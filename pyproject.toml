@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "flexmesa"
+version = "0.1.0"
+description = "Modular, differentiable, and memory-safe re-engineering of MESA in Rust and Python/JAX."
+readme = "README.md"
+license = { text = "LGPL-3.0-or-later" }
+requires-python = ">=3.12"
+authors = [
+  { name = "Josh Speagle", email = "j.speagle@utoronto.ca" },
+]
+dependencies = [
+  "numpy>=2.0",
+  "scipy>=1.12",
+  "jax>=0.4.30",
+  "safetensors>=0.4",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["src", "tests"]
+cache_dir = "/tmp/flexmesa-pytest-cache"
+addopts = "--doctest-modules --strict-markers -m 'not slow'"
+markers = [
+  "slow: marks full-grid or multi-step stellar evolution tests (> 5 s)",
+]
+
+[tool.ruff]
+line-length = 80
+target-version = "py312"
+cache-dir = "/tmp/flexmesa-ruff-cache"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "NPY", "RUF"]
+
+[tool.ruff.lint.flake8-import-conventions.extend-aliases]
+"jax.numpy" = "jnp"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["src", "tests"]
+cache_dir = "/tmp/flexmesa-mypy-cache"
+mypy_path = "src"
+ignore_missing_imports = true

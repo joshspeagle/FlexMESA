@@ -10,7 +10,7 @@ Following the project's milestone-to-sub-issue workflow (`DECISIONS #5`), Wave 0
 | :--- | :--- | :--- | :--- |
 | **[#7 (Wave 0A)](https://github.com/joshspeagle/FlexMESA/issues/7)** | Wave 0 specification, Index & Memory-Order Contract, and `<pkg>/test/test_output` golden baseline parser & numerical comparator | `docs/design/wave-0-spec.md`, `src/flexmesa/testing/`, `crates/flexmesa-testing/` | Parse and verify MESA `<pkg>/test/test_output*` files in `pytest`, `hypothesis`, and `cargo test` with $\le 10^{-12}$ relative tolerance. |
 | **[#8 (Wave 0B)](https://github.com/joshspeagle/FlexMESA/issues/8)** | Declarative `<pkg>/defaults/*.defaults` and `*_columns.list` parser & Fortran `inlist` validator | `src/flexmesa/schema/`, `crates/flexmesa-schema/` | Parse MESA's `controls.defaults`, `star_job.defaults`, `eos.defaults`, and `kap.defaults` without textual `.inc` or `ctrls_io.f90` boilerplate. |
-| **[#9 (Wave 0C)](https://github.com/joshspeagle/FlexMESA/issues/9)** | Physics table `.safetensors` converter (`isotopes.data`, `lodders03.data`, `helm_table`), `SHA-256` manifest (`manifest.toml`), and zero-copy `mmap` loader | `src/flexmesa/data/`, `crates/flexmesa-data/`, `scripts/convert_mesa_data.py` | Bit-exact round-trip parity between MESA ASCII tables and memory-mapped `float64` `.safetensors` tensors in Python/JAX and Safe Rust. |
+| **[#9 (Wave 0C)](https://github.com/joshspeagle/FlexMESA/issues/9)** | Physics table `.safetensors` converter (`isotopes.data`, `lodders03.data`, `helm_table`), `SHA-256` manifest (`manifest.toml`), and zero-copy `mmap` loader | `src/flexmesa/data/`, `crates/flexmesa-data/` | Bit-exact round-trip parity between MESA ASCII tables and memory-mapped `float64` `.safetensors` tensors in Python/JAX and Safe Rust. |
 
 ---
 
@@ -87,9 +87,16 @@ Both `flexmesa.schema` (`src/flexmesa/schema/defaults.py` and `src/flexmesa/sche
 
 ## 5. Physics Table `.safetensors` Converter, `mmap` Loader & `SHA-256` Manifest (`Wave 0C`)
 
-Per `DECISIONS #3`, MESA's ASCII and binary physics tables are converted into 64-byte-aligned, row-major `float64` `.safetensors` files verified against a committed `SHA-256` manifest (`src/flexmesa/data/manifest.toml`):
+Per `DECISIONS #3`, MESA's ASCII and binary physics tables are converted into row-major `float64` (`F64`) and `int64` (`I64`) `.safetensors` files verified against a committed `SHA-256` manifest (`src/flexmesa/data/manifest.toml`):
 
-- `flexmesa.data` (`src/flexmesa/data/`) and `crates/flexmesa-data` (`crates/flexmesa-data/`):
-  - Parse `manifest.toml` entries (`TableArtifact` with `name`, `filename`, `sha256`, `size_bytes`, `tensors`, and `description`).
-  - Compute and verify `SHA-256` digests (`compute_sha256`, `verify_file_sha256`) before memory-mapping `.safetensors` files (`load_safetensors_mmap` / `save_safetensors_file`) with transparent `.safetensors.zst` decompression.
-  - Convert upstream MESA ASCII tables (`chem/data/isotopes.data`, `chem/data/lodders03.data`, and `eos/helm_table.dat`) into `.safetensors` bundles with bit-exact `float64` round-trip parity across Python/JAX and Safe Rust.
+- **Manifest & Integrity (`src/flexmesa/data/manifest.py`, `crates/flexmesa-data/src/lib.rs`, `crates/flexmesa-data/src/sha256.rs`)**:
+  - `TableArtifact`: Stores `name`, `filename`, `sha256` (64-character lowercase hex digest), `size_bytes`, `tensors` (required tensor names), and `description`.
+  - `parse_manifest_text(text)` / `parse_manifest_file(path)` / `load_default_manifest()`: Parses and validates `[[tables]]` declarations from `manifest.toml`.
+  - `compute_sha256_bytes(data)` / `compute_sha256_file(path)` / `verify_file_sha256(path, expected_sha256)`: Computes and verifies FIPS 180-4 `SHA-256` digests before opening table bundles.
+- **`.safetensors` Bundle I/O (`src/flexmesa/data/loader.py`, `crates/flexmesa-data/src/safetensors.rs`)**:
+  - `LoadedTableBundle` / `SafeTensorBundle`: Holds named row-major `float64` and `int64` tensors plus string header metadata (`__metadata__`).
+  - `save_safetensors_bundle` / `load_safetensors_bundle` (Python, backed by `safetensors.safe_open` `mmap`) and `save_safetensors_file` / `load_safetensors_file` (Safe Rust, `#![forbid(unsafe_code)]`): Enforce `float64`/`int64` dtypes, checked shape products, contiguous offsets, and finite IEEE-754 floating-point values (`require_finite=True`).
+- **MESA Table Converters (`src/flexmesa/data/converters.py`, `crates/flexmesa-data/src/converters.rs`)**:
+  - `parse_lodders03_text`: Converts `chem/data/lodders03.data` into `atomic_number_z`, `mass_number_a`, `isotopic_percent`, and `number_abundance_si` (stripping thousands-separator commas such as `768,900` on line 67 for $^{56}\text{Fe}$).
+  - `parse_isotopes_text`: Converts `chem/data/isotopes.data` (`7,856` nuclides $\times$ 4 lines) into `atomic_number_z`, `neutron_number_n`, `isomeric_state`, `atomic_mass_w`, `spin`, `mass_excess_mev`, and `partition_function` (`(n_nuclides, 24)`).
+  - `parse_helm_table_text`: Converts `eos/helm_table.dat` (`4 * imax * jmax` lines in `(j_temp, i_rho)` file order) into row-major `(imax, jmax)` tensors (`f..fddtt`, `dpdf..dpdfdt`, `ef..efdt`, `xf..xfdt`), 1D grids (`log_d_grid`, `log_t_grid`, `d_grid`, `t_grid`), and packed jet tensors (`f_jet` `(imax, jmax, 9)`, `dpdf_jet`, `ef_jet`, `xf_jet` `(imax, jmax, 4)`).

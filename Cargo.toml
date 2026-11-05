@@ -3,6 +3,7 @@ resolver = "2"
 members = [
   "crates/flexmesa-testing",
   "crates/flexmesa-schema",
+  "crates/flexmesa-data",
 ]
 
 [workspace.package]

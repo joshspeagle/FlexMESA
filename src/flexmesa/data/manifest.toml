@@ -1,0 +1,73 @@
+# SPDX-License-Identifier: LGPL-3.0-or-later
+# FlexMESA Physics Table Manifest (Wave 0C)
+#
+# Maps logical table identifiers to their row-major float64/int64 .safetensors
+# artifacts, SHA-256 digests, uncompressed byte sizes, and required tensor
+# schemas.
+
+[[tables]]
+name = "lodders03"
+filename = "lodders03.safetensors"
+sha256 = "029eaf304a0c197541d3485ab3a411cd0fb02364c14bee04724f55e52e420620"
+size_bytes = 11072
+tensors = [
+  "atomic_number_z",
+  "mass_number_a",
+  "isotopic_percent",
+  "number_abundance_si",
+]
+description = "Solar-system meteoric isotopic abundances from Table 6 of Lodders (2003, ApJ, 591, 1220)."
+
+[[tables]]
+name = "isotopes"
+filename = "isotopes.safetensors"
+sha256 = "c4e566b7de149642d29b571d58e6a430612c0e11cd71946b8755a4d8503321cb"
+size_bytes = 1931096
+tensors = [
+  "atomic_number_z",
+  "neutron_number_n",
+  "isomeric_state",
+  "atomic_mass_w",
+  "spin",
+  "mass_excess_mev",
+  "partition_function",
+]
+description = "Nuclear ground-state masses, spins, mass excesses, and 24-point temperature partition functions for 7,856 nuclides."
+
+[[tables]]
+name = "helm_table"
+filename = "helm_table.safetensors"
+sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+size_bytes = 908481920
+tensors = [
+  "log_d_grid",
+  "log_t_grid",
+  "d_grid",
+  "t_grid",
+  "f",
+  "fd",
+  "ft",
+  "fdd",
+  "ftt",
+  "fdt",
+  "fddt",
+  "fdtt",
+  "fddtt",
+  "dpdf",
+  "dpdfd",
+  "dpdft",
+  "dpdfdt",
+  "ef",
+  "efd",
+  "eft",
+  "efdt",
+  "xf",
+  "xfd",
+  "xft",
+  "xfdt",
+  "f_jet",
+  "dpdf_jet",
+  "ef_jet",
+  "xf_jet",
+]
+description = "Timmes & Swesty (2000) Helmholtz electron-positron free energy, pressure derivative, chemical potential, and number density biquintic/bicubic tables (2701 x 1001)."

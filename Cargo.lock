@@ -124,6 +124,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "da7c62ceae207dd37ea5b845da6a0696c799f85e97da1ab5b7910be3c1c80223"
 
 [[package]]
+name = "flexmesa-autodiff"
+version = "0.1.0"
+dependencies = [
+ "flexmesa-const",
+ "flexmesa-math",
+ "flexmesa-testing",
+ "proptest",
+]
+
+[[package]]
 name = "flexmesa-const"
 version = "0.1.0"
 dependencies = [
@@ -137,6 +147,16 @@ dependencies = [
  "flexmesa-testing",
  "proptest",
  "tempfile",
+]
+
+[[package]]
+name = "flexmesa-math"
+version = "0.1.0"
+dependencies = [
+ "flexmesa-const",
+ "flexmesa-testing",
+ "flexmesa-utils",
+ "proptest",
 ]
 
 [[package]]

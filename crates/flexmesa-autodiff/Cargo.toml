@@ -1,0 +1,19 @@
+[package]
+name = "flexmesa-autodiff"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Forward-mode first-order dual and second-order hyperdual numbers for FlexMESA"
+
+[dependencies]
+flexmesa-const = { path = "../flexmesa-const" }
+flexmesa-math = { path = "../flexmesa-math" }
+
+[dev-dependencies]
+flexmesa-testing = { path = "../flexmesa-testing" }
+proptest = "1.5"
+
+[lints]
+workspace = true

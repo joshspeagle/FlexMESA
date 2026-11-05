@@ -21,6 +21,7 @@ htmlcov/
 
 # Rust & Cargo Build Artifacts
 target/
+.cargo/config.toml
 pgo-data/
 *.profraw
 *.profdata
@@ -42,9 +43,9 @@ pgo-data/
 photos/
 LOGS/
 
-# OS & Editor Files
+# OS, Editor & Local Scratch Files
 .DS_Store
 Thumbs.db
 *~
 *.swp
-.claude/worktrees/
+.claude/

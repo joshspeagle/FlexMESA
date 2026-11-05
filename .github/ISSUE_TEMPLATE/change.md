@@ -14,4 +14,4 @@ labels: enhancement
 
 ## Acceptance criteria
 
-<!-- Unit tests, golden test_output parity tolerance (<= 1e-12), autodiff check_grads, hypothesis/proptest coverage, and 4-stage benchmark telemetry. -->
+<!-- Unit tests, golden test_output parity tolerance (<= 1e-12), autodiff check_grads, hypothesis/proptest coverage, and benchmark verification. -->

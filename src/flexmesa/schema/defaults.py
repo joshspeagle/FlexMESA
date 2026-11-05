@@ -19,10 +19,12 @@ from flexmesa.testing import golden
 type ControlValue = bool | int | float | str
 
 _ASSIGNMENT_RE: re.Pattern[str] = re.compile(
-    r"^([A-Za-z_][A-Za-z0-9_]*)(?:\(\s*([^)]*?)\s*\))?\s*=\s*(.+)$"
+    r"^([A-Za-z_][A-Za-z0-9_]*)(?:\(\s*([^()\s][^()]*?)\s*\))?\s*=\s*(.+)$"
 )
 _INTEGER_RE: re.Pattern[str] = re.compile(r"^[+-]?\d+$")
 _UNDERLINE_RE: re.Pattern[str] = re.compile(r"^[=\-~^]{3,}$")
+_I64_MIN: int = -(1 << 63)
+_I64_MAX: int = (1 << 63) - 1
 
 
 class ControlType(enum.StrEnum):
@@ -134,8 +136,8 @@ def parse_control_value(raw: str) -> tuple[ControlType, ControlValue]:
         Tuple `(control_type, parsed_value)`.
 
     Raises:
-        ValueError: If `raw` is not a valid Fortran logical, string, integer,
-            or finite floating-point literal.
+        ValueError: If `raw` is not a valid Fortran logical, string, 64-bit
+            integer, or finite floating-point literal.
 
     Examples:
         >>> from flexmesa.schema import defaults
@@ -149,9 +151,9 @@ def parse_control_value(raw: str) -> tuple[ControlType, ControlValue]:
         raise ValueError("Cannot parse empty control value literal.")
 
     lower = token.lower()
-    if lower in (".true.", "t"):
+    if lower in (".true.", ".true", ".t.", "t"):
         return (ControlType.LOGICAL, True)
-    if lower in (".false.", "f"):
+    if lower in (".false.", ".false", ".f.", "f"):
         return (ControlType.LOGICAL, False)
 
     if len(token) >= 2 and token[0] == token[-1] and token[0] in ("'", '"'):
@@ -164,8 +166,13 @@ def parse_control_value(raw: str) -> tuple[ControlType, ControlValue]:
         return (ControlType.STRING, inner.replace(quote * 2, quote))
 
     if _INTEGER_RE.match(token) is not None:
-        return (ControlType.INTEGER, int(token))
+        int_val = int(token)
+        if not (_I64_MIN <= int_val <= _I64_MAX):
+            raise ValueError(f"64-bit integer overflow in literal: {raw!r}.")
+        return (ControlType.INTEGER, int_val)
 
+    if not golden.is_fortran_float_token(token):
+        raise ValueError(f"Invalid Fortran control literal: {raw!r}.")
     return (ControlType.FLOAT, golden.parse_fortran_float(token))
 
 
@@ -211,6 +218,55 @@ def _update_comment_state(
     return current_section
 
 
+def _merge_element_override(
+    prev: ControlDefault,
+    subscript: str,
+    ctrl_type: ControlType,
+    val: ControlValue,
+    line_idx: int,
+) -> ControlDefault:
+    """Merge an indexed element override into an existing `ControlDefault`."""
+    if prev.control_type == ctrl_type:
+        return dataclasses.replace(
+            prev,
+            is_array=True,
+            element_overrides=(*prev.element_overrides, (subscript, val)),
+        )
+    if (
+        prev.control_type == ControlType.FLOAT
+        and ctrl_type == ControlType.INTEGER
+        and isinstance(val, int)
+    ):
+        return dataclasses.replace(
+            prev,
+            is_array=True,
+            element_overrides=(
+                *prev.element_overrides,
+                (subscript, float(val)),
+            ),
+        )
+    if (
+        prev.control_type == ControlType.INTEGER
+        and ctrl_type == ControlType.FLOAT
+        and isinstance(prev.default_value, int)
+    ):
+        widened = tuple(
+            (s, float(v) if isinstance(v, int) else v)
+            for s, v in prev.element_overrides
+        )
+        return dataclasses.replace(
+            prev,
+            control_type=ControlType.FLOAT,
+            default_value=float(prev.default_value),
+            is_array=True,
+            element_overrides=(*widened, (subscript, val)),
+        )
+    raise ValueError(
+        f"Incompatible override type for {prev.name!r} at line {line_idx}: "
+        f"expected {prev.control_type}, got {ctrl_type}."
+    )
+
+
 def _record_assignment(
     line_idx: int,
     code: str,
@@ -223,11 +279,8 @@ def _record_assignment(
     key = name.lower()
 
     if subscript is not None and subscript != ":" and key in controls:
-        prev = controls[key]
-        controls[key] = dataclasses.replace(
-            prev,
-            is_array=True,
-            element_overrides=(*prev.element_overrides, (subscript, val)),
+        controls[key] = _merge_element_override(
+            controls[key], subscript, ctrl_type, val, line_idx
         )
     else:
         overrides = (

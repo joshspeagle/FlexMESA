@@ -10,9 +10,9 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use crate::{
-    find_unquoted_char, parse_control_value, read_file_text, split_assignment,
-    strip_fortran_comment, ControlDefault, ControlType, ControlValue,
-    SchemaError,
+    find_unquoted_char, is_valid_identifier, parse_control_value,
+    read_file_text, split_assignment, strip_fortran_comment, ControlDefault,
+    ControlType, ControlValue, SchemaError,
 };
 
 /// Single `name[(subscript)] = value` assignment inside a Fortran namelist.
@@ -75,6 +75,53 @@ fn split_top_level_commas(code: &str) -> Vec<&str> {
     parts
 }
 
+/// Parse comma-separated assignments or array value lists on one line.
+fn parse_assignments_in_segment(
+    body: &str,
+    line_number: usize,
+    out: &mut Vec<NamelistAssignment>,
+) -> Result<(), SchemaError> {
+    let mut seq_name: Option<String> = None;
+    let mut seq_next_idx = 1_usize;
+
+    for item in split_top_level_commas(body) {
+        if find_unquoted_char(item, '=').is_some() {
+            let (name, sub, rhs) = split_assignment(item, line_number)?;
+            let value = parse_control_value(rhs, line_number)?;
+            seq_name = Some(name.to_owned());
+            seq_next_idx = sub
+                .and_then(|s| s.parse::<usize>().ok())
+                .map_or(2, |n| n + 1);
+            out.push(NamelistAssignment {
+                name: name.to_owned(),
+                subscript: sub.map(str::to_owned),
+                value,
+                line_number,
+            });
+        } else if let Some(ref arr_name) = seq_name {
+            if let Some(prev) = out.last_mut() {
+                if prev.name == *arr_name && prev.subscript.is_none() {
+                    prev.subscript = Some("1".to_owned());
+                }
+            }
+            let value = parse_control_value(item, line_number)?;
+            out.push(NamelistAssignment {
+                name: arr_name.clone(),
+                subscript: Some(seq_next_idx.to_string()),
+                value,
+                line_number,
+            });
+            seq_next_idx += 1;
+        } else {
+            return Err(SchemaError::ParseError {
+                line_number,
+                message: format!("expected '=' in assignment: {item:?}"),
+            });
+        }
+    }
+    Ok(())
+}
+
 /// Parse one or more Fortran `&namelist ... /` blocks from `inlist` text.
 ///
 /// # Errors
@@ -108,25 +155,36 @@ pub fn parse_namelist_text(
                     message: format!("expected '&namelist' header: {code:?}"),
                 });
             };
-            let end = rest.find(char::is_whitespace).unwrap_or(rest.len());
-            active_name = Some(rest[..end].to_owned());
+            let end = rest
+                .find(|c: char| c.is_whitespace() || c == '/')
+                .unwrap_or(rest.len());
+            let group = &rest[..end];
+            if !is_valid_identifier(group) {
+                return Err(SchemaError::ParseError {
+                    line_number,
+                    message: format!("invalid namelist name: {group:?}"),
+                });
+            }
+            active_name = Some(group.to_owned());
             code = rest[end..].trim();
             if code.is_empty() {
                 continue;
             }
         }
         let slash_pos = find_unquoted_char(code, '/');
-        let body = slash_pos.map_or(code, |p| code[..p].trim());
-        for item in split_top_level_commas(body) {
-            let (name, sub, rhs) = split_assignment(item, line_number)?;
-            let value = parse_control_value(rhs, line_number)?;
-            active_assigns.push(NamelistAssignment {
-                name: name.to_owned(),
-                subscript: sub.map(str::to_owned),
-                value,
-                line_number,
-            });
+        if let Some(p) = slash_pos {
+            let trailing = code[p + 1..].trim();
+            if !trailing.is_empty() {
+                return Err(SchemaError::ParseError {
+                    line_number,
+                    message: format!(
+                        "unexpected trailing tokens after '/': {trailing:?}"
+                    ),
+                });
+            }
         }
+        let body = slash_pos.map_or(code, |p| code[..p].trim());
+        parse_assignments_in_segment(body, line_number, &mut active_assigns)?;
         if slash_pos.is_some() {
             blocks.push(NamelistBlock {
                 name: active_name.take().unwrap_or_default(),

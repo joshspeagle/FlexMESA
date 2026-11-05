@@ -108,6 +108,20 @@ fn test_parse_and_validate_namelist() {
 
     let bad_type = parse_namelist_text("&eos\n  use_PC = 1.0d0\n/\n").unwrap();
     assert!(validate_namelist_block(&bad_type[0], &schema, false).is_err());
+
+    assert!(parse_control_value("99999999999999999999", 1).is_err());
+    assert!(
+        parse_namelist_text("&eos\n  use_PC = .true. / trailing\n").is_err()
+    );
+    assert!(parse_namelist_text("&eos\n  use_PC() = .true.\n/\n").is_err());
+    assert!(parse_namelist_text("&1bad\n  use_PC = .true.\n/\n").is_err());
+
+    let arr_blocks =
+        parse_namelist_text("&eos\n  use_PC = .true\n  arr = 8, 8, 8\n/\n")
+            .unwrap();
+    assert_eq!(arr_blocks[0].assignments.len(), 4);
+    assert_eq!(arr_blocks[0].assignments[1].subscript.as_deref(), Some("1"));
+    assert_eq!(arr_blocks[0].assignments[3].subscript.as_deref(), Some("3"));
 }
 
 proptest! {

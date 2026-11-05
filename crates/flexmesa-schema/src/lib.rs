@@ -14,7 +14,9 @@ use std::fmt;
 use std::fs;
 use std::path::Path;
 
-use flexmesa_testing::parse_fortran_float;
+use flexmesa_testing::{
+    is_fortran_float_token, is_integer_token, parse_fortran_float,
+};
 
 pub use namelist::{
     parse_namelist_file, parse_namelist_text, validate_namelist_block,
@@ -162,6 +164,17 @@ impl fmt::Display for SchemaError {
 
 impl std::error::Error for SchemaError {}
 
+/// Return whether `ident` is a valid Fortran identifier (`^[A-Za-z_][A-Za-z0-9_]*$`).
+pub(crate) fn is_valid_identifier(ident: &str) -> bool {
+    let bytes = ident.as_bytes();
+    bytes
+        .first()
+        .is_some_and(|b| b.is_ascii_alphabetic() || *b == b'_')
+        && bytes[1..]
+            .iter()
+            .all(|b| b.is_ascii_alphanumeric() || *b == b'_')
+}
+
 /// Return the byte index of the first `target` char outside quotes.
 pub(crate) fn find_unquoted_char(line: &str, target: char) -> Option<usize> {
     if !line.contains(target) {
@@ -203,7 +216,7 @@ pub fn strip_fortran_comment(line: &str) -> (&str, &str) {
 ///
 /// # Errors
 /// Returns [`SchemaError::ParseError`] if `raw` is not a valid logical, string,
-/// integer, or finite floating-point literal.
+/// 64-bit integer, or finite floating-point literal.
 ///
 /// # Examples
 /// ```
@@ -225,10 +238,18 @@ pub fn parse_control_value(
             message: "empty control value literal".to_owned(),
         });
     }
-    if tok.eq_ignore_ascii_case(".true.") || tok.eq_ignore_ascii_case("t") {
+    if tok.eq_ignore_ascii_case(".true.")
+        || tok.eq_ignore_ascii_case(".true")
+        || tok.eq_ignore_ascii_case(".t.")
+        || tok.eq_ignore_ascii_case("t")
+    {
         return Ok(ControlValue::Logical(true));
     }
-    if tok.eq_ignore_ascii_case(".false.") || tok.eq_ignore_ascii_case("f") {
+    if tok.eq_ignore_ascii_case(".false.")
+        || tok.eq_ignore_ascii_case(".false")
+        || tok.eq_ignore_ascii_case(".f.")
+        || tok.eq_ignore_ascii_case("f")
+    {
         return Ok(ControlValue::Logical(false));
     }
     let bytes = tok.as_bytes();
@@ -253,8 +274,19 @@ pub fn parse_control_value(
         }
         return Ok(ControlValue::String(inner.replace(doubled, single)));
     }
-    if let Ok(int_val) = tok.parse::<i64>() {
+    if is_integer_token(tok) {
+        let int_val =
+            tok.parse::<i64>().map_err(|_| SchemaError::ParseError {
+                line_number,
+                message: format!("64-bit integer overflow in literal: {tok:?}"),
+            })?;
         return Ok(ControlValue::Integer(int_val));
+    }
+    if !is_fortran_float_token(tok) {
+        return Err(SchemaError::ParseError {
+            line_number,
+            message: format!("invalid Fortran control literal: {tok:?}"),
+        });
     }
     let float_val =
         parse_fortran_float(tok).map_err(|_| SchemaError::ParseError {
@@ -277,22 +309,20 @@ pub(crate) fn split_assignment(
     };
     let (lhs, rhs) = (lhs_raw.trim(), rhs_raw.trim());
     let (name, sub) = if let Some(open_idx) = lhs.find('(') {
-        if !lhs.ends_with(')') {
+        let sub_str = lhs[open_idx + 1..].strip_suffix(')').map(str::trim);
+        let Some(s) =
+            sub_str.filter(|s| !s.is_empty() && !s.contains(['(', ')']))
+        else {
             return Err(SchemaError::ParseError {
                 line_number,
-                message: format!("unclosed '(' in {lhs:?}"),
+                message: format!("malformed subscript in {lhs:?}"),
             });
-        }
-        (
-            lhs[..open_idx].trim(),
-            Some(lhs[open_idx + 1..lhs.len() - 1].trim()),
-        )
+        };
+        (lhs[..open_idx].trim(), Some(s))
     } else {
         (lhs, None)
     };
-    if name.is_empty()
-        || !name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
-    {
+    if !is_valid_identifier(name) {
         return Err(SchemaError::ParseError {
             line_number,
             message: format!("invalid control identifier: {name:?}"),
@@ -321,6 +351,53 @@ fn update_comment_state<'a>(
     } else if !comment.is_empty() && comment != "::" {
         pending_docs.push(comment);
     }
+}
+
+/// Merge an indexed element override into an existing [`ControlDefault`].
+fn merge_element_override(
+    ctrl: &mut ControlDefault,
+    sub_str: &str,
+    val: ControlValue,
+    line_number: usize,
+) -> Result<(), SchemaError> {
+    ctrl.is_array = true;
+    let val_t = val.control_type();
+    if ctrl.control_type == val_t {
+        ctrl.element_overrides.push((sub_str.to_owned(), val));
+        return Ok(());
+    }
+    if ctrl.control_type == ControlType::Float {
+        if let ControlValue::Integer(i) = val {
+            #[allow(clippy::cast_precision_loss)]
+            ctrl.element_overrides
+                .push((sub_str.to_owned(), ControlValue::Float(i as f64)));
+            return Ok(());
+        }
+    }
+    if ctrl.control_type == ControlType::Integer && val_t == ControlType::Float
+    {
+        if let ControlValue::Integer(def_i) = ctrl.default_value {
+            ctrl.control_type = ControlType::Float;
+            #[allow(clippy::cast_precision_loss)]
+            {
+                ctrl.default_value = ControlValue::Float(def_i as f64);
+                for (_, v) in &mut ctrl.element_overrides {
+                    if let ControlValue::Integer(elem_i) = *v {
+                        *v = ControlValue::Float(elem_i as f64);
+                    }
+                }
+            }
+            ctrl.element_overrides.push((sub_str.to_owned(), val));
+            return Ok(());
+        }
+    }
+    Err(SchemaError::ParseError {
+        line_number,
+        message: format!(
+            "incompatible override type for {:?}: expected {:?}, got {val_t:?}",
+            ctrl.name, ctrl.control_type
+        ),
+    })
 }
 
 /// Parse the text of a MESA `<pkg>/defaults/*.defaults` file.
@@ -353,10 +430,12 @@ pub fn parse_defaults_text(
         if let (Some(&pos), Some(sub_str)) =
             (index_by_key.get(&key), sub.filter(|_| is_specific))
         {
-            controls[pos].is_array = true;
-            controls[pos]
-                .element_overrides
-                .push((sub_str.to_owned(), val));
+            merge_element_override(
+                &mut controls[pos],
+                sub_str,
+                val,
+                line_number,
+            )?;
         } else {
             let overrides = match sub.filter(|_| is_specific) {
                 Some(s) => vec![(s.to_owned(), val.clone())],

@@ -16,7 +16,7 @@ from collections.abc import Mapping
 from flexmesa.schema import defaults
 
 _NAMELIST_HEADER_RE: re.Pattern[str] = re.compile(
-    r"^&([A-Za-z_][A-Za-z0-9_]*)\s*(.*)$"
+    r"^&([A-Za-z_][A-Za-z0-9_]*)(?=$|\s|/)\s*(.*)$"
 )
 
 
@@ -93,20 +93,58 @@ def _parse_assignments_in_segment(
     line_idx: int,
     out: list[NamelistAssignment],
 ) -> None:
-    """Parse comma-separated assignments from `segment` into `out`."""
+    """Parse comma-separated assignments or array value lists into `out`."""
+    seq_name: str | None = None
+    seq_next_idx = 1
+
     for item in _split_top_level_commas(segment):
-        name, sub, val_type, val = defaults.parse_assignment_clause(
-            item, line_idx
-        )
-        out.append(
-            NamelistAssignment(
-                name=name,
-                subscript=sub,
-                value_type=val_type,
-                value=val,
-                line_number=line_idx,
+        if defaults.find_unquoted_char(item, "=") is not None:
+            name, sub, val_type, val = defaults.parse_assignment_clause(
+                item, line_idx
             )
+            seq_name = name
+            seq_next_idx = (
+                int(sub) + 1 if sub is not None and sub.isdigit() else 2
+            )
+            out.append(NamelistAssignment(name, sub, val_type, val, line_idx))
+        elif seq_name is not None:
+            if out[-1].name == seq_name and out[-1].subscript is None:
+                out[-1] = dataclasses.replace(out[-1], subscript="1")
+            val_type, val = defaults.parse_control_value(item)
+            out.append(
+                NamelistAssignment(
+                    seq_name, str(seq_next_idx), val_type, val, line_idx
+                )
+            )
+            seq_next_idx += 1
+        else:
+            raise ValueError(
+                f"Malformed control assignment at line {line_idx}: {item!r}."
+            )
+
+
+def _process_namelist_body_line(
+    code: str,
+    line_idx: int,
+    active_name: str,
+    active_assignments: list[NamelistAssignment],
+    blocks: list[NamelistBlock],
+) -> str | None:
+    """Process one namelist body line and return updated `active_name`."""
+    slash_idx = defaults.find_unquoted_char(code, "/")
+    if slash_idx is not None and code[slash_idx + 1 :].strip():
+        raise ValueError(
+            f"Unexpected trailing tokens after '/' at line {line_idx}: "
+            f"{code[slash_idx + 1 :].strip()!r}."
         )
+    body = code if slash_idx is None else code[:slash_idx].strip()
+    if body:
+        _parse_assignments_in_segment(body, line_idx, active_assignments)
+    if slash_idx is not None:
+        blocks.append(NamelistBlock(active_name, tuple(active_assignments)))
+        active_assignments.clear()
+        return None
+    return active_name
 
 
 def parse_namelist_text(text: str) -> list[NamelistBlock]:
@@ -137,7 +175,6 @@ def parse_namelist_text(text: str) -> list[NamelistBlock]:
         code, _ = defaults.strip_fortran_comment(raw_line)
         if not code:
             continue
-
         if active_name is None:
             hdr = _NAMELIST_HEADER_RE.match(code)
             if hdr is None:
@@ -148,20 +185,9 @@ def parse_namelist_text(text: str) -> list[NamelistBlock]:
             code = hdr.group(2).strip()
             if not code:
                 continue
-
-        slash_idx = defaults.find_unquoted_char(code, "/")
-        body = code if slash_idx is None else code[:slash_idx].strip()
-        if body:
-            _parse_assignments_in_segment(body, line_idx, active_assignments)
-        if slash_idx is not None:
-            blocks.append(
-                NamelistBlock(
-                    name=active_name,
-                    assignments=tuple(active_assignments),
-                )
-            )
-            active_name = None
-            active_assignments = []
+        active_name = _process_namelist_body_line(
+            code, line_idx, active_name, active_assignments, blocks
+        )
 
     if active_name is not None:
         raise ValueError(

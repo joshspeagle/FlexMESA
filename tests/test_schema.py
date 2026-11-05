@@ -161,6 +161,24 @@ def test_parse_and_validate_namelist_against_schema(
         namelist.validate_namelist_block(bad_type[0], schema)
 
 
+def test_namelist_and_control_value_edge_cases() -> None:
+    """Verify Stage B edge cases: 64-bit bounds, identifiers, and shorthands."""
+    schema = defaults.parse_defaults_text(_SAMPLE_EOS_DEFAULTS)
+    with pytest.raises(ValueError, match="64-bit integer overflow"):
+        defaults.parse_control_value("9223372036854775808")
+    with pytest.raises(ValueError, match="Unexpected trailing tokens"):
+        namelist.parse_namelist_text("&eos\n  use_PC = .true. / extra\n")
+    with pytest.raises(ValueError, match="Malformed control assignment"):
+        defaults.parse_defaults_text("  foo() = 1\n")
+
+    shorthand = namelist.parse_namelist_text(
+        "&eos\n  use_PC = .true\n  suffix_for_FreeEOS_Z = '_A', '_B'\n/\n"
+    )
+    validated_short = namelist.validate_namelist_block(shorthand[0], schema)
+    assert validated_short["use_PC"] is True
+    assert validated_short["suffix_for_FreeEOS_Z"] == {"1": "_A", "2": "_B"}
+
+
 @hypothesis.given(
     int_val=st.integers(min_value=-10_000_000, max_value=10_000_000),
     bool_val=st.booleans(),

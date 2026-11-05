@@ -1,0 +1,19 @@
+[package]
+name = "flexmesa-math"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "IEEE-754 float64 elementary and domain-safe mathematical intrinsics for FlexMESA"
+
+[dependencies]
+flexmesa-const = { path = "../flexmesa-const" }
+flexmesa-utils = { path = "../flexmesa-utils" }
+
+[dev-dependencies]
+flexmesa-testing = { path = "../flexmesa-testing" }
+proptest = "1.5"
+
+[lints]
+workspace = true

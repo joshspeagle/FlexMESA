@@ -6,6 +6,8 @@ members = [
   "crates/flexmesa-data",
   "crates/flexmesa-const",
   "crates/flexmesa-utils",
+  "crates/flexmesa-math",
+  "crates/flexmesa-autodiff",
 ]
 
 [workspace.package]

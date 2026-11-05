@@ -120,7 +120,8 @@ impl<const N: usize> Sub<DualOrder1<N>> for f64 {
     }
 }
 
-/// Dual-dual multiplication $x y$ via the product rule $y \nabla x + x \nabla y$.
+/// Dual-dual multiplication $x y$ via the product rule
+/// $y \nabla x + x \nabla y$.
 impl<const N: usize> Mul for DualOrder1<N> {
     type Output = Self;
     #[inline]

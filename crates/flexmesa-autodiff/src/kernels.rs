@@ -326,17 +326,14 @@ pub fn unary_atanh(x: f64) -> (f64, f64, f64) {
 
 /// Return `(f(x), f'(x), f''(x))` for integer powers $x^{2}$ through $x^{8}$.
 ///
-/// Reuses $x^{n-2}$ and $x^{n-1} = x^{n-2} x$ to avoid redundant multiplications
-/// while preserving left-associative IEEE-754 rounding.
+/// Reuses $x^{n-2}$ and $x^{n-1} = x^{n-2} x$ to avoid redundant
+/// multiplications while preserving left-associative IEEE-754 rounding.
 #[must_use]
 #[inline]
 pub fn unary_pown(x: f64, n: u32) -> (f64, f64, f64) {
     match n {
         2 => (pow2(x), 2.0 * x, 2.0),
-        3 => {
-            let p2 = pow2(x);
-            (p2 * x, 3.0 * p2, 6.0 * x)
-        }
+        3 => (pow3(x), 3.0 * pow2(x), 6.0 * x),
         4 => {
             let p2 = pow2(x);
             let p3 = p2 * x;
@@ -370,10 +367,7 @@ pub fn unary_pown(x: f64, n: u32) -> (f64, f64, f64) {
 #[must_use]
 #[inline]
 pub fn unary_pow_scalar(x: f64, p: f64) -> (f64, f64, f64) {
-    let val = pow(x, p);
-    let d1 = p * pow(x, p - 1.0);
-    let d2 = p * (p - 1.0) * pow(x, p - 2.0);
-    (val, d1, d2)
+    (pow(x, p), p * pow(x, p - 1.0), p * (p - 1.0) * pow(x, p - 2.0))
 }
 
 /// Return `(f(x), f'(x), f''(x))` for $b^{x}$ with constant base $b > 0$.
@@ -383,8 +377,7 @@ pub fn unary_rpow_scalar(base: f64, x: f64) -> (f64, f64, f64) {
     let val = pow(base, x);
     let lnb = log(base);
     let d1 = val * lnb;
-    let d2 = d1 * lnb;
-    (val, d1, d2)
+    (val, d1, d1 * lnb)
 }
 
 /// Return `(z, dz/dx, dz/dy, d2z/dx2, d2z/dxdy, d2z/dy2)` for $x^{y}$ with
@@ -396,10 +389,12 @@ pub fn binary_pow(x: f64, y: f64) -> (f64, f64, f64, f64, f64, f64) {
     let lnx = log(x);
     let xm1 = pow(x, y - 1.0);
     let xm2 = pow(x, y - 2.0);
-    let d1x = y * xm1;
-    let d1y = val * lnx;
-    let d2x = y * (y - 1.0) * xm2;
-    let d1x_d1y = xm1 * (1.0 + y * lnx);
-    let d2y = val * pow2(lnx);
-    (val, d1x, d1y, d2x, d1x_d1y, d2y)
+    (
+        val,
+        y * xm1,
+        val * lnx,
+        y * (y - 1.0) * xm2,
+        xm1 * (1.0 + y * lnx),
+        val * pow2(lnx),
+    )
 }

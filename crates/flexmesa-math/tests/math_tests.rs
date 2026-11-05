@@ -41,8 +41,9 @@ fn eval3(f: fn(f64) -> f64) -> [f64; 3] {
     [f(XS[0]), f(XS[1]), f(XS[2])]
 }
 
-/// Verify logarithms (`log`, `log10`, `log1p`, `log2`, `safe_log`, `safe_log10`)
-/// and exponentials (`exp`, `exp10`, `expm1`) against `test_output.INTRINSIC`.
+/// Verify logarithms (`log`, `log10`, `log1p`, `log2`, `safe_log`,
+/// `safe_log10`) and exponentials (`exp`, `exp10`, `expm1`) against
+/// `test_output.INTRINSIC`.
 #[test]
 fn test_math_intrinsic_golden_logs_and_exps_match_mesa_reference() {
     // Natural and base-10/base-2 logarithms at XS = [0.1, 0.2, 0.4].

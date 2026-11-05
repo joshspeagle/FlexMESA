@@ -8,6 +8,8 @@ registered JAX PyTree propagating exact first and second partial derivatives
 
 from __future__ import annotations
 
+from typing import Self
+
 import jax
 import jax.numpy as jnp
 
@@ -108,23 +110,32 @@ class AutoDiffReal2VarOrder2(base.AutoDiffBase):
             jax.Array,
             jax.Array,
         ],
-    ) -> AutoDiffReal2VarOrder2:
+    ) -> Self:
         """Reconstruct `AutoDiffReal2VarOrder2` from flattened PyTree leaves."""
         del aux_data
-        return cls(*children)
+        obj = object.__new__(cls)
+        (
+            obj.val,
+            obj.d1val1,
+            obj.d1val2,
+            obj.d2val1,
+            obj.d1val1_d1val2,
+            obj.d2val2,
+        ) = children
+        return obj
 
     @classmethod
-    def constant(cls, val: intrinsics.ArrayLike) -> AutoDiffReal2VarOrder2:
+    def constant(cls, val: intrinsics.ArrayLike) -> Self:
         """Construct a constant hyperdual with zero derivatives."""
         return cls(val)
 
     @classmethod
-    def var1(cls, val: intrinsics.ArrayLike) -> AutoDiffReal2VarOrder2:
+    def var1(cls, val: intrinsics.ArrayLike) -> Self:
         """Seed the first independent variable $x_1$ (`d1val1 = 1.0`)."""
         return cls(val, d1val1=1.0)
 
     @classmethod
-    def var2(cls, val: intrinsics.ArrayLike) -> AutoDiffReal2VarOrder2:
+    def var2(cls, val: intrinsics.ArrayLike) -> Self:
         """Seed the second independent variable $x_2$ (`d1val2 = 1.0`)."""
         return cls(val, d1val2=1.0)
 
@@ -133,12 +144,12 @@ class AutoDiffReal2VarOrder2(base.AutoDiffBase):
         z_val: intrinsics.ArrayLike,
         z_d1x: intrinsics.ArrayLike,
         z_d2x: intrinsics.ArrayLike,
-    ) -> AutoDiffReal2VarOrder2:
+    ) -> Self:
         """Apply MESA's second-order unary chain rule."""
         zv = intrinsics.as_f64(z_val)
         zd1 = intrinsics.as_f64(z_d1x)
         zd2 = intrinsics.as_f64(z_d2x)
-        return AutoDiffReal2VarOrder2(
+        return type(self)(
             zv,
             self.d1val1 * zd1,
             self.d1val2 * zd1,
@@ -156,7 +167,7 @@ class AutoDiffReal2VarOrder2(base.AutoDiffBase):
         z_d2x: intrinsics.ArrayLike,
         z_d1x_d1y: intrinsics.ArrayLike,
         z_d2y: intrinsics.ArrayLike,
-    ) -> AutoDiffReal2VarOrder2:
+    ) -> Self:
         """Apply MESA's second-order binary chain rule."""
         d1x = intrinsics.as_f64(z_d1x)
         d1y = intrinsics.as_f64(z_d1y)
@@ -165,7 +176,7 @@ class AutoDiffReal2VarOrder2(base.AutoDiffBase):
         d2y = intrinsics.as_f64(z_d2y)
         q0 = self.d1val1 * d1xy
         q1 = self.d1val2 * d1xy
-        return AutoDiffReal2VarOrder2(
+        return type(self)(
             z_val,
             self.d1val1 * d1x + other.d1val1 * d1y,
             self.d1val2 * d1x + other.d1val2 * d1y,
@@ -193,28 +204,26 @@ class AutoDiffReal2VarOrder2(base.AutoDiffBase):
             ),
         )
 
-    def apply_unary(
-        self, kernel: kernels.UnaryKernel
-    ) -> AutoDiffReal2VarOrder2:
+    def apply_unary(self, kernel: kernels.UnaryKernel) -> Self:
         """Propagate a unary kernel `(f, f', f'')` through `self`."""
         zv, zd1, zd2 = kernel(self.val)
         return self.make_unary_operator(zv, zd1, zd2)
 
-    def differentiate_1(self) -> AutoDiffReal2VarOrder2:
+    def differentiate_1(self) -> Self:
         """Extract $\\partial / \\partial x_1$ with zero second partials."""
-        return AutoDiffReal2VarOrder2(
+        return type(self)(
             self.d1val1, self.d2val1, self.d1val1_d1val2, 0.0, 0.0, 0.0
         )
 
-    def differentiate_2(self) -> AutoDiffReal2VarOrder2:
+    def differentiate_2(self) -> Self:
         """Extract $\\partial / \\partial x_2$ with zero second partials."""
-        return AutoDiffReal2VarOrder2(
+        return type(self)(
             self.d1val2, self.d1val1_d1val2, self.d2val2, 0.0, 0.0, 0.0
         )
 
     def pow(
         self, other: AutoDiffReal2VarOrder2 | intrinsics.ArrayLike
-    ) -> AutoDiffReal2VarOrder2:
+    ) -> Self:
         """Raise `self` to a hyperdual or scalar exponent `other` ($x^{y}$)."""
         if isinstance(other, AutoDiffReal2VarOrder2):
             zv, d1x, d1y, d2x, d1x_d1y, d2y = kernels.binary_pow(
@@ -228,7 +237,7 @@ class AutoDiffReal2VarOrder2(base.AutoDiffBase):
 
     def max(
         self, other: AutoDiffReal2VarOrder2 | intrinsics.ArrayLike
-    ) -> AutoDiffReal2VarOrder2:
+    ) -> Self:
         """Compute $\\max(x, y)$ using MESA's Heaviside subgradient."""
         if isinstance(other, AutoDiffReal2VarOrder2):
             q0 = fmath.heaviside(self.val - other.val)
@@ -243,7 +252,7 @@ class AutoDiffReal2VarOrder2(base.AutoDiffBase):
 
     def min(
         self, other: AutoDiffReal2VarOrder2 | intrinsics.ArrayLike
-    ) -> AutoDiffReal2VarOrder2:
+    ) -> Self:
         """Compute $\\min(x, y)$ using MESA's Heaviside subgradient."""
         if isinstance(other, AutoDiffReal2VarOrder2):
             q0 = fmath.heaviside(other.val - self.val)
@@ -258,13 +267,13 @@ class AutoDiffReal2VarOrder2(base.AutoDiffBase):
 
     def dim(
         self, other: AutoDiffReal2VarOrder2 | intrinsics.ArrayLike
-    ) -> AutoDiffReal2VarOrder2:
+    ) -> Self:
         """Compute $\\operatorname{dim}(x, y) = \\max(x - y, 0)$."""
         return (self - other).max(0.0)
 
-    def __neg__(self) -> AutoDiffReal2VarOrder2:
+    def __neg__(self) -> Self:
         """Negate all six hyperdual components directly without squaring."""
-        return AutoDiffReal2VarOrder2(
+        return type(self)(
             -self.val,
             -self.d1val1,
             -self.d1val2,
@@ -275,10 +284,10 @@ class AutoDiffReal2VarOrder2(base.AutoDiffBase):
 
     def __add__(
         self, other: AutoDiffReal2VarOrder2 | intrinsics.ArrayLike
-    ) -> AutoDiffReal2VarOrder2:
+    ) -> Self:
         """Add a hyperdual or scalar operand."""
         if isinstance(other, AutoDiffReal2VarOrder2):
-            return AutoDiffReal2VarOrder2(
+            return type(self)(
                 self.val + other.val,
                 self.d1val1 + other.d1val1,
                 self.d1val2 + other.d1val2,
@@ -287,7 +296,7 @@ class AutoDiffReal2VarOrder2(base.AutoDiffBase):
                 self.d2val2 + other.d2val2,
             )
         c = intrinsics.as_f64(other)
-        return AutoDiffReal2VarOrder2(
+        return type(self)(
             self.val + c,
             self.d1val1,
             self.d1val2,
@@ -296,16 +305,16 @@ class AutoDiffReal2VarOrder2(base.AutoDiffBase):
             self.d2val2,
         )
 
-    def __radd__(self, other: intrinsics.ArrayLike) -> AutoDiffReal2VarOrder2:
+    def __radd__(self, other: intrinsics.ArrayLike) -> Self:
         """Add a scalar left operand to `self`."""
         return self.__add__(other)
 
     def __sub__(
         self, other: AutoDiffReal2VarOrder2 | intrinsics.ArrayLike
-    ) -> AutoDiffReal2VarOrder2:
+    ) -> Self:
         """Subtract a hyperdual or scalar operand from `self`."""
         if isinstance(other, AutoDiffReal2VarOrder2):
-            return AutoDiffReal2VarOrder2(
+            return type(self)(
                 self.val - other.val,
                 self.d1val1 - other.d1val1,
                 self.d1val2 - other.d1val2,
@@ -314,7 +323,7 @@ class AutoDiffReal2VarOrder2(base.AutoDiffBase):
                 self.d2val2 - other.d2val2,
             )
         c = intrinsics.as_f64(other)
-        return AutoDiffReal2VarOrder2(
+        return type(self)(
             self.val - c,
             self.d1val1,
             self.d1val2,
@@ -323,20 +332,20 @@ class AutoDiffReal2VarOrder2(base.AutoDiffBase):
             self.d2val2,
         )
 
-    def __rsub__(self, other: intrinsics.ArrayLike) -> AutoDiffReal2VarOrder2:
+    def __rsub__(self, other: intrinsics.ArrayLike) -> Self:
         """Subtract `self` from a scalar left operand."""
         return (-self) + other
 
     def __mul__(
         self, other: AutoDiffReal2VarOrder2 | intrinsics.ArrayLike
-    ) -> AutoDiffReal2VarOrder2:
+    ) -> Self:
         """Multiply `self` by a hyperdual or scalar operand."""
         if isinstance(other, AutoDiffReal2VarOrder2):
             return self.make_binary_operator(
                 other, self.val * other.val, other.val, self.val, 0.0, 1.0, 0.0
             )
         c = intrinsics.as_f64(other)
-        return AutoDiffReal2VarOrder2(
+        return type(self)(
             self.val * c,
             self.d1val1 * c,
             self.d1val2 * c,
@@ -345,13 +354,13 @@ class AutoDiffReal2VarOrder2(base.AutoDiffBase):
             self.d2val2 * c,
         )
 
-    def __rmul__(self, other: intrinsics.ArrayLike) -> AutoDiffReal2VarOrder2:
+    def __rmul__(self, other: intrinsics.ArrayLike) -> Self:
         """Multiply a scalar left operand by `self`."""
         return self.__mul__(other)
 
     def __truediv__(
         self, other: AutoDiffReal2VarOrder2 | intrinsics.ArrayLike
-    ) -> AutoDiffReal2VarOrder2:
+    ) -> Self:
         """Divide `self` by a hyperdual or scalar operand."""
         if isinstance(other, AutoDiffReal2VarOrder2):
             inv_y = 1.0 / other.val
@@ -367,15 +376,13 @@ class AutoDiffReal2VarOrder2(base.AutoDiffBase):
             )
         return self * (1.0 / intrinsics.as_f64(other))
 
-    def __rtruediv__(
-        self, other: intrinsics.ArrayLike
-    ) -> AutoDiffReal2VarOrder2:
+    def __rtruediv__(self, other: intrinsics.ArrayLike) -> Self:
         """Divide a scalar left operand by `self` ($c / y = c y^{-1}$)."""
         return self.powm1() * intrinsics.as_f64(other)
 
     def __pow__(
         self, other: AutoDiffReal2VarOrder2 | intrinsics.ArrayLike
-    ) -> AutoDiffReal2VarOrder2:
+    ) -> Self:
         """Raise `self` to power `other` ($x^{y}$)."""
         return self.pow(other)
 

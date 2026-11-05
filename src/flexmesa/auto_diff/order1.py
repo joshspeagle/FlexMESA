@@ -47,11 +47,30 @@ class DualOrder1(base.AutoDiffBase):
     ) -> None:
         """Initialize `DualOrder1` with `float64` `val` and `d1` arrays."""
         self.val: jax.Array = intrinsics.as_f64(val)
-        self.d1: jax.Array = intrinsics.as_f64(d1)
-        if self.NUM_VARS > 0 and self.d1.shape[-1:] != (self.NUM_VARS,):
+        d1_arr = intrinsics.as_f64(d1)
+        if d1_arr.ndim == 0:
+            msg = "DualOrder1 d1 must have at least 1 dimension"
+            raise ValueError(msg)
+        if self.NUM_VARS > 0 and d1_arr.shape[-1:] != (self.NUM_VARS,):
             msg = (
                 f"{type(self).__name__} requires trailing dimension "
-                f"{self.NUM_VARS}, got shape {self.d1.shape}"
+                f"{self.NUM_VARS}, got shape {d1_arr.shape}"
+            )
+            raise ValueError(msg)
+        target_shape = (*self.val.shape, d1_arr.shape[-1])
+        self.d1: jax.Array = (
+            d1_arr
+            if d1_arr.shape == target_shape
+            else jnp.broadcast_to(d1_arr, target_shape)
+        )
+
+    def _check_compatible_dual(self, other: DualOrder1) -> None:
+        """Ensure two `DualOrder1` operands share variable arity `N`."""
+        if self.d1.shape[-1:] != other.d1.shape[-1:]:
+            msg = (
+                f"Cannot combine {type(self).__name__} "
+                f"(N={self.d1.shape[-1]}) with {type(other).__name__} "
+                f"(N={other.d1.shape[-1]})"
             )
             raise ValueError(msg)
 
@@ -69,7 +88,9 @@ class DualOrder1(base.AutoDiffBase):
     ) -> Self:
         """Reconstruct `DualOrder1` from flattened `(val, d1)` leaves."""
         del aux_data
-        return cls(children[0], children[1])
+        obj = object.__new__(cls)
+        obj.val, obj.d1 = children
+        return obj
 
     @classmethod
     def constant(
@@ -114,6 +135,7 @@ class DualOrder1(base.AutoDiffBase):
         z_d1y: intrinsics.ArrayLike,
     ) -> Self:
         """Apply the first-order binary chain rule $z = g(x, y)$."""
+        self._check_compatible_dual(other)
         zv = intrinsics.as_f64(z_val)
         zd1x = intrinsics.as_f64(z_d1x)
         zd1y = intrinsics.as_f64(z_d1y)
@@ -169,6 +191,7 @@ class DualOrder1(base.AutoDiffBase):
 
     def __add__(self, other: DualOrder1 | intrinsics.ArrayLike) -> Self:
         if isinstance(other, DualOrder1):
+            self._check_compatible_dual(other)
             return type(self)(self.val + other.val, self.d1 + other.d1)
         return type(self)(self.val + intrinsics.as_f64(other), self.d1)
 
@@ -177,6 +200,7 @@ class DualOrder1(base.AutoDiffBase):
 
     def __sub__(self, other: DualOrder1 | intrinsics.ArrayLike) -> Self:
         if isinstance(other, DualOrder1):
+            self._check_compatible_dual(other)
             return type(self)(self.val - other.val, self.d1 - other.d1)
         return type(self)(self.val - intrinsics.as_f64(other), self.d1)
 

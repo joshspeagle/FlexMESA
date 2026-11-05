@@ -15,6 +15,7 @@ import hypothesis
 import jax
 import jax.numpy as jnp
 import numpy as np
+import pytest
 from hypothesis import strategies as st
 from jax import test_util
 
@@ -312,3 +313,25 @@ def test_property_hyperdual_matches_jax_jacfwd_and_hessian(
         [_fn_jax(pt), g[0], g[1], h[0, 0], h[0, 1], h[1, 1]],
         1.0e-12,
     )
+
+
+def test_auto_diff_pytree_unflatten_batching_and_arity_guards() -> None:
+    """Verify PyTree `tree_map`/`eval_shape`, batching, and arity guards."""
+    x4 = ad.AutoDiffReal4VarOrder1.independent(2.0, 1)
+    mapped = jax.tree_util.tree_map(lambda a: a.ndim, x4)
+    assert mapped.val == 0
+    assert mapped.d1 == 1
+
+    shaped = jax.eval_shape(
+        lambda u: u.exp() + 1.0, ad.AutoDiffReal2VarOrder2.var1(1.5)
+    )
+    assert shaped.val.ndim == 0
+
+    x2 = ad.AutoDiffReal2VarOrder1.independent(3.0, 0)
+    z_batch = x2 + jnp.asarray([1.0, 2.0, 3.0], dtype=jnp.float64)
+    assert z_batch.val.shape == (3,)
+    assert z_batch.d1.shape == (3, 2)
+
+    y1 = ad.AutoDiffReal1VarOrder1.independent(2.0, 0)
+    with pytest.raises(ValueError, match="Cannot combine"):
+        _ = x2 + y1

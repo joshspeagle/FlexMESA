@@ -272,8 +272,8 @@ respect to $(T, \rho, \bar{A}, \bar{Z})$ across five channels (`neu_get`):
    $C_V^2 - C_A^2$ for $n_{\nu} = 2$ additional neutrino flavors beyond $\nu_e$.
 2. **Plasmon decay (`plas_neu`)** ($\tilde{\gamma} \to \nu + \bar{\nu}$, Itoh et
    al. eqs. 4.1, 4.5–4.11): Transverse (`ft`), longitudinal (`fl`), and
-   cross-term (`fxy`) plasma dielectric fits in $\gamma^2 =
-   \gamma_0^2 (\rho Y_e)^{2/3} / (T_8^2 (1 + (1.019\times 10^{-6}\rho Y_e)^{2/3})^{1/2})$.
+   cross-term (`fxy`) plasma dielectric fits in $\gamma^2 = 1.1095\times 10^{11}
+   (\rho Y_e) / (T^2 (1 + (1.019\times 10^{-6}\rho Y_e)^{2/3})^{1/2})$.
 3. **Photoneutrino (`phot_neu`)** ($e^- + \gamma \to e^- + \nu + \bar{\nu}$,
    Itoh et al. eqs. 3.2–3.8 and Table 2): 3-term Fourier expansion across three
    temperature bands ($10^7 \le T < 10^8\,\mathrm{K}$,
@@ -283,8 +283,8 @@ respect to $(T, \rho, \bar{A}, \bar{Z})$ across five channels (`neu_get`):
    \bar{\nu}$): Smooth cosine ramp $\alpha = \frac{1}{2}(1 - \cos(\pi\,
    \mathrm{tfrac}))$ over $0.05\,T_F < T < 0.3\,T_F$ blending weakly degenerate
    gas (`brem_neu_weak_degen`, $T \ge 0.3\,T_F$) and strongly degenerate liquid
-   metal (`brem_neu_liquid_metal`, $T \le 0.05\,T_F$), where $T_F = 5.9302\times
-   10^9 (\sqrt{1 + 1.018\times 10^{-4}\rho_6^{2/3} Y_e^{2/3}} - 1)$.
+   metal (`brem_neu_liquid_metal`, $T \le 0.05\,T_F$), where $u = (\rho_6
+   Y_e)^{2/3}$ and $T_F = 5.9302\times 10^9 (\sqrt{u} - 1)$.
 5. **Recombination (`reco_neu`)** ($e^-_{\mathrm{cont}} \to
    e^-_{\mathrm{bound}} + \nu + \bar{\nu}$): Uses Antia (1993, ApJS, 84, 101)
    rational approximations `ifermi12` ($F_{1/2}^{-1}$) and `zfermim12`
@@ -303,8 +303,8 @@ respect to $(T, \rho, \bar{A}, \bar{Z})$ across five channels (`neu_get`):
 #### Convective and Mixing Transport (`turb`)
 Evaluates local and time-dependent stellar mixing coefficients ($D$ in
 $\mathrm{cm^2\,s^{-1}}$), convective velocity ($v_c$ in $\mathrm{cm\,s^{-1}}$),
-convective flux ($F_{\mathrm{conv}}$), and temperature gradient ($\nabla_T$) with
-first-order autodiff partials (`DualOrder1` in Rust, `jax.grad` in Python):
+convective flux ($F_{\mathrm{conv}}$), and temperature gradient ($\nabla_T$)
+with first-order autodiff partials (`DualOrder1` in Rust, `jax.grad` in Python):
 
 1. **Mixing-Length Theory (`set_mlt`)**: Solves the cubic MLT efficiency
    equation $a_0 \Gamma^3 + \Gamma^2 + \Gamma - a_0 B^3 = 0$ via analytical
@@ -323,14 +323,14 @@ first-order autodiff partials (`DualOrder1` in Rust, `jax.grad` in Python):
    $Y^*$ are propagated via the implicit function theorem $\partial Y^* /
    \partial p = -(\partial Q / \partial Y)^{-1} (\partial Q / \partial p)$.
 3. **Semiconvection (`set_semiconvection`)**: Langer, El Eid, & Fricke (1985)
-   diffusivity $D_{\mathrm{sc}} = \alpha_{\mathrm{sc}} K_{\mathrm{rad}}
-   (\nabla_r - \nabla_{\mathrm{ad}}) / (6 (2 \nabla_{\mathrm{ad}} - \nabla_r -
-   \nabla_L))$ and quadratic radiative/semiconvective flux partitioning (`Langer_85`
-   and `Langer_85 mixing; gradT = gradr`).
+   diffusivity $D_{\mathrm{sc}} = (\alpha_{\mathrm{sc}} K_{\mathrm{rad}} /
+   (6 C_P \rho)) (\nabla_r - \nabla_{\mathrm{ad}}) / (\nabla_L - \nabla_r)$ and
+   quadratic radiative/semiconvective flux partitioning (`Langer_85` and
+   `Langer_85 mixing; gradT = gradr`).
 4. **Thermohaline Mixing (`set_thermohaline`)**: Kippenhahn, Ruschenplatt, &
    Thomas (1980), Traxler, Garaud, & Stellmach (2011), and Brown, Garaud, &
-   Stellmach (2013) salt-finger diffusivities (solving the 2D coupled growth-rate
-   and wavenumber equations via Newton-Raphson).
+   Stellmach (2013) salt-finger diffusivities (solving the 2D coupled
+   growth-rate and wavenumber equations via Newton-Raphson).
 
 Matches all golden output values in `turb/test/test_output`
 (`check_efficient_MLT_scaling`, 31-step `check_TDC` sweep, and

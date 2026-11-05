@@ -20,6 +20,54 @@ import math
 
 from flexmesa.neu import inputs as _inputs
 
+_IFERMI12_A1: tuple[float, ...] = (
+    1.999266880833e4,
+    5.702479099336e3,
+    6.610132843877e2,
+    3.818838129486e1,
+    1.0,
+)
+_IFERMI12_B1: tuple[float, ...] = (
+    1.771804140488e4,
+    -2.014785161019e3,
+    9.130355392717e1,
+    -1.670718177489,
+)
+_IFERMI12_A2: tuple[float, ...] = (
+    -1.277060388085e-2,
+    7.187946804945e-2,
+    -4.262314235106e-1,
+    4.997559426872e-1,
+    -1.285579118012,
+    -3.930805454272e-1,
+    1.0,
+)
+_IFERMI12_B2: tuple[float, ...] = (
+    -9.745794806288e-3,
+    5.485432756838e-2,
+    -3.299466243260e-1,
+    4.077841975923e-1,
+    -1.145531476975,
+    -6.067091689181e-2,
+)
+
+
+def _eval_horner(coeffs: tuple[float, ...], z: float) -> float:
+    """Evaluate polynomial $\\sum_i c_i z^i$ in descending degree order.
+
+    Args:
+        coeffs: Polynomial coefficients `(c_0, c_1, ..., c_n)` in ascending
+            power order.
+        z: Evaluation coordinate $z$ (dimensionless).
+
+    Returns:
+        Polynomial value $\\sum_{i=0}^n c_i z^i$ (dimensionless).
+    """
+    acc = coeffs[-1]
+    for c in reversed(coeffs[:-1]):
+        acc = acc * z + c
+    return acc
+
 
 def ifermi12(f: float) -> float:
     """Evaluates inverse Fermi-Dirac integral $F_{1/2}^{-1}(f)$ (Antia 1993).
@@ -34,52 +82,14 @@ def ifermi12(f: float) -> float:
     Returns:
         Dimensionless electron chemical potential $\\nu = \\mu_e / (k_B T)$.
     """
-    a1 = (
-        1.999266880833e4,
-        5.702479099336e3,
-        6.610132843877e2,
-        3.818838129486e1,
-        1.0,
-    )
-    b1 = (
-        1.771804140488e4,
-        -2.014785161019e3,
-        9.130355392717e1,
-        -1.670718177489,
-    )
-    a2 = (
-        -1.277060388085e-2,
-        7.187946804945e-2,
-        -4.262314235106e-1,
-        4.997559426872e-1,
-        -1.285579118012,
-        -3.930805454272e-1,
-        1.0,
-    )
-    b2 = (
-        -9.745794806288e-3,
-        5.485432756838e-2,
-        -3.299466243260e-1,
-        4.077841975923e-1,
-        -1.145531476975,
-        -6.067091689181e-2,
-    )
     if f < 4.0:
-        rn = f + a1[3]
-        for i in (2, 1, 0):
-            rn = rn * f + a1[i]
-        den = b1[3]
-        for i in (2, 1, 0):
-            den = den * f + b1[i]
+        rn = _eval_horner(_IFERMI12_A1, f)
+        den = _eval_horner(_IFERMI12_B1, f)
         return math.log(f * rn / den)
 
     ff = 1.0 / math.pow(f, 1.0 / 1.5)
-    rn = ff + a2[5]
-    for i in (4, 3, 2, 1, 0):
-        rn = rn * ff + a2[i]
-    den = b2[5]
-    for i in (4, 3, 2, 1, 0):
-        den = den * ff + b2[i]
+    rn = _eval_horner(_IFERMI12_A2, ff)
+    den = _eval_horner(_IFERMI12_B2, ff)
     return rn / (den * ff)
 
 

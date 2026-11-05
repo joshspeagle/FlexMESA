@@ -26,6 +26,33 @@ from flexmesa.neu import inputs as _inputs
 FAC3: float = _const.PI / 5.0
 
 
+def _combine_brem_rate(
+    t85: float,
+    t86: float,
+    inp: _inputs.NeuInputs,
+    f: tuple[float, float, float, float, float],
+    g: tuple[float, float, float, float, float],
+) -> _inputs.NeuRate:
+    """Combine vector (`f`) and axial-vector (`g`) structure factors."""
+    pref = 0.5738 * inp.zbar * inp.ye * t86 * inp.den
+    prefdt = 0.5738 * inp.zbar * inp.ye * 6.0 * t85 * inp.den * 1.0e-8
+    prefdd = 0.5738 * inp.zbar * inp.ye * t86
+    prefda = -pref * inp.abari
+    prefdz = 0.5738 * 2.0 * inp.ye * t86 * inp.den
+    comb = _inputs.TFAC4 * f[0] - _inputs.TFAC5 * g[0]
+    return _inputs.NeuRate(
+        val=pref * comb,
+        d_t=prefdt * comb
+        + pref * (_inputs.TFAC4 * f[1] - _inputs.TFAC5 * g[1]),
+        d_rho=prefdd * comb
+        + pref * (_inputs.TFAC4 * f[2] - _inputs.TFAC5 * g[2]),
+        d_abar=prefda * comb
+        + pref * (_inputs.TFAC4 * f[3] - _inputs.TFAC5 * g[3]),
+        d_zbar=prefdz * comb
+        + pref * (_inputs.TFAC4 * f[4] - _inputs.TFAC5 * g[4]),
+    )
+
+
 def brem_neu_weak_degen(t8: float, inp: _inputs.NeuInputs) -> _inputs.NeuRate:
     """Evaluates weakly degenerate bremsstrahlung fit (`brem_neu_weak_degen`).
 
@@ -73,29 +100,21 @@ def brem_neu_weak_degen(t8: float, inp: _inputs.NeuInputs) -> _inputs.NeuRate:
     cz = -1.26 * etam2
     inv_edum = 1.0 / edum
     xden = c00 * inv_edum
-    xdendt = (cz * etadt - xden * dz * etadt) * inv_edum
-    xdendd = (cz * etadd - xden * dz * etadd) * inv_edum
-    xdenda = (cz * etada - xden * dz * etada) * inv_edum
-    xdendz = (cz * etadz - xden * dz * etadz) * inv_edum
-
-    fbrem = xnum + xden
-    fbremdt = -xnum * xnum * f0 + xdendt
-    fbremdd = xdendd
-    fbremda = xdenda
-    fbremdz = xdendz
+    d_scale = (cz - xden * dz) * inv_edum
+    f_tup = (
+        xnum + xden,
+        -xnum * xnum * f0 + d_scale * etadt,
+        d_scale * etadd,
+        d_scale * etada,
+        d_scale * etadz,
+    )
 
     ga0 = 230.0 + 6.7e5 * t8m2 + 7.66e9 * t8m5
     gf0 = (-2.0 * 6.7e5 * t8m3 - 5.0 * 7.66e9 * t8m6) * 1.0e-8
     gz = 1.0 + inp.rm * 1.0e-9
-    gdum = ga0 * gz
-    gdumdt = gf0 * gz
-    g_scale = ga0 * 1.0e-9
-    gxnum = 1.0 / gdum
+    gxnum = 1.0 / (ga0 * gz)
     neg_gx2 = -gxnum * gxnum
-    gxnumdt = neg_gx2 * gdumdt
-    gxnumdd = neg_gx2 * g_scale * inp.rmdd
-    gxnumda = neg_gx2 * g_scale * inp.rmda
-    gxnumdz = neg_gx2 * g_scale * inp.rmdz
+    g_scale = neg_gx2 * ga0 * 1.0e-9
 
     p1 = math.pow(t8, 3.85)
     gc00 = 7.75e5 * t832 + 247.0 * p1
@@ -112,34 +131,16 @@ def brem_neu_weak_degen(t8: float, inp: _inputs.NeuInputs) -> _inputs.NeuRate:
     gd2dt = gdd00 * inp.rmi + gdd01 + gdd02 * den_p
     neg_c00_rmi2 = -gc00 * inp.rmi * inp.rmi
     gd2dd = neg_c00_rmi2 * inp.rmdd + 0.656 * gc02 * math.pow(inp.den, -0.344)
-    gd2da = neg_c00_rmi2 * inp.rmda
-    gd2dz = neg_c00_rmi2 * inp.rmdz
     gxden = 1.0 / gd2
     neg_gxd2 = -gxden * gxden
-
-    gbrem = gxnum + gxden
-    gbremdt = gxnumdt + neg_gxd2 * gd2dt
-    gbremdd = gxnumdd + neg_gxd2 * gd2dd
-    gbremda = gxnumda + neg_gxd2 * gd2da
-    gbremdz = gxnumdz + neg_gxd2 * gd2dz
-
-    pref = 0.5738 * inp.zbar * inp.ye * t86 * inp.den
-    prefdt = 0.5738 * inp.zbar * inp.ye * 6.0 * t85 * inp.den * 1.0e-8
-    prefdd = 0.5738 * inp.zbar * inp.ye * t86
-    prefda = -pref * inp.abari
-    prefdz = 0.5738 * 2.0 * inp.ye * t86 * inp.den
-    comb = _inputs.TFAC4 * fbrem - _inputs.TFAC5 * gbrem
-    return _inputs.NeuRate(
-        val=pref * comb,
-        d_t=prefdt * comb
-        + pref * (_inputs.TFAC4 * fbremdt - _inputs.TFAC5 * gbremdt),
-        d_rho=prefdd * comb
-        + pref * (_inputs.TFAC4 * fbremdd - _inputs.TFAC5 * gbremdd),
-        d_abar=prefda * comb
-        + pref * (_inputs.TFAC4 * fbremda - _inputs.TFAC5 * gbremda),
-        d_zbar=prefdz * comb
-        + pref * (_inputs.TFAC4 * fbremdz - _inputs.TFAC5 * gbremdz),
+    g_tup = (
+        gxnum + gxden,
+        neg_gx2 * gf0 * gz + neg_gxd2 * gd2dt,
+        g_scale * inp.rmdd + neg_gxd2 * gd2dd,
+        (g_scale + neg_gxd2 * neg_c00_rmi2) * inp.rmda,
+        (g_scale + neg_gxd2 * neg_c00_rmi2) * inp.rmdz,
     )
+    return _combine_brem_rate(t85, t86, inp, f_tup, g_tup)
 
 
 def _eval_liq_fourier(
@@ -157,7 +158,9 @@ def _eval_liq_fourier(
 
     Computes $(f(u), \\partial f / \\partial \\rho)$ for Itoh et al. (1996)
     Section 5.2 (`fb`, `ft`, `gb`, `gt` and their $\\rho$ derivatives `c00..c03`
-    in `brem_neu_liquid_metal`).
+    in `brem_neu_liquid_metal`) over the dimensionless Fourier angle
+    $u = (\\pi / 5)(\\log_{10} \\rho - 3)$ and density chain-rule factor
+    $a_{0,u} = (\\pi / (5 \\ln 10)) / \\rho$.
 
     Args:
         u: Scaled logarithmic density argument $u = (\\pi / 5)(\\log_{10}\\rho
@@ -240,29 +243,56 @@ def brem_neu_liquid_metal(t8: float, inp: _inputs.NeuInputs) -> _inputs.NeuRate:
 
     # Evaluate Fourier components (fb, ft, gb, gt) and their rho derivatives.
     fb, c00 = _eval_liq_fourier(
-        u, a0_u, cos_k, sin_k, 0.17946, 0.00945, 0.34529,
+        u,
+        a0_u,
+        cos_k,
+        sin_k,
+        0.17946,
+        0.00945,
+        0.34529,
         (-0.05821, -0.01089, -0.01147, -0.00656, -0.00519),
         (-0.04969, -0.01584, -0.00504, -0.00281),
     )
     ft, c01 = _eval_liq_fourier(
-        u, a0_u, cos_k, sin_k, 0.06781, -0.02342, 0.24819,
+        u,
+        a0_u,
+        cos_k,
+        sin_k,
+        0.06781,
+        -0.02342,
+        0.24819,
         (-0.00944, -0.01289, -0.00589, -0.00404, -0.00330),
         (-0.02213, -0.01136, -0.00467, -0.00131),
     )
     gb, c02 = _eval_liq_fourier(
-        u, a0_u, cos_k, sin_k, 0.00766, -0.01259, 0.07917,
+        u,
+        a0_u,
+        cos_k,
+        sin_k,
+        0.00766,
+        -0.01259,
+        0.07917,
         (-0.00710, -0.00028, 0.00232, 0.00044, 0.00158),
         (0.02300, -0.01078, 0.00118, -0.00089),
     )
     gt, c03 = _eval_liq_fourier(
-        u, a0_u, cos_k, sin_k, -0.00769, -0.00829, 0.05211,
+        u,
+        a0_u,
+        cos_k,
+        sin_k,
+        -0.00769,
+        -0.00829,
+        0.05211,
         (0.00356, -0.00184, 0.00146, 0.00031, 0.00069),
         (0.01052, -0.00354, -0.00014, -0.00018),
     )
 
     # Evaluate ion-ion Coulomb coupling parameter Gamma (`dum`) and powers.
     dum = (
-        2.275e-1 * inp.zbar * inp.zbar * t8m1
+        2.275e-1
+        * inp.zbar
+        * inp.zbar
+        * t8m1
         * math.pow(inp.den6 * inp.abari, _const.ONE_THIRD)
     )
     dumdt = -dum * inp.tempi
@@ -290,35 +320,21 @@ def brem_neu_liquid_metal(t8: float, inp: _inputs.NeuInputs) -> _inputs.NeuRate:
         + 0.74498 * gm2
     )
 
-    fliq = v * fb + (1.0 - v) * ft
-    fliqdt = a0 * dumdt * (fb - ft)
-    fliqdd = a0 * dumdd * (fb - ft) + v * c00 + (1.0 - v) * c01
-    fliqda = a0 * dumda * (fb - ft)
-    fliqdz = a0 * dumdz * (fb - ft)
-
-    gliq = w * gb + (1.0 - w) * gt
-    gliqdt = a1 * dumdt * (gb - gt)
-    gliqdd = a1 * dumdd * (gb - gt) + w * c02 + (1.0 - w) * c03
-    gliqda = a1 * dumda * (gb - gt)
-    gliqdz = a1 * dumdz * (gb - gt)
-
-    pref = 0.5738 * inp.zbar * inp.ye * t86 * inp.den
-    prefdt = 0.5738 * inp.zbar * inp.ye * 6.0 * t85 * inp.den * 1.0e-8
-    prefdd = 0.5738 * inp.zbar * inp.ye * t86
-    prefda = -pref * inp.abari
-    prefdz = 0.5738 * 2.0 * inp.ye * t86 * inp.den
-    comb = _inputs.TFAC4 * fliq - _inputs.TFAC5 * gliq
-    return _inputs.NeuRate(
-        val=pref * comb,
-        d_t=prefdt * comb
-        + pref * (_inputs.TFAC4 * fliqdt - _inputs.TFAC5 * gliqdt),
-        d_rho=prefdd * comb
-        + pref * (_inputs.TFAC4 * fliqdd - _inputs.TFAC5 * gliqdd),
-        d_abar=prefda * comb
-        + pref * (_inputs.TFAC4 * fliqda - _inputs.TFAC5 * gliqda),
-        d_zbar=prefdz * comb
-        + pref * (_inputs.TFAC4 * fliqdz - _inputs.TFAC5 * gliqdz),
+    f_liq = (
+        v * fb + (1.0 - v) * ft,
+        a0 * dumdt * (fb - ft),
+        a0 * dumdd * (fb - ft) + v * c00 + (1.0 - v) * c01,
+        a0 * dumda * (fb - ft),
+        a0 * dumdz * (fb - ft),
     )
+    g_liq = (
+        w * gb + (1.0 - w) * gt,
+        a1 * dumdt * (gb - gt),
+        a1 * dumdd * (gb - gt) + w * c02 + (1.0 - w) * c03,
+        a1 * dumda * (gb - gt),
+        a1 * dumdz * (gb - gt),
+    )
+    return _combine_brem_rate(t85, t86, inp, f_liq, g_liq)
 
 
 def brem_neu(inp: _inputs.NeuInputs) -> _inputs.NeuRate:

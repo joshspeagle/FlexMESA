@@ -11,7 +11,7 @@ Physical Units and Conventions:
       10^9\\,\\mathrm{K})$.
     - Mass density `den` in $\\mathrm{g\\,cm^{-3}}$, with electron density
       factor $\\rho / \\mu_e = \\rho\\,\\bar{Z} / \\bar{A}$ (`rm`).
-    - Dimensionless relativistic degeneracy parameter $\\xi = (10^{-3} \\rho
+    - Dimensionless relativistic degeneracy parameter $\\xi = (10^{-9} \\rho
       Y_e)^{1/3} / \\lambda$ (`zeta`) and its analytical partial derivatives
       with respect to $(T, \\rho, \\bar{A}, \\bar{Z})$.
 """
@@ -71,9 +71,7 @@ TFAC5: float = 0.5 * TFAC2
 
 # Recombination weak-coupling combination (`tfac6` in `mod_neu.f90`).
 TFAC6: float = (
-    C_V * C_V
-    + 1.5 * C_A * C_A
-    + SNEUT_Z * (C_VP * C_VP + 1.5 * C_AP * C_AP)
+    C_V * C_V + 1.5 * C_A * C_A + SNEUT_Z * (C_VP * C_VP + 1.5 * C_AP * C_AP)
 )
 
 
@@ -187,7 +185,7 @@ class NeuInputs:
         rmdd: Derivative $\\partial(\\rho Y_e)/\\partial \\rho = Y_e$.
         rmda: Derivative $\\partial(\\rho Y_e)/\\partial \\bar{A}$.
         rmdz: Derivative $\\partial(\\rho Y_e)/\\partial \\bar{Z}$.
-        zeta: Degeneracy parameter $\\xi = (10^{-3}\\rho Y_e)^{1/3} / \\lambda$.
+        zeta: Degeneracy parameter $\\xi = (10^{-9}\\rho Y_e)^{1/3} / \\lambda$.
         zeta2: Power $\\xi^2$.
         zeta3: Power $\\xi^3$.
         zetadt: Derivative $\\partial \\xi / \\partial T$.

@@ -224,6 +224,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "flexmesa-turb"
+version = "0.1.0"
+dependencies = [
+ "flexmesa-autodiff",
+ "flexmesa-const",
+ "flexmesa-math",
+ "flexmesa-testing",
+ "flexmesa-utils",
+]
+
+[[package]]
 name = "flexmesa-utils"
 version = "0.1.0"
 dependencies = [

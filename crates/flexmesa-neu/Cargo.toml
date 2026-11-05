@@ -5,7 +5,7 @@ edition.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
-description = "Thermal neutrino energy loss rates and analytical derivatives (Itoh et al. 1996)"
+description = "Thermal neutrino energy loss rates and derivatives (Itoh et al. 1996)"
 
 [dependencies]
 flexmesa-const = { path = "../flexmesa-const" }

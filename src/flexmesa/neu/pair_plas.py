@@ -47,10 +47,7 @@ def pair_neu(inp: _inputs.NeuInputs) -> _inputs.NeuRate:
         + 918.6 * inp.xl8
     )
     gldt = inp.xldt * (
-        -26.08 * inp.xl
-        + 534.0 * inp.xl3
-        + 9204.0 * inp.xl5
-        + 7348.8 * inp.xl7
+        -26.08 * inp.xl + 534.0 * inp.xl3 + 9204.0 * inp.xl5 + 7348.8 * inp.xl7
     )
 
     # Evaluate f_pair numerator and denominator across the T9 = 10 boundary.
@@ -60,9 +57,7 @@ def pair_neu(inp: _inputs.NeuInputs) -> _inputs.NeuRate:
     if inp.t9 < 10.0:
         b1 = math.exp(-5.5924 * inp.zeta)
         b2 = -b1 * 5.5924
-        den_a1 = (
-            9.383e-1 * inp.xlm1 - 4.141e-1 * inp.xlm2 + 5.829e-2 * inp.xlm3
-        )
+        den_a1 = 9.383e-1 * inp.xlm1 - 4.141e-1 * inp.xlm2 + 5.829e-2 * inp.xlm3
         den_a2 = (
             -9.383e-1 * inp.xlm2
             + 2.0 * 4.141e-1 * inp.xlm3

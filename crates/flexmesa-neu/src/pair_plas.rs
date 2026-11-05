@@ -13,7 +13,7 @@
 //!   C_A'^2)\right]\left[1 + \frac{(C_V^2 - C_A^2) + n_\nu (C_V'^2 -
 //!   C_A'^2)}{(C_V^2 + C_A^2) + n_\nu (C_V'^2 + C_A'^2)}\,q_{\mathrm{pair}}
 //!   \right] g(\lambda)\,e^{-2/\lambda}\,f_{\mathrm{pair}}(\lambda, \xi)$$
-//!   where $\lambda = T / (5.9302 \times 10^9\,\mathrm{K})$ and $\xi = (10^{-3}
+//!   where $\lambda = T / (5.9302 \times 10^9\,\mathrm{K})$ and $\xi = (10^{-9}
 //!   \rho Y_e)^{1/3} / \lambda$. Separates the $f_{\mathrm{pair}}$ fit
 //!   coefficients at $T_9 = 10$ ($T = 10^{10}\,\mathrm{K}$).
 //! - **Plasmon Decay (`plas_neu`)**: Dominant at high electron degeneracy where
@@ -233,44 +233,43 @@ pub fn plas_neu(input: &NeuInputs) -> NeuRate {
     let xdenda = xnumda;
     let xdendz = xnumdz;
 
-    let (fxy, fxydt, fxydd, fxyda, fxydz) =
-        if xnum.abs() > 0.7 || xden < 0.0 {
-            (1.0, 0.0, 0.0, 0.0, 0.0)
+    let (fxy, fxydt, fxydd, fxyda, fxydz) = if xnum.abs() > 0.7 || xden < 0.0 {
+        (1.0, 0.0, 0.0, 0.0, 0.0)
+    } else {
+        let p_a1 = 0.39 - 1.25 * xnum - 0.35 * sin(4.5 * xnum);
+        let p_a2 = -1.25 - 4.5 * 0.35 * cos(4.5 * xnum);
+        let arg = 4.5 * xnum + 0.9;
+        let p_b1 = 0.3 * exp(-pow(arg, 2.0));
+        let p_b2 = -p_b1 * 2.0 * arg * 4.5;
+        let c_val = (xden - 1.6 + 1.25 * xnum).min(0.0);
+        let (dumdt, dumdd, dumda, dumdz) = if c_val == 0.0 {
+            (0.0, 0.0, 0.0, 0.0)
         } else {
-            let p_a1 = 0.39 - 1.25 * xnum - 0.35 * sin(4.5 * xnum);
-            let p_a2 = -1.25 - 4.5 * 0.35 * cos(4.5 * xnum);
-            let arg = 4.5 * xnum + 0.9;
-            let p_b1 = 0.3 * exp(-pow(arg, 2.0));
-            let p_b2 = -p_b1 * 2.0 * arg * 4.5;
-            let c_val = (xden - 1.6 + 1.25 * xnum).min(0.0);
-            let (dumdt, dumdd, dumda, dumdz) = if c_val == 0.0 {
-                (0.0, 0.0, 0.0, 0.0)
-            } else {
-                (
-                    xdendt + 1.25 * xnumdt,
-                    xdendd + 1.25 * xnumdd,
-                    xdenda + 1.25 * xnumda,
-                    xdendz + 1.25 * xnumdz,
-                )
-            };
-            let d_val = 0.57 - 0.25 * xnum;
-            let a3_val = c_val / d_val;
-            let g_exp = exp(-a3_val * a3_val);
-            let f1 = -g_exp * 2.0 * a3_val / d_val;
-            let c01 = f1 * (dumdt + a3_val * 0.25 * xnumdt);
-            let c02 = f1 * (dumdd + a3_val * 0.25 * xnumdd);
-            let c03 = f1 * (dumda + a3_val * 0.25 * xnumda);
-            let c04 = f1 * (dumdz + a3_val * 0.25 * xnumdz);
-            let diff_ab = p_a1 - p_b1;
-            let ddiff_ab = p_a2 - p_b2;
             (
-                1.05 + diff_ab * g_exp,
-                ddiff_ab * xnumdt * g_exp + diff_ab * c01,
-                ddiff_ab * xnumdd * g_exp + diff_ab * c02,
-                ddiff_ab * xnumda * g_exp + diff_ab * c03,
-                ddiff_ab * xnumdz * g_exp + diff_ab * c04,
+                xdendt + 1.25 * xnumdt,
+                xdendd + 1.25 * xnumdd,
+                xdenda + 1.25 * xnumda,
+                xdendz + 1.25 * xnumdz,
             )
         };
+        let d_val = 0.57 - 0.25 * xnum;
+        let a3_val = c_val / d_val;
+        let g_exp = exp(-a3_val * a3_val);
+        let f1 = -g_exp * 2.0 * a3_val / d_val;
+        let c01 = f1 * (dumdt + a3_val * 0.25 * xnumdt);
+        let c02 = f1 * (dumdd + a3_val * 0.25 * xnumdd);
+        let c03 = f1 * (dumda + a3_val * 0.25 * xnumda);
+        let c04 = f1 * (dumdz + a3_val * 0.25 * xnumdz);
+        let diff_ab = p_a1 - p_b1;
+        let ddiff_ab = p_a2 - p_b2;
+        (
+            1.05 + diff_ab * g_exp,
+            ddiff_ab * xnumdt * g_exp + diff_ab * c01,
+            ddiff_ab * xnumdd * g_exp + diff_ab * c02,
+            ddiff_ab * xnumda * g_exp + diff_ab * c03,
+            ddiff_ab * xnumdz * g_exp + diff_ab * c04,
+        )
+    };
 
     // Equations 4.1 and 4.5: combine (ft + fl) * fxy * exp(-gl) * gl^6 * pref
     let sum_ftl = ft + fl;

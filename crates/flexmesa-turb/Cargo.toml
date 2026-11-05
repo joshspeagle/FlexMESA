@@ -1,0 +1,20 @@
+[package]
+name = "flexmesa-turb"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Convective and turbulent mixing (MLT, TDC, semiconvection, thermohaline)"
+
+[dependencies]
+flexmesa-autodiff = { path = "../flexmesa-autodiff" }
+flexmesa-const = { path = "../flexmesa-const" }
+flexmesa-math = { path = "../flexmesa-math" }
+flexmesa-utils = { path = "../flexmesa-utils" }
+
+[dev-dependencies]
+flexmesa-testing = { path = "../flexmesa-testing" }
+
+[lints]
+workspace = true

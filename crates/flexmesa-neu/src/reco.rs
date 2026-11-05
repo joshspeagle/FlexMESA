@@ -214,7 +214,9 @@ pub fn reco_neu(input: &NeuInputs) -> NeuRate {
     let nu3 = nu2 * nu;
 
     let (a1, a2, a3, b, c, d, f1, f2, f3) = if nu < 0.0 {
-        (1.51e-2, 2.42e-1, 1.21, 3.71e-2, 9.06e-1, 9.28e-1, 0.0, 0.0, 0.0)
+        (
+            1.51e-2, 2.42e-1, 1.21, 3.71e-2, 9.06e-1, 9.28e-1, 0.0, 0.0, 0.0,
+        )
     } else {
         (
             1.23e-2, 2.66e-1, 1.30, 1.17e-1, 8.97e-1, 1.77e-1, -1.20e-2,
@@ -252,18 +254,14 @@ pub fn reco_neu(input: &NeuInputs) -> NeuRate {
     let z_nu = exp(nu);
     let inv_gum = 1.0 / gum;
     let bigj = c00 * z_nu * inv_gum;
-    let bigjdt = (c01 * dumdt + c00 * nudt - c00 * inv_gum * gumdt)
-        * z_nu
-        * inv_gum;
-    let bigjdd = (c01 * dumdd + c00 * nudd - c00 * inv_gum * gumdd)
-        * z_nu
-        * inv_gum;
-    let bigjda = (c01 * dumda + c00 * nuda - c00 * inv_gum * gumda)
-        * z_nu
-        * inv_gum;
-    let bigjdz = (c01 * dumdz + c00 * nudz - c00 * inv_gum * gumdz)
-        * z_nu
-        * inv_gum;
+    let bigjdt =
+        (c01 * dumdt + c00 * nudt - c00 * inv_gum * gumdt) * z_nu * inv_gum;
+    let bigjdd =
+        (c01 * dumdd + c00 * nudd - c00 * inv_gum * gumdd) * z_nu * inv_gum;
+    let bigjda =
+        (c01 * dumda + c00 * nuda - c00 * inv_gum * gumda) * z_nu * inv_gum;
+    let bigjdz =
+        (c01 * dumdz + c00 * nudz - c00 * inv_gum * gumdz) * z_nu * inv_gum;
 
     let z_zn = exp(zeta + nu);
     let inv_1pz = 1.0 / (1.0 + z_zn);

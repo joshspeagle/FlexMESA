@@ -35,6 +35,7 @@ def _exp10(x: float) -> float:
     """Evaluates $10^x = \\exp(x \\ln 10)$ matching upstream `exp10`."""
     return math.exp(x * _const.LN10)
 
+
 # Representative golden rows from upstream `neu/test/test_output`.
 # Columns:
 #   0..4:   log10_t, log10_rho, abar, zbar
@@ -46,6 +47,7 @@ def _exp10(x: float) -> float:
 #   19..24: sources(1..5, 3) = d_rho for the 5 channels
 #   24..29: sources(1..5, 4) = d_abar for the 5 channels
 #   29..34: sources(1..5, 5) = d_zbar for the 5 channels
+# fmt: off
 GOLDEN_ROWS: tuple[tuple[float, ...], ...] = (
     # IDX 3090: logT = 7.35, logRho = 6.0, abar = 54.1, zbar = 1.0
     (
@@ -138,6 +140,7 @@ GOLDEN_ROWS: tuple[tuple[float, ...], ...] = (
         -31102773253.80594, 243430875762.274, 0.0,
     ),
 )
+# fmt: on
 
 
 def _assert_rel_close(actual: float, expected: float, rtol: float) -> None:
@@ -237,39 +240,60 @@ def test_centered_finite_difference_derivatives() -> None:
         t, rho = _exp10(log10_t), _exp10(log10_rho)
         base = neu.neu_get(t=t, rho=rho, abar=abar, zbar=zbar)
 
-        dt = t * step
-        rp = neu.neu_get(t=t + dt, rho=rho, abar=abar, zbar=zbar)
-        rm = neu.neu_get(t=t - dt, rho=rho, abar=abar, zbar=zbar)
-        _assert_rel_close(
-            base.total.d_t, (rp.total.val - rm.total.val) / (2.0 * dt), 1e-6
-        )
+        dt, drho, dabar, dzbar = t * step, rho * step, abar * step, zbar * step
+        rt_p = neu.neu_get(t=t + dt, rho=rho, abar=abar, zbar=zbar)
+        rt_m = neu.neu_get(t=t - dt, rho=rho, abar=abar, zbar=zbar)
+        rr_p = neu.neu_get(t=t, rho=rho + drho, abar=abar, zbar=zbar)
+        rr_m = neu.neu_get(t=t, rho=rho - drho, abar=abar, zbar=zbar)
+        ra_p = neu.neu_get(t=t, rho=rho, abar=abar + dabar, zbar=zbar)
+        ra_m = neu.neu_get(t=t, rho=rho, abar=abar - dabar, zbar=zbar)
+        rz_p = neu.neu_get(t=t, rho=rho, abar=abar, zbar=zbar + dzbar)
+        rz_m = neu.neu_get(t=t, rho=rho, abar=abar, zbar=zbar - dzbar)
 
-        drho = rho * step
-        rp = neu.neu_get(t=t, rho=rho + drho, abar=abar, zbar=zbar)
-        rm = neu.neu_get(t=t, rho=rho - drho, abar=abar, zbar=zbar)
+        _assert_rel_close(
+            base.total.d_t, (rt_p.total.val - rt_m.total.val) / (2.0 * dt), 1e-6
+        )
         _assert_rel_close(
             base.total.d_rho,
-            (rp.total.val - rm.total.val) / (2.0 * drho),
+            (rr_p.total.val - rr_m.total.val) / (2.0 * drho),
             1e-6,
         )
-
-        dabar = abar * step
-        rp = neu.neu_get(t=t, rho=rho, abar=abar + dabar, zbar=zbar)
-        rm = neu.neu_get(t=t, rho=rho, abar=abar - dabar, zbar=zbar)
         _assert_rel_close(
             base.total.d_abar,
-            (rp.total.val - rm.total.val) / (2.0 * dabar),
+            (ra_p.total.val - ra_m.total.val) / (2.0 * dabar),
             1e-6,
         )
-
-        dzbar = zbar * step
-        rp = neu.neu_get(t=t, rho=rho, abar=abar, zbar=zbar + dzbar)
-        rm = neu.neu_get(t=t, rho=rho, abar=abar, zbar=zbar - dzbar)
         _assert_rel_close(
             base.total.d_zbar,
-            (rp.total.val - rm.total.val) / (2.0 * dzbar),
+            (rz_p.total.val - rz_m.total.val) / (2.0 * dzbar),
             1e-6,
         )
+        for ch_idx in range(5):
+            if base.sources[ch_idx, 0] > 1.0e-30:
+                _assert_rel_close(
+                    float(base.sources[ch_idx, 1]),
+                    float(rt_p.sources[ch_idx, 0] - rt_m.sources[ch_idx, 0])
+                    / (2.0 * dt),
+                    1e-6,
+                )
+                _assert_rel_close(
+                    float(base.sources[ch_idx, 2]),
+                    float(rr_p.sources[ch_idx, 0] - rr_m.sources[ch_idx, 0])
+                    / (2.0 * drho),
+                    1e-6,
+                )
+                _assert_rel_close(
+                    float(base.sources[ch_idx, 3]),
+                    float(ra_p.sources[ch_idx, 0] - ra_m.sources[ch_idx, 0])
+                    / (2.0 * dabar),
+                    1e-6,
+                )
+                _assert_rel_close(
+                    float(base.sources[ch_idx, 4]),
+                    float(rz_p.sources[ch_idx, 0] - rz_m.sources[ch_idx, 0])
+                    / (2.0 * dzbar),
+                    1e-6,
+                )
 
 
 def test_jax_pair_plas_grad_and_vmap_parity() -> None:

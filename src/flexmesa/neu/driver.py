@@ -3,8 +3,8 @@
 
 Ports `neu_get` (`neu/public/neu_lib.f90` and `neutrinos` in
 `neu/private/mod_neu.f90`) and provides a pure-JAX `float64` differentiable
-total neutrino loss function `neu_get_jax` compatible with `jax.jit`,
-`jax.vmap`, and `jax.grad`.
+pair + plasmon neutrino loss function `neu_pair_plas_jax` compatible with
+`jax.jit`, `jax.vmap`, and `jax.grad`.
 
 Index and Memory-Order Contract:
     - Upstream 1-based channel indices (`pair_neu_type = 1 .. reco_neu_type =
@@ -228,11 +228,12 @@ def neu_get(
     if (
         _utils.is_bad(abar)
         or _utils.is_bad(zbar)
+        or _utils.is_bad(log10_tlim)
         or abar <= 0.0
         or zbar <= 0.0
     ):
         raise ValueError(
-            f"abar and zbar must be positive and finite: {abar}, {zbar}"
+            f"abar, zbar, and log10_tlim must be valid: {abar}, {zbar}"
         )
 
     if temp <= _inputs.TMIN_NEU or logtemp <= _inputs.LOG10_TMIN_NEU:
@@ -297,9 +298,9 @@ def neu_get(
         dtype=np.float64,
     )
     total = _inputs.NeuRate(*loss_arr.tolist())
-    return NeuResult(
-        total, pair, plas, phot, brem, reco, loss_arr, sources_arr
-    )
+    if _utils.is_bad(total.val):
+        raise ValueError("Non-finite total neutrino loss encountered.")
+    return NeuResult(total, pair, plas, phot, brem, reco, loss_arr, sources_arr)
 
 
 def neu_pair_plas_jax(
@@ -349,9 +350,7 @@ def neu_pair_plas_jax(
 
     gl = 1.0 - 13.04 * xl2 + 133.5 * xl4 + 1534.0 * xl6 + 918.6 * xl8
     a1 = 6.002e19 + 2.084e20 * zeta + 1.872e21 * zeta2
-    b1 = jnp.where(
-        t < 1.0e10, jnp.exp(-5.5924 * zeta), jnp.exp(-4.9924 * zeta)
-    )
+    b1 = jnp.where(t < 1.0e10, jnp.exp(-5.5924 * zeta), jnp.exp(-4.9924 * zeta))
     den_a1 = jnp.where(
         t < 1.0e10,
         9.383e-1 * xlm1 - 4.141e-1 * xlm2 + 5.829e-2 * xlm3,

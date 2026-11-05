@@ -238,9 +238,7 @@ pub fn phot_neu(input: &NeuInputs) -> NeuRate {
     let q_xnum = 0.666 * pow(q_a0, -2.066);
     let q_xnumdt = -2.066 * q_xnum / q_a0 * 2.045 * input.xldt;
 
-    let q_dum = 1.875e8 * input.xl
-        + 1.653e8 * input.xl2
-        + 8.499e8 * input.xl3
+    let q_dum = 1.875e8 * input.xl + 1.653e8 * input.xl2 + 8.499e8 * input.xl3
         - 1.604e8 * input.xl4;
     let q_dumdt = input.xldt
         * (1.875e8 + 2.0 * 1.653e8 * input.xl + 3.0 * 8.499e8 * input.xl2

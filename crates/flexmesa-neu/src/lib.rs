@@ -281,11 +281,6 @@ pub fn neu_get(
     log10_tlim: f64,
     flags: NeuFlags,
 ) -> Result<NeuResult, NeuError> {
-    if t_opt.is_some_and(|t| t <= TMIN_NEU && t > 0.0)
-        || log10_t_opt.is_some_and(|lt| lt <= LOG10_TMIN_NEU)
-    {
-        return Ok(NeuResult::default());
-    }
     let temp = match (t_opt, log10_t_opt) {
         (Some(t), _) => t,
         (None, Some(lt)) => exp10(lt),
@@ -297,9 +292,6 @@ pub fn neu_get(
     let logtemp = log10_t_opt.unwrap_or_else(|| log10(temp));
     if logtemp > 20.0 || is_bad(logtemp) {
         return Err(NeuError::InvalidInput("log10_T exceeds 20 or is NaN"));
-    }
-    if temp <= TMIN_NEU || logtemp <= LOG10_TMIN_NEU {
-        return Ok(NeuResult::default());
     }
     let den = match (rho_opt, log10_rho_opt) {
         (Some(r), _) => r,
@@ -313,10 +305,18 @@ pub fn neu_get(
     if logden > 20.0 || is_bad(logden) {
         return Err(NeuError::InvalidInput("log10_Rho exceeds 20 or is NaN"));
     }
-    if abar <= 0.0 || zbar <= 0.0 || is_bad(abar) || is_bad(zbar) {
+    if abar <= 0.0
+        || zbar <= 0.0
+        || is_bad(abar)
+        || is_bad(zbar)
+        || is_bad(log10_tlim)
+    {
         return Err(NeuError::InvalidInput(
-            "abar and zbar must be positive and finite",
+            "abar, zbar, and log10_tlim must be valid",
         ));
+    }
+    if temp <= TMIN_NEU || logtemp <= LOG10_TMIN_NEU {
+        return Ok(NeuResult::default());
     }
 
     let input = NeuInputs::new(temp, logtemp, den, logden, abar, zbar);

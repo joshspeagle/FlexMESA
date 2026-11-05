@@ -26,7 +26,7 @@
 )]
 
 use flexmesa_math::{exp10, log10};
-use flexmesa_neu::{NeuChannel, NeuError, NeuFlags, NeuRate, neu_get};
+use flexmesa_neu::{neu_get, NeuChannel, NeuError, NeuFlags, NeuRate};
 
 /// Golden baseline rows from upstream `neu/test/test_output`.
 ///
@@ -40,6 +40,7 @@ use flexmesa_neu::{NeuChannel, NeuError, NeuFlags, NeuRate, neu_get};
 /// - `19..24`: `sources(1..5, 3)` = `d_rho` for the 5 channels
 /// - `24..29`: `sources(1..5, 4)` = `d_abar` for the 5 channels
 /// - `29..34`: `sources(1..5, 5)` = `d_zbar` for the 5 channels
+#[rustfmt::skip]
 const GOLDEN_ROWS: [[f64; 34]; 6] = [
     // IDX 3090: logT = 7.35, logRho = 6.0, abar = 54.1, zbar = 1.0
     [
@@ -297,29 +298,46 @@ fn test_centered_finite_difference_derivatives_all_channels() {
         };
         let base = eval(t, rho, abar, zbar);
 
-        let dt = t * step;
-        let fd_dt = (eval(t + dt, rho, abar, zbar).total.val
-            - eval(t - dt, rho, abar, zbar).total.val)
-            / (2.0 * dt);
-        assert_rel_close(base.total.d_t, fd_dt, 1e-6, "total d_t");
+        let diffs = [
+            (
+                eval(t * (1.0 + step), rho, abar, zbar),
+                eval(t * (1.0 - step), rho, abar, zbar),
+                t * step,
+            ),
+            (
+                eval(t, rho * (1.0 + step), abar, zbar),
+                eval(t, rho * (1.0 - step), abar, zbar),
+                rho * step,
+            ),
+            (
+                eval(t, rho, abar * (1.0 + step), zbar),
+                eval(t, rho, abar * (1.0 - step), zbar),
+                abar * step,
+            ),
+            (
+                eval(t, rho, abar, zbar * (1.0 + step)),
+                eval(t, rho, abar, zbar * (1.0 - step)),
+                zbar * step,
+            ),
+        ];
 
-        let drho = rho * step;
-        let fd_drho = (eval(t, rho + drho, abar, zbar).total.val
-            - eval(t, rho - drho, abar, zbar).total.val)
-            / (2.0 * drho);
-        assert_rel_close(base.total.d_rho, fd_drho, 1e-6, "total d_rho");
-
-        let dabar = abar * step;
-        let fd_dabar = (eval(t, rho, abar + dabar, zbar).total.val
-            - eval(t, rho, abar - dabar, zbar).total.val)
-            / (2.0 * dabar);
-        assert_rel_close(base.total.d_abar, fd_dabar, 1e-6, "total d_abar");
-
-        let dzbar = zbar * step;
-        let fd_dzbar = (eval(t, rho, abar, zbar + dzbar).total.val
-            - eval(t, rho, abar, zbar - dzbar).total.val)
-            / (2.0 * dzbar);
-        assert_rel_close(base.total.d_zbar, fd_dzbar, 1e-6, "total d_zbar");
+        for (k, (rp, rm, h)) in diffs.iter().enumerate() {
+            let fd_tot = (rp.loss[0] - rm.loss[0]) / (2.0 * h);
+            assert_rel_close(base.loss[k + 1], fd_tot, 1e-6, "total deriv");
+            for ch in NeuChannel::ALL {
+                let idx = ch as usize;
+                if base.sources[idx][0] > 1.0e-30 {
+                    let fd_ch =
+                        (rp.sources[idx][0] - rm.sources[idx][0]) / (2.0 * h);
+                    assert_rel_close(
+                        base.sources[idx][k + 1],
+                        fd_ch,
+                        1e-6,
+                        "channel deriv",
+                    );
+                }
+            }
+        }
     }
 }
 
@@ -338,44 +356,20 @@ fn test_invalid_inputs_return_domain_errors() {
         Err(NeuError::MissingDensity)
     );
     for bad in [0.0, -1.0, f64::NAN, f64::INFINITY] {
-        assert!(matches!(
-            neu_get(
-                Some(bad),
+        for (t, rho, abar) in
+            [(bad, 1.0e5, 12.0), (1.0e8, bad, 12.0), (1.0e8, 1.0e5, bad)]
+        {
+            let res = neu_get(
+                Some(t),
                 Some(8.0),
-                Some(1.0e5),
+                Some(rho),
                 Some(5.0),
-                12.0,
+                abar,
                 6.0,
                 7.5,
-                flags
-            ),
-            Err(NeuError::InvalidInput(_))
-        ));
-        assert!(matches!(
-            neu_get(
-                Some(1.0e8),
-                Some(8.0),
-                Some(bad),
-                Some(5.0),
-                12.0,
-                6.0,
-                7.5,
-                flags
-            ),
-            Err(NeuError::InvalidInput(_))
-        ));
-        assert!(matches!(
-            neu_get(
-                Some(1.0e8),
-                Some(8.0),
-                Some(1.0e5),
-                Some(5.0),
-                bad,
-                6.0,
-                7.5,
-                flags
-            ),
-            Err(NeuError::InvalidInput(_))
-        ));
+                flags,
+            );
+            assert!(matches!(res, Err(NeuError::InvalidInput(_))));
+        }
     }
 }

@@ -22,9 +22,8 @@
 //! - For $0.05\,T_F < T < 0.3\,T_F$, blends both regimes via the smooth cosine
 //!   ramp $\alpha = \tfrac{1}{2}(1 - \cos(\pi\,\mathrm{tfrac}))$ where
 //!   $\mathrm{tfrac} = (T / T_F - 0.05) / 0.25$ and $T_F = 5.9302 \times
-//!   10^9\,[(\rho_6 Y_e)^{2/3} + 1]^{1/2} - 5.9302 \times 10^9$ (in MESA's
-//!   `u = (den6 * ye)**(2/3)`, `tfermi = a * (sqrt(u) - 1)` parameterization),
-//!   propagating exact chain-rule partial derivatives with respect to
+//!   10^9\,(\sqrt{u} - 1)$ with $u = (\rho_6 Y_e)^{2/3}$, propagating exact
+//!   chain-rule partial derivatives with respect to
 //!   $(T, \rho, \bar{A}, \bar{Z})$.
 
 use crate::inputs::{TFAC4, TFAC5};
@@ -131,9 +130,6 @@ fn brem_neu_weak_degen(t8: f64, input: &NeuInputs) -> NeuRate {
     // Itoh et al. (1996) eq. 5.1: combine weak-coupling weights TFAC4 and
     // TFAC5 with the density/composition prefactor 0.5738 * Z * Y_e * T_8^6 *
     // rho and apply the product rule for all four partial derivatives.
-    // Itoh et al. (1996) eq. 5.16: combine strongly degenerate structure
-    // factors fliq and gliq with the density/composition prefactor and
-    // weak-coupling weights TFAC4 and TFAC5.
     let pref = 0.5738 * input.zbar * input.ye * t86 * input.den;
     let prefdt =
         0.5738 * input.zbar * input.ye * 6.0 * t85 * input.den * 1.0e-8;
@@ -148,6 +144,45 @@ fn brem_neu_weak_degen(t8: f64, input: &NeuInputs) -> NeuRate {
         d_abar: prefda * comb + pref * (TFAC4 * fbremda - TFAC5 * gbremda),
         d_zbar: prefdz * comb + pref * (TFAC4 * fbremdz - TFAC5 * gbremdz),
     }
+}
+
+/// Evaluates one 5-harmonic liquid-metal Fourier structure function and its
+/// density derivative (`brem_neu_liquid_metal` in `mod_neu.f90`, Itoh et al.
+/// 1996, eqs. 5.17–5.18).
+#[inline]
+fn eval_liq_fourier(
+    u: f64,
+    a0_u: f64,
+    cos_h: [f64; 5],
+    sin_h: [f64; 5],
+    c0: f64,
+    cu: f64,
+    cc: f64,
+    a_cos: [f64; 5],
+    b_sin: [f64; 4],
+) -> (f64, f64) {
+    let val = 0.5 * c0
+        + cu * u
+        + cc
+        + a_cos[0] * cos_h[0]
+        + b_sin[0] * sin_h[0]
+        + a_cos[1] * cos_h[1]
+        + b_sin[1] * sin_h[1]
+        + a_cos[2] * cos_h[2]
+        + b_sin[2] * sin_h[2]
+        + a_cos[3] * cos_h[3]
+        + b_sin[3] * sin_h[3]
+        + a_cos[4] * cos_h[4];
+    let dval = a0_u
+        * (cu - a_cos[0] * sin_h[0] + b_sin[0] * cos_h[0]
+            - a_cos[1] * sin_h[1] * 2.0
+            + b_sin[1] * cos_h[1] * 2.0
+            - a_cos[2] * sin_h[2] * 3.0
+            + b_sin[2] * cos_h[2] * 3.0
+            - a_cos[3] * sin_h[3] * 4.0
+            + b_sin[3] * cos_h[3] * 4.0
+            - a_cos[4] * sin_h[4] * 5.0);
+    (val, dval)
 }
 
 /// Strongly degenerate liquid-metal bremsstrahlung fit (`brem_neu_liquid_metal`
@@ -180,82 +215,53 @@ fn brem_neu_liquid_metal(t8: f64, input: &NeuInputs) -> NeuRate {
     let cos4 = 2.0 * cos2 * cos2 - 1.0;
     let sin5 = sin1 * (5.0 - sin1 * sin1 * (20.0 - 16.0 * sin1 * sin1));
     let cos5 = cos1 * (cos1 * cos1 * (16.0 * cos1 * cos1 - 20.0) + 5.0);
+    let cos_h = [cos1, cos2, cos3, cos4, cos5];
+    let sin_h = [sin1, sin2, sin3, sin4, sin5];
 
-    let fb = 0.5 * 0.17946 + 0.00945 * u + 0.34529
-        - 0.05821 * cos1
-        - 0.04969 * sin1
-        - 0.01089 * cos2
-        - 0.01584 * sin2
-        - 0.01147 * cos3
-        - 0.00504 * sin3
-        - 0.00656 * cos4
-        - 0.00281 * sin4
-        - 0.00519 * cos5;
-    let c00 = a0_u
-        * (0.00945 + 0.05821 * sin1 - 0.04969 * cos1 + 0.01089 * sin2 * 2.0
-            - 0.01584 * cos2 * 2.0
-            + 0.01147 * sin3 * 3.0
-            - 0.00504 * cos3 * 3.0
-            + 0.00656 * sin4 * 4.0
-            - 0.00281 * cos4 * 4.0
-            + 0.00519 * sin5 * 5.0);
-
-    let ft = 0.5 * 0.06781 - 0.02342 * u + 0.24819
-        - 0.00944 * cos1
-        - 0.02213 * sin1
-        - 0.01289 * cos2
-        - 0.01136 * sin2
-        - 0.00589 * cos3
-        - 0.00467 * sin3
-        - 0.00404 * cos4
-        - 0.00131 * sin4
-        - 0.00330 * cos5;
-    let c01 = a0_u
-        * (-0.02342 + 0.00944 * sin1 - 0.02213 * cos1 + 0.01289 * sin2 * 2.0
-            - 0.01136 * cos2 * 2.0
-            + 0.00589 * sin3 * 3.0
-            - 0.00467 * cos3 * 3.0
-            + 0.00404 * sin4 * 4.0
-            - 0.00131 * cos4 * 4.0
-            + 0.00330 * sin5 * 5.0);
-
-    let gb = 0.5 * 0.00766 - 0.01259 * u + 0.07917 - 0.00710 * cos1
-        + 0.02300 * sin1
-        - 0.00028 * cos2
-        - 0.01078 * sin2
-        + 0.00232 * cos3
-        + 0.00118 * sin3
-        + 0.00044 * cos4
-        - 0.00089 * sin4
-        + 0.00158 * cos5;
-    let c02 = a0_u
-        * (-0.01259 + 0.00710 * sin1 + 0.02300 * cos1 + 0.00028 * sin2 * 2.0
-            - 0.01078 * cos2 * 2.0
-            - 0.00232 * sin3 * 3.0
-            + 0.00118 * cos3 * 3.0
-            - 0.00044 * sin4 * 4.0
-            - 0.00089 * cos4 * 4.0
-            - 0.00158 * sin5 * 5.0);
-
-    let gt = -0.5 * 0.00769 - 0.00829 * u
-        + 0.05211
-        + 0.00356 * cos1
-        + 0.01052 * sin1
-        - 0.00184 * cos2
-        - 0.00354 * sin2
-        + 0.00146 * cos3
-        - 0.00014 * sin3
-        + 0.00031 * cos4
-        - 0.00018 * sin4
-        + 0.00069 * cos5;
-    let c03 = a0_u
-        * (-0.00829 - 0.00356 * sin1 + 0.01052 * cos1 + 0.00184 * sin2 * 2.0
-            - 0.00354 * cos2 * 2.0
-            - 0.00146 * sin3 * 3.0
-            - 0.00014 * cos3 * 3.0
-            - 0.00031 * sin4 * 4.0
-            - 0.00018 * cos4 * 4.0
-            - 0.00069 * sin5 * 5.0);
+    let (fb, c00) = eval_liq_fourier(
+        u,
+        a0_u,
+        cos_h,
+        sin_h,
+        0.17946,
+        0.00945,
+        0.34529,
+        [-0.05821, -0.01089, -0.01147, -0.00656, -0.00519],
+        [-0.04969, -0.01584, -0.00504, -0.00281],
+    );
+    let (ft, c01) = eval_liq_fourier(
+        u,
+        a0_u,
+        cos_h,
+        sin_h,
+        0.06781,
+        -0.02342,
+        0.24819,
+        [-0.00944, -0.01289, -0.00589, -0.00404, -0.00330],
+        [-0.02213, -0.01136, -0.00467, -0.00131],
+    );
+    let (gb, c02) = eval_liq_fourier(
+        u,
+        a0_u,
+        cos_h,
+        sin_h,
+        0.00766,
+        -0.01259,
+        0.07917,
+        [-0.00710, -0.00028, 0.00232, 0.00044, 0.00158],
+        [0.02300, -0.01078, 0.00118, -0.00089],
+    );
+    let (gt, c03) = eval_liq_fourier(
+        u,
+        a0_u,
+        cos_h,
+        sin_h,
+        -0.00769,
+        -0.00829,
+        0.05211,
+        [0.00356, -0.00184, 0.00146, 0.00031, 0.00069],
+        [0.01052, -0.00354, -0.00014, -0.00018],
+    );
 
     let dum = 2.275e-1
         * input.zbar

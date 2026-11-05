@@ -47,3 +47,7 @@ strict = true
 files = ["src", "tests"]
 mypy_path = "src"
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_decorators = false

@@ -1,0 +1,314 @@
+# SPDX-License-Identifier: LGPL-3.0-or-later
+"""Parser for MESA `<pkg>/defaults/*.defaults` and `*_columns.list` files.
+
+Extracts parameter names, Fortran control types (`LOGICAL`, `INTEGER`, `FLOAT`,
+`STRING`), scalar and array default values, indexed element overrides, section
+headings, and inline documentation from MESA `.defaults` and `*_columns.list`
+files without generated Fortran namelist boilerplate.
+"""
+
+from __future__ import annotations
+
+import dataclasses
+import enum
+import pathlib
+import re
+
+from flexmesa.testing import golden
+
+type ControlValue = bool | int | float | str
+
+_ASSIGNMENT_RE: re.Pattern[str] = re.compile(
+    r"^([A-Za-z_][A-Za-z0-9_]*)(?:\(\s*([^)]*?)\s*\))?\s*=\s*(.+)$"
+)
+_INTEGER_RE: re.Pattern[str] = re.compile(r"^[+-]?\d+$")
+_UNDERLINE_RE: re.Pattern[str] = re.compile(r"^[=\-~^]{3,}$")
+
+
+class ControlType(enum.StrEnum):
+    """Fortran scalar type for a MESA `.defaults` control parameter."""
+
+    LOGICAL = "logical"
+    INTEGER = "integer"
+    FLOAT = "float"
+    STRING = "string"
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class ControlDefault:
+    """Single control parameter definition parsed from a MESA `.defaults` file.
+
+    Attributes:
+        name: Canonical control identifier (for example, `use_PC` or
+            `initial_mass`).
+        control_type: Parsed `ControlType` (`LOGICAL`, `INTEGER`, `FLOAT`, or
+            `STRING`).
+        default_value: Scalar or broadcast default value (in the physical CGS
+            or solar units documented by the MESA control).
+        is_array: Whether the control is an array parameter (declared with
+            `(:)` or an explicit subscript in `.defaults`).
+        element_overrides: Tuple of `(subscript, value)` pairs for per-index
+            defaults (such as `("13", "_CO")` on `suffix_for_FreeEOS_Z`).
+        section: Active underlined section header preceding this control.
+        doc: Cleaned documentation comment block preceding the control.
+        line_number: 1-based line number of the initial declaration.
+    """
+
+    name: str
+    control_type: ControlType
+    default_value: ControlValue
+    is_array: bool
+    element_overrides: tuple[tuple[str, ControlValue], ...]
+    section: str
+    doc: str
+    line_number: int
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class ColumnEntry:
+    """Single active column or directive from a MESA `*_columns.list` file.
+
+    Attributes:
+        name: Column identifier or directive (for example, `model_number`,
+            `star_age`, or `add_abundances`).
+        section: Active `!#` or `!##` section heading preceding this column.
+        comment: Inline trailing comment describing units or meaning.
+        line_number: 1-based line number in the `*_columns.list` file.
+    """
+
+    name: str
+    section: str
+    comment: str
+    line_number: int
+
+
+def strip_fortran_comment(line: str) -> tuple[str, str]:
+    """Split a Fortran line into `(code_part, comment_part)` outside quotes.
+
+    Args:
+        line: Raw single line of Fortran source or `.defaults` text.
+
+    Returns:
+        Tuple `(code, comment)` with outer whitespace stripped.
+    """
+    in_single = False
+    in_double = False
+    for idx, ch in enumerate(line):
+        if ch == "'" and not in_double:
+            in_single = not in_single
+        elif ch == '"' and not in_single:
+            in_double = not in_double
+        elif ch == "!" and not in_single and not in_double:
+            return (line[:idx].strip(), line[idx + 1 :].strip())
+    return (line.strip(), "")
+
+
+def parse_control_value(raw: str) -> tuple[ControlType, ControlValue]:
+    """Parse a Fortran `.defaults` or namelist literal into type and value.
+
+    Args:
+        raw: Stripped right-hand-side literal string (for example, `.false.`,
+            `1d-4`, `'undefined'`, or `170`).
+
+    Returns:
+        Tuple `(control_type, parsed_value)`.
+
+    Raises:
+        ValueError: If `raw` is not a valid Fortran logical, string, integer,
+            or finite floating-point literal.
+
+    Examples:
+        >>> from flexmesa.schema import defaults
+        >>> defaults.parse_control_value(".true.")
+        (<ControlType.LOGICAL: 'logical'>, True)
+        >>> defaults.parse_control_value("1d-4")
+        (<ControlType.FLOAT: 'float'>, 0.0001)
+    """
+    token = raw.strip()
+    if not token:
+        raise ValueError("Cannot parse empty control value literal.")
+
+    lower = token.lower()
+    if lower in (".true.", "t"):
+        return (ControlType.LOGICAL, True)
+    if lower in (".false.", "f"):
+        return (ControlType.LOGICAL, False)
+
+    if len(token) >= 2 and token[0] == token[-1] and token[0] in ("'", '"'):
+        quote = token[0]
+        inner = token[1:-1]
+        if quote in inner.replace(quote * 2, ""):
+            raise ValueError(f"Unescaped quote inside string literal: {raw!r}.")
+        return (ControlType.STRING, inner.replace(quote * 2, quote))
+
+    if _INTEGER_RE.match(token) is not None:
+        return (ControlType.INTEGER, int(token))
+
+    return (ControlType.FLOAT, golden.parse_fortran_float(token))
+
+
+def _update_comment_state(
+    comment: str,
+    pending_docs: list[str],
+    current_section: str,
+) -> str:
+    """Update section title and pending docstring lines from a `!` comment."""
+    if _UNDERLINE_RE.match(comment) is not None and pending_docs:
+        if comment[0] in ("=", "-", "^"):
+            title = pending_docs.pop().strip()
+            pending_docs.clear()
+            return title
+        return current_section
+    if comment not in ("::", ""):
+        pending_docs.append(comment)
+    return current_section
+
+
+def _record_assignment(
+    line_idx: int,
+    code: str,
+    current_section: str,
+    pending_docs: list[str],
+    controls: dict[str, ControlDefault],
+) -> None:
+    """Parse one `name[(sub)] = value` line and update `controls` in place."""
+    match = _ASSIGNMENT_RE.match(code)
+    if match is None:
+        raise ValueError(
+            f"Malformed control assignment at line {line_idx}: {code!r}."
+        )
+    name, subscript, raw_val = match.group(1), match.group(2), match.group(3)
+    ctrl_type, val = parse_control_value(raw_val)
+    key = name.lower()
+    is_array = subscript is not None
+    is_specific_elem = subscript is not None and subscript != ":"
+
+    if key in controls and is_specific_elem:
+        prev = controls[key]
+        assert subscript is not None
+        controls[key] = dataclasses.replace(
+            prev,
+            is_array=True,
+            element_overrides=(*prev.element_overrides, (subscript, val)),
+        )
+    else:
+        overrides = ((subscript, val),) if is_specific_elem else ()
+        controls[key] = ControlDefault(
+            name=name,
+            control_type=ctrl_type,
+            default_value=val,
+            is_array=is_array,
+            element_overrides=overrides,
+            section=current_section,
+            doc="\n".join(pending_docs).strip(),
+            line_number=line_idx,
+        )
+    pending_docs.clear()
+
+
+def parse_defaults_text(text: str) -> dict[str, ControlDefault]:
+    """Parse the text of a MESA `<pkg>/defaults/*.defaults` file.
+
+    Args:
+        text: Full UTF-8 contents of a MESA `.defaults` file.
+
+    Returns:
+        Ordered dictionary mapping lowercase control names to `ControlDefault`
+        entries.
+
+    Raises:
+        ValueError: If any non-comment line contains a malformed assignment or
+            invalid literal.
+
+    Examples:
+        >>> from flexmesa.schema import defaults
+        >>> sample = "! EOS\\n! ---\\n  use_PC = .false.\\n  logT1 = 7.6d0\\n"
+        >>> schema = defaults.parse_defaults_text(sample)
+        >>> schema["use_pc"].default_value, schema["logt1"].section
+        (False, 'EOS')
+    """
+    controls: dict[str, ControlDefault] = {}
+    current_section = ""
+    pending_docs: list[str] = []
+
+    for line_idx, raw_line in enumerate(text.splitlines(), start=1):
+        code, comment = strip_fortran_comment(raw_line)
+        if not code:
+            if comment:
+                current_section = _update_comment_state(
+                    comment, pending_docs, current_section
+                )
+            continue
+        _record_assignment(
+            line_idx, code, current_section, pending_docs, controls
+        )
+
+    return controls
+
+
+def parse_defaults_file(path: str | pathlib.Path) -> dict[str, ControlDefault]:
+    """Read and parse a MESA `<pkg>/defaults/*.defaults` file from disk.
+
+    Args:
+        path: Path to the `.defaults` file.
+
+    Returns:
+        Ordered dictionary mapping lowercase control names to `ControlDefault`
+        objects.
+    """
+    return parse_defaults_text(pathlib.Path(path).read_text(encoding="utf-8"))
+
+
+def parse_columns_text(text: str) -> list[ColumnEntry]:
+    """Parse active column declarations from a MESA `*_columns.list` file.
+
+    Args:
+        text: Full UTF-8 contents of a `history_columns.list` or
+            `profile_columns.list` file.
+
+    Returns:
+        Ordered list of active `ColumnEntry` declarations (preserving first
+        occurrence order when duplicates appear, matching MESA's rule).
+
+    Examples:
+        >>> from flexmesa.schema import defaults
+        >>> sample = "!# general\\n  model_number ! count\\n  !star_age_sec\\n"
+        >>> cols = defaults.parse_columns_text(sample)
+        >>> len(cols), cols[0].name, cols[0].section
+        (1, 'model_number', 'general')
+    """
+    entries: list[ColumnEntry] = []
+    seen_names: set[str] = set()
+    current_section = ""
+
+    for line_idx, raw_line in enumerate(text.splitlines(), start=1):
+        code, comment = strip_fortran_comment(raw_line)
+        if not code:
+            if comment.startswith("#"):
+                current_section = comment.lstrip("#").strip()
+            continue
+        key = code.lower()
+        if key in seen_names:
+            continue
+        seen_names.add(key)
+        entries.append(
+            ColumnEntry(
+                name=code,
+                section=current_section,
+                comment=comment,
+                line_number=line_idx,
+            )
+        )
+    return entries
+
+
+def parse_columns_file(path: str | pathlib.Path) -> list[ColumnEntry]:
+    """Read and parse a MESA `*_columns.list` file from disk.
+
+    Args:
+        path: Path to the `*_columns.list` file.
+
+    Returns:
+        Ordered list of active `ColumnEntry` declarations.
+    """
+    return parse_columns_text(pathlib.Path(path).read_text(encoding="utf-8"))

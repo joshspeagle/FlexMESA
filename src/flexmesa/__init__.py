@@ -24,7 +24,7 @@ def enable_float64() -> bool:
         >>> flexmesa.enable_float64()
         True
     """
-    jax.config.update("jax_enable_x64", True)
+    jax.config.update("jax_enable_x64", True)  # type: ignore[no-untyped-call]
     return bool(jax.config.jax_enable_x64)
 
 
@@ -38,9 +38,11 @@ from flexmesa import (  # noqa: E402
     interp_2d,
     math,
     mtx,
+    neu,
     num,
     schema,
     testing,
+    turb,
     utils,
 )
 
@@ -55,8 +57,10 @@ __all__: list[str] = [
     "interp_2d",
     "math",
     "mtx",
+    "neu",
     "num",
     "schema",
     "testing",
+    "turb",
     "utils",
 ]

@@ -253,40 +253,88 @@ full IEEE-754 `float64` precision (fixing the missing `implicit none` 32-bit
 
 ### 2.5 Wave 1E: Thermal Neutrinos (`neu`) and Convection (`turb`)
 
+#### Index and Memory-Order Contract (`neu` & `turb`)
+| Concept | Upstream MESA Fortran (`neu_def.f90`, `turb.f90`) | FlexMESA Safe Rust (`flexmesa-neu`, `flexmesa-turb`) | FlexMESA Python/JAX (`flexmesa.neu`, `flexmesa.turb`) |
+| --- | --- | --- | --- |
+| Neutrino channel index (`num_neu_types = 5`) | 1-based `ipair_neu_type = 1`, `iplas_neu_type = 2`, `iphot_neu_type = 3`, `ibrem_neu_type = 4`, `ireco_neu_type = 5` | 0-based `NeuChannel` enum (`Pair = 0`, `Plas = 1`, `Phot = 2`, `Brem = 3`, `Reco = 4`) and named struct fields | 0-based array axis `[pair, plas, phot, brem, reco]` of shape `(5, 5)` and named dataclass attributes |
+| Neutrino derivative index (`num_neu_rvs = 5`) | 1-based `ineu = 1`, `idneu_dT = 2`, `idneu_dRho = 3`, `idneu_dabar = 4`, `idneu_dzbar = 5` (`sources(5, 5)` column-major) | `NeuRate` struct (`val`, `d_t`, `d_rho`, `d_abar`, `d_zbar`) and row-major `sources: [[f64; 5]; 5]` (`sources[channel][deriv]`) | `NeuResult` with `loss: (5,)` (`[val, dT, dRho, dabar, dzbar]`) and C-contiguous `sources: (5, 5)` (`sources[channel, deriv]`) |
+| Autodiff variable ordering (`turb`) | `auto_diff_real_star_order1` (`d1Array(1..24)`) | `DualOrder1<6>` over `(gradr, grada, gradL, L, T, rho)` or `DualOrder1<K>` generic inputs | JAX `float64` scalar/array primitives supporting `jax.grad`, `jax.jacfwd`, `jax.jacrev`, and `jax.vmap` |
+
 #### Thermal Neutrino Cooling (`neu`)
 Evaluates Itoh et al. (1996, ApJS, 102, 411) fitting formulas for total and
-channel-resolved thermal neutrino energy loss rates $\epsilon_{\nu}$
+channel-resolved thermal neutrino specific energy loss rates $\epsilon_{\nu}$
 ($\mathrm{erg\,g^{-1}\,s^{-1}}$) and their analytical partial derivatives with
-respect to $(T, \rho, \bar{A}, \bar{Z})$ across five channels:
+respect to $(T, \rho, \bar{A}, \bar{Z})$ across five channels (`neu_get`):
 
-1. **Pair production** ($e^+ + e^- \to \nu + \bar{\nu}$)
-2. **Photoneutrino** ($e^- + \gamma \to e^- + \nu + \bar{\nu}$)
-3. **Plasmon decay** ($\tilde{\gamma} \to \nu + \bar{\nu}$)
-4. **Bremsstrahlung** ($e^- + (Z, A) \to e^- + (Z, A) + \nu + \bar{\nu}$)
-5. **Recombination** ($e^-_{\mathrm{cont}} \to e^-_{\mathrm{bound}} + \nu + \bar{\nu}$)
+1. **Pair production (`pair_neu`)** ($e^+ + e^- \to \nu + \bar{\nu}$, Itoh et
+   al. eqs. 2.1–2.8): Separate rational-exponential fits for $T_9 < 10$ and
+   $T_9 \ge 10$ with weak-interaction coupling constants $C_V^2 + C_A^2$ and
+   $C_V^2 - C_A^2$ for $n_{\nu} = 2$ additional neutrino flavors beyond $\nu_e$.
+2. **Plasmon decay (`plas_neu`)** ($\tilde{\gamma} \to \nu + \bar{\nu}$, Itoh et
+   al. eqs. 4.1, 4.5–4.11): Transverse (`ft`), longitudinal (`fl`), and
+   cross-term (`fxy`) plasma dielectric fits in $\gamma^2 = 1.1095\times 10^{11}
+   (\rho Y_e) / (T^2 (1 + (1.019\times 10^{-6}\rho Y_e)^{2/3})^{1/2})$.
+3. **Photoneutrino (`phot_neu`)** ($e^- + \gamma \to e^- + \nu + \bar{\nu}$,
+   Itoh et al. eqs. 3.2–3.8 and Table 2): 3-term Fourier expansion across three
+   temperature bands ($10^7 \le T < 10^8\,\mathrm{K}$,
+   $10^8 \le T < 10^9\,\mathrm{K}$, and $T \ge 10^9\,\mathrm{K}$), clamped to
+   zero when the polynomial fit turns negative at extreme degeneracy.
+4. **Bremsstrahlung (`brem_neu`)** ($e^- + (Z, A) \to e^- + (Z, A) + \nu +
+   \bar{\nu}$): Smooth cosine ramp $\alpha = \frac{1}{2}(1 - \cos(\pi\,
+   \mathrm{tfrac}))$ over $0.05\,T_F < T < 0.3\,T_F$ blending weakly degenerate
+   gas (`brem_neu_weak_degen`, $T \ge 0.3\,T_F$) and strongly degenerate liquid
+   metal (`brem_neu_liquid_metal`, $T \le 0.05\,T_F$), where $u = (\rho_6
+   Y_e)^{2/3}$ and $T_F = 5.9302\times 10^9 (\sqrt{u} - 1)$.
+5. **Recombination (`reco_neu`)** ($e^-_{\mathrm{cont}} \to
+   e^-_{\mathrm{bound}} + \nu + \bar{\nu}$): Uses Antia (1993, ApJS, 84, 101)
+   rational approximations `ifermi12` ($F_{1/2}^{-1}$) and `zfermim12`
+   ($F_{-1/2}$) over electron degeneracy parameter $\nu \in [-20, 10]$.
 
-Matches all golden output values in `neu/test/test_output` to $\le 10^{-12}$
-relative error.
+- **Low-Temperature Smooth Cutoff**: For $\log_{10} T \le 7.0$, all rates and
+  derivatives vanish; for $7.0 < \log_{10} T < \log_{10} T_{\mathrm{lim}}$,
+  rates are multiplied by $f = \frac{1}{2}(1 - \cos(\pi (\log_{10} T - 7) /
+  (\log_{10} T_{\mathrm{lim}} - 7)))$ with chain-rule temperature derivative
+  $\partial f / \partial T$.
+- **Golden Parity**: Matches all 300,000 numbers across the 10,000 rows of
+  `neu/test/test_output` (`log10_T` in $[6, 10.5]$, `log10_Rho` in $[6, 10.5]$,
+  `abar` in $[1, 54.1]$, `zbar` in $[1, 23.5]$, `log10_Tlim = 7.5`) to
+  $\le 10^{-12}$ relative error.
 
 #### Convective and Mixing Transport (`turb`)
 Evaluates local and time-dependent stellar mixing coefficients ($D$ in
 $\mathrm{cm^2\,s^{-1}}$), convective velocity ($v_c$ in $\mathrm{cm\,s^{-1}}$),
-convective flux ($F_{\mathrm{conv}}$), and temperature gradient ($\nabla$) with
-first-order autodiff partials via `AutoDiffReal4Coeff`:
+convective flux ($F_{\mathrm{conv}}$), and temperature gradient ($\nabla_T$)
+with first-order autodiff partials (`DualOrder1` in Rust, `jax.grad` in Python):
 
 1. **Mixing-Length Theory (`set_mlt`)**: Solves the cubic MLT efficiency
-   equation across `Cox`, `Henyey`, `ML1`, `ML2`, and `Mihalas` variants.
-2. **Time-Dependent Convection (`set_tdc`)**: Solves the Kuhfuss (1986) / MESA
-   TDC convective velocity equation over time step $\Delta t$ using Newton
-   iteration with bisection fallback.
+   equation $a_0 \Gamma^3 + \Gamma^2 + \Gamma - a_0 B^3 = 0$ via analytical
+   Cardano/trigonometric cubic roots across `Cox`, `Henyey`, `ML1`, `ML2`,
+   `Mihalas`, and `TDC` geometric parameterizations (`Get_MLT_alfa_f_1_2_3`),
+   supporting exact `DualOrder1` / JAX differentiation and optional rotational
+   diffusivity limiting.
+2. **Time-Dependent Convection (`set_tdc`)**: Solves the Kuhfuss (1986) /
+   Smolec time-dependent convection energy equation $Q(Y) = (L - L_0 \nabla_L)
+   - L_0 Y - c_0 A_f(Y_{\mathrm{env}}) Y_{\mathrm{env}} = 0$ over $Z = \ln|Y|
+   \in [-100, 100]$ via Newton iteration with bisection fallback (`tdc.f90`,
+   `tdc_support.f90`), evaluating hyperbolic ($J^2 > 0$) and trigonometric
+   ($J^2 < 0$) analytical convective velocity histories $2\,dw/dt = \xi_0 +
+   \xi_1 w + \xi_2 w^2$ and Wuchterl & Feuchtinger (1998) quintic smootherstep
+   enthalpy flux limiting. First-order partial derivatives at the converged root
+   $Y^*$ are propagated via the implicit function theorem $\partial Y^* /
+   \partial p = -(\partial Q / \partial Y)^{-1} (\partial Q / \partial p)$.
 3. **Semiconvection (`set_semiconvection`)**: Langer, El Eid, & Fricke (1985)
-   diffusivity and radiative/convective flux partitioning.
+   diffusivity $D_{\mathrm{sc}} = (\alpha_{\mathrm{sc}} K_{\mathrm{rad}} /
+   (6 C_P \rho)) (\nabla_r - \nabla_{\mathrm{ad}}) / (\nabla_L - \nabla_r)$ and
+   quadratic radiative/semiconvective flux partitioning (`Langer_85` and
+   `Langer_85 mixing; gradT = gradr`).
 4. **Thermohaline Mixing (`set_thermohaline`)**: Kippenhahn, Ruschenplatt, &
    Thomas (1980), Traxler, Garaud, & Stellmach (2011), and Brown, Garaud, &
-   Stellmach (2013) salt-finger diffusivities.
+   Stellmach (2013) salt-finger diffusivities (solving the 2D coupled
+   growth-rate and wavenumber equations via Newton-Raphson).
 
-Matches all golden output values in `turb/test/test_output` to $\le 10^{-12}$
-relative error.
+Matches all golden output values in `turb/test/test_output`
+(`check_efficient_MLT_scaling`, 31-step `check_TDC` sweep, and
+`compare_TDC_and_Cox_MLT`) to $\le 10^{-12}$ relative error.
 
 ---
 

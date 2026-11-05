@@ -8,6 +8,8 @@ members = [
   "crates/flexmesa-utils",
   "crates/flexmesa-math",
   "crates/flexmesa-autodiff",
+  "crates/flexmesa-interp1d",
+  "crates/flexmesa-interp2d",
 ]
 
 [workspace.package]

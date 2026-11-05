@@ -30,5 +30,29 @@ def enable_float64() -> bool:
 
 _X64_ENABLED: bool = enable_float64()
 
+from flexmesa import (  # noqa: E402
+    auto_diff,
+    constants,
+    data,
+    interp_1d,
+    interp_2d,
+    math,
+    schema,
+    testing,
+    utils,
+)
+
 __version__: str = "0.1.0"
-__all__: list[str] = ["__version__", "enable_float64"]
+__all__: list[str] = [
+    "__version__",
+    "auto_diff",
+    "constants",
+    "data",
+    "enable_float64",
+    "interp_1d",
+    "interp_2d",
+    "math",
+    "schema",
+    "testing",
+    "utils",
+]

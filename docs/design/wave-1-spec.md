@@ -127,13 +127,20 @@ $$p_i(\Delta x) = c_{0,i} + \Delta x\,(c_{1,i} + \Delta x\,(c_{2,i} + \Delta x\,
 - **Huynh (1993) MP5 / M3a Slope Limiter (`interp_m3a`, `interp_m3b`, `interp_m3q`)**:
   Higher-order median-limited slopes preserving accuracy at smooth extrema.
 - **Integrals**: Exact analytic integration of the piecewise cubic over
-  $[x_a, x_b]$.
+  $[x_a, x_b]$. Fixes upstream `do_integrate_values` (`interp_1d_misc.f90`),
+  which checks `x1 > x0` instead of `x1 /= x0` when subtracting the lower
+  sub-interval antiderivative `a1`, so strictly decreasing grids preserve exact
+  definite-integral symmetry.
 
 #### 2D Tensor-Product Spline Interpolation (`interp_2d`)
 Constructs $4 \times 4$ bicubic patch coefficients on rectangular grids
 $(x_i, y_j)$ of shape `(N_x, N_y)` returning $(f, \partial_x f, \partial_y f,
-\partial_{xx} f, \partial_{yy} f, \partial_{xy} f)$ matching
-`interp_2d/test/test_output` to $\le 10^{-12}$ relative error.
+\partial_{xx} f, \partial_{yy} f, \partial_{xy} f)$, alongside 2D
+piecewise-monotonic (`interp_mkbipm_db` / `interp_evbipm_db`) and Akima (1996,
+ACM Algorithm 760) bivariate surface interpolation (`interp_rgbi3p_db` /
+`interp_rgsf3p_db`). Evaluates all cubic Hermite basis terms in `fvbicub_db` in
+full IEEE-754 `float64` precision (fixing the missing `implicit none` 32-bit
+`REAL` truncation of local basis variables in upstream `bicub_db.f`).
 
 ---
 

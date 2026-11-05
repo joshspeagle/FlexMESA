@@ -150,6 +150,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "flexmesa-interp1d"
+version = "0.1.0"
+dependencies = [
+ "flexmesa-autodiff",
+ "flexmesa-testing",
+ "flexmesa-utils",
+ "proptest",
+]
+
+[[package]]
+name = "flexmesa-interp2d"
+version = "0.1.0"
+dependencies = [
+ "flexmesa-interp1d",
+ "flexmesa-testing",
+ "flexmesa-utils",
+ "proptest",
+]
+
+[[package]]
 name = "flexmesa-math"
 version = "0.1.0"
 dependencies = [

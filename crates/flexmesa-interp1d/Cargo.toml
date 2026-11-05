@@ -1,0 +1,19 @@
+[package]
+name = "flexmesa-interp1d"
+description = "1D piecewise-monotonic and monotonicity-preserving cubic splines for FlexMESA"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+flexmesa-autodiff = { path = "../flexmesa-autodiff" }
+flexmesa-utils = { path = "../flexmesa-utils" }
+
+[dev-dependencies]
+flexmesa-testing = { path = "../flexmesa-testing" }
+proptest = "1.5"
+
+[lints]
+workspace = true

@@ -1,0 +1,18 @@
+[package]
+name = "flexmesa-data"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Physics table SHA-256 manifest, SafeTensors F64/I64 reader/writer, and MESA table converters."
+
+[lints]
+workspace = true
+
+[dependencies]
+flexmesa-testing = { path = "../flexmesa-testing" }
+
+[dev-dependencies]
+proptest = "1.4"
+tempfile = "3.10"

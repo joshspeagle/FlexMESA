@@ -374,11 +374,11 @@ class AutoDiffReal2VarOrder2(base.AutoDiffBase):
                 -inv_y2,
                 2.0 * self.val * inv_y2 * inv_y,
             )
-        return self * (1.0 / intrinsics.as_f64(other))
+        return self.__mul__(1.0 / intrinsics.as_f64(other))
 
     def __rtruediv__(self, other: intrinsics.ArrayLike) -> Self:
         """Divide a scalar left operand by `self` ($c / y = c y^{-1}$)."""
-        return self.powm1() * intrinsics.as_f64(other)
+        return self.powm1().__mul__(intrinsics.as_f64(other))
 
     def __pow__(
         self, other: AutoDiffReal2VarOrder2 | intrinsics.ArrayLike

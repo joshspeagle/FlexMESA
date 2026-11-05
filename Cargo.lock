@@ -180,6 +180,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "flexmesa-mtx"
+version = "0.1.0"
+dependencies = [
+ "flexmesa-autodiff",
+ "flexmesa-utils",
+ "proptest",
+]
+
+[[package]]
+name = "flexmesa-num"
+version = "0.1.0"
+dependencies = [
+ "flexmesa-autodiff",
+ "flexmesa-math",
+ "flexmesa-mtx",
+ "flexmesa-utils",
+ "proptest",
+]
+
+[[package]]
 name = "flexmesa-schema"
 version = "0.1.0"
 dependencies = [

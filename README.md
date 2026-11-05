@@ -33,3 +33,7 @@ PYTHONPATH=src /home/joshspeagle/.venvs/default/bin/pytest
 ~/.local/bin/mypy --strict src tests
 /home/joshspeagle/.venvs/default/bin/python /mnt/d/Dropbox/.agents/skills/code-style/scripts/check_code_style.py src tests
 ```
+
+## License & Upstream Attribution
+
+`FlexMESA` is distributed under the **GNU Lesser General Public License v3.0 or later (`LGPL-3.0-or-later`)**; see [`LICENSE`](LICENSE) for full terms. Physical equations, numerical algorithms, reference test cases, and converted physics tables derive from [MESA (Modules for Experiments in Stellar Astrophysics)](https://github.com/MESAHub/mesa) by Bill Paxton, Frank Timmes, Josiah Schwab, Evan Bauer, Adam Jermyn, and the MESA Team.

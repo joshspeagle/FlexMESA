@@ -27,12 +27,13 @@ pgo-data/
 
 # MESA Legacy Caches, Large Physics Tables & Checkpoints
 .mesa_temp_cache/
-data/
+/data/
 *.bin
 *.mod
 *.h5
 *.hdf5
 *.safetensors
+*.zst
 *.npz
 *.xz
 *.txz

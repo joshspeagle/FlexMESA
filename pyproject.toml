@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Modular, differentiable, and memory-safe re-engineering of MESA in Rust and Python/JAX."
 readme = "README.md"
 license = { text = "LGPL-3.0-or-later" }
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 authors = [
   { name = "Josh Speagle", email = "j.speagle@utoronto.ca" },
 ]
@@ -23,6 +23,7 @@ dependencies = [
 where = ["src"]
 
 [tool.pytest.ini_options]
+pythonpath = ["src"]
 testpaths = ["src", "tests"]
 cache_dir = "/tmp/flexmesa-pytest-cache"
 addopts = "--doctest-modules --strict-markers -m 'not slow'"
@@ -45,8 +46,7 @@ select = ["E", "F", "W", "I", "B", "UP", "NPY", "RUF"]
 [tool.mypy]
 python_version = "3.12"
 strict = true
+files = ["src", "tests"]
 cache_dir = "/tmp/flexmesa-mypy-cache"
-warn_return_any = true
-warn_unused_configs = true
 mypy_path = "src"
 ignore_missing_imports = true

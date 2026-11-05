@@ -25,7 +25,7 @@ def enable_float64() -> bool:
         True
     """
     jax.config.update("jax_enable_x64", True)
-    return True
+    return bool(jax.config.jax_enable_x64)
 
 
 _X64_ENABLED: bool = enable_float64()

@@ -10,6 +10,7 @@ members = [
   "crates/flexmesa-autodiff",
   "crates/flexmesa-interp1d",
   "crates/flexmesa-interp2d",
+  "crates/flexmesa-mtx",
 ]
 
 [workspace.package]

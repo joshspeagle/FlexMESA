@@ -146,26 +146,104 @@ full IEEE-754 `float64` precision (fixing the missing `implicit none` 32-bit
 
 ### 2.4 Wave 1D: Linear Algebra (`mtx`) and Numerical Solvers (`num`)
 
+#### Index and Memory-Order Contract (`mtx` and `num`)
+| Quantity | Upstream Fortran (`mtx` / `num`) | Safe Rust (`crates/flexmesa-{mtx,num}`) | Python/JAX (`src/flexmesa/{mtx,num}`) |
+| :--- | :--- | :--- | :--- |
+| Array indexing | 1-based (`1..=n`), except `_0_based` sparse routines | 0-based (`0..n`); sparse routines support both 1-based and 0-based CSR/CSC conventions; `binary_search` and `qsort_index` provide both 0-based and upstream-compatible 1-based variants | 0-based (`0..n`), with optional `one_based: bool` for CSR/CSC sparse indices and `binary_search` |
+| Dense matrix layout | Column-major `A(lda, n)` | Row-major `n * n` contiguous slice `&[f64]` (`A[i * n + j]`) | Row-major 2D array of shape `(n, n)` (`float64`) |
+| Banded matrix layout | Column-major `AB(ldab, n)` with `ldab >= 2*kl + ku + 1`; entry $A_{i,j}$ at row `kl + ku + i - j` (0-based) and col `j` | Row-major `(2*kl + ku + 1, n)` contiguous buffer (`ab[row * n + j]`, `row = kl + ku + i - j`) | 2D array of shape `(2*kl + ku + 1, n)` (`float64`) |
+| Block-tridiagonal layout | Column-major `lblk(nvar, nvar, nz)`, `dblk(nvar, nvar, nz)`, `ublk(nvar, nvar, nz)` | Shell-major row-major blocks of shape `(nz, nvar, nvar)` (`blk[(k * nvar + i) * nvar + j]`), with `lblk[0] = 0` and `ublk[nz - 1] = 0` | 3D arrays `lblk`, `dblk`, `ublk` of shape `(nz, nvar, nvar)` and right-hand side `(nz, nvar)` |
+
 #### Linear Algebra (`mtx`)
-- **Dense LU with Partial Pivoting (`dgetrf` / `dgetrs`)**: Solves
-  $A x = b$ for $A \in \mathbb{R}^{N \times N}$ in `float64`.
-- **Banded LU (`dgbmv` / `dgbtrf` / `dgbtrs`)**: Solves banded systems with
-  $k_l$ sub-diagonals and $k_u$ super-diagonals.
-- **Block-Tridiagonal Solver (`bcyclic` / Thomas algorithm)**: Solves coupled
-  stellar structure and nuclear network Jacobians with block shape
-  `(N_zones, N_vars, N_vars)` to $\le 10^{-12}$ residual norm.
+- **Dense LU with Partial Pivoting (`dgetrf` / `dgetrs` / `solve_dense`)**:
+  Factors $P A = L U$ for $A \in \mathbb{R}^{N \times N}$ in `float64` with
+  row-interchange pivot vector, solves $A x = b$ and multi-RHS $A X = B$,
+  evaluates factored matrix-vector and matrix-matrix products
+  (`lu_factored_square_mv`, `lu_factored_square_mm`), and estimates the
+  1-norm reciprocal condition number (`rcond_dense`).
+- **Implicit Differentiation of Linear Solves (`solve_dense_dual`)**:
+  For parameter-dependent system $A(p)\,x(p) = b(p)$ with `DualOrder1` entries,
+  computes the primal solution $x = A^{-1} b$ and propagates exact first-order
+  tangents via the implicit function theorem without differentiating through
+  pivoting loops:
+  $$A\,\frac{\partial x}{\partial p_m} = \frac{\partial b}{\partial p_m} - \frac{\partial A}{\partial p_m}\,x$$
+- **Banded LU (`dgbtrf` / `dgbtrs` / `solve_banded` / `band_multiply_xa`)**:
+  Factors and solves banded systems with $k_l$ sub-diagonals and $k_u$
+  super-diagonals stored in compact `(2*k_l + k_u + 1, N)` band format,
+  alongside `dense_to_band` and `band_to_dense` conversions.
+- **Block-Tridiagonal Solver (`block_dble_mv` / `block_thomas_factor` / `block_thomas_solve` / `solve_block_tridiagonal`)**:
+  Evaluates block-tridiagonal products
+  $$y_k = L_k x_{k-1} + D_k x_k + U_k x_{k+1}, \qquad k \in \{0, \dots, N_z - 1\}$$
+  and solves coupled block-tridiagonal systems of block shape
+  `(N_zones, N_vars, N_vars)` via block LU Thomas elimination with partial
+  pivoting per diagonal block, matching upstream `mtx/test/test_output`
+  (`test_square1`, `test_square2`, `test_square_inv`, `test_block_tridiagonal` on
+  `block_tri.data` with $N_{\mathrm{var}} = 25, N_z = 20$) to $\le 10^{-12}$
+  relative residual norm.
+- **Sparse Format Conversions (`sparse`)**:
+  Bidirectional conversions between dense, banded, compressed-row sparse (CSR),
+  and compressed-column sparse (CSC) representations in both 1-based and
+  0-based index conventions (`dense_to_row_sparse`, `row_sparse_to_dense`,
+  `dense_to_col_sparse`, `col_sparse_to_dense`, `band_to_column_sparse`,
+  `column_sparse_to_band`, `band_to_row_sparse`, `row_sparse_to_band`, and
+  `find_loc_in_sparse`).
+  - **Upstream Bug Fixes in 0-Based Sparse Routines**: Upstream
+    `do_row_sparse_0_based_to_dense` (`mtx_support.f90`) declares `rowptr(0:n)`
+    and `colind(0:nz-1)` while indexing `rowptr(i)` for `i = 1..n`, `values(k)`
+    with 0-based `k`, and 1-based `a(i, j)` with unshifted 0-based `j =
+    colind(k)`; similarly, `find_loc_in_column_0_based` (`mtx_formats.dek`)
+    iterates over `k = colptr(j)-1 .. colptr(j+1)` instead of
+    `colptr(j) .. colptr(j+1)-1`. FlexMESA uses consistent 0-based half-open
+    pointer ranges `ptr[idx]..ptr[idx + 1]` for 0-based CSR/CSC formats and
+    `1`-based `(ptr[idx] - 1)..(ptr[idx + 1] - 1)` offsets for 1-based CSR/CSC
+    formats.
 
 #### Numerical Solvers (`num`)
-- **Compensated Summation**: Knuth two-sum and Neumaier / Kahan-Babuska
-  four-sum primitives preventing catastrophic cancellation in conservation
-  checks.
-- **1D Root-Finding (`safe_root`)**: Hybrid Brent-Dekker and Newton-Raphson
-  solver with bracket maintenance.
-- **Damped Newton-Raphson Solver (`newton`)**: Line-search damped Newton step
-  with analytical or finite-difference Jacobian.
-- **Explicit and Stiff Implicit ODE Integrators**: Dormand-Prince (`dopri5`,
-  `dop853`) and Rosenbrock / implicit Runge-Kutta (`ros2`, `rodasp`, `radau5`)
-  integrators matching `num/test/test_output` within tolerance.
+- **Compensated Summation, Search, and Algebraic Primitives (`search`)**:
+  - Knuth `two_sum` and Neumaier compensated summation (`neumaier_sum`) for
+    cancellation-free conservation sums.
+  - `binary_search` on ascending and descending grids with optional hint index,
+    and 1-based/0-based `qsort_index` permutation sorting matching `test_qsort`.
+  - `linear_interp`, `find0`, `find0_quadratic`, `find_max_quadratic`,
+    `two_piece_linear_coeffs`, Ridders' Richardson-extrapolated numerical
+    derivative `dfridr`, and recursive adaptive Simpson 3/8 quadrature
+    `integrate`.
+  - **Upstream Bug Fix in `find_max_quadratic`**: Upstream `num_lib.f90` line
+    581 checks `if (y2 < max(y1, y2)) ierr = -1` (which is identically false)
+    instead of `if (y2 < max(y1, y3) .or. c >= 0) ierr = -1`. FlexMESA enforces
+    $y_2 \ge \max(y_1, y_3)$ and negative quadratic curvature $c < 0$ so convex
+    parabolas or non-interior points cannot be misclassified as a quadratic
+    maximum.
+- **1D Root-Finding and Minimization (`root`, `brent`)**:
+  - Brent's algorithms (`brent_safe_zero`, `brent_local_min`,
+    `brent_global_min`) and hybrid Newton-Brent root-finding
+    (`look_for_brackets`, `safe_root`, `safe_root_with_brackets`,
+    `safe_root_with_guess`, `safe_root_without_brackets`) matching all golden
+    outputs in `test_brent` and `test_support` (`0.74800609950637120`, `0.5`).
+  - **Implicit Differentiation of Root-Finding (`safe_root_dual`)**: For
+    $f(x^*(p), p) = 0$, propagates first-order derivatives via
+    $$\frac{\partial x^*}{\partial p_m} = -\left(\frac{\partial f}{\partial x}(x^*, p)\right)^{-1} \frac{\partial f}{\partial p_m}(x^*, p)$$
+- **Derivative-Free Multivariate Optimization (`simplex`)**:
+  Nelder-Mead simplex optimizer (`nm_simplex`) with weighted centroids, box
+  bounds enforcement, shrink steps, and adaptive random search (`ARS`) using the
+  Park-Miller minimal standard generator (`r8_uniform_01`), tested across the
+  Wood (`WD`), extended Rosenbrock (`ER`), Freudenstein-Roth (`FR4`), Beale
+  (`BLE`), Powell singular (`PS`), and trigonometric (`TR`) test functions.
+- **Explicit and Stiff Implicit ODE Integrators (`rk`, `rosenbrock`)**:
+  - Explicit Runge-Kutta (`rk2`, `rk4`) and Dormand-Prince order 5(4) (`dopri5`)
+    and order 8(5,3) (`dop853`) adaptive integrators with continuous dense
+    output (`contd5`), matching the Van der Pol (`vdpol`, $\epsilon = 10^{-3}$)
+    reference solution `[1.7632345401889102, -0.83568868191466206]`.
+  - Linearly-implicit Rosenbrock and RODAS stiff integrators (`ros2`, `rose2`,
+    `ros3p`, `ros3pl`, `rodas3`, `rodas4`, `rodasp`) with Gustafsson predictive
+    step-size control, dense and banded Jacobians, and continuous output
+    (`contro3`, `contro4`), verified on `vdpol`, `diffusion` ($N_z = 48$), and
+    `medakzo` ($N = 400$).
+- **Damped Newton-Raphson Solver (`newton`)**:
+  Line-search damped Newton-Raphson solver supporting analytical and numerical
+  Jacobians across dense, banded, and block-tridiagonal matrix structures,
+  matching the 1001-zone implicit diffusion benchmark in `test_newton`
+  (`2.9347118120566711e-2` to $\le 10^{-12}$ relative error).
 
 ---
 

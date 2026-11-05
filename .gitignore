@@ -1,0 +1,49 @@
+# Python & Packaging
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+.eggs/
+.venv/
+venv/
+
+# Testing, Type-Checking & Linting Caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+.coverage
+coverage.xml
+htmlcov/
+
+# Rust & Cargo Build Artifacts
+target/
+pgo-data/
+*.profraw
+*.profdata
+
+# MESA Legacy Caches, Large Physics Tables & Checkpoints
+.mesa_temp_cache/
+data/
+*.bin
+*.mod
+*.h5
+*.hdf5
+*.safetensors
+*.npz
+*.xz
+*.txz
+*.tar.gz
+*.tgz
+photos/
+LOGS/
+
+# OS & Editor Files
+.DS_Store
+Thumbs.db
+*~
+*.swp
+.claude/worktrees/

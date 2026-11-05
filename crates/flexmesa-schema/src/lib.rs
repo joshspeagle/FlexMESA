@@ -14,7 +14,7 @@ use std::fmt;
 use std::fs;
 use std::path::Path;
 
-use flexmesa_testing::{is_integer_token, parse_fortran_float};
+use flexmesa_testing::parse_fortran_float;
 
 pub use namelist::{
     parse_namelist_file, parse_namelist_text, validate_namelist_block,
@@ -162,21 +162,41 @@ impl fmt::Display for SchemaError {
 
 impl std::error::Error for SchemaError {}
 
-/// Split a Fortran line into `(code_part, comment_part)` outside quotes.
-#[must_use]
-pub fn strip_fortran_comment(line: &str) -> (&str, &str) {
-    let mut in_single = false;
-    let mut in_double = false;
+/// Return the byte index of the first `target` char outside quotes.
+pub(crate) fn find_unquoted_char(line: &str, target: char) -> Option<usize> {
+    if !line.contains(target) {
+        return None;
+    }
+    if !line.contains(['\'', '"']) {
+        return line.find(target);
+    }
+    let (mut in_single, mut in_double) = (false, false);
     for (idx, ch) in line.char_indices() {
         if ch == '\'' && !in_double {
             in_single = !in_single;
         } else if ch == '"' && !in_single {
             in_double = !in_double;
-        } else if ch == '!' && !in_single && !in_double {
-            return (line[..idx].trim(), line[idx + 1..].trim());
+        } else if ch == target && !in_single && !in_double {
+            return Some(idx);
         }
     }
-    (line.trim(), "")
+    None
+}
+
+/// Read UTF-8 text from `path`, mapping I/O errors to [`SchemaError::IoError`].
+pub(crate) fn read_file_text(path: &Path) -> Result<String, SchemaError> {
+    fs::read_to_string(path).map_err(|err| SchemaError::IoError {
+        message: format!("{}: {err}", path.display()),
+    })
+}
+
+/// Split a Fortran line into `(code_part, comment_part)` outside quotes.
+#[must_use]
+pub fn strip_fortran_comment(line: &str) -> (&str, &str) {
+    match find_unquoted_char(line, '!') {
+        Some(idx) => (line[..idx].trim(), line[idx + 1..].trim()),
+        None => (line.trim(), ""),
+    }
 }
 
 /// Parse a Fortran `.defaults` or namelist literal into a [`ControlValue`].
@@ -216,23 +236,25 @@ pub fn parse_control_value(
         && bytes[0] == bytes[bytes.len() - 1]
         && (bytes[0] == b'\'' || bytes[0] == b'"')
     {
-        let q = char::from(bytes[0]);
-        let doubled = format!("{q}{q}");
+        let (q, doubled, single) = if bytes[0] == b'\'' {
+            ('\'', "''", "'")
+        } else {
+            ('"', "\"\"", "\"")
+        };
         let inner = &tok[1..tok.len() - 1];
-        if inner.replace(&doubled, "").contains(q) {
+        if !inner.contains(q) {
+            return Ok(ControlValue::String(inner.to_owned()));
+        }
+        if inner.replace(doubled, "").contains(q) {
             return Err(SchemaError::ParseError {
                 line_number,
                 message: format!("unescaped quote in string literal: {tok}"),
             });
         }
-        return Ok(ControlValue::String(
-            inner.replace(&doubled, &q.to_string()),
-        ));
+        return Ok(ControlValue::String(inner.replace(doubled, single)));
     }
-    if is_integer_token(tok) {
-        if let Ok(int_val) = tok.parse::<i64>() {
-            return Ok(ControlValue::Integer(int_val));
-        }
+    if let Ok(int_val) = tok.parse::<i64>() {
+        return Ok(ControlValue::Integer(int_val));
     }
     let float_val =
         parse_fortran_float(tok).map_err(|_| SchemaError::ParseError {
@@ -253,8 +275,7 @@ pub(crate) fn split_assignment(
             message: format!("expected '=' in assignment: {item:?}"),
         });
     };
-    let lhs = lhs_raw.trim();
-    let rhs = rhs_raw.trim();
+    let (lhs, rhs) = (lhs_raw.trim(), rhs_raw.trim());
     let (name, sub) = if let Some(open_idx) = lhs.find('(') {
         if !lhs.ends_with(')') {
             return Err(SchemaError::ParseError {
@@ -280,12 +301,26 @@ pub(crate) fn split_assignment(
     Ok((name, sub, rhs))
 }
 
-/// Return whether `comment` is a section/parameter underline (`===`, `---`, `~~~`).
-fn is_underline(comment: &str) -> bool {
-    comment.len() >= 3
+/// Update `current_section` and `pending_docs` from a `.defaults` comment line.
+fn update_comment_state<'a>(
+    comment: &'a str,
+    pending_docs: &mut Vec<&'a str>,
+    current_section: &mut String,
+) {
+    let is_under = comment.len() >= 3
         && comment
             .bytes()
-            .all(|b| matches!(b, b'=' | b'-' | b'~' | b'^'))
+            .all(|b| matches!(b, b'=' | b'-' | b'~' | b'^'));
+    if is_under {
+        if comment.starts_with(['=', '-', '^']) {
+            if let Some(title) = pending_docs.pop() {
+                title.trim().clone_into(current_section);
+                pending_docs.clear();
+            }
+        }
+    } else if !comment.is_empty() && comment != "::" {
+        pending_docs.push(comment);
+    }
 }
 
 /// Parse the text of a MESA `<pkg>/defaults/*.defaults` file.
@@ -304,18 +339,11 @@ pub fn parse_defaults_text(
         let line_number = idx + 1;
         let (code, comment) = strip_fortran_comment(raw_line);
         if code.is_empty() {
-            if !comment.is_empty() {
-                if is_underline(comment) {
-                    if comment.starts_with(['=', '-', '^']) {
-                        if let Some(title) = pending_docs.pop() {
-                            title.trim().clone_into(&mut current_section);
-                            pending_docs.clear();
-                        }
-                    }
-                } else if comment != "::" {
-                    pending_docs.push(comment);
-                }
-            }
+            update_comment_state(
+                comment,
+                &mut pending_docs,
+                &mut current_section,
+            );
             continue;
         }
         let (name, sub, rhs) = split_assignment(code, line_number)?;
@@ -358,19 +386,14 @@ pub fn parse_defaults_text(
 pub fn parse_defaults_file(
     path: &Path,
 ) -> Result<Vec<ControlDefault>, SchemaError> {
-    let content =
-        fs::read_to_string(path).map_err(|err| SchemaError::IoError {
-            message: format!("{}: {err}", path.display()),
-        })?;
-    parse_defaults_text(&content)
+    parse_defaults_text(&read_file_text(path)?)
 }
 
 /// Parse active column declarations from a MESA `*_columns.list` file.
 #[must_use]
 pub fn parse_columns_text(text: &str) -> Vec<ColumnEntry> {
-    let mut entries = Vec::new();
-    let mut seen = HashSet::new();
-    let mut current_section = String::new();
+    let (mut entries, mut seen, mut section) =
+        (Vec::new(), HashSet::new(), String::new());
     for (idx, raw_line) in text.lines().enumerate() {
         let (code, comment) = strip_fortran_comment(raw_line);
         if code.is_empty() {
@@ -378,18 +401,28 @@ pub fn parse_columns_text(text: &str) -> Vec<ColumnEntry> {
                 comment
                     .trim_start_matches('#')
                     .trim()
-                    .clone_into(&mut current_section);
+                    .clone_into(&mut section);
             }
             continue;
         }
         if seen.insert(code.to_ascii_lowercase()) {
             entries.push(ColumnEntry {
                 name: code.to_owned(),
-                section: current_section.clone(),
+                section: section.clone(),
                 comment: comment.to_owned(),
                 line_number: idx + 1,
             });
         }
     }
     entries
+}
+
+/// Read and parse a MESA `*_columns.list` file from disk.
+///
+/// # Errors
+/// Returns [`SchemaError::IoError`] if `path` cannot be read.
+pub fn parse_columns_file(
+    path: &Path,
+) -> Result<Vec<ColumnEntry>, SchemaError> {
+    Ok(parse_columns_text(&read_file_text(path)?))
 }

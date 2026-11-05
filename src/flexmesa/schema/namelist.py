@@ -18,9 +18,6 @@ from flexmesa.schema import defaults
 _NAMELIST_HEADER_RE: re.Pattern[str] = re.compile(
     r"^&([A-Za-z_][A-Za-z0-9_]*)\s*(.*)$"
 )
-_ASSIGNMENT_LHS_RE: re.Pattern[str] = re.compile(
-    r"^([A-Za-z_][A-Za-z0-9_]*)(?:\(\s*([^)]*?)\s*\))?\s*=\s*(.+)$"
-)
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -59,6 +56,10 @@ class NamelistBlock:
 
 def _split_top_level_commas(code: str) -> list[str]:
     """Split a namelist line on commas outside quotes and parentheses."""
+    if "," not in code:
+        stripped = code.strip()
+        return [stripped] if stripped else []
+
     parts: list[str] = []
     start = 0
     in_single = False
@@ -87,20 +88,6 @@ def _split_top_level_commas(code: str) -> list[str]:
     return parts
 
 
-def _find_slash_terminator(code: str) -> int | None:
-    """Return index of namelist terminator `/` outside quotes, or `None`."""
-    in_single = False
-    in_double = False
-    for idx, ch in enumerate(code):
-        if ch == "'" and not in_double:
-            in_single = not in_single
-        elif ch == '"' and not in_single:
-            in_double = not in_double
-        elif ch == "/" and not in_single and not in_double:
-            return idx
-    return None
-
-
 def _parse_assignments_in_segment(
     segment: str,
     line_idx: int,
@@ -108,13 +95,9 @@ def _parse_assignments_in_segment(
 ) -> None:
     """Parse comma-separated assignments from `segment` into `out`."""
     for item in _split_top_level_commas(segment):
-        match = _ASSIGNMENT_LHS_RE.match(item)
-        if match is None:
-            raise ValueError(
-                f"Malformed namelist assignment at line {line_idx}: {item!r}."
-            )
-        name, sub, raw_val = match.group(1), match.group(2), match.group(3)
-        val_type, val = defaults.parse_control_value(raw_val)
+        name, sub, val_type, val = defaults.parse_assignment_clause(
+            item, line_idx
+        )
         out.append(
             NamelistAssignment(
                 name=name,
@@ -166,7 +149,7 @@ def parse_namelist_text(text: str) -> list[NamelistBlock]:
             if not code:
                 continue
 
-        slash_idx = _find_slash_terminator(code)
+        slash_idx = defaults.find_unquoted_char(code, "/")
         body = code if slash_idx is None else code[:slash_idx].strip()
         if body:
             _parse_assignments_in_segment(body, line_idx, active_assignments)
@@ -300,9 +283,10 @@ def validate_namelist_block(
         )
         if assign.subscript is not None:
             existing = overrides.get(spec.name)
-            sub_map = dict(existing) if isinstance(existing, dict) else {}
-            sub_map[assign.subscript] = value
-            overrides[spec.name] = sub_map
+            if not isinstance(existing, dict):
+                existing = {}
+                overrides[spec.name] = existing
+            existing[assign.subscript] = value
         else:
             overrides[spec.name] = value
     return overrides

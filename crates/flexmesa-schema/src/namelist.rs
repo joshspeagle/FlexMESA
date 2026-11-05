@@ -7,12 +7,12 @@
 //! [`ControlDefault`] schema.
 
 use std::collections::HashMap;
-use std::fs;
 use std::path::Path;
 
 use crate::{
-    parse_control_value, split_assignment, strip_fortran_comment,
-    ControlDefault, ControlType, ControlValue, SchemaError,
+    find_unquoted_char, parse_control_value, read_file_text, split_assignment,
+    strip_fortran_comment, ControlDefault, ControlType, ControlValue,
+    SchemaError,
 };
 
 /// Single `name[(subscript)] = value` assignment inside a Fortran namelist.
@@ -39,6 +39,14 @@ pub struct NamelistBlock {
 
 /// Split a namelist body on commas outside quotes and parentheses.
 fn split_top_level_commas(code: &str) -> Vec<&str> {
+    if !code.contains(',') {
+        let trimmed = code.trim();
+        return if trimmed.is_empty() {
+            Vec::new()
+        } else {
+            vec![trimmed]
+        };
+    }
     let (mut parts, mut start, mut in_s, mut in_d, mut depth) =
         (Vec::new(), 0, false, false, 0_usize);
     for (idx, ch) in code.char_indices() {
@@ -67,25 +75,19 @@ fn split_top_level_commas(code: &str) -> Vec<&str> {
     parts
 }
 
-/// Return the byte index of a namelist terminator `/` outside string quotes.
-fn find_slash_outside_quotes(code: &str) -> Option<usize> {
-    let (mut in_s, mut in_d) = (false, false);
-    for (idx, ch) in code.char_indices() {
-        if ch == '\'' && !in_d {
-            in_s = !in_s;
-        } else if ch == '"' && !in_s {
-            in_d = !in_d;
-        } else if ch == '/' && !in_s && !in_d {
-            return Some(idx);
-        }
-    }
-    None
-}
-
 /// Parse one or more Fortran `&namelist ... /` blocks from `inlist` text.
 ///
 /// # Errors
 /// Returns [`SchemaError::ParseError`] on malformed namelist syntax.
+///
+/// # Examples
+/// ```
+/// use flexmesa_schema::parse_namelist_text;
+///
+/// let blocks = parse_namelist_text("&eos\n  use_PC = .true.\n/\n").unwrap();
+/// assert_eq!(blocks.len(), 1);
+/// assert_eq!(blocks[0].name, "eos");
+/// ```
 pub fn parse_namelist_text(
     text: &str,
 ) -> Result<Vec<NamelistBlock>, SchemaError> {
@@ -113,7 +115,7 @@ pub fn parse_namelist_text(
                 continue;
             }
         }
-        let slash_pos = find_slash_outside_quotes(code);
+        let slash_pos = find_unquoted_char(code, '/');
         let body = slash_pos.map_or(code, |p| code[..p].trim());
         for item in split_top_level_commas(body) {
             let (name, sub, rhs) = split_assignment(item, line_number)?;
@@ -148,11 +150,7 @@ pub fn parse_namelist_text(
 pub fn parse_namelist_file(
     path: &Path,
 ) -> Result<Vec<NamelistBlock>, SchemaError> {
-    let content =
-        fs::read_to_string(path).map_err(|err| SchemaError::IoError {
-            message: format!("{}: {err}", path.display()),
-        })?;
-    parse_namelist_text(&content)
+    parse_namelist_text(&read_file_text(path)?)
 }
 
 /// Validate a [`NamelistBlock`] against a [`ControlDefault`] slice.
@@ -161,6 +159,17 @@ pub fn parse_namelist_file(
 /// Returns [`SchemaError::UnknownControl`] or [`SchemaError::ValidationError`]
 /// if an assignment references an unknown control, indexes a scalar, or
 /// supplies an incompatible value type.
+///
+/// # Examples
+/// ```
+/// use flexmesa_schema::{
+///     parse_defaults_text, parse_namelist_text, validate_namelist_block,
+/// };
+///
+/// let schema = parse_defaults_text("  use_PC = .false.\n").unwrap();
+/// let blocks = parse_namelist_text("&eos\n  use_PC = .true.\n/\n").unwrap();
+/// assert!(validate_namelist_block(&blocks[0], &schema, false).is_ok());
+/// ```
 pub fn validate_namelist_block(
     block: &NamelistBlock,
     schema: &[ControlDefault],

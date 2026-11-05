@@ -59,7 +59,9 @@ const SAMPLE_INLIST: &str = "\
 /
 ";
 
-/// Verify `.defaults` and `*_columns.list` extraction and deduplication.
+/// Verify `.defaults` and `*_columns.list` extraction and deduplication,
+/// checking section titles, broadcast array declarations, and element
+/// overrides.
 #[test]
 fn test_parse_defaults_and_columns() {
     let schema = parse_defaults_text(SAMPLE_EOS_DEFAULTS).unwrap();
@@ -84,7 +86,9 @@ fn test_parse_defaults_and_columns() {
     assert_eq!(cols[2].section, "age");
 }
 
-/// Verify Fortran `&namelist` parsing and schema validation rules.
+/// Verify Fortran `&namelist` parsing and schema validation rules, including
+/// numeric widening (`Zbase = 0.02d0`), strict mode, and error rejection on
+/// unknown controls, scalar indexing, and type mismatches.
 #[test]
 fn test_parse_and_validate_namelist() {
     let schema = parse_defaults_text(SAMPLE_EOS_DEFAULTS).unwrap();
@@ -107,7 +111,8 @@ fn test_parse_and_validate_namelist() {
 }
 
 proptest! {
-    /// Property test: integer and boolean control literals round-trip cleanly.
+    /// Property test: integer and boolean control literals round-trip cleanly
+    /// across `[-10_000_000, 10_000_000]` and `.true.`/`.false.`.
     #[test]
     fn prop_control_value_integer_and_logical_roundtrip(
         int_val in -10_000_000_i64..10_000_000_i64,

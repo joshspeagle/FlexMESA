@@ -82,6 +82,32 @@ class ColumnEntry:
     line_number: int
 
 
+def find_unquoted_char(text: str, target: str) -> int | None:
+    """Return index of first `target` character outside quotes, or `None`.
+
+    Args:
+        text: Input Fortran source or configuration line.
+        target: Single-character delimiter (such as `'!'` or `'/'`).
+
+    Returns:
+        0-based character index of the first unquoted `target`, or `None`.
+    """
+    if target not in text:
+        return None
+    if "'" not in text and '"' not in text:
+        return text.find(target)
+    in_single = False
+    in_double = False
+    for idx, ch in enumerate(text):
+        if ch == "'" and not in_double:
+            in_single = not in_single
+        elif ch == '"' and not in_single:
+            in_double = not in_double
+        elif ch == target and not in_single and not in_double:
+            return idx
+    return None
+
+
 def strip_fortran_comment(line: str) -> tuple[str, str]:
     """Split a Fortran line into `(code_part, comment_part)` outside quotes.
 
@@ -91,16 +117,10 @@ def strip_fortran_comment(line: str) -> tuple[str, str]:
     Returns:
         Tuple `(code, comment)` with outer whitespace stripped.
     """
-    in_single = False
-    in_double = False
-    for idx, ch in enumerate(line):
-        if ch == "'" and not in_double:
-            in_single = not in_single
-        elif ch == '"' and not in_single:
-            in_double = not in_double
-        elif ch == "!" and not in_single and not in_double:
-            return (line[:idx].strip(), line[idx + 1 :].strip())
-    return (line.strip(), "")
+    idx = find_unquoted_char(line, "!")
+    if idx is None:
+        return (line.strip(), "")
+    return (line[:idx].strip(), line[idx + 1 :].strip())
 
 
 def parse_control_value(raw: str) -> tuple[ControlType, ControlValue]:
@@ -137,6 +157,8 @@ def parse_control_value(raw: str) -> tuple[ControlType, ControlValue]:
     if len(token) >= 2 and token[0] == token[-1] and token[0] in ("'", '"'):
         quote = token[0]
         inner = token[1:-1]
+        if quote not in inner:
+            return (ControlType.STRING, inner)
         if quote in inner.replace(quote * 2, ""):
             raise ValueError(f"Unescaped quote inside string literal: {raw!r}.")
         return (ControlType.STRING, inner.replace(quote * 2, quote))
@@ -145,6 +167,31 @@ def parse_control_value(raw: str) -> tuple[ControlType, ControlValue]:
         return (ControlType.INTEGER, int(token))
 
     return (ControlType.FLOAT, golden.parse_fortran_float(token))
+
+
+def parse_assignment_clause(
+    clause: str, line_idx: int
+) -> tuple[str, str | None, ControlType, ControlValue]:
+    """Parse a `name[(subscript)] = value` clause into its typed components.
+
+    Args:
+        clause: Single assignment expression without trailing comments.
+        line_idx: 1-based line number for error reporting.
+
+    Returns:
+        Tuple `(name, subscript, control_type, value)`.
+
+    Raises:
+        ValueError: If `clause` does not match `name[(subscript)] = value`.
+    """
+    match = _ASSIGNMENT_RE.match(clause)
+    if match is None:
+        raise ValueError(
+            f"Malformed control assignment at line {line_idx}: {clause!r}."
+        )
+    name, subscript, raw_val = match.group(1), match.group(2), match.group(3)
+    ctrl_type, val = parse_control_value(raw_val)
+    return (name, subscript, ctrl_type, val)
 
 
 def _update_comment_state(
@@ -172,32 +219,27 @@ def _record_assignment(
     controls: dict[str, ControlDefault],
 ) -> None:
     """Parse one `name[(sub)] = value` line and update `controls` in place."""
-    match = _ASSIGNMENT_RE.match(code)
-    if match is None:
-        raise ValueError(
-            f"Malformed control assignment at line {line_idx}: {code!r}."
-        )
-    name, subscript, raw_val = match.group(1), match.group(2), match.group(3)
-    ctrl_type, val = parse_control_value(raw_val)
+    name, subscript, ctrl_type, val = parse_assignment_clause(code, line_idx)
     key = name.lower()
-    is_array = subscript is not None
-    is_specific_elem = subscript is not None and subscript != ":"
 
-    if key in controls and is_specific_elem:
+    if subscript is not None and subscript != ":" and key in controls:
         prev = controls[key]
-        assert subscript is not None
         controls[key] = dataclasses.replace(
             prev,
             is_array=True,
             element_overrides=(*prev.element_overrides, (subscript, val)),
         )
     else:
-        overrides = ((subscript, val),) if is_specific_elem else ()
+        overrides = (
+            ((subscript, val),)
+            if subscript is not None and subscript != ":"
+            else ()
+        )
         controls[key] = ControlDefault(
             name=name,
             control_type=ctrl_type,
             default_value=val,
-            is_array=is_array,
+            is_array=subscript is not None,
             element_overrides=overrides,
             section=current_section,
             doc="\n".join(pending_docs).strip(),

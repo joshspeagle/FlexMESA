@@ -73,15 +73,15 @@ MESA declares module configuration defaults across `<pkg>/defaults/*.defaults` (
 Both `flexmesa.schema` (`src/flexmesa/schema/defaults.py` and `src/flexmesa/schema/namelist.py`) and `crates/flexmesa-schema` (`crates/flexmesa-schema/src/lib.rs`) eliminate that boilerplate by parsing `.defaults` and `*_columns.list` files directly into typed schemas:
 
 - **Schema Data Structures**:
-  - `ControlType`: `LOGICAL` (`bool`), `INTEGER` (`int` / `i64`), `FLOAT` (`float` / `f64`), `STRING` (`str` / `String`).
+  - `ControlType`: `LOGICAL` (`bool`), `INTEGER` (`int` / `i64`), `FLOAT` (`float` / `f64`), `STRING` (`str` / `String`), paired with `ControlValue` (`bool | int | float | str` in Python; `enum ControlValue` in Safe Rust).
   - `ControlDefault`: Stores `name`, `control_type`, `default_value`, `is_array` (`True` when declared with `(:)` or `(idx)`), `element_overrides` (indexed overrides such as `suffix_for_FreeEOS_Z(13) = '_CO'`), `section` (from underlined `! ===` or `! ---` headings), `doc` (the preceding `!` comment block), and `line_number`.
   - `ColumnEntry`: Stores `name` (column identifier or directive), `section` (`!#` / `!##` heading), `comment` (inline `!` description), and `line_number`.
   - `NamelistAssignment` & `NamelistBlock`: Structured representation of legacy Fortran `&namelist ... /` blocks (`&eos`, `&kap`, `&star_job`, `&controls`).
 - **Parser & Validator Functions**:
   - `parse_control_value(raw)`: Parses Fortran `.true.`/`.false.` logicals, single- or double-quoted strings (with doubled-quote escaping), 64-bit integers, and Fortran `d`/`D`/`e`/`E` double-precision floats.
-  - `parse_defaults_text(text)` / `parse_defaults_file(path)`: Extracts all `ControlDefault` entries in declaration order (indexed by lowercase name for case-insensitive Fortran namelist lookup).
+  - `parse_defaults_text(text)` / `parse_defaults_file(path)`: Extracts all `ControlDefault` entries in declaration order (`dict[str, ControlDefault]` keyed by lowercase name in Python; `Result<Vec<ControlDefault>, SchemaError>` in Safe Rust).
   - `parse_columns_text(text)` / `parse_columns_file(path)`: Extracts all active `ColumnEntry` declarations from a `*_columns.list` file.
-  - `parse_namelist_text(text)` and `validate_namelist_block(block, schema, *, strict_numeric_types=False)`: Parses Fortran `&namelist ... /` text and validates every assignment against the target `.defaults` schema, rejecting unknown control names, invalid subscripts on scalar controls, and incompatible value types.
+  - `parse_namelist_text(text)` / `parse_namelist_file(path)` and `validate_namelist_block(block, schema, ...)`: Parses Fortran `&namelist ... /` text and validates every assignment against the target `.defaults` schema (returning the coerced override mapping in Python or `Result<(), SchemaError>` in Safe Rust), rejecting unknown control names, invalid subscripts on scalar controls, and incompatible value types.
 
 ---
 

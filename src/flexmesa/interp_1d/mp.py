@@ -206,7 +206,20 @@ def interp_m3a(
     x: np.ndarray | jnp.ndarray,
     y: np.ndarray | jnp.ndarray,
 ) -> jnp.ndarray:
-    """Computes Huynh (1993) average-slope MP coefficients (`interp_m3a`)."""
+    """Computes Huynh (1993) average-slope MP coefficients (`interp_m3a`).
+
+    Args:
+        x: Knot coordinates of shape ``(N,)`` (``N >= 2``), strictly monotonic,
+            in physical or dimensionless units.
+        y: Knot values of shape ``(N,)`` in physical or dimensionless units.
+
+    Returns:
+        JAX ``float64`` array of shape ``(N, 4)`` with ``[c0, c1, c2, c3]`` at
+        each knot.
+
+    Raises:
+        ValueError: If ``x`` and ``y`` fail grid validation.
+    """
     return interp_m3(x, y, which=MpLimiter.AVERAGE)
 
 
@@ -214,7 +227,20 @@ def interp_m3b(
     x: np.ndarray | jnp.ndarray,
     y: np.ndarray | jnp.ndarray,
 ) -> jnp.ndarray:
-    """Computes Huynh (1993) superbee-slope MP coefficients (`interp_m3b`)."""
+    """Computes Huynh (1993) superbee-slope MP coefficients (`interp_m3b`).
+
+    Args:
+        x: Knot coordinates of shape ``(N,)`` (``N >= 2``), strictly monotonic,
+            in physical or dimensionless units.
+        y: Knot values of shape ``(N,)`` in physical or dimensionless units.
+
+    Returns:
+        JAX ``float64`` array of shape ``(N, 4)`` with ``[c0, c1, c2, c3]`` at
+        each knot.
+
+    Raises:
+        ValueError: If ``x`` and ``y`` fail grid validation.
+    """
     return interp_m3(x, y, which=MpLimiter.SUPER_BEE)
 
 
@@ -222,5 +248,18 @@ def interp_m3q(
     x: np.ndarray | jnp.ndarray,
     y: np.ndarray | jnp.ndarray,
 ) -> jnp.ndarray:
-    """Computes Huynh (1993) quartic-slope MP coefficients (`interp_m3q`)."""
+    """Computes Huynh (1993) quartic-slope MP coefficients (`interp_m3q`).
+
+    Args:
+        x: Knot coordinates of shape ``(N,)`` (``N >= 2``), strictly monotonic,
+            in physical or dimensionless units.
+        y: Knot values of shape ``(N,)`` in physical or dimensionless units.
+
+    Returns:
+        JAX ``float64`` array of shape ``(N, 4)`` with ``[c0, c1, c2, c3]`` at
+        each knot.
+
+    Raises:
+        ValueError: If ``x`` and ``y`` fail grid validation.
+    """
     return interp_m3(x, y, which=MpLimiter.QUARTIC)

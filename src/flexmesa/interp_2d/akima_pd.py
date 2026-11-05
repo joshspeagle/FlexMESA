@@ -220,9 +220,7 @@ def rgpd3p_db(
         raise ValueError("rgpd3p_db requires nxd >= 2 and nyd >= 2.")
     spline1d.splinck_db(x_arr, 1.0e-3, "x")
     spline1d.splinck_db(y_arr, 1.0e-3, "y")
-    z_arr = np.asarray(zd, dtype=np.float64).reshape(nxd, nyd)
-    if not np.all(np.isfinite(z_arr)):
-        raise ValueError("zd must contain only finite float64 values.")
+    z_arr = spline1d.reshape_grid_2d(zd, nxd, nyd, "zd")
 
     nx0, ny0 = max(4, nxd), max(4, nyd)
     eps_scale = float(np.float32(1.0e-12))

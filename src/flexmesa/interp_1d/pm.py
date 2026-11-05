@@ -163,6 +163,9 @@ def interp_pm_slopes_only(
     Returns:
         JAX ``float64`` array of shape ``(N, 4)`` with ``[:, 0] = y``,
         ``[:, 1] = df/dx``, and ``[:, 2:] = 0``.
+
+    Raises:
+        ValueError: If ``x`` and ``y`` fail grid validation.
     """
     return _mk_pmcub(x, y, slope_only=True)
 
@@ -184,6 +187,10 @@ def interp_4pt_pm(
 
     Returns:
         JAX ``float64`` array ``[a0, a1, a2]`` of shape ``(3,)``.
+
+    Raises:
+        ValueError: If ``x`` and ``y`` do not have length 4 or fail grid
+            validation.
     """
     x_arr, y_arr = validate_1d_grid(
         np.asarray(x, dtype=np.float64),
@@ -233,10 +240,18 @@ def interp_pm_autodiff(
 
     Returns:
         List of ``N`` 4-tuples ``(c0, c1, c2, c3)`` of ``DualOrder1`` values.
+
+    Raises:
+        ValueError: If ``x`` and ``y`` have mismatched lengths, fewer than 2
+            points, non-finite values/derivatives, or non-monotonic abscissas.
     """
     nx = len(x)
     if nx != len(y) or nx < 2:
         raise ValueError("x and y must have matching length >= 2.")
+    if any(not np.all(np.isfinite(pt.d1)) for pt in x) or any(
+        not np.all(np.isfinite(pt.d1)) for pt in y
+    ):
+        raise ValueError("x and y dual derivatives must be finite.")
     x_primal = np.array([pt.val for pt in x], dtype=np.float64)
     y_primal = np.array([pt.val for pt in y], dtype=np.float64)
     validate_1d_grid(x_primal, y_primal, min_points=2)

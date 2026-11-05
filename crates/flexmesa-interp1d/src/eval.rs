@@ -154,13 +154,25 @@ pub fn interp_value_and_slope(
     if is_bad(xval) {
         return Err(Interp1dError::NonFiniteInput);
     }
-    if init_x.len() == 1 {
+    let n = init_x.len();
+    if n == 1 {
         return Ok((coeffs[0][0], 0.0));
     }
     let (k, delta) = locate_clamped_interval(init_x, xval, increasing);
     let c = &coeffs[k];
     let val = c[0] + delta * (c[1] + delta * (c[2] + delta * c[3]));
-    let slope = c[1] + 2.0 * delta * (c[2] + 1.5 * delta * c[3]);
+    // Clamp query values outside the knot domain to the boundary knot and zero
+    // the exterior derivative, matching upstream MESA do_interp_values.
+    let out_of_bounds = if increasing {
+        xval < init_x[0] || xval > init_x[n - 1]
+    } else {
+        xval > init_x[0] || xval < init_x[n - 1]
+    };
+    let slope = if out_of_bounds {
+        0.0
+    } else {
+        c[1] + 2.0 * delta * (c[2] + 1.5 * delta * c[3])
+    };
     Ok((val, slope))
 }
 
@@ -179,7 +191,8 @@ pub fn interp_values_and_slopes(
     if x.iter().any(|&v| is_bad(v)) {
         return Err(Interp1dError::NonFiniteInput);
     }
-    if init_x.len() == 1 {
+    let n = init_x.len();
+    if n == 1 {
         return Ok((vec![coeffs[0][0]; x.len()], vec![0.0; x.len()]));
     }
     let mut vals = Vec::with_capacity(x.len());
@@ -188,7 +201,18 @@ pub fn interp_values_and_slopes(
         let (k, delta) = locate_clamped_interval(init_x, xk, increasing);
         let c = &coeffs[k];
         vals.push(c[0] + delta * (c[1] + delta * (c[2] + delta * c[3])));
-        slopes.push(c[1] + 2.0 * delta * (c[2] + 1.5 * delta * c[3]));
+        // Clamp exterior queries and zero out-of-domain derivatives.
+        let out_of_bounds = if increasing {
+            xk < init_x[0] || xk > init_x[n - 1]
+        } else {
+            xk > init_x[0] || xk < init_x[n - 1]
+        };
+        let slope = if out_of_bounds {
+            0.0
+        } else {
+            c[1] + 2.0 * delta * (c[2] + 1.5 * delta * c[3])
+        };
+        slopes.push(slope);
     }
     Ok((vals, slopes))
 }

@@ -34,9 +34,12 @@ fn validate_bc_len(
     bc: &[f64],
     expected: usize,
 ) -> Result<(), Interp2dError> {
-    if matches!(code, BicubicBc::FirstDeriv | BicubicBc::SecondDeriv)
-        && bc.len() != expected
-    {
+    if bc.iter().any(|&v| is_bad(v)) {
+        return Err(Interp2dError::NonFiniteInput);
+    }
+    let requires_bc =
+        matches!(code, BicubicBc::FirstDeriv | BicubicBc::SecondDeriv);
+    if (requires_bc || !bc.is_empty()) && bc.len() != expected {
         return Err(Interp2dError::DimensionMismatch {
             expected,
             actual: bc.len(),

@@ -10,8 +10,11 @@ from __future__ import annotations
 import dataclasses
 from collections.abc import Sequence
 
+import jax
 import jax.numpy as jnp
 import numpy as np
+
+from flexmesa.interp_2d import spline1d
 
 
 @dataclasses.dataclass(frozen=True)
@@ -85,11 +88,48 @@ def herm2xy_db(
     Returns:
         8-tuple ``(ix, jy, xp, yp, hx, hxi, hy, hyi)`` of ``float64``/``int32``
         JAX scalars.
+
+    Raises:
+        ValueError: If ``x`` or ``y`` fails grid validation, or if concrete
+            ``(xget, yget)`` is non-finite or lies outside the grid beyond
+            relative tolerance ``4e-7``.
     """
     x_grid = jnp.asarray(x, dtype=jnp.float64)
     y_grid = jnp.asarray(y, dtype=jnp.float64)
+    if (
+        x_grid.ndim != 1
+        or y_grid.ndim != 1
+        or x_grid.shape[0] < 2
+        or y_grid.shape[0] < 2
+    ):
+        raise ValueError("x and y must be 1D arrays with at least 2 points.")
+    if not isinstance(x, jax.core.Tracer):
+        spline1d.splinck_db(np.asarray(x, dtype=np.float64), 1.0e-3, "x")
+    if not isinstance(y, jax.core.Tracer):
+        spline1d.splinck_db(np.asarray(y, dtype=np.float64), 1.0e-3, "y")
+
     xq = jnp.asarray(xget, dtype=jnp.float64)
     yq = jnp.asarray(yget, dtype=jnp.float64)
+    if not isinstance(xget, jax.core.Tracer) and not isinstance(
+        yget, jax.core.Tracer
+    ):
+        xf = float(xget)
+        yf = float(yget)
+        if not (np.isfinite(xf) and np.isfinite(yf)):
+            raise ValueError("xget and yget must be finite float64 values.")
+        x0, xn = float(x_grid[0]), float(x_grid[-1])
+        y0, yn = float(y_grid[0]), float(y_grid[-1])
+        zxtol = 4.0e-7 * max(abs(x0), abs(xn))
+        zytol = 4.0e-7 * max(abs(y0), abs(yn))
+        if xf < x0 - zxtol or xf > xn + zxtol:
+            raise ValueError(
+                f"xget={xf} is outside x grid domain [{x0}, {xn}]."
+            )
+        if yf < y0 - zytol or yf > yn + zytol:
+            raise ValueError(
+                f"yget={yf} is outside y grid domain [{y0}, {yn}]."
+            )
+
     zx = jnp.clip(xq, x_grid[0], x_grid[-1])
     zy = jnp.clip(yq, y_grid[0], y_grid[-1])
 
@@ -130,12 +170,27 @@ def interp_evbicub_db(
     Returns:
         :class:`BicubicEval` containing ``(f, df_dx, df_dy, d2f_dx2, d2f_dy2,
         d2f_dxdy)``.
+
+    Raises:
+        ValueError: If grid dimensions are ``< 4``, ``coeffs`` shape is
+            mismatched, or inputs are non-finite or out of range.
     """
     x_grid = jnp.asarray(x, dtype=jnp.float64)
     y_grid = jnp.asarray(y, dtype=jnp.float64)
-    c_arr = jnp.asarray(coeffs, dtype=jnp.float64).reshape(
-        x_grid.shape[0], y_grid.shape[0], 4
-    )
+    nx = x_grid.shape[0]
+    ny = y_grid.shape[0]
+    if nx < 4 or ny < 4:
+        raise ValueError("interp_evbicub_db requires nx >= 4 and ny >= 4.")
+    c_raw = jnp.asarray(coeffs, dtype=jnp.float64)
+    if c_raw.shape not in ((nx, ny, 4), (nx * ny, 4)):
+        raise ValueError(
+            f"coeffs must have shape ({nx}, {ny}, 4) or ({nx * ny}, 4)."
+        )
+    if not isinstance(coeffs, jax.core.Tracer) and not np.all(
+        np.isfinite(np.asarray(coeffs, dtype=np.float64))
+    ):
+        raise ValueError("coeffs must contain only finite float64 values.")
+    c_arr = c_raw.reshape(nx, ny, 4)
     ix, jy, xp, yp, hx, hxi, hy, hyi = herm2xy_db(
         xget, yget, x_grid, y_grid, ilinx, iliny
     )
@@ -261,7 +316,12 @@ def interp_evbicub_mask_db(
     Returns:
         JAX ``float64`` array of shape ``(6,)`` containing requested values
         packed from index 0.
+
+    Raises:
+        ValueError: If ``ict`` does not have length 6 or evaluation fails.
     """
+    if len(ict) != 6:
+        raise ValueError("ict must have length 6.")
     ev = interp_evbicub_db(xget, yget, x, y, ilinx, iliny, coeffs)
     items = [ev.f, ev.df_dx, ev.df_dy, ev.d2f_dx2, ev.d2f_dy2, ev.d2f_dxdy]
     out = [0.0] * 6

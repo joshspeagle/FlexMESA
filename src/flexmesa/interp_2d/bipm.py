@@ -40,9 +40,7 @@ def interp_mkbipm_db(
         raise ValueError("interp_mkbipm_db requires nx >= 4 and ny >= 4.")
     spline1d.splinck_db(x_arr, 1.0e-3, "x")
     spline1d.splinck_db(y_arr, 1.0e-3, "y")
-    z_arr = np.asarray(z, dtype=np.float64).reshape(nx, ny)
-    if not np.all(np.isfinite(z_arr)):
-        raise ValueError("z must contain only finite float64 values.")
+    z_arr = spline1d.reshape_grid_2d(z, nx, ny, "z")
 
     coeffs = np.zeros((nx, ny, 4), dtype=np.float64)
     for iy in range(ny):
@@ -73,6 +71,11 @@ def interp_evbipm_db(
 
     Returns:
         Scalar ``float64`` JAX array containing the interpolated value.
+
+    Raises:
+        ValueError: If grid dimensions are ``< 4``, non-ascending, mismatched
+            with ``coeffs``, or if ``(xget, yget)`` is non-finite or outside
+            ``[x[0], x[-1]) x [y[0], y[-1])``.
     """
     x_arr = np.asarray(x, dtype=np.float64)
     y_arr = np.asarray(y, dtype=np.float64)
@@ -81,10 +84,23 @@ def interp_evbipm_db(
         raise ValueError("interp_evbipm_db requires nx >= 4 and ny >= 4.")
     spline1d.splinck_db(x_arr, 1.0e-3, "x")
     spline1d.splinck_db(y_arr, 1.0e-3, "y")
-    c_arr = np.asarray(coeffs, dtype=np.float64).reshape(nx, ny, 4)
+    c_raw = np.asarray(coeffs, dtype=np.float64)
+    if c_raw.shape not in ((nx, ny, 4), (nx * ny, 4)) or not np.all(
+        np.isfinite(c_raw)
+    ):
+        raise ValueError(
+            f"coeffs must be a finite array of shape ({nx}, {ny}, 4)."
+        )
+    c_arr = c_raw.reshape(nx, ny, 4)
     xq = float(xget)
     yq = float(yget)
-    if xq < x_arr[0] or xq >= x_arr[-1] or yq < y_arr[0] or yq >= y_arr[-1]:
+    if (
+        not (np.isfinite(xq) and np.isfinite(yq))
+        or xq < x_arr[0]
+        or xq >= x_arr[-1]
+        or yq < y_arr[0]
+        or yq >= y_arr[-1]
+    ):
         raise ValueError("Query (xget, yget) is outside the grid domain.")
 
     ix = int(np.clip(np.searchsorted(x_arr, xq, side="right") - 1, 0, nx - 2))

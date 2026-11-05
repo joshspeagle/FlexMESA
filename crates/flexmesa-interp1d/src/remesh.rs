@@ -135,7 +135,13 @@ pub fn interp_values_autodiff<const N: usize>(
             actual: 0,
         });
     }
-    if x.iter().any(|v| is_bad(v.val)) || init_x.iter().any(|v| is_bad(v.val)) {
+    let bad_dual = |v: &DualOrder1<N>| {
+        is_bad(v.val) || v.d1.iter().any(|&d| is_bad(d))
+    };
+    if x.iter().any(bad_dual)
+        || init_x.iter().any(bad_dual)
+        || coeffs.iter().any(|c| c.iter().any(bad_dual))
+    {
         return Err(Interp1dError::NonFiniteInput);
     }
     if nx == 1 {

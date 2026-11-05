@@ -214,9 +214,9 @@ pub fn rgpd3p_db(
             });
 
             // Combine valid x and y stencils to estimate cross derivative z_xy.
-            // If any stencil patch has near-zero residual variance (`smwti > 0`),
+            // If any stencil patch has near-zero residual variance (smwti > 0),
             // return the unweighted average across exact-fit patches; otherwise
-            // return the volatility-weighted average `smpef / smwtf`.
+            // return the volatility-weighted average smpef / smwtf.
             let (mut smpef, mut smwtf, mut smpei, mut smwti) =
                 (0.0, 0.0, 0.0, 0.0);
 

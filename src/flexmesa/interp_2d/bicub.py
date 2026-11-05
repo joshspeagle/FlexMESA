@@ -44,13 +44,13 @@ def _validate_bc_slice(
     if bc is None:
         return np.zeros(expected_len, dtype=np.float64)
     arr = np.asarray(bc, dtype=np.float64)
-    if code in (1, 2) and arr.shape != (expected_len,):
-        raise ValueError(
-            f"{name} must have shape ({expected_len},) when boundary code "
-            f"is {code}."
-        )
-    if arr.size == 0:
+    if arr.size == 0 and code not in (1, 2):
         return np.zeros(expected_len, dtype=np.float64)
+    if arr.shape != (expected_len,):
+        raise ValueError(
+            f"{name} must have shape ({expected_len},) when provided or "
+            f"when boundary code is {code}."
+        )
     if not np.all(np.isfinite(arr)):
         raise ValueError(f"{name} must contain only finite float64 values.")
     return arr
@@ -100,9 +100,7 @@ def interp_mkbicub_db(
     nx, ny = x_arr.size, y_arr.size
     if nx < 4 or ny < 4:
         raise ValueError("2D bicubic spline requires nx >= 4 and ny >= 4.")
-    z_arr = np.asarray(z, dtype=np.float64).reshape(nx, ny)
-    if not np.all(np.isfinite(z_arr)):
-        raise ValueError("z must contain only finite float64 values.")
+    z_arr = spline1d.reshape_grid_2d(z, nx, ny, "z")
 
     ilinx = splinck_db(x_arr, 1.0e-3, "x")
     iliny = splinck_db(y_arr, 1.0e-3, "y")

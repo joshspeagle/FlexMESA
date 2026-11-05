@@ -21,6 +21,7 @@
 //! calculation with adjacent-knot verification; otherwise, it falls back to
 //! $O(\log N)$ binary search via `slice::partition_point`.
 
+use crate::spline1d::splinck_db;
 use crate::{BicubicEval, Interp2dError};
 use flexmesa_utils::is_bad;
 
@@ -33,8 +34,9 @@ use flexmesa_utils::is_bad;
 ///
 /// # Errors
 ///
-/// Returns [`Interp2dError`] if `(xget, yget)` is non-finite or lies outside
-/// the grid beyond relative tolerance $4 \times 10^{-7}$.
+/// Returns [`Interp2dError`] if `(xget, yget)` is non-finite, `x` or `y` fails
+/// grid validation (`nx < 2`, `ny < 2`, or non-ascending), or `(xget, yget)`
+/// lies outside the grid beyond relative tolerance $4 \times 10^{-7}$.
 pub fn herm2xy_db(
     xget: f64,
     yget: f64,
@@ -46,8 +48,29 @@ pub fn herm2xy_db(
     if is_bad(xget) || is_bad(yget) {
         return Err(Interp2dError::NonFiniteInput);
     }
+    // Validate grid dimensions (nx >= 2, ny >= 2) and strict ascending order
+    // along both axes before computing normalized cell offsets (xp, yp).
+    // Validate 2D bicubic spline dimensions (nx >= 4, ny >= 4), coefficient
+    // table length (nx * ny), and finiteness of all [f, f_xx, f_yy, f_xxyy]
+    // moments before evaluating the 16-term Hermite basis expansion.
     let nx = x.len();
     let ny = y.len();
+    if nx < 2 {
+        return Err(Interp2dError::InsufficientPoints {
+            axis: "x",
+            min_points: 2,
+            actual: nx,
+        });
+    }
+    if ny < 2 {
+        return Err(Interp2dError::InsufficientPoints {
+            axis: "y",
+            min_points: 2,
+            actual: ny,
+        });
+    }
+    splinck_db(x, 1.0e-3, "x")?;
+    splinck_db(y, 1.0e-3, "y")?;
     let mut zxget = xget;
     if xget < x[0] || xget > x[nx - 1] {
         let zxtol = 4.0e-7 * x[0].abs().max(x[nx - 1].abs());
@@ -129,13 +152,35 @@ pub fn interp_evbicub_db(
     iliny: bool,
     coeffs: &[[f64; 4]],
 ) -> Result<BicubicEval, Interp2dError> {
+    // Validate grid dimensions (nx >= 2, ny >= 2) and strict ascending order
+    // along both axes before computing normalized cell offsets (xp, yp).
+    // Validate 2D bicubic spline dimensions (nx >= 4, ny >= 4), coefficient
+    // table length (nx * ny), and finiteness of all [f, f_xx, f_yy, f_xxyy]
+    // moments before evaluating the 16-term Hermite basis expansion.
     let nx = x.len();
     let ny = y.len();
+    if nx < 4 {
+        return Err(Interp2dError::InsufficientPoints {
+            axis: "x",
+            min_points: 4,
+            actual: nx,
+        });
+    }
+    if ny < 4 {
+        return Err(Interp2dError::InsufficientPoints {
+            axis: "y",
+            min_points: 4,
+            actual: ny,
+        });
+    }
     if coeffs.len() != nx * ny {
         return Err(Interp2dError::DimensionMismatch {
             expected: nx * ny,
             actual: coeffs.len(),
         });
+    }
+    if coeffs.iter().any(|c| c.iter().any(|&v| is_bad(v))) {
+        return Err(Interp2dError::NonFiniteInput);
     }
     let (i, j, xp, yp, hx, hxi, hy, hyi) =
         herm2xy_db(xget, yget, x, y, ilinx, iliny)?;
@@ -194,6 +239,8 @@ pub fn interp_evbicub_db(
     let dfxx0_y = c01[1] - c00[1];
     let dfxx1_y = c11[1] - c10[1];
 
+    // Assemble f(x, y) and its five partial derivatives (df/dx, df/dy,
+    // d2f/dx2, d2f/dy2, d2f/dxdy) from the precomputed 1D basis combinations.
     let f = xpi * y0_f
         + xp * y1_f
         + sixth * hx2 * (cxi * y0_fxx + cx * y1_fxx)

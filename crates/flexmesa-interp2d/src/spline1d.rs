@@ -184,7 +184,7 @@ fn v_spline_db(k_bc1: i32, k_bcn: i32, x: &[f64], f: &mut [[f64; 4]]) {
 
     // Assemble interior tridiagonal matrix diagonals and RHS differences.
     // Diagonal entries 2 * (h_{i-1} + h_i) are stored in f[i][1], upper/lower
-    // off-diagonals h_i in f[i][3], and divided-difference RHS terms in f[i][2].
+    // off-diagonals h_i in f[i][3], and divided-difference RHS in f[i][2].
     f[0][3] = x[1] - x[0];
     f[1][2] = (f[1][0] - f[0][0]) / f[0][3];
     for i in 1..(n - 1) {

@@ -1,20 +1,15 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
-"""Spline evaluation, definite integration, and remeshing (`interp_1d`).
+"""Spline evaluation and definite integration (`interp_1d`).
 
-Provides vectorized ``float64`` JAX evaluation of 1D cubic splines, exact
-piecewise-analytic definite integration across monotonic knot grids, and
-hydrostatic Lagrangian remeshing stencils (`interp_3_to_1`, `interp_3_to_2`,
-`interp_4_to_1`).
+Provides vectorized ``float64`` JAX evaluation of 1D cubic splines and exact
+piecewise-analytic definite integration across monotonic knot grids.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
-
 import jax.numpy as jnp
 import numpy as np
 
-from flexmesa import auto_diff
 from flexmesa.interp_1d import pm
 
 
@@ -51,8 +46,13 @@ def _eval_horner(
     x_grid = jnp.asarray(init_x, dtype=jnp.float64)
     c_arr = jnp.asarray(coeffs, dtype=jnp.float64)
     x_q = jnp.asarray(xs, dtype=jnp.float64)
-    if x_grid.ndim != 1 or c_arr.shape != (x_grid.shape[0], 4):
-        raise ValueError("coeffs must have shape (len(init_x), 4).")
+    nx = x_grid.shape[0]
+    if x_grid.ndim != 1 or nx == 0 or c_arr.shape != (nx, 4):
+        raise ValueError("coeffs must have shape (len(init_x), 4) with N >= 1.")
+    if nx == 1:
+        vals = jnp.full_like(x_q, c_arr[0, 0])
+        slopes = jnp.zeros_like(x_q) if with_slopes else None
+        return vals, slopes
 
     idx = _locate_intervals_jax(x_grid, x_q)
     dx = x_q - x_grid[idx]
@@ -66,8 +66,8 @@ def _eval_horner(
     vals = c0 + dx * (c1 + dx * (c2 + dx * c3))
     lo = jnp.minimum(x_grid[0], x_grid[-1])
     hi = jnp.maximum(x_grid[0], x_grid[-1])
-    left_idx = jnp.where(x_grid[-1] > x_grid[0], 0, x_grid.shape[0] - 1)
-    right_idx = jnp.where(x_grid[-1] > x_grid[0], x_grid.shape[0] - 1, 0)
+    left_idx = jnp.where(x_grid[-1] > x_grid[0], 0, nx - 1)
+    right_idx = jnp.where(x_grid[-1] > x_grid[0], nx - 1, 0)
     vals = jnp.where(x_q <= lo, c_arr[left_idx, 0], vals)
     vals = jnp.where(x_q >= hi, c_arr[right_idx, 0], vals)
     if not with_slopes:
@@ -96,6 +96,9 @@ def interp_values_and_slopes(
 
     Returns:
         Tuple ``(vals, slopes)`` of ``float64`` JAX arrays of shape ``(M,)``.
+
+    Raises:
+        ValueError: If ``init_x`` and ``coeffs`` shapes are incompatible.
     """
     vals, slopes = _eval_horner(init_x, coeffs, xs, with_slopes=True)
     assert slopes is not None
@@ -116,6 +119,9 @@ def interp_values(
 
     Returns:
         JAX ``float64`` array of interpolated values of shape ``(M,)``.
+
+    Raises:
+        ValueError: If ``init_x`` and ``coeffs`` shapes are incompatible.
     """
     vals, _ = _eval_horner(init_x, coeffs, xs, with_slopes=False)
     return vals
@@ -135,6 +141,9 @@ def interp_value_and_slope(
 
     Returns:
         Tuple ``(val, slope)`` of scalar ``float64`` JAX arrays.
+
+    Raises:
+        ValueError: If ``init_x`` and ``coeffs`` shapes are incompatible.
     """
     vals, slopes = interp_values_and_slopes(
         init_x, coeffs, jnp.atleast_1d(jnp.asarray(x, dtype=jnp.float64))
@@ -156,6 +165,9 @@ def interp_value(
 
     Returns:
         Scalar ``float64`` JAX array containing ``f(x)``.
+
+    Raises:
+        ValueError: If ``init_x`` and ``coeffs`` shapes are incompatible.
     """
     vals = interp_values(
         init_x, coeffs, jnp.atleast_1d(jnp.asarray(x, dtype=jnp.float64))
@@ -181,8 +193,8 @@ def integrate_values(
     and ``integrals[k] = \\int_{xs[k-1]}^{xs[k]} f(x)\\,dx`` for ``k >= 1``.
 
     Args:
-        init_x: Strictly monotonic knot coordinates of shape ``(N,)`` in
-            physical or dimensionless units.
+        init_x: Strictly monotonic knot coordinates of shape ``(N,)``
+            (``N >= 2``) in physical or dimensionless units.
         coeffs: Spline coefficient array of shape ``(N, 4)``.
         xs: Monotonic integration bounds of shape ``(M,)`` aligned with
             ``init_x`` direction and lying within ``init_x`` bounds.
@@ -191,27 +203,38 @@ def integrate_values(
         JAX ``float64`` array of shape ``(M,)`` containing segment integrals.
 
     Raises:
-        ValueError: If ``xs`` lies outside ``init_x`` or reverses direction.
+        ValueError: If ``init_x``, ``coeffs``, or ``xs`` fail validation or
+            ``xs`` lies outside ``init_x`` or reverses direction.
     """
-    x_grid = np.asarray(init_x, dtype=np.float64)
+    x_grid, _ = pm.validate_1d_grid(init_x, init_x, min_points=2)
     c_arr = np.asarray(coeffs, dtype=np.float64)
     x_q = np.asarray(xs, dtype=np.float64)
     nx = x_grid.size
-    if c_arr.shape != (nx, 4):
-        raise ValueError("coeffs must have shape (len(init_x), 4).")
+    if c_arr.shape != (nx, 4) or not np.all(np.isfinite(c_arr)):
+        raise ValueError("coeffs must be a finite array of shape (N, 4).")
+    if x_q.ndim != 1 or not np.all(np.isfinite(x_q)):
+        raise ValueError("xs must be a finite 1D float64 array.")
+    if x_q.size == 0:
+        return jnp.zeros(0, dtype=jnp.float64)
+
     increasing = bool(x_grid[-1] > x_grid[0])
+    lo = float(min(x_grid[0], x_grid[-1]))
+    hi = float(max(x_grid[0], x_grid[-1]))
+    if float(np.min(x_q)) < lo or float(np.max(x_q)) > hi:
+        raise ValueError("xs must lie within the init_x domain.")
+
     grid_asc = x_grid if increasing else x_grid[::-1]
     out = np.zeros(x_q.size, dtype=np.float64)
 
     for k in range(1, x_q.size):
         xa, xb = float(x_q[k - 1]), float(x_q[k])
         if increasing:
-            if xb < xa or xa < x_grid[0] or xb > x_grid[-1]:
+            if xb < xa:
                 raise ValueError("xs must be increasing within init_x range.")
             pos = int(np.searchsorted(grid_asc, xa, side="right")) - 1
             start_i = max(0, min(pos, nx - 2))
         else:
-            if xb > xa or xa > x_grid[0] or xb < x_grid[-1]:
+            if xb > xa:
                 raise ValueError("xs must be decreasing within init_x range.")
             pos = int(np.searchsorted(grid_asc, xa, side="left"))
             start_i = max(0, min((nx - 2) - pos, nx - 2))
@@ -242,139 +265,3 @@ def integrate_values(
             total += a2 - a1
         out[k] = total
     return jnp.asarray(out, dtype=jnp.float64)
-
-
-def interpolate_vector(
-    old_x: np.ndarray | jnp.ndarray,
-    old_y: np.ndarray | jnp.ndarray,
-    new_x: np.ndarray | jnp.ndarray,
-    builder: Callable[
-        [np.ndarray | jnp.ndarray, np.ndarray | jnp.ndarray], jnp.ndarray
-    ] = pm.interp_pm,
-) -> jnp.ndarray:
-    """Interpolates ``(old_x, old_y)`` onto ``new_x`` using ``builder``."""
-    coeffs = builder(old_x, old_y)
-    return interp_values(old_x, coeffs, new_x)
-
-
-def interpolate_vector_pm(
-    old_x: np.ndarray | jnp.ndarray,
-    old_y: np.ndarray | jnp.ndarray,
-    new_x: np.ndarray | jnp.ndarray,
-) -> jnp.ndarray:
-    """Interpolates ``(old_x, old_y)`` onto ``new_x`` using ``interp_pm``."""
-    return interpolate_vector(old_x, old_y, new_x, builder=pm.interp_pm)
-
-
-def interp_values_autodiff(
-    init_x: Sequence[auto_diff.DualOrder1],
-    coeffs: Sequence[
-        tuple[
-            auto_diff.DualOrder1,
-            auto_diff.DualOrder1,
-            auto_diff.DualOrder1,
-            auto_diff.DualOrder1,
-        ]
-    ],
-    x: Sequence[auto_diff.DualOrder1],
-) -> list[auto_diff.DualOrder1]:
-    """Evaluates a 1D cubic spline over ``DualOrder1`` queries (`O(M log N)`).
-
-    Args:
-        init_x: Sequence of ``N >= 1`` strictly monotonic ``DualOrder1`` knots.
-        coeffs: Sequence of ``N`` 4-tuples ``(c0, c1, c2, c3)``.
-        x: Sequence of ``M`` ``DualOrder1`` query abscissas.
-
-    Returns:
-        List of ``M`` interpolated ``DualOrder1`` values.
-    """
-    nx = len(init_x)
-    if nx != len(coeffs) or nx == 0:
-        raise ValueError("init_x and coeffs must have matching length >= 1.")
-    if nx == 1:
-        return [coeffs[0][0] for _ in x]
-    x_primal = np.array([pt.val for pt in init_x], dtype=np.float64)
-    increasing = bool(x_primal[-1] > x_primal[0])
-    grid_asc = x_primal if increasing else x_primal[::-1]
-    out: list[auto_diff.DualOrder1] = []
-
-    for xq in x:
-        if (increasing and xq.val <= x_primal[0]) or (
-            not increasing and xq.val >= x_primal[0]
-        ):
-            out.append(coeffs[0][0])
-            continue
-        if (increasing and xq.val >= x_primal[-1]) or (
-            not increasing and xq.val <= x_primal[-1]
-        ):
-            out.append(coeffs[-1][0])
-            continue
-        pos = int(np.searchsorted(grid_asc, xq.val, side="right")) - 1
-        idx_asc = max(0, min(pos, nx - 2))
-        idx = idx_asc if increasing else (nx - 2) - idx_asc
-        dx = xq - init_x[idx]
-        c0, c1, c2, c3 = coeffs[idx]
-        out.append(c0 + dx * (c1 + dx * (c2 + dx * c3)))
-    return out
-
-
-def interpolate_vector_pm_autodiff(
-    old_x: Sequence[auto_diff.DualOrder1],
-    old_y: Sequence[auto_diff.DualOrder1],
-    new_x: Sequence[auto_diff.DualOrder1],
-) -> list[auto_diff.DualOrder1]:
-    """Interpolates ``DualOrder1`` vectors via Steffen (1990) ``interp_pm``."""
-    coeffs = pm.interp_pm_autodiff(old_x, old_y)
-    return interp_values_autodiff(old_x, coeffs, new_x)
-
-
-def interp_3_to_1(
-    pdqm1: float,
-    pdq00: float,
-    ndqm1: float,
-    pfm1: float,
-    pf00: float,
-    pfp1: float,
-) -> float:
-    """Remeshes 3 points spaced by ``(pdqm1, pdq00)`` to offset ``ndqm1``."""
-    x_old = np.array([0.0, pdqm1, pdqm1 + pdq00], dtype=np.float64)
-    v_old = np.array([pfm1, pf00, pfp1], dtype=np.float64)
-    x_new = np.array([ndqm1], dtype=np.float64)
-    return float(interpolate_vector_pm(x_old, v_old, x_new)[0])
-
-
-def interp_3_to_2(
-    pdqm1: float,
-    pdq00: float,
-    ndqm1: float,
-    ndq00: float,
-    pfm1: float,
-    pf00: float,
-    pfp1: float,
-) -> tuple[float, float]:
-    """Remeshes 3 points spaced by ``(pdqm1, pdq00)`` onto 2 target offsets."""
-    x_old = np.array([0.0, pdqm1, pdqm1 + pdq00], dtype=np.float64)
-    v_old = np.array([pfm1, pf00, pfp1], dtype=np.float64)
-    x_new = np.array([ndqm1, ndqm1 + ndq00], dtype=np.float64)
-    res = interpolate_vector_pm(x_old, v_old, x_new)
-    return float(res[0]), float(res[1])
-
-
-def interp_4_to_1(
-    pdqm1: float,
-    pdq00: float,
-    pdqp1: float,
-    ndq00: float,
-    pfm1: float,
-    pf00: float,
-    pfp1: float,
-    pfp2: float,
-) -> float:
-    """Remeshes 4 points spaced by ``(pdqm1, pdq00, pdqp1)`` to ``ndq00``."""
-    x_old = np.array(
-        [0.0, pdqm1, pdqm1 + pdq00, pdqm1 + pdq00 + pdqp1],
-        dtype=np.float64,
-    )
-    v_old = np.array([pfm1, pf00, pfp1, pfp2], dtype=np.float64)
-    x_new = np.array([ndq00], dtype=np.float64)
-    return float(interpolate_vector_pm(x_old, v_old, x_new)[0])

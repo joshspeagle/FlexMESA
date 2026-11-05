@@ -16,7 +16,7 @@ from __future__ import annotations
 import jax.numpy as jnp
 import numpy as np
 
-from flexmesa.interp_2d import akima_pd
+from flexmesa.interp_2d import akima_pd, spline1d
 
 rgpd3p_db = akima_pd.rgpd3p_db
 
@@ -168,16 +168,23 @@ def interp_rgbi3p_db(
     Returns:
         JAX ``float64`` array of shape ``(*batch,)`` containing interpolated
         values.
+
+    Raises:
+        ValueError: If grid or query arrays have mismatched shapes, fewer than
+            2 grid points per axis, non-ascending knot coordinates, or
+            non-finite values.
     """
     x_arr = np.asarray(xd, dtype=np.float64)
     y_arr = np.asarray(yd, dtype=np.float64)
-    z_arr = np.asarray(zd, dtype=np.float64).reshape(x_arr.size, y_arr.size)
+    z_arr = spline1d.reshape_grid_2d(zd, x_arr.size, y_arr.size, "zd")
     xi_arr = np.asarray(xi, dtype=np.float64)
     yi_arr = np.asarray(yi, dtype=np.float64)
     if xi_arr.shape != yi_arr.shape or xi_arr.size == 0:
         raise ValueError(
             "xi and yi must be non-empty arrays of identical shape."
         )
+    if not (np.all(np.isfinite(xi_arr)) and np.all(np.isfinite(yi_arr))):
+        raise ValueError("xi and yi must contain only finite float64 values.")
     pdd = np.asarray(rgpd3p_db(x_arr, y_arr, z_arr), dtype=np.float64)
     out = [
         _eval_akima_point(x_arr, y_arr, z_arr, pdd, float(xq), float(yq))
@@ -204,14 +211,25 @@ def interp_rgsf3p_db(
 
     Returns:
         JAX ``float64`` array of shape ``(nxi, nyi)`` containing surface values.
+
+    Raises:
+        ValueError: If grid or target arrays fail validation or contain
+            non-finite values.
     """
     x_arr = np.asarray(xd, dtype=np.float64)
     y_arr = np.asarray(yd, dtype=np.float64)
-    z_arr = np.asarray(zd, dtype=np.float64).reshape(x_arr.size, y_arr.size)
+    z_arr = spline1d.reshape_grid_2d(zd, x_arr.size, y_arr.size, "zd")
     xi_arr = np.asarray(xi, dtype=np.float64)
     yi_arr = np.asarray(yi, dtype=np.float64)
-    if xi_arr.size == 0 or yi_arr.size == 0:
+    if (
+        xi_arr.ndim != 1
+        or yi_arr.ndim != 1
+        or xi_arr.size == 0
+        or yi_arr.size == 0
+    ):
         raise ValueError("xi and yi must be non-empty 1D arrays.")
+    if not (np.all(np.isfinite(xi_arr)) and np.all(np.isfinite(yi_arr))):
+        raise ValueError("xi and yi must contain only finite float64 values.")
     pdd = np.asarray(rgpd3p_db(x_arr, y_arr, z_arr), dtype=np.float64)
     zi = np.zeros((xi_arr.size, yi_arr.size), dtype=np.float64)
     for ixi, xq in enumerate(xi_arr):

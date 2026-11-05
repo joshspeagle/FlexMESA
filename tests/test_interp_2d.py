@@ -13,9 +13,11 @@ from __future__ import annotations
 
 import math
 
+import hypothesis
 import jax
 import jax.numpy as jnp
 import numpy as np
+from hypothesis import strategies as st
 
 from flexmesa import interp_2d
 
@@ -39,11 +41,20 @@ def _mesa_2d_test_grid() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
 def test_upstream_mesa_interp2d_bicub_and_bipm_match_golden() -> None:
     """Verifies 2D bicubic and piecewise-monotonic interpolation and autodiff.
 
-    Checks `interp_mkbicub_db`, `interp_evbicub_db`, `interp_mkbipm_db`, and
-    `interp_evbipm_db` against upstream MESA golden values and `jax.grad` /
+    Checks `interp_mkspline_db`, `interp_mkbicub_db`, `interp_evbicub_db`,
+    `interp_evbicub_mask_db`, `interp_mkbipm_db`, and `interp_evbipm_db`
+    against all 6 upstream MESA `test2D_db` golden points and `jax.grad` /
     `jax.hessian`.
     """
     x, y, z = _mesa_2d_test_grid()
+
+    # Verify 1D C^2 spline helper `interp_mkspline_db` reproduces quadratic f''.
+    fxx_quad, uniform_x = interp_2d.interp_mkspline_db(x, 3.0 * x**2 - 2.0 * x)
+    assert uniform_x
+    np.testing.assert_allclose(
+        np.asarray(fxx_quad), 6.0, rtol=1e-13, atol=1e-13
+    )
+
     coeffs, ilinx, iliny = interp_2d.interp_mkbicub_db(x, y, z)
     assert ilinx and iliny
 
@@ -59,18 +70,86 @@ def test_upstream_mesa_interp2d_bicub_and_bipm_match_golden() -> None:
     )
     np.testing.assert_allclose(c_mid, expected_mid, rtol=2e-12, atol=1e-13)
 
-    # Evaluate bicubic value and partial derivatives at (x0, y0) = (0.1, 0.2).
-    x0, y0 = 0.1, 0.2
-    ev = interp_2d.interp_evbicub_db(x0, y0, x, y, ilinx, iliny, coeffs)
-    np.testing.assert_allclose(
-        float(ev.f), 8.412838387532941e-2, rtol=1e-7, atol=5e-9
+    x_min, x_max = 0.1, 0.8 * math.pi
+    y_min, y_max = 0.2, 0.6 * math.pi
+    dx = x_max - x_min
+    dy = 0.5 * (y_max - y_min)
+
+    # Pinned (i, j, z, dz/dx, dz/dy) points from upstream test2D_db(.true.).
+    expected_bicub = (
+        (
+            0,
+            0,
+            8.412838387532941e-2,
+            8.223244982667942e-1,
+            -5.830990551255731e-2,
+        ),
+        (
+            1,
+            0,
+            1.1571939326516818e-1,
+            -2.327225412452813e-1,
+            -2.9310550186889182e-2,
+        ),
+        (
+            0,
+            1,
+            2.58331372196636e-2,
+            2.5594985035557577e-1,
+            -6.062774870752535e-2,
+        ),
+        (
+            1,
+            1,
+            5.2413685332749614e-2,
+            -1.0296823150811425e-1,
+            -1.0258873034645082e-1,
+        ),
+        (
+            0,
+            2,
+            -9.275811236254504e-3,
+            -9.214212823541054e-2,
+            -2.265013757433625e-2,
+        ),
+        (
+            1,
+            2,
+            -2.458149485380903e-2,
+            4.635499485797099e-2,
+            -6.625610809426089e-2,
+        ),
     )
-    np.testing.assert_allclose(
-        float(ev.df_dx), 8.223244982667942e-1, rtol=1e-6, atol=5e-7
-    )
-    np.testing.assert_allclose(
-        float(ev.df_dy), -5.830990551255731e-2, rtol=1e-5, atol=5e-7
-    )
+
+    # Evaluate each of the 6 upstream test2D_db(.true.) sample points and
+    # verify both full BicubicEval and masked interp_evbicub_mask_db outputs.
+    # Note that upstream MESA's fvbicub_db omits `implicit none` and evaluates
+    # its local basis polynomials in 32-bit float; our full float64 basis
+    # agrees with upstream within single-precision truncation (~5e-7) while
+    # matching exact polynomial calculus and jax.grad/jax.hessian to ~1e-13.
+    for i, j, exp_z, exp_dzdx, exp_dzdy in expected_bicub:
+        xq = x_min + float(i) * dx
+        yq = y_min + float(j) * dy
+        ev = interp_2d.interp_evbicub_db(xq, yq, x, y, ilinx, iliny, coeffs)
+        np.testing.assert_allclose(float(ev.f), exp_z, rtol=1e-7, atol=5e-9)
+        np.testing.assert_allclose(
+            float(ev.df_dx), exp_dzdx, rtol=1e-5, atol=5e-7
+        )
+        np.testing.assert_allclose(
+            float(ev.df_dy), exp_dzdy, rtol=1e-5, atol=5e-7
+        )
+        masked = np.asarray(
+            interp_2d.interp_evbicub_mask_db(
+                xq, yq, x, y, ilinx, iliny, coeffs, [1, 1, 1, 0, 0, 0]
+            )
+        )
+        np.testing.assert_allclose(
+            masked[:3],
+            [float(ev.f), float(ev.df_dx), float(ev.df_dy)],
+            rtol=1e-15,
+            atol=1e-15,
+        )
+        np.testing.assert_allclose(masked[3:], 0.0, atol=1e-15)
 
     def f_scalar(xy: jnp.ndarray) -> jnp.ndarray:
         return interp_2d.interp_evbicub_db(
@@ -78,23 +157,28 @@ def test_upstream_mesa_interp2d_bicub_and_bipm_match_golden() -> None:
         ).f
 
     # Verify analytic first and second partials against jax.grad / jax.hessian.
+    x0, y0 = 0.1, 0.2
+    ev0 = interp_2d.interp_evbicub_db(x0, y0, x, y, ilinx, iliny, coeffs)
     xy0 = jnp.array([x0, y0], dtype=jnp.float64)
     grad_xy = np.asarray(jax.grad(f_scalar)(xy0))
     hess_xy = np.asarray(jax.hessian(f_scalar)(xy0))
     np.testing.assert_allclose(
-        grad_xy, [float(ev.df_dx), float(ev.df_dy)], rtol=1e-13, atol=1e-14
+        grad_xy, [float(ev0.df_dx), float(ev0.df_dy)], rtol=1e-13, atol=1e-14
     )
     np.testing.assert_allclose(
-        hess_xy[0, 0], float(ev.d2f_dx2), rtol=1e-13, atol=1e-14
+        hess_xy[0, 0], float(ev0.d2f_dx2), rtol=1e-13, atol=1e-14
     )
     np.testing.assert_allclose(
-        hess_xy[1, 1], float(ev.d2f_dy2), rtol=1e-13, atol=1e-14
+        hess_xy[1, 1], float(ev0.d2f_dy2), rtol=1e-13, atol=1e-14
     )
     np.testing.assert_allclose(
-        hess_xy[0, 1], float(ev.d2f_dxdy), rtol=1e-13, atol=1e-14
+        hess_xy[0, 1], float(ev0.d2f_dxdy), rtol=1e-13, atol=1e-14
     )
 
-    # Verify 2D Steffen (1990) piecewise-monotonic interpolation.
+    # Verify 2D Steffen (1990) piecewise-monotonic interpolation on all 6 pts.
+    # Each query evaluates four 1D x-splines on a 4-point y stencil followed by
+    # a 1D Steffen cubic interpolation along y, matching test2D_db(.false.) to
+    # full double precision (<= 1e-12).
     coeffs_pm = interp_2d.interp_mkbipm_db(x, y, z)
     np.testing.assert_allclose(
         np.asarray(coeffs_pm[14, 16]),
@@ -106,8 +190,19 @@ def test_upstream_mesa_interp2d_bicub_and_bipm_match_golden() -> None:
         ],
         rtol=1e-12,
     )
-    val_pm = float(interp_2d.interp_evbipm_db(x0, y0, x, y, coeffs_pm))
-    np.testing.assert_allclose(val_pm, 8.351309743282355e-2, rtol=1e-12)
+    expected_bipm = (
+        (0, 0, 8.351309743282355e-2),
+        (1, 0, 1.1572304354801646e-1),
+        (0, 1, 2.580157764222351e-2),
+        (1, 1, 5.2402920852187326e-2),
+        (0, 2, -9.271793796082475e-3),
+        (1, 2, -2.457567139911116e-2),
+    )
+    for i, j, exp_z in expected_bipm:
+        xq = x_min + float(i) * dx
+        yq = y_min + float(j) * dy
+        val_pm = float(interp_2d.interp_evbipm_db(xq, yq, x, y, coeffs_pm))
+        np.testing.assert_allclose(val_pm, exp_z, rtol=1e-12, atol=1e-13)
 
 
 def test_upstream_mesa_interp2d_akima_matches_golden_table() -> None:
@@ -153,3 +248,72 @@ def test_upstream_mesa_interp2d_akima_matches_golden_table() -> None:
     np.testing.assert_allclose(
         z_bi, [z_sf[0, 22], z_sf[18, 22]], rtol=1e-14, atol=1e-14
     )
+
+
+@hypothesis.settings(max_examples=25, deadline=None)
+@hypothesis.given(
+    a00=st.floats(-5.0, 5.0),
+    a10=st.floats(-3.0, 3.0),
+    a01=st.floats(-3.0, 3.0),
+    a20=st.floats(-2.0, 2.0),
+    a11=st.floats(-2.0, 2.0),
+    a02=st.floats(-2.0, 2.0),
+    xq=st.floats(-1.5, 1.5),
+    yq=st.floats(-1.5, 1.5),
+)
+def test_prop_interp2d_bicubic_reproduces_biquadratic_and_derivatives(
+    a00: float,
+    a10: float,
+    a01: float,
+    a20: float,
+    a11: float,
+    a02: float,
+    xq: float,
+    yq: float,
+) -> None:
+    """Property test: not-a-knot bicubic spline reproduces biquadratic surfaces.
+
+    Verifies that `interp_mkbicub_db` and `interp_evbicub_db` reproduce any
+    biquadratic polynomial $P(x, y) = a_{00} + a_{10} x + a_{01} y + a_{20} x^2
+    + a_{11} x y + a_{02} y^2$ and its first and second partial derivatives to
+    machine precision.
+    """
+    x = np.linspace(-2.0, 2.0, 7, dtype=np.float64)
+    y = np.linspace(-2.0, 2.0, 8, dtype=np.float64)
+    xx, yy = np.meshgrid(x, y, indexing="ij")
+    z = (
+        a00
+        + a10 * xx
+        + a01 * yy
+        + a20 * xx**2
+        + a11 * xx * yy
+        + a02 * yy**2
+    )
+    coeffs, ilinx, iliny = interp_2d.interp_mkbicub_db(x, y, z)
+    ev = interp_2d.interp_evbicub_db(xq, yq, x, y, ilinx, iliny, coeffs)
+
+    f_exact = (
+        a00
+        + a10 * xq
+        + a01 * yq
+        + a20 * xq**2
+        + a11 * xq * yq
+        + a02 * yq**2
+    )
+    df_dx_exact = a10 + 2.0 * a20 * xq + a11 * yq
+    df_dy_exact = a01 + a11 * xq + 2.0 * a02 * yq
+
+    np.testing.assert_allclose(float(ev.f), f_exact, rtol=1e-11, atol=1e-11)
+    np.testing.assert_allclose(
+        float(ev.df_dx), df_dx_exact, rtol=1e-11, atol=1e-11
+    )
+    np.testing.assert_allclose(
+        float(ev.df_dy), df_dy_exact, rtol=1e-11, atol=1e-11
+    )
+    np.testing.assert_allclose(
+        float(ev.d2f_dx2), 2.0 * a20, rtol=1e-11, atol=1e-11
+    )
+    np.testing.assert_allclose(
+        float(ev.d2f_dy2), 2.0 * a02, rtol=1e-11, atol=1e-11
+    )
+    np.testing.assert_allclose(float(ev.d2f_dxdy), a11, rtol=1e-11, atol=1e-11)

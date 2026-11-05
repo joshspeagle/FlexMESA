@@ -74,6 +74,38 @@ def splinck_db(
     return bool(np.all(np.abs(diffs - dxavg) <= zeps))
 
 
+def reshape_grid_2d(
+    z: np.ndarray | jnp.ndarray,
+    nx: int,
+    ny: int,
+    name: str = "z",
+) -> np.ndarray:
+    """Validates and reshapes a 2D or flat grid array to ``(nx, ny)``.
+
+    Args:
+        z: Grid values of shape ``(nx, ny)`` or flat ``(nx * ny,)``.
+        nx: Expected x-grid length.
+        ny: Expected y-grid length.
+        name: Parameter name for error reporting.
+
+    Returns:
+        2D ``float64`` NumPy array of shape ``(nx, ny)``.
+
+    Raises:
+        ValueError: If ``z`` does not have shape ``(nx, ny)`` or ``(nx * ny,)``
+            or contains non-finite values.
+    """
+    arr = np.asarray(z, dtype=np.float64)
+    if arr.shape not in ((nx, ny), (nx * ny,)):
+        raise ValueError(
+            f"{name} must have shape ({nx}, {ny}) or ({nx * ny},), "
+            f"got {arr.shape}."
+        )
+    if not np.all(np.isfinite(arr)):
+        raise ValueError(f"{name} must contain only finite float64 values.")
+    return arr.reshape(nx, ny)
+
+
 def _v_spline_db(
     k_bc1: int,
     k_bcn: int,
@@ -300,16 +332,33 @@ def interp_mkspline_db(
     Returns:
         Tuple ``(fxx, uniform)`` where ``fxx`` has shape ``(N,)`` (`float64`)
         and ``uniform`` indicates even spacing within ``1e-3``.
+
+    Raises:
+        ValueError: If ``x`` or ``y`` has fewer than 4 points, mismatched
+            shapes, non-ascending knot coordinates, non-finite values, or
+            invalid boundary condition codes.
     """
     x_arr = np.asarray(x, dtype=np.float64)
     y_arr = np.asarray(y, dtype=np.float64)
     if x_arr.ndim != 1 or y_arr.shape != x_arr.shape or x_arr.size < 4:
         raise ValueError("x and y must be 1D arrays of matching length >= 4.")
-    if not np.all(np.isfinite(y_arr)):
-        raise ValueError("y must contain only finite float64 values.")
+    if not (
+        np.all(np.isfinite(y_arr))
+        and np.isfinite(bcxmin)
+        and np.isfinite(bcxmax)
+    ):
+        raise ValueError(
+            "y, bcxmin, and bcxmax must contain finite float64 values."
+        )
     bc1 = int(ibcxmin)
     bcn = int(ibcxmax)
-    if bc1 < -1 or bc1 > 7 or (bc1 >= 0 and (bcn < 0 or bcn > 7)):
+    if (
+        bc1 < -1
+        or bc1 > 7
+        or bcn < -1
+        or bcn > 7
+        or (bc1 >= 0 and bcn < 0)
+    ):
         raise ValueError("Invalid boundary condition code.")
     uniform = splinck_db(x_arr, 1.0e-3, "x")
 

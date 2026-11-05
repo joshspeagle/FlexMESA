@@ -22,15 +22,16 @@ from __future__ import annotations
 from flexmesa.interp_1d import eval as _eval
 from flexmesa.interp_1d import mp as _mp
 from flexmesa.interp_1d import pm as _pm
+from flexmesa.interp_1d import remesh as _remesh
 
 MP_WORK_SIZE = _pm.MP_WORK_SIZE
 MpLimiter = _mp.MpLimiter
 PM_WORK_SIZE = _pm.PM_WORK_SIZE
 SMACHEPS = _pm.SMACHEPS
 integrate_values = _eval.integrate_values
-interp_3_to_1 = _eval.interp_3_to_1
-interp_3_to_2 = _eval.interp_3_to_2
-interp_4_to_1 = _eval.interp_4_to_1
+interp_3_to_1 = _remesh.interp_3_to_1
+interp_3_to_2 = _remesh.interp_3_to_2
+interp_4_to_1 = _remesh.interp_4_to_1
 interp_4pt_pm = _pm.interp_4pt_pm
 interp_m3 = _mp.interp_m3
 interp_m3a = _mp.interp_m3a
@@ -43,10 +44,10 @@ interp_value = _eval.interp_value
 interp_value_and_slope = _eval.interp_value_and_slope
 interp_values = _eval.interp_values
 interp_values_and_slopes = _eval.interp_values_and_slopes
-interp_values_autodiff = _eval.interp_values_autodiff
-interpolate_vector = _eval.interpolate_vector
-interpolate_vector_pm = _eval.interpolate_vector_pm
-interpolate_vector_pm_autodiff = _eval.interpolate_vector_pm_autodiff
+interp_values_autodiff = _remesh.interp_values_autodiff
+interpolate_vector = _remesh.interpolate_vector
+interpolate_vector_pm = _remesh.interpolate_vector_pm
+interpolate_vector_pm_autodiff = _remesh.interpolate_vector_pm_autodiff
 median = _mp.median
 minmod = _mp.minmod
 minmod4 = _mp.minmod4

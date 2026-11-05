@@ -193,7 +193,7 @@ pub fn heaviside(x: f64) -> f64 {
 /// Normalizes Fortran `D`/`d` exponent markers to `e` before parsing.
 ///
 /// # Errors
-/// Returns [`ParseFloatError`] if the string cannot be parsed as a valid number.
+/// Returns [`ParseFloatError`] if the string cannot be parsed as a number.
 pub fn str_to_double(token: &str) -> Result<f64, ParseFloatError> {
     let trimmed = token.trim();
     if trimmed.contains(['d', 'D']) {
@@ -203,10 +203,11 @@ pub fn str_to_double(token: &str) -> Result<f64, ParseFloatError> {
     }
 }
 
-/// Parse a whitespace-delimited string of Fortran/IEEE-754 numbers into `Vec<f64>`.
+/// Parse a whitespace-delimited string of Fortran/IEEE-754 numbers into a
+/// `Vec<f64>`.
 ///
 /// # Errors
-/// Returns [`ParseFloatError`] if any whitespace-separated token fails to parse.
+/// Returns [`ParseFloatError`] if any whitespace-separated token is invalid.
 ///
 /// # Examples
 /// ```

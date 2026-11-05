@@ -1,17 +1,29 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
-"""Public interface for `flexmesa.auto_diff` (`auto_diff` module port)."""
+"""Public interface for `flexmesa.auto_diff` (`auto_diff` module port).
+
+Exports first-order forward-mode dual numbers (`DualOrder1` and its fixed-arity
+subclasses `AutoDiffReal1VarOrder1`, `AutoDiffReal2VarOrder1`,
+`AutoDiffReal4VarOrder1`, `AutoDiffReal4Coeff`, and `AutoDiffRealStarOrder1`)
+and two-variable second-order hyperdual numbers (`AutoDiffReal2VarOrder2` and
+its alias `AutoDiffReal2ndOrder`), all registered as static JAX PyTrees.
+"""
 
 from __future__ import annotations
 
 from flexmesa.auto_diff import kernels, order1, order2
 
+# Number of stellar structure variables in AutoDiffRealStarOrder1.
 STAR_ORDER1_VARS = order1.STAR_ORDER1_VARS
+
+# First-order dual number PyTree classes and aliases.
 DualOrder1 = order1.DualOrder1
 AutoDiffReal1VarOrder1 = order1.AutoDiffReal1VarOrder1
 AutoDiffReal2VarOrder1 = order1.AutoDiffReal2VarOrder1
 AutoDiffReal4VarOrder1 = order1.AutoDiffReal4VarOrder1
 AutoDiffReal4Coeff = order1.AutoDiffReal4Coeff
 AutoDiffRealStarOrder1 = order1.AutoDiffRealStarOrder1
+
+# Second-order bivariate hyperdual PyTree class and alias.
 AutoDiffReal2VarOrder2 = order2.AutoDiffReal2VarOrder2
 AutoDiffReal2ndOrder = order2.AutoDiffReal2ndOrder
 

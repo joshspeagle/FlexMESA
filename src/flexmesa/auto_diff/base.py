@@ -3,8 +3,8 @@
 
 Provides all 32 unary elementary functions (`sin`, `cos`, `exp`, `log`,
 `safe_log`, `safe_sqrt`, etc.), fixed integer powers (`pow2` through `pow8`),
-reverse scalar exponentiation (`rpow`), and value-based relational comparisons
-shared by `DualOrder1` and `AutoDiffReal2VarOrder2`.
+scalar exponentiation (`powf`, `powi`, `rpow`), and value-based relational
+comparisons shared by `DualOrder1` and `AutoDiffReal2VarOrder2`.
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ class AutoDiffBase:
         return self.apply_unary(kernels.unary_sqrt)
 
     def safe_sqrt(self) -> Self:
-        """Compute $\\sqrt{x H(x)}$."""
+        """Compute $\\sqrt{\\max(x, 0)}$."""
         return self.apply_unary(kernels.unary_safe_sqrt)
 
     def exp(self) -> Self:
@@ -182,6 +182,16 @@ class AutoDiffBase:
     def pow8(self) -> Self:
         """Compute $x^{8}$."""
         return self.apply_unary(lambda x: kernels.unary_pown(x, 8))
+
+    def powf(self, exponent: intrinsics.ArrayLike) -> Self:
+        """Raise `self` to a constant floating-point `exponent` ($x^{p}$)."""
+        return self.apply_unary(
+            lambda x: kernels.unary_pow_scalar(x, exponent)
+        )
+
+    def powi(self, exponent: int) -> Self:
+        """Raise `self` to a constant integer `exponent` ($x^{n}$)."""
+        return self.powf(float(exponent))
 
     def rpow(self, base: intrinsics.ArrayLike) -> Self:
         """Raise positive scalar `base` to exponent `self` ($b^{x}$)."""

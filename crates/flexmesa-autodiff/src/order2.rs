@@ -7,7 +7,7 @@
 //! derivatives $(\partial_{1}, \partial_{2}, \partial_{11}, \partial_{12},
 //! \partial_{22})$ in a single forward pass.
 
-use flexmesa_math::{heaviside, pow2, sgn};
+use flexmesa_math::{heaviside, pow2};
 
 use crate::kernels;
 
@@ -16,7 +16,7 @@ use crate::kernels;
 /// Stores the primal value `val`, first partial derivatives `d1val1` and
 /// `d1val2`, and second partial derivatives `d2val1`
 /// ($\partial^{2} / \partial x_{1}^{2}$), `d1val1_d1val2`
-/// ($\partial^{2} / \partial x_{1} \partial x_{2}$), and `d2val2`
+/// ($\partial^{2} / (\partial x_{1} \partial x_{2})$), and `d2val2`
 /// ($\partial^{2} / \partial x_{2}^{2}$).
 ///
 /// # Examples
@@ -43,7 +43,8 @@ pub struct AutoDiffReal2VarOrder2 {
     pub d1val2: f64,
     /// Second partial derivative $\partial^{2} f / \partial x_{1}^{2}$.
     pub d2val1: f64,
-    /// Mixed second partial derivative $\partial^{2} f / (\partial x_{1} \partial x_{2})$.
+    /// Mixed second partial derivative
+    /// $\partial^{2} f / (\partial x_{1} \partial x_{2})$.
     pub d1val1_d1val2: f64,
     /// Second partial derivative $\partial^{2} f / \partial x_{2}^{2}$.
     pub d2val2: f64,
@@ -56,6 +57,15 @@ macro_rules! unary_method {
         #[inline]
         pub fn $name(self) -> Self {
             self.apply_unary($kernel)
+        }
+    };
+    ($name:ident, pown $n:literal, $doc:expr) => {
+        #[doc = $doc]
+        #[must_use]
+        #[inline]
+        pub fn $name(self) -> Self {
+            let (v, d1, d2) = kernels::unary_pown(self.val, $n);
+            self.make_unary_operator(v, d1, d2)
         }
     };
 }
@@ -96,10 +106,16 @@ impl AutoDiffReal2VarOrder2 {
         Self::new(val, 0.0, 1.0, 0.0, 0.0, 0.0)
     }
 
-    /// Apply the second-order unary chain rule matching MESA's `make_unary_operator`.
+    /// Apply the second-order unary chain rule matching MESA's
+    /// `make_unary_operator`.
     #[must_use]
     #[inline]
-    pub fn make_unary_operator(self, z_val: f64, z_d1x: f64, z_d2x: f64) -> Self {
+    pub fn make_unary_operator(
+        self,
+        z_val: f64,
+        z_d1x: f64,
+        z_d2x: f64,
+    ) -> Self {
         Self {
             val: z_val,
             d1val1: self.d1val1 * z_d1x,
@@ -111,7 +127,8 @@ impl AutoDiffReal2VarOrder2 {
         }
     }
 
-    /// Apply the second-order binary chain rule matching MESA's `make_binary_operator`.
+    /// Apply the second-order binary chain rule matching MESA's
+    /// `make_binary_operator`.
     #[must_use]
     #[inline]
     #[allow(clippy::similar_names, clippy::too_many_arguments)]
@@ -150,7 +167,8 @@ impl AutoDiffReal2VarOrder2 {
         }
     }
 
-    /// Propagate a scalar derivative kernel `(f(x), f'(x), f''(x))` through `self`.
+    /// Propagate a scalar derivative kernel `(f(x), f'(x), f''(x))` through
+    /// `self`.
     #[must_use]
     #[inline]
     pub fn apply_unary(self, kernel: fn(f64) -> (f64, f64, f64)) -> Self {
@@ -158,33 +176,51 @@ impl AutoDiffReal2VarOrder2 {
         self.make_unary_operator(z_val, z_d1x, z_d2x)
     }
 
-    /// Extract the first partial derivative with respect to variable 1 as a hyperdual.
+    /// Extract the first partial derivative with respect to variable 1 as a
+    /// hyperdual.
     #[must_use]
     #[inline]
     pub const fn differentiate_1(self) -> Self {
         Self::new(self.d1val1, self.d2val1, self.d1val1_d1val2, 0.0, 0.0, 0.0)
     }
 
-    /// Extract the first partial derivative with respect to variable 2 as a hyperdual.
+    /// Extract the first partial derivative with respect to variable 2 as a
+    /// hyperdual.
     #[must_use]
     #[inline]
     pub const fn differentiate_2(self) -> Self {
         Self::new(self.d1val2, self.d1val1_d1val2, self.d2val2, 0.0, 0.0, 0.0)
     }
 
-    unary_method!(sign, kernels::unary_sign, "Compute $\\operatorname{sgn}(x)$.");
+    unary_method!(
+        sign,
+        kernels::unary_sign,
+        "Compute $\\operatorname{sgn}(x)$."
+    );
     unary_method!(abs, kernels::unary_abs, "Compute $|x|$.");
     unary_method!(sqrt, kernels::unary_sqrt, "Compute $\\sqrt{x}$.");
-    unary_method!(safe_sqrt, kernels::unary_safe_sqrt, "Compute $\\sqrt{x H(x)}$.");
+    unary_method!(
+        safe_sqrt,
+        kernels::unary_safe_sqrt,
+        "Compute $\\sqrt{\\max(x, 0)}$."
+    );
     unary_method!(exp, kernels::unary_exp, "Compute $\\exp(x)$.");
     unary_method!(expm1, kernels::unary_expm1, "Compute $e^{x} - 1$.");
     unary_method!(exp10, kernels::unary_exp10, "Compute $10^{x}$.");
     unary_method!(powm1, kernels::unary_powm1, "Compute $x^{-1}$.");
     unary_method!(log, kernels::unary_log, "Compute $\\ln(x)$.");
-    unary_method!(safe_log, kernels::unary_safe_log, "Compute $\\operatorname{safe\\_log}(x)$.");
+    unary_method!(
+        safe_log,
+        kernels::unary_safe_log,
+        "Compute $\\operatorname{safe\\_log}(x)$."
+    );
     unary_method!(log1p, kernels::unary_log1p, "Compute $\\ln(1 + x)$.");
     unary_method!(log10, kernels::unary_log10, "Compute $\\log_{10}(x)$.");
-    unary_method!(safe_log10, kernels::unary_safe_log10, "Compute $\\operatorname{safe\\_log10}(x)$.");
+    unary_method!(
+        safe_log10,
+        kernels::unary_safe_log10,
+        "Compute $\\operatorname{safe\\_log10}(x)$."
+    );
     unary_method!(log2, kernels::unary_log2, "Compute $\\log_{2}(x)$.");
     unary_method!(sin, kernels::unary_sin, "Compute $\\sin(x)$.");
     unary_method!(cos, kernels::unary_cos, "Compute $\\cos(x)$.");
@@ -198,68 +234,43 @@ impl AutoDiffReal2VarOrder2 {
     unary_method!(asin, kernels::unary_asin, "Compute $\\arcsin(x)$.");
     unary_method!(acos, kernels::unary_acos, "Compute $\\arccos(x)$.");
     unary_method!(atan, kernels::unary_atan, "Compute $\\arctan(x)$.");
-    unary_method!(asinpi, kernels::unary_asinpi, "Compute $\\arcsin(x) / \\pi$.");
-    unary_method!(acospi, kernels::unary_acospi, "Compute $\\arccos(x) / \\pi$.");
-    unary_method!(atanpi, kernels::unary_atanpi, "Compute $\\arctan(x) / \\pi$.");
-    unary_method!(asinh, kernels::unary_asinh, "Compute $\\operatorname{arsinh}(x)$.");
-    unary_method!(acosh, kernels::unary_acosh, "Compute $\\operatorname{arcosh}(x)$.");
-    unary_method!(atanh, kernels::unary_atanh, "Compute $\\operatorname{artanh}(x)$.");
-
-    /// Compute $x^{2}$.
-    #[must_use]
-    #[inline]
-    pub fn pow2(self) -> Self {
-        let (v, d1, d2) = kernels::unary_pown(self.val, 2);
-        self.make_unary_operator(v, d1, d2)
-    }
-
-    /// Compute $x^{3}$.
-    #[must_use]
-    #[inline]
-    pub fn pow3(self) -> Self {
-        let (v, d1, d2) = kernels::unary_pown(self.val, 3);
-        self.make_unary_operator(v, d1, d2)
-    }
-
-    /// Compute $x^{4}$.
-    #[must_use]
-    #[inline]
-    pub fn pow4(self) -> Self {
-        let (v, d1, d2) = kernels::unary_pown(self.val, 4);
-        self.make_unary_operator(v, d1, d2)
-    }
-
-    /// Compute $x^{5}$.
-    #[must_use]
-    #[inline]
-    pub fn pow5(self) -> Self {
-        let (v, d1, d2) = kernels::unary_pown(self.val, 5);
-        self.make_unary_operator(v, d1, d2)
-    }
-
-    /// Compute $x^{6}$.
-    #[must_use]
-    #[inline]
-    pub fn pow6(self) -> Self {
-        let (v, d1, d2) = kernels::unary_pown(self.val, 6);
-        self.make_unary_operator(v, d1, d2)
-    }
-
-    /// Compute $x^{7}$.
-    #[must_use]
-    #[inline]
-    pub fn pow7(self) -> Self {
-        let (v, d1, d2) = kernels::unary_pown(self.val, 7);
-        self.make_unary_operator(v, d1, d2)
-    }
-
-    /// Compute $x^{8}$.
-    #[must_use]
-    #[inline]
-    pub fn pow8(self) -> Self {
-        let (v, d1, d2) = kernels::unary_pown(self.val, 8);
-        self.make_unary_operator(v, d1, d2)
-    }
+    unary_method!(
+        asinpi,
+        kernels::unary_asinpi,
+        "Compute $\\arcsin(x) / \\pi$."
+    );
+    unary_method!(
+        acospi,
+        kernels::unary_acospi,
+        "Compute $\\arccos(x) / \\pi$."
+    );
+    unary_method!(
+        atanpi,
+        kernels::unary_atanpi,
+        "Compute $\\arctan(x) / \\pi$."
+    );
+    unary_method!(
+        asinh,
+        kernels::unary_asinh,
+        "Compute $\\operatorname{arsinh}(x)$."
+    );
+    unary_method!(
+        acosh,
+        kernels::unary_acosh,
+        "Compute $\\operatorname{arcosh}(x)$."
+    );
+    unary_method!(
+        atanh,
+        kernels::unary_atanh,
+        "Compute $\\operatorname{artanh}(x)$."
+    );
+    unary_method!(pow2, pown 2, "Compute $x^{2}$.");
+    unary_method!(pow3, pown 3, "Compute $x^{3}$.");
+    unary_method!(pow4, pown 4, "Compute $x^{4}$.");
+    unary_method!(pow5, pown 5, "Compute $x^{5}$.");
+    unary_method!(pow6, pown 6, "Compute $x^{6}$.");
+    unary_method!(pow7, pown 7, "Compute $x^{7}$.");
+    unary_method!(pow8, pown 8, "Compute $x^{8}$.");
 
     /// Raise `self` to a hyperdual power `other` ($x^{y}$).
     #[must_use]
@@ -285,7 +296,8 @@ impl AutoDiffReal2VarOrder2 {
         self.powf(f64::from(n))
     }
 
-    /// Raise a constant positive scalar `base` to the hyperdual exponent `self` ($b^{x}$).
+    /// Raise a constant positive scalar `base` to the hyperdual exponent
+    /// `self` ($b^{x}$).
     #[must_use]
     #[inline]
     pub fn rpow(self, base: f64) -> Self {
@@ -345,19 +357,13 @@ impl AutoDiffReal2VarOrder2 {
     #[must_use]
     #[inline]
     pub fn dim(self, other: Self) -> Self {
-        let diff = self.val - other.val;
-        let w = 0.5 + 0.5 * sgn(diff);
-        let val = 0.5 * diff + 0.5 * diff.abs();
-        self.make_binary_operator(other, val, w, -w, 0.0, 0.0, 0.0)
+        (self - other).max_scalar(0.0)
     }
 
     /// Compute positive difference $\operatorname{dim}(x, c) = \max(x - c, 0)$.
     #[must_use]
     #[inline]
     pub fn dim_scalar(self, c: f64) -> Self {
-        let diff = self.val - c;
-        let w = 0.5 + 0.5 * sgn(diff);
-        let val = 0.5 * diff + 0.5 * diff.abs();
-        self.make_unary_operator(val, w, 0.0)
+        (self - c).max_scalar(0.0)
     }
 }

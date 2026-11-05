@@ -7,14 +7,14 @@
 //! `safe_log10`, `safe_sqrt`), base-10 and shifted exponentials (`exp10`,
 //! `expm1`, `log1p`, `log2`), fixed integer-power helpers (`powm1`, `pow2`
 //! through `pow8`), half-turn trigonometric functions (`sinpi`, `cospi`,
-//! `tanpi`, `asinpi`, `acospi`, `atanpi`), and sign/step utilities (`sgn`,
-//! `heaviside`).
+//! `tanpi`, `asinpi`, `acospi`, `atanpi`), Euclidean norm (`hypot`), and
+//! sign/step utilities (`sgn`, `heaviside`).
 
 #![forbid(unsafe_code)]
 
 pub mod trig;
 
-use flexmesa_const::LN10;
+use flexmesa_const::{LN10, LN2};
 use flexmesa_utils::is_bad;
 
 pub use trig::{
@@ -26,7 +26,8 @@ pub use trig::{
 /// Minimum positive floor applied by [`safe_log`] and [`safe_log10`].
 pub const SAFE_LOG_FLOOR: f64 = 1.0e-99;
 
-/// Fallback value returned by [`safe_log`] and [`safe_log10`] on non-finite input.
+/// Fallback value returned by [`safe_log`] and [`safe_log10`] on non-finite
+/// input.
 pub const SAFE_LOG_BAD_RETURN: f64 = -99.0;
 
 /// Compute the domain-safe square root $\sqrt{\max(x, 0)}$.
@@ -119,7 +120,7 @@ pub fn log1p(x: f64) -> f64 {
 #[must_use]
 #[inline]
 pub fn log2(x: f64) -> f64 {
-    x.ln() / 2.0_f64.ln()
+    x.ln() / LN2
 }
 
 /// Compute the natural exponential $e^{x}$.
@@ -138,8 +139,8 @@ pub fn expm1(x: f64) -> f64 {
 
 /// Compute the base-10 exponential $10^{x}$ matching MESA's `exp10`.
 ///
-/// When `x` is a finite integer in `[-308, 308]`, `exp10` multiplies `10.0`
-/// repeatedly so integer decades match exact decimal powers; otherwise it
+/// When `x` is a finite integer in `[-308, 308]`, `exp10` evaluates integer
+/// exponentiation so integer decades match exact decimal powers; otherwise it
 /// evaluates $\exp(x \ln 10)$.
 ///
 /// # Examples
@@ -157,18 +158,18 @@ pub fn exp10(x: f64) -> f64 {
     if x.is_finite() && x == x.floor() && (-308.0..=308.0).contains(&x) {
         #[allow(clippy::cast_possible_truncation)]
         let ix = x as i32;
-        let mut acc = 1.0_f64;
-        for _ in 0..ix.unsigned_abs() {
-            acc *= 10.0_f64;
-        }
-        if ix < 0 {
-            1.0_f64 / acc
-        } else {
-            acc
-        }
+        let mag = 10.0_f64.powi(ix.abs());
+        if ix < 0 { 1.0_f64 / mag } else { mag }
     } else {
         (x * LN10).exp()
     }
+}
+
+/// Compute the Euclidean hypotenuse $\sqrt{x^{2} + y^{2}}$ without overflow.
+#[must_use]
+#[inline]
+pub fn hypot(x: f64, y: f64) -> f64 {
+    x.hypot(y)
 }
 
 /// Raise `x` to a floating-point power $x^{y}$.

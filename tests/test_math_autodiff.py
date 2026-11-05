@@ -9,6 +9,8 @@ to `<= 1e-15`, `test_auto_diff.f90` cases across `DualOrder1` and
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 import hypothesis
 import jax
 import jax.numpy as jnp
@@ -19,19 +21,23 @@ from jax import test_util
 from flexmesa import auto_diff as ad
 from flexmesa import constants
 from flexmesa import math as fmath
+from flexmesa.testing import golden
 
+# Standard evaluation grid used in upstream MESA's math/test.
 XS: jax.Array = jnp.asarray([0.1, 0.2, 0.4], dtype=jnp.float64)
+
+# Relative/absolute tolerances for math intrinsics and auto_diff comparisons.
 TOL_MATH: float = 1.0e-15
 TOL_AD: float = 1.0e-14
 
 
 def _assert_close(
-    actual: jax.Array | np.ndarray | list[float] | list[jax.Array],
-    expected: jax.Array | np.ndarray | list[float] | list[jax.Array],
+    actual: jax.Array | np.ndarray | Sequence[float | jax.Array],
+    expected: jax.Array | np.ndarray | Sequence[float | jax.Array],
     tol: float = TOL_MATH,
 ) -> None:
     """Assert elementwise parity within `rtol = tol` and `atol = tol`."""
-    np.testing.assert_allclose(
+    golden.assert_values_match(
         np.asarray(actual, dtype=np.float64),
         np.asarray(expected, dtype=np.float64),
         rtol=tol,
@@ -67,6 +73,7 @@ def _fn_jax(xy: jax.Array) -> jax.Array:
 
 def test_math_intrinsic_golden_logs_and_exps_match_mesa() -> None:
     """Verify logarithms and exponentials against `test_output.INTRINSIC`."""
+    # Natural, base-10, shifted, and base-2 logarithms on XS = [0.1, 0.2, 0.4].
     _assert_close(
         fmath.log(XS),
         [-2.3025850929940455, -1.6094379124341003, -0.9162907318741551],
@@ -83,6 +90,7 @@ def test_math_intrinsic_golden_logs_and_exps_match_mesa() -> None:
         fmath.log2(XS),
         [-3.321928094887362, -2.321928094887362, -1.3219280948873622],
     )
+    # Domain-safe logarithms and natural/base-10 exponentials.
     _assert_close(fmath.safe_log(XS), fmath.log(XS))
     _assert_close(fmath.safe_log10(XS), fmath.log10(XS))
     _assert_close(
@@ -100,9 +108,9 @@ def test_math_intrinsic_golden_logs_and_exps_match_mesa() -> None:
 
 
 def test_math_intrinsic_golden_powers_match_mesa() -> None:
-    """Verify `pow`, `pow2`..`pow8`, and `powm1` against `test_output`."""
+    """Verify `pow`, `powi`, `pow2`..`pow8`, `powm1`, and `hypot`."""
     p2 = [1.0e-2, 4.0e-2, 1.6e-1]
-    _assert_close(fmath.pow(XS, 2), p2)
+    _assert_close(fmath.powi(XS, 2), p2)
     _assert_close(fmath.pow(XS, 2.0), p2)
     _assert_close(fmath.pow2(XS), p2)
     _assert_close(fmath.pow3(XS), [1.0e-3, 8.0e-3, 6.4e-2])
@@ -112,6 +120,7 @@ def test_math_intrinsic_golden_powers_match_mesa() -> None:
     _assert_close(fmath.pow7(XS), [1.0e-7, 1.28e-5, 1.6384e-3])
     _assert_close(fmath.pow8(XS), [1.0e-8, 2.56e-6, 6.5536e-4])
     _assert_close(fmath.powm1(XS), [10.0, 5.0, 2.5])
+    _assert_close([float(fmath.hypot(3.0, 4.0))], [5.0])
 
 
 def test_math_intrinsic_golden_direct_trig_matches_mesa() -> None:
@@ -144,6 +153,7 @@ def test_math_intrinsic_golden_direct_trig_matches_mesa() -> None:
 
 def test_math_intrinsic_golden_inverse_and_hyperbolic_match_mesa() -> None:
     """Verify inverse trig and hyperbolic functions against `test_output`."""
+    # Inverse trigonometric functions in radians and half-turns.
     _assert_close(
         fmath.acos(XS),
         [1.4706289056333368, 1.369438406004566, 1.1592794807274085],
@@ -168,6 +178,7 @@ def test_math_intrinsic_golden_inverse_and_hyperbolic_match_mesa() -> None:
         fmath.atanpi(XS),
         [0.03172551743055357, 0.0628329581890012, 0.1211189415908434],
     )
+    # Direct hyperbolic functions cosh, sinh, tanh.
     _assert_close(
         fmath.cosh(XS),
         [1.0050041680558035, 1.020066755619076, 1.081072371838455],
@@ -209,6 +220,7 @@ def test_auto_diff_order1_binary_and_unary_match_mesa_test_suite() -> None:
     x = ad.AutoDiffReal2VarOrder1(1.0, [1.0, 0.0])
     y = ad.AutoDiffReal2VarOrder1(2.0, [1.0, 0.0])
     z = x + y
+    assert isinstance(z, ad.AutoDiffReal2VarOrder1)
     _assert_close([float(z.val), *z.d1.tolist()], [3.0, 2.0, 0.0], TOL_AD)
     x = ad.AutoDiffReal2VarOrder1(3.0, [1.0, 0.0])
     y = ad.AutoDiffReal2VarOrder1(2.0, [0.0, 1.0])

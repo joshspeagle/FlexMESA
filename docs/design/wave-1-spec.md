@@ -100,13 +100,16 @@ $H \in \mathbb{R}^{K \times K}$:
 - **Binary product rule** for $u \cdot w$:
   $$\nabla(uw) = w\,\nabla u + u\,\nabla w, \qquad H_{uw} = w\,H_u + u\,H_w + \nabla u\,\nabla w^{\top} + \nabla w\,\nabla u^{\top}$$
 - **Specialized Stellar Types**:
-  - `AutoDiffReal2Val1`: Value and first derivative $(v, \partial_1 v)$.
-  - `AutoDiffReal4Coeff`: 4-variable first-order jet
+  - `DualOrder1` (`AutoDiffReal1VarOrder1`, `AutoDiffReal2VarOrder1`,
+    `AutoDiffRealStarOrder1`): First-order forward-mode dual numbers for
+    $N \in \{1, 2, 33\}$ independent variables.
+  - `AutoDiffReal4VarOrder1` (`AutoDiffReal4Coeff`): 4-variable first-order jet
     $(v, \partial_{\ln T}, \partial_{\ln \rho}, \partial_a, \partial_b)$ used by
     `turb` and `neu`.
-  - `AutoDiffReal2ndOrder`: Full second-order hyperdual number supporting all
-    704 derivative checks in `auto_diff/test/test_output` to $\le 10^{-14}$
-    relative error and verified against `jax.test_util.check_grads`.
+  - `AutoDiffReal2VarOrder2` (`AutoDiffReal2ndOrder`): Full bivariate
+    second-order hyperdual number supporting all 704 derivative checks in
+    `auto_diff/test/test_output` to $\le 10^{-14}$ relative error and verified
+    against `jax.test_util.check_grads`.
 
 ---
 

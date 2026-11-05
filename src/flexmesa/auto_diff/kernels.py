@@ -3,7 +3,7 @@
 
 Each unary kernel returns a 3-tuple `(f(x), f'(x), f''(x))` of `float64` JAX
 arrays so that `DualOrder1` and `AutoDiffReal2VarOrder2` share identical
-elementary derivative formulas.
+elementary derivative formulas and domain-safety guards.
 """
 
 from __future__ import annotations
@@ -19,8 +19,8 @@ from flexmesa import math as fmath
 type UnaryTriplet = tuple[jax.Array, jax.Array, jax.Array]
 type UnaryKernel = Callable[[jax.Array], UnaryTriplet]
 
-_INV_LN10: float = 1.0 / constants.LN10
-_INV_LN2: float = 1.0 / float(jnp.log(jnp.asarray(2.0, dtype=jnp.float64)))
+_INV_LN10: float = constants.ILN10
+_INV_LN2: float = 1.0 / constants.LN2
 _INV_PI: float = 1.0 / constants.PI
 
 
@@ -36,16 +36,25 @@ def unary_abs(val: jax.Array) -> UnaryTriplet:
 
 
 def unary_sqrt(val: jax.Array) -> UnaryTriplet:
-    """Return `(f, f', f'')` for $\\sqrt{x}$."""
+    """Return `(f, f', f'')` for $\\sqrt{x}$ on $x > 0$."""
     q0 = jnp.sqrt(val)
     return q0, 0.5 / q0, -0.25 / (val * q0)
 
 
 def unary_safe_sqrt(val: jax.Array) -> UnaryTriplet:
-    """Return `(f, f', f'')` for $\\sqrt{x H(x)}$."""
-    q0 = jnp.sqrt(val * fmath.heaviside(val))
-    inv_x = fmath.powm1(val)
-    return q0, 0.5 * q0 * inv_x, -0.25 * q0 * fmath.pow2(inv_x)
+    """Return `(f, f', f'')` for $\\sqrt{\\max(x, 0)}$ without `0.0 * Inf`."""
+    pos = val > 0.0
+    safe_x = jnp.where(pos, val, 1.0)
+    q0_pos = jnp.sqrt(safe_x)
+    q0 = jnp.where(pos, q0_pos, 0.0)
+    d1 = jnp.where(pos, 0.5 / q0_pos, 0.0)
+    d2 = jnp.where(pos, -0.25 / (safe_x * q0_pos), 0.0)
+    is_nan = jnp.isnan(val)
+    return (
+        jnp.where(is_nan, jnp.nan, q0),
+        jnp.where(is_nan, jnp.nan, d1),
+        jnp.where(is_nan, jnp.nan, d2),
+    )
 
 
 def unary_exp(val: jax.Array) -> UnaryTriplet:
@@ -57,7 +66,7 @@ def unary_exp(val: jax.Array) -> UnaryTriplet:
 def unary_expm1(val: jax.Array) -> UnaryTriplet:
     """Return `(f, f', f'')` for $e^{x} - 1$."""
     q0 = fmath.exp(val)
-    return fmath.expm1(val), q0, q0
+    return q0 - 1.0, q0, q0
 
 
 def unary_exp10(val: jax.Array) -> UnaryTriplet:
@@ -82,8 +91,12 @@ def unary_log(val: jax.Array) -> UnaryTriplet:
 
 def unary_safe_log(val: jax.Array) -> UnaryTriplet:
     """Return `(f, f', f'')` for $\\operatorname{safe\\_log}(x)$."""
-    inv = fmath.powm1(val)
-    return fmath.safe_log(val), inv, -fmath.pow2(inv)
+    active = jnp.isfinite(val) & (val > fmath.SAFE_LOG_FLOOR)
+    safe_x = jnp.where(active, val, 1.0)
+    inv = 1.0 / safe_x
+    d1 = jnp.where(active, inv, 0.0)
+    d2 = jnp.where(active, -(inv * inv), 0.0)
+    return fmath.safe_log(val), d1, d2
 
 
 def unary_log1p(val: jax.Array) -> UnaryTriplet:
@@ -100,8 +113,12 @@ def unary_log10(val: jax.Array) -> UnaryTriplet:
 
 def unary_safe_log10(val: jax.Array) -> UnaryTriplet:
     """Return `(f, f', f'')` for $\\operatorname{safe\\_log10}(x)$."""
-    inv = fmath.powm1(val)
-    return fmath.safe_log10(val), _INV_LN10 * inv, -_INV_LN10 * fmath.pow2(inv)
+    active = jnp.isfinite(val) & (val > fmath.SAFE_LOG_FLOOR)
+    safe_x = jnp.where(active, val, 1.0)
+    inv = 1.0 / safe_x
+    d1 = jnp.where(active, _INV_LN10 * inv, 0.0)
+    d2 = jnp.where(active, -_INV_LN10 * (inv * inv), 0.0)
+    return fmath.safe_log10(val), d1, d2
 
 
 def unary_log2(val: jax.Array) -> UnaryTriplet:
@@ -135,25 +152,21 @@ def unary_sinpi(val: jax.Array) -> UnaryTriplet:
     """Return `(f, f', f'')` for $\\sin(\\pi x)$."""
     s = fmath.sinpi(val)
     c = fmath.cospi(val)
-    return s, constants.PI * c, -(constants.PI * constants.PI) * s
+    return s, constants.PI * c, -constants.PI2 * s
 
 
 def unary_cospi(val: jax.Array) -> UnaryTriplet:
     """Return `(f, f', f'')` for $\\cos(\\pi x)$."""
     s = fmath.sinpi(val)
     c = fmath.cospi(val)
-    return c, -constants.PI * s, -(constants.PI * constants.PI) * c
+    return c, -constants.PI * s, -constants.PI2 * c
 
 
 def unary_tanpi(val: jax.Array) -> UnaryTriplet:
     """Return `(f, f', f'')` for $\\tan(\\pi x)$."""
     t = fmath.tanpi(val)
     sec2 = fmath.pow2(t) + 1.0
-    return (
-        t,
-        constants.PI * sec2,
-        2.0 * (constants.PI * constants.PI) * t * sec2,
-    )
+    return t, constants.PI * sec2, 2.0 * constants.PI2 * t * sec2
 
 
 def unary_sinh(val: jax.Array) -> UnaryTriplet:
@@ -199,20 +212,20 @@ def unary_atan(val: jax.Array) -> UnaryTriplet:
 
 def unary_asinpi(val: jax.Array) -> UnaryTriplet:
     """Return `(f, f', f'')` for $\\arcsin(x) / \\pi$."""
-    _, d1, d2 = unary_asin(val)
-    return fmath.asinpi(val), d1 * _INV_PI, d2 * _INV_PI
+    v, d1, d2 = unary_asin(val)
+    return v * _INV_PI, d1 * _INV_PI, d2 * _INV_PI
 
 
 def unary_acospi(val: jax.Array) -> UnaryTriplet:
     """Return `(f, f', f'')` for $\\arccos(x) / \\pi$."""
-    _, d1, d2 = unary_acos(val)
-    return fmath.acospi(val), d1 * _INV_PI, d2 * _INV_PI
+    v, d1, d2 = unary_acos(val)
+    return v * _INV_PI, d1 * _INV_PI, d2 * _INV_PI
 
 
 def unary_atanpi(val: jax.Array) -> UnaryTriplet:
     """Return `(f, f', f'')` for $\\arctan(x) / \\pi$."""
-    _, d1, d2 = unary_atan(val)
-    return fmath.atanpi(val), d1 * _INV_PI, d2 * _INV_PI
+    v, d1, d2 = unary_atan(val)
+    return v * _INV_PI, d1 * _INV_PI, d2 * _INV_PI
 
 
 def unary_asinh(val: jax.Array) -> UnaryTriplet:
@@ -240,17 +253,28 @@ def unary_pown(val: jax.Array, degree: int) -> UnaryTriplet:
     if degree == 2:
         return fmath.pow2(val), 2.0 * val, jnp.full_like(val, 2.0)
     if degree == 3:
-        return fmath.pow3(val), 3.0 * fmath.pow2(val), 6.0 * val
+        p2 = fmath.pow2(val)
+        return p2 * val, 3.0 * p2, 6.0 * val
     if degree == 4:
-        return fmath.pow4(val), 4.0 * fmath.pow3(val), 12.0 * fmath.pow2(val)
+        p2 = fmath.pow2(val)
+        p3 = p2 * val
+        return p3 * val, 4.0 * p3, 12.0 * p2
     if degree == 5:
-        return fmath.pow5(val), 5.0 * fmath.pow4(val), 20.0 * fmath.pow3(val)
+        p3 = fmath.pow3(val)
+        p4 = p3 * val
+        return p4 * val, 5.0 * p4, 20.0 * p3
     if degree == 6:
-        return fmath.pow6(val), 6.0 * fmath.pow5(val), 30.0 * fmath.pow4(val)
+        p4 = fmath.pow4(val)
+        p5 = p4 * val
+        return p5 * val, 6.0 * p5, 30.0 * p4
     if degree == 7:
-        return fmath.pow7(val), 7.0 * fmath.pow6(val), 42.0 * fmath.pow5(val)
+        p5 = fmath.pow5(val)
+        p6 = p5 * val
+        return p6 * val, 7.0 * p6, 42.0 * p5
     if degree == 8:
-        return fmath.pow8(val), 8.0 * fmath.pow7(val), 56.0 * fmath.pow6(val)
+        p6 = fmath.pow6(val)
+        p7 = p6 * val
+        return p7 * val, 8.0 * p7, 56.0 * p6
     return unary_pow_scalar(val, float(degree))
 
 

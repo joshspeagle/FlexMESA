@@ -26,25 +26,33 @@ use flexmesa_math::{cos, cosh, exp, log, pow2, sin, sinh, tan, tanh};
 use flexmesa_testing::assert_values_match;
 use proptest::prelude::*;
 
+/// Numerical parity tolerance for first- and second-order automatic
+/// differentiation tests.
 const TOL: f64 = 1.0e-14;
 
+/// Assert elementwise parity within `rtol` and `atol`.
 fn assert_allclose(actual: &[f64], expected: &[f64], rtol: f64, atol: f64) {
     assert_values_match(actual, expected, rtol, atol, "autodiff_tests")
         .expect("autodiff_tests parity mismatch");
 }
 
+/// Assert primal and two partial derivatives on [`AutoDiffReal2VarOrder1`].
 fn check_2var_order1(z: AutoDiffReal2VarOrder1, val: f64, d1: f64, d2: f64) {
     assert_allclose(&[z.val, z.d1[0], z.d1[1]], &[val, d1, d2], TOL, TOL);
 }
 
+/// Verify binary arithmetic, `max`, `min`, `dim`, and `pow` on
+/// [`AutoDiffReal2VarOrder1`] against `test_auto_diff.f90`.
 #[test]
 fn test_auto_diff_2var_order1_binary_operators_match_mesa_test_suite() {
+    // Addition with dual and scalar operands.
     let x = AutoDiffReal2VarOrder1::new(1.0, [1.0, 0.0]);
     let y = AutoDiffReal2VarOrder1::new(2.0, [1.0, 0.0]);
     check_2var_order1(x + y, 3.0, 2.0, 0.0);
     check_2var_order1(x + 2.0, 3.0, 1.0, 0.0);
     check_2var_order1(2.0 + x, 3.0, 1.0, 0.0);
 
+    // Multiplication and division with dual and scalar operands.
     let x = AutoDiffReal2VarOrder1::new(3.0, [1.0, 0.0]);
     let y = AutoDiffReal2VarOrder1::new(2.0, [0.0, 1.0]);
     check_2var_order1(x * y, 6.0, 2.0, 3.0);
@@ -53,11 +61,13 @@ fn test_auto_diff_2var_order1_binary_operators_match_mesa_test_suite() {
     check_2var_order1(x / y, 1.5, 0.5, -0.75);
     check_2var_order1(x / 2.0, 1.5, 0.5, 0.0);
 
+    // Subtraction with dual and scalar operands.
     let x = AutoDiffReal2VarOrder1::new(1.0, [1.0, 0.0]);
     let y = AutoDiffReal2VarOrder1::new(5.0, [0.0, 2.0]);
     check_2var_order1(x - y, -4.0, 1.0, -2.0);
     check_2var_order1(x - 1.0, 0.0, 1.0, 0.0);
 
+    // Extrema (`max`, `min`) and positive difference (`dim`) subgradients.
     let x = AutoDiffReal2VarOrder1::new(1.0, [1.0, 0.0]);
     let y = AutoDiffReal2VarOrder1::new(2.0, [0.0, 2.0]);
     check_2var_order1(x.max(y), 2.0, 0.0, 2.0);
@@ -73,13 +83,17 @@ fn test_auto_diff_2var_order1_binary_operators_match_mesa_test_suite() {
     check_2var_order1(y.dim(x), 0.0, 0.0, 0.0);
     check_2var_order1(x.dim_scalar(1.0), 1.0, 2.0, 0.0);
 
+    // Binary power x^y where both base and exponent carry derivatives.
     let x = AutoDiffReal2VarOrder1::new(2.0, [1.0, 0.0]);
     let y = AutoDiffReal2VarOrder1::new(2.0, [0.0, 1.0]);
     check_2var_order1(x.pow(y), 4.0, 4.0, 4.0 * log(2.0));
 }
 
+/// Verify unary elementary and domain-safe operators on
+/// [`AutoDiffReal2VarOrder1`] against `test_auto_diff.f90`.
 #[test]
 fn test_auto_diff_2var_order1_unary_operators_match_mesa_test_suite() {
+    // Exponentials, absolute value, negation, and logarithms at x = 1.
     let x1 = AutoDiffReal2VarOrder1::new(1.0, [1.0, 0.0]);
     check_2var_order1(x1.exp(), exp(1.0), exp(1.0), 0.0);
     check_2var_order1(x1.abs(), 1.0, 1.0, 0.0);
@@ -88,6 +102,14 @@ fn test_auto_diff_2var_order1_unary_operators_match_mesa_test_suite() {
     check_2var_order1(x1.log(), 0.0, 1.0, 0.0);
     check_2var_order1(x1.safe_log(), 0.0, 1.0, 0.0);
 
+    // Domain-safe guards at x <= 0 avoid 0.0 * Inf = NaN contamination.
+    let x0 = AutoDiffReal2VarOrder1::new(0.0, [1.0, 0.0]);
+    check_2var_order1(x0.safe_sqrt(), 0.0, 0.0, 0.0);
+    let x_neg = AutoDiffReal2VarOrder1::new(-4.0, [1.0, 0.0]);
+    check_2var_order1(x_neg.safe_sqrt(), 0.0, 0.0, 0.0);
+    check_2var_order1(x0.safe_log10(), -99.0, 0.0, 0.0);
+
+    // Trigonometric and hyperbolic functions at x = pi.
     let x_pi = AutoDiffReal2VarOrder1::new(PI, [1.0, 0.0]);
     check_2var_order1(x_pi.sin(), sin(PI), cos(PI), 0.0);
     check_2var_order1(x_pi.cos(), cos(PI), -sin(PI), 0.0);
@@ -96,6 +118,7 @@ fn test_auto_diff_2var_order1_unary_operators_match_mesa_test_suite() {
     check_2var_order1(x_pi.cosh(), cosh(PI), sinh(PI), 0.0);
     check_2var_order1(x_pi.tanh(), tanh(PI), 1.0 / pow2(cosh(PI)), 0.0);
 
+    // Inverse trigonometric and hyperbolic functions at x = 0.5 and x = 2.0.
     let x_half = AutoDiffReal2VarOrder1::new(0.5, [1.0, 0.0]);
     check_2var_order1(x_half.asin(), 0.5_f64.asin(), 2.0 / 3.0_f64.sqrt(), 0.0);
     check_2var_order1(
@@ -107,6 +130,7 @@ fn test_auto_diff_2var_order1_unary_operators_match_mesa_test_suite() {
     check_2var_order1(x_half.atan(), 0.5_f64.atan(), 0.8, 0.0);
     check_2var_order1(x_half.atanh(), 0.5_f64.atanh(), 4.0 / 3.0, 0.0);
 
+    // Fixed integer powers pow2..pow8 and scalar base/exponent powers.
     let x2 = AutoDiffReal2VarOrder1::new(2.0, [1.0, 0.0]);
     check_2var_order1(x2.asinh(), 2.0_f64.asinh(), 1.0 / 5.0_f64.sqrt(), 0.0);
     check_2var_order1(x2.acosh(), 2.0_f64.acosh(), 1.0 / 3.0_f64.sqrt(), 0.0);
@@ -131,14 +155,23 @@ fn test_auto_diff_2var_order1_unary_operators_match_mesa_test_suite() {
     check_2var_order1(x10.safe_log10(), 1.0, 1.0 / (10.0 * LN10), 0.0);
 }
 
+/// Verify `N = 1`, `N = 4`, and `N = 33` (`AutoDiffRealStarOrder1`) dual
+/// specializations.
 #[test]
 fn test_auto_diff_1var_4var_and_star_order1_propagate_partials_correctly() {
+    // Single-variable quotient and chain rule.
     let u = AutoDiffReal1VarOrder1::independent(2.0, 0);
     let fu = (u.pow3() + u.exp()) / u;
     let expected_val = (8.0 + exp(2.0)) / 2.0;
     let expected_d1 = (2.0 * (12.0 + exp(2.0)) - (8.0 + exp(2.0))) / 4.0;
-    assert_allclose(&[fu.val, fu.d1[0]], &[expected_val, expected_d1], TOL, TOL);
+    assert_allclose(
+        &[fu.val, fu.d1[0]],
+        &[expected_val, expected_d1],
+        TOL,
+        TOL,
+    );
 
+    // Four-variable gradient propagation.
     let a = AutoDiffReal4VarOrder1::independent(1.5, 0);
     let b = AutoDiffReal4VarOrder1::independent(2.5, 1);
     let c = AutoDiffReal4VarOrder1::independent(-0.5, 2);
@@ -151,6 +184,7 @@ fn test_auto_diff_1var_4var_and_star_order1_propagate_partials_correctly() {
         TOL,
     );
 
+    // 33-variable stellar structure gradient propagation.
     let mut star_sum = AutoDiffRealStarOrder1::constant(0.0);
     for idx in 0..15 {
         let xi = AutoDiffRealStarOrder1::independent(1.0 + idx as f64, idx);
@@ -165,12 +199,15 @@ fn test_auto_diff_1var_4var_and_star_order1_propagate_partials_correctly() {
     }
 }
 
+/// Verify bivariate second-order Hessian propagation and directional
+/// differentiation (`differentiate_1`, `differentiate_2`).
 #[test]
 fn test_auto_diff_2var_order2_hessian_and_differentiate_match_exact_calculus() {
     let x = AutoDiffReal2VarOrder2::var1(1.2);
     let y = AutoDiffReal2VarOrder2::var2(0.7);
     let f = (x * y).exp() + x.pow3() / y.sin();
 
+    // Closed-form analytical first and second partial derivatives.
     let xv = 1.2_f64;
     let yv = 0.7_f64;
     let exy = (xv * yv).exp();
@@ -183,8 +220,8 @@ fn test_auto_diff_2var_order2_hessian_and_differentiate_match_exact_calculus() {
     let expected_dxx = yv * yv * exy + 6.0 * xv / sy;
     let expected_dxy =
         exy * (1.0 + xv * yv) - 3.0 * xv.powi(2) * cy / (sy * sy);
-    let expected_dyy = xv * xv * exy
-        + xv.powi(3) * (1.0 + cy * cy) / (sy * sy * sy);
+    let expected_dyy =
+        xv * xv * exy + xv.powi(3) * (1.0 + cy * cy) / (sy * sy * sy);
 
     assert_allclose(
         &[f.val, f.d1val1, f.d1val2, f.d2val1, f.d1val1_d1val2, f.d2val2],
@@ -200,6 +237,7 @@ fn test_auto_diff_2var_order2_hessian_and_differentiate_match_exact_calculus() {
         TOL,
     );
 
+    // Directional derivative extraction.
     let df_dx = f.differentiate_1();
     assert_allclose(
         &[df_dx.val, df_dx.d1val1, df_dx.d1val2],
@@ -217,22 +255,27 @@ fn test_auto_diff_2var_order2_hessian_and_differentiate_match_exact_calculus() {
 }
 
 proptest! {
+    /// Property check that [`AutoDiffReal2VarOrder2`] agrees with central
+    /// first and second finite differences across `(0.25, 0.85)^2`.
     #[test]
     fn test_order2_elementary_chain_matches_finite_differences(
         xv in 0.25_f64..0.85_f64,
         yv in 0.25_f64..0.85_f64
     ) {
-        let eval_hyper = |x: AutoDiffReal2VarOrder2, y: AutoDiffReal2VarOrder2| {
-            x.sinpi() * y.cospi()
-                + x.safe_sqrt() * y.log1p()
-                + x.exp10() / (y.cosh() + 1.0)
-                + x.atanh() * y.asin()
-        };
+        let eval_hyper =
+            |x: AutoDiffReal2VarOrder2, y: AutoDiffReal2VarOrder2| {
+                x.sinpi() * y.cospi()
+                    + x.safe_sqrt() * y.log1p()
+                    + x.exp10() / (y.cosh() + 1.0)
+                    + x.atanh() * y.asin()
+            };
 
         let z = eval_hyper(
             AutoDiffReal2VarOrder2::var1(xv),
             AutoDiffReal2VarOrder2::var2(yv),
         );
+        // Step h = 1e-4 balances O(h^2) truncation error and O(eps / h^2)
+        // roundoff error for central second differences.
         let h = 1.0e-4;
         let f00 = z.val;
         let fpx = eval_hyper(
@@ -257,9 +300,9 @@ proptest! {
         let fd_dxx = (fpx - 2.0 * f00 + fmx) / (h * h);
         let fd_dyy = (fpy - 2.0 * f00 + fmy) / (h * h);
 
-        prop_assert!((z.d1val1 - fd_dx).abs() < 1.0e-6, "dx: {} vs {}", z.d1val1, fd_dx);
-        prop_assert!((z.d1val2 - fd_dy).abs() < 1.0e-6, "dy: {} vs {}", z.d1val2, fd_dy);
-        prop_assert!((z.d2val1 - fd_dxx).abs() < 1.0e-5, "dxx: {} vs {}", z.d2val1, fd_dxx);
-        prop_assert!((z.d2val2 - fd_dyy).abs() < 1.0e-5, "dyy: {} vs {}", z.d2val2, fd_dyy);
+        prop_assert!((z.d1val1 - fd_dx).abs() < 1.0e-6);
+        prop_assert!((z.d1val2 - fd_dy).abs() < 1.0e-6);
+        prop_assert!((z.d2val1 - fd_dxx).abs() < 1.0e-5);
+        prop_assert!((z.d2val2 - fd_dyy).abs() < 1.0e-5);
     }
 }

@@ -23,14 +23,15 @@
 
 pub mod kernels;
 pub mod order1;
-pub mod order1_ops;
+mod order1_ops;
 pub mod order2;
-pub mod order2_ops;
+mod order2_ops;
 
 pub use order1::DualOrder1;
 pub use order2::AutoDiffReal2VarOrder2;
 
-/// Number of independent stellar structure variables in [`AutoDiffRealStarOrder1`].
+/// Number of independent stellar structure variables in
+/// [`AutoDiffRealStarOrder1`].
 pub const STAR_ORDER1_VARS: usize = 33;
 
 /// One-variable first-order dual number (`auto_diff_real_1var_order1`).
@@ -42,11 +43,11 @@ pub type AutoDiffReal2VarOrder1 = DualOrder1<2>;
 /// Four-variable first-order dual number (`auto_diff_real_4var_order1`).
 pub type AutoDiffReal4VarOrder1 = DualOrder1<4>;
 
-/// Alias for [`AutoDiffReal4VarOrder1`] matching MESA's `auto_diff_real_4coeff`.
+/// Alias for [`AutoDiffReal4VarOrder1`] matching `auto_diff_real_4coeff`.
 pub type AutoDiffReal4Coeff = DualOrder1<4>;
 
 /// Stellar 33-variable first-order dual number (`auto_diff_real_star_order1`).
 pub type AutoDiffRealStarOrder1 = DualOrder1<STAR_ORDER1_VARS>;
 
-/// Alias for [`AutoDiffReal2VarOrder2`] matching MESA's `auto_diff_real_2nd_order`.
+/// Alias for [`AutoDiffReal2VarOrder2`] matching `auto_diff_real_2nd_order`.
 pub type AutoDiffReal2ndOrder = AutoDiffReal2VarOrder2;

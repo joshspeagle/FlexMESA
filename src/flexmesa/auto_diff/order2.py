@@ -16,6 +16,14 @@ from flexmesa.auto_diff import base, kernels
 from flexmesa.math import intrinsics
 
 
+def _as_bcast_f64(
+    arr: intrinsics.ArrayLike, shape: tuple[int, ...]
+) -> jax.Array:
+    """Convert `arr` to `float64` and broadcast to `shape` if needed."""
+    a = intrinsics.as_f64(arr)
+    return a if a.shape == shape else jnp.broadcast_to(a, shape)
+
+
 @jax.tree_util.register_pytree_node_class
 class AutoDiffReal2VarOrder2(base.AutoDiffBase):
     """Two-variable second-order forward-mode hyperdual number.
@@ -56,23 +64,14 @@ class AutoDiffReal2VarOrder2(base.AutoDiffBase):
         d2val2: intrinsics.ArrayLike = 0.0,
     ) -> None:
         """Initialize all six `float64` hyperdual components."""
-        v = jnp.asarray(val, dtype=jnp.float64)
+        v = intrinsics.as_f64(val)
+        sh = v.shape
         self.val: jax.Array = v
-        self.d1val1: jax.Array = jnp.broadcast_to(
-            jnp.asarray(d1val1, dtype=jnp.float64), v.shape
-        )
-        self.d1val2: jax.Array = jnp.broadcast_to(
-            jnp.asarray(d1val2, dtype=jnp.float64), v.shape
-        )
-        self.d2val1: jax.Array = jnp.broadcast_to(
-            jnp.asarray(d2val1, dtype=jnp.float64), v.shape
-        )
-        self.d1val1_d1val2: jax.Array = jnp.broadcast_to(
-            jnp.asarray(d1val1_d1val2, dtype=jnp.float64), v.shape
-        )
-        self.d2val2: jax.Array = jnp.broadcast_to(
-            jnp.asarray(d2val2, dtype=jnp.float64), v.shape
-        )
+        self.d1val1: jax.Array = _as_bcast_f64(d1val1, sh)
+        self.d1val2: jax.Array = _as_bcast_f64(d1val2, sh)
+        self.d2val1: jax.Array = _as_bcast_f64(d2val1, sh)
+        self.d1val1_d1val2: jax.Array = _as_bcast_f64(d1val1_d1val2, sh)
+        self.d2val2: jax.Array = _as_bcast_f64(d2val2, sh)
 
     def tree_flatten(
         self,
@@ -136,9 +135,9 @@ class AutoDiffReal2VarOrder2(base.AutoDiffBase):
         z_d2x: intrinsics.ArrayLike,
     ) -> AutoDiffReal2VarOrder2:
         """Apply MESA's second-order unary chain rule."""
-        zv = jnp.asarray(z_val, dtype=jnp.float64)
-        zd1 = jnp.asarray(z_d1x, dtype=jnp.float64)
-        zd2 = jnp.asarray(z_d2x, dtype=jnp.float64)
+        zv = intrinsics.as_f64(z_val)
+        zd1 = intrinsics.as_f64(z_d1x)
+        zd2 = intrinsics.as_f64(z_d2x)
         return AutoDiffReal2VarOrder2(
             zv,
             self.d1val1 * zd1,
@@ -237,7 +236,7 @@ class AutoDiffReal2VarOrder2(base.AutoDiffBase):
             return self.make_binary_operator(
                 other, jnp.maximum(self.val, other.val), q0, q1, 0.0, 0.0, 0.0
             )
-        c = jnp.asarray(other, dtype=jnp.float64)
+        c = intrinsics.as_f64(other)
         return self.make_unary_operator(
             jnp.maximum(self.val, c), fmath.heaviside(self.val - c), 0.0
         )
@@ -252,7 +251,7 @@ class AutoDiffReal2VarOrder2(base.AutoDiffBase):
             return self.make_binary_operator(
                 other, jnp.minimum(self.val, other.val), q0, q1, 0.0, 0.0, 0.0
             )
-        c = jnp.asarray(other, dtype=jnp.float64)
+        c = intrinsics.as_f64(other)
         return self.make_unary_operator(
             jnp.minimum(self.val, c), fmath.heaviside(c - self.val), 0.0
         )
@@ -261,23 +260,23 @@ class AutoDiffReal2VarOrder2(base.AutoDiffBase):
         self, other: AutoDiffReal2VarOrder2 | intrinsics.ArrayLike
     ) -> AutoDiffReal2VarOrder2:
         """Compute $\\operatorname{dim}(x, y) = \\max(x - y, 0)$."""
-        if isinstance(other, AutoDiffReal2VarOrder2):
-            diff = self.val - other.val
-            w = 0.5 + 0.5 * fmath.sgn(diff)
-            val = 0.5 * diff + 0.5 * jnp.abs(diff)
-            return self.make_binary_operator(other, val, w, -w, 0.0, 0.0, 0.0)
-        c = jnp.asarray(other, dtype=jnp.float64)
-        diff = self.val - c
-        w = 0.5 + 0.5 * fmath.sgn(diff)
-        val = 0.5 * diff + 0.5 * jnp.abs(diff)
-        return self.make_unary_operator(val, w, 0.0)
+        return (self - other).max(0.0)
 
     def __neg__(self) -> AutoDiffReal2VarOrder2:
-        return self.make_unary_operator(-self.val, -1.0, 0.0)
+        """Negate all six hyperdual components directly without squaring."""
+        return AutoDiffReal2VarOrder2(
+            -self.val,
+            -self.d1val1,
+            -self.d1val2,
+            -self.d2val1,
+            -self.d1val1_d1val2,
+            -self.d2val2,
+        )
 
     def __add__(
         self, other: AutoDiffReal2VarOrder2 | intrinsics.ArrayLike
     ) -> AutoDiffReal2VarOrder2:
+        """Add a hyperdual or scalar operand."""
         if isinstance(other, AutoDiffReal2VarOrder2):
             return AutoDiffReal2VarOrder2(
                 self.val + other.val,
@@ -287,7 +286,7 @@ class AutoDiffReal2VarOrder2(base.AutoDiffBase):
                 self.d1val1_d1val2 + other.d1val1_d1val2,
                 self.d2val2 + other.d2val2,
             )
-        c = jnp.asarray(other, dtype=jnp.float64)
+        c = intrinsics.as_f64(other)
         return AutoDiffReal2VarOrder2(
             self.val + c,
             self.d1val1,
@@ -298,11 +297,13 @@ class AutoDiffReal2VarOrder2(base.AutoDiffBase):
         )
 
     def __radd__(self, other: intrinsics.ArrayLike) -> AutoDiffReal2VarOrder2:
+        """Add a scalar left operand to `self`."""
         return self.__add__(other)
 
     def __sub__(
         self, other: AutoDiffReal2VarOrder2 | intrinsics.ArrayLike
     ) -> AutoDiffReal2VarOrder2:
+        """Subtract a hyperdual or scalar operand from `self`."""
         if isinstance(other, AutoDiffReal2VarOrder2):
             return AutoDiffReal2VarOrder2(
                 self.val - other.val,
@@ -312,7 +313,7 @@ class AutoDiffReal2VarOrder2(base.AutoDiffBase):
                 self.d1val1_d1val2 - other.d1val1_d1val2,
                 self.d2val2 - other.d2val2,
             )
-        c = jnp.asarray(other, dtype=jnp.float64)
+        c = intrinsics.as_f64(other)
         return AutoDiffReal2VarOrder2(
             self.val - c,
             self.d1val1,
@@ -323,24 +324,35 @@ class AutoDiffReal2VarOrder2(base.AutoDiffBase):
         )
 
     def __rsub__(self, other: intrinsics.ArrayLike) -> AutoDiffReal2VarOrder2:
+        """Subtract `self` from a scalar left operand."""
         return (-self) + other
 
     def __mul__(
         self, other: AutoDiffReal2VarOrder2 | intrinsics.ArrayLike
     ) -> AutoDiffReal2VarOrder2:
+        """Multiply `self` by a hyperdual or scalar operand."""
         if isinstance(other, AutoDiffReal2VarOrder2):
             return self.make_binary_operator(
                 other, self.val * other.val, other.val, self.val, 0.0, 1.0, 0.0
             )
-        c = jnp.asarray(other, dtype=jnp.float64)
-        return self.make_unary_operator(self.val * c, c, 0.0)
+        c = intrinsics.as_f64(other)
+        return AutoDiffReal2VarOrder2(
+            self.val * c,
+            self.d1val1 * c,
+            self.d1val2 * c,
+            self.d2val1 * c,
+            self.d1val1_d1val2 * c,
+            self.d2val2 * c,
+        )
 
     def __rmul__(self, other: intrinsics.ArrayLike) -> AutoDiffReal2VarOrder2:
+        """Multiply a scalar left operand by `self`."""
         return self.__mul__(other)
 
     def __truediv__(
         self, other: AutoDiffReal2VarOrder2 | intrinsics.ArrayLike
     ) -> AutoDiffReal2VarOrder2:
+        """Divide `self` by a hyperdual or scalar operand."""
         if isinstance(other, AutoDiffReal2VarOrder2):
             inv_y = 1.0 / other.val
             inv_y2 = inv_y * inv_y
@@ -353,18 +365,18 @@ class AutoDiffReal2VarOrder2(base.AutoDiffBase):
                 -inv_y2,
                 2.0 * self.val * inv_y2 * inv_y,
             )
-        c = jnp.asarray(other, dtype=jnp.float64)
-        return self.make_unary_operator(self.val / c, 1.0 / c, 0.0)
+        return self * (1.0 / intrinsics.as_f64(other))
 
     def __rtruediv__(
         self, other: intrinsics.ArrayLike
     ) -> AutoDiffReal2VarOrder2:
-        c = jnp.asarray(other, dtype=jnp.float64)
-        return self.powm1() * c
+        """Divide a scalar left operand by `self` ($c / y = c y^{-1}$)."""
+        return self.powm1() * intrinsics.as_f64(other)
 
     def __pow__(
         self, other: AutoDiffReal2VarOrder2 | intrinsics.ArrayLike
     ) -> AutoDiffReal2VarOrder2:
+        """Raise `self` to power `other` ($x^{y}$)."""
         return self.pow(other)
 
 

@@ -10,7 +10,7 @@ automatic differentiation gradients ever evaluate `0.0 * NaN` or `0.0 * Inf`.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 
 import jax
 import jax.numpy as jnp
@@ -22,12 +22,25 @@ type ArrayLike = float | int | Sequence[float] | np.ndarray | jax.Array
 
 SAFE_LOG_FLOOR: float = 1.0e-99
 SAFE_LOG_BAD_RETURN: float = -99.0
-_LN2: float = float(np.log(2.0))
 
 
 def as_f64(val: ArrayLike) -> jax.Array:
     """Convert scalar or array input `val` to a `float64` JAX array."""
+    if isinstance(val, jax.Array) and val.dtype == jnp.float64:
+        return val
     return jnp.asarray(val, dtype=jnp.float64)
+
+
+def _safe_log_apply(
+    val: ArrayLike, log_fn: Callable[[jax.Array], jax.Array]
+) -> jax.Array:
+    """Apply `log_fn` with MESA's `1e-99` floor and `-99.0` bad-value guard."""
+    x_arr = as_f64(val)
+    finite = jnp.isfinite(x_arr)
+    clamped = jnp.where(
+        finite & (x_arr > SAFE_LOG_FLOOR), x_arr, SAFE_LOG_FLOOR
+    )
+    return jnp.where(finite, log_fn(clamped), SAFE_LOG_BAD_RETURN)
 
 
 def safe_sqrt(val: ArrayLike) -> jax.Array:
@@ -75,12 +88,7 @@ def safe_log(val: ArrayLike) -> jax.Array:
         >>> float(fmath.safe_log(float("nan")))
         -99.0
     """
-    x_arr = as_f64(val)
-    finite = jnp.isfinite(x_arr)
-    clamped = jnp.where(
-        finite & (x_arr > SAFE_LOG_FLOOR), x_arr, SAFE_LOG_FLOOR
-    )
-    return jnp.where(finite, jnp.log(clamped), SAFE_LOG_BAD_RETURN)
+    return _safe_log_apply(val, jnp.log)
 
 
 def safe_log10(val: ArrayLike) -> jax.Array:
@@ -101,12 +109,7 @@ def safe_log10(val: ArrayLike) -> jax.Array:
         >>> float(fmath.safe_log10(0.0))
         -99.0
     """
-    x_arr = as_f64(val)
-    finite = jnp.isfinite(x_arr)
-    clamped = jnp.where(
-        finite & (x_arr > SAFE_LOG_FLOOR), x_arr, SAFE_LOG_FLOOR
-    )
-    return jnp.where(finite, jnp.log10(clamped), SAFE_LOG_BAD_RETURN)
+    return _safe_log_apply(val, jnp.log10)
 
 
 def log(val: ArrayLike) -> jax.Array:
@@ -154,7 +157,7 @@ def log2(val: ArrayLike) -> jax.Array:
     Returns:
         `float64` JAX array of shape `(*batch,)`.
     """
-    return jnp.log(as_f64(val)) / _LN2
+    return jnp.log(as_f64(val)) / constants.LN2
 
 
 def exp(val: ArrayLike) -> jax.Array:
@@ -202,6 +205,11 @@ def exp10(val: ArrayLike) -> jax.Array:
     )
 
 
+def hypot(lhs: ArrayLike, rhs: ArrayLike) -> jax.Array:
+    """Compute the Euclidean hypotenuse $\\sqrt{x^{2} + y^{2}}$ in `float64`."""
+    return jnp.hypot(as_f64(lhs), as_f64(rhs))
+
+
 def pow(base: ArrayLike, exponent: ArrayLike) -> jax.Array:
     """Raise `base` to power `exponent` ($x^{y}$) in `float64`.
 
@@ -213,6 +221,11 @@ def pow(base: ArrayLike, exponent: ArrayLike) -> jax.Array:
         `float64` JAX array of shape `(*batch,)`.
     """
     return jnp.power(as_f64(base), as_f64(exponent))
+
+
+def powi(base: ArrayLike, exponent: int) -> jax.Array:
+    """Raise `base` to an integer power `exponent` ($x^{n}$) in `float64`."""
+    return jnp.power(as_f64(base), float(exponent))
 
 
 def powm1(val: ArrayLike) -> jax.Array:

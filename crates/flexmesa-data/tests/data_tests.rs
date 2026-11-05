@@ -18,7 +18,8 @@ use std::collections::BTreeMap;
 use std::fmt::Write as _;
 
 use flexmesa_data::converters::{
-    parse_helm_table_text, parse_isotopes_text, parse_lodders03_text,
+    convert_ascii_table_file, parse_helm_table_text, parse_isotopes_text,
+    parse_lodders03_text,
 };
 use flexmesa_data::load_default_manifest;
 use flexmesa_data::safetensors::{
@@ -121,6 +122,8 @@ fn test_sha256_vectors_and_manifest_parsing() {
 /// - Non-finite `f64::NAN` elements are rejected when `require_finite = true`.
 #[test]
 fn test_safetensors_file_roundtrip_and_integrity() {
+    // Verify file-based ASCII-to-.safetensors conversion matches Python's
+    // deterministic SHA-256 digest byte-for-byte.
     let dir = tempfile::tempdir().unwrap();
     let st_path = dir.path().join("sample.safetensors");
 
@@ -171,6 +174,17 @@ fn test_converters_parse_lodders03_isotopes_and_helm_table() {
     let nsi = lod.tensors["number_abundance_si"].as_f64_slice().unwrap();
     assert!((nsi[3] - 768_900.0).abs() < 1e-9);
     assert_eq!(lod.metadata["isotopes"], "h1,h2,he4,fe56");
+    // Verify file-based ASCII-to-.safetensors conversion matches Python's
+    // deterministic SHA-256 digest byte-for-byte.
+    let dir = tempfile::tempdir().unwrap();
+    let lod_in = dir.path().join("lodders03.data");
+    let lod_out = dir.path().join("lodders03.safetensors");
+    std::fs::write(&lod_in, SAMPLE_LODDERS03).unwrap();
+    assert_eq!(
+        convert_ascii_table_file(&lod_in, &lod_out, parse_lodders03_text)
+            .unwrap(),
+        "877856c26bf3eec3a187b6977e37b9c6bef811116d6f3655a9a35d6261c126d3"
+    );
 
     let iso = parse_isotopes_text(SAMPLE_ISOTOPES).unwrap();
     assert_eq!(

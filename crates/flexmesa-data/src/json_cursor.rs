@@ -15,6 +15,9 @@ use std::collections::BTreeMap;
 use crate::DataError;
 
 /// Raw parsed tensor header descriptor (`dtype`, `shape`, `begin`, `end`).
+///
+/// Holds the validated dtype string, shape axis vector, and `[begin, end]`
+/// byte offset range within the `.safetensors` payload buffer.
 pub(crate) type RawTensorDesc = (String, Vec<usize>, usize, usize);
 
 /// Parsed `.safetensors` JSON header (`metadata` and tensor descriptors).
@@ -23,9 +26,11 @@ pub(crate) type ParsedHeader =
 
 /// Minimal byte cursor for parsing `.safetensors` JSON headers.
 ///
-/// Operates directly on the UTF-8 byte slice of the `.safetensors` JSON header
-/// and tracks the current byte offset `pos`.
+/// Operates directly on the validated UTF-8 header string and tracks the
+/// current byte offset `pos`.
 pub(crate) struct JsonCursor<'a> {
+    /// Underlying UTF-8 header string slice.
+    text: &'a str,
     /// Underlying UTF-8 header byte slice.
     bytes: &'a [u8],
     /// Current read position within `bytes`.
@@ -36,6 +41,7 @@ impl<'a> JsonCursor<'a> {
     /// Create a new [`JsonCursor`] positioned at byte 0 of `text`.
     pub(crate) fn new(text: &'a str) -> Self {
         Self {
+            text,
             bytes: text.as_bytes(),
             pos: 0,
         }
@@ -69,31 +75,31 @@ impl<'a> JsonCursor<'a> {
     }
 
     /// Parse a double-quoted JSON string, unescaping `\"`, `\\`, `\n`, `\r`,
-    /// and `\t`.
+    /// and `\t` while preserving multi-byte UTF-8 characters.
     ///
     /// Returns [`DataError::ParseError`] on unterminated strings or escapes.
     pub(crate) fn parse_string(&mut self) -> Result<String, DataError> {
         self.consume(b'"')?;
         let mut out = String::new();
-        while self.pos < self.bytes.len() {
-            let b = self.bytes[self.pos];
-            self.pos += 1;
-            if b == b'"' {
+        while let Some(ch) = self.text[self.pos..].chars().next() {
+            self.pos += ch.len_utf8();
+            if ch == '"' {
                 return Ok(out);
             }
-            if b == b'\\' {
-                let esc = *self.bytes.get(self.pos).ok_or_else(|| {
-                    DataError::ParseError("unterminated escape".to_owned())
-                })?;
-                self.pos += 1;
+            if ch == '\\' {
+                let esc =
+                    self.text[self.pos..].chars().next().ok_or_else(|| {
+                        DataError::ParseError("unterminated escape".to_owned())
+                    })?;
+                self.pos += esc.len_utf8();
                 out.push(match esc {
-                    b'n' => '\n',
-                    b'r' => '\r',
-                    b't' => '\t',
-                    other => other as char,
+                    'n' => '\n',
+                    'r' => '\r',
+                    't' => '\t',
+                    other => other,
                 });
             } else {
-                out.push(b as char);
+                out.push(ch);
             }
         }
         Err(DataError::ParseError(
@@ -188,20 +194,56 @@ pub(crate) fn escape_json_str(s: &str) -> String {
     out
 }
 
+/// Format a `"__metadata__":{...}` JSON entry from a string map.
+///
+/// Serializes each `(key, value)` pair in deterministic `BTreeMap` order using
+/// [`escape_json_str`].
+pub(crate) fn format_metadata_entry(meta: &BTreeMap<String, String>) -> String {
+    let pairs: Vec<String> = meta
+        .iter()
+        .map(|(k, v)| format!("{}:{}", escape_json_str(k), escape_json_str(v)))
+        .collect();
+    format!("\"__metadata__\":{{{}}}", pairs.join(","))
+}
+
+/// Format a per-tensor JSON header entry with `"dtype"`, `"shape"`, and
+/// `"data_offsets": [offset, end]`.
+///
+/// Produces a compact JSON key-value fragment suitable for joining into the
+/// top-level `.safetensors` header object.
+pub(crate) fn format_tensor_entry(
+    name: &str,
+    dtype: &str,
+    shape: &[usize],
+    offset: usize,
+    end: usize,
+) -> String {
+    let shape_str = shape
+        .iter()
+        .map(usize::to_string)
+        .collect::<Vec<_>>()
+        .join(",");
+    format!(
+        "{}:{{\"dtype\":\"{dtype}\",\"shape\":[{shape_str}],\
+         \"data_offsets\":[{offset},{end}]}}",
+        escape_json_str(name)
+    )
+}
+
 /// Parse one tensor descriptor object with `"dtype"`, `"shape"`, and
 /// `"data_offsets": [begin, end]`.
 ///
-/// Rejects unknown JSON keys and verifies that `"data_offsets"` contains
-/// exactly two non-negative byte offsets `[begin, end]`.
+/// Rejects unknown or duplicate JSON keys and verifies that `"data_offsets"`
+/// contains exactly two non-negative byte offsets `[begin, end]`.
 pub(crate) fn parse_tensor_desc(
     cur: &mut JsonCursor<'_>,
 ) -> Result<RawTensorDesc, DataError> {
     let (mut dtype, mut shape, mut offsets) = (None, None, None);
     cur.parse_object(|c, field| {
         match field.as_str() {
-            "dtype" => dtype = Some(c.parse_string()?),
-            "shape" => shape = Some(c.parse_usize_list()?),
-            "data_offsets" => {
+            "dtype" if dtype.is_none() => dtype = Some(c.parse_string()?),
+            "shape" if shape.is_none() => shape = Some(c.parse_usize_list()?),
+            "data_offsets" if offsets.is_none() => {
                 let list = c.parse_usize_list()?;
                 let [b, e] = list.as_slice() else {
                     return Err(DataError::ParseError(
@@ -212,7 +254,7 @@ pub(crate) fn parse_tensor_desc(
             }
             other => {
                 return Err(DataError::ParseError(format!(
-                    "unknown tensor header field {other:?}"
+                    "unknown or duplicate tensor header field {other:?}"
                 )));
             }
         }
@@ -263,7 +305,8 @@ pub(crate) fn split_header_and_payload(
 /// tensor descriptors.
 ///
 /// Extracts the optional `"__metadata__"` string-to-string dictionary and all
-/// top-level tensor descriptor objects in appearance order.
+/// top-level tensor descriptor objects in appearance order, rejecting trailing
+/// non-whitespace characters or duplicate metadata keys.
 ///
 /// # Errors
 /// Returns [`DataError::ParseError`] if the JSON syntax is invalid or if any
@@ -273,11 +316,23 @@ pub(crate) fn parse_safetensors_header(
 ) -> Result<ParsedHeader, DataError> {
     let mut cur = JsonCursor::new(header_str);
     let mut metadata = BTreeMap::new();
+    let mut seen_meta = false;
     let mut raw_descs: Vec<(String, RawTensorDesc)> = Vec::new();
     cur.parse_object(|c, key| {
         if key == "__metadata__" {
+            if seen_meta {
+                return Err(DataError::ParseError(
+                    "duplicate __metadata__ in header".to_owned(),
+                ));
+            }
+            seen_meta = true;
             c.parse_object(|mc, mk| {
-                metadata.insert(mk, mc.parse_string()?);
+                let mv = mc.parse_string()?;
+                if metadata.insert(mk, mv).is_some() {
+                    return Err(DataError::ParseError(
+                        "duplicate metadata key in header".to_owned(),
+                    ));
+                }
                 Ok(())
             })
         } else {
@@ -285,5 +340,11 @@ pub(crate) fn parse_safetensors_header(
             Ok(())
         }
     })?;
+    cur.skip_ws();
+    if cur.pos != cur.bytes.len() {
+        return Err(DataError::ParseError(
+            "unexpected trailing characters after JSON header".to_owned(),
+        ));
+    }
     Ok((metadata, raw_descs))
 }

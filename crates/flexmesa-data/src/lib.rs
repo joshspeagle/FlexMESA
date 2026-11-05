@@ -96,6 +96,9 @@ impl fmt::Display for DataError {
 impl std::error::Error for DataError {}
 
 /// Extract a double-quoted TOML string value.
+///
+/// Strips surrounding whitespace and requires an opening and closing `"`
+/// delimiter.
 fn parse_toml_quoted(raw: &str) -> Result<String, DataError> {
     let trimmed = raw.trim();
     trimmed
@@ -138,7 +141,29 @@ fn take_required_field(
         })
 }
 
+/// Strip trailing `#` TOML comments outside double-quoted strings.
+///
+/// Scans `raw` character-by-character, toggling quote state on unescaped `"`
+/// characters and truncating at the first `#` encountered outside quotes.
+fn strip_toml_comment(raw: &str) -> &str {
+    let mut in_quotes = false;
+    let mut prev_backslash = false;
+    for (idx, ch) in raw.char_indices() {
+        if ch == '"' && !prev_backslash {
+            in_quotes = !in_quotes;
+        } else if ch == '#' && !in_quotes {
+            return raw[..idx].trim();
+        }
+        prev_backslash = ch == '\\' && !prev_backslash;
+    }
+    raw.trim()
+}
+
 /// Finalize and insert a single `[[tables]]` stanza into `artifacts`.
+///
+/// Validates required keys (`"name"`, `"filename"`, `"sha256"`, `"size_bytes"`,
+/// and `"tensors"`), rejects duplicate tensor names or unknown fields, and
+/// inserts the resulting [`TableArtifact`] into `artifacts`.
 fn flush_artifact(
     fields: &mut BTreeMap<String, String>,
     tensors: &mut Vec<String>,
@@ -163,13 +188,28 @@ fn flush_artifact(
             "manifest table {name:?} must declare a non-empty 'tensors' list"
         )));
     }
+    if tensors
+        .iter()
+        .enumerate()
+        .any(|(i, t)| tensors[i + 1..].contains(t))
+    {
+        return Err(DataError::ValidationError(format!(
+            "manifest table {name:?} has duplicate tensor names"
+        )));
+    }
+    let description = fields.remove("description").unwrap_or_default();
+    if let Some((unknown, _)) = fields.pop_first() {
+        return Err(DataError::ValidationError(format!(
+            "manifest table {name:?} has unknown field {unknown:?}"
+        )));
+    }
     let artifact = TableArtifact {
         name: name.clone(),
         filename,
         sha256: sha256.to_ascii_lowercase(),
         size_bytes,
         tensors: std::mem::take(tensors),
-        description: fields.remove("description").unwrap_or_default(),
+        description,
     };
     if artifacts.insert(name, artifact).is_some() {
         return Err(DataError::ValidationError(
@@ -203,16 +243,20 @@ pub fn parse_manifest_text(
     let (mut in_table, mut in_tensors_array) = (false, false);
 
     for raw_line in text.lines() {
-        let line = raw_line.split('#').next().unwrap_or("").trim();
+        let line = strip_toml_comment(raw_line);
         if line.is_empty() {
             continue;
         }
         if line == "[[tables]]" {
+            if in_tensors_array {
+                return Err(DataError::ParseError(
+                    "unclosed 'tensors' array before [[tables]]".to_owned(),
+                ));
+            }
             if in_table {
                 flush_artifact(&mut fields, &mut tensors, &mut artifacts)?;
             }
             in_table = true;
-            in_tensors_array = false;
             continue;
         }
         if !in_table {
@@ -233,6 +277,11 @@ pub fn parse_manifest_text(
         };
         let (key, val) = (lhs.trim(), rhs.trim());
         if key == "tensors" {
+            if !tensors.is_empty() {
+                return Err(DataError::ParseError(
+                    "duplicate 'tensors' field in [[tables]] stanza".to_owned(),
+                ));
+            }
             let Some(after_open) = val.strip_prefix('[') else {
                 return Err(DataError::ParseError(
                     "tensors must be a bracketed array".to_owned(),
@@ -241,11 +290,23 @@ pub fn parse_manifest_text(
             let body = after_open.strip_suffix(']').unwrap_or(after_open);
             push_quoted_items(body, &mut tensors)?;
             in_tensors_array = !after_open.ends_with(']');
-        } else if key == "size_bytes" {
-            fields.insert(key.to_owned(), val.to_owned());
         } else {
-            fields.insert(key.to_owned(), parse_toml_quoted(val)?);
+            let parsed_val = if key == "size_bytes" {
+                val.to_owned()
+            } else {
+                parse_toml_quoted(val)?
+            };
+            if fields.insert(key.to_owned(), parsed_val).is_some() {
+                return Err(DataError::ParseError(format!(
+                    "duplicate field {key:?} in [[tables]] stanza"
+                )));
+            }
         }
+    }
+    if in_tensors_array {
+        return Err(DataError::ParseError(
+            "unclosed 'tensors' array at end of manifest".to_owned(),
+        ));
     }
     if in_table {
         flush_artifact(&mut fields, &mut tensors, &mut artifacts)?;

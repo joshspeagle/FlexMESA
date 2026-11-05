@@ -68,9 +68,11 @@ def parse_lodders03_text(text: str) -> loader.LoadedTableBundle:
 
     Returns:
         `LoadedTableBundle` with 1D arrays `'atomic_number_z'` (`int64`,
-        shape `(N,)`), `'mass_number_a'` (`int64`, shape `(N,)`),
-        `'isotopic_percent'` (`float64`, shape `(N,)`), and
-        `'number_abundance_si'` (`float64`, shape `(N,)`), plus metadata
+        shape `(N,)`, dimensionless proton number $Z$), `'mass_number_a'`
+        (`int64`, shape `(N,)`, dimensionless nucleon number $A$),
+        `'isotopic_percent'` (`float64`, shape `(N,)`, atom `%`), and
+        `'number_abundance_si'` (`float64`, shape `(N,)`, solar number
+        abundance normalized to $N(\\text{Si}) = 10^6$), plus metadata
         `'isotopes'` (comma-separated lowercase names such as `'h1,h2,he3'`).
 
     Raises:
@@ -155,12 +157,13 @@ def parse_isotopes_text(text: str) -> loader.LoadedTableBundle:
             partition-function values across 3 lines of 8 values).
 
     Returns:
-        `LoadedTableBundle` containing `'atomic_number_z'` (`int64`, `(N,)`),
-        `'neutron_number_n'` (`int64`, `(N,)`), `'isomeric_state'` (`int64`,
-        `(N,)`), `'atomic_mass_w'` (`float64`, `(N,)`), `'spin'` (`float64`,
-        `(N,)`), `'mass_excess_mev'` (`float64`, `(N,)`), and
-        `'partition_function'` (`float64`, `(N, 24)`), plus metadata
-        `'nuclide_names'`.
+        `LoadedTableBundle` containing `'atomic_number_z'` (`int64`, `(N,)`,
+        dimensionless), `'neutron_number_n'` (`int64`, `(N,)`, dimensionless),
+        `'isomeric_state'` (`int64`, `(N,)`, dimensionless), `'atomic_mass_w'`
+        (`float64`, `(N,)`, atomic mass units $\\text{u}$), `'spin'` (`float64`,
+        `(N,)`, ground-state spin in $\\hbar$), `'mass_excess_mev'` (`float64`,
+        `(N,)`, $\\text{MeV}$), and `'partition_function'` (`float64`,
+        `(N, 24)`, dimensionless), plus metadata `'nuclide_names'`.
 
     Raises:
         ValueError: If the non-empty line count is zero or not a multiple of 4,
@@ -247,36 +250,39 @@ def parse_helm_table_text(
         jmax: Number of temperature grid points (`>= 2`, default `1001`).
         logdlo: Minimum $\\log_{10}(\\rho / Y_e)$ (`default -12.0`).
         logdhi: Maximum $\\log_{10}(\\rho / Y_e)$ (`default 15.0`).
-        logtlo: Minimum $\\log_{10} T$ (`default 3.0`).
-        logthi: Maximum $\\log_{10} T$ (`default 13.0`).
+        logtlo: Minimum $\\log_{10} T$ in $\\text{K}$ (`3.0`).
+        logthi: Maximum $\\log_{10} T$ in $\\text{K}$ (`13.0`).
 
     Returns:
-        `LoadedTableBundle` with 1D grids (`'log_d_grid'`, `'log_t_grid'`,
-        `'d_grid'`, `'t_grid'`), the 21 individual `(imax, jmax)` `float64`
-        tables (`'f'` .. `'xfdt'`), and the 4 packed jet tensors (`'f_jet'`
-        `(imax, jmax, 9)`, `'dpdf_jet'`, `'ef_jet'`, `'xf_jet'`
-        `(imax, jmax, 4)`).
+        `LoadedTableBundle` with 1D grids (`'log_d_grid'`, `'d_grid'` of shape
+        `(imax,)` in $\\text{g cm}^{-3}$; `'log_t_grid'`, `'t_grid'` of shape
+        `(jmax,)` in $\\text{K}$), the 21 `(imax, jmax)` CGS tables (`'f'` in
+        $\\text{erg g}^{-1}$, `'dpdf'` in $\\text{dyn cm}^{-2}$, `'ef'`
+        dimensionless, `'xf'` in $\\text{cm}^{-3}$, and partial derivatives),
+        and the 4 packed jet tensors (`'f_jet'` `(imax, jmax, 9)`,
+        `'dpdf_jet'`, `'ef_jet'`, `'xf_jet'` `(imax, jmax, 4)`).
 
     Raises:
-        ValueError: If `imax < 2`, `jmax < 2`, or the line count does not equal
-            `4 * imax * jmax`.
+        ValueError: If `imax < 2`, `jmax < 2`, grid bounds are inverted, or the
+            line count does not equal `4 * imax * jmax`.
     """
-    if imax < 2 or jmax < 2:
-        raise ValueError(f"imax and jmax must be >= 2, got ({imax}, {jmax})")
+    if imax < 2 or jmax < 2 or not (logdlo < logdhi and logtlo < logthi):
+        raise ValueError(f"Invalid helm_table grid ({imax}, {jmax})")
     non_empty = _non_empty_lines(text)
     n_block = imax * jmax
     if len(non_empty) != 4 * n_block:
-        raise ValueError(
-            f"Expected {4 * n_block} non-empty rows for ({imax}, {jmax}) "
-            f"helm_table, got {len(non_empty)}"
-        )
+        raise ValueError(f"Expected {4 * n_block} rows, got {len(non_empty)}")
     f_jet = _parse_helm_section(non_empty, 0, imax, jmax, 9)
     dpdf_jet = _parse_helm_section(non_empty, n_block, imax, jmax, 4)
     ef_jet = _parse_helm_section(non_empty, 2 * n_block, imax, jmax, 4)
     xf_jet = _parse_helm_section(non_empty, 3 * n_block, imax, jmax, 4)
 
-    log_d = np.linspace(logdlo, logdhi, imax, dtype=np.float64)
-    log_t = np.linspace(logtlo, logthi, jmax, dtype=np.float64)
+    log_d = logdlo + np.arange(imax, dtype=np.float64) * (
+        (logdhi - logdlo) / float(imax - 1)
+    )
+    log_t = logtlo + np.arange(jmax, dtype=np.float64) * (
+        (logthi - logtlo) / float(jmax - 1)
+    )
     tensors: dict[str, loader.TableTensor] = {
         "log_d_grid": log_d,
         "log_t_grid": log_t,
@@ -318,7 +324,19 @@ def convert_lodders03_file(
     input_path: str | pathlib.Path,
     output_path: str | pathlib.Path,
 ) -> str:
-    """Convert `lodders03.data` into `.safetensors` and return SHA-256."""
+    """Convert `lodders03.data` into `.safetensors` and return SHA-256.
+
+    Args:
+        input_path: Path to the source `lodders03.data` ASCII file.
+        output_path: Destination `.safetensors` file path.
+
+    Returns:
+        Lowercase 64-character hexadecimal `SHA-256` digest of `output_path`.
+
+    Raises:
+        FileNotFoundError: If `input_path` does not exist.
+        ValueError: If the ASCII table is empty or malformed.
+    """
     return _convert_text_file(input_path, output_path, parse_lodders03_text)
 
 
@@ -326,7 +344,19 @@ def convert_isotopes_file(
     input_path: str | pathlib.Path,
     output_path: str | pathlib.Path,
 ) -> str:
-    """Convert `isotopes.data` into `.safetensors` and return SHA-256."""
+    """Convert `isotopes.data` into `.safetensors` and return SHA-256.
+
+    Args:
+        input_path: Path to the source `isotopes.data` ASCII file.
+        output_path: Destination `.safetensors` file path.
+
+    Returns:
+        Lowercase 64-character hexadecimal `SHA-256` digest of `output_path`.
+
+    Raises:
+        FileNotFoundError: If `input_path` does not exist.
+        ValueError: If the ASCII table is empty or malformed.
+    """
     return _convert_text_file(input_path, output_path, parse_isotopes_text)
 
 
@@ -337,7 +367,21 @@ def convert_helm_table_file(
     imax: int = 2701,
     jmax: int = 1001,
 ) -> str:
-    """Convert `helm_table.dat` into `.safetensors` and return SHA-256."""
+    """Convert `helm_table.dat` into `.safetensors` and return SHA-256.
+
+    Args:
+        input_path: Path to the source `helm_table.dat` ASCII file.
+        output_path: Destination `.safetensors` file path.
+        imax: Number of density grid points (`>= 2`, default `2701`).
+        jmax: Number of temperature grid points (`>= 2`, default `1001`).
+
+    Returns:
+        Lowercase 64-character hexadecimal `SHA-256` digest of `output_path`.
+
+    Raises:
+        FileNotFoundError: If `input_path` does not exist.
+        ValueError: If `imax < 2`, `jmax < 2`, or the table is malformed.
+    """
     return _convert_text_file(
         input_path,
         output_path,

@@ -32,7 +32,8 @@ const HELM_F_COLS: [&str; 9] = [
 ];
 /// Helmholtz pressure-derivative jet column names (`dpdf` through `dpdfdt`).
 const HELM_DPDF_COLS: [&str; 4] = ["dpdf", "dpdfd", "dpdft", "dpdfdt"];
-/// Helmholtz electron chemical-potential jet column names (`ef` through `efdt`).
+/// Helmholtz electron chemical-potential jet column names (`ef` through
+/// `efdt`).
 const HELM_EF_COLS: [&str; 4] = ["ef", "efd", "eft", "efdt"];
 /// Helmholtz number-density jet column names (`xf` through `xfdt`).
 const HELM_XF_COLS: [&str; 4] = ["xf", "xfd", "xft", "xfdt"];
@@ -338,9 +339,17 @@ pub fn parse_helm_table_text(
             "imax and jmax must be >= 2, got ({imax}, {jmax})"
         )));
     }
+    if !(log_rho_min < log_rho_max && log_temp_min < log_temp_max) {
+        return Err(DataError::ParseError(format!(
+            "invalid helm_table bounds [{log_rho_min}, {log_rho_max}], \
+             [{log_temp_min}, {log_temp_max}]"
+        )));
+    }
     let lines = non_empty_lines(text);
-    let n_block = imax * jmax;
-    if lines.len() != 4 * n_block {
+    let n_block = imax.checked_mul(jmax).ok_or_else(|| {
+        DataError::ParseError("helm_table grid product overflow".to_owned())
+    })?;
+    if Some(lines.len()) != n_block.checked_mul(4) {
         return Err(DataError::ParseError(format!(
             "expected {} rows for ({imax}, {jmax}) helm_table, got {}",
             4 * n_block,

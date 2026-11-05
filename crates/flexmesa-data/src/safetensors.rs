@@ -35,7 +35,8 @@ use std::fs;
 use std::path::Path;
 
 use crate::json_cursor::{
-    escape_json_str, parse_safetensors_header, split_header_and_payload,
+    format_metadata_entry, format_tensor_entry, parse_safetensors_header,
+    split_header_and_payload,
 };
 use crate::sha256::{compute_sha256_bytes, is_valid_sha256_hex};
 use crate::DataError;
@@ -178,17 +179,8 @@ fn build_tensor_header_entry(
         TensorData::Int64 { .. } => "I64",
     };
     let end = offset + byte_len;
-    let shape_str = tensor
-        .shape()
-        .iter()
-        .map(usize::to_string)
-        .collect::<Vec<_>>()
-        .join(",");
-    let entry = format!(
-        "{}:{{\"dtype\":\"{dtype_str}\",\"shape\":[{shape_str}],\
-         \"data_offsets\":[{offset},{end}]}}",
-        escape_json_str(name)
-    );
+    let entry =
+        format_tensor_entry(name, dtype_str, tensor.shape(), offset, end);
     Ok((entry, byte_len))
 }
 
@@ -209,14 +201,7 @@ pub fn encode_safetensors_bytes(
     }
     let mut header_parts: Vec<String> = Vec::new();
     if !bundle.metadata.is_empty() {
-        let meta: Vec<String> = bundle
-            .metadata
-            .iter()
-            .map(|(k, v)| {
-                format!("{}:{}", escape_json_str(k), escape_json_str(v))
-            })
-            .collect();
-        header_parts.push(format!("\"__metadata__\":{{{}}}", meta.join(",")));
+        header_parts.push(format_metadata_entry(&bundle.metadata));
     }
     let mut total_payload = 0usize;
     for (name, tensor) in &bundle.tensors {
@@ -301,7 +286,8 @@ fn decode_tensor_slice(
 ///
 /// # Errors
 /// Returns [`DataError::ParseError`] on malformed header syntax or
-/// [`DataError::ValidationError`] on invalid offsets, unsupported dtypes, or
+/// [`DataError::ValidationError`] on empty bundles, non-contiguous or
+/// out-of-bounds offsets, duplicate tensor keys, unsupported dtypes, or
 /// non-finite `f64` values when `require_finite` is `true`.
 pub fn decode_safetensors_bytes(
     data: &[u8],
@@ -309,11 +295,18 @@ pub fn decode_safetensors_bytes(
 ) -> Result<SafeTensorBundle, DataError> {
     let (header_str, payload) = split_header_and_payload(data)?;
     let (metadata, raw_descs) = parse_safetensors_header(header_str)?;
+    if raw_descs.is_empty() {
+        return Err(DataError::ValidationError(
+            "SafeTensors header contains zero tensors".to_owned(),
+        ));
+    }
     let mut tensors = BTreeMap::new();
+    let mut expected_offset = 0usize;
     for (name, (dtype, shape, begin, end)) in raw_descs {
-        if begin > end || end > payload.len() {
+        if begin != expected_offset || begin > end || end > payload.len() {
             return Err(DataError::ValidationError(format!(
-                "invalid data_offsets [{begin}, {end}] for {name:?}"
+                "non-contiguous or invalid data_offsets [{begin}, {end}] \
+                 (expected start {expected_offset}) for {name:?}"
             )));
         }
         let tensor = decode_tensor_slice(
@@ -323,12 +316,25 @@ pub fn decode_safetensors_bytes(
             &payload[begin..end],
             require_finite,
         )?;
-        tensors.insert(name, tensor);
+        if tensors.insert(name.clone(), tensor).is_some() {
+            return Err(DataError::ValidationError(format!(
+                "duplicate tensor key {name:?} in SafeTensors header"
+            )));
+        }
+        expected_offset = end;
+    }
+    if expected_offset != payload.len() {
+        return Err(DataError::ValidationError(format!(
+            "unreferenced trailing payload bytes: ended at {expected_offset}, \
+             payload length {}",
+            payload.len()
+        )));
     }
     Ok(SafeTensorBundle { tensors, metadata })
 }
 
-/// Write a [`SafeTensorBundle`] to `path` and return its `SHA-256` hex digest.
+/// Write a [`SafeTensorBundle`] atomically to `path` and return its `SHA-256`
+/// hex digest.
 ///
 /// # Errors
 /// Returns [`DataError`] if validation or file writing fails.
@@ -339,7 +345,19 @@ pub fn save_safetensors_file(
 ) -> Result<String, DataError> {
     let bytes = encode_safetensors_bytes(bundle, require_finite)?;
     let digest = compute_sha256_bytes(&bytes);
-    fs::write(path, &bytes).map_err(|err| DataError::IoError {
+    if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
+        fs::create_dir_all(parent).map_err(|err| DataError::IoError {
+            path: parent.display().to_string(),
+            message: err.to_string(),
+        })?;
+    }
+    let tmp_path =
+        path.with_extension(format!("safetensors.tmp.{}", std::process::id()));
+    fs::write(&tmp_path, &bytes).map_err(|err| DataError::IoError {
+        path: tmp_path.display().to_string(),
+        message: err.to_string(),
+    })?;
+    fs::rename(&tmp_path, path).map_err(|err| DataError::IoError {
         path: path.display().to_string(),
         message: err.to_string(),
     })?;

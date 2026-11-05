@@ -14,6 +14,9 @@ import pathlib
 import tomllib
 
 _HEX_DIGITS = frozenset("0123456789abcdef")
+_ALLOWED_TABLE_KEYS = frozenset(
+    {"name", "filename", "sha256", "size_bytes", "tensors", "description"}
+)
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -124,6 +127,8 @@ def verify_file_sha256(
 
 def _validate_table_entry(raw: dict[str, object]) -> TableArtifact:
     """Validate and convert one `[[tables]]` dictionary to `TableArtifact`."""
+    if unknown := set(raw.keys()) - _ALLOWED_TABLE_KEYS:
+        raise ValueError(f"Unknown manifest table field(s): {sorted(unknown)}")
     name, filename = raw.get("name"), raw.get("filename")
     sha256, size_bytes = raw.get("sha256"), raw.get("size_bytes")
     tensors, description = raw.get("tensors"), raw.get("description", "")
@@ -148,16 +153,17 @@ def _validate_table_entry(raw: dict[str, object]) -> TableArtifact:
         raise ValueError(
             f"Manifest table {name!r} must declare non-empty tensor names"
         )
-    if not isinstance(description, str):
-        raise ValueError(
-            f"Manifest table {name!r} has non-string 'description'"
-        )
+    cleaned_tensors = tuple(str(t).strip() for t in tensors)
+    if len(set(cleaned_tensors)) != len(cleaned_tensors) or not isinstance(
+        description, str
+    ):
+        raise ValueError(f"Invalid tensors or description in table {name!r}")
     return TableArtifact(
         name=name.strip(),
         filename=filename.strip(),
         sha256=sha256.strip().lower(),
         size_bytes=size_bytes,
-        tensors=tuple(str(t).strip() for t in tensors),
+        tensors=cleaned_tensors,
         description=description.strip(),
     )
 

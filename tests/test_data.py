@@ -158,6 +158,13 @@ def test_converters_parse_lodders03_isotopes_and_helm_table(
     )
     assert lod.tensors["number_abundance_si"][3] == pytest.approx(768900.0)
     assert lod.metadata["isotopes"] == "h1,h2,he4,fe56"
+    lod_in = tmp_path / "lodders03.data"
+    lod_out = tmp_path / "lodders03.safetensors"
+    lod_in.write_text(_SAMPLE_LODDERS03, encoding="utf-8")
+    assert (
+        converters.convert_lodders03_file(lod_in, lod_out)
+        == "877856c26bf3eec3a187b6977e37b9c6bef811116d6f3655a9a35d6261c126d3"
+    )
 
     iso = converters.parse_isotopes_text(_SAMPLE_ISOTOPES)
     assert np.array_equal(
@@ -194,12 +201,15 @@ def test_safetensors_float64_and_int64_roundtrip_bit_exact(
     """Property test: finite `float64` and `int64` arrays round-trip.
 
     Generates random 2D `float64` and 1D `int64` arrays using `default_rng` and
-    verifies bit-exact serialization and deserialization.
+    verifies bit-exact serialization via `loader.encode_safetensors_bytes` and
+    deserialization via `safetensors.numpy.load`.
     """
     rng = np.random.default_rng(seed)
     f_arr = rng.standard_normal((rows, cols), dtype=np.float64)
     i_arr = rng.integers(-1_000_000, 1_000_000, size=(rows,), dtype=np.int64)
-    raw_bytes = safetensors.numpy.save({"f": f_arr, "i": i_arr})
+    raw_bytes = loader.encode_safetensors_bytes(
+        {"f": f_arr, "i": i_arr}, metadata={"seed": str(seed)}
+    )
     decoded = safetensors.numpy.load(raw_bytes)
     assert np.array_equal(decoded["f"], f_arr)
     assert np.array_equal(decoded["i"], i_arr)

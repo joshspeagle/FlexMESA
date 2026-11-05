@@ -37,3 +37,31 @@ Every choice that another developer could reasonably make differently and that a
 - **Alternatives Rejected**:
   - *Porting `pgstar` or `adipls`/`stella` line-by-line*: Would add ~80,000 LOC of non-core UI and legacy F77 code that does not contribute to the core 1D Henyey evolution engine.
   - *Porting both `RSP1` and `TDC`/`RSP2`*: Duplicates nonlinear radial pulsation physics that MESA itself is consolidating into `TDC`/`RSP2`.
+
+---
+
+## DECISIONS #4: Physics Data Table Format (`.safetensors`), GitHub Releases Hosting, & Wave 3a/3b EOS Staging
+
+- **Date**: 2026-11-04
+- **Decision**:
+  1. **Runtime Format (`.safetensors`)**: Convert MESA's ASCII/HDF5 physics data tables and pre-fitted spline coefficient arrays in Wave 0 into contiguous, 64-byte-aligned `float64` `.safetensors` files stored outside Git in `~/.cache/flexmesa/data/` (or `$FLEXMESA_DATA_DIR`, staged via `/tmp/flexmesa-data` on WSL2). Both Rust (`safetensors` + `memmap2`) and Python/JAX (`safetensors.numpy`) memory-map (`mmap`) these files directly from the OS page cache with sub-millisecond startup latency and zero C-library dependencies.
+  2. **Distribution & Hosting (`GitHub Release Assets` + SHA-256 Manifest + Local `$MESA_DIR` Builder)**: Keep the Git repository free of Git LFS binary blobs. Commit a lightweight `SHA-256` manifest (`src/flexmesa/data/manifest.toml`) and distribute modular `zstd`-compressed `.safetensors.zst` bundles via **GitHub Release Assets** (`joshspeagle/FlexMESA` releases), fetched automatically on first use or via `flexmesa data fetch`, alongside a local conversion command (`flexmesa data build --from-mesa /tmp/mesa-audit`) for offline builds from a MESA checkout.
+  3. **Two-Subwave EOS Staging (`Wave 3a` $\to$ `Wave 3b`)**: Stage the 7-component EOS migration into **Wave 3a** (`Ideal + HELM + PC + Skye` + $C^2$ quintic smootherstep blending, requiring only the single `helm_table.safetensors` grid and 3rd-order forward automatic differentiation) followed by **Wave 3b** (`FreeEOS + OPAL/SCVH + CMS` 4D $(Z, X, \log T, \log Q)$ bicubic spline tensor evaluators).
+- **Why**: MESA's 6 primary `.xz` table archives (`1.91 GiB` compressed) expand to `10.3 GiB` of ASCII text (`1.43 GiB` for `helm_table.dat` alone, which shrinks to `454 MB` in raw binary `float64`). Storing `2.18 GiB` in Git LFS would immediately exceed GitHub's `1 GiB` free LFS quota, whereas GitHub Release Assets provide unlimited free storage and bandwidth up to `2.0 GiB` per file. Using `.safetensors` over HDF5 eliminates `libhdf5-dev` C linker and thread-mutex bottlenecks on the Rust track while enabling zero-copy shared OS page-cache `mmap` across parallel worker processes.
+- **Alternatives Rejected**:
+  - *Storing data tables in Git LFS*: Exceeds GitHub's `1 GiB` free LFS quota on a single clone and forces every contributor/CI job to download `2.2 GiB` upfront.
+  - *Using compressed HDF5 (`.h5`) as the primary runtime format*: Introduces native `libhdf5` C build/ABI dependencies and global API mutex locks in Rust, and prevents zero-copy OS `mmap` when chunk compression is enabled.
+  - *Blocking all of `eos` on the 4D `FreeEOS`/`OPAL`/`CMS` tables*: Delays testing ionized stellar interior physics (`HELM + Skye`) that only need `helm_table`.
+
+---
+
+## DECISIONS #5: Stage 0 User-Space Toolchain Setup on `speagle-desktop` & `LGPL-3.0-or-later` License
+
+- **Date**: 2026-11-04
+- **Decision**:
+  1. **User-Space Toolchains on `speagle-desktop`**: Install `safetensors` into the shared `~/.venvs/default` Python 3.14 environment (recorded in `~/.venvs/default.requirements.txt`; Python 3.14 provides native stdlib `compression.zstd`), install the stable Rust toolchain via `rustup` in `~/.cargo` / `~/.rustup`, and unpack the user-space **MESA SDK** (`mesasdk-x86_64-linux`) into `~/.local/mesasdk` (which bundles `gfortran`, `crmath`/`crlibm`, `lapack`/`blas`, `hdf5_fortran`, and `ndiff` without requiring root privileges).
+  2. **Repository License (`LGPL-3.0-or-later`)**: License `FlexMESA` under the **GNU Lesser General Public License v3.0 or later (`LGPL-3.0-or-later`)** matching MESA's root `LICENSE`, with explicit upstream attribution to the MESA Team and module authors.
+- **Why**: Installing `rustup` and the MESA SDK in user space (`~/.cargo` and `~/.local/mesasdk`) requires zero `sudo` privileges and provides the exact `gfortran` + `crmath` (`< 0.5 ULP` correctly rounded math) environment needed to execute MESA's Stage 0 Fortran unit tests for live wall-clock/memory baseline telemetry (`scripts/telemetry.py`). Adopting `LGPL-3.0-or-later` ensures full license compatibility with MESA's derived physics equations, test oracles, and converted data tables while permitting library linking by downstream users.
+- **Alternatives Rejected**:
+  - *Relying solely on system `apt` packages (`sudo apt install gfortran`)*: Requires root privileges and omits MESA's custom `crmath` (`crlibm` Fortran 2003 module) and `ndiff` binaries bundled in the MESA SDK.
+  - *Choosing a non-copyleft license (MIT/BSD/Apache-2.0)*: Incompatible with translating and redistributing `LGPL-3.0-or-later` / `GPL-3.0-or-later` algorithms and derived tables from MESA.

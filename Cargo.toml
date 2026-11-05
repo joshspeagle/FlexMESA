@@ -5,6 +5,7 @@ members = []
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
+license = "LGPL-3.0-or-later"
 authors = ["Josh Speagle <j.speagle@utoronto.ca>"]
 repository = "https://github.com/joshspeagle/FlexMESA"
 

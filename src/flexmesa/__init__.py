@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-or-later
 """FlexMESA: Modular stellar astrophysics in Safe Rust and Python/JAX.
 
 This package provides the Python and JAX (`float64`) implementation of MESA's

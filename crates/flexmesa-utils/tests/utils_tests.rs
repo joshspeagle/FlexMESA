@@ -1,68 +1,79 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 //! Integration tests verifying `flexmesa-utils` against upstream MESA golden
 //! output (`utils/test/test_output`).
+//!
+//! Covers string-keyed and integer-pair-keyed dictionaries with duplicate
+//! reporting, the `.net` reaction-network token stream lexer, and IEEE-754
+//! finiteness guards.
 
 use flexmesa_utils::{
-    is_bad, is_bad_slice, remove_underbars, replace_bad_nums, split_line, tokenize, IntegerDict,
-    IntegerIdict, Token,
+    is_bad, is_bad_slice, remove_underbars, replace_bad_nums, split_line,
+    tokenize, IntegerDict, IntegerIdict, Token,
 };
 
+/// Verify `IntegerDict` insertion, duplicate reporting, hash creation hook,
+/// and key lookup against `test_dict` in `utils/test/src/test_utils.f90`.
 #[test]
 fn test_integer_dict_matches_upstream_mesa() {
     let mut dict = IntegerDict::new();
+    assert!(dict.is_empty());
     let keys = [
-        "he4", "c12", "n14", "o16", "ne20", "mg24", "si28", "s32", "ar36", "ca40", "ti44", "cr48",
-        "fe52", "fe54", "fe56", "ni56", "neut", "h1", "prot",
+        "he4", "c12", "n14", "o16", "ne20", "mg24", "si28", "s32", "ar36",
+        "ca40", "ti44", "cr48", "fe52", "fe54", "fe56", "ni56", "neut", "h1",
+        "prot",
     ];
-    for (idx, &k) in keys.iter().enumerate() {
-        let value = i64::try_from(idx + 1).expect("index fits in i64");
+    for (&k, value) in keys.iter().zip(1_i64..) {
         let duplicate = dict.define_and_report_duplicates(k, value);
         assert!(!duplicate);
     }
 
+    // Redefining existing keys reports duplicate = true and updates values.
     assert!(dict.define_and_report_duplicates("o16", 6));
     assert!(dict.define_and_report_duplicates("ne20", 7));
     dict.create_hash();
     assert!(dict.define_and_report_duplicates("o16", 4));
     assert!(dict.define_and_report_duplicates("ne20", 5));
 
-    for (idx, &k) in keys.iter().enumerate() {
-        let expected = i64::try_from(idx + 1).expect("index fits in i64");
+    for (&k, expected) in keys.iter().zip(1_i64..) {
         assert_eq!(dict.lookup(k), Some(expected));
     }
     assert_eq!(dict.lookup("missing"), None);
     assert_eq!(dict.len(), keys.len());
 }
 
+/// Verify `IntegerIdict` insertion, duplicate reporting, and pair lookup
+/// against `test_idict` in `utils/test/src/test_utils.f90`.
 #[test]
 fn test_integer_idict_matches_upstream_mesa() {
     let mut idict = IntegerIdict::new();
+    assert!(idict.is_empty());
     let k1s = [
         4, 12, 14, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 54, 56, 56, 1, 1, 1,
     ];
     let k2s = [
         2, 6, 7, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 26, 26, 28, 0, 1, 2,
     ];
-    for (idx, (&k1, &k2)) in k1s.iter().zip(k2s.iter()).enumerate() {
-        let value = i64::try_from(idx + 1).expect("index fits in i64");
+    for ((&k1, &k2), value) in k1s.iter().zip(k2s.iter()).zip(1_i64..) {
         let duplicate = idict.define_and_report_duplicates(k1, k2, value);
         assert!(!duplicate);
     }
 
+    // Redefining existing integer pairs reports duplicate = true.
     assert!(idict.define_and_report_duplicates(16, 8, 6));
     assert!(idict.define_and_report_duplicates(20, 10, 7));
     idict.create_hash();
     assert!(idict.define_and_report_duplicates(16, 8, 4));
     assert!(idict.define_and_report_duplicates(20, 10, 5));
 
-    for (idx, (&k1, &k2)) in k1s.iter().zip(k2s.iter()).enumerate() {
-        let expected = i64::try_from(idx + 1).expect("index fits in i64");
+    for ((&k1, &k2), expected) in k1s.iter().zip(k2s.iter()).zip(1_i64..) {
         assert_eq!(idict.lookup(k1, k2), Some(expected));
     }
     assert_eq!(idict.lookup(99, 99), None);
     assert_eq!(idict.len(), k1s.len());
 }
 
+/// Verify that `tokenize` reproduces the exact token sequence from upstream
+/// `utils/test/token.txt` and `utils/test/test_output`.
 #[test]
 fn test_token_stream_matches_upstream_mesa_token_txt() {
     let input = "\
@@ -100,6 +111,9 @@ add_reactions(rc12pg, rc12ap)
     assert_eq!(tokens, expected);
 }
 
+/// Verify IEEE-754 finiteness checks (`is_bad`, `is_bad_slice`,
+/// `replace_bad_nums`) and string manipulation helpers (`remove_underbars`,
+/// `split_line`).
 #[test]
 fn test_finiteness_guards_and_string_helpers() {
     assert!(!is_bad(0.0));

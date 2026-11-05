@@ -5,6 +5,11 @@ This module ports upstream MESA's `const_def` module in IEEE-754 double
 precision (`float64`). Fundamental physical constants follow CODATA 2018 exact
 definitions, and solar/planetary reference values follow the IAU 2012 and
 IAU 2015 Resolution B3 nominal conversion constants.
+
+Examples:
+    >>> from flexmesa import constants
+    >>> constants.MixingType.from_code(0) is constants.MixingType.NO_MIXING
+    True
 """
 
 from __future__ import annotations
@@ -119,7 +124,7 @@ BOLTZM: float = KERG
 PLANCK_H: float = 6.62607015e-27
 
 #: Reduced Planck constant $\hbar = h / (2\pi)$ in $\mathrm{erg\,s}$.
-HBAR: float = PLANCK_H / (2.0 * PI)
+HBAR: float = PLANCK_H / TWO_PI
 
 #: Ideal gas constant $\mathcal{R} = k_{\mathrm{B}} N_{\mathrm{A}}$ in
 #: $\mathrm{erg\,K^{-1}\,mol^{-1}}$.
@@ -135,7 +140,7 @@ MEV_TO_ERGS: float = 1.0e6 * EV2ERG
 MEV_AMU: float = MEV_TO_ERGS / AMU
 
 #: Mega-electron-volt equivalent mass in $\mathrm{g}$ ($\mathrm{MeV} / c^2$).
-MEV2GR: float = (1.0e6 * EV2ERG) / (CLIGHT * CLIGHT)
+MEV2GR: float = MEV_TO_ERGS / (CLIGHT * CLIGHT)
 
 #: Alias for mega-electron-volt equivalent mass in $\mathrm{g}$.
 MEV_TO_GRAMS: float = MEV2GR
@@ -303,3 +308,22 @@ class MixingType(enum.IntEnum):
     ANONYMOUS_MIXING = 8
     LEFTOVER_CONVECTIVE_MIXING = 9
     PHASE_SEPARATION_MIXING = 10
+
+    @classmethod
+    def from_code(cls, code: int) -> MixingType | None:
+        """Convert an integer mixing code from MESA into a `MixingType`.
+
+        Args:
+            code: Integer mixing code (`-1` through `10`).
+
+        Returns:
+            Corresponding `MixingType` member, or `None` if out of range.
+        """
+        try:
+            return cls(int(code))
+        except ValueError:
+            return None
+
+    def code(self) -> int:
+        """Return the integer mixing code matching MESA `const_def`."""
+        return int(self.value)

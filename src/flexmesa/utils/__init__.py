@@ -26,6 +26,13 @@ def is_bad(value: float) -> bool:
 
     Returns:
         `True` if `value` is `NaN` or $\pm\infty$, `False` otherwise.
+
+    Examples:
+        >>> from flexmesa import utils
+        >>> utils.is_bad(1.0)
+        False
+        >>> utils.is_bad(float("nan"))
+        True
     """
     return not math.isfinite(value)
 
@@ -39,7 +46,9 @@ def is_bad_array(values: np.ndarray | jax.Array) -> bool:
     Returns:
         `True` if at least one element of `values` is non-finite.
     """
-    return bool(np.any(~np.isfinite(np.asarray(values, dtype=np.float64))))
+    if isinstance(values, jax.Array):
+        return not bool(jnp.all(jnp.isfinite(values)))
+    return not bool(np.isfinite(values).all())
 
 
 def replace_bad_nums(
@@ -61,8 +70,7 @@ def replace_bad_nums(
         entries replaced by `replacement`.
     """
     arr = jnp.asarray(values, dtype=jnp.float64)
-    repl = jnp.asarray(replacement, dtype=jnp.float64)
-    return jnp.where(jnp.isfinite(arr), arr, repl)
+    return jnp.where(jnp.isfinite(arr), arr, float(replacement))
 
 
 def remove_underbars(text: str) -> str:
@@ -87,7 +95,9 @@ def split_line(line: str, num: int) -> list[str]:
     Returns:
         List of at most `num` whitespace-delimited substrings.
     """
-    return line.split()[:num]
+    if num <= 0:
+        return []
+    return line.split(None, num)[:num]
 
 
 class IntegerDict:
@@ -138,6 +148,10 @@ class IntegerDict:
             Associated integer value, or `None` if `key` is not present.
         """
         return self._map.get(key.rstrip())
+
+    def is_empty(self) -> bool:
+        """Return `True` if the dictionary contains no entries."""
+        return not self._map
 
     def __len__(self) -> int:
         """Return the number of entries in the dictionary."""
@@ -205,6 +219,10 @@ class IntegerIdict:
         """
         return self._map.get((int(key1), int(key2)))
 
+    def is_empty(self) -> bool:
+        """Return `True` if the dictionary contains no entries."""
+        return not self._map
+
     def __len__(self) -> int:
         """Return the number of entries in the dictionary."""
         return len(self._map)
@@ -218,7 +236,7 @@ class IntegerIdict:
         return [(k1, k2, val) for (k1, k2), val in sorted(self._map.items())]
 
 
-class TokenKind(enum.Enum):
+class TokenKind(enum.StrEnum):
     """Lexical token classification matching upstream MESA `utils_def`."""
 
     NAME = "name"
@@ -229,7 +247,7 @@ class TokenKind(enum.Enum):
     EOF = "eof"
 
 
-@dataclasses.dataclass(frozen=True)
+@dataclasses.dataclass(frozen=True, slots=True)
 class Token:
     """Lexical token emitted by `Tokenizer` and `tokenize`.
 
@@ -242,16 +260,19 @@ class Token:
     value: str = ""
 
 
+_LEFT_PAREN_TOKEN: Token = Token(TokenKind.LEFT_PAREN, "(")
+_RIGHT_PAREN_TOKEN: Token = Token(TokenKind.RIGHT_PAREN, ")")
+_COMMA_TOKEN: Token = Token(TokenKind.COMMA, ",")
+_EOF_TOKEN: Token = Token(TokenKind.EOF, "")
+
+
 def _scan_quoted_or_name(line: str, pos: int, ch: str) -> tuple[Token, int]:
     """Scan a quoted string or bare identifier starting at `ch` in `line`."""
     if ch in ('"', "'"):
-        start = pos
-        while pos < len(line) and line[pos] != ch:
-            pos += 1
-        content = line[start:pos]
-        if pos < len(line):
-            pos += 1
-        return Token(TokenKind.STRING, content), pos
+        end = line.find(ch, pos)
+        if end == -1:
+            return Token(TokenKind.STRING, line[pos:]), len(line)
+        return Token(TokenKind.STRING, line[pos:end]), end + 1
 
     start = pos - 1
     while pos < len(line) and line[pos] not in (" ", "\t", "(", ")", ","):
@@ -282,7 +303,7 @@ class Tokenizer:
         while True:
             while self._pos >= len(self._current):
                 if self._line_idx >= len(self._lines):
-                    return Token(TokenKind.EOF, "")
+                    return _EOF_TOKEN
                 self._current = self._lines[self._line_idx]
                 self._line_idx += 1
                 self._pos = 0
@@ -296,11 +317,11 @@ class Tokenizer:
                     self._pos = len(self._current)
                     break
                 if ch == "(":
-                    return Token(TokenKind.LEFT_PAREN, "(")
+                    return _LEFT_PAREN_TOKEN
                 if ch == ")":
-                    return Token(TokenKind.RIGHT_PAREN, ")")
+                    return _RIGHT_PAREN_TOKEN
                 if ch == ",":
-                    return Token(TokenKind.COMMA, ",")
+                    return _COMMA_TOKEN
                 tok, self._pos = _scan_quoted_or_name(
                     self._current, self._pos, ch
                 )
@@ -315,6 +336,11 @@ def tokenize(text: str) -> list[Token]:
 
     Returns:
         Sequence of `Token` objects terminated by `Token(TokenKind.EOF, "")`.
+
+    Examples:
+        >>> from flexmesa import utils
+        >>> [t.value for t in utils.tokenize("add_isos(ih1, ihe4)")]
+        ['add_isos', '(', 'ih1', ',', 'ihe4', ')', '']
     """
     lexer = Tokenizer(text)
     tokens: list[Token] = []
@@ -324,3 +350,18 @@ def tokenize(text: str) -> list[Token]:
         if tok.kind is TokenKind.EOF:
             break
     return tokens
+
+
+__all__: list[str] = [
+    "IntegerDict",
+    "IntegerIdict",
+    "Token",
+    "TokenKind",
+    "Tokenizer",
+    "is_bad",
+    "is_bad_array",
+    "remove_underbars",
+    "replace_bad_nums",
+    "split_line",
+    "tokenize",
+]

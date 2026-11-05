@@ -1,5 +1,15 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
-"""Unit and golden-output parity tests for `flexmesa.constants` and `utils`."""
+"""Unit and golden-output parity tests for `flexmesa.constants` and `utils`.
+
+This test module verifies:
+- All 23 derived physical and astronomical CGS constants against upstream MESA
+  `const/test/test_output` to relative tolerance `rtol <= 1e-15`.
+- `MixingType` integer enum round-trips across codes `-1` through `10`.
+- `IntegerDict`, `IntegerIdict`, and the `.net` reaction-network stream
+  tokenizer against `utils/test/test_output` and `utils/test/token.txt`.
+- IEEE-754 finiteness guards (`is_bad`, `is_bad_array`, `replace_bad_nums`) and
+  `NaN`-free gradient propagation under `jax.grad`.
+"""
 
 from __future__ import annotations
 
@@ -79,10 +89,12 @@ def test_constants_golden_parity_matches_upstream_mesa() -> None:
 
 def test_mixing_type_enum_codes_match_upstream_mesa() -> None:
     """Verify `MixingType` integer codes from `-1` through `10`."""
-    assert int(constants.MixingType.CRYSTALLIZED) == -1
-    assert int(constants.MixingType.NO_MIXING) == 0
-    assert int(constants.MixingType.CONVECTIVE_MIXING) == 1
-    assert int(constants.MixingType.PHASE_SEPARATION_MIXING) == 10
+    for code in range(-1, 11):
+        member = constants.MixingType.from_code(code)
+        assert member is not None
+        assert member.code() == code
+    assert constants.MixingType.from_code(-2) is None
+    assert constants.MixingType.from_code(11) is None
     assert len(constants.MixingType) == 12
     assert constants.NUMBER_OF_MIXING_TYPES == 11
 
@@ -90,6 +102,7 @@ def test_mixing_type_enum_codes_match_upstream_mesa() -> None:
 def test_integer_dict_matches_upstream_mesa() -> None:
     """Verify `IntegerDict` against `utils/test/test_output`."""
     d = utils.IntegerDict()
+    assert d.is_empty()
     keys = (
         "he4",
         "c12",
@@ -127,6 +140,7 @@ def test_integer_dict_matches_upstream_mesa() -> None:
 def test_integer_idict_matches_upstream_mesa() -> None:
     """Verify `IntegerIdict` against `utils/test/test_output`."""
     idict = utils.IntegerIdict()
+    assert idict.is_empty()
     k1s = (
         4, 12, 14, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 54, 56, 56, 1, 1, 1,
     )
@@ -196,3 +210,4 @@ def test_replace_bad_nums_avoids_nan_gradient_contamination() -> None:
     golden.assert_values_match(grads, np.array([4.0, 0.0, -6.0, 0.0]))
     assert utils.remove_underbars("star_mass_msun  ") == "star mass msun"
     assert utils.split_line("a   b c d", 3) == ["a", "b", "c"]
+    assert not utils.split_line("a b", 0)

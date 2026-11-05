@@ -68,16 +68,17 @@ All physical constants are defined in CGS units in double precision (`f64` /
   in upstream `const/test/test_output`.
 
 #### Core Utilities (`utils`)
-- **IEEE-754 Finiteness Guards**: `is_bad(x)` returns `true` whenever `x` is
-  `NaN` or $\pm\infty$ (`!x.is_finite()`). Vectorized variants operate without
+- **IEEE-754 Finiteness Guards**: `is_bad(value)` returns `true` whenever
+  `value` is `NaN` or $\pm\infty$ (`!value.is_finite()`). Vectorized variants
+  (`is_bad_slice` / `is_bad_array` and `replace_bad_nums`) operate without
   propagating `0.0 * NaN` in values or gradients.
 - **Dictionaries**: `IntegerDict` (string key to `i64`/`int` value) and
   `IntegerIdict` (ordered integer pair `(k1, k2)` to `i64`/`int` value) with
   duplicate reporting upon redefinition.
-- **Reaction Network Token Lexer**: Stateful stream tokenizer producing
-  `NameToken`, `StringToken`, `LeftParenToken`, `RightParenToken`,
-  `CommaToken`, and `EofToken` while stripping `!` line comments and `&`
-  continuations.
+- **Reaction Network Token Lexer**: Stateful stream tokenizer (`Tokenizer` and
+  `tokenize`) emitting `Token` entries (`Name`, `String`, `LeftParen`,
+  `RightParen`, `Comma`, and `Eof` in Safe Rust; `TokenKind` variants in Python)
+  while stripping `!` line comments and `&` continuations.
 
 ---
 
@@ -146,7 +147,8 @@ $(x_i, y_j)$ of shape `(N_x, N_y)` returning $(f, \partial_x f, \partial_y f,
 
 #### Numerical Solvers (`num`)
 - **Compensated Summation**: Knuth two-sum and Neumaier / Kahan-Babuska
-  four-sum primitives preventing catastrophic cancellation in conservation checks.
+  four-sum primitives preventing catastrophic cancellation in conservation
+  checks.
 - **1D Root-Finding (`safe_root`)**: Hybrid Brent-Dekker and Newton-Raphson
   solver with bracket maintenance.
 - **Damped Newton-Raphson Solver (`newton`)**: Line-search damped Newton step
@@ -180,8 +182,8 @@ $\mathrm{cm^2\,s^{-1}}$), convective velocity ($v_c$ in $\mathrm{cm\,s^{-1}}$),
 convective flux ($F_{\mathrm{conv}}$), and temperature gradient ($\nabla$) with
 first-order autodiff partials via `AutoDiffReal4Coeff`:
 
-1. **Mixing-Length Theory (`set_mlt`)**: Solves the cubic MLT efficiency equation
-   across `Cox`, `Henyey`, `ML1`, `ML2`, and `Mihalas` variants.
+1. **Mixing-Length Theory (`set_mlt`)**: Solves the cubic MLT efficiency
+   equation across `Cox`, `Henyey`, `ML1`, `ML2`, and `Mihalas` variants.
 2. **Time-Dependent Convection (`set_tdc`)**: Solves the Kuhfuss (1986) / MESA
    TDC convective velocity equation over time step $\Delta t$ using Newton
    iteration with bisection fallback.
@@ -201,7 +203,8 @@ relative error.
 Evaluates Safe Rust (`crates/`), Python/NumPy (`src/flexmesa/`), and Python/JAX
 (`jax.jit` + `jax.vmap` in `float64`) across four optimization stages:
 
-1. **Stage 0 (Idiomatic Baseline)**: Direct scalar / unvectorized reference port.
+1. **Stage 0 (Idiomatic Baseline)**: Direct scalar / unvectorized reference
+   port.
 2. **Stage 1 (Contiguous Array Layout)**: Structure-of-Arrays (SoA) batching
    over stellar zones $N_{\mathrm{zones}} \in \{128, 1024, 4096\}$.
 3. **Stage 2 (Vectorized / JIT Kernel Fusion)**: `jax.jit` fused XLA kernels and

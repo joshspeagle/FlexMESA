@@ -11,7 +11,8 @@
 // Mathematical constants (`f64`, dimensionless)
 
 /// Ratio of a circle's circumference to its diameter ($\pi$).
-pub const PI: f64 = 3.141_592_653_589_793_238_462_643_383_279_502_884_197_169_399_375_1;
+pub const PI: f64 =
+    3.141_592_653_589_793_238_462_643_383_279_502_884_197_169_399_375_1;
 
 /// Twice $\pi$ ($2\pi$).
 pub const TWO_PI: f64 = 2.0 * PI;
@@ -25,10 +26,10 @@ pub const PI4: f64 = 4.0 * PI;
 /// Alias for $4\pi$.
 pub const FOUR_PI: f64 = PI4;
 
-/// Euler-Mascheroni constant ($\gamma$), matching upstream `const_def::eulercon`.
+/// Euler-Mascheroni constant ($\gamma$), matching `const_def::eulercon`.
 pub const EULERCON: f64 = 0.577_215_664_901_532_861;
 
-/// Base of the natural logarithm ($e$), matching upstream `const_def::eulernum`.
+/// Base of the natural logarithm ($e$), matching `const_def::eulernum`.
 pub const EULERNUM: f64 = 2.718_281_828_459_045_235_360_287_471_352_662_49;
 
 /// Natural logarithm of 2 ($\ln 2$).
@@ -116,7 +117,7 @@ pub const BOLTZM: f64 = KERG;
 pub const PLANCK_H: f64 = 6.626_070_15e-27;
 
 /// Reduced Planck constant $\hbar = h / (2\pi)$ in $\mathrm{erg\,s}$.
-pub const HBAR: f64 = PLANCK_H / (2.0 * PI);
+pub const HBAR: f64 = PLANCK_H / TWO_PI;
 
 /// Ideal gas constant $\mathcal{R} = k_{\mathrm{B}} N_{\mathrm{A}}$ in
 /// $\mathrm{erg\,K^{-1}\,mol^{-1}}$.
@@ -132,7 +133,7 @@ pub const MEV_TO_ERGS: f64 = 1.0e6 * EV2ERG;
 pub const MEV_AMU: f64 = MEV_TO_ERGS / AMU;
 
 /// Mega-electron-volt equivalent mass in $\mathrm{g}$ ($\mathrm{MeV} / c^2$).
-pub const MEV2GR: f64 = (1.0e6 * EV2ERG) / (CLIGHT * CLIGHT);
+pub const MEV2GR: f64 = MEV_TO_ERGS / (CLIGHT * CLIGHT);
 
 /// Alias for mega-electron-volt equivalent mass in $\mathrm{g}$.
 pub const MEV_TO_GRAMS: f64 = MEV2GR;
@@ -145,10 +146,10 @@ pub const QCONV: f64 = MEV_TO_ERGS * AVO;
 /// $\mathrm{eV\,K^{-1}}$.
 pub const KEV: f64 = KERG / EV2ERG;
 
-/// Stefan-Boltzmann constant $\sigma_{\mathrm{SB}} = \frac{\pi^2 k_{\mathrm{B}}^4}{60\,\hbar^3 c^2}$
-/// in $\mathrm{erg\,cm^{-2}\,s^{-1}\,K^{-4}}$.
-pub const BOLTZ_SIGMA: f64 =
-    (PI * PI * BOLTZM * BOLTZM * BOLTZM * BOLTZM) / (60.0 * HBAR * HBAR * HBAR * CLIGHT * CLIGHT);
+/// Stefan-Boltzmann constant $\sigma_{\mathrm{SB}}$ in
+/// $\mathrm{erg\,cm^{-2}\,s^{-1}\,K^{-4}}$.
+pub const BOLTZ_SIGMA: f64 = (PI * PI * BOLTZM * BOLTZM * BOLTZM * BOLTZM)
+    / (60.0 * HBAR * HBAR * HBAR * CLIGHT * CLIGHT);
 
 /// Radiation density constant $a_{\mathrm{rad}} = 4\sigma_{\mathrm{SB}} / c$ in
 /// $\mathrm{erg\,cm^{-3}\,K^{-4}}$.
@@ -287,10 +288,19 @@ pub const ARG_NOT_PROVIDED: f64 = -9.0e99;
 /// Upstream MESA sentinel for a missing scalar value (`-9e99`).
 pub const MISSING_VALUE: f64 = ARG_NOT_PROVIDED;
 
-/// Number of non-negative mixing-type categories (`phase_separation_mixing + 1`).
+/// Number of non-negative mixing-type categories (`phase_separation + 1`).
 pub const NUMBER_OF_MIXING_TYPES: usize = 11;
 
 /// Mixing process classification matching upstream MESA `const_def`.
+///
+/// # Examples
+/// ```
+/// use flexmesa_const::MixingType;
+///
+/// let kind = MixingType::from_code(1).unwrap();
+/// assert_eq!(kind, MixingType::ConvectiveMixing);
+/// assert_eq!(kind.code(), 1);
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(i32)]
 pub enum MixingType {

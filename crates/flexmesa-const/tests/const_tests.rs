@@ -1,14 +1,20 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 //! Integration tests verifying `flexmesa-const` against upstream MESA golden
 //! output (`const/test/test_output`).
+//!
+//! Each test validates CODATA 2018 and IAU 2015 CGS constants and mixing
+//! enumerations to IEEE-754 double-precision tolerance (`rtol <= 1e-15`).
 
 #![allow(clippy::approx_constant, clippy::excessive_precision)]
 
 use flexmesa_const as c;
 use flexmesa_testing::assert_values_match;
 
+/// Verify all 23 derived quantities emitted by upstream `test_const.f90`
+/// against `const/test/test_output` to relative tolerance `1e-15`.
 #[test]
 fn test_const_golden_parity_matches_upstream_mesa() {
+    // Assemble the 23 constants in the exact order printed by test_const.f90.
     let actual = [
         c::PI,
         c::LN10,
@@ -34,6 +40,7 @@ fn test_const_golden_parity_matches_upstream_mesa() {
         c::CLIGHT,
         c::KERG,
     ];
+    // Reference values parsed from upstream const/test/test_output.
     let expected = [
         3.141_592_653_589_793_1,
         2.302_585_092_994_045_5,
@@ -63,6 +70,8 @@ fn test_const_golden_parity_matches_upstream_mesa() {
         .expect("all 23 constants match upstream MESA");
 }
 
+/// Verify integer round-trip conversion for all 12 `MixingType` codes (`-1..=10`)
+/// and confirm out-of-range codes return `None`.
 #[test]
 fn test_mixing_type_roundtrip_codes() {
     for code in -1..=10 {

@@ -51,6 +51,13 @@ def brent_safe_zero(
     sb = float(b)
     fa = float(func(sa) if df_a is None else df_a)
     fb = float(func(sb) if df_b is None else df_b)
+    if not (
+        math.isfinite(sa)
+        and math.isfinite(sb)
+        and math.isfinite(fa)
+        and math.isfinite(fb)
+    ):
+        raise ValueError("non-finite endpoint or value in brent_safe_zero")
     if fa == 0.0:
         return sa, 0.0
     if fb == 0.0:
@@ -116,6 +123,8 @@ def brent_safe_zero(
         else:
             sb -= tol
         fb = float(func(sb))
+        if not math.isfinite(fb):
+            raise ValueError("non-finite f(x) in brent_safe_zero")
 
     raise RuntimeError("brent_safe_zero exceeded max_iter")
 
@@ -147,8 +156,15 @@ def brent_local_min(
     Raises:
         ValueError: If $a \\ge b$, $\\epsilon \\le 0$, or $t < 0$.
     """
-    if a >= b or eps <= 0.0 or t < 0.0:
-        raise ValueError("require a < b, eps > 0, t >= 0 in brent_local_min")
+    if (
+        not (math.isfinite(a) and math.isfinite(b))
+        or a >= b
+        or eps <= 0.0
+        or t < 0.0
+    ):
+        raise ValueError(
+            "require finite a < b, eps > 0, t >= 0 in brent_local_min"
+        )
     c_gold = 0.5 * (3.0 - math.sqrt(5.0))
     sa = float(a)
     sb = float(b)
@@ -158,6 +174,8 @@ def brent_local_min(
     e = 0.0
     d = 0.0
     fx = float(func(x))
+    if not math.isfinite(fx):
+        raise ValueError("non-finite objective value in brent_local_min")
     fw = fx
     fv = fx
     limit = 200 if max_tries <= 0 else max_tries
@@ -197,6 +215,8 @@ def brent_local_min(
         else:
             u = x - tol
         fu = float(func(u))
+        if not math.isfinite(fu):
+            raise ValueError("non-finite objective value in brent_local_min")
         if fu <= fx:
             if u < x:
                 sb = x
@@ -246,8 +266,10 @@ def brent_global_min(
     Raises:
         ValueError: If $a \\ge b$.
     """
-    if a >= b:
-        raise ValueError("require a < b in brent_global_min")
+    if not (math.isfinite(a) and math.isfinite(b) and math.isfinite(c)) or (
+        a >= b
+    ):
+        raise ValueError("require finite a < b and c in brent_global_min")
     best_x = min(max(float(c), float(a)), float(b))
     best_f = float(func(best_x))
     for endpoint in (float(a), float(b)):

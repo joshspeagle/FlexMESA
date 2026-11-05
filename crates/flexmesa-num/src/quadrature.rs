@@ -4,6 +4,10 @@
 //! (`dfridr` in `num/public/num_lib.f90`) and recursive adaptive Simpson 3/8
 //! quadrature (`simp38` in `num/private/mod_integrate.f90`) into Safe Rust in
 //! `f64` precision.
+//! - [`dfridr`] adapts step sizes geometrically and stops when higher-order
+//!   extapolation columns cease reducing the estimated truncation error.
+//! - [`integrate`] subdivides intervals recursively on a stack until the
+//!   4-point vs. 7-point Newton-Cotes 3/8 difference satisfies the tolerance.
 
 use crate::NumError;
 

@@ -17,6 +17,15 @@
 //! 4. **Banded LU Verification**: Pentadiagonal `dgbtrf`/`dgbtrs` vs. dense LU.
 //! 5. **Property-Based Dense Solve**: Random diagonally dominant $4 \times 4$
 //!    systems via `proptest`.
+//!
+//! # Numerical Oracles
+//!
+//! - Upstream MESA `mtx/test/test_output` reference solutions are checked to
+//!   $< 10^{-11}$ componentwise tolerance.
+//! - Matrix-matrix and matrix-vector products are cross-checked against direct
+//!   dense inner products to $< 10^{-14}$.
+//! - CSR, CSC, and banded roundtrips preserve exact IEEE-754 `f64` bit
+//!   patterns across all non-zero entries.
 
 #![allow(
     clippy::approx_constant,

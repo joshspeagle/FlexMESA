@@ -13,11 +13,39 @@
 //!   0.04$) and continuous 4th-order dense polynomial output (`contd5`).
 //! - [`dop853`]: High-precision adaptive Dormand-Prince integration API
 //!   compatible with [`DopriResult`].
+//!
+//! # Step-Size Control & Robustness
+//!
+//! - Step sizes are adapted via Lund's proportional-integral (PI) controller
+//!   with safety factor `0.9` and per-step ratio clamping to `[0.1, 5.0]`.
+//! - Every stage callback is checked for state-vector length consistency and
+//!   finite local error norms, and step-size underflow (`x + h == x`) is
+//!   detected and reported via [`NumError::ConvergenceFailed`].
 
 use crate::rk_tableau::{A21, A3, A4, A5, A6, A7, C, D, E};
 use crate::NumError;
 
 pub use crate::rk_tableau::DopriResult;
+
+/// Evaluates `fcn(t, y)` and verifies that the returned derivative vector has
+/// length `n`.
+fn eval_stage<F>(
+    n: usize,
+    t: f64,
+    y: &[f64],
+    fcn: &mut F,
+) -> Result<Vec<f64>, NumError>
+where
+    F: FnMut(f64, &[f64]) -> Result<Vec<f64>, NumError>,
+{
+    let k = fcn(t, y)?;
+    if k.len() != n {
+        return Err(NumError::InvalidParameter(
+            "derivative vector length mismatch in rk",
+        ));
+    }
+    Ok(k)
+}
 
 /// Performs a single midpoint 2nd-order Runge-Kutta step $y(t + h)$ for
 /// $y' = f(t, y)$.
@@ -38,9 +66,9 @@ where
     F: FnMut(f64, &[f64]) -> Result<Vec<f64>, NumError>,
 {
     let n = y.len();
-    let k1 = derivs(t, y)?;
+    let k1 = eval_stage(n, t, y, &mut derivs)?;
     let y_mid: Vec<f64> = (0..n).map(|i| y[i] + 0.5 * h * k1[i]).collect();
-    let k2 = derivs(t + 0.5 * h, &y_mid)?;
+    let k2 = eval_stage(n, t + 0.5 * h, &y_mid, &mut derivs)?;
     Ok((0..n).map(|i| y[i] + h * k2[i]).collect())
 }
 
@@ -63,13 +91,13 @@ where
     F: FnMut(f64, &[f64]) -> Result<Vec<f64>, NumError>,
 {
     let n = y.len();
-    let k1 = derivs(t, y)?;
+    let k1 = eval_stage(n, t, y, &mut derivs)?;
     let y2: Vec<f64> = (0..n).map(|i| y[i] + 0.5 * h * k1[i]).collect();
-    let k2 = derivs(t + 0.5 * h, &y2)?;
+    let k2 = eval_stage(n, t + 0.5 * h, &y2, &mut derivs)?;
     let y3: Vec<f64> = (0..n).map(|i| y[i] + 0.5 * h * k2[i]).collect();
-    let k3 = derivs(t + 0.5 * h, &y3)?;
+    let k3 = eval_stage(n, t + 0.5 * h, &y3, &mut derivs)?;
     let y4: Vec<f64> = (0..n).map(|i| y[i] + h * k3[i]).collect();
-    let k4 = derivs(t + h, &y4)?;
+    let k4 = eval_stage(n, t + h, &y4, &mut derivs)?;
     Ok((0..n)
         .map(|i| {
             y[i] + (h / 6.0) * (k1[i] + 2.0 * k2[i] + 2.0 * k3[i] + k4[i])
@@ -135,7 +163,7 @@ where
     };
     let mut x = x0;
     let mut y = y0.to_vec();
-    let mut k1 = fcn(x, &y)?;
+    let mut k1 = eval_stage(n, x, &y, &mut fcn)?;
     let mut nfcn = 1usize;
     let mut h = if h0 == 0.0 {
         1e-4 * posneg
@@ -165,22 +193,28 @@ where
         if (x + 1.01 * h - x_end) * posneg > 0.0 {
             h = x_end - x;
         }
+        let xph = x + h;
+        if xph == x {
+            return Err(NumError::ConvergenceFailed(
+                "step size underflow in dopri5",
+            ));
+        }
         nstep += 1;
 
         // Evaluate stages k2..k7 using First-Same-As-Last (FSAL) stage k1
         for i in 0..n {
             y_stg[i] = y[i] + h * A21 * k1[i];
         }
-        let k2 = fcn(x + C[0] * h, &y_stg)?;
+        let k2 = eval_stage(n, x + C[0] * h, &y_stg, &mut fcn)?;
         for i in 0..n {
             y_stg[i] = y[i] + h * (A3[0] * k1[i] + A3[1] * k2[i]);
         }
-        let k3 = fcn(x + C[1] * h, &y_stg)?;
+        let k3 = eval_stage(n, x + C[1] * h, &y_stg, &mut fcn)?;
         for i in 0..n {
             y_stg[i] =
                 y[i] + h * (A4[0] * k1[i] + A4[1] * k2[i] + A4[2] * k3[i]);
         }
-        let k4 = fcn(x + C[2] * h, &y_stg)?;
+        let k4 = eval_stage(n, x + C[2] * h, &y_stg, &mut fcn)?;
         for i in 0..n {
             y_stg[i] = y[i]
                 + h * (A5[0] * k1[i]
@@ -188,7 +222,7 @@ where
                     + A5[2] * k3[i]
                     + A5[3] * k4[i]);
         }
-        let k5 = fcn(x + C[3] * h, &y_stg)?;
+        let k5 = eval_stage(n, x + C[3] * h, &y_stg, &mut fcn)?;
         for i in 0..n {
             y_stg[i] = y[i]
                 + h * (A6[0] * k1[i]
@@ -197,8 +231,7 @@ where
                     + A6[3] * k4[i]
                     + A6[4] * k5[i]);
         }
-        let xph = x + h;
-        let k6 = fcn(xph, &y_stg)?;
+        let k6 = eval_stage(n, xph, &y_stg, &mut fcn)?;
         for i in 0..n {
             y_new[i] = y[i]
                 + h * (A7[0] * k1[i]
@@ -207,7 +240,7 @@ where
                     + A7[4] * k5[i]
                     + A7[5] * k6[i]);
         }
-        let k7 = fcn(xph, &y_new)?;
+        let k7 = eval_stage(n, xph, &y_new, &mut fcn)?;
         nfcn += 6;
 
         // Compute scaled RMS error norm across components
@@ -225,6 +258,11 @@ where
             err_sq += ratio * ratio;
         }
         let err = (err_sq / (n as f64)).sqrt();
+        if !err.is_finite() {
+            return Err(NumError::NonFiniteValue(
+                "non-finite local error in dopri5",
+            ));
+        }
         // Lund PI step-size controller (beta = 0.04, expo1 = 0.2 - 0.75 * beta)
         let fac11 = err.powf(0.17);
         let fac = fac11 / facold.powf(0.04);

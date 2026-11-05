@@ -206,6 +206,10 @@ def block_thomas_solve(
 
     Returns:
         Solution array `x` matching the shape of `b` in `float64`.
+
+    Raises:
+        ValueError: If block dimensions mismatch or a diagonal block is
+            singular.
     """
     l_arr, d_arr, u_arr, nz, nvar = _validate_blocks(
         lblk, d_factored, u_factored
@@ -238,6 +242,10 @@ def solve_block_tridiagonal(
 
     Returns:
         Solution array `x` matching the shape of `b` in `float64`.
+
+    Raises:
+        ValueError: If block dimensions mismatch, inputs are non-finite, or a
+            diagonal block is singular.
     """
     d_fac, u_fac, ipiv = block_thomas_factor(lblk, dblk, ublk)
     return block_thomas_solve(lblk, d_fac, u_fac, ipiv, b)

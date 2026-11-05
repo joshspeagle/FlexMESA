@@ -28,6 +28,10 @@
 //!
 //! - **Van der Pol (`vdpol`)**: $y_1' = y_2$, $y_2' = ((1 - y_1^2) y_2 - y_1) /
 //!   \epsilon$ with $\epsilon = 10^{-3}$ and $y(0) = [2, 0]$ on $t \in [0, 2]$.
+//! - **Stiff Tridiagonal ODE**: $y' = A y$ with eigenvalues spanning $[-2000,
+//!   -1]$, verifying unconditional stability of `Ros2`, `Rodas3`, and `Rodas4`.
+//! - **Implicit Diffusion (`test_newton.f90`)**: 1001-cell backward-Euler step
+//!   solved with `newton_solve_block_tridiagonal`.
 //! - **Implicit Diffusion (`test_newton`)**: $N_z = 1001$ shells,
 //!   $N_{\mathrm{var}} = 2$ variables per shell ($c_k, f_k$), $\kappa = 1$,
 //!   $\Delta x = 1/N_z$, $\Delta t = 10\,\Delta x^2 / \kappa$, evolved for 10

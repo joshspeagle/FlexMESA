@@ -13,6 +13,12 @@
 //! - [`nm_simplex`] evolves an $(n + 1)$-vertex polytope in $\mathbb{R}^n$ via
 //!   reflection ($\alpha$), expansion ($\beta$), outside/inside contraction
 //!   ($\gamma$), and full shrink ($\delta$) toward the current best vertex.
+//!
+//! # Convergence Criteria
+//!
+//! - Iteration terminates when both the vertex diameter relative to scale and
+//!   the objective spread across the $(n + 1)$ vertices fall below tolerance,
+//!   or when the evaluation/iteration budget is exhausted.
 
 use crate::NumError;
 

@@ -232,7 +232,7 @@ class DualOrder1(base.AutoDiffBase):
 
     def __rtruediv__(self, other: intrinsics.ArrayLike) -> Self:
         c = intrinsics.as_f64(other)
-        return self.powm1() * c
+        return self.powm1().__mul__(c)
 
     def __pow__(self, other: DualOrder1 | intrinsics.ArrayLike) -> Self:
         return self.pow(other)

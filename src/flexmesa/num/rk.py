@@ -221,6 +221,9 @@ def dopri5(
             break
         if (x + 1.01 * h - x_end) * posneg > 0.0:
             h = x_end - x
+        xph = x + h
+        if xph == x:
+            raise RuntimeError("step size underflow in dopri5")
         nstep += 1
 
         k2 = np.asarray(fcn(x + c2 * h, y + h * a21 * k1), dtype=np.float64)
@@ -238,7 +241,6 @@ def dopri5(
             ),
             dtype=np.float64,
         )
-        xph = x + h
         k6 = np.asarray(
             fcn(
                 xph,
@@ -258,6 +260,8 @@ def dopri5(
         )
         sk = atol + rtol * np.maximum(np.abs(y), np.abs(y_new))
         err = float(math.sqrt(float(np.mean((err_vec / sk) ** 2))))
+        if not math.isfinite(err):
+            raise ValueError("non-finite local error in dopri5")
         fac11 = err**0.17 if err > 0.0 else 0.0
         fac = fac11 / (facold**0.04)
         fac_clamped = min(5.0, max(0.1, fac / 0.9))
@@ -328,6 +332,11 @@ def dop853(
 
     Returns:
         :class:`DopriResult` with final state and dense-output history.
+
+    Raises:
+        ValueError: If ``y0`` is empty, tolerances are non-positive, or local
+            errors become non-finite.
+        RuntimeError: If ``max_steps`` is exceeded or step size underflows.
     """
     return dopri5(
         x0,

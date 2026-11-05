@@ -45,11 +45,22 @@ def look_for_brackets(
         ValueError: If ``dx == 0`` or ``xmin >= xmax``.
         RuntimeError: If no sign change is found within ``ntry`` expansions.
     """
-    if dx == 0.0 or xmin >= xmax:
-        raise ValueError("require dx != 0 and xmin < xmax")
+    if (
+        not (
+            np.isfinite(x)
+            and np.isfinite(dx)
+            and np.isfinite(xmin)
+            and np.isfinite(xmax)
+        )
+        or dx == 0.0
+        or xmin >= xmax
+    ):
+        raise ValueError("require finite arguments, dx != 0, and xmin < xmax")
     x1 = min(max(float(x), float(xmin)), float(xmax))
     x3 = x1
     y0, _ = func(x1)
+    if not np.isfinite(y0):
+        raise ValueError("non-finite f(x) in look_for_brackets")
     if y0 == 0.0:
         return (x1, x1), (0.0, 0.0)
     y1 = float(y0)
@@ -65,12 +76,16 @@ def look_for_brackets(
         if can_left:
             x_new = max(float(xmin), x1 - step)
             y_new, _ = func(x_new)
+            if not np.isfinite(y_new):
+                raise ValueError("non-finite f(x) in look_for_brackets")
             if y_new == 0.0 or (y_new > 0.0) != (y1 > 0.0):
                 return (x_new, x1), (float(y_new), y1)
             x1, y1 = x_new, float(y_new)
         if can_right:
             x_new = min(float(xmax), x3 + step)
             y_new, _ = func(x_new)
+            if not np.isfinite(y_new):
+                raise ValueError("non-finite f(x) in look_for_brackets")
             if y_new == 0.0 or (y_new > 0.0) != (y3 > 0.0):
                 return (x3, x_new), (y3, float(y_new))
             x3, y3 = x_new, float(y_new)
@@ -107,6 +122,13 @@ def safe_root_with_brackets(
         ValueError: If ``y1_in`` and ``y3_in`` have the same strict sign.
         RuntimeError: If ``imax`` is exceeded.
     """
+    if not (
+        np.isfinite(x1_in)
+        and np.isfinite(x3_in)
+        and np.isfinite(y1_in)
+        and np.isfinite(y3_in)
+    ):
+        raise ValueError("non-finite bracket in safe_root_with_brackets")
     if y1_in == 0.0:
         return float(x1_in), 0.0
     if y3_in == 0.0:
@@ -122,6 +144,8 @@ def safe_root_with_brackets(
     dxold = abs(x3_in - x1_in)
     dx = dxold
     f, df = func(rts)
+    if not np.isfinite(f):
+        raise ValueError("non-finite f(x) in safe_root_with_brackets")
     limit = 100 if imax <= 0 else imax
 
     for _ in range(limit):
@@ -144,8 +168,12 @@ def safe_root_with_brackets(
                 return float(rts), float(f)
         if abs(dx) <= epsx:
             f_end, _ = func(rts)
+            if not np.isfinite(f_end):
+                raise ValueError("non-finite f(x) in safe_root_with_brackets")
             return float(rts), float(f_end)
         f, df = func(rts)
+        if not np.isfinite(f):
+            raise ValueError("non-finite f(x) in safe_root_with_brackets")
         if f < 0.0:
             xl = rts
         else:
@@ -188,7 +216,15 @@ def safe_root_with_guess(
 
     Returns:
         Tuple ``(root_x, f_at_root)`` in ``float64``.
+
+    Raises:
+        ValueError: If ``xmin >= xmax`` or inputs are non-finite.
+        RuntimeError: If bracketing or iteration fails.
     """
+    if xmin >= xmax or not (
+        np.isfinite(x_guess) and np.isfinite(xmin) and np.isfinite(xmax)
+    ):
+        raise ValueError("require finite x_guess and xmin < xmax")
     x = min(max(float(x_guess), float(xmin)), float(xmax))
     for _ in range(newt_imax):
         fx, dfx = func(x)
@@ -249,6 +285,10 @@ def safe_root_without_brackets(
 
     Returns:
         Tuple ``(root_x, f_at_root)`` in ``float64``.
+
+    Raises:
+        ValueError: If ``xmin >= xmax`` or inputs are non-finite.
+        RuntimeError: If bracketing or iteration fails.
     """
     return safe_root_with_guess(
         func,

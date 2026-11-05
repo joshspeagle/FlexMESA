@@ -151,6 +151,10 @@ pub fn linear_interp(x1: f64, y1: f64, x2: f64, y2: f64, x: f64) -> f64 {
 /// Returns [`NumError::InvalidParameter`] if $y_1$ and $y_2$ have the same
 /// strict sign.
 pub fn find0(x1: f64, y1: f64, x2: f64, y2: f64) -> Result<f64, NumError> {
+    if !x1.is_finite() || !y1.is_finite() || !x2.is_finite() || !y2.is_finite()
+    {
+        return Err(NumError::NonFiniteValue("non-finite input in find0"));
+    }
     if y1 == 0.0 {
         return Ok(x1);
     }
@@ -182,6 +186,11 @@ pub fn find0_quadratic(
     x3: f64,
     y3: f64,
 ) -> Result<(f64, f64), NumError> {
+    if !y1.is_finite() || !y2.is_finite() || !y3.is_finite() {
+        return Err(NumError::NonFiniteValue(
+            "non-finite ordinate in find0_quadratic",
+        ));
+    }
     if !((x1 < x2 && x2 < x3) || (x1 > x2 && x2 > x3)) {
         return Err(NumError::InvalidParameter(
             "x1, x2, x3 must be strictly monotonic in find0_quadratic",
@@ -253,6 +262,11 @@ pub fn find_max_quadratic(
     x3: f64,
     y3: f64,
 ) -> Result<(f64, f64), NumError> {
+    if !y1.is_finite() || !y2.is_finite() || !y3.is_finite() {
+        return Err(NumError::NonFiniteValue(
+            "non-finite ordinate in find_max_quadratic",
+        ));
+    }
     if !((x1 < x2 && x2 < x3) || (x1 > x2 && x2 > x3)) {
         return Err(NumError::InvalidParameter(
             "x1, x2, x3 must be strictly monotonic in find_max_quadratic",

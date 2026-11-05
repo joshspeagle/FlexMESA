@@ -205,6 +205,8 @@ def _rosenbrock_core(
     n = int(y.size)
     if n == 0 or rtol <= 0.0 or atol <= 0.0:
         raise ValueError("require y0.size >= 1 and rtol, atol > 0")
+    if t0 == t_end:
+        return RosenbrockResult(y=y, nfcn=0, njac=0, naccpt=0, nrejct=0)
     s, gamma, order, a, c, alpha, gamma_t, m, e = _coeffs_for(variant)
     posneg = 1.0 if t_end >= t0 else -1.0
     hmax_val = abs(t_end - t0) if hmax <= 0.0 else abs(hmax)
@@ -222,6 +224,8 @@ def _rosenbrock_core(
             )
         if (t + 1.01 * h - t_end) * posneg > 0.0:
             h = t_end - t
+        if t + h == t:
+            raise RuntimeError("step size underflow in rosenbrock")
         f0 = np.asarray(fcn(t, y), dtype=np.float64).ravel()
         dt_eps = 1e-8 * max(1.0, abs(t))
         f_dt = np.asarray(fcn(t + dt_eps, y), dtype=np.float64).ravel()
@@ -251,6 +255,8 @@ def _rosenbrock_core(
         err_vec = np.sum(e[:s, None] * g_stages, axis=0)
         sk = atol + rtol * np.maximum(np.abs(y), np.abs(y_new))
         err = float(math.sqrt(float(np.mean((err_vec / sk) ** 2))))
+        if not math.isfinite(err):
+            raise ValueError("non-finite local error in rosenbrock")
         fac = min(5.0, max(0.1, 0.9 * (max(err, 1e-10) ** (-1.0 / order))))
         if err <= 1.0:
             t += h
@@ -294,6 +300,11 @@ def rosenbrock_dense(
 
     Returns:
         :class:`RosenbrockResult` with final state and counters.
+
+    Raises:
+        ValueError: If tolerances are invalid, stage matrices are singular, or
+            local errors are non-finite.
+        RuntimeError: If ``max_steps`` is exceeded or step size underflows.
     """
 
     def _factor(
@@ -344,6 +355,11 @@ def rosenbrock_banded(
 
     Returns:
         :class:`RosenbrockResult` with final state and counters.
+
+    Raises:
+        ValueError: If tolerances or bandwidths are invalid, stage matrices are
+            singular, or local errors are non-finite.
+        RuntimeError: If ``max_steps`` is exceeded or step size underflows.
     """
     ldab = 2 * ml + mu + 1
 

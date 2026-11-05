@@ -102,10 +102,14 @@ def _newton_driver(
         RuntimeError: If ``config.max_iter`` is exceeded.
     """
     y = np.asarray(y_init, dtype=np.float64).ravel().copy()
-    if y.size == 0:
-        raise ValueError("y_init must be non-empty in newton_solve")
+    if y.size == 0 or config.min_damping <= 0.0 or config.min_damping > 1.0:
+        raise ValueError(
+            "require non-empty y_init and 0 < min_damping <= 1 in newton_solve"
+        )
     res = np.asarray(eval_res(y), dtype=np.float64).ravel()
     res_norm, _ = _rms_and_max(res)
+    if res.size != y.size or not math.isfinite(res_norm):
+        raise ValueError("invalid or non-finite residual in newton_solve")
     if res_norm <= config.tol_residual_norm:
         return NewtonResult(
             y=y,
@@ -117,6 +121,8 @@ def _newton_driver(
     for it in range(1, config.max_iter + 1):
         dy = np.asarray(solve_step(y, -res), dtype=np.float64).ravel()
         corr_norm, max_corr = _rms_and_max(dy)
+        if dy.size != y.size or not math.isfinite(corr_norm):
+            raise ValueError("invalid or non-finite Newton step")
 
         coeff = 1.0
         y_trial = y
@@ -125,7 +131,12 @@ def _newton_driver(
         while coeff >= config.min_damping:
             y_trial = y + coeff * dy
             res_trial = np.asarray(eval_res(y_trial), dtype=np.float64).ravel()
+            if res_trial.size != y.size:
+                raise ValueError("residual size mismatch in newton_solve")
             rn, _ = _rms_and_max(res_trial)
+            if not math.isfinite(rn):
+                coeff *= 0.5
+                continue
             res_trial_norm = rn
             if (
                 rn <= (1.0 - 0.1 * coeff) * res_norm
@@ -134,6 +145,8 @@ def _newton_driver(
             ):
                 break
             coeff *= 0.5
+        if not math.isfinite(res_trial_norm):
+            raise ValueError("non-finite residual after line-search damping")
         y = y_trial
         res = res_trial
         res_norm = res_trial_norm
@@ -168,6 +181,10 @@ def newton_solve_dense(
 
     Returns:
         :class:`NewtonResult` with converged state and norm diagnostics.
+
+    Raises:
+        ValueError: If inputs, residuals, or Jacobians are invalid or singular.
+        RuntimeError: If ``config.max_iter`` is exceeded.
     """
     cfg = NewtonConfig() if config is None else config
 
@@ -202,6 +219,10 @@ def newton_solve_banded(
 
     Returns:
         :class:`NewtonResult` with converged state and norm diagnostics.
+
+    Raises:
+        ValueError: If inputs, residuals, or Jacobians are invalid or singular.
+        RuntimeError: If ``config.max_iter`` is exceeded.
     """
     cfg = NewtonConfig() if config is None else config
 
@@ -240,6 +261,10 @@ def newton_solve_block_tridiagonal(
 
     Returns:
         :class:`NewtonResult` with converged state and norm diagnostics.
+
+    Raises:
+        ValueError: If inputs, residuals, or blocks are invalid or singular.
+        RuntimeError: If ``config.max_iter`` is exceeded.
     """
     cfg = NewtonConfig() if config is None else config
 
@@ -282,6 +307,9 @@ def newton_solve_jax(
     Returns:
         Converged state ``y_star`` of shape ``(n,)`` supporting ``jax.grad``
         and ``jax.jacrev``.
+
+    Raises:
+        ValueError: If the residual norm becomes non-finite.
     """
     y0 = jnp.asarray(y_init, dtype=jnp.float64)
 
@@ -291,7 +319,10 @@ def newton_solve_jax(
         y = y0
         for _ in range(max_iter):
             f_val = res_fn(y, p)
-            if float(jnp.linalg.norm(f_val)) <= tol:
+            fnorm = float(jnp.linalg.norm(f_val))
+            if not math.isfinite(fnorm):
+                raise ValueError("non-finite residual in newton_solve_jax")
+            if fnorm <= tol:
                 break
             j_mat = jac_y_fn(y, p)
             dy = jnp.linalg.solve(j_mat, -f_val)

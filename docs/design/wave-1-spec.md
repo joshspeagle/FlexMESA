@@ -149,7 +149,7 @@ full IEEE-754 `float64` precision (fixing the missing `implicit none` 32-bit
 #### Index and Memory-Order Contract (`mtx` and `num`)
 | Quantity | Upstream Fortran (`mtx` / `num`) | Safe Rust (`crates/flexmesa-{mtx,num}`) | Python/JAX (`src/flexmesa/{mtx,num}`) |
 | :--- | :--- | :--- | :--- |
-| Array indexing | 1-based (`1..=n`), except `_0_based` sparse routines | 0-based (`0..n`); sparse routines support both 1-based and 0-based CSR/CSC conventions; `binary_search` and `qsort_index` provide both 0-based and upstream-compatible 1-based variants | 0-based (`0..n`), with optional `one_based: bool` for CSR/CSC sparse indices and `binary_search` |
+| Array indexing | 1-based (`1..=n`), except `_0_based` sparse routines | 0-based (`0..n`); sparse routines support both 1-based and 0-based CSR/CSC conventions; `binary_search` and `qsort_index` provide both 0-based and upstream-compatible 1-based variants | 0-based (`0..n`); sparse routines provide explicit 1-based and `_0_based` CSR/CSC conversions, and `binary_search` / `binary_search_1based` provide 0-based and 1-based search |
 | Dense matrix layout | Column-major `A(lda, n)` | Row-major `n * n` contiguous slice `&[f64]` (`A[i * n + j]`) | Row-major 2D array of shape `(n, n)` (`float64`) |
 | Banded matrix layout | Column-major `AB(ldab, n)` with `ldab >= 2*kl + ku + 1`; entry $A_{i,j}$ at row `kl + ku + i - j` (0-based) and col `j` | Row-major `(2*kl + ku + 1, n)` contiguous buffer (`ab[row * n + j]`, `row = kl + ku + i - j`) | 2D array of shape `(2*kl + ku + 1, n)` (`float64`) |
 | Block-tridiagonal layout | Column-major `lblk(nvar, nvar, nz)`, `dblk(nvar, nvar, nz)`, `ublk(nvar, nvar, nz)` | Shell-major row-major blocks of shape `(nz, nvar, nvar)` (`blk[(k * nvar + i) * nvar + j]`), with `lblk[0] = 0` and `ublk[nz - 1] = 0` | 3D arrays `lblk`, `dblk`, `ublk` of shape `(nz, nvar, nvar)` and right-hand side `(nz, nvar)` |
@@ -186,9 +186,9 @@ full IEEE-754 `float64` precision (fixing the missing `implicit none` 32-bit
   Bidirectional conversions between dense, banded, compressed-row sparse (CSR),
   and compressed-column sparse (CSC) representations in both 1-based and
   0-based index conventions (`dense_to_row_sparse`, `row_sparse_to_dense`,
-  `dense_to_col_sparse`, `col_sparse_to_dense`, `band_to_column_sparse`,
-  `column_sparse_to_band`, `band_to_row_sparse`, `row_sparse_to_band`, and
-  `find_loc_in_sparse`).
+  `dense_to_col_sparse`, `column_sparse_to_dense`, `col_sparse_0_based_to_dense`,
+  `band_to_column_sparse`, `column_sparse_to_band`, `band_to_row_sparse`,
+  `row_sparse_to_band`, and `find_loc_in_sparse`).
   - **Upstream Bug Fixes in 0-Based Sparse Routines**: Upstream
     `do_row_sparse_0_based_to_dense` (`mtx_support.f90`) declares `rowptr(0:n)`
     and `colind(0:nz-1)` while indexing `rowptr(i)` for `i = 1..n`, `values(k)`

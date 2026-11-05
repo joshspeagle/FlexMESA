@@ -9,6 +9,9 @@
 //! In a banded buffer `ab` of shape `(ldab, n)` (`ldab >= ml + mu + 1`),
 //! matrix entry $A_{i,j}$ resides at `row = (ldab - 1 - ml) + i - j` and
 //! column `j`.
+//! - [`band_to_row_sparse`] and [`band_to_col_sparse`] emit 1-based CSR/CSC
+//!   index arrays matching upstream MESA (`mtx_lib.f90`).
+//! - [`find_loc_in_sparse`] supports both 0-based and 1-based sparse layouts.
 
 use crate::{MtxError, SparseFormat};
 

@@ -7,6 +7,15 @@
 //! $$\frac{\partial x^*}{\partial p_m}
 //!   = -\left(\frac{\partial f}{\partial x}\right)^{-1}
 //!     \frac{\partial f}{\partial p_m}$$
+//!
+//! # Safeguards & Error Handling
+//!
+//! - [`look_for_brackets`] expands outward geometrically from `x` inside
+//!   `[xmin, xmax]` while verifying finite function evaluations at every step.
+//! - [`safe_root_with_brackets`] combines Newton-Raphson with bisection so the
+//!   iterate never leaves the sign-change bracket and converges superlinearly
+//!   near simple roots.
+//! - [`safe_root_with_guess`] tries guarded Newton steps before bracketing.
 
 use crate::NumError;
 use flexmesa_autodiff::DualOrder1;
@@ -33,14 +42,26 @@ pub fn look_for_brackets<F>(
 where
     F: FnMut(f64) -> Result<(f64, f64), NumError>,
 {
-    if dx == 0.0 || xmin >= xmax {
+    // Validate finiteness and domain ordering before clamping x to [xmin, xmax]
+    if !(x.is_finite()
+        && dx.is_finite()
+        && xmin.is_finite()
+        && xmax.is_finite())
+        || dx == 0.0
+        || xmin >= xmax
+    {
         return Err(NumError::InvalidParameter(
-            "require dx != 0 and xmin < xmax in look_for_brackets",
+            "require finite arguments, dx != 0, and xmin < xmax",
         ));
     }
     let mut x1 = x.clamp(xmin, xmax);
     let mut x3 = x1;
     let (y0, _) = func(x1)?;
+    if !y0.is_finite() {
+        return Err(NumError::NonFiniteValue(
+            "non-finite f(x) in look_for_brackets",
+        ));
+    }
     if y0 == 0.0 {
         return Ok(((x1, x1), (0.0, 0.0)));
     }
@@ -59,6 +80,11 @@ where
         if can_move_left {
             let x_new = (x1 - step).max(xmin);
             let (y_new, _) = func(x_new)?;
+            if !y_new.is_finite() {
+                return Err(NumError::NonFiniteValue(
+                    "non-finite f(x) in look_for_brackets",
+                ));
+            }
             if y_new == 0.0 || (y_new > 0.0) != (y1 > 0.0) {
                 return Ok(((x_new, x1), (y_new, y1)));
             }
@@ -68,6 +94,11 @@ where
         if can_move_right {
             let x_new = (x3 + step).min(xmax);
             let (y_new, _) = func(x_new)?;
+            if !y_new.is_finite() {
+                return Err(NumError::NonFiniteValue(
+                    "non-finite f(x) in look_for_brackets",
+                ));
+            }
             if y_new == 0.0 || (y_new > 0.0) != (y3 > 0.0) {
                 return Ok(((x3, x_new), (y3, y_new)));
             }
@@ -105,6 +136,16 @@ pub fn safe_root_with_brackets<F>(
 where
     F: FnMut(f64) -> Result<(f64, f64), NumError>,
 {
+    // Reject non-finite bracket endpoints or function evaluations
+    if !(x1_in.is_finite()
+        && x3_in.is_finite()
+        && y1_in.is_finite()
+        && y3_in.is_finite())
+    {
+        return Err(NumError::NonFiniteValue(
+            "non-finite bracket endpoint in safe_root_with_brackets",
+        ));
+    }
     if y1_in == 0.0 {
         return Ok((x1_in, 0.0));
     }
@@ -126,6 +167,11 @@ where
     let mut dxold = (x3_in - x1_in).abs();
     let mut dx = dxold;
     let (mut f, mut df) = func(rts)?;
+    if !f.is_finite() {
+        return Err(NumError::NonFiniteValue(
+            "non-finite f(x) in safe_root_with_brackets",
+        ));
+    }
     let max_iter = if imax == 0 { 100 } else { imax };
 
     for _iter in 0..max_iter {
@@ -154,9 +200,19 @@ where
         }
         if dx.abs() <= epsx {
             let (f_final, _) = func(rts)?;
+            if !f_final.is_finite() {
+                return Err(NumError::NonFiniteValue(
+                    "non-finite f(x) in safe_root_with_brackets",
+                ));
+            }
             return Ok((rts, f_final));
         }
         let (f_new, df_new) = func(rts)?;
+        if !f_new.is_finite() {
+            return Err(NumError::NonFiniteValue(
+                "non-finite f(x) in safe_root_with_brackets",
+            ));
+        }
         f = f_new;
         df = df_new;
         if f < 0.0 {
@@ -202,6 +258,14 @@ pub fn safe_root_with_guess<F>(
 where
     F: FnMut(f64) -> Result<(f64, f64), NumError>,
 {
+    // Validate finite guess and ordered domain bounds before clamping
+    if xmin >= xmax
+        || !(x_guess.is_finite() && xmin.is_finite() && xmax.is_finite())
+    {
+        return Err(NumError::InvalidParameter(
+            "require finite x_guess and xmin < xmax in safe_root_with_guess",
+        ));
+    }
     // Try up to newt_imax pure Newton steps from x_guess if within [xmin, xmax]
     let mut x = x_guess.clamp(xmin, xmax);
     for _ in 0..newt_imax {

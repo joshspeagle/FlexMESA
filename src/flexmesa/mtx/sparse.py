@@ -106,6 +106,9 @@ def dense_to_row_sparse(
     Returns:
         Tuple `(rowptr, colind, values)` with 1-based indices in `int64` and
         non-zero values in `float64`.
+
+    Raises:
+        ValueError: If `a` is not a non-empty square 2D array.
     """
     return _dense_to_compressed(
         a, is_row_major=True, include_diag=include_diag, base=1
@@ -128,6 +131,9 @@ def dense_to_row_0_based(
     Returns:
         Tuple `(rowptr, colind, values)` with 0-based indices in `int64` and
         values in `float64`.
+
+    Raises:
+        ValueError: If `a` is not a non-empty square 2D array.
     """
     return _dense_to_compressed(
         a, is_row_major=True, include_diag=include_diag, base=0
@@ -150,6 +156,9 @@ def row_sparse_to_dense(
 
     Returns:
         Dense matrix of shape `(N, N)` in `float64`.
+
+    Raises:
+        ValueError: If pointer or index bounds are invalid.
     """
     return _compressed_to_dense(
         n, rowptr, colind, values, is_row_major=True, base=1
@@ -174,6 +183,9 @@ def row_sparse_0_based_to_dense(
 
     Returns:
         Dense matrix of shape `(N, N)` in `float64`.
+
+    Raises:
+        ValueError: If pointer or index bounds are invalid.
     """
     return _compressed_to_dense(
         n, rowptr, colind, values, is_row_major=True, base=0
@@ -195,6 +207,9 @@ def dense_to_col_sparse(
 
     Returns:
         Tuple `(colptr, rowind, values)` with 1-based indices in `int64`.
+
+    Raises:
+        ValueError: If `a` is not a non-empty square 2D array.
     """
     return _dense_to_compressed(
         a, is_row_major=False, include_diag=include_diag, base=1
@@ -216,6 +231,9 @@ def dense_to_col_0_based(
 
     Returns:
         Tuple `(colptr, rowind, values)` with 0-based indices in `int64`.
+
+    Raises:
+        ValueError: If `a` is not a non-empty square 2D array.
     """
     return _dense_to_compressed(
         a, is_row_major=False, include_diag=include_diag, base=0
@@ -238,6 +256,9 @@ def column_sparse_to_dense(
 
     Returns:
         Dense matrix of shape `(N, N)` in `float64`.
+
+    Raises:
+        ValueError: If pointer or index bounds are invalid.
     """
     return _compressed_to_dense(
         n, colptr, rowind, values, is_row_major=False, base=1
@@ -260,6 +281,9 @@ def col_sparse_0_based_to_dense(
 
     Returns:
         Dense matrix of shape `(N, N)` in `float64`.
+
+    Raises:
+        ValueError: If pointer or index bounds are invalid.
     """
     return _compressed_to_dense(
         n, colptr, rowind, values, is_row_major=False, base=0

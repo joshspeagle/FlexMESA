@@ -232,10 +232,10 @@ def dgbtrs(
     if lu.ndim != 2 or rhs.ndim != 1 or lu.shape[1] != rhs.shape[0]:
         raise ValueError("Incompatible shapes in dgbtrs.")
     ldab, n = int(lu.shape[0]), int(lu.shape[1])
-    if piv.shape != (n,) or ldab < 2 * kl + ku + 1:
-        raise ValueError("Invalid ipiv or ldab in dgbtrs.")
-    if not np.all(np.isfinite(rhs)):
-        raise ValueError("Right-hand side b contains NaN or infinite entries.")
+    if kl < 0 or ku < 0 or piv.shape != (n,) or ldab < 2 * kl + ku + 1:
+        raise ValueError("Invalid kl, ku, ipiv, or ldab in dgbtrs.")
+    if not np.all(np.isfinite(lu)) or not np.all(np.isfinite(rhs)):
+        raise ValueError("lu_ab or rhs b contains NaN or infinite entries.")
 
     x = rhs.copy()
     diag = ldab - 1 - kl
@@ -277,6 +277,10 @@ def solve_banded(
 
     Returns:
         Solution vector `x` of shape `(N,)` in `float64`.
+
+    Raises:
+        ValueError: If shapes mismatch, inputs are non-finite, or $A$ is
+            singular.
     """
     lu, ipiv = dgbtrf(ab, kl, ku)
     return dgbtrs(lu, kl, ku, ipiv, b)
@@ -302,6 +306,7 @@ def rcond_banded(
         Reciprocal 1-norm condition number in $[0, 1]$ (dimensionless).
     """
     ab_arr = np.asarray(ab, dtype=np.float64)
+    lu_arr = np.asarray(lu_ab, dtype=np.float64)
     ldab, n = int(ab_arr.shape[0]), int(ab_arr.shape[1])
     diag = ldab - 1 - kl
     anorm = 0.0
@@ -313,7 +318,7 @@ def rcond_banded(
             for i in range(i_min, i_max + 1)
         )
         anorm = max(anorm, col_sum)
-    if anorm == 0.0:
+    if anorm == 0.0 or np.any(lu_arr[diag, :] == 0.0):
         return 0.0
     trial = np.full(n, 1.0 / n, dtype=np.float64)
     y = dgbtrs(lu_ab, kl, ku, ipiv, trial)

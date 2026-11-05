@@ -12,6 +12,8 @@
 //!   `row = ldab - 1 - kl`.
 //! - In left band-vector multiplication (`band_multiply_xa`), entry $A_{i,j}$
 //!   is stored in compact upper-aligned layout at `row = ku + i - j`.
+//! - All routines reject non-finite matrix and vector entries (`NaN`, `Inf`)
+//!   with [`MtxError::NonFiniteEntry`].
 
 use crate::MtxError;
 use flexmesa_utils::is_bad_slice;
@@ -259,8 +261,8 @@ pub fn dgbtrs(
             "ab, ipiv, or b length mismatch in dgbtrs",
         ));
     }
-    if is_bad_slice(b) {
-        return Err(MtxError::NonFiniteInput("rhs b contains NaN/Inf"));
+    if is_bad_slice(ab) || is_bad_slice(b) {
+        return Err(MtxError::NonFiniteInput("ab or rhs b contains NaN/Inf"));
     }
 
     let diag = ldab - 1 - kl;

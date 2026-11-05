@@ -19,6 +19,18 @@
 //! - [`rosenbrock_banded`] packs $E$ into LAPACK banded storage `(2 * ml + mu
 //!   + 1, N)`, factors it once per step via [`dgbtrf`], and solves each stage
 //!   in $O(N (m_l + m_u))$ substitutions via [`dgbtrs`].
+//!
+//! # Step Rejection & Error Norms
+//!
+//! - At each step, the embedded error vector $e = \sum_j e_j g_j$ is scaled by
+//!   $\mathrm{atol} + \mathrm{rtol} \max(|y_i|, |y_{\mathrm{new}, i}|)$ and
+//!   measured in the root-mean-square norm.
+//! - Non-finite error norms, mismatched callback vector lengths, and step-size
+//!   underflow (`t + h == t`) return explicit [`NumError`] variants rather than
+//!   propagating `NaN` states silently.
+//! - Zero-span calls (`t0 == t_end`) return immediately with zero evaluations.
+//! - Stage right-hand sides include the non-autonomous temporal term
+//!   $h \gamma_{t,i} (\partial f / \partial t)$ alongside the stage couplings.
 
 use crate::rosenbrock_coeffs::{coeffs_for, RosenbrockVariant};
 use crate::NumError;
@@ -27,13 +39,22 @@ use flexmesa_mtx::{dense_to_band, dgbtrf, dgbtrs, dgetrf, dgetrs};
 /// Builds the dense stage matrix $E = (\gamma h)^{-1} I - J$ in row-major order
 /// across all $N \times N$ entries by negating $J$ and adding $(\gamma h)^{-1}$
 /// along the main diagonal.
-fn build_stage_matrix(n: usize, h_gamma: f64, j_mat: &[f64]) -> Vec<f64> {
+fn build_stage_matrix(
+    n: usize,
+    h_gamma: f64,
+    j_mat: &[f64],
+) -> Result<Vec<f64>, NumError> {
+    if j_mat.len() != n * n {
+        return Err(NumError::InvalidParameter(
+            "Jacobian length must equal n * n in rosenbrock",
+        ));
+    }
     let mut e_mat = j_mat.iter().map(|&v| -v).collect::<Vec<f64>>();
     let inv_hg = 1.0 / h_gamma;
     for i in 0..n {
         e_mat[i * n + i] += inv_hg;
     }
-    e_mat
+    Ok(e_mat)
 }
 
 /// Summary of an adaptive Rosenbrock integration.
@@ -91,7 +112,7 @@ where
         |t, y, h_gamma| {
             let n = y.len();
             let j_mat = jac(t, y)?;
-            let mut e_mat = build_stage_matrix(n, h_gamma, &j_mat);
+            let mut e_mat = build_stage_matrix(n, h_gamma, &j_mat)?;
             let mut ipiv = vec![0usize; n];
             dgetrf(n, &mut e_mat, &mut ipiv).map_err(|_| {
                 NumError::LinearSolveFailed("rosenbrock_dense LU")
@@ -153,7 +174,7 @@ where
         |t, y, h_gamma| {
             let n = y.len();
             let j_mat = jac_dense(t, y)?;
-            let e_mat = build_stage_matrix(n, h_gamma, &j_mat);
+            let e_mat = build_stage_matrix(n, h_gamma, &j_mat)?;
             let mut ab = vec![0.0; ldab * n];
             dense_to_band(n, n, &e_mat, ml, mu, &mut ab, ldab).map_err(
                 |_| NumError::LinearSolveFailed("dense_to_band failed"),
@@ -205,6 +226,15 @@ where
             "require y0.len() >= 1 and rtol, atol > 0 in rosenbrock",
         ));
     }
+    if t0 == t_end {
+        return Ok(RosenbrockResult {
+            y: y0.to_vec(),
+            nfcn: 0,
+            njac: 0,
+            naccpt: 0,
+            nrejct: 0,
+        });
+    }
     let rc = coeffs_for(variant);
     let posneg = (t_end - t0).signum();
     let hmax = if hmax_in <= 0.0 {
@@ -237,9 +267,19 @@ where
         if (t + 1.01 * h - t_end) * posneg > 0.0 {
             h = t_end - t;
         }
+        if t + h == t {
+            return Err(NumError::ConvergenceFailed(
+                "step size underflow in rosenbrock",
+            ));
+        }
         let f0 = fcn(t, &y)?;
         let dt_eps = 1e-8 * t.abs().max(1.0);
         let f_dt = fcn(t + dt_eps, &y)?;
+        if f0.len() != n || f_dt.len() != n {
+            return Err(NumError::InvalidParameter(
+                "derivative vector length mismatch in rosenbrock",
+            ));
+        }
         nfcn += 2;
         let df_dt: Vec<f64> =
             (0..n).map(|i| (f_dt[i] - f0[i]) / dt_eps).collect();
@@ -261,7 +301,13 @@ where
                 f0.clone()
             } else {
                 nfcn += 1;
-                fcn(t + rc.alpha[stg] * h, &y_stg)?
+                let fs = fcn(t + rc.alpha[stg] * h, &y_stg)?;
+                if fs.len() != n {
+                    return Err(NumError::InvalidParameter(
+                        "derivative vector length mismatch in rosenbrock",
+                    ));
+                }
+                fs
             };
             let mut rhs = f_stg;
             for i in 0..n {
@@ -295,6 +341,11 @@ where
             err_sq += r * r;
         }
         let err = (err_sq / (n as f64)).sqrt();
+        if !err.is_finite() {
+            return Err(NumError::NonFiniteValue(
+                "non-finite local error in rosenbrock",
+            ));
+        }
         // Accept step if RMS error <= 1.0 and propose next step size h
         // using safety factor 0.9 and clamping h_new / h to [0.1, 5.0]
         let fac = (0.9 * err.max(1e-10).powf(-1.0 / rc.order)).clamp(0.1, 5.0);

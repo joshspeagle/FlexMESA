@@ -15,6 +15,16 @@
 //! - [`brent_global_min`] partitions $[a, b]$ into sub-intervals scaled by the
 //!   second-derivative bound $m$ and refines the lowest minimum via
 //!   [`brent_local_min`].
+//!
+//! # Finiteness & Bracketing Guarantees
+//!
+//! - All routines validate that input bounds and evaluated function values are
+//!   finite IEEE-754 `f64` numbers (`is_finite()`), returning
+//!   [`NumError::NonFiniteValue`] or [`NumError::InvalidParameter`] immediately
+//!   if `NaN` or `Inf` is encountered.
+//! - [`brent_safe_zero`] maintains an enclosing sign-change bracket at every
+//!   iteration and falls back to bisection whenever a secant or inverse
+//!   quadratic step jumps outside the bracket or contracts too slowly.
 
 use crate::NumError;
 
@@ -53,6 +63,12 @@ where
         Some(v) => v,
         None => func(sb)?,
     };
+    if !sa.is_finite() || !sb.is_finite() || !fa.is_finite() || !fb.is_finite()
+    {
+        return Err(NumError::NonFiniteValue(
+            "non-finite endpoint or value in brent_safe_zero",
+        ));
+    }
     if fa == 0.0 {
         return Ok((sa, 0.0));
     }
@@ -136,6 +152,11 @@ where
             sb -= tol;
         }
         fb = func(sb)?;
+        if !fb.is_finite() {
+            return Err(NumError::NonFiniteValue(
+                "non-finite function value in brent_safe_zero",
+            ));
+        }
     }
     Err(NumError::ConvergenceFailed(
         "brent_safe_zero exceeded max_iter",
@@ -161,9 +182,9 @@ pub fn brent_local_min<F>(
 where
     F: FnMut(f64) -> Result<f64, NumError>,
 {
-    if a >= b || eps <= 0.0 || t < 0.0 {
+    if !a.is_finite() || !b.is_finite() || a >= b || eps <= 0.0 || t < 0.0 {
         return Err(NumError::InvalidParameter(
-            "require a < b, eps > 0, t >= 0 in brent_local_min",
+            "require finite a < b, eps > 0, t >= 0 in brent_local_min",
         ));
     }
     // Golden ratio conjugate (3 - sqrt(5)) / 2 ~= 0.3819660112501051
@@ -176,6 +197,11 @@ where
     let mut e = 0.0_f64;
     let mut d = 0.0_f64;
     let mut fx = func(x)?;
+    if !fx.is_finite() {
+        return Err(NumError::NonFiniteValue(
+            "non-finite objective value in brent_local_min",
+        ));
+    }
     let mut fw = fx;
     let mut fv = fx;
     let limit = if max_tries == 0 { 200 } else { max_tries };
@@ -226,6 +252,11 @@ where
             x - tol
         };
         let fu = func(u)?;
+        if !fu.is_finite() {
+            return Err(NumError::NonFiniteValue(
+                "non-finite objective value in brent_local_min",
+            ));
+        }
         // Update bracket [sa, sb] and lowest-three points x, w, v
         if fu <= fx {
             if u < x {
@@ -292,9 +323,9 @@ pub fn brent_global_min<F>(
 where
     F: FnMut(f64) -> Result<f64, NumError>,
 {
-    if a >= b {
+    if !a.is_finite() || !b.is_finite() || !c.is_finite() || a >= b {
         return Err(NumError::InvalidParameter(
-            "require a < b in brent_global_min",
+            "require finite a < b and finite c in brent_global_min",
         ));
     }
     let mut best_x = c.clamp(a, b);

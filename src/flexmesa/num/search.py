@@ -188,6 +188,13 @@ def find0(x1: float, y1: float, x2: float, y2: float) -> float:
     Raises:
         ValueError: If ``y1`` and ``y2`` have the same strict sign.
     """
+    if not (
+        np.isfinite(x1)
+        and np.isfinite(y1)
+        and np.isfinite(x2)
+        and np.isfinite(y2)
+    ):
+        raise ValueError("non-finite input in find0")
     if y1 == 0.0:
         return float(x1)
     if y2 == 0.0:
@@ -206,6 +213,8 @@ def _quadratic_divided_diffs(
     y3: float,
 ) -> tuple[float, float, float]:
     """Computes Newton divided-difference coefficients ``(dx12, b, c)``."""
+    if not (np.isfinite(y1) and np.isfinite(y2) and np.isfinite(y3)):
+        raise ValueError("non-finite ordinate in quadratic interpolation")
     if not ((x1 < x2 < x3) or (x1 > x2 > x3)):
         raise ValueError("x1, x2, x3 must be strictly monotonic")
     dx12 = x2 - x1

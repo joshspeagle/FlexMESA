@@ -88,14 +88,24 @@ where
     S: FnMut(&[f64], &[f64]) -> Result<Vec<f64>, NumError>,
 {
     let n = y_init.len();
-    if n == 0 {
+    if n == 0 || config.min_damping <= 0.0 || config.min_damping > 1.0 {
         return Err(NumError::InvalidParameter(
-            "y_init must be non-empty in newton_solve",
+            "require non-empty y_init and 0 < min_damping <= 1 in newton_solve",
         ));
     }
     let mut y = y_init.to_vec();
     let mut res = eval_res(&y)?;
+    if res.len() != n {
+        return Err(NumError::InvalidParameter(
+            "residual length must equal y_init.len() in newton_solve",
+        ));
+    }
     let (mut res_norm, _) = rms_and_max(&res);
+    if !res_norm.is_finite() {
+        return Err(NumError::NonFiniteValue(
+            "non-finite initial residual norm in newton_solve",
+        ));
+    }
     if res_norm <= config.tol_residual_norm {
         return Ok(NewtonResult {
             y,
@@ -113,6 +123,11 @@ where
         }
         let dy = solve_step(&y, &neg_res)?;
         let (corr_norm, max_corr) = rms_and_max(&dy);
+        if !corr_norm.is_finite() {
+            return Err(NumError::NonFiniteValue(
+                "non-finite Newton correction in newton_solve",
+            ));
+        }
 
         // Backtracking line search if residual norm increases markedly
         let mut coeff = 1.0_f64;
@@ -123,7 +138,16 @@ where
                 y_trial[i] = y[i] + coeff * dy[i];
             }
             res_trial = eval_res(&y_trial)?;
+            if res_trial.len() != n {
+                return Err(NumError::InvalidParameter(
+                    "residual length must equal y_init.len() in newton_solve",
+                ));
+            }
             let (rn, _) = rms_and_max(&res_trial);
+            if !rn.is_finite() {
+                coeff *= 0.5;
+                continue;
+            }
             res_trial_norm = rn;
             if rn <= (1.0 - 0.1 * coeff) * res_norm
                 || rn <= config.tol_residual_norm
@@ -132,6 +156,11 @@ where
                 break;
             }
             coeff *= 0.5;
+        }
+        if !res_trial_norm.is_finite() {
+            return Err(NumError::NonFiniteValue(
+                "non-finite residual norm after damping in newton_solve",
+            ));
         }
         y.copy_from_slice(&y_trial);
         res = res_trial;

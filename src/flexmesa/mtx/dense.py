@@ -270,8 +270,9 @@ def rcond_dense(
         Reciprocal 1-norm condition number in $[0, 1]$ (dimensionless).
     """
     a_arr, n = _validate_square(a)
+    lu_arr = np.asarray(lu, dtype=np.float64)
     anorm = float(np.max(np.sum(np.abs(a_arr), axis=0)))
-    if anorm == 0.0:
+    if anorm == 0.0 or np.any(np.diag(lu_arr) == 0.0):
         return 0.0
     trial = np.full(n, 1.0 / n, dtype=np.float64)
     ainv_norm = 0.0

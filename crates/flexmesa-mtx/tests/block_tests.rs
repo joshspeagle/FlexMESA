@@ -15,6 +15,10 @@
 //!    centered finite differences to $< 10^{-9}$.
 //! 3. **Property-Based Verification**: Compares `solve_block_tridiagonal`
 //!    against full dense LU (`solve_dense`) across random block systems.
+//! 4. **Zero-Diagonal & Boundary Checks**: Verifies condition-number handling
+//!    and dimension validation on block-tridiagonal inputs.
+//!
+//! All tests run deterministically in IEEE-754 `f64` precision.
 
 #![allow(
     clippy::cast_precision_loss,

@@ -37,7 +37,9 @@ pub use bicub::{
     herm2xy_db, interp_evbicub_db, interp_evbicub_mask_db, interp_mkbicub_db,
 };
 pub use bipm::{interp_evbipm_db, interp_mkbipm_db};
-pub use spline1d::{mkspline_db, splinck_db};
+pub use spline1d::{
+    mkspline_db as interp_mkspline_db, mkspline_db, splinck_db,
+};
 
 /// Boundary condition selector for 1D and 2D cubic splines (`mkspline_db` and
 /// `interp_mkbicub_db`), matching upstream PSPLINE / MESA codes `-1..=7`.
@@ -152,7 +154,8 @@ impl fmt::Display for Interp2dError {
                 actual,
             } => write!(
                 f,
-                "{axis} axis requires at least {min_points} points, got {actual}"
+                "{axis} axis requires at least {min_points} points, \
+                 got {actual}"
             ),
             Self::DimensionMismatch { expected, actual } => write!(
                 f,

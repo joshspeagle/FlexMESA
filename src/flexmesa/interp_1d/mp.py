@@ -11,10 +11,20 @@ References:
 
 from __future__ import annotations
 
+import enum
+
 import jax.numpy as jnp
 import numpy as np
 
 from flexmesa.interp_1d import pm
+
+
+class MpLimiter(enum.IntEnum):
+    """Slope-limiter variant for Huynh (1993) MP cubic interpolation."""
+
+    AVERAGE = 1
+    QUARTIC = 2
+    SUPER_BEE = 3
 
 
 def _fortran_sign1(val: float) -> float:
@@ -23,24 +33,68 @@ def _fortran_sign1(val: float) -> float:
 
 
 def minmod(a: float, b: float) -> float:
-    """Two-argument minmod limiter matching upstream ``minmod1``."""
+    """Two-argument minmod limiter matching upstream ``minmod1``.
+
+    Args:
+        a: First scalar slope argument in physical or dimensionless units.
+        b: Second scalar slope argument in physical or dimensionless units.
+
+    Returns:
+        Limited scalar ``0.5 * (sign(1, a) + sign(1, b)) * min(|a|, |b|)``.
+    """
     return 0.5 * (_fortran_sign1(a) + _fortran_sign1(b)) * min(abs(a), abs(b))
 
 
 def minmod4(a: float, b: float, c: float, d: float) -> float:
-    """Four-argument sequential minmod limiter matching ``minmod4_1``."""
+    """Four-argument sequential minmod limiter matching ``minmod4_1``.
+
+    Args:
+        a: First scalar argument.
+        b: Second scalar argument.
+        c: Third scalar argument.
+        d: Fourth scalar argument.
+
+    Returns:
+        Sequentially limited value ``minmod(minmod(minmod(a, b), c), d)``.
+    """
     return minmod(minmod(minmod(a, b), c), d)
 
 
 def median(a: float, b: float, c: float) -> float:
-    """Median of three numbers via ``a + minmod(b - a, c - a)``."""
+    """Median of three numbers via ``a + minmod(b - a, c - a)``.
+
+    Args:
+        a: First scalar argument.
+        b: Second scalar argument.
+        c: Third scalar argument.
+
+    Returns:
+        Median of ``(a, b, c)``.
+    """
     return a + minmod(b - a, c - a)
+
+
+def _normalize_limiter(which: str | MpLimiter) -> MpLimiter:
+    """Normalizes string or enum slope-limiter selector to `MpLimiter`."""
+    if isinstance(which, MpLimiter):
+        return which
+    mapping = {
+        "average": MpLimiter.AVERAGE,
+        "quartic": MpLimiter.QUARTIC,
+        "super_bee": MpLimiter.SUPER_BEE,
+    }
+    if which not in mapping:
+        raise ValueError(
+            f"Unknown m3 variant {which!r}; expected 'average', 'quartic', "
+            "or 'super_bee'."
+        )
+    return mapping[which]
 
 
 def interp_m3(
     x: np.ndarray | jnp.ndarray,
     y: np.ndarray | jnp.ndarray,
-    which: str = "quartic",
+    which: str | MpLimiter = MpLimiter.QUARTIC,
 ) -> jnp.ndarray:
     """Computes Huynh (1993) monotonicity-preserving cubic spline coefficients.
 
@@ -51,7 +105,8 @@ def interp_m3(
         x: Knot coordinates of shape ``(N,)`` (``N >= 2``), strictly monotonic,
             in physical or dimensionless units.
         y: Knot values of shape ``(N,)`` in physical or dimensionless units.
-        which: Slope-limiter variant in ``{"average", "quartic", "super_bee"}``.
+        which: Slope-limiter variant (`MpLimiter` or ``"average"``,
+            ``"quartic"``, ``"super_bee"``).
 
     Returns:
         JAX ``float64`` array of shape ``(N, 4)`` with ``[c0, c1, c2, c3]``
@@ -61,11 +116,7 @@ def interp_m3(
         ValueError: If ``N < 2``, ``x`` is not strictly monotonic, or ``which``
             is unknown.
     """
-    if which not in ("average", "quartic", "super_bee"):
-        raise ValueError(
-            f"Unknown m3 variant {which!r}; expected 'average', 'quartic', "
-            "or 'super_bee'."
-        )
+    limiter = _normalize_limiter(which)
     x_arr, y_arr = pm.validate_1d_grid(x, y, min_points=2)
     n = x_arr.size
     if n <= 3:
@@ -99,20 +150,22 @@ def interp_m3(
         s[i] = minmod(float(s_mid[i - 1]), float(s_mid[i]))
         t[i] = minmod(float(sp_l[i]), float(sp_r[i]))
 
-    if which == "average":
+    if limiter == MpLimiter.AVERAGE:
         for i in range(1, n - 1):
             bound = max(3.0 * abs(float(s[i])), 1.5 * abs(float(t[i])))
             avg = 0.5 * abs(float(sp_l[i] + sp_r[i]))
             coeffs[i, 1] = _fortran_sign1(float(t[i])) * min(avg, bound)
-    elif which == "quartic":
+    elif limiter == MpLimiter.QUARTIC:
         e_mid = np.zeros(n - 1, dtype=np.float64)
         e_mid[1:-1] = (d[2:-1] - d[1:-2]) / (x_arr[3:] - x_arr[:-3])
-        for i in range(2, n - 2):
-            numer = e_mid[i - 1] * (x_arr[i + 2] - x_arr[i]) + e_mid[i] * (
-                x_arr[i] - x_arr[i - 2]
+        if n > 4:
+            numer = e_mid[1:-2] * (x_arr[4:] - x_arr[2:-2]) + e_mid[2:-1] * (
+                x_arr[2:-2] - x_arr[:-4]
             )
-            denom = x_arr[i + 2] - x_arr[i - 2]
-            coeffs[i, 1] = s_mid[i] - h[i] * (d[i] + h[i - 1] * numer / denom)
+            denom = x_arr[4:] - x_arr[:-4]
+            coeffs[2:-2, 1] = s_mid[2:-1] - h[2:-1] * (
+                d[2:-2] + h[1:-2] * numer / denom
+            )
         for idx in (1, n - 2):
             bound = max(3.0 * abs(float(s[idx])), 1.5 * abs(float(t[idx])))
             avg = 0.5 * abs(float(sp_l[idx] + sp_r[idx]))
@@ -154,7 +207,7 @@ def interp_m3a(
     y: np.ndarray | jnp.ndarray,
 ) -> jnp.ndarray:
     """Computes Huynh (1993) average-slope MP coefficients (`interp_m3a`)."""
-    return interp_m3(x, y, which="average")
+    return interp_m3(x, y, which=MpLimiter.AVERAGE)
 
 
 def interp_m3b(
@@ -162,7 +215,7 @@ def interp_m3b(
     y: np.ndarray | jnp.ndarray,
 ) -> jnp.ndarray:
     """Computes Huynh (1993) superbee-slope MP coefficients (`interp_m3b`)."""
-    return interp_m3(x, y, which="super_bee")
+    return interp_m3(x, y, which=MpLimiter.SUPER_BEE)
 
 
 def interp_m3q(
@@ -170,4 +223,4 @@ def interp_m3q(
     y: np.ndarray | jnp.ndarray,
 ) -> jnp.ndarray:
     """Computes Huynh (1993) quartic-slope MP coefficients (`interp_m3q`)."""
-    return interp_m3(x, y, which="quartic")
+    return interp_m3(x, y, which=MpLimiter.QUARTIC)

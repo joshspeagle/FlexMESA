@@ -2,7 +2,7 @@
 //! `interp_4_to_1`) and forward-mode automatic differentiation (`DualOrder1`)
 //! evaluation for 1D cubic splines.
 
-use crate::eval::{interp_values, locate_clamped_interval};
+use crate::eval::interp_values;
 use crate::pm::{interp_pm, interp_pm_autodiff};
 use crate::{CubicCoeffs, Interp1dError};
 use flexmesa_autodiff::DualOrder1;
@@ -141,14 +141,13 @@ pub fn interp_values_autodiff<const N: usize>(
     if nx == 1 {
         return Ok(vec![coeffs[0][0]; x.len()]);
     }
-    let primal_x: Vec<f64> = init_x.iter().map(|v| v.val).collect();
-    let h0 = primal_x[1] - primal_x[0];
+    let h0 = init_x[1].val - init_x[0].val;
     if h0 == 0.0 {
         return Err(Interp1dError::NonMonotonicGrid { index: 0 });
     }
     let increasing = h0 > 0.0;
     for i in 1..(nx - 1) {
-        let hi = primal_x[i + 1] - primal_x[i];
+        let hi = init_x[i + 1].val - init_x[i].val;
         if hi == 0.0 || (hi > 0.0) != increasing {
             return Err(Interp1dError::NonMonotonicGrid { index: i });
         }
@@ -171,8 +170,18 @@ pub fn interp_values_autodiff<const N: usize>(
         } else {
             xk
         };
-        let (k, _) =
-            locate_clamped_interval(&primal_x, x_clamped.val, increasing);
+        let pos = if increasing {
+            init_x.partition_point(|pt| pt.val < x_clamped.val)
+        } else {
+            init_x.partition_point(|pt| pt.val > x_clamped.val)
+        };
+        let k = if pos == 0 {
+            0
+        } else if pos >= nx {
+            nx - 2
+        } else {
+            pos - 1
+        };
         let delta = x_clamped - init_x[k];
         let c = &coeffs[k];
         vals.push(c[0] + delta * (c[1] + delta * (c[2] + delta * c[3])));

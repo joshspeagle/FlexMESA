@@ -7,7 +7,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from flexmesa import interp_1d
-from flexmesa.interp_2d import bicub
+from flexmesa.interp_2d import spline1d
 
 
 def interp_mkbipm_db(
@@ -38,8 +38,8 @@ def interp_mkbipm_db(
     nx, ny = x_arr.size, y_arr.size
     if nx < 4 or ny < 4:
         raise ValueError("interp_mkbipm_db requires nx >= 4 and ny >= 4.")
-    bicub.splinck_db(x_arr, 1.0e-3, "x")
-    bicub.splinck_db(y_arr, 1.0e-3, "y")
+    spline1d.splinck_db(x_arr, 1.0e-3, "x")
+    spline1d.splinck_db(y_arr, 1.0e-3, "y")
     z_arr = np.asarray(z, dtype=np.float64).reshape(nx, ny)
     if not np.all(np.isfinite(z_arr)):
         raise ValueError("z must contain only finite float64 values.")
@@ -77,6 +77,10 @@ def interp_evbipm_db(
     x_arr = np.asarray(x, dtype=np.float64)
     y_arr = np.asarray(y, dtype=np.float64)
     nx, ny = x_arr.size, y_arr.size
+    if nx < 4 or ny < 4:
+        raise ValueError("interp_evbipm_db requires nx >= 4 and ny >= 4.")
+    spline1d.splinck_db(x_arr, 1.0e-3, "x")
+    spline1d.splinck_db(y_arr, 1.0e-3, "y")
     c_arr = np.asarray(coeffs, dtype=np.float64).reshape(nx, ny, 4)
     xq = float(xget)
     yq = float(yget)

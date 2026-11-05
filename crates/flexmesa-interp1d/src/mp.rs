@@ -12,14 +12,17 @@ use crate::pm::{fortran_sign1, interp_pm};
 use crate::{validate_grid_and_widths, CubicCoeffs, Interp1dError, MpLimiter};
 
 /// Two-argument minmod limiter:
-/// $$\mathrm{minmod}(a, b) = \tfrac{1}{2}\,(\mathrm{sign}(1, a) + \mathrm{sign}(1, b))\,\min(|a|, |b|)$$
+/// $$\mathrm{minmod}(a, b)
+///   = \tfrac{1}{2}\,(\mathrm{sign}(1, a) + \mathrm{sign}(1, b))
+///     \,\min(|a|, |b|)$$
 #[inline]
 #[must_use]
 pub fn minmod(a: f64, b: f64) -> f64 {
     f64::midpoint(fortran_sign1(a), fortran_sign1(b)) * a.abs().min(b.abs())
 }
 
-/// Four-argument minmod limiter applied sequentially (`minmod(minmod(minmod(a, b), c), d)`).
+/// Four-argument minmod limiter applied sequentially
+/// (`minmod(minmod(minmod(a, b), c), d)`).
 #[inline]
 #[must_use]
 pub fn minmod4(a: f64, b: f64, c: f64, d: f64) -> f64 {
@@ -127,17 +130,11 @@ pub fn interp_m3(
                 coeffs[i][1] =
                     s_mid[i] - h[i] * (d[i] + h[i - 1] * numer / denom);
             }
-            let bound_1 = (3.0 * s[1].abs()).max(1.5 * t[1].abs());
-            coeffs[1][1] = fortran_sign1(t[1])
-                * (0.5 * (sp_l[1] + sp_r[1]).abs()).min(bound_1);
-
-            let last_int = n - 2;
-            let bound_last =
-                (3.0 * s[last_int].abs()).max(1.5 * t[last_int].abs());
-            coeffs[last_int][1] = fortran_sign1(t[last_int])
-                * (0.5 * (sp_l[last_int] + sp_r[last_int]).abs())
-                    .min(bound_last);
-
+            for idx in [1, n - 2] {
+                let bound = (3.0 * s[idx].abs()).max(1.5 * t[idx].abs());
+                let avg = 0.5 * (sp_l[idx] + sp_r[idx]).abs();
+                coeffs[idx][1] = fortran_sign1(t[idx]) * avg.min(bound);
+            }
             for i in 1..(n - 1) {
                 let med = median(coeffs[i][1], sp_l[i], sp_r[i]);
                 let tmax = fortran_sign1(t[i])

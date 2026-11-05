@@ -1,5 +1,13 @@
 //! Two-dimensional piecewise-monotonic cubic interpolation (`interp_mkbipm_db`
 //! and `interp_evbipm_db`).
+//!
+//! Constructs 1D Steffen (1990) piecewise-monotonic cubic splines along `x` at
+//! every `y[iy]` slice during setup (`interp_mkbipm_db`). At evaluation time
+//! (`interp_evbipm_db`), evaluates the four 1D `x`-splines bracketing `yget`
+//! and performs a 4-point local Steffen (1990) interpolation along `y`.
+//!
+//! Reference: Steffen, M. (1990), "A simple method for monotonic interpolation
+//! in one dimension", Astronomy & Astrophysics, 239, 443-450.
 
 use crate::spline1d::splinck_db;
 use crate::Interp2dError;
@@ -9,9 +17,10 @@ use flexmesa_utils::is_bad;
 /// Constructs 2D piecewise-monotonic cubic spline coefficients along the `x`
 /// axis for each `y` slice (`interp_mkbipm_db`).
 ///
-/// Input `z` has row-major shape `(nx, ny)` where `z[ix * ny + iy] = f(x[ix], y[iy])`.
-/// Returns a vector of `nx * ny` 4-element `x`-spline coefficient arrays
-/// `[c0, c1, c2, c3]` indexed as `coeffs[ix * ny + iy]`.
+/// Input `z` has row-major shape `(nx, ny)` where
+/// `z[ix * ny + iy] = f(x[ix], y[iy])`. Returns a vector of `nx * ny` 4-element
+/// `x`-spline coefficient arrays `[c0, c1, c2, c3]` indexed as
+/// `coeffs[ix * ny + iy]`.
 ///
 /// # Errors
 ///
@@ -50,6 +59,7 @@ pub fn interp_mkbipm_db(
     splinck_db(x, 1.0e-3, "x")?;
     splinck_db(y, 1.0e-3, "y")?;
 
+    // Fit 1D Steffen (1990) monotonic spline along x for each y-slice.
     let mut coeffs = vec![[0.0_f64; 4]; nx * ny];
     let mut x_vals = vec![0.0_f64; nx];
     for iy in 0..ny {
@@ -105,6 +115,8 @@ pub fn interp_evbipm_db(
     if is_bad(xget) || is_bad(yget) {
         return Err(Interp2dError::NonFiniteInput);
     }
+    splinck_db(x, 1.0e-3, "x")?;
+    splinck_db(y, 1.0e-3, "y")?;
     if xget < x[0] || xget >= x[nx - 1] {
         return Err(Interp2dError::OutOfRange {
             axis: "x",
@@ -118,12 +130,14 @@ pub fn interp_evbipm_db(
         });
     }
 
+    // Locate x-interval ix and y-interval jy via binary search.
     let pos_x = x.partition_point(|&xk| xk <= xget);
     let ix = pos_x.saturating_sub(1).min(nx - 2);
 
     let pos_y = y.partition_point(|&yk| yk <= yget);
     let jy = pos_y.saturating_sub(1).min(ny - 2);
 
+    // Choose 4-point y-stencil [jlo..jlo + 4] bracketing yget.
     let dx = xget - x[ix];
     let jlo = if jy == 0 {
         0
@@ -144,5 +158,6 @@ pub fn interp_evbipm_db(
 
     let y_coeffs =
         interp_pm(&ys, &ff).map_err(|_| Interp2dError::NonFiniteInput)?;
-    interp_value(&ys, &y_coeffs, yget).map_err(|_| Interp2dError::NonFiniteInput)
+    interp_value(&ys, &y_coeffs, yget)
+        .map_err(|_| Interp2dError::NonFiniteInput)
 }

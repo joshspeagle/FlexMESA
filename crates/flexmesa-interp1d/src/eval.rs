@@ -1,10 +1,18 @@
 //! Evaluation, differentiation, and definite integration for 1D cubic splines.
+//!
+//! Provides scalar and vectorized polynomial evaluation (`interp_value`,
+//! `interp_values`, `interp_value_and_slope`, `interp_values_and_slopes`) and
+//! exact piecewise-cubic definite integration (`integrate_values`) on both
+//! strictly ascending and strictly descending knot grids.
 
 use crate::{CubicCoeffs, Interp1dError};
 use flexmesa_utils::is_bad;
 
 /// Clamps `xval` to the knot domain and locates the interval index
 /// `k in 0..(n - 1)` for a strictly monotonic grid `init_x` (`n >= 2`).
+///
+/// Returns `(k, delta)` where `delta = x_clamped - init_x[k]` is the signed
+/// local offset from the left knot of subinterval `k`.
 #[inline]
 pub(crate) fn locate_clamped_interval(
     init_x: &[f64],
@@ -19,6 +27,7 @@ pub(crate) fn locate_clamped_interval(
     } else {
         xval.clamp(xn, x0)
     };
+    // Binary search for the first knot exceeding x_clamped along grid order.
     let idx = if increasing {
         init_x.partition_point(|&xk| xk < x_clamped)
     } else {
@@ -35,6 +44,10 @@ pub(crate) fn locate_clamped_interval(
 }
 
 /// Validates `init_x` and `coeffs` for evaluation.
+///
+/// Confirms matching non-zero length, finite entries, and strict monotonicity
+/// of `init_x`, returning `Ok(true)` for ascending grids and `Ok(false)` for
+/// descending grids.
 fn validate_eval_inputs(
     init_x: &[f64],
     coeffs: &[CubicCoeffs],
@@ -180,8 +193,43 @@ pub fn interp_values_and_slopes(
     Ok((vals, slopes))
 }
 
-/// Evaluates the definite integral of the piecewise cubic spline over consecutive
-/// sub-intervals $[x_{m-1}, x_m]$ for $m = 1, \dots, N_v - 1$, with
+/// Evaluates the cubic antiderivative polynomial on interval `k` at offset `d`:
+/// $$\int_0^d p_k(x_k + u)\,du = d\,(c_0 + d\,(\tfrac{1}{2} c_1 + d\,(
+///   \tfrac{1}{3} c_2 + \tfrac{1}{4} c_3\,d)))$$
+#[inline]
+fn poly_antideriv(c: &CubicCoeffs, d: f64) -> f64 {
+    d * (c[0] + d * (0.5 * c[1] + d * (c[2] / 3.0 + 0.25 * d * c[3])))
+}
+
+/// Accumulates the definite integral across sub-segment `[x1, x2]` within knot
+/// cell `k` starting at `x0` and updates `*xk_prev` to `x2`.
+///
+/// Returns zero immediately when `x1 == x2`.
+#[inline]
+fn accum_segment(
+    c: &CubicCoeffs,
+    x0: f64,
+    x1: f64,
+    x2: f64,
+    xk_prev: &mut f64,
+) -> f64 {
+    if x1 == x2 {
+        return 0.0;
+    }
+    let a2 = poly_antideriv(c, x2 - x0);
+    // Note: checks x1 != x0 (rather than upstream MESA's x1 > x0) so descending
+    // grids subtract the lower sub-interval integral identically to ascending.
+    let a1 = if x1 != x0 {
+        poly_antideriv(c, x1 - x0)
+    } else {
+        0.0
+    };
+    *xk_prev = x2;
+    a2 - a1
+}
+
+/// Evaluates the definite integral of the piecewise cubic spline over
+/// consecutive sub-intervals $[x_{m-1}, x_m]$ for $m = 1, \dots, N_v - 1$, with
 /// `vals[0] = 0.0`.
 ///
 /// # Errors
@@ -208,6 +256,8 @@ pub fn integrate_values(
     if x.iter().any(|&v| is_bad(v)) {
         return Err(Interp1dError::NonFiniteInput);
     }
+    // Verify that integration endpoints lie within the knot domain and follow
+    // the same monotonic orientation as init_x.
     if (increasing && (x[0] < init_x[0] || x[nv - 1] > init_x[nx - 1]))
         || (!increasing && (x[0] > init_x[0] || x[nv - 1] < init_x[nx - 1]))
     {
@@ -219,18 +269,15 @@ pub fn integrate_values(
         }
     }
 
-    let poly_antideriv = |k: usize, d: f64| -> f64 {
-        let c = &coeffs[k];
-        d * (c[0] + d * (0.5 * c[1] + d * (c[2] / 3.0 + 0.25 * d * c[3])))
-    };
-
     let mut vals = vec![0.0_f64; nv];
     let mut k_old = 0usize;
     let mut xkp1_old = init_x[1];
     let mut xk_prev = x[0];
 
-    for val_out in vals.iter_mut().skip(1).zip(x.iter().skip(1)) {
-        let (out_slot, &xk_target) = val_out;
+    // Sweep monotonically across knot cells, accumulating full and partial
+    // cell antiderivatives in O(nx + nv) total operations.
+    for (out_slot, &xk_target) in vals.iter_mut().skip(1).zip(x.iter().skip(1))
+    {
         let mut xk_new = xk_target;
         let mut sum = 0.0_f64;
 
@@ -243,38 +290,25 @@ pub fn integrate_values(
                 xk_new = xkp1_old;
                 break;
             }
-            let x0 = init_x[k_old - 1];
-            let x1 = xk_prev;
-            let x2 = xkp1_old;
-            if x1 != x2 {
-                let a2 = poly_antideriv(k_old - 1, x2 - x0);
-                let a1 = if x1 != x0 {
-                    poly_antideriv(k_old - 1, x1 - x0)
-                } else {
-                    0.0
-                };
-                sum += a2 - a1;
-                xk_prev = x2;
-            }
+            sum += accum_segment(
+                &coeffs[k_old - 1],
+                init_x[k_old - 1],
+                xk_prev,
+                xkp1_old,
+                &mut xk_prev,
+            );
             xkp1_old = init_x[k_old + 1];
         }
 
-        let x0 = init_x[k_old];
-        let x1 = xk_prev;
-        let x2 = xk_new;
-        if x1 != x2 {
-            let a2 = poly_antideriv(k_old, x2 - x0);
-            let a1 = if x1 != x0 {
-                poly_antideriv(k_old, x1 - x0)
-            } else {
-                0.0
-            };
-            sum += a2 - a1;
-            xk_prev = x2;
-        }
+        sum += accum_segment(
+            &coeffs[k_old],
+            init_x[k_old],
+            xk_prev,
+            xk_new,
+            &mut xk_prev,
+        );
         *out_slot = sum;
     }
 
     Ok(vals)
 }
-

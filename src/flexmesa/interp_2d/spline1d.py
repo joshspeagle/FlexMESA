@@ -1,5 +1,10 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
-"""One-dimensional C^2 cubic spline helpers (`mkspline_db`, `splinck_db`)."""
+"""One-dimensional C^2 cubic spline helpers (`mkspline_db`, `splinck_db`).
+
+Ports the 1D $C^2$ tridiagonal spline solver (`V_SPLINE_db`, `cspline_db`,
+`mkspline_db`) and grid uniformity checker (`splinck_db`) from upstream
+PSPLINE / MESA ``interp_2d/private/bicub_db.f`` into ``float64`` NumPy/JAX.
+"""
 
 from __future__ import annotations
 
@@ -10,7 +15,19 @@ import numpy as np
 
 
 class BicubicBc(enum.IntEnum):
-    """Boundary condition codes for 1D and 2D cubic splines (`-1..=7`)."""
+    """Boundary condition codes for 1D and 2D cubic splines (`-1..=7`).
+
+    Attributes:
+        PERIODIC: Periodic boundary condition (`-1`).
+        NOT_A_KNOT: Not-a-knot boundary condition (`0`, MESA default).
+        FIRST_DERIV: Match specified first derivative (`1`).
+        SECOND_DERIV: Match specified second derivative (`2`).
+        ZERO_FIRST_DERIV: Zero first derivative (`3`).
+        ZERO_SECOND_DERIV: Natural spline / zero second derivative (`4`).
+        DIVIDED_DIFF_1: Match first divided difference (`5`).
+        DIVIDED_DIFF_2: Match second divided difference (`6`).
+        DIVIDED_DIFF_3: Match third divided difference (`7`).
+    """
 
     PERIODIC = -1
     NOT_A_KNOT = 0
@@ -63,11 +80,25 @@ def _v_spline_db(
     x: np.ndarray,
     f: np.ndarray,
 ) -> None:
-    """In-place port of PSPLINE ``V_SPLINE_db`` on ``f`` of shape ``(N, 4)``."""
+    """In-place port of PSPLINE ``V_SPLINE_db`` on ``f`` of shape ``(N, 4)``.
+
+    Solves the tridiagonal (or cyclic tridiagonal when ``k_bc1 == -1``)
+    continuity system for $C^2$ cubic spline moments and stores ``f'(x_i)``,
+    ``f''(x_i)``, and ``f'''(x_i)`` in ``f[:, 1]``, ``f[:, 2]``, and
+    ``f[:, 3]``.
+
+    Args:
+        k_bc1: Left boundary condition code in ``-1..=7``.
+        k_bcn: Right boundary condition code in ``0..=7``.
+        x: 1D ascending knot array of shape ``(N,)`` in physical units.
+        f: Coefficient array of shape ``(N, 4)`` modified in place so
+            ``f[:, 2]`` holds ``f''(x_i)`` on exit.
+    """
     n = x.size
     imin = 0
     imax = n - 1
 
+    # Evaluate boundary derivative or divided-difference targets at x[0], x[-1].
     a1 = (
         float(f[0, 1])
         if k_bc1 == 1
@@ -111,6 +142,7 @@ def _v_spline_db(
         else 0.0
     )
 
+    # Assemble interior tridiagonal matrix diagonals and RHS differences.
     f[-1, 1:] = 0.0
     f[0, 3] = x[1] - x[0]
     f[1, 2] = (f[1, 0] - f[0, 0]) / f[0, 3]
@@ -122,16 +154,13 @@ def _v_spline_db(
 
     elem21 = float(f[0, 3])
     elemnn1 = float(f[n - 2, 3])
-    wk = np.zeros(n, dtype=np.float64)
 
+    # Apply left boundary condition row at index 0 (or condense into row 1).
     if k_bc1 == -1:
         f[0, 1] = 2.0 * (f[0, 3] + f[n - 2, 3])
         f[0, 2] = (f[1, 0] - f[0, 0]) / f[0, 3] - (f[-1, 0] - f[-2, 0]) / f[
             n - 2, 3
         ]
-        wk[0] = f[n - 2, 3]
-        wk[n - 3] = f[n - 3, 3]
-        wk[n - 2] = f[n - 2, 3]
     elif k_bc1 in (1, 3, 5):
         f[0, 1] = 2.0 * f[0, 3]
         f[0, 2] = (f[1, 0] - f[0, 0]) / f[0, 3] - a1
@@ -148,6 +177,7 @@ def _v_spline_db(
         f[1, 1] = f[0, 3] + 2.0 * f[1, 3]
         f[1, 2] = f[1, 2] * f[1, 3] / (f[0, 3] + f[1, 3])
 
+    # Apply right boundary condition row at n - 1 (or condense into n - 2).
     if k_bcn in (1, 3, 5):
         f[-1, 1] = 2.0 * f[n - 2, 3]
         f[-1, 2] = -(f[-1, 0] - f[-2, 0]) / f[n - 2, 3] + an
@@ -164,7 +194,12 @@ def _v_spline_db(
         f[n - 2, 1] = 2.0 * f[n - 3, 3] + f[n - 2, 3]
         f[n - 2, 2] = f[n - 2, 2] * f[n - 3, 3] / (f[n - 2, 3] + f[n - 3, 3])
 
+    # Forward elimination and back-substitution for cyclic or standard system.
     if k_bc1 == -1:
+        wk = np.zeros(n, dtype=np.float64)
+        wk[0] = f[n - 2, 3]
+        wk[n - 3] = f[n - 3, 3]
+        wk[n - 2] = f[n - 2, 3]
         for i in range(1, n - 2):
             t = f[i - 1, 3] / f[i - 1, 1]
             f[i, 1] -= t * f[i - 1, 3]
@@ -221,6 +256,7 @@ def _v_spline_db(
                 f[-2, 2] + (f[-2, 2] - f[-3, 2]) * f[n - 2, 3] / f[n - 3, 3]
             )
 
+    # Convert moments sigma_i = f''(x_i) / 6 into f', f'', and f'''.
     for i in range(n - 1):
         h_i = f[i, 3]
         sig_i = f[i, 2]
@@ -253,8 +289,9 @@ def interp_mkspline_db(
     """Computes second derivatives ``f''(x_i)`` of a 1D C^2 cubic spline.
 
     Args:
-        x: Strictly ascending knot coordinates of shape ``(N,)`` (``N >= 4``).
-        y: Knot values of shape ``(N,)``.
+        x: Strictly ascending knot coordinates of shape ``(N,)`` (``N >= 4``)
+            in physical or dimensionless units.
+        y: Knot values of shape ``(N,)`` in physical or dimensionless units.
         ibcxmin: Left boundary condition code in ``-1..=7``.
         bcxmin: Left boundary value (used when ``ibcxmin in (1, 2)``).
         ibcxmax: Right boundary condition code in ``0..=7``.
@@ -288,10 +325,10 @@ def interp_mkspline_db(
         fspl4[-1, 2] = bcxmax
 
     _v_spline_db(bc1, bcn, x_arr, fspl4)
-    fspl4[:, 2] *= 0.5
-    fspl4[:, 3] /= 6.0
-
     fxx = np.zeros(x_arr.size, dtype=np.float64)
-    fxx[:-1] = 2.0 * fspl4[:-1, 2]
-    fxx[-1] = 2.0 * fspl4[-2, 2] + (x_arr[-1] - x_arr[-2]) * 6.0 * fspl4[-2, 3]
+    fxx[:-1] = fspl4[:-1, 2]
+    fxx[-1] = fspl4[-2, 2] + (x_arr[-1] - x_arr[-2]) * fspl4[-2, 3]
     return jnp.asarray(fxx, dtype=jnp.float64), uniform
+
+
+mkspline_db = interp_mkspline_db

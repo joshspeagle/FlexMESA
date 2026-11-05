@@ -16,6 +16,8 @@ import numpy as np
 from flexmesa import auto_diff
 
 SMACHEPS: float = 1.0e-13
+PM_WORK_SIZE: int = 3
+MP_WORK_SIZE: int = 14
 
 
 def validate_1d_grid(
@@ -57,8 +59,19 @@ def validate_1d_grid(
 
 
 def _steffen_slope(s0: float, s1: float, p: float) -> float:
-    """Applies Steffen (1990) monotonicity limiter to parabolic slope `p`."""
+    """Applies Steffen (1990) monotonicity limiter to parabolic slope `p`.
+
+    Args:
+        s0: Left secant slope in physical units.
+        s1: Right secant slope in physical units.
+        p: Parabolic slope estimate at the shared knot.
+
+    Returns:
+        Monotonicity-limited first derivative at the knot.
+    """
     if s0 * s1 <= 0.0:
+        return 0.0
+    if s0 * p <= 0.0:
         return 0.0
     lim = 2.0 * min(abs(s0), abs(s1))
     if abs(p) > lim:
@@ -66,8 +79,54 @@ def _steffen_slope(s0: float, s1: float, p: float) -> float:
     return p
 
 
+def _mk_pmcub(
+    x: np.ndarray | jnp.ndarray,
+    y: np.ndarray | jnp.ndarray,
+    *,
+    slope_only: bool,
+) -> jnp.ndarray:
+    """Shared implementation for `interp_pm` and `interp_pm_slopes_only`."""
+    x_arr, y_arr = validate_1d_grid(x, y, min_points=2)
+    nx = x_arr.size
+    coeffs = np.zeros((nx, 4), dtype=np.float64)
+    coeffs[:, 0] = y_arr
+
+    if nx == 2:
+        coeffs[0, 1] = (y_arr[1] - y_arr[0]) / (x_arr[1] - x_arr[0])
+        coeffs[1, 1] = 0.0
+        return jnp.asarray(coeffs, dtype=jnp.float64)
+
+    h = x_arr[1:] - x_arr[:-1]
+    s = (y_arr[1:] - y_arr[:-1]) / h
+
+    p = (s[:-1] * h[1:] + s[1:] * h[:-1]) / (h[:-1] + h[1:])
+    for i in range(1, nx - 1):
+        coeffs[i, 1] = _steffen_slope(
+            float(s[i - 1]), float(s[i]), float(p[i - 1])
+        )
+
+    p_left = float(
+        s[0] * (1.0 + h[0] / (h[0] + h[1])) - s[1] * h[0] / (h[0] + h[1])
+    )
+    coeffs[0, 1] = _steffen_slope(float(s[0]), float(s[0]), p_left)
+
+    p_right = float(
+        s[-1] * (1.0 + h[-1] / (h[-1] + h[-2]))
+        - s[-2] * h[-1] / (h[-1] + h[-2])
+    )
+    coeffs[-1, 1] = _steffen_slope(float(s[-1]), float(s[-1]), p_right)
+
+    if slope_only:
+        return jnp.asarray(coeffs, dtype=jnp.float64)
+
+    coeffs[:-1, 2] = (3.0 * s - 2.0 * coeffs[:-1, 1] - coeffs[1:, 1]) / h
+    coeffs[:-1, 3] = (coeffs[:-1, 1] + coeffs[1:, 1] - 2.0 * s) / (h * h)
+    return jnp.asarray(coeffs, dtype=jnp.float64)
+
+
 def interp_pm(
-    x: np.ndarray | jnp.ndarray, y: np.ndarray | jnp.ndarray
+    x: np.ndarray | jnp.ndarray,
+    y: np.ndarray | jnp.ndarray,
 ) -> jnp.ndarray:
     """Computes Steffen (1990) piecewise-monotonic cubic coefficients.
 
@@ -87,39 +146,7 @@ def interp_pm(
     Raises:
         ValueError: If ``x`` and ``y`` fail grid validation.
     """
-    x_arr, y_arr = validate_1d_grid(x, y, min_points=2)
-    nx = x_arr.size
-    coeffs = np.zeros((nx, 4), dtype=np.float64)
-    coeffs[:, 0] = y_arr
-
-    if nx == 2:
-        coeffs[0, 1] = (y_arr[1] - y_arr[0]) / (x_arr[1] - x_arr[0])
-        coeffs[1, 1] = coeffs[0, 1]
-        return jnp.asarray(coeffs, dtype=jnp.float64)
-
-    h = x_arr[1:] - x_arr[:-1]
-    s = (y_arr[1:] - y_arr[:-1]) / h
-
-    p = (s[:-1] * h[1:] + s[1:] * h[:-1]) / (h[:-1] + h[1:])
-    for i in range(1, nx - 1):
-        coeffs[i, 1] = _steffen_slope(
-            float(s[i - 1]), float(s[i]), float(p[i - 1])
-        )
-
-    p_left = float(
-        s[0] * (1.0 + h[0] / (h[0] + h[1])) - s[1] * h[0] / (h[0] + h[1])
-    )
-    coeffs[0, 1] = _steffen_slope(float(s[0]), float(s[1]), p_left)
-
-    p_right = float(
-        s[-1] * (1.0 + h[-1] / (h[-1] + h[-2]))
-        - s[-2] * h[-1] / (h[-1] + h[-2])
-    )
-    coeffs[-1, 1] = _steffen_slope(float(s[-1]), float(s[-2]), p_right)
-
-    coeffs[:-1, 2] = (3.0 * s - 2.0 * coeffs[:-1, 1] - coeffs[1:, 1]) / h
-    coeffs[:-1, 3] = (coeffs[:-1, 1] + coeffs[1:, 1] - 2.0 * s) / (h * h)
-    return jnp.asarray(coeffs, dtype=jnp.float64)
+    return _mk_pmcub(x, y, slope_only=False)
 
 
 def interp_pm_slopes_only(
@@ -137,9 +164,7 @@ def interp_pm_slopes_only(
         JAX ``float64`` array of shape ``(N, 4)`` with ``[:, 0] = y``,
         ``[:, 1] = df/dx``, and ``[:, 2:] = 0``.
     """
-    coeffs = np.asarray(interp_pm(x, y), dtype=np.float64).copy()
-    coeffs[:, 2:] = 0.0
-    return jnp.asarray(coeffs, dtype=jnp.float64)
+    return _mk_pmcub(x, y, slope_only=True)
 
 
 def interp_4pt_pm(
@@ -167,19 +192,7 @@ def interp_4pt_pm(
     )
     if x_arr.size != 4:
         raise ValueError("interp_4pt_pm requires exactly 4 points.")
-    h0 = float(x_arr[1] - x_arr[0])
-    h1 = float(x_arr[2] - x_arr[1])
-    h2 = float(x_arr[3] - x_arr[2])
-    s0 = float((y_arr[1] - y_arr[0]) / h0)
-    s1 = float((y_arr[2] - y_arr[1]) / h1)
-    s2 = float((y_arr[3] - y_arr[2]) / h2)
-    p1 = (s0 * h1 + s1 * h0) / (h0 + h1)
-    p2 = (s1 * h2 + s2 * h1) / (h1 + h2)
-    d1 = _steffen_slope(s0, s1, p1)
-    d2 = _steffen_slope(s1, s2, p2)
-    a1 = (3.0 * s1 - 2.0 * d1 - d2) / h1
-    a2 = (d1 + d2 - 2.0 * s1) / (h1 * h1)
-    return jnp.asarray([d1, a1, a2], dtype=jnp.float64)
+    return interp_pm(x_arr, y_arr)[1, 1:]
 
 
 def _steffen_slope_autodiff(
@@ -189,7 +202,7 @@ def _steffen_slope_autodiff(
 ) -> auto_diff.DualOrder1:
     """Applies the Steffen (1990) limiter to ``DualOrder1`` slopes."""
     n_vars = int(s0.d1.shape[0])
-    if s0.val * s1.val <= 0.0:
+    if s0.val * s1.val <= 0.0 or s0.val * p.val <= 0.0:
         return auto_diff.DualOrder1.constant(0.0, n_vars)
     two_s0 = 2.0 * abs(s0)
     two_s1 = 2.0 * abs(s1)
@@ -214,8 +227,9 @@ def interp_pm_autodiff(
 
     Args:
         x: Sequence of ``N >= 2`` strictly monotonic ``DualOrder1`` knot
-            coordinates.
-        y: Sequence of ``N`` ``DualOrder1`` knot values.
+            coordinates in physical or dimensionless units.
+        y: Sequence of ``N`` ``DualOrder1`` knot values in physical or
+            dimensionless units.
 
     Returns:
         List of ``N`` 4-tuples ``(c0, c1, c2, c3)`` of ``DualOrder1`` values.
@@ -231,7 +245,7 @@ def interp_pm_autodiff(
     zero = auto_diff.DualOrder1.constant(0.0, n_vars)
     if nx == 2:
         slope = (y[1] - y[0]) / (x[1] - x[0])
-        return [(y[0], slope, zero, zero), (y[1], slope, zero, zero)]
+        return [(y[0], slope, zero, zero), (y[1], zero, zero, zero)]
 
     h = [x[i + 1] - x[i] for i in range(nx - 1)]
     s = [(y[i + 1] - y[i]) / h[i] for i in range(nx - 1)]
@@ -241,12 +255,12 @@ def interp_pm_autodiff(
         d[i] = _steffen_slope_autodiff(s[i - 1], s[i], p_i)
 
     p0 = s[0] * (1.0 + h[0] / (h[0] + h[1])) - s[1] * h[0] / (h[0] + h[1])
-    d[0] = _steffen_slope_autodiff(s[0], s[1], p0)
+    d[0] = _steffen_slope_autodiff(s[0], s[0], p0)
 
     pn = s[-1] * (1.0 + h[-1] / (h[-1] + h[-2])) - s[-2] * h[-1] / (
         h[-1] + h[-2]
     )
-    d[-1] = _steffen_slope_autodiff(s[-1], s[-2], pn)
+    d[-1] = _steffen_slope_autodiff(s[-1], s[-1], pn)
 
     out: list[
         tuple[

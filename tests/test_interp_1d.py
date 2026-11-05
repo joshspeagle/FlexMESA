@@ -1,5 +1,13 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
-"""Golden, autodiff, and property tests for `interp_1d` and `interp_2d`."""
+"""Golden, autodiff, and property tests for `flexmesa.interp_1d`.
+
+Validates FlexMESA 1D piecewise-monotonic cubic spline builders (`interp_pm`,
+`interp_m3a`, `interp_m3b`, `interp_m3q`, `interp_4pt_pm`), evaluators
+(`interp_values`, `interp_value_and_slope`), definite integrator
+(`integrate_values`), and Lagrangian remeshing stencils (`interp_3_to_1`,
+`interp_3_to_2`, `interp_4_to_1`) against upstream MESA test outputs (`test1`,
+`test2`, `test3`), `jax.grad`, and `DualOrder1` forward-mode autodiff.
+"""
 
 from __future__ import annotations
 
@@ -11,8 +19,11 @@ import jax.numpy as jnp
 import numpy as np
 from hypothesis import strategies as st
 
-from flexmesa import auto_diff, interp_1d, interp_2d
+from flexmesa import auto_diff, interp_1d
 
+# Upstream MESA 100-point test vector `u` (`test_interp_1d.f90`).
+# Represents a smooth non-monotonic bell-shaped profile used by `test1`
+# (Huynh 1993 `interp_m3q`) and `test3` (Steffen 1990 `interp_pm`).
 # fmt: off
 _TEST_U: tuple[float, ...] = (
     0.3691382918814334, 0.3695899829574669, 0.3699633032242006,
@@ -54,12 +65,20 @@ _TEST_U: tuple[float, ...] = (
 
 
 def test_upstream_mesa_interp1d_test1_m3q_matches_golden_output() -> None:
-    """Verifies Huynh (1993) quartic MP cubic against upstream `test1`."""
+    """Verifies Huynh (1993) quartic MP cubic against upstream `test1`.
+
+    Checks both strictly increasing (`sign = +1`) and strictly decreasing
+    (`sign = -1`) knot grids against the pinned upstream MESA `test1`
+    coefficients (`coeffs[:3, 1]`) and evaluated values on the 100-point test
+    profile `_TEST_U`. Under grid reflection $x \\to -x$, odd-order derivatives
+    flip sign while interpolated function values remain invariant.
+    """
     dx = 0.594059405940594
     u_arr = np.asarray(_TEST_U, dtype=np.float64)
     for sign in (1.0, -1.0):
         init_xs = sign * dx * np.arange(100, dtype=np.float64)
         coeffs = np.asarray(interp_1d.interp_m3q(init_xs, u_arr))
+        # Compare first three knot slopes f'(x_0), f'(x_1), f'(x_2).
         np.testing.assert_allclose(
             coeffs[:3, 1],
             sign
@@ -73,6 +92,7 @@ def test_upstream_mesa_interp1d_test1_m3q_matches_golden_output() -> None:
             rtol=1e-12,
             atol=1e-14,
         )
+        # Compare interpolated values at the four upstream test abscissas.
         xs = sign * np.array([10.0, 10.4, 10.8, 11.0], dtype=np.float64)
         vals = np.asarray(interp_1d.interp_values(init_xs, coeffs, xs))
         expected = np.array(
@@ -87,13 +107,19 @@ def test_upstream_mesa_interp1d_test1_m3q_matches_golden_output() -> None:
 
 
 def test_upstream_mesa_interp1d_test2_sin_and_integral_match_golden() -> None:
-    """Verifies `interp_m3q` and `integrate_values` on `test2(true/false)`."""
+    """Verifies `interp_m3q` and `integrate_values` on `test2(true/false)`.
+
+    Confirms that definite integration over adjacent intervals reproduces the
+    exact symmetry of ``sin(x)`` on both ascending and descending grids. Note
+    that upstream MESA's `do_integrate_values` had a decreasing-grid bug
+    (`if (x1 > x0)` instead of `if (x1 /= x0)`); FlexMESA fixes this so both
+    grid orientations yield identical positive segment integrals.
+    """
     n = 43
     dx = 1.0 / float(n - 1)
     for sign in (1.0, -1.0):
         init_xs = sign * 4.0 * dx * np.arange(n, dtype=np.float64)
-        u = np.sin(init_xs)
-        coeffs = interp_1d.interp_m3q(init_xs, u)
+        coeffs = interp_1d.interp_m3q(init_xs, np.sin(init_xs))
         xs = sign * np.array(
             [
                 0.0,
@@ -120,6 +146,7 @@ def test_upstream_mesa_interp1d_test2_sin_and_integral_match_golden() -> None:
         )
         np.testing.assert_allclose(vals, expected_vals, rtol=1e-12, atol=1e-14)
 
+        # Definite integral of sin(sign * x) over sign * [xa, xb] is invariant.
         integrals = np.asarray(interp_1d.integrate_values(init_xs, coeffs, xs))
         expected_integrals = np.array(
             [
@@ -138,7 +165,13 @@ def test_upstream_mesa_interp1d_test2_sin_and_integral_match_golden() -> None:
 
 
 def test_upstream_mesa_interp1d_test3_4pt_and_remesh_match_golden() -> None:
-    """Verifies Steffen (1990) `test3`, `interp_4pt_pm`, and `interp_3_to_2`."""
+    """Verifies Steffen (1990) `test3`, `interp_4pt_pm`, and `interp_3_to_2`.
+
+    Checks `interp_pm`, `interp_pm_slopes_only`, `interp_4pt_pm`,
+    `interp_3_to_2`, and `interp_3_to_1` against upstream MESA golden values,
+    confirming that `interp_pm_slopes_only` matches the first-derivative column
+    of `interp_pm` to machine precision and zeroes higher-order columns.
+    """
     dx = 0.594059405940594
     u_arr = np.asarray(_TEST_U, dtype=np.float64)
     for sign in (1.0, -1.0):
@@ -161,48 +194,54 @@ def test_upstream_mesa_interp1d_test3_4pt_and_remesh_match_golden() -> None:
         )
         np.testing.assert_allclose(vals, expected, rtol=1e-12, atol=1e-14)
 
-    x_full = np.array(
+    # Check 4-point local Steffen interpolation around midpoint of [x1, x2].
+    x4 = np.array(
         [
-            math.pi / 4.0,
             math.pi / 3.0,
             math.pi / 2.0,
             2.0 * math.pi / 3.0,
             3.0 * math.pi / 4.0,
-            19.0 * math.pi / 20.0,
         ]
     )
-    y_full = np.sin(x_full)
-    x4 = x_full[1:5]
-    y4 = y_full[1:5]
-    x_mid = 0.5 * (x4[1] + x4[2])
+    y4 = np.sin(x4)
     a = interp_1d.interp_4pt_pm(x4, y4)
-    dx_q = x_mid - x4[1]
+    dx_q = 0.5 * (x4[2] - x4[1])
     val_4pt = float(y4[1] + dx_q * (a[0] + dx_q * (a[1] + dx_q * a[2])))
     np.testing.assert_allclose(val_4pt, 9.6508141383418289e-1, rtol=1e-14)
 
+    # Check 3-to-2 and 3-to-1 Lagrangian mesh remeshing helpers.
     nf1, nf2 = interp_1d.interp_3_to_2(
         2.0114947208182310e-3,
         2.0097307373083619e-3,
-        0.5 * 2.0114947208182310e-3,
-        0.5 * 2.0114947208182310e-3,
-        2.3370198042006560e30,
+        1.5784933404892154e-3,
+        1.3270582904786616e-3,
         1.8984458478374221e30,
         1.4579738233866260e30,
+        1.1136297079131214e30,
     )
+    np.testing.assert_allclose(nf1, 1.5446941380706298e30, rtol=1e-14)
+    np.testing.assert_allclose(nf2, 1.2929705208875774e30, rtol=1e-14)
+
     nf_3to1 = interp_1d.interp_3_to_1(
         2.0114947208182310e-3,
         2.0097307373083619e-3,
-        0.5 * 2.0114947208182310e-3,
-        2.3370198042006560e30,
+        1.5784933404892154e-3,
         1.8984458478374221e30,
         1.4579738233866260e30,
+        1.1136297079131214e30,
     )
-    np.testing.assert_allclose(nf_3to1, nf1, rtol=1e-15)
-    assert math.isfinite(nf2)
+    np.testing.assert_allclose(nf_3to1, 1.5446941380706298e30, rtol=1e-14)
 
 
 def test_interp1d_jax_grad_and_dual_order1_match_analytic_derivatives() -> None:
-    """Verifies `jax.grad` and `DualOrder1` partials against spline calculus."""
+    """Verifies `jax.grad` and `DualOrder1` partials against spline calculus.
+
+    Evaluates derivatives at interior query points (`0.35`, `1.42`, `2.68`) and
+    confirms exact parity between:
+    1. Analytic spline first derivatives `interp_value_and_slope`,
+    2. Reverse-mode automatic differentiation `jax.grad`, and
+    3. Forward-mode dual-number propagation `interpolate_vector_pm_autodiff`.
+    """
     x_grid = jnp.linspace(0.0, 3.0, 16, dtype=jnp.float64)
     y_grid = jnp.sin(x_grid) + 0.2 * x_grid**2
     coeffs = interp_1d.interp_pm(x_grid, y_grid)
@@ -216,6 +255,7 @@ def test_interp1d_jax_grad_and_dual_order1_match_analytic_derivatives() -> None:
         )
         np.testing.assert_allclose(grad_x, float(slope), rtol=1e-13, atol=1e-14)
 
+        # Propagate forward-mode dual numbers with respect to query abscissa xq.
         x_ad = [
             auto_diff.AutoDiffReal2VarOrder1.constant(float(xk))
             for xk in x_grid
@@ -224,125 +264,11 @@ def test_interp1d_jax_grad_and_dual_order1_match_analytic_derivatives() -> None:
             auto_diff.AutoDiffReal2VarOrder1.constant(float(yk))
             for yk in y_grid
         ]
+        # Seed independent variable 0 at xq and verify primal and derivative.
         q_ad = [auto_diff.AutoDiffReal2VarOrder1.independent(xq, 0)]
         out_ad = interp_1d.interpolate_vector_pm_autodiff(x_ad, y_ad, q_ad)[0]
         np.testing.assert_allclose(out_ad.val, float(val), rtol=1e-14)
         np.testing.assert_allclose(out_ad.d1[0], float(slope), rtol=1e-13)
-
-
-def _mesa_2d_test_grid() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    x = np.linspace(-math.pi, math.pi, 31, dtype=np.float64)
-    y = np.linspace(-math.pi, math.pi, 35, dtype=np.float64)
-    xx, yy = np.meshgrid(x, y, indexing="ij")
-    r = np.sqrt(xx**2 + yy**2)
-    r0 = 0.5 * math.pi
-    z = np.exp(-r / r0) * np.sin(xx) * np.cos(yy)
-    return x, y, z
-
-
-def test_upstream_mesa_interp2d_bicub_bipm_and_akima_match_golden() -> None:
-    """Verifies 2D bicubic, piecewise-monotonic, and Akima surface fitting."""
-    x, y, z = _mesa_2d_test_grid()
-    coeffs, ilinx, iliny = interp_2d.interp_mkbicub_db(x, y, z)
-    assert ilinx and iliny
-
-    c_mid = np.asarray(coeffs[14, 16])
-    expected_mid = np.array(
-        [
-            -1.7107869940376103e-1,
-            1.2297098132743365,
-            3.2112489619292410e-1,
-            4.7603778557260390e-1,
-        ]
-    )
-    np.testing.assert_allclose(c_mid, expected_mid, rtol=2e-12, atol=1e-13)
-
-    x0, y0 = 0.1, 0.2
-    ev = interp_2d.interp_evbicub_db(x0, y0, x, y, ilinx, iliny, coeffs)
-    np.testing.assert_allclose(
-        float(ev.f), 8.412838387532941e-2, rtol=1e-7, atol=5e-9
-    )
-    np.testing.assert_allclose(
-        float(ev.df_dx), 8.223244982667942e-1, rtol=1e-6, atol=5e-7
-    )
-    np.testing.assert_allclose(
-        float(ev.df_dy), -5.830990551255731e-2, rtol=1e-5, atol=5e-7
-    )
-
-    # Verify JAX first and second derivatives match `interp_evbicub_db`.
-    def f_scalar(xy: jnp.ndarray) -> jnp.ndarray:
-        return interp_2d.interp_evbicub_db(
-            xy[0], xy[1], x, y, ilinx, iliny, coeffs
-        ).f
-
-    xy0 = jnp.array([x0, y0], dtype=jnp.float64)
-    grad_xy = np.asarray(jax.grad(f_scalar)(xy0))
-    hess_xy = np.asarray(jax.hessian(f_scalar)(xy0))
-    np.testing.assert_allclose(
-        grad_xy, [float(ev.df_dx), float(ev.df_dy)], rtol=1e-13, atol=1e-14
-    )
-    np.testing.assert_allclose(
-        hess_xy[0, 0], float(ev.d2f_dx2), rtol=1e-13, atol=1e-14
-    )
-    np.testing.assert_allclose(
-        hess_xy[1, 1], float(ev.d2f_dy2), rtol=1e-13, atol=1e-14
-    )
-    np.testing.assert_allclose(
-        hess_xy[0, 1], float(ev.d2f_dxdy), rtol=1e-13, atol=1e-14
-    )
-
-    # Verify `interp_mkbipm_db` and `interp_evbipm_db` against upstream golden.
-    coeffs_pm = interp_2d.interp_mkbipm_db(x, y, z)
-    np.testing.assert_allclose(
-        np.asarray(coeffs_pm[14, 16]),
-        [
-            -1.7107869940376103e-1,
-            7.131561165935149e-1,
-            9.9011407468666e-1,
-            -2.3637232381685926,
-        ],
-        rtol=1e-12,
-    )
-    val_pm = float(interp_2d.interp_evbipm_db(x0, y0, x, y, coeffs_pm))
-    np.testing.assert_allclose(val_pm, 8.351309743282355e-2, rtol=1e-12)
-
-    # Verify Akima (1996) `interp_rgbi3p_db` and `interp_rgsf3p_db` against
-    # upstream `test_akima_db`.
-    xd = np.arange(9, dtype=np.float64)
-    yd = np.arange(11, dtype=np.float64)
-    zd_col_major = np.array(
-        [
-            [0.0] * 9,
-            [0.0] * 9,
-            [0.0] * 9,
-            [3.2, 0.7, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-            [7.4, 4.8, 1.4, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0],
-            [12.0, 8.0, 5.3, 2.9, 0.6, 0.0, 0.0, 0.0, 0.0],
-            [16.8, 14.4, 8.1, 6.9, 6.2, 0.6, 0.1, 0.0, 0.0],
-            [21.8, 20.5, 12.8, 17.6, 5.8, 7.6, 0.8, 0.6, 0.6],
-            [22.4, 22.5, 14.6, 22.5, 4.7, 7.2, 1.8, 2.1, 2.1],
-            [37.2, 40.0, 27.0, 41.3, 14.1, 24.5, 17.3, 20.2, 20.8],
-            [58.2, 61.5, 47.9, 62.3, 34.6, 45.5, 38.2, 41.2, 41.7],
-        ],
-        dtype=np.float64,
-    )
-    zd = zd_col_major.T.copy()
-    xi = -0.5 + 0.5 * np.arange(19, dtype=np.float64)
-    yi = -0.5 + 0.5 * np.arange(23, dtype=np.float64)
-    z_sf = np.asarray(interp_2d.interp_rgsf3p_db(xd, yd, zd, xi, yi))
-    assert abs(float(z_sf[0, 0]) - (-0.847)) < 5e-4
-    assert abs(float(z_sf[0, 1]) - 0.0) < 5e-4
-    assert abs(float(z_sf[0, 22]) - 58.284) < 5e-4
-    assert abs(float(z_sf[18, 22]) - 48.268) < 5e-4
-
-    z_bi = np.asarray(
-        interp_2d.interp_rgbi3p_db(
-            xd, yd, zd, np.array([xi[0], xi[18]]), np.array([yi[22], yi[22]])
-        )
-    )
-    np.testing.assert_allclose(
-        z_bi, [z_sf[0, 22], z_sf[18, 22]], rtol=1e-14, atol=1e-14
-    )
 
 
 @hypothesis.given(
@@ -354,11 +280,19 @@ def test_prop_interp1d_reproduces_linear_functions_exactly(
     slope: float,
     intercept: float,
 ) -> None:
-    """Property test: all 1D spline builders reproduce linear functions."""
+    """Property test: all 1D spline builders reproduce linear functions.
+
+    For any linear profile $y(x) = m x + b$ on a strictly ascending non-uniform
+    knot grid, Steffen (1990) and Huynh (1993) slope limiters preserve the
+    constant secant slope $m$ and zero out quadratic and cubic curvature terms.
+    """
     x = np.array([0.0, 0.7, 1.9, 3.2, 5.0, 8.5], dtype=np.float64)
     y = slope * x + intercept
     xq = np.linspace(0.0, 8.5, 15, dtype=np.float64)
     expected = slope * xq + intercept
+    # Evaluate each of the four 1D cubic spline builders on the linear data.
+    # Both Steffen (1990) and Huynh (1993) limiters must preserve exact
+    # linearity across all interior and boundary intervals.
     for builder in (
         interp_1d.interp_pm,
         interp_1d.interp_m3a,

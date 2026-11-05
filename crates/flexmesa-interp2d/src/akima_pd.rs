@@ -1,18 +1,52 @@
 //! Partial-derivative estimation (`rgpd3p_db`) on rectangular grids for Akima
 //! (1996, ACM Algorithm 760) bivariate interpolation.
+//!
+//! Estimates $(z_x, z_y, z_{xy})$ at every node $(x_{d,i}, y_{d,j})$ of a
+//! rectangular grid by forming volatility-weighted combinations of up to four
+//! 4-point 1D Lagrange stencils along $x$ and $y$ and up to sixteen
+//! $4 \times 4$ tensor-product stencils in 2D.
+//!
+//! # Algorithm Overview
+//!
+//! 1. **1D Stencil Sweep (`eval_1d_stencils`)**: At each grid point
+//!    $(x_0, y_0)$, evaluates up to four 4-point 1D Lagrange stencils (`IDLT`)
+//!    along $x$ and along $y$. Each stencil yields a third-order derivative
+//!    estimate `pez` and a volatility measure `volf` computed as the sum of
+//!    squared residuals from a 4-point linear least-squares fit
+//!    $z \approx b_{00} + b_1 (x - x_0)$.
+//! 2. **2D Cross-Derivative Sweep**: Pairs every valid $x$-stencil with every
+//!    valid $y$-stencil to form a $4 \times 4$ 2D patch, estimates $z_{xy}$ via
+//!    tensor-product Lagrange weights (`pezxy`), and weights each patch by the
+//!    reciprocal of its 16-point bilinear least-squares residual variance.
+//! 3. **Small-Grid Boundary Extrapolation (`supplement_z_grid`)**: When the
+//!    input grid has only $N = 2$ or $N = 3$ points along an axis, synthetic
+//!    exterior stencil values are extrapolated via linear (`z2f`) or quadratic
+//!    (`z3f`) polynomials so the 4-point stencil formulas remain well-defined.
+//!
+//! Reference: Akima, H. (1996), "Algorithm 760: Rectangular-Grid-Data Surface
+//! Fitting that Has the Accuracy of a Bicubic Polynomial", ACM Transactions on
+//! Mathematical Software, 22(3), 357-361.
 
 use crate::spline1d::splinck_db;
 use crate::Interp2dError;
 use flexmesa_utils::is_bad;
 
+/// Relative index offsets for the 4 candidate 4-point stencils around `i0`.
 const IDLT: [[isize; 3]; 4] =
     [[-3, -2, -1], [-2, -1, 1], [-1, 1, 2], [1, 2, 3]];
 
+/// Linear extrapolation helper for 2-point grids in `RGPD3P_db`.
+///
+/// Extrapolates the line through `(0, zz0)` and `(xx1, zz1)` to offset `xx2`.
 #[inline]
 fn z2f(xx1: f64, xx2: f64, zz0: f64, zz1: f64) -> f64 {
     (zz1 - zz0) * xx2 / xx1 + zz0
 }
 
+/// Quadratic extrapolation helper for 3-point grids in `RGPD3P_db`.
+///
+/// Extrapolates the parabola through `(0, zz0)`, `(xx1, zz1)`, and `(xx2, zz2)`
+/// to offset `xx3`.
 #[inline]
 fn z3f(xx1: f64, xx2: f64, xx3: f64, zz0: f64, zz1: f64, zz2: f64) -> f64 {
     ((zz2 - zz0) * (xx3 - xx1) / xx2 - (zz1 - zz0) * (xx3 - xx2) / xx1)
@@ -20,18 +54,31 @@ fn z3f(xx1: f64, xx2: f64, xx3: f64, zz0: f64, zz1: f64, zz2: f64) -> f64 {
         + zz0
 }
 
+/// Cached 1D stencil quantities and weighted first derivative along one axis.
 #[derive(Clone, Copy, Default)]
 struct AxisStencils {
+    /// Coordinate displacements `[d1, d2, d3]` for each of the 4 stencils.
     da: [[f64; 3]; 4],
+    /// Stencil values `[z1, z2, z3]` for each of the 4 stencils.
     za: [[f64; 3]; 4],
+    /// Lagrange derivative weights `[c1, c2, c3]` for each of the 4 stencils.
     ca: [[f64; 3]; 4],
+    /// Sum of displacements $d_1 + d_2 + d_3$ per stencil.
     sa: [f64; 4],
+    /// Sum of squared displacements $d_1^2 + d_2^2 + d_3^2$ per stencil.
     ssa: [f64; 4],
+    /// Linear least-squares intercept $b_{00}$ per stencil.
     b00a: [f64; 4],
+    /// Linear least-squares slope $b_1$ per stencil.
     b1a: [f64; 4],
+    /// Volatility-weighted 1D derivative estimate at node `i0`.
     deriv: f64,
 }
 
+/// Evaluates the 4 candidate 1D stencils along a single grid axis around `i0`.
+///
+/// Computes Lagrange 4-point cubic derivative estimates `pez` and linear
+/// least-squares volatility weights `1 / (volf * ss)` for each valid stencil.
 fn eval_1d_stencils<F>(
     grid: &[f64],
     i0: usize,
@@ -46,28 +93,22 @@ where
     let n0 = n.max(4) as isize;
     let c0 = grid[i0];
     let mut out = AxisStencils::default();
-    let mut smpef = 0.0_f64;
-    let mut smwtf = 0.0_f64;
-    let mut smpei = 0.0_f64;
-    let mut smwti = 0.0_f64;
+    let (mut smpef, mut smwtf, mut smpei, mut smwti) = (0.0, 0.0, 0.0, 0.0);
 
     for ipe in 0..4 {
-        let i1 = (i0 as isize) + IDLT[ipe][0];
-        let i2 = (i0 as isize) + IDLT[ipe][1];
-        let i3 = (i0 as isize) + IDLT[ipe][2];
-        if i1 < 0 || i2 < 0 || i3 < 0 || i1 >= n0 || i2 >= n0 || i3 >= n0 {
+        let [o1, o2, o3] = IDLT[ipe];
+        let i0s = i0 as isize;
+        let (i1, i2, i3) = (i0s + o1, i0s + o2, i0s + o3);
+        if i1.min(i2).min(i3) < 0 || i1.max(i2).max(i3) >= n0 {
             continue;
         }
-        let u1 = i1 as usize;
-        let u2 = i2 as usize;
-        let u3 = i3 as usize;
-        let d1 = grid[u1] - c0;
-        let z1 = get_z(u1);
+        let (u1, u2, u3) = (i1 as usize, i2 as usize, i3 as usize);
+        let (d1, z1) = (grid[u1] - c0, get_z(u1));
+        // Supplement stencil coordinates when grid has fewer than 4 points.
         let (d2, d3, z2, z3) = if n >= 4 {
             (grid[u2] - c0, grid[u3] - c0, get_z(u2), get_z(u3))
         } else if n == 3 {
-            let d2_v = grid[u2] - c0;
-            let z2_v = get_z(u2);
+            let (d2_v, z2_v) = (grid[u2] - c0, get_z(u2));
             let d3_v = 2.0 * grid[2] - grid[1] - c0;
             (d2_v, d3_v, z2_v, z3f(d1, d2_v, d3_v, z00, z1, z2_v))
         } else {
@@ -81,6 +122,7 @@ where
         let pez =
             c1 * (z1 - z00) / d1 + c2 * (z2 - z00) / d2 + c3 * (z3 - z00) / d3;
 
+        // Volatility factor from 4-point linear least-squares fit residuals.
         let s = d1 + d2 + d3;
         let sz = z00 + z1 + z2 + z3;
         let ss = d1 * d1 + d2 * d2 + d3 * d3;
@@ -109,11 +151,7 @@ where
         out.b00a[ipe] = b00;
         out.b1a[ipe] = b1;
     }
-    out.deriv = if smwti < 0.5 {
-        smpef / smwtf
-    } else {
-        smpei / smwti
-    };
+    out.deriv = if smwti < 0.5 { smpef / smwtf } else { smpei / smwti };
     out
 }
 
@@ -134,8 +172,7 @@ pub fn rgpd3p_db(
     yd: &[f64],
     zd: &[f64],
 ) -> Result<Vec<[f64; 3]>, Interp2dError> {
-    let nxd = xd.len();
-    let nyd = yd.len();
+    let (nxd, nyd) = (xd.len(), yd.len());
     if nxd < 2 {
         return Err(Interp2dError::InsufficientPoints {
             axis: "x",
@@ -162,65 +199,59 @@ pub fn rgpd3p_db(
     splinck_db(xd, 1.0e-3, "x")?;
     splinck_db(yd, 1.0e-3, "y")?;
 
-    let nx0 = nxd.max(4) as isize;
-    let ny0 = nyd.max(4) as isize;
+    let (nx0, ny0) = (nxd.max(4) as isize, nyd.max(4) as isize);
     let eps_scale = f64::from(1.0e-12_f32);
     let mut pdd = vec![[0.0_f64; 3]; nxd * nyd];
 
     for iy0 in 0..nyd {
         for ix0 in 0..nxd {
             let z00 = zd[ix0 * nyd + iy0];
-            let xs =
-                eval_1d_stencils(xd, ix0, z00, eps_scale, |u| zd[u * nyd + iy0]);
-            let ys =
-                eval_1d_stencils(yd, iy0, z00, eps_scale, |v| zd[ix0 * nyd + v]);
+            let xs = eval_1d_stencils(xd, ix0, z00, eps_scale, |u| {
+                zd[u * nyd + iy0]
+            });
+            let ys = eval_1d_stencils(yd, iy0, z00, eps_scale, |v| {
+                zd[ix0 * nyd + v]
+            });
 
-            let mut smpef = 0.0_f64;
-            let mut smwtf = 0.0_f64;
-            let mut smpei = 0.0_f64;
-            let mut smwti = 0.0_f64;
+            // Combine valid x and y stencils to estimate cross derivative z_xy.
+            // If any stencil patch has near-zero residual variance (`smwti > 0`),
+            // return the unweighted average across exact-fit patches; otherwise
+            // return the volatility-weighted average `smpef / smwtf`.
+            let (mut smpef, mut smwtf, mut smpei, mut smwti) =
+                (0.0, 0.0, 0.0, 0.0);
 
             for ipex in 0..4 {
-                let ix1 = (ix0 as isize) + IDLT[ipex][0];
-                let ix2 = (ix0 as isize) + IDLT[ipex][1];
-                let ix3 = (ix0 as isize) + IDLT[ipex][2];
-                if ix1 < 0
-                    || ix2 < 0
-                    || ix3 < 0
-                    || ix1 >= nx0
-                    || ix2 >= nx0
-                    || ix3 >= nx0
-                {
+                let [ox1, ox2, ox3] = IDLT[ipex];
+                let ix0s = ix0 as isize;
+                let (ix1, ix2, ix3) = (ix0s + ox1, ix0s + ox2, ix0s + ox3);
+                if ix1.min(ix2).min(ix3) < 0 || ix1.max(ix2).max(ix3) >= nx0 {
                     continue;
                 }
-                let xs_loc = xs.da[ipex];
-                let zs_x = xs.za[ipex];
-                let [cx1, cx2, cx3] = xs.ca[ipex];
-                let sx = xs.sa[ipex];
-                let sxx = xs.ssa[ipex];
-                let b00x = xs.b00a[ipex];
-                let b10 = xs.b1a[ipex];
+                let (xs_loc, zs_x, [cx1, cx2, cx3]) =
+                    (xs.da[ipex], xs.za[ipex], xs.ca[ipex]);
+                let (sx, sxx, b00x, b10) =
+                    (xs.sa[ipex], xs.ssa[ipex], xs.b00a[ipex], xs.b1a[ipex]);
 
                 for ipey in 0..4 {
-                    let iy1 = (iy0 as isize) + IDLT[ipey][0];
-                    let iy2 = (iy0 as isize) + IDLT[ipey][1];
-                    let iy3 = (iy0 as isize) + IDLT[ipey][2];
-                    if iy1 < 0
-                        || iy2 < 0
-                        || iy3 < 0
-                        || iy1 >= ny0
-                        || iy2 >= ny0
-                        || iy3 >= ny0
+                    let [oy1, oy2, oy3] = IDLT[ipey];
+                    let (iy1, iy2, iy3) = (
+                        iy0 as isize + oy1,
+                        iy0 as isize + oy2,
+                        iy0 as isize + oy3,
+                    );
+                    if iy1.min(iy2).min(iy3) < 0
+                        || iy1.max(iy2).max(iy3) >= ny0
                     {
                         continue;
                     }
-                    let ys_loc = ys.da[ipey];
-                    let zs_y = ys.za[ipey];
-                    let cys = ys.ca[ipey];
-                    let sy = ys.sa[ipey];
-                    let syy = ys.ssa[ipey];
-                    let b00y = ys.b00a[ipey];
-                    let b01 = ys.b1a[ipey];
+                    let (ys_loc, zs_y, cys) =
+                        (ys.da[ipey], ys.za[ipey], ys.ca[ipey]);
+                    let (sy, syy, b00y, b01) = (
+                        ys.sa[ipey],
+                        ys.ssa[ipey],
+                        ys.b00a[ipey],
+                        ys.b1a[ipey],
+                    );
 
                     let z_grid = supplement_z_grid(
                         nxd,
@@ -234,6 +265,7 @@ pub fn rgpd3p_db(
                         zs_y,
                     );
 
+                    // Primary 2D cross-derivative estimate pezxy.
                     let mut pe_row = [0.0_f64; 3];
                     for r in 0..3 {
                         for c in 0..3 {
@@ -245,14 +277,14 @@ pub fn rgpd3p_db(
                     let pezxy =
                         cx1 * pe_row[0] + cx2 * pe_row[1] + cx3 * pe_row[2];
 
+                    // Least-squares bilinear fit and 16-point 2D volatility.
                     let b00 = f64::midpoint(b00x, b00y);
                     let sxxyy = sxx * syy;
                     let mut sxyz = 0.0_f64;
                     for r in 0..3 {
-                        let mut row_sum = 0.0_f64;
-                        for c in 0..3 {
-                            row_sum += ys_loc[c] * z_grid[r][c];
-                        }
+                        let row_sum = ys_loc[0] * z_grid[r][0]
+                            + ys_loc[1] * z_grid[r][1]
+                            + ys_loc[2] * z_grid[r][2];
                         sxyz += xs_loc[r] * row_sum;
                     }
                     let b11 = (sxyz
@@ -278,8 +310,7 @@ pub fn rgpd3p_db(
                             z_sq_sum += z_grid[r][c] * z_grid[r][c];
                         }
                     }
-                    let epsln = z_sq_sum * eps_scale;
-                    if volf > epsln {
+                    if volf > z_sq_sum * eps_scale {
                         let wt = 1.0 / (volf * sxxyy);
                         smpef += wt * pezxy;
                         smwtf += wt;
@@ -289,11 +320,7 @@ pub fn rgpd3p_db(
                     }
                 }
             }
-            let zxydi = if smwti < 0.5 {
-                smpef / smwtf
-            } else {
-                smpei / smwti
-            };
+            let zxydi = if smwti < 0.5 { smpef / smwtf } else { smpei / smwti };
             pdd[ix0 * nyd + iy0] = [xs.deriv, ys.deriv, zxydi];
         }
     }
@@ -301,6 +328,13 @@ pub fn rgpd3p_db(
     Ok(pdd)
 }
 
+/// Populates the 3x3 stencil value matrix `z` around `(ix0, iy0)`,
+/// extrapolating missing rows or columns via `z2f` or `z3f` when `nxd < 4` or
+/// `nyd < 4`.
+///
+/// Copies all valid interior nodes `(ixs[r], iys[c])` from `zd`, then
+/// extrapolates along `x` for small `nxd` (`2` or `3`) and along `y` for small
+/// `nyd` (`2` or `3`) matching upstream `RGPD3P_db`.
 #[allow(clippy::too_many_arguments)]
 fn supplement_z_grid(
     nxd: usize,
@@ -313,11 +347,9 @@ fn supplement_z_grid(
     zs_x: [f64; 3],
     zs_y: [f64; 3],
 ) -> [[f64; 3]; 3] {
-    let [x1, x2, x3] = xs;
-    let [y1, y2, y3] = ys;
+    let ([x1, x2, x3], [y1, y2, y3]) = (xs, ys);
     let mut z = [[0.0_f64; 3]; 3];
-    let nx_in = (nxd - 1).min(3);
-    let ny_in = (nyd - 1).min(3);
+    let (nx_in, ny_in) = ((nxd - 1).min(3), (nyd - 1).min(3));
     for r in 0..nx_in {
         for c in 0..ny_in {
             z[r][c] = zd[ixs[r] * nyd + iys[c]];

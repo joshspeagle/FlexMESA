@@ -1,5 +1,11 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
-"""Spline evaluation, definite integration, and remeshing (`interp_1d`)."""
+"""Spline evaluation, definite integration, and remeshing (`interp_1d`).
+
+Provides vectorized ``float64`` JAX evaluation of 1D cubic splines, exact
+piecewise-analytic definite integration across monotonic knot grids, and
+hydrostatic Lagrangian remeshing stencils (`interp_3_to_1`, `interp_3_to_2`,
+`interp_4_to_1`).
+"""
 
 from __future__ import annotations
 
@@ -16,13 +22,59 @@ def _locate_intervals_jax(
     init_x: jnp.ndarray,
     xs: jnp.ndarray,
 ) -> jnp.ndarray:
-    """Locates 0-based subinterval indices ``i in [0, nx - 2]`` for queries."""
+    """Locates 0-based subinterval indices ``i in [0, nx - 2]`` for queries.
+
+    Handles both strictly increasing and strictly decreasing knot arrays
+    ``init_x`` of shape ``(N,)`` via binary search (`jnp.searchsorted`).
+    """
     nx = init_x.shape[0]
     increasing = init_x[-1] > init_x[0]
     grid_asc = jnp.where(increasing, init_x, init_x[::-1])
     pos = jnp.searchsorted(grid_asc, xs, side="right") - 1
     idx_asc = jnp.clip(pos, 0, nx - 2)
     return jnp.where(increasing, idx_asc, (nx - 2) - idx_asc)
+
+
+def _eval_horner(
+    init_x: np.ndarray | jnp.ndarray,
+    coeffs: np.ndarray | jnp.ndarray,
+    xs: np.ndarray | jnp.ndarray,
+    *,
+    with_slopes: bool,
+) -> tuple[jnp.ndarray, jnp.ndarray | None]:
+    """Shared Horner evaluator for 1D cubic splines and optional derivatives.
+
+    Clamps values outside ``[min(init_x), max(init_x)]`` to the nearest
+    endpoint knot value and zeroes exterior derivatives, matching upstream MESA
+    ``do_interp_values``.
+    """
+    x_grid = jnp.asarray(init_x, dtype=jnp.float64)
+    c_arr = jnp.asarray(coeffs, dtype=jnp.float64)
+    x_q = jnp.asarray(xs, dtype=jnp.float64)
+    if x_grid.ndim != 1 or c_arr.shape != (x_grid.shape[0], 4):
+        raise ValueError("coeffs must have shape (len(init_x), 4).")
+
+    idx = _locate_intervals_jax(x_grid, x_q)
+    dx = x_q - x_grid[idx]
+    c0, c1, c2, c3 = (
+        c_arr[idx, 0],
+        c_arr[idx, 1],
+        c_arr[idx, 2],
+        c_arr[idx, 3],
+    )
+
+    vals = c0 + dx * (c1 + dx * (c2 + dx * c3))
+    lo = jnp.minimum(x_grid[0], x_grid[-1])
+    hi = jnp.maximum(x_grid[0], x_grid[-1])
+    left_idx = jnp.where(x_grid[-1] > x_grid[0], 0, x_grid.shape[0] - 1)
+    right_idx = jnp.where(x_grid[-1] > x_grid[0], x_grid.shape[0] - 1, 0)
+    vals = jnp.where(x_q <= lo, c_arr[left_idx, 0], vals)
+    vals = jnp.where(x_q >= hi, c_arr[right_idx, 0], vals)
+    if not with_slopes:
+        return vals, None
+    slopes = c1 + dx * (2.0 * c2 + 3.0 * dx * c3)
+    slopes = jnp.where((x_q < lo) | (x_q > hi), 0.0, slopes)
+    return vals, slopes
 
 
 def interp_values_and_slopes(
@@ -45,29 +97,8 @@ def interp_values_and_slopes(
     Returns:
         Tuple ``(vals, slopes)`` of ``float64`` JAX arrays of shape ``(M,)``.
     """
-    x_grid = jnp.asarray(init_x, dtype=jnp.float64)
-    c_arr = jnp.asarray(coeffs, dtype=jnp.float64)
-    x_q = jnp.asarray(xs, dtype=jnp.float64)
-    if x_grid.ndim != 1 or c_arr.shape != (x_grid.shape[0], 4):
-        raise ValueError("coeffs must have shape (len(init_x), 4).")
-
-    idx = _locate_intervals_jax(x_grid, x_q)
-    dx = x_q - x_grid[idx]
-    c0 = c_arr[idx, 0]
-    c1 = c_arr[idx, 1]
-    c2 = c_arr[idx, 2]
-    c3 = c_arr[idx, 3]
-
-    vals = c0 + dx * (c1 + dx * (c2 + dx * c3))
-    slopes = c1 + dx * (2.0 * c2 + 3.0 * dx * c3)
-
-    lo = jnp.minimum(x_grid[0], x_grid[-1])
-    hi = jnp.maximum(x_grid[0], x_grid[-1])
-    left_idx = jnp.where(x_grid[-1] > x_grid[0], 0, x_grid.shape[0] - 1)
-    right_idx = jnp.where(x_grid[-1] > x_grid[0], x_grid.shape[0] - 1, 0)
-    vals = jnp.where(x_q <= lo, c_arr[left_idx, 0], vals)
-    vals = jnp.where(x_q >= hi, c_arr[right_idx, 0], vals)
-    slopes = jnp.where((x_q < lo) | (x_q > hi), 0.0, slopes)
+    vals, slopes = _eval_horner(init_x, coeffs, xs, with_slopes=True)
+    assert slopes is not None
     return vals, slopes
 
 
@@ -76,8 +107,17 @@ def interp_values(
     coeffs: np.ndarray | jnp.ndarray,
     xs: np.ndarray | jnp.ndarray,
 ) -> jnp.ndarray:
-    """Evaluates a 1D cubic spline at query points ``xs`` (`interp_values`)."""
-    vals, _ = interp_values_and_slopes(init_x, coeffs, xs)
+    """Evaluates a 1D cubic spline at query points ``xs`` (`interp_values`).
+
+    Args:
+        init_x: Strictly monotonic knot coordinates of shape ``(N,)``.
+        coeffs: Spline coefficient array of shape ``(N, 4)``.
+        xs: Query coordinates of shape ``(M,)``.
+
+    Returns:
+        JAX ``float64`` array of interpolated values of shape ``(M,)``.
+    """
+    vals, _ = _eval_horner(init_x, coeffs, xs, with_slopes=False)
     return vals
 
 
@@ -86,7 +126,16 @@ def interp_value_and_slope(
     coeffs: np.ndarray | jnp.ndarray,
     x: float | jnp.ndarray,
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
-    """Evaluates a 1D cubic spline value and slope at a single scalar ``x``."""
+    """Evaluates a 1D cubic spline value and slope at a single scalar ``x``.
+
+    Args:
+        init_x: Strictly monotonic knot coordinates of shape ``(N,)``.
+        coeffs: Spline coefficient array of shape ``(N, 4)``.
+        x: Scalar query coordinate in physical or dimensionless units.
+
+    Returns:
+        Tuple ``(val, slope)`` of scalar ``float64`` JAX arrays.
+    """
     vals, slopes = interp_values_and_slopes(
         init_x, coeffs, jnp.atleast_1d(jnp.asarray(x, dtype=jnp.float64))
     )
@@ -98,9 +147,20 @@ def interp_value(
     coeffs: np.ndarray | jnp.ndarray,
     x: float | jnp.ndarray,
 ) -> jnp.ndarray:
-    """Evaluates a 1D cubic spline value at a single scalar ``x``."""
-    val, _ = interp_value_and_slope(init_x, coeffs, x)
-    return val
+    """Evaluates a 1D cubic spline value at a single scalar ``x``.
+
+    Args:
+        init_x: Strictly monotonic knot coordinates of shape ``(N,)``.
+        coeffs: Spline coefficient array of shape ``(N, 4)``.
+        x: Scalar query coordinate in physical or dimensionless units.
+
+    Returns:
+        Scalar ``float64`` JAX array containing ``f(x)``.
+    """
+    vals = interp_values(
+        init_x, coeffs, jnp.atleast_1d(jnp.asarray(x, dtype=jnp.float64))
+    )
+    return vals[0]
 
 
 def _cubic_antideriv(c: np.ndarray, dx: float) -> float:
@@ -140,38 +200,39 @@ def integrate_values(
     if c_arr.shape != (nx, 4):
         raise ValueError("coeffs must have shape (len(init_x), 4).")
     increasing = bool(x_grid[-1] > x_grid[0])
+    grid_asc = x_grid if increasing else x_grid[::-1]
     out = np.zeros(x_q.size, dtype=np.float64)
 
     for k in range(1, x_q.size):
-        xa = float(x_q[k - 1])
-        xb = float(x_q[k])
+        xa, xb = float(x_q[k - 1]), float(x_q[k])
         if increasing:
             if xb < xa or xa < x_grid[0] or xb > x_grid[-1]:
                 raise ValueError("xs must be increasing within init_x range.")
+            pos = int(np.searchsorted(grid_asc, xa, side="right")) - 1
+            start_i = max(0, min(pos, nx - 2))
         else:
             if xb > xa or xa > x_grid[0] or xb < x_grid[-1]:
                 raise ValueError("xs must be decreasing within init_x range.")
+            pos = int(np.searchsorted(grid_asc, xa, side="left"))
+            start_i = max(0, min((nx - 2) - pos, nx - 2))
         if xa == xb:
             continue
 
         total = 0.0
-        for i in range(nx - 1):
-            x0 = float(x_grid[i])
-            x1 = float(x_grid[i + 1])
+        for i in range(start_i, nx - 1):
+            x0, x1 = float(x_grid[i]), float(x_grid[i + 1])
             if increasing:
                 if x1 <= xa:
                     continue
                 if x0 >= xb:
                     break
-                seg_start = max(xa, x0)
-                seg_end = min(xb, x1)
+                seg_start, seg_end = max(xa, x0), min(xb, x1)
             else:
                 if x1 >= xa:
                     continue
                 if x0 <= xb:
                     break
-                seg_start = min(xa, x0)
-                seg_end = max(xb, x1)
+                seg_start, seg_end = min(xa, x0), max(xb, x1)
             a2 = _cubic_antideriv(c_arr[i], seg_end - x0)
             a1 = (
                 _cubic_antideriv(c_arr[i], seg_start - x0)
@@ -205,6 +266,58 @@ def interpolate_vector_pm(
     return interpolate_vector(old_x, old_y, new_x, builder=pm.interp_pm)
 
 
+def interp_values_autodiff(
+    init_x: Sequence[auto_diff.DualOrder1],
+    coeffs: Sequence[
+        tuple[
+            auto_diff.DualOrder1,
+            auto_diff.DualOrder1,
+            auto_diff.DualOrder1,
+            auto_diff.DualOrder1,
+        ]
+    ],
+    x: Sequence[auto_diff.DualOrder1],
+) -> list[auto_diff.DualOrder1]:
+    """Evaluates a 1D cubic spline over ``DualOrder1`` queries (`O(M log N)`).
+
+    Args:
+        init_x: Sequence of ``N >= 1`` strictly monotonic ``DualOrder1`` knots.
+        coeffs: Sequence of ``N`` 4-tuples ``(c0, c1, c2, c3)``.
+        x: Sequence of ``M`` ``DualOrder1`` query abscissas.
+
+    Returns:
+        List of ``M`` interpolated ``DualOrder1`` values.
+    """
+    nx = len(init_x)
+    if nx != len(coeffs) or nx == 0:
+        raise ValueError("init_x and coeffs must have matching length >= 1.")
+    if nx == 1:
+        return [coeffs[0][0] for _ in x]
+    x_primal = np.array([pt.val for pt in init_x], dtype=np.float64)
+    increasing = bool(x_primal[-1] > x_primal[0])
+    grid_asc = x_primal if increasing else x_primal[::-1]
+    out: list[auto_diff.DualOrder1] = []
+
+    for xq in x:
+        if (increasing and xq.val <= x_primal[0]) or (
+            not increasing and xq.val >= x_primal[0]
+        ):
+            out.append(coeffs[0][0])
+            continue
+        if (increasing and xq.val >= x_primal[-1]) or (
+            not increasing and xq.val <= x_primal[-1]
+        ):
+            out.append(coeffs[-1][0])
+            continue
+        pos = int(np.searchsorted(grid_asc, xq.val, side="right")) - 1
+        idx_asc = max(0, min(pos, nx - 2))
+        idx = idx_asc if increasing else (nx - 2) - idx_asc
+        dx = xq - init_x[idx]
+        c0, c1, c2, c3 = coeffs[idx]
+        out.append(c0 + dx * (c1 + dx * (c2 + dx * c3)))
+    return out
+
+
 def interpolate_vector_pm_autodiff(
     old_x: Sequence[auto_diff.DualOrder1],
     old_y: Sequence[auto_diff.DualOrder1],
@@ -212,95 +325,56 @@ def interpolate_vector_pm_autodiff(
 ) -> list[auto_diff.DualOrder1]:
     """Interpolates ``DualOrder1`` vectors via Steffen (1990) ``interp_pm``."""
     coeffs = pm.interp_pm_autodiff(old_x, old_y)
-    nx = len(old_x)
-    increasing = old_x[-1].val > old_x[0].val
-    out: list[auto_diff.DualOrder1] = []
-
-    for xq in new_x:
-        if (increasing and xq.val <= old_x[0].val) or (
-            not increasing and xq.val >= old_x[0].val
-        ):
-            out.append(coeffs[0][0])
-            continue
-        if (increasing and xq.val >= old_x[-1].val) or (
-            not increasing and xq.val <= old_x[-1].val
-        ):
-            out.append(coeffs[-1][0])
-            continue
-        idx = nx - 2
-        for i in range(nx - 1):
-            in_cell = (
-                old_x[i].val <= xq.val <= old_x[i + 1].val
-                if increasing
-                else old_x[i].val >= xq.val >= old_x[i + 1].val
-            )
-            if in_cell:
-                idx = i
-                break
-        dx = xq - old_x[idx]
-        c0, c1, c2, c3 = coeffs[idx]
-        out.append(c0 + dx * (c1 + dx * (c2 + dx * c3)))
-    return out
+    return interp_values_autodiff(old_x, coeffs, new_x)
 
 
 def interp_3_to_1(
-    dm_m1: float,
-    dm_00: float,
-    dm_p1: float,
-    f_m1: float,
-    f_00: float,
-    f_p1: float,
+    pdqm1: float,
+    pdq00: float,
+    ndqm1: float,
+    pfm1: float,
+    pf00: float,
+    pfp1: float,
 ) -> float:
-    """Interpolates cell-averaged ``(f_m1, f_00, f_p1)`` to the central face."""
-    old_x = np.array(
-        [0.0, 0.5 * (dm_m1 + dm_00), 0.5 * dm_m1 + dm_00 + 0.5 * dm_p1],
-        dtype=np.float64,
-    )
-    old_y = np.array([f_m1, f_00, f_p1], dtype=np.float64)
-    new_x = np.array([0.5 * dm_m1], dtype=np.float64)
-    return float(interpolate_vector_pm(old_x, old_y, new_x)[0])
+    """Remeshes 3 points spaced by ``(pdqm1, pdq00)`` to offset ``ndqm1``."""
+    x_old = np.array([0.0, pdqm1, pdqm1 + pdq00], dtype=np.float64)
+    v_old = np.array([pfm1, pf00, pfp1], dtype=np.float64)
+    x_new = np.array([ndqm1], dtype=np.float64)
+    return float(interpolate_vector_pm(x_old, v_old, x_new)[0])
 
 
 def interp_3_to_2(
-    dm_m1: float,
-    dm_00: float,
-    dm_p1: float,
-    dm_p2: float,
-    f_m1: float,
-    f_00: float,
-    f_p1: float,
+    pdqm1: float,
+    pdq00: float,
+    ndqm1: float,
+    ndq00: float,
+    pfm1: float,
+    pf00: float,
+    pfp1: float,
 ) -> tuple[float, float]:
-    """Interpolates cell-averaged ``(f_m1, f_00, f_p1)`` to two inner faces."""
-    old_x = np.array(
-        [
-            0.0,
-            0.5 * (dm_m1 + dm_00),
-            0.5 * dm_m1 + dm_00 + 0.5 * dm_p1,
-            0.5 * dm_m1 + dm_00 + dm_p1 + 0.5 * dm_p2,
-        ],
-        dtype=np.float64,
-    )
-    old_y = np.array([f_m1, f_00, f_p1, f_p1], dtype=np.float64)
-    new_x = np.array([0.5 * dm_m1, 0.5 * dm_m1 + dm_00], dtype=np.float64)
-    res = interpolate_vector_pm(old_x, old_y, new_x)
+    """Remeshes 3 points spaced by ``(pdqm1, pdq00)`` onto 2 target offsets."""
+    x_old = np.array([0.0, pdqm1, pdqm1 + pdq00], dtype=np.float64)
+    v_old = np.array([pfm1, pf00, pfp1], dtype=np.float64)
+    x_new = np.array([ndqm1, ndqm1 + ndq00], dtype=np.float64)
+    res = interpolate_vector_pm(x_old, v_old, x_new)
     return float(res[0]), float(res[1])
 
 
 def interp_4_to_1(
-    dm_m2: float,
-    dm_m1: float,
-    dm_00: float,
-    dm_pt: float,
-    f_m2: float,
-    f_m1: float,
-    f_00: float,
-    f_p1: float,
+    pdqm1: float,
+    pdq00: float,
+    pdqp1: float,
+    ndq00: float,
+    pfm1: float,
+    pf00: float,
+    pfp1: float,
+    pfp2: float,
 ) -> float:
-    """Interpolates 4 cell points to ``dm_pt`` using ``interp_pm``."""
-    old_x = np.array(
-        [0.0, dm_m2, dm_m2 + dm_m1, dm_m2 + dm_m1 + dm_00],
+    """Remeshes 4 points spaced by ``(pdqm1, pdq00, pdqp1)`` to ``ndq00``."""
+    x_old = np.array(
+        [0.0, pdqm1, pdqm1 + pdq00, pdqm1 + pdq00 + pdqp1],
         dtype=np.float64,
     )
-    old_y = np.array([f_m2, f_m1, f_00, f_p1], dtype=np.float64)
-    new_x = np.array([dm_pt], dtype=np.float64)
-    return float(interpolate_vector_pm(old_x, old_y, new_x)[0])
+    v_old = np.array([pfm1, pf00, pfp1, pfp2], dtype=np.float64)
+    x_new = np.array([ndq00], dtype=np.float64)
+    return float(interpolate_vector_pm(x_old, v_old, x_new)[0])

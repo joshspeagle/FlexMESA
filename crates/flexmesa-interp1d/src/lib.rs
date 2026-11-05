@@ -12,7 +12,8 @@
 //! $N$ four-element coefficient arrays `[c0, c1, c2, c3]`. On interval
 //! $[x_i, x_{i+1}]$ (or $[x_{i+1}, x_i]$ when $x$ is strictly decreasing), the
 //! cubic polynomial for displacement $\Delta x = x - x_i$ is:
-//! $$p_i(x) = c_{0,i} + \Delta x\,(c_{1,i} + \Delta x\,(c_{2,i} + \Delta x\,c_{3,i}))$$
+//! $$p_i(x) = c_{0,i} + \Delta x\,(c_{1,i} + \Delta x\,(
+//!   c_{2,i} + \Delta x\,c_{3,i}))$$
 //! where $c_{0,i} = y_i$, $c_{1,i} = p_i'(x_i)$,
 //! $c_{2,i} = \tfrac{1}{2} p_i''(x_i)$, and
 //! $c_{3,i} = \tfrac{1}{6} p_i'''(x_i)$.
@@ -112,7 +113,8 @@ impl fmt::Display for Interp1dError {
             ),
             Self::InsufficientPoints { min_points, actual } => write!(
                 f,
-                "interpolation requires at least {min_points} points, got {actual}"
+                "interpolation requires at least {min_points} points, \
+                 got {actual}"
             ),
             Self::NonFiniteInput => {
                 write!(f, "interpolation input contains NaN or infinity")
@@ -123,7 +125,8 @@ impl fmt::Display for Interp1dError {
             ),
             Self::IntegrationDomainError => write!(
                 f,
-                "integration points must lie within knot range and follow knot order"
+                "integration points must lie within knot range and follow \
+                 knot order"
             ),
         }
     }

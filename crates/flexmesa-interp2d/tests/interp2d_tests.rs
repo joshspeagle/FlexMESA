@@ -1,9 +1,18 @@
 //! Integration and property-based tests for `flexmesa-interp2d`.
+//!
+//! Validates Safe Rust 2D bicubic splines (`interp_mkbicub_db`,
+//! `interp_evbicub_db`, `interp_evbicub_mask_db`), 2D Steffen (1990)
+//! piecewise-monotonic splines (`interp_mkbipm_db`, `interp_evbipm_db`), and
+//! Akima (1996, ACM Algorithm 760) bivariate surface fitting
+//! (`interp_rgbi3p_db`, `interp_rgsf3p_db`, `rgpd3p_db`) against upstream MESA
+//! golden baselines (`test2D_db`, `test_akima_db`) and exact polynomial
+//! calculus identities.
 
 #![allow(
     clippy::approx_constant,
     clippy::cast_lossless,
     clippy::cast_precision_loss,
+    clippy::doc_markdown,
     clippy::excessive_precision,
     clippy::float_cmp,
     clippy::many_single_char_names,
@@ -21,15 +30,23 @@ use flexmesa_interp2d::{
 use proptest::prelude::*;
 use std::f64::consts::PI;
 
+/// Number of x-grid knots in upstream MESA `test2D_db`.
 const NUM_XPTS: usize = 31;
+
+/// Number of y-grid knots in upstream MESA `test2D_db`.
 const NUM_YPTS: usize = 35;
 
+/// Evaluates the upstream MESA 2D test function
+/// $f(x, y) = \exp(-r / r_0) \sin(x) \cos(y)$ with $r = \sqrt{x^2 + y^2}$ and
+/// $r_0 = \pi / 2$.
 fn test_fcn_db(x: f64, y: f64) -> f64 {
     let r = (x * x + y * y).sqrt();
     let r0 = 0.5 * PI;
     (-r / r0).exp() * x.sin() * y.cos()
 }
 
+/// Constructs the $31 \times 35$ uniform rectangular test grid
+/// `(xpts, ypts, z)` over $[-\pi, \pi]^2$ matching upstream MESA `test2D_db`.
 fn build_mesa_2d_test_grid() -> (Vec<f64>, Vec<f64>, Vec<f64>) {
     let xmin = -PI;
     let xmax = PI;
@@ -51,6 +68,9 @@ fn build_mesa_2d_test_grid() -> (Vec<f64>, Vec<f64>, Vec<f64>) {
     (xpts, ypts, z)
 }
 
+/// Verifies `interp_mkbicub_db`, `interp_evbicub_db`, and
+/// `interp_evbicub_mask_db` against upstream MESA `test2D_db(.true.)` and
+/// finite-difference derivative identities.
 #[test]
 fn test_mesa_bicubic_spline_matches_golden_output() {
     let (xpts, ypts, z) = build_mesa_2d_test_grid();
@@ -76,7 +96,7 @@ fn test_mesa_bicubic_spline_matches_golden_output() {
     assert!(ilinx);
     assert!(iliny);
 
-    // Fortran 1-based (num_xpts/2 = 15, num_ypts/2 = 17) -> 0-based (14, 16)
+    // Fortran 1-based (num_xpts/2 = 15, num_ypts/2 = 17) -> 0-based (14, 16).
     let mid = f[14 * NUM_YPTS + 16];
     let expected_mid = [
         -1.710_786_994_037_610_3e-1,
@@ -95,6 +115,7 @@ fn test_mesa_bicubic_spline_matches_golden_output() {
     let dx = x_max - x_min;
     let dy = 0.5 * (y_max - y_min);
 
+    // Pinned (i, j, z, dz/dx, dz/dy) values from upstream test2D_db(.true.).
     let expected_pts: [(usize, usize, f64, f64, f64); 6] = [
         (
             0,
@@ -200,6 +221,8 @@ fn test_mesa_bicubic_spline_matches_golden_output() {
     }
 }
 
+/// Verifies 2D Steffen (1990) piecewise-monotonic interpolation
+/// (`interp_mkbipm_db`, `interp_evbipm_db`) against `test2D_db(.false.)`.
 #[test]
 fn test_mesa_bipm_matches_golden_output() {
     let (xpts, ypts, z) = build_mesa_2d_test_grid();
@@ -244,12 +267,14 @@ fn test_mesa_bipm_matches_golden_output() {
     }
 }
 
+/// Verifies Akima (1996, ACM Algorithm 760) `interp_rgbi3p_db` and
+/// `interp_rgsf3p_db` against the published 9x11 table in `test_akima_db.f`.
 #[test]
 fn test_akima_rgbi3p_and_rgsf3p_match_published_table() {
     let xd: Vec<f64> = (0..9).map(|i| i as f64).collect();
     let yd: Vec<f64> = (0..11).map(|j| j as f64).collect();
 
-    // Fortran column-major ZD(1:9, 1:11) table from test_akima_db.f
+    // Fortran column-major ZD(1:9, 1:11) table from test_akima_db.f.
     let zd_col_major: [[f64; 9]; 11] = [
         [0.0; 9],
         [0.0; 9],
@@ -291,7 +316,7 @@ fn test_akima_rgbi3p_and_rgsf3p_match_published_table() {
         assert!((a - b).abs() < 1.0e-14);
     }
 
-    // Spot-check corner, interior, and extrapolated values from ZIE in test_akima_db.f
+    // Spot-check corner, interior, and extrapolated values from ZIE.
     assert!((zi_sf[0] - (-0.847)).abs() < 5.0e-4);
     assert!((zi_sf[1] - 0.0).abs() < 5.0e-4);
     assert!((zi_sf[22] - 58.284).abs() < 5.0e-4);
@@ -299,6 +324,10 @@ fn test_akima_rgbi3p_and_rgsf3p_match_published_table() {
 }
 
 proptest! {
+    /// Property test: 2D bicubic spline reproduces any biquadratic polynomial
+    /// $p(x, y) = a_{00} + a_{10} x + a_{01} y + a_{20} x^2 + a_{11} x y
+    /// + a_{02} y^2$ and its first and second partial derivatives to machine
+    /// precision.
     #[test]
     fn prop_bicubic_spline_reproduces_biquadratic_and_derivatives(
         a00 in -2.0_f64..2.0_f64,
@@ -344,7 +373,8 @@ proptest! {
             &bc_y,
         ).unwrap();
 
-        let eval = interp_evbicub_db(xq, yq, &xs, &ys, ilinx, iliny, &f).unwrap();
+        let ev =
+            interp_evbicub_db(xq, yq, &xs, &ys, ilinx, iliny, &f).unwrap();
         let exact_f = poly(xq, yq);
         let exact_df_dx = a10 + 2.0 * a20 * xq + a11 * yq;
         let exact_df_dy = a01 + a11 * xq + 2.0 * a02 * yq;
@@ -352,11 +382,11 @@ proptest! {
         let exact_d2f_dy2 = 2.0 * a02;
         let exact_d2f_dxdy = a11;
 
-        prop_assert!((eval.f - exact_f).abs() < 1.0e-12);
-        prop_assert!((eval.df_dx - exact_df_dx).abs() < 1.0e-11);
-        prop_assert!((eval.df_dy - exact_df_dy).abs() < 1.0e-11);
-        prop_assert!((eval.d2f_dx2 - exact_d2f_dx2).abs() < 1.0e-10);
-        prop_assert!((eval.d2f_dy2 - exact_d2f_dy2).abs() < 1.0e-10);
-        prop_assert!((eval.d2f_dxdy - exact_d2f_dxdy).abs() < 1.0e-10);
+        prop_assert!((ev.f - exact_f).abs() < 1.0e-12);
+        prop_assert!((ev.df_dx - exact_df_dx).abs() < 1.0e-11);
+        prop_assert!((ev.df_dy - exact_df_dy).abs() < 1.0e-11);
+        prop_assert!((ev.d2f_dx2 - exact_d2f_dx2).abs() < 1.0e-10);
+        prop_assert!((ev.d2f_dy2 - exact_d2f_dy2).abs() < 1.0e-10);
+        prop_assert!((ev.d2f_dxdy - exact_d2f_dxdy).abs() < 1.0e-10);
     }
 }

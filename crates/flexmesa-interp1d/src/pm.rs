@@ -18,12 +18,25 @@ pub(crate) fn fortran_sign1(val: f64) -> f64 {
     }
 }
 
+/// Limits a boundary parabolic slope estimate `p` against adjacent secant `s`.
+#[inline]
+fn limit_endpoint_slope(p: f64, s: f64) -> f64 {
+    if p * s <= 0.0 {
+        0.0
+    } else if p.abs() > 2.0 * s.abs() {
+        2.0 * s
+    } else {
+        p
+    }
+}
+
 /// Constructs a Steffen (1990) piecewise-monotonic cubic interpolant on a
 /// strictly monotonic grid `x` (`n >= 2`) with knot values `y`.
 ///
 /// Returns `n` coefficient tuples `[c0, c1, c2, c3]` where on interval
 /// $[x_i, x_{i+1}]$ with $\Delta x = x - x_i$:
-/// $$p_i(x) = c_{0,i} + \Delta x\,(c_{1,i} + \Delta x\,(c_{2,i} + \Delta x\,c_{3,i}))$$
+/// $$p_i(x) = c_{0,i} + \Delta x\,(c_{1,i} + \Delta x\,(
+///   c_{2,i} + \Delta x\,c_{3,i}))$$
 ///
 /// # Errors
 ///
@@ -49,7 +62,7 @@ pub fn interp_pm(
 }
 
 /// Constructs a Steffen (1990) piecewise-monotonic interpolant computing only
-/// the knot values `c0` and limited first derivatives `c1` (with `c2 = c3 = 0`).
+/// the knot values `c0` and limited first derivatives `c1` (`c2 = c3 = 0`).
 ///
 /// # Errors
 ///
@@ -76,8 +89,7 @@ fn mk_pmcub(
     }
 
     if n == 2 {
-        let s0 = (y[1] - y[0]) / h[0];
-        coeffs[0][1] = s0;
+        coeffs[0][1] = (y[1] - y[0]) / h[0];
         coeffs[1][1] = 0.0;
         return Ok(coeffs);
     }
@@ -94,25 +106,13 @@ fn mk_pmcub(
     }
 
     let p0 = s[0] * (1.0 + h[0] / (h[0] + h[1])) - s[1] * h[0] / (h[0] + h[1]);
-    coeffs[0][1] = if p0 * s[0] <= 0.0 {
-        0.0
-    } else if p0.abs() > 2.0 * s[0].abs() {
-        2.0 * s[0]
-    } else {
-        p0
-    };
+    coeffs[0][1] = limit_endpoint_slope(p0, s[0]);
 
     let h_last = h[n - 2];
     let h_prev = h[n - 3];
     let p_end = s[n - 2] * (1.0 + h_last / (h_last + h_prev))
         - s[n - 3] * h_last / (h_last + h_prev);
-    coeffs[n - 1][1] = if p_end * s[n - 2] <= 0.0 {
-        0.0
-    } else if p_end.abs() > 2.0 * s[n - 2].abs() {
-        2.0 * s[n - 2]
-    } else {
-        p_end
-    };
+    coeffs[n - 1][1] = limit_endpoint_slope(p_end, s[n - 2]);
 
     if slope_only {
         return Ok(coeffs);
@@ -145,21 +145,23 @@ pub fn interp_4pt_pm(
     x: &[f64; 4],
     y: &[f64; 4],
 ) -> Result<[f64; 3], Interp1dError> {
-    let h = validate_grid_and_widths(x, y, 4)?;
-    let (h1, h2, h3) = (h[0], h[1], h[2]);
-    let s1 = (y[1] - y[0]) / h1;
-    let s2 = (y[2] - y[1]) / h2;
-    let s3 = (y[3] - y[2]) / h3;
-    let p2 = (s1 * h2 + s2 * h1) / (h1 + h2);
-    let p3 = (s2 * h3 + s3 * h2) / (h2 + h3);
-    let as2 = s2.abs();
-    let ss2 = fortran_sign1(s2);
-    let yp2 = (fortran_sign1(s1) + ss2) * s1.abs().min(as2).min(0.5 * p2.abs());
-    let yp3 = (ss2 + fortran_sign1(s3)) * as2.min(s3.abs()).min(0.5 * p3.abs());
-    let a1 = yp2;
-    let a2 = (3.0 * s2 - 2.0 * yp2 - yp3) / h2;
-    let a3 = (yp2 + yp3 - 2.0 * s2) / (h2 * h2);
-    Ok([a1, a2, a3])
+    let coeffs = interp_pm(x, y)?;
+    Ok([coeffs[1][1], coeffs[1][2], coeffs[1][3]])
+}
+
+/// Limits a boundary `DualOrder1` parabolic slope `p` against secant `s`.
+#[inline]
+fn limit_endpoint_slope_autodiff<const N: usize>(
+    p: DualOrder1<N>,
+    s: DualOrder1<N>,
+) -> DualOrder1<N> {
+    if (p * s).val <= 0.0 {
+        DualOrder1::<N>::constant(0.0)
+    } else if p.abs().val > (2.0 * s.abs()).val {
+        2.0 * s
+    } else {
+        p
+    }
 }
 
 /// Constructs a Steffen (1990) piecewise-monotonic cubic interpolant over
@@ -229,25 +231,13 @@ pub fn interp_pm_autodiff<const N: usize>(
     }
 
     let p0 = s[0] * (1.0 + h[0] / (h[0] + h[1])) - s[1] * h[0] / (h[0] + h[1]);
-    coeffs[0][1] = if (p0 * s[0]).val <= 0.0 {
-        zero
-    } else if p0.abs().val > (2.0 * s[0].abs()).val {
-        2.0 * s[0]
-    } else {
-        p0
-    };
+    coeffs[0][1] = limit_endpoint_slope_autodiff(p0, s[0]);
 
     let h_last = h[n - 2];
     let h_prev = h[n - 3];
     let p_end = s[n - 2] * (1.0 + h_last / (h_last + h_prev))
         - s[n - 3] * h_last / (h_last + h_prev);
-    coeffs[n - 1][1] = if (p_end * s[n - 2]).val <= 0.0 {
-        zero
-    } else if p_end.abs().val > (2.0 * s[n - 2].abs()).val {
-        2.0 * s[n - 2]
-    } else {
-        p_end
-    };
+    coeffs[n - 1][1] = limit_endpoint_slope_autodiff(p_end, s[n - 2]);
 
     for i in 0..(n - 1) {
         let c1_i = coeffs[i][1];

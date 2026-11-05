@@ -16,5 +16,5 @@ labels: phase
 
 - [ ] All constituent module unit tests and golden `test_output` parity checks pass (`<= 1e-12`).
 - [ ] All files respect the `<= 400` LOC budget and `>= 20%` documentation ratio.
-- [ ] 4-stage performance staircase and telemetry (`migration_telemetry.json`) recorded.
-- [ ] Final audit (`/code-simplify` and `/code-review`) completed.
+- [ ] Performance benchmarks across scalar, vectorized, parallel, and JIT execution recorded.
+- [ ] Pre-merge simplification and multi-angle code review completed.

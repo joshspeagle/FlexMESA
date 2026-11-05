@@ -1,12 +1,12 @@
 # CLAUDE.md
 
-`FlexMESA` is a modern, modular, and verifiable re-engineering of MESA (Modules for Experiments in Stellar Astrophysics) into a dual-track Safe Rust (`crates/`) and differentiable Python/JAX (`src/flexmesa/`) architecture.
+`FlexMESA` is a modern, modular, and verifiable re-engineering of [MESA (Modules for Experiments in Stellar Astrophysics)](https://github.com/MESAHub/mesa) into a dual-track Safe Rust (`crates/`) and differentiable Python/JAX (`src/flexmesa/`) architecture.
 
 ## Start here
 
-- Read [`notes/PLAN.md`](notes/PLAN.md) (current position and wave roadmap), the latest entries in [`notes/LOG.md`](notes/LOG.md), and the open architectural rulings in [`notes/QUESTIONS.md`](notes/QUESTIONS.md).
+- Read [`notes/PLAN.md`](notes/PLAN.md) (current position and wave roadmap), the latest entries in [`notes/LOG.md`](notes/LOG.md), and any open architectural questions in [`notes/QUESTIONS.md`](notes/QUESTIONS.md).
 - Every settled architectural, numerical, or governance choice is recorded in [`notes/DECISIONS.md`](notes/DECISIONS.md).
-- The Stage 0/1 MESA codebase census, 12-tier dependency graph, and migration blueprint live in [`docs/design/scoping-and-architecture.md`](docs/design/scoping-and-architecture.md).
+- The MESA codebase census, 12-tier dependency graph, and migration blueprint live in [`docs/design/scoping-and-architecture.md`](docs/design/scoping-and-architecture.md) and wave specifications in [`docs/design/`](docs/design/).
 
 ## Layout
 
@@ -15,22 +15,23 @@
 | `src/flexmesa/` | Python and JAX (`float64`) package mirroring MESA's module tiers |
 | `crates/` | Safe Rust (`#![forbid(unsafe_code)]`) Cargo workspace crates mirroring MESA's module tiers |
 | `tests/` | Python `pytest` and `hypothesis` test suite (`slow` marks full-grid or multi-step evolutionary tests) |
-| `benchmarks/` | 4-stage performance staircase scripts and `migration_telemetry.json` logs (`code-migrate`) |
-| `docs/` | Sphinx/MyST documentation and `docs/design/` architectural blueprints |
-| `notes/` | Active roadmap (`PLAN.md`), decision log (`DECISIONS.md`), session log (`LOG.md`), and open rulings (`QUESTIONS.md`) |
+| `benchmarks/` | Performance benchmark harnesses comparing scalar, vectorized, parallel, and JIT/GPU execution |
+| `docs/` | Documentation and `docs/design/` architectural blueprints and wave specifications |
+| `notes/` | Active roadmap (`PLAN.md`), decision log (`DECISIONS.md`), milestone log (`LOG.md`), and open rulings (`QUESTIONS.md`) |
 
 ## Commands
 
-- **Shared Python Environment**: Always use `/home/joshspeagle/.venvs/default/bin/python` and CLI tools in `~/.local/bin/` (`ruff`, `mypy`, `pytest`). Never create a virtual environment inside Dropbox.
-- **Fast Python Tests**: `PYTHONPATH=src /home/joshspeagle/.venvs/default/bin/pytest`
-- **Python Style, Lint & Types**:
+- **Python Unit & Doctest Suite**:
   ```bash
-  ~/.local/bin/ruff check .
-  ~/.local/bin/ruff format --check --line-length 80 .
-  ~/.local/bin/mypy --strict src tests
-  /home/joshspeagle/.venvs/default/bin/python /mnt/d/Dropbox/.agents/skills/code-style/scripts/check_code_style.py src tests
+  pytest
   ```
-- **Rust Workspace Tests & Clippy Gate** (when Rust crates are present):
+- **Python Linting, Formatting & Type Checking**:
+  ```bash
+  ruff check .
+  ruff format --check --line-length 80 .
+  mypy --strict src tests
+  ```
+- **Rust Workspace Tests & Clippy Gate**:
   ```bash
   cargo test --workspace --all-targets
   cargo test --workspace --doc
@@ -41,23 +42,24 @@
 
 - **Lead**: Josh Speagle (`joshspeagle`). Priorities are numerical correctness and parity first, API clarity and documentation second, and throughput third. Never trade correctness for speed.
 - **Decisions (`notes/DECISIONS.md`)**: Whenever a choice affects behavior, public API shape, array index conventions, numerical tolerances, defaults, or workflow, record the decision, rationale, and rejected alternatives in `notes/DECISIONS.md`. Never choose silently.
-- **Questions (`notes/QUESTIONS.md`)**: Record architectural forks requiring Josh's ruling in `notes/QUESTIONS.md` with a recommended first option.
+- **Questions (`notes/QUESTIONS.md`)**: Record open architectural forks requiring a project ruling in `notes/QUESTIONS.md` with a recommended first option.
 
-## GitHub Workflow (`github-flow`) & Pre-PR Gate
+## Git, Issues & Pull Request Workflow
 
 All changes (`>10` lines) reach `main` through a pull request closing an issue:
 
-1. **Issue and Branch First**: Open a GitHub issue (`gh issue create`), branch `<issue>-<slug>` from `main`, and open a draft PR (`gh pr create --draft`) after the first meaningful commit (`Closes #<issue>`).
-2. **Commit & Attribution Discipline**: Keep one logical change per commit with passing tests. Preserve native `git config` author/committer settings, include a `Co-Authored-By:` trailer in commit messages, and end every GitHub issue body, PR description, and comment posted via `gh` with `---` and `_Generated by [Antigravity](https://antigravity.google)_` (or the active agent's attribution footer).
-3. **Pre-PR Verification, Simplification & Review Gate (Sequential Two-Stage Pipeline)**:
-   - **Step 1 (Tests & Linters)**: Run the full test, linter, type-check, and `code-style` / `clippy` suite (bounded 5-iteration self-healing via `code-migrate`).
-   - **Step 2 (Stage A `/code-simplify` $\to$ Apply & Re-Test)**: Launch diff-sized `/code-simplify` subagents (`<100` lines: 1 agent; `100-500` lines: 2 concurrent agents; `>500` lines / full wave PR: **4 concurrent Frontier Reasoning agents**, one per angle across *Reuse, Simplification & Register, Numerical/Runtime Efficiency, Abstraction Altitude*). Apply accepted refinements (`refactor: <description> (simplify)`), log any non-obvious trade-offs in `notes/DECISIONS.md`, and re-run the test and linter suite.
-   - **Step 3 (Stage B `/code-review` on Post-Simplification Code)**: After simplifications and tests pass, launch diff-sized `/code-review` subagents on the simplified diff (`<100` lines: 1 agent; `100-500` lines: 3 concurrent agents; `>500` lines / full wave PR: **5 concurrent Frontier Reasoning agents**, one per lens across *`AGENTS.md`/Spec-Departure, Numerical/Array/Statistical Bugs, Silent Failures & Leaks, Test Oracles, Git History & Docstrings*), reporting all findings with confidence $\ge 80$.
-   - **Step 4 (Resolution & Docs Upkeep)**: Present or resolve $\ge 80$ review findings (`fix: <description> (review)`), verify documentation triggers, and mark the PR ready (`gh pr ready`). Every implementation plan ends with an explicit `Final audit` task executing this gate.
+1. **Issue and Branch First**: Open a GitHub issue (`gh issue create`), branch `<issue>-<slug>` from `main`, and open a draft pull request (`gh pr create --draft`) after the first meaningful commit (`Closes #<issue>`).
+2. **Public-Facing Repository & Issue Standard**: Everything committed to Git or posted to GitHub (issues, pull requests, comments, documentation, and `notes/`) must be written for a public open-source audience. Never include machine-specific filesystem paths, local file URIs, hostnames, or internal environment references.
+3. **Commit & Attribution Discipline**: Keep one logical change per commit with passing tests. Preserve native `git config` author and committer settings, include a `Co-Authored-By:` trailer when assisted by an AI agent, and end agent-authored GitHub issue bodies, PR descriptions, and comments with `---` and `_Generated by [Antigravity](https://antigravity.google)_` (or the active agent's attribution footer).
+4. **Pre-PR Verification, Simplification & Review Gate**:
+   - **Step 1 (Tests & Static Analysis)**: Run the full Python and Rust test, doctest, linter, formatter, and type-check suites with zero warnings.
+   - **Step 2 (Code Simplification Pass)**: Review the diff across reuse, readability, numerical/runtime efficiency, and abstraction altitude; apply refinements and re-run the test suite.
+   - **Step 3 (Multi-Lens Code Review)**: Audit the post-simplification diff for specification compliance, numerical/array/statistical bugs, silent failures or resource leaks, test oracle quality, and git history/docstring accuracy.
+   - **Step 4 (Resolution & Docs Upkeep)**: Resolve review findings, update any affected documentation or `CHANGELOG.md`, and mark the pull request ready for merge.
 
 ## Scientific Code, Verification & Prose Standards
 
 - **Modular File Hygiene (`<= 400` LOC)**: Target `<= 400` lines of code per file (hard ceiling `600` LOC) and `>= 20%` documentation ratio.
-- **Precision & Determinism**: Enforce `float64` (`jnp.float64`, `np.float64`, `f64`) across all thermodynamic, spline, linear-algebra, and PDE state calculations, and double-double (`f64x2`) or `f128` accumulation where nuclear statistical equilibrium (NSE) cancellation occurs. Use explicit `np.random.default_rng(seed)` (`SPEC 7`) or `jax.random.key(seed)` for any stochastic test generation.
-- **Two-Tier Numerical Parity (`code-migrate`)**: Verify every migrated module against (1) MESA's standalone `<pkg>/test/test_output` 16-digit golden baselines and exact analytical/autodiff identities (`jax.test_util.check_grads`), and (2) `proptest` / `hypothesis` property-based fuzzing.
-- **Synergistic Prose Register (`co-writer`)**: Pair physical and statistical intuition with exact technical terminology across all docstrings, design documents, and tutorials. Document array shapes and physical CGS/solar units in every Google-style docstring (`Args:`, `Returns:`, `Raises:`). Never use em-dashes, mannered metaphors, or setup-and-reveal colons.
+- **Precision & Determinism**: Enforce `float64` (`jnp.float64`, `np.float64`, `f64`) across all thermodynamic, spline, linear-algebra, and PDE state calculations, and double-double (`f64x2`) or `f128` accumulation where nuclear statistical equilibrium (NSE) cancellation occurs. Use explicit `np.random.default_rng(seed)` or `jax.random.key(seed)` for any stochastic test generation.
+- **Two-Tier Numerical Parity**: Verify every migrated module against (1) MESA's standalone `<pkg>/test/test_output` 16-digit golden baselines and exact analytical/autodiff identities (`jax.test_util.check_grads`), and (2) `proptest` and `hypothesis` property-based fuzzing.
+- **Documentation & Prose Style**: Pair physical and statistical intuition with exact technical terminology across all docstrings, design documents, and tutorials. Document array shapes and physical CGS/solar units in every Google-style docstring (`Args:`, `Returns:`, `Raises:`). Avoid em-dashes, mannered metaphors, and mid-sentence setup-and-reveal colons.

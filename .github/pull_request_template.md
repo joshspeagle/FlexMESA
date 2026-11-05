@@ -6,7 +6,7 @@ Closes #
 
 ## Checks
 
-<!-- Fast tests, doctests, hypothesis/proptest fuzzing, ruff, mypy, check_code_style.py, cargo clippy, and Stage 0 golden parity verification. -->
+<!-- Unit tests, doctests, hypothesis/proptest fuzzing, ruff, mypy, cargo test, cargo clippy, and golden parity verification. -->
 
 ## Decisions
 
@@ -14,4 +14,4 @@ Closes #
 
 ## Reviews
 
-<!-- /code-simplify and /code-review results scaled by diff size, fixes applied, and responses to any remaining items. -->
+<!-- Code simplification and multi-angle code review results, fixes applied, and responses to any remaining items. -->

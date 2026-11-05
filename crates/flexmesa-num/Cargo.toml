@@ -1,0 +1,20 @@
+[package]
+name = "flexmesa-num"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Root-finding, optimization, quadrature, ODE/DAE, and Newton solvers for FlexMESA"
+
+[lints]
+workspace = true
+
+[dependencies]
+flexmesa-utils = { path = "../flexmesa-utils" }
+flexmesa-math = { path = "../flexmesa-math" }
+flexmesa-autodiff = { path = "../flexmesa-autodiff" }
+flexmesa-mtx = { path = "../flexmesa-mtx" }
+
+[dev-dependencies]
+proptest = "1"

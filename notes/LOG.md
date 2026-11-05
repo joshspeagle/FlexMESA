@@ -6,7 +6,7 @@
   - Mapped the 12-tier topological module dependency DAG (`const` through `star`, `binary`, `astero`).
   - Audited MESA's SymPy-based `auto_diff` code generator (8 forward-AD types, `14,188` lines), textual `.inc` and `.dek` metaprogramming (`2,480` includes across `175` files), and the 6,008-field `star_info` state container (`3,673` raw Fortran pointers in `star`).
   - Audited all 16 foundational numerical and microphysics packages (`const`, `math`, `interp_1d`, `interp_2d`, `mtx`, `num`, `chem`, `neu`, `turb`, `eos`, `kap`, `rates`, `net`, `ionization`, `atm`, `colors`) and their two-stage `.bin` spline cache infrastructure.
-  - Cataloged the two-tier verification oracle: 21 standalone module unit tests (`58` files, `20,618` LOC, `18,885` lines of 16-digit golden `test_output` baselines) and 107 active integration test cases (`91 star`, `8 binary`, `8 astero`).
+  - Cataloged the two-tier verification oracle comprising 21 standalone module unit tests (`58` files, `20,618` LOC, `18,885` lines of 16-digit golden `test_output` baselines) and 107 active integration test cases (`91 star`, `8 binary`, `8 astero`).
 - Recorded `DECISIONS #1` through `DECISIONS #5` in [`notes/DECISIONS.md`](./DECISIONS.md):
   - Dual-Track (`Safe Rust` + `Python/JAX`) evaluation for Wave 1 plus stateless microphysics pilot (`neu` and `turb`).
   - Opened `deferred` tracking issues `#3` (`pgstar`/`pgbinary`), `#4` (`stella`/`adipls`/`gyre`), and `#5` (`RSP1`).

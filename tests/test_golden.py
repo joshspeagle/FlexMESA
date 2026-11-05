@@ -1,8 +1,20 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
-"""Unit and property tests for `flexmesa.testing.golden`."""
+"""Unit and property tests for `flexmesa.testing.golden`.
+
+Tests cover:
+1. Fortran double-precision (`D`/`E` and bare 3-digit exponent) float parsing.
+2. Section-aware `GoldenRecord` extraction across scalar, indexed, and dense
+   tabular MESA `<pkg>/test/test_output` formats.
+3. Dense 2D `float64` table stacking (`extract_golden_table`) and file I/O.
+4. Vectorized numerical parity verification (`assert_values_match` and
+   `assert_golden_records_match`) at `rtol=1e-12, atol=1e-15`.
+5. Property-based round-trip invariants across arbitrary mantissas and
+   exponents via `hypothesis`.
+"""
 
 from __future__ import annotations
 
+import dataclasses
 import pathlib
 
 import hypothesis
@@ -54,7 +66,13 @@ _SAMPLE_TURB_AUTODIFF_OUTPUT: str = (
 
 
 def test_parse_fortran_float_supports_standard_d_and_bare_exponents() -> None:
-    """Verify parsing of E, D, and 3-digit bare Fortran exponents."""
+    """Verify parsing of E, D, and 3-digit bare Fortran exponents.
+
+    Checks that standard scientific notation (`E+00`), Fortran double-precision
+    notation (`D-04`), and bare 3-digit exponents (`-102`, `+105`) parse to
+    IEEE-754 `float64` within `1e-15` relative accuracy, and that empty or
+    overflowing (`1.0e500`) strings raise `ValueError`.
+    """
     pi_str = "3.1415926535897931E+00"
     assert golden.parse_fortran_float(pi_str) == pytest.approx(np.pi, rel=1e-15)
     assert golden.parse_fortran_float(
@@ -76,7 +94,12 @@ def test_parse_fortran_float_supports_standard_d_and_bare_exponents() -> None:
 
 
 def test_parse_golden_text_extracts_sections_labels_and_values() -> None:
-    """Verify structured record extraction across MESA output patterns."""
+    """Verify structured record extraction across MESA output patterns.
+
+    Checks key-value scalar lines (`const`), section headers with embedded
+    numbers (`math`), indexed multi-column spline lines (`interp_1d`,
+    `interp_2d`), and separator-delimited diagnostics (`turb`, `auto_diff`).
+    """
     const_records = golden.parse_golden_text(_SAMPLE_CONST_OUTPUT)
     assert len(const_records) == 4
     assert const_records[0].label == "pi"
@@ -106,7 +129,12 @@ def test_parse_golden_text_extracts_sections_labels_and_values() -> None:
 def test_extract_golden_table_and_file_roundtrip(
     tmp_path: pathlib.Path,
 ) -> None:
-    """Verify dense table stacking and file reading from disk."""
+    """Verify dense table stacking and file reading from disk.
+
+    Confirms that `parse_golden_file` and `extract_golden_table` produce a
+    C-contiguous 2D `float64` array of shape `(n_records, n_cols)` and reject
+    empty record sequences.
+    """
     out_file = tmp_path / "test_output"
     out_file.write_text(_SAMPLE_NEU_TABLE_OUTPUT, encoding="utf-8")
     records = golden.parse_golden_file(out_file)
@@ -121,19 +149,17 @@ def test_extract_golden_table_and_file_roundtrip(
 
 
 def test_assert_golden_records_match_checks_parity_and_failures() -> None:
-    """Verify that 1e-14 perturbations pass and 1e-6 perturbations fail."""
+    """Verify that 1e-14 perturbations pass and 1e-6 perturbations fail.
+
+    Tests `assert_golden_records_match` under a Multiplicative `(1 + 1e-14)`
+    perturbation (which must satisfy `rtol=1e-12`) and an additive `1e-6`
+    perturbation (which must raise `AssertionError` with record context).
+    """
     expected = golden.parse_golden_text(_SAMPLE_MATH_INTERP_OUTPUT)
-    perturbed: list[golden.GoldenRecord] = []
-    for rec in expected:
-        perturbed.append(
-            golden.GoldenRecord(
-                line_number=rec.line_number,
-                section=rec.section,
-                label=rec.label,
-                indices=rec.indices,
-                values=rec.values * (1.0 + 1e-14),
-            )
-        )
+    perturbed = [
+        dataclasses.replace(rec, values=rec.values * (1.0 + 1e-14))
+        for rec in expected
+    ]
 
     summary = golden.assert_golden_records_match(
         perturbed, expected, rtol=1e-12, atol=1e-15
@@ -145,13 +171,7 @@ def test_assert_golden_records_match_checks_parity_and_failures() -> None:
     bad_records = list(expected)
     bad_vals = bad_records[1].values.copy()
     bad_vals[0] += 1e-6
-    bad_records[1] = golden.GoldenRecord(
-        line_number=bad_records[1].line_number,
-        section=bad_records[1].section,
-        label=bad_records[1].label,
-        indices=bad_records[1].indices,
-        values=bad_vals,
-    )
+    bad_records[1] = dataclasses.replace(bad_records[1], values=bad_vals)
     with pytest.raises(AssertionError, match="Golden parity check failed"):
         golden.assert_golden_records_match(bad_records, expected, rtol=1e-12)
 
@@ -172,7 +192,12 @@ def test_fortran_float_parsing_roundtrips_arbitrary_exponents(
     exponent: int,
     use_d_char: bool,
 ) -> None:
-    """Property test: arbitrary Fortran D/E floats round-trip to 1e-14."""
+    """Property test: arbitrary Fortran D/E floats round-trip to 1e-14.
+
+    Generates finite mantissas in `[-9.99999999999999, 9.99999999999999]` and
+    base-10 exponents in `[-200, 200]` formatted with `D` or `E` and checks
+    `assert_values_match` against IEEE-754 `float(...)`.
+    """
     exp_char = "D" if use_d_char else "E"
     formatted = f"{mantissa:.15f}{exp_char}{exponent:+03d}"
     expected = float(f"{mantissa:.15f}e{exponent:+03d}")

@@ -24,6 +24,9 @@ _FORTRAN_FLOAT_RE: re.Pattern[str] = re.compile(
     r"^[+-]?(?:\d+\.\d*|\.\d+|\d+)(?:[eEdD][+-]?\d+|[+-]\d{2,3})$"
     r"|^[+-]?(?:\d+\.\d+|\d+\.)[eEdD]?$"
 )
+_BARE_EXP_RE: re.Pattern[str] = re.compile(
+    r"^([+-]?(?:\d+\.\d*|\.\d+|\d+))([+-]\d{2,3})$"
+)
 _INTEGER_TOKEN_RE: re.Pattern[str] = re.compile(r"^[+-]?\d+$")
 _SEPARATOR_LINE_RE: re.Pattern[str] = re.compile(r"^[\s\-=#*]+$")
 
@@ -89,8 +92,6 @@ def is_fortran_float_token(token: str) -> bool:
         >>> golden.is_fortran_float_token("42")
         False
     """
-    if _INTEGER_TOKEN_RE.match(token) is not None:
-        return False
     return _FORTRAN_FLOAT_RE.match(token) is not None
 
 
@@ -123,15 +124,9 @@ def parse_fortran_float(token: str) -> float:
     if not stripped:
         raise ValueError("Cannot parse empty token as a Fortran float.")
 
-    normalized = stripped.replace("D", "e").replace("d", "e")
-    if "e" not in normalized and "E" not in normalized:
-        bare_exp = re.match(
-            r"^([+-]?(?:\d+\.\d*|\.\d+|\d+))([+-]\d{2,3})$",
-            normalized,
-        )
-        if bare_exp is not None:
-            normalized = f"{bare_exp.group(1)}e{bare_exp.group(2)}"
-
+    normalized = _BARE_EXP_RE.sub(
+        r"\1e\2", stripped.replace("D", "e").replace("d", "e")
+    )
     value = float(normalized)
     if not math.isfinite(value):
         raise ValueError(
@@ -174,7 +169,7 @@ def parse_golden_text(text: str) -> list[GoldenRecord]:
         tokens = stripped.split()
         float_values_rev: list[float] = []
         idx = len(tokens) - 1
-        while idx >= 0 and is_fortran_float_token(tokens[idx]):
+        while idx >= 0 and _FORTRAN_FLOAT_RE.match(tokens[idx]) is not None:
             float_values_rev.append(parse_fortran_float(tokens[idx]))
             idx -= 1
 
@@ -236,12 +231,12 @@ def extract_golden_table(
         raise ValueError(
             "Cannot stack an empty sequence of GoldenRecord items."
         )
-    first_len = int(records[0].values.shape[0])
+    first_len = records[0].values.size
     for rec in records:
-        if int(rec.values.shape[0]) != first_len:
+        if rec.values.size != first_len:
             raise ValueError(
                 f"Inconsistent column count at line {rec.line_number}: "
-                f"expected {first_len}, got {int(rec.values.shape[0])}."
+                f"expected {first_len}, got {rec.values.size}."
             )
     return np.ascontiguousarray(
         np.vstack([rec.values for rec in records]),
@@ -286,9 +281,8 @@ def assert_values_match(
 ) -> tuple[float, float]:
     """Assert elementwise parity between two `float64` arrays or scalars.
 
-    For each element pair `(a, e)`, checks
-    `|a - e| <= atol + rtol * max(|e|, atol)` and reports the maximum absolute
-    and relative errors.
+    For each element pair `(a, e)`, checks `|a - e| <= atol + rtol * |e|` and
+    reports the maximum absolute and relative errors.
 
     Args:
         actual: Computed array or scalar of shape `(*shape,)`.
@@ -311,9 +305,10 @@ def assert_values_match(
     if act_arr.size == 0:
         return (0.0, 0.0)
 
+    abs_exp = np.abs(exp_arr)
     abs_err = np.abs(act_arr - exp_arr)
-    rel_err = abs_err / np.maximum(np.abs(exp_arr), atol)
-    allowed = atol + rtol * np.abs(exp_arr)
+    rel_err = abs_err / np.maximum(abs_exp, atol)
+    allowed = atol + rtol * abs_exp
 
     if np.any(abs_err > allowed):
         bad_idx = int(np.argmax(abs_err - allowed))
@@ -330,29 +325,22 @@ def assert_values_match(
     return (float(np.max(abs_err)), float(np.max(rel_err)))
 
 
-def _assert_single_record_match(
-    idx: int,
-    act_rec: GoldenRecord,
-    exp_rec: GoldenRecord,
-    *,
-    rtol: float,
-    atol: float,
-) -> tuple[float, float]:
-    """Compare metadata and numerical values for one `GoldenRecord` pair."""
-    if act_rec.label != exp_rec.label or act_rec.indices != exp_rec.indices:
+def _verify_record_pair_metadata(
+    idx: int, act_rec: GoldenRecord, exp_rec: GoldenRecord
+) -> None:
+    """Verify metadata and value lengths for one `GoldenRecord` pair."""
+    if (
+        act_rec.label != exp_rec.label
+        or act_rec.indices != exp_rec.indices
+        or act_rec.values.shape != exp_rec.values.shape
+    ):
         raise AssertionError(
-            f"Record {idx} metadata mismatch (expected line "
+            f"Record {idx} metadata/shape mismatch (line "
             f"{exp_rec.line_number}): actual=({act_rec.label!r}, "
-            f"{act_rec.indices}) vs expected=({exp_rec.label!r}, "
-            f"{exp_rec.indices})."
+            f"{act_rec.indices}, shape={act_rec.values.shape}) vs "
+            f"expected=({exp_rec.label!r}, {exp_rec.indices}, "
+            f"shape={exp_rec.values.shape})."
         )
-    ctx = (
-        f"line {exp_rec.line_number} "
-        f"({exp_rec.section or 'root'}: {exp_rec.label or 'row'})"
-    )
-    return assert_values_match(
-        act_rec.values, exp_rec.values, rtol=rtol, atol=atol, context=ctx
-    )
 
 
 def assert_golden_records_match(
@@ -364,10 +352,6 @@ def assert_golden_records_match(
 ) -> GoldenComparisonSummary:
     """Compare two sequences of `GoldenRecord` entries for numerical parity.
 
-    Verifies that record counts, labels, integer indices, and value array
-    lengths match, and checks every floating-point value via
-    `assert_values_match`.
-
     Args:
         actual: Sequence of computed `GoldenRecord` objects.
         expected: Sequence of reference `GoldenRecord` objects.
@@ -375,36 +359,43 @@ def assert_golden_records_match(
         atol: Absolute error floor for near-zero values (default `1e-15`).
 
     Returns:
-        `GoldenComparisonSummary` reporting record count, value count, and
-        worst-case absolute and relative errors.
+        `GoldenComparisonSummary` with record/value counts and max errors.
 
     Raises:
-        AssertionError: If record metadata or numerical values diverge beyond
-            `rtol` and `atol`.
+        AssertionError: If metadata or values diverge beyond `rtol` and `atol`.
     """
     if len(actual) != len(expected):
         raise AssertionError(
             f"Record count mismatch: actual has {len(actual)} records, "
             f"expected has {len(expected)} records."
         )
-
-    total_values = 0
-    max_abs = 0.0
-    max_rel = 0.0
-
+    if not expected:
+        return GoldenComparisonSummary(0, 0, 0.0, 0.0)
     for idx, (act_rec, exp_rec) in enumerate(
         zip(actual, expected, strict=True)
     ):
-        rec_abs, rec_rel = _assert_single_record_match(
-            idx, act_rec, exp_rec, rtol=rtol, atol=atol
-        )
-        total_values += int(exp_rec.values.size)
-        max_abs = max(max_abs, rec_abs)
-        max_rel = max(max_rel, rec_rel)
+        _verify_record_pair_metadata(idx, act_rec, exp_rec)
 
+    act_flat = np.concatenate([rec.values for rec in actual])
+    exp_flat = np.concatenate([rec.values for rec in expected])
+    try:
+        max_abs, max_rel = assert_values_match(
+            act_flat, exp_flat, rtol=rtol, atol=atol
+        )
+    except AssertionError:
+        for act_rec, exp_rec in zip(actual, expected, strict=True):
+            ctx = (
+                f"line {exp_rec.line_number} "
+                f"({exp_rec.section or 'root'}: {exp_rec.label or 'row'})"
+            )
+            assert_values_match(
+                act_rec.values,
+                exp_rec.values,
+                rtol=rtol,
+                atol=atol,
+                context=ctx,
+            )
+        raise
     return GoldenComparisonSummary(
-        num_records=len(expected),
-        num_values=total_values,
-        max_abs_error=max_abs,
-        max_rel_error=max_rel,
+        len(expected), int(exp_flat.size), max_abs, max_rel
     )

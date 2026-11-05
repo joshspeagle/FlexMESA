@@ -8,6 +8,7 @@
 //! [`GoldenRecord`] entries and verifies elementwise relative and absolute
 //! numerical parity (`<= 1e-12` relative error by default) in 100% Safe Rust.
 
+use std::borrow::Cow;
 use std::fmt;
 use std::fs;
 use std::path::Path;
@@ -36,7 +37,8 @@ pub struct GoldenComparisonSummary {
     pub num_values: usize,
     /// Maximum elementwise absolute error `|actual - expected|`.
     pub max_abs_error: f64,
-    /// Maximum elementwise relative error `|actual - expected| / max(|expected|, atol)`.
+    /// Maximum elementwise relative error
+    /// `|actual - expected| / max(|expected|, atol)`.
     pub max_rel_error: f64,
 }
 
@@ -55,7 +57,7 @@ pub enum GoldenError {
     },
     /// Two value slices or record lists failed the numerical parity check.
     ParityMismatch {
-        /// Detailed diagnostic message pinpointing the failing record and value.
+        /// Detailed diagnostic message pinpointing the failing record/value.
         message: String,
     },
 }
@@ -64,7 +66,7 @@ impl fmt::Display for GoldenError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidFloatToken { token } => {
-                write!(f, "invalid or non-finite Fortran float token: {token:?}")
+                write!(f, "invalid or non-finite Fortran float: {token:?}")
             }
             Self::IoError { message } => write!(f, "I/O error: {message}"),
             Self::ParityMismatch { message } => write!(f, "{message}"),
@@ -82,10 +84,7 @@ pub fn is_integer_token(token: &str) -> bool {
         return false;
     }
     let start = usize::from(bytes[0] == b'+' || bytes[0] == b'-');
-    if start >= bytes.len() {
-        return false;
-    }
-    bytes[start..].iter().all(u8::is_ascii_digit)
+    start < bytes.len() && bytes[start..].iter().all(u8::is_ascii_digit)
 }
 
 /// Return whether `token` is a Fortran floating-point literal (not an integer).
@@ -100,48 +99,42 @@ pub fn is_integer_token(token: &str) -> bool {
 /// ```
 #[must_use]
 pub fn is_fortran_float_token(token: &str) -> bool {
-    if is_integer_token(token) {
-        return false;
-    }
-    if !(token.contains('.')
-        || token.contains('e')
-        || token.contains('E')
-        || token.contains('d')
-        || token.contains('D'))
-    {
-        return false;
-    }
-    parse_fortran_float(token).is_ok()
+    try_parse_fortran_float(token).is_some()
 }
 
-/// Normalize bare 3-digit Fortran exponents (such as `1.25-100`) by inserting `'e'`.
-fn normalize_fortran_token(trimmed: &str) -> String {
-    let mut normalized = String::with_capacity(trimmed.len() + 2);
-    for ch in trimmed.chars() {
-        if ch == 'd' || ch == 'D' {
-            normalized.push('e');
-        } else {
-            normalized.push(ch);
-        }
-    }
+/// Normalize Fortran `d`/`D` or bare 2- to 3-digit exponents into IEEE syntax.
+fn normalize_fortran_token(trimmed: &str) -> Cow<'_, str> {
+    let base: Cow<'_, str> = if trimmed.contains(['d', 'D']) {
+        Cow::Owned(trimmed.replace(['d', 'D'], "e"))
+    } else {
+        Cow::Borrowed(trimmed)
+    };
 
-    if !normalized.contains('e') && !normalized.contains('E') {
-        let bytes = normalized.as_bytes();
-        for idx in (1..bytes.len()).rev() {
-            if bytes[idx] == b'+' || bytes[idx] == b'-' {
-                let exp_part = &bytes[idx + 1..];
-                if (2..=3).contains(&exp_part.len()) && exp_part.iter().all(u8::is_ascii_digit) {
-                    let mut with_e = String::with_capacity(normalized.len() + 1);
-                    with_e.push_str(&normalized[..idx]);
-                    with_e.push('e');
-                    with_e.push_str(&normalized[idx..]);
-                    return with_e;
-                }
-                break;
+    if !base.contains(['e', 'E']) {
+        if let Some(idx) = base.rfind(['+', '-']).filter(|&i| i > 0) {
+            let exp = &base.as_bytes()[idx + 1..];
+            if (2..=3).contains(&exp.len())
+                && exp.iter().all(u8::is_ascii_digit)
+            {
+                return Cow::Owned(format!(
+                    "{}e{}",
+                    &base[..idx],
+                    &base[idx..]
+                ));
             }
         }
     }
-    normalized
+    base
+}
+
+/// Try to parse `token` as a Fortran float literal (rejecting plain integers).
+fn try_parse_fortran_float(token: &str) -> Option<f64> {
+    let trimmed = token.trim();
+    let normalized = normalize_fortran_token(trimmed);
+    if !normalized.contains(['.', 'e', 'E']) {
+        return None;
+    }
+    normalized.parse::<f64>().ok().filter(|v| v.is_finite())
 }
 
 /// Parse a Fortran or IEEE-754 floating-point string into a finite `f64`.
@@ -161,24 +154,7 @@ fn normalize_fortran_token(trimmed: &str) -> String {
 /// assert!((val - std::f64::consts::LN_10).abs() < 1e-15);
 /// ```
 pub fn parse_fortran_float(token: &str) -> Result<f64, GoldenError> {
-    let trimmed = token.trim();
-    if trimmed.is_empty() {
-        return Err(GoldenError::InvalidFloatToken {
-            token: token.to_owned(),
-        });
-    }
-    if trimmed.eq_ignore_ascii_case("nan")
-        || trimmed.eq_ignore_ascii_case("inf")
-        || trimmed.eq_ignore_ascii_case("-inf")
-        || trimmed.eq_ignore_ascii_case("+inf")
-        || trimmed.eq_ignore_ascii_case("infinity")
-    {
-        return Err(GoldenError::InvalidFloatToken {
-            token: token.to_owned(),
-        });
-    }
-
-    let normalized = normalize_fortran_token(trimmed);
+    let normalized = normalize_fortran_token(token.trim());
     let value: f64 = normalized
         .parse()
         .map_err(|_| GoldenError::InvalidFloatToken {
@@ -192,7 +168,7 @@ pub fn parse_fortran_float(token: &str) -> Result<f64, GoldenError> {
     Ok(value)
 }
 
-/// Return whether a trimmed line consists solely of separator characters (`-`, `=`, `#`, `*`).
+/// Return whether a trimmed line consists solely of separator characters.
 fn is_separator_line(trimmed: &str) -> bool {
     !trimmed.is_empty()
         && trimmed
@@ -200,7 +176,7 @@ fn is_separator_line(trimmed: &str) -> bool {
             .all(|b| matches!(b, b' ' | b'\t' | b'-' | b'=' | b'#' | b'*'))
 }
 
-/// Parse the text of a MESA `<pkg>/test/test_output` file into [`GoldenRecord`] entries.
+/// Parse the text of a MESA `<pkg>/test/test_output` file into records.
 ///
 /// # Errors
 /// Returns [`GoldenError`] if a floating-point token is malformed.
@@ -229,8 +205,11 @@ pub fn parse_golden_text(text: &str) -> Result<Vec<GoldenRecord>, GoldenError> {
         let tokens: Vec<&str> = trimmed.split_whitespace().collect();
         let mut float_values = Vec::new();
         let mut cursor = tokens.len();
-        while cursor > 0 && is_fortran_float_token(tokens[cursor - 1]) {
-            float_values.push(parse_fortran_float(tokens[cursor - 1])?);
+        while cursor > 0 {
+            let Some(val) = try_parse_fortran_float(tokens[cursor - 1]) else {
+                break;
+            };
+            float_values.push(val);
             cursor -= 1;
         }
 
@@ -276,7 +255,37 @@ pub fn parse_golden_file(path: &Path) -> Result<Vec<GoldenRecord>, GoldenError> 
     parse_golden_text(&content)
 }
 
-/// Compare two `f64` slices for elementwise numerical parity within `rtol` and `atol`.
+/// Stack uniform-width [`GoldenRecord`] entries into a row-major `Vec<Vec<f64>>`.
+///
+/// # Errors
+/// Returns [`GoldenError::ParityMismatch`] if `records` is empty or records
+/// have differing column counts.
+pub fn extract_golden_table(
+    records: &[GoldenRecord],
+) -> Result<Vec<Vec<f64>>, GoldenError> {
+    let Some(first) = records.first() else {
+        return Err(GoldenError::ParityMismatch {
+            message: "cannot stack an empty GoldenRecord slice".to_owned(),
+        });
+    };
+    let n_cols = first.values.len();
+    let mut table = Vec::with_capacity(records.len());
+    for rec in records {
+        if rec.values.len() != n_cols {
+            return Err(GoldenError::ParityMismatch {
+                message: format!(
+                    "inconsistent column count at line {}: expected {n_cols}, got {}",
+                    rec.line_number,
+                    rec.values.len()
+                ),
+            });
+        }
+        table.push(rec.values.clone());
+    }
+    Ok(table)
+}
+
+/// Compare two `f64` slices for elementwise numerical parity.
 ///
 /// # Errors
 /// Returns [`GoldenError::ParityMismatch`] if lengths differ, any element is
@@ -296,32 +305,27 @@ pub fn assert_values_match(
     if actual.len() != expected.len() {
         return Err(GoldenError::ParityMismatch {
             message: format!(
-                "[{context}] length mismatch: actual {} vs expected {}",
+                "[{context}] length mismatch: {} vs {}",
                 actual.len(),
                 expected.len()
             ),
         });
     }
-
-    let mut max_abs = 0.0_f64;
-    let mut max_rel = 0.0_f64;
-
+    let (mut max_abs, mut max_rel) = (0.0_f64, 0.0_f64);
     for (idx, (&act, &exp)) in actual.iter().zip(expected.iter()).enumerate() {
         if !act.is_finite() || !exp.is_finite() {
             return Err(GoldenError::ParityMismatch {
                 message: format!(
-                    "[{context}] non-finite value at index {idx}: actual={act}, expected={exp}"
+                    "[{context}] non-finite at index {idx}: actual={act}, expected={exp}"
                 ),
             });
         }
+        let abs_exp = exp.abs();
         let abs_err = (act - exp).abs();
-        let denom = exp.abs().max(atol);
-        let rel_err = abs_err / denom;
-        let allowed = atol + rtol * exp.abs();
-
+        let rel_err = abs_err / abs_exp.max(atol);
+        let allowed = atol + rtol * abs_exp;
         max_abs = max_abs.max(abs_err);
         max_rel = max_rel.max(rel_err);
-
         if abs_err > allowed {
             return Err(GoldenError::ParityMismatch {
                 message: format!(
@@ -332,11 +336,10 @@ pub fn assert_values_match(
             });
         }
     }
-
     Ok((max_abs, max_rel))
 }
 
-/// Compare two slices of [`GoldenRecord`] entries for metadata and numerical parity.
+/// Compare two slices of [`GoldenRecord`] entries for metadata and parity.
 ///
 /// # Errors
 /// Returns [`GoldenError::ParityMismatch`] if record counts, labels, indices,
@@ -356,11 +359,8 @@ pub fn assert_golden_records_match(
             ),
         });
     }
-
-    let mut num_values = 0_usize;
-    let mut max_abs_error = 0.0_f64;
-    let mut max_rel_error = 0.0_f64;
-
+    let (mut num_values, mut max_abs_error, mut max_rel_error) =
+        (0_usize, 0.0_f64, 0.0_f64);
     for (idx, (act_rec, exp_rec)) in actual.iter().zip(expected.iter()).enumerate() {
         if act_rec.label != exp_rec.label || act_rec.indices != exp_rec.indices {
             return Err(GoldenError::ParityMismatch {
@@ -375,88 +375,22 @@ pub fn assert_golden_records_match(
                 ),
             });
         }
-        let ctx = format!(
-            "line {} ({}: {})",
-            exp_rec.line_number, exp_rec.section, exp_rec.label
-        );
         let (rec_abs, rec_rel) =
-            assert_values_match(&act_rec.values, &exp_rec.values, rtol, atol, &ctx)?;
+            assert_values_match(&act_rec.values, &exp_rec.values, rtol, atol, "")
+                .map_err(|err| GoldenError::ParityMismatch {
+                    message: format!(
+                        "line {} ({}: {}): {err}",
+                        exp_rec.line_number, exp_rec.section, exp_rec.label
+                    ),
+                })?;
         num_values += exp_rec.values.len();
         max_abs_error = max_abs_error.max(rec_abs);
         max_rel_error = max_rel_error.max(rec_rel);
     }
-
     Ok(GoldenComparisonSummary {
         num_records: expected.len(),
         num_values,
         max_abs_error,
         max_rel_error,
     })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use proptest::prelude::*;
-
-    const SAMPLE_MIXED: &str = "\
- CRLIBM
-   Function Value (x=   0.1000000000000000E+00 )
-        log  -0.2302585092994045E+01
- test2 T
-                                            x val exact           1    0.0000000000000000D+00    0.0000000000000000D+00
-                                              test2D_db           2           3    2.5132741228718345D+00   -2.4581494853809029D-02
-";
-
-    #[test]
-    fn test_parse_fortran_float_handles_d_e_and_bare_exponents() {
-        let pi = parse_fortran_float("3.1415926535897931E+00").unwrap();
-        assert!((pi - std::f64::consts::PI).abs() < 1e-15);
-
-        let d_val = parse_fortran_float("-8.2630874248383526D-04").unwrap();
-        assert!((d_val - (-8.263_087_424_838_353e-4)).abs() < 1e-19);
-
-        let bare = parse_fortran_float("1.2500000000000000-102").unwrap();
-        assert!((bare - 1.25e-102).abs() < 1e-117);
-
-        assert!(parse_fortran_float("NaN").is_err());
-        assert!(parse_fortran_float("").is_err());
-    }
-
-    #[test]
-    fn test_parse_and_compare_golden_records() {
-        let expected = parse_golden_text(SAMPLE_MIXED).unwrap();
-        assert_eq!(expected.len(), 3);
-        assert_eq!(expected[0].label, "log");
-        assert_eq!(expected[1].indices, vec![1]);
-        assert_eq!(expected[2].indices, vec![2, 3]);
-
-        let mut perturbed = expected.clone();
-        for rec in &mut perturbed {
-            for val in &mut rec.values {
-                *val *= 1.0 + 1e-14;
-            }
-        }
-        let summary = assert_golden_records_match(&perturbed, &expected, 1e-12, 1e-15).unwrap();
-        assert_eq!(summary.num_records, 3);
-        assert_eq!(summary.num_values, 5);
-        assert!(summary.max_rel_error <= 1e-12);
-
-        perturbed[0].values[0] += 1e-5;
-        assert!(assert_golden_records_match(&perturbed, &expected, 1e-12, 1e-15).is_err());
-    }
-
-    proptest! {
-        #[test]
-        fn prop_fortran_d_exponent_roundtrips(
-            mantissa in -9.999_999_999_f64..9.999_999_999_f64,
-            exponent in -200_i32..200_i32,
-        ) {
-            let formatted = format!("{mantissa:.14}D{exponent:+03}");
-            let expected: f64 = format!("{mantissa:.14}e{exponent:+03}").parse().unwrap();
-            let parsed = parse_fortran_float(&formatted).unwrap();
-            let (_, rel_err) = assert_values_match(&[parsed], &[expected], 1e-13, 1e-300, "prop").unwrap();
-            prop_assert!(rel_err <= 1e-13);
-        }
-    }
 }

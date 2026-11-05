@@ -63,3 +63,33 @@ Both `flexmesa.testing.golden` (Python) and `crates/flexmesa-testing` (Safe Rust
 - `is_fortran_float_token(token)` / `parse_fortran_float(token)`: Parses IEEE-754 `float64` strings with `e`/`E` or Fortran `d`/`D` exponents (as well as bare 2- or 3-digit signed Fortran exponents such as `1.0000000000000000-100`).
 - `parse_golden_file(path)` / `parse_golden_text(text)` / `extract_golden_table(records)`: Extracts all numeric records (`GoldenRecord` with `line_number`, `section`, `label`, `indices: tuple[int, ...] / Vec<i64>`, and `values: NDArray[np.float64] / Vec<f64>`) while preserving section headers (`Test MLT`, `test1 T`, `Function Value (x= ...)`), and stacks uniform-width rows into a 2D table.
 - `assert_values_match(actual, expected, rtol=1e-12, atol=1e-15)` and `assert_golden_records_match(actual, expected, rtol=1e-12, atol=1e-15)`: Computes elementwise absolute error $|a - e|$ and relative error $|a - e| / \max(|e|, \text{atol})$, checks $|a - e| \le \text{atol} + \text{rtol} \cdot |e|$, returns a `GoldenComparisonSummary`, and raises a diagnostic error pinpointing the first failing record, line number, label, and relative deviation.
+
+---
+
+## 4. Declarative `.defaults` & `columns.list` Schema Parser & Namelist Validator (`Wave 0B`)
+
+MESA declares module configuration defaults across `<pkg>/defaults/*.defaults` (`eos.defaults`, `kap.defaults`, `colors.defaults`, `controls.defaults`, `star_job.defaults`, `binary_controls.defaults`, `binary_job.defaults`, `astero_search.defaults`) and output column schemas across `*_columns.list` (`history_columns.list`, `profile_columns.list`, `binary_history_columns.list`). Upstream Fortran mirrors these files via ~12,444 lines of manual namelist I/O (`ctrls_io.f90` and `.inc` files).
+
+Both `flexmesa.schema` (`src/flexmesa/schema/defaults.py` and `src/flexmesa/schema/namelist.py`) and `crates/flexmesa-schema` (`crates/flexmesa-schema/src/lib.rs`) eliminate that boilerplate by parsing `.defaults` and `*_columns.list` files directly into typed schemas:
+
+- **Schema Data Structures**:
+  - `ControlType`: `LOGICAL` (`bool`), `INTEGER` (`int` / `i64`), `FLOAT` (`float` / `f64`), `STRING` (`str` / `String`), paired with `ControlValue` (`bool | int | float | str` in Python; `enum ControlValue` in Safe Rust).
+  - `ControlDefault`: Stores `name`, `control_type`, `default_value`, `is_array` (`True` when declared with `(:)` or `(idx)`), `element_overrides` (indexed overrides such as `suffix_for_FreeEOS_Z(13) = '_CO'`), `section` (from underlined `! ===` or `! ---` headings), `doc` (the preceding `!` comment block), and `line_number`.
+  - `ColumnEntry`: Stores `name` (column identifier or directive), `section` (`!#` / `!##` heading), `comment` (inline `!` description), and `line_number`.
+  - `NamelistAssignment` & `NamelistBlock`: Structured representation of legacy Fortran `&namelist ... /` blocks (`&eos`, `&kap`, `&star_job`, `&controls`).
+- **Parser & Validator Functions**:
+  - `parse_control_value(raw)`: Parses Fortran `.true.`/`.false.` logicals, single- or double-quoted strings (with doubled-quote escaping), 64-bit integers, and Fortran `d`/`D`/`e`/`E` double-precision floats.
+  - `parse_defaults_text(text)` / `parse_defaults_file(path)`: Extracts all `ControlDefault` entries in declaration order (`dict[str, ControlDefault]` keyed by lowercase name in Python; `Result<Vec<ControlDefault>, SchemaError>` in Safe Rust).
+  - `parse_columns_text(text)` / `parse_columns_file(path)`: Extracts all active `ColumnEntry` declarations from a `*_columns.list` file.
+  - `parse_namelist_text(text)` / `parse_namelist_file(path)` and `validate_namelist_block(block, schema, ...)`: Parses Fortran `&namelist ... /` text and validates every assignment against the target `.defaults` schema (returning the coerced override mapping in Python or `Result<(), SchemaError>` in Safe Rust), rejecting unknown control names, invalid subscripts on scalar controls, and incompatible value types.
+
+---
+
+## 5. Physics Table `.safetensors` Converter, `mmap` Loader & `SHA-256` Manifest (`Wave 0C`)
+
+Per `DECISIONS #3`, MESA's ASCII and binary physics tables are converted into 64-byte-aligned, row-major `float64` `.safetensors` files verified against a committed `SHA-256` manifest (`src/flexmesa/data/manifest.toml`):
+
+- `flexmesa.data` (`src/flexmesa/data/`) and `crates/flexmesa-data` (`crates/flexmesa-data/`):
+  - Parse `manifest.toml` entries (`TableArtifact` with `name`, `filename`, `sha256`, `size_bytes`, `tensors`, and `description`).
+  - Compute and verify `SHA-256` digests (`compute_sha256`, `verify_file_sha256`) before memory-mapping `.safetensors` files (`load_safetensors_mmap` / `save_safetensors_file`) with transparent `.safetensors.zst` decompression.
+  - Convert upstream MESA ASCII tables (`chem/data/isotopes.data`, `chem/data/lodders03.data`, and `eos/helm_table.dat`) into `.safetensors` bundles with bit-exact `float64` round-trip parity across Python/JAX and Safe Rust.

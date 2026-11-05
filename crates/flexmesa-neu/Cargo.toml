@@ -1,0 +1,16 @@
+[package]
+name = "flexmesa-neu"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Thermal neutrino energy loss rates and analytical derivatives (Itoh et al. 1996)"
+
+[dependencies]
+flexmesa-const = { path = "../flexmesa-const" }
+flexmesa-math = { path = "../flexmesa-math" }
+flexmesa-utils = { path = "../flexmesa-utils" }
+
+[lints]
+workspace = true

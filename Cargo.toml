@@ -12,6 +12,7 @@ members = [
   "crates/flexmesa-interp2d",
   "crates/flexmesa-mtx",
   "crates/flexmesa-num",
+  "crates/flexmesa-neu",
 ]
 
 [workspace.package]

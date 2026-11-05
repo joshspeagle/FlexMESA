@@ -189,6 +189,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "flexmesa-neu"
+version = "0.1.0"
+dependencies = [
+ "flexmesa-const",
+ "flexmesa-math",
+ "flexmesa-utils",
+]
+
+[[package]]
 name = "flexmesa-num"
 version = "0.1.0"
 dependencies = [

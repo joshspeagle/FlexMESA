@@ -2,8 +2,9 @@
 //! Physics table `SHA-256` manifest, `.safetensors` I/O, and MESA converters.
 //!
 //! Provides:
-//! 1. [`TableArtifact`] and [`parse_manifest_text`] / [`parse_manifest_file`]
-//!    for parsing `manifest.toml` table integrity declarations.
+//! 1. [`TableArtifact`] and [`parse_manifest_text`], [`parse_manifest_file`],
+//!    and [`load_default_manifest`] for parsing `manifest.toml` table
+//!    integrity declarations.
 //! 2. [`sha256`] for pure Safe Rust FIPS 180-4 `SHA-256` hashing and file
 //!    verification.
 //! 3. [`safetensors`] for reading and writing `F64` (`f64`) and `I64` (`i64`)
@@ -13,6 +14,7 @@
 //!    `helm_table.dat` ASCII tables into row-major `.safetensors` bundles.
 
 pub mod converters;
+mod json_cursor;
 pub mod safetensors;
 pub mod sha256;
 
@@ -23,10 +25,13 @@ use std::path::Path;
 
 use sha256::is_valid_sha256_hex;
 
-/// Metadata and integrity record for a `.safetensors` physics table in `manifest.toml`.
+const DEFAULT_MANIFEST_TOML: &str =
+    include_str!("../../../src/flexmesa/data/manifest.toml");
+
+/// Metadata and integrity record for a `.safetensors` table in `manifest.toml`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TableArtifact {
-    /// Logical table identifier (e.g., `"lodders03"`, `"isotopes"`, `"helm_table"`).
+    /// Logical table identifier (`"lodders03"`, `"isotopes"`, `"helm_table"`).
     pub name: String,
     /// Canonical `.safetensors` filename (e.g., `"lodders03.safetensors"`).
     pub filename: String,
@@ -40,7 +45,7 @@ pub struct TableArtifact {
     pub description: String,
 }
 
-/// Error returned during manifest parsing, `SHA-256` verification, or `.safetensors` I/O.
+/// Error returned by manifest parsing, `SHA-256` checks, or `.safetensors` I/O.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DataError {
     /// File could not be read or written on disk.
@@ -50,7 +55,7 @@ pub enum DataError {
         /// Underlying OS I/O error message.
         message: String,
     },
-    /// Syntax error while parsing `manifest.toml`, `.safetensors` header, or ASCII tables.
+    /// Syntax error while parsing `manifest.toml`, JSON, or ASCII tables.
     ParseError(String),
     /// Schema, dtype, shape, or finiteness validation failure.
     ValidationError(String),
@@ -81,7 +86,8 @@ impl fmt::Display for DataError {
                 actual,
             } => write!(
                 f,
-                "SHA-256 checksum mismatch for {path:?}: expected {expected}, got {actual}"
+                "SHA-256 mismatch for {path:?}: \
+                 expected {expected}, got {actual}"
             ),
         }
     }
@@ -92,52 +98,61 @@ impl std::error::Error for DataError {}
 /// Extract a double-quoted TOML string value.
 fn parse_toml_quoted(raw: &str) -> Result<String, DataError> {
     let trimmed = raw.trim();
-    let Some(inner) =
-        trimmed.strip_prefix('"').and_then(|s| s.strip_suffix('"'))
-    else {
-        return Err(DataError::ParseError(format!(
-            "expected double-quoted TOML string, got {trimmed:?}"
-        )));
-    };
-    Ok(inner.to_owned())
+    trimmed
+        .strip_prefix('"')
+        .and_then(|s| s.strip_suffix('"'))
+        .map(str::to_owned)
+        .ok_or_else(|| {
+            DataError::ParseError(format!(
+                "expected double-quoted TOML string, got {trimmed:?}"
+            ))
+        })
 }
 
-/// Finalize and validate a single `[[tables]]` stanza into a [`TableArtifact`].
-fn build_artifact(
+/// Parse comma-separated quoted strings from `segment` into `tensors`.
+fn push_quoted_items(
+    segment: &str,
+    tensors: &mut Vec<String>,
+) -> Result<(), DataError> {
+    for item in segment.split(',') {
+        if !item.trim().is_empty() {
+            tensors.push(parse_toml_quoted(item)?);
+        }
+    }
+    Ok(())
+}
+
+/// Remove and validate a required non-empty string field from `fields`.
+fn take_required_field(
+    fields: &mut BTreeMap<String, String>,
+    table: &str,
+    key: &str,
+) -> Result<String, DataError> {
+    fields
+        .remove(key)
+        .filter(|s| !s.trim().is_empty())
+        .ok_or_else(|| {
+            DataError::ValidationError(format!(
+                "manifest table {table:?} missing {key:?}"
+            ))
+        })
+}
+
+/// Finalize and insert a single `[[tables]]` stanza into `artifacts`.
+fn flush_artifact(
     fields: &mut BTreeMap<String, String>,
     tensors: &mut Vec<String>,
-) -> Result<TableArtifact, DataError> {
-    let name = fields
-        .remove("name")
-        .filter(|s| !s.trim().is_empty())
-        .ok_or_else(|| {
-            DataError::ValidationError(
-                "manifest table missing 'name'".to_owned(),
-            )
-        })?;
-    let filename = fields
-        .remove("filename")
-        .filter(|s| !s.trim().is_empty())
-        .ok_or_else(|| {
-        DataError::ValidationError(format!(
-            "manifest table {name:?} missing 'filename'"
-        ))
-    })?;
-    let sha256 = fields.remove("sha256").ok_or_else(|| {
-        DataError::ValidationError(format!(
-            "manifest table {name:?} missing 'sha256'"
-        ))
-    })?;
+    artifacts: &mut BTreeMap<String, TableArtifact>,
+) -> Result<(), DataError> {
+    let name = take_required_field(fields, "<unnamed>", "name")?;
+    let filename = take_required_field(fields, &name, "filename")?;
+    let sha256 = take_required_field(fields, &name, "sha256")?;
     if !is_valid_sha256_hex(&sha256) {
         return Err(DataError::ValidationError(format!(
             "manifest table {name:?} has invalid 'sha256': {sha256:?}"
         )));
     }
-    let size_str = fields.remove("size_bytes").ok_or_else(|| {
-        DataError::ValidationError(format!(
-            "manifest table {name:?} missing 'size_bytes'"
-        ))
-    })?;
+    let size_str = take_required_field(fields, &name, "size_bytes")?;
     let size_bytes = size_str.parse::<u64>().map_err(|_| {
         DataError::ValidationError(format!(
             "manifest table {name:?} has invalid 'size_bytes': {size_str:?}"
@@ -148,31 +163,44 @@ fn build_artifact(
             "manifest table {name:?} must declare a non-empty 'tensors' list"
         )));
     }
-    let description = fields.remove("description").unwrap_or_default();
-    Ok(TableArtifact {
-        name,
+    let artifact = TableArtifact {
+        name: name.clone(),
         filename,
         sha256: sha256.to_ascii_lowercase(),
         size_bytes,
         tensors: std::mem::take(tensors),
-        description,
-    })
+        description: fields.remove("description").unwrap_or_default(),
+    };
+    if artifacts.insert(name, artifact).is_some() {
+        return Err(DataError::ValidationError(
+            "duplicate table name in manifest".to_owned(),
+        ));
+    }
+    Ok(())
 }
 
-/// Parse `manifest.toml` text (`[[tables]]` stanzas) into a map of [`TableArtifact`]s.
+/// Parse `manifest.toml` text (`[[tables]]` stanzas) into [`TableArtifact`]s.
 ///
 /// # Errors
 /// Returns [`DataError::ParseError`] or [`DataError::ValidationError`] if the
 /// manifest syntax is malformed, `[[tables]]` is empty, duplicate table names
 /// occur, or any required field fails validation.
+///
+/// # Examples
+/// ```
+/// use flexmesa_data::load_default_manifest;
+///
+/// let tables = load_default_manifest().unwrap();
+/// assert!(tables.contains_key("lodders03"));
+/// assert!(tables.contains_key("isotopes"));
+/// ```
 pub fn parse_manifest_text(
     text: &str,
 ) -> Result<BTreeMap<String, TableArtifact>, DataError> {
     let mut artifacts = BTreeMap::new();
     let mut fields: BTreeMap<String, String> = BTreeMap::new();
     let mut tensors: Vec<String> = Vec::new();
-    let mut in_table = false;
-    let mut in_tensors_array = false;
+    let (mut in_table, mut in_tensors_array) = (false, false);
 
     for raw_line in text.lines() {
         let line = raw_line.split('#').next().unwrap_or("").trim();
@@ -181,12 +209,7 @@ pub fn parse_manifest_text(
         }
         if line == "[[tables]]" {
             if in_table {
-                let art = build_artifact(&mut fields, &mut tensors)?;
-                if artifacts.insert(art.name.clone(), art).is_some() {
-                    return Err(DataError::ValidationError(
-                        "duplicate table name in manifest".to_owned(),
-                    ));
-                }
+                flush_artifact(&mut fields, &mut tensors, &mut artifacts)?;
             }
             in_table = true;
             in_tensors_array = false;
@@ -198,20 +221,9 @@ pub fn parse_manifest_text(
             )));
         }
         if in_tensors_array {
-            if let Some(before_close) = line.strip_suffix(']') {
-                for item in before_close.split(',') {
-                    if !item.trim().is_empty() {
-                        tensors.push(parse_toml_quoted(item)?);
-                    }
-                }
-                in_tensors_array = false;
-            } else {
-                for item in line.split(',') {
-                    if !item.trim().is_empty() {
-                        tensors.push(parse_toml_quoted(item)?);
-                    }
-                }
-            }
+            let body = line.strip_suffix(']').unwrap_or(line);
+            push_quoted_items(body, &mut tensors)?;
+            in_tensors_array = !line.ends_with(']');
             continue;
         }
         let Some((lhs, rhs)) = line.split_once('=') else {
@@ -219,42 +231,24 @@ pub fn parse_manifest_text(
                 "malformed manifest line: {line:?}"
             )));
         };
-        let key = lhs.trim();
-        let val = rhs.trim();
+        let (key, val) = (lhs.trim(), rhs.trim());
         if key == "tensors" {
             let Some(after_open) = val.strip_prefix('[') else {
                 return Err(DataError::ParseError(
                     "tensors must be a bracketed array".to_owned(),
                 ));
             };
-            if let Some(inner) = after_open.strip_suffix(']') {
-                for item in inner.split(',') {
-                    if !item.trim().is_empty() {
-                        tensors.push(parse_toml_quoted(item)?);
-                    }
-                }
-            } else {
-                for item in after_open.split(',') {
-                    if !item.trim().is_empty() {
-                        tensors.push(parse_toml_quoted(item)?);
-                    }
-                }
-                in_tensors_array = true;
-            }
+            let body = after_open.strip_suffix(']').unwrap_or(after_open);
+            push_quoted_items(body, &mut tensors)?;
+            in_tensors_array = !after_open.ends_with(']');
         } else if key == "size_bytes" {
             fields.insert(key.to_owned(), val.to_owned());
         } else {
             fields.insert(key.to_owned(), parse_toml_quoted(val)?);
         }
     }
-
     if in_table {
-        let art = build_artifact(&mut fields, &mut tensors)?;
-        if artifacts.insert(art.name.clone(), art).is_some() {
-            return Err(DataError::ValidationError(
-                "duplicate table name in manifest".to_owned(),
-            ));
-        }
+        flush_artifact(&mut fields, &mut tensors, &mut artifacts)?;
     }
     if artifacts.is_empty() {
         return Err(DataError::ValidationError(
@@ -276,4 +270,13 @@ pub fn parse_manifest_file(
         message: err.to_string(),
     })?;
     parse_manifest_text(&text)
+}
+
+/// Load the bundled `src/flexmesa/data/manifest.toml` physics table manifest.
+///
+/// # Errors
+/// Returns [`DataError`] if the embedded manifest fails validation.
+pub fn load_default_manifest(
+) -> Result<BTreeMap<String, TableArtifact>, DataError> {
+    parse_manifest_text(DEFAULT_MANIFEST_TOML)
 }

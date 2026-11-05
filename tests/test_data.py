@@ -59,24 +59,29 @@ _SAMPLE_ISOTOPES = "\n".join(
 
 
 def _build_synthetic_helm_text(imax: int = 3, jmax: int = 2) -> str:
-    """Build a synthetic `helm_table.dat` fixture of size `(imax, jmax)`."""
+    """Build a synthetic `helm_table.dat` fixture of size `(imax, jmax)`.
+
+    Populates all four sections (`f`, `dpdf`, `ef`, `xf`) in MESA's outer `j`
+    (temperature), inner `i` (density) row ordering so transpose parity can be
+    tested against known cell formulas.
+    """
     lines: list[str] = []
-    for j in range(jmax):
-        for i in range(imax):
-            base = float(100 * j + 10 * i)
-            vals = [f"{base + k + 1:.16E}" for k in range(9)]
-            lines.append("  ".join(vals))
-    for sec in range(1, 4):
+    for sec, n_cols in ((0, 9), (1, 4), (2, 4), (3, 4)):
         for j in range(jmax):
             for i in range(imax):
                 base = float(1000 * sec + 100 * j + 10 * i)
-                vals = [f"{base + k + 1:.16E}" for k in range(4)]
+                vals = [f"{base + k + 1:.16E}" for k in range(n_cols)]
                 lines.append("  ".join(vals))
     return "\n".join(lines) + "\n"
 
 
 def test_default_manifest_loads_and_validates_entries() -> None:
-    """Verify `load_default_manifest` parses `manifest.toml` cleanly."""
+    """Verify `load_default_manifest` parses `manifest.toml` cleanly.
+
+    Checks that `lodders03`, `isotopes`, and `helm_table` entries exist with
+    valid 64-character `SHA-256` hex digests and that duplicate table names are
+    rejected.
+    """
     tables = manifest.load_default_manifest()
     assert {"lodders03", "isotopes", "helm_table"} <= set(tables.keys())
     lod = tables["lodders03"]
@@ -98,7 +103,12 @@ def test_default_manifest_loads_and_validates_entries() -> None:
 def test_safetensors_bundle_roundtrips_and_enforces_integrity(
     tmp_path: pathlib.Path,
 ) -> None:
-    """Verify `.safetensors` saving, SHA-256 checks, and NaN/dtype rejection."""
+    """Verify `.safetensors` saving, SHA-256 checks, and NaN/dtype rejection.
+
+    Confirms memory-mapped loading via `load_safetensors_bundle` and verifies
+    that corrupted `SHA-256` digests, missing required tensors, `NaN` values,
+    and `float32` tensors raise appropriate exceptions.
+    """
     st_path = tmp_path / "sample.safetensors"
     f_arr = np.array([[1.25, -2.5], [3.75, 4.0]], dtype=np.float64)
     i_arr = np.array([10, 20, 30], dtype=np.int64)
@@ -137,7 +147,11 @@ def test_safetensors_bundle_roundtrips_and_enforces_integrity(
 def test_converters_parse_lodders03_isotopes_and_helm_table(
     tmp_path: pathlib.Path,
 ) -> None:
-    """Verify conversion of `lodders03`, `isotopes`, and `helm_table`."""
+    """Verify conversion of `lodders03`, `isotopes`, and `helm_table`.
+
+    Checks thousands-separator handling (`768,900`), isomeric state parsing
+    (`al26-1`), and `(imax, jmax)` row-major indexing for `helm_table`.
+    """
     lod = converters.parse_lodders03_text(_SAMPLE_LODDERS03)
     assert np.array_equal(
         lod.tensors["atomic_number_z"], np.array([1, 1, 2, 26], dtype=np.int64)
@@ -177,7 +191,11 @@ def test_safetensors_float64_and_int64_roundtrip_bit_exact(
     cols: int,
     seed: int,
 ) -> None:
-    """Property test: finite `float64` and `int64` arrays round-trip."""
+    """Property test: finite `float64` and `int64` arrays round-trip.
+
+    Generates random 2D `float64` and 1D `int64` arrays using `default_rng` and
+    verifies bit-exact serialization and deserialization.
+    """
     rng = np.random.default_rng(seed)
     f_arr = rng.standard_normal((rows, cols), dtype=np.float64)
     i_arr = rng.integers(-1_000_000, 1_000_000, size=(rows,), dtype=np.int64)

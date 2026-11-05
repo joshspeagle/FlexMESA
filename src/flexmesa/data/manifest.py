@@ -13,7 +13,6 @@ import hashlib
 import pathlib
 import tomllib
 
-_CHUNK_SIZE_BYTES = 1024 * 1024
 _HEX_DIGITS = frozenset("0123456789abcdef")
 
 
@@ -88,12 +87,8 @@ def compute_sha256_file(path: str | pathlib.Path) -> str:
     Raises:
         FileNotFoundError: If `path` does not exist.
     """
-    file_path = pathlib.Path(path)
-    hasher = hashlib.sha256()
-    with file_path.open("rb") as handle:
-        while chunk := handle.read(_CHUNK_SIZE_BYTES):
-            hasher.update(chunk)
-    return hasher.hexdigest()
+    with pathlib.Path(path).open("rb") as handle:
+        return hashlib.file_digest(handle, "sha256").hexdigest()
 
 
 def verify_file_sha256(

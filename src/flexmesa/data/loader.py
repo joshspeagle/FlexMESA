@@ -104,12 +104,13 @@ def save_safetensors_bundle(
         if metadata is not None
         else None
     )
+    raw_bytes: bytes = safetensors.numpy.save(
+        normalized, metadata=normalized_meta
+    )
     out_path = pathlib.Path(path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    safetensors.numpy.save_file(
-        normalized, str(out_path), metadata=normalized_meta
-    )
-    return manifest.compute_sha256_file(out_path)
+    out_path.write_bytes(raw_bytes)
+    return manifest.compute_sha256_bytes(raw_bytes)
 
 
 def load_safetensors_bundle(
@@ -150,22 +151,22 @@ def load_safetensors_bundle(
 
     tensors: dict[str, TableTensor] = {}
     with safetensors.safe_open(str(file_path), framework="np") as handle:
+        available_keys = [str(k) for k in handle.keys()]
+        if required_tensors is not None:
+            present_keys = set(available_keys)
+            missing = [t for t in required_tensors if t not in present_keys]
+            if missing:
+                raise KeyError(
+                    f"Missing required tensor(s) {missing} in {file_path.name}"
+                )
         raw_meta = handle.metadata()
         metadata: dict[str, str] = (
             {str(k): str(v) for k, v in raw_meta.items()}
             if isinstance(raw_meta, dict)
             else {}
         )
-        for key in handle.keys():
-            raw_arr = handle.get_tensor(key)
-            tensors[str(key)] = _validate_and_normalize_tensor(
-                str(key), raw_arr, require_finite=require_finite
-            )
-
-    if required_tensors is not None:
-        missing = [t for t in required_tensors if t not in tensors]
-        if missing:
-            raise KeyError(
-                f"Missing required tensor(s) {missing} in {file_path.name}"
+        for key in available_keys:
+            tensors[key] = _validate_and_normalize_tensor(
+                key, handle.get_tensor(key), require_finite=require_finite
             )
     return LoadedTableBundle(tensors=tensors, metadata=metadata)

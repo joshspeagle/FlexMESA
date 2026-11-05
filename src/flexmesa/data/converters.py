@@ -10,6 +10,7 @@ Contract (`docs/design/wave-0-spec.md` §2.2).
 from __future__ import annotations
 
 import pathlib
+from collections.abc import Callable
 
 import numpy as np
 import numpy.typing as npt
@@ -32,6 +33,13 @@ _HELM_F_COLS = (
 _HELM_DPDF_COLS = ("dpdf", "dpdfd", "dpdft", "dpdfdt")
 _HELM_EF_COLS = ("ef", "efd", "eft", "efdt")
 _HELM_XF_COLS = ("xf", "xfd", "xft", "xfdt")
+
+
+def _non_empty_lines(text: str) -> list[str]:
+    """Return stripped non-empty lines from `text`."""
+    return [
+        stripped for line in text.splitlines() if (stripped := line.strip())
+    ]
 
 
 def _parse_isomeric_state(name: str) -> int:
@@ -158,7 +166,7 @@ def parse_isotopes_text(text: str) -> loader.LoadedTableBundle:
         ValueError: If the non-empty line count is zero or not a multiple of 4,
             or if any record is malformed.
     """
-    non_empty = [line.strip() for line in text.splitlines() if line.strip()]
+    non_empty = _non_empty_lines(text)
     if not non_empty or len(non_empty) % 4 != 0:
         raise ValueError(
             f"isotopes.data must have a positive multiple of 4 non-empty "
@@ -177,12 +185,7 @@ def parse_isotopes_text(text: str) -> loader.LoadedTableBundle:
     for i in range(n_nuclides):
         rec = _parse_single_nuclide_record(non_empty, i * 4)
         names.append(rec[0])
-        w_arr[i], z_arr[i], n_arr[i], iso_arr[i] = (
-            rec[1],
-            rec[2],
-            rec[3],
-            rec[4],
-        )
+        w_arr[i], z_arr[i], n_arr[i], iso_arr[i] = rec[1:5]
         spin_arr[i], mex_arr[i], pf_arr[i, :] = rec[5], rec[6], rec[7]
 
     return loader.LoadedTableBundle(
@@ -207,7 +210,7 @@ def _parse_helm_section(
     n_cols: int,
 ) -> npt.NDArray[np.float64]:
     """Parse one `helm_table.dat` section into `(imax, jmax, n_cols)`."""
-    flat = np.empty((jmax, imax, n_cols), dtype=np.float64)
+    out = np.empty((imax, jmax, n_cols), dtype=np.float64)
     for j in range(jmax):
         for i in range(imax):
             line = lines[start_idx + j * imax + i]
@@ -217,8 +220,8 @@ def _parse_helm_section(
                     f"Expected {n_cols} columns in helm_table row "
                     f"{start_idx + j * imax + i + 1}, got {len(tokens)}"
                 )
-            flat[j, i, :] = [golden.parse_fortran_float(tok) for tok in tokens]
-    return np.ascontiguousarray(np.swapaxes(flat, 0, 1), dtype=np.float64)
+            out[i, j, :] = [golden.parse_fortran_float(tok) for tok in tokens]
+    return out
 
 
 def parse_helm_table_text(
@@ -234,9 +237,9 @@ def parse_helm_table_text(
     """Parse MESA `eos/helm_table.dat` text into a `LoadedTableBundle`.
 
     Follows MESA's `read_helm_table` loop order (`j = 0..jmax` outer temperature
-    loop, `i = 0..imax` inner density loop) and transposes into `FlexMESA`'s
-    canonical row-major `(imax, jmax)` layout where `[i_rho, j_temp]` matches
-    Fortran `h% f(i_rho + 1, j_temp + 1)`.
+    loop, `i = 0..imax` inner density loop) and stores `FlexMESA`'s canonical
+    row-major `(imax, jmax)` layout where `[i_rho, j_temp]` matches Fortran
+    `h% f(i_rho + 1, j_temp + 1)`.
 
     Args:
         text: Raw ASCII content of `helm_table.dat`.
@@ -260,7 +263,7 @@ def parse_helm_table_text(
     """
     if imax < 2 or jmax < 2:
         raise ValueError(f"imax and jmax must be >= 2, got ({imax}, {jmax})")
-    non_empty = [line.strip() for line in text.splitlines() if line.strip()]
+    non_empty = _non_empty_lines(text)
     n_block = imax * jmax
     if len(non_empty) != 4 * n_block:
         raise ValueError(
@@ -299,17 +302,24 @@ def parse_helm_table_text(
     )
 
 
+def _convert_text_file(
+    input_path: str | pathlib.Path,
+    output_path: str | pathlib.Path,
+    parser: Callable[[str], loader.LoadedTableBundle],
+) -> str:
+    """Read `input_path`, parse it with `parser`, and save `.safetensors`."""
+    bundle = parser(pathlib.Path(input_path).read_text(encoding="utf-8"))
+    return loader.save_safetensors_bundle(
+        output_path, bundle.tensors, bundle.metadata
+    )
+
+
 def convert_lodders03_file(
     input_path: str | pathlib.Path,
     output_path: str | pathlib.Path,
 ) -> str:
     """Convert `lodders03.data` into `.safetensors` and return SHA-256."""
-    bundle = parse_lodders03_text(
-        pathlib.Path(input_path).read_text(encoding="utf-8")
-    )
-    return loader.save_safetensors_bundle(
-        output_path, bundle.tensors, bundle.metadata
-    )
+    return _convert_text_file(input_path, output_path, parse_lodders03_text)
 
 
 def convert_isotopes_file(
@@ -317,9 +327,19 @@ def convert_isotopes_file(
     output_path: str | pathlib.Path,
 ) -> str:
     """Convert `isotopes.data` into `.safetensors` and return SHA-256."""
-    bundle = parse_isotopes_text(
-        pathlib.Path(input_path).read_text(encoding="utf-8")
-    )
-    return loader.save_safetensors_bundle(
-        output_path, bundle.tensors, bundle.metadata
+    return _convert_text_file(input_path, output_path, parse_isotopes_text)
+
+
+def convert_helm_table_file(
+    input_path: str | pathlib.Path,
+    output_path: str | pathlib.Path,
+    *,
+    imax: int = 2701,
+    jmax: int = 1001,
+) -> str:
+    """Convert `helm_table.dat` into `.safetensors` and return SHA-256."""
+    return _convert_text_file(
+        input_path,
+        output_path,
+        lambda text: parse_helm_table_text(text, imax=imax, jmax=jmax),
     )

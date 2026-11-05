@@ -4,6 +4,14 @@
 //!
 //! Each test validates CODATA 2018 and IAU 2015 CGS constants and mixing
 //! enumerations to IEEE-754 double-precision tolerance (`rtol <= 1e-15`).
+//!
+//! Physical quantities verified include:
+//! - Fundamental constants ($c$, $h$, $k_{\mathrm{B}}$, $N_{\mathrm{A}}$, $q_{\mathrm{e}}$)
+//! - Radiation constants ($\sigma_{\mathrm{SB}}$, $a_{\mathrm{rad}}$)
+//! - Astronomical conversion constants ($\mathrm{au}$, $\mathrm{yr}$, $\mathrm{ly}$,
+//!   $M_{\odot}$, $R_{\odot}$, $L_{\odot}$, $M_{\oplus}$)
+//! - Baryon and lepton masses ($m_{\mathrm{u}}$, $m_{\mathrm{n}}$, $m_{\mathrm{p}}$,
+//!   $m_{\mathrm{e}}$)
 
 #![allow(clippy::approx_constant, clippy::excessive_precision)]
 
@@ -70,10 +78,11 @@ fn test_const_golden_parity_matches_upstream_mesa() {
         .expect("all 23 constants match upstream MESA");
 }
 
-/// Verify integer round-trip conversion for all 12 `MixingType` codes (`-1..=10`)
-/// and confirm out-of-range codes return `None`.
+/// Verify integer round-trip conversion for all 12 `MixingType` codes
+/// (`-1..=10`) and confirm out-of-range codes return `None`.
 #[test]
 fn test_mixing_type_roundtrip_codes() {
+    // Every valid MESA mixing code (-1..=10) round-trips cleanly.
     for code in -1..=10 {
         let kind = c::MixingType::from_code(code).expect("valid mixing code");
         assert_eq!(kind.code(), code);

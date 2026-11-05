@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
-"""Unit and golden-output parity tests for `flexmesa.constants` and `utils`.
+"""Unit, golden-output parity, and property tests for `constants` and `utils`.
 
 This test module verifies:
 - All 23 derived physical and astronomical CGS constants against upstream MESA
@@ -9,13 +9,17 @@ This test module verifies:
   tokenizer against `utils/test/test_output` and `utils/test/token.txt`.
 - IEEE-754 finiteness guards (`is_bad`, `is_bad_array`, `replace_bad_nums`) and
   `NaN`-free gradient propagation under `jax.grad`.
+- Property-based invariants under `hypothesis` across arbitrary float arrays and
+  string keys.
 """
 
 from __future__ import annotations
 
+import hypothesis
 import jax
 import jax.numpy as jnp
 import numpy as np
+from hypothesis import strategies as st
 
 from flexmesa import constants, utils
 from flexmesa.testing import golden
@@ -48,13 +52,24 @@ _EXPECTED_CONST_VALUES: tuple[float, ...] = (
 
 
 def _squared_norm_after_filtering(arr: jax.Array) -> jax.Array:
-    """Compute sum of squares after replacing non-finite entries with zero."""
+    """Compute sum of squares after replacing non-finite entries with zero.
+
+    Args:
+        arr: 1D `float64` JAX array potentially containing `NaN` or `Inf`.
+
+    Returns:
+        Scalar `float64` sum of squared finite elements.
+    """
     safe = utils.replace_bad_nums(arr, replacement=0.0)
     return jnp.sum(safe * safe)
 
 
 def test_constants_golden_parity_matches_upstream_mesa() -> None:
-    """Verify all 23 derived constants against MESA `const/test/test_output`."""
+    """Verify all 23 derived constants against MESA `const/test/test_output`.
+
+    Checks mathematical, radiation, astronomical, and particle constants in CGS
+    units against the 16-digit reference values emitted by `test_const.f90`.
+    """
     actual = np.array(
         [
             constants.PI,
@@ -88,7 +103,11 @@ def test_constants_golden_parity_matches_upstream_mesa() -> None:
 
 
 def test_mixing_type_enum_codes_match_upstream_mesa() -> None:
-    """Verify `MixingType` integer codes from `-1` through `10`."""
+    """Verify `MixingType` integer codes from `-1` through `10`.
+
+    Confirms round-trip conversion via `MixingType.from_code` and `.code()` as
+    well as `None` return for out-of-range integer codes.
+    """
     for code in range(-1, 11):
         member = constants.MixingType.from_code(code)
         assert member is not None
@@ -100,7 +119,11 @@ def test_mixing_type_enum_codes_match_upstream_mesa() -> None:
 
 
 def test_integer_dict_matches_upstream_mesa() -> None:
-    """Verify `IntegerDict` against `utils/test/test_output`."""
+    """Verify `IntegerDict` against `utils/test/test_output`.
+
+    Reproduces `test_dict` from `utils/test/src/test_utils.f90` across all 19
+    isotope keys (`he4` through `prot`) and duplicate key redefinitions.
+    """
     d = utils.IntegerDict()
     assert d.is_empty()
     keys = (
@@ -138,7 +161,11 @@ def test_integer_dict_matches_upstream_mesa() -> None:
 
 
 def test_integer_idict_matches_upstream_mesa() -> None:
-    """Verify `IntegerIdict` against `utils/test/test_output`."""
+    """Verify `IntegerIdict` against `utils/test/test_output`.
+
+    Reproduces `test_idict` from `utils/test/src/test_utils.f90` across 19
+    `(A, Z)` integer key pairs and duplicate redefinitions.
+    """
     idict = utils.IntegerIdict()
     assert idict.is_empty()
     k1s = (
@@ -160,12 +187,16 @@ def test_integer_idict_matches_upstream_mesa() -> None:
 
 
 def test_tokenize_matches_upstream_mesa_token_txt() -> None:
-    """Verify `.net` stream tokenizer against `utils/test/token.txt`."""
+    """Verify `.net` stream tokenizer against `utils/test/token.txt`.
+
+    Checks comment stripping (including adjacent `!` comments), `&` continuation
+    skipping, single- and double-quoted strings, and delimiter tokens.
+    """
     sample = (
         "!test input for token_read\n\n"
         "add_isos(\n"
         "   ih1, ihe4, & ! ignore & and comment\n"
-        "   ic12\n"
+        "   ic12!inline_comment\n"
         "   )\n\n"
         "'string1'  \"string2\"\n\n"
         "add_reactions(rc12pg, rc12ap)\n"
@@ -194,7 +225,11 @@ def test_tokenize_matches_upstream_mesa_token_txt() -> None:
 
 
 def test_replace_bad_nums_avoids_nan_gradient_contamination() -> None:
-    """Verify `replace_bad_nums` filters `NaN`/`Inf` under `jax.grad`."""
+    """Verify `replace_bad_nums` filters `NaN`/`Inf` under `jax.grad`.
+
+    Ensures `jnp.where` prevents `0.0 * NaN` from contaminating reverse-mode
+    autodiff gradients when non-finite entries are masked.
+    """
     assert not utils.is_bad(0.0)
     assert utils.is_bad(float("nan"))
     assert utils.is_bad(float("inf"))
@@ -211,3 +246,33 @@ def test_replace_bad_nums_avoids_nan_gradient_contamination() -> None:
     assert utils.remove_underbars("star_mass_msun  ") == "star mass msun"
     assert utils.split_line("a   b c d", 3) == ["a", "b", "c"]
     assert not utils.split_line("a b", 0)
+
+
+@hypothesis.given(
+    finite_vals=st.lists(
+        st.floats(-1e50, 1e50, allow_nan=False, allow_infinity=False),
+        min_size=1,
+        max_size=16,
+    ),
+    key=st.from_regex(r"[a-z][a-z0-9_]{0,12}", fullmatch=True),
+    val1=st.integers(-10_000, 10_000),
+    val2=st.integers(-10_000, 10_000),
+)
+def test_prop_replace_bad_nums_and_dict_normalization(
+    finite_vals: list[float],
+    key: str,
+    val1: int,
+    val2: int,
+) -> None:
+    """Property test for `replace_bad_nums` and `IntegerDict` normalization."""
+    arr = np.array([*finite_vals, float("nan"), float("inf")], dtype=np.float64)
+    assert utils.is_bad_array(arr)
+    cleaned = utils.replace_bad_nums(arr, replacement=0.0)
+    assert not utils.is_bad_array(cleaned)
+
+    d = utils.IntegerDict()
+    padded = f"{key}   "
+    assert not d.define_and_report_duplicates(padded, val1)
+    assert d.lookup(key) == val1
+    assert d.define_and_report_duplicates(key, val2)
+    assert d.lookup(padded) == val2

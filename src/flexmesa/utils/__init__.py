@@ -275,7 +275,17 @@ def _scan_quoted_or_name(line: str, pos: int, ch: str) -> tuple[Token, int]:
         return Token(TokenKind.STRING, line[pos:end]), end + 1
 
     start = pos - 1
-    while pos < len(line) and line[pos] not in (" ", "\t", "(", ")", ","):
+    while pos < len(line) and line[pos] not in (
+        " ",
+        "\t",
+        "(",
+        ")",
+        ",",
+        "!",
+        "&",
+        "'",
+        '"',
+    ):
         pos += 1
     return Token(TokenKind.NAME, line[start:pos]), pos
 

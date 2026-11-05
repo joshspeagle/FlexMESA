@@ -11,6 +11,7 @@ description = "IEEE-754 finiteness guards, string/integer dictionaries, and reac
 
 [dev-dependencies]
 flexmesa-testing = { path = "../flexmesa-testing" }
+proptest = "1.4"
 
 [lints]
 workspace = true

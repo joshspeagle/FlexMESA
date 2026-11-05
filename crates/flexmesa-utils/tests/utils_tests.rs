@@ -1,15 +1,20 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-//! Integration tests verifying `flexmesa-utils` against upstream MESA golden
-//! output (`utils/test/test_output`).
+//! Integration and property-based tests verifying `flexmesa-utils` against
+//! upstream MESA golden output (`utils/test/test_output`).
 //!
-//! Covers string-keyed and integer-pair-keyed dictionaries with duplicate
-//! reporting, the `.net` reaction-network token stream lexer, and IEEE-754
-//! finiteness guards.
+//! Covers:
+//! - String-keyed (`IntegerDict`) and integer-pair-keyed (`IntegerIdict`)
+//!   dictionaries with duplicate-key reporting and trailing-space trimming.
+//! - The `.net` reaction-network token stream lexer (`Tokenizer`, `tokenize`)
+//!   against `utils/test/token.txt` and inline comment/continuation edge cases.
+//! - IEEE-754 finiteness guards (`is_bad`, `is_bad_slice`, `replace_bad_nums`)
+//!   and property-based fuzzing with `proptest`.
 
 use flexmesa_utils::{
     is_bad, is_bad_slice, remove_underbars, replace_bad_nums, split_line,
     tokenize, IntegerDict, IntegerIdict, Token,
 };
+use proptest::prelude::*;
 
 /// Verify `IntegerDict` insertion, duplicate reporting, hash creation hook,
 /// and key lookup against `test_dict` in `utils/test/src/test_utils.f90`.
@@ -73,7 +78,8 @@ fn test_integer_idict_matches_upstream_mesa() {
 }
 
 /// Verify that `tokenize` reproduces the exact token sequence from upstream
-/// `utils/test/token.txt` and `utils/test/test_output`.
+/// `utils/test/token.txt` and `utils/test/test_output`, and stops identifiers
+/// cleanly at adjacent `!` comments or `&` markers.
 #[test]
 fn test_token_stream_matches_upstream_mesa_token_txt() {
     let input = "\
@@ -81,7 +87,7 @@ fn test_token_stream_matches_upstream_mesa_token_txt() {
 
 add_isos(
    ih1, ihe4, & ! ignore & and comment
-   ic12
+   ic12!inline_comment
    )
 
 'string1'  \"string2\"
@@ -133,4 +139,33 @@ fn test_finiteness_guards_and_string_helpers() {
         split_line("alpha   beta  gamma delta", 3),
         vec!["alpha", "beta", "gamma"]
     );
+}
+
+proptest! {
+    /// Property test verifying that `replace_bad_nums` produces a finite slice
+    /// for any combination of finite values, `NaN`, and infinities, and that
+    /// `IntegerDict` normalizes trailing spaces consistently.
+    #[test]
+    fn prop_replace_bad_nums_and_dict_normalization(
+        finite_vals in prop::collection::vec(-1.0e50_f64..1.0e50_f64, 1..32),
+        key in "[a-z][a-z0-9_]{0,15}",
+        val1 in any::<i64>(),
+        val2 in any::<i64>(),
+    ) {
+        let mut mixed = finite_vals.clone();
+        mixed.push(f64::NAN);
+        mixed.push(f64::INFINITY);
+        prop_assert!(is_bad_slice(&mixed));
+
+        let cleaned = replace_bad_nums(&mixed, 0.0);
+        prop_assert!(!is_bad_slice(&cleaned));
+        prop_assert_eq!(cleaned.len(), mixed.len());
+
+        let mut dict = IntegerDict::new();
+        let padded = format!("{key}   ");
+        prop_assert!(!dict.define_and_report_duplicates(&padded, val1));
+        prop_assert_eq!(dict.lookup(&key), Some(val1));
+        prop_assert!(dict.define_and_report_duplicates(&key, val2));
+        prop_assert_eq!(dict.lookup(&padded), Some(val2));
+    }
 }

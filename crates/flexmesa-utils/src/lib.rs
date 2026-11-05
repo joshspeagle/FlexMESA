@@ -295,7 +295,7 @@ impl<'a> Tokenizer<'a> {
                 _ => {
                     let end = self
                         .current
-                        .find([' ', '\t', '(', ')', ','])
+                        .find([' ', '\t', '(', ')', ',', '!', '&', '\'', '"'])
                         .unwrap_or(self.current.len());
                     let name = self.current[..end].to_owned();
                     self.current = &self.current[end..];

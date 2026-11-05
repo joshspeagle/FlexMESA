@@ -14,6 +14,7 @@ Verifies:
 from __future__ import annotations
 
 import pathlib
+from typing import Any
 
 import hypothesis
 import numpy as np
@@ -138,9 +139,10 @@ def test_safetensors_bundle_roundtrips_and_enforces_integrity(
             {"bad": np.array([1.0, np.nan], dtype=np.float64)},
         )
     with pytest.raises(TypeError, match="Unsupported tensor dtype"):
+        bad_f32: Any = {"bad": np.array([1.0, 2.0], dtype=np.float32)}
         loader.save_safetensors_bundle(
             tmp_path / "f32.safetensors",
-            {"bad": np.array([1.0, 2.0], dtype=np.float32)},  # type: ignore[dict-item]
+            bad_f32,
         )
 
 

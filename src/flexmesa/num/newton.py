@@ -119,8 +119,8 @@ def _newton_driver(
         corr_norm, max_corr = _rms_and_max(dy)
 
         coeff = 1.0
-        y_trial = y.copy()
-        res_trial = res.copy()
+        y_trial = y
+        res_trial = res
         res_trial_norm = res_norm
         while coeff >= config.min_damping:
             y_trial = y + coeff * dy

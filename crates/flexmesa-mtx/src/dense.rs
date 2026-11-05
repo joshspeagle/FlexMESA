@@ -11,7 +11,7 @@
 //! Differentiating $A(p)\,x(p) = b(p)$ with respect to parameter $p_m$ yields
 //! the tangent linear system:
 //! $$A(p)\,\frac{\partial x}{\partial p_m}
-//!   = \frac{\partial b}{\partial p_m} - \frac{\partial A}{\partial p_m}\,x(p)$$
+//! = \frac{\partial b}{\partial p_m} - \frac{\partial A}{\partial p_m}\,x(p)$$
 //! which reuses the primal LU factorization $P A = L U$ across all $K$ tangent
 //! directions in $O(K N^2)$ post-factorization operations.
 

@@ -2,11 +2,10 @@
 """Dense LU factorization, linear system solvers, and JAX differentiable solve.
 
 Stores dense $N \\times N$ matrices in row-major order (`a[i, j]`, `float64`).
-Provides `dgetrf` (LU factorization with partial pivoting), `dgetrs` and
-`dgetrs_multi` (forward/backward substitution), `solve_dense`,
-`solve_dense_multi`, `multiply_xa`, `lu_factored_square_mv`,
-`lu_factored_square_mm`, `rcond_dense`, and the JAX-differentiable
-`solve_dense_jax`.
+Provides `dgetrf` (LU factorization with partial pivoting), `dgetrs`
+(forward/backward substitution for 1D vectors and 2D multi-RHS matrices),
+`solve_dense`, `multiply_xa`, `lu_factored_square_mv`, `lu_factored_square_mm`,
+`rcond_dense`, and the JAX-differentiable `solve_dense_jax`.
 """
 
 from __future__ import annotations
@@ -244,9 +243,8 @@ def lu_factored_square_mm(
     b_arr = np.asarray(b, dtype=np.float64)
     if piv.shape != (n,) or b_arr.ndim != 2 or b_arr.shape[0] != n:
         raise ValueError("lu, ipiv, and b dimensions are incompatible.")
-    u_mat = np.triu(lu_arr)
-    l_mat = np.tril(lu_arr, k=-1) + np.eye(n, dtype=np.float64)
-    prod: npt.NDArray[np.float64] = l_mat @ (u_mat @ b_arr)
+    u_b = np.triu(lu_arr) @ b_arr
+    prod: npt.NDArray[np.float64] = u_b + np.tril(lu_arr, k=-1) @ u_b
     for k in range(n - 1, -1, -1):
         p = int(piv[k])
         if p < 0 or p >= n:
@@ -312,4 +310,5 @@ def solve_dense_jax(
     """
     a64 = jnp.asarray(a, dtype=jnp.float64)
     b64 = jnp.asarray(b, dtype=jnp.float64)
-    return jnp.linalg.solve(a64, b64)
+    sol: jax.Array = jnp.linalg.solve(a64, b64)
+    return sol

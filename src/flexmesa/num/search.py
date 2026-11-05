@@ -197,6 +197,23 @@ def find0(x1: float, y1: float, x2: float, y2: float) -> float:
     return float(x1 - y1 * (x2 - x1) / (y2 - y1))
 
 
+def _quadratic_divided_diffs(
+    x1: float,
+    y1: float,
+    x2: float,
+    y2: float,
+    x3: float,
+    y3: float,
+) -> tuple[float, float, float]:
+    """Computes Newton divided-difference coefficients ``(dx12, b, c)``."""
+    if not ((x1 < x2 < x3) or (x1 > x2 > x3)):
+        raise ValueError("x1, x2, x3 must be strictly monotonic")
+    dx12 = x2 - x1
+    b = (y2 - y1) / dx12
+    c = ((y3 - y2) / (x3 - x2) - b) / (x3 - x1)
+    return dx12, b, c
+
+
 def find0_quadratic(
     x1: float,
     y1: float,
@@ -208,8 +225,8 @@ def find0_quadratic(
     """Finds the root of the quadratic through three monotonic points.
 
     Args:
-        x1: First abscissa.
-        y1: Function value at ``x1``.
+        x1: First abscissa (arbitrary units).
+        y1: Function value at ``x1`` (arbitrary units).
         x2: Interior abscissa strictly between ``x1`` and ``x3``.
         y2: Function value at ``x2``.
         x3: Third abscissa.
@@ -222,8 +239,7 @@ def find0_quadratic(
         ValueError: If abscissas are not strictly monotonic or ``y1, y3`` do
             not bracket zero.
     """
-    if not ((x1 < x2 < x3) or (x1 > x2 > x3)):
-        raise ValueError("x1, x2, x3 must be strictly monotonic")
+    dx12, b, c = _quadratic_divided_diffs(x1, y1, x2, y2, x3, y3)
     if y1 == 0.0:
         return float(x1), 0.0
     if y2 == 0.0:
@@ -232,11 +248,6 @@ def find0_quadratic(
         return float(x3), 0.0
     if (y1 > 0.0 and y3 > 0.0) or (y1 < 0.0 and y3 < 0.0):
         raise ValueError("y1 and y3 must bracket zero in find0_quadratic")
-    dx12 = x2 - x1
-    dx23 = x3 - x2
-    dx13 = x3 - x1
-    b = (y2 - y1) / dx12
-    c = ((y3 - y2) / dx23 - b) / dx13
     a_q = c
     b_q = b - c * dx12
     c_q = y1
@@ -273,8 +284,8 @@ def find_max_quadratic(
     enforcing ``y2 >= max(y1, y3)`` and strict concavity ``c < 0``.
 
     Args:
-        x1: First abscissa.
-        y1: Function value at ``x1``.
+        x1: First abscissa (arbitrary units).
+        y1: Function value at ``x1`` (arbitrary units).
         x2: Interior abscissa strictly between ``x1`` and ``x3``.
         y2: Function value at ``x2`` (must satisfy ``y2 >= max(y1, y3)``).
         x3: Third abscissa.
@@ -287,18 +298,46 @@ def find_max_quadratic(
         ValueError: If abscissas are not monotonic, ``y2 < max(y1, y3)``, or
             the quadratic is not strictly concave.
     """
-    if not ((x1 < x2 < x3) or (x1 > x2 > x3)):
-        raise ValueError("x1, x2, x3 must be strictly monotonic")
+    dx1, b, c = _quadratic_divided_diffs(x1, y1, x2, y2, x3, y3)
     if y2 < max(y1, y3):
         raise ValueError("interior value y2 must be >= max(y1, y3)")
-    dx1 = x2 - x1
-    dx2 = x3 - x2
-    dx12 = x3 - x1
-    b = (y2 - y1) / dx1
-    c = ((y3 - y2) / dx2 - b) / dx12
     if c >= 0.0:
         raise ValueError("quadratic is not strictly concave (c >= 0)")
     dxmax = 0.5 * (dx1 - b / c)
     xmax = float(x1 + dxmax)
     ymax = float(y1 + dxmax * b + dxmax * (xmax - x2) * c)
     return xmax, ymax
+
+
+def two_piece_linear_coeffs(
+    x: float,
+    x0: float,
+    x1: float,
+    x2: float,
+) -> tuple[float, float, float]:
+    """Solves for two-piece linear weights ``(a, b, c)`` on ``(x0, x1, x2)``.
+
+    Args:
+        x: Query point inside ``[min(x0, x2), max(x0, x2)]`` (arbitrary units).
+        x0: First grid abscissa (arbitrary units).
+        x1: Middle grid abscissa (arbitrary units).
+        x2: Third grid abscissa (arbitrary units).
+
+    Returns:
+        Tuple ``(a, b, c)`` such that $f(x) = a f(x_0) + b f(x_1) + c f(x_2)$.
+
+    Raises:
+        ValueError: If ``(x0, x1, x2)`` is not monotonic or ``x`` is out of
+            bounds.
+    """
+    if not (
+        (x0 < x1 < x2 and x0 <= x <= x2) or (x0 > x1 > x2 and x2 <= x <= x0)
+    ):
+        raise ValueError("x outside monotonic (x0, x1, x2) range")
+    if x == x1:
+        return 0.0, 1.0, 0.0
+    if (x0 < x1 and x < x1) or (x0 > x1 and x > x1):
+        a = float((x1 - x) / (x1 - x0))
+        return a, 1.0 - a, 0.0
+    c = float((x - x1) / (x2 - x1))
+    return 0.0, 1.0 - c, c

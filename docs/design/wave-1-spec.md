@@ -161,24 +161,26 @@ full IEEE-754 `float64` precision (fixing the missing `implicit none` 32-bit
   evaluates factored matrix-vector and matrix-matrix products
   (`lu_factored_square_mv`, `lu_factored_square_mm`), and estimates the
   1-norm reciprocal condition number (`rcond_dense`).
-- **Implicit Differentiation of Linear Solves (`solve_dense_dual`)**:
-  For parameter-dependent system $A(p)\,x(p) = b(p)$ with `DualOrder1` entries,
-  computes the primal solution $x = A^{-1} b$ and propagates exact first-order
-  tangents via the implicit function theorem without differentiating through
-  pivoting loops:
+- **Implicit Differentiation of Linear Solves (`solve_dense_dual`,
+  `solve_dense_jax`)**:
+  For parameter-dependent system $A(p)\,x(p) = b(p)$, computes the primal
+  solution $x = A^{-1} b$ and propagates exact first-order tangents via the
+  implicit function theorem without differentiating through pivoting loops:
   $$A\,\frac{\partial x}{\partial p_m} = \frac{\partial b}{\partial p_m} - \frac{\partial A}{\partial p_m}\,x$$
 - **Banded LU (`dgbtrf` / `dgbtrs` / `solve_banded` / `band_multiply_xa`)**:
   Factors and solves banded systems with $k_l$ sub-diagonals and $k_u$
   super-diagonals stored in compact `(2*k_l + k_u + 1, N)` band format,
   alongside `dense_to_band` and `band_to_dense` conversions.
-- **Block-Tridiagonal Solver (`block_dble_mv` / `block_thomas_factor` / `block_thomas_solve` / `solve_block_tridiagonal`)**:
+- **Block-Tridiagonal Solver (`block_dble_mv` / `block_thomas_factor` /
+  `block_thomas_solve` / `solve_block_tridiagonal` /
+  `solve_block_tridiagonal_jax`)**:
   Evaluates block-tridiagonal products
   $$y_k = L_k x_{k-1} + D_k x_k + U_k x_{k+1}, \qquad k \in \{0, \dots, N_z - 1\}$$
   and solves coupled block-tridiagonal systems of block shape
   `(N_zones, N_vars, N_vars)` via block LU Thomas elimination with partial
   pivoting per diagonal block, matching upstream `mtx/test/test_output`
-  (`test_square1`, `test_square2`, `test_square_inv`, `test_block_tridiagonal` on
-  `block_tri.data` with $N_{\mathrm{var}} = 25, N_z = 20$) to $\le 10^{-12}$
+  (`test_square1`, `test_square2`, `test_square_inv`, `test_block_tridiagonal`
+  on `block_tri.data` with $N_{\mathrm{var}} = 25, N_z = 20$) to $\le 10^{-12}$
   relative residual norm.
 - **Sparse Format Conversions (`sparse`)**:
   Bidirectional conversions between dense, banded, compressed-row sparse (CSR),
@@ -220,8 +222,9 @@ full IEEE-754 `float64` precision (fixing the missing `implicit none` 32-bit
     (`look_for_brackets`, `safe_root`, `safe_root_with_brackets`,
     `safe_root_with_guess`, `safe_root_without_brackets`) matching all golden
     outputs in `test_brent` and `test_support` (`0.74800609950637120`, `0.5`).
-  - **Implicit Differentiation of Root-Finding (`safe_root_dual`)**: For
-    $f(x^*(p), p) = 0$, propagates first-order derivatives via
+  - **Implicit Differentiation of Root-Finding (`safe_root_dual`,
+    `safe_root_jax`)**: For $f(x^*(p), p) = 0$, propagates first-order
+    derivatives via
     $$\frac{\partial x^*}{\partial p_m} = -\left(\frac{\partial f}{\partial x}(x^*, p)\right)^{-1} \frac{\partial f}{\partial p_m}(x^*, p)$$
 - **Derivative-Free Multivariate Optimization (`simplex`)**:
   Nelder-Mead simplex optimizer (`nm_simplex`) with weighted centroids, box
@@ -239,10 +242,11 @@ full IEEE-754 `float64` precision (fixing the missing `implicit none` 32-bit
     step-size control, dense and banded Jacobians, and continuous output
     (`contro3`, `contro4`), verified on `vdpol`, `diffusion` ($N_z = 48$), and
     `medakzo` ($N = 400$).
-- **Damped Newton-Raphson Solver (`newton`)**:
+- **Damped Newton-Raphson Solver (`newton`, `newton_solve_jax`)**:
   Line-search damped Newton-Raphson solver supporting analytical and numerical
-  Jacobians across dense, banded, and block-tridiagonal matrix structures,
-  matching the 1001-zone implicit diffusion benchmark in `test_newton`
+  Jacobians across dense, banded, and block-tridiagonal matrix structures plus
+  custom-JVP implicit differentiation (`newton_solve_jax`), matching the
+  1001-zone implicit diffusion benchmark in `test_newton`
   (`2.9347118120566711e-2` to $\le 10^{-12}$ relative error).
 
 ---

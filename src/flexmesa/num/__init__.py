@@ -77,6 +77,7 @@ find_max_quadratic = search.find_max_quadratic
 linear_interp = search.linear_interp
 neumaier_sum = search.neumaier_sum
 qsort_index = search.qsort_index
+two_piece_linear_coeffs = search.two_piece_linear_coeffs
 two_sum = search.two_sum
 
 SimplexConfig = simplex.SimplexConfig
@@ -126,5 +127,6 @@ __all__ = [
     "safe_root_with_brackets",
     "safe_root_with_guess",
     "safe_root_without_brackets",
+    "two_piece_linear_coeffs",
     "two_sum",
 ]

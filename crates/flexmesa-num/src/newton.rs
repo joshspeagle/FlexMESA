@@ -105,15 +105,18 @@ where
         });
     }
 
+    let mut neg_res = vec![0.0; n];
+    let mut y_trial = vec![0.0; n];
     for iter in 1..=config.max_iter {
-        let neg_res: Vec<f64> = res.iter().map(|&v| -v).collect();
+        for i in 0..n {
+            neg_res[i] = -res[i];
+        }
         let dy = solve_step(&y, &neg_res)?;
         let (corr_norm, max_corr) = rms_and_max(&dy);
 
         // Backtracking line search if residual norm increases markedly
         let mut coeff = 1.0_f64;
-        let mut y_trial = vec![0.0; n];
-        let mut res_trial = res.clone();
+        let mut res_trial = Vec::new();
         let mut res_trial_norm = res_norm;
         while coeff >= config.min_damping {
             for i in 0..n {

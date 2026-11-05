@@ -246,19 +246,17 @@ def dgbtrs(
             raise ValueError("Pivot index out of bounds.")
         if p != j:
             x[p], x[j] = x[j], x[p]
-        bj = float(x[j])
-        for i_off in range(1, lm + 1):
-            x[j + i_off] -= float(lu[diag + i_off, j]) * bj
+        if lm > 0:
+            x[j + 1 : j + 1 + lm] -= lu[diag + 1 : diag + 1 + lm, j] * x[j]
 
     for j in range(n - 1, -1, -1):
         u_jj = float(lu[diag, j])
         if u_jj == 0.0:
             raise ValueError(f"Singular banded U factor at column {j}.")
         x[j] /= u_jj
-        bj = float(x[j])
         lm = min(j, kl + ku)
-        for k_off in range(1, lm + 1):
-            x[j - k_off] -= float(lu[diag - k_off, j]) * bj
+        if lm > 0:
+            x[j - lm : j] -= lu[diag - lm : diag, j] * x[j]
     return x
 
 

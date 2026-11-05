@@ -13,15 +13,28 @@
 //! \partial f / \partial y$ directly into the linear stage operator
 //! $E = (\gamma h)^{-1} I - J$.
 //!
-//! - [`rosenbrock_dense`] forms the dense $(N, N)$ matrix $E$ and solves each
-//!   stage via Gaussian elimination with partial pivoting ([`solve_dense`]).
+//! - [`rosenbrock_dense`] forms the dense $(N, N)$ matrix $E$, computes its
+//!   LU factorization once per step via [`dgetrf`], and solves each stage in
+//!   $O(N^2)$ forward/back substitutions via [`dgetrs`].
 //! - [`rosenbrock_banded`] packs $E$ into LAPACK banded storage `(2 * ml + mu
-//!   + 1, N)` and solves each stage in $O(N (m_l + m_u)^2)$ operations via
-//!   [`solve_banded`].
+//!   + 1, N)`, factors it once per step via [`dgbtrf`], and solves each stage
+//!   in $O(N (m_l + m_u))$ substitutions via [`dgbtrs`].
 
 use crate::rosenbrock_coeffs::{coeffs_for, RosenbrockVariant};
 use crate::NumError;
-use flexmesa_mtx::{dense_to_band, solve_banded, solve_dense};
+use flexmesa_mtx::{dense_to_band, dgbtrf, dgbtrs, dgetrf, dgetrs};
+
+/// Builds the dense stage matrix $E = (\gamma h)^{-1} I - J$ in row-major order
+/// across all $N \times N$ entries by negating $J$ and adding $(\gamma h)^{-1}$
+/// along the main diagonal.
+fn build_stage_matrix(n: usize, h_gamma: f64, j_mat: &[f64]) -> Vec<f64> {
+    let mut e_mat = j_mat.iter().map(|&v| -v).collect::<Vec<f64>>();
+    let inv_hg = 1.0 / h_gamma;
+    for i in 0..n {
+        e_mat[i * n + i] += inv_hg;
+    }
+    e_mat
+}
 
 /// Summary of an adaptive Rosenbrock integration.
 #[derive(Debug, Clone)]
@@ -75,19 +88,22 @@ where
         atol,
         max_steps,
         &mut fcn,
-        |t, y, h_gamma, rhs| {
+        |t, y, h_gamma| {
             let n = y.len();
             let j_mat = jac(t, y)?;
-            let mut e_mat = vec![0.0; n * n];
-            let inv_hg = 1.0 / h_gamma;
-            for i in 0..n {
-                for j in 0..n {
-                    let diag = if i == j { inv_hg } else { 0.0 };
-                    e_mat[i * n + j] = diag - j_mat[i * n + j];
-                }
-            }
-            solve_dense(n, &e_mat, rhs)
-                .map_err(|_| NumError::LinearSolveFailed("rosenbrock_dense LU"))
+            let mut e_mat = build_stage_matrix(n, h_gamma, &j_mat);
+            let mut ipiv = vec![0usize; n];
+            dgetrf(n, &mut e_mat, &mut ipiv).map_err(|_| {
+                NumError::LinearSolveFailed("rosenbrock_dense LU")
+            })?;
+            Ok((e_mat, ipiv))
+        },
+        |n, lu, ipiv, rhs| {
+            let mut x = rhs.to_vec();
+            dgetrs(n, lu, ipiv, &mut x).map_err(|_| {
+                NumError::LinearSolveFailed("rosenbrock_dense dgetrs")
+            })?;
+            Ok(x)
         },
     )
 }
@@ -97,8 +113,8 @@ where
 /// selected [`RosenbrockVariant`].
 ///
 /// The callback `jac_dense(t, y)` returns the $(N, N)$ row-major Jacobian,
-/// which is packed into banded storage `(2 * ml + mu + 1, N)` and solved via
-/// [`solve_banded`].
+/// which is packed into banded storage `(2 * ml + mu + 1, N)` and factored
+/// once per step via [`dgbtrf`].
 ///
 /// # Errors
 ///
@@ -122,6 +138,7 @@ where
     F: FnMut(f64, &[f64]) -> Result<Vec<f64>, NumError>,
     J: FnMut(f64, &[f64]) -> Result<Vec<f64>, NumError>,
 {
+    let ldab = 2 * ml + mu + 1;
     rosenbrock_core(
         variant,
         t0,
@@ -133,25 +150,26 @@ where
         atol,
         max_steps,
         &mut fcn,
-        |t, y, h_gamma, rhs| {
+        |t, y, h_gamma| {
             let n = y.len();
             let j_mat = jac_dense(t, y)?;
-            let mut e_mat = vec![0.0; n * n];
-            let inv_hg = 1.0 / h_gamma;
-            for i in 0..n {
-                for j in 0..n {
-                    let diag = if i == j { inv_hg } else { 0.0 };
-                    e_mat[i * n + j] = diag - j_mat[i * n + j];
-                }
-            }
-            let ldab = 2 * ml + mu + 1;
+            let e_mat = build_stage_matrix(n, h_gamma, &j_mat);
             let mut ab = vec![0.0; ldab * n];
             dense_to_band(n, n, &e_mat, ml, mu, &mut ab, ldab).map_err(
                 |_| NumError::LinearSolveFailed("dense_to_band failed"),
             )?;
-            solve_banded(n, ml, mu, &ab, ldab, rhs).map_err(|_| {
+            let mut ipiv = vec![0usize; n];
+            dgbtrf(n, ml, mu, &mut ab, ldab, &mut ipiv).map_err(|_| {
                 NumError::LinearSolveFailed("rosenbrock_banded LU")
-            })
+            })?;
+            Ok((ab, ipiv))
+        },
+        |n, lu_ab, ipiv, rhs| {
+            let mut x = rhs.to_vec();
+            dgbtrs(n, ml, mu, lu_ab, ldab, ipiv, &mut x).map_err(|_| {
+                NumError::LinearSolveFailed("rosenbrock_banded dgbtrs")
+            })?;
+            Ok(x)
         },
     )
 }
@@ -160,10 +178,9 @@ where
 /// [`rosenbrock_banded`].
 ///
 /// Evaluates the temporal partial derivative $\partial f / \partial t$ via
-/// forward difference at each step, solves the $s$ stage linear systems via
-/// `solve_stage`, computes the scaled RMS local truncation error across all
-/// state components, and adjusts the step size $h$ with safety factor $0.9$.
-fn rosenbrock_core<F, S>(
+/// forward difference and factors $E = (\gamma h)^{-1} I - J$ once per step,
+/// then solves the $s$ stage linear systems using the factored operator.
+fn rosenbrock_core<F, P, S>(
     variant: RosenbrockVariant,
     t0: f64,
     t_end: f64,
@@ -174,11 +191,13 @@ fn rosenbrock_core<F, S>(
     atol: f64,
     max_steps: usize,
     fcn: &mut F,
+    mut factor_step: P,
     mut solve_stage: S,
 ) -> Result<RosenbrockResult, NumError>
 where
     F: FnMut(f64, &[f64]) -> Result<Vec<f64>, NumError>,
-    S: FnMut(f64, &[f64], f64, &[f64]) -> Result<Vec<f64>, NumError>,
+    P: FnMut(f64, &[f64], f64) -> Result<(Vec<f64>, Vec<usize>), NumError>,
+    S: FnMut(usize, &[f64], &[usize], &[f64]) -> Result<Vec<f64>, NumError>,
 {
     let n = y0.len();
     if n == 0 || rtol <= 0.0 || atol <= 0.0 {
@@ -225,6 +244,7 @@ where
         let df_dt: Vec<f64> =
             (0..n).map(|i| (f_dt[i] - f0[i]) / dt_eps).collect();
 
+        let (lu, ipiv) = factor_step(t, &y, h * rc.gamma)?;
         // Solve linear stage equations E * g_stg = rhs_stg for stg = 0..s
         let mut g_stages: Vec<Vec<f64>> = Vec::with_capacity(rc.s);
         for stg in 0..rc.s {
@@ -253,7 +273,7 @@ where
                     rhs[i] += c_ij_over_h * g_stages[j][i];
                 }
             }
-            let g_i = solve_stage(t, &y, h * rc.gamma, &rhs)?;
+            let g_i = solve_stage(n, &lu, &ipiv, &rhs)?;
             g_stages.push(g_i);
         }
 

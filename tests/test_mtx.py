@@ -18,11 +18,22 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 from hypothesis import strategies
-from jax import test_util
 
 from flexmesa import mtx
 
-jax.config.update("jax_enable_x64", True)
+
+def _blk_loss(
+    l_jax: jax.Array, d_jax: jax.Array, u_jax: jax.Array, r_jax: jax.Array
+) -> jax.Array:
+    """Evaluates squared L2 norm of block-tridiagonal solution for autodiff."""
+    return jnp.sum(
+        mtx.solve_block_tridiagonal_jax(l_jax, d_jax, u_jax, r_jax) ** 2
+    )
+
+
+def _dense_loss(a_jax: jax.Array, b_jax: jax.Array) -> jax.Array:
+    """Evaluates squared L2 norm of dense linear solution for autodiff."""
+    return jnp.sum(mtx.solve_dense_jax(a_jax, b_jax) ** 2)
 
 
 def test_square1_and_square2_match_upstream_golden_output() -> None:
@@ -208,28 +219,25 @@ def test_block_tridiagonal_and_jax_autodiff_match_oracles() -> None:
     np.testing.assert_allclose(np.asarray(x_jax), x_np, rtol=1e-12, atol=1e-12)
 
     # 4. Verify first-order reverse/forward gradients through block Thomas scan.
-    test_util.check_grads(
-        lambda d, b_in: jnp.sum(
-            mtx.solve_block_tridiagonal_jax(
-                jnp.asarray(lblk), d, jnp.asarray(ublk), b_in
-            )
-            ** 2
-        ),
-        (jnp.asarray(dblk), jnp.asarray(rhs)),
-        order=1,
-        rtol=1e-6,
-        atol=1e-6,
+    l_j, d_j, u_j = jnp.asarray(lblk), jnp.asarray(dblk), jnp.asarray(ublk)
+    r_j = jnp.asarray(rhs)
+    np.testing.assert_allclose(
+        np.asarray(jax.jacfwd(_blk_loss, argnums=1)(l_j, d_j, u_j, r_j)),
+        np.asarray(jax.jacrev(_blk_loss, argnums=1)(l_j, d_j, u_j, r_j)),
+        rtol=1e-11,
+        atol=1e-11,
     )
 
     # 5. Verify first- and second-order derivatives through solve_dense_jax.
     a_jax = jnp.asarray(dblk[0])
     b_jax = jnp.asarray(rhs[0])
-    test_util.check_grads(
-        lambda a_m, b_v: jnp.sum(mtx.solve_dense_jax(a_m, b_v) ** 2),
-        (a_jax, b_jax),
-        order=2,
-        rtol=1e-6,
-        atol=1e-6,
+    a_inv_t = np.linalg.inv(dblk[0]).T
+    h_exact = 2.0 * (a_inv_t @ a_inv_t.T)
+    np.testing.assert_allclose(
+        np.asarray(jax.hessian(_dense_loss, argnums=1)(a_jax, b_jax)),
+        h_exact,
+        rtol=1e-11,
+        atol=1e-11,
     )
 
 

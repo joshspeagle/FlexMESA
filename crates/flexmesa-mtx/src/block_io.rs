@@ -208,17 +208,9 @@ pub fn write_block_tridiagonal_text(
     dblk: &[f64],
     ublk: &[f64],
 ) -> Result<String, MtxError> {
-    let blk_sz = nvar * nvar;
-    if nvar == 0
-        || nz == 0
-        || lblk.len() != nz * blk_sz
-        || dblk.len() != nz * blk_sz
-        || ublk.len() != nz * blk_sz
-    {
-        return Err(MtxError::DimensionMismatch(
-            "invalid slice lengths in write_block_tridiagonal_text",
-        ));
-    }
+    let blk_sz = crate::block_tridiag::check_blocks(
+        nvar, nz, lblk, dblk, ublk,
+    )?;
     let mut out = String::new();
     let _ = writeln!(out, "{nvar} {nz}");
     for k in 0..nz {

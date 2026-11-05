@@ -24,9 +24,9 @@ pub mod band;
 pub mod block_io;
 pub mod block_tridiag;
 pub mod dense;
-pub mod dense_ops;
+mod dense_ops;
 pub mod sparse;
-pub mod sparse_band;
+mod sparse_band;
 
 pub use band::{
     band_multiply_xa, band_to_dense, dense_to_band, dgbtrf, dgbtrs,

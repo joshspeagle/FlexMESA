@@ -152,15 +152,26 @@ def _coeffs_for(
     return 6, 0.25, 4.0, a, c, alpha, gamma_t, m, e
 
 
+def _build_stage_matrix(
+    n: int,
+    h_gamma: float,
+    j_raw: npt.ArrayLike,
+) -> npt.NDArray[np.float64]:
+    """Forms the dense stage matrix $E = (\\gamma h)^{-1} I - J$."""
+    e_mat = -np.asarray(j_raw, dtype=np.float64).reshape((n, n)).copy()
+    e_mat.flat[:: n + 1] += 1.0 / h_gamma
+    return e_mat
+
+
 def _rosenbrock_core(
     variant: RosenbrockVariant,
     t0: float,
     t_end: float,
     y0: npt.ArrayLike,
     fcn: Callable[[float, npt.NDArray[np.float64]], npt.ArrayLike],
-    solve_stage: Callable[
-        [float, npt.NDArray[np.float64], float, npt.NDArray[np.float64]],
-        npt.NDArray[np.float64],
+    factor_step: Callable[
+        [float, npt.NDArray[np.float64], float],
+        Callable[[npt.NDArray[np.float64]], npt.NDArray[np.float64]],
     ],
     h0: float,
     hmax: float,
@@ -172,15 +183,15 @@ def _rosenbrock_core(
 
     Args:
         variant: Selected :class:`RosenbrockVariant`.
-        t0: Initial time.
-        t_end: Final time.
-        y0: Initial state vector of shape ``(n,)``.
+        t0: Initial time (dimensionless).
+        t_end: Final time (dimensionless).
+        y0: Initial state vector of shape ``(n,)`` (arbitrary units).
         fcn: Right-hand side callable ``fcn(t, y)``.
-        solve_stage: Linear stage solver ``solve_stage(t, y, h_gamma, rhs)``.
-        h0: Initial step size.
-        hmax: Maximum step size.
-        rtol: Relative tolerance.
-        atol: Absolute tolerance.
+        factor_step: Step factorizer returning a stage linear solver callable.
+        h0: Initial step size (dimensionless).
+        hmax: Maximum step size (dimensionless).
+        rtol: Relative tolerance (dimensionless).
+        atol: Absolute tolerance (arbitrary units).
         max_steps: Maximum number of steps.
 
     Returns:
@@ -216,6 +227,7 @@ def _rosenbrock_core(
         f_dt = np.asarray(fcn(t + dt_eps, y), dtype=np.float64).ravel()
         nfcn += 2
         df_dt = (f_dt - f0) / dt_eps
+        solve_rhs = factor_step(t, y, h * gamma)
 
         g_stages = np.zeros((s, n), dtype=np.float64)
         for stg in range(s):
@@ -233,7 +245,7 @@ def _rosenbrock_core(
             rhs = f_stg + h * float(gamma_t[stg]) * df_dt
             for j in range(stg):
                 rhs += (float(c[stg, j]) / h) * g_stages[j]
-            g_stages[stg] = solve_stage(t, y, h * gamma, rhs)
+            g_stages[stg] = solve_rhs(rhs)
 
         y_new = y + np.sum(m[:s, None] * g_stages, axis=0)
         err_vec = np.sum(e[:s, None] * g_stages, axis=0)
@@ -269,34 +281,32 @@ def rosenbrock_dense(
 
     Args:
         variant: Selected :class:`RosenbrockVariant`.
-        t0: Initial time.
-        t_end: Final time.
-        y0: Initial state vector of shape ``(n,)``.
+        t0: Initial time (dimensionless).
+        t_end: Final time (dimensionless).
+        y0: Initial state vector of shape ``(n,)`` (arbitrary units).
         fcn: Right-hand side callable ``fcn(t, y)`` returning shape ``(n,)``.
         jac: Jacobian callable ``jac(t, y)`` returning shape ``(n, n)``.
-        h0: Initial step size.
-        hmax: Maximum step size.
-        rtol: Relative tolerance.
-        atol: Absolute tolerance.
+        h0: Initial step size (dimensionless).
+        hmax: Maximum step size (dimensionless).
+        rtol: Relative tolerance (dimensionless).
+        atol: Absolute tolerance (arbitrary units).
         max_steps: Maximum number of steps.
 
     Returns:
         :class:`RosenbrockResult` with final state and counters.
     """
 
-    def _solve(
+    def _factor(
         t: float,
         y: npt.NDArray[np.float64],
         h_gamma: float,
-        rhs: npt.NDArray[np.float64],
-    ) -> npt.NDArray[np.float64]:
-        n = int(y.size)
-        j_mat = np.asarray(jac(t, y), dtype=np.float64).reshape((n, n))
-        e_mat = np.eye(n, dtype=np.float64) / h_gamma - j_mat
-        return mtx_dense.solve_dense(e_mat, rhs)
+    ) -> Callable[[npt.NDArray[np.float64]], npt.NDArray[np.float64]]:
+        e_mat = _build_stage_matrix(int(y.size), h_gamma, jac(t, y))
+        lu, ipiv = mtx_dense.dgetrf(e_mat)
+        return lambda rhs: mtx_dense.dgetrs(lu, ipiv, rhs)
 
     return _rosenbrock_core(
-        variant, t0, t_end, y0, fcn, _solve, h0, hmax, rtol, atol, max_steps
+        variant, t0, t_end, y0, fcn, _factor, h0, hmax, rtol, atol, max_steps
     )
 
 
@@ -321,34 +331,32 @@ def rosenbrock_banded(
         variant: Selected :class:`RosenbrockVariant`.
         ml: Number of sub-diagonals ($m_l \\ge 0$).
         mu: Number of super-diagonals ($m_u \\ge 0$).
-        t0: Initial time.
-        t_end: Final time.
-        y0: Initial state vector of shape ``(n,)`` ($m_l + m_u + 1 \\le n$).
+        t0: Initial time (dimensionless).
+        t_end: Final time (dimensionless).
+        y0: Initial state vector of shape ``(n,)`` (arbitrary units).
         fcn: Right-hand side callable ``fcn(t, y)`` returning shape ``(n,)``.
         jac_dense: Jacobian callable ``jac_dense(t, y)`` returning ``(n, n)``.
-        h0: Initial step size.
-        hmax: Maximum step size.
-        rtol: Relative tolerance.
-        atol: Absolute tolerance.
+        h0: Initial step size (dimensionless).
+        hmax: Maximum step size (dimensionless).
+        rtol: Relative tolerance (dimensionless).
+        atol: Absolute tolerance (arbitrary units).
         max_steps: Maximum number of steps.
 
     Returns:
         :class:`RosenbrockResult` with final state and counters.
     """
+    ldab = 2 * ml + mu + 1
 
-    def _solve(
+    def _factor(
         t: float,
         y: npt.NDArray[np.float64],
         h_gamma: float,
-        rhs: npt.NDArray[np.float64],
-    ) -> npt.NDArray[np.float64]:
-        n = int(y.size)
-        j_mat = np.asarray(jac_dense(t, y), dtype=np.float64).reshape((n, n))
-        e_mat = np.eye(n, dtype=np.float64) / h_gamma - j_mat
-        ldab = 2 * ml + mu + 1
+    ) -> Callable[[npt.NDArray[np.float64]], npt.NDArray[np.float64]]:
+        e_mat = _build_stage_matrix(int(y.size), h_gamma, jac_dense(t, y))
         ab = mtx_band.dense_to_band(e_mat, ml, mu, ldab=ldab)
-        return mtx_band.solve_banded(ab, ml, mu, rhs)
+        lu, ipiv = mtx_band.dgbtrf(ab, ml, mu)
+        return lambda rhs: mtx_band.dgbtrs(lu, ml, mu, ipiv, rhs)
 
     return _rosenbrock_core(
-        variant, t0, t_end, y0, fcn, _solve, h0, hmax, rtol, atol, max_steps
+        variant, t0, t_end, y0, fcn, _factor, h0, hmax, rtol, atol, max_steps
     )

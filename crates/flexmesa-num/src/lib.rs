@@ -52,10 +52,10 @@ pub mod brent;
 pub mod newton;
 pub mod quadrature;
 pub mod rk;
-pub mod rk_tableau;
+mod rk_tableau;
 pub mod root;
 pub mod rosenbrock;
-pub mod rosenbrock_coeffs;
+mod rosenbrock_coeffs;
 pub mod search;
 pub mod simplex;
 

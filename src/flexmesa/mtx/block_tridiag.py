@@ -54,6 +54,30 @@ def _validate_blocks(
     return l_arr, d_arr, u_arr, int(d_arr.shape[0]), int(d_arr.shape[1])
 
 
+def _as_block_vec(
+    vec: npt.ArrayLike,
+    nz: int,
+    nvar: int,
+    name: str,
+    *,
+    copy: bool = False,
+) -> tuple[npt.NDArray[np.float64], bool]:
+    """Reshapes and validates a 1D `(nz * nvar,)` or 2D `(nz, nvar)` vector."""
+    arr = np.asarray(vec, dtype=np.float64)
+    is_1d = arr.ndim == 1
+    if is_1d:
+        if arr.shape != (nz * nvar,):
+            raise ValueError(f"1D vector {name} must have shape (nz * nvar,).")
+        out = arr.reshape(nz, nvar)
+    elif arr.shape == (nz, nvar):
+        out = arr
+    else:
+        raise ValueError(
+            f"{name} must have shape (nz, nvar) or (nz * nvar,)."
+        )
+    return (out.copy() if copy else out), is_1d
+
+
 def block_dble_mv(
     lblk: npt.ArrayLike,
     dblk: npt.ArrayLike,
@@ -79,18 +103,9 @@ def block_dble_mv(
         ValueError: If block or vector dimensions do not match.
     """
     l_arr, d_arr, u_arr, nz, nvar = _validate_blocks(lblk, dblk, ublk)
-    b_arr = np.asarray(b, dtype=np.float64)
-    is_1d = b_arr.ndim == 1
-    if is_1d:
-        if b_arr.shape != (nz * nvar,):
-            raise ValueError("1D vector b must have shape (nz * nvar,).")
-        b_2d = b_arr.reshape(nz, nvar)
-    elif b_arr.shape == (nz, nvar):
-        b_2d = b_arr
-    else:
-        raise ValueError("b must have shape (nz, nvar) or (nz * nvar,).")
+    b_2d, is_1d = _as_block_vec(b, nz, nvar, "b")
 
-    prod = np.einsum("kij,kj->ki", d_arr, b_2d)
+    prod: npt.NDArray[np.float64] = np.einsum("kij,kj->ki", d_arr, b_2d)
     if nz > 1:
         prod[1:] += np.einsum("kij,kj->ki", l_arr[1:], b_2d[:-1])
         prod[:-1] += np.einsum("kij,kj->ki", u_arr[:-1], b_2d[1:])
@@ -106,10 +121,13 @@ def block_multiply_xa(
     """Evaluates left product $b = x^{\\top} A$ for a block-tridiagonal system.
 
     Args:
-        lblk: Sub-diagonal blocks `(nz, nvar, nvar)` in `float64`.
-        dblk: Diagonal blocks `(nz, nvar, nvar)` in `float64`.
-        ublk: Super-diagonal blocks `(nz, nvar, nvar)` in `float64`.
-        x: Left vector of shape `(nz, nvar)` or `(nz * nvar,)` in `float64`.
+        lblk: Sub-diagonal blocks `(nz, nvar, nvar)` in `float64`
+            (dimensionless).
+        dblk: Diagonal blocks `(nz, nvar, nvar)` in `float64` (dimensionless).
+        ublk: Super-diagonal blocks `(nz, nvar, nvar)` in `float64`
+            (dimensionless).
+        x: Left vector of shape `(nz, nvar)` or `(nz * nvar,)` in `float64`
+            (dimensionless).
 
     Returns:
         Row-vector product $b = x^{\\top} A$ matching the shape of `x`.
@@ -118,18 +136,9 @@ def block_multiply_xa(
         ValueError: If block or vector dimensions do not match.
     """
     l_arr, d_arr, u_arr, nz, nvar = _validate_blocks(lblk, dblk, ublk)
-    x_arr = np.asarray(x, dtype=np.float64)
-    is_1d = x_arr.ndim == 1
-    if is_1d:
-        if x_arr.shape != (nz * nvar,):
-            raise ValueError("1D vector x must have shape (nz * nvar,).")
-        x_2d = x_arr.reshape(nz, nvar)
-    elif x_arr.shape == (nz, nvar):
-        x_2d = x_arr
-    else:
-        raise ValueError("x must have shape (nz, nvar) or (nz * nvar,).")
+    x_2d, is_1d = _as_block_vec(x, nz, nvar, "x")
 
-    out = np.einsum("ki,kij->kj", x_2d, d_arr)
+    out: npt.NDArray[np.float64] = np.einsum("ki,kij->kj", x_2d, d_arr)
     if nz > 1:
         out[1:] += np.einsum("ki,kij->kj", x_2d[:-1], u_arr[:-1])
         out[:-1] += np.einsum("ki,kij->kj", x_2d[1:], l_arr[1:])
@@ -148,9 +157,11 @@ def block_thomas_factor(
     """Factors a block-tridiagonal system via the block Thomas algorithm.
 
     Args:
-        lblk: Sub-diagonal blocks `(nz, nvar, nvar)` in `float64`.
-        dblk: Diagonal blocks `(nz, nvar, nvar)` in `float64`.
-        ublk: Super-diagonal blocks `(nz, nvar, nvar)` in `float64`.
+        lblk: Sub-diagonal blocks `(nz, nvar, nvar)` in `float64`
+            (dimensionless).
+        dblk: Diagonal blocks `(nz, nvar, nvar)` in `float64` (dimensionless).
+        ublk: Super-diagonal blocks `(nz, nvar, nvar)` in `float64`
+            (dimensionless).
 
     Returns:
         Tuple `(d_factored, u_factored, ipiv)` of shapes `(nz, nvar, nvar)`,
@@ -183,13 +194,15 @@ def block_thomas_solve(
     """Solves a block-tridiagonal system from [`block_thomas_factor`] factors.
 
     Args:
-        lblk: Sub-diagonal blocks `(nz, nvar, nvar)` in `float64`.
-        d_factored: Factored diagonal blocks `(nz, nvar, nvar)` in `float64`.
+        lblk: Sub-diagonal blocks `(nz, nvar, nvar)` in `float64`
+            (dimensionless).
+        d_factored: Factored diagonal blocks `(nz, nvar, nvar)` in `float64`
+            (dimensionless).
         u_factored: Factored super-diagonal blocks `(nz, nvar, nvar)` in
-            `float64`.
-        ipiv: Pivot array `(nz, nvar)` in `int64`.
+            `float64` (dimensionless).
+        ipiv: Pivot array `(nz, nvar)` in `int64` (dimensionless).
         b: Right-hand side of shape `(nz, nvar)` or `(nz * nvar,)` in
-            `float64`.
+            `float64` (dimensionless).
 
     Returns:
         Solution array `x` matching the shape of `b` in `float64`.
@@ -198,16 +211,7 @@ def block_thomas_solve(
         lblk, d_factored, u_factored
     )
     piv = np.asarray(ipiv, dtype=np.int64)
-    rhs = np.asarray(b, dtype=np.float64)
-    is_1d = rhs.ndim == 1
-    if is_1d:
-        if rhs.shape != (nz * nvar,):
-            raise ValueError("1D rhs b must have shape (nz * nvar,).")
-        work = rhs.reshape(nz, nvar).copy()
-    elif rhs.shape == (nz, nvar):
-        work = rhs.copy()
-    else:
-        raise ValueError("b must have shape (nz, nvar) or (nz * nvar,).")
+    work, is_1d = _as_block_vec(b, nz, nvar, "b", copy=True)
 
     for k in range(nz):
         if k > 0:

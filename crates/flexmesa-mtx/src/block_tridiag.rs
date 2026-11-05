@@ -25,7 +25,7 @@ use flexmesa_utils::is_bad_slice;
 
 /// Validates common block-tridiagonal dimensions `(nvar, nz)` and slice lengths
 /// for `lblk`, `dblk`, and `ublk`.
-fn check_blocks(
+pub(crate) fn check_blocks(
     nvar: usize,
     nz: usize,
     lblk: &[f64],
@@ -44,6 +44,19 @@ fn check_blocks(
         ));
     }
     Ok(blk_sz)
+}
+
+/// Accumulates $y \leftarrow y + \alpha B x$ for an $n_{\mathrm{var}} \times
+/// n_{\mathrm{var}}$ block `blk`.
+fn accum_block_mv(blk: &[f64], x: &[f64], scale: f64, y: &mut [f64]) {
+    let nvar = y.len();
+    for i in 0..nvar {
+        let mut s = 0.0;
+        for j in 0..nvar {
+            s += blk[i * nvar + j] * x[j];
+        }
+        y[i] += scale * s;
+    }
 }
 
 /// Evaluates the block-tridiagonal matrix-vector product
@@ -68,29 +81,20 @@ pub fn block_dble_mv(
             "vec_b or prod length mismatch in block_dble_mv",
         ));
     }
+    prod.fill(0.0);
     for k in 0..nz {
-        let d_k = &dblk[k * blk_sz..(k + 1) * blk_sz];
-        let b_k = &vec_b[k * nvar..(k + 1) * nvar];
-        for i in 0..nvar {
-            let mut sum = 0.0;
-            for j in 0..nvar {
-                sum += d_k[i * nvar + j] * b_k[j];
-            }
-            if k > 0 {
-                let l_k = &lblk[k * blk_sz..(k + 1) * blk_sz];
-                let b_km1 = &vec_b[(k - 1) * nvar..k * nvar];
-                for j in 0..nvar {
-                    sum += l_k[i * nvar + j] * b_km1[j];
-                }
-            }
-            if k + 1 < nz {
-                let u_k = &ublk[k * blk_sz..(k + 1) * blk_sz];
-                let b_kp1 = &vec_b[(k + 1) * nvar..(k + 2) * nvar];
-                for j in 0..nvar {
-                    sum += u_k[i * nvar + j] * b_kp1[j];
-                }
-            }
-            prod[k * nvar + i] = sum;
+        let out_k = &mut prod[k * nvar..(k + 1) * nvar];
+        let b_s = k * blk_sz..(k + 1) * blk_sz;
+        accum_block_mv(
+            &dblk[b_s.clone()], &vec_b[k * nvar..(k + 1) * nvar], 1.0, out_k,
+        );
+        if k > 0 {
+            let b_km1 = &vec_b[(k - 1) * nvar..k * nvar];
+            accum_block_mv(&lblk[b_s.clone()], b_km1, 1.0, out_k);
+        }
+        if k + 1 < nz {
+            let b_kp1 = &vec_b[(k + 1) * nvar..(k + 2) * nvar];
+            accum_block_mv(&ublk[b_s], b_kp1, 1.0, out_k);
         }
     }
     Ok(())
@@ -167,28 +171,18 @@ pub fn lu_factored_block_dble_mv(
         ));
     }
     for k in 0..nz {
-        let d_k = &dblk[k * blk_sz..(k + 1) * blk_sz];
+        let b_s = k * blk_sz..(k + 1) * blk_sz;
         let ipiv_k = &ipiv[k * nvar..(k + 1) * nvar];
         let b_k = &vec_b[k * nvar..(k + 1) * nvar];
         let p_k = &mut prod[k * nvar..(k + 1) * nvar];
-        lu_factored_square_mv(nvar, d_k, ipiv_k, b_k, p_k)?;
+        lu_factored_square_mv(nvar, &dblk[b_s.clone()], ipiv_k, b_k, p_k)?;
         if k > 0 {
-            let l_k = &lblk[k * blk_sz..(k + 1) * blk_sz];
             let b_km1 = &vec_b[(k - 1) * nvar..k * nvar];
-            for i in 0..nvar {
-                for j in 0..nvar {
-                    p_k[i] += l_k[i * nvar + j] * b_km1[j];
-                }
-            }
+            accum_block_mv(&lblk[b_s.clone()], b_km1, 1.0, p_k);
         }
         if k + 1 < nz {
-            let u_k = &ublk[k * blk_sz..(k + 1) * blk_sz];
             let b_kp1 = &vec_b[(k + 1) * nvar..(k + 2) * nvar];
-            for i in 0..nvar {
-                for j in 0..nvar {
-                    p_k[i] += u_k[i * nvar + j] * b_kp1[j];
-                }
-            }
+            accum_block_mv(&ublk[b_s], b_kp1, 1.0, p_k);
         }
     }
     Ok(())
@@ -281,14 +275,10 @@ pub fn block_thomas_solve(
 
     for k in 0..nz {
         if k > 0 {
+            let (prev, curr) = rhs.split_at_mut(k * nvar);
             let l_k = &lblk[k * blk_sz..(k + 1) * blk_sz];
-            for i in 0..nvar {
-                let mut sum = 0.0;
-                for j in 0..nvar {
-                    sum += l_k[i * nvar + j] * rhs[(k - 1) * nvar + j];
-                }
-                rhs[k * nvar + i] -= sum;
-            }
+            let p_km1 = &prev[(k - 1) * nvar..k * nvar];
+            accum_block_mv(l_k, p_km1, -1.0, &mut curr[..nvar]);
         }
         let d_k = &dblk[k * blk_sz..(k + 1) * blk_sz];
         let ipiv_k = &ipiv[k * nvar..(k + 1) * nvar];
@@ -296,14 +286,10 @@ pub fn block_thomas_solve(
     }
 
     for k in (0..nz.saturating_sub(1)).rev() {
+        let (curr, next) = rhs.split_at_mut((k + 1) * nvar);
         let u_k = &ublk[k * blk_sz..(k + 1) * blk_sz];
-        for i in 0..nvar {
-            let mut sum = 0.0;
-            for j in 0..nvar {
-                sum += u_k[i * nvar + j] * rhs[(k + 1) * nvar + j];
-            }
-            rhs[k * nvar + i] -= sum;
-        }
+        let c_k = &mut curr[k * nvar..(k + 1) * nvar];
+        accum_block_mv(u_k, &next[..nvar], -1.0, c_k);
     }
     Ok(())
 }

@@ -1,0 +1,16 @@
+[package]
+name = "flexmesa-utils"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "IEEE-754 finiteness guards, string/integer dictionaries, and reaction-network token lexer for FlexMESA"
+
+[dependencies]
+
+[dev-dependencies]
+flexmesa-testing = { path = "../flexmesa-testing" }
+
+[lints]
+workspace = true

@@ -140,7 +140,7 @@ def test_safetensors_bundle_roundtrips_and_enforces_integrity(
     with pytest.raises(TypeError, match="Unsupported tensor dtype"):
         loader.save_safetensors_bundle(
             tmp_path / "f32.safetensors",
-            {"bad": np.array([1.0, 2.0], dtype=np.float32)},
+            {"bad": np.array([1.0, 2.0], dtype=np.float32)},  # type: ignore[dict-item]
         )
 
 

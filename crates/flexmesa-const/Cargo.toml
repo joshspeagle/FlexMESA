@@ -1,0 +1,16 @@
+[package]
+name = "flexmesa-const"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Physical, mathematical, and astronomical CGS constants for FlexMESA"
+
+[dependencies]
+
+[dev-dependencies]
+flexmesa-testing = { path = "../flexmesa-testing" }
+
+[lints]
+workspace = true

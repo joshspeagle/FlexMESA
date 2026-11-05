@@ -4,6 +4,8 @@ members = [
   "crates/flexmesa-testing",
   "crates/flexmesa-schema",
   "crates/flexmesa-data",
+  "crates/flexmesa-const",
+  "crates/flexmesa-utils",
 ]
 
 [workspace.package]

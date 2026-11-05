@@ -87,10 +87,16 @@ def test_parse_fortran_float_supports_standard_d_and_bare_exponents() -> None:
         -4.5e105, rel=1e-15
     )
 
+    assert not golden.is_fortran_float_token("1-100")
+    assert not golden.is_fortran_float_token("1.0D")
     with pytest.raises(ValueError, match="Cannot parse empty token"):
         golden.parse_fortran_float("   ")
     with pytest.raises(ValueError, match="Non-finite"):
         golden.parse_fortran_float("1.0e500")
+    with pytest.raises(ValueError, match="Non-finite"):
+        golden.parse_golden_text("  pi  NaN\n")
+    with pytest.raises(ValueError, match="Tolerances must be finite"):
+        golden.assert_values_match(1.0, 2.0, rtol=float("nan"))
 
 
 def test_parse_golden_text_extracts_sections_labels_and_values() -> None:

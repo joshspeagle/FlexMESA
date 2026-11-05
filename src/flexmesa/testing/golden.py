@@ -21,11 +21,14 @@ import numpy as np
 import numpy.typing as npt
 
 _FORTRAN_FLOAT_RE: re.Pattern[str] = re.compile(
-    r"^[+-]?(?:\d+\.\d*|\.\d+|\d+)(?:[eEdD][+-]?\d+|[+-]\d{2,3})$"
-    r"|^[+-]?(?:\d+\.\d+|\d+\.)[eEdD]?$"
+    r"^[+-]?(?:\d+\.\d*|\.\d+|\d+)[eEdD][+-]?\d+$"
+    r"|^[+-]?(?:\d+\.\d*|\.\d+)(?:[+-]\d{2,3})?$"
 )
 _BARE_EXP_RE: re.Pattern[str] = re.compile(
-    r"^([+-]?(?:\d+\.\d*|\.\d+|\d+))([+-]\d{2,3})$"
+    r"^([+-]?(?:\d+\.\d*|\.\d+))([+-]\d{2,3})$"
+)
+_NONFINITE_TOKEN_RE: re.Pattern[str] = re.compile(
+    r"^[+-]?(?:nan|inf|infinity)$", re.IGNORECASE
 )
 _INTEGER_TOKEN_RE: re.Pattern[str] = re.compile(r"^[+-]?\d+$")
 _SEPARATOR_LINE_RE: re.Pattern[str] = re.compile(r"^[\s\-=#*]+$")
@@ -135,19 +138,52 @@ def parse_fortran_float(token: str) -> float:
     return value
 
 
+def _parse_line_tokens(
+    line_idx: int, tokens: list[str], section: str
+) -> GoldenRecord | None:
+    """Extract a `GoldenRecord` from tokens, or `None` for section headers."""
+    float_values_rev: list[float] = []
+    idx = len(tokens) - 1
+    while idx >= 0:
+        tok = tokens[idx]
+        if _NONFINITE_TOKEN_RE.match(tok) is not None:
+            raise ValueError(
+                f"Non-finite floating-point token {tok!r} at line {line_idx}."
+            )
+        if _FORTRAN_FLOAT_RE.match(tok) is None:
+            break
+        float_values_rev.append(parse_fortran_float(tok))
+        idx -= 1
+    if not float_values_rev:
+        return None
+    float_values_rev.reverse()
+
+    int_indices_rev: list[int] = []
+    while idx >= 0 and _INTEGER_TOKEN_RE.match(tokens[idx]) is not None:
+        int_indices_rev.append(int(tokens[idx]))
+        idx -= 1
+    int_indices_rev.reverse()
+    return GoldenRecord(
+        line_number=line_idx,
+        section=section,
+        label=" ".join(tokens[: idx + 1]),
+        indices=tuple(int_indices_rev),
+        values=np.asarray(float_values_rev, dtype=np.float64),
+    )
+
+
 def parse_golden_text(text: str) -> list[GoldenRecord]:
     """Parse the text of a MESA `<pkg>/test/test_output` file into records.
-
-    Lines ending with one or more Fortran floating-point literals are extracted
-    as `GoldenRecord` instances. Non-empty lines that do not end with a
-    floating-point value (and are not separator lines of `-`, `=`, `#`, or `*`)
-    update the active `section` name for subsequent records.
 
     Args:
         text: Full UTF-8 contents of a MESA `test_output` file.
 
     Returns:
         Ordered list of `GoldenRecord` entries extracted from `text`.
+
+    Raises:
+        ValueError: If a trailing numeric token is non-finite (`NaN`, `Inf`,
+            or exponent overflow).
 
     Examples:
         >>> from flexmesa.testing import golden
@@ -160,41 +196,15 @@ def parse_golden_text(text: str) -> list[GoldenRecord]:
     """
     records: list[GoldenRecord] = []
     current_section = ""
-
     for line_idx, raw_line in enumerate(text.splitlines(), start=1):
         stripped = raw_line.strip()
         if not stripped or _SEPARATOR_LINE_RE.match(stripped) is not None:
             continue
-
-        tokens = stripped.split()
-        float_values_rev: list[float] = []
-        idx = len(tokens) - 1
-        while idx >= 0 and _FORTRAN_FLOAT_RE.match(tokens[idx]) is not None:
-            float_values_rev.append(parse_fortran_float(tokens[idx]))
-            idx -= 1
-
-        if not float_values_rev:
+        record = _parse_line_tokens(line_idx, stripped.split(), current_section)
+        if record is None:
             current_section = stripped
-            continue
-
-        float_values_rev.reverse()
-        int_indices_rev: list[int] = []
-        while idx >= 0 and _INTEGER_TOKEN_RE.match(tokens[idx]) is not None:
-            int_indices_rev.append(int(tokens[idx]))
-            idx -= 1
-        int_indices_rev.reverse()
-
-        label = " ".join(tokens[: idx + 1])
-        records.append(
-            GoldenRecord(
-                line_number=line_idx,
-                section=current_section,
-                label=label,
-                indices=tuple(int_indices_rev),
-                values=np.asarray(float_values_rev, dtype=np.float64),
-            )
-        )
-
+        else:
+            records.append(record)
     return records
 
 
@@ -207,8 +217,7 @@ def parse_golden_file(path: str | pathlib.Path) -> list[GoldenRecord]:
     Returns:
         Ordered list of `GoldenRecord` entries extracted from `path`.
     """
-    file_path = pathlib.Path(path)
-    return parse_golden_text(file_path.read_text(encoding="utf-8"))
+    return parse_golden_text(pathlib.Path(path).read_text(encoding="utf-8"))
 
 
 def extract_golden_table(
@@ -239,8 +248,7 @@ def extract_golden_table(
                 f"expected {first_len}, got {rec.values.size}."
             )
     return np.ascontiguousarray(
-        np.vstack([rec.values for rec in records]),
-        dtype=np.float64,
+        np.vstack([rec.values for rec in records]), dtype=np.float64
     )
 
 
@@ -253,9 +261,13 @@ def _validate_match_inputs(
     context: str,
 ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     """Validate tolerances, array shapes, and finiteness for parity checks."""
-    if rtol < 0.0 or atol <= 0.0:
+    if (
+        not (math.isfinite(rtol) and math.isfinite(atol))
+        or rtol < 0.0
+        or atol <= 0.0
+    ):
         raise ValueError(
-            f"Tolerances must satisfy rtol >= 0 and atol > 0; "
+            f"Tolerances must be finite with rtol >= 0 and atol > 0; "
             f"got rtol={rtol}, atol={atol}."
         )
     act_arr = np.asarray(actual, dtype=np.float64)
@@ -295,7 +307,8 @@ def assert_values_match(
         Tuple `(max_abs_error, max_rel_error)` in `float64`.
 
     Raises:
-        ValueError: If `rtol < 0` or `atol <= 0`, or if shapes do not match.
+        ValueError: If `rtol < 0`, `atol <= 0`, non-finite tolerances, or shape
+            mismatch.
         AssertionError: If any element contains `NaN`/`Inf` or exceeds the
             tolerance bound.
     """

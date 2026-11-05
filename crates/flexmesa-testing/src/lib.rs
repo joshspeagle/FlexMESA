@@ -99,7 +99,7 @@ pub fn is_integer_token(token: &str) -> bool {
 /// ```
 #[must_use]
 pub fn is_fortran_float_token(token: &str) -> bool {
-    try_parse_fortran_float(token).is_some()
+    matches!(classify_float_token(token), Some(Ok(_)))
 }
 
 /// Normalize Fortran `d`/`D` or bare 2- to 3-digit exponents into IEEE syntax.
@@ -110,7 +110,7 @@ fn normalize_fortran_token(trimmed: &str) -> Cow<'_, str> {
         Cow::Borrowed(trimmed)
     };
 
-    if !base.contains(['e', 'E']) {
+    if !base.contains(['e', 'E']) && base.contains('.') {
         if let Some(idx) = base.rfind(['+', '-']).filter(|&i| i > 0) {
             let exp = &base.as_bytes()[idx + 1..];
             if (2..=3).contains(&exp.len())
@@ -127,14 +127,33 @@ fn normalize_fortran_token(trimmed: &str) -> Cow<'_, str> {
     base
 }
 
-/// Try to parse `token` as a Fortran float literal (rejecting plain integers).
-fn try_parse_fortran_float(token: &str) -> Option<f64> {
+/// Return whether `trimmed` is a case-insensitive `NaN`, `Inf`, or `Infinity`.
+fn is_nonfinite_literal(trimmed: &str) -> bool {
+    let core = trimmed.strip_prefix(['+', '-']).unwrap_or(trimmed);
+    core.eq_ignore_ascii_case("nan")
+        || core.eq_ignore_ascii_case("inf")
+        || core.eq_ignore_ascii_case("infinity")
+}
+
+/// Classify `token` as non-float (`None`), valid `f64`, or non-finite error.
+fn classify_float_token(token: &str) -> Option<Result<f64, GoldenError>> {
     let trimmed = token.trim();
+    if is_nonfinite_literal(trimmed) {
+        return Some(Err(GoldenError::InvalidFloatToken {
+            token: token.to_owned(),
+        }));
+    }
     let normalized = normalize_fortran_token(trimmed);
     if !normalized.contains(['.', 'e', 'E']) {
         return None;
     }
-    normalized.parse::<f64>().ok().filter(|v| v.is_finite())
+    let val = normalized.parse::<f64>().ok()?;
+    if !val.is_finite() {
+        return Some(Err(GoldenError::InvalidFloatToken {
+            token: token.to_owned(),
+        }));
+    }
+    Some(Ok(val))
 }
 
 /// Parse a Fortran or IEEE-754 floating-point string into a finite `f64`.
@@ -155,11 +174,12 @@ fn try_parse_fortran_float(token: &str) -> Option<f64> {
 /// ```
 pub fn parse_fortran_float(token: &str) -> Result<f64, GoldenError> {
     let normalized = normalize_fortran_token(token.trim());
-    let value: f64 = normalized
-        .parse()
-        .map_err(|_| GoldenError::InvalidFloatToken {
-            token: token.to_owned(),
-        })?;
+    let value: f64 =
+        normalized
+            .parse()
+            .map_err(|_| GoldenError::InvalidFloatToken {
+                token: token.to_owned(),
+            })?;
     if !value.is_finite() {
         return Err(GoldenError::InvalidFloatToken {
             token: token.to_owned(),
@@ -179,7 +199,7 @@ fn is_separator_line(trimmed: &str) -> bool {
 /// Parse the text of a MESA `<pkg>/test/test_output` file into records.
 ///
 /// # Errors
-/// Returns [`GoldenError`] if a floating-point token is malformed.
+/// Returns [`GoldenError`] if a floating-point token is non-finite.
 ///
 /// # Examples
 /// ```
@@ -206,10 +226,10 @@ pub fn parse_golden_text(text: &str) -> Result<Vec<GoldenRecord>, GoldenError> {
         let mut float_values = Vec::new();
         let mut cursor = tokens.len();
         while cursor > 0 {
-            let Some(val) = try_parse_fortran_float(tokens[cursor - 1]) else {
+            let Some(res) = classify_float_token(tokens[cursor - 1]) else {
                 break;
             };
-            float_values.push(val);
+            float_values.push(res?);
             cursor -= 1;
         }
 
@@ -230,11 +250,10 @@ pub fn parse_golden_text(text: &str) -> Result<Vec<GoldenRecord>, GoldenError> {
         }
         int_indices.reverse();
 
-        let label = tokens[..cursor].join(" ");
         records.push(GoldenRecord {
             line_number,
             section: current_section.clone(),
-            label,
+            label: tokens[..cursor].join(" "),
             indices: int_indices,
             values: float_values,
         });
@@ -247,15 +266,18 @@ pub fn parse_golden_text(text: &str) -> Result<Vec<GoldenRecord>, GoldenError> {
 ///
 /// # Errors
 /// Returns [`GoldenError::IoError`] if the file cannot be read, or
-/// [`GoldenError::InvalidFloatToken`] on malformed numeric tokens.
-pub fn parse_golden_file(path: &Path) -> Result<Vec<GoldenRecord>, GoldenError> {
-    let content = fs::read_to_string(path).map_err(|err| GoldenError::IoError {
-        message: format!("{}: {err}", path.display()),
-    })?;
+/// [`GoldenError::InvalidFloatToken`] on non-finite numeric tokens.
+pub fn parse_golden_file(
+    path: &Path,
+) -> Result<Vec<GoldenRecord>, GoldenError> {
+    let content =
+        fs::read_to_string(path).map_err(|err| GoldenError::IoError {
+            message: format!("{}: {err}", path.display()),
+        })?;
     parse_golden_text(&content)
 }
 
-/// Stack uniform-width [`GoldenRecord`] entries into a row-major `Vec<Vec<f64>>`.
+/// Stack uniform-width [`GoldenRecord`] rows into a `Vec<Vec<f64>>`.
 ///
 /// # Errors
 /// Returns [`GoldenError::ParityMismatch`] if `records` is empty or records
@@ -274,7 +296,8 @@ pub fn extract_golden_table(
         if rec.values.len() != n_cols {
             return Err(GoldenError::ParityMismatch {
                 message: format!(
-                    "inconsistent column count at line {}: expected {n_cols}, got {}",
+                    "inconsistent column count at line {}: \
+                     expected {n_cols}, got {}",
                     rec.line_number,
                     rec.values.len()
                 ),
@@ -288,8 +311,8 @@ pub fn extract_golden_table(
 /// Compare two `f64` slices for elementwise numerical parity.
 ///
 /// # Errors
-/// Returns [`GoldenError::ParityMismatch`] if lengths differ, any element is
-/// non-finite, or `|a - e| > atol + rtol * |e|`.
+/// Returns [`GoldenError::ParityMismatch`] if lengths differ, tolerances or
+/// elements are non-finite, or `|a - e| > atol + rtol * |e|`.
 pub fn assert_values_match(
     actual: &[f64],
     expected: &[f64],
@@ -297,7 +320,7 @@ pub fn assert_values_match(
     atol: f64,
     context: &str,
 ) -> Result<(f64, f64), GoldenError> {
-    if rtol < 0.0 || atol <= 0.0 {
+    if !rtol.is_finite() || !atol.is_finite() || rtol < 0.0 || atol <= 0.0 {
         return Err(GoldenError::ParityMismatch {
             message: format!("invalid tolerances: rtol={rtol}, atol={atol}"),
         });
@@ -316,7 +339,8 @@ pub fn assert_values_match(
         if !act.is_finite() || !exp.is_finite() {
             return Err(GoldenError::ParityMismatch {
                 message: format!(
-                    "[{context}] non-finite at index {idx}: actual={act}, expected={exp}"
+                    "[{context}] non-finite at index {idx}: \
+                     actual={act}, expected={exp}"
                 ),
             });
         }
@@ -330,8 +354,9 @@ pub fn assert_values_match(
             return Err(GoldenError::ParityMismatch {
                 message: format!(
                     "[{context}] golden parity check failed at index {idx}: \
-                     actual={act:.16e}, expected={exp:.16e}, abs_err={abs_err:.3e}, \
-                     rel_err={rel_err:.3e} (rtol={rtol:.1e}, atol={atol:.1e})"
+                     actual={act:.16e}, expected={exp:.16e}, \
+                     abs_err={abs_err:.3e}, rel_err={rel_err:.3e} \
+                     (rtol={rtol:.1e}, atol={atol:.1e})"
                 ),
             });
         }
@@ -361,8 +386,11 @@ pub fn assert_golden_records_match(
     }
     let (mut num_values, mut max_abs_error, mut max_rel_error) =
         (0_usize, 0.0_f64, 0.0_f64);
-    for (idx, (act_rec, exp_rec)) in actual.iter().zip(expected.iter()).enumerate() {
-        if act_rec.label != exp_rec.label || act_rec.indices != exp_rec.indices {
+    for (idx, (act_rec, exp_rec)) in
+        actual.iter().zip(expected.iter()).enumerate()
+    {
+        if act_rec.label != exp_rec.label || act_rec.indices != exp_rec.indices
+        {
             return Err(GoldenError::ParityMismatch {
                 message: format!(
                     "record {idx} metadata mismatch at line {}: \
@@ -375,14 +403,19 @@ pub fn assert_golden_records_match(
                 ),
             });
         }
-        let (rec_abs, rec_rel) =
-            assert_values_match(&act_rec.values, &exp_rec.values, rtol, atol, "")
-                .map_err(|err| GoldenError::ParityMismatch {
-                    message: format!(
-                        "line {} ({}: {}): {err}",
-                        exp_rec.line_number, exp_rec.section, exp_rec.label
-                    ),
-                })?;
+        let (rec_abs, rec_rel) = assert_values_match(
+            &act_rec.values,
+            &exp_rec.values,
+            rtol,
+            atol,
+            "",
+        )
+        .map_err(|err| GoldenError::ParityMismatch {
+            message: format!(
+                "line {} ({}: {}): {err}",
+                exp_rec.line_number, exp_rec.section, exp_rec.label
+            ),
+        })?;
         num_values += exp_rec.values.len();
         max_abs_error = max_abs_error.max(rec_abs);
         max_rel_error = max_rel_error.max(rec_rel);

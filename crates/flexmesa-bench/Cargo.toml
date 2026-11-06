@@ -1,0 +1,23 @@
+[package]
+name = "flexmesa-bench"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Wave 1 4-stage performance benchmark suite for FlexMESA"
+
+[dependencies]
+flexmesa-const = { path = "../flexmesa-const" }
+flexmesa-utils = { path = "../flexmesa-utils" }
+flexmesa-math = { path = "../flexmesa-math" }
+flexmesa-autodiff = { path = "../flexmesa-autodiff" }
+flexmesa-interp1d = { path = "../flexmesa-interp1d" }
+flexmesa-interp2d = { path = "../flexmesa-interp2d" }
+flexmesa-mtx = { path = "../flexmesa-mtx" }
+flexmesa-num = { path = "../flexmesa-num" }
+flexmesa-neu = { path = "../flexmesa-neu" }
+flexmesa-turb = { path = "../flexmesa-turb" }
+
+[lints]
+workspace = true

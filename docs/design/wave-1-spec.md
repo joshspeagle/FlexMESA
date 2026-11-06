@@ -25,6 +25,7 @@ subpackage:
 | `num` | `crates/flexmesa-num` | `src/flexmesa/num` | Compensated summation, Brent root-finding, damped Newton, and ODE solvers |
 | `neu` | `crates/flexmesa-neu` | `src/flexmesa/neu` | Itoh et al. (1996) thermal neutrino cooling rates and partials |
 | `turb` | `crates/flexmesa-turb` | `src/flexmesa/turb` | Mixing-length theory (MLT), time-dependent convection (TDC), and mixing |
+| *(Wave 1F Bench)* | `crates/flexmesa-bench` | `src/flexmesa/bench` | Four-stage performance staircase across $N_{\mathrm{zones}} \in \{128, 1024, 4096\}$ |
 
 ---
 
@@ -340,19 +341,24 @@ Matches all golden output values in `turb/test/test_output`
 
 ### 2.6 Wave 1F: 4-Stage Performance Staircase and Architecture Synthesis
 
-Evaluates Safe Rust (`crates/`), Python/NumPy (`src/flexmesa/`), and Python/JAX
-(`jax.jit` + `jax.vmap` in `float64`) across four optimization stages:
+Evaluates Safe Rust (`crates/flexmesa-bench`), Python/NumPy
+(`src/flexmesa/bench`), and Python/JAX (`jax.jit` + `jax.vmap` in `float64`)
+across six representative workloads (`auto_diff`, `interp_2d`, `neu`,
+`mtx_tridiag`, `turb_mlt`, and `turb_tdc`), three radial zone counts
+$N_{\mathrm{zones}} \in \{128, 1024, 4096\}$, and four optimization stages:
 
 1. **Stage 0 (Idiomatic Baseline)**: Direct scalar / unvectorized reference
    port.
 2. **Stage 1 (Contiguous Array Layout)**: Structure-of-Arrays (SoA) batching
    over stellar zones $N_{\mathrm{zones}} \in \{128, 1024, 4096\}$.
-3. **Stage 2 (Vectorized / JIT Kernel Fusion)**: `jax.jit` fused XLA kernels and
-   Safe Rust slice/SIMD loops with zero inner-loop heap allocations.
-4. **Stage 3 (Batched / Multi-Core Parallelism)**: `jax.vmap` across stellar
-   grids and multi-threaded Safe Rust execution.
+3. **Stage 2 (Vectorized / JIT Kernel Fusion)**: `jax.jit` fused XLA kernels
+   (via `jax.lax.fori_loop` and Implicit Function Theorem differentiation) and
+   Safe Rust pre-validated slice loops with zero inner-loop heap allocations.
+4. **Stage 3 (Batched / Multi-Core Parallelism)**: `jax.vmap` across $B = 4$
+   stellar profiles and 4-thread scoped Safe Rust execution.
 
-The benchmark suite records median wall-clock latency, memory footprint,
-compilation overhead, and autodiff ergonomics in
-`docs/design/wave-1-benchmark-report.md` to inform the post-Wave 1 architecture
-synthesis.
+All 18 `(workload, N_zones)` combinations agree to 9 significant digits in
+primal checksums across Safe Rust and Python/JAX, with stage-to-stage relative
+discrepancy $\le 7.01 \times 10^{-13}$. Full empirical tables, XLA compilation
+latencies, and the Wave 2/3 architectural trade-off evaluation are recorded in
+`docs/design/wave-1-benchmark-report.md`.

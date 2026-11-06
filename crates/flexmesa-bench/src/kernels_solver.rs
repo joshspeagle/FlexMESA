@@ -8,8 +8,6 @@
 //! 3. `bench_turb_tdc`: Kuhfuss (1986) 1D Time-Dependent Convection (`set_tdc`)
 //!    with Implicit Function Theorem `DualOrder1<6>` sensitivities.
 
-use std::thread;
-
 use flexmesa_autodiff::DualOrder1;
 use flexmesa_const::{KERG, LSUN, MP, MSUN, RSUN, STANDARD_CGRAV};
 use flexmesa_mtx::{
@@ -21,8 +19,8 @@ use flexmesa_turb::{
 
 use crate::tridiag_fast::{fast_block_thomas_solve, make_block_tridiag_fixture};
 use crate::{
-    max_err3, max_rel_diff, measure_us, BenchRecord, LatencyStats, ThermoGrid,
-    STAGE3_THREADS,
+    max_err3, max_rel_diff, measure_stage3_chunks_us, measure_us, BenchRecord,
+    LatencyStats, ThermoGrid, STAGE3_THREADS,
 };
 
 /// Solar surface gravitational acceleration $G M_{\odot} / R_{\odot}^2$ in
@@ -111,24 +109,23 @@ pub fn bench_mtx_block_tridiag(
             )
         })
         .collect();
-    let stage3_batch = measure_us(n_warmup, n_repeats, || {
-        let l_ref = &lblk;
-        let d_ref = &dblk;
-        let u_ref = &ublk;
-        let r_ref = &rhs;
-        thread::scope(|s| {
-            for (dw, uw, ipiv, sol) in &mut workspaces {
-                s.spawn(move || {
-                    dw.copy_from_slice(d_ref);
-                    uw.copy_from_slice(u_ref);
-                    sol.copy_from_slice(r_ref);
-                    fast_block_thomas_solve(
-                        nvar, nz, l_ref, dw, uw, ipiv, sol,
-                    );
-                });
-            }
-        });
-    });
+    let l_ref = &lblk;
+    let d_ref = &dblk;
+    let u_ref = &ublk;
+    let r_ref = &rhs;
+    let stage3_batch = measure_stage3_chunks_us(
+        n_warmup,
+        n_repeats,
+        &mut workspaces,
+        1,
+        |_tid, ws_slice| {
+            let (dw, uw, ipiv, sol) = &mut ws_slice[0];
+            dw.copy_from_slice(d_ref);
+            uw.copy_from_slice(u_ref);
+            sol.copy_from_slice(r_ref);
+            fast_block_thomas_solve(nvar, nz, l_ref, dw, uw, ipiv, sol);
+        },
+    );
     let stage3 = LatencyStats {
         median_us: stage3_batch.median_us / (STAGE3_THREADS as f64),
         iqr_us: stage3_batch.iqr_us / (STAGE3_THREADS as f64),
@@ -317,25 +314,23 @@ where
         }
     });
 
-    // Stage 3: 4-thread scoped parallel execution across zone chunks.
+    // Stage 3: 4-thread persistent rayon parallel execution across zone chunks.
     let mut out3 = vec![0.0_f64; nz * 4];
     let chunk_z = nz.div_ceil(STAGE3_THREADS);
     let eval_ref = &eval_zone;
-    let stage3 = measure_us(n_warmup, n_repeats, || {
-        thread::scope(|s| {
-            for (idx, dst_chunk) in out3.chunks_mut(chunk_z * 4).enumerate() {
-                let z0 = idx * chunk_z;
-                s.spawn(move || {
-                    for (local_k, dst) in
-                        dst_chunk.chunks_exact_mut(4).enumerate()
-                    {
-                        let k = z0 + local_k;
-                        dst.copy_from_slice(&eval_ref(k as f64 / denom));
-                    }
-                });
+    let stage3 = measure_stage3_chunks_us(
+        n_warmup,
+        n_repeats,
+        &mut out3,
+        chunk_z * 4,
+        |idx, dst_chunk| {
+            let z0 = idx * chunk_z;
+            for (local_k, dst) in dst_chunk.chunks_exact_mut(4).enumerate() {
+                let k = z0 + local_k;
+                dst.copy_from_slice(&eval_ref(k as f64 / denom));
             }
-        });
-    });
+        },
+    );
 
     let max_rel_err = max_err3(
         max_rel_diff(&ref_flat, &out1),

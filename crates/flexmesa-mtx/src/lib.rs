@@ -21,6 +21,7 @@
 )]
 
 pub mod band;
+pub mod bcyclic;
 pub mod block_io;
 pub mod block_tridiag;
 pub mod dense;
@@ -32,6 +33,7 @@ pub use band::{
     band_multiply_xa, band_to_dense, dense_to_band, dgbtrf, dgbtrs,
     rcond_banded, solve_banded,
 };
+pub use bcyclic::solve_block_tridiag_bcyclic;
 pub use block_io::{
     parse_block_tridiagonal_text, write_block_tridiagonal_text,
     BlockTridiagData,

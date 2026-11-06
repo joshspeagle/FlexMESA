@@ -10,16 +10,14 @@
 //! 3. `bench_neu`: Itoh et al. (1996) pair-production and plasmon-decay
 //!    thermal neutrino energy-loss rate and 4-variable Jacobian (`neu_get`).
 
-use std::thread;
-
 use flexmesa_autodiff::AutoDiffReal2VarOrder2;
 use flexmesa_interp2d::interp_evbicub_db;
 use flexmesa_neu::{neu_get, NeuFlags};
 
 use crate::bicub_fast::eval_bicub_prevalidated;
 use crate::{
-    max_err3, max_rel_diff, measure_us, BenchRecord, BicubTable, ThermoGrid,
-    STAGE3_THREADS,
+    max_err3, max_rel_diff, measure_stage3_chunks_us, measure_us, BenchRecord,
+    BicubTable, ThermoGrid, STAGE3_THREADS,
 };
 
 /// Evaluates the non-polynomial bivariate thermodynamic expression
@@ -127,24 +125,22 @@ where
         }
     });
 
-    // Stage 3: 4-thread scoped parallel execution across zone chunks.
+    // Stage 3: 4-thread persistent rayon parallel execution across zone chunks.
     let mut out3 = vec![0.0_f64; nz * 6];
     let chunk_z = nz.div_ceil(STAGE3_THREADS);
     let fast_ref = &eval_fast;
-    let stage3 = measure_us(n_warmup, n_repeats, || {
-        thread::scope(|s| {
-            for (idx, dst_chunk) in out3.chunks_mut(chunk_z * 6).enumerate() {
-                let z0 = idx * chunk_z;
-                s.spawn(move || {
-                    for (local_k, dst) in
-                        dst_chunk.chunks_exact_mut(6).enumerate()
-                    {
-                        dst.copy_from_slice(&fast_ref(z0 + local_k));
-                    }
-                });
+    let stage3 = measure_stage3_chunks_us(
+        n_warmup,
+        n_repeats,
+        &mut out3,
+        chunk_z * 6,
+        |idx, dst_chunk| {
+            let z0 = idx * chunk_z;
+            for (local_k, dst) in dst_chunk.chunks_exact_mut(6).enumerate() {
+                dst.copy_from_slice(&fast_ref(z0 + local_k));
             }
-        });
-    });
+        },
+    );
 
     let max_rel_err = max_err3(
         max_rel_diff(&ref_flat, &out1),
@@ -329,35 +325,33 @@ pub fn bench_neu(
         }
     });
 
-    // Stage 3: 4-thread scoped parallel execution across zone chunks.
+    // Stage 3: 4-thread persistent rayon parallel execution across zone chunks.
     let mut out3 = vec![0.0_f64; nz * 5];
     let chunk_z = nz.div_ceil(STAGE3_THREADS);
-    let stage3 = measure_us(n_warmup, n_repeats, || {
-        thread::scope(|s| {
-            for (idx, dst_chunk) in out3.chunks_mut(chunk_z * 5).enumerate() {
-                let z0 = idx * chunk_z;
-                s.spawn(move || {
-                    for (local_k, dst) in
-                        dst_chunk.chunks_exact_mut(5).enumerate()
-                    {
-                        let k = z0 + local_k;
-                        let out = neu_get(
-                            Some(grid.t[k]),
-                            Some(grid.log10_t[k]),
-                            Some(grid.rho[k]),
-                            Some(grid.log10_rho[k]),
-                            grid.abar[k],
-                            grid.zbar[k],
-                            7.5,
-                            flags,
-                        )
-                        .unwrap();
-                        dst.copy_from_slice(&out.loss);
-                    }
-                });
+    let stage3 = measure_stage3_chunks_us(
+        n_warmup,
+        n_repeats,
+        &mut out3,
+        chunk_z * 5,
+        |idx, dst_chunk| {
+            let z0 = idx * chunk_z;
+            for (local_k, dst) in dst_chunk.chunks_exact_mut(5).enumerate() {
+                let k = z0 + local_k;
+                let out = neu_get(
+                    Some(grid.t[k]),
+                    Some(grid.log10_t[k]),
+                    Some(grid.rho[k]),
+                    Some(grid.log10_rho[k]),
+                    grid.abar[k],
+                    grid.zbar[k],
+                    7.5,
+                    flags,
+                )
+                .unwrap();
+                dst.copy_from_slice(&out.loss);
             }
-        });
-    });
+        },
+    );
 
     let max_rel_err = max_err3(
         max_rel_diff(&ref_flat, &out1),

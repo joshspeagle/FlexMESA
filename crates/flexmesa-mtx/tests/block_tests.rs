@@ -32,8 +32,9 @@
 use flexmesa_autodiff::DualOrder1;
 use flexmesa_mtx::{
     block_dble_mv, block_multiply_xa, dgetrf, lu_factored_block_dble_mv,
-    parse_block_tridiagonal_text, solve_block_tridiagonal, solve_dense,
-    solve_dense_dual, write_block_tridiagonal_text,
+    parse_block_tridiagonal_text, solve_block_tridiag_bcyclic,
+    solve_block_tridiagonal, solve_dense, solve_dense_dual,
+    write_block_tridiagonal_text,
 };
 use proptest::prelude::*;
 
@@ -263,6 +264,53 @@ proptest! {
         let x_dense = solve_dense(n_tot, &a_dense, &rhs).unwrap();
         for idx in 0..n_tot {
             prop_assert!((x_blk[idx] - x_dense[idx]).abs() < 1e-11);
+        }
+    }
+}
+
+/// Verifies `solve_block_tridiag_bcyclic` (serial and parallel `rayon`) against
+/// `solve_block_tridiagonal` across odd, prime, and power-of-two grid sizes.
+#[test]
+fn test_bcyclic_matches_block_thomas_across_grid_sizes() {
+    let nvar = 4usize;
+    let blk_sz = nvar * nvar;
+    for &nz in &[1usize, 2, 3, 7, 8, 15, 32, 65, 128] {
+        let mut lblk = vec![0.0_f64; nz * blk_sz];
+        let mut dblk = vec![0.0_f64; nz * blk_sz];
+        let mut ublk = vec![0.0_f64; nz * blk_sz];
+        let mut rhs = vec![0.0_f64; nz * nvar];
+        for k in 0..nz {
+            let s = (k + 1) as f64 / (nz as f64);
+            for i in 0..nvar {
+                rhs[k * nvar + i] = (0.3 * (k as f64) + (i as f64)).sin();
+                for j in 0..nvar {
+                    let base = 0.05 * ((i + j + 1) as f64);
+                    dblk[k * blk_sz + i * nvar + j] =
+                        if i == j { 4.0 + s + base } else { base };
+                    if k > 0 {
+                        lblk[k * blk_sz + i * nvar + j] = -0.2 * base;
+                    }
+                    if k + 1 < nz {
+                        ublk[k * blk_sz + i * nvar + j] = -0.15 * base;
+                    }
+                }
+            }
+        }
+        let x_ref =
+            solve_block_tridiagonal(nvar, nz, &lblk, &dblk, &ublk, &rhs)
+                .unwrap();
+        for &par in &[false, true] {
+            let x_bc = solve_block_tridiag_bcyclic(
+                nvar, nz, &lblk, &dblk, &ublk, &rhs, par,
+            )
+            .unwrap();
+            for (a, b) in x_ref.iter().zip(x_bc.iter()) {
+                let rel = (a - b).abs() / a.abs().max(1.0);
+                assert!(
+                    rel < 1.0e-13,
+                    "nz={nz} par={par} rel={rel:e} a={a} b={b}"
+                );
+            }
         }
     }
 }

@@ -185,9 +185,7 @@ class AutoDiffBase:
 
     def powf(self, exponent: intrinsics.ArrayLike) -> Self:
         """Raise `self` to a constant floating-point `exponent` ($x^{p}$)."""
-        return self.apply_unary(
-            lambda x: kernels.unary_pow_scalar(x, exponent)
-        )
+        return self.apply_unary(lambda x: kernels.unary_pow_scalar(x, exponent))
 
     def powi(self, exponent: int) -> Self:
         """Raise `self` to a constant integer `exponent` ($x^{n}$)."""

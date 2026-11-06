@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rust-and-python:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Run Cargo Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Run Rust unit and integration tests
+        run: cargo test --workspace --exclude flexmesa-py
+
+      - name: Install Python build and test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install maturin pytest ruff
+          python -m pip install .
+
+      - name: Run Ruff formatter and linter
+        run: |
+          ruff format --check --line-length 80 src tests
+          ruff check src tests
+
+      - name: Run Pytest suite (Safe Rust, PyO3, and JAX parity)
+        env:
+          OMP_NUM_THREADS: "4"
+          OPENBLAS_NUM_THREADS: "4"
+          MKL_NUM_THREADS: "4"
+        run: pytest -v

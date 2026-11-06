@@ -169,10 +169,46 @@ def test_integer_idict_matches_upstream_mesa() -> None:
     idict = utils.IntegerIdict()
     assert idict.is_empty()
     k1s = (
-        4, 12, 14, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 54, 56, 56, 1, 1, 1,
+        4,
+        12,
+        14,
+        16,
+        20,
+        24,
+        28,
+        32,
+        36,
+        40,
+        44,
+        48,
+        52,
+        54,
+        56,
+        56,
+        1,
+        1,
+        1,
     )
     k2s = (
-        2, 6, 7, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 26, 26, 28, 0, 1, 2,
+        2,
+        6,
+        7,
+        8,
+        10,
+        12,
+        14,
+        16,
+        18,
+        20,
+        22,
+        24,
+        26,
+        26,
+        26,
+        28,
+        0,
+        1,
+        2,
     )
     for idx, (k1, k2) in enumerate(zip(k1s, k2s, strict=True), start=1):
         assert not idict.define_and_report_duplicates(k1, k2, idx)

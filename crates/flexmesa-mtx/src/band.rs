@@ -13,7 +13,7 @@
 //! - In left band-vector multiplication (`band_multiply_xa`), entry $A_{i,j}$
 //!   is stored in compact upper-aligned layout at `row = ku + i - j`.
 //! - All routines reject non-finite matrix and vector entries (`NaN`, `Inf`)
-//!   with [`MtxError::NonFiniteEntry`].
+//!   with [`MtxError::NonFiniteInput`].
 
 use crate::MtxError;
 use flexmesa_utils::is_bad_slice;

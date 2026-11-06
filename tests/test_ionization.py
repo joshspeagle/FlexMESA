@@ -143,7 +143,14 @@ def test_fe56_in_he4_zones_rust_vs_jax_across_random_seeds() -> None:
             dtype=np.float64,
         )
         np.testing.assert_allclose(out_par, out_seq, rtol=1e-15, atol=1e-15)
-        np.testing.assert_allclose(out_par, out_jax, rtol=1e-14, atol=1e-14)
+        np.testing.assert_allclose(
+            out_par[:, 0], out_jax[:, 0], rtol=1e-14, atol=1e-14
+        )
+        # First derivatives divide spline values (~26) by grid spacing dx=0.05,
+        # giving a 1-ULP CPU FMA vs non-FMA bound of 26 * eps / 0.05 ~ 1.15e-13.
+        np.testing.assert_allclose(
+            out_par[:, 1:], out_jax[:, 1:], rtol=1e-12, atol=2e-13
+        )
 
 
 def test_eval_ionization_zones_rust_vs_jax_across_random_seeds() -> None:
@@ -178,7 +185,14 @@ def test_eval_ionization_zones_rust_vs_jax_across_random_seeds() -> None:
             dtype=np.float64,
         )
         np.testing.assert_allclose(out_par, out_seq, rtol=1e-15, atol=1e-15)
-        np.testing.assert_allclose(out_par, out_jax, rtol=1e-14, atol=1e-14)
+        np.testing.assert_allclose(
+            out_par[:, 0], out_jax[:, 0], rtol=1e-14, atol=1e-14
+        )
+        # First derivatives divide spline values (~26) by grid spacing dx=0.05,
+        # giving a 1-ULP CPU FMA vs non-FMA bound of 26 * eps / 0.05 ~ 1.15e-13.
+        np.testing.assert_allclose(
+            out_par[:, 1:], out_jax[:, 1:], rtol=1e-12, atol=2e-13
+        )
 
 
 def test_typical_charge_and_chi_effective_rust_vs_jax() -> None:

@@ -221,9 +221,7 @@ class AutoDiffReal2VarOrder2(base.AutoDiffBase):
             self.d1val2, self.d1val1_d1val2, self.d2val2, 0.0, 0.0, 0.0
         )
 
-    def pow(
-        self, other: AutoDiffReal2VarOrder2 | intrinsics.ArrayLike
-    ) -> Self:
+    def pow(self, other: AutoDiffReal2VarOrder2 | intrinsics.ArrayLike) -> Self:
         """Raise `self` to a hyperdual or scalar exponent `other` ($x^{y}$)."""
         if isinstance(other, AutoDiffReal2VarOrder2):
             zv, d1x, d1y, d2x, d1x_d1y, d2y = kernels.binary_pow(
@@ -235,9 +233,7 @@ class AutoDiffReal2VarOrder2(base.AutoDiffBase):
         zv, d1x, d2x = kernels.unary_pow_scalar(self.val, other)
         return self.make_unary_operator(zv, d1x, d2x)
 
-    def max(
-        self, other: AutoDiffReal2VarOrder2 | intrinsics.ArrayLike
-    ) -> Self:
+    def max(self, other: AutoDiffReal2VarOrder2 | intrinsics.ArrayLike) -> Self:
         """Compute $\\max(x, y)$ using MESA's Heaviside subgradient."""
         if isinstance(other, AutoDiffReal2VarOrder2):
             q0 = fmath.heaviside(self.val - other.val)
@@ -250,9 +246,7 @@ class AutoDiffReal2VarOrder2(base.AutoDiffBase):
             jnp.maximum(self.val, c), fmath.heaviside(self.val - c), 0.0
         )
 
-    def min(
-        self, other: AutoDiffReal2VarOrder2 | intrinsics.ArrayLike
-    ) -> Self:
+    def min(self, other: AutoDiffReal2VarOrder2 | intrinsics.ArrayLike) -> Self:
         """Compute $\\min(x, y)$ using MESA's Heaviside subgradient."""
         if isinstance(other, AutoDiffReal2VarOrder2):
             q0 = fmath.heaviside(other.val - self.val)
@@ -265,9 +259,7 @@ class AutoDiffReal2VarOrder2(base.AutoDiffBase):
             jnp.minimum(self.val, c), fmath.heaviside(c - self.val), 0.0
         )
 
-    def dim(
-        self, other: AutoDiffReal2VarOrder2 | intrinsics.ArrayLike
-    ) -> Self:
+    def dim(self, other: AutoDiffReal2VarOrder2 | intrinsics.ArrayLike) -> Self:
         """Compute $\\operatorname{dim}(x, y) = \\max(x - y, 0)$."""
         return (self - other).max(0.0)
 

@@ -139,11 +139,7 @@ def solve_block_tridiag_pcr(
 
         l_prod = l_cur @ s_prev
         u_prod = u_cur @ s_next
-        d_cur = (
-            d_cur
-            - l_prod[:, :, nvar : 2 * nvar]
-            - u_prod[:, :, :nvar]
-        )
+        d_cur = d_cur - l_prod[:, :, nvar : 2 * nvar] - u_prod[:, :, :nvar]
         b_cur = b_cur - l_prod[:, :, 2 * nvar] - u_prod[:, :, 2 * nvar]
         if level + 1 < n_levels:
             l_cur = -l_prod[:, :, :nvar]

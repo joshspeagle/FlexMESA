@@ -1,13 +1,13 @@
 [build-system]
-requires = ["setuptools>=68.0"]
-build-backend = "setuptools.build_meta"
+requires = ["maturin>=1.7,<2.0"]
+build-backend = "maturin"
 
 [project]
 name = "flexmesa"
 version = "0.1.0"
 description = "Modular, differentiable, and memory-safe re-engineering of MESA in Rust and Python/JAX."
 readme = "README.md"
-license = { text = "LGPL-3.0-or-later" }
+license = "LGPL-3.0-or-later"
 requires-python = ">=3.12"
 authors = [
   { name = "Josh Speagle", email = "j.speagle@utoronto.ca" },
@@ -19,8 +19,10 @@ dependencies = [
   "safetensors>=0.4",
 ]
 
-[tool.setuptools.packages.find]
-where = ["src"]
+[tool.maturin]
+python-source = "src"
+module-name = "flexmesa._rust"
+manifest-path = "crates/flexmesa-py/Cargo.toml"
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

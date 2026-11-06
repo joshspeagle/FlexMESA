@@ -70,9 +70,7 @@ def _vdp3(_x: float, y: npt.NDArray[np.float64]) -> list[float]:
     return [*_vdp(_x, y[:2], eps=1e-3), float(-y[2])]
 
 
-def _vdp3_jac(
-    _x: float, y: npt.NDArray[np.float64]
-) -> npt.NDArray[np.float64]:
+def _vdp3_jac(_x: float, y: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
     """Evaluates 3x3 Jacobian of 3-component stiff Van der Pol system.
 
     Args:
@@ -390,9 +388,9 @@ def test_jax_implicit_autodiff_for_safe_root_and_newton() -> None:
     p_sys = jnp.array([3.0, 5.0], dtype=jnp.float64)
     y_init = jnp.array([1.2, 1.8], dtype=jnp.float64)
     y_sol = num.newton_solve_jax(_res_fn_jax, y_init, p_sys)
-    jac_p = jax.jacrev(
-        lambda p: num.newton_solve_jax(_res_fn_jax, y_init, p)
-    )(p_sys)
+    jac_p = jax.jacrev(lambda p: num.newton_solve_jax(_res_fn_jax, y_init, p))(
+        p_sys
+    )
     jy = jnp.array(
         [[2.0 * y_sol[0], 1.0], [1.0, 2.0 * y_sol[1]]], dtype=jnp.float64
     )

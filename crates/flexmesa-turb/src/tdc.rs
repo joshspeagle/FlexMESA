@@ -7,7 +7,7 @@
 //!   - c_0 A_f(Y_{\mathrm{env}}) Y_{\mathrm{env}} = 0$$
 //!
 //! over $Z = \ln|Y| \in [-100, 100]$ using bisection bracketing followed by
-//! damped Newton-Raphson refinement ([`bracket_plus_newton_search`]).
+//! damped Newton-Raphson refinement (`bracket_plus_newton_search`).
 //!
 //! # Derivative Propagation (Implicit Function Theorem)
 //! At a converged root $Y^*$ where $Q(Y^*, \mathbf{p}) = 0$, the first-order

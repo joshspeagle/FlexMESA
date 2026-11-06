@@ -60,9 +60,7 @@ def dgetrf(
         diag = lu[k, k]
         if k + 1 < n:
             lu[k + 1 :, k] /= diag
-            lu[k + 1 :, k + 1 :] -= np.outer(
-                lu[k + 1 :, k], lu[k, k + 1 :]
-            )
+            lu[k + 1 :, k + 1 :] -= np.outer(lu[k + 1 :, k], lu[k, k + 1 :])
     return lu, ipiv
 
 

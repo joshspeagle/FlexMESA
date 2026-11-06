@@ -281,24 +281,12 @@ def test_prop_interp2d_bicubic_reproduces_biquadratic_and_derivatives(
     x = np.linspace(-2.0, 2.0, 7, dtype=np.float64)
     y = np.linspace(-2.0, 2.0, 8, dtype=np.float64)
     xx, yy = np.meshgrid(x, y, indexing="ij")
-    z = (
-        a00
-        + a10 * xx
-        + a01 * yy
-        + a20 * xx**2
-        + a11 * xx * yy
-        + a02 * yy**2
-    )
+    z = a00 + a10 * xx + a01 * yy + a20 * xx**2 + a11 * xx * yy + a02 * yy**2
     coeffs, ilinx, iliny = interp_2d.interp_mkbicub_db(x, y, z)
     ev = interp_2d.interp_evbicub_db(xq, yq, x, y, ilinx, iliny, coeffs)
 
     f_exact = (
-        a00
-        + a10 * xq
-        + a01 * yq
-        + a20 * xq**2
-        + a11 * xq * yq
-        + a02 * yq**2
+        a00 + a10 * xq + a01 * yq + a20 * xq**2 + a11 * xq * yq + a02 * yq**2
     )
     df_dx_exact = a10 + 2.0 * a20 * xq + a11 * yq
     df_dy_exact = a01 + a11 * xq + 2.0 * a02 * yq

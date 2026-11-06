@@ -23,9 +23,9 @@
 //!   differentiation (`safe_root_dual`).
 //! - [`simplex`]: Nelder-Mead (`1965`) downhill simplex optimization
 //!   (`nm_simplex`) and Park-Miller `ran1_zah` uniform PRNG.
-//! - [`rk`] and [`rk_tableau`]: Explicit Runge-Kutta integrators (`rk2`, `rk4`,
+//! - [`rk`] and `rk_tableau`: Explicit Runge-Kutta integrators (`rk2`, `rk4`,
 //!   `dopri5`, `dop853`) with Shampine 4th-order dense output (`dense_eval`).
-//! - [`rosenbrock`] and [`rosenbrock_coeffs`]: L-stable Rosenbrock-Wanner stiff
+//! - [`rosenbrock`] and `rosenbrock_coeffs`: L-stable Rosenbrock-Wanner stiff
 //!   ODE integrators across all 7 MESA stage families (`Ros2`, `Rose2`,
 //!   `Ros3p`, `Ros3pl`, `Rodas3`, `Rodas4`, `Rodasp`).
 //! - [`newton`]: Damped Newton-Raphson solver for dense, banded, and

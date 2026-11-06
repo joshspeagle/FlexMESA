@@ -244,14 +244,11 @@ def dopri5(
         k6 = np.asarray(
             fcn(
                 xph,
-                y
-                + h * (a61 * k1 + a62 * k2 + a63 * k3 + a64 * k4 + a65 * k5),
+                y + h * (a61 * k1 + a62 * k2 + a63 * k3 + a64 * k4 + a65 * k5),
             ),
             dtype=np.float64,
         )
-        y_new = y + h * (
-            a71 * k1 + a73 * k3 + a74 * k4 + a75 * k5 + a76 * k6
-        )
+        y_new = y + h * (a71 * k1 + a73 * k3 + a74 * k4 + a75 * k5 + a76 * k6)
         k7 = np.asarray(fcn(xph, y_new), dtype=np.float64)
         nfcn += 6
 

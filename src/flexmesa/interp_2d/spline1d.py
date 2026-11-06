@@ -352,13 +352,7 @@ def interp_mkspline_db(
         )
     bc1 = int(ibcxmin)
     bcn = int(ibcxmax)
-    if (
-        bc1 < -1
-        or bc1 > 7
-        or bcn < -1
-        or bcn > 7
-        or (bc1 >= 0 and bcn < 0)
-    ):
+    if bc1 < -1 or bc1 > 7 or bcn < -1 or bcn > 7 or (bc1 >= 0 and bcn < 0):
         raise ValueError("Invalid boundary condition code.")
     uniform = splinck_db(x_arr, 1.0e-3, "x")
 

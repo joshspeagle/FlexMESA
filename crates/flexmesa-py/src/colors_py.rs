@@ -260,11 +260,11 @@ fn py_colors_eval_colors_zones<'py>(
     }
     let sys = MagSystem::parse(mag_system).map_err(py_err)?;
     let m = SedInterpMethod::parse(method).map_err(py_err)?;
-    let (t_s, g_s, m_s, r_s) = (
-        teff.as_slice()?,
-        log_g.as_slice()?,
-        metallicity.as_slice()?,
-        r.as_slice()?,
+    let (tv, gv, mv, rv) = (
+        teff.as_slice()?.to_vec(),
+        log_g.as_slice()?.to_vec(),
+        metallicity.as_slice()?.to_vec(),
+        r.as_slice()?.to_vec(),
     );
     let cube = builtin_sed_cube();
     eval_batch_2d::<NUM_COLORS_OUT, _>(
@@ -272,8 +272,8 @@ fn py_colors_eval_colors_zones<'py>(
         nz,
         parallel,
         PARALLEL_ZONE_THRESHOLD,
-        |k| {
-            cube.eval_colors(t_s[k], g_s[k], m_s[k], r_s[k], d, sys, m)
+        move |k| {
+            cube.eval_colors(tv[k], gv[k], mv[k], rv[k], d, sys, m)
                 .unwrap_or([f64::NAN; NUM_COLORS_OUT])
         },
     )

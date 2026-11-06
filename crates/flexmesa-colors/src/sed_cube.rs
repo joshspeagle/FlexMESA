@@ -26,6 +26,20 @@ use crate::utils::{interpolate_array, simpson_integration_fn};
 const BUILTIN_KURUCZ_BYTES: &[u8] =
     include_bytes!("../data/builtin_kurucz_johnson.bin");
 
+/// Return type of [`SedCube::precompute_johnson_filters`].
+///
+/// Bundles the 7 resampled filter transmission vectors, their
+/// wavelength-weighted counterparts $S_\lambda(\lambda_i)\,\lambda_i$, their
+/// photon-counting normalization integrals $\int S_\lambda \lambda\,d\lambda$,
+/// and the precomputed 3-point non-uniform Simpson panel weights
+/// `[c0, c1, c2]` along the canonical SED wavelength grid.
+type PrecomputedFilters = (
+    [Vec<f64>; NUM_JOHNSON_FILTERS],
+    [Vec<f64>; NUM_JOHNSON_FILTERS],
+    [f64; NUM_JOHNSON_FILTERS],
+    Vec<[f64; 3]>,
+);
+
 /// 4D stellar atmosphere SED lookup cube over
 /// $(T_{\mathrm{eff}}, \log g, [\mathrm{M/H}], \lambda)$.
 #[derive(Debug, Clone)]
@@ -46,9 +60,15 @@ pub struct SedCube {
     /// Johnson `B, I, J, M, R, U, V` filter transmission curves resampled onto
     /// `wavelengths`, each of length `n_lambda`.
     pub filters_on_sed_grid: [Vec<f64>; NUM_JOHNSON_FILTERS],
+    /// Precomputed wavelength-weighted filter curves $S_\lambda(\lambda_i)\,
+    /// \lambda_i$ for each Johnson filter, each of length `n_lambda`.
+    pub filters_weighted_on_sed_grid: [Vec<f64>; NUM_JOHNSON_FILTERS],
     /// Precomputed photon-counting denominator
     /// $\int S_\lambda(\lambda)\,\lambda\,d\lambda$ for each Johnson filter.
     pub filter_norm_integrals: [f64; NUM_JOHNSON_FILTERS],
+    /// Precomputed non-uniform Simpson panel weights `[c0, c1, c2]` for each
+    /// consecutive 3-node panel `2 * p ..= 2 * p + 2` along `wavelengths`.
+    pub simpson_panels: Vec<[f64; 3]>,
 }
 
 impl SedCube {
@@ -141,8 +161,12 @@ impl SedCube {
             }
         }
 
-        let (filters_on_sed_grid, filter_norm_integrals) =
-            Self::precompute_johnson_filters(&wavelengths)?;
+        let (
+            filters_on_sed_grid,
+            filters_weighted_on_sed_grid,
+            filter_norm_integrals,
+            simpson_panels,
+        ) = Self::precompute_johnson_filters(&wavelengths)?;
 
         Ok(Self {
             teff_grid,
@@ -152,7 +176,9 @@ impl SedCube {
             slot_map,
             sed_table,
             filters_on_sed_grid,
+            filters_weighted_on_sed_grid,
             filter_norm_integrals,
+            simpson_panels,
         })
     }
 
@@ -182,8 +208,12 @@ impl SedCube {
             });
         }
         let slot_map: Vec<usize> = (0..(nt * ng * nm)).collect();
-        let (filters_on_sed_grid, filter_norm_integrals) =
-            Self::precompute_johnson_filters(&wavelengths)?;
+        let (
+            filters_on_sed_grid,
+            filters_weighted_on_sed_grid,
+            filter_norm_integrals,
+            simpson_panels,
+        ) = Self::precompute_johnson_filters(&wavelengths)?;
         Ok(Self {
             teff_grid,
             logg_grid,
@@ -192,23 +222,22 @@ impl SedCube {
             slot_map,
             sed_table: flux,
             filters_on_sed_grid,
+            filters_weighted_on_sed_grid,
             filter_norm_integrals,
+            simpson_panels,
         })
     }
 
-    /// Precomputes the 7 Johnson filter transmission curves on `wavelengths`
-    /// and their photon-counting normalization integrals
-    /// $\int S_\lambda(\lambda)\,\lambda\,d\lambda$.
+    /// Precomputes the 7 Johnson filter transmission curves on `wavelengths`,
+    /// their $\lambda$-weighted counterparts, their photon-counting
+    /// normalization integrals $\int S_\lambda(\lambda)\,\lambda\,d\lambda$,
+    /// and the non-uniform Simpson panel weights `[c0, c1, c2]`.
     fn precompute_johnson_filters(
         wavelengths: &[f64],
-    ) -> Result<
-        (
-            [Vec<f64>; NUM_JOHNSON_FILTERS],
-            [f64; NUM_JOHNSON_FILTERS],
-        ),
-        ColorsError,
-    > {
+    ) -> Result<PrecomputedFilters, ColorsError> {
         let mut on_grid: [Vec<f64>; NUM_JOHNSON_FILTERS] =
+            core::array::from_fn(|_| Vec::new());
+        let mut weighted_on_grid: [Vec<f64>; NUM_JOHNSON_FILTERS] =
             core::array::from_fn(|_| Vec::new());
         let mut norms = [0.0_f64; NUM_JOHNSON_FILTERS];
         for (idx, filt) in JOHNSON_FILTERS.iter().enumerate() {
@@ -217,13 +246,36 @@ impl SedCube {
                 filt.transmission,
                 wavelengths,
             )?;
+            // Pre-multiply transmission by wavelength for photon-counting
+            // synthetic photometry and precompute the denominator integral.
+            let fw: Vec<f64> = f_interp
+                .iter()
+                .zip(wavelengths.iter())
+                .map(|(&tr, &w)| tr * w)
+                .collect();
             norms[idx] =
-                simpson_integration_fn(wavelengths, f_interp.len(), |i| {
-                    f_interp[i] * wavelengths[i]
-                })?;
+                simpson_integration_fn(wavelengths, fw.len(), |i| fw[i])?;
             on_grid[idx] = f_interp;
+            weighted_on_grid[idx] = fw;
         }
-        Ok((on_grid, norms))
+        // Precompute non-uniform Simpson panel weights `[c0, c1, c2]` once
+        // along the fixed canonical wavelength grid.
+        let n = wavelengths.len();
+        let mut panels = Vec::with_capacity(n / 2);
+        let mut i = 0usize;
+        while i + 2 < n {
+            let h1 = wavelengths[i + 1] - wavelengths[i];
+            let h2 = wavelengths[i + 2] - wavelengths[i + 1];
+            let h12 = h1 + h2;
+            let w_outer = h12 / 6.0;
+            panels.push([
+                w_outer * (2.0 * h1 - h2) / h1,
+                w_outer * (h12 * h12) / (h1 * h2),
+                w_outer * (2.0 * h2 - h1) / h2,
+            ]);
+            i += 2;
+        }
+        Ok((on_grid, weighted_on_grid, norms, panels))
     }
 
     /// Returns the surface flux spectrum $F_\lambda(\lambda)$ of length

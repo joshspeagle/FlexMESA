@@ -140,65 +140,57 @@ impl SedCube {
         r: T,
         d: T,
     ) -> Vec<T> {
-        let (nt, ng, nm) = (
-            self.teff_grid.len(),
-            self.logg_grid.len(),
-            self.meta_grid.len(),
-        );
+        let mut result = vec![T::zero(); self.wavelengths.len()];
+        self.eval_sed_hermite_into(teff, log_g, metallicity, r, d, &mut result);
+        result
+    }
+
+    /// Evaluates the diluted 3D cubic Hermite SED directly into `result`
+    /// without heap allocation.
+    pub fn eval_sed_hermite_into<T: RealScalar>(
+        &self,
+        teff: T,
+        log_g: T,
+        metallicity: T,
+        r: T,
+        d: T,
+        result: &mut [T],
+    ) {
         let nlam = self.wavelengths.len();
-        let (ix, tx) = find_interval(&self.teff_grid, teff);
-        let (iy, ty) = find_interval(&self.logg_grid, log_g);
-        let (iz, tz) = find_interval(&self.meta_grid, metallicity);
+        result[..nlam].fill(T::zero());
+        let (ix, hx, gx, ext_x) =
+            Self::axis_hermite_stencil(&self.teff_grid, teff);
+        let (iy, hy, gy, ext_y) =
+            Self::axis_hermite_stencil(&self.logg_grid, log_g);
+        let (iz, hz, gz, ext_z) =
+            Self::axis_hermite_stencil(&self.meta_grid, metallicity);
+        let sgn = [T::from_f64(-1.0), T::from_f64(1.0)];
 
-        let dx = self.teff_grid[ix + 1] - self.teff_grid[ix];
-        let dy = self.logg_grid[iy + 1] - self.logg_grid[iy];
-        let dz = self.meta_grid[iz + 1] - self.meta_grid[iz];
-
-        let (hx, hxd) = ([h00(tx), h01(tx)], [h10(tx), h11(tx)]);
-        let (hy, hyd) = ([h00(ty), h01(ty)], [h10(ty), h11(ty)]);
-        let (hz, hzd) = ([h00(tz), h01(tz)], [h10(tz), h11(tz)]);
-
-        let st_x = [
-            Self::diff_stencil(ix, nt, &self.teff_grid),
-            Self::diff_stencil(ix + 1, nt, &self.teff_grid),
-        ];
-        let st_y = [
-            Self::diff_stencil(iy, ng, &self.logg_grid),
-            Self::diff_stencil(iy + 1, ng, &self.logg_grid),
-        ];
-        let st_z = [
-            Self::diff_stencil(iz, nm, &self.meta_grid),
-            Self::diff_stencil(iz + 1, nm, &self.meta_grid),
-        ];
-
-        let mut result = vec![T::zero(); nlam];
         for kz in 0..2 {
-            let (wz, wzd, k) = (hz[kz], hzd[kz], iz + kz);
-            let (km, kp, inv_dz) = st_z[kz];
+            let (wz, k, k_ext) = (hz[kz], iz + kz, ext_z[kz]);
             for ky in 0..2 {
-                let (wy, wyd, j) = (hy[ky], hyd[ky], iy + ky);
-                let (jm, jp, inv_dy) = st_y[ky];
+                let (wy, j, j_ext) = (hy[ky], iy + ky, ext_y[ky]);
+                let wy_wz = wy * wz;
+                let yz_tan =
+                    sgn[ky] * gy[1 - ky] * wz + sgn[kz] * gz[1 - kz] * wy;
                 for kx in 0..2 {
-                    let (wx, wxd, i) = (hx[kx], hxd[kx], ix + kx);
-                    let (im, ip, inv_dx) = st_x[kx];
-                    let w_val = wx * wy * wz;
-                    let w_dx = wxd * wy * wz * T::from_f64(dx * inv_dx);
-                    let w_dy = wx * wyd * wz * T::from_f64(dy * inv_dy);
-                    let w_dz = wx * wy * wzd * T::from_f64(dz * inv_dz);
+                    let (wx, i, i_ext) = (hx[kx], ix + kx, ext_x[kx]);
+                    let w_corner = (wx + sgn[kx] * gx[1 - kx]) * wy_wz
+                        + wx * yz_tan;
+                    let w_x = sgn[kx] * gx[kx] * wy_wz;
+                    let w_y = sgn[ky] * wx * gy[ky] * wz;
+                    let w_z = sgn[kz] * wx * wy * gz[kz];
 
-                    let f_ijk = self.sed_at(i, j, k);
-                    let (f_ip, f_im) =
-                        (self.sed_at(ip, j, k), self.sed_at(im, j, k));
-                    let (f_jp, f_jm) =
-                        (self.sed_at(i, jp, k), self.sed_at(i, jm, k));
-                    let (f_kp, f_km) =
-                        (self.sed_at(i, j, kp), self.sed_at(i, j, km));
+                    let (f_ijk, f_x) =
+                        (self.sed_at(i, j, k), self.sed_at(i_ext, j, k));
+                    let (f_y, f_z) =
+                        (self.sed_at(i, j_ext, k), self.sed_at(i, j, k_ext));
 
                     for lam in 0..nlam {
-                        let c = w_val * T::from_f64(f_ijk[lam])
-                            + w_dx * T::from_f64(f_ip[lam] - f_im[lam])
-                            + w_dy * T::from_f64(f_jp[lam] - f_jm[lam])
-                            + w_dz * T::from_f64(f_kp[lam] - f_km[lam]);
+                        let c = w_corner * T::from_f64(f_ijk[lam])
+                            + w_x * T::from_f64(f_x[lam])
+                            + w_y * T::from_f64(f_y[lam])
+                            + w_z * T::from_f64(f_z[lam]);
                         result[lam] = result[lam] + c;
                     }
                 }
@@ -206,10 +198,31 @@ impl SedCube {
         }
 
         let scale = (r / d) * (r / d);
-        for v in &mut result {
+        for v in &mut result[..nlam] {
             *v = *v * scale;
         }
-        result
+    }
+
+    /// Computes `(idx0, [h00, h01], [gx0, gx1], [im0, ip1])` along `grid`.
+    #[inline]
+    fn axis_hermite_stencil<T: RealScalar>(
+        grid: &[f64],
+        val: T,
+    ) -> (usize, [T; 2], [T; 2], [usize; 2]) {
+        let n = grid.len();
+        let (idx, t) = find_interval(grid, val);
+        let dx = grid[idx + 1] - grid[idx];
+        let s0 = Self::diff_stencil(idx, n, grid);
+        let s1 = Self::diff_stencil(idx + 1, n, grid);
+        (
+            idx,
+            [h00(t), h01(t)],
+            [
+                h10(t) * T::from_f64(dx * s0.2),
+                h11(t) * T::from_f64(dx * s1.2),
+            ],
+            [s0.0, s1.1],
+        )
     }
 
     /// Returns `(i_minus, i_plus, 1.0 / (grid[i_plus] - grid[i_minus]))` for
@@ -358,12 +371,8 @@ impl SedCube {
             for (ig, &dg) in dg_sq.iter().enumerate() {
                 let dt_dg = dt + dg;
                 for (im, &dm) in dm_sq.iter().enumerate() {
-                    insert_top4(
-                        &mut best_d2,
-                        &mut best_idx,
-                        dt_dg + dm,
-                        (it, ig, im),
-                    );
+                    let idx = (it, ig, im);
+                    insert_top4(&mut best_d2, &mut best_idx, dt_dg + dm, idx);
                 }
             }
         }

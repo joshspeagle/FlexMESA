@@ -1,20 +1,10 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
 """Generates publication-styled diagnostic figures for the FlexMESA docs.
 
-Produces four 300 dpi PNG figures in `docs/assets/figures/` following the
-AASTeX publication plot style (Computer Modern typography, inward ticks on all
-four sides, frameless legends, and journal-derived widths):
-1. `neu_regimes.png`: Itoh et al. (1996) thermal neutrino energy-loss channels
-   and logarithmic temperature sensitivity across $\\log_{10}(T/\\mathrm{K})$.
-2. `interp_stencil_accuracy.png`: 1D monotonic vs. quartic-slope piecewise
-   cubic interpolation (`interp_pm` vs. `interp_m3b`) across a sharp composition
-   front and measured 2D bicubic spline (`interp_2d`) convergence.
-3. `turb_mlt_tdc_comparison.png`: Steady-state Cox (1968) MLT vs. transient
-   Kuhfuss (1986) 1D Time-Dependent Convection superadiabaticity and Implicit
-   Function Theorem sensitivity $\\partial \\nabla_T / \\partial \\nabla_r$.
-4. `wave1_benchmark_staircase.png`: Four-way runtime comparison at
-   $N_{\\mathrm{zones}} = 4096$ across Upstream Fortran MESA, Safe Rust,
-   Python/PyO3 (`flexmesa._rust`), and Python/JAX (`@jax.jit(vmap)`).
+Produces 300 dpi PNG figures in `docs/assets/figures/` following the AASTeX
+publication plot style (Computer Modern typography, inward ticks on all four
+sides, frameless legends, and journal-derived widths) across Wave 1 (`neu`,
+`interp_1d`, `interp_2d`, `turb`) and Wave 2 (`chem`, `ionization`, `colors`).
 """
 
 from __future__ import annotations
@@ -23,6 +13,7 @@ import pathlib
 import shutil
 import subprocess
 
+import build_docs_figures_wave2 as _w2_figs
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
@@ -69,7 +60,7 @@ RC_PARAMS = {
 
 
 def main() -> None:
-    """Generates all four publication-styled documentation figures."""
+    """Generates all publication-styled documentation figures."""
     _register_latin_modern()
     mpl.rcParams.update(RC_PARAMS)  # type: ignore[arg-type,unused-ignore]
     root = pathlib.Path(__file__).resolve().parent.parent
@@ -79,6 +70,8 @@ def main() -> None:
     plot_interp_stencil_accuracy(out_dir)
     plot_turb_mlt_tdc(out_dir)
     plot_wave1_benchmark_staircase(out_dir)
+    _w2_figs.plot_colors_kurucz_sed_johnson(out_dir)
+    _w2_figs.plot_wave2_benchmark_staircase(out_dir)
 
 
 def _register_latin_modern() -> None:

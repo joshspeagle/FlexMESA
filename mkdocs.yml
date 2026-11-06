@@ -90,7 +90,9 @@ nav:
       - Wave 0 Schemas, Data & Golden Oracles: modules/wave-0-foundation.md
       - Wave 1 Dual Algebra, Splines & Solvers: modules/wave-1-numerics.md
       - Wave 1 Neutrinos & Turbulent Convection: modules/wave-1-microphysics.md
+      - Wave 2 Composition, Ionization & Photometry: modules/wave-2-microphysics.md
   - Benchmarks & Parity:
       - Wave 1.5 Four-Way Benchmark Report: design/wave-1-benchmark-report.md
+      - Wave 2.5 Four-Way Benchmark Report: design/wave-2-benchmark-report.md
   - API Reference:
       - Python, PyO3 & JAX Reference: api/index.md

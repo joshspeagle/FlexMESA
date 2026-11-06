@@ -155,11 +155,13 @@ fn py_ion_charge_of_fe56_in_he4_zones<'py>(
     let x_max = tbl.log_ne[tbl.log_ne.len() - 1];
     let y_min = tbl.log_t[0];
     let y_max = tbl.log_t[tbl.log_t.len() - 1];
+    let x_tol = 4.0e-7 * x_min.abs().max(x_max.abs());
+    let y_tol = 4.0e-7 * y_min.abs().max(y_max.abs());
     for (&x, &y) in lne.iter().zip(lt) {
         if !x.is_finite()
             || !y.is_finite()
-            || !(x_min..=x_max).contains(&x)
-            || !(y_min..=y_max).contains(&y)
+            || !(x_min - x_tol..=x_max + x_tol).contains(&x)
+            || !(y_min - y_tol..=y_max + y_tol).contains(&y)
         {
             return Err(PyValueError::new_err(format!(
                 "query ({x}, {y}) out of range [{x_min}, {x_max}] \
@@ -167,13 +169,15 @@ fn py_ion_charge_of_fe56_in_he4_zones<'py>(
             )));
         }
     }
+    let (lne_v, lt_v) = (lne.to_vec(), lt.to_vec());
     eval_batch_2d::<3, _>(
         py,
-        lne.len(),
+        lne_v.len(),
         parallel,
         PARALLEL_ZONE_THRESHOLD,
-        |k| {
-            let ev = tbl.eval_full(lne[k], lt[k]).expect("prevalidated zone");
+        move |k| {
+            let ev =
+                tbl.eval_full(lne_v[k], lt_v[k]).expect("prevalidated zone");
             [ev.f, ev.df_dx, ev.df_dy]
         },
     )
@@ -257,8 +261,14 @@ fn py_ion_eval_ionization_zones<'py>(
         ));
     }
     let grid = IonTableGrid::builtin();
-    eval_batch_2d::<28, _>(py, n, parallel, PARALLEL_ZONE_THRESHOLD, |k| {
-        grid.eval_generic(z_s[k], x_s[k], lrho_s[k], lt_s[k])
+    let (zv, xv, lrhov, ltv) = (
+        z_s.to_vec(),
+        x_s.to_vec(),
+        lrho_s.to_vec(),
+        lt_s.to_vec(),
+    );
+    eval_batch_2d::<28, _>(py, n, parallel, PARALLEL_ZONE_THRESHOLD, move |k| {
+        grid.eval_generic(zv[k], xv[k], lrhov[k], ltv[k])
     })
 }
 

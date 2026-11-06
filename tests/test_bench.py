@@ -23,6 +23,13 @@ _EXPECTED_CHECKSUMS_N8: tuple[tuple[str, float], ...] = (
     ("turb_tdc", 3.3187342241650115e00),
 )
 
+_EXPECTED_WAVE2_CHECKSUMS_N8: tuple[tuple[str, float], ...] = (
+    ("chem_comp", 1.6870014935210610e01),
+    ("ion_fe56", 1.6837093929584180e02),
+    ("ion_4d", 6.1188461461721810e01),
+    ("colors_sed", 3.6086917325391080e01),
+)
+
 
 def test_wave1_four_stage_benchmarks_parity_across_stages() -> None:
     """All six Wave 1 workloads agree across Stages 0..3 and match Rust.
@@ -69,3 +76,37 @@ def test_measure_us_records_positive_median_and_compile_latency() -> None:
     assert stats.median_us > 0.0
     assert stats.iqr_us >= 0.0
     assert stats.compile_us > 0.0
+
+
+def test_wave2_four_stage_benchmarks_parity_across_stages() -> None:
+    """All four Wave 2 workloads agree across Stages 0..3 and match Rust.
+
+    Verifies stage-to-stage relative error <= 1e-12 and pinned cross-language
+    reference checksums at N_zones = 8.
+    """
+    records = bench.run_all_wave2_benchmarks(
+        zone_counts=(4, 8),
+        n_warmup=1,
+        n_repeats=3,
+    )
+    assert len(records) == 8
+    for rec in records:
+        assert rec.max_rel_err <= 1.0e-12, (
+            f"workload {rec.workload} (N={rec.n_zones}) "
+            f"stage parity error {rec.max_rel_err:.3e} > 1e-12"
+        )
+        assert rec.stage0.median_us > 0.0
+        assert rec.stage1.median_us > 0.0
+        assert rec.stage2.median_us > 0.0
+        assert rec.stage3.median_us > 0.0
+        assert math.isfinite(rec.checksum)
+
+    for rec, (exp_name, exp_sum) in zip(
+        records[4:], _EXPECTED_WAVE2_CHECKSUMS_N8, strict=True
+    ):
+        assert rec.workload == exp_name
+        rel_err = abs(rec.checksum - exp_sum) / abs(exp_sum)
+        assert rel_err <= 1.0e-12, (
+            f"workload {rec.workload} (N=8) checksum {rec.checksum:.15e} "
+            f"vs {exp_sum:.15e} (rel {rel_err:.3e})"
+        )

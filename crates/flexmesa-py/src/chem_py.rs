@@ -296,11 +296,12 @@ fn py_chem_get_composition_info_zones<'py>(
     }
     let props = SpeciesProps::from_catalog(builtin_catalog(), &chem_ids)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    let x_slice = x_zones
+    let xs = x_zones
         .as_slice()
-        .map_err(|_| PyValueError::new_err("x_zones must be C-contiguous"))?;
-    eval_batch_2d::<10, _>(py, nz, parallel, PARALLEL_ZONE_THRESHOLD, |k| {
-        let row = &x_slice[k * n_species..(k + 1) * n_species];
+        .map_err(|_| PyValueError::new_err("x_zones must be C-contiguous"))?
+        .to_vec();
+    eval_batch_2d::<10, _>(py, nz, parallel, PARALLEL_ZONE_THRESHOLD, move |k| {
+        let row = &xs[k * n_species..(k + 1) * n_species];
         eval_composition_moments_generic::<f64>(&props, row).to_array()
     })
 }

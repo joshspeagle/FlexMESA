@@ -18,6 +18,9 @@ flexmesa-mtx = { path = "../flexmesa-mtx" }
 flexmesa-num = { path = "../flexmesa-num" }
 flexmesa-neu = { path = "../flexmesa-neu" }
 flexmesa-turb = { path = "../flexmesa-turb" }
+flexmesa-chem = { path = "../flexmesa-chem" }
+flexmesa-ionization = { path = "../flexmesa-ionization" }
+flexmesa-colors = { path = "../flexmesa-colors" }
 rayon.workspace = true
 
 [lints]

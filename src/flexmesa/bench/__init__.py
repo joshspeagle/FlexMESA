@@ -24,6 +24,7 @@ from __future__ import annotations
 from flexmesa.bench import harness as _harness
 from flexmesa.bench import kernels_micro as _micro
 from flexmesa.bench import kernels_solver as _solver
+from flexmesa.bench import kernels_wave2 as _wave2
 
 STAGE3_BATCH_SIZE = _harness.STAGE3_BATCH_SIZE
 BenchRecord = _harness.BenchRecord
@@ -46,23 +47,38 @@ bench_turb_mlt = _solver.bench_turb_mlt
 bench_turb_tdc = _solver.bench_turb_tdc
 run_all_wave1_benchmarks = _solver.run_all_wave1_benchmarks
 
+WAVE2_ISO_NAMES = _wave2.WAVE2_ISO_NAMES
+bench_chem_comp = _wave2.bench_chem_comp
+bench_colors_sed = _wave2.bench_colors_sed
+bench_ion_4d = _wave2.bench_ion_4d
+bench_ion_fe56 = _wave2.bench_ion_fe56
+make_wave2_composition_profile = _wave2.make_wave2_composition_profile
+run_all_wave2_benchmarks = _wave2.run_all_wave2_benchmarks
+
 __all__: list[str] = [
     "STAGE3_BATCH_SIZE",
+    "WAVE2_ISO_NAMES",
     "BenchRecord",
     "BicubTable",
     "LatencyStats",
     "ThermoGrid",
     "bench_autodiff",
+    "bench_chem_comp",
+    "bench_colors_sed",
     "bench_interp2d",
+    "bench_ion_4d",
+    "bench_ion_fe56",
     "bench_mtx_block_tridiag",
     "bench_neu",
     "bench_turb_mlt",
     "bench_turb_tdc",
     "make_block_tridiag_fixture",
+    "make_wave2_composition_profile",
     "max_err3",
     "max_rel_diff",
     "measure_and_capture",
     "measure_stage3_batch",
     "measure_us",
     "run_all_wave1_benchmarks",
+    "run_all_wave2_benchmarks",
 ]

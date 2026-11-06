@@ -78,6 +78,23 @@ def _axis_d2(ax: jax.Array, v: jax.Array) -> jax.Array:
     return d * d
 
 
+def _compute_interp_radius_with_grid(
+    grid: utils.ColorsBuiltinGrid,
+    teff: jax.Array | float,
+    log_g: jax.Array | float,
+    metallicity: jax.Array | float,
+) -> jax.Array:
+    """Compute normalized interpolation radius given explicit ``grid``."""
+    t_v = jax.lax.stop_gradient(jnp.asarray(teff, dtype=jnp.float64))
+    g_v = jax.lax.stop_gradient(jnp.asarray(log_g, dtype=jnp.float64))
+    m_v = jax.lax.stop_gradient(jnp.asarray(metallicity, dtype=jnp.float64))
+    return jnp.sqrt(
+        _axis_d2(grid.teff_grid, t_v)
+        + _axis_d2(grid.logg_grid, g_v)
+        + _axis_d2(grid.meta_grid, m_v)
+    )
+
+
 @jax.jit
 def compute_interp_radius_jax(
     teff: jax.Array | float,
@@ -94,14 +111,8 @@ def compute_interp_radius_jax(
     Returns:
         Scalar normalized interpolation radius ``Interp_rad``.
     """
-    grid = utils.get_builtin_colors_grid()
-    t_v = jax.lax.stop_gradient(jnp.asarray(teff, dtype=jnp.float64))
-    g_v = jax.lax.stop_gradient(jnp.asarray(log_g, dtype=jnp.float64))
-    m_v = jax.lax.stop_gradient(jnp.asarray(metallicity, dtype=jnp.float64))
-    return jnp.sqrt(
-        _axis_d2(grid.teff_grid, t_v)
-        + _axis_d2(grid.logg_grid, g_v)
-        + _axis_d2(grid.meta_grid, m_v)
+    return _compute_interp_radius_with_grid(
+        utils.get_builtin_colors_grid(), teff, log_g, metallicity
     )
 
 
@@ -112,9 +123,8 @@ def _axis_stencil_jax(
     tuple[jax.Array, jax.Array],
     tuple[jax.Array, jax.Array],
     tuple[jax.Array, jax.Array],
-    tuple[jax.Array, jax.Array],
 ]:
-    """Precompute ``(i, ip, im, s)`` finite-difference stencils."""
+    """Precompute ``((i0, i1), (im0, ip1), (s0, s1))`` stencil arrays."""
     n = ax.shape[0]
     dx_c = ax[idx0 + 1] - ax[idx0]
     i0 = idx0
@@ -125,10 +135,74 @@ def _axis_stencil_jax(
     den1 = ax[ip1] - ax[im1]
     s0 = jnp.where(jnp.abs(den0) > 0.0, dx_c / den0, 0.0)
     s1 = jnp.where(jnp.abs(den1) > 0.0, dx_c / den1, 0.0)
-    return (i0, i1), (ip0, ip1), (im0, im1), (s0, s1)
+    return (i0, i1), (im0, ip1), (s0, s1)
 
 
-@jax.jit
+def _eval_sed_hermite_with_grid(
+    teff: jax.Array | float,
+    log_g: jax.Array | float,
+    metallicity: jax.Array | float,
+    r: jax.Array | float,
+    d: jax.Array | float,
+    grid: utils.ColorsBuiltinGrid,
+) -> jax.Array:
+    """Evaluate 3D cubic Hermite SED using an explicit ``ColorsBuiltinGrid``."""
+    nlam = grid.wavelengths.shape[0]
+
+    i0, tx = _find_interval_jax(
+        grid.teff_grid, jnp.asarray(teff, dtype=jnp.float64)
+    )
+    j0, ty = _find_interval_jax(
+        grid.logg_grid, jnp.asarray(log_g, dtype=jnp.float64)
+    )
+    k0, tz = _find_interval_jax(
+        grid.meta_grid, jnp.asarray(metallicity, dtype=jnp.float64)
+    )
+
+    hx, hdx = (h00(tx), h01(tx)), (h10(tx), h11(tx))
+    hy, hdy = (h00(ty), h01(ty)), (h10(ty), h11(ty))
+    hz, hdz = (h00(tz), h01(tz)), (h10(tz), h11(tz))
+
+    idx_i, ext_i, sx_i = _axis_stencil_jax(grid.teff_grid, i0)
+    idx_j, ext_j, sy_j = _axis_stencil_jax(grid.logg_grid, j0)
+    idx_k, ext_k, sz_k = _axis_stencil_jax(grid.meta_grid, k0)
+
+    gx = (hdx[0] * sx_i[0], hdx[1] * sx_i[1])
+    gy = (hdy[0] * sy_j[0], hdy[1] * sy_j[1])
+    gz = (hdz[0] * sz_k[0], hdz[1] * sz_k[1])
+    sgn = (-1.0, 1.0)
+
+    result = jnp.zeros(nlam, dtype=jnp.float64)
+    for ii in range(2):
+        i, i_ext = idx_i[ii], ext_i[ii]
+        for jj in range(2):
+            j, j_ext = idx_j[jj], ext_j[jj]
+            for kk in range(2):
+                k, k_ext = idx_k[kk], ext_k[kk]
+                w_corner = (
+                    hx[ii] * hy[jj] * hz[kk]
+                    + sgn[ii] * gx[1 - ii] * hy[jj] * hz[kk]
+                    + sgn[jj] * hx[ii] * gy[1 - jj] * hz[kk]
+                    + sgn[kk] * hx[ii] * hy[jj] * gz[1 - kk]
+                )
+                w_x = sgn[ii] * gx[ii] * hy[jj] * hz[kk]
+                w_y = sgn[jj] * hx[ii] * gy[jj] * hz[kk]
+                w_z = sgn[kk] * hx[ii] * hy[jj] * gz[kk]
+
+                result = (
+                    result
+                    + w_corner * _sed_at_jax(grid, i, j, k)
+                    + w_x * _sed_at_jax(grid, i_ext, j, k)
+                    + w_y * _sed_at_jax(grid, i, j_ext, k)
+                    + w_z * _sed_at_jax(grid, i, j, k_ext)
+                )
+
+    return utils.dilute_flux_jax(result, r, d)
+
+
+_eval_sed_hermite_jit = jax.jit(_eval_sed_hermite_with_grid)
+
+
 def eval_sed_hermite_jax(
     teff: jax.Array | float,
     log_g: jax.Array | float,
@@ -149,55 +223,9 @@ def eval_sed_hermite_jax(
         Diluted 1D SED flux array of shape ``(1199,)`` in
         ``erg s^-1 cm^-2 Angstrom^-1``.
     """
-    grid = utils.get_builtin_colors_grid()
-    nlam = grid.wavelengths.shape[0]
-
-    i0, tx = _find_interval_jax(
-        grid.teff_grid, jnp.asarray(teff, dtype=jnp.float64)
+    return _eval_sed_hermite_jit(
+        teff, log_g, metallicity, r, d, utils.get_builtin_colors_grid()
     )
-    j0, ty = _find_interval_jax(
-        grid.logg_grid, jnp.asarray(log_g, dtype=jnp.float64)
-    )
-    k0, tz = _find_interval_jax(
-        grid.meta_grid, jnp.asarray(metallicity, dtype=jnp.float64)
-    )
-
-    hx, hdx = (h00(tx), h01(tx)), (h10(tx), h11(tx))
-    hy, hdy = (h00(ty), h01(ty)), (h10(ty), h11(ty))
-    hz, hdz = (h00(tz), h01(tz)), (h10(tz), h11(tz))
-
-    idx_i, ip_i, im_i, sx_i = _axis_stencil_jax(grid.teff_grid, i0)
-    idx_j, jp_j, jm_j, sy_j = _axis_stencil_jax(grid.logg_grid, j0)
-    idx_k, kp_k, km_k, sz_k = _axis_stencil_jax(grid.meta_grid, k0)
-
-    result = jnp.zeros(nlam, dtype=jnp.float64)
-    for ii in range(2):
-        i, ip, im, sx = idx_i[ii], ip_i[ii], im_i[ii], sx_i[ii]
-        for jj in range(2):
-            j, jp, jm, sy = idx_j[jj], jp_j[jj], jm_j[jj], sy_j[jj]
-            for kk in range(2):
-                k, kp, km, sz = idx_k[kk], kp_k[kk], km_k[kk], sz_k[kk]
-                w_val = hx[ii] * hy[jj] * hz[kk]
-                w_dx = hdx[ii] * hy[jj] * hz[kk] * sx
-                w_dy = hx[ii] * hdy[jj] * hz[kk] * sy
-                w_dz = hx[ii] * hy[jj] * hdz[kk] * sz
-
-                f_ijk = _sed_at_jax(grid, i, j, k)
-                f_ip = _sed_at_jax(grid, ip, j, k)
-                f_im = _sed_at_jax(grid, im, j, k)
-                f_jp = _sed_at_jax(grid, i, jp, k)
-                f_jm = _sed_at_jax(grid, i, jm, k)
-                f_kp = _sed_at_jax(grid, i, j, kp)
-                f_km = _sed_at_jax(grid, i, j, km)
-                result = (
-                    result
-                    + w_val * f_ijk
-                    + w_dx * (f_ip - f_im)
-                    + w_dy * (f_jp - f_jm)
-                    + w_dz * (f_kp - f_km)
-                )
-
-    return utils.dilute_flux_jax(result, r, d)
 
 
 @jax.jit

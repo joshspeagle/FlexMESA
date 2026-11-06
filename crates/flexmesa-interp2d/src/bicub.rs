@@ -16,7 +16,8 @@
 //!    PSPLINE / MESA `do_mkbicub_db`.
 
 pub use crate::bicub_eval::{
-    herm2xy_db, interp_evbicub_db, interp_evbicub_mask_db,
+    herm2xy_db, herm2xy_prevalidated_db, interp_evbicub_db,
+    interp_evbicub_mask_db, interp_evbicub_prevalidated_db,
 };
 use crate::spline1d::{mkspline_db, splinck_db};
 use crate::{BicubicBc, Interp2dError};

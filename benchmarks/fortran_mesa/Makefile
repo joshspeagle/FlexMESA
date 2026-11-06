@@ -14,6 +14,8 @@ FFLAGS ?= -O2 -fopenmp -cpp -ffree-form -ffree-line-length-none
 
 MESA_INC := -I$(MESA_DIR)/include -I$(MESA_DIR)/build/interp_2d/modules
 MESA_LIBS := \
+	$(MESA_DIR)/lib/libcolors.a \
+	$(MESA_DIR)/lib/libionization.a \
 	$(MESA_DIR)/lib/libturb.a \
 	$(MESA_DIR)/lib/libneu.a \
 	$(MESA_DIR)/lib/libinterp_2d.a \
@@ -35,11 +37,17 @@ OBJS := \
 	$(BUILD_DIR)/bench_kernels_solver.o \
 	$(BUILD_DIR)/run_wave1_bench.o
 
+WAVE2_OBJS := \
+	$(BUILD_DIR)/bench_harness.o \
+	$(BUILD_DIR)/bench_kernels_wave2.o \
+	$(BUILD_DIR)/run_wave2_bench.o
+
 TARGET := $(BUILD_DIR)/run_wave1_bench
+TARGET_WAVE2 := $(BUILD_DIR)/run_wave2_bench
 
-.PHONY: all run clean
+.PHONY: all run run_wave2 clean
 
-all: $(TARGET)
+all: $(TARGET) $(TARGET_WAVE2)
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
@@ -59,12 +67,24 @@ $(BUILD_DIR)/bench_kernels_solver.o: bench_kernels_solver.f90 $(BUILD_DIR)/bench
 $(BUILD_DIR)/run_wave1_bench.o: run_wave1_bench.f90 $(BUILD_DIR)/bench_kernels_micro.o $(BUILD_DIR)/bench_kernels_solver.o | $(BUILD_DIR)
 	$(FC) $(FFLAGS) $(MESA_INC) -I$(BUILD_DIR) -J$(BUILD_DIR) -c $< -o $@
 
+$(BUILD_DIR)/bench_kernels_wave2.o: bench_kernels_wave2.f90 $(BUILD_DIR)/bench_harness.o | $(BUILD_DIR)
+	$(FC) $(FFLAGS) $(MESA_INC) -I$(BUILD_DIR) -J$(BUILD_DIR) -c $< -o $@
+
+$(BUILD_DIR)/run_wave2_bench.o: run_wave2_bench.f90 $(BUILD_DIR)/bench_kernels_wave2.o | $(BUILD_DIR)
+	$(FC) $(FFLAGS) $(MESA_INC) -I$(BUILD_DIR) -J$(BUILD_DIR) -c $< -o $@
+
 $(TARGET): $(OBJS)
 	$(FC) $(FFLAGS) -o $@ $(OBJS) $(MESA_LIBS) $(BLAS_LAPACK_LIBS)
 
+$(TARGET_WAVE2): $(WAVE2_OBJS)
+	$(FC) $(FFLAGS) -o $@ $(WAVE2_OBJS) $(MESA_LIBS) $(BLAS_LAPACK_LIBS)
+
 run: $(TARGET)
-	$(TARGET)
+	MESA_DIR=$(MESA_DIR) $(TARGET)
+
+run_wave2: $(TARGET_WAVE2)
+	MESA_DIR=$(MESA_DIR) $(TARGET_WAVE2)
 
 clean:
-	rm -f $(BUILD_DIR)/*.o $(BUILD_DIR)/*.mod $(TARGET)
+	rm -f $(BUILD_DIR)/*.o $(BUILD_DIR)/*.mod $(TARGET) $(TARGET_WAVE2)
 	if [ -d $(BUILD_DIR) ]; then rmdir $(BUILD_DIR) 2>/dev/null || true; fi

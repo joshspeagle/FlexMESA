@@ -18,7 +18,7 @@ use std::sync::OnceLock;
 
 use flexmesa_autodiff::DualOrder1;
 use flexmesa_interp2d::{
-    interp_evbicub_db, interp_mkbicub_db, BicubicBc, BicubicEval,
+    interp_evbicub_prevalidated_db, interp_mkbicub_db, BicubicBc, BicubicEval,
 };
 use flexmesa_math::str_to_vector;
 use rayon::prelude::*;
@@ -154,7 +154,7 @@ impl Fe56He4Table {
         log10_ne: f64,
         log10_t: f64,
     ) -> Result<BicubicEval, IonError> {
-        interp_evbicub_db(
+        interp_evbicub_prevalidated_db(
             log10_ne,
             log10_t,
             &self.log_ne,

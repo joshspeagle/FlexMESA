@@ -62,8 +62,9 @@ fn eval_autodiff_order2_batch<'py>(
     if xs.len() != ys.len() {
         return Err(PyValueError::new_err("x and y length mismatch"));
     }
-    eval_batch_2d(py, xs.len(), parallel, 64, |k| {
-        eval_autodiff_order2_zone(xs[k], ys[k])
+    let (xv, yv) = (xs.to_vec(), ys.to_vec());
+    eval_batch_2d(py, xv.len(), parallel, 64, move |k| {
+        eval_autodiff_order2_zone(xv[k], yv[k])
     })
 }
 

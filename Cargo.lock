@@ -182,6 +182,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "flexmesa-chem"
+version = "0.1.0"
+dependencies = [
+ "flexmesa-autodiff",
+ "flexmesa-const",
+ "flexmesa-math",
+ "flexmesa-utils",
+ "rayon",
+]
+
+[[package]]
 name = "flexmesa-const"
 version = "0.1.0"
 dependencies = [
@@ -263,6 +274,7 @@ version = "0.1.0"
 dependencies = [
  "flexmesa-autodiff",
  "flexmesa-bench",
+ "flexmesa-chem",
  "flexmesa-const",
  "flexmesa-data",
  "flexmesa-interp1d",

@@ -16,6 +16,7 @@ doctest = false
 [dependencies]
 flexmesa-autodiff = { path = "../flexmesa-autodiff" }
 flexmesa-bench = { path = "../flexmesa-bench" }
+flexmesa-chem = { path = "../flexmesa-chem" }
 flexmesa-const = { path = "../flexmesa-const" }
 flexmesa-data = { path = "../flexmesa-data" }
 flexmesa-interp1d = { path = "../flexmesa-interp1d" }

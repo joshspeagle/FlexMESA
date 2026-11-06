@@ -29,6 +29,10 @@
     clippy::unnecessary_wraps
 )]
 
+/// Tier A and Tier B bindings for `chem` (elements, nuclides, solar scales,
+/// composition).
+#[allow(unsafe_code)]
+pub mod chem_py;
 /// Tier B bindings for 1D piecewise-monotonic and MP cubic interpolation.
 #[allow(unsafe_code)]
 pub mod interp_1d;
@@ -98,5 +102,6 @@ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     interp_2d::register(m)?;
     neu_py::register(m)?;
     turb_py::register(m)?;
+    chem_py::register(m)?;
     Ok(())
 }

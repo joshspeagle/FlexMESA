@@ -286,7 +286,7 @@ Evaluating MESA's 12 tiers against Safe Rust (`#![forbid(unsafe_code)]`), Python
 
 ### Settled Target Architecture (`DECISIONS #1` & `#3`): **Wave 1 Dual-Track (`crates/` Safe Rust + `src/flexmesa/` Python/JAX) & Three-Layer Design**
 
-Per [`notes/DECISIONS.md`](../../notes/DECISIONS.md), `FlexMESA` runs **Wave 1 on a Dual Track** (implementing all 8 foundational numerical modules plus stateless Tier 3/5 microphysics modules `neu` and `turb` in both Safe Rust and Python/JAX `float64`) to benchmark numerical parity, code organization, readability, and 4-stage performance before selecting the single or hybrid backend for Waves 2 through 5. Across the workspace, the system is organized into three layers:
+Per [`notes/DECISIONS.md`](https://github.com/joshspeagle/FlexMESA/blob/main/notes/DECISIONS.md), `FlexMESA` runs **Wave 1 on a Dual Track** (implementing all 8 foundational numerical modules plus stateless Tier 3/5 microphysics modules `neu` and `turb` in both Safe Rust and Python/JAX `float64`) to benchmark numerical parity, code organization, readability, and 4-stage performance before selecting the single or hybrid backend for Waves 2 through 5. Across the workspace, the system is organized into three layers:
 
 1. **Layer 1: Modernized `.safetensors` Data & Declarative Schema Layer (`DECISIONS #3`)**:
    - Convert MESA's `2.18 GiB` of ASCII/HDF5 tables (`10.3 GiB` uncompressed ASCII) and pre-fitted spline caches into contiguous, 64-byte-aligned `float64` **`.safetensors`** files (`mmap`-ready in `~/.cache/flexmesa/data/`) distributed as modular `.safetensors.zst` bundles on **GitHub Release Assets** (`joshspeagle/FlexMESA`) with a committed `SHA-256` manifest (`src/flexmesa/data/manifest.toml`), alongside declarative schema parsing from `*.defaults` and `*_columns.list`.
@@ -299,7 +299,7 @@ Per [`notes/DECISIONS.md`](../../notes/DECISIONS.md), `FlexMESA` runs **Wave 1 o
 
 ## 6. Wave Execution Strategy (`Waves 0 through 5`)
 
-Because MESA's 12-tier dependency DAG is strictly acyclic and **every module from Tier 0 to Tier 8 has its own standalone golden unit test (`<pkg>/test/test_output`)**, the migration proceeds across six waves ([`notes/PLAN.md`](../../notes/PLAN.md)):
+Because MESA's 12-tier dependency DAG is strictly acyclic and **every module from Tier 0 to Tier 8 has its own standalone golden unit test (`<pkg>/test/test_output`)**, the migration proceeds across six waves ([`notes/PLAN.md`](https://github.com/joshspeagle/FlexMESA/blob/main/notes/PLAN.md)):
 
 ```mermaid
 flowchart LR

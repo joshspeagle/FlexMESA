@@ -6,7 +6,7 @@
 //!   Infrastructure parsers, `.safetensors` table converters and `SHA-256`
 //!   hashing, golden baseline parsers, and 1st/2nd-order dual-number kernels.
 //! - **Tier B (`math`, `interp_1d`, `interp_2d`, `neu`, `turb`, `chem`,
-//!   `ionization`)**:
+//!   `ionization`, `colors`)**:
 //!   Domain-safe elementary intrinsics, 1D/2D spline builders and evaluators,
 //!   Itoh et al. (1996) 5-channel thermal neutrino losses, and Cox (1968) /
 //!   Kuhfuss (1986) convective transport (`MLT` and `TDC`) with persistent
@@ -34,6 +34,10 @@
 /// composition).
 #[allow(unsafe_code)]
 pub mod chem_py;
+/// Tier B bindings for `colors` (Kurucz2003 SEDs, bolometric and synthetic
+/// photometry).
+#[allow(unsafe_code)]
+pub mod colors_py;
 /// Tier B bindings for 1D piecewise-monotonic and MP cubic interpolation.
 #[allow(unsafe_code)]
 pub mod interp_1d;
@@ -108,6 +112,7 @@ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     neu_py::register(m)?;
     turb_py::register(m)?;
     chem_py::register(m)?;
+    colors_py::register(m)?;
     ionization_py::register(m)?;
     Ok(())
 }

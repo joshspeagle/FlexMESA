@@ -11,18 +11,17 @@ Architecture:
    2nd-order dual-number benchmark kernels, periodic table and nuclide
    catalogs, Anders & Grevesse (1989) + Lodders (2003) solar abundances, and
    10 solar abundance scales (`AG89`..`AAG21`).
-2. **Tier B (`math`, `interp_1d`, `interp_2d`, `neu`, `turb`, `chem`)**:
+2. **Tier B (`math`, `interp_1d`, `interp_2d`, `neu`, `turb`, `chem`,
+   `ionization`, `colors`)**:
    Domain-safe libm intrinsics, 1D Steffen/Huynh monotonic splines, 2D
    PSPLINE/Steffen bicubic surface interpolants, Itoh et al. (1996) 5-channel
    thermal neutrino losses, Cox (1968) / Kuhfuss (1986) convective transport
-   (`MLT` and `TDC`), and differentiable composition moments
-   (`get_composition_info`), with both single-zone scalar entry points and
-   persistent 4-thread `rayon` multi-zone batch evaluators.
+   (`MLT` and `TDC`), differentiable composition moments, ionization tables and
+   diffusion typical charges, and 4D Kurucz + Johnson stellar photometry, with
+   single-zone scalar entry points and persistent `rayon` multi-zone kernels.
 3. **Tier C (`mtx`)**:
-   Coupled block-tridiagonal linear solvers (`solve_block_tridiagonal`
-   sequential block-Thomas, `solve_block_tridiag_bcyclic` Hirshman et al. 2010
-   odd-even cyclic reduction, and `block_multiply_xa` transpose/left-product
-   kernel for reverse-mode Implicit Function Theorem adjoints).
+   Coupled block-tridiagonal linear solvers (`solve_block_tridiagonal`,
+   `solve_block_tridiag_bcyclic`, and `block_multiply_xa`).
 
 All array arguments (`_ArrF64`) expect 1D C-contiguous ``float64`` buffers
 borrowed zero-copy via ``PyReadonlyArray1::as_slice``.
@@ -37,7 +36,10 @@ import numpy.typing as npt
 
 type _ArrF64 = npt.NDArray[np.float64]
 type _ArrI64 = npt.NDArray[np.int64]
+type _ScalarVal = bool | int | float | str
+type _TensorDict = dict[str, _ArrF64 | _ArrI64]
 
+# fmt: off
 # ---------------------------------------------------------------------------
 # Tier A: Infrastructure (`utils`, `testing`, `schema`, `data`, `auto_diff`)
 # ---------------------------------------------------------------------------
@@ -52,53 +54,30 @@ def split_line(line: str, num: int) -> list[str]: ...
 def tokenize(text: str) -> list[tuple[str, str]]: ...
 def is_fortran_float_token(token: str) -> bool: ...
 def parse_fortran_float(token: str) -> float: ...
-
-# Golden baseline parser (`parse_golden_text`), control schema and namelist
-# parsers (`parse_control_value`, `parse_defaults_text`, `parse_columns_text`,
-# `parse_namelist_text`), SHA-256 hex validators and digests, `.safetensors`
-# ASCII table converters, and 2nd-order dual-number benchmark kernels.
 def parse_golden_text(
     text: str,
 ) -> list[tuple[int, str, str, list[int], _ArrF64]]: ...
-def parse_control_value(raw: str) -> tuple[str, bool | int | float | str]: ...
+def parse_control_value(raw: str) -> tuple[str, _ScalarVal]: ...
 def parse_defaults_text(
     text: str,
 ) -> list[
     tuple[
-        str,
-        str,
-        bool | int | float | str,
-        bool,
-        list[tuple[str, bool | int | float | str]],
-        str,
-        str,
-        int,
+        str, str, _ScalarVal, bool, list[tuple[str, _ScalarVal]], str, str, int
     ]
 ]: ...
 def parse_columns_text(text: str) -> list[tuple[str, str, str, int]]: ...
 def parse_namelist_text(
     text: str,
-) -> list[
-    tuple[str, list[tuple[str, str | None, str, bool | int | float | str, int]]]
-]: ...
+) -> list[tuple[str, list[tuple[str, str | None, str, _ScalarVal, int]]]]: ...
 def is_valid_sha256_hex(digest: str) -> bool: ...
 def compute_sha256_bytes(data: bytes) -> str: ...
 def compute_sha256_file(path: str) -> str: ...
-def parse_lodders03_text(
-    text: str,
-) -> tuple[dict[str, _ArrF64 | _ArrI64], dict[str, str]]: ...
-def parse_isotopes_text(
-    text: str,
-) -> tuple[dict[str, _ArrF64 | _ArrI64], dict[str, str]]: ...
+def parse_lodders03_text(text: str) -> tuple[_TensorDict, dict[str, str]]: ...
+def parse_isotopes_text(text: str) -> tuple[_TensorDict, dict[str, str]]: ...
 def parse_helm_table_text(
-    text: str,
-    imax: int,
-    jmax: int,
-    logdlo: float,
-    logdhi: float,
-    logtlo: float,
-    logthi: float,
-) -> tuple[dict[str, _ArrF64 | _ArrI64], dict[str, str]]: ...
+    text: str, imax: int, jmax: int, logdlo: float, logdhi: float,
+    logtlo: float, logthi: float,
+) -> tuple[_TensorDict, dict[str, str]]: ...
 def eval_autodiff_order2_zone(x: float, y: float) -> list[float]: ...
 def eval_autodiff_order2_batch(
     x: _ArrF64, y: _ArrF64, parallel: bool = False
@@ -123,17 +102,11 @@ def cospi(x: float) -> float: ...
 def tanpi(x: float) -> float: ...
 def sgn(x: float) -> float: ...
 def heaviside(x: float) -> float: ...
-
-# 1D C-contiguous NumPy array wrappers for elementary functions (`safe_log`,
-# `safe_log10`, `safe_sqrt`, `exp10`) and whitespace-delimited vector parsing.
 def str_to_vector(text: str) -> _ArrF64: ...
 def safe_log_array(xs: _ArrF64) -> _ArrF64: ...
 def safe_log10_array(xs: _ArrF64) -> _ArrF64: ...
 def safe_sqrt_array(xs: _ArrF64) -> _ArrF64: ...
 def exp10_array(xs: _ArrF64) -> _ArrF64: ...
-
-# 1D Steffen (1990) and Huynh (1993) spline builders (`(nx, 4)` output) and
-# evaluators (`(nq,)` output) over strictly monotonic 1D knot grids.
 def interp_pm(x: _ArrF64, y: _ArrF64) -> _ArrF64: ...
 def interp_m3a(x: _ArrF64, y: _ArrF64) -> _ArrF64: ...
 def interp_m3b(x: _ArrF64, y: _ArrF64) -> _ArrF64: ...
@@ -147,86 +120,40 @@ def interp_values_and_slopes(
 def integrate_values(
     init_x: _ArrF64, coeffs_flat: _ArrF64, x_query: _ArrF64
 ) -> _ArrF64: ...
-
-# 2D PSPLINE C^2 bicubic (`interp_mkbicub_db`, `interp_evbicub_db`,
-# `interp_evbicub_batch`) and Steffen (1990) 2D piecewise-monotonic
-# (`interp_mkbipm_db`, `interp_evbipm_db`) surface interpolation.
 def interp_mkbicub_db(
-    x: _ArrF64,
-    y: _ArrF64,
-    z_flat: _ArrF64,
-    ibcxmin: int,
-    bcxmin: _ArrF64,
-    ibcxmax: int,
-    bcxmax: _ArrF64,
-    ibcymin: int,
-    bcymin: _ArrF64,
-    ibcymax: int,
+    x: _ArrF64, y: _ArrF64, z_flat: _ArrF64, ibcxmin: int, bcxmin: _ArrF64,
+    ibcxmax: int, bcxmax: _ArrF64, ibcymin: int, bcymin: _ArrF64, ibcymax: int,
     bcymax: _ArrF64,
 ) -> tuple[_ArrF64, bool, bool]: ...
 def interp_evbicub_db(
-    xget: float,
-    yget: float,
-    x: _ArrF64,
-    y: _ArrF64,
-    ilinx: bool,
-    iliny: bool,
+    xget: float, yget: float, x: _ArrF64, y: _ArrF64, ilinx: bool, iliny: bool,
     coeffs_flat: _ArrF64,
 ) -> list[float]: ...
 def interp_evbicub_batch(
-    x_q: _ArrF64,
-    y_q: _ArrF64,
-    x: _ArrF64,
-    y: _ArrF64,
-    coeffs_flat: _ArrF64,
+    x_q: _ArrF64, y_q: _ArrF64, x: _ArrF64, y: _ArrF64, coeffs_flat: _ArrF64,
     parallel: bool = False,
 ) -> _ArrF64: ...
 def interp_mkbipm_db(x: _ArrF64, y: _ArrF64, z_flat: _ArrF64) -> _ArrF64: ...
 def interp_evbipm_db(
     xget: float, yget: float, x: _ArrF64, y: _ArrF64, coeffs_flat: _ArrF64
 ) -> float: ...
-
-# Itoh et al. (1996) 5-channel thermal neutrino loss rates (`neu_get`,
-# `neu_get_batch`) and Cox (1968) / Kuhfuss (1986) convective transport
-# (`set_mlt_f64`, `set_mlt_batch`, `set_tdc_batch`).
 def neu_get(
-    t: float | None = None,
-    log10_t: float | None = None,
-    rho: float | None = None,
-    log10_rho: float | None = None,
-    abar: float = 4.0,
-    zbar: float = 2.0,
-    log10_tlim: float = 7.5,
+    t: float | None = None, log10_t: float | None = None,
+    rho: float | None = None, log10_rho: float | None = None, abar: float = 4.0,
+    zbar: float = 2.0, log10_tlim: float = 7.5,
     flags: Sequence[bool] = (True, True, True, True, True),
 ) -> tuple[list[float], list[list[float]]]: ...
 def neu_get_batch(
-    t: _ArrF64,
-    log10_t: _ArrF64,
-    rho: _ArrF64,
-    log10_rho: _ArrF64,
-    abar: _ArrF64,
-    zbar: _ArrF64,
-    log10_tlim: float = 7.5,
+    t: _ArrF64, log10_t: _ArrF64, rho: _ArrF64, log10_rho: _ArrF64,
+    abar: _ArrF64, zbar: _ArrF64, log10_tlim: float = 7.5,
     flags: Sequence[bool] = (True, True, True, True, True),
     parallel: bool = False,
 ) -> _ArrF64: ...
 def set_mlt_f64(
-    option: str,
-    mixing_length_alpha: float,
-    henyey_y_param: float,
-    henyey_nu_param: float,
-    chi_t: float,
-    chi_rho: float,
-    cp: float,
-    grav: float,
-    lambda_mlt: float,
-    rho: float,
-    p: float,
-    t: float,
-    opacity: float,
-    gradr: float,
-    grada: float,
-    gradl: float,
+    option: str, mixing_length_alpha: float, henyey_y_param: float,
+    henyey_nu_param: float, chi_t: float, chi_rho: float, cp: float,
+    grav: float, lambda_mlt: float, rho: float, p: float, t: float,
+    opacity: float, gradr: float, grada: float, gradl: float,
 ) -> tuple[list[float], int]: ...
 def set_mlt_batch(s_frac: _ArrF64, parallel: bool = False) -> _ArrF64: ...
 def set_tdc_batch(s_frac: _ArrF64, parallel: bool = False) -> _ArrF64: ...
@@ -239,35 +166,24 @@ def set_tdc_batch(s_frac: _ArrF64, parallel: bool = False) -> _ArrF64: ...
 # persistent 4-thread `rayon` execution, and left block-tridiagonal product
 # (`block_multiply_xa`) for reverse-mode Implicit Function Theorem adjoints.
 def solve_block_tridiagonal(
-    nvar: int,
-    nz: int,
-    lblk: _ArrF64,
-    dblk: _ArrF64,
-    ublk: _ArrF64,
+    nvar: int, nz: int, lblk: _ArrF64, dblk: _ArrF64, ublk: _ArrF64,
     rhs: _ArrF64,
 ) -> _ArrF64: ...
 def solve_block_tridiag_bcyclic(
-    nvar: int,
-    nz: int,
-    lblk: _ArrF64,
-    dblk: _ArrF64,
-    ublk: _ArrF64,
-    rhs: _ArrF64,
-    parallel: bool = False,
+    nvar: int, nz: int, lblk: _ArrF64, dblk: _ArrF64, ublk: _ArrF64,
+    rhs: _ArrF64, parallel: bool = False,
 ) -> _ArrF64: ...
 def block_multiply_xa(
-    nvar: int,
-    nz: int,
-    lblk: _ArrF64,
-    dblk: _ArrF64,
-    ublk: _ArrF64,
+    nvar: int, nz: int, lblk: _ArrF64, dblk: _ArrF64, ublk: _ArrF64,
     vec_x: _ArrF64,
 ) -> _ArrF64: ...
 
 # ---------------------------------------------------------------------------
 # Wave 2a: Chemical Elements, Nuclides, Solar Scales & Composition (`chem`)
 # ---------------------------------------------------------------------------
-# Tier A: Periodic table ($Z \in [0, 112]$), categories, and partition grid.
+# Periodic table ($Z \in [0, 112]$), 347-nuclide reference catalog, Anders &
+# Grevesse (1989) + Lodders (2003) solar abundances, 10 solar scales, and
+# differentiable composition moments (`get_composition_info`).
 def py_chem_get_element_id(name: str) -> int | None: ...
 def py_chem_element_name(z: int) -> str | None: ...
 def py_chem_element_long_name(z: int) -> str | None: ...
@@ -281,8 +197,6 @@ def py_chem_generate_nuclide_names(
 def py_chem_generate_long_nuclide_names(
     z: Sequence[int], a: Sequence[int]
 ) -> list[str]: ...
-
-# Tier A: Built-in 347-nuclide reference catalog (`isotopes.data`).
 def py_chem_get_nuclide_index(name: str) -> int | None: ...
 def py_chem_nuclide_info(
     chem_id: int,
@@ -290,8 +204,6 @@ def py_chem_nuclide_info(
 def py_chem_species_props(
     chem_ids: Sequence[int],
 ) -> tuple[list[int], list[float], list[float], list[float], list[float]]: ...
-
-# Tier A: Anders & Grevesse (1989) + Lodders (2003) 286-isotope solar catalog.
 def py_chem_ag89_zsol() -> float: ...
 def py_chem_ag89_yesol() -> float: ...
 def py_chem_xsol(name: str) -> float: ...
@@ -301,35 +213,15 @@ def py_chem_ag89_namsol() -> list[str]: ...
 def py_chem_get_stable_mass_frac(
     z: Sequence[int], a: Sequence[int], abun_in: Sequence[float]
 ) -> list[float]: ...
-
-# Tier A: Solar elemental abundance scales (`AG89`..`AAG21`) and `reaction_Q`.
 def py_chem_solar_element_zfrac(scale: str) -> list[float]: ...
 def py_chem_solar_cno_fraction(scale: str) -> float: ...
 def py_chem_m_div_h(x: float, z: float, scale: str) -> float: ...
 def py_chem_reaction_qtotal(
     num_in: int, num_out: int, reactants: Sequence[int]
 ) -> float: ...
-
-# Tier B: Composition moments (`get_composition_info`) and multi-zone kernel.
 def py_chem_get_composition_info(
     chem_ids: Sequence[int], x: Sequence[float], skip_partials: bool
-) -> tuple[
-    tuple[
-        float,
-        float,
-        float,
-        float,
-        float,
-        float,
-        float,
-        float,
-        float,
-        float,
-    ],
-    list[float],
-    list[float],
-    list[float],
-]: ...
+) -> tuple[tuple[float, ...], list[float], list[float], list[float]]: ...
 def py_chem_get_composition_info_zones(
     chem_ids: Sequence[int], x_zones: _ArrF64, parallel: bool = False
 ) -> _ArrF64: ...
@@ -350,21 +242,15 @@ def py_ion_charge_of_fe56_in_he4_zones(
     log10_ne: _ArrF64, log10_t: _ArrF64, parallel: bool = False
 ) -> _ArrF64: ...
 def py_ion_eval_ionization(
-    z: float,
-    x: float,
-    rho: float | None = None,
-    log10_rho: float | None = None,
-    t: float | None = None,
+    z: float, x: float, rho: float | None = None,
+    log10_rho: float | None = None, t: float | None = None,
     log10_t: float | None = None,
 ) -> list[float]: ...
 def py_ion_eval_ionization_dual(
     z: float, x: float, log10_rho: float, log10_t: float
 ) -> tuple[_ArrF64, _ArrF64]: ...
 def py_ion_eval_ionization_zones(
-    z: _ArrF64,
-    x: _ArrF64,
-    log10_rho: _ArrF64,
-    log10_t: _ArrF64,
+    z: _ArrF64, x: _ArrF64, log10_rho: _ArrF64, log10_t: _ArrF64,
     parallel: bool = False,
 ) -> _ArrF64: ...
 def py_ion_chi_info(
@@ -374,11 +260,64 @@ def py_ion_chi_effective(
     chi: float, c0: float, c1: float, c2: float, z1: float, z2: float
 ) -> float: ...
 def py_ion_eval_typical_charge(
-    cid: int,
-    abar: float,
-    free_e: float,
-    t: float,
-    log10_t: float,
-    rho: float,
+    cid: int, abar: float, free_e: float, t: float, log10_t: float, rho: float,
     log10_rho: float,
 ) -> float: ...
+
+# ---------------------------------------------------------------------------
+# Wave 2c: Bolometric & Synthetic Stellar Photometry (`colors`)
+# ---------------------------------------------------------------------------
+# Kurucz2003all 4D SED cube, 7 Johnson filters (`B, I, J, M, R, U, V`),
+# Hermite/Linear/KNN SED interpolation, and 10-column history photometry.
+def py_colors_column_names() -> list[str]: ...
+def py_colors_filter_names() -> list[str]: ...
+def py_colors_filter_curve(
+    idx: int,
+) -> tuple[_ArrF64, _ArrF64, float, float, float]: ...
+def py_colors_builtin_grid() -> tuple[
+    _ArrF64, _ArrF64, _ArrF64, _ArrF64, _ArrI64, _ArrF64, _ArrF64, _ArrF64,
+    _ArrF64, _ArrF64, _ArrF64,
+]: ...
+def py_colors_eval_sed(
+    teff: float, log_g: float, metallicity: float, r: float,
+    d: float = 3.0857e19, method: str = "Hermite",
+) -> tuple[_ArrF64, _ArrF64]: ...
+def py_colors_eval_colors(
+    teff: float, log_g: float, metallicity: float, r: float,
+    d: float = 3.0857e19, mag_system: str = "Vega", method: str = "Hermite",
+) -> _ArrF64: ...
+def py_colors_eval_colors_dual(
+    teff: float, log_g: float, metallicity: float, r: float,
+    d: float = 3.0857e19, mag_system: str = "Vega",
+) -> tuple[_ArrF64, _ArrF64]: ...
+def py_colors_eval_colors_zones(
+    teff: _ArrF64, log_g: _ArrF64, metallicity: _ArrF64, r: _ArrF64,
+    d: float = 3.0857e19, mag_system: str = "Vega", method: str = "Hermite",
+    parallel: bool = True,
+) -> _ArrF64: ...
+def py_colors_simpson_integration(x: _ArrF64, y: _ArrF64) -> float: ...
+def py_colors_trapezoidal_integration(x: _ArrF64, y: _ArrF64) -> float: ...
+def py_colors_dilute_flux(
+    surface_flux: _ArrF64, r: float, d: float
+) -> _ArrF64: ...
+def py_colors_interpolate_array(
+    x_in: _ArrF64, y_in: _ArrF64, x_out: _ArrF64
+) -> _ArrF64: ...
+def py_colors_calculate_bolometric_phot(
+    wavelengths: _ArrF64, fluxes: _ArrF64
+) -> tuple[float, float]: ...
+def py_colors_calculate_synthetic(
+    wavelengths: _ArrF64, fluxes: _ArrF64, filter_wavelengths: _ArrF64,
+    filter_trans: _ArrF64, zero_point_flux: float,
+) -> float: ...
+def py_colors_compute_vega_zero_point(
+    vega_wave: _ArrF64, vega_flux: _ArrF64, filt_wave: _ArrF64,
+    filt_trans: _ArrF64,
+) -> float: ...
+def py_colors_compute_ab_zero_point(
+    filt_wave: _ArrF64, filt_trans: _ArrF64
+) -> float: ...
+def py_colors_compute_st_zero_point(
+    filt_wave: _ArrF64, filt_trans: _ArrF64
+) -> float: ...
+# fmt: on

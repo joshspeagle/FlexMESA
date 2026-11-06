@@ -1,0 +1,17 @@
+[package]
+name = "flexmesa-colors"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Safe Rust bolometric and synthetic photometry for FlexMESA."
+
+[dependencies]
+flexmesa-autodiff = { path = "../flexmesa-autodiff" }
+flexmesa-const = { path = "../flexmesa-const" }
+flexmesa-math = { path = "../flexmesa-math" }
+rayon.workspace = true
+
+[lints]
+workspace = true

@@ -141,14 +141,22 @@ fn neu_get_batch<'py>(
         ));
     }
     let flg = flags_from_arr(flags);
-    eval_batch_2d(py, nz, parallel, 64, |k| {
+    let (tv, ltv, rv, lrv, av, zv) = (
+        ts.to_vec(),
+        lts.to_vec(),
+        rhos.to_vec(),
+        lrhos.to_vec(),
+        as_.to_vec(),
+        zs.to_vec(),
+    );
+    eval_batch_2d(py, nz, parallel, 64, move |k| {
         rust_neu_get(
-            Some(ts[k]),
-            Some(lts[k]),
-            Some(rhos[k]),
-            Some(lrhos[k]),
-            as_[k],
-            zs[k],
+            Some(tv[k]),
+            Some(ltv[k]),
+            Some(rv[k]),
+            Some(lrv[k]),
+            av[k],
+            zv[k],
             log10_tlim,
             flg,
         )

@@ -106,6 +106,7 @@
 | **Wave 0** | Infrastructure: `schema` (TOML/JSON namelists), `data` (`.safetensors` + SHA-256), `testing` (`test_output` parser) | **Complete** | 100% golden parser & binary table roundtrip tests |
 | **Wave 1** | Foundation & First Microphysics: `const`, `utils`, `math`, `auto_diff`, `interp_1d`, `interp_2d`, `mtx`, `num`, `neu`, `turb` | **Complete** | 16-digit parity with upstream `<pkg>/test/test_output` |
 | **Wave 1.5** | Three-Tier Hybrid Consolidation, `PyO3` Zero-Copy Bridge, `bcyclic` & JAX PCR Solvers, 4-Way Fortran Benchmarks & Docs | **Complete** | 18/18 4-way Fortran MESA parity & performance gates passed |
-| **Wave 2** | Atomic & Photometric Microphysics: `chem` (`lodders03`, `gs98`, `asplund09` + 5095 nuclides), `ionization`, `colors` | **Next** | Upstream `<pkg>/test/test_output` + Wave 2.5 Fortran benchmark gate |
-| **Wave 3a/3b** | Core Thermodynamic, Opacity, Nuclear & Atmospheric Engines: `rates`, `net`, `eos`, `kap`, `atm` | Planned | Upstream `<pkg>/test/test_output` + Wave 3.5 Fortran benchmark gates |
+| **Wave 2** | Atomic & Photometric Microphysics: `chem` (`lodders03`, `gs98`, `asplund09` + 5095 nuclides), `ionization`, `colors` | **Complete** | 16-digit parity with upstream `<pkg>/test/test_output` |
+| **Wave 2.5** | Pre-Validated Bicubic Spline Fast Path, Adaptive Spin-Then-Park Worker Team, Precomputed Simpson & 32-Gather Hermite SED Synthesis | **Complete** | 12/12 4-way Fortran MESA parity & performance gates passed |
+| **Wave 3a/3b** | Core Thermodynamic, Opacity, Nuclear & Atmospheric Engines: `rates`, `net`, `eos`, `kap`, `atm` | **Next** | Upstream `<pkg>/test/test_output` + Wave 3.5 Fortran benchmark gates |
 | **Wave 4–5** | 1D Hydrostatic/Hydrodynamic Stellar Evolution (`star`), Non-Adiabatic Pulsations (`gyre`), Binary Evolution (`binary`), Asteroseismology (`astero`) | Planned | Full evolutionary track & eigenfrequency parity |

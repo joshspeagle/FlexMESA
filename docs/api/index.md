@@ -1,6 +1,6 @@
 # Python, PyO3 & JAX API Reference
 
-This page provides the auto-generated API reference for `flexmesa` across all Wave 0, Wave 1, and Wave 1.5 packages. Safe Rust crate documentation (`crates/flexmesa-*`) is built via `cargo doc --workspace --no-deps` and published at `/rustdoc/` in the GitHub Pages deployment.
+This page provides the auto-generated API reference for `flexmesa` across all Wave 0, Wave 1, Wave 1.5, Wave 2, and Wave 2.5 packages. Safe Rust crate documentation (`crates/flexmesa-*`) is built via `cargo doc --workspace --no-deps` and published at `/rustdoc/` in the GitHub Pages deployment.
 
 ---
 
@@ -60,13 +60,22 @@ This page provides the auto-generated API reference for `flexmesa` across all Wa
 
 ---
 
-## Wave 1 Microphysics (`neu`, `turb`) & Benchmarks (`bench`)
+## Wave 1 & Wave 2 Microphysics (`neu`, `turb`, `chem`, `ionization`, `colors`) & Benchmarks (`bench`)
 
 ### `flexmesa.neu`
 ::: flexmesa.neu
 
 ### `flexmesa.turb`
 ::: flexmesa.turb
+
+### `flexmesa.chem`
+::: flexmesa.chem
+
+### `flexmesa.ionization`
+::: flexmesa.ionization
+
+### `flexmesa.colors`
+::: flexmesa.colors
 
 ### `flexmesa.bench`
 ::: flexmesa.bench

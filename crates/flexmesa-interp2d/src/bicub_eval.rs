@@ -71,28 +71,54 @@ pub fn herm2xy_db(
     }
     splinck_db(x, 1.0e-3, "x")?;
     splinck_db(y, 1.0e-3, "y")?;
-    let mut zxget = xget;
-    if xget < x[0] || xget > x[nx - 1] {
-        let zxtol = 4.0e-7 * x[0].abs().max(x[nx - 1].abs());
-        if xget < x[0] - zxtol || xget > x[nx - 1] + zxtol {
+    herm2xy_prevalidated_db(xget, yget, x, y, ilinx, iliny)
+}
+
+/// Clamps `val` to `[axis[0], axis[n - 1]]` within relative tolerance `4e-7`,
+/// or returns [`Interp2dError::OutOfRange`] if outside that tolerance.
+#[inline]
+fn clamp_axis_query(
+    val: f64,
+    axis: &[f64],
+    axis_name: &'static str,
+) -> Result<f64, Interp2dError> {
+    let n = axis.len();
+    if val < axis[0] || val > axis[n - 1] {
+        let tol = 4.0e-7 * axis[0].abs().max(axis[n - 1].abs());
+        if val < axis[0] - tol || val > axis[n - 1] + tol {
             return Err(Interp2dError::OutOfRange {
-                axis: "x",
-                value: xget,
+                axis: axis_name,
+                value: val,
             });
         }
-        zxget = xget.clamp(x[0], x[nx - 1]);
+        return Ok(val.clamp(axis[0], axis[n - 1]));
     }
-    let mut zyget = yget;
-    if yget < y[0] || yget > y[ny - 1] {
-        let zytol = 4.0e-7 * y[0].abs().max(y[ny - 1].abs());
-        if yget < y[0] - zytol || yget > y[ny - 1] + zytol {
-            return Err(Interp2dError::OutOfRange {
-                axis: "y",
-                value: yget,
-            });
-        }
-        zyget = yget.clamp(y[0], y[ny - 1]);
+    Ok(val)
+}
+
+/// Locates the grid cell `(i, j)` and normalized local coordinates
+/// `(xparam, yparam, hx, hxi, hy, hyi)` for query `(xget, yget)` on a
+/// pre-validated strictly ascending `(x, y)` grid (`nx >= 2`, `ny >= 2`).
+///
+/// # Errors
+///
+/// Returns [`Interp2dError`] if `(xget, yget)` is non-finite or lies outside
+/// `[x[0], x[nx - 1]]` or `[y[0], y[ny - 1]]` beyond relative tolerance
+/// $4 \times 10^{-7}$.
+#[inline]
+pub fn herm2xy_prevalidated_db(
+    xget: f64,
+    yget: f64,
+    x: &[f64],
+    y: &[f64],
+    ilinx: bool,
+    iliny: bool,
+) -> Result<(usize, usize, f64, f64, f64, f64, f64, f64), Interp2dError> {
+    if is_bad(xget) || is_bad(yget) {
+        return Err(Interp2dError::NonFiniteInput);
     }
+    let zxget = clamp_axis_query(xget, x, "x")?;
+    let zyget = clamp_axis_query(yget, y, "y")?;
 
     let i = locate_axis_cell(x, zxget, ilinx);
     let j = locate_axis_cell(y, zyget, iliny);
@@ -182,8 +208,34 @@ pub fn interp_evbicub_db(
     if coeffs.iter().any(|c| c.iter().any(|&v| is_bad(v))) {
         return Err(Interp2dError::NonFiniteInput);
     }
+    splinck_db(x, 1.0e-3, "x")?;
+    splinck_db(y, 1.0e-3, "y")?;
+    interp_evbicub_prevalidated_db(xget, yget, x, y, ilinx, iliny, coeffs)
+}
+
+/// Evaluates the 2D bicubic spline value and all first and second partial
+/// derivatives at `(xget, yget)` on a pre-validated spline table (`x`, `y`,
+/// and `coeffs` already checked by [`crate::interp_mkbicub_db`]).
+///
+/// Validates that `(xget, yget)` is finite and within the grid domain (with
+/// $4 \times 10^{-7}$ boundary clamping tolerance), without re-scanning the
+/// entire `x`, `y`, and `coeffs` arrays on every query.
+///
+/// # Errors
+///
+/// Returns [`Interp2dError`] if `(xget, yget)` is non-finite or out of range.
+pub fn interp_evbicub_prevalidated_db(
+    xget: f64,
+    yget: f64,
+    x: &[f64],
+    y: &[f64],
+    ilinx: bool,
+    iliny: bool,
+    coeffs: &[[f64; 4]],
+) -> Result<BicubicEval, Interp2dError> {
+    let ny = y.len();
     let (i, j, xp, yp, hx, hxi, hy, hyi) =
-        herm2xy_db(xget, yget, x, y, ilinx, iliny)?;
+        herm2xy_prevalidated_db(xget, yget, x, y, ilinx, iliny)?;
 
     let sixth = 1.0_f64 / 6.0;
     let z36th = sixth * sixth;

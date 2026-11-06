@@ -203,8 +203,9 @@ fn set_mlt_batch<'py>(
 ) -> PyResult<Bound<'py, PyArray2<f64>>> {
     let sf = s_frac
         .as_slice()
-        .map_err(|_| PyValueError::new_err("s_frac must be C-contiguous"))?;
-    eval_batch_2d(py, sf.len(), parallel, 64, |k| eval_mlt_zone(sf[k]))
+        .map_err(|_| PyValueError::new_err("s_frac must be C-contiguous"))?
+        .to_vec();
+    eval_batch_2d(py, sf.len(), parallel, 64, move |k| eval_mlt_zone(sf[k]))
 }
 
 /// Evaluates Kuhfuss (1986) TDC with `DualOrder1<6>` sensitivities across
@@ -221,8 +222,9 @@ fn set_tdc_batch<'py>(
 ) -> PyResult<Bound<'py, PyArray2<f64>>> {
     let sf = s_frac
         .as_slice()
-        .map_err(|_| PyValueError::new_err("s_frac must be C-contiguous"))?;
-    eval_batch_2d(py, sf.len(), parallel, 32, |k| eval_tdc_zone(sf[k]))
+        .map_err(|_| PyValueError::new_err("s_frac must be C-contiguous"))?
+        .to_vec();
+    eval_batch_2d(py, sf.len(), parallel, 32, move |k| eval_tdc_zone(sf[k]))
 }
 
 /// Registers Tier B `turb` functions on `m`.

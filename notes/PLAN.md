@@ -7,8 +7,10 @@
   - **Wave 1 (`Foundational Numerics + Stateless Microphysics Pilot`)** ([Issue #13](https://github.com/joshspeagle/FlexMESA/issues/13), PRs [#20](https://github.com/joshspeagle/FlexMESA/pull/20)–[#25](https://github.com/joshspeagle/FlexMESA/pull/25))
   - **Post-Wave 1 Four-Way Fortran MESA Benchmark Synthesis & Architecture Gate** ([Issue #26](https://github.com/joshspeagle/FlexMESA/issues/26), PR [#27](https://github.com/joshspeagle/FlexMESA/pull/27))
   - **Wave 1.5 (`Three-Tier Hybrid Integration, Wave 1 Revision & Public Documentation Website`)** ([Issue #28](https://github.com/joshspeagle/FlexMESA/issues/28), Sub-Issues [#29](https://github.com/joshspeagle/FlexMESA/issues/29)–[#32](https://github.com/joshspeagle/FlexMESA/issues/32), PRs [#33](https://github.com/joshspeagle/FlexMESA/pull/33)–[#36](https://github.com/joshspeagle/FlexMESA/pull/36))
+  - **Wave 2 (`Atomic & Post-Processing Microphysics: chem, ionization, colors`)** ([Issue #37](https://github.com/joshspeagle/FlexMESA/issues/37), Sub-Issues [#38](https://github.com/joshspeagle/FlexMESA/issues/38)–[#40](https://github.com/joshspeagle/FlexMESA/issues/40), PRs [#42](https://github.com/joshspeagle/FlexMESA/pull/42), [#43](https://github.com/joshspeagle/FlexMESA/pull/43), [#45](https://github.com/joshspeagle/FlexMESA/pull/45))
+  - **Wave 2.5 (`Post-Wave 2 Review, Optimization, Upstream Fortran MESA Gate & Docs Sync`)** ([Issue #41](https://github.com/joshspeagle/FlexMESA/issues/41))
 - **Active Phase**:
-  - **Wave 2 (`Atomic & Post-Processing Microphysics: chem, ionization, colors`)**
+  - **Wave 3a (`Analytical & Single-Table EOS Core: Ideal, HELM, PC, Skye & Quintic Blending`)**
 - **Completed Architectural Decisions (`notes/DECISIONS.md`)**:
   - `DECISIONS #1`: Dual-Track (`Safe Rust` + `Python/JAX`) evaluation across Wave 1 (`const`, `utils`, `math`, `auto_diff`, `interp_1d`, `interp_2d`, `mtx`, `num`) + stateless microphysics pilot (`neu`, `turb`).
   - `DECISIONS #2`: Legacy and external subsystem scope exclusions (`pgstar`/`pgbinary` `#3`, `stella`/`adipls`/`gyre` `#4`, and legacy `RSP1` `#5`).

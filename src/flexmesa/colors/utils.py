@@ -82,20 +82,19 @@ def get_builtin_colors_grid() -> ColorsBuiltinGrid:
         a_zp,
         s_zp,
     ) = _rust.py_colors_builtin_grid()
-    with jax.ensure_compile_time_eval():
-        return ColorsBuiltinGrid(
-            teff_grid=jnp.asarray(t_g, dtype=jnp.float64),
-            logg_grid=jnp.asarray(g_g, dtype=jnp.float64),
-            meta_grid=jnp.asarray(m_g, dtype=jnp.float64),
-            wavelengths=jnp.asarray(wav, dtype=jnp.float64),
-            slot_map=jnp.asarray(s_map, dtype=jnp.int64),
-            sed_table=jnp.asarray(s_tbl, dtype=jnp.float64),
-            filters_on_sed_grid=jnp.asarray(f_grid, dtype=jnp.float64),
-            filter_norm_integrals=jnp.asarray(f_norm, dtype=jnp.float64),
-            vega_zp=jnp.asarray(v_zp, dtype=jnp.float64),
-            ab_zp=jnp.asarray(a_zp, dtype=jnp.float64),
-            st_zp=jnp.asarray(s_zp, dtype=jnp.float64),
-        )
+    return ColorsBuiltinGrid(
+        teff_grid=jnp.asarray(t_g, dtype=jnp.float64),
+        logg_grid=jnp.asarray(g_g, dtype=jnp.float64),
+        meta_grid=jnp.asarray(m_g, dtype=jnp.float64),
+        wavelengths=jnp.asarray(wav, dtype=jnp.float64),
+        slot_map=jnp.asarray(s_map, dtype=jnp.int64),
+        sed_table=jnp.asarray(s_tbl, dtype=jnp.float64),
+        filters_on_sed_grid=jnp.asarray(f_grid, dtype=jnp.float64),
+        filter_norm_integrals=jnp.asarray(f_norm, dtype=jnp.float64),
+        vega_zp=jnp.asarray(v_zp, dtype=jnp.float64),
+        ab_zp=jnp.asarray(a_zp, dtype=jnp.float64),
+        st_zp=jnp.asarray(s_zp, dtype=jnp.float64),
+    )
 
 
 def remove_dat(path: str) -> str:

@@ -47,7 +47,53 @@ def _parse_mag_and_method_ids(mag_system: str, method: str) -> tuple[int, int]:
     return m_id, t_id
 
 
-@functools.partial(jax.jit, static_argnames=("mag_system_id", "method_id"))
+def _eval_colors_with_grid(
+    teff: jax.Array | float,
+    log_g: jax.Array | float,
+    metallicity: jax.Array | float,
+    r: jax.Array | float,
+    d: jax.Array | float,
+    grid: utils.ColorsBuiltinGrid,
+    mag_system_id: int = 0,
+    method_id: int = 0,
+) -> jax.Array:
+    """Evaluate 10-column ``colors`` history vector given explicit ``grid``."""
+    if method_id == 0:
+        fluxes = sed._eval_sed_hermite_with_grid(
+            teff, log_g, metallicity, r, d, grid
+        )
+    elif method_id == 1:
+        fluxes = sed.eval_sed_linear_jax(teff, log_g, metallicity, r, d)
+    else:
+        fluxes = sed.eval_sed_knn_jax(teff, log_g, metallicity, r, d)
+
+    w = grid.wavelengths
+    cleaned = synthetic.clean_sed_fluxes_jax(w, fluxes)
+    bol_flux = utils.simpson_integration_jax(w, cleaned)
+    bol_mag = jnp.asarray(
+        synthetic.flux_to_magnitude(bol_flux), dtype=jnp.float64
+    )
+    interp_rad = sed._compute_interp_radius_with_grid(
+        grid, teff, log_g, metallicity
+    )
+    zps = (grid.vega_zp, grid.ab_zp, grid.st_zp)[mag_system_id]
+
+    weighted = (cleaned * grid.filters_on_sed_grid) * w
+    int_f = utils.simpson_integration_jax(w, weighted)
+    syn_f = int_f / grid.filter_norm_integrals
+    mags = -2.5 * jnp.log10(syn_f / zps)
+
+    return jnp.concatenate(
+        [jnp.stack([bol_mag, bol_flux, interp_rad], axis=0), mags],
+        axis=0,
+    )
+
+
+_eval_colors_single_jit = jax.jit(
+    _eval_colors_with_grid, static_argnames=("mag_system_id", "method_id")
+)
+
+
 def eval_colors_jax(
     teff: jax.Array | float,
     log_g: jax.Array | float,
@@ -72,37 +118,15 @@ def eval_colors_jax(
         1D array of shape ``(10,)`` containing
         ``[Mag_bol, Flux_bol, Interp_rad, B, I, J, M, R, U, V]``.
     """
-    grid = utils.get_builtin_colors_grid()
-    if method_id == 0:
-        fluxes = sed.eval_sed_hermite_jax(teff, log_g, metallicity, r, d)
-    elif method_id == 1:
-        fluxes = sed.eval_sed_linear_jax(teff, log_g, metallicity, r, d)
-    else:
-        fluxes = sed.eval_sed_knn_jax(teff, log_g, metallicity, r, d)
-
-    w = grid.wavelengths
-    cleaned = synthetic.clean_sed_fluxes_jax(w, fluxes)
-    bol_flux = utils.simpson_integration_jax(w, cleaned)
-    bol_mag = jnp.asarray(
-        synthetic.flux_to_magnitude(bol_flux), dtype=jnp.float64
-    )
-    interp_rad = sed.compute_interp_radius_jax(teff, log_g, metallicity)
-
-    if mag_system_id == 0:
-        zps = grid.vega_zp
-    elif mag_system_id == 1:
-        zps = grid.ab_zp
-    else:
-        zps = grid.st_zp
-
-    weighted = (cleaned * grid.filters_on_sed_grid) * w
-    int_f = utils.simpson_integration_jax(w, weighted)
-    syn_f = int_f / grid.filter_norm_integrals
-    mags = -2.5 * jnp.log10(syn_f / zps)
-
-    return jnp.concatenate(
-        [jnp.stack([bol_mag, bol_flux, interp_rad], axis=0), mags],
-        axis=0,
+    return _eval_colors_single_jit(
+        teff,
+        log_g,
+        metallicity,
+        r,
+        d,
+        utils.get_builtin_colors_grid(),
+        mag_system_id,
+        method_id,
     )
 
 
@@ -218,6 +242,24 @@ def eval_colors_dual(
 
 
 @functools.partial(jax.jit, static_argnames=("mag_system_id", "method_id"))
+def _eval_colors_zones_with_grid_jax(
+    teff: jax.Array,
+    log_g: jax.Array,
+    metallicity: jax.Array,
+    r: jax.Array,
+    d: jax.Array,
+    grid: utils.ColorsBuiltinGrid,
+    mag_system_id: int,
+    method_id: int,
+) -> jax.Array:
+    """JIT-compiled ``vmap`` multi-zone evaluator with explicit ``grid``."""
+    return jax.vmap(
+        lambda t_i, g_i, m_i, r_i: _eval_colors_with_grid(
+            t_i, g_i, m_i, r_i, d, grid, mag_system_id, method_id
+        )
+    )(teff, log_g, metallicity, r)
+
+
 def _eval_colors_zones_jax(
     teff: jax.Array,
     log_g: jax.Array,
@@ -228,11 +270,16 @@ def _eval_colors_zones_jax(
     method_id: int,
 ) -> jax.Array:
     """JIT-compiled ``vmap`` multi-zone evaluator in JAX ``float64``."""
-    return jax.vmap(
-        lambda t_i, g_i, m_i, r_i: eval_colors_jax(
-            t_i, g_i, m_i, r_i, d, mag_system_id, method_id
-        )
-    )(teff, log_g, metallicity, r)
+    return _eval_colors_zones_with_grid_jax(
+        teff,
+        log_g,
+        metallicity,
+        r,
+        d,
+        utils.get_builtin_colors_grid(),
+        mag_system_id,
+        method_id,
+    )
 
 
 def eval_colors_zones(

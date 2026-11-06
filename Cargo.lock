@@ -169,9 +169,12 @@ name = "flexmesa-bench"
 version = "0.1.0"
 dependencies = [
  "flexmesa-autodiff",
+ "flexmesa-chem",
+ "flexmesa-colors",
  "flexmesa-const",
  "flexmesa-interp1d",
  "flexmesa-interp2d",
+ "flexmesa-ionization",
  "flexmesa-math",
  "flexmesa-mtx",
  "flexmesa-neu",

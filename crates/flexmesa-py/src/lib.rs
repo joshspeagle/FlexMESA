@@ -64,15 +64,86 @@ pub mod tier_a_parse;
 #[allow(unsafe_code)]
 pub mod turb_py;
 
-use flexmesa_bench::stage3_pool;
+use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
+use std::thread::{self, Thread};
+
 use numpy::{PyArray1, PyArray2, PyArrayMethods};
 use pyo3::prelude::*;
-use rayon::prelude::*;
+
+const STATE_IDLE: u8 = 0;
+const STATE_READY: u8 = 1;
+const STATE_PARKED: u8 = 2;
+const SPIN_LIMIT: u32 = 200_000;
+
+/// Single persistent worker thread slot with adaptive spin-then-park wakeup.
+struct WorkerSlot {
+    state: AtomicU8,
+    task: Mutex<Option<Box<dyn FnOnce() + Send>>>,
+    thread: OnceLock<Thread>,
+}
+
+/// Returns the 3 persistent background worker slots (forming a 4-thread team
+/// together with the calling thread).
+fn worker_slots() -> &'static [Arc<WorkerSlot>; 3] {
+    static SLOTS: OnceLock<[Arc<WorkerSlot>; 3]> = OnceLock::new();
+    SLOTS.get_or_init(|| {
+        std::array::from_fn(|_| {
+            let slot = Arc::new(WorkerSlot {
+                state: AtomicU8::new(STATE_IDLE),
+                task: Mutex::new(None),
+                thread: OnceLock::new(),
+            });
+            let slot_c = Arc::clone(&slot);
+            let handle = thread::spawn(move || {
+                let mut spins = 0_u32;
+                loop {
+                    if slot_c.state.load(Ordering::Acquire) == STATE_READY {
+                        slot_c.state.store(STATE_IDLE, Ordering::Relaxed);
+                        let job = slot_c.task.lock().unwrap().take();
+                        if let Some(f) = job {
+                            f();
+                        }
+                        spins = 0;
+                    } else if spins < SPIN_LIMIT {
+                        spins += 1;
+                        std::hint::spin_loop();
+                    } else if slot_c
+                        .state
+                        .compare_exchange(
+                            STATE_IDLE,
+                            STATE_PARKED,
+                            Ordering::AcqRel,
+                            Ordering::Acquire,
+                        )
+                        .is_ok()
+                    {
+                        while slot_c.state.load(Ordering::Acquire)
+                            == STATE_PARKED
+                        {
+                            thread::park();
+                        }
+                        spins = 0;
+                    }
+                }
+            });
+            let _ = slot.thread.set(handle.thread().clone());
+            slot
+        })
+    })
+}
+
+/// Returns the global mutex serializing access to `worker_slots()`.
+fn team_dispatch_lock() -> &'static Mutex<()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(()))
+}
 
 /// Evaluates `eval_zone(k)` across `nz` zones into a `(nz, W)` `f64` array.
 ///
-/// Dispatches across the persistent 4-thread `rayon` worker pool when
-/// `parallel == true` and `nz >= min_par`, and executes sequentially otherwise.
+/// Dispatches across the persistent 4-thread adaptive spin-then-park worker
+/// team when `parallel == true` and `nz >= min_par`, and executes sequentially
+/// otherwise.
 pub(crate) fn eval_batch_2d<'py, const W: usize, F>(
     py: Python<'py>,
     nz: usize,
@@ -81,15 +152,66 @@ pub(crate) fn eval_batch_2d<'py, const W: usize, F>(
     eval_zone: F,
 ) -> PyResult<Bound<'py, PyArray2<f64>>>
 where
-    F: Fn(usize) -> [f64; W] + Sync,
+    F: Fn(usize) -> [f64; W] + Send + Sync + 'static,
 {
     let mut out = vec![0.0_f64; nz * W];
     let (rows, _) = out.as_chunks_mut::<W>();
     if parallel && nz >= min_par {
-        stage3_pool().install(|| {
-            rows.par_iter_mut().enumerate().for_each(|(k, dst)| {
-                *dst = eval_zone(k);
-            });
+        let eval_arc = Arc::new(eval_zone);
+        let slots = worker_slots();
+        py.detach(|| {
+            let Ok(_guard) = team_dispatch_lock().try_lock() else {
+                for (k, dst) in rows.iter_mut().enumerate() {
+                    *dst = eval_arc(k);
+                }
+                return;
+            };
+            let chunk_z = nz.div_ceil(4).max(1);
+            let done = Arc::new(AtomicUsize::new(0));
+            let mut results: [Option<Arc<Mutex<Vec<[f64; W]>>>>; 3] =
+                [None, None, None];
+            let mut active = 0_usize;
+            for (w, slot_ref) in slots.iter().enumerate() {
+                let z0 = (w + 1) * chunk_z;
+                if z0 >= nz {
+                    break;
+                }
+                let z1 = (z0 + chunk_z).min(nz);
+                let res_buf = Arc::new(Mutex::new(Vec::new()));
+                results[w] = Some(Arc::clone(&res_buf));
+                let eval_w = Arc::clone(&eval_arc);
+                let done_w = Arc::clone(&done);
+                *slot_ref.task.lock().unwrap() = Some(Box::new(move || {
+                    let mut local = Vec::with_capacity(z1 - z0);
+                    for k in z0..z1 {
+                        local.push(eval_w(k));
+                    }
+                    *res_buf.lock().unwrap() = local;
+                    done_w.fetch_add(1, Ordering::Release);
+                }));
+                if slot_ref.state.swap(STATE_READY, Ordering::AcqRel)
+                    == STATE_PARKED
+                {
+                    if let Some(th) = slot_ref.thread.get() {
+                        th.unpark();
+                    }
+                }
+                active += 1;
+            }
+            let z0_end = chunk_z.min(nz);
+            for (k, dst) in rows[..z0_end].iter_mut().enumerate() {
+                *dst = eval_arc(k);
+            }
+            while done.load(Ordering::Acquire) < active {
+                std::hint::spin_loop();
+            }
+            for (w, res_opt) in results.into_iter().enumerate() {
+                if let Some(res_arc) = res_opt {
+                    let z0 = (w + 1) * chunk_z;
+                    let local = res_arc.lock().unwrap();
+                    rows[z0..z0 + local.len()].copy_from_slice(&local);
+                }
+            }
         });
     } else {
         for (k, dst) in rows.iter_mut().enumerate() {

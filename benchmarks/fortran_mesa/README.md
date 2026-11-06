@@ -1,10 +1,11 @@
-# Upstream Fortran MESA Wave 1 Benchmark Suite
+# Upstream Fortran MESA Benchmark Suite (`Wave 1` & `Wave 2`)
 
 This directory contains the native Fortran 2008 benchmark harness comparing
 upstream Fortran MESA (`gfortran -O2 -fopenmp`) directly against the Safe Rust
 (`crates/flexmesa-bench`) and Python/NumPy/JAX (`src/flexmesa/bench`) Wave 1
-implementations across identical thermodynamic profiles, spline grids,
-block-tridiagonal Henyey matrices, and convective transport states.
+and Wave 2 implementations across identical thermodynamic profiles, spline
+grids, block-tridiagonal Henyey matrices, convective transport states, nuclear
+abundance profiles, ionization grids, and stellar atmosphere SED cubes.
 
 ## Workloads and Four-Stage Ladder
 
@@ -12,6 +13,8 @@ Every workload is evaluated across radial shell counts
 $N_{\mathrm{zones}} \in \{128, 1024, 4096\}$ and verified at
 $N_{\mathrm{zones}} \in \{8, 32\}$ against the pinned cross-language reference
 checksums:
+
+### Wave 1 Workloads (`run_wave1_bench`)
 
 1. `auto_diff`: Two-variable second-order forward-mode hyperdual evaluation
    (`auto_diff_real_2var_order2`) vs. fused analytical evaluation and 4-thread
@@ -32,13 +35,29 @@ checksums:
 6. `turb_tdc`: Kuhfuss (1986) 1D Time-Dependent Convection (`set_TDC`) using
    `auto_diff_real_star_order1` across 1 and 4 OpenMP threads.
 
+### Wave 2 Workloads (`run_wave2_bench`)
+
+1. `chem_comp`: 8-isotope (`h1`, `he3`, `he4`, `c12`, `n14`, `o16`, `ne20`,
+   `mg24`) composition moment reduction (`basic_composition_info` vs. hoisted
+   species properties and 4-thread OpenMP).
+2. `ion_fe56`: Potekhin ${}^{56}\mathrm{Fe}$-in-${}^4\mathrm{He}$ effective
+   charge interpolation on the $105 \times 30$ Thomas-Fermi-Dirac-Hubbard grid
+   (`eval_charge_of_Fe56_in_He4` and direct `interp_evbicub_db` with partials).
+3. `ion_4d`: 28-channel 4D $(Z, X, \log_{10}\rho, \log_{10}T)$
+   trilinear-over-bicubic mean ionic charge evaluation (`eval_ionization`).
+4. `colors_sed`: 3D `Kurucz2003all` cubic Hermite SED synthesis (`1199`
+   wavelengths) plus bolometric integration and 7-band `Generic/Johnson` (`B, I,
+   J, M, R, U, V`) Vega synthetic photometry.
+
 ## Building and Running
 
 Prerequisite: a compiled MESA checkout with `libconst.a`, `libutils.a`,
 `libmath.a`, `libauto_diff.a`, `libinterp_1d.a`, `libinterp_2d.a`, `libmtx.a`,
-`libnum.a`, `libchem.a`, `libneu.a`, and `libturb.a` installed under
-`$(MESA_DIR)/lib` and `.mod` files under `$(MESA_DIR)/include`.
+`libnum.a`, `libchem.a`, `libneu.a`, `libturb.a`, `libionization.a`, and
+`libcolors.a` installed under `$(MESA_DIR)/lib` and `.mod` files under
+`$(MESA_DIR)/include`.
 
 ```bash
 make -C benchmarks/fortran_mesa MESA_DIR=/path/to/mesa run
+make -C benchmarks/fortran_mesa MESA_DIR=/path/to/mesa run_wave2
 ```

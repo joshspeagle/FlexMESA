@@ -269,6 +269,20 @@ impl SedCube {
             &self.logg_grid,
             &self.meta_grid,
         );
+        if self.wavelengths.len() == 1199 {
+            let mut sed_buf = [T::zero(); 1199];
+            self.eval_sed_hermite_into(
+                teff,
+                log_g,
+                metallicity,
+                r,
+                d,
+                &mut sed_buf,
+            );
+            return self.colors_from_sed_generic(
+                &sed_buf, interp_rad, mag_system,
+            );
+        }
         let fluxes =
             self.eval_sed_hermite_generic(teff, log_g, metallicity, r, d);
         self.colors_from_sed_generic(&fluxes, interp_rad, mag_system)
@@ -289,6 +303,12 @@ impl SedCube {
         mag_system: MagSystem,
         method: SedInterpMethod,
     ) -> Result<[f64; NUM_COLORS_OUT], ColorsError> {
+        // Fast-path stack-allocated Hermite SED evaluation when requested.
+        if method == SedInterpMethod::Hermite {
+            return self.eval_colors_generic(
+                teff, log_g, metallicity, r, d, mag_system,
+            );
+        }
         let interp_rad = compute_interp_radius(
             teff,
             log_g,
@@ -321,29 +341,26 @@ impl SedCube {
 
         let mut bol_flux = T::zero();
         let mut int_flux = [T::zero(); NUM_JOHNSON_FILTERS];
-        let mut i = 0usize;
-        while i + 2 < n {
-            let h1 = w[i + 1] - w[i];
-            let h2 = w[i + 2] - w[i + 1];
-            let h12 = h1 + h2;
-            let w_outer = h12 / 6.0;
-            let c0 = T::from_f64(w_outer * (2.0 * h1 - h2) / h1);
-            let c1 = T::from_f64(w_outer * (h12 * h12) / (h1 * h2));
-            let c2 = T::from_f64(w_outer * (2.0 * h2 - h1) / h2);
-
+        // Accumulate bolometric and photon-weighted filter integrals in one
+        // fused pass over all precomputed non-uniform Simpson panels.
+        for (p, &[c0_f, c1_f, c2_f]) in
+            self.simpson_panels.iter().enumerate()
+        {
+            let i = 2 * p;
+            let (c0, c1, c2) =
+                (T::from_f64(c0_f), T::from_f64(c1_f), T::from_f64(c2_f));
             let f0 = cleaned_flux_at(w, fluxes, i);
             let f1 = cleaned_flux_at(w, fluxes, i + 1);
             let f2 = cleaned_flux_at(w, fluxes, i + 2);
             bol_flux = bol_flux + f0 * c0 + f1 * c1 + f2 * c2;
 
             for (f_idx, acc) in int_flux.iter_mut().enumerate() {
-                let tr = &self.filters_on_sed_grid[f_idx];
-                let y0 = f0 * T::from_f64(tr[i] * w[i]);
-                let y1 = f1 * T::from_f64(tr[i + 1] * w[i + 1]);
-                let y2 = f2 * T::from_f64(tr[i + 2] * w[i + 2]);
+                let fw = &self.filters_weighted_on_sed_grid[f_idx];
+                let y0 = f0 * T::from_f64(fw[i]);
+                let y1 = f1 * T::from_f64(fw[i + 1]);
+                let y2 = f2 * T::from_f64(fw[i + 2]);
                 *acc = *acc + y0 * c0 + y1 * c1 + y2 * c2;
             }
-            i += 2;
         }
         if n.is_multiple_of(2) {
             let dx = T::from_f64(0.5 * (w[n - 1] - w[n - 2]));
@@ -351,9 +368,9 @@ impl SedCube {
             let f_prev = cleaned_flux_at(w, fluxes, n - 2);
             bol_flux = bol_flux + dx * (f_last + f_prev);
             for (f_idx, acc) in int_flux.iter_mut().enumerate() {
-                let tr = &self.filters_on_sed_grid[f_idx];
-                let y_last = f_last * T::from_f64(tr[n - 1] * w[n - 1]);
-                let y_prev = f_prev * T::from_f64(tr[n - 2] * w[n - 2]);
+                let fw = &self.filters_weighted_on_sed_grid[f_idx];
+                let y_last = f_last * T::from_f64(fw[n - 1]);
+                let y_prev = f_prev * T::from_f64(fw[n - 2]);
                 *acc = *acc + dx * (y_last + y_prev);
             }
         }

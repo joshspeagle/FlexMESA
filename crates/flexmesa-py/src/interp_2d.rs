@@ -178,8 +178,15 @@ fn interp_evbicub_batch<'py>(
             "coeffs_flat length must equal nx * ny * 4",
         ));
     }
-    eval_batch_2d(py, xq.len(), parallel, 64, |k| {
-        eval_bicub_prevalidated(xq[k], yq[k], xs, ys, coeffs)
+    let (xqv, yqv, xsv, ysv, cfv) = (
+        xq.to_vec(),
+        yq.to_vec(),
+        xs.to_vec(),
+        ys.to_vec(),
+        coeffs.to_vec(),
+    );
+    eval_batch_2d(py, xqv.len(), parallel, 64, move |k| {
+        eval_bicub_prevalidated(xqv[k], yqv[k], &xsv, &ysv, &cfv)
     })
 }
 

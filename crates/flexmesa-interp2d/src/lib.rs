@@ -34,7 +34,8 @@ use std::fmt;
 
 pub use akima::{interp_rgbi3p_db, interp_rgsf3p_db, rgpd3p_db};
 pub use bicub::{
-    herm2xy_db, interp_evbicub_db, interp_evbicub_mask_db, interp_mkbicub_db,
+    herm2xy_db, herm2xy_prevalidated_db, interp_evbicub_db,
+    interp_evbicub_mask_db, interp_evbicub_prevalidated_db, interp_mkbicub_db,
 };
 pub use bipm::{interp_evbipm_db, interp_mkbipm_db};
 pub use spline1d::{

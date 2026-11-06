@@ -34,6 +34,7 @@
 pub mod bicub_fast;
 pub mod kernels_micro;
 pub mod kernels_solver;
+pub mod kernels_wave2;
 pub mod tridiag_fast;
 
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -47,6 +48,10 @@ use rayon::ThreadPool;
 pub use kernels_micro::{bench_autodiff, bench_interp2d, bench_neu};
 pub use kernels_solver::{
     bench_mtx_block_tridiag, bench_turb_mlt, bench_turb_tdc,
+};
+pub use kernels_wave2::{
+    bench_chem_comp, bench_colors_sed, bench_ion_4d, bench_ion_fe56,
+    run_all_wave2_benchmarks,
 };
 
 /// Number of worker threads used in Stage 3 multi-core benchmarks.
@@ -92,17 +97,13 @@ fn stats_from_samples(mut samples: Vec<f64>) -> LatencyStats {
 ///   chunks of length `chunk_len`.
 /// * `chunk_len` - Number of elements assigned to each worker thread.
 /// * `op_chunk` - Per-thread kernel receiving `(thread_idx, dst_chunk)`.
-pub fn measure_stage3_chunks_us<T, F>(
+pub fn measure_stage3_chunks_us<T: Send, F: Fn(usize, &mut [T]) + Sync>(
     n_warmup: usize,
     n_repeats: usize,
     slice: &mut [T],
     chunk_len: usize,
     op_chunk: F,
-) -> LatencyStats
-where
-    T: Send,
-    F: Fn(usize, &mut [T]) + Sync,
-{
+) -> LatencyStats {
     let repeats = n_repeats.max(3);
     let (step, count) = (AtomicUsize::new(0), AtomicUsize::new(0));
     let wait = || {
@@ -296,12 +297,12 @@ impl ThermoGrid {
     /// # Returns
     /// Initialized [`ThermoGrid`] across `n_zones` shells.
     pub fn new(n_zones: usize) -> Self {
-        let mut log10_t = Vec::with_capacity(n_zones);
-        let mut t = Vec::with_capacity(n_zones);
-        let mut log10_rho = Vec::with_capacity(n_zones);
-        let mut rho = Vec::with_capacity(n_zones);
-        let mut abar = Vec::with_capacity(n_zones);
-        let mut zbar = Vec::with_capacity(n_zones);
+        let (mut log10_t, mut t) =
+            (Vec::with_capacity(n_zones), Vec::with_capacity(n_zones));
+        let (mut log10_rho, mut rho) =
+            (Vec::with_capacity(n_zones), Vec::with_capacity(n_zones));
+        let (mut abar, mut zbar) =
+            (Vec::with_capacity(n_zones), Vec::with_capacity(n_zones));
         let denom = (n_zones.saturating_sub(1)).max(1) as f64;
         for k in 0..n_zones {
             let s = k as f64 / denom;

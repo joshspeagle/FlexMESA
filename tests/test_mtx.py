@@ -7,7 +7,7 @@ banded (`dense_to_band`, `band_to_dense`, `dgbtrf`, `dgbtrs`, `solve_banded`,
 and 0-based conversions, `find_loc_in_sparse`), and block-tridiagonal
 (`block_dble_mv`, `block_multiply_xa`, `solve_block_tridiagonal`,
 `solve_block_tridiagonal_jax`) routines against upstream MESA test outputs
-(`test_square1`, `test_square2`, `test_mtx_support`) and `jax.test_util`.
+(`test_square1`, `test_square2`, `test_mtx_support`) and analytical AD oracles.
 """
 
 from __future__ import annotations
@@ -16,6 +16,7 @@ import hypothesis
 import jax
 import jax.numpy as jnp
 import numpy as np
+import numpy.typing as npt
 import pytest
 from hypothesis import strategies
 
@@ -178,26 +179,38 @@ def test_banded_lu_and_multiply_xa_match_dense() -> None:
     )
 
 
-def test_block_tridiagonal_and_jax_autodiff_match_oracles() -> None:
-    """Verifies `solve_block_tridiagonal` and JAX implicit derivatives.
-
-    Checks NumPy and JAX `lax.scan` block Thomas solvers against the block
-    matrix-vector residual and validates first- and second-order derivatives
-    via `jax.test_util.check_grads`.
-    """
-    rng = np.random.default_rng(42)
-    nz = 6
-    nvar = 4
+def _make_diag_dom_block_tridiag(
+    rng: np.random.Generator, nz: int, nvar: int = 4
+) -> tuple[
+    npt.NDArray[np.float64],
+    npt.NDArray[np.float64],
+    npt.NDArray[np.float64],
+    npt.NDArray[np.float64],
+]:
+    """Generates a random diagonally dominant `(nz, nvar, nvar)` system."""
     lblk = rng.uniform(-0.15, 0.15, size=(nz, nvar, nvar))
-    dblk = rng.uniform(-0.2, 0.2, size=(nz, nvar, nvar))
-    for k in range(nz):
-        dblk[k] += 6.0 * np.eye(nvar, dtype=np.float64)
+    dblk = (
+        rng.uniform(-0.2, 0.2, size=(nz, nvar, nvar))
+        + 6.0 * np.eye(nvar, dtype=np.float64)[None, :, :]
+    )
     ublk = rng.uniform(-0.15, 0.15, size=(nz, nvar, nvar))
     lblk[0] = 0.0
     ublk[-1] = 0.0
     rhs = rng.uniform(-2.0, 2.0, size=(nz, nvar))
+    return lblk, dblk, ublk, rhs
 
-    # 1. Verify NumPy block Thomas solve against block matrix-vector product.
+
+def test_block_tridiagonal_and_jax_autodiff_match_oracles() -> None:
+    """Verifies `solve_block_tridiagonal` and JAX implicit derivatives.
+
+    Checks Safe Rust and JAX block-tridiagonal solvers against the block
+    matrix-vector residual and validates first- and second-order derivatives
+    against `jax.jacfwd`/`jax.jacrev` and analytical Hessian oracles.
+    """
+    rng = np.random.default_rng(42)
+    lblk, dblk, ublk, rhs = _make_diag_dom_block_tridiag(rng, nz=6, nvar=4)
+
+    # 1. Verify NumPy/Rust block Thomas solve against block MV product.
     x_np = mtx.solve_block_tridiagonal(lblk, dblk, ublk, rhs)
     prod_np = mtx.block_dble_mv(lblk, dblk, ublk, x_np)
     np.testing.assert_allclose(prod_np, rhs, rtol=1e-12, atol=1e-12)
@@ -208,7 +221,7 @@ def test_block_tridiagonal_and_jax_autodiff_match_oracles() -> None:
         np.sum(rhs * prod_np), np.sum(xa_np * x_np), rtol=1e-12, atol=1e-12
     )
 
-    # 3. Verify JAX scan block Thomas solver matches NumPy in float64.
+    # 3. Verify JAX PCR block-tridiagonal solver matches NumPy/Rust in float64.
     x_jax = mtx.solve_block_tridiagonal_jax(
         jnp.asarray(lblk),
         jnp.asarray(dblk),
@@ -218,7 +231,7 @@ def test_block_tridiagonal_and_jax_autodiff_match_oracles() -> None:
     assert x_jax.dtype == jnp.float64
     np.testing.assert_allclose(np.asarray(x_jax), x_np, rtol=1e-12, atol=1e-12)
 
-    # 4. Verify first-order reverse/forward gradients through block Thomas scan.
+    # 4. Verify first-order reverse/forward gradients through block-tridiag PCR.
     l_j, d_j, u_j = jnp.asarray(lblk), jnp.asarray(dblk), jnp.asarray(ublk)
     r_j = jnp.asarray(rhs)
     np.testing.assert_allclose(
@@ -255,6 +268,103 @@ def test_mtx_rejects_singular_and_nan_inputs() -> None:
     nan_mat[0, 1] = np.nan
     with pytest.raises(ValueError, match="NaN"):
         mtx.dgetrf(nan_mat)
+
+
+def test_block_tridiag_pcr_rust_ffi_and_bcyclic_match_thomas() -> None:
+    """Verifies `bcyclic`, JAX `pcr`, and `rust_ffi` solvers and VJP gradients.
+
+    Tests odd, even, and power-of-two zone counts (`nz in (1, 5, 7, 8, 13)`)
+    across Safe Rust (`method="bcyclic"`, `parallel=True/False`), native JAX
+    Parallel Cyclic Reduction (`solver_mode="pcr"`, including `jax.vmap`), and
+    the `custom_vjp` Safe Rust FFI bridge (`solver_mode="rust_ffi"`), and
+    checks `jax.grad` reverse-mode cotangents on `(L, D, U, b)` to $< 10^{-11}$.
+    """
+    rng = np.random.default_rng(20261106)
+    nvar = 4
+    for nz in (1, 5, 7, 8, 13):
+        lblk, dblk, ublk, rhs = _make_diag_dom_block_tridiag(rng, nz, nvar)
+        x_ref = mtx.solve_block_tridiagonal(lblk, dblk, ublk, rhs)
+        for par in (False, True):
+            x_bcyc = mtx.solve_block_tridiagonal(
+                lblk, dblk, ublk, rhs, method="bcyclic", parallel=par
+            )
+            np.testing.assert_allclose(x_bcyc, x_ref, rtol=1e-12, atol=1e-12)
+
+        l_j, d_j, u_j, r_j = (
+            jnp.asarray(lblk),
+            jnp.asarray(dblk),
+            jnp.asarray(ublk),
+            jnp.asarray(rhs),
+        )
+        for mode in ("pcr", "scan", "rust_ffi"):
+            x_mode = mtx.solve_block_tridiagonal_jax(
+                l_j, d_j, u_j, r_j, solver_mode=mode
+            )
+            np.testing.assert_allclose(
+                np.asarray(x_mode), x_ref, rtol=1e-12, atol=1e-12
+            )
+
+    # Verify jax.vmap over solve_block_tridiag_pcr and reverse-mode VJP on nz=8.
+    lblk8, dblk8, ublk8, rhs8 = _make_diag_dom_block_tridiag(rng, 8, nvar)
+    l8, d8, u8, r8 = (
+        jnp.asarray(lblk8),
+        jnp.asarray(dblk8),
+        jnp.asarray(ublk8),
+        jnp.asarray(rhs8),
+    )
+    x_vmap = jax.vmap(mtx.solve_block_tridiag_pcr)(
+        jnp.stack([l8, l8]),
+        jnp.stack([d8, d8]),
+        jnp.stack([u8, u8]),
+        jnp.stack([r8, r8]),
+    )
+    x8_ref = mtx.solve_block_tridiagonal(lblk8, dblk8, ublk8, rhs8)
+    np.testing.assert_allclose(
+        np.asarray(x_vmap[0]), x8_ref, rtol=1e-12, atol=1e-12
+    )
+
+    weights = jnp.asarray(rng.uniform(-1.0, 1.0, size=(8, nvar)))
+
+    def _loss(
+        l_in: jax.Array,
+        d_in: jax.Array,
+        u_in: jax.Array,
+        r_in: jax.Array,
+        mode: mtx.SolverMode,
+    ) -> jax.Array:
+        x = mtx.solve_block_tridiagonal_jax(
+            l_in, d_in, u_in, r_in, solver_mode=mode
+        )
+        return jnp.sum(weights * x)
+
+    g_pcr = jax.grad(
+        lambda l_in, d_in, u_in, r_in: _loss(l_in, d_in, u_in, r_in, "pcr"),
+        argnums=(0, 1, 2, 3),
+    )(l8, d8, u8, r8)
+    g_ffi = jax.grad(
+        lambda l_in, d_in, u_in, r_in: _loss(
+            l_in, d_in, u_in, r_in, "rust_ffi"
+        ),
+        argnums=(0, 1, 2, 3),
+    )(l8, d8, u8, r8)
+    np.testing.assert_allclose(
+        np.asarray(g_ffi[0])[1:],
+        np.asarray(g_pcr[0])[1:],
+        rtol=1e-11,
+        atol=1e-11,
+    )
+    np.testing.assert_allclose(
+        np.asarray(g_ffi[1]), np.asarray(g_pcr[1]), rtol=1e-11, atol=1e-11
+    )
+    np.testing.assert_allclose(
+        np.asarray(g_ffi[2])[:-1],
+        np.asarray(g_pcr[2])[:-1],
+        rtol=1e-11,
+        atol=1e-11,
+    )
+    np.testing.assert_allclose(
+        np.asarray(g_ffi[3]), np.asarray(g_pcr[3]), rtol=1e-11, atol=1e-11
+    )
 
 
 @hypothesis.settings(max_examples=25, deadline=None)

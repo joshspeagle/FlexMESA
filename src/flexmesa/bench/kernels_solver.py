@@ -1,14 +1,18 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
-"""Four-stage solver and convective transport benchmarks in Python/NumPy/JAX.
+"""Four-stage solver and convective transport benchmarks (`flexmesa.bench`).
 
-Implements Stages 0..3 for:
+Evaluates the Three-Tier Hybrid Architecture across Stages 0..3 for:
 1. `bench_mtx_block_tridiag`: $5 \\times 5$ block-tridiagonal Henyey system
-   factorization and solve (`mtx`) across NumPy and JAX `lax.scan`.
+   factorization and solve (`mtx`) across `flexmesa._rust` (sequential Thomas
+   Stage 0, 4-thread `rayon` Hirshman `bcyclic` Stage 1) and JAX
+   `solve_block_tridiag_pcr` (`@jax.jit` Stage 2, `@jax.jit(vmap)` Stage 3).
 2. `bench_turb_mlt`: Cox Mixing-Length Theory (`set_mlt` / `set_mlt_jax`) with
-   first-order sensitivities across scalar `DualOrder1`, `jax.vmap`,
-   `@jax.jit`, and batched `(B, N_zones)` stages.
+   first-order sensitivities across `flexmesa._rust.set_mlt_batch` (1-thread
+   Stage 0, 4-thread `rayon` Stage 1) and `@jax.jit` / `@jax.jit(vmap)`
+   (Stages 2..3).
 3. `bench_turb_tdc`: Kuhfuss 1D Time-Dependent Convection (`set_tdc`) with
-   implicit-function-theorem sensitivities across Stages 0..3.
+   Implicit Function Theorem sensitivities across `flexmesa._rust.set_tdc_batch`
+   (Stages 0..1) and `@jax.jit` / `@jax.jit(vmap)` (Stages 2..3).
 """
 
 from __future__ import annotations
@@ -20,8 +24,7 @@ import jax.numpy as jnp
 import numpy as np
 import numpy.typing as npt
 
-from flexmesa import auto_diff as _ad
-from flexmesa import constants as _const
+from flexmesa import _dispatch, _rust
 from flexmesa import turb as _turb
 from flexmesa.bench import harness as _h
 from flexmesa.bench import kernels_micro as _micro
@@ -29,55 +32,6 @@ from flexmesa.bench import tdc_fast as _tdc_fast
 from flexmesa.bench import tridiag_fast as _tridiag_fast
 
 bench_mtx_block_tridiag = _tridiag_fast.bench_mtx_block_tridiag
-
-
-def _c6(val: float) -> _ad.DualOrder1:
-    """Creates a 6-variable constant `DualOrder1`."""
-    return _ad.DualOrder1.constant(val, num_vars=6)
-
-
-def _v6(val: float, idx: int) -> _ad.DualOrder1:
-    """Creates the `idx`-th 6-variable independent `DualOrder1`."""
-    return _ad.DualOrder1.independent(val, idx, num_vars=6)
-
-
-def _eval_mlt_zone_dual(s_frac: float) -> tuple[float, float, float, float]:
-    """Evaluates Cox `set_mlt` with 6-variable `DualOrder1` at `s_frac`.
-
-    Args:
-        s_frac: Normalized radial shell coordinate $s \\in [0, 1]$.
-
-    Returns:
-        4-tuple `(grad_t, d, conv_vel, d_grad_t_d_gradr)` in CGS units.
-    """
-    t_val = 1.0e5 * (1.0 + 0.5 * s_frac)
-    rho_val = 1.0e-5 * (1.0 + 0.5 * s_frac)
-    p_val = rho_val * t_val * _tdc_fast.RGAS_IDEAL
-    hp_val = p_val / (rho_val * _tdc_fast.GRAV_SOLAR)
-    inp = _turb.MltInputs(
-        chi_t=_c6(1.0),
-        chi_rho=_c6(1.0),
-        cp=_c6(_tdc_fast.CP_IDEAL),
-        grav=_c6(_tdc_fast.GRAV_SOLAR),
-        lambda_=_v6(2.0 * hp_val, 3),
-        rho=_v6(rho_val, 5),
-        p=_c6(p_val),
-        t=_v6(t_val, 4),
-        opacity=_c6(1.0),
-        gradr=_v6(0.45 + 0.25 * s_frac, 0),
-        grada=_v6(0.40, 1),
-        gradl=_v6(0.40, 2),
-    )
-    out = _turb.set_mlt(_turb.MltParams.cox(2.0), inp)
-    assert isinstance(out.grad_t, _ad.DualOrder1)
-    assert isinstance(out.d, _ad.DualOrder1)
-    assert isinstance(out.conv_vel, _ad.DualOrder1)
-    return (
-        float(out.grad_t.val),
-        float(out.d.val),
-        float(out.conv_vel.val),
-        float(out.grad_t.d1[0]),
-    )
 
 
 def _mlt_point_jax(s_frac: jax.Array) -> jax.Array:
@@ -131,96 +85,14 @@ _mlt_jit = jax.jit(_mlt_vmap)
 _mlt_batch_jit = jax.jit(jax.vmap(_mlt_vmap))
 
 
-def _make_tdc_params_and_inputs(
-    s_np: npt.NDArray[np.float64],
-) -> tuple[_turb.TdcParams, list[_turb.TdcInputs]]:
-    """Pre-constructs `TdcParams` and per-zone 6-variable `TdcInputs`.
-
-    Args:
-        s_np: 1D array of normalized zone coordinates $s \\in [0, 1]$.
-
-    Returns:
-        Two-tuple `(params, inputs)` for `set_tdc`.
-    """
-    c_one, c_zero = _c6(1.0), _c6(0.0)
-    c_r = _c6(_const.RSUN)
-    c_cp = _c6(_tdc_fast.CP_IDEAL)
-    c_grav = _c6(_tdc_fast.GRAV_SOLAR)
-    g_ad, g_l = _v6(0.40, 1), _v6(0.40, 2)
-
-    params = _turb.TdcParams(
-        conv_vel_start=1.0e5,
-        mixing_length_alpha=2.0,
-        tdc_alpha_d=1.0,
-        tdc_alpha_r=0.0,
-        tdc_alpha_pt=0.0,
-        tdc_alpha_c=1.0,
-        tdc_alpha_s=1.0,
-        dt=1.0e4,
-        cgrav=_const.STANDARD_CGRAV,
-        m=_const.MSUN,
-        scale=70.0 * _const.LSUN * 1.0e-3,
-        max_conv_vel=1.0e99,
-        include_mlt_corr_to_tdc=True,
-        use_tdc_enthalpy_flux_limiter=False,
-        y_face_guess=0.0,
-    )
-    inputs: list[_turb.TdcInputs] = []
-    for s_val in s_np:
-        sf = float(s_val)
-        t_val = 1.0e5 * (1.0 + 0.2 * sf)
-        rho_val = 1.0e-5 * (1.0 + 0.2 * sf)
-        p_val = rho_val * t_val * _tdc_fast.RGAS_IDEAL
-        hp_val = p_val / (rho_val * _tdc_fast.GRAV_SOLAR)
-        inputs.append(
-            _turb.TdcInputs(
-                chi_t=c_one,
-                chi_rho=c_one,
-                gradr=_v6(0.42 + 0.08 * sf, 0),
-                r=c_r,
-                p=_c6(p_val),
-                t=_v6(t_val, 4),
-                rho=_v6(rho_val, 5),
-                dv=c_zero,
-                cp=c_cp,
-                opacity=c_one,
-                scale_height=_v6(hp_val, 3),
-                gradl=g_l,
-                grada=g_ad,
-                eq_div_w=c_zero,
-                grav=c_grav,
-                energy=c_zero,
-            )
-        )
-    return params, inputs
-
-
-def _eval_tdc_tuple(
-    params: _turb.TdcParams, inp: _turb.TdcInputs
-) -> tuple[float, float, float, float]:
-    """Evaluates `set_tdc` and extracts `(grad_t, d, conv_vel, d_grad_t)`."""
-    out = _turb.set_tdc(params, inp).output
-    assert isinstance(out.grad_t, _ad.DualOrder1)
-    assert isinstance(out.d, _ad.DualOrder1)
-    assert isinstance(out.conv_vel, _ad.DualOrder1)
-    return (
-        float(out.grad_t.val),
-        float(out.d.val),
-        float(out.conv_vel.val),
-        float(out.grad_t.d1[0]),
-    )
-
-
 def _bench_turb_4stage(
     workload: str,
     nz: int,
     n_warmup: int,
     n_repeats: int,
-    stage1_repeats: int,
-    eval_sub_stage0: collections.abc.Callable[
-        [npt.NDArray[np.float64], npt.NDArray[np.float64]], None
+    rust_batch_fn: collections.abc.Callable[
+        [npt.NDArray[np.float64], bool], npt.NDArray[np.float64]
     ],
-    vmap_fn: collections.abc.Callable[[jax.Array], jax.Array],
     jit_fn: collections.abc.Callable[[jax.Array], jax.Array],
     batch_jit_fn: collections.abc.Callable[[jax.Array], jax.Array],
 ) -> _h.BenchRecord:
@@ -229,32 +101,30 @@ def _bench_turb_4stage(
     Args:
         workload: Workload identifier (`"turb_mlt"` or `"turb_tdc"`).
         nz: Number of radial shells ($N_{\\mathrm{zones}}$).
-        n_warmup: Number of untimed warmup iterations for Stages 2 and 3.
-        n_repeats: Number of timed iterations for Stages 2 and 3.
-        stage1_repeats: Number of timed iterations for Stage 1 `vmap`.
-        eval_sub_stage0: Callable populating `out0_sub` on `s_sub`.
-        vmap_fn: Un-JITted `jax.vmap` kernel for Stage 1.
+        n_warmup: Number of untimed warmup iterations.
+        n_repeats: Number of timed iterations.
+        rust_batch_fn: Zero-copy `flexmesa._rust` batch evaluator taking
+            `(s_frac, parallel)`.
         jit_fn: `@jax.jit`-compiled kernel for Stage 2.
         batch_jit_fn: `@jax.jit(jax.vmap)` batched kernel for Stage 3.
 
     Returns:
         `BenchRecord` with Stages 0..3 latencies and parity error.
     """
-    s_np = np.arange(nz, dtype=np.float64) / float(max(nz - 1, 1))
-    s_j = jnp.asarray(s_np, dtype=jnp.float64)
-    m_sub = min(nz, 4)
-    sub_idx = np.linspace(0, nz - 1, m_sub, dtype=np.int64)
-    s_sub = s_np[sub_idx]
-    out0_sub = np.empty((m_sub, 4), dtype=np.float64)
-
-    stage0_sub = _h.measure_us(1, 2, lambda: eval_sub_stage0(s_sub, out0_sub))
-    scale0 = float(nz) / float(m_sub)
-    stage0 = _h.LatencyStats(
-        median_us=stage0_sub.median_us * scale0,
-        iqr_us=stage0_sub.iqr_us * scale0,
+    s_np = _dispatch.as_c_f64(
+        np.arange(nz, dtype=np.float64) / float(max(nz - 1, 1))
     )
-    stage1, out1_j = _h.measure_and_capture(
-        1, stage1_repeats, lambda: vmap_fn(s_j)
+    s_j = jnp.asarray(s_np, dtype=jnp.float64)
+
+    stage0, out0_np = _h.measure_and_capture(
+        n_warmup,
+        n_repeats,
+        lambda: rust_batch_fn(s_np, False),
+    )
+    stage1, out1_np = _h.measure_and_capture(
+        n_warmup,
+        n_repeats,
+        lambda: rust_batch_fn(s_np, True),
     )
     stage2, out2_j = _h.measure_and_capture(
         n_warmup,
@@ -271,13 +141,12 @@ def _bench_turb_4stage(
         lambda: batch_jit_fn(s_b),
     )
 
-    out1_np = np.asarray(out1_j, dtype=np.float64)
     out2_np = np.asarray(out2_j, dtype=np.float64)
     out3_np = np.asarray(out3_j, dtype=np.float64)
     max_rel_err = _h.max_err3(
-        _h.max_rel_diff(out0_sub, out1_np[sub_idx]),
-        _h.max_rel_diff(out1_np, out2_np),
-        _h.max_rel_diff(out1_np, out3_np),
+        _h.max_rel_diff(out0_np, out1_np),
+        _h.max_rel_diff(out0_np, out2_np),
+        _h.max_rel_diff(out0_np, out3_np),
     )
     return _h.BenchRecord(
         workload=workload,
@@ -289,23 +158,6 @@ def _bench_turb_4stage(
         max_rel_err=max_rel_err,
         checksum=float(np.sum(out2_np[:, 0])),
     )
-
-
-def _run_mlt_stage0_sub(
-    s_sub: npt.NDArray[np.float64], out0_sub: npt.NDArray[np.float64]
-) -> None:
-    """Evaluates Stage 0 `set_mlt` across the anchor coordinates `s_sub`."""
-    for i, sf in enumerate(s_sub):
-        out0_sub[i] = _eval_mlt_zone_dual(float(sf))
-
-
-def _run_tdc_stage0_sub(
-    s_sub: npt.NDArray[np.float64], out0_sub: npt.NDArray[np.float64]
-) -> None:
-    """Evaluates Stage 0 `set_tdc` across the anchor coordinates `s_sub`."""
-    p0, inps0 = _make_tdc_params_and_inputs(s_sub)
-    for i, inp in enumerate(inps0):
-        out0_sub[i] = _eval_tdc_tuple(p0, inp)
 
 
 def bench_turb_mlt(
@@ -328,9 +180,7 @@ def bench_turb_mlt(
         grid.n_zones,
         n_warmup,
         n_repeats,
-        n_repeats,
-        _run_mlt_stage0_sub,
-        _mlt_vmap,
+        _rust.set_mlt_batch,
         _mlt_jit,
         _mlt_batch_jit,
     )
@@ -356,9 +206,7 @@ def bench_turb_tdc(
         grid.n_zones,
         n_warmup,
         n_repeats,
-        3,
-        _run_tdc_stage0_sub,
-        _tdc_fast.tdc_vmap,
+        _rust.set_tdc_batch,
         _tdc_fast.tdc_jit,
         _tdc_fast.tdc_batch_jit,
     )

@@ -18,7 +18,7 @@ use flexmesa_neu::{neu_get, NeuFlags};
 
 use crate::bicub_fast::eval_bicub_prevalidated;
 use crate::{
-    max_rel_diff, measure_us, BenchRecord, BicubTable, ThermoGrid,
+    max_err3, max_rel_diff, measure_us, BenchRecord, BicubTable, ThermoGrid,
     STAGE3_THREADS,
 };
 
@@ -146,9 +146,11 @@ where
         });
     });
 
-    let max_rel_err = max_rel_diff(&ref_flat, &out1)
-        .max(max_rel_diff(&ref_flat, &out2))
-        .max(max_rel_diff(&ref_flat, &out3));
+    let max_rel_err = max_err3(
+        max_rel_diff(&ref_flat, &out1),
+        max_rel_diff(&ref_flat, &out2),
+        max_rel_diff(&ref_flat, &out3),
+    );
     let checksum: f64 = out2.iter().step_by(6).sum();
 
     BenchRecord {
@@ -166,10 +168,13 @@ where
 /// Benchmarks two-variable 2nd-order automatic differentiation (`auto_diff`)
 /// across Stages 0..3 over `grid.n_zones` stellar shells.
 ///
-/// - **Stage 0**: Scalar loop allocating a fresh `Vec<[f64; 6]>` per step.
-/// - **Stage 1**: Pre-allocated contiguous Structure-of-Arrays (SoA) buffer.
-/// - **Stage 2**: Fused register-inlined derivative evaluation over slices.
-/// - **Stage 3**: 4-thread scoped data-parallel evaluation over shell chunks.
+/// # Arguments
+/// * `grid` - Stellar thermodynamic profile across `n_zones` shells.
+/// * `n_warmup` - Number of untimed warmup iterations.
+/// * `n_repeats` - Number of timed iterations.
+///
+/// # Returns
+/// [`BenchRecord`] with Stages 0..3 latencies, parity error, and checksum.
 pub fn bench_autodiff(
     grid: &ThermoGrid,
     n_warmup: usize,
@@ -187,14 +192,14 @@ pub fn bench_autodiff(
 
 /// Benchmarks 2D bicubic spline evaluation (`interp_2d`) across Stages 0..3.
 ///
-/// - **Stage 0**: Zone-by-zone `interp_evbicub_db` calls with per-step vector
-///   allocation and repeated table monotonicity/finiteness validation.
-/// - **Stage 1**: Contiguous pre-allocated output slice calling
-///   `interp_evbicub_db`.
-/// - **Stage 2**: Hoisted table validation (`eval_bicub_prevalidated`) in a
-///   single-threaded slice loop.
-/// - **Stage 3**: 4-thread scoped parallel execution of
-///   `eval_bicub_prevalidated`.
+/// # Arguments
+/// * `grid` - Stellar thermodynamic profile across `n_zones` shells.
+/// * `table` - Precomputed $64 \times 64$ bicubic spline table.
+/// * `n_warmup` - Number of untimed warmup iterations.
+/// * `n_repeats` - Number of timed iterations.
+///
+/// # Returns
+/// [`BenchRecord`] with Stages 0..3 latencies, parity error, and checksum.
 pub fn bench_interp2d(
     grid: &ThermoGrid,
     table: &BicubTable,
@@ -241,13 +246,13 @@ pub fn bench_interp2d(
 /// Benchmarks Itoh et al. (1996) pair + plasmon thermal neutrino loss (`neu`)
 /// across Stages 0..3.
 ///
-/// - **Stage 0**: Scalar loop recomputing $\log_{10}T$ and $\log_{10}\rho$ from
-///   $(T, \rho)$ and allocating a fresh `Vec<[f64; 5]>` per step.
-/// - **Stage 1**: Contiguous pre-allocated output slice without precomputed
-///   $\log_{10}$ inputs.
-/// - **Stage 2**: Fused slice loop passing precomputed $(T, \log_{10}T, \rho,
-///   \log_{10}\rho)$ to avoid redundant logarithm evaluations.
-/// - **Stage 3**: 4-thread scoped parallel evaluation across shell chunks.
+/// # Arguments
+/// * `grid` - Stellar thermodynamic profile across `n_zones` shells.
+/// * `n_warmup` - Number of untimed warmup iterations.
+/// * `n_repeats` - Number of timed iterations.
+///
+/// # Returns
+/// [`BenchRecord`] with Stages 0..3 latencies, parity error, and checksum.
 pub fn bench_neu(
     grid: &ThermoGrid,
     n_warmup: usize,
@@ -354,9 +359,11 @@ pub fn bench_neu(
         });
     });
 
-    let max_rel_err = max_rel_diff(&ref_flat, &out1)
-        .max(max_rel_diff(&ref_flat, &out2))
-        .max(max_rel_diff(&ref_flat, &out3));
+    let max_rel_err = max_err3(
+        max_rel_diff(&ref_flat, &out1),
+        max_rel_diff(&ref_flat, &out2),
+        max_rel_diff(&ref_flat, &out3),
+    );
     let checksum: f64 = out2.iter().step_by(5).sum();
 
     BenchRecord {

@@ -8,13 +8,27 @@
 
 use flexmesa_bench::run_all_wave1_benchmarks;
 
+/// Pinned cross-language reference checksums for $N_{\mathrm{zones}} = 8$
+/// across all six Wave 1 workloads (shared with `tests/test_bench.py`).
+/// Each entry pairs the canonical workload identifier with the exact Stage 2
+/// `f64` primal reduction sum.
+const EXPECTED_CHECKSUMS_N8: [(&str, f64); 6] = [
+    ("auto_diff", 1.089_274_155_553_244e4),
+    ("interp_2d", 3.622_775_349_153_983e2),
+    ("neu", 9.868_900_412_911_318e12),
+    ("mtx_tridiag", 1.065_650_530_823_759e1),
+    ("turb_mlt", 3.419_048_546_150_96),
+    ("turb_tdc", 3.318_734_224_165_011_5),
+];
+
 /// Verifies that all six Wave 1 benchmark workloads (`auto_diff`, `interp_2d`,
 /// `neu`, `mtx_tridiag`, `turb_mlt`, and `turb_tdc`) execute across Stages 0..3
 /// and maintain machine-precision parity ($\le 10^{-12}$ relative discrepancy)
-/// across all four optimization stages.
+/// across all four optimization stages and against pinned cross-language
+/// reference checksums.
 #[test]
 fn test_wave1_four_stage_benchmarks_parity() {
-    let records = run_all_wave1_benchmarks(&[32, 128], 1, 3);
+    let records = run_all_wave1_benchmarks(&[8, 32], 1, 3);
     assert_eq!(records.len(), 12);
     for rec in &records {
         assert!(
@@ -29,6 +43,20 @@ fn test_wave1_four_stage_benchmarks_parity() {
         assert!(rec.stage2.median_us > 0.0);
         assert!(rec.stage3.median_us > 0.0);
         assert!(rec.checksum.is_finite());
+    }
+    for (rec, &(exp_name, exp_sum)) in
+        records[..6].iter().zip(EXPECTED_CHECKSUMS_N8.iter())
+    {
+        assert_eq!(rec.workload, exp_name);
+        let rel_err = (rec.checksum - exp_sum).abs() / exp_sum.abs();
+        assert!(
+            rel_err <= 1.0e-12,
+            "workload {} (N=8) checksum {:.15e} vs {:.15e} (rel {:.3e})",
+            rec.workload,
+            rec.checksum,
+            exp_sum,
+            rel_err
+        );
     }
 }
 

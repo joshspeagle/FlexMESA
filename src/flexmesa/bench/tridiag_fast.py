@@ -114,8 +114,8 @@ def bench_mtx_block_tridiag(
     )
 
     out2 = np.asarray(out2_j, dtype=np.float64)
-    out3 = np.asarray(out3_j[0], dtype=np.float64)
-    max_rel_err = max(
+    out3 = np.asarray(out3_j, dtype=np.float64)
+    max_rel_err = _h.max_err3(
         _h.max_rel_diff(out0, out1),
         _h.max_rel_diff(out0, out2),
         _h.max_rel_diff(out0, out3),

@@ -29,6 +29,7 @@ BicubTable = _harness.BicubTable
 LatencyStats = _harness.LatencyStats
 ThermoGrid = _harness.ThermoGrid
 make_block_tridiag_fixture = _harness.make_block_tridiag_fixture
+max_err3 = _harness.max_err3
 max_rel_diff = _harness.max_rel_diff
 measure_and_capture = _harness.measure_and_capture
 measure_stage3_batch = _harness.measure_stage3_batch
@@ -56,6 +57,7 @@ __all__: list[str] = [
     "bench_turb_mlt",
     "bench_turb_tdc",
     "make_block_tridiag_fixture",
+    "max_err3",
     "max_rel_diff",
     "measure_and_capture",
     "measure_stage3_batch",

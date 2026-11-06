@@ -85,6 +85,15 @@ pub struct BenchRecord {
 
 /// Measures the median and interquartile range (in microseconds) of `op` across
 /// `n_warmup` untimed warmup calls and `n_repeats` timed calls.
+///
+/// # Arguments
+/// * `n_warmup` - Number of untimed warmup invocations.
+/// * `n_repeats` - Number of timed invocations (clamped to at least 3).
+/// * `op` - Closure to benchmark.
+///
+/// # Returns
+/// [`LatencyStats`] containing the median and interquartile range in
+/// $\mu\mathrm{s}$.
 pub fn measure_us<F: FnMut()>(
     n_warmup: usize,
     n_repeats: usize,
@@ -116,18 +125,46 @@ pub fn measure_us<F: FnMut()>(
 }
 
 /// Computes the maximum relative difference between two `f64` slices `a` and
-/// `b`.
+/// `b`, propagating `f64::NAN` if any element is non-finite.
+///
+/// # Arguments
+/// * `a` - Reference `f64` slice.
+/// * `b` - Candidate `f64` slice of matching length.
+///
+/// # Returns
+/// Maximum elementwise relative discrepancy, or `f64::NAN` if any entry is
+/// non-finite.
 pub fn max_rel_diff(a: &[f64], b: &[f64]) -> f64 {
     assert_eq!(a.len(), b.len(), "slice length mismatch in max_rel_diff");
     let mut max_err = 0.0_f64;
     for (&x, &y) in a.iter().zip(b.iter()) {
+        if !x.is_finite() || !y.is_finite() {
+            return f64::NAN;
+        }
         let denom = x.abs().max(y.abs()).max(1.0e-30);
         let rel = (x - y).abs() / denom;
-        if rel > max_err {
+        if rel.is_nan() || rel > max_err {
             max_err = rel;
         }
     }
     max_err
+}
+
+/// Combines three stage relative errors while propagating `f64::NAN`.
+///
+/// # Arguments
+/// * `d1` - Stage 1 relative error.
+/// * `d2` - Stage 2 relative error.
+/// * `d3` - Stage 3 relative error.
+///
+/// # Returns
+/// Maximum of `(d1, d2, d3)`, or `f64::NAN` if any input is `NaN`.
+pub fn max_err3(d1: f64, d2: f64, d3: f64) -> f64 {
+    if d1.is_nan() || d2.is_nan() || d3.is_nan() {
+        f64::NAN
+    } else {
+        d1.max(d2).max(d3)
+    }
 }
 
 /// Deterministic stellar thermodynamic and composition profile across
@@ -157,6 +194,12 @@ pub struct ThermoGrid {
 
 impl ThermoGrid {
     /// Constructs a deterministic stellar profile of `n_zones` shells.
+    ///
+    /// # Arguments
+    /// * `n_zones` - Number of radial zones ($N_{\mathrm{zones}} \ge 1$).
+    ///
+    /// # Returns
+    /// Initialized [`ThermoGrid`] across `n_zones` shells.
     pub fn new(n_zones: usize) -> Self {
         let mut log10_t = Vec::with_capacity(n_zones);
         let mut t = Vec::with_capacity(n_zones);
@@ -211,6 +254,9 @@ pub struct BicubTable {
 
 impl BicubTable {
     /// Builds the deterministic $64 \times 64$ bicubic spline table.
+    ///
+    /// # Returns
+    /// Initialized [`BicubTable`] with precomputed spline coefficients.
     pub fn new() -> Self {
         let nx = 64usize;
         let ny = 64usize;
@@ -263,6 +309,14 @@ impl Default for BicubTable {
 
 /// Runs the complete Wave 1 four-stage benchmark suite across `zone_counts` and
 /// returns all [`BenchRecord`] entries.
+///
+/// # Arguments
+/// * `zone_counts` - Slice of radial zone counts $N_{\mathrm{zones}}$.
+/// * `n_warmup` - Number of untimed warmup iterations per stage.
+/// * `n_repeats` - Number of timed iterations per stage.
+///
+/// # Returns
+/// Vector of [`BenchRecord`] results across all six Wave 1 workloads.
 pub fn run_all_wave1_benchmarks(
     zone_counts: &[usize],
     n_warmup: usize,

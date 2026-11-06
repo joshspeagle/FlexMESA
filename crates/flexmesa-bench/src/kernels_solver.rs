@@ -21,7 +21,7 @@ use flexmesa_turb::{
 
 use crate::tridiag_fast::{fast_block_thomas_solve, make_block_tridiag_fixture};
 use crate::{
-    max_rel_diff, measure_us, BenchRecord, LatencyStats, ThermoGrid,
+    max_err3, max_rel_diff, measure_us, BenchRecord, LatencyStats, ThermoGrid,
     STAGE3_THREADS,
 };
 
@@ -44,14 +44,13 @@ type TridiagWorkspace = (Vec<f64>, Vec<f64>, Vec<usize>, Vec<f64>);
 /// Benchmarks $5 \times 5$ block-tridiagonal Henyey solves (`mtx`) across
 /// Stages 0..3 for `nz` radial shells.
 ///
-/// - **Stage 0**: High-level `solve_block_tridiagonal`, allocating fresh LU
-///   factor and pivot buffers per call.
-/// - **Stage 1**: Pre-allocated workspace buffers (`d1`, `u1`, `ipiv1`, `out1`)
-///   reused across calls via `block_thomas_factor` and `block_thomas_solve`.
-/// - **Stage 2**: Zero-allocation `fast_block_thomas_solve` over contiguous
-///   slices.
-/// - **Stage 3**: Multi-system throughput across 4 concurrent block-tridiagonal
-///   solves with pre-allocated per-thread workspaces (amortized per system).
+/// # Arguments
+/// * `nz` - Number of radial zones ($N_{\mathrm{zones}}$).
+/// * `n_warmup` - Number of untimed warmup iterations.
+/// * `n_repeats` - Number of timed iterations.
+///
+/// # Returns
+/// [`BenchRecord`] with Stages 0..3 latencies, parity error, and checksum.
 pub fn bench_mtx_block_tridiag(
     nz: usize,
     n_warmup: usize,
@@ -134,11 +133,21 @@ pub fn bench_mtx_block_tridiag(
         median_us: stage3_batch.median_us / (STAGE3_THREADS as f64),
         iqr_us: stage3_batch.iqr_us / (STAGE3_THREADS as f64),
     };
-    let out3 = &workspaces[0].3;
+    let mut d3 = 0.0_f64;
+    for (_, _, _, sol) in &workspaces {
+        let err = max_rel_diff(&ref_sol, sol);
+        d3 = if err.is_nan() || d3.is_nan() {
+            f64::NAN
+        } else {
+            d3.max(err)
+        };
+    }
 
-    let max_rel_err = max_rel_diff(&ref_sol, &out1)
-        .max(max_rel_diff(&ref_sol, &out2))
-        .max(max_rel_diff(&ref_sol, out3));
+    let max_rel_err = max_err3(
+        max_rel_diff(&ref_sol, &out1),
+        max_rel_diff(&ref_sol, &out2),
+        d3,
+    );
     let checksum: f64 = out2.iter().sum();
 
     BenchRecord {
@@ -328,9 +337,11 @@ where
         });
     });
 
-    let max_rel_err = max_rel_diff(&ref_flat, &out1)
-        .max(max_rel_diff(&ref_flat, &out2))
-        .max(max_rel_diff(&ref_flat, &out3));
+    let max_rel_err = max_err3(
+        max_rel_diff(&ref_flat, &out1),
+        max_rel_diff(&ref_flat, &out2),
+        max_rel_diff(&ref_flat, &out3),
+    );
     let checksum: f64 = out2.iter().step_by(4).sum();
 
     BenchRecord {
@@ -352,6 +363,9 @@ where
 /// * `grid` - Stellar thermodynamic profile across `n_zones` shells.
 /// * `n_warmup` - Number of untimed warmup iterations.
 /// * `n_repeats` - Number of timed iterations.
+///
+/// # Returns
+/// [`BenchRecord`] with Stages 0..3 latencies, parity error, and checksum.
 pub fn bench_turb_mlt(
     grid: &ThermoGrid,
     n_warmup: usize,
@@ -362,6 +376,14 @@ pub fn bench_turb_mlt(
 
 /// Benchmarks Kuhfuss 1D Time-Dependent Convection (`set_tdc`) with
 /// `DualOrder1<6>` Implicit Function Theorem sensitivities across Stages 0..3.
+///
+/// # Arguments
+/// * `grid` - Stellar thermodynamic profile across `n_zones` shells.
+/// * `n_warmup` - Number of untimed warmup iterations.
+/// * `n_repeats` - Number of timed iterations.
+///
+/// # Returns
+/// [`BenchRecord`] with Stages 0..3 latencies, parity error, and checksum.
 pub fn bench_turb_tdc(
     grid: &ThermoGrid,
     n_warmup: usize,

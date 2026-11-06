@@ -90,8 +90,8 @@ def measure_us(
     for idx in range(warm):
         t0 = time.perf_counter_ns()
         res = op()
-        if res is not None:
-            jax.block_until_ready(res)
+        if isinstance(res, jax.Array):
+            res.block_until_ready()
         elapsed_us = (time.perf_counter_ns() - t0) * 1.0e-3
         if idx == 0 and record_first_as_compile:
             compile_us = elapsed_us
@@ -101,8 +101,8 @@ def measure_us(
     for idx in range(repeats):
         t0 = time.perf_counter_ns()
         res = op()
-        if res is not None:
-            jax.block_until_ready(res)
+        if isinstance(res, jax.Array):
+            res.block_until_ready()
         samples[idx] = (time.perf_counter_ns() - t0) * 1.0e-3
 
     samples.sort()
@@ -196,15 +196,42 @@ def max_rel_diff(
 
     Args:
         reference: Reference array-like input in `float64`.
-        candidate: Candidate array-like input in `float64` of matching shape.
+        candidate: Candidate array-like input in `float64` of matching shape
+            (or batched shape `(B, *reference.shape)`).
 
     Returns:
-        Maximum relative discrepancy across all elements.
+        Maximum relative discrepancy across all elements, or `NaN` if any
+        entry is non-finite.
+
+    Raises:
+        ValueError: If `candidate` is not broadcast-compatible with
+            `reference`.
     """
-    a_arr = np.asarray(reference, dtype=np.float64).ravel()
-    b_arr = np.asarray(candidate, dtype=np.float64).ravel()
+    a_arr = np.asarray(reference, dtype=np.float64)
+    b_arr = np.asarray(candidate, dtype=np.float64)
+    if b_arr.ndim == a_arr.ndim + 1 and b_arr.shape[1:] == a_arr.shape:
+        a_arr = np.broadcast_to(a_arr, b_arr.shape)
+    elif a_arr.shape != b_arr.shape:
+        msg = f"shape mismatch in max_rel_diff: {a_arr.shape} vs {b_arr.shape}"
+        raise ValueError(msg)
+    if not (np.all(np.isfinite(a_arr)) and np.all(np.isfinite(b_arr))):
+        return float("nan")
     denom = np.maximum(np.maximum(np.abs(a_arr), np.abs(b_arr)), 1.0e-30)
     return float(np.max(np.abs(a_arr - b_arr) / denom))
+
+
+def max_err3(d1: float, d2: float, d3: float) -> float:
+    """Combines three stage relative errors while propagating `NaN`.
+
+    Args:
+        d1: Stage 1 relative discrepancy.
+        d2: Stage 2 relative discrepancy.
+        d3: Stage 3 relative discrepancy.
+
+    Returns:
+        Maximum of `(d1, d2, d3)`, or `NaN` if any input is `NaN`.
+    """
+    return float(np.max([d1, d2, d3]))
 
 
 @dataclasses.dataclass(frozen=True)

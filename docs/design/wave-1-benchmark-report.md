@@ -162,16 +162,17 @@ All latencies below are reported as `median +/- IQR` in microseconds
   all $4 n_x n_y = 16{,}384$ bicubic coefficients for finiteness on every query
   point. Hoisting table validation outside the zone loop
   (`eval_bicub_prevalidated` in Stage 2) reduces 4096-zone evaluation latency
-  from $12{,}919.38\,\mu\mathrm{s}$ to $128.44\,\mu\mathrm{s}$ ($31.4\,\mathrm{ns}$
-  per shell, a $100.59\times$ speedup). Wave 2 EOS (`eos`) and opacity (`kap`)
-  table evaluators should therefore validate tables once at construction time
-  and expose an unchecked cell evaluation method for inner zone loops.
+  from $12{,}919.38\,\mu\mathrm{s}$ to $128.44\,\mu\mathrm{s}$
+  ($31.4\,\mathrm{ns}$ per shell, a $100.59\times$ speedup). Wave 2 EOS (`eos`)
+  and opacity (`kap`) table evaluators should therefore validate tables once at
+  construction time and expose an unchecked cell evaluation method for inner
+  zone loops.
 - **Stack-Resident Forward-Mode Dual Arithmetic (`auto_diff`, `turb_mlt`,
   `turb_tdc`)**: Because `DualOrder1<const N: usize>` and
   `AutoDiffReal2VarOrder2` store their tangent arrays inline on the stack
   (`[f64; N]`), LLVM unrolls and vectorizes all derivative propagation without
-  heap traffic. Even Stage 0 runs in $19.7\,\mathrm{ns}$ per zone for
-  `auto_diff`, $136\,\mathrm{ns}$ per zone for `turb_mlt`, and
+  heap traffic. Stage 2 runs in $19.7\,\mathrm{ns}$ per zone ($24.6\,\mathrm{ns}$
+  in Stage 0) for `auto_diff`, $136\,\mathrm{ns}$ per zone for `turb_mlt`, and
   $0.98\,\mu\mathrm{s}$ per zone for the iterative `turb_tdc` solver.
 - **Multi-Threading Crossover Threshold (`Stage 3`)**: Spawning OS threads via
   `std::thread::scope` incurs a fixed synchronization floor of
@@ -243,12 +244,13 @@ Stages 2 and 3:
   for `mtx_tridiag` carry a strict sequential dependency from shell $k - 1$ to
   shell $k$. Executing `solve_block_tridiagonal_jax` via `jax.lax.scan` on the
   GPU (`Stage 2`) requires $N_{\mathrm{zones}}$ sequential $5 \times 5$ matrix
-  factorizations on a single streaming multiprocessor, taking $55.7\,\mathrm{ms}$
-  at $N_{\mathrm{zones}} = 128$, $391.7\,\mathrm{ms}$ at
+  factorizations on a single streaming multiprocessor, taking
+  $55.7\,\mathrm{ms}$ at $N_{\mathrm{zones}} = 128$, $391.7\,\mathrm{ms}$ at
   $N_{\mathrm{zones}} = 1024$, and $1619.0\,\mathrm{ms}$ at
   $N_{\mathrm{zones}} = 4096$. By contrast, CPU LAPACK (`Stage 1`,
   `np.linalg.solve` in a pre-allocated loop) takes $34.65\,\mathrm{ms}$ at
-  $N_{\mathrm{zones}} = 4096$, and Safe Rust (`Stage 2`) takes $1.56\,\mathrm{ms}$.
+  $N_{\mathrm{zones}} = 4096$, and Safe Rust (`Stage 2`) takes
+  $1.56\,\mathrm{ms}$.
 
 ---
 
@@ -258,8 +260,8 @@ Stages 2 and 3:
 
 | Workload ($N_{\mathrm{zones}} = 4096$) | Safe Rust Stage 2 ($\mu\mathrm{s}$) | Safe Rust Stage 3 ($\mu\mathrm{s}$) | Python/NumPy Best ($\mu\mathrm{s}$) | JAX `@jit` Stage 2 ($\mu\mathrm{s}$) | JAX `@jit(vmap)` Stage 3 ($\mu\mathrm{s}$) | JAX Compile ($\mathrm{ms}$) | Fastest Single-Star Engine | Fastest Batched Grid Engine |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | :--- | :--- |
-| `auto_diff` | `80.56` | `241.31` | `14626.04` | `1266.05` | `318.98` | `148.5` | Safe Rust (`15.7x` vs JAX) | Safe Rust (`3.96x` vs JAX) |
-| `interp_2d` | `128.44` | `280.35` | `93319.73` | `1285.33` | `325.16` | `314.1` | Safe Rust (`10.0x` vs JAX) | Safe Rust (`2.53x` vs JAX) |
+| `auto_diff` | `80.56` | `241.31` | `14626.04` | `1266.05` | `318.98` | `148.5` | Safe Rust (`15.7x` vs JAX) | Safe Rust Stage 2 (`3.96x` vs JAX) |
+| `interp_2d` | `128.44` | `280.35` | `93319.73` | `1285.33` | `325.16` | `314.1` | Safe Rust (`10.0x` vs JAX) | Safe Rust Stage 2 (`2.53x` vs JAX) |
 | `neu` | `602.97` | `372.35` | `45140.33` | `1263.82` | `321.29` | `495.7` | Safe Rust (`2.10x` vs JAX) | JAX Batch/4 (`1.16x` vs Rust) |
 | `mtx_tridiag` | `1563.45` | `451.97` | `34646.39` | `1618998.55` | `475115.88` | `1686.6` | Safe Rust (`22.2x` vs NumPy, `1036x` vs JAX) | Safe Rust (`1051x` vs JAX) |
 | `turb_mlt` | `556.33` | `360.26` | `49688.91` | `1287.58` | `316.21` | `177.2` | Safe Rust (`2.31x` vs JAX) | JAX Batch/4 (`1.14x` vs Rust) |
@@ -284,9 +286,9 @@ Stages 2 and 3:
      ($N_{\mathrm{zones}}$) change without padding or bucketing.
 2. **Batched GPU Throughput and End-to-End Differentiability for Inference**:
    - When evaluating expensive shell-local microphysics (`neu`, `turb_mlt`,
-     fixed-step `turb_tdc`, and upcoming Wave 2 `eos`, `kap`, and `rates`) across
-     large zone counts ($N_{\mathrm{zones}} = 4096$) or batched stellar grids
-     (`Stage 3`, $B \ge 4$ stars in parallel for Bayesian inference, HMC, or
+     fixed-step `turb_tdc`, and upcoming Wave 2 `eos`, `kap`, and `rates`)
+     across large zone counts ($N_{\mathrm{zones}} = 4096$) or batched stellar
+     grids (`Stage 3`, $B \ge 4$ stars in parallel for Bayesian inference, HMC, or
      simulation-based inference), `@jax.jit(jax.vmap)` saturates the GPU and
      matches or outperforms 4-thread CPU Safe Rust ($316\,\mu\mathrm{s}$ vs.
      $360\,\mu\mathrm{s}$ on `turb_mlt`, $321\,\mu\mathrm{s}$ vs.

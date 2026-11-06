@@ -273,8 +273,8 @@ def _bench_turb_4stage(
 
     out1_np = np.asarray(out1_j, dtype=np.float64)
     out2_np = np.asarray(out2_j, dtype=np.float64)
-    out3_np = np.asarray(out3_j[0], dtype=np.float64)
-    max_rel_err = max(
+    out3_np = np.asarray(out3_j, dtype=np.float64)
+    max_rel_err = _h.max_err3(
         _h.max_rel_diff(out0_sub, out1_np[sub_idx]),
         _h.max_rel_diff(out1_np, out2_np),
         _h.max_rel_diff(out1_np, out3_np),

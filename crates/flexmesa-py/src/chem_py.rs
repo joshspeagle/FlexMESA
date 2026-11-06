@@ -42,7 +42,7 @@ use crate::eval_batch_2d;
 ///
 /// Initialized lazily on first access via [`OnceLock::get_or_init`] so
 /// repeated Python calls incur zero catalog construction overhead.
-fn builtin_catalog() -> &'static NuclideCatalog {
+pub(crate) fn builtin_catalog() -> &'static NuclideCatalog {
     static CATALOG: OnceLock<NuclideCatalog> = OnceLock::new();
     CATALOG.get_or_init(NuclideCatalog::builtin)
 }

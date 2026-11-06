@@ -5,7 +5,8 @@
 //! - **Tier A (`utils`, `schema`, `data`, `testing`, `auto_diff`)**:
 //!   Infrastructure parsers, `.safetensors` table converters and `SHA-256`
 //!   hashing, golden baseline parsers, and 1st/2nd-order dual-number kernels.
-//! - **Tier B (`math`, `interp_1d`, `interp_2d`, `neu`, `turb`)**:
+//! - **Tier B (`math`, `interp_1d`, `interp_2d`, `neu`, `turb`, `chem`,
+//!   `ionization`)**:
 //!   Domain-safe elementary intrinsics, 1D/2D spline builders and evaluators,
 //!   Itoh et al. (1996) 5-channel thermal neutrino losses, and Cox (1968) /
 //!   Kuhfuss (1986) convective transport (`MLT` and `TDC`) with persistent
@@ -39,6 +40,10 @@ pub mod interp_1d;
 /// Tier B bindings for 2D bicubic and piecewise-monotonic interpolation.
 #[allow(unsafe_code)]
 pub mod interp_2d;
+/// Tier B bindings for `ionization` (`Fe56` in `He4`, 4D tables,
+/// `typical_charge`).
+#[allow(unsafe_code)]
+pub mod ionization_py;
 /// Tier A/B/C bindings for `auto_diff`, `math`, and `mtx`.
 #[allow(unsafe_code)]
 pub mod math_solvers;
@@ -103,5 +108,6 @@ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     neu_py::register(m)?;
     turb_py::register(m)?;
     chem_py::register(m)?;
+    ionization_py::register(m)?;
     Ok(())
 }

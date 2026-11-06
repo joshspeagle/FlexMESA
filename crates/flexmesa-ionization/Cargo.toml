@@ -1,0 +1,20 @@
+[package]
+name = "flexmesa-ionization"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Safe Rust ionic charge tables, 4D (Z, X, logQ, logT) partial-pressure and neutral-fraction interpolators, and Dupuis/Paquette diffusion charges for FlexMESA."
+
+[dependencies]
+flexmesa-autodiff = { path = "../flexmesa-autodiff" }
+flexmesa-chem = { path = "../flexmesa-chem" }
+flexmesa-const = { path = "../flexmesa-const" }
+flexmesa-interp2d = { path = "../flexmesa-interp2d" }
+flexmesa-math = { path = "../flexmesa-math" }
+flexmesa-utils = { path = "../flexmesa-utils" }
+rayon.workspace = true
+
+[lints]
+workspace = true

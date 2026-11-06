@@ -229,6 +229,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "flexmesa-ionization"
+version = "0.1.0"
+dependencies = [
+ "flexmesa-autodiff",
+ "flexmesa-chem",
+ "flexmesa-const",
+ "flexmesa-interp2d",
+ "flexmesa-math",
+ "flexmesa-utils",
+ "rayon",
+]
+
+[[package]]
 name = "flexmesa-math"
 version = "0.1.0"
 dependencies = [
@@ -279,6 +292,7 @@ dependencies = [
  "flexmesa-data",
  "flexmesa-interp1d",
  "flexmesa-interp2d",
+ "flexmesa-ionization",
  "flexmesa-math",
  "flexmesa-mtx",
  "flexmesa-neu",

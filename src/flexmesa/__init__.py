@@ -24,7 +24,7 @@ def enable_float64() -> bool:
         >>> flexmesa.enable_float64()
         True
     """
-    jax.config.update("jax_enable_x64", True)  # type: ignore[no-untyped-call]
+    jax.config.update("jax_enable_x64", True)
     return bool(jax.config.jax_enable_x64)
 
 
@@ -32,6 +32,7 @@ _X64_ENABLED: bool = enable_float64()
 
 from flexmesa import (  # noqa: E402
     auto_diff,
+    bench,
     constants,
     data,
     interp_1d,
@@ -50,6 +51,7 @@ __version__: str = "0.1.0"
 __all__: list[str] = [
     "__version__",
     "auto_diff",
+    "bench",
     "constants",
     "data",
     "enable_float64",

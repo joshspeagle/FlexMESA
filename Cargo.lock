@@ -134,6 +134,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "flexmesa-bench"
+version = "0.1.0"
+dependencies = [
+ "flexmesa-autodiff",
+ "flexmesa-const",
+ "flexmesa-interp1d",
+ "flexmesa-interp2d",
+ "flexmesa-math",
+ "flexmesa-mtx",
+ "flexmesa-neu",
+ "flexmesa-num",
+ "flexmesa-turb",
+ "flexmesa-utils",
+]
+
+[[package]]
 name = "flexmesa-const"
 version = "0.1.0"
 dependencies = [

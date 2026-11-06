@@ -171,12 +171,10 @@ mod tests {
         {
             let diff = (got - exp).abs();
             let tol = 1.0e-12 * exp.abs().max(1.0);
+            // Check column-wise parity against upstream test_output.
             assert!(
                 diff <= tol,
-                "hot_ms col {} mismatch: got {:.13e}, expected {:.13e}",
-                i,
-                got,
-                exp
+                "hot_ms col {i} mismatch: got {got:.13e}, expected {exp:.13e}",
             );
         }
 
@@ -209,12 +207,10 @@ mod tests {
         {
             let diff = (got - exp).abs();
             let tol = 1.0e-12 * exp.abs().max(1.0);
+            // Check column-wise parity against upstream test_output.
             assert!(
                 diff <= tol,
-                "cool_giant col {} mismatch: got {:.13e}, expected {:.13e}",
-                i,
-                got,
-                exp
+                "cool_giant col {i} mismatch: {got:.13e} vs {exp:.13e}",
             );
         }
     }

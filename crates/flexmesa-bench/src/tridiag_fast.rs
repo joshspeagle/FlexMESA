@@ -9,6 +9,13 @@ use flexmesa_mtx::{dgetrf, dgetrs, dgetrs_multi};
 /// Constructs a diagonally dominant, well-conditioned $5 \times 5$
 /// block-tridiagonal system across `nz` shells matching a 5-variable Henyey
 /// stellar structure matrix.
+///
+/// # Arguments
+/// * `nz` - Number of radial zones ($N_{\mathrm{zones}} \ge 1$).
+///
+/// # Returns
+/// Four-tuple `(lblk, dblk, ublk, rhs)` where `lblk`, `dblk`, and `ublk` have
+/// flattened row-major shape `(nz * 25,)` and `rhs` has length `nz * 5`.
 pub fn make_block_tridiag_fixture(
     nz: usize,
 ) -> (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>) {
@@ -45,6 +52,18 @@ pub fn make_block_tridiag_fixture(
 /// Factors and solves a pre-validated block-tridiagonal system in-place using
 /// pre-allocated workspace buffers (`dblk`, `ublk`, `ipiv`, `rhs`) without
 /// repeating $O(n_z n_{\mathrm{var}}^2)$ NaN validation scans.
+///
+/// # Arguments
+/// * `nvar` - Block dimension ($N_{\mathrm{var}} = 5$).
+/// * `nz` - Number of radial zones ($N_{\mathrm{zones}}$).
+/// * `lblk` - Sub-diagonal blocks of length `nz * nvar * nvar` (read-only).
+/// * `dblk` - Diagonal blocks of length `nz * nvar * nvar` (overwritten with
+///   LU factors).
+/// * `ublk` - Super-diagonal blocks of length `nz * nvar * nvar` (overwritten
+///   with $D_k^{-1} U_k$).
+/// * `ipiv` - Pre-allocated pivot index buffer of length `nz * nvar`.
+/// * `rhs` - Right-hand side buffer of length `nz * nvar` (overwritten in place
+///   with the solution vector $x$).
 pub fn fast_block_thomas_solve(
     nvar: usize,
     nz: usize,

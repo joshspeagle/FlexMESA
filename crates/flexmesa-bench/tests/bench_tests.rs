@@ -1,5 +1,10 @@
 //! Integration tests for the Wave 1 four-stage benchmark harness
 //! (`flexmesa-bench`).
+//!
+//! Verifies that all six representative Wave 1 workloads (`auto_diff`,
+//! `interp_2d`, `neu`, `mtx_tridiag`, `turb_mlt`, and `turb_tdc`) produce
+//! machine-precision parity ($\le 10^{-12}$ relative error) across Stages 0..3
+//! and provides a `--release` Markdown table printer (`--ignored`).
 
 use flexmesa_bench::run_all_wave1_benchmarks;
 
@@ -38,9 +43,7 @@ fn print_full_wave1_rust_benchmarks() {
         "| Workload | N_zones | Stage 0 (us) | Stage 1 (us) | \
          Stage 2 (us) | Stage 3 (us) | Max Rel Err | Checksum |"
     );
-    println!(
-        "|---|---:|---:|---:|---:|---:|---:|---:|"
-    );
+    println!("|---|---:|---:|---:|---:|---:|---:|---:|");
     for rec in &records {
         println!(
             "| `{}` | {} | {:.2} +/- {:.2} | {:.2} +/- {:.2} | \

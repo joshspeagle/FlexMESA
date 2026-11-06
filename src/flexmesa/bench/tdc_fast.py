@@ -10,12 +10,21 @@ HLO graphs and exact iterate parity with `set_tdc`.
 
 from __future__ import annotations
 
+from typing import Final
+
 import jax
 import jax.numpy as jnp
 
 from flexmesa import constants as _const
 from flexmesa import turb as _turb
-from flexmesa.turb import tdc_support as _support
+
+X_ALFAS: Final[float] = 0.5 * _const.SQRT_2_DIV_3
+X_CEDE: Final[float] = (8.0 / 3.0) * _const.SQRT_2_DIV_3
+GRAV_SOLAR: Final[float] = (
+    _const.MSUN * _const.STANDARD_CGRAV / (_const.RSUN * _const.RSUN)
+)
+RGAS_IDEAL: Final[float] = _const.KERG / _const.MP
+CP_IDEAL: Final[float] = 2.5 * RGAS_IDEAL
 
 
 def _eval_q_and_af_jax(
@@ -28,7 +37,23 @@ def _eval_q_and_af_jax(
     cp_val: jax.Array,
     grav_val: jax.Array,
 ) -> tuple[jax.Array, jax.Array]:
-    """Evaluates TDC luminosity residual $Q(Y, \\nabla_r)$ and speed $A_f$."""
+    """Evaluates TDC luminosity residual $Q(Y, \\nabla_r)$ and speed $A_f$.
+
+    Args:
+        y: Dimensionless superadiabaticity $Y = \\nabla_T - \\nabla_L$.
+        gradr: Radiative temperature gradient $\\nabla_r$ (dimensionless).
+        t_val: Temperature $T$ in $\\mathrm{K}$.
+        rho_val: Mass density $\\rho$ in $\\mathrm{g\\,cm^{-3}}$.
+        p_val: Total pressure $P$ in $\\mathrm{dyn\\,cm^{-2}}$.
+        hp_val: Pressure scale height $H_P$ in $\\mathrm{cm}$.
+        cp_val: Specific heat $C_P$ in $\\mathrm{erg\\,g^{-1}\\,K^{-1}}$.
+        grav_val: Local gravity $g$ in $\\mathrm{cm\\,s^{-2}}$.
+
+    Returns:
+        Two-tuple `(q, af)` of luminosity residual $Q(Y)$ in
+        $\\mathrm{erg\\,s^{-1}}$ and final scaled convective speed $A_f$ in
+        $\\mathrm{cm\\,s^{-1}}$.
+    """
     one = jnp.float64(1.0)
     g04 = jnp.float64(0.40)
     gamma = _turb.set_mlt_jax(
@@ -48,7 +73,7 @@ def _eval_q_and_af_jax(
     )[0]
     r_sq = jnp.float64(_const.RSUN * _const.RSUN)
     c0 = (
-        jnp.float64(2.0 * _support.X_ALFAS * 4.0 * _const.PI)
+        jnp.float64(2.0 * X_ALFAS * 4.0 * _const.PI)
         * rho_val
         * t_val
         * cp_val
@@ -76,15 +101,8 @@ def _eval_q_and_af_jax(
     dt = jnp.float64(1.0e4)
 
     y_env = y * (gamma / (1.0 + gamma))
-    xi0 = (
-        jnp.float64(2.0 * _support.X_ALFAS)
-        * cp_val
-        * t_val
-        / hp_val
-        * g04
-        * y_env
-    )
-    xi2 = -jnp.float64(0.5 * _support.X_CEDE) / hp_val
+    xi0 = jnp.float64(2.0 * X_ALFAS) * cp_val * t_val / hp_val * g04 * y_env
+    xi2 = -jnp.float64(0.5 * X_CEDE) / hp_val
     j_val = jnp.sqrt(jnp.maximum(-4.0 * xi0 * xi2, 1.0e-300))
     jt4 = 0.25 * dt * j_val
     th = jnp.tanh(jnp.clip(jt4, -50.0, 50.0))
@@ -96,14 +114,33 @@ def _eval_q_and_af_jax(
 
 
 def eval_tdc_point_jax(s_frac: jax.Array) -> jax.Array:
-    """Computes `[grad_t, d, conv_vel, d_grad_t_d_gradr]` in JAX `float64`."""
+    """Computes `[grad_t, d, conv_vel, d_grad_t_d_gradr]` in JAX `float64`.
+
+    Narrows the logarithmic superadiabaticity bracket $Z = \\ln Y \\in [-100,
+    100]$ to width $< 1.0$ via 8 bisection steps (`jax.lax.fori_loop`), refines
+    $Z^*$ via 8 damped Newton-Raphson iterations with the exact MESA residual
+    ($|Q| / \\mathrm{scale} \\le 10^{-8}$) and step ($|\\Delta Z| < 10^{-13}$)
+    convergence latches, and propagates $\\partial \\nabla_T / \\partial
+    \\nabla_r$ at the converged root $Y^* = \\exp(Z^*)$ via the Implicit
+    Function Theorem:
+    $$\\frac{\\partial Y^*}{\\partial \\nabla_r} =
+      -\\left(\\frac{\\partial Q}{\\partial Y}\\right)^{-1}
+      \\frac{\\partial Q}{\\partial \\nabla_r}.$$
+
+    Args:
+        s_frac: Normalized radial shell coordinate $s \\in [0, 1]$ (`float64`
+            scalar).
+
+    Returns:
+        4-element `float64` JAX array `[grad_t, d, conv_vel, d_grad_t_d_gradr]`
+        of shape `(4,)` in CGS units (dimensionless, $\\mathrm{cm^2\\,s^{-1}}$,
+        $\\mathrm{cm\\,s^{-1}}$, dimensionless).
+    """
     t_val = 1.0e5 * (1.0 + 0.2 * s_frac)
     rho_val = 1.0e-5 * (1.0 + 0.2 * s_frac)
-    grav_val = jnp.float64(
-        _const.MSUN * _const.STANDARD_CGRAV / (_const.RSUN * _const.RSUN)
-    )
-    cp_val = jnp.float64(2.5 * _const.KERG / _const.MP)
-    p_val = rho_val * t_val * jnp.float64(_const.KERG / _const.MP)
+    grav_val = jnp.float64(GRAV_SOLAR)
+    cp_val = jnp.float64(CP_IDEAL)
+    p_val = rho_val * t_val * jnp.float64(RGAS_IDEAL)
     hp_val = p_val / (rho_val * grav_val)
     gradr_val = 0.42 + 0.08 * s_frac
     scale_val = jnp.float64(70.0 * _const.LSUN * 1.0e-3)

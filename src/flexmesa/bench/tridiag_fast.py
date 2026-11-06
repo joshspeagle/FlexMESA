@@ -107,16 +107,10 @@ def bench_mtx_block_tridiag(
     d_b = jnp.broadcast_to(d_j[None, ...], (b_sz, *d_j.shape))
     u_b = jnp.broadcast_to(u_j[None, ...], (b_sz, *u_j.shape))
     r_b = jnp.broadcast_to(r_j[None, ...], (b_sz, *r_j.shape))
-    stage3_raw, out3_j = _h.measure_and_capture(
+    stage3, out3_j = _h.measure_stage3_batch(
         n_warmup,
         n_repeats,
         lambda: _tridiag_batch_jit(l_b, d_b, u_b, r_b),
-        record_first_as_compile=True,
-    )
-    stage3 = _h.LatencyStats(
-        median_us=stage3_raw.median_us / float(b_sz),
-        iqr_us=stage3_raw.iqr_us / float(b_sz),
-        compile_us=stage3_raw.compile_us,
     )
 
     out2 = np.asarray(out2_j, dtype=np.float64)

@@ -1,118 +1,155 @@
-//! Pre-validated 2D bicubic spline evaluation kernel (`bicub_fast`).
+//! Fast pre-validated 2D bicubic spline evaluation (`interp_2d` Stage 2 & 3).
 //!
-//! Hoists $O(n_x n_y)$ grid monotonicity (`splinck_db`) and coefficient
-//! finiteness checks outside the zone loop so Stage 2 and Stage 3 benchmarks
-//! measure pure 16-term Hermite cell evaluation across $N_{\mathrm{zones}}$
-//! queries.
+//! `interp_evbicub_db` in `flexmesa-interp2d` validates grid monotonicity
+//! (`splinck_db`, $O(n_x + n_y)$) and scans all $4 n_x n_y$ coefficients for
+//! finiteness on every scalar call. Hoisting table validation outside the
+//! radial shell loop isolates the 16-term cubic Hermite evaluation kernel per
+//! zone for Stage 2 (single-thread) and Stage 3 (4-thread scoped) benchmarks.
 
-/// Evaluates the 16-term Hermite bicubic expansion on a pre-validated uniform
-/// rectangular grid `(x, y, coeffs)` without repeating $O(n_x n_y)$ table
-/// validation on every query point.
+/// Pre-computed 1D cell index, local grid spacing, and cubic Hermite basis
+/// polynomials for a single coordinate axis.
+#[derive(Debug, Clone, Copy)]
+struct AxisHermite {
+    /// Lower cell index $i \in \{0, \dots, n - 2\}$.
+    idx: usize,
+    /// Normalized local coordinate $p = (q - x_i) / h \in [0, 1]$.
+    p: f64,
+    /// Complementary coordinate $1 - p$.
+    pi: f64,
+    /// Cell width $h = x_{i+1} - x_i$.
+    h: f64,
+    /// Squared cell width $h^2$.
+    h2: f64,
+    /// Reciprocal cell width $1 / h$.
+    hi: f64,
+    /// Cubic basis term $p(p^2 - 1)$.
+    c: f64,
+    /// Complementary cubic basis term $(1 - p)((1 - p)^2 - 1)$.
+    ci: f64,
+    /// Cubic derivative basis term $3 p^2 - 1$.
+    cd: f64,
+    /// Complementary cubic derivative basis term $-3(1 - p)^2 + 1$.
+    cdi: f64,
+}
+
+/// Locates the containing interval on a strictly ascending uniform 1D `grid`
+/// and evaluates the 1D cubic Hermite basis polynomials at `query`.
+#[inline]
+fn locate_and_basis_1d(query: f64, grid: &[f64]) -> AxisHermite {
+    let n = grid.len();
+    let zq = query.clamp(grid[0], grid[n - 1]);
+    let d_avg = (grid[n - 1] - grid[0]) / ((n - 1) as f64);
+    let mut idx = ((zq - grid[0]) / d_avg).floor() as usize;
+    if idx >= n - 1 {
+        idx = n - 2;
+    }
+    if zq < grid[idx] && idx > 0 {
+        idx -= 1;
+    } else if zq > grid[idx + 1] && idx + 1 < n - 1 {
+        idx += 1;
+    }
+    let h = grid[idx + 1] - grid[idx];
+    let hi = 1.0 / h;
+    let p = (zq - grid[idx]) * hi;
+    let pi = 1.0 - p;
+    let p2 = p * p;
+    let pi2 = pi * pi;
+    AxisHermite {
+        idx,
+        p,
+        pi,
+        h,
+        h2: h * h,
+        hi,
+        c: p * (p2 - 1.0),
+        ci: pi * (pi2 - 1.0),
+        cd: 3.0 * p2 - 1.0,
+        cdi: -3.0 * pi2 + 1.0,
+    }
+}
+
+/// Evaluates `[f, df_dx, df_dy, d2f_dx2, d2f_dy2, d2f_dxdy]` on a
+/// pre-validated uniform 2D bicubic spline grid `(x_grid, y_grid, coeffs)`.
 ///
-/// Returns `[f, df_dx, df_dy, d2f_dx2, d2f_dy2, d2f_dxdy]`.
+/// # Arguments
+/// * `x_query` - Query coordinate along the first axis ($\log_{10}\rho$).
+/// * `y_query` - Query coordinate along the second axis ($\log_{10}T$).
+/// * `x_grid` - Strictly ascending uniform 1D grid of length `nx`.
+/// * `y_grid` - Strictly ascending uniform 1D grid of length `ny`.
+/// * `coeffs` - Flattened bicubic spline coefficients `[f, f_xx, f_yy, f_xxyy]`
+///   of length `nx * ny` in row-major order (`i * ny + j`).
+///
+/// # Returns
+/// Six-element array `[f, df_dx, df_dy, d2f_dx2, d2f_dy2, d2f_dxdy]`.
 #[inline]
 pub fn eval_bicub_prevalidated(
-    xget: f64,
-    yget: f64,
-    x: &[f64],
-    y: &[f64],
+    x_query: f64,
+    y_query: f64,
+    x_grid: &[f64],
+    y_grid: &[f64],
     coeffs: &[[f64; 4]],
-) -> [f64; 6] {
-    let nx = x.len();
-    let ny = y.len();
-    let zx = xget.clamp(x[0], x[nx - 1]);
-    let zy = yget.clamp(y[0], y[ny - 1]);
-    let dx_avg = (x[nx - 1] - x[0]) / ((nx - 1) as f64);
-    let dy_avg = (y[ny - 1] - y[0]) / ((ny - 1) as f64);
-    let mut i = (((zx - x[0]) / dx_avg) as usize).min(nx - 2);
-    if zx < x[i] && i > 0 {
-        i -= 1;
-    } else if zx > x[i + 1] && i + 1 < nx - 1 {
-        i += 1;
-    }
-    let mut j = (((zy - y[0]) / dy_avg) as usize).min(ny - 2);
-    if zy < y[j] && j > 0 {
-        j -= 1;
-    } else if zy > y[j + 1] && j + 1 < ny - 1 {
-        j += 1;
-    }
-    let hx = x[i + 1] - x[i];
-    let hxi = 1.0 / hx;
-    let xp = (zx - x[i]) * hxi;
-    let xpi = 1.0 - xp;
-    let hy = y[j + 1] - y[j];
-    let hyi = 1.0 / hy;
-    let yp = (zy - y[j]) * hyi;
-    let ypi = 1.0 - yp;
+) -> [f64; 4 + 2] {
+    let ny = y_grid.len();
+    let ax = locate_and_basis_1d(x_query, x_grid);
+    let ay = locate_and_basis_1d(y_query, y_grid);
 
-    let xp2 = xp * xp;
-    let xpi2 = xpi * xpi;
-    let cx = xp * (xp2 - 1.0);
-    let cxi = xpi * (xpi2 - 1.0);
-    let cxd = 3.0 * xp2 - 1.0;
-    let cxdi = -3.0 * xpi2 + 1.0;
-    let hx2 = hx * hx;
-
-    let yp2 = yp * yp;
-    let ypi2 = ypi * ypi;
-    let cy = yp * (yp2 - 1.0);
-    let cyi = ypi * (ypi2 - 1.0);
-    let cyd = 3.0 * yp2 - 1.0;
-    let cydi = -3.0 * ypi2 + 1.0;
-    let hy2 = hy * hy;
+    let c00 = &coeffs[ax.idx * ny + ay.idx];
+    let c01 = &coeffs[ax.idx * ny + ay.idx + 1];
+    let c10 = &coeffs[(ax.idx + 1) * ny + ay.idx];
+    let c11 = &coeffs[(ax.idx + 1) * ny + ay.idx + 1];
 
     let sixth = 1.0 / 6.0;
     let z36th = 1.0 / 36.0;
-    let c00 = coeffs[i * ny + j];
-    let c01 = coeffs[i * ny + j + 1];
-    let c10 = coeffs[(i + 1) * ny + j];
-    let c11 = coeffs[(i + 1) * ny + j + 1];
 
-    let y0_f = ypi * c00[0] + yp * c01[0];
-    let y1_f = ypi * c10[0] + yp * c11[0];
-    let y0_fxx = ypi * c00[1] + yp * c01[1];
-    let y1_fxx = ypi * c10[1] + yp * c11[1];
-    let y0_fyy = ypi * c00[2] + yp * c01[2];
-    let y1_fyy = ypi * c10[2] + yp * c11[2];
-    let y0_fxxyy = ypi * c00[3] + yp * c01[3];
-    let y1_fxxyy = ypi * c10[3] + yp * c11[3];
-    let cy0_fyy = cyi * c00[2] + cy * c01[2];
-    let cy1_fyy = cyi * c10[2] + cy * c11[2];
-    let cy0_fxxyy = cyi * c00[3] + cy * c01[3];
-    let cy1_fxxyy = cyi * c10[3] + cy * c11[3];
-    let cyd0_fyy = cydi * c00[2] + cyd * c01[2];
-    let cyd1_fyy = cydi * c10[2] + cyd * c11[2];
-    let cyd0_fxxyy = cydi * c00[3] + cyd * c01[3];
-    let cyd1_fxxyy = cydi * c10[3] + cyd * c11[3];
+    let y0_0 = ay.pi * c00[0] + ay.p * c01[0];
+    let y1_0 = ay.pi * c10[0] + ay.p * c11[0];
+    let y0_1 = ay.pi * c00[1] + ay.p * c01[1];
+    let y1_1 = ay.pi * c10[1] + ay.p * c11[1];
+    let y0_2 = ay.pi * c00[2] + ay.p * c01[2];
+    let y1_2 = ay.pi * c10[2] + ay.p * c11[2];
+    let y0_3 = ay.pi * c00[3] + ay.p * c01[3];
+    let y1_3 = ay.pi * c10[3] + ay.p * c11[3];
 
-    let df0_y = c01[0] - c00[0];
-    let df1_y = c11[0] - c10[0];
-    let dfxx0_y = c01[1] - c00[1];
-    let dfxx1_y = c11[1] - c10[1];
+    let cy0_2 = ay.ci * c00[2] + ay.c * c01[2];
+    let cy1_2 = ay.ci * c10[2] + ay.c * c11[2];
+    let cy0_3 = ay.ci * c00[3] + ay.c * c01[3];
+    let cy1_3 = ay.ci * c10[3] + ay.c * c11[3];
 
-    let f = xpi * y0_f
-        + xp * y1_f
-        + sixth * hx2 * (cxi * y0_fxx + cx * y1_fxx)
-        + sixth * hy2 * (xpi * cy0_fyy + xp * cy1_fyy)
-        + z36th * hx2 * hy2 * (cxi * cy0_fxxyy + cx * cy1_fxxyy);
-    let df_dx = hxi * (y1_f - y0_f)
-        + sixth * hx * (cxdi * y0_fxx + cxd * y1_fxx)
-        + sixth * hxi * hy2 * (cy1_fyy - cy0_fyy)
-        + z36th * hx * hy2 * (cxdi * cy0_fxxyy + cxd * cy1_fxxyy);
-    let df_dy = hyi * (xpi * df0_y + xp * df1_y)
-        + sixth * hx2 * hyi * (cxi * dfxx0_y + cx * dfxx1_y)
-        + sixth * hy * (xpi * cyd0_fyy + xp * cyd1_fyy)
-        + z36th * hx2 * hy * (cxi * cyd0_fxxyy + cx * cyd1_fxxyy);
-    let d2f_dx2 = xpi * y0_fxx
-        + xp * y1_fxx
-        + sixth * hy2 * (xpi * cy0_fxxyy + xp * cy1_fxxyy);
-    let d2f_dy2 = xpi * y0_fyy
-        + xp * y1_fyy
-        + sixth * hx2 * (cxi * y0_fxxyy + cx * y1_fxxyy);
-    let d2f_dxdy = hxi * hyi * (df1_y - df0_y)
-        + sixth * hx * hyi * (cxdi * dfxx0_y + cxd * dfxx1_y)
-        + sixth * hxi * hy * (cyd1_fyy - cyd0_fyy)
-        + z36th * hx * hy * (cxdi * cyd0_fxxyy + cxd * cyd1_fxxyy);
+    let f = ax.pi * y0_0
+        + ax.p * y1_0
+        + sixth * ax.h2 * (ax.ci * y0_1 + ax.c * y1_1)
+        + sixth * ay.h2 * (ax.pi * cy0_2 + ax.p * cy1_2)
+        + z36th * ax.h2 * ay.h2 * (ax.ci * cy0_3 + ax.c * cy1_3);
+
+    let df_dx = ax.hi * (y1_0 - y0_0)
+        + sixth * ax.h * (ax.cdi * y0_1 + ax.cd * y1_1)
+        + sixth * ax.hi * ay.h2 * (cy1_2 - cy0_2)
+        + z36th * ax.h * ay.h2 * (ax.cdi * cy0_3 + ax.cd * cy1_3);
+
+    let cyd0_2 = ay.cdi * c00[2] + ay.cd * c01[2];
+    let cyd1_2 = ay.cdi * c10[2] + ay.cd * c11[2];
+    let cyd0_3 = ay.cdi * c00[3] + ay.cd * c01[3];
+    let cyd1_3 = ay.cdi * c10[3] + ay.cd * c11[3];
+    let df0_0 = c01[0] - c00[0];
+    let df1_0 = c11[0] - c10[0];
+    let df0_1 = c01[1] - c00[1];
+    let df1_1 = c11[1] - c10[1];
+
+    let df_dy = ay.hi * (ax.pi * df0_0 + ax.p * df1_0)
+        + sixth * ax.h2 * ay.hi * (ax.ci * df0_1 + ax.c * df1_1)
+        + sixth * ay.h * (ax.pi * cyd0_2 + ax.p * cyd1_2)
+        + z36th * ax.h2 * ay.h * (ax.ci * cyd0_3 + ax.c * cyd1_3);
+
+    let d2f_dx2 = ax.pi * y0_1
+        + ax.p * y1_1
+        + sixth * ay.h2 * (ax.pi * cy0_3 + ax.p * cy1_3);
+    let d2f_dy2 = ax.pi * y0_2
+        + ax.p * y1_2
+        + sixth * ax.h2 * (ax.ci * y0_3 + ax.c * y1_3);
+    let d2f_dxdy = ay.hi * ax.hi * (df1_0 - df0_0)
+        + sixth * ax.h * ay.hi * (ax.cdi * df0_1 + ax.cd * df1_1)
+        + sixth * ax.hi * ay.h * (cyd1_2 - cyd0_2)
+        + z36th * ax.h * ay.h * (ax.cdi * cyd0_3 + ax.cd * cyd1_3);
 
     [f, df_dx, df_dy, d2f_dx2, d2f_dy2, d2f_dxdy]
 }

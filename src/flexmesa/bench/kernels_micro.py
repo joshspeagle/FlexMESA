@@ -26,13 +26,29 @@ from flexmesa.bench import harness as _h
 
 
 def _autodiff_primal_jax(xy: jax.Array) -> jax.Array:
-    """Evaluates $f(x, y) = \\exp(0.1 x y) + x^{1.5} / (y + 2)$ in JAX."""
+    """Evaluates $f(x, y) = \\exp(0.1 x y) + x^{1.5} / (y + 2)$ in JAX.
+
+    Args:
+        xy: Two-element coordinate vector `[x, y]` of shape `(2,)` (`float64`).
+
+    Returns:
+        Scalar `float64` value $f(x, y)$.
+    """
     x, y = xy[0], xy[1]
     return jnp.exp(0.1 * x * y) + jnp.power(x, 1.5) / (y + 2.0)
 
 
 def _autodiff_point_jax(x: jax.Array, y: jax.Array) -> jax.Array:
-    """Computes `[f, df_dx, df_dy, d2f_dx2, d2f_dxdy, d2f_dy2]` at `(x, y)`."""
+    """Computes `[f, df_dx, df_dy, d2f_dx2, d2f_dxdy, d2f_dy2]` at `(x, y)`.
+
+    Args:
+        x: First independent variable ($\\log_{10}T$, scalar `float64`).
+        y: Second independent variable ($\\log_{10}\\rho$, scalar `float64`).
+
+    Returns:
+        6-element `float64` JAX array `[f, df_dx, df_dy, d2f_dx2, d2f_dxdy,
+        d2f_dy2]` of shape `(6,)`.
+    """
     xy = jnp.stack([x, y])
     val, grad = jax.value_and_grad(_autodiff_primal_jax)(xy)
     hess = jax.hessian(_autodiff_primal_jax)(xy)
@@ -51,7 +67,13 @@ def _eval_autodiff_stage0(
     y_np: npt.NDArray[np.float64],
     out0: npt.NDArray[np.float64],
 ) -> None:
-    """Evaluates Stage 0 zone-by-zone scalar `AutoDiffReal2VarOrder2` loop."""
+    """Evaluates Stage 0 zone-by-zone scalar `AutoDiffReal2VarOrder2` loop.
+
+    Args:
+        x_np: 1D array of $\\log_{10}T$ coordinates of shape `(n_zones,)`.
+        y_np: 1D array of $\\log_{10}\\rho$ coordinates of shape `(n_zones,)`.
+        out0: Pre-allocated output buffer of shape `(n_zones, 6)`.
+    """
     for k in range(x_np.shape[0]):
         xk = _ad.AutoDiffReal2VarOrder2.var1(float(x_np[k]))
         yk = _ad.AutoDiffReal2VarOrder2.var2(float(y_np[k]))
@@ -67,7 +89,15 @@ def _eval_autodiff_stage0(
 
 
 def _eval_autodiff_stage1(x_j: jax.Array, y_j: jax.Array) -> jax.Array:
-    """Evaluates Stage 1 array-wide `AutoDiffReal2VarOrder2` expression."""
+    """Evaluates Stage 1 array-wide `AutoDiffReal2VarOrder2` expression.
+
+    Args:
+        x_j: 1D JAX array of $\\log_{10}T$ values of shape `(n_zones,)`.
+        y_j: 1D JAX array of $\\log_{10}\\rho$ values of shape `(n_zones,)`.
+
+    Returns:
+        2D `float64` JAX array of shape `(n_zones, 6)`.
+    """
     xv = _ad.AutoDiffReal2VarOrder2.var1(x_j)
     yv = _ad.AutoDiffReal2VarOrder2.var2(y_j)
     zv = (xv * yv * 0.1).exp() + xv.powf(1.5) / (yv + 2.0)
@@ -115,21 +145,14 @@ def bench_autodiff(
     b_sz = _h.STAGE3_BATCH_SIZE
     x_b = jnp.broadcast_to(x_j[None, :], (b_sz, nz))
     y_b = jnp.broadcast_to(y_j[None, :], (b_sz, nz))
-    stage3_raw, out3_j = _h.measure_and_capture(
+    stage3, out3_j = _h.measure_stage3_batch(
         n_warmup,
         n_repeats,
         lambda: _autodiff_batch_jit(x_b, y_b),
-        record_first_as_compile=True,
-    )
-    stage3 = _h.LatencyStats(
-        median_us=stage3_raw.median_us / float(b_sz),
-        iqr_us=stage3_raw.iqr_us / float(b_sz),
-        compile_us=stage3_raw.compile_us,
     )
 
-    out1_np = np.asarray(out1_j, dtype=np.float64)
-    out2_np = np.asarray(out2_j, dtype=np.float64)
-    out3_np = np.asarray(out3_j[0], dtype=np.float64)
+    out1_np, out2_np = np.asarray(out1_j), np.asarray(out2_j)
+    out3_np = np.asarray(out3_j[0])
     max_rel_err = max(
         _h.max_rel_diff(out0, out1_np),
         _h.max_rel_diff(out0, out2_np),
@@ -179,16 +202,15 @@ def bench_interp2d(
                 table.coeffs,
             )
             out0[k] = (
-                float(ev.f),
-                float(ev.df_dx),
-                float(ev.df_dy),
-                float(ev.d2f_dx2),
-                float(ev.d2f_dy2),
-                float(ev.d2f_dxdy),
+                ev.f,
+                ev.df_dx,
+                ev.df_dy,
+                ev.d2f_dx2,
+                ev.d2f_dy2,
+                ev.d2f_dxdy,
             )
 
     stage0 = _h.measure_us(1, 3, _run_stage0)
-
     xq_j = jnp.asarray(grid.log10_rho, dtype=jnp.float64)
     yq_j = jnp.asarray(grid.log10_t, dtype=jnp.float64)
     tx, ty, tc = table.x_jax, table.y_jax, table.coeffs_jax
@@ -201,25 +223,16 @@ def bench_interp2d(
         lambda: _bicub.bicub_jit(xq_j, yq_j, tx, ty, tc),
         record_first_as_compile=True,
     )
-
     b_sz = _h.STAGE3_BATCH_SIZE
     xq_b = jnp.broadcast_to(xq_j[None, :], (b_sz, nz))
     yq_b = jnp.broadcast_to(yq_j[None, :], (b_sz, nz))
-    stage3_raw, out3_j = _h.measure_and_capture(
+    stage3, out3_j = _h.measure_stage3_batch(
         n_warmup,
         n_repeats,
         lambda: _bicub.bicub_batch_jit(xq_b, yq_b, tx, ty, tc),
-        record_first_as_compile=True,
     )
-    stage3 = _h.LatencyStats(
-        median_us=stage3_raw.median_us / float(b_sz),
-        iqr_us=stage3_raw.iqr_us / float(b_sz),
-        compile_us=stage3_raw.compile_us,
-    )
-
-    out1_np = np.asarray(out1_j, dtype=np.float64)
-    out2_np = np.asarray(out2_j, dtype=np.float64)
-    out3_np = np.asarray(out3_j[0], dtype=np.float64)
+    out1_np, out2_np = np.asarray(out1_j), np.asarray(out2_j)
+    out3_np = np.asarray(out3_j[0])
     max_rel_err = max(
         _h.max_rel_diff(out0, out1_np),
         _h.max_rel_diff(out0, out2_np),
@@ -243,7 +256,18 @@ def _neu_pair_plas_cutoff_jax(
     abar: jax.Array,
     zbar: jax.Array,
 ) -> jax.Array:
-    """Evaluates pair + plasmon neutrino loss with low-$T$ cosine cutoff."""
+    """Evaluates pair + plasmon neutrino loss with low-$T$ cosine cutoff.
+
+    Args:
+        t: Temperature $T$ in $\\mathrm{K}$ (`float64` scalar).
+        rho: Mass density $\\rho$ in $\\mathrm{g\\,cm^{-3}}$ (`float64` scalar).
+        abar: Mean atomic weight $\\bar{A}$ in $\\mathrm{amu}$ (`float64`).
+        zbar: Mean ionic charge $\\bar{Z}$ in $e$ (`float64`).
+
+    Returns:
+        Specific neutrino energy-loss rate $\\epsilon_\\nu$ in
+        $\\mathrm{erg\\,g^{-1}\\,s^{-1}}$.
+    """
     raw = _neu.neu_pair_plas_jax(t, rho, abar, zbar)
     log10_t = jnp.log10(t)
     ratio = (log10_t - 7.0) / 0.5
@@ -261,11 +285,20 @@ def _neu_point_jax(
     abar: jax.Array,
     zbar: jax.Array,
 ) -> jax.Array:
-    """Computes `[val, d_t, d_rho, d_abar, d_zbar]` in JAX `float64`."""
-    val = _neu_pair_plas_cutoff_jax(t, rho, abar, zbar)
-    grads = jax.grad(_neu_pair_plas_cutoff_jax, argnums=(0, 1, 2, 3))(
-        t, rho, abar, zbar
-    )
+    """Computes `[val, d_t, d_rho, d_abar, d_zbar]` in JAX `float64`.
+
+    Args:
+        t: Temperature $T$ in $\\mathrm{K}$ (`float64` scalar).
+        rho: Mass density $\\rho$ in $\\mathrm{g\\,cm^{-3}}$ (`float64` scalar).
+        abar: Mean atomic weight $\\bar{A}$ in $\\mathrm{amu}$ (`float64`).
+        zbar: Mean ionic charge $\\bar{Z}$ in $e$ (`float64`).
+
+    Returns:
+        5-element `float64` JAX array `[val, d_t, d_rho, d_abar, d_zbar]`.
+    """
+    val, grads = jax.value_and_grad(
+        _neu_pair_plas_cutoff_jax, argnums=(0, 1, 2, 3)
+    )(t, rho, abar, zbar)
     return jnp.stack([val, grads[0], grads[1], grads[2], grads[3]])
 
 
@@ -341,16 +374,10 @@ def bench_neu(
     rho_b = jnp.broadcast_to(rho_j[None, :], (b_sz, nz))
     abar_b = jnp.broadcast_to(abar_j[None, :], (b_sz, nz))
     zbar_b = jnp.broadcast_to(zbar_j[None, :], (b_sz, nz))
-    stage3_raw, out3_j = _h.measure_and_capture(
+    stage3, out3_j = _h.measure_stage3_batch(
         n_warmup,
         n_repeats,
         lambda: _neu_batch_jit(t_b, rho_b, abar_b, zbar_b),
-        record_first_as_compile=True,
-    )
-    stage3 = _h.LatencyStats(
-        median_us=stage3_raw.median_us / float(b_sz),
-        iqr_us=stage3_raw.iqr_us / float(b_sz),
-        compile_us=stage3_raw.compile_us,
     )
 
     out2_np = np.asarray(out2_j, dtype=np.float64)

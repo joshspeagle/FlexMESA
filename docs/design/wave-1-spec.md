@@ -354,7 +354,7 @@ $N_{\mathrm{zones}} \in \{128, 1024, 4096\}$, and four optimization stages:
 3. **Stage 2 (Vectorized / JIT Kernel Fusion)**: `jax.jit` fused XLA kernels
    (via `jax.lax.fori_loop` and Implicit Function Theorem differentiation) and
    Safe Rust pre-validated slice loops with zero inner-loop heap allocations.
-4. **Stage 3 (Batched / Multi-Core Parallelism)**: `jax.vmap` across $B = 8$
+4. **Stage 3 (Batched / Multi-Core Parallelism)**: `jax.vmap` across $B = 4$
    stellar profiles and 4-thread scoped Safe Rust execution.
 
 All 18 `(workload, N_zones)` combinations agree to 9 significant digits in

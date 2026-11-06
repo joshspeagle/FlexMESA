@@ -154,6 +154,40 @@ def measure_and_capture[T](
     return stats, box[0]
 
 
+def measure_stage3_batch[T](
+    n_warmup: int,
+    n_repeats: int,
+    op_batch: collections.abc.Callable[[], T],
+) -> tuple[LatencyStats, T]:
+    """Measures a batched Stage 3 call and amortizes latency per profile.
+
+    Args:
+        n_warmup: Number of untimed warmup iterations.
+        n_repeats: Number of timed iterations.
+        op_batch: Zero-argument callable executing a batch of
+            `STAGE3_BATCH_SIZE` stellar profiles.
+
+    Returns:
+        Two-tuple `(amortized_stats, batch_result)` where `median_us` and
+        `iqr_us` are divided by `STAGE3_BATCH_SIZE`.
+    """
+    raw, out = measure_and_capture(
+        n_warmup,
+        n_repeats,
+        op_batch,
+        record_first_as_compile=True,
+    )
+    scale = float(STAGE3_BATCH_SIZE)
+    return (
+        LatencyStats(
+            median_us=raw.median_us / scale,
+            iqr_us=raw.iqr_us / scale,
+            compile_us=raw.compile_us,
+        ),
+        out,
+    )
+
+
 def max_rel_diff(
     reference: npt.ArrayLike,
     candidate: npt.ArrayLike,

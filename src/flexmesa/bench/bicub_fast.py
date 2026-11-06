@@ -14,20 +14,20 @@ import jax.numpy as jnp
 
 
 def locate_uniform_cell_jax(
-    q: jax.Array,
+    query: jax.Array,
     grid: jax.Array,
 ) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array]:
-    """Locates cell index `i`, normalized offset `xp`, `hx`, and `1 / hx`.
+    """Locates cell index `idx`, normalized offset `xp`, `h`, and `1 / h`.
 
     Args:
-        q: Query coordinate scalar (`float64` `jax.Array`).
+        query: Query coordinate scalar (`float64` `jax.Array`).
         grid: Strictly ascending uniform 1D grid of shape `(N,)`.
 
     Returns:
         4-tuple `(idx, xp, h, hi)` of `int32`/`float64` JAX scalars.
     """
     n = grid.shape[0]
-    zq = jnp.clip(q, grid[0], grid[-1])
+    zq = jnp.clip(query, grid[0], grid[-1])
     d_avg = (grid[-1] - grid[0]) / float(n - 1)
     idx = jnp.clip(
         jnp.floor((zq - grid[0]) / d_avg).astype(jnp.int32), 0, n - 2
@@ -43,25 +43,25 @@ def locate_uniform_cell_jax(
 def eval_bicub_point_jax(
     xq: jax.Array,
     yq: jax.Array,
-    x: jax.Array,
-    y: jax.Array,
+    x_grid: jax.Array,
+    y_grid: jax.Array,
     coeffs: jax.Array,
 ) -> jax.Array:
     """Evaluates `[f, df_dx, df_dy, d2f_dx2, d2f_dy2, d2f_dxdy]` in pure JAX.
 
     Args:
-        xq: Query x-coordinate (`float64` scalar).
-        yq: Query y-coordinate (`float64` scalar).
-        x: Uniform x-grid of shape `(nx,)`.
-        y: Uniform y-grid of shape `(ny,)`.
+        xq: Query x-coordinate (`float64` scalar, $\\log_{10}\\rho$).
+        yq: Query y-coordinate (`float64` scalar, $\\log_{10}T$).
+        x_grid: Uniform x-grid of shape `(nx,)`.
+        y_grid: Uniform y-grid of shape `(ny,)`.
         coeffs: Bicubic spline coefficients of shape `(nx, ny, 4)`.
 
     Returns:
         6-element `float64` JAX array `[f, df_dx, df_dy, d2f_dx2, d2f_dy2,
         d2f_dxdy]`.
     """
-    i, xp, hx, hxi = locate_uniform_cell_jax(xq, x)
-    j, yp, hy, hyi = locate_uniform_cell_jax(yq, y)
+    i, xp, hx, hxi = locate_uniform_cell_jax(xq, x_grid)
+    j, yp, hy, hyi = locate_uniform_cell_jax(yq, y_grid)
     xpi, ypi = 1.0 - xp, 1.0 - yp
     xp2, xpi2 = xp * xp, xpi * xpi
     yp2, ypi2 = yp * yp, ypi * ypi

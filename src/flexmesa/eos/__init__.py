@@ -10,7 +10,7 @@ analytical neutral ideal gas plus radiation (`ideal`).
 
 from __future__ import annotations
 
-from flexmesa.eos import core, fermi, ideal
+from flexmesa.eos import core, fermi, helm, ideal
 
 EOS_BASIC_RESULT_NAMES = core.EOS_BASIC_RESULT_NAMES
 EosEvalOutput = core.EosEvalOutput
@@ -49,6 +49,9 @@ compute_ion_offset = core.compute_ion_offset
 compute_ion_offset_from_za = core.compute_ion_offset_from_za
 dfermi = fermi.dfermi
 dfermi_jax = fermi.dfermi_jax
+eval_helm_cell_jax = helm.eval_helm_cell_jax
+eval_helm_eos = helm.eval_helm_eos
+eval_helm_eos_zones = helm.eval_helm_eos_zones
 eval_ideal_eos = ideal.eval_ideal_eos
 eval_ideal_eos_from_weights = ideal.eval_ideal_eos_from_weights
 eval_ideal_eos_zones = ideal.eval_ideal_eos_zones
@@ -97,10 +100,14 @@ __all__: list[str] = [
     "core",
     "dfermi",
     "dfermi_jax",
+    "eval_helm_cell_jax",
+    "eval_helm_eos",
+    "eval_helm_eos_zones",
     "eval_ideal_eos",
     "eval_ideal_eos_from_weights",
     "eval_ideal_eos_zones",
     "fermi",
+    "helm",
     "ideal",
     "is_contained",
     "min_distance_to_polygon",

@@ -38,6 +38,9 @@ pub mod chem_py;
 /// photometry).
 #[allow(unsafe_code)]
 pub mod colors_py;
+/// Tier B bindings for `eos` Wave 3a.2 (`HELM` equation of state).
+#[allow(unsafe_code)]
+pub mod eos_helm_py;
 /// Tier B bindings for `eos` (Wave 3a analytical and single-table EOS core).
 #[allow(unsafe_code)]
 pub mod eos_py;
@@ -240,5 +243,6 @@ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     colors_py::register(m)?;
     ionization_py::register(m)?;
     eos_py::register(m)?;
+    eos_helm_py::register(m)?;
     Ok(())
 }

@@ -358,4 +358,21 @@ def eos_eval_ideal_zones(
     temp: _ArrF64, rho: _ArrF64, abar: float, zbar: float, xa: _ArrF64,
     weights: _ArrF64, a: _ArrF64, parallel: bool = True,
 ) -> _ArrF64: ...
+def eos_eval_helm(
+    temp: float, rho: float, abar: float, zbar: float,
+) -> tuple[_ArrF64, _ArrF64, _ArrF64, _ArrF64, _ArrF64]: ...
+def eos_eval_helm_zones(
+    temp: _ArrF64, rho: _ArrF64, abar: _ArrF64, zbar: _ArrF64,
+    parallel: bool = True,
+) -> _ArrF64: ...
+def eos_helm_cell_data(
+    log_temp: float, din: float,
+) -> tuple[
+    float, float, float, float, _ArrF64, _ArrF64, _ArrF64, _ArrF64
+]: ...
+def eos_helm_cells_batch(
+    log_temp: _ArrF64, din: _ArrF64,
+) -> tuple[
+    _ArrF64, _ArrF64, _ArrF64, _ArrF64, _ArrF64, _ArrF64, _ArrF64, _ArrF64
+]: ...
 # fmt: on

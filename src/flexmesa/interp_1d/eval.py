@@ -10,6 +10,7 @@ from __future__ import annotations
 import jax.numpy as jnp
 import numpy as np
 
+from flexmesa import _dispatch, _rust
 from flexmesa.interp_1d import pm
 
 
@@ -77,11 +78,34 @@ def _eval_horner(
     return vals, slopes
 
 
+def _prepare_rust_eval_1d(
+    init_x: np.ndarray | jnp.ndarray,
+    coeffs: np.ndarray | jnp.ndarray,
+    xs: np.ndarray | jnp.ndarray,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray] | None:
+    """Validates and packs 1D spline inputs as C-contiguous ``float64`` arrays.
+
+    Returns ``(xg, ca_flat, xq)`` when ``nx >= 2`` and ``xq`` is 1D, or ``None``
+    when the single-knot / higher-rank fallback path in ``_eval_horner`` should
+    be used.
+    """
+    xg = np.ascontiguousarray(init_x, dtype=np.float64)
+    ca = np.ascontiguousarray(coeffs, dtype=np.float64)
+    xq = np.ascontiguousarray(xs, dtype=np.float64)
+    if xg.ndim != 1 or xg.size == 0 or ca.shape != (xg.size, 4):
+        raise ValueError("coeffs must have shape (len(init_x), 4) with N >= 1.")
+    if xg.size >= 2 and xq.ndim == 1:
+        return xg, ca.ravel(), xq
+    return None
+
+
 def interp_values_and_slopes(
     init_x: np.ndarray | jnp.ndarray,
     coeffs: np.ndarray | jnp.ndarray,
     xs: np.ndarray | jnp.ndarray,
-) -> tuple[jnp.ndarray, jnp.ndarray]:
+    *,
+    backend: _dispatch.Backend = "auto",
+) -> tuple[np.ndarray | jnp.ndarray, np.ndarray | jnp.ndarray]:
     """Evaluates a 1D cubic spline and its first derivative at query points.
 
     Supports ``jax.grad``, ``jax.hessian``, and ``jax.vmap`` with respect to
@@ -93,13 +117,18 @@ def interp_values_and_slopes(
         coeffs: Spline coefficient array of shape ``(N, 4)``.
         xs: Query coordinates of shape ``(M,)`` in physical or dimensionless
             units.
+        backend: Execution backend (``"auto"``, ``"rust"``, or ``"jax"``).
 
     Returns:
-        Tuple ``(vals, slopes)`` of ``float64`` JAX arrays of shape ``(M,)``.
+        Tuple ``(vals, slopes)`` of ``float64`` arrays of shape ``(M,)``.
 
     Raises:
         ValueError: If ``init_x`` and ``coeffs`` shapes are incompatible.
     """
+    if _dispatch.resolve_backend(backend, init_x, coeffs, xs) == "rust":
+        packed = _prepare_rust_eval_1d(init_x, coeffs, xs)
+        if packed is not None:
+            return _rust.interp_values_and_slopes(*packed)
     vals, slopes = _eval_horner(init_x, coeffs, xs, with_slopes=True)
     assert slopes is not None
     return vals, slopes
@@ -109,20 +138,27 @@ def interp_values(
     init_x: np.ndarray | jnp.ndarray,
     coeffs: np.ndarray | jnp.ndarray,
     xs: np.ndarray | jnp.ndarray,
-) -> jnp.ndarray:
+    *,
+    backend: _dispatch.Backend = "auto",
+) -> np.ndarray | jnp.ndarray:
     """Evaluates a 1D cubic spline at query points ``xs`` (`interp_values`).
 
     Args:
         init_x: Strictly monotonic knot coordinates of shape ``(N,)``.
         coeffs: Spline coefficient array of shape ``(N, 4)``.
         xs: Query coordinates of shape ``(M,)``.
+        backend: Execution backend (``"auto"``, ``"rust"``, or ``"jax"``).
 
     Returns:
-        JAX ``float64`` array of interpolated values of shape ``(M,)``.
+        ``float64`` array of interpolated values of shape ``(M,)``.
 
     Raises:
         ValueError: If ``init_x`` and ``coeffs`` shapes are incompatible.
     """
+    if _dispatch.resolve_backend(backend, init_x, coeffs, xs) == "rust":
+        packed = _prepare_rust_eval_1d(init_x, coeffs, xs)
+        if packed is not None:
+            return _rust.interp_values(*packed)
     vals, _ = _eval_horner(init_x, coeffs, xs, with_slopes=False)
     return vals
 
@@ -131,22 +167,31 @@ def interp_value_and_slope(
     init_x: np.ndarray | jnp.ndarray,
     coeffs: np.ndarray | jnp.ndarray,
     x: float | jnp.ndarray,
-) -> tuple[jnp.ndarray, jnp.ndarray]:
+    *,
+    backend: _dispatch.Backend = "auto",
+) -> tuple[np.ndarray | jnp.ndarray, np.ndarray | jnp.ndarray]:
     """Evaluates a 1D cubic spline value and slope at a single scalar ``x``.
 
     Args:
         init_x: Strictly monotonic knot coordinates of shape ``(N,)``.
         coeffs: Spline coefficient array of shape ``(N, 4)``.
         x: Scalar query coordinate in physical or dimensionless units.
+        backend: Execution backend (``"auto"``, ``"rust"``, or ``"jax"``).
 
     Returns:
-        Tuple ``(val, slope)`` of scalar ``float64`` JAX arrays.
+        Tuple ``(val, slope)`` of scalar ``float64`` values.
 
     Raises:
         ValueError: If ``init_x`` and ``coeffs`` shapes are incompatible.
     """
+    resolved = _dispatch.resolve_backend(backend, init_x, coeffs, x)
+    xq = (
+        np.atleast_1d(np.asarray(x, dtype=np.float64))
+        if resolved == "rust"
+        else jnp.atleast_1d(jnp.asarray(x, dtype=jnp.float64))
+    )
     vals, slopes = interp_values_and_slopes(
-        init_x, coeffs, jnp.atleast_1d(jnp.asarray(x, dtype=jnp.float64))
+        init_x, coeffs, xq, backend=resolved
     )
     return vals[0], slopes[0]
 
@@ -155,23 +200,30 @@ def interp_value(
     init_x: np.ndarray | jnp.ndarray,
     coeffs: np.ndarray | jnp.ndarray,
     x: float | jnp.ndarray,
-) -> jnp.ndarray:
+    *,
+    backend: _dispatch.Backend = "auto",
+) -> np.ndarray | jnp.ndarray:
     """Evaluates a 1D cubic spline value at a single scalar ``x``.
 
     Args:
         init_x: Strictly monotonic knot coordinates of shape ``(N,)``.
         coeffs: Spline coefficient array of shape ``(N, 4)``.
         x: Scalar query coordinate in physical or dimensionless units.
+        backend: Execution backend (``"auto"``, ``"rust"``, or ``"jax"``).
 
     Returns:
-        Scalar ``float64`` JAX array containing ``f(x)``.
+        Scalar ``float64`` value containing ``f(x)``.
 
     Raises:
         ValueError: If ``init_x`` and ``coeffs`` shapes are incompatible.
     """
-    vals = interp_values(
-        init_x, coeffs, jnp.atleast_1d(jnp.asarray(x, dtype=jnp.float64))
+    resolved = _dispatch.resolve_backend(backend, init_x, coeffs, x)
+    xq = (
+        np.atleast_1d(np.asarray(x, dtype=np.float64))
+        if resolved == "rust"
+        else jnp.atleast_1d(jnp.asarray(x, dtype=jnp.float64))
     )
+    vals = interp_values(init_x, coeffs, xq, backend=resolved)
     return vals[0]
 
 
@@ -186,7 +238,9 @@ def integrate_values(
     init_x: np.ndarray | jnp.ndarray,
     coeffs: np.ndarray | jnp.ndarray,
     xs: np.ndarray | jnp.ndarray,
-) -> jnp.ndarray:
+    *,
+    backend: _dispatch.Backend = "auto",
+) -> np.ndarray | jnp.ndarray:
     """Integrates a 1D cubic spline over adjacent segments ``[xs[k-1], xs[k]]``.
 
     Returns an array ``integrals`` of shape ``(M,)`` with ``integrals[0] = 0``
@@ -198,9 +252,10 @@ def integrate_values(
         coeffs: Spline coefficient array of shape ``(N, 4)``.
         xs: Monotonic integration bounds of shape ``(M,)`` aligned with
             ``init_x`` direction and lying within ``init_x`` bounds.
+        backend: Execution backend (``"auto"``, ``"rust"``, or ``"jax"``).
 
     Returns:
-        JAX ``float64`` array of shape ``(M,)`` containing segment integrals.
+        ``float64`` array of shape ``(M,)`` containing segment integrals.
 
     Raises:
         ValueError: If ``init_x``, ``coeffs``, or ``xs`` fail validation or
@@ -216,6 +271,13 @@ def integrate_values(
         raise ValueError("xs must be a finite 1D float64 array.")
     if x_q.size == 0:
         return jnp.zeros(0, dtype=jnp.float64)
+
+    if _dispatch.resolve_backend(backend, init_x, coeffs, xs) == "rust":
+        return _rust.integrate_values(
+            _dispatch.as_c_f64(x_grid),
+            _dispatch.as_c_f64(c_arr),
+            _dispatch.as_c_f64(x_q),
+        )
 
     increasing = bool(x_grid[-1] > x_grid[0])
     lo = float(min(x_grid[0], x_grid[-1]))

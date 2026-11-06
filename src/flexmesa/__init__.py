@@ -31,6 +31,8 @@ def enable_float64() -> bool:
 _X64_ENABLED: bool = enable_float64()
 
 from flexmesa import (  # noqa: E402
+    _dispatch,
+    _rust,
     auto_diff,
     bench,
     constants,
@@ -47,9 +49,14 @@ from flexmesa import (  # noqa: E402
     utils,
 )
 
+Backend = _dispatch.Backend
+resolve_backend = _dispatch.resolve_backend
+
 __version__: str = "0.1.0"
 __all__: list[str] = [
+    "Backend",
     "__version__",
+    "_rust",
     "auto_diff",
     "bench",
     "constants",
@@ -61,6 +68,7 @@ __all__: list[str] = [
     "mtx",
     "neu",
     "num",
+    "resolve_backend",
     "schema",
     "testing",
     "turb",

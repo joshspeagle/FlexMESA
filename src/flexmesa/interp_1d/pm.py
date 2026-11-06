@@ -13,7 +13,7 @@ from collections.abc import Sequence
 import jax.numpy as jnp
 import numpy as np
 
-from flexmesa import auto_diff
+from flexmesa import _dispatch, _rust, auto_diff
 
 SMACHEPS: float = 1.0e-13
 PM_WORK_SIZE: int = 3
@@ -43,14 +43,16 @@ def validate_1d_grid(
             non-finite, or ``x`` is not strictly monotonic.
     """
     x_arr = np.asarray(x, dtype=np.float64)
-    y_arr = np.asarray(y, dtype=np.float64)
+    y_arr = x_arr if x is y else np.asarray(y, dtype=np.float64)
     if x_arr.ndim != 1 or y_arr.ndim != 1 or x_arr.shape != y_arr.shape:
         raise ValueError("x and y must be 1D arrays of identical length.")
     if x_arr.size < min_points:
         raise ValueError(
             f"1D interpolation requires at least {min_points} points."
         )
-    if not (np.all(np.isfinite(x_arr)) and np.all(np.isfinite(y_arr))):
+    if not (
+        np.all(np.isfinite(x_arr)) and (x is y or np.all(np.isfinite(y_arr)))
+    ):
         raise ValueError("x and y must contain only finite float64 values.")
     dx = np.diff(x_arr)
     if not (np.all(dx > 0.0) or np.all(dx < 0.0)):
@@ -127,7 +129,9 @@ def _mk_pmcub(
 def interp_pm(
     x: np.ndarray | jnp.ndarray,
     y: np.ndarray | jnp.ndarray,
-) -> jnp.ndarray:
+    *,
+    backend: _dispatch.Backend = "auto",
+) -> np.ndarray | jnp.ndarray:
     """Computes Steffen (1990) piecewise-monotonic cubic coefficients.
 
     On subinterval ``[x[i], x[i + 1]]`` with offset ``dx = x_eval - x[i]``, the
@@ -138,14 +142,21 @@ def interp_pm(
         x: Knot coordinates of shape ``(N,)`` (``N >= 2``), strictly monotonic,
             in physical or dimensionless units.
         y: Knot values of shape ``(N,)`` in physical or dimensionless units.
+        backend: Execution backend (``"auto"``, ``"rust"``, or ``"jax"``).
 
     Returns:
-        JAX ``float64`` array of shape ``(N, 4)`` containing the local cubic
+        ``float64`` array of shape ``(N, 4)`` containing the local cubic
         coefficients ``[c0, c1, c2, c3]`` at each knot.
 
     Raises:
         ValueError: If ``x`` and ``y`` fail grid validation.
     """
+    if _dispatch.resolve_backend(backend, x, y) == "rust":
+        x_arr, y_arr = validate_1d_grid(x, y, min_points=2)
+        return _rust.interp_pm(
+            _dispatch.as_c_f64(x_arr),
+            _dispatch.as_c_f64(y_arr),
+        )
     return _mk_pmcub(x, y, slope_only=False)
 
 
@@ -173,7 +184,7 @@ def interp_pm_slopes_only(
 def interp_4pt_pm(
     x: Sequence[float] | np.ndarray | jnp.ndarray,
     y: Sequence[float] | np.ndarray | jnp.ndarray,
-) -> jnp.ndarray:
+) -> np.ndarray | jnp.ndarray:
     """Computes cubic coefficients on the middle interval of a 4-point stencil.
 
     For ``x[1] <= x_eval <= x[2]`` and ``dx = x_eval - x[1]``, the interpolated
@@ -186,7 +197,7 @@ def interp_4pt_pm(
             dimensionless units.
 
     Returns:
-        JAX ``float64`` array ``[a0, a1, a2]`` of shape ``(3,)``.
+        ``float64`` array ``[a0, a1, a2]`` of shape ``(3,)``.
 
     Raises:
         ValueError: If ``x`` and ``y`` do not have length 4 or fail grid

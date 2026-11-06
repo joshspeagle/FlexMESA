@@ -25,9 +25,10 @@ def interpolate_vector(
     old_y: np.ndarray | jnp.ndarray,
     new_x: np.ndarray | jnp.ndarray,
     builder: Callable[
-        [np.ndarray | jnp.ndarray, np.ndarray | jnp.ndarray], jnp.ndarray
+        [np.ndarray | jnp.ndarray, np.ndarray | jnp.ndarray],
+        np.ndarray | jnp.ndarray,
     ] = pm.interp_pm,
-) -> jnp.ndarray:
+) -> np.ndarray | jnp.ndarray:
     """Interpolates ``(old_x, old_y)`` onto ``new_x`` using ``builder``.
 
     Args:
@@ -41,7 +42,7 @@ def interpolate_vector(
             array (default :func:`flexmesa.interp_1d.pm.interp_pm`).
 
     Returns:
-        JAX ``float64`` array of shape ``(M,)`` containing interpolated values
+        ``float64`` array of shape ``(M,)`` containing interpolated values
         at ``new_x``.
 
     Raises:
@@ -55,7 +56,7 @@ def interpolate_vector_pm(
     old_x: np.ndarray | jnp.ndarray,
     old_y: np.ndarray | jnp.ndarray,
     new_x: np.ndarray | jnp.ndarray,
-) -> jnp.ndarray:
+) -> np.ndarray | jnp.ndarray:
     """Interpolates ``(old_x, old_y)`` onto ``new_x`` using ``interp_pm``.
 
     Args:
@@ -67,7 +68,7 @@ def interpolate_vector_pm(
             dimensionless units.
 
     Returns:
-        JAX ``float64`` array of shape ``(M,)`` containing Steffen (1990)
+        ``float64`` array of shape ``(M,)`` containing Steffen (1990)
         interpolated values at ``new_x``.
 
     Raises:
@@ -141,20 +142,17 @@ def interp_values_autodiff(
     pm.validate_1d_grid(x_primal, x_primal, min_points=2)
     increasing = bool(x_primal[-1] > x_primal[0])
     grid_asc = x_primal if increasing else x_primal[::-1]
+    lo_knot, hi_knot = (
+        (init_x[0], init_x[-1]) if increasing else (init_x[-1], init_x[0])
+    )
+    lo_val, hi_val = lo_knot.val, hi_knot.val
     out: list[auto_diff.DualOrder1] = []
 
     for xq in x:
-        if increasing:
-            if xq.val < x_primal[0]:
-                x_clamped = init_x[0]
-            elif xq.val > x_primal[-1]:
-                x_clamped = init_x[-1]
-            else:
-                x_clamped = xq
-        elif xq.val > x_primal[0]:
-            x_clamped = init_x[0]
-        elif xq.val < x_primal[-1]:
-            x_clamped = init_x[-1]
+        if xq.val < lo_val:
+            x_clamped = lo_knot
+        elif xq.val > hi_val:
+            x_clamped = hi_knot
         else:
             x_clamped = xq
 

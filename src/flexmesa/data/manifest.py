@@ -1,19 +1,19 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
 """SHA-256 manifest parser and file integrity verifier for physics tables.
 
-Parses `manifest.toml` declarations (`[[tables]]`) into typed `TableArtifact`
-records and verifies `.safetensors` files against their recorded `SHA-256`
-digests prior to memory-mapping.
+Parses ``manifest.toml`` declarations (``[[tables]]``) into typed
+``TableArtifact`` records and verifies ``.safetensors`` files against their
+recorded ``SHA-256`` digests via ``flexmesa._rust`` prior to memory-mapping.
 """
 
 from __future__ import annotations
 
 import dataclasses
-import hashlib
 import pathlib
 import tomllib
 
-_HEX_DIGITS = frozenset("0123456789abcdef")
+from flexmesa import _rust
+
 _ALLOWED_TABLE_KEYS = frozenset(
     {"name", "filename", "sha256", "size_bytes", "tensors", "description"}
 )
@@ -21,16 +21,16 @@ _ALLOWED_TABLE_KEYS = frozenset(
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class TableArtifact:
-    """Metadata and integrity record for a `.safetensors` physics table.
+    """Metadata and integrity record for a ``.safetensors`` physics table.
 
     Attributes:
-        name: Logical table identifier (e.g., `'lodders03'`, `'isotopes'`,
-            `'helm_table'`).
-        filename: Canonical `.safetensors` filename (e.g.,
-            `'lodders03.safetensors'`).
-        sha256: Lowercase 64-character hexadecimal `SHA-256` digest of the
-            uncompressed `.safetensors` file.
-        size_bytes: Uncompressed `.safetensors` file size in bytes (`>= 0`).
+        name: Logical table identifier (e.g., ``'lodders03'``, ``'isotopes'``,
+            ``'helm_table'``).
+        filename: Canonical ``.safetensors`` filename (e.g.,
+            ``'lodders03.safetensors'``).
+        sha256: Lowercase 64-character hexadecimal ``SHA-256`` digest of the
+            uncompressed ``.safetensors`` file.
+        size_bytes: Uncompressed ``.safetensors`` file size in bytes (``>= 0``).
         tensors: Ordered tuple of tensor names required in the bundle.
         description: Human-readable summary of the physical data and source.
     """
@@ -44,13 +44,16 @@ class TableArtifact:
 
 
 def is_valid_sha256_hex(digest: str) -> bool:
-    """Return `True` if `digest` is a 64-character hexadecimal string.
+    """Return ``True`` if ``digest`` is a 64-character hexadecimal string.
+
+    Delegates to ``flexmesa_data::sha256::is_valid_sha256_hex`` via
+    ``flexmesa._rust``.
 
     Args:
-        digest: Candidate `SHA-256` hexadecimal digest string.
+        digest: Candidate ``SHA-256`` hexadecimal digest string.
 
     Returns:
-        `True` if `digest` has length 64 and contains only ASCII hex digits.
+        ``True`` if ``digest`` has length 64 and contains only ASCII hex digits.
 
     Examples:
         >>> is_valid_sha256_hex("0" * 64)
@@ -58,58 +61,63 @@ def is_valid_sha256_hex(digest: str) -> bool:
         >>> is_valid_sha256_hex("not-a-digest")
         False
     """
-    stripped = digest.strip().lower()
-    return len(stripped) == 64 and all(ch in _HEX_DIGITS for ch in stripped)
+    return _rust.is_valid_sha256_hex(digest.strip())
 
 
 def compute_sha256_bytes(data: bytes) -> str:
-    """Compute the lowercase 64-character `SHA-256` hex digest of `data`.
+    """Compute the lowercase 64-character ``SHA-256`` hex digest of ``data``.
+
+    Delegates to ``flexmesa_data::sha256::compute_sha256_bytes`` via
+    ``flexmesa._rust``.
 
     Args:
         data: Raw byte buffer to hash.
 
     Returns:
-        Lowercase 64-character hexadecimal `SHA-256` digest.
+        Lowercase 64-character hexadecimal ``SHA-256`` digest.
 
     Examples:
         >>> compute_sha256_bytes(b"")
         'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
     """
-    return hashlib.sha256(data).hexdigest()
+    return _rust.compute_sha256_bytes(data)
 
 
 def compute_sha256_file(path: str | pathlib.Path) -> str:
-    """Compute the lowercase 64-character `SHA-256` hex digest of a file.
+    """Compute the lowercase 64-character ``SHA-256`` hex digest of a file.
+
+    Delegates to ``flexmesa_data::sha256::compute_sha256_file`` via
+    ``flexmesa._rust``.
 
     Args:
         path: Path to the file on disk.
 
     Returns:
-        Lowercase 64-character hexadecimal `SHA-256` digest.
+        Lowercase 64-character hexadecimal ``SHA-256`` digest.
 
     Raises:
-        FileNotFoundError: If `path` does not exist.
+        FileNotFoundError: If ``path`` does not exist.
     """
-    with pathlib.Path(path).open("rb") as handle:
-        return hashlib.file_digest(handle, "sha256").hexdigest()
+    return _rust.compute_sha256_file(str(path))
 
 
 def verify_file_sha256(
     path: str | pathlib.Path,
     expected_sha256: str,
 ) -> str:
-    """Verify that `path` matches `expected_sha256`.
+    """Verify that ``path`` matches ``expected_sha256``.
 
     Args:
         path: Path to the file on disk.
-        expected_sha256: Expected 64-character hexadecimal `SHA-256` digest.
+        expected_sha256: Expected 64-character hexadecimal ``SHA-256`` digest.
 
     Returns:
-        Verified lowercase 64-character hexadecimal `SHA-256` digest.
+        Verified lowercase 64-character hexadecimal ``SHA-256`` digest.
 
     Raises:
-        ValueError: If `expected_sha256` is not a valid 64-character hex string
-            or if the computed file digest does not match `expected_sha256`.
+        ValueError: If ``expected_sha256`` is not a valid 64-character hex
+            string or if the computed file digest does not match
+            ``expected_sha256``.
     """
     if not is_valid_sha256_hex(expected_sha256):
         raise ValueError(
@@ -126,7 +134,7 @@ def verify_file_sha256(
 
 
 def _validate_table_entry(raw: dict[str, object]) -> TableArtifact:
-    """Validate and convert one `[[tables]]` dictionary to `TableArtifact`."""
+    """Validate and convert one ``[[tables]]`` dict to ``TableArtifact``."""
     if unknown := set(raw.keys()) - _ALLOWED_TABLE_KEYS:
         raise ValueError(f"Unknown manifest table field(s): {sorted(unknown)}")
     name, filename = raw.get("name"), raw.get("filename")
@@ -169,16 +177,16 @@ def _validate_table_entry(raw: dict[str, object]) -> TableArtifact:
 
 
 def parse_manifest_text(text: str) -> dict[str, TableArtifact]:
-    """Parse a `manifest.toml` document into a dictionary of `TableArtifact`s.
+    """Parse ``manifest.toml`` text into a dict of ``TableArtifact`` entries.
 
     Args:
-        text: Raw TOML content containing a `[[tables]]` array of tables.
+        text: Raw TOML content containing a ``[[tables]]`` array of tables.
 
     Returns:
-        Dictionary mapping logical table `name` to its `TableArtifact`.
+        Dictionary mapping logical table ``name`` to its ``TableArtifact``.
 
     Raises:
-        ValueError: If the TOML syntax is invalid, `[[tables]]` is missing,
+        ValueError: If the TOML syntax is invalid, ``[[tables]]`` is missing,
             duplicate table names appear, or any field fails validation.
     """
     try:
@@ -206,22 +214,34 @@ def parse_manifest_text(text: str) -> dict[str, TableArtifact]:
 
 
 def parse_manifest_file(path: str | pathlib.Path) -> dict[str, TableArtifact]:
-    """Read and parse a `manifest.toml` file from disk.
+    """Read and parse a ``manifest.toml`` file from disk.
 
     Args:
-        path: Path to the `manifest.toml` file.
+        path: Path to the ``manifest.toml`` file.
 
     Returns:
-        Dictionary mapping logical table `name` to its `TableArtifact`.
+        Dictionary mapping logical table ``name`` to its ``TableArtifact``.
     """
     return parse_manifest_text(pathlib.Path(path).read_text(encoding="utf-8"))
 
 
 def load_default_manifest() -> dict[str, TableArtifact]:
-    """Load the bundled `src/flexmesa/data/manifest.toml` table manifest.
+    """Load the bundled ``src/flexmesa/data/manifest.toml`` table manifest.
 
     Returns:
-        Dictionary mapping logical table `name` to its `TableArtifact`.
+        Dictionary mapping logical table ``name`` to its ``TableArtifact``.
     """
     manifest_path = pathlib.Path(__file__).with_name("manifest.toml")
     return parse_manifest_file(manifest_path)
+
+
+__all__ = [
+    "TableArtifact",
+    "compute_sha256_bytes",
+    "compute_sha256_file",
+    "is_valid_sha256_hex",
+    "load_default_manifest",
+    "parse_manifest_file",
+    "parse_manifest_text",
+    "verify_file_sha256",
+]

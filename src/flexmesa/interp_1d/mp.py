@@ -16,6 +16,7 @@ import enum
 import jax.numpy as jnp
 import numpy as np
 
+from flexmesa import _dispatch, _rust
 from flexmesa.interp_1d import pm
 
 
@@ -95,7 +96,9 @@ def interp_m3(
     x: np.ndarray | jnp.ndarray,
     y: np.ndarray | jnp.ndarray,
     which: str | MpLimiter = MpLimiter.QUARTIC,
-) -> jnp.ndarray:
+    *,
+    backend: _dispatch.Backend = "auto",
+) -> np.ndarray | jnp.ndarray:
     """Computes Huynh (1993) monotonicity-preserving cubic spline coefficients.
 
     For ``N <= 3``, delegates to :func:`flexmesa.interp_1d.pm.interp_pm`
@@ -107,9 +110,10 @@ def interp_m3(
         y: Knot values of shape ``(N,)`` in physical or dimensionless units.
         which: Slope-limiter variant (`MpLimiter` or ``"average"``,
             ``"quartic"``, ``"super_bee"``).
+        backend: Execution backend (``"auto"``, ``"rust"``, or ``"jax"``).
 
     Returns:
-        JAX ``float64`` array of shape ``(N, 4)`` with ``[c0, c1, c2, c3]``
+        ``float64`` array of shape ``(N, 4)`` with ``[c0, c1, c2, c3]``
         at each knot.
 
     Raises:
@@ -120,7 +124,16 @@ def interp_m3(
     x_arr, y_arr = pm.validate_1d_grid(x, y, min_points=2)
     n = x_arr.size
     if n <= 3:
-        return pm.interp_pm(x_arr, y_arr)
+        return pm.interp_pm(x_arr, y_arr, backend=backend)
+
+    if _dispatch.resolve_backend(backend, x, y) == "rust":
+        xc = _dispatch.as_c_f64(x_arr)
+        yc = _dispatch.as_c_f64(y_arr)
+        if limiter == MpLimiter.AVERAGE:
+            return _rust.interp_m3a(xc, yc)
+        if limiter == MpLimiter.QUARTIC:
+            return _rust.interp_m3q(xc, yc)
+        return _rust.interp_m3b(xc, yc)
 
     h = x_arr[1:] - x_arr[:-1]
     coeffs = np.zeros((n, 4), dtype=np.float64)
@@ -205,61 +218,70 @@ def interp_m3(
 def interp_m3a(
     x: np.ndarray | jnp.ndarray,
     y: np.ndarray | jnp.ndarray,
-) -> jnp.ndarray:
+    *,
+    backend: _dispatch.Backend = "auto",
+) -> np.ndarray | jnp.ndarray:
     """Computes Huynh (1993) average-slope MP coefficients (`interp_m3a`).
 
     Args:
         x: Knot coordinates of shape ``(N,)`` (``N >= 2``), strictly monotonic,
             in physical or dimensionless units.
         y: Knot values of shape ``(N,)`` in physical or dimensionless units.
+        backend: Execution backend (``"auto"``, ``"rust"``, or ``"jax"``).
 
     Returns:
-        JAX ``float64`` array of shape ``(N, 4)`` with ``[c0, c1, c2, c3]`` at
+        ``float64`` array of shape ``(N, 4)`` with ``[c0, c1, c2, c3]`` at
         each knot.
 
     Raises:
         ValueError: If ``x`` and ``y`` fail grid validation.
     """
-    return interp_m3(x, y, which=MpLimiter.AVERAGE)
+    return interp_m3(x, y, which=MpLimiter.AVERAGE, backend=backend)
 
 
 def interp_m3b(
     x: np.ndarray | jnp.ndarray,
     y: np.ndarray | jnp.ndarray,
-) -> jnp.ndarray:
+    *,
+    backend: _dispatch.Backend = "auto",
+) -> np.ndarray | jnp.ndarray:
     """Computes Huynh (1993) superbee-slope MP coefficients (`interp_m3b`).
 
     Args:
         x: Knot coordinates of shape ``(N,)`` (``N >= 2``), strictly monotonic,
             in physical or dimensionless units.
         y: Knot values of shape ``(N,)`` in physical or dimensionless units.
+        backend: Execution backend (``"auto"``, ``"rust"``, or ``"jax"``).
 
     Returns:
-        JAX ``float64`` array of shape ``(N, 4)`` with ``[c0, c1, c2, c3]`` at
+        ``float64`` array of shape ``(N, 4)`` with ``[c0, c1, c2, c3]`` at
         each knot.
 
     Raises:
         ValueError: If ``x`` and ``y`` fail grid validation.
     """
-    return interp_m3(x, y, which=MpLimiter.SUPER_BEE)
+    return interp_m3(x, y, which=MpLimiter.SUPER_BEE, backend=backend)
 
 
 def interp_m3q(
     x: np.ndarray | jnp.ndarray,
     y: np.ndarray | jnp.ndarray,
-) -> jnp.ndarray:
+    *,
+    backend: _dispatch.Backend = "auto",
+) -> np.ndarray | jnp.ndarray:
     """Computes Huynh (1993) quartic-slope MP coefficients (`interp_m3q`).
 
     Args:
         x: Knot coordinates of shape ``(N,)`` (``N >= 2``), strictly monotonic,
             in physical or dimensionless units.
         y: Knot values of shape ``(N,)`` in physical or dimensionless units.
+        backend: Execution backend (``"auto"``, ``"rust"``, or ``"jax"``).
 
     Returns:
-        JAX ``float64`` array of shape ``(N, 4)`` with ``[c0, c1, c2, c3]`` at
+        ``float64`` array of shape ``(N, 4)`` with ``[c0, c1, c2, c3]`` at
         each knot.
 
     Raises:
         ValueError: If ``x`` and ``y`` fail grid validation.
     """
-    return interp_m3(x, y, which=MpLimiter.QUARTIC)
+    return interp_m3(x, y, which=MpLimiter.QUARTIC, backend=backend)

@@ -30,6 +30,7 @@ pgo-data/
 .mesa_temp_cache/
 /data/
 *.bin
+!crates/**/data/*.bin
 *.mod
 *.h5
 *.hdf5

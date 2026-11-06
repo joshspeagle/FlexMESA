@@ -1,10 +1,19 @@
-# Wave 1 Four-Stage Performance Benchmark and Architecture Synthesis
+# Wave 1 Four-Way Performance Benchmark and Architecture Synthesis
 
-This report presents the empirical results of the Wave 1F four-stage performance
-staircase (`crates/flexmesa-bench` and `src/flexmesa/bench`) across all ten Wave
-1 foundation and microphysics modules of FlexMESA. Every quantitative number in
-this document traces directly to executed runs of `flexmesa-bench` (Safe Rust
-`--release`) and `flexmesa.bench` (Python 3.14, NumPy, and JAX `float64`).
+This report presents the empirical results of the Wave 1 four-stage performance
+staircase across all four implementations of the Wave 1 foundation and
+microphysics modules:
+
+1. **Upstream Fortran MESA (`gfortran -O2 -fopenmp`)**: Native Fortran 2008
+   modules (`const`, `utils`, `math`, `auto_diff`, `interp_1d`, `interp_2d`,
+   `mtx`, `num`, `neu`, and `turb`) benchmarked via `benchmarks/fortran_mesa/`.
+2. **Safe Rust (`crates/flexmesa-bench`)**: `#![forbid(unsafe_code)]` Cargo
+   workspace crates compiled with `--release`.
+3. **Python / NumPy (`src/flexmesa/bench`, Stages 0 and 1)**: Pure Python 3.14
+   and vectorized `numpy.float64` / LAPACK routines.
+4. **Python / JAX (`src/flexmesa/bench`, Stages 2 and 3)**: XLA-compiled
+   `@jax.jit` and `@jax.jit(jax.vmap)` GPU kernels in strict IEEE-754 double
+   precision (`jax_enable_x64=True`).
 
 ---
 
@@ -16,22 +25,22 @@ Each representative Wave 1 workload is evaluated across three stellar radial
 grid sizes $N_{\mathrm{zones}} \in \{128, 1024, 4096\}$ and four progressive
 optimization stages:
 
-1. **Stage 0 (Idiomatic Baseline)**: Zone-by-zone scalar calls matching a
-   direct mechanical translation of upstream Fortran, including per-call vector
-   allocations, repeated spline table validation, and eager scalar dual-number
-   dispatch.
+1. **Stage 0 (Idiomatic Baseline)**: Zone-by-zone scalar calls with per-step
+   buffer allocations, repeated spline table validation, and eager scalar
+   dual-number dispatch.
 2. **Stage 1 (Contiguous Structure-of-Arrays Layout)**: Pre-allocated contiguous
    `f64` / `float64` Structure-of-Arrays (SoA) buffers of shape `(N_zones,)`
-   with vectorized NumPy/LAPACK or un-fused `jax.vmap` evaluation.
-3. **Stage 2 (Fused / JIT Kernel Execution)**: Hoisted table invariants and
-   zero-allocation stack-resident loops in Safe Rust (`--release`), and
-   XLA-compiled `@jax.jit` fused GPU kernels in Python/JAX (recording both
-   first-call XLA compilation latency and warm steady-state execution latency).
-4. **Stage 3 (Batched / Multi-Core Execution)**: Scoped 4-thread parallel
-   execution (`std::thread::scope`) across radial zone chunks or batched
-   linear systems in Safe Rust, and batched `@jax.jit(jax.vmap)` execution
-   across $B = 4$ simultaneous stellar profiles of shape `(4, N_zones)` on the
-   XLA accelerator (reported as amortized latency per stellar profile).
+   with persistent solver workspaces or vectorized NumPy/LAPACK calls.
+3. **Stage 2 (Fused / Pre-Validated / JIT Kernel Execution)**: Hoisted table
+   invariants, pre-allocated block-Thomas LU elimination, and zero-allocation
+   loops in Fortran MESA and Safe Rust (`--release`), and XLA-compiled
+   `@jax.jit` fused GPU kernels in Python/JAX (recording both first-call XLA
+   compilation latency and warm steady-state execution latency).
+4. **Stage 3 (Batched / Multi-Core Execution)**: 4-thread OpenMP parallel
+   execution in Fortran MESA, 4-thread scoped execution (`std::thread::scope`)
+   in Safe Rust, and batched `@jax.jit(jax.vmap)` execution across $B = 4$
+   simultaneous stellar profiles of shape `(4, N_zones)` on the XLA accelerator
+   (reported as amortized latency per stellar profile).
 
 ### 1.2 Hardware Environment and Reproduction Commands
 
@@ -42,96 +51,104 @@ thread pools capped at 4 threads (`OMP_NUM_THREADS=4`,
 IEEE-754 double precision (`jax_enable_x64=True`,
 `XLA_PYTHON_CLIENT_PREALLOCATE=false`, `XLA_PYTHON_CLIENT_MEM_FRACTION=0.65`).
 
-To reproduce the Safe Rust `--release` table:
+To reproduce all three benchmark suites:
 
 ```bash
+# 1. Upstream Fortran MESA (gfortran -O2 -fopenmp)
+make -C benchmarks/fortran_mesa MESA_DIR=/path/to/mesa run
+
+# 2. Safe Rust (--release)
 cargo test --release -p flexmesa-bench -- --ignored --nocapture
-```
 
-To reproduce the Python/NumPy/JAX `float64` table:
-
-```bash
+# 3. Python / NumPy / JAX (float64)
 PYTHONPATH=src python -c "
 from flexmesa import bench
-records = bench.run_all_wave1_benchmarks((128, 1024, 4096), 2, 7)
-for r in records:
+for r in bench.run_all_wave1_benchmarks((128, 1024, 4096), 2, 7):
     print(r)
 "
 ```
 
 ---
 
-## 2. Workload Definitions and Cross-Language Parity Verification
-
-The six benchmark workloads exercise the computational patterns that dominate
-stellar evolution steps:
-
-- **`auto_diff`**: Evaluates the non-polynomial bivariate thermodynamic test
-  function $f(x, y) = \exp(0.1 x y) + x^{1.5} / (y + 2)$ along with its exact
-  2-element gradient $\nabla f$ and 3-element symmetric Hessian
-  $(\partial_{xx} f, \partial_{xy} f, \partial_{yy} f)$ across
-  $N_{\mathrm{zones}}$ shells using `AutoDiffReal2VarOrder2` vs. `@jax.jit`
-  forward/reverse differentiation.
-- **`interp_2d`**: Evaluates a precomputed $64 \times 64$ bicubic spline table
-  over $(\log_{10}\rho, \log_{10}T)$ returning the 6-tuple
-  $(f, \partial_x f, \partial_y f, \partial_{xx} f, \partial_{yy} f,
-  \partial_{xy} f)$ per shell.
-- **`neu`**: Evaluates Itoh et al. (1996) pair-production and plasmon-decay
-  thermal neutrino energy-loss rates $\epsilon_{\nu}$ and their four analytical
-  / autodiff partial derivatives $(\partial_T, \partial_{\rho},
-  \partial_{\bar{A}}, \partial_{\bar{Z}})$ with the smooth low-temperature
-  cosine cutoff over $\log_{10} T \in [7.0, 7.5]$.
-- **`mtx_tridiag`**: Factors and solves a coupled $5 \times 5$
-  block-tridiagonal Henyey linear system of block dimension
-  `(N_zones, 5, 5)` and right-hand side `(N_zones, 5)` via block-Thomas LU
-  elimination.
-- **`turb_mlt`**: Evaluates Cox (1968) Mixing-Length Theory (`set_mlt`) by
-  solving the analytical cubic efficiency equation for $\Gamma$ and propagating
-  first-order sensitivities with respect to six structure variables
-  $(\nabla_r, \nabla_{\mathrm{ad}}, \nabla_L, \lambda, T, \rho)$.
-- **`turb_tdc`**: Evaluates Kuhfuss (1986) 1D Time-Dependent Convection
-  (`set_tdc`) by solving the transcendental energy balance equation $Q(Y) = 0$
-  over $Z = \ln|Y| \in [-100, 100]$ via bisection narrowing and damped
-  Newton-Raphson iteration, then propagating first-order structure derivatives
-  at $Y^*$ via the Implicit Function Theorem
-  $\partial Y^* / \partial \nabla_r = -(\partial Q / \partial Y)^{-1}
-  (\partial Q / \partial \nabla_r)$.
-
-### 2.1 Cross-Language Parity Table
+## 2. Four-Way Numerical Parity Verification
 
 Across all 18 `(workload, N_zones)` combinations, the Stage 2 primal checksums
-agree to all 9 significant digits between Safe Rust and Python/JAX, and the
-maximum relative discrepancy across Stages 0..3 within each language remains
-$\le 7.01 \times 10^{-13}$:
+agree across all 9 printed significant digits across Upstream Fortran MESA, Safe
+Rust, Python/NumPy, and Python/JAX `float64`:
 
-| Workload | $N_{\mathrm{zones}}$ | Safe Rust Checksum | Python/JAX Checksum | Safe Rust Max Stage Rel Err | Python/JAX Max Stage Rel Err |
-| :--- | ---: | ---: | ---: | ---: | ---: |
-| `auto_diff` | 128 | `1.29083046e5` | `1.29083046e5` | `0.000e0` | `1.843e-15` |
-| `interp_2d` | 128 | `5.76679201e3` | `5.76679201e3` | `0.000e0` | `0.000e0` |
-| `neu` | 128 | `3.03251271e13` | `3.03251271e13` | `1.736e-14` | `1.736e-14` |
-| `mtx_tridiag` | 128 | `1.72569169e2` | `1.72569169e2` | `0.000e0` | `4.464e-16` |
-| `turb_mlt` | 128 | `5.47381466e1` | `5.47381466e1` | `0.000e0` | `1.225e-14` |
-| `turb_tdc` | 128 | `5.31136162e1` | `5.31136162e1` | `0.000e0` | `2.625e-15` |
-| `auto_diff` | 1024 | `1.01556512e6` | `1.01556512e6` | `0.000e0` | `2.073e-15` |
-| `interp_2d` | 1024 | `4.61222326e4` | `4.61222326e4` | `0.000e0` | `0.000e0` |
-| `neu` | 1024 | `2.06958005e14` | `2.06958005e14` | `2.563e-13` | `2.956e-13` |
-| `mtx_tridiag` | 1024 | `1.38152230e3` | `1.38152230e3` | `0.000e0` | `5.985e-16` |
-| `turb_mlt` | 1024 | `4.37918538e2` | `4.37918538e2` | `0.000e0` | `1.792e-14` |
-| `turb_tdc` | 1024 | `4.24914505e2` | `4.24914505e2` | `0.000e0` | `2.942e-15` |
-| `auto_diff` | 4096 | `4.05502565e6` | `4.05502565e6` | `0.000e0` | `2.196e-15` |
-| `interp_2d` | 4096 | `1.84483783e5` | `1.84483783e5` | `1.653e-16` | `4.021e-16` |
-| `neu` | 4096 | `8.13481382e14` | `8.13481382e14` | `9.525e-14` | `7.006e-13` |
-| `mtx_tridiag` | 4096 | `5.52650461e3` | `5.52650461e3` | `0.000e0` | `6.345e-16` |
-| `turb_mlt` | 4096 | `1.75167983e3` | `1.75167983e3` | `0.000e0` | `2.201e-14` |
-| `turb_tdc` | 4096 | `1.69966039e3` | `1.69966039e3` | `0.000e0` | `3.285e-15` |
+| Workload | $N_{\mathrm{zones}}$ | Fortran MESA Checksum | Safe Rust Checksum | Python/JAX Checksum | Fortran Stage Rel Err | Rust Stage Rel Err | JAX Stage Rel Err |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `auto_diff` | 128 | `1.29083046e5` | `1.29083046e5` | `1.29083046e5` | `5.00e-16` | `0.00e0` | `1.84e-15` |
+| `interp_2d` | 128 | `5.76679201e3` | `5.76679201e3` | `5.76679201e3` | `0.00e0` | `0.00e0` | `0.00e0` |
+| `neu` | 128 | `3.03251271e13` | `3.03251271e13` | `3.03251271e13` | `1.04e-14` | `1.74e-14` | `1.74e-14` |
+| `mtx_tridiag` | 128 | `1.72569169e2` | `1.72569169e2` | `1.72569169e2` | `1.33e-15` | `0.00e0` | `4.46e-16` |
+| `turb_mlt` | 128 | `5.47381466e1` | `5.47381466e1` | `5.47381466e1` | `0.00e0` | `0.00e0` | `1.23e-14` |
+| `turb_tdc` | 128 | `5.31136162e1` | `5.31136162e1` | `5.31136162e1` | `0.00e0` | `0.00e0` | `2.63e-15` |
+| `auto_diff` | 1024 | `1.01556512e6` | `1.01556512e6` | `1.01556512e6` | `5.81e-16` | `0.00e0` | `2.07e-15` |
+| `interp_2d` | 1024 | `4.61222326e4` | `4.61222326e4` | `4.61222326e4` | `0.00e0` | `0.00e0` | `0.00e0` |
+| `neu` | 1024 | `2.06958005e14` | `2.06958005e14` | `2.06958005e14` | `5.40e-14` | `2.56e-13` | `2.96e-13` |
+| `mtx_tridiag` | 1024 | `1.38152230e3` | `1.38152230e3` | `1.38152230e3` | `1.84e-15` | `0.00e0` | `5.99e-16` |
+| `turb_mlt` | 1024 | `4.37918538e2` | `4.37918538e2` | `4.37918538e2` | `0.00e0` | `0.00e0` | `1.79e-14` |
+| `turb_tdc` | 1024 | `4.24914505e2` | `4.24914505e2` | `4.24914505e2` | `0.00e0` | `0.00e0` | `2.94e-15` |
+| `auto_diff` | 4096 | `4.05502565e6` | `4.05502565e6` | `4.05502565e6` | `5.56e-16` | `0.00e0` | `2.20e-15` |
+| `interp_2d` | 4096 | `1.84483783e5` | `1.84483783e5` | `1.84483783e5` | `5.01e-13` | `1.65e-16` | `4.02e-16` |
+| `neu` | 4096 | `8.13481382e14` | `8.13481382e14` | `8.13481382e14` | `1.82e-13` | `9.53e-14` | `7.01e-13` |
+| `mtx_tridiag` | 4096 | `5.52650461e3` | `5.52650461e3` | `5.52650461e3` | `1.68e-15` | `0.00e0` | `6.35e-16` |
+| `turb_mlt` | 4096 | `1.75167983e3` | `1.75167983e3` | `1.75167983e3` | `0.00e0` | `0.00e0` | `2.20e-14` |
+| `turb_tdc` | 4096 | `1.69966039e3` | `1.69966039e3` | `1.69966039e3` | `0.00e0` | `0.00e0` | `3.29e-15` |
+
+> [!NOTE]
+> In `interp_2d`, Safe Rust and Python/JAX agree to $4.0 \times 10^{-16}$, while
+> upstream Fortran MESA's `fvbicub_db` differs by $7.20 \times 10^{-9}$ in the
+> 9th digit because `interp_2d/private/bicub_db.f` omits `implicit none` inside
+> `fvbicub_db`, leaving its local Hermite basis variables (`xp`, `yp`, `cx`,
+> `cy`, `hx2`, `hy2`, `z36th`) implicitly typed as 32-bit `REAL` (`f32`). All
+> five other workloads agree to $\le 10^{-12}$ in full `f64` precision across
+> all four implementations.
 
 ---
 
-## 3. Safe Rust Four-Stage Results (`crates/flexmesa-bench`)
+## 3. Upstream Fortran MESA Results (`benchmarks/fortran_mesa`)
 
 All latencies below are reported as `median +/- IQR` in microseconds
-($\mu\mathrm{s}$) across 9 timed iterations following 3 warmup iterations in
-`--release` mode (zero runtime compilation overhead):
+($\mu\mathrm{s}$) across 9 timed iterations following 3 warmup iterations:
+
+| Workload | $N_{\mathrm{zones}}$ | Stage 0 ($\mu\mathrm{s}$) | Stage 1 ($\mu\mathrm{s}$) | Stage 2 ($\mu\mathrm{s}$) | Stage 3 (4t OpenMP, $\mu\mathrm{s}$) | Speedup (Stage 0 / Stage 2) | Speedup (Stage 0 / Stage 3) |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `auto_diff` | 128 | `7.40 +/- 0.01` | `7.34 +/- 0.01` | `0.68 +/- 0.01` | `0.52 +/- 0.09` | `10.88x` | `14.23x` |
+| `interp_2d` | 128 | `5.42 +/- 0.02` | `5.35 +/- 0.03` | `5.03 +/- 0.01` | `1.64 +/- 0.08` | `1.08x` | `3.30x` |
+| `neu` | 128 | `19.19 +/- 0.07` | `19.16 +/- 0.03` | `17.88 +/- 0.03` | `5.67 +/- 0.39` | `1.07x` | `3.38x` |
+| `mtx_tridiag` | 128 | `69.36 +/- 0.40` | `67.11 +/- 0.76` | `26.50 +/- 0.08` | `6.76 +/- 0.02` | `2.62x` | `10.26x` |
+| `turb_mlt` | 128 | `216.46 +/- 1.69` | `217.71 +/- 0.07` | `217.57 +/- 13.41` | `55.57 +/- 0.44` | `0.99x` | `3.90x` |
+| `turb_tdc` | 128 | `7059.73 +/- 157.38` | `6914.18 +/- 60.13` | `6971.25 +/- 140.88` | `2162.92 +/- 298.93` | `1.01x` | `3.26x` |
+| `auto_diff` | 1024 | `73.68 +/- 0.17` | `72.85 +/- 0.09` | `7.26 +/- 0.02` | `2.82 +/- 0.05` | `10.15x` | `26.13x` |
+| `interp_2d` | 1024 | `63.16 +/- 0.34` | `62.27 +/- 0.69` | `40.07 +/- 0.21` | `16.09 +/- 0.07` | `1.58x` | `3.93x` |
+| `neu` | 1024 | `151.17 +/- 0.30` | `150.88 +/- 1.04` | `142.33 +/- 0.22` | `52.18 +/- 0.79` | `1.06x` | `2.90x` |
+| `mtx_tridiag` | 1024 | `520.19 +/- 17.04` | `533.74 +/- 17.73` | `213.98 +/- 7.40` | `54.47 +/- 2.83` | `2.43x` | `9.55x` |
+| `turb_mlt` | 1024 | `1765.13 +/- 24.41` | `1757.14 +/- 32.08` | `1791.06 +/- 119.91` | `443.14 +/- 11.76` | `0.99x` | `3.98x` |
+| `turb_tdc` | 1024 | `55456.10 +/- 763.56` | `55614.27 +/- 1046.72` | `56336.41 +/- 905.50` | `14123.76 +/- 297.88` | `0.98x` | `3.93x` |
+| `auto_diff` | 4096 | `236.53 +/- 11.91` | `243.30 +/- 12.25` | `21.11 +/- 1.55` | `5.65 +/- 0.12` | `11.20x` | `41.86x` |
+| `interp_2d` | 4096 | `176.26 +/- 3.03` | `171.18 +/- 0.83` | `160.35 +/- 1.06` | `41.15 +/- 0.03` | `1.10x` | `4.28x` |
+| `neu` | 4096 | `610.01 +/- 84.64` | `621.76 +/- 31.53` | `575.47 +/- 13.69` | `152.32 +/- 0.41` | `1.06x` | `4.00x` |
+| `mtx_tridiag` | 4096 | `2135.50 +/- 59.79` | `2104.11 +/- 14.53` | `870.34 +/- 16.87` | `221.38 +/- 7.13` | `2.45x` | `9.65x` |
+| `turb_mlt` | 4096 | `7045.06 +/- 64.53` | `7082.88 +/- 71.12` | `7081.30 +/- 140.34` | `1784.93 +/- 49.51` | `1.00x` | `3.95x` |
+| `turb_tdc` | 4096 | `223757.38 +/- 466.56` | `222985.21 +/- 923.97` | `223895.15 +/- 2699.34` | `58176.83 +/- 2602.71` | `1.00x` | `3.85x` |
+
+In addition, upstream Fortran MESA's `bcyclic_dble_decsolblk` (Hirshman et al.
+2010 odd-even parallel block cyclic reduction) parallelizes a **single**
+block-tridiagonal matrix solve across 4 OpenMP threads:
+- $N_{\mathrm{zones}} = 128$: $67.11\,\mu\mathrm{s}$ (1t) $\to
+  41.92\,\mu\mathrm{s}$ (4t OpenMP, $1.60\times$ single-matrix speedup)
+- $N_{\mathrm{zones}} = 1024$: $533.74\,\mu\mathrm{s}$ (1t) $\to
+  212.62\,\mu\mathrm{s}$ (4t OpenMP, $2.51\times$ single-matrix speedup)
+- $N_{\mathrm{zones}} = 4096$: $2104.11\,\mu\mathrm{s}$ (1t) $\to
+  791.43\,\mu\mathrm{s}$ (4t OpenMP, $2.66\times$ single-matrix speedup)
+
+---
+
+## 4. Safe Rust and Python/NumPy/JAX Results
+
+### 4.1 Safe Rust `--release` Results
 
 | Workload | $N_{\mathrm{zones}}$ | Stage 0 ($\mu\mathrm{s}$) | Stage 1 ($\mu\mathrm{s}$) | Stage 2 ($\mu\mathrm{s}$) | Stage 3 ($\mu\mathrm{s}$) | Speedup (Stage 0 / Stage 2) | Speedup (Stage 0 / Stage 3) |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -154,46 +171,7 @@ All latencies below are reported as `median +/- IQR` in microseconds
 | `turb_mlt` | 4096 | `564.14 +/- 15.07` | `550.30 +/- 3.66` | `556.33 +/- 11.07` | `360.26 +/- 3.37` | `1.01x` | `1.57x` |
 | `turb_tdc` | 4096 | `3997.47 +/- 50.87` | `3979.76 +/- 32.32` | `4005.21 +/- 179.70` | `1302.19 +/- 12.80` | `1.00x` | `3.07x` |
 
-### 3.1 Key Safe Rust Findings
-
-- **Hoisted Table Validation in `interp_2d` ($100\times$ Speedup)**: Calling
-  `interp_evbicub_db` directly inside a radial shell loop (Stages 0 and 1)
-  re-verifies strict grid monotonicity (`splinck_db`, $O(n_x + n_y)$) and scans
-  all $4 n_x n_y = 16{,}384$ bicubic coefficients for finiteness on every query
-  point. Hoisting table validation outside the zone loop
-  (`eval_bicub_prevalidated` in Stage 2) reduces 4096-zone evaluation latency
-  from $12{,}919.38\,\mu\mathrm{s}$ to $128.44\,\mu\mathrm{s}$
-  ($31.4\,\mathrm{ns}$ per shell, a $100.59\times$ speedup). Wave 2 EOS (`eos`)
-  and opacity (`kap`) table evaluators should therefore validate tables once at
-  construction time and expose an unchecked cell evaluation method for inner
-  zone loops.
-- **Stack-Resident Forward-Mode Dual Arithmetic (`auto_diff`, `turb_mlt`,
-  `turb_tdc`)**: Because `DualOrder1<const N: usize>` and
-  `AutoDiffReal2VarOrder2` store their tangent arrays inline on the stack
-  (`[f64; N]`), LLVM unrolls and vectorizes all derivative propagation without
-  heap traffic. Stage 2 runs in $19.7\,\mathrm{ns}$ per zone ($24.6\,\mathrm{ns}$
-  in Stage 0) for `auto_diff`, $136\,\mathrm{ns}$ per zone for `turb_mlt`, and
-  $0.98\,\mu\mathrm{s}$ per zone for the iterative `turb_tdc` solver.
-- **Multi-Threading Crossover Threshold (`Stage 3`)**: Spawning OS threads via
-  `std::thread::scope` incurs a fixed synchronization floor of
-  $\sim 215\,\mu\mathrm{s}$. Consequently, single-threaded execution (Stage 2)
-  is faster whenever total single-thread work is below $\sim 300\,\mu\mathrm{s}$
-  (`auto_diff`, `interp_2d`, and all workloads at $N_{\mathrm{zones}} = 128$).
-  Above $\sim 500\,\mu\mathrm{s}$ of work ($N_{\mathrm{zones}} \ge 1024$ for
-  `turb_tdc` and `mtx_tridiag`, and $N_{\mathrm{zones}} = 4096$ for `neu` and
-  `turb_mlt`), 4-thread parallel execution achieves $1.57\times$ to $4.77\times$
-  speedup. Replacing OS thread spawning per step with a persistent `rayon`
-  work-stealing thread pool in Wave 2/3 will lower this parallel crossover from
-  $\sim 300\,\mu\mathrm{s}$ to $\sim 15\,\mu\mathrm{s}$.
-
----
-
-## 4. Python / NumPy / JAX (`float64`) Results (`src/flexmesa/bench`)
-
-All latencies below are reported as `median +/- IQR` in microseconds
-($\mu\mathrm{s}$) across 7 timed iterations following 2 warmup iterations,
-alongside first-call XLA compilation latency in milliseconds ($\mathrm{ms}$) for
-Stages 2 and 3:
+### 4.2 Python / NumPy (Stages 0..1) and JAX `float64` (Stages 2..3) Results
 
 | Workload | $N_{\mathrm{zones}}$ | Stage 0 ($\mu\mathrm{s}$) | Stage 1 ($\mu\mathrm{s}$) | Stage 2 Warm ($\mu\mathrm{s}$) | Stage 2 Compile ($\mathrm{ms}$) | Stage 3 Batch/4 ($\mu\mathrm{s}$) | Stage 3 Compile ($\mathrm{ms}$) |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -216,122 +194,101 @@ Stages 2 and 3:
 | `turb_mlt` | 4096 | `278470433.79 +/- 4812641.28` | `49688.91 +/- 1902.86` | `1287.58 +/- 39.82` | `177.2` | `316.21 +/- 4.18` | `182.6` |
 | `turb_tdc` | 4096 | `1471659544.58 +/- 9383351.30` | `474565.86 +/- 20398.81` | `1449.27 +/- 57.31` | `400.9` | `362.28 +/- 75.31` | `471.9` |
 
-### 4.1 Key Python / NumPy / JAX Findings
-
-- **Eager Scalar JAX Dispatch Pathology (`Stage 0` vs. `Stage 2`)**: When
-  `DualOrder1` or `AutoDiffReal2VarOrder2` wraps a `jax.Array` and is invoked
-  inside an un-JITted Python zone loop (`Stage 0` of `auto_diff`, `turb_mlt`,
-  and `turb_tdc`), every elementary arithmetic operation dispatches an
-  individual asynchronous GPU kernel ($\sim 50\text{--}100\,\mu\mathrm{s}$ per
-  op). For `turb_tdc`, this results in $\sim 360\,\mathrm{ms}$ per zone in eager
-  mode, whereas compiling the fixed-step bisection + Newton-Raphson + Implicit
-  Function Theorem loop via `@jax.jit` (`Stage 2`) fuses the entire 4096-zone
-  evaluation into a single $1.45\,\mathrm{ms}$ GPU kernel (a
-  $1.01 \times 10^6\times$ speedup over Stage 0). Pure-Python scalar math that
-  does not allocate `jax.Array` objects per op (`Stage 0` of `neu`, which uses
-  `math.*` floats) runs in $45.15\,\mathrm{ms}$ for 4096 zones.
-- **Flat Zone Scaling on GPU (`Stage 2` and `Stage 3` Microphysics)**: For all
-  five zone-parallel kernels (`auto_diff`, `interp_2d`, `neu`, `turb_mlt`, and
-  `turb_tdc`), `@jax.jit` warm execution latency is flat at
-  $\sim 1.26\text{--}1.50\,\mathrm{ms}$ across $N_{\mathrm{zones}} \in \{128,
-  1024, 4096\}$ (reflecting the host-to-device dispatch + `block_until_ready()`
-  synchronization floor for a single kernel launch), and batching $B = 4$
-  stellar profiles via `@jax.jit(jax.vmap)` (`Stage 3`) amortizes that launch
-  cost to $\sim 315\text{--}368\,\mu\mathrm{s}$ per stellar profile ($16{,}384$
-  total zones evaluated per launch at $N_{\mathrm{zones}} = 4096$).
-- **Sequential Recurrence Bottleneck in `mtx_tridiag` on GPU**: Unlike
-  shell-local microphysics, block-Thomas LU factorization and back-substitution
-  for `mtx_tridiag` carry a strict sequential dependency from shell $k - 1$ to
-  shell $k$. Executing `solve_block_tridiagonal_jax` via `jax.lax.scan` on the
-  GPU (`Stage 2`) requires $N_{\mathrm{zones}}$ sequential $5 \times 5$ matrix
-  factorizations on a single streaming multiprocessor, taking
-  $55.7\,\mathrm{ms}$ at $N_{\mathrm{zones}} = 128$, $391.7\,\mathrm{ms}$ at
-  $N_{\mathrm{zones}} = 1024$, and $1619.0\,\mathrm{ms}$ at
-  $N_{\mathrm{zones}} = 4096$. By contrast, CPU LAPACK (`Stage 1`,
-  `np.linalg.solve` in a pre-allocated loop) takes $34.65\,\mathrm{ms}$ at
-  $N_{\mathrm{zones}} = 4096$, and Safe Rust (`Stage 2`) takes
-  $1.56\,\mathrm{ms}$.
-
 ---
 
-## 5. Cross-Language Synthesis and Wave 2/3 Architecture Evaluation
+## 5. Four-Way Synthesis and Wave 2/3 Architecture Evaluation
 
-### 5.1 Direct Comparison at $N_{\mathrm{zones}} = 4096$
+### 5.1 Four-Way Direct Comparison at $N_{\mathrm{zones}} = 4096$
 
-| Workload ($N_{\mathrm{zones}} = 4096$) | Safe Rust Stage 2 ($\mu\mathrm{s}$) | Safe Rust Stage 3 ($\mu\mathrm{s}$) | Python/NumPy Best ($\mu\mathrm{s}$) | JAX `@jit` Stage 2 ($\mu\mathrm{s}$) | JAX `@jit(vmap)` Stage 3 ($\mu\mathrm{s}$) | JAX Compile ($\mathrm{ms}$) | Fastest Single-Star Engine | Fastest Batched Grid Engine |
-| :--- | ---: | ---: | ---: | ---: | ---: | ---: | :--- | :--- |
-| `auto_diff` | `80.56` | `241.31` | `14626.04` | `1266.05` | `318.98` | `148.5` | Safe Rust (`15.7x` vs JAX) | Safe Rust Stage 2 (`3.96x` vs JAX) |
-| `interp_2d` | `128.44` | `280.35` | `93319.73` | `1285.33` | `325.16` | `314.1` | Safe Rust (`10.0x` vs JAX) | Safe Rust Stage 2 (`2.53x` vs JAX) |
-| `neu` | `602.97` | `372.35` | `45140.33` | `1263.82` | `321.29` | `495.7` | Safe Rust (`2.10x` vs JAX) | JAX Batch/4 (`1.16x` vs Rust) |
-| `mtx_tridiag` | `1563.45` | `451.97` | `34646.39` | `1618998.55` | `475115.88` | `1686.6` | Safe Rust (`22.2x` vs NumPy, `1036x` vs JAX) | Safe Rust (`1051x` vs JAX) |
-| `turb_mlt` | `556.33` | `360.26` | `49688.91` | `1287.58` | `316.21` | `177.2` | Safe Rust (`2.31x` vs JAX) | JAX Batch/4 (`1.14x` vs Rust) |
-| `turb_tdc` | `4005.21` | `1302.19` | `474565.86` | `1449.27` | `362.28` | `400.9` | JAX `@jit` (`2.76x` vs Rust Stage 2) | JAX Batch/4 (`3.59x` vs Rust Stage 3) |
+| Workload ($N_{\mathrm{zones}} = 4096$) | Fortran MESA 1t ($\mu\mathrm{s}$) | Fortran MESA 4t OpenMP ($\mu\mathrm{s}$) | Safe Rust 1t ($\mu\mathrm{s}$) | Safe Rust 4t ($\mu\mathrm{s}$) | Python/NumPy Best ($\mu\mathrm{s}$) | JAX `@jit` 1-Star ($\mu\mathrm{s}$) | JAX `@jit(vmap)` Batch/4 ($\mu\mathrm{s}$) |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `auto_diff` (hyperdual) | `243.30` | `5.65` (fused) | `97.48` (`80.56` fused) | `241.31` | `14626.04` | `1266.05` | `318.98` |
+| `interp_2d` (bicubic) | `171.18` (`160.35` fast) | `41.15` | `128.44` | `280.35` | `93319.73` | `1285.33` | `325.16` |
+| `neu` (Itoh 1996) | `621.76` (`575.47` fast) | `152.32` | `601.48` | `372.35` | `45140.33` | `1263.82` | `321.29` |
+| `mtx_tridiag` ($5 \times 5$) | `2104.11` (`870.34` Thomas) | `791.43` (`221.38` batch) | `1563.45` | `451.97` | `34646.39` | `1618998.55` | `475115.88` |
+| `turb_mlt` (Cox 1968) | `7082.88` | `1784.93` | `550.30` | `360.26` | `49688.91` | `1287.58` | `316.21` |
+| `turb_tdc` (Kuhfuss 1986) | `222985.21` | `58176.83` | `3979.76` | `1302.19` | `474565.86` | `1449.27` | `362.28` |
 
-### 5.2 Trade-Offs Across Safe Rust, Python/NumPy, and JAX `float64`
+### 5.2 Five Structural Findings from the Four-Way Comparison
 
-1. **Single-Star Evolution Latency and Adaptive Mesh / Solver Control Flow**:
-   - A full stellar evolution step in Wave 3 (`star`) alternates between
-     evaluating microphysics across $N_{\mathrm{zones}} \sim 1000\text{--}4000$
-     shells, assembling and solving the coupled block-tridiagonal Henyey matrix
-     (`mtx_tridiag`), stiff reaction network sub-stepping (`net` + Rosenbrock /
-     RODAS integrators), and adaptive mesh refinement (remeshing, splitting, and
-     merging zones, which changes $N_{\mathrm{zones}}$ dynamically between
-     timesteps).
-   - Safe Rust executes the entire single-star loop in native machine code with
-     **zero JIT re-compilation penalty when $N_{\mathrm{zones}}$ changes** and
-     solves the $4096 \times 5 \times 5$ block-tridiagonal Henyey system in
-     $1.56\,\mathrm{ms}$ ($0.45\,\mathrm{ms}$ batched), whereas JAX `lax.scan`
-     requires $1619\,\mathrm{ms}$ on GPU and re-triggers
-     $0.15\text{--}2.2\,\mathrm{s}$ of XLA compilation whenever array shapes
-     ($N_{\mathrm{zones}}$) change without padding or bucketing.
-2. **Batched GPU Throughput and End-to-End Differentiability for Inference**:
-   - When evaluating expensive shell-local microphysics (`neu`, `turb_mlt`,
-     fixed-step `turb_tdc`, and upcoming Wave 2 `eos`, `kap`, and `rates`)
-     across large zone counts ($N_{\mathrm{zones}} = 4096$) or batched stellar
-     grids (`Stage 3`, $B \ge 4$ stars in parallel for Bayesian inference, HMC, or
-     simulation-based inference), `@jax.jit(jax.vmap)` saturates the GPU and
-     matches or outperforms 4-thread CPU Safe Rust ($316\,\mu\mathrm{s}$ vs.
-     $360\,\mu\mathrm{s}$ on `turb_mlt`, $321\,\mu\mathrm{s}$ vs.
-     $372\,\mu\mathrm{s}$ on `neu`, and $362\,\mu\mathrm{s}$ vs.
-     $1302\,\mu\mathrm{s}$ on `turb_tdc`), while providing arbitrary-order
+1. **Implicit Function Theorem (IFT) + Const-Generic Dual Numbers Deliver a
+   $13\times\text{--}162\times$ Speedup Over Upstream Fortran MESA on `turb_mlt`
+   and `turb_tdc`**:
+   - In upstream Fortran MESA, `set_MLT` and `set_TDC` are hardwired to
+     `type(auto_diff_real_star_order1)`, which propagates a fixed **33-element**
+     tangent array (`d1Array(33)`) through every elementary operation, and
+     `set_TDC` wraps `auto_diff_real_star_order1` inside `auto_diff_real_tdc`
+     ($> 70$ floating-point components) across every bracket-search and
+     Newton-Raphson iteration of $Q(Y) = 0$. Consequently, 4096 zones of
+     `turb_tdc` take $223.0\,\mathrm{ms}$ on 1 thread ($58.2\,\mathrm{ms}$ on 4
+     OpenMP threads) in Fortran MESA.
+   - By contrast, FlexMESA's Safe Rust and JAX implementations solve for the
+     scalar root $Y^*$ in `f64` and apply the **Implicit Function Theorem**
+     $\partial Y^* / \partial \theta = -(\partial Q / \partial Y)^{-1}
+     (\partial Q / \partial \theta)$ once at convergence using only the 6 active
+     local tangents (`DualOrder1<6>`). At $N_{\mathrm{zones}} = 4096$, Safe Rust
+     is **$12.9\times$ faster than Fortran MESA on `turb_mlt`**
+     ($550\,\mu\mathrm{s}$ vs. $7083\,\mu\mathrm{s}$) and **$56.0\times$ faster
+     on `turb_tdc`** ($3.98\,\mathrm{ms}$ vs. $223.0\,\mathrm{ms}$), while JAX
+     `@jit(vmap)` on GPU is **$160.6\times$ faster than 4-thread Fortran MESA on
+     `turb_tdc`** ($362\,\mu\mathrm{s}$ vs. $58.2\,\mathrm{ms}$).
+2. **Cross-Crate Monomorphization in Safe Rust Matches or Beats `gfortran -O2`
+   on Leaf Kernels (`auto_diff`, `interp_2d`, `neu`)**:
+   - On single-threaded leaf kernels (`Stage 1` and `Stage 2` at
+     $N_{\mathrm{zones}} = 4096$), Safe Rust is **$2.50\times$ faster than
+     Fortran MESA** on operator-overloaded `AutoDiffReal2VarOrder2`
+     ($97.48\,\mu\mathrm{s}$ vs. $243.30\,\mu\mathrm{s}$), **$1.25\times$
+     faster** on `interp_2d` ($128.44\,\mu\mathrm{s}$ vs.
+     $160.35\,\mu\mathrm{s}$, while fixing upstream MESA's implicit `f32` bug in
+     `fvbicub_db`), and **within $3\%$** on `neu_get` ($601.48\,\mu\mathrm{s}$
+     vs. $621.76\,\mu\mathrm{s}$).
+3. **Persistent Thread Pool (`libgomp` / `rayon`) vs. OS Thread Spawning
+   (`std::thread::scope`)**:
+   - Upstream Fortran MESA's `!\$omp parallel do` uses `libgomp`'s persistent
+     warm worker pool ($\sim 1\,\mu\mathrm{s}$ barrier overhead), achieving a
+     $3.8\times\text{--}4.0\times$ 4-core speedup even on $160\,\mu\mathrm{s}$
+     workloads (`interp_2d`: $160.35\,\mu\mathrm{s} \to 41.15\,\mu\mathrm{s}$;
+     `neu`: $575.47\,\mu\mathrm{s} \to 152.32\,\mu\mathrm{s}$). In Safe Rust,
+     spawning fresh OS threads via `std::thread::scope` adds a
+     $\sim 215\,\mu\mathrm{s}$ floor; adopting a persistent `rayon` thread pool
+     in Wave 2/3 will give Safe Rust the same $\sim 1\,\mu\mathrm{s}$ barrier
+     overhead as OpenMP.
+4. **Block-Tridiagonal Henyey Solves (`mtx_tridiag`): Sequential Thomas vs.
+   Odd-Even Parallel Cyclic Reduction (`bcyclic`)**:
+   - Upstream MESA's `bcyclic_dble_decsolblk` (Hirshman et al. 2010) reduces a
+     single 4096-zone Henyey solve from $2104\,\mu\mathrm{s}$ (1 thread) to
+     $791\,\mu\mathrm{s}$ (4 OpenMP threads) via
+     $\lceil \log_2 N_{\mathrm{zones}} \rceil = 12$ odd-even reduction levels,
+     whereas sequential block-Thomas takes $870\,\mu\mathrm{s}$ in Fortran and
+     $1563\,\mu\mathrm{s}$ in Safe Rust.
+   - Crucially, this same $\log_2 N_{\mathrm{zones}}$ parallel cyclic reduction
+     (PCR) algorithm explains how to eliminate JAX's $1619\,\mathrm{ms}$
+     sequential `lax.scan` bottleneck on GPU by replacing $N_{\mathrm{zones}} =
+     4096$ sequential scan steps with $12$ vectorized block-row reductions.
+5. **Batched GPU Throughput and End-to-End Differentiability in JAX**:
+   - Once compiled with `@jax.jit(jax.vmap)`, JAX evaluates 4096 zones of
+     complex microphysics (`neu`, `turb_mlt`, `turb_tdc`) in
+     $316\text{--}362\,\mu\mathrm{s}$ per stellar profile on the GPU with exact
      forward and reverse-mode automatic differentiation (`jax.grad`,
-     `jax.jacfwd`, `jax.vjp`) without manual derivative bookkeeping.
-3. **Why Pure Eager Python / NumPy Is Insufficient as a Sole Engine**:
-   - Pure Python / NumPy (`Stage 0` and `Stage 1`) is $20\times$ to $1000\times$
-     slower than Safe Rust and `@jax.jit` across every workload except
-     LAPACK-backed `mtx_tridiag` ($34.6\,\mathrm{ms}$ vs. $1.56\,\mathrm{ms}$ in
-     Safe Rust). Moreover, wrapping `jax.Array` inside Python scalar loops
-     (`Stage 0`) incurs catastrophic per-op dispatch latency. In Python, every
-     physics kernel must either operate on pure Python `float` / NumPy arrays
-     for scalar control flow or be compiled end-to-end as a branchless array
-     program under `@jax.jit`.
+     `jax.jacfwd`, `jax.vjp`).
 
 ### 5.3 Architectural Options for Wave 2 and Wave 3
 
-Based on the Wave 1 empirical findings, three concrete architectural strategies
-are available for Wave 2 (`rates`, `net`, `eos`, `kap`, `atm`, `ionization`,
-`colors`) and Wave 3 (`chem`, `star_data`, `star`, `astero`, `binary`):
-
 - **Option 1 (Recommended Hybrid / Dual-Track Architecture)**:
-  - Maintain the **dual-track Safe Rust + JAX `float64` architecture for Wave 2
-    microphysics (`eos`, `kap`, `rates`, `net`, `atm`, `ionization`, `colors`)**
-    using `@jax.jit`-native array formulations (`lax.fori_loop` / `jnp.where`
-    plus Implicit Function Theorem `custom_jvp` rules) on the Python/JAX track
-    and pre-validated zero-allocation `DualOrder1` kernels on the Safe Rust
-    track.
-  - For **sequential/sparse linear algebra (`mtx_tridiag`, stiff `net` ODE
-    solvers) and adaptive-mesh stellar evolution (`star` in Wave 3)**, use Safe
-    Rust as the high-speed structural/solver backbone and expose zero-copy
-    `PyO3` / JAX `ffi_call` + `custom_vjp` bindings to Python so JAX workflows
-    get sub-millisecond CPU block-tridiagonal solves and adaptive remeshing
-    without `lax.scan` GPU bottlenecks or shape-recompilation stalls.
-- **Option 2 (Full Dual-Track Parity Through Wave 2 and Wave 3)**:
-  - Continue implementing every Wave 2 and Wave 3 module independently in both
-    Safe Rust (`crates/`) and pure Python/JAX (`src/flexmesa/`), using padded
-    fixed-size zone buckets (e.g., $N_{\mathrm{pad}} \in \{512, 1024, 2048,
-    4096\}$) and host-callback or parallel cyclic reduction (PCR) solvers in JAX
-    to mitigate dynamic shape recompilation and sequential `lax.scan` latency.
+  - Maintain the **dual-track Safe Rust + JAX `float64` architecture across Wave
+    2 microphysics (`rates`, `net`, `eos`, `kap`, `atm`, `ionization`,
+    `colors`)**, using const-generic `DualOrder1<N>` + Implicit Function Theorem
+    solvers + persistent `rayon` parallelism in Safe Rust, and branchless
+    `@jax.jit` + `custom_jvp` / `custom_vjp` kernels in Python/JAX.
+  - In `mtx` / Wave 3 (`star`), add **parallel block cyclic reduction (`bcyclic`
+    / PCR)** alongside block-Thomas in both Safe Rust and JAX (plus `PyO3` / JAX
+    `ffi_call` host bindings), eliminating the sequential GPU `lax.scan`
+    bottleneck while preserving end-to-end differentiability.
+- **Option 2 (Pure Dual-Track Without Cross-Language FFI)**:
+  - Keep Safe Rust and Python/JAX completely independent through Wave 2 and Wave
+    3, relying on native JAX parallel cyclic reduction (PCR) and padded zone
+    buckets ($N_{\mathrm{pad}} \in \{512, 1024, 2048, 4096\}$) for GPU
+    evolution.
 - **Option 3 (Single-Language Concentration Post-Wave 1)**:
-  - Concentrate Wave 2 and Wave 3 implementation in a single primary language
-    (either Safe Rust with `PyO3` Python bindings, or pure Python/JAX `float64`
-    with custom C/Rust FFI primitives only for `mtx_tridiag`).
+  - Concentrate Wave 2 and Wave 3 in a single primary engine (either Safe Rust
+    with `PyO3` bindings or Python/JAX `float64` with Rust FFI for solvers).

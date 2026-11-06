@@ -64,3 +64,43 @@ Every choice that another developer could reasonably make differently and that a
 - **Why**: Breaking large migration waves into self-contained module pull requests keeps diffs auditable, isolates numerical regressions to a single MESA package, and ensures every merged commit maintains full test and golden parity coverage.
 - **Alternatives Rejected**:
   - *Landing an entire migration wave in a single monolithic pull request*: Creates multi-thousand-line diffs that are difficult to review and debug.
+
+---
+
+## DECISIONS #6: Integrated Three-Tier Hybrid Architecture (`Safe Rust Core via PyO3 + Native @jax.jit Array Kernels`)
+
+- **Date**: 2026-11-06
+- **Decision**: Partition `FlexMESA` across three architectural tiers unified behind a single Python API (`backend="auto" | "rust" | "jax"`):
+  1. **Tier A (`utils`, `schema`, `data`, `testing`, `auto_diff`)**: Maintain a single canonical implementation in Safe Rust (`crates/` with `#![forbid(unsafe_code)]`, persistent `rayon` worker pool, and zero-copy `.safetensors` memory mapping), exposed to Python via a compiled `PyO3` extension module (`flexmesa._rust`). Prune duplicated pure-Python infrastructure parsers/loaders and scalar Python operator-overloaded dual-number loops.
+  2. **Tier B (`const`, `math`, `interp_1d`, `interp_2d`, `neu`, `turb`, `chem`, `ionization`, `colors`, `eos`, `kap`, `rates`, `atm`)**: Implement each physics module as (a) a monomorphized Safe Rust CPU kernel (`f64` and `DualOrder1<N>` with Implicit Function Theorem root differentiation and persistent `rayon` zone parallelism) and (b) a concise, branchless `@jax.jit` flat-array kernel (`jnp.where`, `lax.fori_loop`, `jax.custom_jvp`). Under `backend="auto"` (default), `numpy.ndarray` and float inputs dispatch zero-copy to `flexmesa._rust`, while `jax.Array` and traced inputs dispatch to `@jax.jit`.
+  3. **Tier C (`mtx`, `num`, `net`, `star_solver`)**: Provide both sequential block-Thomas and parallel `bcyclic` cyclic reduction in Safe Rust (`crates/flexmesa-mtx`), and provide both native JAX parallel cyclic reduction (`solver_mode="pcr"`) and `flexmesa._rust` FFI solver bindings with analytical `jax.custom_vjp` rules (`solver_mode="rust_ffi"`).
+- **Why**: Wave 1 benchmarks against upstream Fortran MESA demonstrated that (1) pure-Python/NumPy loops and Python operator-overloaded dual-number classes are $90\times\text{--}10^6\times$ slower than Safe Rust and are completely superseded by zero-copy `PyO3` dispatch on CPU, while (2) native `@jax.jit` flat-array kernels with Implicit Function Theorem `custom_jvp` rules evaluate 4096 zones of complex microphysics (`neu`, `turb_mlt`, `turb_tdc`) in $316\text{--}362\,\mu\mathrm{s}$ per star on GPU ($160.6\times$ faster than 4-thread Fortran MESA on `turb_tdc`) with exact forward and reverse automatic differentiation.
+- **Alternatives Rejected**:
+  - *Maintaining separate pure-Python/NumPy fallback implementations alongside Safe Rust and JAX*: Adds thousands of lines of slow, duplicated maintenance burden when `flexmesa._rust` already provides sub-millisecond CPU execution on `numpy.ndarray` inputs.
+  - *Writing Wave 2+ physics solely in Safe Rust and calling them from JAX via host callbacks*: Forces PCIe host-device memory transfers on every microphysics call, preventing XLA kernel fusion and GPU `vmap` scaling.
+
+---
+
+## DECISIONS #7: Block-Tridiagonal & Stiff Solver Strategy (`Odd-Even bcyclic + Native JAX PCR + Rust FFI custom_vjp`)
+
+- **Date**: 2026-11-06
+- **Decision**:
+  1. In Safe Rust (`crates/flexmesa-mtx`), implement Hirshman et al. (2010) odd-even parallel block cyclic reduction (`solve_block_tridiag_bcyclic`) alongside sequential block-Thomas (`solve_block_tridiagonal`), parallelized over a persistent `rayon` thread pool.
+  2. In Python/JAX (`src/flexmesa/mtx` and `src/flexmesa/num`), support both (a) **native JAX Parallel Cyclic Reduction (`solver_mode="pcr"`)**, which reduces a block-tridiagonal system in $\lceil \log_2 N_{\mathrm{zones}} \rceil$ vectorized steps (`12` steps at $N_{\mathrm{zones}} = 4096$) entirely on GPU without sequential `lax.scan` overhead, and (b) **Safe Rust FFI solver dispatch (`solver_mode="rust_ffi"`)** wrapped with an analytical Implicit Function Theorem `jax.custom_vjp` rule solving $A^\top \lambda = \bar{x}$ and $\bar{A} = -\lambda x^\top$.
+- **Why**: Sequential `lax.scan` block-Thomas on GPU requires $N_{\mathrm{zones}} = 4096$ sequential kernel launches/steps ($1619\,\mathrm{ms}$), whereas $\lceil \log_2 N_{\mathrm{zones}} \rceil$ parallel cyclic reduction reduces dependency depth by $340\times$ on GPU, and the `flexmesa._rust` FFI binding with `custom_vjp` provides sub-millisecond exact solves and adjoints on CPU or hybrid workflows.
+- **Alternatives Rejected**:
+  - *Sequential `lax.scan` block-Thomas as the sole JAX solver*: Creates a $>1.6\,\mathrm{s}$ bottleneck per Henyey iteration on GPU.
+  - *Host FFI callback only (no native JAX PCR)*: Prevents pure on-GPU `jax.vmap` batch evolution of stellar grids.
+
+---
+
+## DECISIONS #8: Standing `Wave X.5` Consolidation, Optimization, Upstream Fortran MESA Gate & Public MkDocs Material Website
+
+- **Date**: 2026-11-06
+- **Decision**:
+  1. **Explicit `Wave X.5` Stage at the End of Every Wave (`Wave 1.5`, `Wave 2.5`, `Wave 3a.5`, `Wave 3b.5`, `Wave 4.5`, `Wave 5.5`)**: After completing the initial module PRs of any Wave `X`, execute a dedicated **Phase `X.5`** milestone before advancing to Wave `X+1`. Each `Wave X.5` stage (a) compiles and links the corresponding upstream Fortran MESA static libraries in `benchmarks/fortran_mesa/` to run head-to-head 16-digit parity and 4-stage timing benchmarks, (b) conducts a holistic cross-module code and performance review to implement algorithmic and FFI optimizations, (c) loops through both the `FlexMESA` test suite and the compare-to-original-Fortran-MESA benchmark gate after every batch of changes (advancing to the next wave **only** once all Fortran MESA parity and performance gates pass and are posted to the GitHub issue), and (d) syncs the public documentation website.
+  2. **Public Documentation Website Stack (`MkDocs Material`)**: Build and maintain a public-facing documentation website using **MkDocs Material** (`mkdocs.yml`, `docs/`, `.github/workflows/docs.yml` for GitHub Pages) with `mkdocstrings-python`, KaTeX math rendering (`pymdownx.arithmatex`), Mermaid architecture diagrams, side-by-side Rust/Python/JAX code tabs, module-by-module physical and numerical explainers, embedded publication-styled diagnostic figures (`scripts/build_docs_figures.py`), live 4-way benchmark scorecards, and synced Python/JAX + Rust (`cargo doc`) API references.
+- **Why**: Individual module PR checks verify local correctness, but cross-module bottlenecks, multi-core scaling floors, and upstream Fortran MESA comparisons only emerge when the full wave is benchmarked holistically against compiled Fortran MESA. Building the public MkDocs Material website incrementally during each `Wave X.5` gate ensures the public documentation, equations, diagnostic plots, and API reference remain strictly synchronized with the verified codebase.
+- **Alternatives Rejected**:
+  - *Relying solely on per-PR unit tests without a post-wave Fortran MESA benchmark and optimization stage*: Misses systemic performance opportunities (such as persistent `rayon` pools, `PyO3` consolidation, and `bcyclic` cyclic reduction) and risks drifting from upstream Fortran MESA performance.
+  - *Deferring public documentation to the end of Wave 5*: Leaves the project without accessible public explainers, architecture guides, and visual diagnostics during active development.

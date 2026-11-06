@@ -18,6 +18,7 @@ flexmesa-mtx = { path = "../flexmesa-mtx" }
 flexmesa-num = { path = "../flexmesa-num" }
 flexmesa-neu = { path = "../flexmesa-neu" }
 flexmesa-turb = { path = "../flexmesa-turb" }
+rayon.workspace = true
 
 [lints]
 workspace = true

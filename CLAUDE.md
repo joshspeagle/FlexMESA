@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-`FlexMESA` is a modern, modular, and verifiable re-engineering of [MESA (Modules for Experiments in Stellar Astrophysics)](https://github.com/MESAHub/mesa) into a dual-track Safe Rust (`crates/`) and differentiable Python/JAX (`src/flexmesa/`) architecture.
+`FlexMESA` is a modern, modular, and verifiable re-engineering of [MESA (Modules for Experiments in Stellar Astrophysics)](https://github.com/MESAHub/mesa) into a **Three-Tier Hybrid Architecture** combining a canonical Safe Rust engine (`crates/`, exposed to Python via `PyO3` as `flexmesa._rust`) with differentiable Python/JAX (`float64`) array kernels (`src/flexmesa/`).
 
 ## Start here
 
@@ -12,12 +12,24 @@
 
 | Path | Role |
 | :--- | :--- |
-| `src/flexmesa/` | Python and JAX (`float64`) package mirroring MESA's module tiers |
-| `crates/` | Safe Rust (`#![forbid(unsafe_code)]`) Cargo workspace crates mirroring MESA's module tiers |
+| `src/flexmesa/` | Unified Python and JAX (`float64`) package (`backend="auto" \| "rust" \| "jax"`) mirroring MESA's module tiers |
+| `crates/` | Safe Rust (`#![forbid(unsafe_code)]`) Cargo workspace crates + `flexmesa-py` (`PyO3` extension bridge) |
 | `tests/` | Python `pytest` and `hypothesis` test suite (`slow` marks full-grid or multi-step evolutionary tests) |
-| `benchmarks/` | Performance benchmark harnesses comparing scalar, vectorized, parallel, and JIT/GPU execution |
-| `docs/` | Documentation and `docs/design/` architectural blueprints and wave specifications |
+| `benchmarks/` | Cross-language 4-stage benchmark harnesses, including compiled upstream Fortran MESA (`benchmarks/fortran_mesa/`) |
+| `docs/` | Public MkDocs Material documentation website (`mkdocs.yml`) and `docs/design/` architectural specifications |
 | `notes/` | Active roadmap (`PLAN.md`), decision log (`DECISIONS.md`), milestone log (`LOG.md`), and open rulings (`QUESTIONS.md`) |
+
+## Three-Tier Hybrid Architecture Contract (`DECISIONS #6` & `#7`)
+
+1. **Tier A (`utils`, `schema`, `data`, `testing`, `auto_diff`)**:
+   - Canonical implementation lives in Safe Rust (`crates/`) and is exposed zero-copy to Python via `flexmesa._rust` (`PyO3`). Never duplicate infrastructure parsers, `.safetensors` table loaders, or scalar Python dual-number operator-overloaded loops in pure Python.
+2. **Tier B (`const`, `math`, `interp_1d`, `interp_2d`, `neu`, `turb`, `chem`, `ionization`, `colors`, `eos`, `kap`, `rates`, `atm`)**:
+   - **Safe Rust (`crates/`)**: Monomorphized `f64` and `DualOrder1<N>` kernels with Implicit Function Theorem root derivatives and persistent `rayon` parallel zone evaluation.
+   - **Python / JAX (`src/flexmesa/`)**: Branchless `@jax.jit` flat-array kernels (`jnp.where`, `lax.fori_loop`, `jax.custom_jvp`).
+   - **Unified Dispatch (`backend="auto" | "rust" | "jax"`)**: `"auto"` routes `numpy.ndarray` and float inputs zero-copy to `flexmesa._rust` and `jax.Array` / traced inputs to `@jax.jit`.
+3. **Tier C (`mtx`, `num`, `net`, `star_solver`)**:
+   - Safe Rust provides sequential block-Thomas, Hirshman `bcyclic` odd-even cyclic reduction, and stiff Rosenbrock/Newton solvers.
+   - JAX provides both native $\lceil \log_2 N_{\mathrm{zones}} \rceil$ parallel cyclic reduction (`solver_mode="pcr"`) for on-GPU `vmap` and `flexmesa._rust` FFI bindings with analytical `jax.custom_vjp` rules (`solver_mode="rust_ffi"`).
 
 ## Commands
 
@@ -37,29 +49,29 @@
   cargo test --workspace --doc
   cargo clippy --workspace --all-targets -- -D warnings
   ```
+- **Public Documentation Website Build**:
+  ```bash
+  mkdocs build --strict
+  ```
 
-## Governance & Decisions Protocol
+## Governance, Per-PR Gate & Post-Wave `X.5` Gate (`DECISIONS #5` & `#8`)
 
 - **Lead**: Josh Speagle (`joshspeagle`). Priorities are numerical correctness and parity first, API clarity and documentation second, and throughput third. Never trade correctness for speed.
-- **Decisions (`notes/DECISIONS.md`)**: Whenever a choice affects behavior, public API shape, array index conventions, numerical tolerances, defaults, or workflow, record the decision, rationale, and rejected alternatives in `notes/DECISIONS.md`. Never choose silently.
-- **Questions (`notes/QUESTIONS.md`)**: Record open architectural forks requiring a project ruling in `notes/QUESTIONS.md` with a recommended first option.
-
-## Git, Issues & Pull Request Workflow
-
-All changes (`>10` lines) reach `main` through a pull request closing an issue:
-
-1. **Issue and Branch First**: Open a GitHub issue (`gh issue create`), branch `<issue>-<slug>` from `main`, and open a draft pull request (`gh pr create --draft`) after the first meaningful commit (`Closes #<issue>`).
-2. **Public-Facing Repository & Issue Standard**: Everything committed to Git or posted to GitHub (issues, pull requests, comments, documentation, and `notes/`) must be written for a public open-source audience. Never include machine-specific filesystem paths, local file URIs, hostnames, or internal environment references.
-3. **Commit & Attribution Discipline**: Keep one logical change per commit with passing tests. Preserve native `git config` author and committer settings, include a `Co-Authored-By:` trailer when assisted by an AI agent, and end agent-authored GitHub issue bodies, PR descriptions, and comments with `---` and `_Generated by [Antigravity](https://antigravity.google)_` (or the active agent's attribution footer).
-4. **Pre-PR Verification, Simplification & Review Gate**:
-   - **Step 1 (Tests & Static Analysis)**: Run the full Python and Rust test, doctest, linter, formatter, and type-check suites with zero warnings.
-   - **Step 2 (Code Simplification Pass)**: Review the diff across reuse, readability, numerical/runtime efficiency, and abstraction altitude; apply refinements and re-run the test suite.
-   - **Step 3 (Multi-Lens Code Review)**: Audit the post-simplification diff for specification compliance, numerical/array/statistical bugs, silent failures or resource leaks, test oracle quality, and git history/docstring accuracy.
-   - **Step 4 (Resolution & Docs Upkeep)**: Resolve review findings, update any affected documentation or `CHANGELOG.md`, and mark the pull request ready for merge.
+- **Decisions (`notes/DECISIONS.md`)**: Record every choice affecting behavior, public API shape, array index conventions, numerical tolerances, defaults, or workflow in `notes/DECISIONS.md` with rationale and rejected alternatives. Never choose silently.
+- **Git, Issues & Per-PR Gate**:
+  1. Open a GitHub issue, branch `<issue>-<slug>` from `main`, and open a draft pull request (`Closes #<issue>`).
+  2. Keep all repository files, issues, pull requests, and comments strictly public-facing with zero machine-specific paths, local file URIs, hostnames, or internal environment references.
+  3. Preserve native `git config` author/committer settings, include a `Co-Authored-By:` trailer when assisted by an AI agent, and end agent-authored GitHub issue bodies, PR descriptions, and comments with `---` and `_Generated by [Antigravity](https://antigravity.google)_`.
+  4. Before merging any PR, pass (a) Python/Rust tests and static analysis, (b) a code simplification pass, (c) a multi-lens code review pass, and (d) documentation upkeep.
+- **Mandatory Post-Wave `X.5` Consolidation, Optimization, Upstream Fortran MESA & Documentation Gate (`Wave 1.5`, `Wave 2.5`, `Wave 3a.5`, `Wave 3b.5`, `Wave 4.5`, `Wave 5.5`)**:
+  - At the conclusion of every wave, before starting the next wave, execute an explicit **Phase `X.5`** milestone that:
+    1. Compiles and links the actual upstream Fortran MESA modules in `benchmarks/fortran_mesa/`, verifying 16-digit golden `test_output` parity, multi-zone stage checksum parity, and 4-stage timing benchmarks (`Fortran MESA` vs. `Safe Rust` vs. `Python PyO3` vs. `Python JAX`).
+    2. Performs a holistic cross-module code and performance review across the entire wave, implementing algorithmic and FFI optimizations to eliminate regressions and maximize speedups.
+    3. Re-runs the full `FlexMESA` test suite and the compare-to-original-Fortran-MESA benchmark suite after every batch of `X.5` changes, advancing to the next wave **only** when all Fortran MESA parity and performance gates pass.
+    4. Updates the public-facing MkDocs Material documentation website (`docs/`) with module explainers, governing equations, diagnostic plots, updated 4-way benchmark scorecards, and synced API references.
 
 ## Scientific Code, Verification & Prose Standards
 
 - **Modular File Hygiene (`<= 400` LOC)**: Target `<= 400` lines of code per file (hard ceiling `600` LOC) and `>= 20%` documentation ratio.
 - **Precision & Determinism**: Enforce `float64` (`jnp.float64`, `np.float64`, `f64`) across all thermodynamic, spline, linear-algebra, and PDE state calculations, and double-double (`f64x2`) or `f128` accumulation where nuclear statistical equilibrium (NSE) cancellation occurs. Use explicit `np.random.default_rng(seed)` or `jax.random.key(seed)` for any stochastic test generation.
-- **Two-Tier Numerical Parity**: Verify every migrated module against (1) MESA's standalone `<pkg>/test/test_output` 16-digit golden baselines and exact analytical/autodiff identities (`jax.test_util.check_grads`), and (2) `proptest` and `hypothesis` property-based fuzzing.
-- **Documentation & Prose Style**: Pair physical and statistical intuition with exact technical terminology across all docstrings, design documents, and tutorials. Document array shapes and physical CGS/solar units in every Google-style docstring (`Args:`, `Returns:`, `Raises:`). Avoid em-dashes, mannered metaphors, and mid-sentence setup-and-reveal colons.
+- **Documentation & Prose Style**: Pair physical and statistical intuition with exact technical terminology across all docstrings, design documents, and website pages. Document array shapes and physical CGS/solar units in every Google-style docstring (`Args:`, `Returns:`, `Raises:`). Avoid em-dashes, mannered metaphors, and mid-sentence setup-and-reveal colons.

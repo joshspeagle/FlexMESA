@@ -9,8 +9,8 @@
 //!   contiguous `f64` slices (`SoA`) across $N_{\mathrm{zones}}$ stellar zones.
 //! - **Stage 2 (Fused Kernel & Hoisted Invariants)**: Inlined slice loops with
 //!   hoisted table/grid validation and pre-allocated solver workspaces.
-//! - **Stage 3 (Multi-Core Data Parallelism)**: Scoped thread parallelism
-//!   chunked across 4 worker threads.
+//! - **Stage 3 (Multi-Core Data Parallelism)**: Persistent `rayon` worker pool
+//!   with lock-free atomic team barrier across 4 worker threads.
 
 #![forbid(unsafe_code)]
 #![allow(
@@ -36,10 +36,13 @@ pub mod kernels_micro;
 pub mod kernels_solver;
 pub mod tridiag_fast;
 
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
 
 use flexmesa_interp2d::{interp_mkbicub_db, BicubicBc};
 use flexmesa_math::{cospi, exp10, sinpi};
+use rayon::ThreadPool;
 
 pub use kernels_micro::{bench_autodiff, bench_interp2d, bench_neu};
 pub use kernels_solver::{
@@ -48,6 +51,104 @@ pub use kernels_solver::{
 
 /// Number of worker threads used in Stage 3 multi-core benchmarks.
 pub const STAGE3_THREADS: usize = 4;
+
+/// Returns a reference to the persistent 4-thread `rayon` worker pool used for
+/// Stage 3 data-parallel benchmarks.
+pub fn stage3_pool() -> &'static ThreadPool {
+    static POOL: OnceLock<ThreadPool> = OnceLock::new();
+    POOL.get_or_init(|| {
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(STAGE3_THREADS)
+            .build()
+            .expect("failed to build persistent Stage 3 rayon thread pool")
+    })
+}
+
+/// Computes median and interquartile range (`Q75 - Q25`) from raw timing
+/// samples in microseconds.
+fn stats_from_samples(mut samples: Vec<f64>) -> LatencyStats {
+    let repeats = samples.len();
+    samples.sort_by(f64::total_cmp);
+    let mid = repeats / 2;
+    let median_us = if repeats % 2 == 1 {
+        samples[mid]
+    } else {
+        f64::midpoint(samples[mid - 1], samples[mid])
+    };
+    LatencyStats {
+        median_us,
+        iqr_us: samples[(3 * repeats) / 4] - samples[repeats / 4],
+    }
+}
+
+/// Measures a static-chunked Stage 3 multi-core kernel `op_chunk(tid, chunk)`
+/// across all `STAGE3_THREADS` workers of the persistent `rayon` pool using a
+/// lock-free atomic team barrier.
+///
+/// # Arguments
+/// * `n_warmup` - Number of untimed warmup invocations.
+/// * `n_repeats` - Number of timed invocations (clamped to at least 3).
+/// * `slice` - Mutable output slice partitioned into at most `STAGE3_THREADS`
+///   chunks of length `chunk_len`.
+/// * `chunk_len` - Number of elements assigned to each worker thread.
+/// * `op_chunk` - Per-thread kernel receiving `(thread_idx, dst_chunk)`.
+pub fn measure_stage3_chunks_us<T, F>(
+    n_warmup: usize,
+    n_repeats: usize,
+    slice: &mut [T],
+    chunk_len: usize,
+    op_chunk: F,
+) -> LatencyStats
+where
+    T: Send,
+    F: Fn(usize, &mut [T]) + Sync,
+{
+    let repeats = n_repeats.max(3);
+    let (step, count) = (AtomicUsize::new(0), AtomicUsize::new(0));
+    let wait = || {
+        let s = step.load(Ordering::Acquire);
+        if count.fetch_add(1, Ordering::AcqRel) + 1 == STAGE3_THREADS {
+            count.store(0, Ordering::Release);
+            step.fetch_add(1, Ordering::Release);
+        } else {
+            while step.load(Ordering::Acquire) == s {
+                std::hint::spin_loop();
+            }
+        }
+    };
+    let chunk_slots: Vec<Mutex<&mut [T]>> =
+        slice.chunks_mut(chunk_len).map(Mutex::new).collect();
+    assert!(chunk_slots.len() <= STAGE3_THREADS);
+    let samples_mutex = Mutex::new(Vec::new());
+    stage3_pool().broadcast(|ctx| {
+        let tid = ctx.index();
+        let mut guard = (tid < chunk_slots.len())
+            .then(|| chunk_slots[tid].lock().unwrap());
+        wait();
+        for _ in 0..n_warmup {
+            if let Some(ref mut dst) = guard {
+                op_chunk(tid, dst);
+            }
+        }
+        let mut local_samples =
+            Vec::with_capacity(if tid == 0 { repeats } else { 0 });
+        for _ in 0..repeats {
+            wait();
+            let t0 = (tid == 0).then(Instant::now);
+            if let Some(ref mut dst) = guard {
+                op_chunk(tid, dst);
+            }
+            wait();
+            if let Some(start) = t0 {
+                local_samples.push(start.elapsed().as_nanos() as f64 * 1.0e-3);
+            }
+        }
+        if tid == 0 {
+            *samples_mutex.lock().unwrap() = local_samples;
+        }
+    });
+    stats_from_samples(samples_mutex.into_inner().unwrap())
+}
 
 /// Summary latency statistics (median and interquartile range in microseconds)
 /// for a single optimization stage.
@@ -109,19 +210,7 @@ pub fn measure_us<F: FnMut()>(
         op();
         samples.push(t0.elapsed().as_nanos() as f64 * 1.0e-3);
     }
-    samples.sort_by(f64::total_cmp);
-    let mid = repeats / 2;
-    let median_us = if repeats % 2 == 1 {
-        samples[mid]
-    } else {
-        f64::midpoint(samples[mid - 1], samples[mid])
-    };
-    let q25 = samples[repeats / 4];
-    let q75 = samples[(3 * repeats) / 4];
-    LatencyStats {
-        median_us,
-        iqr_us: q75 - q25,
-    }
+    stats_from_samples(samples)
 }
 
 /// Computes the maximum relative difference between two `f64` slices `a` and
@@ -150,6 +239,16 @@ pub fn max_rel_diff(a: &[f64], b: &[f64]) -> f64 {
     max_err
 }
 
+/// Returns the maximum of `a` and `b` while propagating `f64::NAN`.
+#[inline]
+pub fn nan_max(a: f64, b: f64) -> f64 {
+    if a.is_nan() || b.is_nan() {
+        f64::NAN
+    } else {
+        a.max(b)
+    }
+}
+
 /// Combines three stage relative errors while propagating `f64::NAN`.
 ///
 /// # Arguments
@@ -160,11 +259,7 @@ pub fn max_rel_diff(a: &[f64], b: &[f64]) -> f64 {
 /// # Returns
 /// Maximum of `(d1, d2, d3)`, or `f64::NAN` if any input is `NaN`.
 pub fn max_err3(d1: f64, d2: f64, d3: f64) -> f64 {
-    if d1.is_nan() || d2.is_nan() || d3.is_nan() {
-        f64::NAN
-    } else {
-        d1.max(d2).max(d3)
-    }
+    nan_max(nan_max(d1, d2), d3)
 }
 
 /// Deterministic stellar thermodynamic and composition profile across
@@ -210,25 +305,15 @@ impl ThermoGrid {
         let denom = (n_zones.saturating_sub(1)).max(1) as f64;
         for k in 0..n_zones {
             let s = k as f64 / denom;
-            let lt = 7.2 + 2.6 * s;
-            let lrho = 4.0 + 5.0 * s;
+            let (lt, lrho, a) = (7.2 + 2.6 * s, 4.0 + 5.0 * s, 4.0 + 24.0 * s);
             log10_t.push(lt);
             t.push(exp10(lt));
             log10_rho.push(lrho);
             rho.push(exp10(lrho));
-            let a = 4.0 + 24.0 * s;
             abar.push(a);
             zbar.push(0.5 * a);
         }
-        Self {
-            n_zones,
-            log10_t,
-            t,
-            log10_rho,
-            rho,
-            abar,
-            zbar,
-        }
+        Self { n_zones, log10_t, t, log10_rho, rho, abar, zbar }
     }
 }
 
@@ -237,14 +322,11 @@ impl ThermoGrid {
 /// look-ups.
 #[derive(Debug, Clone)]
 pub struct BicubTable {
-    /// Strictly ascending `x` grid ($\log_{10}\rho \in [3.5, 9.5]$) of length
-    /// `64`.
+    /// Strictly ascending `x` grid ($\log_{10}\rho \in [3.5, 9.5]$), len `64`.
     pub x: Vec<f64>,
-    /// Strictly ascending `y` grid ($\log_{10}T \in [7.0, 10.0]$) of length
-    /// `64`.
+    /// Strictly ascending `y` grid ($\log_{10}T \in [7.0, 10.0]$), len `64`.
     pub y: Vec<f64>,
-    /// Precomputed bicubic spline coefficients `[f, f_xx, f_yy, f_xxyy]` of
-    /// length `64 * 64`.
+    /// Bicubic spline coefficients `[f, f_xx, f_yy, f_xxyy]`, len `64 * 64`.
     pub coeffs: Vec<[f64; 4]>,
     /// Uniform-spacing flag along `x`.
     pub ilinx: bool,
@@ -254,12 +336,8 @@ pub struct BicubTable {
 
 impl BicubTable {
     /// Builds the deterministic $64 \times 64$ bicubic spline table.
-    ///
-    /// # Returns
-    /// Initialized [`BicubTable`] with precomputed spline coefficients.
     pub fn new() -> Self {
-        let nx = 64usize;
-        let ny = 64usize;
+        let (nx, ny) = (64usize, 64usize);
         let x: Vec<f64> = (0..nx)
             .map(|i| 3.5 + 6.0 * (i as f64) / ((nx - 1) as f64))
             .collect();
@@ -267,37 +345,20 @@ impl BicubTable {
             .map(|j| 7.0 + 3.0 * (j as f64) / ((ny - 1) as f64))
             .collect();
         let mut z = vec![0.0_f64; nx * ny];
-        for i in 0..nx {
-            for j in 0..ny {
-                let xi = x[i];
-                let yj = y[j];
+        for (i, &xi) in x.iter().enumerate() {
+            for (j, &yj) in y.iter().enumerate() {
                 z[i * ny + j] = 0.25 * xi * xi
                     + 0.15 * xi * yj
                     + 0.35 * yj * yj
                     + 0.1 * sinpi(0.2 * xi) * cospi(0.15 * yj);
             }
         }
+        let bc = BicubicBc::NotAKnot;
         let (coeffs, ilinx, iliny) = interp_mkbicub_db(
-            &x,
-            &y,
-            &z,
-            BicubicBc::NotAKnot,
-            &[],
-            BicubicBc::NotAKnot,
-            &[],
-            BicubicBc::NotAKnot,
-            &[],
-            BicubicBc::NotAKnot,
-            &[],
+            &x, &y, &z, bc, &[], bc, &[], bc, &[], bc, &[],
         )
         .expect("valid bicubic table");
-        Self {
-            x,
-            y,
-            coeffs,
-            ilinx,
-            iliny,
-        }
+        Self { x, y, coeffs, ilinx, iliny }
     }
 }
 

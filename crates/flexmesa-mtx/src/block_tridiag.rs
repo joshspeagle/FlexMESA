@@ -48,7 +48,13 @@ pub(crate) fn check_blocks(
 
 /// Accumulates $y \leftarrow y + \alpha B x$ for an $n_{\mathrm{var}} \times
 /// n_{\mathrm{var}}$ block `blk`.
-fn accum_block_mv(blk: &[f64], x: &[f64], scale: f64, y: &mut [f64]) {
+#[inline]
+pub(crate) fn accum_block_mv(
+    blk: &[f64],
+    x: &[f64],
+    scale: f64,
+    y: &mut [f64],
+) {
     let nvar = y.len();
     for i in 0..nvar {
         let mut s = 0.0;
@@ -56,6 +62,22 @@ fn accum_block_mv(blk: &[f64], x: &[f64], scale: f64, y: &mut [f64]) {
             s += blk[i * nvar + j] * x[j];
         }
         y[i] += scale * s;
+    }
+}
+
+/// Subtracts a block matrix-matrix product $C \leftarrow C - A B$ for
+/// $n \times n$ row-major blocks.
+#[inline]
+pub(crate) fn sub_block_mm(n: usize, a: &[f64], b: &[f64], c: &mut [f64]) {
+    for i in 0..n {
+        for m in 0..n {
+            let a_im = a[i * n + m];
+            if a_im != 0.0 {
+                for j in 0..n {
+                    c[i * n + j] -= a_im * b[m * n + j];
+                }
+            }
+        }
     }
 }
 
@@ -232,16 +254,7 @@ pub fn block_thomas_factor(
             let l_kp1 = &lblk[(k + 1) * blk_sz..(k + 2) * blk_sz];
             let u_k_ref = &ublk[k * blk_sz..(k + 1) * blk_sz];
             let d_kp1 = &mut dblk[(k + 1) * blk_sz..(k + 2) * blk_sz];
-            for i in 0..nvar {
-                for m in 0..nvar {
-                    let l_im = l_kp1[i * nvar + m];
-                    if l_im != 0.0 {
-                        for j in 0..nvar {
-                            d_kp1[i * nvar + j] -= l_im * u_k_ref[m * nvar + j];
-                        }
-                    }
-                }
-            }
+            sub_block_mm(nvar, l_kp1, u_k_ref, d_kp1);
         }
     }
     Ok(())

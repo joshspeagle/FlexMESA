@@ -8,8 +8,6 @@
 //! 3. `bench_turb_tdc`: Kuhfuss (1986) 1D Time-Dependent Convection (`set_tdc`)
 //!    with Implicit Function Theorem `DualOrder1<6>` sensitivities.
 
-use std::thread;
-
 use flexmesa_autodiff::DualOrder1;
 use flexmesa_const::{KERG, LSUN, MP, MSUN, RSUN, STANDARD_CGRAV};
 use flexmesa_mtx::{
@@ -19,17 +17,18 @@ use flexmesa_turb::{
     set_mlt, set_tdc, MltInputs, MltParams, TdcInputs, TdcParams,
 };
 
+use crate::kernels_micro::bench_zone_fn;
 use crate::tridiag_fast::{fast_block_thomas_solve, make_block_tridiag_fixture};
 use crate::{
-    max_err3, max_rel_diff, measure_us, BenchRecord, LatencyStats, ThermoGrid,
-    STAGE3_THREADS,
+    max_err3, max_rel_diff, measure_stage3_chunks_us, measure_us, nan_max,
+    BenchRecord, LatencyStats, ThermoGrid, STAGE3_THREADS,
 };
 
 /// Solar surface gravitational acceleration $G M_{\odot} / R_{\odot}^2$ in
 /// $\mathrm{cm\,s^{-2}}$.
 const GRAV_SOLAR: f64 = MSUN * STANDARD_CGRAV / (RSUN * RSUN);
 
-/// Ideal monatomic specific Gas constant $k_{\mathrm{B}} / m_p$ in
+/// Ideal monatomic specific gas constant $k_{\mathrm{B}} / m_p$ in
 /// $\mathrm{erg\,g^{-1}\,K^{-1}}$.
 const RGAS_IDEAL: f64 = KERG / MP;
 
@@ -111,37 +110,32 @@ pub fn bench_mtx_block_tridiag(
             )
         })
         .collect();
-    let stage3_batch = measure_us(n_warmup, n_repeats, || {
-        let l_ref = &lblk;
-        let d_ref = &dblk;
-        let u_ref = &ublk;
-        let r_ref = &rhs;
-        thread::scope(|s| {
-            for (dw, uw, ipiv, sol) in &mut workspaces {
-                s.spawn(move || {
-                    dw.copy_from_slice(d_ref);
-                    uw.copy_from_slice(u_ref);
-                    sol.copy_from_slice(r_ref);
-                    fast_block_thomas_solve(
-                        nvar, nz, l_ref, dw, uw, ipiv, sol,
-                    );
-                });
-            }
-        });
-    });
+    let l_ref = &lblk;
+    let d_ref = &dblk;
+    let u_ref = &ublk;
+    let r_ref = &rhs;
+    let stage3_batch = measure_stage3_chunks_us(
+        n_warmup,
+        n_repeats,
+        &mut workspaces,
+        1,
+        |_tid, ws_slice| {
+            let (dw, uw, ipiv, sol) = &mut ws_slice[0];
+            dw.copy_from_slice(d_ref);
+            uw.copy_from_slice(u_ref);
+            sol.copy_from_slice(r_ref);
+            fast_block_thomas_solve(nvar, nz, l_ref, dw, uw, ipiv, sol);
+        },
+    );
     let stage3 = LatencyStats {
         median_us: stage3_batch.median_us / (STAGE3_THREADS as f64),
         iqr_us: stage3_batch.iqr_us / (STAGE3_THREADS as f64),
     };
-    let mut d3 = 0.0_f64;
-    for (_, _, _, sol) in &workspaces {
-        let err = max_rel_diff(&ref_sol, sol);
-        d3 = if err.is_nan() || d3.is_nan() {
-            f64::NAN
-        } else {
-            d3.max(err)
-        };
-    }
+    let d3 = workspaces
+        .iter()
+        .fold(0.0_f64, |acc, (_, _, _, sol)| {
+            nan_max(acc, max_rel_diff(&ref_sol, sol))
+        });
 
     let max_rel_err = max_err3(
         max_rel_diff(&ref_sol, &out1),
@@ -260,102 +254,6 @@ fn eval_tdc_zone(s_frac: f64) -> [f64; 4] {
     ]
 }
 
-/// Shared 4-stage benchmark driver for a 4-output zone kernel `eval_zone(s)`.
-///
-/// Evaluates `eval_zone` at normalized radial coordinates $s_k = k / (N - 1)$
-/// across:
-/// - **Stage 0**: Scalar loop allocating a fresh `Vec<[f64; 4]>` per step.
-/// - **Stage 1**: Pre-allocated contiguous Structure-of-Arrays (SoA) slice.
-/// - **Stage 2**: Fused slice-chunk loop (`chunks_exact_mut(4)`).
-/// - **Stage 3**: Scoped 4-thread parallel execution across radial chunks.
-///
-/// # Arguments
-/// * `workload` - Static benchmark name (`"turb_mlt"` or `"turb_tdc"`).
-/// * `grid` - Stellar thermodynamic profile across `n_zones` shells.
-/// * `n_warmup` - Number of untimed warmup iterations.
-/// * `n_repeats` - Number of timed iterations.
-/// * `eval_zone` - Thread-safe per-zone evaluator returning `[f64; 4]`.
-fn bench_zone_fn_4<F>(
-    workload: &'static str,
-    grid: &ThermoGrid,
-    n_warmup: usize,
-    n_repeats: usize,
-    eval_zone: F,
-) -> BenchRecord
-where
-    F: Fn(f64) -> [f64; 4] + Sync,
-{
-    let nz = grid.n_zones;
-    let denom = (nz.saturating_sub(1)).max(1) as f64;
-
-    // Stage 0: Scalar loop allocating Vec<[f64; 4]> per call.
-    let mut ref_flat = vec![0.0_f64; nz * 4];
-    let stage0 = measure_us(n_warmup, n_repeats, || {
-        let mut rows = Vec::with_capacity(nz);
-        for k in 0..nz {
-            rows.push(eval_zone(k as f64 / denom));
-        }
-        for (k, r) in rows.iter().enumerate() {
-            ref_flat[k * 4..(k + 1) * 4].copy_from_slice(r);
-        }
-    });
-
-    // Stage 1: Contiguous pre-allocated SoA slice buffer.
-    let mut out1 = vec![0.0_f64; nz * 4];
-    let stage1 = measure_us(n_warmup, n_repeats, || {
-        for k in 0..nz {
-            let r = eval_zone(k as f64 / denom);
-            out1[k * 4..(k + 1) * 4].copy_from_slice(&r);
-        }
-    });
-
-    // Stage 2: Fused slice chunk loop.
-    let mut out2 = vec![0.0_f64; nz * 4];
-    let stage2 = measure_us(n_warmup, n_repeats, || {
-        for (k, dst) in out2.chunks_exact_mut(4).enumerate() {
-            dst.copy_from_slice(&eval_zone(k as f64 / denom));
-        }
-    });
-
-    // Stage 3: 4-thread scoped parallel execution across zone chunks.
-    let mut out3 = vec![0.0_f64; nz * 4];
-    let chunk_z = nz.div_ceil(STAGE3_THREADS);
-    let eval_ref = &eval_zone;
-    let stage3 = measure_us(n_warmup, n_repeats, || {
-        thread::scope(|s| {
-            for (idx, dst_chunk) in out3.chunks_mut(chunk_z * 4).enumerate() {
-                let z0 = idx * chunk_z;
-                s.spawn(move || {
-                    for (local_k, dst) in
-                        dst_chunk.chunks_exact_mut(4).enumerate()
-                    {
-                        let k = z0 + local_k;
-                        dst.copy_from_slice(&eval_ref(k as f64 / denom));
-                    }
-                });
-            }
-        });
-    });
-
-    let max_rel_err = max_err3(
-        max_rel_diff(&ref_flat, &out1),
-        max_rel_diff(&ref_flat, &out2),
-        max_rel_diff(&ref_flat, &out3),
-    );
-    let checksum: f64 = out2.iter().step_by(4).sum();
-
-    BenchRecord {
-        workload,
-        n_zones: nz,
-        stage0,
-        stage1,
-        stage2,
-        stage3,
-        max_rel_err,
-        checksum,
-    }
-}
-
 /// Benchmarks Cox Mixing-Length Theory (`set_mlt`) with `DualOrder1<6>`
 /// sensitivities across Stages 0..3.
 ///
@@ -371,7 +269,16 @@ pub fn bench_turb_mlt(
     n_warmup: usize,
     n_repeats: usize,
 ) -> BenchRecord {
-    bench_zone_fn_4("turb_mlt", grid, n_warmup, n_repeats, eval_mlt_zone)
+    let nz = grid.n_zones;
+    let denom = (nz.saturating_sub(1)).max(1) as f64;
+    bench_zone_fn(
+        "turb_mlt",
+        nz,
+        n_warmup,
+        n_repeats,
+        |k| eval_mlt_zone((k as f64) / denom),
+        |k| eval_mlt_zone((k as f64) / denom),
+    )
 }
 
 /// Benchmarks Kuhfuss 1D Time-Dependent Convection (`set_tdc`) with
@@ -389,5 +296,14 @@ pub fn bench_turb_tdc(
     n_warmup: usize,
     n_repeats: usize,
 ) -> BenchRecord {
-    bench_zone_fn_4("turb_tdc", grid, n_warmup, n_repeats, eval_tdc_zone)
+    let nz = grid.n_zones;
+    let denom = (nz.saturating_sub(1)).max(1) as f64;
+    bench_zone_fn(
+        "turb_tdc",
+        nz,
+        n_warmup,
+        n_repeats,
+        |k| eval_tdc_zone((k as f64) / denom),
+        |k| eval_tdc_zone((k as f64) / denom),
+    )
 }

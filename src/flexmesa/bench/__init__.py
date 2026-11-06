@@ -2,16 +2,18 @@
 """Wave 1 four-stage performance benchmark suite (`flexmesa.bench`).
 
 Evaluates the Wave 1 leaf utilities and microphysics kernels (`auto_diff`,
-`interp_2d`, `mtx`, `neu`, and `turb`) across four progressive optimization
-stages in Python/NumPy and JAX `float64`:
+`interp_2d`, `mtx`, `neu`, and `turb`) across four progressive execution
+stages in the Three-Tier Hybrid Architecture (`flexmesa._rust` + JAX `float64`):
 
-- **Stage 0 (Idiomatic Scalar Baseline)**: Zone-by-zone scalar Python loops.
-- **Stage 1 (Contiguous Structure-of-Arrays Layout)**: Vectorized NumPy or
-  un-fused `jax.vmap` evaluation over contiguous `float64` arrays of shape
-  `(N_zones,)`.
+- **Stage 0 (Sequential Safe Rust PyO3 Baseline)**: Zero-copy single-thread
+  `flexmesa._rust` execution (`parallel=False`).
+- **Stage 1 (Parallel 4-Thread `rayon` Safe Rust PyO3)**: Zero-copy 4-thread
+  persistent `rayon` `flexmesa._rust` execution (`parallel=True`, and Hirshman
+  et al. 2010 `bcyclic` for `mtx_tridiag`).
 - **Stage 2 (Fused / JIT Kernel Execution)**: XLA-compiled `@jax.jit` fused
   kernels (recording both first-call compilation latency and warm steady-state
-  execution latency) and hoisted-invariant NumPy kernels.
+  execution latency), including $\\lceil \\log_2 N_{\\mathrm{zones}} \\rceil$
+  Parallel Cyclic Reduction (`solve_block_tridiag_pcr`) for `mtx_tridiag`.
 - **Stage 3 (Batched / Multi-Profile Execution)**: Batched `jax.jit(jax.vmap)`
   execution across `STAGE3_BATCH_SIZE` stellar profiles `(B, N_zones)` on the
   active XLA device (amortized per profile).

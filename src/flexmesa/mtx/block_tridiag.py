@@ -1,28 +1,30 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
-"""Block-tridiagonal matrix-vector products and Thomas solvers (`mtx`).
+"""Block-tridiagonal matrix-vector products and linear solvers (`mtx`).
 
 Represents a block-tridiagonal matrix across `nz` shells and `nvar` variables
 per shell via three arrays `lblk`, `dblk`, and `ublk` of shape
 `(nz, nvar, nvar)` in `float64`, where shell `k` has sub-diagonal block
 `lblk[k]` ($k > 0$), diagonal block `dblk[k]`, and super-diagonal block
-`ublk[k]` ($k + 1 < n_z$). Includes a JAX-differentiable block Thomas solver
-(`solve_block_tridiagonal_jax`) built on `jax.lax.scan`.
+`ublk[k]` ($k + 1 < n_z$). Supports Safe Rust sequential Thomas and Hirshman et
+al. (2010) `bcyclic` odd-even cyclic reduction via `flexmesa._rust`, as well as
+JAX-differentiable solvers (`solver_mode="pcr"`, `"scan"`, or `"rust_ffi"`).
 """
 
 from __future__ import annotations
+
+from typing import Literal
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 import numpy.typing as npt
 
-from flexmesa.mtx import dense
+from flexmesa import _dispatch, _rust
+from flexmesa.mtx import dense, pcr
 
 
 def _validate_blocks(
-    lblk: npt.ArrayLike,
-    dblk: npt.ArrayLike,
-    ublk: npt.ArrayLike,
+    lblk: npt.ArrayLike, dblk: npt.ArrayLike, ublk: npt.ArrayLike
 ) -> tuple[
     npt.NDArray[np.float64],
     npt.NDArray[np.float64],
@@ -31,50 +33,42 @@ def _validate_blocks(
     int,
 ]:
     """Validates `(nz, nvar, nvar)` block-tridiagonal arrays in `float64`."""
-    l_arr = np.asarray(lblk, dtype=np.float64)
-    d_arr = np.asarray(dblk, dtype=np.float64)
-    u_arr = np.asarray(ublk, dtype=np.float64)
+    l_a, d_a, u_a = (
+        np.asarray(lblk, dtype=np.float64),
+        np.asarray(dblk, dtype=np.float64),
+        np.asarray(ublk, dtype=np.float64),
+    )
     if (
-        d_arr.ndim != 3
-        or d_arr.shape[0] == 0
-        or d_arr.shape[1] == 0
-        or d_arr.shape[1] != d_arr.shape[2]
-        or l_arr.shape != d_arr.shape
-        or u_arr.shape != d_arr.shape
+        d_a.ndim != 3
+        or 0 in d_a.shape[:2]
+        or d_a.shape[1] != d_a.shape[2]
+        or l_a.shape != d_a.shape
+        or u_a.shape != d_a.shape
     ):
         raise ValueError(
             "lblk, dblk, ublk must share non-empty shape (nz, nvar, nvar)."
         )
     if not (
-        np.all(np.isfinite(l_arr))
-        and np.all(np.isfinite(d_arr))
-        and np.all(np.isfinite(u_arr))
+        np.all(np.isfinite(l_a))
+        and np.all(np.isfinite(d_a))
+        and np.all(np.isfinite(u_a))
     ):
         raise ValueError("Block-tridiagonal arrays contain NaN or Inf.")
-    return l_arr, d_arr, u_arr, int(d_arr.shape[0]), int(d_arr.shape[1])
+    return l_a, d_a, u_a, int(d_a.shape[0]), int(d_a.shape[1])
 
 
 def _as_block_vec(
-    vec: npt.ArrayLike,
-    nz: int,
-    nvar: int,
-    name: str,
-    *,
-    copy: bool = False,
+    vec: npt.ArrayLike, nz: int, nvar: int, name: str, *, copy: bool = False
 ) -> tuple[npt.NDArray[np.float64], bool]:
     """Reshapes and validates a 1D `(nz * nvar,)` or 2D `(nz, nvar)` vector."""
     arr = np.asarray(vec, dtype=np.float64)
     is_1d = arr.ndim == 1
-    if is_1d:
-        if arr.shape != (nz * nvar,):
-            raise ValueError(f"1D vector {name} must have shape (nz * nvar,).")
+    if is_1d and arr.shape == (nz * nvar,):
         out = arr.reshape(nz, nvar)
-    elif arr.shape == (nz, nvar):
+    elif not is_1d and arr.shape == (nz, nvar):
         out = arr
     else:
-        raise ValueError(
-            f"{name} must have shape (nz, nvar) or (nz * nvar,)."
-        )
+        raise ValueError(f"{name} must have shape (nz, nvar) or (nz * nvar,).")
     return (out.copy() if copy else out), is_1d
 
 
@@ -117,6 +111,8 @@ def block_multiply_xa(
     dblk: npt.ArrayLike,
     ublk: npt.ArrayLike,
     x: npt.ArrayLike,
+    *,
+    backend: _dispatch.Backend = "auto",
 ) -> npt.NDArray[np.float64]:
     """Evaluates left product $b = x^{\\top} A$ for a block-tridiagonal system.
 
@@ -128,6 +124,7 @@ def block_multiply_xa(
             (dimensionless).
         x: Left vector of shape `(nz, nvar)` or `(nz * nvar,)` in `float64`
             (dimensionless).
+        backend: Execution backend (``"auto"``, ``"rust"``, or ``"jax"``).
 
     Returns:
         Row-vector product $b = x^{\\top} A$ matching the shape of `x`.
@@ -137,6 +134,17 @@ def block_multiply_xa(
     """
     l_arr, d_arr, u_arr, nz, nvar = _validate_blocks(lblk, dblk, ublk)
     x_2d, is_1d = _as_block_vec(x, nz, nvar, "x")
+
+    if _dispatch.resolve_backend(backend, lblk, dblk, ublk, x) == "rust":
+        out_r = _rust.block_multiply_xa(
+            nvar,
+            nz,
+            _dispatch.as_c_f64(l_arr),
+            _dispatch.as_c_f64(d_arr),
+            _dispatch.as_c_f64(u_arr),
+            _dispatch.as_c_f64(x_2d),
+        )
+        return out_r.reshape(-1) if is_1d else out_r
 
     out: npt.NDArray[np.float64] = np.einsum("ki,kij->kj", x_2d, d_arr)
     if nz > 1:
@@ -231,24 +239,69 @@ def solve_block_tridiagonal(
     dblk: npt.ArrayLike,
     ublk: npt.ArrayLike,
     b: npt.ArrayLike,
+    *,
+    method: Literal["thomas", "bcyclic"] = "thomas",
+    parallel: bool = False,
+    backend: _dispatch.Backend = "auto",
 ) -> npt.NDArray[np.float64]:
     """Factors and solves a block-tridiagonal linear system $A x = b$.
 
     Args:
-        lblk: Sub-diagonal blocks `(nz, nvar, nvar)` in `float64`.
-        dblk: Diagonal blocks `(nz, nvar, nvar)` in `float64`.
-        ublk: Super-diagonal blocks `(nz, nvar, nvar)` in `float64`.
-        b: Right-hand side `(nz, nvar)` or `(nz * nvar,)` in `float64`.
+        lblk: Sub-diagonal blocks `(nz, nvar, nvar)` in `float64`
+            (dimensionless).
+        dblk: Diagonal blocks `(nz, nvar, nvar)` in `float64` (dimensionless).
+        ublk: Super-diagonal blocks `(nz, nvar, nvar)` in `float64`
+            (dimensionless).
+        b: Right-hand side `(nz, nvar)` or `(nz * nvar,)` in `float64`
+            (dimensionless).
+        method: Solver algorithm (`"thomas"` sequential block-Thomas or
+            `"bcyclic"` Hirshman et al. 2010 odd-even cyclic reduction).
+        parallel: When `method == "bcyclic"`, whether to run the reduction
+            levels across the persistent 4-thread `rayon` pool.
+        backend: Execution backend (`"auto"`, `"rust"`, or `"jax"`).
 
     Returns:
-        Solution array `x` matching the shape of `b` in `float64`.
+        Solution array `x` matching the shape of `b` in `float64`
+        (dimensionless).
 
     Raises:
         ValueError: If block dimensions mismatch, inputs are non-finite, or a
             diagonal block is singular.
     """
-    d_fac, u_fac, ipiv = block_thomas_factor(lblk, dblk, ublk)
-    return block_thomas_solve(lblk, d_fac, u_fac, ipiv, b)
+    if method not in ("thomas", "bcyclic"):
+        msg = f"Invalid method {method!r}; expected 'thomas' or 'bcyclic'."
+        raise ValueError(msg)
+
+    l_arr, d_arr, u_arr, nz, nvar = _validate_blocks(lblk, dblk, ublk)
+    b_2d, is_1d = _as_block_vec(b, nz, nvar, "b")
+    if not np.all(np.isfinite(b_2d)):
+        raise ValueError("Right-hand side b contains NaN or Inf.")
+
+    if _dispatch.resolve_backend(backend, lblk, dblk, ublk, b) == "rust":
+        l_c = _dispatch.as_c_f64(l_arr)
+        d_c = _dispatch.as_c_f64(d_arr)
+        u_c = _dispatch.as_c_f64(u_arr)
+        b_c = _dispatch.as_c_f64(b_2d)
+        if method == "bcyclic":
+            x_r = _rust.solve_block_tridiag_bcyclic(
+                nvar, nz, l_c, d_c, u_c, b_c, parallel
+            )
+        else:
+            x_r = _rust.solve_block_tridiagonal(nvar, nz, l_c, d_c, u_c, b_c)
+        return x_r.reshape(-1) if is_1d else x_r
+
+    mode: pcr.SolverMode = "pcr" if method == "bcyclic" else "scan"
+    x_j = np.asarray(
+        solve_block_tridiagonal_jax(
+            jnp.asarray(l_arr),
+            jnp.asarray(d_arr),
+            jnp.asarray(u_arr),
+            jnp.asarray(b_2d),
+            solver_mode=mode,
+        ),
+        dtype=np.float64,
+    )
+    return x_j.reshape(-1) if is_1d else x_j
 
 
 def _thomas_fwd_step(
@@ -260,9 +313,11 @@ def _thomas_fwd_step(
     l_k, d_k, u_k, b_k = inputs
     d_hat = d_k - l_k @ u_prev
     rhs_k = b_k - l_k @ y_prev
-    u_hat = jnp.linalg.solve(d_hat, u_k)
-    y_hat = jnp.linalg.solve(d_hat, rhs_k)
-    return (u_hat, y_hat), (u_hat, y_hat)
+    uy_hat = jnp.linalg.solve(
+        d_hat, jnp.concatenate([u_k, rhs_k[:, None]], axis=-1)
+    )
+    pair = (uy_hat[:, :-1], uy_hat[:, -1])
+    return pair, pair
 
 
 def _thomas_bwd_step(
@@ -280,26 +335,49 @@ def solve_block_tridiagonal_jax(
     dblk: jax.Array,
     ublk: jax.Array,
     b: jax.Array,
+    *,
+    solver_mode: pcr.SolverMode = "pcr",
 ) -> jax.Array:
-    """Differentiable block-tridiagonal Thomas solver in `float64` via `scan`.
+    """Differentiable block-tridiagonal linear solver in JAX `float64`.
 
     Args:
-        lblk: Sub-diagonal JAX array `(nz, nvar, nvar)` in `float64`.
-        dblk: Diagonal JAX array `(nz, nvar, nvar)` in `float64`.
-        ublk: Super-diagonal JAX array `(nz, nvar, nvar)` in `float64`.
-        b: Right-hand side JAX array `(nz, nvar)` in `float64`.
+        lblk: Sub-diagonal JAX array `(nz, nvar, nvar)` in `float64`
+            (dimensionless).
+        dblk: Diagonal JAX array `(nz, nvar, nvar)` in `float64`
+            (dimensionless).
+        ublk: Super-diagonal JAX array `(nz, nvar, nvar)` in `float64`
+            (dimensionless).
+        b: Right-hand side JAX array `(nz, nvar)` in `float64` (dimensionless).
+        solver_mode: JAX solver strategy (`"pcr"` vectorized Parallel Cyclic
+            Reduction, `"scan"` sequential `jax.lax.scan` block-Thomas, or
+            `"rust_ffi"` Safe Rust `bcyclic` with analytical `custom_vjp`).
 
     Returns:
-        Solution JAX array `x` of shape `(nz, nvar)` in `float64`,
-        differentiable via `jax.grad`, `jax.jacfwd`, and `jax.jacrev`.
-    """
-    l64 = jnp.asarray(lblk, dtype=jnp.float64)
-    d64 = jnp.asarray(dblk, dtype=jnp.float64)
-    u64 = jnp.asarray(ublk, dtype=jnp.float64)
-    b64 = jnp.asarray(b, dtype=jnp.float64)
+        Solution JAX array `x` of shape `(nz, nvar)` in `float64`
+        (dimensionless), differentiable via `jax.grad`, `jax.jacfwd`, and
+        `jax.jacrev`.
 
-    u_hat_0 = jnp.linalg.solve(d64[0], u64[0])
-    y_hat_0 = jnp.linalg.solve(d64[0], b64[0])
+    Raises:
+        ValueError: If `solver_mode` is not `"pcr"`, `"scan"`, or `"rust_ffi"`.
+    """
+    if solver_mode == "pcr":
+        return pcr.solve_block_tridiag_pcr(lblk, dblk, ublk, b)
+    if solver_mode == "rust_ffi":
+        return pcr.solve_block_tridiag_rust_ffi(lblk, dblk, ublk, b)
+    if solver_mode != "scan":
+        msg = (
+            f"Invalid solver_mode {solver_mode!r}; expected 'pcr', 'scan', "
+            "or 'rust_ffi'."
+        )
+        raise ValueError(msg)
+
+    l64, d64, u64, b64, nz, _ = pcr.validate_jax_blocks(lblk, dblk, ublk, b)
+    uy_0: jax.Array = jnp.linalg.solve(
+        d64[0], jnp.concatenate([u64[0], b64[0, :, None]], axis=-1)
+    )
+    u_hat_0, y_hat_0 = uy_0[:, :-1], uy_0[:, -1]
+    if nz == 1:
+        return y_hat_0[None, :]
 
     _, (u_hats_rest, y_hats_rest) = jax.lax.scan(
         _thomas_fwd_step,

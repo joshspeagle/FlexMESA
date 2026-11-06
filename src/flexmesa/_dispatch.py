@@ -63,10 +63,7 @@ def resolve_backend(backend: Backend, *values: Any) -> Literal["rust", "jax"]:
             ``"jax"``.
     """
     if backend == "auto":
-        for v in values:
-            if isinstance(v, _JAX_TYPES):
-                return "jax"
-        return "rust"
+        return "jax" if is_jax_input(*values) else "rust"
     if backend == "rust":
         return "rust"
     if backend == "jax":

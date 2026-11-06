@@ -15,6 +15,7 @@ members = [
   "crates/flexmesa-neu",
   "crates/flexmesa-turb",
   "crates/flexmesa-bench",
+  "crates/flexmesa-py",
 ]
 
 [workspace.package]
@@ -25,6 +26,8 @@ authors = ["Josh Speagle <j.speagle@utoronto.ca>"]
 repository = "https://github.com/joshspeagle/FlexMESA"
 
 [workspace.dependencies]
+numpy = "0.30"
+pyo3 = { version = "0.30", features = ["extension-module"] }
 rayon = "1.12"
 
 [workspace.lints.rust]
@@ -39,7 +42,6 @@ pedantic = "warn"
 opt-level = 3
 lto = "fat"
 codegen-units = 1
-panic = "abort"
 
 [profile.test]
 opt-level = 2

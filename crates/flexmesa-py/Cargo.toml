@@ -1,0 +1,33 @@
+[package]
+name = "flexmesa-py"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "PyO3 Python extension bridge (flexmesa._rust) for FlexMESA."
+
+[lib]
+name = "_rust"
+crate-type = ["cdylib"]
+test = false
+doctest = false
+
+[dependencies]
+flexmesa-autodiff = { path = "../flexmesa-autodiff" }
+flexmesa-bench = { path = "../flexmesa-bench" }
+flexmesa-const = { path = "../flexmesa-const" }
+flexmesa-data = { path = "../flexmesa-data" }
+flexmesa-interp1d = { path = "../flexmesa-interp1d" }
+flexmesa-interp2d = { path = "../flexmesa-interp2d" }
+flexmesa-math = { path = "../flexmesa-math" }
+flexmesa-mtx = { path = "../flexmesa-mtx" }
+flexmesa-neu = { path = "../flexmesa-neu" }
+flexmesa-num = { path = "../flexmesa-num" }
+flexmesa-schema = { path = "../flexmesa-schema" }
+flexmesa-testing = { path = "../flexmesa-testing" }
+flexmesa-turb = { path = "../flexmesa-turb" }
+flexmesa-utils = { path = "../flexmesa-utils" }
+numpy.workspace = true
+pyo3.workspace = true
+rayon.workspace = true

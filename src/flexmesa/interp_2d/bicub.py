@@ -12,6 +12,7 @@ from __future__ import annotations
 import jax.numpy as jnp
 import numpy as np
 
+from flexmesa import _dispatch, _rust
 from flexmesa.interp_2d import bicub_eval, spline1d
 
 BicubicBc = spline1d.BicubicBc
@@ -68,7 +69,9 @@ def interp_mkbicub_db(
     bcymin: np.ndarray | jnp.ndarray | None = None,
     ibcymax: BicubicBc | int = BicubicBc.NOT_A_KNOT,
     bcymax: np.ndarray | jnp.ndarray | None = None,
-) -> tuple[jnp.ndarray, bool, bool]:
+    *,
+    backend: _dispatch.Backend = "auto",
+) -> tuple[np.ndarray | jnp.ndarray, bool, bool]:
     """Constructs 2D C^2 bicubic spline coefficients on grid ``(x, y)``.
 
     Args:
@@ -86,9 +89,10 @@ def interp_mkbicub_db(
         bcymin: Boundary data of shape ``(nx,)`` at ``y[0]``.
         ibcymax: Boundary condition at ``y[-1]``.
         bcymax: Boundary data of shape ``(nx,)`` at ``y[-1]``.
+        backend: Execution backend (``"auto"``, ``"rust"``, or ``"jax"``).
 
     Returns:
-        Tuple ``(coeffs, ilinx, iliny)`` where ``coeffs`` is a ``float64`` JAX
+        Tuple ``(coeffs, ilinx, iliny)`` where ``coeffs`` is a ``float64``
         array of shape ``(nx, ny, 4)`` containing ``[f, f_xx, f_yy, f_xxyy]``.
 
     Raises:
@@ -109,6 +113,21 @@ def interp_mkbicub_db(
     bc_x1 = _validate_bc_slice(bcxmax, int(ibcxmax), ny, "bcxmax")
     bc_y0 = _validate_bc_slice(bcymin, int(ibcymin), nx, "bcymin")
     bc_y1 = _validate_bc_slice(bcymax, int(ibcymax), nx, "bcymax")
+
+    if _dispatch.resolve_backend(backend, x, y, z) == "rust":
+        return _rust.interp_mkbicub_db(
+            _dispatch.as_c_f64(x_arr),
+            _dispatch.as_c_f64(y_arr),
+            _dispatch.as_c_f64(z_arr),
+            int(ibcxmin),
+            _dispatch.as_c_f64(bc_x0),
+            int(ibcxmax),
+            _dispatch.as_c_f64(bc_x1),
+            int(ibcymin),
+            _dispatch.as_c_f64(bc_y0),
+            int(ibcymax),
+            _dispatch.as_c_f64(bc_y1),
+        )
 
     coeffs = np.zeros((nx, ny, 4), dtype=np.float64)
     coeffs[:, :, 0] = z_arr

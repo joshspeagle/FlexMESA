@@ -333,3 +333,52 @@ def py_chem_get_composition_info(
 def py_chem_get_composition_info_zones(
     chem_ids: Sequence[int], x_zones: _ArrF64, parallel: bool = False
 ) -> _ArrF64: ...
+
+# ---------------------------------------------------------------------------
+# Wave 2b: Ionization Tables & Diffusion Typical Charge (`ionization`)
+# ---------------------------------------------------------------------------
+def py_ion_result_names() -> list[str]: ...
+def py_ion_fe56_he4_grid() -> tuple[_ArrF64, _ArrF64, _ArrF64]: ...
+def py_ion_builtin_cell_grid() -> tuple[
+    float, float, int, float, float, int, _ArrF64
+]: ...
+def py_ion_potentials_table() -> _ArrF64: ...
+def py_ion_charge_of_fe56_in_he4(
+    log10_ne: float, log10_t: float
+) -> tuple[float, float, float]: ...
+def py_ion_charge_of_fe56_in_he4_zones(
+    log10_ne: _ArrF64, log10_t: _ArrF64, parallel: bool = False
+) -> _ArrF64: ...
+def py_ion_eval_ionization(
+    z: float,
+    x: float,
+    rho: float | None = None,
+    log10_rho: float | None = None,
+    t: float | None = None,
+    log10_t: float | None = None,
+) -> list[float]: ...
+def py_ion_eval_ionization_dual(
+    z: float, x: float, log10_rho: float, log10_t: float
+) -> tuple[_ArrF64, _ArrF64]: ...
+def py_ion_eval_ionization_zones(
+    z: _ArrF64,
+    x: _ArrF64,
+    log10_rho: _ArrF64,
+    log10_t: _ArrF64,
+    parallel: bool = False,
+) -> _ArrF64: ...
+def py_ion_chi_info(
+    a1: float, z1: float, t: float, log10_t: float, rho: float, log10_rho: float
+) -> tuple[float, float, float, float]: ...
+def py_ion_chi_effective(
+    chi: float, c0: float, c1: float, c2: float, z1: float, z2: float
+) -> float: ...
+def py_ion_eval_typical_charge(
+    cid: int,
+    abar: float,
+    free_e: float,
+    t: float,
+    log10_t: float,
+    rho: float,
+    log10_rho: float,
+) -> float: ...

@@ -15,6 +15,7 @@ members = [
   "crates/flexmesa-neu",
   "crates/flexmesa-turb",
   "crates/flexmesa-chem",
+  "crates/flexmesa-ionization",
   "crates/flexmesa-bench",
   "crates/flexmesa-py",
 ]

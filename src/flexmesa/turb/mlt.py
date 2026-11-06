@@ -13,17 +13,22 @@ All inputs and outputs use CGS physical units (`cm`, `g`, `s`, `erg`, `K`,
 
 from __future__ import annotations
 
+import math
+
 import jax
 import jax.numpy as jnp
 
+from flexmesa import _dispatch, _rust
+from flexmesa import auto_diff as _ad
 from flexmesa import constants as _const
-from flexmesa import utils as _utils
 from flexmesa.turb import types as _types
 
 
 def set_mlt(
     params: _types.MltParams,
     inp: _types.MltInputs,
+    *,
+    backend: _dispatch.Backend = "auto",
 ) -> _types.TurbOutput:
     """Evaluate local Mixing-Length Theory (`calc_MLT` in `mlt.f90`).
 
@@ -31,6 +36,7 @@ def set_mlt(
         params: Non-differentiable MLT configuration parameters (`MltParams`).
         inp: Thermodynamic and structure inputs (`MltInputs`) with `float` or
             `DualOrder1` fields in CGS units.
+        backend: Execution backend (``"auto"``, ``"rust"``, or ``"jax"``).
 
     Returns:
         `TurbOutput` containing `(gamma, grad_t, y_face, conv_vel, d,
@@ -41,18 +47,67 @@ def set_mlt(
     """
     if (
         params.mixing_length_alpha <= 0.0
-        or _utils.is_bad(params.mixing_length_alpha)
+        or not math.isfinite(params.mixing_length_alpha)
         or _types.val_of(inp.t) <= 0.0
         or _types.val_of(inp.rho) <= 0.0
         or _types.val_of(inp.p) <= 0.0
         or _types.val_of(inp.cp) <= 0.0
         or _types.val_of(inp.opacity) <= 0.0
-        or _utils.is_bad(_types.val_of(inp.gradr))
-        or _utils.is_bad(_types.val_of(inp.gradl))
-        or _utils.is_bad(_types.val_of(inp.grada))
+        or not math.isfinite(_types.val_of(inp.gradr))
+        or not math.isfinite(_types.val_of(inp.gradl))
+        or not math.isfinite(_types.val_of(inp.grada))
     ):
         msg = "Invalid or non-positive thermodynamic input in set_mlt"
         raise ValueError(msg)
+    # Extract the twelve thermodynamic and structural state variables so that
+    # pure-float evaluations can be dispatched directly to compiled Safe Rust
+    # (`flexmesa._rust.set_mlt_f64`) while preserving forward-mode DualOrder1
+    # operator overloading when any field carries tangent derivatives.
+    fields = (
+        inp.chi_t,
+        inp.chi_rho,
+        inp.cp,
+        inp.grav,
+        inp.lambda_,
+        inp.rho,
+        inp.p,
+        inp.t,
+        inp.opacity,
+        inp.gradr,
+        inp.grada,
+        inp.gradl,
+    )
+    # Route standard scalar float evaluations to compiled Safe Rust when
+    # backend is "auto" or "rust" and no velocity cap is active.
+    if (
+        not any(isinstance(v, _ad.DualOrder1) for v in fields)
+        and params.max_conv_vel >= 1.0e99
+        and _dispatch.resolve_backend(backend, *fields) == "rust"
+    ):
+        (
+            (
+                gamma_r,
+                grad_t_r,
+                y_face_r,
+                conv_vel_r,
+                d_r,
+            ),
+            mix_r,
+        ) = _rust.set_mlt_f64(
+            params.option.value,
+            float(params.mixing_length_alpha),
+            float(params.henyey_y),
+            float(params.henyey_nu),
+            *(float(_types.val_of(v)) for v in fields),
+        )
+        return _types.TurbOutput(
+            gamma=gamma_r,
+            grad_t=grad_t_r,
+            y_face=y_face_r,
+            conv_vel=conv_vel_r,
+            d=d_r,
+            mixing_type=_const.MixingType(mix_r),
+        )
     proto = inp.gradr
     zero = _types.const_like(proto, 0.0)
     one = _types.const_like(proto, 1.0)
@@ -148,7 +203,9 @@ def set_mlt(
         conv_vel = zero
         d = zero
 
-    if _utils.is_bad(_types.val_of(zeta)):
+    # Validate that convective fraction Zeta = (Gamma / B)^3 is finite and
+    # clamp to [0, 1] before blending the radiative and Ledoux gradients.
+    if not math.isfinite(_types.val_of(zeta)):
         msg = "NaN or Inf encountered in MLT Zeta"
         raise ValueError(msg)
     if _types.val_of(zeta) > 1.0:
@@ -251,12 +308,15 @@ def set_mlt_jax(
     b_cubed = ((a_val * a_val) / a0) * dgrad_safe
     delta = a0 * b_cubed
     f = -2.0 + 9.0 * a0 + 27.0 * a0 * a0 * delta
+    # Evaluate the Cardano discriminant f0^2 = f^2 + 4 * (-1 + 3 a0)^3 and
+    # guard against negative arguments or extreme radiative regimes before
+    # taking the square root so reverse-mode JAX gradients remain finite.
     term = -1.0 + 3.0 * a0
     f0_sq = f * f + 4.0 * term * term * term
     f0 = jnp.where(
-        f > 1.0e100,
+        (f > 1.0e100) | (f0_sq <= 0.0),
         f,
-        jnp.where(f0_sq <= 0.0, f, jnp.sqrt(jnp.maximum(f0_sq, 0.0))),
+        jnp.sqrt(jnp.maximum(f0_sq, 0.0)),
     )
     # Cardano cubic root with safe floor on positive convective branch.
     f1_arg = jnp.maximum(f + f0, 1.0e-99)
@@ -265,6 +325,8 @@ def set_mlt_jax(
     gamma_conv = (_const.FOUR_13 * f1 + f2 - 2.0) / (6.0 * a0)
     gamma_pos = jnp.maximum(gamma_conv, 1.0e-99)
 
+    # Compute convective velocity v_c, diffusion D = v_c * Lambda / 3,
+    # and convective efficiency fraction Zeta = min((Gamma / B)^3, 1).
     vc_conv = (
         mixing_length_alpha
         * jnp.sqrt(q * p64 / (8.0 * rho64))
@@ -277,6 +339,7 @@ def set_mlt_jax(
         1.0,
     )
 
+    # Select between convective and radiative zones via branchless jnp.where.
     gamma = jnp.where(unstable, gamma_conv, -1.0e99)
     zeta = jnp.where(unstable, zeta_conv, 0.0)
     conv_vel = jnp.where(unstable, vc_conv, 0.0)

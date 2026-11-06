@@ -24,8 +24,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from flexmesa import _dispatch, _rust
 from flexmesa import constants as _const
-from flexmesa import utils as _utils
 from flexmesa.neu import brem as _brem
 from flexmesa.neu import inputs as _inputs
 from flexmesa.neu import pair_plas as _pair_plas
@@ -142,15 +142,23 @@ class NeuResult:
 def _zero_result() -> NeuResult:
     """Constructs an all-zero `NeuResult` for below-cutoff temperatures."""
     z = _inputs.NeuRate()
+    z_loss = np.zeros(5, dtype=np.float64)
+    z_src = np.zeros((5, 5), dtype=np.float64)
+    return NeuResult(z, z, z, z, z, z, z_loss, z_src)
+
+
+def _build_neu_result(
+    loss_arr: np.ndarray, sources_arr: np.ndarray
+) -> NeuResult:
+    """Packs `(loss_arr, sources_arr)` into a validated `NeuResult`."""
+    total = _inputs.NeuRate(*(float(v) for v in loss_arr))
+    if not math.isfinite(total.val):
+        raise ValueError("Non-finite total neutrino loss encountered.")
+    ch = [
+        _inputs.NeuRate(*(float(v) for v in sources_arr[i])) for i in range(5)
+    ]
     return NeuResult(
-        total=z,
-        pair=z,
-        plas=z,
-        phot=z,
-        brem=z,
-        reco=z,
-        loss=np.zeros(5, dtype=np.float64),
-        sources=np.zeros((5, 5), dtype=np.float64),
+        total, ch[0], ch[1], ch[2], ch[3], ch[4], loss_arr, sources_arr
     )
 
 
@@ -163,6 +171,8 @@ def neu_get(
     zbar: float = 1.0,
     log10_tlim: float = 7.5,
     flags: NeuFlags | None = None,
+    *,
+    backend: _dispatch.Backend = "auto",
 ) -> NeuResult:
     """Evaluates specific thermal neutrino energy loss rates and derivatives.
 
@@ -186,6 +196,7 @@ def neu_get(
             $\\log_{10}(T / \\mathrm{K})$ (default `7.5`).
         flags: Per-channel enable flags (`NeuFlags`, defaults to
             `NeuFlags.all()`).
+        backend: Execution backend (``"auto"``, ``"rust"``, or ``"jax"``).
 
     Returns:
         `NeuResult` containing total and per-channel `NeuRate` values and
@@ -196,39 +207,30 @@ def neu_get(
             `log10_rho` is provided, or any input is non-positive, non-finite,
             or exceeds $\\log_{10} = 20$.
     """
-    active_flags = NeuFlags.all() if flags is None else flags
-
+    active = NeuFlags.all() if flags is None else flags
     if t is None and log10_t is None:
         raise ValueError("Neither t nor log10_t was provided to neu_get.")
     if rho is None and log10_rho is None:
         raise ValueError("Neither rho nor log10_rho was provided to neu_get.")
 
-    if t is not None:
-        temp = t
-    else:
-        assert log10_t is not None
-        temp = math.exp(log10_t * _const.LN10)
-    if _utils.is_bad(temp) or temp <= 0.0:
+    temp = t if t is not None else math.exp((log10_t or 0.0) * _const.LN10)
+    if not math.isfinite(temp) or temp <= 0.0:
         raise ValueError(f"Temperature t must be positive and finite: {temp}")
     logtemp = log10_t if log10_t is not None else math.log10(temp)
-    if _utils.is_bad(logtemp) or logtemp > 20.0:
+    if not math.isfinite(logtemp) or logtemp > 20.0:
         raise ValueError(f"log10_t must be finite and <= 20: {logtemp}")
 
-    if rho is not None:
-        den = rho
-    else:
-        assert log10_rho is not None
-        den = math.exp(log10_rho * _const.LN10)
-    if _utils.is_bad(den) or den <= 0.0:
+    den = rho if rho is not None else math.exp((log10_rho or 0.0) * _const.LN10)
+    if not math.isfinite(den) or den <= 0.0:
         raise ValueError(f"Density rho must be positive and finite: {den}")
     logden = log10_rho if log10_rho is not None else math.log10(den)
-    if _utils.is_bad(logden) or logden > 20.0:
+    if not math.isfinite(logden) or logden > 20.0:
         raise ValueError(f"log10_rho must be finite and <= 20: {logden}")
 
     if (
-        _utils.is_bad(abar)
-        or _utils.is_bad(zbar)
-        or _utils.is_bad(log10_tlim)
+        not math.isfinite(abar)
+        or not math.isfinite(zbar)
+        or not math.isfinite(log10_tlim)
         or abar <= 0.0
         or zbar <= 0.0
     ):
@@ -239,33 +241,45 @@ def neu_get(
     if temp <= _inputs.TMIN_NEU or logtemp <= _inputs.LOG10_TMIN_NEU:
         return _zero_result()
 
+    if (
+        _dispatch.resolve_backend(
+            backend, temp, logtemp, den, logden, abar, zbar
+        )
+        == "rust"
+    ):
+        flag_tup = (
+            active.pair,
+            active.plas,
+            active.phot,
+            active.brem,
+            active.reco,
+        )
+        t_f, lt_f = float(temp), float(logtemp)
+        d_f, ld_f = float(den), float(logden)
+        a_f, z_f, tl_f = float(abar), float(zbar), float(log10_tlim)
+        loss_r, src_r = _rust.neu_get(
+            t_f, lt_f, d_f, ld_f, a_f, z_f, tl_f, flag_tup
+        )
+        return _build_neu_result(
+            np.asarray(loss_r, dtype=np.float64),
+            np.asarray(src_r, dtype=np.float64),
+        )
+
     inp = _inputs.NeuInputs.create(temp, logtemp, den, logden, abar, zbar)
     z_rate = _inputs.NeuRate()
     pair = (
         _pair_plas.pair_neu(inp).to_specific(inp.deni)
-        if active_flags.pair
+        if active.pair
         else z_rate
     )
     plas = (
         _pair_plas.plas_neu(inp).to_specific(inp.deni)
-        if active_flags.plas
+        if active.plas
         else z_rate
     )
-    phot = (
-        _phot.phot_neu(inp).to_specific(inp.deni)
-        if active_flags.phot
-        else z_rate
-    )
-    brem = (
-        _brem.brem_neu(inp).to_specific(inp.deni)
-        if active_flags.brem
-        else z_rate
-    )
-    reco = (
-        _reco.reco_neu(inp).to_specific(inp.deni)
-        if active_flags.reco
-        else z_rate
-    )
+    phot = _phot.phot_neu(inp).to_specific(inp.deni) if active.phot else z_rate
+    brem = _brem.brem_neu(inp).to_specific(inp.deni) if active.brem else z_rate
+    reco = _reco.reco_neu(inp).to_specific(inp.deni) if active.reco else z_rate
 
     if inp.logtemp <= log10_tlim and log10_tlim > _inputs.LOG10_TMIN_NEU:
         dtlim = log10_tlim - _inputs.LOG10_TMIN_NEU
@@ -287,20 +301,8 @@ def neu_get(
         [r.to_tuple() for r in (pair, plas, phot, brem, reco)],
         dtype=np.float64,
     )
-    loss_arr = np.array(
-        [
-            plas.val + pair.val + phot.val + brem.val + reco.val,
-            plas.d_t + pair.d_t + phot.d_t + brem.d_t + reco.d_t,
-            plas.d_rho + pair.d_rho + phot.d_rho + brem.d_rho + reco.d_rho,
-            plas.d_abar + pair.d_abar + phot.d_abar + brem.d_abar + reco.d_abar,
-            plas.d_zbar + pair.d_zbar + phot.d_zbar + brem.d_zbar + reco.d_zbar,
-        ],
-        dtype=np.float64,
-    )
-    total = _inputs.NeuRate(*loss_arr.tolist())
-    if _utils.is_bad(total.val):
-        raise ValueError("Non-finite total neutrino loss encountered.")
-    return NeuResult(total, pair, plas, phot, brem, reco, loss_arr, sources_arr)
+    loss_arr = np.sum(sources_arr, axis=0)
+    return _build_neu_result(loss_arr, sources_arr)
 
 
 def neu_pair_plas_jax(

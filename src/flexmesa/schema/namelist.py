@@ -1,36 +1,34 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
-"""Parser and schema validator for legacy MESA Fortran `&namelist` (`inlist`).
+"""Parser and schema validator for legacy MESA Fortran ``&namelist`` blocks.
 
-Parses Fortran `&namelist ... /` blocks (`&eos`, `&kap`, `&star_job`,
-`&controls`) into structured `NamelistBlock` objects and validates every
-control assignment against a parsed `ControlDefault` schema.
+Parses Fortran ``&namelist ... /`` blocks (``&eos``, ``&kap``, ``&star_job``,
+``&controls``) into structured ``NamelistBlock`` objects by delegating to the
+canonical Safe Rust ``flexmesa_schema::parse_namelist_text`` implementation in
+``flexmesa._rust``, and validates every control assignment against a parsed
+``ControlDefault`` schema.
 """
 
 from __future__ import annotations
 
 import dataclasses
 import pathlib
-import re
 from collections.abc import Mapping
 
+from flexmesa import _rust
 from flexmesa.schema import defaults
-
-_NAMELIST_HEADER_RE: re.Pattern[str] = re.compile(
-    r"^&([A-Za-z_][A-Za-z0-9_]*)(?=$|\s|/)\s*(.*)$"
-)
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class NamelistAssignment:
-    """Single `name[(subscript)] = value` assignment inside a namelist block.
+    """Single ``name[(subscript)] = value`` assignment inside a namelist block.
 
     Attributes:
-        name: Control parameter name as written in the `inlist`.
-        subscript: Optional array subscript string (for example, `"1"` or
-            `"13"`), or `None` for scalar assignments.
-        value_type: Parsed `ControlType` of the assigned literal.
-        value: Parsed Python scalar value (`bool | int | float | str`).
-        line_number: 1-based line number in the `inlist` source.
+        name: Control parameter name as written in the ``inlist``.
+        subscript: Optional array subscript string (for example, ``"1"`` or
+            ``"13"``), or ``None`` for scalar assignments.
+        value_type: Parsed ``ControlType`` of the assigned literal.
+        value: Parsed Python scalar value (``bool | int | float | str``).
+        line_number: 1-based line number in the ``inlist`` source.
     """
 
     name: str
@@ -42,122 +40,32 @@ class NamelistAssignment:
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class NamelistBlock:
-    """Parsed Fortran `&namelist ... /` block from a MESA `inlist` file.
+    """Parsed Fortran ``&namelist ... /`` block from a MESA ``inlist`` file.
 
     Attributes:
-        name: Namelist group name without leading `&` (for example, `"eos"`,
-            `"controls"`, or `"star_job"`).
-        assignments: Ordered tuple of `NamelistAssignment` entries.
+        name: Namelist group name without leading ``&`` (for example, ``"eos"``,
+            ``"controls"``, or ``"star_job"``).
+        assignments: Ordered tuple of ``NamelistAssignment`` entries.
     """
 
     name: str
     assignments: tuple[NamelistAssignment, ...]
 
 
-def _split_top_level_commas(code: str) -> list[str]:
-    """Split a namelist line on commas outside quotes and parentheses."""
-    if "," not in code:
-        stripped = code.strip()
-        return [stripped] if stripped else []
-
-    parts: list[str] = []
-    start = 0
-    in_single = False
-    in_double = False
-    paren_depth = 0
-
-    for idx, ch in enumerate(code):
-        if ch == "'" and not in_double:
-            in_single = not in_single
-        elif ch == '"' and not in_single:
-            in_double = not in_double
-        elif not in_single and not in_double:
-            if ch == "(":
-                paren_depth += 1
-            elif ch == ")":
-                paren_depth = max(0, paren_depth - 1)
-            elif ch == "," and paren_depth == 0:
-                segment = code[start:idx].strip()
-                if segment:
-                    parts.append(segment)
-                start = idx + 1
-
-    tail = code[start:].strip()
-    if tail:
-        parts.append(tail)
-    return parts
-
-
-def _parse_assignments_in_segment(
-    segment: str,
-    line_idx: int,
-    out: list[NamelistAssignment],
-) -> None:
-    """Parse comma-separated assignments or array value lists into `out`."""
-    seq_name: str | None = None
-    seq_next_idx = 1
-
-    for item in _split_top_level_commas(segment):
-        if defaults.find_unquoted_char(item, "=") is not None:
-            name, sub, val_type, val = defaults.parse_assignment_clause(
-                item, line_idx
-            )
-            seq_name = name
-            seq_next_idx = (
-                int(sub) + 1 if sub is not None and sub.isdigit() else 2
-            )
-            out.append(NamelistAssignment(name, sub, val_type, val, line_idx))
-        elif seq_name is not None:
-            if out[-1].name == seq_name and out[-1].subscript is None:
-                out[-1] = dataclasses.replace(out[-1], subscript="1")
-            val_type, val = defaults.parse_control_value(item)
-            out.append(
-                NamelistAssignment(
-                    seq_name, str(seq_next_idx), val_type, val, line_idx
-                )
-            )
-            seq_next_idx += 1
-        else:
-            raise ValueError(
-                f"Malformed control assignment at line {line_idx}: {item!r}."
-            )
-
-
-def _process_namelist_body_line(
-    code: str,
-    line_idx: int,
-    active_name: str,
-    active_assignments: list[NamelistAssignment],
-    blocks: list[NamelistBlock],
-) -> str | None:
-    """Process one namelist body line and return updated `active_name`."""
-    slash_idx = defaults.find_unquoted_char(code, "/")
-    if slash_idx is not None and code[slash_idx + 1 :].strip():
-        raise ValueError(
-            f"Unexpected trailing tokens after '/' at line {line_idx}: "
-            f"{code[slash_idx + 1 :].strip()!r}."
-        )
-    body = code if slash_idx is None else code[:slash_idx].strip()
-    if body:
-        _parse_assignments_in_segment(body, line_idx, active_assignments)
-    if slash_idx is not None:
-        blocks.append(NamelistBlock(active_name, tuple(active_assignments)))
-        active_assignments.clear()
-        return None
-    return active_name
-
-
 def parse_namelist_text(text: str) -> list[NamelistBlock]:
-    """Parse one or more Fortran `&namelist ... /` blocks from `inlist` text.
+    """Parse one or more Fortran ``&namelist ... /`` blocks from text.
+
+    Delegates directly to ``flexmesa_schema::parse_namelist_text`` via
+    ``flexmesa._rust``.
 
     Args:
-        text: Full UTF-8 contents of a MESA `inlist` file.
+        text: Full UTF-8 contents of a MESA ``inlist`` file.
 
     Returns:
-        Ordered list of `NamelistBlock` objects.
+        Ordered list of ``NamelistBlock`` objects.
 
     Raises:
-        ValueError: If namelist headers, assignments, or terminators (`/`) are
+        ValueError: If namelist headers, assignments, or terminators (``/``) are
             malformed or unclosed.
 
     Examples:
@@ -167,43 +75,42 @@ def parse_namelist_text(text: str) -> list[NamelistBlock]:
         >>> blocks[0].name, blocks[0].assignments[0].value
         ('eos', True)
     """
-    blocks: list[NamelistBlock] = []
-    active_name: str | None = None
-    active_assignments: list[NamelistAssignment] = []
-
-    for line_idx, raw_line in enumerate(text.splitlines(), start=1):
-        code, _ = defaults.strip_fortran_comment(raw_line)
-        if not code:
-            continue
-        if active_name is None:
-            hdr = _NAMELIST_HEADER_RE.match(code)
-            if hdr is None:
-                raise ValueError(
-                    f"Expected '&namelist' header at line {line_idx}: {code!r}."
+    try:
+        raw = _rust.parse_namelist_text(text)
+    except ValueError as exc:
+        msg = str(exc)
+        if ": " in msg:
+            prefix, rest = msg.split(": ", 1)
+            msg = f"{prefix}: {rest[:1].upper()}{rest[1:]}"
+        else:
+            msg = f"{msg[:1].upper()}{msg[1:]}"
+        raise ValueError(msg) from exc
+    return [
+        NamelistBlock(
+            name=block_name,
+            assignments=tuple(
+                NamelistAssignment(
+                    name=a_name,
+                    subscript=subscript,
+                    value_type=defaults.ControlType(t_str),
+                    value=val,
+                    line_number=line_no,
                 )
-            active_name = hdr.group(1)
-            code = hdr.group(2).strip()
-            if not code:
-                continue
-        active_name = _process_namelist_body_line(
-            code, line_idx, active_name, active_assignments, blocks
+                for a_name, subscript, t_str, val, line_no in assigns
+            ),
         )
-
-    if active_name is not None:
-        raise ValueError(
-            f"Unclosed namelist block '&{active_name}' (missing '/')."
-        )
-    return blocks
+        for block_name, assigns in raw
+    ]
 
 
 def parse_namelist_file(path: str | pathlib.Path) -> list[NamelistBlock]:
-    """Read and parse a MESA Fortran `inlist` file from disk.
+    """Read and parse a MESA Fortran ``inlist`` file from disk.
 
     Args:
-        path: Path to the `inlist` file.
+        path: Path to the ``inlist`` file.
 
     Returns:
-        Ordered list of `NamelistBlock` objects.
+        Ordered list of ``NamelistBlock`` objects.
     """
     return parse_namelist_text(pathlib.Path(path).read_text(encoding="utf-8"))
 
@@ -214,7 +121,7 @@ def _is_type_compatible(
     *,
     strict_numeric_types: bool,
 ) -> bool:
-    """Return whether `actual_type` is compatible with `expected_type`."""
+    """Return whether ``actual_type`` is compatible with ``expected_type``."""
     if expected_type == actual_type:
         return True
     if (
@@ -236,7 +143,7 @@ def _validate_single_assignment(
     *,
     strict_numeric_types: bool,
 ) -> tuple[defaults.ControlDefault, defaults.ControlValue]:
-    """Validate one `NamelistAssignment` and return `(spec, coerced_value)`."""
+    """Validate one ``NamelistAssignment`` into ``(spec, coerced_value)``."""
     key = assign.name.lower()
     if key not in schema:
         raise KeyError(
@@ -275,31 +182,32 @@ def validate_namelist_block(
     *,
     strict_numeric_types: bool = False,
 ) -> dict[str, defaults.ControlValue | dict[str, defaults.ControlValue]]:
-    """Validate a `NamelistBlock` against a `.defaults` schema.
+    """Validate a ``NamelistBlock`` against a ``.defaults`` schema.
 
     Args:
-        block: Parsed `NamelistBlock` to validate.
-        schema: Mapping of lowercase control names to `ControlDefault` entries
-            (as returned by `defaults.parse_defaults_text`).
-        strict_numeric_types: If `True`, reject `FLOAT` literals on controls
-            whose default literal in `.defaults` was parsed as `INTEGER`.
-            Defaults to `False` because MESA `.defaults` files frequently write
-            `-1` or `1` for `real(dp)` controls (`Zbase = -1`,
-            `initial_mass = 1`).
+        block: Parsed ``NamelistBlock`` to validate.
+        schema: Mapping of lowercase control names to ``ControlDefault`` entries
+            (as returned by ``defaults.parse_defaults_text``).
+        strict_numeric_types: If ``True``, reject ``FLOAT`` literals on controls
+            whose default literal in ``.defaults`` was parsed as ``INTEGER``.
+            Defaults to ``False`` because MESA ``.defaults`` files frequently
+            write ``-1`` or ``1`` for ``real(dp)`` controls (``Zbase = -1``,
+            ``initial_mass = 1``).
 
     Returns:
         Dictionary of validated control overrides keyed by canonical control
-        name (mapping scalar controls to `ControlValue` and subscripted array
-        controls to `{subscript: ControlValue}`).
+        name (mapping scalar controls to ``ControlValue`` and subscripted array
+        controls to ``{subscript: ControlValue}``).
 
     Raises:
-        KeyError: If an assigned control name does not exist in `schema`.
+        KeyError: If an assigned control name does not exist in ``schema``.
         TypeError: If an assigned value's type or subscript is incompatible
             with the schema definition.
     """
     overrides: dict[
         str, defaults.ControlValue | dict[str, defaults.ControlValue]
     ] = {}
+
     for assign in block.assignments:
         spec, value = _validate_single_assignment(
             block.name,
@@ -307,12 +215,22 @@ def validate_namelist_block(
             schema,
             strict_numeric_types=strict_numeric_types,
         )
-        if assign.subscript is not None:
+        if assign.subscript is None:
+            overrides[spec.name] = value
+        else:
             existing = overrides.get(spec.name)
             if not isinstance(existing, dict):
                 existing = {}
                 overrides[spec.name] = existing
             existing[assign.subscript] = value
-        else:
-            overrides[spec.name] = value
+
     return overrides
+
+
+__all__ = [
+    "NamelistAssignment",
+    "NamelistBlock",
+    "parse_namelist_file",
+    "parse_namelist_text",
+    "validate_namelist_block",
+]

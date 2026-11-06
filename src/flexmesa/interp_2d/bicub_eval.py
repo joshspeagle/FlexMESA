@@ -14,6 +14,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from flexmesa import _dispatch, _rust
 from flexmesa.interp_2d import spline1d
 
 
@@ -52,9 +53,7 @@ def _locate_axis_jax(
         ).astype(jnp.int32)
         idx = jnp.clip(raw, 0, nm - 1)
         idx = jnp.where((val < axis[idx]) & (idx > 0), idx - 1, idx)
-        return jnp.where(
-            (val > axis[idx + 1]) & (idx + 1 < nm), idx + 1, idx
-        )
+        return jnp.where((val > axis[idx + 1]) & (idx + 1 < nm), idx + 1, idx)
     return jnp.clip(jnp.searchsorted(axis, val, side="right") - 1, 0, nm - 1)
 
 
@@ -152,6 +151,8 @@ def interp_evbicub_db(
     ilinx: bool,
     iliny: bool,
     coeffs: np.ndarray | jnp.ndarray,
+    *,
+    backend: _dispatch.Backend = "auto",
 ) -> BicubicEval:
     """Evaluates 2D bicubic spline value and derivatives (`fvbicub_db`).
 
@@ -166,6 +167,7 @@ def interp_evbicub_db(
         iliny: Uniform spacing flag for ``y``.
         coeffs: Bicubic coefficient array of shape ``(nx, ny, 4)`` from
             :func:`flexmesa.interp_2d.bicub.interp_mkbicub_db`.
+        backend: Execution backend (``"auto"``, ``"rust"``, or ``"jax"``).
 
     Returns:
         :class:`BicubicEval` containing ``(f, df_dx, df_dy, d2f_dx2, d2f_dy2,
@@ -175,6 +177,41 @@ def interp_evbicub_db(
         ValueError: If grid dimensions are ``< 4``, ``coeffs`` shape is
             mismatched, or inputs are non-finite or out of range.
     """
+    if _dispatch.resolve_backend(backend, xget, yget, x, y, coeffs) == "rust":
+        xg = np.ascontiguousarray(x, dtype=np.float64)
+        yg = np.ascontiguousarray(y, dtype=np.float64)
+        ca = np.ascontiguousarray(coeffs, dtype=np.float64)
+        if (
+            xg.ndim == 1
+            and yg.ndim == 1
+            and xg.size >= 4
+            and yg.size >= 4
+            and ca.shape in ((xg.size, yg.size, 4), (xg.size * yg.size, 4))
+        ):
+            (
+                f_r,
+                df_dx_r,
+                df_dy_r,
+                d2f_dx2_r,
+                d2f_dy2_r,
+                d2f_dxdy_r,
+            ) = _rust.interp_evbicub_db(
+                float(xget),
+                float(yget),
+                xg,
+                yg,
+                bool(ilinx),
+                bool(iliny),
+                ca.ravel(),
+            )
+            return BicubicEval(
+                f=jnp.asarray(f_r, dtype=jnp.float64),
+                df_dx=jnp.asarray(df_dx_r, dtype=jnp.float64),
+                df_dy=jnp.asarray(df_dy_r, dtype=jnp.float64),
+                d2f_dx2=jnp.asarray(d2f_dx2_r, dtype=jnp.float64),
+                d2f_dy2=jnp.asarray(d2f_dy2_r, dtype=jnp.float64),
+                d2f_dxdy=jnp.asarray(d2f_dxdy_r, dtype=jnp.float64),
+            )
     x_grid = jnp.asarray(x, dtype=jnp.float64)
     y_grid = jnp.asarray(y, dtype=jnp.float64)
     nx = x_grid.shape[0]

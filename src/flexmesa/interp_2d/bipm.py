@@ -6,7 +6,7 @@ from __future__ import annotations
 import jax.numpy as jnp
 import numpy as np
 
-from flexmesa import interp_1d
+from flexmesa import _dispatch, _rust, interp_1d
 from flexmesa.interp_2d import spline1d
 
 
@@ -14,7 +14,9 @@ def interp_mkbipm_db(
     x: np.ndarray | jnp.ndarray,
     y: np.ndarray | jnp.ndarray,
     z: np.ndarray | jnp.ndarray,
-) -> jnp.ndarray:
+    *,
+    backend: _dispatch.Backend = "auto",
+) -> np.ndarray | jnp.ndarray:
     """Constructs 2D piecewise-monotonic cubic spline coefficients along `x`.
 
     Args:
@@ -24,9 +26,10 @@ def interp_mkbipm_db(
             physical or dimensionless units.
         z: Grid values of shape ``(nx, ny)`` or flat ``(nx * ny,)`` in
             row-major order.
+        backend: Execution backend (``"auto"``, ``"rust"``, or ``"jax"``).
 
     Returns:
-        JAX ``float64`` array of shape ``(nx, ny, 4)`` containing 1D
+        ``float64`` array of shape ``(nx, ny, 4)`` containing 1D
         Steffen (1990) ``x``-spline coefficients for each ``y`` slice.
 
     Raises:
@@ -42,9 +45,16 @@ def interp_mkbipm_db(
     spline1d.splinck_db(y_arr, 1.0e-3, "y")
     z_arr = spline1d.reshape_grid_2d(z, nx, ny, "z")
 
+    if _dispatch.resolve_backend(backend, x, y, z) == "rust":
+        return _rust.interp_mkbipm_db(
+            _dispatch.as_c_f64(x_arr),
+            _dispatch.as_c_f64(y_arr),
+            _dispatch.as_c_f64(z_arr),
+        )
+
     coeffs = np.zeros((nx, ny, 4), dtype=np.float64)
     for iy in range(ny):
-        c_x = interp_1d.interp_pm(x_arr, z_arr[:, iy])
+        c_x = interp_1d.interp_pm(x_arr, z_arr[:, iy], backend="jax")
         coeffs[:, iy, :] = np.asarray(c_x, dtype=np.float64)
     return jnp.asarray(coeffs, dtype=jnp.float64)
 
@@ -55,7 +65,9 @@ def interp_evbipm_db(
     x: np.ndarray | jnp.ndarray,
     y: np.ndarray | jnp.ndarray,
     coeffs: np.ndarray | jnp.ndarray,
-) -> jnp.ndarray:
+    *,
+    backend: _dispatch.Backend = "auto",
+) -> float | np.ndarray | jnp.ndarray:
     """Evaluates the 2D piecewise-monotonic cubic interpolant at `(xget, yget)`.
 
     Performs four 1D cubic evaluations along ``x`` on a 4-point ``y`` stencil
@@ -68,9 +80,10 @@ def interp_evbipm_db(
         y: Strictly ascending y-grid of shape ``(ny,)`` (``ny >= 4``).
         coeffs: Coefficient array of shape ``(nx, ny, 4)`` from
             :func:`interp_mkbipm_db`.
+        backend: Execution backend (``"auto"``, ``"rust"``, or ``"jax"``).
 
     Returns:
-        Scalar ``float64`` JAX array containing the interpolated value.
+        Scalar ``float64`` value containing the interpolated value.
 
     Raises:
         ValueError: If grid dimensions are ``< 4``, non-ascending, mismatched
@@ -103,6 +116,18 @@ def interp_evbipm_db(
     ):
         raise ValueError("Query (xget, yget) is outside the grid domain.")
 
+    if _dispatch.resolve_backend(backend, xget, yget, x, y, coeffs) == "rust":
+        return jnp.asarray(
+            _rust.interp_evbipm_db(
+                xq,
+                yq,
+                _dispatch.as_c_f64(x_arr),
+                _dispatch.as_c_f64(y_arr),
+                _dispatch.as_c_f64(c_arr),
+            ),
+            dtype=jnp.float64,
+        )
+
     ix = int(np.clip(np.searchsorted(x_arr, xq, side="right") - 1, 0, nx - 2))
     jy = int(np.clip(np.searchsorted(y_arr, yq, side="right") - 1, 0, ny - 2))
 
@@ -119,5 +144,5 @@ def interp_evbipm_db(
     ff = c_sub[:, 0] + dx * (
         c_sub[:, 1] + dx * (c_sub[:, 2] + dx * c_sub[:, 3])
     )
-    y_coeffs = interp_1d.interp_pm(ys, ff)
-    return interp_1d.interp_value(ys, y_coeffs, yq)
+    y_coeffs = interp_1d.interp_pm(ys, ff, backend="jax")
+    return interp_1d.interp_value(ys, y_coeffs, yq, backend="jax")

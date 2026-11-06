@@ -22,6 +22,7 @@
 pub mod blend;
 pub mod free_energy;
 pub mod gauss_fermi;
+pub mod helm;
 pub mod ideal;
 pub mod ion_offset;
 pub mod types;
@@ -38,6 +39,11 @@ pub use free_energy::{
 };
 pub use gauss_fermi::{
     dfermi, dfermi_order1, DQLAG020_WG, DQLAG020_XG, DQLEG020_WG, DQLEG020_XG,
+};
+pub use helm::{
+    do_convert_helm_results, eval_helm_coulomb, eval_helm_eos,
+    eval_helm_eos_zones, h3, h5, helmeos2, CubicBasis1D, HelmCell, HelmConfig,
+    HelmTable, HelmThermoVar, HelmVertex, QuinticBasis1D, NUM_HELM_RESULTS,
 };
 pub use ideal::{
     eval_ideal_eos, eval_ideal_eos_from_weights, IDEAL_MASS_FRACTION_LIMIT,

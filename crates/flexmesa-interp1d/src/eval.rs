@@ -294,8 +294,8 @@ pub fn integrate_values(
     }
 
     let mut vals = vec![0.0_f64; nv];
-    let mut k_old = 0usize;
-    let mut xkp1_old = init_x[1];
+    let (mut k_old, _) = locate_clamped_interval(init_x, x[0], increasing);
+    let mut xkp1_old = init_x[k_old + 1];
     let mut xk_prev = x[0];
 
     // Sweep monotonically across knot cells, accumulating full and partial

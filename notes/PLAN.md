@@ -2,7 +2,10 @@
 
 ## Current Status
 
-- **Active Phase**: **Wave 0 (`Infrastructure, Schema Parser & .safetensors Data Pipeline`)** ([Issue #6](https://github.com/joshspeagle/FlexMESA/issues/6)), executing sub-issues [#7 (`Wave 0A`)](https://github.com/joshspeagle/FlexMESA/issues/7), [#8 (`Wave 0B`)](https://github.com/joshspeagle/FlexMESA/issues/8), and [#9 (`Wave 0C`)](https://github.com/joshspeagle/FlexMESA/issues/9).
+- **Completed Phases**:
+  - **Wave 0 (`Infrastructure, Schema Parser & .safetensors Data Pipeline`)** ([Issue #6](https://github.com/joshspeagle/FlexMESA/issues/6), PRs [#10](https://github.com/joshspeagle/FlexMESA/pull/10), [#11](https://github.com/joshspeagle/FlexMESA/pull/11), [#12](https://github.com/joshspeagle/FlexMESA/pull/12))
+  - **Wave 1 (`Foundational Numerics + Stateless Microphysics Pilot`)** ([Issue #13](https://github.com/joshspeagle/FlexMESA/issues/13), PRs [#20](https://github.com/joshspeagle/FlexMESA/pull/20)–[#25](https://github.com/joshspeagle/FlexMESA/pull/25))
+- **Active Phase**: **Post-Wave 1 Four-Way Benchmark Synthesis & Wave 2/3 Architecture Decision Gate** ([Issue #26](https://github.com/joshspeagle/FlexMESA/issues/26) and [`docs/design/wave-1-benchmark-report.md`](../docs/design/wave-1-benchmark-report.md)).
 - **Completed Architectural Decisions (`notes/DECISIONS.md`)**:
   - `DECISIONS #1`: Dual-Track (`Safe Rust` + `Python/JAX`) evaluation across Wave 1 (`const`, `utils`, `math`, `auto_diff`, `interp_1d`, `interp_2d`, `mtx`, `num`) + stateless microphysics pilot (`neu`, `turb`).
   - `DECISIONS #2`: Legacy and external subsystem scope exclusions (`pgstar`/`pgbinary` `#3`, `stella`/`adipls`/`gyre` `#4`, and legacy `RSP1` `#5`).

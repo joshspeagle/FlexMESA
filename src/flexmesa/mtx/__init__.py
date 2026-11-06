@@ -5,8 +5,9 @@ Re-exports dense (`dgetrf`, `dgetrs`, `solve_dense`, `solve_dense_jax`),
 banded (`dense_to_band`, `band_to_dense`, `dgbtrf`, `dgbtrs`, `solve_banded`),
 sparse (`SparseFormat`, CSR/CSC conversions, `find_loc_in_sparse`), and
 block-tridiagonal (`block_dble_mv`, `block_thomas_factor`,
-`block_thomas_solve`, `solve_block_tridiagonal`,
-`solve_block_tridiagonal_jax`) routines in `float64`.
+`block_thomas_solve`, `solve_block_tridiagonal`, `solve_block_tridiag_pcr`,
+`solve_block_tridiag_rust_ffi`, `solve_block_tridiagonal_jax`) routines in
+`float64`.
 
 Storage Conventions:
     - Dense matrices use row-major `(N, N)` `float64` arrays.
@@ -23,7 +24,7 @@ Storage Conventions:
 
 from __future__ import annotations
 
-from flexmesa.mtx import band, block_tridiag, dense, sparse
+from flexmesa.mtx import band, block_tridiag, dense, pcr, sparse
 
 dgetrf = dense.dgetrf
 dgetrs = dense.dgetrs
@@ -53,14 +54,18 @@ column_sparse_to_dense = sparse.column_sparse_to_dense
 col_sparse_0_based_to_dense = sparse.col_sparse_0_based_to_dense
 find_loc_in_sparse = sparse.find_loc_in_sparse
 
+SolverMode = pcr.SolverMode
 block_dble_mv = block_tridiag.block_dble_mv
 block_multiply_xa = block_tridiag.block_multiply_xa
 block_thomas_factor = block_tridiag.block_thomas_factor
 block_thomas_solve = block_tridiag.block_thomas_solve
+solve_block_tridiag_pcr = pcr.solve_block_tridiag_pcr
+solve_block_tridiag_rust_ffi = pcr.solve_block_tridiag_rust_ffi
 solve_block_tridiagonal = block_tridiag.solve_block_tridiagonal
 solve_block_tridiagonal_jax = block_tridiag.solve_block_tridiagonal_jax
 
 __all__ = [
+    "SolverMode",
     "SparseFormat",
     "band",
     "band_multiply_xa",
@@ -86,11 +91,14 @@ __all__ = [
     "lu_factored_square_mm",
     "lu_factored_square_mv",
     "multiply_xa",
+    "pcr",
     "rcond_banded",
     "rcond_dense",
     "row_sparse_0_based_to_dense",
     "row_sparse_to_dense",
     "solve_banded",
+    "solve_block_tridiag_pcr",
+    "solve_block_tridiag_rust_ffi",
     "solve_block_tridiagonal",
     "solve_block_tridiagonal_jax",
     "solve_dense",

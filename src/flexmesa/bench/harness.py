@@ -48,9 +48,9 @@ class BenchRecord:
         workload: Workload identifier (`"auto_diff"`, `"interp_2d"`,
             `"mtx_tridiag"`, `"neu"`, `"turb_mlt"`, or `"turb_tdc"`).
         n_zones: Number of stellar zones ($N_{\\mathrm{zones}}$).
-        stage0: Stage 0 (idiomatic scalar Python loop) latency.
-        stage1: Stage 1 (contiguous Structure-of-Arrays NumPy/eager) latency.
-        stage2: Stage 2 (XLA `@jax.jit` fused kernel or hoisted NumPy) latency.
+        stage0: Stage 0 (sequential 1-thread `flexmesa._rust` PyO3) latency.
+        stage1: Stage 1 (parallel 4-thread `rayon` `flexmesa._rust`) latency.
+        stage2: Stage 2 (XLA `@jax.jit` fused kernel) latency.
         stage3: Stage 3 (batched `jax.vmap` ensemble, per-profile) latency.
         max_rel_err: Maximum relative discrepancy across Stages 0..3.
         checksum: Scalar `float64` checksum matching the Rust benchmark suite.

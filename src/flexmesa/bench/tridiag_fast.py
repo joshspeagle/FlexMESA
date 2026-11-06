@@ -2,11 +2,15 @@
 """Four-stage $5 \\times 5$ block-tridiagonal solver benchmark (`tridiag_fast`).
 
 Evaluates block-tridiagonal Henyey linear system factorization and solve
-across:
-- Stage 0: Pure-Python `solve_block_tridiagonal` (`dgetrf`/`dgetrs`).
-- Stage 1: Contiguous pre-allocated LAPACK `np.linalg.solve` Thomas sweep.
-- Stage 2: XLA `@jax.jit` fused `solve_block_tridiagonal_jax` (`lax.scan`).
-- Stage 3: Batched `@jax.jit(jax.vmap)` across `STAGE3_BATCH_SIZE` systems.
+across the Three-Tier Hybrid Architecture:
+- Stage 0: Zero-copy `flexmesa._rust.solve_block_tridiagonal` (1-thread
+  block-Thomas in Safe Rust).
+- Stage 1: Zero-copy `flexmesa._rust.solve_block_tridiag_bcyclic` (4-thread
+  persistent `rayon` Hirshman et al. 2010 odd-even cyclic reduction).
+- Stage 2: XLA `@jax.jit` fused `solve_block_tridiag_pcr` ($\\lceil \\log_2
+  N_{\\mathrm{zones}} \\rceil$ vectorized Parallel Cyclic Reduction).
+- Stage 3: Batched `@jax.jit(jax.vmap)` `solve_block_tridiag_pcr` across
+  `STAGE3_BATCH_SIZE` simultaneous stellar systems.
 """
 
 from __future__ import annotations
@@ -14,50 +18,15 @@ from __future__ import annotations
 import jax
 import jax.numpy as jnp
 import numpy as np
-import numpy.typing as npt
 
+from flexmesa import _dispatch, _rust
 from flexmesa import mtx as _mtx
 from flexmesa.bench import harness as _h
 
-_tridiag_jit = jax.jit(_mtx.solve_block_tridiagonal_jax)
+_tridiag_jit = jax.jit(_mtx.solve_block_tridiag_pcr)
 _tridiag_batch_jit = jax.jit(
-    jax.vmap(_mtx.solve_block_tridiagonal_jax, in_axes=(0, 0, 0, 0))
+    jax.vmap(_mtx.solve_block_tridiag_pcr, in_axes=(0, 0, 0, 0))
 )
-
-
-def fast_block_thomas_numpy(
-    lblk: npt.NDArray[np.float64],
-    dblk: npt.NDArray[np.float64],
-    ublk: npt.NDArray[np.float64],
-    rhs: npt.NDArray[np.float64],
-    d_w: npt.NDArray[np.float64],
-    u_w: npt.NDArray[np.float64],
-    x_w: npt.NDArray[np.float64],
-) -> None:
-    """Solves a $5 \\times 5$ block-tridiagonal system in-place via LAPACK.
-
-    Args:
-        lblk: Sub-diagonal blocks `(nz, 5, 5)` in `float64`.
-        dblk: Diagonal blocks `(nz, 5, 5)` in `float64`.
-        ublk: Super-diagonal blocks `(nz, 5, 5)` in `float64`.
-        rhs: Right-hand side `(nz, 5)` in `float64`.
-        d_w: Pre-allocated diagonal workspace `(nz, 5, 5)`.
-        u_w: Pre-allocated super-diagonal workspace `(nz, 5, 5)`.
-        x_w: Pre-allocated solution buffer `(nz, 5)`.
-    """
-    nz = lblk.shape[0]
-    np.copyto(d_w, dblk)
-    np.copyto(u_w, ublk)
-    np.copyto(x_w, rhs)
-    for k in range(nz):
-        if k > 0:
-            d_w[k] -= lblk[k] @ u_w[k - 1]
-            x_w[k] -= lblk[k] @ x_w[k - 1]
-        if k + 1 < nz:
-            u_w[k] = np.linalg.solve(d_w[k], u_w[k])
-        x_w[k] = np.linalg.solve(d_w[k], x_w[k])
-    for k in range(nz - 2, -1, -1):
-        x_w[k] -= u_w[k] @ x_w[k + 1]
 
 
 def bench_mtx_block_tridiag(
@@ -76,19 +45,22 @@ def bench_mtx_block_tridiag(
         `BenchRecord` with Stages 0..3 latencies and parity error.
     """
     lblk, dblk, ublk, rhs = _h.make_block_tridiag_fixture(nz)
+    l_f = _dispatch.as_c_f64(lblk)
+    d_f = _dispatch.as_c_f64(dblk)
+    u_f = _dispatch.as_c_f64(ublk)
+    r_f = _dispatch.as_c_f64(rhs)
+
     stage0, out0 = _h.measure_and_capture(
         n_warmup,
         n_repeats,
-        lambda: _mtx.solve_block_tridiagonal(lblk, dblk, ublk, rhs),
+        lambda: _rust.solve_block_tridiagonal(5, nz, l_f, d_f, u_f, r_f),
     )
-
-    d_w = np.empty_like(dblk)
-    u_w = np.empty_like(ublk)
-    out1 = np.empty_like(rhs)
-    stage1 = _h.measure_us(
+    stage1, out1 = _h.measure_and_capture(
         n_warmup,
         n_repeats,
-        lambda: fast_block_thomas_numpy(lblk, dblk, ublk, rhs, d_w, u_w, out1),
+        lambda: _rust.solve_block_tridiag_bcyclic(
+            5, nz, l_f, d_f, u_f, r_f, True
+        ),
     )
 
     l_j = jnp.asarray(lblk, dtype=jnp.float64)

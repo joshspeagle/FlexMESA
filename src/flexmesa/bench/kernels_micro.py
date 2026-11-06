@@ -1,13 +1,17 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
-"""Four-stage microphysics and utility kernel benchmarks in Python/NumPy/JAX.
+"""Four-stage microphysics and utility kernel benchmarks (`flexmesa.bench`).
 
-Implements Stages 0..3 for:
-1. `bench_autodiff`: Two-variable second-order forward-mode hyperdual vs. XLA
-   `@jax.jit` automatic differentiation (`auto_diff`).
-2. `bench_interp2d`: 2D bicubic spline evaluation (`interp_2d`) across scalar,
-   un-JITted `jax.vmap`, fused `@jax.jit`, and batched `(B, N_zones)` stages.
+Evaluates the Three-Tier Hybrid Architecture across Stages 0..3 for:
+1. `bench_autodiff`: Two-variable second-order forward-mode hyperdual via
+   zero-copy `flexmesa._rust` (`parallel=False` Stage 0, `parallel=True`
+   4-thread `rayon` Stage 1) vs. XLA `@jax.jit` (Stage 2) and `@jax.jit(vmap)`
+   (Stage 3).
+2. `bench_interp2d`: 2D bicubic spline evaluation (`interp_2d`) across
+   `flexmesa._rust.interp_evbicub_batch` (1-thread Stage 0, 4-thread `rayon`
+   Stage 1) and `@jax.jit` / `@jax.jit(vmap)` (Stages 2..3).
 3. `bench_neu`: Thermal neutrino energy-loss rate and 4-variable Jacobian
-   evaluation (`neu`) across scalar, SoA, `@jax.jit`, and batched stages.
+   evaluation (`neu`) across `flexmesa._rust.neu_get_batch` (Stages 0..1) and
+   `@jax.jit` / `@jax.jit(vmap)` (Stages 2..3).
 """
 
 from __future__ import annotations
@@ -15,11 +19,9 @@ from __future__ import annotations
 import jax
 import jax.numpy as jnp
 import numpy as np
-import numpy.typing as npt
 
-from flexmesa import auto_diff as _ad
+from flexmesa import _dispatch, _rust
 from flexmesa import constants as _const
-from flexmesa import interp_2d as _interp2d
 from flexmesa import neu as _neu
 from flexmesa.bench import bicub_fast as _bicub
 from flexmesa.bench import harness as _h
@@ -62,51 +64,6 @@ _autodiff_jit = jax.jit(_autodiff_vmap)
 _autodiff_batch_jit = jax.jit(jax.vmap(_autodiff_vmap, in_axes=(0, 0)))
 
 
-def _eval_autodiff_stage0(
-    x_np: npt.NDArray[np.float64],
-    y_np: npt.NDArray[np.float64],
-    out0: npt.NDArray[np.float64],
-) -> None:
-    """Evaluates Stage 0 zone-by-zone scalar `AutoDiffReal2VarOrder2` loop.
-
-    Args:
-        x_np: 1D array of $\\log_{10}T$ coordinates of shape `(n_zones,)`.
-        y_np: 1D array of $\\log_{10}\\rho$ coordinates of shape `(n_zones,)`.
-        out0: Pre-allocated output buffer of shape `(n_zones, 6)`.
-    """
-    for k in range(x_np.shape[0]):
-        xk = _ad.AutoDiffReal2VarOrder2.var1(float(x_np[k]))
-        yk = _ad.AutoDiffReal2VarOrder2.var2(float(y_np[k]))
-        zk = (xk * yk * 0.1).exp() + xk.powf(1.5) / (yk + 2.0)
-        out0[k] = (
-            float(zk.val),
-            float(zk.d1val1),
-            float(zk.d1val2),
-            float(zk.d2val1),
-            float(zk.d1val1_d1val2),
-            float(zk.d2val2),
-        )
-
-
-def _eval_autodiff_stage1(x_j: jax.Array, y_j: jax.Array) -> jax.Array:
-    """Evaluates Stage 1 array-wide `AutoDiffReal2VarOrder2` expression.
-
-    Args:
-        x_j: 1D JAX array of $\\log_{10}T$ values of shape `(n_zones,)`.
-        y_j: 1D JAX array of $\\log_{10}\\rho$ values of shape `(n_zones,)`.
-
-    Returns:
-        2D `float64` JAX array of shape `(n_zones, 6)`.
-    """
-    xv = _ad.AutoDiffReal2VarOrder2.var1(x_j)
-    yv = _ad.AutoDiffReal2VarOrder2.var2(y_j)
-    zv = (xv * yv * 0.1).exp() + xv.powf(1.5) / (yv + 2.0)
-    return jnp.stack(
-        [zv.val, zv.d1val1, zv.d1val2, zv.d2val1, zv.d1val1_d1val2, zv.d2val2],
-        axis=-1,
-    )
-
-
 def bench_autodiff(
     grid: _h.ThermoGrid,
     n_warmup: int = 2,
@@ -123,18 +80,22 @@ def bench_autodiff(
         `BenchRecord` with Stages 0..3 latencies and parity error.
     """
     nz = grid.n_zones
-    out0 = np.empty((nz, 6), dtype=np.float64)
-    stage0 = _h.measure_us(
+    x_c = _dispatch.as_c_f64(grid.log10_t)
+    y_c = _dispatch.as_c_f64(grid.log10_rho)
+
+    stage0, out0 = _h.measure_and_capture(
         n_warmup,
         n_repeats,
-        lambda: _eval_autodiff_stage0(grid.log10_t, grid.log10_rho, out0),
+        lambda: _rust.eval_autodiff_order2_batch(x_c, y_c, False),
+    )
+    stage1, out1 = _h.measure_and_capture(
+        n_warmup,
+        n_repeats,
+        lambda: _rust.eval_autodiff_order2_batch(x_c, y_c, True),
     )
 
     x_j = jnp.asarray(grid.log10_t, dtype=jnp.float64)
     y_j = jnp.asarray(grid.log10_rho, dtype=jnp.float64)
-    stage1, out1_j = _h.measure_and_capture(
-        n_warmup, n_repeats, lambda: _eval_autodiff_stage1(x_j, y_j)
-    )
     stage2, out2_j = _h.measure_and_capture(
         n_warmup,
         n_repeats,
@@ -151,10 +112,10 @@ def bench_autodiff(
         lambda: _autodiff_batch_jit(x_b, y_b),
     )
 
-    out1_np, out2_np = np.asarray(out1_j), np.asarray(out2_j)
-    out3_np = np.asarray(out3_j)
+    out2_np = np.asarray(out2_j, dtype=np.float64)
+    out3_np = np.asarray(out3_j, dtype=np.float64)
     max_rel_err = _h.max_err3(
-        _h.max_rel_diff(out0, out1_np),
+        _h.max_rel_diff(out0, out1),
         _h.max_rel_diff(out0, out2_np),
         _h.max_rel_diff(out0, out3_np),
     )
@@ -188,35 +149,26 @@ def bench_interp2d(
         `BenchRecord` with Stages 0..3 latencies and parity error.
     """
     nz = grid.n_zones
-    out0 = np.empty((nz, 6), dtype=np.float64)
+    xq_c = _dispatch.as_c_f64(grid.log10_rho)
+    yq_c = _dispatch.as_c_f64(grid.log10_t)
+    tx_c = _dispatch.as_c_f64(table.x)
+    ty_c = _dispatch.as_c_f64(table.y)
+    tc_c = _dispatch.as_c_f64(table.coeffs)
 
-    def _run_stage0() -> None:
-        for k in range(nz):
-            ev = _interp2d.interp_evbicub_db(
-                float(grid.log10_rho[k]),
-                float(grid.log10_t[k]),
-                table.x,
-                table.y,
-                table.ilinx,
-                table.iliny,
-                table.coeffs,
-            )
-            out0[k] = (
-                ev.f,
-                ev.df_dx,
-                ev.df_dy,
-                ev.d2f_dx2,
-                ev.d2f_dy2,
-                ev.d2f_dxdy,
-            )
+    stage0, out0 = _h.measure_and_capture(
+        n_warmup,
+        n_repeats,
+        lambda: _rust.interp_evbicub_batch(xq_c, yq_c, tx_c, ty_c, tc_c, False),
+    )
+    stage1, out1 = _h.measure_and_capture(
+        n_warmup,
+        n_repeats,
+        lambda: _rust.interp_evbicub_batch(xq_c, yq_c, tx_c, ty_c, tc_c, True),
+    )
 
-    stage0 = _h.measure_us(1, 3, _run_stage0)
     xq_j = jnp.asarray(grid.log10_rho, dtype=jnp.float64)
     yq_j = jnp.asarray(grid.log10_t, dtype=jnp.float64)
     tx, ty, tc = table.x_jax, table.y_jax, table.coeffs_jax
-    stage1, out1_j = _h.measure_and_capture(
-        n_warmup, n_repeats, lambda: _bicub.bicub_vmap(xq_j, yq_j, tx, ty, tc)
-    )
     stage2, out2_j = _h.measure_and_capture(
         n_warmup,
         n_repeats,
@@ -231,10 +183,10 @@ def bench_interp2d(
         n_repeats,
         lambda: _bicub.bicub_batch_jit(xq_b, yq_b, tx, ty, tc),
     )
-    out1_np, out2_np = np.asarray(out1_j), np.asarray(out2_j)
-    out3_np = np.asarray(out3_j)
+    out2_np = np.asarray(out2_j, dtype=np.float64)
+    out3_np = np.asarray(out3_j, dtype=np.float64)
     max_rel_err = _h.max_err3(
-        _h.max_rel_diff(out0, out1_np),
+        _h.max_rel_diff(out0, out1),
         _h.max_rel_diff(out0, out2_np),
         _h.max_rel_diff(out0, out3_np),
     )
@@ -270,11 +222,16 @@ def _neu_pair_plas_cutoff_jax(
     """
     raw = _neu.neu_pair_plas_jax(t, rho, abar, zbar)
     log10_t = jnp.log10(t)
-    ratio = (log10_t - 7.0) / 0.5
+    t_min = _neu.LOG10_TMIN_NEU
+    ratio = (log10_t - t_min) / 0.5
     f_cut = jnp.where(
-        log10_t <= 7.0,
+        log10_t <= t_min,
         0.0,
-        jnp.where(log10_t < 7.5, 0.5 * (1.0 - jnp.cos(_const.PI * ratio)), 1.0),
+        jnp.where(
+            log10_t < t_min + 0.5,
+            0.5 * (1.0 - jnp.cos(_const.PI * ratio)),
+            1.0,
+        ),
     )
     return raw * f_cut
 
@@ -323,40 +280,28 @@ def bench_neu(
         `BenchRecord` with Stages 0..3 latencies and parity error.
     """
     nz = grid.n_zones
-    flags_pp = _neu.NeuFlags(
-        pair=True, plas=True, phot=False, brem=False, reco=False
+    flags_pp = (True, True, False, False, False)
+    t_c = _dispatch.as_c_f64(grid.t)
+    lt_c = _dispatch.as_c_f64(grid.log10_t)
+    r_c = _dispatch.as_c_f64(grid.rho)
+    lr_c = _dispatch.as_c_f64(grid.log10_rho)
+    a_c = _dispatch.as_c_f64(grid.abar)
+    z_c = _dispatch.as_c_f64(grid.zbar)
+
+    stage0, out0 = _h.measure_and_capture(
+        n_warmup,
+        n_repeats,
+        lambda: _rust.neu_get_batch(
+            t_c, lt_c, r_c, lr_c, a_c, z_c, 7.5, flags_pp, False
+        ),
     )
-    out0 = np.empty((nz, 5), dtype=np.float64)
-    out1 = np.empty((nz, 5), dtype=np.float64)
-
-    def _run_stage0() -> None:
-        for k in range(nz):
-            out0[k] = _neu.neu_get(
-                float(grid.t[k]),
-                None,
-                float(grid.rho[k]),
-                None,
-                float(grid.abar[k]),
-                float(grid.zbar[k]),
-                7.5,
-                flags_pp,
-            ).loss
-
-    def _run_stage1() -> None:
-        for k in range(nz):
-            out1[k] = _neu.neu_get(
-                float(grid.t[k]),
-                float(grid.log10_t[k]),
-                float(grid.rho[k]),
-                float(grid.log10_rho[k]),
-                float(grid.abar[k]),
-                float(grid.zbar[k]),
-                7.5,
-                flags_pp,
-            ).loss
-
-    stage0 = _h.measure_us(n_warmup, n_repeats, _run_stage0)
-    stage1 = _h.measure_us(n_warmup, n_repeats, _run_stage1)
+    stage1, out1 = _h.measure_and_capture(
+        n_warmup,
+        n_repeats,
+        lambda: _rust.neu_get_batch(
+            t_c, lt_c, r_c, lr_c, a_c, z_c, 7.5, flags_pp, True
+        ),
+    )
 
     t_j = jnp.asarray(grid.t, dtype=jnp.float64)
     rho_j = jnp.asarray(grid.rho, dtype=jnp.float64)

@@ -3,9 +3,9 @@
 
 Provides fixed-step bisection + Newton-Raphson root-finding in $Z = \\ln Y$ via
 `jax.lax.fori_loop` coupled with Implicit Function Theorem differentiation
-(`jax.grad`) so Stages 1 (`jax.vmap`), 2 (`@jax.jit`), and 3
-(`jax.jit(jax.vmap)`) of `bench_turb_tdc` execute on the XLA device with compact
-HLO graphs and exact iterate parity with `set_tdc`.
+(`jax.grad`) so Stages 2 (`@jax.jit`) and 3 (`jax.jit(jax.vmap)`) of
+`bench_turb_tdc` execute on the XLA device with compact HLO graphs and exact
+iterate parity with `set_tdc`.
 """
 
 from __future__ import annotations
@@ -17,14 +17,59 @@ import jax.numpy as jnp
 
 from flexmesa import constants as _const
 from flexmesa import turb as _turb
+from flexmesa.turb import tdc_support as _tdc_support
 
-X_ALFAS: Final[float] = 0.5 * _const.SQRT_2_DIV_3
-X_CEDE: Final[float] = (8.0 / 3.0) * _const.SQRT_2_DIV_3
+X_ALFAS: Final[float] = _tdc_support.X_ALFAS
+X_CEDE: Final[float] = _tdc_support.X_CEDE
 GRAV_SOLAR: Final[float] = (
     _const.MSUN * _const.STANDARD_CGRAV / (_const.RSUN * _const.RSUN)
 )
 RGAS_IDEAL: Final[float] = _const.KERG / _const.MP
 CP_IDEAL: Final[float] = 2.5 * RGAS_IDEAL
+
+
+def _eval_q_and_af_given_gamma(
+    y: jax.Array,
+    gamma: jax.Array,
+    lum: jax.Array,
+    c0: jax.Array,
+    l0: jax.Array,
+    hp_val: jax.Array,
+    cp_val: jax.Array,
+    t_val: jax.Array,
+) -> tuple[jax.Array, jax.Array]:
+    """Evaluates TDC residual $Q(Y)$ and speed $A_f$ for precomputed $\\Gamma$.
+
+    Args:
+        y: Dimensionless superadiabaticity $Y = \\nabla_T - \\nabla_L$.
+        gamma: Convective efficiency $\\Gamma$ from steady-state Cox MLT.
+        lum: Local luminosity $L$ in $\\mathrm{erg\\,s^{-1}}$.
+        c0: Convective luminosity prefactor $c_0$ in $\\mathrm{erg\\,cm^{-1}}$.
+        l0: Radiative luminosity prefactor $L_0$ in $\\mathrm{erg\\,s^{-1}}$.
+        hp_val: Pressure scale height $H_P$ in $\\mathrm{cm}$.
+        cp_val: Specific heat $C_P$ in $\\mathrm{erg\\,g^{-1}\\,K^{-1}}$.
+        t_val: Temperature $T$ in $\\mathrm{K}$.
+
+    Returns:
+        Two-tuple `(q, af)` of luminosity residual $Q(Y)$ in
+        $\\mathrm{erg\\,s^{-1}}$ and scaled convective speed $A_f$ in
+        $\\mathrm{cm\\,s^{-1}}$.
+    """
+    g04 = jnp.float64(0.40)
+    a0 = jnp.float64(1.0e5 / _const.SQRT_2_DIV_3)
+    dt = jnp.float64(1.0e4)
+
+    y_env = y * (gamma / (1.0 + gamma))
+    xi0 = jnp.float64(2.0 * X_ALFAS) * cp_val * t_val / hp_val * g04 * y_env
+    xi2 = -jnp.float64(0.5 * X_CEDE) / hp_val
+    j_val = jnp.sqrt(jnp.maximum(-4.0 * xi0 * xi2, 1.0e-300))
+    jt4 = 0.25 * dt * j_val
+    th = jnp.tanh(jnp.clip(jt4, -50.0, 50.0))
+    num = th * (2.0 * xi0) + a0 * j_val
+    den = th * (2.0 * a0 * xi2) - j_val
+    af = jnp.abs(num / den)
+    q = (lum - l0 * g04) - l0 * y - c0 * af * y_env
+    return q, af
 
 
 def _eval_q_and_af_jax(
@@ -97,20 +142,9 @@ def _eval_q_and_af_jax(
         * gradr
         / p_val
     )
-    a0 = jnp.float64(1.0e5 / _const.SQRT_2_DIV_3)
-    dt = jnp.float64(1.0e4)
-
-    y_env = y * (gamma / (1.0 + gamma))
-    xi0 = jnp.float64(2.0 * X_ALFAS) * cp_val * t_val / hp_val * g04 * y_env
-    xi2 = -jnp.float64(0.5 * X_CEDE) / hp_val
-    j_val = jnp.sqrt(jnp.maximum(-4.0 * xi0 * xi2, 1.0e-300))
-    jt4 = 0.25 * dt * j_val
-    th = jnp.tanh(jnp.clip(jt4, -50.0, 50.0))
-    num = th * (2.0 * xi0) + a0 * j_val
-    den = th * (2.0 * a0 * xi2) - j_val
-    af = jnp.abs(num / den)
-    q = (lum - l0 * g04) - l0 * y - c0 * af * y_env
-    return q, af
+    return _eval_q_and_af_given_gamma(
+        y, gamma, lum, c0, l0, hp_val, cp_val, t_val
+    )
 
 
 def eval_tdc_point_jax(s_frac: jax.Array) -> jax.Array:
@@ -118,7 +152,7 @@ def eval_tdc_point_jax(s_frac: jax.Array) -> jax.Array:
 
     Narrows the logarithmic superadiabaticity bracket $Z = \\ln Y \\in [-100,
     100]$ to width $< 1.0$ via 8 bisection steps (`jax.lax.fori_loop`), refines
-    $Z^*$ via 8 damped Newton-Raphson iterations with the exact MESA residual
+    $Z^*$ via 20 damped Newton-Raphson iterations with the exact MESA residual
     ($|Q| / \\mathrm{scale} \\le 10^{-8}$) and step ($|\\Delta Z| < 10^{-13}$)
     convergence latches, and propagates $\\partial \\nabla_T / \\partial
     \\nabla_r$ at the converged root $Y^* = \\exp(Z^*)$ via the Implicit
@@ -145,13 +179,61 @@ def eval_tdc_point_jax(s_frac: jax.Array) -> jax.Array:
     gradr_val = 0.42 + 0.08 * s_frac
     scale_val = jnp.float64(70.0 * _const.LSUN * 1.0e-3)
 
+    # Hoist loop-invariant MLT efficiency and luminosity prefactors outside
+    # the bisection and Newton-Raphson root-finding loops.
+    one = jnp.float64(1.0)
+    g04 = jnp.float64(0.40)
+    gamma0 = _turb.set_mlt_jax(
+        one,
+        one,
+        cp_val,
+        grav_val,
+        2.0 * hp_val,
+        rho_val,
+        p_val,
+        t_val,
+        one,
+        gradr_val,
+        g04,
+        g04,
+        2.0,
+    )[0]
+    r_sq = jnp.float64(_const.RSUN * _const.RSUN)
+    c0 = (
+        jnp.float64(2.0 * X_ALFAS * 4.0 * _const.PI)
+        * rho_val
+        * t_val
+        * cp_val
+        * r_sq
+    )
+    t4 = (t_val * t_val) * (t_val * t_val)
+    l0 = (
+        jnp.float64(
+            (16.0 * _const.PI * _const.CRAD * _const.CLIGHT / 3.0)
+            * _const.STANDARD_CGRAV
+            * _const.MSUN
+        )
+        * t4
+        / p_val
+    )
+    lum0 = (
+        jnp.float64(64.0 * _const.PI * _const.BOLTZ_SIGMA / 3.0)
+        * t4
+        * grav_val
+        * r_sq
+        * gradr_val
+        / p_val
+    )
+
+    def _q_of_z(z: jax.Array) -> jax.Array:
+        return _eval_q_and_af_given_gamma(
+            jnp.exp(z), gamma0, lum0, c0, l0, hp_val, cp_val, t_val
+        )[0]
+
     def _q_of_y_gr(y: jax.Array, gr: jax.Array) -> jax.Array:
         return _eval_q_and_af_jax(
             y, gr, t_val, rho_val, p_val, hp_val, cp_val, grav_val
         )[0]
-
-    def _q_of_z(z: jax.Array) -> jax.Array:
-        return _q_of_y_gr(jnp.exp(z), gradr_val)
 
     def _bisect_step(
         _: int,
@@ -200,14 +282,14 @@ def eval_tdc_point_jax(s_frac: jax.Array) -> jax.Array:
     z_init = 0.5 * (lb + ub)
     z_star, _, _, _, _ = jax.lax.fori_loop(
         0,
-        8,
+        20,
         _newton_step,
         (z_init, lb, ub, jnp.bool_(False), jnp.bool_(False)),
     )
 
     y_star = jnp.exp(z_star)
-    _, af_star = _eval_q_and_af_jax(
-        y_star, gradr_val, t_val, rho_val, p_val, hp_val, cp_val, grav_val
+    _, af_star = _eval_q_and_af_given_gamma(
+        y_star, gamma0, lum0, c0, l0, hp_val, cp_val, t_val
     )
     dq_dy, dq_dgr = jax.grad(_q_of_y_gr, argnums=(0, 1))(y_star, gradr_val)
     dy_dgr = -dq_dgr / dq_dy

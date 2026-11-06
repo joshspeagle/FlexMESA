@@ -1,0 +1,95 @@
+site_name: FlexMESA
+site_description: >-
+  Modern Three-Tier Hybrid Safe Rust + Python/JAX Rewrite of the MESA Stellar
+  Evolution Codebase with End-to-End Automatic Differentiation
+site_url: https://joshspeagle.github.io/FlexMESA/
+repo_url: https://github.com/joshspeagle/FlexMESA
+repo_name: joshspeagle/FlexMESA
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.tabs.link
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: deep orange
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: deep orange
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+plugins:
+  - search
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          paths: [src]
+          options:
+            docstring_style: google
+            show_source: false
+            show_root_heading: true
+            show_symbol_type_heading: true
+            members_order: source
+            separate_signature: true
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.arithmatex:
+      generic: true
+  - tables
+  - toc:
+      permalink: true
+
+extra_javascript:
+  - javascripts/katex.js
+  - https://unpkg.com/katex@0.16.9/dist/katex.min.js
+  - https://unpkg.com/katex@0.16.9/dist/contrib/auto-render.min.js
+
+extra_css:
+  - https://unpkg.com/katex@0.16.9/dist/katex.min.css
+
+nav:
+  - Overview:
+      - Home: index.md
+      - Design Philosophy & Hybrid Architecture: design-philosophy.md
+  - Specifications:
+      - Master Scoping & Architecture: design/scoping-and-architecture.md
+      - Wave 0 Infrastructure Specification: design/wave-0-spec.md
+      - Wave 1 Foundation & Microphysics Specification: design/wave-1-spec.md
+      - Wave 1.5 Hybrid Consolidation Specification: design/wave-1-5-spec.md
+  - Module Physics & Numerics:
+      - Wave 0 Schemas, Data & Golden Oracles: modules/wave-0-foundation.md
+      - Wave 1 Dual Algebra, Splines & Solvers: modules/wave-1-numerics.md
+      - Wave 1 Neutrinos & Turbulent Convection: modules/wave-1-microphysics.md
+  - Benchmarks & Parity:
+      - Wave 1.5 Four-Way Benchmark Report: design/wave-1-benchmark-report.md
+  - API Reference:
+      - Python, PyO3 & JAX Reference: api/index.md

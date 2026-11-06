@@ -49,3 +49,5 @@ Thumbs.db
 *~
 *.swp
 .claude/
+site/
+docs/assets/figures/*.png

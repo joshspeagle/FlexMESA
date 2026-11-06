@@ -2,10 +2,11 @@
 //!
 //! Provides IEEE-754 `f64` LU factorization with partial pivoting for dense
 //! (`dgetrf`, `dgetrs`), banded (`dgbtrf`, `dgbtrs`), and block-tridiagonal
-//! (`block_thomas_factor`, `block_thomas_solve`) linear systems, forward-mode
-//! implicit differentiation for parameter-dependent linear systems
-//! (`solve_dense_dual`), and bidirectional conversions across dense, banded,
-//! compressed-row sparse (CSR), and compressed-column sparse (CSC) formats.
+//! (`block_thomas_factor`, `block_thomas_solve`, `solve_block_tridiag_bcyclic`)
+//! linear systems, forward-mode implicit differentiation for parameter-varying
+//! linear systems (`solve_dense_dual`), and bidirectional conversions across
+//! dense, banded, compressed-row sparse (CSR), and compressed-column sparse
+//! (CSC) formats.
 
 #![forbid(unsafe_code)]
 #![allow(

@@ -1,8 +1,9 @@
 //! Block-tridiagonal golden, Harwell-Boeing, autodiff, and property tests.
 //!
-//! Verifies `solve_block_tridiagonal`, `block_dble_mv`, `block_multiply_xa`,
-//! `lu_factored_block_dble_mv`, `write_block_tridiagonal_text`,
-//! `parse_block_tridiagonal_text`, and `solve_dense_dual`.
+//! Verifies `solve_block_tridiagonal`, `solve_block_tridiag_bcyclic`,
+//! `block_dble_mv`, `block_multiply_xa`, `lu_factored_block_dble_mv`,
+//! `write_block_tridiagonal_text`, `parse_block_tridiagonal_text`, and
+//! `solve_dense_dual`.
 //!
 //! # Test Coverage
 //!
@@ -13,10 +14,15 @@
 //!    $b^{\top}(A x) = (b^{\top} A) x$, and Harwell-Boeing `RUA` text I/O.
 //! 2. **Implicit Forward-Mode Autodiff**: Verifies `solve_dense_dual` against
 //!    centered finite differences to $< 10^{-9}$.
-//! 3. **Property-Based Verification**: Compares `solve_block_tridiagonal`
-//!    against full dense LU (`solve_dense`) across random block systems.
-//! 4. **Zero-Diagonal & Boundary Checks**: Verifies condition-number handling
-//!    and dimension validation on block-tridiagonal inputs.
+//! 3. **Property-Based Verification**: Compares `solve_block_tridiagonal` and
+//!    `solve_block_tridiag_bcyclic` against full dense LU (`solve_dense`)
+//!    across random non-symmetric block systems.
+//! 4. **Parallel Block Cyclic Reduction (`bcyclic`) Parity**: Verifies both
+//!    serial and `rayon`-parallel Hirshman et al. (2010) odd-even cyclic
+//!    reduction (`solve_block_tridiag_bcyclic`) against sequential block
+//!    Thomas across odd, prime, and power-of-two grid sizes up to
+//!    $N_{\mathrm{zones}} = 4096$ with non-symmetric, non-commutative,
+//!    shell-varying blocks.
 //!
 //! All tests run deterministically in IEEE-754 `f64` precision.
 
@@ -262,36 +268,59 @@ proptest! {
             }
         }
         let x_dense = solve_dense(n_tot, &a_dense, &rhs).unwrap();
+        let x_bcyclic = solve_block_tridiag_bcyclic(
+            nvar, nz, &lblk, &dblk, &ublk, &rhs, false,
+        ).unwrap();
         for idx in 0..n_tot {
             prop_assert!((x_blk[idx] - x_dense[idx]).abs() < 1e-11);
+            prop_assert!((x_bcyclic[idx] - x_dense[idx]).abs() < 1e-11);
         }
     }
 }
 
 /// Verifies `solve_block_tridiag_bcyclic` (serial and parallel `rayon`) against
-/// `solve_block_tridiagonal` across odd, prime, and power-of-two grid sizes.
+/// `solve_block_tridiagonal` across odd, prime, and power-of-two grid sizes up
+/// to $N_{\mathrm{zones}} = 4096$.
+///
+/// Constructs shell-varying, non-symmetric, non-commutative $4 \times 4$ blocks
+/// $D_k \ne D_k^{\top}$, $L_k \ne L_k^{\top}$, and $U_k \ne U_k^{\top}$ so that
+/// any block-multiplication order reversal ($B A$ vs. $A B$), transpose error,
+/// or shell-index offset on $L_k$ or $U_k$ is immediately detected.
+///
+/// Checks both `parallel = false` and `parallel = true` across
+/// $N_{\mathrm{zones}} \in \{1, 2, 3, 7, 8, 15, 32, 65, 128, 1024, 4096\}$ to
+/// relative error $< 10^{-13}$.
 #[test]
 fn test_bcyclic_matches_block_thomas_across_grid_sizes() {
     let nvar = 4usize;
     let blk_sz = nvar * nvar;
-    for &nz in &[1usize, 2, 3, 7, 8, 15, 32, 65, 128] {
+    let grid_sizes = [1usize, 2, 3, 7, 8, 15, 32, 65, 128, 1024, 4096];
+    for &nz in &grid_sizes {
         let mut lblk = vec![0.0_f64; nz * blk_sz];
         let mut dblk = vec![0.0_f64; nz * blk_sz];
         let mut ublk = vec![0.0_f64; nz * blk_sz];
         let mut rhs = vec![0.0_f64; nz * nvar];
         for k in 0..nz {
+            let kf = k as f64;
             let s = (k + 1) as f64 / (nz as f64);
             for i in 0..nvar {
-                rhs[k * nvar + i] = (0.3 * (k as f64) + (i as f64)).sin();
+                rhs[k * nvar + i] = (0.3 * kf + 0.7 * (i as f64)).sin();
                 for j in 0..nvar {
-                    let base = 0.05 * ((i + j + 1) as f64);
-                    dblk[k * blk_sz + i * nvar + j] =
-                        if i == j { 4.0 + s + base } else { base };
+                    let idx = k * blk_sz + i * nvar + j;
+                    let d_off =
+                        0.03 * (((3 * i + j + 2 * k + 1) % 7) as f64 - 3.0);
+                    dblk[idx] = if i == j {
+                        5.0 + s + 0.15 * (i as f64) + d_off
+                    } else {
+                        d_off
+                    };
                     if k > 0 {
-                        lblk[k * blk_sz + i * nvar + j] = -0.2 * base;
+                        lblk[idx] = -0.06
+                            * (((2 * i + 5 * j + k + 2) % 9) as f64 - 4.0);
                     }
                     if k + 1 < nz {
-                        ublk[k * blk_sz + i * nvar + j] = -0.15 * base;
+                        ublk[idx] = -0.05
+                            * (((4 * i + j + 3 * k + 1) % 9) as f64 - 4.0);
                     }
                 }
             }

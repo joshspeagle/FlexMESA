@@ -65,17 +65,18 @@ fn eval_autodiff_fused(x: f64, y: f64) -> [f64; 6] {
     [val, d1val1, d1val2, d2val1, d1val1_d1val2, d2val2]
 }
 
-/// Shared 4-stage benchmark driver for a 6-output per-zone kernel pair
-/// `(eval_base, eval_fast)` over `nz` shells.
+/// Shared const-generic 4-stage benchmark driver for an `N`-output per-zone
+/// kernel pair `(eval_base, eval_fast)` over `nz` shells.
 ///
 /// Evaluates `eval_base` in Stages 0 and 1 and `eval_fast` in Stages 2 and 3:
-/// - **Stage 0**: Scalar loop allocating a fresh `Vec<[f64; 6]>` per step.
+/// - **Stage 0**: Scalar loop allocating a fresh `Vec<[f64; N]>` per step.
 /// - **Stage 1**: Pre-allocated contiguous Structure-of-Arrays (SoA) slice.
-/// - **Stage 2**: Fused single-thread slice loop (`chunks_exact_mut(6)`).
-/// - **Stage 3**: Scoped 4-thread parallel execution across radial chunks.
+/// - **Stage 2**: Fused single-thread slice loop (`chunks_exact_mut(N)`).
+/// - **Stage 3**: 4-thread persistent `rayon` parallel execution across radial
+///   chunks.
 ///
 /// # Arguments
-/// * `workload` - Static benchmark name (`"auto_diff"` or `"interp_2d"`).
+/// * `workload` - Static benchmark name.
 /// * `nz` - Number of radial zones ($N_{\mathrm{zones}}$).
 /// * `n_warmup` - Number of untimed warmup iterations.
 /// * `n_repeats` - Number of timed iterations.
@@ -83,9 +84,9 @@ fn eval_autodiff_fused(x: f64, y: f64) -> [f64; 6] {
 /// * `eval_fast` - Thread-safe fused per-zone evaluator for Stages 2 and 3.
 ///
 /// # Returns
-/// `BenchRecord` with Stages 0..3 latencies, maximum relative stage
+/// [`BenchRecord`] with Stages 0..3 latencies, maximum relative stage
 /// discrepancy, and Stage 2 primal checksum.
-fn bench_zone_fn_6<F0, F2>(
+pub(crate) fn bench_zone_fn<const N: usize, F0, F2>(
     workload: &'static str,
     nz: usize,
     n_warmup: usize,
@@ -94,49 +95,49 @@ fn bench_zone_fn_6<F0, F2>(
     eval_fast: F2,
 ) -> BenchRecord
 where
-    F0: Fn(usize) -> [f64; 6],
-    F2: Fn(usize) -> [f64; 6] + Sync,
+    F0: Fn(usize) -> [f64; N],
+    F2: Fn(usize) -> [f64; N] + Sync,
 {
-    // Stage 0: Scalar loop allocating Vec<[f64; 6]> per call.
-    let mut ref_flat = vec![0.0_f64; nz * 6];
+    // Stage 0: Scalar loop allocating Vec<[f64; N]> per call.
+    let mut ref_flat = vec![0.0_f64; nz * N];
     let stage0 = measure_us(n_warmup, n_repeats, || {
         let mut rows = Vec::with_capacity(nz);
         for k in 0..nz {
             rows.push(eval_base(k));
         }
         for (k, r) in rows.iter().enumerate() {
-            ref_flat[k * 6..(k + 1) * 6].copy_from_slice(r);
+            ref_flat[k * N..(k + 1) * N].copy_from_slice(r);
         }
     });
 
     // Stage 1: Contiguous pre-allocated SoA slice buffer.
-    let mut out1 = vec![0.0_f64; nz * 6];
+    let mut out1 = vec![0.0_f64; nz * N];
     let stage1 = measure_us(n_warmup, n_repeats, || {
         for k in 0..nz {
-            out1[k * 6..(k + 1) * 6].copy_from_slice(&eval_base(k));
+            out1[k * N..(k + 1) * N].copy_from_slice(&eval_base(k));
         }
     });
 
     // Stage 2: Fused inlined / pre-validated slice kernel.
-    let mut out2 = vec![0.0_f64; nz * 6];
+    let mut out2 = vec![0.0_f64; nz * N];
     let stage2 = measure_us(n_warmup, n_repeats, || {
-        for (k, dst) in out2.chunks_exact_mut(6).enumerate() {
+        for (k, dst) in out2.chunks_exact_mut(N).enumerate() {
             dst.copy_from_slice(&eval_fast(k));
         }
     });
 
     // Stage 3: 4-thread persistent rayon parallel execution across zone chunks.
-    let mut out3 = vec![0.0_f64; nz * 6];
+    let mut out3 = vec![0.0_f64; nz * N];
     let chunk_z = nz.div_ceil(STAGE3_THREADS);
     let fast_ref = &eval_fast;
     let stage3 = measure_stage3_chunks_us(
         n_warmup,
         n_repeats,
         &mut out3,
-        chunk_z * 6,
+        chunk_z * N,
         |idx, dst_chunk| {
             let z0 = idx * chunk_z;
-            for (local_k, dst) in dst_chunk.chunks_exact_mut(6).enumerate() {
+            for (local_k, dst) in dst_chunk.chunks_exact_mut(N).enumerate() {
                 dst.copy_from_slice(&fast_ref(z0 + local_k));
             }
         },
@@ -147,7 +148,7 @@ where
         max_rel_diff(&ref_flat, &out2),
         max_rel_diff(&ref_flat, &out3),
     );
-    let checksum: f64 = out2.iter().step_by(6).sum();
+    let checksum: f64 = out2.iter().step_by(N).sum();
 
     BenchRecord {
         workload,
@@ -176,7 +177,7 @@ pub fn bench_autodiff(
     n_warmup: usize,
     n_repeats: usize,
 ) -> BenchRecord {
-    bench_zone_fn_6(
+    bench_zone_fn(
         "auto_diff",
         grid.n_zones,
         n_warmup,
@@ -202,7 +203,7 @@ pub fn bench_interp2d(
     n_warmup: usize,
     n_repeats: usize,
 ) -> BenchRecord {
-    bench_zone_fn_6(
+    bench_zone_fn(
         "interp_2d",
         grid.n_zones,
         n_warmup,
@@ -254,7 +255,6 @@ pub fn bench_neu(
     n_warmup: usize,
     n_repeats: usize,
 ) -> BenchRecord {
-    let nz = grid.n_zones;
     let flags = NeuFlags {
         pair: true,
         plas: true,
@@ -262,13 +262,13 @@ pub fn bench_neu(
         brem: false,
         reco: false,
     };
-
-    // Stage 0: Scalar loop recomputing log10(T)/log10(Rho) and allocating Vec.
-    let mut ref_flat = vec![0.0_f64; nz * 5];
-    let stage0 = measure_us(n_warmup, n_repeats, || {
-        let mut rows = Vec::with_capacity(nz);
-        for k in 0..nz {
-            let out = neu_get(
+    bench_zone_fn(
+        "neu",
+        grid.n_zones,
+        n_warmup,
+        n_repeats,
+        |k| {
+            neu_get(
                 Some(grid.t[k]),
                 None,
                 Some(grid.rho[k]),
@@ -278,39 +278,11 @@ pub fn bench_neu(
                 7.5,
                 flags,
             )
-            .unwrap();
-            rows.push(out.loss);
-        }
-        for (k, r) in rows.iter().enumerate() {
-            ref_flat[k * 5..(k + 1) * 5].copy_from_slice(r);
-        }
-    });
-
-    // Stage 1: Contiguous SoA output buffer without precomputed log10 inputs.
-    let mut out1 = vec![0.0_f64; nz * 5];
-    let stage1 = measure_us(n_warmup, n_repeats, || {
-        for k in 0..nz {
-            let out = neu_get(
-                Some(grid.t[k]),
-                None,
-                Some(grid.rho[k]),
-                None,
-                grid.abar[k],
-                grid.zbar[k],
-                7.5,
-                flags,
-            )
-            .unwrap();
-            out1[k * 5..(k + 1) * 5].copy_from_slice(&out.loss);
-        }
-    });
-
-    // Stage 2: Fused slice kernel passing precomputed (T, log10_T, Rho,
-    // log10_Rho).
-    let mut out2 = vec![0.0_f64; nz * 5];
-    let stage2 = measure_us(n_warmup, n_repeats, || {
-        for (k, dst) in out2.chunks_exact_mut(5).enumerate() {
-            let out = neu_get(
+            .unwrap()
+            .loss
+        },
+        |k| {
+            neu_get(
                 Some(grid.t[k]),
                 Some(grid.log10_t[k]),
                 Some(grid.rho[k]),
@@ -320,54 +292,8 @@ pub fn bench_neu(
                 7.5,
                 flags,
             )
-            .unwrap();
-            dst.copy_from_slice(&out.loss);
-        }
-    });
-
-    // Stage 3: 4-thread persistent rayon parallel execution across zone chunks.
-    let mut out3 = vec![0.0_f64; nz * 5];
-    let chunk_z = nz.div_ceil(STAGE3_THREADS);
-    let stage3 = measure_stage3_chunks_us(
-        n_warmup,
-        n_repeats,
-        &mut out3,
-        chunk_z * 5,
-        |idx, dst_chunk| {
-            let z0 = idx * chunk_z;
-            for (local_k, dst) in dst_chunk.chunks_exact_mut(5).enumerate() {
-                let k = z0 + local_k;
-                let out = neu_get(
-                    Some(grid.t[k]),
-                    Some(grid.log10_t[k]),
-                    Some(grid.rho[k]),
-                    Some(grid.log10_rho[k]),
-                    grid.abar[k],
-                    grid.zbar[k],
-                    7.5,
-                    flags,
-                )
-                .unwrap();
-                dst.copy_from_slice(&out.loss);
-            }
+            .unwrap()
+            .loss
         },
-    );
-
-    let max_rel_err = max_err3(
-        max_rel_diff(&ref_flat, &out1),
-        max_rel_diff(&ref_flat, &out2),
-        max_rel_diff(&ref_flat, &out3),
-    );
-    let checksum: f64 = out2.iter().step_by(5).sum();
-
-    BenchRecord {
-        workload: "neu",
-        n_zones: nz,
-        stage0,
-        stage1,
-        stage2,
-        stage3,
-        max_rel_err,
-        checksum,
-    }
+    )
 }

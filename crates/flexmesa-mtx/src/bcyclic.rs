@@ -27,27 +27,30 @@
 //!    levels $s = S-1 \dots 0$ in reverse to recover all odd-multiple shells:
 //!    $$x_j = \tilde{b}_j - \tilde{L}_j x_{j-p} - \tilde{U}_j x_{j+p}.$$
 
+use std::ops::Range;
+
 use rayon::prelude::*;
 
-use crate::block_tridiag::check_blocks;
+use crate::block_tridiag::{accum_block_mv, check_blocks, sub_block_mm};
 use crate::dense::{dgetrf, dgetrs, dgetrs_multi};
 use crate::MtxError;
 use flexmesa_utils::is_bad_slice;
 
-/// Subtract a block product $C \leftarrow C - A B$ for $n \times n$ row-major
-/// blocks.
+/// Minimum number of active odd or even rows required to dispatch a cyclic
+/// reduction level across the `rayon` thread pool.
+const MIN_PARALLEL_ROWS: usize = 16;
+
+/// Returns the flat slice range for shell `r` in a `(nz, nvar, nvar)` block
+/// buffer (`blk_sz = nvar * nvar`).
 #[inline]
-fn sub_block_mm(n: usize, a: &[f64], b: &[f64], c: &mut [f64]) {
-    for i in 0..n {
-        for m in 0..n {
-            let a_im = a[i * n + m];
-            if a_im != 0.0 {
-                for j in 0..n {
-                    c[i * n + j] -= a_im * b[m * n + j];
-                }
-            }
-        }
-    }
+const fn blk_range(r: usize, blk_sz: usize) -> Range<usize> {
+    (r * blk_sz)..((r + 1) * blk_sz)
+}
+
+/// Returns the flat slice range for shell `r` in a `(nz, nvar)` vector buffer.
+#[inline]
+const fn vec_range(r: usize, nvar: usize) -> Range<usize> {
+    (r * nvar)..((r + 1) * nvar)
 }
 
 /// Negated block product $C \leftarrow -A B$ for $n \times n$ row-major blocks.
@@ -57,25 +60,15 @@ fn neg_block_mm(n: usize, a: &[f64], b: &[f64], c: &mut [f64]) {
     sub_block_mm(n, a, b, c);
 }
 
-/// Subtract a block-vector product $y \leftarrow y - A x$ for an $n \times n$
-/// block `a` and length-$n$ vectors `x`, `y`.
-#[inline]
-fn sub_block_mv(n: usize, a: &[f64], x: &[f64], y: &mut [f64]) {
-    for i in 0..n {
-        let mut s = 0.0;
-        for j in 0..n {
-            s += a[i * n + j] * x[j];
-        }
-        y[i] -= s;
-    }
-}
-
-/// Normalizes a single odd block row $(L_j, D_j, U_j, b_j)$ in place by
-/// factoring $D_j$ and solving $D_j \tilde{L}_j = L_j$, $D_j \tilde{U}_j =
-/// U_j$, and $D_j \tilde{b}_j = b_j$.
+/// Normalizes a single odd block row $j = (2m + 1)p$ in place by factoring
+/// $D_j$ and solving $D_j \tilde{L}_j = L_j$, $D_j \tilde{U}_j = U_j$, and
+/// $D_j \tilde{b}_j = b_j$.
+///
+/// Because $j = (2m + 1)p \ge p$ for all $m \ge 0$, every odd row has a valid
+/// left neighbor $j - p = 2m p \ge 0$.
 fn normalize_odd_row(
     nvar: usize,
-    has_left: bool,
+    row_idx: usize,
     has_right: bool,
     l_j: &mut [f64],
     d_j: &mut [f64],
@@ -83,12 +76,11 @@ fn normalize_odd_row(
     b_j: &mut [f64],
     ipiv: &mut [usize],
 ) -> Result<(), MtxError> {
-    dgetrf(nvar, d_j, ipiv)?;
-    if has_left {
-        dgetrs_multi(nvar, nvar, d_j, ipiv, l_j)?;
-    } else {
-        l_j.fill(0.0);
-    }
+    dgetrf(nvar, d_j, ipiv).map_err(|e| match e {
+        MtxError::SingularMatrix(_) => MtxError::SingularMatrix(row_idx),
+        other => other,
+    })?;
+    dgetrs_multi(nvar, nvar, d_j, ipiv, l_j)?;
     if has_right {
         dgetrs_multi(nvar, nvar, d_j, ipiv, u_j)?;
     } else {
@@ -97,8 +89,10 @@ fn normalize_odd_row(
     dgetrs(nvar, d_j, ipiv, b_j)
 }
 
-/// Computes the Schur complement update for even row $k$ from normalized
-/// neighbors $k - p$ and $k + p$.
+/// Computes the Schur complement update for even row $k = 2m p$ from normalized
+/// odd neighbors $k - p$ and $k + p$, updating `d_k` in place and writing the
+/// updated off-diagonal blocks and right-hand side into `(l_next, u_next,
+/// b_next)`.
 #[allow(clippy::too_many_arguments)]
 fn update_even_row(
     nvar: usize,
@@ -106,30 +100,25 @@ fn update_even_row(
     stride: usize,
     nz: usize,
     l_cur: &[f64],
-    d_cur: &[f64],
     u_cur: &[f64],
     b_cur: &[f64],
+    d_k: &mut [f64],
     l_next: &mut [f64],
-    d_next: &mut [f64],
     u_next: &mut [f64],
     b_next: &mut [f64],
 ) {
     let blk_sz = nvar * nvar;
-    let l_k = &l_cur[k * blk_sz..(k + 1) * blk_sz];
-    let d_k = &d_cur[k * blk_sz..(k + 1) * blk_sz];
-    let u_k = &u_cur[k * blk_sz..(k + 1) * blk_sz];
-    let b_k = &b_cur[k * nvar..(k + 1) * nvar];
-
-    d_next.copy_from_slice(d_k);
-    b_next.copy_from_slice(b_k);
+    let l_k = &l_cur[blk_range(k, blk_sz)];
+    let u_k = &u_cur[blk_range(k, blk_sz)];
+    b_next.copy_from_slice(&b_cur[vec_range(k, nvar)]);
 
     if k >= stride {
         let jm = k - stride;
-        let l_jm = &l_cur[jm * blk_sz..(jm + 1) * blk_sz];
-        let u_jm = &u_cur[jm * blk_sz..(jm + 1) * blk_sz];
-        let b_jm = &b_cur[jm * nvar..(jm + 1) * nvar];
-        sub_block_mm(nvar, l_k, u_jm, d_next);
-        sub_block_mv(nvar, l_k, b_jm, b_next);
+        let l_jm = &l_cur[blk_range(jm, blk_sz)];
+        let u_jm = &u_cur[blk_range(jm, blk_sz)];
+        let b_jm = &b_cur[vec_range(jm, nvar)];
+        sub_block_mm(nvar, l_k, u_jm, d_k);
+        accum_block_mv(l_k, b_jm, -1.0, b_next);
         if jm >= stride {
             neg_block_mm(nvar, l_k, l_jm, l_next);
         } else {
@@ -141,11 +130,11 @@ fn update_even_row(
 
     if k + stride < nz {
         let jp = k + stride;
-        let l_jp = &l_cur[jp * blk_sz..(jp + 1) * blk_sz];
-        let u_jp = &u_cur[jp * blk_sz..(jp + 1) * blk_sz];
-        let b_jp = &b_cur[jp * nvar..(jp + 1) * nvar];
-        sub_block_mm(nvar, u_k, l_jp, d_next);
-        sub_block_mv(nvar, u_k, b_jp, b_next);
+        let l_jp = &l_cur[blk_range(jp, blk_sz)];
+        let u_jp = &u_cur[blk_range(jp, blk_sz)];
+        let b_jp = &b_cur[vec_range(jp, nvar)];
+        sub_block_mm(nvar, u_k, l_jp, d_k);
+        accum_block_mv(u_k, b_jp, -1.0, b_next);
         if jp + stride < nz {
             neg_block_mm(nvar, u_k, u_jp, u_next);
         } else {
@@ -160,8 +149,8 @@ fn update_even_row(
 /// odd-even block cyclic reduction (`bcyclic`).
 ///
 /// When `parallel` is `true`, odd-row block factorizations and even-row Schur
-/// updates at each reduction level execute in parallel across the active
-/// `rayon` thread pool.
+/// updates at each reduction level with at least `16` active rows execute in
+/// parallel across the enclosing `rayon` thread pool.
 ///
 /// # Arguments
 /// * `nvar` - Number of variables per shell ($N_{\mathrm{var}} \ge 1$).
@@ -176,7 +165,8 @@ fn update_even_row(
 /// # Errors
 ///
 /// Returns [`MtxError::DimensionMismatch`], [`MtxError::NonFiniteInput`], or
-/// [`MtxError::SingularMatrix`] if any diagonal block is singular.
+/// [`MtxError::SingularMatrix`] (carrying the 0-based singular shell index) if
+/// any diagonal block is singular.
 pub fn solve_block_tridiag_bcyclic(
     nvar: usize,
     nz: usize,
@@ -207,7 +197,6 @@ pub fn solve_block_tridiag_bcyclic(
     let mut u_work = ublk.to_vec();
     let mut b_work = rhs.to_vec();
     let mut l_tmp = vec![0.0_f64; nz * blk_sz];
-    let mut d_tmp = vec![0.0_f64; nz * blk_sz];
     let mut u_tmp = vec![0.0_f64; nz * blk_sz];
     let mut b_tmp = vec![0.0_f64; nz * nvar];
     let mut ipiv_work = vec![0usize; nz * nvar];
@@ -221,7 +210,7 @@ pub fn solve_block_tridiag_bcyclic(
         let n_odd = (nz.saturating_sub(stride)).div_ceil(step);
 
         // Step 1: Normalize odd multiples j = (2m + 1) * stride in-place.
-        if parallel && n_odd >= 16 {
+        if parallel && n_odd >= MIN_PARALLEL_ROWS {
             l_work
                 .par_chunks_mut(blk_sz)
                 .zip(d_work.par_chunks_mut(blk_sz))
@@ -235,7 +224,7 @@ pub fn solve_block_tridiag_bcyclic(
                     }
                     normalize_odd_row(
                         nvar,
-                        j >= stride,
+                        j,
                         j + stride < nz,
                         lj,
                         dj,
@@ -243,90 +232,79 @@ pub fn solve_block_tridiag_bcyclic(
                         bj,
                         ipiv,
                     )
-                    .map_err(|e| match e {
-                        MtxError::SingularMatrix(_) => {
-                            MtxError::SingularMatrix(j)
-                        }
-                        other => other,
-                    })
                 })?;
         } else {
             for m in 0..n_odd {
                 let j = (2 * m + 1) * stride;
                 normalize_odd_row(
                     nvar,
-                    j >= stride,
+                    j,
                     j + stride < nz,
-                    &mut l_work[j * blk_sz..(j + 1) * blk_sz],
-                    &mut d_work[j * blk_sz..(j + 1) * blk_sz],
-                    &mut u_work[j * blk_sz..(j + 1) * blk_sz],
-                    &mut b_work[j * nvar..(j + 1) * nvar],
-                    &mut ipiv_work[j * nvar..(j + 1) * nvar],
-                )
-                .map_err(|e| match e {
-                    MtxError::SingularMatrix(_) => MtxError::SingularMatrix(j),
-                    other => other,
-                })?;
+                    &mut l_work[blk_range(j, blk_sz)],
+                    &mut d_work[blk_range(j, blk_sz)],
+                    &mut u_work[blk_range(j, blk_sz)],
+                    &mut b_work[vec_range(j, nvar)],
+                    &mut ipiv_work[vec_range(j, nvar)],
+                )?;
             }
         }
 
         // Step 2: Schur complement update on even multiples k = 2m * stride.
         let n_even = nz.div_ceil(step);
-        if parallel && n_even >= 16 {
-            l_tmp
+        if parallel && n_even >= MIN_PARALLEL_ROWS {
+            d_work
                 .par_chunks_mut(blk_sz)
-                .zip(d_tmp.par_chunks_mut(blk_sz))
+                .zip(l_tmp.par_chunks_mut(blk_sz))
                 .zip(u_tmp.par_chunks_mut(blk_sz))
                 .zip(b_tmp.par_chunks_mut(nvar))
                 .enumerate()
-                .for_each(|(k, (((ln, dn), un), bn))| {
+                .for_each(|(k, (((dk, ln), un), bn))| {
                     if k % step == 0 {
                         update_even_row(
-                            nvar, k, stride, nz, &l_work, &d_work, &u_work,
-                            &b_work, ln, dn, un, bn,
+                            nvar, k, stride, nz, &l_work, &u_work, &b_work, dk,
+                            ln, un, bn,
                         );
                     }
                 });
-            for m in 0..n_even {
-                let k = 2 * m * stride;
-                let bs = k * blk_sz..(k + 1) * blk_sz;
-                let vs = k * nvar..(k + 1) * nvar;
-                l_work[bs.clone()].copy_from_slice(&l_tmp[bs.clone()]);
-                d_work[bs.clone()].copy_from_slice(&d_tmp[bs.clone()]);
-                u_work[bs.clone()].copy_from_slice(&u_tmp[bs]);
-                b_work[vs.clone()].copy_from_slice(&b_tmp[vs]);
-            }
         } else {
             for m in 0..n_even {
                 let k = 2 * m * stride;
-                let bs = k * blk_sz..(k + 1) * blk_sz;
-                let vs = k * nvar..(k + 1) * nvar;
+                let bs = blk_range(k, blk_sz);
+                let vs = vec_range(k, nvar);
                 update_even_row(
                     nvar,
                     k,
                     stride,
                     nz,
                     &l_work,
-                    &d_work,
                     &u_work,
                     &b_work,
+                    &mut d_work[bs.clone()],
                     &mut l_tmp[bs.clone()],
-                    &mut d_tmp[bs.clone()],
-                    &mut u_tmp[bs.clone()],
-                    &mut b_tmp[vs.clone()],
+                    &mut u_tmp[bs],
+                    &mut b_tmp[vs],
                 );
-                l_work[bs.clone()].copy_from_slice(&l_tmp[bs.clone()]);
-                d_work[bs.clone()].copy_from_slice(&d_tmp[bs.clone()]);
-                u_work[bs.clone()].copy_from_slice(&u_tmp[bs]);
-                b_work[vs.clone()].copy_from_slice(&b_tmp[vs]);
             }
+        }
+        for m in 0..n_even {
+            let k = 2 * m * stride;
+            let bs = blk_range(k, blk_sz);
+            let vs = vec_range(k, nvar);
+            l_work[bs.clone()].copy_from_slice(&l_tmp[bs.clone()]);
+            u_work[bs.clone()].copy_from_slice(&u_tmp[bs]);
+            b_work[vs.clone()].copy_from_slice(&b_tmp[vs]);
         }
 
         stride = step;
     }
 
     // Step 3: Solve root shell k = 0.
-    dgetrf(nvar, &mut d_work[0..blk_sz], &mut ipiv_work[0..nvar])?;
+    dgetrf(nvar, &mut d_work[0..blk_sz], &mut ipiv_work[0..nvar]).map_err(
+        |e| match e {
+            MtxError::SingularMatrix(_) => MtxError::SingularMatrix(0),
+            other => other,
+        },
+    )?;
     dgetrs(
         nvar,
         &d_work[0..blk_sz],
@@ -334,27 +312,31 @@ pub fn solve_block_tridiag_bcyclic(
         &mut b_work[0..nvar],
     )?;
 
-    // Step 4: Backward substitution across strides in reverse order.
+    // Step 4: In-place backward substitution across strides in reverse order.
     let mut x = b_work;
     for &p in strides.iter().rev() {
         let step = 2 * p;
         let n_odd = (nz.saturating_sub(p)).div_ceil(step);
         for m in 0..n_odd {
             let j = (2 * m + 1) * p;
-            let vs = j * nvar..(j + 1) * nvar;
-            b_tmp[vs.clone()].copy_from_slice(&x[vs.clone()]);
-            let x_j = &mut b_tmp[vs.clone()];
-            if j >= p {
-                let jm = j - p;
-                let l_j = &l_work[j * blk_sz..(j + 1) * blk_sz];
-                sub_block_mv(nvar, l_j, &x[jm * nvar..(jm + 1) * nvar], x_j);
-            }
+            let jm = j - p;
+            let (left, rest) = x.split_at_mut(j * nvar);
+            let (x_j, right) = rest.split_at_mut(nvar);
+            accum_block_mv(
+                &l_work[blk_range(j, blk_sz)],
+                &left[vec_range(jm, nvar)],
+                -1.0,
+                x_j,
+            );
             if j + p < nz {
-                let jp = j + p;
-                let u_j = &u_work[j * blk_sz..(j + 1) * blk_sz];
-                sub_block_mv(nvar, u_j, &x[jp * nvar..(jp + 1) * nvar], x_j);
+                let right_off = (p - 1) * nvar;
+                accum_block_mv(
+                    &u_work[blk_range(j, blk_sz)],
+                    &right[right_off..right_off + nvar],
+                    -1.0,
+                    x_j,
+                );
             }
-            x[vs].copy_from_slice(x_j);
         }
     }
 

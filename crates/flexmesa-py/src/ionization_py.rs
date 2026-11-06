@@ -21,9 +21,9 @@
 
 use flexmesa_autodiff::DualOrder1;
 use flexmesa_ionization::{
-    Fe56He4Table, ION_RESULT_NAMES, IONIZATION_POTENTIALS, IonTableGrid,
-    NUM_ION_VALS, NUM_ION_XS, NUM_ION_ZS, PARALLEL_ZONE_THRESHOLD,
     chi_effective, chi_info, eval_ionization, eval_typical_charge,
+    Fe56He4Table, IonTableGrid, IONIZATION_POTENTIALS, ION_RESULT_NAMES,
+    NUM_ION_VALS, NUM_ION_XS, NUM_ION_ZS, PARALLEL_ZONE_THRESHOLD,
 };
 use numpy::{
     PyArray1, PyArray2, PyArrayMethods, PyReadonlyArray1, PyUntypedArrayMethods,
@@ -261,12 +261,8 @@ fn py_ion_eval_ionization_zones<'py>(
         ));
     }
     let grid = IonTableGrid::builtin();
-    let (zv, xv, lrhov, ltv) = (
-        z_s.to_vec(),
-        x_s.to_vec(),
-        lrho_s.to_vec(),
-        lt_s.to_vec(),
-    );
+    let (zv, xv, lrhov, ltv) =
+        (z_s.to_vec(), x_s.to_vec(), lrho_s.to_vec(), lt_s.to_vec());
     eval_batch_2d::<28, _>(py, n, parallel, PARALLEL_ZONE_THRESHOLD, move |k| {
         grid.eval_generic(zv[k], xv[k], lrhov[k], ltv[k])
     })

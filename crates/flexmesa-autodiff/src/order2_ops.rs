@@ -87,7 +87,10 @@ impl Add<f64> for AutoDiffReal2VarOrder2 {
     type Output = Self;
     #[inline]
     fn add(self, rhs: f64) -> Self::Output {
-        Self { val: self.val + rhs, ..self }
+        Self {
+            val: self.val + rhs,
+            ..self
+        }
     }
 }
 
@@ -122,7 +125,10 @@ impl Sub<f64> for AutoDiffReal2VarOrder2 {
     type Output = Self;
     #[inline]
     fn sub(self, rhs: f64) -> Self::Output {
-        Self { val: self.val - rhs, ..self }
+        Self {
+            val: self.val - rhs,
+            ..self
+        }
     }
 }
 

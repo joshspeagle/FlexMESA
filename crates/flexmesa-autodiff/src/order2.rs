@@ -82,7 +82,14 @@ impl AutoDiffReal2VarOrder2 {
         d1val1_d1val2: f64,
         d2val2: f64,
     ) -> Self {
-        Self { val, d1val1, d1val2, d2val1, d1val1_d1val2, d2val2 }
+        Self {
+            val,
+            d1val1,
+            d1val2,
+            d2val1,
+            d1val1_d1val2,
+            d2val2,
+        }
     }
 
     /// Construct a constant hyperdual number with all derivatives set to zero.

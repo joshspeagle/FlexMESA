@@ -173,10 +173,7 @@ fn interp_values_and_slopes<'py>(
     let (vals, slopes) =
         flexmesa_interp1d::interp_values_and_slopes(xs, coeffs, xq)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    Ok((
-        PyArray1::from_vec(py, vals),
-        PyArray1::from_vec(py, slopes),
-    ))
+    Ok((PyArray1::from_vec(py, vals), PyArray1::from_vec(py, slopes)))
 }
 
 /// Evaluates consecutive sub-interval definite integrals of a 1D cubic spline

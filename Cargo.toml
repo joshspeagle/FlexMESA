@@ -17,6 +17,7 @@ members = [
   "crates/flexmesa-chem",
   "crates/flexmesa-ionization",
   "crates/flexmesa-colors",
+  "crates/flexmesa-eos",
   "crates/flexmesa-bench",
   "crates/flexmesa-py",
 ]

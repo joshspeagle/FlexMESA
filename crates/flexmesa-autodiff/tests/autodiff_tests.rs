@@ -224,7 +224,14 @@ fn test_auto_diff_2var_order2_hessian_and_differentiate_match_exact_calculus() {
         xv * xv * exy + xv.powi(3) * (1.0 + cy * cy) / (sy * sy * sy);
 
     assert_allclose(
-        &[f.val, f.d1val1, f.d1val2, f.d2val1, f.d1val1_d1val2, f.d2val2],
+        &[
+            f.val,
+            f.d1val1,
+            f.d1val2,
+            f.d2val1,
+            f.d1val1_d1val2,
+            f.d2val2,
+        ],
         &[
             expected_val,
             expected_dx,

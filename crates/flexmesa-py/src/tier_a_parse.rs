@@ -150,9 +150,8 @@ fn parse_fortran_float(token: &str) -> PyResult<f64> {
 fn parse_golden_text<'py>(
     py: Python<'py>,
     text: &str,
-) -> PyResult<
-    Vec<(usize, String, String, Vec<i64>, Bound<'py, PyArray1<f64>>)>,
-> {
+) -> PyResult<Vec<(usize, String, String, Vec<i64>, Bound<'py, PyArray1<f64>>)>>
+{
     let records = flexmesa_testing::parse_golden_text(text)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
     Ok(records

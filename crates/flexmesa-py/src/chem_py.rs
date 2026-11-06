@@ -23,14 +23,14 @@
 use std::sync::OnceLock;
 
 use flexmesa_chem::{
-    AG89_TABLE, NuclideCatalog, PARALLEL_ZONE_THRESHOLD, SolarScale,
-    SpeciesProps, ag89_yesol, ag89_zsol, category_id, category_name,
-    chem_get_element_id, chem_get_solar, chem_m_div_h, chem_xsol,
-    element_long_name, element_main_iso_name, element_name,
-    eval_composition_moments_generic, generate_long_nuclide_names,
-    generate_nuclide_names, get_composition_info, get_partition_fcn_indx,
-    get_stable_mass_frac, lodders03_element_atom_percent, solar_cno_fraction,
-    solar_element_zfrac,
+    ag89_yesol, ag89_zsol, category_id, category_name, chem_get_element_id,
+    chem_get_solar, chem_m_div_h, chem_xsol, element_long_name,
+    element_main_iso_name, element_name, eval_composition_moments_generic,
+    generate_long_nuclide_names, generate_nuclide_names, get_composition_info,
+    get_partition_fcn_indx, get_stable_mass_frac,
+    lodders03_element_atom_percent, solar_cno_fraction, solar_element_zfrac,
+    NuclideCatalog, SolarScale, SpeciesProps, AG89_TABLE,
+    PARALLEL_ZONE_THRESHOLD,
 };
 use numpy::{PyArray2, PyReadonlyArray2, PyUntypedArrayMethods};
 use pyo3::exceptions::PyValueError;
@@ -300,10 +300,16 @@ fn py_chem_get_composition_info_zones<'py>(
         .as_slice()
         .map_err(|_| PyValueError::new_err("x_zones must be C-contiguous"))?
         .to_vec();
-    eval_batch_2d::<10, _>(py, nz, parallel, PARALLEL_ZONE_THRESHOLD, move |k| {
-        let row = &xs[k * n_species..(k + 1) * n_species];
-        eval_composition_moments_generic::<f64>(&props, row).to_array()
-    })
+    eval_batch_2d::<10, _>(
+        py,
+        nz,
+        parallel,
+        PARALLEL_ZONE_THRESHOLD,
+        move |k| {
+            let row = &xs[k * n_species..(k + 1) * n_species];
+            eval_composition_moments_generic::<f64>(&props, row).to_array()
+        },
+    )
 }
 
 /// Register all Wave 2a `chem` functions on the `flexmesa._rust` module.

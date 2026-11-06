@@ -222,6 +222,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "flexmesa-eos"
+version = "0.1.0"
+dependencies = [
+ "flexmesa-autodiff",
+ "flexmesa-chem",
+ "flexmesa-const",
+ "flexmesa-interp1d",
+ "flexmesa-interp2d",
+ "flexmesa-math",
+ "rayon",
+]
+
+[[package]]
 name = "flexmesa-interp1d"
 version = "0.1.0"
 dependencies = [
@@ -304,6 +317,7 @@ dependencies = [
  "flexmesa-colors",
  "flexmesa-const",
  "flexmesa-data",
+ "flexmesa-eos",
  "flexmesa-interp1d",
  "flexmesa-interp2d",
  "flexmesa-ionization",

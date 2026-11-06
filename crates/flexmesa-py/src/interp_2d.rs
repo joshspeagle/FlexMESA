@@ -18,9 +18,7 @@
 
 use flexmesa_bench::bicub_fast::eval_bicub_prevalidated;
 use flexmesa_interp2d::BicubicBc;
-use numpy::{
-    PyArray1, PyArray2, PyArray3, PyArrayMethods, PyReadonlyArray1,
-};
+use numpy::{PyArray1, PyArray2, PyArray3, PyArrayMethods, PyReadonlyArray1};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
@@ -88,8 +86,8 @@ fn interp_mkbicub_db<'py>(
     )
     .map_err(|e| PyValueError::new_err(e.to_string()))?;
     let (nx, ny) = (xs.len(), ys.len());
-    let arr = PyArray1::from_slice(py, coeffs.as_flattened())
-        .reshape([nx, ny, 4])?;
+    let arr =
+        PyArray1::from_slice(py, coeffs.as_flattened()).reshape([nx, ny, 4])?;
     Ok((arr, ilinx, iliny))
 }
 
@@ -122,7 +120,14 @@ fn interp_evbicub_db(
         xget, yget, xs, ys, ilinx, iliny, coeffs,
     )
     .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    Ok([ev.f, ev.df_dx, ev.df_dy, ev.d2f_dx2, ev.d2f_dy2, ev.d2f_dxdy])
+    Ok([
+        ev.f,
+        ev.df_dx,
+        ev.df_dy,
+        ev.d2f_dx2,
+        ev.d2f_dy2,
+        ev.d2f_dxdy,
+    ])
 }
 
 /// Evaluates a 2D bicubic spline over 1D query arrays `x_q, y_q` of shape

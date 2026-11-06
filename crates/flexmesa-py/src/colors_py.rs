@@ -48,9 +48,17 @@ type PyFilterCurve<'py> = (PyArr1<'py>, PyArr1<'py>, f64, f64, f64);
 
 /// Return tuple type for [`py_colors_builtin_grid`].
 type PyBuiltinGrid<'py> = (
-    PyArr1<'py>, PyArr1<'py>, PyArr1<'py>, PyArr1<'py>,
-    Bound<'py, PyArray1<i64>>, PyArr2<'py>, PyArr2<'py>,
-    PyArr1<'py>, PyArr1<'py>, PyArr1<'py>, PyArr1<'py>,
+    PyArr1<'py>,
+    PyArr1<'py>,
+    PyArr1<'py>,
+    PyArr1<'py>,
+    Bound<'py, PyArray1<i64>>,
+    PyArr2<'py>,
+    PyArr2<'py>,
+    PyArr1<'py>,
+    PyArr1<'py>,
+    PyArr1<'py>,
+    PyArr1<'py>,
 );
 
 /// Converts a `flexmesa-colors` error into a Python `ValueError`.
@@ -104,14 +112,10 @@ fn py_colors_builtin_grid(py: Python<'_>) -> PyResult<PyBuiltinGrid<'_>> {
     let nlam = cube.wavelengths.len();
     let n_slots = cube.sed_table.len() / nlam;
     let slot_i64: Vec<i64> = cube.slot_map.iter().map(|&s| s as i64).collect();
-    let sed_arr = PyArray1::from_slice(py, &cube.sed_table)
-        .reshape([n_slots, nlam])?;
-    let filt_flat: Vec<f64> = cube
-        .filters_on_sed_grid
-        .iter()
-        .flatten()
-        .copied()
-        .collect();
+    let sed_arr =
+        PyArray1::from_slice(py, &cube.sed_table).reshape([n_slots, nlam])?;
+    let filt_flat: Vec<f64> =
+        cube.filters_on_sed_grid.iter().flatten().copied().collect();
     let filt_arr = PyArray1::from_vec(py, filt_flat)
         .reshape([NUM_JOHNSON_FILTERS, nlam])?;
     let vega_zp: Vec<f64> =
@@ -283,7 +287,8 @@ fn py_colors_eval_colors_zones<'py>(
 /// `simpson_integration(x, y)`.
 #[pyfunction]
 fn py_colors_simpson_integration(
-    x: PyRoArr1<'_>, y: PyRoArr1<'_>,
+    x: PyRoArr1<'_>,
+    y: PyRoArr1<'_>,
 ) -> PyResult<f64> {
     simpson_integration(x.as_slice()?, y.as_slice()?).map_err(py_err)
 }
@@ -291,7 +296,8 @@ fn py_colors_simpson_integration(
 /// Evaluates composite trapezoidal quadrature `trapezoidal_integration(x, y)`.
 #[pyfunction]
 fn py_colors_trapezoidal_integration(
-    x: PyRoArr1<'_>, y: PyRoArr1<'_>,
+    x: PyRoArr1<'_>,
+    y: PyRoArr1<'_>,
 ) -> PyResult<f64> {
     trapezoidal_integration(x.as_slice()?, y.as_slice()?).map_err(py_err)
 }
@@ -299,7 +305,10 @@ fn py_colors_trapezoidal_integration(
 /// Applies geometric flux dilution `surface_flux * (r / d)^2`.
 #[pyfunction]
 fn py_colors_dilute_flux<'py>(
-    py: Python<'py>, surface_flux: PyRoArr1<'py>, r: f64, d: f64,
+    py: Python<'py>,
+    surface_flux: PyRoArr1<'py>,
+    r: f64,
+    d: f64,
 ) -> PyResult<PyArr1<'py>> {
     let out = dilute_flux(surface_flux.as_slice()?, r, d);
     Ok(PyArray1::from_vec(py, out))
@@ -309,19 +318,25 @@ fn py_colors_dilute_flux<'py>(
 /// interpolation with flat clamping outside `[x_in[0], x_in[-1]]`.
 #[pyfunction]
 fn py_colors_interpolate_array<'py>(
-    py: Python<'py>, x_in: PyRoArr1<'py>, y_in: PyRoArr1<'py>,
+    py: Python<'py>,
+    x_in: PyRoArr1<'py>,
+    y_in: PyRoArr1<'py>,
     x_out: PyRoArr1<'py>,
 ) -> PyResult<PyArr1<'py>> {
-    let out =
-        interpolate_array(x_in.as_slice()?, y_in.as_slice()?, x_out.as_slice()?)
-            .map_err(py_err)?;
+    let out = interpolate_array(
+        x_in.as_slice()?,
+        y_in.as_slice()?,
+        x_out.as_slice()?,
+    )
+    .map_err(py_err)?;
     Ok(PyArray1::from_vec(py, out))
 }
 
 /// Computes `(bol_mag, bol_flux)` from `(wavelengths, fluxes)`.
 #[pyfunction]
 fn py_colors_calculate_bolometric_phot(
-    wavelengths: PyRoArr1<'_>, fluxes: PyRoArr1<'_>,
+    wavelengths: PyRoArr1<'_>,
+    fluxes: PyRoArr1<'_>,
 ) -> PyResult<(f64, f64)> {
     calculate_bolometric_phot(wavelengths.as_slice()?, fluxes.as_slice()?)
         .map_err(py_err)
@@ -331,13 +346,17 @@ fn py_colors_calculate_bolometric_phot(
 /// filter transmission curve.
 #[pyfunction]
 fn py_colors_calculate_synthetic(
-    wavelengths: PyRoArr1<'_>, fluxes: PyRoArr1<'_>,
-    filter_wavelengths: PyRoArr1<'_>, filter_trans: PyRoArr1<'_>,
+    wavelengths: PyRoArr1<'_>,
+    fluxes: PyRoArr1<'_>,
+    filter_wavelengths: PyRoArr1<'_>,
+    filter_trans: PyRoArr1<'_>,
     zero_point_flux: f64,
 ) -> PyResult<f64> {
     let res = calculate_synthetic(
-        wavelengths.as_slice()?, fluxes.as_slice()?,
-        filter_wavelengths.as_slice()?, filter_trans.as_slice()?,
+        wavelengths.as_slice()?,
+        fluxes.as_slice()?,
+        filter_wavelengths.as_slice()?,
+        filter_trans.as_slice()?,
         zero_point_flux,
     );
     res.map_err(py_err)
@@ -346,12 +365,16 @@ fn py_colors_calculate_synthetic(
 /// Computes the Vega photon-counting zero-point flux for a filter curve.
 #[pyfunction]
 fn py_colors_compute_vega_zero_point(
-    vega_wave: PyRoArr1<'_>, vega_flux: PyRoArr1<'_>,
-    filt_wave: PyRoArr1<'_>, filt_trans: PyRoArr1<'_>,
+    vega_wave: PyRoArr1<'_>,
+    vega_flux: PyRoArr1<'_>,
+    filt_wave: PyRoArr1<'_>,
+    filt_trans: PyRoArr1<'_>,
 ) -> PyResult<f64> {
     let res = compute_vega_zero_point(
-        vega_wave.as_slice()?, vega_flux.as_slice()?,
-        filt_wave.as_slice()?, filt_trans.as_slice()?,
+        vega_wave.as_slice()?,
+        vega_flux.as_slice()?,
+        filt_wave.as_slice()?,
+        filt_trans.as_slice()?,
     );
     res.map_err(py_err)
 }
@@ -359,7 +382,8 @@ fn py_colors_compute_vega_zero_point(
 /// Computes the AB photon-counting zero-point flux ($f_\nu = 3631\,$Jy).
 #[pyfunction]
 fn py_colors_compute_ab_zero_point(
-    filt_wave: PyRoArr1<'_>, filt_trans: PyRoArr1<'_>,
+    filt_wave: PyRoArr1<'_>,
+    filt_trans: PyRoArr1<'_>,
 ) -> PyResult<f64> {
     compute_ab_zero_point(filt_wave.as_slice()?, filt_trans.as_slice()?)
         .map_err(py_err)
@@ -369,7 +393,8 @@ fn py_colors_compute_ab_zero_point(
 /// 10^{-9}\,\mathrm{erg\,s^{-1}\,cm^{-2}\,\AA^{-1}}$).
 #[pyfunction]
 fn py_colors_compute_st_zero_point(
-    filt_wave: PyRoArr1<'_>, filt_trans: PyRoArr1<'_>,
+    filt_wave: PyRoArr1<'_>,
+    filt_trans: PyRoArr1<'_>,
 ) -> PyResult<f64> {
     compute_st_zero_point(filt_wave.as_slice()?, filt_trans.as_slice()?)
         .map_err(py_err)

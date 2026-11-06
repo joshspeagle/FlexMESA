@@ -38,6 +38,9 @@ pub mod chem_py;
 /// photometry).
 #[allow(unsafe_code)]
 pub mod colors_py;
+/// Tier B bindings for `eos` (Wave 3a analytical and single-table EOS core).
+#[allow(unsafe_code)]
+pub mod eos_py;
 /// Tier B bindings for 1D piecewise-monotonic and MP cubic interpolation.
 #[allow(unsafe_code)]
 pub mod interp_1d;
@@ -236,5 +239,6 @@ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     chem_py::register(m)?;
     colors_py::register(m)?;
     ionization_py::register(m)?;
+    eos_py::register(m)?;
     Ok(())
 }

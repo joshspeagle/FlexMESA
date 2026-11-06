@@ -79,7 +79,10 @@ impl<const N: usize> Add<f64> for DualOrder1<N> {
     type Output = Self;
     #[inline]
     fn add(self, rhs: f64) -> Self::Output {
-        Self { val: self.val + rhs, d1: self.d1 }
+        Self {
+            val: self.val + rhs,
+            d1: self.d1,
+        }
     }
 }
 
@@ -106,7 +109,10 @@ impl<const N: usize> Sub<f64> for DualOrder1<N> {
     type Output = Self;
     #[inline]
     fn sub(self, rhs: f64) -> Self::Output {
-        Self { val: self.val - rhs, d1: self.d1 }
+        Self {
+            val: self.val - rhs,
+            d1: self.d1,
+        }
     }
 }
 

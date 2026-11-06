@@ -86,6 +86,7 @@ nav:
       - Wave 1 Foundation & Microphysics Specification: design/wave-1-spec.md
       - Wave 1.5 Hybrid Consolidation Specification: design/wave-1-5-spec.md
       - Wave 2 Atomic & Photometric Specification: design/wave-2-spec.md
+      - Wave 3a Analytical & Single-Table EOS Specification: design/wave-3a-spec.md
   - Module Physics & Numerics:
       - Wave 0 Schemas, Data & Golden Oracles: modules/wave-0-foundation.md
       - Wave 1 Dual Algebra, Splines & Solvers: modules/wave-1-numerics.md

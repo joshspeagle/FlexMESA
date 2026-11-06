@@ -68,9 +68,8 @@ fn set_mlt_f64(
     grada: f64,
     gradl: f64,
 ) -> PyResult<([f64; 5], i32)> {
-    let opt: MltOption = option
-        .parse()
-        .map_err(|e: flexmesa_turb::TurbError| {
+    let opt: MltOption =
+        option.parse().map_err(|e: flexmesa_turb::TurbError| {
             PyValueError::new_err(e.to_string())
         })?;
     let params = MltParams {
@@ -129,7 +128,12 @@ fn eval_mlt_zone(s_frac: f64) -> [f64; 4] {
         gradl: DualOrder1::independent(0.40, 2),
     };
     set_mlt(&params, &inp).map_or([f64::NAN; 4], |out| {
-        [out.grad_t.val, out.d.val, out.conv_vel.val, out.grad_t.d1[0]]
+        [
+            out.grad_t.val,
+            out.d.val,
+            out.conv_vel.val,
+            out.grad_t.d1[0],
+        ]
     })
 }
 

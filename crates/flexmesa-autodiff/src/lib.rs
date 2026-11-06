@@ -22,13 +22,17 @@
 #![forbid(unsafe_code)]
 
 pub mod kernels;
+pub mod kernels3;
 pub mod order1;
 mod order1_ops;
 pub mod order2;
 mod order2_ops;
+pub mod order3;
+mod order3_ops;
 
 pub use order1::DualOrder1;
 pub use order2::AutoDiffReal2VarOrder2;
+pub use order3::AutoDiffReal2VarOrder3;
 
 /// Number of independent stellar structure variables in
 /// [`AutoDiffRealStarOrder1`].

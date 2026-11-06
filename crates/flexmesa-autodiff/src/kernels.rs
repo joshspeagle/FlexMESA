@@ -9,9 +9,9 @@
 
 use flexmesa_const::{ILN10, LN10, LN2, PI, PI2};
 use flexmesa_math::{
-    SAFE_LOG_FLOOR, acos, acosh, asin, asinh, atan, atanh, cos, cosh, cospi,
-    exp, exp10, log, log10, log1p, log2, pow, pow2, pow3, pow4, pow5, pow6,
-    powm1, safe_log, safe_log10, sgn, sin, sinh, sinpi, tan, tanh, tanpi,
+    acos, acosh, asin, asinh, atan, atanh, cos, cosh, cospi, exp, exp10, log,
+    log10, log1p, log2, pow, pow2, pow3, pow4, pow5, pow6, powm1, safe_log,
+    safe_log10, sgn, sin, sinh, sinpi, tan, tanh, tanpi, SAFE_LOG_FLOOR,
 };
 
 /// Return `(f(x), f'(x), f''(x))` for $\operatorname{sign}(x)$ with zero
@@ -367,7 +367,11 @@ pub fn unary_pown(x: f64, n: u32) -> (f64, f64, f64) {
 #[must_use]
 #[inline]
 pub fn unary_pow_scalar(x: f64, p: f64) -> (f64, f64, f64) {
-    (pow(x, p), p * pow(x, p - 1.0), p * (p - 1.0) * pow(x, p - 2.0))
+    (
+        pow(x, p),
+        p * pow(x, p - 1.0),
+        p * (p - 1.0) * pow(x, p - 2.0),
+    )
 }
 
 /// Return `(f(x), f'(x), f''(x))` for $b^{x}$ with constant base $b > 0$.

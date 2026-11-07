@@ -230,9 +230,7 @@ where
             r = e;
             e = d;
         }
-        if p.abs() < (0.5 * q * r).abs()
-            && p > q * (sa - x)
-            && p < q * (sb - x)
+        if p.abs() < (0.5 * q * r).abs() && p > q * (sa - x) && p < q * (sb - x)
         {
             d = p / q;
             let u = x + d;

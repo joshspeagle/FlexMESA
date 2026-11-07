@@ -40,8 +40,8 @@ pub use block_io::{
     BlockTridiagData,
 };
 pub use block_tridiag::{
-    block_dble_mv, block_multiply_xa, block_thomas_factor,
-    block_thomas_solve, clip_block, clip_blocks, lu_factored_block_dble_mv,
+    block_dble_mv, block_multiply_xa, block_thomas_factor, block_thomas_solve,
+    clip_block, clip_blocks, lu_factored_block_dble_mv,
     solve_block_tridiagonal,
 };
 pub use dense::{
@@ -55,10 +55,10 @@ pub use dense_ops::{
 pub use sparse::{
     col_sparse_0_based_to_dense, column_sparse_to_dense, dense_to_col_0_based,
     dense_to_col_sparse, dense_to_col_sparse_with_diag,
-    dense_to_col_with_diag_0_based, dense_to_row_0_based,
-    dense_to_row_sparse, dense_to_row_sparse_with_diag,
-    dense_to_row_with_diag_0_based, dense_to_sparse_with_diag,
-    row_sparse_0_based_to_dense, row_sparse_to_dense,
+    dense_to_col_with_diag_0_based, dense_to_row_0_based, dense_to_row_sparse,
+    dense_to_row_sparse_with_diag, dense_to_row_with_diag_0_based,
+    dense_to_sparse_with_diag, row_sparse_0_based_to_dense,
+    row_sparse_to_dense,
 };
 pub use sparse_band::{
     band_to_col_sparse_with_diag, band_to_column_sparse, band_to_row_sparse,

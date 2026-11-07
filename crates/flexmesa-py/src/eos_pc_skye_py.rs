@@ -3,9 +3,10 @@
 //! state and domain blend weights).
 
 use flexmesa_eos::{
-    eval_pc_eos, eval_pc_eos_from_weights, eval_skye_eos, get_pc_alfa,
-    get_skye_alfa, get_skye_alfa_simple, HelmTable, PcConfig, SkyeConfig,
-    SkyeSolidMixingRule, NUM_EOS_BASIC_RESULTS,
+    eval_pc_eos, eval_pc_eos_from_weights, eval_skye_eos,
+    eval_skye_eos_from_weights, get_pc_alfa, get_skye_alfa,
+    get_skye_alfa_simple, HelmTable, PcConfig, SkyeConfig, SkyeSolidMixingRule,
+    NUM_EOS_BASIC_RESULTS,
 };
 use numpy::{PyArray2, PyReadonlyArray1};
 use pyo3::exceptions::PyValueError;
@@ -272,6 +273,103 @@ pub fn eos_eval_skye<'py>(
     Ok(into_py_eos_tuple(py, &out))
 }
 
+/// Evaluates `Skye` across `nz` zones at `(rho, temp, abar, zbar, xa_flat, z,
+/// acmi, a)`, returning an `(nz, 78)` array packing
+/// `[res[0..26], d_dlnd[0..26], d_dln_t[0..26]]`.
+#[pyfunction]
+#[pyo3(signature = (
+    rho,
+    temp,
+    abar,
+    zbar,
+    xa_flat,
+    z,
+    acmi,
+    a,
+    skye_use_ion_offsets=true,
+    skye_solid_mixing_rule="PC",
+    mass_fraction_limit=1.0e-4,
+    parallel=true
+))]
+#[allow(clippy::too_many_arguments)]
+pub fn eos_eval_skye_zones<'py>(
+    py: Python<'py>,
+    rho: PyReadonlyArray1<'py, f64>,
+    temp: PyReadonlyArray1<'py, f64>,
+    abar: PyReadonlyArray1<'py, f64>,
+    zbar: PyReadonlyArray1<'py, f64>,
+    xa_flat: PyReadonlyArray1<'py, f64>,
+    z: Vec<usize>,
+    acmi: PyReadonlyArray1<'py, f64>,
+    a: PyReadonlyArray1<'py, f64>,
+    skye_use_ion_offsets: bool,
+    skye_solid_mixing_rule: &str,
+    mass_fraction_limit: f64,
+    parallel: bool,
+) -> PyResult<Bound<'py, PyArray2<f64>>> {
+    let r_s = rho
+        .as_slice()
+        .map_err(|_| PyValueError::new_err("rho must be contiguous"))?
+        .to_vec();
+    let t_s = temp
+        .as_slice()
+        .map_err(|_| PyValueError::new_err("temp must be contiguous"))?
+        .to_vec();
+    let ab_s = abar
+        .as_slice()
+        .map_err(|_| PyValueError::new_err("abar must be contiguous"))?
+        .to_vec();
+    let zb_s = zbar
+        .as_slice()
+        .map_err(|_| PyValueError::new_err("zbar must be contiguous"))?
+        .to_vec();
+    let xa_s = xa_flat
+        .as_slice()
+        .map_err(|_| PyValueError::new_err("xa_flat must be contiguous"))?
+        .to_vec();
+    let ac_s = acmi
+        .as_slice()
+        .map_err(|_| PyValueError::new_err("acmi must be contiguous"))?
+        .to_vec();
+    let a_s = a
+        .as_slice()
+        .map_err(|_| PyValueError::new_err("a must be contiguous"))?
+        .to_vec();
+    let nz = r_s.len();
+    let sp = z.len();
+    if t_s.len() != nz
+        || ab_s.len() != nz
+        || zb_s.len() != nz
+        || ac_s.len() != sp
+        || a_s.len() != sp
+        || xa_s.len() != nz * sp
+    {
+        return Err(PyValueError::new_err(
+            "zone or species slice length mismatch in eos_eval_skye_zones",
+        ));
+    }
+    let cfg = SkyeConfig {
+        skye_use_ion_offsets,
+        skye_solid_mixing_rule: parse_mixing_rule(skye_solid_mixing_rule)?,
+        mass_fraction_limit_for_skye: mass_fraction_limit,
+        ..SkyeConfig::default()
+    };
+    let ht = HelmTable::builtin();
+    eval_batch_2d::<78, _>(py, nz, parallel, 32, move |k| {
+        let mut row = [f64::NAN; 78];
+        let xa_k = &xa_s[k * sp..(k + 1) * sp];
+        if let Ok(out) = eval_skye_eos_from_weights(
+            &cfg, ht, t_s[k], r_s[k], ab_s[k], zb_s[k], xa_k, &z, &ac_s, &a_s,
+        ) {
+            let n = NUM_EOS_BASIC_RESULTS;
+            row[0..n].copy_from_slice(&out.res);
+            row[n..2 * n].copy_from_slice(&out.d_dlnd);
+            row[2 * n..3 * n].copy_from_slice(&out.d_dln_t);
+        }
+        row
+    })
+}
+
 /// Registers Wave 3a.3 `PC` and `Skye` bindings on the `flexmesa._rust` module.
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(eos_get_pc_alfa, m)?)?;
@@ -280,5 +378,6 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(eos_get_skye_alfa, m)?)?;
     m.add_function(wrap_pyfunction!(eos_get_skye_alfa_simple, m)?)?;
     m.add_function(wrap_pyfunction!(eos_eval_skye, m)?)?;
+    m.add_function(wrap_pyfunction!(eos_eval_skye_zones, m)?)?;
     Ok(())
 }

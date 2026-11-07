@@ -247,8 +247,7 @@ fn eval_strong_coulomb(
         dzz: y_p * ecoul.dzz,
     };
 
-    let u0_s =
-        3.0 * B1 * p1 - 5.0 * C1 * p2 + D1 * (plasg.val.ln() - 1.0) - E1;
+    let u0_s = 3.0 * B1 * p1 - 5.0 * C1 * p2 + D1 * (plasg.val.ln() - 1.0) - E1;
     let du0_s = 0.75 * B1 * p3 + 1.25 * C1 * p4 + D1 * plasginv;
     let ddu0_s =
         -0.5625 * B1 * p5 - 1.5625 * C1 * p6 - D1 * plasginv * plasginv;

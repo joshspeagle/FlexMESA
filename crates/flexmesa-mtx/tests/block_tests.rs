@@ -69,8 +69,7 @@ fn test_block_tridiagonal_25x20_and_hb_roundtrip() {
 
     for k in 0..nz {
         for i in 0..nvar {
-            rhs[k * nvar + i] =
-                1.1 + 0.05 * (k as f64) - 0.04 * (i as f64);
+            rhs[k * nvar + i] = 1.1 + 0.05 * (k as f64) - 0.04 * (i as f64);
             for j in 0..nvar {
                 let idx = k * blk_sz + i * nvar + j;
                 dblk[idx] = if i == j {
@@ -88,8 +87,8 @@ fn test_block_tridiagonal_25x20_and_hb_roundtrip() {
         }
     }
 
-    let x = solve_block_tridiagonal(nvar, nz, &lblk, &dblk, &ublk, &rhs)
-        .unwrap();
+    let x =
+        solve_block_tridiagonal(nvar, nz, &lblk, &dblk, &ublk, &rhs).unwrap();
     let mut prod = vec![0.0; nz * nvar];
     block_dble_mv(nvar, nz, &lblk, &dblk, &ublk, &x, &mut prod).unwrap();
     for idx in 0..(nz * nvar) {
@@ -110,7 +109,14 @@ fn test_block_tridiagonal_25x20_and_hb_roundtrip() {
     }
     let mut prod_lu = vec![0.0; nz * nvar];
     lu_factored_block_dble_mv(
-        nvar, nz, &lblk, &d_lu, &ublk, &ipiv, &x, &mut prod_lu,
+        nvar,
+        nz,
+        &lblk,
+        &d_lu,
+        &ublk,
+        &ipiv,
+        &x,
+        &mut prod_lu,
     )
     .unwrap();
     for idx in 0..(nz * nvar) {

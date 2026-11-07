@@ -12,15 +12,17 @@ import jax
 import jax.numpy as jnp
 
 
-def _excor7_fxc(theta: jax.Array, game: jax.Array) -> jax.Array:
+def _excor7_fxc(
+    theta: jax.Array, game: jax.Array, th_min: float = 0.04
+) -> jax.Array:
     """Evaluate Tanaka & Ichimaru `EXCOR7` free energy $f_{\\mathrm{xc}}$."""
     sqth = jnp.sqrt(theta)
     theta2 = theta * theta
     theta3 = theta2 * theta
     theta4 = theta3 * theta
-    th_safe = jnp.maximum(theta, 0.04)
+    th_safe = jnp.maximum(theta, th_min)
     sq_safe = jnp.sqrt(th_safe)
-    hi = theta > 0.04
+    hi = theta > th_min
     t1 = jnp.where(hi, jnp.tanh(1.0 / th_safe), 1.0)
     t2 = jnp.where(hi, jnp.tanh(1.0 / sq_safe), 1.0)
 

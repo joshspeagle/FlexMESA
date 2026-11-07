@@ -178,7 +178,9 @@ where
             });
         }
     }
-    Err(NumError::ConvergenceFailed("newton_solve exceeded max_iter"))
+    Err(NumError::ConvergenceFailed(
+        "newton_solve exceeded max_iter",
+    ))
 }
 
 /// Solves a nonlinear system $F(y) = 0$ with a dense $(N, N)$ Jacobian

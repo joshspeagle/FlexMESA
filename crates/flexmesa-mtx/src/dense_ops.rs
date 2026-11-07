@@ -101,7 +101,9 @@ pub fn lu_factored_square_mv(
     }
     for (k, &piv) in ipiv.iter().enumerate().rev() {
         if piv >= n {
-            return Err(MtxError::InvalidParameter("pivot index out of bounds"));
+            return Err(MtxError::InvalidParameter(
+                "pivot index out of bounds",
+            ));
         }
         if piv != k {
             out_y.swap(k, piv);
@@ -154,7 +156,9 @@ pub fn lu_factored_square_mm(
     }
     for (k, &piv) in ipiv.iter().enumerate().rev() {
         if piv >= n {
-            return Err(MtxError::InvalidParameter("pivot index out of bounds"));
+            return Err(MtxError::InvalidParameter(
+                "pivot index out of bounds",
+            ));
         }
         if piv != k {
             for j in 0..n {

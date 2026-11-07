@@ -111,16 +111,16 @@ fn do_safe_get_rho_t(
     ntry: usize,
     cfg: &EosConfig,
 ) -> Result<EosInverseOutput, EosError> {
-    let catalog = NuclideCatalog::builtin();
+    let catalog = NuclideCatalog::builtin_ref();
     let comp =
-        get_composition_info(&catalog, chem_id, xa, true).map_err(|e| {
+        get_composition_info(catalog, chem_id, xa, true).map_err(|e| {
             EosError::InvalidState {
                 context: "do_safe_get_rho_t",
                 detail: e.to_string(),
             }
         })?;
     let (z_int, azion, acmi, a_baryon) =
-        extract_species_weights(&catalog, chem_id, "do_safe_get_rho_t")?;
+        extract_species_weights(catalog, chem_id, "do_safe_get_rho_t")?;
 
     let the_other_val = exp10(the_other_log);
     let mut eos_calls = 0usize;
@@ -348,9 +348,9 @@ pub fn eos_pt_get(
     log_t: f64,
     cfg: &EosConfig,
 ) -> Result<EosPtOutput, EosError> {
-    let catalog = NuclideCatalog::builtin();
+    let catalog = NuclideCatalog::builtin_ref();
     let comp =
-        get_composition_info(&catalog, chem_id, xa, true).map_err(|e| {
+        get_composition_info(catalog, chem_id, xa, true).map_err(|e| {
             EosError::InvalidState {
                 context: "eos_pt_get",
                 detail: e.to_string(),
@@ -364,8 +364,17 @@ pub fn eos_pt_get(
     let target_ln_pgas = log_pgas * LN10;
 
     let inv = eos_dt_get_rho(
-        ht, chem_id, xa, log_t, I_LN_PGAS as isize, target_ln_pgas,
-        log_rho_guess, 1.0e-8, 1.0e-8, 20, cfg,
+        ht,
+        chem_id,
+        xa,
+        log_t,
+        I_LN_PGAS as isize,
+        target_ln_pgas,
+        log_rho_guess,
+        1.0e-8,
+        1.0e-8,
+        20,
+        cfg,
     )?;
 
     let log_rho = inv.log10_result;

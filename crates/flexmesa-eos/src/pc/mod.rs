@@ -165,7 +165,14 @@ pub fn eval_pc_eos_from_weights(
         });
     }
     let species = xa.len().min(azion.len()).min(acmi.len());
-    let mut ay = vec![0.0_f64; species];
+    let mut ay_buf = [0.0_f64; 32];
+    let mut ay_vec = Vec::new();
+    let ay: &mut [f64] = if species <= 32 {
+        &mut ay_buf[..species]
+    } else {
+        ay_vec.resize(species, 0.0);
+        &mut ay_vec
+    };
     for j in 0..species {
         if xa[j] >= config.mass_fraction_limit_for_pc {
             ay[j] = xa[j] / acmi[j];
@@ -179,7 +186,7 @@ pub fn eval_pc_eos_from_weights(
     let start_crystal = config.pc_gamma_start_crystal;
     let full_crystal = config.pc_gamma_full_crystal;
 
-    let m = melange9(&ay, azion, acmi, rho, temp, start_crystal, full_crystal)?;
+    let m = melange9(ay, azion, acmi, rho, temp, start_crystal, full_crystal)?;
 
     let phase = if m.gami_mean.val < start_crystal {
         AutoDiffReal2VarOrder1::zero()
@@ -224,7 +231,7 @@ pub fn eval_pc_eos_from_weights(
     let ln_e = safe_log_order1(u_nkt * t * (n * KERG));
     let ln_s = safe_log_order1(s_nk * (n * KERG));
 
-    let mut out = EosEvalOutput::zeros(xa.len());
+    let mut out = EosEvalOutput::zeros(0);
     let channels: [(usize, AutoDiffReal2VarOrder1); 17] = [
         (I_LN_PGAS, ln_pgas),
         (I_LN_E, ln_e),
@@ -277,9 +284,37 @@ pub fn eval_pc_eos(
             detail: "chem_id and xa length mismatch".to_string(),
         });
     }
-    let catalog = NuclideCatalog::builtin();
-    let (_, azion, acmi, _) =
-        crate::blend_dt::extract_species_weights(&catalog, chem_id, "eval_pc_eos")?;
+    let catalog = NuclideCatalog::builtin_ref();
+    let n = chem_id.len();
+    if n <= 32 {
+        let mut az_buf = [0.0_f64; 32];
+        let mut ac_buf = [0.0_f64; 32];
+        for (idx, &cid) in chem_id.iter().enumerate() {
+            let nuc = catalog.get_by_id(cid).ok_or_else(|| {
+                EosError::InvalidState {
+                    context: "eval_pc_eos",
+                    detail: format!("unknown chem_id {cid}"),
+                }
+            })?;
+            az_buf[idx] = nuc.z as f64;
+            ac_buf[idx] = nuc.w;
+        }
+        return eval_pc_eos_from_weights(
+            config,
+            rho,
+            t,
+            abar,
+            zbar,
+            xa,
+            &az_buf[..n],
+            &ac_buf[..n],
+        );
+    }
+    let (_, azion, acmi, _) = crate::blend_dt::extract_species_weights(
+        catalog,
+        chem_id,
+        "eval_pc_eos",
+    )?;
     eval_pc_eos_from_weights(config, rho, t, abar, zbar, xa, &azion, &acmi)
 }
 

@@ -270,7 +270,9 @@ pub fn dgbtrs(
         let lm = kl.min(n - 1 - j);
         let l = ipiv[j];
         if l >= n {
-            return Err(MtxError::InvalidParameter("pivot index out of bounds"));
+            return Err(MtxError::InvalidParameter(
+                "pivot index out of bounds",
+            ));
         }
         if l != j {
             b.swap(l, j);

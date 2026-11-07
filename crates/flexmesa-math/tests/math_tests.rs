@@ -15,11 +15,11 @@
 )]
 
 use flexmesa_math::{
-    SAFE_LOG_BAD_RETURN, acos, acosh, acospi, asin, asinh, asinpi, atan, atanh,
-    atanpi, cos, cosh, cospi, exp, exp10, expm1, heaviside, hypot, log, log10,
-    log1p, log2, pow, pow2, pow3, pow4, pow5, pow6, pow7, pow8, powi, powm1,
-    safe_log, safe_log10, safe_sqrt, sgn, sin, sinh, sinpi, str_to_double,
-    str_to_vector, tan, tanh, tanpi,
+    acos, acosh, acospi, asin, asinh, asinpi, atan, atanh, atanpi, cos, cosh,
+    cospi, exp, exp10, expm1, heaviside, hypot, log, log10, log1p, log2, pow,
+    pow2, pow3, pow4, pow5, pow6, pow7, pow8, powi, powm1, safe_log,
+    safe_log10, safe_sqrt, sgn, sin, sinh, sinpi, str_to_double, str_to_vector,
+    tan, tanh, tanpi, SAFE_LOG_BAD_RETURN,
 };
 use flexmesa_testing::assert_values_match;
 use proptest::prelude::*;
@@ -257,13 +257,21 @@ fn test_math_intrinsic_golden_trig_and_hyperbolic_match_mesa_reference() {
     );
     assert_allclose(
         &eval3(asinpi),
-        &[0.3188428042925993e-1, 0.6409421684897494e-1, 0.1309898804344546],
+        &[
+            0.3188428042925993e-1,
+            0.6409421684897494e-1,
+            0.1309898804344546,
+        ],
         TOL,
         TOL,
     );
     assert_allclose(
         &eval3(atanpi),
-        &[0.3172551743055357e-1, 0.6283295818900120e-1, 0.1211189415908434],
+        &[
+            0.3172551743055357e-1,
+            0.6283295818900120e-1,
+            0.1211189415908434,
+        ],
         TOL,
         TOL,
     );

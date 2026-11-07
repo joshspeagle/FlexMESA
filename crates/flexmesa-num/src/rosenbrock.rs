@@ -359,7 +359,5 @@ where
             h = posneg * (h.abs() * fac.min(0.5));
         }
     }
-    Err(NumError::ConvergenceFailed(
-        "rosenbrock exceeded max_steps",
-    ))
+    Err(NumError::ConvergenceFailed("rosenbrock exceeded max_steps"))
 }

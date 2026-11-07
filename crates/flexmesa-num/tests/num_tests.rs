@@ -154,8 +154,7 @@ fn test_dfridr_and_integrate_match_upstream_simp38_oracles() {
     // Upstream test 5: int_0^{10} exp(x) dx = exp(10) - 1
     let (i5, _) = integrate(f64::exp, 0.0, 10.0, 1e-6, 50_000).unwrap();
     assert!(
-        (i5 - (10.0_f64.exp() - 1.0)).abs()
-            <= 1e-6 * (10.0_f64.exp() - 1.0)
+        (i5 - (10.0_f64.exp() - 1.0)).abs() <= 1e-6 * (10.0_f64.exp() - 1.0)
     );
 }
 
@@ -296,19 +295,13 @@ fn test_nm_simplex_and_park_miller_prng_match_upstream_oracles() {
         f_tol: 1e-14,
         ..SimplexConfig::default()
     };
-    let res = nm_simplex(
-        2,
-        &[-2.0, -2.0],
-        &[2.0, 2.0],
-        &[-0.5, 0.8],
-        &cfg,
-        |x| {
+    let res =
+        nm_simplex(2, &[-2.0, -2.0], &[2.0, 2.0], &[-0.5, 0.8], &cfg, |x| {
             let t1 = 1.0 - x[0];
             let t2 = x[1] - x[0] * x[0];
             Ok(t1 * t1 + 100.0 * t2 * t2)
-        },
-    )
-    .unwrap();
+        })
+        .unwrap();
     assert!((res.x_min[0] - 1.0).abs() <= 1e-4);
     assert!((res.x_min[1] - 1.0).abs() <= 1e-4);
     assert!(res.f_min <= 1e-8);

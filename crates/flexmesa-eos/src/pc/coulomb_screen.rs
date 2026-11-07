@@ -346,7 +346,15 @@ pub fn fscr_sol8(
         + xsr * gami * fdxg * 2.0
         + gami * gami * fdgg)
         / 9.0;
-    Ok(PcIonContrib { f: fscr, u: uscr, p: pscr, s: s_scr, cv: cvscr, pdt: pdtscr, pdr: pdrscr })
+    Ok(PcIonContrib {
+        f: fscr,
+        u: uscr,
+        p: pscr,
+        s: s_scr,
+        cv: cvscr,
+        pdt: pdtscr,
+        pdr: pdrscr,
+    })
 }
 
 /// Evaluate `CORMIX` for the liquid linear-mixing-rule correction (`pc_eos.f90`
@@ -365,7 +373,15 @@ pub fn cormix(
     let d = z2mean / (zmean * zmean);
     if (d - 1.0).abs() < TINY {
         let z = AutoDiffReal2VarOrder1::zero();
-        return PcIonContrib { f: z, u: z, p: z, s: z, cv: z, pdt: z, pdr: z };
+        return PcIonContrib {
+            f: z,
+            u: z,
+            p: z,
+            s: z,
+            cv: z,
+            pdt: z,
+            pdr: z,
+        };
     }
     let gami_mean = game * z53;
     let dif0 = if rs.val < TINY {
@@ -394,5 +410,13 @@ pub fn cormix(
     let pdtmix = pmix - udg / 3.0;
     let pdrmix = pmix + udg / 9.0;
     let smix = umix - fmix;
-    PcIonContrib { f: fmix, u: umix, p: pmix, s: smix, cv: cvmix, pdt: pdtmix, pdr: pdrmix }
+    PcIonContrib {
+        f: fmix,
+        u: umix,
+        p: pmix,
+        s: smix,
+        cv: cvmix,
+        pdt: pdtmix,
+        pdr: pdrmix,
+    }
 }

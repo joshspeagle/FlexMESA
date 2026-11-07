@@ -151,7 +151,11 @@ where
         out.b00a[ipe] = b00;
         out.b1a[ipe] = b1;
     }
-    out.deriv = if smwti < 0.5 { smpef / smwtf } else { smpei / smwti };
+    out.deriv = if smwti < 0.5 {
+        smpef / smwtf
+    } else {
+        smpei / smwti
+    };
     out
 }
 
@@ -239,8 +243,7 @@ pub fn rgpd3p_db(
                         iy0 as isize + oy2,
                         iy0 as isize + oy3,
                     );
-                    if iy1.min(iy2).min(iy3) < 0
-                        || iy1.max(iy2).max(iy3) >= ny0
+                    if iy1.min(iy2).min(iy3) < 0 || iy1.max(iy2).max(iy3) >= ny0
                     {
                         continue;
                     }
@@ -320,7 +323,11 @@ pub fn rgpd3p_db(
                     }
                 }
             }
-            let zxydi = if smwti < 0.5 { smpef / smwtf } else { smpei / smwti };
+            let zxydi = if smwti < 0.5 {
+                smpef / smwtf
+            } else {
+                smpei / smwti
+            };
             pdd[ix0 * nyd + iy0] = [xs.deriv, ys.deriv, zxydi];
         }
     }

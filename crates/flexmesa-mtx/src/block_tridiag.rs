@@ -108,7 +108,10 @@ pub fn block_dble_mv(
         let out_k = &mut prod[k * nvar..(k + 1) * nvar];
         let b_s = k * blk_sz..(k + 1) * blk_sz;
         accum_block_mv(
-            &dblk[b_s.clone()], &vec_b[k * nvar..(k + 1) * nvar], 1.0, out_k,
+            &dblk[b_s.clone()],
+            &vec_b[k * nvar..(k + 1) * nvar],
+            1.0,
+            out_k,
         );
         if k > 0 {
             let b_km1 = &vec_b[(k - 1) * nvar..k * nvar];

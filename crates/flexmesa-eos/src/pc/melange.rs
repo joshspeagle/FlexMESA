@@ -65,7 +65,15 @@ pub fn melange9(
     const RAD: f64 = 2.5568570411948021e-07;
 
     let nmix = ay_in.len().min(azion.len()).min(acmi.len());
-    let mut ay = ay_in[..nmix].to_vec();
+    let mut ay_buf = [0.0_f64; 32];
+    let mut ay_vec = Vec::new();
+    let ay: &mut [f64] = if nmix <= 32 {
+        ay_buf[..nmix].copy_from_slice(&ay_in[..nmix]);
+        &mut ay_buf[..nmix]
+    } else {
+        ay_vec.extend_from_slice(&ay_in[..nmix]);
+        &mut ay_vec
+    };
     let y_sum: f64 = ay.iter().sum();
     if y_sum <= 0.0 {
         return Err(EosError::InvalidState {
@@ -74,7 +82,7 @@ pub fn melange9(
         });
     }
     if (y_sum - 1.0).abs() > TINY {
-        for val in &mut ay {
+        for val in ay.iter_mut() {
             *val /= y_sum;
         }
     }

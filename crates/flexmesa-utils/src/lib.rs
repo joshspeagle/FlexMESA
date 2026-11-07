@@ -205,10 +205,7 @@ impl IntegerIdict {
     /// Return all `(k1, k2, value)` entries in lexicographical key order.
     #[must_use]
     pub fn entries(&self) -> Vec<(i64, i64, i64)> {
-        self.map
-            .iter()
-            .map(|(&(k1, k2), &v)| (k1, k2, v))
-            .collect()
+        self.map.iter().map(|(&(k1, k2), &v)| (k1, k2, v)).collect()
     }
 }
 

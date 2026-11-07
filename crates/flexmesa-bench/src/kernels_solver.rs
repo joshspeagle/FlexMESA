@@ -18,7 +18,9 @@ use flexmesa_turb::{
 };
 
 use crate::kernels_micro::bench_zone_fn;
-use crate::tridiag_fast::{fast_block_thomas_solve, make_block_tridiag_fixture};
+use crate::tridiag_fast::{
+    fast_block_thomas_solve, make_block_tridiag_fixture,
+};
 use crate::{
     max_err3, max_rel_diff, measure_stage3_chunks_us, measure_us, nan_max,
     BenchRecord, LatencyStats, ThermoGrid, STAGE3_THREADS,
@@ -62,9 +64,8 @@ pub fn bench_mtx_block_tridiag(
     // call.
     let mut ref_sol = vec![0.0_f64; nz * nvar];
     let stage0 = measure_us(n_warmup, n_repeats, || {
-        let sol =
-            solve_block_tridiagonal(nvar, nz, &lblk, &dblk, &ublk, &rhs)
-                .unwrap();
+        let sol = solve_block_tridiagonal(nvar, nz, &lblk, &dblk, &ublk, &rhs)
+            .unwrap();
         ref_sol.copy_from_slice(&sol);
     });
 
@@ -131,11 +132,9 @@ pub fn bench_mtx_block_tridiag(
         median_us: stage3_batch.median_us / (STAGE3_THREADS as f64),
         iqr_us: stage3_batch.iqr_us / (STAGE3_THREADS as f64),
     };
-    let d3 = workspaces
-        .iter()
-        .fold(0.0_f64, |acc, (_, _, _, sol)| {
-            nan_max(acc, max_rel_diff(&ref_sol, sol))
-        });
+    let d3 = workspaces.iter().fold(0.0_f64, |acc, (_, _, _, sol)| {
+        nan_max(acc, max_rel_diff(&ref_sol, sol))
+    });
 
     let max_rel_err = max_err3(
         max_rel_diff(&ref_sol, &out1),
@@ -195,7 +194,12 @@ fn eval_mlt_zone(s_frac: f64) -> [f64; 4] {
         gradl: v6(0.40, 2),
     };
     let out = set_mlt(&params, &inp).unwrap();
-    [out.grad_t.val, out.d.val, out.conv_vel.val, out.grad_t.d1[0]]
+    [
+        out.grad_t.val,
+        out.d.val,
+        out.conv_vel.val,
+        out.grad_t.d1[0],
+    ]
 }
 
 /// Evaluates Kuhfuss (1986) 1D Time-Dependent Convection (`set_tdc`) with

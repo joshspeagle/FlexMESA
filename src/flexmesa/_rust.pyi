@@ -138,10 +138,6 @@ def set_tdc_batch(s_frac: _ArrF64, parallel: bool = False) -> _ArrF64: ...
 # ---------------------------------------------------------------------------
 # Tier C: Coupled Linear Solvers (`mtx`)
 # ---------------------------------------------------------------------------
-# Sequential block-Thomas (`solve_block_tridiagonal`), Hirshman et al. (2010)
-# odd-even block cyclic reduction (`solve_block_tridiag_bcyclic`) with optional
-# persistent 4-thread `rayon` execution, and left block-tridiagonal product
-# (`block_multiply_xa`) for reverse-mode Implicit Function Theorem adjoints.
 def solve_block_tridiagonal(
     nvar: int, nz: int, lblk: _ArrF64, dblk: _ArrF64, ublk: _ArrF64,
     rhs: _ArrF64,
@@ -158,9 +154,6 @@ def block_multiply_xa(
 # ---------------------------------------------------------------------------
 # Wave 2a: Chemical Elements, Nuclides, Solar Scales & Composition (`chem`)
 # ---------------------------------------------------------------------------
-# Periodic table ($Z \in [0, 112]$), 347-nuclide reference catalog, Anders &
-# Grevesse (1989) + Lodders (2003) solar abundances, 10 solar scales, and
-# differentiable composition moments (`get_composition_info`).
 def py_chem_get_element_id(name: str) -> int | None: ...
 def py_chem_element_name(z: int) -> str | None: ...
 def py_chem_element_long_name(z: int) -> str | None: ...
@@ -373,6 +366,12 @@ def eos_eval_skye(
     xa: _ArrF64, skye_use_ion_offsets: bool = True,
     skye_solid_mixing_rule: str = "PC", mass_fraction_limit: float = 1.0e-4,
 ) -> tuple[_ArrF64, _ArrF64, _ArrF64]: ...
+def eos_eval_skye_zones(
+    rho: _ArrF64, temp: _ArrF64, abar: _ArrF64, zbar: _ArrF64, xa_flat: _ArrF64,
+    z: list[int], acmi: _ArrF64, a: _ArrF64, skye_use_ion_offsets: bool = True,
+    skye_solid_mixing_rule: str = "PC", mass_fraction_limit: float = 1.0e-4,
+    parallel: bool = True,
+) -> _ArrF64: ...
 def eos_eval_dt_get(
     rho: float, temp: float, chem_id: list[int], xa: _ArrF64,
     use_skye: bool = True, use_pc: bool = False,

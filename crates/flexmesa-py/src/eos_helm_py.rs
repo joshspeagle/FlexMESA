@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 //! `PyO3` bindings for `flexmesa-eos` Wave 3a.2 (`HELM` equation of state).
 
-use flexmesa_eos::{HelmTable, NUM_EOS_BASIC_RESULTS, eval_helm_eos};
+use flexmesa_eos::{eval_helm_eos, HelmTable, NUM_EOS_BASIC_RESULTS};
 use numpy::{PyArray1, PyArray2, PyArrayMethods, PyReadonlyArray1};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;

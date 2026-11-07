@@ -23,23 +23,23 @@ pub mod polynomials;
 pub mod table;
 
 pub use components::{
-    HELM_SIFAC, HelmThermoVar, eval_ideal_ions, eval_radiation,
+    eval_ideal_ions, eval_radiation, HelmThermoVar, HELM_SIFAC,
 };
 pub use convert::{
     do_convert_helm_results, eval_helm_eos, eval_helm_eos_zones,
 };
 pub use coulomb::eval_helm_coulomb;
 pub use elec_pos::eval_electron_positron;
-pub use eval::{HelmConfig, helmeos2};
+pub use eval::{helmeos2, HelmConfig};
 pub use polynomials::{
-    CubicBasis1D, QuinticBasis1D, dddpsi0, dddpsi1, dddpsi2, ddpsi0, ddpsi1,
-    ddpsi2, dpsi0, dpsi1, dpsi2, h3, h5, psi0, psi1, psi2, xdddpsi0, xdddpsi1,
-    xddpsi0, xddpsi1, xdpsi0, xdpsi1, xpsi0, xpsi1,
+    dddpsi0, dddpsi1, dddpsi2, ddpsi0, ddpsi1, ddpsi2, dpsi0, dpsi1, dpsi2, h3,
+    h5, psi0, psi1, psi2, xdddpsi0, xdddpsi1, xddpsi0, xddpsi1, xdpsi0, xdpsi1,
+    xpsi0, xpsi1, CubicBasis1D, QuinticBasis1D,
 };
 pub use table::{
-    HELM_IMAX, HELM_JMAX, HELM_LOGDHI, HELM_LOGDLO, HELM_LOGDSTP,
-    HELM_LOGDSTPI, HELM_LOGTHI, HELM_LOGTLO, HELM_LOGTSTP, HELM_LOGTSTPI,
-    HelmCell, HelmTable, HelmVertex,
+    HelmCell, HelmTable, HelmVertex, HELM_IMAX, HELM_JMAX, HELM_LOGDHI,
+    HELM_LOGDLO, HELM_LOGDSTP, HELM_LOGDSTPI, HELM_LOGTHI, HELM_LOGTLO,
+    HELM_LOGTSTP, HELM_LOGTSTPI,
 };
 
 // 1-based result indices from `eos/public/helm_def.dek` (`409` slots).

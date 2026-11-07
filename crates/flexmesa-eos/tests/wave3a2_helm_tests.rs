@@ -9,7 +9,7 @@
     clippy::unreadable_literal
 )]
 
-use flexmesa_eos::{EOS_BASIC_RESULT_NAMES, eval_helm_eos};
+use flexmesa_eos::{eval_helm_eos, EOS_BASIC_RESULT_NAMES};
 
 fn assert_helm_case(
     label: &str,

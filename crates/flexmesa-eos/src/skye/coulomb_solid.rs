@@ -210,17 +210,36 @@ pub fn solid_mixing_rule_correction(
 ) -> AutoDiffReal2VarOrder3 {
     const EPS: f64 = 1.0e-40;
     let n = ay.len().min(azion.len());
-    let mut unique_charges: Vec<f64> = Vec::with_capacity(n);
-    let mut charge_abundances: Vec<f64> = Vec::with_capacity(n);
+    let mut uc_buf = [0.0_f64; 32];
+    let mut ca_buf = [0.0_f64; 32];
+    let mut uc_vec = Vec::new();
+    let mut ca_vec = Vec::new();
 
-    for i in 0..n {
-        if let Some(idx) = unique_charges.iter().position(|&z| z == azion[i]) {
-            charge_abundances[idx] += ay[i];
-        } else {
-            unique_charges.push(azion[i]);
-            charge_abundances.push(ay[i]);
+    let (unique_charges, charge_abundances): (&[f64], &[f64]) = if n <= 32 {
+        let mut num_u = 0_usize;
+        for i in 0..n {
+            if let Some(idx) =
+                uc_buf[..num_u].iter().position(|&z| z == azion[i])
+            {
+                ca_buf[idx] += ay[i];
+            } else {
+                uc_buf[num_u] = azion[i];
+                ca_buf[num_u] = ay[i];
+                num_u += 1;
+            }
         }
-    }
+        (&uc_buf[..num_u], &ca_buf[..num_u])
+    } else {
+        for i in 0..n {
+            if let Some(idx) = uc_vec.iter().position(|&z| z == azion[i]) {
+                ca_vec[idx] += ay[i];
+            } else {
+                uc_vec.push(azion[i]);
+                ca_vec.push(ay[i]);
+            }
+        }
+        (&uc_vec, &ca_vec)
+    };
 
     let num_unique = unique_charges.len();
     let mut f = AutoDiffReal2VarOrder3::constant(0.0);

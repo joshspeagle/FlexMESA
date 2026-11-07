@@ -243,8 +243,7 @@ fn test_upstream_mesa_4pt_and_3_to_2_match_golden_output() {
     .unwrap();
     assert_close(nf_single, nf00, "interp_3_to_1");
 
-    let nf4 =
-        interp_4_to_1(1.0, 1.0, 1.0, 1.5, 0.0, 1.0, 8.0, 27.0).unwrap();
+    let nf4 = interp_4_to_1(1.0, 1.0, 1.0, 1.5, 0.0, 1.0, 8.0, 27.0).unwrap();
     let direct = interpolate_vector_pm(
         &[0.0, 1.0, 2.0, 3.0],
         &[0.0, 1.0, 8.0, 27.0],
@@ -264,10 +263,8 @@ fn test_autodiff_interp_pm_matches_analytic_slope_and_parameter_derivative() {
         .iter()
         .map(|&xv| AutoDiffReal2VarOrder1::constant(xv))
         .collect();
-    let y_ad: Vec<AutoDiffReal2VarOrder1> = x_vals
-        .iter()
-        .map(|&xv| scale * (xv * xv + 1.0))
-        .collect();
+    let y_ad: Vec<AutoDiffReal2VarOrder1> =
+        x_vals.iter().map(|&xv| scale * (xv * xv + 1.0)).collect();
     let x_query = [AutoDiffReal2VarOrder1::independent(1.6, 0)];
     let res = interpolate_vector_pm_autodiff(&x_ad, &y_ad, &x_query).unwrap();
 

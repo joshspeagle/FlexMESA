@@ -225,3 +225,134 @@ def h3(fi: jax.Array, wt: jax.Array, wd: jax.Array) -> jax.Array:
     """Evaluate the 16-term bicubic Hermite tensor product `h3`."""
     w16 = wt[..., _H3_T_IDX] * wd[..., _H3_D_IDX]
     return jnp.sum(fi * w16, axis=-1)
+
+
+def _quintic_w2_coord_core(
+    val: jax.Array,
+    lo: jax.Array,
+    d: jax.Array,
+    d2: jax.Array,
+    di: jax.Array,
+    d2i: jax.Array,
+    d3i: jax.Array,
+) -> jax.Array:
+    """Return second-derivative quintic weights `w2` at coordinate `val`."""
+    return quintic_basis_1d((val - lo) * di, d, d2, di, d2i, d3i)[2]
+
+
+_quintic_w2_coord = jax.custom_jvp(_quintic_w2_coord_core)
+
+
+def _quintic_w2_coord_jvp(
+    primals: tuple[jax.Array, ...], tangents: tuple[jax.Array, ...]
+) -> tuple[jax.Array, jax.Array]:
+    val, lo, d, d2, di, d2i, d3i = primals
+    dval = tangents[0]
+    _, _, w2, w3 = quintic_basis_1d((val - lo) * di, d, d2, di, d2i, d3i)
+    return w2, w3 * dval[..., None]
+
+
+_quintic_w2_coord.defjvp(_quintic_w2_coord_jvp)
+
+
+def _quintic_w1_coord_core(
+    val: jax.Array,
+    lo: jax.Array,
+    d: jax.Array,
+    d2: jax.Array,
+    di: jax.Array,
+    d2i: jax.Array,
+    d3i: jax.Array,
+) -> jax.Array:
+    """Return first-derivative quintic weights `w1` at coordinate `val`."""
+    return quintic_basis_1d((val - lo) * di, d, d2, di, d2i, d3i)[1]
+
+
+_quintic_w1_coord = jax.custom_jvp(_quintic_w1_coord_core)
+
+
+def _quintic_w1_coord_jvp(
+    primals: tuple[jax.Array, ...], tangents: tuple[jax.Array, ...]
+) -> tuple[jax.Array, jax.Array]:
+    val, lo, d, d2, di, d2i, d3i = primals
+    dval = tangents[0]
+    w1 = _quintic_w1_coord(val, lo, d, d2, di, d2i, d3i)
+    w2 = _quintic_w2_coord(val, lo, d, d2, di, d2i, d3i)
+    return w1, w2 * dval[..., None]
+
+
+_quintic_w1_coord.defjvp(_quintic_w1_coord_jvp)
+
+
+def _quintic_w0_coord_core(
+    val: jax.Array,
+    lo: jax.Array,
+    d: jax.Array,
+    d2: jax.Array,
+    di: jax.Array,
+    d2i: jax.Array,
+    d3i: jax.Array,
+) -> jax.Array:
+    """Return quintic basis weights `w0` with Horner JVPs up to 3rd order."""
+    return quintic_basis_1d((val - lo) * di, d, d2, di, d2i, d3i)[0]
+
+
+quintic_w0_coord = jax.custom_jvp(_quintic_w0_coord_core)
+
+
+def _quintic_w0_coord_jvp(
+    primals: tuple[jax.Array, ...], tangents: tuple[jax.Array, ...]
+) -> tuple[jax.Array, jax.Array]:
+    val, lo, d, d2, di, d2i, d3i = primals
+    dval = tangents[0]
+    w0 = quintic_w0_coord(val, lo, d, d2, di, d2i, d3i)
+    w1 = _quintic_w1_coord(val, lo, d, d2, di, d2i, d3i)
+    return w0, w1 * dval[..., None]
+
+
+quintic_w0_coord.defjvp(_quintic_w0_coord_jvp)
+
+
+def _cubic_w1_coord_core(
+    val: jax.Array, lo: jax.Array, d: jax.Array, di: jax.Array, d2i: jax.Array
+) -> jax.Array:
+    """Return first-derivative cubic weights `w1` at coordinate `val`."""
+    return cubic_basis_1d((val - lo) * di, d, di, d2i)[1]
+
+
+_cubic_w1_coord = jax.custom_jvp(_cubic_w1_coord_core)
+
+
+def _cubic_w1_coord_jvp(
+    primals: tuple[jax.Array, ...], tangents: tuple[jax.Array, ...]
+) -> tuple[jax.Array, jax.Array]:
+    val, lo, d, di, d2i = primals
+    dval = tangents[0]
+    _, w1, w2 = cubic_basis_1d((val - lo) * di, d, di, d2i)
+    return w1, w2 * dval[..., None]
+
+
+_cubic_w1_coord.defjvp(_cubic_w1_coord_jvp)
+
+
+def _cubic_w0_coord_core(
+    val: jax.Array, lo: jax.Array, d: jax.Array, di: jax.Array, d2i: jax.Array
+) -> jax.Array:
+    """Return cubic basis weights `w0` with Horner JVPs up to 2nd order."""
+    return cubic_basis_1d((val - lo) * di, d, di, d2i)[0]
+
+
+cubic_w0_coord = jax.custom_jvp(_cubic_w0_coord_core)
+
+
+def _cubic_w0_coord_jvp(
+    primals: tuple[jax.Array, ...], tangents: tuple[jax.Array, ...]
+) -> tuple[jax.Array, jax.Array]:
+    val, lo, d, di, d2i = primals
+    dval = tangents[0]
+    w0 = cubic_w0_coord(val, lo, d, di, d2i)
+    w1 = _cubic_w1_coord(val, lo, d, di, d2i)
+    return w0, w1 * dval[..., None]
+
+
+cubic_w0_coord.defjvp(_cubic_w0_coord_jvp)

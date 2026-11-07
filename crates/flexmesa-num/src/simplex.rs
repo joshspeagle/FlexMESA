@@ -63,8 +63,8 @@ pub fn i4_uniform(a: i32, b: i32, seed: &mut i32) -> i32 {
 pub fn perm_uniform(n: usize, seed: &mut i32) -> Vec<usize> {
     let mut p: Vec<usize> = (1..=n).collect();
     for i in 0..n {
-        let j = (i4_uniform(i as i32, (n.saturating_sub(1)) as i32, seed))
-            as usize;
+        let j =
+            (i4_uniform(i as i32, (n.saturating_sub(1)) as i32, seed)) as usize;
         p.swap(i, j);
     }
     p
@@ -141,10 +141,7 @@ pub fn nm_simplex<F>(
 where
     F: FnMut(&[f64]) -> Result<f64, NumError>,
 {
-    if n == 0
-        || x_lower.len() != n
-        || x_upper.len() != n
-        || x_first.len() != n
+    if n == 0 || x_lower.len() != n || x_upper.len() != n || x_first.len() != n
     {
         return Err(NumError::InvalidParameter(
             "x_lower, x_upper, x_first must have length n >= 1 in nm_simplex",
@@ -152,20 +149,18 @@ where
     }
 
     let mut num_evals = 0usize;
-    let eval_point = |pt: &[f64],
-                      evals: &mut usize,
-                      f: &mut F|
-     -> Result<f64, NumError> {
-        *evals += 1;
-        if config.enforce_bounds {
-            for j in 0..n {
-                if pt[j] < x_lower[j] || pt[j] > x_upper[j] {
-                    return Ok(1e30);
+    let eval_point =
+        |pt: &[f64], evals: &mut usize, f: &mut F| -> Result<f64, NumError> {
+            *evals += 1;
+            if config.enforce_bounds {
+                for j in 0..n {
+                    if pt[j] < x_lower[j] || pt[j] > x_upper[j] {
+                        return Ok(1e30);
+                    }
                 }
             }
-        }
-        f(pt)
-    };
+            f(pt)
+        };
 
     // Initialize n + 1 simplex vertices by perturbing each coordinate axis j
     let n_verts = n + 1;
@@ -246,8 +241,7 @@ where
         if f_ref < f_vals[0] {
             // Expansion step along the reflection ray
             for j in 0..n {
-                x_exp[j] =
-                    centroid[j] + config.beta * (x_ref[j] - centroid[j]);
+                x_exp[j] = centroid[j] + config.beta * (x_ref[j] - centroid[j]);
             }
             let f_exp = eval_point(&x_exp, &mut num_evals, &mut fcn)?;
             if f_exp < f_ref {

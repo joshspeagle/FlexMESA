@@ -188,9 +188,8 @@ pub fn interp_pm_autodiff<const N: usize>(
             actual: n,
         });
     }
-    let bad_dual = |v: &DualOrder1<N>| {
-        is_bad(v.val) || v.d1.iter().any(|&d| is_bad(d))
-    };
+    let bad_dual =
+        |v: &DualOrder1<N>| is_bad(v.val) || v.d1.iter().any(|&d| is_bad(d));
     if x.iter().any(bad_dual) || y.iter().any(bad_dual) {
         return Err(Interp1dError::NonFiniteInput);
     }

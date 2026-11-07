@@ -172,6 +172,7 @@ dependencies = [
  "flexmesa-chem",
  "flexmesa-colors",
  "flexmesa-const",
+ "flexmesa-eos",
  "flexmesa-interp1d",
  "flexmesa-interp2d",
  "flexmesa-ionization",

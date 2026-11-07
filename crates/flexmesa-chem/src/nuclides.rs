@@ -21,6 +21,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 use std::str::FromStr;
+use std::sync::OnceLock;
 
 use flexmesa_const::{AMU, CLIGHT, FIVE_THIRDS, MEV_TO_ERGS};
 use flexmesa_math::pow;
@@ -139,11 +140,20 @@ impl Default for NuclideCatalog {
 }
 
 impl NuclideCatalog {
-    /// Build the default reference catalog containing all 347 built-in nuclides
-    /// (every dominant element isotope, every Anders & Grevesse 1989 solar
-    /// isotope, and standard nuclear reaction network species).
+    /// Returns a static reference to the built-in 347-nuclide catalog.
+    #[must_use]
+    pub fn builtin_ref() -> &'static Self {
+        static CATALOG: OnceLock<NuclideCatalog> = OnceLock::new();
+        CATALOG.get_or_init(Self::build_builtin)
+    }
+
+    /// Build the default reference catalog containing all 347 built-in nuclides.
     #[must_use]
     pub fn builtin() -> Self {
+        Self::builtin_ref().clone()
+    }
+
+    fn build_builtin() -> Self {
         let total = BUILTIN_NUCLIDES_A.len() + BUILTIN_NUCLIDES_B.len();
         let mut entries = Vec::with_capacity(total);
         let mut by_id = HashMap::with_capacity(total);

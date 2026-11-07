@@ -209,37 +209,32 @@ def _ideal_grad_and_val(
     mask: jax.Array,
     ya: jax.Array,
     weights: jax.Array,
-) -> tuple[jax.Array, jax.Array]:
-    """Return `(grad_F, F)` at `td = [T, rho]` for single-pass Hessian+grad."""
+) -> tuple[jax.Array, tuple[jax.Array, jax.Array]]:
+    """Return `(grad_F, (grad_F, F))` at `td = [T, rho]`."""
     f_val, grad_f = jax.value_and_grad(_ideal_free_energy_vec, argnums=0)(
         td, abar, mask, ya, weights
     )
-    return grad_f, f_val
+    return grad_f, (grad_f, f_val)
 
 
-def _ideal_state_from_ln(
-    ln_t: jax.Array,
-    ln_d: jax.Array,
-    abar: jax.Array,
-    zbar: jax.Array,
-    mask: jax.Array,
-    ya: jax.Array,
-    weights: jax.Array,
+def pack_free_energy_thermo_jax(
+    t_v: jax.Array,
+    d_v: jax.Array,
+    f_v: jax.Array,
+    df_dt: jax.Array,
+    df_dd: jax.Array,
+    d2f_dt2: jax.Array,
+    d2f_dtdd: jax.Array,
+    d2f_dd2: jax.Array,
+    mu: jax.Array,
+    ln_free_e: jax.Array,
+    etaele: jax.Array,
+    phase: jax.Array,
+    latent_ddlnt: jax.Array,
+    latent_ddlnrho: jax.Array,
+    frac_idx: int,
 ) -> jax.Array:
-    """Assemble the 26-channel `ideal_eos` state at `(ln T, ln rho)`."""
-    t_v = jnp.exp(ln_t)
-    d_v = jnp.exp(ln_d)
-    td = jnp.stack([t_v, d_v])
-    hess_f, f_v = jax.jacfwd(_ideal_grad_and_val, argnums=0, has_aux=True)(
-        td, abar, mask, ya, weights
-    )
-    grad_f, _ = _ideal_grad_and_val(td, abar, mask, ya, weights)
-
-    df_dt, df_dd = grad_f[0], grad_f[1]
-    d2f_dt2 = hess_f[0, 0]
-    d2f_dtdd = hess_f[0, 1]
-    d2f_dd2 = hess_f[1, 1]
-
+    """Assemble the 26-channel MESA state from free-energy partials."""
     sgas = -df_dt
     pgas = d_v * d_v * df_dd
     egas = f_v + t_v * sgas
@@ -263,16 +258,16 @@ def _ideal_state_from_ln(
     gam1 = chid + (gam3 - 1.0) * chit
     nabad = (gam3 - 1.0) / gam1
     cp = de_dt * gam1 / chid
-    ln_free_e = jnp.log(1.0e-20 / (constants.AVO * d_v))
-    z0 = jnp.zeros_like(t_v) + zbar * 0.0
+    z0 = jnp.zeros_like(t_v)
+    fracs = [z0 + (1.0 if i == frac_idx else 0.0) for i in range(19, 26)]
     return jnp.stack(
         [
             jnp.log(pgas),
             jnp.log(e_tot),
             jnp.log(s_tot),
-            abar + z0,
-            ln_free_e,
-            z0 - 1.0e99,
+            mu + z0,
+            ln_free_e + z0,
+            etaele + z0,
             nabad,
             chid,
             chit,
@@ -283,23 +278,52 @@ def _ideal_state_from_ln(
             ds_dd,
             gam1,
             gam3,
-            z0,
-            z0,
-            z0,
-            z0,
-            z0,
-            z0,
-            z0,
-            z0,
-            z0,
-            z0 + 1.0,
+            phase + z0,
+            latent_ddlnt + z0,
+            latent_ddlnrho + z0,
+            *fracs,
         ]
     )
 
 
+def _ideal_state_from_td(
+    t_v: jax.Array,
+    d_v: jax.Array,
+    abar: jax.Array,
+    zbar: jax.Array,
+    mask: jax.Array,
+    ya: jax.Array,
+    weights: jax.Array,
+) -> jax.Array:
+    """Assemble the 26-channel `ideal_eos` state at `(T, rho)`."""
+    td = jnp.stack([t_v, d_v])
+    hess_f, (grad_f, f_v) = jax.jacfwd(
+        _ideal_grad_and_val, argnums=0, has_aux=True
+    )(td, abar, mask, ya, weights)
+    z0 = jnp.zeros_like(t_v) + zbar * 0.0
+    ln_free_e = jnp.log(1.0e-20 / (constants.AVO * d_v))
+    return pack_free_energy_thermo_jax(
+        t_v,
+        d_v,
+        f_v,
+        grad_f[0],
+        grad_f[1],
+        hess_f[0, 0],
+        hess_f[0, 1],
+        hess_f[1, 1],
+        abar + z0,
+        ln_free_e,
+        z0 - 1.0e99,
+        z0,
+        z0,
+        z0,
+        core.I_FRAC_IDEAL,
+    )
+
+
 def _ideal_state_with_aux(
-    ln_t: jax.Array,
-    ln_d: jax.Array,
+    t_v: jax.Array,
+    d_v: jax.Array,
     abar: jax.Array,
     zbar: jax.Array,
     mask: jax.Array,
@@ -307,7 +331,7 @@ def _ideal_state_with_aux(
     weights: jax.Array,
 ) -> tuple[jax.Array, jax.Array]:
     """Return `(res, res)` for single-pass `jacfwd(..., has_aux=True)`."""
-    res = _ideal_state_from_ln(ln_t, ln_d, abar, zbar, mask, ya, weights)
+    res = _ideal_state_from_td(t_v, d_v, abar, zbar, mask, ya, weights)
     return res, res
 
 
@@ -330,12 +354,10 @@ def _eval_ideal_eos_core(
     sum_y = jnp.sum(ya_raw)
     ya = ya_raw / jnp.where(sum_y > 0.0, sum_y, 1.0)
     w_safe = jnp.where(mask, weights, 1.0)
-    ln_t0 = jnp.log(temp)
-    ln_d0 = jnp.log(rho)
-    (d_dln_t, d_dlnd), res = jax.jacfwd(
+    (d_dt, d_dd), res = jax.jacfwd(
         _ideal_state_with_aux, argnums=(0, 1), has_aux=True
-    )(ln_t0, ln_d0, abar, zbar, mask, ya, w_safe)
-    return res, d_dlnd, d_dln_t
+    )(temp, rho, abar, zbar, mask, ya, w_safe)
+    return res, d_dd * rho, d_dt * temp
 
 
 _eval_ideal_eos_jit = jax.jit(_eval_ideal_eos_core)

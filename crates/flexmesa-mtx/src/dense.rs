@@ -46,7 +46,9 @@ pub fn dgetrf(
         ));
     }
     if is_bad_slice(a) {
-        return Err(MtxError::NonFiniteInput("dense matrix a contains NaN/Inf"));
+        return Err(MtxError::NonFiniteInput(
+            "dense matrix a contains NaN/Inf",
+        ));
     }
 
     for k in 0..n {
@@ -109,7 +111,9 @@ pub fn dgetrs_trans(
     }
     for &piv in ipiv {
         if piv >= n {
-            return Err(MtxError::InvalidParameter("pivot index out of bounds"));
+            return Err(MtxError::InvalidParameter(
+                "pivot index out of bounds",
+            ));
         }
     }
 
@@ -278,11 +282,7 @@ pub fn rcond_dense(
     lu: &[f64],
     ipiv: &[usize],
 ) -> Result<f64, MtxError> {
-    if n == 0
-        || a_mat.len() != n * n
-        || lu.len() != n * n
-        || ipiv.len() != n
-    {
+    if n == 0 || a_mat.len() != n * n || lu.len() != n * n || ipiv.len() != n {
         return Err(MtxError::DimensionMismatch(
             "a_mat and lu must have length n * n and ipiv must have length n",
         ));

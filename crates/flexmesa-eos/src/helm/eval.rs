@@ -5,11 +5,11 @@
 
 use flexmesa_const::CLIGHT;
 
-use crate::helm::components::{HelmThermoVar, eval_ideal_ions, eval_radiation};
+use crate::helm::components::{eval_ideal_ions, eval_radiation, HelmThermoVar};
 use crate::helm::coulomb::eval_helm_coulomb;
 use crate::helm::elec_pos::eval_electron_positron;
 use crate::helm::table::{
-    HELM_LOGDHI, HELM_LOGDLO, HELM_LOGTHI, HELM_LOGTLO, HelmTable,
+    HelmTable, HELM_LOGDHI, HELM_LOGDLO, HELM_LOGTHI, HELM_LOGTLO,
 };
 use crate::helm::{
     H_CHID, H_CHIT, H_CP, H_CS, H_CV, H_DCHIDDA, H_DCHIDDD, H_DCHIDDT,
@@ -17,14 +17,13 @@ use crate::helm::{
     H_DCPDT, H_DCPDZ, H_DCVDA, H_DCVDD, H_DCVDT, H_DCVDZ, H_DEA, H_DED, H_DEDA,
     H_DEDD, H_DEDT, H_DEDZ, H_DET, H_DETAA, H_DETAD, H_DETAT, H_DETAZ, H_DEZ,
     H_DGAM1DA, H_DGAM1DD, H_DGAM1DT, H_DGAM1DZ, H_DGAM2DA, H_DGAM2DD,
-    H_DGAM2DT, H_DGAM2DZ, H_DGAM3DA, H_DGAM3DD, H_DGAM3DT, H_DGAM3DZ,
-    H_DNABDA, H_DNABDD, H_DNABDT, H_DNABDZ, H_DPA, H_DPD, H_DPGASA, H_DPGASD,
-    H_DPGASDD, H_DPGAST, H_DPGASDT, H_DPGASZ, H_DPRADD, H_DPRADT, H_DPT,
-    H_DPZ, H_DSA, H_DSD, H_DSDA, H_DSDD, H_DSDT, H_DSDZ, H_DST, H_DSTA,
-    H_DSTT, H_DSTZ, H_DSZ, H_DXNEA, H_DXNED, H_DXNET, H_DXNEZ, H_EGAS, H_ERAD,
-    H_ETAELE, H_ETOT, H_GAM1, H_GAM2, H_GAM3, H_NABAD, H_PGAS, H_PLASG,
-    H_PRAD, H_PTOT, H_SGAS, H_SRAD, H_STOT, H_VALID, H_XNE, H_XNI,
-    NUM_HELM_RESULTS,
+    H_DGAM2DT, H_DGAM2DZ, H_DGAM3DA, H_DGAM3DD, H_DGAM3DT, H_DGAM3DZ, H_DNABDA,
+    H_DNABDD, H_DNABDT, H_DNABDZ, H_DPA, H_DPD, H_DPGASA, H_DPGASD, H_DPGASDD,
+    H_DPGASDT, H_DPGAST, H_DPGASZ, H_DPRADD, H_DPRADT, H_DPT, H_DPZ, H_DSA,
+    H_DSD, H_DSDA, H_DSDD, H_DSDT, H_DSDZ, H_DST, H_DSTA, H_DSTT, H_DSTZ,
+    H_DSZ, H_DXNEA, H_DXNED, H_DXNET, H_DXNEZ, H_EGAS, H_ERAD, H_ETAELE,
+    H_ETOT, H_GAM1, H_GAM2, H_GAM3, H_NABAD, H_PGAS, H_PLASG, H_PRAD, H_PTOT,
+    H_SGAS, H_SRAD, H_STOT, H_VALID, H_XNE, H_XNI, NUM_HELM_RESULTS,
 };
 
 /// Configuration parameters for the `HELM` equation of state (`eos.defaults`).
@@ -205,24 +204,18 @@ fn store_gammas_and_results(
     let presinv = 1.0 / pres.val;
 
     let chit = temp * presinv * pres.dt;
-    let dchitdd =
-        temp * presinv * (pres.ddt - pres.dt * presinv * pres.dd);
+    let dchitdd = temp * presinv * (pres.ddt - pres.dt * presinv * pres.dd);
     let dchitdt =
         chit * (tempinv - presinv * pres.dt) + temp * presinv * pres.dtt;
-    let dchitda =
-        temp * presinv * (pres.dta - pres.dt * presinv * pres.da);
-    let dchitdz =
-        temp * presinv * (pres.dtz - pres.dt * presinv * pres.dz);
+    let dchitda = temp * presinv * (pres.dta - pres.dt * presinv * pres.da);
+    let dchitdz = temp * presinv * (pres.dtz - pres.dt * presinv * pres.dz);
 
     let chid = den * presinv * pres.dd;
     let dchiddd =
         chid * (deninv - presinv * pres.dd) + den * presinv * pres.ddd;
-    let dchiddt =
-        den * presinv * (pres.ddt - pres.dd * presinv * pres.dt);
-    let dchidda =
-        den * presinv * (pres.dda - pres.dd * presinv * pres.da);
-    let dchiddz =
-        den * presinv * (pres.ddz - pres.dd * presinv * pres.dz);
+    let dchiddt = den * presinv * (pres.ddt - pres.dd * presinv * pres.dt);
+    let dchidda = den * presinv * (pres.dda - pres.dd * presinv * pres.da);
+    let dchiddz = den * presinv * (pres.ddz - pres.dd * presinv * pres.dz);
 
     let cv = ener.dt;
     if cv < 0.0 {
@@ -235,10 +228,10 @@ fn store_gammas_and_results(
     let dcvdz = ener.dtz;
 
     let x = pres.val * deninv * tempinv * cvinv * chit;
-    let dxdd = x
-        * (presinv * pres.dd - deninv - cvinv * dcvdd + dchitdd / chit);
-    let dxdt = x
-        * (presinv * pres.dt - tempinv - cvinv * dcvdt + dchitdt / chit);
+    let dxdd =
+        x * (presinv * pres.dd - deninv - cvinv * dcvdd + dchitdd / chit);
+    let dxdt =
+        x * (presinv * pres.dt - tempinv - cvinv * dcvdt + dchitdt / chit);
     let dxda = x * (presinv * pres.da - cvinv * dcvda + dchitda / chit);
     let dxdz = x * (presinv * pres.dz - cvinv * dcvdz + dchitdz / chit);
 

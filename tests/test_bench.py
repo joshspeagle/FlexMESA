@@ -30,6 +30,13 @@ _EXPECTED_WAVE2_CHECKSUMS_N8: tuple[tuple[str, float], ...] = (
     ("colors_sed", 3.6086917325391080e01),
 )
 
+_EXPECTED_WAVE3A_CHECKSUMS_N8: tuple[tuple[str, float], ...] = (
+    ("eos_ideal", 1.4382242574811980e02),
+    ("eos_helm", 3.5616889578660440e02),
+    ("eos_pc", 4.1178868944201080e02),
+    ("eos_skye", 3.5613318367227720e02),
+)
+
 
 def test_wave1_four_stage_benchmarks_parity_across_stages() -> None:
     """All six Wave 1 workloads agree across Stages 0..3 and match Rust.
@@ -107,6 +114,42 @@ def test_wave2_four_stage_benchmarks_parity_across_stages() -> None:
         assert rec.workload == exp_name
         rel_err = abs(rec.checksum - exp_sum) / abs(exp_sum)
         assert rel_err <= 1.0e-12, (
+            f"workload {rec.workload} (N=8) checksum {rec.checksum:.15e} "
+            f"vs {exp_sum:.15e} (rel {rel_err:.3e})"
+        )
+
+
+def test_wave3a_four_stage_benchmarks_parity_across_stages() -> None:
+    """All four Wave 3a EOS workloads agree across Stages 0..3 and match Rust.
+
+    Verifies stage-to-stage relative error <= 1e-9 across all 26 EOS channels
+    (including 2nd-order autodiff Hessians of Helmholtz free energy at low
+    density) and pinned cross-language `lnPgas` reference checksums at
+    N_zones = 8 to <= 1e-13.
+    """
+    records = bench.run_all_wave3a_benchmarks(
+        zone_counts=(4, 8),
+        n_warmup=1,
+        n_repeats=3,
+    )
+    assert len(records) == 8
+    for rec in records:
+        assert rec.max_rel_err <= 1.0e-9, (
+            f"workload {rec.workload} (N={rec.n_zones}) "
+            f"stage parity error {rec.max_rel_err:.3e} > 1e-9"
+        )
+        assert rec.stage0.median_us > 0.0
+        assert rec.stage1.median_us > 0.0
+        assert rec.stage2.median_us > 0.0
+        assert rec.stage3.median_us > 0.0
+        assert math.isfinite(rec.checksum)
+
+    for rec, (exp_name, exp_sum) in zip(
+        records[4:], _EXPECTED_WAVE3A_CHECKSUMS_N8, strict=True
+    ):
+        assert rec.workload == exp_name
+        rel_err = abs(rec.checksum - exp_sum) / abs(exp_sum)
+        assert rel_err <= 1.0e-13, (
             f"workload {rec.workload} (N=8) checksum {rec.checksum:.15e} "
             f"vs {exp_sum:.15e} (rel {rel_err:.3e})"
         )

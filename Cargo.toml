@@ -19,6 +19,7 @@ members = [
   "crates/flexmesa-colors",
   "crates/flexmesa-eos",
   "crates/flexmesa-kap",
+  "crates/flexmesa-rates",
   "crates/flexmesa-bench",
   "crates/flexmesa-py",
 ]

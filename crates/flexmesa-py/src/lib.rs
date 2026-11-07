@@ -69,6 +69,9 @@ pub mod math_solvers;
 /// Tier B bindings for `neu` (Itoh et al. 1996 thermal neutrino losses).
 #[allow(unsafe_code)]
 pub mod neu_py;
+/// Tier B bindings for `rates` (nuclear reaction rates, screening, and weak rates).
+#[allow(unsafe_code)]
+pub mod rates_py;
 /// Tier A bindings for `data` (`SHA-256` hashing and `.safetensors` parsers).
 #[allow(unsafe_code)]
 pub mod tier_a_data;
@@ -256,5 +259,6 @@ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     eos_pc_skye_py::register(m)?;
     eos_solver_py::register(m)?;
     kap_py::register(m)?;
+    rates_py::register(m)?;
     Ok(())
 }

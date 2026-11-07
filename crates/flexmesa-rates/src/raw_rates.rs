@@ -75,9 +75,10 @@ pub fn eval_reaclib_handle(
     eval_reaclib_with_cat(RatesCatalog::builtin(), handle, t9, check_e_flag)
 }
 
-/// Internal dispatcher for `set_raw_rate` matching `raw_rates.f90`.
+/// Evaluates `set_raw_rate` for a [`ReactionInfo`] entry given [`RatesCatalog`]
+/// and [`TFactors`] at temperature `temp` ($\mathrm{K}$).
 #[must_use]
-pub(crate) fn eval_reaction_raw(
+pub fn eval_reaction_raw(
     cat: &RatesCatalog,
     info: &ReactionInfo,
     temp: f64,

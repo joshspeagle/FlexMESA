@@ -1,0 +1,287 @@
+// SPDX-License-Identifier: LGPL-3.0-or-later
+//! Constant- or prescribed-$(T, \rho)$ one-zone nuclear burner (`burn_1_zone`)
+//! and Bader-Deuflhard semi-implicit midpoint extrapolation integrator
+//! (`netint`, `stifbs`, `simpr`, `net_pzextr`) from
+//! `net/private/net_burn.f90` and `net/private/net_burn_support.f90`.
+
+use flexmesa_chem::{get_composition_info, NuclideCatalog, NUM_CATEGORIES};
+use flexmesa_const::QCONV;
+use flexmesa_eos::{eos_dt_get, EosConfig, HelmTable, I_ETA};
+use flexmesa_interp1d::{interp_pm, interp_value};
+use flexmesa_math::exp10;
+use flexmesa_rates::ScreeningMode;
+use flexmesa_utils::is_bad;
+
+use crate::burn_stepper::netint;
+use crate::derivs::eval_net;
+use crate::types::{NetError, NetEvalResult, NetGeneralInfo};
+
+/// Configuration and history inputs for [`burn_1_zone`].
+#[derive(Debug, Clone)]
+pub struct Burn1ZoneInput<'a> {
+    /// Starting integration time $t_{\mathrm{start}}$ ($\mathrm{s}$).
+    pub t_start: f64,
+    /// Ending integration time $t_{\mathrm{end}}$ ($\mathrm{s}$).
+    pub t_end: f64,
+    /// Initial mass fractions `starting_x` (`[species]`).
+    pub starting_x: &'a [f64],
+    /// Time knot grid `times` (`[ntimes]`).
+    pub times: &'a [f64],
+    /// $\log_{10}(T / \mathrm{K})$ at each time knot (`[ntimes]`).
+    pub log10_ts: &'a [f64],
+    /// $\log_{10}(\rho / \mathrm{g\,cm^{-3}})$ at each time knot (`[ntimes]`).
+    pub log10_rhos: &'a [f64],
+    /// Electron degeneracy $\eta$ at each time knot (`[ntimes]`).
+    pub etas: &'a [f64],
+    /// Optional external mass-fraction source term `dxdt_source_term` (`[species]`).
+    pub dxdt_source_term: Option<&'a [f64]>,
+    /// Per-reaction rate multipliers (`[num_reactions]`).
+    pub rate_factors: &'a [f64],
+    /// Global weak-reaction multiplier.
+    pub weak_rate_factor: f64,
+    /// Total reaction $Q$-values (`std_reaction_Qs`).
+    pub reaction_qs: &'a [f64],
+    /// Neutrino-loss $Q_{\nu}$-values (`std_reaction_neuQs`).
+    pub reaction_neu_qs: &'a [f64],
+    /// Plasma screening prescription (`ScreeningMode`).
+    pub screening_mode: ScreeningMode,
+    /// Suggested initial step size (`stptry_in`, or `0.0` for automatic).
+    pub stptry_in: f64,
+    /// Maximum allowed number of integration substeps (`max_steps`).
+    pub max_steps: usize,
+    /// Relative integration error tolerance (`eps`, e.g., `1e-8`).
+    pub eps: f64,
+    /// Abundance scaling floor (`odescal`, e.g., `1e-12`).
+    pub odescal: f64,
+}
+
+/// Output of [`burn_1_zone`].
+#[derive(Debug, Clone)]
+pub struct Burn1ZoneOutput {
+    /// Final mass fractions `ending_x` (`[species]`).
+    pub ending_x: Vec<f64>,
+    /// Final category-resolved nuclear energy generation rates (`[NUM_CATEGORIES]`).
+    pub eps_nuc_categories: [f64; NUM_CATEGORIES],
+    /// Time-averaged nuclear energy generation rate ($\mathrm{erg\,g^{-1}\,s^{-1}}$).
+    pub avg_eps_nuc: f64,
+    /// Final thermal + weak neutrino loss rate ($\mathrm{erg\,g^{-1}\,s^{-1}}$).
+    pub eps_neu_total: f64,
+    /// Total number of right-hand side evaluations (`nfcn`).
+    pub nfcn: usize,
+    /// Total number of Jacobian evaluations (`njac`).
+    pub njac: usize,
+    /// Total number of substeps taken (`nstep`).
+    pub nstep: usize,
+    /// Number of accepted steps without retry (`naccpt`).
+    pub naccpt: usize,
+    /// Number of retried steps (`nrejct`).
+    pub nrejct: usize,
+}
+
+/// Integrates a single zone over $[t_{\mathrm{start}}, t_{\mathrm{end}}]$ along
+/// a constant or piecewise-monotonic cubic $(T(t), \rho(t))$ trajectory using
+/// the Bader-Deuflhard semi-implicit midpoint rule (`burn_1_zone` in
+/// `net/private/net_burn.f90`).
+///
+/// # Errors
+/// Returns [`NetError`] if spline construction, EOS evaluation, or stiff ODE
+/// integration fails.
+pub fn burn_1_zone(
+    g: &NetGeneralInfo,
+    ht: &HelmTable,
+    eos_cfg: &EosConfig,
+    input: &Burn1ZoneInput<'_>,
+) -> Result<Burn1ZoneOutput, NetError> {
+    let species = g.num_isos;
+    if input.starting_x.len() != species {
+        return Err(NetError::IntegrationError(format!(
+            "starting_x length {} != species {species}",
+            input.starting_x.len()
+        )));
+    }
+    let ntimes = input.times.len();
+    if ntimes == 0
+        || input.log10_ts.len() != ntimes
+        || input.log10_rhos.len() != ntimes
+    {
+        return Err(NetError::IntegrationError(
+            "invalid times / log10_ts / log10_rhos lengths".to_string(),
+        ));
+    }
+
+    let log10_ts_coeffs = if ntimes > 1 {
+        interp_pm(input.times, input.log10_ts)
+            .map_err(|e| NetError::IntegrationError(e.to_string()))?
+    } else {
+        vec![[input.log10_ts[0], 0.0, 0.0, 0.0]]
+    };
+    let log10_rhos_coeffs = if ntimes > 1 {
+        interp_pm(input.times, input.log10_rhos)
+            .map_err(|e| NetError::IntegrationError(e.to_string()))?
+    } else {
+        vec![[input.log10_rhos[0], 0.0, 0.0, 0.0]]
+    };
+
+    let nuclides = NuclideCatalog::builtin_ref();
+    let mut aion = vec![0.0_f64; species];
+    let mut save_x = vec![0.0_f64; species];
+    let mut ending_y = vec![0.0_f64; species];
+    for i in 0..species {
+        let cid = g.chem_id[i];
+        let nuc = nuclides.get_by_id(cid).ok_or_else(|| {
+            NetError::InvalidReactionOrIso(format!("unknown cid {cid}"))
+        })?;
+        aion[i] = nuc.z_plus_n as f64;
+        save_x[i] = input.starting_x[i];
+        ending_y[i] = input.starting_x[i] / aion[i];
+    }
+
+    let start = input.t_start;
+    let stopp = input.t_end;
+    let stptry = (start * 1.0e-10).max(1.0e-16);
+    let stpmin = stptry * 1.0e-12;
+
+    let mut last_eval: Option<NetEvalResult> = None;
+    let mut dens_dfdy = vec![0.0_f64; species * species];
+    let mut dmat = vec![0.0_f64; species * species];
+
+    let mut nfcn = 0_usize;
+    let mut njac = 0_usize;
+
+    let eval_step = |time: f64,
+                     y: &mut [f64],
+                     f_out: Option<&mut [f64]>,
+                     dfdy_out: Option<&mut [f64]>,
+                     last_eval: &mut Option<NetEvalResult>|
+     -> Result<(), NetError> {
+        let (lg_t, lg_rho) = if ntimes == 1 {
+            (input.log10_ts[0], input.log10_rhos[0])
+        } else {
+            let lgt = interp_value(input.times, &log10_ts_coeffs, time)
+                .map_err(|e| NetError::IntegrationError(e.to_string()))?;
+            let lgr = interp_value(input.times, &log10_rhos_coeffs, time)
+                .map_err(|e| NetError::IntegrationError(e.to_string()))?;
+            (lgt, lgr)
+        };
+
+        let mut x = vec![0.0_f64; species];
+        for i in 0..species {
+            if is_bad(y[i]) {
+                return Err(NetError::IntegrationError(format!(
+                    "bad y[{i}]={} at time={time}",
+                    y[i]
+                )));
+            }
+            y[i] = y[i].clamp(1.0e-30, 1.0);
+            x[i] = y[i] * aion[i];
+        }
+
+        let rho = exp10(lg_rho);
+        let temp = exp10(lg_t);
+
+        let comp = get_composition_info(nuclides, &g.chem_id, &x, false)
+            .map_err(|e| NetError::IntegrationError(e.to_string()))?;
+
+        let eos = eos_dt_get(ht, rho, temp, &g.chem_id, &x, eos_cfg)
+            .map_err(|e| NetError::IntegrationError(e.to_string()))?;
+        let eta = eos.res[I_ETA];
+        let d_eta_dlnt = eos.d_dln_t[I_ETA];
+        let d_eta_dlnrho = eos.d_dlnd[I_ETA];
+
+        let dxdt_only = dfdy_out.is_none();
+        let res = eval_net(
+            g,
+            false,
+            dxdt_only,
+            &x,
+            temp,
+            lg_t,
+            rho,
+            lg_rho,
+            comp.abar,
+            comp.zbar,
+            comp.z2bar,
+            comp.ye,
+            eta,
+            d_eta_dlnt,
+            d_eta_dlnrho,
+            input.rate_factors,
+            input.weak_rate_factor,
+            input.screening_mode,
+            false,
+            false,
+            false,
+            false,
+        )?;
+
+        if let Some(f) = f_out {
+            for j in 0..species {
+                let src = input.dxdt_source_term.map_or(0.0, |s| s[j]);
+                f[j] = (res.dxdt[j] + src) / aion[j];
+            }
+        }
+        if let Some(dfdy) = dfdy_out {
+            for i in 0..species {
+                for j in 0..species {
+                    dfdy[i * species + j] =
+                        res.d_dxdt_dx[i * species + j] * aion[j] / aion[i];
+                }
+            }
+        }
+        *last_eval = Some(res);
+        Ok(())
+    };
+
+    let (naccpt, nrejct, nstep) = netint(
+        start,
+        stptry,
+        stpmin,
+        input.max_steps,
+        stopp,
+        &mut ending_y,
+        input.eps,
+        species,
+        species,
+        input.odescal,
+        &mut dens_dfdy,
+        &mut dmat,
+        &mut last_eval,
+        &mut |time, y, f, w| {
+            nfcn += 1;
+            eval_step(time, y, Some(f), None, w)
+        },
+        &mut |time, y, dfdy, w| {
+            njac += 1;
+            eval_step(time, y, None, Some(dfdy), w)
+        },
+    )?;
+
+    let mut ending_x = vec![0.0_f64; species];
+    let mut burn_ergs = 0.0_f64;
+    for i in 0..species {
+        ending_x[i] = ending_y[i] * aion[i];
+        let dx = ending_x[i] - save_x[i];
+        let cid = g.chem_id[i];
+        let q_iso = nuclides.get_q(cid).unwrap_or(0.0);
+        burn_ergs += q_iso * dx / aion[i];
+    }
+    burn_ergs *= QCONV;
+    let final_res = last_eval.ok_or_else(|| {
+        NetError::IntegrationError(
+            "no eval_net result in burn_1_zone".to_string(),
+        )
+    })?;
+    let avg_eps_nuc = burn_ergs / (stopp - start) - final_res.eps_neu_total;
+
+    Ok(Burn1ZoneOutput {
+        ending_x,
+        eps_nuc_categories: final_res.eps_nuc_categories,
+        avg_eps_nuc,
+        eps_neu_total: final_res.eps_neu_total,
+        nfcn,
+        njac,
+        nstep,
+        naccpt,
+        nrejct,
+    })
+}

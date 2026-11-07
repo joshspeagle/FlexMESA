@@ -20,6 +20,8 @@ members = [
   "crates/flexmesa-eos",
   "crates/flexmesa-kap",
   "crates/flexmesa-rates",
+  "crates/flexmesa-atm",
+  "crates/flexmesa-net",
   "crates/flexmesa-bench",
   "crates/flexmesa-py",
 ]

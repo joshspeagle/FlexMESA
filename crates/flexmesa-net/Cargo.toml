@@ -1,0 +1,23 @@
+[package]
+name = "flexmesa-net"
+description = "Nuclear reaction networks, analytical Jacobians, approx21, and stiff one-zone burners for FlexMESA"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+flexmesa-const = { path = "../flexmesa-const" }
+flexmesa-math = { path = "../flexmesa-math" }
+flexmesa-utils = { path = "../flexmesa-utils" }
+flexmesa-interp1d = { path = "../flexmesa-interp1d" }
+flexmesa-mtx = { path = "../flexmesa-mtx" }
+flexmesa-num = { path = "../flexmesa-num" }
+flexmesa-chem = { path = "../flexmesa-chem" }
+flexmesa-eos = { path = "../flexmesa-eos" }
+flexmesa-rates = { path = "../flexmesa-rates" }
+rayon.workspace = true
+
+[lints]
+workspace = true

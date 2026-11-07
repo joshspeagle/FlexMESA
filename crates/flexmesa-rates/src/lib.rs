@@ -42,12 +42,14 @@ pub mod tfactors;
 pub mod types;
 pub mod weak;
 
-pub use ecapture::{eval_ecapture_pair, eval_mui_coulomb, eval_vs_coulomb};
+pub use ecapture::{
+    eval_ecapnuc_rate, eval_ecapture_pair, eval_mui_coulomb, eval_vs_coulomb,
+};
 pub use loader::{RatesCatalog, SuzukiTable, WeakTable};
 pub use ratelib::eval_analytic_rate;
 pub use raw_rates::{
     eval_fl_epsnuc_3alf, eval_interp_rate_table, eval_reaclib_handle,
-    set_raw_rate, set_raw_rates,
+    eval_reaction_raw, set_raw_rate, set_raw_rates,
 };
 pub use screen::{screen_extended, screen_pair, screen_salpeter};
 pub use screen_chugunov::screen_chugunov;

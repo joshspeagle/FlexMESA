@@ -30,6 +30,9 @@
     clippy::unnecessary_wraps
 )]
 
+/// Tier B bindings for `atm` (surface boundary conditions, $T(\tau)$, tables).
+#[allow(unsafe_code)]
+pub mod atm_py;
 /// Tier A and Tier B bindings for `chem` (elements, nuclides, solar scales,
 /// composition).
 #[allow(unsafe_code)]
@@ -66,6 +69,9 @@ pub mod kap_py;
 /// Tier A/B/C bindings for `auto_diff`, `math`, and `mtx`.
 #[allow(unsafe_code)]
 pub mod math_solvers;
+/// Tier B/C bindings for `net` (nuclear networks, analytical Jacobians, burners).
+#[allow(unsafe_code)]
+pub mod net_py;
 /// Tier B bindings for `neu` (Itoh et al. 1996 thermal neutrino losses).
 #[allow(unsafe_code)]
 pub mod neu_py;
@@ -260,5 +266,7 @@ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     eos_solver_py::register(m)?;
     kap_py::register(m)?;
     rates_py::register(m)?;
+    atm_py::register(m)?;
+    net_py::register(m)?;
     Ok(())
 }

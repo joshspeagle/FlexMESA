@@ -155,6 +155,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "da7c62ceae207dd37ea5b845da6a0696c799f85e97da1ab5b7910be3c1c80223"
 
 [[package]]
+name = "flexmesa-atm"
+version = "0.1.0"
+dependencies = [
+ "flexmesa-autodiff",
+ "flexmesa-chem",
+ "flexmesa-const",
+ "flexmesa-eos",
+ "flexmesa-interp1d",
+ "flexmesa-interp2d",
+ "flexmesa-kap",
+ "flexmesa-math",
+ "flexmesa-num",
+ "flexmesa-utils",
+]
+
+[[package]]
 name = "flexmesa-autodiff"
 version = "0.1.0"
 dependencies = [
@@ -305,6 +321,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "flexmesa-net"
+version = "0.1.0"
+dependencies = [
+ "flexmesa-chem",
+ "flexmesa-const",
+ "flexmesa-eos",
+ "flexmesa-interp1d",
+ "flexmesa-math",
+ "flexmesa-mtx",
+ "flexmesa-num",
+ "flexmesa-rates",
+ "flexmesa-utils",
+ "rayon",
+]
+
+[[package]]
 name = "flexmesa-neu"
 version = "0.1.0"
 dependencies = [
@@ -328,6 +360,7 @@ dependencies = [
 name = "flexmesa-py"
 version = "0.1.0"
 dependencies = [
+ "flexmesa-atm",
  "flexmesa-autodiff",
  "flexmesa-bench",
  "flexmesa-chem",
@@ -341,6 +374,7 @@ dependencies = [
  "flexmesa-kap",
  "flexmesa-math",
  "flexmesa-mtx",
+ "flexmesa-net",
  "flexmesa-neu",
  "flexmesa-num",
  "flexmesa-rates",

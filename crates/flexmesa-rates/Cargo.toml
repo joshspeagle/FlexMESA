@@ -1,0 +1,19 @@
+[package]
+name = "flexmesa-rates"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Nuclear reaction rates, plasma screening, weak reactions, and electron captures for FlexMESA"
+
+[dependencies]
+flexmesa-autodiff = { path = "../flexmesa-autodiff" }
+flexmesa-chem = { path = "../flexmesa-chem" }
+flexmesa-const = { path = "../flexmesa-const" }
+flexmesa-eos = { path = "../flexmesa-eos" }
+flexmesa-interp1d = { path = "../flexmesa-interp1d" }
+flexmesa-math = { path = "../flexmesa-math" }
+
+[lints]
+workspace = true

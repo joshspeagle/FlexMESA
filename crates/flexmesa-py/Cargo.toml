@@ -29,6 +29,7 @@ flexmesa-math = { path = "../flexmesa-math" }
 flexmesa-mtx = { path = "../flexmesa-mtx" }
 flexmesa-neu = { path = "../flexmesa-neu" }
 flexmesa-num = { path = "../flexmesa-num" }
+flexmesa-rates = { path = "../flexmesa-rates" }
 flexmesa-schema = { path = "../flexmesa-schema" }
 flexmesa-testing = { path = "../flexmesa-testing" }
 flexmesa-turb = { path = "../flexmesa-turb" }

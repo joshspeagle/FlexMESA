@@ -69,6 +69,27 @@ impl<const N: usize> DualOrder1<N> {
         Self { val, d1: [0.0; N] }
     }
 
+    /// Construct the additive identity (`0.0` with zero partial derivatives).
+    #[must_use]
+    #[inline]
+    pub const fn zero() -> Self {
+        Self::constant(0.0)
+    }
+
+    /// Natural logarithm alias (`self.log()`).
+    #[must_use]
+    #[inline]
+    pub fn ln(self) -> Self {
+        self.log()
+    }
+
+    /// Reciprocal alias (`self.powm1()`).
+    #[must_use]
+    #[inline]
+    pub fn recip(self) -> Self {
+        self.powm1()
+    }
+
     /// Construct the `index`-th independent variable
     /// ($\partial x_{i} / \partial x_{i} = 1$).
     ///
@@ -277,5 +298,41 @@ impl<const N: usize> DualOrder1<N> {
     #[inline]
     pub fn dim_scalar(self, c: f64) -> Self {
         (self - c).max_scalar(0.0)
+    }
+}
+
+impl DualOrder1<2> {
+    /// Seed the first independent variable (`d1 = [1.0, 0.0]`).
+    #[must_use]
+    #[inline]
+    pub const fn var1(val: f64) -> Self {
+        Self {
+            val,
+            d1: [1.0, 0.0],
+        }
+    }
+
+    /// Seed the second independent variable (`d1 = [0.0, 1.0]`).
+    #[must_use]
+    #[inline]
+    pub const fn var2(val: f64) -> Self {
+        Self {
+            val,
+            d1: [0.0, 1.0],
+        }
+    }
+
+    /// First partial derivative (`d1[0]`).
+    #[must_use]
+    #[inline]
+    pub const fn d1val1(self) -> f64 {
+        self.d1[0]
+    }
+
+    /// Second partial derivative (`d1[1]`).
+    #[must_use]
+    #[inline]
+    pub const fn d1val2(self) -> f64 {
+        self.d1[1]
     }
 }

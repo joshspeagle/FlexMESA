@@ -4,16 +4,21 @@
 Exposes the canonical 26-slot thermodynamic state vector (`eos_def`),
 $C^2$-continuous polygonal quintic blending (`eos_blend`), Aparicio (1998)
 20-point Gauss-Legendre/Gauss-Laguerre relativistic Fermi-Dirac integrals
-(`gauss_fermi`), ground-state ionization energy offsets (`ion_offset`), and
-analytical neutral ideal gas plus radiation (`ideal`).
+(`gauss_fermi`), ground-state ionization energy offsets (`ion_offset`),
+analytical neutral ideal gas plus radiation (`ideal`), Helmholtz biquintic /
+bicubic electron-positron EOS (`helm`), Potekhin-Chabrier (`pc`) and Jermyn et
+al. (2021) `Skye` (`skye`) plasma/crystallization EOS, and the unified
+`eosDT_get` blend and `PT`/`DE` inverse solvers (`solver`).
 """
 
 from __future__ import annotations
 
-from flexmesa.eos import core, fermi, helm, ideal
+from flexmesa.eos import core, fermi, helm, ideal, pc, skye, solver
 
 EOS_BASIC_RESULT_NAMES = core.EOS_BASIC_RESULT_NAMES
 EosEvalOutput = core.EosEvalOutput
+EosInverseOutput = solver.EosInverseOutput
+EosPtOutput = solver.EosPtOutput
 I_CHI_RHO = core.I_CHI_RHO
 I_CHI_T = core.I_CHI_T
 I_CP = core.I_CP
@@ -49,12 +54,23 @@ compute_ion_offset = core.compute_ion_offset
 compute_ion_offset_from_za = core.compute_ion_offset_from_za
 dfermi = fermi.dfermi
 dfermi_jax = fermi.dfermi_jax
+eos_dt_get = solver.eos_dt_get
+eos_dt_get_rho = solver.eos_dt_get_rho
+eos_dt_get_t = solver.eos_dt_get_t
+eos_gamma_de_get = solver.eos_gamma_de_get
+eos_pt_get = solver.eos_pt_get
 eval_helm_cell_jax = helm.eval_helm_cell_jax
 eval_helm_eos = helm.eval_helm_eos
 eval_helm_eos_zones = helm.eval_helm_eos_zones
 eval_ideal_eos = ideal.eval_ideal_eos
 eval_ideal_eos_from_weights = ideal.eval_ideal_eos_from_weights
 eval_ideal_eos_zones = ideal.eval_ideal_eos_zones
+eval_pc_eos = pc.eval_pc_eos
+eval_pc_eos_zones = pc.eval_pc_eos_zones
+eval_skye_eos = skye.eval_skye_eos
+get_pc_alfa = pc.get_pc_alfa
+get_skye_alfa = skye.get_skye_alfa
+get_skye_alfa_simple = skye.get_skye_alfa_simple
 is_contained = core.is_contained
 min_distance_to_polygon = core.min_distance_to_polygon
 min_distance_to_polygon_jax = core.min_distance_to_polygon_jax
@@ -94,24 +110,40 @@ __all__: list[str] = [
     "NUM_EOS_D_DXA_RESULTS",
     "NUM_EOS_FRAC_RESULTS",
     "EosEvalOutput",
+    "EosInverseOutput",
+    "EosPtOutput",
     "blend_eos_results",
     "compute_ion_offset",
     "compute_ion_offset_from_za",
     "core",
     "dfermi",
     "dfermi_jax",
+    "eos_dt_get",
+    "eos_dt_get_rho",
+    "eos_dt_get_t",
+    "eos_gamma_de_get",
+    "eos_pt_get",
     "eval_helm_cell_jax",
     "eval_helm_eos",
     "eval_helm_eos_zones",
     "eval_ideal_eos",
     "eval_ideal_eos_from_weights",
     "eval_ideal_eos_zones",
+    "eval_pc_eos",
+    "eval_pc_eos_zones",
+    "eval_skye_eos",
     "fermi",
+    "get_pc_alfa",
+    "get_skye_alfa",
+    "get_skye_alfa_simple",
     "helm",
     "ideal",
     "is_contained",
     "min_distance_to_polygon",
     "min_distance_to_polygon_jax",
+    "pc",
     "quintic_blend",
     "quintic_blend_jax",
+    "skye",
+    "solver",
 ]

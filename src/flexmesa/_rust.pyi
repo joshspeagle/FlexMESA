@@ -54,21 +54,11 @@ def split_line(line: str, num: int) -> list[str]: ...
 def tokenize(text: str) -> list[tuple[str, str]]: ...
 def is_fortran_float_token(token: str) -> bool: ...
 def parse_fortran_float(token: str) -> float: ...
-def parse_golden_text(
-    text: str,
-) -> list[tuple[int, str, str, list[int], _ArrF64]]: ...
+def parse_golden_text(text: str) -> list[tuple[int, str, str, list[int], _ArrF64]]: ...  # noqa: E501
 def parse_control_value(raw: str) -> tuple[str, _ScalarVal]: ...
-def parse_defaults_text(
-    text: str,
-) -> list[
-    tuple[
-        str, str, _ScalarVal, bool, list[tuple[str, _ScalarVal]], str, str, int
-    ]
-]: ...
+def parse_defaults_text(text: str) -> list[tuple[str, str, _ScalarVal, bool, list[tuple[str, _ScalarVal]], str, str, int]]: ...  # noqa: E501
 def parse_columns_text(text: str) -> list[tuple[str, str, str, int]]: ...
-def parse_namelist_text(
-    text: str,
-) -> list[tuple[str, list[tuple[str, str | None, str, _ScalarVal, int]]]]: ...
+def parse_namelist_text(text: str) -> list[tuple[str, list[tuple[str, str | None, str, _ScalarVal, int]]]]: ...  # noqa: E501
 def is_valid_sha256_hex(digest: str) -> bool: ...
 def compute_sha256_bytes(data: bytes) -> str: ...
 def compute_sha256_file(path: str) -> str: ...
@@ -79,19 +69,12 @@ def parse_helm_table_text(
     logtlo: float, logthi: float,
 ) -> tuple[_TensorDict, dict[str, str]]: ...
 def eval_autodiff_order2_zone(x: float, y: float) -> list[float]: ...
-def eval_autodiff_order2_batch(
-    x: _ArrF64, y: _ArrF64, parallel: bool = False
-) -> _ArrF64: ...
+def eval_autodiff_order2_batch(x: _ArrF64, y: _ArrF64, parallel: bool = False) -> _ArrF64: ...  # noqa: E501
 
 # ---------------------------------------------------------------------------
 # Tier B: Microphysics & Numerics (`math`, `interp_1d`, `interp_2d`, `neu`,
 # `turb`)
 # ---------------------------------------------------------------------------
-# Domain-safe scalar and 1D array elementary functions (`safe_sqrt`, `safe_log`,
-# `safe_log10`, `exp10`, `pow`, `sinpi`, `cospi`, `tanpi`, `sgn`, `heaviside`),
-# 1D Steffen/Huynh spline builders and evaluators, 2D PSPLINE/Steffen bicubic
-# setup and evaluation, Itoh et al. (1996) 5-channel thermal neutrino losses,
-# and Cox (1968) / Kuhfuss (1986) convective transport (`MLT` and `TDC`).
 def safe_sqrt(x: float) -> float: ...
 def safe_log(x: float) -> float: ...
 def safe_log10(x: float) -> float: ...
@@ -111,15 +94,9 @@ def interp_pm(x: _ArrF64, y: _ArrF64) -> _ArrF64: ...
 def interp_m3a(x: _ArrF64, y: _ArrF64) -> _ArrF64: ...
 def interp_m3b(x: _ArrF64, y: _ArrF64) -> _ArrF64: ...
 def interp_m3q(x: _ArrF64, y: _ArrF64) -> _ArrF64: ...
-def interp_values(
-    init_x: _ArrF64, coeffs_flat: _ArrF64, x_query: _ArrF64
-) -> _ArrF64: ...
-def interp_values_and_slopes(
-    init_x: _ArrF64, coeffs_flat: _ArrF64, x_query: _ArrF64
-) -> tuple[_ArrF64, _ArrF64]: ...
-def integrate_values(
-    init_x: _ArrF64, coeffs_flat: _ArrF64, x_query: _ArrF64
-) -> _ArrF64: ...
+def interp_values(init_x: _ArrF64, coeffs_flat: _ArrF64, x_query: _ArrF64) -> _ArrF64: ...  # noqa: E501
+def interp_values_and_slopes(init_x: _ArrF64, coeffs_flat: _ArrF64, x_query: _ArrF64) -> tuple[_ArrF64, _ArrF64]: ...  # noqa: E501
+def integrate_values(init_x: _ArrF64, coeffs_flat: _ArrF64, x_query: _ArrF64) -> _ArrF64: ...  # noqa: E501
 def interp_mkbicub_db(
     x: _ArrF64, y: _ArrF64, z_flat: _ArrF64, ibcxmin: int, bcxmin: _ArrF64,
     ibcxmax: int, bcxmax: _ArrF64, ibcymin: int, bcymin: _ArrF64, ibcymax: int,
@@ -367,12 +344,57 @@ def eos_eval_helm_zones(
 ) -> _ArrF64: ...
 def eos_helm_cell_data(
     log_temp: float, din: float,
-) -> tuple[
-    float, float, float, float, _ArrF64, _ArrF64, _ArrF64, _ArrF64
-]: ...
+) -> tuple[float, float, float, float, _ArrF64, _ArrF64, _ArrF64, _ArrF64]: ...
 def eos_helm_cells_batch(
     log_temp: _ArrF64, din: _ArrF64,
-) -> tuple[
-    _ArrF64, _ArrF64, _ArrF64, _ArrF64, _ArrF64, _ArrF64, _ArrF64, _ArrF64
-]: ...
+) -> tuple[_ArrF64, _ArrF64, _ArrF64, _ArrF64, _ArrF64, _ArrF64, _ArrF64, _ArrF64]: ...  # noqa: E501
+def eos_get_pc_alfa(
+    log_rho: float, log_t: float, abar: float, zbar: float,
+    use_gamma_limit: bool = True, log_rho1: float = 2.999,
+    log_rho2: float = 2.8, log_t1: float = 7.6, log_t2: float = 7.7,
+    log_gamma_e_all_helm: float = -1.8, log_gamma_e_all_pc: float = -1.7,
+) -> tuple[float, float, float]: ...
+def eos_eval_pc(
+    rho: float, temp: float, abar: float, zbar: float, chem_id: list[int],
+    xa: _ArrF64, include_radiation: bool = True,
+    pc_gamma_start_crystal: float = 170.0, pc_gamma_full_crystal: float = 180.0,
+    mass_fraction_limit: float = 1.0e-4,
+) -> tuple[_ArrF64, _ArrF64, _ArrF64]: ...
+def eos_eval_pc_zones(
+    rho: _ArrF64, temp: _ArrF64, abar: _ArrF64, zbar: _ArrF64, xa_flat: _ArrF64,
+    azion: _ArrF64, acmi: _ArrF64, include_radiation: bool = True,
+    pc_gamma_start_crystal: float = 170.0, pc_gamma_full_crystal: float = 180.0,
+    mass_fraction_limit: float = 1.0e-4, parallel: bool = True,
+) -> _ArrF64: ...
+def eos_get_skye_alfa(log_rho: float, log_t: float, abar: float, zbar: float) -> tuple[float, float, float]: ...  # noqa: E501
+def eos_get_skye_alfa_simple(log_rho: float, log_t: float) -> tuple[float, float, float]: ...  # noqa: E501
+def eos_eval_skye(
+    rho: float, temp: float, abar: float, zbar: float, chem_id: list[int],
+    xa: _ArrF64, skye_use_ion_offsets: bool = True,
+    skye_solid_mixing_rule: str = "PC", mass_fraction_limit: float = 1.0e-4,
+) -> tuple[_ArrF64, _ArrF64, _ArrF64]: ...
+def eos_eval_dt_get(
+    rho: float, temp: float, chem_id: list[int], xa: _ArrF64,
+    use_skye: bool = True, use_pc: bool = False,
+    pc_use_gamma_limit: bool = True, skye_solid_mixing_rule: str = "PC",
+) -> tuple[_ArrF64, _ArrF64, _ArrF64]: ...
+def eos_eval_pt_get(
+    pgas: float, temp: float, chem_id: list[int], xa: _ArrF64,
+    use_skye: bool = True, use_pc: bool = False,
+    pc_use_gamma_limit: bool = True, skye_solid_mixing_rule: str = "PC",
+) -> tuple[float, float, float, float, _ArrF64, _ArrF64, _ArrF64]: ...
+def eos_eval_dt_get_t(
+    rho: float, which_other: int, other_value: float, chem_id: list[int],
+    xa: _ArrF64, log_t_guess: float = 6.0, use_skye: bool = True,
+    use_pc: bool = False,
+) -> tuple[float, float, _ArrF64, _ArrF64, _ArrF64]: ...
+def eos_eval_dt_get_rho(
+    temp: float, which_other: int, other_value: float, chem_id: list[int],
+    xa: _ArrF64, log_rho_guess: float = 0.0, use_skye: bool = True,
+    use_pc: bool = False,
+) -> tuple[float, float, _ArrF64, _ArrF64, _ArrF64]: ...
+def eos_eval_gamma_de_get(
+    abar: float, zbar: float, rho: float, energy: float,
+    gamma: float = 1.6666666666666667,
+) -> tuple[float, float, _ArrF64, _ArrF64, _ArrF64]: ...
 # fmt: on

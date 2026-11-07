@@ -15,7 +15,7 @@ use pyo3::prelude::*;
 
 use crate::eval_batch_2d;
 
-type PyEosTuple<'py> = (
+pub(crate) type PyEosTuple<'py> = (
     Bound<'py, PyArray1<f64>>,
     Bound<'py, PyArray1<f64>>,
     Bound<'py, PyArray1<f64>>,
@@ -31,7 +31,7 @@ fn parse_polygon_coords(
     Ok(arr.outer_iter().map(|row| [row[0], row[1]]).collect())
 }
 
-fn into_py_eos_tuple<'py>(
+pub(crate) fn into_py_eos_tuple<'py>(
     py: Python<'py>,
     out: &EosEvalOutput,
 ) -> PyEosTuple<'py> {

@@ -1,9 +1,11 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
-r"""Top-level `eosDT_get` blend and `PT` / `DE` inverse solvers (`eos/public`).
+r"""Top-level `eosDT_get` 7-level cascade, 4D table evaluators, and `PT`/`DE`
+inverse solvers (`eos/public`).
 
 Provides the Tier B dual-track (`backend="auto" | "rust" | "jax"`) Python and
-JAX interfaces for [`eos_dt_get`], [`eos_pt_get`], [`eos_dt_get_t`],
-[`eos_dt_get_rho`], and [`eos_gamma_de_get`].
+JAX interfaces for [`eos_dt_get`], [`eos_pt_get`], [`eval_opal_scvh_eos`],
+[`eval_free_eos`], [`eval_cms_eos`], [`eos_dt_get_t`], [`eos_dt_get_rho`],
+[`eos_pt_get_t`], [`eos_pt_get_pgas`], and [`eos_gamma_de_get`].
 """
 
 from __future__ import annotations
@@ -43,12 +45,12 @@ class EosPtOutput:
 
 @dataclasses.dataclass(frozen=True)
 class EosInverseOutput:
-    """Result of an inverse EOS root-find (`eosDT_get_T` / `eosDT_get_Rho`).
+    """Result of an inverse EOS root-find (`eosDT_get_*` / `eosPT_get_*`).
 
     Attributes:
-        result: Solved linear quantity ($T$ in `K` or $\\rho$ in `g cm^-3`).
-        log10_result: Solved base-10 logarithm ($\\log_{10} T$ or
-            $\\log_{10} \\rho$).
+        result: Solved linear quantity ($T$ in `K`, $\\rho$ in `g cm^-3`, or
+            $P_{\\mathrm{gas}}$ in `dyn cm^-2`).
+        log10_result: Solved base-10 logarithm.
         eos: 26-channel [`EosEvalOutput`] evaluated at the converged state.
     """
 
@@ -70,11 +72,29 @@ def _pack_inv(vals: tuple[Any, ...]) -> EosInverseOutput:
 
 
 def _prep(
-    cid: Sequence[int], xa: Any, s: bool, p: bool, g: bool, r: str
-) -> tuple[list[int], np.ndarray, bool, bool, bool, str]:
+    cid: Sequence[int],
+    xa: Any,
+    s: bool,
+    p: bool,
+    g: bool,
+    r: str,
+    c: bool,
+    f: bool,
+    o: bool,
+) -> tuple[list[int], np.ndarray, bool, bool, bool, str, bool, bool, bool]:
     """Normalize composition and control flags for Rust EOS FFI calls."""
     xa_c = np.ascontiguousarray(xa, dtype=np.float64)
-    return [int(c) for c in cid], xa_c, bool(s), bool(p), bool(g), str(r)
+    return (
+        [int(x) for x in cid],
+        xa_c,
+        bool(s),
+        bool(p),
+        bool(g),
+        str(r),
+        bool(c),
+        bool(f),
+        bool(o),
+    )
 
 
 def eos_dt_get_jax(
@@ -87,6 +107,9 @@ def eos_dt_get_jax(
     use_pc: bool = False,
     pc_use_gamma_limit: bool = True,
     skye_solid_mixing_rule: str = "PC",
+    use_cms: bool = False,
+    use_free_eos: bool = True,
+    use_opal_scvh: bool = True,
 ) -> tuple[jax.Array, jax.Array, jax.Array]:
     """Evaluate `eosDT_get` in JAX with exact `custom_jvp` derivative rules."""
     f_args = _prep(
@@ -96,6 +119,9 @@ def eos_dt_get_jax(
         use_pc,
         pc_use_gamma_limit,
         skye_solid_mixing_rule,
+        use_cms,
+        use_free_eos,
+        use_opal_scvh,
     )
 
     def _host_cb(
@@ -123,9 +149,12 @@ def eos_dt_get(
     use_pc: bool = False,
     pc_use_gamma_limit: bool = True,
     skye_solid_mixing_rule: str = "PC",
+    use_cms: bool = False,
+    use_free_eos: bool = True,
+    use_opal_scvh: bool = True,
     backend: _dispatch.Backend = "auto",
 ) -> core.EosEvalOutput:
-    """Evaluate the unified top-level `eosDT_get` (`eosdt_eval.f90`).
+    """Evaluate the unified 7-level `eosDT_get` cascade (`eosdt_eval.f90`).
 
     Args:
         rho: Mass density $\\rho$ in `g cm^-3` (scalar).
@@ -136,6 +165,9 @@ def eos_dt_get(
         use_pc: Whether `PC` is enabled when `Skye` is disabled.
         pc_use_gamma_limit: Whether `PC` uses $\\log_{10} \\Gamma_e$ limits.
         skye_solid_mixing_rule: Solid mixing rule (`"PC"` or `"Ogata"`).
+        use_cms: Whether `CMS` H/He EOS is enabled.
+        use_free_eos: Whether `FreeEOS` 4D tables are enabled.
+        use_opal_scvh: Whether `OPAL/SCVH` 4D tables are enabled.
         backend: Execution backend (`"auto"`, `"rust"`, or `"jax"`).
 
     Returns:
@@ -151,6 +183,9 @@ def eos_dt_get(
             use_pc=use_pc,
             pc_use_gamma_limit=pc_use_gamma_limit,
             skye_solid_mixing_rule=skye_solid_mixing_rule,
+            use_cms=use_cms,
+            use_free_eos=use_free_eos,
+            use_opal_scvh=use_opal_scvh,
         )
         return core.EosEvalOutput(res, d_dlnd, d_dln_t)
     f_args = _prep(
@@ -160,10 +195,97 @@ def eos_dt_get(
         use_pc,
         pc_use_gamma_limit,
         skye_solid_mixing_rule,
+        use_cms,
+        use_free_eos,
+        use_opal_scvh,
     )
     return core.EosEvalOutput(
         *_rust.eos_eval_dt_get(float(rho), float(temp), *f_args)
     )
+
+
+def _eval_4d_table_dt(
+    fn: Any,
+    rho: float | jax.Array,
+    temp: float | jax.Array,
+    chem_id: Sequence[int],
+    xa: np.ndarray | jax.Array,
+    backend: _dispatch.Backend,
+) -> core.EosEvalOutput:
+    """Shared dual-track wrapper for standalone 4D EOS table evaluators."""
+    cids = [int(c) for c in chem_id]
+    xa_c = np.ascontiguousarray(xa, dtype=np.float64)
+    if _dispatch.resolve_backend(backend, rho, temp, xa) == "jax":
+
+        def _host_cb(
+            r_a: np.ndarray, t_a: np.ndarray
+        ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+            res_np, dlnd_np, dlnt_np = fn(float(r_a), float(t_a), cids, xa_c)
+            return (
+                np.asarray(res_np, dtype=np.float64),
+                np.asarray(dlnd_np, dtype=np.float64),
+                np.asarray(dlnt_np, dtype=np.float64),
+            )
+
+        res, d_dlnd, d_dln_t = skye.eval_host_dt_jvp(
+            jnp.asarray(rho, np.float64),
+            jnp.asarray(temp, np.float64),
+            _host_cb,
+        )
+        return core.EosEvalOutput(res, d_dlnd, d_dln_t)
+    return core.EosEvalOutput(*fn(float(rho), float(temp), cids, xa_c))
+
+
+def eval_opal_scvh_eos(
+    rho: float | jax.Array,
+    temp: float | jax.Array,
+    chem_id: Sequence[int],
+    xa: np.ndarray | jax.Array,
+    *,
+    backend: _dispatch.Backend = "auto",
+) -> core.EosEvalOutput:
+    """Evaluate `OPAL/SCVH` 4D tabulated EOS standalone at `(rho, T)`."""
+    return _eval_4d_table_dt(
+        _rust.eos_eval_opal_scvh, rho, temp, chem_id, xa, backend
+    )
+
+
+def eval_free_eos(
+    rho: float | jax.Array,
+    temp: float | jax.Array,
+    chem_id: Sequence[int],
+    xa: np.ndarray | jax.Array,
+    *,
+    backend: _dispatch.Backend = "auto",
+) -> core.EosEvalOutput:
+    """Evaluate `FreeEOS` 4D tabulated EOS standalone at `(rho, T)`."""
+    return _eval_4d_table_dt(
+        _rust.eos_eval_free_eos, rho, temp, chem_id, xa, backend
+    )
+
+
+def eval_cms_eos(
+    rho: float | jax.Array,
+    temp: float | jax.Array,
+    chem_id: Sequence[int],
+    xa: np.ndarray | jax.Array,
+    *,
+    backend: _dispatch.Backend = "auto",
+) -> core.EosEvalOutput:
+    """Evaluate Chabrier, Mazevet & Soubiran (`CMS`) EOS standalone."""
+    return _eval_4d_table_dt(
+        _rust.eos_eval_cms, rho, temp, chem_id, xa, backend
+    )
+
+
+#: Special `which_other` code for $E_{\mathrm{gas}} = E - E_{\mathrm{rad}}$.
+WHICH_OTHER_EGAS: int = -1
+#: Special `which_other` code for $\log_{10} P_{\mathrm{total}}$.
+WHICH_OTHER_LOG_PTOT: int = -2
+
+_SC = jax.ShapeDtypeStruct((), jnp.float64)
+_VC = jax.ShapeDtypeStruct((core.NUM_EOS_BASIC_RESULTS,), jnp.float64)
+_PT_SPEC = (_SC, _SC, _SC, _SC, _VC, _VC, _VC)
 
 
 def eos_pt_get_jax(
@@ -176,6 +298,9 @@ def eos_pt_get_jax(
     use_pc: bool = False,
     pc_use_gamma_limit: bool = True,
     skye_solid_mixing_rule: str = "PC",
+    use_cms: bool = False,
+    use_free_eos: bool = True,
+    use_opal_scvh: bool = True,
 ) -> EosPtOutput:
     """Evaluate `eosPT_get` in JAX with Implicit Function Theorem JVP."""
     f_args = _prep(
@@ -185,21 +310,20 @@ def eos_pt_get_jax(
         use_pc,
         pc_use_gamma_limit,
         skye_solid_mixing_rule,
+        use_cms,
+        use_free_eos,
+        use_opal_scvh,
     )
 
     def _host_cb(p_a: np.ndarray, t_a: np.ndarray) -> tuple[np.ndarray, ...]:
         vals = _rust.eos_eval_pt_get(float(p_a), float(t_a), *f_args)
         return tuple(np.asarray(v, dtype=np.float64) for v in vals)
 
-    sc = jax.ShapeDtypeStruct((), jnp.float64)
-    vc = jax.ShapeDtypeStruct((core.NUM_EOS_BASIC_RESULTS,), jnp.float64)
-    out_spec = (sc, sc, sc, sc, vc, vc, vc)
-
     def _eval_core(p_in: jax.Array, t_in: jax.Array) -> tuple[jax.Array, ...]:
-        r_v, lr_v, dp_v, dt_v, res_v, dlnd_v, dlnt_v = jax.pure_callback(
-            _host_cb, out_spec, p_in, t_in
+        res: tuple[jax.Array, ...] = jax.pure_callback(
+            _host_cb, _PT_SPEC, p_in, t_in
         )
-        return r_v, lr_v, dp_v, dt_v, res_v, dlnd_v, dlnt_v
+        return res
 
     _eval = jax.custom_jvp(_eval_core)
 
@@ -213,7 +337,9 @@ def eos_pt_get_jax(
             p_p, t_p
         )
         dln_p, dln_t = dp / p_p, dt / t_p
-        dln_rho = d_dlpg * dln_p + d_dlt * dln_t
+        dln_rho = (dln_p - d_dln_t[core.I_LN_PGAS] * dln_t) / d_dlnd[
+            core.I_LN_PGAS
+        ]
         drho, dlrho = rho_v * dln_rho, dln_rho / jnp.log(10.0)
         dres = d_dlnd * dln_rho + d_dln_t * dln_t
         zs, zv = jnp.zeros_like(rho_v), jnp.zeros_like(res)
@@ -237,6 +363,9 @@ def eos_pt_get(
     use_pc: bool = False,
     pc_use_gamma_limit: bool = True,
     skye_solid_mixing_rule: str = "PC",
+    use_cms: bool = False,
+    use_free_eos: bool = True,
+    use_opal_scvh: bool = True,
     backend: _dispatch.Backend = "auto",
 ) -> EosPtOutput:
     """Evaluate the inverse `(P_gas, T)` solver `eosPT_get` (`eospt_eval.f90`).
@@ -250,6 +379,9 @@ def eos_pt_get(
         use_pc: Whether `PC` is enabled when `Skye` is disabled.
         pc_use_gamma_limit: Whether `PC` uses $\\log_{10} \\Gamma_e$ limits.
         skye_solid_mixing_rule: Solid mixing rule (`"PC"` or `"Ogata"`).
+        use_cms: Whether `CMS` H/He EOS is enabled.
+        use_free_eos: Whether `FreeEOS` 4D tables are enabled.
+        use_opal_scvh: Whether `OPAL/SCVH` 4D tables are enabled.
         backend: Execution backend (`"auto"`, `"rust"`, or `"jax"`).
 
     Returns:
@@ -266,6 +398,9 @@ def eos_pt_get(
             use_pc=use_pc,
             pc_use_gamma_limit=pc_use_gamma_limit,
             skye_solid_mixing_rule=skye_solid_mixing_rule,
+            use_cms=use_cms,
+            use_free_eos=use_free_eos,
+            use_opal_scvh=use_opal_scvh,
         )
     f_args = _prep(
         chem_id,
@@ -274,8 +409,45 @@ def eos_pt_get(
         use_pc,
         pc_use_gamma_limit,
         skye_solid_mixing_rule,
+        use_cms,
+        use_free_eos,
+        use_opal_scvh,
     )
     return _pack_pt(_rust.eos_eval_pt_get(float(pgas), float(temp), *f_args))
+
+
+def _call_inv_solver(
+    fn: Any,
+    val: float,
+    which_other: int,
+    other_value: float,
+    chem_id: Sequence[int],
+    xa: np.ndarray,
+    log_guess: float,
+    use_skye: bool,
+    use_pc: bool,
+    use_cms: bool,
+    use_free_eos: bool,
+    use_opal_scvh: bool,
+) -> EosInverseOutput:
+    """Shared FFI helper for `eosDT_get_*` and `eosPT_get_*` inverse solvers."""
+    xa_c = np.ascontiguousarray(xa, np.float64)
+    cids = [int(c) for c in chem_id]
+    return _pack_inv(
+        fn(
+            float(val),
+            int(which_other),
+            float(other_value),
+            cids,
+            xa_c,
+            float(log_guess),
+            bool(use_skye),
+            bool(use_pc),
+            bool(use_cms),
+            bool(use_free_eos),
+            bool(use_opal_scvh),
+        )
+    )
 
 
 def eos_dt_get_t(
@@ -288,34 +460,25 @@ def eos_dt_get_t(
     log_t_guess: float = 6.0,
     use_skye: bool = True,
     use_pc: bool = False,
+    use_cms: bool = False,
+    use_free_eos: bool = True,
+    use_opal_scvh: bool = True,
 ) -> EosInverseOutput:
-    """Solve for temperature $T$ given density $\\rho$ and `res[which_other]`.
-
-    Args:
-        rho: Mass density $\\rho$ in `g cm^-3`.
-        which_other: 0-based channel index (`I_LN_E`, `I_LN_S`, `I_LN_PGAS`).
-        other_value: Target value for `res[which_other]`.
-        chem_id: 1-based MESA nuclide identifiers of length `N_species`.
-        xa: Species mass fractions of shape `(N_species,)`.
-        log_t_guess: Initial guess for $\\log_{10}(T / \\mathrm{K})$.
-        use_skye: Whether `Skye` is enabled.
-        use_pc: Whether `PC` is enabled when `Skye` is disabled.
-
-    Returns:
-        [`EosInverseOutput`] with converged `T`, `log10_T`, and `eos`.
-    """
-    xa_c, cids = np.ascontiguousarray(xa, np.float64), [int(c) for c in chem_id]
-    args = (
-        float(rho),
-        int(which_other),
-        float(other_value),
-        cids,
-        xa_c,
-        float(log_t_guess),
-        bool(use_skye),
-        bool(use_pc),
+    """Solve for $T$ given $\\rho$ and `res[which_other]`."""
+    return _call_inv_solver(
+        _rust.eos_eval_dt_get_t,
+        rho,
+        which_other,
+        other_value,
+        chem_id,
+        xa,
+        log_t_guess,
+        use_skye,
+        use_pc,
+        use_cms,
+        use_free_eos,
+        use_opal_scvh,
     )
-    return _pack_inv(_rust.eos_eval_dt_get_t(*args))
 
 
 def eos_dt_get_rho(
@@ -328,34 +491,87 @@ def eos_dt_get_rho(
     log_rho_guess: float = 0.0,
     use_skye: bool = True,
     use_pc: bool = False,
+    use_cms: bool = False,
+    use_free_eos: bool = True,
+    use_opal_scvh: bool = True,
 ) -> EosInverseOutput:
-    """Solve for density $\\rho$ given temperature $T$ and `res[which_other]`.
-
-    Args:
-        temp: Temperature $T$ in `K`.
-        which_other: 0-based channel index (`I_LN_PGAS`, `I_LN_E`, `I_LN_S`).
-        other_value: Target value for `res[which_other]`.
-        chem_id: 1-based MESA nuclide identifiers of length `N_species`.
-        xa: Species mass fractions of shape `(N_species,)`.
-        log_rho_guess: Initial guess for $\\log_{10} \\rho$.
-        use_skye: Whether `Skye` is enabled.
-        use_pc: Whether `PC` is enabled when `Skye` is disabled.
-
-    Returns:
-        [`EosInverseOutput`] with converged `rho`, `log10_rho`, and `eos`.
-    """
-    xa_c, cids = np.ascontiguousarray(xa, np.float64), [int(c) for c in chem_id]
-    args = (
-        float(temp),
-        int(which_other),
-        float(other_value),
-        cids,
-        xa_c,
-        float(log_rho_guess),
-        bool(use_skye),
-        bool(use_pc),
+    """Solve for $\\rho$ given $T$ and `res[which_other]`."""
+    return _call_inv_solver(
+        _rust.eos_eval_dt_get_rho,
+        temp,
+        which_other,
+        other_value,
+        chem_id,
+        xa,
+        log_rho_guess,
+        use_skye,
+        use_pc,
+        use_cms,
+        use_free_eos,
+        use_opal_scvh,
     )
-    return _pack_inv(_rust.eos_eval_dt_get_rho(*args))
+
+
+def eos_pt_get_t(
+    pgas: float,
+    which_other: int,
+    other_value: float,
+    chem_id: Sequence[int],
+    xa: np.ndarray,
+    *,
+    log_t_guess: float = 6.0,
+    use_skye: bool = True,
+    use_pc: bool = False,
+    use_cms: bool = False,
+    use_free_eos: bool = True,
+    use_opal_scvh: bool = True,
+) -> EosInverseOutput:
+    """Solve for $T$ given $P_{\\mathrm{gas}}$ and `res[which_other]`."""
+    return _call_inv_solver(
+        _rust.eos_eval_pt_get_t,
+        pgas,
+        which_other,
+        other_value,
+        chem_id,
+        xa,
+        log_t_guess,
+        use_skye,
+        use_pc,
+        use_cms,
+        use_free_eos,
+        use_opal_scvh,
+    )
+
+
+def eos_pt_get_pgas(
+    temp: float,
+    which_other: int,
+    other_value: float,
+    chem_id: Sequence[int],
+    xa: np.ndarray,
+    *,
+    log_pgas_guess: float = 10.0,
+    use_skye: bool = True,
+    use_pc: bool = False,
+    use_cms: bool = False,
+    use_free_eos: bool = True,
+    use_opal_scvh: bool = True,
+) -> EosInverseOutput:
+    """Solve for $P_{\\mathrm{gas}}$ given $T$ and `res[which_other]`."""
+    return _call_inv_solver(
+        _rust.eos_eval_pt_get_pgas,
+        temp,
+        which_other,
+        other_value,
+        chem_id,
+        xa,
+        log_pgas_guess,
+        use_skye,
+        use_pc,
+        use_cms,
+        use_free_eos,
+        use_opal_scvh,
+    )
 
 
 def eos_gamma_de_get(
@@ -366,18 +582,7 @@ def eos_gamma_de_get(
     *,
     gamma: float = 5.0 / 3.0,
 ) -> EosInverseOutput:
-    """Evaluate closed-form ideal $\\gamma$-law `eos_gamma_DE_get`.
-
-    Args:
-        abar: Mean atomic weight $\\bar{A}$.
-        zbar: Mean atomic charge $\\bar{Z}$.
-        rho: Mass density $\\rho$ in `g cm^-3`.
-        energy: Specific internal energy $E$ in `erg g^-1`.
-        gamma: Adiabatic exponent $\\gamma$ (defaults to $5/3$).
-
-    Returns:
-        [`EosInverseOutput`] with analytical `T`, `log10_T`, and `eos`.
-    """
+    """Evaluate closed-form ideal $\\gamma$-law `eos_gamma_DE_get`."""
     return _pack_inv(
         _rust.eos_eval_gamma_de_get(
             float(abar), float(zbar), float(rho), float(energy), float(gamma)

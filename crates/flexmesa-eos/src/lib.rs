@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-//! Equation of State (`eos`) engine for `FlexMESA` (Wave 3a).
+//! Equation of State (`eos`) engine for `FlexMESA` (Waves 3a & 3b.1).
 //!
 //! Provides the canonical 26-slot thermodynamic result schema (`eos_def`),
 //! ground-state nuclear binding and ionization energy offsets (`ion_offset`),
@@ -9,8 +9,9 @@
 //! Gauss-Legendre/Gauss-Laguerre relativistic Fermi-Dirac integrals
 //! (`gauss_fermi`), Helmholtz biquintic/bicubic electron-positron EOS (`helm`),
 //! Potekhin & Chabrier (`pc`) and `Skye` (`skye`) plasma/crystallization EOS,
-//! hierarchical `eosDT_get` blending (`blend_dt`), and inverse `(P_gas, T)` /
-//! $(\rho, E)$ solvers (`inverse`).
+//! 4D tabulated `OPAL/SCVH` and `FreeEOS` grids (`tables_4d`), Chabrier,
+//! Mazevet & Soubiran (`cms`) H/He EOS, full 7-level `eosDT_get` blending
+//! (`blend_dt`), and inverse `(P_gas, T)` / $(\rho, E)$ solvers (`inverse`, `eos_pt`).
 
 #![forbid(unsafe_code)]
 #![allow(
@@ -37,6 +38,8 @@
 
 pub mod blend;
 pub mod blend_dt;
+pub mod cms;
+pub mod eos_pt;
 pub mod free_energy;
 pub mod gamma_de;
 pub mod gauss_fermi;
@@ -46,6 +49,7 @@ pub mod inverse;
 pub mod ion_offset;
 pub mod pc;
 pub mod skye;
+pub mod tables_4d;
 pub mod types;
 
 pub use blend::{
@@ -55,13 +59,23 @@ pub use blend::{
 };
 pub use blend_dt::{
     combine_two_eos_components, eos_dt_get, eos_dt_get_from_weights,
-    eos_dt_get_zones, get_helm_alfa, EosConfig,
+    eos_dt_get_from_weights_with_tables, eos_dt_get_zones, get_helm_alfa,
+    EosConfig,
+};
+pub use cms::{
+    eval_cms_eos, eval_cms_eos_from_weights, eval_cms_fixed_x, get_cms_alfa,
+    include_cms_radiation, CmsConfig, CmsTableSet, CmsXTable, CMS_NUM_XS,
+    CMS_XSTR, CMS_XVALS,
+};
+pub use eos_pt::{
+    eos_pt_get, eos_pt_get_pgas, eos_pt_get_t, EosPtInverseOutput, EosPtOutput,
 };
 pub use free_energy::{
     compute_derived_quantities, compute_f_ideal_ion, compute_f_rad,
     compute_xne, pack_for_export, sifac_constant,
     thermodynamics_from_free_energy, DerivedThermodynamics,
 };
+pub use gamma_de::{eos_gamma_de_get, EosGammaDeOutput};
 pub use gauss_fermi::{
     dfermi, dfermi_order1, DQLAG020_WG, DQLAG020_XG, DQLEG020_WG, DQLEG020_XG,
 };
@@ -74,8 +88,8 @@ pub use ideal::{
     eval_ideal_eos, eval_ideal_eos_from_weights, IDEAL_MASS_FRACTION_LIMIT,
 };
 pub use inverse::{
-    eos_dt_get_rho, eos_dt_get_t, eos_gamma_de_get, eos_pt_get,
-    EosGammaDeOutput, EosInverseOutput, EosPtOutput,
+    eos_dt_get_rho, eos_dt_get_t, EosInverseOutput, WHICH_OTHER_EGAS,
+    WHICH_OTHER_LOG_PTOT,
 };
 pub use ion_offset::{
     compute_ion_offset, compute_ion_offset_from_za, NIST_IONIZATION_TABLE_EV,
@@ -89,6 +103,14 @@ pub use skye::{
     eval_skye_eos_zones, extrapolate_free_energy, get_skye_alfa,
     get_skye_alfa_simple, nonideal_corrections, ocp_free_energy, SkyeConfig,
     SkyeNonidealOutput, SkyeSolidMixingRule,
+};
+pub use tables_4d::{
+    do_eos_interpolations, eosdt_relative_data_path,
+    eval_eosdt_table_from_weights, eval_free_eos, eval_opal_scvh_eos,
+    eval_xtable, format_xz_str, get1_eosdt_for_x, get1_eosdt_results,
+    get_free_eos_alfa, get_opal_scvh_alfa_and_partials, locate_log_q,
+    locate_log_t, DtXzInfo, EosDtTableKind, EosDtTableSet, EosDtVertex,
+    EosDtXzTable, FreeEosConfig, OpalScvhConfig, NUM_EOS_TABLE_VALS,
 };
 pub use types::{
     EosError, EosEvalOutput, EOS_BASIC_RESULT_NAMES, I_CHI_RHO, I_CHI_T, I_CP,

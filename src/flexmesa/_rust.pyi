@@ -376,21 +376,48 @@ def eos_eval_dt_get(
     rho: float, temp: float, chem_id: list[int], xa: _ArrF64,
     use_skye: bool = True, use_pc: bool = False,
     pc_use_gamma_limit: bool = True, skye_solid_mixing_rule: str = "PC",
+    use_cms: bool = False, use_free_eos: bool = True,
+    use_opal_scvh: bool = True,
 ) -> tuple[_ArrF64, _ArrF64, _ArrF64]: ...
 def eos_eval_pt_get(
     pgas: float, temp: float, chem_id: list[int], xa: _ArrF64,
     use_skye: bool = True, use_pc: bool = False,
     pc_use_gamma_limit: bool = True, skye_solid_mixing_rule: str = "PC",
+    use_cms: bool = False, use_free_eos: bool = True,
+    use_opal_scvh: bool = True,
 ) -> tuple[float, float, float, float, _ArrF64, _ArrF64, _ArrF64]: ...
+def eos_eval_opal_scvh(
+    rho: float, temp: float, chem_id: list[int], xa: _ArrF64,
+) -> tuple[_ArrF64, _ArrF64, _ArrF64]: ...
+def eos_eval_free_eos(
+    rho: float, temp: float, chem_id: list[int], xa: _ArrF64,
+) -> tuple[_ArrF64, _ArrF64, _ArrF64]: ...
+def eos_eval_cms(
+    rho: float, temp: float, chem_id: list[int], xa: _ArrF64,
+) -> tuple[_ArrF64, _ArrF64, _ArrF64]: ...
 def eos_eval_dt_get_t(
     rho: float, which_other: int, other_value: float, chem_id: list[int],
     xa: _ArrF64, log_t_guess: float = 6.0, use_skye: bool = True,
-    use_pc: bool = False,
+    use_pc: bool = False, use_cms: bool = False, use_free_eos: bool = True,
+    use_opal_scvh: bool = True,
 ) -> tuple[float, float, _ArrF64, _ArrF64, _ArrF64]: ...
 def eos_eval_dt_get_rho(
     temp: float, which_other: int, other_value: float, chem_id: list[int],
     xa: _ArrF64, log_rho_guess: float = 0.0, use_skye: bool = True,
-    use_pc: bool = False,
+    use_pc: bool = False, use_cms: bool = False, use_free_eos: bool = True,
+    use_opal_scvh: bool = True,
+) -> tuple[float, float, _ArrF64, _ArrF64, _ArrF64]: ...
+def eos_eval_pt_get_t(
+    pgas: float, which_other: int, other_value: float, chem_id: list[int],
+    xa: _ArrF64, log_t_guess: float = 6.0, use_skye: bool = True,
+    use_pc: bool = False, use_cms: bool = False, use_free_eos: bool = True,
+    use_opal_scvh: bool = True,
+) -> tuple[float, float, _ArrF64, _ArrF64, _ArrF64]: ...
+def eos_eval_pt_get_pgas(
+    temp: float, which_other: int, other_value: float, chem_id: list[int],
+    xa: _ArrF64, log_pgas_guess: float = 10.0, use_skye: bool = True,
+    use_pc: bool = False, use_cms: bool = False, use_free_eos: bool = True,
+    use_opal_scvh: bool = True,
 ) -> tuple[float, float, _ArrF64, _ArrF64, _ArrF64]: ...
 def eos_eval_gamma_de_get(
     abar: float, zbar: float, rho: float, energy: float,

@@ -14,6 +14,7 @@ flexmesa-const = { path = "../flexmesa-const" }
 flexmesa-interp1d = { path = "../flexmesa-interp1d" }
 flexmesa-interp2d = { path = "../flexmesa-interp2d" }
 flexmesa-math = { path = "../flexmesa-math" }
+flexmesa-utils = { path = "../flexmesa-utils" }
 rayon.workspace = true
 
 [lints]

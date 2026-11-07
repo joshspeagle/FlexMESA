@@ -188,19 +188,20 @@ def _ideal_free_energy(
     n_q = jnp.power(kt, 1.5) / sifac
     n_j = jnp.where(mask, ya * n_tot, 1.0)
     n_qj = jnp.where(mask, n_q * jnp.power(weights, 1.5), 1.0)
-    terms = jnp.where(mask, ya * (jnp.log(n_j / n_qj) - 1.0), 0.0)
-    return jnp.sum(terms) * kt / (constants.AMU * abar)
+    terms = jnp.where(mask, ya * (jnp.log(n_j) - jnp.log(n_qj) - 1.0), 0.0)
+    return (jnp.sum(terms) * (constants.KERG / (constants.AMU * abar))) * t_in
 
 
-def _ideal_free_energy_vec(
+def _ideal_free_energy_with_aux(
     td: jax.Array,
     abar: jax.Array,
     mask: jax.Array,
     ya: jax.Array,
     weights: jax.Array,
-) -> jax.Array:
-    """Evaluate `compute_F_ideal_ion` at `td = [T, rho]` (`skye_ideal.f90`)."""
-    return _ideal_free_energy(td[0], td[1], abar, mask, ya, weights)
+) -> tuple[jax.Array, jax.Array]:
+    """Evaluate `(F, F)` at `td = [T, rho]` (`skye_ideal.f90`)."""
+    f_val = _ideal_free_energy(td[0], td[1], abar, mask, ya, weights)
+    return f_val, f_val
 
 
 def _ideal_grad_and_val(
@@ -211,9 +212,9 @@ def _ideal_grad_and_val(
     weights: jax.Array,
 ) -> tuple[jax.Array, tuple[jax.Array, jax.Array]]:
     """Return `(grad_F, (grad_F, F))` at `td = [T, rho]`."""
-    f_val, grad_f = jax.value_and_grad(_ideal_free_energy_vec, argnums=0)(
-        td, abar, mask, ya, weights
-    )
+    grad_f, f_val = jax.jacfwd(
+        _ideal_free_energy_with_aux, argnums=0, has_aux=True
+    )(td, abar, mask, ya, weights)
     return grad_f, (grad_f, f_val)
 
 

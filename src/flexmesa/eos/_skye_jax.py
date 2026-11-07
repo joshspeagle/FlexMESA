@@ -53,15 +53,17 @@ def _skye_fb_and_aux(
     t_v, d_v = td[0], td[1]
     ye = zbar / abar
     din = ye * d_v
+    dt2, dd2 = dth * dth, dd * dd
     dti, ddi = 1.0 / dth, 1.0 / dd
+    dt2i, dd2i = 1.0 / dt2, 1.0 / dd2
     qt_w0 = _helm_jax_poly.quintic_w0_coord(
-        t_v, t_lo, dth, dth * dth, dti, dti * dti, dti * dti * dti
+        t_v, t_lo, dth, dt2, dti, dt2i, dt2i * dti
     )
     qd_w0 = _helm_jax_poly.quintic_w0_coord(
-        din, d_lo, dd, dd * dd, ddi, ddi * ddi, ddi * ddi * ddi
+        din, d_lo, dd, dd2, ddi, dd2i, dd2i * ddi
     )
-    ct_w0 = _helm_jax_poly.cubic_w0_coord(t_v, t_lo, dth, dti, dti * dti)
-    cd_w0 = _helm_jax_poly.cubic_w0_coord(din, d_lo, dd, ddi, ddi * ddi)
+    ct_w0 = _helm_jax_poly.cubic_w0_coord(t_v, t_lo, dth, dti, dt2i)
+    cd_w0 = _helm_jax_poly.cubic_w0_coord(din, d_lo, dd, ddi, dd2i)
     f_ele = _helm_jax_poly.h5(fi_f, qt_w0, qd_w0) * ye
     etaele = _helm_jax_poly.h3(fi_ef, ct_w0, cd_w0)
 
@@ -98,13 +100,18 @@ def _skye_fb_and_aux(
 
     df_coul = jnp.where(df_liq <= df_sol, df_liq, df_sol)
     blur = kt / 100.0
+    in_trans = jnp.abs(df_liq - df_sol) <= 20.0 * blur
     ex = jnp.exp(jnp.clip((df_liq - df_sol) / blur, -25.0, 25.0))
     phase = jnp.where(
         df_liq < df_sol - 20.0 * blur,
         0.0,
         jnp.where(df_sol < df_liq - 20.0 * blur, 1.0, ex / (ex + 1.0)),
     )
-    df_blur = df_liq * (1.0 - phase) + df_sol * phase - df_coul
+    df_blur = jnp.where(
+        in_trans,
+        df_liq * (1.0 - phase) + df_sol * phase - df_coul,
+        0.0,
+    )
     f_gas = f_ion + df_coul + f_ele
     return jnp.stack([f_gas, df_blur]), (f_gas, etaele, phase)
 

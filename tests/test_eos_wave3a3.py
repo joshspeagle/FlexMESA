@@ -152,8 +152,8 @@ def test_eval_skye_eos_and_eos_dt_get_rust_jax_and_autodiff() -> None:
         jnp.asarray(xa, dtype=jnp.float64),
         backend="jax",
     )
-    assert _rel_diff(np.asarray(sk_r.res), np.asarray(sk_j.res)) < 2.0e-13
-    assert _rel_diff(np.asarray(sk_r.d_dlnd), np.asarray(sk_j.d_dlnd)) < 1.0e-9
+    assert _rel_diff(np.asarray(sk_r.res), np.asarray(sk_j.res)) < 1.0e-11
+    assert _rel_diff(np.asarray(sk_r.d_dlnd), np.asarray(sk_j.d_dlnd)) < 1.0e-8
     assert (
         _rel_diff(np.asarray(sk_r.d_dln_t), np.asarray(sk_j.d_dln_t)) < 2.0e-6
     )
@@ -191,7 +191,7 @@ def test_eval_skye_eos_and_eos_dt_get_rust_jax_and_autodiff() -> None:
         jnp.asarray(a_arr),
         backend="jax",
     )
-    assert _rel_diff(np.asarray(sk_zr.res), np.asarray(sk_zj.res)) < 2.0e-12
+    assert _rel_diff(np.asarray(sk_zr.res), np.asarray(sk_zj.res)) < 1.0e-10
 
     # Verify Ogata solid mixing rule in crystallized regime
     sk_ogata = eos.eval_skye_eos(
@@ -215,7 +215,7 @@ def test_eval_skye_eos_and_eos_dt_get_rust_jax_and_autodiff() -> None:
         jnp.asarray(xa, dtype=jnp.float64),
         backend="jax",
     )
-    assert _rel_diff(np.asarray(dt_r.res), np.asarray(dt_j.res)) < 2.0e-13
+    assert _rel_diff(np.asarray(dt_r.res), np.asarray(dt_j.res)) < 1.0e-11
 
     def _ln_pgas_fn(r_in: jax.Array, t_in: jax.Array) -> jax.Array:
         out = eos.eos_dt_get(

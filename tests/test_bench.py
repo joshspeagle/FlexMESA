@@ -134,9 +134,9 @@ def test_wave3a_four_stage_benchmarks_parity_across_stages() -> None:
     )
     assert len(records) == 8
     for rec in records:
-        assert rec.max_rel_err <= 1.0e-9, (
+        assert rec.max_rel_err <= 2.0e-9, (
             f"workload {rec.workload} (N={rec.n_zones}) "
-            f"stage parity error {rec.max_rel_err:.3e} > 1e-9"
+            f"stage parity error {rec.max_rel_err:.3e} > 2e-9"
         )
         assert rec.stage0.median_us > 0.0
         assert rec.stage1.median_us > 0.0

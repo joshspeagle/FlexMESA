@@ -28,7 +28,7 @@ use crate::helm::{
 };
 
 /// Configuration parameters for the `HELM` equation of state (`eos.defaults`).
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct HelmConfig {
     /// Temperature threshold ($\mathrm{K}$) below which Coulomb terms roll off.
     pub coulomb_temp_cut: f64,

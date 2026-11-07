@@ -350,10 +350,10 @@ impl HelmTable {
 
         let (t_lo, dth) = (self.t[jat - 1], self.t[jat] - self.t[jat - 1]);
         let (dt2, dti) = (dth * dth, 1.0 / dth);
-        let (dt2i, dt3i) = (dti * dti, dti * dti * dti);
+        let (dt2i, dt3i) = (1.0 / dt2, (1.0 / dt2) * dti);
         let (d_lo, dd) = (self.d[iat - 1], self.d[iat] - self.d[iat - 1]);
         let (dd2, ddi) = (dd * dd, 1.0 / dd);
-        let (dd2i, dd3i) = (ddi * ddi, ddi * ddi * ddi);
+        let (dd2i, dd3i) = (1.0 / dd2, (1.0 / dd2) * ddi);
         let c = [
             (iat, jat),
             (iat + 1, jat),

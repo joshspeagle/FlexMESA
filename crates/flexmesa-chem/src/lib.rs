@@ -52,6 +52,7 @@ pub mod elements;
 pub mod nuclides;
 pub mod nuclides_data_a;
 pub mod nuclides_data_b;
+pub mod nuclides_data_c;
 pub mod solar_ag89;
 pub mod solar_ag89_data;
 pub mod solar_scales;

@@ -29,6 +29,7 @@ use flexmesa_math::pow;
 use crate::elements::NPART;
 use crate::nuclides_data_a::{RawNuclideRow, BUILTIN_NUCLIDES_A};
 use crate::nuclides_data_b::BUILTIN_NUCLIDES_B;
+use crate::nuclides_data_c::BUILTIN_NUCLIDES_C;
 use crate::ChemError;
 
 /// Atomic mass excess $\Delta M_p$ of ${}^1\mathrm{H}$ (`h1`) in
@@ -154,13 +155,17 @@ impl NuclideCatalog {
     }
 
     fn build_builtin() -> Self {
-        let total = BUILTIN_NUCLIDES_A.len() + BUILTIN_NUCLIDES_B.len();
+        let total = BUILTIN_NUCLIDES_A.len()
+            + BUILTIN_NUCLIDES_B.len()
+            + BUILTIN_NUCLIDES_C.len();
         let mut entries = Vec::with_capacity(total);
         let mut by_id = HashMap::with_capacity(total);
         let mut by_name = HashMap::with_capacity(total);
 
-        let iter_rows =
-            BUILTIN_NUCLIDES_A.iter().chain(BUILTIN_NUCLIDES_B.iter());
+        let iter_rows = BUILTIN_NUCLIDES_A
+            .iter()
+            .chain(BUILTIN_NUCLIDES_B.iter())
+            .chain(BUILTIN_NUCLIDES_C.iter());
         for (pos, &(cid, name, z, n, spin, mex, isom)) in iter_rows.enumerate()
         {
             let entry = NuclideEntry::from_raw(

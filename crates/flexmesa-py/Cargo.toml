@@ -14,6 +14,7 @@ test = false
 doctest = false
 
 [dependencies]
+flexmesa-atm = { path = "../flexmesa-atm" }
 flexmesa-autodiff = { path = "../flexmesa-autodiff" }
 flexmesa-bench = { path = "../flexmesa-bench" }
 flexmesa-chem = { path = "../flexmesa-chem" }
@@ -27,6 +28,7 @@ flexmesa-ionization = { path = "../flexmesa-ionization" }
 flexmesa-kap = { path = "../flexmesa-kap" }
 flexmesa-math = { path = "../flexmesa-math" }
 flexmesa-mtx = { path = "../flexmesa-mtx" }
+flexmesa-net = { path = "../flexmesa-net" }
 flexmesa-neu = { path = "../flexmesa-neu" }
 flexmesa-num = { path = "../flexmesa-num" }
 flexmesa-rates = { path = "../flexmesa-rates" }

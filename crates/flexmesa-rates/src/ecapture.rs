@@ -3,7 +3,9 @@
 //! electron screening shift (`Throwe1983`, `Itoh2002`), and on-the-fly Fermi-Dirac
 //! phase-space weak rates (`eval_ecapture`, `eval_psi`, `coulomb.f90`).
 
-use flexmesa_const::{CLIGHT, FINE, KEV, LN2, ME, MEV_TO_ERGS, ONE_THIRD, PI};
+use flexmesa_const::{
+    CLIGHT, FINE, KERG, KEV, LN2, ME, MEV_TO_ERGS, ONE_THIRD, PI, PI2,
+};
 use flexmesa_eos::dfermi;
 
 use crate::loader::RatesCatalog;
@@ -287,4 +289,121 @@ pub fn eval_ecapture_pair(
         dqneu_dln_t: 0.0,
         dqneu_dln_rho: 0.0,
     })
+}
+
+/// Evaluates proton electron-capture (`rpen`, `spen`) and neutron positron-capture
+/// (`rnep`, `snep`) rates and neutrino losses (`ecapnuc` in `rates/private/ratelib.f90`).
+#[must_use]
+pub fn eval_ecapnuc_rate(
+    etakep: f64,
+    temp: f64,
+    rho: f64,
+) -> (f64, f64, f64, f64) {
+    const C2ME: f64 = ME * CLIGHT * CLIGHT;
+    const K_DIV_C2ME: f64 = KERG / C2ME;
+    const CMK5: f64 =
+        K_DIV_C2ME * K_DIV_C2ME * K_DIV_C2ME * K_DIV_C2ME * K_DIV_C2ME;
+    const CMK6: f64 = CMK5 * K_DIV_C2ME;
+    const QN1: f64 = -2.071_644_6e-6;
+    const QN2: f64 = 2.071_644_6e-6;
+    const FT: f64 = 1_083.926_9;
+
+    let t9 = temp * 1.0e-9;
+    if t9 < 1.0e-3 || rho < 1.0e-9 || etakep < -50.0 {
+        return (0.0, 0.0, 0.0, 0.0);
+    }
+
+    let eval_branch = |qn: f64, etael: f64, etaef: f64| -> (f64, f64) {
+        let t5 = temp * temp * temp * temp * temp;
+        let zetan = qn / KERG / temp;
+        let eta = etaef - etael;
+        let exeta = if eta <= 6.8e2 { eta.exp() } else { 0.0 };
+        let etael2 = etael * etael;
+        let etael3 = etael2 * etael;
+        let etael4 = etael3 * etael;
+        let etael5 = etael4 * etael;
+        let zetan2 = zetan * zetan;
+        let f0 = if eta <= 6.8e2 { exeta.ln_1p() } else { eta };
+
+        let f1l = exeta;
+        let f2l = 2.0 * f1l;
+        let f3l = 6.0 * f1l;
+        let f4l = 24.0 * f1l;
+        let f5l = 120.0 * f1l;
+
+        let (f1g, f2g, f3g, f4g, f5g) = if eta > 0.0 {
+            let exmeta = (-eta).exp();
+            let eta2 = eta * eta;
+            let eta3 = eta2 * eta;
+            let eta4 = eta3 * eta;
+            (
+                0.5 * eta2 + 2.0 - exmeta,
+                eta3 / 3.0 + 4.0 * eta + 2.0 * exmeta,
+                0.25 * eta4 + 0.5 * PI2 * eta2 + 12.0 - 6.0 * exmeta,
+                0.2 * eta4 * eta
+                    + 2.0 * PI2 / 3.0 * eta3
+                    + 48.0 * eta
+                    + 24.0 * exmeta,
+                eta4 * eta2 / 6.0
+                    + 5.0 / 6.0 * PI2 * eta4
+                    + 7.0 / 6.0 * PI2 * eta2
+                    + 240.0
+                    - 120.0 * exmeta,
+            )
+        } else {
+            (0.0, 0.0, 0.0, 0.0, 0.0)
+        };
+
+        let fac3 = 2.0 * zetan + 4.0 * etael;
+        let fac2 = 6.0 * etael2 + 6.0 * etael * zetan + zetan2;
+        let fac1 = 4.0 * etael3 + 6.0 * etael2 * zetan + 2.0 * etael * zetan2;
+        let fac0 = etael4 + 2.0 * zetan * etael3 + etael2 * zetan2;
+
+        let rie1 = f4l + fac3 * f3l + fac2 * f2l + fac1 * f1l + fac0 * f0;
+        let rie2 = f4g + fac3 * f3g + fac2 * f2g + fac1 * f1g + fac0 * f0;
+
+        let facv4 = 5.0 * etael + 3.0 * zetan;
+        let facv3 = 10.0 * etael2 + 12.0 * etael * zetan + 3.0 * zetan2;
+        let facv2 = 10.0 * etael3
+            + 18.0 * etael2 * zetan
+            + 9.0 * etael * zetan2
+            + zetan2 * zetan;
+        let facv1 = 5.0 * etael4
+            + 12.0 * etael3 * zetan
+            + 9.0 * etael2 * zetan2
+            + 2.0 * etael * zetan2 * zetan;
+        let facv0 = etael5
+            + 3.0 * etael4 * zetan
+            + 3.0 * etael3 * zetan2
+            + etael2 * zetan2 * zetan;
+        let rjv1 = f5l
+            + facv4 * f4l
+            + facv3 * f3l
+            + facv2 * f2l
+            + facv1 * f1l
+            + facv0 * f0;
+        let rjv2 = f5g
+            + facv4 * f4g
+            + facv3 * f3g
+            + facv2 * f2g
+            + facv1 * f1g
+            + facv0 * f0;
+
+        if eta > 0.0 {
+            (
+                LN2 * CMK5 * t5 * rie2 / FT,
+                LN2 * CMK6 * t5 * temp * rjv2 / FT,
+            )
+        } else {
+            (
+                LN2 * CMK5 * t5 * rie1 / FT,
+                LN2 * CMK6 * t5 * temp * rjv1 / FT,
+            )
+        }
+    };
+
+    let etaef = etakep + C2ME / KERG / temp;
+    let (rpen, spen) = eval_branch(QN1, QN2 / KERG / temp, etaef);
+    let (rnep, snep) = eval_branch(QN2, C2ME / KERG / temp, -etaef);
+    (rpen, rnep, spen, snep)
 }

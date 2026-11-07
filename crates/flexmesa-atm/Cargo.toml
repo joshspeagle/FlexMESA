@@ -1,0 +1,23 @@
+[package]
+name = "flexmesa-atm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Surface boundary conditions, T(tau) relations, irradiated atmospheres, and atmosphere tables for FlexMESA"
+
+[dependencies]
+flexmesa-autodiff = { path = "../flexmesa-autodiff" }
+flexmesa-chem = { path = "../flexmesa-chem" }
+flexmesa-const = { path = "../flexmesa-const" }
+flexmesa-eos = { path = "../flexmesa-eos" }
+flexmesa-interp1d = { path = "../flexmesa-interp1d" }
+flexmesa-interp2d = { path = "../flexmesa-interp2d" }
+flexmesa-kap = { path = "../flexmesa-kap" }
+flexmesa-math = { path = "../flexmesa-math" }
+flexmesa-num = { path = "../flexmesa-num" }
+flexmesa-utils = { path = "../flexmesa-utils" }
+
+[lints]
+workspace = true

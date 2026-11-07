@@ -184,43 +184,76 @@ pub fn eval_skye_eos_from_weights(
     let ytot1 = 1.0 / abar;
     let f_rad = compute_f_rad(temp, den);
 
-    let mut azion = Vec::with_capacity(species);
-    let mut acmi = Vec::with_capacity(species);
-    let mut a_sel = Vec::with_capacity(species);
-    let mut select_xa = Vec::with_capacity(species);
+    let mut azion_buf = [0.0_f64; 32];
+    let mut acmi_buf = [0.0_f64; 32];
+    let mut a_buf = [0.0_f64; 32];
+    let mut ya_buf = [0.0_f64; 32];
+    let mut azion_vec = Vec::new();
+    let mut acmi_vec = Vec::new();
+    let mut a_vec = Vec::new();
+    let mut ya_vec = Vec::new();
     let mut norm = 0.0_f64;
 
-    for j in 0..species {
-        if xa[j] > config.mass_fraction_limit_for_skye {
-            azion.push(z[j] as f64);
-            acmi.push(acmi_in[j]);
-            a_sel.push(a_in[j]);
-            select_xa.push(xa[j]);
-            norm += xa[j];
+    let (azion, acmi, ya): (&[f64], &[f64], &[f64]) = if species <= 32 {
+        let mut count = 0_usize;
+        for j in 0..species {
+            if xa[j] > config.mass_fraction_limit_for_skye {
+                azion_buf[count] = z[j] as f64;
+                acmi_buf[count] = acmi_in[j];
+                a_buf[count] = a_in[j];
+                ya_buf[count] = xa[j];
+                norm += xa[j];
+                count += 1;
+            }
         }
-    }
-    if select_xa.is_empty() || norm <= 0.0 {
-        return Err(EosError::InvalidState {
-            context: "eval_skye_eos_from_weights",
-            detail: "no species above mass_fraction_limit_for_skye".to_string(),
-        });
-    }
-    for x in &mut select_xa {
-        *x /= norm;
-    }
+        if count == 0 || norm <= 0.0 {
+            return Err(EosError::InvalidState {
+                context: "eval_skye_eos_from_weights",
+                detail: "no species above mass_fraction_limit_for_skye"
+                    .to_string(),
+            });
+        }
+        let mut ya_norm = 0.0_f64;
+        for idx in 0..count {
+            let x = ya_buf[idx] / norm;
+            let yj = x / a_buf[idx];
+            ya_buf[idx] = yj;
+            ya_norm += yj;
+        }
+        for y in &mut ya_buf[..count] {
+            *y /= ya_norm;
+        }
+        (&azion_buf[..count], &acmi_buf[..count], &ya_buf[..count])
+    } else {
+        for j in 0..species {
+            if xa[j] > config.mass_fraction_limit_for_skye {
+                azion_vec.push(z[j] as f64);
+                acmi_vec.push(acmi_in[j]);
+                a_vec.push(a_in[j]);
+                ya_vec.push(xa[j]);
+                norm += xa[j];
+            }
+        }
+        if ya_vec.is_empty() || norm <= 0.0 {
+            return Err(EosError::InvalidState {
+                context: "eval_skye_eos_from_weights",
+                detail: "no species above mass_fraction_limit_for_skye"
+                    .to_string(),
+            });
+        }
+        let mut ya_norm = 0.0_f64;
+        for (y, &aj) in ya_vec.iter_mut().zip(a_vec.iter()) {
+            let yj = (*y / norm) / aj;
+            *y = yj;
+            ya_norm += yj;
+        }
+        for y in &mut ya_vec {
+            *y /= ya_norm;
+        }
+        (&azion_vec, &acmi_vec, &ya_vec)
+    };
 
-    let mut ya = Vec::with_capacity(select_xa.len());
-    let mut ya_norm = 0.0_f64;
-    for (&x, &aj) in select_xa.iter().zip(a_sel.iter()) {
-        let yj = x / aj;
-        ya.push(yj);
-        ya_norm += yj;
-    }
-    for y in &mut ya {
-        *y /= ya_norm;
-    }
-
-    let mut f_ideal_ion = compute_f_ideal_ion(temp, den, abar, &acmi, &ya);
+    let mut f_ideal_ion = compute_f_ideal_ion(temp, den, abar, acmi, ya);
     if config.skye_use_ion_offsets {
         let offset = compute_ion_offset_from_za(
             &xa[..species],
@@ -240,9 +273,9 @@ pub fn eval_skye_eos_from_weights(
     let xnefer = compute_xne(den, ytot1, zbar);
 
     let coul = nonideal_corrections(
-        &ya,
-        &azion,
-        &acmi,
+        ya,
+        azion,
+        acmi,
         config.skye_min_gamma_for_solid,
         config.skye_max_gamma_for_liquid,
         config.skye_solid_mixing_rule,
@@ -266,7 +299,7 @@ pub fn eval_skye_eos_from_weights(
         coul.phase,
         coul.latent_ddln_t,
         coul.latent_ddln_rho,
-        xa.len(),
+        0,
     )?;
     out.set_single_component_fraction(I_FRAC_SKYE);
     Ok(out)
@@ -291,9 +324,41 @@ pub fn eval_skye_eos(
             detail: "chem_id and xa length mismatch".to_string(),
         });
     }
-    let catalog = NuclideCatalog::builtin();
-    let (z, _, acmi, a) =
-        crate::blend_dt::extract_species_weights(&catalog, chem_id, "eval_skye_eos")?;
+    let catalog = NuclideCatalog::builtin_ref();
+    let n = chem_id.len();
+    if n <= 32 {
+        let mut z_buf = [0_usize; 32];
+        let mut ac_buf = [0.0_f64; 32];
+        let mut a_buf = [0.0_f64; 32];
+        for (idx, &cid) in chem_id.iter().enumerate() {
+            let nuc = catalog.get_by_id(cid).ok_or_else(|| {
+                EosError::InvalidState {
+                    context: "eval_skye_eos",
+                    detail: format!("unknown chem_id {cid}"),
+                }
+            })?;
+            z_buf[idx] = nuc.z as usize;
+            ac_buf[idx] = nuc.w;
+            a_buf[idx] = nuc.z_plus_n as f64;
+        }
+        return eval_skye_eos_from_weights(
+            config,
+            ht,
+            t,
+            rho,
+            abar,
+            zbar,
+            xa,
+            &z_buf[..n],
+            &ac_buf[..n],
+            &a_buf[..n],
+        );
+    }
+    let (z, _, acmi, a) = crate::blend_dt::extract_species_weights(
+        catalog,
+        chem_id,
+        "eval_skye_eos",
+    )?;
     eval_skye_eos_from_weights(
         config, ht, t, rho, abar, zbar, xa, &z, &acmi, &a,
     )

@@ -332,12 +332,7 @@ impl CubicBasis1D {
         let mx = 1.0 - x;
         Self {
             w0: [xpsi0(x), xpsi1(x) * dh, xpsi0(mx), -xpsi1(mx) * dh],
-            w1: [
-                xdpsi0(x) * dhi,
-                xdpsi1(x),
-                -xdpsi0(mx) * dhi,
-                xdpsi1(mx),
-            ],
+            w1: [xdpsi0(x) * dhi, xdpsi1(x), -xdpsi0(mx) * dhi, xdpsi1(mx)],
             w2: [
                 xddpsi0(x) * dh2i,
                 xddpsi1(x) * dhi,

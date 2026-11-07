@@ -147,6 +147,7 @@ pub fn combine_two_eos_components(
 }
 
 /// Evaluates `HELM` for `eosDT_get` with the given [`HelmTable`] and [`HelmConfig`].
+#[allow(clippy::too_many_arguments)]
 fn eval_helm_component(
     ht: &HelmTable,
     rho: f64,
@@ -155,7 +156,6 @@ fn eval_helm_component(
     log_t: f64,
     abar: f64,
     zbar: f64,
-    species: usize,
     cfg: &HelmConfig,
 ) -> Result<EosEvalOutput, EosError> {
     let (helm_res, _off_table) = helmeos2(
@@ -165,9 +165,7 @@ fn eval_helm_component(
         context: "eval_helm_component",
         detail: format!("helmeos2 failed at rho={rho:e}, T={t:e}"),
     })?;
-    let (mut out, _, _) =
-        do_convert_helm_results(abar, zbar, rho, t, &helm_res);
-    out.d_dxa = vec![[0.0; 2]; species];
+    let (out, _, _) = do_convert_helm_results(abar, zbar, rho, t, &helm_res);
     Ok(out)
 }
 
@@ -191,7 +189,7 @@ fn eval_level6_from_weights(
 
     if alfa <= 0.0 {
         return eval_helm_component(
-            ht, rho, log_rho, t, log_t, abar, zbar, xa.len(), &cfg.helm,
+            ht, rho, log_rho, t, log_t, abar, zbar, &cfg.helm,
         );
     }
     if alfa >= 1.0 {
@@ -200,9 +198,8 @@ fn eval_level6_from_weights(
         );
     }
 
-    let out_helm = eval_helm_component(
-        ht, rho, log_rho, t, log_t, abar, zbar, xa.len(), &cfg.helm,
-    )?;
+    let out_helm =
+        eval_helm_component(ht, rho, log_rho, t, log_t, abar, zbar, &cfg.helm)?;
     let out_ideal =
         eval_ideal_eos_from_weights(t, rho, abar, zbar, xa, acmi, a_baryon)?;
     Ok(combine_two_eos_components(
@@ -329,16 +326,16 @@ pub fn eos_dt_get(
     xa: &[f64],
     cfg: &EosConfig,
 ) -> Result<EosEvalOutput, EosError> {
-    let catalog = NuclideCatalog::builtin();
+    let catalog = NuclideCatalog::builtin_ref();
     let comp =
-        get_composition_info(&catalog, chem_id, xa, true).map_err(|e| {
+        get_composition_info(catalog, chem_id, xa, true).map_err(|e| {
             EosError::InvalidState {
                 context: "eos_dt_get",
                 detail: e.to_string(),
             }
         })?;
     let (z_int, azion, acmi, a_baryon) =
-        extract_species_weights(&catalog, chem_id, "eos_dt_get")?;
+        extract_species_weights(catalog, chem_id, "eos_dt_get")?;
     let log_rho = rho.log10();
     let log_t = t.log10();
     eos_dt_get_from_weights(
@@ -365,15 +362,15 @@ pub fn eos_dt_get_zones(
         });
     }
 
-    let catalog = NuclideCatalog::builtin();
+    let catalog = NuclideCatalog::builtin_ref();
     let (z_int, azion, acmi, a_baryon) =
-        extract_species_weights(&catalog, chem_id, "eos_dt_get_zones")?;
+        extract_species_weights(catalog, chem_id, "eos_dt_get_zones")?;
 
     (0..n_zones)
         .into_par_iter()
         .map(|iz| {
             let xa = &xa_zones[iz * n_spec..(iz + 1) * n_spec];
-            let comp = get_composition_info(&catalog, chem_id, xa, true)
+            let comp = get_composition_info(catalog, chem_id, xa, true)
                 .map_err(|e| EosError::InvalidState {
                     context: "eos_dt_get_zones",
                     detail: e.to_string(),

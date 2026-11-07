@@ -42,45 +42,76 @@ pub fn eval_ideal_eos_from_weights(
         });
     }
     let species = xa.len().min(weights.len()).min(a.len());
-    let mut acmi = Vec::with_capacity(species);
-    let mut a_sel = Vec::with_capacity(species);
-    let mut select_xa = Vec::with_capacity(species);
+    let mut acmi_buf = [0.0_f64; 32];
+    let mut a_buf = [0.0_f64; 32];
+    let mut ya_buf = [0.0_f64; 32];
+    let mut acmi_vec = Vec::new();
+    let mut ya_vec = Vec::new();
+    let mut count = 0_usize;
     let mut norm = 0.0_f64;
 
-    for j in 0..species {
-        if xa[j] > IDEAL_MASS_FRACTION_LIMIT {
-            acmi.push(weights[j]);
-            a_sel.push(a[j]);
-            select_xa.push(xa[j]);
-            norm += xa[j];
+    let (acmi, ya): (&[f64], &[f64]) = if species <= 32 {
+        for j in 0..species {
+            if xa[j] > IDEAL_MASS_FRACTION_LIMIT {
+                acmi_buf[count] = weights[j];
+                a_buf[count] = a[j];
+                ya_buf[count] = xa[j];
+                norm += xa[j];
+                count += 1;
+            }
         }
-    }
-    if select_xa.is_empty() || norm <= 0.0 {
-        return Err(EosError::InvalidState {
-            context: "eval_ideal_eos_from_weights",
-            detail: "no species with xa > 1e-10".to_string(),
-        });
-    }
-
-    for x in &mut select_xa {
-        *x /= norm;
-    }
-
-    let mut ya = Vec::with_capacity(select_xa.len());
-    let mut ya_norm = 0.0_f64;
-    for (&x, &aj) in select_xa.iter().zip(a_sel.iter()) {
-        let yj = x / aj;
-        ya.push(yj);
-        ya_norm += yj;
-    }
-    for y in &mut ya {
-        *y /= ya_norm;
-    }
+        if count == 0 || norm <= 0.0 {
+            return Err(EosError::InvalidState {
+                context: "eval_ideal_eos_from_weights",
+                detail: "no species with xa > 1e-10".to_string(),
+            });
+        }
+        let mut ya_norm = 0.0_f64;
+        for idx in 0..count {
+            let x = ya_buf[idx] / norm;
+            let yj = x / a_buf[idx];
+            ya_buf[idx] = yj;
+            ya_norm += yj;
+        }
+        for y in &mut ya_buf[..count] {
+            *y /= ya_norm;
+        }
+        (&acmi_buf[..count], &ya_buf[..count])
+    } else {
+        acmi_vec.reserve(species);
+        let mut a_sel = Vec::with_capacity(species);
+        let mut select_xa = Vec::with_capacity(species);
+        for j in 0..species {
+            if xa[j] > IDEAL_MASS_FRACTION_LIMIT {
+                acmi_vec.push(weights[j]);
+                a_sel.push(a[j]);
+                select_xa.push(xa[j]);
+                norm += xa[j];
+            }
+        }
+        if select_xa.is_empty() || norm <= 0.0 {
+            return Err(EosError::InvalidState {
+                context: "eval_ideal_eos_from_weights",
+                detail: "no species with xa > 1e-10".to_string(),
+            });
+        }
+        ya_vec.reserve(select_xa.len());
+        let mut ya_norm = 0.0_f64;
+        for (&x, &aj) in select_xa.iter().zip(a_sel.iter()) {
+            let yj = (x / norm) / aj;
+            ya_vec.push(yj);
+            ya_norm += yj;
+        }
+        for y in &mut ya_vec {
+            *y /= ya_norm;
+        }
+        (&acmi_vec, &ya_vec)
+    };
 
     let temp = AutoDiffReal2VarOrder3::var1(temp_in);
     let den = AutoDiffReal2VarOrder3::var2(den_in);
 
-    let f_ideal_ion = compute_f_ideal_ion(temp, den, abar, &acmi, &ya);
+    let f_ideal_ion = compute_f_ideal_ion(temp, den, abar, acmi, ya);
     let zero = AutoDiffReal2VarOrder3::constant(0.0);
     let etaele = AutoDiffReal2VarOrder3::constant(-1.0e99);
     let xnefer = AutoDiffReal2VarOrder3::constant(1.0e-20);
@@ -99,7 +130,7 @@ pub fn eval_ideal_eos_from_weights(
         zero,
         zero,
         zero,
-        xa.len(),
+        0,
     )?;
     out.res[I_MU] = abar;
     out.set_single_component_fraction(I_FRAC_IDEAL);
@@ -131,9 +162,33 @@ pub fn eval_ideal_eos(
             ),
         });
     }
-    let catalog = NuclideCatalog::builtin();
-    let mut weights = Vec::with_capacity(xa.len());
-    let mut a = Vec::with_capacity(xa.len());
+    let catalog = NuclideCatalog::builtin_ref();
+    let n = xa.len();
+    if n <= 32 {
+        let mut w_buf = [0.0_f64; 32];
+        let mut a_buf = [0.0_f64; 32];
+        for (idx, &cid) in chem_id.iter().enumerate() {
+            let entry = catalog.get_by_id(cid).ok_or_else(|| {
+                EosError::InvalidState {
+                    context: "eval_ideal_eos",
+                    detail: format!("unknown chem_id {cid}"),
+                }
+            })?;
+            w_buf[idx] = entry.w;
+            a_buf[idx] = entry.z_plus_n as f64;
+        }
+        return eval_ideal_eos_from_weights(
+            temp_in,
+            den_in,
+            abar,
+            zbar,
+            xa,
+            &w_buf[..n],
+            &a_buf[..n],
+        );
+    }
+    let mut weights = Vec::with_capacity(n);
+    let mut a = Vec::with_capacity(n);
     for &cid in chem_id {
         let entry =
             catalog

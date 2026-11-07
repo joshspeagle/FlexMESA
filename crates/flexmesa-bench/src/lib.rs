@@ -35,6 +35,7 @@ pub mod bicub_fast;
 pub mod kernels_micro;
 pub mod kernels_solver;
 pub mod kernels_wave2;
+pub mod kernels_wave3a;
 pub mod tridiag_fast;
 
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -52,6 +53,10 @@ pub use kernels_solver::{
 pub use kernels_wave2::{
     bench_chem_comp, bench_colors_sed, bench_ion_4d, bench_ion_fe56,
     run_all_wave2_benchmarks,
+};
+pub use kernels_wave3a::{
+    bench_eos_helm, bench_eos_ideal, bench_eos_pc, bench_eos_skye,
+    run_all_wave3a_benchmarks,
 };
 
 /// Number of worker threads used in Stage 3 multi-core benchmarks.
@@ -123,8 +128,8 @@ pub fn measure_stage3_chunks_us<T: Send, F: Fn(usize, &mut [T]) + Sync>(
     let samples_mutex = Mutex::new(Vec::new());
     stage3_pool().broadcast(|ctx| {
         let tid = ctx.index();
-        let mut guard = (tid < chunk_slots.len())
-            .then(|| chunk_slots[tid].lock().unwrap());
+        let mut guard =
+            (tid < chunk_slots.len()).then(|| chunk_slots[tid].lock().unwrap());
         wait();
         for _ in 0..n_warmup {
             if let Some(ref mut dst) = guard {
@@ -297,10 +302,10 @@ impl ThermoGrid {
     /// # Returns
     /// Initialized [`ThermoGrid`] across `n_zones` shells.
     pub fn new(n_zones: usize) -> Self {
-        let (mut log10_t, mut t) =
-            (Vec::with_capacity(n_zones), Vec::with_capacity(n_zones));
-        let (mut log10_rho, mut rho) =
-            (Vec::with_capacity(n_zones), Vec::with_capacity(n_zones));
+        let mut log10_t = Vec::with_capacity(n_zones);
+        let mut t = Vec::with_capacity(n_zones);
+        let mut log10_rho = Vec::with_capacity(n_zones);
+        let mut rho = Vec::with_capacity(n_zones);
         let (mut abar, mut zbar) =
             (Vec::with_capacity(n_zones), Vec::with_capacity(n_zones));
         let denom = (n_zones.saturating_sub(1)).max(1) as f64;
@@ -314,7 +319,15 @@ impl ThermoGrid {
             abar.push(a);
             zbar.push(0.5 * a);
         }
-        Self { n_zones, log10_t, t, log10_rho, rho, abar, zbar }
+        Self {
+            n_zones,
+            log10_t,
+            t,
+            log10_rho,
+            rho,
+            abar,
+            zbar,
+        }
     }
 }
 
@@ -339,12 +352,10 @@ impl BicubTable {
     /// Builds the deterministic $64 \times 64$ bicubic spline table.
     pub fn new() -> Self {
         let (nx, ny) = (64usize, 64usize);
-        let x: Vec<f64> = (0..nx)
-            .map(|i| 3.5 + 6.0 * (i as f64) / ((nx - 1) as f64))
-            .collect();
-        let y: Vec<f64> = (0..ny)
-            .map(|j| 7.0 + 3.0 * (j as f64) / ((ny - 1) as f64))
-            .collect();
+        let x: Vec<f64> =
+            (0..nx).map(|i| 3.5 + 6.0 * (i as f64) / 63.0).collect();
+        let y: Vec<f64> =
+            (0..ny).map(|j| 7.0 + 3.0 * (j as f64) / 63.0).collect();
         let mut z = vec![0.0_f64; nx * ny];
         for (i, &xi) in x.iter().enumerate() {
             for (j, &yj) in y.iter().enumerate() {
@@ -355,11 +366,16 @@ impl BicubTable {
             }
         }
         let bc = BicubicBc::NotAKnot;
-        let (coeffs, ilinx, iliny) = interp_mkbicub_db(
-            &x, &y, &z, bc, &[], bc, &[], bc, &[], bc, &[],
-        )
-        .expect("valid bicubic table");
-        Self { x, y, coeffs, ilinx, iliny }
+        let (coeffs, ilinx, iliny) =
+            interp_mkbicub_db(&x, &y, &z, bc, &[], bc, &[], bc, &[], bc, &[])
+                .expect("valid bicubic table");
+        Self {
+            x,
+            y,
+            coeffs,
+            ilinx,
+            iliny,
+        }
     }
 }
 
@@ -371,14 +387,6 @@ impl Default for BicubTable {
 
 /// Runs the complete Wave 1 four-stage benchmark suite across `zone_counts` and
 /// returns all [`BenchRecord`] entries.
-///
-/// # Arguments
-/// * `zone_counts` - Slice of radial zone counts $N_{\mathrm{zones}}$.
-/// * `n_warmup` - Number of untimed warmup iterations per stage.
-/// * `n_repeats` - Number of timed iterations per stage.
-///
-/// # Returns
-/// Vector of [`BenchRecord`] results across all six Wave 1 workloads.
 pub fn run_all_wave1_benchmarks(
     zone_counts: &[usize],
     n_warmup: usize,

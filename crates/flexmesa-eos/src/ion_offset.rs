@@ -88,7 +88,7 @@ pub fn compute_ion_offset(
             ),
         });
     }
-    let catalog = NuclideCatalog::builtin();
+    let catalog = NuclideCatalog::builtin_ref();
     let mut offset_ev_per_amu = 0.0_f64;
     for (&xk, &cid) in xa.iter().zip(chem_id.iter()) {
         let entry =

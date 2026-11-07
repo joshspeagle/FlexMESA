@@ -36,9 +36,8 @@ use crate::BenchRecord;
 
 /// Canonical 8-isotope stellar benchmark network (`h1`, `he3`, `he4`, `c12`,
 /// `n14`, `o16`, `ne20`, `mg24`).
-pub const WAVE2_ISO_NAMES: [&str; 8] = [
-    "h1", "he3", "he4", "c12", "n14", "o16", "ne20", "mg24",
-];
+pub const WAVE2_ISO_NAMES: [&str; 8] =
+    ["h1", "he3", "he4", "c12", "n14", "o16", "ne20", "mg24"];
 
 /// Builds the deterministic 8-isotope mass fraction profile `xa` of length
 /// `nz` spanning core-to-surface stellar compositions.
@@ -141,12 +140,10 @@ pub fn bench_ion_fe56(
     n_repeats: usize,
 ) -> BenchRecord {
     let denom = (nz.saturating_sub(1)).max(1) as f64;
-    let lne: Vec<f64> = (0..nz)
-        .map(|k| 24.5 + 5.5 * (k as f64) / denom)
-        .collect();
-    let lt: Vec<f64> = (0..nz)
-        .map(|k| 6.2 + 1.6 * (k as f64) / denom)
-        .collect();
+    let lne: Vec<f64> =
+        (0..nz).map(|k| 24.5 + 5.5 * (k as f64) / denom).collect();
+    let lt: Vec<f64> =
+        (0..nz).map(|k| 6.2 + 1.6 * (k as f64) / denom).collect();
     let tbl = Fe56He4Table::builtin();
 
     bench_zone_fn::<3, _, _>(
@@ -215,9 +212,7 @@ pub fn bench_ion_4d(
             )
             .expect("valid eval_ionization")
         },
-        |k| {
-            grid.eval_generic(z_vec[k], x_vec[k], lrho_vec[k], lt_vec[k])
-        },
+        |k| grid.eval_generic(z_vec[k], x_vec[k], lrho_vec[k], lt_vec[k]),
     )
 }
 
@@ -265,11 +260,7 @@ pub fn bench_colors_sed(
                 &cube.meta_grid,
             );
             let sed = cube.eval_sed_hermite_generic(
-                teff[k],
-                logg[k],
-                meta[k],
-                rad[k],
-                D_10PC_CM,
+                teff[k], logg[k], meta[k], rad[k], D_10PC_CM,
             );
             let (mag_bol, flux_bol) =
                 calculate_bolometric_phot(&cube.wavelengths, &sed)

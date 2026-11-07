@@ -7,19 +7,19 @@
 use flexmesa_const::AVO;
 use rayon::prelude::*;
 
-use crate::helm::eval::{HelmConfig, helmeos2};
+use crate::helm::eval::{helmeos2, HelmConfig};
 use crate::helm::table::HelmTable;
 use crate::helm::{
     H_CHID, H_CHIT, H_CP, H_CV, H_DCHIDDA, H_DCHIDDD, H_DCHIDDT, H_DCHIDDZ,
     H_DCHITDA, H_DCHITDD, H_DCHITDT, H_DCHITDZ, H_DCPDA, H_DCPDD, H_DCPDT,
-    H_DCPDZ, H_DCVDA, H_DCVDD, H_DCVDT, H_DCVDZ, H_DEA, H_DED, H_DEDA,
-    H_DEDD, H_DEDT, H_DEDZ, H_DET, H_DETAA, H_DETAD, H_DETAT, H_DETAZ, H_DEZ,
+    H_DCPDZ, H_DCVDA, H_DCVDD, H_DCVDT, H_DCVDZ, H_DEA, H_DED, H_DEDA, H_DEDD,
+    H_DEDT, H_DEDZ, H_DET, H_DETAA, H_DETAD, H_DETAT, H_DETAZ, H_DEZ,
     H_DGAM1DA, H_DGAM1DD, H_DGAM1DT, H_DGAM1DZ, H_DGAM3DA, H_DGAM3DD,
     H_DGAM3DT, H_DGAM3DZ, H_DNABDA, H_DNABDD, H_DNABDT, H_DNABDZ, H_DPGASA,
-    H_DPGASD, H_DPGAST, H_DPGASZ, H_DSA, H_DSD, H_DSDA, H_DSDD, H_DSDT,
-    H_DSDZ, H_DST, H_DSTA, H_DSTT, H_DSTZ, H_DSZ, H_DXNEA, H_DXNED, H_DXNET,
-    H_DXNEZ, H_ETAELE, H_ETOT, H_GAM1, H_GAM3, H_NABAD, H_PGAS, H_STOT,
-    H_XNE, NUM_HELM_RESULTS,
+    H_DPGASD, H_DPGAST, H_DPGASZ, H_DSA, H_DSD, H_DSDA, H_DSDD, H_DSDT, H_DSDZ,
+    H_DST, H_DSTA, H_DSTT, H_DSTZ, H_DSZ, H_DXNEA, H_DXNED, H_DXNET, H_DXNEZ,
+    H_ETAELE, H_ETOT, H_GAM1, H_GAM3, H_NABAD, H_PGAS, H_STOT, H_XNE,
+    NUM_HELM_RESULTS,
 };
 use crate::types::{
     EosEvalOutput, I_CHI_RHO, I_CHI_T, I_CP, I_CV, I_DE_DRHO, I_DS_DRHO,
@@ -184,7 +184,11 @@ pub fn eval_helm_eos_zones(
     abars: &[f64],
     zbars: &[f64],
 ) -> Vec<EosEvalOutput> {
-    let n = temps.len().min(dens.len()).min(abars.len()).min(zbars.len());
+    let n = temps
+        .len()
+        .min(dens.len())
+        .min(abars.len())
+        .min(zbars.len());
     let eval_one = |i: usize| {
         eval_helm_eos(temps[i], dens[i], abars[i], zbars[i]).map_or_else(
             |_| EosEvalOutput {

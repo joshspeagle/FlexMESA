@@ -11,8 +11,8 @@
 )]
 
 use flexmesa_eos::{
-    CubicBasis1D, EOS_BASIC_RESULT_NAMES, HelmConfig, HelmTable,
-    QuinticBasis1D, eval_helm_eos, eval_helm_eos_zones, helmeos2,
+    eval_helm_eos, eval_helm_eos_zones, helmeos2, CubicBasis1D, HelmConfig,
+    HelmTable, QuinticBasis1D, EOS_BASIC_RESULT_NAMES,
 };
 
 fn helm_exp10(x: f64) -> f64 {
@@ -279,14 +279,7 @@ fn test_helm_eos_degenerate_and_pair_regimes_match_fortran_oracle() {
             3.1619724594831923e-3,
         ],
     ];
-    assert_helm_case(
-        "sample_eos_c12",
-        1.0e9,
-        1.0e4,
-        12.0,
-        6.0,
-        &expected_pair,
-    );
+    assert_helm_case("sample_eos_c12", 1.0e9, 1.0e4, 12.0, 6.0, &expected_pair);
 
     // 3. Cold crystallized WD core where sgas < 1e-20 returns Err(1) in MESA
     let res_err = eval_helm_eos(

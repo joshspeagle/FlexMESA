@@ -175,8 +175,8 @@ impl SedCube {
                     sgn[ky] * gy[1 - ky] * wz + sgn[kz] * gz[1 - kz] * wy;
                 for kx in 0..2 {
                     let (wx, i, i_ext) = (hx[kx], ix + kx, ext_x[kx]);
-                    let w_corner = (wx + sgn[kx] * gx[1 - kx]) * wy_wz
-                        + wx * yz_tan;
+                    let w_corner =
+                        (wx + sgn[kx] * gx[1 - kx]) * wy_wz + wx * yz_tan;
                     let w_x = sgn[kx] * gx[kx] * wy_wz;
                     let w_y = sgn[ky] * wx * gy[ky] * wz;
                     let w_z = sgn[kz] * wx * wy * gz[kz];

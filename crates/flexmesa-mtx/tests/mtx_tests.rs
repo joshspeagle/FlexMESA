@@ -134,11 +134,7 @@ fn test_square2_and_inv_match_upstream_golden_output() {
 
     let a2 = [4.70, 6.20, 0.00, 3.20, 0.00, 0.31, 0.00, 3.10, 0.00];
     let b2 = [1.1, 2.1, 3.1];
-    let x2_ref = [
-        -1.085_106_382_978_723_3,
-        1.0,
-        1.797_529_169_526_424_3e1,
-    ];
+    let x2_ref = [-1.085_106_382_978_723_3, 1.0, 1.797_529_169_526_424_3e1];
     let x2 = solve_dense(n, &a2, &b2).unwrap();
     for i in 0..n {
         assert!((x2[i] - x2_ref[i]).abs() < 1e-13);

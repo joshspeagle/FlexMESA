@@ -236,8 +236,7 @@ fn v_spline_db(k_bc1: i32, k_bcn: i32, x: &[f64], f: &mut [[f64; 4]]) {
     } else if k_bc1 != -1 {
         imax = n - 2;
         f[n - 2][1] = 2.0 * f[n - 3][3] + f[n - 2][3];
-        f[n - 2][2] =
-            f[n - 2][2] * f[n - 3][3] / (f[n - 2][3] + f[n - 3][3]);
+        f[n - 2][2] = f[n - 2][2] * f[n - 3][3] / (f[n - 2][3] + f[n - 3][3]);
     }
 
     // Solve cyclic tridiagonal (k_bc1 == -1) or standard tridiagonal system.
@@ -292,9 +291,8 @@ fn v_spline_db(k_bc1: i32, k_bcn: i32, x: &[f64], f: &mut [[f64; 4]]) {
         for ib in 1..=(imax - imin) {
             let i = imax - ib;
             if i == 1 && imin == 1 {
-                f[i][2] = (f[i][2]
-                    - (f[i][3] - f[i - 1][3]) * f[i + 1][2])
-                    / f[i][1];
+                f[i][2] =
+                    (f[i][2] - (f[i][3] - f[i - 1][3]) * f[i + 1][2]) / f[i][1];
             } else {
                 f[i][2] = (f[i][2] - f[i][3] * f[i + 1][2]) / f[i][1];
             }
@@ -302,8 +300,8 @@ fn v_spline_db(k_bc1: i32, k_bcn: i32, x: &[f64], f: &mut [[f64; 4]]) {
         f[0][3] = x[1] - x[0];
         f[n - 2][3] = x[n - 1] - x[n - 2];
         if !(1..=7).contains(&k_bc1) {
-            f[0][2] = (f[1][2] * (f[0][3] + f[1][3]) - f[2][2] * f[0][3])
-                / f[1][3];
+            f[0][2] =
+                (f[1][2] * (f[0][3] + f[1][3]) - f[2][2] * f[0][3]) / f[1][3];
         }
         if !(1..=7).contains(&k_bcn) {
             f[n - 1][2] = f[n - 2][2]
@@ -330,8 +328,7 @@ fn v_spline_db(k_bc1: i32, k_bcn: i32, x: &[f64], f: &mut [[f64; 4]]) {
         f[n - 1][3] = f[0][3];
     } else {
         let hn = x[n - 1] - x[n - 2];
-        f[n - 1][1] =
-            f[n - 2][1] + hn * (f[n - 2][2] + 0.5 * hn * f[n - 2][3]);
+        f[n - 1][1] = f[n - 2][1] + hn * (f[n - 2][2] + 0.5 * hn * f[n - 2][3]);
         f[n - 1][2] = f[n - 2][2] + hn * f[n - 2][3];
         f[n - 1][3] = f[n - 2][3];
         if k_bcn == 1 || k_bcn == 3 || k_bcn == 5 {

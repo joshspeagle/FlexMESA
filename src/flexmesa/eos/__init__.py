@@ -68,6 +68,7 @@ eval_ideal_eos_zones = ideal.eval_ideal_eos_zones
 eval_pc_eos = pc.eval_pc_eos
 eval_pc_eos_zones = pc.eval_pc_eos_zones
 eval_skye_eos = skye.eval_skye_eos
+eval_skye_eos_zones = skye.eval_skye_eos_zones
 get_pc_alfa = pc.get_pc_alfa
 get_skye_alfa = skye.get_skye_alfa
 get_skye_alfa_simple = skye.get_skye_alfa_simple
@@ -132,6 +133,7 @@ __all__: list[str] = [
     "eval_pc_eos",
     "eval_pc_eos_zones",
     "eval_skye_eos",
+    "eval_skye_eos_zones",
     "fermi",
     "get_pc_alfa",
     "get_skye_alfa",

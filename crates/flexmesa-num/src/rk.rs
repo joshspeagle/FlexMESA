@@ -99,9 +99,7 @@ where
     let y4: Vec<f64> = (0..n).map(|i| y[i] + h * k3[i]).collect();
     let k4 = eval_stage(n, t + h, &y4, &mut derivs)?;
     Ok((0..n)
-        .map(|i| {
-            y[i] + (h / 6.0) * (k1[i] + 2.0 * k2[i] + 2.0 * k3[i] + k4[i])
-        })
+        .map(|i| y[i] + (h / 6.0) * (k1[i] + 2.0 * k2[i] + 2.0 * k3[i] + k4[i]))
         .collect())
 }
 

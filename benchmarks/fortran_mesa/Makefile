@@ -14,6 +14,7 @@ FFLAGS ?= -O2 -fopenmp -cpp -ffree-form -ffree-line-length-none
 
 MESA_INC := -I$(MESA_DIR)/include -I$(MESA_DIR)/build/interp_2d/modules
 MESA_LIBS := \
+	$(MESA_DIR)/lib/libeos.a \
 	$(MESA_DIR)/lib/libcolors.a \
 	$(MESA_DIR)/lib/libionization.a \
 	$(MESA_DIR)/lib/libturb.a \
@@ -42,12 +43,18 @@ WAVE2_OBJS := \
 	$(BUILD_DIR)/bench_kernels_wave2.o \
 	$(BUILD_DIR)/run_wave2_bench.o
 
+WAVE3A_OBJS := \
+	$(BUILD_DIR)/bench_harness.o \
+	$(BUILD_DIR)/bench_kernels_wave3a.o \
+	$(BUILD_DIR)/run_wave3a_bench.o
+
 TARGET := $(BUILD_DIR)/run_wave1_bench
 TARGET_WAVE2 := $(BUILD_DIR)/run_wave2_bench
+TARGET_WAVE3A := $(BUILD_DIR)/run_wave3a_bench
 
-.PHONY: all run run_wave2 clean
+.PHONY: all run run_wave2 run_wave3a clean
 
-all: $(TARGET) $(TARGET_WAVE2)
+all: $(TARGET) $(TARGET_WAVE2) $(TARGET_WAVE3A)
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
@@ -73,11 +80,20 @@ $(BUILD_DIR)/bench_kernels_wave2.o: bench_kernels_wave2.f90 $(BUILD_DIR)/bench_h
 $(BUILD_DIR)/run_wave2_bench.o: run_wave2_bench.f90 $(BUILD_DIR)/bench_kernels_wave2.o | $(BUILD_DIR)
 	$(FC) $(FFLAGS) $(MESA_INC) -I$(BUILD_DIR) -J$(BUILD_DIR) -c $< -o $@
 
+$(BUILD_DIR)/bench_kernels_wave3a.o: bench_kernels_wave3a.f90 $(BUILD_DIR)/bench_harness.o | $(BUILD_DIR)
+	$(FC) $(FFLAGS) $(MESA_INC) -I$(BUILD_DIR) -J$(BUILD_DIR) -c $< -o $@
+
+$(BUILD_DIR)/run_wave3a_bench.o: run_wave3a_bench.f90 $(BUILD_DIR)/bench_kernels_wave3a.o | $(BUILD_DIR)
+	$(FC) $(FFLAGS) $(MESA_INC) -I$(BUILD_DIR) -J$(BUILD_DIR) -c $< -o $@
+
 $(TARGET): $(OBJS)
 	$(FC) $(FFLAGS) -o $@ $(OBJS) $(MESA_LIBS) $(BLAS_LAPACK_LIBS)
 
 $(TARGET_WAVE2): $(WAVE2_OBJS)
 	$(FC) $(FFLAGS) -o $@ $(WAVE2_OBJS) $(MESA_LIBS) $(BLAS_LAPACK_LIBS)
+
+$(TARGET_WAVE3A): $(WAVE3A_OBJS)
+	$(FC) $(FFLAGS) -o $@ $(WAVE3A_OBJS) $(MESA_LIBS) $(BLAS_LAPACK_LIBS)
 
 run: $(TARGET)
 	MESA_DIR=$(MESA_DIR) $(TARGET)
@@ -85,6 +101,9 @@ run: $(TARGET)
 run_wave2: $(TARGET_WAVE2)
 	MESA_DIR=$(MESA_DIR) $(TARGET_WAVE2)
 
+run_wave3a: $(TARGET_WAVE3A)
+	MESA_DIR=$(MESA_DIR) $(TARGET_WAVE3A)
+
 clean:
-	rm -f $(BUILD_DIR)/*.o $(BUILD_DIR)/*.mod $(TARGET) $(TARGET_WAVE2)
+	rm -f $(BUILD_DIR)/*.o $(BUILD_DIR)/*.mod $(TARGET) $(TARGET_WAVE2) $(TARGET_WAVE3A)
 	if [ -d $(BUILD_DIR) ]; then rmdir $(BUILD_DIR) 2>/dev/null || true; fi

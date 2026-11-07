@@ -25,6 +25,7 @@ from flexmesa.bench import harness as _harness
 from flexmesa.bench import kernels_micro as _micro
 from flexmesa.bench import kernels_solver as _solver
 from flexmesa.bench import kernels_wave2 as _wave2
+from flexmesa.bench import kernels_wave3a as _wave3a
 
 STAGE3_BATCH_SIZE = _harness.STAGE3_BATCH_SIZE
 BenchRecord = _harness.BenchRecord
@@ -55,6 +56,12 @@ bench_ion_fe56 = _wave2.bench_ion_fe56
 make_wave2_composition_profile = _wave2.make_wave2_composition_profile
 run_all_wave2_benchmarks = _wave2.run_all_wave2_benchmarks
 
+bench_eos_helm = _wave3a.bench_eos_helm
+bench_eos_ideal = _wave3a.bench_eos_ideal
+bench_eos_pc = _wave3a.bench_eos_pc
+bench_eos_skye = _wave3a.bench_eos_skye
+run_all_wave3a_benchmarks = _wave3a.run_all_wave3a_benchmarks
+
 __all__: list[str] = [
     "STAGE3_BATCH_SIZE",
     "WAVE2_ISO_NAMES",
@@ -65,6 +72,10 @@ __all__: list[str] = [
     "bench_autodiff",
     "bench_chem_comp",
     "bench_colors_sed",
+    "bench_eos_helm",
+    "bench_eos_ideal",
+    "bench_eos_pc",
+    "bench_eos_skye",
     "bench_interp2d",
     "bench_ion_4d",
     "bench_ion_fe56",
@@ -81,4 +92,5 @@ __all__: list[str] = [
     "measure_us",
     "run_all_wave1_benchmarks",
     "run_all_wave2_benchmarks",
+    "run_all_wave3a_benchmarks",
 ]

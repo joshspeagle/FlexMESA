@@ -21,13 +21,15 @@ use std::sync::OnceLock;
 
 use flexmesa_const::{AVO, CLIGHT, KERG, ME, PI, PLANCK_H};
 
-#[allow(clippy::float_cmp)]
+#[allow(clippy::float_cmp, clippy::cast_possible_truncation)]
 fn helm_exp10(x: f64) -> f64 {
     if x.is_finite() && x == x.floor() && (-308.0..=308.0).contains(&x) {
-        #[allow(clippy::cast_possible_truncation)]
         let ix = x as i32;
-        let mag = 10.0_f64.powi(ix.abs());
-        if ix < 0 { 1.0_f64 / mag } else { mag }
+        if ix < 0 {
+            1.0_f64 / 10.0_f64.powi(-ix)
+        } else {
+            10.0_f64.powi(ix)
+        }
     } else {
         (x * std::f64::consts::LN_10).exp()
     }
@@ -35,31 +37,22 @@ fn helm_exp10(x: f64) -> f64 {
 
 /// Number of density grid points ($\rho Y_e$) in the `HELM` table.
 pub const HELM_IMAX: usize = 2701;
-
 /// Number of temperature grid points ($T$) in the `HELM` table.
 pub const HELM_JMAX: usize = 1001;
-
 /// Lower $\log_{10}(T/\mathrm{K})$ bound of the `HELM` table.
 pub const HELM_LOGTLO: f64 = 3.0;
-
 /// Upper $\log_{10}(T/\mathrm{K})$ bound of the `HELM` table.
 pub const HELM_LOGTHI: f64 = 13.0;
-
 /// Step size $\Delta \log_{10} T$ of the `HELM` table.
 pub const HELM_LOGTSTP: f64 = 0.01;
-
 /// Inverse step size $1 / \Delta \log_{10} T$ of the `HELM` table.
 pub const HELM_LOGTSTPI: f64 = 100.0;
-
 /// Lower $\log_{10}(\rho Y_e / \mathrm{g\,cm^{-3}})$ bound of the `HELM` table.
 pub const HELM_LOGDLO: f64 = -12.0;
-
 /// Upper $\log_{10}(\rho Y_e / \mathrm{g\,cm^{-3}})$ bound of the `HELM` table.
 pub const HELM_LOGDHI: f64 = 15.0;
-
 /// Step size $\Delta \log_{10}(\rho Y_e)$ of the `HELM` table.
 pub const HELM_LOGDSTP: f64 = 0.01;
-
 /// Inverse step size $1 / \Delta \log_{10}(\rho Y_e)$ of the `HELM` table.
 pub const HELM_LOGDSTPI: f64 = 100.0;
 
@@ -144,14 +137,12 @@ impl HelmTable {
     }
 
     fn build_axes() -> (Vec<f64>, Vec<f64>) {
-        let mut t = Vec::with_capacity(HELM_JMAX);
-        for j in 1..=HELM_JMAX {
-            t.push(helm_exp10(HELM_LOGTLO + ((j - 1) as f64) * HELM_LOGTSTP));
-        }
-        let mut d = Vec::with_capacity(HELM_IMAX);
-        for i in 1..=HELM_IMAX {
-            d.push(helm_exp10(HELM_LOGDLO + ((i - 1) as f64) * HELM_LOGDSTP));
-        }
+        let t = (1..=HELM_JMAX)
+            .map(|j| helm_exp10(HELM_LOGTLO + ((j - 1) as f64) * HELM_LOGTSTP))
+            .collect();
+        let d = (1..=HELM_IMAX)
+            .map(|i| helm_exp10(HELM_LOGDLO + ((i - 1) as f64) * HELM_LOGDSTP))
+            .collect();
         (t, d)
     }
 
@@ -172,21 +163,22 @@ impl HelmTable {
                 BUILTIN_PATCHES[pos + 3],
             ]);
             pos += 4;
-            let mut vals = [0.0_f64; 21];
-            for v in &mut vals {
-                let bytes: [u8; 8] = BUILTIN_PATCHES[pos..pos + 8]
-                    .try_into()
-                    .unwrap_or([0; 8]);
-                *v = f64::from_le_bytes(bytes);
-                pos += 8;
-            }
-            let vertex = HelmVertex {
-                f: vals[0..9].try_into().unwrap_or([0.0; 9]),
-                dpdf: vals[9..13].try_into().unwrap_or([0.0; 4]),
-                ef: vals[13..17].try_into().unwrap_or([0.0; 4]),
-                xf: vals[17..21].try_into().unwrap_or([0.0; 4]),
-            };
-            patches.insert((i, j), vertex);
+            let vals: [f64; 21] = std::array::from_fn(|k| {
+                let s = pos + 8 * k;
+                f64::from_le_bytes(
+                    BUILTIN_PATCHES[s..s + 8].try_into().unwrap_or([0; 8]),
+                )
+            });
+            pos += 21 * 8;
+            patches.insert(
+                (i, j),
+                HelmVertex {
+                    f: vals[0..9].try_into().unwrap_or([0.0; 9]),
+                    dpdf: vals[9..13].try_into().unwrap_or([0.0; 4]),
+                    ef: vals[13..17].try_into().unwrap_or([0.0; 4]),
+                    xf: vals[17..21].try_into().unwrap_or([0.0; 4]),
+                },
+            );
         }
         Self {
             t,
@@ -215,18 +207,16 @@ impl HelmTable {
             f.read_exact(&mut buf)?;
             Ok(i32::from_le_bytes(buf[4..8].try_into().unwrap()))
         };
-        let imax = read_i32_rec(&mut file)? as usize;
-        let jmax = read_i32_rec(&mut file)? as usize;
+        let (imax, jmax) = (
+            read_i32_rec(&mut file)? as usize,
+            read_i32_rec(&mut file)? as usize,
+        );
         if imax != HELM_IMAX || jmax != HELM_JMAX {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "invalid helm_table.bin dimensions",
-            ));
+            return Err(io::Error::from(io::ErrorKind::InvalidData));
         }
         let n = imax * jmax;
         let mut planes = vec![vec![0.0_f64; n]; 21];
-        let mut marker = [0u8; 4];
-        let mut raw = vec![0u8; n * 8];
+        let (mut marker, mut raw) = ([0u8; 4], vec![0u8; n * 8]);
         for plane in &mut planes {
             file.read_exact(&mut marker)?;
             file.read_exact(&mut raw)?;
@@ -235,15 +225,14 @@ impl HelmTable {
                 plane[idx] = f64::from_le_bytes(chunk.try_into().unwrap());
             }
         }
-        let mut dense = Vec::with_capacity(n);
-        for idx in 0..n {
-            dense.push(HelmVertex {
+        let dense = (0..n)
+            .map(|idx| HelmVertex {
                 f: std::array::from_fn(|k| planes[k][idx]),
                 dpdf: std::array::from_fn(|k| planes[9 + k][idx]),
                 ef: std::array::from_fn(|k| planes[13 + k][idx]),
                 xf: std::array::from_fn(|k| planes[17 + k][idx]),
-            });
-        }
+            })
+            .collect();
         let (t, d) = Self::build_axes();
         Ok(Self {
             t,
@@ -257,29 +246,72 @@ impl HelmTable {
     /// embedded golden patches without a dense table file loaded.
     #[inline]
     fn analytical_vertex(&self, i: usize, j: usize) -> HelmVertex {
-        let den = self.d[i - 1];
-        let temp = self.t[j - 1];
-        let kt = KERG * temp;
-        let n_e = AVO * den;
+        let (den, temp) = (self.d[i - 1], self.t[j - 1]);
+        let (kt, k, n_e) = (KERG * temp, AVO * KERG, AVO * den);
         let lambda3 = (PLANCK_H * PLANCK_H / (2.0 * PI * ME * kt)).powf(1.5);
         let z_deg = (0.5 * n_e * lambda3).max(1.0e-99);
         let eta = z_deg.ln();
-        let f_val = AVO * kt * (eta - 1.0);
-        let fd = AVO * kt / den;
-        let ft = AVO * KERG * (eta - 2.5);
-        let fdd = -AVO * kt / (den * den);
-        let ftt = -1.5 * AVO * KERG / temp;
-        let fdt = AVO * KERG / den;
-        let fddt = -AVO * KERG / (den * den);
-        let fdtt = 0.0;
-        let fddtt = 0.0;
         let p_f = (PLANCK_H / (2.0 * PI)) * (3.0 * PI * PI * n_e).cbrt();
-        let e_f = p_f * p_f / (2.0 * ME)
-            * (1.0 - 0.25 * (p_f / (ME * CLIGHT)).powi(2));
-        let dpdf = AVO * kt + (2.0 / 3.0) * AVO * e_f.max(0.0);
+        if z_deg <= 0.1 {
+            let e_f = p_f * p_f / (2.0 * ME)
+                * (1.0 - 0.25 * (p_f / (ME * CLIGHT)).powi(2));
+            return HelmVertex {
+                f: [
+                    AVO * kt * (eta - 1.0),
+                    AVO * kt / den,
+                    k * (eta - 2.5),
+                    -AVO * kt / (den * den),
+                    -1.5 * k / temp,
+                    k / den,
+                    -k / (den * den),
+                    0.0,
+                    0.0,
+                ],
+                dpdf: [
+                    AVO * kt + (2.0 / 3.0) * AVO * e_f.max(0.0),
+                    0.0,
+                    k,
+                    0.0,
+                ],
+                ef: [eta, 1.0 / den, -1.5 / temp, 0.0],
+                xf: [n_e, AVO, 0.0, 0.0],
+            };
+        }
+        let w = std::f64::consts::E / z_deg;
+        let (p, q, ln_1pw) = (w / (1.0 + w), 1.0 / (1.0 + w), w.ln_1p());
+        let x_f = p_f / (ME * CLIGHT);
+        let (x2, gam, mc2) = (
+            x_f * x_f,
+            (1.0 + x_f * x_f).sqrt(),
+            AVO * ME * CLIGHT * CLIGHT,
+        );
+        let f_cold = mc2
+            * (0.375 * (x_f * (2.0 * x2 + 1.0) * gam - x_f.asinh())
+                / (x2 * x_f)
+                - 1.0);
+        let mu_cold = mc2 * x2 / (gam + 1.0);
+        let fd_cold = (mu_cold - f_cold) / den;
+        let fdd_cold = (mc2 * x2 / (3.0 * gam * den) - 2.0 * fd_cold) / den;
+        let f_val = f_cold - k * temp * ln_1pw;
+        let fd = fd_cold + k * p * temp / den;
+        let ft = -k * (1.5 * p + ln_1pw);
+        let fdd = fdd_cold + k * p * temp * (p - 2.0) / (den * den);
+        let ftt = 0.75 * k * p * (3.0 * p - 5.0) / temp;
+        let fdt = -0.5 * k * p * (3.0 * p - 5.0) / den;
+        let fddt = -k * p * (3.0 * p * p - 7.0 * p + 5.0) / (den * den);
+        let fdtt = -0.75 * k * p * q * (6.0 * p - 5.0) / (den * temp);
+        let fddtt = 1.5 * k * p * q * q * (9.0 * p - 5.0) / (den * den * temp);
+        let dpdf_c = mc2 * x2 / (3.0 * gam);
+        let dpdfd_c = dpdf_c * (2.0 + x2) / (3.0 * den * (1.0 + x2));
+        let p2 = p * p;
         HelmVertex {
             f: [f_val, fd, ft, fdd, ftt, fdt, fddt, fdtt, fddtt],
-            dpdf: [dpdf, 0.0, AVO * KERG, 0.0],
+            dpdf: [
+                dpdf_c + k * p2 * temp,
+                dpdfd_c - 2.0 * k * p2 * q * temp / den,
+                k * p2 * (4.0 - 3.0 * p),
+                k * p2 * q * (9.0 * p - 8.0) / den,
+            ],
             ef: [eta, 1.0 / den, -1.5 / temp, 0.0],
             xf: [n_e, AVO, 0.0, 0.0],
         }
@@ -316,57 +348,34 @@ impl HelmTable {
         let iat = (((din.log10() - HELM_LOGDLO) * HELM_LOGDSTPI) as isize + 1)
             .clamp(1, (HELM_IMAX - 1) as isize) as usize;
 
-        let t_lo = self.t[jat - 1];
-        let t_hi = self.t[jat];
-        let dth = t_hi - t_lo;
-        let dt2 = dth * dth;
-        let dti = 1.0 / dth;
-        let dt2i = 1.0 / dt2;
-        let dt3i = dt2i * dti;
+        let (t_lo, dth) = (self.t[jat - 1], self.t[jat] - self.t[jat - 1]);
+        let (dt2, dti) = (dth * dth, 1.0 / dth);
+        let (dt2i, dt3i) = (1.0 / dt2, (1.0 / dt2) * dti);
+        let (d_lo, dd) = (self.d[iat - 1], self.d[iat] - self.d[iat - 1]);
+        let (dd2, ddi) = (dd * dd, 1.0 / dd);
+        let (dd2i, dd3i) = (1.0 / dd2, (1.0 / dd2) * ddi);
+        let c = [
+            (iat, jat),
+            (iat + 1, jat),
+            (iat, jat + 1),
+            (iat + 1, jat + 1),
+        ];
+        let [v00, v10, v01, v11] = if self.dense.is_some() {
+            c.map(|(i, j)| self.vertex(i, j))
+        } else if c
+            .iter()
+            .all(|&(i, j)| self.patches.contains_key(&(i as u16, j as u16)))
+        {
+            c.map(|(i, j)| self.patches[&(i as u16, j as u16)])
+        } else {
+            c.map(|(i, j)| self.analytical_vertex(i, j))
+        };
 
-        let d_lo = self.d[iat - 1];
-        let d_hi = self.d[iat];
-        let dd = d_hi - d_lo;
-        let dd2 = dd * dd;
-        let ddi = 1.0 / dd;
-        let dd2i = 1.0 / dd2;
-        let dd3i = dd2i * ddi;
-
-        let v00 = self.vertex(iat, jat);
-        let v10 = self.vertex(iat + 1, jat);
-        let v01 = self.vertex(iat, jat + 1);
-        let v11 = self.vertex(iat + 1, jat + 1);
-
-        let f_cols = [0, 2, 4, 1, 3, 5, 6, 7, 8];
-        let mut fi_f = [0.0; 36];
-        for (blk, &col) in f_cols.iter().enumerate() {
-            fi_f[4 * blk] = v00.f[col];
-            fi_f[4 * blk + 1] = v10.f[col];
-            fi_f[4 * blk + 2] = v01.f[col];
-            fi_f[4 * blk + 3] = v11.f[col];
-        }
-
-        let c_cols = [0, 2, 1, 3];
-        let mut fi_dpdf = [0.0; 16];
-        let mut fi_ef = [0.0; 16];
-        let mut fi_xf = [0.0; 16];
-        for (blk, &col) in c_cols.iter().enumerate() {
-            fi_dpdf[4 * blk] = v00.dpdf[col];
-            fi_dpdf[4 * blk + 1] = v10.dpdf[col];
-            fi_dpdf[4 * blk + 2] = v01.dpdf[col];
-            fi_dpdf[4 * blk + 3] = v11.dpdf[col];
-
-            fi_ef[4 * blk] = v00.ef[col];
-            fi_ef[4 * blk + 1] = v10.ef[col];
-            fi_ef[4 * blk + 2] = v01.ef[col];
-            fi_ef[4 * blk + 3] = v11.ef[col];
-
-            fi_xf[4 * blk] = v00.xf[col];
-            fi_xf[4 * blk + 1] = v10.xf[col];
-            fi_xf[4 * blk + 2] = v01.xf[col];
-            fi_xf[4 * blk + 3] = v11.xf[col];
-        }
-
+        let (f_c, c_c, v) = (
+            [0, 2, 4, 1, 3, 5, 6, 7, 8],
+            [0, 2, 1, 3],
+            [v00, v10, v01, v11],
+        );
         HelmCell {
             iat,
             jat,
@@ -382,10 +391,10 @@ impl HelmTable {
             ddi,
             dd2i,
             dd3i,
-            fi_f,
-            fi_dpdf,
-            fi_ef,
-            fi_xf,
+            fi_f: std::array::from_fn(|k| v[k % 4].f[f_c[k / 4]]),
+            fi_dpdf: std::array::from_fn(|k| v[k % 4].dpdf[c_c[k / 4]]),
+            fi_ef: std::array::from_fn(|k| v[k % 4].ef[c_c[k / 4]]),
+            fi_xf: std::array::from_fn(|k| v[k % 4].xf[c_c[k / 4]]),
         }
     }
 }

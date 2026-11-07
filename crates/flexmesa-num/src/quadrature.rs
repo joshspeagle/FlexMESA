@@ -173,13 +173,46 @@ fn simp_rec<F: FnMut(f64) -> f64>(
     }
     let t3 = tol / 3.0;
     let r1 = simp_rec(
-        f, a, m1, fa, fa1, fa2, f1, s1, t3, depth + 1, ncalls, max_steps,
+        f,
+        a,
+        m1,
+        fa,
+        fa1,
+        fa2,
+        f1,
+        s1,
+        t3,
+        depth + 1,
+        ncalls,
+        max_steps,
     )?;
     let r2 = simp_rec(
-        f, m1, m2, f1, fb1, fb2, f2, s2, t3, depth + 1, ncalls, max_steps,
+        f,
+        m1,
+        m2,
+        f1,
+        fb1,
+        fb2,
+        f2,
+        s2,
+        t3,
+        depth + 1,
+        ncalls,
+        max_steps,
     )?;
     let r3 = simp_rec(
-        f, m2, b, f2, fc1, fc2, fb, s3, t3, depth + 1, ncalls, max_steps,
+        f,
+        m2,
+        b,
+        f2,
+        fc1,
+        fc2,
+        fb,
+        s3,
+        t3,
+        depth + 1,
+        ncalls,
+        max_steps,
     )?;
     Ok(r1 + r2 + r3)
 }

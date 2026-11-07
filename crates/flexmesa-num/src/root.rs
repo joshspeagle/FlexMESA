@@ -328,8 +328,8 @@ where
     F: FnMut(f64) -> Result<(f64, f64), NumError>,
 {
     safe_root_with_guess(
-        func, x_guess, dx, None, None, None, None, newt_imax, imax, xmin,
-        xmax, epsx, epsy,
+        func, x_guess, dx, None, None, None, None, newt_imax, imax, xmin, xmax,
+        epsx, epsy,
     )
 }
 

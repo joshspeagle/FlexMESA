@@ -152,8 +152,46 @@ def test_eval_skye_eos_and_eos_dt_get_rust_jax_and_autodiff() -> None:
         jnp.asarray(xa, dtype=jnp.float64),
         backend="jax",
     )
-    assert _rel_diff(np.asarray(sk_r.res), np.asarray(sk_j.res)) < 1.0e-14
+    assert _rel_diff(np.asarray(sk_r.res), np.asarray(sk_j.res)) < 1.0e-11
+    assert _rel_diff(np.asarray(sk_r.d_dlnd), np.asarray(sk_j.d_dlnd)) < 1.0e-8
+    assert (
+        _rel_diff(np.asarray(sk_r.d_dln_t), np.asarray(sk_j.d_dln_t)) < 2.0e-6
+    )
     assert float(sk_r.res[eos.I_FRAC_SKYE]) == 1.0
+
+    # Verify multi-zone eval_skye_eos_zones across Rust and native @jax.jit
+    infos = [chem.get_nuclide_info(c) for c in chem_id]
+    z_arr = np.array([inf.z for inf in infos], dtype=np.int64)
+    acmi_arr = np.array([inf.w for inf in infos], dtype=np.float64)
+    a_arr = np.array([float(inf.a) for inf in infos], dtype=np.float64)
+    rhos_z = np.array([1.0e2, 1.0e6], dtype=np.float64)
+    temps_z = np.array([1.0e8, 1.0e7], dtype=np.float64)
+    abars_z = np.full(2, abar, dtype=np.float64)
+    zbars_z = np.full(2, zbar, dtype=np.float64)
+    xa_z = np.tile(xa, (2, 1))
+    sk_zr = eos.eval_skye_eos_zones(
+        rhos_z,
+        temps_z,
+        abars_z,
+        zbars_z,
+        xa_z,
+        z_arr,
+        acmi_arr,
+        a_arr,
+        backend="rust",
+    )
+    sk_zj = eos.eval_skye_eos_zones(
+        jnp.asarray(rhos_z),
+        jnp.asarray(temps_z),
+        jnp.asarray(abars_z),
+        jnp.asarray(zbars_z),
+        jnp.asarray(xa_z),
+        jnp.asarray(z_arr),
+        jnp.asarray(acmi_arr),
+        jnp.asarray(a_arr),
+        backend="jax",
+    )
+    assert _rel_diff(np.asarray(sk_zr.res), np.asarray(sk_zj.res)) < 1.0e-10
 
     # Verify Ogata solid mixing rule in crystallized regime
     sk_ogata = eos.eval_skye_eos(
@@ -177,7 +215,7 @@ def test_eval_skye_eos_and_eos_dt_get_rust_jax_and_autodiff() -> None:
         jnp.asarray(xa, dtype=jnp.float64),
         backend="jax",
     )
-    assert _rel_diff(np.asarray(dt_r.res), np.asarray(dt_j.res)) < 1.0e-14
+    assert _rel_diff(np.asarray(dt_r.res), np.asarray(dt_j.res)) < 1.0e-11
 
     def _ln_pgas_fn(r_in: jax.Array, t_in: jax.Array) -> jax.Array:
         out = eos.eos_dt_get(

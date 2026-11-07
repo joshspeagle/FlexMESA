@@ -84,35 +84,17 @@ fn test_dopri5_and_dense_eval_match_upstream_van_der_pol_benchmark() {
         let y2 = y[1];
         Ok(vec![y2, ((1.0 - y1 * y1) * y2 - y1) / eps])
     };
-    let res = dopri5(
-        0.0,
-        2.0,
-        &[2.0, 0.0],
-        1e-6,
-        0.0,
-        1e-8,
-        1e-8,
-        100_000,
-        vdpol,
-    )
-    .unwrap();
+    let res =
+        dopri5(0.0, 2.0, &[2.0, 0.0], 1e-6, 0.0, 1e-8, 1e-8, 100_000, vdpol)
+            .unwrap();
     assert!((res.y[0] - 1.763_234_540_188_910_2).abs() <= 5e-5);
     assert!((res.y[1] - (-0.835_688_681_914_662_1)).abs() <= 5e-5);
 
     // Verify Shampine 4th-order dense output consistency at endpoints and
     // against direct integration to t = 1.0
-    let res_t1 = dopri5(
-        0.0,
-        1.0,
-        &[2.0, 0.0],
-        1e-6,
-        0.0,
-        1e-8,
-        1e-8,
-        100_000,
-        vdpol,
-    )
-    .unwrap();
+    let res_t1 =
+        dopri5(0.0, 1.0, &[2.0, 0.0], 1e-6, 0.0, 1e-8, 1e-8, 100_000, vdpol)
+            .unwrap();
     let y_mid = res.dense_eval(1.0);
     assert!((y_mid[0] - res_t1.y[0]).abs() <= 1e-4);
     let y_end = res.dense_eval(2.0);

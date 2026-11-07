@@ -16,9 +16,7 @@
 //!   specifiers), followed by `colptr` (`10I8`), `rowind` (`12I6`), and
 //!   `values` (`5E27.16`, accepting Fortran `D`/`d` exponents on input).
 
-use crate::sparse::{
-    column_sparse_to_dense, dense_to_col_sparse_with_diag,
-};
+use crate::sparse::{column_sparse_to_dense, dense_to_col_sparse_with_diag};
 use crate::MtxError;
 use std::fmt::Write as _;
 
@@ -122,9 +120,7 @@ where
         .ok_or(MtxError::ParseError("unexpected EOF at HB line 4"))?;
 
     let mut l3 = hdr3.split_whitespace();
-    let _mxtype = l3
-        .next()
-        .ok_or(MtxError::ParseError("missing MXTYPE"))?;
+    let _mxtype = l3.next().ok_or(MtxError::ParseError("missing MXTYPE"))?;
     let nrow: usize = l3
         .next()
         .ok_or(MtxError::ParseError("missing nrow"))?
@@ -208,9 +204,8 @@ pub fn write_block_tridiagonal_text(
     dblk: &[f64],
     ublk: &[f64],
 ) -> Result<String, MtxError> {
-    let blk_sz = crate::block_tridiag::check_blocks(
-        nvar, nz, lblk, dblk, ublk,
-    )?;
+    let blk_sz =
+        crate::block_tridiag::check_blocks(nvar, nz, lblk, dblk, ublk)?;
     let mut out = String::new();
     let _ = writeln!(out, "{nvar} {nz}");
     for k in 0..nz {
@@ -267,10 +262,8 @@ fn write_one_hb_block(
         out,
         "{totcrd:14}{ptrcrd:14}{indcrd:14}{valcrd:14}{zero_val:14}"
     );
-    let _ = writeln!(
-        out,
-        "RUA           {nvar:14}{nvar:14}{nnz:14}{zero_val:14}"
-    );
+    let _ =
+        writeln!(out, "RUA           {nvar:14}{nvar:14}{nnz:14}{zero_val:14}");
     let _ = writeln!(out, "(10I8)          (12I6)          (5E27.16)");
     for chunk in colptr.chunks(10) {
         for &c in chunk {

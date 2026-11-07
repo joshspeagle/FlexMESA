@@ -159,7 +159,11 @@ pub fn exp10(x: f64) -> f64 {
         #[allow(clippy::cast_possible_truncation)]
         let ix = x as i32;
         let mag = 10.0_f64.powi(ix.abs());
-        if ix < 0 { 1.0_f64 / mag } else { mag }
+        if ix < 0 {
+            1.0_f64 / mag
+        } else {
+            mag
+        }
     } else {
         (x * LN10).exp()
     }

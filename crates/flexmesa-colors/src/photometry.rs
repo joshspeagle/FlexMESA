@@ -279,9 +279,8 @@ impl SedCube {
                 d,
                 &mut sed_buf,
             );
-            return self.colors_from_sed_generic(
-                &sed_buf, interp_rad, mag_system,
-            );
+            return self
+                .colors_from_sed_generic(&sed_buf, interp_rad, mag_system);
         }
         let fluxes =
             self.eval_sed_hermite_generic(teff, log_g, metallicity, r, d);
@@ -306,7 +305,12 @@ impl SedCube {
         // Fast-path stack-allocated Hermite SED evaluation when requested.
         if method == SedInterpMethod::Hermite {
             return self.eval_colors_generic(
-                teff, log_g, metallicity, r, d, mag_system,
+                teff,
+                log_g,
+                metallicity,
+                r,
+                d,
+                mag_system,
             );
         }
         let interp_rad = compute_interp_radius(
@@ -343,9 +347,7 @@ impl SedCube {
         let mut int_flux = [T::zero(); NUM_JOHNSON_FILTERS];
         // Accumulate bolometric and photon-weighted filter integrals in one
         // fused pass over all precomputed non-uniform Simpson panels.
-        for (p, &[c0_f, c1_f, c2_f]) in
-            self.simpson_panels.iter().enumerate()
-        {
+        for (p, &[c0_f, c1_f, c2_f]) in self.simpson_panels.iter().enumerate() {
             let i = 2 * p;
             let (c0, c1, c2) =
                 (T::from_f64(c0_f), T::from_f64(c1_f), T::from_f64(c2_f));

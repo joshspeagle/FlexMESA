@@ -6,7 +6,7 @@ use flexmesa_autodiff::AutoDiffReal2VarOrder3;
 use flexmesa_const::{KERG, MP};
 
 use crate::helm::components::HelmThermoVar;
-use crate::helm::polynomials::{CubicBasis1D, QuinticBasis1D, h3, h5};
+use crate::helm::polynomials::{h3, h5, CubicBasis1D, QuinticBasis1D};
 use crate::helm::table::HelmTable;
 
 /// Evaluates electron-positron pressure, specific energy, specific entropy,

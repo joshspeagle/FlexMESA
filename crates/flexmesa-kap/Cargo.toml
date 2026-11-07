@@ -1,0 +1,22 @@
+[package]
+name = "flexmesa-kap"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Safe Rust radiative, conductive, and Compton opacity (kap) for FlexMESA"
+
+[dependencies]
+flexmesa-autodiff = { path = "../flexmesa-autodiff" }
+flexmesa-chem = { path = "../flexmesa-chem" }
+flexmesa-const = { path = "../flexmesa-const" }
+flexmesa-interp1d = { path = "../flexmesa-interp1d" }
+flexmesa-interp2d = { path = "../flexmesa-interp2d" }
+flexmesa-math = { path = "../flexmesa-math" }
+flexmesa-num = { path = "../flexmesa-num" }
+flexmesa-utils = { path = "../flexmesa-utils" }
+rayon.workspace = true
+
+[lints]
+workspace = true

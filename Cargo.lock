@@ -343,6 +343,7 @@ dependencies = [
  "flexmesa-mtx",
  "flexmesa-neu",
  "flexmesa-num",
+ "flexmesa-rates",
  "flexmesa-schema",
  "flexmesa-testing",
  "flexmesa-turb",
@@ -350,6 +351,18 @@ dependencies = [
  "numpy",
  "pyo3",
  "rayon",
+]
+
+[[package]]
+name = "flexmesa-rates"
+version = "0.1.0"
+dependencies = [
+ "flexmesa-autodiff",
+ "flexmesa-chem",
+ "flexmesa-const",
+ "flexmesa-eos",
+ "flexmesa-interp1d",
+ "flexmesa-math",
 ]
 
 [[package]]

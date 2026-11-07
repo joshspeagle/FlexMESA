@@ -423,4 +423,80 @@ def eos_eval_gamma_de_get(
     abar: float, zbar: float, rho: float, energy: float,
     gamma: float = 1.6666666666666667,
 ) -> tuple[float, float, _ArrF64, _ArrF64, _ArrF64]: ...
+def kap_get_results_rust(
+    z: float, x: float, zbase: float, xc: float, xn: float, xo: float,
+    xne: float, log_rho: float, log_t: float, lnfree_e: float,
+    d_lnfree_e_dln_rho: float, d_lnfree_e_dln_t: float, eta: float,
+    d_eta_dln_rho: float, d_eta_dln_t: float, zbar: float = 1.0,
+    kap_option: str = "gs98", kap_co_option: str = "gs98_co",
+    kap_low_t_option: str = "lowT_fa05_gs98",
+    kap_blend_log_t_upper_bdy: float = 3.88,
+    kap_blend_log_t_lower_bdy: float = 3.80,
+    cubic_interpolation_in_x: bool = False,
+    cubic_interpolation_in_z: bool = False,
+    include_electron_conduction: bool = True,
+    use_blouin_conductive_opacities: bool = True,
+    use_zbase_for_type1: bool = False, use_type2_opacities: bool = False,
+    kap_type2_full_off_x: float = 1.0e-3, kap_type2_full_on_x: float = 1.0e-6,
+    kap_type2_full_off_dz: float = 0.001, kap_type2_full_on_dz: float = 0.01,
+) -> tuple[float, float, float, list[float]]: ...
+def kap_get_rust(
+    chem_id: npt.NDArray[np.uintp], xa: _ArrF64, log_rho: float, log_t: float,
+    lnfree_e: float, d_lnfree_e_dln_rho: float, d_lnfree_e_dln_t: float,
+    eta: float, d_eta_dln_rho: float, d_eta_dln_t: float, zbase: float = 0.02,
+    kap_option: str = "gs98", kap_co_option: str = "gs98_co",
+    kap_low_t_option: str = "lowT_fa05_gs98",
+    kap_blend_log_t_upper_bdy: float = 3.88,
+    kap_blend_log_t_lower_bdy: float = 3.80,
+    cubic_interpolation_in_x: bool = False,
+    cubic_interpolation_in_z: bool = False,
+    include_electron_conduction: bool = True,
+    use_blouin_conductive_opacities: bool = True,
+    use_zbase_for_type1: bool = False, use_type2_opacities: bool = False,
+    kap_type2_full_off_x: float = 1.0e-3, kap_type2_full_on_x: float = 1.0e-6,
+    kap_type2_full_off_dz: float = 0.001, kap_type2_full_on_dz: float = 0.01,
+) -> tuple[float, float, float, list[float]]: ...
+def kap_get_elect_cond_opacity_rust(
+    zbar: float, log_rho: float, log_t: float, use_blouin: bool = True,
+) -> tuple[float, float, float]: ...
+def kap_get_compton_opacity_rust(
+    rho: float, t: float, lnfree_e: float, d_lnfree_e_dln_rho: float,
+    d_lnfree_e_dln_t: float, eta: float, d_eta_dln_rho: float,
+    d_eta_dln_t: float,
+) -> tuple[float, float, float]: ...
+def kap_get_fixed_metal_rust(
+    z: float, x: float, log_rho: float, log_t: float, prefix: str = "gs98",
+    cubic_x: bool = False, cubic_z: bool = False,
+) -> tuple[float, float, float]: ...
+def kap_get_co_rust(
+    zbase: float, x: float, dxc: float, dxo: float, log_rho: float,
+    log_t: float, kap_co_option: str = "gn93_co", cubic_x: bool = False,
+    cubic_z: bool = False,
+) -> tuple[float, float, float]: ...
+def kap_get_aesopus_rust(
+    zbase: float, x: float, xc: float, xn: float, xo: float, log_rho: float,
+    log_t: float,
+) -> tuple[float, float, float]: ...
+def kap_get_kapcn_rust(
+    zbase: float, x: float, fc: float, fn_val: float, log_rho: float,
+    log_t: float,
+) -> tuple[float, float, float]: ...
+def kap_get_zones_rust(
+    chem_id: npt.NDArray[np.uintp], xa_zones: _ArrF64, log_rho_zones: _ArrF64,
+    log_t_zones: _ArrF64, lnfree_e_zones: _ArrF64,
+    d_lnfree_e_dln_rho_zones: _ArrF64, d_lnfree_e_dln_t_zones: _ArrF64,
+    eta_zones: _ArrF64, d_eta_dln_rho_zones: _ArrF64,
+    d_eta_dln_t_zones: _ArrF64, zbase: float = 0.02, kap_option: str = "gs98",
+    kap_co_option: str = "gs98_co", kap_low_t_option: str = "lowT_fa05_gs98",
+    kap_blend_log_t_upper_bdy: float = 3.88,
+    kap_blend_log_t_lower_bdy: float = 3.80,
+    cubic_interpolation_in_x: bool = False,
+    cubic_interpolation_in_z: bool = False,
+    include_electron_conduction: bool = True,
+    use_blouin_conductive_opacities: bool = True,
+    use_zbase_for_type1: bool = False, use_type2_opacities: bool = False,
+    kap_type2_full_off_x: float = 1.0e-3, kap_type2_full_on_x: float = 1.0e-6,
+    kap_type2_full_off_dz: float = 0.001, kap_type2_full_on_dz: float = 0.01,
+    parallel: bool = True,
+) -> _ArrF64: ...
 # fmt: on

@@ -270,6 +270,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "flexmesa-kap"
+version = "0.1.0"
+dependencies = [
+ "flexmesa-autodiff",
+ "flexmesa-chem",
+ "flexmesa-const",
+ "flexmesa-interp1d",
+ "flexmesa-interp2d",
+ "flexmesa-math",
+ "flexmesa-num",
+ "flexmesa-utils",
+ "rayon",
+]
+
+[[package]]
 name = "flexmesa-math"
 version = "0.1.0"
 dependencies = [
@@ -323,6 +338,7 @@ dependencies = [
  "flexmesa-interp1d",
  "flexmesa-interp2d",
  "flexmesa-ionization",
+ "flexmesa-kap",
  "flexmesa-math",
  "flexmesa-mtx",
  "flexmesa-neu",

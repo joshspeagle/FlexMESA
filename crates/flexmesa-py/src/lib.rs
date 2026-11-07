@@ -60,6 +60,9 @@ pub mod interp_2d;
 /// `typical_charge`).
 #[allow(unsafe_code)]
 pub mod ionization_py;
+/// Tier B bindings for `kap` (`kap` radiative, conductive, and Compton opacities).
+#[allow(unsafe_code)]
+pub mod kap_py;
 /// Tier A/B/C bindings for `auto_diff`, `math`, and `mtx`.
 #[allow(unsafe_code)]
 pub mod math_solvers;
@@ -252,5 +255,6 @@ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     eos_helm_py::register(m)?;
     eos_pc_skye_py::register(m)?;
     eos_solver_py::register(m)?;
+    kap_py::register(m)?;
     Ok(())
 }

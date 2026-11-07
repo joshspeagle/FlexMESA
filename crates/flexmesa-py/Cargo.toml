@@ -24,6 +24,7 @@ flexmesa-eos = { path = "../flexmesa-eos" }
 flexmesa-interp1d = { path = "../flexmesa-interp1d" }
 flexmesa-interp2d = { path = "../flexmesa-interp2d" }
 flexmesa-ionization = { path = "../flexmesa-ionization" }
+flexmesa-kap = { path = "../flexmesa-kap" }
 flexmesa-math = { path = "../flexmesa-math" }
 flexmesa-mtx = { path = "../flexmesa-mtx" }
 flexmesa-neu = { path = "../flexmesa-neu" }

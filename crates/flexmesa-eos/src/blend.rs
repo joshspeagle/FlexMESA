@@ -227,12 +227,19 @@ pub fn blend_eos_results(
             + d_beta_dlnt * res_2.res[j];
     }
 
-    let species = res_1.d_dxa.len().min(res_2.d_dxa.len());
+    let species = res_1.d_dxa.len().max(res_2.d_dxa.len());
     let mut d_dxa = vec![[0.0_f64; NUM_EOS_D_DXA_RESULTS]; species];
-    for (row, (r1, r2)) in d_dxa
-        .iter_mut()
-        .zip(res_1.d_dxa.iter().zip(res_2.d_dxa.iter()))
-    {
+    for (i, row) in d_dxa.iter_mut().enumerate() {
+        let r1 = res_1
+            .d_dxa
+            .get(i)
+            .copied()
+            .unwrap_or([0.0; NUM_EOS_D_DXA_RESULTS]);
+        let r2 = res_2
+            .d_dxa
+            .get(i)
+            .copied()
+            .unwrap_or([0.0; NUM_EOS_D_DXA_RESULTS]);
         for (val, (&v1, &v2)) in row.iter_mut().zip(r1.iter().zip(r2.iter())) {
             *val = alpha * v1 + beta * v2;
         }

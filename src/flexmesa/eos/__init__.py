@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
-"""Equation of State (`eos`) module for FlexMESA (Wave 3a).
+"""Equation of State (`eos`) module for FlexMESA (Waves 3a & 3b.1).
 
 Exposes the canonical 26-slot thermodynamic state vector (`eos_def`),
 $C^2$-continuous polygonal quintic blending (`eos_blend`), Aparicio (1998)
@@ -59,12 +59,17 @@ eos_dt_get_rho = solver.eos_dt_get_rho
 eos_dt_get_t = solver.eos_dt_get_t
 eos_gamma_de_get = solver.eos_gamma_de_get
 eos_pt_get = solver.eos_pt_get
+eos_pt_get_pgas = solver.eos_pt_get_pgas
+eos_pt_get_t = solver.eos_pt_get_t
+eval_cms_eos = solver.eval_cms_eos
+eval_free_eos = solver.eval_free_eos
 eval_helm_cell_jax = helm.eval_helm_cell_jax
 eval_helm_eos = helm.eval_helm_eos
 eval_helm_eos_zones = helm.eval_helm_eos_zones
 eval_ideal_eos = ideal.eval_ideal_eos
 eval_ideal_eos_from_weights = ideal.eval_ideal_eos_from_weights
 eval_ideal_eos_zones = ideal.eval_ideal_eos_zones
+eval_opal_scvh_eos = solver.eval_opal_scvh_eos
 eval_pc_eos = pc.eval_pc_eos
 eval_pc_eos_zones = pc.eval_pc_eos_zones
 eval_skye_eos = skye.eval_skye_eos
@@ -124,12 +129,17 @@ __all__: list[str] = [
     "eos_dt_get_t",
     "eos_gamma_de_get",
     "eos_pt_get",
+    "eos_pt_get_pgas",
+    "eos_pt_get_t",
+    "eval_cms_eos",
+    "eval_free_eos",
     "eval_helm_cell_jax",
     "eval_helm_eos",
     "eval_helm_eos_zones",
     "eval_ideal_eos",
     "eval_ideal_eos_from_weights",
     "eval_ideal_eos_zones",
+    "eval_opal_scvh_eos",
     "eval_pc_eos",
     "eval_pc_eos_zones",
     "eval_skye_eos",

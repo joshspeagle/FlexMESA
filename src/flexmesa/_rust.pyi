@@ -35,6 +35,7 @@ import numpy as np
 import numpy.typing as npt
 
 type _ArrF64 = npt.NDArray[np.float64]
+type _ArrI32 = npt.NDArray[np.int32]
 type _ArrI64 = npt.NDArray[np.int64]
 type _ScalarVal = bool | int | float | str
 type _TensorDict = dict[str, _ArrF64 | _ArrI64]
@@ -544,4 +545,97 @@ def net_eval_zones(
     screening_mode: str = "extended", skip_jacobian: bool = False,
     parallel: bool = True,
 ) -> _ArrF64: ...
+def star_yrs_for_init_timestep(m_msun: float) -> float: ...
+def star_interp_q(dq1: _ArrF64, v1: _ArrF64, dq2: _ArrF64) -> _ArrF64: ...
+
+class RustStarModel:
+    nz: int
+    species: int
+    model_number: int
+    star_age: float
+    dt: float
+    mstar: float
+    teff: float
+    ln_peos_surf: float
+    ln_t_surf: float
+    iso_names: list[str]
+    chem_id: list[int]
+    lnd: _ArrF64
+    ln_t: _ArrF64
+    ln_r: _ArrF64
+    lum: _ArrF64
+    dq: _ArrF64
+    q: _ArrF64
+    m: _ArrF64
+    dm: _ArrF64
+    dm_bar: _ArrF64
+    r: _ArrF64
+    rmid: _ArrF64
+    grav: _ArrF64
+    xa: _ArrF64
+    rho: _ArrF64
+    t: _ArrF64
+    pgas: _ArrF64
+    prad: _ArrF64
+    peos: _ArrF64
+    ln_peos: _ArrF64
+    energy: _ArrF64
+    entropy: _ArrF64
+    grada: _ArrF64
+    cp: _ArrF64
+    cv: _ArrF64
+    chi_rho: _ArrF64
+    chi_t: _ArrF64
+    gamma1: _ArrF64
+    eta: _ArrF64
+    mu: _ArrF64
+    csound: _ArrF64
+    opacity: _ArrF64
+    tau: _ArrF64
+    non_nuc_neu: _ArrF64
+    eps_nuc: _ArrF64
+    dxdt_nuc: _ArrF64
+    gradt: _ArrF64
+    gradr: _ArrF64
+    gradl: _ArrF64
+    scale_height: _ArrF64
+    mlt_vc: _ArrF64
+    mlt_d: _ArrF64
+    mlt_cdc: _ArrF64
+    brunt_b: _ArrF64
+    brunt_n2: _ArrF64
+    mixing_type: _ArrI32
+    @staticmethod
+    def from_zams(
+        initial_mass: float = 1.0,
+        initial_z: float = 0.02,
+        initial_y: float = -1.0,
+    ) -> RustStarModel: ...
+    @staticmethod
+    def from_pre_ms(
+        initial_mass: float = 1.0,
+        initial_z: float = 0.02,
+        initial_y: float = -1.0,
+        t_c: float = 9.0e5,
+        d_log10_p: float = 0.02,
+    ) -> RustStarModel: ...
+    @staticmethod
+    def from_mod_str(text: str) -> RustStarModel: ...
+    @staticmethod
+    def from_photo_bytes(bytes: bytes) -> RustStarModel: ...
+    def to_mod_str(self) -> str: ...
+    def to_photo_bytes(self) -> bytes: ...
+    def eval_hydro_vars(
+        self, skip_net: bool = False, skip_net_jacobian: bool = False
+    ) -> None: ...
+    def set_primary_state(
+        self,
+        lnd: _ArrF64,
+        ln_t: _ArrF64,
+        ln_r: _ArrF64,
+        lum: _ArrF64,
+        dq: _ArrF64,
+        xa: _ArrF64,
+    ) -> None: ...
+
 # fmt: on

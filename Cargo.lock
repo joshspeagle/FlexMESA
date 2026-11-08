@@ -383,6 +383,7 @@ dependencies = [
  "flexmesa-num",
  "flexmesa-rates",
  "flexmesa-schema",
+ "flexmesa-star",
  "flexmesa-testing",
  "flexmesa-turb",
  "flexmesa-utils",
@@ -409,6 +410,28 @@ version = "0.1.0"
 dependencies = [
  "flexmesa-testing",
  "proptest",
+]
+
+[[package]]
+name = "flexmesa-star"
+version = "0.1.0"
+dependencies = [
+ "flexmesa-atm",
+ "flexmesa-autodiff",
+ "flexmesa-chem",
+ "flexmesa-const",
+ "flexmesa-eos",
+ "flexmesa-interp1d",
+ "flexmesa-interp2d",
+ "flexmesa-kap",
+ "flexmesa-math",
+ "flexmesa-mtx",
+ "flexmesa-net",
+ "flexmesa-neu",
+ "flexmesa-num",
+ "flexmesa-rates",
+ "flexmesa-turb",
+ "rayon",
 ]
 
 [[package]]

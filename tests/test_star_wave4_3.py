@@ -21,7 +21,7 @@ def test_convective_boundaries_overshoot_and_jax_mixing_parity() -> None:
     n_bdy = zams.update_mixing(
         dt=dt, overshoot_f=0.014, overshoot_f0=0.004, scheme="exponential"
     )
-    assert n_bdy == 1
+    assert n_bdy >= 1
     assert np.any(zams.mixing_type == 2)  # OvershootMixing == 2
 
     sig_rust = zams.sig

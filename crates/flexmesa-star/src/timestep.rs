@@ -15,8 +15,6 @@
 //! $\kappa = 10$ is the smooth arctangent limiter (`filter_limit` in
 //! `timestep.f90:2398`).
 
-use flexmesa_const::L_SUN;
-
 use crate::model::StarModel;
 
 /// Dominant constraint determining the next proposed timestep
@@ -58,31 +56,58 @@ pub fn filter_limit(x: f64) -> f64 {
     1.0 + KAPPA * ((x - 1.0) / KAPPA).atan()
 }
 
+fn smoothed_var_sum(v: &[f64], v_old: &[f64]) -> f64 {
+    let nz = v.len();
+    if nz == 0 || v_old.len() != nz {
+        return 0.0;
+    }
+    if nz < 4 {
+        return v
+            .iter()
+            .zip(v_old.iter())
+            .map(|(a, b)| (a - b).abs())
+            .sum::<f64>();
+    }
+    let mut sum = 0.0_f64;
+    for k in 2..nz - 2 {
+        let s_new: f64 = v[k - 2..=k + 2].iter().sum();
+        let s_old: f64 = v_old[k - 2..=k + 2].iter().sum();
+        sum += (s_new - s_old).abs() / 5.0;
+    }
+    sum += ((2.0 * v[0] + v[1]) - (2.0 * v_old[0] + v_old[1])).abs() / 3.0;
+    sum += ((2.0 * v[nz - 1] + v[nz - 2])
+        - (2.0 * v_old[nz - 1] + v_old[nz - 2]))
+        .abs()
+        / 3.0;
+    let s1_new = v[0] + v[1] + v[2];
+    let s1_old = v_old[0] + v_old[1] + v_old[2];
+    sum += (s1_new - s1_old).abs() / 3.0;
+    sum
+}
+
 /// Evaluates the normalized structural variation `varcontrol` between the
-/// current state `(\ln\rho, \ln T, \ln R, L)` and the previous step's `*_old`
-/// snapshot (`eval_varcontrol` in `timestep.f90:2024-2136`).
+/// current state `(\ln\rho, \ln T, \ln R)` and the previous step's `*_old`
+/// snapshot using a 5-point boxcar filter (`eval_varcontrol` in
+/// `timestep.f90:2299-2364`).
 #[must_use]
 pub fn eval_varcontrol(model: &StarModel) -> f64 {
     let nz = model.nz;
-    if nz == 0 || model.lnd_old.len() != nz {
+    if nz == 0
+        || model.lnd_old.len() != nz
+        || model.ln_t_old.len() != nz
+        || model.ln_r_old.len() != nz
+    {
         return 0.0;
     }
-    let l_surf_scale = model.lum[0].abs().max(L_SUN);
-    let mut sum = 0.0_f64;
+    let sum_lnd = smoothed_var_sum(&model.lnd, &model.lnd_old) / 3.0;
+    let sum_lnt = smoothed_var_sum(&model.ln_t, &model.ln_t_old);
+    let sum_lnr = smoothed_var_sum(&model.ln_r, &model.ln_r_old);
 
-    for k in 0..nz {
-        let dlnd = (model.lnd[k] - model.lnd_old[k]).abs()
-            / (1.0 + model.lnd[k].abs());
-        let dlnt = (model.ln_t[k] - model.ln_t_old[k]).abs()
-            / (1.0 + model.ln_t[k].abs());
-        let dlnr = (model.ln_r[k] - model.ln_r_old[k]).abs()
-            / (1.0 + model.ln_r[k].abs());
-        let dlum = (model.lum[k] - model.lum_old[k]).abs()
-            / (l_surf_scale + model.lum[k].abs());
-        sum += dlnd + dlnt + dlnr + dlum;
-    }
-
-    sum / ((4 * nz) as f64)
+    let sumscales = model.lnd_old[0].abs().max(1.0)
+        + model.ln_t_old[0].abs().max(1.0)
+        + model.ln_r_old[0].abs().max(1.0);
+    let nterms = (3 * nz) as f64;
+    (sum_lnd + sum_lnt + sum_lnr) / (sumscales * nterms)
 }
 
 /// Evaluates the maximum fractional nuclear fuel depletion ratio
@@ -120,8 +145,8 @@ pub fn eval_dx_nuc_drop_ratio(
 }
 
 /// Evaluates the Söderlind & Wang (2006) H211PI digital control timestep
-/// multiplier $f_{\mathrm{dt}} = \Delta t_{n+1} / \Delta t_n$ (`filter_dt` in
-/// `timestep.f90:2360-2412`).
+/// multiplier $f_{\mathrm{dt}} = \Delta t_{n+1} / \Delta t_n$ (`filter_dt_next`
+/// in `timestep.f90:2367-2416`).
 #[must_use]
 pub fn eval_h211_factor(
     dt_limit_ratio: f64,
@@ -132,20 +157,15 @@ pub fn eval_h211_factor(
     min_timestep_factor: f64,
 ) -> (f64, bool, bool) {
     let ratio_curr = dt_limit_ratio.max(1.0e-10);
-    let ratio_prev = if dt_limit_ratio_old > 0.0 {
-        dt_limit_ratio_old.max(1.0e-10)
+    let raw_factor = if dt_limit_ratio_old > 0.0 && dt_old > 0.0 && dt > 0.0 {
+        let ratio_prev = dt_limit_ratio_old.max(1.0e-10);
+        let dt_ratio = (dt / dt_old).max(1.0e-10);
+        let r_n = filter_limit(1.0 / ratio_curr).max(1.0e-4);
+        let r_nm1 = filter_limit(1.0 / ratio_prev).max(1.0e-4);
+        filter_limit((r_n * r_nm1 / dt_ratio).powf(0.25))
     } else {
-        ratio_curr
+        1.0 / ratio_curr
     };
-    let dt_ratio = if dt_old > 0.0 && dt > 0.0 {
-        (dt / dt_old).max(1.0e-10)
-    } else {
-        1.0
-    };
-
-    let r_n = filter_limit(1.0 / ratio_curr).max(1.0e-4);
-    let r_nm1 = filter_limit(1.0 / ratio_prev).max(1.0e-4);
-    let raw_factor = filter_limit((r_n * r_nm1 / dt_ratio).powf(0.25));
 
     let hit_max = raw_factor > max_timestep_factor;
     let hit_min = raw_factor < min_timestep_factor;

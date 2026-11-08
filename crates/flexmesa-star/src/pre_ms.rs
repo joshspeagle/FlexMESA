@@ -152,12 +152,19 @@ fn eval_pre_ms_gradt(
         henyey_y: 1.0 / 3.0,
         max_conv_vel: 1.0e99,
     };
+    let hp_std = p / (grav * rho);
+    let hp_alt = (p / (STANDARD_CGRAV * rho * rho)).sqrt();
+    let hp = if !hp_std.is_finite() || hp_std > hp_alt {
+        hp_alt
+    } else {
+        hp_std
+    };
     let mlt_in = MltInputs {
         chi_t: eos.res[I_CHI_T],
         chi_rho: eos.res[I_CHI_RHO],
         cp: eos.res[I_CP],
         grav,
-        lambda: ctx.controls.mixing_length_alpha * p / (grav * rho),
+        lambda: ctx.controls.mixing_length_alpha * hp,
         rho,
         p,
         t,
@@ -371,7 +378,11 @@ pub fn build_pre_ms_model(
     job: StarJobControls,
 ) -> Result<StarModel, StarError> {
     let ht = HelmTable::builtin();
-    let eos_cfg = EosConfig::default();
+    let eos_cfg = EosConfig {
+        use_free_eos: false,
+        use_opal_scvh: false,
+        ..EosConfig::default()
+    };
     let kap_cfg = KapConfig {
         zbase: controls.zbase,
         ..KapConfig::default()
@@ -462,6 +473,7 @@ pub fn build_pre_ms_model(
     }
     let m_total = best_shells[0].m;
     let mut model = StarModel::new(nz, chem_id, job, controls);
+    model.eos_config = eos_cfg;
     model.mstar = mstar;
     model.mstar_start = mstar;
     model.mstar_old = mstar;

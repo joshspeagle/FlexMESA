@@ -149,6 +149,25 @@ class StarModel(_arrays.StarModelArrays):
             bool(skip_net), bool(skip_net_jacobian)
         )
 
+    def set_primary_state(
+        self,
+        lnd: _ArrF64,
+        ln_t: _ArrF64,
+        ln_r: _ArrF64,
+        lum: _ArrF64,
+        dq: _ArrF64,
+        xa: _ArrF64,
+    ) -> None:
+        """Replace primary state arrays and synchronize staggered geometry."""
+        self._rust_model.set_primary_state(
+            np.ascontiguousarray(lnd, dtype=np.float64),
+            np.ascontiguousarray(ln_t, dtype=np.float64),
+            np.ascontiguousarray(ln_r, dtype=np.float64),
+            np.ascontiguousarray(lum, dtype=np.float64),
+            np.ascontiguousarray(dq, dtype=np.float64),
+            np.ascontiguousarray(xa, dtype=np.float64),
+        )
+
     def save_start_values(self) -> None:
         """Snapshot current state arrays as start-of-step `*_start` values."""
         self._rust_model.save_start_values()
@@ -318,6 +337,7 @@ class StarModel(_arrays.StarModelArrays):
         do_remesh: bool = False,
         op_split_burn: bool = False,
         use_bcyclic: bool = True,
+        max_age: float | None = None,
     ) -> list[EvolveStepReport]:
         """Evolve the model for up to `max_steps` steps (`star_evolve`)."""
         return [
@@ -327,6 +347,7 @@ class StarModel(_arrays.StarModelArrays):
                 bool(do_remesh),
                 bool(op_split_burn),
                 bool(use_bcyclic),
+                None if max_age is None else float(max_age),
             )
         ]
 

@@ -168,7 +168,13 @@ fn eval_face_mlt(
     let lum_k = StarAdOrder1::variable(model.lum[k], I_L_00);
     let gm_k = model.cgrav[k] * model.m_grav[k];
     let grav_f = gm_k / (r_k * r_k);
-    let hp_f = p_f / (grav_f * rho_f);
+    let hp_std = p_f / (grav_f * rho_f);
+    let hp_alt = (p_f / (model.cgrav[k] * rho_f * rho_f)).sqrt();
+    let hp_f = if !hp_std.val.is_finite() || hp_std.val > hp_alt.val {
+        hp_alt
+    } else {
+        hp_std
+    };
 
     let mut gradr_f =
         p_f * kap_f * lum_k / (4.0 * FOUR_PI * CLIGHT * gm_k * prad_f);
@@ -186,7 +192,7 @@ fn eval_face_mlt(
     // In `check_for_redo_mlt` (`mlt_info.f90:312`), `alfa = dr / scale_height(k)`
     // and `mixing_length = alfa * scale_height(k)`.
     let alpha_mlt = if let Some(dr) = custom_length {
-        dr / hp_f.val.max(1.0)
+        (dr / hp_f.val.max(1.0)).max(1.0e-6)
     } else {
         model.controls.mixing_length_alpha
     };

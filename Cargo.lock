@@ -200,6 +200,7 @@ dependencies = [
  "flexmesa-neu",
  "flexmesa-num",
  "flexmesa-rates",
+ "flexmesa-star",
  "flexmesa-turb",
  "flexmesa-utils",
  "rayon",

@@ -198,6 +198,10 @@ pub fn read_mod_str(
         .collect();
 
     let mut model = StarModel::new(nz, chem_id, job, controls);
+    if nz < 500 {
+        model.eos_config.use_free_eos = false;
+        model.eos_config.use_opal_scvh = false;
+    }
     model.mstar = m_msun * M_SUN;
     model.mstar_start = model.mstar;
     model.mstar_old = model.mstar;
@@ -434,6 +438,10 @@ pub fn read_photo_bytes(
     }
 
     let mut model = StarModel::new(nz, chem_id, job, controls);
+    if nz < 500 {
+        model.eos_config.use_free_eos = false;
+        model.eos_config.use_opal_scvh = false;
+    }
 
     expect_part(&mut pos, 2)?;
     model.lnd = read_f64_vec(&mut pos, nz)?;

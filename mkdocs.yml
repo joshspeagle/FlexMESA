@@ -88,6 +88,7 @@ nav:
       - Wave 2 Atomic & Photometric Specification: design/wave-2-spec.md
       - Wave 3a Analytical & Single-Table EOS Specification: design/wave-3a-spec.md
       - Wave 3b 4D Tabulated EOS, Opacity, Rates, Networks & Atmospheres Specification: design/wave-3b-spec.md
+      - Wave 4 1D Stellar Structure & Evolution Specification: design/wave-4-spec.md
   - Module Physics & Numerics:
       - Wave 0 Schemas, Data & Golden Oracles: modules/wave-0-foundation.md
       - Wave 1 Dual Algebra, Splines & Solvers: modules/wave-1-numerics.md
@@ -95,10 +96,12 @@ nav:
       - Wave 2 Composition, Ionization & Photometry: modules/wave-2-microphysics.md
       - Wave 3a Ideal, HELM, PC & Skye Equations of State: modules/wave-3a-eos-core.md
       - Wave 3b 4D Tabulated EOS, Opacity, Nuclear Rates, Networks & Atmospheres: modules/wave-3b-microphysics.md
+      - Wave 4 1D Stellar Structure & Evolution Engine: modules/wave-4-star-engine.md
   - Benchmarks & Parity:
       - Wave 1.5 Four-Way Benchmark Report: design/wave-1-benchmark-report.md
       - Wave 2.5 Four-Way Benchmark Report: design/wave-2-benchmark-report.md
       - Wave 3a.5 Four-Way Benchmark Report: design/wave-3a-benchmark-report.md
       - Wave 3b.5 Four-Way Benchmark Report: design/wave-3b-benchmark-report.md
+      - Wave 4.5 Four-Way Benchmark Report: design/wave-4-benchmark-report.md
   - API Reference:
       - Python, PyO3 & JAX Reference: api/index.md

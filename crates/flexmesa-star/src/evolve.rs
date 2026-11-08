@@ -214,8 +214,18 @@ pub fn star_evolve(
             }
         }
         if let Some(max_age) = model.controls.max_age {
-            if model.star_age >= max_age {
+            if model.star_age >= max_age * (1.0 - 1.0e-12) {
                 break;
+            }
+            let dt_base = if model.dt_next > 0.0 {
+                model.dt_next
+            } else {
+                model.dt
+            };
+            let rem_sec = (max_age - model.star_age) * SECYER;
+            if rem_sec > 0.0 && dt_base > rem_sec {
+                model.dt_next = rem_sec.max(1.0);
+                model.dt = model.dt_next;
             }
         }
         let rep =

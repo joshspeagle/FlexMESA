@@ -15,6 +15,7 @@ import subprocess
 
 import build_docs_figures_wave2 as _w2_figs
 import build_docs_figures_wave3a as _w3a_figs
+import build_docs_figures_wave3b as _w3b_figs
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
@@ -75,6 +76,8 @@ def main() -> None:
     _w2_figs.plot_wave2_benchmark_staircase(out_dir)
     _w3a_figs.plot_eos_helm_skye_phase_diagram(out_dir)
     _w3a_figs.plot_wave3a_benchmark_staircase(out_dir)
+    _w3b_figs.plot_wave3b_microphysics_diagnostics(out_dir)
+    _w3b_figs.plot_wave3b_benchmark_staircase(out_dir)
 
 
 def _register_latin_modern() -> None:

@@ -74,7 +74,33 @@ pub fn set_mlt_vars(model: &mut StarModel) -> Result<(), StarError> {
     if model.controls.redo_conv_for_dr_lt_mixing_length {
         check_for_redo_mlt(model)?;
     }
+    if model.sig.iter().all(|&s| s == 0.0) {
+        update_sig_from_d_mix(model);
+    }
     Ok(())
+}
+
+/// Computes the Lagrangian mass-diffusion coefficient
+/// $\sigma_k = (4\pi r_k^2 \rho_{\mathrm{face},k})^2 D_{\mathrm{mix},k} / \overline{\Delta m}_k$
+/// across interior faces `k = 1..nz-1` (`sig[0] = 0`), applying the diffusive
+/// stiffness cap $\sigma_k \Delta t / \min(\Delta m_{k-1}, \Delta m_k) \le 10^6$.
+pub fn update_sig_from_d_mix(model: &mut StarModel) {
+    let nz = model.nz;
+    if nz == 0 {
+        return;
+    }
+    model.sig[0] = 0.0;
+    for k in 1..nz {
+        let rho_f = model.interp_val_to_pt(&model.rho, k);
+        let area_rho = FOUR_PI * model.r[k] * model.r[k] * rho_f;
+        let dm_bar_k = model.dm_bar[k].max(1.0e-30);
+        let mut sig_k = (area_rho * area_rho) * model.d_mix[k] / dm_bar_k;
+        if model.dt > 0.0 {
+            let dm_min = model.dm[k - 1].min(model.dm[k]).max(1.0e-30);
+            sig_k = sig_k.min(1.0e6 * dm_min / model.dt);
+        }
+        model.sig[k] = sig_k;
+    }
 }
 
 /// Evaluates MLT quantities at a single face `k`, optionally overriding the
@@ -144,7 +170,8 @@ fn eval_face_mlt(
     let grav_f = gm_k / (r_k * r_k);
     let hp_f = p_f / (grav_f * rho_f);
 
-    let mut gradr_f = p_f * kap_f * lum_k / (FOUR_PI * CLIGHT * gm_k * prad_f);
+    let mut gradr_f =
+        p_f * kap_f * lum_k / (4.0 * FOUR_PI * CLIGHT * gm_k * prad_f);
     if k == 0 && model.tau[0] < 2.0 / 3.0 && model.tau[0] > 0.0 {
         gradr_f = gradr_f * (1.0 + 2.0 / (3.0 * model.tau[0]));
     }
@@ -393,5 +420,6 @@ pub fn set_hydro_vars(
     set_mlt_vars(model)?;
     do_brunt_n2(model);
     eval_surf_bc(model)?;
+    crate::eps_grav::eval_eps_grav(model);
     Ok(())
 }

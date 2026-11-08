@@ -78,27 +78,33 @@ pub fn default_basic_net_composition(
     (chem_id, xa)
 }
 
-#[allow(clippy::too_many_arguments)]
-fn eval_pre_ms_gradt(
-    ht: &HelmTable,
-    eos_cfg: &EosConfig,
-    kap_cfg: &KapConfig,
-    controls: &StarControls,
-    chem_id: &[usize],
-    xa: &[f64],
+/// Invariant microphysics and composition context for [`eval_pre_ms_gradt`].
+struct PreMsGradtCtx<'a> {
+    ht: &'a HelmTable,
+    eos_cfg: &'a EosConfig,
+    kap_cfg: &'a KapConfig,
+    controls: &'a StarControls,
+    chem_id: &'a [usize],
+    xa: &'a [f64],
     xh: f64,
     xz: f64,
     zbar: f64,
     xc: f64,
     xn: f64,
     xo: f64,
+}
+
+/// Evaluates total pressure $P$, mean molecular weight $\mu$, and MLT actual
+/// temperature gradient $\nabla_T$ for a trial pre-MS shell at $(\rho, T, r, m, L)$.
+fn eval_pre_ms_gradt(
+    ctx: &PreMsGradtCtx<'_>,
     rho: f64,
     t: f64,
     r: f64,
     m: f64,
     lum: f64,
 ) -> Result<(f64, f64, f64), StarError> {
-    let eos = eos_dt_get(ht, rho, t, chem_id, xa, eos_cfg)
+    let eos = eos_dt_get(ctx.ht, rho, t, ctx.chem_id, ctx.xa, ctx.eos_cfg)
         .map_err(|e| StarError::MicrophysicsError(format!("eos error: {e}")))?;
     let log_rho = rho.log10();
     let log_t = t.log10();
@@ -108,16 +114,16 @@ fn eval_pre_ms_gradt(
     let eta = eos.res[I_ETA];
     let d_eta_dlnd = eos.d_dlnd[I_ETA];
     let d_eta_dlnt = eos.d_dln_t[I_ETA];
-    let xne = rho * flexmesa_const::AVO * lnfree_e.exp();
+    let xne = ctx.xa.get(6).copied().unwrap_or(0.0);
 
     let kap_out = get_kap_results(
-        kap_cfg,
-        zbar,
-        xh,
-        xz,
-        xc,
-        xn,
-        xo,
+        ctx.kap_cfg,
+        ctx.zbar,
+        ctx.xh,
+        ctx.xz,
+        ctx.xc,
+        ctx.xn,
+        ctx.xo,
         xne,
         log_rho,
         log_t,
@@ -134,13 +140,14 @@ fn eval_pre_ms_gradt(
     let prad = CRAD * t.powi(4) / 3.0;
     let p = pgas + prad;
     let grav = STANDARD_CGRAV * m / (r * r);
-    let kap = kap_out.kap * controls.opacity_factor;
-    let gradr = p * kap * lum / (FOUR_PI * CLIGHT * STANDARD_CGRAV * m * prad);
+    let kap = kap_out.kap * ctx.controls.opacity_factor;
+    let gradr =
+        p * kap * lum / (4.0 * FOUR_PI * CLIGHT * STANDARD_CGRAV * m * prad);
     let grada = eos.res[I_GRAD_AD];
 
     let mlt_params = MltParams {
-        option: controls.mlt_option,
-        mixing_length_alpha: controls.mixing_length_alpha,
+        option: ctx.controls.mlt_option,
+        mixing_length_alpha: ctx.controls.mixing_length_alpha,
         henyey_nu: 8.0,
         henyey_y: 1.0 / 3.0,
         max_conv_vel: 1.0e99,
@@ -150,7 +157,7 @@ fn eval_pre_ms_gradt(
         chi_rho: eos.res[I_CHI_RHO],
         cp: eos.res[I_CP],
         grav,
-        lambda: controls.mixing_length_alpha * p / (grav * rho),
+        lambda: ctx.controls.mixing_length_alpha * p / (grav * rho),
         rho,
         p,
         t,
@@ -207,17 +214,36 @@ pub fn build1_pre_ms_model(
         * (r_est / R_SUN).powi(2)
         * exp10(job.pre_ms_log_lum_factor);
 
-    // Inner-most shell (`q = 1e-5`, `pre_ms_model.f90:423-444`)
-    let q_c = 1.0e-5;
+    // Inner-most shell (`pre_ms_model.f90:451-474`, using Kippenhahn & Weigert
+    // Eq. 10.6 matched to `d_log10_p` so `dm[nz-2] / dm[nz-1] = O(1)` for any
+    // step size `d_log10_p`).
+    let d_log10_p = job.pre_ms_d_log10_p.max(1.0e-4);
+    let dp_target_c = p_c * (1.0 - exp10(-0.5 * d_log10_p));
+    let kw_factor = (3.0 * STANDARD_CGRAV / (8.0 * std::f64::consts::PI))
+        * (FOUR_PI * rho_c / 3.0).powf(4.0 / 3.0);
+    let m_kw = (dp_target_c / kw_factor).powf(1.5);
+    let q_c = (m_kw / mstar).clamp(1.0e-5, 0.05);
     let m_c = q_c * mstar;
     let r_c = (m_c / (FOUR_PI * rho_c / 3.0)).cbrt();
     let lum_c = q_c * l_star;
-    let (_, _, gradt_c) = eval_pre_ms_gradt(
-        ht, eos_cfg, kap_cfg, controls, chem_id, xa, comp.xh, comp.xz,
-        comp.zbar, xc, xn, xo, rho_c, t_c, r_c, m_c, lum_c,
-    )?;
+    let ctx = PreMsGradtCtx {
+        ht,
+        eos_cfg,
+        kap_cfg,
+        controls,
+        chem_id,
+        xa,
+        xh: comp.xh,
+        xz: comp.xz,
+        zbar: comp.zbar,
+        xc,
+        xn,
+        xo,
+    };
+    let (_, _, gradt_c) =
+        eval_pre_ms_gradt(&ctx, rho_c, t_c, r_c, m_c, lum_c)?;
 
-    let dp_c = -STANDARD_CGRAV * m_c * rho_c / (2.0 * r_c);
+    let dp_c = -kw_factor * m_c.powf(2.0 / 3.0);
     let p_outer_c = (p_c + dp_c).max(0.5 * p_c);
     let dlnp_c = p_outer_c.ln() - p_c.ln();
     let t_outer_c = t_c * (1.0 + dlnp_c * gradt_c).max(0.5);
@@ -230,8 +256,6 @@ pub fn build1_pre_ms_model(
         t: t_c,
         rho: rho_c,
     });
-
-    let d_log10_p = job.pre_ms_d_log10_p.max(1.0e-4);
     let mut m_prev = m_c;
     let mut r_prev = r_c;
     let mut t_prev = t_outer_c;
@@ -283,26 +307,24 @@ pub fn build1_pre_ms_model(
             let dlnp_full = 2.0 * (p_mid.ln() - p_prev.ln());
             let dp_step = p_prev * dlnp_full.exp_m1();
 
-            // 10 inner iterations for (m_curr, r_curr) (`pre_ms_model.f90:547`)
-            for _j in 1..=10 {
-                let r_bar = 0.5 * (r_prev + r_curr);
+            // 9 inner iterations for (m_curr, r_curr) (`pre_ms_model.f90:548-556`)
+            for _j in 1..=9 {
+                let r_bar = (0.5 * (r_prev.powi(3) + r_curr.powi(3))).cbrt();
                 let m_bar = 0.5 * (m_prev + m_curr);
                 let dm_step = (-FOUR_PI * r_bar.powi(4) * dp_step
                     / (STANDARD_CGRAV * m_bar))
                     .max(1.0e-12 * mstar);
-                let dr_step =
-                    (dm_step / (FOUR_PI * r_bar * r_bar * rho_mid)).max(0.0);
                 m_curr = m_prev + dm_step;
-                r_curr = r_prev + dr_step;
+                let dv = 3.0 * dm_step / (FOUR_PI * rho_mid);
+                r_curr = (r_prev.powi(3) + dv).cbrt();
             }
 
-            let r_mid = 0.5 * (r_prev + r_curr);
+            let r_mid = (0.5 * (r_prev.powi(3) + r_curr.powi(3))).cbrt();
             let m_mid = 0.5 * (m_prev + m_curr);
             let lum_mid = (m_mid / mstar) * l_star;
-            if let Ok((_, _, gt)) = eval_pre_ms_gradt(
-                ht, eos_cfg, kap_cfg, controls, chem_id, xa, comp.xh, comp.xz,
-                comp.zbar, xc, xn, xo, rho_mid, t_mid, r_mid, m_mid, lum_mid,
-            ) {
+            if let Ok((_, _, gt)) =
+                eval_pre_ms_gradt(&ctx, rho_mid, t_mid, r_mid, m_mid, lum_mid)
+            {
                 gradt_mid = gt;
             }
         }
@@ -368,7 +390,8 @@ pub fn build_pre_ms_model(
         let mu_est = 0.61;
         let r_rsun = 0.6929 * mu_est * controls.initial_mass * (1.0e6 / t_c);
         let r_cgs = (r_rsun * R_SUN).max(0.1 * R_SUN);
-        (1.430 * mstar / (FOUR_PI * r_cgs.powi(3) / 3.0)).clamp(1.0e-5, 1.0e2)
+        let vol_fac = FOUR_PI * r_cgs.powi(3) / 3.0;
+        (1.430 * mstar / vol_fac).clamp(1.0e-5, 1.0e2)
     };
 
     let mut x1 = rho_c_guess.ln();
@@ -382,8 +405,9 @@ pub fn build_pre_ms_model(
 
     let (mut f1, mut best_shells) = eval_f(x1)?;
     if f1.abs() > 1.0e-3 {
-        // Bracket root by stepping ln_rho_c
-        let dx = if f1 > 0.0 { 0.15 * LN10 } else { -0.15 * LN10 };
+        // Bracket root by stepping ln_rho_c (`M_1 ~ T_c^3 rho_c^{-3/2}`, so
+        // `f1 = (M_* - M_1)/M_* > 0` requires decreasing `ln_rho_c`).
+        let dx = if f1 > 0.0 { -0.15 * LN10 } else { 0.15 * LN10 };
         let mut x2 = x1;
         let mut f2 = f1;
         for _ in 0..30 {
@@ -463,6 +487,14 @@ pub fn build_pre_ms_model(
         model.cell_xa_mut(k).copy_from_slice(&xa_single);
     }
 
+    model.sync_mesh_and_pack()?;
+    let mut r_inner3 = model.r_center.powi(3);
+    for k in (0..nz).rev() {
+        let rho_k = model.lnd[k].exp();
+        let r_outer3 = r_inner3 + 3.0 * model.dm[k] / (FOUR_PI * rho_k);
+        model.ln_r[k] = r_outer3.ln() / 3.0;
+        r_inner3 = r_outer3;
+    }
     model.finish_init_model()?;
 
     Ok(model)

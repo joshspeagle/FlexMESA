@@ -145,10 +145,13 @@ impl StarModel {
         Ok(())
     }
 
-    /// Synchronizes mesh geometry and snapshots `*_start` and `*_old` arrays
-    /// for freshly initialized ZAMS or pre-MS models.
+    /// Synchronizes mesh geometry, evaluates initial EOS thermodynamic state,
+    /// and snapshots `*_start` and `*_old` arrays for freshly initialized ZAMS
+    /// or pre-MS models.
     pub fn finish_init_model(&mut self) -> Result<(), StarError> {
         self.sync_mesh_and_pack()?;
+        crate::micro::set_basic_vars(self)?;
+        crate::micro::do_eos(self)?;
         self.save_start_values();
         self.save_old_values();
         Ok(())
@@ -299,6 +302,7 @@ impl StarModel {
         self.peos_start.clone_from(&self.peos);
         self.xa_start.clone_from(&self.xa);
         self.xh_start.clone_from(&self.xh);
+        crate::hydro_vars::update_sig_from_d_mix(self);
     }
 
     /// Snapshots current state into `*_old` arrays after a successful step.

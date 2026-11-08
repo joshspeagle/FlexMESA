@@ -63,5 +63,5 @@ mypy_path = "src"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-module = ["tests.*", "flexmesa.rates.*"]
+module = ["tests.*", "flexmesa.*"]
 disallow_untyped_decorators = false

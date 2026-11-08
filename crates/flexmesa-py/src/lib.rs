@@ -78,6 +78,9 @@ pub mod neu_py;
 /// Tier B bindings for `rates` (nuclear reaction rates, screening, and weak rates).
 #[allow(unsafe_code)]
 pub mod rates_py;
+/// Tier A/B/C bindings for `star` (stellar structure, ZAMS/pre-MS, I/O, microphysics).
+#[allow(unsafe_code)]
+pub mod star_py;
 /// Tier A bindings for `data` (`SHA-256` hashing and `.safetensors` parsers).
 #[allow(unsafe_code)]
 pub mod tier_a_data;
@@ -268,5 +271,6 @@ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     rates_py::register(m)?;
     atm_py::register(m)?;
     net_py::register(m)?;
+    star_py::register(m)?;
     Ok(())
 }

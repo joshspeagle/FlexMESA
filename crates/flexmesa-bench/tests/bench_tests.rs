@@ -1,20 +1,20 @@
-//! Integration tests for the Wave 1 four-stage benchmark harness
-//! (`flexmesa-bench`).
+// SPDX-License-Identifier: LGPL-3.0-or-later
+//! Integration tests for the four-stage benchmark harness (`flexmesa-bench`).
 //!
-//! Verifies that all six representative Wave 1 workloads (`auto_diff`,
-//! `interp_2d`, `neu`, `mtx_tridiag`, `turb_mlt`, and `turb_tdc`) produce
-//! machine-precision parity ($\le 10^{-12}$ relative error) across Stages 0..3
-//! and provides a `--release` Markdown table printer (`--ignored`).
+//! Verifies that all Wave 1 (`auto_diff`, `interp_2d`, `neu`, `mtx_tridiag`,
+//! `turb_mlt`, `turb_tdc`), Wave 2 (`chem_comp`, `ion_fe56`, `ion_4d`,
+//! `colors_sed`), Wave 3a (`eos_ideal`, `eos_helm`, `eos_pc`, `eos_skye`), and
+//! Wave 3b (`eos_4d`, `kap_fixed`, `rates_screen`, `net_eval`, `atm_table`)
+//! workloads maintain machine-precision parity ($\le 10^{-12}$ relative error)
+//! across Stages 0..3 and against pinned cross-language checksums.
 
 use flexmesa_bench::{
     run_all_wave1_benchmarks, run_all_wave2_benchmarks,
-    run_all_wave3a_benchmarks,
+    run_all_wave3a_benchmarks, run_all_wave3b_benchmarks, BenchRecord,
 };
 
 /// Pinned cross-language reference checksums for $N_{\mathrm{zones}} = 8$
 /// across all six Wave 1 workloads (shared with `tests/test_bench.py`).
-/// Each entry pairs the canonical workload identifier with the exact Stage 2
-/// `f64` primal reduction sum.
 const EXPECTED_CHECKSUMS_N8: [(&str, f64); 6] = [
     ("auto_diff", 1.089_274_155_553_244e4),
     ("interp_2d", 3.622_775_349_153_983e2),
@@ -25,8 +25,7 @@ const EXPECTED_CHECKSUMS_N8: [(&str, f64); 6] = [
 ];
 
 /// Pinned cross-language reference checksums for $N_{\mathrm{zones}} = 8$
-/// across all four Wave 2 workloads (shared with `tests/test_bench.py` and
-/// `benchmarks/fortran_mesa/run_wave2_bench.f90`).
+/// across all four Wave 2 workloads.
 const EXPECTED_WAVE2_CHECKSUMS_N8: [(&str, f64); 4] = [
     ("chem_comp", 1.687_001_493_521_061e1),
     ("ion_fe56", 1.683_709_392_958_418e2),
@@ -35,8 +34,7 @@ const EXPECTED_WAVE2_CHECKSUMS_N8: [(&str, f64); 4] = [
 ];
 
 /// Pinned cross-language reference checksums for $N_{\mathrm{zones}} = 8$
-/// across all four Wave 3a EOS workloads (shared with `tests/test_bench.py`
-/// and `benchmarks/fortran_mesa/run_wave3a_bench.f90`).
+/// across all four Wave 3a EOS workloads.
 const EXPECTED_WAVE3A_CHECKSUMS_N8: [(&str, f64); 4] = [
     ("eos_ideal", 1.438_224_257_481_198e2),
     ("eos_helm", 3.561_688_957_866_044e2),
@@ -44,16 +42,20 @@ const EXPECTED_WAVE3A_CHECKSUMS_N8: [(&str, f64); 4] = [
     ("eos_skye", 3.561_331_836_722_772e2),
 ];
 
-/// Verifies that all six Wave 1 benchmark workloads (`auto_diff`, `interp_2d`,
-/// `neu`, `mtx_tridiag`, `turb_mlt`, and `turb_tdc`) execute across Stages 0..3
-/// and maintain machine-precision parity ($\le 10^{-12}$ relative discrepancy)
-/// across all four optimization stages and against pinned cross-language
-/// reference checksums.
-#[test]
-fn test_wave1_four_stage_benchmarks_parity() {
-    let records = run_all_wave1_benchmarks(&[8, 32], 1, 3);
-    assert_eq!(records.len(), 12);
-    for rec in &records {
+/// Pinned cross-language reference checksums for $N_{\mathrm{zones}} = 8$
+/// across all five Wave 3b microphysics workloads (shared with
+/// `tests/test_bench.py` and `benchmarks/fortran_mesa/run_wave3b_bench.f90`).
+const EXPECTED_WAVE3B_CHECKSUMS_N8: [(&str, f64); 5] = [
+    ("eos_4d", 2.037_364_564_689_326e2),
+    ("kap_fixed", 2.909_195_757_111_935),
+    ("rates_screen", -1.139_188_914_724_813e2),
+    ("net_eval", 9.619_649_848_151_354e1),
+    ("atm_table", 8.985_411_175_716_764e1),
+];
+
+fn assert_records_parity(records: &[BenchRecord], expected_n8: &[(&str, f64)]) {
+    assert_eq!(records.len(), expected_n8.len() * 2);
+    for rec in records {
         assert!(
             rec.max_rel_err <= 1.0e-12,
             "workload {} (N={}) stage parity error {:.3e} > 1e-12",
@@ -68,7 +70,7 @@ fn test_wave1_four_stage_benchmarks_parity() {
         assert!(rec.checksum.is_finite());
     }
     for (rec, &(exp_name, exp_sum)) in
-        records[..6].iter().zip(EXPECTED_CHECKSUMS_N8.iter())
+        records[..expected_n8.len()].iter().zip(expected_n8.iter())
     {
         assert_eq!(rec.workload, exp_name);
         let rel_err = (rec.checksum - exp_sum).abs() / exp_sum.abs();
@@ -83,174 +85,96 @@ fn test_wave1_four_stage_benchmarks_parity() {
     }
 }
 
+fn print_bench_table(records: &[BenchRecord]) {
+    println!(
+        "| Workload | N_zones | Stage 0 (us) | Stage 1 (us) | \
+         Stage 2 (us) | Stage 3 (us) | Max Rel Err | Checksum |"
+    );
+    println!("|---|---:|---:|---:|---:|---:|---:|---:|");
+    for rec in records {
+        println!(
+            "| `{}` | {} | {:.2} +/- {:.2} | {:.2} +/- {:.2} | \
+             {:.2} +/- {:.2} | {:.2} +/- {:.2} | {:.3e} | {:.8e} |",
+            rec.workload,
+            rec.n_zones,
+            rec.stage0.median_us,
+            rec.stage0.iqr_us,
+            rec.stage1.median_us,
+            rec.stage1.iqr_us,
+            rec.stage2.median_us,
+            rec.stage2.iqr_us,
+            rec.stage3.median_us,
+            rec.stage3.iqr_us,
+            rec.max_rel_err,
+            rec.checksum
+        );
+    }
+}
+
+/// Verifies that all six Wave 1 benchmark workloads execute across Stages 0..3
+/// and maintain machine-precision parity ($\le 10^{-12}$).
+#[test]
+fn test_wave1_four_stage_benchmarks_parity() {
+    let records = run_all_wave1_benchmarks(&[8, 32], 1, 3);
+    assert_records_parity(&records, &EXPECTED_CHECKSUMS_N8);
+}
+
 /// Prints the full Wave 1 four-stage benchmark table across
-/// $N_{\mathrm{zones}} \in \{128, 1024, 4096\}$ when invoked with
-/// `cargo test --release -p flexmesa-bench -- --ignored --nocapture`.
+/// $N_{\mathrm{zones}} \in \{128, 1024, 4096\}$.
 #[test]
 #[ignore = "benchmark table generator for --release runs"]
 fn print_full_wave1_rust_benchmarks() {
     let records = run_all_wave1_benchmarks(&[128, 1024, 4096], 3, 9);
-    println!(
-        "| Workload | N_zones | Stage 0 (us) | Stage 1 (us) | \
-         Stage 2 (us) | Stage 3 (us) | Max Rel Err | Checksum |"
-    );
-    println!("|---|---:|---:|---:|---:|---:|---:|---:|");
-    for rec in &records {
-        println!(
-            "| `{}` | {} | {:.2} +/- {:.2} | {:.2} +/- {:.2} | \
-             {:.2} +/- {:.2} | {:.2} +/- {:.2} | {:.3e} | {:.8e} |",
-            rec.workload,
-            rec.n_zones,
-            rec.stage0.median_us,
-            rec.stage0.iqr_us,
-            rec.stage1.median_us,
-            rec.stage1.iqr_us,
-            rec.stage2.median_us,
-            rec.stage2.iqr_us,
-            rec.stage3.median_us,
-            rec.stage3.iqr_us,
-            rec.max_rel_err,
-            rec.checksum
-        );
-    }
+    print_bench_table(&records);
 }
 
-/// Verifies that all four Wave 2 benchmark workloads (`chem_comp`, `ion_fe56`,
-/// `ion_4d`, and `colors_sed`) execute across Stages 0..3 and maintain
-/// machine-precision parity ($\le 10^{-12}$ relative discrepancy) across all
-/// four optimization stages.
+/// Verifies that all four Wave 2 benchmark workloads execute across Stages 0..3
+/// and maintain machine-precision parity ($\le 10^{-12}$).
 #[test]
 fn test_wave2_four_stage_benchmarks_parity() {
     let records = run_all_wave2_benchmarks(&[8, 32], 1, 3);
-    assert_eq!(records.len(), 8);
-    for rec in &records {
-        assert!(
-            rec.max_rel_err <= 1.0e-12,
-            "workload {} (N={}) stage parity error {:.3e} > 1e-12",
-            rec.workload,
-            rec.n_zones,
-            rec.max_rel_err
-        );
-        assert!(rec.stage0.median_us > 0.0);
-        assert!(rec.stage1.median_us > 0.0);
-        assert!(rec.stage2.median_us > 0.0);
-        assert!(rec.stage3.median_us > 0.0);
-        assert!(rec.checksum.is_finite());
-    }
-    for (rec, &(exp_name, exp_sum)) in
-        records[..4].iter().zip(EXPECTED_WAVE2_CHECKSUMS_N8.iter())
-    {
-        assert_eq!(rec.workload, exp_name);
-        let rel_err = (rec.checksum - exp_sum).abs() / exp_sum.abs();
-        assert!(
-            rel_err <= 1.0e-12,
-            "workload {} (N=8) checksum {:.15e} vs {:.15e} (rel {:.3e})",
-            rec.workload,
-            rec.checksum,
-            exp_sum,
-            rel_err
-        );
-    }
+    assert_records_parity(&records, &EXPECTED_WAVE2_CHECKSUMS_N8);
 }
 
 /// Prints the full Wave 2 four-stage benchmark table across
-/// $N_{\mathrm{zones}} \in \{128, 1024, 4096\}$ when invoked with
-/// `cargo test --release -p flexmesa-bench -- --ignored --nocapture`.
+/// $N_{\mathrm{zones}} \in \{128, 1024, 4096\}$.
 #[test]
 #[ignore = "benchmark table generator for --release runs"]
 fn print_full_wave2_rust_benchmarks() {
     let records = run_all_wave2_benchmarks(&[128, 1024, 4096], 3, 9);
-    println!(
-        "| Workload | N_zones | Stage 0 (us) | Stage 1 (us) | \
-         Stage 2 (us) | Stage 3 (us) | Max Rel Err | Checksum |"
-    );
-    println!("|---|---:|---:|---:|---:|---:|---:|---:|");
-    for rec in &records {
-        println!(
-            "| `{}` | {} | {:.2} +/- {:.2} | {:.2} +/- {:.2} | \
-             {:.2} +/- {:.2} | {:.2} +/- {:.2} | {:.3e} | {:.8e} |",
-            rec.workload,
-            rec.n_zones,
-            rec.stage0.median_us,
-            rec.stage0.iqr_us,
-            rec.stage1.median_us,
-            rec.stage1.iqr_us,
-            rec.stage2.median_us,
-            rec.stage2.iqr_us,
-            rec.stage3.median_us,
-            rec.stage3.iqr_us,
-            rec.max_rel_err,
-            rec.checksum
-        );
-    }
+    print_bench_table(&records);
 }
 
-/// Verifies that all four Wave 3a EOS benchmark workloads (`eos_ideal`,
-/// `eos_helm`, `eos_pc`, and `eos_skye`) execute across Stages 0..3 and
-/// maintain machine-precision parity ($\le 10^{-12}$ relative discrepancy)
-/// across all four optimization stages.
+/// Verifies that all four Wave 3a EOS benchmark workloads execute across Stages
+/// 0..3 and maintain machine-precision parity ($\le 10^{-12}$).
 #[test]
 fn test_wave3a_four_stage_benchmarks_parity() {
     let records = run_all_wave3a_benchmarks(&[8, 32], 1, 3);
-    assert_eq!(records.len(), 8);
-    for rec in &records {
-        assert!(
-            rec.max_rel_err <= 1.0e-12,
-            "workload {} (N={}) stage parity error {:.3e} > 1e-12",
-            rec.workload,
-            rec.n_zones,
-            rec.max_rel_err
-        );
-        assert!(rec.stage0.median_us > 0.0);
-        assert!(rec.stage1.median_us > 0.0);
-        assert!(rec.stage2.median_us > 0.0);
-        assert!(rec.stage3.median_us > 0.0);
-        assert!(rec.checksum.is_finite());
-    }
-    for (rec, &(exp_name, exp_sum)) in
-        records[..4].iter().zip(EXPECTED_WAVE3A_CHECKSUMS_N8.iter())
-    {
-        assert_eq!(rec.workload, exp_name);
-        let rel_err = (rec.checksum - exp_sum).abs() / exp_sum.abs();
-        assert!(
-            rel_err <= 1.0e-12,
-            "workload {} (N=8) checksum {:.15e} vs {:.15e} (rel {:.3e})",
-            rec.workload,
-            rec.checksum,
-            exp_sum,
-            rel_err
-        );
-    }
+    assert_records_parity(&records, &EXPECTED_WAVE3A_CHECKSUMS_N8);
 }
 
 /// Prints the full Wave 3a four-stage benchmark table across
-/// $N_{\mathrm{zones}} \in \{128, 1024, 4096\}$ when invoked with
-/// `cargo test --release -p flexmesa-bench -- --ignored --nocapture`.
+/// $N_{\mathrm{zones}} \in \{128, 1024, 4096\}$.
 #[test]
 #[ignore = "benchmark table generator for --release runs"]
 fn print_full_wave3a_rust_benchmarks() {
     let records = run_all_wave3a_benchmarks(&[128, 1024, 4096], 3, 9);
-    println!(
-        "| Workload | N_zones | Stage 0 (us) | Stage 1 (us) | \
-         Stage 2 (us) | Stage 3 (us) | Max Rel Err | Checksum |"
-    );
-    println!("|---|---:|---:|---:|---:|---:|---:|---:|");
-    for rec in &records {
-        println!(
-            "| `{}` | {} | {:.2} +/- {:.2} | {:.2} +/- {:.2} | \
-             {:.2} +/- {:.2} | {:.2} +/- {:.2} | {:.3e} | {:.8e} |",
-            rec.workload,
-            rec.n_zones,
-            rec.stage0.median_us,
-            rec.stage0.iqr_us,
-            rec.stage1.median_us,
-            rec.stage1.iqr_us,
-            rec.stage2.median_us,
-            rec.stage2.iqr_us,
-            rec.stage3.median_us,
-            rec.stage3.iqr_us,
-            rec.max_rel_err,
-            rec.checksum
-        );
-    }
+    print_bench_table(&records);
+}
+
+/// Verifies that all five Wave 3b microphysics benchmark workloads execute
+/// across Stages 0..3 and maintain machine-precision parity ($\le 10^{-12}$).
+#[test]
+fn test_wave3b_four_stage_benchmarks_parity() {
+    let records = run_all_wave3b_benchmarks(&[8, 32], 1, 3);
+    assert_records_parity(&records, &EXPECTED_WAVE3B_CHECKSUMS_N8);
+}
+
+/// Prints the full Wave 3b four-stage benchmark table across
+/// $N_{\mathrm{zones}} \in \{128, 1024, 4096\}$.
+#[test]
+#[ignore = "benchmark table generator for --release runs"]
+fn print_full_wave3b_rust_benchmarks() {
+    let records = run_all_wave3b_benchmarks(&[128, 1024, 4096], 3, 9);
+    print_bench_table(&records);
 }

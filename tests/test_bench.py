@@ -1,19 +1,18 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
-"""Verification tests for the Wave 1 four-stage benchmark suite.
+"""Verification tests for the four-stage benchmark suites (Waves 1 through 3b).
 
-Verifies that Stages 0, 1, 2, and 3 produce machine-precision agreement
-($\\le 10^{-13}$ relative discrepancy) across all six Wave 1 workloads
-(`auto_diff`, `interp_2d`, `neu`, `mtx_tridiag`, `turb_mlt`, and `turb_tdc`).
+Verifies that Stages 0, 1, 2, and 3 produce machine-precision agreement and
+match the pinned cross-language reference checksums at N_zones = 8 across all
+Wave 1, Wave 2, Wave 3a, and Wave 3b workloads.
 """
 
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 
 from flexmesa import bench
 
-# Pinned cross-language reference checksums at N_zones = 8 (shared with
-# crates/flexmesa-bench/tests/bench_tests.rs).
 _EXPECTED_CHECKSUMS_N8: tuple[tuple[str, float], ...] = (
     ("auto_diff", 1.0892741555532441e04),
     ("interp_2d", 3.6227753491539829e02),
@@ -37,23 +36,28 @@ _EXPECTED_WAVE3A_CHECKSUMS_N8: tuple[tuple[str, float], ...] = (
     ("eos_skye", 3.5613318367227720e02),
 )
 
+_EXPECTED_WAVE3B_CHECKSUMS_N8: tuple[tuple[str, float], ...] = (
+    ("eos_4d", 2.0373645646893260e02),
+    ("kap_fixed", 2.9091957571119350e00),
+    ("rates_screen", -1.1391889147248130e02),
+    ("net_eval", 9.6196498481513540e01),
+    ("atm_table", 8.9854111757167640e01),
+)
 
-def test_wave1_four_stage_benchmarks_parity_across_stages() -> None:
-    """All six Wave 1 workloads agree across Stages 0..3 and match Rust.
 
-    Verifies stage-to-stage relative error <= 1e-12 and pinned cross-language
-    reference checksums at N_zones = 8.
-    """
-    records = bench.run_all_wave1_benchmarks(
-        zone_counts=(4, 8),
-        n_warmup=1,
-        n_repeats=3,
-    )
-    assert len(records) == 12
+def _assert_records_parity(
+    records: Sequence[bench.BenchRecord],
+    expected_n8: Sequence[tuple[str, float]],
+    max_stage_rel_err: float = 1.0e-12,
+    max_chk_rel_err: float = 1.0e-12,
+) -> None:
+    """Assert stage parity and N_zones = 8 reference checksums."""
+    n_workloads = len(expected_n8)
+    assert len(records) == 2 * n_workloads
     for rec in records:
-        assert rec.max_rel_err <= 1.0e-12, (
+        assert rec.max_rel_err <= max_stage_rel_err, (
             f"workload {rec.workload} (N={rec.n_zones}) "
-            f"stage parity error {rec.max_rel_err:.3e} > 1e-12"
+            f"stage parity {rec.max_rel_err:.3e} > {max_stage_rel_err:.1e}"
         )
         assert rec.stage0.median_us > 0.0
         assert rec.stage1.median_us > 0.0
@@ -62,14 +66,22 @@ def test_wave1_four_stage_benchmarks_parity_across_stages() -> None:
         assert math.isfinite(rec.checksum)
 
     for rec, (exp_name, exp_sum) in zip(
-        records[6:], _EXPECTED_CHECKSUMS_N8, strict=True
+        records[n_workloads:], expected_n8, strict=True
     ):
         assert rec.workload == exp_name
         rel_err = abs(rec.checksum - exp_sum) / abs(exp_sum)
-        assert rel_err <= 1.0e-12, (
+        assert rel_err <= max_chk_rel_err, (
             f"workload {rec.workload} (N=8) checksum {rec.checksum:.15e} "
             f"vs {exp_sum:.15e} (rel {rel_err:.3e})"
         )
+
+
+def test_wave1_four_stage_benchmarks_parity_across_stages() -> None:
+    """All six Wave 1 workloads agree across Stages 0..3 and match Rust."""
+    records = bench.run_all_wave1_benchmarks(
+        zone_counts=(4, 8), n_warmup=1, n_repeats=3
+    )
+    _assert_records_parity(records, _EXPECTED_CHECKSUMS_N8)
 
 
 def test_measure_us_records_positive_median_and_compile_latency() -> None:
@@ -86,70 +98,31 @@ def test_measure_us_records_positive_median_and_compile_latency() -> None:
 
 
 def test_wave2_four_stage_benchmarks_parity_across_stages() -> None:
-    """All four Wave 2 workloads agree across Stages 0..3 and match Rust.
-
-    Verifies stage-to-stage relative error <= 1e-12 and pinned cross-language
-    reference checksums at N_zones = 8.
-    """
+    """All four Wave 2 workloads agree across Stages 0..3 and match Rust."""
     records = bench.run_all_wave2_benchmarks(
-        zone_counts=(4, 8),
-        n_warmup=1,
-        n_repeats=3,
+        zone_counts=(4, 8), n_warmup=1, n_repeats=3
     )
-    assert len(records) == 8
-    for rec in records:
-        assert rec.max_rel_err <= 1.0e-12, (
-            f"workload {rec.workload} (N={rec.n_zones}) "
-            f"stage parity error {rec.max_rel_err:.3e} > 1e-12"
-        )
-        assert rec.stage0.median_us > 0.0
-        assert rec.stage1.median_us > 0.0
-        assert rec.stage2.median_us > 0.0
-        assert rec.stage3.median_us > 0.0
-        assert math.isfinite(rec.checksum)
-
-    for rec, (exp_name, exp_sum) in zip(
-        records[4:], _EXPECTED_WAVE2_CHECKSUMS_N8, strict=True
-    ):
-        assert rec.workload == exp_name
-        rel_err = abs(rec.checksum - exp_sum) / abs(exp_sum)
-        assert rel_err <= 1.0e-12, (
-            f"workload {rec.workload} (N=8) checksum {rec.checksum:.15e} "
-            f"vs {exp_sum:.15e} (rel {rel_err:.3e})"
-        )
+    _assert_records_parity(records, _EXPECTED_WAVE2_CHECKSUMS_N8)
 
 
 def test_wave3a_four_stage_benchmarks_parity_across_stages() -> None:
-    """All four Wave 3a EOS workloads agree across Stages 0..3 and match Rust.
-
-    Verifies stage-to-stage relative error <= 1e-9 across all 26 EOS channels
-    (including 2nd-order autodiff Hessians of Helmholtz free energy at low
-    density) and pinned cross-language `lnPgas` reference checksums at
-    N_zones = 8 to <= 1e-13.
-    """
+    """All four Wave 3a workloads agree across Stages 0..3 and match Rust."""
     records = bench.run_all_wave3a_benchmarks(
-        zone_counts=(4, 8),
-        n_warmup=1,
-        n_repeats=3,
+        zone_counts=(4, 8), n_warmup=1, n_repeats=3
     )
-    assert len(records) == 8
-    for rec in records:
-        assert rec.max_rel_err <= 2.0e-9, (
-            f"workload {rec.workload} (N={rec.n_zones}) "
-            f"stage parity error {rec.max_rel_err:.3e} > 2e-9"
-        )
-        assert rec.stage0.median_us > 0.0
-        assert rec.stage1.median_us > 0.0
-        assert rec.stage2.median_us > 0.0
-        assert rec.stage3.median_us > 0.0
-        assert math.isfinite(rec.checksum)
+    _assert_records_parity(
+        records,
+        _EXPECTED_WAVE3A_CHECKSUMS_N8,
+        max_stage_rel_err=2.0e-9,
+        max_chk_rel_err=1.0e-13,
+    )
 
-    for rec, (exp_name, exp_sum) in zip(
-        records[4:], _EXPECTED_WAVE3A_CHECKSUMS_N8, strict=True
-    ):
-        assert rec.workload == exp_name
-        rel_err = abs(rec.checksum - exp_sum) / abs(exp_sum)
-        assert rel_err <= 1.0e-13, (
-            f"workload {rec.workload} (N=8) checksum {rec.checksum:.15e} "
-            f"vs {exp_sum:.15e} (rel {rel_err:.3e})"
-        )
+
+def test_wave3b_four_stage_benchmarks_parity_across_stages() -> None:
+    """All five Wave 3b workloads agree across Stages 0..3 and match Rust."""
+    records = bench.run_all_wave3b_benchmarks(
+        zone_counts=(4, 8), n_warmup=1, n_repeats=3
+    )
+    _assert_records_parity(
+        records, _EXPECTED_WAVE3B_CHECKSUMS_N8, max_stage_rel_err=5.0e-12
+    )

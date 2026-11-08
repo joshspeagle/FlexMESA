@@ -2,19 +2,22 @@
 //! `PyO3` bindings for `flexmesa-eos` Wave 3a.3 and Wave 3b.1 (`eosDT_get`
 //! 7-level cascade, 4D tabulated EOS evaluators, and `PT`/`DE` inverse solvers).
 
+use flexmesa_chem::{get_composition_info, NuclideCatalog};
 use flexmesa_const::LN10;
 use flexmesa_eos::{
     eos_dt_get, eos_dt_get_rho, eos_dt_get_t, eos_gamma_de_get, eos_pt_get,
     eos_pt_get_pgas, eos_pt_get_t, eval_cms_eos, eval_free_eos,
-    eval_opal_scvh_eos, CmsConfig, CmsTableSet, EosConfig, EosDtTableSet,
-    FreeEosConfig, HelmTable, OpalScvhConfig,
+    eval_opal_scvh_eos, get1_eosdt_results, CmsConfig, CmsTableSet, EosConfig,
+    EosDtTableKind, EosDtTableSet, FreeEosConfig, HelmTable, OpalScvhConfig,
+    I_FRAC_OPAL_SCVH, NUM_EOS_BASIC_RESULTS,
 };
-use numpy::{PyArray1, PyReadonlyArray1};
+use numpy::{PyArray1, PyArray2, PyArrayMethods, PyReadonlyArray1};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
 use crate::eos_pc_skye_py::parse_mixing_rule;
 use crate::eos_py::{into_py_eos_tuple, PyEosTuple};
+use crate::eval_batch_2d;
 
 type PyPtTuple<'py> = (
     f64,
@@ -507,12 +510,76 @@ pub fn eos_eval_gamma_de_get<'py>(
     )
 }
 
+/// Evaluates `OPAL/SCVH` 4D tabulated EOS across `nz` zones at `(chem_id, xa)`,
+/// returning an `(nz, 78)` array `[res[0..26], d_dlnd[0..26], d_dln_t[0..26]]`.
+#[pyfunction]
+#[pyo3(signature = (rho, temp, chem_id, xa, parallel=true))]
+pub fn eos_eval_opal_scvh_zones<'py>(
+    py: Python<'py>,
+    rho: PyReadonlyArray1<'py, f64>,
+    temp: PyReadonlyArray1<'py, f64>,
+    chem_id: Vec<usize>,
+    xa: PyReadonlyArray1<'py, f64>,
+    parallel: bool,
+) -> PyResult<Bound<'py, PyArray2<f64>>> {
+    let r_s = rho
+        .as_slice()
+        .map_err(|_| PyValueError::new_err("rho must be contiguous"))?
+        .to_vec();
+    let t_s = temp
+        .as_slice()
+        .map_err(|_| PyValueError::new_err("temp must be contiguous"))?
+        .to_vec();
+    let xa_v = xa
+        .as_slice()
+        .map_err(|_| PyValueError::new_err("xa must be contiguous"))?
+        .to_vec();
+    let nz = r_s.len();
+    if t_s.len() != nz {
+        return Err(PyValueError::new_err(
+            "rho and temp must have equal length",
+        ));
+    }
+    let cat = NuclideCatalog::builtin_ref();
+    let comp = get_composition_info(cat, &chem_id, &xa_v, true)
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    let dt = EosDtTableSet::builtin();
+    let cfg = OpalScvhConfig::default();
+    let out_arr = eval_batch_2d::<78, _>(py, nz, parallel, 8, move |k| {
+        let mut row = [f64::NAN; 78];
+        if let Ok((mut out, _, _)) = get1_eosdt_results(
+            dt,
+            EosDtTableKind::OpalScvh,
+            comp.xz,
+            comp.xh,
+            r_s[k].log10(),
+            t_s[k].log10(),
+            cfg.use_linear_interp_for_x,
+            cfg.tiny_fuzz,
+        ) {
+            out.set_single_component_fraction(I_FRAC_OPAL_SCVH);
+            let n = NUM_EOS_BASIC_RESULTS;
+            row[0..n].copy_from_slice(&out.res);
+            row[n..2 * n].copy_from_slice(&out.d_dlnd);
+            row[2 * n..3 * n].copy_from_slice(&out.d_dln_t);
+        }
+        row
+    })?;
+    if out_arr.readonly().as_slice()?.iter().any(|v| v.is_nan()) {
+        return Err(PyValueError::new_err(
+            "OPAL/SCVH evaluation failed in eos_eval_opal_scvh_zones",
+        ));
+    }
+    Ok(out_arr)
+}
+
 /// Registers Wave 3a.3 and Wave 3b.1 `eosDT_get` cascade, 4D table evaluators,
 /// and inverse solver bindings on the `flexmesa._rust` module.
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(eos_eval_dt_get, m)?)?;
     m.add_function(wrap_pyfunction!(eos_eval_pt_get, m)?)?;
     m.add_function(wrap_pyfunction!(eos_eval_opal_scvh, m)?)?;
+    m.add_function(wrap_pyfunction!(eos_eval_opal_scvh_zones, m)?)?;
     m.add_function(wrap_pyfunction!(eos_eval_free_eos, m)?)?;
     m.add_function(wrap_pyfunction!(eos_eval_cms, m)?)?;
     m.add_function(wrap_pyfunction!(eos_eval_dt_get_t, m)?)?;

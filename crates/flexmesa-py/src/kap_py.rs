@@ -77,8 +77,8 @@ fn build_kap_config(
 #[pyo3(signature = (
     z, x, zbase, xc, xn, xo, xne, log_rho, log_t,
     lnfree_e, d_lnfree_e_dln_rho, d_lnfree_e_dln_t,
-    eta, d_eta_dln_rho, d_eta_dln_t, zbar=1.0,
-    kap_option="gs98", kap_co_option="gs98_co", kap_low_t_option="lowT_fa05_gs98",
+    eta, d_eta_dln_rho, d_eta_dln_t, zbar=1.0, kap_option="gs98",
+    kap_co_option="gs98_co", kap_low_t_option="lowT_fa05_gs98",
     kap_blend_log_t_upper_bdy=3.88, kap_blend_log_t_lower_bdy=3.80,
     cubic_interpolation_in_x=false, cubic_interpolation_in_z=false,
     include_electron_conduction=true, use_blouin_conductive_opacities=true,
@@ -450,21 +450,22 @@ pub fn kap_get_zones_rust<'py>(
     let out_arr =
         crate::eval_batch_2d::<7, _>(py, nz, parallel, 8, move |k| {
             let xa_k = &xa_flat[k * n_spec..(k + 1) * n_spec];
-            match kap_get(
+            kap_get(
                 &cfg, &cid, xa_k, lr[k], lt[k], lnf[k], dlnf_dr[k], dlnf_dt[k],
                 et[k], det_dr[k], det_dt[k],
-            ) {
-                Ok(out) => [
-                    out.kap,
-                    out.dlnkap_dln_rho,
-                    out.dlnkap_dln_t,
-                    out.kap_fracs[0],
-                    out.kap_fracs[1],
-                    out.kap_fracs[2],
-                    out.kap_fracs[3],
-                ],
-                Err(_) => [f64::NAN; 7],
-            }
+            )
+            .map(|o| {
+                [
+                    o.kap,
+                    o.dlnkap_dln_rho,
+                    o.dlnkap_dln_t,
+                    o.kap_fracs[0],
+                    o.kap_fracs[1],
+                    o.kap_fracs[2],
+                    o.kap_fracs[3],
+                ]
+            })
+            .unwrap_or([f64::NAN; 7])
         })?;
     if out_arr.readonly().as_slice()?.iter().any(|v| v.is_nan()) {
         return Err(PyValueError::new_err(
@@ -474,9 +475,79 @@ pub fn kap_get_zones_rust<'py>(
     Ok(out_arr)
 }
 
+/// Evaluate `get_kap_results` across `N_zones` zones at fixed composition,
+/// returning an `(N_zones, 7)` array.
+#[pyfunction]
+#[pyo3(signature = (
+    z, x, zbase, xc, xn, xo, xne, log_rho_zones, log_t_zones,
+    lnfree_e, d_lnfree_e_dln_rho, d_lnfree_e_dln_t,
+    eta, d_eta_dln_rho, d_eta_dln_t, zbar=1.0, kap_option="gs98",
+    kap_co_option="gs98_co", kap_low_t_option="lowT_fa05_gs98",
+    kap_blend_log_t_upper_bdy=3.88, kap_blend_log_t_lower_bdy=3.80,
+    cubic_interpolation_in_x=false, cubic_interpolation_in_z=false,
+    include_electron_conduction=true, use_blouin_conductive_opacities=true,
+    use_zbase_for_type1=false, use_type2_opacities=false,
+    kap_type2_full_off_x=1.0e-3, kap_type2_full_on_x=1.0e-6,
+    kap_type2_full_off_dz=0.001, kap_type2_full_on_dz=0.01,
+    parallel=true
+))]
+#[rustfmt::skip]
+#[allow(clippy::fn_params_excessive_bools)]
+pub fn kap_get_results_zones_rust<'py>(
+    py: Python<'py>, z: f64, x: f64, zbase: f64, xc: f64, xn: f64, xo: f64,
+    xne: f64, log_rho_zones: PyReadonlyArray1<'py, f64>,
+    log_t_zones: PyReadonlyArray1<'py, f64>, lnfree_e: f64,
+    d_lnfree_e_dln_rho: f64, d_lnfree_e_dln_t: f64, eta: f64,
+    d_eta_dln_rho: f64, d_eta_dln_t: f64, zbar: f64, kap_option: &str,
+    kap_co_option: &str, kap_low_t_option: &str,
+    kap_blend_log_t_upper_bdy: f64, kap_blend_log_t_lower_bdy: f64,
+    cubic_interpolation_in_x: bool, cubic_interpolation_in_z: bool,
+    include_electron_conduction: bool, use_blouin_conductive_opacities: bool,
+    use_zbase_for_type1: bool, use_type2_opacities: bool,
+    kap_type2_full_off_x: f64, kap_type2_full_on_x: f64,
+    kap_type2_full_off_dz: f64, kap_type2_full_on_dz: f64, parallel: bool,
+) -> PyResult<Bound<'py, PyArray2<f64>>> {
+    let cfg = build_kap_config(
+        zbase, kap_option, kap_co_option, kap_low_t_option,
+        kap_blend_log_t_upper_bdy, kap_blend_log_t_lower_bdy,
+        cubic_interpolation_in_x, cubic_interpolation_in_z,
+        include_electron_conduction, use_blouin_conductive_opacities,
+        use_zbase_for_type1, use_type2_opacities, kap_type2_full_off_x,
+        kap_type2_full_on_x, kap_type2_full_off_dz, kap_type2_full_on_dz,
+    )?;
+    let lr = log_rho_zones.as_slice()?.to_vec();
+    let lt = log_t_zones.as_slice()?.to_vec();
+    let nz = lr.len();
+    if lt.len() != nz {
+        return Err(PyValueError::new_err(
+            "log_rho_zones and log_t_zones must have equal length",
+        ));
+    }
+    let out_arr =
+        crate::eval_batch_2d::<7, _>(py, nz, parallel, 8, move |k| {
+            get_kap_results(
+                &cfg, zbar, x, z, xc, xn, xo, xne, lr[k], lt[k], lnfree_e,
+                d_lnfree_e_dln_rho, d_lnfree_e_dln_t, eta, d_eta_dln_rho,
+                d_eta_dln_t,
+            )
+            .map(|o| {
+                [
+                    o.kap, o.dlnkap_dln_rho, o.dlnkap_dln_t, o.kap_fracs[0],
+                    o.kap_fracs[1], o.kap_fracs[2], o.kap_fracs[3],
+                ]
+            })
+            .unwrap_or([f64::NAN; 7])
+        })?;
+    if out_arr.readonly().as_slice()?.iter().any(|v| v.is_nan()) {
+        return Err(PyValueError::new_err("kap_get_results_zones_rust failed"));
+    }
+    Ok(out_arr)
+}
+
 /// Register `kap` bindings on `flexmesa._rust`.
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(kap_get_results_rust, m)?)?;
+    m.add_function(wrap_pyfunction!(kap_get_results_zones_rust, m)?)?;
     m.add_function(wrap_pyfunction!(kap_get_rust, m)?)?;
     m.add_function(wrap_pyfunction!(kap_get_elect_cond_opacity_rust, m)?)?;
     m.add_function(wrap_pyfunction!(kap_get_compton_opacity_rust, m)?)?;

@@ -72,7 +72,9 @@ pub use burn_const_p::{
     burn_1_zone_const_p, BurnConstPInput, BurnConstPOutput,
     BurnConstPOutput as OneZoneBurnConstPResult,
 };
-pub use derivs::{eval_net, get_derivs};
+pub use derivs::{
+    eval_net, eval_net_with_work, get_derivs, with_thread_local_work,
+};
 pub use derivs_support::NetWorkState;
 pub use f64x2::F64x2;
 pub use initialize::{global_logttab, global_ttab};

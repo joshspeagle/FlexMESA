@@ -136,6 +136,20 @@ impl NetWorkState {
             wk_dqneu_dln_rho: vec![0.0; nw],
         }
     }
+
+    /// Resets per-evaluation accumulators in `self` for zero-allocation reuse.
+    pub fn reset(&mut self, g: &NetGeneralInfo) {
+        let ni = g.num_isos;
+        let nr = g.num_reactions;
+        self.eps_nuc_categories = [0.0; NUM_CATEGORIES];
+        self.eps_neu_total = 0.0;
+        self.d_eps_nuc_dy[..ni].fill(0.0);
+        self.d_dydt_dy[..ni * ni].fill(0.0);
+        self.raw_rate[..nr].fill(0.0);
+        self.screened_rate[..nr].fill(0.0);
+        self.eps_nuc_rate[..nr].fill(0.0);
+        self.eps_neu_rate[..nr].fill(0.0);
+    }
 }
 
 /// Evaluates a single weak reaction with low-$T_9$ Reaclib/halflife blending

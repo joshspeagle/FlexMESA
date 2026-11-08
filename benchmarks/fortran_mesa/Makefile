@@ -14,6 +14,10 @@ FFLAGS ?= -O2 -fopenmp -cpp -ffree-form -ffree-line-length-none
 
 MESA_INC := -I$(MESA_DIR)/include -I$(MESA_DIR)/build/interp_2d/modules
 MESA_LIBS := \
+	$(MESA_DIR)/lib/libatm.a \
+	$(MESA_DIR)/lib/libnet.a \
+	$(MESA_DIR)/lib/librates.a \
+	$(MESA_DIR)/lib/libkap.a \
 	$(MESA_DIR)/lib/libeos.a \
 	$(MESA_DIR)/lib/libcolors.a \
 	$(MESA_DIR)/lib/libionization.a \
@@ -48,13 +52,20 @@ WAVE3A_OBJS := \
 	$(BUILD_DIR)/bench_kernels_wave3a.o \
 	$(BUILD_DIR)/run_wave3a_bench.o
 
+WAVE3B_OBJS := \
+	$(BUILD_DIR)/bench_harness.o \
+	$(BUILD_DIR)/bench_kernels_wave3a.o \
+	$(BUILD_DIR)/bench_kernels_wave3b.o \
+	$(BUILD_DIR)/run_wave3b_bench.o
+
 TARGET := $(BUILD_DIR)/run_wave1_bench
 TARGET_WAVE2 := $(BUILD_DIR)/run_wave2_bench
 TARGET_WAVE3A := $(BUILD_DIR)/run_wave3a_bench
+TARGET_WAVE3B := $(BUILD_DIR)/run_wave3b_bench
 
-.PHONY: all run run_wave2 run_wave3a clean
+.PHONY: all run run_wave2 run_wave3a run_wave3b clean
 
-all: $(TARGET) $(TARGET_WAVE2) $(TARGET_WAVE3A)
+all: $(TARGET) $(TARGET_WAVE2) $(TARGET_WAVE3A) $(TARGET_WAVE3B)
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
@@ -86,6 +97,12 @@ $(BUILD_DIR)/bench_kernels_wave3a.o: bench_kernels_wave3a.f90 $(BUILD_DIR)/bench
 $(BUILD_DIR)/run_wave3a_bench.o: run_wave3a_bench.f90 $(BUILD_DIR)/bench_kernels_wave3a.o | $(BUILD_DIR)
 	$(FC) $(FFLAGS) $(MESA_INC) -I$(BUILD_DIR) -J$(BUILD_DIR) -c $< -o $@
 
+$(BUILD_DIR)/bench_kernels_wave3b.o: bench_kernels_wave3b.f90 $(BUILD_DIR)/bench_harness.o $(BUILD_DIR)/bench_kernels_wave3a.o | $(BUILD_DIR)
+	$(FC) $(FFLAGS) $(MESA_INC) -I$(BUILD_DIR) -J$(BUILD_DIR) -c $< -o $@
+
+$(BUILD_DIR)/run_wave3b_bench.o: run_wave3b_bench.f90 $(BUILD_DIR)/bench_kernels_wave3b.o | $(BUILD_DIR)
+	$(FC) $(FFLAGS) $(MESA_INC) -I$(BUILD_DIR) -J$(BUILD_DIR) -c $< -o $@
+
 $(TARGET): $(OBJS)
 	$(FC) $(FFLAGS) -o $@ $(OBJS) $(MESA_LIBS) $(BLAS_LAPACK_LIBS)
 
@@ -94,6 +111,9 @@ $(TARGET_WAVE2): $(WAVE2_OBJS)
 
 $(TARGET_WAVE3A): $(WAVE3A_OBJS)
 	$(FC) $(FFLAGS) -o $@ $(WAVE3A_OBJS) $(MESA_LIBS) $(BLAS_LAPACK_LIBS)
+
+$(TARGET_WAVE3B): $(WAVE3B_OBJS)
+	$(FC) $(FFLAGS) -o $@ $(WAVE3B_OBJS) $(MESA_LIBS) $(BLAS_LAPACK_LIBS)
 
 run: $(TARGET)
 	MESA_DIR=$(MESA_DIR) $(TARGET)
@@ -104,6 +124,9 @@ run_wave2: $(TARGET_WAVE2)
 run_wave3a: $(TARGET_WAVE3A)
 	MESA_DIR=$(MESA_DIR) $(TARGET_WAVE3A)
 
+run_wave3b: $(TARGET_WAVE3B)
+	MESA_DIR=$(MESA_DIR) $(TARGET_WAVE3B)
+
 clean:
-	rm -f $(BUILD_DIR)/*.o $(BUILD_DIR)/*.mod $(TARGET) $(TARGET_WAVE2) $(TARGET_WAVE3A)
+	rm -f $(BUILD_DIR)/*.o $(BUILD_DIR)/*.mod $(TARGET) $(TARGET_WAVE2) $(TARGET_WAVE3A) $(TARGET_WAVE3B)
 	if [ -d $(BUILD_DIR) ]; then rmdir $(BUILD_DIR) 2>/dev/null || true; fi

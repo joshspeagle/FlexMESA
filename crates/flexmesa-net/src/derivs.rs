@@ -25,149 +25,112 @@ use crate::types::{
 
 const MIN_Z_FOR_SWITCH_TO_PROT: i32 = 12;
 
-/// Evaluates a nuclear reaction network at `(x, temp, log_t, rho, log_rho)`
-/// (`eval_net` in `net/private/net_eval.f90`).
+#[rustfmt::skip]
 #[allow(clippy::too_many_arguments)]
-pub fn eval_net(
-    g: &NetGeneralInfo,
-    rates_only: bool,
-    just_dxdt: bool,
-    x: &[f64],
-    mut temp: f64,
-    mut log_t: f64,
-    rho: f64,
-    log_rho: f64,
-    abar: f64,
-    zbar: f64,
-    z2bar: f64,
-    ye: f64,
-    eta: f64,
-    d_eta_dln_t: f64,
-    d_eta_dln_rho: f64,
-    rate_factors: &[f64],
-    weak_rate_factor: f64,
-    screening_mode: ScreeningMode,
-    use_3a_fl87: bool,
-    use_suzuki: bool,
-    do_ecapture: bool,
-    symbolic: bool,
-) -> Result<NetEvalResult, NetError> {
-    if log_t < RATTAB_TLO {
-        log_t = RATTAB_TLO;
-        temp = RATTAB_TEMP_LO;
+fn eval_net_setup(
+    g: &NetGeneralInfo, w: &mut NetWorkState, x: &[f64],
+    temp: &mut f64, log_t: &mut f64, rho: f64,
+    abar: f64, zbar: f64, z2bar: f64, ye: f64,
+    eta: f64, d_eta_dln_t: f64, d_eta_dln_rho: f64,
+    rate_factors: &[f64], weak_rate_factor: f64,
+    use_suzuki: bool, do_ecapture: bool,
+) -> Result<(), NetError> {
+    if x.len() != g.num_isos {
+        return Err(NetError::IntegrationError(format!(
+            "expected {} mass fractions, got {}",
+            g.num_isos, x.len()
+        )));
+    }
+    if *log_t < RATTAB_TLO {
+        *log_t = RATTAB_TLO;
+        *temp = RATTAB_TEMP_LO;
     }
     let nuclides = NuclideCatalog::builtin_ref();
-    let mut w = NetWorkState::new(g);
     for (i, &cid) in g.chem_id.iter().enumerate() {
         let a = nuclides.get_by_id(cid).unwrap().z_plus_n as f64;
         w.y[i] = x[i].clamp(0.0, 1.0) / a;
     }
-
     if g.num_wk_reactions > 0 {
         get_weaklib_rates(
-            g,
-            &mut w,
-            temp,
-            rho,
-            ye,
-            abar,
-            zbar,
-            z2bar,
-            eta,
-            d_eta_dln_t,
-            d_eta_dln_rho,
-            weak_rate_factor,
-            use_suzuki,
-            do_ecapture,
+            g, w, *temp, rho, ye, abar, zbar, z2bar, eta, d_eta_dln_t,
+            d_eta_dln_rho, weak_rate_factor, use_suzuki, do_ecapture,
         );
     }
-
     g.eval_raw_rates_from_tables(
-        ye,
-        log_t,
-        temp,
-        rho,
-        rate_factors,
+        ye, *log_t, *temp, rho, rate_factors,
         &mut w.rate_raw[..g.num_reactions],
         &mut w.rate_raw_dt[..g.num_reactions],
         &mut w.rate_raw_drho[..g.num_reactions],
+    )
+}
+
+/// Evaluates a nuclear reaction network at `(x, temp, log_t, rho, log_rho)`
+/// (`eval_net` in `net/private/net_eval.f90`).
+#[rustfmt::skip]
+#[allow(clippy::too_many_arguments)]
+pub fn eval_net(
+    g: &NetGeneralInfo, rates_only: bool, just_dxdt: bool, x: &[f64],
+    mut temp: f64, mut log_t: f64, rho: f64, log_rho: f64,
+    abar: f64, zbar: f64, z2bar: f64, ye: f64,
+    eta: f64, d_eta_dln_t: f64, d_eta_dln_rho: f64,
+    rate_factors: &[f64], weak_rate_factor: f64,
+    screening_mode: ScreeningMode, use_3a_fl87: bool,
+    use_suzuki: bool, do_ecapture: bool, symbolic: bool,
+) -> Result<NetEvalResult, NetError> {
+    let mut w = NetWorkState::new(g);
+    eval_net_setup(
+        g, &mut w, x, &mut temp, &mut log_t, rho, abar, zbar, z2bar, ye, eta,
+        d_eta_dln_t, d_eta_dln_rho, rate_factors, weak_rate_factor,
+        use_suzuki, do_ecapture,
     )?;
 
     if g.doing_approx21 {
         return eval_net_approx21_procs(
-            g,
-            &mut w,
-            rates_only,
-            just_dxdt,
-            temp,
-            log_t,
-            rho,
-            log_rho,
-            abar,
-            zbar,
-            z2bar,
-            ye,
-            eta,
-            weak_rate_factor,
-            screening_mode,
+            g, &mut w, rates_only, just_dxdt, temp, log_t, rho, log_rho, abar,
+            zbar, z2bar, ye, eta, weak_rate_factor, screening_mode,
             use_3a_fl87,
         );
     }
 
     screen_net(
-        g,
-        &w.y,
-        temp,
-        rho,
-        log_t,
-        log_rho,
+        g, &w.y, temp, rho, log_t, log_rho,
         &w.rate_raw[..g.num_reactions],
         &w.rate_raw_dt[..g.num_reactions],
         &w.rate_raw_drho[..g.num_reactions],
         &mut w.rate_screened[..g.num_reactions],
         &mut w.rate_screened_dt[..g.num_reactions],
         &mut w.rate_screened_drho[..g.num_reactions],
-        screening_mode,
-        zbar,
-        abar,
-        z2bar,
+        screening_mode, zbar, abar, z2bar,
     )?;
 
     let ni = g.num_isos;
     let nr = g.num_reactions;
     let mut res = NetEvalResult {
-        eps_nuc: 0.0,
-        d_eps_nuc_drho: 0.0,
-        d_eps_nuc_dt: 0.0,
-        d_eps_nuc_dx: vec![0.0; ni],
-        dxdt: vec![0.0; ni],
-        d_dxdt_drho: vec![0.0; ni],
-        d_dxdt_dt: vec![0.0; ni],
+        eps_nuc: 0.0, d_eps_nuc_drho: 0.0, d_eps_nuc_dt: 0.0,
+        d_eps_nuc_dx: vec![0.0; ni], dxdt: vec![0.0; ni],
+        d_dxdt_drho: vec![0.0; ni], d_dxdt_dt: vec![0.0; ni],
         d_dxdt_dx: vec![0.0; ni * ni],
         eps_nuc_categories: [0.0; NUM_CATEGORIES],
-        eps_neu_total: 0.0,
-        rate_raw: w.rate_raw[..nr].to_vec(),
-        rate_screened: w.rate_screened[..nr].to_vec(),
+        eps_neu_total: 0.0, rate_raw: Vec::new(), rate_screened: Vec::new(),
     };
     if rates_only {
+        res.rate_raw = w.rate_raw[..nr].to_vec();
+        res.rate_screened = w.rate_screened[..nr].to_vec();
         return Ok(res);
     }
 
-    let mut dydt = vec![[F64x2::ZERO; NUM_RVS]; ni];
+    let mut stack_dydt = [[F64x2::ZERO; NUM_RVS]; 32];
+    let mut heap_dydt = Vec::new();
+    let dydt: &mut [[F64x2; NUM_RVS]] = if ni <= 32 {
+        &mut stack_dydt[..ni]
+    } else {
+        heap_dydt.resize(ni, [F64x2::ZERO; NUM_RVS]);
+        &mut heap_dydt[..]
+    };
     let mut eps_nuc_mev = [F64x2::ZERO; NUM_RVS];
     get_derivs(
-        g,
-        &mut w,
-        &mut dydt,
-        &mut eps_nuc_mev,
-        temp,
-        rho,
-        abar,
-        zbar,
-        rate_factors,
-        use_3a_fl87,
-        symbolic,
-        just_dxdt,
+        g, &mut w, dydt, &mut eps_nuc_mev, temp, rho, abar, zbar,
+        rate_factors, use_3a_fl87, symbolic, just_dxdt,
     )?;
 
     res.rate_raw = w.rate_raw[..nr].to_vec();
@@ -177,6 +140,7 @@ pub fn eval_net(
         return Ok(res);
     }
 
+    let nuclides = NuclideCatalog::builtin_ref();
     for k in 0..NUM_CATEGORIES {
         res.eps_nuc_categories[k] = QCONV * w.eps_nuc_categories[k];
     }
@@ -202,6 +166,99 @@ pub fn eval_net(
     res.d_eps_nuc_drho = (eps_nuc_mev[2] * QCONV).to_f64();
     res.eps_neu_total = w.eps_neu_total * QCONV;
     Ok(res)
+}
+
+/// Executes `f` with a thread-local [`NetWorkState`] sized for `g`, avoiding
+/// per-zone heap allocations in multi-zone sequential or parallel loops.
+pub fn with_thread_local_work<R>(
+    g: &NetGeneralInfo,
+    f: impl FnOnce(&mut NetWorkState) -> R,
+) -> R {
+    thread_local! {
+        static WORK: std::cell::RefCell<Option<NetWorkState>> =
+            const { std::cell::RefCell::new(None) };
+    }
+    WORK.with(|cell| {
+        let mut borrow = cell.borrow_mut();
+        let needs_init = match borrow.as_ref() {
+            None => true,
+            Some(w) => {
+                w.y.len() < g.num_isos
+                    || w.rate_raw.len() < g.num_reactions
+                    || w.wk_lambda.len() < g.num_wk_reactions
+            }
+        };
+        if needs_init {
+            *borrow = Some(NetWorkState::new(g));
+        }
+        f(borrow.as_mut().unwrap())
+    })
+}
+
+/// Evaluates a nuclear reaction network in place using a reusable
+/// [`NetWorkState`] and `dydt` slice with zero heap allocations.
+///
+/// Populates `w` and `dydt`, and returns
+/// `(eps_nuc, d_eps_nuc_dt, d_eps_nuc_drho, eps_neu_total)` in
+/// $\mathrm{erg\,g^{-1}\,s^{-1}}$.
+#[rustfmt::skip]
+#[allow(clippy::too_many_arguments)]
+pub fn eval_net_with_work(
+    g: &NetGeneralInfo, w: &mut NetWorkState, dydt: &mut [[F64x2; NUM_RVS]],
+    just_dxdt: bool, x: &[f64], mut temp: f64, mut log_t: f64,
+    rho: f64, log_rho: f64, abar: f64, zbar: f64, z2bar: f64, ye: f64,
+    eta: f64, d_eta_dln_t: f64, d_eta_dln_rho: f64,
+    rate_factors: &[f64], weak_rate_factor: f64,
+    screening_mode: ScreeningMode, use_3a_fl87: bool,
+    use_suzuki: bool, do_ecapture: bool,
+) -> Result<(f64, f64, f64, f64), NetError> {
+    w.reset(g);
+    let ni = g.num_isos;
+    dydt[..ni].fill([F64x2::ZERO; NUM_RVS]);
+    eval_net_setup(
+        g, w, x, &mut temp, &mut log_t, rho, abar, zbar, z2bar, ye, eta,
+        d_eta_dln_t, d_eta_dln_rho, rate_factors, weak_rate_factor,
+        use_suzuki, do_ecapture,
+    )?;
+    if g.doing_approx21 {
+        let res = eval_net_approx21_procs(
+            g, w, false, just_dxdt, temp, log_t, rho, log_rho, abar, zbar,
+            z2bar, ye, eta, weak_rate_factor, screening_mode, use_3a_fl87,
+        )?;
+        let nuclides = NuclideCatalog::builtin_ref();
+        for i in 0..ni {
+            let a_i = nuclides.get_by_id(g.chem_id[i]).unwrap().z_plus_n as f64;
+            dydt[i][0] = F64x2::from_f64(res.dxdt[i] / a_i);
+            if !just_dxdt {
+                dydt[i][1] = F64x2::from_f64(res.d_dxdt_dt[i] / a_i);
+                dydt[i][2] = F64x2::from_f64(res.d_dxdt_drho[i] / a_i);
+            }
+        }
+        return Ok((
+            res.eps_nuc, res.d_eps_nuc_dt, res.d_eps_nuc_drho,
+            res.eps_neu_total,
+        ));
+    }
+    screen_net(
+        g, &w.y, temp, rho, log_t, log_rho,
+        &w.rate_raw[..g.num_reactions],
+        &w.rate_raw_dt[..g.num_reactions],
+        &w.rate_raw_drho[..g.num_reactions],
+        &mut w.rate_screened[..g.num_reactions],
+        &mut w.rate_screened_dt[..g.num_reactions],
+        &mut w.rate_screened_drho[..g.num_reactions],
+        screening_mode, zbar, abar, z2bar,
+    )?;
+    let mut eps_nuc_mev = [F64x2::ZERO; NUM_RVS];
+    get_derivs(
+        g, w, &mut dydt[..ni], &mut eps_nuc_mev, temp, rho, abar, zbar,
+        rate_factors, use_3a_fl87, false, just_dxdt,
+    )?;
+    let eps_nuc = (eps_nuc_mev[0] * QCONV).to_f64();
+    let d_eps_nuc_dt = (eps_nuc_mev[1] * QCONV).to_f64();
+    let d_eps_nuc_drho = (eps_nuc_mev[2] * QCONV).to_f64();
+    let eps_neu_total = w.eps_neu_total * QCONV;
+    Ok((eps_nuc, d_eps_nuc_dt, d_eps_nuc_drho, eps_neu_total))
 }
 
 /// Evaluates molar RHS `dydt`, `eps_nuc_mev`, and `w.d_dydt_dy` across all

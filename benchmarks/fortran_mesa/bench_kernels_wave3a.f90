@@ -21,7 +21,8 @@ module bench_kernels_wave3a
    implicit none
    private
 
-   public :: bench_eos_ideal, bench_eos_helm, bench_eos_pc, bench_eos_skye
+   public :: bench_eos_component_profile, bench_eos_ideal, bench_eos_helm, &
+      bench_eos_pc, bench_eos_skye
 
    character(len=iso_name_length), parameter :: WAVE2_ISO_NAMES(8) = [ &
       'h1      ', 'he3     ', 'he4     ', 'c12     ', &

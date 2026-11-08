@@ -26,6 +26,7 @@ from flexmesa.bench import kernels_micro as _micro
 from flexmesa.bench import kernels_solver as _solver
 from flexmesa.bench import kernels_wave2 as _wave2
 from flexmesa.bench import kernels_wave3a as _wave3a
+from flexmesa.bench import kernels_wave3b as _wave3b
 
 STAGE3_BATCH_SIZE = _harness.STAGE3_BATCH_SIZE
 BenchRecord = _harness.BenchRecord
@@ -62,6 +63,13 @@ bench_eos_pc = _wave3a.bench_eos_pc
 bench_eos_skye = _wave3a.bench_eos_skye
 run_all_wave3a_benchmarks = _wave3a.run_all_wave3a_benchmarks
 
+bench_atm_table = _wave3b.bench_atm_table
+bench_eos_4d = _wave3b.bench_eos_4d
+bench_kap_fixed = _wave3b.bench_kap_fixed
+bench_net_eval = _wave3b.bench_net_eval
+bench_rates_screen = _wave3b.bench_rates_screen
+run_all_wave3b_benchmarks = _wave3b.run_all_wave3b_benchmarks
+
 __all__: list[str] = [
     "STAGE3_BATCH_SIZE",
     "WAVE2_ISO_NAMES",
@@ -69,9 +77,11 @@ __all__: list[str] = [
     "BicubTable",
     "LatencyStats",
     "ThermoGrid",
+    "bench_atm_table",
     "bench_autodiff",
     "bench_chem_comp",
     "bench_colors_sed",
+    "bench_eos_4d",
     "bench_eos_helm",
     "bench_eos_ideal",
     "bench_eos_pc",
@@ -79,8 +89,11 @@ __all__: list[str] = [
     "bench_interp2d",
     "bench_ion_4d",
     "bench_ion_fe56",
+    "bench_kap_fixed",
     "bench_mtx_block_tridiag",
+    "bench_net_eval",
     "bench_neu",
+    "bench_rates_screen",
     "bench_turb_mlt",
     "bench_turb_tdc",
     "make_block_tridiag_fixture",
@@ -93,4 +106,5 @@ __all__: list[str] = [
     "run_all_wave1_benchmarks",
     "run_all_wave2_benchmarks",
     "run_all_wave3a_benchmarks",
+    "run_all_wave3b_benchmarks",
 ]

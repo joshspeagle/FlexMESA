@@ -6,7 +6,7 @@
 use crate::loader::{kap_tables, AesopusData, AesopusZSet, KapCnData};
 use crate::types::KapError;
 use flexmesa_interp1d::interpolate_vector_pm;
-use flexmesa_interp2d::interp_evbicub_db;
+use flexmesa_interp2d::interp_evbicub_prevalidated_db;
 use flexmesa_math::{exp10, safe_log10};
 use flexmesa_num::binary_search;
 
@@ -205,7 +205,7 @@ fn aesopus_interp_rt(
             .ok_or(KapError::MissingTable("no AESOPUS slice available"))?
     };
     let (kap1, ilinx, iliny) = slice.spline_data(&ka.log_rs, &ka.log_ts)?;
-    let ev = interp_evbicub_db(
+    let ev = interp_evbicub_prevalidated_db(
         log_r, log_t, &ka.log_rs, &ka.log_ts, *ilinx, *iliny, kap1,
     )
     .map_err(|_| {
@@ -329,7 +329,7 @@ fn kapcn_interp_fixed_z(
                 let tbl_idx = 21 * i + 7 * j + (ifc + n - 1);
                 let (kap1, ilinx, iliny) =
                     zset.spline_data(tbl_idx, &kcn.log_rs, &kcn.log_ts);
-                let res = interp_evbicub_db(
+                let res = interp_evbicub_prevalidated_db(
                     log_r,
                     log_t,
                     &kcn.log_rs,

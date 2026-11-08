@@ -6,10 +6,10 @@ use flexmesa_chem::NuclideCatalog;
 use flexmesa_const::KEV;
 use flexmesa_rates::{
     eval_ecapture_pair, eval_fl_epsnuc_3alf, eval_mui_coulomb,
-    eval_reaclib_handle, eval_vs_coulomb, eval_weak_reaction_pair,
-    eval_weaklib_one, screen_pair, set_raw_rate, set_raw_rates,
-    CoulombMuiOption, CoulombVsOption, RatesCatalog, ScreeningMode, TFactors,
-    WeakRateEval,
+    eval_reaclib_handle, eval_reaclib_terms, eval_vs_coulomb,
+    eval_weak_reaction_pair, eval_weaklib_one, screen_pair, set_raw_rate,
+    set_raw_rates, CoulombMuiOption, CoulombVsOption, RatesCatalog,
+    ScreeningMode, TFactors, WeakRateEval, DEFAULT_REACLIB_MIN_T9,
 };
 use numpy::{PyArray1, PyArray2, PyArrayMethods, PyReadonlyArray1};
 use pyo3::exceptions::PyValueError;
@@ -380,6 +380,49 @@ pub fn rates_eval_weak_table_index(
     Ok((tab.lhs_name.clone(), tab.rhs_name.clone(), pack_weak(&w)))
 }
 
+/// Evaluate a REACLIB reaction handle and plasma screening across `n_zones`
+/// zones, returning an `(n_zones, 3)` array `[safe_log10(fw * scor), fw, scor]`.
+#[pyfunction]
+#[pyo3(signature = (
+    handle, mode, temps, dens, zbar, abar, z2bar, a1, z1, a2, z2, parallel=true
+))]
+pub fn rates_eval_reaclib_screen_zones<'py>(
+    py: Python<'py>,
+    handle: &str,
+    mode: &str,
+    temps: PyReadonlyArray1<'py, f64>,
+    dens: PyReadonlyArray1<'py, f64>,
+    zbar: f64,
+    abar: f64,
+    z2bar: f64,
+    a1: f64,
+    z1: f64,
+    a2: f64,
+    z2: f64,
+    parallel: bool,
+) -> PyResult<Bound<'py, PyArray2<f64>>> {
+    let sm = parse_screen_mode(mode)?;
+    let (_, terms) = RatesCatalog::builtin()
+        .reaclib_terms(handle)
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    let t_v = temps.as_slice()?.to_vec();
+    let d_v = dens.as_slice()?.to_vec();
+    let nz = t_v.len();
+    if d_v.len() != nz {
+        return Err(PyValueError::new_err(
+            "temps and dens must have equal length",
+        ));
+    }
+    crate::eval_batch_2d::<3, _>(py, nz, parallel, 16, move |k| {
+        let t = t_v[k];
+        let d = d_v[k];
+        let (fw, _, _, _) =
+            eval_reaclib_terms(terms, t * 1.0e-9, DEFAULT_REACLIB_MIN_T9, true);
+        let sc = screen_pair(sm, t, d, zbar, abar, z2bar, a1, z1, a2, z2);
+        [flexmesa_math::safe_log10(fw * sc.scor), fw, sc.scor]
+    })
+}
+
 /// Register `rates` functions on `flexmesa._rust`.
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(rates_reaction_id_by_name, m)?)?;
@@ -387,6 +430,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(rates_reaction_info, m)?)?;
     m.add_function(wrap_pyfunction!(rates_reaclib_terms, m)?)?;
     m.add_function(wrap_pyfunction!(rates_eval_reaclib_handle, m)?)?;
+    m.add_function(wrap_pyfunction!(rates_eval_reaclib_screen_zones, m)?)?;
     m.add_function(wrap_pyfunction!(rates_set_raw_rate, m)?)?;
     m.add_function(wrap_pyfunction!(rates_set_raw_rates, m)?)?;
     m.add_function(wrap_pyfunction!(rates_set_raw_rates_zones, m)?)?;

@@ -180,8 +180,9 @@ def eval_reaclib_terms_jax(
     t_hi = _TPART_JAX[idx_m + 1]
     dt = t_hi - t_lo
     tfac = jnp.expand_dims((t - t_lo) / dt, axis=-1)
-    p_lo = jnp.take(inv_parts, idx_m, axis=-1)
-    p_hi = jnp.take(inv_parts, idx_m + 1, axis=-1)
+    inv_parts_t = jnp.swapaxes(inv_parts, -2, -1)
+    p_lo = inv_parts_t[idx_m]
+    p_hi = inv_parts_t[idx_m + 1]
     ratio = jnp.maximum(p_hi / jnp.maximum(p_lo, 1.0e-30), 1.0e-30)
     qr_mid = p_lo * (ratio**tfac)
     dqr_mid = qr_mid * jnp.log(ratio) * jnp.expand_dims(t / dt, axis=-1)

@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
-"""Wave 1 four-stage performance benchmark suite (`flexmesa.bench`).
+"""Waves 1 through 5 four-stage performance benchmark suite (`flexmesa.bench`).
 
-Evaluates the Wave 1 leaf utilities and microphysics kernels (`auto_diff`,
-`interp_2d`, `mtx`, `neu`, and `turb`) across four progressive execution
-stages in the Three-Tier Hybrid Architecture (`flexmesa._rust` + JAX `float64`):
+Evaluates all 25 migrated FlexMESA modules across Waves 1, 2, 3a, 3b, 4, and 5
+across four progressive execution stages in the Three-Tier Hybrid Architecture
+(`flexmesa._rust` + JAX `float64`):
 
 - **Stage 0 (Sequential Safe Rust PyO3 Baseline)**: Zero-copy single-thread
   `flexmesa._rust` execution (`parallel=False`).
@@ -28,6 +28,7 @@ from flexmesa.bench import kernels_wave2 as _wave2
 from flexmesa.bench import kernels_wave3a as _wave3a
 from flexmesa.bench import kernels_wave3b as _wave3b
 from flexmesa.bench import kernels_wave4 as _wave4
+from flexmesa.bench import kernels_wave5 as _wave5
 
 STAGE3_BATCH_SIZE = _harness.STAGE3_BATCH_SIZE
 BenchRecord = _harness.BenchRecord
@@ -79,6 +80,12 @@ bench_star_remesh = _wave4.bench_star_remesh
 make_wave4_zams_model = _wave4.make_wave4_zams_model
 run_all_wave4_benchmarks = _wave4.run_all_wave4_benchmarks
 
+bench_w5_astero_seism = _wave5.bench_w5_astero_seism
+bench_w5_binary_rlof = _wave5.bench_w5_binary_rlof
+bench_w5_diff_rot = _wave5.bench_w5_diff_rot
+bench_w5_riemann_rsp2 = _wave5.bench_w5_riemann_rsp2
+run_all_wave5_benchmarks = _wave5.run_all_wave5_benchmarks
+
 __all__: list[str] = [
     "STAGE3_BATCH_SIZE",
     "WAVE2_ISO_NAMES",
@@ -110,6 +117,10 @@ __all__: list[str] = [
     "bench_star_remesh",
     "bench_turb_mlt",
     "bench_turb_tdc",
+    "bench_w5_astero_seism",
+    "bench_w5_binary_rlof",
+    "bench_w5_diff_rot",
+    "bench_w5_riemann_rsp2",
     "make_block_tridiag_fixture",
     "make_wave2_composition_profile",
     "make_wave4_zams_model",
@@ -123,4 +134,5 @@ __all__: list[str] = [
     "run_all_wave3a_benchmarks",
     "run_all_wave3b_benchmarks",
     "run_all_wave4_benchmarks",
+    "run_all_wave5_benchmarks",
 ]

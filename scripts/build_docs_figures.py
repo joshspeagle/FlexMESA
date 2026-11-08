@@ -17,6 +17,7 @@ import build_docs_figures_wave2 as _w2_figs
 import build_docs_figures_wave3a as _w3a_figs
 import build_docs_figures_wave3b as _w3b_figs
 import build_docs_figures_wave4 as _w4_figs
+import build_docs_figures_wave5 as _w5_figs
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
@@ -81,6 +82,9 @@ def main() -> None:
     _w3b_figs.plot_wave3b_benchmark_staircase(out_dir)
     _w4_figs.plot_wave4_star_structure_evolution(out_dir)
     _w4_figs.plot_wave4_benchmark_staircase(out_dir)
+    _w5_figs.plot_wave5_benchmark_speedup(out_dir)
+    _w5_figs.plot_wave5_astero_echelle_surface_corr(out_dir)
+    _w5_figs.plot_wave5_binary_rlof_evolution(out_dir)
 
 
 def _register_latin_modern() -> None:

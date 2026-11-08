@@ -11,7 +11,7 @@
 use flexmesa_bench::{
     run_all_wave1_benchmarks, run_all_wave2_benchmarks,
     run_all_wave3a_benchmarks, run_all_wave3b_benchmarks,
-    run_all_wave4_benchmarks, BenchRecord,
+    run_all_wave4_benchmarks, run_all_wave5_benchmarks, BenchRecord,
 };
 
 /// Pinned cross-language reference checksums for $N_{\mathrm{zones}} = 8$
@@ -63,6 +63,16 @@ const EXPECTED_WAVE4_CHECKSUMS_N8: [(&str, f64); 5] = [
     ("star_newton_step", 1.333_277_163_962_19e2),
     ("star_remesh", 4.203_476_959_958_853e2),
     ("star_evolve_step", 9.931_842_248_453_043e1),
+];
+
+/// Pinned cross-language reference checksums for $N_{\mathrm{zones}} = 8$
+/// across all four Wave 5 workloads (shared with `tests/test_wave5_bench.py`
+/// and `benchmarks/fortran_mesa/run_wave5_bench.f90`).
+const EXPECTED_WAVE5_CHECKSUMS_N8: [(&str, f64); 4] = [
+    ("w5_diff_rot", 3.082_380_424_983_001e5),
+    ("w5_riemann_rsp2", -2.543_418_211_343_195e5),
+    ("w5_binary_rlof", 6.234_702_123_446_103),
+    ("w5_astero_seism", 7.563_537_818_023_943e1),
 ];
 
 fn assert_records_parity(records: &[BenchRecord], expected_n8: &[(&str, f64)]) {
@@ -205,5 +215,22 @@ fn test_wave4_four_stage_benchmarks_parity() {
 #[ignore = "benchmark table generator for --release runs"]
 fn print_full_wave4_rust_benchmarks() {
     let records = run_all_wave4_benchmarks(&[128, 512, 1024], 2, 7);
+    print_bench_table(&records);
+}
+
+/// Verifies that all four Wave 5 benchmark workloads execute across Stages 0..3
+/// and maintain machine-precision parity ($\le 10^{-12}$).
+#[test]
+fn test_wave5_four_stage_benchmarks_parity() {
+    let records = run_all_wave5_benchmarks(&[8, 32], 1, 3);
+    assert_records_parity(&records, &EXPECTED_WAVE5_CHECKSUMS_N8);
+}
+
+/// Prints the full Wave 5 four-stage benchmark table across
+/// $N_{\mathrm{zones}} \in \{128, 512, 1024\}$.
+#[test]
+#[ignore = "benchmark table generator for --release runs"]
+fn print_full_wave5_rust_benchmarks() {
+    let records = run_all_wave5_benchmarks(&[128, 512, 1024], 3, 11);
     print_bench_table(&records);
 }

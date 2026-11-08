@@ -17,6 +17,7 @@ dependencies = [
   "scipy>=1.12",
   "jax>=0.4.30",
   "safetensors>=0.4",
+  "matplotlib>=3.9",
 ]
 
 [project.optional-dependencies]

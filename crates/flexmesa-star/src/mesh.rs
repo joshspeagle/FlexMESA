@@ -3,7 +3,7 @@
 //! state vector packing/snapshot operations on [`StarModel`]
 //! (`star/private/star_utils.f90` and `star/private/hydro_vars.f90`).
 
-use flexmesa_eos::{I_LN_E, I_LN_S};
+use flexmesa_eos::{I_LN_E, I_LN_S, NUM_EOS_BASIC_RESULTS};
 
 use crate::controls::StarError;
 use crate::model::StarModel;
@@ -347,6 +347,143 @@ impl StarModel {
                 self.eos_d_dlnd[k][I_LN_S],
                 self.eos_d_dlnt[k][I_LN_S],
             );
+        }
+    }
+
+    /// Resizes all zone-indexed vectors on [`StarModel`] to `nz` zones.
+    pub fn resize_zones(&mut self, nz: usize) {
+        let (sp, nv) = (self.species, self.layout.nvar_hydro);
+        self.nz = nz;
+        for v in [
+            &mut self.lnd,
+            &mut self.ln_t,
+            &mut self.ln_r,
+            &mut self.lum,
+            &mut self.v,
+            &mut self.u,
+            &mut self.omega,
+            &mut self.j_rot,
+            &mut self.lnd_start,
+            &mut self.ln_t_start,
+            &mut self.ln_r_start,
+            &mut self.lum_start,
+            &mut self.v_start,
+            &mut self.u_start,
+            &mut self.ln_pgas_start,
+            &mut self.ln_peos_start,
+            &mut self.ln_e_start,
+            &mut self.ln_s_start,
+            &mut self.energy_start,
+            &mut self.peos_start,
+            &mut self.lnd_old,
+            &mut self.ln_t_old,
+            &mut self.ln_r_old,
+            &mut self.lum_old,
+            &mut self.dq_old,
+            &mut self.dq,
+            &mut self.q,
+            &mut self.xq,
+            &mut self.dm,
+            &mut self.dm_bar,
+            &mut self.m,
+            &mut self.m_grav,
+            &mut self.grav,
+            &mut self.r,
+            &mut self.rmid,
+            &mut self.abar,
+            &mut self.zbar,
+            &mut self.z2bar,
+            &mut self.z53bar,
+            &mut self.ye,
+            &mut self.xh_mass,
+            &mut self.yhe_mass,
+            &mut self.z_mass,
+            &mut self.rho,
+            &mut self.t,
+            &mut self.pgas,
+            &mut self.ln_pgas,
+            &mut self.prad,
+            &mut self.peos,
+            &mut self.ln_peos,
+            &mut self.energy,
+            &mut self.ln_e,
+            &mut self.entropy,
+            &mut self.ln_s,
+            &mut self.grada,
+            &mut self.cv,
+            &mut self.cp,
+            &mut self.chi_rho,
+            &mut self.chi_t,
+            &mut self.gamma1,
+            &mut self.gamma3,
+            &mut self.eta,
+            &mut self.gam,
+            &mut self.mu,
+            &mut self.lnfree_e,
+            &mut self.csound,
+            &mut self.opacity,
+            &mut self.d_opacity_dlnd,
+            &mut self.d_opacity_dlnt,
+            &mut self.tau,
+            &mut self.non_nuc_neu,
+            &mut self.d_non_nuc_neu_dlnd,
+            &mut self.d_non_nuc_neu_dlnt,
+            &mut self.eps_nuc,
+            &mut self.d_epsnuc_dlnd,
+            &mut self.d_epsnuc_dlnt,
+            &mut self.eps_nuc_neu_total,
+            &mut self.eps_mdot,
+            &mut self.gradt,
+            &mut self.gradr,
+            &mut self.gradl,
+            &mut self.scale_height,
+            &mut self.mlt_vc,
+            &mut self.mlt_d,
+            &mut self.mlt_cdc,
+            &mut self.mlt_gamma,
+            &mut self.d_mix,
+            &mut self.conv_vel,
+            &mut self.sig,
+            &mut self.brunt_b,
+            &mut self.brunt_n2,
+        ] {
+            v.resize(nz, 0.0);
+        }
+        let cg = self.cgrav.first().copied().unwrap_or(6.674_30e-8);
+        self.cgrav.resize(nz, cg);
+        for v in [
+            &mut self.xa,
+            &mut self.xa_start,
+            &mut self.xa_old,
+            &mut self.d_epsnuc_dx,
+            &mut self.dxdt_nuc,
+            &mut self.d_dxdt_nuc_dlnd,
+            &mut self.d_dxdt_nuc_dlnt,
+        ] {
+            v.resize(nz * sp, 0.0);
+        }
+        self.xh.resize(nz * nv, 0.0);
+        self.xh_start.resize(nz * nv, 0.0);
+        self.d_dxdt_nuc_dx.resize(nz * sp * sp, 0.0);
+        self.eos_res.resize(nz, [0.0; NUM_EOS_BASIC_RESULTS]);
+        self.eos_d_dlnd.resize(nz, [0.0; NUM_EOS_BASIC_RESULTS]);
+        self.eos_d_dlnt.resize(nz, [0.0; NUM_EOS_BASIC_RESULTS]);
+        self.mixing_type
+            .resize(nz, flexmesa_const::MixingType::NoMixing);
+        for ad in [
+            &mut self.ln_peos_ad,
+            &mut self.ln_e_ad,
+            &mut self.ln_s_ad,
+            &mut self.eps_grav_ad,
+            &mut self.gradt_ad,
+            &mut self.gradr_ad,
+            &mut self.gradl_ad,
+            &mut self.scale_height_ad,
+            &mut self.mlt_vc_ad,
+            &mut self.mlt_d_ad,
+            &mut self.mlt_cdc_ad,
+        ] {
+            ad.resize(nz, StarAdOrder1::ZERO);
         }
     }
 }

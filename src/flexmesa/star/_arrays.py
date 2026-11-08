@@ -78,6 +78,58 @@ class HenyeySolverReport:
     max_correction: float
 
 
+@dataclasses.dataclass(frozen=True)
+class EvolveStepReport:
+    """Diagnostic summary returned by `StarModel.evolve_step`.
+
+    Attributes:
+        model_number: Evolutionary step counter after completion.
+        star_age: Stellar age in years (`yr`).
+        dt: Timestep taken in seconds (`s`).
+        dt_next: Proposed next timestep in seconds (`s`).
+        iterations: Number of Henyey Newton-Raphson iterations.
+        retries: Number of step retries (`dt` halvings).
+        num_splits: Number of zone splits during remeshing.
+        num_merges: Number of zone merges during remeshing.
+        varcontrol: Measured normalized structural variation.
+        converged: Whether the step converged.
+    """
+
+    model_number: int
+    star_age: float
+    dt: float
+    dt_next: float
+    iterations: int
+    retries: int
+    num_splits: int
+    num_merges: int
+    varcontrol: float
+    converged: bool
+
+
+@dataclasses.dataclass(frozen=True)
+class HistoryRow:
+    """Scalar evolutionary summary corresponding to a `history.data` line."""
+
+    model_number: int
+    star_age: float
+    star_mass: float
+    log_dt: float
+    log_lh: float
+    log_l: float
+    log_teff: float
+    log_r: float
+    log_g: float
+    log_center_t: float
+    log_center_rho: float
+    center_h1: float
+    center_he4: float
+    he_core_mass: float
+    num_zones: int
+    num_retries: int
+    total_num_solver_iterations: int
+
+
 class StarModelArrays:
     """Mixin exposing scalar and 1D/2D NumPy array properties on `StarModel`."""
 
@@ -111,6 +163,16 @@ class StarModelArrays:
     @dt.setter
     def dt(self, value: float) -> None:
         self._rust_model.dt = float(value)
+
+    @property
+    def dt_next(self) -> float:
+        """Proposed next timestep in seconds (`s`)."""
+        return self._rust_model.dt_next
+
+    @property
+    def dt_old(self) -> float:
+        """Previous step timestep in seconds (`s`)."""
+        return self._rust_model.dt_old
 
     @property
     def mstar(self) -> float:

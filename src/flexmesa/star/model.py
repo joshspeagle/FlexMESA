@@ -16,13 +16,15 @@ import numpy as np
 import numpy.typing as npt
 
 from flexmesa import _rust
-from flexmesa.star import _arrays, jax_kernels, jax_winds_mix
+from flexmesa.star import _arrays, jax_evolve, jax_kernels, jax_winds_mix
 
 type _ArrF64 = npt.NDArray[np.float64]
 
 JaxStarState = _arrays.JaxStarState
 HenyeySystemResult = _arrays.HenyeySystemResult
 HenyeySolverReport = _arrays.HenyeySolverReport
+EvolveStepReport = _arrays.EvolveStepReport
+HistoryRow = _arrays.HistoryRow
 
 
 class StarModel(_arrays.StarModelArrays):
@@ -151,6 +153,20 @@ class StarModel(_arrays.StarModelArrays):
         """Snapshot current state arrays as start-of-step `*_start` values."""
         self._rust_model.save_start_values()
 
+    def save_old_values(self) -> None:
+        """Snapshot current state arrays as previous-step `*_old` values."""
+        self._rust_model.save_old_values()
+
+    def set_evolve_controls(
+        self,
+        mesh_delta_coeff: float = 1.0,
+        varcontrol_target: float = 1.0e-4,
+    ) -> None:
+        """Set `mesh_delta_coeff` and `varcontrol_target` on `controls`."""
+        self._rust_model.set_evolve_controls(
+            float(mesh_delta_coeff), float(varcontrol_target)
+        )
+
     def eval_equations(self, include_chem: bool = False) -> HenyeySystemResult:
         """Evaluate coupled 1D Henyey residuals and block-tridiagonal Jacobian.
 
@@ -261,6 +277,97 @@ class StarModel(_arrays.StarModelArrays):
         return float(
             self._rust_model.apply_wind_and_adjust_mass(
                 str(scheme), float(eta), float(dt)
+            )
+        )
+
+    def adjust_mesh(self) -> tuple[int, int]:
+        """Run adaptive remeshing (`do_adjust_mesh`) -> `(splits, merges)`."""
+        s, m = self._rust_model.adjust_mesh()
+        return int(s), int(m)
+
+    def pick_next_timestep(
+        self,
+        max_timestep_factor: float = 1.2,
+        min_timestep_factor: float = 0.5,
+        dx_nuc_drop_limit: float = 1.0e-2,
+    ) -> tuple[float, float, float]:
+        """Compute `(dt_next, varcontrol, dt_limit_ratio)` via H211 filter."""
+        dt_n, vc, ratio = self._rust_model.pick_next_timestep(
+            float(max_timestep_factor),
+            float(min_timestep_factor),
+            float(dx_nuc_drop_limit),
+        )
+        return float(dt_n), float(vc), float(ratio)
+
+    def evolve_step(
+        self,
+        do_remesh: bool = False,
+        op_split_burn: bool = False,
+        use_bcyclic: bool = True,
+    ) -> EvolveStepReport:
+        """Execute a single evolutionary step (`star_evolve_step`)."""
+        return EvolveStepReport(
+            *self._rust_model.evolve_step(
+                bool(do_remesh), bool(op_split_burn), bool(use_bcyclic)
+            )
+        )
+
+    def evolve(
+        self,
+        max_steps: int,
+        do_remesh: bool = False,
+        op_split_burn: bool = False,
+        use_bcyclic: bool = True,
+    ) -> list[EvolveStepReport]:
+        """Evolve the model for up to `max_steps` steps (`star_evolve`)."""
+        return [
+            EvolveStepReport(*t)
+            for t in self._rust_model.evolve(
+                int(max_steps),
+                bool(do_remesh),
+                bool(op_split_burn),
+                bool(use_bcyclic),
+            )
+        ]
+
+    def history_row(self) -> HistoryRow:
+        """Extract the current `HistoryRow` summary (`history.data`)."""
+        (m_num, n_z, n_ret, n_it), vals = self._rust_model.history_tuple()
+        return HistoryRow(
+            model_number=int(m_num),
+            star_age=float(vals[0]),
+            star_mass=float(vals[1]),
+            log_dt=float(vals[2]),
+            log_lh=float(vals[3]),
+            log_l=float(vals[4]),
+            log_teff=float(vals[5]),
+            log_r=float(vals[6]),
+            log_g=float(vals[7]),
+            log_center_t=float(vals[8]),
+            log_center_rho=float(vals[9]),
+            center_h1=float(vals[10]),
+            center_he4=float(vals[11]),
+            he_core_mass=float(vals[12]),
+            num_zones=int(n_z),
+            num_retries=int(n_ret),
+            total_num_solver_iterations=int(n_it),
+        )
+
+    def to_history_line(self) -> str:
+        """Format the current state as a fixed-width `history.data` line."""
+        return self._rust_model.to_history_line()
+
+    def to_profile_str(self) -> str:
+        """Format the current radial structure as a `profile.data` table."""
+        return self._rust_model.to_profile_str()
+
+    def eval_mesh_gval_jax(self, mesh_delta_coeff: float = 1.0) -> jax.Array:
+        """Evaluate dimensionless mesh spacing variation `g_k` via JAX."""
+        return jnp.asarray(
+            jax_evolve.eval_mesh_gval_jax(
+                jnp.asarray(self.ln_peos),
+                jnp.asarray(self.ln_t),
+                mesh_delta_coeff=float(mesh_delta_coeff),
             )
         )
 

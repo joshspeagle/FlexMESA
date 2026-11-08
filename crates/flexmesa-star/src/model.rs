@@ -63,6 +63,8 @@ pub struct StarModel {
     pub dt_next: f64,
     /// Previous timestep $\Delta t_{\mathrm{old}}$ in seconds (`dt_old`).
     pub dt_old: f64,
+    /// Previous step timestep-limiter ratio (`dt_limit_ratio_old` for H211 filter).
+    pub dt_limit_ratio_old: f64,
     /// Total stellar mass $M_*$ in grams (`mstar`).
     pub mstar: f64,
     /// Start-of-step stellar mass in grams (`mstar_start`).
@@ -394,6 +396,7 @@ impl StarModel {
             dt: 1.0e3 * SECYER,
             dt_next: 1.0e3 * SECYER,
             dt_old: 1.0e3 * SECYER,
+            dt_limit_ratio_old: 1.0,
             mstar,
             mstar_start: mstar,
             mstar_old: mstar,

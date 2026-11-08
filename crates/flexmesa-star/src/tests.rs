@@ -340,3 +340,49 @@ fn test_convective_boundaries_overshoot_diffusion_and_winds_conserve_mass() {
     let dq_sum: f64 = model.dq.iter().sum();
     assert!((dq_sum - 1.0).abs() <= 1.0e-14);
 }
+
+#[test]
+fn test_remesh_timestep_evolve_and_history_preserve_invariants() {
+    let controls = StarControls {
+        initial_mass: 4.0,
+        initial_z: 0.02,
+        mesh_delta_coeff: 0.5,
+        varcontrol_target: 1.0e-3,
+        max_model_number: Some(3),
+        ..StarControls::default()
+    };
+    let job = StarJobControls {
+        create_pre_ms_model: true,
+        pre_ms_d_log10_p: 0.15,
+        ..StarJobControls::default()
+    };
+    let mut model = build_pre_ms_model(controls, job).expect("build pre-MS");
+    model.dt = 10.0 * SECYER;
+    model.dt_next = model.dt;
+    set_hydro_vars(&mut model, false, false).expect("init hydro");
+
+    let mass_h1_before: f64 = (0..model.nz)
+        .map(|k| model.dm[k] * model.xa[k * model.species])
+        .sum();
+    let (n_splits, _n_merges) =
+        do_adjust_mesh(&mut model, &MeshFunctionConfig::default())
+            .expect("do_adjust_mesh");
+    assert!(n_splits > 0);
+    let mass_h1_after: f64 = (0..model.nz)
+        .map(|k| model.dm[k] * model.xa[k * model.species])
+        .sum();
+    assert!((mass_h1_after - mass_h1_before).abs() <= 1.0e-12 * mass_h1_before);
+
+    let reports =
+        star_evolve(&mut model, 5, false, false, true).expect("star_evolve");
+    assert_eq!(reports.len(), 2);
+    assert_eq!(model.model_number, 3);
+    assert!(model.star_age > 0.0);
+
+    let h_row = extract_history_row(&model);
+    assert_eq!(h_row.model_number, 3);
+    let h_str = format_history_row(&h_row);
+    assert!(h_str.contains('3'));
+    let prof_str = format_profile_string(&model);
+    assert!(prof_str.contains("photosphere_L"));
+}

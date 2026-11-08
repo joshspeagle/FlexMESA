@@ -473,6 +473,8 @@ class RustStarModel:
     model_number: int
     star_age: float
     dt: float
+    dt_next: float
+    dt_old: float
     mstar: float
     teff: float
     ln_peos_surf: float
@@ -547,7 +549,9 @@ class RustStarModel:
     def to_mod_str(self) -> str: ...
     def to_photo_bytes(self) -> bytes: ...
     def eval_hydro_vars(self, skip_net: bool = False, skip_net_jacobian: bool = False) -> None: ...  # noqa: E501
+    def set_evolve_controls(self, mesh_delta_coeff: float = 1.0, varcontrol_target: float = 1.0e-4) -> None: ...  # noqa: E501
     def save_start_values(self) -> None: ...
+    def save_old_values(self) -> None: ...
     def eval_equations(self, include_chem: bool = False) -> tuple[_ArrF64, _ArrF64, _ArrF64, _ArrF64, _ArrF64]: ...  # noqa: E501
     def solve_henyey(self, include_chem: bool = False, use_bcyclic: bool = True) -> tuple[bool, int, float, float, float, float]: ...  # noqa: E501
     def update_mixing(self, dt: float, overshoot_f: float = 0.0, overshoot_f0: float = 0.004, scheme: str = "exponential") -> int: ...  # noqa: E501
@@ -556,6 +560,15 @@ class RustStarModel:
     def run_omega_mix(self, dt: float, omega: _ArrF64, nu_omega: _ArrF64, n_substeps: int = 4) -> None: ...  # noqa: E501
     def step_struct_burn_mix(self, dt: float, op_split_burn: bool = False, use_bcyclic: bool = True, overshoot_f: float = 0.0, overshoot_f0: float = 0.004) -> tuple[bool, int, float, float, float, float]: ...  # noqa: E501
     def apply_wind_and_adjust_mass(self, scheme: str = "Dutch", eta: float = 1.0, dt: float = 0.0) -> float: ...  # noqa: E501
+    def adjust_mesh(self) -> tuple[int, int]: ...
+    def pick_next_timestep(self, max_timestep_factor: float = 1.2, min_timestep_factor: float = 0.5, dx_nuc_drop_limit: float = 1.0e-2) -> tuple[float, float, float]: ...  # noqa: E501
+    def evolve_step(self, do_remesh: bool = False, op_split_burn: bool = False, use_bcyclic: bool = True) -> tuple[int, float, float, float, int, int, int, int, float, bool]: ...  # noqa: E501
+    def evolve(self, max_steps: int, do_remesh: bool = False, op_split_burn: bool = False, use_bcyclic: bool = True) -> list[tuple[int, float, float, float, int, int, int, int, float, bool]]: ...  # noqa: E501
+    def history_tuple(
+        self,
+    ) -> tuple[tuple[int, int, int, int], list[float]]: ...
+    def to_history_line(self) -> str: ...
+    def to_profile_str(self) -> str: ...
     def set_primary_state(self, lnd: _ArrF64, ln_t: _ArrF64, ln_r: _ArrF64, lum: _ArrF64, dq: _ArrF64, xa: _ArrF64) -> None: ...  # noqa: E501
 
 # fmt: on

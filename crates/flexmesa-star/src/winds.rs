@@ -394,6 +394,7 @@ pub fn do_adjust_mass(
     let default_acc: Vec<f64> = model.cell_xa(0).to_vec();
     let x_acc = x_accreted.unwrap_or(&default_acc);
     let mut accum = vec![0.0; species];
+    let mut kk_start = 0_usize;
     for k in 0..k_b {
         let xq_00 = model.xq[k];
         let xq_p1 = xq_00 + model.dq[k];
@@ -414,15 +415,17 @@ pub fn do_adjust_mass(
                 e_accum += w_acc * e_old[0];
             }
             let a_start = x_00.max(0.0);
-            for kk in 0..nz {
+            while kk_start + 1 < nz
+                && xq_old[kk_start] + dq_old[kk_start] <= a_start
+            {
+                kk_start += 1;
+            }
+            for kk in kk_start..nz {
                 let b0 = xq_old[kk];
-                let b1 = b0 + dq_old[kk];
-                if b1 <= a_start {
-                    continue;
-                }
                 if b0 >= x_p1 {
                     break;
                 }
+                let b1 = b0 + dq_old[kk];
                 let overlap = (x_p1.min(b1) - a_start.max(b0)).max(0.0);
                 if overlap > 0.0 {
                     for j in 0..species {

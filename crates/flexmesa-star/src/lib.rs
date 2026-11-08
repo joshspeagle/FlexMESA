@@ -8,20 +8,26 @@
 //! Ports upstream Fortran MESA's `star_data` and `star` modules into Safe Rust
 //! (`#![forbid(unsafe_code)]`) with `rayon` zone parallelism and 3-cell stencil
 //! forward-mode automatic differentiation ([`StarAdOrder1`]):
-//! - **State & I/O ([`model`], [`controls`], [`mesh`], [`model_io`], [`zams`], [`pre_ms`])**:
-//!   Canonical [`StarModel`] representation, staggered Lagrangian mass grid,
-//!   ZAMS interpolation, $n=1.5$ pre-MS polytrope builder, and `.mod`/`.photo`
-//!   serialization.
-//! - **Microphysics & Face Transport ([`micro`], [`hydro_vars`], [`eps_grav`])**:
-//!   Parallel zone EOS, opacity, neutrino, and nuclear reaction network calls,
-//!   MLT/TDC convection, Brunt-Väisälä buoyancy, and surface boundary conditions.
+//! - **State & I/O ([`model`], [`controls`], [`mesh`], [`model_io`], [`zams`],
+//!   [`pre_ms`])**: Canonical [`StarModel`] representation, staggered
+//!   Lagrangian mass grid, ZAMS interpolation, $n=1.5$ pre-MS polytrope
+//!   builder, and `.mod`/`.photo` serialization.
+//! - **Microphysics & Face Transport ([`micro`], [`hydro_vars`],
+//!   [`eps_grav`])**: Parallel zone EOS, opacity, neutrino, and nuclear
+//!   reaction network calls, MLT/TDC convection, Brunt-Väisälä buoyancy, and
+//!   surface boundary conditions.
 //! - **Henyey Equations & Solver ([`hydro_eqns`], [`solver`])**:
 //!   Coupled hydrodynamic and species conservation equations, analytical
 //!   block-tridiagonal Jacobian assembly, and damped Newton-Raphson solver.
-//! - **Mixing, Burning & Winds ([`mix_info`], [`overshoot`], [`struct_burn_mix`], [`winds`])**:
-//!   Sub-cell convective boundary detection, step/exponential overshooting,
-//!   operator-split and coupled burning/diffusion, rotational angular momentum
-//!   diffusion, and stellar wind mass adjustment.
+//! - **Mixing, Burning & Winds ([`mix_info`], [`overshoot`],
+//!   [`struct_burn_mix`], [`winds`])**: Sub-cell convective boundary detection,
+//!   step/exponential overshooting, operator-split and coupled
+//!   burning/diffusion, rotational angular momentum diffusion, and stellar wind
+//!   mass adjustment.
+//! - **Remeshing, Timestep & Evolution ([`mesh_adjust`], [`timestep`],
+//!   [`evolve`], [`history`])**: Adaptive Lagrangian mesh spacing, Söderlind &
+//!   Wang (2006) H211 timestep control, evolutionary retry cascade, and
+//!   `history.data`/`profile.data` output.
 
 #![forbid(unsafe_code)]
 #![allow(
@@ -56,9 +62,12 @@
 
 pub mod controls;
 pub mod eps_grav;
+pub mod evolve;
+pub mod history;
 pub mod hydro_eqns;
 pub mod hydro_vars;
 pub mod mesh;
+pub mod mesh_adjust;
 pub mod micro;
 pub mod mix_info;
 pub mod model;
@@ -68,6 +77,7 @@ pub mod pre_ms;
 pub mod solver;
 pub mod star_ad;
 pub mod struct_burn_mix;
+pub mod timestep;
 pub mod winds;
 pub mod zams;
 
@@ -81,6 +91,13 @@ pub use controls::{
 pub use eps_grav::{
     eval_eps_grav, eval_eps_grav_lns_cell, eval_eps_grav_std_cell,
 };
+pub use evolve::{
+    restore_from_old, star_evolve, star_evolve_step, EvolveStepReport,
+};
+pub use history::{
+    extract_history_row, format_history_header, format_history_row,
+    format_profile_string, HistoryRow,
+};
 pub use hydro_eqns::{
     compute_x_scale, do1_chem_eqns, do1_density_eqn, do1_energy_eqn,
     do1_momentum_eqn, do1_radius_eqn, do1_temperature_eqn, do_surf_bc_eqns,
@@ -89,6 +106,10 @@ pub use hydro_eqns::{
 pub use hydro_vars::{
     check_for_redo_mlt, do_brunt_b, do_brunt_n2, eval_surf_bc, set_hydro_vars,
     set_mlt_vars, update_sig_from_d_mix,
+};
+pub use mesh_adjust::{
+    do_adjust_mesh, eval_mesh_gval, plan_mesh, remap_onto_dq,
+    MeshFunctionConfig,
 };
 pub use micro::{
     do_eos, do_kap, do_net, do_neu, get_tau, global_basic_net, set_basic_vars,
@@ -119,6 +140,10 @@ pub use star_ad::{
 pub use struct_burn_mix::{
     do_struct_burn_mix, op_split_burn_zones, solve_composition_diffusion,
     solve_omega_mix,
+};
+pub use timestep::{
+    eval_dx_nuc_drop_ratio, eval_h211_factor, eval_varcontrol, filter_limit,
+    pick_next_timestep, TimestepLimitReason, TimestepReport,
 };
 pub use winds::{
     do_adjust_mass, eval_blocker_wind, eval_de_jager_wind, eval_dutch_wind,

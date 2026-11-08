@@ -3,12 +3,11 @@
 
 Wraps `flexmesa._rust.RustStarModel` (Tier A/B Safe Rust engine) and exposes
 both zero-copy NumPy arrays and pure `@jax.jit` staggered-grid, face-gradient,
-and Henyey residual kernels (`flexmesa.star.jax_kernels`).
+Henyey residual, diffusive mixing, and stellar wind kernels.
 """
 
 from __future__ import annotations
 
-import dataclasses
 import pathlib
 
 import jax
@@ -17,82 +16,23 @@ import numpy as np
 import numpy.typing as npt
 
 from flexmesa import _rust
-from flexmesa.star import jax_kernels
+from flexmesa.star import _arrays, jax_kernels, jax_winds_mix
 
 type _ArrF64 = npt.NDArray[np.float64]
-type _ArrI32 = npt.NDArray[np.int32]
+
+JaxStarState = _arrays.JaxStarState
+HenyeySystemResult = _arrays.HenyeySystemResult
+HenyeySolverReport = _arrays.HenyeySolverReport
 
 
-@dataclasses.dataclass(frozen=True)
-class JaxStarState:
-    """Immutable JAX PyTree snapshot of a 1D stellar structure model.
-
-    Attributes:
-        lnd: Cell natural log density of shape `(nz,)` (`ln(g cm^-3)`).
-        ln_t: Cell natural log temperature of shape `(nz,)` (`ln(K)`).
-        ln_r: Face natural log radius of shape `(nz,)` (`ln(cm)`).
-        lum: Face luminosity of shape `(nz,)` (`erg s^-1`).
-        dq: Cell relative mass fractions of shape `(nz,)`.
-        xa: Cell species mass fractions of shape `(nz, species)`.
-        mstar: Total stellar mass in grams (`g`).
-    """
-
-    lnd: jax.Array
-    ln_t: jax.Array
-    ln_r: jax.Array
-    lum: jax.Array
-    dq: jax.Array
-    xa: jax.Array
-    mstar: float
-
-
-@dataclasses.dataclass(frozen=True)
-class HenyeySystemResult:
-    """Assembled 1D Henyey residual vector and block-tridiagonal Jacobian.
-
-    Attributes:
-        equ: Residual array of shape `(nz, nvar)`.
-        lblk: Sub-diagonal Jacobian blocks of shape `(nz, nvar, nvar)`.
-        dblk: Diagonal Jacobian blocks of shape `(nz, nvar, nvar)`.
-        ublk: Super-diagonal Jacobian blocks of shape `(nz, nvar, nvar)`.
-        x_scale: Variable scaling array of shape `(nz, nvar)`.
-    """
-
-    equ: _ArrF64
-    lblk: _ArrF64
-    dblk: _ArrF64
-    ublk: _ArrF64
-    x_scale: _ArrF64
-
-
-@dataclasses.dataclass(frozen=True)
-class HenyeySolverReport:
-    """Convergence report returned by `StarModel.solve_henyey`.
-
-    Attributes:
-        converged: Whether convergence tolerances were satisfied.
-        iterations: Number of Newton-Raphson iterations executed.
-        residual_norm: Mean absolute residual `sum(|equ|) / (nz * nvar)`.
-        max_residual: Maximum absolute residual `max(|equ|)`.
-        correction_norm: Mean absolute scaled correction.
-        max_correction: Maximum absolute scaled correction.
-    """
-
-    converged: bool
-    iterations: int
-    residual_norm: float
-    max_residual: float
-    correction_norm: float
-    max_correction: float
-
-
-class StarModel:
+class StarModel(_arrays.StarModelArrays):
     """1D Lagrangian stellar structure and evolution model (`Star_Info`).
 
     Provides a unified Python/JAX interface backed by `RustStarModel`
     (`flexmesa-star`) for ZAMS interpolation, $n=1.5$ pre-MS polytrope
     construction, ASCII `.mod` and binary `.photo` I/O, parallelized zone/face
-    microphysics evaluation, and coupled block-tridiagonal Henyey solves.
+    microphysics evaluation, convective boundary overshooting, operator-split
+    and coupled structure-burn-mix solves, and stellar winds.
     """
 
     def __init__(self, rust_model: _rust.RustStarModel) -> None:
@@ -245,6 +185,85 @@ class StarModel:
             )
         )
 
+    def update_mixing(
+        self,
+        dt: float,
+        overshoot_f: float = 0.0,
+        overshoot_f0: float = 0.004,
+        scheme: str = "exponential",
+    ) -> int:
+        """Clean mixing glitches, locate boundaries, and apply overshooting.
+
+        Args:
+            dt: Timestep in seconds (`s`).
+            overshoot_f: Overshoot decay scale `f` in units of `H_P`.
+            overshoot_f0: Anchor step distance `f_0` into CZ in units of `H_P`.
+            scheme: `"exponential"` or `"step"`.
+
+        Returns:
+            Number of detected convective boundaries (`num_conv_boundaries`).
+        """
+        return int(
+            self._rust_model.update_mixing(
+                float(dt), float(overshoot_f), float(overshoot_f0), str(scheme)
+            )
+        )
+
+    def eval_dxdt_mix(self) -> _ArrF64:
+        """Evaluate mass-conserving species diffusion rate `(nz, species)`."""
+        return self._rust_model.eval_dxdt_mix()
+
+    def solve_diffusion(self, dt: float) -> None:
+        """Solve implicit backward-Euler species diffusion over `dt` (`s`)."""
+        self._rust_model.solve_diffusion(float(dt))
+
+    def run_omega_mix(
+        self,
+        dt: float,
+        omega: _ArrF64,
+        nu_omega: _ArrF64,
+        n_substeps: int = 4,
+    ) -> None:
+        """Solve substepped rotational angular momentum diffusion."""
+        self._rust_model.run_omega_mix(
+            float(dt),
+            np.ascontiguousarray(omega, dtype=np.float64),
+            np.ascontiguousarray(nu_omega, dtype=np.float64),
+            int(n_substeps),
+        )
+
+    def step_struct_burn_mix(
+        self,
+        dt: float,
+        op_split_burn: bool = False,
+        use_bcyclic: bool = True,
+        overshoot_f: float = 0.0,
+        overshoot_f0: float = 0.004,
+    ) -> HenyeySolverReport:
+        """Execute a `do_struct_burn_mix` step (coupled or operator-split)."""
+        return HenyeySolverReport(
+            *self._rust_model.step_struct_burn_mix(
+                float(dt),
+                bool(op_split_burn),
+                bool(use_bcyclic),
+                float(overshoot_f),
+                float(overshoot_f0),
+            )
+        )
+
+    def apply_wind_and_adjust_mass(
+        self,
+        scheme: str = "Dutch",
+        eta: float = 1.0,
+        dt: float = 0.0,
+    ) -> float:
+        """Evaluate wind mass-loss rate and optionally adjust 3-region mass."""
+        return float(
+            self._rust_model.apply_wind_and_adjust_mass(
+                str(scheme), float(eta), float(dt)
+            )
+        )
+
     def to_jax_state(self) -> JaxStarState:
         """Export primary structure variables as an immutable `JaxStarState`."""
         return JaxStarState(
@@ -298,312 +317,29 @@ class StarModel:
                 jnp.asarray(self.gradt),
                 jnp.asarray(self.eps_nuc),
                 jnp.asarray(self.non_nuc_neu),
-                jnp.zeros_like(jnp.asarray(self.lnd)),
+                jnp.asarray(self.eps_mdot),
                 float(self.ln_peos_surf),
                 float(self.ln_t_surf),
                 float(self.dt),
             )
         )
 
-    @property
-    def nz(self) -> int:
-        """Number of Lagrangian zones (`nz`)."""
-        return self._rust_model.nz
-
-    @property
-    def species(self) -> int:
-        """Number of active nuclear species (`species`)."""
-        return self._rust_model.species
-
-    @property
-    def model_number(self) -> int:
-        """Current evolutionary step number."""
-        return self._rust_model.model_number
-
-    @property
-    def star_age(self) -> float:
-        """Stellar age in years (`yr`)."""
-        return self._rust_model.star_age
-
-    @property
-    def dt(self) -> float:
-        """Current timestep in seconds (`s`)."""
-        return self._rust_model.dt
-
-    @dt.setter
-    def dt(self, value: float) -> None:
-        """Set the current timestep in seconds (`s`)."""
-        self._rust_model.dt = float(value)
-
-    @property
-    def mstar(self) -> float:
-        """Total stellar mass in grams (`g`)."""
-        return self._rust_model.mstar
-
-    @property
-    def teff(self) -> float:
-        """Surface effective temperature in Kelvin (`K`)."""
-        return self._rust_model.teff
-
-    @property
-    def ln_peos_surf(self) -> float:
-        """Surface natural log total pressure from atmosphere BC."""
-        return self._rust_model.ln_peos_surf
-
-    @property
-    def ln_t_surf(self) -> float:
-        """Surface natural log temperature from atmosphere BC."""
-        return self._rust_model.ln_t_surf
-
-    @property
-    def iso_names(self) -> list[str]:
-        """Isotope names of active species (`len = species`)."""
-        return self._rust_model.iso_names
-
-    @property
-    def chem_id(self) -> list[int]:
-        """1-based `chem_id` indices of active species."""
-        return self._rust_model.chem_id
-
-    @property
-    def lnd(self) -> _ArrF64:
-        """Cell natural log density of shape `(nz,)` (`ln(g cm^-3)`)."""
-        return self._rust_model.lnd
-
-    @property
-    def lnd_start(self) -> _ArrF64:
-        """Start-of-step cell natural log density of shape `(nz,)`."""
-        return self._rust_model.lnd_start
-
-    @property
-    def ln_t(self) -> _ArrF64:
-        """Cell natural log temperature of shape `(nz,)` (`ln(K)`)."""
-        return self._rust_model.ln_t
-
-    @property
-    def ln_r(self) -> _ArrF64:
-        """Face natural log radius of shape `(nz,)` (`ln(cm)`)."""
-        return self._rust_model.ln_r
-
-    @property
-    def lum(self) -> _ArrF64:
-        """Face luminosity of shape `(nz,)` (`erg s^-1`)."""
-        return self._rust_model.lum
-
-    @property
-    def dq(self) -> _ArrF64:
-        """Cell relative mass fraction of shape `(nz,)`."""
-        return self._rust_model.dq
-
-    @property
-    def q(self) -> _ArrF64:
-        """Face enclosed mass fraction of shape `(nz,)`."""
-        return self._rust_model.q
-
-    @property
-    def m(self) -> _ArrF64:
-        """Face enclosed mass of shape `(nz,)` (`g`)."""
-        return self._rust_model.m
-
-    @property
-    def dm(self) -> _ArrF64:
-        """Cell mass of shape `(nz,)` (`g`)."""
-        return self._rust_model.dm
-
-    @property
-    def dm_bar(self) -> _ArrF64:
-        """Face control-volume mass of shape `(nz,)` (`g`)."""
-        return self._rust_model.dm_bar
-
-    @property
-    def r(self) -> _ArrF64:
-        """Face radius of shape `(nz,)` (`cm`)."""
-        return self._rust_model.r
-
-    @property
-    def rmid(self) -> _ArrF64:
-        """Cell volumetric mid-radius of shape `(nz,)` (`cm`)."""
-        return self._rust_model.rmid
-
-    @property
-    def grav(self) -> _ArrF64:
-        """Face gravitational acceleration of shape `(nz,)` (`cm s^-2`)."""
-        return self._rust_model.grav
-
-    @property
-    def xa(self) -> _ArrF64:
-        """Cell species mass fractions of shape `(nz, species)`."""
-        return self._rust_model.xa
-
-    @property
-    def rho(self) -> _ArrF64:
-        """Cell density of shape `(nz,)` (`g cm^-3`)."""
-        return self._rust_model.rho
-
-    @property
-    def t(self) -> _ArrF64:
-        """Cell temperature of shape `(nz,)` (`K`)."""
-        return self._rust_model.t
-
-    @property
-    def pgas(self) -> _ArrF64:
-        """Cell gas pressure of shape `(nz,)` (`dyn cm^-2`)."""
-        return self._rust_model.pgas
-
-    @property
-    def prad(self) -> _ArrF64:
-        """Cell radiation pressure of shape `(nz,)` (`dyn cm^-2`)."""
-        return self._rust_model.prad
-
-    @property
-    def peos(self) -> _ArrF64:
-        """Cell total pressure of shape `(nz,)` (`dyn cm^-2`)."""
-        return self._rust_model.peos
-
-    @property
-    def ln_peos(self) -> _ArrF64:
-        """Cell natural log total pressure of shape `(nz,)`."""
-        return self._rust_model.ln_peos
-
-    @property
-    def energy(self) -> _ArrF64:
-        """Cell specific internal energy of shape `(nz,)` (`erg g^-1`)."""
-        return self._rust_model.energy
-
-    @property
-    def energy_start(self) -> _ArrF64:
-        """Start-of-step cell specific internal energy of shape `(nz,)`."""
-        return self._rust_model.energy_start
-
-    @property
-    def entropy(self) -> _ArrF64:
-        """Cell specific entropy of shape `(nz,)` (`erg g^-1 K^-1`)."""
-        return self._rust_model.entropy
-
-    @property
-    def grada(self) -> _ArrF64:
-        """Cell adiabatic temperature gradient of shape `(nz,)`."""
-        return self._rust_model.grada
-
-    @property
-    def cp(self) -> _ArrF64:
-        """Cell isobaric specific heat of shape `(nz,)` (`erg g^-1 K^-1`)."""
-        return self._rust_model.cp
-
-    @property
-    def cv(self) -> _ArrF64:
-        """Cell isochoric specific heat of shape `(nz,)` (`erg g^-1 K^-1`)."""
-        return self._rust_model.cv
-
-    @property
-    def chi_rho(self) -> _ArrF64:
-        """Cell `(dlnP/dlnRho)_T` of shape `(nz,)`."""
-        return self._rust_model.chi_rho
-
-    @property
-    def chi_t(self) -> _ArrF64:
-        """Cell `(dlnP/dlnT)_Rho` of shape `(nz,)`."""
-        return self._rust_model.chi_t
-
-    @property
-    def gamma1(self) -> _ArrF64:
-        """Cell first adiabatic exponent `Gamma_1` of shape `(nz,)`."""
-        return self._rust_model.gamma1
-
-    @property
-    def eta(self) -> _ArrF64:
-        """Cell electron degeneracy parameter `eta` of shape `(nz,)`."""
-        return self._rust_model.eta
-
-    @property
-    def mu(self) -> _ArrF64:
-        """Cell mean molecular weight `mu` of shape `(nz,)`."""
-        return self._rust_model.mu
-
-    @property
-    def csound(self) -> _ArrF64:
-        """Cell adiabatic sound speed of shape `(nz,)` (`cm s^-1`)."""
-        return self._rust_model.csound
-
-    @property
-    def opacity(self) -> _ArrF64:
-        """Cell Rosseland mean opacity of shape `(nz,)` (`cm^2 g^-1`)."""
-        return self._rust_model.opacity
-
-    @property
-    def tau(self) -> _ArrF64:
-        """Face optical depth `tau` of shape `(nz,)`."""
-        return self._rust_model.tau
-
-    @property
-    def non_nuc_neu(self) -> _ArrF64:
-        """Cell thermal neutrino rate of shape `(nz,)` (`erg g^-1 s^-1`)."""
-        return self._rust_model.non_nuc_neu
-
-    @property
-    def eps_nuc(self) -> _ArrF64:
-        """Cell nuclear energy rate of shape `(nz,)` (`erg g^-1 s^-1`)."""
-        return self._rust_model.eps_nuc
-
-    @property
-    def eps_grav(self) -> _ArrF64:
-        """Cell gravitational energy rate of shape `(nz,)` (`erg g^-1 s^-1`)."""
-        return self._rust_model.eps_grav
-
-    @property
-    def dxdt_nuc(self) -> _ArrF64:
-        """Cell nuclear abundance rate of shape `(nz, species)` (`s^-1`)."""
-        return self._rust_model.dxdt_nuc
-
-    @property
-    def gradt(self) -> _ArrF64:
-        """Face actual temperature gradient `gradT` of shape `(nz,)`."""
-        return self._rust_model.gradt
-
-    @property
-    def gradr(self) -> _ArrF64:
-        """Face radiative temperature gradient `gradr` of shape `(nz,)`."""
-        return self._rust_model.gradr
-
-    @property
-    def gradl(self) -> _ArrF64:
-        """Face Ledoux temperature gradient `gradL` of shape `(nz,)`."""
-        return self._rust_model.gradl
-
-    @property
-    def scale_height(self) -> _ArrF64:
-        """Face pressure scale height `H_P` of shape `(nz,)` (`cm`)."""
-        return self._rust_model.scale_height
-
-    @property
-    def mlt_vc(self) -> _ArrF64:
-        """Face convective velocity of shape `(nz,)` (`cm s^-1`)."""
-        return self._rust_model.mlt_vc
-
-    @property
-    def mlt_d(self) -> _ArrF64:
-        """Face MLT diffusion coefficient of shape `(nz,)` (`cm^2 s^-1`)."""
-        return self._rust_model.mlt_d
-
-    @property
-    def mlt_cdc(self) -> _ArrF64:
-        """Face convective conductivity of shape `(nz,)`."""
-        return self._rust_model.mlt_cdc
-
-    @property
-    def brunt_b(self) -> _ArrF64:
-        """Face composition gradient term `B` of shape `(nz,)`."""
-        return self._rust_model.brunt_b
-
-    @property
-    def brunt_n2(self) -> _ArrF64:
-        """Face Brunt-Väisälä frequency `N^2` of shape `(nz,)` (`s^-2`)."""
-        return self._rust_model.brunt_n2
-
-    @property
-    def mixing_type(self) -> _ArrI32:
-        """Face integer mixing classification codes of shape `(nz,)`."""
-        return self._rust_model.mixing_type
+    def eval_winds_jax(self, eta: float = 1.0) -> dict[str, jax.Array]:
+        """Evaluate differentiable wind mass-loss rates via JAX."""
+        x_s = float(self.xh_mass[0])
+        y_s = float(self.yhe_mass[0])
+        z_s = float(max(0.0, 1.0 - x_s - y_s))
+        return dict(
+            jax_winds_mix.eval_winds_jax(
+                float(self.lum[0]),
+                float(self.mstar),
+                float(self.teff),
+                x_s,
+                y_s,
+                z_s,
+                eta=float(eta),
+            )
+        )
 
 
 def yrs_for_init_timestep(m_msun: float) -> float:

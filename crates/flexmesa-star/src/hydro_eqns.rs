@@ -233,8 +233,7 @@ pub fn do_surf_bc_eqns(model: &StarModel, sys: &mut HenyeySystem) {
 
     if !model.controls.use_momentum_outer_bc {
         let p_surf = model.ln_peos_surf_ad.exp();
-        let ln_p_bc =
-            (p_surf + dp_0).max(StarAdOrder1::constant(1.0e-30)).ln();
+        let ln_p_bc = (p_surf + dp_0).max(StarAdOrder1::constant(1.0e-30)).ln();
         let ln_peos_0 = model.ln_peos_ad[0];
         let denom_p = if ln_peos_0.val > 1.0 {
             ln_peos_0
@@ -321,8 +320,8 @@ pub fn do1_temperature_eqn(
     let p_point = interp_peos_ad_to_face(model, k);
 
     let r_k = StarAdOrder1::variable(model.ln_r[k], I_LNR_00).exp();
-    let dlnp_dm_qhse = -(model.cgrav[k] * model.m_grav[k])
-        / (FOUR_PI * r_k.pow4() * p_point);
+    let dlnp_dm_qhse =
+        -(model.cgrav[k] * model.m_grav[k]) / (FOUR_PI * r_k.pow4() * p_point);
     let dm_k = 0.5 * (model.dm[k - 1] + model.dm[k]);
     let dln_t_theory = dlnp_dm_qhse * model.gradt_ad[k] * dm_k;
 
@@ -512,7 +511,8 @@ pub fn eval_henyey_equations(
     model: &mut StarModel,
     include_chem: bool,
 ) -> Result<HenyeySystem, StarError> {
-    set_hydro_vars(model, false, !include_chem)?;
+    let skip_net = model.controls.op_split_burn && !include_chem;
+    set_hydro_vars(model, skip_net, !include_chem)?;
     eval_eps_grav(model);
 
     let nz = model.nz;

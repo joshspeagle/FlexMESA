@@ -256,9 +256,19 @@ impl ZamsCatalog {
                             ln_r.push(parse_fortran_f64(toks[3])?);
                             lum.push(parse_fortran_f64(toks[4])?);
                             dq.push(parse_fortran_f64(toks[5])?);
+                            let mut row_xa = Vec::with_capacity(species);
+                            let mut sum_xa = 0.0;
                             for j in 0..species {
-                                xa.push(parse_fortran_f64(toks[6 + j])?);
+                                let xj = parse_fortran_f64(toks[6 + j])?;
+                                row_xa.push(xj);
+                                sum_xa += xj;
                             }
+                            if sum_xa > 0.0 {
+                                for xj in &mut row_xa {
+                                    *xj /= sum_xa;
+                                }
+                            }
+                            xa.extend_from_slice(&row_xa);
                         }
                         models.push(ZamsEntry {
                             m_msun,

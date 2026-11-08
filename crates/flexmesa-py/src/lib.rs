@@ -84,7 +84,10 @@ pub mod star_helpers_py;
 /// Tier A/B/C bindings for `star` (stellar structure, ZAMS/pre-MS, I/O, microphysics).
 #[allow(unsafe_code)]
 pub mod star_py;
-/// Tier B/C bindings for Wave 5 `star` extensions (diffusion, rotation, premix).
+/// Tier A/B bindings for Wave 5.2 `star` hydrodynamics and pulsation export.
+#[allow(unsafe_code)]
+pub mod star_wave5_2_py;
+/// Tier B/C bindings for Wave 5.1 `star` extensions (diffusion, rotation, premix).
 #[allow(unsafe_code)]
 pub mod star_wave5_py;
 /// Tier A bindings for `data` (`SHA-256` hashing and `.safetensors` parsers).
@@ -279,5 +282,6 @@ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     net_py::register(m)?;
     star_py::register(m)?;
     star_wave5_py::register(m)?;
+    star_wave5_2_py::register(m)?;
     Ok(())
 }

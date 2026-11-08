@@ -76,7 +76,10 @@ pub mod model_io;
 pub mod overshoot;
 pub mod pre_ms;
 pub mod premix;
+pub mod pulse;
+pub mod riemann;
 pub mod rotation;
+pub mod rsp2;
 pub mod solver;
 pub mod star_ad;
 pub mod struct_burn_mix;
@@ -86,6 +89,8 @@ pub mod zams;
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_wave5;
 
 pub use controls::{
     AtmOption, AtmTTauRelation, EnergyEqnOption, StarControls, StarError,
@@ -140,10 +145,23 @@ pub use premix::{
     add_predictive_mixing, do_conv_premix, do_phase_separation,
     eval_castellani_penetration_vel, eval_phase_separation_shift,
 };
+pub use pulse::{
+    build_pulse_points, eval_center_parabolic, export_fgong, export_gyre,
+    export_osc, PulsePoint,
+};
+pub use riemann::{
+    eval_hllc_face, eval_hllc_surface_face, eval_riemann_momentum_residual,
+    eval_riemann_profile, HllcFaceState,
+};
 pub use rotation::{
     eval_magnetic_diffusivity, eval_omega_crit, eval_rotation_fp_ft,
     eval_rotational_mixing_zone, eval_thermal_diffusivity,
     set_rotation_mixing_info, RotationalMixZone, RI_CRIT_DSI,
+};
+pub use rsp2::{
+    eval_rsp2_face, eval_rsp2_zone, solve_stationary_rsp2_w, Rsp2Config,
+    Rsp2FaceResult, Rsp2ZoneResult, X_ALFAC, X_ALFAP, X_ALFAS, X_CEDE,
+    X_GAMMAR,
 };
 pub use solver::{
     compute_corr_coeff, compute_correction_norms, compute_vector_norms,

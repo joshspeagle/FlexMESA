@@ -111,9 +111,13 @@ def test_eval_helm_eos_jax_autodiff_matches_analytical_derivatives() -> None:
     rho0 = 100.0
     abar0 = 1.72
     zbar0 = 1.15
+    _, da_r, dz_r = eos.eval_helm_eos(temp0, rho0, abar0, zbar0, backend="rust")
     out_j, da_j, dz_j = eos.eval_helm_eos(
         temp0, rho0, abar0, zbar0, backend="jax"
     )
+    assert _rel_diff(np.asarray(da_r), np.asarray(da_j)) < 1.0e-8
+    assert _rel_diff(np.asarray(dz_r), np.asarray(dz_j)) < 1.0e-8
+
     ad_dlnd, ad_dlnt, ad_da, ad_dz = jax.jacfwd(
         _res_of_ln_td_az, argnums=(0, 1, 2, 3)
     )(
@@ -148,21 +152,38 @@ def test_eval_helm_eos_jax_autodiff_matches_analytical_derivatives() -> None:
         _rel_diff(np.asarray(dz_j)[primary_idx], np.asarray(ad_dz)[primary_idx])
         < 1.0e-10
     )
-    active_non_mu = [i for i in range(16) if i != eos.I_MU]
+    # Upstream Fortran MESA `eos/private/helm_electron_positron.dek` lines
+    # 566-567 writes `dpepdda = (zz*dindd + ww)*dindda` using `dindd = Y_e`
+    # instead of `din = Y_e * rho` (see `notes/DECISIONS.md` #9). All 11
+    # active_non_mu channels independent of `dpepdda`/`dpepddz` match
+    # `jax.jacfwd` to < 1e-6 at all densities:
+    dpepdd_channels = {
+        eos.I_GRAD_AD,
+        eos.I_CHI_RHO,
+        eos.I_CP,
+        eos.I_GAMMA1,
+    }
+    exact_chain_idx = [
+        i for i in range(16) if i != eos.I_MU and i not in dpepdd_channels
+    ]
     assert (
         _rel_diff(
-            np.asarray(da_j)[active_non_mu], np.asarray(ad_da)[active_non_mu]
+            np.asarray(da_j)[exact_chain_idx],
+            np.asarray(ad_da)[exact_chain_idx],
         )
-        < 1.5e-2
+        < 1.0e-6
     )
     assert (
         _rel_diff(
-            np.asarray(dz_j)[active_non_mu], np.asarray(ad_dz)[active_non_mu]
+            np.asarray(dz_j)[exact_chain_idx],
+            np.asarray(ad_dz)[exact_chain_idx],
         )
-        < 1.5e-2
+        < 1.0e-6
     )
     # At rho = 1.0 g cm^-3, din == dindd = Y_e in helm_electron_positron.dek,
-    # so all 15 active_non_mu channels match jax.jacfwd to < 1e-6.
+    # so all 15 active_non_mu channels (including the 4 dpepdda channels)
+    # match `jax.jacfwd` to < 1e-6:
+    active_non_mu = [i for i in range(16) if i != eos.I_MU]
     _, da_1, dz_1 = eos.eval_helm_eos(temp0, 1.0, abar0, zbar0, backend="jax")
     _, _, ad_da_1, ad_dz_1 = jax.jacfwd(_res_of_ln_td_az, argnums=(0, 1, 2, 3))(
         jnp.log(jnp.asarray(1.0, dtype=jnp.float64)),

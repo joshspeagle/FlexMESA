@@ -14,9 +14,11 @@
   - **Wave 3b (`Tabulated 4D EOS, Opacity, Nuclear Reaction Rates, Networks & Stellar Atmospheres`)** ([Issue #56](https://github.com/joshspeagle/FlexMESA/issues/56), Sub-Issues [#57](https://github.com/joshspeagle/FlexMESA/issues/57)–[#60](https://github.com/joshspeagle/FlexMESA/issues/60), PRs [#62](https://github.com/joshspeagle/FlexMESA/pull/62)–[#65](https://github.com/joshspeagle/FlexMESA/pull/65))
   - **Wave 3b.5 (`Post-Wave 3b Review, Optimization, Upstream Fortran MESA Gate & Docs Sync`)** ([Issue #61](https://github.com/joshspeagle/FlexMESA/issues/61), PR [#66](https://github.com/joshspeagle/FlexMESA/pull/66))
   - **Wave 4 (`Core 1D star Hydrostatic & Hydrodynamic Henyey Engine`)** ([Issue #67](https://github.com/joshspeagle/FlexMESA/issues/67), Sub-Issues [#68](https://github.com/joshspeagle/FlexMESA/issues/68)–[#71](https://github.com/joshspeagle/FlexMESA/issues/71), PRs [#73](https://github.com/joshspeagle/FlexMESA/pull/73)–[#76](https://github.com/joshspeagle/FlexMESA/pull/76))
-  - **Wave 4.5 (`Post-Wave 4 Review, Optimization, Upstream Fortran MESA Gate & Docs Sync`)** ([Issue #72](https://github.com/joshspeagle/FlexMESA/issues/72))
+  - **Wave 4.5 (`Post-Wave 4 Review, Optimization, Upstream Fortran MESA Gate & Docs Sync`)** ([Issue #72](https://github.com/joshspeagle/FlexMESA/issues/72), PR [#77](https://github.com/joshspeagle/FlexMESA/pull/77))
+  - **Wave 5 (`Advanced star Physics, binary, astero & plotting`)** ([Issue #78](https://github.com/joshspeagle/FlexMESA/issues/78), Sub-Issues [#79](https://github.com/joshspeagle/FlexMESA/issues/79)–[#82](https://github.com/joshspeagle/FlexMESA/issues/82), PRs [#84](https://github.com/joshspeagle/FlexMESA/pull/84)–[#87](https://github.com/joshspeagle/FlexMESA/pull/87))
+  - **Wave 5.5 (`Post-Wave 5 Review, Full-Workspace Fortran MESA Gate & Public MkDocs Website Release`)** ([Issue #83](https://github.com/joshspeagle/FlexMESA/issues/83))
 - **Active Phase**:
-  - **Wave 5 (`Advanced star Physics, binary, astero & gyre`)**
+  - **All Waves (`Wave 0` through `Wave 5.5`) Complete across all 25 MESA Dependency DAG Modules**
 - **Completed Architectural Decisions (`notes/DECISIONS.md`)**:
   - `DECISIONS #1`: Dual-Track (`Safe Rust` + `Python/JAX`) evaluation across Wave 1 (`const`, `utils`, `math`, `auto_diff`, `interp_1d`, `interp_2d`, `mtx`, `num`) + stateless microphysics pilot (`neu`, `turb`).
   - `DECISIONS #2`: Legacy and external subsystem scope exclusions (`pgstar`/`pgbinary` `#3`, `stella`/`adipls`/`gyre` `#4`, and legacy `RSP1` `#5`).

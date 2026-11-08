@@ -194,8 +194,10 @@ dependencies = [
 name = "flexmesa-bench"
 version = "0.1.0"
 dependencies = [
+ "flexmesa-astero",
  "flexmesa-atm",
  "flexmesa-autodiff",
+ "flexmesa-binary",
  "flexmesa-chem",
  "flexmesa-colors",
  "flexmesa-const",

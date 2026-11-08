@@ -23,11 +23,11 @@
 
 1. **Tier A (`utils`, `schema`, `data`, `testing`, `auto_diff`)**:
    - Canonical implementation lives in Safe Rust (`crates/`) and is exposed zero-copy to Python via `flexmesa._rust` (`PyO3`). Never duplicate infrastructure parsers, `.safetensors` table loaders, or scalar Python dual-number operator-overloaded loops in pure Python.
-2. **Tier B (`const`, `math`, `interp_1d`, `interp_2d`, `neu`, `turb`, `chem`, `ionization`, `colors`, `eos`, `kap`, `rates`, `atm`)**:
+2. **Tier B (`const`, `math`, `interp_1d`, `interp_2d`, `neu`, `turb`, `chem`, `ionization`, `colors`, `eos`, `kap`, `rates`, `atm`, `star` microphysics/diffusion/rotation/riemann/rsp2, `binary`, `astero`)**:
    - **Safe Rust (`crates/`)**: Monomorphized `f64` and `DualOrder1<N>` kernels with Implicit Function Theorem root derivatives and persistent `rayon` parallel zone evaluation.
    - **Python / JAX (`src/flexmesa/`)**: Branchless `@jax.jit` flat-array kernels (`jnp.where`, `lax.fori_loop`, `jax.custom_jvp`).
    - **Unified Dispatch (`backend="auto" | "rust" | "jax"`)**: `"auto"` routes `numpy.ndarray` and float inputs zero-copy to `flexmesa._rust` and `jax.Array` / traced inputs to `@jax.jit`.
-3. **Tier C (`mtx`, `num`, `net`, `star_solver`)**:
+3. **Tier C (`mtx`, `num`, `net`, `star_solver`, `binary` implicit RLOF, `astero` optimization drivers)**:
    - Safe Rust provides sequential block-Thomas, Hirshman `bcyclic` odd-even cyclic reduction, and stiff Rosenbrock/Newton solvers.
    - JAX provides both native $\lceil \log_2 N_{\mathrm{zones}} \rceil$ parallel cyclic reduction (`solver_mode="pcr"`) for on-GPU `vmap` and `flexmesa._rust` FFI bindings with analytical `jax.custom_vjp` rules (`solver_mode="rust_ffi"`).
 

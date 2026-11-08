@@ -1,8 +1,7 @@
-//! Wave 1 four-stage performance benchmark harness (`flexmesa-bench`).
+//! Waves 1 through 5 four-stage performance benchmark harness (`flexmesa-bench`).
 //!
-//! Evaluates the Wave 1 leaf utilities and microphysics kernels (`auto_diff`,
-//! `interp_2d`, `mtx`, `neu`, and `turb`) across four progressive optimization
-//! stages in Safe Rust:
+//! Evaluates all 25 migrated FlexMESA modules across Waves 1, 2, 3a, 3b, 4, and
+//! 5 across four progressive optimization stages in Safe Rust:
 //! - **Stage 0 (Idiomatic Scalar Baseline)**: Zone-by-zone scalar calls with
 //!   per-call output allocation.
 //! - **Stage 1 (Contiguous Structure-of-Arrays Layout)**: Pre-allocated
@@ -38,6 +37,7 @@ pub mod kernels_wave2;
 pub mod kernels_wave3a;
 pub mod kernels_wave3b;
 pub mod kernels_wave4;
+pub mod kernels_wave5;
 pub mod tridiag_fast;
 
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -68,6 +68,11 @@ pub use kernels_wave4::{
     bench_star_evolve_step, bench_star_hydro_eqns, bench_star_micro_vars,
     bench_star_newton_step, bench_star_remesh, make_wave4_zams_model,
     run_all_wave4_benchmarks,
+};
+pub use kernels_wave5::{
+    bench_w5_astero_seism, bench_w5_binary_rlof, bench_w5_diff_rot,
+    bench_w5_riemann_rsp2, eval_astero_seism_workload, eval_binary_rlof_zone,
+    eval_diff_rot_zone, run_all_wave5_benchmarks, RiemannRsp2Grid,
 };
 
 /// Number of worker threads used in Stage 3 multi-core benchmarks.

@@ -1,6 +1,6 @@
 # Python, PyO3 & JAX API Reference
 
-This page provides the auto-generated API reference for `flexmesa` across all Wave 0 through Wave 4.5 packages. Safe Rust crate documentation (`crates/flexmesa-*`) is built via `cargo doc --workspace --no-deps` and published at `/rustdoc/` in the GitHub Pages deployment.
+This page provides the auto-generated API reference for `flexmesa` across all Wave 0 through Wave 5.5 packages. Safe Rust crate documentation (`crates/flexmesa-*`) is built via `cargo doc --workspace --no-deps` and published at `/rustdoc/` in the GitHub Pages deployment.
 
 ---
 
@@ -94,6 +94,15 @@ This page provides the auto-generated API reference for `flexmesa` across all Wa
 
 ### `flexmesa.star`
 ::: flexmesa.star
+
+### `flexmesa.binary`
+::: flexmesa.binary
+
+### `flexmesa.astero`
+::: flexmesa.astero
+
+### `flexmesa.plotting`
+::: flexmesa.plotting
 
 ### `flexmesa.bench`
 ::: flexmesa.bench

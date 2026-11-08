@@ -105,6 +105,9 @@ pub mod tier_a_parse;
 /// Tier B bindings for `turb` (`MLT` and `TDC` convective transport).
 #[allow(unsafe_code)]
 pub mod turb_py;
+/// Batch PyO3 bindings for the Wave 5 benchmark suite.
+#[allow(unsafe_code)]
+pub mod wave5_bench_py;
 
 use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -291,5 +294,6 @@ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     star_wave5_2_py::register(m)?;
     binary_py::register(m)?;
     astero_py::register(m)?;
+    wave5_bench_py::register(m)?;
     Ok(())
 }

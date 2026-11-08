@@ -571,4 +571,19 @@ class RustStarModel:
     def to_profile_str(self) -> str: ...
     def set_primary_state(self, lnd: _ArrF64, ln_t: _ArrF64, ln_r: _ArrF64, lum: _ArrF64, dq: _ArrF64, xa: _ArrF64) -> None: ...  # noqa: E501
 
+def star_eval_burgers_velocities(a: _ArrF64, z: _ArrF64, x_mass: _ArrF64, rho: float, t: float, dlnt_dr: float, g_grav: float, g_rad: _ArrF64 | None = None, scheme: str = "stanton_murillo") -> tuple[_ArrF64, _ArrF64, float]: ...  # noqa: E501
+def star_eval_caplan_ocp_dstar(gamma_i: float, kappa: float) -> float: ...
+def star_eval_radiative_levitation_accel(kappa_species: float, lum_face: float, r_face: float) -> float: ...  # noqa: E501
+def star_eval_wd_sedimentation_heating(a: _ArrF64, z: _ArrF64, x_mass: _ArrF64, v_gt: _ArrF64, abar: float, zbar: float, g_grav: float) -> float: ...  # noqa: E501
+def star_do_element_diffusion(model: RustStarModel, dt: float, scheme: str = "stanton_murillo") -> tuple[_ArrF64, _ArrF64]: ...  # noqa: E501
+def star_eval_rotation_fp_ft(w_div_w_crit: float, fp_min: float = 0.75, ft_min: float = 0.95) -> tuple[float, float, float]: ...  # noqa: E501
+def star_eval_omega_crit(cgrav: float, m_grav: float, r_polar: float, lum: float, opacity: float, max_gamma_edd: float = 0.99) -> float: ...  # noqa: E501
+def star_eval_rotational_mixing_zone(r: float, hp: float, grav: float, rho: float, t: float, cp: float, opacity: float, chi_t: float, chi_rho: float, grada: float, gradt: float, brunt_n2_t: float, brunt_n2_mu: float, omega: float, dln_omega_dln_r: float, abar: float, zbar: float, d_visc: float = 0.0) -> tuple[float, float, float, float, float, float, float, float, float]: ...  # noqa: E501
+def star_set_rotation_mixing_info(model: RustStarModel) -> _ArrF64: ...
+def star_eval_phase_separation_shift(x_heavy: float, is_one_mixture: bool = False) -> float: ...  # noqa: E501
+def star_eval_castellani_penetration_vel(conv_vel: float, r: float, hp: float, gradr: float, grada: float, abar_in: float, abar_out: float) -> float: ...  # noqa: E501
+def star_do_conv_premix(model: RustStarModel, max_iters: int = 10, avoid_fuel_increase: bool = True) -> int: ...  # noqa: E501
+def star_add_predictive_mixing(model: RustStarModel, ingested_mass_limit_coeff: float = 0.1, superad_thresh: float = 0.005) -> int: ...  # noqa: E501
+def star_do_phase_separation(model: RustStarModel, dt: float, gamma_crystallization: float = 175.0, is_one_mixture: bool = False) -> _ArrF64: ...  # noqa: E501
+
 # fmt: on

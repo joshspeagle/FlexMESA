@@ -424,6 +424,7 @@ dependencies = [
  "flexmesa-eos",
  "flexmesa-interp1d",
  "flexmesa-interp2d",
+ "flexmesa-ionization",
  "flexmesa-kap",
  "flexmesa-math",
  "flexmesa-mtx",

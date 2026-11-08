@@ -17,6 +17,7 @@ doctest = false
 flexmesa-atm = { path = "../flexmesa-atm" }
 flexmesa-autodiff = { path = "../flexmesa-autodiff" }
 flexmesa-bench = { path = "../flexmesa-bench" }
+flexmesa-binary = { path = "../flexmesa-binary" }
 flexmesa-chem = { path = "../flexmesa-chem" }
 flexmesa-colors = { path = "../flexmesa-colors" }
 flexmesa-const = { path = "../flexmesa-const" }

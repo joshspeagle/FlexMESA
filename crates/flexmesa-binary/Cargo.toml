@@ -1,0 +1,17 @@
+[package]
+name = "flexmesa-binary"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Binary star orbital mechanics, Roche-lobe overflow, angular momentum loss, tides, and coupled binary evolution for FlexMESA."
+
+[dependencies]
+flexmesa-autodiff = { path = "../flexmesa-autodiff" }
+flexmesa-const = { path = "../flexmesa-const" }
+flexmesa-math = { path = "../flexmesa-math" }
+flexmesa-star = { path = "../flexmesa-star" }
+
+[lints]
+workspace = true

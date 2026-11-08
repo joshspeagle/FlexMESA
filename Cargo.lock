@@ -207,6 +207,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "flexmesa-binary"
+version = "0.1.0"
+dependencies = [
+ "flexmesa-autodiff",
+ "flexmesa-const",
+ "flexmesa-math",
+ "flexmesa-star",
+]
+
+[[package]]
 name = "flexmesa-chem"
 version = "0.1.0"
 dependencies = [
@@ -368,6 +378,7 @@ dependencies = [
  "flexmesa-atm",
  "flexmesa-autodiff",
  "flexmesa-bench",
+ "flexmesa-binary",
  "flexmesa-chem",
  "flexmesa-colors",
  "flexmesa-const",

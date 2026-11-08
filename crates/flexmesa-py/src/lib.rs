@@ -33,6 +33,9 @@
 /// Tier B bindings for `atm` (surface boundary conditions, $T(\tau)$, tables).
 #[allow(unsafe_code)]
 pub mod atm_py;
+/// Tier B/C bindings for Wave 5.3 `binary` (orbital mechanics, RLOF, tides, binary evolution).
+#[allow(unsafe_code)]
+pub mod binary_py;
 /// Tier A and Tier B bindings for `chem` (elements, nuclides, solar scales,
 /// composition).
 #[allow(unsafe_code)]
@@ -283,5 +286,6 @@ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     star_py::register(m)?;
     star_wave5_py::register(m)?;
     star_wave5_2_py::register(m)?;
+    binary_py::register(m)?;
     Ok(())
 }

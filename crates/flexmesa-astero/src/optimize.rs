@@ -163,8 +163,8 @@ where
                 let best_v = vertices[l_idx].clone();
                 for &j in &order[1..] {
                     for i in 0..n {
-                        vertices[j][i] = best_v[i]
-                            + delta * (vertices[j][i] - best_v[i]);
+                        vertices[j][i] =
+                            best_v[i] + delta * (vertices[j][i] - best_v[i]);
                     }
                     f_vals[j] = eval_fn(&vertices[j]);
                     evals += 1;

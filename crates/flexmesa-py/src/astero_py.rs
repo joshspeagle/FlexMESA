@@ -3,15 +3,14 @@
 //! frequency ratios, $\chi^2$ evaluation, and optimization drivers.
 
 use flexmesa_astero::{
-    AsteroChi2Weights, eval_acoustic_profile, eval_astero_chi2,
-    eval_combined_corr, eval_cubic_corr, eval_delta_nu_asymptotic,
-    eval_delta_nu_radius_scaling, eval_delta_nu_scaling,
-    eval_delta_pg_bildsten2012, eval_delta_pg_traditional,
-    eval_frequency_ratios_r01_r10, eval_frequency_ratios_r02,
-    eval_glitch_acoustic_depths, eval_kjeldsen_corr, eval_nu_ac, eval_nu_max,
-    eval_power_law_corr, eval_radial_delta_nu_ols, eval_sonoi_corr,
-    match_modes_by_degree, nelder_mead_minimize, powell_quadratic_minimize,
-    scan_cartesian_grid,
+    eval_acoustic_profile, eval_astero_chi2, eval_combined_corr,
+    eval_cubic_corr, eval_delta_nu_asymptotic, eval_delta_nu_radius_scaling,
+    eval_delta_nu_scaling, eval_delta_pg_bildsten2012,
+    eval_delta_pg_traditional, eval_frequency_ratios_r01_r10,
+    eval_frequency_ratios_r02, eval_glitch_acoustic_depths, eval_kjeldsen_corr,
+    eval_nu_ac, eval_nu_max, eval_power_law_corr, eval_radial_delta_nu_ols,
+    eval_sonoi_corr, match_modes_by_degree, nelder_mead_minimize,
+    powell_quadratic_minimize, scan_cartesian_grid, AsteroChi2Weights,
 };
 use numpy::{PyArray1, PyReadonlyArray1};
 use pyo3::exceptions::PyValueError;
@@ -335,10 +334,7 @@ pub fn astero_eval_ratios_r02<'py>(
         as_slice(&l2_freqs)?,
         as_slice(&l2_sigs)?,
     );
-    Ok((
-        PyArray1::from_vec(py, r02),
-        PyArray1::from_vec(py, sig_r02),
-    ))
+    Ok((PyArray1::from_vec(py, r02), PyArray1::from_vec(py, sig_r02)))
 }
 
 /// Evaluates composite asteroseismic + spectroscopic $\chi^2$ (`get_chi2`).

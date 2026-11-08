@@ -88,8 +88,7 @@ pub fn eval_kjeldsen_corr(
     let mut corr = Vec::with_capacity(all_model_freqs.len());
     for (idx, &f_mod) in all_model_freqs.iter().enumerate() {
         let q_nl = if idx < all_inertias.len() && !l0_model_freqs.is_empty() {
-            let e0 =
-                interpolate_l0_inertia(f_mod, l0_model_freqs, l0_inertias);
+            let e0 = interpolate_l0_inertia(f_mod, l0_model_freqs, l0_inertias);
             (all_inertias[idx] / e0.max(1.0e-30)).max(1.0e-30)
         } else {
             1.0
@@ -245,8 +244,8 @@ where
             let sig = obs_sigmas[i].max(1.0e-30);
             let x1 = -f_ad.d1[0] / sig;
             let x2 = -f_ad.d1[1] / sig;
-            let y = ((obs_freqs[i] - model_freqs[i]) * q_arr[i] - f_ad.val)
-                / sig;
+            let y =
+                ((obs_freqs[i] - model_freqs[i]) * q_arr[i] - f_ad.val) / sig;
             s11 += x1 * x1;
             s12 += x1 * x2;
             s22 += x2 * x2;

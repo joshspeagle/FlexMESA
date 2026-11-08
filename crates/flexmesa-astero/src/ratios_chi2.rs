@@ -107,9 +107,8 @@ pub fn eval_frequency_ratios_r01_r10(
             / 64.0;
         let s_dnu1_sq = l1_sigmas[i].powi(2) + l1_sigmas[i - 1].powi(2);
         sig_r01.push(
-            (s_d01_sq / (dnu1 * dnu1)
-                + s_dnu1_sq * (d01 * d01) / dnu1.powi(4))
-            .sqrt(),
+            (s_d01_sq / (dnu1 * dnu1) + s_dnu1_sq * (d01 * d01) / dnu1.powi(4))
+                .sqrt(),
         );
 
         let d10 = -(l1_freqs[i - 1] - 4.0 * l0_freqs[i] + 6.0 * l1_freqs[i]
@@ -127,9 +126,8 @@ pub fn eval_frequency_ratios_r01_r10(
             / 64.0;
         let s_dnu0_sq = l0_sigmas[i + 1].powi(2) + l0_sigmas[i].powi(2);
         sig_r10.push(
-            (s_d10_sq / (dnu0 * dnu0)
-                + s_dnu0_sq * (d10 * d10) / dnu0.powi(4))
-            .sqrt(),
+            (s_d10_sq / (dnu0 * dnu0) + s_dnu0_sq * (d10 * d10) / dnu0.powi(4))
+                .sqrt(),
         );
     }
     (r01, sig_r01, r10, sig_r10)
@@ -230,7 +228,11 @@ fn eval_component_chi2(
         let r = (model[i] - obs[i]) / sigmas[i].max(1.0e-30);
         sum += r * r;
     }
-    if normalize { sum / (n as f64) } else { sum }
+    if normalize {
+        sum / (n as f64)
+    } else {
+        sum
+    }
 }
 
 /// Evaluates the composite asteroseismic and spectroscopic $\chi^2$ hierarchy

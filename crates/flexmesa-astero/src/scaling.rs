@@ -105,11 +105,7 @@ pub fn eval_delta_nu_asymptotic(photosphere_acoustic_r: f64) -> f64 {
 ///
 /// Corresponds to `report.f90:345-347`.
 #[must_use]
-pub fn eval_delta_nu_scaling(
-    m_g: f64,
-    teff_k: f64,
-    l_phot_erg_s: f64,
-) -> f64 {
+pub fn eval_delta_nu_scaling(m_g: f64, teff_k: f64, l_phot_erg_s: f64) -> f64 {
     DELTA_NU_SUN
         * (m_g / MSUN).sqrt()
         * pow(teff_k / TEFF_SUN_ASTERO, 3.0)

@@ -357,8 +357,18 @@ def eval_surface_correction(
         else _dispatch.as_c_f64(l0_orders)
     )
     return _rust.astero_eval_surface_correction(
-        scheme, obs_f, obs_s, mod_f, mod_i, l0_of, l0_mf, l0_mi, l0_or,
-        float(delta_nu_obs), float(nu_max), float(b_power),
+        scheme,
+        obs_f,
+        obs_s,
+        mod_f,
+        mod_i,
+        l0_of,
+        l0_mf,
+        l0_mi,
+        l0_or,
+        float(delta_nu_obs),
+        float(nu_max),
+        float(b_power),
         float(correction_factor),
     )
 

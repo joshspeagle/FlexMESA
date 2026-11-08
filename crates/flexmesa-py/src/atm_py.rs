@@ -7,15 +7,23 @@ use flexmesa_atm::{
     eval_t_tau_dq_dtau, eval_t_tau_uniform, eval_t_tau_varying, eval_table,
     get_t_tau_base, get_table_alfa_beta, get_table_base, radiation_pressure,
     AtmEosCallbackResult, AtmError, AtmEvalOutput, AtmKapCallbackResult,
+    AtmTables, ATM_TABLE_PHOTOSPHERE,
 };
 use flexmesa_const::LN10;
 use flexmesa_eos::{eos_pt_get, EosConfig, HelmTable, I_ETA, I_LN_FREE_E};
 use flexmesa_kap::{kap_get, KapConfig, KapLowTOption};
-use numpy::PyReadonlyArray1;
+use numpy::{PyArray1, PyArray2, PyArrayMethods, PyReadonlyArray1};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
 type AtmEvalTuple = (f64, f64, f64, f64, f64, f64, f64, f64, f64, f64, f64);
+type AtmSplineTuple<'py> = (
+    Bound<'py, PyArray1<f64>>,
+    Bound<'py, PyArray1<f64>>,
+    bool,
+    bool,
+    Bound<'py, PyArray2<f64>>,
+);
 
 fn to_py_err(e: AtmError) -> PyErr {
     PyValueError::new_err(e.to_string())
@@ -378,6 +386,94 @@ pub fn atm_eval_irradiated(
     ))
 }
 
+/// Evaluates `eval_table` across `n_zones` surface boundary conditions,
+/// returning an `(n_zones, 11)` array.
+#[pyfunction]
+#[pyo3(signature = (l, r, m, cgrav, id, z, skip_partials, teff, parallel=true))]
+pub fn atm_eval_table_zones<'py>(
+    py: Python<'py>,
+    l: PyReadonlyArray1<'py, f64>,
+    r: PyReadonlyArray1<'py, f64>,
+    m: PyReadonlyArray1<'py, f64>,
+    cgrav: f64,
+    id: i32,
+    z: f64,
+    skip_partials: bool,
+    teff: PyReadonlyArray1<'py, f64>,
+    parallel: bool,
+) -> PyResult<Bound<'py, PyArray2<f64>>> {
+    let l_v = l.as_slice()?.to_vec();
+    let r_v = r.as_slice()?.to_vec();
+    let m_v = m.as_slice()?.to_vec();
+    let t_v = teff.as_slice()?.to_vec();
+    let nz = l_v.len();
+    if r_v.len() != nz || m_v.len() != nz || t_v.len() != nz {
+        return Err(PyValueError::new_err(
+            "l, r, m, and teff must have equal length",
+        ));
+    }
+    let out_arr =
+        crate::eval_batch_2d::<11, _>(py, nz, parallel, 16, move |k| {
+            match eval_table(
+                l_v[k],
+                r_v[k],
+                m_v[k],
+                cgrav,
+                id,
+                z,
+                skip_partials,
+                t_v[k],
+            ) {
+                Ok(out) => [
+                    out.ln_t,
+                    out.dln_t_dl,
+                    out.dln_t_dln_r,
+                    out.dln_t_dln_m,
+                    out.dln_t_dln_kap,
+                    out.ln_p,
+                    out.dln_p_dl,
+                    out.dln_p_dln_r,
+                    out.dln_p_dln_m,
+                    out.dln_p_dln_kap,
+                    out.kap,
+                ],
+                Err(_) => [f64::NAN; 11],
+            }
+        })?;
+    if out_arr.readonly().as_slice()?.iter().any(|v| v.is_nan()) {
+        return Err(PyValueError::new_err("atm_eval_table_zones failed"));
+    }
+    Ok(out_arr)
+}
+
+/// Returns `(logg_array, teff_array, iling, ilint, pgas_coeffs)` for the solar
+/// metallicity (`log_z == 0.0`) slice of `ATM_TABLE_PHOTOSPHERE`.
+#[pyfunction]
+pub fn atm_table_photosphere_zsol_spline<'py>(
+    py: Python<'py>,
+) -> PyResult<AtmSplineTuple<'py>> {
+    let ai = AtmTables::builtin()
+        .get_info(ATM_TABLE_PHOTOSPHERE)
+        .map_err(to_py_err)?;
+    let iz = ai
+        .log_z
+        .iter()
+        .position(|&lz| lz.abs() < 1.0e-12)
+        .ok_or_else(|| PyValueError::new_err("missing log_z == 0.0 slice"))?;
+    let n_cells = ai.ng * ai.nt;
+    let mut flat = Vec::with_capacity(n_cells * 4);
+    for c4 in &ai.pgas_splines[iz] {
+        flat.extend_from_slice(c4);
+    }
+    Ok((
+        PyArray1::from_slice(py, &ai.logg_array),
+        PyArray1::from_slice(py, &ai.teff_array),
+        ai.iling,
+        ai.ilint,
+        PyArray1::from_vec(py, flat).reshape([n_cells, 4])?,
+    ))
+}
+
 /// Registers `flexmesa-atm` functions on the `flexmesa._rust` module.
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(atm_eval_t_tau, m)?)?;
@@ -386,6 +482,8 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(atm_eval_e2, m)?)?;
     m.add_function(wrap_pyfunction!(atm_eval_paczynski_gradr, m)?)?;
     m.add_function(wrap_pyfunction!(atm_eval_table, m)?)?;
+    m.add_function(wrap_pyfunction!(atm_eval_table_zones, m)?)?;
+    m.add_function(wrap_pyfunction!(atm_table_photosphere_zsol_spline, m)?)?;
     m.add_function(wrap_pyfunction!(atm_get_table_alfa_beta, m)?)?;
     m.add_function(wrap_pyfunction!(atm_get_table_base, m)?)?;
     m.add_function(wrap_pyfunction!(atm_eval_t_tau_uniform, m)?)?;

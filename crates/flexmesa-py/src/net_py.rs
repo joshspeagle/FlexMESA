@@ -8,8 +8,9 @@ use std::sync::{Arc, Mutex, OnceLock};
 use flexmesa_chem::NuclideCatalog;
 use flexmesa_eos::{EosConfig, HelmTable};
 use flexmesa_net::{
-    builtin_net_files, burn_1_zone, burn_1_zone_const_p, net_get,
-    Burn1ZoneInput, BurnConstPInput, NetError, NetGeneralInfo,
+    builtin_net_files, burn_1_zone, burn_1_zone_const_p, eval_net_with_work,
+    net_get, with_thread_local_work, Burn1ZoneInput, BurnConstPInput, F64x2,
+    NetError, NetGeneralInfo, NUM_RVS,
 };
 use flexmesa_num::RosenbrockVariant;
 use flexmesa_rates::ScreeningMode;
@@ -345,11 +346,108 @@ pub fn net_burn_1_zone_const_p<'py>(
     ))
 }
 
+/// Evaluates `eval_net_with_work` across `n_zones` zones, returning an
+/// `(n_zones, 4)` array `[log10_eps_nuc, eps_nuc, d_eps_dt, d_eps_drho]`.
+#[pyfunction]
+#[pyo3(signature = (
+    net_name, x, temps, log_ts, rhos, log_rhos, abar, zbar, z2bar, ye,
+    eta=0.0, d_eta_dlnt=0.0, d_eta_dlnrho=0.0,
+    weak_rate_factor=1.0, screening_mode="extended",
+    skip_jacobian=false, parallel=true
+))]
+pub fn net_eval_zones<'py>(
+    py: Python<'py>,
+    net_name: &str,
+    x: PyReadonlyArray1<'py, f64>,
+    temps: PyReadonlyArray1<'py, f64>,
+    log_ts: PyReadonlyArray1<'py, f64>,
+    rhos: PyReadonlyArray1<'py, f64>,
+    log_rhos: PyReadonlyArray1<'py, f64>,
+    abar: f64,
+    zbar: f64,
+    z2bar: f64,
+    ye: f64,
+    eta: f64,
+    d_eta_dlnt: f64,
+    d_eta_dlnrho: f64,
+    weak_rate_factor: f64,
+    screening_mode: &str,
+    skip_jacobian: bool,
+    parallel: bool,
+) -> PyResult<Bound<'py, PyArray2<f64>>> {
+    let g = cached_net(net_name)?;
+    let sc = parse_screening(screening_mode)?;
+    let x_v = x.as_slice()?.to_vec();
+    let t_v = temps.as_slice()?.to_vec();
+    let lt_v = log_ts.as_slice()?.to_vec();
+    let r_v = rhos.as_slice()?.to_vec();
+    let lr_v = log_rhos.as_slice()?.to_vec();
+    let nz = t_v.len();
+    if lt_v.len() != nz || r_v.len() != nz || lr_v.len() != nz {
+        return Err(PyValueError::new_err(
+            "temps, log_ts, rhos, and log_rhos must have equal length",
+        ));
+    }
+    if x_v.len() != g.num_isos {
+        return Err(PyValueError::new_err(
+            "x must have length equal to num_isos",
+        ));
+    }
+    let rf_vec = vec![1.0_f64; g.num_reactions];
+    let out_arr =
+        crate::eval_batch_2d::<4, _>(py, nz, parallel, 8, move |k| {
+            let mut stack_dydt = [[F64x2::ZERO; NUM_RVS]; 32];
+            let mut heap_dydt = Vec::new();
+            let dydt: &mut [[F64x2; NUM_RVS]] = if g.num_isos <= 32 {
+                &mut stack_dydt[..g.num_isos]
+            } else {
+                heap_dydt.resize(g.num_isos, [F64x2::ZERO; NUM_RVS]);
+                &mut heap_dydt[..]
+            };
+            match with_thread_local_work(&g, |w| {
+                eval_net_with_work(
+                    &g,
+                    w,
+                    dydt,
+                    skip_jacobian,
+                    &x_v,
+                    t_v[k],
+                    lt_v[k],
+                    r_v[k],
+                    lr_v[k],
+                    abar,
+                    zbar,
+                    z2bar,
+                    ye,
+                    eta,
+                    d_eta_dlnt,
+                    d_eta_dlnrho,
+                    &rf_vec,
+                    weak_rate_factor,
+                    sc,
+                    false,
+                    false,
+                    false,
+                )
+            }) {
+                Ok((eps, deps_dt, deps_dr, _)) => {
+                    [flexmesa_math::safe_log10(eps), eps, deps_dt, deps_dr]
+                }
+                Err(_) => [f64::NAN; 4],
+            }
+        })?;
+    if out_arr.readonly().as_slice()?.iter().any(|v| v.is_nan()) {
+        return Err(PyValueError::new_err("net_eval_zones failed"));
+    }
+    Ok(out_arr)
+}
+
 /// Registers `flexmesa-net` functions on the `flexmesa._rust` module.
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(net_list_networks, m)?)?;
     m.add_function(wrap_pyfunction!(net_info, m)?)?;
     m.add_function(wrap_pyfunction!(net_eval, m)?)?;
+    m.add_function(wrap_pyfunction!(net_eval_zones, m)?)?;
     m.add_function(wrap_pyfunction!(net_burn_1_zone, m)?)?;
     m.add_function(wrap_pyfunction!(net_burn_1_zone_const_p, m)?)?;
     Ok(())

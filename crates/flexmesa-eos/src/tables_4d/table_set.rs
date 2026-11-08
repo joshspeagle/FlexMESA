@@ -114,6 +114,10 @@ pub struct EosDtTableSet {
     pub free_xz: DtXzInfo,
     /// Optional root MESA `data` directory for on-demand `.data` loading.
     pub data_dir: Option<PathBuf>,
+    /// Lock-free built-in `OPAL/SCVH` tables indexed by `[iz - 1][ix - 1]`.
+    builtin_opal: Vec<Vec<Option<Arc<EosDtXzTable>>>>,
+    /// Lock-free built-in `FreeEOS` tables indexed by `[iz - 1][ix - 1]`.
+    builtin_free: Vec<Vec<Option<Arc<EosDtXzTable>>>>,
     /// Loaded or sparse-patched `(kind, ix_1based, iz_1based)` tables.
     tables: RwLock<HashMap<(EosDtTableKind, usize, usize), Arc<EosDtXzTable>>>,
 }
@@ -195,15 +199,75 @@ impl EosDtTableSet {
             }
         }
 
-        let arc_map = map.into_iter().map(|(k, v)| (k, Arc::new(v))).collect();
+        let mut builtin_opal: Vec<Vec<Option<Arc<EosDtXzTable>>>> = opal_xz
+            .xs_for_z
+            .iter()
+            .map(|xs| vec![None; xs.len()])
+            .collect();
+        let mut builtin_free: Vec<Vec<Option<Arc<EosDtXzTable>>>> = free_xz
+            .xs_for_z
+            .iter()
+            .map(|xs| vec![None; xs.len()])
+            .collect();
+
+        let mut arc_map = HashMap::with_capacity(map.len());
+        for ((kind, ix, iz), mut tbl) in map {
+            tbl.finalize_patches();
+            let arc_tbl = Arc::new(tbl);
+            let grid = match kind {
+                EosDtTableKind::OpalScvh => &mut builtin_opal,
+                EosDtTableKind::FreeEos => &mut builtin_free,
+            };
+            if let Some(row) = grid.get_mut(iz.wrapping_sub(1)) {
+                if let Some(slot) = row.get_mut(ix.wrapping_sub(1)) {
+                    *slot = Some(Arc::clone(&arc_tbl));
+                }
+            }
+            arc_map.insert((kind, ix, iz), arc_tbl);
+        }
+
         let env_dir =
             std::env::var_os("FLEXMESA_EOS_DATA_DIR").map(PathBuf::from);
         Self {
             opal_xz,
             free_xz,
             data_dir: env_dir,
+            builtin_opal,
+            builtin_free,
             tables: RwLock::new(arc_map),
         }
+    }
+
+    #[inline]
+    fn builtin_arc(
+        &self,
+        kind: EosDtTableKind,
+        ix_1based: usize,
+        iz_1based: usize,
+    ) -> Option<&Arc<EosDtXzTable>> {
+        if self.data_dir.is_some() {
+            return None;
+        }
+        let grid = match kind {
+            EosDtTableKind::OpalScvh => &self.builtin_opal,
+            EosDtTableKind::FreeEos => &self.builtin_free,
+        };
+        grid.get(iz_1based.wrapping_sub(1))
+            .and_then(|row| row.get(ix_1based.wrapping_sub(1)))
+            .and_then(Option::as_ref)
+    }
+
+    /// Fast lock-free reference lookup when built-in patch tables are active.
+    #[inline]
+    #[must_use]
+    pub fn get_table_fast(
+        &self,
+        kind: EosDtTableKind,
+        ix_1based: usize,
+        iz_1based: usize,
+    ) -> Option<&EosDtXzTable> {
+        self.builtin_arc(kind, ix_1based, iz_1based)
+            .map(Arc::as_ref)
     }
 
     /// Retrieves or lazily loads the `(ix_1based, iz_1based)` table for `kind`.
@@ -213,6 +277,9 @@ impl EosDtTableSet {
         ix_1based: usize,
         iz_1based: usize,
     ) -> Result<Arc<EosDtXzTable>, EosError> {
+        if let Some(tbl) = self.builtin_arc(kind, ix_1based, iz_1based) {
+            return Ok(Arc::clone(tbl));
+        }
         let key = (kind, ix_1based, iz_1based);
         if let Ok(guard) = self.tables.read() {
             if let Some(tbl) = guard.get(&key) {

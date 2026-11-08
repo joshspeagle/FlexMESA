@@ -10,9 +10,11 @@
   - **Wave 2 (`Atomic & Post-Processing Microphysics: chem, ionization, colors`)** ([Issue #37](https://github.com/joshspeagle/FlexMESA/issues/37), Sub-Issues [#38](https://github.com/joshspeagle/FlexMESA/issues/38)–[#40](https://github.com/joshspeagle/FlexMESA/issues/40), PRs [#42](https://github.com/joshspeagle/FlexMESA/pull/42), [#43](https://github.com/joshspeagle/FlexMESA/pull/43), [#45](https://github.com/joshspeagle/FlexMESA/pull/45))
   - **Wave 2.5 (`Post-Wave 2 Review, Optimization, Upstream Fortran MESA Gate & Docs Sync`)** ([Issue #41](https://github.com/joshspeagle/FlexMESA/issues/41), PR [#46](https://github.com/joshspeagle/FlexMESA/pull/46))
   - **Wave 3a (`Analytical & Single-Table EOS Core: Ideal, HELM, PC, Skye & Quintic Blending`)** ([Issue #47](https://github.com/joshspeagle/FlexMESA/issues/47), Sub-Issues [#48](https://github.com/joshspeagle/FlexMESA/issues/48)–[#50](https://github.com/joshspeagle/FlexMESA/issues/50), PRs [#52](https://github.com/joshspeagle/FlexMESA/pull/52)–[#54](https://github.com/joshspeagle/FlexMESA/pull/54))
-  - **Wave 3a.5 (`Post-Wave 3a Review, Optimization, Upstream Fortran MESA Gate & Docs Sync`)** ([Issue #51](https://github.com/joshspeagle/FlexMESA/issues/51))
+  - **Wave 3a.5 (`Post-Wave 3a Review, Optimization, Upstream Fortran MESA Gate & Docs Sync`)** ([Issue #51](https://github.com/joshspeagle/FlexMESA/issues/51), PR [#55](https://github.com/joshspeagle/FlexMESA/pull/55))
+  - **Wave 3b (`Tabulated 4D EOS, Opacity, Nuclear Reaction Rates, Networks & Stellar Atmospheres`)** ([Issue #56](https://github.com/joshspeagle/FlexMESA/issues/56), Sub-Issues [#57](https://github.com/joshspeagle/FlexMESA/issues/57)–[#60](https://github.com/joshspeagle/FlexMESA/issues/60), PRs [#62](https://github.com/joshspeagle/FlexMESA/pull/62)–[#65](https://github.com/joshspeagle/FlexMESA/pull/65))
+  - **Wave 3b.5 (`Post-Wave 3b Review, Optimization, Upstream Fortran MESA Gate & Docs Sync`)** ([Issue #61](https://github.com/joshspeagle/FlexMESA/issues/61))
 - **Active Phase**:
-  - **Wave 3b (`Tabulated 4D EOS, Opacity, Nuclear Reaction Rates, Networks & Stellar Atmospheres`)**
+  - **Wave 4 (`Core 1D star Hydrostatic & Hydrodynamic Henyey Engine`)**
 - **Completed Architectural Decisions (`notes/DECISIONS.md`)**:
   - `DECISIONS #1`: Dual-Track (`Safe Rust` + `Python/JAX`) evaluation across Wave 1 (`const`, `utils`, `math`, `auto_diff`, `interp_1d`, `interp_2d`, `mtx`, `num`) + stateless microphysics pilot (`neu`, `turb`).
   - `DECISIONS #2`: Legacy and external subsystem scope exclusions (`pgstar`/`pgbinary` `#3`, `stella`/`adipls`/`gyre` `#4`, and legacy `RSP1` `#5`).

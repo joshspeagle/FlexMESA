@@ -15,8 +15,9 @@ pub use blend_alfa::{
     OpalScvhConfig,
 };
 pub use spline::{
-    do_eos_interpolations, eval_xtable, locate_log_q, locate_log_t,
-    EosDtTableKind, EosDtVertex, EosDtXzTable, NUM_EOS_TABLE_VALS,
+    do_eos_interpolations, eval_xtable, eval_xtable_16, locate_log_q,
+    locate_log_t, EosDtTableKind, EosDtVertex, EosDtXzTable,
+    NUM_EOS_TABLE_VALS,
 };
 pub use table_set::{
     eosdt_relative_data_path, format_xz_str, DtXzInfo, EosDtTableSet,
@@ -28,6 +29,47 @@ use crate::types::{
 };
 use flexmesa_chem::{get_composition_info, NuclideCatalog};
 use flexmesa_utils::is_bad;
+
+#[inline]
+fn eval_kind_ix_iz_16(
+    tables: &EosDtTableSet,
+    kind: EosDtTableKind,
+    ix_1based: usize,
+    iz_1based: usize,
+    log_rho: f64,
+    log_t: f64,
+) -> Result<
+    (
+        [f64; NUM_EOS_TABLE_VALS],
+        [f64; NUM_EOS_TABLE_VALS],
+        [f64; NUM_EOS_TABLE_VALS],
+    ),
+    EosError,
+> {
+    if let Some(tbl) = tables.get_table_fast(kind, ix_1based, iz_1based) {
+        eval_xtable_16(tbl, log_rho, log_t)
+    } else {
+        let tbl = tables.get_table(kind, ix_1based, iz_1based)?;
+        eval_xtable_16(&tbl, log_rho, log_t)
+    }
+}
+
+#[inline]
+fn eval_kind_ix_iz(
+    tables: &EosDtTableSet,
+    kind: EosDtTableKind,
+    ix_1based: usize,
+    iz_1based: usize,
+    log_rho: f64,
+    log_t: f64,
+) -> Result<EosEvalOutput, EosError> {
+    if let Some(tbl) = tables.get_table_fast(kind, ix_1based, iz_1based) {
+        eval_xtable(tbl, log_rho, log_t)
+    } else {
+        let tbl = tables.get_table(kind, ix_1based, iz_1based)?;
+        eval_xtable(&tbl, log_rho, log_t)
+    }
+}
 
 /// Evaluates `Get1_eosdt_for_X` at fixed metallicity index `iz_1based` and hydrogen fraction `x`.
 ///
@@ -51,14 +93,13 @@ pub fn get1_eosdt_for_x(
     let num_xs = xs.len();
 
     if x < tiny || num_xs == 1 {
-        let tbl = tables.get_table(kind, 1, iz_1based)?;
-        let out = eval_xtable(&tbl, log_rho, log_t)?;
+        let out = eval_kind_ix_iz(tables, kind, 1, iz_1based, log_rho, log_t)?;
         return Ok((out, [0.0; NUM_EOS_BASIC_RESULTS]));
     }
 
     if x >= xs[num_xs - 1] {
-        let tbl = tables.get_table(kind, num_xs, iz_1based)?;
-        let out = eval_xtable(&tbl, log_rho, log_t)?;
+        let out =
+            eval_kind_ix_iz(tables, kind, num_xs, iz_1based, log_rho, log_t)?;
         if is_bad(out.res[I_LN_S]) {
             return Err(EosError::InvalidState {
                 context: "get1_eosdt_for_x",
@@ -79,10 +120,17 @@ pub fn get1_eosdt_for_x(
                 break;
             }
         }
-        let tbl1 = tables.get_table(kind, ix_1based - 1, iz_1based)?;
-        let tbl2 = tables.get_table(kind, ix_1based, iz_1based)?;
-        let out1 = eval_xtable(&tbl1, log_rho, log_t)?;
-        let out2 = eval_xtable(&tbl2, log_rho, log_t)?;
+        let (r1, d1, t1) = eval_kind_ix_iz_16(
+            tables,
+            kind,
+            ix_1based - 1,
+            iz_1based,
+            log_rho,
+            log_t,
+        )?;
+        let (r2, d2, t2) = eval_kind_ix_iz_16(
+            tables, kind, ix_1based, iz_1based, log_rho, log_t,
+        )?;
 
         let x1 = xs[ix_1based - 2];
         let x2 = xs[ix_1based - 1];
@@ -97,10 +145,10 @@ pub fn get1_eosdt_for_x(
         let mut d_dx = [0.0_f64; NUM_EOS_BASIC_RESULTS];
 
         for j in 0..NUM_EOS_TABLE_VALS {
-            res[j] = alfa * out1.res[j] + beta * out2.res[j];
-            d_dlnd[j] = alfa * out1.d_dlnd[j] + beta * out2.d_dlnd[j];
-            d_dln_t[j] = alfa * out1.d_dln_t[j] + beta * out2.d_dln_t[j];
-            d_dx[j] = dalfa_dx * out1.res[j] + dbeta_dx * out2.res[j];
+            res[j] = alfa * r1[j] + beta * r2[j];
+            d_dlnd[j] = alfa * d1[j] + beta * d2[j];
+            d_dln_t[j] = alfa * t1[j] + beta * t2[j];
+            d_dx[j] = dalfa_dx * r1[j] + dbeta_dx * r2[j];
         }
 
         Ok((
@@ -146,10 +194,15 @@ pub fn get1_eosdt_for_x(
         return do_linear(tables);
     }
 
-    let mut outs = Vec::with_capacity(ix_hi - ix_lo + 1);
-    for ix in ix_lo..=ix_hi {
-        let tbl = tables.get_table(kind, ix, iz_1based)?;
-        outs.push(eval_xtable(&tbl, log_rho, log_t)?);
+    let mut r_outs = [[0.0_f64; NUM_EOS_TABLE_VALS]; 4];
+    let mut d_outs = [[0.0_f64; NUM_EOS_TABLE_VALS]; 4];
+    let mut t_outs = [[0.0_f64; NUM_EOS_TABLE_VALS]; 4];
+    for (slot, ix) in (ix_lo..=ix_hi).enumerate() {
+        let (r, d, t) =
+            eval_kind_ix_iz_16(tables, kind, ix, iz_1based, log_rho, log_t)?;
+        r_outs[slot] = r;
+        d_outs[slot] = d;
+        t_outs[slot] = t;
     }
 
     let del_x = x - xs[ix_lo - 1];
@@ -172,18 +225,15 @@ pub fn get1_eosdt_for_x(
             (2.0 * del_x - dx) / denom,
         ];
         for j in 0..NUM_EOS_TABLE_VALS {
-            res[j] = c[0] * outs[0].res[j]
-                + c[1] * outs[1].res[j]
-                + c[2] * outs[2].res[j];
-            d_dlnd[j] = c[0] * outs[0].d_dlnd[j]
-                + c[1] * outs[1].d_dlnd[j]
-                + c[2] * outs[2].d_dlnd[j];
-            d_dln_t[j] = c[0] * outs[0].d_dln_t[j]
-                + c[1] * outs[1].d_dln_t[j]
-                + c[2] * outs[2].d_dln_t[j];
-            d_dx[j] = dcdx[0] * outs[0].res[j]
-                + dcdx[1] * outs[1].res[j]
-                + dcdx[2] * outs[2].res[j];
+            res[j] =
+                c[0] * r_outs[0][j] + c[1] * r_outs[1][j] + c[2] * r_outs[2][j];
+            d_dlnd[j] =
+                c[0] * d_outs[0][j] + c[1] * d_outs[1][j] + c[2] * d_outs[2][j];
+            d_dln_t[j] =
+                c[0] * t_outs[0][j] + c[1] * t_outs[1][j] + c[2] * t_outs[2][j];
+            d_dx[j] = dcdx[0] * r_outs[0][j]
+                + dcdx[1] * r_outs[1][j]
+                + dcdx[2] * r_outs[2][j];
         }
     } else {
         let coef = ((x - xs[ix_lo]) / dx).clamp(0.0, 1.0);
@@ -201,19 +251,19 @@ pub fn get1_eosdt_for_x(
             coef * (3.0 * coef - 2.0) / 2.0 * dcoef_dx,
         ];
         for j in 0..NUM_EOS_TABLE_VALS {
-            res[j] = c[0] * outs[0].res[j]
-                + (c[1] * outs[1].res[j]
-                    + (c[2] * outs[2].res[j] + c[3] * outs[3].res[j]));
-            d_dlnd[j] = c[0] * outs[0].d_dlnd[j]
-                + (c[1] * outs[1].d_dlnd[j]
-                    + (c[2] * outs[2].d_dlnd[j] + c[3] * outs[3].d_dlnd[j]));
-            d_dln_t[j] = c[0] * outs[0].d_dln_t[j]
-                + (c[1] * outs[1].d_dln_t[j]
-                    + (c[2] * outs[2].d_dln_t[j] + c[3] * outs[3].d_dln_t[j]));
-            d_dx[j] = dcdx[0] * outs[0].res[j]
-                + dcdx[1] * outs[1].res[j]
-                + dcdx[2] * outs[2].res[j]
-                + dcdx[3] * outs[3].res[j];
+            res[j] = c[0] * r_outs[0][j]
+                + (c[1] * r_outs[1][j]
+                    + (c[2] * r_outs[2][j] + c[3] * r_outs[3][j]));
+            d_dlnd[j] = c[0] * d_outs[0][j]
+                + (c[1] * d_outs[1][j]
+                    + (c[2] * d_outs[2][j] + c[3] * d_outs[3][j]));
+            d_dln_t[j] = c[0] * t_outs[0][j]
+                + (c[1] * t_outs[1][j]
+                    + (c[2] * t_outs[2][j] + c[3] * t_outs[3][j]));
+            d_dx[j] = dcdx[0] * r_outs[0][j]
+                + dcdx[1] * r_outs[1][j]
+                + dcdx[2] * r_outs[2][j]
+                + dcdx[3] * r_outs[3][j];
         }
     }
 

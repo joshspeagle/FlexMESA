@@ -14,7 +14,9 @@ use crate::types::{
 use crate::utils::radiation_pressure;
 use flexmesa_const::LN10;
 use flexmesa_interp1d::{interp_pm, interp_value};
-use flexmesa_interp2d::{interp_evbicub_db, interp_mkbicub_db, BicubicBc};
+use flexmesa_interp2d::{
+    interp_evbicub_prevalidated_db, interp_mkbicub_db, BicubicBc,
+};
 use flexmesa_math::safe_log10;
 use flexmesa_utils::is_bad;
 use std::sync::LazyLock;
@@ -269,24 +271,29 @@ pub fn get_table_values(
         idx
     };
 
-    let mut zlo = z_index.saturating_sub(1).max(1);
-    let mut zhi = (z_index + 2).min(nz);
-    if zhi - zlo != 3 {
-        zlo = zlo.saturating_sub(1).max(1);
-    }
-    if zhi - zlo != 3 {
-        zhi = (zhi + 1).min(nz);
-    }
+    let (zlo, zhi) = if (new_log_z - ai.log_z[z_index - 1]).abs() == 0.0 {
+        (z_index, z_index)
+    } else {
+        let mut lo = z_index.saturating_sub(1).max(1);
+        let mut hi = (z_index + 2).min(nz);
+        if hi - lo != 3 {
+            lo = lo.saturating_sub(1).max(1);
+        }
+        if hi - lo != 3 {
+            hi = (hi + 1).min(nz);
+        }
+        (lo, hi)
+    };
     let num_zs = zhi - zlo + 1;
 
     let do_interp =
         |splines: &[Vec<[f64; 4]>]| -> Result<(f64, f64, f64), AtmError> {
-            let mut vals = Vec::with_capacity(num_zs);
-            let mut d_dlogg = Vec::with_capacity(num_zs);
-            let mut d_dteff = Vec::with_capacity(num_zs);
+            let mut vals = [0.0_f64; 4];
+            let mut d_dlogg = [0.0_f64; 4];
+            let mut d_dteff = [0.0_f64; 4];
 
-            for iz in (zlo - 1)..zhi {
-                let ev = interp_evbicub_db(
+            for (k, iz) in ((zlo - 1)..zhi).enumerate() {
+                let ev = interp_evbicub_prevalidated_db(
                     new_logg,
                     new_teff,
                     &ai.logg_array,
@@ -299,9 +306,9 @@ pub fn get_table_values(
                     context: "get_table_values::interp_evbicub_db",
                     detail: e.to_string(),
                 })?;
-                vals.push(ev.f);
-                d_dlogg.push(ev.df_dx);
-                d_dteff.push(ev.df_dy);
+                vals[k] = ev.f;
+                d_dlogg[k] = ev.df_dx;
+                d_dteff[k] = ev.df_dy;
             }
 
             if num_zs == 1 {
@@ -322,7 +329,11 @@ pub fn get_table_values(
                         }
                     })
                 };
-                Ok((interp_z(&vals)?, interp_z(&d_dlogg)?, interp_z(&d_dteff)?))
+                Ok((
+                    interp_z(&vals[..num_zs])?,
+                    interp_z(&d_dlogg[..num_zs])?,
+                    interp_z(&d_dteff[..num_zs])?,
+                ))
             }
         };
 

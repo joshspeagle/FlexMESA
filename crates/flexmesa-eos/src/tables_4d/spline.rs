@@ -74,12 +74,14 @@ pub struct EosDtXzTable {
     pub del_log_q: f64,
     /// Sparse vertex map `(i_q, j_t)` (1-based indices) for built-in test patches.
     pub patches: HashMap<(u16, u16), EosDtVertex>,
+    /// Sorted flat `(key, vertex)` table (`key = ((i_q as u32) << 16) | j_t`).
+    pub patch_lut: Vec<(u32, EosDtVertex)>,
     /// Optional full dense grid of `num_log_qs * num_log_ts` vertices.
     pub dense: Option<Vec<EosDtVertex>>,
 }
 
 impl EosDtXzTable {
-    /// Creates an empty `(X, Z)` table header with standard MESA `(logQ, logT)` dimensions.
+    /// Creates an empty `(X, Z)` table header with standard MESA dimensions.
     #[must_use]
     pub fn new_standard_header(x: f64, z: f64) -> Self {
         Self {
@@ -95,17 +97,35 @@ impl EosDtXzTable {
             log_q_max: 5.69,
             del_log_q: 0.03,
             patches: HashMap::new(),
+            patch_lut: Vec::new(),
             dense: None,
         }
     }
 
+    /// Rebuilds the sorted [`Self::patch_lut`] from [`Self::patches`].
+    pub fn finalize_patches(&mut self) {
+        self.patch_lut = self
+            .patches
+            .iter()
+            .map(|(&(iq, jt), &v)| (((iq as u32) << 16) | (jt as u32), v))
+            .collect();
+        self.patch_lut.sort_unstable_by_key(|&(k, _)| k);
+    }
+
     /// Looks up a 1-based `(i_q, j_t)` vertex from either the dense array or sparse patches.
+    #[inline]
     #[must_use]
     pub fn get_vertex(&self, i_q: usize, j_t: usize) -> Option<&EosDtVertex> {
         if let Some(dense) = &self.dense {
             let idx = (i_q - 1) * self.num_log_ts + (j_t - 1);
             dense.get(idx)
         } else {
+            let key = ((i_q as u32) << 16) | (j_t as u32);
+            if let Ok(pos) =
+                self.patch_lut.binary_search_by_key(&key, |&(k, _)| k)
+            {
+                return Some(&self.patch_lut[pos].1);
+            }
             self.patches.get(&(i_q as u16, j_t as u16))
         }
     }
@@ -291,6 +311,7 @@ impl EosDtXzTable {
             log_q_max,
             del_log_q,
             patches: HashMap::new(),
+            patch_lut: Vec::new(),
             dense: Some(dense),
         })
     }
@@ -307,86 +328,80 @@ impl EosDtXzTable {
     }
 }
 
+#[inline]
+fn locate_uniform_axis(
+    val_in: f64,
+    v_min: f64,
+    v_max: f64,
+    del_v: f64,
+    n_pts: usize,
+    return_err_beyond_bounds: bool,
+    ctx: &'static str,
+    name: &'static str,
+) -> Result<(usize, f64, f64, f64), EosError> {
+    let i_raw = ((val_in - v_min) / del_v + 1.0e-4) as isize + 1;
+    if i_raw < 1 || (i_raw as usize) >= n_pts {
+        if return_err_beyond_bounds {
+            return Err(EosError::InvalidState {
+                context: ctx,
+                detail: format!("{name}={val_in} outside [{v_min}, {v_max}]"),
+            });
+        }
+        let idx = if i_raw < 1 { 1 } else { n_pts - 1 };
+        let v0 = v_min + ((idx - 1) as f64) * del_v;
+        let v1 = v0 + del_v;
+        let v_clamped = if i_raw < 1 { v0 } else { v1 };
+        Ok((idx, v0, v_clamped, v1))
+    } else {
+        let idx = i_raw as usize;
+        let v0 = v_min + ((idx - 1) as f64) * del_v;
+        Ok((idx, v0, val_in, v0 + del_v))
+    }
+}
+
 /// Locates the 1-based cell index `i_q` and cell bounds `(log_q0, log_q_clamped, log_q1)`.
-///
-/// Mirrors `Locate_logQ` in `eos/private/eosdt_eval.f90` (lines 2023..2050).
+#[inline]
 pub fn locate_log_q(
     ep: &EosDtXzTable,
     log_q_in: f64,
     return_err_beyond_bounds: bool,
 ) -> Result<(usize, f64, f64, f64), EosError> {
-    let iq_raw =
-        ((log_q_in - ep.log_q_min) / ep.del_log_q + 1.0e-4) as isize + 1;
-    if iq_raw < 1 || (iq_raw as usize) >= ep.num_log_qs {
-        if return_err_beyond_bounds {
-            return Err(EosError::InvalidState {
-                context: "locate_log_q",
-                detail: format!(
-                    "logQ={log_q_in} outside [{}, {}]",
-                    ep.log_q_min, ep.log_q_max
-                ),
-            });
-        }
-        if iq_raw < 1 {
-            let log_q0 = ep.log_q_min;
-            let log_q1 = log_q0 + ep.del_log_q;
-            Ok((1, log_q0, log_q0, log_q1))
-        } else {
-            let iq = ep.num_log_qs - 1;
-            let log_q0 = ep.log_q_min + ((iq - 1) as f64) * ep.del_log_q;
-            let log_q1 = log_q0 + ep.del_log_q;
-            Ok((iq, log_q0, log_q1, log_q1))
-        }
-    } else {
-        let iq = iq_raw as usize;
-        let log_q0 = ep.log_q_min + ((iq - 1) as f64) * ep.del_log_q;
-        let log_q1 = log_q0 + ep.del_log_q;
-        Ok((iq, log_q0, log_q_in, log_q1))
-    }
+    locate_uniform_axis(
+        log_q_in,
+        ep.log_q_min,
+        ep.log_q_max,
+        ep.del_log_q,
+        ep.num_log_qs,
+        return_err_beyond_bounds,
+        "locate_log_q",
+        "logQ",
+    )
 }
 
 /// Locates the 1-based cell index `j_t` and cell bounds `(log_t0, log_t_clamped, log_t1)`.
-///
-/// Mirrors `Locate_logT` in `eos/private/eosdt_eval.f90` (lines 2053..2080).
+#[inline]
 pub fn locate_log_t(
     ep: &EosDtXzTable,
     log_t_in: f64,
     return_err_beyond_bounds: bool,
 ) -> Result<(usize, f64, f64, f64), EosError> {
-    let it_raw =
-        ((log_t_in - ep.log_t_min) / ep.del_log_t + 1.0e-4) as isize + 1;
-    if it_raw < 1 || (it_raw as usize) >= ep.num_log_ts {
-        if return_err_beyond_bounds {
-            return Err(EosError::InvalidState {
-                context: "locate_log_t",
-                detail: format!(
-                    "logT={log_t_in} outside [{}, {}]",
-                    ep.log_t_min, ep.log_t_max
-                ),
-            });
-        }
-        if it_raw < 1 {
-            let log_t0 = ep.log_t_min;
-            let log_t1 = log_t0 + ep.del_log_t;
-            Ok((1, log_t0, log_t0, log_t1))
-        } else {
-            let it = ep.num_log_ts - 1;
-            let log_t0 = ep.log_t_min + ((it - 1) as f64) * ep.del_log_t;
-            let log_t1 = log_t0 + ep.del_log_t;
-            Ok((it, log_t0, log_t1, log_t1))
-        }
-    } else {
-        let it = it_raw as usize;
-        let log_t0 = ep.log_t_min + ((it - 1) as f64) * ep.del_log_t;
-        let log_t1 = log_t0 + ep.del_log_t;
-        Ok((it, log_t0, log_t_in, log_t1))
-    }
+    locate_uniform_axis(
+        log_t_in,
+        ep.log_t_min,
+        ep.log_t_max,
+        ep.del_log_t,
+        ep.num_log_ts,
+        return_err_beyond_bounds,
+        "locate_log_t",
+        "logT",
+    )
 }
 
 /// Evaluates all 16 bicubic splines and their $(x, y)$ partials on a single cell.
 ///
 /// Mirrors `Do_EoS_Interpolations` in `eos/private/eosdt_support.f90` (lines 32..172)
 /// with the exact floating-point operation order of the Fortran SIMD loop.
+#[inline]
 #[must_use]
 pub fn do_eos_interpolations(
     v_ij: &EosDtVertex,
@@ -404,44 +419,25 @@ pub fn do_eos_interpolations(
     [f64; NUM_EOS_TABLE_VALS],
     [f64; NUM_EOS_TABLE_VALS],
 ) {
-    let hx = x1 - x0;
-    let hxi = 1.0 / hx;
-    let hx2 = hx * hx;
+    let (hx, hy) = (x1 - x0, y1 - y0);
+    let (hxi, hyi) = (1.0 / hx, 1.0 / hy);
+    let (hx2, hy2) = (hx * hx, hy * hy);
 
-    let xp = (xget - x0) * hxi;
-    let xpi = 1.0 - xp;
-    let xp2 = xp * xp;
-    let xpi2 = xpi * xpi;
+    let (xp, yp) = ((xget - x0) * hxi, (yget - y0) * hyi);
+    let (xpi, ypi) = (1.0 - xp, 1.0 - yp);
+    let (xp2, xpi2) = (xp * xp, xpi * xpi);
+    let (yp2, ypi2) = (yp * yp, ypi * ypi);
 
-    let cx = xp * (xp2 - 1.0);
-    let cxi = xpi * (xpi2 - 1.0);
-    let cxd = 3.0 * xp2 - 1.0;
-    let cxdi = -3.0 * xpi2 + 1.0;
+    let (cx, cxi) = (xp * (xp2 - 1.0), xpi * (xpi2 - 1.0));
+    let (cxd, cxdi) = (3.0 * xp2 - 1.0, -3.0 * xpi2 + 1.0);
+    let (cy, cyi) = (yp * (yp2 - 1.0), ypi * (ypi2 - 1.0));
+    let (cyd, cydi) = (3.0 * yp2 - 1.0, -3.0 * ypi2 + 1.0);
 
-    let hy = y1 - y0;
-    let hyi = 1.0 / hy;
-    let hy2 = hy * hy;
-
-    let yp = (yget - y0) * hyi;
-    let ypi = 1.0 - yp;
-    let yp2 = yp * yp;
-    let ypi2 = ypi * ypi;
-
-    let cy = yp * (yp2 - 1.0);
-    let cyi = ypi * (ypi2 - 1.0);
-    let cyd = 3.0 * yp2 - 1.0;
-    let cydi = -3.0 * ypi2 + 1.0;
-
-    let sixth_hx2 = ONE_SIXTH * hx2;
-    let sixth_hy2 = ONE_SIXTH * hy2;
+    let (sixth_hx2, sixth_hy2) = (ONE_SIXTH * hx2, ONE_SIXTH * hy2);
     let z36th_hx2_hy2 = sixth_hx2 * sixth_hy2;
-
-    let sixth_hx = ONE_SIXTH * hx;
-    let sixth_hxi_hy2 = sixth_hy2 * hxi;
+    let (sixth_hx, sixth_hxi_hy2) = (ONE_SIXTH * hx, sixth_hy2 * hxi);
     let z36th_hx_hy2 = sixth_hx * sixth_hy2;
-
-    let sixth_hx2_hyi = sixth_hx2 * hyi;
-    let sixth_hy = ONE_SIXTH * hy;
+    let (sixth_hx2_hyi, sixth_hy) = (sixth_hx2 * hyi, ONE_SIXTH * hy);
     let z36th_hx2_hy = sixth_hx2 * sixth_hy;
 
     let mut fval = [0.0_f64; NUM_EOS_TABLE_VALS];
@@ -450,25 +446,17 @@ pub fn do_eos_interpolations(
 
     for k in 0..NUM_EOS_TABLE_VALS {
         let base = k * 4;
-        let f1_ij = v_ij.coeffs[base];
-        let f2_ij = v_ij.coeffs[base + 1];
-        let f3_ij = v_ij.coeffs[base + 2];
-        let f4_ij = v_ij.coeffs[base + 3];
-
-        let f1_ip1_j = v_ip1_j.coeffs[base];
-        let f2_ip1_j = v_ip1_j.coeffs[base + 1];
-        let f3_ip1_j = v_ip1_j.coeffs[base + 2];
-        let f4_ip1_j = v_ip1_j.coeffs[base + 3];
-
-        let f1_i_jp1 = v_i_jp1.coeffs[base];
-        let f2_i_jp1 = v_i_jp1.coeffs[base + 1];
-        let f3_i_jp1 = v_i_jp1.coeffs[base + 2];
-        let f4_i_jp1 = v_i_jp1.coeffs[base + 3];
-
-        let f1_ip1_jp1 = v_ip1_jp1.coeffs[base];
-        let f2_ip1_jp1 = v_ip1_jp1.coeffs[base + 1];
-        let f3_ip1_jp1 = v_ip1_jp1.coeffs[base + 2];
-        let f4_ip1_jp1 = v_ip1_jp1.coeffs[base + 3];
+        let c_00 = &v_ij.coeffs[base..];
+        let c_10 = &v_ip1_j.coeffs[base..];
+        let c_01 = &v_i_jp1.coeffs[base..];
+        let c_11 = &v_ip1_jp1.coeffs[base..];
+        let (f1_ij, f2_ij, f3_ij, f4_ij) = (c_00[0], c_00[1], c_00[2], c_00[3]);
+        let (f1_ip1_j, f2_ip1_j, f3_ip1_j, f4_ip1_j) =
+            (c_10[0], c_10[1], c_10[2], c_10[3]);
+        let (f1_i_jp1, f2_i_jp1, f3_i_jp1, f4_i_jp1) =
+            (c_01[0], c_01[1], c_01[2], c_01[3]);
+        let (f1_ip1_jp1, f2_ip1_jp1, f3_ip1_jp1, f4_ip1_jp1) =
+            (c_11[0], c_11[1], c_11[2], c_11[3]);
 
         fval[k] = xpi * (ypi * f1_ij + yp * f1_i_jp1)
             + xp * (ypi * f1_ip1_j + yp * f1_ip1_jp1)
@@ -510,14 +498,20 @@ pub fn do_eos_interpolations(
     (fval, df_dx, df_dy)
 }
 
-/// Evaluates a single `(X, Z)` table at `(log_rho_in, log_t_in)`.
-///
-/// Mirrors `Get1_eosdt_XTable_Results` in `eos/private/eosdt_eval.f90` (lines 2083..2241).
-pub fn eval_xtable(
+/// Evaluates the 16 tabulated EOS channels and $(\ln\rho, \ln T)$ partials.
+#[inline]
+pub fn eval_xtable_16(
     ep: &EosDtXzTable,
     log_rho_in: f64,
     log_t_in: f64,
-) -> Result<EosEvalOutput, EosError> {
+) -> Result<
+    (
+        [f64; NUM_EOS_TABLE_VALS],
+        [f64; NUM_EOS_TABLE_VALS],
+        [f64; NUM_EOS_TABLE_VALS],
+    ),
+    EosError,
+> {
     let log_q_in = log_rho_in - 2.0 * log_t_in + 12.0;
     let (iq, log_q0, log_q, log_q1) = locate_log_q(ep, log_q_in, true)?;
     let (jt, log_t0, log_t, log_t1) = locate_log_t(ep, log_t_in, true)?;
@@ -536,7 +530,7 @@ pub fn eval_xtable(
     let v_i_jp1 = vtx(iq, jt + 1)?;
     let v_ip1_jp1 = vtx(iq + 1, jt + 1)?;
 
-    let (fval, df_dx, df_dy) = do_eos_interpolations(
+    let (fval, mut df_dx, mut df_dy) = do_eos_interpolations(
         v_ij, v_ip1_j, v_i_jp1, v_ip1_jp1, log_q0, log_q, log_q1, log_t0,
         log_t, log_t1,
     );
@@ -548,25 +542,39 @@ pub fn eval_xtable(
         });
     }
 
-    let mut res = [0.0_f64; NUM_EOS_BASIC_RESULTS];
-    let mut d_dlnd = [0.0_f64; NUM_EOS_BASIC_RESULTS];
-    let mut d_dln_t = [0.0_f64; NUM_EOS_BASIC_RESULTS];
-
     for k in 0..NUM_EOS_TABLE_VALS {
-        res[k] = fval[k];
         let dlnd_k = df_dx[k] / LN10;
         let dlnt_k = df_dy[k] / LN10 - 2.0 * dlnd_k;
-        d_dlnd[k] = dlnd_k;
-        d_dln_t[k] = dlnt_k;
+        df_dx[k] = dlnd_k;
+        df_dy[k] = dlnt_k;
     }
 
-    if is_bad(d_dlnd[I_LN_S]) || is_bad(d_dln_t[I_LN_S]) {
+    if is_bad(df_dx[I_LN_S]) || is_bad(df_dy[I_LN_S]) {
         return Err(EosError::InvalidState {
             context: "eval_xtable",
             detail: "non-finite d_dlnd[I_LN_S] or d_dlnT[I_LN_S]".to_string(),
         });
     }
 
+    Ok((fval, df_dx, df_dy))
+}
+
+/// Evaluates a single `(X, Z)` table at `(log_rho_in, log_t_in)`.
+///
+/// Mirrors `Get1_eosdt_XTable_Results` in `eos/private/eosdt_eval.f90` (lines 2083..2241).
+#[inline]
+pub fn eval_xtable(
+    ep: &EosDtXzTable,
+    log_rho_in: f64,
+    log_t_in: f64,
+) -> Result<EosEvalOutput, EosError> {
+    let (fval, dlnd, dlnt) = eval_xtable_16(ep, log_rho_in, log_t_in)?;
+    let mut res = [0.0_f64; NUM_EOS_BASIC_RESULTS];
+    let mut d_dlnd = [0.0_f64; NUM_EOS_BASIC_RESULTS];
+    let mut d_dln_t = [0.0_f64; NUM_EOS_BASIC_RESULTS];
+    res[..NUM_EOS_TABLE_VALS].copy_from_slice(&fval);
+    d_dlnd[..NUM_EOS_TABLE_VALS].copy_from_slice(&dlnd);
+    d_dln_t[..NUM_EOS_TABLE_VALS].copy_from_slice(&dlnt);
     Ok(EosEvalOutput {
         res,
         d_dlnd,

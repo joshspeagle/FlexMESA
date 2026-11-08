@@ -40,12 +40,7 @@ type _ScalarVal = bool | int | float | str
 type _TensorDict = dict[str, _ArrF64 | _ArrI64]
 
 # fmt: off
-# ---------------------------------------------------------------------------
 # Tier A: Infrastructure (`utils`, `testing`, `schema`, `data`, `auto_diff`)
-# ---------------------------------------------------------------------------
-# IEEE-754 finiteness checks, Fortran lexical scanners, golden record parsers,
-# control schema and namelist parsers, SHA-256 hashing, and `.safetensors`
-# ASCII table converters (`lodders03.data`, `isotopes.data`, `helm_table.dat`).
 def is_bad(x: float) -> bool: ...
 def is_bad_array(xs: _ArrF64) -> bool: ...
 def replace_bad_nums(xs: _ArrF64, replacement: float) -> _ArrF64: ...
@@ -71,10 +66,7 @@ def parse_helm_table_text(
 def eval_autodiff_order2_zone(x: float, y: float) -> list[float]: ...
 def eval_autodiff_order2_batch(x: _ArrF64, y: _ArrF64, parallel: bool = False) -> _ArrF64: ...  # noqa: E501
 
-# ---------------------------------------------------------------------------
-# Tier B: Microphysics & Numerics (`math`, `interp_1d`, `interp_2d`, `neu`,
-# `turb`)
-# ---------------------------------------------------------------------------
+# Tier B: Microphysics & Numerics (`math`, `interp_1d/2d`, `neu`, `turb`)
 def safe_sqrt(x: float) -> float: ...
 def safe_log(x: float) -> float: ...
 def safe_log10(x: float) -> float: ...
@@ -111,9 +103,7 @@ def interp_evbicub_batch(
     parallel: bool = False,
 ) -> _ArrF64: ...
 def interp_mkbipm_db(x: _ArrF64, y: _ArrF64, z_flat: _ArrF64) -> _ArrF64: ...
-def interp_evbipm_db(
-    xget: float, yget: float, x: _ArrF64, y: _ArrF64, coeffs_flat: _ArrF64
-) -> float: ...
+def interp_evbipm_db(xget: float, yget: float, x: _ArrF64, y: _ArrF64, coeffs_flat: _ArrF64) -> float: ...  # noqa: E501
 def neu_get(
     t: float | None = None, log10_t: float | None = None,
     rho: float | None = None, log10_rho: float | None = None, abar: float = 4.0,
@@ -135,25 +125,12 @@ def set_mlt_f64(
 def set_mlt_batch(s_frac: _ArrF64, parallel: bool = False) -> _ArrF64: ...
 def set_tdc_batch(s_frac: _ArrF64, parallel: bool = False) -> _ArrF64: ...
 
-# ---------------------------------------------------------------------------
 # Tier C: Coupled Linear Solvers (`mtx`)
-# ---------------------------------------------------------------------------
-def solve_block_tridiagonal(
-    nvar: int, nz: int, lblk: _ArrF64, dblk: _ArrF64, ublk: _ArrF64,
-    rhs: _ArrF64,
-) -> _ArrF64: ...
-def solve_block_tridiag_bcyclic(
-    nvar: int, nz: int, lblk: _ArrF64, dblk: _ArrF64, ublk: _ArrF64,
-    rhs: _ArrF64, parallel: bool = False,
-) -> _ArrF64: ...
-def block_multiply_xa(
-    nvar: int, nz: int, lblk: _ArrF64, dblk: _ArrF64, ublk: _ArrF64,
-    vec_x: _ArrF64,
-) -> _ArrF64: ...
+def solve_block_tridiagonal(nvar: int, nz: int, lblk: _ArrF64, dblk: _ArrF64, ublk: _ArrF64, rhs: _ArrF64) -> _ArrF64: ...  # noqa: E501
+def solve_block_tridiag_bcyclic(nvar: int, nz: int, lblk: _ArrF64, dblk: _ArrF64, ublk: _ArrF64, rhs: _ArrF64, parallel: bool = False) -> _ArrF64: ...  # noqa: E501
+def block_multiply_xa(nvar: int, nz: int, lblk: _ArrF64, dblk: _ArrF64, ublk: _ArrF64, vec_x: _ArrF64) -> _ArrF64: ...  # noqa: E501
 
-# ---------------------------------------------------------------------------
 # Wave 2a: Chemical Elements, Nuclides, Solar Scales & Composition (`chem`)
-# ---------------------------------------------------------------------------
 def py_chem_get_element_id(name: str) -> int | None: ...
 def py_chem_element_name(z: int) -> str | None: ...
 def py_chem_element_long_name(z: int) -> str | None: ...
@@ -180,9 +157,7 @@ def py_chem_reaction_qtotal(num_in: int, num_out: int, reactants: Sequence[int])
 def py_chem_get_composition_info(chem_ids: Sequence[int], x: Sequence[float], skip_partials: bool) -> tuple[tuple[float, ...], list[float], list[float], list[float]]: ...  # noqa: E501
 def py_chem_get_composition_info_zones(chem_ids: Sequence[int], x_zones: _ArrF64, parallel: bool = False) -> _ArrF64: ...  # noqa: E501
 
-# ---------------------------------------------------------------------------
 # Wave 2b: Ionization Tables & Diffusion Typical Charge (`ionization`)
-# ---------------------------------------------------------------------------
 def py_ion_result_names() -> list[str]: ...
 def py_ion_fe56_he4_grid() -> tuple[_ArrF64, _ArrF64, _ArrF64]: ...
 def py_ion_builtin_cell_grid() -> tuple[float, float, int, float, float, int, _ArrF64]: ...  # noqa: E501
@@ -194,74 +169,32 @@ def py_ion_eval_ionization(
     log10_rho: float | None = None, t: float | None = None,
     log10_t: float | None = None,
 ) -> list[float]: ...
-def py_ion_eval_ionization_dual(
-    z: float, x: float, log10_rho: float, log10_t: float
-) -> tuple[_ArrF64, _ArrF64]: ...
-def py_ion_eval_ionization_zones(
-    z: _ArrF64, x: _ArrF64, log10_rho: _ArrF64, log10_t: _ArrF64,
-    parallel: bool = False,
-) -> _ArrF64: ...
-def py_ion_chi_info(
-    a1: float, z1: float, t: float, log10_t: float, rho: float, log10_rho: float
-) -> tuple[float, float, float, float]: ...
-def py_ion_chi_effective(
-    chi: float, c0: float, c1: float, c2: float, z1: float, z2: float
-) -> float: ...
-def py_ion_eval_typical_charge(
-    cid: int, abar: float, free_e: float, t: float, log10_t: float, rho: float,
-    log10_rho: float,
-) -> float: ...
+def py_ion_eval_ionization_dual(z: float, x: float, log10_rho: float, log10_t: float) -> tuple[_ArrF64, _ArrF64]: ...  # noqa: E501
+def py_ion_eval_ionization_zones(z: _ArrF64, x: _ArrF64, log10_rho: _ArrF64, log10_t: _ArrF64, parallel: bool = False) -> _ArrF64: ...  # noqa: E501
+def py_ion_chi_info(a1: float, z1: float, t: float, log10_t: float, rho: float, log10_rho: float) -> tuple[float, float, float, float]: ...  # noqa: E501
+def py_ion_chi_effective(chi: float, c0: float, c1: float, c2: float, z1: float, z2: float) -> float: ...  # noqa: E501
+def py_ion_eval_typical_charge(cid: int, abar: float, free_e: float, t: float, log10_t: float, rho: float, log10_rho: float) -> float: ...  # noqa: E501
 
-# ---------------------------------------------------------------------------
 # Wave 2c: Bolometric & Synthetic Stellar Photometry (`colors`)
-# ---------------------------------------------------------------------------
-# Kurucz2003all 4D SED cube, 7 Johnson filters (`B, I, J, M, R, U, V`),
-# Hermite/Linear/KNN SED interpolation, and 10-column history photometry.
 def py_colors_column_names() -> list[str]: ...
 def py_colors_filter_names() -> list[str]: ...
-def py_colors_filter_curve(
-    idx: int,
-) -> tuple[_ArrF64, _ArrF64, float, float, float]: ...
-def py_colors_builtin_grid() -> tuple[
-    _ArrF64, _ArrF64, _ArrF64, _ArrF64, _ArrI64, _ArrF64, _ArrF64, _ArrF64,
-    _ArrF64, _ArrF64, _ArrF64,
-]: ...
-def py_colors_eval_sed(
-    teff: float, log_g: float, metallicity: float, r: float,
-    d: float = 3.0857e19, method: str = "Hermite",
-) -> tuple[_ArrF64, _ArrF64]: ...
-def py_colors_eval_colors(
-    teff: float, log_g: float, metallicity: float, r: float,
-    d: float = 3.0857e19, mag_system: str = "Vega", method: str = "Hermite",
-) -> _ArrF64: ...
-def py_colors_eval_colors_dual(
-    teff: float, log_g: float, metallicity: float, r: float,
-    d: float = 3.0857e19, mag_system: str = "Vega",
-) -> tuple[_ArrF64, _ArrF64]: ...
-def py_colors_eval_colors_zones(
-    teff: _ArrF64, log_g: _ArrF64, metallicity: _ArrF64, r: _ArrF64,
-    d: float = 3.0857e19, mag_system: str = "Vega", method: str = "Hermite",
-    parallel: bool = True,
-) -> _ArrF64: ...
+def py_colors_filter_curve(idx: int) -> tuple[_ArrF64, _ArrF64, float, float, float]: ...  # noqa: E501
+def py_colors_builtin_grid() -> tuple[_ArrF64, _ArrF64, _ArrF64, _ArrF64, _ArrI64, _ArrF64, _ArrF64, _ArrF64, _ArrF64, _ArrF64, _ArrF64]: ...  # noqa: E501
+def py_colors_eval_sed(teff: float, log_g: float, metallicity: float, r: float, d: float = 3.0857e19, method: str = "Hermite") -> tuple[_ArrF64, _ArrF64]: ...  # noqa: E501
+def py_colors_eval_colors(teff: float, log_g: float, metallicity: float, r: float, d: float = 3.0857e19, mag_system: str = "Vega", method: str = "Hermite") -> _ArrF64: ...  # noqa: E501
+def py_colors_eval_colors_dual(teff: float, log_g: float, metallicity: float, r: float, d: float = 3.0857e19, mag_system: str = "Vega") -> tuple[_ArrF64, _ArrF64]: ...  # noqa: E501
+def py_colors_eval_colors_zones(teff: _ArrF64, log_g: _ArrF64, metallicity: _ArrF64, r: _ArrF64, d: float = 3.0857e19, mag_system: str = "Vega", method: str = "Hermite", parallel: bool = True) -> _ArrF64: ...  # noqa: E501
 def py_colors_simpson_integration(x: _ArrF64, y: _ArrF64) -> float: ...
 def py_colors_trapezoidal_integration(x: _ArrF64, y: _ArrF64) -> float: ...
 def py_colors_dilute_flux(surface_flux: _ArrF64, r: float, d: float) -> _ArrF64: ...  # noqa: E501
 def py_colors_interpolate_array(x_in: _ArrF64, y_in: _ArrF64, x_out: _ArrF64) -> _ArrF64: ...  # noqa: E501
 def py_colors_calculate_bolometric_phot(wavelengths: _ArrF64, fluxes: _ArrF64) -> tuple[float, float]: ...  # noqa: E501
-def py_colors_calculate_synthetic(
-    wavelengths: _ArrF64, fluxes: _ArrF64, filter_wavelengths: _ArrF64,
-    filter_trans: _ArrF64, zero_point_flux: float,
-) -> float: ...
-def py_colors_compute_vega_zero_point(
-    vega_wave: _ArrF64, vega_flux: _ArrF64, filt_wave: _ArrF64,
-    filt_trans: _ArrF64,
-) -> float: ...
+def py_colors_calculate_synthetic(wavelengths: _ArrF64, fluxes: _ArrF64, filter_wavelengths: _ArrF64, filter_trans: _ArrF64, zero_point_flux: float) -> float: ...  # noqa: E501
+def py_colors_compute_vega_zero_point(vega_wave: _ArrF64, vega_flux: _ArrF64, filt_wave: _ArrF64, filt_trans: _ArrF64) -> float: ...  # noqa: E501
 def py_colors_compute_ab_zero_point(filt_wave: _ArrF64, filt_trans: _ArrF64) -> float: ...  # noqa: E501
 def py_colors_compute_st_zero_point(filt_wave: _ArrF64, filt_trans: _ArrF64) -> float: ...  # noqa: E501
 
-# ---------------------------------------------------------------------------
 # Wave 3a.1: EOS Core, Blending & Fermi-Dirac Integrals (`eos`)
-# ---------------------------------------------------------------------------
 def eos_basic_result_names() -> list[str]: ...
 def eos_is_contained(coords: _ArrF64, x: float, y: float) -> bool: ...
 def eos_min_distance_to_polygon(
@@ -274,41 +207,17 @@ def eos_blend_results(
     linear_blend: bool, res_1: _ArrF64, d_dlnd_1: _ArrF64, d_dln_t_1: _ArrF64,
     res_2: _ArrF64, d_dlnd_2: _ArrF64, d_dln_t_2: _ArrF64,
 ) -> tuple[_ArrF64, _ArrF64, _ArrF64]: ...
-def eos_dfermi(
-    dk: float, eta: float, theta: float
-) -> tuple[float, float, float]: ...
-def eos_dfermi_zones(
-    dk: float, eta: _ArrF64, theta: _ArrF64, parallel: bool = True
-) -> _ArrF64: ...
+def eos_dfermi(dk: float, eta: float, theta: float) -> tuple[float, float, float]: ...  # noqa: E501
+def eos_dfermi_zones(dk: float, eta: _ArrF64, theta: _ArrF64, parallel: bool = True) -> _ArrF64: ...  # noqa: E501
 def eos_compute_ion_offset(xa: _ArrF64, chem_id: list[int]) -> float: ...
-def eos_compute_ion_offset_from_za(
-    xa: _ArrF64, z: list[int], a: _ArrF64
-) -> float: ...
-def eos_eval_ideal(
-    temp: float, rho: float, abar: float, zbar: float, xa: _ArrF64,
-    chem_id: list[int],
-) -> tuple[_ArrF64, _ArrF64, _ArrF64]: ...
-def eos_eval_ideal_from_weights(
-    temp: float, rho: float, abar: float, zbar: float, xa: _ArrF64,
-    weights: _ArrF64, a: _ArrF64,
-) -> tuple[_ArrF64, _ArrF64, _ArrF64]: ...
-def eos_eval_ideal_zones(
-    temp: _ArrF64, rho: _ArrF64, abar: float, zbar: float, xa: _ArrF64,
-    weights: _ArrF64, a: _ArrF64, parallel: bool = True,
-) -> _ArrF64: ...
-def eos_eval_helm(
-    temp: float, rho: float, abar: float, zbar: float,
-) -> tuple[_ArrF64, _ArrF64, _ArrF64, _ArrF64, _ArrF64]: ...
-def eos_eval_helm_zones(
-    temp: _ArrF64, rho: _ArrF64, abar: _ArrF64, zbar: _ArrF64,
-    parallel: bool = True,
-) -> _ArrF64: ...
-def eos_helm_cell_data(
-    log_temp: float, din: float,
-) -> tuple[float, float, float, float, _ArrF64, _ArrF64, _ArrF64, _ArrF64]: ...
-def eos_helm_cells_batch(
-    log_temp: _ArrF64, din: _ArrF64,
-) -> tuple[_ArrF64, _ArrF64, _ArrF64, _ArrF64, _ArrF64, _ArrF64, _ArrF64, _ArrF64]: ...  # noqa: E501
+def eos_compute_ion_offset_from_za(xa: _ArrF64, z: list[int], a: _ArrF64) -> float: ...  # noqa: E501
+def eos_eval_ideal(temp: float, rho: float, abar: float, zbar: float, xa: _ArrF64, chem_id: list[int]) -> tuple[_ArrF64, _ArrF64, _ArrF64]: ...  # noqa: E501
+def eos_eval_ideal_from_weights(temp: float, rho: float, abar: float, zbar: float, xa: _ArrF64, weights: _ArrF64, a: _ArrF64) -> tuple[_ArrF64, _ArrF64, _ArrF64]: ...  # noqa: E501
+def eos_eval_ideal_zones(temp: _ArrF64, rho: _ArrF64, abar: float, zbar: float, xa: _ArrF64, weights: _ArrF64, a: _ArrF64, parallel: bool = True) -> _ArrF64: ...  # noqa: E501
+def eos_eval_helm(temp: float, rho: float, abar: float, zbar: float) -> tuple[_ArrF64, _ArrF64, _ArrF64, _ArrF64, _ArrF64]: ...  # noqa: E501
+def eos_eval_helm_zones(temp: _ArrF64, rho: _ArrF64, abar: _ArrF64, zbar: _ArrF64, parallel: bool = True) -> _ArrF64: ...  # noqa: E501
+def eos_helm_cell_data(log_temp: float, din: float) -> tuple[float, float, float, float, _ArrF64, _ArrF64, _ArrF64, _ArrF64]: ...  # noqa: E501
+def eos_helm_cells_batch(log_temp: _ArrF64, din: _ArrF64) -> tuple[_ArrF64, _ArrF64, _ArrF64, _ArrF64, _ArrF64, _ArrF64, _ArrF64, _ArrF64]: ...  # noqa: E501
 def eos_get_pc_alfa(
     log_rho: float, log_t: float, abar: float, zbar: float,
     use_gamma_limit: bool = True, log_rho1: float = 2.999,
@@ -587,4 +496,52 @@ def net_burn_1_zone_const_p(
 ) -> tuple[
     _ArrF64, float, float, float, float, float, int, int, int, int, int
 ]: ...
+def eos_eval_opal_scvh_zones(
+    rho: _ArrF64, temp: _ArrF64, chem_id: Sequence[int], xa: _ArrF64,
+    parallel: bool = True,
+) -> _ArrF64: ...
+def eos_opal_scvh_cells_batch(
+    log_rho: _ArrF64, log_temp: _ArrF64, ix_1based: int = 5,
+    iz_1based: int = 2,
+) -> tuple[
+    _ArrF64, _ArrF64, _ArrF64, _ArrF64, _ArrF64, _ArrF64, _ArrF64, _ArrF64
+]: ...
+def atm_table_photosphere_zsol_spline() -> tuple[
+    _ArrF64, _ArrF64, bool, bool, _ArrF64
+]: ...
+def kap_get_results_zones_rust(
+    z: float, x: float, zbase: float, xc: float, xn: float, xo: float,
+    xne: float, log_rho_zones: _ArrF64, log_t_zones: _ArrF64,
+    lnfree_e: float, d_lnfree_e_dln_rho: float, d_lnfree_e_dln_t: float,
+    eta: float, d_eta_dln_rho: float, d_eta_dln_t: float,
+    zbar: float = 1.0, kap_option: str = "gs98",
+    kap_co_option: str = "gs98_co", kap_low_t_option: str = "lowT_fa05_gs98",
+    kap_blend_log_t_upper_bdy: float = 3.88,
+    kap_blend_log_t_lower_bdy: float = 3.80,
+    cubic_interpolation_in_x: bool = False,
+    cubic_interpolation_in_z: bool = False,
+    include_electron_conduction: bool = True,
+    use_blouin_conductive_opacities: bool = True,
+    use_zbase_for_type1: bool = False, use_type2_opacities: bool = False,
+    kap_type2_full_off_x: float = 1.0e-3, kap_type2_full_on_x: float = 1.0e-6,
+    kap_type2_full_off_dz: float = 0.001, kap_type2_full_on_dz: float = 0.01,
+    parallel: bool = True,
+) -> _ArrF64: ...
+def rates_eval_reaclib_screen_zones(
+    handle: str, mode: str, temps: _ArrF64, dens: _ArrF64, zbar: float,
+    abar: float, z2bar: float, a1: float, z1: float, a2: float, z2: float,
+    parallel: bool = True,
+) -> _ArrF64: ...
+def atm_eval_table_zones(
+    l: _ArrF64, r: _ArrF64, m: _ArrF64, cgrav: float, id: int, z: float,
+    skip_partials: bool, teff: _ArrF64, parallel: bool = True,
+) -> _ArrF64: ...
+def net_eval_zones(
+    net_name: str, x: _ArrF64, temps: _ArrF64, log_ts: _ArrF64,
+    rhos: _ArrF64, log_rhos: _ArrF64, abar: float, zbar: float, z2bar: float,
+    ye: float, eta: float = 0.0, d_eta_dlnt: float = 0.0,
+    d_eta_dlnrho: float = 0.0, weak_rate_factor: float = 1.0,
+    screening_mode: str = "extended", skip_jacobian: bool = False,
+    parallel: bool = True,
+) -> _ArrF64: ...
 # fmt: on

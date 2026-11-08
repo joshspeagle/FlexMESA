@@ -184,6 +184,7 @@ dependencies = [
 name = "flexmesa-bench"
 version = "0.1.0"
 dependencies = [
+ "flexmesa-atm",
  "flexmesa-autodiff",
  "flexmesa-chem",
  "flexmesa-colors",
@@ -192,10 +193,13 @@ dependencies = [
  "flexmesa-interp1d",
  "flexmesa-interp2d",
  "flexmesa-ionization",
+ "flexmesa-kap",
  "flexmesa-math",
  "flexmesa-mtx",
+ "flexmesa-net",
  "flexmesa-neu",
  "flexmesa-num",
+ "flexmesa-rates",
  "flexmesa-turb",
  "flexmesa-utils",
  "rayon",

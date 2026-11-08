@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 //! `PyO3` bindings for `flexmesa-eos` Wave 3a.2 (`HELM` equation of state).
 
-use flexmesa_eos::{eval_helm_eos, HelmTable, NUM_EOS_BASIC_RESULTS};
+use flexmesa_eos::{
+    eval_helm_eos, locate_log_q, locate_log_t, EosDtTableKind, EosDtTableSet,
+    HelmTable, NUM_EOS_BASIC_RESULTS,
+};
 use numpy::{PyArray1, PyArray2, PyArrayMethods, PyReadonlyArray1};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -188,11 +191,100 @@ pub fn eos_helm_cells_batch<'py>(
     ))
 }
 
-/// Registers Wave 3a.2 `HELM` bindings on the `flexmesa._rust` module.
+/// Returns batched `OPAL/SCVH` cell bounds and 64-coefficient vertex arrays
+/// `(q0, q1, t0, t1, v00, v10, v01, v11)` across `nz` zones for `(ix, iz)`.
+#[pyfunction]
+#[pyo3(signature = (log_rho, log_temp, ix_1based=5, iz_1based=2))]
+pub fn eos_opal_scvh_cells_batch<'py>(
+    py: Python<'py>,
+    log_rho: PyReadonlyArray1<'py, f64>,
+    log_temp: PyReadonlyArray1<'py, f64>,
+    ix_1based: usize,
+    iz_1based: usize,
+) -> PyResult<PyHelmCellsBatchTuple<'py>> {
+    let lr_s = log_rho
+        .as_slice()
+        .map_err(|_| PyValueError::new_err("log_rho must be contiguous"))?;
+    let lt_s = log_temp
+        .as_slice()
+        .map_err(|_| PyValueError::new_err("log_temp must be contiguous"))?;
+    let nz = lr_s.len();
+    if lt_s.len() != nz {
+        return Err(PyValueError::new_err(
+            "log_rho and log_temp must have equal length",
+        ));
+    }
+    if ix_1based < 3 {
+        return Err(PyValueError::new_err("ix_1based must be >= 3"));
+    }
+    let dt = EosDtTableSet::builtin();
+    let eps = [
+        dt.get_table(EosDtTableKind::OpalScvh, ix_1based - 2, iz_1based)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?,
+        dt.get_table(EosDtTableKind::OpalScvh, ix_1based - 1, iz_1based)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?,
+        dt.get_table(EosDtTableKind::OpalScvh, ix_1based, iz_1based)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?,
+    ];
+    let w = [-0.125_f64, 0.75_f64, 0.375_f64];
+    let mut q0 = Vec::with_capacity(nz);
+    let mut q1 = Vec::with_capacity(nz);
+    let mut t0 = Vec::with_capacity(nz);
+    let mut t1 = Vec::with_capacity(nz);
+    let mut v00 = Vec::with_capacity(nz * 64);
+    let mut v10 = Vec::with_capacity(nz * 64);
+    let mut v01 = Vec::with_capacity(nz * 64);
+    let mut v11 = Vec::with_capacity(nz * 64);
+    let blend_v = |i: usize, j: usize| -> PyResult<[f64; 64]> {
+        let a = eps[0]
+            .get_vertex(i, j)
+            .ok_or_else(|| PyValueError::new_err("missing vertex"))?;
+        let b = eps[1]
+            .get_vertex(i, j)
+            .ok_or_else(|| PyValueError::new_err("missing vertex"))?;
+        let c = eps[2]
+            .get_vertex(i, j)
+            .ok_or_else(|| PyValueError::new_err("missing vertex"))?;
+        let mut out = [0.0_f64; 64];
+        for (m, item) in out.iter_mut().enumerate() {
+            *item =
+                w[0] * a.coeffs[m] + w[1] * b.coeffs[m] + w[2] * c.coeffs[m];
+        }
+        Ok(out)
+    };
+    for k in 0..nz {
+        let lq = lr_s[k] - 2.0 * lt_s[k] + 12.0;
+        let (iq, lq0, _, lq1) = locate_log_q(&eps[0], lq, true)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let (jt, lt0, _, lt1) = locate_log_t(&eps[0], lt_s[k], true)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        q0.push(lq0);
+        q1.push(lq1);
+        t0.push(lt0);
+        t1.push(lt1);
+        v00.extend_from_slice(&blend_v(iq, jt)?);
+        v10.extend_from_slice(&blend_v(iq + 1, jt)?);
+        v01.extend_from_slice(&blend_v(iq, jt + 1)?);
+        v11.extend_from_slice(&blend_v(iq + 1, jt + 1)?);
+    }
+    Ok((
+        PyArray1::from_vec(py, q0),
+        PyArray1::from_vec(py, q1),
+        PyArray1::from_vec(py, t0),
+        PyArray1::from_vec(py, t1),
+        PyArray1::from_vec(py, v00).reshape([nz, 64])?,
+        PyArray1::from_vec(py, v10).reshape([nz, 64])?,
+        PyArray1::from_vec(py, v01).reshape([nz, 64])?,
+        PyArray1::from_vec(py, v11).reshape([nz, 64])?,
+    ))
+}
+
+/// Registers Wave 3a.2 `HELM` and `OPAL/SCVH` cell batch bindings.
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(eos_eval_helm, m)?)?;
     m.add_function(wrap_pyfunction!(eos_eval_helm_zones, m)?)?;
     m.add_function(wrap_pyfunction!(eos_helm_cell_data, m)?)?;
     m.add_function(wrap_pyfunction!(eos_helm_cells_batch, m)?)?;
+    m.add_function(wrap_pyfunction!(eos_opal_scvh_cells_batch, m)?)?;
     Ok(())
 }

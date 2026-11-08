@@ -188,7 +188,7 @@ pub fn solve_composition_diffusion(model: &mut StarModel, dt: f64) {
     }
 }
 
-fn solve_scalar_tridiag(
+pub(crate) fn solve_scalar_tridiag(
     dl: &[f64],
     d: &[f64],
     du: &[f64],

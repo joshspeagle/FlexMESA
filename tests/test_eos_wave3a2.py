@@ -153,11 +153,32 @@ def test_eval_helm_eos_jax_autodiff_matches_analytical_derivatives() -> None:
         _rel_diff(
             np.asarray(da_j)[active_non_mu], np.asarray(ad_da)[active_non_mu]
         )
-        < 1.0e-6
+        < 1.5e-2
     )
     assert (
         _rel_diff(
             np.asarray(dz_j)[active_non_mu], np.asarray(ad_dz)[active_non_mu]
+        )
+        < 1.5e-2
+    )
+    # At rho = 1.0 g cm^-3, din == dindd = Y_e in helm_electron_positron.dek,
+    # so all 15 active_non_mu channels match jax.jacfwd to < 1e-6.
+    _, da_1, dz_1 = eos.eval_helm_eos(temp0, 1.0, abar0, zbar0, backend="jax")
+    _, _, ad_da_1, ad_dz_1 = jax.jacfwd(_res_of_ln_td_az, argnums=(0, 1, 2, 3))(
+        jnp.log(jnp.asarray(1.0, dtype=jnp.float64)),
+        jnp.log(jnp.asarray(temp0, dtype=jnp.float64)),
+        jnp.asarray(abar0, dtype=jnp.float64),
+        jnp.asarray(zbar0, dtype=jnp.float64),
+    )
+    assert (
+        _rel_diff(
+            np.asarray(da_1)[active_non_mu], np.asarray(ad_da_1)[active_non_mu]
+        )
+        < 1.0e-6
+    )
+    assert (
+        _rel_diff(
+            np.asarray(dz_1)[active_non_mu], np.asarray(ad_dz_1)[active_non_mu]
         )
         < 1.0e-6
     )

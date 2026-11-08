@@ -61,6 +61,7 @@
 )]
 
 pub mod controls;
+pub mod diffusion;
 pub mod eps_grav;
 pub mod evolve;
 pub mod history;
@@ -74,6 +75,8 @@ pub mod model;
 pub mod model_io;
 pub mod overshoot;
 pub mod pre_ms;
+pub mod premix;
+pub mod rotation;
 pub mod solver;
 pub mod star_ad;
 pub mod struct_burn_mix;
@@ -87,6 +90,11 @@ mod tests;
 pub use controls::{
     AtmOption, AtmTTauRelation, EnergyEqnOption, StarControls, StarError,
     StarJobControls, VarLayout,
+};
+pub use diffusion::{
+    do_element_diffusion, eval_burgers_velocities, eval_caplan_ocp_dstar,
+    eval_coulomb_collision_factors, eval_radiative_levitation_accel,
+    eval_wd_sedimentation_heating, BurgersZoneResult, DiffusionScheme,
 };
 pub use eps_grav::{
     eval_eps_grav, eval_eps_grav_lns_cell, eval_eps_grav_std_cell,
@@ -127,6 +135,15 @@ pub use overshoot::{apply_overshooting, OvershootConfig, OvershootScheme};
 pub use pre_ms::{
     build1_pre_ms_model, build_pre_ms_model, default_basic_net_composition,
     PreMsShell,
+};
+pub use premix::{
+    add_predictive_mixing, do_conv_premix, do_phase_separation,
+    eval_castellani_penetration_vel, eval_phase_separation_shift,
+};
+pub use rotation::{
+    eval_magnetic_diffusivity, eval_omega_crit, eval_rotation_fp_ft,
+    eval_rotational_mixing_zone, eval_thermal_diffusivity,
+    set_rotation_mixing_info, RotationalMixZone, RI_CRIT_DSI,
 };
 pub use solver::{
     compute_corr_coeff, compute_correction_norms, compute_vector_norms,

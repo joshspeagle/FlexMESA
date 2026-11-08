@@ -469,6 +469,56 @@ class StarModel(_arrays.StarModelArrays):
             )
         )
 
+    def do_element_diffusion(
+        self, dt: float, scheme: str = "stanton_murillo"
+    ) -> tuple[_ArrF64, _ArrF64]:
+        """Run multi-species Burgers element diffusion over `dt` (`s`)."""
+        return _rust.star_do_element_diffusion(
+            self._rust_model, float(dt), str(scheme)
+        )
+
+    def set_rotation_mixing_info(self) -> _ArrF64:
+        """Update shellular rotation `(f_P, f_T)` and mixing coefficients."""
+        return _rust.star_set_rotation_mixing_info(self._rust_model)
+
+    def do_conv_premix(
+        self, max_iters: int = 10, avoid_fuel_increase: bool = True
+    ) -> int:
+        """Run iterative convective premixing (`do_conv_premix`)."""
+        return int(
+            _rust.star_do_conv_premix(
+                self._rust_model, int(max_iters), bool(avoid_fuel_increase)
+            )
+        )
+
+    def add_predictive_mixing(
+        self,
+        ingested_mass_limit_coeff: float = 0.1,
+        superad_thresh: float = 0.005,
+    ) -> int:
+        """Apply predictive mixing at convective boundaries."""
+        return int(
+            _rust.star_add_predictive_mixing(
+                self._rust_model,
+                float(ingested_mass_limit_coeff),
+                float(superad_thresh),
+            )
+        )
+
+    def do_phase_separation(
+        self,
+        dt: float,
+        gamma_crystallization: float = 175.0,
+        is_one_mixture: bool = False,
+    ) -> _ArrF64:
+        """Execute white-dwarf crystallization phase separation over `dt`."""
+        return _rust.star_do_phase_separation(
+            self._rust_model,
+            float(dt),
+            float(gamma_crystallization),
+            bool(is_one_mixture),
+        )
+
 
 def yrs_for_init_timestep(m_msun: float) -> float:
     """Compute the initial ZAMS timestep in years (`yrs_for_init_timestep`)."""

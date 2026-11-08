@@ -564,9 +564,7 @@ class RustStarModel:
     def pick_next_timestep(self, max_timestep_factor: float = 1.2, min_timestep_factor: float = 0.5, dx_nuc_drop_limit: float = 1.0e-2) -> tuple[float, float, float]: ...  # noqa: E501
     def evolve_step(self, do_remesh: bool = False, op_split_burn: bool = False, use_bcyclic: bool = True) -> tuple[int, float, float, float, int, int, int, int, float, bool]: ...  # noqa: E501
     def evolve(self, max_steps: int, do_remesh: bool = False, op_split_burn: bool = False, use_bcyclic: bool = True, max_age: float | None = None) -> list[tuple[int, float, float, float, int, int, int, int, float, bool]]: ...  # noqa: E501
-    def history_tuple(
-        self,
-    ) -> tuple[tuple[int, int, int, int], list[float]]: ...
+    def history_tuple(self) -> tuple[tuple[int, int, int, int], list[float]]: ...  # noqa: E501
     def to_history_line(self) -> str: ...
     def to_profile_str(self) -> str: ...
     def set_primary_state(self, lnd: _ArrF64, ln_t: _ArrF64, ln_r: _ArrF64, lum: _ArrF64, dq: _ArrF64, xa: _ArrF64) -> None: ...  # noqa: E501
@@ -585,5 +583,17 @@ def star_eval_castellani_penetration_vel(conv_vel: float, r: float, hp: float, g
 def star_do_conv_premix(model: RustStarModel, max_iters: int = 10, avoid_fuel_increase: bool = True) -> int: ...  # noqa: E501
 def star_add_predictive_mixing(model: RustStarModel, ingested_mass_limit_coeff: float = 0.1, superad_thresh: float = 0.005) -> int: ...  # noqa: E501
 def star_do_phase_separation(model: RustStarModel, dt: float, gamma_crystallization: float = 175.0, is_one_mixture: bool = False) -> _ArrF64: ...  # noqa: E501
+def star_eval_hllc_face(p_l: float, rho_l: float, cs_l: float, u_l: float, dm_l: float, p_r: float, rho_r: float, cs_r: float, u_r: float, dm_r: float, r_face: float, m_grav_face: float, cgrav_face: float) -> tuple[float, float, float, float, float, float, float]: ...  # noqa: E501
+def star_eval_hllc_surface_face(p_surf_cell: float, rho_surf: float, cs_surf: float, u_surf: float, dm_surf: float, r_surf: float, m_surf: float, cgrav_surf: float, p_bc: float) -> tuple[float, float, float, float, float, float, float]: ...  # noqa: E501
+def star_eval_riemann_momentum_residual(u_k: float, u_old_k: float, dt: float, dm_k: float, r_outer: float, r_inner: float, p_face_outer: float, p_face_inner: float, p_cell_k: float, g_cell_k: float) -> float: ...  # noqa: E501
+def star_eval_riemann_profile(model: RustStarModel, u_cell: _ArrF64, u_old_cell: _ArrF64, p_surf_bc: float = 0.0, parallel: bool = True) -> tuple[_ArrF64, _ArrF64]: ...  # noqa: E501
+def star_eval_rsp2_zone(w: float, t: float, rho: float, p: float, cp: float, grad_ad: float, delta: float, kappa: float, hp_cell: float, grad_t: float, r_outer: float, r_inner: float, u_outer: float, u_inner: float, dm: float, dlnd_dt: float = 0.0, alfa: float = 1.5, alfap: float = 1.0, alfas: float = 1.0, alfac: float = 1.0, alfad: float = 1.0, alfam: float = 0.25, alfat: float = 0.01, gammar: float = 1.0, min_w2_for_turbulence: float = 1.0e-4) -> tuple[float, float, float, float, float, float, float]: ...  # noqa: E501
+def star_eval_rsp2_face(r_face: float, m_grav_face: float, cgrav_face: float, p_face: float, rho_face: float, t_face: float, cp_face: float, grad_ad_face: float, kappa_face: float, w_inner: float, w_outer: float, t4_inner: float, t4_outer: float, lnp_inner: float, lnp_outer: float, chi_face: float, du_over_r_face: float, dm_bar: float, alfa: float = 1.5, alfac: float = 1.0, alfat: float = 0.01) -> tuple[float, float, float, float, float, float]: ...  # noqa: E501
+def star_solve_stationary_rsp2_w(t: float, rho: float, p: float, cp: float, grad_ad: float, delta: float, kappa: float, hp_cell: float, grad_t: float, alfa: float = 1.5, alfas: float = 1.0, alfad: float = 1.0, gammar: float = 1.0) -> float: ...  # noqa: E501
+def star_eval_center_parabolic(r_inner: float, r_outer: float, v_inner: float, v_outer: float) -> float: ...  # noqa: E501
+def star_build_pulse_points(model: RustStarModel, add_center_point: bool = True, add_double_points: bool = False, grad_mu_threshold: float = 1.0e99) -> _ArrF64: ...  # noqa: E501
+def star_export_gyre(model: RustStarModel, add_center_point: bool = True) -> str: ...  # noqa: E501
+def star_export_fgong(model: RustStarModel, add_center_point: bool = True) -> str: ...  # noqa: E501
+def star_export_osc(model: RustStarModel, add_center_point: bool = True) -> str: ...  # noqa: E501
 
 # fmt: on

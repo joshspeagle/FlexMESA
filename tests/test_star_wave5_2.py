@@ -1,0 +1,381 @@
+# SPDX-License-Identifier: LGPL-3.0-or-later
+"""Verification tests for Wave 5.2: HLLC Riemann hydrodynamics, `RSP2`
+time-dependent turbulent convection, and `GYRE`/`FGONG`/`OSC` pulsation
+structure exporters (Issues #80, #4, and #5).
+"""
+
+from __future__ import annotations
+
+import jax
+import jax.numpy as jnp
+import jax.test_util as jtu
+import numpy as np
+
+from flexmesa import _rust, star
+
+
+def test_hllc_riemann_face_and_surface_match_jax_and_preserve_hydrostatic() -> (
+    None
+):
+    """Verify HLLC Riemann face/surface kernels, Rust-vs-JAX parity, exact
+    hydrostatic equilibrium preservation, and autodiff vs. finite differences.
+    """
+    r_face = 5.0e10
+    m_grav = 1.0e33
+    cgrav = 6.67430e-8
+    dm = 1.0e30
+    area = 4.0 * np.pi * r_face * r_face
+    g_over_a = cgrav * m_grav / (r_face * r_face * area)
+    p_star = 1.0e15
+    p_l = p_star + 0.5 * dm * g_over_a
+    p_r = p_star - 0.5 * dm * g_over_a
+
+    # 1. Exact hydrostatic equilibrium: u_L = u_R = 0 and P_L^* == P_R^*
+    f_rust = _rust.star_eval_hllc_face(
+        p_l,
+        10.0,
+        5.0e7,
+        0.0,
+        dm,
+        p_r,
+        8.0,
+        4.5e7,
+        0.0,
+        dm,
+        r_face,
+        m_grav,
+        cgrav,
+    )
+    f_jax = star.eval_hllc_face_jax(
+        jnp.asarray(p_l),
+        jnp.asarray(10.0),
+        jnp.asarray(5.0e7),
+        jnp.asarray(0.0),
+        jnp.asarray(dm),
+        jnp.asarray(p_r),
+        jnp.asarray(8.0),
+        jnp.asarray(4.5e7),
+        jnp.asarray(0.0),
+        jnp.asarray(dm),
+        jnp.asarray(r_face),
+        jnp.asarray(m_grav),
+        jnp.asarray(cgrav),
+    )
+    for r_val, j_val in zip(f_rust, f_jax, strict=True):
+        np.testing.assert_allclose(
+            r_val, float(j_val), rtol=1.0e-14, atol=1.0e-14
+        )
+    assert abs(f_rust[4]) <= 1.0e-14
+    assert abs(f_rust[5] - p_star) / p_star <= 1.0e-14
+
+    # 2. Outward pressure wave: P_L^* > P_R^* drives u_face > 0
+    f_shock_r = _rust.star_eval_hllc_face(
+        1.5 * p_l,
+        12.0,
+        5.5e7,
+        1.0e5,
+        dm,
+        p_r,
+        8.0,
+        4.5e7,
+        -2.0e4,
+        dm,
+        r_face,
+        m_grav,
+        cgrav,
+    )
+    f_shock_j = star.eval_hllc_face_jax(
+        jnp.asarray(1.5 * p_l),
+        jnp.asarray(12.0),
+        jnp.asarray(5.5e7),
+        jnp.asarray(1.0e5),
+        jnp.asarray(dm),
+        jnp.asarray(p_r),
+        jnp.asarray(8.0),
+        jnp.asarray(4.5e7),
+        jnp.asarray(-2.0e4),
+        jnp.asarray(dm),
+        jnp.asarray(r_face),
+        jnp.asarray(m_grav),
+        jnp.asarray(cgrav),
+    )
+    for r_val, j_val in zip(f_shock_r, f_shock_j, strict=True):
+        np.testing.assert_allclose(r_val, float(j_val), rtol=1.0e-14)
+    assert f_shock_r[4] > 0.0
+
+    # Central finite-difference verification of `eval_hllc_face_jax`
+    jtu.check_grads(
+        lambda pl, pr: star.eval_hllc_face_jax(
+            pl,
+            jnp.asarray(12.0),
+            jnp.asarray(5.5e7),
+            jnp.asarray(1.0e5),
+            jnp.asarray(dm),
+            pr,
+            jnp.asarray(8.0),
+            jnp.asarray(4.5e7),
+            jnp.asarray(-2.0e4),
+            jnp.asarray(dm),
+            jnp.asarray(r_face),
+            jnp.asarray(m_grav),
+            jnp.asarray(cgrav),
+        )[4],
+        (jnp.asarray(1.5 * p_l), jnp.asarray(p_r)),
+        order=1,
+        rtol=1.0e-6,
+    )
+
+    # 3. Surface HLLC boundary state and spherical geometric cancellation
+    s_rust = _rust.star_eval_hllc_surface_face(
+        1.0e5, 1.0e-7, 1.0e6, 0.0, 1.0e24, 7.0e10, 2.0e33, cgrav, 8.0e4
+    )
+    s_jax = star.eval_hllc_surface_face_jax(
+        jnp.asarray(1.0e5),
+        jnp.asarray(1.0e-7),
+        jnp.asarray(1.0e6),
+        jnp.asarray(0.0),
+        jnp.asarray(1.0e24),
+        jnp.asarray(7.0e10),
+        jnp.asarray(2.0e33),
+        jnp.asarray(cgrav),
+        jnp.asarray(8.0e4),
+    )
+    for r_val, j_val in zip(s_rust, s_jax, strict=True):
+        np.testing.assert_allclose(r_val, float(j_val), rtol=1.0e-14)
+
+    res_r = _rust.star_eval_riemann_momentum_residual(
+        0.0, 0.0, 10.0, 1.0e28, 5.0e10, 4.9e10, 1.0e14, 1.0e14, 1.0e14, 0.0
+    )
+    res_j = float(
+        star.eval_riemann_momentum_residual_jax(
+            jnp.asarray(0.0),
+            jnp.asarray(0.0),
+            jnp.asarray(10.0),
+            jnp.asarray(1.0e28),
+            jnp.asarray(5.0e10),
+            jnp.asarray(4.9e10),
+            jnp.asarray(1.0e14),
+            jnp.asarray(1.0e14),
+            jnp.asarray(1.0e14),
+            jnp.asarray(0.0),
+        )
+    )
+    assert abs(res_r) == 0.0
+    assert abs(res_j) == 0.0
+
+
+def test_rsp2_zone_face_and_stationary_solver_match_jax_and_autodiff() -> None:
+    """Verify `RSP2` zone, face, and stationary quadratic pre-solver across
+    Safe Rust and JAX, including subadiabatic gradient safety (`gammar=0.0`).
+    """
+    t = 1.0e5
+    rho = 1.0e-5
+    p = 1.0e8
+    cp = 3.0e8
+    grad_ad = 0.40
+    delta = 1.2
+    kappa = 2.0
+    hp_cell = 1.0e9
+    grad_t = 0.55
+
+    w_eq_r = _rust.star_solve_stationary_rsp2_w(
+        t, rho, p, cp, grad_ad, delta, kappa, hp_cell, grad_t
+    )
+    w_eq_j = float(
+        star.solve_stationary_rsp2_w_jax(
+            jnp.asarray(t),
+            jnp.asarray(rho),
+            jnp.asarray(p),
+            jnp.asarray(cp),
+            jnp.asarray(grad_ad),
+            jnp.asarray(delta),
+            jnp.asarray(kappa),
+            jnp.asarray(hp_cell),
+            jnp.asarray(grad_t),
+        )
+    )
+    assert w_eq_r > 0.0
+    np.testing.assert_allclose(w_eq_r, w_eq_j, rtol=1.0e-14)
+
+    z_r = _rust.star_eval_rsp2_zone(
+        w_eq_r,
+        t,
+        rho,
+        p,
+        cp,
+        grad_ad,
+        delta,
+        kappa,
+        hp_cell,
+        grad_t,
+        5.01e10,
+        5.0e10,
+        0.0,
+        0.0,
+        1.0e28,
+        0.0,
+    )
+    z_j = star.eval_rsp2_zone_jax(
+        jnp.asarray(w_eq_r),
+        jnp.asarray(t),
+        jnp.asarray(rho),
+        jnp.asarray(p),
+        jnp.asarray(cp),
+        jnp.asarray(grad_ad),
+        jnp.asarray(delta),
+        jnp.asarray(kappa),
+        jnp.asarray(hp_cell),
+        jnp.asarray(grad_t),
+        jnp.asarray(5.01e10),
+        jnp.asarray(5.0e10),
+        jnp.asarray(0.0),
+        jnp.asarray(0.0),
+        jnp.asarray(1.0e28),
+        jnp.asarray(0.0),
+    )
+    for r_val, j_val in zip(z_r, z_j, strict=True):
+        np.testing.assert_allclose(
+            r_val, float(j_val), rtol=1.0e-13, atol=1.0e-14
+        )
+    assert abs(z_r[6]) / max(abs(z_r[3]), abs(z_r[4]), 1.0) <= 1.0e-13
+
+    # Face evaluation parity
+    f_r = _rust.star_eval_rsp2_face(
+        5.0e10,
+        1.0e33,
+        6.67430e-8,
+        1.0e8,
+        1.0e-5,
+        1.0e5,
+        3.0e8,
+        0.40,
+        2.0,
+        w_eq_r,
+        0.8 * w_eq_r,
+        (1.05e5) ** 4,
+        (0.95e5) ** 4,
+        18.5,
+        18.3,
+        z_r[1],
+        -1.0e-5,
+        1.0e28,
+    )
+    f_j = star.eval_rsp2_face_jax(
+        jnp.asarray(5.0e10),
+        jnp.asarray(1.0e33),
+        jnp.asarray(6.67430e-8),
+        jnp.asarray(1.0e8),
+        jnp.asarray(1.0e-5),
+        jnp.asarray(1.0e5),
+        jnp.asarray(3.0e8),
+        jnp.asarray(0.40),
+        jnp.asarray(2.0),
+        jnp.asarray(w_eq_r),
+        jnp.asarray(0.8 * w_eq_r),
+        jnp.asarray((1.05e5) ** 4),
+        jnp.asarray((0.95e5) ** 4),
+        jnp.asarray(18.5),
+        jnp.asarray(18.3),
+        jnp.asarray(z_r[1]),
+        jnp.asarray(-1.0e-5),
+        jnp.asarray(1.0e28),
+    )
+    for r_val, j_val in zip(f_r, f_j, strict=True):
+        np.testing.assert_allclose(r_val, float(j_val), rtol=1.0e-13)
+
+    # Central finite-difference verification of `solve_stationary_rsp2_w_jax`
+    jtu.check_grads(
+        lambda gt_in: star.solve_stationary_rsp2_w_jax(
+            jnp.asarray(t),
+            jnp.asarray(rho),
+            jnp.asarray(p),
+            jnp.asarray(cp),
+            jnp.asarray(grad_ad),
+            jnp.asarray(delta),
+            jnp.asarray(kappa),
+            jnp.asarray(hp_cell),
+            gt_in,
+        ),
+        (jnp.asarray(grad_t),),
+        order=1,
+        rtol=1.0e-6,
+    )
+
+    # Verify subadiabatic zone (grad_t < grad_ad) with gammar=0.0 produces
+    # exact 0.0 and finite zero gradient (no 0 * inf = NaN propagation)
+    grad_sub = jax.grad(
+        lambda gt_in: star.solve_stationary_rsp2_w_jax(
+            jnp.asarray(t),
+            jnp.asarray(rho),
+            jnp.asarray(p),
+            jnp.asarray(cp),
+            jnp.asarray(grad_ad),
+            jnp.asarray(delta),
+            jnp.asarray(kappa),
+            jnp.asarray(hp_cell),
+            gt_in,
+            gammar=0.0,
+        )
+    )(jnp.asarray(0.25))
+    assert jnp.isfinite(grad_sub)
+    assert float(grad_sub) == 0.0
+
+
+def test_star_model_riemann_profile_and_pulse_exporters() -> None:
+    """Verify full-profile HLLC evaluation, Dziembowski pulsation variables,
+    double-point insertion, and `GYRE` / `FGONG` / `OSC` ASCII exporters.
+    """
+    model = star.StarModel.from_zams()
+    model.eval_hydro_vars()
+
+    faces, residuals = model.eval_riemann_profile(p_surf_bc=model.peos[0])
+    assert faces.shape == (model.nz, 7)
+    assert residuals.shape == (model.nz,)
+    assert np.all(np.isfinite(faces))
+    assert np.all(np.isfinite(residuals))
+
+    pts = model.build_pulse_points(add_center_point=True)
+    n_pts = model.nz + 1
+    assert pts.shape == (n_pts, 26)
+    assert pts[0, 0] == 0.0
+    assert abs(pts[0, 24] - 3.0) <= 1.0e-14
+    assert np.all(np.diff(pts[:, 0]) >= 0.0)
+    np.testing.assert_allclose(
+        pts[:, 18] + pts[:, 19] + pts[:, 20], 1.0, rtol=1.0e-14
+    )
+
+    # Compare non-center Dziembowski columns directly against model.peos[::-1]
+    v_j, vg_j, a_j, u_j, c1_j = star.eval_dziembowski_variables_jax(
+        jnp.asarray(model.r[::-1]),
+        jnp.asarray(model.m[::-1]),
+        jnp.asarray(model.peos[::-1]),
+        jnp.asarray(model.rho[::-1]),
+        jnp.asarray(model.gamma1[::-1]),
+        jnp.asarray(model.brunt_n2[::-1]),
+        jnp.full(model.nz, 6.67430e-8, dtype=jnp.float64),
+        float(model.r[0]),
+        float(model.mstar),
+    )
+    np.testing.assert_allclose(pts[1:, 21], np.asarray(v_j), rtol=1.0e-12)
+    np.testing.assert_allclose(pts[1:, 22], np.asarray(vg_j), rtol=1.0e-12)
+    np.testing.assert_allclose(
+        pts[1:, 23], np.asarray(a_j), rtol=1.0e-12, atol=1.0e-14
+    )
+    np.testing.assert_allclose(pts[1:, 24], np.asarray(u_j), rtol=1.0e-12)
+    np.testing.assert_allclose(pts[1:, 25], np.asarray(c1_j), rtol=1.0e-12)
+
+    # Verify double-point insertion preserves X + Y + Z = 1 on all points
+    pts_dbl = model.build_pulse_points(
+        add_center_point=True, add_double_points=True, grad_mu_threshold=0.0
+    )
+    assert pts_dbl.shape[0] > n_pts
+    np.testing.assert_allclose(
+        pts_dbl[:, 18] + pts_dbl[:, 19] + pts_dbl[:, 20], 1.0, rtol=1.0e-14
+    )
+
+    gyre_txt = model.to_gyre_str(add_center_point=True)
+    assert len(gyre_txt.splitlines()) == 1 + n_pts
+    fgong_txt = model.to_fgong_str(add_center_point=True)
+    assert len(fgong_txt.splitlines()) == 5 + 3 + 8 * n_pts
+    osc_txt = model.to_osc_str(add_center_point=True)
+    assert len(osc_txt.splitlines()) == 2 + 3 + 5 * n_pts

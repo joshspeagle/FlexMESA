@@ -519,6 +519,59 @@ class StarModel(_arrays.StarModelArrays):
             bool(is_one_mixture),
         )
 
+    def eval_riemann_profile(
+        self,
+        u_cell: _ArrF64 | None = None,
+        u_old_cell: _ArrF64 | None = None,
+        p_surf_bc: float = 0.0,
+        parallel: bool = True,
+    ) -> tuple[_ArrF64, _ArrF64]:
+        """Evaluate HLLC Riemann face states `(nz, 7)` and residuals `(nz,)`."""
+        nz = self.nz
+        u_arr = (
+            np.zeros(nz, dtype=np.float64)
+            if u_cell is None
+            else np.ascontiguousarray(u_cell, dtype=np.float64)
+        )
+        u_old_arr = (
+            u_arr
+            if u_old_cell is None
+            else np.ascontiguousarray(u_old_cell, dtype=np.float64)
+        )
+        return _rust.star_eval_riemann_profile(
+            self._rust_model,
+            u_arr,
+            u_old_arr,
+            float(p_surf_bc),
+            bool(parallel),
+        )
+
+    def build_pulse_points(
+        self,
+        add_center_point: bool = True,
+        add_double_points: bool = False,
+        grad_mu_threshold: float = 1.0e99,
+    ) -> _ArrF64:
+        """Build the `(n_pts, 26)` pulsation structure matrix."""
+        return _rust.star_build_pulse_points(
+            self._rust_model,
+            bool(add_center_point),
+            bool(add_double_points),
+            float(grad_mu_threshold),
+        )
+
+    def to_gyre_str(self, add_center_point: bool = True) -> str:
+        """Export the model in `GYRE` v120 ASCII format (`pulse_gyre.f90`)."""
+        return _rust.star_export_gyre(self._rust_model, bool(add_center_point))
+
+    def to_fgong_str(self, add_center_point: bool = True) -> str:
+        """Export the model in `FGONG` v1300 format (`pulse_fgong.f90`)."""
+        return _rust.star_export_fgong(self._rust_model, bool(add_center_point))
+
+    def to_osc_str(self, add_center_point: bool = True) -> str:
+        """Export the model in `OSC` ASCII format (`pulse_osc.f90`)."""
+        return _rust.star_export_osc(self._rust_model, bool(add_center_point))
+
 
 def yrs_for_init_timestep(m_msun: float) -> float:
     """Compute the initial ZAMS timestep in years (`yrs_for_init_timestep`)."""

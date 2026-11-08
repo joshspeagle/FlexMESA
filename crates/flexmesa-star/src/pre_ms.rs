@@ -240,8 +240,7 @@ pub fn build1_pre_ms_model(
         xn,
         xo,
     };
-    let (_, _, gradt_c) =
-        eval_pre_ms_gradt(&ctx, rho_c, t_c, r_c, m_c, lum_c)?;
+    let (_, _, gradt_c) = eval_pre_ms_gradt(&ctx, rho_c, t_c, r_c, m_c, lum_c)?;
 
     let dp_c = -kw_factor * m_c.powf(2.0 / 3.0);
     let p_outer_c = (p_c + dp_c).max(0.5 * p_c);

@@ -9,10 +9,15 @@
 //! transport profiles, and Brunt-Väisälä buoyancy frequencies.
 
 use flexmesa_star::{
-    build_pre_ms_model, eval_henyey_equations, interp_q, load_zams_model,
-    read_mod_str, read_photo_bytes, set_hydro_vars, solve_henyey_step,
-    write_mod_string, write_photo_bytes, yrs_for_init_timestep, StarControls,
-    StarError, StarJobControls, StarModel,
+    apply_overshooting, build_pre_ms_model, clean_mixing_glitches,
+    compute_convection_sigmas, do_adjust_mass, do_struct_burn_mix,
+    eval_dxdt_mix, eval_henyey_equations, interp_q, load_zams_model,
+    locate_convection_boundaries, read_mod_str, read_photo_bytes,
+    set_hydro_vars, set_mdot, solve_composition_diffusion, solve_henyey_step,
+    solve_omega_mix, write_mod_string, write_photo_bytes,
+    yrs_for_init_timestep, DutchLowTScheme, HenyeySolverReport,
+    OvershootConfig, OvershootScheme, StarControls, StarError, StarJobControls,
+    StarModel, WindScheme,
 };
 use numpy::{
     PyArray1, PyArray2, PyArray3, PyArrayMethods, PyReadonlyArray1,
@@ -29,9 +34,68 @@ type HenyeyEquationsPyTuple<'py> = (
     Bound<'py, PyArray3<f64>>,
     Bound<'py, PyArray2<f64>>,
 );
+type SolverReportTuple = (bool, usize, f64, f64, f64, f64);
 
 fn to_py_err(e: StarError) -> PyErr {
     PyValueError::new_err(e.to_string())
+}
+
+const fn report_to_tuple(rep: HenyeySolverReport) -> SolverReportTuple {
+    (
+        rep.converged,
+        rep.iterations,
+        rep.residual_norm,
+        rep.max_residual,
+        rep.correction_norm,
+        rep.max_correction,
+    )
+}
+
+fn build_overshoot_configs(
+    overshoot_f: f64,
+    overshoot_f0: f64,
+    scheme: &str,
+) -> Vec<OvershootConfig> {
+    if overshoot_f <= 0.0 {
+        return Vec::new();
+    }
+    let ov_scheme = if scheme.eq_ignore_ascii_case("step") {
+        OvershootScheme::Step
+    } else {
+        OvershootScheme::Exponential
+    };
+    vec![
+        OvershootConfig {
+            scheme: ov_scheme,
+            top_conv_bdy: true,
+            f: overshoot_f,
+            f0: overshoot_f0,
+            ..OvershootConfig::default()
+        },
+        OvershootConfig {
+            scheme: ov_scheme,
+            top_conv_bdy: false,
+            f: overshoot_f,
+            f0: overshoot_f0,
+            ..OvershootConfig::default()
+        },
+    ]
+}
+
+fn parse_wind_scheme(scheme: &str) -> PyResult<WindScheme> {
+    match scheme.to_ascii_lowercase().as_str() {
+        "" | "none" => Ok(WindScheme::None),
+        "reimers" => Ok(WindScheme::Reimers),
+        "blocker" => Ok(WindScheme::Blocker),
+        "vink" => Ok(WindScheme::Vink),
+        "nieuwenhuijzen" => Ok(WindScheme::Nieuwenhuijzen),
+        "de jager" | "de_jager" | "dejager" => Ok(WindScheme::DeJager),
+        "van loon" | "van_loon" | "vanloon" => Ok(WindScheme::VanLoon),
+        "dutch" => Ok(WindScheme::Dutch),
+        other => Err(PyValueError::new_err(format!(
+            "unknown wind scheme: {other}"
+        ))),
+    }
 }
 
 /// Python-exposed wrapper around [`flexmesa_star::StarModel`].
@@ -63,19 +127,16 @@ macro_rules! impl_py_star_model {
                     zbase: initial_z,
                     ..StarControls::default()
                 };
-                let job = StarJobControls::default();
-                let inner = load_zams_model(controls, job).map_err(to_py_err)?;
+                let inner = load_zams_model(controls, StarJobControls::default())
+                    .map_err(to_py_err)?;
                 Ok(Self { inner })
             }
 
             /// Constructs an $n = 1.5$ pre-main-sequence polytrope model.
             #[staticmethod]
             #[pyo3(signature = (
-                initial_mass=1.0,
-                initial_z=0.02,
-                initial_y=-1.0,
-                t_c=9.0e5,
-                d_log10_p=0.02
+                initial_mass=1.0, initial_z=0.02, initial_y=-1.0,
+                t_c=9.0e5, d_log10_p=0.02
             ))]
             pub fn from_pre_ms(
                 initial_mass: f64,
@@ -136,8 +197,7 @@ macro_rules! impl_py_star_model {
                 &self,
                 py: Python<'py>,
             ) -> Bound<'py, PyBytes> {
-                let buf = write_photo_bytes(&self.inner);
-                PyBytes::new(py, &buf)
+                PyBytes::new(py, &write_photo_bytes(&self.inner))
             }
 
             /// Evaluates zone and face microphysics (`set_hydro_vars`).
@@ -165,14 +225,15 @@ macro_rules! impl_py_star_model {
                 dq: PyReadonlyArray1<'_, f64>,
                 xa: PyReadonlyArray2<'_, f64>,
             ) -> PyResult<()> {
-                let lnd_s = lnd.as_slice()?;
-                let lnt_s = ln_t.as_slice()?;
-                let lnr_s = ln_r.as_slice()?;
-                let lum_s = lum.as_slice()?;
-                let dq_s = dq.as_slice()?;
-                let xa_s = xa.as_slice()?;
-                let nz = lnd_s.len();
-                let species = self.inner.species;
+                let (lnd_s, lnt_s, lnr_s, lum_s, dq_s, xa_s) = (
+                    lnd.as_slice()?,
+                    ln_t.as_slice()?,
+                    ln_r.as_slice()?,
+                    lum.as_slice()?,
+                    dq.as_slice()?,
+                    xa.as_slice()?,
+                );
+                let (nz, species) = (lnd_s.len(), self.inner.species);
                 if lnt_s.len() != nz
                     || lnr_s.len() != nz
                     || lum_s.len() != nz
@@ -189,8 +250,7 @@ macro_rules! impl_py_star_model {
                 self.inner.lum.copy_from_slice(lum_s);
                 self.inner.dq.copy_from_slice(dq_s);
                 self.inner.xa.copy_from_slice(xa_s);
-                self.inner.sync_mesh_and_pack().map_err(to_py_err)?;
-                Ok(())
+                self.inner.sync_mesh_and_pack().map_err(to_py_err)
             }
 
             /// Number of Lagrangian zones (`nz`).
@@ -246,45 +306,34 @@ macro_rules! impl_py_star_model {
                 let sys = py
                     .detach(|| eval_henyey_equations(inner, include_chem))
                     .map_err(to_py_err)?;
-                let nz = sys.nz;
-                let nvar = sys.nvar;
-                let equ =
-                    PyArray1::from_vec(py, sys.equ).reshape([nz, nvar])?;
-                let lblk = PyArray1::from_vec(py, sys.lblk)
-                    .reshape([nz, nvar, nvar])?;
-                let dblk = PyArray1::from_vec(py, sys.dblk)
-                    .reshape([nz, nvar, nvar])?;
-                let ublk = PyArray1::from_vec(py, sys.ublk)
-                    .reshape([nz, nvar, nvar])?;
-                let x_scale =
-                    PyArray1::from_vec(py, sys.x_scale).reshape([nz, nvar])?;
-                Ok((equ, lblk, dblk, ublk, x_scale))
+                let (nz, nvar) = (sys.nz, sys.nvar);
+                Ok((
+                    PyArray1::from_vec(py, sys.equ).reshape([nz, nvar])?,
+                    PyArray1::from_vec(py, sys.lblk)
+                        .reshape([nz, nvar, nvar])?,
+                    PyArray1::from_vec(py, sys.dblk)
+                        .reshape([nz, nvar, nvar])?,
+                    PyArray1::from_vec(py, sys.ublk)
+                        .reshape([nz, nvar, nvar])?,
+                    PyArray1::from_vec(py, sys.x_scale).reshape([nz, nvar])?,
+                ))
             }
 
-            /// Executes a damped Newton-Raphson Henyey step, returning
-            /// `(converged, iterations, residual_norm, max_residual,
-            /// correction_norm, max_correction)`.
+            /// Executes a damped Newton-Raphson Henyey step.
             #[pyo3(signature = (include_chem=false, use_bcyclic=true))]
             pub fn solve_henyey(
                 &mut self,
                 py: Python<'_>,
                 include_chem: bool,
                 use_bcyclic: bool,
-            ) -> PyResult<(bool, usize, f64, f64, f64, f64)> {
+            ) -> PyResult<SolverReportTuple> {
                 let inner = &mut self.inner;
                 let rep = py
                     .detach(|| {
                         solve_henyey_step(inner, include_chem, use_bcyclic)
                     })
                     .map_err(to_py_err)?;
-                Ok((
-                    rep.converged,
-                    rep.iterations,
-                    rep.residual_norm,
-                    rep.max_residual,
-                    rep.correction_norm,
-                    rep.max_correction,
-                ))
+                Ok(report_to_tuple(rep))
             }
 
             /// Total stellar mass $M_*$ in grams.
@@ -365,6 +414,123 @@ macro_rules! impl_py_star_model {
                 PyArray1::from_vec(py, codes)
             }
 
+            /// Cleans mixing glitches, locates convective boundaries, applies
+            /// overshooting, and updates `sig`, returning `num_conv_boundaries`.
+            #[pyo3(signature = (
+                dt, overshoot_f=0.0, overshoot_f0=0.004, scheme="exponential"
+            ))]
+            pub fn update_mixing(
+                &mut self,
+                dt: f64,
+                overshoot_f: f64,
+                overshoot_f0: f64,
+                scheme: &str,
+            ) -> usize {
+                clean_mixing_glitches(&mut self.inner, 1.0, 0.1);
+                let (_cz_dq, boundaries) =
+                    locate_convection_boundaries(&self.inner);
+                let cfgs =
+                    build_overshoot_configs(overshoot_f, overshoot_f0, scheme);
+                if !cfgs.is_empty() {
+                    apply_overshooting(&mut self.inner, &boundaries, &cfgs);
+                }
+                compute_convection_sigmas(&mut self.inner, dt, 1.0, 1.0e10);
+                boundaries.len()
+            }
+
+            /// Explicit mass-conserving diffusive species mixing rate.
+            pub fn eval_dxdt_mix<'py>(
+                &self,
+                py: Python<'py>,
+            ) -> PyResult<Bound<'py, PyArray2<f64>>> {
+                let rate = eval_dxdt_mix(&self.inner);
+                PyArray1::from_vec(py, rate)
+                    .reshape([self.inner.nz, self.inner.species])
+            }
+
+            /// Implicit backward-Euler species diffusion over `dt` (s).
+            pub fn solve_diffusion(&mut self, dt: f64) {
+                solve_composition_diffusion(&mut self.inner, dt);
+            }
+
+            /// Substepped tridiagonal rotational angular momentum diffusion.
+            #[pyo3(signature = (dt, omega, nu_omega, n_substeps=4))]
+            pub fn run_omega_mix(
+                &mut self,
+                dt: f64,
+                omega: PyReadonlyArray1<'_, f64>,
+                nu_omega: PyReadonlyArray1<'_, f64>,
+                n_substeps: usize,
+            ) -> PyResult<()> {
+                let (w_s, nu_s) = (omega.as_slice()?, nu_omega.as_slice()?);
+                if w_s.len() != self.inner.nz || nu_s.len() != self.inner.nz {
+                    return Err(PyValueError::new_err(
+                        "omega and nu_omega must have length nz",
+                    ));
+                }
+                self.inner.omega.copy_from_slice(w_s);
+                solve_omega_mix(&mut self.inner, dt, nu_s, n_substeps);
+                Ok(())
+            }
+
+            /// Executes `do_struct_burn_mix` (coupled or operator-split).
+            #[pyo3(signature = (
+                dt, op_split_burn=false, use_bcyclic=true,
+                overshoot_f=0.0, overshoot_f0=0.004
+            ))]
+            pub fn step_struct_burn_mix(
+                &mut self,
+                py: Python<'_>,
+                dt: f64,
+                op_split_burn: bool,
+                use_bcyclic: bool,
+                overshoot_f: f64,
+                overshoot_f0: f64,
+            ) -> PyResult<SolverReportTuple> {
+                let cfgs = build_overshoot_configs(
+                    overshoot_f,
+                    overshoot_f0,
+                    "exponential",
+                );
+                let inner = &mut self.inner;
+                let rep = py
+                    .detach(|| {
+                        do_struct_burn_mix(
+                            inner,
+                            dt,
+                            op_split_burn,
+                            use_bcyclic,
+                            &cfgs,
+                        )
+                    })
+                    .map_err(to_py_err)?;
+                Ok(report_to_tuple(rep))
+            }
+
+            /// Evaluates stellar wind mass loss and applies 3-region mass
+            /// adjustment (`do_adjust_mass`), returning `mstar_dot`
+            /// ($\mathrm{g\,s^{-1}}$).
+            #[pyo3(signature = (scheme="Dutch", eta=1.0, dt=0.0))]
+            pub fn apply_wind_and_adjust_mass(
+                &mut self,
+                scheme: &str,
+                eta: f64,
+                dt: f64,
+            ) -> PyResult<f64> {
+                let ws = parse_wind_scheme(scheme)?;
+                let mdot = set_mdot(
+                    &mut self.inner,
+                    ws,
+                    DutchLowTScheme::DeJager,
+                    eta,
+                );
+                if dt > 0.0 && mdot != 0.0 {
+                    do_adjust_mass(&mut self.inner, mdot * dt, None, 0.99, 0.95)
+                        .map_err(to_py_err)?;
+                }
+                Ok(mdot)
+            }
+
             $(
                 $(#[$doc])+
                 #[getter]
@@ -394,6 +560,8 @@ impl_py_star_model!(
     dq => dq,
     /// Face enclosed mass fraction $q$.
     q => q,
+    /// Face exterior mass fraction $1 - q$.
+    xq => xq,
     /// Face enclosed mass $m$ ($\mathrm{g}$).
     m => m,
     /// Cell mass $\Delta m$ ($\mathrm{g}$).
@@ -410,6 +578,10 @@ impl_py_star_model!(
     rho => rho,
     /// Cell temperature $T$ ($\mathrm{K}$).
     t => t,
+    /// Cell hydrogen mass fraction $X$.
+    xh_mass => xh_mass,
+    /// Cell helium mass fraction $Y$.
+    yhe_mass => yhe_mass,
     /// Cell gas pressure $P_{\mathrm{gas}}$ ($\mathrm{dyn\,cm^{-2}}$).
     pgas => pgas,
     /// Cell radiation pressure $P_{\mathrm{rad}}$ ($\mathrm{dyn\,cm^{-2}}$).
@@ -450,6 +622,8 @@ impl_py_star_model!(
     non_nuc_neu => non_nuc_neu,
     /// Cell nuclear energy generation rate $\epsilon_{\mathrm{nuc}}$.
     eps_nuc => eps_nuc,
+    /// Cell mass-change heating rate $\epsilon_{\dot{M}}$.
+    eps_mdot => eps_mdot,
     /// Face actual temperature gradient $\nabla_T$.
     gradt => gradt,
     /// Face radiative temperature gradient $\nabla_{\mathrm{rad}}$.
@@ -464,6 +638,18 @@ impl_py_star_model!(
     mlt_d => mlt_d,
     /// Face convective conductivity $c_{\mathrm{dc}}$.
     mlt_cdc => mlt_cdc,
+    /// Face total Eulerian diffusion coefficient $D_{\mathrm{mix}}$
+    /// ($\mathrm{cm^2\,s^{-1}}$).
+    d_mix => d_mix,
+    /// Face convective velocity after overshooting $v_{c,\mathrm{mix}}$
+    /// ($\mathrm{cm\,s^{-1}}$).
+    conv_vel => conv_vel,
+    /// Face Lagrangian diffusion coupling $\sigma$ ($\mathrm{g\,s^{-1}}$).
+    sig => sig,
+    /// Face rotational angular velocity $\Omega$ ($\mathrm{rad\,s^{-1}}$).
+    omega => omega,
+    /// Face specific angular momentum $j_{\mathrm{rot}}$ ($\mathrm{cm^2\,s^{-1}}$).
+    j_rot => j_rot,
     /// Face composition gradient term $B$.
     brunt_b => brunt_b,
     /// Face Brunt-Väisälä frequency squared $N^2$ ($\mathrm{s^{-2}}$).

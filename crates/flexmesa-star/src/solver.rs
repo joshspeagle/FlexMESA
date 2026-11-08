@@ -171,7 +171,9 @@ fn apply_damped_correction(
             for j in 0..model.species {
                 let ivar = model.layout.chem_var_index(j);
                 let x_new = (xa_base[c_base + j]
-                    + alpha * dx_scaled[s_base + ivar] * x_scale[s_base + ivar])
+                    + alpha
+                        * dx_scaled[s_base + ivar]
+                        * x_scale[s_base + ivar])
                     .clamp(0.0, 1.0);
                 model.xa[c_base + j] = x_new;
             }
@@ -211,22 +213,11 @@ fn solve_linear_henyey_system(
     let rhs: Vec<f64> = sys.equ.iter().map(|&r| -r).collect();
     let res = if use_bcyclic && sys.nz >= 2 {
         solve_block_tridiag_bcyclic(
-            sys.nvar,
-            sys.nz,
-            &sys.lblk,
-            &sys.dblk,
-            &sys.ublk,
-            &rhs,
-            true,
+            sys.nvar, sys.nz, &sys.lblk, &sys.dblk, &sys.ublk, &rhs, true,
         )
     } else {
         solve_block_tridiagonal(
-            sys.nvar,
-            sys.nz,
-            &sys.lblk,
-            &sys.dblk,
-            &sys.ublk,
-            &rhs,
+            sys.nvar, sys.nz, &sys.lblk, &sys.dblk, &sys.ublk, &rhs,
         )
     };
     res.map_err(|e| {

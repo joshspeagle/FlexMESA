@@ -489,10 +489,13 @@ class RustStarModel:
     m: _ArrF64
     dm: _ArrF64
     dm_bar: _ArrF64
+    xq: _ArrF64
     r: _ArrF64
     rmid: _ArrF64
     grav: _ArrF64
     xa: _ArrF64
+    xh_mass: _ArrF64
+    yhe_mass: _ArrF64
     rho: _ArrF64
     t: _ArrF64
     pgas: _ArrF64
@@ -516,6 +519,7 @@ class RustStarModel:
     non_nuc_neu: _ArrF64
     eps_nuc: _ArrF64
     eps_grav: _ArrF64
+    eps_mdot: _ArrF64
     dxdt_nuc: _ArrF64
     gradt: _ArrF64
     gradr: _ArrF64
@@ -524,6 +528,11 @@ class RustStarModel:
     mlt_vc: _ArrF64
     mlt_d: _ArrF64
     mlt_cdc: _ArrF64
+    d_mix: _ArrF64
+    conv_vel: _ArrF64
+    sig: _ArrF64
+    omega: _ArrF64
+    j_rot: _ArrF64
     brunt_b: _ArrF64
     brunt_n2: _ArrF64
     mixing_type: _ArrI32
@@ -541,6 +550,12 @@ class RustStarModel:
     def save_start_values(self) -> None: ...
     def eval_equations(self, include_chem: bool = False) -> tuple[_ArrF64, _ArrF64, _ArrF64, _ArrF64, _ArrF64]: ...  # noqa: E501
     def solve_henyey(self, include_chem: bool = False, use_bcyclic: bool = True) -> tuple[bool, int, float, float, float, float]: ...  # noqa: E501
+    def update_mixing(self, dt: float, overshoot_f: float = 0.0, overshoot_f0: float = 0.004, scheme: str = "exponential") -> int: ...  # noqa: E501
+    def eval_dxdt_mix(self) -> _ArrF64: ...
+    def solve_diffusion(self, dt: float) -> None: ...
+    def run_omega_mix(self, dt: float, omega: _ArrF64, nu_omega: _ArrF64, n_substeps: int = 4) -> None: ...  # noqa: E501
+    def step_struct_burn_mix(self, dt: float, op_split_burn: bool = False, use_bcyclic: bool = True, overshoot_f: float = 0.0, overshoot_f0: float = 0.004) -> tuple[bool, int, float, float, float, float]: ...  # noqa: E501
+    def apply_wind_and_adjust_mass(self, scheme: str = "Dutch", eta: float = 1.0, dt: float = 0.0) -> float: ...  # noqa: E501
     def set_primary_state(self, lnd: _ArrF64, ln_t: _ArrF64, ln_r: _ArrF64, lum: _ArrF64, dq: _ArrF64, xa: _ArrF64) -> None: ...  # noqa: E501
 
 # fmt: on

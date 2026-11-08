@@ -298,6 +298,8 @@ pub struct StarControls {
     pub non_nuc_neu_factor: f64,
     /// Minimum $\log_{10}(T/\mathrm{K})$ for nuclear network evaluation.
     pub min_logt_for_net: f64,
+    /// Whether operator-split 1-zone burning is active (`op_split_burn`).
+    pub op_split_burn: bool,
     /// Nuclear energy generation multiplicative factor (`1.0`).
     pub eps_nuc_factor: f64,
     /// Nuclear abundance rate multiplicative factor (`1.0`).
@@ -370,6 +372,7 @@ impl Default for StarControls {
             min_t_for_neu: 1.0e7,
             non_nuc_neu_factor: 1.0,
             min_logt_for_net: 6.3,
+            op_split_burn: false,
             eps_nuc_factor: 1.0,
             dxdt_nuc_factor: 1.0,
             screening_mode: ScreeningMode::Extended,

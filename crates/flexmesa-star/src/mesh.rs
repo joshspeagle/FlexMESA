@@ -302,7 +302,9 @@ impl StarModel {
         self.peos_start.clone_from(&self.peos);
         self.xa_start.clone_from(&self.xa);
         self.xh_start.clone_from(&self.xh);
-        crate::hydro_vars::update_sig_from_d_mix(self);
+        if self.sig.iter().all(|&s| s == 0.0) {
+            crate::hydro_vars::update_sig_from_d_mix(self);
+        }
     }
 
     /// Snapshots current state into `*_old` arrays after a successful step.

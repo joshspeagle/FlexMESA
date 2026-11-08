@@ -307,7 +307,7 @@ fn test_convective_boundaries_overshoot_diffusion_and_winds_conserve_mass() {
     clean_mixing_glitches(&mut model, 1.0, 0.1);
     let (cz_bdy_dq, boundaries) = locate_convection_boundaries(&model);
     assert_eq!(cz_bdy_dq.len(), model.nz);
-    assert!(!boundaries.is_empty());
+    assert_eq!(boundaries.len(), 5);
 
     let ov_cfg = OvershootConfig::default();
     apply_overshooting(&mut model, &boundaries, &[ov_cfg]);

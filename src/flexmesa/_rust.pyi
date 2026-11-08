@@ -563,7 +563,7 @@ class RustStarModel:
     def adjust_mesh(self) -> tuple[int, int]: ...
     def pick_next_timestep(self, max_timestep_factor: float = 1.2, min_timestep_factor: float = 0.5, dx_nuc_drop_limit: float = 1.0e-2) -> tuple[float, float, float]: ...  # noqa: E501
     def evolve_step(self, do_remesh: bool = False, op_split_burn: bool = False, use_bcyclic: bool = True) -> tuple[int, float, float, float, int, int, int, int, float, bool]: ...  # noqa: E501
-    def evolve(self, max_steps: int, do_remesh: bool = False, op_split_burn: bool = False, use_bcyclic: bool = True) -> list[tuple[int, float, float, float, int, int, int, int, float, bool]]: ...  # noqa: E501
+    def evolve(self, max_steps: int, do_remesh: bool = False, op_split_burn: bool = False, use_bcyclic: bool = True, max_age: float | None = None) -> list[tuple[int, float, float, float, int, int, int, int, float, bool]]: ...  # noqa: E501
     def history_tuple(
         self,
     ) -> tuple[tuple[int, int, int, int], list[float]]: ...

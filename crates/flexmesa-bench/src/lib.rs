@@ -37,6 +37,7 @@ pub mod kernels_solver;
 pub mod kernels_wave2;
 pub mod kernels_wave3a;
 pub mod kernels_wave3b;
+pub mod kernels_wave4;
 pub mod tridiag_fast;
 
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -62,6 +63,11 @@ pub use kernels_wave3a::{
 pub use kernels_wave3b::{
     bench_atm_table, bench_eos_4d, bench_kap_fixed, bench_net_eval,
     bench_rates_screen, run_all_wave3b_benchmarks,
+};
+pub use kernels_wave4::{
+    bench_star_evolve_step, bench_star_hydro_eqns, bench_star_micro_vars,
+    bench_star_newton_step, bench_star_remesh, make_wave4_zams_model,
+    run_all_wave4_benchmarks,
 };
 
 /// Number of worker threads used in Stage 3 multi-core benchmarks.

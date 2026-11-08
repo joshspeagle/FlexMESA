@@ -217,7 +217,9 @@ def eval_face_mlt_and_brunt_jax(
     chi_rho_f = jnp.maximum(_to_face(chi_rho), 1.0e-10)
     chi_t_f = jnp.maximum(_to_face(chi_t), 1.0e-10)
 
-    hp = p_f / (grav * rho_f)
+    hp_std = p_f / (grav * rho_f)
+    hp_alt = jnp.sqrt(p_f / jnp.maximum(cgrav * rho_f * rho_f, 1.0e-99))
+    hp = jnp.where(jnp.isfinite(hp_std) & (hp_std <= hp_alt), hp_std, hp_alt)
     lam = mixing_length_alpha * hp
 
     # Brunt composition term B

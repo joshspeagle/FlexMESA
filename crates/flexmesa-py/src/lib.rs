@@ -78,6 +78,9 @@ pub mod neu_py;
 /// Tier B bindings for `rates` (nuclear reaction rates, screening, and weak rates).
 #[allow(unsafe_code)]
 pub mod rates_py;
+/// Internal helper routines for [`star_py::PyStarModel`].
+#[allow(unsafe_code)]
+pub mod star_helpers_py;
 /// Tier A/B/C bindings for `star` (stellar structure, ZAMS/pre-MS, I/O, microphysics).
 #[allow(unsafe_code)]
 pub mod star_py;

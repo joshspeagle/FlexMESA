@@ -252,46 +252,38 @@ impl HelmTable {
         let z_deg = (0.5 * n_e * lambda3).max(1.0e-99);
         let eta = z_deg.ln();
         let p_f = (PLANCK_H / (2.0 * PI)) * (3.0 * PI * PI * n_e).cbrt();
-        if z_deg <= 0.1 {
-            let e_f = p_f * p_f / (2.0 * ME)
-                * (1.0 - 0.25 * (p_f / (ME * CLIGHT)).powi(2));
-            return HelmVertex {
-                f: [
-                    AVO * kt * (eta - 1.0),
-                    AVO * kt / den,
-                    k * (eta - 2.5),
-                    -AVO * kt / (den * den),
-                    -1.5 * k / temp,
-                    k / den,
-                    -k / (den * den),
-                    0.0,
-                    0.0,
-                ],
-                dpdf: [
-                    AVO * kt + (2.0 / 3.0) * AVO * e_f.max(0.0),
-                    0.0,
-                    k,
-                    0.0,
-                ],
-                ef: [eta, 1.0 / den, -1.5 / temp, 0.0],
-                xf: [n_e, AVO, 0.0, 0.0],
-            };
-        }
         let w = std::f64::consts::E / z_deg;
-        let (p, q, ln_1pw) = (w / (1.0 + w), 1.0 / (1.0 + w), w.ln_1p());
+        let (p, q, ln_1pw) = if z_deg < 1.0e-8 {
+            let q_small = z_deg / std::f64::consts::E;
+            (1.0 - q_small, q_small, 1.0 - eta + q_small)
+        } else {
+            (w / (1.0 + w), 1.0 / (1.0 + w), w.ln_1p())
+        };
         let x_f = p_f / (ME * CLIGHT);
         let (x2, gam, mc2) = (
             x_f * x_f,
             (1.0 + x_f * x_f).sqrt(),
             AVO * ME * CLIGHT * CLIGHT,
         );
-        let f_cold = mc2
-            * (0.375 * (x_f * (2.0 * x2 + 1.0) * gam - x_f.asinh())
-                / (x2 * x_f)
-                - 1.0);
-        let mu_cold = mc2 * x2 / (gam + 1.0);
-        let fd_cold = (mu_cold - f_cold) / den;
-        let fdd_cold = (mc2 * x2 / (3.0 * gam * den) - 2.0 * fd_cold) / den;
+        let (f_cold, fd_cold, fdd_cold) = if x_f < 1.0e-2 {
+            let x4 = x2 * x2;
+            let x6 = x4 * x2;
+            let f_c = mc2 * (0.3 * x2 - (3.0 / 56.0) * x4 + (1.0 / 48.0) * x6);
+            let fd_c = (mc2 / den)
+                * (0.2 * x2 - (1.0 / 14.0) * x4 + (1.0 / 24.0) * x6);
+            let fdd_c =
+                (mc2 / (den * den)) * (-(1.0 / 15.0) * x2 + (1.0 / 42.0) * x4);
+            (f_c, fd_c, fdd_c)
+        } else {
+            let f_c = mc2
+                * (0.375 * (x_f * (2.0 * x2 + 1.0) * gam - x_f.asinh())
+                    / (x2 * x_f)
+                    - 1.0);
+            let mu_c = mc2 * x2 / (gam + 1.0);
+            let fd_c = (mu_c - f_c) / den;
+            let fdd_c = (mc2 * x2 / (3.0 * gam * den) - 2.0 * fd_c) / den;
+            (f_c, fd_c, fdd_c)
+        };
         let f_val = f_cold - k * temp * ln_1pw;
         let fd = fd_cold + k * p * temp / den;
         let ft = -k * (1.5 * p + ln_1pw);

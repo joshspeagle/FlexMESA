@@ -27,6 +27,7 @@ from flexmesa.bench import kernels_solver as _solver
 from flexmesa.bench import kernels_wave2 as _wave2
 from flexmesa.bench import kernels_wave3a as _wave3a
 from flexmesa.bench import kernels_wave3b as _wave3b
+from flexmesa.bench import kernels_wave4 as _wave4
 
 STAGE3_BATCH_SIZE = _harness.STAGE3_BATCH_SIZE
 BenchRecord = _harness.BenchRecord
@@ -70,6 +71,14 @@ bench_net_eval = _wave3b.bench_net_eval
 bench_rates_screen = _wave3b.bench_rates_screen
 run_all_wave3b_benchmarks = _wave3b.run_all_wave3b_benchmarks
 
+bench_star_evolve_step = _wave4.bench_star_evolve_step
+bench_star_hydro_eqns = _wave4.bench_star_hydro_eqns
+bench_star_micro_vars = _wave4.bench_star_micro_vars
+bench_star_newton_step = _wave4.bench_star_newton_step
+bench_star_remesh = _wave4.bench_star_remesh
+make_wave4_zams_model = _wave4.make_wave4_zams_model
+run_all_wave4_benchmarks = _wave4.run_all_wave4_benchmarks
+
 __all__: list[str] = [
     "STAGE3_BATCH_SIZE",
     "WAVE2_ISO_NAMES",
@@ -94,10 +103,16 @@ __all__: list[str] = [
     "bench_net_eval",
     "bench_neu",
     "bench_rates_screen",
+    "bench_star_evolve_step",
+    "bench_star_hydro_eqns",
+    "bench_star_micro_vars",
+    "bench_star_newton_step",
+    "bench_star_remesh",
     "bench_turb_mlt",
     "bench_turb_tdc",
     "make_block_tridiag_fixture",
     "make_wave2_composition_profile",
+    "make_wave4_zams_model",
     "max_err3",
     "max_rel_diff",
     "measure_and_capture",
@@ -107,4 +122,5 @@ __all__: list[str] = [
     "run_all_wave2_benchmarks",
     "run_all_wave3a_benchmarks",
     "run_all_wave3b_benchmarks",
+    "run_all_wave4_benchmarks",
 ]

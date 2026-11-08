@@ -489,7 +489,7 @@ pub fn load_zams_model_from_catalog(
     let dt_sec = yrs_for_init_timestep(m_target) * SECYER;
     model.dt = dt_sec;
     model.dt_next = dt_sec;
-    model.dt_old = dt_sec;
+    model.dt_old = 0.0;
     model.finish_init_model()?;
 
     Ok(model)

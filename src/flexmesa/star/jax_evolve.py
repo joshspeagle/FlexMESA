@@ -42,6 +42,20 @@ def eval_mesh_gval_jax(
     return jnp.concatenate([g_inner, g_inner[-1:]])
 
 
+def _smoothed_var_sum_jax(v: jax.Array, v_old: jax.Array) -> jax.Array:
+    """Evaluate 5-point boxcar-smoothed variation sum (`timestep.f90`)."""
+    dv = v - v_old
+    nz = dv.shape[0]
+    if nz < 4:
+        return jnp.sum(jnp.abs(dv))
+    c5 = (dv[:-4] + dv[1:-3] + dv[2:-2] + dv[3:-1] + dv[4:]) / 5.0
+    s_mid = jnp.sum(jnp.abs(c5))
+    s_0 = jnp.abs(2.0 * dv[0] + dv[1]) / 3.0
+    s_n = jnp.abs(2.0 * dv[-1] + dv[-2]) / 3.0
+    s_1 = jnp.abs(dv[0] + dv[1] + dv[2]) / 3.0
+    return s_mid + s_0 + s_n + s_1
+
+
 @jax.jit
 def eval_varcontrol_jax(
     lnd: jax.Array,
@@ -68,13 +82,17 @@ def eval_varcontrol_jax(
     Returns:
         Scalar JAX array holding `varcontrol`.
     """
+    del lum, lum_old
     nz = lnd.shape[0]
-    l_scale = jnp.maximum(jnp.abs(lum[0]), _L_SUN)
-    dlnd = jnp.abs(lnd - lnd_old) / (1.0 + jnp.abs(lnd))
-    dlnt = jnp.abs(ln_t - ln_t_old) / (1.0 + jnp.abs(ln_t))
-    dlnr = jnp.abs(ln_r - ln_r_old) / (1.0 + jnp.abs(ln_r))
-    dlum = jnp.abs(lum - lum_old) / (l_scale + jnp.abs(lum))
-    return jnp.sum(dlnd + dlnt + dlnr + dlum) / (4.0 * nz)
+    sum_lnd = _smoothed_var_sum_jax(lnd, lnd_old) / 3.0
+    sum_lnt = _smoothed_var_sum_jax(ln_t, ln_t_old)
+    sum_lnr = _smoothed_var_sum_jax(ln_r, ln_r_old)
+    sumscales = (
+        jnp.maximum(jnp.abs(lnd_old[0]), 1.0)
+        + jnp.maximum(jnp.abs(ln_t_old[0]), 1.0)
+        + jnp.maximum(jnp.abs(ln_r_old[0]), 1.0)
+    )
+    return (sum_lnd + sum_lnt + sum_lnr) / (sumscales * (3.0 * nz))
 
 
 def _filter_limit_jax(x: jax.Array | float) -> jax.Array:
@@ -111,17 +129,19 @@ def eval_h211_timestep_jax(
         jnp.asarray(dt_limit_ratio, dtype=jnp.float64), 1.0e-10
     )
     w_prev_in = jnp.asarray(dt_limit_ratio_old, dtype=jnp.float64)
-    w_prev = jnp.where(w_prev_in > 0.0, jnp.maximum(w_prev_in, 1.0e-10), w_curr)
+    has_prev = (w_prev_in > 0.0) & (dt_old_arr > 0.0) & (dt_arr > 0.0)
+    w_prev = jnp.maximum(w_prev_in, 1.0e-10)
     dt_ratio = jnp.where(
-        (dt_old_arr > 0.0) & (dt_arr > 0.0),
-        jnp.maximum(dt_arr / dt_old_arr, 1.0e-10),
+        has_prev,
+        jnp.maximum(dt_arr / jnp.maximum(dt_old_arr, 1.0e-30), 1.0e-10),
         1.0,
     )
 
     r_n = jnp.maximum(_filter_limit_jax(1.0 / w_curr), 1.0e-4)
     r_nm1 = jnp.maximum(_filter_limit_jax(1.0 / w_prev), 1.0e-4)
-    raw_factor = _filter_limit_jax(
+    h211_factor = _filter_limit_jax(
         (r_n**0.25) * (r_nm1**0.25) * (dt_ratio ** (-0.25))
     )
+    raw_factor = jnp.where(has_prev, h211_factor, 1.0 / w_curr)
     clamped = jnp.clip(raw_factor, min_timestep_factor, max_timestep_factor)
     return dt_arr * clamped

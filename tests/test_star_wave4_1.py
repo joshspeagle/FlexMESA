@@ -124,7 +124,7 @@ def test_star_jax_grid_and_face_mlt_match_rust_and_differentiate() -> None:
     )
 
     # Verify JAX forward-mode AD through `eval_face_mlt_and_brunt_jax`
-    sl = slice(model.nz - 16, model.nz)
+    sl = slice(model.nz - 128, model.nz - 112)
     dq_s = jnp.asarray(model.dq[sl])
     lnr_s = jnp.asarray(model.ln_r[sl])
     lum_s = jnp.asarray(model.lum[sl])

@@ -26,6 +26,7 @@ flexmesa-kap = { path = "../flexmesa-kap" }
 flexmesa-rates = { path = "../flexmesa-rates" }
 flexmesa-net = { path = "../flexmesa-net" }
 flexmesa-atm = { path = "../flexmesa-atm" }
+flexmesa-star = { path = "../flexmesa-star" }
 rayon.workspace = true
 
 [lints]

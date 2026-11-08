@@ -10,7 +10,8 @@
 
 use flexmesa_bench::{
     run_all_wave1_benchmarks, run_all_wave2_benchmarks,
-    run_all_wave3a_benchmarks, run_all_wave3b_benchmarks, BenchRecord,
+    run_all_wave3a_benchmarks, run_all_wave3b_benchmarks,
+    run_all_wave4_benchmarks, BenchRecord,
 };
 
 /// Pinned cross-language reference checksums for $N_{\mathrm{zones}} = 8$
@@ -51,6 +52,17 @@ const EXPECTED_WAVE3B_CHECKSUMS_N8: [(&str, f64); 5] = [
     ("rates_screen", -1.139_188_914_724_813e2),
     ("net_eval", 9.619_649_848_151_354e1),
     ("atm_table", 8.985_411_175_716_764e1),
+];
+
+/// Pinned cross-language reference checksums for $N_{\mathrm{zones}} = 8$
+/// across all five Wave 4 1D stellar engine workloads (shared with
+/// `tests/test_wave4_bench.py` and `benchmarks/fortran_mesa/run_wave4_bench.f90`).
+const EXPECTED_WAVE4_CHECKSUMS_N8: [(&str, f64); 5] = [
+    ("star_micro_vars", 2.497_297_961_588_147e2),
+    ("star_hydro_eqns", 1.411_154_427_772_951e6),
+    ("star_newton_step", 1.333_277_163_962_19e2),
+    ("star_remesh", 4.203_476_959_958_853e2),
+    ("star_evolve_step", 9.931_842_248_453_043e1),
 ];
 
 fn assert_records_parity(records: &[BenchRecord], expected_n8: &[(&str, f64)]) {
@@ -176,5 +188,22 @@ fn test_wave3b_four_stage_benchmarks_parity() {
 #[ignore = "benchmark table generator for --release runs"]
 fn print_full_wave3b_rust_benchmarks() {
     let records = run_all_wave3b_benchmarks(&[128, 1024, 4096], 3, 9);
+    print_bench_table(&records);
+}
+
+/// Verifies that all five Wave 4 1D stellar engine benchmark workloads execute
+/// across Stages 0..3 and maintain machine-precision parity ($\le 10^{-12}$).
+#[test]
+fn test_wave4_four_stage_benchmarks_parity() {
+    let records = run_all_wave4_benchmarks(&[8, 32], 1, 3);
+    assert_records_parity(&records, &EXPECTED_WAVE4_CHECKSUMS_N8);
+}
+
+/// Prints the full Wave 4 four-stage benchmark table across
+/// $N_{\mathrm{zones}} \in \{128, 512, 1024\}$.
+#[test]
+#[ignore = "benchmark table generator for --release runs"]
+fn print_full_wave4_rust_benchmarks() {
+    let records = run_all_wave4_benchmarks(&[128, 512, 1024], 2, 7);
     print_bench_table(&records);
 }

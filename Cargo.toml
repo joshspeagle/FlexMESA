@@ -24,6 +24,7 @@ members = [
   "crates/flexmesa-net",
   "crates/flexmesa-star",
   "crates/flexmesa-binary",
+  "crates/flexmesa-astero",
   "crates/flexmesa-bench",
   "crates/flexmesa-py",
 ]

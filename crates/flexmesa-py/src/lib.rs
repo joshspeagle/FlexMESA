@@ -30,6 +30,9 @@
     clippy::unnecessary_wraps
 )]
 
+/// Tier B/C bindings for Wave 5.4 `astero` (scaling relations, surface effects, optimization).
+#[allow(unsafe_code)]
+pub mod astero_py;
 /// Tier B bindings for `atm` (surface boundary conditions, $T(\tau)$, tables).
 #[allow(unsafe_code)]
 pub mod atm_py;
@@ -287,5 +290,6 @@ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     star_wave5_py::register(m)?;
     star_wave5_2_py::register(m)?;
     binary_py::register(m)?;
+    astero_py::register(m)?;
     Ok(())
 }

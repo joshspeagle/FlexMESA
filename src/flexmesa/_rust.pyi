@@ -30,6 +30,7 @@ borrowed zero-copy via ``PyReadonlyArray1::as_slice``.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import Any
 
 import numpy as np
 import numpy.typing as npt
@@ -519,5 +520,23 @@ def binary_eval_jdot_mb(m_star: float, r_star: float, rl_star: float, period: fl
 def binary_eval_jdot_ls(s_donor_old: float, s_donor: float, s_accretor_old: float, s_accretor: float, dt: float) -> float: ...  # noqa: E501
 def binary_eval_tides_hut(m_star: float, m_companion: float, r_phot: float, separation: float, eccentricity: float, period: float, omega_star: float, m_env_msun: float, r_env_rsun: float, l_phot_lsun: float, r_gyr_sq: float, f_tid: float, has_convective_envelope: bool) -> tuple[float, float, float, float, float, float, float]: ...  # noqa: E501
 def binary_pick_next_timestep_rl(donor_time_step_yr: float, max_timestep_sec: float, rl_gap_old_donor: float, rl_gap_donor: float, fr: float = 0.01, fr_limit: float = 0.01, fr_dt_limit: float = 0.0, dt_softening_factor: float = 0.0, time_delta_coeff: float = 1.0) -> tuple[float, int]: ...  # noqa: E501
+
+def astero_eval_acoustic_profile(r: _ArrF64, csound: _ArrF64, r_center: float, r_phot: float) -> dict[str, Any]: ...  # noqa: E501
+def astero_eval_delta_nu_asymptotic(photosphere_acoustic_r: float) -> float: ...
+def astero_eval_delta_nu_scaling(m_g: float, teff_k: float, l_phot_erg_s: float) -> float: ...  # noqa: E501
+def astero_eval_delta_nu_radius_scaling(m_g: float, r_phot_cm: float) -> float: ...  # noqa: E501
+def astero_eval_nu_max(m_g: float, r_phot_cm: float, teff_k: float) -> float: ...  # noqa: E501
+def astero_eval_nu_ac(g_surf_cgs: float, gamma1_surf: float, rho_surf: float, peos_surf: float) -> float: ...  # noqa: E501
+def astero_eval_delta_pg(r: _ArrF64, r_mid: _ArrF64, brunt_n2: _ArrF64, csound_face: _ArrF64, mode_freq_uhz: float, bildsten2012: bool) -> float: ...  # noqa: E501
+def astero_eval_glitch_acoustic_depths(r: _ArrF64, csound: _ArrF64, gradr: _ArrF64, grada: _ArrF64, gamma1: _ArrF64, t: _ArrF64, r_center: float) -> tuple[float, float, float]: ...  # noqa: E501
+def astero_eval_radial_delta_nu_ols(n_orders: _ArrF64, model_freqs: _ArrF64) -> float: ...  # noqa: E501
+def astero_match_modes_by_degree(obs_freqs: _ArrF64, cand_freqs: _ArrF64, cand_inertias: _ArrF64, cand_orders: _ArrI32) -> tuple[_ArrF64, _ArrF64, _ArrI32]: ...  # noqa: E501
+def astero_eval_surface_correction(scheme: str, obs_freqs: _ArrF64, obs_sigmas: _ArrF64, model_freqs: _ArrF64, model_inertias: _ArrF64, l0_obs_freqs: _ArrF64, l0_model_freqs: _ArrF64, l0_inertias: _ArrF64, l0_orders: _ArrF64, delta_nu_obs: float, nu_max: float, b_power: float, correction_factor: float) -> dict[str, Any]: ...  # noqa: E501
+def astero_eval_ratios_r01_r10(l0_freqs: _ArrF64, l0_sigs: _ArrF64, l1_freqs: _ArrF64, l1_sigs: _ArrF64) -> dict[str, _ArrF64]: ...  # noqa: E501
+def astero_eval_ratios_r02(l0_freqs: _ArrF64, l0_sigs: _ArrF64, l1_freqs: _ArrF64, l1_sigs: _ArrF64, l2_freqs: _ArrF64, l2_sigs: _ArrF64) -> tuple[_ArrF64, _ArrF64]: ...  # noqa: E501
+def astero_eval_chi2(obs_freqs: _ArrF64, obs_sigmas: _ArrF64, corr_model_freqs: _ArrF64, r010_obs: _ArrF64, r010_sigmas: _ArrF64, r010_model: _ArrF64, r02_obs: _ArrF64, r02_sigmas: _ArrF64, r02_model: _ArrF64, delta_nu_obs: float, delta_nu_sigma: float, delta_nu_model: float, nu_max_obs: float, nu_max_sigma: float, nu_max_model: float, spectro_obs: _ArrF64, spectro_sigmas: _ArrF64, spectro_model: _ArrF64, chi2_seismo_fraction: float, chi2_seismo_delta_nu_fraction: float, chi2_seismo_nu_max_fraction: float, chi2_seismo_r_010_fraction: float, chi2_seismo_r_02_fraction: float) -> dict[str, float]: ...  # noqa: E501
+def astero_nelder_mead_minimize(objective: Any, x_first: list[float], x_lower: list[float], x_upper: list[float], max_evals: int, x_atol: float, x_rtol: float, chi2_tol: float, centroid_weight_power: float) -> dict[str, Any]: ...  # noqa: E501
+def astero_powell_quadratic_minimize(objective: Any, x_first: list[float], x_lower: list[float], x_upper: list[float], max_evals: int, rhobeg: float, rhoend: float) -> dict[str, Any]: ...  # noqa: E501
+def astero_scan_cartesian_grid(objective: Any, x_lower: list[float], x_upper: list[float], x_delta: list[float]) -> dict[str, Any]: ...  # noqa: E501
 
 # fmt: on

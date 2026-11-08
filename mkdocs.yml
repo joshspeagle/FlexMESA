@@ -1,7 +1,7 @@
 site_name: FlexMESA
 site_description: >-
-  Modern Three-Tier Hybrid Safe Rust + Python/JAX Rewrite of the MESA Stellar
-  Evolution Codebase with End-to-End Automatic Differentiation
+  Modular, Memory-Safe, and Differentiable Stellar Astrophysics in Safe Rust and
+  Python/JAX
 site_url: https://joshspeagle.github.io/FlexMESA/
 repo_url: https://github.com/joshspeagle/FlexMESA
 repo_name: joshspeagle/FlexMESA
@@ -77,10 +77,31 @@ extra_css:
   - https://unpkg.com/katex@0.16.9/dist/katex.min.css
 
 nav:
-  - Overview:
-      - Home: index.md
-      - Design Philosophy & Hybrid Architecture: design-philosophy.md
-  - Specifications:
+  - Getting Started:
+      - Overview: index.md
+      - Installation & Setup: getting-started/installation.md
+      - 5-Minute Quickstart: getting-started/quickstart.md
+      - Coming from Fortran MESA: getting-started/coming-from-mesa.md
+  - Background & Physics:
+      - Hybrid Architecture, Autodiff & Solvers: concepts/architecture.md
+      - Equations of State (eos): concepts/eos.md
+      - Opacity, Atmospheres & Photometry (kap, atm, colors): concepts/opacity-and-atmospheres.md
+      - Nuclear Networks, Rates & Neutrinos (chem, ionization, neu, rates, net): concepts/nuclear-and-neutrinos.md
+      - Convection, Diffusion, Rotation & Dynamos (turb, star): concepts/convection-mixing-rotation.md
+      - 1D Stellar Structure, Henyey & Hydrodynamics (star): concepts/stellar-structure-and-hydro.md
+      - Interacting Binaries & Accretors (binary): concepts/binaries.md
+      - Asteroseismology & Pulsation Exports (astero, star): concepts/asteroseismology.md
+  - Benchmarks & Verification:
+      - Numerics, Splines, Neutrinos & Convection (Wave 1.5): design/wave-1-benchmark-report.md
+      - Composition, Ionization & Photometry (Wave 2.5): design/wave-2-benchmark-report.md
+      - Analytical & Single-Table EOS (Wave 3a.5): design/wave-3a-benchmark-report.md
+      - 4D EOS, Opacity, Networks & Atmospheres (Wave 3b.5): design/wave-3b-benchmark-report.md
+      - 1D Stellar Structure & Evolution (Wave 4.5): design/wave-4-benchmark-report.md
+      - Advanced Star, Binaries & Asteroseismology (Wave 5.5): design/wave-5-benchmark-report.md
+  - API Reference:
+      - Python, PyO3 & JAX Reference: api/index.md
+  - Developer & Specs Archive:
+      - Specifications Overview: design/index.md
       - Master Scoping & Architecture: design/scoping-and-architecture.md
       - Wave 0 Infrastructure Specification: design/wave-0-spec.md
       - Wave 1 Foundation & Microphysics Specification: design/wave-1-spec.md
@@ -90,21 +111,3 @@ nav:
       - Wave 3b 4D Tabulated EOS, Opacity, Rates, Networks & Atmospheres Specification: design/wave-3b-spec.md
       - Wave 4 1D Stellar Structure & Evolution Specification: design/wave-4-spec.md
       - Wave 5 Advanced Stellar Physics, Interacting Binaries & Asteroseismology Specification: design/wave-5-spec.md
-  - Module Physics & Numerics:
-      - Wave 0 Schemas, Data & Golden Oracles: modules/wave-0-foundation.md
-      - Wave 1 Dual Algebra, Splines & Solvers: modules/wave-1-numerics.md
-      - Wave 1 Neutrinos & Turbulent Convection: modules/wave-1-microphysics.md
-      - Wave 2 Composition, Ionization & Photometry: modules/wave-2-microphysics.md
-      - Wave 3a Ideal, HELM, PC & Skye Equations of State: modules/wave-3a-eos-core.md
-      - Wave 3b 4D Tabulated EOS, Opacity, Nuclear Rates, Networks & Atmospheres: modules/wave-3b-microphysics.md
-      - Wave 4 1D Stellar Structure & Evolution Engine: modules/wave-4-star-engine.md
-      - Wave 5 Advanced Stellar Physics, Interacting Binaries & Asteroseismology: modules/wave-5-advanced-star-binary-astero.md
-  - Benchmarks & Parity:
-      - Wave 1.5 Four-Way Benchmark Report: design/wave-1-benchmark-report.md
-      - Wave 2.5 Four-Way Benchmark Report: design/wave-2-benchmark-report.md
-      - Wave 3a.5 Four-Way Benchmark Report: design/wave-3a-benchmark-report.md
-      - Wave 3b.5 Four-Way Benchmark Report: design/wave-3b-benchmark-report.md
-      - Wave 4.5 Four-Way Benchmark Report: design/wave-4-benchmark-report.md
-      - Wave 5.5 Four-Way Benchmark Report: design/wave-5-benchmark-report.md
-  - API Reference:
-      - Python, PyO3 & JAX Reference: api/index.md

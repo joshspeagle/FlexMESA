@@ -13,7 +13,7 @@ from __future__ import annotations
 import jax
 import jax.numpy as jnp
 
-from flexmesa import constants, turb
+from flexmesa import constants, mtx, turb
 
 _FOUR_PI: float = float(constants.FOUR_PI)
 _CLIGHT: float = float(constants.CLIGHT)
@@ -120,7 +120,7 @@ def interp_cell_to_face_jax(
     """
     alfa, beta = face_weights_jax(dq)
     val_m1 = jnp.concatenate([cell_val[:1], cell_val[:-1]])
-    return alfa * cell_val + beta * val_m1
+    return jnp.asarray(alfa * cell_val + beta * val_m1)
 
 
 @jax.jit
@@ -199,15 +199,23 @@ def eval_face_mlt_and_brunt_jax(
     grav = gm / (r * r)
 
     prad = (_CRAD / 3.0) * (t**4)
-    rho_f = interp_cell_to_face_jax(dq, rho)
-    t_f = interp_cell_to_face_jax(dq, t)
-    p_f = interp_cell_to_face_jax(dq, peos)
-    prad_f = interp_cell_to_face_jax(dq, prad)
-    kap_f = interp_cell_to_face_jax(dq, opacity)
-    grada_f = interp_cell_to_face_jax(dq, grada)
-    cp_f = interp_cell_to_face_jax(dq, cp)
-    chi_rho_f = jnp.maximum(interp_cell_to_face_jax(dq, chi_rho), 1.0e-10)
-    chi_t_f = jnp.maximum(interp_cell_to_face_jax(dq, chi_t), 1.0e-10)
+    alfa, beta = face_weights_jax(dq)
+
+    def _to_face(cell_val: jax.Array) -> jax.Array:
+        return jnp.asarray(
+            alfa * cell_val
+            + beta * jnp.concatenate([cell_val[:1], cell_val[:-1]])
+        )
+
+    rho_f = _to_face(rho)
+    t_f = _to_face(t)
+    p_f = _to_face(peos)
+    prad_f = _to_face(prad)
+    kap_f = _to_face(opacity)
+    grada_f = _to_face(grada)
+    cp_f = _to_face(cp)
+    chi_rho_f = jnp.maximum(_to_face(chi_rho), 1.0e-10)
+    chi_t_f = jnp.maximum(_to_face(chi_t), 1.0e-10)
 
     hp = p_f / (grav * rho_f)
     lam = mixing_length_alpha * hp
@@ -228,7 +236,7 @@ def eval_face_mlt_and_brunt_jax(
         0.0,
     )
 
-    gradr_base = p_f * kap_f * lum / (_FOUR_PI * _CLIGHT * gm * prad_f)
+    gradr_base = p_f * kap_f * lum / (4.0 * _FOUR_PI * _CLIGHT * gm * prad_f)
     surf_fac = jnp.where(
         (tau_0 > 0.0) & (tau_0 < 2.0 / 3.0),
         1.0 + 2.0 / (3.0 * tau_0),
@@ -276,3 +284,159 @@ def eval_face_mlt_and_brunt_jax(
         "brunt_b": brunt_b,
         "brunt_n2": brunt_n2,
     }
+
+
+@jax.jit
+def eval_hydro_residuals_jax(
+    dq: jax.Array,
+    dm: jax.Array,
+    dm_bar: jax.Array,
+    m_grav: jax.Array,
+    lnd: jax.Array,
+    ln_t: jax.Array,
+    ln_r: jax.Array,
+    lum: jax.Array,
+    lnd_start: jax.Array,
+    ln_peos: jax.Array,
+    ln_e: jax.Array,
+    energy_start: jax.Array,
+    gradt: jax.Array,
+    eps_nuc: jax.Array,
+    non_nuc_neu: jax.Array,
+    eps_mdot: jax.Array,
+    ln_peos_surf: float | jax.Array,
+    ln_t_surf: float | jax.Array,
+    dt: float | jax.Array,
+    r_center: float | jax.Array = 0.0,
+    l_center: float | jax.Array = 0.0,
+    cgrav: float | jax.Array = _G_CGS,
+) -> jax.Array:
+    """Evaluate the 4-equation hydrostatic Henyey residual array `(nz, 4)`.
+
+    Computes the dimensionless residual slots `(i_equ_l, i_dv_dt, i_dlnd_dt,
+    i_dlne_dt)` across all `nz` zones in pure differentiable JAX (`float64`),
+    matching `eval_henyey_equations` in `flexmesa-star`.
+
+    Args:
+        dq: Cell relative mass fractions of shape `(nz,)`.
+        dm: Cell masses of shape `(nz,)` (`g`).
+        dm_bar: Face control-volume masses of shape `(nz,)` (`g`).
+        m_grav: Face enclosed gravitational masses of shape `(nz,)` (`g`).
+        lnd: Cell natural log densities of shape `(nz,)` (`ln(g cm^-3)`).
+        ln_t: Cell natural log temperatures of shape `(nz,)` (`ln(K)`).
+        ln_r: Face natural log radii of shape `(nz,)` (`ln(cm)`).
+        lum: Face luminosities of shape `(nz,)` (`erg s^-1`).
+        lnd_start: Start-of-step cell `lnd` of shape `(nz,)`.
+        ln_peos: Cell natural log total pressure of shape `(nz,)`.
+        ln_e: Cell natural log specific internal energy of shape `(nz,)`.
+        energy_start: Start-of-step specific internal energy of shape `(nz,)`.
+        gradt: Face actual temperature gradient of shape `(nz,)`.
+        eps_nuc: Cell nuclear energy generation rate of shape `(nz,)`.
+        non_nuc_neu: Cell thermal neutrino loss rate of shape `(nz,)`.
+        eps_mdot: Cell mass-adjustment energy rate of shape `(nz,)`.
+        ln_peos_surf: Surface natural log pressure from atmosphere BC.
+        ln_t_surf: Surface natural log temperature from atmosphere BC.
+        dt: Timestep in seconds (`s`).
+        r_center: Inner core radius in centimeters (`cm`).
+        l_center: Inner core luminosity in `erg s^-1`.
+        cgrav: Gravitational constant (`cm^3 g^-1 s^-2`).
+
+    Returns:
+        Dimensionless residual matrix `equ` of shape `(nz, 4)`.
+    """
+    nz = dq.shape[0]
+    idx = jnp.arange(nz)
+    alfa, beta = face_weights_jax(dq)
+
+    rho = jnp.exp(lnd)
+    t = jnp.exp(ln_t)
+    r = jnp.exp(ln_r)
+    peos = jnp.exp(ln_peos)
+    energy = jnp.exp(ln_e)
+
+    # 1. Continuity / volume equation (`i_dlnd_dt = 2`)
+    r_p1_cubed = jnp.concatenate(
+        [r[1:] ** 3, jnp.asarray([r_center**3], dtype=r.dtype)]
+    )
+    dr3 = (3.0 * dm / _FOUR_PI) / rho
+    equ_dlnd = ln_r - jnp.log(r_p1_cubed + dr3) / 3.0
+
+    # Surface BC helper dp_0
+    dp_0 = (cgrav * m_grav[0] * dm[0] / (2.0 * _FOUR_PI)) / (r[0] ** 4)
+    p_surf = jnp.exp(ln_peos_surf)
+    t_surf = jnp.exp(ln_t_surf)
+
+    # 2. Momentum / hydrostatic pressure equation (`i_dv_dt = 1`)
+    ln_p_bc = jnp.log(p_surf + dp_0)
+    denom_p0 = jnp.where(ln_peos[0] > 1.0, ln_peos[0], 1.0)
+    resid_p_surf = (ln_p_bc - ln_peos[0]) / denom_p0
+
+    peos_m1 = jnp.concatenate([peos[:1], peos[:-1]])
+    p_avg = alfa * peos + beta * peos_m1
+    dp_hse = -(cgrav * m_grav / (r * r)) * (dm_bar / (_FOUR_PI * r * r))
+    resid_p_int = (dp_hse - (peos_m1 - peos)) / p_avg
+    equ_dv = jnp.where(idx == 0, resid_p_surf, resid_p_int)
+
+    # 3. Temperature transport / surface T BC equation (`i_equ_l = 0`)
+    dt_0 = dp_0 * gradt[0] * (t[0] / peos[0])
+    ln_t_bc = jnp.log(t_surf + dt_0)
+    denom_t0 = jnp.where(ln_t[0] > 1.0, ln_t[0], 1.0)
+    resid_t_surf = (ln_t_bc - ln_t[0]) / denom_t0
+
+    dm_m1 = jnp.concatenate([dm[:1], dm[:-1]])
+    dm_k = 0.5 * (dm_m1 + dm)
+    dlnp_dm_qhse = -(cgrav * m_grav) / (_FOUR_PI * (r**4) * p_avg)
+    dln_t_theory = dlnp_dm_qhse * gradt * dm_k
+    t_m1 = jnp.concatenate([t[:1], t[:-1]])
+    t_point = alfa * t + beta * t_m1
+    dln_t_actual = (t_m1 - t) / t_point
+    resid_t_int = dln_t_theory - dln_t_actual
+    equ_l = jnp.where(idx == 0, resid_t_surf, resid_t_int)
+
+    # 4. Energy conservation equation (`i_dlne_dt = 3`)
+    lum_p1 = jnp.concatenate(
+        [lum[1:], jnp.asarray([l_center], dtype=lum.dtype)]
+    )
+    dl_dm = (lum - lum_p1) / dm
+    sources = eps_nuc - non_nuc_neu + eps_mdot
+    dt_safe = jnp.maximum(dt, 1.0e-30)
+    de_dt = (energy - energy_start) / dt_safe
+    pdv_dt = peos * (jnp.exp(-lnd) - jnp.exp(-lnd_start)) / dt_safe
+    esum = -dl_dm + sources - de_dt - pdv_dt
+    scal = dt_safe / jnp.maximum(energy_start, 1.0)
+    scal = jnp.where(idx == 0, scal * 1.0e-6, scal)
+    equ_dlne = esum * scal
+
+    return jnp.stack([equ_l, equ_dv, equ_dlnd, equ_dlne], axis=-1)
+
+
+def solve_henyey_linear_jax(
+    lblk: jax.Array,
+    dblk: jax.Array,
+    ublk: jax.Array,
+    equ: jax.Array,
+    solver_mode: str = "pcr",
+) -> jax.Array:
+    """Solve the scaled Henyey linear system `J dx_scaled = -equ`.
+
+    Args:
+        lblk: Sub-diagonal blocks of shape `(nz, nvar, nvar)`.
+        dblk: Diagonal blocks of shape `(nz, nvar, nvar)`.
+        ublk: Super-diagonal blocks of shape `(nz, nvar, nvar)`.
+        equ: Residual vector of shape `(nz, nvar)`.
+        solver_mode: `"pcr"` for native JAX Parallel Cyclic Reduction or
+            `"rust_ffi"` for the `jax.custom_vjp` Safe Rust `bcyclic` FFI.
+
+    Returns:
+        Scaled Newton step `dx_scaled` of shape `(nz, nvar)`.
+
+    Raises:
+        ValueError: If `solver_mode` is not `"pcr"` or `"rust_ffi"`.
+    """
+    rhs = -equ
+    if solver_mode == "pcr":
+        return mtx.solve_block_tridiag_pcr(lblk, dblk, ublk, rhs)
+    if solver_mode == "rust_ffi":
+        return mtx.solve_block_tridiag_rust_ffi(lblk, dblk, ublk, rhs)
+    msg = f"Invalid solver_mode={solver_mode!r}; expected 'pcr' or 'rust_ffi'."
+    raise ValueError(msg)

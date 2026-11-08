@@ -2,8 +2,8 @@
 """Python and JAX hybrid stellar structure model (`StarModel`).
 
 Wraps `flexmesa._rust.RustStarModel` (Tier A/B Safe Rust engine) and exposes
-both zero-copy NumPy arrays and pure `@jax.jit` staggered-grid and face-gradient
-kernels (`flexmesa.star.jax_kernels`).
+both zero-copy NumPy arrays and pure `@jax.jit` staggered-grid, face-gradient,
+and Henyey residual kernels (`flexmesa.star.jax_kernels`).
 """
 
 from __future__ import annotations
@@ -46,21 +46,57 @@ class JaxStarState:
     mstar: float
 
 
+@dataclasses.dataclass(frozen=True)
+class HenyeySystemResult:
+    """Assembled 1D Henyey residual vector and block-tridiagonal Jacobian.
+
+    Attributes:
+        equ: Residual array of shape `(nz, nvar)`.
+        lblk: Sub-diagonal Jacobian blocks of shape `(nz, nvar, nvar)`.
+        dblk: Diagonal Jacobian blocks of shape `(nz, nvar, nvar)`.
+        ublk: Super-diagonal Jacobian blocks of shape `(nz, nvar, nvar)`.
+        x_scale: Variable scaling array of shape `(nz, nvar)`.
+    """
+
+    equ: _ArrF64
+    lblk: _ArrF64
+    dblk: _ArrF64
+    ublk: _ArrF64
+    x_scale: _ArrF64
+
+
+@dataclasses.dataclass(frozen=True)
+class HenyeySolverReport:
+    """Convergence report returned by `StarModel.solve_henyey`.
+
+    Attributes:
+        converged: Whether convergence tolerances were satisfied.
+        iterations: Number of Newton-Raphson iterations executed.
+        residual_norm: Mean absolute residual `sum(|equ|) / (nz * nvar)`.
+        max_residual: Maximum absolute residual `max(|equ|)`.
+        correction_norm: Mean absolute scaled correction.
+        max_correction: Maximum absolute scaled correction.
+    """
+
+    converged: bool
+    iterations: int
+    residual_norm: float
+    max_residual: float
+    correction_norm: float
+    max_correction: float
+
+
 class StarModel:
     """1D Lagrangian stellar structure and evolution model (`Star_Info`).
 
     Provides a unified Python/JAX interface backed by `RustStarModel`
     (`flexmesa-star`) for ZAMS interpolation, $n=1.5$ pre-MS polytrope
-    construction, ASCII `.mod` and binary `.photo` I/O, and parallelized
-    zone/face microphysics evaluation.
+    construction, ASCII `.mod` and binary `.photo` I/O, parallelized zone/face
+    microphysics evaluation, and coupled block-tridiagonal Henyey solves.
     """
 
     def __init__(self, rust_model: _rust.RustStarModel) -> None:
-        """Initialize a `StarModel` from a `RustStarModel` instance.
-
-        Args:
-            rust_model: Underlying compiled `RustStarModel`.
-        """
+        """Initialize a `StarModel` from a `RustStarModel` instance."""
         self._rust_model = rust_model
 
     @classmethod
@@ -76,17 +112,14 @@ class StarModel:
         Args:
             initial_mass: Initial stellar mass in solar masses (`M_sun`).
             initial_z: Initial metal mass fraction `Z`.
-            initial_y: Initial helium mass fraction `Y` (`< 0` uses
-                `0.24 + 2*Z`).
+            initial_y: Initial helium mass fraction `Y` (`< 0` uses `0.24+2Z`).
             eval_hydro: Whether to immediately evaluate zone/face microphysics.
 
         Returns:
             Initialized `StarModel`.
         """
         rm = _rust.RustStarModel.from_zams(
-            initial_mass=float(initial_mass),
-            initial_z=float(initial_z),
-            initial_y=float(initial_y),
+            float(initial_mass), float(initial_z), float(initial_y)
         )
         inst = cls(rm)
         if eval_hydro:
@@ -117,11 +150,11 @@ class StarModel:
             Initialized `StarModel`.
         """
         rm = _rust.RustStarModel.from_pre_ms(
-            initial_mass=float(initial_mass),
-            initial_z=float(initial_z),
-            initial_y=float(initial_y),
-            t_c=float(t_c),
-            d_log10_p=float(d_log10_p),
+            float(initial_mass),
+            float(initial_z),
+            float(initial_y),
+            float(t_c),
+            float(d_log10_p),
         )
         inst = cls(rm)
         if eval_hydro:
@@ -130,15 +163,7 @@ class StarModel:
 
     @classmethod
     def from_mod_str(cls, text: str, eval_hydro: bool = False) -> StarModel:
-        """Parse an upstream MESA ASCII `.mod` string into a `StarModel`.
-
-        Args:
-            text: ASCII `.mod` file contents.
-            eval_hydro: Whether to evaluate microphysics after loading.
-
-        Returns:
-            Loaded `StarModel`.
-        """
+        """Parse an upstream MESA ASCII `.mod` string into a `StarModel`."""
         inst = cls(_rust.RustStarModel.from_mod_str(text))
         if eval_hydro:
             inst.eval_hydro_vars()
@@ -148,15 +173,7 @@ class StarModel:
     def from_mod_file(
         cls, path: str | pathlib.Path, eval_hydro: bool = False
     ) -> StarModel:
-        """Read an ASCII `.mod` file from disk.
-
-        Args:
-            path: Path to the `.mod` file.
-            eval_hydro: Whether to evaluate microphysics after loading.
-
-        Returns:
-            Loaded `StarModel`.
-        """
+        """Read an ASCII `.mod` file from disk into a `StarModel`."""
         text = pathlib.Path(path).read_text(encoding="utf-8")
         return cls.from_mod_str(text, eval_hydro=eval_hydro)
 
@@ -164,15 +181,7 @@ class StarModel:
     def from_photo_bytes(
         cls, data: bytes, eval_hydro: bool = False
     ) -> StarModel:
-        """Restore a `StarModel` from binary `.photo` restart bytes.
-
-        Args:
-            data: Binary `.photo` checkpoint payload.
-            eval_hydro: Whether to evaluate microphysics after loading.
-
-        Returns:
-            Restored `StarModel`.
-        """
+        """Restore a `StarModel` from binary `.photo` restart bytes."""
         inst = cls(_rust.RustStarModel.from_photo_bytes(data))
         if eval_hydro:
             inst.eval_hydro_vars()
@@ -191,19 +200,49 @@ class StarModel:
         return self._rust_model.to_photo_bytes()
 
     def eval_hydro_vars(
-        self,
-        skip_net: bool = False,
-        skip_net_jacobian: bool = False,
+        self, skip_net: bool = False, skip_net_jacobian: bool = False
     ) -> None:
-        """Evaluate zone and face microphysics (`set_hydro_vars`).
+        """Evaluate zone and face microphysics (`set_hydro_vars`)."""
+        self._rust_model.eval_hydro_vars(
+            bool(skip_net), bool(skip_net_jacobian)
+        )
+
+    def save_start_values(self) -> None:
+        """Snapshot current state arrays as start-of-step `*_start` values."""
+        self._rust_model.save_start_values()
+
+    def eval_equations(self, include_chem: bool = False) -> HenyeySystemResult:
+        """Evaluate coupled 1D Henyey residuals and block-tridiagonal Jacobian.
 
         Args:
-            skip_net: Skip nuclear network evaluation (`do_net`).
-            skip_net_jacobian: Skip dense nuclear composition Jacobian.
+            include_chem: Include `species` composition equations in the
+                coupled Jacobian (`nvar = nvar_hydro + species`).
+
+        Returns:
+            `HenyeySystemResult` containing `(equ, lblk, dblk, ublk, x_scale)`.
         """
-        self._rust_model.eval_hydro_vars(
-            skip_net=bool(skip_net),
-            skip_net_jacobian=bool(skip_net_jacobian),
+        return HenyeySystemResult(
+            *self._rust_model.eval_equations(include_chem=bool(include_chem))
+        )
+
+    def solve_henyey(
+        self, include_chem: bool = False, use_bcyclic: bool = True
+    ) -> HenyeySolverReport:
+        """Execute a damped Newton-Raphson Henyey step for the current `dt`.
+
+        Args:
+            include_chem: Solve coupled hydro + composition system.
+            use_bcyclic: Use Hirshman et al. (2010) odd-even cyclic reduction
+                (`True`) or sequential block-Thomas (`False`).
+
+        Returns:
+            `HenyeySolverReport` summarizing convergence and norms.
+        """
+        return HenyeySolverReport(
+            *self._rust_model.solve_henyey(
+                include_chem=bool(include_chem),
+                use_bcyclic=bool(use_bcyclic),
+            )
         )
 
     def to_jax_state(self) -> JaxStarState:
@@ -222,21 +261,47 @@ class StarModel:
         """Evaluate face temperature gradients, MLT, and Brunt `N^2` via JAX."""
         return dict(
             jax_kernels.eval_face_mlt_and_brunt_jax(
-                dq=jnp.asarray(self.dq),
-                ln_r=jnp.asarray(self.ln_r),
-                lum=jnp.asarray(self.lum),
-                m_grav=jnp.asarray(self.m),
-                rho=jnp.asarray(self.rho),
-                t=jnp.asarray(self.t),
-                peos=jnp.asarray(self.peos),
-                ln_peos=jnp.asarray(self.ln_peos),
-                grada=jnp.asarray(self.grada),
-                cp=jnp.asarray(self.cp),
-                chi_rho=jnp.asarray(self.chi_rho),
-                chi_t=jnp.asarray(self.chi_t),
-                mu=jnp.asarray(self.mu),
-                opacity=jnp.asarray(self.opacity),
+                jnp.asarray(self.dq),
+                jnp.asarray(self.ln_r),
+                jnp.asarray(self.lum),
+                jnp.asarray(self.m),
+                jnp.asarray(self.rho),
+                jnp.asarray(self.t),
+                jnp.asarray(self.peos),
+                jnp.asarray(self.ln_peos),
+                jnp.asarray(self.grada),
+                jnp.asarray(self.cp),
+                jnp.asarray(self.chi_rho),
+                jnp.asarray(self.chi_t),
+                jnp.asarray(self.mu),
+                jnp.asarray(self.opacity),
                 tau_0=float(self.tau[0]),
+            )
+        )
+
+    def eval_hydro_residuals_jax(self) -> jax.Array:
+        """Evaluate the 4-equation hydrostatic residual array `(nz, 4)`."""
+        return jnp.asarray(
+            jax_kernels.eval_hydro_residuals_jax(
+                jnp.asarray(self.dq),
+                jnp.asarray(self.dm),
+                jnp.asarray(self.dm_bar),
+                jnp.asarray(self.m),
+                jnp.asarray(self.lnd),
+                jnp.asarray(self.ln_t),
+                jnp.asarray(self.ln_r),
+                jnp.asarray(self.lum),
+                jnp.asarray(self.lnd_start),
+                jnp.asarray(self.ln_peos),
+                jnp.log(jnp.asarray(self.energy)),
+                jnp.asarray(self.energy_start),
+                jnp.asarray(self.gradt),
+                jnp.asarray(self.eps_nuc),
+                jnp.asarray(self.non_nuc_neu),
+                jnp.zeros_like(jnp.asarray(self.lnd)),
+                float(self.ln_peos_surf),
+                float(self.ln_t_surf),
+                float(self.dt),
             )
         )
 
@@ -264,6 +329,11 @@ class StarModel:
     def dt(self) -> float:
         """Current timestep in seconds (`s`)."""
         return self._rust_model.dt
+
+    @dt.setter
+    def dt(self, value: float) -> None:
+        """Set the current timestep in seconds (`s`)."""
+        self._rust_model.dt = float(value)
 
     @property
     def mstar(self) -> float:
@@ -299,6 +369,11 @@ class StarModel:
     def lnd(self) -> _ArrF64:
         """Cell natural log density of shape `(nz,)` (`ln(g cm^-3)`)."""
         return self._rust_model.lnd
+
+    @property
+    def lnd_start(self) -> _ArrF64:
+        """Start-of-step cell natural log density of shape `(nz,)`."""
+        return self._rust_model.lnd_start
 
     @property
     def ln_t(self) -> _ArrF64:
@@ -396,6 +471,11 @@ class StarModel:
         return self._rust_model.energy
 
     @property
+    def energy_start(self) -> _ArrF64:
+        """Start-of-step cell specific internal energy of shape `(nz,)`."""
+        return self._rust_model.energy_start
+
+    @property
     def entropy(self) -> _ArrF64:
         """Cell specific entropy of shape `(nz,)` (`erg g^-1 K^-1`)."""
         return self._rust_model.entropy
@@ -464,6 +544,11 @@ class StarModel:
     def eps_nuc(self) -> _ArrF64:
         """Cell nuclear energy rate of shape `(nz,)` (`erg g^-1 s^-1`)."""
         return self._rust_model.eps_nuc
+
+    @property
+    def eps_grav(self) -> _ArrF64:
+        """Cell gravitational energy rate of shape `(nz,)` (`erg g^-1 s^-1`)."""
+        return self._rust_model.eps_grav
 
     @property
     def dxdt_nuc(self) -> _ArrF64:

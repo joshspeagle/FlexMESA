@@ -254,6 +254,9 @@ pub fn do_kap(model: &mut StarModel) -> Result<(), StarError> {
     let idx_o16 = catalog
         .get_nuclide_index("o16")
         .and_then(|cid| model.net_iso.get(cid).copied().flatten());
+    let idx_ne20 = catalog
+        .get_nuclide_index("ne20")
+        .and_then(|cid| model.net_iso.get(cid).copied().flatten());
     let kap_factor = model.controls.opacity_factor;
     let kap_cfg = &model.kap_config;
 
@@ -264,10 +267,10 @@ pub fn do_kap(model: &mut StarModel) -> Result<(), StarError> {
             let xc = idx_c12.map_or(0.0, |j| xa_k[j]);
             let xn = idx_n14.map_or(0.0, |j| xa_k[j]);
             let xo = idx_o16.map_or(0.0, |j| xa_k[j]);
+            let xne = idx_ne20.map_or(0.0, |j| xa_k[j]);
             let rho_k = model.rho[k];
             let t_k = model.t[k];
             let lnfree_e = model.lnfree_e[k];
-            let xne = rho_k * AVO * lnfree_e.exp();
             let out = get_kap_results(
                 kap_cfg,
                 model.zbar[k],

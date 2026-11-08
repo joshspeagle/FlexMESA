@@ -189,6 +189,18 @@ impl VarLayout {
     pub const fn chem_var_index(&self, j: usize) -> usize {
         self.nvar_hydro + j
     }
+
+    /// Returns the number of coupled variables per zone (`nvar_total` when
+    /// `include_chem` is true, or `nvar_hydro` otherwise).
+    #[must_use]
+    #[inline]
+    pub const fn nvar(&self, include_chem: bool) -> usize {
+        if include_chem {
+            self.nvar_total
+        } else {
+            self.nvar_hydro
+        }
+    }
 }
 
 /// Job-level initialization and model-building controls (`&star_job` namelist

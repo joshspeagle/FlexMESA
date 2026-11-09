@@ -171,11 +171,25 @@ rl1 = binary.eval_rlobe(m1, m2, sep)
 
 jdot_gr = binary.eval_jdot_gr_jax(m1, m2, sep, j_orb)
 jdot_mb = binary.eval_jdot_mb_jax(
-    m_star=m1, r_star=1.1 * constants.RSUN, rl_star=rl1, period=per, gamma_mb=3.0, q_conv_env=0.08
+    m_star=m1,
+    r_star=1.1 * constants.RSUN,
+    rl_star=rl1,
+    period=per,
+    gamma_mb=3.0,
+    q_conv_env=0.08,
 )
 jdot_ml = _rust.binary_eval_jdot_ml(
-    m1, m2, sep, float(per), 0.05,
-    -1.0e-9 * constants.MSUN / 3.15576e7, 0.0, 0.0, 0.0, 0.0, 1.0,
+    m1,
+    m2,
+    sep,
+    float(per),
+    0.05,
+    -1.0e-9 * constants.MSUN / 3.15576e7,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
 )
 jdot_ls = _rust.binary_eval_jdot_ls(1.0e50, 1.001e50, 0.0, 0.0, 1.0e10)
 
@@ -186,8 +200,19 @@ print(
 
 # 3. Hut (1981) tidal synchronization and circularization
 f2, f3, f4, f5, k_div_t, t_sync_s, edot_hut = _rust.binary_eval_tides_hut(
-    m1, m2, 1.1 * constants.RSUN, sep, 0.10, float(per), 1.5e-5,
-    0.15, 0.4, 1.5, 0.1, 1.0, True,
+    m1,
+    m2,
+    1.1 * constants.RSUN,
+    sep,
+    0.10,
+    float(per),
+    1.5e-5,
+    0.15,
+    0.4,
+    1.5,
+    0.1,
+    1.0,
+    True,
 )
 dedot_de = jax.grad(
     lambda e_in: binary.eval_edot_tidal_hut_jax(
@@ -197,5 +222,65 @@ dedot_de = jax.grad(
 print(
     f"Hut tides: t_sync = {t_sync_s / 3.15576e7:.2e} yr, de/dt = {edot_hut:.4e} s^-1, "
     f"d(de/dt)/de = {float(dedot_de):.4e} s^-1"
+)
+```
+
+---
+
+## 4. Analytical Orbital Oracles, Massive-Star Winds & Custom `other_*` Hooks
+
+Stage `E2E-5` provides analytical physics oracles and multi-stage runners for all 8 upstream `binary/test_suite` cases (`double_bh`, `evolve_both_stars`, `jdot_gr_check`, `jdot_ls_check`, `jdot_ml_check`, `star_plus_point_mass`, `star_plus_point_mass_explicit_mdot`, `wind_fed_bhhmxb`) and the 4 Tier 5/6 `star/test_suite` hook cases (`check_redo`, `other_physics_hooks`, `relax_composition_j_entropy`, `timing`):
+
+- **Peters (1964) GW Inspiral & Tauris & van den Heuvel (2003) Non-Conservative Oracles (`binary.eval_gr_expected_separation_rsun`, `binary.eval_tauris_vdh_expected_separation_rsun`)**: Closed-form orbital separation trajectories $a(t)$ (`jdot_gr_check`) and $a(q; \alpha, \beta, \delta, \gamma)$ (`jdot_ml_check`).
+- **Brott et al. (2011) Bi-Stability Massive-Star Winds (`binary.eval_brott_wind_msun_yr`, `binary/test_suite/double_bh`)**: Combines Vink et al. (2001), Nieuwenhuijzen & de Jager (1990), and Hamann et al. (1995) Wolf-Rayet winds across the bi-stability jump for $70\,M_\odot + 65\,M_\odot$ binary black-hole progenitors (`double_bh`).
+- **Custom `other_*` Physics Hooks & Step-Redo Parity (`star.eval_overshoot_dbl_exp`, `star.eval_grafener_kudritzki_wind_msun_yr`, `star.verify_step_redo_bit_parity`)**: Evaluates double-exponential convective overshooting $D_{\mathrm{ov}}(r)$, Gräfener & Kudritzki (2008) Wolf-Rayet optically thick wind mass-loss rates, and `0 ULP` `.photo` step-redo parity (`check_redo`).
+
+```python
+from flexmesa import binary, constants, star
+
+# 1. Peters (1964) GW inspiral and Tauris & van den Heuvel (2003) non-conservative separation
+a_gr = binary.eval_gr_expected_separation_rsun(
+    a0_rsun=2.5, m1_msun=1.4, m2_msun=1.0, time_sec=1.0e8 * 3.15576e7
+)
+a_ml = binary.eval_tauris_vdh_expected_separation_rsun(
+    a0_rsun=10.0, q0=2.0, q=1.2, alpha=0.2, beta=0.3, delta=0.1, gamma=1.5
+)
+w_brott = binary.eval_brott_wind_msun_yr(
+    l_surf_lsun=6.0e5,
+    m_surf_msun=65.0,
+    r_surf_rsun=12.0,
+    t_surf_k=48000.0,
+    x_surf=0.35,
+    y_surf=0.63,
+    z_div_z_solar=0.1,
+)
+print(
+    f"Oracles: a_GR = {a_gr:.4f} Rsun, a_TVdH = {a_ml:.4f} Rsun, "
+    f"Mdot_Brott = {w_brott:.3e} Msun/yr"
+)
+
+# 2. Double-exponential overshoot, Grafener-Kudritzki WR wind, and step-redo bit parity
+d_ov = star.eval_overshoot_dbl_exp(
+    d0=1.0e14,
+    delta_r=1.0e9,
+    hp_bdy=5.0e9,
+    f_ov1=0.015,
+    f_ov2=0.005,
+    d_ov_trans=1.0e12,
+)
+mdot_gk = star.eval_grafener_kudritzki_wind_msun_yr(
+    m_surf_g=60.0 * constants.MSUN,
+    l_surf_erg_s=1.0e6 * constants.LSUN,
+    r_surf_cm=30.0 * constants.RSUN,
+    t_surf_k=40000.0,
+    x_surf=0.70,
+    z_surf=0.02,
+    w_scale=1.0,
+)
+zams_1m = star.StarModel.from_zams(initial_mass=1.0, initial_z=0.02)
+redo_ok = star.verify_step_redo_bit_parity(zams_1m)
+print(
+    f"Other hooks: D_ov = {d_ov:.3e} cm^2/s, Mdot_GK = {mdot_gk:.3e} Msun/yr, "
+    f"redo parity = {redo_ok}"
 )
 ```

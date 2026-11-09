@@ -23,6 +23,11 @@ TIER4_ASTERO_CASES: tuple[str, ...] = tuple(
 TIER4_DEV_CASES: tuple[tuple[str, str], ...] = tuple(
     (str(s), str(c)) for s, c in _rust.star_tier4_dev_case_names()
 )
+TIER5_STAR_CASES: tuple[str, ...] = tuple(_rust.star_tier5_star_case_names())
+ALL_ACTIVE_STAR_CASES: tuple[str, ...] = tuple(
+    _rust.star_all_active_star_case_names()
+)
+TIER5_BINARY_CASES: tuple[str, ...] = tuple(_rust.binary_tier5_case_names())
 
 
 def eval_linear_oscillation_modes(
@@ -294,5 +299,184 @@ def run_dev_cases_suite(
         True,
         None if max_steps_per_stage is None else int(max_steps_per_stage),
         bool(verify_restart),
+    )
+    return [dict(item) for item in raw]
+
+
+def eval_overshoot_dbl_exp(
+    d0: float,
+    delta_r: float,
+    hp_bdy: float,
+    f_ov1: float,
+    f_ov2: float,
+    d_ov_trans: float,
+) -> float:
+    """Evaluate double-exponential convective overshooting $D_{\\mathrm{ov}}(r)$
+    (`other_overshooting_scheme` in `other_physics_hooks`, Stage `E2E-5`).
+    """
+    return float(
+        _rust.star_eval_overshoot_dbl_exp(
+            float(d0),
+            float(delta_r),
+            float(hp_bdy),
+            float(f_ov1),
+            float(f_ov2),
+            float(d_ov_trans),
+        )
+    )
+
+
+def eval_grafener_kudritzki_wind_msun_yr(
+    m_surf_g: float,
+    l_surf_erg_s: float,
+    r_surf_cm: float,
+    t_surf_k: float,
+    x_surf: float,
+    z_surf: float,
+    w_scale: float = 1.0,
+) -> float:
+    """Evaluate the Gräfener & Kudritzki (2008) / Vink et al. (2011)
+    high-$\\Gamma_e$ massive-star wind mass-loss rate $\\dot{M}$
+    ($M_\\odot\\,\\mathrm{yr}^{-1}$) (`other_wind`, Stage `E2E-5`).
+    """
+    return float(
+        _rust.star_eval_grafener_kudritzki_wind_msun_yr(
+            float(m_surf_g),
+            float(l_surf_erg_s),
+            float(r_surf_cm),
+            float(t_surf_k),
+            float(x_surf),
+            float(z_surf),
+            float(w_scale),
+        )
+    )
+
+
+def verify_step_redo_bit_parity(model: star_model.StarModel) -> bool:
+    """Verify bit-identical state restoration and step redo parity
+    (`star/test_suite/check_redo`, Stage `E2E-5`).
+    """
+    return bool(_rust.star_verify_step_redo_bit_parity(model._rust_model))
+
+
+def run_tier5_star_suite(
+    mesa_dir: str | pathlib.Path,
+    max_steps_per_stage: int | None = 15,
+    verify_restart: bool = True,
+) -> list[dict[str, Any]]:
+    """Execute all 4 Tier 5/6 `star/test_suite` cases under `mesa_dir`."""
+    raw = _rust.star_run_tier5_star_suite(
+        str(mesa_dir),
+        True,
+        None if max_steps_per_stage is None else int(max_steps_per_stage),
+        bool(verify_restart),
+    )
+    return [dict(item) for item in raw]
+
+
+def run_all_active_star_suite(
+    mesa_dir: str | pathlib.Path,
+    max_steps_per_stage: int | None = 15,
+    verify_restart: bool = True,
+) -> list[dict[str, Any]]:
+    """Execute all 91 active `star/test_suite` cases across Tiers 1-5."""
+    raw = _rust.star_run_all_active_star_suite(
+        str(mesa_dir),
+        None if max_steps_per_stage is None else int(max_steps_per_stage),
+        bool(verify_restart),
+    )
+    return [dict(item) for item in raw]
+
+
+def eval_gr_expected_separation_rsun(
+    a0_rsun: float,
+    m1_msun: float,
+    m2_msun: float,
+    time_sec: float,
+) -> float:
+    """Evaluate Peters (1964) analytical gravitational-wave inspiral separation
+    $a(t)$ ($R_\\odot$) (`jdot_gr_check`).
+    """
+    return float(
+        _rust.binary_eval_gr_expected_separation_rsun(
+            float(a0_rsun),
+            float(m1_msun),
+            float(m2_msun),
+            float(time_sec),
+        )
+    )
+
+
+def eval_tauris_vdh_expected_separation_rsun(
+    a0_rsun: float,
+    q0: float,
+    q: float,
+    alpha: float,
+    beta: float,
+    delta: float,
+    gamma: float,
+) -> float:
+    """Evaluate Tauris & van den Heuvel (2003, Eq. 16.20) analytical separation
+    $a(q)$ ($R_\\odot$) under non-conservative mass transfer (`jdot_ml_check`).
+    """
+    return float(
+        _rust.binary_eval_tauris_vdh_expected_separation_rsun(
+            float(a0_rsun),
+            float(q0),
+            float(q),
+            float(alpha),
+            float(beta),
+            float(delta),
+            float(gamma),
+        )
+    )
+
+
+def eval_brott_wind_msun_yr(
+    l_surf_lsun: float,
+    m_surf_msun: float,
+    r_surf_rsun: float,
+    t_surf_k: float,
+    x_surf: float,
+    y_surf: float,
+    z_div_z_solar: float,
+) -> float:
+    """Evaluate Brott et al. (2011) massive-star wind mass-loss rate $\\dot{M}$
+    ($M_\\odot\\,\\mathrm{yr}^{-1}$) (`double_bh`).
+    """
+    return float(
+        _rust.binary_eval_brott_wind_msun_yr(
+            float(l_surf_lsun),
+            float(m_surf_msun),
+            float(r_surf_rsun),
+            float(t_surf_k),
+            float(x_surf),
+            float(y_surf),
+            float(z_div_z_solar),
+        )
+    )
+
+
+def run_binary_test_suite_case(
+    case_dir: str | pathlib.Path,
+    max_steps_cap: int | None = 15,
+) -> dict[str, Any]:
+    """Execute a single `binary/test_suite/<case>` directory."""
+    return dict(
+        _rust.binary_run_test_suite_case(
+            str(case_dir),
+            None if max_steps_cap is None else int(max_steps_cap),
+        )
+    )
+
+
+def run_binary_suite(
+    mesa_dir: str | pathlib.Path,
+    max_steps_cap: int | None = 15,
+) -> list[dict[str, Any]]:
+    """Execute all 8 `binary/test_suite` cases under `mesa_dir`."""
+    raw = _rust.binary_run_suite(
+        str(mesa_dir),
+        None if max_steps_cap is None else int(max_steps_cap),
     )
     return [dict(item) for item in raw]

@@ -31,6 +31,9 @@ use crate::tier3_extras::{
 use crate::tier4_extras::{
     is_tier4_case, verify_tier4_case_assertions, Tier4CaseExtras,
 };
+use crate::tier5_extras::{
+    is_tier5_star_case, verify_tier5_star_case_assertions, Tier5StarCaseExtras,
+};
 
 /// Control flow directive returned by [`StarExtras`] step hooks (`keep_going`,
 /// `retry`, `terminate` in `star/public/star_def.inc`).
@@ -100,10 +103,10 @@ pub trait StarExtras {
     fn other_wind(
         &self,
         _model: &StarModel,
-        _l_surf: f64,
-        _m_surf: f64,
-        _r_surf: f64,
-        _t_surf: f64,
+        _l: f64,
+        _m: f64,
+        _r: f64,
+        _t: f64,
     ) -> Option<f64> {
         None
     }
@@ -131,17 +134,13 @@ pub trait StarExtras {
 /// Default no-op [`StarExtras`] implementation (`standard_run_star_extras.inc`).
 #[derive(Debug, Clone, Copy, Default)]
 pub struct DefaultStarExtras;
-
 impl StarExtras for DefaultStarExtras {}
 
 /// Tolman-Oppenheimer-Volkoff (TOV) post-Newtonian general-relativistic
 /// effective gravitational constant hook (`other_cgrav` in `ns_h`, `ns_he`,
-/// `tzo`, and `neutron_star_envelope`):
-///
-/// $$G_{\mathrm{eff}}(r) = G\,\left(1 + \frac{P}{\rho c^2}\right)\left(1 + \frac{4\pi r^3 P}{m c^2}\right)\left(1 - \frac{2 G m}{r c^2}\right)^{-1}.$$
+/// `tzo`, and `neutron_star_envelope`).
 #[derive(Debug, Clone, Copy, Default)]
 pub struct TovGrStarExtras;
-
 impl StarExtras for TovGrStarExtras {
     fn other_cgrav(&self, model: &mut StarModel) {
         model.cgrav = crate::tier3_physics::eval_tov_effective_cgrav(model);
@@ -281,7 +280,8 @@ pub fn run_inlist_stage(
             if model.controls.use_other_torque {
                 if let Some(jdot) = extras.other_torque(model) {
                     let dt = model.dt;
-                    for (j_k, &dj_k) in model.j_rot.iter_mut().zip(jdot.iter()) {
+                    for (j_k, &dj_k) in model.j_rot.iter_mut().zip(jdot.iter())
+                    {
                         *j_k = (*j_k + dj_k * dt).max(1.0e10);
                     }
                 }
@@ -412,14 +412,7 @@ pub fn run_test_suite_case(
         .unwrap_or("unknown")
         .to_string();
 
-    let mut rn_stages = parse_rn_stages(case_dir, skip_optional)?;
-    if skip_optional
-        && rn_stages.iter().any(|st| {
-            matches!(st, RnStage::CopyCheckpoint { src_mod, .. } if !case_dir.join(src_mod).exists())
-        })
-    {
-        rn_stages = parse_rn_stages(case_dir, false)?;
-    }
+    let rn_stages = parse_rn_stages(case_dir, skip_optional)?;
     let tier = if is_tier1_case(&case_name) {
         1
     } else if is_tier2_case(&case_name) {
@@ -428,6 +421,8 @@ pub fn run_test_suite_case(
         3
     } else if is_tier4_case(&case_name) {
         4
+    } else if is_tier5_star_case(&case_name) {
+        5
     } else {
         0
     };
@@ -478,11 +473,14 @@ pub fn run_test_suite_case(
                 let mut tier3_extras = Tier3CaseExtras::new(&case_name);
                 let mut tier4_extras =
                     Tier4CaseExtras::with_case_dir(&case_name, case_dir);
+                let mut tier5_extras =
+                    Tier5StarCaseExtras::with_case_dir(&case_name, case_dir);
                 let extras: &mut dyn StarExtras = match tier {
                     1 => &mut tier1_extras,
                     2 => &mut tier2_extras,
                     3 => &mut tier3_extras,
                     4 => &mut tier4_extras,
+                    5 => &mut tier5_extras,
                     _ if use_tov => &mut tov_extras,
                     _ => &mut default_extras,
                 };
@@ -525,22 +523,23 @@ pub fn run_test_suite_case(
             (hr1.star_mass - hr2.star_mass).abs() < 0.5
                 && (hr1.log_teff - hr2.log_teff).abs() < 0.2
         });
-    let assertions_passed =
-        twin_match
-            && current_model.as_ref().is_some_and(|m| match tier {
-                1 => verify_tier1_case_assertions(m, &case_name),
-                2 => verify_tier2_case_assertions(m, &case_name),
-                3 => verify_tier3_case_assertions(m, &case_name),
-                4 => verify_tier4_case_assertions(m, &case_name),
-                _ => m.nz >= 2 && m.teff.is_finite() && m.teff > 0.0,
-            });
+    let assertions_passed = twin_match
+        && current_model.as_ref().is_some_and(|m| match tier {
+            1 => verify_tier1_case_assertions(m, &case_name),
+            2 => verify_tier2_case_assertions(m, &case_name),
+            3 => verify_tier3_case_assertions(m, &case_name),
+            4 => verify_tier4_case_assertions(m, &case_name),
+            5 => verify_tier5_star_case_assertions(m, &case_name, case_dir),
+            _ => m.nz >= 2 && m.teff.is_finite() && m.teff > 0.0,
+        });
     let final_hr = stage_reports
         .last()
         .map(|s| s.final_history)
         .or_else(|| current_model.as_ref().map(extract_history_row));
-    let termination_code = stage_reports
-        .last()
-        .map_or_else(|| String::from("completed"), |s| s.termination_code.clone());
+    let termination_code = stage_reports.last().map_or_else(
+        || String::from("completed"),
+        |s| s.termination_code.clone(),
+    );
     let passed =
         assertions_passed && (!verify_restart || photo_restart_verified);
 

@@ -31,6 +31,8 @@
 )]
 
 pub mod disk;
+pub mod e2e;
+pub mod e2e_oracles;
 pub mod edd_wind;
 pub mod jdot_tides;
 pub mod mdot;
@@ -39,6 +41,12 @@ pub mod system;
 pub mod timestep;
 
 pub use disk::eval_l2_mass_loss_fraction;
+pub use e2e::{
+    eval_brott_wind_msun_yr, eval_gr_expected_separation_rsun,
+    eval_tauris_vdh_expected_separation_rsun, is_tier5_binary_case,
+    run_binary_suite, run_binary_test_suite_case, BinaryCaseRunReport,
+    BinaryInlistControls, TIER5_BINARY_CASES,
+};
 pub use edd_wind::{
     bh_initial_equatorial_mass, eval_accreted_material_j, eval_bh_spin,
     eval_bondi_hoyle_wind_fraction, eval_mdot_edd, eval_tout_wind_enhancement,
@@ -159,5 +167,50 @@ mod tests {
         assert!(iters <= 30);
         assert!(obj.abs() <= solver.tolerance);
         assert!((mdot_sol - target_mdot).abs() / target_mdot.abs() < 1.0e-2);
+    }
+
+    #[test]
+    fn test_e2e_5_binary_test_suite_and_oracles() {
+        use std::path::Path;
+
+        assert_eq!(TIER5_BINARY_CASES.len(), 8);
+        assert!(is_tier5_binary_case("jdot_gr_check"));
+        assert!(is_tier5_binary_case("wind_fed_bhhmxb"));
+        assert!(is_tier5_binary_case("double_bh"));
+
+        let a_gr =
+            eval_gr_expected_separation_rsun(1.0, 1.4, 1.4, 1.0e7 * SECYER);
+        assert!(a_gr > 0.0 && a_gr < 1.0);
+
+        let a_ml = eval_tauris_vdh_expected_separation_rsun(
+            10.0, 2.0, 1.5, 0.4, 0.4, 0.19, 2.0,
+        );
+        assert!(a_ml > 0.0 && a_ml.is_finite());
+
+        let w_brott = eval_brott_wind_msun_yr(
+            5.0e5, 60.0, 15.0, 45_000.0, 0.7, 0.28, 0.02,
+        );
+        assert!(w_brott > 0.0 && w_brott.is_finite());
+
+        if let Ok(mesa_dir) = std::env::var("MESA_DIR") {
+            let base = Path::new(&mesa_dir);
+            if base.join("binary").join("test_suite").is_dir() {
+                let reps =
+                    run_binary_suite(base, Some(4)).expect("binary suite");
+                assert_eq!(reps.len(), 8);
+                for r in &reps {
+                    assert!(
+                        r.passed,
+                        "binary case {} failed: m1={} m2={} a={} P={} rel_err={}",
+                        r.case_name,
+                        r.final_m1_msun,
+                        r.final_m2_msun,
+                        r.final_separation_rsun,
+                        r.final_period_days,
+                        r.max_relative_oracle_error
+                    );
+                }
+            }
+        }
     }
 }

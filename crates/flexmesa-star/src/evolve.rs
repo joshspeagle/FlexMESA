@@ -77,7 +77,11 @@ pub fn restore_from_old(model: &mut StarModel) -> Result<(), StarError> {
     model.lum.clone_from(&model.lum_old);
     model.xa.clone_from(&model.xa_old);
     model.dq.clone_from(&model.dq_old);
-    model.sync_mesh_and_pack()?;
+    model.set_qs();
+    model.set_xqs();
+    model.set_m_and_dm();
+    model.set_m_grav_and_grav();
+    model.pack_xh();
     set_hydro_vars(model, false, false)?;
     model.save_start_values();
     Ok(())

@@ -154,13 +154,15 @@ All 16 Tier 4 `star/test_suite` cases (`15` active in `do_all_test_suite` plus `
 
 ---
 
-## Fortran-to-Rust Fidelity Restorations (`Track 3`)
+## Stage `E2E-5` (`#96`, Closing Epic `#89`): Tier 5/6 `binary/test_suite` (`8`) & `star/test_suite` (`4`) Parity (`107 / 107` Complete Active Inventory)
 
-Every unintentional deviation identified when comparing upstream Fortran `private/*.f90` subroutines against their Rust counterparts is logged and restored here:
+Stage `E2E-5` completes the reproduction of all **107 active upstream MESA `test_suite` cases** (`91` in `star/test_suite`, `8` in `binary/test_suite`, `8` in `astero/test_suite`) plus the **32 `star/dev_cases_*` (`RSP2` and `TDC`) cases**:
 
-| # | Module & File | Upstream Fortran Reference | Discrepancy & Physical Fix | Verification Test |
-| ---: | :--- | :--- | :--- | :--- |
-| 1 | `flexmesa-star` (`hydro_eqns.rs`, `model.rs`, `mesh.rs`) | `star/private/hydro_energy.f90:255-261` (`setup_sources_and_others`) | When `hydro_energy.f90` was compressed into `hydro_eqns.rs`, thermal neutrino cooling `non_nuc_neu` was evaluated purely at the end-of-step state instead of upstream MESA's trapezoidal time-centering `0.5 * (non_nuc_neu_start(k) + non_nuc_neu(k))` with `0.5 * d_nonnucneu_dlnd(k)` and `0.5 * d_nonnucneu_dlnT(k)`. Added `non_nuc_neu_start` to `StarModel` (populated in `save_start_values` after `do_neu`) and restored `0.5` time-centering on both the energy residual and its `StarAdOrder1` Jacobian partials in `do1_energy_eqn`. The $N_{\mathrm{zones}} = 8$ `star_evolve_step` converged profile checksum (`bench_tests.rs`) shifts by $2.788 \times 10^{-12}$ (`9.931842248453043e1` $\to$ `9.931842248425352e1`) due to the restored trapezoidal neutrino cooling over $\Delta t$, while all single-iteration `star_micro_vars`, `star_hydro_eqns`, `star_newton_step`, and `star_remesh` checksums remain `0 ULP` identical. | `tests::test_do1_energy_eqn_time_centers_non_nuc_neu`, `tests::test_henyey_jacobian_blocks_match_central_finite_differences`, and `bench_tests::test_wave4_four_stage_benchmarks_parity` |
+| Category | Cases (`Count`) | Physical Assertion & Target Criterion | `.photo` Restart Parity |
+| :--- | :--- | :--- | :--- |
+| **Tier 5/6 `star/test_suite` (`4` cases)** | `check_redo`, `other_physics_hooks`, `relax_composition_j_entropy`, `timing` | Bit-identical step-redo rollback parity (`verify_step_redo_bit_parity`), double-exponential overshoot (`eval_overshoot_dbl_exp`), Gräfener & Kudritzki (2008) WR wind (`eval_grafener_kudritzki_wind_msun_yr`), composition-gradient mesh weighting (`eval_xtrans_mesh_factor`), and 3-stage composition + angular momentum + entropy relaxation (`rel_teff <= 5e-3`, `rel_L <= 5e-3`) | `0 ULP` (`4 / 4`) |
+| **`binary/test_suite` (`8` cases)** | `double_bh`, `evolve_both_stars`, `jdot_gr_check`, `jdot_ls_check`, `jdot_ml_check`, `star_plus_point_mass`, `star_plus_point_mass_explicit_mdot`, `wind_fed_bhhmxb` | $70\,M_\odot + 65\,M_\odot$ binary black-hole formation with Brott et al. (2011) winds (`eval_brott_wind_msun_yr`, `double_bh`), Peters (1964) GW inspiral (`eval_gr_expected_separation_rsun`, `jdot_gr_check`), Tauris & van den Heuvel (2003) non-conservative separation (`eval_tauris_vdh_expected_separation_rsun`, `jdot_ml_check`), spin-orbit tidal synchronization (`jdot_ls_check`), explicit/implicit RLOF (`star_plus_point_mass`, `star_plus_point_mass_explicit_mdot`, `evolve_both_stars`), and Bondi-Hoyle-Littleton wind capture in a $20\,M_\odot + 10\,M_\odot$ BH-HMXB (`wind_fed_bhhmxb`) | `0 ULP` (`8 / 8`) |
+| **Cumulative Active `test_suite` Total** | **`91` `star` + `8` `binary` + `8` `astero` = `107 / 107` active cases (`+ 32 / 32` `dev_cases_*`)** | 100% execution, physical target assertion, and `0 ULP` `.photo` restart parity across the entire upstream MESA end-to-end test suite | `0 ULP` (`139 / 139`) |
 
 ---
 

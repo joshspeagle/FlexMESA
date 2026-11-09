@@ -548,5 +548,12 @@ def star_verify_photo_restart(model: Any, n_steps: int) -> tuple[int, int]: ...
 def star_parse_inlist_bundle(inlist_path: str) -> dict[str, Any]: ...
 def star_parse_rn_stages(case_dir: str, skip_optional: bool = True) -> list[tuple[str, str, str]]: ...  # noqa: E501
 def star_run_test_suite_case(case_dir: str, skip_optional: bool = True, max_steps_per_stage: int | None = None, verify_restart: bool = False) -> dict[str, Any]: ...  # noqa: E501
+def star_tier1_cases() -> list[str]: ...
+def star_run_tier1_suite(mesa_dir: str, max_steps_per_stage: int | None = 15, verify_restart: bool = True) -> list[dict[str, Any]]: ...  # noqa: E501
+def star_eval_starspot_luminosity(l_surf: float, f_spot: float, x_spot: float) -> tuple[float, float]: ...  # noqa: E501
+def star_eval_t_tau_gradr_factor(tau: float, scheme: str) -> tuple[float, float]: ...  # noqa: E501
+def star_eval_model_colors(model: Any) -> tuple[float, float, float, float, float, float, float, float, float, float]: ...  # noqa: E501
+def star_eval_solar_calibration_objective(log_l: float, log_r: float, zx_surf: float, target_zx: float) -> float: ...  # noqa: E501
+def star_nelder_mead_solar_step(simplex: list[tuple[list[float], float]]) -> tuple[float, float, float]: ...  # noqa: E501
 
 # fmt: on

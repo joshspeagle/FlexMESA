@@ -1,0 +1,448 @@
+// SPDX-License-Identifier: LGPL-3.0-or-later
+//! Multi-stage `inlist` execution driver (`run_inlist_stage`,
+//! `run_test_suite_case`), `run_star_extras` hook trait ([`StarExtras`]),
+//! and bit-identical photo restart verification (`verify_photo_restart_parity`).
+
+use std::fs;
+use std::path::Path;
+use std::time::Instant;
+
+use flexmesa_const::{CLIGHT, FOUR_PI, STANDARD_CGRAV};
+
+use crate::controls::StarError;
+use crate::evolve::star_evolve_step;
+use crate::history::{extract_history_row, HistoryRow};
+use crate::hydro_vars::set_hydro_vars;
+use crate::inlist::{parse_rn_stages, InlistBundle, RnStage};
+use crate::model::StarModel;
+use crate::model_io::{
+    compute_photo_checksum, read_photo_bytes, write_mod_string,
+    write_photo_bytes,
+};
+use crate::star_job_init::init_or_update_model_from_bundle;
+use crate::termination::check_termination_limits_with_history;
+
+/// Control flow directive returned by [`StarExtras`] step hooks (`keep_going`,
+/// `retry`, `terminate` in `star/public/star_def.inc`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ExtrasDirective {
+    /// Continue normal evolution (`keep_going`).
+    KeepGoing,
+    /// Force a step retry with reduced timestep (`retry`).
+    Retry,
+    /// Terminate the evolutionary stage with the given reason string (`terminate`).
+    Terminate(String),
+}
+
+/// Rust trait equivalent of upstream MESA's `run_star_extras.f90` hooks and
+/// `other_*` physics callbacks.
+pub trait StarExtras {
+    /// Invoked after `inlist` controls are loaded before model initialization.
+    fn extras_controls(&mut self, _model: &mut StarModel) {}
+
+    /// Invoked once at the start of an evolutionary stage after model loading
+    /// and `&star_job` relaxation.
+    ///
+    /// # Errors
+    /// Returns [`StarError`] if custom startup initialization fails.
+    fn extras_startup(
+        &mut self,
+        _model: &mut StarModel,
+        _restart: bool,
+    ) -> Result<(), StarError> {
+        Ok(())
+    }
+
+    /// Invoked at the start of each evolutionary step before remeshing.
+    fn extras_start_step(&mut self, _model: &mut StarModel) -> ExtrasDirective {
+        ExtrasDirective::KeepGoing
+    }
+
+    /// Invoked immediately after a step converges to check custom limits.
+    fn extras_check_model(
+        &mut self,
+        _model: &mut StarModel,
+    ) -> ExtrasDirective {
+        ExtrasDirective::KeepGoing
+    }
+
+    /// Invoked at the end of a step after history extraction.
+    fn extras_finish_step(
+        &mut self,
+        _model: &mut StarModel,
+    ) -> ExtrasDirective {
+        ExtrasDirective::KeepGoing
+    }
+
+    /// Invoked once after the evolutionary loop terminates.
+    fn extras_after_evolve(&mut self, _model: &mut StarModel) {}
+
+    /// Custom effective gravitational constant profile $G_{\mathrm{eff}}(k)$
+    /// invoked when `controls.use_other_cgrav` is true.
+    fn other_cgrav(&self, _model: &mut StarModel) {}
+
+    /// Custom mixing-length parameter profile $\alpha_{\mathrm{MLT}}(k)$
+    /// invoked when `controls.use_other_alpha_mlt` is true.
+    fn other_alpha_mlt(&self, _model: &mut StarModel) {}
+
+    /// Custom wind mass-loss rate $\dot{M}$ ($M_\odot\,\mathrm{yr^{-1}}$)
+    /// invoked when `controls.use_other_wind` is true.
+    fn other_wind(
+        &self,
+        _model: &StarModel,
+        _l_surf: f64,
+        _m_surf: f64,
+        _r_surf: f64,
+        _t_surf: f64,
+    ) -> Option<f64> {
+        None
+    }
+
+    /// Custom multiplier or adjustment on $\dot{M}$ (`g s^-1`) invoked when
+    /// `controls.use_other_adjust_mdot` is true.
+    fn other_adjust_mdot(&self, _model: &StarModel, current_mdot: f64) -> f64 {
+        current_mdot
+    }
+
+    /// Custom specific angular momentum torque $\dot{j}_{\mathrm{extra}}(k)$
+    /// ($\mathrm{cm^2\,s^{-2}}$) invoked when `controls.use_other_torque` is true.
+    fn other_torque(&self, _model: &StarModel) -> Option<Vec<f64>> {
+        None
+    }
+
+    /// Custom extra specific energy generation $\epsilon_{\mathrm{extra}}(k)$
+    /// ($\mathrm{erg\,g^{-1}\,s^{-1}}$) invoked when `controls.use_other_energy`
+    /// is true.
+    fn other_energy(&self, _model: &StarModel) -> Option<Vec<f64>> {
+        None
+    }
+}
+
+/// Default no-op [`StarExtras`] implementation (`standard_run_star_extras.inc`).
+#[derive(Debug, Clone, Copy, Default)]
+pub struct DefaultStarExtras;
+
+impl StarExtras for DefaultStarExtras {}
+
+/// Tolman-Oppenheimer-Volkoff (TOV) post-Newtonian general-relativistic
+/// effective gravitational constant hook (`other_cgrav` in `ns_h`, `ns_he`,
+/// `tzo`, and `neutron_star_envelope`):
+///
+/// $$G_{\mathrm{eff}}(r) = G\,\left(1 + \frac{P}{\rho c^2}\right)\left(1 + \frac{4\pi r^3 P}{m c^2}\right)\left(1 - \frac{2 G m}{r c^2}\right)^{-1}.$$
+#[derive(Debug, Clone, Copy, Default)]
+pub struct TovGrStarExtras;
+
+impl StarExtras for TovGrStarExtras {
+    fn other_cgrav(&self, model: &mut StarModel) {
+        let c2 = CLIGHT * CLIGHT;
+        for k in 0..model.nz {
+            let m_k = model.m[k].max(1.0);
+            let r_k = model.r[k].max(1.0e3);
+            let rho_k = model.rho[k].max(1.0e-30);
+            let p_k = model.peos[k].max(0.0);
+            let term1 = 1.0 + p_k / (rho_k * c2);
+            let term2 = 1.0 + FOUR_PI * r_k.powi(3) * p_k / (m_k * c2);
+            let denom =
+                (1.0 - 2.0 * STANDARD_CGRAV * m_k / (r_k * c2)).max(0.1);
+            model.cgrav[k] = STANDARD_CGRAV * term1 * term2 / denom;
+        }
+    }
+}
+
+/// Telemetry and final state returned by a single `inlist` stage execution.
+#[derive(Debug, Clone)]
+pub struct StageRunReport {
+    /// Entry `inlist` name executed in this stage.
+    pub inlist_name: String,
+    /// Number of evolutionary steps completed in this stage.
+    pub steps_taken: usize,
+    /// Total Henyey Newton-Raphson iterations across all steps in this stage.
+    pub total_newton_iterations: usize,
+    /// Total step retries across all steps in this stage.
+    pub total_retries: usize,
+    /// Termination code that ended the stage (e.g. `"max_age"`,
+    /// `"xa_central_lower_limit"`, `"max_model_number"`).
+    pub termination_code: String,
+    /// Wall-clock runtime of the stage in seconds (`s`).
+    pub runtime_sec: f64,
+    /// Final [`HistoryRow`] summary at the end of the stage.
+    pub final_history: HistoryRow,
+    /// Complete sequence of [`HistoryRow`] records across the stage.
+    pub history_rows: Vec<HistoryRow>,
+}
+
+/// Telemetry and stage reports returned by a full multi-stage `test_suite` case.
+#[derive(Debug, Clone)]
+pub struct CaseRunReport {
+    /// Case directory name (e.g. `"1M_pre_ms_to_wd"`).
+    pub case_name: String,
+    /// Per-stage execution reports in chronological order.
+    pub stages: Vec<StageRunReport>,
+    /// Total evolutionary steps across all stages.
+    pub total_steps: usize,
+    /// Total Newton-Raphson iterations across all stages.
+    pub total_newton_iterations: usize,
+    /// Total retries across all stages.
+    pub total_retries: usize,
+    /// Total wall-clock runtime in seconds (`s`).
+    pub total_runtime_sec: f64,
+    /// Whether bit-identical `.photo` restart parity passed.
+    pub photo_restart_verified: bool,
+}
+
+/// Executes a single `inlist` stage on `model`, stepping until either a
+/// built-in `&controls` termination limit, an [`ExtrasDirective::Terminate`],
+/// or `max_steps_cap` is reached.
+///
+/// # Errors
+/// Returns [`StarError`] if a step fails to converge after all retries or if
+/// saving the final `.mod` file fails.
+pub fn run_inlist_stage(
+    model: &mut StarModel,
+    bundle: &InlistBundle,
+    extras: &mut dyn StarExtras,
+    max_steps_cap: Option<usize>,
+) -> Result<StageRunReport, StarError> {
+    let t0 = Instant::now();
+    let mut steps_taken = 0_usize;
+    let mut total_newton_iterations = 0_usize;
+    let mut total_retries = 0_usize;
+    let mut history_rows = Vec::new();
+    let mut termination_code = String::from("max_steps_cap");
+
+    let cap = max_steps_cap.unwrap_or(50_000);
+    let do_remesh = model.controls.mesh_delta_coeff > 0.0;
+    let op_split_burn = model.controls.op_split_burn;
+
+    let init_hr = extract_history_row(model);
+    if let Some(code) =
+        check_termination_limits_with_history(model, Some(&init_hr))
+    {
+        termination_code = code;
+    } else {
+        for _ in 0..cap {
+            if let ExtrasDirective::Terminate(reason) =
+                extras.extras_start_step(model)
+            {
+                termination_code = reason;
+                break;
+            }
+            if model.controls.use_other_cgrav {
+                extras.other_cgrav(model);
+            }
+
+            let step_rep =
+                star_evolve_step(model, do_remesh, op_split_burn, true)?;
+            steps_taken += 1;
+            total_newton_iterations += step_rep.iterations;
+            total_retries += step_rep.retries;
+
+            let hr = extract_history_row(model);
+            history_rows.push(hr);
+
+            if let ExtrasDirective::Terminate(reason) =
+                extras.extras_check_model(model)
+            {
+                termination_code = reason;
+                break;
+            }
+            if let ExtrasDirective::Terminate(reason) =
+                extras.extras_finish_step(model)
+            {
+                termination_code = reason;
+                break;
+            }
+            if let Some(code) =
+                check_termination_limits_with_history(model, Some(&hr))
+            {
+                termination_code = code;
+                break;
+            }
+        }
+    }
+
+    extras.extras_after_evolve(model);
+
+    if model.job.save_model_when_terminate
+        && !model.job.save_model_filename.is_empty()
+    {
+        let out_path = bundle.case_dir.join(&model.job.save_model_filename);
+        let mod_text = write_mod_string(model)?;
+        fs::write(&out_path, mod_text).map_err(|e| {
+            StarError::IoError(format!(
+                "failed to write {}: {e}",
+                out_path.display()
+            ))
+        })?;
+    }
+
+    let final_history = history_rows.last().copied().unwrap_or(init_hr);
+
+    Ok(StageRunReport {
+        inlist_name: bundle.entry_inlist.clone(),
+        steps_taken,
+        total_newton_iterations,
+        total_retries,
+        termination_code,
+        runtime_sec: t0.elapsed().as_secs_f64(),
+        final_history,
+        history_rows,
+    })
+}
+
+/// Verifies bit-identical `.photo` restart parity on `model`:
+/// 1. Clones `model`, advances 1 warm-up step if `lnd_old` is unpopulated so
+///    H211 filter memory (`dt_limit_ratio_old`) and `*_old` arrays are active,
+///    then serializes `.photo` bytes and deserializes a fresh `restarted` model.
+/// 2. Evolves both `continued` and `restarted` for `n_verify_steps` steps.
+/// 3. Asserts `compute_photo_checksum` of both serialized states is equal.
+///
+/// # Errors
+/// Returns [`StarError`] if `.photo` serialization, step evolution, or
+/// bit-identical checksum comparison fails.
+pub fn verify_photo_restart_parity(
+    model: &StarModel,
+    n_verify_steps: usize,
+) -> Result<(u64, u64), StarError> {
+    let mut continued = model.clone();
+    let do_remesh = continued.controls.mesh_delta_coeff > 0.0;
+    let op_split = continued.controls.op_split_burn;
+    if continued.lnd_old.is_empty() {
+        star_evolve_step(&mut continued, do_remesh, op_split, true)?;
+    }
+
+    let photo_bytes = write_photo_bytes(&continued);
+    let mut restarted = read_photo_bytes(
+        &photo_bytes,
+        continued.controls.clone(),
+        continued.job.clone(),
+    )?;
+    restarted.eos_config = continued.eos_config;
+    restarted.kap_config = continued.kap_config.clone();
+    set_hydro_vars(&mut restarted, false, false)?;
+    restarted.save_start_values();
+
+    for _ in 0..n_verify_steps {
+        star_evolve_step(&mut continued, do_remesh, op_split, true)?;
+        star_evolve_step(&mut restarted, do_remesh, op_split, true)?;
+    }
+
+    let c_cont = compute_photo_checksum(&write_photo_bytes(&continued));
+    let c_rest = compute_photo_checksum(&write_photo_bytes(&restarted));
+    if c_cont != c_rest {
+        return Err(StarError::IoError(format!(
+            "photo restart parity mismatch: continued={c_cont:#x} != restarted={c_rest:#x}"
+        )));
+    }
+    Ok((c_cont, c_rest))
+}
+
+/// Executes all stages of an upstream MESA `test_suite` case directory
+/// according to its `./rn` script (`skip_optional` controls whether
+/// `MESA_SKIP_OPTIONAL` branches are skipped).
+///
+/// # Errors
+/// Returns [`StarError`] if `inlist` parsing or stage execution fails.
+pub fn run_test_suite_case(
+    case_dir: &Path,
+    skip_optional: bool,
+    max_steps_per_stage: Option<usize>,
+    verify_restart: bool,
+) -> Result<CaseRunReport, StarError> {
+    let t0 = Instant::now();
+    let case_name = case_dir
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("unknown")
+        .to_string();
+
+    let rn_stages = parse_rn_stages(case_dir, skip_optional)?;
+
+    let mut current_model: Option<StarModel> = None;
+    let mut stage_reports = Vec::with_capacity(rn_stages.len());
+    let mut total_steps = 0_usize;
+    let mut total_newton = 0_usize;
+    let mut total_retries = 0_usize;
+    let mut photo_restart_verified = false;
+
+    for stage in &rn_stages {
+        match stage {
+            RnStage::CopyCheckpoint { src_mod, dst_mod } => {
+                let src = case_dir.join(src_mod);
+                let dst = case_dir.join(dst_mod);
+                if src.exists() {
+                    fs::copy(&src, &dst).map_err(|e| {
+                        StarError::IoError(format!(
+                            "failed to copy checkpoint {} -> {}: {e}",
+                            src.display(),
+                            dst.display()
+                        ))
+                    })?;
+                }
+            }
+            RnStage::DoOne {
+                inlist, output_mod, ..
+            } => {
+                let inlist_path = case_dir.join(inlist);
+                if !inlist_path.exists() {
+                    continue;
+                }
+                let bundle = InlistBundle::from_file(&inlist_path)?;
+                let use_tov = bundle.controls.use_other_cgrav;
+                let mut default_extras = DefaultStarExtras;
+                let mut tov_extras = TovGrStarExtras;
+                let extras: &mut dyn StarExtras = if use_tov {
+                    &mut tov_extras
+                } else {
+                    &mut default_extras
+                };
+
+                let mut model = init_or_update_model_from_bundle(
+                    &bundle,
+                    current_model.take(),
+                    extras,
+                )?;
+
+                let rep = run_inlist_stage(
+                    &mut model,
+                    &bundle,
+                    extras,
+                    max_steps_per_stage,
+                )?;
+
+                if verify_restart && !photo_restart_verified {
+                    let (c1, c2) = verify_photo_restart_parity(&model, 1)?;
+                    photo_restart_verified = c1 == c2;
+                }
+
+                if let Some(out_name) = output_mod {
+                    let out_path = case_dir.join(out_name);
+                    if !out_path.exists() {
+                        let mod_text = write_mod_string(&model)?;
+                        fs::write(&out_path, mod_text).map_err(|e| {
+                            StarError::IoError(format!(
+                                "failed to write {}: {e}",
+                                out_path.display()
+                            ))
+                        })?;
+                    }
+                }
+                total_steps += rep.steps_taken;
+                total_newton += rep.total_newton_iterations;
+                total_retries += rep.total_retries;
+                stage_reports.push(rep);
+                current_model = Some(model);
+            }
+        }
+    }
+
+    Ok(CaseRunReport {
+        case_name,
+        stages: stage_reports,
+        total_steps,
+        total_newton_iterations: total_newton,
+        total_retries,
+        total_runtime_sec: t0.elapsed().as_secs_f64(),
+        photo_restart_verified,
+    })
+}

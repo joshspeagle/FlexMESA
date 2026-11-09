@@ -17,55 +17,74 @@ use crate::zams::parse_fortran_f64;
 pub const STAR_DEF_VERSION: i32 = 19;
 
 /// Serializes a [`StarModel`] into an upstream MESA ASCII `.mod` string
-/// (`write_model.f90`).
+/// (`write_model.f90`), preserving optional core boundary headers (`xmstar`,
+/// `R_center`, `L_center`, `v_center`) and active dynamic/rotational columns
+/// (`v`, `u`, `omega`, `j_rot`).
 ///
 /// # Errors
 /// Returns [`StarError::IoError`] if formatting fails.
 pub fn write_mod_string(model: &StarModel) -> Result<String, StarError> {
-    let mut out = String::with_capacity(model.nz * 180 + 1024);
+    let mut out = String::with_capacity(model.nz * 200 + 1024);
     writeln!(out, "! note: initial lines of file can contain comments")
-        .map_err(|e| StarError::IoError(e.to_string()))?;
-    writeln!(out, "!").map_err(|e| StarError::IoError(e.to_string()))?;
-    writeln!(out, "           1 -- model with uniform dq")
-        .map_err(|e| StarError::IoError(e.to_string()))?;
-    writeln!(out).map_err(|e| StarError::IoError(e.to_string()))?;
+        .unwrap();
+    writeln!(out, "!").unwrap();
+    writeln!(out, "           1 -- model with uniform dq").unwrap();
+    writeln!(out).unwrap();
 
     let m_msun = model.mstar / M_SUN;
     let dt_yrs = model.dt / SECYER;
-    writeln!(out, "             M/Msun      {m_msun:26.16E}")
-        .map_err(|e| StarError::IoError(e.to_string()))?;
+    writeln!(out, "             M/Msun      {m_msun:26.16E}").unwrap();
     writeln!(out, "       model_number      {:26}", model.model_number)
-        .map_err(|e| StarError::IoError(e.to_string()))?;
+        .unwrap();
     writeln!(out, "           star_age      {:26.16E}", model.star_age)
-        .map_err(|e| StarError::IoError(e.to_string()))?;
+        .unwrap();
     writeln!(
         out,
         "          initial_z      {:26.16E}",
         model.controls.initial_z
     )
-    .map_err(|e| StarError::IoError(e.to_string()))?;
-    writeln!(out, "           n_shells      {:26}", model.nz)
-        .map_err(|e| StarError::IoError(e.to_string()))?;
-    writeln!(out, "           net_name   '{}'", model.job.net_name)
-        .map_err(|e| StarError::IoError(e.to_string()))?;
-    writeln!(out, "            species      {:26}", model.species)
-        .map_err(|e| StarError::IoError(e.to_string()))?;
-    writeln!(out, "               Teff      {:26.16E}", model.teff)
-        .map_err(|e| StarError::IoError(e.to_string()))?;
-    writeln!(out, "   year_for_time_step      {dt_yrs:26.16E}")
-        .map_err(|e| StarError::IoError(e.to_string()))?;
-    writeln!(out).map_err(|e| StarError::IoError(e.to_string()))?;
+    .unwrap();
+    writeln!(out, "           n_shells      {:26}", model.nz).unwrap();
+    writeln!(out, "           net_name   '{}'", model.job.net_name).unwrap();
+    writeln!(out, "            species      {:26}", model.species).unwrap();
+    for (k_str, val, show) in [
+        ("xmstar", model.xmstar, model.m_center > 0.0),
+        ("R_center", model.r_center, model.r_center > 0.0),
+        ("L_center", model.l_center, model.l_center > 0.0),
+        ("v_center", model.v_center, model.v_center != 0.0),
+    ] {
+        if show {
+            writeln!(out, "{k_str:>19}      {val:26.16E}").unwrap();
+        }
+    }
+    writeln!(out, "               Teff      {:26.16E}", model.teff).unwrap();
+    writeln!(out, "   year_for_time_step      {dt_yrs:26.16E}").unwrap();
+    writeln!(out).unwrap();
+
+    let write_v = model.controls.v_flag && model.v.len() == model.nz;
+    let write_u = model.controls.u_flag && model.u.len() == model.nz;
+    let write_rot = model.controls.rotation_flag
+        && model.omega.len() == model.nz
+        && model.j_rot.len() == model.nz;
 
     write!(
         out,
         "        lnd                       lnT                       lnR                       L                         dq"
     )
-    .map_err(|e| StarError::IoError(e.to_string()))?;
-    for name in &model.iso_names {
-        write!(out, "  {name:>24}")
-            .map_err(|e| StarError::IoError(e.to_string()))?;
+    .unwrap();
+    if write_v {
+        write!(out, "  {:>24}", "v").unwrap();
     }
-    writeln!(out).map_err(|e| StarError::IoError(e.to_string()))?;
+    if write_u {
+        write!(out, "  {:>24}", "u").unwrap();
+    }
+    if write_rot {
+        write!(out, "  {:>24}  {:>24}", "omega", "j_rot").unwrap();
+    }
+    for name in &model.iso_names {
+        write!(out, "  {name:>24}").unwrap();
+    }
+    writeln!(out).unwrap();
 
     for k in 0..model.nz {
         write!(
@@ -78,32 +97,44 @@ pub fn write_mod_string(model: &StarModel) -> Result<String, StarError> {
             model.lum[k],
             model.dq[k],
         )
-        .map_err(|e| StarError::IoError(e.to_string()))?;
-        let xa_k = model.cell_xa(k);
-        for &x_j in xa_k {
-            write!(out, "  {x_j:24.16E}")
-                .map_err(|e| StarError::IoError(e.to_string()))?;
+        .unwrap();
+        if write_v {
+            write!(out, "  {:24.16E}", model.v[k]).unwrap();
         }
-        writeln!(out).map_err(|e| StarError::IoError(e.to_string()))?;
+        if write_u {
+            write!(out, "  {:24.16E}", model.u[k]).unwrap();
+        }
+        if write_rot {
+            write!(
+                out,
+                "  {:24.16E}  {:24.16E}",
+                model.omega[k], model.j_rot[k]
+            )
+            .unwrap();
+        }
+        for &x_j in model.cell_xa(k) {
+            write!(out, "  {x_j:24.16E}").unwrap();
+        }
+        writeln!(out).unwrap();
     }
 
-    writeln!(out).map_err(|e| StarError::IoError(e.to_string()))?;
-    writeln!(out, "        previous model")
-        .map_err(|e| StarError::IoError(e.to_string()))?;
-    writeln!(out, "   previous n_shells      {:26}", model.nz)
-        .map_err(|e| StarError::IoError(e.to_string()))?;
+    writeln!(out).unwrap();
+    writeln!(out, "        previous model").unwrap();
+    writeln!(out, "   previous n_shells      {:26}", model.nz).unwrap();
     writeln!(out, "  previous mass (grams)   {:26.16E}", model.mstar_old)
-        .map_err(|e| StarError::IoError(e.to_string()))?;
-    writeln!(out, "   timestep (seconds)     {:26.16E}", model.dt_old)
-        .map_err(|e| StarError::IoError(e.to_string()))?;
+        .unwrap();
+    writeln!(out, "   timestep (seconds)     {:26.16E}", model.dt_old).unwrap();
     writeln!(out, "    dt_next (seconds)     {:26.16E}", model.dt_next)
-        .map_err(|e| StarError::IoError(e.to_string()))?;
+        .unwrap();
 
     Ok(out)
 }
 
 /// Parses an upstream MESA ASCII `.mod` string into a [`StarModel`]
-/// (`read_model.f90`).
+/// (`read_model.f90`), supporting all 16 upstream `.mod` column layouts
+/// (`lnd`, `lnT`, `lnR`, `et_RSP`/`erad_RSP`/`Fr_RSP`, `w`/`Hp`, `L`, `dq`,
+/// `v`, `omega`, `j_rot`, `D_omega`, `am_nu_rot`, `u`, `alpha_RTI`,
+/// `conv_vel`/`mlt_vc`, and `species` nuclide columns).
 ///
 /// # Errors
 /// Returns [`StarError::IoError`] if the `.mod` text is malformed.
@@ -112,13 +143,19 @@ pub fn read_mod_str(
     mut controls: StarControls,
     mut job: StarJobControls,
 ) -> Result<StarModel, StarError> {
-    let mut lines = text.lines().peekable();
+    let mut lines = text.lines();
     let mut m_msun = controls.initial_mass;
     let mut model_number = 1_usize;
     let mut star_age = 0.0_f64;
     let mut nz = 0_usize;
+    let mut header_species: Option<usize> = None;
     let mut teff = 5777.0_f64;
-    let mut dt_yrs = 1000.0_f64;
+    let mut dt_yrs: Option<f64> = None;
+    let mut xmstar_opt: Option<f64> = None;
+    let mut r_center = 0.0_f64;
+    let mut l_center = 0.0_f64;
+    let mut v_center = 0.0_f64;
+    let mut num_retries = 0_usize;
     let mut header_cols: Vec<String> = Vec::new();
 
     for line in lines.by_ref() {
@@ -126,78 +163,108 @@ pub fn read_mod_str(
         if trimmed.is_empty() || trimmed.starts_with('!') {
             continue;
         }
-        if trimmed.starts_with("M/Msun") {
-            if let Some(v) = trimmed.split_whitespace().nth(1) {
-                m_msun = parse_fortran_f64(v)?;
-                controls.initial_mass = m_msun;
-            }
-        } else if trimmed.starts_with("model_number") {
-            if let Some(v) = trimmed.split_whitespace().nth(1) {
-                model_number = v.parse::<usize>().unwrap_or(1);
-            }
-        } else if trimmed.starts_with("star_age") {
-            if let Some(v) = trimmed.split_whitespace().nth(1) {
-                star_age = parse_fortran_f64(v)?;
-            }
-        } else if trimmed.starts_with("initial_z")
-            || trimmed.starts_with("initial_Z")
-        {
-            if let Some(v) = trimmed.split_whitespace().nth(1) {
-                controls.initial_z = parse_fortran_f64(v)?;
-            }
-        } else if trimmed.starts_with("n_shells") {
-            if let Some(v) = trimmed.split_whitespace().nth(1) {
-                nz = v.parse::<usize>().map_err(|e| {
-                    StarError::IoError(format!("invalid n_shells: {e}"))
-                })?;
-            }
-        } else if trimmed.starts_with("net_name") {
-            if let Some(v) = trimmed.split_whitespace().nth(1) {
-                job.net_name =
-                    v.trim_matches('\'').trim_matches('"').to_string();
-            }
-        } else if trimmed.starts_with("Teff") {
-            if let Some(v) = trimmed.split_whitespace().nth(1) {
-                teff = parse_fortran_f64(v)?;
-            }
-        } else if trimmed.starts_with("year_for_time_step") {
-            if let Some(v) = trimmed.split_whitespace().nth(1) {
-                dt_yrs = parse_fortran_f64(v)?;
-            }
-        } else if trimmed.starts_with("lnd ")
-            || (trimmed.contains("lnd") && trimmed.contains("lnT"))
-        {
+        if trimmed.starts_with("lnd ") {
             header_cols = trimmed
                 .split_whitespace()
                 .map(ToString::to_string)
                 .collect();
             break;
         }
+        let Some((key, rest)) = trimmed.split_once(char::is_whitespace) else {
+            continue;
+        };
+        let Some(v) = rest.split_whitespace().next() else {
+            continue;
+        };
+        match key {
+            "M/Msun" => {
+                m_msun = parse_fortran_f64(v)?;
+                controls.initial_mass = m_msun;
+            }
+            "model_number" => model_number = v.parse::<usize>().unwrap_or(1),
+            "star_age" => star_age = parse_fortran_f64(v)?,
+            "initial_z" | "initial_Z" => {
+                controls.initial_z = parse_fortran_f64(v)?;
+            }
+            "initial_y" | "initial_Y" => {
+                controls.initial_y = parse_fortran_f64(v)?;
+            }
+            "n_shells" => {
+                nz = v
+                    .parse()
+                    .map_err(|e| StarError::IoError(format!("{e}")))?;
+            }
+            "net_name" => {
+                job.net_name = v.trim_matches(['\'', '"']).to_string();
+            }
+            "species" => header_species = v.parse::<usize>().ok(),
+            "Teff" => teff = parse_fortran_f64(v)?,
+            "year_for_time_step" => dt_yrs = Some(parse_fortran_f64(v)?),
+            "xmstar" => xmstar_opt = Some(parse_fortran_f64(v)?),
+            "R_center" => r_center = parse_fortran_f64(v)?,
+            "L_center" => l_center = parse_fortran_f64(v)?,
+            "v_center" => v_center = parse_fortran_f64(v)?,
+            "tau_factor" if !job.set_tau_factor => {
+                controls.tau_factor = parse_fortran_f64(v)?;
+            }
+            "opacity_factor" => controls.opacity_factor = parse_fortran_f64(v)?,
+            "num_retries" => num_retries = v.parse::<usize>().unwrap_or(0),
+            _ => {}
+        }
     }
 
     if nz == 0 || header_cols.len() < 5 {
-        return Err(StarError::IoError(String::from(
-            "missing n_shells or column header in .mod file",
-        )));
+        return Err(StarError::IoError(String::from("malformed .mod header")));
     }
-    let lnd_idx =
-        header_cols.iter().position(|c| c == "lnd").ok_or_else(|| {
-            StarError::IoError(String::from("missing lnd column"))
-        })?;
-    // Determine whether v or omega columns precede dq
-    let dq_idx = header_cols
-        .iter()
-        .position(|c| c == "dq")
-        .ok_or_else(|| StarError::IoError(String::from("missing dq column")))?;
-    let iso_names = &header_cols[dq_idx + 1..];
-    let species = iso_names.len();
+    let find_col = |name: &str| -> Result<usize, StarError> {
+        header_cols
+            .iter()
+            .position(|c| c == name)
+            .ok_or_else(|| StarError::IoError(format!("missing {name} col")))
+    };
+    let lnd_idx = find_col("lnd")?;
+    let lnt_idx = find_col("lnT")?;
+    let lnr_idx = find_col("lnR")?;
+    let lum_idx = find_col("L")?;
+    let dq_idx = find_col("dq")?;
+
     let catalog = NuclideCatalog::builtin_ref();
+    let iso_start_idx = if let Some(sp) =
+        header_species.filter(|&s| s > 0 && header_cols.len() > s)
+    {
+        header_cols.len() - sp
+    } else {
+        (dq_idx + 1..header_cols.len())
+            .find(|&i| catalog.get_nuclide_index(&header_cols[i]).is_some())
+            .unwrap_or(dq_idx + 1)
+    };
+    let pre_iso_cols = &header_cols[..iso_start_idx];
+    let v_idx = pre_iso_cols.iter().position(|c| c == "v");
+    let u_idx = pre_iso_cols.iter().position(|c| c == "u");
+    let omega_idx = pre_iso_cols.iter().position(|c| c == "omega");
+    let j_rot_idx = pre_iso_cols.iter().position(|c| c == "j_rot");
+    let vc_idx = pre_iso_cols
+        .iter()
+        .position(|c| c == "conv_vel" || c == "mlt_vc");
+
+    if v_idx.is_some() && !job.change_v_flag {
+        controls.v_flag = true;
+    }
+    if u_idx.is_some() && !job.change_u_flag {
+        controls.u_flag = true;
+    }
+    if omega_idx.is_some() && !job.change_rotation_flag {
+        controls.rotation_flag = true;
+    }
+
+    let iso_names = &header_cols[iso_start_idx..];
+    let species = iso_names.len();
     let chem_id: Vec<usize> = iso_names
         .iter()
         .map(|n| catalog.get_nuclide_index(n).unwrap_or(1))
         .collect();
 
-    let mut model = StarModel::new(nz, chem_id, job, controls);
+    let mut model = StarModel::new(nz, chem_id, job.clone(), controls);
     if nz < 500 {
         model.eos_config.use_free_eos = false;
         model.eos_config.use_opal_scvh = false;
@@ -205,13 +272,23 @@ pub fn read_mod_str(
     model.mstar = m_msun * M_SUN;
     model.mstar_start = model.mstar;
     model.mstar_old = model.mstar;
+    if let Some(xm) = xmstar_opt.filter(|&x| x > 0.0) {
+        model.xmstar = xm;
+        model.m_center = (model.mstar - xm).max(0.0);
+    }
+    model.r_center = r_center;
+    model.l_center = l_center;
+    model.v_center = v_center;
     model.model_number = model_number;
     model.star_age = star_age;
     model.teff = teff;
-    model.dt = dt_yrs * SECYER;
-    model.dt_next = model.dt;
-    model.dt_old = model.dt;
+    model.num_retries = num_retries;
+    let init_dt = dt_yrs.unwrap_or(1000.0) * SECYER;
+    model.dt = init_dt;
+    model.dt_next = init_dt;
+    model.dt_old = init_dt;
 
+    let total_cols = header_cols.len();
     let mut k = 0_usize;
     while k < nz {
         let Some(line) = lines.next() else {
@@ -223,29 +300,44 @@ pub fn read_mod_str(
         if toks.is_empty() {
             continue;
         }
-        if toks.len() < 1 + (dq_idx - lnd_idx + 1) + species {
+        if toks.len() < 1 + total_cols {
             return Err(StarError::IoError(format!(
-                "short zone row in .mod at zone {}: '{}'",
+                "short zone row in .mod at zone {}: expected {}, got {}",
                 k + 1,
-                line
+                1 + total_cols,
+                toks.len()
             )));
         }
-        // First token is 1-based zone index k+1
         let offset = 1;
-        model.lnd[k] = parse_fortran_f64(toks[offset])?;
-        model.ln_t[k] = parse_fortran_f64(toks[offset + 1])?;
-        model.ln_r[k] = parse_fortran_f64(toks[offset + 2])?;
-        model.lum[k] = parse_fortran_f64(toks[offset + 3])?;
-        let dq_col = offset + (dq_idx - lnd_idx);
-        model.dq[k] = parse_fortran_f64(toks[dq_col])?;
+        model.lnd[k] = parse_fortran_f64(toks[offset + lnd_idx])?;
+        model.ln_t[k] = parse_fortran_f64(toks[offset + lnt_idx])?;
+        model.ln_r[k] = parse_fortran_f64(toks[offset + lnr_idx])?;
+        model.lum[k] = parse_fortran_f64(toks[offset + lum_idx])?;
+        model.dq[k] = parse_fortran_f64(toks[offset + dq_idx])?;
+        if let Some(idx) = v_idx {
+            model.v[k] = parse_fortran_f64(toks[offset + idx])?;
+        }
+        if let Some(idx) = u_idx {
+            model.u[k] = parse_fortran_f64(toks[offset + idx])?;
+        }
+        if let Some(idx) = omega_idx {
+            model.omega[k] = parse_fortran_f64(toks[offset + idx])?;
+        }
+        if let Some(idx) = j_rot_idx {
+            model.j_rot[k] = parse_fortran_f64(toks[offset + idx])?;
+        }
+        if let Some(idx) = vc_idx {
+            let vc = parse_fortran_f64(toks[offset + idx])?;
+            model.mlt_vc[k] = vc;
+            model.conv_vel[k] = vc;
+        }
         for j in 0..species {
             model.xa[k * species + j] =
-                parse_fortran_f64(toks[dq_col + 1 + j])?;
+                parse_fortran_f64(toks[offset + iso_start_idx + j])?;
         }
         k += 1;
     }
 
-    // Parse optional footer scalars
     let mut parsed_mstar_old = model.mstar_old;
     let mut parsed_dt_old = model.dt_old;
     for line in lines {
@@ -256,12 +348,31 @@ pub fn read_mod_str(
             }
         } else if t.starts_with("timestep (seconds)") {
             if let Some(v) = t.split_whitespace().last() {
-                parsed_dt_old = parse_fortran_f64(v)?;
+                let dt_s = parse_fortran_f64(v)?;
+                parsed_dt_old = dt_s;
+                if dt_yrs.is_none() {
+                    model.dt = dt_s;
+                }
             }
         } else if t.starts_with("dt_next (seconds)") {
             if let Some(v) = t.split_whitespace().last() {
                 model.dt_next = parse_fortran_f64(v)?;
+                if dt_yrs.is_none() {
+                    model.dt = model.dt_next;
+                }
             }
+        }
+    }
+
+    // Align `model.chem_id` and `model.xa` ordering with `NetGeneralInfo.chem_id`
+    let target_net = if job.change_net && !job.new_net_name.is_empty() {
+        job.new_net_name.clone()
+    } else {
+        model.job.net_name.clone()
+    };
+    if let Ok(net) = crate::micro::get_or_load_net(&target_net, None) {
+        if net.chem_id != model.chem_id {
+            crate::micro::change_model_network(&mut model, &target_net, None)?;
         }
     }
 
@@ -272,21 +383,28 @@ pub fn read_mod_str(
     Ok(model)
 }
 
+/// Computes a deterministic 64-bit FNV-1a checksum of `.photo` restart bytes
+/// (`./ck` in upstream MESA `test_suite_helpers`).
+#[must_use]
+pub fn compute_photo_checksum(bytes: &[u8]) -> u64 {
+    let mut hash = 0xcbf2_9ce4_8422_2325_u64;
+    for &b in bytes {
+        hash ^= u64::from(b);
+        hash = hash.wrapping_mul(0x0100_0000_01b3_u64);
+    }
+    hash
+}
+
 /// Serializes a [`StarModel`] into binary `.photo` restart bytes with
 /// `STAR_DEF_VERSION = 19` and `part_number = 1..7` sentinels (`photo_out.f90`).
 #[must_use]
 pub fn write_photo_bytes(model: &StarModel) -> Vec<u8> {
     let mut buf =
-        Vec::with_capacity(model.nz * (8 * (10 + model.species)) + 256);
-    let write_i32 = |buf: &mut Vec<u8>, v: i32| {
-        buf.extend_from_slice(&v.to_le_bytes());
-    };
-    let write_u64 = |buf: &mut Vec<u8>, v: u64| {
-        buf.extend_from_slice(&v.to_le_bytes());
-    };
-    let write_f64 = |buf: &mut Vec<u8>, v: f64| {
-        buf.extend_from_slice(&v.to_le_bytes());
-    };
+        Vec::with_capacity(model.nz * (8 * (12 + model.species)) + 256);
+    let write_i32 =
+        |buf: &mut Vec<u8>, v: i32| buf.extend_from_slice(&v.to_le_bytes());
+    let write_u64 =
+        |buf: &mut Vec<u8>, v: u64| buf.extend_from_slice(&v.to_le_bytes());
     let write_f64_slice = |buf: &mut Vec<u8>, s: &[f64]| {
         for &v in s {
             buf.extend_from_slice(&v.to_le_bytes());
@@ -304,43 +422,47 @@ pub fn write_photo_bytes(model: &StarModel) -> Vec<u8> {
         write_u64(&mut buf, cid as u64);
     }
 
-    // Part 2: primary hydro arrays (`lnd`, `ln_t`, `ln_r`, `lum`, `v`, `u`, `dq`, `xa`)
+    // Part 2: primary hydro and rotational arrays (`lnd`, `ln_t`, `ln_r`, `lum`, `v`, `u`, `dq`, `xa`, `omega`, `j_rot`)
     write_i32(&mut buf, 2);
-    write_f64_slice(&mut buf, &model.lnd);
-    write_f64_slice(&mut buf, &model.ln_t);
-    write_f64_slice(&mut buf, &model.ln_r);
-    write_f64_slice(&mut buf, &model.lum);
-    write_f64_slice(&mut buf, &model.v);
-    write_f64_slice(&mut buf, &model.u);
-    write_f64_slice(&mut buf, &model.dq);
-    write_f64_slice(&mut buf, &model.xa);
+    for s in [&model.lnd, &model.ln_t, &model.ln_r, &model.lum] {
+        write_f64_slice(&mut buf, s);
+    }
+    for s in [&model.v, &model.u, &model.dq, &model.xa] {
+        write_f64_slice(&mut buf, s);
+    }
+    write_u64(&mut buf, model.omega.len() as u64);
+    write_f64_slice(&mut buf, &model.omega);
+    write_u64(&mut buf, model.j_rot.len() as u64);
+    write_f64_slice(&mut buf, &model.j_rot);
 
     // Part 3: old-step arrays
     write_i32(&mut buf, 3);
-    write_f64_slice(&mut buf, &model.lnd_old);
-    write_f64_slice(&mut buf, &model.ln_t_old);
-    write_f64_slice(&mut buf, &model.ln_r_old);
-    write_f64_slice(&mut buf, &model.lum_old);
-    write_f64_slice(&mut buf, &model.dq_old);
-    write_f64_slice(&mut buf, &model.xa_old);
+    write_u64(&mut buf, model.lnd_old.len() as u64);
+    for s in [&model.lnd_old, &model.ln_t_old, &model.ln_r_old] {
+        write_f64_slice(&mut buf, s);
+    }
+    for s in [&model.lum_old, &model.dq_old, &model.xa_old] {
+        write_f64_slice(&mut buf, s);
+    }
 
-    // Part 4: evolutionary scalar state
+    // Part 4: evolutionary scalar state (including H211 filter memory `dt_limit_ratio_old`)
     write_i32(&mut buf, 4);
     write_u64(&mut buf, model.model_number as u64);
-    write_f64(&mut buf, model.star_age);
-    write_f64(&mut buf, model.star_age_old);
-    write_f64(&mut buf, model.dt);
-    write_f64(&mut buf, model.dt_next);
-    write_f64(&mut buf, model.dt_old);
-    write_f64(&mut buf, model.mstar);
-    write_f64(&mut buf, model.mstar_old);
-    write_f64(&mut buf, model.mstar_dot);
-    write_f64(&mut buf, model.m_center);
-    write_f64(&mut buf, model.r_center);
-    write_f64(&mut buf, model.l_center);
-    write_f64(&mut buf, model.v_center);
-    write_f64(&mut buf, model.teff);
-    write_f64(&mut buf, model.tau_base);
+    for v in [model.star_age, model.star_age_old, model.dt] {
+        buf.extend_from_slice(&v.to_le_bytes());
+    }
+    for v in [model.dt_next, model.dt_old, model.dt_limit_ratio_old] {
+        buf.extend_from_slice(&v.to_le_bytes());
+    }
+    for v in [model.mstar, model.mstar_old, model.mstar_dot] {
+        buf.extend_from_slice(&v.to_le_bytes());
+    }
+    for v in [model.m_center, model.r_center, model.l_center] {
+        buf.extend_from_slice(&v.to_le_bytes());
+    }
+    for v in [model.v_center, model.teff, model.tau_base] {
+        buf.extend_from_slice(&v.to_le_bytes());
+    }
     write_u64(&mut buf, model.total_num_solver_iterations as u64);
     write_u64(&mut buf, model.num_retries as u64);
 
@@ -363,52 +485,29 @@ pub fn read_photo_bytes(
     job: StarJobControls,
 ) -> Result<StarModel, StarError> {
     let mut pos = 0_usize;
+    let eof = |msg: &str| StarError::IoError(msg.to_string());
     let read_i32 = |pos: &mut usize| -> Result<i32, StarError> {
-        if *pos + 4 > bytes.len() {
-            return Err(StarError::IoError(String::from(
-                "unexpected EOF reading i32 in .photo",
-            )));
-        }
-        let v = i32::from_le_bytes(bytes[*pos..*pos + 4].try_into().unwrap());
+        let s = bytes.get(*pos..*pos + 4).ok_or_else(|| eof("EOF i32"))?;
         *pos += 4;
-        Ok(v)
+        Ok(i32::from_le_bytes(s.try_into().unwrap()))
     };
     let read_u64 = |pos: &mut usize| -> Result<u64, StarError> {
-        if *pos + 8 > bytes.len() {
-            return Err(StarError::IoError(String::from(
-                "unexpected EOF reading u64 in .photo",
-            )));
-        }
-        let v = u64::from_le_bytes(bytes[*pos..*pos + 8].try_into().unwrap());
+        let s = bytes.get(*pos..*pos + 8).ok_or_else(|| eof("EOF u64"))?;
         *pos += 8;
-        Ok(v)
-    };
-    let read_f64 = |pos: &mut usize| -> Result<f64, StarError> {
-        if *pos + 8 > bytes.len() {
-            return Err(StarError::IoError(String::from(
-                "unexpected EOF reading f64 in .photo",
-            )));
-        }
-        let v = f64::from_le_bytes(bytes[*pos..*pos + 8].try_into().unwrap());
-        *pos += 8;
-        Ok(v)
+        Ok(u64::from_le_bytes(s.try_into().unwrap()))
     };
     let read_f64_vec = |pos: &mut usize,
                         n: usize|
      -> Result<Vec<f64>, StarError> {
-        if *pos + 8 * n > bytes.len() {
-            return Err(StarError::IoError(String::from(
-                "unexpected EOF reading f64 slice in .photo",
-            )));
-        }
-        let mut v = Vec::with_capacity(n);
-        for _ in 0..n {
-            let x =
-                f64::from_le_bytes(bytes[*pos..*pos + 8].try_into().unwrap());
-            *pos += 8;
-            v.push(x);
-        }
-        Ok(v)
+        let end = *pos + 8 * n;
+        let slice = bytes.get(*pos..end).ok_or_else(|| eof("EOF f64 slice"))?;
+        *pos = end;
+        Ok(slice
+            .as_chunks::<8>()
+            .0
+            .iter()
+            .map(|&c| f64::from_le_bytes(c))
+            .collect())
     };
     let expect_part =
         |pos: &mut usize, expected: i32| -> Result<(), StarError> {
@@ -452,31 +551,29 @@ pub fn read_photo_bytes(
     model.u = read_f64_vec(&mut pos, nz)?;
     model.dq = read_f64_vec(&mut pos, nz)?;
     model.xa = read_f64_vec(&mut pos, nz * species)?;
+    let n_omega = read_u64(&mut pos)? as usize;
+    model.omega = read_f64_vec(&mut pos, n_omega)?;
+    let n_jrot = read_u64(&mut pos)? as usize;
+    model.j_rot = read_f64_vec(&mut pos, n_jrot)?;
 
     expect_part(&mut pos, 3)?;
-    model.lnd_old = read_f64_vec(&mut pos, nz)?;
-    model.ln_t_old = read_f64_vec(&mut pos, nz)?;
-    model.ln_r_old = read_f64_vec(&mut pos, nz)?;
-    model.lum_old = read_f64_vec(&mut pos, nz)?;
-    model.dq_old = read_f64_vec(&mut pos, nz)?;
-    model.xa_old = read_f64_vec(&mut pos, nz * species)?;
+    let nz_old = read_u64(&mut pos)? as usize;
+    model.lnd_old = read_f64_vec(&mut pos, nz_old)?;
+    model.ln_t_old = read_f64_vec(&mut pos, nz_old)?;
+    model.ln_r_old = read_f64_vec(&mut pos, nz_old)?;
+    model.lum_old = read_f64_vec(&mut pos, nz_old)?;
+    model.dq_old = read_f64_vec(&mut pos, nz_old)?;
+    model.xa_old = read_f64_vec(&mut pos, nz_old * species)?;
 
     expect_part(&mut pos, 4)?;
     model.model_number = read_u64(&mut pos)? as usize;
-    model.star_age = read_f64(&mut pos)?;
-    model.star_age_old = read_f64(&mut pos)?;
-    model.dt = read_f64(&mut pos)?;
-    model.dt_next = read_f64(&mut pos)?;
-    model.dt_old = read_f64(&mut pos)?;
-    model.mstar = read_f64(&mut pos)?;
-    model.mstar_old = read_f64(&mut pos)?;
-    model.mstar_dot = read_f64(&mut pos)?;
-    model.m_center = read_f64(&mut pos)?;
-    model.r_center = read_f64(&mut pos)?;
-    model.l_center = read_f64(&mut pos)?;
-    model.v_center = read_f64(&mut pos)?;
-    model.teff = read_f64(&mut pos)?;
-    model.tau_base = read_f64(&mut pos)?;
+    let s = read_f64_vec(&mut pos, 15)?;
+    (model.star_age, model.star_age_old, model.dt) = (s[0], s[1], s[2]);
+    (model.dt_next, model.dt_old, model.dt_limit_ratio_old) =
+        (s[3], s[4], s[5]);
+    (model.mstar, model.mstar_old, model.mstar_dot) = (s[6], s[7], s[8]);
+    (model.m_center, model.r_center, model.l_center) = (s[9], s[10], s[11]);
+    (model.v_center, model.teff, model.tau_base) = (s[12], s[13], s[14]);
     model.total_num_solver_iterations = read_u64(&mut pos)? as usize;
     model.num_retries = read_u64(&mut pos)? as usize;
 
@@ -484,11 +581,10 @@ pub fn read_photo_bytes(
     expect_part(&mut pos, 6)?;
     expect_part(&mut pos, 7)?;
 
-    model.set_qs();
-    model.set_xqs();
-    model.set_m_and_dm();
-    model.set_m_grav_and_grav();
-    model.pack_xh();
+    model.xmstar = (model.mstar - model.m_center).max(0.0);
+    model.mstar_start = model.mstar;
+    model.sync_mesh_and_pack()?;
+    crate::hydro_vars::set_hydro_vars(&mut model, false, false)?;
     model.save_start_values();
 
     Ok(model)

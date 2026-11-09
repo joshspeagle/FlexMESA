@@ -27,7 +27,7 @@ use flexmesa_net::{burn_1_zone, Burn1ZoneInput};
 
 use crate::controls::StarError;
 use crate::hydro_vars::set_hydro_vars;
-use crate::micro::global_basic_net;
+use crate::micro::resolve_model_net;
 use crate::mix_info::{
     clean_mixing_glitches, compute_convection_sigmas,
     locate_convection_boundaries,
@@ -55,10 +55,9 @@ pub fn op_split_burn_zones(
     }
     let nz = model.nz;
     let species = model.species;
-    let net_info = global_basic_net();
-    if species != net_info.num_isos {
+    let Some(net_info) = resolve_model_net(model) else {
         return Ok(());
-    }
+    };
     let ht = HelmTable::builtin();
     let num_reactions = net_info.num_reactions;
     let rate_factors = vec![1.0; num_reactions];
@@ -103,7 +102,7 @@ pub fn op_split_burn_zones(
             eps: 1.0e-6,
             odescal: 1.0e-12,
         };
-        let out = burn_1_zone(net_info, ht, &model.eos_config, &input)
+        let out = burn_1_zone(&net_info, ht, &model.eos_config, &input)
             .map_err(|e| {
                 StarError::MicrophysicsError(format!(
                     "op_split_burn failed at zone {k}: {e}"

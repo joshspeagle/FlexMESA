@@ -67,6 +67,10 @@ pub mod evolve;
 pub mod history;
 pub mod hydro_eqns;
 pub mod hydro_vars;
+pub mod inlist;
+pub mod inlist_populate;
+pub mod inlist_runner;
+pub mod job_controls;
 pub mod mesh;
 pub mod mesh_adjust;
 pub mod micro;
@@ -82,7 +86,9 @@ pub mod rotation;
 pub mod rsp2;
 pub mod solver;
 pub mod star_ad;
+pub mod star_job_init;
 pub mod struct_burn_mix;
+pub mod termination;
 pub mod timestep;
 pub mod winds;
 pub mod zams;
@@ -120,12 +126,19 @@ pub use hydro_vars::{
     check_for_redo_mlt, do_brunt_b, do_brunt_n2, eval_surf_bc, set_hydro_vars,
     set_mlt_vars, update_sig_from_d_mix,
 };
+pub use inlist::{parse_rn_stages, InlistBundle, RnStage, SectionControls};
+pub use inlist_runner::{
+    run_inlist_stage, run_test_suite_case, verify_photo_restart_parity,
+    CaseRunReport, DefaultStarExtras, ExtrasDirective, StageRunReport,
+    StarExtras, TovGrStarExtras,
+};
 pub use mesh_adjust::{
     do_adjust_mesh, eval_mesh_gval, plan_mesh, remap_onto_dq,
     MeshFunctionConfig,
 };
 pub use micro::{
-    do_eos, do_kap, do_net, do_neu, get_tau, global_basic_net, set_basic_vars,
+    change_model_network, do_eos, do_kap, do_net, do_neu, get_or_load_net,
+    get_tau, global_basic_net, set_basic_vars,
 };
 pub use mix_info::{
     cdc_factor, clean_mixing_glitches, compute_convection_sigmas,
@@ -133,8 +146,8 @@ pub use mix_info::{
 };
 pub use model::StarModel;
 pub use model_io::{
-    read_mod_str, read_photo_bytes, write_mod_string, write_photo_bytes,
-    STAR_DEF_VERSION,
+    compute_photo_checksum, read_mod_str, read_photo_bytes, write_mod_string,
+    write_photo_bytes, STAR_DEF_VERSION,
 };
 pub use overshoot::{apply_overshooting, OvershootConfig, OvershootScheme};
 pub use pre_ms::{
@@ -172,9 +185,14 @@ pub use star_ad::{
     I_LNR_P1, I_LNT_00, I_LNT_M1, I_LNT_P1, I_L_00, I_L_M1, I_L_P1, I_OMEGA_00,
     I_OMEGA_M1, I_OMEGA_P1, I_V_00, I_V_M1, I_V_P1, NUM_STAR_AD_VARS,
 };
+pub use star_job_init::init_or_update_model_from_bundle;
 pub use struct_burn_mix::{
     do_struct_burn_mix, op_split_burn_zones, solve_composition_diffusion,
     solve_omega_mix,
+};
+pub use termination::{
+    check_termination_limits, check_termination_limits_with_history,
+    compute_core_masses_msun,
 };
 pub use timestep::{
     eval_dx_nuc_drop_ratio, eval_h211_factor, eval_varcontrol, filter_limit,

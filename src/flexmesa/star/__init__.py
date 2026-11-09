@@ -8,6 +8,7 @@ driver (`flexmesa.star`).
 from __future__ import annotations
 
 from flexmesa.star import (
+    e2e,
     jax_diffusion_rot,
     jax_evolve,
     jax_hydro_pulse,
@@ -52,6 +53,9 @@ eval_varcontrol_jax = jax_evolve.eval_varcontrol_jax
 eval_winds_jax = jax_winds_mix.eval_winds_jax
 face_weights_jax = jax_kernels.face_weights_jax
 interp_q = model.interp_q
+parse_inlist_bundle = e2e.parse_inlist_bundle
+parse_rn_stages = e2e.parse_rn_stages
+run_test_suite_case = e2e.run_test_suite_case
 solve_henyey_linear_jax = jax_kernels.solve_henyey_linear_jax
 solve_stationary_rsp2_w_jax = jax_hydro_pulse.solve_stationary_rsp2_w_jax
 yrs_for_init_timestep = model.yrs_for_init_timestep
@@ -64,6 +68,7 @@ __all__ = [
     "JaxStarState",
     "StarModel",
     "compute_staggered_grid_jax",
+    "e2e",
     "eval_burgers_velocities_jax",
     "eval_caplan_ocp_dstar_jax",
     "eval_convection_sigmas_jax",
@@ -93,6 +98,9 @@ __all__ = [
     "jax_kernels",
     "jax_winds_mix",
     "model",
+    "parse_inlist_bundle",
+    "parse_rn_stages",
+    "run_test_suite_case",
     "solve_henyey_linear_jax",
     "solve_stationary_rsp2_w_jax",
     "yrs_for_init_timestep",

@@ -4,7 +4,9 @@
 //! reaction network (`do_net`) evaluation (`star/private/micro.f90` and
 //! `star/private/net.f90`).
 
-use std::sync::OnceLock;
+use std::collections::HashMap;
+use std::path::Path;
+use std::sync::{Arc, Mutex, OnceLock};
 
 use flexmesa_chem::{get_composition_info, NuclideCatalog};
 use flexmesa_const::{AVO, CRAD, FOUR_PI, KERG, QE};
@@ -18,11 +20,13 @@ use flexmesa_net::{net_get, NetEvalResult, NetGeneralInfo};
 use flexmesa_neu::{neu_get, NeuFlags, NeuResult};
 use rayon::prelude::*;
 
-use crate::controls::StarError;
+use crate::controls::{StarError, VarLayout};
 use crate::model::StarModel;
 use crate::star_ad::{StarAdExt, StarAdOrder1};
 
 static BASIC_NET_INFO: OnceLock<NetGeneralInfo> = OnceLock::new();
+static NET_CACHE: OnceLock<Mutex<HashMap<String, Arc<NetGeneralInfo>>>> =
+    OnceLock::new();
 
 /// Returns the cached [`NetGeneralInfo`] for `"basic.net"`.
 #[must_use]
@@ -31,6 +35,125 @@ pub fn global_basic_net() -> &'static NetGeneralInfo {
         NetGeneralInfo::from_name("basic.net")
             .expect("valid built-in basic.net")
     })
+}
+
+/// Returns a cached [`Arc<NetGeneralInfo>`] for `net_name` (loading from the
+/// embedded 83-network bundle or optional `search_dir` on first request).
+///
+/// # Errors
+/// Returns [`StarError::MicrophysicsError`] if the `.net` file cannot be parsed.
+pub fn get_or_load_net(
+    net_name: &str,
+    search_dir: Option<&Path>,
+) -> Result<Arc<NetGeneralInfo>, StarError> {
+    let key = net_name.trim();
+    let cache = NET_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Ok(guard) = cache.lock() {
+        if let Some(info) = guard.get(key) {
+            return Ok(Arc::clone(info));
+        }
+    }
+    let info = Arc::new(
+        NetGeneralInfo::from_name_or_dir(key, search_dir).map_err(|e| {
+            StarError::MicrophysicsError(format!(
+                "failed to load network '{key}': {e}"
+            ))
+        })?,
+    );
+    if let Ok(mut guard) = cache.lock() {
+        guard.insert(key.to_string(), Arc::clone(&info));
+    }
+    Ok(info)
+}
+
+/// Returns a cached [`Arc<NetGeneralInfo>`] matching `model.job.net_name` and
+/// `model.species`, or `None` if the network cannot be resolved or its species
+/// count does not match `model.species`.
+#[must_use]
+pub fn resolve_model_net(model: &StarModel) -> Option<Arc<NetGeneralInfo>> {
+    let net_info = get_or_load_net(&model.job.net_name, None).ok()?;
+    (net_info.num_isos == model.species).then_some(net_info)
+}
+
+/// Projects `model` from its current isotope set onto `new_net_name`
+/// (`change_net` in `star/private/adjust_xyz.f90:584-712`), preserving exact
+/// mass fractions for shared isotopes and dumping any removed trace mass into
+/// the heaviest retained metal so $\sum_j X_{j,k} = 1$ in every zone.
+///
+/// # Errors
+/// Returns [`StarError`] if `new_net_name` cannot be loaded.
+pub fn change_model_network(
+    model: &mut StarModel,
+    new_net_name: &str,
+    search_dir: Option<&Path>,
+) -> Result<(), StarError> {
+    let net_info = get_or_load_net(new_net_name, search_dir)?;
+    let new_chem_id = net_info.chem_id.clone();
+    let new_species = new_chem_id.len();
+    if new_species == 0 {
+        return Err(StarError::InvalidInput(format!(
+            "empty species list in network '{new_net_name}'"
+        )));
+    }
+    let old_species = model.species;
+    let nz = model.nz;
+    let mut new_xa = vec![0.0_f64; nz * new_species];
+    let mut new_net_iso = vec![None; 7857];
+    let catalog = NuclideCatalog::builtin_ref();
+    let mut new_iso_names = Vec::with_capacity(new_species);
+    for (j_new, &cid) in new_chem_id.iter().enumerate() {
+        let name = catalog
+            .get_by_id(cid)
+            .map_or_else(|| format!("iso_{cid}"), |n| n.name.clone());
+        new_iso_names.push(name);
+        if cid < new_net_iso.len() {
+            new_net_iso[cid] = Some(j_new);
+        }
+    }
+
+    for k in 0..nz {
+        let mut transferred = 0.0_f64;
+        for (j_old, &cid_old) in model.chem_id.iter().enumerate() {
+            let x_val = model.xa[k * old_species + j_old].max(0.0);
+            if let Some(Some(j_new)) = new_net_iso.get(cid_old) {
+                new_xa[k * new_species + *j_new] += x_val;
+                transferred += x_val;
+            }
+        }
+        let missing = (1.0 - transferred).max(0.0);
+        if missing > 0.0 {
+            new_xa[k * new_species + (new_species - 1)] += missing;
+        }
+        let sum: f64 =
+            new_xa[k * new_species..(k + 1) * new_species].iter().sum();
+        if sum > 0.0 {
+            for j in 0..new_species {
+                new_xa[k * new_species + j] /= sum;
+            }
+        }
+    }
+
+    model.job.net_name = new_net_name.trim().to_string();
+    model.species = new_species;
+    model.chem_id = new_chem_id;
+    model.iso_names = new_iso_names;
+    model.net_iso = new_net_iso;
+    model.layout = VarLayout::new(
+        new_species,
+        model.controls.v_flag,
+        model.controls.u_flag,
+    );
+    model.xa.clone_from(&new_xa);
+    model.xa_start.clone_from(&new_xa);
+    model.xa_old = new_xa;
+    model.d_epsnuc_dx.resize(nz * new_species, 0.0);
+    model.dxdt_nuc.resize(nz * new_species, 0.0);
+    model.d_dxdt_nuc_dlnd.resize(nz * new_species, 0.0);
+    model.d_dxdt_nuc_dlnt.resize(nz * new_species, 0.0);
+    model
+        .d_dxdt_nuc_dx
+        .resize(nz * new_species * new_species, 0.0);
+    Ok(())
 }
 
 /// Evaluates `rho`, `t`, `r`, `rmid`, `grav`, and composition moments (`abar`,

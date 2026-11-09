@@ -13,6 +13,8 @@ use flexmesa_atm::{
 use flexmesa_rates::ScreeningMode;
 use flexmesa_turb::MltOption;
 
+pub use crate::job_controls::StarJobControls;
+
 /// Atmosphere boundary condition option (`atm_option` in `star_controls.inc`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AtmOption {
@@ -203,54 +205,6 @@ impl VarLayout {
     }
 }
 
-/// Job-level initialization and model-building controls (`&star_job` namelist
-/// in `star_data/private/star_job_controls.inc`).
-#[derive(Debug, Clone)]
-pub struct StarJobControls {
-    /// Whether to construct an initial $n = 1.5$ pre-MS polytrope model.
-    pub create_pre_ms_model: bool,
-    /// Central temperature $T_c$ ($\mathrm{K}$) for `create_pre_ms_model`.
-    pub pre_ms_t_c: f64,
-    /// Optional initial central density guess $\rho_c$ ($\mathrm{g\,cm^{-3}}$;
-    /// $\le 0$ uses the Ushomirsky et al. 1998 analytic $n=1.5$ guess).
-    pub pre_ms_guess_rho_c: f64,
-    /// Step size $\Delta \log_{10} P_{\mathrm{gas}}$ for outward pre-MS
-    /// integration (`0.004` default, `0.02` for coarse grids).
-    pub pre_ms_d_log10_p: f64,
-    /// Surface $\log_{10} P$ cutoff for pre-MS integration (`3.5` default).
-    pub pre_ms_log_p_surf_limit: f64,
-    /// Surface $\log_{10} T$ cutoff for pre-MS integration (`3.7` default).
-    pub pre_ms_log_t_surf_limit: f64,
-    /// Logarithmic luminosity boost factor for pre-MS contraction (`0.0` default).
-    pub pre_ms_log_lum_factor: f64,
-    /// Number of relaxation steps during pre-MS startup (`100` in MESA).
-    pub pre_ms_relax_num_steps: usize,
-    /// Whether to load a saved `.mod` file on startup.
-    pub load_saved_model: bool,
-    /// Path to saved `.mod` file when `load_saved_model` is true.
-    pub saved_model_name: String,
-    /// Nuclear reaction network name (`"basic.net"` default).
-    pub net_name: String,
-}
-
-impl Default for StarJobControls {
-    fn default() -> Self {
-        Self {
-            create_pre_ms_model: false,
-            pre_ms_t_c: 9.0e5,
-            pre_ms_guess_rho_c: 0.0,
-            pre_ms_d_log10_p: 0.004,
-            pre_ms_log_p_surf_limit: 3.5,
-            pre_ms_log_t_surf_limit: 3.7,
-            pre_ms_log_lum_factor: 0.0,
-            pre_ms_relax_num_steps: 20,
-            load_saved_model: false,
-            saved_model_name: String::new(),
-            net_name: String::from("basic.net"),
-        }
-    }
-}
-
 /// Evolutionary and physics controls (`&controls` namelist in
 /// `star_data/private/star_controls.inc`).
 #[derive(Debug, Clone)]
@@ -268,6 +222,12 @@ pub struct StarControls {
     pub max_model_number: Option<usize>,
     /// Maximum stellar age in years (`max_age`).
     pub max_age: Option<f64>,
+    /// Maximum stellar age in seconds (`max_age_in_seconds`).
+    pub max_age_in_seconds: Option<f64>,
+    /// Maximum timestep in years (`max_years_for_timestep`).
+    pub max_years_for_timestep: Option<f64>,
+    /// Minimum timestep limit in seconds (`min_timestep_limit`).
+    pub min_timestep_limit: f64,
     /// Mixing-length parameter $\alpha_{\mathrm{MLT}}$ (`2.0` default).
     pub mixing_length_alpha: f64,
     /// Convection theory option (`MltOption::Cox` default).
@@ -332,8 +292,20 @@ pub struct StarControls {
     pub u_flag: bool,
     /// Whether rotation $\Omega_k$ is active (`rotation_flag`).
     pub rotation_flag: bool,
+    /// Whether nonlinear pulsation (`RSP_flag`) is active.
+    pub rsp_flag: bool,
+    /// Whether turbulent pulsation energy (`RSP2_flag`) is active.
+    pub rsp2_flag: bool,
+    /// Whether element diffusion (`do_element_diffusion`) is active.
+    pub do_element_diffusion: bool,
+    /// Whether convective premixing (`do_conv_premix`) is active.
+    pub do_conv_premix: bool,
+    /// Whether crystallization phase separation (`do_phase_separation`) is active.
+    pub do_phase_separation: bool,
     /// Whether to use momentum equation at outer boundary $k = 0$.
     pub use_momentum_outer_bc: bool,
+    /// Constant mass-change rate $\dot{M}$ in $M_\odot\,\mathrm{yr}^{-1}$ (`mass_change`).
+    pub mass_change: f64,
     /// Reimers wind scaling factor $\eta_{\mathrm{Reimers}}$.
     pub reimers_scaling_factor: f64,
     /// Blöcker wind scaling factor $\eta_{\mathrm{Blocker}}$.
@@ -346,6 +318,136 @@ pub struct StarControls {
     pub cool_wind_rgb_scheme: String,
     /// Cool AGB wind scheme name (`""`, `"Blocker"`, `"Dutch"`, etc.).
     pub cool_wind_agb_scheme: String,
+
+    // --- Evolutionary Stopping Conditions (`check_model` in `do_one_utils.f90`) ---
+    /// Stop when `L_nuc / L >= lnuc_div_l_zams_limit` (`stop_near_zams`).
+    pub stop_near_zams: bool,
+    /// Threshold $L_{\mathrm{nuc}} / L$ for ZAMS arrival (`Lnuc_div_L_zams_limit`, `0.99` default).
+    pub lnuc_div_l_zams_limit: f64,
+    /// Central abundance lower-limit species names (`xa_central_lower_limit_species(1..)`).
+    pub xa_central_lower_limit_species: Vec<String>,
+    /// Central abundance lower-limit thresholds (`xa_central_lower_limit(1..)`).
+    pub xa_central_lower_limit: Vec<f64>,
+    /// Central abundance upper-limit species names (`xa_central_upper_limit_species(1..)`).
+    pub xa_central_upper_limit_species: Vec<String>,
+    /// Central abundance upper-limit thresholds (`xa_central_upper_limit(1..)`).
+    pub xa_central_upper_limit: Vec<f64>,
+    /// Upper limit on $\log_{10}(L / L_\odot)$ (`log_L_upper_limit`).
+    pub log_l_upper_limit: Option<f64>,
+    /// Lower limit on $\log_{10}(L / L_\odot)$ (`log_L_lower_limit`).
+    pub log_l_lower_limit: Option<f64>,
+    /// Upper limit on $T_{\mathrm{eff}}$ in K (`Teff_upper_limit`).
+    pub teff_upper_limit: Option<f64>,
+    /// Lower limit on $T_{\mathrm{eff}}$ in K (`Teff_lower_limit`).
+    pub teff_lower_limit: Option<f64>,
+    /// Upper limit on $\log_{10}(T_{\mathrm{eff}}/\mathrm{K})$ (`log_Teff_upper_limit`).
+    pub log_teff_upper_limit: Option<f64>,
+    /// Lower limit on $\log_{10}(T_{\mathrm{eff}}/\mathrm{K})$ (`log_Teff_lower_limit`).
+    pub log_teff_lower_limit: Option<f64>,
+    /// Upper limit on $\log_{10}(T_c/\mathrm{K})$ (`log_center_temp_upper_limit`).
+    pub log_center_temp_upper_limit: Option<f64>,
+    /// Lower limit on $\log_{10}(T_c/\mathrm{K})$ (`log_center_temp_lower_limit`).
+    pub log_center_temp_lower_limit: Option<f64>,
+    /// Upper limit on $\log_{10}(\rho_c/\mathrm{g\,cm^{-3}})$ (`log_center_density_upper_limit`).
+    pub log_center_density_upper_limit: Option<f64>,
+    /// Lower limit on $\log_{10}(\rho_c/\mathrm{g\,cm^{-3}})$ (`log_center_density_lower_limit`).
+    pub log_center_density_lower_limit: Option<f64>,
+    /// Upper limit on $\max_k \log_{10}(T_k/\mathrm{K})$ (`log_max_temp_upper_limit`).
+    pub log_max_temp_upper_limit: Option<f64>,
+    /// Upper limit on $\log_{10} g_{\mathrm{surf}}$ (`log_g_upper_limit`).
+    pub log_g_upper_limit: Option<f64>,
+    /// Lower limit on $\log_{10} g_{\mathrm{surf}}$ (`log_g_lower_limit`).
+    pub log_g_lower_limit: Option<f64>,
+    /// Upper limit on $\log_{10}(P_{\mathrm{surf}}/\mathrm{dyn\,cm^{-2}})$ (`log_Psurf_upper_limit`).
+    pub log_psurf_upper_limit: Option<f64>,
+    /// Upper limit on $\log_{10}(R_{\mathrm{surf}}/R_\odot)$ (`log_Rsurf_upper_limit`).
+    pub log_rsurf_upper_limit: Option<f64>,
+    /// Lower limit on inner boundary radius $R_{\mathrm{center}} / R_\odot$ (`center_R_lower_limit`).
+    pub center_r_lower_limit: Option<f64>,
+    /// Upper limit on He-core mass in $M_\odot$ (`he_core_mass_limit`).
+    pub he_core_mass_limit: Option<f64>,
+    /// Upper limit on CO-core mass in $M_\odot$ (`co_core_mass_limit`).
+    pub co_core_mass_limit: Option<f64>,
+    /// Upper limit on ONe-core mass in $M_\odot$ (`one_core_mass_limit`).
+    pub one_core_mass_limit: Option<f64>,
+    /// Lower limit on H-rich envelope mass $M_* - M_{\mathrm{He,core}}$ in $M_\odot$ (`envelope_mass_limit`).
+    pub envelope_mass_limit: Option<f64>,
+    /// Lower limit on He-shell mass $M_{\mathrm{He,core}} - M_{\mathrm{CO,core}}$ in $M_\odot$ (`he_layer_mass_lower_limit`).
+    pub he_layer_mass_lower_limit: Option<f64>,
+    /// Upper limit on total nuclear luminosity in $L_\odot$ (`power_nuc_burn_upper_limit`).
+    pub power_nuc_burn_upper_limit: Option<f64>,
+    /// Lower limit on total nuclear luminosity in $L_\odot$ (`power_nuc_burn_lower_limit`).
+    pub power_nuc_burn_lower_limit: Option<f64>,
+    /// Upper limit on He-burning luminosity in $L_\odot$ (`power_he_burn_upper_limit`).
+    pub power_he_burn_upper_limit: Option<f64>,
+    /// Maximum total stellar mass in $M_\odot$ (`star_mass_max_limit`).
+    pub star_mass_max_limit: Option<f64>,
+    /// Minimum total stellar mass in $M_\odot$ (`star_mass_min_limit`).
+    pub star_mass_min_limit: Option<f64>,
+    /// Minimum remnant/baryonic mass in $M_\odot$ (`remnant_mass_min_limit`).
+    pub remnant_mass_min_limit: Option<f64>,
+    /// Minimum total mass of species `star_species_mass_min_limit_iso` in $M_\odot$ (`star_species_mass_min_limit`).
+    pub star_species_mass_min_limit: Option<f64>,
+    /// Isotope name for `star_species_mass_min_limit` (`star_species_mass_min_limit_iso`).
+    pub star_species_mass_min_limit_iso: String,
+    /// Maximum total mass of species `star_species_mass_max_limit_iso` in $M_\odot$ (`star_species_mass_max_limit`).
+    pub star_species_mass_max_limit: Option<f64>,
+    /// Isotope name for `star_species_mass_max_limit` (`star_species_mass_max_limit_iso`).
+    pub star_species_mass_max_limit_iso: String,
+    /// Iron-core infall velocity threshold in $\mathrm{cm\,s^{-1}}$ (`fe_core_infall_limit`).
+    pub fe_core_infall_limit: Option<f64>,
+    /// Upper limit on $|v_{\mathrm{surf}}| / v_{\mathrm{KH}}$ (`v_surf_div_v_kh_upper_limit`).
+    pub v_surf_div_v_kh_upper_limit: Option<f64>,
+    /// Stop when evolutionary phase reaches TP-AGB (`stop_at_phase_TP_AGB`).
+    pub stop_at_phase_tp_agb: bool,
+    /// Maximum pulsation periods for RSP (`RSP_max_num_periods`).
+    pub rsp_max_num_periods: Option<isize>,
+    /// Target steps per pulsation cycle (`RSP_target_steps_per_cycle`).
+    pub rsp_target_steps_per_cycle: usize,
+    /// RSP envelope mass in $M_\odot$ (`RSP_mass`).
+    pub rsp_mass: f64,
+    /// RSP effective temperature in K (`RSP_Teff`).
+    pub rsp_teff: f64,
+    /// RSP luminosity in $L_\odot$ (`RSP_L`).
+    pub rsp_l: f64,
+    /// RSP hydrogen mass fraction $X$ (`RSP_X`).
+    pub rsp_x: f64,
+    /// RSP metal mass fraction $Z$ (`RSP_Z`).
+    pub rsp_z: f64,
+
+    // --- `other_*` Physics Hook Enables & User `x_ctrl` Arrays ---
+    /// Enable custom `other_cgrav` hook (`use_other_cgrav`).
+    pub use_other_cgrav: bool,
+    /// Enable custom `other_alpha_mlt` hook (`use_other_alpha_mlt`).
+    pub use_other_alpha_mlt: bool,
+    /// Enable custom `other_wind` hook (`use_other_wind`).
+    pub use_other_wind: bool,
+    /// Enable custom `other_adjust_mdot` hook (`use_other_adjust_mdot`).
+    pub use_other_adjust_mdot: bool,
+    /// Enable custom `other_torque` hook (`use_other_torque`).
+    pub use_other_torque: bool,
+    /// Enable custom `other_energy` hook (`use_other_energy`).
+    pub use_other_energy: bool,
+    /// Enable custom `other_eps_grav` hook (`use_other_eps_grav`).
+    pub use_other_eps_grav: bool,
+    /// Enable custom `other_neu` hook (`use_other_neu`).
+    pub use_other_neu: bool,
+    /// Enable custom `other_kap` hook (`use_other_kap`).
+    pub use_other_kap: bool,
+    /// Enable custom `other_surface_PT` hook (`use_other_surface_PT`).
+    pub use_other_surface_pt: bool,
+    /// Enable custom `other_overshooting_scheme` hook (`use_other_overshooting_scheme`).
+    pub use_other_overshooting_scheme: bool,
+    /// Enable custom `other_momentum_implicit` hook (`use_other_momentum_implicit`).
+    pub use_other_momentum_implicit: bool,
+    /// User floating-point control vector `x_ctrl(1..99)` (0-based `0..100`).
+    pub x_ctrl: Vec<f64>,
+    /// User integer control vector `x_integer_ctrl(1..99)` (0-based `0..100`).
+    pub x_integer_ctrl: Vec<i64>,
+    /// User logical control vector `x_logical_ctrl(1..99)` (0-based `0..100`).
+    pub x_logical_ctrl: Vec<bool>,
+    /// User string control vector `x_character_ctrl(1..99)` (0-based `0..100`).
+    pub x_character_ctrl: Vec<String>,
 }
 
 impl Default for StarControls {
@@ -357,6 +459,9 @@ impl Default for StarControls {
             zbase: 0.02,
             max_model_number: None,
             max_age: None,
+            max_age_in_seconds: None,
+            max_years_for_timestep: None,
+            min_timestep_limit: 1.0e-6,
             mixing_length_alpha: 2.0,
             mlt_option: MltOption::Cox,
             use_ledoux_criterion: false,
@@ -389,13 +494,82 @@ impl Default for StarControls {
             v_flag: false,
             u_flag: false,
             rotation_flag: false,
+            rsp_flag: false,
+            rsp2_flag: false,
+            do_element_diffusion: false,
+            do_conv_premix: false,
+            do_phase_separation: false,
             use_momentum_outer_bc: false,
+            mass_change: 0.0,
             reimers_scaling_factor: 0.0,
             blocker_scaling_factor: 0.0,
             vink_scaling_factor: 0.0,
             dutch_scaling_factor: 0.0,
             cool_wind_rgb_scheme: String::new(),
             cool_wind_agb_scheme: String::new(),
+            stop_near_zams: false,
+            lnuc_div_l_zams_limit: 0.99,
+            xa_central_lower_limit_species: Vec::new(),
+            xa_central_lower_limit: Vec::new(),
+            xa_central_upper_limit_species: Vec::new(),
+            xa_central_upper_limit: Vec::new(),
+            log_l_upper_limit: None,
+            log_l_lower_limit: None,
+            teff_upper_limit: None,
+            teff_lower_limit: None,
+            log_teff_upper_limit: None,
+            log_teff_lower_limit: None,
+            log_center_temp_upper_limit: None,
+            log_center_temp_lower_limit: None,
+            log_center_density_upper_limit: None,
+            log_center_density_lower_limit: None,
+            log_max_temp_upper_limit: None,
+            log_g_upper_limit: None,
+            log_g_lower_limit: None,
+            log_psurf_upper_limit: None,
+            log_rsurf_upper_limit: None,
+            center_r_lower_limit: None,
+            he_core_mass_limit: None,
+            co_core_mass_limit: None,
+            one_core_mass_limit: None,
+            envelope_mass_limit: None,
+            he_layer_mass_lower_limit: None,
+            power_nuc_burn_upper_limit: None,
+            power_nuc_burn_lower_limit: None,
+            power_he_burn_upper_limit: None,
+            star_mass_max_limit: None,
+            star_mass_min_limit: None,
+            remnant_mass_min_limit: None,
+            star_species_mass_min_limit: None,
+            star_species_mass_min_limit_iso: String::new(),
+            star_species_mass_max_limit: None,
+            star_species_mass_max_limit_iso: String::new(),
+            fe_core_infall_limit: None,
+            v_surf_div_v_kh_upper_limit: None,
+            stop_at_phase_tp_agb: false,
+            rsp_max_num_periods: None,
+            rsp_target_steps_per_cycle: 150,
+            rsp_mass: 0.65,
+            rsp_teff: 6500.0,
+            rsp_l: 45.0,
+            rsp_x: 0.75,
+            rsp_z: 0.0004,
+            use_other_cgrav: false,
+            use_other_alpha_mlt: false,
+            use_other_wind: false,
+            use_other_adjust_mdot: false,
+            use_other_torque: false,
+            use_other_energy: false,
+            use_other_eps_grav: false,
+            use_other_neu: false,
+            use_other_kap: false,
+            use_other_surface_pt: false,
+            use_other_overshooting_scheme: false,
+            use_other_momentum_implicit: false,
+            x_ctrl: vec![0.0; 100],
+            x_integer_ctrl: vec![0; 100],
+            x_logical_ctrl: vec![false; 100],
+            x_character_ctrl: vec![String::new(); 100],
         }
     }
 }

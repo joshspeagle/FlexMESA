@@ -363,10 +363,20 @@ pub fn do1_energy_eqn(
         model.d_epsnuc_dlnd[k],
         model.d_epsnuc_dlnt[k],
     );
+    // Upstream MESA time-centers non-nuclear neutrino losses across the step
+    // (`star/private/hydro_energy.f90:255-261`):
+    //   non_nuc_neu_ad%val = 0.5d0*(s% non_nuc_neu_start(k) + s% non_nuc_neu(k))
+    //   non_nuc_neu_ad%d1Array(i_lnd_00) = 0.5d0*s% d_nonnucneu_dlnd(k)
+    //   non_nuc_neu_ad%d1Array(i_lnT_00) = 0.5d0*s% d_nonnucneu_dlnT(k)
+    let non_nuc_neu_start_k = model
+        .non_nuc_neu_start
+        .get(k)
+        .copied()
+        .unwrap_or(model.non_nuc_neu[k]);
     let non_nuc_neu_ad = StarAdOrder1::from_dlnd_dlnt_00(
-        model.non_nuc_neu[k],
-        model.d_non_nuc_neu_dlnd[k],
-        model.d_non_nuc_neu_dlnt[k],
+        0.5 * (non_nuc_neu_start_k + model.non_nuc_neu[k]),
+        0.5 * model.d_non_nuc_neu_dlnd[k],
+        0.5 * model.d_non_nuc_neu_dlnt[k],
     );
     let sources = eps_nuc_ad - non_nuc_neu_ad + model.eps_mdot[k];
     let dt = model.dt.max(1.0e-30);

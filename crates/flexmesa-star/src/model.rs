@@ -135,6 +135,8 @@ pub struct StarModel {
     pub energy_start: Vec<f64>,
     /// Start-of-step total pressure $P_{\mathrm{eos}}$ (`Peos_start`).
     pub peos_start: Vec<f64>,
+    /// Start-of-step thermal neutrino energy loss rate (`non_nuc_neu_start`).
+    pub non_nuc_neu_start: Vec<f64>,
     /// Start-of-step species mass fractions (`xa_start`).
     pub xa_start: Vec<f64>,
     /// Start-of-step packed hydro vector (`xh_start`).
@@ -430,6 +432,7 @@ impl StarModel {
             ln_s_start: vec![0.0; nz],
             energy_start: vec![0.0; nz],
             peos_start: vec![0.0; nz],
+            non_nuc_neu_start: vec![0.0; nz],
             xa_start: vec![0.0; nz * species],
             xh_start: vec![0.0; nz * layout.nvar_hydro],
             lnd_old: vec![0.0; nz],

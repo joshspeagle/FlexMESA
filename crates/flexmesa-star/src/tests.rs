@@ -386,3 +386,43 @@ fn test_remesh_timestep_evolve_and_history_preserve_invariants() {
     let prof_str = format_profile_string(&model);
     assert!(prof_str.contains("photosphere_L"));
 }
+
+#[test]
+fn test_do1_energy_eqn_time_centers_non_nuc_neu() {
+    let controls = StarControls {
+        initial_mass: 4.0,
+        initial_z: 0.02,
+        ..StarControls::default()
+    };
+    let mut model =
+        load_zams_model(controls, StarJobControls::default()).expect("zams");
+    model.dt = 100.0;
+    set_hydro_vars(&mut model, false, false).expect("init hydro");
+    model.save_start_values();
+
+    let k = model.nz - 1;
+    let x_scale = compute_x_scale(&model, false);
+    let mut sys_base = HenyeySystem::new(
+        model.nz,
+        model.layout.nvar_hydro,
+        x_scale.clone(),
+    );
+    do1_energy_eqn(&model, k, false, &mut sys_base);
+
+    let delta_neu = 1.0e4_f64;
+    let mut model_trial = model.clone();
+    model_trial.non_nuc_neu[k] += delta_neu;
+    let mut sys_trial =
+        HenyeySystem::new(model.nz, model.layout.nvar_hydro, x_scale);
+    do1_energy_eqn(&model_trial, k, false, &mut sys_trial);
+
+    let i_equ = model.layout.i_dlne_dt;
+    let idx = k * model.layout.nvar_hydro + i_equ;
+    let scal = model.dt / model.energy_start[k].max(1.0);
+    let expected_diff = -0.5 * delta_neu * scal;
+    let actual_diff = sys_trial.equ[idx] - sys_base.equ[idx];
+    assert!(
+        (actual_diff - expected_diff).abs() <= 1.0e-12 * expected_diff.abs(),
+        "expected time-centered 0.5*delta_neu shift {expected_diff}, got {actual_diff}"
+    );
+}

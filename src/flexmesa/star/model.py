@@ -572,6 +572,11 @@ class StarModel(_arrays.StarModelArrays):
         """Export the model in `OSC` ASCII format (`pulse_osc.f90`)."""
         return _rust.star_export_osc(self._rust_model, bool(add_center_point))
 
+    def verify_photo_restart(self, n_steps: int = 1) -> tuple[int, int]:
+        """Verify bit-identical `.photo` restart parity over `n_steps` steps."""
+        c1, c2 = _rust.star_verify_photo_restart(self._rust_model, int(n_steps))
+        return int(c1), int(c2)
+
 
 def yrs_for_init_timestep(m_msun: float) -> float:
     """Compute the initial ZAMS timestep in years (`yrs_for_init_timestep`)."""

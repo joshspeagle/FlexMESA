@@ -3,6 +3,8 @@
 //! (`net/private/net_initialize.f90` and `net/private/net_approx21.f90`).
 
 use std::collections::{HashMap, HashSet};
+use std::fs;
+use std::path::Path;
 use std::sync::OnceLock;
 
 use flexmesa_chem::{chem_get_element_id, NuclideCatalog};
@@ -127,6 +129,15 @@ fn tokenize_net(src: &str) -> Vec<NetToken> {
 impl ParsedNetDef {
     /// Parses a named `.net` file from the embedded bundle.
     pub fn parse_from_name(net_filename: &str) -> Result<Self, NetError> {
+        Self::parse_from_name_or_dir(net_filename, None)
+    }
+
+    /// Parses a named `.net` file from the embedded bundle or an optional
+    /// case-local directory `search_dir`.
+    pub fn parse_from_name_or_dir(
+        net_filename: &str,
+        search_dir: Option<&Path>,
+    ) -> Result<Self, NetError> {
         let mut def = Self {
             net_filename: net_filename.trim().to_string(),
             active_isos: HashSet::new(),
@@ -138,18 +149,34 @@ impl ParsedNetDef {
             fe56ec_n_neut: 0,
             next_dynamic_id: 317,
         };
-        def.read_net_file(net_filename.trim())?;
+        def.read_net_file(net_filename.trim(), search_dir)?;
         if def.doing_approx21 {
             def.mark_approx21()?;
         }
         Ok(def)
     }
 
-    fn read_net_file(&mut self, filename: &str) -> Result<(), NetError> {
+    fn read_net_file(
+        &mut self,
+        filename: &str,
+        search_dir: Option<&Path>,
+    ) -> Result<(), NetError> {
         let files = builtin_net_files();
-        let src = files
-            .get(filename)
-            .ok_or_else(|| NetError::UnknownNetFile(filename.to_string()))?;
+        let owned_src;
+        let src: &str = if let Some(s) = files.get(filename) {
+            s.as_str()
+        } else if let Some(dir) = search_dir {
+            let p = dir.join(filename);
+            owned_src = fs::read_to_string(&p)
+                .map_err(|_| NetError::UnknownNetFile(filename.to_string()))?;
+            owned_src.as_str()
+        } else if Path::new(filename).exists() {
+            owned_src = fs::read_to_string(filename)
+                .map_err(|_| NetError::UnknownNetFile(filename.to_string()))?;
+            owned_src.as_str()
+        } else {
+            return Err(NetError::UnknownNetFile(filename.to_string()));
+        };
         let tokens = tokenize_net(src);
         let mut idx = 0_usize;
         while idx < tokens.len() {
@@ -188,7 +215,7 @@ impl ParsedNetDef {
                     };
                     let inc_name = inc.clone();
                     idx += 1;
-                    self.read_net_file(&inc_name)?;
+                    self.read_net_file(&inc_name, search_dir)?;
                 }
                 other => {
                     return Err(NetError::ParseError(format!(

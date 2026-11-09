@@ -110,7 +110,7 @@ pub fn star_verify_photo_restart(
     verify_photo_restart_parity(&model.inner, n_steps).map_err(to_py_err)
 }
 
-fn case_report_to_pydict<'py>(
+pub(crate) fn case_report_to_pydict<'py>(
     py: Python<'py>,
     rep: &CaseRunReport,
 ) -> PyResult<Bound<'py, PyDict>> {

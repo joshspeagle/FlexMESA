@@ -17,7 +17,7 @@ use crate::diffusion::{
 };
 use crate::history::extract_history_row;
 use crate::inlist_runner::{
-    run_test_suite_case, CaseRunReport, ExtrasDirective, StarExtras,
+    run_case_list, CaseRunReport, ExtrasDirective, StarExtras,
 };
 use crate::micro::change_model_network;
 use crate::mix_info::compute_convection_sigmas;
@@ -493,17 +493,5 @@ pub fn run_tier1_suite(
     max_steps_per_stage: Option<usize>,
     verify_restart: bool,
 ) -> Result<Vec<CaseRunReport>, StarError> {
-    let suite_dir = mesa_dir.join("star").join("test_suite");
-    let mut reports = Vec::with_capacity(TIER1_CASES.len());
-    for &case_name in &TIER1_CASES {
-        let case_dir = suite_dir.join(case_name);
-        let rep = run_test_suite_case(
-            &case_dir,
-            true,
-            max_steps_per_stage,
-            verify_restart,
-        )?;
-        reports.push(rep);
-    }
-    Ok(reports)
+    run_case_list(mesa_dir, &TIER1_CASES, max_steps_per_stage, verify_restart)
 }

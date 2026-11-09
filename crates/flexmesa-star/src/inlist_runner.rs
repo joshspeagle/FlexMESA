@@ -24,6 +24,9 @@ use crate::termination::check_termination_limits_with_history;
 use crate::tier1_extras::{
     is_tier1_case, verify_tier1_case_assertions, Tier1CaseExtras,
 };
+use crate::tier2_extras::{
+    is_tier2_case, verify_tier2_case_assertions, Tier2CaseExtras,
+};
 
 /// Control flow directive returned by [`StarExtras`] step hooks (`keep_going`,
 /// `retry`, `terminate` in `star/public/star_def.inc`).
@@ -242,10 +245,12 @@ pub fn run_inlist_stage(
     let op_split_burn = model.controls.op_split_burn;
 
     let init_hr = extract_history_row(model);
-    if let Some(code) =
-        check_termination_limits_with_history(model, Some(&init_hr))
-    {
-        termination_code = code;
+    if cap == 0 {
+        if let Some(code) =
+            check_termination_limits_with_history(model, Some(&init_hr))
+        {
+            termination_code = code;
+        }
     } else {
         for _ in 0..cap {
             if let ExtrasDirective::Terminate(reason) =
@@ -266,6 +271,12 @@ pub fn run_inlist_stage(
 
             let check_dir = extras.extras_check_model(model);
             let finish_dir = extras.extras_finish_step(model);
+            model.mstar_start = model.mstar;
+            model.sync_mesh_and_pack()?;
+            set_hydro_vars(model, false, false)?;
+            let dt_cur = model.dt;
+            crate::struct_burn_mix::refresh_mixing_state(model, dt_cur, &[]);
+            model.save_start_values();
             let hr = extract_history_row(model);
             history_rows.push(hr);
 
@@ -292,13 +303,15 @@ pub fn run_inlist_stage(
         && !model.job.save_model_filename.is_empty()
     {
         let out_path = bundle.case_dir.join(&model.job.save_model_filename);
-        let mod_text = write_mod_string(model)?;
-        fs::write(&out_path, mod_text).map_err(|e| {
-            StarError::IoError(format!(
-                "failed to write {}: {e}",
-                out_path.display()
-            ))
-        })?;
+        if !out_path.exists() {
+            let mod_text = write_mod_string(model)?;
+            fs::write(&out_path, mod_text).map_err(|e| {
+                StarError::IoError(format!(
+                    "failed to write {}: {e}",
+                    out_path.display()
+                ))
+            })?;
+        }
     }
 
     let final_history = history_rows.last().copied().unwrap_or(init_hr);
@@ -384,6 +397,13 @@ pub fn run_test_suite_case(
         .to_string();
 
     let rn_stages = parse_rn_stages(case_dir, skip_optional)?;
+    let tier = if is_tier1_case(&case_name) {
+        1
+    } else if is_tier2_case(&case_name) {
+        2
+    } else {
+        0
+    };
 
     let mut current_model: Option<StarModel> = None;
     let mut stage_reports = Vec::with_capacity(rn_stages.len());
@@ -395,6 +415,7 @@ pub fn run_test_suite_case(
     for stage in &rn_stages {
         match stage {
             RnStage::CopyCheckpoint { src_mod, dst_mod } => {
+                current_model = None;
                 let src = case_dir.join(src_mod);
                 let dst = case_dir.join(dst_mod);
                 if src.exists() {
@@ -416,16 +437,18 @@ pub fn run_test_suite_case(
                 }
                 let bundle = InlistBundle::from_file(&inlist_path)?;
                 let use_tov = bundle.controls.use_other_cgrav;
-                let is_t1 = is_tier1_case(&case_name);
                 let mut default_extras = DefaultStarExtras;
                 let mut tov_extras = TovGrStarExtras;
                 let mut tier1_extras = Tier1CaseExtras::new(&case_name);
+                let mut tier2_extras = Tier2CaseExtras::new(&case_name);
                 let extras: &mut dyn StarExtras = if use_tov {
                     &mut tov_extras
-                } else if is_t1 {
-                    &mut tier1_extras
                 } else {
-                    &mut default_extras
+                    match tier {
+                        1 => &mut tier1_extras,
+                        2 => &mut tier2_extras,
+                        _ => &mut default_extras,
+                    }
                 };
 
                 let mut model = init_or_update_model_from_bundle(
@@ -468,13 +491,10 @@ pub fn run_test_suite_case(
     }
 
     let runtime_sec = t0.elapsed().as_secs_f64();
-    let tier = usize::from(is_tier1_case(&case_name));
-    let assertions_passed = current_model.as_ref().is_some_and(|m| {
-        if tier == 1 {
-            verify_tier1_case_assertions(m, &case_name)
-        } else {
-            m.nz >= 2 && m.teff.is_finite() && m.teff > 0.0
-        }
+    let assertions_passed = current_model.as_ref().is_some_and(|m| match tier {
+        1 => verify_tier1_case_assertions(m, &case_name),
+        2 => verify_tier2_case_assertions(m, &case_name),
+        _ => m.nz >= 2 && m.teff.is_finite() && m.teff > 0.0,
     });
     let final_hr = stage_reports
         .last()
@@ -528,4 +548,29 @@ pub fn run_test_suite_case(
         photo_restart_verified,
         assertions_passed,
     })
+}
+
+/// Runs a slice of `star/test_suite/<case>` directories under `mesa_dir` in
+/// order and returns their [`CaseRunReport`] records.
+///
+/// # Errors
+/// Returns [`StarError`] if any case in `cases` fails to execute.
+pub fn run_case_list(
+    mesa_dir: &Path,
+    cases: &[&str],
+    max_steps_per_stage: Option<usize>,
+    verify_restart: bool,
+) -> Result<Vec<CaseRunReport>, StarError> {
+    let suite_dir = mesa_dir.join("star").join("test_suite");
+    let mut reports = Vec::with_capacity(cases.len());
+    for &case_name in cases {
+        let case_dir = suite_dir.join(case_name);
+        reports.push(run_test_suite_case(
+            &case_dir,
+            true,
+            max_steps_per_stage,
+            verify_restart,
+        )?);
+    }
+    Ok(reports)
 }

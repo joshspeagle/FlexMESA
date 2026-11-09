@@ -466,6 +466,8 @@ pub fn write_photo_bytes(model: &StarModel) -> Vec<u8> {
 
     // Part 5..7 sentinels (`photo_out.f90`)
     write_i32(&mut buf, 5);
+    write_f64_slice(&mut buf, &model.eps_mdot);
+    write_f64_slice(&mut buf, &model.cgrav);
     write_i32(&mut buf, 6);
     write_i32(&mut buf, 7);
 
@@ -574,6 +576,8 @@ pub fn read_photo_bytes(
     model.num_retries = read_u64(&mut pos)? as usize;
 
     expect_part(&mut pos, 5)?;
+    model.eps_mdot = read_f64_vec(&mut pos, nz)?;
+    model.cgrav = read_f64_vec(&mut pos, nz)?;
     expect_part(&mut pos, 6)?;
     expect_part(&mut pos, 7)?;
 

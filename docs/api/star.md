@@ -5,7 +5,7 @@ The `flexmesa.star` subpackage implements the 1D Lagrangian stellar structure an
 - **Model Initialization & I/O**: Zero-Age Main Sequence (`StarModel.from_zams`), homothetic Pre-Main-Sequence contraction (`StarModel.from_pre_ms`), upstream ASCII `.mod` readers/writers (`from_mod_file`, `from_mod_str`, `write_mod_file`, `to_mod_str`), and exact IEEE-754 binary `.photo` snapshots (`to_photo_bytes`, `from_photo_bytes`, `verify_photo_restart`).
 - **Coupled Henyey Solver & Time Evolution**: Staggered 1D cell/face grids, 3-cell stencil automatic differentiation (`StarAdOrder1`), coupled block-tridiagonal Newton-Raphson relaxation (`solve_henyey`, `step_struct_burn_mix`, `evolve`), adaptive mesh refinement (`adjust_mesh`), and Söderlind-Wang H211 PI timestep control (`eval_h211_timestep_jax`).
 - **Advanced Stellar Physics**: Exponential/step convective overshooting, Reimers/Blocker/Vink/Dutch stellar winds, Burgers multi-fluid atomic diffusion, Caplan strong-coupling OCP diffusion, white dwarf C/O crystallization phase separation, shellular Roche rotation and Spruit-Tayler magnetic dynamos, well-balanced 1D spherical HLLC Riemann hydrodynamics, `RSP2` radial pulsation equations, and `GYRE`/`FGONG`/`OSC` structure exporters (`to_gyre_str`, `to_fgong_str`, `to_osc_str`).
-- **End-to-End `inlist` & `test_suite` Execution**: Recursive Fortran `inlist` bundle parsing (`parse_inlist_bundle`), `rn` stage extraction (`parse_rn_stages`), and automated upstream `test_suite` execution across Tiers 1, 2, and 3 (`TIER1_CASES`, `TIER2_CASES`, `TIER3_CASES`, `run_test_suite_case`, `run_tier1_suite`, `run_tier2_suite`, `run_tier3_suite`).
+- **End-to-End `inlist` & `test_suite` Execution**: Recursive Fortran `inlist` bundle parsing (`parse_inlist_bundle`), `rn` stage extraction (`parse_rn_stages`), linear oscillation mode and `RSP` `LINA`/envelope builders (`eval_linear_oscillation_modes`, `eval_rsp_lina_modes`, `build_rsp_envelope_model`), and automated upstream `test_suite` execution across Tiers 1, 2, 3, and 4 (`TIER1_CASES`, `TIER2_CASES`, `TIER3_CASES`, `TIER4_STAR_CASES`, `TIER4_ASTERO_CASES`, `TIER4_DEV_CASES`, `run_test_suite_case`, `run_tier1_suite`, `run_tier2_suite`, `run_tier3_suite`, `run_tier4_suite`, `run_astero_suite`, `run_dev_cases_suite`).
 
 For governing equations and numerical architecture, see [1D Stellar Structure, Henyey & Hydrodynamics](../concepts/stellar-structure-and-hydro.md) and [Convection, Diffusion, Rotation & Dynamos](../concepts/convection-mixing-rotation.md).
 
@@ -75,3 +75,9 @@ print(f"nz={model.nz}, Teff={model.teff:.1f} K, log10(T_c)={model.ln_t[-1] / 2.3
 ## Inlist Bundle & `test_suite` Runner (`flexmesa.star.e2e`)
 
 ::: flexmesa.star.e2e
+
+---
+
+## Tier 4 Pulsation, `RSP`, `astero` & `dev_cases_*` Runner (`flexmesa.star.e2e_tier45`)
+
+::: flexmesa.star.e2e_tier45

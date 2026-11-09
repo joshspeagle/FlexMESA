@@ -141,6 +141,19 @@ All 22 Tier 3 upstream `star/test_suite` cases ([#94](https://github.com/joshspe
 
 ---
 
+## Stage `E2E-4` (`#95`, Closing `#4` & `#5`): Tier 4 Pulsation (`16` `star`), `astero/test_suite` (`8`), and `star/dev_cases_*` (`32`) Parity
+
+All 16 Tier 4 `star/test_suite` cases (`15` active in `do_all_test_suite` plus `rsp_Cepheid_6M`), all 8 `astero/test_suite` cases (`95 / 107` cumulative active `test_suite` cases across Tiers 1–4), and all 32 `star/dev_cases_*` (`RSP2` and `TDC`) cases execute and verify `0 ULP` `.photo` restart parity:
+
+| Category | Cases (`Count`) | Physical Assertion & Target Criterion | `.photo` Restart Parity |
+| :--- | :--- | :--- | :--- |
+| **`gyre_in_mesa_*` (`6` cases)** | `gyre_in_mesa_bcep`, `gyre_in_mesa_envelope`, `gyre_in_mesa_ms`, `gyre_in_mesa_rsg`, `gyre_in_mesa_spb`, `gyre_in_mesa_wd` | Linear adiabatic & non-adiabatic $\kappa$-mechanism eigenfrequencies $\nu$ and growth rates $\eta$ (`eval_target_mode_frequency_and_growth`, `eval_linear_oscillation_modes`, Issue `#4`) match `x_ctrl(1..2)` within $3\%$ | `0 ULP` (`6 / 6`) |
+| **`rsp_*` `star/test_suite` (`10` cases)** | `rsp_BEP`, `rsp_BLAP`, `rsp_Cepheid`, `rsp_Delta_Scuti`, `rsp_RR_Lyrae`, `rsp_Type_II_Cepheid`, `rsp_check_2nd_crossing`, `rsp_gyre`, `rsp_save_and_load_file`, `rsp_Cepheid_6M` | `LINA` radial fundamental/overtone periods $P_0, P_1, P_2$ and growth rates (`eval_rsp_lina_modes`), `create_RSP_model` static envelope builder (`build_rsp_envelope_model`, Issue `#5`), and 2nd-crossing instability strip blue/red edges (`eval_rsp_2nd_crossing_edges`) | `0 ULP` (`10 / 10`) |
+| **`astero/test_suite` (`8` cases)** | `astero_adipls`, `astero_gyre`, `example_astero`, `fast_from_file`, `fast_newuoa`, `fast_scan_grid`, `fast_simplex`, `surface_effects` | Global $(\Delta\nu, \nu_{\max})$ scaling (`eval_astero_scaling_dnu_numax_uhz`), 5-scheme empirical surface corrections, 5-point frequency separation ratios $(r_{01}, r_{10}, r_{02})$, and Nelder-Mead / Powell BOBYQA / Cartesian grid $\chi^2$ minimization | `0 ULP` (`8 / 8`) |
+| **`star/dev_cases_*` (`32` cases)** | `dev_cases_TDC_Pulsation` (`3`), `dev_cases_compare_pulses` (`3`), `dev_cases_star_to_RSP2` (`12`), `dev_cases_test_RSP2` (`7`), `dev_cases_test_TDC` (`7`) | Multi-stage `create_RSP_model` / `.mod` loading, `RSP2` and `TDC` turbulent convection radial pulsation evolution, and `0 ULP` `.photo` restart parity | `0 ULP` (`32 / 32`) |
+
+---
+
 ## Fortran-to-Rust Fidelity Restorations (`Track 3`)
 
 Every unintentional deviation identified when comparing upstream Fortran `private/*.f90` subroutines against their Rust counterparts is logged and restored here:

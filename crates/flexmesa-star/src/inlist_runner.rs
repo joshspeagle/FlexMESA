@@ -28,6 +28,9 @@ use crate::tier2_extras::{
 use crate::tier3_extras::{
     is_tier3_case, verify_tier3_case_assertions, Tier3CaseExtras,
 };
+use crate::tier4_extras::{
+    is_tier4_case, verify_tier4_case_assertions, Tier4CaseExtras,
+};
 
 /// Control flow directive returned by [`StarExtras`] step hooks (`keep_going`,
 /// `retry`, `terminate` in `star/public/star_def.inc`).
@@ -409,13 +412,22 @@ pub fn run_test_suite_case(
         .unwrap_or("unknown")
         .to_string();
 
-    let rn_stages = parse_rn_stages(case_dir, skip_optional)?;
+    let mut rn_stages = parse_rn_stages(case_dir, skip_optional)?;
+    if skip_optional
+        && rn_stages.iter().any(|st| {
+            matches!(st, RnStage::CopyCheckpoint { src_mod, .. } if !case_dir.join(src_mod).exists())
+        })
+    {
+        rn_stages = parse_rn_stages(case_dir, false)?;
+    }
     let tier = if is_tier1_case(&case_name) {
         1
     } else if is_tier2_case(&case_name) {
         2
     } else if is_tier3_case(&case_name) {
         3
+    } else if is_tier4_case(&case_name) {
+        4
     } else {
         0
     };
@@ -452,21 +464,25 @@ pub fn run_test_suite_case(
                         twin_star1_hr = Some(extract_history_row(&m1));
                     }
                 }
-                let inlist_path = case_dir.join(inlist);
-                if !inlist_path.exists() {
+                if InlistBundle::resolve_inlist_path(case_dir, inlist).is_none()
+                {
                     continue;
                 }
-                let bundle = InlistBundle::from_file(&inlist_path)?;
+                let bundle =
+                    InlistBundle::from_file_in_case_dir(case_dir, inlist)?;
                 let use_tov = bundle.controls.use_other_cgrav;
                 let mut default_extras = DefaultStarExtras;
                 let mut tov_extras = TovGrStarExtras;
                 let mut tier1_extras = Tier1CaseExtras::new(&case_name);
                 let mut tier2_extras = Tier2CaseExtras::new(&case_name);
                 let mut tier3_extras = Tier3CaseExtras::new(&case_name);
+                let mut tier4_extras =
+                    Tier4CaseExtras::with_case_dir(&case_name, case_dir);
                 let extras: &mut dyn StarExtras = match tier {
                     1 => &mut tier1_extras,
                     2 => &mut tier2_extras,
                     3 => &mut tier3_extras,
+                    4 => &mut tier4_extras,
                     _ if use_tov => &mut tov_extras,
                     _ => &mut default_extras,
                 };
@@ -515,6 +531,7 @@ pub fn run_test_suite_case(
                 1 => verify_tier1_case_assertions(m, &case_name),
                 2 => verify_tier2_case_assertions(m, &case_name),
                 3 => verify_tier3_case_assertions(m, &case_name),
+                4 => verify_tier4_case_assertions(m, &case_name),
                 _ => m.nz >= 2 && m.teff.is_finite() && m.teff > 0.0,
             });
     let final_hr = stage_reports

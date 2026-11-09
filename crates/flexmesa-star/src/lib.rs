@@ -81,9 +81,11 @@ pub mod overshoot;
 pub mod pre_ms;
 pub mod premix;
 pub mod pulse;
+pub mod pulse_modes;
 pub mod riemann;
 pub mod rotation;
 pub mod rsp2;
+pub mod rsp_build;
 pub mod solver;
 pub mod star_ad;
 pub mod star_job_init;
@@ -93,6 +95,7 @@ pub mod tier1_extras;
 pub mod tier2_extras;
 pub mod tier3_extras;
 pub mod tier3_physics;
+pub mod tier4_extras;
 pub mod timestep;
 pub mod winds;
 pub mod zams;
@@ -166,6 +169,12 @@ pub use pulse::{
     build_pulse_points, eval_center_parabolic, export_fgong, export_gyre,
     export_osc, PulsePoint,
 };
+pub use pulse_modes::{
+    eval_acoustic_large_separation_hz, eval_astero_scaling_dnu_numax_uhz,
+    eval_buoyancy_period_spacing_s, eval_kappa_mechanism_growth,
+    eval_linear_oscillation_modes, eval_target_mode_frequency_and_growth,
+    LinearOscillationMode,
+};
 pub use riemann::{
     eval_hllc_face, eval_hllc_surface_face, eval_riemann_momentum_residual,
     eval_riemann_profile, HllcFaceState,
@@ -179,6 +188,10 @@ pub use rsp2::{
     eval_rsp2_face, eval_rsp2_zone, solve_stationary_rsp2_w, Rsp2Config,
     Rsp2FaceResult, Rsp2ZoneResult, X_ALFAC, X_ALFAP, X_ALFAS, X_CEDE,
     X_GAMMAR,
+};
+pub use rsp_build::{
+    build_rsp_envelope_model, eval_rsp_2nd_crossing_edges, eval_rsp_lina_modes,
+    RspLinaMode,
 };
 pub use solver::{
     compute_corr_coeff, compute_correction_norms, compute_vector_norms,
@@ -220,6 +233,12 @@ pub use tier3_physics::{
     eval_pair_instability_gamma1_and_energy, eval_roche_gravity_darkening,
     eval_spruit_tayler_dynamo_diagnostics, eval_tov_effective_cgrav,
     eval_tzo_core_accretion_step, export_stella_ascii,
+};
+pub use tier4_extras::{
+    is_tier4_case, run_astero_suite, run_astero_test_suite_case,
+    run_dev_cases_suite, run_tier4_star_suite, run_tier4_suite,
+    verify_tier4_case_assertions, Tier4CaseExtras, TIER4_ACTIVE_STAR_CASES,
+    TIER4_ASTERO_CASES, TIER4_DEV_CASES, TIER4_STAR_CASES,
 };
 pub use timestep::{
     eval_dx_nuc_drop_ratio, eval_h211_factor, eval_varcontrol, filter_limit,

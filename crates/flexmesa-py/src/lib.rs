@@ -87,6 +87,9 @@ pub mod rates_py;
 /// PyO3 bindings for `star` end-to-end `inlist` parsing and `test_suite` runner.
 #[allow(unsafe_code)]
 pub mod star_e2e_py;
+/// PyO3 bindings for Stage `E2E-4` and `E2E-5` pulsation, `astero`, and `dev_cases_*` suites.
+#[allow(unsafe_code)]
+pub mod star_e2e_tier45_py;
 /// Internal helper routines for [`star_py::PyStarModel`].
 #[allow(unsafe_code)]
 pub mod star_helpers_py;
@@ -294,6 +297,7 @@ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     net_py::register(m)?;
     star_py::register(m)?;
     star_e2e_py::register(m)?;
+    star_e2e_tier45_py::register_star_e2e_tier45(m)?;
     star_wave5_py::register(m)?;
     star_wave5_2_py::register(m)?;
     binary_py::register(m)?;

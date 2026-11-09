@@ -190,6 +190,82 @@ pub struct InlistBundle {
 }
 
 impl InlistBundle {
+    /// Resolves `name` against `case_dir` or `case_dir/../shared/`.
+    #[must_use]
+    pub fn resolve_inlist_path(case_dir: &Path, name: &str) -> Option<PathBuf> {
+        let trimmed = name.trim();
+        if trimmed.is_empty() {
+            return None;
+        }
+        let direct = case_dir.join(trimmed);
+        if direct.exists() {
+            return Some(direct);
+        }
+        if let Some(parent) = case_dir.parent() {
+            let shared = parent.join("shared").join(trimmed);
+            if shared.exists() {
+                return Some(shared);
+            }
+        }
+        None
+    }
+
+    /// Parses `inlist_name` inside `case_dir` (checking `../shared/` if needed)
+    /// and recursively resolves all `read_extra_*_inlist` includes.
+    ///
+    /// # Errors
+    /// Returns [`StarError::IoError`] if a required `inlist` file cannot be
+    /// read or parsed.
+    pub fn from_file_in_case_dir(
+        case_dir: &Path,
+        inlist_name: &str,
+    ) -> Result<Self, StarError> {
+        let Some(entry_path) = Self::resolve_inlist_path(case_dir, inlist_name)
+        else {
+            return Err(StarError::IoError(format!(
+                "missing entry inlist '{inlist_name}' in '{}'",
+                case_dir.display()
+            )));
+        };
+        let mut sections: HashMap<String, SectionControls> = HashMap::new();
+        let mut visited: HashSet<(String, PathBuf)> = HashSet::new();
+
+        Self::load_file_recursive(
+            case_dir,
+            &entry_path,
+            None,
+            &mut sections,
+            &mut visited,
+        )?;
+
+        let astero_search = case_dir.join("inlist_astero_search_controls");
+        if astero_search.exists() {
+            let _ = Self::load_file_recursive(
+                case_dir,
+                &astero_search,
+                None,
+                &mut sections,
+                &mut visited,
+            );
+        }
+
+        let mut bundle = Self {
+            case_dir: case_dir.to_path_buf(),
+            entry_inlist: inlist_name.to_string(),
+            job: StarJobControls::default(),
+            controls: StarControls::default(),
+            eos_config: EosConfig {
+                use_free_eos: false,
+                use_opal_scvh: false,
+                ..EosConfig::default()
+            },
+            kap_config: KapConfig::default(),
+            sections,
+        };
+        bundle.populate_typed_structs();
+        Ok(bundle)
+    }
+
     /// Parses `inlist_path` and recursively resolves all `read_extra_*_inlist`
     /// includes relative to `inlist_path.parent()`.
     ///
@@ -205,32 +281,7 @@ impl InlistBundle {
             || String::from("inlist"),
             |s| s.to_string_lossy().into_owned(),
         );
-        let mut sections: HashMap<String, SectionControls> = HashMap::new();
-        let mut visited: HashSet<(String, PathBuf)> = HashSet::new();
-
-        Self::load_file_recursive(
-            &case_dir,
-            inlist_path,
-            None,
-            &mut sections,
-            &mut visited,
-        )?;
-
-        let mut bundle = Self {
-            case_dir,
-            entry_inlist,
-            job: StarJobControls::default(),
-            controls: StarControls::default(),
-            eos_config: EosConfig {
-                use_free_eos: false,
-                use_opal_scvh: false,
-                ..EosConfig::default()
-            },
-            kap_config: KapConfig::default(),
-            sections,
-        };
-        bundle.populate_typed_structs();
-        Ok(bundle)
+        Self::from_file_in_case_dir(&case_dir, &entry_inlist)
     }
 
     fn load_file_recursive(
@@ -238,7 +289,7 @@ impl InlistBundle {
         file_path: &Path,
         target_section: Option<&str>,
         sections: &mut HashMap<String, SectionControls>,
-        visited: &mut HashSet<(String, PathBuf)>,
+        visited: &mut HashSet<(String, PathBuf)> ,
     ) -> Result<(), StarError> {
         let canon = file_path
             .canonicalize()
@@ -294,8 +345,9 @@ impl InlistBundle {
                     if trimmed.is_empty() {
                         continue;
                     }
-                    let next_path = case_dir.join(trimmed);
-                    if !next_path.exists() {
+                    let Some(next_path) =
+                        Self::resolve_inlist_path(case_dir, trimmed)
+                    else {
                         if is_optional_gui || trimmed == "inlist_nzhi" {
                             continue;
                         }
@@ -304,7 +356,7 @@ impl InlistBundle {
                              referenced from '{}'",
                             file_path.display()
                         )));
-                    }
+                    };
                     Self::load_file_recursive(
                         case_dir,
                         &next_path,
@@ -380,10 +432,18 @@ pub fn parse_rn_stages(
         if line.is_empty() {
             continue;
         }
-        if line.starts_with("if ") && line.contains("MESA_SKIP_OPTIONAL") {
+        if line.starts_with("if ")
+            && (line.contains("MESA_SKIP_OPTIONAL")
+                || line.contains("MESA_RUN_OPTIONAL"))
+        {
             in_skip_if = true;
             in_else = false;
-            skip_if_is_nonempty = !line.contains("-z");
+            let has_z = line.contains("-z");
+            skip_if_is_nonempty = if line.contains("MESA_RUN_OPTIONAL") {
+                has_z
+            } else {
+                !has_z
+            };
             continue;
         }
         if in_skip_if && (line == "else" || line.starts_with("else ")) {
@@ -411,6 +471,9 @@ pub fn parse_rn_stages(
         let toks: Vec<&str> = line.split_whitespace().collect();
         if toks.is_empty() {
             continue;
+        }
+        if toks[0] == "return" || toks[0] == "exit" {
+            break;
         }
         if toks[0] == "do_one" || toks[0] == "do_one_binary" {
             let inlist = toks

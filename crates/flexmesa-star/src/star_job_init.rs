@@ -63,14 +63,22 @@ fn build_initial_planet_or_wd_model(
     mut controls: StarControls,
     job: StarJobControls,
 ) -> Result<StarModel, StarError> {
-    let m_target = if job.mass_in_gm_for_create_initial_model > 0.0 {
+    let use_create_init_dims =
+        job.create_initial_model || job.use_other_build_initial_model;
+    let m_target = if use_create_init_dims
+        && job.mass_in_gm_for_create_initial_model > 0.0
+    {
         job.mass_in_gm_for_create_initial_model / M_SUN
     } else if job.relax_mass && job.new_mass > 0.0 {
         job.new_mass
     } else {
         controls.initial_mass
     };
-    let r_init_cm = job.radius_in_cm_for_create_initial_model;
+    let r_init_cm = if use_create_init_dims {
+        job.radius_in_cm_for_create_initial_model
+    } else {
+        0.0
+    };
     controls.initial_mass = 1.0;
     let mut model = load_zams_model(controls, job)?;
     model.controls.initial_mass = m_target;
@@ -265,26 +273,42 @@ pub fn init_or_update_model_from_bundle(
         .and_then(|s| s.to_str())
         .unwrap_or("");
     let is_tier2_or_3 = crate::tier2_extras::is_tier2_case(case_name)
-        || crate::tier3_extras::is_tier3_case(case_name);
+        || crate::tier3_extras::is_tier3_case(case_name)
+        || crate::tier4_extras::is_tier4_case(case_name);
     let mut loaded_from_mod = false;
-    let mut model = if crate::tier3_extras::is_tier3_case(case_name) {
+    let mut model = if job.create_rsp_model {
+        crate::rsp_build::build_rsp_envelope_model(
+            controls.clone(),
+            job.clone(),
+        )?
+    } else if crate::tier3_extras::is_tier3_case(case_name)
+        || crate::tier4_extras::is_tier4_case(case_name)
+    {
         if let Some(prev) = existing_model {
             prev
         } else {
             let mut init_controls = controls.clone();
-            let candidate_name = if job.load_saved_model && !job.saved_model_name.is_empty() {
-                Some(job.saved_model_name.as_str())
-            } else if !controls.zams_filename.is_empty() {
-                Some(controls.zams_filename.as_str())
-            } else {
-                None
-            };
+            let candidate_name =
+                if job.load_saved_model && !job.saved_model_name.is_empty() {
+                    Some(job.saved_model_name.as_str())
+                } else if !controls.zams_filename.is_empty() {
+                    Some(controls.zams_filename.as_str())
+                } else {
+                    None
+                };
             if let Some(mname) = candidate_name {
-                if let Some(mod_path) = resolve_model_path(&bundle.case_dir, mname) {
+                if let Some(mod_path) =
+                    resolve_model_path(&bundle.case_dir, mname)
+                {
                     if let Some(m_hdr) = peek_mod_header_mass(&mod_path) {
                         init_controls.initial_mass = m_hdr;
                     }
                 }
+            }
+            if (case_name.starts_with("rsp_") || job.create_rsp_model)
+                && init_controls.rsp_mass > 0.0
+            {
+                init_controls.initial_mass = init_controls.rsp_mass;
             }
             build_initial_planet_or_wd_model(init_controls, job.clone())?
         }

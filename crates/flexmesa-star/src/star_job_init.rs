@@ -306,6 +306,20 @@ pub fn init_or_update_model_from_bundle(
         model.controls.tau_factor = job.set_to_this_tau_factor;
     }
 
+    // Pure-envelope integration mode (`make_env`): when nuclear energy generation
+    // is disabled (`eps_nuc_factor == 0.0`) and `l_center == 0.0`, supply core
+    // luminosity at the inner boundary so radiative/convective flux stays balanced.
+    if model.controls.eps_nuc_factor == 0.0
+        && model.l_center == 0.0
+        && model.lum.first().copied().unwrap_or(0.0) > 0.0
+    {
+        model.l_center = model.lum[0];
+        if !job.set_initial_dt || model.dt < 1.0e2 {
+            model.dt = 1.0e2 * SECYER;
+            model.dt_next = model.dt;
+        }
+    }
+
     // 6. Velocity & rotation flags (`change_v_flag`, `change_u_flag`, `change_rotation_flag`)
     if job.change_v_flag {
         model.controls.v_flag = job.new_v_flag;

@@ -302,7 +302,7 @@ pub fn solve_omega_mix(
 
 /// Applies glitch cleanup, convective boundary detection, overshooting, and
 /// Lagrangian coupling factor (`sig`) evaluation.
-fn refresh_mixing_state(
+pub(crate) fn refresh_mixing_state(
     model: &mut StarModel,
     dt: f64,
     overshoot_configs: &[OvershootConfig],
@@ -330,6 +330,7 @@ pub fn do_struct_burn_mix(
     overshoot_configs: &[OvershootConfig],
 ) -> Result<HenyeySolverReport, StarError> {
     model.dt = dt;
+    let saved_op_split = model.controls.op_split_burn;
     model.controls.op_split_burn = op_split_burn;
     set_hydro_vars(model, false, false)?;
     model.save_start_values();
@@ -338,13 +339,15 @@ pub fn do_struct_burn_mix(
     let report = if op_split_burn {
         op_split_burn_zones(model, dt)?;
         let res = solve_henyey_step(model, false, use_bcyclic);
-        model.controls.op_split_burn = false;
+        model.controls.op_split_burn = saved_op_split;
         let rep = res?;
         solve_composition_diffusion(model, dt);
         set_hydro_vars(model, false, false)?;
         rep
     } else {
-        let rep = solve_henyey_step(model, true, use_bcyclic)?;
+        let res = solve_henyey_step(model, true, use_bcyclic);
+        model.controls.op_split_burn = saved_op_split;
+        let rep = res?;
         set_hydro_vars(model, false, false)?;
         rep
     };

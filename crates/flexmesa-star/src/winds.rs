@@ -308,7 +308,9 @@ pub fn set_mdot(
 /// - Region III ($k_B \le k < \mathrm{nz}$): constant physical mass $\Delta m_k$.
 ///
 /// Redistributes species mass fractions `xa` via exact piecewise-constant
-/// overlap integration across old mass intervals and updates `eps_mdot`.
+/// overlap integration across old mass intervals, reconstructs `ln_r` from
+/// `lnd` and `dm`, and zeros `eps_mdot` (gravothermal heating is evaluated via
+/// $\epsilon_{\mathrm{grav}} = -T\,ds/dt$ in `set_hydro_vars`).
 ///
 /// # Errors
 /// Returns [`StarError`] if the new envelope mass is non-positive or
@@ -358,7 +360,6 @@ pub fn do_adjust_mass(
     let dq_old = model.dq.clone();
     let xq_old = model.xq.clone();
     let xa_old = model.xa.clone();
-    let e_old = model.energy.clone();
 
     // Revise `dq` across Regions I, II, and III (`revise_q_and_dq`).
     let sum_i: f64 = dq_old[..k_a].iter().sum();
@@ -404,15 +405,14 @@ pub fn do_adjust_mass(
 
         if x_p1 <= 0.0 {
             model.cell_xa_mut(k).copy_from_slice(&x_acc[..species]);
+            model.eps_mdot[k] = 0.0;
         } else {
             accum.fill(0.0);
-            let mut e_accum = 0.0;
             if x_00 < 0.0 {
                 let w_acc = -x_00;
                 for j in 0..species {
                     accum[j] += w_acc * x_acc[j];
                 }
-                e_accum += w_acc * e_old[0];
             }
             let a_start = x_00.max(0.0);
             while kk_start + 1 < nz
@@ -431,7 +431,6 @@ pub fn do_adjust_mass(
                     for j in 0..species {
                         accum[j] += overlap * xa_old[kk * species + j];
                     }
-                    e_accum += overlap * e_old[kk];
                 }
             }
             let mut sum_x = 0.0;
@@ -445,13 +444,14 @@ pub fn do_adjust_mass(
                     model.xa[k * species + j] /= sum_x;
                 }
             }
-            let dt = model.dt.max(1.0);
-            model.eps_mdot[k] = (e_accum / dx - e_old[k]) / dt;
+            model.eps_mdot[k] = 0.0;
         }
     }
     for k in k_b..nz {
         model.eps_mdot[k] = 0.0;
     }
+
+    model.reconstruct_ln_r_from_lnd_and_dm();
 
     set_basic_vars(model)
 }

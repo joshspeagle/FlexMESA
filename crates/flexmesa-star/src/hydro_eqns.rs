@@ -172,7 +172,10 @@ pub fn compute_x_scale(model: &StarModel, include_chem: bool) -> Vec<f64> {
             .max(max_abs_l * model.q[k].min(1.0))
             .max(model.lum_start[k].abs());
         if let Some(iv) = layout.i_v.or(layout.i_u) {
-            x_scale[base + iv] = model.csound[k].max(1.0);
+            let r_over_dt =
+                model.ln_r_start[k].exp().max(1.0) / model.dt.max(1.0e-30);
+            x_scale[base + iv] =
+                r_over_dt.min(model.csound[k].max(1.0)).max(1.0e-30);
         }
         if include_chem {
             for j in 0..model.species {
@@ -282,12 +285,17 @@ pub fn do1_momentum_eqn(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
     let r2 = r_k * r_k;
     let area = FOUR_PI * r2;
     let g_hse = -model.cgrav[k] * model.m_grav[k] / r2;
-    let accel = if model.controls.v_flag && model.dt > 0.0 {
-        (StarAdOrder1::variable(model.v[k], I_V_00) - model.v_start[k])
-            / model.dt
-    } else {
-        StarAdOrder1::ZERO
-    };
+    let accel =
+        if (model.controls.v_flag || model.controls.u_flag) && model.dt > 0.0 {
+            let (v_curr, v_st) = if model.controls.v_flag {
+                (model.v[k], model.v_start[k])
+            } else {
+                (model.u[k], model.u_start[k])
+            };
+            (StarAdOrder1::variable(v_curr, I_V_00) - v_st) / model.dt
+        } else {
+            StarAdOrder1::ZERO
+        };
     let dp_hse = (g_hse - accel) * (model.dm_bar[k] / area);
 
     let resid = if k == 0 {

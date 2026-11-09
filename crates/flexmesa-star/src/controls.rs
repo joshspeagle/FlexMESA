@@ -4,206 +4,13 @@
 //! corresponding to `star_data/private/star_controls.inc`,
 //! `star_job_controls.inc`, and `star/private/alloc.f90`.
 
-use std::fmt;
-
-use flexmesa_atm::{
-    ATM_T_TAU_EDDINGTON, ATM_T_TAU_KRISHNA_SWAMY, ATM_T_TAU_SOLAR_HOPF,
-    ATM_T_TAU_TRAMPEDACH_SOLAR,
-};
 use flexmesa_rates::ScreeningMode;
 use flexmesa_turb::MltOption;
 
-pub use crate::job_controls::StarJobControls;
-
-/// Atmosphere boundary condition option (`atm_option` in `star_controls.inc`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AtmOption {
-    /// Grey $T(\tau)$ relation (`'T_tau'`).
-    TTau,
-    /// Tabulated atmosphere (`'table'`).
-    Table,
-    /// Simple photosphere $P_0 = \tau g / \kappa$, $T = T_{\mathrm{eff}}$.
-    SimplePhotosphere,
-}
-
-/// Grey $T(\tau)$ relation identifier (`atm_T_tau_relation` in `star_controls.inc`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AtmTTauRelation {
-    /// Eddington grey $T^4 = \tfrac{3}{4} T_{\mathrm{eff}}^4 (\tau + 2/3)$ (`'Eddington'`).
-    Eddington,
-    /// Solar Hopf relation (`'solar_Hopf'`).
-    SolarHopf,
-    /// Krishna Swamy (1966) empirical relation (`'Krishna_Swamy'`).
-    KrishnaSwamy,
-    /// Trampedach et al. (2014) 3D radiation-hydrodynamics relation (`'Trampedach_solar'`).
-    TrampedachSolar,
-}
-
-impl AtmTTauRelation {
-    /// Returns the `flexmesa-atm` integer relation ID (`ATM_T_TAU_*`).
-    #[must_use]
-    pub const fn id(self) -> i32 {
-        match self {
-            Self::Eddington => ATM_T_TAU_EDDINGTON,
-            Self::SolarHopf => ATM_T_TAU_SOLAR_HOPF,
-            Self::KrishnaSwamy => ATM_T_TAU_KRISHNA_SWAMY,
-            Self::TrampedachSolar => ATM_T_TAU_TRAMPEDACH_SOLAR,
-        }
-    }
-}
-
-/// Error conditions returned by `flexmesa-star` routines.
-#[derive(Debug, Clone, PartialEq)]
-pub enum StarError {
-    /// Invalid configuration or input dimension.
-    InvalidInput(String),
-    /// Failure during ZAMS or `.mod`/`.photo` file parsing or serialization.
-    IoError(String),
-    /// Microphysics (EOS, opacity, reaction network, or atmosphere) failure.
-    MicrophysicsError(String),
-    /// Non-convergence in root-finding or Henyey Newton-Raphson solver.
-    ConvergenceFailure(String),
-}
-
-impl fmt::Display for StarError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::InvalidInput(msg) => write!(f, "invalid star input: {msg}"),
-            Self::IoError(msg) => write!(f, "star model I/O error: {msg}"),
-            Self::MicrophysicsError(msg) => {
-                write!(f, "star microphysics error: {msg}")
-            }
-            Self::ConvergenceFailure(msg) => {
-                write!(f, "star solver convergence failure: {msg}")
-            }
-        }
-    }
-}
-
-impl std::error::Error for StarError {}
-
-/// Energy conservation equation formulation (`energy_eqn_option` in MESA).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum EnergyEqnOption {
-    /// Total energy conservation $de/dt + P\,d(1/\rho)/dt$ (`'dedt'`).
-    Dedt,
-    /// Gravitational energy form $\epsilon_{\mathrm{grav}} = -T\,ds/dt$ (`'eps_grav'`).
-    EpsGrav,
-}
-
-/// Dynamic hydrodynamic variable and equation slot layout (`set_var_info` in
-/// `star/private/alloc.f90:2002-2110`).
-///
-/// All indices are 0-based into per-zone slices of length `nvar_hydro` or
-/// `nvar_total = nvar_hydro + species`.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct VarLayout {
-    /// Cell-centered $\ln\rho$ variable slot (`0`, Fortran `1`).
-    pub i_lnd: usize,
-    /// Cell-centered $\ln T$ variable slot (`1`, Fortran `2`).
-    pub i_lnt: usize,
-    /// Face-centered $\ln R$ variable slot (`2`, Fortran `3`).
-    pub i_lnr: usize,
-    /// Face-centered luminosity $L$ variable slot (`3`, Fortran `4`).
-    pub i_lum: usize,
-    /// Optional face-centered velocity $v$ variable slot (`v_flag`).
-    pub i_v: Option<usize>,
-    /// Optional cell-centered Riemann velocity $u$ variable slot (`u_flag`).
-    pub i_u: Option<usize>,
-    /// Number of hydrodynamic variables per zone (`4` in hydrostatic mode, `5`
-    /// when `v_flag` or `u_flag` is enabled).
-    pub nvar_hydro: usize,
-    /// Number of nuclear network species (`species`).
-    pub species: usize,
-    /// Total coupled solver variables per zone (`nvar_hydro + species`).
-    pub nvar_total: usize,
-    /// Temperature gradient / surface $T$ equation slot (`i_equL`).
-    pub i_equ_l: usize,
-    /// Momentum / hydrostatic / surface $P$ equation slot (`i_dv_dt`).
-    pub i_dv_dt: usize,
-    /// Continuity / volume-radius equation slot (`i_dlnd_dt`).
-    pub i_dlnd_dt: usize,
-    /// Energy conservation equation slot (`i_dlnE_dt`).
-    pub i_dlne_dt: usize,
-    /// Optional radius-velocity kinematic equation slot (`i_dlnR_dt`).
-    pub i_dlnr_dt: Option<usize>,
-}
-
-impl VarLayout {
-    /// Constructs the variable and equation layout for `(species, v_flag, u_flag)`
-    /// matching `set_var_info` in `star/private/alloc.f90:2002-2110`.
-    #[must_use]
-    pub const fn new(species: usize, v_flag: bool, u_flag: bool) -> Self {
-        let i_lnd = 0;
-        let i_lnt = 1;
-        let i_lnr = 2;
-        let i_lum = 3;
-        let mut nvar_hydro = 4;
-        let i_v = if v_flag {
-            let idx = nvar_hydro;
-            nvar_hydro += 1;
-            Some(idx)
-        } else {
-            None
-        };
-        let i_u = if !v_flag && u_flag {
-            let idx = nvar_hydro;
-            nvar_hydro += 1;
-            Some(idx)
-        } else {
-            None
-        };
-        let has_vel = v_flag || u_flag;
-        let (i_equ_l, i_dv_dt, i_dlnd_dt, i_dlne_dt, i_dlnr_dt) = if has_vel {
-            let iv = if let Some(idx) = i_v {
-                idx
-            } else if let Some(idx) = i_u {
-                idx
-            } else {
-                4
-            };
-            (i_lum, iv, i_lnd, i_lnt, Some(i_lnr))
-        } else {
-            (i_lnd, i_lnt, i_lnr, i_lum, None)
-        };
-        Self {
-            i_lnd,
-            i_lnt,
-            i_lnr,
-            i_lum,
-            i_v,
-            i_u,
-            nvar_hydro,
-            species,
-            nvar_total: nvar_hydro + species,
-            i_equ_l,
-            i_dv_dt,
-            i_dlnd_dt,
-            i_dlne_dt,
-            i_dlnr_dt,
-        }
-    }
-
-    /// Returns the solver variable index (`0..nvar_total`) for species `j`
-    /// (`0..species`).
-    #[must_use]
-    #[inline]
-    pub const fn chem_var_index(&self, j: usize) -> usize {
-        self.nvar_hydro + j
-    }
-
-    /// Returns the number of coupled variables per zone (`nvar_total` when
-    /// `include_chem` is true, or `nvar_hydro` otherwise).
-    #[must_use]
-    #[inline]
-    pub const fn nvar(&self, include_chem: bool) -> usize {
-        if include_chem {
-            self.nvar_total
-        } else {
-            self.nvar_hydro
-        }
-    }
-}
+pub use crate::job_controls::{
+    AtmOption, AtmTTauRelation, EnergyEqnOption, StarError, StarJobControls,
+    VarLayout,
+};
 
 /// Evolutionary and physics controls (`&controls` namelist in
 /// `star_data/private/star_controls.inc`).
@@ -218,6 +25,8 @@ pub struct StarControls {
     pub initial_y: f64,
     /// Base metallicity $Z_{\mathrm{base}}$ for Type 2 opacities.
     pub zbase: f64,
+    /// Optional custom ZAMS filename (`zams_filename`).
+    pub zams_filename: String,
     /// Maximum model number before stopping (`max_model_number`).
     pub max_model_number: Option<usize>,
     /// Maximum stellar age in years (`max_age`).
@@ -302,10 +111,36 @@ pub struct StarControls {
     pub do_conv_premix: bool,
     /// Whether crystallization phase separation (`do_phase_separation`) is active.
     pub do_phase_separation: bool,
+    /// Whether latent/gravitational phase-separation heating is active (`do_phase_separation_heating`).
+    pub do_phase_separation_heating: bool,
+    /// Phase-separation mixture option (`"CO"` or `"ONe"`, `phase_separation_option`).
+    pub phase_separation_option: String,
+    /// Incident planetary/stellar irradiation flux in $\mathrm{erg\,cm^{-2}\,s^{-1}}$ (`irradiation_flux`).
+    pub irradiation_flux: f64,
+    /// Attenuation column depth for irradiation in $\mathrm{g\,cm^{-2}}$ (`column_depth_for_irradiation`).
+    pub column_depth_for_irradiation: f64,
     /// Whether to use momentum equation at outer boundary $k = 0$.
     pub use_momentum_outer_bc: bool,
     /// Constant mass-change rate $\dot{M}$ in $M_\odot\,\mathrm{yr}^{-1}$ (`mass_change`).
     pub mass_change: f64,
+    /// Whether accreted material matches surface composition (`accrete_same_as_surface`).
+    pub accrete_same_as_surface: bool,
+    /// Whether accreted material uses explicit mass fractions (`accrete_given_mass_fractions`).
+    pub accrete_given_mass_fractions: bool,
+    /// Accreted $^1\mathrm{H}$ mass fraction (`accretion_h1`).
+    pub accretion_h1: f64,
+    /// Accreted $^4\mathrm{He}$ mass fraction (`accretion_he4`).
+    pub accretion_he4: f64,
+    /// Custom accreted isotope identifiers (`accretion_species_id(1..N)`).
+    pub accretion_species_id: Vec<String>,
+    /// Custom accreted isotope mass fractions (`accretion_species_xa(1..N)`).
+    pub accretion_species_xa: Vec<f64>,
+    /// Super-Eddington wind scaling factor (`super_eddington_scaling_factor`).
+    pub super_eddington_scaling_factor: f64,
+    /// Temperature threshold where hot wind turns fully on in K (`hot_wind_full_on_T`).
+    pub hot_wind_full_on_t: f64,
+    /// Temperature threshold where cool wind turns fully on in K (`cool_wind_full_on_T`).
+    pub cool_wind_full_on_t: f64,
     /// Reimers wind scaling factor $\eta_{\mathrm{Reimers}}$.
     pub reimers_scaling_factor: f64,
     /// Blöcker wind scaling factor $\eta_{\mathrm{Blocker}}$.
@@ -398,8 +233,22 @@ pub struct StarControls {
     pub fe_core_infall_limit: Option<f64>,
     /// Upper limit on $|v_{\mathrm{surf}}| / v_{\mathrm{KH}}$ (`v_surf_div_v_kh_upper_limit`).
     pub v_surf_div_v_kh_upper_limit: Option<f64>,
+    /// Upper limit on central Coulomb coupling parameter $\Gamma_c$ (`gamma_center_limit`).
+    pub gamma_center_limit: Option<f64>,
+    /// Upper limit on $v_{\mathrm{surf}} / v_{\mathrm{esc}}$ (`v_surf_div_v_esc_limit`).
+    pub v_surf_div_v_esc_limit: Option<f64>,
+    /// Upper limit on $\Omega_{\mathrm{surf}} / \Omega_{\mathrm{crit}}$ (`surf_omega_div_omega_crit_limit`).
+    pub surf_omega_div_omega_crit_limit: Option<f64>,
+    /// Minimum convective core gap $\Delta q$ (`conv_core_gap_dq_limit`).
+    pub conv_core_gap_dq_limit: Option<f64>,
     /// Stop when evolutionary phase reaches TP-AGB (`stop_at_phase_TP_AGB`).
     pub stop_at_phase_tp_agb: bool,
+    /// Stop when carbon burning ignites (`stop_at_phase_C_burn`).
+    pub stop_at_phase_c_burn: bool,
+    /// Stop when neon burning ignites (`stop_at_phase_Ne_burn`).
+    pub stop_at_phase_ne_burn: bool,
+    /// Stop when oxygen burning ignites (`stop_at_phase_O_burn`).
+    pub stop_at_phase_o_burn: bool,
     /// Maximum pulsation periods for RSP (`RSP_max_num_periods`).
     pub rsp_max_num_periods: Option<isize>,
     /// Target steps per pulsation cycle (`RSP_target_steps_per_cycle`).
@@ -457,6 +306,7 @@ impl Default for StarControls {
             initial_z: 0.02,
             initial_y: -1.0,
             zbase: 0.02,
+            zams_filename: String::new(),
             max_model_number: None,
             max_age: None,
             max_age_in_seconds: None,
@@ -499,8 +349,21 @@ impl Default for StarControls {
             do_element_diffusion: false,
             do_conv_premix: false,
             do_phase_separation: false,
+            do_phase_separation_heating: false,
+            phase_separation_option: String::from("CO"),
+            irradiation_flux: 0.0,
+            column_depth_for_irradiation: 0.0,
             use_momentum_outer_bc: false,
             mass_change: 0.0,
+            accrete_same_as_surface: true,
+            accrete_given_mass_fractions: false,
+            accretion_h1: -1.0,
+            accretion_he4: -1.0,
+            accretion_species_id: Vec::new(),
+            accretion_species_xa: Vec::new(),
+            super_eddington_scaling_factor: 0.0,
+            hot_wind_full_on_t: 1.0e4,
+            cool_wind_full_on_t: 1.0e4,
             reimers_scaling_factor: 0.0,
             blocker_scaling_factor: 0.0,
             vink_scaling_factor: 0.0,
@@ -546,7 +409,14 @@ impl Default for StarControls {
             star_species_mass_max_limit_iso: String::new(),
             fe_core_infall_limit: None,
             v_surf_div_v_kh_upper_limit: None,
+            gamma_center_limit: None,
+            v_surf_div_v_esc_limit: None,
+            surf_omega_div_omega_crit_limit: None,
+            conv_core_gap_dq_limit: None,
             stop_at_phase_tp_agb: false,
+            stop_at_phase_c_burn: false,
+            stop_at_phase_ne_burn: false,
+            stop_at_phase_o_burn: false,
             rsp_max_num_periods: None,
             rsp_target_steps_per_cycle: 150,
             rsp_mass: 0.65,

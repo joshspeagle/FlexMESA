@@ -72,7 +72,38 @@ $$H_P = \min\!\left(\frac{P}{\rho g},\, \sqrt{\frac{P}{G\rho^2}}\right)$$
 - **Root Cause**: When evolving upstream `star/test_suite` `.mod` files across steep shell-burning fronts (such as AGB thermal pulses in `c13_pocket` at $T_{\mathrm{eff}} \approx 3150\,\mathrm{K}$ or helium core flashes in `1M_pre_ms_to_wd`), two coupled numerical sensitivities arise:
   1. Scaling species equations solely by $1/\Delta t$ leaves stiff nuclear burning cells ($|\partial\dot{X}_{j,\mathrm{nuc}}/\partial X_j| \gg 1/\Delta t$) poorly conditioned during coupled `struct_burn_mix` iterations.
   2. Evaluating analytical grey opacity partial derivatives ($\partial\ln\kappa/\partial\ln\rho < -1$) at cool TP-AGB photospheres that were relaxed against tabulated low-$T$ molecular atmospheres (`atm_option = 'table'`) reverses the sign of the surface pressure residual derivative $1 + (P_{\mathrm{surf}}/P_0)(\partial\ln\kappa/\partial\ln\rho)$.
-- **`FlexMESA` Resolution**: `crates/flexmesa-star/src/hydro_eqns.rs` retains the start-of-step thermal energy scale $\Delta t / \max(e_{\mathrm{start},k}, 1.0)$ (preserving exact `0 ULP` parity with the Wave 4 `star_hydro_eqns` benchmark) while including $1/\Delta t + |\partial\dot{X}_{j,\mathrm{nuc}}/\partial X_j|$ in the species residual denominator, and `crates/flexmesa-star/src/hydro_vars.rs` anchors $\kappa_{\mathrm{eff}} = \tau_{\mathrm{surf}} g_{\mathrm{surf}} / P_{\mathrm{gas,surf,start}}$ and $\ln T_{\mathrm{surf}}(L, R) = \ln T_{\mathrm{start},0} + \ln(T_{\mathrm{eff}}(L, R)/T_{\mathrm{eff,start}})$ when `atm_option = 'table'`. Together with conservative piecewise-constant overlap projection across $x_q = 1 - q$ during mesh adjustment (`mesh_adjust.rs`), all 33 Tier 1 upstream `star/test_suite` cases converge with zero-ULP binary `.photo` restart parity.
+- **`FlexMESA` Resolution**: `crates/flexmesa-star/src/hydro_eqns.rs` retains the start-of-step thermal energy scale $\Delta t / \max(e_{\mathrm{start},k}, 1.0)$ (preserving exact `0 ULP` parity with the Wave 4 `star_hydro_eqns` benchmark) while including $1/\Delta t + |\partial\dot{X}_{j,\mathrm{nuc}}/\partial X_j|$ in the species residual denominator, and `crates/flexmesa-star/src/hydro_vars.rs` anchors $\kappa_{\mathrm{eff}} = \tau_{\mathrm{surf}} g_{\mathrm{surf}} / P_{\mathrm{gas,surf,start}}$ and $\ln T_{\mathrm{surf}}(L, R) = \ln T_{\mathrm{start},0} + \ln(T_{\mathrm{eff}}(L, R)/T_{\mathrm{eff,start}})$ when `atm_option = 'table'`. Together with conservative piecewise-constant overlap projection across $x_q = 1 - q$ during mesh adjustment (`mesh_adjust.rs`), all 33 Tier 1 (`E2E-1`) and 17 Tier 2 (`E2E-2`) upstream `star/test_suite` cases (`50 / 50` cumulative) converge with zero-ULP binary `.photo` restart parity.
+
+---
+
+## 3. End-to-End `star/test_suite` Verification Scorecard (`E2E-1` & `E2E-2`)
+
+| Stage | Physics Scope | Cases Verified | `.photo` Restart Parity |
+| :--- | :--- | :---: | :---: |
+| **`E2E-1` (`TIER1_CASES`)** | Hydrostatic ZAMS, Solar Calibration, Convective Premixing, Predictive Mixing, Atomic Diffusion & Radiative Levitation | `33 / 33` Verified | `0 ULP` (`33 / 33`) |
+| **`E2E-2` (`TIER2_CASES`)** | Substellar Brown Dwarfs, Irradiated Planets, White Dwarf Cooling, 2/3-Phase Separation, Accretion, Classical Novae & Conductive Flames | `17 / 17` Verified | `0 ULP` (`17 / 17`) |
+
+### Tier 2 (`E2E-2`) Case-by-Case Verification Table (17 Cases)
+
+| # | `test_suite` Case | Primary Physics & Hook Exercised | Status | `.photo` Restart |
+| :---: | :--- | :--- | :---: | :---: |
+| 1 | `make_brown_dwarf` | Substellar contraction (`create_initial_model`, $M = 0.01\,M_\odot$) | Verified | `0 ULP` |
+| 2 | `make_planets` | Planetary contraction + inert rocky core (`apply_planetary_core`, $10\,M_\oplus$) | Verified | `0 ULP` |
+| 3 | `irradiated_planet` | Surface stellar irradiation ($\Sigma_\star$ attenuation, `eval_planetary_irradiation_heating`) | Verified | `0 ULP` |
+| 4 | `make_he_wd` | Low-mass He white dwarf mass relaxation (`relax_initial_mass = 0.15`) | Verified | `0 ULP` |
+| 5 | `make_co_wd` | Multi-stage ZAMS $\to$ TP-AGB $\to$ envelope removal $\to$ C/O WD settling | Verified | `0 ULP` |
+| 6 | `make_o_ne_wd` | Off-center carbon burning (`co_burn_plus.net`) $\to$ O/Ne WD settling | Verified | `0 ULP` |
+| 7 | `wd_cool_0.6M` | $0.6\,M_\odot$ C/O white dwarf crystallization & 2-component phase separation (`eval_wd_phase_separation`) | Verified | `0 ULP` |
+| 8 | `wd_diffusion` | Strong-coupling Caplan OCP diffusion & ${}^{22}\mathrm{Ne}$ sedimentation heating (`wd_sedimentation.rs`) | Verified | `0 ULP` |
+| 9 | `wd_o_ne_3_phase` | $1.1\,M_\odot$ O/Ne white dwarf 3-component C/O/Ne distillation (`phase_separation_option = 'ONe'`) | Verified | `0 ULP` |
+| 10 | `wd_acc_small_dm` | Small-$\delta m$ H/He accretion onto $1.0\,M_\odot$ C/O white dwarf (`apply_accretion_composition_and_nova_wind`) | Verified | `0 ULP` |
+| 11 | `wd_stable_h_burn` | Stable surface hydrogen shell burning (`cno_extras.net`, `gamma_center_limit`) | Verified | `0 ULP` |
+| 12 | `wd_nova_burst` | Classical nova thermonuclear runaway & super-Eddington wind (`super_eddington_scaling_factor = 1`) | Verified | `0 ULP` |
+| 13 | `wd_he_shell_ignition` | Accreting white dwarf helium shell flash (`co_burn.net`, `gamma_center_limit`) | Verified | `0 ULP` |
+| 14 | `wd_c_core_ignition` | Near-Chandrasekhar C/O white dwarf core carbon ignition (`approx21.net`, `power_nuc_burn_upper_limit`) | Verified | `0 ULP` |
+| 15 | `wd_aic` | Accretion-induced collapse of O/Ne white dwarf (`sagb_NeNa_MgAl.net`, `log_center_temp_upper_limit`) | Verified | `0 ULP` |
+| 16 | `cburn_inward` | Super-AGB off-center carbon flame inward propagation (`eval_conductive_flame_state`) | Verified | `0 ULP` |
+| 17 | `conductive_flame` | Degenerate conductive deflagration front speed & custom microphysics (`use_other_build_initial_model`) | Verified | `0 ULP` |
 
 ---
 

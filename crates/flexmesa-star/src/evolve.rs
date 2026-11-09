@@ -131,7 +131,8 @@ pub fn star_evolve_step(
     model.save_old_values();
     model.dt_old = prev_dt_old;
 
-    let mut dt_try = model.dt.max(1.0);
+    let dt_floor = model.controls.min_timestep_limit.clamp(1.0e-20, 1.0);
+    let mut dt_try = model.dt.max(dt_floor);
     let mut retries = 0_usize;
     let (wind_scheme, wind_eta) = active_wind(model);
 

@@ -13,6 +13,7 @@ from flexmesa import _rust
 from flexmesa.star import model as star_model
 
 TIER1_CASES: tuple[str, ...] = tuple(_rust.star_tier1_cases())
+TIER2_CASES: tuple[str, ...] = tuple(_rust.star_tier2_cases())
 
 
 def parse_inlist_bundle(inlist_path: str | pathlib.Path) -> dict[str, Any]:
@@ -199,3 +200,91 @@ def nelder_mead_solar_step(
     ]
     res = _rust.star_nelder_mead_solar_step(raw_in)
     return float(res[0]), float(res[1]), float(res[2])
+
+
+def run_tier2_suite(
+    mesa_dir: str | pathlib.Path,
+    max_steps_per_stage: int | None = 15,
+    verify_restart: bool = True,
+) -> list[dict[str, Any]]:
+    """Execute all 17 Tier 2 `star/test_suite` cases under `mesa_dir`.
+
+    Args:
+        mesa_dir: Root path of the MESA installation containing
+            `star/test_suite/<case>`.
+        max_steps_per_stage: Optional maximum evolutionary steps per `./rn`
+            stage (`None` runs until physical termination).
+        verify_restart: Whether to verify bit-identical `.photo` restart parity
+            (`0 ULP`) on every case.
+
+    Returns:
+        List of 17 `CaseRunReport` dictionaries in canonical `TIER2_CASES`
+        order.
+    """
+    raw = _rust.star_run_tier2_suite(
+        str(mesa_dir),
+        None if max_steps_per_stage is None else int(max_steps_per_stage),
+        bool(verify_restart),
+    )
+    return [dict(item) for item in raw]
+
+
+def eval_planetary_irradiation_heating(
+    model: star_model.StarModel,
+    f_irr: float,
+    col_depth_irr: float = 250.0,
+) -> tuple[list[float], float]:
+    """Evaluate planetary surface irradiation heating profile and radius
+    (`irradiated_planet`).
+
+    Args:
+        model: Active `StarModel` instance.
+        f_irr: Incident surface irradiation flux in `erg cm^-2 s^-1`.
+        col_depth_irr: Attenuation column depth in `g cm^-2`.
+
+    Returns:
+        Tuple `(eps_irr, r_rjup)` where `eps_irr` is the specific heating rate
+        profile (`erg g^-1 s^-1`, shape `(nz,)`) and `r_rjup` is `R / R_Jup`.
+    """
+    eps_irr, r_rjup = _rust.star_eval_planetary_irradiation_heating(
+        model._rust_model,
+        float(f_irr),
+        float(col_depth_irr),
+    )
+    return [float(v) for v in eps_irr], float(r_rjup)
+
+
+def eval_wd_phase_separation(
+    model: star_model.StarModel,
+    option: str = "CO",
+) -> tuple[float, float]:
+    """Evaluate white dwarf Coulomb crystallization and 2/3-component phase
+    separation (`wd_cool_0.6M` and `wd_o_ne_3_phase`).
+
+    Args:
+        model: Active `StarModel` instance.
+        option: Mixture option (`"CO"` or `"ONe"`).
+
+    Returns:
+        Tuple `(crystallized_mass_frac, total_latent_lum_erg_s)`.
+    """
+    cryst_frac, l_lat = _rust.star_eval_wd_phase_separation(
+        model._rust_model, str(option)
+    )
+    return float(cryst_frac), float(l_lat)
+
+
+def eval_conductive_flame_state(
+    model: star_model.StarModel,
+) -> tuple[float, float]:
+    """Evaluate conductive flame speed and flame mass coordinate
+    (`conductive_flame` and `cburn_inward`).
+
+    Args:
+        model: Active `StarModel` instance.
+
+    Returns:
+        Tuple `(v_flame_cm_s, q_flame)`.
+    """
+    v_f, q_f = _rust.star_eval_conductive_flame_state(model._rust_model)
+    return float(v_f), float(q_f)

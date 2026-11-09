@@ -143,6 +143,9 @@ fn eval_pre_ms_gradt(
     let kap = kap_out.kap * ctx.controls.opacity_factor;
     let gradr =
         p * kap * lum / (4.0 * FOUR_PI * CLIGHT * STANDARD_CGRAV * m * prad);
+    if ctx.controls.mixing_length_alpha <= 0.0 {
+        return Ok((p, eos.res[I_MU], gradr));
+    }
     let grada = eos.res[I_GRAD_AD];
 
     let mlt_params = MltParams {

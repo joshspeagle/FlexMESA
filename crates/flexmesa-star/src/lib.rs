@@ -90,6 +90,7 @@ pub mod star_job_init;
 pub mod struct_burn_mix;
 pub mod termination;
 pub mod tier1_extras;
+pub mod tier2_extras;
 pub mod timestep;
 pub mod winds;
 pub mod zams;
@@ -200,6 +201,12 @@ pub use tier1_extras::{
     eval_starspot_effective_luminosity, eval_t_tau_gradr_factor, is_tier1_case,
     nelder_mead_solar_calibration_step, run_tier1_suite,
     verify_tier1_case_assertions, Tier1CaseExtras, TIER1_CASES,
+};
+pub use tier2_extras::{
+    apply_accretion_composition_and_nova_wind, apply_planetary_core,
+    eval_conductive_flame_state, eval_planetary_irradiation_heating,
+    eval_wd_phase_separation, is_tier2_case, run_tier2_suite,
+    verify_tier2_case_assertions, Tier2CaseExtras, TIER2_CASES,
 };
 pub use timestep::{
     eval_dx_nuc_drop_ratio, eval_h211_factor, eval_varcontrol, filter_limit,

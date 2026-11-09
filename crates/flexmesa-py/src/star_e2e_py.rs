@@ -6,11 +6,13 @@
 use std::path::Path;
 
 use flexmesa_star::{
-    eval_model_colors, eval_solar_calibration_objective,
+    eval_conductive_flame_state, eval_model_colors,
+    eval_planetary_irradiation_heating, eval_solar_calibration_objective,
     eval_starspot_effective_luminosity, eval_t_tau_gradr_factor,
-    nelder_mead_solar_calibration_step, parse_rn_stages, run_test_suite_case,
-    run_tier1_suite, verify_photo_restart_parity, AtmTTauRelation,
-    CaseRunReport, InlistBundle, RnStage, StarError, TIER1_CASES,
+    eval_wd_phase_separation, nelder_mead_solar_calibration_step,
+    parse_rn_stages, run_test_suite_case, run_tier1_suite, run_tier2_suite,
+    verify_photo_restart_parity, AtmTTauRelation, CaseRunReport, InlistBundle,
+    RnStage, StarError, TIER1_CASES, TIER2_CASES,
 };
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
@@ -277,7 +279,66 @@ pub fn star_nelder_mead_solar_step(
     Ok(nelder_mead_solar_calibration_step(&mut arr))
 }
 
-/// Registers `E2E-0` and `E2E-1` runner functions on `flexmesa._rust`.
+/// Returns the canonical 17-case Tier 2 `star/test_suite` inventory.
+#[pyfunction]
+pub fn star_tier2_cases() -> Vec<String> {
+    TIER2_CASES.iter().map(|&s| String::from(s)).collect()
+}
+
+/// Runs all 17 Tier 2 `star/test_suite` cases under `mesa_dir/star/test_suite`.
+#[pyfunction]
+#[pyo3(signature = (mesa_dir, max_steps_per_stage=Some(15), verify_restart=true))]
+pub fn star_run_tier2_suite<'py>(
+    py: Python<'py>,
+    mesa_dir: &str,
+    max_steps_per_stage: Option<usize>,
+    verify_restart: bool,
+) -> PyResult<Bound<'py, PyList>> {
+    let reports = py
+        .detach(|| {
+            run_tier2_suite(
+                Path::new(mesa_dir),
+                max_steps_per_stage,
+                verify_restart,
+            )
+        })
+        .map_err(to_py_err)?;
+    let list = PyList::empty(py);
+    for rep in &reports {
+        list.append(case_report_to_pydict(py, rep)?)?;
+    }
+    Ok(list)
+}
+
+/// Evaluates planetary irradiation heating profile $\epsilon_{\mathrm{irr}}(k)$
+/// and planetary radius in Jupiter radii $R / R_{\mathrm{Jup}}$.
+#[pyfunction]
+pub fn star_eval_planetary_irradiation_heating(
+    model: &PyStarModel,
+    f_irr: f64,
+    col_depth_irr: f64,
+) -> (Vec<f64>, f64) {
+    eval_planetary_irradiation_heating(&model.inner, f_irr, col_depth_irr)
+}
+
+/// Evaluates white dwarf Coulomb crystallization and 2/3-component phase separation.
+#[pyfunction]
+#[pyo3(signature = (model, option="CO"))]
+pub fn star_eval_wd_phase_separation(
+    model: &mut PyStarModel,
+    option: &str,
+) -> (f64, f64) {
+    eval_wd_phase_separation(&mut model.inner, option)
+}
+
+/// Evaluates the conductive carbon/oxygen flame speed $v_{\mathrm{flame}}$
+/// ($\mathrm{cm\,s^{-1}}$) and flame mass coordinate $q_{\mathrm{flame}}$.
+#[pyfunction]
+pub fn star_eval_conductive_flame_state(model: &PyStarModel) -> (f64, f64) {
+    eval_conductive_flame_state(&model.inner)
+}
+
+/// Registers `E2E-0`, `E2E-1`, and `E2E-2` runner functions on `flexmesa._rust`.
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(star_parse_inlist_bundle, m)?)?;
     m.add_function(wrap_pyfunction!(star_parse_rn_stages, m)?)?;
@@ -293,5 +354,13 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m
     )?)?;
     m.add_function(wrap_pyfunction!(star_nelder_mead_solar_step, m)?)?;
+    m.add_function(wrap_pyfunction!(star_tier2_cases, m)?)?;
+    m.add_function(wrap_pyfunction!(star_run_tier2_suite, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        star_eval_planetary_irradiation_heating,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(star_eval_wd_phase_separation, m)?)?;
+    m.add_function(wrap_pyfunction!(star_eval_conductive_flame_state, m)?)?;
     Ok(())
 }

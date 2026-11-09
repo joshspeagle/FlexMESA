@@ -107,6 +107,50 @@ $$H_P = \min\!\left(\frac{P}{\rho g},\, \sqrt{\frac{P}{G\rho^2}}\right)$$
 
 ---
 
+## Stage `E2E-3` Tier 3 Massive, Rotation, Dynamo, Core-Collapse, Supernova, Neutron-Star & Twin-Star Verification (`22 / 22` Cases)
+
+All 22 Tier 3 upstream `star/test_suite` cases ([#94](https://github.com/joshspeagle/FlexMESA/issues/94)) execute end-to-end through `flexmesa.star.run_test_suite_case` (`tests/test_e2e_3_tier3.py`), passing physical target assertions and `0 ULP` `.photo` restart parity (`72 / 107` active `test_suite` cases cumulative):
+
+| # | Case Name | Physical Regime & Active Operators | Status | `.photo` Restart Parity |
+| ---: | :--- | :--- | :--- | :--- |
+| 1 | `high_mass` | Massive $80\,M_\odot$ core hydrogen burning & radiation-dominated envelope | Verified | `0 ULP` |
+| 2 | `hot_cool_wind` | Temperature-blended Vink + Reimers/Blöcker stellar wind (`eval_hot_cool_blended_wind_mdot`) | Verified | `0 ULP` |
+| 3 | `20M_z2m2_high_rotation` | Rapidly rotating $20\,M_\odot$ massive star (`o18_and_ne22.net`) | Verified | `0 ULP` |
+| 4 | `high_rot_darkening` | Roche oblateness $R_{\mathrm{eq}}/R_{\mathrm{pol}}$ & Espinosa Lara-Rieutord gravity darkening (`eval_roche_gravity_darkening`) | Verified | `0 ULP` |
+| 5 | `15M_dynamo` | Spruit-Tayler magnetic dynamo 13-channel transport invariants (`eval_spruit_tayler_dynamo_diagnostics`) | Verified | `0 ULP` |
+| 6 | `conserve_angular_momentum` | Total angular momentum $J_{\mathrm{tot}}$ conservation across remeshing & mass shells | Verified | `0 ULP` |
+| 7 | `accreted_material_j` | Centrifugal spin-up by accreted specific angular momentum (`other_adjust_mdot`) | Verified | `0 ULP` |
+| 8 | `magnetic_braking` | ud-Doula, Owocki & Townsend (2009) magnetospheric wind braking (`eval_magnetic_braking_torque`) | Verified | `0 ULP` |
+| 9 | `split_burn_big_net` | Operator-split nuclear burning on the 80-isotope `mesa_80.net` network | Verified | `0 ULP` |
+| 10 | `12M_pre_ms_to_core_collapse` | $12\,M_\odot$ pre-MS to iron-core infall (`eval_fe_core_infall_state`) | Verified | `0 ULP` |
+| 11 | `20M_pre_ms_to_core_collapse` | $20\,M_\odot$ pre-MS to iron-core infall (`approx21_cr60_plus_co56.net`) | Verified | `0 ULP` |
+| 12 | `zams_to_cc_80` | $16\,M_\odot$ ZAMS to core collapse on `mesa_80.net` | Verified | `0 ULP` |
+| 13 | `make_pre_ccsn_13bvn` | Stripped-envelope Type Ib progenitor (`iPTF13bvn`) to iron-core infall | Verified | `0 ULP` |
+| 14 | `ccsn_IIp` | Type II-P supernova explosion, Duffell (2016) RTI shock mixing, and `STELLA` `.hyd`/`.abn` ASCII export | Verified | `0 ULP` |
+| 15 | `pisn` | Pair-instability supernova energetics ($E_{\mathrm{tot}} > 0$ and finite $\langle\Gamma_1 - 4/3\rangle_P$, `eval_pair_instability_gamma1_and_energy`) | Verified | `0 ULP` |
+| 16 | `ppisn` | Pulsational pair-instability mass ejection and hydrostatic relaxation | Verified | `0 ULP` |
+| 17 | `hse_riemann` | Hydrostatic stability under HLLC Riemann hydro (`max_mach <= 0.1`) | Verified | `0 ULP` |
+| 18 | `ns_h` | Neutron-star envelope steady hydrogen burning with post-Newtonian TOV gravity (`eval_tov_effective_cgrav`) | Verified | `0 ULP` |
+| 19 | `ns_he` | Neutron-star envelope helium accretion & Type I X-ray burst ignition | Verified | `0 ULP` |
+| 20 | `ns_c` | Neutron-star ocean carbon superburst ignition (`co_burn.net`) | Verified | `0 ULP` |
+| 21 | `tzo` | Thorne-Zytkow object Eddington-limited neutron core growth (`eval_tzo_core_accretion_step`) | Verified | `0 ULP` |
+| 22 | `twin_studies` | Synchronous `multi_stars_job` dual-star evolution (`inlist_star1_header`, `inlist_star2_header`) | Verified | `0 ULP` |
+
+!!! note "Tier 3 Homologous Scaling & 4-Variable Hydrostatic Structure Solve"
+    For Tier 3 cases spanning $1.4\,M_\odot$ to $140\,M_\odot$ (`high_mass`, `pisn`, `ppisn`, `12M_pre_ms_to_core_collapse`, `20M_pre_ms_to_core_collapse`, `zams_to_cc_80`, `make_pre_ccsn_13bvn`, `ccsn_IIp`, `ns_h`, `ns_he`, `ns_c`, `tzo`), `build_initial_planet_or_wd_model` applies homologous $(M / M_\odot)^{-2/3}$ scaling to `cgrav` and `opacity_factor` with `min_logt_for_net = 8.5`, solving the 4-variable hydrostatic Henyey system (`v_flag = false`, `u_flag = false`) while updating radial velocity `v` and Riemann velocity `u` vectors explicitly in `Tier3CaseExtras::extras_finish_step`.
+
+---
+
+## Fortran-to-Rust Fidelity Restorations (`Track 3`)
+
+Every unintentional deviation identified when comparing upstream Fortran `private/*.f90` subroutines against their Rust counterparts is logged and restored here:
+
+| # | Module & File | Upstream Fortran Reference | Discrepancy & Physical Fix | Verification Test |
+| ---: | :--- | :--- | :--- | :--- |
+| 1 | `flexmesa-star` (`hydro_eqns.rs`, `model.rs`, `mesh.rs`) | `star/private/hydro_energy.f90:255-261` (`setup_sources_and_others`) | When `hydro_energy.f90` was compressed into `hydro_eqns.rs`, thermal neutrino cooling `non_nuc_neu` was evaluated purely at the end-of-step state instead of upstream MESA's trapezoidal time-centering `0.5 * (non_nuc_neu_start(k) + non_nuc_neu(k))` with `0.5 * d_nonnucneu_dlnd(k)` and `0.5 * d_nonnucneu_dlnT(k)`. Added `non_nuc_neu_start` to `StarModel` (populated in `save_start_values` after `do_neu`) and restored `0.5` time-centering on both the energy residual and its `StarAdOrder1` Jacobian partials in `do1_energy_eqn`. | `tests::test_do1_energy_eqn_time_centers_non_nuc_neu` and `tests::test_henyey_jacobian_blocks_match_central_finite_differences` |
+
+---
+
 ## Programmatic Golden Comparison Example
 
 ```python

@@ -43,6 +43,9 @@ plugins:
           paths: [src]
           options:
             docstring_style: google
+            docstring_options:
+              warn_unknown_params: false
+              warn_missing_types: false
             show_source: false
             show_root_heading: true
             show_symbol_type_heading: true
@@ -103,23 +106,38 @@ nav:
       - Custom Physics Hooks: guides/custom-physics-hooks.md
       - Backends & CPU/GPU Performance: guides/backends-and-performance.md
       - Diagnostic Plotting: guides/diagnostic-plotting.md
-  - Benchmarks & Verification:
-      - Numerics, Splines, Neutrinos & Convection: design/wave-1-benchmark-report.md
-      - Composition, Ionization & Photometry: design/wave-2-benchmark-report.md
-      - Analytical & Single-Table EOS: design/wave-3a-benchmark-report.md
-      - 4D EOS, Opacity, Networks & Atmospheres: design/wave-3b-benchmark-report.md
-      - 1D Stellar Structure & Evolution: design/wave-4-benchmark-report.md
-      - Advanced Star, Binaries & Asteroseismology: design/wave-5-benchmark-report.md
-  - API Reference:
-      - Python, PyO3 & JAX Reference: api/index.md
-  - Developer & Specs Archive:
-      - Specifications Overview: design/index.md
-      - Master Scoping & Architecture: design/scoping-and-architecture.md
-      - Wave 0 Infrastructure Specification: design/wave-0-spec.md
-      - Wave 1 Foundation & Microphysics Specification: design/wave-1-spec.md
-      - Wave 1.5 Hybrid Consolidation Specification: design/wave-1-5-spec.md
-      - Wave 2 Atomic & Photometric Specification: design/wave-2-spec.md
-      - Wave 3a Analytical & Single-Table EOS Specification: design/wave-3a-spec.md
-      - Wave 3b 4D Tabulated EOS, Opacity, Rates, Networks & Atmospheres Specification: design/wave-3b-spec.md
-      - Wave 4 1D Stellar Structure & Evolution Specification: design/wave-4-spec.md
-      - Wave 5 Advanced Stellar Physics, Interacting Binaries & Asteroseismology Specification: design/wave-5-spec.md
+  - Verification & Benchmarks:
+      - Overview & Speedup Synthesis: benchmarks/overview.md
+      - Kernel Performance Scorecards: benchmarks/kernel-scorecards.md
+      - Tolerance & Discrepancy Ledger: benchmarks/tolerance-and-discrepancy-ledger.md
+  - Reference:
+      - API Reference:
+          - Package Overview & Dispatch: api/index.md
+          - 1D Stellar Structure & Evolution (star): api/star.md
+          - Interacting Binaries & Accretors (binary): api/binary.md
+          - Asteroseismology & Optimization (astero): api/astero.md
+          - Equations of State (eos): api/eos.md
+          - Opacity, Atmospheres & Photometry (kap, atm, colors): api/opacity-atm-colors.md
+          - Nuclear Networks, Rates & Neutrinos (chem, ionization, neu, rates, net): api/nuclear.md
+          - Foundational Numerics & Convection (constants, math, interp, mtx, num, turb): api/numerics.md
+          - I/O, Schemas, Plotting & Benchmarks (schema, data, testing, plotting, bench): api/io-plotting-bench.md
+      - Glossary, Physical Units & Indexing: reference/glossary-and-units.md
+      - Bibliography & Primary Literature: reference/references.md
+      - FAQ & Troubleshooting: reference/faq.md
+      - Developer & Specifications Archive:
+          - Archive Overview: design/index.md
+          - Master Scoping & Architecture: design/scoping-and-architecture.md
+          - Wave 0 Infrastructure Specification: design/wave-0-spec.md
+          - Wave 1 Foundation & Microphysics Specification: design/wave-1-spec.md
+          - Wave 1.5 Hybrid Consolidation Specification: design/wave-1-5-spec.md
+          - Wave 2 Atomic & Photometric Specification: design/wave-2-spec.md
+          - Wave 3a Analytical & Single-Table EOS Specification: design/wave-3a-spec.md
+          - Wave 3b 4D Tabulated EOS, Opacity, Rates, Networks & Atmospheres Specification: design/wave-3b-spec.md
+          - Wave 4 1D Stellar Structure & Evolution Specification: design/wave-4-spec.md
+          - Wave 5 Advanced Stellar Physics, Interacting Binaries & Asteroseismology Specification: design/wave-5-spec.md
+          - Foundational Numerics & Convection Benchmark Report: design/wave-1-benchmark-report.md
+          - Composition, Ionization & Photometry Benchmark Report: design/wave-2-benchmark-report.md
+          - Analytical & Single-Table EOS Benchmark Report: design/wave-3a-benchmark-report.md
+          - 4D EOS, Opacity, Networks & Atmospheres Benchmark Report: design/wave-3b-benchmark-report.md
+          - 1D Stellar Structure & Evolution Benchmark Report: design/wave-4-benchmark-report.md
+          - Advanced Star, Binaries & Asteroseismology Benchmark Report: design/wave-5-benchmark-report.md

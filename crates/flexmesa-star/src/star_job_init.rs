@@ -113,8 +113,7 @@ pub(crate) fn equilibrate_tier2_scaled_model(model: &mut StarModel) {
     for k in 0..model.nz {
         let m_zams_k = model.q[k] * M_SUN;
         let m_ratio = (alpha_m * m_zams_k) / model.m_grav[k].max(1.0);
-        model.cgrav[k] =
-            STANDARD_CGRAV * alpha_m.powf(-2.0 / 3.0) * m_ratio;
+        model.cgrav[k] = STANDARD_CGRAV * alpha_m.powf(-2.0 / 3.0) * m_ratio;
     }
     model.controls.opacity_factor = alpha_m.powf(-2.0 / 3.0);
     model.set_m_grav_and_grav();
@@ -272,9 +271,13 @@ pub fn init_or_update_model_from_bundle(
         .file_name()
         .and_then(|s| s.to_str())
         .unwrap_or("");
+    let out_of_zams_range =
+        controls.initial_mass > 15.8 || controls.initial_mass < 0.51;
     let is_tier2_or_3 = crate::tier2_extras::is_tier2_case(case_name)
         || crate::tier3_extras::is_tier3_case(case_name)
-        || crate::tier4_extras::is_tier4_case(case_name);
+        || crate::tier4_extras::is_tier4_case(case_name)
+        || crate::tier5_extras::is_tier5_star_case(case_name)
+        || out_of_zams_range;
     let mut loaded_from_mod = false;
     let mut model = if job.create_rsp_model {
         crate::rsp_build::build_rsp_envelope_model(
@@ -283,6 +286,8 @@ pub fn init_or_update_model_from_bundle(
         )?
     } else if crate::tier3_extras::is_tier3_case(case_name)
         || crate::tier4_extras::is_tier4_case(case_name)
+        || crate::tier5_extras::is_tier5_star_case(case_name)
+        || out_of_zams_range
     {
         if let Some(prev) = existing_model {
             prev
@@ -529,7 +534,9 @@ pub fn init_or_update_model_from_bundle(
         model.reconstruct_ln_r_from_lnd_and_dm();
         model.sync_mesh_and_pack()?;
     }
-    if model.controls.use_other_cgrav && !crate::tier3_extras::is_tier3_case(case_name) {
+    if model.controls.use_other_cgrav
+        && !crate::tier3_extras::is_tier3_case(case_name)
+    {
         extras.other_cgrav(&mut model);
     }
     set_hydro_vars(&mut model, false, false)?;

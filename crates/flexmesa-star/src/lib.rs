@@ -96,6 +96,7 @@ pub mod tier2_extras;
 pub mod tier3_extras;
 pub mod tier3_physics;
 pub mod tier4_extras;
+pub mod tier5_extras;
 pub mod timestep;
 pub mod winds;
 pub mod zams;
@@ -239,6 +240,13 @@ pub use tier4_extras::{
     run_dev_cases_suite, run_tier4_star_suite, run_tier4_suite,
     verify_tier4_case_assertions, Tier4CaseExtras, TIER4_ACTIVE_STAR_CASES,
     TIER4_ASTERO_CASES, TIER4_DEV_CASES, TIER4_STAR_CASES,
+};
+pub use tier5_extras::{
+    all_active_star_case_names, eval_grafener_kudritzki_wind_msun_yr,
+    eval_overshoot_dbl_exp, eval_xtrans_mesh_factor, is_tier5_star_case,
+    run_all_active_star_suite, run_tier5_star_suite,
+    verify_step_redo_bit_parity, verify_tier5_star_case_assertions,
+    write_relax_profile_files, Tier5StarCaseExtras, TIER5_STAR_CASES,
 };
 pub use timestep::{
     eval_dx_nuc_drop_ratio, eval_h211_factor, eval_varcontrol, filter_limit,

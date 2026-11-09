@@ -333,7 +333,15 @@ fn test_e2e_4_tier4_pulsation_astero_and_dev_cases() {
     let (dnu, numax) = eval_astero_scaling_dnu_numax_uhz(&model);
     assert!(dnu > 50.0 && numax > 1000.0);
 
-    let lina = eval_rsp_lina_modes(4.165, 1438.8, 6050.0, 0.73, 0.007, 3, Some(3.92305));
+    let lina = eval_rsp_lina_modes(
+        4.165,
+        1438.8,
+        6050.0,
+        0.73,
+        0.007,
+        3,
+        Some(3.92305),
+    );
     assert_eq!(lina.len(), 3);
     assert!((lina[0].period_days - 3.92305).abs() < 1.0e-12);
     assert!(lina[1].period_days < lina[0].period_days);
@@ -342,22 +350,86 @@ fn test_e2e_4_tier4_pulsation_astero_and_dev_cases() {
     if let Ok(mesa_dir) = std::env::var("MESA_DIR") {
         let base = Path::new(&mesa_dir);
         if base.join("star").join("test_suite").is_dir() {
-            let star_reps =
-                run_tier4_star_suite(base, true, Some(2), true).expect("tier4 star");
+            let star_reps = run_tier4_star_suite(base, true, Some(2), true)
+                .expect("tier4 star");
             assert_eq!(star_reps.len(), 16);
-            assert!(star_reps.iter().all(|r| r.passed && r.photo_restart_verified));
+            assert!(star_reps
+                .iter()
+                .all(|r| r.passed && r.photo_restart_verified));
         }
         if base.join("astero").join("test_suite").is_dir() {
-            let astero_reps =
-                run_astero_suite(base, true, Some(2), true).expect("tier4 astero");
+            let astero_reps = run_astero_suite(base, true, Some(2), true)
+                .expect("tier4 astero");
             assert_eq!(astero_reps.len(), 8);
-            assert!(astero_reps.iter().all(|r| r.passed && r.photo_restart_verified));
+            assert!(astero_reps
+                .iter()
+                .all(|r| r.passed && r.photo_restart_verified));
         }
         if base.join("star").join("dev_cases_star_to_RSP2").is_dir() {
-            let dev_reps =
-                run_dev_cases_suite(base, true, Some(2), true).expect("tier4 dev");
+            let dev_reps = run_dev_cases_suite(base, true, Some(2), true)
+                .expect("tier4 dev");
             assert_eq!(dev_reps.len(), 32);
-            assert!(dev_reps.iter().all(|r| r.passed && r.photo_restart_verified));
+            assert!(dev_reps
+                .iter()
+                .all(|r| r.passed && r.photo_restart_verified));
+        }
+    }
+}
+
+#[test]
+fn test_e2e_5_tier5_star_hooks_and_91_active_star_inventory() {
+    use std::path::Path;
+
+    assert_eq!(TIER5_STAR_CASES.len(), 4);
+    assert_eq!(all_active_star_case_names().len(), 91);
+    assert!(is_tier5_star_case("check_redo"));
+    assert!(is_tier5_star_case("other_physics_hooks"));
+    assert!(is_tier5_star_case("relax_composition_j_entropy"));
+    assert!(is_tier5_star_case("timing"));
+
+    let (d_ov1, vc_ov1) = eval_overshoot_dbl_exp(
+        1.0e9, 1.0e14, 1.0e5, 0.002, 0.015, 0.005, 1.0e2, 2.0e7,
+    );
+    let (d_ov2, _) = eval_overshoot_dbl_exp(
+        1.0e9, 1.0e14, 1.0e5, 0.002, 0.015, 0.005, 1.0e2, 8.0e7,
+    );
+    assert!(d_ov1 > d_ov2 && d_ov2 > 0.0 && vc_ov1 > 0.0);
+
+    let mdot_gk = eval_grafener_kudritzki_wind_msun_yr(
+        1.0e6 * 3.828e33,
+        60.0 * flexmesa_const::M_SUN,
+        30.0 * flexmesa_const::R_SUN,
+        40_000.0,
+        0.7,
+        0.28,
+        0.02,
+        0.1,
+    );
+    assert!(mdot_gk < 0.0 && mdot_gk.is_finite());
+
+    let mut model =
+        load_zams_model(StarControls::default(), StarJobControls::default())
+            .expect("zams");
+    set_hydro_vars(&mut model, false, false).expect("hydro_vars");
+    let (c1, c2) = verify_step_redo_bit_parity(&model).expect("redo parity");
+    assert_eq!(c1, c2);
+
+    if let Ok(mesa_dir) = std::env::var("MESA_DIR") {
+        let base = Path::new(&mesa_dir);
+        if base.join("star").join("test_suite").is_dir() {
+            let tier5_reps =
+                run_tier5_star_suite(base, Some(2), true).expect("tier5 star");
+            assert_eq!(tier5_reps.len(), 4);
+            for r in &tier5_reps {
+                assert!(
+                    r.passed && r.photo_restart_verified,
+                    "tier5 case {} failed: passed={}, assertions={}, restart={}",
+                    r.case_name,
+                    r.passed,
+                    r.assertions_passed,
+                    r.photo_restart_verified
+                );
+            }
         }
     }
 }

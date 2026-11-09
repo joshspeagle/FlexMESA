@@ -23,12 +23,11 @@
 //! sharing the same mixing classification with $g_k + g_{k+1} < 0.45$ and
 //! $\Delta q_k + \Delta q_{k+1} \le \Delta q_{\max}$ are merged.
 
-use flexmesa_const::{FOUR_PI, LN10, M_SUN, R_SUN};
+use flexmesa_const::{LN10, M_SUN, R_SUN};
 
 use crate::controls::StarError;
 use crate::hydro_vars::set_hydro_vars;
 use crate::model::StarModel;
-use crate::zams::interp_q;
 
 /// Weights and scale parameters for the adaptive mesh spacing functions
 /// (`mesh_functions.f90`).
@@ -67,8 +66,8 @@ impl Default for MeshFunctionConfig {
             r_function_param: 1.0e-4,
             m_function_weight: 0.0,
             m_function_param: 1.0e-2,
-            grad_function_weight: 0.0,
-            xa_function_weight: 0.0,
+            grad_function_weight: 10.0,
+            xa_function_weight: 20.0,
             xa_function_param: 1.0e-3,
             min_dq: 1.0e-12,
             max_dq: 1.0e-1,
@@ -231,17 +230,15 @@ pub fn remap_onto_dq(
         )));
     }
 
-    let dq_old = model.dq.clone();
     let xq_old = model.xq.clone();
     let xa_old = model.xa.clone();
     let e_old = model.energy.clone();
-
-    let lnd_new = interp_q(&dq_old, &model.lnd, dq_new)?;
-    let lnt_new = interp_q(&dq_old, &model.ln_t, dq_new)?;
-    let lum_new = interp_q(&dq_old, &model.lum, dq_new)?;
-    let v_new = interp_q(&dq_old, &model.v, dq_new)?;
-    let u_new = interp_q(&dq_old, &model.u, dq_new)?;
-    let omega_new = interp_q(&dq_old, &model.omega, dq_new)?;
+    let lnd_old = model.lnd.clone();
+    let lnt_old = model.ln_t.clone();
+    let lum_old = model.lum.clone();
+    let v_old = model.v.clone();
+    let u_old = model.u.clone();
+    let omega_old = model.omega.clone();
 
     model.resize_zones(nz_new);
     model.dq.copy_from_slice(dq_new);
@@ -250,14 +247,9 @@ pub fn remap_onto_dq(
     model.set_xqs();
     model.set_m_and_dm();
 
-    model.lnd.copy_from_slice(&lnd_new);
-    model.ln_t.copy_from_slice(&lnt_new);
-    model.lum.copy_from_slice(&lum_new);
-    model.v.copy_from_slice(&v_new);
-    model.u.copy_from_slice(&u_new);
-    model.omega.copy_from_slice(&omega_new);
-
-    // O(nz) two-pointer conservative overlap projection of `xa` and `energy`.
+    // O(nz) two-pointer conservative overlap projection in `xq` so unsplit
+    // zones are preserved to 0 ULP and thin surface zones avoid `1 - xq`
+    // cancellation.
     let mut accum = vec![0.0; species];
     let mut kk_start = 0_usize;
     for k in 0..nz_new {
@@ -266,6 +258,12 @@ pub fn remap_onto_dq(
         let dx = (a1 - a0).max(1.0e-99);
         accum.fill(0.0);
         let mut e_acc = 0.0;
+        let mut lnd_acc = 0.0;
+        let mut lnt_acc = 0.0;
+        let mut lum_acc = 0.0;
+        let mut v_acc = 0.0;
+        let mut u_acc = 0.0;
+        let mut omega_acc = 0.0;
 
         while kk_start + 1 < nz_old && xq_old[kk_start + 1] <= a0 {
             kk_start += 1;
@@ -282,6 +280,12 @@ pub fn remap_onto_dq(
                     accum[j] += ov * xa_old[kk * species + j];
                 }
                 e_acc += ov * e_old[kk];
+                lnd_acc += ov * lnd_old[kk];
+                lnt_acc += ov * lnt_old[kk];
+                lum_acc += ov * lum_old[kk];
+                v_acc += ov * v_old[kk];
+                u_acc += ov * u_old[kk];
+                omega_acc += ov * omega_old[kk];
             }
         }
         let mut sum_x = 0.0;
@@ -296,16 +300,15 @@ pub fn remap_onto_dq(
             }
         }
         model.energy[k] = e_acc / dx;
+        model.lnd[k] = lnd_acc / dx;
+        model.ln_t[k] = lnt_acc / dx;
+        model.lum[k] = lum_acc / dx;
+        model.v[k] = v_acc / dx;
+        model.u[k] = u_acc / dx;
+        model.omega[k] = omega_acc / dx;
     }
 
-    // Reconstruct face radii `ln_r` from cell densities `lnd` and masses `dm`
-    // so the continuity equation `dr^3 = 3 dm / (4 pi rho)` holds identically.
-    let mut r3 = model.r_center.powi(3);
-    for k in (0..nz_new).rev() {
-        let rho_k = model.lnd[k].exp().max(1.0e-30);
-        r3 += 3.0 * model.dm[k] / (FOUR_PI * rho_k);
-        model.ln_r[k] = r3.max(1.0).cbrt().ln();
-    }
+    model.reconstruct_ln_r_from_lnd_and_dm();
 
     let (age_old, dt_old, mstar_old) =
         (model.star_age_old, model.dt_old, model.mstar_old);

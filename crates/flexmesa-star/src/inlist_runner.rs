@@ -21,6 +21,9 @@ use crate::model_io::{
 };
 use crate::star_job_init::init_or_update_model_from_bundle;
 use crate::termination::check_termination_limits_with_history;
+use crate::tier1_extras::{
+    is_tier1_case, verify_tier1_case_assertions, Tier1CaseExtras,
+};
 
 /// Control flow directive returned by [`StarExtras`] step hooks (`keep_going`,
 /// `retry`, `terminate` in `star/public/star_def.inc`).
@@ -176,6 +179,12 @@ pub struct StageRunReport {
 pub struct CaseRunReport {
     /// Case directory name (e.g. `"1M_pre_ms_to_wd"`).
     pub case_name: String,
+    /// Suite tier number (`1` for Tier 1 cases, `0` otherwise).
+    pub tier: usize,
+    /// Whether the case passed execution, physical assertions, and restart parity.
+    pub passed: bool,
+    /// Final stage termination code string.
+    pub termination_code: String,
     /// Per-stage execution reports in chronological order.
     pub stages: Vec<StageRunReport>,
     /// Total evolutionary steps across all stages.
@@ -186,8 +195,26 @@ pub struct CaseRunReport {
     pub total_retries: usize,
     /// Total wall-clock runtime in seconds (`s`).
     pub total_runtime_sec: f64,
+    /// Total wall-clock runtime in milliseconds (`ms`).
+    pub wall_time_ms: f64,
+    /// Final effective temperature $T_{\mathrm{eff}}$ (`K`).
+    pub final_teff: f64,
+    /// Final $\log_{10}(L / L_\odot)$.
+    pub final_log_l: f64,
+    /// Final $\log_{10}(R / R_\odot)$.
+    pub final_log_r: f64,
+    /// Final central $\log_{10} T_c$ (`K`).
+    pub final_log_tc: f64,
+    /// Final central $\log_{10} \rho_c$ ($\mathrm{g\,cm^{-3}}$).
+    pub final_log_rhoc: f64,
+    /// Final central ${}^1\mathrm{H}$ mass fraction $X_{\mathrm{c,H1}}$.
+    pub final_center_h1: f64,
+    /// Final central ${}^4\mathrm{He}$ mass fraction $X_{\mathrm{c,He4}}$.
+    pub final_center_he4: f64,
     /// Whether bit-identical `.photo` restart parity passed.
     pub photo_restart_verified: bool,
+    /// Whether post-run physical assertions passed.
+    pub assertions_passed: bool,
 }
 
 /// Executes a single `inlist` stage on `model`, stepping until either a
@@ -237,18 +264,16 @@ pub fn run_inlist_stage(
             total_newton_iterations += step_rep.iterations;
             total_retries += step_rep.retries;
 
+            let check_dir = extras.extras_check_model(model);
+            let finish_dir = extras.extras_finish_step(model);
             let hr = extract_history_row(model);
             history_rows.push(hr);
 
-            if let ExtrasDirective::Terminate(reason) =
-                extras.extras_check_model(model)
-            {
+            if let ExtrasDirective::Terminate(reason) = check_dir {
                 termination_code = reason;
                 break;
             }
-            if let ExtrasDirective::Terminate(reason) =
-                extras.extras_finish_step(model)
-            {
+            if let ExtrasDirective::Terminate(reason) = finish_dir {
                 termination_code = reason;
                 break;
             }
@@ -320,6 +345,8 @@ pub fn verify_photo_restart_parity(
     restarted.eos_config = continued.eos_config;
     restarted.kap_config = continued.kap_config.clone();
     set_hydro_vars(&mut restarted, false, false)?;
+    let dt_rest = restarted.dt;
+    crate::struct_burn_mix::refresh_mixing_state(&mut restarted, dt_rest, &[]);
     restarted.save_start_values();
 
     for _ in 0..n_verify_steps {
@@ -389,10 +416,14 @@ pub fn run_test_suite_case(
                 }
                 let bundle = InlistBundle::from_file(&inlist_path)?;
                 let use_tov = bundle.controls.use_other_cgrav;
+                let is_t1 = is_tier1_case(&case_name);
                 let mut default_extras = DefaultStarExtras;
                 let mut tov_extras = TovGrStarExtras;
+                let mut tier1_extras = Tier1CaseExtras::new(&case_name);
                 let extras: &mut dyn StarExtras = if use_tov {
                     &mut tov_extras
+                } else if is_t1 {
+                    &mut tier1_extras
                 } else {
                     &mut default_extras
                 };
@@ -436,13 +467,65 @@ pub fn run_test_suite_case(
         }
     }
 
+    let runtime_sec = t0.elapsed().as_secs_f64();
+    let tier = usize::from(is_tier1_case(&case_name));
+    let assertions_passed = current_model.as_ref().is_some_and(|m| {
+        if tier == 1 {
+            verify_tier1_case_assertions(m, &case_name)
+        } else {
+            m.nz >= 2 && m.teff.is_finite() && m.teff > 0.0
+        }
+    });
+    let final_hr = stage_reports
+        .last()
+        .map(|s| s.final_history)
+        .or_else(|| current_model.as_ref().map(extract_history_row));
+    let termination_code = stage_reports
+        .last()
+        .map_or_else(|| String::from("completed"), |s| s.termination_code.clone());
+    let (
+        final_teff,
+        final_log_l,
+        final_log_r,
+        final_log_tc,
+        final_log_rhoc,
+        final_center_h1,
+        final_center_he4,
+    ) = if let Some(hr) = final_hr {
+        (
+            10.0_f64.powf(hr.log_teff),
+            hr.log_l,
+            hr.log_r,
+            hr.log_center_t,
+            hr.log_center_rho,
+            hr.center_h1,
+            hr.center_he4,
+        )
+    } else {
+        (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+    };
+    let passed =
+        assertions_passed && (!verify_restart || photo_restart_verified);
+
     Ok(CaseRunReport {
         case_name,
+        tier,
+        passed,
+        termination_code,
         stages: stage_reports,
         total_steps,
         total_newton_iterations: total_newton,
         total_retries,
-        total_runtime_sec: t0.elapsed().as_secs_f64(),
+        total_runtime_sec: runtime_sec,
+        wall_time_ms: runtime_sec * 1000.0,
+        final_teff,
+        final_log_l,
+        final_log_r,
+        final_log_tc,
+        final_log_rhoc,
+        final_center_h1,
+        final_center_he4,
         photo_restart_verified,
+        assertions_passed,
     })
 }

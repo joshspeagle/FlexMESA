@@ -222,13 +222,13 @@ def eval_face_mlt_and_brunt_jax(
     hp = jnp.where(jnp.isfinite(hp_std) & (hp_std <= hp_alt), hp_std, hp_alt)
     lam = mixing_length_alpha * hp
 
-    # Brunt composition term B
+    # Brunt composition term B (use log1p((mu_{k-1} - mu_k) / mu_k) to avoid
+    # catastrophic cancellation when mu_{k-1} ~ mu_k)
     lnp_m1 = jnp.concatenate([ln_peos[:1], ln_peos[:-1]])
     mu_m1 = jnp.concatenate([mu[:1], mu[:-1]])
     dlnp = lnp_m1 - ln_peos
-    dlnmu = jnp.log(jnp.maximum(mu_m1, 1.0e-10)) - jnp.log(
-        jnp.maximum(mu, 1.0e-10)
-    )
+    mu_safe = jnp.maximum(mu, 1.0e-10)
+    dlnmu = jnp.log1p((jnp.maximum(mu_m1, 1.0e-10) - mu_safe) / mu_safe)
     b_raw = (chi_rho_f / chi_t_f) * (
         dlnmu / jnp.where(jnp.abs(dlnp) > 1.0e-14, dlnp, 1.0)
     )

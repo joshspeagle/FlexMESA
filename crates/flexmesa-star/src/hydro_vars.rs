@@ -44,7 +44,7 @@ pub fn do_brunt_b(model: &mut StarModel) {
         }
         let mu_m1 = model.mu[k - 1].max(1.0e-10);
         let mu_00 = model.mu[k].max(1.0e-10);
-        let dln_mu = mu_m1.ln() - mu_00.ln();
+        let dln_mu = ((mu_m1 - mu_00) / mu_00).ln_1p();
         let chi_rho_f = model.interp_val_to_pt(&model.chi_rho, k);
         let chi_t_f = model.interp_val_to_pt(&model.chi_t, k).max(1.0e-10);
         // Ledoux composition gradient term B = (chi_rho / chi_T) * (d ln mu / d ln P)
@@ -296,7 +296,8 @@ pub fn check_for_redo_mlt(model: &mut StarModel) -> Result<(), StarError> {
             model.r[k_bot + 1]
         } else {
             model.r_center
-        };
+        }
+        ;
         let dr = (r_top - r_bot).max(0.0);
         if dr > 0.0 {
             let mut min_lambda = f64::INFINITY;

@@ -51,7 +51,9 @@ jobs:
           ruff check src tests
 
       - name: Build MkDocs Material documentation (strict)
-        run: mkdocs build --strict --site-dir site
+        run: |
+          python scripts/build_docs_figures.py
+          mkdocs build --strict --site-dir site
 
       - name: Run Pytest suite (Safe Rust, PyO3, and JAX parity)
         env:

@@ -309,3 +309,55 @@ fn test_e2e_2_tier2_physics_helpers_and_suite() {
     assert!(v_flame > 0.0 && v_flame.is_finite());
     assert!(q_flame > 0.0 && q_flame <= 1.0);
 }
+
+#[test]
+fn test_e2e_4_tier4_pulsation_astero_and_dev_cases() {
+    use std::path::Path;
+
+    assert_eq!(TIER4_STAR_CASES.len(), 16);
+    assert_eq!(TIER4_ACTIVE_STAR_CASES.len(), 15);
+    assert_eq!(TIER4_ASTERO_CASES.len(), 8);
+    assert_eq!(TIER4_DEV_CASES.len(), 32);
+    assert!(is_tier4_case("gyre_in_mesa_ms"));
+    assert!(is_tier4_case("rsp_Cepheid"));
+    assert!(is_tier4_case("example_astero"));
+    assert!(is_tier4_case("dev_TDC_Cepheid_6M"));
+
+    let mut model =
+        load_zams_model(StarControls::default(), StarJobControls::default())
+            .expect("zams");
+    set_hydro_vars(&mut model, false, false).expect("hydro_vars");
+    let modes = eval_linear_oscillation_modes(&model, 0, &[1, 2, 3]);
+    assert_eq!(modes.len(), 3);
+    assert!(modes[0].freq_hz > 0.0 && modes[1].freq_hz > modes[0].freq_hz);
+    let (dnu, numax) = eval_astero_scaling_dnu_numax_uhz(&model);
+    assert!(dnu > 50.0 && numax > 1000.0);
+
+    let lina = eval_rsp_lina_modes(4.165, 1438.8, 6050.0, 0.73, 0.007, 3, Some(3.92305));
+    assert_eq!(lina.len(), 3);
+    assert!((lina[0].period_days - 3.92305).abs() < 1.0e-12);
+    assert!(lina[1].period_days < lina[0].period_days);
+    assert!(lina[0].growth_rate > 0.0);
+
+    if let Ok(mesa_dir) = std::env::var("MESA_DIR") {
+        let base = Path::new(&mesa_dir);
+        if base.join("star").join("test_suite").is_dir() {
+            let star_reps =
+                run_tier4_star_suite(base, true, Some(2), true).expect("tier4 star");
+            assert_eq!(star_reps.len(), 16);
+            assert!(star_reps.iter().all(|r| r.passed && r.photo_restart_verified));
+        }
+        if base.join("astero").join("test_suite").is_dir() {
+            let astero_reps =
+                run_astero_suite(base, true, Some(2), true).expect("tier4 astero");
+            assert_eq!(astero_reps.len(), 8);
+            assert!(astero_reps.iter().all(|r| r.passed && r.photo_restart_verified));
+        }
+        if base.join("star").join("dev_cases_star_to_RSP2").is_dir() {
+            let dev_reps =
+                run_dev_cases_suite(base, true, Some(2), true).expect("tier4 dev");
+            assert_eq!(dev_reps.len(), 32);
+            assert!(dev_reps.iter().all(|r| r.passed && r.photo_restart_verified));
+        }
+    }
+}

@@ -221,4 +221,13 @@ print(
     f"Exported pulsation payloads: GYRE={len(gyre_text.splitlines())} lines, "
     f"FGONG={len(fgong_text.splitlines())} lines, OSC={len(osc_text.splitlines())} lines"
 )
+
+# 3. Evaluate linear oscillation eigenmodes (GYRE/ADIPLS parity) and RSP LINA periods
+p_modes = star.eval_linear_oscillation_modes(model, 0, [1, 2, 3])
+lina_modes = star.eval_rsp_lina_modes(4.165, 1438.8, 6050.0, 0.73, 0.007, 3)
+rsp_env = star.build_rsp_envelope_model(m_msun=0.65, l_lsun=45.0, teff_k=6700.0)
+print(
+    f"Linear p-modes (l=0, n=1..3): {[round(m['freq_uhz'], 2) for m in p_modes]} uHz; "
+    f"RSP LINA P0={lina_modes[0]['period_days']:.4f} d; RSP env nz={rsp_env.nz}"
+)
 ```

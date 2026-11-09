@@ -27,11 +27,15 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: "pip"
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
+
+      - name: Cache Rust cargo target and registry
+        uses: Swatinem/rust-cache@v2
 
       - name: Run Cargo Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings

@@ -25,6 +25,7 @@ JaxStarState = model.JaxStarState
 StarModel = model.StarModel
 TIER1_CASES = e2e.TIER1_CASES
 TIER2_CASES = e2e.TIER2_CASES
+TIER3_CASES = e2e.TIER3_CASES
 compute_staggered_grid_jax = jax_kernels.compute_staggered_grid_jax
 eval_burgers_velocities_jax = jax_diffusion_rot.eval_burgers_velocities_jax
 eval_caplan_ocp_dstar_jax = jax_diffusion_rot.eval_caplan_ocp_dstar_jax
@@ -60,6 +61,7 @@ parse_rn_stages = e2e.parse_rn_stages
 run_test_suite_case = e2e.run_test_suite_case
 run_tier1_suite = e2e.run_tier1_suite
 run_tier2_suite = e2e.run_tier2_suite
+run_tier3_suite = e2e.run_tier3_suite
 solve_henyey_linear_jax = jax_kernels.solve_henyey_linear_jax
 solve_stationary_rsp2_w_jax = jax_hydro_pulse.solve_stationary_rsp2_w_jax
 yrs_for_init_timestep = model.yrs_for_init_timestep
@@ -67,6 +69,7 @@ yrs_for_init_timestep = model.yrs_for_init_timestep
 __all__ = [
     "TIER1_CASES",
     "TIER2_CASES",
+    "TIER3_CASES",
     "EvolveStepReport",
     "HenyeySolverReport",
     "HenyeySystemResult",
@@ -109,6 +112,7 @@ __all__ = [
     "run_test_suite_case",
     "run_tier1_suite",
     "run_tier2_suite",
+    "run_tier3_suite",
     "solve_henyey_linear_jax",
     "solve_stationary_rsp2_w_jax",
     "yrs_for_init_timestep",

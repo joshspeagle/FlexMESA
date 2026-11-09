@@ -84,6 +84,9 @@ pub mod neu_py;
 /// Tier B bindings for `rates` (nuclear reaction rates, screening, and weak rates).
 #[allow(unsafe_code)]
 pub mod rates_py;
+/// PyO3 bindings for `star` end-to-end `inlist` parsing and `test_suite` runner.
+#[allow(unsafe_code)]
+pub mod star_e2e_py;
 /// Internal helper routines for [`star_py::PyStarModel`].
 #[allow(unsafe_code)]
 pub mod star_helpers_py;
@@ -290,6 +293,7 @@ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     atm_py::register(m)?;
     net_py::register(m)?;
     star_py::register(m)?;
+    star_e2e_py::register(m)?;
     star_wave5_py::register(m)?;
     star_wave5_2_py::register(m)?;
     binary_py::register(m)?;

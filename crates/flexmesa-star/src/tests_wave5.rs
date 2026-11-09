@@ -107,3 +107,99 @@ fn test_wave5_2_riemann_rsp2_and_pulse_exporters_preserve_invariants() {
     let osc_str = export_osc(&model, true);
     assert_eq!(osc_str.lines().count(), 2 + 3 + 5 * n_pts);
 }
+
+#[test]
+fn test_e2e_0_inlist_bundle_net_change_termination_and_photo_restart_parity() {
+    use std::fs;
+
+    // 1. Dynamic network switching preserves total mass fraction sum(X) == 1
+    let mut model =
+        load_zams_model(StarControls::default(), StarJobControls::default())
+            .expect("zams");
+    assert_eq!(model.species, 8);
+    change_model_network(&mut model, "co_burn.net", None)
+        .expect("switch to co_burn.net");
+    assert_eq!(model.species, 9);
+    for k in 0..model.nz {
+        let sum_x: f64 = model.cell_xa(k).iter().sum();
+        assert!((sum_x - 1.0).abs() <= 1.0e-14);
+    }
+
+    // 2. Bit-identical `.photo` restart parity over 2 evolutionary steps
+    let (c_cont, c_rest) =
+        verify_photo_restart_parity(&model, 2).expect("photo restart parity");
+    assert_eq!(c_cont, c_rest);
+
+    // 3. Multi-stage `InlistBundle` + `rn` stage execution in an isolated temp dir
+    let tmp_dir = std::env::temp_dir()
+        .join(format!("flexmesa_e2e0_test_{}", std::process::id()));
+    let _ = fs::create_dir_all(&tmp_dir);
+
+    fs::write(
+        tmp_dir.join("inlist_common"),
+        r"
+&controls
+   initial_mass = 1.0
+   initial_z = 0.02
+   mesh_delta_coeff = 0.0
+/ ! end of controls namelist
+",
+    )
+    .expect("write inlist_common");
+
+    fs::write(
+        tmp_dir.join("inlist_stage1"),
+        r"
+&star_job
+   save_model_when_terminate = .true.
+   save_model_filename = 'stage1_out.mod'
+/ ! end of star_job namelist
+
+&controls
+   read_extra_controls_inlist(1) = .true.
+   extra_controls_inlist_name(1) = 'inlist_common'
+   max_model_number = 3
+/ ! end of controls namelist
+",
+    )
+    .expect("write inlist_stage1");
+
+    fs::write(
+        tmp_dir.join("inlist_stage2"),
+        r"
+&star_job
+   load_saved_model = .true.
+   load_model_filename = 'stage1_out.mod'
+   change_net = .true.
+   new_net_name = 'co_burn.net'
+/ ! end of star_job namelist
+
+&controls
+   read_extra_controls_inlist(1) = .true.
+   extra_controls_inlist_name(1) = 'inlist_common'
+   max_model_number = 5
+/ ! end of controls namelist
+",
+    )
+    .expect("write inlist_stage2");
+
+    fs::write(
+        tmp_dir.join("rn"),
+        r"#!/usr/bin/env bash
+do_one inlist_stage1 stage1_out.mod
+do_one inlist_stage2 final.mod
+",
+    )
+    .expect("write rn");
+
+    let rep = run_test_suite_case(&tmp_dir, true, Some(10), true)
+        .expect("run 2-stage case");
+    assert_eq!(rep.stages.len(), 2);
+    assert_eq!(rep.stages[0].termination_code, "max_model_number");
+    assert_eq!(rep.stages[1].termination_code, "max_model_number");
+    assert!(rep.photo_restart_verified);
+    assert!(tmp_dir.join("stage1_out.mod").exists());
+    assert!(tmp_dir.join("final.mod").exists());
+
+    let _ = fs::remove_dir_all(&tmp_dir);
+}

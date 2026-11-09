@@ -122,3 +122,21 @@ Every choice that another developer could reasonably make differently and that a
 - **Alternatives Rejected**:
   - *Relaxing test tolerances across all channels when an upstream MESA discrepancy affects a subset of channels*: Masks potential regressions in the unaffected channels.
   - *Single-line commit messages*: Leaves the git log without context on why a change was made or how it was verified.
+
+---
+
+## DECISIONS #10: Upstream MESA End-to-End `test_suite` Reproduction (`E2E-0`–`E2E-5`) & Public Documentation Overhaul (`Docs-1`–`Docs-5`)
+
+- **Date**: 2026-11-08
+- **Decision**:
+  1. **Dual-Mode Multi-Stage `test_suite` Runner (`--skip-optional` and `--full-stages`)**: The `FlexMESA` end-to-end `test_suite` harness (`flexmesa.test_suite` and `flexmesa-star::inlist_runner`) parses upstream `rn` scripts (`do_one <inlist> [output_mod] [logs_dir]`) and supports both (a) `--skip-optional` (`MESA_SKIP_OPTIONAL=1`, loading committed upstream `standard_*.mod` checkpoints for fast CI regression testing across all 92 required stages) and (b) `--full-stages` (executing all 217 `do_one` stages end-to-end from Pre-MS/ZAMS without loading pre-baked checkpoints).
+  2. **First-Class `StarExtras` / `BinaryExtras` Trait & Built-In `test_suite` Registry**: Expose a safe callback trait (`StarExtras` in Rust, subclassable/callable protocol in Python) supporting lifecycle hooks (`extras_startup`, `extras_start_step`, `extras_check_model`, `extras_finish_step`, `extras_after_evolve`) and `other_*` physics closures (`other_alpha_mlt`, `other_cgrav`, `other_wind`, `other_torque`, `other_adjust_mdot`, `other_overshooting_scheme`, `other_surface_PT`, `other_neu`, `other_energy`, `other_eps_grav`, `other_momentum_implicit`, `other_kap`), paired with a built-in registry translating the custom `run_star_extras.f90` / `run_binary_extras.f90` logic of the 49 upstream `test_suite` cases that use non-empty hooks.
+  3. **Resolution of Deferred Subsystems Required by `test_suite`**:
+     - **Issue #3 (`pgstar`/`pgbinary`)**: Parse and accept `&pgstar`, `&pgbinary`, and `&astero_pgstar_controls` namelist sections cleanly in `InlistBundle` as no-op GUI settings while redirecting plot output to `flexmesa.plotting`.
+     - **Issue #4 (`GYRE`, `ADIPLS`, `STELLA`)**: Implement a native Safe Rust + JAX adiabatic/non-adiabatic stellar pulsation mode solver (`flexmesa-star::pulse_modes`, solving the 4th-order linearized Dziembowski 1971 oscillation BVP on [`PulsePoint`] grids) and `STELLA` ASCII hydro/abundance export (`export_stella`) so all 10 oscillation `test_suite` cases and `ccsn_IIp` pass end-to-end.
+     - **Issue #5 (`RSP1` / `RSP2`)**: Implement the static nonlinear pulsation envelope builder (`create_RSP_model` / `build_rsp_envelope`) and wire `RSP_flag = .true.` into the coupled `RSP2` turbulent-energy solver so both the 9 active `rsp_*` `test_suite` cases and the 32 `star/dev_cases_*` (`RSP2` and `TDC`) cases run end-to-end.
+  4. **Six-Tab Domain-Organized Public Documentation & Standing `docs-upkeep` Gate**: Overhaul `mkdocs.yml` and `docs/` from an internal wave-numbered porting log into a 6-tab user-centered site (`Getting Started`, `Background & Physics`, `Tutorials`, `User Guides`, `Verification & Benchmarks`, `Reference` with 8 domain-split API pages), and enforce `.claude/rules/docs-upkeep.md`, `tests/test_docs_snippets.py`, and `mkdocs build --strict` prior to merging any PR.
+- **Why**: Complete vindication of the `FlexMESA` rewrite requires reproducing all 107 active upstream MESA `test_suite` cases and 32 `dev_cases_*` from their native directory layouts while providing external scientific users with navigable, domain-organized documentation and executable tutorials.
+- **Alternatives Rejected**:
+  - *Skipping `test_suite` cases that use `run_star_extras.f90` or deferred `RSP`/`GYRE` hooks*: Would leave 58% of the upstream `test_suite` unverified.
+  - *Retaining wave-numbered (`Wave 0`–`Wave 5`) top-level documentation navigation*: Mixes internal engineering chronology with user-facing scientific concepts and API reference.

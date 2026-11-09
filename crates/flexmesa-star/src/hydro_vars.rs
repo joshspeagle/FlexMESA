@@ -198,34 +198,54 @@ fn eval_face_mlt(
     };
     let lambda_f = hp_f * alpha_mlt;
 
-    let mlt_params = MltParams {
-        option: model.controls.mlt_option,
-        mixing_length_alpha: alpha_mlt,
-        henyey_nu: 8.0,
-        henyey_y: 1.0 / 3.0,
-        max_conv_vel: 1.0e99,
-    };
-    let mlt_in = MltInputs {
-        chi_t: chi_t_f,
-        chi_rho: chi_rho_f,
-        cp: cp_f,
-        grav: grav_f,
-        lambda: lambda_f,
-        rho: rho_f,
-        p: p_f,
-        t: t_f,
-        opacity: kap_f,
-        gradr: gradr_f,
-        grada: grada_f,
-        gradl: gradl_f,
-    };
-    let mlt_out = set_mlt(&mlt_params, &mlt_in).map_err(|e| {
-        StarError::MicrophysicsError(format!("set_mlt failed at face {k}: {e}"))
-    })?;
-
-    // Convective conductivity cdc = (4*pi*r^2*rho)^2 * vc * Lambda / 3
-    let area_rho = FOUR_PI * r_k * r_k * rho_f;
-    let cdc_f = area_rho * area_rho * mlt_out.conv_vel * lambda_f / 3.0;
+    let (grad_t_f, conv_vel_f, d_f, cdc_f, gamma_val, mix_type) =
+        if alpha_mlt <= 0.0 {
+            (
+                gradr_f,
+                StarAdOrder1::ZERO,
+                StarAdOrder1::ZERO,
+                StarAdOrder1::ZERO,
+                0.0,
+                flexmesa_const::MixingType::NoMixing,
+            )
+        } else {
+            let mlt_params = MltParams {
+                option: model.controls.mlt_option,
+                mixing_length_alpha: alpha_mlt,
+                henyey_nu: 8.0,
+                henyey_y: 1.0 / 3.0,
+                max_conv_vel: 1.0e99,
+            };
+            let mlt_in = MltInputs {
+                chi_t: chi_t_f,
+                chi_rho: chi_rho_f,
+                cp: cp_f,
+                grav: grav_f,
+                lambda: lambda_f,
+                rho: rho_f,
+                p: p_f,
+                t: t_f,
+                opacity: kap_f,
+                gradr: gradr_f,
+                grada: grada_f,
+                gradl: gradl_f,
+            };
+            let mlt_out = set_mlt(&mlt_params, &mlt_in).map_err(|e| {
+                StarError::MicrophysicsError(format!(
+                    "set_mlt failed at face {k}: {e}"
+                ))
+            })?;
+            let area_rho = FOUR_PI * r_k * r_k * rho_f;
+            let cdc = area_rho * area_rho * mlt_out.conv_vel * lambda_f / 3.0;
+            (
+                mlt_out.grad_t,
+                mlt_out.conv_vel,
+                mlt_out.d,
+                cdc,
+                mlt_out.gamma.val,
+                mlt_out.mixing_type,
+            )
+        };
 
     model.scale_height[k] = hp_f.val;
     model.scale_height_ad[k] = hp_f;
@@ -233,18 +253,18 @@ fn eval_face_mlt(
     model.gradr_ad[k] = gradr_f;
     model.gradl[k] = gradl_f.val;
     model.gradl_ad[k] = gradl_f;
-    model.gradt[k] = mlt_out.grad_t.val;
-    model.gradt_ad[k] = mlt_out.grad_t;
-    model.mlt_vc[k] = mlt_out.conv_vel.val;
-    model.mlt_vc_ad[k] = mlt_out.conv_vel;
-    model.mlt_d[k] = mlt_out.d.val;
-    model.mlt_d_ad[k] = mlt_out.d;
+    model.gradt[k] = grad_t_f.val;
+    model.gradt_ad[k] = grad_t_f;
+    model.mlt_vc[k] = conv_vel_f.val;
+    model.mlt_vc_ad[k] = conv_vel_f;
+    model.mlt_d[k] = d_f.val;
+    model.mlt_d_ad[k] = d_f;
     model.mlt_cdc[k] = cdc_f.val;
     model.mlt_cdc_ad[k] = cdc_f;
-    model.mlt_gamma[k] = mlt_out.gamma.val;
-    model.mixing_type[k] = mlt_out.mixing_type;
-    model.d_mix[k] = mlt_out.d.val;
-    model.conv_vel[k] = mlt_out.conv_vel.val;
+    model.mlt_gamma[k] = gamma_val;
+    model.mixing_type[k] = mix_type;
+    model.d_mix[k] = d_f.val;
+    model.conv_vel[k] = conv_vel_f.val;
 
     Ok(())
 }

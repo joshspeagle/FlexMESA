@@ -42,7 +42,7 @@ jobs:
       - name: Install Python build and test dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install maturin pytest hypothesis ruff mkdocs-material "mkdocstrings[python]"
+          python -m pip install maturin pytest pytest-xdist hypothesis ruff mkdocs-material "mkdocstrings[python]"
           python -m pip install --no-build-isolation -e ".[test,docs]"
 
       - name: Run Ruff formatter and linter
@@ -60,4 +60,4 @@ jobs:
           OMP_NUM_THREADS: "4"
           OPENBLAS_NUM_THREADS: "4"
           MKL_NUM_THREADS: "4"
-        run: pytest -v
+        run: pytest -n auto -v

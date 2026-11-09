@@ -418,11 +418,39 @@ pub fn parse_rn_stages(
                 .map_or_else(|| String::from("inlist"), |s| (*s).to_string());
             let output_mod = toks.get(2).map(|s| (*s).to_string());
             let logs_dir = toks.get(3).map(|s| (*s).to_string());
-            stages.push(RnStage::DoOne {
-                inlist,
-                output_mod,
-                logs_dir,
-            });
+            if inlist == "inlist"
+                && !case_dir.join("inlist").exists()
+                && case_dir.join("inlist_multi_stars_job").exists()
+            {
+                let ms_path = case_dir.join("inlist_multi_stars_job");
+                let mut names = Vec::new();
+                if let Ok(blocks) = parse_namelist_file(&ms_path) {
+                    let mut sec = SectionControls::default();
+                    for b in &blocks {
+                        for a in &b.assignments {
+                            sec.insert(a);
+                        }
+                    }
+                    names = sec.get_indexed_strings("inlist_names");
+                }
+                if names.is_empty() {
+                    names.push(String::from("inlist_star1_header"));
+                    names.push(String::from("inlist_star2_header"));
+                }
+                for n in names {
+                    stages.push(RnStage::DoOne {
+                        inlist: n,
+                        output_mod: None,
+                        logs_dir: None,
+                    });
+                }
+            } else {
+                stages.push(RnStage::DoOne {
+                    inlist,
+                    output_mod,
+                    logs_dir,
+                });
+            }
         } else if toks[0] == "cp" && toks.len() >= 3 {
             stages.push(RnStage::CopyCheckpoint {
                 src_mod: toks[1].to_string(),

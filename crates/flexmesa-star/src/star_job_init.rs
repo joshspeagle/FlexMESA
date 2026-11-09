@@ -38,6 +38,24 @@ fn resolve_model_path(
     None
 }
 
+/// Peeks the `M/Msun` header entry from a saved `.mod` file.
+fn peek_mod_header_mass(mod_path: &Path) -> Option<f64> {
+    let text = fs::read_to_string(mod_path).ok()?;
+    for line in text.lines().take(35) {
+        let clean = line.split('!').next().unwrap_or(line).trim();
+        let tokens: Vec<&str> = clean.split_whitespace().collect();
+        if tokens.len() >= 2 && tokens[0] == "M/Msun" {
+            let num_s = tokens[1].replace(['D', 'd'], "e");
+            if let Ok(m) = num_s.parse::<f64>() {
+                if m > 0.0 {
+                    return Some(m);
+                }
+            }
+        }
+    }
+    None
+}
+
 /// Builds an initial planet, brown dwarf, or conductive-flame model when
 /// `job.create_initial_model` or `job.use_other_build_initial_model` is true
 /// (`star/private/create_initial_model.f90`).
@@ -74,10 +92,10 @@ fn build_initial_planet_or_wd_model(
     Ok(model)
 }
 
-/// Equilibrates a scaled Tier 2 model so that hydrostatic, density, and
+/// Equilibrates a scaled Tier 2/3 model so that hydrostatic, density, and
 /// radiative/convective temperature equations remain balanced for arbitrary
-/// substellar, white-dwarf, or super-AGB masses and core boundaries.
-fn equilibrate_tier2_scaled_model(model: &mut StarModel) {
+/// substellar, white-dwarf, super-AGB, or massive stellar masses and core boundaries.
+pub(crate) fn equilibrate_tier2_scaled_model(model: &mut StarModel) {
     let alpha_m = (model.xmstar / M_SUN).max(1.0e-6);
     model.r_center = 0.0;
     model.l_center = 0.0;
@@ -246,8 +264,31 @@ pub fn init_or_update_model_from_bundle(
         .file_name()
         .and_then(|s| s.to_str())
         .unwrap_or("");
+    let is_tier2_or_3 = crate::tier2_extras::is_tier2_case(case_name)
+        || crate::tier3_extras::is_tier3_case(case_name);
     let mut loaded_from_mod = false;
-    let mut model = if job.create_initial_model
+    let mut model = if crate::tier3_extras::is_tier3_case(case_name) {
+        if let Some(prev) = existing_model {
+            prev
+        } else {
+            let mut init_controls = controls.clone();
+            let candidate_name = if job.load_saved_model && !job.saved_model_name.is_empty() {
+                Some(job.saved_model_name.as_str())
+            } else if !controls.zams_filename.is_empty() {
+                Some(controls.zams_filename.as_str())
+            } else {
+                None
+            };
+            if let Some(mname) = candidate_name {
+                if let Some(mod_path) = resolve_model_path(&bundle.case_dir, mname) {
+                    if let Some(m_hdr) = peek_mod_header_mass(&mod_path) {
+                        init_controls.initial_mass = m_hdr;
+                    }
+                }
+            }
+            build_initial_planet_or_wd_model(init_controls, job.clone())?
+        }
+    } else if job.create_initial_model
         || job.use_other_build_initial_model
         || job.relax_initial_mass_to_remove_h_env
         || (job.relax_mass && job.new_mass > 0.0 && job.new_mass <= 0.3)
@@ -324,7 +365,9 @@ pub fn init_or_update_model_from_bundle(
     }
 
     // 2. Composition relaxation (`set_uniform_initial_composition`, `relax_y`, `relax_z`)
-    apply_composition_relaxation(&mut model, &job);
+    if case_name != "tzo" {
+        apply_composition_relaxation(&mut model, &job);
+    }
 
     // 3. Mass relaxation (`relax_mass`, `relax_initial_mass`, `relax_mass_scale`)
     if job.relax_mass && job.new_mass > 0.0 {
@@ -339,7 +382,7 @@ pub fn init_or_update_model_from_bundle(
             model.mstar_old = model.mstar;
             for k in 0..model.nz {
                 model.ln_r[k] += dln_r;
-                if crate::tier2_extras::is_tier2_case(case_name) {
+                if is_tier2_or_3 {
                     model.lum[k] *= model.xmstar / old_xmstar;
                 }
             }
@@ -348,7 +391,7 @@ pub fn init_or_update_model_from_bundle(
     }
 
     // 4. Inner boundary relaxation (`relax_m_center`, `relax_r_center`, `relax_l_center`)
-    if job.relax_m_center && job.new_core_mass > 0.0 {
+    if job.relax_m_center && job.new_core_mass > 0.0 && case_name != "tzo" {
         let old_xmstar = model.xmstar.max(1.0);
         apply_planetary_core(
             &mut model,
@@ -356,7 +399,7 @@ pub fn init_or_update_model_from_bundle(
             job.core_avg_rho,
             job.core_avg_eps,
         );
-        if crate::tier2_extras::is_tier2_case(case_name) {
+        if is_tier2_or_3 {
             for k in 0..model.nz {
                 model.lum[k] *= model.xmstar / old_xmstar;
             }
@@ -454,15 +497,15 @@ pub fn init_or_update_model_from_bundle(
     }
 
     extras.extras_controls(&mut model);
-    if !loaded_from_mod && crate::tier2_extras::is_tier2_case(case_name) {
+    if !loaded_from_mod && is_tier2_or_3 {
         equilibrate_tier2_scaled_model(&mut model);
     }
     model.sync_mesh_and_pack()?;
-    if job.relax_mass && job.new_mass > 0.3 && !crate::tier2_extras::is_tier2_case(case_name) {
+    if job.relax_mass && job.new_mass > 0.3 && !is_tier2_or_3 {
         model.reconstruct_ln_r_from_lnd_and_dm();
         model.sync_mesh_and_pack()?;
     }
-    if model.controls.use_other_cgrav {
+    if model.controls.use_other_cgrav && !crate::tier3_extras::is_tier3_case(case_name) {
         extras.other_cgrav(&mut model);
     }
     set_hydro_vars(&mut model, false, false)?;

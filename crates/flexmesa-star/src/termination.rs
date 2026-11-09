@@ -338,6 +338,67 @@ pub fn check_termination_limits_with_history(
     if c.stop_at_phase_tp_agb && co_core_m > 0.45 && power_he_lsun > 1.0e3 {
         return Some(String::from("stop_at_phase_TP_AGB"));
     }
+    if c.stop_at_phase_c_burn
+        && hr.center_he4 < 1.0e-2
+        && (hr.log_center_t >= 8.5 || power_nuc_lsun >= 1.0)
+    {
+        return Some(String::from("stop_at_phase_C_burn"));
+    }
+    if c.stop_at_phase_ne_burn && hr.log_center_t >= 9.0 {
+        return Some(String::from("stop_at_phase_Ne_burn"));
+    }
+    if c.stop_at_phase_o_burn && hr.log_center_t >= 9.15 {
+        return Some(String::from("stop_at_phase_O_burn"));
+    }
+
+    if let Some(lim) = c.gamma_center_limit {
+        if model.gam[nz - 1] >= lim {
+            return Some(String::from("gamma_center_limit"));
+        }
+    }
+    if let Some(lim) = c.v_surf_div_v_esc_limit {
+        let v_surf = model.v.first().copied().unwrap_or(0.0).abs();
+        let r_surf = model.r[0].max(1.0);
+        let v_esc = (2.0 * STANDARD_CGRAV * model.mstar.max(1.0) / r_surf)
+            .sqrt()
+            .max(1.0e-30);
+        if v_surf / v_esc >= lim {
+            return Some(String::from("v_surf_div_v_esc_limit"));
+        }
+    }
+    if let Some(lim) = c.surf_omega_div_omega_crit_limit {
+        let omega_surf = model.omega.first().copied().unwrap_or(0.0).abs();
+        let r_surf = model.r[0].max(1.0);
+        let omega_crit = (STANDARD_CGRAV * model.mstar.max(1.0)
+            / r_surf.powi(3))
+        .sqrt()
+        .max(1.0e-30);
+        if omega_surf / omega_crit >= lim {
+            return Some(String::from("surf_omega_div_omega_crit_limit"));
+        }
+    }
+    if let Some(lim) = c.conv_core_gap_dq_limit {
+        let mut last_conv_q: Option<f64> = None;
+        let mut in_conv = false;
+        for k in (0..nz).rev() {
+            let is_conv = model.d_mix[k] > 0.0;
+            if is_conv {
+                if !in_conv {
+                    if let Some(q_prev) = last_conv_q {
+                        if (model.q[k] - q_prev).abs() <= lim {
+                            return Some(String::from(
+                                "conv_core_gap_dq_limit",
+                            ));
+                        }
+                    }
+                }
+                last_conv_q = Some(model.q[k]);
+                in_conv = true;
+            } else {
+                in_conv = false;
+            }
+        }
+    }
 
     None
 }

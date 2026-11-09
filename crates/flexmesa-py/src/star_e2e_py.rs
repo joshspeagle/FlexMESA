@@ -6,13 +6,19 @@
 use std::path::Path;
 
 use flexmesa_star::{
-    eval_conductive_flame_state, eval_model_colors,
-    eval_planetary_irradiation_heating, eval_solar_calibration_objective,
+    eval_conductive_flame_state, eval_duffell_rti_shock_state,
+    eval_fe_core_infall_state, eval_hot_cool_blended_wind_mdot,
+    eval_magnetic_braking_torque, eval_model_colors,
+    eval_pair_instability_gamma1_and_energy,
+    eval_planetary_irradiation_heating, eval_roche_gravity_darkening,
+    eval_solar_calibration_objective, eval_spruit_tayler_dynamo_diagnostics,
     eval_starspot_effective_luminosity, eval_t_tau_gradr_factor,
-    eval_wd_phase_separation, nelder_mead_solar_calibration_step,
-    parse_rn_stages, run_test_suite_case, run_tier1_suite, run_tier2_suite,
-    verify_photo_restart_parity, AtmTTauRelation, CaseRunReport, InlistBundle,
-    RnStage, StarError, TIER1_CASES, TIER2_CASES,
+    eval_tov_effective_cgrav, eval_tzo_core_accretion_step,
+    eval_wd_phase_separation, export_stella_ascii,
+    nelder_mead_solar_calibration_step, parse_rn_stages, run_case_list,
+    run_test_suite_case, verify_photo_restart_parity, AtmTTauRelation,
+    CaseRunReport, InlistBundle, RnStage, StarError, TIER1_CASES, TIER2_CASES,
+    TIER3_CASES,
 };
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
@@ -185,6 +191,30 @@ pub fn star_run_test_suite_case<'py>(
     case_report_to_pydict(py, &rep)
 }
 
+fn run_suite_to_pylist<'py>(
+    py: Python<'py>,
+    mesa_dir: &str,
+    cases: &'static [&'static str],
+    max_steps_per_stage: Option<usize>,
+    verify_restart: bool,
+) -> PyResult<Bound<'py, PyList>> {
+    let reports = py
+        .detach(|| {
+            run_case_list(
+                Path::new(mesa_dir),
+                cases,
+                max_steps_per_stage,
+                verify_restart,
+            )
+        })
+        .map_err(to_py_err)?;
+    let list = PyList::empty(py);
+    for rep in &reports {
+        list.append(case_report_to_pydict(py, rep)?)?;
+    }
+    Ok(list)
+}
+
 /// Returns the canonical 33-case Tier 1 `star/test_suite` inventory.
 #[pyfunction]
 pub fn star_tier1_cases() -> Vec<String> {
@@ -200,20 +230,13 @@ pub fn star_run_tier1_suite<'py>(
     max_steps_per_stage: Option<usize>,
     verify_restart: bool,
 ) -> PyResult<Bound<'py, PyList>> {
-    let reports = py
-        .detach(|| {
-            run_tier1_suite(
-                Path::new(mesa_dir),
-                max_steps_per_stage,
-                verify_restart,
-            )
-        })
-        .map_err(to_py_err)?;
-    let list = PyList::empty(py);
-    for rep in &reports {
-        list.append(case_report_to_pydict(py, rep)?)?;
-    }
-    Ok(list)
+    run_suite_to_pylist(
+        py,
+        mesa_dir,
+        &TIER1_CASES,
+        max_steps_per_stage,
+        verify_restart,
+    )
 }
 
 /// Evaluates the YREC starspot effective unspotted luminosity and blocking factor.
@@ -294,20 +317,13 @@ pub fn star_run_tier2_suite<'py>(
     max_steps_per_stage: Option<usize>,
     verify_restart: bool,
 ) -> PyResult<Bound<'py, PyList>> {
-    let reports = py
-        .detach(|| {
-            run_tier2_suite(
-                Path::new(mesa_dir),
-                max_steps_per_stage,
-                verify_restart,
-            )
-        })
-        .map_err(to_py_err)?;
-    let list = PyList::empty(py);
-    for rep in &reports {
-        list.append(case_report_to_pydict(py, rep)?)?;
-    }
-    Ok(list)
+    run_suite_to_pylist(
+        py,
+        mesa_dir,
+        &TIER2_CASES,
+        max_steps_per_stage,
+        verify_restart,
+    )
 }
 
 /// Evaluates planetary irradiation heating profile $\epsilon_{\mathrm{irr}}(k)$
@@ -338,7 +354,126 @@ pub fn star_eval_conductive_flame_state(model: &PyStarModel) -> (f64, f64) {
     eval_conductive_flame_state(&model.inner)
 }
 
-/// Registers `E2E-0`, `E2E-1`, and `E2E-2` runner functions on `flexmesa._rust`.
+/// Returns the canonical 22-case Tier 3 `star/test_suite` inventory.
+#[pyfunction]
+pub fn star_tier3_cases() -> Vec<String> {
+    TIER3_CASES.iter().map(|&s| String::from(s)).collect()
+}
+
+/// Runs all 22 Tier 3 `star/test_suite` cases under `mesa_dir/star/test_suite`.
+#[pyfunction]
+#[pyo3(signature = (mesa_dir, max_steps_per_stage=Some(15), verify_restart=true))]
+pub fn star_run_tier3_suite<'py>(
+    py: Python<'py>,
+    mesa_dir: &str,
+    max_steps_per_stage: Option<usize>,
+    verify_restart: bool,
+) -> PyResult<Bound<'py, PyList>> {
+    run_suite_to_pylist(
+        py,
+        mesa_dir,
+        &TIER3_CASES,
+        max_steps_per_stage,
+        verify_restart,
+    )
+}
+
+/// Evaluates the temperature-blended hot Vink + cool Reimers/Blöcker wind
+/// mass-loss rate $\dot{M}$ ($M_\odot\,\mathrm{yr}^{-1}$) (`hot_cool_wind`).
+#[pyfunction]
+pub fn star_eval_hot_cool_blended_wind_mdot(model: &PyStarModel) -> f64 {
+    eval_hot_cool_blended_wind_mdot(&model.inner)
+}
+
+/// Evaluates Roche oblateness $R_{\mathrm{eq}}/R_{\mathrm{pol}}$, $(f_P, f_T)$,
+/// and Espinosa Lara & Rieutord (2011) equatorial-to-polar $T_{\mathrm{eff}}$
+/// ratio (`high_rot_darkening`).
+#[pyfunction]
+pub fn star_eval_roche_gravity_darkening(
+    omega_div_omega_crit: f64,
+) -> (f64, f64, f64, f64) {
+    eval_roche_gravity_darkening(omega_div_omega_crit)
+}
+
+/// Evaluates the 13 Spruit-Tayler magnetic dynamo and angular momentum
+/// diagnostics (`15M_dynamo`, `20M_z2m2_high_rotation`).
+#[pyfunction]
+pub fn star_eval_spruit_tayler_dynamo_diagnostics(
+    model: &PyStarModel,
+) -> [f64; 13] {
+    eval_spruit_tayler_dynamo_diagnostics(&model.inner)
+}
+
+/// Evaluates the ud-Doula, Owocki & Townsend (2009) magnetospheric wind
+/// braking torque profile $\dot{j}_{\mathrm{extra}}(k)$ and braked surface
+/// rotation velocity (`magnetic_braking`).
+#[pyfunction]
+#[pyo3(signature = (model, b_dipolar_gauss=5000.0))]
+pub fn star_eval_magnetic_braking_torque(
+    model: &PyStarModel,
+    b_dipolar_gauss: f64,
+) -> (Vec<f64>, f64) {
+    eval_magnetic_braking_torque(&model.inner, b_dipolar_gauss)
+}
+
+/// Evaluates iron-group core mass $M_{\mathrm{Fe,core}}$ ($M_\odot$) and peak
+/// core infall speed $v_{\mathrm{infall}}$ ($\mathrm{cm\,s^{-1}}$).
+#[pyfunction]
+pub fn star_eval_fe_core_infall_state(model: &PyStarModel) -> (f64, f64) {
+    eval_fe_core_infall_state(&model.inner)
+}
+
+/// Evaluates supernova shock mass $M_{\mathrm{shock}}$ ($M_\odot$), peak
+/// Duffell (2016) Rayleigh-Taylor diffusivity $D_{\mathrm{RTI}}$, and mixed
+/// $^{1}\mathrm{H}$ mass fraction (`ccsn_IIp`).
+#[pyfunction]
+pub fn star_eval_duffell_rti_shock_state(
+    model: &PyStarModel,
+) -> (f64, f64, f64) {
+    eval_duffell_rti_shock_state(&model.inner)
+}
+
+/// Exports `STELLA` radiation-hydrodynamics `.hyd` and `.abn` ASCII tables
+/// (`ccsn_IIp`, Issue #4).
+#[pyfunction]
+pub fn star_export_stella_ascii(model: &PyStarModel) -> (String, String) {
+    export_stella_ascii(&model.inner)
+}
+
+/// Evaluates pressure-weighted $\langle\Gamma_1 - 4/3\rangle_P$ and total
+/// energy $E_{\mathrm{tot}}$ ($\mathrm{erg}$) (`pisn`, `ppisn`).
+#[pyfunction]
+pub fn star_eval_pair_instability_gamma1_and_energy(
+    model: &PyStarModel,
+) -> (f64, f64) {
+    eval_pair_instability_gamma1_and_energy(&model.inner)
+}
+
+/// Evaluates the post-Newtonian TOV effective gravity profile $G_{\mathrm{eff}}(k)$
+/// (`ns_h`, `ns_he`, `ns_c`, `tzo`).
+#[pyfunction]
+pub fn star_eval_tov_effective_cgrav(model: &PyStarModel) -> Vec<f64> {
+    eval_tov_effective_cgrav(&model.inner)
+}
+
+/// Evaluates Thorne-Zytkow Eddington-limited neutron core accretion (`tzo`).
+#[pyfunction]
+#[pyo3(signature = (model, eta_ledd=1.0, eta_medd=1.0, target_mass_msun=1.4))]
+pub fn star_eval_tzo_core_accretion_step(
+    model: &mut PyStarModel,
+    eta_ledd: f64,
+    eta_medd: f64,
+    target_mass_msun: f64,
+) -> (f64, f64) {
+    eval_tzo_core_accretion_step(
+        &mut model.inner,
+        eta_ledd,
+        eta_medd,
+        target_mass_msun,
+    )
+}
+
+/// Registers `E2E-0`, `E2E-1`, `E2E-2`, and `E2E-3` runner functions on `flexmesa._rust`.
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(star_parse_inlist_bundle, m)?)?;
     m.add_function(wrap_pyfunction!(star_parse_rn_stages, m)?)?;
@@ -362,5 +497,26 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     )?)?;
     m.add_function(wrap_pyfunction!(star_eval_wd_phase_separation, m)?)?;
     m.add_function(wrap_pyfunction!(star_eval_conductive_flame_state, m)?)?;
+    m.add_function(wrap_pyfunction!(star_tier3_cases, m)?)?;
+    m.add_function(wrap_pyfunction!(star_run_tier3_suite, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        star_eval_hot_cool_blended_wind_mdot,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(star_eval_roche_gravity_darkening, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        star_eval_spruit_tayler_dynamo_diagnostics,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(star_eval_magnetic_braking_torque, m)?)?;
+    m.add_function(wrap_pyfunction!(star_eval_fe_core_infall_state, m)?)?;
+    m.add_function(wrap_pyfunction!(star_eval_duffell_rti_shock_state, m)?)?;
+    m.add_function(wrap_pyfunction!(star_export_stella_ascii, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        star_eval_pair_instability_gamma1_and_energy,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(star_eval_tov_effective_cgrav, m)?)?;
+    m.add_function(wrap_pyfunction!(star_eval_tzo_core_accretion_step, m)?)?;
     Ok(())
 }

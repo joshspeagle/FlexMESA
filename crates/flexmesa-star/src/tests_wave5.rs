@@ -261,3 +261,51 @@ fn test_e2e_1_tier1_physics_helpers_and_suite() {
         }
     }
 }
+
+#[test]
+fn test_e2e_2_tier2_physics_helpers_and_suite() {
+    assert_eq!(TIER2_CASES.len(), 17);
+    assert!(is_tier2_case("make_brown_dwarf"));
+    assert!(is_tier2_case("conductive_flame"));
+    assert!(!is_tier2_case("make_zams"));
+
+    let mut model =
+        load_zams_model(StarControls::default(), StarJobControls::default())
+            .expect("zams");
+    set_hydro_vars(&mut model, false, false).expect("hydro_vars");
+
+    let (eps_irr, r_rjup) =
+        eval_planetary_irradiation_heating(&model, 1.0e8, 250.0);
+    assert_eq!(eps_irr.len(), model.nz);
+    assert!(eps_irr[0] > 0.0 && eps_irr[0] <= 1.0e8 / (4.0 * 250.0));
+    assert!(eps_irr[0] >= eps_irr[model.nz - 1]);
+    assert!(r_rjup > 1.0);
+
+    apply_planetary_core(&mut model, 3.0024584e-5, 10.0, 0.0);
+    assert!(model.m_center > 0.0 && model.r_center > 0.0);
+
+    for k in 0..model.nz {
+        model.rho[k] = 1.0e7;
+        model.lnd[k] = (1.0e7_f64).ln();
+        model.t[k] = 3.0e6;
+        model.ln_t[k] = (3.0e6_f64).ln();
+        model.zbar[k] = 8.0;
+        model.z53bar[k] = 8.0_f64.powf(5.0 / 3.0);
+        model.abar[k] = 16.0;
+        model.ye[k] = 0.5;
+    }
+    let (cryst_frac, l_lat) = eval_wd_phase_separation(&mut model, "ONe");
+    assert!(cryst_frac > 0.0 && cryst_frac <= 1.0);
+    assert!(l_lat > 0.0);
+
+    model.controls.mass_change = 1.0e-9;
+    model.controls.accrete_same_as_surface = false;
+    model.controls.accretion_h1 = 0.70;
+    model.controls.accretion_he4 = 0.28;
+    let mdot_net = apply_accretion_composition_and_nova_wind(&mut model);
+    assert!((mdot_net - 1.0e-9).abs() < 1.0e-15);
+
+    let (v_flame, q_flame) = eval_conductive_flame_state(&model);
+    assert!(v_flame > 0.0 && v_flame.is_finite());
+    assert!(q_flame > 0.0 && q_flame <= 1.0);
+}

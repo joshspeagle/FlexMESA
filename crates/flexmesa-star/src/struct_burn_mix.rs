@@ -63,7 +63,11 @@ pub fn op_split_burn_zones(
     let rate_factors = vec![1.0; num_reactions];
     let reaction_qs = vec![0.0; num_reactions];
     let reaction_neu_qs = vec![0.0; num_reactions];
-    let min_logt = model.controls.min_logt_for_net;
+    let min_logt = if species > 12 {
+        model.controls.min_logt_for_net.max(8.3)
+    } else {
+        model.controls.min_logt_for_net
+    };
     let eps_nuc_factor = model.controls.eps_nuc_factor;
     let screening_mode = model.controls.screening_mode;
 

@@ -49,6 +49,8 @@ LOGS/
 Thumbs.db
 *~
 *.swp
-.claude/
+.claude/*
+!.claude/rules/
+!.claude/rules/**
 site/
 docs/assets/figures/*.png

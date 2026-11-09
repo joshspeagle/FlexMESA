@@ -12,16 +12,19 @@ Stellar evolution connects microphysical processes in dense plasma interiors (eq
 Initialize Zero-Age Main Sequence (`ZAMS`) stars, convective pre-main-sequence (`pre-MS`) polytropes, or upstream MESA `.mod` models in [`flexmesa.star`](concepts/stellar-structure-and-hydro.md), and evolve coupled 1D hydrostatic or hydrodynamic interiors with adaptive remeshing, convective overshooting, Burgers multi-fluid element diffusion, shellular rotation, and Spruit-Tayler magnetic dynamos. Couple evolved donor and accretor stars or compact companions in [`flexmesa.binary`](concepts/binaries.md) to model Eggleton Roche-lobe geometry, implicit Ritter and Kolb-Ritter mass transfer, Kerr black-hole spin evolution, gravitational-wave radiation, magnetic braking, and Hut tidal circularization.
 
 - **Getting Started**: [5-Minute Quickstart](getting-started/quickstart.md) | [Coming from Fortran MESA](getting-started/coming-from-mesa.md)
+- **Tutorials & Guides**: [Single-Star Evolution](tutorials/01-single-star-evolution.md) | [Massive Stars & Hydro](tutorials/02-massive-stars-and-hydro.md) | [White Dwarfs & Diffusion](tutorials/03-white-dwarfs-and-diffusion.md) | [Interacting Binaries](tutorials/04-interacting-binaries.md) | [Inlists & Models](guides/inlists-and-models.md) | [Custom Physics Hooks](guides/custom-physics-hooks.md)
 - **Domain Physics**: [Stellar Structure & Hydrodynamics](concepts/stellar-structure-and-hydro.md) | [Convection, Mixing & Rotation](concepts/convection-mixing-rotation.md) | [Interacting Binaries](concepts/binaries.md)
 
 ### 2. Differentiable Microphysics & Inverse Problems
 Evaluate the 7-component equation of state ([`flexmesa.eos`](concepts/eos.md)), radiative and conductive Rosseland mean opacities ([`flexmesa.kap`](concepts/opacity-and-atmospheres.md)), 5-channel thermal neutrino losses ([`flexmesa.neu`](concepts/nuclear-and-neutrinos.md)), Mixing-Length Theory and Time-Dependent Convection ([`flexmesa.turb`](concepts/convection-mixing-rotation.md)), and stiff thermonuclear reaction networks ([`flexmesa.net`](concepts/nuclear-and-neutrinos.md)) on multi-core CPU (`backend="rust"`) or GPU (`backend="jax"`). Propagate exact derivatives with `jax.grad`, `jax.jacfwd`, and `jax.vmap` for Hamiltonian Monte Carlo, variational inference, and sensitivity analysis without finite-difference truncation error.
 
+- **Tutorials & Guides**: [Differentiable JAX Workflows](tutorials/06-differentiable-jax-workflows.md) | [Backends & CPU/GPU Performance](guides/backends-and-performance.md)
 - **Background & Numerics**: [Hybrid Architecture & Autodiff](concepts/architecture.md) | [Equations of State](concepts/eos.md) | [Nuclear Networks & Neutrinos](concepts/nuclear-and-neutrinos.md)
 
 ### 3. Asteroseismology & Pulsation Modeling
 Compute cumulative acoustic transit integrals, asymptotic and solar-scaled global oscillation parameters ($\Delta\nu$, $\nu_{\max}$, $\nu_{\mathrm{ac}}$, and dipole gravity-mode period spacing $\Delta\Pi_1$), base-of-convection-zone and $\mathrm{He\,II}$ acoustic glitch depths, five empirical surface-effect frequency correction laws (`kjeldsen`, `cubic`, `combined`, `power_law`, `sonoi`), and Roxburgh & Vorontsov (2003) 5-point frequency separation ratios ($r_{01}, r_{10}, r_{02}$) in [`flexmesa.astero`](concepts/asteroseismology.md). Export interior profiles directly to `GYRE`, `FGONG`, and `OSC` formats and generate publication-styled diagnostic figures with `flexmesa.plotting`.
 
+- **Tutorials & Guides**: [Asteroseismology & Pulsations](tutorials/05-asteroseismology-and-pulsations.md) | [Diagnostic Plotting](guides/diagnostic-plotting.md)
 - **Domain Physics**: [Asteroseismology & Pulsation](concepts/asteroseismology.md) | [Opacity, Atmospheres & Synthetic Photometry](concepts/opacity-and-atmospheres.md)
 
 ---

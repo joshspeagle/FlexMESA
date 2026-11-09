@@ -63,14 +63,22 @@ fn build_initial_planet_or_wd_model(
     mut controls: StarControls,
     job: StarJobControls,
 ) -> Result<StarModel, StarError> {
-    let m_target = if job.mass_in_gm_for_create_initial_model > 0.0 {
+    let use_create_init_dims =
+        job.create_initial_model || job.use_other_build_initial_model;
+    let m_target = if use_create_init_dims
+        && job.mass_in_gm_for_create_initial_model > 0.0
+    {
         job.mass_in_gm_for_create_initial_model / M_SUN
     } else if job.relax_mass && job.new_mass > 0.0 {
         job.new_mass
     } else {
         controls.initial_mass
     };
-    let r_init_cm = job.radius_in_cm_for_create_initial_model;
+    let r_init_cm = if use_create_init_dims {
+        job.radius_in_cm_for_create_initial_model
+    } else {
+        0.0
+    };
     controls.initial_mass = 1.0;
     let mut model = load_zams_model(controls, job)?;
     model.controls.initial_mass = m_target;
@@ -297,7 +305,9 @@ pub fn init_or_update_model_from_bundle(
                     }
                 }
             }
-            if init_controls.rsp_mass > 0.0 {
+            if (case_name.starts_with("rsp_") || job.create_rsp_model)
+                && init_controls.rsp_mass > 0.0
+            {
                 init_controls.initial_mass = init_controls.rsp_mass;
             }
             build_initial_planet_or_wd_model(init_controls, job.clone())?

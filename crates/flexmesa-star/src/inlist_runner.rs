@@ -412,7 +412,14 @@ pub fn run_test_suite_case(
         .unwrap_or("unknown")
         .to_string();
 
-    let rn_stages = parse_rn_stages(case_dir, skip_optional)?;
+    let mut rn_stages = parse_rn_stages(case_dir, skip_optional)?;
+    if skip_optional
+        && rn_stages.iter().any(|st| {
+            matches!(st, RnStage::CopyCheckpoint { src_mod, .. } if !case_dir.join(src_mod).exists())
+        })
+    {
+        rn_stages = parse_rn_stages(case_dir, false)?;
+    }
     let tier = if is_tier1_case(&case_name) {
         1
     } else if is_tier2_case(&case_name) {

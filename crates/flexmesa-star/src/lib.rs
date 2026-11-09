@@ -89,6 +89,7 @@ pub mod star_ad;
 pub mod star_job_init;
 pub mod struct_burn_mix;
 pub mod termination;
+pub mod tier1_extras;
 pub mod timestep;
 pub mod winds;
 pub mod zams;
@@ -193,6 +194,12 @@ pub use struct_burn_mix::{
 pub use termination::{
     check_termination_limits, check_termination_limits_with_history,
     compute_core_masses_msun,
+};
+pub use tier1_extras::{
+    eval_model_colors, eval_solar_calibration_objective,
+    eval_starspot_effective_luminosity, eval_t_tau_gradr_factor, is_tier1_case,
+    nelder_mead_solar_calibration_step, run_tier1_suite,
+    verify_tier1_case_assertions, Tier1CaseExtras, TIER1_CASES,
 };
 pub use timestep::{
     eval_dx_nuc_drop_ratio, eval_h211_factor, eval_varcontrol, filter_limit,

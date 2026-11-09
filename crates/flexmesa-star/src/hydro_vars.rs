@@ -331,9 +331,45 @@ pub fn eval_surf_bc(model: &mut StarModel) -> Result<(), StarError> {
     let m_surf = model.m_grav[0].max(1.0);
     let cgrav = model.cgrav[0];
     let tau_surf = model.controls.tau_factor * model.tau_base;
-    let kap_surf = model.opacity[0].max(1.0e-10);
     let teff = atm_teff(l_surf, r_surf);
     model.teff = teff;
+
+    let (kap_surf, dlnkap_dlnd, dlnkap_dlnt) =
+        if model.controls.atm_option == AtmOption::Table {
+            let dln_d = if model.lnd_start.is_empty() {
+                0.0
+            } else {
+                model.lnd_start[0] - model.lnd[0]
+            };
+            let dln_t = if model.ln_t_start.is_empty() {
+                0.0
+            } else {
+                model.ln_t_start[0] - model.ln_t[0]
+            };
+            let p_start = model.peos[0]
+                * (model.chi_rho[0] * dln_d + model.chi_t[0] * dln_t)
+                    .clamp(-5.0, 5.0)
+                    .exp();
+            let r_s = if model.ln_r_start.is_empty() {
+                r_surf
+            } else {
+                model.ln_r_start[0].exp().max(1.0)
+            };
+            let dp_0 = (cgrav * m_surf * model.dm[0] / (2.0 * FOUR_PI))
+                / r_s.powi(4);
+            let p_rad = (1.0 / 3.0) * CRAD * teff.powi(4);
+            let p_gas_surf = (p_start - dp_0 - 0.5 * p_rad).max(1.0);
+            let g_s = cgrav * m_surf / (r_s * r_s);
+            let kap_eff = (tau_surf * g_s / p_gas_surf).max(1.0e-10);
+            (kap_eff, 0.0, 0.0)
+        } else {
+            let k0 = model.opacity[0].max(1.0e-10);
+            (
+                k0,
+                model.d_opacity_dlnd[0] / k0,
+                model.d_opacity_dlnt[0] / k0,
+            )
+        };
 
     let relation_id = match model.controls.atm_option {
         AtmOption::TTau | AtmOption::Table => {
@@ -379,9 +415,6 @@ pub fn eval_surf_bc(model: &mut StarModel) -> Result<(), StarError> {
         StarError::MicrophysicsError(format!("eval_t_tau_uniform failed: {e}"))
     })?;
 
-    let dlnkap_dlnd = model.d_opacity_dlnd[0] / kap_surf;
-    let dlnkap_dlnt = model.d_opacity_dlnt[0] / kap_surf;
-
     let mut d1_lnp = [0.0; 18];
     d1_lnp[I_LND_00] = atm_out.dln_p_dln_kap * dlnkap_dlnd;
     d1_lnp[I_LNT_00] = atm_out.dln_p_dln_kap * dlnkap_dlnt;
@@ -397,8 +430,21 @@ pub fn eval_surf_bc(model: &mut StarModel) -> Result<(), StarError> {
     d1_lnt[I_LNT_00] = atm_out.dln_t_dln_kap * dlnkap_dlnt;
     d1_lnt[I_LNR_00] = atm_out.dln_t_dln_r;
     d1_lnt[I_L_00] = atm_out.dln_t_dl;
+    let ln_t_surf_val = if model.controls.atm_option == AtmOption::Table
+        && !model.ln_t_start.is_empty()
+        && !model.ln_r_start.is_empty()
+        && !model.lum_start.is_empty()
+    {
+        let teff_s = atm_teff(
+            model.lum_start[0].max(1.0),
+            model.ln_r_start[0].exp().max(1.0),
+        );
+        model.ln_t_start[0] + (teff / teff_s.max(1.0)).ln()
+    } else {
+        atm_out.ln_t
+    };
     model.ln_t_surf_ad = StarAdOrder1 {
-        val: atm_out.ln_t,
+        val: ln_t_surf_val,
         d1: d1_lnt,
     };
 

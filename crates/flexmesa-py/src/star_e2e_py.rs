@@ -6,8 +6,11 @@
 use std::path::Path;
 
 use flexmesa_star::{
-    parse_rn_stages, run_test_suite_case, verify_photo_restart_parity,
-    InlistBundle, RnStage,
+    eval_model_colors, eval_solar_calibration_objective,
+    eval_starspot_effective_luminosity, eval_t_tau_gradr_factor,
+    nelder_mead_solar_calibration_step, parse_rn_stages, run_test_suite_case,
+    run_tier1_suite, verify_photo_restart_parity, AtmTTauRelation,
+    CaseRunReport, InlistBundle, RnStage, StarError, TIER1_CASES,
 };
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
@@ -99,40 +102,31 @@ pub fn star_verify_photo_restart(
     verify_photo_restart_parity(&model.inner, n_steps).map_err(to_py_err)
 }
 
-/// Runs a multi-stage upstream MESA `test_suite` case directory and returns a
-/// structured telemetry dictionary.
-#[pyfunction]
-#[pyo3(signature = (
-    case_dir,
-    skip_optional=true,
-    max_steps_per_stage=None,
-    verify_restart=false
-))]
-pub fn star_run_test_suite_case<'py>(
+fn case_report_to_pydict<'py>(
     py: Python<'py>,
-    case_dir: &str,
-    skip_optional: bool,
-    max_steps_per_stage: Option<usize>,
-    verify_restart: bool,
+    rep: &CaseRunReport,
 ) -> PyResult<Bound<'py, PyDict>> {
-    let rep = py
-        .detach(|| {
-            run_test_suite_case(
-                Path::new(case_dir),
-                skip_optional,
-                max_steps_per_stage,
-                verify_restart,
-            )
-        })
-        .map_err(to_py_err)?;
-
     let out = PyDict::new(py);
     out.set_item("case_name", &rep.case_name)?;
+    out.set_item("tier", rep.tier)?;
+    out.set_item("passed", rep.passed)?;
+    out.set_item("termination_code", &rep.termination_code)?;
     out.set_item("total_steps", rep.total_steps)?;
+    out.set_item("total_newton_iters", rep.total_newton_iterations)?;
     out.set_item("total_newton_iterations", rep.total_newton_iterations)?;
     out.set_item("total_retries", rep.total_retries)?;
     out.set_item("total_runtime_sec", rep.total_runtime_sec)?;
+    out.set_item("wall_time_ms", rep.wall_time_ms)?;
+    out.set_item("final_teff", rep.final_teff)?;
+    out.set_item("final_log_l", rep.final_log_l)?;
+    out.set_item("final_log_r", rep.final_log_r)?;
+    out.set_item("final_log_tc", rep.final_log_tc)?;
+    out.set_item("final_log_rhoc", rep.final_log_rhoc)?;
+    out.set_item("final_center_h1", rep.final_center_h1)?;
+    out.set_item("final_center_he4", rep.final_center_he4)?;
+    out.set_item("photo_restart_passed", rep.photo_restart_verified)?;
     out.set_item("photo_restart_verified", rep.photo_restart_verified)?;
+    out.set_item("assertions_passed", rep.assertions_passed)?;
 
     let stages_list = PyList::empty(py);
     for st in &rep.stages {
@@ -160,11 +154,144 @@ pub fn star_run_test_suite_case<'py>(
     Ok(out)
 }
 
-/// Registers `E2E-0` runner functions on `flexmesa._rust`.
+/// Runs a multi-stage upstream MESA `test_suite` case directory and returns a
+/// structured telemetry dictionary.
+#[pyfunction]
+#[pyo3(signature = (
+    case_dir,
+    skip_optional=true,
+    max_steps_per_stage=None,
+    verify_restart=false
+))]
+pub fn star_run_test_suite_case<'py>(
+    py: Python<'py>,
+    case_dir: &str,
+    skip_optional: bool,
+    max_steps_per_stage: Option<usize>,
+    verify_restart: bool,
+) -> PyResult<Bound<'py, PyDict>> {
+    let rep = py
+        .detach(|| {
+            run_test_suite_case(
+                Path::new(case_dir),
+                skip_optional,
+                max_steps_per_stage,
+                verify_restart,
+            )
+        })
+        .map_err(to_py_err)?;
+    case_report_to_pydict(py, &rep)
+}
+
+/// Returns the canonical 33-case Tier 1 `star/test_suite` inventory.
+#[pyfunction]
+pub fn star_tier1_cases() -> Vec<String> {
+    TIER1_CASES.iter().map(|&s| String::from(s)).collect()
+}
+
+/// Runs all 33 Tier 1 `star/test_suite` cases under `mesa_dir/star/test_suite`.
+#[pyfunction]
+#[pyo3(signature = (mesa_dir, max_steps_per_stage=Some(15), verify_restart=true))]
+pub fn star_run_tier1_suite<'py>(
+    py: Python<'py>,
+    mesa_dir: &str,
+    max_steps_per_stage: Option<usize>,
+    verify_restart: bool,
+) -> PyResult<Bound<'py, PyList>> {
+    let reports = py
+        .detach(|| {
+            run_tier1_suite(
+                Path::new(mesa_dir),
+                max_steps_per_stage,
+                verify_restart,
+            )
+        })
+        .map_err(to_py_err)?;
+    let list = PyList::empty(py);
+    for rep in &reports {
+        list.append(case_report_to_pydict(py, rep)?)?;
+    }
+    Ok(list)
+}
+
+/// Evaluates the YREC starspot effective unspotted luminosity and blocking factor.
+#[pyfunction]
+pub fn star_eval_starspot_luminosity(
+    l_surf: f64,
+    f_spot: f64,
+    x_spot: f64,
+) -> (f64, f64) {
+    eval_starspot_effective_luminosity(l_surf, f_spot, x_spot)
+}
+
+/// Evaluates the Hopf function $q(\tau)$ and $1 + \tau\,dq/d\tau$ factor.
+#[pyfunction]
+pub fn star_eval_t_tau_gradr_factor(
+    tau: f64,
+    scheme: &str,
+) -> PyResult<(f64, f64)> {
+    let rel = match scheme.to_ascii_lowercase().as_str() {
+        "eddington" => AtmTTauRelation::Eddington,
+        "krishna_swamy" | "krishnaswamy" => AtmTTauRelation::KrishnaSwamy,
+        "solar_hopf_grey" | "solar_hopf" | "solarhopf" => {
+            AtmTTauRelation::SolarHopf
+        }
+        "trampedach_solar" | "trampedach" => AtmTTauRelation::TrampedachSolar,
+        other => {
+            return Err(to_py_err(StarError::InvalidInput(format!(
+                "unknown T(tau) relation '{other}'"
+            ))));
+        }
+    };
+    Ok(eval_t_tau_gradr_factor(tau, rel))
+}
+
+/// Evaluates the 10-column synthetic Johnson-Cousins photometry vector on `model`.
+#[pyfunction]
+pub fn star_eval_model_colors(model: &PyStarModel) -> PyResult<[f64; 10]> {
+    eval_model_colors(&model.inner).map_err(to_py_err)
+}
+
+/// Evaluates the solar calibration $\chi^2$ objective.
+#[pyfunction]
+pub fn star_eval_solar_calibration_objective(
+    log_l: f64,
+    log_r: f64,
+    zx_surf: f64,
+    target_zx: f64,
+) -> f64 {
+    eval_solar_calibration_objective(log_l, log_r, zx_surf, target_zx)
+}
+
+/// Performs one Nelder-Mead simplex step on a 4-vertex solar calibration simplex.
+#[pyfunction]
+pub fn star_nelder_mead_solar_step(
+    simplex: Vec<([f64; 3], f64)>,
+) -> PyResult<[f64; 3]> {
+    if simplex.len() != 4 {
+        return Err(to_py_err(StarError::InvalidInput(String::from(
+            "simplex must have exactly 4 vertices",
+        ))));
+    }
+    let mut arr = [simplex[0], simplex[1], simplex[2], simplex[3]];
+    Ok(nelder_mead_solar_calibration_step(&mut arr))
+}
+
+/// Registers `E2E-0` and `E2E-1` runner functions on `flexmesa._rust`.
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(star_parse_inlist_bundle, m)?)?;
     m.add_function(wrap_pyfunction!(star_parse_rn_stages, m)?)?;
     m.add_function(wrap_pyfunction!(star_verify_photo_restart, m)?)?;
     m.add_function(wrap_pyfunction!(star_run_test_suite_case, m)?)?;
+    m.add_function(wrap_pyfunction!(star_tier1_cases, m)?)?;
+    m.add_function(wrap_pyfunction!(star_run_tier1_suite, m)?)?;
+    m.add_function(wrap_pyfunction!(star_eval_starspot_luminosity, m)?)?;
+    m.add_function(wrap_pyfunction!(star_eval_t_tau_gradr_factor, m)?)?;
+    m.add_function(wrap_pyfunction!(star_eval_model_colors, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        star_eval_solar_calibration_objective,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(star_nelder_mead_solar_step, m)?)?;
     Ok(())
 }

@@ -23,6 +23,7 @@ HenyeySystemResult = model.HenyeySystemResult
 HistoryRow = model.HistoryRow
 JaxStarState = model.JaxStarState
 StarModel = model.StarModel
+TIER1_CASES = e2e.TIER1_CASES
 compute_staggered_grid_jax = jax_kernels.compute_staggered_grid_jax
 eval_burgers_velocities_jax = jax_diffusion_rot.eval_burgers_velocities_jax
 eval_caplan_ocp_dstar_jax = jax_diffusion_rot.eval_caplan_ocp_dstar_jax
@@ -56,11 +57,13 @@ interp_q = model.interp_q
 parse_inlist_bundle = e2e.parse_inlist_bundle
 parse_rn_stages = e2e.parse_rn_stages
 run_test_suite_case = e2e.run_test_suite_case
+run_tier1_suite = e2e.run_tier1_suite
 solve_henyey_linear_jax = jax_kernels.solve_henyey_linear_jax
 solve_stationary_rsp2_w_jax = jax_hydro_pulse.solve_stationary_rsp2_w_jax
 yrs_for_init_timestep = model.yrs_for_init_timestep
 
 __all__ = [
+    "TIER1_CASES",
     "EvolveStepReport",
     "HenyeySolverReport",
     "HenyeySystemResult",
@@ -101,6 +104,7 @@ __all__ = [
     "parse_inlist_bundle",
     "parse_rn_stages",
     "run_test_suite_case",
+    "run_tier1_suite",
     "solve_henyey_linear_jax",
     "solve_stationary_rsp2_w_jax",
     "yrs_for_init_timestep",

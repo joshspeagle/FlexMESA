@@ -73,7 +73,7 @@ print("Validated controls:", validated)
 
 Many upstream MESA `test_suite` cases chain multiple evolutionary stages inside a `./rn` bash script using `do_one <inlist> <final_mod>` helper calls, where Stage 1 relaxes a pre-MS or ZAMS model and saves `stage1.mod`, and Stage 2 loads `stage1.mod` (`load_saved_model = .true.`) to evolve through helium burning or mass transfer.
 
-`star.parse_rn_stages` extracts the ordered list of `(stage_kind, inlist_name, output_mod)` stages from a case directory (respecting `MESA_SKIP_OPTIONAL` conditional blocks when `skip_optional=True`), and `star.run_test_suite_case` executes the entire multi-stage pipeline end-to-end with optional `.photo` restart verification:
+`star.parse_rn_stages` extracts the ordered list of `(stage_kind, inlist_name, output_mod)` stages from a case directory (respecting `MESA_SKIP_OPTIONAL` conditional blocks when `skip_optional=True`), and `star.run_test_suite_case` executes the entire multi-stage pipeline end-to-end with optional `.photo` restart verification. For upstream `star/test_suite` cases that include custom Fortran `src/run_star_extras.f90` hooks, `star.TIER1_CASES`, `star.run_tier1_case`, and `star.run_tier1_suite` automatically attach the built-in `Tier1CaseExtras` hook registry and verify physical end-of-run invariants:
 
 ```python
 import pathlib

@@ -221,7 +221,11 @@ impl InlistBundle {
             entry_inlist,
             job: StarJobControls::default(),
             controls: StarControls::default(),
-            eos_config: EosConfig::default(),
+            eos_config: EosConfig {
+                use_free_eos: false,
+                use_opal_scvh: false,
+                ..EosConfig::default()
+            },
             kap_config: KapConfig::default(),
             sections,
         };
@@ -369,6 +373,7 @@ pub fn parse_rn_stages(
     let mut stages = Vec::new();
     let mut in_skip_if = false;
     let mut in_else = false;
+    let mut skip_if_is_nonempty = true;
 
     for raw_line in text.lines() {
         let line = raw_line.split('#').next().unwrap_or("").trim();
@@ -378,6 +383,7 @@ pub fn parse_rn_stages(
         if line.starts_with("if ") && line.contains("MESA_SKIP_OPTIONAL") {
             in_skip_if = true;
             in_else = false;
+            skip_if_is_nonempty = !line.contains("-z");
             continue;
         }
         if in_skip_if && (line == "else" || line.starts_with("else ")) {
@@ -390,8 +396,13 @@ pub fn parse_rn_stages(
             continue;
         }
         if in_skip_if {
+            let cond_true = if skip_if_is_nonempty {
+                skip_optional
+            } else {
+                !skip_optional
+            };
             let active_branch =
-                (skip_optional && !in_else) || (!skip_optional && in_else);
+                (cond_true && !in_else) || (!cond_true && in_else);
             if !active_branch {
                 continue;
             }

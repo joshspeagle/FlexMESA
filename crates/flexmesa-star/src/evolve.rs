@@ -109,7 +109,7 @@ pub fn star_evolve_step(
     op_split_burn: bool,
     use_bcyclic: bool,
 ) -> Result<EvolveStepReport, StarError> {
-    const MAX_RETRIES: usize = 8;
+    const MAX_RETRIES: usize = 16;
 
     if model.dt_next > 0.0 {
         model.dt = model.dt_next;
@@ -117,6 +117,9 @@ pub fn star_evolve_step(
     let prev_dt_old = model.dt_old;
 
     let (num_splits, num_merges) = if do_remesh {
+        set_hydro_vars(model, false, false)?;
+        let dt_curr = model.dt.max(1.0);
+        crate::struct_burn_mix::refresh_mixing_state(model, dt_curr, &[]);
         do_adjust_mesh(model, &MeshFunctionConfig::default())?
     } else {
         (0, 0)
@@ -185,7 +188,7 @@ pub fn star_evolve_step(
                 }
                 retries += 1;
                 model.num_retries += 1;
-                dt_try *= 0.5;
+                dt_try *= if retries >= 4 { 0.2 } else { 0.5 };
                 restore_from_old(model)?;
                 model.dt_old = prev_dt_old;
             }

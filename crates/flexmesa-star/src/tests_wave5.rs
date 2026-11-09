@@ -203,3 +203,61 @@ do_one inlist_stage2 final.mod
 
     let _ = fs::remove_dir_all(&tmp_dir);
 }
+
+#[test]
+fn test_e2e_1_tier1_physics_helpers_and_suite() {
+    use std::path::Path;
+
+    assert_eq!(TIER1_CASES.len(), 33);
+    assert!(is_tier1_case("make_zams"));
+    assert!(is_tier1_case("simplex_solar_calibration"));
+    assert!(!is_tier1_case("unknown_case"));
+
+    let (l_eff, alpha) = eval_starspot_effective_luminosity(1.0, 0.34, 0.85);
+    assert!(alpha < 1.0 && alpha > 0.8);
+    assert!((l_eff * alpha - 1.0).abs() <= 1.0e-14);
+
+    let (q_edd, fac_edd) =
+        eval_t_tau_gradr_factor(2.0 / 3.0, AtmTTauRelation::Eddington);
+    assert!((q_edd - 2.0 / 3.0).abs() <= 1.0e-14);
+    assert!((fac_edd - 1.0).abs() <= 1.0e-14);
+    let (q_ks, fac_ks) =
+        eval_t_tau_gradr_factor(2.0 / 3.0, AtmTTauRelation::KrishnaSwamy);
+    assert!(q_ks > 0.5 && fac_ks > 1.0);
+    let (q_hopf, fac_hopf) =
+        eval_t_tau_gradr_factor(2.0 / 3.0, AtmTTauRelation::SolarHopf);
+    assert!(q_hopf > 0.5 && fac_hopf > 1.0);
+
+    let mut model =
+        load_zams_model(StarControls::default(), StarJobControls::default())
+            .expect("zams");
+    set_hydro_vars(&mut model, false, false).expect("hydro_vars");
+    let cols = eval_model_colors(&model).expect("colors");
+    assert_eq!(cols.len(), 10);
+    assert!(cols.iter().all(|v| v.is_finite()));
+
+    let mut simplex = [
+        ([0.270, 0.018, 1.80], 12.0),
+        ([0.275, 0.019, 1.90], 4.5),
+        ([0.280, 0.020, 2.00], 8.0),
+        ([0.260, 0.015, 1.60], 25.0),
+    ];
+    let trial = nelder_mead_solar_calibration_step(&mut simplex);
+    assert!(trial[0] >= 0.20 && trial[0] <= 0.35);
+    assert!(
+        eval_solar_calibration_objective(0.0, 0.0, 0.0229, 0.0229).abs()
+            <= 1.0e-15
+    );
+
+    if let Ok(mesa_dir) = std::env::var("MESA_DIR") {
+        let base = Path::new(&mesa_dir);
+        let case_dir = base.join("star").join("test_suite").join("make_zams");
+        if case_dir.is_dir() {
+            let rep = run_test_suite_case(&case_dir, true, Some(2), true)
+                .expect("make_zams tier 1 run");
+            assert!(rep.passed);
+            assert!(rep.assertions_passed);
+            assert!(rep.photo_restart_verified);
+        }
+    }
+}

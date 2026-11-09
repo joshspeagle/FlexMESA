@@ -438,8 +438,11 @@ pub fn do1_chem_eqns(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
         let kj = k * species + j;
         let i_var = model.layout.chem_var_index(j);
         let i_equ = i_var;
+        let nuc_base = k * species * species + j * species;
+        let d_self = model.d_dxdt_nuc_dx[nuc_base + j].abs();
         let x_scale_kj = sys.x_scale[k * sys.nvar + i_var];
-        let rate_scale = (1.0 / dt + sig_00_dm + sig_p1_dm).max(1.0e-30);
+        let rate_scale =
+            (1.0 / dt + sig_00_dm + sig_p1_dm + d_self).max(1.0e-30);
         let eqn_scale = (x_scale_kj * rate_scale).max(1.0e-12);
 
         let x_00 = model.xa[kj];
@@ -484,7 +487,6 @@ pub fn do1_chem_eqns(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
             sys.add_partial(k, i_equ, k + 1, i_var, sig_p1_dm / eqn_scale);
         }
 
-        let nuc_base = k * species * species + j * species;
         for m in 0..species {
             let d_nuc = model.d_dxdt_nuc_dx[nuc_base + m];
             if d_nuc != 0.0 {

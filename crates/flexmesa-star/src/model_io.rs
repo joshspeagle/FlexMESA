@@ -265,10 +265,8 @@ pub fn read_mod_str(
         .collect();
 
     let mut model = StarModel::new(nz, chem_id, job.clone(), controls);
-    if nz < 500 {
-        model.eos_config.use_free_eos = false;
-        model.eos_config.use_opal_scvh = false;
-    }
+    model.eos_config.use_free_eos = false;
+    model.eos_config.use_opal_scvh = false;
     model.mstar = m_msun * M_SUN;
     model.mstar_start = model.mstar;
     model.mstar_old = model.mstar;
@@ -537,10 +535,8 @@ pub fn read_photo_bytes(
     }
 
     let mut model = StarModel::new(nz, chem_id, job, controls);
-    if nz < 500 {
-        model.eos_config.use_free_eos = false;
-        model.eos_config.use_opal_scvh = false;
-    }
+    model.eos_config.use_free_eos = false;
+    model.eos_config.use_opal_scvh = false;
 
     expect_part(&mut pos, 2)?;
     model.lnd = read_f64_vec(&mut pos, nz)?;
@@ -583,8 +579,14 @@ pub fn read_photo_bytes(
 
     model.xmstar = (model.mstar - model.m_center).max(0.0);
     model.mstar_start = model.mstar;
-    model.sync_mesh_and_pack()?;
+    model.set_qs();
+    model.set_xqs();
+    model.set_m_and_dm();
+    model.set_m_grav_and_grav();
+    model.pack_xh();
     crate::hydro_vars::set_hydro_vars(&mut model, false, false)?;
+    let dt_photo = model.dt;
+    crate::struct_burn_mix::refresh_mixing_state(&mut model, dt_photo, &[]);
     model.save_start_values();
 
     Ok(model)

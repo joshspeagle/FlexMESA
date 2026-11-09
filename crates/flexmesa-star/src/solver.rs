@@ -283,6 +283,8 @@ pub fn solve_henyey_step(
 
         let mut alpha = base_coeff;
         let mut step_accepted = false;
+        let mut best_rnorm = f64::INFINITY;
+        let mut best_sys: Option<(f64, f64, f64, HenyeySystem)> = None;
         for _bt in 0..8 {
             apply_damped_correction(
                 model,
@@ -296,19 +298,50 @@ pub fn solve_henyey_step(
             if let Ok(next_sys) = eval_henyey_equations(model, include_chem) {
                 let (next_rnorm, next_rmax) =
                     compute_vector_norms(&next_sys.equ);
-                if next_rnorm.is_finite()
-                    && next_rmax.is_finite()
-                    && (iter == 1
-                        || next_rnorm <= 1.5 * prev_residual_norm.max(1.0e-6))
-                {
-                    sys = next_sys;
-                    residual_norm = next_rnorm;
-                    max_residual = next_rmax;
-                    step_accepted = true;
-                    break;
+                if next_rnorm.is_finite() && next_rmax.is_finite() {
+                    if iter == 1
+                        || next_rnorm <= 1.5 * prev_residual_norm.max(1.0e-4)
+                    {
+                        sys = next_sys;
+                        residual_norm = next_rnorm;
+                        max_residual = next_rmax;
+                        step_accepted = true;
+                        break;
+                    }
+                    if next_rnorm < best_rnorm {
+                        best_rnorm = next_rnorm;
+                        best_sys =
+                            Some((alpha, next_rnorm, next_rmax, next_sys));
+                    }
                 }
             }
             alpha *= 0.5;
+        }
+
+        if !step_accepted {
+            if let Some((best_alpha, best_rnorm, best_rmax, saved_sys)) =
+                best_sys
+            {
+                if best_alpha > 0.0
+                    && best_rnorm < 1.0e6
+                    && (best_rnorm <= prev_residual_norm * 2.0
+                        || prev_residual_norm > 1.0)
+                {
+                    apply_damped_correction(
+                        model,
+                        &xh_prev,
+                        &xa_prev,
+                        &dx_scaled,
+                        &sys.x_scale,
+                        best_alpha,
+                        include_chem,
+                    );
+                    sys = saved_sys;
+                    residual_norm = best_rnorm;
+                    max_residual = best_rmax;
+                    step_accepted = true;
+                }
+            }
         }
 
         if !step_accepted {
@@ -328,8 +361,13 @@ pub fn solve_henyey_step(
         let resid_ok = residual_norm <= model.controls.tol_residual_norm
             && max_residual <= model.controls.tol_max_residual;
         let tight_resid = residual_norm <= 1.0e-10 && max_residual <= 1.0e-8;
+        let mean_norm_ok = iter >= 5
+            && residual_norm <= model.controls.tol_residual_norm
+            && correction_norm <= model.controls.tol_correction_norm
+            && max_residual <= 0.1
+            && max_correction <= 0.05;
 
-        if (corr_ok && resid_ok) || tight_resid {
+        if (corr_ok && resid_ok) || tight_resid || mean_norm_ok {
             converged = true;
             break;
         }

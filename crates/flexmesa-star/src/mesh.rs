@@ -133,6 +133,18 @@ impl StarModel {
         }
     }
 
+    /// Reconstructs outer face radii `ln_r` outward from `r_center` using cell
+    /// densities `lnd` and cell masses `dm` so the spherical continuity
+    /// equation $\Delta(r^3) = 3\,\Delta m / (4\pi\rho)$ holds identically.
+    pub fn reconstruct_ln_r_from_lnd_and_dm(&mut self) {
+        let mut r3 = self.r_center.powi(3);
+        for k in (0..self.nz).rev() {
+            let rho_k = self.lnd[k].exp().max(1.0e-30);
+            r3 += 3.0 * self.dm[k] / (flexmesa_const::FOUR_PI * rho_k);
+            self.ln_r[k] = r3.max(1.0).cbrt().ln();
+        }
+    }
+
     /// Synchronizes `q`, `xq`, `dm`, `dm_bar`, `m`, `m_grav`, `r`, `rmid`,
     /// `grav`, and `xh` after `dq` or `ln_r` changes.
     pub fn sync_mesh_and_pack(&mut self) -> Result<(), StarError> {

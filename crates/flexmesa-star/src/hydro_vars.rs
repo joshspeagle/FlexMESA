@@ -15,7 +15,7 @@ use flexmesa_turb::{set_mlt, MltInputs, MltParams};
 
 use crate::controls::{AtmOption, StarError};
 use crate::micro::{
-    do_eos, do_kap, do_net, do_neu, global_basic_net, set_basic_vars,
+    do_eos, do_kap, do_net, do_neu, resolve_model_net, set_basic_vars,
 };
 use crate::model::StarModel;
 use crate::star_ad::{
@@ -420,7 +420,9 @@ pub fn set_hydro_vars(
     do_kap(model)?;
     do_neu(model)?;
     if !skip_net {
-        do_net(model, global_basic_net(), skip_net_jacobian)?;
+        if let Some(net_info) = resolve_model_net(model) {
+            do_net(model, &net_info, skip_net_jacobian)?;
+        }
     }
     do_brunt_b(model);
     set_mlt_vars(model)?;

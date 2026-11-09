@@ -247,6 +247,20 @@ impl NetGeneralInfo {
         Self::from_parsed(parsed)
     }
 
+    /// Compiles and initializes a [`NetGeneralInfo`] from an embedded `.net`
+    /// file name or a case-local file in `search_dir`.
+    ///
+    /// # Errors
+    /// Returns [`NetError`] if the file is unknown or fails to initialize.
+    pub fn from_name_or_dir(
+        net_filename: &str,
+        search_dir: Option<&std::path::Path>,
+    ) -> Result<Self, NetError> {
+        let parsed =
+            ParsedNetDef::parse_from_name_or_dir(net_filename, search_dir)?;
+        Self::from_parsed(parsed)
+    }
+
     /// Compiles and initializes a [`NetGeneralInfo`] from a [`ParsedNetDef`].
     pub fn from_parsed(parsed: ParsedNetDef) -> Result<Self, NetError> {
         let nuclides = NuclideCatalog::builtin_ref();

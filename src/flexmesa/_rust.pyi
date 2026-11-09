@@ -555,5 +555,10 @@ def star_eval_t_tau_gradr_factor(tau: float, scheme: str) -> tuple[float, float]
 def star_eval_model_colors(model: Any) -> tuple[float, float, float, float, float, float, float, float, float, float]: ...  # noqa: E501
 def star_eval_solar_calibration_objective(log_l: float, log_r: float, zx_surf: float, target_zx: float) -> float: ...  # noqa: E501
 def star_nelder_mead_solar_step(simplex: list[tuple[list[float], float]]) -> tuple[float, float, float]: ...  # noqa: E501
+def star_tier2_cases() -> list[str]: ...
+def star_run_tier2_suite(mesa_dir: str, max_steps_per_stage: int | None = 15, verify_restart: bool = True) -> list[dict[str, Any]]: ...  # noqa: E501
+def star_eval_planetary_irradiation_heating(model: Any, f_irr: float, col_depth_irr: float) -> tuple[list[float], float]: ...  # noqa: E501
+def star_eval_wd_phase_separation(model: Any, option: str = "CO") -> tuple[float, float]: ...  # noqa: E501
+def star_eval_conductive_flame_state(model: Any) -> tuple[float, float]: ...
 
 # fmt: on

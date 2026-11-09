@@ -295,16 +295,35 @@ impl ZamsCatalog {
     }
 }
 
-/// Parses a Fortran floating-point string (supporting `D`/`d` exponents).
+/// Parses a Fortran floating-point string (supporting `D`/`d` exponents and
+/// 3-digit exponent overflows without `E`/`D`, e.g. `9.9999999999999982-100`).
 pub(crate) fn parse_fortran_f64(s: &str) -> Result<f64, StarError> {
-    let cleaned = if s.contains(['D', 'd']) {
-        s.replace(['D', 'd'], "e")
+    let trimmed = s.trim();
+    let cleaned = if trimmed.contains(['D', 'd']) {
+        trimmed.replace(['D', 'd'], "e")
     } else {
-        s.to_string()
+        trimmed.to_string()
     };
-    cleaned
-        .parse::<f64>()
-        .map_err(|e| StarError::IoError(format!("invalid float '{s}': {e}")))
+    if let Ok(v) = cleaned.parse::<f64>() {
+        return Ok(v);
+    }
+    // Handle Fortran 3-digit exponents that omit 'E'/'D' (e.g. `1.2345-100`)
+    let bytes = cleaned.as_bytes();
+    for i in (1..bytes.len()).rev() {
+        if (bytes[i] == b'-' || bytes[i] == b'+')
+            && bytes[i - 1] != b'e'
+            && bytes[i - 1] != b'E'
+        {
+            let mut fixed = String::with_capacity(cleaned.len() + 1);
+            fixed.push_str(&cleaned[..i]);
+            fixed.push('e');
+            fixed.push_str(&cleaned[i..]);
+            if let Ok(v) = fixed.parse::<f64>() {
+                return Ok(v);
+            }
+        }
+    }
+    Err(StarError::IoError(format!("invalid float '{s}'")))
 }
 
 /// Computes the initial ZAMS timestep in years (`yrs_for_init_timestep` in

@@ -62,7 +62,7 @@ const EXPECTED_WAVE4_CHECKSUMS_N8: [(&str, f64); 5] = [
     ("star_hydro_eqns", 1.411_154_427_772_951e6),
     ("star_newton_step", 1.333_277_163_962_19e2),
     ("star_remesh", 4.203_476_959_958_853e2),
-    ("star_evolve_step", 9.931_842_248_453_043e1),
+    ("star_evolve_step", 9.931_842_248_425_352e1),
 ];
 
 /// Pinned cross-language reference checksums for $N_{\mathrm{zones}} = 8$

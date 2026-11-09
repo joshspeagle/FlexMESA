@@ -91,6 +91,8 @@ pub mod struct_burn_mix;
 pub mod termination;
 pub mod tier1_extras;
 pub mod tier2_extras;
+pub mod tier3_extras;
+pub mod tier3_physics;
 pub mod timestep;
 pub mod winds;
 pub mod zams;
@@ -130,9 +132,9 @@ pub use hydro_vars::{
 };
 pub use inlist::{parse_rn_stages, InlistBundle, RnStage, SectionControls};
 pub use inlist_runner::{
-    run_inlist_stage, run_test_suite_case, verify_photo_restart_parity,
-    CaseRunReport, DefaultStarExtras, ExtrasDirective, StageRunReport,
-    StarExtras, TovGrStarExtras,
+    run_case_list, run_inlist_stage, run_test_suite_case,
+    verify_photo_restart_parity, CaseRunReport, DefaultStarExtras,
+    ExtrasDirective, StageRunReport, StarExtras, TovGrStarExtras,
 };
 pub use mesh_adjust::{
     do_adjust_mesh, eval_mesh_gval, plan_mesh, remap_onto_dq,
@@ -207,6 +209,17 @@ pub use tier2_extras::{
     eval_conductive_flame_state, eval_planetary_irradiation_heating,
     eval_wd_phase_separation, is_tier2_case, run_tier2_suite,
     verify_tier2_case_assertions, Tier2CaseExtras, TIER2_CASES,
+};
+pub use tier3_extras::{
+    compute_total_angular_momentum, is_tier3_case, run_tier3_suite,
+    verify_tier3_case_assertions, Tier3CaseExtras, TIER3_CASES,
+};
+pub use tier3_physics::{
+    eval_duffell_rti_shock_state, eval_fe_core_infall_state,
+    eval_hot_cool_blended_wind_mdot, eval_magnetic_braking_torque,
+    eval_pair_instability_gamma1_and_energy, eval_roche_gravity_darkening,
+    eval_spruit_tayler_dynamo_diagnostics, eval_tov_effective_cgrav,
+    eval_tzo_core_accretion_step, export_stella_ascii,
 };
 pub use timestep::{
     eval_dx_nuc_drop_ratio, eval_h211_factor, eval_varcontrol, filter_limit,

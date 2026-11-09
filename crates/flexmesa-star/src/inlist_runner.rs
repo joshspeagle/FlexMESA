@@ -7,8 +7,6 @@ use std::fs;
 use std::path::Path;
 use std::time::Instant;
 
-use flexmesa_const::{CLIGHT, FOUR_PI, STANDARD_CGRAV};
-
 use crate::controls::StarError;
 use crate::evolve::star_evolve_step;
 use crate::history::{extract_history_row, HistoryRow};
@@ -26,6 +24,9 @@ use crate::tier1_extras::{
 };
 use crate::tier2_extras::{
     is_tier2_case, verify_tier2_case_assertions, Tier2CaseExtras,
+};
+use crate::tier3_extras::{
+    is_tier3_case, verify_tier3_case_assertions, Tier3CaseExtras,
 };
 
 /// Control flow directive returned by [`StarExtras`] step hooks (`keep_going`,
@@ -140,19 +141,24 @@ pub struct TovGrStarExtras;
 
 impl StarExtras for TovGrStarExtras {
     fn other_cgrav(&self, model: &mut StarModel) {
-        let c2 = CLIGHT * CLIGHT;
-        for k in 0..model.nz {
-            let m_k = model.m[k].max(1.0);
-            let r_k = model.r[k].max(1.0e3);
-            let rho_k = model.rho[k].max(1.0e-30);
-            let p_k = model.peos[k].max(0.0);
-            let term1 = 1.0 + p_k / (rho_k * c2);
-            let term2 = 1.0 + FOUR_PI * r_k.powi(3) * p_k / (m_k * c2);
-            let denom =
-                (1.0 - 2.0 * STANDARD_CGRAV * m_k / (r_k * c2)).max(0.1);
-            model.cgrav[k] = STANDARD_CGRAV * term1 * term2 / denom;
-        }
+        model.cgrav = crate::tier3_physics::eval_tov_effective_cgrav(model);
     }
+}
+
+fn write_mod_if_missing(
+    model: &StarModel,
+    out_path: &Path,
+) -> Result<(), StarError> {
+    if !out_path.exists() {
+        let mod_text = write_mod_string(model)?;
+        fs::write(out_path, mod_text).map_err(|e| {
+            StarError::IoError(format!(
+                "failed to write {}: {e}",
+                out_path.display()
+            ))
+        })?;
+    }
+    Ok(())
 }
 
 /// Telemetry and final state returned by a single `inlist` stage execution.
@@ -262,6 +268,21 @@ pub fn run_inlist_stage(
             if model.controls.use_other_cgrav {
                 extras.other_cgrav(model);
             }
+            if model.controls.use_other_alpha_mlt {
+                extras.other_alpha_mlt(model);
+            }
+            if model.controls.use_other_adjust_mdot {
+                model.mstar_dot =
+                    extras.other_adjust_mdot(model, model.mstar_dot);
+            }
+            if model.controls.use_other_torque {
+                if let Some(jdot) = extras.other_torque(model) {
+                    let dt = model.dt;
+                    for (j_k, &dj_k) in model.j_rot.iter_mut().zip(jdot.iter()) {
+                        *j_k = (*j_k + dj_k * dt).max(1.0e10);
+                    }
+                }
+            }
 
             let step_rep =
                 star_evolve_step(model, do_remesh, op_split_burn, true)?;
@@ -303,15 +324,7 @@ pub fn run_inlist_stage(
         && !model.job.save_model_filename.is_empty()
     {
         let out_path = bundle.case_dir.join(&model.job.save_model_filename);
-        if !out_path.exists() {
-            let mod_text = write_mod_string(model)?;
-            fs::write(&out_path, mod_text).map_err(|e| {
-                StarError::IoError(format!(
-                    "failed to write {}: {e}",
-                    out_path.display()
-                ))
-            })?;
-        }
+        write_mod_if_missing(model, &out_path)?;
     }
 
     let final_history = history_rows.last().copied().unwrap_or(init_hr);
@@ -401,11 +414,14 @@ pub fn run_test_suite_case(
         1
     } else if is_tier2_case(&case_name) {
         2
+    } else if is_tier3_case(&case_name) {
+        3
     } else {
         0
     };
 
     let mut current_model: Option<StarModel> = None;
+    let mut twin_star1_hr: Option<HistoryRow> = None;
     let mut stage_reports = Vec::with_capacity(rn_stages.len());
     let mut total_steps = 0_usize;
     let mut total_newton = 0_usize;
@@ -431,6 +447,11 @@ pub fn run_test_suite_case(
             RnStage::DoOne {
                 inlist, output_mod, ..
             } => {
+                if case_name == "twin_studies" {
+                    if let Some(m1) = current_model.take() {
+                        twin_star1_hr = Some(extract_history_row(&m1));
+                    }
+                }
                 let inlist_path = case_dir.join(inlist);
                 if !inlist_path.exists() {
                     continue;
@@ -441,14 +462,13 @@ pub fn run_test_suite_case(
                 let mut tov_extras = TovGrStarExtras;
                 let mut tier1_extras = Tier1CaseExtras::new(&case_name);
                 let mut tier2_extras = Tier2CaseExtras::new(&case_name);
-                let extras: &mut dyn StarExtras = if use_tov {
-                    &mut tov_extras
-                } else {
-                    match tier {
-                        1 => &mut tier1_extras,
-                        2 => &mut tier2_extras,
-                        _ => &mut default_extras,
-                    }
+                let mut tier3_extras = Tier3CaseExtras::new(&case_name);
+                let extras: &mut dyn StarExtras = match tier {
+                    1 => &mut tier1_extras,
+                    2 => &mut tier2_extras,
+                    3 => &mut tier3_extras,
+                    _ if use_tov => &mut tov_extras,
+                    _ => &mut default_extras,
                 };
 
                 let mut model = init_or_update_model_from_bundle(
@@ -471,15 +491,7 @@ pub fn run_test_suite_case(
 
                 if let Some(out_name) = output_mod {
                     let out_path = case_dir.join(out_name);
-                    if !out_path.exists() {
-                        let mod_text = write_mod_string(&model)?;
-                        fs::write(&out_path, mod_text).map_err(|e| {
-                            StarError::IoError(format!(
-                                "failed to write {}: {e}",
-                                out_path.display()
-                            ))
-                        })?;
-                    }
+                    write_mod_if_missing(&model, &out_path)?;
                 }
                 total_steps += rep.steps_taken;
                 total_newton += rep.total_newton_iterations;
@@ -491,11 +503,20 @@ pub fn run_test_suite_case(
     }
 
     let runtime_sec = t0.elapsed().as_secs_f64();
-    let assertions_passed = current_model.as_ref().is_some_and(|m| match tier {
-        1 => verify_tier1_case_assertions(m, &case_name),
-        2 => verify_tier2_case_assertions(m, &case_name),
-        _ => m.nz >= 2 && m.teff.is_finite() && m.teff > 0.0,
-    });
+    let twin_match = twin_star1_hr
+        .zip(current_model.as_ref().map(extract_history_row))
+        .is_none_or(|(hr1, hr2)| {
+            (hr1.star_mass - hr2.star_mass).abs() < 0.5
+                && (hr1.log_teff - hr2.log_teff).abs() < 0.2
+        });
+    let assertions_passed =
+        twin_match
+            && current_model.as_ref().is_some_and(|m| match tier {
+                1 => verify_tier1_case_assertions(m, &case_name),
+                2 => verify_tier2_case_assertions(m, &case_name),
+                3 => verify_tier3_case_assertions(m, &case_name),
+                _ => m.nz >= 2 && m.teff.is_finite() && m.teff > 0.0,
+            });
     let final_hr = stage_reports
         .last()
         .map(|s| s.final_history)
@@ -503,27 +524,6 @@ pub fn run_test_suite_case(
     let termination_code = stage_reports
         .last()
         .map_or_else(|| String::from("completed"), |s| s.termination_code.clone());
-    let (
-        final_teff,
-        final_log_l,
-        final_log_r,
-        final_log_tc,
-        final_log_rhoc,
-        final_center_h1,
-        final_center_he4,
-    ) = if let Some(hr) = final_hr {
-        (
-            10.0_f64.powf(hr.log_teff),
-            hr.log_l,
-            hr.log_r,
-            hr.log_center_t,
-            hr.log_center_rho,
-            hr.center_h1,
-            hr.center_he4,
-        )
-    } else {
-        (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
-    };
     let passed =
         assertions_passed && (!verify_restart || photo_restart_verified);
 
@@ -538,13 +538,13 @@ pub fn run_test_suite_case(
         total_retries,
         total_runtime_sec: runtime_sec,
         wall_time_ms: runtime_sec * 1000.0,
-        final_teff,
-        final_log_l,
-        final_log_r,
-        final_log_tc,
-        final_log_rhoc,
-        final_center_h1,
-        final_center_he4,
+        final_teff: final_hr.map_or(0.0, |h| 10.0_f64.powf(h.log_teff)),
+        final_log_l: final_hr.map_or(0.0, |h| h.log_l),
+        final_log_r: final_hr.map_or(0.0, |h| h.log_r),
+        final_log_tc: final_hr.map_or(0.0, |h| h.log_center_t),
+        final_log_rhoc: final_hr.map_or(0.0, |h| h.log_center_rho),
+        final_center_h1: final_hr.map_or(0.0, |h| h.center_h1),
+        final_center_he4: final_hr.map_or(0.0, |h| h.center_he4),
         photo_restart_verified,
         assertions_passed,
     })

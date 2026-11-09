@@ -164,6 +164,7 @@ impl StarModel {
         self.sync_mesh_and_pack()?;
         crate::micro::set_basic_vars(self)?;
         crate::micro::do_eos(self)?;
+        crate::micro::do_neu(self)?;
         self.save_start_values();
         self.save_old_values();
         Ok(())
@@ -312,6 +313,7 @@ impl StarModel {
         self.ln_s_start.clone_from(&self.ln_s);
         self.energy_start.clone_from(&self.energy);
         self.peos_start.clone_from(&self.peos);
+        self.non_nuc_neu_start.clone_from(&self.non_nuc_neu);
         self.xa_start.clone_from(&self.xa);
         self.xh_start.clone_from(&self.xh);
         if self.sig.iter().all(|&s| s == 0.0) {
@@ -387,6 +389,7 @@ impl StarModel {
             &mut self.ln_s_start,
             &mut self.energy_start,
             &mut self.peos_start,
+            &mut self.non_nuc_neu_start,
             &mut self.lnd_old,
             &mut self.ln_t_old,
             &mut self.ln_r_old,

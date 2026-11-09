@@ -377,9 +377,7 @@ pub fn do1_energy_eqn(
         }
     };
 
-    let e_scale = (model.energy_start[k].max(1.0) / dt)
-        .max(model.lum_start[k].abs().max(L_SUN) / model.dm[k].max(1.0));
-    let mut scal = 1.0 / e_scale;
+    let mut scal = dt / model.energy_start[k].max(1.0);
     if k == 0 {
         scal *= 1.0e-6;
     }

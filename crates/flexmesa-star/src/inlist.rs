@@ -289,7 +289,7 @@ impl InlistBundle {
         file_path: &Path,
         target_section: Option<&str>,
         sections: &mut HashMap<String, SectionControls>,
-        visited: &mut HashSet<(String, PathBuf)>,
+        visited: &mut HashSet<(String, PathBuf)> ,
     ) -> Result<(), StarError> {
         let canon = file_path
             .canonicalize()
@@ -536,14 +536,6 @@ pub fn parse_rn_stages(
                 logs_dir: None,
             });
         }
-    }
-
-    if skip_optional
-        && stages.iter().any(|st| {
-            matches!(st, RnStage::CopyCheckpoint { src_mod, .. } if !case_dir.join(src_mod).exists())
-        })
-    {
-        return parse_rn_stages(case_dir, false);
     }
 
     if stages.is_empty() {

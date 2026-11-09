@@ -1,30 +1,11 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
 """Type annotations for the compiled ``flexmesa._rust`` PyO3 extension.
 
-Declares the public Python-to-Rust boundary across the Three-Tier Hybrid
-Architecture:
-
-1. **Tier A (`utils`, `testing`, `schema`, `data`, `auto_diff`, `chem`)**:
-   Canonical Safe Rust implementations of IEEE-754 finiteness predicates,
-   Fortran lexical scanners, golden-baseline parsers, control schema and
-   namelist parsers, SHA-256 digests, `.safetensors` table converters,
-   2nd-order dual-number benchmark kernels, periodic table and nuclide
-   catalogs, Anders & Grevesse (1989) + Lodders (2003) solar abundances, and
-   10 solar abundance scales (`AG89`..`AAG21`).
-2. **Tier B (`math`, `interp_1d`, `interp_2d`, `neu`, `turb`, `chem`,
-   `ionization`, `colors`)**:
-   Domain-safe libm intrinsics, 1D Steffen/Huynh monotonic splines, 2D
-   PSPLINE/Steffen bicubic surface interpolants, Itoh et al. (1996) 5-channel
-   thermal neutrino losses, Cox (1968) / Kuhfuss (1986) convective transport
-   (`MLT` and `TDC`), differentiable composition moments, ionization tables and
-   diffusion typical charges, and 4D Kurucz + Johnson stellar photometry, with
-   single-zone scalar entry points and persistent `rayon` multi-zone kernels.
-3. **Tier C (`mtx`)**:
-   Coupled block-tridiagonal linear solvers (`solve_block_tridiagonal`,
-   `solve_block_tridiag_bcyclic`, and `block_multiply_xa`).
-
-All array arguments (`_ArrF64`) expect 1D C-contiguous ``float64`` buffers
-borrowed zero-copy via ``PyReadonlyArray1::as_slice``.
+Declares the public Python-to-Rust boundary across Tier A (`utils`, `testing`,
+`schema`, `data`, `auto_diff`, `chem`), Tier B (`math`, `interp_1d/2d`, `neu`,
+`turb`, `ionization`, `colors`, `eos`, `kap`, `rates`, `atm`), and Tier C
+(`mtx`, `num`, `net`, `star`, `binary`, `astero`). All `_ArrF64` arguments
+expect 1D C-contiguous ``float64`` buffers borrowed zero-copy.
 """
 
 from __future__ import annotations
@@ -587,5 +568,18 @@ def star_run_astero_test_suite_case(case_dir: str, skip_optional: bool = True, m
 def star_run_astero_suite(mesa_dir: str, skip_optional: bool = True, max_steps_per_stage: int | None = None, verify_restart: bool = True) -> list[dict[str, Any]]: ...  # noqa: E501
 def star_run_tier4_suite(mesa_dir: str, skip_optional: bool = True, max_steps_per_stage: int | None = None, verify_restart: bool = True) -> list[dict[str, Any]]: ...  # noqa: E501
 def star_run_dev_cases_suite(mesa_dir: str, skip_optional: bool = True, max_steps_per_stage: int | None = None, verify_restart: bool = True) -> list[dict[str, Any]]: ...  # noqa: E501
+def star_tier5_star_case_names() -> list[str]: ...
+def star_all_active_star_case_names() -> list[str]: ...
+def star_eval_overshoot_dbl_exp(d0: float, delta_r: float, hp_bdy: float, f_ov1: float, f_ov2: float, d_ov_trans: float) -> float: ...  # noqa: E501
+def star_eval_grafener_kudritzki_wind_msun_yr(m_surf_g: float, l_surf_erg_s: float, r_surf_cm: float, t_surf_k: float, x_surf: float, z_surf: float, w_scale: float) -> float: ...  # noqa: E501
+def star_verify_step_redo_bit_parity(model: Any) -> bool: ...
+def star_run_tier5_star_suite(mesa_dir: str, skip_optional: bool = True, max_steps_per_stage: int | None = None, verify_restart: bool = True) -> list[dict[str, Any]]: ...  # noqa: E501
+def star_run_all_active_star_suite(mesa_dir: str, max_steps_per_stage: int | None = None, verify_restart: bool = True) -> list[dict[str, Any]]: ...  # noqa: E501
+def binary_tier5_case_names() -> list[str]: ...
+def binary_eval_gr_expected_separation_rsun(a0_rsun: float, m1_msun: float, m2_msun: float, time_sec: float) -> float: ...  # noqa: E501
+def binary_eval_tauris_vdh_expected_separation_rsun(a0_rsun: float, q0: float, q: float, alpha: float, beta: float, delta: float, gamma: float) -> float: ...  # noqa: E501
+def binary_eval_brott_wind_msun_yr(l_surf_lsun: float, m_surf_msun: float, r_surf_rsun: float, t_surf_k: float, x_surf: float, y_surf: float, z_div_z_solar: float) -> float: ...  # noqa: E501
+def binary_run_test_suite_case(case_dir: str, max_steps_cap: int | None = None) -> dict[str, Any]: ...  # noqa: E501
+def binary_run_suite(mesa_dir: str, max_steps_cap: int | None = None) -> list[dict[str, Any]]: ...  # noqa: E501
 
 # fmt: on

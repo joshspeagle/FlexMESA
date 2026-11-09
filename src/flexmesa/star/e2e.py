@@ -10,11 +10,29 @@ import pathlib
 from typing import Any
 
 from flexmesa import _rust
+from flexmesa.star import e2e_tier45
 from flexmesa.star import model as star_model
 
 TIER1_CASES: tuple[str, ...] = tuple(_rust.star_tier1_cases())
 TIER2_CASES: tuple[str, ...] = tuple(_rust.star_tier2_cases())
 TIER3_CASES: tuple[str, ...] = tuple(_rust.star_tier3_cases())
+TIER4_STAR_CASES = e2e_tier45.TIER4_STAR_CASES
+TIER4_ACTIVE_STAR_CASES = e2e_tier45.TIER4_ACTIVE_STAR_CASES
+TIER4_ASTERO_CASES = e2e_tier45.TIER4_ASTERO_CASES
+TIER4_DEV_CASES = e2e_tier45.TIER4_DEV_CASES
+build_rsp_envelope_model = e2e_tier45.build_rsp_envelope_model
+eval_astero_scaling_dnu_numax_uhz = e2e_tier45.eval_astero_scaling_dnu_numax_uhz
+eval_linear_oscillation_modes = e2e_tier45.eval_linear_oscillation_modes
+eval_rsp_2nd_crossing_edges = e2e_tier45.eval_rsp_2nd_crossing_edges
+eval_rsp_lina_modes = e2e_tier45.eval_rsp_lina_modes
+eval_target_mode_frequency_and_growth = (
+    e2e_tier45.eval_target_mode_frequency_and_growth
+)
+run_astero_suite = e2e_tier45.run_astero_suite
+run_astero_test_suite_case = e2e_tier45.run_astero_test_suite_case
+run_dev_cases_suite = e2e_tier45.run_dev_cases_suite
+run_tier4_star_suite = e2e_tier45.run_tier4_star_suite
+run_tier4_suite = e2e_tier45.run_tier4_suite
 
 
 def parse_inlist_bundle(inlist_path: str | pathlib.Path) -> dict[str, Any]:

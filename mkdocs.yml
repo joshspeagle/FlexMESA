@@ -91,13 +91,25 @@ nav:
       - 1D Stellar Structure, Henyey & Hydrodynamics (star): concepts/stellar-structure-and-hydro.md
       - Interacting Binaries & Accretors (binary): concepts/binaries.md
       - Asteroseismology & Pulsation Exports (astero, star): concepts/asteroseismology.md
+  - Tutorials:
+      - 1. Single-Star Evolution: tutorials/01-single-star-evolution.md
+      - 2. Massive Stars, Rotation & Hydro: tutorials/02-massive-stars-and-hydro.md
+      - 3. White Dwarfs & Atomic Diffusion: tutorials/03-white-dwarfs-and-diffusion.md
+      - 4. Interacting Binaries & Accretors: tutorials/04-interacting-binaries.md
+      - 5. Asteroseismology & Pulsations: tutorials/05-asteroseismology-and-pulsations.md
+      - 6. Differentiable JAX Workflows: tutorials/06-differentiable-jax-workflows.md
+  - User Guides:
+      - Inlists, Models & Data Caches: guides/inlists-and-models.md
+      - Custom Physics Hooks: guides/custom-physics-hooks.md
+      - Backends & CPU/GPU Performance: guides/backends-and-performance.md
+      - Diagnostic Plotting: guides/diagnostic-plotting.md
   - Benchmarks & Verification:
-      - Numerics, Splines, Neutrinos & Convection (Wave 1.5): design/wave-1-benchmark-report.md
-      - Composition, Ionization & Photometry (Wave 2.5): design/wave-2-benchmark-report.md
-      - Analytical & Single-Table EOS (Wave 3a.5): design/wave-3a-benchmark-report.md
-      - 4D EOS, Opacity, Networks & Atmospheres (Wave 3b.5): design/wave-3b-benchmark-report.md
-      - 1D Stellar Structure & Evolution (Wave 4.5): design/wave-4-benchmark-report.md
-      - Advanced Star, Binaries & Asteroseismology (Wave 5.5): design/wave-5-benchmark-report.md
+      - Numerics, Splines, Neutrinos & Convection: design/wave-1-benchmark-report.md
+      - Composition, Ionization & Photometry: design/wave-2-benchmark-report.md
+      - Analytical & Single-Table EOS: design/wave-3a-benchmark-report.md
+      - 4D EOS, Opacity, Networks & Atmospheres: design/wave-3b-benchmark-report.md
+      - 1D Stellar Structure & Evolution: design/wave-4-benchmark-report.md
+      - Advanced Star, Binaries & Asteroseismology: design/wave-5-benchmark-report.md
   - API Reference:
       - Python, PyO3 & JAX Reference: api/index.md
   - Developer & Specs Archive:

@@ -242,9 +242,18 @@ pub fn solve_omega_mix(
     let steps = n_substeps.max(1);
     let dt_sub = dt / (steps as f64);
 
-    // Specific moment of inertia `i_rot[k] = (2/3) * r[k]^2` on faces.
-    let i_rot: Vec<f64> =
-        model.r.iter().map(|&rk| (2.0 / 3.0) * rk * rk).collect();
+    // Specific moment of inertia `i_rot[k]` on faces (`model.aux.i_rot[k]` when
+    // populated by `update_rotation_distortion_factors`, or `(2/3) * r[k]^2`).
+    let i_rot: Vec<f64> = (0..nz)
+        .map(|k| {
+            let ir = model.aux.i_rot.get(k).copied().unwrap_or(0.0);
+            if ir > 0.0 {
+                ir
+            } else {
+                (2.0 / 3.0) * model.r[k] * model.r[k]
+            }
+        })
+        .collect();
 
     // Cell-centered harmonic-mean rotational coupling `am_sig_omega[k]` for
     // cell `k` (`0..nz-1`, `hydro_rotation.f90:399-490`).
@@ -298,6 +307,9 @@ pub fn solve_omega_mix(
         let d_omega = solve_scalar_tridiag(&dl, &d, &du, &rhs);
         for (k, &dw) in d_omega.iter().enumerate() {
             model.omega[k] += dw;
+        }
+        if model.dm_bar[0] <= 0.0 && nz >= 2 {
+            model.omega[0] = model.omega[1];
         }
     }
     for (k, &ir) in i_rot.iter().enumerate() {

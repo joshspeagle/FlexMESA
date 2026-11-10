@@ -320,6 +320,63 @@ pub fn eval_rotational_mixing_zone(
     }
 }
 
+/// Updates shellular rotational distortion factors (`fp_rot`, `ft_rot`) and
+/// specific moment of inertia `i_rot` on `model.aux` across all faces
+/// (`eval_fp_ft` in `star/private/hydro_rotation.f90:753-811`).
+pub fn update_rotation_distortion_factors(model: &mut StarModel) {
+    let nz = model.nz;
+    if nz == 0 {
+        return;
+    }
+    if model.aux.fp_rot.len() != nz {
+        model.aux.resize(nz, model.species);
+    }
+    if !model.controls.rotation_flag {
+        model.aux.fp_rot.fill(1.0);
+        model.aux.ft_rot.fill(1.0);
+        for k in 0..nz {
+            let r_k = model.r[k].max(1.0);
+            model.aux.i_rot[k] = (2.0 / 3.0) * r_k * r_k;
+        }
+        return;
+    }
+    for k in 0..nz {
+        let r_k = model.r[k].max(1.0e5);
+        let m_k = model.m_grav[k].max(1.0e20);
+        let om_k = model.omega[k];
+        if om_k.abs() > 0.0 {
+            let om_crit = eval_omega_crit(
+                model.cgrav[k],
+                m_k,
+                r_k,
+                model.lum[k],
+                model.opacity[k],
+                0.99,
+            );
+            let w = if om_crit > 0.0 {
+                (om_k.abs() / om_crit).min(0.99)
+            } else {
+                0.0
+            };
+            let (fp, ft, i_rot_over_r2) = eval_rotation_fp_ft(w, 0.75, 0.95);
+            model.aux.fp_rot[k] = fp;
+            model.aux.ft_rot[k] = ft;
+            model.aux.i_rot[k] = i_rot_over_r2 * r_k * r_k;
+        } else {
+            if model.aux.fp_rot[k] <= 0.0 {
+                model.aux.fp_rot[k] = 1.0;
+            }
+            if model.aux.ft_rot[k] <= 0.0 {
+                model.aux.ft_rot[k] = 1.0;
+            }
+            if model.aux.i_rot[k] <= 0.0 {
+                model.aux.i_rot[k] = (2.0 / 3.0) * r_k * r_k;
+            }
+        }
+        model.j_rot[k] = model.aux.i_rot[k] * om_k;
+    }
+}
+
 /// Evaluates shellular rotational distortion $(f_P, f_T)$, specific angular
 /// momentum $j_{\mathrm{rot},k}$, and rotational mixing instabilities across
 /// all faces of `model`, updating `model.grav`, `model.gradr`, `model.j_rot`,
@@ -333,29 +390,14 @@ pub fn set_rotation_mixing_info(
     if !model.controls.rotation_flag || nz < 2 {
         return zones;
     }
+    update_rotation_distortion_factors(model);
 
     for k in 0..nz {
         let r_k = model.r[k].max(1.0e5);
         let m_k = model.m_grav[k].max(1.0e20);
         let g_sph = model.cgrav[k] * m_k / (r_k * r_k);
-        let om_crit = eval_omega_crit(
-            model.cgrav[k],
-            m_k,
-            r_k,
-            model.lum[k],
-            model.opacity[k],
-            0.99,
-        );
-        let w = if om_crit > 0.0 {
-            (model.omega[k].abs() / om_crit).min(0.99)
-        } else {
-            0.0
-        };
-        let (fp, ft, i_rot_over_r2) = eval_rotation_fp_ft(w, 0.75, 0.95);
-        let i_rot = i_rot_over_r2 * r_k * r_k;
-        model.j_rot[k] = i_rot * model.omega[k];
+        let fp = model.aux.fp_rot[k];
         model.grav[k] = fp * g_sph;
-        model.gradr[k] *= ft / fp;
 
         if k > 0 && k + 1 < nz {
             let dr_ln =
@@ -364,9 +406,20 @@ pub fn set_rotation_mixing_info(
             let om_dn = model.omega[k + 1].abs().max(1.0e-20);
             let dln_om_dln_r = (om_up.ln() - om_dn.ln()) / dr_ln;
             let n2_tot = model.brunt_n2[k];
-            let g_hp = model.grav[k] / model.scale_height[k].max(1.0e5);
-            let delta = (model.chi_t[k] / model.chi_rho[k].max(1.0e-6)).abs();
-            let n2_mu = g_hp * delta * model.brunt_b[k];
+            let stored_n2_mu = model
+                .aux
+                .brunt_n2_composition_term
+                .get(k)
+                .copied()
+                .unwrap_or(0.0);
+            let n2_mu = if stored_n2_mu.abs() > 0.0 {
+                stored_n2_mu
+            } else {
+                let g_hp = model.grav[k] / model.scale_height[k].max(1.0e5);
+                let delta =
+                    (model.chi_t[k] / model.chi_rho[k].max(1.0e-6)).abs();
+                g_hp * delta * model.brunt_b[k]
+            };
             let n2_t = n2_tot - n2_mu;
 
             let z_mix = eval_rotational_mixing_zone(

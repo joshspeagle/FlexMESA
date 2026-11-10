@@ -87,6 +87,7 @@ pub mod pre_ms;
 pub mod premix;
 pub mod pulse;
 pub mod pulse_modes;
+pub mod relax;
 pub mod riemann;
 pub mod rotation;
 pub mod rsp2;
@@ -112,6 +113,8 @@ mod tests;
 mod tests_fidelity1;
 #[cfg(test)]
 mod tests_fidelity2;
+#[cfg(test)]
+mod tests_fidelity4;
 #[cfg(test)]
 mod tests_wave5;
 
@@ -195,6 +198,11 @@ pub use pulse_modes::{
     eval_buoyancy_period_spacing_s, eval_kappa_mechanism_growth,
     eval_linear_oscillation_modes, eval_target_mode_frequency_and_growth,
     LinearOscillationMode,
+};
+pub use relax::{
+    apply_composition_relaxation, apply_uniform_rotation, relax_core_boundary,
+    relax_from_profile_files, relax_irradiation_to_target,
+    relax_mass_to_target, relax_tau_factor_to_target, relax_to_remove_h_env,
 };
 pub use riemann::{
     eval_hllc_face, eval_hllc_surface_face, eval_riemann_momentum_residual,

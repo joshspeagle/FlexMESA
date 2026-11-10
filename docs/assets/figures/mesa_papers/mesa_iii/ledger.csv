@@ -1,0 +1,10 @@
+key,value
+ccsn_max_log_d_rti,1.7164957547e+01
+ccsn_shock_mass_msun,1.2750000000e+01
+gr_final_sep_ratio,8.2678414925e-01
+hllc_rankine_hugoniot_rel_err,1.2000000000e-04
+hllc_shock_flux_mass,3.1832694653e+16
+ml_final_sep_ratio,1.2295233508e+00
+rlof_peak_log_mdot_msun_yr,-4.0820238052e+00
+urca_a23_log_rhoye_thresh,9.2300000000e+00
+urca_a25_log_rhoye_thresh,9.1100000000e+00

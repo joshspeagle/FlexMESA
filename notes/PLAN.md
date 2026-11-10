@@ -19,9 +19,8 @@
   - **Wave 5.5 (`Post-Wave 5 Review, Full-Workspace Fortran MESA Gate & Public MkDocs Website Release`)** ([Issue #83](https://github.com/joshspeagle/FlexMESA/issues/83), PR [#88](https://github.com/joshspeagle/FlexMESA/pull/88))
   - **Track 2 (`Docs-1`–`Docs-5`, Public Documentation Overhaul & `docs-upkeep` Gate)** ([Epic #90](https://github.com/joshspeagle/FlexMESA/issues/90), Sub-Issues [#97](https://github.com/joshspeagle/FlexMESA/issues/97)–[#101](https://github.com/joshspeagle/FlexMESA/issues/101), PRs [#102](https://github.com/joshspeagle/FlexMESA/pull/102), [#104](https://github.com/joshspeagle/FlexMESA/pull/104)–[#106](https://github.com/joshspeagle/FlexMESA/pull/106))
   - **Track 1 (`E2E-0`–`E2E-5`, Complete Upstream MESA End-to-End `test_suite` Reproduction)** ([Epic #89](https://github.com/joshspeagle/FlexMESA/issues/89), Sub-Issues [#91](https://github.com/joshspeagle/FlexMESA/issues/91)–[#96](https://github.com/joshspeagle/FlexMESA/issues/96), Closing [#4](https://github.com/joshspeagle/FlexMESA/issues/4) & [#5](https://github.com/joshspeagle/FlexMESA/issues/5), PRs [#103](https://github.com/joshspeagle/FlexMESA/pull/103), [#107](https://github.com/joshspeagle/FlexMESA/pull/107), [#108](https://github.com/joshspeagle/FlexMESA/pull/108), [#111](https://github.com/joshspeagle/FlexMESA/pull/111), [#122](https://github.com/joshspeagle/FlexMESA/pull/122))
-- **Active Closeout Campaign**:
-  - **Track 3 (`Fidelity-1`–`Fidelity-4`, Epic [#109](https://github.com/joshspeagle/FlexMESA/issues/109), Sub-Issues [#112](https://github.com/joshspeagle/FlexMESA/issues/112)–[#115](https://github.com/joshspeagle/FlexMESA/issues/115))**: Systematic line-by-line Fortran-to-Rust fidelity audit across all 25 modules and physical E2E verification.
-  - **Track 4 (`PaperFigs-1`–`PaperFigs-6`, Epic [#110](https://github.com/joshspeagle/FlexMESA/issues/110), Sub-Issues [#116](https://github.com/joshspeagle/FlexMESA/issues/116)–[#121](https://github.com/joshspeagle/FlexMESA/issues/121))**: Canonical MESA I–VI instrument paper figure reproduction suite.
+  - **Track 3 (`Fidelity-1`–`Fidelity-4`, Systematic Line-by-Line Fortran-to-Rust Fidelity Audit & Physical E2E Verification)** ([Epic #109](https://github.com/joshspeagle/FlexMESA/issues/109), Sub-Issues [#112](https://github.com/joshspeagle/FlexMESA/issues/112)–[#115](https://github.com/joshspeagle/FlexMESA/issues/115), PRs [#124](https://github.com/joshspeagle/FlexMESA/pull/124)–[#127](https://github.com/joshspeagle/FlexMESA/pull/127))
+  - **Track 4 (`PaperFigs-1`–`PaperFigs-6`, Canonical MESA I–VI Instrument Paper Figure Reproduction Atlas)** ([Epic #110](https://github.com/joshspeagle/FlexMESA/issues/110), Sub-Issues [#116](https://github.com/joshspeagle/FlexMESA/issues/116)–[#121](https://github.com/joshspeagle/FlexMESA/issues/121), PR [#128](https://github.com/joshspeagle/FlexMESA/pull/128))
 - **Completed Architectural Decisions (`notes/DECISIONS.md`)**:
   - `DECISIONS #1`: Dual-Track (`Safe Rust` + `Python/JAX`) evaluation across Wave 1 (`const`, `utils`, `math`, `auto_diff`, `interp_1d`, `interp_2d`, `mtx`, `num`) + stateless microphysics pilot (`neu`, `turb`).
   - `DECISIONS #2`: Legacy and external subsystem scope exclusions (`pgstar`/`pgbinary` `#3`, `stella`/`adipls`/`gyre` `#4`, and legacy `RSP1` `#5`).
@@ -34,6 +33,7 @@
   - `DECISIONS #9`: Strict test tolerance governance, documented upstream Fortran MESA discrepancies, and mandatory multi-line git commit bodies.
   - `DECISIONS #10`: Upstream MESA end-to-end `test_suite` reproduction (`E2E-0`–`E2E-5`) and 6-tab domain-organized public documentation overhaul (`Docs-1`–`Docs-5`).
   - `DECISIONS #11`: Track 3 systematic Fortran-to-Rust line-by-line fidelity audit (`Fidelity-1`–`Fidelity-4`).
+  - `DECISIONS #12`: Track 4 canonical MESA I–VI instrument paper figure reproduction atlas (`PaperFigs-1`–`PaperFigs-6`).
 
 ---
 

@@ -108,6 +108,7 @@ nav:
       - Diagnostic Plotting: guides/diagnostic-plotting.md
   - Verification & Benchmarks:
       - Overview & Speedup Synthesis: benchmarks/overview.md
+      - MESA I-VI Paper Figures: benchmarks/mesa_paper_figures.md
       - Kernel Performance Scorecards: benchmarks/kernel-scorecards.md
       - Tolerance & Discrepancy Ledger: benchmarks/tolerance-and-discrepancy-ledger.md
   - Reference:

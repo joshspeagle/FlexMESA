@@ -1,0 +1,9 @@
+key,value
+autodiff_exact_rel_err,1.0000000000e-16
+fd_centered_min_rel_err,1.2805996879e-12
+primal_val_check,0.0000000000e+00
+skye_phase_span,1.0000000000e+00
+tdc_long_dt_gradt_rel_err,1.1102230246e-16
+tdc_long_dt_vc_rel_err,1.2184008653e-16
+wd_cryst_core_o16_shift,6.0962917304e-02
+wd_cryst_mass_frac,1.2500000000e-01

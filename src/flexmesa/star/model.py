@@ -423,6 +423,7 @@ class StarModel(_arrays.StarModelArrays):
                 jnp.asarray(self.mu),
                 jnp.asarray(self.opacity),
                 tau_0=float(self.tau[0]),
+                brunt_b=jnp.asarray(self.brunt_b),
             )
         )
 

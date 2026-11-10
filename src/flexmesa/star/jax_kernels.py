@@ -148,7 +148,7 @@ def eval_optical_depth_jax(
 
 
 @jax.jit
-def eval_face_mlt_and_brunt_jax(
+def _eval_face_mlt_and_brunt_core_jax(
     dq: jax.Array,
     ln_r: jax.Array,
     lum: jax.Array,
@@ -163,37 +163,13 @@ def eval_face_mlt_and_brunt_jax(
     chi_t: jax.Array,
     mu: jax.Array,
     opacity: jax.Array,
-    tau_0: float | jax.Array = 2.0 / 3.0,
-    mixing_length_alpha: float = 2.0,
-    use_ledoux_criterion: bool = False,
-    cgrav: float | jax.Array = _G_CGS,
+    tau_0: float | jax.Array,
+    mixing_length_alpha: float,
+    use_ledoux_criterion: bool,
+    cgrav: float | jax.Array,
+    brunt_b_override: jax.Array,
+    use_brunt_b_override: bool,
 ) -> dict[str, jax.Array]:
-    """Evaluate face temperature gradients, Cox MLT, and Brunt-Väisälä `N^2`.
-
-    Args:
-        dq: Cell relative mass fractions of shape `(nz,)`.
-        ln_r: Face natural log radius of shape `(nz,)` (`ln(cm)`).
-        lum: Face luminosity of shape `(nz,)` (`erg s^-1`).
-        m_grav: Face enclosed gravitational mass of shape `(nz,)` (`g`).
-        rho: Cell density of shape `(nz,)` (`g cm^-3`).
-        t: Cell temperature of shape `(nz,)` (`K`).
-        peos: Cell total pressure of shape `(nz,)` (`dyn cm^-2`).
-        ln_peos: Cell natural log pressure of shape `(nz,)`.
-        grada: Cell adiabatic temperature gradient of shape `(nz,)`.
-        cp: Cell specific heat at constant pressure of shape `(nz,)`.
-        chi_rho: Cell `dlnP/dlnRho` at constant `T` of shape `(nz,)`.
-        chi_t: Cell `dlnP/dlnT` at constant `Rho` of shape `(nz,)`.
-        mu: Cell mean molecular weight of shape `(nz,)`.
-        opacity: Cell opacity of shape `(nz,)` (`cm^2 g^-1`).
-        tau_0: Surface optical depth `tau[0]`.
-        mixing_length_alpha: Mixing-length parameter `alpha_MLT`.
-        use_ledoux_criterion: Whether to include `brunt_B` in `gradL`.
-        cgrav: Gravitational constant (`cm^3 g^-1 s^-2`).
-
-    Returns:
-        Dictionary containing `("scale_height", "gradr", "gradl", "gradt",
-        "mlt_vc", "mlt_d", "mlt_cdc", "brunt_b", "brunt_n2")` of shape `(nz,)`.
-    """
     r = jnp.exp(ln_r)
     gm = cgrav * m_grav
     grav = gm / (r * r)
@@ -232,11 +208,12 @@ def eval_face_mlt_and_brunt_jax(
     b_raw = (chi_rho_f / chi_t_f) * (
         dlnmu / jnp.where(jnp.abs(dlnp) > 1.0e-14, dlnp, 1.0)
     )
-    brunt_b = jnp.where(
+    brunt_b_gradmux = jnp.where(
         (jnp.arange(dq.shape[0]) > 0) & (jnp.abs(dlnp) > 1.0e-14),
         jnp.clip(b_raw, -10.0, 10.0),
         0.0,
     )
+    brunt_b = jnp.where(use_brunt_b_override, brunt_b_override, brunt_b_gradmux)
 
     gradr_base = p_f * kap_f * lum / (4.0 * _FOUR_PI * _CLIGHT * gm * prad_f)
     surf_fac = jnp.where(
@@ -286,6 +263,84 @@ def eval_face_mlt_and_brunt_jax(
         "brunt_b": brunt_b,
         "brunt_n2": brunt_n2,
     }
+
+
+def eval_face_mlt_and_brunt_jax(
+    dq: jax.Array,
+    ln_r: jax.Array,
+    lum: jax.Array,
+    m_grav: jax.Array,
+    rho: jax.Array,
+    t: jax.Array,
+    peos: jax.Array,
+    ln_peos: jax.Array,
+    grada: jax.Array,
+    cp: jax.Array,
+    chi_rho: jax.Array,
+    chi_t: jax.Array,
+    mu: jax.Array,
+    opacity: jax.Array,
+    tau_0: float | jax.Array = 2.0 / 3.0,
+    mixing_length_alpha: float = 2.0,
+    use_ledoux_criterion: bool = False,
+    cgrav: float | jax.Array = _G_CGS,
+    brunt_b: jax.Array | None = None,
+) -> dict[str, jax.Array]:
+    """Evaluate face temperature gradients, Cox MLT, and Brunt-Väisälä `N^2`.
+
+    Args:
+        dq: Cell relative mass fractions of shape `(nz,)`.
+        ln_r: Face natural log radius of shape `(nz,)` (`ln(cm)`).
+        lum: Face luminosity of shape `(nz,)` (`erg s^-1`).
+        m_grav: Face enclosed gravitational mass of shape `(nz,)` (`g`).
+        rho: Cell density of shape `(nz,)` (`g cm^-3`).
+        t: Cell temperature of shape `(nz,)` (`K`).
+        peos: Cell total pressure of shape `(nz,)` (`dyn cm^-2`).
+        ln_peos: Cell natural log pressure of shape `(nz,)`.
+        grada: Cell adiabatic temperature gradient of shape `(nz,)`.
+        cp: Cell specific heat at constant pressure of shape `(nz,)`.
+        chi_rho: Cell `dlnP/dlnRho` at constant `T` of shape `(nz,)`.
+        chi_t: Cell `dlnP/dlnT` at constant `Rho` of shape `(nz,)`.
+        mu: Cell mean molecular weight of shape `(nz,)`.
+        opacity: Cell opacity of shape `(nz,)` (`cm^2 g^-1`).
+        tau_0: Surface optical depth `tau[0]`.
+        mixing_length_alpha: Mixing-length parameter `alpha_MLT`.
+        use_ledoux_criterion: Whether to include `brunt_B` in `gradL`.
+        cgrav: Gravitational constant (`cm^3 g^-1 s^-2`).
+        brunt_b: Optional precomputed Brunt composition term of shape `(nz,)`.
+
+    Returns:
+        Dictionary containing `("scale_height", "gradr", "gradl", "gradt",
+        "mlt_vc", "mlt_d", "mlt_cdc", "brunt_b", "brunt_n2")` of shape `(nz,)`.
+    """
+    has_override = brunt_b is not None
+    b_override = (
+        jnp.asarray(brunt_b) if brunt_b is not None else jnp.zeros_like(dq)
+    )
+    return dict(
+        _eval_face_mlt_and_brunt_core_jax(
+            dq,
+            ln_r,
+            lum,
+            m_grav,
+            rho,
+            t,
+            peos,
+            ln_peos,
+            grada,
+            cp,
+            chi_rho,
+            chi_t,
+            mu,
+            opacity,
+            tau_0,
+            mixing_length_alpha,
+            use_ledoux_criterion,
+            cgrav,
+            b_override,
+            has_override,
+        )
+    )
 
 
 @jax.jit

@@ -54,3 +54,4 @@ Thumbs.db
 !.claude/rules/**
 site/
 docs/assets/figures/*.png
+docs/assets/figures/mesa_papers/*/*.png

@@ -6,7 +6,6 @@
 use std::fs;
 use std::path::Path;
 
-use flexmesa_chem::NuclideCatalog;
 use flexmesa_const::{M_SUN, R_SUN, SECYER, STANDARD_CGRAV};
 
 use crate::controls::{StarControls, StarError, StarJobControls, VarLayout};
@@ -17,6 +16,12 @@ use crate::micro::change_model_network;
 use crate::model::StarModel;
 use crate::model_io::read_mod_str;
 use crate::pre_ms::build_pre_ms_model;
+pub(crate) use crate::relax::equilibrate_tier2_scaled_model;
+use crate::relax::{
+    apply_composition_relaxation, apply_uniform_rotation, relax_core_boundary,
+    relax_from_profile_files, relax_irradiation_to_target,
+    relax_mass_to_target, relax_tau_factor_to_target, relax_to_remove_h_env,
+};
 use crate::tier2_extras::apply_planetary_core;
 use crate::zams::load_zams_model;
 
@@ -98,157 +103,6 @@ fn build_initial_planet_or_wd_model(
     model.mstar_start = model.mstar;
     model.mstar_old = model.mstar;
     Ok(model)
-}
-
-/// Equilibrates a scaled Tier 2/3 model so that hydrostatic, density, and
-/// radiative/convective temperature equations remain balanced for arbitrary
-/// substellar, white-dwarf, super-AGB, or massive stellar masses and core boundaries.
-pub(crate) fn equilibrate_tier2_scaled_model(model: &mut StarModel) {
-    let alpha_m = (model.xmstar / M_SUN).max(1.0e-6);
-    model.r_center = 0.0;
-    model.l_center = 0.0;
-    model.set_m_and_dm();
-    model.reconstruct_ln_r_from_lnd_and_dm();
-    model.set_m_grav_and_grav();
-    for k in 0..model.nz {
-        let m_zams_k = model.q[k] * M_SUN;
-        let m_ratio = (alpha_m * m_zams_k) / model.m_grav[k].max(1.0);
-        model.cgrav[k] = STANDARD_CGRAV * alpha_m.powf(-2.0 / 3.0) * m_ratio;
-    }
-    model.controls.opacity_factor = alpha_m.powf(-2.0 / 3.0);
-    model.set_m_grav_and_grav();
-}
-
-/// Applies uniform composition overrides (`set_uniform_initial_composition`) or
-/// $(Y, Z)$ relaxation (`relax_y`, `relax_z`) to `model.xa`.
-fn apply_composition_relaxation(model: &mut StarModel, job: &StarJobControls) {
-    let catalog = NuclideCatalog::builtin_ref();
-    let h1_id = catalog.get_nuclide_index("h1").unwrap_or(1);
-    let h2_id = catalog.get_nuclide_index("h2").unwrap_or(2);
-    let he3_id = catalog.get_nuclide_index("he3").unwrap_or(3);
-    let he4_id = catalog.get_nuclide_index("he4").unwrap_or(4);
-
-    if job.set_uniform_initial_composition {
-        let h1 = job.initial_h1.max(0.0);
-        let h2 = job.initial_h2.max(0.0);
-        let he3 = job.initial_he3.max(0.0);
-        let he4 = job.initial_he4.max(0.0);
-        let z_rem = (1.0 - (h1 + h2 + he3 + he4)).max(0.0);
-
-        let metal_count = model
-            .chem_id
-            .iter()
-            .filter(|&&id| {
-                id != h1_id && id != h2_id && id != he3_id && id != he4_id
-            })
-            .count()
-            .max(1);
-
-        for k in 0..model.nz {
-            let species = model.species;
-            for j in 0..species {
-                let cid = model.chem_id[j];
-                model.xa[k * species + j] = if cid == h1_id {
-                    h1
-                } else if cid == h2_id {
-                    h2
-                } else if cid == he3_id {
-                    he3
-                } else if cid == he4_id {
-                    he4
-                } else {
-                    z_rem / (metal_count as f64)
-                };
-            }
-            let row = model.cell_xa_mut(k);
-            let s: f64 = row.iter().sum();
-            if s > 0.0 {
-                for v in row.iter_mut() {
-                    *v /= s;
-                }
-            }
-        }
-        return;
-    }
-
-    if job.relax_y || job.relax_z {
-        let target_z = if job.relax_z && job.new_z >= 0.0 {
-            Some(job.new_z.clamp(0.0, 1.0))
-        } else {
-            None
-        };
-        let target_y = if job.relax_y && job.new_y >= 0.0 {
-            Some(job.new_y.clamp(0.0, 1.0))
-        } else {
-            None
-        };
-
-        for k in 0..model.nz {
-            let species = model.species;
-            let mut x_cur = 0.0;
-            let mut y_cur = 0.0;
-            let mut z_cur = 0.0;
-            for j in 0..species {
-                let cid = model.chem_id[j];
-                let val = model.xa[k * species + j];
-                if cid == h1_id || cid == h2_id {
-                    x_cur += val;
-                } else if cid == he3_id || cid == he4_id {
-                    y_cur += val;
-                } else {
-                    z_cur += val;
-                }
-            }
-            let z_new = target_z.unwrap_or(z_cur);
-            let y_new = target_y.unwrap_or(y_cur).min((1.0 - z_new).max(0.0));
-            let x_new = (1.0 - y_new - z_new).max(0.0);
-
-            for j in 0..species {
-                let cid = model.chem_id[j];
-                let val = model.xa[k * species + j];
-                model.xa[k * species + j] = if cid == h1_id || cid == h2_id {
-                    if x_cur > 1.0e-15 {
-                        val * (x_new / x_cur)
-                    } else if cid == h1_id {
-                        x_new
-                    } else {
-                        0.0
-                    }
-                } else if cid == he3_id || cid == he4_id {
-                    if y_cur > 1.0e-15 {
-                        val * (y_new / y_cur)
-                    } else if cid == he4_id {
-                        y_new
-                    } else {
-                        0.0
-                    }
-                } else if z_cur > 1.0e-15 {
-                    val * (z_new / z_cur)
-                } else {
-                    z_new / (species.saturating_sub(2).max(1) as f64)
-                };
-            }
-            let row = model.cell_xa_mut(k);
-            let s: f64 = row.iter().sum();
-            if s > 0.0 {
-                for v in row.iter_mut() {
-                    *v /= s;
-                }
-            }
-        }
-    }
-}
-
-fn apply_uniform_rotation(model: &mut StarModel, omega_0: f64) {
-    model.controls.rotation_flag = true;
-    if model.omega.len() != model.nz {
-        model.omega.resize(model.nz, 0.0);
-        model.j_rot.resize(model.nz, 0.0);
-    }
-    for k in 0..model.nz {
-        model.omega[k] = omega_0;
-        model.j_rot[k] = (2.0 / 3.0) * model.r[k].powi(2) * omega_0;
-    }
 }
 
 /// Initializes a [`StarModel`] from `bundle` (or updates `existing_model` for
@@ -363,24 +217,32 @@ pub fn init_or_update_model_from_bundle(
 
     // Preserve active model state across stages / `.mod` loads unless overridden
     let preserved_net = model.job.net_name.clone();
-    let preserved_v_flag = model.controls.v_flag;
-    let preserved_u_flag = model.controls.u_flag;
-    let preserved_rot_flag = model.controls.rotation_flag;
-    let preserved_tau_factor = model.controls.tau_factor;
-    let preserved_init_mass = model.controls.initial_mass;
-    let preserved_init_z = model.controls.initial_z;
-    let preserved_init_y = model.controls.initial_y;
+    let (preserved_v, preserved_u, preserved_rot) = (
+        model.controls.v_flag,
+        model.controls.u_flag,
+        model.controls.rotation_flag,
+    );
+    let (preserved_tau, preserved_m, preserved_z, preserved_y) = (
+        model.controls.tau_factor,
+        model.controls.initial_mass,
+        model.controls.initial_z,
+        model.controls.initial_y,
+    );
 
     model.job = job.clone();
     model.job.net_name = preserved_net;
     model.controls = controls;
-    model.controls.v_flag = preserved_v_flag;
-    model.controls.u_flag = preserved_u_flag;
-    model.controls.rotation_flag = preserved_rot_flag;
-    model.controls.tau_factor = preserved_tau_factor;
-    model.controls.initial_mass = preserved_init_mass;
-    model.controls.initial_z = preserved_init_z;
-    model.controls.initial_y = preserved_init_y;
+    (
+        model.controls.v_flag,
+        model.controls.u_flag,
+        model.controls.rotation_flag,
+    ) = (preserved_v, preserved_u, preserved_rot);
+    (
+        model.controls.tau_factor,
+        model.controls.initial_mass,
+        model.controls.initial_z,
+        model.controls.initial_y,
+    ) = (preserved_tau, preserved_m, preserved_z, preserved_y);
     model.eos_config = bundle.eos_config;
     model.kap_config = bundle.kap_config.clone();
 
@@ -393,46 +255,29 @@ pub fn init_or_update_model_from_bundle(
         )?;
     }
 
-    // 2. Composition relaxation (`set_uniform_initial_composition`, `relax_y`, `relax_z`)
+    // 2. Composition and external profile relaxation
     if case_name != "tzo" {
         apply_composition_relaxation(&mut model, &job);
     }
+    relax_from_profile_files(&mut model, &bundle.case_dir);
 
-    // 3. Mass relaxation (`relax_mass`, `relax_initial_mass`, `relax_mass_scale`)
+    // 3. Mass and H-envelope stripping relaxation
     if job.relax_mass && job.new_mass > 0.0 {
-        let old_mstar = model.mstar.max(1.0);
-        let old_xmstar = model.xmstar.max(1.0);
-        let new_mstar = job.new_mass * M_SUN;
-        if (new_mstar - old_mstar).abs() > 1.0e-9 * old_mstar {
-            let dln_r = (new_mstar / old_mstar).ln() / 3.0;
-            model.mstar = new_mstar;
-            model.xmstar = (new_mstar - model.m_center).max(0.0);
-            model.mstar_start = model.mstar;
-            model.mstar_old = model.mstar;
-            for k in 0..model.nz {
-                model.ln_r[k] += dln_r;
-                if is_tier2_or_3 {
-                    model.lum[k] *= model.xmstar / old_xmstar;
-                }
-            }
-        }
-        model.controls.initial_mass = job.new_mass;
+        relax_mass_to_target(&mut model, job.new_mass, 8, is_tier2_or_3);
+    } else if job.relax_initial_mass_to_remove_h_env {
+        relax_to_remove_h_env(&mut model, 1.0e-4, 8, is_tier2_or_3);
     }
 
-    // 4. Inner boundary relaxation (`relax_m_center`, `relax_r_center`, `relax_l_center`)
+    // 4. Inner boundary, irradiation, and optical-depth relaxation
     if job.relax_m_center && job.new_core_mass > 0.0 && case_name != "tzo" {
-        let old_xmstar = model.xmstar.max(1.0);
-        apply_planetary_core(
+        relax_core_boundary(
             &mut model,
             job.new_core_mass,
             job.core_avg_rho,
             job.core_avg_eps,
+            8,
+            is_tier2_or_3,
         );
-        if is_tier2_or_3 {
-            for k in 0..model.nz {
-                model.lum[k] *= model.xmstar / old_xmstar;
-            }
-        }
     }
     if job.relax_r_center && job.new_r_center > 0.0 {
         model.r_center = job.new_r_center;
@@ -441,21 +286,18 @@ pub fn init_or_update_model_from_bundle(
         model.l_center = job.new_l_center;
     }
     if job.relax_irradiation && job.new_irradiation_flux > 0.0 {
-        model.controls.irradiation_flux = job.new_irradiation_flux;
-        if job.column_depth_for_irradiation > 0.0 {
-            model.controls.column_depth_for_irradiation =
-                job.column_depth_for_irradiation;
-        }
+        relax_irradiation_to_target(
+            &mut model,
+            job.new_irradiation_flux,
+            job.column_depth_for_irradiation,
+            8,
+        );
     }
-
-    // 5. Surface optical depth factor (`set_tau_factor`)
     if job.set_tau_factor && job.set_to_this_tau_factor > 0.0 {
-        model.controls.tau_factor = job.set_to_this_tau_factor;
+        relax_tau_factor_to_target(&mut model, job.set_to_this_tau_factor, 8);
     }
 
-    // Pure-envelope integration mode (`make_env`): when nuclear energy generation
-    // is disabled (`eps_nuc_factor == 0.0`) and `l_center == 0.0`, supply core
-    // luminosity at the inner boundary so radiative/convective flux stays balanced.
+    // Pure-envelope integration mode (`make_env`)
     if model.controls.eps_nuc_factor == 0.0
         && model.l_center == 0.0
         && model.lum.first().copied().unwrap_or(0.0) > 0.0
@@ -500,7 +342,6 @@ pub fn init_or_update_model_from_bundle(
         apply_uniform_rotation(&mut model, omega_0);
     }
 
-    // Rebuild `VarLayout` whenever `v_flag`, `u_flag`, or `species` changed
     model.layout = VarLayout::new(
         model.species,
         model.controls.v_flag,
@@ -549,11 +390,7 @@ pub fn init_or_update_model_from_bundle(
         ) || match crate::hydro_eqns::eval_henyey_equations(
             &mut model, false,
         ) {
-            Ok(sys) => {
-                let (_, max_res) =
-                    crate::solver::compute_vector_norms(&sys.equ);
-                max_res > 0.25
-            }
+            Ok(sys) => crate::solver::compute_vector_norms(&sys.equ).1 > 0.25,
             Err(_) => true,
         };
         if needs_fallback {

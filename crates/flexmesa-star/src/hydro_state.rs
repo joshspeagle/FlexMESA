@@ -13,6 +13,9 @@ pub struct HydroAuxState {
     /// Whether the model is currently in an initialization relaxation phase
     /// (`doing_relax` in `star_data_def.f90`).
     pub doing_relax: bool,
+    /// Cumulative global energy conservation error in $\mathrm{erg}$
+    /// (`cumulative_energy_error` in `star_data_step_work.inc`).
+    pub cumulative_energy_error: f64,
     /// Start-of-step specific heat at constant pressure $C_{P,\mathrm{start},k}$ (`Cp_start`).
     pub cp_start: Vec<f64>,
     /// Start-of-step adiabatic temperature gradient $\nabla_{\mathrm{ad,start},k}$ (`grada_start`).
@@ -61,6 +64,10 @@ pub struct HydroAuxState {
     pub sig_rti: Vec<f64>,
     /// Rayleigh-Taylor instability momentum source term (`source_plus_alpha_RTI`).
     pub source_plus_alpha_rti: Vec<f64>,
+    /// Rayleigh-Taylor instability amplitude $\alpha_{\mathrm{RTI},k}$ (`alpha_RTI`).
+    pub alpha_rti: Vec<f64>,
+    /// Rotational velocity to critical velocity ratio $\omega_k / \omega_{\mathrm{crit},k}$ (`w_div_wc`).
+    pub w_div_wc: Vec<f64>,
     /// Rotational pressure distortion correction factor $f_{P,\mathrm{rot},k}$ (`fp_rot`).
     pub fp_rot: Vec<f64>,
     /// Rotational temperature distortion correction factor $f_{T,\mathrm{rot},k}$ (`ft_rot`).
@@ -90,6 +97,7 @@ impl HydroAuxState {
     pub fn new(nz: usize, species: usize) -> Self {
         Self {
             doing_relax: false,
+            cumulative_energy_error: 0.0,
             cp_start: vec![0.0; nz],
             grada_start: vec![0.0; nz],
             chi_t_start: vec![0.0; nz],
@@ -113,6 +121,8 @@ impl HydroAuxState {
             mlt_vc_old: vec![0.0; nz],
             sig_rti: vec![0.0; nz],
             source_plus_alpha_rti: vec![0.0; nz],
+            alpha_rti: vec![0.0; nz],
+            w_div_wc: vec![0.0; nz],
             fp_rot: vec![1.0; nz],
             ft_rot: vec![1.0; nz],
             i_rot: vec![0.0; nz],
@@ -149,6 +159,8 @@ impl HydroAuxState {
             &mut self.mlt_vc_old,
             &mut self.sig_rti,
             &mut self.source_plus_alpha_rti,
+            &mut self.alpha_rti,
+            &mut self.w_div_wc,
             &mut self.i_rot,
             &mut self.brunt_n2_composition_term,
         ] {

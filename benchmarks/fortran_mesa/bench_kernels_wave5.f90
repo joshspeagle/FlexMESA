@@ -18,6 +18,7 @@ module bench_kernels_wave5
       clight, crad, kerg, hbar, amu, me, mp, qe, msun, rsun, lsun, secyer
    use hydro_rotation, only: rot_a_poly => a, log_term_power
    use binary_utils, only: eval_rlobe
+   use binary_tides, only: hut_f3 => f3, hut_f4 => f4
    use astero_def, only: correction_factor
    use astero_lib, only: astero_get_cubic_all_freq_corr, &
       astero_get_combined_all_freq_corr
@@ -336,7 +337,7 @@ contains
       real(dp) :: q2, log_q2, gam_q, r_exp, mdot_thin
       real(dp) :: one_m_a2, z1, z2, r_isco, m_eq, m_eff, ratio, a_cur, m_rat
       real(dp) :: eta, mdot_edd, jdot_gr, r_eff_mb, om_orb, jdot_mb
-      real(dp) :: q_tid, r_over_a, e2, e4, f3, f4, one_m_e2, bracket, edot_tid
+      real(dp) :: q_tid, r_over_a, e2, f3, f4, one_m_e2, bracket, edot_tid
 
       s = (real(k, dp) - 0.5_dp) / real(nz, dp)
       md = msun * (1.20_dp + 6.80_dp * s)
@@ -389,9 +390,8 @@ contains
       jdot_mb = -3.8e-30_dp * md * (rsun**4) * ((r_eff_mb / rsun)**3) * &
          (om_orb**3)
 
-      q_tid = ma / md; r_over_a = r_d / sep; e2 = ecc * ecc; e4 = e2 * e2
-      f3 = 1.0_dp + 3.75_dp * e2 + 1.875_dp * e4 + (5.0_dp / 64.0_dp) * e4 * e2
-      f4 = 1.0_dp + 1.5_dp * e2 + 0.125_dp * e4
+      q_tid = ma / md; r_over_a = r_d / sep; e2 = ecc * ecc
+      f3 = hut_f3(ecc); f4 = hut_f4(ecc)
       one_m_e2 = max(1.0_dp - e2, 1.0e-12_dp)
       bracket = f3 - (11.0_dp / 18.0_dp) * (om_star / om_orb) * f4 * &
          (one_m_e2**1.5_dp)

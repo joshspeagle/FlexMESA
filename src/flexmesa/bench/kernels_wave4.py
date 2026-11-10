@@ -28,73 +28,52 @@ import jax.numpy as jnp
 import numpy as np
 import numpy.typing as npt
 
-from flexmesa import _rust
+from flexmesa import _rust, star
 from flexmesa.bench import harness as _h
-from flexmesa.star import (
-    StarModel,
-    eval_face_mlt_and_brunt_jax,
-    eval_h211_timestep_jax,
-    eval_hydro_residuals_jax,
-    eval_mesh_gval_jax,
-    eval_varcontrol_jax,
-    interp_q,
-    solve_henyey_linear_jax,
-)
 
 type _ArrF64 = npt.NDArray[np.float64]
 
-_FACE_MLT_JIT = jax.jit(eval_face_mlt_and_brunt_jax)
+
+def _face_mlt_obs(*args: jax.Array | float) -> jax.Array:
+    """Evaluate `ln_peos + gradt + ln(opacity)` from face MLT/Brunt."""
+    out = star.eval_face_mlt_and_brunt_jax(*args)  # type: ignore[arg-type]
+    return jnp.asarray(args[7] + out["gradt"] + jnp.log(args[13]))
+
+
+_FACE_MLT_JIT = jax.jit(_face_mlt_obs)
 _FACE_MLT_BATCH_JIT = jax.jit(
     jax.vmap(
-        lambda lnr, lum, dq, m, rho, t, peos, lnp, ga, cp, cr, ct, mu, kap: (
-            eval_face_mlt_and_brunt_jax(
-                dq, lnr, lum, m, rho, t, peos, lnp, ga, cp, cr, ct, mu, kap
-            )["gradt"]
-        ),
-        in_axes=(0, 0, None, None, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+        _face_mlt_obs,
+        in_axes=(None, 0, 0, None, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, None),
     )
 )
 
-_HYDRO_RES_JIT = jax.jit(eval_hydro_residuals_jax)
+
+def _hydro_res_obs(*args: jax.Array | float) -> jax.Array:
+    """Evaluate `|equ| + |diag(dblk)|` via `eval_hydro_residuals_jax`."""
+    equ = star.eval_hydro_residuals_jax(*args[:-1])
+    return jnp.asarray(jnp.abs(equ) + jnp.abs(args[-1]))
+
+
+_HYDRO_RES_JIT = jax.jit(_hydro_res_obs)
 _HYDRO_RES_BATCH_JIT = jax.jit(
     jax.vmap(
-        lambda lnd, lnt, lnr, lum, dq, dm, dmb, m, lnds, lnp, lne, es, gt, en, eneu, em, lnps, lnts, dt: (  # noqa: E501
-            eval_hydro_residuals_jax(
-                dq,
-                dm,
-                dmb,
-                m,
-                lnd,
-                lnt,
-                lnr,
-                lum,
-                lnds,
-                lnp,
-                lne,
-                es,
-                gt,
-                en,
-                eneu,
-                em,
-                lnps,
-                lnts,
-                dt,
-            )
-        ),
+        _hydro_res_obs,
         in_axes=(
-            0,
-            0,
-            0,
-            0,
-            None,
             None,
             None,
             None,
             None,
             0,
             0,
+            0,
+            0,
             None,
             0,
+            0,
+            None,
+            0,
+            None,
             None,
             None,
             None,
@@ -106,19 +85,19 @@ _HYDRO_RES_BATCH_JIT = jax.jit(
 )
 
 _SOLVE_PCR_JIT = jax.jit(
-    lambda l_j, d_j, u_j, equ_j: solve_henyey_linear_jax(
+    lambda l_j, d_j, u_j, equ_j: star.solve_henyey_linear_jax(
         l_j, d_j, u_j, equ_j, solver_mode="pcr"
     )
 )
 _SOLVE_FFI_JIT = jax.jit(
-    lambda l_j, d_j, u_j, equ_j: solve_henyey_linear_jax(
+    lambda l_j, d_j, u_j, equ_j: star.solve_henyey_linear_jax(
         l_j, d_j, u_j, equ_j, solver_mode="rust_ffi"
     )
 )
 
-_MESH_GVAL_JIT = jax.jit(eval_mesh_gval_jax)
+_MESH_GVAL_JIT = jax.jit(star.eval_mesh_gval_jax)
 _MESH_GVAL_BATCH_JIT = jax.jit(
-    jax.vmap(lambda lnp, lnt: eval_mesh_gval_jax(lnp, lnt), in_axes=(0, 0))
+    jax.vmap(lambda lnp, lnt: star.eval_mesh_gval_jax(lnp, lnt), in_axes=(0, 0))
 )
 
 
@@ -127,7 +106,7 @@ def _bcast_stage3(x: jax.Array, nz: int) -> jax.Array:
     return jnp.broadcast_to(x[None, :], (_h.STAGE3_BATCH_SIZE, nz))
 
 
-def make_wave4_zams_model(nz: int) -> StarModel:
+def make_wave4_zams_model(nz: int) -> star.StarModel:
     """Construct a resampled $4.0\\,M_\\odot, Z = 0.02$ ZAMS `StarModel`.
 
     Matches `flexmesa_bench::make_wave4_zams_model(nz)` so cross-language
@@ -139,7 +118,7 @@ def make_wave4_zams_model(nz: int) -> StarModel:
     Returns:
         Initialized `StarModel` with `nz` zones.
     """
-    base = StarModel.from_zams(4.0, 0.02)
+    base = star.StarModel.from_zams(4.0, 0.02)
     if nz == base.nz:
         return base
 
@@ -161,9 +140,9 @@ def make_wave4_zams_model(nz: int) -> StarModel:
     dq = np.ascontiguousarray(dq / np.sum(dq), dtype=np.float64)
 
     base_dq = base.dq
-    lnd = interp_q(base_dq, base.lnd, dq)
-    ln_t = interp_q(base_dq, base.ln_t, dq)
-    lum = interp_q(base_dq, base.lum, dq)
+    lnd = star.interp_q(base_dq, base.lnd, dq)
+    ln_t = star.interp_q(base_dq, base.ln_t, dq)
+    lum = star.interp_q(base_dq, base.lum, dq)
     dm = base.mstar * dq
     rho = np.exp(lnd)
     dv = (3.0 * dm) / (4.0 * np.pi * np.maximum(rho, 1.0e-30))
@@ -175,11 +154,11 @@ def make_wave4_zams_model(nz: int) -> StarModel:
     xa = np.empty((nz_c, spec), dtype=np.float64)
     for j in range(spec):
         col = np.ascontiguousarray(base_xa[:, j], dtype=np.float64)
-        xa[:, j] = np.maximum(interp_q(base_dq, col, dq), 0.0)
+        xa[:, j] = np.maximum(star.interp_q(base_dq, col, dq), 0.0)
     row_sums = np.sum(xa, axis=1, keepdims=True)
     xa = np.ascontiguousarray(xa / np.maximum(row_sums, 1.0e-30))
 
-    model = StarModel.from_zams(4.0, 0.02, eval_hydro=False)
+    model = star.StarModel.from_zams(4.0, 0.02, eval_hydro=False)
     model.set_primary_state(lnd, ln_t, ln_r, lum, dq, xa)
     model.eval_hydro_vars()
     model.save_start_values()
@@ -224,52 +203,58 @@ def bench_star_micro_vars(
         model.eval_hydro_vars(skip_net=False, skip_net_jacobian=True)
         return model.ln_peos + model.gradt + np.log(model.opacity)
 
-    def _s2() -> jax.Array:
-        out = _FACE_MLT_JIT(
-            dq_j,
-            lnr_j,
-            lum_j,
-            m_j,
-            rho_j,
-            t_j,
-            peos_j,
-            lnp_j,
-            ga_j,
-            cp_j,
-            cr_j,
-            ct_j,
-            mu_j,
-            kap_j,
-            tau0,
-        )
-        return jnp.asarray(lnp_j + out["gradt"] + jnp.log(kap_j))
-
+    s2_args = (
+        dq_j,
+        lnr_j,
+        lum_j,
+        m_j,
+        rho_j,
+        t_j,
+        peos_j,
+        lnp_j,
+        ga_j,
+        cp_j,
+        cr_j,
+        ct_j,
+        mu_j,
+        kap_j,
+        tau0,
+    )
+    s3_args = (
+        dq_j,
+        lnr_b,
+        lum_b,
+        m_j,
+        rho_b,
+        t_b,
+        peos_b,
+        lnp_b,
+        ga_b,
+        cp_b,
+        cr_b,
+        ct_b,
+        mu_b,
+        kap_b,
+        tau0,
+    )
     s0, v0 = _h.measure_and_capture(n_warmup, n_repeats, _s0)
     s1, v1 = _h.measure_and_capture(n_warmup, n_repeats, _s1)
-    s2, _ = _h.measure_and_capture(
-        n_warmup, n_repeats, _s2, record_first_as_compile=True
-    )
-    s3, _ = _h.measure_stage3_batch(
+    s2, v2_j = _h.measure_and_capture(
         n_warmup,
         n_repeats,
-        lambda: _FACE_MLT_BATCH_JIT(
-            lnr_b,
-            lum_b,
-            dq_j,
-            m_j,
-            rho_b,
-            t_b,
-            peos_b,
-            lnp_b,
-            ga_b,
-            cp_b,
-            cr_b,
-            ct_b,
-            mu_b,
-            kap_b,
-        ),
+        lambda: _FACE_MLT_JIT(*s2_args),
+        record_first_as_compile=True,
     )
-    err = _h.max_rel_diff(v0, v1)
+    s3, v3_b = _h.measure_stage3_batch(
+        n_warmup, n_repeats, lambda: _FACE_MLT_BATCH_JIT(*s3_args)
+    )
+    v2 = np.asarray(v2_j, dtype=np.float64)
+    v3 = np.asarray(v3_b[0], dtype=np.float64)
+    err = _h.max_err3(
+        _h.max_rel_diff(v0, v1),
+        _h.max_rel_diff(v0, v2),
+        _h.max_rel_diff(v0, v3),
+    )
     return _h.BenchRecord(
         workload="star_micro_vars",
         n_zones=model.nz,
@@ -306,6 +291,8 @@ def bench_star_hydro_eqns(
     lnps = float(model.ln_peos_surf)
     lnts = float(model.ln_t_surf)
     dt = float(model.dt)
+    sys_init = model.eval_equations(include_chem=False)
+    diag_j = jnp.asarray(np.diagonal(sys_init.dblk, axis1=1, axis2=2))
 
     nz_val = model.nz
     lnd_b, lnt_b = _bcast_stage3(lnd_j, nz_val), _bcast_stage3(lnt_j, nz_val)
@@ -316,63 +303,71 @@ def bench_star_hydro_eqns(
 
     def _s0() -> _ArrF64:
         sys = model.eval_equations(include_chem=False)
-        diag = np.diagonal(sys.ublk, axis1=1, axis2=2)
+        diag = np.diagonal(sys.dblk, axis1=1, axis2=2)
         return np.abs(sys.equ) + np.abs(diag)
 
+    s2_args = (
+        dq_j,
+        dm_j,
+        dmb_j,
+        m_j,
+        lnd_j,
+        lnt_j,
+        lnr_j,
+        lum_j,
+        lnds_j,
+        lnp_j,
+        lne_j,
+        es_j,
+        gt_j,
+        en_j,
+        eneu_j,
+        em_j,
+        lnps,
+        lnts,
+        dt,
+        diag_j,
+    )
+    s3_args = (
+        dq_j,
+        dm_j,
+        dmb_j,
+        m_j,
+        lnd_b,
+        lnt_b,
+        lnr_b,
+        lum_b,
+        lnds_j,
+        lnp_b,
+        lne_b,
+        es_j,
+        gt_b,
+        en_j,
+        eneu_j,
+        em_j,
+        lnps,
+        lnts,
+        dt,
+        diag_j,
+    )
     s0, v0 = _h.measure_and_capture(n_warmup, n_repeats, _s0)
     s1, v1 = _h.measure_and_capture(n_warmup, n_repeats, _s0)
-    s2, _ = _h.measure_and_capture(
+    s2, v2_j = _h.measure_and_capture(
         n_warmup,
         n_repeats,
-        lambda: _HYDRO_RES_JIT(
-            dq_j,
-            dm_j,
-            dmb_j,
-            m_j,
-            lnd_j,
-            lnt_j,
-            lnr_j,
-            lum_j,
-            lnds_j,
-            lnp_j,
-            lne_j,
-            es_j,
-            gt_j,
-            en_j,
-            eneu_j,
-            em_j,
-            lnps,
-            lnts,
-            dt,
-        ),
+        lambda: _HYDRO_RES_JIT(*s2_args),
         record_first_as_compile=True,
     )
-    s3, _ = _h.measure_stage3_batch(
-        n_warmup,
-        n_repeats,
-        lambda: _HYDRO_RES_BATCH_JIT(
-            lnd_b,
-            lnt_b,
-            lnr_b,
-            lum_b,
-            dq_j,
-            dm_j,
-            dmb_j,
-            m_j,
-            lnds_j,
-            lnp_b,
-            lne_b,
-            es_j,
-            gt_b,
-            en_j,
-            eneu_j,
-            em_j,
-            lnps,
-            lnts,
-            dt,
-        ),
+    s3, v3_b = _h.measure_stage3_batch(
+        n_warmup, n_repeats, lambda: _HYDRO_RES_BATCH_JIT(*s3_args)
     )
-    err = _h.max_rel_diff(v0.ravel(), v1.ravel())
+    v2 = np.asarray(v2_j, dtype=np.float64)
+    v3 = np.asarray(v3_b[0], dtype=np.float64)
+    err = _h.max_err3(
+        _h.max_rel_diff(v0.ravel(), v1.ravel()),
+        _h.max_rel_diff(v0.ravel(), v2.ravel()),
+        _h.max_rel_diff(v0.ravel(), v3.ravel()),
+    )
     return _h.BenchRecord(
         workload="star_hydro_eqns",
         n_zones=model.nz,
@@ -528,10 +523,12 @@ def bench_star_evolve_step(
 
     @jax.jit
     def _step_filter() -> jax.Array:
-        vc = eval_varcontrol_jax(
+        vc = star.eval_varcontrol_jax(
             lnd_j, lnt_j, lnr_j, lum_j, lnd0_j, lnt0_j, lnr0_j, lum0_j
         )
-        return jnp.asarray(eval_h211_timestep_jax(dt, dt, vc / 1.0e-4, 1.0))
+        return jnp.asarray(
+            star.eval_h211_timestep_jax(dt, dt, vc / 1.0e-4, 1.0)
+        )
 
     def _run_hybrid() -> _ArrF64:
         out = _run(False, True)

@@ -20,6 +20,14 @@ import numpy as np
 
 from flexmesa import bench, star
 
+_EXPECTED_WAVE4_CHECKSUMS_N8: dict[str, float] = {
+    "star_micro_vars": 2.497297961588147e2,
+    "star_hydro_eqns": 4.660073228335436e6,
+    "star_newton_step": 1.33327716396219e2,
+    "star_remesh": 4.203476959958853e2,
+    "star_evolve_step": 9.987143083869501e1,
+}
+
 
 def test_wave4_bench_kernels_return_positive_throughput() -> None:
     """All 5 Wave 4 benchmark kernels return valid timing and parity records."""
@@ -28,21 +36,21 @@ def test_wave4_bench_kernels_return_positive_throughput() -> None:
     )
     assert len(records) == 5
     workloads = {r.workload for r in records}
-    assert workloads == {
-        "star_micro_vars",
-        "star_hydro_eqns",
-        "star_newton_step",
-        "star_remesh",
-        "star_evolve_step",
-    }
+    assert workloads == set(_EXPECTED_WAVE4_CHECKSUMS_N8)
     for rec in records:
         assert rec.n_zones == 8
         assert rec.stage0.median_us > 0.0
         assert rec.stage1.median_us > 0.0
         assert rec.stage2.median_us > 0.0
         assert rec.stage3.median_us > 0.0
-        assert rec.max_rel_err < 1.0e-11
+        assert rec.max_rel_err < 1.0e-10
         assert np.isfinite(rec.checksum)
+        exp_sum = _EXPECTED_WAVE4_CHECKSUMS_N8[rec.workload]
+        rel_err = abs(rec.checksum - exp_sum) / abs(exp_sum)
+        assert rel_err <= 1.0e-12, (
+            f"{rec.workload} (N=8) checksum {rec.checksum:.15e} "
+            f"!= {exp_sum:.15e} (rel {rel_err:.3e})"
+        )
 
 
 def test_zams_catalog_masses_initialize_without_error() -> None:

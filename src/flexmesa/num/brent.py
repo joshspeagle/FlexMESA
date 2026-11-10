@@ -238,6 +238,30 @@ def brent_local_min(
     return x, fx
 
 
+def local_min(
+    max_tries: int,
+    a: float,
+    b: float,
+    eps: float,
+    t: float,
+    func: Callable[[float], float],
+) -> tuple[float, float]:
+    """Alias for :func:`brent_local_min` matching upstream ``local_min``.
+
+    Args:
+        max_tries: Maximum function evaluations allowed.
+        a: Lower search bound ($a < b$).
+        b: Upper search bound ($b > a$).
+        eps: Relative abscissa tolerance ($> 0$).
+        t: Absolute abscissa tolerance ($\\ge 0$).
+        func: Objective callable ``func(x)`` returning $f(x)$ in ``float64``.
+
+    Returns:
+        Tuple ``(x_min, f_min)`` in ``float64``.
+    """
+    return brent_local_min(max_tries, a, b, eps, t, func)
+
+
 def brent_global_min(
     max_tries: int,
     a: float,
@@ -250,41 +274,182 @@ def brent_global_min(
 ) -> tuple[float, float]:
     """Seeks the global minimum $(x_{\\min}, f(x_{\\min}))$ of $f$ on $[a, b]$.
 
+    Implements Brent's (1973) global minimization algorithm
+    (``eval_global_min`` / ``glomin`` in ``mod_brent.f90``) using parabolic
+    under-estimators with second-derivative bound $m$.
+
     Args:
-        max_tries: Total function evaluation budget across sub-intervals.
+        max_tries: Maximum outer interval-advance iterations.
         a: Lower search bound ($a < b$).
         b: Upper search bound ($b > a$).
-        c: Initial candidate abscissa clamped to $[a, b]$.
-        m: Upper bound on $|f''(x)|$ controlling sub-interval partitioning.
-        e: Relative abscissa tolerance ($> 0$).
-        t: Absolute abscissa tolerance ($\\ge 0$).
+        c: Initial candidate abscissa in $[a, b]$.
+        m: Upper bound on $f''(x)$ on $[a, b]$.
+        e: Positive bound on absolute evaluation error in $f(x)$.
+        t: Positive absolute abscissa tolerance.
         func: Objective callable ``func(x)`` returning $f(x)$ in ``float64``.
 
     Returns:
         Tuple ``(x_min, f_min)`` in ``float64``.
 
     Raises:
-        ValueError: If $a \\ge b$.
+        ValueError: If $a \\ge b$ or inputs/outputs are non-finite.
     """
-    if not (math.isfinite(a) and math.isfinite(b) and math.isfinite(c)) or (
-        a >= b
+    if (
+        not (
+            math.isfinite(a)
+            and math.isfinite(b)
+            and math.isfinite(c)
+            and math.isfinite(m)
+            and math.isfinite(e)
+            and math.isfinite(t)
+        )
+        or a >= b
     ):
         raise ValueError("require finite a < b and c in brent_global_min")
-    best_x = min(max(float(c), float(a)), float(b))
-    best_f = float(func(best_x))
-    for endpoint in (float(a), float(b)):
-        fe = float(func(endpoint))
-        if fe < best_f:
-            best_f = fe
-            best_x = endpoint
-    n_sub = 8 if m > 0.0 else 4
-    step = (b - a) / float(n_sub)
-    sub_budget = max(25, max_tries // n_sub)
-    for idx in range(n_sub):
-        sub_a = a + idx * step
-        sub_b = b if (idx + 1 == n_sub) else (sub_a + step)
-        xm, fm = brent_local_min(sub_budget, sub_a, sub_b, e, t, func)
-        if fm < best_f:
-            best_f = fm
-            best_x = xm
-    return best_x, best_f
+    machep = 2.220446049250313e-16
+    a0 = float(b)
+    x = a0
+    a2 = float(a)
+    y0 = float(func(a0))
+    yb = y0
+    y2 = float(func(a2))
+    y = y2
+    if not (math.isfinite(y0) and math.isfinite(y2)):
+        raise ValueError("non-finite endpoint value in brent_global_min")
+    if y0 < y:
+        y = y0
+    else:
+        x = a2
+    if m <= 0.0 or b <= a:
+        return x, y
+
+    m2 = 0.5 * (1.0 + 16.0 * machep) * float(m)
+    sc = 0.5 * (a2 + a0) if (c <= a2 or a0 <= c) else float(c)
+    y1 = float(func(sc))
+    if not math.isfinite(y1):
+        raise ValueError("non-finite interior value in brent_global_min")
+    k = 3
+    d0 = a2 - sc
+    h = 9.0 / 11.0
+    if y1 < y:
+        x = sc
+        y = y1
+
+    limit = 100_000 if max_tries <= 0 else int(max_tries)
+    for _ in range(limit):
+        d1 = a2 - a0
+        d2 = sc - a0
+        z2 = a0_end = float(b) - a2
+        z0 = y2 - y1
+        z1 = y2 - y0
+        r = d1 * d1 * z0 - d0 * d0 * z1
+        p = r
+        qs = 2.0 * (d0 * z1 - d1 * z0)
+        q = qs
+
+        if k < 1_000_000 or y2 <= y:
+            while True:
+                if q * (r * (yb - y2) + z2 * q * ((y2 - y) + t)) < (
+                    z2 * m2 * r * (z2 * q - r)
+                ):
+                    a3 = a2 + r / q
+                    y3 = float(func(a3))
+                    if not math.isfinite(y3):
+                        raise ValueError("non-finite f(x) in brent_global_min")
+                    if y3 < y:
+                        x = a3
+                        y = y3
+                k = (1611 * k) % 1_048_576
+                q = 1.0
+                r = (float(b) - float(a)) * 0.00001 * float(k)
+                if a0_end <= r:
+                    break
+        else:
+            k = (1611 * k) % 1_048_576
+            q = 1.0
+            r = (float(b) - float(a)) * 0.00001 * float(k)
+            while r < z2:
+                if q * (r * (yb - y2) + z2 * q * ((y2 - y) + t)) < (
+                    z2 * m2 * r * (z2 * q - r)
+                ):
+                    a3 = a2 + r / q
+                    y3 = float(func(a3))
+                    if not math.isfinite(y3):
+                        raise ValueError("non-finite f(x) in brent_global_min")
+                    if y3 < y:
+                        x = a3
+                        y = y3
+                k = (1611 * k) % 1_048_576
+                q = 1.0
+                r = (float(b) - float(a)) * 0.00001 * float(k)
+
+        r = m2 * d0 * d1 * d2
+        s = math.sqrt(((y2 - y) + t) / m2)
+        h = 0.5 * (1.0 + h)
+        p = h * (p + 2.0 * r * s)
+        q = q + 0.5 * qs
+        r = -0.5 * (d0 + (z0 + 2.01 * e) / (d0 * m2))
+        r = (a2 + s) if (r < s or d0 < 0.0) else (a2 + r)
+        a3 = (a2 + p / q) if (p * q > 0.0) else r
+
+        while True:
+            a3 = max(a3, r)
+            if float(b) <= a3:
+                a3 = float(b)
+                y3 = yb
+            else:
+                y3 = float(func(a3))
+                if not math.isfinite(y3):
+                    raise ValueError("non-finite f(x) in brent_global_min")
+            if y3 < y:
+                x = a3
+                y = y3
+            d0 = a3 - a2
+            if a3 <= r:
+                break
+            p = 2.0 * (y2 - y3) / (float(m) * d0)
+            if (1.0 + 9.0 * machep) * d0 <= abs(p):
+                break
+            if 0.5 * m2 * (d0 * d0 + p * p) <= (y2 - y) + (y3 - y) + 2.0 * t:
+                break
+            a3 = 0.5 * (a2 + a3)
+            h = 0.9 * h
+
+        if float(b) <= a3:
+            break
+        a0 = sc
+        sc = a2
+        a2 = a3
+        y0 = y1
+        y1 = y2
+        y2 = y3
+
+    return x, y
+
+
+def glomin(
+    max_tries: int,
+    a: float,
+    b: float,
+    c: float,
+    m: float,
+    e: float,
+    t: float,
+    func: Callable[[float], float],
+) -> tuple[float, float]:
+    """Alias for :func:`brent_global_min` matching Burkardt/MESA ``glomin``.
+
+    Args:
+        max_tries: Maximum outer interval-advance iterations.
+        a: Lower search bound ($a < b$).
+        b: Upper search bound ($b > a$).
+        c: Initial candidate abscissa in $[a, b]$.
+        m: Upper bound on $f''(x)$ on $[a, b]$.
+        e: Positive bound on absolute evaluation error in $f(x)$.
+        t: Positive absolute abscissa tolerance.
+        func: Objective callable ``func(x)`` returning $f(x)$ in ``float64``.
+
+    Returns:
+        Tuple ``(x_min, f_min)`` in ``float64``.
+    """
+    return brent_global_min(max_tries, a, b, c, m, e, t, func)

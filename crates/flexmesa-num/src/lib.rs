@@ -48,8 +48,10 @@
     clippy::too_many_lines
 )]
 
+pub mod bobyqa;
 pub mod brent;
 pub mod newton;
+pub mod newuoa;
 pub mod quadrature;
 pub mod rk;
 mod rk_tableau;
@@ -59,18 +61,24 @@ mod rosenbrock_coeffs;
 pub mod search;
 pub mod simplex;
 
-pub use brent::{brent_global_min, brent_local_min, brent_safe_zero};
+pub use bobyqa::{bobyqa, BobyqaResult};
+pub use brent::{
+    brent_global_min, brent_local_min, brent_safe_zero, glomin, local_min,
+};
 pub use newton::{
     newton_solve_banded, newton_solve_block_tridiagonal, newton_solve_dense,
     NewtonConfig, NewtonResult,
 };
+pub use newuoa::{newuoa, NewuoaResult};
 pub use quadrature::{dfridr, integrate};
 pub use rk::{dop853, dopri5, rk2, rk4, DopriResult};
 pub use root::{
     look_for_brackets, safe_root_dual, safe_root_with_brackets,
     safe_root_with_guess, safe_root_without_brackets,
 };
-pub use rosenbrock::{rosenbrock_banded, rosenbrock_dense, RosenbrockResult};
+pub use rosenbrock::{
+    rosenbrock_banded, rosenbrock_dae_diag, rosenbrock_dense, RosenbrockResult,
+};
 pub use rosenbrock_coeffs::RosenbrockVariant;
 pub use search::{
     binary_search, binary_search_1based, find0, find0_quadratic,

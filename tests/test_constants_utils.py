@@ -15,6 +15,8 @@ This test module verifies:
 
 from __future__ import annotations
 
+import pathlib
+
 import hypothesis
 import jax
 import jax.numpy as jnp
@@ -225,20 +227,33 @@ def test_integer_idict_matches_upstream_mesa() -> None:
 def test_tokenize_matches_upstream_mesa_token_txt() -> None:
     """Verify `.net` stream tokenizer against `utils/test/token.txt`.
 
-    Checks comment stripping (including adjacent `!` comments), `&` continuation
-    skipping, single- and double-quoted strings, and delimiter tokens.
+    Checks all tokens emitted from `utils/test/token.txt` (including lines 4-5
+    `file = "token.txt"` and `file2 = 'token2.txt'`) against
+    `utils/test/test_output`, as well as inline comment and `&` continuation
+    edge cases.
     """
-    sample = (
-        "!test input for token_read\n\n"
-        "add_isos(\n"
-        "   ih1, ihe4, & ! ignore & and comment\n"
-        "   ic12!inline_comment\n"
-        "   )\n\n"
-        "'string1'  \"string2\"\n\n"
-        "add_reactions(rc12pg, rc12ap)\n"
+    token_txt = (
+        "\n"
+        "      ! test token reader\n"
+        "      \n"
+        '      file = "token.txt"\n'
+        "      file2 = 'token2.txt'\n"
+        "      \n"
+        "      add_isos(ih1, ihe4, ic12)\n"
+        "      \n"
+        "      add_reactions(\n"
+        "          rc12pg,           ! c12(p,g)n13\n"
+        "          rc12ap            ! c12(a,p)n15\n"
+        "          )\n"
+        "         "
     )
-    tokens = utils.tokenize(sample)
     expected = [
+        utils.Token(utils.TokenKind.NAME, "file"),
+        utils.Token(utils.TokenKind.NAME, "="),
+        utils.Token(utils.TokenKind.STRING, "token.txt"),
+        utils.Token(utils.TokenKind.NAME, "file2"),
+        utils.Token(utils.TokenKind.NAME, "="),
+        utils.Token(utils.TokenKind.STRING, "token2.txt"),
         utils.Token(utils.TokenKind.NAME, "add_isos"),
         utils.Token(utils.TokenKind.LEFT_PAREN, "("),
         utils.Token(utils.TokenKind.NAME, "ih1"),
@@ -247,8 +262,6 @@ def test_tokenize_matches_upstream_mesa_token_txt() -> None:
         utils.Token(utils.TokenKind.COMMA, ","),
         utils.Token(utils.TokenKind.NAME, "ic12"),
         utils.Token(utils.TokenKind.RIGHT_PAREN, ")"),
-        utils.Token(utils.TokenKind.STRING, "string1"),
-        utils.Token(utils.TokenKind.STRING, "string2"),
         utils.Token(utils.TokenKind.NAME, "add_reactions"),
         utils.Token(utils.TokenKind.LEFT_PAREN, "("),
         utils.Token(utils.TokenKind.NAME, "rc12pg"),
@@ -257,7 +270,57 @@ def test_tokenize_matches_upstream_mesa_token_txt() -> None:
         utils.Token(utils.TokenKind.RIGHT_PAREN, ")"),
         utils.Token(utils.TokenKind.EOF, ""),
     ]
+    tokens = utils.tokenize(token_txt)
     assert tokens == expected
+
+    tz = utils.Tokenizer(token_txt)
+    streamed = [tz.next_token() for _ in range(len(expected))]
+    assert streamed == expected
+    assert tz.next_token() == utils.Token(utils.TokenKind.EOF, "")
+
+    repo_root = pathlib.Path(__file__).resolve().parent.parent
+    upstream_token = (
+        repo_root
+        / ".mesa_temp_cache"
+        / "mesa_root"
+        / "utils"
+        / "test"
+        / "token.txt"
+    )
+    if upstream_token.exists():
+        assert utils.tokenize(upstream_token.read_text()) == expected
+
+    upstream_output = (
+        repo_root
+        / ".mesa_temp_cache"
+        / "mesa_root"
+        / "utils"
+        / "test"
+        / "test_output"
+    )
+    if upstream_output.exists():
+        raw_lines = [
+            line.strip()
+            for line in upstream_output.read_text().splitlines()
+            if line.strip().endswith("_token") or "_token " in line
+        ]
+        formatted = []
+        for tok in expected:
+            if tok.kind == utils.TokenKind.NAME:
+                formatted.append(f"name_token {len(tok.value):11d} {tok.value}")
+            elif tok.kind == utils.TokenKind.STRING:
+                formatted.append(
+                    f"string_token {len(tok.value):11d} {tok.value}"
+                )
+            elif tok.kind == utils.TokenKind.LEFT_PAREN:
+                formatted.append("left_paren_token")
+            elif tok.kind == utils.TokenKind.RIGHT_PAREN:
+                formatted.append("right_paren_token")
+            elif tok.kind == utils.TokenKind.COMMA:
+                formatted.append("comma_token")
+            elif tok.kind == utils.TokenKind.EOF:
+                formatted.append("eof_token")
+        assert formatted == raw_lines
 
 
 def test_replace_bad_nums_avoids_nan_gradient_contamination() -> None:

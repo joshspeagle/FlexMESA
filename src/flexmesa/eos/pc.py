@@ -99,6 +99,7 @@ def eval_pc_eos(
     pc_gamma_start_crystal: float = 170.0,
     pc_gamma_full_crystal: float = 180.0,
     mass_fraction_limit: float = 1.0e-4,
+    solver_mode: str = "jax",
     backend: _dispatch.Backend = "auto",
 ) -> core.EosEvalOutput:
     """Evaluate the 26-channel Potekhin-Chabrier (`PC`) equation of state.
@@ -114,6 +115,7 @@ def eval_pc_eos(
         pc_gamma_start_crystal: $\\Gamma_i$ onset of crystallization.
         pc_gamma_full_crystal: $\\Gamma_i$ completion of crystallization.
         mass_fraction_limit: Minimum species mass fraction included in `PC`.
+        solver_mode: JAX evaluation mode (`"jax"` native or `"rust_ffi"`).
         backend: Execution backend (`"auto"`, `"rust"`, or `"jax"`).
 
     Returns:
@@ -141,6 +143,7 @@ def eval_pc_eos(
             pc_gamma_start_crystal=pc_gamma_start_crystal,
             pc_gamma_full_crystal=pc_gamma_full_crystal,
             mass_fraction_limit=mass_fraction_limit,
+            solver_mode=solver_mode,
         )
         return core.EosEvalOutput(res=res, d_dlnd=d_dlnd, d_dln_t=d_dln_t)
     res_np, dlnd_np, dlnt_np = _rust.eos_eval_pc(
@@ -172,6 +175,7 @@ def eval_pc_eos_zones(
     pc_gamma_full_crystal: float = 180.0,
     mass_fraction_limit: float = 1.0e-4,
     parallel: bool = True,
+    solver_mode: str = "jax",
     backend: _dispatch.Backend = "auto",
 ) -> core.EosEvalOutput:
     """Evaluate the 26-channel `PC` EOS across `N_zones` stellar zones.
@@ -189,6 +193,7 @@ def eval_pc_eos_zones(
         pc_gamma_full_crystal: $\\Gamma_i$ completion of crystallization.
         mass_fraction_limit: Minimum species mass fraction included in `PC`.
         parallel: Whether to use the Rayon worker pool on `"rust"`.
+        solver_mode: JAX evaluation mode (`"jax"` native or `"rust_ffi"`).
         backend: Execution backend (`"auto"`, `"rust"`, or `"jax"`).
 
     Returns:
@@ -209,6 +214,7 @@ def eval_pc_eos_zones(
             pc_gamma_start_crystal=pc_gamma_start_crystal,
             pc_gamma_full_crystal=pc_gamma_full_crystal,
             mass_fraction_limit=mass_fraction_limit,
+            solver_mode=solver_mode,
         )
         return core.EosEvalOutput(res=res, d_dlnd=d_dlnd, d_dln_t=d_dln_t)
     out = _rust.eos_eval_pc_zones(

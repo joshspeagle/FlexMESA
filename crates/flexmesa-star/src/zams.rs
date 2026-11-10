@@ -75,44 +75,30 @@ impl ZamsCatalog {
         }
         let mut pos = 4;
         let read_u32 = |pos: &mut usize| -> Result<usize, StarError> {
-            if *pos + 4 > bytes.len() {
-                return Err(StarError::IoError(String::from(
-                    "unexpected EOF reading u32 in ZAMS binary",
-                )));
-            }
-            let val =
-                u32::from_le_bytes(bytes[*pos..*pos + 4].try_into().unwrap())
-                    as usize;
+            let s = bytes.get(*pos..*pos + 4).ok_or_else(|| {
+                StarError::IoError(String::from("EOF reading u32 in ZAMS"))
+            })?;
             *pos += 4;
-            Ok(val)
+            Ok(u32::from_le_bytes(s.try_into().unwrap()) as usize)
         };
         let read_f64 = |pos: &mut usize| -> Result<f64, StarError> {
-            if *pos + 8 > bytes.len() {
-                return Err(StarError::IoError(String::from(
-                    "unexpected EOF reading f64 in ZAMS binary",
-                )));
-            }
-            let val =
-                f64::from_le_bytes(bytes[*pos..*pos + 8].try_into().unwrap());
+            let s = bytes.get(*pos..*pos + 8).ok_or_else(|| {
+                StarError::IoError(String::from("EOF reading f64 in ZAMS"))
+            })?;
             *pos += 8;
-            Ok(val)
+            Ok(f64::from_le_bytes(s.try_into().unwrap()))
         };
         let read_f64_vec =
             |pos: &mut usize, n: usize| -> Result<Vec<f64>, StarError> {
-                if *pos + 8 * n > bytes.len() {
-                    return Err(StarError::IoError(String::from(
-                        "unexpected EOF reading f64 slice in ZAMS binary",
-                    )));
-                }
-                let mut v = Vec::with_capacity(n);
-                for _ in 0..n {
-                    let val = f64::from_le_bytes(
-                        bytes[*pos..*pos + 8].try_into().unwrap(),
-                    );
-                    *pos += 8;
-                    v.push(val);
-                }
-                Ok(v)
+                let s = bytes.get(*pos..*pos + 8 * n).ok_or_else(|| {
+                    StarError::IoError(String::from("EOF reading f64 slice"))
+                })?;
+                *pos += 8 * n;
+                Ok(s.as_chunks::<8>()
+                    .0
+                    .iter()
+                    .map(|&c| f64::from_le_bytes(c))
+                    .collect())
             };
 
         let _version = read_u32(&mut pos)?;
@@ -146,7 +132,14 @@ impl ZamsCatalog {
                 ln_r.push(row_vals[b + 2]);
                 lum.push(row_vals[b + 3]);
                 dq.push(row_vals[b + 4]);
-                xa.extend_from_slice(&row_vals[b + 5..b + 5 + species]);
+                let mut row_xa = row_vals[b + 5..b + 5 + species].to_vec();
+                let sum_xa: f64 = row_xa.iter().sum();
+                if sum_xa > 0.0 {
+                    for xj in &mut row_xa {
+                        *xj /= sum_xa;
+                    }
+                }
+                xa.extend_from_slice(&row_xa);
             }
             models.push(ZamsEntry {
                 m_msun,
@@ -178,11 +171,11 @@ impl ZamsCatalog {
         let mut initial_y = 0.28;
         for line in lines.by_ref() {
             let trimmed = line.trim();
-            if trimmed.starts_with("initial_Z") {
+            if trimmed.starts_with("initial_Z") || trimmed.starts_with("initial_z") {
                 if let Some(tok) = trimmed.split_whitespace().nth(1) {
                     initial_z = parse_fortran_f64(tok)?;
                 }
-            } else if trimmed.starts_with("initial_Y") {
+            } else if trimmed.starts_with("initial_Y") || trimmed.starts_with("initial_y") {
                 if let Some(tok) = trimmed.split_whitespace().nth(1) {
                     initial_y = parse_fortran_f64(tok)?;
                 }
@@ -191,7 +184,8 @@ impl ZamsCatalog {
             }
         }
         for line in lines.by_ref() {
-            if line.trim() == "1" {
+            let t = line.trim();
+            if t == "1" || t.starts_with("-1.") {
                 break;
             }
         }
@@ -428,22 +422,29 @@ pub fn load_zams_model_from_catalog(
     }
     let m_min = catalog.models.first().unwrap().m_msun;
     let m_max = catalog.models.last().unwrap().m_msun;
-    if m_target < m_min * (1.0 - 1.0e-7) || m_target > m_max * (1.0 + 1.0e-7) {
+    let m_floor = m_min.min(0.075);
+    if m_target < m_floor * (1.0 - 1.0e-7) || m_target > m_max * (1.0 + 1.0e-7)
+    {
         return Err(StarError::InvalidInput(format!(
-            "initial_mass={m_target} outside ZAMS catalog range [{m_min}, {m_max}]"
+            "initial_mass={m_target} outside ZAMS catalog range [{m_floor}, {m_max}]"
         )));
     }
 
-    // Locate bracketing models m1 <= m_target <= m2
-    let mut idx1 = 0;
-    for (i, entry) in catalog.models.iter().enumerate() {
-        if entry.m_msun <= m_target * (1.0 + 1.0e-9) {
-            idx1 = i;
-        } else {
-            break;
+    // Locate bracketing models m1 <= m_target <= m2 (`init_model.f90:209-243`)
+    let (idx1, idx2) = if m_target <= m_min * (1.0 + 1.0e-7) {
+        (0, 0)
+    } else {
+        let mut i1 = 0;
+        for (i, entry) in catalog.models.iter().enumerate() {
+            if entry.m_msun <= m_target * (1.0 + 1.0e-9) {
+                i1 = i;
+            } else {
+                break;
+            }
         }
-    }
-    let idx2 = (idx1 + 1).min(catalog.models.len() - 1);
+        let i2 = (i1 + 1).min(catalog.models.len() - 1);
+        (i1, i2)
+    };
     let e1 = &catalog.models[idx1];
     let e2 = &catalog.models[idx2];
 
@@ -500,9 +501,17 @@ pub fn load_zams_model_from_catalog(
         }
     }
 
-    model.mstar = m_target * M_SUN;
+    model.mstar = if m_target < e1.m_msun * (1.0 - 1.0e-7) {
+        e1.m_msun * M_SUN
+    } else {
+        m_target * M_SUN
+    };
+    model.xmstar = model.mstar;
     model.mstar_start = model.mstar;
     model.mstar_old = model.mstar;
+    if m_target < e1.m_msun * (1.0 - 1.0e-7) {
+        crate::relax::relax_mass_to_target(&mut model, m_target, 8, true);
+    }
     model.model_number = 1;
     model.star_age = 0.0;
     let dt_sec = yrs_for_init_timestep(m_target) * SECYER;
@@ -510,7 +519,6 @@ pub fn load_zams_model_from_catalog(
     model.dt_next = dt_sec;
     model.dt_old = 0.0;
     model.finish_init_model()?;
-
     Ok(model)
 }
 
@@ -523,4 +531,58 @@ pub fn load_zams_model(
     job: StarJobControls,
 ) -> Result<StarModel, StarError> {
     load_zams_model_from_catalog(ZamsCatalog::builtin(), controls, job)
+}
+
+#[cfg(test)]
+mod zams_catalog_tests {
+    use super::*;
+
+    #[test]
+    fn test_builtin_zams_catalog_loads_full_mesa_grid_and_interpolates_0p08_to_100_msun(
+    ) {
+        let cat = ZamsCatalog::builtin();
+        assert_eq!(cat.models.len(), 35);
+        assert!((cat.initial_z - 0.02).abs() <= 1.0e-15);
+        assert!((cat.initial_y - 0.28).abs() <= 1.0e-15);
+        assert!((cat.models[0].m_msun - 0.12589254117941673).abs() <= 1.0e-12);
+        assert!(
+            (cat.models.last().unwrap().m_msun - 316.22776601683796).abs()
+                <= 1.0e-10
+        );
+
+        let ascii_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(
+            "../../.mesa_temp_cache/mesa_data/star_data/zams_models/zams_z2m2_y28.data",
+        );
+        if ascii_path.is_file() {
+            let text = std::fs::read_to_string(&ascii_path)
+                .expect("read zams_z2m2_y28.data");
+            let parsed =
+                ZamsCatalog::parse_ascii(&text).expect("parse_ascii zams");
+            assert_eq!(parsed.models.len(), cat.models.len());
+            for (a, b) in cat.models.iter().zip(parsed.models.iter()) {
+                assert!((a.m_msun - b.m_msun).abs() <= 1.0e-14 * a.m_msun);
+                assert_eq!(a.nz, b.nz);
+                assert_eq!(a.lnd, b.lnd);
+                assert_eq!(a.ln_t, b.ln_t);
+            }
+        }
+
+        let (mut prev_l, mut prev_r) = (0.0_f64, 0.0_f64);
+        for &m_msun in &[0.08, 0.10, 0.5, 1.0, 2.0, 4.0, 10.0, 50.0, 100.0] {
+            let controls = StarControls {
+                initial_mass: m_msun,
+                initial_z: 0.02,
+                ..StarControls::default()
+            };
+            let model = load_zams_model(controls, StarJobControls::default())
+                .expect("load_zams_model across 0.08..=100 Msun");
+            assert!(model.nz >= 1980);
+            assert!((model.mstar - m_msun * M_SUN).abs() <= 1.0e-12 * model.mstar);
+            assert!((model.dq.iter().sum::<f64>() - 1.0).abs() <= 1.0e-13);
+            let (l_lsun, r_rsun) = (model.surface_l_lsun(), model.surface_r_rsun());
+            assert!(l_lsun.is_finite() && l_lsun > prev_l);
+            assert!(r_rsun.is_finite() && r_rsun > prev_r);
+            (prev_l, prev_r) = (l_lsun, r_rsun);
+        }
+    }
 }

@@ -305,3 +305,208 @@ def test_prop_interp2d_bicubic_reproduces_biquadratic_and_derivatives(
         float(ev.d2f_dy2), 2.0 * a02, rtol=1e-11, atol=1e-11
     )
     np.testing.assert_allclose(float(ev.d2f_dxdy), a11, rtol=1e-11, atol=1e-11)
+
+
+def test_renka790_cshep2_cubic_and_scattered_2d_parity() -> None:
+    """Verify ACM TOMS 790 (`cshep2`/`qshep2`) cubic and scattered 2D parity."""
+    # Exact cubic reproduction from test_renka790_db.f (N=20, NC=10, NW=16)
+
+    def fq(xx: float, yy: float) -> float:
+        return ((xx + 2.0 * yy) / 3.0) ** 3
+
+    def fx(xx: float, yy: float) -> float:
+        return ((xx + 2.0 * yy) / 3.0) ** 2
+
+    def fy(xx: float, yy: float) -> float:
+        return 2.0 * ((xx + 2.0 * yy) / 3.0) ** 2
+
+    def fxx(xx: float, yy: float) -> float:
+        return 2.0 * (xx + 2.0 * yy) / 9.0
+
+    def fxy(xx: float, yy: float) -> float:
+        return 4.0 * (xx + 2.0 * yy) / 9.0
+
+    def fyy(xx: float, yy: float) -> float:
+        return 8.0 * (xx + 2.0 * yy) / 9.0
+
+    xs_c, ys_c, fs_c = [], [], []
+    for j in range(5):
+        yj = j / 4.0
+        for i in range(4):
+            xi = i / 3.0
+            xs_c.append(xi)
+            ys_c.append(yj)
+            fs_c.append(fq(xi, yj))
+
+    cshep = interp_2d.interp_cshep2_db(
+        np.array(xs_c), np.array(ys_c), np.array(fs_c), nc=10, nw=16, nr=3
+    )
+    qshep = interp_2d.qshep2(
+        np.array(xs_c), np.array(ys_c), np.array(fs_c), nc=10, nw=16, nr=3
+    )
+
+    for py in np.linspace(0.0, 1.0, 11):
+        for px in np.linspace(0.0, 1.0, 11):
+            c_val = interp_2d.interp_cs2val_db(cshep, float(px), float(py))
+            q_val = interp_2d.qs2val(qshep, float(px), float(py))
+            cg, cx, cy = interp_2d.interp_cs2grd_db(cshep, float(px), float(py))
+            qg, qx, qy = interp_2d.qs2grd(qshep, float(px), float(py))
+            ch, chx, chy, chxx, chxy, chyy = interp_2d.cs2hes_db(
+                cshep, float(px), float(py)
+            )
+            assert abs(c_val - fq(px, py)) < 1e-13
+            assert abs(q_val - c_val) < 1e-15
+            assert abs(cg - c_val) < 1e-14 and abs(qg - q_val) < 1e-14
+            assert abs(cx - fx(px, py)) < 1e-12 and abs(qx - cx) < 1e-15
+            assert abs(cy - fy(px, py)) < 1e-12 and abs(qy - cy) < 1e-15
+            assert abs(ch - c_val) < 1e-14
+            assert abs(chx - cx) < 1e-14 and abs(chy - cy) < 1e-14
+            assert abs(chxx - fxx(px, py)) < 1e-11
+            assert abs(chxy - fxy(px, py)) < 1e-11
+            assert abs(chyy - fyy(px, py)) < 1e-11
+
+    # Franke's 33-node set (KS=2, N=33, NC=17, NW=30, NR=6)
+    x2 = np.array(
+        [
+            0.05,
+            0.00,
+            0.00,
+            0.00,
+            0.10,
+            0.10,
+            0.15,
+            0.20,
+            0.25,
+            0.30,
+            0.35,
+            0.50,
+            0.50,
+            0.55,
+            0.60,
+            0.60,
+            0.60,
+            0.65,
+            0.70,
+            0.70,
+            0.70,
+            0.75,
+            0.75,
+            0.75,
+            0.80,
+            0.80,
+            0.85,
+            0.90,
+            0.90,
+            0.95,
+            1.00,
+            1.00,
+            1.00,
+        ],
+        dtype=np.float64,
+    )
+    y2 = np.array(
+        [
+            0.45,
+            0.50,
+            1.00,
+            0.00,
+            0.15,
+            0.75,
+            0.30,
+            0.10,
+            0.20,
+            0.35,
+            0.85,
+            0.00,
+            1.00,
+            0.95,
+            0.25,
+            0.65,
+            0.85,
+            0.70,
+            0.20,
+            0.65,
+            0.90,
+            0.10,
+            0.35,
+            0.85,
+            0.40,
+            0.65,
+            0.25,
+            0.35,
+            0.80,
+            0.90,
+            0.00,
+            0.50,
+            1.00,
+        ],
+        dtype=np.float64,
+    )
+
+    def tstfn1(
+        xx: np.ndarray | float, yy: np.ndarray | float
+    ) -> np.ndarray | float:
+        return (
+            0.75
+            * np.exp(-((9.0 * xx - 2.0) ** 2 + (9.0 * yy - 2.0) ** 2) / 4.0)
+            + 0.75
+            * np.exp(-((9.0 * xx + 1.0) ** 2) / 49.0 - (9.0 * yy + 1.0) / 10.0)
+            + 0.5
+            * np.exp(-((9.0 * xx - 7.0) ** 2 + (9.0 * yy - 3.0) ** 2) / 4.0)
+            - 0.2 * np.exp(-((9.0 * xx - 4.0) ** 2) - (9.0 * yy - 7.0) ** 2)
+        )
+
+    w2 = tstfn1(x2, y2)
+    franke = interp_2d.interp_cshep2_db(x2, y2, w2, nc=17, nw=30, nr=6)
+    p_grid = np.linspace(0.0, 1.0, 33)
+    errs = [
+        abs(
+            interp_2d.interp_cs2val_db(franke, float(px), float(py))
+            - float(tstfn1(px, py))
+        )
+        for px in p_grid
+        for py in p_grid
+    ]
+    assert abs(max(errs) - 0.1985167087686014) < 1e-12
+    assert abs(float(np.mean(errs)) - 0.03217025005461399) < 1e-12
+
+    # Scattered 2D interpolation on MESA's 31x35 test2D_db grid at 6 golden pts
+    xpts, ypts, z_grid = _mesa_2d_test_grid()
+    xx, yy = np.meshgrid(xpts, ypts, indexing="ij")
+    scat = interp_2d.interp_cshep2_db(
+        xx.ravel(), yy.ravel(), z_grid.ravel(), nc=17, nw=32, nr=10
+    )
+    x_min, x_max = 0.1, 0.8 * math.pi
+    y_min, y_max = 0.2, 0.6 * math.pi
+    dx = x_max - x_min
+    dy = 0.5 * (y_max - y_min)
+    golden_pts = (
+        (0, 0, 0.08443031571220527, 0.8426978068643065, -0.05312016510832069),
+        (1, 0, 0.11571953715487195, -0.23272372576109734, -0.0292880351263485),
+        (0, 1, 0.02583107216746556, 0.25668785540470757, -0.06076899376517829),
+        (1, 1, 0.05241360426423525, -0.10275593626780094, -0.10257100263948463),
+        (
+            0,
+            2,
+            -0.009280594758942013,
+            -0.09261745586884203,
+            -0.02266957111867004,
+        ),
+        (
+            1,
+            2,
+            -0.024582273200498193,
+            0.04625995292101696,
+            -0.06629310142916707,
+        ),
+    )
+    for i, j, exp_z, exp_dzdx, exp_dzdy in golden_pts:
+        qx = x_min + float(i) * dx
+        qy = y_min + float(j) * dy
+        z_scat, dz_dx, dz_dy = interp_2d.interp_cs2grd_db(scat, qx, qy)
+        r = math.hypot(qx, qy)
+        z_exact = math.exp(-r / (0.5 * math.pi)) * math.sin(qx) * math.cos(qy)
+        assert abs(z_scat - exp_z) < 1e-12
+        assert abs(dz_dx - exp_dzdx) < 1e-12
+        assert abs(dz_dy - exp_dzdy) < 1e-12
+        assert abs(z_scat - z_exact) < 5e-4

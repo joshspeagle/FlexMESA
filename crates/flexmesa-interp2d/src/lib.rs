@@ -27,6 +27,8 @@ pub mod akima_pd;
 pub mod bicub;
 pub mod bicub_eval;
 pub mod bipm;
+pub mod renka790;
+pub(crate) mod renka790_support;
 pub mod spline1d;
 
 use std::error::Error;
@@ -38,6 +40,10 @@ pub use bicub::{
     interp_evbicub_mask_db, interp_evbicub_prevalidated_db, interp_mkbicub_db,
 };
 pub use bipm::{interp_evbipm_db, interp_mkbipm_db};
+pub use renka790::{
+    interp_cs2grd_db, interp_cs2val_db, interp_cshep2_db, qs2grd, qs2val,
+    qshep2, Cshep2Interpolant, Qshep2Interpolant,
+};
 pub use spline1d::{
     mkspline_db as interp_mkspline_db, mkspline_db, splinck_db,
 };
@@ -144,6 +150,8 @@ pub enum Interp2dError {
         /// Requested coordinate value.
         value: f64,
     },
+    /// Collinear or duplicate scattered nodes in ACM TOMS 790 (`cshep2`).
+    DuplicateNodes,
 }
 
 impl fmt::Display for Interp2dError {
@@ -173,6 +181,9 @@ impl fmt::Display for Interp2dError {
             }
             Self::OutOfRange { axis, value } => {
                 write!(f, "query coordinate {axis} = {value} is out of range")
+            }
+            Self::DuplicateNodes => {
+                write!(f, "scattered 2D nodes are duplicate or collinear")
             }
         }
     }

@@ -9,6 +9,7 @@ to `<= 1e-15`, `test_auto_diff.f90` cases across `DualOrder1` and
 
 from __future__ import annotations
 
+import pathlib
 from collections.abc import Sequence
 
 import hypothesis
@@ -335,3 +336,249 @@ def test_auto_diff_pytree_unflatten_batching_and_arity_guards() -> None:
     y1 = ad.AutoDiffReal1VarOrder1.independent(2.0, 0)
     with pytest.raises(ValueError, match="Cannot combine"):
         _ = x2 + y1
+
+
+def _parse_upstream_auto_diff_output(
+    text: str,
+) -> tuple[list[tuple[list[float], list[float]]], list[tuple[bool, bool]]]:
+    """Parse numeric and boolean records from `auto_diff/test/test_output`."""
+    numeric: list[tuple[list[float], list[float]]] = []
+    booleans: list[tuple[bool, bool]] = []
+    for raw in text.splitlines():
+        line = raw.strip()
+        if line.startswith("Should print T:"):
+            booleans.append((True, line.split(":", 1)[1].strip() == "T"))
+        elif line.startswith("Should print F:"):
+            booleans.append((False, line.split(":", 1)[1].strip() == "T"))
+        elif line.startswith("Should print") and ":" in line:
+            lhs_raw, rhs_raw = line.split(":", 1)
+            lhs = (
+                lhs_raw.removeprefix("Should print approximately")
+                .removeprefix("Should print")
+                .strip()
+            )
+            exp_vals = [
+                float(t.replace("D", "E").replace("d", "e"))
+                for t in lhs.split()
+            ]
+            act_vals = [
+                float(t.replace("D", "E").replace("d", "e"))
+                for t in rhs_raw.strip().split()
+            ]
+            numeric.append((exp_vals, act_vals))
+    return numeric, booleans
+
+
+def _run_order1_comparisons(cls: type[ad.DualOrder1]) -> list[bool]:
+    """Run the 21 relational comparison checks for `cls`."""
+    x = cls.constant(3.1)
+    y = cls.constant(3.1)
+    y_lo = cls.constant(2.9)
+    x_int = cls.constant(3.0)
+    return [
+        x == y,
+        x > y_lo,
+        x < y_lo,
+        x >= y_lo,
+        x <= y_lo,
+        x >= y,
+        x <= y,
+        x == 3.1,
+        x > 2.9,
+        x < 2.9,
+        x >= 2.9,
+        x <= 2.9,
+        x >= 3.1,
+        x <= 3.1,
+        x_int == 3,
+        x_int > 2,
+        x_int < 2,
+        x_int >= 3,
+        x_int <= 2,
+        x_int >= 2,
+        x_int <= 3,
+    ]
+
+
+def _run_order1_unary(u: object, rec: object) -> list[list[float]]:
+    """Run the 36 shared unary operator cases for `u(val)`."""
+    pi = constants.PI
+    e1 = float(fmath.exp(1.0))
+    return [
+        rec(u(pi).sin()),
+        rec(u(pi).cos()),
+        rec(u(pi).tan()),
+        rec(u(pi).sinh()),
+        rec(u(pi).cosh()),
+        rec(u(pi).tanh()),
+        rec(u(0.5).asin()),
+        rec(u(0.5).acos()),
+        rec(u(0.5).atan()),
+        rec(u(2.0).asinh()),
+        rec(u(2.0).acosh()),
+        rec(u(0.5).atanh()),
+        rec(-u(1.0)),
+        rec(-u(-1.0)),
+        rec(u(1.0).log()),
+        rec(u(1.0).safe_log()),
+        rec(u(10.0).log10()),
+        rec(u(10.0).safe_log10()),
+        rec(u(e1).log()),
+        rec(u(e1).safe_log()),
+        rec(u(100.0).log10()),
+        rec(u(100.0).safe_log10()),
+        rec(u(3.0).pow2()),
+        rec(u(2.0).pow3()),
+        rec(u(2.0).pow4()),
+        rec(u(3.0).pow5()),
+        rec(u(2.0).pow6()),
+        rec(u(2.0).pow7()),
+        rec(u(4.0).powf(0.5)),
+        rec(u(2.0).rpow(e1)),
+        rec(u(4.0).powi(2)),
+        rec(u(2.0).rpow(2.0)),
+    ]
+
+
+def _run_1var_order1_golden() -> tuple[list[bool], list[list[float]]]:
+    """Run all `do_test_auto_diff_1var_order1` cases from `test_auto_diff`."""
+    c1 = ad.AutoDiffReal1VarOrder1
+
+    def rec(z: ad.AutoDiffReal1VarOrder1) -> list[float]:
+        return [float(z.val), float(z.d1[0])]
+
+    def u(v: float) -> ad.AutoDiffReal1VarOrder1:
+        return c1(v, [1.0])
+
+    x1, y2, x3 = c1(1.0, [1.0]), c1(2.0, [1.0]), c1(3.0, [1.0])
+    y2_d2, x2_d2 = c1(2.0, [2.0]), c1(2.0, [2.0])
+    # fmt: off
+    nums = [
+        rec(c1.constant(3.1)), rec(x1 + y2), rec(x1 + 2.0), rec(2.0 + x1),
+        rec(x3 * y2), rec(x3 * 2.0), rec(2.0 * x3), rec(x1.max(y2_d2)),
+        rec(x1.max(2.0)), rec(x1.max(0.0)), rec(x1.max(2.0)), rec(x1.max(0.0)),
+        rec(x2_d2.dim(x1)), rec(x1.dim(x2_d2)), rec(x2_d2.dim(1.0)),
+        rec(u(1.0).exp()), rec(u(1.0).abs()), rec(u(-1.0).abs()),
+        rec(u(2.0).exp()), *_run_order1_unary(u, rec),
+    ]
+    # fmt: on
+    return _run_order1_comparisons(c1), nums
+
+
+def _run_2var_order1_golden() -> tuple[list[bool], list[list[float]]]:
+    """Run all `do_test_auto_diff_2var_order1` cases from `test_auto_diff`."""
+    c2 = ad.AutoDiffReal2VarOrder1
+
+    def rec(z: ad.AutoDiffReal2VarOrder1) -> list[float]:
+        return [float(z.val), float(z.d1[0]), float(z.d1[1])]
+
+    def u1(v: float) -> ad.AutoDiffReal2VarOrder1:
+        return c2(v, [1.0, 0.0])
+
+    def u2(v: float) -> ad.AutoDiffReal2VarOrder1:
+        return c2(v, [0.0, 1.0])
+
+    x1, y2_v1, x3 = u1(1.0), u1(2.0), u1(3.0)
+    y2_v2, y5_v2 = c2(2.0, [0.0, 1.0]), c2(5.0, [0.0, 2.0])
+    x2_v1, y2_d2 = c2(2.0, [1.0, 0.0]), c2(2.0, [0.0, 2.0])
+    x2_d2, y1_v2 = c2(2.0, [2.0, 0.0]), c2(1.0, [0.0, 1.0])
+    # fmt: off
+    nums = [
+        rec(c2.constant(3.1)), rec(x1 + y2_v1), rec(x1 + 2.0), rec(2.0 + x1),
+        rec(x1 + 2), rec(2 + x1), rec(x3 * y2_v2), rec(x3 * 2.0),
+        rec(x3 / y2_v2), rec(x3 / 2.0), rec(x1 - y2_v2), rec(x1 - y5_v2),
+        rec(x2_v1 - 1.0), rec(2.0 * x3), rec(x1.max(y2_d2)), rec(x1.max(2.0)),
+        rec(x1.max(0.0)), rec(x1.max(2.0)), rec(x1.max(0.0)),
+        rec(x1.min(y2_d2)), rec(x1.min(2.0)), rec(x1.min(0.0)),
+        rec(x1.min(2.0)), rec(x1.min(0.0)), rec(x2_d2.dim(y1_v2)),
+        rec(y1_v2.dim(x2_d2)), rec(x2_d2.dim(1.0)), rec(x2_v1.pow(y2_v2)),
+        rec(u1(1.0).exp()), rec(u2(1.0).exp()), rec(u1(2.0).exp()),
+        rec(u1(1.0).abs()), rec(u1(-1.0).abs()), *_run_order1_unary(u1, rec),
+    ]
+    # fmt: on
+    return _run_order1_comparisons(c2), nums
+
+
+def _run_star_order1_golden() -> list[list[float]]:
+    """Run all `do_test_auto_diff_star_order1` cases from `test_auto_diff`."""
+    cs = ad.AutoDiffRealStarOrder1
+    nums: list[list[float]] = []
+    x_assign = cs.independent(3.0, 3)
+    nums.extend([[float(x_assign.d1[i])] for i in range(15)])
+
+    d1_seq = [float(i + 1) if i < 15 else 0.0 for i in range(33)]
+    x_base = cs(3.0, d1_seq)
+    y_pow2 = x_base.pow2()
+    nums.extend([[float(y_pow2.d1[i])] for i in range(15)])
+    x_pow2 = x_base.pow2()
+    nums.extend([[float(x_pow2.d1[i])] for i in range(15)])
+
+    y_add1 = x_base + 1.0
+    nums.extend([[float(y_add1.d1[i])] for i in range(15)])
+    y_addx = x_base + x_base
+    nums.extend([[float(y_addx.d1[i])] for i in range(15)])
+
+    z_d1 = [float(1 - (i + 1)) if i < 15 else 0.0 for i in range(33)]
+    z = cs(2.0, z_d1)
+    y_chain = x_base.exp() * z
+    nums.extend([[float(y_chain.d1[i])] for i in range(15)])
+    return nums
+
+
+def test_auto_diff_complete_golden_test_output_and_order2_sweep() -> None:
+    """Verify all 704 lines of `auto_diff/test/test_output` and `Order2Var2`."""
+    bools_1v, nums_1v = _run_1var_order1_golden()
+    bools_2v, nums_2v = _run_2var_order1_golden()
+    nums_star = _run_star_order1_golden()
+
+    all_bools = [*bools_1v, *bools_2v]
+    all_nums = [*nums_1v, *nums_2v, *nums_star]
+    assert len(all_bools) == 42
+    assert len(all_nums) == 206
+
+    repo_root = pathlib.Path(__file__).resolve().parent.parent
+    out_path = (
+        repo_root
+        / ".mesa_temp_cache"
+        / "mesa_root"
+        / "auto_diff"
+        / "test"
+        / "test_output"
+    )
+    if out_path.exists():
+        golden_nums, golden_bools = _parse_upstream_auto_diff_output(
+            out_path.read_text()
+        )
+        assert len(golden_bools) == len(all_bools)
+        for actual_b, (exp_b, ref_b) in zip(
+            all_bools, golden_bools, strict=True
+        ):
+            assert actual_b is exp_b
+            assert actual_b is ref_b
+
+        assert len(golden_nums) == len(all_nums)
+        for actual_vec, (exp_vec, ref_vec) in zip(
+            all_nums, golden_nums, strict=True
+        ):
+            _assert_close(actual_vec, exp_vec, TOL_AD)
+            _assert_close(actual_vec, ref_vec, TOL_AD)
+
+    # Order2Var2 comparison, binary, unary, and chain_rule parity
+    c22 = ad.AutoDiffReal2VarOrder2
+    x_cmp = c22.constant(3.1)
+    y_cmp = c22.constant(2.9)
+    assert x_cmp == c22.constant(3.1) and x_cmp > y_cmp and not (x_cmp < y_cmp)
+    assert x_cmp >= y_cmp and not (x_cmp <= y_cmp) and x_cmp == 3.1
+
+    xv, yv = 0.6, 1.1
+    x2 = ad.AutoDiffReal2VarOrder1(xv, [1.0, 0.0])
+    y2 = ad.AutoDiffReal2VarOrder1(yv, [0.0, 1.0])
+    chain_2v = (x2.pow2() + x2.sin()).exp() * y2.cos()
+    x22 = c22.var1(xv)
+    y22 = c22.var2(yv)
+    chain_22 = (x22.pow2() + x22.sin()).exp() * y22.cos()
+    _assert_close(
+        [float(chain_2v.val), float(chain_2v.d1[0]), float(chain_2v.d1[1])],
+        [float(chain_22.val), float(chain_22.d1val1), float(chain_22.d1val2)],
+        TOL_AD,
+    )

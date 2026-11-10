@@ -3,11 +3,13 @@
 
 #![allow(clippy::excessive_precision, clippy::similar_names)]
 
+use flexmesa_kap::loader::kap_tables;
 use flexmesa_kap::{
-    compton_opacity, do_electron_conduction, do_electron_conduction_potekhin,
-    get_kap_results, kap_get_zones, kapcn_get, KapCoOption, KapConfig,
-    KapLowTOption, KapOption, I_FRAC_COMPTON, I_FRAC_HIGH_T, I_FRAC_LOW_T,
-    I_FRAC_TYPE2,
+    aesopus_get, compton_opacity, do_electron_conduction,
+    do_electron_conduction_potekhin, get1_kap_co_results,
+    get1_kap_fixed_metal_results, get_kap_results, kap_get_zones, kapcn_get,
+    KapCoOption, KapConfig, KapLowTOption, KapOption, I_FRAC_COMPTON,
+    I_FRAC_HIGH_T, I_FRAC_LOW_T, I_FRAC_TYPE2,
 };
 
 fn assert_rel_close(actual: f64, expected: f64, rtol: f64, label: &str) {
@@ -317,4 +319,102 @@ fn test_kapcn_and_multi_zone_batch_evaluation() {
         outs[2].kap_fracs[I_FRAC_COMPTON] > 0.0
             && outs[2].kap_fracs[I_FRAC_COMPTON] < 1.0
     );
+}
+
+#[test]
+fn test_kap_full_tables_all_slices_loaded_and_distinct() {
+    let tables = kap_tables();
+    for expected in [
+        "gs98",
+        "gn93",
+        "a09",
+        "OP_gs98",
+        "OP_a09_nans_removed_by_hand",
+        "lowT_fa05_gs98",
+        "lowT_fa05_gn93",
+        "lowT_fa05_a09p",
+    ] {
+        let set = tables
+            .fixed_sets
+            .iter()
+            .find(|s| s.prefix == expected)
+            .unwrap_or_else(|| panic!("missing fixed set {expected}"));
+        let count: usize = set
+            .z_tables
+            .iter()
+            .map(|zt| {
+                zt.x_tables.iter().filter(|xt| xt.raw_i16.is_some()).count()
+            })
+            .sum();
+        assert_eq!(count, 126, "{expected} must have all 126 (Z, X) tables");
+    }
+    let f11 = tables
+        .fixed_sets
+        .iter()
+        .find(|s| s.prefix == "lowT_Freedman11")
+        .expect("missing lowT_Freedman11");
+    assert_eq!(f11.z_tables.len(), 7);
+
+    for expected_co in ["gn93_co", "gs98_co", "a09_co"] {
+        let set = tables
+            .co_sets
+            .iter()
+            .find(|s| s.prefix == expected_co)
+            .unwrap_or_else(|| panic!("missing CO set {expected_co}"));
+        let x_cnt: usize = set
+            .z_tables
+            .iter()
+            .map(|zt| zt.x_tables.iter().filter(|xt| xt.present).count())
+            .sum();
+        assert_eq!(x_cnt, 40, "{expected_co} must have all 40 (Z, X) tables");
+        for zt in &set.z_tables {
+            for xt in &zt.x_tables {
+                assert!(xt.co_tables.iter().all(|sub| sub.raw_i16.is_some()));
+            }
+        }
+    }
+
+    let aes_slices: usize = tables
+        .aesopus
+        .ts
+        .iter()
+        .map(|zset| zset.slices.iter().filter(|s| s.raw_f32.is_some()).count())
+        .sum();
+    assert_eq!(aes_slices, 14_625, "AESOPUS must have all 14,625 slices");
+    assert_eq!(tables.kap_cn.z_sets.len(), 14);
+
+    let cfg = KapConfig::default();
+    let (lk_gs98, _, _) =
+        get1_kap_fixed_metal_results(&cfg, "gs98", 0.015, 0.65, -4.5, 5.8)
+            .unwrap();
+    let (lk_gn93, _, _) =
+        get1_kap_fixed_metal_results(&cfg, "gn93", 0.015, 0.65, -4.5, 5.8)
+            .unwrap();
+    let (lk_op, _, _) =
+        get1_kap_fixed_metal_results(&cfg, "OP_gs98", 0.015, 0.65, -4.5, 5.8)
+            .unwrap();
+    assert!((lk_gs98 - lk_gn93).abs() > 1.0e-5, "gn93 != gs98");
+    assert!((lk_gs98 - lk_op).abs() > 1.0e-4, "OP_gs98 != gs98");
+
+    let cfg_gn93_co = KapConfig {
+        kap_co_option: KapCoOption::Gn93Co,
+        ..KapConfig::default()
+    };
+    let cfg_gs98_co = KapConfig {
+        kap_co_option: KapCoOption::Gs98Co,
+        ..KapConfig::default()
+    };
+    let (co1, _, _) =
+        get1_kap_co_results(&cfg_gn93_co, 0.004, 0.10, 0.15, 0.25, -4.0, 6.2)
+            .unwrap();
+    let (co2, _, _) =
+        get1_kap_co_results(&cfg_gs98_co, 0.004, 0.10, 0.15, 0.25, -4.0, 6.2)
+            .unwrap();
+    assert!((co1 - co2).abs() > 1.0e-5, "gs98_co != gn93_co");
+
+    let (aes1, _, _) =
+        aesopus_get(0.0001, 0.50, 1.0e-5, 5.0e-6, 3.0e-5, -9.0, 3.45).unwrap();
+    let (aes2, _, _) =
+        aesopus_get(0.0300, 0.75, 8.0e-3, 2.0e-3, 1.2e-2, -9.0, 3.45).unwrap();
+    assert!((aes1 - aes2).abs() / aes1 > 1.0e-2, "distinct AESOPUS Z/X");
 }

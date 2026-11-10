@@ -32,19 +32,18 @@ pub fn r8_uniform_01(seed: &mut i32) -> f64 {
     const IM: i64 = 2_147_483_647;
     const IQ: i64 = 127_773;
     const IR: i64 = 2_836;
-    const AM: f64 = 1.0 / (IM as f64);
 
     if *seed == 0 {
         *seed = 123_459_876;
     }
-    let s = i64::from(*seed).abs().max(1);
+    let s = i64::from(*seed);
     let k = s / IQ;
     let mut next = IA * (s - k * IQ) - IR * k;
     if next < 0 {
         next += IM;
     }
     *seed = next as i32;
-    (AM * (next as f64)).min(1.0 - f64::EPSILON)
+    (next as f64) * 4.656_612_875e-10
 }
 
 /// Returns a uniform pseudo-random integer in `[a, b]` (inclusive) using
@@ -89,19 +88,29 @@ pub struct SimplexConfig {
     pub delta: f64,
     /// Whether to enforce box bounds `[x_lower, x_upper]` via penalty.
     pub enforce_bounds: bool,
+    /// Whether to use MESA's adaptive random search (`ARS`) on contraction
+    /// failure (`mod_simplex.f90`).
+    pub adaptive_random_search: bool,
+    /// Initial PRNG seed for adaptive random search (`107461921` in MESA).
+    pub seed: i32,
+    /// Power for inverse-objective centroid weighting (`0.0` = uniform).
+    pub centroid_weight_power: f64,
 }
 
 impl Default for SimplexConfig {
     fn default() -> Self {
         Self {
-            max_evals: 2_000,
+            max_evals: 20_000,
             x_tol: 1e-10,
-            f_tol: 1e-12,
+            f_tol: 0.0,
             alpha: 1.0,
             beta: 2.0,
             gamma: 0.5,
             delta: 0.5,
             enforce_bounds: false,
+            adaptive_random_search: false,
+            seed: 107_461_921,
+            centroid_weight_power: 0.0,
         }
     }
 }
@@ -151,153 +160,197 @@ where
     let mut num_evals = 0usize;
     let eval_point =
         |pt: &[f64], evals: &mut usize, f: &mut F| -> Result<f64, NumError> {
-            *evals += 1;
             if config.enforce_bounds {
                 for j in 0..n {
                     if pt[j] < x_lower[j] || pt[j] > x_upper[j] {
-                        return Ok(1e30);
+                        return Ok(1e99);
                     }
                 }
             }
+            *evals += 1;
             f(pt)
         };
 
-    // Initialize n + 1 simplex vertices by perturbing each coordinate axis j
+    // Initialize n + 1 simplex vertices matching mod_simplex.f90:
+    // vertex n (1-based n+1) is x_first; vertices 0..n perturb axis j by
+    // +/- 0.25*(x_upper[j] - x_lower[j]) toward the farther bound.
     let n_verts = n + 1;
-    let mut simplex: Vec<Vec<f64>> = Vec::with_capacity(n_verts);
-    let mut f_vals = Vec::with_capacity(n_verts);
-
-    simplex.push(x_first.to_vec());
-    f_vals.push(eval_point(x_first, &mut num_evals, &mut fcn)?);
+    let mut simplex: Vec<Vec<f64>> = vec![x_first.to_vec(); n_verts];
+    let mut f_vals = vec![0.0_f64; n_verts];
+    f_vals[n] = eval_point(&simplex[n], &mut num_evals, &mut fcn)?;
 
     for j in 0..n {
-        let mut v = x_first.to_vec();
-        let span = (x_upper[j] - x_lower[j]).abs().max(1.0);
-        let step = if v[j].abs() > 1e-6 {
-            0.05 * v[j].abs()
+        let span = x_upper[j] - x_lower[j];
+        if span.abs() > 1e-14 {
+            if x_upper[j] - x_first[j] < x_first[j] - x_lower[j] {
+                simplex[j][j] = x_first[j] - 0.25 * span;
+            } else {
+                simplex[j][j] = x_first[j] + 0.25 * span;
+            }
         } else {
-            0.05 * span
-        };
-        v[j] += if v[j] + step <= x_upper[j] || !config.enforce_bounds {
-            step
-        } else {
-            -step
-        };
-        let fv = eval_point(&v, &mut num_evals, &mut fcn)?;
-        simplex.push(v);
-        f_vals.push(fv);
+            let step = 0.05 * x_first[j].abs().max(1.0);
+            simplex[j][j] += step;
+        }
+        f_vals[j] = eval_point(&simplex[j], &mut num_evals, &mut fcn)?;
     }
 
     let mut num_iters = 0usize;
     let mut num_shrinks = 0usize;
+    let mut seed = config.seed;
     let mut centroid = vec![0.0; n];
     let mut x_ref = vec![0.0; n];
     let mut x_exp = vec![0.0; n];
     let mut x_con = vec![0.0; n];
+    let mut x_ars = vec![0.0; n];
 
-    while num_evals < config.max_evals {
-        // Sort vertices by objective value ascending (0 = best, n = worst)
-        let mut order: Vec<usize> = (0..n_verts).collect();
-        order.sort_by(|&a, &b| f_vals[a].total_cmp(&f_vals[b]));
-        let sorted_s: Vec<Vec<f64>> =
-            order.iter().map(|&k| simplex[k].clone()).collect();
-        let sorted_f: Vec<f64> = order.iter().map(|&k| f_vals[k]).collect();
-        simplex = sorted_s;
-        f_vals = sorted_f;
-
-        // Check convergence in function spread and relative vertex diameter
-        let f_spread = (f_vals[n] - f_vals[0]).abs();
-        let mut x_diam = 0.0_f64;
-        for k in 1..n_verts {
-            for j in 0..n {
-                let scale = simplex[0][j].abs().max(1.0);
-                x_diam =
-                    x_diam.max((simplex[k][j] - simplex[0][j]).abs() / scale);
+    loop {
+        num_iters += 1;
+        // Identify h (max f), l (min f), and s (2nd max f) in place
+        let mut h = 0usize;
+        let mut l = 0usize;
+        for j in 1..n_verts {
+            if f_vals[j] > f_vals[h] {
+                h = j;
+            }
+            if f_vals[j] < f_vals[l] {
+                l = j;
             }
         }
-        if f_spread <= config.f_tol && x_diam <= config.x_tol {
+        let mut s = usize::MAX;
+        for j in 0..n_verts {
+            if j == h {
+                continue;
+            }
+            if s == usize::MAX || f_vals[j] > f_vals[s] {
+                s = j;
+            }
+        }
+
+        // Check domain convergence matching mod_simplex.f90 lines 114-124
+        let mut term_val_x = 0.0_f64;
+        for j in 0..n_verts {
+            if j == l {
+                continue;
+            }
+            for i in 0..n {
+                let denom = config.x_tol
+                    * (1.0 + simplex[j][i].abs().max(simplex[l][i].abs()));
+                let term1 = (simplex[j][i] - simplex[l][i]).abs() / denom;
+                if term1 > term_val_x {
+                    term_val_x = term1;
+                }
+            }
+        }
+        if term_val_x <= 1.0
+            || (config.f_tol > 0.0 && f_vals[h] - f_vals[l] <= config.f_tol)
+        {
             break;
         }
-        num_iters += 1;
+        if num_iters > config.max_evals || num_evals > config.max_evals {
+            break;
+        }
 
-        // Compute centroid of the n best vertices (excluding worst vertex n)
+        // Compute weighted centroid excluding worst vertex h
         centroid.fill(0.0);
-        for v in simplex.iter().take(n) {
-            for j in 0..n {
-                centroid[j] += v[j];
+        let mut sum_weight = 0.0_f64;
+        for j in 0..n_verts {
+            if j == h {
+                continue;
             }
+            let weight = if config.centroid_weight_power == 0.0 {
+                1.0
+            } else {
+                let w = 1.0 / f_vals[j].abs().max(1e-30);
+                if (config.centroid_weight_power - 1.0).abs() <= 1e-15 {
+                    w
+                } else {
+                    w.powf(config.centroid_weight_power)
+                }
+            };
+            for i in 0..n {
+                centroid[i] += simplex[j][i] * weight;
+            }
+            sum_weight += weight;
         }
         for c in &mut centroid {
-            *c /= n as f64;
+            *c /= sum_weight;
         }
 
         // Reflection step across the centroid
-        for j in 0..n {
-            x_ref[j] =
-                centroid[j] + config.alpha * (centroid[j] - simplex[n][j]);
+        for i in 0..n {
+            x_ref[i] =
+                centroid[i] + config.alpha * (centroid[i] - simplex[h][i]);
         }
         let f_ref = eval_point(&x_ref, &mut num_evals, &mut fcn)?;
 
-        if f_ref < f_vals[0] {
-            // Expansion step along the reflection ray
-            for j in 0..n {
-                x_exp[j] = centroid[j] + config.beta * (x_ref[j] - centroid[j]);
+        if f_ref < f_vals[s] {
+            simplex[h].copy_from_slice(&x_ref);
+            f_vals[h] = f_ref;
+            if f_ref < f_vals[l] {
+                for i in 0..n {
+                    x_exp[i] =
+                        centroid[i] + config.beta * (x_ref[i] - centroid[i]);
+                }
+                let f_exp = eval_point(&x_exp, &mut num_evals, &mut fcn)?;
+                // Accept expand whenever f_exp < f(l) (mod_simplex.f90:167)
+                if f_exp < f_vals[l] {
+                    simplex[h].copy_from_slice(&x_exp);
+                    f_vals[h] = f_exp;
+                }
             }
-            let f_exp = eval_point(&x_exp, &mut num_evals, &mut fcn)?;
-            if f_exp < f_ref {
-                simplex[n].copy_from_slice(&x_exp);
-                f_vals[n] = f_exp;
-            } else {
-                simplex[n].copy_from_slice(&x_ref);
-                f_vals[n] = f_ref;
-            }
-        } else if f_ref < f_vals[n - 1] {
-            simplex[n].copy_from_slice(&x_ref);
-            f_vals[n] = f_ref;
         } else {
-            // Outside or inside contraction toward the centroid
-            let outside = f_ref < f_vals[n];
-            for j in 0..n {
-                x_con[j] = if outside {
-                    centroid[j] + config.gamma * (x_ref[j] - centroid[j])
+            let outside = f_ref < f_vals[h];
+            for i in 0..n {
+                x_con[i] = if outside {
+                    centroid[i] + config.gamma * (x_ref[i] - centroid[i])
                 } else {
-                    centroid[j] + config.gamma * (simplex[n][j] - centroid[j])
+                    centroid[i] + config.gamma * (simplex[h][i] - centroid[i])
                 };
             }
             let f_con = eval_point(&x_con, &mut num_evals, &mut fcn)?;
-            let accept = if outside {
-                f_con <= f_ref
-            } else {
-                f_con < f_vals[n]
-            };
-            if accept {
-                simplex[n].copy_from_slice(&x_con);
-                f_vals[n] = f_con;
-            } else {
-                // Shrink all non-best vertices toward simplex[0]
-                num_shrinks += 1;
-                let best = simplex[0].clone();
-                for k in 1..n_verts {
-                    for j in 0..n {
-                        simplex[k][j] =
-                            best[j] + config.delta * (simplex[k][j] - best[j]);
+            if f_con < f_vals[h].min(f_ref) {
+                simplex[h].copy_from_slice(&x_con);
+                f_vals[h] = f_con;
+            } else if config.adaptive_random_search {
+                for _k in 0..100 {
+                    if num_evals > config.max_evals {
+                        break;
                     }
-                    f_vals[k] =
-                        eval_point(&simplex[k], &mut num_evals, &mut fcn)?;
+                    for i in 0..n {
+                        let u = r8_uniform_01(&mut seed);
+                        x_ars[i] = x_lower[i] + u * (x_upper[i] - x_lower[i]);
+                    }
+                    let f_ars = eval_point(&x_ars, &mut num_evals, &mut fcn)?;
+                    if f_ars <= f_vals[h] {
+                        simplex[h].copy_from_slice(&x_ars);
+                        f_vals[h] = f_ars;
+                        break;
+                    }
+                }
+            } else {
+                num_shrinks += 1;
+                let best = simplex[l].clone();
+                for j in 0..n_verts {
+                    if j == l {
+                        continue;
+                    }
+                    for i in 0..n {
+                        simplex[j][i] =
+                            best[i] + config.delta * (simplex[j][i] - best[i]);
+                    }
+                    f_vals[j] =
+                        eval_point(&simplex[j], &mut num_evals, &mut fcn)?;
                 }
             }
         }
     }
 
-    // Scan final simplex vertices to return the lowest-objective vertex
-    // and package diagnostic evaluation/iteration/shrink counters
     let mut best_idx = 0;
     for k in 1..n_verts {
         if f_vals[k] < f_vals[best_idx] {
             best_idx = k;
         }
     }
-    // Package minimum point, objective value, and diagnostic counters
     Ok(SimplexResult {
         x_min: simplex[best_idx].clone(),
         f_min: f_vals[best_idx],

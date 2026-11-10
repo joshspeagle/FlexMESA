@@ -254,11 +254,7 @@ impl InlistBundle {
             entry_inlist: inlist_name.to_string(),
             job: StarJobControls::default(),
             controls: StarControls::default(),
-            eos_config: EosConfig {
-                use_free_eos: false,
-                use_opal_scvh: false,
-                ..EosConfig::default()
-            },
+            eos_config: EosConfig::default(),
             kap_config: KapConfig::default(),
             sections,
         };

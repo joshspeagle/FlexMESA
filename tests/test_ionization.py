@@ -156,16 +156,18 @@ def test_fe56_in_he4_zones_rust_vs_jax_across_random_seeds() -> None:
 def test_eval_ionization_zones_rust_vs_jax_across_random_seeds() -> None:
     r"""Verify multi-zone 4D `eval_ionization_zones` Rust vs. JAX across seeds.
 
-    Evaluates 128 zones spanning all $Z$ regimes ($[0, 0.04]$, $(0.04, 0.20]$,
-    and $(0.20, 1.0]$) and $X \in [0, 1 - Z]$ across 20 deterministic seeds.
+    Evaluates 128 zones spanning the full astrophysical domain ($\log_{10} T \in
+    [3.2, 8.8]$, $\log Q \in [-9.0, 5.0]$, $Z \in [0.0, 1.0]$, and $X \in
+    [0.0, 1.0]$) across 20 deterministic seeds without $2 \times 2$ cell
+    clamping.
     """
     n_zones = 128
     for seed in range(20):
         rng = np.random.default_rng(seed)
-        z = rng.uniform(0.0, 0.5, size=n_zones)
-        x = rng.uniform(0.0, 1.0 - z, size=n_zones)
-        lt = rng.uniform(4.501, 4.559, size=n_zones)
-        lq = rng.uniform(-2.079, -1.991, size=n_zones)
+        z = rng.uniform(0.0, 1.0, size=n_zones)
+        x = rng.uniform(0.0, 1.0, size=n_zones)
+        lt = rng.uniform(3.2, 8.8, size=n_zones)
+        lq = rng.uniform(-9.0, 5.0, size=n_zones)
         lrho = lq + 2.0 * lt - 12.0
 
         out_par = ionization.eval_ionization_zones(

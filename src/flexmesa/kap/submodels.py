@@ -14,16 +14,17 @@ from __future__ import annotations
 import jax
 
 from flexmesa import _dispatch, _rust
-from flexmesa.kap import jax_kernels
+from flexmesa.kap import jax_co_lowt, jax_interp, jax_kernels
 
 
 def kap_get_elect_cond_opacity(
-    zbar: float,
-    log_rho: float,
-    log_t: float,
+    zbar: jax.Array | float,
+    log_rho: jax.Array | float,
+    log_t: jax.Array | float,
     *,
     use_blouin: bool = True,
-) -> tuple[float, float, float]:
+    backend: _dispatch.Backend = "auto",
+) -> tuple[jax.Array | float, jax.Array | float, jax.Array | float]:
     """Evaluate Potekhin / Blouin electron thermal conduction opacity.
 
     Args:
@@ -32,11 +33,20 @@ def kap_get_elect_cond_opacity(
         log_t: Base-10 log temperature `log10(T / K)`.
         use_blouin: Apply Blouin et al. (2020) H/He moderate-coupling
             correction.
+        backend: Execution backend (`"auto"`, `"rust"`, or `"jax"`).
 
     Returns:
         Tuple `(kap, dlnkap_dln_rho, dlnkap_dln_t)` where `kap` has units
         `cm^2 g^-1`.
     """
+    args = (zbar, log_rho, log_t)
+    if _dispatch.resolve_backend(backend, *args) == "jax":
+        k, dr, dt = jax_kernels.electron_conduction_jax(
+            zbar, log_rho, log_t, use_blouin=use_blouin
+        )
+        if _dispatch.is_jax_input(*args):
+            return k, dr, dt
+        return float(k), float(dr), float(dt)
     return _rust.kap_get_elect_cond_opacity_rust(
         float(zbar), float(log_rho), float(log_t), use_blouin=bool(use_blouin)
     )
@@ -101,15 +111,16 @@ def kap_get_compton_opacity(
 
 
 def kap_get_fixed_metal(
-    z: float,
-    x: float,
-    log_rho: float,
-    log_t: float,
+    z: jax.Array | float,
+    x: jax.Array | float,
+    log_rho: jax.Array | float,
+    log_t: jax.Array | float,
     *,
     prefix: str = "gs98",
     cubic_x: bool = False,
     cubic_z: bool = False,
-) -> tuple[float, float, float]:
+    backend: _dispatch.Backend = "auto",
+) -> tuple[jax.Array | float, jax.Array | float, jax.Array | float]:
     """Evaluate Type 1 fixed-metal opacity.
 
     Args:
@@ -120,10 +131,25 @@ def kap_get_fixed_metal(
         prefix: Fixed-metal table prefix (`"gs98"`, `"a09"`, etc.).
         cubic_x: Use cubic interpolation in `X`.
         cubic_z: Use cubic interpolation in `Z`.
+        backend: Execution backend (`"auto"`, `"rust"`, or `"jax"`).
 
     Returns:
         Tuple `(log10_kap, dlnkap_dln_rho, dlnkap_dln_t)`.
     """
+    args = (z, x, log_rho, log_t)
+    if _dispatch.resolve_backend(backend, *args) == "jax":
+        lk, dr, dt = jax_interp.eval_fixed_metal_jax(
+            z,
+            x,
+            log_rho,
+            log_t,
+            prefix=prefix,
+            cubic_x=cubic_x,
+            cubic_z=cubic_z,
+        )
+        if _dispatch.is_jax_input(*args):
+            return lk, dr, dt
+        return float(lk), float(dr), float(dt)
     return _rust.kap_get_fixed_metal_rust(
         float(z),
         float(x),
@@ -136,17 +162,18 @@ def kap_get_fixed_metal(
 
 
 def kap_get_co(
-    zbase: float,
-    x: float,
-    dxc: float,
-    dxo: float,
-    log_rho: float,
-    log_t: float,
+    zbase: jax.Array | float,
+    x: jax.Array | float,
+    dxc: jax.Array | float,
+    dxo: jax.Array | float,
+    log_rho: jax.Array | float,
+    log_t: jax.Array | float,
     *,
     kap_co_option: str = "gn93_co",
     cubic_x: bool = False,
     cubic_z: bool = False,
-) -> tuple[float, float, float]:
+    backend: _dispatch.Backend = "auto",
+) -> tuple[jax.Array | float, jax.Array | float, jax.Array | float]:
     """Evaluate Type 2 C/O-enhanced opacity.
 
     Args:
@@ -156,13 +183,31 @@ def kap_get_co(
         dxo: Oxygen enhancement `dXO`.
         log_rho: Base-10 log mass density `log10(rho / g cm^-3)`.
         log_t: Base-10 log temperature `log10(T / K)`.
-        kap_co_option: Type 2 table prefix (`"gn93_co"`, `"a09_co"`).
+        kap_co_option: Type 2 table prefix (`"gn93_co"`, `"gs98_co"`,
+            `"a09_co"`).
         cubic_x: Use cubic interpolation in `X`.
         cubic_z: Use cubic interpolation in `Z`.
+        backend: Execution backend (`"auto"`, `"rust"`, or `"jax"`).
 
     Returns:
         Tuple `(log10_kap, dlnkap_dln_rho, dlnkap_dln_t)`.
     """
+    args = (zbase, x, dxc, dxo, log_rho, log_t)
+    if _dispatch.resolve_backend(backend, *args) == "jax":
+        lk, dr, dt = jax_co_lowt.eval_co_kap_jax(
+            zbase,
+            x,
+            dxc,
+            dxo,
+            log_rho,
+            log_t,
+            kap_co_option=kap_co_option,
+            cubic_x=cubic_x,
+            cubic_z=cubic_z,
+        )
+        if _dispatch.is_jax_input(*args):
+            return lk, dr, dt
+        return float(lk), float(dr), float(dt)
     return _rust.kap_get_co_rust(
         float(zbase),
         float(x),
@@ -177,14 +222,16 @@ def kap_get_co(
 
 
 def kap_get_aesopus(
-    zbase: float,
-    x: float,
-    xc: float,
-    xn: float,
-    xo: float,
-    log_rho: float,
-    log_t: float,
-) -> tuple[float, float, float]:
+    zbase: jax.Array | float,
+    x: jax.Array | float,
+    xc: jax.Array | float,
+    xn: jax.Array | float,
+    xo: jax.Array | float,
+    log_rho: jax.Array | float,
+    log_t: jax.Array | float,
+    *,
+    backend: _dispatch.Backend = "auto",
+) -> tuple[jax.Array | float, jax.Array | float, jax.Array | float]:
     """Evaluate Marigo & Aringer (2009) `AESOPUS_AGSS09` low-T opacity.
 
     Args:
@@ -195,10 +242,19 @@ def kap_get_aesopus(
         xo: Oxygen mass fraction `XO`.
         log_rho: Base-10 log mass density `log10(rho / g cm^-3)`.
         log_t: Base-10 log temperature `log10(T / K)`.
+        backend: Execution backend (`"auto"`, `"rust"`, or `"jax"`).
 
     Returns:
         Tuple `(kap, dlnkap_dln_rho, dlnkap_dln_t)`.
     """
+    args = (zbase, x, xc, xn, xo, log_rho, log_t)
+    if _dispatch.resolve_backend(backend, *args) == "jax":
+        k, dr, dt = jax_co_lowt.eval_aesopus_jax(
+            zbase, x, xc, xn, xo, log_rho, log_t
+        )
+        if _dispatch.is_jax_input(*args):
+            return k, dr, dt
+        return float(k), float(dr), float(dt)
     return _rust.kap_get_aesopus_rust(
         float(zbase),
         float(x),
@@ -211,13 +267,15 @@ def kap_get_aesopus(
 
 
 def kap_get_kapcn(
-    zbase: float,
-    x: float,
-    fc: float,
-    fn_val: float,
-    log_rho: float,
-    log_t: float,
-) -> tuple[float, float, float]:
+    zbase: jax.Array | float,
+    x: jax.Array | float,
+    fc: jax.Array | float,
+    fn_val: jax.Array | float,
+    log_rho: jax.Array | float,
+    log_t: jax.Array | float,
+    *,
+    backend: _dispatch.Backend = "auto",
+) -> tuple[jax.Array | float, jax.Array | float, jax.Array | float]:
     """Evaluate Lederer & Aringer (2009) `kapCN` low-T opacity.
 
     Args:
@@ -229,10 +287,19 @@ def kap_get_kapcn(
             `fN = (X_N / Z) / (X_N / Z)_solar`.
         log_rho: Base-10 log mass density `log10(rho / g cm^-3)`.
         log_t: Base-10 log temperature `log10(T / K)`.
+        backend: Execution backend (`"auto"`, `"rust"`, or `"jax"`).
 
     Returns:
         Tuple `(kap, dlnkap_dln_rho, dlnkap_dln_t)`.
     """
+    args = (zbase, x, fc, fn_val, log_rho, log_t)
+    if _dispatch.resolve_backend(backend, *args) == "jax":
+        k, dr, dt = jax_co_lowt.eval_kapcn_jax(
+            zbase, x, fc, fn_val, log_rho, log_t
+        )
+        if _dispatch.is_jax_input(*args):
+            return k, dr, dt
+        return float(k), float(dr), float(dt)
     return _rust.kap_get_kapcn_rust(
         float(zbase),
         float(x),

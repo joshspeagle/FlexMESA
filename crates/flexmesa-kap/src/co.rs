@@ -35,7 +35,7 @@ pub fn get1_kap_co_results(
         .co_sets
         .iter()
         .find(|s| s.prefix == prefix)
-        .unwrap_or(&tables.co_sets[0]);
+        .ok_or(KapError::MissingTable("unknown CO table prefix"))?;
     let z_tables = &set.z_tables;
     let num_zs = z_tables.len();
     if num_zs == 0 {
@@ -106,93 +106,43 @@ pub fn get1_kap_co_results(
             iz
         };
         let indices = [i1 - 1, i1, i1 + 1, i1 + 2];
-        let all_present = indices
-            .iter()
-            .all(|&idx| z_tables[idx].x_tables.iter().any(|xt| xt.present));
-        if all_present {
-            let mut z_old = [AutoDiffReal2VarOrder1::from(0.0); 4];
-            let mut v_old = [AutoDiffReal2VarOrder1::from(0.0); 4];
-            for (k, &izz) in indices.iter().enumerate() {
-                z_old[k] = AutoDiffReal2VarOrder1::from(z_tables[izz].zbase);
-                let (lk, dlk_dr, dlk_dt) = get_kap_for_co_x(
-                    cfg,
-                    &z_tables[izz],
-                    dxc,
-                    dxo,
-                    x,
-                    log_rho,
-                    log_t,
-                )?;
-                v_old[k] = AutoDiffReal2VarOrder1 {
-                    val: lk,
-                    d1: [dlk_dt, dlk_dr],
-                };
-            }
-            let z_new = [AutoDiffReal2VarOrder1::from(zbase)];
-            let v_new = interpolate_vector_pm_autodiff(&z_old, &v_old, &z_new)
-                .map_err(|_| {
-                    KapError::NumericalFailure(
-                        "interp_pm_autodiff failed in CO Z",
-                    )
-                })?;
-            return Ok((v_new[0].val, v_new[0].d1[1], v_new[0].d1[0]));
+        let mut z_old = [AutoDiffReal2VarOrder1::from(0.0); 4];
+        let mut v_old = [AutoDiffReal2VarOrder1::from(0.0); 4];
+        for (k, &izz) in indices.iter().enumerate() {
+            z_old[k] = AutoDiffReal2VarOrder1::from(z_tables[izz].zbase);
+            let (lk, dlk_dr, dlk_dt) = get_kap_for_co_x(
+                cfg,
+                &z_tables[izz],
+                dxc,
+                dxo,
+                x,
+                log_rho,
+                log_t,
+            )?;
+            v_old[k] = AutoDiffReal2VarOrder1 {
+                val: lk,
+                d1: [dlk_dt, dlk_dr],
+            };
         }
+        let z_new = [AutoDiffReal2VarOrder1::from(zbase)];
+        let v_new = interpolate_vector_pm_autodiff(&z_old, &v_old, &z_new)
+            .map_err(|_| {
+                KapError::NumericalFailure("interp_pm_autodiff failed in CO Z")
+            })?;
+        return Ok((v_new[0].val, v_new[0].d1[1], v_new[0].d1[0]));
     }
 
-    let iz0 = nearest_present_co_z(z_tables, iz);
-    let iz1 = nearest_present_co_z(z_tables, iz + 1);
     let (lk0, dlk0_dr, dlk0_dt) =
-        get_kap_for_co_x(cfg, &z_tables[iz0], dxc, dxo, x, log_rho, log_t)?;
-    if iz0 == iz1 {
-        return Ok((lk0, dlk0_dr, dlk0_dt));
-    }
+        get_kap_for_co_x(cfg, &z_tables[iz], dxc, dxo, x, log_rho, log_t)?;
     let (lk1, dlk1_dr, dlk1_dt) =
-        get_kap_for_co_x(cfg, &z_tables[iz1], dxc, dxo, x, log_rho, log_t)?;
-    let z0_act = z_tables[iz0].zbase;
-    let z1_act = z_tables[iz1].zbase;
-    let beta = (zbase - z1_act) / (z0_act - z1_act);
+        get_kap_for_co_x(cfg, &z_tables[iz + 1], dxc, dxo, x, log_rho, log_t)?;
+    let beta = (zbase - z1) / (z0 - z1);
     let alfa = 1.0 - beta;
     Ok((
         beta * lk0 + alfa * lk1,
         beta * dlk0_dr + alfa * dlk1_dr,
         beta * dlk0_dt + alfa * dlk1_dt,
     ))
-}
-
-fn nearest_present_co_z(z_tables: &[KapCoZTable], target_iz: usize) -> usize {
-    if z_tables[target_iz].x_tables.iter().any(|xt| xt.present) {
-        return target_iz;
-    }
-    let mut best = target_iz;
-    let mut best_dist = f64::INFINITY;
-    for (idx, zt) in z_tables.iter().enumerate() {
-        if zt.x_tables.iter().any(|xt| xt.present) {
-            let d = (zt.zbase - z_tables[target_iz].zbase).abs();
-            if d < best_dist {
-                best_dist = d;
-                best = idx;
-            }
-        }
-    }
-    best
-}
-
-fn nearest_present_co_x(x_tables: &[KapCoXTable], target_ix: usize) -> usize {
-    if x_tables[target_ix].present {
-        return target_ix;
-    }
-    let mut best = target_ix;
-    let mut best_dist = f64::INFINITY;
-    for (idx, xt) in x_tables.iter().enumerate() {
-        if xt.present {
-            let d = (xt.x - x_tables[target_ix].x).abs();
-            if d < best_dist {
-                best_dist = d;
-                best = idx;
-            }
-        }
-    }
-    best
 }
 
 fn get_kap_for_co_x(
@@ -210,12 +160,16 @@ fn get_kap_for_co_x(
     let x_tables = &zt.x_tables;
     let num_xs = x_tables.len();
     if num_xs == 1 || x >= x_tables[num_xs - 1].x {
-        let idx = nearest_present_co_x(x_tables, num_xs - 1);
-        return get_kap_for_dxco(&x_tables[idx], dxc, dxo, log_rho, log_t);
+        return get_kap_for_dxco(
+            &x_tables[num_xs - 1],
+            dxc,
+            dxo,
+            log_rho,
+            log_t,
+        );
     }
     if x <= x_tables[0].x {
-        let idx = nearest_present_co_x(x_tables, 0);
-        return get_kap_for_dxco(&x_tables[idx], dxc, dxo, log_rho, log_t);
+        return get_kap_for_dxco(&x_tables[0], dxc, dxo, log_rho, log_t);
     }
 
     let mut ix = num_xs - 1;
@@ -226,19 +180,22 @@ fn get_kap_for_co_x(
         }
     }
     if ix == num_xs - 1 {
-        let idx = nearest_present_co_x(x_tables, num_xs - 1);
-        return get_kap_for_dxco(&x_tables[idx], dxc, dxo, log_rho, log_t);
+        return get_kap_for_dxco(
+            &x_tables[num_xs - 1],
+            dxc,
+            dxo,
+            log_rho,
+            log_t,
+        );
     }
 
     let x0 = x_tables[ix].x;
     let x1 = x_tables[ix + 1].x;
     if x0 >= x {
-        let idx = nearest_present_co_x(x_tables, ix);
-        return get_kap_for_dxco(&x_tables[idx], dxc, dxo, log_rho, log_t);
+        return get_kap_for_dxco(&x_tables[ix], dxc, dxo, log_rho, log_t);
     }
     if x1 <= x {
-        let idx = nearest_present_co_x(x_tables, ix + 1);
-        return get_kap_for_dxco(&x_tables[idx], dxc, dxo, log_rho, log_t);
+        return get_kap_for_dxco(&x_tables[ix + 1], dxc, dxo, log_rho, log_t);
     }
 
     if num_xs >= 4 && cfg.cubic_interpolation_in_x {
@@ -250,41 +207,30 @@ fn get_kap_for_co_x(
             ix
         };
         let indices = [i1 - 1, i1, i1 + 1, i1 + 2];
-        if indices.iter().all(|&idx| x_tables[idx].present) {
-            let mut x_old = [AutoDiffReal2VarOrder1::from(0.0); 4];
-            let mut v_old = [AutoDiffReal2VarOrder1::from(0.0); 4];
-            for (k, &ixx) in indices.iter().enumerate() {
-                x_old[k] = AutoDiffReal2VarOrder1::from(x_tables[ixx].x);
-                let (lk, dlk_dr, dlk_dt) =
-                    get_kap_for_dxco(&x_tables[ixx], dxc, dxo, log_rho, log_t)?;
-                v_old[k] = AutoDiffReal2VarOrder1 {
-                    val: lk,
-                    d1: [dlk_dt, dlk_dr],
-                };
-            }
-            let x_new = [AutoDiffReal2VarOrder1::from(x)];
-            let v_new = interpolate_vector_pm_autodiff(&x_old, &v_old, &x_new)
-                .map_err(|_| {
-                    KapError::NumericalFailure(
-                        "interp_pm_autodiff failed in CO X",
-                    )
-                })?;
-            return Ok((v_new[0].val, v_new[0].d1[1], v_new[0].d1[0]));
+        let mut x_old = [AutoDiffReal2VarOrder1::from(0.0); 4];
+        let mut v_old = [AutoDiffReal2VarOrder1::from(0.0); 4];
+        for (k, &ixx) in indices.iter().enumerate() {
+            x_old[k] = AutoDiffReal2VarOrder1::from(x_tables[ixx].x);
+            let (lk, dlk_dr, dlk_dt) =
+                get_kap_for_dxco(&x_tables[ixx], dxc, dxo, log_rho, log_t)?;
+            v_old[k] = AutoDiffReal2VarOrder1 {
+                val: lk,
+                d1: [dlk_dt, dlk_dr],
+            };
         }
+        let x_new = [AutoDiffReal2VarOrder1::from(x)];
+        let v_new = interpolate_vector_pm_autodiff(&x_old, &v_old, &x_new)
+            .map_err(|_| {
+                KapError::NumericalFailure("interp_pm_autodiff failed in CO X")
+            })?;
+        return Ok((v_new[0].val, v_new[0].d1[1], v_new[0].d1[0]));
     }
 
-    let ix0 = nearest_present_co_x(x_tables, ix);
-    let ix1 = nearest_present_co_x(x_tables, ix + 1);
     let (lk0, dlk0_dr, dlk0_dt) =
-        get_kap_for_dxco(&x_tables[ix0], dxc, dxo, log_rho, log_t)?;
-    if ix0 == ix1 {
-        return Ok((lk0, dlk0_dr, dlk0_dt));
-    }
+        get_kap_for_dxco(&x_tables[ix], dxc, dxo, log_rho, log_t)?;
     let (lk1, dlk1_dr, dlk1_dt) =
-        get_kap_for_dxco(&x_tables[ix1], dxc, dxo, log_rho, log_t)?;
-    let x0_act = x_tables[ix0].x;
-    let x1_act = x_tables[ix1].x;
-    let beta = (x - x1_act) / (x0_act - x1_act);
+        get_kap_for_dxco(&x_tables[ix + 1], dxc, dxo, log_rho, log_t)?;
+    let beta = (x - x1) / (x0 - x1);
     let alfa = 1.0 - beta;
     Ok((
         beta * lk0 + alfa * lk1,

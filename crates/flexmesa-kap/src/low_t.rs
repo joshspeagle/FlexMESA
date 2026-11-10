@@ -102,7 +102,7 @@ fn aesopus_interp(
 #[allow(clippy::too_many_arguments)]
 fn aesopus_interp_fixed_zref(
     ka: &AesopusData,
-    mut iz: usize,
+    iz: usize,
     x: f64,
     xc: f64,
     xn: f64,
@@ -111,18 +111,7 @@ fn aesopus_interp_fixed_zref(
     log_t: f64,
 ) -> Result<[f64; 3], KapError> {
     if ka.ts[iz].slices.is_empty() {
-        let mut best = iz;
-        let mut best_d = f64::INFINITY;
-        for (idx, ts_i) in ka.ts.iter().enumerate() {
-            if !ts_i.slices.is_empty() {
-                let d = (ka.zs[idx] - ka.zs[iz]).abs();
-                if d < best_d {
-                    best_d = d;
-                    best = idx;
-                }
-            }
-        }
-        iz = best;
+        return Err(KapError::MissingTable("AESOPUS Z table set not loaded"));
     }
 
     let zref = ka.zs[iz];
@@ -196,14 +185,7 @@ fn aesopus_interp_rt(
     let n_fc = ts.fcs.len();
     let n_fn = ts.fns.len();
     let flat_idx = ((ix * n_fco + ico) * n_fc + ic) * n_fn + in_;
-    let slice = if ts.slices[flat_idx].raw_f32.is_some() {
-        &ts.slices[flat_idx]
-    } else {
-        ts.slices
-            .iter()
-            .find(|s| s.raw_f32.is_some())
-            .ok_or(KapError::MissingTable("no AESOPUS slice available"))?
-    };
+    let slice = &ts.slices[flat_idx];
     let (kap1, ilinx, iliny) = slice.spline_data(&ka.log_rs, &ka.log_ts)?;
     let ev = interp_evbicub_prevalidated_db(
         log_r, log_t, &ka.log_rs, &ka.log_ts, *ilinx, *iliny, kap1,

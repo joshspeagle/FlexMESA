@@ -11,6 +11,8 @@
 //! with their photon-counting denominator integrals $\int S_\lambda \lambda\,
 //! d\lambda$.
 
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 use flexmesa_autodiff::DualOrder1;
@@ -22,9 +24,15 @@ use crate::filters_data::{
 use crate::types::{ColorsError, MagSystem, SedInterpMethod};
 use crate::utils::{interpolate_array, simpson_integration_fn};
 
-/// Raw bytes of the built-in `Kurucz2003all` sparse SED cube asset.
-const BUILTIN_KURUCZ_BYTES: &[u8] =
-    include_bytes!("../data/builtin_kurucz_johnson.bin");
+/// First half of the built-in full $76 \times 11 \times 8 \times 1199$
+/// `Kurucz2003all` (`lcb98cor`) dense SED cube asset.
+const BUILTIN_KURUCZ_BYTES_A: &[u8] =
+    include_bytes!("../data/builtin_kurucz_johnson_a.bin");
+/// Second half of the built-in full $76 \times 11 \times 8 \times 1199$
+/// `Kurucz2003all` (`lcb98cor`) dense SED cube asset.
+const BUILTIN_KURUCZ_BYTES_B: &[u8] =
+    include_bytes!("../data/builtin_kurucz_johnson_b.bin");
+const COLORS_CACHE_MAGIC: &[u8; 8] = b"FMCOLCA1";
 
 /// Return type of [`SedCube::precompute_johnson_filters`].
 ///
@@ -72,114 +80,139 @@ pub struct SedCube {
 }
 
 impl SedCube {
-    /// Parses the built-in `Kurucz2003all` SED cube and pre-interpolates the
-    /// 7 Johnson filter transmission curves onto its wavelength grid.
+    /// Parses the full $76 \times 11 \times 8 \times 1199$ `Kurucz2003all`
+    /// (`lcb98cor`) dense SED cube from the compile-time embedded
+    /// `builtin_kurucz_johnson.bin` asset (or from an explicit
+    /// `FLEXMESA_DATA_DIR` / `MESA_DIR` `flux_cube.bin` override when set),
+    /// loading all `6,688` slots with a 1-to-1 `slot_map` and zero
+    /// nearest-neighbor node substitution.
     ///
     /// # Errors
-    /// Returns [`ColorsError::BinaryParseError`] if the embedded binary payload
-    /// is truncated or malformed.
+    /// Returns [`ColorsError::BinaryParseError`] if the binary payload is
+    /// truncated or malformed.
     pub fn from_builtin() -> Result<Self, ColorsError> {
-        let bytes = BUILTIN_KURUCZ_BYTES;
-        if bytes.len() < 20 {
-            return Err(ColorsError::BinaryParseError("header too short"));
+        if let Some(flux_path) = resolve_mesa_flux_cube_path() {
+            if let Ok(cube) = Self::from_mesa_flux_cube(&flux_path) {
+                return Ok(cube);
+            }
         }
-        let mut pos = 0usize;
-        let read_u32 = |pos: &mut usize| -> Result<usize, ColorsError> {
-            let end = *pos + 4;
-            let b: [u8; 4] = bytes
-                .get(*pos..end)
-                .ok_or(ColorsError::BinaryParseError("unexpected EOF (u32)"))?
-                .try_into()
-                .map_err(|_| ColorsError::BinaryParseError("u32 slice"))?;
+        let mut combined = Vec::with_capacity(
+            BUILTIN_KURUCZ_BYTES_A.len() + BUILTIN_KURUCZ_BYTES_B.len(),
+        );
+        combined.extend_from_slice(BUILTIN_KURUCZ_BYTES_A);
+        combined.extend_from_slice(BUILTIN_KURUCZ_BYTES_B);
+        Self::from_binary_bytes(&combined)
+    }
+
+    /// Load the complete $76 \times 11 \times 8 \times 1199$ Fortran stream
+    /// binary `flux_cube.bin` (or `lcb98cor.dat` binary cube) with zero
+    /// nearest-neighbor node copying.
+    ///
+    /// # Errors
+    /// Returns [`ColorsError`] if the file cannot be read or has invalid
+    /// dimensions.
+    #[allow(clippy::cast_sign_loss, clippy::missing_panics_doc)]
+    pub fn from_mesa_flux_cube(path: &Path) -> Result<Self, ColorsError> {
+        let bytes = fs::read(path)
+            .map_err(|_| ColorsError::BinaryParseError("read flux_cube.bin"))?;
+        if bytes.len() < 16 {
+            return Err(ColorsError::BinaryParseError(
+                "flux_cube.bin header too short",
+            ));
+        }
+        let nt = i32::from_le_bytes(bytes[0..4].try_into().unwrap()) as usize;
+        let ng = i32::from_le_bytes(bytes[4..8].try_into().unwrap()) as usize;
+        let nm = i32::from_le_bytes(bytes[8..12].try_into().unwrap()) as usize;
+        let nlam =
+            i32::from_le_bytes(bytes[12..16].try_into().unwrap()) as usize;
+        let expected_f64 = nt + ng + nm + nlam + nt * ng * nm * nlam;
+        if bytes.len() != 16 + expected_f64 * 8 {
+            return Err(ColorsError::BinaryParseError(
+                "flux_cube.bin size mismatch",
+            ));
+        }
+        let mut pos = 16usize;
+        let read_vec = |pos: &mut usize, count: usize| -> Vec<f64> {
+            let end = *pos + count * 8;
+            let v: Vec<f64> = bytes[*pos..end]
+                .as_chunks::<8>()
+                .0
+                .iter()
+                .map(|&c| f64::from_le_bytes(c))
+                .collect();
             *pos = end;
-            Ok(u32::from_le_bytes(b) as usize)
+            v
         };
-        let read_f64_vec =
-            |pos: &mut usize, count: usize| -> Result<Vec<f64>, ColorsError> {
-                let byte_len = count * 8;
-                let end = *pos + byte_len;
-                let slice = bytes.get(*pos..end).ok_or(
-                    ColorsError::BinaryParseError("unexpected EOF (f64 vec)"),
-                )?;
-                *pos = end;
-                Ok(slice
-                    .as_chunks::<8>()
-                    .0
-                    .iter()
-                    .map(|&c| f64::from_le_bytes(c))
-                    .collect())
-            };
+        let teff_grid = read_vec(&mut pos, nt);
+        let logg_grid = read_vec(&mut pos, ng);
+        let meta_grid = read_vec(&mut pos, nm);
+        let wavelengths = read_vec(&mut pos, nlam);
 
-        let nt = read_u32(&mut pos)?;
-        let ng = read_u32(&mut pos)?;
-        let nm = read_u32(&mut pos)?;
-        let nlam = read_u32(&mut pos)?;
-        let n_nodes = read_u32(&mut pos)?;
-
-        let teff_grid = read_f64_vec(&mut pos, nt)?;
-        let logg_grid = read_f64_vec(&mut pos, ng)?;
-        let meta_grid = read_f64_vec(&mut pos, nm)?;
-        let wavelengths = read_f64_vec(&mut pos, nlam)?;
-
-        let mut sed_table = Vec::with_capacity(n_nodes * nlam);
-        let mut node_coords = Vec::with_capacity(n_nodes);
-        let mut exact_map = vec![usize::MAX; nt * ng * nm];
-
-        for slot in 0..n_nodes {
-            let it = read_u32(&mut pos)?;
-            let ig = read_u32(&mut pos)?;
-            let im = read_u32(&mut pos)?;
-            let sed = read_f64_vec(&mut pos, nlam)?;
-            sed_table.extend_from_slice(&sed);
-            node_coords.push((it, ig, im));
-            exact_map[(it * ng + ig) * nm + im] = slot;
-        }
-
-        // Populate `slot_map` for all `(it, ig, im)` cells: exact slot if
-        // present in the sparse table, else nearest stored node in index space.
-        let mut slot_map = vec![0usize; nt * ng * nm];
-        for it in 0..nt {
-            for ig in 0..ng {
-                for im in 0..nm {
-                    let flat = (it * ng + ig) * nm + im;
-                    if exact_map[flat] == usize::MAX {
-                        let best = node_coords
-                            .iter()
-                            .enumerate()
-                            .min_by_key(|(_, &(nt_i, ng_i, nm_i))| {
-                                let dt = it.abs_diff(nt_i);
-                                let dg = ig.abs_diff(ng_i);
-                                let dm = im.abs_diff(nm_i);
-                                dt * 100 + dg * 10 + dm
-                            })
-                            .map_or(0, |(idx, _)| idx);
-                        slot_map[flat] = best;
-                    } else {
-                        slot_map[flat] = exact_map[flat];
+        // Upstream `flux_cube.bin` is stored in Fortran column-major order
+        // `(nt, ng, nm, nlam)` where `it` varies fastest and `ilam` slowest.
+        // Transpose into row-major `(nt, ng, nm, nlam)` where `ilam` is
+        // contiguous for each `(it, ig, im)` node.
+        let raw_payload = &bytes[pos..];
+        let n_cells = nt * ng * nm;
+        let mut flux = vec![0.0_f64; n_cells * nlam];
+        for ilam in 0..nlam {
+            let lam_base = ilam * n_cells;
+            for im in 0..nm {
+                let im_base = lam_base + im * (nt * ng);
+                for ig in 0..ng {
+                    let ig_base = im_base + ig * nt;
+                    for it in 0..nt {
+                        let f_idx = ig_base + it;
+                        let off = f_idx * 8;
+                        let val = f64::from_le_bytes(
+                            raw_payload[off..off + 8].try_into().unwrap(),
+                        );
+                        let c_cell = (it * ng + ig) * nm + im;
+                        flux[c_cell * nlam + ilam] = val;
                     }
                 }
             }
         }
+        Self::from_dense(teff_grid, logg_grid, meta_grid, wavelengths, flux)
+    }
 
-        let (
-            filters_on_sed_grid,
-            filters_weighted_on_sed_grid,
-            filter_norm_integrals,
-            simpson_panels,
-        ) = Self::precompute_johnson_filters(&wavelengths)?;
-
-        Ok(Self {
-            teff_grid,
-            logg_grid,
-            meta_grid,
-            wavelengths,
-            slot_map,
-            sed_table,
-            filters_on_sed_grid,
-            filters_weighted_on_sed_grid,
-            filter_norm_integrals,
-            simpson_panels,
-        })
+    /// Parses a dense `FMCOLCA1` binary SED cube payload (`builtin_kurucz_johnson.bin`).
+    ///
+    /// # Errors
+    /// Returns [`ColorsError::BinaryParseError`] if the binary header or size
+    /// is invalid.
+    #[allow(clippy::missing_panics_doc)]
+    pub fn from_binary_bytes(bytes: &[u8]) -> Result<Self, ColorsError> {
+        if bytes.len() < 24 || &bytes[0..8] != COLORS_CACHE_MAGIC {
+            return Err(ColorsError::BinaryParseError("invalid cache magic"));
+        }
+        let nt = u32::from_le_bytes(bytes[8..12].try_into().unwrap()) as usize;
+        let ng = u32::from_le_bytes(bytes[12..16].try_into().unwrap()) as usize;
+        let nm = u32::from_le_bytes(bytes[16..20].try_into().unwrap()) as usize;
+        let nlam =
+            u32::from_le_bytes(bytes[20..24].try_into().unwrap()) as usize;
+        let expected_f64 = nt + ng + nm + nlam + nt * ng * nm * nlam;
+        if bytes.len() != 24 + expected_f64 * 8 {
+            return Err(ColorsError::BinaryParseError("cache size mismatch"));
+        }
+        let mut pos = 24usize;
+        let read_vec = |pos: &mut usize, count: usize| -> Vec<f64> {
+            let end = *pos + count * 8;
+            let v: Vec<f64> = bytes[*pos..end]
+                .as_chunks::<8>()
+                .0
+                .iter()
+                .map(|&c| f64::from_le_bytes(c))
+                .collect();
+            *pos = end;
+            v
+        };
+        let teff_grid = read_vec(&mut pos, nt);
+        let logg_grid = read_vec(&mut pos, ng);
+        let meta_grid = read_vec(&mut pos, nm);
+        let wavelengths = read_vec(&mut pos, nlam);
+        let flux = read_vec(&mut pos, nt * ng * nm * nlam);
+        Self::from_dense(teff_grid, logg_grid, meta_grid, wavelengths, flux)
     }
 
     /// Constructs a dense [`SedCube`] from explicit coordinate grids and a
@@ -278,6 +311,13 @@ impl SedCube {
         Ok((on_grid, weighted_on_grid, norms, panels))
     }
 
+    /// Returns the number of stored SED spectra (`sed_table.len() / wavelengths.len()`).
+    #[inline]
+    #[must_use]
+    pub fn n_seds(&self) -> usize {
+        self.sed_table.len() / self.wavelengths.len()
+    }
+
     /// Returns the surface flux spectrum $F_\lambda(\lambda)$ of length
     /// `self.wavelengths.len()` at grid indices `(it, ig, im)`.
     #[inline]
@@ -374,4 +414,25 @@ pub fn builtin_sed_cube() -> &'static SedCube {
         SedCube::from_builtin()
             .expect("built-in Kurucz2003 SED cube must parse")
     })
+}
+
+fn resolve_mesa_flux_cube_path() -> Option<PathBuf> {
+    let candidates = [
+        "colors_data/stellar_models/Kurucz2003all/flux_cube.bin",
+        "colors_data/lcb98cor.dat",
+        "stellar_models/Kurucz2003all/flux_cube.bin",
+        "data/colors_data/stellar_models/Kurucz2003all/flux_cube.bin",
+    ];
+    for var in ["FLEXMESA_DATA_DIR", "MESA_DIR"] {
+        if let Ok(base) = std::env::var(var) {
+            let bp = PathBuf::from(base);
+            for rel in &candidates {
+                let p = bp.join(rel);
+                if p.is_file() {
+                    return Some(p);
+                }
+            }
+        }
+    }
+    None
 }

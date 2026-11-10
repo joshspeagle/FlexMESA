@@ -5,12 +5,11 @@
 //! and `eoscms_eval.f90` (`Get_CMS_alfa`, `get_CMS_for_eosdt`, `eval_eosCMS_fixed_X`,
 //! and `include_radiation`).
 
+pub mod config;
 pub mod table;
 
-pub use table::{
-    get_cms_alfa, CmsConfig, CmsTableSet, CmsXTable, CMS_NUM_XS, CMS_XSTR,
-    CMS_XVALS,
-};
+pub use config::{get_cms_alfa, CmsConfig, CMS_NUM_XS, CMS_XSTR, CMS_XVALS};
+pub use table::{CmsTableSet, CmsXTable};
 
 use crate::tables_4d::spline::{do_eos_interpolations, NUM_EOS_TABLE_VALS};
 use crate::types::{

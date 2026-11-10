@@ -26,7 +26,11 @@ NeuChannel = driver.NeuChannel
 NeuFlags = driver.NeuFlags
 NeuResult = driver.NeuResult
 neu_get = driver.neu_get
+neu_get_jax = driver.neu_get_jax
+neu_channels_jax = driver.neu_channels_jax
 neu_pair_plas_jax = driver.neu_pair_plas_jax
+ifermi12_jax = driver.ifermi12_jax
+zfermim12_jax = driver.zfermim12_jax
 
 pair_neu = pair_plas.pair_neu
 plas_neu = pair_plas.plas_neu
@@ -46,11 +50,15 @@ __all__ = [
     "NeuResult",
     "brem_neu",
     "ifermi12",
+    "ifermi12_jax",
+    "neu_channels_jax",
     "neu_get",
+    "neu_get_jax",
     "neu_pair_plas_jax",
     "pair_neu",
     "phot_neu",
     "plas_neu",
     "reco_neu",
     "zfermim12",
+    "zfermim12_jax",
 ]

@@ -28,6 +28,9 @@ with JAX custom-VJP differentiation for implicit roots and Newton solves.
 from __future__ import annotations
 
 from flexmesa.num import (
+    bobyqa as _bobyqa,
+)
+from flexmesa.num import (
     brent,
     newton,
     quadrature,
@@ -37,10 +40,20 @@ from flexmesa.num import (
     search,
     simplex,
 )
+from flexmesa.num import (
+    newuoa as _newuoa,
+)
+
+BobyqaResult = _bobyqa.BobyqaResult
+bobyqa = _bobyqa.bobyqa
+NewuoaResult = _newuoa.NewuoaResult
+newuoa = _newuoa.newuoa
 
 brent_global_min = brent.brent_global_min
 brent_local_min = brent.brent_local_min
 brent_safe_zero = brent.brent_safe_zero
+glomin = brent.glomin
+local_min = brent.local_min
 
 NewtonConfig = newton.NewtonConfig
 NewtonResult = newton.NewtonResult
@@ -67,6 +80,7 @@ safe_root_without_brackets = root.safe_root_without_brackets
 RosenbrockResult = rosenbrock.RosenbrockResult
 RosenbrockVariant = rosenbrock.RosenbrockVariant
 rosenbrock_banded = rosenbrock.rosenbrock_banded
+rosenbrock_dae_diag = rosenbrock.rosenbrock_dae_diag
 rosenbrock_dense = rosenbrock.rosenbrock_dense
 
 binary_search = search.binary_search
@@ -88,15 +102,18 @@ perm_uniform = simplex.perm_uniform
 r8_uniform_01 = simplex.r8_uniform_01
 
 __all__ = [
+    "BobyqaResult",
     "DopriResult",
     "NewtonConfig",
     "NewtonResult",
+    "NewuoaResult",
     "RosenbrockResult",
     "RosenbrockVariant",
     "SimplexConfig",
     "SimplexResult",
     "binary_search",
     "binary_search_1based",
+    "bobyqa",
     "brent_global_min",
     "brent_local_min",
     "brent_safe_zero",
@@ -106,15 +123,18 @@ __all__ = [
     "find0",
     "find0_quadratic",
     "find_max_quadratic",
+    "glomin",
     "i4_uniform",
     "integrate",
     "linear_interp",
+    "local_min",
     "look_for_brackets",
     "neumaier_sum",
     "newton_solve_banded",
     "newton_solve_block_tridiagonal",
     "newton_solve_dense",
     "newton_solve_jax",
+    "newuoa",
     "nm_simplex",
     "perm_uniform",
     "qsort_index",
@@ -122,6 +142,7 @@ __all__ = [
     "rk2",
     "rk4",
     "rosenbrock_banded",
+    "rosenbrock_dae_diag",
     "rosenbrock_dense",
     "safe_root_jax",
     "safe_root_with_brackets",

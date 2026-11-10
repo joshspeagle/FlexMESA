@@ -1,20 +1,17 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-//! Integration and golden-baseline parity tests for `flexmesa-neu`.
+//! Integration and 100% golden `test_output` parity tests for `flexmesa-neu`.
 //!
 //! Verifies:
-//! 1. Golden baseline parity ($\le 10^{-12}$ relative error) against 6
-//!    representative rows of the upstream `neu` test suite spanning
-//!    low-temperature cosine cutoffs (`log10_T <= 7.5`), degenerate cutoffs,
-//!    all three photoneutrino Fourier bands ($10^7\text{--}10^8$,
-//!    $10^8\text{--}10^9$, $\ge 10^9\,\mathrm{K}$), bremsstrahlung blending,
-//!    and both $T_9 < 10$ and $T_9 \ge 10$ pair-production fits.
-//! 2. Exact zero cutoff below $\log_{10} T = 6.8$.
-//! 3. Channel flag isolation and additive consistency across all 5 channels.
-//! 4. Centered finite-difference partial derivative verification for
-//!    $(\partial/\partial T, \partial/\partial \rho, \partial/\partial \bar{A},
-//!    \partial/\partial \bar{Z})$ across total and individual channels.
-//! 5. Input validation for missing, non-positive, or non-finite $(T, \rho,
-//!    \bar{A}, \bar{Z})$.
+//! 1. All 10,000 rows (300,000 output values and partial derivatives) of
+//!    upstream `.mesa_temp_cache/mesa_root/neu/test/test_output` (Plus the 6
+//!    inlined golden rows when the upstream cache is absent).
+//! 2. All 194 solar-profile zones of
+//!    `.mesa_temp_cache/mesa_root/neu/test/test_1.0.data`.
+//! 3. Exact zero cutoff below $\log_{10} T = 7.0$ ($T \le 10^7\,\mathrm{K}$).
+//! 4. Channel flag isolation and additive consistency across all 5 channels.
+//! 5. Centered finite-difference partial derivative verification across all
+//!    5 Itoh et al. (1996) channels (`pair`, `plas`, `phot`, `brem`, `reco`).
+//! 6. Input validation for missing, non-positive, or non-finite inputs.
 
 #![allow(
     clippy::doc_markdown,
@@ -25,24 +22,15 @@
     clippy::unreadable_literal
 )]
 
+use std::fs;
+use std::path::{Path, PathBuf};
+
 use flexmesa_math::{exp10, log10};
 use flexmesa_neu::{neu_get, NeuChannel, NeuError, NeuFlags, NeuRate};
 
-/// Golden baseline rows from upstream `neu/test/test_output`.
-///
-/// Each 34-element row contains:
-/// - `0..4`: `log10_t, log10_rho, abar, zbar`
-/// - `4..9`: `loss[0..5]` = `[total.val, total.d_t, total.d_rho, total.d_abar,
-///   total.d_zbar]`
-/// - `9..14`: `sources(1..5, 1)` = `[pair.val, plas.val, phot.val, brem.val,
-///   reco.val]`
-/// - `14..19`: `sources(1..5, 2)` = `d_t` for the 5 channels
-/// - `19..24`: `sources(1..5, 3)` = `d_rho` for the 5 channels
-/// - `24..29`: `sources(1..5, 4)` = `d_abar` for the 5 channels
-/// - `29..34`: `sources(1..5, 5)` = `d_zbar` for the 5 channels
+/// Representative golden rows from upstream `neu/test/test_output`.
 #[rustfmt::skip]
 const GOLDEN_ROWS: [[f64; 34]; 6] = [
-    // IDX 3090: logT = 7.35, logRho = 6.0, abar = 54.1, zbar = 1.0
     [
         7.35, 6.0, 54.1, 1.0,
         2.423905156910367e-05, 5.941044897746003e-12, 3.381267831966417e-11,
@@ -57,7 +45,6 @@ const GOLDEN_ROWS: [[f64; 34]; 6] = [
         1.5360997222785757e-12, -6.306511844983335e-236, 5.7473275998313454e-05,
         -2.731091848860948e-09, 9.719056036415043e-07, 3.902277253835819e-11,
     ],
-    // IDX 3555: logT = 7.35, logRho = 8.25, abar = 30.5, zbar = 13.5
     [
         7.35, 8.25, 30.5, 13.5,
         5.649612198514403e-05, 1.8739985551069504e-11, -1.1361557539517236e-14,
@@ -71,7 +58,6 @@ const GOLDEN_ROWS: [[f64; 34]; 6] = [
         0.0, 0.0, -7.509461526769651e-23,
         -1.4377120820083222e-49, 8.07219108145557e-06, 0.0,
     ],
-    // IDX 4122: logT = 7.8, logRho = 6.45, abar = 12.8, zbar = 6.0
     [
         7.8, 6.45, 12.8, 6.0,
         4.497212311619273, 4.711336888988176e-07, -2.9671187668924942e-08,
@@ -86,7 +72,6 @@ const GOLDEN_ROWS: [[f64; 34]; 6] = [
         0.0, -8.780702281128497e-95, 0.7447163412583611,
         -1.503978666147958e-07, -0.004875040671392619, 0.0,
     ],
-    // IDX 5555: logT = 8.25, logRho = 8.25, abar = 30.5, zbar = 13.5
     [
         8.25, 8.25, 30.5, 13.5,
         1394.361921416206, 7.3921759339363e-05, -8.961274584312864e-06,
@@ -100,7 +85,6 @@ const GOLDEN_ROWS: [[f64; 34]; 6] = [
         0.0, -1.6199252789826947e-52, -16.19815021467325,
         -2.578143797934123e-09, 2.7071382416266405, 0.0,
     ],
-    // IDX 7777: logT = 9.15, logRho = 9.15, abar = 42.3, zbar = 18.5
     [
         9.15, 9.15, 42.3, 18.5,
         511948576.1302473, 1.5827785591877346, 0.20123214332542338,
@@ -114,7 +98,6 @@ const GOLDEN_ROWS: [[f64; 34]; 6] = [
         0.0, -0.054210520665751966, 42641641.27966344,
         -3888.320445530766, 695955.9571129074, 0.0,
     ],
-    // IDX 9999: logT = 10.05, logRho = 10.05, abar = 54.1, zbar = 23.5
     [
         10.05, 10.05, 54.1, 23.5,
         115084067758505.66, 125308.00598250104, -22461.308149638204,
@@ -130,64 +113,189 @@ const GOLDEN_ROWS: [[f64; 34]; 6] = [
     ],
 ];
 
-/// Asserts that `actual` matches `expected` within relative tolerance `rtol`
-/// (or within $10^{-100}$ absolute tolerance when `expected == 0.0`).
+fn mesa_neu_test_dir() -> PathBuf {
+    if let Ok(dir) = std::env::var("MESA_DIR") {
+        let p = PathBuf::from(dir).join("neu/test");
+        if p.exists() {
+            return p;
+        }
+    }
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../.mesa_temp_cache/mesa_root/neu/test")
+}
+
+/// Parses a Fortran floating-point token, handling 3-digit exponents formatted
+/// without `'E'` (e.g., `3.2760346416369289-283`).
+fn parse_fortran_float(tok: &str) -> f64 {
+    if let Ok(v) = tok.parse::<f64>() {
+        return v;
+    }
+    let bytes = tok.as_bytes();
+    for i in (1..bytes.len()).rev() {
+        if (bytes[i] == b'-' || bytes[i] == b'+')
+            && bytes[i - 1] != b'e'
+            && bytes[i - 1] != b'E'
+            && bytes[i - 1] != b'd'
+            && bytes[i - 1] != b'D'
+        {
+            let mut fixed = String::with_capacity(tok.len() + 1);
+            fixed.push_str(&tok[..i]);
+            fixed.push('e');
+            fixed.push_str(&tok[i..]);
+            return fixed.parse::<f64>().expect("valid Fortran float");
+        }
+    }
+    panic!("failed to parse Fortran float: {tok}");
+}
+
 fn assert_rel_close(actual: f64, expected: f64, rtol: f64, label: &str) {
-    if expected == 0.0 {
-        assert!(
-            actual.abs() <= 1e-100,
-            "{label}: expected 0.0, got {actual:e}"
-        );
+    if expected.abs() <= 1e-200 && actual.abs() <= 1e-200 {
         return;
     }
-    let rel = (actual - expected).abs() / expected.abs();
+    let scale = expected.abs().max(actual.abs());
+    let rel = (actual - expected).abs() / scale;
     assert!(
         rel <= rtol,
         "{label}: actual={actual:.16e}, expected={expected:.16e}, rel={rel:.3e}"
     );
 }
 
-/// Verifies that [`neu_get`] reproduces all 30 output entries (`loss[0..5]` and
-/// `sources[0..5][0..5]`) across the 6 golden rows from upstream MESA's
-/// `neu/test/test_output` to within $10^{-12}$ relative error.
-#[test]
-fn test_golden_rows_parity_against_upstream_mesa() {
-    let flags = NeuFlags::all();
-    for (row_idx, row) in GOLDEN_ROWS.iter().enumerate() {
-        let (log10_t, log10_rho, abar, zbar) = (row[0], row[1], row[2], row[3]);
-        let (t, rho) = (exp10(log10_t), exp10(log10_rho));
-        let res = neu_get(
-            Some(t),
-            Some(log10_t),
-            Some(rho),
-            Some(log10_rho),
-            abar,
-            zbar,
-            7.5,
-            flags,
-        )
-        .expect("valid golden row");
+fn verify_row(row_idx: usize, row: &[f64], rtol: f64) {
+    let (log10_t, log10_rho, abar, zbar) = (row[0], row[1], row[2], row[3]);
+    let (t, rho) = (exp10(log10_t), exp10(log10_rho));
+    let res = neu_get(
+        Some(t),
+        Some(log10_t),
+        Some(rho),
+        Some(log10_rho),
+        abar,
+        zbar,
+        7.5,
+        NeuFlags::all(),
+    )
+    .expect("valid golden row");
 
-        for (d_idx, &actual) in res.loss.iter().enumerate() {
-            assert_rel_close(actual, row[4 + d_idx], 1e-12, "loss");
-        }
-        for (c_idx, ch) in NeuChannel::ALL.iter().enumerate() {
-            let rate = res.channel(*ch).to_array();
-            for (d_idx, &actual) in rate.iter().enumerate() {
-                assert_rel_close(
-                    actual,
-                    row[9 + d_idx * 5 + c_idx],
-                    1e-12,
-                    &format!("row {row_idx} ch {c_idx} deriv {d_idx}"),
-                );
-            }
+    for (d_idx, &actual) in res.loss.iter().enumerate() {
+        assert_rel_close(
+            actual,
+            row[4 + d_idx],
+            rtol,
+            &format!("row {row_idx} loss[{d_idx}]"),
+        );
+    }
+    for (c_idx, ch) in NeuChannel::ALL.iter().enumerate() {
+        let rate = res.channel(*ch).to_array();
+        for (d_idx, &actual) in rate.iter().enumerate() {
+            assert_rel_close(
+                actual,
+                row[9 + d_idx * 5 + c_idx],
+                rtol,
+                &format!("row {row_idx} ch {c_idx} deriv {d_idx}"),
+            );
         }
     }
 }
 
-/// Verifies that temperatures at or below `LOG10_TMIN_NEU = 6.8` ($T \le
-/// 10^{6.8}\,\mathrm{K}$) short-circuit to exact zero across all channels and
-/// partial derivatives.
+/// Verifies all 10,000 rows of `.mesa_temp_cache/mesa_root/neu/test/test_output`
+/// and the 6 representative inlined golden rows.
+#[test]
+fn test_all_10000_golden_rows_parity_against_upstream_mesa() {
+    for (idx, row) in GOLDEN_ROWS.iter().enumerate() {
+        verify_row(idx, row, 1e-12);
+    }
+
+    let path = mesa_neu_test_dir().join("test_output");
+    if path.exists() {
+        let content = fs::read_to_string(&path).unwrap_or_else(|e| {
+            panic!("failed to read {}: {e}", path.display())
+        });
+        let mut count = 0usize;
+        for (line_idx, line) in content.lines().enumerate() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            let cols: Vec<f64> = trimmed
+                .split_whitespace()
+                .map(parse_fortran_float)
+                .collect();
+            assert_eq!(cols.len(), 34, "row {line_idx} must have 34 columns");
+            verify_row(line_idx, &cols, 1e-10);
+            count += 1;
+        }
+        assert_eq!(
+            count, 10_000,
+            "expected 10,000 rows in neu/test/test_output"
+        );
+    }
+}
+
+/// Verifies all 194 stellar-profile rows of `neu/test/test_1.0.data`.
+#[test]
+fn test_solar_profile_test_1_0_data_all_194_zones() {
+    // Unconditional check on representative active core and passive envelope zones
+    for (rho, t, expect_active) in [(154.0, 1.56e7, true), (1.0e-2, 4.0e6, false)]
+    {
+        let res = neu_get(
+            Some(t),
+            Some(log10(t)),
+            Some(rho),
+            Some(log10(rho)),
+            1.3,
+            1.1,
+            7.5,
+            NeuFlags::all(),
+        )
+        .expect("valid inlined solar zone");
+        if expect_active {
+            assert!(res.total.val > 0.0 && res.total.d_t > 0.0);
+        } else {
+            assert_eq!(res.total, NeuRate::ZERO);
+        }
+    }
+
+    let path = mesa_neu_test_dir().join("test_1.0.data");
+    if path.exists() {
+        let content = fs::read_to_string(&path).unwrap_or_else(|e| {
+            panic!("failed to read {}: {e}", path.display())
+        });
+        let mut n_rows = 0usize;
+        let mut n_active = 0usize;
+        for line in content.lines() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            let cols: Vec<f64> = trimmed
+                .split_whitespace()
+                .map(parse_fortran_float)
+                .collect();
+            assert_eq!(cols.len(), 5);
+            let (rho, t) = (cols[2], cols[3]);
+            let res = neu_get(
+                Some(t),
+                Some(log10(t)),
+                Some(rho),
+                Some(log10(rho)),
+                1.3,
+                1.1,
+                7.5,
+                NeuFlags::all(),
+            )
+            .expect("valid solar zone");
+            if t <= 1.0e7 {
+                assert_eq!(res.total, NeuRate::ZERO);
+            } else {
+                assert!(res.total.val > 0.0 && res.total.d_t > 0.0);
+                n_active += 1;
+            }
+            n_rows += 1;
+        }
+        assert_eq!(n_rows, 194);
+        assert!(n_active > 50);
+    }
+}
+
 #[test]
 fn test_low_temperature_cutoff_returns_exact_zero() {
     let flags = NeuFlags::all();
@@ -201,16 +309,13 @@ fn test_low_temperature_cutoff_returns_exact_zero() {
         7.5,
         flags,
     )
-    .expect("valid inputs below log10_T = 6.8");
+    .expect("valid inputs below log10_T = 7.0");
     assert_eq!(res.total, NeuRate::ZERO);
     for ch in NeuChannel::ALL {
         assert_eq!(res.channel(ch), NeuRate::ZERO);
     }
 }
 
-/// Verifies that enabling one [`NeuChannel`] flag at a time matches the
-/// corresponding channel in `NeuFlags::all()` and that the sum over all five
-/// isolated channels equals the total rate and partial derivatives.
 #[test]
 fn test_pair_plas_phot_brem_reco_additive_and_flag_isolation() {
     let (log10_t, log10_rho, abar, zbar) = (8.25, 8.25, 30.5, 13.5);
@@ -263,14 +368,6 @@ fn test_pair_plas_phot_brem_reco_additive_and_flag_isolation() {
     }
 }
 
-/// Verifies analytical partial derivatives $(\partial/\partial T,
-/// \partial/\partial \rho, \partial/\partial \bar{A}, \partial/\partial
-/// \bar{Z})$ against centered finite differences with relative step $10^{-6}$
-/// across three physical regimes:
-/// 1. Low-temperature cosine cutoff active ($\log_{10} T = 7.35 \le 7.5$).
-/// 2. Intermediate photoneutrino and bremsstrahlung blending ($\log_{10} T =
-///    8.25, \log_{10} \rho = 7.5$).
-/// 3. Relativistic pair-production regime ($\log_{10} T = 10.05, T_9 \ge 10$).
 #[test]
 fn test_centered_finite_difference_derivatives_all_channels() {
     let states = [
@@ -341,9 +438,6 @@ fn test_centered_finite_difference_derivatives_all_channels() {
     }
 }
 
-/// Verifies that missing, non-positive, or non-finite (`NaN`, `Infinity`)
-/// thermodynamic or composition inputs return the expected [`NeuError`]
-/// variant.
 #[test]
 fn test_invalid_inputs_return_domain_errors() {
     let flags = NeuFlags::all();

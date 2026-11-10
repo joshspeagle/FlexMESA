@@ -337,4 +337,56 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn test_full_76x11x8x1199_sed_cube_and_domain_sweeps() {
+        let cube = builtin_sed_cube();
+        assert_eq!(cube.teff_grid.len(), 76);
+        assert_eq!(cube.logg_grid.len(), 11);
+        assert_eq!(cube.meta_grid.len(), 8);
+        assert_eq!(cube.wavelengths.len(), 1199);
+        assert_eq!(cube.n_seds(), 76 * 11 * 8);
+        assert_eq!(cube.sed_table.len(), 76 * 11 * 8 * 1199);
+        for (idx, &slot) in cube.slot_map.iter().enumerate() {
+            assert_eq!(slot, idx, "expected 1-to-1 dense slot_map");
+        }
+
+        // Sweep across (Teff in [2000, 50000] K, log_g in [-1.0, 5.5], [M/H] in [-5.0, +1.0])
+        for &(teff, logg, meta) in &[
+            (2000.0, -1.0, -5.0),
+            (3500.0, 0.0, -2.5),
+            (4500.0, 2.5, -1.5),
+            (5778.0, 4.44, 0.0),
+            (8500.0, 4.0, -0.5),
+            (15000.0, 4.0, 0.2),
+            (30000.0, 4.5, 0.5),
+            (50000.0, 5.5, 1.0),
+        ] {
+            let out = cube
+                .eval_colors(
+                    teff,
+                    logg,
+                    meta,
+                    RSUN,
+                    D_10PC_CM,
+                    MagSystem::Vega,
+                    SedInterpMethod::Hermite,
+                )
+                .expect("domain sweep eval_colors");
+            assert!(
+                out[1] > 0.0 && out.iter().all(|v| v.is_finite()),
+                "non-finite or non-positive output at ({teff}, {logg}, {meta}): {out:?}"
+            );
+            let sed = cube.eval_sed(
+                teff,
+                logg,
+                meta,
+                RSUN,
+                D_10PC_CM,
+                SedInterpMethod::Linear,
+            );
+            assert_eq!(sed.len(), 1199);
+            assert!(sed.iter().any(|&f| f > 0.0));
+        }
+    }
 }

@@ -349,3 +349,158 @@ fn test_bcyclic_matches_block_thomas_across_grid_sizes() {
         }
     }
 }
+
+/// Verifies `solve_block_tridiagonal`, `solve_block_tridiag_bcyclic`, and
+/// `block_dble_mv` on the upstream MESA `mtx/test/test_case.data` (`12 x 9`)
+/// and `mtx/test/block_tri.data` (`25 x 20` slice from `25 x 979`) against
+/// lines 16-18 of `mtx/test/test_output`.
+#[test]
+#[allow(clippy::too_many_lines)]
+fn test_upstream_mesa_block_tri_data_and_test_case_data_parity() {
+    use std::path::PathBuf;
+
+    // Unconditional golden check from upstream mtx/test/test_output (test_square1)
+    let a1 = [
+        1.80, 2.88, 2.05, 0.00, 5.25, -2.95, -0.95, -3.80, 0.00, 0.00, -2.90,
+        -1.04, -1.11, 0.00, -0.59, 0.80,
+    ];
+    let b1 = [4.35, 5.05, 3.04, -2.05];
+    let x1_ref = [
+        -1.621_540_827_545_881_2e-1,
+        1.639_134_902_388_556_2,
+        -3.845_422_922_965_1e-2,
+        -2.815_848_783_878_857_7,
+    ];
+    let x1 = solve_dense(4, &a1, &b1).unwrap();
+    for (act, exp) in x1.iter().zip(x1_ref.iter()) {
+        assert!((act - exp).abs() < 1.0e-13);
+    }
+
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../.mesa_temp_cache/mesa_root/mtx/test");
+    let out_path = root.join("test_output");
+    if out_path.exists() {
+        let out_text =
+            std::fs::read_to_string(&out_path).expect("read mtx/test/test_output");
+        let out_lines: Vec<&str> = out_text.lines().collect();
+        assert!(
+            out_lines[15].contains("testing with nvar,nz")
+                && out_lines[15].contains("25")
+                && out_lines[15].contains("20")
+        );
+        assert_eq!(out_lines[16].trim(), "bcyclic_dble");
+        assert_eq!(out_lines[17].trim(), "done bcyclic_dble");
+    }
+
+    // 1. Verify test_case.data (nvar = 12, nz = 9) when present
+    let tc_path = root.join("test_case.data");
+    if tc_path.exists() {
+        let tc_text =
+            std::fs::read_to_string(&tc_path).expect("read mtx/test/test_case.data");
+        let mut tc_lines = tc_text.lines();
+        let hdr: Vec<usize> = tc_lines
+            .next()
+            .unwrap()
+            .split_whitespace()
+            .map(|s| s.parse().unwrap())
+            .collect();
+        let (nvar_tc, nz_tc) = (hdr[0], hdr[1]);
+        assert_eq!((nvar_tc, nz_tc), (12, 9));
+        let blk_sz_tc = nvar_tc * nvar_tc;
+        let mut lblk_tc = vec![0.0_f64; nz_tc * blk_sz_tc];
+        let mut dblk_tc = vec![0.0_f64; nz_tc * blk_sz_tc];
+        let mut ublk_tc = vec![0.0_f64; nz_tc * blk_sz_tc];
+        let mut brhs_tc = vec![0.0_f64; nz_tc * nvar_tc];
+        let mut xcorr_tc = vec![0.0_f64; nz_tc * nvar_tc];
+
+        for k in 0..nz_tc {
+            for i in 0..nvar_tc {
+                for j in 0..nvar_tc {
+                    let vals: Vec<f64> = tc_lines
+                        .next()
+                        .unwrap()
+                        .split_whitespace()
+                        .map(|s| s.parse().unwrap())
+                        .collect();
+                    let idx = k * blk_sz_tc + i * nvar_tc + j;
+                    ublk_tc[idx] = vals[0];
+                    dblk_tc[idx] = vals[1];
+                    lblk_tc[idx] = vals[2];
+                }
+            }
+            for i in 0..nvar_tc {
+                let vals: Vec<f64> = tc_lines
+                    .next()
+                    .unwrap()
+                    .split_whitespace()
+                    .map(|s| s.parse().unwrap())
+                    .collect();
+                brhs_tc[k * nvar_tc + i] = vals[0];
+                xcorr_tc[k * nvar_tc + i] = vals[1];
+            }
+        }
+
+        let mut mv_tc = vec![0.0_f64; nz_tc * nvar_tc];
+        block_dble_mv(
+            nvar_tc, nz_tc, &lblk_tc, &dblk_tc, &ublk_tc, &xcorr_tc, &mut mv_tc,
+        )
+        .unwrap();
+        for (&m, &b) in mv_tc.iter().zip(brhs_tc.iter()) {
+            assert!((m - b).abs() / b.abs().max(1.0) < 1.0e-13);
+        }
+        let x_tc_thomas = solve_block_tridiagonal(
+            nvar_tc, nz_tc, &lblk_tc, &dblk_tc, &ublk_tc, &brhs_tc,
+        )
+        .unwrap();
+        let x_tc_bcyc = solve_block_tridiag_bcyclic(
+            nvar_tc, nz_tc, &lblk_tc, &dblk_tc, &ublk_tc, &brhs_tc, false,
+        )
+        .unwrap();
+        for idx in 0..(nz_tc * nvar_tc) {
+            let xc = xcorr_tc[idx];
+            assert!((x_tc_thomas[idx] - xc).abs() / xc.abs() < 1.0e-13);
+            assert!((x_tc_bcyc[idx] - xc).abs() / xc.abs() < 1.0e-12);
+        }
+    }
+
+    // 2. Verify block_tri.data (nvar = 25, first nz = 20 shells of 979) when present
+    let bt_path = root.join("block_tri.data");
+    if bt_path.exists() {
+        let bt_text =
+            std::fs::read_to_string(&bt_path).expect("read mtx/test/block_tri.data");
+        let (nvar_bt, nz_full, lblk_full, dblk_full, ublk_full) =
+            parse_block_tridiagonal_text(&bt_text)
+                .expect("parse Harwell-Boeing block_tri.data");
+        assert_eq!((nvar_bt, nz_full), (25, 979));
+        let nz_bt = 20_usize;
+        let blk_sz_bt = nvar_bt * nvar_bt;
+        let lblk_bt = lblk_full[..(nz_bt * blk_sz_bt)].to_vec();
+        let dblk_bt = dblk_full[..(nz_bt * blk_sz_bt)].to_vec();
+        let mut ublk_bt = ublk_full[..(nz_bt * blk_sz_bt)].to_vec();
+        ublk_bt[(nz_bt - 1) * blk_sz_bt..].fill(0.0);
+
+        let xcorr_bt: Vec<f64> = (1..=(nz_bt * nvar_bt))
+            .map(|m| 1.0 + 1.0e-3 * (m as f64))
+            .collect();
+        let mut brhs_bt = vec![0.0_f64; nz_bt * nvar_bt];
+        block_dble_mv(
+            nvar_bt, nz_bt, &lblk_bt, &dblk_bt, &ublk_bt, &xcorr_bt, &mut brhs_bt,
+        )
+        .unwrap();
+
+        let x_bt_thomas = solve_block_tridiagonal(
+            nvar_bt, nz_bt, &lblk_bt, &dblk_bt, &ublk_bt, &brhs_bt,
+        )
+        .unwrap();
+        let x_bt_bcyc = solve_block_tridiag_bcyclic(
+            nvar_bt, nz_bt, &lblk_bt, &dblk_bt, &ublk_bt, &brhs_bt, true,
+        )
+        .unwrap();
+        for idx in 0..(nz_bt * nvar_bt) {
+            let xc = xcorr_bt[idx];
+            let denom = 1.0e-4 + 1.0e-4 * xc.abs().max(x_bt_bcyc[idx].abs());
+            assert!((x_bt_bcyc[idx] - xc).abs() / denom < 1.0e-9);
+            assert!((x_bt_thomas[idx] - xc).abs() / denom < 1.0e-9);
+        }
+    }
+}

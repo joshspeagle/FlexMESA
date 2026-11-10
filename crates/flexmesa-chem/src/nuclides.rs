@@ -27,10 +27,9 @@ use flexmesa_const::{AMU, CLIGHT, FIVE_THIRDS, MEV_TO_ERGS};
 use flexmesa_math::pow;
 
 use crate::elements::NPART;
-use crate::nuclides_data_a::{RawNuclideRow, BUILTIN_NUCLIDES_A};
-use crate::nuclides_data_b::BUILTIN_NUCLIDES_B;
-use crate::nuclides_data_c::BUILTIN_NUCLIDES_C;
 use crate::ChemError;
+
+const NUCLIDES_FULL_BIN: &[u8] = include_bytes!("../data/nuclides_full.bin");
 
 /// Atomic mass excess $\Delta M_p$ of ${}^1\mathrm{H}$ (`h1`) in
 /// $\mathrm{MeV}$.
@@ -141,44 +140,84 @@ impl Default for NuclideCatalog {
 }
 
 impl NuclideCatalog {
-    /// Returns a static reference to the built-in 347-nuclide catalog.
+    /// Returns a static reference to the built-in 7,856-nuclide catalog.
     #[must_use]
     pub fn builtin_ref() -> &'static Self {
         static CATALOG: OnceLock<NuclideCatalog> = OnceLock::new();
         CATALOG.get_or_init(Self::build_builtin)
     }
 
-    /// Build the default reference catalog containing all 347 built-in nuclides.
+    /// Build the default reference catalog containing all 7,856 built-in nuclides
+    /// from MESA `isotopes.data`, including 24-point partition functions `pfcn`.
     #[must_use]
     pub fn builtin() -> Self {
         Self::builtin_ref().clone()
     }
 
+    /// Return a slice of all [`NuclideEntry`] records in 1-based `chem_id` order.
+    #[must_use]
+    pub fn entries(&self) -> &[NuclideEntry] {
+        &self.entries
+    }
+
+    #[allow(clippy::cast_sign_loss)]
     fn build_builtin() -> Self {
-        let total = BUILTIN_NUCLIDES_A.len()
-            + BUILTIN_NUCLIDES_B.len()
-            + BUILTIN_NUCLIDES_C.len();
+        const REC_SIZE: usize = 228;
+        assert!(
+            &NUCLIDES_FULL_BIN[0..8] == b"FMCHM001",
+            "invalid nuclides_full.bin magic header"
+        );
+        let total =
+            u32::from_le_bytes(NUCLIDES_FULL_BIN[8..12].try_into().unwrap())
+                as usize;
         let mut entries = Vec::with_capacity(total);
         let mut by_id = HashMap::with_capacity(total);
         let mut by_name = HashMap::with_capacity(total);
+        let mut del_mp = DEL_MP;
+        let mut del_mn = DEL_MN;
 
-        let iter_rows = BUILTIN_NUCLIDES_A
-            .iter()
-            .chain(BUILTIN_NUCLIDES_B.iter())
-            .chain(BUILTIN_NUCLIDES_C.iter());
-        for (pos, &(cid, name, z, n, spin, mex, isom)) in iter_rows.enumerate()
-        {
+        for pos in 0..total {
+            let off = 12 + pos * REC_SIZE;
+            let rec = &NUCLIDES_FULL_BIN[off..off + REC_SIZE];
+            let cid =
+                u32::from_le_bytes(rec[0..4].try_into().unwrap()) as usize;
+            let name_bytes = &rec[4..12];
+            let name_end = name_bytes
+                .iter()
+                .position(|&b| b == 0)
+                .unwrap_or(name_bytes.len());
+            let name = std::str::from_utf8(&name_bytes[..name_end])
+                .expect("valid ascii nuclide name")
+                .to_string();
+            let z = i16::from_le_bytes(rec[12..14].try_into().unwrap()) as usize;
+            let n = i16::from_le_bytes(rec[14..16].try_into().unwrap()) as usize;
+            let isom = rec[16];
+            let spin = f64::from_le_bytes(rec[20..28].try_into().unwrap());
+            let mex = f64::from_le_bytes(rec[28..36].try_into().unwrap());
+            if z == 1 && n == 0 {
+                del_mp = mex;
+            }
+            if z == 0 && n == 1 {
+                del_mn = mex;
+            }
+            let mut pfcn = [1.0_f64; NPART];
+            for (k, p_val) in pfcn.iter_mut().enumerate().take(NPART) {
+                let p_off = 36 + k * 8;
+                *p_val = f64::from_le_bytes(
+                    rec[p_off..p_off + 8].try_into().unwrap(),
+                );
+            }
             let entry = NuclideEntry::from_raw(
                 cid,
-                name.to_string(),
-                usize::from(z),
-                usize::from(n),
+                name.clone(),
+                z,
+                n,
                 spin,
                 mex,
                 isom,
-                [1.0_f64; NPART],
-                DEL_MP,
-                DEL_MN,
+                pfcn,
+                del_mp,
+                del_mn,
             );
             by_id.insert(cid, pos);
             by_name.insert(name.to_ascii_lowercase(), pos);
@@ -188,8 +227,8 @@ impl NuclideCatalog {
             entries,
             by_id,
             by_name,
-            del_mp: DEL_MP,
-            del_mn: DEL_MN,
+            del_mp,
+            del_mn,
         }
     }
 
@@ -399,13 +438,11 @@ impl NuclideCatalog {
     }
 }
 
-/// Expose raw built-in nuclide rows (`Part A` and `Part B`) for inspection.
+/// Expose the built-in [`NuclideEntry`] rows from [`NuclideCatalog::builtin_ref`].
 ///
-/// Returns a pair of static slices containing the 347 built-in reference
-/// nuclides compiled into `flexmesa-chem` (`MAIN_ISO_NAME`, `AG89_TABLE`,
-/// and standard nuclear reaction network species).
+/// Returns a static slice of all 7,856 built-in nuclides compiled into
+/// `flexmesa-chem` from MESA `isotopes.data`.
 #[must_use]
-pub fn builtin_nuclide_rows(
-) -> (&'static [RawNuclideRow], &'static [RawNuclideRow]) {
-    (&BUILTIN_NUCLIDES_A, &BUILTIN_NUCLIDES_B)
+pub fn builtin_nuclide_rows() -> &'static [NuclideEntry] {
+    NuclideCatalog::builtin_ref().entries()
 }

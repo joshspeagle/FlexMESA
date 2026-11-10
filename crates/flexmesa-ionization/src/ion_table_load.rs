@@ -1,10 +1,11 @@
 //! Four-dimensional $(Z, X, \log Q, \log T)$ ionization table loader and
-//! built-in solar/stellar reference cell (`ion_tables_load.f90`).
+//! full built-in $175 \times 102$ bicubic spline grid (`ion_tables_load.f90`).
 //!
 //! Provides [`IonTableGrid`], including:
-//! - [`IonTableGrid::builtin`]: Lazily initialized reference $(\log Q, \log T)$
-//!   cell (`iQ = 88..89`, $\log Q \in [-2.08, -1.99]$; `jT = 40..41`,
-//!   $\log T \in [4.50, 4.56]$) containing exact upstream MESA not-a-knot
+//! - [`IonTableGrid::builtin`]: Lazily initialized full $175 \times 102$
+//!   $(\log Q, \log T)$ grid (`iQ = 0..174`, $\log Q \in [-10.0, 5.66]$;
+//!   `jT = 0..101`, $\log T \in [2.10, 8.16]$) across all 22 $(Z, X)$
+//!   tables (`ion_tables_full.bin`), containing exact upstream MESA not-a-knot
 //!   bicubic spline coefficients across $(Z, X)$.
 //! - [`IonTableGrid::from_data_dir`]: Full 22-table ASCII loader (`ion_*.data`)
 //!   that builds global $175 \times 102$ not-a-knot bicubic splines via
@@ -18,16 +19,15 @@ use std::sync::OnceLock;
 use flexmesa_interp2d::{interp_mkbicub_db, BicubicBc};
 use flexmesa_math::{exp10, log10};
 use flexmesa_utils::is_bad;
+use rayon::prelude::*;
 
-use crate::ion_table_data_a::{ION_CELL_Z00_X40, ION_CELL_Z00_X60};
-use crate::ion_table_data_b::{ION_CELL_Z00_X100, ION_CELL_Z00_X80};
-use crate::ion_table_data_c::{ION_CELL_Z02_X40, ION_CELL_Z02_X60};
-use crate::ion_table_data_d::{ION_CELL_Z02_X80, ION_CELL_Z04_X40};
-use crate::ion_table_data_e::{ION_CELL_Z04_X60, ION_CELL_Z04_X80};
 use crate::{
     IonError, IonScalar, ION_XS, ION_ZS, NUM_ION_VALS, NUM_ION_XS,
     NUM_ION_XS_FOR_Z, NUM_ION_ZS,
 };
+
+const ION_TABLES_FULL_BIN: &[u8] = include_bytes!("../data/ion_tables_full.bin");
+const ION_CACHE_MAGIC: &[u8; 8] = b"FMIONCA1";
 
 /// Precomputed 4D $(Z, X, \log Q, \log T)$ ionization spline grid.
 #[derive(Debug, Clone)]
@@ -50,36 +50,139 @@ pub struct IonTableGrid {
 }
 
 impl IonTableGrid {
-    /// Return the built-in solar/stellar reference cell grid (`iQ = 88..89`,
-    /// $\log Q \in [-2.08, -1.99]$; `jT = 40..41`, $\log T \in [4.50, 4.56]$)
-    /// containing exact upstream MESA spline coefficients across $(Z, X)$.
+    /// Return the full $175 \times 102$ $(\log Q, \log T)$ ionization spline
+    /// grid across all $(Z, X)$ compositions (`iQ = 0..174`, $\log Q \in
+    /// [-10.0, 5.66]$; `jT = 0..101`, $\log T \in [2.10, 8.16]$).
     #[must_use]
     pub fn builtin() -> &'static Self {
         static BUILTIN: OnceLock<IonTableGrid> = OnceLock::new();
-        BUILTIN.get_or_init(Self::build_builtin_cell)
+        BUILTIN.get_or_init(Self::build_builtin_full)
     }
 
-    /// Construct the $2 \times 2$ $(\log Q, \log T)$ reference cell from the
-    /// embedded upstream MESA spline patches.
-    fn build_builtin_cell() -> Self {
-        let mut coeffs = vec![vec![Vec::new(); NUM_ION_XS]; NUM_ION_ZS];
-        for (iz, z_slots) in coeffs.iter_mut().enumerate() {
-            for (ix, slot) in z_slots.iter_mut().enumerate() {
-                let patch = select_builtin_patch(iz, ix);
-                let mut vars = Vec::with_capacity(NUM_ION_VALS);
-                for ch in patch {
-                    vars.push(ch.to_vec());
+    fn build_builtin_full() -> Self {
+        let cache_path = default_ion_cache_path();
+        if let Some(ref cp) = cache_path {
+            if let Ok(grid) = Self::from_binary_cache(cp) {
+                return grid;
+            }
+        }
+        let grid = if let Some(dir) = resolve_ion_data_dir() {
+            Self::from_data_dir(&dir, "ion", "")
+                .unwrap_or_else(|_| Self::from_embedded_full())
+        } else {
+            Self::from_embedded_full()
+        };
+        if let Some(ref cp) = cache_path {
+            let _ = grid.write_binary_cache(cp);
+        }
+        grid
+    }
+
+    /// Construct the full $175 \times 102$ $(\log Q, \log T)$ spline grid from
+    /// the embedded compact binary `ion_tables_full.bin`.
+    #[must_use]
+    #[allow(
+        clippy::assigning_clones,
+        clippy::cast_precision_loss,
+        clippy::cast_sign_loss,
+        clippy::missing_panics_doc,
+        clippy::needless_range_loop
+    )]
+    pub fn from_embedded_full() -> Self {
+        assert_eq!(&ION_TABLES_FULL_BIN[0..8], b"FMION001");
+        let n_tables =
+            u32::from_le_bytes(ION_TABLES_FULL_BIN[8..12].try_into().unwrap())
+                as usize;
+        let n_vals =
+            u32::from_le_bytes(ION_TABLES_FULL_BIN[12..16].try_into().unwrap())
+                as usize;
+        let nq =
+            u32::from_le_bytes(ION_TABLES_FULL_BIN[16..20].try_into().unwrap())
+                as usize;
+        let nt =
+            u32::from_le_bytes(ION_TABLES_FULL_BIN[20..24].try_into().unwrap())
+                as usize;
+        let (lq_min, dq, lt_min, dt) = (-10.0_f64, 0.09_f64, 2.10_f64, 0.06_f64);
+
+        let mut pos = 24usize;
+        let mut raw_tables: Vec<Vec<Vec<f64>>> = Vec::with_capacity(n_tables);
+        for _ in 0..n_tables {
+            let mut raw = vec![vec![0.0_f64; nq * nt]; n_vals];
+            for ch in raw.iter_mut().take(n_vals) {
+                for jt in 0..nt {
+                    let flag = ION_TABLES_FULL_BIN[pos];
+                    let m0 = i32::from_le_bytes(
+                        ION_TABLES_FULL_BIN[pos + 1..pos + 5]
+                            .try_into()
+                            .unwrap(),
+                    );
+                    pos += 5;
+                    let mut cur = m0;
+                    ch[jt] = f64::from(cur) / 1000.0;
+                    if flag == 0 {
+                        let val = f64::from(cur) / 1000.0;
+                        for iq in 1..nq {
+                            ch[iq * nt + jt] = val;
+                        }
+                    } else if flag == 2 {
+                        let d0 = i32::from(i16::from_le_bytes(
+                            ION_TABLES_FULL_BIN[pos..pos + 2]
+                                .try_into()
+                                .unwrap(),
+                        ));
+                        pos += 2;
+                        for iq in 1..nq {
+                            cur += d0;
+                            ch[iq * nt + jt] = f64::from(cur) / 1000.0;
+                        }
+                    } else {
+                        for iq in 1..nq {
+                            let d = i32::from(i16::from_le_bytes(
+                                ION_TABLES_FULL_BIN[pos..pos + 2]
+                                    .try_into()
+                                    .unwrap(),
+                            ));
+                            pos += 2;
+                            cur += d;
+                            ch[iq * nt + jt] = f64::from(cur) / 1000.0;
+                        }
+                    }
                 }
-                *slot = vars;
+            }
+            raw_tables.push(raw);
+        }
+
+        let log_qs: Vec<f64> =
+            (0..nq).map(|i| lq_min + (i as f64) * dq).collect();
+        let log_ts: Vec<f64> =
+            (0..nt).map(|j| lt_min + (j as f64) * dt).collect();
+        let spline_tables: Vec<Vec<Vec<f64>>> = raw_tables
+            .into_par_iter()
+            .map(|raw| {
+                build_table_splines(&log_qs, &log_ts, &raw)
+                    .expect("embedded ionization bicubic spline")
+            })
+            .collect();
+
+        let mut coeffs = vec![vec![Vec::new(); NUM_ION_XS]; NUM_ION_ZS];
+        let mut t_idx = 0usize;
+        for iz in 0..NUM_ION_ZS {
+            let n_xs = NUM_ION_XS_FOR_Z[iz];
+            for ix in 0..n_xs {
+                coeffs[iz][ix] = spline_tables[t_idx].clone();
+                t_idx += 1;
+            }
+            for ix in n_xs..NUM_ION_XS {
+                coeffs[iz][ix] = coeffs[iz][n_xs - 1].clone();
             }
         }
         Self {
-            log_q_min: -2.08,
-            del_log_q: 0.09,
-            num_log_qs: 2,
-            log_t_min: 4.50,
-            del_log_t: 0.06,
-            num_log_ts: 2,
+            log_q_min: lq_min,
+            del_log_q: dq,
+            num_log_qs: nq,
+            log_t_min: lt_min,
+            del_log_t: dt,
+            num_log_ts: nt,
             coeffs,
         }
     }
@@ -89,16 +192,17 @@ impl IonTableGrid {
     ///
     /// # Errors
     /// Returns [`IonError`] if any table file is missing or malformed.
+    #[allow(
+        clippy::assigning_clones,
+        clippy::needless_range_loop,
+        clippy::type_complexity
+    )]
     pub fn from_data_dir(
         data_dir: &Path,
         file_prefix: &str,
         z1_suffix: &str,
     ) -> Result<Self, IonError> {
-        let first_path =
-            ion_table_filename(data_dir, file_prefix, z1_suffix, 0.0, 0.0);
-        let (nq, lq_min, dq, nt, lt_min, dt, _) =
-            parse_ion_ascii_table(&first_path)?;
-        let mut coeffs = vec![vec![Vec::new(); NUM_ION_XS]; NUM_ION_ZS];
+        let mut pairs = Vec::with_capacity(22);
         for iz in 0..NUM_ION_ZS {
             for ix in 0..NUM_ION_XS_FOR_Z[iz] {
                 let path = ion_table_filename(
@@ -108,8 +212,30 @@ impl IonTableGrid {
                     ION_ZS[iz],
                     ION_XS[ix],
                 );
-                let (_, _, _, _, _, _, tbl) = parse_ion_ascii_table(&path)?;
-                coeffs[iz][ix] = tbl;
+                pairs.push((iz, ix, path));
+            }
+        }
+        let parsed: Result<
+            Vec<(usize, usize, usize, f64, f64, usize, f64, f64, Vec<Vec<f64>>)>,
+            IonError,
+        > = pairs
+            .into_par_iter()
+            .map(|(iz, ix, path)| {
+                let (nq, lq_min, dq, nt, lt_min, dt, tbl) =
+                    parse_ion_ascii_table(&path)?;
+                Ok((iz, ix, nq, lq_min, dq, nt, lt_min, dt, tbl))
+            })
+            .collect();
+        let parsed = parsed?;
+        let (_, _, nq, lq_min, dq, nt, lt_min, dt, _) = parsed[0];
+        let mut coeffs = vec![vec![Vec::new(); NUM_ION_XS]; NUM_ION_ZS];
+        for (iz, ix, _, _, _, _, _, _, tbl) in parsed {
+            coeffs[iz][ix] = tbl;
+        }
+        for iz in 0..NUM_ION_ZS {
+            let n_xs = NUM_ION_XS_FOR_Z[iz];
+            for ix in n_xs..NUM_ION_XS {
+                coeffs[iz][ix] = coeffs[iz][n_xs - 1].clone();
             }
         }
         Ok(Self {
@@ -122,24 +248,118 @@ impl IonTableGrid {
             coeffs,
         })
     }
+
+    #[allow(clippy::cast_possible_truncation)]
+    fn from_binary_cache(path: &Path) -> Result<Self, IonError> {
+        let bytes =
+            fs::read(path).map_err(|e| IonError::Io(e.to_string()))?;
+        if bytes.len() < 56 || &bytes[0..8] != ION_CACHE_MAGIC {
+            return Err(IonError::Io("invalid ion cache header".to_string()));
+        }
+        let lq_min = f64::from_le_bytes(bytes[8..16].try_into().unwrap());
+        let dq = f64::from_le_bytes(bytes[16..24].try_into().unwrap());
+        let nq =
+            u64::from_le_bytes(bytes[24..32].try_into().unwrap()) as usize;
+        let lt_min = f64::from_le_bytes(bytes[32..40].try_into().unwrap());
+        let dt = f64::from_le_bytes(bytes[40..48].try_into().unwrap());
+        let nt =
+            u64::from_le_bytes(bytes[48..56].try_into().unwrap()) as usize;
+        let cell_len = nq * nt * 4;
+        let expected_bytes =
+            56 + NUM_ION_ZS * NUM_ION_XS * NUM_ION_VALS * cell_len * 8;
+        if bytes.len() != expected_bytes {
+            return Err(IonError::Io("ion cache size mismatch".to_string()));
+        }
+        let mut pos = 56usize;
+        let mut coeffs = vec![vec![Vec::new(); NUM_ION_XS]; NUM_ION_ZS];
+        for z_slots in coeffs.iter_mut().take(NUM_ION_ZS) {
+            for slot in z_slots.iter_mut().take(NUM_ION_XS) {
+                let mut vars = Vec::with_capacity(NUM_ION_VALS);
+                for _ in 0..NUM_ION_VALS {
+                    let mut ch = Vec::with_capacity(cell_len);
+                    for _ in 0..cell_len {
+                        ch.push(f64::from_le_bytes(
+                            bytes[pos..pos + 8].try_into().unwrap(),
+                        ));
+                        pos += 8;
+                    }
+                    vars.push(ch);
+                }
+                *slot = vars;
+            }
+        }
+        Ok(Self {
+            log_q_min: lq_min,
+            del_log_q: dq,
+            num_log_qs: nq,
+            log_t_min: lt_min,
+            del_log_t: dt,
+            num_log_ts: nt,
+            coeffs,
+        })
+    }
+
+    fn write_binary_cache(&self, path: &Path) -> Result<(), IonError> {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)
+                .map_err(|e| IonError::Io(e.to_string()))?;
+        }
+        let cell_len = self.num_log_qs * self.num_log_ts * 4;
+        let mut out = Vec::with_capacity(
+            56 + NUM_ION_ZS * NUM_ION_XS * NUM_ION_VALS * cell_len * 8,
+        );
+        out.extend_from_slice(ION_CACHE_MAGIC);
+        out.extend_from_slice(&self.log_q_min.to_le_bytes());
+        out.extend_from_slice(&self.del_log_q.to_le_bytes());
+        out.extend_from_slice(&(self.num_log_qs as u64).to_le_bytes());
+        out.extend_from_slice(&self.log_t_min.to_le_bytes());
+        out.extend_from_slice(&self.del_log_t.to_le_bytes());
+        out.extend_from_slice(&(self.num_log_ts as u64).to_le_bytes());
+        for iz in 0..NUM_ION_ZS {
+            for ix in 0..NUM_ION_XS {
+                for v in 0..NUM_ION_VALS {
+                    for &val in &self.coeffs[iz][ix][v] {
+                        out.extend_from_slice(&val.to_le_bytes());
+                    }
+                }
+            }
+        }
+        fs::write(path, out).map_err(|e| IonError::Io(e.to_string()))
+    }
 }
 
-/// Select the embedded reference cell for `(iz, ix)`.
-///
-/// Maps each $(Z, X)$ grid index pair `(iz, ix)` to its precomputed $2 \times
-/// 2 \times 4$ bicubic spline patch at `iQ = 88..89` and `jT = 40..41`.
-fn select_builtin_patch(iz: usize, ix: usize) -> &'static [[f64; 16]; 28] {
-    match (iz, ix) {
-        (0, 0..=2) => &ION_CELL_Z00_X40,
-        (0, 3) => &ION_CELL_Z00_X60,
-        (0, 4) => &ION_CELL_Z00_X80,
-        (0, _) => &ION_CELL_Z00_X100,
-        (1, 0..=2) => &ION_CELL_Z02_X40,
-        (1, 3) => &ION_CELL_Z02_X60,
-        (1, _) => &ION_CELL_Z02_X80,
-        (_, 0..=2) => &ION_CELL_Z04_X40,
-        (_, 3) => &ION_CELL_Z04_X60,
-        (_, _) => &ION_CELL_Z04_X80,
+fn resolve_ion_data_dir() -> Option<PathBuf> {
+    if let Ok(d) = std::env::var("FLEXMESA_DATA_DIR") {
+        let p = PathBuf::from(&d).join("ionization_data");
+        if p.is_dir() {
+            return Some(p);
+        }
+        let p2 = PathBuf::from(&d);
+        if p2.join("ion_00z00x.data").is_file() {
+            return Some(p2);
+        }
+    }
+    if let Ok(d) = std::env::var("MESA_DIR") {
+        let p = PathBuf::from(d).join("data/ionization_data");
+        if p.is_dir() {
+            return Some(p);
+        }
+    }
+    let rel = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../.mesa_temp_cache/mesa_data/ionization_data");
+    if rel.is_dir() {
+        return Some(rel);
+    }
+    None
+}
+
+fn default_ion_cache_path() -> Option<PathBuf> {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../.mesa_temp_cache");
+    if root.is_dir() {
+        Some(root.join("bin_cache/ionization_full.bin"))
+    } else {
+        None
     }
 }
 
@@ -238,11 +458,20 @@ fn parse_ion_ascii_table(
 
     let log_qs: Vec<f64> = (0..nq).map(|i| lq_min + (i as f64) * dq).collect();
     let log_ts: Vec<f64> = (0..nt).map(|j| lt_min + (j as f64) * dt).collect();
+    let coeffs = build_table_splines(&log_qs, &log_ts, &raw)?;
+    Ok((nq, lq_min, dq, nt, lt_min, dt, coeffs))
+}
+
+fn build_table_splines(
+    log_qs: &[f64],
+    log_ts: &[f64],
+    raw: &[Vec<f64>],
+) -> Result<Vec<Vec<f64>>, IonError> {
     let mut coeffs = Vec::with_capacity(NUM_ION_VALS);
     for raw_v in raw.iter().take(NUM_ION_VALS) {
         let (c, _, _) = interp_mkbicub_db(
-            &log_qs,
-            &log_ts,
+            log_qs,
+            log_ts,
             raw_v,
             BicubicBc::NotAKnot,
             &[],
@@ -261,7 +490,7 @@ fn parse_ion_ascii_table(
             .collect();
         coeffs.push(flat);
     }
-    Ok((nq, lq_min, dq, nt, lt_min, dt, coeffs))
+    Ok(coeffs)
 }
 
 /// Locate the 0-based cell index and clamp out-of-range coordinates

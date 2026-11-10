@@ -143,10 +143,10 @@ impl KapLowTOption {
         match s.trim() {
             "lowT_fa05_gs98" => Some(Self::LowTFa05Gs98),
             "lowT_fa05_gn93" => Some(Self::LowTFa05Gn93),
-            "lowT_fa05_a09p" => Some(Self::LowTFa05A09p),
+            "lowT_fa05_a09p" | "lowT_fa05_a09" => Some(Self::LowTFa05A09p),
             "lowT_Freedman11" => Some(Self::LowTFreedman11),
-            "kapCN" => Some(Self::KapCn),
-            "AESOPUS" => Some(Self::Aesopus),
+            "kapCN" | "kapcn" => Some(Self::KapCn),
+            "AESOPUS" | "aesopus" => Some(Self::Aesopus),
             _ => None,
         }
     }

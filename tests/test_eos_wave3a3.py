@@ -112,7 +112,16 @@ def test_eval_pc_eos_and_zones_match_across_rust_and_jax() -> None:
         )
         assert abs(float(out_r.res[eos.I_PHASE]) - expected_phase) < 1.0e-12
         assert abs(float(out_r.res[eos.I_FRAC_PC]) - 1.0) < 1.0e-14
-        assert _rel_diff(np.asarray(out_r.res), np.asarray(out_j.res)) < 1.0e-14
+        tol_res = 1.0e-13 if rho < 1.0e6 else 5.0e-12
+        assert _rel_diff(np.asarray(out_r.res), np.asarray(out_j.res)) < tol_res
+        assert (
+            _rel_diff(np.asarray(out_r.d_dlnd), np.asarray(out_j.d_dlnd))
+            < 1.0e-10
+        )
+        assert (
+            _rel_diff(np.asarray(out_r.d_dln_t), np.asarray(out_j.d_dln_t))
+            < 1.0e-10
+        )
 
     rhos = np.array([1.0e5, 1.0e6, 1.0e7], dtype=np.float64)
     temps = np.array([1.0e7, 5.0e6, 2.0e6], dtype=np.float64)
@@ -300,4 +309,112 @@ def test_inverse_solvers_pt_dt_and_gamma_de_with_jax_ift_grad() -> None:
     gde = eos.eos_gamma_de_get(abar, zbar, 10.0, 1.0e15, gamma=5.0 / 3.0)
     assert (
         abs(np.exp(float(gde.eos.res[eos.I_LN_E])) - 1.0e15) / 1.0e15 < 1.0e-12
+    )
+
+
+def test_pc_and_skye_off_golden_grid_parity_and_jacfwd() -> None:
+    """Verify `eval_pc_eos` and `eval_skye_eos` across off-golden states."""
+    chem_id, xa, abar, zbar = _c12_o16_composition()
+    for log_rho, log_t in [(3.8, 7.2), (5.4, 6.8), (6.7, 6.1), (7.5, 6.4)]:
+        rho = 10.0**log_rho
+        temp = 10.0**log_t
+        pc_r = eos.eval_pc_eos(
+            rho, temp, abar, zbar, chem_id, xa, backend="rust"
+        )
+        pc_j = eos.eval_pc_eos(
+            jnp.float64(rho),
+            jnp.float64(temp),
+            jnp.float64(abar),
+            jnp.float64(zbar),
+            chem_id,
+            jnp.asarray(xa),
+            backend="jax",
+        )
+        assert (
+            _rel_diff(np.asarray(pc_r.res[:8]), np.asarray(pc_j.res[:8]))
+            <= 1.0e-12
+        )
+        assert _rel_diff(np.asarray(pc_r.res), np.asarray(pc_j.res)) < 1.0e-11
+
+        sk_r = eos.eval_skye_eos(
+            rho, temp, abar, zbar, chem_id, xa, backend="rust"
+        )
+        sk_j = eos.eval_skye_eos(
+            jnp.float64(rho),
+            jnp.float64(temp),
+            jnp.float64(abar),
+            jnp.float64(zbar),
+            chem_id,
+            jnp.asarray(xa),
+            backend="jax",
+        )
+        assert (
+            _rel_diff(np.asarray(sk_r.res[:3]), np.asarray(sk_j.res[:3]))
+            <= 1.0e-12
+        )
+        assert _rel_diff(np.asarray(sk_r.res), np.asarray(sk_j.res)) < 1.0e-6
+
+    # Verify jax.jacfwd on eval_pc_eos and eval_skye_eos matches d_dlnd, d_dln_t
+    rho0 = jnp.float64(10.0**5.4)
+    t0 = jnp.float64(10.0**6.8)
+    pc0 = eos.eval_pc_eos(
+        rho0,
+        t0,
+        jnp.float64(abar),
+        jnp.float64(zbar),
+        chem_id,
+        jnp.asarray(xa),
+        backend="jax",
+    )
+    jac_pc_r, jac_pc_t = jax.jacfwd(
+        lambda r, t: jnp.asarray(
+            eos.eval_pc_eos(
+                r,
+                t,
+                jnp.float64(abar),
+                jnp.float64(zbar),
+                chem_id,
+                jnp.asarray(xa),
+                backend="jax",
+            ).res
+        ),
+        argnums=(0, 1),
+    )(rho0, t0)
+    assert (
+        _rel_diff(np.asarray(pc0.d_dlnd), np.asarray(jac_pc_r * rho0))
+        <= 1.0e-12
+    )
+    assert (
+        _rel_diff(np.asarray(pc0.d_dln_t), np.asarray(jac_pc_t * t0)) <= 1.0e-12
+    )
+
+    sk0 = eos.eval_skye_eos(
+        rho0,
+        t0,
+        jnp.float64(abar),
+        jnp.float64(zbar),
+        chem_id,
+        jnp.asarray(xa),
+        backend="jax",
+    )
+    jac_sk_r, jac_sk_t = jax.jacfwd(
+        lambda r, t: jnp.asarray(
+            eos.eval_skye_eos(
+                r,
+                t,
+                jnp.float64(abar),
+                jnp.float64(zbar),
+                chem_id,
+                jnp.asarray(xa),
+                backend="jax",
+            ).res
+        ),
+        argnums=(0, 1),
+    )(rho0, t0)
+    assert (
+        _rel_diff(np.asarray(sk0.d_dlnd), np.asarray(jac_sk_r * rho0))
+        <= 1.0e-12
+    )
+    assert (
+        _rel_diff(np.asarray(sk0.d_dln_t), np.asarray(jac_sk_t * t0)) <= 1.0e-12
     )

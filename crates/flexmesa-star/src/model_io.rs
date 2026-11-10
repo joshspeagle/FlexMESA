@@ -249,10 +249,6 @@ pub fn read_mod_str(
         .collect();
 
     let mut model = StarModel::new(nz, chem_id, job.clone(), controls);
-    (
-        model.eos_config.use_free_eos,
-        model.eos_config.use_opal_scvh,
-    ) = (false, false);
     model.mstar = m_msun * M_SUN;
     (model.mstar_start, model.mstar_old) = (model.mstar, model.mstar);
     if let Some(mc) = m_center_opt.filter(|&m| m > 0.0) {
@@ -525,10 +521,6 @@ pub fn read_photo_bytes(
     }
 
     let mut model = StarModel::new(nz, chem_id, job, controls);
-    (
-        model.eos_config.use_free_eos,
-        model.eos_config.use_opal_scvh,
-    ) = (false, false);
 
     expect_part(&mut pos, 2)?;
     for dst in [

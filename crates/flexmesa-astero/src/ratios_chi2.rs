@@ -134,10 +134,13 @@ pub fn eval_frequency_ratios_r01_r10(
 }
 
 /// Evaluates the quadrupole-to-radial frequency separation ratio
-/// $r_{02}(i) = (\nu_{0,i} - \nu_{2,i}) / (\nu_{1,i} - \nu_{1,i-1})$ and its
+/// $r_{02}(i) = (\nu_{0,i} - \nu_{2,j}) / (\nu_{1,i} - \nu_{1,i-1})$ and its
 /// propagated uncertainty $\sigma_{r_{02}}(i)$ for paired $(l=0, l=2)$ shells.
 ///
-/// Corresponds to `get_r02_frequency_ratios` in `astero_support.f90:421-486`.
+/// Matches each $l=0$ mode $\nu_{0,i}$ ($i \ge 1$) to the $l=2$ mode $\nu_{2,j}$
+/// bracketed inside $[\nu_{1,i-1}, \nu_{0,i}]$ when lengths differ or falls back
+/// to direct index pairing $j = i$ when equal-length sequences are provided
+/// (`get_r02_frequency_ratios` in `astero_support.f90:421-486`).
 #[must_use]
 pub fn eval_frequency_ratios_r02(
     l0_freqs: &[f64],
@@ -147,29 +150,82 @@ pub fn eval_frequency_ratios_r02(
     l2_freqs: &[f64],
     l2_sigmas: &[f64],
 ) -> (Vec<f64>, Vec<f64>) {
-    let len = l0_freqs
+    let n01 = l0_freqs
         .len()
         .min(l0_sigmas.len())
         .min(l1_freqs.len())
-        .min(l1_sigmas.len())
-        .min(l2_freqs.len())
-        .min(l2_sigmas.len());
-    if len < 2 {
+        .min(l1_sigmas.len());
+    let n2 = l2_freqs.len().min(l2_sigmas.len());
+    if n01 < 2 || n2 == 0 {
         return (Vec::new(), Vec::new());
     }
-    let mut r02 = Vec::with_capacity(len - 1);
-    let mut sig_r02 = Vec::with_capacity(len - 1);
-    for i in 1..len {
-        let d02 = l0_freqs[i] - l2_freqs[i];
+    let mut r02 = Vec::with_capacity(n01 - 1);
+    let mut sig_r02 = Vec::with_capacity(n01 - 1);
+    for i in 1..n01 {
+        let j_match = (0..n2)
+            .find(|&j| {
+                l2_freqs[j] >= l1_freqs[i - 1] && l2_freqs[j] <= l0_freqs[i]
+            })
+            .or((i < n2).then_some(i));
+        let Some(j) = j_match else {
+            r02.push(0.0);
+            sig_r02.push(0.0);
+            continue;
+        };
+        let d02 = l0_freqs[i] - l2_freqs[j];
         let dnu1 = (l1_freqs[i] - l1_freqs[i - 1]).max(1.0e-30);
         r02.push(d02 / dnu1);
-        let s_num = l0_sigmas[i].powi(2) + l2_sigmas[i].powi(2);
+        let s_num = l0_sigmas[i].powi(2) + l2_sigmas[j].powi(2);
         let s_den = l1_sigmas[i].powi(2) + l1_sigmas[i - 1].powi(2);
         sig_r02.push(
             (s_num / (dnu1 * dnu1) + s_den * (d02 * d02) / dnu1.powi(4)).sqrt(),
         );
     }
     (r02, sig_r02)
+}
+
+/// Linearly interpolates a model $r_{010}$ frequency separation ratio at target
+/// frequency `freq` (`interpolate_ratio_r010` in `astero_support.f90:489-520`).
+#[must_use]
+pub fn interpolate_ratio_r010(
+    freq: f64,
+    r010_freqs: &[f64],
+    r010_vals: &[f64],
+) -> f64 {
+    let n = r010_freqs.len().min(r010_vals.len());
+    if n == 0 {
+        return 0.0;
+    }
+    if freq <= r010_freqs[0] || n == 1 {
+        return r010_vals[0];
+    }
+    for i in 0..(n - 1) {
+        if freq >= r010_freqs[i] && freq <= r010_freqs[i + 1] {
+            let df = r010_freqs[i + 1] - r010_freqs[i];
+            if df.abs() <= 1.0e-30 {
+                return r010_vals[i];
+            }
+            let beta = (freq - r010_freqs[i]) / df;
+            return (1.0 - beta) * r010_vals[i] + beta * r010_vals[i + 1];
+        }
+    }
+    r010_vals[n - 1]
+}
+
+/// Linearly interpolates a model $r_{02}$ frequency separation ratio at target
+/// frequency `freq` using radial frequencies `l0_freqs[1..=n]` corresponding to
+/// `r02_vals[0..n]` (`interpolate_ratio_r02` in `astero_support.f90:523-550`).
+#[must_use]
+pub fn interpolate_ratio_r02(
+    freq: f64,
+    l0_freqs: &[f64],
+    r02_vals: &[f64],
+) -> f64 {
+    if l0_freqs.len() < 2 || r02_vals.is_empty() {
+        return 0.0;
+    }
+    let n = r02_vals.len().min(l0_freqs.len() - 1);
+    interpolate_ratio_r010(freq, &l0_freqs[1..=n], &r02_vals[..n])
 }
 
 /// Weights and normalization controls for `eval_astero_chi2`

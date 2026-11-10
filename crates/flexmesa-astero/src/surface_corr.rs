@@ -211,6 +211,7 @@ fn fit_two_param_surface_corr<F>(
     correction_factor: f64,
     a_init: f64,
     b_init: f64,
+    zero_a_when_b_neg: bool,
     eval_term: F,
 ) -> (Vec<f64>, f64, f64)
 where
@@ -267,19 +268,73 @@ where
             break;
         }
     }
-    if b < 0.0 {
+    if zero_a_when_b_neg && b < 0.0 {
         a = 0.0;
     }
 
+    let corr = apply_two_param_surface_corr(
+        model_freqs,
+        model_inertias,
+        l0_freqs,
+        l0_inertias,
+        nu_max,
+        correction_factor,
+        a,
+        b,
+        eval_term,
+    );
+    (corr, a, b)
+}
+
+#[inline]
+fn power_law_term(
+    a_ad: DualOrder1<2>,
+    b_ad: DualOrder1<2>,
+    freq: f64,
+    numax: f64,
+) -> DualOrder1<2> {
+    let ratio = DualOrder1::<2>::constant(freq / numax);
+    a_ad * ratio.pow(b_ad)
+}
+
+#[inline]
+fn sonoi_term(
+    a_ad: DualOrder1<2>,
+    b_ad: DualOrder1<2>,
+    freq: f64,
+    numax: f64,
+) -> DualOrder1<2> {
+    let ratio = DualOrder1::<2>::constant(freq / numax);
+    let one = DualOrder1::<2>::constant(1.0);
+    a_ad * numax * (one - one / (one + ratio.pow(b_ad)))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn apply_two_param_surface_corr<F>(
+    model_freqs: &[f64],
+    model_inertias: &[f64],
+    l0_freqs: &[f64],
+    l0_inertias: &[f64],
+    nu_max: f64,
+    correction_factor: f64,
+    a: f64,
+    b: f64,
+    eval_term: F,
+) -> Vec<f64>
+where
+    F: Fn(DualOrder1<2>, DualOrder1<2>, f64, f64) -> DualOrder1<2>,
+{
+    let n = model_freqs.len().min(model_inertias.len());
     let a_c = DualOrder1::<2>::constant(a);
     let b_c = DualOrder1::<2>::constant(b);
     let mut corr = Vec::with_capacity(n);
     for i in 0..n {
-        let df = eval_term(a_c, b_c, model_freqs[i], nu_max).val
-            / q_arr[i].max(1.0e-30);
+        let e0 = interpolate_l0_inertia(model_freqs[i], l0_freqs, l0_inertias);
+        let q = (model_inertias[i] / e0.max(1.0e-30)).max(1.0e-30);
+        let df = eval_term(a_c, b_c, model_freqs[i], nu_max).val / q;
         corr.push(model_freqs[i] + correction_factor * df);
     }
-    (corr, a, b)
+    corr
 }
 
 /// Evaluates the Ball & Gizon (2017) free power-law surface correction
@@ -314,11 +369,49 @@ pub fn eval_power_law_corr(
         correction_factor,
         -5.25,
         5.37,
-        |a_ad, b_ad, freq, numax| {
-            let ratio = DualOrder1::<2>::constant(freq / numax);
-            a_ad * ratio.pow(b_ad)
-        },
+        false,
+        power_law_term,
     )
+}
+
+/// Evaluates the radial-only ($l=0$) Ball & Gizon (2017) power-law surface
+/// correction (`get_power_law_freq_corr(..., radial_only=.true.)` in
+/// `astero_support.f90:1010-1089`), fitting $(a, b)$ exclusively to radial
+/// modes before correcting all `model_freqs` via $Q_{nl}$.
+#[allow(clippy::too_many_arguments)]
+#[must_use]
+pub fn eval_power_law_corr_radial_only(
+    l0_obs_freqs: &[f64],
+    l0_obs_sigmas: &[f64],
+    l0_freqs: &[f64],
+    l0_inertias: &[f64],
+    model_freqs: &[f64],
+    model_inertias: &[f64],
+    nu_max: f64,
+    correction_factor: f64,
+) -> (Vec<f64>, f64, f64) {
+    let (_, a, b) = eval_power_law_corr(
+        l0_obs_freqs,
+        l0_obs_sigmas,
+        l0_freqs,
+        l0_inertias,
+        l0_freqs,
+        l0_inertias,
+        nu_max,
+        correction_factor,
+    );
+    let corr = apply_two_param_surface_corr(
+        model_freqs,
+        model_inertias,
+        l0_freqs,
+        l0_inertias,
+        nu_max,
+        correction_factor,
+        a,
+        b,
+        power_law_term,
+    );
+    (corr, a, b)
 }
 
 /// Evaluates the Sonoi et al. (2015) modified Lorentzian surface correction
@@ -354,10 +447,47 @@ pub fn eval_sonoi_corr(
         correction_factor,
         -3.59e-3,
         11.26,
-        |a_ad, b_ad, freq, numax| {
-            let ratio = DualOrder1::<2>::constant(freq / numax);
-            let one = DualOrder1::<2>::constant(1.0);
-            a_ad * numax * (one - one / (one + ratio.pow(b_ad)))
-        },
+        true,
+        sonoi_term,
     )
+}
+
+/// Evaluates the radial-only ($l=0$) Sonoi et al. (2015) modified Lorentzian
+/// surface correction (`get_sonoi_freq_corr(..., radial_only=.true.)` in
+/// `astero_support.f90:1140-1219`), fitting $(a, b)$ exclusively to radial
+/// modes before correcting all `model_freqs` via $Q_{nl}$.
+#[allow(clippy::too_many_arguments)]
+#[must_use]
+pub fn eval_sonoi_corr_radial_only(
+    l0_obs_freqs: &[f64],
+    l0_obs_sigmas: &[f64],
+    l0_freqs: &[f64],
+    l0_inertias: &[f64],
+    model_freqs: &[f64],
+    model_inertias: &[f64],
+    nu_max: f64,
+    correction_factor: f64,
+) -> (Vec<f64>, f64, f64) {
+    let (_, a, b) = eval_sonoi_corr(
+        l0_obs_freqs,
+        l0_obs_sigmas,
+        l0_freqs,
+        l0_inertias,
+        l0_freqs,
+        l0_inertias,
+        nu_max,
+        correction_factor,
+    );
+    let corr = apply_two_param_surface_corr(
+        model_freqs,
+        model_inertias,
+        l0_freqs,
+        l0_inertias,
+        nu_max,
+        correction_factor,
+        a,
+        b,
+        sonoi_term,
+    );
+    (corr, a, b)
 }

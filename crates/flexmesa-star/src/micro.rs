@@ -393,18 +393,13 @@ pub fn do_kap(model: &mut StarModel) -> Result<(), StarError> {
     let nz = model.nz;
     let species = model.species;
     let catalog = NuclideCatalog::builtin_ref();
-    let idx_c12 = catalog
-        .get_nuclide_index("c12")
-        .and_then(|cid| model.net_iso.get(cid).copied().flatten());
-    let idx_n14 = catalog
-        .get_nuclide_index("n14")
-        .and_then(|cid| model.net_iso.get(cid).copied().flatten());
-    let idx_o16 = catalog
-        .get_nuclide_index("o16")
-        .and_then(|cid| model.net_iso.get(cid).copied().flatten());
-    let idx_ne20 = catalog
-        .get_nuclide_index("ne20")
-        .and_then(|cid| model.net_iso.get(cid).copied().flatten());
+    // Sum all isotopes of C (Z=6), N (Z=7), O (Z=8), and Ne (Z=10) for Type 2
+    // CO-enhanced opacities (`micro.f90:694-702`).
+    let iso_z: Vec<usize> = model
+        .chem_id
+        .iter()
+        .map(|&cid| catalog.get_by_id(cid).map_or(0, |n| n.z))
+        .collect();
     let kap_factor = model.controls.opacity_factor;
     let kap_cfg = &model.kap_config;
 
@@ -412,10 +407,19 @@ pub fn do_kap(model: &mut StarModel) -> Result<(), StarError> {
         .into_par_iter()
         .map(|k| {
             let xa_k = &model.xa[k * species..(k + 1) * species];
-            let xc = idx_c12.map_or(0.0, |j| xa_k[j]);
-            let xn = idx_n14.map_or(0.0, |j| xa_k[j]);
-            let xo = idx_o16.map_or(0.0, |j| xa_k[j]);
-            let xne = idx_ne20.map_or(0.0, |j| xa_k[j]);
+            let mut xc = 0.0;
+            let mut xn = 0.0;
+            let mut xo = 0.0;
+            let mut xne = 0.0;
+            for (&z, &xj) in iso_z.iter().zip(xa_k.iter()) {
+                match z {
+                    6 => xc += xj,
+                    7 => xn += xj,
+                    8 => xo += xj,
+                    10 => xne += xj,
+                    _ => {}
+                }
+            }
             let rho_k = model.rho[k];
             let t_k = model.t[k];
             let lnfree_e = model.lnfree_e[k];

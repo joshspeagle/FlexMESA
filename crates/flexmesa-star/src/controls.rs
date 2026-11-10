@@ -5,7 +5,7 @@
 //! `star_job_controls.inc`, and `star/private/alloc.f90`.
 
 use flexmesa_rates::ScreeningMode;
-use flexmesa_turb::MltOption;
+use flexmesa_turb::{MltOption, SemiconvectionOption, ThermohalineOption};
 
 pub use crate::job_controls::{
     AtmOption, AtmTTauRelation, EnergyEqnOption, StarError, StarJobControls,
@@ -45,8 +45,14 @@ pub struct StarControls {
     pub use_ledoux_criterion: bool,
     /// Semiconvection efficiency parameter $\alpha_{\mathrm{sc}}$.
     pub alpha_semiconvection: f64,
+    /// Semiconvective mixing prescription (`semiconvection_option`).
+    pub semiconvection_option: SemiconvectionOption,
     /// Thermohaline mixing coefficient.
     pub thermohaline_coeff: f64,
+    /// Thermohaline mixing prescription (`thermohaline_option`).
+    pub thermohaline_option: ThermohalineOption,
+    /// Radiation-pressure surface correction factor for `SimplePhotosphere` (`Pextra_factor`).
+    pub pextra_factor: f64,
     /// Minimum diffusive mixing floor $D_{\min}$ ($\mathrm{cm^2\,s^{-1}}$).
     pub min_d_mix: f64,
     /// Whether to remove single-zone mixing glitches (`true` default).
@@ -394,7 +400,10 @@ impl Default for StarControls {
             mlt_option: MltOption::Cox,
             use_ledoux_criterion: false,
             alpha_semiconvection: 0.0,
+            semiconvection_option: SemiconvectionOption::Langer85GradTIsGradr,
             thermohaline_coeff: 0.0,
+            thermohaline_option: ThermohalineOption::Kippenhahn,
+            pextra_factor: 1.0,
             min_d_mix: 0.0,
             remove_mixing_glitches: true,
             redo_conv_for_dr_lt_mixing_length: false,

@@ -271,10 +271,15 @@ pub fn do_phase_separation(
                 continue;
             }
             let x_heavy_k = model.xa[k * nc + j_heavy];
-            let dx = eval_phase_separation_shift(x_heavy_k, is_one_mixture)
-                .min(model.xa[k * nc + j_light])
-                .min(1.0 - x_heavy_k)
-                .min(avail_heavy / dm_solid);
+            let x_light_k = model.xa[k * nc + j_light];
+            let x_pair_tot = (x_heavy_k + x_light_k).max(1.0e-12);
+            let x_heavy_norm = (x_heavy_k / x_pair_tot).clamp(0.0, 1.0);
+            let dx =
+                (eval_phase_separation_shift(x_heavy_norm, is_one_mixture)
+                    * x_pair_tot)
+                    .min(x_light_k)
+                    .min(1.0 - x_heavy_k)
+                    .min(avail_heavy / dm_solid);
             if dx <= 1.0e-8 {
                 continue;
             }

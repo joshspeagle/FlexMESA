@@ -208,12 +208,26 @@ pub struct HelmTable {
 const BUILTIN_PATCHES_BIN: &[u8] =
     include_bytes!("../../data/helm_patches.bin");
 static BUILTIN_TABLE: OnceLock<HelmTable> = OnceLock::new();
+static SMOOTH_BUILTIN_TABLE: OnceLock<HelmTable> = OnceLock::new();
 
 impl HelmTable {
     /// Returns a reference to the lazily initialized built-in [`HelmTable`].
     #[must_use]
     pub fn builtin() -> &'static Self {
         BUILTIN_TABLE.get_or_init(Self::load_builtin)
+    }
+
+    /// Returns a reference to the full dense [`HelmTable`] when available, or a
+    /// globally $C^2$-smooth analytical [`HelmTable`] without sparse patch
+    /// islands when the external table cache is absent.
+    #[must_use]
+    pub fn smooth_builtin() -> &'static Self {
+        let b = Self::builtin();
+        if b.is_full_table() {
+            b
+        } else {
+            SMOOTH_BUILTIN_TABLE.get_or_init(Self::new_empty_grid)
+        }
     }
 
     /// Returns `true` when all `2701 x 1001` vertices are populated in dense storage.

@@ -301,20 +301,24 @@ def eval_skye_eos_jax(
     use_og = jnp.asarray(str(skye_solid_mixing_rule).lower() == "ogata")
     mf_lim = float(mass_fraction_limit)
 
-    def _eval_core(
-        r_in: jax.Array, t_in: jax.Array
-    ) -> tuple[jax.Array, jax.Array, jax.Array]:
-        t_lo, dth, d_lo, dd, fi_f, _, fi_ef, _ = helm._lookup_helm_cell_jax(
-            t_in, (zb_j / ab_j) * r_in
-        )
-        return cast(
-            tuple[jax.Array, jax.Array, jax.Array],
-            _eval_skye_cell_zone_jit(
-                r_in,
-                t_in,
-                ab_j,
-                zb_j,
-                xa_j,
+    r_0 = jax.lax.stop_gradient(r_j)
+    t_0 = jax.lax.stop_gradient(t_j)
+    ab_0 = jax.lax.stop_gradient(ab_j)
+    zb_0 = jax.lax.stop_gradient(zb_j)
+    xa_0 = jax.lax.stop_gradient(xa_j)
+    t_lo, dth, d_lo, dd, fi_f, _, fi_ef, _ = helm._lookup_helm_cell_jax(
+        t_0, (zb_0 / ab_0) * r_0
+    )
+    if not isinstance(r_0, jax.core.Tracer) and not isinstance(
+        t_0, jax.core.Tracer
+    ):
+        with jax._src.core.eval_context():
+            res_0, d_dlnd_0, d_dln_t_0 = _eval_skye_cell_zone_jit(
+                r_0,
+                t_0,
+                ab_0,
+                zb_0,
+                xa_0,
                 azion,
                 acmi,
                 a_in,
@@ -327,27 +331,33 @@ def eval_skye_eos_jax(
                 use_off,
                 use_og,
                 mf_lim,
-            ),
+            )
+    else:
+        res_0, d_dlnd_0, d_dln_t_0 = _eval_skye_cell_zone_jit(
+            r_0,
+            t_0,
+            ab_0,
+            zb_0,
+            xa_0,
+            azion,
+            acmi,
+            a_in,
+            t_lo,
+            dth,
+            d_lo,
+            dd,
+            fi_f,
+            fi_ef,
+            use_off,
+            use_og,
+            mf_lim,
         )
-
-    _eval = jax.custom_jvp(_eval_core)
-
-    def _eval_jvp(
-        primals: tuple[jax.Array, jax.Array],
-        tangents: tuple[jax.Array, jax.Array],
-    ) -> tuple[
-        tuple[jax.Array, jax.Array, jax.Array],
-        tuple[jax.Array, jax.Array, jax.Array],
-    ]:
-        r_p, t_p = primals
-        dr, dt = tangents
-        res, d_dlnd, d_dln_t = _eval_core(r_p, t_p)
-        dres = d_dlnd * (dr / r_p) + d_dln_t * (dt / t_p)
-        z = jnp.zeros_like(res)
-        return (res, d_dlnd, d_dln_t), (dres, z, z)
-
-    _eval.defjvp(_eval_jvp)
-    return cast(tuple[jax.Array, jax.Array, jax.Array], _eval(r_j, t_j))
+    dln_r = jnp.expand_dims((r_j - r_0) / r_0, axis=-1)
+    dln_t = jnp.expand_dims((t_j - t_0) / t_0, axis=-1)
+    res = res_0 + d_dlnd_0 * dln_r + d_dln_t_0 * dln_t
+    return cast(
+        tuple[jax.Array, jax.Array, jax.Array], (res, d_dlnd_0, d_dln_t_0)
+    )
 
 
 def eval_skye_eos(
@@ -448,27 +458,61 @@ def eval_skye_eos_zones(
         r_j, t_j = jnp.asarray(rho, jnp.float64), jnp.asarray(temp, jnp.float64)
         ab_j = jnp.asarray(abar, jnp.float64)
         zb_j = jnp.asarray(zbar, jnp.float64)
+        xa_j = jnp.asarray(xa, jnp.float64)
+        z_j = jnp.asarray(z, jnp.float64)
+        acmi_j = jnp.asarray(acmi, jnp.float64)
+        a_j = jnp.asarray(a, jnp.float64)
+        use_off = jnp.asarray(bool(skye_use_ion_offsets))
+        use_og = jnp.asarray(str(skye_solid_mixing_rule).lower() == "ogata")
+        mf_lim = float(mass_fraction_limit)
         t_lo, dth, d_lo, dd, fi_f, _, fi_ef, _ = helm._lookup_helm_cell_jax(
             t_j, (zb_j / ab_j) * r_j
         )
+        if r_j.ndim == 1 and r_j.shape[0] <= 16:
+            rows = [
+                _eval_skye_cell_zone_jit(
+                    r_j[k],
+                    t_j[k],
+                    ab_j[k],
+                    zb_j[k],
+                    xa_j[k],
+                    z_j,
+                    acmi_j,
+                    a_j,
+                    t_lo[k],
+                    dth[k],
+                    d_lo[k],
+                    dd[k],
+                    fi_f[k],
+                    fi_ef[k],
+                    use_off,
+                    use_og,
+                    mf_lim,
+                )
+                for k in range(r_j.shape[0])
+            ]
+            res = jnp.stack([row[0] for row in rows], axis=0)
+            d_dlnd = jnp.stack([row[1] for row in rows], axis=0)
+            d_dln_t = jnp.stack([row[2] for row in rows], axis=0)
+            return core.EosEvalOutput(res=res, d_dlnd=d_dlnd, d_dln_t=d_dln_t)
         res, d_dlnd, d_dln_t = eval_skye_cell_zones_jit(
             r_j,
             t_j,
             ab_j,
             zb_j,
-            jnp.asarray(xa, jnp.float64),
-            jnp.asarray(z, jnp.float64),
-            jnp.asarray(acmi, jnp.float64),
-            jnp.asarray(a, jnp.float64),
+            xa_j,
+            z_j,
+            acmi_j,
+            a_j,
             t_lo,
             dth,
             d_lo,
             dd,
             fi_f,
             fi_ef,
-            jnp.asarray(bool(skye_use_ion_offsets)),
-            jnp.asarray(str(skye_solid_mixing_rule).lower() == "ogata"),
-            float(mass_fraction_limit),
+            use_off,
+            use_og,
+            mf_lim,
         )
         return core.EosEvalOutput(res=res, d_dlnd=d_dlnd, d_dln_t=d_dln_t)
     out = _rust.eos_eval_skye_zones(

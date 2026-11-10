@@ -58,7 +58,7 @@ pub fn op_split_burn_zones(
     let Some(net_info) = resolve_model_net(model) else {
         return Ok(());
     };
-    let ht = HelmTable::builtin();
+    let ht = HelmTable::smooth_builtin();
     let num_reactions = net_info.num_reactions;
     let rate_factors = vec![1.0; num_reactions];
     let reaction_qs = vec![0.0; num_reactions];

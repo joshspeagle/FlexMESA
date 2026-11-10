@@ -38,7 +38,7 @@ pub fn do_brunt_b(model: &mut StarModel) {
 
     let species = model.species;
     let use_gradmux = model.controls.use_brunt_gradmux_form || species == 0;
-    let ht = HelmTable::builtin();
+    let ht = HelmTable::smooth_builtin();
 
     for k in 1..nz {
         let dlnp_peos = model.ln_peos[k - 1] - model.ln_peos[k];

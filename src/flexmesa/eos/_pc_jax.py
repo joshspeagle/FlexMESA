@@ -475,9 +475,27 @@ def eval_pc_eos_jax(
         r_1d, t_1d = r_a.reshape(-1), t_a.reshape(-1)
         a_1d, z_1d = a_a.reshape(-1), z_a.reshape(-1)
         x_2d = x_a.reshape((-1, sp))
-        res_v, dlnd_v, dlnt_v = _eval_pc_zones_jit(
-            r_1d, t_1d, a_1d, z_1d, x_2d, az_a, ac_a, *j_args
-        )
+        if r_1d.shape[0] <= 16:
+            rows = [
+                _eval_pc_single_jit(
+                    r_1d[k],
+                    t_1d[k],
+                    a_1d[k],
+                    z_1d[k],
+                    x_2d[k],
+                    az_a,
+                    ac_a,
+                    *j_args,
+                )
+                for k in range(r_1d.shape[0])
+            ]
+            res_v = jnp.stack([row[0] for row in rows], axis=0)
+            dlnd_v = jnp.stack([row[1] for row in rows], axis=0)
+            dlnt_v = jnp.stack([row[2] for row in rows], axis=0)
+        else:
+            res_v, dlnd_v, dlnt_v = _eval_pc_zones_jit(
+                r_1d, t_1d, a_1d, z_1d, x_2d, az_a, ac_a, *j_args
+            )
         n = core.NUM_EOS_BASIC_RESULTS
         return (
             res_v.reshape((*orig_shape, n)),
@@ -485,28 +503,37 @@ def eval_pc_eos_jax(
             dlnt_v.reshape((*orig_shape, n)),
         )
 
-    _eval_pc = jax.custom_jvp(_eval_pc_core)
-
-    def _eval_pc_jvp(
-        primals: tuple[jax.Array, ...], tangents: tuple[jax.Array, ...]
-    ) -> tuple[
-        tuple[jax.Array, jax.Array, jax.Array],
-        tuple[jax.Array, jax.Array, jax.Array],
-    ]:
-        r_p, t_p, a_p, z_p, x_p, az_p, ac_p = primals
-        dr, dt, _, _, _, _, _ = tangents
-        res, d_dlnd, d_dln_t = _eval_pc_core(
-            r_p, t_p, a_p, z_p, x_p, az_p, ac_p
+    r_j = jnp.asarray(rho, dtype=jnp.float64)
+    t_j = jnp.asarray(temp, dtype=jnp.float64)
+    r_0 = jax.lax.stop_gradient(r_j)
+    t_0 = jax.lax.stop_gradient(t_j)
+    if not isinstance(r_0, jax.core.Tracer) and not isinstance(
+        t_0, jax.core.Tracer
+    ):
+        with jax._src.core.eval_context():
+            res_0, dlnd_0, dlnt_0 = _eval_pc_core(
+                r_0,
+                t_0,
+                jax.lax.stop_gradient(abar),
+                jax.lax.stop_gradient(zbar),
+                jax.lax.stop_gradient(xa),
+                jax.lax.stop_gradient(azion),
+                jax.lax.stop_gradient(acmi),
+            )
+    else:
+        res_0, dlnd_0, dlnt_0 = _eval_pc_core(
+            r_0,
+            t_0,
+            jax.lax.stop_gradient(abar),
+            jax.lax.stop_gradient(zbar),
+            jax.lax.stop_gradient(xa),
+            jax.lax.stop_gradient(azion),
+            jax.lax.stop_gradient(acmi),
         )
-        dln_rho = jnp.expand_dims(dr / r_p, axis=-1)
-        dln_t = jnp.expand_dims(dt / t_p, axis=-1)
-        d_res = d_dlnd * dln_rho + d_dln_t * dln_t
-        z = jnp.zeros_like(res)
-        return (res, d_dlnd, d_dln_t), (d_res, z, z)
-
-    _eval_pc.defjvp(_eval_pc_jvp)
-    res_o, dlnd_o, dlnt_o = _eval_pc(rho, temp, abar, zbar, xa, azion, acmi)
-    return res_o, dlnd_o, dlnt_o
+    dln_r = jnp.expand_dims((r_j - r_0) / r_0, axis=-1)
+    dln_t = jnp.expand_dims((t_j - t_0) / t_0, axis=-1)
+    res_o = res_0 + dlnd_0 * dln_r + dlnt_0 * dln_t
+    return res_o, dlnd_0, dlnt_0
 
 
 def _eval_pc_rust_ffi_core(

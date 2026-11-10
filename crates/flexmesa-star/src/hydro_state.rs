@@ -65,6 +65,10 @@ pub struct HydroAuxState {
     pub fp_rot: Vec<f64>,
     /// Rotational temperature distortion correction factor $f_{T,\mathrm{rot},k}$ (`ft_rot`).
     pub ft_rot: Vec<f64>,
+    /// Face specific moment of inertia $i_{\mathrm{rot},k}$ in $\mathrm{cm^2}$ (`i_rot`).
+    pub i_rot: Vec<f64>,
+    /// Brunt-Väisälä composition buoyancy term $N_{\mu,k}^2$ in $\mathrm{s^{-2}}$ (`brunt_N2_composition_term`).
+    pub brunt_n2_composition_term: Vec<f64>,
     /// Baryonic mass correction factor per cell (`mass_correction`).
     pub mass_correction: Vec<f64>,
     /// Extra face gravitational acceleration $g_{\mathrm{extra},k}$ (`extra_grav`).
@@ -111,6 +115,8 @@ impl HydroAuxState {
             source_plus_alpha_rti: vec![0.0; nz],
             fp_rot: vec![1.0; nz],
             ft_rot: vec![1.0; nz],
+            i_rot: vec![0.0; nz],
+            brunt_n2_composition_term: vec![0.0; nz],
             mass_correction: vec![1.0; nz],
             extra_grav: vec![StarAdOrder1::ZERO; nz],
             uq_ad: vec![StarAdOrder1::ZERO; nz],
@@ -143,6 +149,8 @@ impl HydroAuxState {
             &mut self.mlt_vc_old,
             &mut self.sig_rti,
             &mut self.source_plus_alpha_rti,
+            &mut self.i_rot,
+            &mut self.brunt_n2_composition_term,
         ] {
             v.resize(nz, 0.0);
         }

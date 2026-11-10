@@ -6,7 +6,7 @@
 
 use flexmesa_rates::ScreeningMode;
 use flexmesa_schema::ControlValue;
-use flexmesa_turb::MltOption;
+use flexmesa_turb::{MltOption, SemiconvectionOption, ThermohalineOption};
 
 use crate::controls::{AtmOption, AtmTTauRelation, EnergyEqnOption};
 use crate::inlist::{InlistBundle, SectionControls};
@@ -260,13 +260,14 @@ impl InlistBundle {
             drag_coefficient, min_q_for_drag, mlt_pturb_factor, pvsc_cq, pvsc_zshock,
             eps_grav_factor, gamma_ln_s_eps_grav_full_on, gamma_ln_s_eps_grav_full_off,
             velocity_q_upper_bound, velocity_tau_lower_bound, velocity_logt_lower_bound,
-            mix_factor,
+            mix_factor, pextra_factor,
         ]);
         map_strs!(ctrl, c, [
             zams_filename, cool_wind_rgb_scheme, cool_wind_agb_scheme, phase_separation_option,
         ]);
         map_bools!(ctrl, c, [
-            use_ledoux_criterion, op_split_burn, accrete_same_as_surface,
+            use_ledoux_criterion, calculate_brunt_n2, use_brunt_gradmux_form,
+            op_split_burn, accrete_same_as_surface,
             accrete_given_mass_fractions, do_element_diffusion, do_conv_premix,
             do_phase_separation, do_phase_separation_heating, use_other_cgrav,
             use_other_alpha_mlt, use_other_wind, use_other_adjust_mdot, use_other_torque,
@@ -329,6 +330,16 @@ impl InlistBundle {
                 "eps_grav" => EnergyEqnOption::EpsGrav,
                 _ => EnergyEqnOption::Dedt,
             };
+        }
+        if let Some(s) = ctrl.get_str("semiconvection_option") {
+            if let Ok(opt) = s.parse::<SemiconvectionOption>() {
+                c.semiconvection_option = opt;
+            }
+        }
+        if let Some(s) = ctrl.get_str("thermohaline_option") {
+            if let Ok(opt) = s.parse::<ThermohalineOption>() {
+                c.thermohaline_option = opt;
+            }
         }
         if let Some(v) = ctrl.get_i64("rsp_max_num_periods") {
             c.rsp_max_num_periods = Some(v as isize);

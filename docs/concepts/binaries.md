@@ -36,8 +36,8 @@ When a donor star expands toward or beyond its Roche lobe around the inner Lagra
 
 3. **Implicit Timestep RLOF Root-Finder (`solve_implicit_rlof_mdot`, `solve_roche_lobe_mdot_jax`)**:
    Because explicit evaluation of $\dot{M}_{\mathrm{RLOF}}(R_1)$ exhibits severe numerical oscillations due to the small atmospheric scale height $H_{P,\mathrm{RL}} / R_{\mathrm{RL},1} \sim 10^{-4}$ to $10^{-2}$, `FlexMESA` solves the implicit consistency equation $f(\dot{M}) = \dot{M} - \dot{M}_{\mathrm{scheme}}(M_1 + \dot{M}\Delta t, a(\dot{M})) = 0$ over each timestep $\Delta t$ using a hybrid Bisection-Brent solver in Safe Rust and a differentiable Newton-bisection solver in JAX.
-4. **Outer $L_2$ Lagrangian Disk Mass Loss (`eval_l2_mass_loss_fraction`)**:
-   In extreme overcontact or super-thermal mass transfer where fluid reaches the outer $L_2$ equipotential, `eval_l2_mass_loss_fraction` computes the fraction of transferred mass lost through a circumbinary $L_2$ outflow alongside its specific angular momentum.
+4. **Outer $L_2$ Lagrangian Disk Mass Loss & Contact Binary Equipotential Solver (`eval_l2_mass_loss_fraction`, `ImplicitRlofSolver::solve_contact_mdot`)**:
+   In overcontact binaries where both stars simultaneously approach or fill their Roche lobes (`contact_scheme` in `binary_mdot.f90:113-147` with mass ratio $q = M_a / M_d$ and Marchant et al. 2016 slope $s_c = q^{-0.52}$), `ImplicitRlofSolver::solve_contact_mdot` solves the dimensionless equipotential balance objective $f_{\mathrm{contact}}(\dot{M}) = s_c\,\delta_{\mathrm{RL},d} - \delta_{\mathrm{RL},a} = 0$ (for $q < 1$, or $\delta_{\mathrm{RL},d} - \delta_{\mathrm{RL},a} / s_c = 0$ for $q \ge 1$) over $[-\dot{M}_{\max}, 0]$, while `eval_l2_mass_loss_fraction` computes the fraction of transferred mass lost through a circumbinary $L_2$ outflow alongside its specific angular momentum. When the companion's relative Roche-lobe overflow exceeds the donor's ($\delta_{\mathrm{RL},2} > \delta_{\mathrm{RL},1}$), `BinarySystem::check_donor_switch` swaps donor and accretor indices (`do_Initial_Binary_Checks` in `binary_evolve.f90`).
 
 ---
 
@@ -46,28 +46,30 @@ When a donor star expands toward or beyond its Roche lobe around the inner Lagra
 When the companion is an accreting black hole (`is_black_hole=True` in `BinarySystem.from_point_mass`), `eval_bh_spin_and_edd_jax` evolves the black hole's gravitational mass $M_{\mathrm{BH}}$ and dimensionless Kerr spin parameter $a_* \in [0, 0.998]$ following Bardeen (1972) and Paxton et al. (2015, §2.5):
 
 - **Innermost Stable Circular Orbit (`ISCO`) Radius & Radiative Efficiency**:
-  Given $Z_1(a_*)$ and $Z_2(a_*)$, the dimensionless prograde ISCO radius $r_{\mathrm{ISCO}} = R_{\mathrm{ISCO}} / (G M_{\mathrm{BH}} / c^2) = 3 + Z_2 - \sqrt{(3 - Z_1)(3 + Z_1 + 2 Z_2)}$ determines the specific binding energy and radiative efficiency $\eta_{\mathrm{ISCO}}$:
+   Given $Z_1(a_*)$ and $Z_2(a_*)$, the dimensionless prograde ISCO radius $r_{\mathrm{ISCO}} = R_{\mathrm{ISCO}} / (G M_{\mathrm{BH}} / c^2) = 3 + Z_2 - \sqrt{(3 - Z_1)(3 + Z_1 + 2 Z_2)}$ determines the specific binding energy and radiative efficiency $\eta_{\mathrm{ISCO}}$:
 
   $$\eta_{\mathrm{ISCO}}(a_*) = 1 - \sqrt{1 - \frac{2}{3\,r_{\mathrm{ISCO}}(a_*)}}, \qquad \dot{M}_{\mathrm{Edd}} = \frac{4\pi G M_{\mathrm{BH}}}{c\,\kappa_{\mathrm{es}}\,\eta_{\mathrm{ISCO}}(a_*)}.$$
 
-- **Rest-Mass vs. Gravitational-Mass Growth**:
-  A rest-mass accretion step $\Delta M_0 = \min(|\dot{M}_{\mathrm{tr}}|, \dot{M}_{\mathrm{Edd}})\,\Delta t$ increases the black-hole gravitational mass by $\Delta M_{\mathrm{BH}} = (1 - \eta_{\mathrm{ISCO}})\,\Delta M_0$ and spins up the Kerr parameter $a_*$ up to the Thorne (1974) radiation-capture ceiling $a_{*,\max} = 0.998$.
+- **Rest-Mass vs. Gravitational-Mass Growth & System Mass-Loss Bookkeeping**:
+  A rest-mass accretion step $\Delta M_0 = \min(|\dot{M}_{\mathrm{tr}}|, \dot{M}_{\mathrm{Edd}})\,\Delta t$ increases the black-hole gravitational mass by $\Delta M_{\mathrm{BH}} = (1 - \eta_{\mathrm{ISCO}})\,\Delta M_0$ (`binary_evolve.f90:296-309`), while the radiated accretion energy $\eta_{\mathrm{ISCO}}\,\Delta M_0$ is accounted for in the system mass-loss rate $\dot{M}_{\mathrm{system\_transfer}}(\text{accretor})$ so total gravitating mass-momentum bookkeeping remains exact (`BinarySystem::accretor_mass_and_sys_loss`).
 
 ---
 
 ## 4. Orbital Angular Momentum Loss ($\dot{J}$) & Hut (1981) Tidal Evolution
 
-`flexmesa.binary` evolves orbital angular momentum $J_{\mathrm{orb}}$, eccentricity $e$, and component spin rates $\Omega_{1,2}$ under three secular torque mechanisms:
+`flexmesa.binary` evolves orbital angular momentum $J_{\mathrm{orb}}$, eccentricity $e$, and component spin rates $\Omega_{1,2}$ under four secular torque mechanisms:
 
-1. **Peters (1964) Gravitational-Wave Radiation (`eval_jdot_gr_jax`)**:
-   Quadrupole gravitational-wave emission extracts orbital angular momentum and circularizes eccentric orbits:
+1. **Peters (1964) Gravitational-Wave Radiation & Eccentricity Decay (`eval_jdot_gr_jax`, `eval_edot_gr`)**:
+   Quadrupole gravitational-wave emission extracts orbital angular momentum (`eval_jdot_gr`) and circularizes eccentric orbits (`eval_edot_gr`, coupled directly into `BinarySystem::step` matching `binary_edot.f90:96`):
 
-   $$\frac{\dot{J}_{\mathrm{gr}}}{J_{\mathrm{orb}}} = -\frac{32}{5}\,\frac{G^3}{c^5}\,\frac{M_1 M_2 (M_1 + M_2)}{a^4\,(1 - e^2)^{5/2}}\left(1 + \frac{7}{8}e^2\right).$$
+   $$\frac{\dot{J}_{\mathrm{gr}}}{J_{\mathrm{orb}}} = -\frac{32}{5}\,\frac{G^3}{c^5}\,\frac{M_1 M_2 (M_1 + M_2)}{a^4\,(1 - e^2)^{5/2}}\left(1 + \frac{7}{8}e^2\right), \qquad \dot{e}_{\mathrm{gr}} = -\frac{304}{15}\,\frac{G^3 M_1 M_2 (M_1 + M_2)}{c^5\,a^4\,(1 - e^2)^{5/2}}\,e\left(1 + \frac{121}{304}e^2\right).$$
 
 2. **Rappaport, Verbunt & Joss (1983) Magnetic Braking (`eval_jdot_mb_jax`)**:
    Magnetized stellar winds coupled to a donor with a convective envelope and radiative core extract spin and orbital angular momentum at rate $\dot{J}_{\mathrm{mb}} = -3.8 \times 10^{-30}\,M_1 R_\odot^4\,(R_1 / R_\odot)^{\gamma_{\mathrm{mb}}}\,\Omega_{\mathrm{orb}}^3\,\mathrm{dyn\,cm}$ (default $\gamma_{\mathrm{mb}} = 3.0$).
-3. **Hut (1981) Weak-Friction Tidal Circularization & Synchronization (`eval_edot_tidal_hut_jax`)**:
-   Evaluates the Hut (1981, A&A, 99, 126) fifth-order eccentricity polynomials $f_1(e^2)$ through $f_5(e^2)$ to compute the tidal circularization rate $\dot{e}_{\mathrm{tidal}}$ and spin-orbit synchronization timescales for convective and radiative envelopes.
+3. **Spin-Orbit Tidal Coupling & Missing Stellar Wind Torque (`eval_jdot_ls_with_winds`, `eval_jdot_missing_wind`)**:
+   Evaluates spin-orbit angular momentum exchange $\dot{J}_{\mathrm{ls}} = -\sum_{i=1}^2 (\Delta S_i - \dot{M}_{\mathrm{wind},i} j_{\mathrm{surf},i}\Delta t) / \Delta t$ after subtracting stellar wind spin loss (`binary_jdot.f90:129-145`) alongside the companion's missing stellar wind angular momentum torque (`default_jdot_missing_wind`).
+4. **Hut (1981) Weak-Friction Tidal Circularization & Synchronization (`eval_edot_tidal_hut_jax`)**:
+   Evaluates the Hut (1981, A&A, 99, 126) fifth-order eccentricity polynomials $f_1(e^2)$ through $f_5(e^2)$ to compute the tidal circularization rate $\dot{e}_{\mathrm{tidal}}$ and spin-orbit synchronization timescales for convective and radiative envelopes, paired with monotonically wrapped $[0, 1)$ true-anomaly phase grids (`build_anomaly_grid`) for eccentric phase-dependent RLOF integration.
 
 === "Python & JAX (`flexmesa.binary`)"
 

@@ -67,3 +67,21 @@ pub use weak::{
     bilinear_interp_2d, eval_suzuki_one, eval_weak_reaction_pair,
     eval_weaklib_one,
 };
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_screen_chugunov_returns_unscreened_for_neutral_or_low_zbar() {
+        let s_z0 =
+            screen_chugunov(1.0e8, 1.0e5, 6.0, 12.0, 1.0, 0.0, 12.0, 6.0);
+        assert_eq!(s_z0, ScreenEval::UNSCREENED);
+        let s_zbar1 =
+            screen_chugunov(1.0e8, 1.0e5, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0);
+        assert_eq!(s_zbar1, ScreenEval::UNSCREENED);
+        let s_c12 =
+            screen_chugunov(1.0e8, 1.0e5, 6.0, 12.0, 12.0, 6.0, 12.0, 6.0);
+        assert!(s_c12.scor > 1.0);
+    }
+}

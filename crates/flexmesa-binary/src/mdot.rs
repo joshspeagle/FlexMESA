@@ -273,22 +273,20 @@ pub fn eval_arras_mdot_thin(
         .sqrt();
     let q13 = pow(q, ONE_THIRD);
     let asl = 4.0 + 4.16 / (-0.96 + q13 + 1.0 / q13);
-    let area = 2.0 * PI * pow(v_th / omega, 2.0) / (asl * (asl - 1.0)).sqrt();
+    let v_om = v_th / omega;
+    let area = 2.0 * PI * v_om * v_om / (asl * (asl - 1.0)).sqrt();
 
     let mfac1 = 1.0 + q;
     let mfac2 = 1.0 + 5.0 * q + 13.0 * q * q;
+    let eval_phi = |rv: f64| {
+        let rfac = rv / separation;
+        let rfac3 = rfac * rfac * rfac;
+        -(STANDARD_CGRAV * m_donor / rv)
+            * (1.0 + mfac1 * rfac3 / 3.0 + 4.0 * mfac2 * rfac3 * rfac3 / 45.0)
+    };
     let rv_l1 = eval_rlobe(m_donor, m_accretor, separation);
-    let rfac_l1 = rv_l1 / separation;
-    let phi_l1 = -(STANDARD_CGRAV * m_donor / rv_l1)
-        * (1.0
-            + mfac1 * pow(rfac_l1, 3.0) / 3.0
-            + 4.0 * mfac2 * pow(rfac_l1, 6.0) / 45.0);
-    let rv = r_donor;
-    let rfac = rv / separation;
-    let phi = -(STANDARD_CGRAV * m_donor / rv)
-        * (1.0
-            + mfac1 * pow(rfac, 3.0) / 3.0
-            + 4.0 * mfac2 * pow(rfac, 6.0) / 45.0);
+    let phi_l1 = eval_phi(rv_l1);
+    let phi = eval_phi(r_donor);
     let my_ritter_exponent = (-(phi_l1 - phi) / (v_th * v_th)).min(80.0);
     let rho_l1 = (rho_surf / exp(0.5)) * exp(my_ritter_exponent);
     -rho_l1 * v_th * area
@@ -374,6 +372,38 @@ impl ImplicitRlofSolver {
         2.0 * (rl_relative_gap_donor + 0.5 * self.tolerance)
     }
 
+    /// Evaluates the `"contact"` overcontact equipotential objective function
+    /// with mass ratio $q = M_a / M_d$ and Marchant et al. (2016) slope
+    /// $s_c = q^{-0.52}$ (`check_implicit_rlo` in `binary_mdot.f90:113-147`):
+    ///
+    /// $$f_{\mathrm{contact}}(\dot{M}_{\mathrm{tr}}) = \begin{cases}
+    ///   2(g_d + \tfrac{1}{2}\mathrm{tol}) & \text{if } g_a < 0 \text{ and } (g_d s_c - g_a > \mathrm{tol} \text{ or } g_d < -\mathrm{tol}), \\
+    ///   g_d s_c - g_a & \text{if } q < 1, \\
+    ///   g_d - g_a / s_c & \text{if } q \ge 1.
+    /// \end{cases}$$
+    #[must_use]
+    pub fn contact_objective(
+        &self,
+        rl_relative_gap_donor: f64,
+        rl_relative_gap_accretor: f64,
+        q_accretor_over_donor: f64,
+    ) -> f64 {
+        let q = q_accretor_over_donor.max(1.0e-12);
+        let slope_contact = pow(q, -0.52);
+        if rl_relative_gap_accretor < 0.0
+            && (rl_relative_gap_donor * slope_contact
+                - rl_relative_gap_accretor
+                > self.tolerance
+                || rl_relative_gap_donor < -self.tolerance)
+        {
+            self.roche_lobe_objective(rl_relative_gap_donor)
+        } else if q < 1.0 {
+            rl_relative_gap_donor * slope_contact - rl_relative_gap_accretor
+        } else {
+            rl_relative_gap_donor - rl_relative_gap_accretor / slope_contact
+        }
+    }
+
     /// Solves for the implicit mass transfer rate $\dot{M}_{\mathrm{tr}} \le 0$
     /// ($\mathrm{g\,s^{-1}}$) given a callable `eval_gap(mdot_g_s) -> rl_relative_gap_donor`,
     /// following the bracketing and quadratic/secant/bisection algorithm of
@@ -386,6 +416,40 @@ impl ImplicitRlofSolver {
         initial_mdot_g_s: f64,
         max_tries: usize,
         mut eval_gap: F,
+    ) -> (f64, usize, f64)
+    where
+        F: FnMut(f64) -> f64,
+    {
+        self.solve_with_objective(initial_mdot_g_s, max_tries, |mdot| {
+            self.roche_lobe_objective(eval_gap(mdot))
+        })
+    }
+
+    /// Solves for the implicit contact-binary mass transfer rate
+    /// $\dot{M}_{\mathrm{tr}} \le 0$ ($\mathrm{g\,s^{-1}}$) driving
+    /// `contact_objective(gap_d, gap_a, q_accretor_over_donor) = 0` when both
+    /// components are in overcontact (`"contact"` scheme in `binary_mdot.f90:113-147`).
+    pub fn solve_contact_mdot<F>(
+        &self,
+        initial_mdot_g_s: f64,
+        q_accretor_over_donor: f64,
+        max_tries: usize,
+        mut eval_gaps: F,
+    ) -> (f64, usize, f64)
+    where
+        F: FnMut(f64) -> (f64, f64),
+    {
+        self.solve_with_objective(initial_mdot_g_s, max_tries, |mdot| {
+            let (gap_d, gap_a) = eval_gaps(mdot);
+            self.contact_objective(gap_d, gap_a, q_accretor_over_donor)
+        })
+    }
+
+    fn solve_with_objective<F>(
+        &self,
+        initial_mdot_g_s: f64,
+        max_tries: usize,
+        mut eval_f: F,
     ) -> (f64, usize, f64)
     where
         F: FnMut(f64) -> f64,
@@ -406,8 +470,7 @@ impl ImplicitRlofSolver {
         let mut have_prev = false;
 
         for iter in 1..=max_tries.max(1) {
-            let gap = eval_gap(mdot);
-            let f = self.roche_lobe_objective(gap);
+            let f = eval_f(mdot);
             if f.abs() <= self.tolerance
                 || (f < 0.0 && mdot == 0.0)
                 || (f > 0.0 && (-mdot - max_abs).abs() <= 1.0e-12 * max_abs)
@@ -467,7 +530,7 @@ impl ImplicitRlofSolver {
 
             let next_mdot = raw_next.max(-max_abs);
             if -next_mdot < min_abs && f < 0.0 {
-                let f_zero = self.roche_lobe_objective(eval_gap(0.0));
+                let f_zero = eval_f(0.0);
                 return (0.0, iter, f_zero);
             }
             if have_lo
@@ -475,12 +538,12 @@ impl ImplicitRlofSolver {
                 && (mdot_hi - mdot_lo).abs()
                     < 1.0e-6 * mdot_hi.abs().min(mdot_lo.abs())
             {
-                let f_next = self.roche_lobe_objective(eval_gap(next_mdot));
+                let f_next = eval_f(next_mdot);
                 return (next_mdot, iter, f_next);
             }
             mdot = next_mdot;
         }
-        let final_f = self.roche_lobe_objective(eval_gap(mdot));
+        let final_f = eval_f(mdot);
         (mdot, max_tries, final_f)
     }
 }

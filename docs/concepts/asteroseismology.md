@@ -38,14 +38,14 @@ One-dimensional mixing-length atmospheres neglect 3D turbulent pressure support 
 | **`"kjeldsen"`** | Kjeldsen, Bedding & Christensen-Dalsgaard (2008) | $\delta\nu_i = a\,\left(\nu_{\mathrm{obs},i} / \nu_0\right)^b / \mathcal{Q}_i$ with fixed solar exponent $b$ (typically $b \approx 4.90$) |
 | **`"cubic"`** | Ball & Gizon (2014) 1-Term Cubic | $\delta\nu_i = a_3\,\left(\nu_{\mathrm{mod},i} / \nu_{\max}\right)^3 / \mathcal{I}_i$ (linear least-squares solve for $a_3$) |
 | **`"combined"`** | Ball & Gizon (2014) 2-Term Inverse + Cubic | $\delta\nu_i = \left[a_{-1}\left(\nu_{\mathrm{mod},i} / \nu_{\max}\right)^{-1} + a_3\left(\nu_{\mathrm{mod},i} / \nu_{\max}\right)^3\right] / \mathcal{I}_i$ ($2\times 2$ linear solve) |
-| **`"power_law"`** | Free 2-Parameter Power Law | $\delta\nu_i = a\,\left(\nu_{\mathrm{mod},i} / \nu_{\max}\right)^b / \mathcal{I}_i$ (nonlinear fit for both amplitude $a$ and exponent $b$) |
-| **`"sonoi"`** | Sonoi et al. (2015) Modified Lorentzian | $\delta\nu_i = a\,\left[1 - \left(1 + (\nu_{\mathrm{mod},i}/\nu_{\max})^b\right)^{-1}\right] / \mathcal{I}_i$ |
+| **`"power_law"`** | Free 2-Parameter Power Law | $\delta\nu_i = a\,\left(\nu_{\mathrm{mod},i} / \nu_{\max}\right)^b / \mathcal{I}_i$ (nonlinear fit for both amplitude $a$ and exponent $b$, with radial-only $l=0$ fitting via `eval_power_law_corr_radial_only` matching `get_power_law_surface_correction` in `astero_support.f90:1010-1138`) |
+| **`"sonoi"`** | Sonoi et al. (2015) Modified Lorentzian | $\delta\nu_i = a\,\left[1 - \left(1 + (\nu_{\mathrm{mod},i}/\nu_{\max})^b\right)^{-1}\right] / \mathcal{I}_i$ (with radial-only $l=0$ fitting via `eval_sonoi_corr_radial_only` and $a=0$ clamping when $b < 0$, matching `astero_support.f90:1150-1244`) |
 
 ---
 
 ## 3. Roxburgh & Vorontsov (2003) Separation Ratios $(r_{01}, r_{10}, r_{02})$
 
-As an alternative to parametric surface corrections, Roxburgh & Vorontsov (2003, A&A, 411, 215) showed that ratios of small-to-large frequency separations constructed from 5-point smoothed radial ($l = 0$), dipole ($l = 1$), and quadrupole ($l = 2$) frequencies are insensitive to the outer convective boundary layers and depend almost exclusively on the interior sound-speed gradient (`eval_ratios_r01_r10`, `eval_ratios_r02`):
+As an alternative to parametric surface corrections, Roxburgh & Vorontsov (2003, A&A, 411, 215) showed that ratios of small-to-large frequency separations constructed from 5-point smoothed radial ($l = 0$), dipole ($l = 1$), and quadrupole ($l = 2$) frequencies are insensitive to the outer convective boundary layers and depend almost exclusively on the interior sound-speed gradient (`eval_ratios_r01_r10`, `eval_ratios_r02`, `interpolate_ratio_r010`, `interpolate_ratio_r02`, matching `get_frequency_ratios` and `interpolate_ratios` in `astero_support.f90:363-550`):
 
 $$d_{01}(n) = \frac{1}{8}\left(\nu_{n-1,0} - 4\nu_{n-1,1} + 6\nu_{n,0} - 4\nu_{n,1} + \nu_{n+1,0}\right), \qquad r_{01}(n) = \frac{d_{01}(n)}{\Delta\nu_1(n)},$$
 

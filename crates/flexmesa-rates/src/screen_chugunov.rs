@@ -20,6 +20,13 @@ pub fn screen_chugunov(
     _a2: f64,
     z2: f64,
 ) -> ScreenEval {
+    // Upstream `eval_screen_chugunov` (`rates/private/screen_chugunov.f90:115-120`)
+    // returns unscreened unity (`scor = 1, dscor_dt = 0, dscor_dd = 0`) for
+    // neutral species (`z1 <= 0` or `z2 <= 0`) or hydrogen-dominated plasmas
+    // (`zbar <= 1`).
+    if z1 <= 0.0 || z2 <= 0.0 || zbar <= 1.0 || temp <= 0.0 || den <= 0.0 {
+        return ScreenEval::UNSCREENED;
+    }
     let mav = abar * AMU;
     let ntot = den / mav;
     let ae = (3.0 / (4.0 * PI * ntot * zbar)).powf(ONE_THIRD);

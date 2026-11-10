@@ -39,7 +39,7 @@ pub struct EosGammaDeOutput {
 #[must_use]
 pub fn eos_gamma_de_get(
     abar: f64,
-    zbar: f64,
+    _zbar: f64,
     rho: f64,
     energy: f64,
     gamma: f64,
@@ -49,12 +49,7 @@ pub fn eos_gamma_de_get(
     let t = (gamma - 1.0) * energy / avo_k_div_abar;
     let log10_t = t.log10();
 
-    let dp_dd_c_t = avo_k_div_abar * t;
-    let dp_dt_c_d = avo_k_div_abar * rho;
-
-    let de_dd_c_t = 0.0;
     let cv = avo_k_div_abar / (gamma - 1.0);
-    let de_dt_c_d = cv;
 
     let raw_s = cv * (p / rho.powf(gamma)).ln() + 1.0e9;
     let entropy = if raw_s.is_nan() || raw_s <= 0.0 {
@@ -62,41 +57,43 @@ pub fn eos_gamma_de_get(
     } else {
         raw_s
     };
-    let ds_dd_c_t = -avo_k_div_abar / rho;
-    let ds_dt_c_d = cv / t;
 
     let mut res = [0.0; NUM_EOS_BASIC_RESULTS];
     let mut d_dlnd = [0.0; NUM_EOS_BASIC_RESULTS];
     let mut d_dln_t = [0.0; NUM_EOS_BASIC_RESULTS];
 
     res[I_LN_PGAS] = p.ln();
-    d_dlnd[I_LN_PGAS] = dp_dd_c_t * rho / p;
-    d_dln_t[I_LN_PGAS] = dp_dt_c_d * t / p;
+    d_dlnd[I_LN_PGAS] = 1.0;
+    d_dln_t[I_LN_PGAS] = 1.0;
 
     res[I_LN_E] = energy.ln();
-    d_dlnd[I_LN_E] = de_dd_c_t * rho / energy;
-    d_dln_t[I_LN_E] = de_dt_c_d * t / energy;
+    d_dlnd[I_LN_E] = 0.0;
+    d_dln_t[I_LN_E] = 1.0;
 
+    // Upstream `Get_eos_gamma_DE_Results` (`eos/private/eosde_eval.f90:84-104`)
+    // sets `d_dlnRho_const_T(i_lnS) = 0`, `d_dlnT_const_Rho(i_lnS) = 0`,
+    // `res(i_dS_dT) = 0`, `res(i_dS_dRho) = 0`, `res(i_mu) = 1 / abar`,
+    // `res(i_lnfree_e) = -1e99`, and `res(i_eta) = 0`.
     res[I_LN_S] = entropy.ln();
-    d_dlnd[I_LN_S] = ds_dd_c_t * rho / entropy;
-    d_dln_t[I_LN_S] = ds_dt_c_d * t / entropy;
+    d_dlnd[I_LN_S] = 0.0;
+    d_dln_t[I_LN_S] = 0.0;
 
     res[I_GRAD_AD] = (gamma - 1.0) / gamma;
     res[I_CHI_RHO] = 1.0;
     res[I_CHI_T] = 1.0;
     res[I_CP] = gamma * cv;
     res[I_CV] = cv;
-    res[I_DE_DRHO] = de_dd_c_t;
-    res[I_DS_DT] = ds_dt_c_d;
-    res[I_DS_DRHO] = ds_dd_c_t;
-    d_dlnd[I_DS_DRHO] = -ds_dd_c_t;
-    d_dln_t[I_DS_DT] = -ds_dt_c_d;
+    res[I_DE_DRHO] = 0.0;
+    res[I_DS_DT] = 0.0;
+    res[I_DS_DRHO] = 0.0;
+    d_dlnd[I_DS_DRHO] = 0.0;
+    d_dln_t[I_DS_DT] = 0.0;
 
-    res[I_MU] = abar;
-    res[I_LN_FREE_E] = (zbar.max(1.0e-10) / abar).ln();
+    res[I_MU] = 1.0 / abar;
+    res[I_LN_FREE_E] = -1.0e99;
     res[I_GAMMA1] = gamma;
     res[I_GAMMA3] = gamma;
-    res[I_ETA] = -20.0;
+    res[I_ETA] = 0.0;
     res[I_FRAC_IDEAL] = 1.0;
 
     EosGammaDeOutput {

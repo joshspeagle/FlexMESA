@@ -40,7 +40,8 @@ pub use optimize::{
 };
 pub use ratios_chi2::{
     eval_astero_chi2, eval_frequency_ratios_r01_r10, eval_frequency_ratios_r02,
-    match_modes_by_degree, AsteroChi2Weights,
+    interpolate_ratio_r010, interpolate_ratio_r02, match_modes_by_degree,
+    AsteroChi2Weights,
 };
 pub use scaling::{
     eval_acoustic_profile, eval_delta_nu_asymptotic,
@@ -51,7 +52,8 @@ pub use scaling::{
 };
 pub use surface_corr::{
     eval_combined_corr, eval_cubic_corr, eval_kjeldsen_corr,
-    eval_power_law_corr, eval_sonoi_corr, interpolate_l0_inertia,
+    eval_power_law_corr, eval_power_law_corr_radial_only, eval_sonoi_corr,
+    eval_sonoi_corr_radial_only, interpolate_l0_inertia,
 };
 
 #[cfg(test)]
@@ -184,5 +186,55 @@ mod tests {
         assert!(f_pq < 1.0e-10);
         assert!((x_pq[0] - target[0]).abs() < 1.0e-5);
         assert!((x_pq[1] - target[1]).abs() < 1.0e-5);
+    }
+
+    #[test]
+    fn test_fidelity3_radial_only_surface_corr_and_ratio_interpolators() {
+        let nu_max = 3090.0_f64;
+        let l0_freqs: Vec<f64> =
+            (18..=22).map(|n| 135.0 * (f64::from(n) + 1.45)).collect();
+        let l0_inertias = vec![1.0e-7_f64; l0_freqs.len()];
+        let sigmas = vec![0.10_f64; l0_freqs.len()];
+
+        let target_a = -4.5_f64;
+        let target_b = 4.2_f64;
+        let l0_obs: Vec<f64> = l0_freqs
+            .iter()
+            .map(|&f| f + target_a * pow(f / nu_max, target_b))
+            .collect();
+        let (corr_ro, a_ro, b_ro) = eval_power_law_corr_radial_only(
+            &l0_obs,
+            &sigmas,
+            &l0_freqs,
+            &l0_inertias,
+            &l0_freqs,
+            &l0_inertias,
+            nu_max,
+            1.0,
+        );
+        assert!((a_ro - target_a).abs() < 1.0e-6);
+        assert!((b_ro - target_b).abs() < 1.0e-6);
+        for (c, o) in corr_ro.iter().zip(&l0_obs) {
+            assert!((c - o).abs() < 1.0e-6);
+        }
+
+        let l1_freqs: Vec<f64> = l0_freqs.iter().map(|&f| f + 62.0).collect();
+        let l2_freqs: Vec<f64> =
+            l0_freqs[1..].iter().map(|&f| f - 9.0).collect();
+        let l2_sigmas = vec![0.10_f64; l2_freqs.len()];
+        let (r02, sig_r02) = eval_frequency_ratios_r02(
+            &l0_freqs, &sigmas, &l1_freqs, &sigmas, &l2_freqs, &l2_sigmas,
+        );
+        assert_eq!(r02.len(), l0_freqs.len() - 1);
+        for (&r, &s) in r02.iter().zip(&sig_r02) {
+            assert!((r - 9.0 / 135.0).abs() < 1.0e-12);
+            assert!(s > 0.0);
+        }
+
+        let mid_f = 0.5 * (l0_freqs[1] + l0_freqs[2]);
+        let r02_interp = interpolate_ratio_r02(mid_f, &l0_freqs, &r02);
+        assert!((r02_interp - 9.0 / 135.0).abs() < 1.0e-12);
+        let r010_interp = interpolate_ratio_r010(mid_f, &l0_freqs[1..], &r02);
+        assert!((r010_interp - 9.0 / 135.0).abs() < 1.0e-12);
     }
 }

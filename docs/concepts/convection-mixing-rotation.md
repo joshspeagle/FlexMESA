@@ -38,12 +38,17 @@ Because `FlexMESA` applies the Implicit Function Theorem at the converged scalar
 
 ## 2. Semiconvection, Thermohaline Mixing & Convective Boundaries
 
-### 2.1 Semiconvection & Salt-Finger Thermohaline Mixing (`flexmesa.turb`)
-- **Langer, El Eid, & Fricke (1985) Semiconvection (`set_semiconvection`)**: Evaluates compositional diffusion $D_{\mathrm{sc}}$ and the modified temperature gradient $\nabla_T$ in Ledoux-stable, Schwarzschild-unstable zones ($\nabla_{\mathrm{ad}} < \nabla_r < \nabla_L$) where a stabilizing mean-molecular-weight gradient $\nabla_\mu > 0$ inhibits overturning convection:
+### 2.1 Semiconvection, Salt-Finger Thermohaline Mixing & Brassard Brunt-Väisälä $B_k$ (`flexmesa.turb`, `flexmesa.star`)
+- **Brassard et al. (1991) Finite-Difference EOS vs. $\nabla_\mu$ Composition Gradient (`do_brunt_b`)**: When `use_brunt_gradmux_form = false` (default, matching `star/private/brunt.f90:236-306`), `do_brunt_b` evaluates `eos_dt_get` at the interpolated face state $(\rho_f, T_f)$ with the compositions $\mathbf{X}_k$ and $\mathbf{X}_{k-1}$ of the adjacent cells:
+
+  $$B_k = \frac{\ln\!\left[P_{\mathrm{rad},f} + P_{\mathrm{gas}}(\rho_f, T_f, \mathbf{X}_k)\right] - \ln\!\left[P_{\mathrm{rad},f} + P_{\mathrm{gas}}(\rho_f, T_f, \mathbf{X}_{k-1})\right]}{(\ln P_{\mathrm{eos},k-1} - \ln P_{\mathrm{eos},k})\,\chi_{T,f}},$$
+
+  capturing partial-ionization and Coulomb/degeneracy shifts across chemical boundaries in both gas- and radiation-dominated interiors, while `use_brunt_gradmux_form = true` evaluates $B_k = (\chi_{\rho,f}/\chi_{T,f})\,(\Delta \ln \mu / \Delta \ln P_{\mathrm{eos}})$.
+- **Langer, El Eid, & Fricke (1985) Semiconvection (`set_semiconvection` in `set_mlt_vars`)**: In Ledoux-stable, Schwarzschild-unstable faces ($\nabla_{\mathrm{ad}} < \nabla_r < \nabla_L$, $B_k > 0$) with `use_ledoux_criterion = true` and `alpha_semiconvection > 0`, `set_mlt_vars` dispatches to `set_semiconvection` (`Langer85GradTIsGradr` or `Langer85`) to evaluate compositional diffusion $D_{\mathrm{sc}}$ and $\nabla_T$ while zeroing `mlt_vc` (`turb_support.f90:440`):
 
   $$D_{\mathrm{sc}} = \alpha_{\mathrm{sc}}\,\frac{K_{\mathrm{rad}}}{6 c_P \rho}\,\frac{\nabla_r - \nabla_{\mathrm{ad}}}{\nabla_L - \nabla_r}, \qquad K_{\mathrm{rad}} = \frac{4 a c T^3}{3 \kappa \rho}.$$
 
-- **Salt-Finger Thermohaline Mixing (`set_thermohaline`)**: Implements Kippenhahn et al. (1980), Traxler, Garaud, & Stellmach (2011), and Brown, Garaud, & Stellmach (2013) double-diffusive fingering convection driven by an inverted mean-molecular-weight gradient ($\nabla_\mu < 0$ in $\nabla_r < \nabla_{\mathrm{ad}}$ radiative zones, such as off-center $^3\mathrm{He}$ burning or planetary pollution).
+- **Salt-Finger Thermohaline Mixing (`set_thermohaline` in `set_mlt_vars`)**: In Schwarzschild-stable faces ($\nabla_r < \nabla_L$) destabilized by an inverted mean-molecular-weight gradient ($B_k < 0$) with `thermohaline_coeff > 0`, `set_mlt_vars` dispatches to `set_thermohaline` (`Kippenhahn`, `TraxlerGaraudStellmach11`, or `BrownGaraudStellmach13`) to compute double-diffusive salt-finger diffusivity $D_{\mathrm{thrm}}$.
 
 ### 2.2 Overshooting, Convective Premixing (`CPM`) & Predictive Mixing (`flexmesa.star`)
 - **Exponential & Step Convective Overshooting (`OvershootConfig`, `update_mixing`)**: `model.update_mixing()` (backed by `flexmesa_star::locate_convection_boundaries` in Safe Rust) detects sub-cell Schwarzschild or Ledoux sign crossings $(\nabla_r - \nabla_{\mathrm{crit}} = 0)$ and extends the convective diffusion coefficient beyond the boundary from an anchor point $r_0$ at distance $f_0 H_P$ inside the convection zone:

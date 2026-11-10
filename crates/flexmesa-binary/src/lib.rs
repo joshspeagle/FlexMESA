@@ -52,7 +52,8 @@ pub use edd_wind::{
     eval_bondi_hoyle_wind_fraction, eval_mdot_edd, eval_tout_wind_enhancement,
 };
 pub use jdot_tides::{
-    eval_edot_tidal_hut, eval_jdot_gr, eval_jdot_ls, eval_jdot_mb,
+    eval_edot_gr, eval_edot_tidal_hut, eval_jdot_gr, eval_jdot_ls,
+    eval_jdot_ls_with_winds, eval_jdot_mb, eval_jdot_missing_wind,
     eval_jdot_ml, eval_k_div_t_convective, eval_k_div_t_radiative, eval_tsync,
     hut_f2, hut_f3, hut_f4, hut_f5,
 };
@@ -212,5 +213,52 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn test_fidelity3_anomaly_grid_edot_gr_jdot_ls_and_contact_solver() {
+        for n in [8_usize, 9_usize, 16_usize] {
+            let (theta, time_co) = build_anomaly_grid(n, 0.4);
+            assert_eq!(theta.len(), n);
+            assert_eq!(time_co.len(), n);
+            assert!((time_co[0]).abs() < 1.0e-15);
+            for w in time_co.windows(2) {
+                assert!(
+                    w[1] > w[0] && w[1] < 1.0,
+                    "non-monotonic time_co for n={n}: {time_co:?}"
+                );
+            }
+        }
+
+        let edot = eval_edot_gr(1.4 * MSUN, 1.4 * MSUN, 2.0 * RSUN, 0.3);
+        assert!(edot < 0.0 && edot.is_finite());
+
+        let jdot_ls_wind = eval_jdot_ls_with_winds(
+            1.0e50, 0.9e50, -1.0e18, 1.0e17, 0.5e50, 0.5e50, 0.0, 0.0, 1.0e14,
+        );
+        assert!((jdot_ls_wind / 1.0e35).abs() < 1.0e-14);
+
+        let jdot_mw = eval_jdot_missing_wind(
+            false, 1.0e18, -2.0e18, 1.0, -0.5e18, 1.0e17,
+        );
+        assert!((jdot_mw - (-0.5e35)).abs() / 0.5e35 < 1.0e-14);
+        let jdot_mw_neg = eval_jdot_missing_wind(
+            false, -1.0e18, -2.0e18, 0.5, -0.5e18, 1.0e17,
+        );
+        assert!((jdot_mw_neg - (-1.0e35)).abs() / 1.0e35 < 1.0e-14);
+
+        let solver = ImplicitRlofSolver::default();
+        let target_mdot = -2.0e-7 * MSUN / SECYER;
+        let q = 0.8_f64;
+        let slope_c = q.powf(-0.52);
+        let (mdot_c, iters_c, obj_c) =
+            solver.solve_contact_mdot(-5.0e-8 * MSUN / SECYER, q, 30, |mdot| {
+                let gap_d = 0.02 * (1.0 - 0.5 * mdot / target_mdot);
+                let gap_a = 0.01 * slope_c;
+                (gap_d, gap_a)
+            });
+        assert!(iters_c <= 30);
+        assert!(obj_c.abs() <= solver.tolerance);
+        assert!((mdot_c - target_mdot).abs() / target_mdot.abs() < 1.0e-2);
     }
 }

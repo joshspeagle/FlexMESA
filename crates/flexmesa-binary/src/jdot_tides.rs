@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LGPL-3.0-or-later
 //! Orbital angular momentum loss ($\dot{J}_{\mathrm{gr}}, \dot{J}_{\mathrm{ml}},
 //! \dot{J}_{\mathrm{mb}}, \dot{J}_{\mathrm{ls}}$) and tidal synchronization
 //! and circularization (Hut 1981; Zahn 1977; Hurley, Tout & Pols 2002).
@@ -119,7 +120,94 @@ pub fn eval_jdot_ls(
     s_accretor: f64,
     dt: f64,
 ) -> f64 {
-    ((s_donor_old - s_donor) + (s_accretor_old - s_accretor)) / dt.max(1.0e-99)
+    eval_jdot_ls_with_winds(
+        s_donor_old,
+        s_donor,
+        0.0,
+        0.0,
+        s_accretor_old,
+        s_accretor,
+        0.0,
+        0.0,
+        dt,
+    )
+}
+
+/// Evaluates spin-orbit coupling torque $\dot{J}_{\mathrm{ls}}$ ($\mathrm{g\,cm^2\,s^{-2}}$)
+/// subtracting stellar wind spin-down $\dot{M}_{\mathrm{wind}}\,j_{\mathrm{surf}}\,\Delta t$
+/// from each component's spin angular momentum change (`default_jdot_ls` in
+/// `binary/private/binary_jdot.f90:152-173`).
+#[allow(clippy::too_many_arguments)]
+#[must_use]
+pub fn eval_jdot_ls_with_winds(
+    s_donor_old: f64,
+    s_donor: f64,
+    mdot_wind_donor: f64,
+    j_surf_donor: f64,
+    s_accretor_old: f64,
+    s_accretor: f64,
+    mdot_wind_accretor: f64,
+    j_surf_accretor: f64,
+    dt: f64,
+) -> f64 {
+    let dt_safe = dt.max(1.0e-99);
+    let dj_donor =
+        s_donor_old - s_donor + mdot_wind_donor * j_surf_donor * dt_safe;
+    let dj_accretor = s_accretor_old - s_accretor
+        + mdot_wind_accretor * j_surf_accretor * dt_safe;
+    (dj_donor + dj_accretor) / dt_safe
+}
+
+/// Evaluates the missing wind spin angular momentum torque on the accretor
+/// $\dot{J}_{\mathrm{missing\_wind}}$ ($\mathrm{g\,cm^2\,s^{-2}}$) when stellar
+/// mass accretion partially or fully masks wind mass loss inside the accretor's
+/// net $\dot{M}_a$ (`default_jdot_missing_wind` in
+/// `binary/private/binary_jdot.f90:176-199`).
+#[must_use]
+pub fn eval_jdot_missing_wind(
+    is_point_mass: bool,
+    mstar_dot_accretor: f64,
+    mtransfer_rate: f64,
+    fixed_xfer_fraction: f64,
+    mdot_system_wind_accretor: f64,
+    j_surf_accretor: f64,
+) -> f64 {
+    if is_point_mass {
+        return 0.0;
+    }
+    let mdot_missing = if mstar_dot_accretor < 0.0 {
+        mtransfer_rate * fixed_xfer_fraction
+    } else {
+        mdot_system_wind_accretor
+    };
+    mdot_missing * j_surf_accretor
+}
+
+/// Evaluates the Peters (1964, PhRv 136, B1224) gravitational-wave orbital
+/// circularization rate $\dot{e}_{\mathrm{gr}}$ ($\mathrm{s}^{-1}$)
+/// (`default_edot_gr` in `binary/private/binary_edot.f90:92-116`):
+///
+/// $$\dot{e}_{\mathrm{gr}} = -\frac{304\,G^3 M_1 M_2 (M_1 + M_2)}{15\,c^5 a^4 (1 - e^2)^{5/2}}\,
+///   e\left(1 + \frac{121}{304} e^2\right)$$
+#[must_use]
+pub fn eval_edot_gr(
+    m_donor: f64,
+    m_accretor: f64,
+    separation: f64,
+    eccentricity: f64,
+) -> f64 {
+    if eccentricity <= 0.0 || separation <= 0.0 {
+        return 0.0;
+    }
+    let g3 = STANDARD_CGRAV * STANDARD_CGRAV * STANDARD_CGRAV;
+    let c5 = CLIGHT * CLIGHT * CLIGHT * CLIGHT * CLIGHT;
+    let a2 = separation * separation;
+    let a4 = a2 * a2;
+    let e2 = eccentricity * eccentricity;
+    let one_m_e2 = (1.0 - e2).max(1.0e-12);
+    -(304.0 * g3 * m_donor * m_accretor * (m_donor + m_accretor) * eccentricity
+        / (15.0 * c5 * a4 * pow(one_m_e2, 2.5)))
+        * (1.0 + (121.0 / 304.0) * e2)
 }
 
 /// Hut (1981, A&A 99, 126 Eq. 11) eccentricity polynomial

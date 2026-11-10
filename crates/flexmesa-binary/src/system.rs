@@ -9,7 +9,9 @@ use flexmesa_const::{MSUN, SECDAY, SECYER};
 use flexmesa_star::StarModel;
 
 use crate::edd_wind::{bh_initial_equatorial_mass, eval_mdot_edd};
-use crate::jdot_tides::{eval_jdot_gr, eval_jdot_mb, eval_jdot_ml};
+use crate::jdot_tides::{
+    eval_edot_gr, eval_jdot_gr, eval_jdot_mb, eval_jdot_ml,
+};
 use crate::mdot::{
     eval_kolb_mdot_thick, eval_ritter_mdot_thin, ImplicitRlofSolver,
 };
@@ -205,28 +207,23 @@ impl BinarySystem {
     ) -> (f64, f64) {
         let m2_old = self.accretor_mass_g();
         let raw_acc = -xfer_frac * mdot_tr;
-        match &self.companion {
-            BinaryCompanion::PointMass {
-                m_bh_zero_eq_g,
-                is_black_hole,
-                ..
-            } => {
-                if *is_black_hole {
-                    let kappa = 0.2 * (1.0 + self.donor.xh_mass[0]);
-                    let (mdot_edd, eta) =
-                        eval_mdot_edd(m2_old, *m_bh_zero_eq_g, kappa);
-                    let capped = raw_acc.min(mdot_edd);
-                    let sys_tr_acc =
-                        (-raw_acc + capped) + self.mass_transfer_beta * mdot_tr;
-                    let m2_new = m2_old + (1.0 - eta) * capped * dt;
-                    (m2_new, sys_tr_acc)
-                } else {
-                    (m2_old + raw_acc * dt, self.mass_transfer_beta * mdot_tr)
-                }
-            }
-            BinaryCompanion::Star(_) => {
-                (m2_old + raw_acc * dt, self.mass_transfer_beta * mdot_tr)
-            }
+        if let BinaryCompanion::PointMass {
+            m_bh_zero_eq_g,
+            is_black_hole: true,
+            ..
+        } = &self.companion
+        {
+            let kappa = 0.2 * (1.0 + self.donor.xh_mass[0]);
+            let (mdot_edd, eta) = eval_mdot_edd(m2_old, *m_bh_zero_eq_g, kappa);
+            let capped = raw_acc.min(mdot_edd);
+            // Include the radiated energy fraction `eta * capped` in the
+            // system mass-loss rate (`binary/private/binary_mdot.f90:582-618`).
+            let sys_tr_acc = (-raw_acc + (1.0 - eta) * capped)
+                + self.mass_transfer_beta * mdot_tr;
+            let m2_new = m2_old + (1.0 - eta) * capped * dt;
+            (m2_new, sys_tr_acc)
+        } else {
+            (m2_old + raw_acc * dt, self.mass_transfer_beta * mdot_tr)
         }
     }
 
@@ -352,6 +349,16 @@ impl BinarySystem {
         );
         self.jdot = jdot_gr + jdot_mb + jdot_ml;
         self.angular_momentum_j = (j_old + self.jdot * dt).max(1.0e40);
+        if self.eccentricity > 0.0 {
+            let edot_gr = eval_edot_gr(
+                m1_new,
+                m2_new,
+                self.separation,
+                self.eccentricity,
+            );
+            self.eccentricity =
+                (self.eccentricity + edot_gr * dt).clamp(0.0, 0.9999_9999);
+        }
         self.separation = separation_from_j_orb(
             m1_new,
             m2_new,
@@ -397,5 +404,23 @@ impl BinarySystem {
         let (next_dt, reason) = binary_pick_next_timestep(&ctrl);
         self.max_timestep_sec = next_dt;
         (next_dt, reason)
+    }
+
+    /// Checks whether the companion star overfills its Roche lobe more deeply
+    /// than the current donor ($g_2 > g_1$) and swaps the donor and accretor
+    /// roles when `keep_donor_fixed` is `false` (`binary_evolve.f90:240-290`).
+    pub fn check_donor_switch(&mut self, keep_donor_fixed: bool) -> bool {
+        if keep_donor_fixed
+            || self.rl_relative_gap[1] <= self.rl_relative_gap[0]
+        {
+            return false;
+        }
+        if let BinaryCompanion::Star(s2) = &mut self.companion {
+            std::mem::swap(&mut self.donor, s2);
+            self.rl.swap(0, 1);
+            self.rl_relative_gap.swap(0, 1);
+            return true;
+        }
+        false
     }
 }

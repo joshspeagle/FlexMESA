@@ -146,8 +146,15 @@ pub fn build_anomaly_grid(
         let mut t_norm = (2.0 * (sqrt_factor * (0.5 * theta).tan()).atan()
             - e_sqrt_1me2 * theta.sin() / (1.0 + e * theta.cos()))
             / (2.0 * PI);
-        if i > n / 2 {
+        // For theta in (pi, 2*pi), atan(sqrt_factor * tan(theta/2)) < 0
+        // (and at theta = pi, tan(pi/2) -> -inf in IEEE-754 float64), so
+        // adding 1.0 whenever `t_norm < 0.0` (or `i > n / 2` in 1-based even-n
+        // Fortran `binary_evolve.f90:129-131`) maps `t_norm` monotonically
+        // onto `[0, 1)` for both even and odd `anomaly_steps`.
+        if t_norm < -1.0e-15 {
             t_norm += 1.0;
+        } else if t_norm < 0.0 {
+            t_norm = 0.0;
         }
         time_co.push(t_norm);
     }

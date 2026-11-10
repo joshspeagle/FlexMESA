@@ -20,7 +20,9 @@ use crate::model::StarModel;
 use crate::pulse_modes::{
     eval_astero_scaling_dnu_numax_uhz, eval_target_mode_frequency_and_growth,
 };
-use crate::rsp_build::{eval_rsp_2nd_crossing_edges, eval_rsp_lina_modes, RspLinaMode};
+use crate::rsp_build::{
+    eval_rsp_2nd_crossing_edges, eval_rsp_lina_modes, RspLinaMode,
+};
 
 /// Evaluates `LINA` radial pulsation modes and optional target fundamental period
 /// from `model.controls`.
@@ -34,21 +36,9 @@ fn eval_model_rsp_lina_modes(
         .get(1)
         .copied()
         .filter(|&p| p > 0.0)
+        .or_else(|| model.controls.x_ctrl.get(7).copied().filter(|&p| p > 0.0))
         .or_else(|| {
-            model
-                .controls
-                .x_ctrl
-                .get(7)
-                .copied()
-                .filter(|&p| p > 0.0)
-        })
-        .or_else(|| {
-            model
-                .controls
-                .x_ctrl
-                .get(23)
-                .copied()
-                .filter(|&p| p > 0.0)
+            model.controls.x_ctrl.get(23).copied().filter(|&p| p > 0.0)
         });
     let rsp_l = if model.controls.rsp_l > 0.0 {
         model.controls.rsp_l
@@ -321,8 +311,11 @@ impl StarExtras for Tier4CaseExtras {
                     model.controls.rsp_teff
                 );
                 for m in &modes {
-                    let _ =
-                        write!(line, "{:16.5E}{:16.5E}", m.period_days, m.growth_rate);
+                    let _ = write!(
+                        line,
+                        "{:16.5E}{:16.5E}",
+                        m.period_days, m.growth_rate
+                    );
                 }
                 line.push('\n');
                 let out_path = dir.join(lina_file);
@@ -373,12 +366,8 @@ impl StarExtras for Tier4CaseExtras {
     }
 
     fn extras_finish_step(&mut self, model: &mut StarModel) -> ExtrasDirective {
-        let target_cycle = model
-            .controls
-            .x_integer_ctrl
-            .get(1)
-            .copied()
-            .unwrap_or(0);
+        let target_cycle =
+            model.controls.x_integer_ctrl.get(1).copied().unwrap_or(0);
         if (self.case_name.starts_with("rsp_")
             || self.case_name.starts_with("dev_rsp2_"))
             && target_cycle > 0

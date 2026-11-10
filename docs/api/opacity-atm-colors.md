@@ -60,6 +60,14 @@ print(
 
 ::: flexmesa.kap.jax_kernels
 
+::: flexmesa.kap.jax_interp
+
+::: flexmesa.kap.jax_co_lowt
+
+::: flexmesa.kap.tables_jax
+
+::: flexmesa.kap.tables_co_lowt_jax
+
 ---
 
 ## Model Atmospheres & Outer Boundary Conditions (`flexmesa.atm`)

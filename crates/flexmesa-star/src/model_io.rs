@@ -452,6 +452,9 @@ pub fn write_photo_bytes(model: &StarModel) -> Vec<u8> {
         &model.aux.etrb,
         &model.aux.alpha_rti,
         &model.aux.w_div_wc,
+        &model.mlt_vc,
+        &model.aux.mlt_vc_old,
+        &model.aux.burn_avg_epsnuc,
     ] {
         write_f64_slice(&mut buf, s);
     }
@@ -576,6 +579,11 @@ pub fn read_photo_bytes(
     ] {
         *dst = read_f64_vec(&mut pos, nz)?;
     }
+    let saved_mlt_vc = read_f64_vec(&mut pos, nz)?;
+    let saved_mlt_vc_old = read_f64_vec(&mut pos, nz)?;
+    model.aux.burn_avg_epsnuc = read_f64_vec(&mut pos, nz)?;
+    model.mlt_vc.clone_from(&saved_mlt_vc);
+    model.aux.mlt_vc_old.clone_from(&saved_mlt_vc_old);
     expect_part(&mut pos, 6)?;
     expect_part(&mut pos, 7)?;
 
@@ -586,6 +594,8 @@ pub fn read_photo_bytes(
     let dt_photo = model.dt;
     crate::struct_burn_mix::refresh_mixing_state(&mut model, dt_photo, &[]);
     model.save_start_values();
+    model.mlt_vc = saved_mlt_vc;
+    model.aux.mlt_vc_old = saved_mlt_vc_old;
 
     Ok(model)
 }

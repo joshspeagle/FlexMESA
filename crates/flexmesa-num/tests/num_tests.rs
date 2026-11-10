@@ -36,7 +36,6 @@
     clippy::type_complexity,
     clippy::unnecessary_wraps
 )]
-
 #![allow(clippy::doc_markdown, clippy::float_cmp)]
 
 use flexmesa_autodiff::DualOrder1;
@@ -358,7 +357,11 @@ fn test_newuoa_and_bobyqa_match_upstream_chebyquad_suite() {
         let res_new =
             newuoa(n, npt, &mut x_new, rhobeg, 1e-6, 5_000, 1e99, chebyquad)
                 .unwrap();
-        assert!(res_new.f_min.abs() <= 1e-10, "newuoa N={n} f={}", res_new.f_min);
+        assert!(
+            res_new.f_min.abs() <= 1e-10,
+            "newuoa N={n} f={}",
+            res_new.f_min
+        );
 
         let mut x_bob = x0.clone();
         let xl = vec![-1.0_f64; n];
@@ -367,7 +370,11 @@ fn test_newuoa_and_bobyqa_match_upstream_chebyquad_suite() {
             n, npt, &mut x_bob, &xl, &xu, rhobeg, 1e-6, 5_000, 1e99, chebyquad,
         )
         .unwrap();
-        assert!(res_bob.f_min.abs() <= 1e-10, "bobyqa N={n} f={}", res_bob.f_min);
+        assert!(
+            res_bob.f_min.abs() <= 1e-10,
+            "bobyqa N={n} f={}",
+            res_bob.f_min
+        );
     }
 }
 
@@ -385,50 +392,97 @@ fn test_nm_simplex_matches_all_six_upstream_benchmarks() {
         centroid_weight_power: 1.0,
         ..SimplexConfig::default()
     };
-    let fr4_cfg = SimplexConfig { enforce_bounds: false, ..base };
-    let r_fr4 = nm_simplex(4, &[-2.0; 4], &[6.0; 4], &[0.5, -2.0, 0.5, -2.0], &fr4_cfg, |x| {
-        let mut s = 0.0;
-        for i in 0..2 {
-            let (x1, x2) = (x[2 * i], x[2 * i + 1]);
-            let t1 = -13.0 + x1 + ((5.0 - x2) * x2 - 2.0) * x2;
-            let t2 = -29.0 + x1 + ((1.0 + x2) * x2 - 14.0) * x2;
-            s += t1 * t1 + t2 * t2;
-        }
-        Ok(s)
-    }).unwrap();
+    let fr4_cfg = SimplexConfig {
+        enforce_bounds: false,
+        ..base
+    };
+    let r_fr4 = nm_simplex(
+        4,
+        &[-2.0; 4],
+        &[6.0; 4],
+        &[0.5, -2.0, 0.5, -2.0],
+        &fr4_cfg,
+        |x| {
+            let mut s = 0.0;
+            for i in 0..2 {
+                let (x1, x2) = (x[2 * i], x[2 * i + 1]);
+                let t1 = -13.0 + x1 + ((5.0 - x2) * x2 - 2.0) * x2;
+                let t2 = -29.0 + x1 + ((1.0 + x2) * x2 - 14.0) * x2;
+                s += t1 * t1 + t2 * t2;
+            }
+            Ok(s)
+        },
+    )
+    .unwrap();
     assert!(r_fr4.f_min < 1e-10);
 
     let r_er = nm_simplex(4, &[-2.0; 4], &[5.0; 4], &[3.0; 4], &base, |x| {
-        Ok((0..3).map(|i| 100.0 * (x[i + 1] - x[i] * x[i]).powi(2) + (1.0 - x[i]).powi(2)).sum())
-    }).unwrap();
+        Ok((0..3)
+            .map(|i| {
+                100.0 * (x[i + 1] - x[i] * x[i]).powi(2) + (1.0 - x[i]).powi(2)
+            })
+            .sum())
+    })
+    .unwrap();
     assert!(r_er.f_min < 1e-10);
 
-    let r_wd = nm_simplex(4, &[-4.0, -2.0, -4.0, -2.0], &[2.0; 4], &[-3.0, -1.0, -3.0, -1.0], &base, |x| {
-        Ok(100.0 * (x[1] - x[0] * x[0]).powi(2) + (1.0 - x[0]).powi(2)
-            + 90.0 * (x[3] - x[2] * x[2]).powi(2) + (1.0 - x[2]).powi(2)
-            + 100.0 * (x[1] + x[3] - 2.0).powi(2) + (x[1] - x[3]).powi(2) / 10.0_f64.sqrt())
-    }).unwrap();
+    let r_wd = nm_simplex(
+        4,
+        &[-4.0, -2.0, -4.0, -2.0],
+        &[2.0; 4],
+        &[-3.0, -1.0, -3.0, -1.0],
+        &base,
+        |x| {
+            Ok(100.0 * (x[1] - x[0] * x[0]).powi(2)
+                + (1.0 - x[0]).powi(2)
+                + 90.0 * (x[3] - x[2] * x[2]).powi(2)
+                + (1.0 - x[2]).powi(2)
+                + 100.0 * (x[1] + x[3] - 2.0).powi(2)
+                + (x[1] - x[3]).powi(2) / 10.0_f64.sqrt())
+        },
+    )
+    .unwrap();
     assert!(r_wd.f_min < 1e-10);
 
     let r_ble = nm_simplex(4, &[-2.0; 4], &[5.0; 4], &[3.0; 4], &base, |x| {
-        Ok((0..2).map(|i| {
-            let (u, v) = (x[2 * i], x[2 * i + 1]);
-            (1.5 - u * (1.0 - v)).powi(2) + (2.25 - u * (1.0 - v * v)).powi(2)
-                + (2.625 - u * (1.0 - v * v * v)).powi(2)
-        }).sum())
-    }).unwrap();
+        Ok((0..2)
+            .map(|i| {
+                let (u, v) = (x[2 * i], x[2 * i + 1]);
+                (1.5 - u * (1.0 - v)).powi(2)
+                    + (2.25 - u * (1.0 - v * v)).powi(2)
+                    + (2.625 - u * (1.0 - v * v * v)).powi(2)
+            })
+            .sum())
+    })
+    .unwrap();
     assert!(r_ble.f_min < 1e-10);
 
-    let r_ps = nm_simplex(4, &[-1.0; 4], &[3.0; 4], &[3.0, -1.0, 0.0, 1.0], &base, |x| {
-        Ok((x[0] + 10.0 * x[1]).powi(2) + 5.0 * (x[2] - x[3]).powi(2)
-            + (x[1] - 2.0 * x[2]).powi(4) + 10.0 * (x[0] - x[3]).powi(4))
-    }).unwrap();
+    let r_ps = nm_simplex(
+        4,
+        &[-1.0; 4],
+        &[3.0; 4],
+        &[3.0, -1.0, 0.0, 1.0],
+        &base,
+        |x| {
+            Ok((x[0] + 10.0 * x[1]).powi(2)
+                + 5.0 * (x[2] - x[3]).powi(2)
+                + (x[1] - 2.0 * x[2]).powi(4)
+                + 10.0 * (x[0] - x[3]).powi(4))
+        },
+    )
+    .unwrap();
     assert!(r_ps.f_min < 1e-10);
 
     let r_tr = nm_simplex(4, &[-0.1; 4], &[0.1; 4], &[0.01; 4], &base, |x| {
         let sc: f64 = x.iter().map(|&v| v.cos()).sum();
-        Ok((0..4).map(|i| (4.0 - sc + ((i + 1) as f64) * (1.0 - x[i].cos()) - x[i].sin()).powi(2)).sum())
-    }).unwrap();
+        Ok((0..4)
+            .map(|i| {
+                (4.0 - sc + ((i + 1) as f64) * (1.0 - x[i].cos()) - x[i].sin())
+                    .powi(2)
+            })
+            .sum())
+    })
+    .unwrap();
     assert!(r_tr.f_min < 1e-10);
 }
 
@@ -440,32 +494,59 @@ fn test_brent_all_ten_minimization_and_five_root_functions() {
     let machep = f64::EPSILON;
     let e = machep.sqrt();
     for m in [0.0, 100.0] {
-        let (x, fx) = glomin(10_000, 7.0, 9.0, 8.0, m, e, e, |x| Ok(2.0 - x)).unwrap();
+        let (x, fx) =
+            glomin(10_000, 7.0, 9.0, 8.0, m, e, e, |x| Ok(2.0 - x)).unwrap();
         assert!((x - 9.0).abs() <= 1e-6 && (fx - (-7.0)).abs() <= 1e-6);
     }
     for m in [2.0, 2.1] {
-        let (x, fx) = glomin(10_000, -1.0, 2.0, 0.5, m, e, e, |x| Ok(x * x)).unwrap();
+        let (x, fx) =
+            glomin(10_000, -1.0, 2.0, 0.5, m, e, e, |x| Ok(x * x)).unwrap();
         assert!(x.abs() <= 1e-6 && fx.abs() <= 1e-12);
     }
     for m in [14.0, 28.0] {
-        let (x, fx) = glomin(10_000, -0.5, 2.0, 0.75, m, e, e, |x| Ok(x * x * (x + 1.0))).unwrap();
+        let (x, fx) =
+            glomin(10_000, -0.5, 2.0, 0.75, m, e, e, |x| Ok(x * x * (x + 1.0)))
+                .unwrap();
         assert!(x.abs() <= 1e-5 && fx.abs() <= 1e-10);
     }
-    let (x4, fx4) = glomin(10_000, -10.0, 10.0, 0.0, 72.0, e, e, |x| Ok((x + x.sin()) * (-x * x).exp())).unwrap();
+    let (x4, fx4) = glomin(10_000, -10.0, 10.0, 0.0, 72.0, e, e, |x| {
+        Ok((x + x.sin()) * (-x * x).exp())
+    })
+    .unwrap();
     assert!((x4 - (-0.679_578_66)).abs() <= 1e-5 && fx4 < -0.824);
-    let (x5, fx5) = glomin(10_000, -10.0, 10.0, 0.0, 72.0, e, e, |x| Ok((x - x.sin()) * (-x * x).exp())).unwrap();
-    assert!((x5 - (-0.679_578_66)).abs() <= 2.0 && fx5 < -0.05, "x5={x5}, fx5={fx5}");
+    let (x5, fx5) = glomin(10_000, -10.0, 10.0, 0.0, 72.0, e, e, |x| {
+        Ok((x - x.sin()) * (-x * x).exp())
+    })
+    .unwrap();
+    assert!(
+        (x5 - (-0.679_578_66)).abs() <= 2.0 && fx5 < -0.05,
+        "x5={x5}, fx5={fx5}"
+    );
 
     let eps = 10.0 * e;
-    let (xg1, fg1) = local_min(10_000, 0.0, std::f64::consts::PI, eps, eps, |x| Ok((x - 2.0).powi(2) + 1.0)).unwrap();
+    let (xg1, fg1) =
+        local_min(10_000, 0.0, std::f64::consts::PI, eps, eps, |x| {
+            Ok((x - 2.0).powi(2) + 1.0)
+        })
+        .unwrap();
     assert!((xg1 - 2.0).abs() <= 1e-6 && (fg1 - 1.0).abs() <= 1e-12);
-    let (xg2, _) = local_min(10_000, 0.0, 1.0, eps, eps, |x| Ok(x * x + (-x).exp())).unwrap();
+    let (xg2, _) =
+        local_min(10_000, 0.0, 1.0, eps, eps, |x| Ok(x * x + (-x).exp()))
+            .unwrap();
     assert!((2.0 * xg2 - (-xg2).exp()).abs() <= 1e-6);
-    let (xg3, _) = local_min(10_000, -2.0, 2.0, eps, eps, |x| Ok(((x * x + 2.0) * x + 1.0) * x + 3.0)).unwrap();
+    let (xg3, _) = local_min(10_000, -2.0, 2.0, eps, eps, |x| {
+        Ok(((x * x + 2.0) * x + 1.0) * x + 3.0)
+    })
+    .unwrap();
     assert!((4.0 * xg3.powi(3) + 4.0 * xg3 + 1.0).abs() <= 1e-6);
-    let (xg4, _) = local_min(10_000, 1e-4, 1.0, eps, eps, |x| Ok(x.exp() + 0.01 / x)).unwrap();
+    let (xg4, _) =
+        local_min(10_000, 1e-4, 1.0, eps, eps, |x| Ok(x.exp() + 0.01 / x))
+            .unwrap();
     assert!((xg4.exp() - 0.01 / (xg4 * xg4)).abs() <= 1e-5);
-    let (xg5, _) = local_min(10_000, 2e-4, 2.0, eps, eps, |x| Ok(x.exp() - 2.0 * x + 0.01 / x - 1e-6 / (x * x))).unwrap();
+    let (xg5, _) = local_min(10_000, 2e-4, 2.0, eps, eps, |x| {
+        Ok(x.exp() - 2.0 * x + 0.01 / x - 1e-6 / (x * x))
+    })
+    .unwrap();
     assert!(xg5 > 0.05 && xg5 < 1.0);
 
     let root_cases: [(f64, f64, fn(f64) -> f64); 5] = [
@@ -476,7 +557,18 @@ fn test_brent_all_ten_minimization_and_five_root_functions() {
         (-5.0, 2.0, |x| (x + 3.0) * (x - 1.0) * (x - 1.0)),
     ];
     for (a, b, f) in root_cases {
-        let (_z, fz) = brent_safe_zero(a, b, machep, machep, 0.0, |x| Ok(f(x)), Some(f(a)), Some(f(b)), 500).unwrap();
+        let (_z, fz) = brent_safe_zero(
+            a,
+            b,
+            machep,
+            machep,
+            0.0,
+            |x| Ok(f(x)),
+            Some(f(a)),
+            Some(f(b)),
+            500,
+        )
+        .unwrap();
         assert!(fz.abs() < 1e-14);
     }
 }

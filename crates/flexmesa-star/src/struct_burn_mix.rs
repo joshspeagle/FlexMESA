@@ -75,7 +75,13 @@ pub fn op_split_burn_zones(
         let log_t = model.ln_t[k] / LN10;
         let log_rho = model.lnd[k] / LN10;
         if log_t < min_logt {
+            model.eps_nuc[k] = 0.0;
+            model.aux.burn_avg_epsnuc[k] = 0.0;
+            model.eps_nuc_neu_total[k] = 0.0;
+            model.d_epsnuc_dlnd[k] = 0.0;
+            model.d_epsnuc_dlnt[k] = 0.0;
             for j in 0..species {
+                model.d_epsnuc_dx[k * species + j] = 0.0;
                 model.dxdt_nuc[k * species + j] = 0.0;
                 model.d_dxdt_nuc_dlnd[k * species + j] = 0.0;
                 model.d_dxdt_nuc_dlnt[k * species + j] = 0.0;

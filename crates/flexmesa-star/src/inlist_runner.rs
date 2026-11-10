@@ -371,12 +371,16 @@ pub fn verify_photo_restart_parity(
         continued.controls.clone(),
         continued.job.clone(),
     )?;
+    let saved_vc = restarted.mlt_vc.clone();
+    let saved_vc_old = restarted.aux.mlt_vc_old.clone();
     restarted.eos_config = continued.eos_config;
     restarted.kap_config = continued.kap_config.clone();
     set_hydro_vars(&mut restarted, false, false)?;
     let dt_rest = restarted.dt;
     crate::struct_burn_mix::refresh_mixing_state(&mut restarted, dt_rest, &[]);
     restarted.save_start_values();
+    restarted.mlt_vc = saved_vc;
+    restarted.aux.mlt_vc_old = saved_vc_old;
 
     for _ in 0..n_verify_steps {
         star_evolve_step(&mut continued, do_remesh, op_split, true)?;

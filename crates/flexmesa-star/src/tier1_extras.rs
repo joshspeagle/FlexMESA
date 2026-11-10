@@ -403,8 +403,11 @@ impl StarExtras for Tier1CaseExtras {
     ) -> Result<(), StarError> {
         if self.case_name == "starspots" {
             let (f_spot, x_spot) = starspot_params(model);
-            let (_l_eff, alpha) =
-                eval_starspot_effective_luminosity(model.lum[0], f_spot, x_spot);
+            let (_l_eff, alpha) = eval_starspot_effective_luminosity(
+                model.lum[0],
+                f_spot,
+                x_spot,
+            );
             self.starspot_alpha = alpha;
             model.controls.tau_factor /= alpha.max(0.1);
         } else if self.case_name == "adjust_net" && model.species < 10 {
@@ -416,10 +419,7 @@ impl StarExtras for Tier1CaseExtras {
         Ok(())
     }
 
-    fn extras_finish_step(
-        &mut self,
-        model: &mut StarModel,
-    ) -> ExtrasDirective {
+    fn extras_finish_step(&mut self, model: &mut StarModel) -> ExtrasDirective {
         if model.controls.do_conv_premix
             || matches!(
                 self.case_name.as_str(),

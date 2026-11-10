@@ -285,7 +285,7 @@ impl InlistBundle {
         file_path: &Path,
         target_section: Option<&str>,
         sections: &mut HashMap<String, SectionControls>,
-        visited: &mut HashSet<(String, PathBuf)> ,
+        visited: &mut HashSet<(String, PathBuf)>,
     ) -> Result<(), StarError> {
         let canon = file_path
             .canonicalize()

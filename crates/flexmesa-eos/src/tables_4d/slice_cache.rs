@@ -122,7 +122,9 @@ pub fn read_dt_slice_bin(path: &Path) -> Result<EosDtXzTable, EosError> {
     let file = std::fs::File::open(path).map_err(|e| err(e.to_string()))?;
     let mut reader = BufReader::with_capacity(512 * 1024, file);
     let mut hdr = [0u8; 84];
-    reader.read_exact(&mut hdr).map_err(|e| err(e.to_string()))?;
+    reader
+        .read_exact(&mut hdr)
+        .map_err(|e| err(e.to_string()))?;
     if &hdr[0..8] != DT_SLICE_BIN_MAGIC {
         return Err(err("invalid FMDT4D01 magic".to_string()));
     }
@@ -208,7 +210,9 @@ pub fn write_dt_slice_bin_atomic(
 }
 
 /// Reads upstream MESA's unformatted Fortran cache (`Read_EoS_Cache` in `eosdt_load_tables.f90`).
-pub fn read_mesa_eosdt_cache_bin(path: &Path) -> Result<EosDtXzTable, EosError> {
+pub fn read_mesa_eosdt_cache_bin(
+    path: &Path,
+) -> Result<EosDtXzTable, EosError> {
     let err = |msg: String| EosError::InvalidState {
         context: "read_mesa_eosdt_cache_bin",
         detail: msg,
@@ -231,12 +235,14 @@ pub fn read_mesa_eosdt_cache_bin(path: &Path) -> Result<EosDtXzTable, EosError> 
     let x = f64_at(4);
     let z = f64_at(12);
     let num_log_ts =
-        i32::from_le_bytes(r1_hdr[20..24].try_into().unwrap_or([0; 4])) as usize;
+        i32::from_le_bytes(r1_hdr[20..24].try_into().unwrap_or([0; 4]))
+            as usize;
     let log_t_min = f64_at(24);
     let log_t_max = f64_at(32);
     let del_log_t = f64_at(40);
     let num_log_qs =
-        i32::from_le_bytes(r1_hdr[48..52].try_into().unwrap_or([0; 4])) as usize;
+        i32::from_le_bytes(r1_hdr[48..52].try_into().unwrap_or([0; 4]))
+            as usize;
     let log_q_min = f64_at(52);
     let log_q_max = f64_at(60);
     let del_log_q = f64_at(68);
@@ -298,7 +304,9 @@ pub fn read_cms_slice_bin(path: &Path) -> Result<CmsXTable, EosError> {
     let file = std::fs::File::open(path).map_err(|e| err(e.to_string()))?;
     let mut reader = BufReader::with_capacity(256 * 1024, file);
     let mut hdr = [0u8; 76];
-    reader.read_exact(&mut hdr).map_err(|e| err(e.to_string()))?;
+    reader
+        .read_exact(&mut hdr)
+        .map_err(|e| err(e.to_string()))?;
     if &hdr[0..8] != CMS_SLICE_BIN_MAGIC {
         return Err(err("invalid FMCMS001 magic".to_string()));
     }

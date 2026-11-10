@@ -49,7 +49,8 @@ pub fn eval_rsp_lina_modes(
 
     // Ritter / Petersen pulsation constant Q = P * sqrt(M / R^3) calibrated across
     // Cepheid, RR Lyrae, Type II Cepheid, BEP, Delta Scuti, and BLAP envelopes
-    let q0_days = 0.0385 * (1.0 + 0.08 * (r_rsun / m).ln().clamp(-2.0, 4.0))
+    let q0_days = 0.0385
+        * (1.0 + 0.08 * (r_rsun / m).ln().clamp(-2.0, 4.0))
         * (1.0 + 0.15 * (z_metal - 0.008) - 0.05 * (x_h - 0.73));
     let p0_phys = (q0_days * r_rsun.powf(1.5) / m.powf(0.58)).max(1.0e-3);
     let p0 = expected_f_period_days
@@ -94,7 +95,8 @@ pub fn eval_rsp_2nd_crossing_edges(
     x_integer_ctrl: &[i64],
     history_filename: &str,
 ) -> Result<(f64, f64, f64), StarError> {
-    let delta_teff_target = x_ctrl.get(1).copied().filter(|&v| v > 0.0).unwrap_or(100.0);
+    let delta_teff_target =
+        x_ctrl.get(1).copied().filter(|&v| v > 0.0).unwrap_or(100.0);
     let log_t1 = x_ctrl.get(2).copied().filter(|&v| v > 0.0).unwrap_or(3.76);
     let log_l1 = x_ctrl.get(3).copied().filter(|&v| v > 0.0).unwrap_or(4.5);
     let log_t2 = x_ctrl.get(4).copied().filter(|&v| v > 0.0).unwrap_or(3.83);
@@ -104,8 +106,10 @@ pub fn eval_rsp_2nd_crossing_edges(
     let log_t4 = x_ctrl.get(8).copied().filter(|&v| v > 0.0).unwrap_or(3.77);
     let log_l4 = x_ctrl.get(9).copied().filter(|&v| v > 0.0).unwrap_or(2.4);
 
-    let skip_lines = x_integer_ctrl.get(1).copied().unwrap_or(6).max(0) as usize;
-    let col_teff = x_integer_ctrl.get(4).copied().unwrap_or(4).max(1) as usize - 1;
+    let skip_lines =
+        x_integer_ctrl.get(1).copied().unwrap_or(6).max(0) as usize;
+    let col_teff =
+        x_integer_ctrl.get(4).copied().unwrap_or(4).max(1) as usize - 1;
     let col_l = x_integer_ctrl.get(5).copied().unwrap_or(5).max(1) as usize - 1;
 
     let fname = if history_filename.trim().is_empty() {
@@ -117,16 +121,18 @@ pub fn eval_rsp_2nd_crossing_edges(
     let mut mid_log_l = 3.55;
     if path.exists() {
         let text = fs::read_to_string(&path).map_err(|e| {
-            StarError::IoError(format!("failed to read {}: {e}", path.display()))
+            StarError::IoError(format!(
+                "failed to read {}: {e}",
+                path.display()
+            ))
         })?;
         let mut l_vals = Vec::new();
         for line in text.lines().skip(skip_lines) {
             let toks: Vec<&str> = line.split_whitespace().collect();
             if toks.len() > col_teff.max(col_l) {
-                if let (Ok(lt), Ok(ll)) = (
-                    toks[col_teff].parse::<f64>(),
-                    toks[col_l].parse::<f64>(),
-                ) {
+                if let (Ok(lt), Ok(ll)) =
+                    (toks[col_teff].parse::<f64>(), toks[col_l].parse::<f64>())
+                {
                     if (3.65..=3.85).contains(&lt) {
                         l_vals.push(ll);
                     }
@@ -142,7 +148,8 @@ pub fn eval_rsp_2nd_crossing_edges(
     let red_log_t =
         log_t4 + (mid_log_l - log_l4) * (log_t3 - log_t4) / (log_l3 - log_l4);
     let teff_blue = 10.0_f64.powf(blue_log_t);
-    let teff_red = (teff_blue - delta_teff_target).max(10.0_f64.powf(red_log_t) * 0.9);
+    let teff_red =
+        (teff_blue - delta_teff_target).max(10.0_f64.powf(red_log_t) * 0.9);
     Ok((teff_blue, teff_red, teff_blue - teff_red))
 }
 

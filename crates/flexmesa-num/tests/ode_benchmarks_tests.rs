@@ -49,8 +49,10 @@ fn test_vdpol_all_nine_solvers_match_golden_test_output() {
         ])
     };
 
-    let r5 = dopri5(0.0, 2.0, &y0, 1e-6, 0.0, 1e-4, 1e-4, 100_000, fcn).unwrap();
-    let r8 = dop853(0.0, 2.0, &y0, 1e-6, 0.0, 1e-4, 1e-4, 100_000, fcn).unwrap();
+    let r5 =
+        dopri5(0.0, 2.0, &y0, 1e-6, 0.0, 1e-4, 1e-4, 100_000, fcn).unwrap();
+    let r8 =
+        dop853(0.0, 2.0, &y0, 1e-6, 0.0, 1e-4, 1e-4, 100_000, fcn).unwrap();
     for i in 0..2 {
         assert!((r5.y[i] - y_ref[i]).abs() <= 2e-3);
         assert!((r8.y[i] - y_ref[i]).abs() <= 2e-3);
@@ -178,13 +180,35 @@ fn test_medakzo_banded_matches_golden_test_output() {
         RosenbrockVariant::Rodasp,
     ] {
         let r1 = rosenbrock_banded(
-            var, 2, 2, 0.0, 5.0, &y0, 1e-9, 0.0, 1e-6, 1e-6, 50_000,
-            medakzo_feval, medakzo_jeval,
+            var,
+            2,
+            2,
+            0.0,
+            5.0,
+            &y0,
+            1e-9,
+            0.0,
+            1e-6,
+            1e-6,
+            50_000,
+            medakzo_feval,
+            medakzo_jeval,
         )
         .unwrap();
         let r2 = rosenbrock_banded(
-            var, 2, 2, 5.0, 20.0, &r1.y, 1e-9, 0.0, 1e-6, 1e-6, 50_000,
-            medakzo_feval, medakzo_jeval,
+            var,
+            2,
+            2,
+            5.0,
+            20.0,
+            &r1.y,
+            1e-9,
+            0.0,
+            1e-6,
+            1e-6,
+            50_000,
+            medakzo_feval,
+            medakzo_jeval,
         )
         .unwrap();
         for (idx, &expected) in ref_11.iter().enumerate() {
@@ -438,7 +462,13 @@ fn test_beam_and_pollu_match_golden_references() {
         ];
         Ok(vec![
             -r[1] - r[10] - r[14] - r[23] - r[24]
-                + r[2] + r[3] + r[9] + r[11] + r[12] + r[22] + r[25],
+                + r[2]
+                + r[3]
+                + r[9]
+                + r[11]
+                + r[12]
+                + r[22]
+                + r[25],
             -r[2] - r[3] - r[9] - r[12] + r[1] + r[21],
             -r[15] + r[1] + r[17] + r[19] + r[22],
             -r[2] - r[16] - r[17] - r[23] + r[15],

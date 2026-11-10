@@ -13,7 +13,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from flexmesa import _dispatch, _rust
-from flexmesa.eos import _cache_io, _helm_jax, core
+from flexmesa.eos import _helm_jax, core
 
 eval_helm_cell_jax = _helm_jax.eval_helm_cell_jax
 
@@ -30,44 +30,27 @@ def _lookup_helm_cell_np(
     np.ndarray,
     np.ndarray,
 ]:
-    t_arr, dt_sav, d_arr, dd_sav, vertices = _cache_io.get_helm_np_arrays()
     t_a = np.asarray(temp_np, dtype=np.float64)
     d_a = np.asarray(din_np, dtype=np.float64)
     batch_shape = t_a.shape
-    lt = np.log10(np.maximum(t_a, 1.0e-99))
-    ldin = np.log10(np.maximum(d_a, 1.0e-99))
-    jat0 = np.clip(
-        np.floor((lt - _cache_io.HELM_LOGTLO) * 100.0).astype(np.int32),
-        0,
-        _cache_io.HELM_JMAX - 2,
+    lt_flat = np.ascontiguousarray(
+        np.log10(np.maximum(t_a, 1.0e-99)).reshape(-1), dtype=np.float64
     )
-    iat0 = np.clip(
-        np.floor((ldin - _cache_io.HELM_LOGDLO) * 100.0).astype(np.int32),
-        0,
-        _cache_io.HELM_IMAX - 2,
+    d_flat = np.ascontiguousarray(
+        np.maximum(d_a, 1.0e-99).reshape(-1), dtype=np.float64
     )
-    corners = np.stack(
-        [
-            vertices[jat0, iat0],
-            vertices[jat0, iat0 + 1],
-            vertices[jat0 + 1, iat0],
-            vertices[jat0 + 1, iat0 + 1],
-        ],
-        axis=-1,
+    t_lo, dth, d_lo, dd, fi_f, fi_dpdf, fi_ef, fi_xf = (
+        _rust.eos_helm_cells_batch(lt_flat, d_flat)
     )
-    fi_f = corners[..., 0:9, :].reshape((*batch_shape, 36))
-    fi_dpdf = corners[..., 9:13, :].reshape((*batch_shape, 16))
-    fi_ef = corners[..., 13:17, :].reshape((*batch_shape, 16))
-    fi_xf = corners[..., 17:21, :].reshape((*batch_shape, 16))
     return (
-        np.asarray(t_arr[jat0], dtype=np.float64),
-        np.asarray(dt_sav[jat0], dtype=np.float64),
-        np.asarray(d_arr[iat0], dtype=np.float64),
-        np.asarray(dd_sav[iat0], dtype=np.float64),
-        fi_f,
-        fi_dpdf,
-        fi_ef,
-        fi_xf,
+        np.asarray(t_lo, dtype=np.float64).reshape(batch_shape),
+        np.asarray(dth, dtype=np.float64).reshape(batch_shape),
+        np.asarray(d_lo, dtype=np.float64).reshape(batch_shape),
+        np.asarray(dd, dtype=np.float64).reshape(batch_shape),
+        np.asarray(fi_f, dtype=np.float64).reshape((*batch_shape, 36)),
+        np.asarray(fi_dpdf, dtype=np.float64).reshape((*batch_shape, 16)),
+        np.asarray(fi_ef, dtype=np.float64).reshape((*batch_shape, 16)),
+        np.asarray(fi_xf, dtype=np.float64).reshape((*batch_shape, 16)),
     )
 
 

@@ -13,8 +13,8 @@
 
 use flexmesa_chem::{get_composition_info, NuclideCatalog};
 use flexmesa_eos::{
-    eval_pc_eos, EosEvalOutput,
-    PcConfig, EOS_BASIC_RESULT_NAMES, NUM_EOS_BASIC_RESULTS,
+    eval_pc_eos, EosEvalOutput, PcConfig, EOS_BASIC_RESULT_NAMES,
+    NUM_EOS_BASIC_RESULTS,
 };
 
 fn make_comp(

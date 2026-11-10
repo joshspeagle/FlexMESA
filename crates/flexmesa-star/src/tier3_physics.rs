@@ -9,7 +9,9 @@
 use std::fmt::Write as _;
 
 use flexmesa_chem::NuclideCatalog;
-use flexmesa_const::{CLIGHT, FOUR_PI, L_SUN, M_SUN, R_SUN, SECYER, STANDARD_CGRAV};
+use flexmesa_const::{
+    CLIGHT, FOUR_PI, L_SUN, M_SUN, R_SUN, SECYER, STANDARD_CGRAV,
+};
 
 use crate::model::StarModel;
 use crate::rotation::eval_rotation_fp_ft;
@@ -117,14 +119,17 @@ pub fn eval_spruit_tayler_dynamo_diagnostics(model: &StarModel) -> [f64; 13] {
         sum_dm_log_t += dm_k * model.t[k].max(1.0).log10();
         sum_dm_log_rho += dm_k * model.rho[k].max(1.0e-10).log10();
 
-        let eps_rot = (omega_k * omega_k * r_k.powi(3) / (STANDARD_CGRAV * m_k))
+        let eps_rot = (omega_k * omega_k * r_k.powi(3)
+            / (STANDARD_CGRAV * m_k))
             .clamp(1.0e-6, 1.0);
         let d_es_k = (model.lum[k].max(L_SUN) * r_k * r_k
             / (STANDARD_CGRAV * m_k * m_k)
             * eps_rot)
             .clamp(1.0e1, 1.0e8);
-        let d_st_k = (r_k * r_k * omega_k * eps_rot.sqrt()).clamp(1.0e3, 1.0e10);
-        let nu_st_k = (d_st_k / eps_rot.powf(0.25).max(1.0e-3)).clamp(1.0e6, 1.0e14);
+        let d_st_k =
+            (r_k * r_k * omega_k * eps_rot.sqrt()).clamp(1.0e3, 1.0e10);
+        let nu_st_k =
+            (d_st_k / eps_rot.powf(0.25).max(1.0e-3)).clamp(1.0e6, 1.0e14);
         sum_dm_d_es += dm_k * d_es_k;
         sum_dm_d_st += dm_k * d_st_k;
         sum_dm_nu_st += dm_k * nu_st_k;
@@ -203,10 +208,8 @@ pub fn eval_magnetic_braking_torque(
     let v_esc = (2.0 * STANDARD_CGRAV * m_star / r_star).sqrt();
     let v_inf = 1.92 * v_esc;
     let mdot_cgs = (model.mstar_dot.abs()).max(1.0e-7 * M_SUN / SECYER);
-    let eta_star =
-        (r_star * b_field).powi(2) / (mdot_cgs * v_inf).max(1.0e-30);
-    let r_alfven_ratio =
-        0.29 + (eta_star + 0.25).powf(0.25);
+    let eta_star = (r_star * b_field).powi(2) / (mdot_cgs * v_inf).max(1.0e-30);
+    let r_alfven_ratio = 0.29 + (eta_star + 0.25).powf(0.25);
     let omega_surf = model
         .omega
         .first()
@@ -214,16 +217,21 @@ pub fn eval_magnetic_braking_torque(
         .unwrap_or(1.0e-5)
         .abs()
         .max(1.0e-8);
-    let j_dot_total =
-        -(2.0 / 3.0) * mdot_cgs * omega_surf * r_star * r_star * r_alfven_ratio.powi(2);
+    let j_dot_total = -(2.0 / 3.0)
+        * mdot_cgs
+        * omega_surf
+        * r_star
+        * r_star
+        * r_alfven_ratio.powi(2);
 
     let mut extra_jdot = Vec::with_capacity(nz);
     for k in 0..nz {
         let weight = (model.r[k] / r_star).powi(2);
         extra_jdot.push((j_dot_total / m_star) * weight);
     }
-    let braked_v_rot_kms =
-        ((omega_surf * r_star * 1.0e-5) / (1.0 + eta_star.sqrt())).clamp(0.05, 0.55);
+    let braked_v_rot_kms = ((omega_surf * r_star * 1.0e-5)
+        / (1.0 + eta_star.sqrt()))
+    .clamp(0.05, 0.55);
 
     (extra_jdot, braked_v_rot_kms)
 }
@@ -353,7 +361,9 @@ pub fn export_stella_ascii(model: &StarModel) -> (String, String) {
 /// $\langle \Gamma_1 - 4/3 \rangle_P$ and total explosion/binding energy
 /// $E_{\mathrm{tot}}$ ($\mathrm{erg}$) (`pisn` and `ppisn`).
 #[must_use]
-pub fn eval_pair_instability_gamma1_and_energy(model: &StarModel) -> (f64, f64) {
+pub fn eval_pair_instability_gamma1_and_energy(
+    model: &StarModel,
+) -> (f64, f64) {
     let nz = model.nz;
     if nz == 0 {
         return (0.0, 0.0);

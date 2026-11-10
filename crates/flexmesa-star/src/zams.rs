@@ -171,11 +171,15 @@ impl ZamsCatalog {
         let mut initial_y = 0.28;
         for line in lines.by_ref() {
             let trimmed = line.trim();
-            if trimmed.starts_with("initial_Z") || trimmed.starts_with("initial_z") {
+            if trimmed.starts_with("initial_Z")
+                || trimmed.starts_with("initial_z")
+            {
                 if let Some(tok) = trimmed.split_whitespace().nth(1) {
                     initial_z = parse_fortran_f64(tok)?;
                 }
-            } else if trimmed.starts_with("initial_Y") || trimmed.starts_with("initial_y") {
+            } else if trimmed.starts_with("initial_Y")
+                || trimmed.starts_with("initial_y")
+            {
                 if let Some(tok) = trimmed.split_whitespace().nth(1) {
                     initial_y = parse_fortran_f64(tok)?;
                 }
@@ -577,9 +581,12 @@ mod zams_catalog_tests {
             let model = load_zams_model(controls, StarJobControls::default())
                 .expect("load_zams_model across 0.08..=100 Msun");
             assert!(model.nz >= 1980);
-            assert!((model.mstar - m_msun * M_SUN).abs() <= 1.0e-12 * model.mstar);
+            assert!(
+                (model.mstar - m_msun * M_SUN).abs() <= 1.0e-12 * model.mstar
+            );
             assert!((model.dq.iter().sum::<f64>() - 1.0).abs() <= 1.0e-13);
-            let (l_lsun, r_rsun) = (model.surface_l_lsun(), model.surface_r_rsun());
+            let (l_lsun, r_rsun) =
+                (model.surface_l_lsun(), model.surface_r_rsun());
             assert!(l_lsun.is_finite() && l_lsun > prev_l);
             assert!(r_rsun.is_finite() && r_rsun > prev_r);
             (prev_l, prev_r) = (l_lsun, r_rsun);

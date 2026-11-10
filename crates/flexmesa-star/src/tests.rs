@@ -402,11 +402,8 @@ fn test_do1_energy_eqn_time_centers_non_nuc_neu() {
 
     let k = model.nz - 1;
     let x_scale = compute_x_scale(&model, false);
-    let mut sys_base = HenyeySystem::new(
-        model.nz,
-        model.layout.nvar_hydro,
-        x_scale.clone(),
-    );
+    let mut sys_base =
+        HenyeySystem::new(model.nz, model.layout.nvar_hydro, x_scale.clone());
     do1_energy_eqn(&model, k, false, &mut sys_base);
 
     let delta_neu = 1.0e4_f64;

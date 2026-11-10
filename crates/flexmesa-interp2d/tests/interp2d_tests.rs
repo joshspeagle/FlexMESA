@@ -408,8 +408,7 @@ fn test_renka790_cshep2_cubic_reproduction_and_scattered_2d_db() {
             + 0.5
                 * (-((9.0 * xx - 7.0).powi(2) + (9.0 * yy - 3.0).powi(2)) / 4.0)
                     .exp()
-            - 0.2
-                * (-(9.0 * xx - 4.0).powi(2) - (9.0 * yy - 7.0).powi(2)).exp()
+            - 0.2 * (-(9.0 * xx - 4.0).powi(2) - (9.0 * yy - 7.0).powi(2)).exp()
     };
     let w2: Vec<f64> = x2
         .iter()

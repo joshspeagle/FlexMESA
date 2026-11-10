@@ -221,7 +221,12 @@ fn run_2var_order1_suite() -> (Vec<bool>, Vec<Vec<f64>>) {
 
     let x3 = AutoDiffReal2VarOrder1::new(3.0, [1.0, 0.0]);
     let y2_v2 = AutoDiffReal2VarOrder1::new(2.0, [0.0, 1.0]);
-    nums.extend([rec(x3 * y2_v2), rec(x3 * 2.0), rec(x3 / y2_v2), rec(x3 / 2.0)]);
+    nums.extend([
+        rec(x3 * y2_v2),
+        rec(x3 * 2.0),
+        rec(x3 / y2_v2),
+        rec(x3 / 2.0),
+    ]);
 
     let y5_v2 = AutoDiffReal2VarOrder1::new(5.0, [0.0, 2.0]);
     let x2_v1 = AutoDiffReal2VarOrder1::new(2.0, [1.0, 0.0]);
@@ -431,7 +436,8 @@ fn test_auto_diff_full_golden_test_output_parity() {
     if output_path.exists() {
         let text = std::fs::read_to_string(&output_path)
             .expect("read auto_diff/test/test_output");
-        let (golden_nums, golden_bools) = parse_upstream_auto_diff_output(&text);
+        let (golden_nums, golden_bools) =
+            parse_upstream_auto_diff_output(&text);
         assert_eq!(golden_bools.len(), all_bools.len());
         for (idx, (&actual_b, &(exp_b, ref_b))) in
             all_bools.iter().zip(golden_bools.iter()).enumerate()

@@ -272,8 +272,8 @@ mod tests {
         let test_out_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../.mesa_temp_cache/mesa_root/chem/test/test_output");
         if test_out_path.exists() {
-            let text =
-                std::fs::read_to_string(&test_out_path).expect("read test_output");
+            let text = std::fs::read_to_string(&test_out_path)
+                .expect("read test_output");
             let lines: Vec<&str> = text.lines().collect();
             assert_eq!(lines.len(), 2635);
             for (idx, row) in AG89_TABLE.iter().enumerate() {
@@ -323,7 +323,8 @@ mod tests {
                         .unwrap();
                     assert!((o16.binding_energy - v).abs() < 1e-13);
                 } else if t.starts_with("Abar") {
-                    let v: f64 = t.split('=').nth(1).unwrap().trim().parse().unwrap();
+                    let v: f64 =
+                        t.split('=').nth(1).unwrap().trim().parse().unwrap();
                     assert!((comp.abar - v).abs() < 1e-6);
                 } else if t.starts_with("Qtotal") {
                     let v: f64 = t

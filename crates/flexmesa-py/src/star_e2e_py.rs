@@ -499,10 +499,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(star_eval_conductive_flame_state, m)?)?;
     m.add_function(wrap_pyfunction!(star_tier3_cases, m)?)?;
     m.add_function(wrap_pyfunction!(star_run_tier3_suite, m)?)?;
-    m.add_function(wrap_pyfunction!(
-        star_eval_hot_cool_blended_wind_mdot,
-        m
-    )?)?;
+    m.add_function(wrap_pyfunction!(star_eval_hot_cool_blended_wind_mdot, m)?)?;
     m.add_function(wrap_pyfunction!(star_eval_roche_gravity_darkening, m)?)?;
     m.add_function(wrap_pyfunction!(
         star_eval_spruit_tayler_dynamo_diagnostics,

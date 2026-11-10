@@ -113,8 +113,10 @@ pub(crate) fn load_or_build_kap_tables(embedded_bin: &[u8]) -> KapTables {
         {
             if let Some(ref cdir) = cache_dir {
                 let _ = fs::create_dir_all(cdir);
-                let tmp_path = cdir
-                    .join(format!("kap_tables_full.{}.tmp", std::process::id()));
+                let tmp_path = cdir.join(format!(
+                    "kap_tables_full.{}.tmp",
+                    std::process::id()
+                ));
                 let dst_path = cdir.join("kap_tables_full.bin");
                 if fs::write(&tmp_path, &bytes).is_ok() {
                     let _ = fs::rename(&tmp_path, &dst_path);
@@ -173,7 +175,8 @@ fn parse_fixed_file_bytes(path: &Path, x: f64, z: f64) -> Option<Vec<u8>> {
         }
     }
 
-    let mut out = Vec::with_capacity(64 + (num_lr + num_lt) * 8 + raw_i16.len() * 2);
+    let mut out =
+        Vec::with_capacity(64 + (num_lr + num_lt) * 8 + raw_i16.len() * 2);
     push_u8(&mut out, 1);
     push_f64(&mut out, x);
     push_f64(&mut out, z);

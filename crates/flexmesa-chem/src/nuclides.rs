@@ -189,8 +189,10 @@ impl NuclideCatalog {
             let name = std::str::from_utf8(&name_bytes[..name_end])
                 .expect("valid ascii nuclide name")
                 .to_string();
-            let z = i16::from_le_bytes(rec[12..14].try_into().unwrap()) as usize;
-            let n = i16::from_le_bytes(rec[14..16].try_into().unwrap()) as usize;
+            let z =
+                i16::from_le_bytes(rec[12..14].try_into().unwrap()) as usize;
+            let n =
+                i16::from_le_bytes(rec[14..16].try_into().unwrap()) as usize;
             let isom = rec[16];
             let spin = f64::from_le_bytes(rec[20..28].try_into().unwrap());
             let mex = f64::from_le_bytes(rec[28..36].try_into().unwrap());

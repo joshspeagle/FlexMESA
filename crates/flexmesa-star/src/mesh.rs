@@ -31,6 +31,12 @@ impl StarModel {
         if self.nz == 0 {
             return Ok(());
         }
+        let midq = self.midq_index();
+        let sum_outer0: f64 = self.dq[..midq].iter().sum();
+        let sum_inner0: f64 = self.dq[midq + 1..].iter().sum();
+        if (sum_outer0 + sum_inner0) + self.dq[midq] == 1.0 {
+            return Ok(());
+        }
         let sum: f64 = self.dq.iter().sum();
         if sum <= 0.0 || !sum.is_finite() {
             return Err(StarError::InvalidInput(format!(

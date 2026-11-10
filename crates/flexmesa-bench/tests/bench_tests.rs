@@ -223,7 +223,11 @@ fn print_full_wave3b_rust_benchmarks() {
 #[test]
 fn test_wave4_four_stage_benchmarks_parity() {
     let records = run_all_wave4_benchmarks(&[8, 32], 1, 3);
-    assert_records_parity_with_tol(&records, &EXPECTED_WAVE4_CHECKSUMS_N8, 1.0e-10);
+    assert_records_parity_with_tol(
+        &records,
+        &EXPECTED_WAVE4_CHECKSUMS_N8,
+        1.0e-10,
+    );
 }
 
 /// Prints the full Wave 4 four-stage benchmark table across

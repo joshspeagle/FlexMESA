@@ -380,10 +380,7 @@ mod tests {
             for ix in 0..NUM_ION_XS {
                 assert_eq!(grid.coeffs[iz][ix].len(), NUM_ION_VALS);
                 for v in 0..NUM_ION_VALS {
-                    assert_eq!(
-                        grid.coeffs[iz][ix][v].len(),
-                        175 * 102 * 4
-                    );
+                    assert_eq!(grid.coeffs[iz][ix][v].len(), 175 * 102 * 4);
                     for (&a, &b) in grid.coeffs[iz][ix][v]
                         .iter()
                         .zip(embedded.coeffs[iz][ix][v].iter())
@@ -395,12 +392,26 @@ mod tests {
         }
 
         // Cool vs hot plasma must yield distinct ionization states (no 2x2 clamping)
-        let cool = eval_ionization(0.02, 0.70, None, Some(-7.0), None, Some(3.5))
-            .expect("cool eval");
-        let hot = eval_ionization(0.02, 0.70, None, Some(-1.0), None, Some(7.5))
-            .expect("hot eval");
-        assert!(cool[10] < 0.05, "H should be mostly neutral at logT=3.5: {}", cool[10]);
-        assert!((hot[10] - 1.0).abs() < 1e-2, "H should be ionized at logT=7.5: {}", hot[10]);
-        assert!(hot[18] > 20.0, "Fe should be highly ionized at logT=7.5: {}", hot[18]);
+        let cool =
+            eval_ionization(0.02, 0.70, None, Some(-7.0), None, Some(3.5))
+                .expect("cool eval");
+        let hot =
+            eval_ionization(0.02, 0.70, None, Some(-1.0), None, Some(7.5))
+                .expect("hot eval");
+        assert!(
+            cool[10] < 0.05,
+            "H should be mostly neutral at logT=3.5: {}",
+            cool[10]
+        );
+        assert!(
+            (hot[10] - 1.0).abs() < 1e-2,
+            "H should be ionized at logT=7.5: {}",
+            hot[10]
+        );
+        assert!(
+            hot[18] > 20.0,
+            "Fe should be highly ionized at logT=7.5: {}",
+            hot[18]
+        );
     }
 }

@@ -26,7 +26,8 @@ use crate::{
     NUM_ION_XS_FOR_Z, NUM_ION_ZS,
 };
 
-const ION_TABLES_FULL_BIN: &[u8] = include_bytes!("../data/ion_tables_full.bin");
+const ION_TABLES_FULL_BIN: &[u8] =
+    include_bytes!("../data/ion_tables_full.bin");
 const ION_CACHE_MAGIC: &[u8; 8] = b"FMIONCA1";
 
 /// Precomputed 4D $(Z, X, \log Q, \log T)$ ionization spline grid.
@@ -102,7 +103,8 @@ impl IonTableGrid {
         let nt =
             u32::from_le_bytes(ION_TABLES_FULL_BIN[20..24].try_into().unwrap())
                 as usize;
-        let (lq_min, dq, lt_min, dt) = (-10.0_f64, 0.09_f64, 2.10_f64, 0.06_f64);
+        let (lq_min, dq, lt_min, dt) =
+            (-10.0_f64, 0.09_f64, 2.10_f64, 0.06_f64);
 
         let mut pos = 24usize;
         let mut raw_tables: Vec<Vec<Vec<f64>>> = Vec::with_capacity(n_tables);
@@ -216,7 +218,17 @@ impl IonTableGrid {
             }
         }
         let parsed: Result<
-            Vec<(usize, usize, usize, f64, f64, usize, f64, f64, Vec<Vec<f64>>)>,
+            Vec<(
+                usize,
+                usize,
+                usize,
+                f64,
+                f64,
+                usize,
+                f64,
+                f64,
+                Vec<Vec<f64>>,
+            )>,
             IonError,
         > = pairs
             .into_par_iter()
@@ -251,19 +263,16 @@ impl IonTableGrid {
 
     #[allow(clippy::cast_possible_truncation)]
     fn from_binary_cache(path: &Path) -> Result<Self, IonError> {
-        let bytes =
-            fs::read(path).map_err(|e| IonError::Io(e.to_string()))?;
+        let bytes = fs::read(path).map_err(|e| IonError::Io(e.to_string()))?;
         if bytes.len() < 56 || &bytes[0..8] != ION_CACHE_MAGIC {
             return Err(IonError::Io("invalid ion cache header".to_string()));
         }
         let lq_min = f64::from_le_bytes(bytes[8..16].try_into().unwrap());
         let dq = f64::from_le_bytes(bytes[16..24].try_into().unwrap());
-        let nq =
-            u64::from_le_bytes(bytes[24..32].try_into().unwrap()) as usize;
+        let nq = u64::from_le_bytes(bytes[24..32].try_into().unwrap()) as usize;
         let lt_min = f64::from_le_bytes(bytes[32..40].try_into().unwrap());
         let dt = f64::from_le_bytes(bytes[40..48].try_into().unwrap());
-        let nt =
-            u64::from_le_bytes(bytes[48..56].try_into().unwrap()) as usize;
+        let nt = u64::from_le_bytes(bytes[48..56].try_into().unwrap()) as usize;
         let cell_len = nq * nt * 4;
         let expected_bytes =
             56 + NUM_ION_ZS * NUM_ION_XS * NUM_ION_VALS * cell_len * 8;
@@ -354,8 +363,8 @@ fn resolve_ion_data_dir() -> Option<PathBuf> {
 }
 
 fn default_ion_cache_path() -> Option<PathBuf> {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../.mesa_temp_cache");
+    let root =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.mesa_temp_cache");
     if root.is_dir() {
         Some(root.join("bin_cache/ionization_full.bin"))
     } else {

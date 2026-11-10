@@ -95,6 +95,8 @@ Steffen (1990) piecewise-monotonic (`interp_pm`) and Huynh (1993) monotonicity-p
 
 ::: flexmesa.interp_2d.bipm
 
+::: flexmesa.interp_2d.renka790
+
 ::: flexmesa.interp_2d.spline1d
 
 ---
@@ -134,6 +136,10 @@ Brent's method (`safe_root_with_brackets`), 1D/multi-D Newton-Raphson, adaptive 
 ::: flexmesa.num.search
 
 ::: flexmesa.num.simplex
+
+::: flexmesa.num.newuoa
+
+::: flexmesa.num.bobyqa
 
 ---
 

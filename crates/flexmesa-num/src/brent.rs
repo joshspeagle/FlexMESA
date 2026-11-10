@@ -377,11 +377,7 @@ where
     }
 
     let m2 = 0.5 * (1.0 + 16.0 * machep) * m;
-    let mut sc = if c <= a || b <= c {
-        0.5 * (a + b)
-    } else {
-        c
-    };
+    let mut sc = if c <= a || b <= c { 0.5 * (a + b) } else { c };
     let mut y1 = func(sc)?;
     if !y1.is_finite() {
         return Err(NumError::NonFiniteValue(
@@ -493,8 +489,7 @@ where
             if (1.0 + 9.0 * machep) * d0 <= p.abs() {
                 break y3_val;
             }
-            if 0.5 * m2 * (d0 * d0 + p * p)
-                <= (y2 - y) + (y3_val - y) + 2.0 * t
+            if 0.5 * m2 * (d0 * d0 + p * p) <= (y2 - y) + (y3_val - y) + 2.0 * t
             {
                 break y3_val;
             }

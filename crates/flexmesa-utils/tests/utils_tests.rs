@@ -129,15 +129,15 @@ fn test_token_stream_matches_upstream_mesa_token_txt() {
 
     // Verify directly against .mesa_temp_cache/mesa_root/utils/test/token.txt and test_output
     let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
-    let upstream_token_path =
-        manifest_dir.join("../../.mesa_temp_cache/mesa_root/utils/test/token.txt");
+    let upstream_token_path = manifest_dir
+        .join("../../.mesa_temp_cache/mesa_root/utils/test/token.txt");
     if upstream_token_path.exists() {
         let upstream_txt = std::fs::read_to_string(&upstream_token_path)
             .expect("read utils/test/token.txt");
         assert_eq!(tokenize(&upstream_txt), expected);
     }
-    let upstream_output_path =
-        manifest_dir.join("../../.mesa_temp_cache/mesa_root/utils/test/test_output");
+    let upstream_output_path = manifest_dir
+        .join("../../.mesa_temp_cache/mesa_root/utils/test/test_output");
     if upstream_output_path.exists() {
         let out_txt = std::fs::read_to_string(&upstream_output_path)
             .expect("read utils/test/test_output");
@@ -151,7 +151,9 @@ fn test_token_stream_matches_upstream_mesa_token_txt() {
             .iter()
             .map(|t| match t {
                 Token::Name(s) => format!("name_token {:11} {}", s.len(), s),
-                Token::String(s) => format!("string_token {:11} {}", s.len(), s),
+                Token::String(s) => {
+                    format!("string_token {:11} {}", s.len(), s)
+                }
                 Token::LeftParen => "left_paren_token".to_owned(),
                 Token::RightParen => "right_paren_token".to_owned(),
                 Token::Comma => "comma_token".to_owned(),

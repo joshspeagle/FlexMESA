@@ -39,11 +39,13 @@ pub const HELM_LOGDLO: f64 = -12.0;
 /// Maximum `log10(rho * Y_e)` of the `HELM` table (`15.0`).
 pub const HELM_LOGDHI: f64 = 15.0;
 /// Grid spacing in `log10(T)` (`0.01`).
-pub const HELM_LOGTSTP: f64 = (HELM_LOGTHI - HELM_LOGTLO) / ((HELM_JMAX - 1) as f64);
+pub const HELM_LOGTSTP: f64 =
+    (HELM_LOGTHI - HELM_LOGTLO) / ((HELM_JMAX - 1) as f64);
 /// Reciprocal grid spacing in `log10(T)` (`100.0`).
 pub const HELM_LOGTSTPI: f64 = 1.0 / HELM_LOGTSTP;
 /// Grid spacing in `log10(rho * Y_e)` (`0.01`).
-pub const HELM_LOGDSTP: f64 = (HELM_LOGDHI - HELM_LOGDLO) / ((HELM_IMAX - 1) as f64);
+pub const HELM_LOGDSTP: f64 =
+    (HELM_LOGDHI - HELM_LOGDLO) / ((HELM_IMAX - 1) as f64);
 /// Reciprocal grid spacing in `log10(rho * Y_e)` (`100.0`).
 pub const HELM_LOGDSTPI: f64 = 1.0 / HELM_LOGDSTP;
 
@@ -203,7 +205,8 @@ pub struct HelmTable {
     patches: HashMap<(u16, u16), HelmVertex>,
 }
 
-const BUILTIN_PATCHES_BIN: &[u8] = include_bytes!("../../data/helm_patches.bin");
+const BUILTIN_PATCHES_BIN: &[u8] =
+    include_bytes!("../../data/helm_patches.bin");
 static BUILTIN_TABLE: OnceLock<HelmTable> = OnceLock::new();
 
 impl HelmTable {
@@ -424,12 +427,13 @@ impl HelmTable {
             v00.f[6], v10.f[6], v01.f[6], v11.f[6], v00.f[7], v10.f[7],
             v01.f[7], v11.f[7], v00.f[8], v10.f[8], v01.f[8], v11.f[8],
         ];
-        let pack16 = |a: &[f64; 4], b: &[f64; 4], c: &[f64; 4], d: &[f64; 4]| {
-            [
-                a[0], b[0], c[0], d[0], a[2], b[2], c[2], d[2], a[1], b[1],
-                c[1], d[1], a[3], b[3], c[3], d[3],
-            ]
-        };
+        let pack16 =
+            |a: &[f64; 4], b: &[f64; 4], c: &[f64; 4], d: &[f64; 4]| {
+                [
+                    a[0], b[0], c[0], d[0], a[2], b[2], c[2], d[2], a[1], b[1],
+                    c[1], d[1], a[3], b[3], c[3], d[3],
+                ]
+            };
 
         HelmCell {
             iat,

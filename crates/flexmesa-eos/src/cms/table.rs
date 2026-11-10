@@ -84,26 +84,31 @@ impl CmsXTable {
     }
 
     /// Parses a `mesa-CMS_*.data` ASCII file and builds its 16 bicubic splines (`load_eosCMS_table`).
-    pub fn from_ascii_reader<R: BufRead>(mut reader: R) -> Result<Self, EosError> {
+    pub fn from_ascii_reader<R: BufRead>(
+        mut reader: R,
+    ) -> Result<Self, EosError> {
         let mut line_buf = String::with_capacity(512);
-        let mut next_non_empty = |buf: &mut String| -> Result<String, EosError> {
-            loop {
-                buf.clear();
-                let n = reader.read_line(buf).map_err(|e| EosError::InvalidState {
-                    context: "CmsXTable::from_ascii_reader",
-                    detail: e.to_string(),
-                })?;
-                if n == 0 {
-                    return Err(EosError::InvalidState {
-                        context: "CmsXTable::from_ascii_reader",
-                        detail: "unexpected EOF".to_string(),
-                    });
+        let mut next_non_empty =
+            |buf: &mut String| -> Result<String, EosError> {
+                loop {
+                    buf.clear();
+                    let n = reader.read_line(buf).map_err(|e| {
+                        EosError::InvalidState {
+                            context: "CmsXTable::from_ascii_reader",
+                            detail: e.to_string(),
+                        }
+                    })?;
+                    if n == 0 {
+                        return Err(EosError::InvalidState {
+                            context: "CmsXTable::from_ascii_reader",
+                            detail: "unexpected EOF".to_string(),
+                        });
+                    }
+                    if !buf.trim().is_empty() {
+                        return Ok(buf.clone());
+                    }
                 }
-                if !buf.trim().is_empty() {
-                    return Ok(buf.clone());
-                }
-            }
-        };
+            };
 
         let _hdr_names = next_non_empty(&mut line_buf)?;
         let hdr_vals_line = next_non_empty(&mut line_buf)?;
@@ -150,11 +155,15 @@ impl CmsXTable {
                     let s =
                         toks.next().ok_or_else(|| EosError::InvalidState {
                             context: "CmsXTable::from_ascii_reader",
-                            detail: format!("fewer than 18 columns at ({it}, {jrho})"),
+                            detail: format!(
+                                "fewer than 18 columns at ({it}, {jrho})"
+                            ),
                         })?;
-                    *v = s.parse::<f64>().map_err(|e| EosError::InvalidState {
-                        context: "CmsXTable::from_ascii_reader",
-                        detail: format!("bad float '{s}': {e}"),
+                    *v = s.parse::<f64>().map_err(|e| {
+                        EosError::InvalidState {
+                            context: "CmsXTable::from_ascii_reader",
+                            detail: format!("bad float '{s}': {e}"),
+                        }
                     })?;
                 }
                 let cell = it * num_log_rhos + jrho;

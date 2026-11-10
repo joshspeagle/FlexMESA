@@ -132,7 +132,8 @@ pub fn verify_tier3_case_assertions(
                 && d[12] > 0.0
         }
         "conserve_angular_momentum" => {
-            model.controls.rotation_flag && compute_total_angular_momentum(model) > 0.0
+            model.controls.rotation_flag
+                && compute_total_angular_momentum(model) > 0.0
         }
         "accreted_material_j" => {
             hr.star_mass >= 18.0
@@ -153,7 +154,8 @@ pub fn verify_tier3_case_assertions(
             fe_core_m >= 1.0 && v_infall >= lim
         }
         "ccsn_IIp" => {
-            let (m_shock, d_rti, mixed_h1) = eval_duffell_rti_shock_state(model);
+            let (m_shock, d_rti, mixed_h1) =
+                eval_duffell_rti_shock_state(model);
             m_shock > 0.0 && d_rti > 0.0 && mixed_h1 >= 0.20
         }
         "pisn" => {
@@ -325,9 +327,9 @@ impl StarExtras for Tier3CaseExtras {
                 model.j_rot.resize(model.nz, 0.0);
             }
             let r_surf = model.r.first().copied().unwrap_or(R_SUN).max(1.0);
-            let omega_crit =
-                (STANDARD_CGRAV * model.mstar.max(M_SUN) / r_surf.powi(3))
-                    .sqrt();
+            let omega_crit = (STANDARD_CGRAV * model.mstar.max(M_SUN)
+                / r_surf.powi(3))
+            .sqrt();
             let omega_0 = match cname {
                 "high_rot_darkening" => 0.98 * omega_crit,
                 "20M_z2m2_high_rotation" => 0.65 * omega_crit,

@@ -380,8 +380,8 @@ fn test_upstream_mesa_block_tri_data_and_test_case_data_parity() {
         .join("../../.mesa_temp_cache/mesa_root/mtx/test");
     let out_path = root.join("test_output");
     if out_path.exists() {
-        let out_text =
-            std::fs::read_to_string(&out_path).expect("read mtx/test/test_output");
+        let out_text = std::fs::read_to_string(&out_path)
+            .expect("read mtx/test/test_output");
         let out_lines: Vec<&str> = out_text.lines().collect();
         assert!(
             out_lines[15].contains("testing with nvar,nz")
@@ -395,8 +395,8 @@ fn test_upstream_mesa_block_tri_data_and_test_case_data_parity() {
     // 1. Verify test_case.data (nvar = 12, nz = 9) when present
     let tc_path = root.join("test_case.data");
     if tc_path.exists() {
-        let tc_text =
-            std::fs::read_to_string(&tc_path).expect("read mtx/test/test_case.data");
+        let tc_text = std::fs::read_to_string(&tc_path)
+            .expect("read mtx/test/test_case.data");
         let mut tc_lines = tc_text.lines();
         let hdr: Vec<usize> = tc_lines
             .next()
@@ -466,8 +466,8 @@ fn test_upstream_mesa_block_tri_data_and_test_case_data_parity() {
     // 2. Verify block_tri.data (nvar = 25, first nz = 20 shells of 979) when present
     let bt_path = root.join("block_tri.data");
     if bt_path.exists() {
-        let bt_text =
-            std::fs::read_to_string(&bt_path).expect("read mtx/test/block_tri.data");
+        let bt_text = std::fs::read_to_string(&bt_path)
+            .expect("read mtx/test/block_tri.data");
         let (nvar_bt, nz_full, lblk_full, dblk_full, ublk_full) =
             parse_block_tridiagonal_text(&bt_text)
                 .expect("parse Harwell-Boeing block_tri.data");
@@ -484,7 +484,13 @@ fn test_upstream_mesa_block_tri_data_and_test_case_data_parity() {
             .collect();
         let mut brhs_bt = vec![0.0_f64; nz_bt * nvar_bt];
         block_dble_mv(
-            nvar_bt, nz_bt, &lblk_bt, &dblk_bt, &ublk_bt, &xcorr_bt, &mut brhs_bt,
+            nvar_bt,
+            nz_bt,
+            &lblk_bt,
+            &dblk_bt,
+            &ublk_bt,
+            &xcorr_bt,
+            &mut brhs_bt,
         )
         .unwrap();
 

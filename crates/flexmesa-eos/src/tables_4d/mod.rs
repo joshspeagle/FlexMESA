@@ -455,12 +455,13 @@ fn comp_and_z_int(
         })?;
     let mut z_int = Vec::with_capacity(chem_id.len());
     for &cid in chem_id {
-        let nuc = catalog
-            .get_by_id(cid)
-            .ok_or_else(|| EosError::InvalidState {
-                context,
-                detail: format!("unknown chem_id {cid}"),
-            })?;
+        let nuc =
+            catalog
+                .get_by_id(cid)
+                .ok_or_else(|| EosError::InvalidState {
+                    context,
+                    detail: format!("unknown chem_id {cid}"),
+                })?;
         z_int.push(nuc.z as usize);
     }
     Ok((comp.xz, comp.xh, z_int))
@@ -475,8 +476,7 @@ pub fn eval_opal_scvh_eos(
     xa: &[f64],
     cfg: &OpalScvhConfig,
 ) -> Result<EosEvalOutput, EosError> {
-    let (xz, xh, z_int) =
-        comp_and_z_int(chem_id, xa, "eval_opal_scvh_eos")?;
+    let (xz, xh, z_int) = comp_and_z_int(chem_id, xa, "eval_opal_scvh_eos")?;
     eval_eosdt_table_from_weights(
         tables,
         EosDtTableKind::OpalScvh,

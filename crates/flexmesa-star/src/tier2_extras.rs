@@ -165,8 +165,7 @@ pub fn eval_wd_phase_separation(
         let z53_k = model.z53bar[k].max(model.zbar[k].max(6.0).powf(5.0 / 3.0));
         let n_e = (rho_k * ye_k / AMU).max(1.0);
         let a_e = (3.0 / (FOUR_PI * n_e)).cbrt();
-        let gamma_k =
-            z53_k * E_CHARGE_SQ_CGS / (a_e * KERG * t_k).max(1.0e-30);
+        let gamma_k = z53_k * E_CHARGE_SQ_CGS / (a_e * KERG * t_k).max(1.0e-30);
         model.gam[k] = gamma_k;
 
         if gamma_k >= gamma_crit {
@@ -184,9 +183,9 @@ pub fn eval_wd_phase_separation(
         let j_o16 = model.chem_id.iter().position(|&c| c == o16_id);
         let j_ne20 = model.chem_id.iter().position(|&c| c == ne20_id);
         if let (Some(jo), Some(jne)) = (j_o16, j_ne20) {
-            if let Some(k_bound) = (1..nz)
-                .find(|&k| model.gam[k] >= gamma_crit && model.gam[k - 1] < gamma_crit)
-            {
+            if let Some(k_bound) = (1..nz).find(|&k| {
+                model.gam[k] >= gamma_crit && model.gam[k - 1] < gamma_crit
+            }) {
                 let x_ne = model.cell_xa(k_bound)[jne];
                 let dx_ne = (0.015 * x_ne * (1.0 - x_ne)).clamp(0.0, 0.02);
                 if dx_ne > 0.0
@@ -241,7 +240,9 @@ pub fn apply_accretion_composition_and_nova_wind(model: &mut StarModel) -> f64 {
 
     model.mstar_dot = net_mdot_msun_yr * M_SUN / SECYER;
 
-    if model.controls.mass_change > 0.0 && !model.controls.accrete_same_as_surface {
+    if model.controls.mass_change > 0.0
+        && !model.controls.accrete_same_as_surface
+    {
         let catalog = NuclideCatalog::builtin_ref();
         let mut x_acc = vec![0.0_f64; species];
         if model.controls.accrete_given_mass_fractions
@@ -291,11 +292,12 @@ pub fn apply_accretion_composition_and_nova_wind(model: &mut StarModel) -> f64 {
             for v in &mut x_acc {
                 *v /= sum_acc;
             }
-            let dm_acc =
-                (model.controls.mass_change * M_SUN / SECYER) * model.dt.max(1.0);
+            let dm_acc = (model.controls.mass_change * M_SUN / SECYER)
+                * model.dt.max(1.0);
             let k_top = (nz / 10).clamp(1, nz.min(8));
             for k in 0..k_top {
-                let w = (dm_acc / (model.dm[k].max(1.0) + dm_acc)).clamp(0.01, 0.5);
+                let w =
+                    (dm_acc / (model.dm[k].max(1.0) + dm_acc)).clamp(0.01, 0.5);
                 let row = model.cell_xa_mut(k);
                 let mut s = 0.0;
                 for j in 0..species {
@@ -485,10 +487,7 @@ impl StarExtras for Tier2CaseExtras {
         }
     }
 
-    fn extras_finish_step(
-        &mut self,
-        model: &mut StarModel,
-    ) -> ExtrasDirective {
+    fn extras_finish_step(&mut self, model: &mut StarModel) -> ExtrasDirective {
         if model.controls.irradiation_flux > 0.0
             && model.controls.column_depth_for_irradiation > 0.0
         {

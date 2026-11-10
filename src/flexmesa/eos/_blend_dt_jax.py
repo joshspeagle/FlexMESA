@@ -59,16 +59,13 @@ def get_helm_alfa_jax(
     log_rho: jax.Array, log_t: jax.Array, helm_blend_width: float = 0.1
 ) -> tuple[jax.Array, jax.Array, jax.Array]:
     """Compute `HELM` polygon fallback fraction `(alfa, d_dlogT, d_dlogRho)`."""
-    lr_f = float(jax.lax.stop_gradient(log_rho))
-    lt_f = float(jax.lax.stop_gradient(log_t))
-    contained = core.is_contained(_HELM_BOUNDS_NP, lr_f, lt_f)
-    sign = -1.0 if contained else 1.0
     bounds_j = jnp.asarray(_HELM_BOUNDS_NP, dtype=jnp.float64)
 
     def _alfa_fn(lr: jax.Array, lt: jax.Array) -> jax.Array:
-        dist = sign * core.min_distance_to_polygon_jax(
-            bounds_j, jnp.stack([lr, lt])
-        )
+        pt = jnp.stack([lr, lt])
+        contained = skye._is_contained_jax(bounds_j, jax.lax.stop_gradient(pt))
+        sign = jnp.where(contained, -1.0, 1.0)
+        dist = sign * core.min_distance_to_polygon_jax(bounds_j, pt)
         scaled = dist / helm_blend_width
         sv = jax.lax.stop_gradient(scaled)
         return jnp.where(sv < 0.0, 0.0, jnp.where(sv > 1.0, 1.0, scaled))
@@ -148,12 +145,19 @@ def get_cms_alfa_jax(
     return val, dt, dr
 
 
+def _clip_radial_jax(r: jax.Array) -> jax.Array:
+    rv = jax.lax.stop_gradient(r)
+    return jnp.where(
+        rv >= 1.0,
+        jnp.ones_like(r),
+        jnp.where(rv < 1.0e-10, jnp.zeros_like(r), r),
+    )
+
+
 def get_opal_scvh_alfa_jax(
     log_t: jax.Array, log_rho: jax.Array, z: float
 ) -> tuple[jax.Array, jax.Array, jax.Array]:
     """Compute `OPAL/SCVH` fallback fraction `(alfa, d_dlogRho, d_dlogT)`."""
-    lt = float(jax.lax.stop_gradient(log_t))
-    lr = float(jax.lax.stop_gradient(log_rho))
     log_q1, log_q2, log_q_max, log_q4 = 5.69, 5.68, 5.3, -8.0
     log_rho5 = -14.299
     log_rho6 = log_rho5 - 1.0e-3
@@ -168,103 +172,104 @@ def get_opal_scvh_alfa_jax(
     )
     z_all_helm, z_no_helm = 0.040, 0.035
 
-    if lt >= log_t1:
-        z0 = jnp.zeros_like(log_t)
-        return jnp.ones_like(log_t), z0, z0
-
     log_t3 = 0.5 * (log_rho1 - log_q1 + 12.0)
     log_t4 = 0.5 * (log_rho2 - log_q2 + 12.0)
     log_rho3 = log_q1 + 2.0 * log_t7 - 12.0
     log_rho4 = log_q2 + 2.0 * log_t7 - 12.0
-    lq = lr - 2.0 * lt + 12.0
 
     def _alfa_fn(lr_in: jax.Array, lt_in: jax.Array) -> jax.Array:
-        if (
-            z >= z_all_helm
-            or lt >= log_t1
-            or lt <= log_t8
-            or lr >= log_rho1
-            or lq <= log_q4
-            or lq >= log_q_max
-            or (lr <= log_rho6 and lt <= log_t6)
-        ):
-            a = jnp.ones_like(lr_in)
-        elif lt >= log_t2:
-            c_dy = (lt_in - log_t2) / (log_t1 - log_t2)
-            if lr > log_rho2:
-                c_dx = (lr_in - log_rho2) / (log_rho1 - log_rho2)
-                r = jnp.sqrt(c_dx * c_dx + c_dy * c_dy)
-                rv = float(jax.lax.stop_gradient(r))
-                a = (
-                    jnp.ones_like(r)
-                    if rv >= 1.0
-                    else (jnp.zeros_like(r) if rv < 1.0e-10 else r)
-                )
-            else:
-                a = c_dy
-        elif lt >= log_t3:
-            a = (
-                (lr_in - log_rho2) / (log_rho1 - log_rho2)
-                if lr > log_rho2
-                else jnp.zeros_like(lr_in)
-            )
-        elif lt >= log_t4:
-            lr_hi = log_q1 + 2.0 * lt - 12.0
-            if lr >= lr_hi:
-                a = jnp.ones_like(lr_in)
-            elif lr > log_rho2:
-                a = (lr_in - log_rho2) / (lr_hi - log_rho2)
-            else:
-                a = jnp.zeros_like(lr_in)
-        elif lr > log_rho4:
-            if lt > log_t7:
-                sa = ((log_q1 + 2.0 * log_t4 - 12.0) - log_rho3) / (
-                    log_t4 - log_t7
-                )
-                sb = (log_rho2 - log_rho4) / (log_t4 - log_t7)
-                lr_hi_v = log_rho3 + (lt - log_t7) * sa
-                lr_lo_v = log_rho4 + (lt - log_t7) * sb
-                if lr >= lr_hi_v:
-                    a = jnp.ones_like(lr_in)
-                elif lr >= lr_lo_v:
-                    a = (lr_in - lr_lo_v) / (lr_hi_v - lr_lo_v)
-                else:
-                    a = jnp.zeros_like(lr_in)
-            elif lr > log_rho3:
-                a = jnp.ones_like(lr_in)
-            else:
-                c_dx = (lr_in - log_rho4) / (log_rho3 - log_rho4)
-                c_dy = (lt_in - log_t7) / (log_t8 - log_t7)
-                r = jnp.sqrt(c_dx * c_dx + c_dy * c_dy)
-                rv = float(jax.lax.stop_gradient(r))
-                a = (
-                    jnp.ones_like(r)
-                    if rv >= 1.0
-                    else (jnp.zeros_like(r) if rv < 1.0e-10 else r)
-                )
-        elif lr >= log_rho5 or lt > log_t5:
-            a = jnp.zeros_like(lr_in)
-        elif lt >= log_t6:
-            if lr <= log_rho6:
-                a = (lt_in - log_t5) / (log_t6 - log_t5)
-            else:
-                c_dx = (lr_in - log_rho6) / (log_rho5 - log_rho6)
-                c_dy = (lt_in - log_t6) / (log_t5 - log_t6)
-                beta = jnp.sqrt(c_dx * c_dx + c_dy * c_dy)
-                r = 1.0 - beta
-                rv = float(jax.lax.stop_gradient(r))
-                a = (
-                    jnp.ones_like(r)
-                    if rv >= 1.0
-                    else (jnp.zeros_like(r) if rv < 1.0e-10 else r)
-                )
-        else:
-            a = (lr_in - log_rho5) / (log_rho6 - log_rho5)
+        lr = jax.lax.stop_gradient(lr_in)
+        lt = jax.lax.stop_gradient(lt_in)
+        lq = lr - 2.0 * lt + 12.0
+        cond_one = (
+            (z >= z_all_helm)
+            | (lt >= log_t1)
+            | (lt <= log_t8)
+            | (lr >= log_rho1)
+            | (lq <= log_q4)
+            | (lq >= log_q_max)
+            | ((lr <= log_rho6) & (lt <= log_t6))
+        )
 
-        av = float(jax.lax.stop_gradient(a))
-        if z > z_no_helm and z < z_all_helm and av < 1.0:
+        c_dy2 = (lt_in - log_t2) / (log_t1 - log_t2)
+        c_dx2 = (lr_in - log_rho2) / (log_rho1 - log_rho2)
+        r2 = _clip_radial_jax(jnp.sqrt(c_dx2 * c_dx2 + c_dy2 * c_dy2))
+        a_t2 = jnp.where(lr > log_rho2, r2, c_dy2)
+
+        a_t3 = jnp.where(
+            lr > log_rho2,
+            (lr_in - log_rho2) / (log_rho1 - log_rho2),
+            jnp.zeros_like(lr_in),
+        )
+
+        lr_hi = log_q1 + 2.0 * lt - 12.0
+        a_t4 = jnp.where(
+            lr >= lr_hi,
+            jnp.ones_like(lr_in),
+            jnp.where(
+                lr > log_rho2,
+                (lr_in - log_rho2) / (lr_hi - log_rho2),
+                jnp.zeros_like(lr_in),
+            ),
+        )
+
+        sa = ((log_q1 + 2.0 * log_t4 - 12.0) - log_rho3) / (log_t4 - log_t7)
+        sb = (log_rho2 - log_rho4) / (log_t4 - log_t7)
+        lr_hi_v = log_rho3 + (lt - log_t7) * sa
+        lr_lo_v = log_rho4 + (lt - log_t7) * sb
+        a_r4_t7 = jnp.where(
+            lr >= lr_hi_v,
+            jnp.ones_like(lr_in),
+            jnp.where(
+                lr >= lr_lo_v,
+                (lr_in - lr_lo_v) / (lr_hi_v - lr_lo_v),
+                jnp.zeros_like(lr_in),
+            ),
+        )
+        c_dx4 = (lr_in - log_rho4) / (log_rho3 - log_rho4)
+        c_dy4 = (lt_in - log_t7) / (log_t8 - log_t7)
+        r4 = _clip_radial_jax(jnp.sqrt(c_dx4 * c_dx4 + c_dy4 * c_dy4))
+        a_r4_lo = jnp.where(lr > log_rho3, jnp.ones_like(lr_in), r4)
+        a_r4 = jnp.where(lt > log_t7, a_r4_t7, a_r4_lo)
+
+        c_dx6 = (lr_in - log_rho6) / (log_rho5 - log_rho6)
+        c_dy6 = (lt_in - log_t6) / (log_t5 - log_t6)
+        r6 = _clip_radial_jax(1.0 - jnp.sqrt(c_dx6 * c_dx6 + c_dy6 * c_dy6))
+        a_t6 = jnp.where(
+            lr <= log_rho6, (lt_in - log_t5) / (log_t6 - log_t5), r6
+        )
+        a_else = (lr_in - log_rho5) / (log_rho6 - log_rho5)
+
+        a = jnp.where(
+            cond_one,
+            jnp.ones_like(lr_in),
+            jnp.where(
+                lt >= log_t2,
+                a_t2,
+                jnp.where(
+                    lt >= log_t3,
+                    a_t3,
+                    jnp.where(
+                        lt >= log_t4,
+                        a_t4,
+                        jnp.where(
+                            lr > log_rho4,
+                            a_r4,
+                            jnp.where(
+                                (lr >= log_rho5) | (lt > log_t5),
+                                jnp.zeros_like(lr_in),
+                                jnp.where(lt >= log_t6, a_t6, a_else),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        av = jax.lax.stop_gradient(a)
+        if z > z_no_helm and z < z_all_helm:
             zf = (z - z_no_helm) / (z_all_helm - z_no_helm)
-            a = zf + (1.0 - zf) * a
+            a = jnp.where(av < 1.0, zf + (1.0 - zf) * a, a)
         return a
 
     val, (dr, dt) = jax.value_and_grad(_alfa_fn, argnums=(0, 1))(log_rho, log_t)
@@ -278,24 +283,47 @@ def _combine_jax(
     eval_1st: object,
     eval_2nd: object,
 ) -> core.EosEvalOutput:
-    av = float(jax.lax.stop_gradient(alfa))
-    if av >= 1.0:
-        out2_only: core.EosEvalOutput = eval_2nd()  # type: ignore[operator]
-        return out2_only
-    out1: core.EosEvalOutput = eval_1st()  # type: ignore[operator]
-    lns1 = float(jax.lax.stop_gradient(out1.res[core.I_LN_S]))
-    dlnd_s1 = float(jax.lax.stop_gradient(out1.d_dlnd[core.I_LN_S]))
-    dlnt_s1 = float(jax.lax.stop_gradient(out1.d_dln_t[core.I_LN_S]))
-    if not (
-        np.isfinite(lns1) and np.isfinite(dlnd_s1) and np.isfinite(dlnt_s1)
-    ):
-        out2_fb: core.EosEvalOutput = eval_2nd()  # type: ignore[operator]
-        return out2_fb
-    if av <= 0.0:
-        return out1
-    out2: core.EosEvalOutput = eval_2nd()  # type: ignore[operator]
+    a_sg = jax.lax.stop_gradient(alfa)
+    while isinstance(a_sg, jax.core.Tracer) and hasattr(a_sg, "primal"):
+        a_sg = a_sg.primal
+    if not isinstance(a_sg, jax.core.Tracer):
+        av = float(a_sg)
+        if av >= 1.0:
+            out2_only: core.EosEvalOutput = eval_2nd()  # type: ignore[operator]
+            return out2_only
+        out1: core.EosEvalOutput = eval_1st()  # type: ignore[operator]
+        lns1 = float(jax.lax.stop_gradient(out1.res[core.I_LN_S]))
+        dlnd_s1 = float(jax.lax.stop_gradient(out1.d_dlnd[core.I_LN_S]))
+        dlnt_s1 = float(jax.lax.stop_gradient(out1.d_dln_t[core.I_LN_S]))
+        if not (
+            np.isfinite(lns1) and np.isfinite(dlnd_s1) and np.isfinite(dlnt_s1)
+        ):
+            out2_fb: core.EosEvalOutput = eval_2nd()  # type: ignore[operator]
+            return out2_fb
+        if av <= 0.0:
+            return out1
+        out2: core.EosEvalOutput = eval_2nd()  # type: ignore[operator]
+        return core.blend_eos_results(
+            alfa, d_dlog_t, d_dlog_rho, False, out2, out1, backend="jax"
+        )
+    out1_j: core.EosEvalOutput = eval_1st()  # type: ignore[operator]
+    out2_j: core.EosEvalOutput = eval_2nd()  # type: ignore[operator]
+    valid1 = (
+        jnp.isfinite(out1_j.res[core.I_LN_S])
+        & jnp.isfinite(out1_j.d_dlnd[core.I_LN_S])
+        & jnp.isfinite(out1_j.d_dln_t[core.I_LN_S])
+        & (alfa < 1.0)
+    )
+    safe_out1 = core.EosEvalOutput(
+        res=jnp.where(valid1, out1_j.res, out2_j.res),
+        d_dlnd=jnp.where(valid1, out1_j.d_dlnd, out2_j.d_dlnd),
+        d_dln_t=jnp.where(valid1, out1_j.d_dln_t, out2_j.d_dln_t),
+    )
+    alfa_eff = jnp.where(valid1, jnp.clip(alfa, 0.0, 1.0), 1.0)
+    dt_eff = jnp.where(valid1, d_dlog_t, 0.0)
+    dr_eff = jnp.where(valid1, d_dlog_rho, 0.0)
     return core.blend_eos_results(
-        alfa, d_dlog_t, d_dlog_rho, False, out2, out1, backend="jax"
+        alfa_eff, dt_eff, dr_eff, False, out2_j, safe_out1, backend="jax"
     )
 
 
@@ -314,7 +342,15 @@ def eos_dt_get_native_jax(
     use_opal_scvh: bool = True,
 ) -> tuple[jax.Array, jax.Array, jax.Array]:
     """Evaluate the 7-level `eosDT_get` cascade in pure native JAX."""
-    xa_np = np.asarray(jax.lax.stop_gradient(xa), dtype=np.float64)
+    if isinstance(xa, np.ndarray):
+        xa_np = np.asarray(xa, dtype=np.float64)
+    else:
+        xa_sg = jax.lax.stop_gradient(xa)
+        while isinstance(xa_sg, jax.core.Tracer) and hasattr(xa_sg, "primal"):
+            xa_sg = xa_sg.primal
+        if isinstance(xa_sg, jax.core.Tracer) and hasattr(xa_sg, "val"):
+            xa_sg = xa_sg.val
+        xa_np = np.asarray(xa_sg, dtype=np.float64)
     cids = [int(c) for c in chem_id]
     comp = chem.get_composition_info(cids, xa_np)
     x_val, z_val = float(comp.xh), float(comp.xz)
@@ -342,14 +378,9 @@ def eos_dt_get_native_jax(
         )
 
     def _lvl5() -> core.EosEvalOutput:
-        if use_opal_scvh:
-            a, dr, dt = get_opal_scvh_alfa_jax(log_t, log_rho, z_val)
-        else:
-            a, dt, dr = (
-                jnp.ones_like(log_t),
-                jnp.zeros_like(log_t),
-                jnp.zeros_like(log_t),
-            )
+        if not use_opal_scvh:
+            return _lvl6()
+        a, dr, dt = get_opal_scvh_alfa_jax(log_t, log_rho, z_val)
         return _combine_jax(
             a,
             dt,
@@ -361,14 +392,9 @@ def eos_dt_get_native_jax(
         )
 
     def _lvl4() -> core.EosEvalOutput:
-        if use_free_eos:
-            a, dt, dr = get_free_eos_alfa_jax(log_rho, log_t, z_val)
-        else:
-            a, dt, dr = (
-                jnp.ones_like(log_t),
-                jnp.zeros_like(log_t),
-                jnp.zeros_like(log_t),
-            )
+        if not use_free_eos:
+            return _lvl5()
+        a, dt, dr = get_free_eos_alfa_jax(log_rho, log_t, z_val)
         return _combine_jax(
             a,
             dt,
@@ -380,16 +406,11 @@ def eos_dt_get_native_jax(
         )
 
     def _lvl3() -> core.EosEvalOutput:
-        if use_pc:
-            a, dt, dr = _pc_jax.get_pc_alfa_jax(
-                log_rho, log_t, abar, zbar, use_gamma_limit=pc_use_gamma_limit
-            )
-        else:
-            a, dt, dr = (
-                jnp.ones_like(log_t),
-                jnp.zeros_like(log_t),
-                jnp.zeros_like(log_t),
-            )
+        if not use_pc:
+            return _lvl4()
+        a, dt, dr = _pc_jax.get_pc_alfa_jax(
+            log_rho, log_t, abar, zbar, use_gamma_limit=pc_use_gamma_limit
+        )
         return _combine_jax(
             a,
             dt,
@@ -401,14 +422,9 @@ def eos_dt_get_native_jax(
         )
 
     def _lvl2() -> core.EosEvalOutput:
-        if use_skye:
-            a, dt, dr = skye.get_skye_alfa_jax(log_rho, log_t, abar, zbar)
-        else:
-            a, dt, dr = (
-                jnp.ones_like(log_t),
-                jnp.zeros_like(log_t),
-                jnp.zeros_like(log_t),
-            )
+        if not use_skye:
+            return _lvl3()
+        a, dt, dr = skye.get_skye_alfa_jax(log_rho, log_t, abar, zbar)
         return _combine_jax(
             a,
             dt,
@@ -427,23 +443,19 @@ def eos_dt_get_native_jax(
             _lvl3,
         )
 
-    if use_cms:
-        a_cms, dt_cms, dr_cms = get_cms_alfa_jax(log_rho, log_t, z_val)
+    if not use_cms:
+        out = _lvl2()
     else:
-        a_cms, dt_cms, dr_cms = (
-            jnp.ones_like(log_t),
-            jnp.zeros_like(log_t),
-            jnp.zeros_like(log_t),
+        a_cms, dt_cms, dr_cms = get_cms_alfa_jax(log_rho, log_t, z_val)
+        out = _combine_jax(
+            a_cms,
+            dt_cms,
+            dr_cms,
+            lambda: core.EosEvalOutput(
+                *_tables_4d_jax.eval_cms_eos_jax(rho, temp, x_val)
+            ),
+            _lvl2,
         )
-    out = _combine_jax(
-        a_cms,
-        dt_cms,
-        dr_cms,
-        lambda: core.EosEvalOutput(
-            *_tables_4d_jax.eval_cms_eos_jax(rho, temp, x_val)
-        ),
-        _lvl2,
-    )
     return (
         jnp.asarray(out.res),
         jnp.asarray(out.d_dlnd),

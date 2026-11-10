@@ -118,7 +118,9 @@ where
             kopt = k;
         }
         if nf >= maxfun {
-            x[..n].copy_from_slice(&(0..n).map(|j| xbase[j] + xpt[kopt][j]).collect::<Vec<_>>());
+            x[..n].copy_from_slice(
+                &(0..n).map(|j| xbase[j] + xpt[kopt][j]).collect::<Vec<_>>(),
+            );
             return Ok(NewuoaResult {
                 x_min: x[..n].to_vec(),
                 f_min: fval[kopt],
@@ -148,16 +150,16 @@ where
                 if k == kopt {
                     continue;
                 }
-                let dsq: f64 = (0..n)
-                    .map(|j| (xpt[k][j] - xpt[kopt][j]).powi(2))
-                    .sum();
+                let dsq: f64 =
+                    (0..n).map(|j| (xpt[k][j] - xpt[kopt][j]).powi(2)).sum();
                 if dsq > max_dist_sq {
                     max_dist_sq = dsq;
                     kfar = k;
                 }
             }
             if max_dist_sq > dist_thresh && nf < maxfun {
-                let d_geo = geometry_step_unconstrained(n, npt, kopt, kfar, rho, &xpt);
+                let d_geo =
+                    geometry_step_unconstrained(n, npt, kopt, kfar, rho, &xpt);
                 let xnew: Vec<f64> =
                     (0..n).map(|j| xpt[kopt][j] + d_geo[j]).collect();
                 let pt: Vec<f64> = (0..n).map(|j| xbase[j] + xnew[j]).collect();
@@ -246,9 +248,8 @@ where
             }
         } else {
             // Replace knew if the new point is closer than knew to xopt
-            let dsq_knew: f64 = (0..n)
-                .map(|j| (xpt[knew][j] - xpt[kopt][j]).powi(2))
-                .sum();
+            let dsq_knew: f64 =
+                (0..n).map(|j| (xpt[knew][j] - xpt[kopt][j]).powi(2)).sum();
             if dnorm * dnorm < dsq_knew {
                 xpt[knew] = xnew;
                 fval[knew] = fnew;
@@ -271,7 +272,9 @@ fn max_dist_sq_from(xpt: &[Vec<f64>], kopt: usize) -> f64 {
     xpt.iter()
         .enumerate()
         .filter(|&(k, _)| k != kopt)
-        .map(|(_, p)| (0..n).map(|j| (p[j] - xpt[kopt][j]).powi(2)).sum::<f64>())
+        .map(|(_, p)| {
+            (0..n).map(|j| (p[j] - xpt[kopt][j]).powi(2)).sum::<f64>()
+        })
         .fold(0.0_f64, f64::max)
 }
 
@@ -389,7 +392,8 @@ fn trsbox_unconstrained(
             r[i] += alpha * hp[i];
         }
         let rr_new: f64 = r.iter().map(|&v| v * v).sum();
-        if rr_new.sqrt() <= 1e-12 * grad.iter().map(|&v| v * v).sum::<f64>().sqrt()
+        if rr_new.sqrt()
+            <= 1e-12 * grad.iter().map(|&v| v * v).sum::<f64>().sqrt()
         {
             break;
         }

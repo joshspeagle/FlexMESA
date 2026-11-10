@@ -224,8 +224,8 @@ impl Cshep2Interpolant {
                     }
                     if neq < lnp {
                         let np = npts[neq];
-                        rs = (x[np - 1] - xk).powi(2)
-                            + (y[np - 1] - yk).powi(2);
+                        rs =
+                            (x[np - 1] - xk).powi(2) + (y[np - 1] - yk).powi(2);
                         if (rs - rsold) / rs < RTOL {
                             continue;
                         }
@@ -311,10 +311,12 @@ impl Cshep2Interpolant {
         py: f64,
     ) -> (f64, f64, f64, f64, f64, f64) {
         let nr_i = self.nr as isize;
-        let imin = (((px - self.xmin - self.rmax) / self.dx) as isize + 1).max(1);
+        let imin =
+            (((px - self.xmin - self.rmax) / self.dx) as isize + 1).max(1);
         let imax =
             (((px - self.xmin + self.rmax) / self.dx) as isize + 1).min(nr_i);
-        let jmin = (((py - self.ymin - self.rmax) / self.dy) as isize + 1).max(1);
+        let jmin =
+            (((py - self.ymin - self.rmax) / self.dy) as isize + 1).max(1);
         let jmax =
             (((py - self.ymin + self.rmax) / self.dy) as isize + 1).min(nr_i);
 
@@ -374,15 +376,12 @@ impl Cshep2Interpolant {
                         let ck = (t1_c * delx + ak[5] * dely + ak[7]) * delx
                             + (t3_c * dely + ak[8]) * dely
                             + self.f[k - 1];
-                        let ckx = t2_c * delx
-                            + (ak[2] * dely + ak[5]) * dely
-                            + ak[7];
-                        let cky = t4_c * dely
-                            + (ak[1] * delx + ak[5]) * delx
-                            + ak[8];
+                        let ckx =
+                            t2_c * delx + (ak[2] * dely + ak[5]) * dely + ak[7];
+                        let cky =
+                            t4_c * dely + (ak[1] * delx + ak[5]) * delx + ak[8];
                         let ckxx = t2_c + 3.0 * ak[0] * delx;
-                        let ckxy =
-                            2.0 * (ak[1] * delx + ak[2] * dely) + ak[5];
+                        let ckxy = 2.0 * (ak[1] * delx + ak[2] * dely) + ak[5];
                         let ckyy = t4_c + 3.0 * ak[3] * dely;
 
                         sw += w;
@@ -486,10 +485,6 @@ pub fn qs2val(interp: &Cshep2Interpolant, px: f64, py: f64) -> f64 {
 
 /// Alias for [`interp_cs2grd_db`].
 #[must_use]
-pub fn qs2grd(
-    interp: &Cshep2Interpolant,
-    px: f64,
-    py: f64,
-) -> (f64, f64, f64) {
+pub fn qs2grd(interp: &Cshep2Interpolant, px: f64, py: f64) -> (f64, f64, f64) {
     interp.eval_grad(px, py)
 }

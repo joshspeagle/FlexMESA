@@ -234,7 +234,8 @@ fn test_all_10000_golden_rows_parity_against_upstream_mesa() {
 #[test]
 fn test_solar_profile_test_1_0_data_all_194_zones() {
     // Unconditional check on representative active core and passive envelope zones
-    for (rho, t, expect_active) in [(154.0, 1.56e7, true), (1.0e-2, 4.0e6, false)]
+    for (rho, t, expect_active) in
+        [(154.0, 1.56e7, true), (1.0e-2, 4.0e6, false)]
     {
         let res = neu_get(
             Some(t),

@@ -183,9 +183,8 @@ where
                 if k == kopt {
                     continue;
                 }
-                let dsq: f64 = (0..n)
-                    .map(|j| (xpt[k][j] - xpt[kopt][j]).powi(2))
-                    .sum();
+                let dsq: f64 =
+                    (0..n).map(|j| (xpt[k][j] - xpt[kopt][j]).powi(2)).sum();
                 if dsq > max_dist_sq {
                     max_dist_sq = dsq;
                     kfar = k;
@@ -195,8 +194,7 @@ where
                 let mut xnew = vec![0.0_f64; n];
                 let norm = max_dist_sq.sqrt().max(1e-15);
                 for j in 0..n {
-                    let step =
-                        (rho / norm) * (xpt[kfar][j] - xpt[kopt][j]);
+                    let step = (rho / norm) * (xpt[kfar][j] - xpt[kopt][j]);
                     xnew[j] = (xpt[kopt][j] + step).clamp(sl[j], su[j]);
                 }
                 let pt: Vec<f64> = (0..n)
@@ -283,10 +281,11 @@ where
                 knew = k;
             }
         }
-        let dsq_knew: f64 = (0..n)
-            .map(|j| (xpt[knew][j] - xpt[kopt][j]).powi(2))
-            .sum();
-        if fnew < fopt || dsq_knew > (2.0 * delta).powi(2) || dnorm * dnorm < dsq_knew
+        let dsq_knew: f64 =
+            (0..n).map(|j| (xpt[knew][j] - xpt[kopt][j]).powi(2)).sum();
+        if fnew < fopt
+            || dsq_knew > (2.0 * delta).powi(2)
+            || dnorm * dnorm < dsq_knew
         {
             xpt[knew] = xnew;
             fval[knew] = fnew;
@@ -411,11 +410,7 @@ fn trsbox_bounded(
             }
             let beta = rr_new / rr;
             for i in 0..n {
-                p[i] = if active[i] {
-                    0.0
-                } else {
-                    -r[i] + beta * p[i]
-                };
+                p[i] = if active[i] { 0.0 } else { -r[i] + beta * p[i] };
             }
             rr = rr_new;
         }

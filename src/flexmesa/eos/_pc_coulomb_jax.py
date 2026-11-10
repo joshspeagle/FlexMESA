@@ -140,6 +140,11 @@ def fition9_jax(gami: jax.Array) -> tuple[jax.Array, ...]:
 
 def _hlfit_f_mid(eta: jax.Array) -> jax.Array:
     """Evaluate intermediate-regime bcc phonon free energy `f_mid(eta)`."""
+    return _hlfit_mid(eta)[0]
+
+
+def _hlfit_mid(eta: jax.Array) -> tuple[jax.Array, jax.Array, jax.Array]:
+    """Evaluate intermediate-regime bcc phonon `(f_mid, u_mid, cv_mid)`."""
     alpha, beta, gamma = 0.265764, 0.334547, 0.932446
     a1, a2, a3, a4, a6, a8 = (
         0.1839,
@@ -179,7 +184,74 @@ def _hlfit_f_mid(eta: jax.Array) -> jax.Array:
     ea = jnp.exp(-eta * alpha)
     eb = jnp.exp(-eta * beta)
     eg = jnp.exp(-eta * gamma)
-    return jnp.log(1.0 - ea) + jnp.log(1.0 - eb) + jnp.log(1.0 - eg) - up / dn
+    f = jnp.log(1.0 - ea) + jnp.log(1.0 - eb) + jnp.log(1.0 - eg) - up / dn
+    up1 = (
+        eta
+        * (
+            eta
+            * (
+                eta * (eta2 * (eta2 * (8.0 * a8) + 6.0 * a6) + 4.0 * a4)
+                + 3.0 * a3
+            )
+            + 2.0 * a2
+        )
+        + a1
+    )
+    up2 = (
+        eta
+        * (
+            eta * (eta2 * (eta2 * (56.0 * a8) + 30.0 * a6) + 12.0 * a4)
+            + 6.0 * a3
+        )
+        + 2.0 * a2
+    )
+    dn1 = eta * (
+        eta2
+        * (
+            eta
+            * (
+                eta
+                * (
+                    eta * (eta2 * (eta2 * (11.0 * b11) + 9.0 * b9) + 7.0 * b7)
+                    + 6.0 * b6
+                )
+                + 5.0 * b5
+            )
+            + 4.0 * b4
+        )
+        + 2.0 * b2
+    )
+    dn2 = (
+        eta2
+        * (
+            eta
+            * (
+                eta
+                * (
+                    eta
+                    * (eta2 * (eta2 * (110.0 * b11) + 72.0 * b9) + 42.0 * b7)
+                    + 30.0 * b6
+                )
+                + 20.0 * b5
+            )
+            + 12.0 * b4
+        )
+        + 2.0 * b2
+    )
+    u_over_eta = (
+        ea * alpha / (1.0 - ea)
+        + eb * beta / (1.0 - eb)
+        + eg * gamma / (1.0 - eg)
+        - (up1 * dn - dn1 * up) / (dn * dn)
+    )
+    cv_over_eta2 = (
+        ea * (alpha * alpha) / ((1.0 - ea) * (1.0 - ea))
+        + eb * (beta * beta) / ((1.0 - eb) * (1.0 - eb))
+        + eg * (gamma * gamma) / ((1.0 - eg) * (1.0 - eg))
+        + ((up2 * dn - dn2 * up) * dn - (up1 * dn - dn1 * up) * dn1 * 2.0)
+        / (dn * dn * dn)
+    )
+    return f, u_over_eta * eta, cv_over_eta2 * eta2
 
 
 def fharm12_anharm8_jax(
@@ -197,11 +269,7 @@ def fharm12_anharm8_jax(
     clm, u1, c11 = -2.49389, 0.5113875, 0.0047770935
     eta = jnp.maximum(tpt, 1.0e-99)
     eta2 = eta * eta
-    f_mid = _hlfit_f_mid(eta)
-    df_deta = jax.grad(_hlfit_f_mid)(eta)
-    d2f_deta2 = jax.grad(jax.grad(_hlfit_f_mid))(eta)
-    u_mid = -eta * df_deta
-    cv_mid = -eta2 * d2f_deta2
+    f_mid, u_mid, cv_mid = _hlfit_mid(eta)
 
     u_hi = 3.0 / (eta**3 * c11)
     f_lo = 3.0 * jnp.log(eta) + clm - 1.5 * u1 * eta + eta2 / 24.0

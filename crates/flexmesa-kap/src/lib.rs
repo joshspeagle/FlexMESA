@@ -50,6 +50,7 @@ pub mod conduction;
 pub mod eval;
 pub mod fixed;
 pub mod loader;
+pub mod loader_ascii;
 pub(crate) mod loader_parse;
 pub mod low_t;
 pub mod spline;

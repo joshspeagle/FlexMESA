@@ -288,26 +288,47 @@ where
     Ok((x, fx))
 }
 
-/// Seeks the global minimum $(x_{\min}, f(x_{\min}))$ of $f$ on $[a, b]$ given
-/// an upper bound `m` on $|f''(x)|$ (`eval_brent_global_min` in
-/// `mod_brent.f90`).
-///
-/// Evaluates $f$ at the initial hint `c` and the interval endpoints $a, b$,
-/// then partitions $[a, b]$ into uniform sub-intervals and refines each
-/// sub-interval via [`brent_local_min`].
-///
-/// # Arguments
-///
-/// - `max_tries`: Total function evaluation budget across sub-intervals.
-/// - `a`, `b`: Lower and upper search bounds ($a < b$).
-/// - `c`: Initial candidate abscissa clamped to $[a, b]$.
-/// - `m`: Bound on $|f''(x)|$ controlling sub-interval count.
-/// - `e`, `t`: Relative and absolute abscissa tolerances passed to
-///   [`brent_local_min`].
+/// Alias for [`brent_local_min`] matching upstream `test_brent.f90` (`local_min`).
 ///
 /// # Errors
 ///
-/// Propagates any error from `func` or [`brent_local_min`].
+/// Propagates any error from [`brent_local_min`].
+pub fn local_min<F>(
+    max_tries: usize,
+    a: f64,
+    b: f64,
+    eps: f64,
+    t: f64,
+    func: F,
+) -> Result<(f64, f64), NumError>
+where
+    F: FnMut(f64) -> Result<f64, NumError>,
+{
+    brent_local_min(max_tries, a, b, eps, t, func)
+}
+
+/// Seeks the global minimum $(x_{\min}, f(x_{\min}))$ of $f$ on $[a, b]$ given
+/// an upper bound `m` on $f''(x)$ (`eval_global_min` / `glomin` in
+/// `mod_brent.f90`).
+///
+/// Implements Brent's (1973) global minimization algorithm using parabolic
+/// under-estimators with second-derivative bound $m$ to skip regions where
+/// $f(x)$ cannot fall below the best value found so far.
+///
+/// # Arguments
+///
+/// - `max_tries`: Maximum number of outer interval-advance iterations.
+/// - `a`, `b`: Lower and upper search bounds ($a < b$).
+/// - `c`: Initial candidate abscissa in $[a, b]$ (uses midpoint if outside).
+/// - `m`: Upper bound on $f''(x)$ for $x \in [a, b]$.
+/// - `e`: Positive bound on the absolute evaluation error of $f(x)$.
+/// - `t`: Positive absolute abscissa tolerance.
+///
+/// # Errors
+///
+/// Returns [`NumError::InvalidParameter`] if $a \ge b$ or inputs are non-finite,
+/// or propagates any error from `func`.
+#[allow(clippy::manual_midpoint, clippy::too_many_lines)]
 pub fn brent_global_min<F>(
     max_tries: usize,
     a: f64,
@@ -321,34 +342,196 @@ pub fn brent_global_min<F>(
 where
     F: FnMut(f64) -> Result<f64, NumError>,
 {
-    if !a.is_finite() || !b.is_finite() || !c.is_finite() || a >= b {
+    if !a.is_finite()
+        || !b.is_finite()
+        || !c.is_finite()
+        || !m.is_finite()
+        || !e.is_finite()
+        || !t.is_finite()
+        || a >= b
+    {
         return Err(NumError::InvalidParameter(
-            "require finite a < b and finite c in brent_global_min",
+            "require finite a < b and finite parameters in brent_global_min",
         ));
     }
-    let mut best_x = c.clamp(a, b);
-    let mut best_f = func(best_x)?;
-    for &endpoint in &[a, b] {
-        let fe = func(endpoint)?;
-        if fe < best_f {
-            best_f = fe;
-            best_x = endpoint;
-        }
+    let machep = f64::EPSILON;
+    let mut a0 = b;
+    let mut x = a0;
+    let mut a2 = a;
+    let mut y0 = func(b)?;
+    let yb = y0;
+    let mut y2 = func(a)?;
+    let mut y = y2;
+    if !y0.is_finite() || !y2.is_finite() {
+        return Err(NumError::NonFiniteValue(
+            "non-finite endpoint value in brent_global_min",
+        ));
     }
-    let n_sub = if m > 0.0 { 8usize } else { 4usize };
-    let step = (b - a) / (n_sub as f64);
-    let sub_budget = (max_tries / n_sub).max(25);
-    for idx in 0..n_sub {
-        let sub_a = a + (idx as f64) * step;
-        let sub_b = if idx + 1 == n_sub { b } else { sub_a + step };
-        if let Ok((xm, fm)) =
-            brent_local_min(sub_budget, sub_a, sub_b, e, t, &mut func)
-        {
-            if fm < best_f {
-                best_f = fm;
-                best_x = xm;
+    if y0 < y {
+        y = y0;
+    } else {
+        x = a;
+    }
+    if m <= 0.0 || b <= a {
+        return Ok((x, y));
+    }
+
+    let m2 = 0.5 * (1.0 + 16.0 * machep) * m;
+    let mut sc = if c <= a || b <= c {
+        0.5 * (a + b)
+    } else {
+        c
+    };
+    let mut y1 = func(sc)?;
+    if !y1.is_finite() {
+        return Err(NumError::NonFiniteValue(
+            "non-finite interior value in brent_global_min",
+        ));
+    }
+    let mut k: i64 = 3;
+    let mut d0 = a2 - sc;
+    let mut h = 9.0 / 11.0;
+    if y1 < y {
+        x = sc;
+        y = y1;
+    }
+
+    let limit = if max_tries == 0 { 100_000 } else { max_tries };
+    for _iter in 1..=limit {
+        let d1 = a2 - a0;
+        let d2 = sc - a0;
+        let z2 = b - a2;
+        let z0 = y2 - y1;
+        let z1 = y2 - y0;
+        let mut r = d1 * d1 * z0 - d0 * d0 * z1;
+        let mut p = r;
+        let qs = 2.0 * (d0 * z1 - d1 * z0);
+        let mut q = qs;
+
+        if k < 1_000_000 || y2 <= y {
+            loop {
+                if q * (r * (yb - y2) + z2 * q * ((y2 - y) + t))
+                    < z2 * m2 * r * (z2 * q - r)
+                {
+                    let a3 = a2 + r / q;
+                    let y3 = func(a3)?;
+                    if !y3.is_finite() {
+                        return Err(NumError::NonFiniteValue(
+                            "non-finite objective value in brent_global_min",
+                        ));
+                    }
+                    if y3 < y {
+                        x = a3;
+                        y = y3;
+                    }
+                }
+                k = (1611 * k) % 1_048_576;
+                q = 1.0;
+                r = (b - a) * 0.00001 * (k as f64);
+                if z2 <= r {
+                    break;
+                }
+            }
+        } else {
+            k = (1611 * k) % 1_048_576;
+            q = 1.0;
+            r = (b - a) * 0.00001 * (k as f64);
+            while r < z2 {
+                if q * (r * (yb - y2) + z2 * q * ((y2 - y) + t))
+                    < z2 * m2 * r * (z2 * q - r)
+                {
+                    let a3 = a2 + r / q;
+                    let y3 = func(a3)?;
+                    if !y3.is_finite() {
+                        return Err(NumError::NonFiniteValue(
+                            "non-finite objective value in brent_global_min",
+                        ));
+                    }
+                    if y3 < y {
+                        x = a3;
+                        y = y3;
+                    }
+                }
+                k = (1611 * k) % 1_048_576;
+                q = 1.0;
+                r = (b - a) * 0.00001 * (k as f64);
             }
         }
+
+        r = m2 * d0 * d1 * d2;
+        let s = (((y2 - y) + t) / m2).sqrt();
+        h = 0.5 * (1.0 + h);
+        p = h * (p + 2.0 * r * s);
+        q += 0.5 * qs;
+        r = -0.5 * (d0 + (z0 + 2.01 * e) / (d0 * m2));
+        r = if r < s || d0 < 0.0 { a2 + s } else { a2 + r };
+        let mut a3 = if p * q > 0.0 { a2 + p / q } else { r };
+
+        let y3 = loop {
+            a3 = a3.max(r);
+            let y3_val = if b <= a3 {
+                a3 = b;
+                yb
+            } else {
+                let v = func(a3)?;
+                if !v.is_finite() {
+                    return Err(NumError::NonFiniteValue(
+                        "non-finite objective value in brent_global_min",
+                    ));
+                }
+                v
+            };
+            if y3_val < y {
+                x = a3;
+                y = y3_val;
+            }
+            d0 = a3 - a2;
+            if a3 <= r {
+                break y3_val;
+            }
+            p = 2.0 * (y2 - y3_val) / (m * d0);
+            if (1.0 + 9.0 * machep) * d0 <= p.abs() {
+                break y3_val;
+            }
+            if 0.5 * m2 * (d0 * d0 + p * p)
+                <= (y2 - y) + (y3_val - y) + 2.0 * t
+            {
+                break y3_val;
+            }
+            a3 = 0.5 * (a2 + a3);
+            h *= 0.9;
+        };
+
+        if b <= a3 {
+            break;
+        }
+        a0 = sc;
+        sc = a2;
+        a2 = a3;
+        y0 = y1;
+        y1 = y2;
+        y2 = y3;
     }
-    Ok((best_x, best_f))
+    Ok((x, y))
+}
+
+/// Alias for [`brent_global_min`] matching Burkardt/MESA `glomin`.
+///
+/// # Errors
+///
+/// Propagates any error from [`brent_global_min`].
+pub fn glomin<F>(
+    max_tries: usize,
+    a: f64,
+    b: f64,
+    c: f64,
+    m: f64,
+    e: f64,
+    t: f64,
+    func: F,
+) -> Result<(f64, f64), NumError>
+where
+    F: FnMut(f64) -> Result<f64, NumError>,
+{
+    brent_global_min(max_tries, a, b, c, m, e, t, func)
 }

@@ -213,39 +213,17 @@ pub fn set_basic_vars(model: &mut StarModel) -> Result<(), StarError> {
 /// Returns [`StarError::MicrophysicsError`] if EOS evaluation fails in any zone.
 pub fn do_eos(model: &mut StarModel) -> Result<(), StarError> {
     let ht = HelmTable::builtin();
-    let eos_outputs = match eos_dt_get_zones(
+    let eos_outputs = eos_dt_get_zones(
         ht,
         &model.rho,
         &model.t,
         &model.chem_id,
         &model.xa,
         &model.eos_config,
-    ) {
-        Ok(outputs) => outputs,
-        Err(_)
-            if model.eos_config.use_free_eos
-                || model.eos_config.use_opal_scvh =>
-        {
-            model.eos_config.use_free_eos = false;
-            model.eos_config.use_opal_scvh = false;
-            eos_dt_get_zones(
-                ht,
-                &model.rho,
-                &model.t,
-                &model.chem_id,
-                &model.xa,
-                &model.eos_config,
-            )
-            .map_err(|e| {
-                StarError::MicrophysicsError(format!("do_eos failed: {e}"))
-            })?
-        }
-        Err(e) => {
-            return Err(StarError::MicrophysicsError(format!(
-                "do_eos failed: {e}"
-            )));
-        }
-    };
+    )
+    .map_err(|e| {
+        StarError::MicrophysicsError(format!("do_eos failed: {e}"))
+    })?;
 
     for (k, out) in eos_outputs.into_iter().enumerate() {
         let t_k = model.t[k];

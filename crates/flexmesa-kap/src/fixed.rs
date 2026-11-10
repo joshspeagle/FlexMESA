@@ -6,7 +6,7 @@
 
 use crate::loader::{kap_tables, KapXTable, KapZTable};
 use crate::spline::{do_kap_interpolations, locate_log};
-use crate::types::{KapConfig, KapError, KapLowTOption, KapOption};
+use crate::types::{KapConfig, KapError, KapLowTOption};
 use flexmesa_autodiff::AutoDiffReal2VarOrder1;
 use flexmesa_interp1d::interpolate_vector_pm_autodiff;
 
@@ -26,17 +26,13 @@ pub fn get1_kap_fixed_metal_results(
     log_t: f64,
 ) -> Result<(f64, f64, f64), KapError> {
     let tables = kap_tables();
-    let set = if let Some(found) =
-        tables.fixed_sets.iter().find(|s| s.prefix == prefix)
-    {
-        found
-    } else if KapOption::from_prefix(prefix).is_some()
-        || KapLowTOption::from_prefix(prefix).is_some()
-    {
-        &tables.fixed_sets[0]
-    } else {
-        return Err(KapError::MissingTable("unknown fixed-metal table prefix"));
-    };
+    let canonical =
+        KapLowTOption::from_prefix(prefix).map_or(prefix, |o| o.prefix());
+    let set = tables
+        .fixed_sets
+        .iter()
+        .find(|s| s.prefix == prefix || s.prefix == canonical)
+        .ok_or(KapError::MissingTable("unknown fixed-metal table prefix"))?;
     let z_tables = &set.z_tables;
     let num_zs = z_tables.len();
     if num_zs == 0 {
@@ -74,28 +70,6 @@ pub fn get1_kap_fixed_metal_results(
     }
 }
 
-fn nearest_present_z_idx(z_tables: &[KapZTable], target_iz: usize) -> usize {
-    if z_tables[target_iz]
-        .x_tables
-        .iter()
-        .any(|xt| xt.raw_i16.is_some())
-    {
-        return target_iz;
-    }
-    let mut best = target_iz;
-    let mut best_dist = f64::INFINITY;
-    for (idx, zt) in z_tables.iter().enumerate() {
-        if zt.x_tables.iter().any(|xt| xt.raw_i16.is_some()) {
-            let d = (zt.z - z_tables[target_iz].z).abs();
-            if d < best_dist {
-                best_dist = d;
-                best = idx;
-            }
-        }
-    }
-    best
-}
-
 fn get_kap_for_x_z_cubic(
     cfg: &KapConfig,
     z_tables: &[KapZTable],
@@ -115,17 +89,6 @@ fn get_kap_for_x_z_cubic(
     };
 
     let indices = [i1 - 1, i1, i1 + 1, i1 + 2];
-    let all_present = indices.iter().all(|&idx| {
-        z_tables[idx].x_tables.iter().any(|xt| xt.raw_i16.is_some())
-    });
-    if !all_present {
-        let z0 = z_tables[iz].z;
-        let z1 = z_tables[iz + 1].z;
-        return get_kap_for_x_z_linear(
-            cfg, z_tables, iz, z, z0, z1, x, log_rho, log_t,
-        );
-    }
-
     let mut z_old = [AutoDiffReal2VarOrder1::from(0.0); 4];
     let mut v_old = [AutoDiffReal2VarOrder1::from(0.0); 4];
     for (k, &izz) in indices.iter().enumerate() {
@@ -157,43 +120,17 @@ fn get_kap_for_x_z_linear(
     log_rho: f64,
     log_t: f64,
 ) -> Result<(f64, f64, f64), KapError> {
-    let iz0 = nearest_present_z_idx(z_tables, iz);
-    let iz1 = nearest_present_z_idx(z_tables, iz + 1);
     let (lk0, dlk0_dr, dlk0_dt) =
-        get_kap_for_x(cfg, &z_tables[iz0], x, log_rho, log_t)?;
-    if iz0 == iz1 {
-        return Ok((lk0, dlk0_dr, dlk0_dt));
-    }
+        get_kap_for_x(cfg, &z_tables[iz], x, log_rho, log_t)?;
     let (lk1, dlk1_dr, dlk1_dt) =
-        get_kap_for_x(cfg, &z_tables[iz1], x, log_rho, log_t)?;
-    let _ = (z0, z1);
-    let z0_act = z_tables[iz0].z;
-    let z1_act = z_tables[iz1].z;
-    let beta = (z - z1_act) / (z0_act - z1_act);
+        get_kap_for_x(cfg, &z_tables[iz + 1], x, log_rho, log_t)?;
+    let beta = (z - z1) / (z0 - z1);
     let alfa = 1.0 - beta;
     Ok((
         beta * lk0 + alfa * lk1,
         beta * dlk0_dr + alfa * dlk1_dr,
         beta * dlk0_dt + alfa * dlk1_dt,
     ))
-}
-
-fn nearest_present_x_idx(x_tables: &[KapXTable], target_ix: usize) -> usize {
-    if x_tables[target_ix].raw_i16.is_some() {
-        return target_ix;
-    }
-    let mut best = target_ix;
-    let mut best_dist = f64::INFINITY;
-    for (idx, xt) in x_tables.iter().enumerate() {
-        if xt.raw_i16.is_some() {
-            let d = (xt.x - x_tables[target_ix].x).abs();
-            if d < best_dist {
-                best_dist = d;
-                best = idx;
-            }
-        }
-    }
-    best
 }
 
 fn get_kap_for_x(
@@ -209,12 +146,14 @@ fn get_kap_for_x(
     let x_tables = &zt.x_tables;
     let num_xs = x_tables.len();
     if num_xs == 1 || x >= x_tables[num_xs - 1].x {
-        let ix = nearest_present_x_idx(x_tables, num_xs - 1);
-        return get_kap_for_log_rho_log_t(&x_tables[ix], log_rho, log_t);
+        return get_kap_for_log_rho_log_t(
+            &x_tables[num_xs - 1],
+            log_rho,
+            log_t,
+        );
     }
     if x <= x_tables[0].x {
-        let ix = nearest_present_x_idx(x_tables, 0);
-        return get_kap_for_log_rho_log_t(&x_tables[ix], log_rho, log_t);
+        return get_kap_for_log_rho_log_t(&x_tables[0], log_rho, log_t);
     }
 
     let mut ix = num_xs - 1;
@@ -225,19 +164,20 @@ fn get_kap_for_x(
         }
     }
     if ix == num_xs - 1 {
-        let idx = nearest_present_x_idx(x_tables, num_xs - 1);
-        return get_kap_for_log_rho_log_t(&x_tables[idx], log_rho, log_t);
+        return get_kap_for_log_rho_log_t(
+            &x_tables[num_xs - 1],
+            log_rho,
+            log_t,
+        );
     }
 
     let x0 = x_tables[ix].x;
     let x1 = x_tables[ix + 1].x;
     if x0 >= x {
-        let idx = nearest_present_x_idx(x_tables, ix);
-        return get_kap_for_log_rho_log_t(&x_tables[idx], log_rho, log_t);
+        return get_kap_for_log_rho_log_t(&x_tables[ix], log_rho, log_t);
     }
     if x1 <= x {
-        let idx = nearest_present_x_idx(x_tables, ix + 1);
-        return get_kap_for_log_rho_log_t(&x_tables[idx], log_rho, log_t);
+        return get_kap_for_log_rho_log_t(&x_tables[ix + 1], log_rho, log_t);
     }
 
     if num_xs >= 4 && cfg.cubic_interpolation_in_x {
@@ -249,39 +189,30 @@ fn get_kap_for_x(
             ix
         };
         let indices = [i1 - 1, i1, i1 + 1, i1 + 2];
-        if indices.iter().all(|&idx| x_tables[idx].raw_i16.is_some()) {
-            let mut x_old = [AutoDiffReal2VarOrder1::from(0.0); 4];
-            let mut v_old = [AutoDiffReal2VarOrder1::from(0.0); 4];
-            for (k, &ixx) in indices.iter().enumerate() {
-                x_old[k] = AutoDiffReal2VarOrder1::from(x_tables[ixx].x);
-                let (lk, dlk_dr, dlk_dt) =
-                    get_kap_for_log_rho_log_t(&x_tables[ixx], log_rho, log_t)?;
-                v_old[k] = AutoDiffReal2VarOrder1 {
-                    val: lk,
-                    d1: [dlk_dt, dlk_dr],
-                };
-            }
-            let x_new = [AutoDiffReal2VarOrder1::from(x)];
-            let v_new = interpolate_vector_pm_autodiff(&x_old, &v_old, &x_new)
-                .map_err(|_| {
-                    KapError::NumericalFailure("interp_pm_autodiff failed in X")
-                })?;
-            return Ok((v_new[0].val, v_new[0].d1[1], v_new[0].d1[0]));
+        let mut x_old = [AutoDiffReal2VarOrder1::from(0.0); 4];
+        let mut v_old = [AutoDiffReal2VarOrder1::from(0.0); 4];
+        for (k, &ixx) in indices.iter().enumerate() {
+            x_old[k] = AutoDiffReal2VarOrder1::from(x_tables[ixx].x);
+            let (lk, dlk_dr, dlk_dt) =
+                get_kap_for_log_rho_log_t(&x_tables[ixx], log_rho, log_t)?;
+            v_old[k] = AutoDiffReal2VarOrder1 {
+                val: lk,
+                d1: [dlk_dt, dlk_dr],
+            };
         }
+        let x_new = [AutoDiffReal2VarOrder1::from(x)];
+        let v_new = interpolate_vector_pm_autodiff(&x_old, &v_old, &x_new)
+            .map_err(|_| {
+                KapError::NumericalFailure("interp_pm_autodiff failed in X")
+            })?;
+        return Ok((v_new[0].val, v_new[0].d1[1], v_new[0].d1[0]));
     }
 
-    let ix0 = nearest_present_x_idx(x_tables, ix);
-    let ix1 = nearest_present_x_idx(x_tables, ix + 1);
     let (lk0, dlk0_dr, dlk0_dt) =
-        get_kap_for_log_rho_log_t(&x_tables[ix0], log_rho, log_t)?;
-    if ix0 == ix1 {
-        return Ok((lk0, dlk0_dr, dlk0_dt));
-    }
+        get_kap_for_log_rho_log_t(&x_tables[ix], log_rho, log_t)?;
     let (lk1, dlk1_dr, dlk1_dt) =
-        get_kap_for_log_rho_log_t(&x_tables[ix1], log_rho, log_t)?;
-    let x0_act = x_tables[ix0].x;
-    let x1_act = x_tables[ix1].x;
-    let beta = (x - x1_act) / (x0_act - x1_act);
+        get_kap_for_log_rho_log_t(&x_tables[ix + 1], log_rho, log_t)?;
+    let beta = (x - x1) / (x0 - x1);
     let alfa = 1.0 - beta;
     Ok((
         beta * lk0 + alfa * lk1,

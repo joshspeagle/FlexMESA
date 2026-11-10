@@ -175,3 +175,70 @@ def test_ion_offset_and_ideal_eos_rust_jax_parity() -> None:
     np.testing.assert_allclose(
         b_r.res, np.asarray(b_j.res), rtol=1e-10, atol=1e-10
     )
+
+
+def test_dfermi_and_blend_off_golden_grid_and_jax_autodiff() -> None:
+    """Verify `dfermi` and `blend_eos_results` across off-golden grids."""
+    for dk in (-0.5, 0.5, 1.5, 2.5):
+        for eta in (-4.0, -0.5, 0.0, 2.5, 12.0, 35.0):
+            for theta in (1.0e-5, 1.0e-2, 0.2, 2.0):
+                fd_r, de_r, dt_r = eos.dfermi(dk, eta, theta, backend="rust")
+                fd_j, de_j, dt_j = eos.dfermi(
+                    dk, jnp.float64(eta), jnp.float64(theta), backend="jax"
+                )
+                np.testing.assert_allclose(float(fd_j), float(fd_r), rtol=1e-13)
+                np.testing.assert_allclose(float(de_j), float(de_r), rtol=1e-13)
+                np.testing.assert_allclose(float(dt_j), float(dt_r), rtol=1e-13)
+
+    for dk_ad in (0.5, 1.5):
+        eta0 = jnp.float64(1.8)
+        theta0 = jnp.float64(0.05)
+        _, de_an, dt_an = eos.dfermi(dk_ad, eta0, theta0, backend="jax")
+        g_eta, g_theta = jax.grad(
+            lambda e, th, k=dk_ad: eos.dfermi(k, e, th, backend="jax")[0],
+            argnums=(0, 1),
+        )(eta0, theta0)
+        np.testing.assert_allclose(float(g_eta), float(de_an), rtol=1e-12)
+        np.testing.assert_allclose(float(g_theta), float(dt_an), rtol=1e-12)
+
+    xa = np.array([0.70, 0.28, 0.02], dtype=np.float64)
+    weights = np.array([1.0078250322, 4.0026032541, 12.0], dtype=np.float64)
+    a = np.array([1.0, 4.0, 12.0], dtype=np.float64)
+    out1_r = eos.eval_ideal_eos_from_weights(
+        1.0e5, 1.0e-2, 1.3, 1.1, xa, weights, a, backend="rust"
+    )
+    out2_r = eos.eval_ideal_eos_from_weights(
+        2.5e5, 3.0e-2, 1.3, 1.1, xa, weights, a, backend="rust"
+    )
+    out1_j = eos.EosEvalOutput(
+        jnp.asarray(out1_r.res),
+        jnp.asarray(out1_r.d_dlnd),
+        jnp.asarray(out1_r.d_dln_t),
+    )
+    out2_j = eos.EosEvalOutput(
+        jnp.asarray(out2_r.res),
+        jnp.asarray(out2_r.d_dlnd),
+        jnp.asarray(out2_r.d_dln_t),
+    )
+    for alfa in (0.15, 0.5, 0.85):
+        br = eos.blend_eos_results(
+            alfa, 0.6, -0.3, False, out1_r, out2_r, backend="rust"
+        )
+        bj = eos.blend_eos_results(
+            jnp.float64(alfa),
+            jnp.float64(0.6),
+            jnp.float64(-0.3),
+            False,
+            out1_j,
+            out2_j,
+            backend="jax",
+        )
+        np.testing.assert_allclose(
+            br.res, np.asarray(bj.res), rtol=1e-12, atol=1e-12
+        )
+        np.testing.assert_allclose(
+            br.d_dlnd, np.asarray(bj.d_dlnd), rtol=1e-12, atol=1e-12
+        )
+        np.testing.assert_allclose(
+            br.d_dln_t, np.asarray(bj.d_dln_t), rtol=1e-12, atol=1e-12
+        )

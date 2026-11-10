@@ -296,31 +296,58 @@ def eval_skye_eos_jax(
     a_in = jnp.asarray([float(inf.a) for inf in infos], jnp.float64)
     r_j, t_j = jnp.asarray(rho, jnp.float64), jnp.asarray(temp, jnp.float64)
     ab_j, zb_j = jnp.asarray(abar, jnp.float64), jnp.asarray(zbar, jnp.float64)
-    t_lo, dth, d_lo, dd, fi_f, _, fi_ef, _ = helm._lookup_helm_cell_jax(
-        t_j, (zb_j / ab_j) * r_j
-    )
-    return cast(
+    xa_j = jnp.asarray(xa, jnp.float64)
+    use_off = jnp.asarray(bool(skye_use_ion_offsets))
+    use_og = jnp.asarray(str(skye_solid_mixing_rule).lower() == "ogata")
+    mf_lim = float(mass_fraction_limit)
+
+    def _eval_core(
+        r_in: jax.Array, t_in: jax.Array
+    ) -> tuple[jax.Array, jax.Array, jax.Array]:
+        t_lo, dth, d_lo, dd, fi_f, _, fi_ef, _ = helm._lookup_helm_cell_jax(
+            t_in, (zb_j / ab_j) * r_in
+        )
+        return cast(
+            tuple[jax.Array, jax.Array, jax.Array],
+            _eval_skye_cell_zone_jit(
+                r_in,
+                t_in,
+                ab_j,
+                zb_j,
+                xa_j,
+                azion,
+                acmi,
+                a_in,
+                t_lo,
+                dth,
+                d_lo,
+                dd,
+                fi_f,
+                fi_ef,
+                use_off,
+                use_og,
+                mf_lim,
+            ),
+        )
+
+    _eval = jax.custom_jvp(_eval_core)
+
+    def _eval_jvp(
+        primals: tuple[jax.Array, jax.Array],
+        tangents: tuple[jax.Array, jax.Array],
+    ) -> tuple[
         tuple[jax.Array, jax.Array, jax.Array],
-        _eval_skye_cell_zone_jit(
-            r_j,
-            t_j,
-            ab_j,
-            zb_j,
-            jnp.asarray(xa, jnp.float64),
-            azion,
-            acmi,
-            a_in,
-            t_lo,
-            dth,
-            d_lo,
-            dd,
-            fi_f,
-            fi_ef,
-            jnp.asarray(bool(skye_use_ion_offsets)),
-            jnp.asarray(str(skye_solid_mixing_rule).lower() == "ogata"),
-            float(mass_fraction_limit),
-        ),
-    )
+        tuple[jax.Array, jax.Array, jax.Array],
+    ]:
+        r_p, t_p = primals
+        dr, dt = tangents
+        res, d_dlnd, d_dln_t = _eval_core(r_p, t_p)
+        dres = d_dlnd * (dr / r_p) + d_dln_t * (dt / t_p)
+        z = jnp.zeros_like(res)
+        return (res, d_dlnd, d_dln_t), (dres, z, z)
+
+    _eval.defjvp(_eval_jvp)
+    return cast(tuple[jax.Array, jax.Array, jax.Array], _eval(r_j, t_j))
 
 
 def eval_skye_eos(

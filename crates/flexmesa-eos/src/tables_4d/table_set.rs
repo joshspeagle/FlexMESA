@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 //! Composition grid metadata (`DtXzInfo`) and lazy-loaded 4D table collection (`EosDtTableSet`).
 
+use crate::helm::table_io::resolve_mesa_data_dir;
+use crate::tables_4d::slice_cache::load_or_build_dt_slice;
 use crate::tables_4d::spline::{EosDtTableKind, EosDtVertex, EosDtXzTable};
 use crate::types::EosError;
 use std::collections::HashMap;
@@ -80,9 +82,9 @@ pub fn format_xz_str(v: f64) -> String {
     }
 }
 
-/// Returns the relative `.data` file path under a MESA `data` directory (`Get_eosDT_Table_Filenames`).
+/// Returns the table filename stem (e.g. `mesa-eosDT_02z60x`) for `(kind, ix_1based, iz_1based)`.
 #[must_use]
-pub fn eosdt_relative_data_path(
+pub fn eosdt_table_stem(
     kind: EosDtTableKind,
     xz: &DtXzInfo,
     ix_1based: usize,
@@ -93,15 +95,26 @@ pub fn eosdt_relative_data_path(
     let z_str = format_xz_str(z);
     let x_str = format_xz_str(x);
     match kind {
-        EosDtTableKind::OpalScvh => {
-            format!("eosDT_data/mesa-eosDT_{z_str}z{x_str}x.data")
-        }
+        EosDtTableKind::OpalScvh => format!("mesa-eosDT_{z_str}z{x_str}x"),
         EosDtTableKind::FreeEos => {
             let suffix = if iz_1based >= 13 { "_CO" } else { "" };
-            format!(
-                "eosFreeEOS_data/mesa-FreeEOS_{z_str}z{x_str}x{suffix}.data"
-            )
+            format!("mesa-FreeEOS_{z_str}z{x_str}x{suffix}")
         }
+    }
+}
+
+/// Returns the relative `.data` file path under a MESA `data` directory (`Get_eosDT_Table_Filenames`).
+#[must_use]
+pub fn eosdt_relative_data_path(
+    kind: EosDtTableKind,
+    xz: &DtXzInfo,
+    ix_1based: usize,
+    iz_1based: usize,
+) -> String {
+    let stem = eosdt_table_stem(kind, xz, ix_1based, iz_1based);
+    match kind {
+        EosDtTableKind::OpalScvh => format!("eosDT_data/{stem}.data"),
+        EosDtTableKind::FreeEos => format!("eosFreeEOS_data/{stem}.data"),
     }
 }
 
@@ -114,10 +127,14 @@ pub struct EosDtTableSet {
     pub free_xz: DtXzInfo,
     /// Optional root MESA `data` directory for on-demand `.data` loading.
     pub data_dir: Option<PathBuf>,
-    /// Lock-free built-in `OPAL/SCVH` tables indexed by `[iz - 1][ix - 1]`.
+    /// Lock-free built-in `OPAL/SCVH` patch tables indexed by `[iz - 1][ix - 1]`.
     builtin_opal: Vec<Vec<Option<Arc<EosDtXzTable>>>>,
-    /// Lock-free built-in `FreeEOS` tables indexed by `[iz - 1][ix - 1]`.
+    /// Lock-free built-in `FreeEOS` patch tables indexed by `[iz - 1][ix - 1]`.
     builtin_free: Vec<Vec<Option<Arc<EosDtXzTable>>>>,
+    /// Lock-free lazily loaded full `OPAL/SCVH` slices indexed by `[iz - 1][ix - 1]`.
+    dense_opal: Vec<Vec<OnceLock<Arc<EosDtXzTable>>>>,
+    /// Lock-free lazily loaded full `FreeEOS` slices indexed by `[iz - 1][ix - 1]`.
+    dense_free: Vec<Vec<OnceLock<Arc<EosDtXzTable>>>>,
     /// Loaded or sparse-patched `(kind, ix_1based, iz_1based)` tables.
     tables: RwLock<HashMap<(EosDtTableKind, usize, usize), Arc<EosDtXzTable>>>,
 }
@@ -131,7 +148,7 @@ impl EosDtTableSet {
         BUILTIN_DT_TABLES.get_or_init(Self::load_builtin)
     }
 
-    /// Creates a new `EosDtTableSet` backed by the built-in patches and an optional `data_dir`.
+    /// Creates a new `EosDtTableSet` backed by the built-in patches and an explicit `data_dir`.
     #[must_use]
     pub fn with_data_dir(data_dir: impl Into<PathBuf>) -> Self {
         let mut set = Self::load_builtin();
@@ -209,6 +226,16 @@ impl EosDtTableSet {
             .iter()
             .map(|xs| vec![None; xs.len()])
             .collect();
+        let dense_opal: Vec<Vec<OnceLock<Arc<EosDtXzTable>>>> = opal_xz
+            .xs_for_z
+            .iter()
+            .map(|xs| (0..xs.len()).map(|_| OnceLock::new()).collect())
+            .collect();
+        let dense_free: Vec<Vec<OnceLock<Arc<EosDtXzTable>>>> = free_xz
+            .xs_for_z
+            .iter()
+            .map(|xs| (0..xs.len()).map(|_| OnceLock::new()).collect())
+            .collect();
 
         let mut arc_map = HashMap::with_capacity(map.len());
         for ((kind, ix, iz), mut tbl) in map {
@@ -226,16 +253,31 @@ impl EosDtTableSet {
             arc_map.insert((kind, ix, iz), arc_tbl);
         }
 
-        let env_dir =
-            std::env::var_os("FLEXMESA_EOS_DATA_DIR").map(PathBuf::from);
         Self {
             opal_xz,
             free_xz,
-            data_dir: env_dir,
+            data_dir: resolve_mesa_data_dir(),
             builtin_opal,
             builtin_free,
+            dense_opal,
+            dense_free,
             tables: RwLock::new(arc_map),
         }
+    }
+
+    #[inline]
+    fn dense_slot(
+        &self,
+        kind: EosDtTableKind,
+        ix_1based: usize,
+        iz_1based: usize,
+    ) -> Option<&OnceLock<Arc<EosDtXzTable>>> {
+        let grid = match kind {
+            EosDtTableKind::OpalScvh => &self.dense_opal,
+            EosDtTableKind::FreeEos => &self.dense_free,
+        };
+        grid.get(iz_1based.wrapping_sub(1))
+            .and_then(|row| row.get(ix_1based.wrapping_sub(1)))
     }
 
     #[inline]
@@ -245,6 +287,11 @@ impl EosDtTableSet {
         ix_1based: usize,
         iz_1based: usize,
     ) -> Option<&Arc<EosDtXzTable>> {
+        if let Some(slot) = self.dense_slot(kind, ix_1based, iz_1based) {
+            if let Some(tbl) = slot.get() {
+                return Some(tbl);
+            }
+        }
         if self.data_dir.is_some() {
             return None;
         }
@@ -257,7 +304,7 @@ impl EosDtTableSet {
             .and_then(Option::as_ref)
     }
 
-    /// Fast lock-free reference lookup when built-in patch tables are active.
+    /// Fast lock-free reference lookup for loaded full slices or built-in patch tables.
     #[inline]
     #[must_use]
     pub fn get_table_fast(
@@ -294,11 +341,13 @@ impl EosDtTableSet {
                 EosDtTableKind::OpalScvh => &self.opal_xz,
                 EosDtTableKind::FreeEos => &self.free_xz,
             };
-            let rel = eosdt_relative_data_path(kind, xz, ix_1based, iz_1based);
-            let full_path = dir.join(rel);
-            if full_path.exists() {
-                let loaded =
-                    Arc::new(EosDtXzTable::from_data_file(&full_path)?);
+            let stem = eosdt_table_stem(kind, xz, ix_1based, iz_1based);
+            if let Ok(loaded_tbl) = load_or_build_dt_slice(dir, kind, &stem) {
+                let loaded = Arc::new(loaded_tbl);
+                if let Some(slot) = self.dense_slot(kind, ix_1based, iz_1based)
+                {
+                    let _ = slot.set(Arc::clone(&loaded));
+                }
                 if let Ok(mut guard) = self.tables.write() {
                     guard.insert(key, Arc::clone(&loaded));
                 }

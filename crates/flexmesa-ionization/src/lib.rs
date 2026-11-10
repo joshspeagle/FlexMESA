@@ -42,11 +42,6 @@ pub mod fe56_he4_data_a;
 pub mod fe56_he4_data_b;
 pub mod fe56_he4_data_c;
 pub mod ion_table;
-pub mod ion_table_data_a;
-pub mod ion_table_data_b;
-pub mod ion_table_data_c;
-pub mod ion_table_data_d;
-pub mod ion_table_data_e;
 pub mod ion_table_load;
 pub mod potentials_data;
 pub mod typical_charge;
@@ -365,5 +360,47 @@ mod tests {
         assert!(
             ceff.val > 0.0 && ceff.d1[0].is_finite() && ceff.d1[1].is_finite()
         );
+    }
+
+    /// Verify full $175 \times 102$ $(\log Q, \log T)$ grid coverage across all
+    /// $(Z, X)$ tables without $2 \times 2$ cell clamping, and parity between
+    /// embedded binary and ASCII/cached tables.
+    #[test]
+    fn test_full_175x102_grid_and_embedded_parity() {
+        let grid = IonTableGrid::builtin();
+        assert_eq!(grid.num_log_qs, 175);
+        assert_eq!(grid.num_log_ts, 102);
+        assert!((grid.log_q_min - (-10.0)).abs() < 1e-14);
+        assert!((grid.log_t_min - 2.10).abs() < 1e-14);
+
+        let embedded = IonTableGrid::from_embedded_full();
+        assert_eq!(embedded.num_log_qs, 175);
+        assert_eq!(embedded.num_log_ts, 102);
+        for iz in 0..NUM_ION_ZS {
+            for ix in 0..NUM_ION_XS {
+                assert_eq!(grid.coeffs[iz][ix].len(), NUM_ION_VALS);
+                for v in 0..NUM_ION_VALS {
+                    assert_eq!(
+                        grid.coeffs[iz][ix][v].len(),
+                        175 * 102 * 4
+                    );
+                    for (&a, &b) in grid.coeffs[iz][ix][v]
+                        .iter()
+                        .zip(embedded.coeffs[iz][ix][v].iter())
+                    {
+                        assert!((a - b).abs() <= 1e-14);
+                    }
+                }
+            }
+        }
+
+        // Cool vs hot plasma must yield distinct ionization states (no 2x2 clamping)
+        let cool = eval_ionization(0.02, 0.70, None, Some(-7.0), None, Some(3.5))
+            .expect("cool eval");
+        let hot = eval_ionization(0.02, 0.70, None, Some(-1.0), None, Some(7.5))
+            .expect("hot eval");
+        assert!(cool[10] < 0.05, "H should be mostly neutral at logT=3.5: {}", cool[10]);
+        assert!((hot[10] - 1.0).abs() < 1e-2, "H should be ionized at logT=7.5: {}", hot[10]);
+        assert!(hot[18] > 20.0, "Fe should be highly ionized at logT=7.5: {}", hot[18]);
     }
 }

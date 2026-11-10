@@ -21,6 +21,7 @@ pub mod elec_pos;
 pub mod eval;
 pub mod polynomials;
 pub mod table;
+pub mod table_io;
 
 pub use components::{
     eval_ideal_ions, eval_radiation, HelmThermoVar, HELM_SIFAC,

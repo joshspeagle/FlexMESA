@@ -7,6 +7,7 @@
 //! `Do_EoS_Interpolations`, `Get_FreeEOS_alfa`, and `get_opal_scvh_alfa_and_partials`).
 
 pub mod blend_alfa;
+pub mod slice_cache;
 pub mod spline;
 pub mod table_set;
 
@@ -439,6 +440,32 @@ pub fn eval_eosdt_table_from_weights(
     Ok(out)
 }
 
+fn comp_and_z_int(
+    chem_id: &[usize],
+    xa: &[f64],
+    context: &'static str,
+) -> Result<(f64, f64, Vec<usize>), EosError> {
+    let catalog = NuclideCatalog::builtin_ref();
+    let comp =
+        get_composition_info(catalog, chem_id, xa, true).map_err(|e| {
+            EosError::InvalidState {
+                context,
+                detail: e.to_string(),
+            }
+        })?;
+    let mut z_int = Vec::with_capacity(chem_id.len());
+    for &cid in chem_id {
+        let nuc = catalog
+            .get_by_id(cid)
+            .ok_or_else(|| EosError::InvalidState {
+                context,
+                detail: format!("unknown chem_id {cid}"),
+            })?;
+        z_int.push(nuc.z as usize);
+    }
+    Ok((comp.xz, comp.xh, z_int))
+}
+
 /// Evaluates the standalone `OPAL/SCVH` tabulated EOS for `(rho, T, chem_id, xa)`.
 pub fn eval_opal_scvh_eos(
     tables: &EosDtTableSet,
@@ -448,30 +475,13 @@ pub fn eval_opal_scvh_eos(
     xa: &[f64],
     cfg: &OpalScvhConfig,
 ) -> Result<EosEvalOutput, EosError> {
-    let catalog = NuclideCatalog::builtin_ref();
-    let comp =
-        get_composition_info(catalog, chem_id, xa, true).map_err(|e| {
-            EosError::InvalidState {
-                context: "eval_opal_scvh_eos",
-                detail: e.to_string(),
-            }
-        })?;
-    let mut z_int = Vec::with_capacity(chem_id.len());
-    for &cid in chem_id {
-        let nuc =
-            catalog
-                .get_by_id(cid)
-                .ok_or_else(|| EosError::InvalidState {
-                    context: "eval_opal_scvh_eos",
-                    detail: format!("unknown chem_id {cid}"),
-                })?;
-        z_int.push(nuc.z as usize);
-    }
+    let (xz, xh, z_int) =
+        comp_and_z_int(chem_id, xa, "eval_opal_scvh_eos")?;
     eval_eosdt_table_from_weights(
         tables,
         EosDtTableKind::OpalScvh,
-        comp.xz,
-        comp.xh,
+        xz,
+        xh,
         rho.log10(),
         t.log10(),
         &z_int,
@@ -489,30 +499,12 @@ pub fn eval_free_eos(
     xa: &[f64],
     cfg: &FreeEosConfig,
 ) -> Result<EosEvalOutput, EosError> {
-    let catalog = NuclideCatalog::builtin_ref();
-    let comp =
-        get_composition_info(catalog, chem_id, xa, true).map_err(|e| {
-            EosError::InvalidState {
-                context: "eval_free_eos",
-                detail: e.to_string(),
-            }
-        })?;
-    let mut z_int = Vec::with_capacity(chem_id.len());
-    for &cid in chem_id {
-        let nuc =
-            catalog
-                .get_by_id(cid)
-                .ok_or_else(|| EosError::InvalidState {
-                    context: "eval_free_eos",
-                    detail: format!("unknown chem_id {cid}"),
-                })?;
-        z_int.push(nuc.z as usize);
-    }
+    let (xz, xh, z_int) = comp_and_z_int(chem_id, xa, "eval_free_eos")?;
     eval_eosdt_table_from_weights(
         tables,
         EosDtTableKind::FreeEos,
-        comp.xz,
-        comp.xh,
+        xz,
+        xh,
         rho.log10(),
         t.log10(),
         &z_int,

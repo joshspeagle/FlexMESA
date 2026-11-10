@@ -323,6 +323,195 @@ fn test_akima_rgbi3p_and_rgsf3p_match_published_table() {
     assert!((zi_sf[18 * 23 + 22] - 48.268).abs() < 5.0e-4);
 }
 
+/// Verifies ACM TOMS 790 (`cshep2` / `cs2val` / `cs2grd` / `cs2hes` and
+/// `qshep2` / `qs2val` / `qs2grd`) against `test_renka790_db.f` and scattered
+/// 2D interpolation on `test_fcn_db`.
+#[test]
+fn test_renka790_cshep2_cubic_reproduction_and_scattered_2d_db() {
+    use flexmesa_interp2d::{
+        interp_cs2grd_db, interp_cs2val_db, interp_cshep2_db, qs2grd, qs2val,
+        qshep2,
+    };
+
+    // Part 1: Exact cubic polynomial reproduction from test_renka790_db.f
+    // FQ(x, y) = ((x + 2y)/3)^3 on 4 x 5 grid (N = 20), NC = 10, NW = 16, NR = 3
+    let fq = |xx: f64, yy: f64| ((xx + 2.0 * yy) / 3.0).powi(3);
+    let fx = |xx: f64, yy: f64| ((xx + 2.0 * yy) / 3.0).powi(2);
+    let fy = |xx: f64, yy: f64| 2.0 * ((xx + 2.0 * yy) / 3.0).powi(2);
+    let fxx = |xx: f64, yy: f64| 2.0 * (xx + 2.0 * yy) / 9.0;
+    let fxy = |xx: f64, yy: f64| 4.0 * (xx + 2.0 * yy) / 9.0;
+    let fyy = |xx: f64, yy: f64| 8.0 * (xx + 2.0 * yy) / 9.0;
+
+    let mut x = Vec::with_capacity(20);
+    let mut y = Vec::with_capacity(20);
+    let mut f = Vec::with_capacity(20);
+    for j in 0..5 {
+        let yj = (j as f64) / 4.0;
+        for i in 0..4 {
+            let xi = (i as f64) / 3.0;
+            x.push(xi);
+            y.push(yj);
+            f.push(fq(xi, yj));
+        }
+    }
+
+    let cshep = interp_cshep2_db(&x, &y, &f, 10, 16, 3)
+        .expect("cshep2 cubic fit succeeds");
+    assert_eq!(cshep.len(), 20);
+    let qshep = qshep2(&x, &y, &f, 10, 16, 3).expect("qshep2 fit succeeds");
+
+    for j in 0..=10 {
+        let py = (j as f64) / 10.0;
+        for i in 0..=10 {
+            let px = (i as f64) / 10.0;
+            let c_val = interp_cs2val_db(&cshep, px, py);
+            let q_val = qs2val(&qshep, px, py);
+            let (cg, cx, cy) = interp_cs2grd_db(&cshep, px, py);
+            let (qg, qx, qy) = qs2grd(&qshep, px, py);
+            let (ch, chx, chy, chxx, chxy, chyy) = cshep.eval_hess(px, py);
+
+            assert!((c_val - fq(px, py)).abs() < 1.0e-13);
+            assert!((q_val - c_val).abs() < 1.0e-15);
+            assert!((cg - c_val).abs() < 1.0e-14);
+            assert!((qg - q_val).abs() < 1.0e-14);
+            assert!((cx - fx(px, py)).abs() < 1.0e-12);
+            assert!((cy - fy(px, py)).abs() < 1.0e-12);
+            assert!((qx - cx).abs() < 1.0e-15);
+            assert!((qy - cy).abs() < 1.0e-15);
+            assert!((ch - c_val).abs() < 1.0e-14);
+            assert!((chx - cx).abs() < 1.0e-14);
+            assert!((chy - cy).abs() < 1.0e-14);
+            assert!((chxx - fxx(px, py)).abs() < 1.0e-11);
+            assert!((chxy - fxy(px, py)).abs() < 1.0e-11);
+            assert!((chyy - fyy(px, py)).abs() < 1.0e-11);
+        }
+    }
+
+    // Part 2: Franke's 33-node set (KS = 2, N = 33, NI = 33, NC = 17, NW = 30,
+    // NR = 6) from test_renka790_db.f (KF = 1, Franke's exponential surface).
+    let x2: [f64; 33] = [
+        0.05, 0.00, 0.00, 0.00, 0.10, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.50,
+        0.50, 0.55, 0.60, 0.60, 0.60, 0.65, 0.70, 0.70, 0.70, 0.75, 0.75, 0.75,
+        0.80, 0.80, 0.85, 0.90, 0.90, 0.95, 1.00, 1.00, 1.00,
+    ];
+    let y2: [f64; 33] = [
+        0.45, 0.50, 1.00, 0.00, 0.15, 0.75, 0.30, 0.10, 0.20, 0.35, 0.85, 0.00,
+        1.00, 0.95, 0.25, 0.65, 0.85, 0.70, 0.20, 0.65, 0.90, 0.10, 0.35, 0.85,
+        0.40, 0.65, 0.25, 0.35, 0.80, 0.90, 0.00, 0.50, 1.00,
+    ];
+    let tstfn1_exp = |xx: f64, yy: f64| {
+        0.75 * (-((9.0 * xx - 2.0).powi(2) + (9.0 * yy - 2.0).powi(2)) / 4.0)
+            .exp()
+            + 0.75
+                * (-(9.0 * xx + 1.0).powi(2) / 49.0 - (9.0 * yy + 1.0) / 10.0)
+                    .exp()
+            + 0.5
+                * (-((9.0 * xx - 7.0).powi(2) + (9.0 * yy - 3.0).powi(2)) / 4.0)
+                    .exp()
+            - 0.2
+                * (-(9.0 * xx - 4.0).powi(2) - (9.0 * yy - 7.0).powi(2)).exp()
+    };
+    let w2: Vec<f64> = x2
+        .iter()
+        .zip(y2.iter())
+        .map(|(&xx, &yy)| tstfn1_exp(xx, yy))
+        .collect();
+    let franke_interp = interp_cshep2_db(&x2, &y2, &w2, 17, 30, 6)
+        .expect("Franke 33-node fit succeeds");
+    let mut ermax = 0.0_f64;
+    let mut ermean = 0.0_f64;
+    for i in 0..33 {
+        let px = (i as f64) / 32.0;
+        for j in 0..33 {
+            let py = (j as f64) / 32.0;
+            let err = (interp_cs2val_db(&franke_interp, px, py)
+                - tstfn1_exp(px, py))
+            .abs();
+            ermax = ermax.max(err);
+            ermean += err;
+        }
+    }
+    ermean /= (33 * 33) as f64;
+    assert!((ermax - 0.198_516_708_768_601_4).abs() < 1.0e-12);
+    assert!((ermean - 0.032_170_250_054_613_99).abs() < 1.0e-12);
+
+    // Part 3: Scattered 2D interpolation on MESA's 31 x 35 (N = 1085) grid of
+    // test_fcn_db(x, y) evaluated at the 6 golden query points of test2D_db.
+    let (xpts, ypts, z_grid) = build_mesa_2d_test_grid();
+    let mut xs = Vec::with_capacity(NUM_XPTS * NUM_YPTS);
+    let mut ys = Vec::with_capacity(NUM_XPTS * NUM_YPTS);
+    let mut fs = Vec::with_capacity(NUM_XPTS * NUM_YPTS);
+    for (i, &xv) in xpts.iter().enumerate() {
+        for (j, &yv) in ypts.iter().enumerate() {
+            xs.push(xv);
+            ys.push(yv);
+            fs.push(z_grid[i * NUM_YPTS + j]);
+        }
+    }
+    let scat = interp_cshep2_db(&xs, &ys, &fs, 17, 32, 10)
+        .expect("scattered 2D fit on MESA test grid succeeds");
+    let x_min = 0.1_f64;
+    let x_max = 0.8 * PI;
+    let y_min = 0.2_f64;
+    let y_max = 0.6 * PI;
+    let dx = x_max - x_min;
+    let dy = 0.5 * (y_max - y_min);
+    let golden_pts: [(usize, usize, f64, f64, f64); 6] = [
+        (
+            0,
+            0,
+            0.084_430_315_712_205_27,
+            0.842_697_806_864_306_5,
+            -0.053_120_165_108_320_69,
+        ),
+        (
+            1,
+            0,
+            0.115_719_537_154_871_95,
+            -0.232_723_725_761_097_34,
+            -0.029_288_035_126_348_5,
+        ),
+        (
+            0,
+            1,
+            0.025_831_072_167_465_56,
+            0.256_687_855_404_707_57,
+            -0.060_768_993_765_178_29,
+        ),
+        (
+            1,
+            1,
+            0.052_413_604_264_235_25,
+            -0.102_755_936_267_800_94,
+            -0.102_571_002_639_484_63,
+        ),
+        (
+            0,
+            2,
+            -0.009_280_594_758_942_013,
+            -0.092_617_455_868_842_03,
+            -0.022_669_571_118_670_04,
+        ),
+        (
+            1,
+            2,
+            -0.024_582_273_200_498_193,
+            0.046_259_952_921_016_96,
+            -0.066_293_101_429_167_07,
+        ),
+    ];
+    for (i, j, exp_z, exp_dzdx, exp_dzdy) in golden_pts {
+        let qx = x_min + (i as f64) * dx;
+        let qy = y_min + (j as f64) * dy;
+        let (z_scat, dz_dx, dz_dy) = interp_cs2grd_db(&scat, qx, qy);
+        let z_exact = test_fcn_db(qx, qy);
+        assert!((z_scat - exp_z).abs() < 1.0e-12);
+        assert!((dz_dx - exp_dzdx).abs() < 1.0e-12);
+        assert!((dz_dy - exp_dzdy).abs() < 1.0e-12);
+        assert!((z_scat - z_exact).abs() < 5.0e-4);
+    }
+}
+
 proptest! {
     /// Property test: 2D bicubic spline reproduces any biquadratic polynomial
     /// $p(x, y) = a_{00} + a_{10} x + a_{01} y + a_{20} x^2 + a_{11} x y

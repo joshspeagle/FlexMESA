@@ -396,3 +396,144 @@ def test_prop_solve_dense_reconstructs_rhs(
     b = np.asarray(rhs, dtype=np.float64)
     x = mtx.solve_dense(a, b)
     np.testing.assert_allclose(a @ x, b, rtol=1e-11, atol=1e-11)
+
+
+def test_upstream_mesa_block_tri_data_and_test_case_data_golden() -> None:
+    """Verifies `test_case.data` and `block_tri.data` against `test_output`."""
+    import pathlib
+
+    # Unconditional golden block-tridiagonal check (nvar = 4, nz = 5)
+    rng = np.random.default_rng(1234)
+    lblk_u, dblk_u, ublk_u, _ = _make_diag_dom_block_tridiag(rng, nz=5, nvar=4)
+    x_exact_u = (1.0 + 1e-3 * np.arange(1, 21, dtype=np.float64)).reshape(5, 4)
+    rhs_u = mtx.block_dble_mv(lblk_u, dblk_u, ublk_u, x_exact_u)
+    np.testing.assert_allclose(
+        mtx.solve_block_tridiagonal(lblk_u, dblk_u, ublk_u, rhs_u),
+        x_exact_u,
+        rtol=1e-13,
+        atol=1e-13,
+    )
+    np.testing.assert_allclose(
+        mtx.solve_block_tridiagonal(
+            lblk_u, dblk_u, ublk_u, rhs_u, method="bcyclic"
+        ),
+        x_exact_u,
+        rtol=1e-13,
+        atol=1e-13,
+    )
+
+    root = (
+        pathlib.Path(__file__).resolve().parents[1]
+        / ".mesa_temp_cache"
+        / "mesa_root"
+        / "mtx"
+        / "test"
+    )
+    out_path = root / "test_output"
+    if out_path.exists():
+        out_lines = out_path.read_text(encoding="utf-8").splitlines()
+        assert (
+            "testing with nvar,nz" in out_lines[15]
+            and "25" in out_lines[15]
+            and "20" in out_lines[15]
+        )
+        assert out_lines[16].strip() == "bcyclic_dble"
+        assert out_lines[17].strip() == "done bcyclic_dble"
+
+    # 1. Load and verify test_case.data (nvar = 12, nz = 9) when present
+    tc_path = root / "test_case.data"
+    if tc_path.exists():
+        tc_lines = tc_path.read_text(encoding="utf-8").splitlines()
+        nvar_tc, nz_tc = map(int, tc_lines[0].split())
+        assert (nvar_tc, nz_tc) == (12, 9)
+        lblk_tc = np.zeros((nz_tc, nvar_tc, nvar_tc), dtype=np.float64)
+        dblk_tc = np.zeros((nz_tc, nvar_tc, nvar_tc), dtype=np.float64)
+        ublk_tc = np.zeros((nz_tc, nvar_tc, nvar_tc), dtype=np.float64)
+        brhs_tc = np.zeros((nz_tc, nvar_tc), dtype=np.float64)
+        xcorr_tc = np.zeros((nz_tc, nvar_tc), dtype=np.float64)
+        idx = 1
+        for k in range(nz_tc):
+            for i in range(nvar_tc):
+                for j in range(nvar_tc):
+                    uv, dv, lv = map(float, tc_lines[idx].split())
+                    ublk_tc[k, i, j] = uv
+                    dblk_tc[k, i, j] = dv
+                    lblk_tc[k, i, j] = lv
+                    idx += 1
+            for i in range(nvar_tc):
+                bv, xv = map(float, tc_lines[idx].split())
+                brhs_tc[k, i] = bv
+                xcorr_tc[k, i] = xv
+                idx += 1
+
+        mv_tc = mtx.block_dble_mv(lblk_tc, dblk_tc, ublk_tc, xcorr_tc)
+        np.testing.assert_allclose(mv_tc, brhs_tc, rtol=1e-13, atol=1e-13)
+        x_tc_thomas = mtx.solve_block_tridiagonal(
+            lblk_tc, dblk_tc, ublk_tc, brhs_tc
+        )
+        x_tc_bcyc = mtx.solve_block_tridiagonal(
+            lblk_tc, dblk_tc, ublk_tc, brhs_tc, method="bcyclic"
+        )
+        np.testing.assert_allclose(
+            x_tc_thomas, xcorr_tc, rtol=1e-13, atol=1e-13
+        )
+        np.testing.assert_allclose(x_tc_bcyc, xcorr_tc, rtol=1e-12, atol=1e-12)
+
+    # 2. Load and verify block_tri.data (nvar = 25, first nz = 20 shells of 979)
+    bt_path = root / "block_tri.data"
+    if bt_path.exists():
+        bt_lines = iter(bt_path.read_text(encoding="utf-8").splitlines())
+        hdr_bt = next(line for line in bt_lines if line.strip())
+        nvar_bt, nz_full = map(int, hdr_bt.split())
+        assert (nvar_bt, nz_full) == (25, 979)
+        nz_bt = 20
+
+        def _parse_hb_block() -> np.ndarray:
+            next(bt_lines)
+            next(bt_lines)
+            h3 = next(bt_lines).split()
+            next(bt_lines)
+            ncol, nnz = int(h3[2]), int(h3[3])
+            colptr: list[int] = []
+            while len(colptr) < ncol + 1:
+                colptr.extend(map(int, next(bt_lines).split()))
+            rowind: list[int] = []
+            while len(rowind) < nnz:
+                rowind.extend(map(int, next(bt_lines).split()))
+            vals: list[float] = []
+            while len(vals) < nnz:
+                vals.extend(
+                    float(t.replace("D", "E").replace("d", "e"))
+                    for t in next(bt_lines).split()
+                )
+            return mtx.column_sparse_to_dense(
+                nvar_bt,
+                np.asarray(colptr, dtype=np.int64),
+                np.asarray(rowind, dtype=np.int64),
+                np.asarray(vals, dtype=np.float64),
+            )
+
+        lblk_bt = np.zeros((nz_bt, nvar_bt, nvar_bt), dtype=np.float64)
+        dblk_bt = np.zeros((nz_bt, nvar_bt, nvar_bt), dtype=np.float64)
+        ublk_bt = np.zeros((nz_bt, nvar_bt, nvar_bt), dtype=np.float64)
+        for k in range(nz_bt):
+            if k > 0:
+                lblk_bt[k] = _parse_hb_block()
+            dblk_bt[k] = _parse_hb_block()
+            ublk_bt[k] = _parse_hb_block()
+        ublk_bt[-1] = 0.0
+
+        xcorr_bt = (
+            1.0 + 1e-3 * np.arange(1, nz_bt * nvar_bt + 1, dtype=np.float64)
+        ).reshape(nz_bt, nvar_bt)
+        brhs_bt = mtx.block_dble_mv(lblk_bt, dblk_bt, ublk_bt, xcorr_bt)
+        x_bt_thomas = mtx.solve_block_tridiagonal(
+            lblk_bt, dblk_bt, ublk_bt, brhs_bt
+        )
+        x_bt_bcyc = mtx.solve_block_tridiagonal(
+            lblk_bt, dblk_bt, ublk_bt, brhs_bt, method="bcyclic"
+        )
+        np.testing.assert_allclose(
+            x_bt_thomas, xcorr_bt, rtol=1e-13, atol=1e-13
+        )
+        np.testing.assert_allclose(x_bt_bcyc, xcorr_bt, rtol=1e-13, atol=1e-13)

@@ -36,13 +36,14 @@ use crate::rosenbrock_coeffs::{coeffs_for, RosenbrockVariant};
 use crate::NumError;
 use flexmesa_mtx::{dense_to_band, dgbtrf, dgbtrs, dgetrf, dgetrs};
 
-/// Builds the dense stage matrix $E = (\gamma h)^{-1} I - J$ in row-major order
-/// across all $N \times N$ entries by negating $J$ and adding $(\gamma h)^{-1}$
-/// along the main diagonal.
+/// Builds the dense stage matrix $E = (\gamma h)^{-1} M - J$ in row-major order
+/// across all $N \times N$ entries by negating $J$ and adding
+/// $m_i (\gamma h)^{-1}$ along the main diagonal.
 fn build_stage_matrix(
     n: usize,
     h_gamma: f64,
     j_mat: &[f64],
+    mass_diag: Option<&[f64]>,
 ) -> Result<Vec<f64>, NumError> {
     if j_mat.len() != n * n {
         return Err(NumError::InvalidParameter(
@@ -51,8 +52,19 @@ fn build_stage_matrix(
     }
     let mut e_mat = j_mat.iter().map(|&v| -v).collect::<Vec<f64>>();
     let inv_hg = 1.0 / h_gamma;
-    for i in 0..n {
-        e_mat[i * n + i] += inv_hg;
+    if let Some(md) = mass_diag {
+        if md.len() != n {
+            return Err(NumError::InvalidParameter(
+                "mass_diag length must equal n in rosenbrock",
+            ));
+        }
+        for i in 0..n {
+            e_mat[i * n + i] += md[i] * inv_hg;
+        }
+    } else {
+        for i in 0..n {
+            e_mat[i * n + i] += inv_hg;
+        }
     }
     Ok(e_mat)
 }
@@ -103,6 +115,7 @@ where
         t0,
         t_end,
         y0,
+        None,
         h0,
         hmax_in,
         rtol,
@@ -112,7 +125,7 @@ where
         |t, y, h_gamma| {
             let n = y.len();
             let j_mat = jac(t, y)?;
-            let mut e_mat = build_stage_matrix(n, h_gamma, &j_mat)?;
+            let mut e_mat = build_stage_matrix(n, h_gamma, &j_mat, None)?;
             let mut ipiv = vec![0usize; n];
             dgetrf(n, &mut e_mat, &mut ipiv).map_err(|_| {
                 NumError::LinearSolveFailed("rosenbrock_dense LU")
@@ -123,6 +136,65 @@ where
             let mut x = rhs.to_vec();
             dgetrs(n, lu, ipiv, &mut x).map_err(|_| {
                 NumError::LinearSolveFailed("rosenbrock_dense dgetrs")
+            })?;
+            Ok(x)
+        },
+    )
+}
+
+/// Integrates a stiff index-1 DAE system $M y'(t) = f(t, y)$ with diagonal
+/// mass matrix $M = \mathrm{diag}(m_0, \dots, m_{n-1})$ and dense $(N, N)$
+/// Jacobian $J = \partial f / \partial y$ from `t0` to `t_end` using the
+/// selected [`RosenbrockVariant`].
+///
+/// # Errors
+///
+/// Propagates any error from [`rosenbrock_dense`].
+pub fn rosenbrock_dae_diag<F, J>(
+    variant: RosenbrockVariant,
+    mass_diag: &[f64],
+    t0: f64,
+    t_end: f64,
+    y0: &[f64],
+    h0: f64,
+    hmax_in: f64,
+    rtol: f64,
+    atol: f64,
+    max_steps: usize,
+    mut fcn: F,
+    mut jac: J,
+) -> Result<RosenbrockResult, NumError>
+where
+    F: FnMut(f64, &[f64]) -> Result<Vec<f64>, NumError>,
+    J: FnMut(f64, &[f64]) -> Result<Vec<f64>, NumError>,
+{
+    rosenbrock_core(
+        variant,
+        t0,
+        t_end,
+        y0,
+        Some(mass_diag),
+        h0,
+        hmax_in,
+        rtol,
+        atol,
+        max_steps,
+        &mut fcn,
+        |t, y, h_gamma| {
+            let n = y.len();
+            let j_mat = jac(t, y)?;
+            let mut e_mat =
+                build_stage_matrix(n, h_gamma, &j_mat, Some(mass_diag))?;
+            let mut ipiv = vec![0usize; n];
+            dgetrf(n, &mut e_mat, &mut ipiv).map_err(|_| {
+                NumError::LinearSolveFailed("rosenbrock_dae_diag LU")
+            })?;
+            Ok((e_mat, ipiv))
+        },
+        |n, lu, ipiv, rhs| {
+            let mut x = rhs.to_vec();
+            dgetrs(n, lu, ipiv, &mut x).map_err(|_| {
+                NumError::LinearSolveFailed("rosenbrock_dae_diag dgetrs")
             })?;
             Ok(x)
         },
@@ -165,6 +237,7 @@ where
         t0,
         t_end,
         y0,
+        None,
         h0,
         hmax_in,
         rtol,
@@ -174,7 +247,7 @@ where
         |t, y, h_gamma| {
             let n = y.len();
             let j_mat = jac_dense(t, y)?;
-            let e_mat = build_stage_matrix(n, h_gamma, &j_mat)?;
+            let e_mat = build_stage_matrix(n, h_gamma, &j_mat, None)?;
             let mut ab = vec![0.0; ldab * n];
             dense_to_band(n, n, &e_mat, ml, mu, &mut ab, ldab).map_err(
                 |_| NumError::LinearSolveFailed("dense_to_band failed"),
@@ -195,17 +268,18 @@ where
     )
 }
 
-/// Shared adaptive step-size loop for [`rosenbrock_dense`] and
-/// [`rosenbrock_banded`].
+/// Shared adaptive step-size loop for [`rosenbrock_dense`],
+/// [`rosenbrock_dae_diag`], and [`rosenbrock_banded`].
 ///
 /// Evaluates the temporal partial derivative $\partial f / \partial t$ via
-/// forward difference and factors $E = (\gamma h)^{-1} I - J$ once per step,
+/// forward difference and factors $E = (\gamma h)^{-1} M - J$ once per step,
 /// then solves the $s$ stage linear systems using the factored operator.
 fn rosenbrock_core<F, P, S>(
     variant: RosenbrockVariant,
     t0: f64,
     t_end: f64,
     y0: &[f64],
+    mass_diag: Option<&[f64]>,
     h0: f64,
     hmax_in: f64,
     rtol: f64,
@@ -287,19 +361,19 @@ where
         let (lu, ipiv) = factor_step(t, &y, h * rc.gamma)?;
         // Solve linear stage equations E * g_stg = rhs_stg for stg = 0..s
         let mut g_stages: Vec<Vec<f64>> = Vec::with_capacity(rc.s);
+        let mut f_stg_cur = f0.clone();
+        let mut f_stg_1 = f0.clone();
         for stg in 0..rc.s {
-            let mut y_stg = y.clone();
-            for j in 0..stg {
-                let a_ij = rc.a[stg][j];
-                if a_ij != 0.0 {
-                    for i in 0..n {
-                        y_stg[i] += a_ij * g_stages[j][i];
+            if stg > 0 && rc.newf[stg] {
+                let mut y_stg = y.clone();
+                for j in 0..stg {
+                    let a_ij = rc.a[stg][j];
+                    if a_ij != 0.0 {
+                        for i in 0..n {
+                            y_stg[i] += a_ij * g_stages[j][i];
+                        }
                     }
                 }
-            }
-            let f_stg = if stg == 0 {
-                f0.clone()
-            } else {
                 nfcn += 1;
                 let fs = fcn(t + rc.alpha[stg] * h, &y_stg)?;
                 if fs.len() != n {
@@ -307,16 +381,36 @@ where
                         "derivative vector length mismatch in rosenbrock",
                     ));
                 }
-                fs
-            };
-            let mut rhs = f_stg;
+                if stg == 1 {
+                    f_stg_1.clone_from(&fs);
+                }
+                f_stg_cur = fs;
+            }
+            let mut rhs = f_stg_cur.clone();
             for i in 0..n {
                 rhs[i] += h * rc.gamma_t[stg] * df_dt[i];
             }
-            for j in 0..stg {
-                let c_ij_over_h = rc.c[stg][j] / h;
-                for i in 0..n {
-                    rhs[i] += c_ij_over_h * g_stages[j][i];
+            if stg > 0 {
+                let mut cont = vec![0.0_f64; n];
+                for j in 0..stg {
+                    let c_ij_over_h = rc.c[stg][j] / h;
+                    for i in 0..n {
+                        cont[i] += c_ij_over_h * g_stages[j][i];
+                    }
+                }
+                if stg == 2 && rc.rd32 != 0.0 {
+                    for i in 0..n {
+                        cont[i] += rc.rd32 * f_stg_1[i] + rc.rd31 * f0[i];
+                    }
+                }
+                if let Some(md) = mass_diag {
+                    for i in 0..n {
+                        rhs[i] += md[i] * cont[i];
+                    }
+                } else {
+                    for i in 0..n {
+                        rhs[i] += cont[i];
+                    }
                 }
             }
             let g_i = solve_stage(n, &lu, &ipiv, &rhs)?;
@@ -347,8 +441,9 @@ where
             ));
         }
         // Accept step if RMS error <= 1.0 and propose next step size h
-        // using safety factor 0.9 and clamping h_new / h to [0.1, 5.0]
-        let fac = (0.9 * err.max(1e-10).powf(-1.0 / rc.order)).clamp(0.1, 5.0);
+        // using safety factor 0.9 and clamping h_new / h to [0.2, 3.0]
+        // (matching MESA mod_rosenbrock.f:413-419 fac1=5, fac2=1/3)
+        let fac = (0.9 * err.max(1e-10).powf(-1.0 / rc.order)).clamp(0.2, 3.0);
         if err <= 1.0 {
             t += h;
             y = y_new;

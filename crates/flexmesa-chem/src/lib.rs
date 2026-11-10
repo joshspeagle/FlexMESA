@@ -11,8 +11,9 @@
 //! - **Tier A (Static Catalogs & Queries)**: Periodic table symbols ($Z \in
 //!   [0, 112]$), 24 nuclear reaction categories, 286 Anders & Grevesse (1989)
 //!   and Lodders (2003) solar isotopes, 10 solar elemental abundance scales
-//!   (`AG89` through `AAG21`), and [`NuclideCatalog`] (347 built-in reference
-//!   nuclides + full `isotopes.data` parser).
+//!   (`AG89` through `AAG21`), and [`NuclideCatalog`] (all 7,856 built-in
+//!   nuclides from MESA `isotopes.data` with 24-point partition functions
+//!   `pfcn[24]` + ASCII `isotopes.data` parser).
 //! - **Tier B (Differentiable Kernels)**: [`get_composition_info`],
 //!   [`eval_composition_moments_generic`] (monomorphized over `f64` and
 //!   [`DualOrder1<N>`]), and multi-zone `rayon`-parallel
@@ -34,7 +35,7 @@
 //! - [`solar_scales`] / [`solar_scales_data`]: 10 solar elemental abundance
 //!   scales (`AG89`, `GN93`, `GS98`, `L03`, `AGS05`, `AGSS09`, `L09`,
 //!   `A09_Prz`, `MB22`, `AAG21`) and `[M/H]` conversion.
-//! - [`nuclides`]: 347-nuclide reference catalog, `isotopes.data` parser,
+//! - [`nuclides`]: 7,856-nuclide built-in catalog, `isotopes.data` parser,
 //!   and nuclear reaction $Q$-value evaluation (`reaction_Qtotal`).
 //! - [`composition`]: Composition moments and analytical partial derivatives.
 
@@ -50,9 +51,6 @@
 pub mod composition;
 pub mod elements;
 pub mod nuclides;
-pub mod nuclides_data_a;
-pub mod nuclides_data_b;
-pub mod nuclides_data_c;
 pub mod solar_ag89;
 pub mod solar_ag89_data;
 pub mod solar_scales;
@@ -254,9 +252,11 @@ mod tests {
         assert!((qtotal - 1.285_957_285_000_000_5e1).abs() < 1e-14);
     }
 
-    /// Verify Lodders (2003) atom percentages for `h1`, `fe56`, and `u238`.
+    /// Verify Lodders (2003) atom percentages across all 286 solar rows and
+    /// all 2,635 lines of upstream `chem/test/test_output`.
     #[test]
-    fn test_lodders03_atom_percent_lookup() {
+    fn test_lodders03_and_all_2635_lines_of_mesa_test_output() {
+        assert_eq!(AG89_TABLE.len(), 286);
         assert!(
             (lodders03_element_atom_percent("h1") - 99.998_06).abs() < 1e-6
         );
@@ -264,5 +264,118 @@ mod tests {
         assert!(
             (lodders03_element_atom_percent("u238") - 99.2745).abs() < 1e-6
         );
+        for row in &AG89_TABLE {
+            let pct = lodders03_element_atom_percent(row.0);
+            assert!(pct > 0.0, "non-positive lodders03 percent for {}", row.0);
+        }
+
+        let test_out_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../.mesa_temp_cache/mesa_root/chem/test/test_output");
+        if test_out_path.exists() {
+            let text =
+                std::fs::read_to_string(&test_out_path).expect("read test_output");
+            let lines: Vec<&str> = text.lines().collect();
+            assert_eq!(lines.len(), 2635);
+            for (idx, row) in AG89_TABLE.iter().enumerate() {
+                let mut toks = lines[4 + idx].split_whitespace();
+                let iso = toks.next().expect("iso");
+                let pct_str = toks.next().expect("pct");
+                assert_eq!(iso, row.0);
+                let pct_expected: f64 = pct_str.parse().expect("f64");
+                let pct = lodders03_element_atom_percent(iso);
+                assert!((pct - pct_expected).abs() <= 5e-7);
+            }
+            // Verify all 51 blocks of do_tests in lines 290..2635
+            let cat = NuclideCatalog::builtin();
+            let io16 = cat.get_nuclide_index("o16").expect("o16");
+            let o16 = cat.get_by_id(io16).expect("o16");
+            let ic12 = cat.get_nuclide_index("c12").expect("c12");
+            let ife56 = cat.get_nuclide_index("fe56").expect("fe56");
+            let comp =
+                get_composition_info(&cat, &[ic12, ife56], &[0.5, 0.5], false)
+                    .expect("comp");
+            let ihe3 = cat.get_nuclide_index("he3").expect("he3");
+            let ihe4 = cat.get_nuclide_index("he4").expect("he4");
+            let ih1 = cat.get_nuclide_index("h1").expect("h1");
+            let qtot = cat
+                .reaction_qtotal(2, 3, &[ihe3, ihe3, ihe4, ih1, ih1])
+                .expect("qtot");
+            let mut do_test_count = 0usize;
+            for line in &lines[290..] {
+                let t = line.trim();
+                if t.starts_with("chem_W(io16)") {
+                    do_test_count += 1;
+                    let v: f64 = t
+                        .split_whitespace()
+                        .last()
+                        .unwrap()
+                        .replace('D', "E")
+                        .parse()
+                        .unwrap();
+                    assert!((o16.w - v).abs() < 1e-14);
+                } else if t.starts_with("chem_binding_energy(io16)") {
+                    let v: f64 = t
+                        .split_whitespace()
+                        .last()
+                        .unwrap()
+                        .replace('D', "E")
+                        .parse()
+                        .unwrap();
+                    assert!((o16.binding_energy - v).abs() < 1e-13);
+                } else if t.starts_with("Abar") {
+                    let v: f64 = t.split('=').nth(1).unwrap().trim().parse().unwrap();
+                    assert!((comp.abar - v).abs() < 1e-6);
+                } else if t.starts_with("Qtotal") {
+                    let v: f64 = t
+                        .split_whitespace()
+                        .last()
+                        .unwrap()
+                        .replace('D', "E")
+                        .parse()
+                        .unwrap();
+                    assert!((qtot - v).abs() < 1e-14);
+                }
+            }
+            assert_eq!(do_test_count, 51);
+        }
+    }
+
+    /// Verify that `NuclideCatalog::builtin()` contains all 7,856 nuclides from
+    /// `isotopes.data` with their real 24-point partition functions `pfcn[24]`.
+    #[test]
+    fn test_builtin_catalog_contains_all_7856_nuclides_with_real_pfcn() {
+        let cat = NuclideCatalog::builtin();
+        assert_eq!(cat.len(), 7856);
+        assert_eq!(builtin_nuclide_rows().len(), 7856);
+        let cl55_id = cat.get_nuclide_index("cl55").expect("cl55 present");
+        assert_eq!(cl55_id, 348);
+        let cl55 = cat.get_by_id(cl55_id).expect("cl55 entry");
+        assert_eq!(cl55.z, 17);
+        assert_eq!(cl55.n, 38);
+        assert!((cl55.pfcn[0] - 1.0).abs() < 1e-12);
+        assert!((cl55.pfcn[1] - 1.01).abs() < 1e-12);
+        assert!((cl55.pfcn[23] - 118.29).abs() < 1e-12);
+
+        let iso_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../.mesa_temp_cache/mesa_data/chem_data/isotopes.data");
+        if iso_path.exists() {
+            let parsed =
+                NuclideCatalog::from_isotopes_file(&iso_path).expect("parse");
+            assert_eq!(parsed.len(), 7856);
+            for (a, b) in cat.entries().iter().zip(parsed.entries().iter()) {
+                assert_eq!(a.chem_id, b.chem_id);
+                assert_eq!(a.name, b.name);
+                assert_eq!(a.z, b.z);
+                assert_eq!(a.n, b.n);
+                assert_eq!(a.isomeric_state, b.isomeric_state);
+                assert!((a.spin - b.spin).abs() <= 1e-15);
+                assert!((a.mass_excess - b.mass_excess).abs() <= 1e-15);
+                assert!((a.binding_energy - b.binding_energy).abs() <= 1e-13);
+                assert!((a.w - b.w).abs() <= 1e-14);
+                for k in 0..NPART {
+                    assert!((a.pfcn[k] - b.pfcn[k]).abs() <= 1e-14);
+                }
+            }
+        }
     }
 }

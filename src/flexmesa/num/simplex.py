@@ -27,12 +27,12 @@ def r8_uniform_01(seed: int) -> tuple[float, int]:
     im = 2_147_483_647
     iq = 127_773
     ir = 2_836
-    s = 123_459_876 if seed == 0 else max(1, abs(int(seed)))
-    k = s // iq
+    s = 123_459_876 if seed == 0 else int(seed)
+    k = int(s / iq)
     nxt = ia * (s - k * iq) - ir * k
     if nxt < 0:
         nxt += im
-    u = min(1.0 - float(np.finfo(np.float64).eps), float(nxt) / float(im))
+    u = float(nxt) * 4.656_612_875e-10
     return u, int(nxt)
 
 
@@ -86,16 +86,23 @@ class SimplexConfig:
         gamma: Contraction coefficient (default ``0.5``).
         delta: Shrink coefficient (default ``0.5``).
         enforce_bounds: Penalize points outside ``[x_lower, x_upper]``.
+        adaptive_random_search: Use MESA's adaptive random search on
+            contraction failure.
+        seed: Initial PRNG seed for adaptive random search.
+        centroid_weight_power: Power for inverse-objective centroid weighting.
     """
 
-    max_evals: int = 2_000
+    max_evals: int = 20_000
     x_tol: float = 1e-10
-    f_tol: float = 1e-12
+    f_tol: float = 0.0
     alpha: float = 1.0
     beta: float = 2.0
     gamma: float = 0.5
     delta: float = 0.5
     enforce_bounds: bool = False
+    adaptive_random_search: bool = False
+    seed: int = 107_461_921
+    centroid_weight_power: float = 0.0
 
 
 @dataclasses.dataclass(frozen=True)
@@ -153,78 +160,124 @@ def nm_simplex(
 
     def _eval(pt: npt.NDArray[np.float64]) -> float:
         nonlocal num_evals
-        num_evals += 1
         if cfg.enforce_bounds and bool(np.any((pt < lo) | (pt > hi))):
-            return 1e30
+            return 1e99
+        num_evals += 1
         return float(fcn(pt))
 
     n_verts = n + 1
-    simplex = np.zeros((n_verts, n), dtype=np.float64)
+    simplex = np.tile(x0, (n_verts, 1)).astype(np.float64)
     f_vals = np.zeros(n_verts, dtype=np.float64)
-    simplex[0] = x0
-    f_vals[0] = _eval(x0)
+    f_vals[n] = _eval(simplex[n])
 
     for j in range(n):
-        v = x0.copy()
-        span = max(1.0, abs(float(hi[j] - lo[j])))
-        vj_abs = abs(float(v[j]))
-        step = 0.05 * vj_abs if vj_abs > 1e-6 else 0.05 * span
-        if v[j] + step <= hi[j] or not cfg.enforce_bounds:
-            v[j] += step
+        span = float(hi[j] - lo[j])
+        if abs(span) > 1e-14:
+            if float(hi[j] - x0[j]) < float(x0[j] - lo[j]):
+                simplex[j, j] = x0[j] - 0.25 * span
+            else:
+                simplex[j, j] = x0[j] + 0.25 * span
         else:
-            v[j] -= step
-        simplex[j + 1] = v
-        f_vals[j + 1] = _eval(v)
+            simplex[j, j] += 0.05 * max(1.0, abs(float(x0[j])))
+        f_vals[j] = _eval(simplex[j])
 
     num_iters = 0
     num_shrinks = 0
+    seed = int(cfg.seed)
 
-    while num_evals < cfg.max_evals:
-        order = np.argsort(f_vals, kind="mergesort")
-        simplex = simplex[order]
-        f_vals = f_vals[order]
-
-        f_spread = abs(float(f_vals[n] - f_vals[0]))
-        scales = np.maximum(1.0, np.abs(simplex[0]))
-        x_diam = float(np.max(np.abs(simplex[1:] - simplex[0]) / scales))
-        if f_spread <= cfg.f_tol and x_diam <= cfg.x_tol:
-            break
+    while True:
         num_iters += 1
+        h = 0
+        lo_idx = 0
+        for j in range(1, n_verts):
+            if f_vals[j] > f_vals[h]:
+                h = j
+            if f_vals[j] < f_vals[lo_idx]:
+                lo_idx = j
+        s = -1
+        for j in range(n_verts):
+            if j == h:
+                continue
+            if s < 0 or f_vals[j] > f_vals[s]:
+                s = j
 
-        centroid = np.mean(simplex[:n], axis=0)
-        x_ref = centroid + cfg.alpha * (centroid - simplex[n])
+        term_val_x = 0.0
+        for j in range(n_verts):
+            if j == lo_idx:
+                continue
+            denom = cfg.x_tol * (
+                1.0 + np.maximum(np.abs(simplex[j]), np.abs(simplex[lo_idx]))
+            )
+            term1 = float(np.max(np.abs(simplex[j] - simplex[lo_idx]) / denom))
+            if term1 > term_val_x:
+                term_val_x = term1
+        if term_val_x <= 1.0 or (
+            cfg.f_tol > 0.0 and float(f_vals[h] - f_vals[lo_idx]) <= cfg.f_tol
+        ):
+            break
+        if num_iters > cfg.max_evals or num_evals > cfg.max_evals:
+            break
+
+        if cfg.centroid_weight_power == 0.0:
+            mask = np.ones(n_verts, dtype=bool)
+            mask[h] = False
+            centroid = np.mean(simplex[mask], axis=0)
+        else:
+            centroid = np.zeros(n, dtype=np.float64)
+            sum_weight = 0.0
+            for j in range(n_verts):
+                if j == h:
+                    continue
+                w = (1.0 / max(1e-30, abs(float(f_vals[j])))) ** float(
+                    cfg.centroid_weight_power
+                )
+                centroid += simplex[j] * w
+                sum_weight += w
+            centroid /= sum_weight
+
+        x_ref = centroid + cfg.alpha * (centroid - simplex[h])
         f_ref = _eval(x_ref)
 
-        if f_ref < f_vals[0]:
-            x_exp = centroid + cfg.beta * (x_ref - centroid)
-            f_exp = _eval(x_exp)
-            if f_exp < f_ref:
-                simplex[n] = x_exp
-                f_vals[n] = f_exp
-            else:
-                simplex[n] = x_ref
-                f_vals[n] = f_ref
-        elif f_ref < f_vals[n - 1]:
-            simplex[n] = x_ref
-            f_vals[n] = f_ref
+        if f_ref < f_vals[s]:
+            simplex[h] = x_ref
+            f_vals[h] = f_ref
+            if f_ref < f_vals[lo_idx]:
+                x_exp = centroid + cfg.beta * (x_ref - centroid)
+                f_exp = _eval(x_exp)
+                if f_exp < f_vals[lo_idx]:
+                    simplex[h] = x_exp
+                    f_vals[h] = f_exp
         else:
-            outside = f_ref < f_vals[n]
+            outside = f_ref < f_vals[h]
             if outside:
                 x_con = centroid + cfg.gamma * (x_ref - centroid)
             else:
-                x_con = centroid + cfg.gamma * (simplex[n] - centroid)
+                x_con = centroid + cfg.gamma * (simplex[h] - centroid)
             f_con = _eval(x_con)
-            if (outside and f_con <= f_ref) or (
-                not outside and f_con < f_vals[n]
-            ):
-                simplex[n] = x_con
-                f_vals[n] = f_con
+            if f_con < min(float(f_vals[h]), f_ref):
+                simplex[h] = x_con
+                f_vals[h] = f_con
+            elif cfg.adaptive_random_search:
+                for _k in range(100):
+                    if num_evals > cfg.max_evals:
+                        break
+                    x_ars = np.empty(n, dtype=np.float64)
+                    for i in range(n):
+                        u, seed = r8_uniform_01(seed)
+                        x_ars[i] = lo[i] + u * (hi[i] - lo[i])
+                    f_ars = _eval(x_ars)
+                    if f_ars <= f_vals[h]:
+                        simplex[h] = x_ars
+                        f_vals[h] = f_ars
+                        break
             else:
                 num_shrinks += 1
-                best = simplex[0].copy()
-                for k in range(1, n_verts):
-                    simplex[k] = best + cfg.delta * (simplex[k] - best)
-                    f_vals[k] = _eval(simplex[k])
+                best = simplex[lo_idx].copy()
+                for j in range(n_verts):
+                    if j == lo_idx:
+                        continue
+                    simplex[j] = best + cfg.delta * (simplex[j] - best)
+                    f_vals[j] = _eval(simplex[j])
 
     best_idx = int(np.argmin(f_vals))
     return SimplexResult(

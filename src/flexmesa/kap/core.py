@@ -4,7 +4,8 @@
 Ports upstream Fortran MESA's `kap` module (`kap_def.f90`, `kap_lib.f90`,
 `kap_eval.f90`, `kap_eval_fixed.f90`, `kap_eval_co.f90`, `condint.f90`,
 `kap_aesopus.f90`, and `kapcn.f90`) with Safe Rust execution via
-`flexmesa._rust` and `@jax.jit` / `jax.custom_jvp` differentiable kernels.
+`flexmesa._rust` and native `@jax.jit` / `jax.custom_jvp` differentiable
+kernels.
 """
 
 from __future__ import annotations
@@ -25,6 +26,8 @@ NUM_KAP_FRACS: int = 4
 
 combine_rad_with_conduction_jax = jax_kernels.combine_rad_with_conduction_jax
 compton_opacity_jax = jax_kernels.compton_opacity_jax
+electron_conduction_jax = jax_kernels.electron_conduction_jax
+kap_get_results_jax = jax_kernels.kap_get_results_jax
 make_differentiable_kap = jax_kernels.make_differentiable_kap
 kap_get_elect_cond_opacity = submodels.kap_get_elect_cond_opacity
 kap_get_compton_opacity = submodels.kap_get_compton_opacity
@@ -55,13 +58,14 @@ class KapEvalOutput:
 
 
 def _pack_kap_output(
-    raw: tuple[float, float, float, list[float]],
+    raw: tuple[Any, Any, Any, Any],
 ) -> KapEvalOutput:
     """Convert raw `(kap, dln_dr, dln_dt, fracs)` tuple to [`KapEvalOutput`]."""
     kap, dln_dr, dln_dt, fracs = raw
+    kap_f = float(kap)
     return KapEvalOutput(
-        kap=float(kap),
-        log10_kap=float(np.log10(kap)),
+        kap=kap_f,
+        log10_kap=float(np.log10(kap_f)),
         dlnkap_dln_rho=float(dln_dr),
         dlnkap_dln_t=float(dln_dt),
         kap_fracs=np.asarray(fracs, dtype=np.float64),
@@ -125,7 +129,8 @@ def kap_get_results(
         d_eta_dln_t: Partial `(d eta / d ln T)_rho`.
         zbar: Mean ionic charge `Zbar`.
         kap_option: High-T Type 1 table prefix (`"gs98"`, `"a09"`, etc.).
-        kap_co_option: High-T Type 2 table prefix (`"gn93_co"`, `"a09_co"`).
+        kap_co_option: High-T Type 2 table prefix (`"gn93_co"`, `"gs98_co"`,
+            `"a09_co"`).
         kap_low_t_option: Low-T table prefix (`"lowT_fa05_gs98"`, `"AESOPUS"`,
             `"kapCN"`).
         kap_blend_log_t_upper_bdy: Upper `log10(T/K)` for low-T/high-T blend.
@@ -147,7 +152,43 @@ def kap_get_results(
         [`KapEvalOutput`] containing `kap`, `log10_kap`, `dlnkap_dln_rho`,
         `dlnkap_dln_t`, and `kap_fracs`.
     """
-    _ = _dispatch.resolve_backend(backend, z, x, zbase, log_rho, log_t)
+    resolved = _dispatch.resolve_backend(backend, z, x, zbase, log_rho, log_t)
+    if resolved == "jax":
+        return _pack_kap_output(
+            jax_kernels.kap_get_results_jax(
+                z,
+                x,
+                zbase,
+                xc,
+                xn,
+                xo,
+                xne,
+                log_rho,
+                log_t,
+                lnfree_e,
+                d_lnfree_e_dln_rho,
+                d_lnfree_e_dln_t,
+                eta,
+                d_eta_dln_rho,
+                d_eta_dln_t,
+                zbar,
+                kap_option=kap_option,
+                kap_co_option=kap_co_option,
+                kap_low_t_option=kap_low_t_option,
+                kap_blend_log_t_upper_bdy=kap_blend_log_t_upper_bdy,
+                kap_blend_log_t_lower_bdy=kap_blend_log_t_lower_bdy,
+                cubic_interpolation_in_x=cubic_interpolation_in_x,
+                cubic_interpolation_in_z=cubic_interpolation_in_z,
+                include_electron_conduction=include_electron_conduction,
+                use_blouin_conductive_opacities=use_blouin_conductive_opacities,
+                use_zbase_for_type1=use_zbase_for_type1,
+                use_type2_opacities=use_type2_opacities,
+                kap_type2_full_off_x=kap_type2_full_off_x,
+                kap_type2_full_on_x=kap_type2_full_on_x,
+                kap_type2_full_off_dz=kap_type2_full_off_dz,
+                kap_type2_full_on_dz=kap_type2_full_on_dz,
+            )
+        )
     return _pack_kap_output(
         _rust.kap_get_results_rust(
             float(z),

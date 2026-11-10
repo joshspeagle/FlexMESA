@@ -217,14 +217,20 @@ def cubic_basis_1d(
 
 def h5(fi: jax.Array, wt: jax.Array, wd: jax.Array) -> jax.Array:
     """Evaluate the 36-term biquintic Hermite tensor product `h5`."""
-    w36 = wt[..., _H5_T_IDX] * wd[..., _H5_D_IDX]
-    return jnp.sum(fi * w36, axis=-1)
+    terms = (fi * wd[..., _H5_D_IDX]) * wt[..., _H5_T_IDX]
+    acc = terms[..., 0]
+    for i in range(1, 36):
+        acc = acc + terms[..., i]
+    return acc
 
 
 def h3(fi: jax.Array, wt: jax.Array, wd: jax.Array) -> jax.Array:
     """Evaluate the 16-term bicubic Hermite tensor product `h3`."""
-    w16 = wt[..., _H3_T_IDX] * wd[..., _H3_D_IDX]
-    return jnp.sum(fi * w16, axis=-1)
+    terms = (fi * wd[..., _H3_D_IDX]) * wt[..., _H3_T_IDX]
+    acc = terms[..., 0]
+    for i in range(1, 16):
+        acc = acc + terms[..., i]
+    return acc
 
 
 def _quintic_w2_coord_core(
@@ -342,7 +348,8 @@ def _cubic_w0_coord_core(
     return cubic_basis_1d((val - lo) * di, d, di, d2i)[0]
 
 
-cubic_w0_coord = jax.custom_jvp(_cubic_w0_coord_core)
+_cubic_w0_coord = jax.custom_jvp(_cubic_w0_coord_core)
+cubic_w0_coord = _cubic_w0_coord
 
 
 def _cubic_w0_coord_jvp(
@@ -356,3 +363,67 @@ def _cubic_w0_coord_jvp(
 
 
 cubic_w0_coord.defjvp(_cubic_w0_coord_jvp)
+
+
+def _eval_h5_jet_core(
+    temp: jax.Array,
+    din: jax.Array,
+    t_lo: jax.Array,
+    dth: jax.Array,
+    d_lo: jax.Array,
+    dd: jax.Array,
+    fi_f: jax.Array,
+) -> tuple[jax.Array, ...]:
+    """Evaluate 10 biquintic Helmholtz partials with exact chain-rule JVPs."""
+    dt2 = dth * dth
+    dti = 1.0 / dth
+    dt2i = 1.0 / dt2
+    dt3i = dt2i * dti
+    dd2 = dd * dd
+    ddi = 1.0 / dd
+    dd2i = 1.0 / dd2
+    dd3i = dd2i * ddi
+    xt = jnp.maximum((temp - t_lo) * dti, 0.0)
+    xd = jnp.maximum((din - d_lo) * ddi, 0.0)
+    qt0, qt1, qt2, qt3 = quintic_basis_1d(xt, dth, dt2, dti, dt2i, dt3i)
+    qd0, qd1, qd2, qd3 = quintic_basis_1d(xd, dd, dd2, ddi, dd2i, dd3i)
+    return (
+        h5(fi_f, qt0, qd0),
+        h5(fi_f, qt0, qd1),
+        h5(fi_f, qt1, qd0),
+        h5(fi_f, qt0, qd2),
+        h5(fi_f, qt2, qd0),
+        h5(fi_f, qt1, qd1),
+        h5(fi_f, qt0, qd3),
+        h5(fi_f, qt1, qd2),
+        h5(fi_f, qt2, qd1),
+        h5(fi_f, qt3, qd0),
+    )
+
+
+eval_h5_jet = jax.custom_jvp(_eval_h5_jet_core)
+
+
+def _eval_h5_jet_jvp(
+    primals: tuple[jax.Array, ...], tangents: tuple[jax.Array, ...]
+) -> tuple[tuple[jax.Array, ...], tuple[jax.Array, ...]]:
+    d_temp, d_din = tangents[0], tangents[1]
+    out = _eval_h5_jet_core(*primals)
+    _, df_d, df_t, df_dd, df_tt, df_dt, df_ddd, df_ddt, df_dtt, df_ttt = out
+    z = jnp.zeros_like(df_d)
+    tan = (
+        df_d * d_din + df_t * d_temp,
+        df_dd * d_din + df_dt * d_temp,
+        df_dt * d_din + df_tt * d_temp,
+        df_ddd * d_din + df_ddt * d_temp,
+        df_dtt * d_din + df_ttt * d_temp,
+        df_ddt * d_din + df_dtt * d_temp,
+        z,
+        z,
+        z,
+        z,
+    )
+    return out, tan
+
+
+eval_h5_jet.defjvp(_eval_h5_jet_jvp)

@@ -21,11 +21,11 @@ import enum
 import math
 
 import jax
-import jax.numpy as jnp
 import numpy as np
 
 from flexmesa import _dispatch, _rust
 from flexmesa import constants as _const
+from flexmesa.neu import _jax
 from flexmesa.neu import brem as _brem
 from flexmesa.neu import inputs as _inputs
 from flexmesa.neu import pair_plas as _pair_plas
@@ -327,71 +327,11 @@ def neu_pair_plas_jax(
         Specific neutrino loss rate $\\epsilon_{\\mathrm{pair+plas}}$ in
         $\\mathrm{erg\\,g^{-1}\\,s^{-1}}$ (`jax.Array` in `float64`).
     """
-    t = jnp.asarray(t, dtype=jnp.float64)
-    rho = jnp.asarray(rho, dtype=jnp.float64)
-    abar = jnp.asarray(abar, dtype=jnp.float64)
-    zbar = jnp.asarray(zbar, dtype=jnp.float64)
+    ch = _jax.neu_channels_jax(t, rho, abar, zbar, log10_tlim=7.0)
+    return ch[0] + ch[1]
 
-    ye = zbar / abar
-    rm = rho * ye
-    xl = (t * 1.0e-9) * _inputs.CON1
-    xl2 = xl * xl
-    xl3 = xl2 * xl
-    xl4 = xl3 * xl
-    xl6 = xl4 * xl2
-    xl8 = xl6 * xl2
-    xl9 = xl8 * xl
-    xlm1 = 1.0 / xl
-    xlm2 = xlm1 * xlm1
-    xlm3 = xlm1 * xlm2
-    xlp5 = jnp.sqrt(xl)
 
-    zeta = jnp.power(rm * 1.0e-9, _const.ONE_THIRD) * xlm1
-    zeta2 = zeta * zeta
-    zeta3 = zeta2 * zeta
-
-    gl = 1.0 - 13.04 * xl2 + 133.5 * xl4 + 1534.0 * xl6 + 918.6 * xl8
-    a1 = 6.002e19 + 2.084e20 * zeta + 1.872e21 * zeta2
-    b1 = jnp.where(t < 1.0e10, jnp.exp(-5.5924 * zeta), jnp.exp(-4.9924 * zeta))
-    den_a1 = jnp.where(
-        t < 1.0e10,
-        9.383e-1 * xlm1 - 4.141e-1 * xlm2 + 5.829e-2 * xlm3,
-        1.2383 * xlm1 - 8.141e-1 * xlm2,
-    )
-    fpair = (a1 * b1) / (zeta3 + den_a1)
-    q_xnum = 1.0 / (10.7480 * xl2 + 0.3967 * xlp5 + 1.005)
-    d_a1 = 7.692e7 * xl3 + 9.715e6 * xlp5
-    q_xden = jnp.power(1.0 + rm / d_a1, -0.3)
-    qpair = q_xnum * q_xden
-    q_pair_vol = (
-        _inputs.TFAC4
-        * (1.0 + _inputs.TFAC3 * qpair)
-        * gl
-        * jnp.exp(-2.0 * xlm1)
-        * fpair
-    )
-
-    a2_p = jnp.power(1.019e-6 * rm, _const.TWO_THIRDS)
-    b1_p = jnp.sqrt(1.0 + a2_p)
-    gl2 = 1.1095e11 * rm / (t * t * b1_p)
-    gl_p = jnp.sqrt(gl2)
-    gl12 = jnp.sqrt(gl_p)
-    gl32 = gl_p * gl12
-    gl72 = gl2 * gl32
-    gl6 = gl2 * gl2 * gl2
-    ft = 2.4 + 0.6 * gl12 + 0.51 * gl_p + 1.25 * gl32
-    fl = (8.6 * gl2 + 1.35 * gl72) / (225.0 - 17.0 * gl_p + gl2)
-    cc = jnp.log10(2.0 * rm)
-    xlnt = jnp.log10(t)
-    xnum = _const.ONE_SIXTH * (17.5 + cc - 3.0 * xlnt)
-    xden = _const.ONE_SIXTH * (-24.5 + cc + 3.0 * xlnt)
-    p_a1 = 0.39 - 1.25 * xnum - 0.35 * jnp.sin(4.5 * xnum)
-    p_b1 = 0.3 * jnp.exp(-jnp.square(4.5 * xnum + 0.9))
-    c_val = jnp.minimum(0.0, xden - 1.6 + 1.25 * xnum)
-    a3_val = c_val / (0.57 - 0.25 * xnum)
-    fxy_inner = 1.05 + (p_a1 - p_b1) * jnp.exp(-a3_val * a3_val)
-    fxy = jnp.where((jnp.abs(xnum) > 0.7) | (xden < 0.0), 1.0, fxy_inner)
-    q_plas_vol = (
-        _inputs.TFAC0 * 3.0e21 * xl9 * gl6 * jnp.exp(-gl_p) * (ft + fl) * fxy
-    )
-    return (q_pair_vol + q_plas_vol) / rho
+neu_channels_jax = _jax.neu_channels_jax
+neu_get_jax = _jax.neu_get_jax
+ifermi12_jax = _jax.ifermi12_jax
+zfermim12_jax = _jax.zfermim12_jax

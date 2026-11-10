@@ -111,8 +111,9 @@ def _eval_all_zx_cells(
         Tensor of shape `(5, 6, 28)` giving all 28 channels at every $(Z, X)$
         table node.
     """
-    lq_min, dq, nq = -2.08, 0.09, coeffs.shape[3]
-    lt_min, dt, nt = 4.50, 0.06, coeffs.shape[4]
+    nq, nt = coeffs.shape[3], coeffs.shape[4]
+    lq_min, dq = (-10.0 if nq > 2 else -2.08), 0.09
+    lt_min, dt = (2.10 if nt > 2 else 4.50), 0.06
     raw_q = log10_rho - 2.0 * log10_t + 12.0
     iq, xp, xpi, cx, cxi = _uniform_axis_basis(raw_q, lq_min, dq, nq)
     jt, yp, ypi, cy, cyi = _uniform_axis_basis(log10_t, lt_min, dt, nt)

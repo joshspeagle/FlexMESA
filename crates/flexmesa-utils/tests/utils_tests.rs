@@ -12,7 +12,7 @@
 
 use flexmesa_utils::{
     is_bad, is_bad_slice, remove_underbars, replace_bad_nums, split_line,
-    tokenize, IntegerDict, IntegerIdict, Token,
+    tokenize, IntegerDict, IntegerIdict, Token, Tokenizer,
 };
 use proptest::prelude::*;
 
@@ -82,20 +82,26 @@ fn test_integer_idict_matches_upstream_mesa() {
 /// cleanly at adjacent `!` comments or `&` markers.
 #[test]
 fn test_token_stream_matches_upstream_mesa_token_txt() {
-    let input = "\
-!test input for token_read
-
-add_isos(
-   ih1, ihe4, & ! ignore & and comment
-   ic12!inline_comment
-   )
-
-'string1'  \"string2\"
-
-add_reactions(rc12pg, rc12ap)
-";
-    let tokens = tokenize(input);
+    let token_txt = "\
+\n      ! test token reader
+      
+      file = \"token.txt\"
+      file2 = 'token2.txt'
+      
+      add_isos(ih1, ihe4, ic12)
+      
+      add_reactions(
+          rc12pg,           ! c12(p,g)n13
+          rc12ap            ! c12(a,p)n15
+          )
+         ";
     let expected = vec![
+        Token::Name("file".to_owned()),
+        Token::Name("=".to_owned()),
+        Token::String("token.txt".to_owned()),
+        Token::Name("file2".to_owned()),
+        Token::Name("=".to_owned()),
+        Token::String("token2.txt".to_owned()),
         Token::Name("add_isos".to_owned()),
         Token::LeftParen,
         Token::Name("ih1".to_owned()),
@@ -104,8 +110,6 @@ add_reactions(rc12pg, rc12ap)
         Token::Comma,
         Token::Name("ic12".to_owned()),
         Token::RightParen,
-        Token::String("string1".to_owned()),
-        Token::String("string2".to_owned()),
         Token::Name("add_reactions".to_owned()),
         Token::LeftParen,
         Token::Name("rc12pg".to_owned()),
@@ -114,7 +118,65 @@ add_reactions(rc12pg, rc12ap)
         Token::RightParen,
         Token::Eof,
     ];
+    let tokens = tokenize(token_txt);
     assert_eq!(tokens, expected);
+
+    let mut tz = Tokenizer::new(token_txt);
+    for exp in &expected {
+        assert_eq!(&tz.next_token(), exp);
+    }
+    assert_eq!(tz.next_token(), Token::Eof);
+
+    // Verify directly against .mesa_temp_cache/mesa_root/utils/test/token.txt and test_output
+    let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let upstream_token_path =
+        manifest_dir.join("../../.mesa_temp_cache/mesa_root/utils/test/token.txt");
+    if upstream_token_path.exists() {
+        let upstream_txt = std::fs::read_to_string(&upstream_token_path)
+            .expect("read utils/test/token.txt");
+        assert_eq!(tokenize(&upstream_txt), expected);
+    }
+    let upstream_output_path =
+        manifest_dir.join("../../.mesa_temp_cache/mesa_root/utils/test/test_output");
+    if upstream_output_path.exists() {
+        let out_txt = std::fs::read_to_string(&upstream_output_path)
+            .expect("read utils/test/test_output");
+        let token_lines: Vec<String> = out_txt
+            .lines()
+            .map(str::trim)
+            .filter(|l| l.ends_with("_token") || l.contains("_token "))
+            .map(str::to_owned)
+            .collect();
+        let formatted: Vec<String> = expected
+            .iter()
+            .map(|t| match t {
+                Token::Name(s) => format!("name_token {:11} {}", s.len(), s),
+                Token::String(s) => format!("string_token {:11} {}", s.len(), s),
+                Token::LeftParen => "left_paren_token".to_owned(),
+                Token::RightParen => "right_paren_token".to_owned(),
+                Token::Comma => "comma_token".to_owned(),
+                Token::Eof => "eof_token".to_owned(),
+            })
+            .collect();
+        assert_eq!(formatted, token_lines);
+    }
+
+    // Also test inline comment and & continuation stripping
+    let inline_input = "add_isos(ih1, ihe4, & ! ignore &\n ic12!inline\n)";
+    assert_eq!(
+        tokenize(inline_input),
+        vec![
+            Token::Name("add_isos".to_owned()),
+            Token::LeftParen,
+            Token::Name("ih1".to_owned()),
+            Token::Comma,
+            Token::Name("ihe4".to_owned()),
+            Token::Comma,
+            Token::Name("ic12".to_owned()),
+            Token::RightParen,
+            Token::Eof,
+        ]
+    );
 }
 
 /// Verify IEEE-754 finiteness checks (`is_bad`, `is_bad_slice`,

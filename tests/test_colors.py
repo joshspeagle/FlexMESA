@@ -334,3 +334,56 @@ def test_dual_autodiff_jacobian_and_jax_check_grads() -> None:
     jtu.check_grads(
         _scaled_eval_colors, (u0,), order=2, atol=1.0e-5, rtol=1.0e-5
     )
+
+
+def test_full_76x11x8x1199_sed_cube_and_full_domain_sweeps() -> None:
+    """Verify full 76x11x8x1199 Kurucz/Lejeune SED cube and domain sweeps.
+
+    Confirms that the built-in SED cube always has dense shape `(6688, 1199)`
+    (`76 * 11 * 8 == 6688` SEDs) with a 1-to-1 `slot_map` (zero nearest-neighbor
+    node copying), and evaluates bolometric corrections, filter magnitudes,
+    and SEDs across `Teff in [2000, 50000] K`, `log g in [-1.0, 5.5]`, and
+    `[M/H] in [-5.0, +1.0]` with Rust vs. JAX parity.
+    """
+    grid = colors.get_builtin_colors_grid()
+    assert grid.teff_grid.shape == (76,)
+    assert grid.logg_grid.shape == (11,)
+    assert grid.meta_grid.shape == (8,)
+    assert grid.wavelengths.shape == (1199,)
+    assert grid.sed_table.shape == (76 * 11 * 8, 1199)
+    np.testing.assert_array_equal(
+        np.asarray(grid.slot_map), np.arange(76 * 11 * 8, dtype=np.int64)
+    )
+
+    teff_arr = np.array(
+        [2000.0, 3500.0, 4500.0, 5778.0, 8500.0, 15000.0, 30000.0, 50000.0],
+        dtype=np.float64,
+    )
+    logg_arr = np.array(
+        [-1.0, 0.0, 2.5, 4.44, 4.0, 4.0, 4.5, 5.5], dtype=np.float64
+    )
+    meta_arr = np.array(
+        [-5.0, -2.5, -1.5, 0.0, -0.5, 0.2, 0.5, 1.0], dtype=np.float64
+    )
+    r_arr = np.full_like(teff_arr, RSUN)
+
+    out_rust = colors.eval_colors_zones(
+        teff_arr, logg_arr, meta_arr, r_arr, D10, backend="rust"
+    )
+    out_jax = np.asarray(
+        colors.eval_colors_zones(
+            jnp.asarray(teff_arr),
+            jnp.asarray(logg_arr),
+            jnp.asarray(meta_arr),
+            jnp.asarray(r_arr),
+            D10,
+            backend="jax",
+        ),
+        dtype=np.float64,
+    )
+    assert np.all(np.isfinite(out_rust))
+    assert np.all(out_rust[:, 1] > 0.0)
+    np.testing.assert_allclose(out_rust, out_jax, rtol=1.0e-12, atol=1.0e-14)
+    # Bolometric correction BC_V = M_bol - V must vary smoothly across Teff
+    bc_v = out_rust[:, 0] - out_rust[:, 9]
+    assert np.all(np.isfinite(bc_v))

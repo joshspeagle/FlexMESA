@@ -2,25 +2,23 @@
 """Timmes & Swesty (2000) `HELM` equation of state (`eos_helm_eval.f90`).
 
 Provides the Tier B dual-track (`backend="auto" | "rust" | "jax"`) Python and
-JAX interfaces for the 26-channel MESA `HELM` equation of state (`helmeos2` and
-`do_convert_helm_results`).
+native `@jax.jit` interfaces for the 26-channel MESA `HELM` equation of state
+(`helmeos2` and `do_convert_helm_results`).
 """
 
 from __future__ import annotations
-
-from typing import cast
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 
 from flexmesa import _dispatch, _rust
-from flexmesa.eos import _helm_jax, core
+from flexmesa.eos import _cache_io, _helm_jax, core
 
 eval_helm_cell_jax = _helm_jax.eval_helm_cell_jax
 
 
-def _host_lookup_cells(
+def _lookup_helm_cell_np(
     temp_np: np.ndarray, din_np: np.ndarray
 ) -> tuple[
     np.ndarray,
@@ -32,90 +30,45 @@ def _host_lookup_cells(
     np.ndarray,
     np.ndarray,
 ]:
-    """Fetch cell bounds and Hermite stencils from the Rust `HelmTable`."""
-    orig_shape = np.shape(temp_np)
-    lt_1d = np.ascontiguousarray(
-        np.log10(np.asarray(temp_np, dtype=np.float64)).reshape(-1)
+    t_arr, dt_sav, d_arr, dd_sav, vertices = _cache_io.get_helm_np_arrays()
+    t_a = np.asarray(temp_np, dtype=np.float64)
+    d_a = np.asarray(din_np, dtype=np.float64)
+    batch_shape = t_a.shape
+    lt = np.log10(np.maximum(t_a, 1.0e-99))
+    ldin = np.log10(np.maximum(d_a, 1.0e-99))
+    jat0 = np.clip(
+        np.floor((lt - _cache_io.HELM_LOGTLO) * 100.0).astype(np.int32),
+        0,
+        _cache_io.HELM_JMAX - 2,
     )
-    dn_1d = np.ascontiguousarray(
-        np.asarray(din_np, dtype=np.float64).reshape(-1)
+    iat0 = np.clip(
+        np.floor((ldin - _cache_io.HELM_LOGDLO) * 100.0).astype(np.int32),
+        0,
+        _cache_io.HELM_IMAX - 2,
     )
-    t_lo, dth, d_lo, dd, fi_f, fi_dpdf, fi_ef, fi_xf = (
-        _rust.eos_helm_cells_batch(lt_1d, dn_1d)
-    )
-    return (
-        t_lo.reshape(orig_shape),
-        dth.reshape(orig_shape),
-        d_lo.reshape(orig_shape),
-        dd.reshape(orig_shape),
-        fi_f.reshape((*orig_shape, 36)),
-        fi_dpdf.reshape((*orig_shape, 16)),
-        fi_ef.reshape((*orig_shape, 16)),
-        fi_xf.reshape((*orig_shape, 16)),
-    )
-
-
-def _lookup_helm_cell_core(
-    temp: jax.Array, din: jax.Array
-) -> tuple[
-    jax.Array,
-    jax.Array,
-    jax.Array,
-    jax.Array,
-    jax.Array,
-    jax.Array,
-    jax.Array,
-    jax.Array,
-]:
-    """Look up `HelmCell` bounds and stencils via host `pure_callback`."""
-    shape = temp.shape
-    dt = jnp.float64
-    spec = (
-        jax.ShapeDtypeStruct(shape, dt),
-        jax.ShapeDtypeStruct(shape, dt),
-        jax.ShapeDtypeStruct(shape, dt),
-        jax.ShapeDtypeStruct(shape, dt),
-        jax.ShapeDtypeStruct((*shape, 36), dt),
-        jax.ShapeDtypeStruct((*shape, 16), dt),
-        jax.ShapeDtypeStruct((*shape, 16), dt),
-        jax.ShapeDtypeStruct((*shape, 16), dt),
-    )
-    out = jax.pure_callback(
-        _host_lookup_cells, spec, temp, din, vmap_method="expand_dims"
-    )
-    return cast(
-        tuple[
-            jax.Array,
-            jax.Array,
-            jax.Array,
-            jax.Array,
-            jax.Array,
-            jax.Array,
-            jax.Array,
-            jax.Array,
+    corners = np.stack(
+        [
+            vertices[jat0, iat0],
+            vertices[jat0, iat0 + 1],
+            vertices[jat0 + 1, iat0],
+            vertices[jat0 + 1, iat0 + 1],
         ],
-        out,
+        axis=-1,
     )
-
-
-_lookup_helm_cell_jvp_fn = jax.custom_jvp(_lookup_helm_cell_core)
-
-
-def _lookup_helm_cell_jvp(
-    primals: tuple[jax.Array, jax.Array],
-    tangents: tuple[jax.Array, jax.Array],
-) -> tuple[
-    tuple[jax.Array, ...],
-    tuple[jax.Array, ...],
-]:
-    """Return zero tangents for piecewise-constant cell bounds and stencils."""
-    del tangents
-    primal_out = _lookup_helm_cell_core(*primals)
-    zero_tan = tuple(jnp.zeros_like(arr) for arr in primal_out)
-    return primal_out, zero_tan
-
-
-_lookup_helm_cell_jvp_fn.defjvp(_lookup_helm_cell_jvp)
+    fi_f = corners[..., 0:9, :].reshape((*batch_shape, 36))
+    fi_dpdf = corners[..., 9:13, :].reshape((*batch_shape, 16))
+    fi_ef = corners[..., 13:17, :].reshape((*batch_shape, 16))
+    fi_xf = corners[..., 17:21, :].reshape((*batch_shape, 16))
+    return (
+        np.asarray(t_arr[jat0], dtype=np.float64),
+        np.asarray(dt_sav[jat0], dtype=np.float64),
+        np.asarray(d_arr[iat0], dtype=np.float64),
+        np.asarray(dd_sav[iat0], dtype=np.float64),
+        fi_f,
+        fi_dpdf,
+        fi_ef,
+        fi_xf,
+    )
 
 
 def _lookup_helm_cell_jax(
@@ -130,21 +83,37 @@ def _lookup_helm_cell_jax(
     jax.Array,
     jax.Array,
 ]:
-    """Typed wrapper around `custom_jvp` `_lookup_helm_cell_jvp_fn`."""
-    out = _lookup_helm_cell_jvp_fn(temp, din)
-    return cast(
-        tuple[
-            jax.Array,
-            jax.Array,
-            jax.Array,
-            jax.Array,
-            jax.Array,
-            jax.Array,
-            jax.Array,
-            jax.Array,
-        ],
-        out,
+    """Look up `HelmCell` bounds and 4-corner Hermite stencils in JAX."""
+    temp_sg = jax.lax.stop_gradient(jnp.asarray(temp, dtype=jnp.float64))
+    din_sg = jax.lax.stop_gradient(jnp.asarray(din, dtype=jnp.float64))
+    if not isinstance(temp_sg, jax.core.Tracer) and not isinstance(
+        din_sg, jax.core.Tracer
+    ):
+        t_lo, dth, d_lo, dd, fi_f, fi_dpdf, fi_ef, fi_xf = _lookup_helm_cell_np(
+            np.asarray(temp_sg), np.asarray(din_sg)
+        )
+        return (
+            jnp.asarray(t_lo, dtype=jnp.float64),
+            jnp.asarray(dth, dtype=jnp.float64),
+            jnp.asarray(d_lo, dtype=jnp.float64),
+            jnp.asarray(dd, dtype=jnp.float64),
+            jnp.asarray(fi_f, dtype=jnp.float64),
+            jnp.asarray(fi_dpdf, dtype=jnp.float64),
+            jnp.asarray(fi_ef, dtype=jnp.float64),
+            jnp.asarray(fi_xf, dtype=jnp.float64),
+        )
+    b_shape = temp_sg.shape
+    sc = jax.ShapeDtypeStruct(b_shape, jnp.float64)
+    s36 = jax.ShapeDtypeStruct((*b_shape, 36), jnp.float64)
+    s16 = jax.ShapeDtypeStruct((*b_shape, 16), jnp.float64)
+    t_c, dt_c, d_c, dd_c, f_c, dp_c, ef_c, xf_c = jax.pure_callback(
+        _lookup_helm_cell_np,
+        (sc, sc, sc, sc, s36, s16, s16, s16),
+        temp_sg,
+        din_sg,
+        vmap_method="expand_dims",
     )
+    return t_c, dt_c, d_c, dd_c, f_c, dp_c, ef_c, xf_c
 
 
 def _eval_helm_jax(

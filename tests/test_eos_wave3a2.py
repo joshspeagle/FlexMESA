@@ -203,3 +203,78 @@ def test_eval_helm_eos_jax_autodiff_matches_analytical_derivatives() -> None:
         )
         < 1.0e-6
     )
+
+
+def test_eval_helm_eos_full_table_off_golden_grid_parity_and_autodiff() -> None:
+    """Verify full `2701x1001` `HELM` table outside the 16 patch vertices."""
+    off_golden_states = [
+        # (logRho, logT, abar, zbar) across full HELM table domain
+        (-7.35, 4.15, 1.29, 1.10),
+        (-3.42, 5.68, 1.29, 1.10),
+        (0.73, 6.84, 1.65, 1.18),
+        (2.15, 7.18, 1.30, 1.10),
+        (4.62, 7.85, 4.00, 2.00),
+        (6.48, 8.12, 13.71, 6.86),
+        (8.35, 8.95, 16.00, 8.00),
+        (9.40, 9.30, 28.00, 14.00),
+    ]
+    temps = np.array(
+        [10.0 ** s[1] for s in off_golden_states], dtype=np.float64
+    )
+    rhos = np.array([10.0 ** s[0] for s in off_golden_states], dtype=np.float64)
+    abars = np.array([s[2] for s in off_golden_states], dtype=np.float64)
+    zbars = np.array([s[3] for s in off_golden_states], dtype=np.float64)
+
+    zones_r = eos.eval_helm_eos_zones(temps, rhos, abars, zbars, backend="rust")
+    zones_j = eos.eval_helm_eos_zones(
+        jnp.asarray(temps),
+        jnp.asarray(rhos),
+        jnp.asarray(abars),
+        jnp.asarray(zbars),
+        backend="jax",
+    )
+    assert not np.any(np.isnan(np.asarray(zones_r.res)))
+    assert not np.any(np.isnan(np.asarray(zones_j.res)))
+    res_r3 = np.asarray(zones_r.res[:, :3])
+    res_j3 = np.asarray(zones_j.res[:, :3])
+    assert _rel_diff(res_r3, res_j3) <= 1.0e-12
+    assert (
+        _rel_diff(np.asarray(zones_r.res), np.asarray(zones_j.res)) < 1.0e-9
+    )
+    assert (
+        _rel_diff(np.asarray(zones_r.d_dlnd), np.asarray(zones_j.d_dlnd))
+        < 1.0e-9
+    )
+    assert (
+        _rel_diff(np.asarray(zones_r.d_dln_t), np.asarray(zones_j.d_dln_t))
+        < 1.0e-6
+    )
+
+    # Check forward-mode jacfwd and reverse-mode grad at an off-patch WD vertex
+    rho_wd = 10.0**6.48
+    temp_wd = 10.0**8.12
+    out_wd, _, _ = eos.eval_helm_eos(
+        temp_wd, rho_wd, 13.71, 6.86, backend="jax"
+    )
+    ad_dlnd, ad_dlnt = jax.jacfwd(
+        lambda lnd, lnt: _res_of_ln_td_az(
+            lnd, lnt, jnp.float64(13.71), jnp.float64(6.86)
+        ),
+        argnums=(0, 1),
+    )(jnp.log(jnp.float64(rho_wd)), jnp.log(jnp.float64(temp_wd)))
+    assert (
+        _rel_diff(np.asarray(out_wd.d_dlnd[:3]), np.asarray(ad_dlnd[:3]))
+        < 1.0e-11
+    )
+    assert (
+        _rel_diff(np.asarray(out_wd.d_dln_t[:3]), np.asarray(ad_dlnt[:3]))
+        < 1.0e-11
+    )
+    assert (
+        _rel_diff(np.asarray(out_wd.d_dlnd[:16]), np.asarray(ad_dlnd[:16]))
+        < 1.0e-8
+    )
+    assert (
+        _rel_diff(np.asarray(out_wd.d_dln_t[:16]), np.asarray(ad_dlnt[:16]))
+        < 1.0e-7
+    )

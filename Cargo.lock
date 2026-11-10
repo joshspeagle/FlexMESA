@@ -444,6 +444,7 @@ dependencies = [
  "flexmesa-atm",
  "flexmesa-autodiff",
  "flexmesa-chem",
+ "flexmesa-colors",
  "flexmesa-const",
  "flexmesa-eos",
  "flexmesa-interp1d",
@@ -456,6 +457,7 @@ dependencies = [
  "flexmesa-neu",
  "flexmesa-num",
  "flexmesa-rates",
+ "flexmesa-schema",
  "flexmesa-turb",
  "rayon",
 ]

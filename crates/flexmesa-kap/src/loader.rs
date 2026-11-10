@@ -4,7 +4,7 @@
 //! Lazily unpacks and fits 2D PSPLINE bicubic splines on first access per
 //! `(Z, X)` or `(Z, X, dXC, dXO)` slice using thread-safe [`OnceLock`] cells.
 
-use crate::loader_parse::parse_kap_tables;
+use crate::loader_ascii::load_or_build_kap_tables;
 use crate::spline::fit_bicubic_not_a_knot;
 use crate::types::KapError;
 use std::sync::OnceLock;
@@ -309,5 +309,5 @@ static KAP_TABLES: OnceLock<KapTables> = OnceLock::new();
 /// Return a reference to the lazily parsed master [`KapTables`].
 #[must_use]
 pub fn kap_tables() -> &'static KapTables {
-    KAP_TABLES.get_or_init(|| parse_kap_tables(KAP_TABLES_BIN))
+    KAP_TABLES.get_or_init(|| load_or_build_kap_tables(KAP_TABLES_BIN))
 }

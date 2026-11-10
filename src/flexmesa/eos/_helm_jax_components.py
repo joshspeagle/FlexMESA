@@ -228,32 +228,26 @@ def eval_elec_pos_jax(
     dt2 = dth * dth
     dti = 1.0 / dth
     dt2i = 1.0 / dt2
-    dt3i = dt2i * dti
     dd2 = dd * dd
     ddi = 1.0 / dd
     dd2i = 1.0 / dd2
-    dd3i = dd2i * ddi
-    xt = jnp.maximum((temp - t_lo) * dti, 0.0)
-    xd = jnp.maximum((din - d_lo) * ddi, 0.0)
-    qt0, qt1, qt2, qt3 = _helm_jax_poly.quintic_basis_1d(
-        xt, dth, dt2, dti, dt2i, dt3i
-    )
-    qd0, qd1, qd2, qd3 = _helm_jax_poly.quintic_basis_1d(
-        xd, dd, dd2, ddi, dd2i, dd3i
-    )
-    ct0, ct1, _ = _helm_jax_poly.cubic_basis_1d(xt, dth, dti, dt2i)
-    cd0, cd1, _ = _helm_jax_poly.cubic_basis_1d(xd, dd, ddi, dd2i)
+    ct0 = _helm_jax_poly.cubic_w0_coord(temp, t_lo, dth, dti, dt2i)
+    ct1 = _helm_jax_poly._cubic_w1_coord(temp, t_lo, dth, dti, dt2i)
+    cd0 = _helm_jax_poly.cubic_w0_coord(din, d_lo, dd, ddi, dd2i)
+    cd1 = _helm_jax_poly._cubic_w1_coord(din, d_lo, dd, ddi, dd2i)
 
-    free = _helm_jax_poly.h5(fi_f, qt0, qd0)
-    df_d = _helm_jax_poly.h5(fi_f, qt0, qd1)
-    df_t = _helm_jax_poly.h5(fi_f, qt1, qd0)
-    df_dd = _helm_jax_poly.h5(fi_f, qt0, qd2)
-    df_tt = _helm_jax_poly.h5(fi_f, qt2, qd0)
-    df_dt = _helm_jax_poly.h5(fi_f, qt1, qd1)
-    df_ddd = _helm_jax_poly.h5(fi_f, qt0, qd3)
-    df_ddt = _helm_jax_poly.h5(fi_f, qt1, qd2)
-    df_dtt = _helm_jax_poly.h5(fi_f, qt2, qd1)
-    df_ttt = _helm_jax_poly.h5(fi_f, qt3, qd0)
+    (
+        free,
+        df_d,
+        df_t,
+        df_dd,
+        df_tt,
+        df_dt,
+        df_ddd,
+        df_ddt,
+        df_dtt,
+        df_ttt,
+    ) = _helm_jax_poly.eval_h5_jet(temp, din, t_lo, dth, d_lo, dd, fi_f)
 
     dpepdd_in = jnp.maximum(_helm_jax_poly.h3(fi_dpdf, ct0, cd0), 1.0e-30)
     dpepddd_in = _helm_jax_poly.h3(fi_dpdf, ct0, cd1)

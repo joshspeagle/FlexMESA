@@ -284,23 +284,7 @@ pub(crate) fn get_co_kap_for_log_rho_log_t(
     };
     let mut log_t = log_t_in;
 
-    let mut target_idx = (ico_1based as usize) - 1;
-    if xt.co_tables[target_idx].raw_i16.is_none() {
-        let mut best = 0_usize;
-        let mut best_dist = f64::INFINITY;
-        for (idx, sub) in xt.co_tables.iter().enumerate() {
-            if sub.raw_i16.is_some() {
-                let d = (sub.dxc - xt.co_tables[target_idx].dxc)
-                    .hypot(sub.dxo - xt.co_tables[target_idx].dxo);
-                if d < best_dist {
-                    best_dist = d;
-                    best = idx;
-                }
-            }
-        }
-        target_idx = best;
-    }
-
+    let target_idx = (ico_1based as usize) - 1;
     let (kap1, ili_log_rs, ili_log_ts) =
         xt.co_tables[target_idx].spline_data(&xt.log_rs, &xt.log_ts)?;
     let (i_r, lr_loc, log_r0, log_r1) = locate_log(

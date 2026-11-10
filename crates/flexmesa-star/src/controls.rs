@@ -297,6 +297,84 @@ pub struct StarControls {
     pub x_logical_ctrl: Vec<bool>,
     /// User string control vector `x_character_ctrl(1..99)` (0-based `0..100`).
     pub x_character_ctrl: Vec<String>,
+
+    // --- Fidelity-1 Hydrodynamic, Energy & `eps_grav` Controls (`hydro_*.f90`, `eps_grav.f90`) ---
+    /// Whether velocity time-centering is active (`using_velocity_time_centering`).
+    pub using_velocity_time_centering: bool,
+    /// Whether luminosity $L_k$ is time-centered during velocity time-centering (`include_L_in_velocity_time_centering`).
+    pub include_l_in_velocity_time_centering: bool,
+    /// Whether total pressure $P_{\mathrm{eos},k}$ is time-centered (`include_P_in_velocity_time_centering`).
+    pub include_p_in_velocity_time_centering: bool,
+    /// Time-centering weight $\theta_L \in [0, 1]$ for luminosity (`L_theta_for_velocity_time_centering`).
+    pub l_theta_for_velocity_time_centering: f64,
+    /// Time-centering weight $\theta_P \in [0, 1]$ for pressure (`P_theta_for_velocity_time_centering`).
+    pub p_theta_for_velocity_time_centering: f64,
+    /// Maximum $\log_{10}(T/\mathrm{K})$ for $P$ and $L$ time-centering (`max_logT_for_include_P_and_L_in_velocity_time_centering`).
+    pub max_logt_for_include_p_and_l_in_velocity_time_centering: f64,
+    /// Use $P\,d(1/\rho)/dt$ form of work when time-centering velocity (`use_P_d_1_div_rho_form_of_work_when_time_centering_velocity`).
+    pub use_p_d_1_div_rho_form_of_work_when_time_centering_velocity: bool,
+    /// Minimum temperature (K) for operator-split burning (`op_split_burn_min_T`).
+    pub op_split_burn_min_t: f64,
+    /// Whether non-local $^{56}\mathrm{Ni}/^{56}\mathrm{Co}$ decay heating replaces local `eps_nuc` (`nonlocal_NiCo_decay_heat`).
+    pub nonlocal_nico_decay_heat: bool,
+    /// Whether convective premixing energy release is included (`do_premix_heating`).
+    pub do_premix_heating: bool,
+    /// TDC turbulent pressure/work coefficient $\alpha_m$ (`TDC_alpha_M`).
+    pub tdc_alpha_m: f64,
+    /// Include TDC turbulent energy in the energy equation (`TDC_include_eturb_in_energy_equation`).
+    pub tdc_include_eturb_in_energy_equation: bool,
+    /// Whether Rayleigh-Taylor instability (`RTI_flag`) transport is active.
+    pub rti_flag: bool,
+    /// Multiplicative factor for RTI internal-energy diffusion (`dedt_RTI_diffusion_factor`).
+    pub dedt_rti_diffusion_factor: f64,
+    /// Multiplicative factor for RTI momentum diffusion (`dudt_RTI_diffusion_factor`).
+    pub dudt_rti_diffusion_factor: f64,
+    /// Include velocity drag heating in the energy equation (`use_drag_energy`).
+    pub use_drag_energy: bool,
+    /// Velocity drag coefficient (`drag_coefficient`).
+    pub drag_coefficient: f64,
+    /// Minimum enclosed mass fraction $q$ for velocity drag (`min_q_for_drag`).
+    pub min_q_for_drag: f64,
+    /// MLT turbulent pressure factor $\alpha_{P,\mathrm{turb}}$ (`mlt_Pturb_factor`).
+    pub mlt_pturb_factor: f64,
+    /// Enable artificial viscosity $P_{\mathrm{vsc}}$ (`use_Pvsc_art_visc`).
+    pub use_pvsc_art_visc: bool,
+    /// Quadratic artificial viscosity coefficient $C_q$ (`Pvsc_Cq`).
+    pub pvsc_cq: f64,
+    /// Shock Mach threshold $z_{\mathrm{shock}}$ for artificial viscosity (`Pvsc_zshock`).
+    pub pvsc_zshock: f64,
+    /// Time-center $\epsilon_{\mathrm{grav}}$ across the step (`use_time_centered_eps_grav`).
+    pub use_time_centered_eps_grav: bool,
+    /// Include composition time derivatives in $\epsilon_{\mathrm{grav}}$ (`include_composition_in_eps_grav`).
+    pub include_composition_in_eps_grav: bool,
+    /// Multiplicative factor on $\epsilon_{\mathrm{grav}}$ (`eps_grav_factor`).
+    pub eps_grav_factor: f64,
+    /// Coulomb $\Gamma$ above which PC $\ln S$ $\epsilon_{\mathrm{grav}}$ is fully on (`gamma_lnS_eps_grav_full_on`).
+    pub gamma_ln_s_eps_grav_full_on: f64,
+    /// Coulomb $\Gamma$ below which PC $\ln S$ $\epsilon_{\mathrm{grav}}$ is fully off (`gamma_lnS_eps_grav_full_off`).
+    pub gamma_ln_s_eps_grav_full_off: f64,
+    /// Apply rotational distortion factor $f_P$ to gravity (`use_gravity_rotation_correction`).
+    pub use_gravity_rotation_correction: bool,
+    /// Apply baryonic mass correction factors (`use_mass_corrections`).
+    pub use_mass_corrections: bool,
+    /// Use $\nabla_T \Delta\ln P - \Delta\ln T$ form of temperature equation (`use_gradT_actual_vs_gradT_MLT_for_T_gradient_eqn`).
+    pub use_gradt_actual_vs_gradt_mlt_for_t_gradient_eqn: bool,
+    /// Use $dP_{\mathrm{rad}}/dm$ form of temperature equation (`use_dPrad_dm_form_of_T_gradient_eqn`).
+    pub use_dprad_dm_form_of_t_gradient_eqn: bool,
+    /// Use RSP Stefan-Boltzmann outer luminosity boundary condition (`use_RSP_L_eqn_outer_BC`).
+    pub use_rsp_l_eqn_outer_bc: bool,
+    /// Upper $q$ bound above which velocity is zeroed (`velocity_q_upper_bound`).
+    pub velocity_q_upper_bound: f64,
+    /// Lower $\tau$ bound below which velocity is zeroed (`velocity_tau_lower_bound`).
+    pub velocity_tau_lower_bound: f64,
+    /// Lower $\log_{10} T$ bound below which velocity is zeroed (`velocity_logT_lower_bound`).
+    pub velocity_logt_lower_bound: f64,
+    /// Enable nuclear reaction rate terms in `do1_chem_eqns` (`do_burn`).
+    pub do_burn: bool,
+    /// Enable diffusive mixing terms in `do1_chem_eqns` (`do_mix`).
+    pub do_mix: bool,
+    /// Multiplicative factor on diffusive mixing $\sigma_k$ (`mix_factor`).
+    pub mix_factor: f64,
 }
 
 impl Default for StarControls {
@@ -440,6 +518,44 @@ impl Default for StarControls {
             x_integer_ctrl: vec![0; 100],
             x_logical_ctrl: vec![false; 100],
             x_character_ctrl: vec![String::new(); 100],
+            using_velocity_time_centering: false,
+            include_l_in_velocity_time_centering: false,
+            include_p_in_velocity_time_centering: false,
+            l_theta_for_velocity_time_centering: 0.5,
+            p_theta_for_velocity_time_centering: 0.5,
+            max_logt_for_include_p_and_l_in_velocity_time_centering: 99.0,
+            use_p_d_1_div_rho_form_of_work_when_time_centering_velocity: true,
+            op_split_burn_min_t: 0.0,
+            nonlocal_nico_decay_heat: false,
+            do_premix_heating: false,
+            tdc_alpha_m: 0.0,
+            tdc_include_eturb_in_energy_equation: false,
+            rti_flag: false,
+            dedt_rti_diffusion_factor: 1.0,
+            dudt_rti_diffusion_factor: 1.0,
+            use_drag_energy: true,
+            drag_coefficient: 0.0,
+            min_q_for_drag: 0.0,
+            mlt_pturb_factor: 0.0,
+            use_pvsc_art_visc: false,
+            pvsc_cq: 4.0,
+            pvsc_zshock: 0.0,
+            use_time_centered_eps_grav: false,
+            include_composition_in_eps_grav: false,
+            eps_grav_factor: 1.0,
+            gamma_ln_s_eps_grav_full_on: 160.0,
+            gamma_ln_s_eps_grav_full_off: 120.0,
+            use_gravity_rotation_correction: true,
+            use_mass_corrections: false,
+            use_gradt_actual_vs_gradt_mlt_for_t_gradient_eqn: false,
+            use_dprad_dm_form_of_t_gradient_eqn: false,
+            use_rsp_l_eqn_outer_bc: false,
+            velocity_q_upper_bound: 1.0,
+            velocity_tau_lower_bound: 0.0,
+            velocity_logt_lower_bound: 0.0,
+            do_burn: true,
+            do_mix: true,
+            mix_factor: 1.0,
         }
     }
 }

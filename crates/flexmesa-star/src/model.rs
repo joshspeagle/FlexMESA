@@ -23,6 +23,7 @@ use flexmesa_eos::{EosConfig, NUM_EOS_BASIC_RESULTS};
 use flexmesa_kap::KapConfig;
 
 use crate::controls::{StarControls, StarJobControls, VarLayout};
+use crate::hydro_state::HydroAuxState;
 use crate::star_ad::{StarAdExt, StarAdOrder1};
 
 /// Canonical 1D stellar structure and evolution state (`Star_Info` in
@@ -349,6 +350,9 @@ pub struct StarModel {
     pub ln_peos_surf_ad: StarAdOrder1,
     /// Atmosphere surface $\ln T_{\mathrm{surf}}$ with stencil partials (`lnT_surf_ad`).
     pub ln_t_surf_ad: StarAdOrder1,
+    /// Auxiliary start-of-step thermodynamic arrays, heating channels,
+    /// rotational factors, RTI profiles, and EOS composition partials (`aux`).
+    pub aux: HydroAuxState,
 }
 
 impl StarModel {
@@ -532,6 +536,7 @@ impl StarModel {
             teff: 5777.0,
             ln_peos_surf_ad: StarAdOrder1::ZERO,
             ln_t_surf_ad: StarAdOrder1::ZERO,
+            aux: HydroAuxState::new(nz, species),
         }
     }
 

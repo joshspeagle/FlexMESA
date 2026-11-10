@@ -31,13 +31,13 @@ MESA_LIBS := \
 	$(MESA_DIR)/lib/libchem.a \
 	$(MESA_DIR)/lib/libmath.a \
 	$(MESA_DIR)/lib/libutils.a \
-	$(MESA_DIR)/lib/libconst.a
+	$(MESA_DIR)/lib/libconst.a \
+	$(MESA_DIR)/lib/libforum.a
 
 MESA_STAR_LIBS := \
 	$(MESA_DIR)/lib/libstar.a \
 	$(MESA_DIR)/lib/libstar_data.a \
-	$(MESA_LIBS) \
-	$(MESA_DIR)/lib/libforum.a
+	$(MESA_LIBS)
 
 MESA_WAVE5_LIBS := \
 	$(MESA_DIR)/lib/libastero.a \

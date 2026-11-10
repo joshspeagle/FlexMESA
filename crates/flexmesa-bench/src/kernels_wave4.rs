@@ -202,7 +202,7 @@ pub fn bench_star_hydro_eqns(
         for k in 0..sys.nz {
             for i in 0..4 {
                 dst[k * 4 + i] =
-                    sys.equ[k * 4 + i].abs() + sys.ublk[k * 16 + i * 5].abs();
+                    sys.equ[k * 4 + i].abs() + sys.dblk[k * 16 + i * 5].abs();
             }
         }
     };

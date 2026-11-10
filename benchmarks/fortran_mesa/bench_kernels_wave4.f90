@@ -236,8 +236,8 @@ contains
          do rep = 1, n_warmup + reps
             if (rep > n_warmup) t0 = now_us()
             if (stage == 0) allocate(tmp(nz))
+            s%need_to_setvars = .true.
             if (stage <= 1) then
-               s%need_to_setvars = .true.
                call set_vars(s, s%dt, ierr)
             else
                call set_final_vars(s, s%dt, ierr)

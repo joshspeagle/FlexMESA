@@ -3,6 +3,12 @@
 //! across multi-zone stellar profiles (`1 M_sun` ZAMS, `0.1 M_sun` brown dwarf,
 //! `0.6 M_sun` white dwarf, and `25 M_sun` massive star).
 
+#![allow(
+    clippy::cast_lossless,
+    clippy::cast_precision_loss,
+    clippy::similar_names
+)]
+
 use flexmesa_chem::NuclideCatalog;
 use flexmesa_eos::helm::{HELM_IMAX, HELM_JMAX};
 use flexmesa_eos::{
@@ -84,9 +90,10 @@ fn test_4d_tables_and_eos_dt_get_across_four_stellar_profiles() {
         let log_rho = -6.8 + s * (2.18 - (-6.8));
         let (rho, t) = (10.0_f64.powf(log_rho), 10.0_f64.powf(log_t));
 
-        let out_opal =
-            eval_opal_scvh_eos(dt_tables, rho, t, &chem_id, &xa_solar, &opal_cfg)
-                .expect("1 M_sun OPAL/SCVH zone must succeed");
+        let out_opal = eval_opal_scvh_eos(
+            dt_tables, rho, t, &chem_id, &xa_solar, &opal_cfg,
+        )
+        .expect("1 M_sun OPAL/SCVH zone must succeed");
         let out_free =
             eval_free_eos(dt_tables, rho, t, &chem_id, &xa_solar, &free_cfg)
                 .expect("1 M_sun FreeEOS zone must succeed");

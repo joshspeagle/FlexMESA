@@ -324,16 +324,16 @@ def test_4d_tables_and_eos_dt_get_across_stellar_profiles_and_autodiff() -> (
         jnp.asarray(xa_unvis),
         backend="jax",
     )
-    cms_r = eos.eval_cms_eos(
-        1.0, 1.0e5, cids_unvis, xa_unvis, backend="rust"
-    )
+    cms_r = eos.eval_cms_eos(1.0, 1.0e5, cids_unvis, xa_unvis, backend="rust")
     np.testing.assert_allclose(
         np.asarray(cms_j.res[:4]), cms_r.res[:4], rtol=1.0e-12, atol=1.0e-12
     )
     jit_dt = jax.jit(
-        lambda r, t: eos.eos_dt_get(
-            r, t, cids_sol, jnp.asarray(xa_sol), backend="jax"
-        ).res
+        lambda r, t: (
+            eos.eos_dt_get(
+                r, t, cids_sol, jnp.asarray(xa_sol), backend="jax"
+            ).res
+        )
     )
     np.testing.assert_allclose(
         np.asarray(jit_dt(r_ad, t_ad)),

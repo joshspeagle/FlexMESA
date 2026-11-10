@@ -10,7 +10,7 @@ from __future__ import annotations
 import jax
 import jax.numpy as jnp
 
-from flexmesa import constants
+from flexmesa import _rust, constants
 
 X_ALFAP: float = constants.TWO_THIRDS
 X_ALFAS: float = 0.5 * constants.SQRT_2_DIV_3
@@ -51,18 +51,6 @@ def eval_hllc_face_jax(
 ) -> _Arr7:
     """Evaluate the well-balanced Lagrangian HLLC Riemann state at interior
     faces (`do1_Riemann_Types` in `star/private/hydro_riemann.f90`).
-
-    Args:
-        p_l, rho_l, cs_l, u_l, dm_l: Inner cell $k$ pressure (`dyn cm^-2`),
-            density (`g cm^-3`), sound speed (`cm s^-1`), velocity (`cm s^-1`),
-            and mass (`g`) of shape `(*batch,)`.
-        p_r, rho_r, cs_r, u_r, dm_r: Outer cell $k-1$ state of shape
-            `(*batch,)`.
-        r_face: Face radius $r_k$ (`cm`) of shape `(*batch,)`.
-        m_grav_face: Enclosed gravitational mass $m_{\\mathrm{grav},k}$ (`g`) of
-            shape `(*batch,)`.
-        cgrav_face: Effective gravitational constant $G_{\\mathrm{eff},k}$
-            (`cm^3 g^-1 s^-2`) of shape `(*batch,)`.
 
     Returns:
         7-tuple `(p_l_star, p_r_star, s_l, s_r, u_face, p_face, ke_flux)` of
@@ -110,17 +98,6 @@ def eval_hllc_surface_face_jax(
 ) -> _Arr7:
     """Evaluate the surface ($k = 0$) HLLC Riemann boundary state
     (`setup_for_surf_Riemann` in `star/private/hydro_riemann.f90`).
-
-    Args:
-        p_surf_cell, rho_surf, cs_surf, u_surf, dm_surf: Outermost cell
-            pressure (`dyn cm^-2`), density (`g cm^-3`), sound speed
-            (`cm s^-1`), velocity (`cm s^-1`), and mass (`g`).
-        r_surf, m_surf, cgrav_surf: Surface radius (`cm`), mass (`g`), and
-            gravitational constant (`cm^3 g^-1 s^-2`).
-        p_bc: External atmospheric boundary pressure (`dyn cm^-2`).
-
-    Returns:
-        7-tuple `(p_l_star, p_r_star, s_l, s_r, u_face, p_face, ke_flux)`.
     """
     r2 = jnp.maximum(r_surf * r_surf, 1.0e-30)
     area = constants.PI4 * r2
@@ -518,3 +495,93 @@ def eval_dziembowski_variables_jax(
         m_s / jnp.maximum(m_tot, 1.0e-30)
     )
     return v_dziem, v_g, a_star, u_dziem, c_1
+
+
+@jax.jit
+def eval_sobolev_feii_5169_tau_jax(
+    rho: jax.Array,
+    x_fe: jax.Array,
+    eta: jax.Array,
+    t_exp_s: float | jax.Array,
+) -> jax.Array:
+    """Evaluate the `STELLA` homologous Sobolev optical depth
+    $\\tau_{\\mathrm{Sob}}$ for `Fe II` 5169 (`parse_swd_vel_feii.f90`).
+
+    Args:
+        rho: Zone mass density (`g cm^-3`) of shape `(*batch,)`.
+        x_fe: Iron mass fraction (`dimensionless`) of shape `(*batch,)`.
+        eta: Population fraction $\\eta(\\rho, T)$ of shape `(*batch,)`.
+        t_exp_s: Time since shock breakout (`s`).
+
+    Returns:
+        Sobolev optical depth $\\tau_{\\mathrm{Sob}}$ of shape `(*batch,)`.
+    """
+    n_fe = (
+        jnp.maximum(rho, 0.0) * jnp.maximum(x_fe, 0.0) / (56.0 * constants.AMU)
+    )
+    return (
+        constants.PI
+        * (constants.QE * constants.QE)
+        / (constants.ME * constants.CLIGHT)
+        * n_fe
+        * jnp.maximum(eta, 0.0)
+        * 0.023
+        * jnp.maximum(t_exp_s, 0.0)
+        * 5169.0e-8
+    )
+
+
+def solve_gyre_mesa_modes(
+    mesa_str: str,
+    l_deg: int,
+    omega_min: float,
+    omega_max: float,
+    n_scan: int = 200,
+    nonadiabatic: bool = True,
+) -> list[tuple[int, int, int, int, float, float, float, float, float]]:
+    """Solve the 4th/6th-order `GYRE` BVP on a `GYRE` MESA model string."""
+    return list(
+        _rust.star_solve_gyre_mesa_modes(
+            str(mesa_str),
+            int(l_deg),
+            float(omega_min),
+            float(omega_max),
+            int(n_scan),
+            bool(nonadiabatic),
+        )
+    )
+
+
+def solve_adipls_fgong_modes(
+    fgong_str: str,
+    l_deg: int,
+    freq_min_uhz: float,
+    freq_max_uhz: float,
+    n_scan: int = 500,
+) -> list[tuple[int, int, int, int, float, float, float, float]]:
+    """Solve the 4th/6th-order `ADIPLS` BVP on an `FGONG` model string."""
+    return list(
+        _rust.star_solve_adipls_fgong_modes(
+            str(fgong_str),
+            int(l_deg),
+            float(freq_min_uhz),
+            float(freq_max_uhz),
+            int(n_scan),
+        )
+    )
+
+
+def run_stella_from_hyd_abn(
+    hyd_str: str,
+    abn_str: str,
+    eta_str: str,
+    times_days: list[float],
+) -> tuple[list[tuple[float, float]], list[tuple[float, float, float, float]]]:
+    """Run the `STELLA` bolometric light-curve and `Fe II` 5169 solver."""
+    lbol, vel = _rust.star_run_stella_from_hyd_abn(
+        str(hyd_str),
+        str(abn_str),
+        str(eta_str),
+        [float(t) for t in times_days],
+    )
+    return list(lbol), list(vel)

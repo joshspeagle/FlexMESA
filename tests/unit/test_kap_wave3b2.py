@@ -52,12 +52,19 @@ def test_kap_fixed_metals_matches_fortran_golden_test_1(
 ) -> None:
     """Verify `kap_get_results` reproduces Fortran MESA `kap` Test 1."""
     out = kap.kap_get_results(
-        z=1.8000000000000016e-2, x=0.70, zbase=0.0,
-        log_rho=-6.0, log_t=6.0, lnfree_e=-1.6965073622377105e-1,
-        eta=-10.0, zbar=1.1018857434091647,
-        kap_option="gs98", kap_low_t_option="lowT_fa05_gs98",
+        z=1.8000000000000016e-2,
+        x=0.70,
+        zbase=0.0,
+        log_rho=-6.0,
+        log_t=6.0,
+        lnfree_e=-1.6965073622377105e-1,
+        eta=-10.0,
+        zbar=1.1018857434091647,
+        kap_option="gs98",
+        kap_low_t_option="lowT_fa05_gs98",
         use_type2_opacities=False,
-        cubic_interpolation_in_x=False, cubic_interpolation_in_z=False,
+        cubic_interpolation_in_x=False,
+        cubic_interpolation_in_z=False,
         backend=backend,  # type: ignore[arg-type]
     )
     np.testing.assert_allclose(
@@ -89,12 +96,22 @@ def test_kap_co_enhanced_matches_fortran_golden_test_2(
 ) -> None:
     """Verify `kap_get_results` reproduces Fortran MESA `kap` Test 2."""
     out = kap.kap_get_results(
-        z=5.8000000000000052e-2, x=0.0, zbase=0.018,
-        xc=2.4119616e-2, xn=9.56736e-4, xo=2.7683164e-2, xne=1.776024e-3,
-        log_rho=-6.0, log_t=6.0, lnfree_e=-6.969230350735236e-1,
-        eta=-10.0, zbar=2.0741317065062339,
-        kap_option="gs98", kap_co_option="gn93_co",
-        kap_low_t_option="lowT_fa05_gs98", use_type2_opacities=True,
+        z=5.8000000000000052e-2,
+        x=0.0,
+        zbase=0.018,
+        xc=2.4119616e-2,
+        xn=9.56736e-4,
+        xo=2.7683164e-2,
+        xne=1.776024e-3,
+        log_rho=-6.0,
+        log_t=6.0,
+        lnfree_e=-6.969230350735236e-1,
+        eta=-10.0,
+        zbar=2.0741317065062339,
+        kap_option="gs98",
+        kap_co_option="gn93_co",
+        kap_low_t_option="lowT_fa05_gs98",
+        use_type2_opacities=True,
         backend=backend,  # type: ignore[arg-type]
     )
     np.testing.assert_allclose(
@@ -126,13 +143,23 @@ def test_kap_aesopus_matches_fortran_golden_test_4(
 ) -> None:
     """Verify `kap_get_results` with `AESOPUS` reproduces Fortran Test 4."""
     out = kap.kap_get_results(
-        z=2.0074120713487353e-2, x=6.7888662523180188e-1, zbase=0.014,
-        xc=2.9968458709806432e-3, xn=1.5270900145630591e-3,
-        xo=9.3376263240514384e-3, xne=0.0,
-        log_rho=-8.2496430699014667, log_t=3.5571504546260235,
-        lnfree_e=-9.2103424666308609, eta=-20.0, zbar=1.1007197824017732,
-        kap_option="a09", kap_co_option="a09_co", kap_low_t_option="AESOPUS",
-        use_zbase_for_type1=True, use_type2_opacities=True,
+        z=2.0074120713487353e-2,
+        x=6.7888662523180188e-1,
+        zbase=0.014,
+        xc=2.9968458709806432e-3,
+        xn=1.5270900145630591e-3,
+        xo=9.3376263240514384e-3,
+        xne=0.0,
+        log_rho=-8.2496430699014667,
+        log_t=3.5571504546260235,
+        lnfree_e=-9.2103424666308609,
+        eta=-20.0,
+        zbar=1.1007197824017732,
+        kap_option="a09",
+        kap_co_option="a09_co",
+        kap_low_t_option="AESOPUS",
+        use_zbase_for_type1=True,
+        use_type2_opacities=True,
         backend=backend,  # type: ignore[arg-type]
     )
     np.testing.assert_allclose(
@@ -174,12 +201,23 @@ def test_all_lines_of_upstream_kap_test_output_verified() -> None:
     ):
         for backend in ("rust", "jax"):
             out = kap.kap_get_results(
-                z=blk["Z"], x=blk["X"], zbase=blk["Zbase"],
-                xc=blk["xc"], xn=blk["xn"], xo=blk["xo"], xne=blk["xne"],
-                log_rho=blk["logRho"], log_t=blk["logT"],
-                lnfree_e=blk["lnfree_e"], eta=eta, zbar=blk["zbar"],
-                kap_option=k_opt, kap_co_option=co_opt, kap_low_t_option=lt_opt,
-                use_type2_opacities=t2, use_zbase_for_type1=uzb,
+                z=blk["Z"],
+                x=blk["X"],
+                zbase=blk["Zbase"],
+                xc=blk["xc"],
+                xn=blk["xn"],
+                xo=blk["xo"],
+                xne=blk["xne"],
+                log_rho=blk["logRho"],
+                log_t=blk["logT"],
+                lnfree_e=blk["lnfree_e"],
+                eta=eta,
+                zbar=blk["zbar"],
+                kap_option=k_opt,
+                kap_co_option=co_opt,
+                kap_low_t_option=lt_opt,
+                use_type2_opacities=t2,
+                use_zbase_for_type1=uzb,
                 backend=backend,  # type: ignore[arg-type]
             )
             np.testing.assert_allclose(
@@ -211,7 +249,11 @@ def test_distinct_fixed_co_aesopus_and_kapcn_tables_no_aliasing() -> None:
     z, x, lr, lt = 0.015, 0.55, -4.5, 5.8
     vals_fixed = {}
     for prefix in (
-        "gs98", "gn93", "a09", "OP_gs98", "OP_a09_nans_removed_by_hand"
+        "gs98",
+        "gn93",
+        "a09",
+        "OP_gs98",
+        "OP_a09_nans_removed_by_hand",
     ):
         r_res = kap.kap_get_fixed_metal(
             z, x, lr, lt, prefix=prefix, backend="rust"
@@ -289,45 +331,92 @@ def test_rust_vs_jax_backend_parity_across_all_regimes() -> None:
     """Verify `backend='rust'` vs `backend='jax'` parity (`rtol <= 1e-11`)."""
     cases = [
         {
-            "z": 0.015, "x": 0.65, "zbase": 0.015, "log_rho": -5.2,
-            "log_t": 6.1, "kap_option": "gn93",
-            "cubic_interpolation_in_x": True, "cubic_interpolation_in_z": True,
-        },
-        {
-            "z": 0.022, "x": 0.52, "zbase": 0.022, "log_rho": -4.3,
-            "log_t": 5.7, "kap_option": "OP_gs98",
-            "cubic_interpolation_in_x": False, "cubic_interpolation_in_z": True,
-        },
-        {
-            "z": 0.025, "x": 5.0e-4, "zbase": 0.018, "xc": 0.012, "xo": 0.015,
-            "log_rho": -4.8, "log_t": 6.2, "kap_option": "gs98",
-            "kap_co_option": "gs98_co", "use_type2_opacities": True,
-            "use_zbase_for_type1": True, "cubic_interpolation_in_x": True,
+            "z": 0.015,
+            "x": 0.65,
+            "zbase": 0.015,
+            "log_rho": -5.2,
+            "log_t": 6.1,
+            "kap_option": "gn93",
+            "cubic_interpolation_in_x": True,
             "cubic_interpolation_in_z": True,
         },
         {
-            "z": 0.018, "x": 0.70, "zbase": 0.018, "log_rho": -7.2,
-            "log_t": 3.84, "kap_option": "a09",
+            "z": 0.022,
+            "x": 0.52,
+            "zbase": 0.022,
+            "log_rho": -4.3,
+            "log_t": 5.7,
+            "kap_option": "OP_gs98",
+            "cubic_interpolation_in_x": False,
+            "cubic_interpolation_in_z": True,
+        },
+        {
+            "z": 0.025,
+            "x": 5.0e-4,
+            "zbase": 0.018,
+            "xc": 0.012,
+            "xo": 0.015,
+            "log_rho": -4.8,
+            "log_t": 6.2,
+            "kap_option": "gs98",
+            "kap_co_option": "gs98_co",
+            "use_type2_opacities": True,
+            "use_zbase_for_type1": True,
+            "cubic_interpolation_in_x": True,
+            "cubic_interpolation_in_z": True,
+        },
+        {
+            "z": 0.018,
+            "x": 0.70,
+            "zbase": 0.018,
+            "log_rho": -7.2,
+            "log_t": 3.84,
+            "kap_option": "a09",
             "kap_low_t_option": "lowT_fa05_a09",
         },
         {
-            "z": 0.015, "x": 0.68, "zbase": 0.015, "xc": 0.003, "xn": 0.001,
-            "log_rho": -9.5, "log_t": 3.60, "kap_low_t_option": "kapCN",
+            "z": 0.015,
+            "x": 0.68,
+            "zbase": 0.015,
+            "xc": 0.003,
+            "xn": 0.001,
+            "log_rho": -9.5,
+            "log_t": 3.60,
+            "kap_low_t_option": "kapCN",
         },
         {
-            "z": 0.020, "x": 0.65, "zbase": 0.017, "xc": 0.004, "xn": 0.0015,
-            "xo": 0.008, "log_rho": -8.4, "log_t": 3.55,
+            "z": 0.020,
+            "x": 0.65,
+            "zbase": 0.017,
+            "xc": 0.004,
+            "xn": 0.0015,
+            "xo": 0.008,
+            "log_rho": -8.4,
+            "log_t": 3.55,
             "kap_low_t_option": "AESOPUS",
         },
         {
-            "z": 0.02, "x": 0.0, "zbase": 0.02, "log_rho": 5.5, "log_t": 7.8,
-            "zbar": 1.6, "eta": 15.0, "include_electron_conduction": True,
+            "z": 0.02,
+            "x": 0.0,
+            "zbase": 0.02,
+            "log_rho": 5.5,
+            "log_t": 7.8,
+            "zbar": 1.6,
+            "eta": 15.0,
+            "include_electron_conduction": True,
             "use_blouin_conductive_opacities": True,
         },
         {
-            "z": 0.02, "x": 0.70, "zbase": 0.02, "log_rho": -2.0,
-            "log_t": 8.45, "lnfree_e": -0.16, "d_lnfree_e_dln_rho": 0.01,
-            "d_lnfree_e_dln_t": 0.02, "eta": -1.5, "d_eta_dln_rho": 0.8,
+            "z": 0.02,
+            "x": 0.70,
+            "zbase": 0.02,
+            "log_rho": -2.0,
+            "log_t": 8.45,
+            "lnfree_e": -0.16,
+            "d_lnfree_e_dln_rho": 0.01,
+            "d_lnfree_e_dln_t": 0.02,
+            "eta": -1.5,
+            "d_eta_dln_rho": 0.8,
             "d_eta_dln_t": -1.2,
         },
     ]

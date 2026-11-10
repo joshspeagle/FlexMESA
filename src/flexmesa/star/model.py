@@ -49,17 +49,7 @@ class StarModel(_arrays.StarModelArrays):
         initial_y: float = -1.0,
         eval_hydro: bool = True,
     ) -> StarModel:
-        """Load a Zero-Age Main Sequence (ZAMS) model (`get_zams_model`).
-
-        Args:
-            initial_mass: Initial stellar mass in solar masses (`M_sun`).
-            initial_z: Initial metal mass fraction `Z`.
-            initial_y: Initial helium mass fraction `Y` (`< 0` uses `0.24+2Z`).
-            eval_hydro: Whether to immediately evaluate zone/face microphysics.
-
-        Returns:
-            Initialized `StarModel`.
-        """
+        """Load a Zero-Age Main Sequence (ZAMS) model (`get_zams_model`)."""
         rm = _rust.RustStarModel.from_zams(
             float(initial_mass), float(initial_z), float(initial_y)
         )
@@ -78,19 +68,7 @@ class StarModel(_arrays.StarModelArrays):
         d_log10_p: float = 0.02,
         eval_hydro: bool = True,
     ) -> StarModel:
-        """Construct an $n = 1.5$ pre-main-sequence polytrope model.
-
-        Args:
-            initial_mass: Initial stellar mass in solar masses (`M_sun`).
-            initial_z: Initial metal mass fraction `Z`.
-            initial_y: Initial helium mass fraction `Y`.
-            t_c: Central temperature in Kelvin (`K`).
-            d_log10_p: Outward integration step size in `log10(P_gas)`.
-            eval_hydro: Whether to immediately evaluate zone/face microphysics.
-
-        Returns:
-            Initialized `StarModel`.
-        """
+        """Construct an $n = 1.5$ pre-main-sequence polytrope model."""
         rm = _rust.RustStarModel.from_pre_ms(
             float(initial_mass),
             float(initial_z),
@@ -187,15 +165,7 @@ class StarModel(_arrays.StarModelArrays):
         )
 
     def eval_equations(self, include_chem: bool = False) -> HenyeySystemResult:
-        """Evaluate coupled 1D Henyey residuals and block-tridiagonal Jacobian.
-
-        Args:
-            include_chem: Include `species` composition equations in the
-                coupled Jacobian (`nvar = nvar_hydro + species`).
-
-        Returns:
-            `HenyeySystemResult` containing `(equ, lblk, dblk, ublk, x_scale)`.
-        """
+        """Evaluate 1D Henyey residuals and block-tridiagonal Jacobian."""
         return HenyeySystemResult(
             *self._rust_model.eval_equations(include_chem=bool(include_chem))
         )
@@ -203,16 +173,7 @@ class StarModel(_arrays.StarModelArrays):
     def solve_henyey(
         self, include_chem: bool = False, use_bcyclic: bool = True
     ) -> HenyeySolverReport:
-        """Execute a damped Newton-Raphson Henyey step for the current `dt`.
-
-        Args:
-            include_chem: Solve coupled hydro + composition system.
-            use_bcyclic: Use Hirshman et al. (2010) odd-even cyclic reduction
-                (`True`) or sequential block-Thomas (`False`).
-
-        Returns:
-            `HenyeySolverReport` summarizing convergence and norms.
-        """
+        """Execute a damped Newton-Raphson Henyey step for the current `dt`."""
         return HenyeySolverReport(
             *self._rust_model.solve_henyey(
                 include_chem=bool(include_chem),
@@ -572,6 +533,36 @@ class StarModel(_arrays.StarModelArrays):
     def to_osc_str(self, add_center_point: bool = True) -> str:
         """Export the model in `OSC` ASCII format (`pulse_osc.f90`)."""
         return _rust.star_export_osc(self._rust_model, bool(add_center_point))
+
+    def to_gsm_bytes(self, add_center_point: bool = True) -> bytes:
+        """Export the model in `GYRE` `GSM` v110 format (`pulse_gsm.f90`)."""
+        return bytes(
+            _rust.star_export_gsm(self._rust_model, bool(add_center_point))
+        )
+
+    def to_saio_str(self, add_center_point: bool = True) -> str:
+        """Export the model in `SAIO` ASCII format (`pulse_saio.f90`)."""
+        return _rust.star_export_saio(self._rust_model, bool(add_center_point))
+
+    def to_cafein_str(self, add_center_point: bool = True) -> str:
+        """Export the model in `CAFEIN` ASCII format (`pulse_cafein.f90`)."""
+        return _rust.star_export_cafein(
+            self._rust_model, bool(add_center_point)
+        )
+
+    def to_gr1d_str(self, add_center_point: bool = True) -> str:
+        """Export the model in `GR1D` ASCII format (`pulse_gr1d.f90`)."""
+        return _rust.star_export_gr1d(self._rust_model, bool(add_center_point))
+
+    def to_pulse_str(self, fmt: str, add_center_point: bool = True) -> str:
+        """Export the model in pulsation format `fmt` (`pulse.f90`)."""
+        return _rust.star_export_pulse_by_format(
+            self._rust_model, str(fmt), bool(add_center_point)
+        )
+
+    def to_stella_pair(self) -> tuple[str, str]:
+        """Export the model as a `STELLA` `(hyd, abn)` pair (`stella_io`)."""
+        return _rust.star_export_stella_pair(self._rust_model)
 
     def verify_photo_restart(self, n_steps: int = 1) -> tuple[int, int]:
         """Verify bit-identical `.photo` restart parity over `n_steps` steps."""

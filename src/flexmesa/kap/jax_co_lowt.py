@@ -16,12 +16,20 @@ _get_aesopus_all_z_coeffs = tables_co_lowt_jax.get_aesopus_all_z_coeffs_jax
 
 
 def _find_co_tables_jax(
-    dxco_max: jax.Array, dxc: jax.Array, dxo: jax.Array,
-    dxc_l: jax.Array, dxo_l: jax.Array,
-    num_co: jax.Array, num_gt: jax.Array, tbl_nums: jax.Array,
-    next_dxc: jax.Array, next_dxo: jax.Array,
-    dxc_tab: jax.Array, dxo_tab: jax.Array,
-    dxc_l_tab: jax.Array, dxo_l_tab: jax.Array,
+    dxco_max: jax.Array,
+    dxc: jax.Array,
+    dxo: jax.Array,
+    dxc_l: jax.Array,
+    dxo_l: jax.Array,
+    num_co: jax.Array,
+    num_gt: jax.Array,
+    tbl_nums: jax.Array,
+    next_dxc: jax.Array,
+    next_dxo: jax.Array,
+    dxc_tab: jax.Array,
+    dxo_tab: jax.Array,
+    dxc_l_tab: jax.Array,
+    dxo_l_tab: jax.Array,
 ) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array]:
     """Locate up to 4 bounding `(dXC, dXO)` sub-tables (`Find_CO_Tables`)."""
     tiny = 1.0e-7
@@ -53,21 +61,20 @@ def _find_co_tables_jax(
 
     i1_0 = tbl_nums[idxc - 1, idxo - 1]
     c_ge_o = dxc >= dxo
-    i2_0 = jnp.where(
-        c_ge_o, tbl_nums[idxc, idxo - 1], tbl_nums[idxc - 1, idxo]
-    )
-    i3_0 = jnp.where(
-        c_ge_o, tbl_nums[idxc - 1, idxo], tbl_nums[idxc, idxo - 1]
-    )
+    i2_0 = jnp.where(c_ge_o, tbl_nums[idxc, idxo - 1], tbl_nums[idxc - 1, idxo])
+    i3_0 = jnp.where(c_ge_o, tbl_nums[idxc - 1, idxo], tbl_nums[idxc, idxo - 1])
     i4_0 = tbl_nums[idxc, idxo]
     a_i1 = jnp.where(
-        _matches(i2_0), i2_0,
+        _matches(i2_0),
+        i2_0,
         jnp.where(_matches(i3_0), i3_0, jnp.where(_matches(i4_0), i4_0, i1_0)),
     )
     a_m = _matches(i2_0) | _matches(i3_0) | _matches(i4_0)
     a_res = (
-        a_i1, jnp.where(a_m, -1, i2_0),
-        jnp.where(a_m, -1, i3_0), jnp.where(a_m, -1, i4_0),
+        a_i1,
+        jnp.where(a_m, -1, i2_0),
+        jnp.where(a_m, -1, i3_0),
+        jnp.where(a_m, -1, i4_0),
     )
     s1_0 = _s(i1_0)
     b_res = (
@@ -97,9 +104,12 @@ def _find_co_tables_jax(
     s2_c, s4_c = _s(i2_c), _s(i4_c)
     denom_s = sec_l_tab[s2_c] - sec_l_tab[s4_c]
     safe_denom_s = jnp.where(jnp.abs(denom_s) == 0.0, 1.0, denom_s)
-    line_24 = pri_l_tab[s4_c] + (pri_l_tab[s2_c] - pri_l_tab[s4_c]) * (
-        sec_l - sec_l_tab[s4_c]
-    ) / safe_denom_s
+    line_24 = (
+        pri_l_tab[s4_c]
+        + (pri_l_tab[s2_c] - pri_l_tab[s4_c])
+        * (sec_l - sec_l_tab[s4_c])
+        / safe_denom_s
+    )
     keep_quad = diag_i2 | (pri_l <= pri_l_tab[s4_c]) | (pri_l <= line_24)
     i1_s = i2_c
     i2_s = next_pri[_s(i1_s)]
@@ -120,29 +130,40 @@ def _find_co_tables_jax(
     use_b = (~m1) & (i4_0 <= 0) & _on_mid(i1_0)
     return (
         jnp.where(
-            m1, i1_0,
+            m1,
+            i1_0,
             jnp.where(use_a, a_res[0], jnp.where(use_b, b_res[0], c_i1)),
         ),
         jnp.where(
-            m1, -1,
+            m1,
+            -1,
             jnp.where(use_a, a_res[1], jnp.where(use_b, b_res[1], c_i2)),
         ),
         jnp.where(
-            m1, -1,
+            m1,
+            -1,
             jnp.where(use_a, a_res[2], jnp.where(use_b, b_res[2], c_i3)),
         ),
         jnp.where(
-            m1, -1,
+            m1,
+            -1,
             jnp.where(use_a, a_res[3], jnp.where(use_b, b_res[3], c_i4)),
         ),
     )
 
 
 def _lerp_co_pair_jax(
-    target_l: jax.Array, pri_a_l: jax.Array, sec_a_l: jax.Array,
-    lk_a: jax.Array, dr_a: jax.Array, dt_a: jax.Array,
-    pri_b_l: jax.Array, sec_b_l: jax.Array,
-    lk_b: jax.Array, dr_b: jax.Array, dt_b: jax.Array,
+    target_l: jax.Array,
+    pri_a_l: jax.Array,
+    sec_a_l: jax.Array,
+    lk_a: jax.Array,
+    dr_a: jax.Array,
+    dt_a: jax.Array,
+    pri_b_l: jax.Array,
+    sec_b_l: jax.Array,
+    lk_b: jax.Array,
+    dr_b: jax.Array,
+    dt_b: jax.Array,
 ) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array]:
     diff = pri_a_l - pri_b_l
     safe_diff = jnp.where(jnp.abs(diff) == 0.0, 1.0, diff)
@@ -160,14 +181,27 @@ def _lerp_co_pair_jax(
 
 
 def _eval_co_for_dxco_jax(
-    iz: jax.Array, ix: jax.Array, dxc_in: jax.Array, dxo_in: jax.Array,
-    log_rho: jax.Array, log_t_in: jax.Array,
-    zs: jax.Array, xs: jax.Array, bounds: jax.Array,
-    num_co: jax.Array, num_gt: jax.Array, tbl_nums: jax.Array,
-    next_dxc: jax.Array, next_dxo: jax.Array,
-    dxc_tab: jax.Array, dxo_tab: jax.Array,
-    dxc_l_tab: jax.Array, dxo_l_tab: jax.Array,
-    log_rs: jax.Array, log_ts: jax.Array, coeffs_all: jax.Array,
+    iz: jax.Array,
+    ix: jax.Array,
+    dxc_in: jax.Array,
+    dxo_in: jax.Array,
+    log_rho: jax.Array,
+    log_t_in: jax.Array,
+    zs: jax.Array,
+    xs: jax.Array,
+    bounds: jax.Array,
+    num_co: jax.Array,
+    num_gt: jax.Array,
+    tbl_nums: jax.Array,
+    next_dxc: jax.Array,
+    next_dxo: jax.Array,
+    dxc_tab: jax.Array,
+    dxo_tab: jax.Array,
+    dxc_l_tab: jax.Array,
+    dxo_l_tab: jax.Array,
+    log_rs: jax.Array,
+    log_ts: jax.Array,
+    coeffs_all: jax.Array,
 ) -> tuple[jax.Array, jax.Array, jax.Array]:
     """Evaluate CO opacity at `(iz, ix)` across `(dXC, dXO, logRho, logT)`."""
     x_v, z_v = xs[iz, ix], zs[iz]
@@ -184,9 +218,20 @@ def _eval_co_for_dxco_jax(
     dxo_l = jnp.log10(z_v + 1.0e-3 + dxo)
 
     i1, i2, i3, i4 = _find_co_tables_jax(
-        dxco_max, dxc, dxo, dxc_l, dxo_l, num_co[iz, ix], num_gt[iz, ix],
-        tbl_nums[iz, ix], next_dxc[iz, ix], next_dxo[iz, ix],
-        dxc_tab[iz, ix], dxo_tab[iz, ix], dxc_l_tab[iz, ix], dxo_l_tab[iz, ix],
+        dxco_max,
+        dxc,
+        dxo,
+        dxc_l,
+        dxo_l,
+        num_co[iz, ix],
+        num_gt[iz, ix],
+        tbl_nums[iz, ix],
+        next_dxc[iz, ix],
+        next_dxo[iz, ix],
+        dxc_tab[iz, ix],
+        dxo_tab[iz, ix],
+        dxc_l_tab[iz, ix],
+        dxo_l_tab[iz, ix],
     )
     bds = bounds[iz, ix]
     lr_min, lr_max, lt_min, lt_max = bds[0], bds[1], bds[2], bds[3]
@@ -260,23 +305,17 @@ def _eval_co_for_dxco_jax(
         jnp.where(
             only1,
             lk1,
-            jnp.where(
-                ex2, lk2, jnp.where(ex3, lk3, jnp.where(ex4, lk4, lk_b))
-            ),
+            jnp.where(ex2, lk2, jnp.where(ex3, lk3, jnp.where(ex4, lk4, lk_b))),
         ),
         jnp.where(
             only1,
             dr1,
-            jnp.where(
-                ex2, dr2, jnp.where(ex3, dr3, jnp.where(ex4, dr4, dr_b))
-            ),
+            jnp.where(ex2, dr2, jnp.where(ex3, dr3, jnp.where(ex4, dr4, dr_b))),
         ),
         jnp.where(
             only1,
             dt1,
-            jnp.where(
-                ex2, dt2, jnp.where(ex3, dt3, jnp.where(ex4, dt4, dt_b))
-            ),
+            jnp.where(ex2, dt2, jnp.where(ex3, dt3, jnp.where(ex4, dt4, dt_b))),
         ),
     )
 
@@ -309,10 +348,26 @@ def eval_co_kap_jax(
         izz: jax.Array, ixx: jax.Array
     ) -> tuple[jax.Array, jax.Array, jax.Array]:
         return _eval_co_for_dxco_jax(
-            izz, ixx, dc_a, do_a, lr_a, lt_a, zs, xs, meta["bounds"],
-            meta["num_co"], meta["num_gt"], meta["tbl_nums"],
-            meta["next_dxc"], meta["next_dxo"], meta["dxc"], meta["dxo"],
-            meta["dxc_l"], meta["dxo_l"], meta["log_rs"], meta["log_ts"],
+            izz,
+            ixx,
+            dc_a,
+            do_a,
+            lr_a,
+            lt_a,
+            zs,
+            xs,
+            meta["bounds"],
+            meta["num_co"],
+            meta["num_gt"],
+            meta["tbl_nums"],
+            meta["next_dxc"],
+            meta["next_dxo"],
+            meta["dxc"],
+            meta["dxo"],
+            meta["dxc_l"],
+            meta["dxo_l"],
+            meta["log_rs"],
+            meta["log_ts"],
             coeffs_all,
         )
 
@@ -434,15 +489,18 @@ def _eval_aesopus_fixed_zref_jax(
     fcos_z = meta["fcos_all"][iz]
     fcs_z = meta["fcs_all"][iz]
     fns_z = meta["fns_all"][iz]
-    fco = jnp.log10(jnp.maximum(xc / jnp.maximum(xo, 1.0e-99), 1.0e-99)) - (
-        meta["fco_ref"]
+    fco = (
+        jnp.log10(jnp.maximum(xc / jnp.maximum(xo, 1.0e-99), 1.0e-99))
+        - (meta["fco_ref"])
     )
-    fc = jnp.log10(jnp.maximum(xc / jnp.maximum(zref_i, 1.0e-99), 1.0e-99)) - (
-        meta["fc_ref"]
+    fc = (
+        jnp.log10(jnp.maximum(xc / jnp.maximum(zref_i, 1.0e-99), 1.0e-99))
+        - (meta["fc_ref"])
     )
-    fn_v = jnp.log10(
-        jnp.maximum(xn / jnp.maximum(zref_i, 1.0e-99), 1.0e-99)
-    ) - (meta["fn_ref"])
+    fn_v = (
+        jnp.log10(jnp.maximum(xn / jnp.maximum(zref_i, 1.0e-99), 1.0e-99))
+        - (meta["fn_ref"])
+    )
     ix, wx = _clipped_linear_weights_jax(x, xs_z)
     ifco, wfco = _clipped_linear_weights_jax(fco, fcos_z)
     ifc, wfc = _clipped_linear_weights_jax(fc, fcs_z)
@@ -505,10 +563,7 @@ def eval_aesopus_jax(
     x_old = log_zs[idxs]
     x_new = jnp.log10(jnp.maximum(z_a, 1.0e-99))
     res_mid = jnp.stack(
-        [
-            jax_interp.interp_pm_1d_jax(x_old, raw[:, c], x_new)
-            for c in range(3)
-        ]
+        [jax_interp.interp_pm_1d_jax(x_old, raw[:, c], x_new) for c in range(3)]
     )
     res = jnp.where(
         z_a <= zs[0],

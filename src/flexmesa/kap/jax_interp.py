@@ -279,15 +279,9 @@ def _eval_fixed_for_x_jax(
         lk_lo, dr_lo, dt_lo = _eval_ix(jnp.asarray(0))
         lk_hi, dr_hi, dt_hi = _eval_ix(nx - 1)
         return (
-            jnp.where(
-                x <= x_min, lk_lo, jnp.where(x >= x_max, lk_hi, lk_c)
-            ),
-            jnp.where(
-                x <= x_min, dr_lo, jnp.where(x >= x_max, dr_hi, dr_c)
-            ),
-            jnp.where(
-                x <= x_min, dt_lo, jnp.where(x >= x_max, dt_hi, dt_c)
-            ),
+            jnp.where(x <= x_min, lk_lo, jnp.where(x >= x_max, lk_hi, lk_c)),
+            jnp.where(x <= x_min, dr_lo, jnp.where(x >= x_max, dr_hi, dr_c)),
+            jnp.where(x <= x_min, dt_lo, jnp.where(x >= x_max, dt_hi, dt_c)),
         )
 
     lk0, dr0, dt0 = _eval_fixed_log_rho_log_t_jax(

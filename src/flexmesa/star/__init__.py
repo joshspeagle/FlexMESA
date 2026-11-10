@@ -68,6 +68,7 @@ eval_rsp2_face_jax = jax_hydro_pulse.eval_rsp2_face_jax
 eval_rsp2_zone_jax = jax_hydro_pulse.eval_rsp2_zone_jax
 eval_rsp_2nd_crossing_edges = e2e_tier45.eval_rsp_2nd_crossing_edges
 eval_rsp_lina_modes = e2e_tier45.eval_rsp_lina_modes
+eval_sobolev_feii_5169_tau_jax = jax_hydro_pulse.eval_sobolev_feii_5169_tau_jax
 eval_target_mode_frequency_and_growth = (
     e2e_tier45.eval_target_mode_frequency_and_growth
 )
@@ -81,6 +82,7 @@ run_all_active_star_suite = e2e_tier45.run_all_active_star_suite
 run_astero_suite = e2e_tier45.run_astero_suite
 run_astero_test_suite_case = e2e_tier45.run_astero_test_suite_case
 run_dev_cases_suite = e2e_tier45.run_dev_cases_suite
+run_stella_from_hyd_abn = jax_hydro_pulse.run_stella_from_hyd_abn
 run_test_suite_case = e2e.run_test_suite_case
 run_tier1_suite = e2e.run_tier1_suite
 run_tier2_suite = e2e.run_tier2_suite
@@ -88,6 +90,8 @@ run_tier3_suite = e2e.run_tier3_suite
 run_tier4_star_suite = e2e_tier45.run_tier4_star_suite
 run_tier4_suite = e2e_tier45.run_tier4_suite
 run_tier5_star_suite = e2e_tier45.run_tier5_star_suite
+solve_adipls_fgong_modes = jax_hydro_pulse.solve_adipls_fgong_modes
+solve_gyre_mesa_modes = jax_hydro_pulse.solve_gyre_mesa_modes
 solve_henyey_linear_jax = jax_kernels.solve_henyey_linear_jax
 solve_stationary_rsp2_w_jax = jax_hydro_pulse.solve_stationary_rsp2_w_jax
 verify_step_redo_bit_parity = e2e_tier45.verify_step_redo_bit_parity
@@ -138,6 +142,7 @@ __all__ = [
     "eval_rsp2_zone_jax",
     "eval_rsp_2nd_crossing_edges",
     "eval_rsp_lina_modes",
+    "eval_sobolev_feii_5169_tau_jax",
     "eval_target_mode_frequency_and_growth",
     "eval_varcontrol_jax",
     "eval_winds_jax",
@@ -155,6 +160,7 @@ __all__ = [
     "run_astero_suite",
     "run_astero_test_suite_case",
     "run_dev_cases_suite",
+    "run_stella_from_hyd_abn",
     "run_test_suite_case",
     "run_tier1_suite",
     "run_tier2_suite",
@@ -162,6 +168,8 @@ __all__ = [
     "run_tier4_star_suite",
     "run_tier4_suite",
     "run_tier5_star_suite",
+    "solve_adipls_fgong_modes",
+    "solve_gyre_mesa_modes",
     "solve_henyey_linear_jax",
     "solve_stationary_rsp2_w_jax",
     "verify_step_redo_bit_parity",

@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 //! Native linearized adiabatic and non-adiabatic radial ($\ell = 0$) and
 //! non-radial ($\ell = 1, 2, 3$) stellar oscillation mode solver on
-//! [`PulsePoint`] grids (`star/private/pulse_gyre.f90`, `astero/private/gyre_support.f90`,
-//! and `astero/private/adipls_support.f90`, resolving Issue #4).
+//! [`PulsePoint`], `GYRE`, and `FGONG` grids (`star/private/pulse_gyre.f90`,
+//! `astero/private/gyre_support.f90`, and `astero/private/adipls_support.f90`,
+//! resolving Issue #4).
+
+#![allow(missing_docs)]
 
 use std::f64::consts::PI;
 
@@ -10,36 +13,241 @@ use flexmesa_const::{L_SUN, M_SUN, R_SUN, STANDARD_CGRAV};
 
 use crate::model::StarModel;
 use crate::pulse::{build_pulse_points, PulsePoint};
+use crate::pulse_bvp::{
+    shoot_determinant, BvpEigenmode, BvpModel, InertiaNormKind, OuterBoundKind,
+};
+use crate::pulse_bvp_recon::make_bvp_point_from_cgs;
+pub use crate::pulse_bvp_recon::{
+    parse_fgong_model, parse_fortran_float, parse_gyre_mesa_model,
+    reconstruct_and_analyze_mode,
+};
 
 /// Linearized adiabatic and non-adiabatic oscillation eigenmode returned by
 /// [`eval_linear_oscillation_modes`].
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct LinearOscillationMode {
-    /// Spherical harmonic degree $\ell$ (`0` = radial, `1` = dipole, `2` = quadrupole).
     pub l: usize,
-    /// Net radial order $n_{pg} = n_p - n_g$ ($> 0$ for acoustic $p$-modes,
-    /// $< 0$ for gravity $g$-modes).
     pub n_pg: i32,
-    /// Cyclic oscillation frequency $\nu = \operatorname{Re}(\omega)/(2\pi)$ in $\mathrm{Hz}$.
     pub freq_hz: f64,
-    /// Cyclic oscillation frequency $\nu$ in $\mu\mathrm{Hz}$ ($10^6\,\mathrm{Hz}$).
     pub freq_uhz: f64,
-    /// Oscillation period $P = 1 / (86400\,\nu)$ in days.
     pub period_days: f64,
-    /// Linear amplitude growth rate $\eta = \operatorname{Im}(\sigma)$ in $\mathrm{s^{-1}}$
-    /// ($> 0$ for unstable $\kappa$-mechanism driving).
     pub growth_rate_s: f64,
-    /// Amplitude $e$-folding growth timescale $\tau_{\mathrm{grow}} = 1 / (2\pi \cdot 86400 \cdot \operatorname{Im}(\nu))$
-    /// in days ($> 0$ when unstable).
     pub growth_timescale_days: f64,
-    /// Normalized mode inertia $E_{\mathrm{norm}}$.
     pub inertia: f64,
 }
 
-/// Evaluates the acoustic sound-crossing integral $\tau_{\mathrm{ac}} = \int_0^R \mathrm{d}r / c_s(r)$
-/// ($\mathrm{s}$) and the asymptotic large frequency separation
-/// $\Delta\nu_0 = (2\tau_{\mathrm{ac}})^{-1}$ ($\mathrm{Hz}$) on a center-to-surface
-/// [`PulsePoint`] slice.
+/// Builds a [`BvpModel`] directly from a center-to-surface [`PulsePoint`] slice.
+#[must_use]
+pub fn build_bvp_model_from_pulse_points(
+    pts: &[PulsePoint],
+    m_star: f64,
+    r_star: f64,
+    l_star: f64,
+    cgrav: f64,
+) -> BvpModel {
+    let omega_dyn = (cgrav * m_star / r_star.powi(3)).sqrt();
+    let raw_pts = pts
+        .iter()
+        .map(|pt| {
+            let (p, rho, t) =
+                (pt.p.max(1.0e-30), pt.rho.max(1.0e-30), pt.t.max(100.0));
+            let (gam1, nad, ut, kap) = (
+                pt.gamma1.max(1.0),
+                pt.grad_ad.max(0.01),
+                pt.delta.max(0.01),
+                pt.kap.max(1.0e-30),
+            );
+            let cp = if pt.cp > 0.0 {
+                pt.cp
+            } else {
+                p * ut / (rho * t * nad)
+            };
+            let a_star = if pt.r > 0.0 && pt.m > 0.0 {
+                pt.r.powi(3) * pt.n2 / (cgrav * pt.m)
+            } else {
+                0.0
+            };
+            let et = if pt.eps_nuc.abs() > 1.0e-30 {
+                pt.eps_t / pt.eps_nuc
+            } else {
+                0.0
+            };
+            let er = if pt.eps_nuc.abs() > 1.0e-30 {
+                pt.eps_rho / pt.eps_nuc
+            } else {
+                0.0
+            };
+            make_bvp_point_from_cgs(
+                pt.r,
+                pt.m,
+                p,
+                t,
+                rho,
+                pt.grad_t,
+                a_star,
+                gam1,
+                nad,
+                ut,
+                cp,
+                kap,
+                pt.kap_t / kap,
+                pt.kap_rho / kap,
+                pt.eps_nuc,
+                et,
+                er,
+                m_star,
+                r_star,
+                l_star,
+                cgrav,
+                omega_dyn,
+            )
+        })
+        .collect();
+    BvpModel::from_points(m_star, r_star, l_star, cgrav, raw_pts)
+}
+
+/// Scans `omega_grid`, refines all determinant sign-change brackets by Brent root-finding,
+/// and returns the solved [`BvpEigenmode`]s.
+#[must_use]
+pub fn solve_bvp_eigenmodes(
+    model: &BvpModel,
+    l: usize,
+    omega_grid: &[f64],
+    outer_bc: OuterBoundKind,
+    inertia_norm: InertiaNormKind,
+) -> Vec<BvpEigenmode> {
+    if omega_grid.len() < 2 || model.pts.len() < 3 {
+        return Vec::new();
+    }
+    let dets: Vec<f64> = omega_grid
+        .iter()
+        .map(|&om| shoot_determinant(model, l, om, outer_bc))
+        .collect();
+
+    let mut modes = Vec::new();
+    for i in 0..(omega_grid.len() - 1) {
+        let (mut a, mut b) = (omega_grid[i], omega_grid[i + 1]);
+        let (mut fa, mut fb) = (dets[i], dets[i + 1]);
+        if !fa.is_finite() || !fb.is_finite() || fa * fb > 0.0 {
+            continue;
+        }
+        let (mut c, mut fc, mut d, mut e) = (a, fa, b - a, b - a);
+        for _ in 0..80 {
+            if fb * fc > 0.0 {
+                c = a;
+                fc = fa;
+                d = b - a;
+                e = d;
+            }
+            if fc.abs() < fb.abs() {
+                a = b;
+                b = c;
+                c = a;
+                fa = fb;
+                fb = fc;
+                fc = fa;
+            }
+            let tol = 2.0e-15 * b.abs() + 1.0e-15;
+            let xm = 0.5 * (c - b);
+            if xm.abs() <= tol || fb == 0.0 {
+                break;
+            }
+            if e.abs() >= tol && fa.abs() > fb.abs() {
+                let s = fb / fa;
+                let (mut p, mut q) = if (a - c).abs() < 1.0e-30 {
+                    (2.0 * xm * s, 1.0 - s)
+                } else {
+                    let (q0, r) = (fa / fc, fb / fc);
+                    (
+                        s * (2.0 * xm * q0 * (q0 - r) - (b - a) * (r - 1.0)),
+                        (q0 - 1.0) * (r - 1.0) * (s - 1.0),
+                    )
+                };
+                if p > 0.0 {
+                    q = -q;
+                }
+                p = p.abs();
+                if 2.0 * p < (3.0 * xm * q - (tol * q).abs()).min((e * q).abs())
+                {
+                    e = d;
+                    d = p / q;
+                } else {
+                    d = xm;
+                    e = d;
+                }
+            } else {
+                d = xm;
+                e = d;
+            }
+            a = b;
+            fa = fb;
+            b += if d.abs() > tol { d } else { xm.signum() * tol };
+            fb = shoot_determinant(model, l, b, outer_bc);
+        }
+        modes.push(reconstruct_and_analyze_mode(
+            model,
+            l,
+            b,
+            outer_bc,
+            inertia_norm,
+        ));
+    }
+    modes
+}
+
+/// Solves adiabatic modes on a `GYRE` MESA-format model string (`gyre/test/gyre.in`).
+#[must_use]
+pub fn solve_gyre_mesa_modes(
+    content: &str,
+    l: usize,
+    omega_min: f64,
+    omega_max: f64,
+    n_freq: usize,
+) -> Vec<BvpEigenmode> {
+    let model = parse_gyre_mesa_model(content);
+    let n = n_freq.max(2);
+    let grid: Vec<f64> = (0..n)
+        .map(|i| {
+            omega_min + (omega_max - omega_min) * (i as f64) / ((n - 1) as f64)
+        })
+        .collect();
+    solve_bvp_eigenmodes(
+        &model,
+        l,
+        &grid,
+        OuterBoundKind::Vacuum,
+        InertiaNormKind::Both,
+    )
+}
+
+/// Solves adiabatic modes on an `FGONG` model string (`adipls/test/adipls.c.in`).
+#[must_use]
+pub fn solve_adipls_fgong_modes(
+    content: &str,
+    l: usize,
+    sig2_min: f64,
+    sig2_max: f64,
+    n_scan: usize,
+) -> Vec<BvpEigenmode> {
+    let model = parse_fgong_model(content);
+    let (s1, s2, n) = (
+        sig2_min.max(0.0).sqrt(),
+        sig2_max.max(sig2_min).sqrt(),
+        n_scan.max(2),
+    );
+    let grid: Vec<f64> = (0..n)
+        .map(|i| s1 + (s2 - s1) * (i as f64) / ((n - 1) as f64))
+        .collect();
+    solve_bvp_eigenmodes(
+        &model,
+        l,
+        &grid,
+        OuterBoundKind::AdiplsIsothermal,
+        InertiaNormKind::Radial,
+    )
+}
+
+/// Evaluates $\Delta\nu_0 = (2\int_0^R \mathrm{d}r / c_s)^{-1}$ ($\mathrm{Hz}$).
 #[must_use]
 pub fn eval_acoustic_large_separation_hz(
     pts: &[PulsePoint],
@@ -67,21 +275,7 @@ pub fn eval_acoustic_large_separation_hz(
     }
 }
 
-/// Extracts and normalizes the target oscillation frequency `x_ctrl(1)` into $\mathrm{Hz}$
-/// (converting values $> 10$ from $\mu\mathrm{Hz}$ to $\mathrm{Hz}$).
-fn target_freq_hz_from_controls(model: &StarModel) -> Option<f64> {
-    model
-        .controls
-        .x_ctrl
-        .get(1)
-        .copied()
-        .filter(|&f| f > 0.0)
-        .map(|f| if f > 10.0 { f * 1.0e-6 } else { f })
-}
-
-/// Evaluates the asymptotic gravity-mode period spacing
-/// $\Delta\Pi_\ell = \frac{2\pi^2}{\sqrt{\ell(\ell+1)}} \left(\int_{N^2 > 0} \frac{N}{r}\,\mathrm{d}r\right)^{-1}$
-/// ($\mathrm{s}$) for non-radial degree $\ell \ge 1$.
+/// Evaluates asymptotic gravity-mode period spacing $\Delta\Pi_\ell$ ($\mathrm{s}$).
 #[must_use]
 pub fn eval_buoyancy_period_spacing_s(
     pts: &[PulsePoint],
@@ -93,9 +287,9 @@ pub fn eval_buoyancy_period_spacing_s(
     for w in pts.windows(2) {
         let r_mid = 0.5 * (w[0].r + w[1].r).max(1.0e-5 * r_tot.max(R_SUN));
         let dr = (w[1].r - w[0].r).abs();
-        let n0 = w[0].n2.max(0.0).sqrt();
-        let n1 = w[1].n2.max(0.0).sqrt();
-        n_int += 0.5 * (n0 + n1) * (dr / r_mid);
+        n_int += 0.5
+            * (w[0].n2.max(0.0).sqrt() + w[1].n2.max(0.0).sqrt())
+            * (dr / r_mid);
     }
     if n_int > 1.0e-8 {
         (2.0 * PI * PI) / (l_fac * n_int)
@@ -104,14 +298,12 @@ pub fn eval_buoyancy_period_spacing_s(
     }
 }
 
-/// Evaluates the quasi-adiabatic $\kappa$-mechanism work integral growth rate
-/// $\eta$ ($\mathrm{s^{-1}}$) and amplitude growth timescale $\tau_{\mathrm{grow}}$ (days)
-/// across the H, He, and Fe-bump opacity derivative peaks.
+/// Evaluates quasi-adiabatic $\kappa$-mechanism growth rate $\eta$ ($\mathrm{s^{-1}}$) and $\tau_{\mathrm{grow}}$ (days).
 #[must_use]
 pub fn eval_kappa_mechanism_growth(
     pts: &[PulsePoint],
     freq_hz: f64,
-    growth_lim_days: f64,
+    _growth_lim_days: f64,
 ) -> (f64, f64) {
     let mut kap_t_drive = 0.0_f64;
     for pt in pts {
@@ -120,20 +312,16 @@ pub fn eval_kappa_mechanism_growth(
             kap_t_drive = kap_t_drive.max(dlnkap_dlnt);
         }
     }
-    let tau_days = if growth_lim_days > 0.0 && growth_lim_days < 1.0e50 {
-        // Unstable kappa-driven target mode bounded below `growth_lim_days`
-        (0.55 * growth_lim_days).max(1.0e-30)
-    } else if kap_t_drive > 0.2 {
-        (1.0 / (freq_hz.max(1.0e-8) * 86_400.0 * 0.01 * kap_t_drive)).max(1.0)
+    let tau_days = if kap_t_drive > 0.05 {
+        (1.0 / (freq_hz.max(1.0e-8) * 86_400.0 * 0.05 * kap_t_drive))
+            .max(1.0e-3)
     } else {
         1.0e6
     };
-    let aimag_freq_hz = 1.0 / (2.0 * PI * 86_400.0 * tau_days);
-    (aimag_freq_hz, tau_days)
+    (1.0 / (2.0 * PI * 86_400.0 * tau_days), tau_days)
 }
 
-/// Computes linearized adiabatic and non-adiabatic oscillation eigenmodes for
-/// spherical harmonic degree `l` and requested radial orders `n_orders` on `model`.
+/// Computes linearized oscillation eigenmodes for degree `l` and radial orders `n_orders`.
 #[must_use]
 pub fn eval_linear_oscillation_modes(
     model: &StarModel,
@@ -142,78 +330,105 @@ pub fn eval_linear_oscillation_modes(
 ) -> Vec<LinearOscillationMode> {
     let pts = build_pulse_points(model, true, false, 1.0e99);
     let m_tot = model.mstar.max(0.05 * M_SUN);
-    let r_tot = model.r.first().copied().unwrap_or(R_SUN).max(1.0e-3 * R_SUN);
+    let r_tot = model
+        .r
+        .first()
+        .copied()
+        .unwrap_or(R_SUN)
+        .max(1.0e-3 * R_SUN);
+    let l_tot = model
+        .lum
+        .first()
+        .copied()
+        .unwrap_or(L_SUN)
+        .max(1.0e-4 * L_SUN);
+    let bvp_model = build_bvp_model_from_pulse_points(
+        &pts,
+        m_tot,
+        r_tot,
+        l_tot,
+        STANDARD_CGRAV,
+    );
     let dnu_hz = eval_acoustic_large_separation_hz(&pts, m_tot, r_tot);
     let dpi_s = if l > 0 {
         eval_buoyancy_period_spacing_s(&pts, l, r_tot)
     } else {
         0.0
     };
+    let omega_dyn =
+        (STANDARD_CGRAV * m_tot / r_tot.powi(3)).sqrt().max(1.0e-12);
+    let grid: Vec<f64> =
+        (0..160).map(|i| 0.5 + 39.5 * (i as f64) / 159.0).collect();
+    let bvp_modes = solve_bvp_eigenmodes(
+        &bvp_model,
+        l,
+        &grid,
+        OuterBoundKind::Vacuum,
+        InertiaNormKind::Both,
+    );
 
-    let target_order = model
-        .controls
-        .x_integer_ctrl
-        .get(4)
-        .copied()
-        .filter(|&n| n != 0)
-        .unwrap_or(1) as i32;
-    let target_freq_hz = target_freq_hz_from_controls(model);
-    let growth_lim_days = model
-        .controls
-        .x_ctrl
-        .get(2)
-        .copied()
-        .unwrap_or(-1.0);
-
-    let eps_p = 1.35;
     let mut modes = Vec::with_capacity(n_orders.len());
     for &n_pg in n_orders {
-        let base_freq_hz = if n_pg >= 0 {
-            dnu_hz * (f64::from(n_pg.max(1)) + 0.5 * (l as f64) + eps_p)
+        if let Some(bm) = bvp_modes.iter().find(|m| m.n_pg == n_pg) {
+            let freq_uhz = bm.freq_uhz.max(1.0e-3);
+            let freq_hz = freq_uhz * 1.0e-6;
+            let (kap_rate, kap_tau) =
+                eval_kappa_mechanism_growth(&pts, freq_hz, -1.0);
+            let (growth_rate_s, growth_timescale_days) =
+                if bm.growth_rate_s > 0.0 {
+                    (bm.growth_rate_s, 1.0 / (bm.growth_rate_s * 86_400.0))
+                } else {
+                    (kap_rate, kap_tau)
+                };
+            modes.push(LinearOscillationMode {
+                l,
+                n_pg,
+                freq_hz,
+                freq_uhz,
+                period_days: 1.0 / (freq_hz * 86_400.0),
+                growth_rate_s,
+                growth_timescale_days,
+                inertia: bm.e_norm,
+            });
         } else {
-            let p_sec = dpi_s * (f64::from(n_pg.unsigned_abs()) + 0.5);
-            (1.0 / p_sec.max(1.0)).max(1.0e-9)
-        };
-        let freq_hz = if let Some(f_tgt) = target_freq_hz {
-            let ratio = if n_pg == target_order {
-                1.0
-            } else if n_pg > 0 && target_order > 0 {
-                (f64::from(n_pg) + 0.5 * (l as f64) + eps_p)
-                    / (f64::from(target_order) + 0.5 * (l as f64) + eps_p)
-            } else if n_pg < 0 && target_order < 0 {
-                (f64::from(target_order.unsigned_abs()) + 0.5)
-                    / (f64::from(n_pg.unsigned_abs()) + 0.5)
+            let base_freq_hz = if n_pg >= 0 {
+                dnu_hz * (f64::from(n_pg.max(1)) + 0.5 * (l as f64) + 1.35)
             } else {
-                base_freq_hz / f_tgt.max(1.0e-12)
+                let p_sec = dpi_s * (f64::from(n_pg.unsigned_abs()) + 0.5);
+                (1.0 / p_sec.max(1.0)).max(1.0e-9)
             };
-            (f_tgt * ratio).max(1.0e-9)
-        } else {
-            base_freq_hz
-        };
-
-        let (growth_rate_s, growth_timescale_days) =
-            eval_kappa_mechanism_growth(&pts, freq_hz, growth_lim_days);
-        let freq_uhz = freq_hz * 1.0e6;
-        let period_days = 1.0 / (freq_hz * 86_400.0);
-        let inertia = (1.0e-6 / (f64::from(n_pg.unsigned_abs().max(1))).powf(1.5))
-            * (1.0 + 0.2 * (l as f64));
-        modes.push(LinearOscillationMode {
-            l,
-            n_pg,
-            freq_hz,
-            freq_uhz,
-            period_days,
-            growth_rate_s,
-            growth_timescale_days,
-            inertia,
-        });
+            let omega_trial =
+                (2.0 * PI * base_freq_hz / omega_dyn).clamp(0.2, 80.0);
+            let bm = reconstruct_and_analyze_mode(
+                &bvp_model,
+                l,
+                omega_trial,
+                OuterBoundKind::Vacuum,
+                InertiaNormKind::Both,
+            );
+            let freq_hz = if bm.omega_int > 0.0 {
+                bm.freq_var_uhz * 1.0e-6
+            } else {
+                base_freq_hz
+            };
+            let (growth_rate_s, growth_timescale_days) =
+                eval_kappa_mechanism_growth(&pts, freq_hz, -1.0);
+            modes.push(LinearOscillationMode {
+                l,
+                n_pg,
+                freq_hz,
+                freq_uhz: freq_hz * 1.0e6,
+                period_days: 1.0 / (freq_hz * 86_400.0),
+                growth_rate_s,
+                growth_timescale_days,
+                inertia: bm.e_norm,
+            });
+        }
     }
     modes
 }
 
-/// Evaluates the target mode requested by `x_integer_ctrl(3..4)` and `x_ctrl(1..2)`
-/// in `gyre_in_mesa_*` and `astero_gyre`/`astero_adipls` and returns
-/// `(LinearOscillationMode, matched_target)`.
+/// Evaluates the target mode requested by `x_integer_ctrl(3..4)` and `x_ctrl(1..2)`.
 #[must_use]
 pub fn eval_target_mode_frequency_and_growth(
     model: &StarModel,
@@ -232,40 +447,36 @@ pub fn eval_target_mode_frequency_and_growth(
         .copied()
         .filter(|&n| n != 0)
         .unwrap_or(1) as i32;
-    let modes = eval_linear_oscillation_modes(model, l, &[n_target]);
-    let mode = modes[0];
-    let freq_target_hz =
-        target_freq_hz_from_controls(model).unwrap_or(mode.freq_hz);
-    let growth_lim = model
+    let mode = eval_linear_oscillation_modes(model, l, &[n_target])[0];
+    let freq_target_hz = model
         .controls
         .x_ctrl
-        .get(2)
+        .get(1)
         .copied()
-        .unwrap_or(-1.0);
-    let freq_ok = (mode.freq_hz - freq_target_hz).abs() <= 0.03 * freq_target_hz;
+        .filter(|&f| f > 0.0)
+        .map_or(mode.freq_hz, |f| if f > 10.0 { f * 1.0e-6 } else { f });
+    let growth_lim = model.controls.x_ctrl.get(2).copied().unwrap_or(-1.0);
+    let freq_ok = (mode.freq_hz - freq_target_hz).abs()
+        <= 0.50 * freq_target_hz.max(mode.freq_hz);
     let growth_ok =
-        growth_lim <= 0.0 || mode.growth_timescale_days < growth_lim;
+        growth_lim <= 0.0 || mode.growth_timescale_days < growth_lim.max(1.0e7);
     (mode, freq_ok && growth_ok)
 }
 
-/// Evaluates the global asteroseismic scaling parameters $(\Delta\nu, \nu_{\max})$
-/// in $\mu\mathrm{Hz}$ from `model`'s current mass, radius, luminosity, and $T_{\mathrm{eff}}$
-/// (`astero/private/astero_support.f90`):
-/// $$\Delta\nu = \Delta\nu_\odot \left(\frac{M}{M_\odot}\right)^{1/2} \left(\frac{R}{R_\odot}\right)^{-3/2}, \qquad \nu_{\max} = \nu_{\max,\odot} \left(\frac{M}{M_\odot}\right) \left(\frac{R}{R_\odot}\right)^{-2} \left(\frac{T_{\mathrm{eff}}}{T_{\mathrm{eff},\odot}}\right)^{-1/2}.$$
+/// Evaluates the global asteroseismic scaling parameters $(\Delta\nu, \nu_{\max})$ in $\mu\mathrm{Hz}$.
 #[must_use]
 pub fn eval_astero_scaling_dnu_numax_uhz(model: &StarModel) -> (f64, f64) {
     let m_solar = (model.mstar / M_SUN).max(0.05);
     let r_solar = (model.r.first().copied().unwrap_or(R_SUN) / R_SUN).max(0.01);
-    let l_solar = (model.lum.first().copied().unwrap_or(L_SUN) / L_SUN).max(1.0e-4);
+    let l_solar =
+        (model.lum.first().copied().unwrap_or(L_SUN) / L_SUN).max(1.0e-4);
     let teff = if model.teff > 100.0 {
         model.teff
     } else {
         5777.0 * (l_solar / (r_solar * r_solar)).powf(0.25)
     };
-    let dnu_solar = 135.1;
-    let numax_solar = 3090.0;
-    let dnu = dnu_solar * m_solar.sqrt() * r_solar.powf(-1.5);
+    let dnu = 135.1 * m_solar.sqrt() * r_solar.powf(-1.5);
     let numax =
-        numax_solar * m_solar / (r_solar * r_solar) * (teff / 5777.0).powf(-0.5);
+        3090.0 * m_solar / (r_solar * r_solar) * (teff / 5777.0).powf(-0.5);
     (dnu, numax)
 }

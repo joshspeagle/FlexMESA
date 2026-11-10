@@ -196,10 +196,7 @@ def _lookup_dt_cell_np(
     iq_raw = np.floor((lq_f - lq_min) / dq + 1.0e-4).astype(np.int64)
     jt_raw = np.floor((lt_f - lt_min) / dt + 1.0e-4).astype(np.int64)
     oob = (
-        (iq_raw < 0)
-        | (iq_raw >= n_q - 1)
-        | (jt_raw < 0)
-        | (jt_raw >= n_t - 1)
+        (iq_raw < 0) | (iq_raw >= n_q - 1) | (jt_raw < 0) | (jt_raw >= n_t - 1)
     )
     iq0 = np.clip(iq_raw, 0, max(0, n_q - 2))
     jt0 = np.clip(jt_raw, 0, max(0, n_t - 2))

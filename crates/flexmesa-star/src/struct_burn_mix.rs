@@ -126,6 +126,7 @@ pub fn op_split_burn_zones(
             }
         }
         model.eps_nuc[k] = out.avg_eps_nuc * eps_nuc_factor;
+        model.aux.burn_avg_epsnuc[k] = out.avg_eps_nuc * eps_nuc_factor;
         model.eps_nuc_neu_total[k] = out.eps_neu_total;
         model.d_epsnuc_dlnd[k] = 0.0;
         model.d_epsnuc_dlnt[k] = 0.0;

@@ -316,6 +316,13 @@ impl StarModel {
         self.non_nuc_neu_start.clone_from(&self.non_nuc_neu);
         self.xa_start.clone_from(&self.xa);
         self.xh_start.clone_from(&self.xh);
+        self.aux.save_start(
+            &self.cp,
+            &self.grada,
+            &self.chi_t,
+            &self.chi_rho,
+            &self.mlt_vc,
+        );
         if self.sig.iter().all(|&s| s == 0.0) {
             crate::hydro_vars::update_sig_from_d_mix(self);
         }
@@ -500,5 +507,6 @@ impl StarModel {
         ] {
             ad.resize(nz, StarAdOrder1::ZERO);
         }
+        self.aux.resize(nz, sp);
     }
 }

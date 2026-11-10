@@ -11,8 +11,11 @@
 
 use flexmesa_const::{FOUR_PI, L_SUN};
 
-use crate::controls::{EnergyEqnOption, StarError, VarLayout};
+use crate::controls::{StarError, VarLayout};
 use crate::eps_grav::eval_eps_grav;
+pub use crate::hydro_energy::do1_energy_eqn;
+pub use crate::hydro_momentum::{do1_momentum_eqn, do1_radius_eqn};
+pub use crate::hydro_temperature::do1_temperature_eqn;
 use crate::hydro_vars::set_hydro_vars;
 use crate::model::StarModel;
 use crate::star_ad::{
@@ -210,7 +213,12 @@ pub fn do1_density_eqn(
         StarAdOrder1::constant(model.r_center.powi(3))
     };
     let rho_00 = StarAdOrder1::variable(model.lnd[k], I_LND_00).exp();
-    let dr3 = (3.0 * model.dm[k] / FOUR_PI) / rho_00;
+    let mc = if model.controls.use_mass_corrections {
+        model.aux.mass_correction.get(k).copied().unwrap_or(1.0)
+    } else {
+        1.0
+    };
+    let dr3 = (3.0 * model.dm[k] * mc / FOUR_PI) / rho_00;
     let rp13_p_dr3 = r_p1_cubed + dr3;
     if rp13_p_dr3.val <= 0.0 || !rp13_p_dr3.val.is_finite() {
         return Err(StarError::ConvergenceFailure(format!(
@@ -230,7 +238,19 @@ pub fn do_surf_bc_eqns(model: &StarModel, sys: &mut HenyeySystem) {
         return;
     }
     let r_0 = StarAdOrder1::variable(model.ln_r[0], I_LNR_00).exp();
-    let dp_0 = (model.cgrav[0] * model.m_grav[0] * model.dm[0]
+    let fp_0 = if model.controls.rotation_flag
+        && model.controls.use_gravity_rotation_correction
+    {
+        model.aux.fp_rot.first().copied().unwrap_or(1.0)
+    } else {
+        1.0
+    };
+    let mc_0 = if model.controls.use_mass_corrections {
+        model.aux.mass_correction.first().copied().unwrap_or(1.0)
+    } else {
+        1.0
+    };
+    let dp_0 = (model.cgrav[0] * model.m_grav[0] * fp_0 * model.dm[0] * mc_0
         / (2.0 * FOUR_PI))
         / r_0.pow4();
 
@@ -247,208 +267,60 @@ pub fn do_surf_bc_eqns(model: &StarModel, sys: &mut HenyeySystem) {
         sys.save_eqn_residual(&model.layout, 0, model.layout.i_dv_dt, &resid_p);
     }
 
-    let lnt_0 = StarAdOrder1::variable(model.ln_t[0], I_LNT_00);
-    let t_0 = lnt_0.exp();
-    let peos_0 = model.ln_peos_ad[0].exp();
-    let dt_0 = dp_0 * model.gradt_ad[0] * (t_0 / peos_0);
-    let t_surf = model.ln_t_surf_ad.exp();
-    let ln_t_bc = (t_surf + dt_0).max(StarAdOrder1::constant(1.0)).ln();
-    let denom_t = if lnt_0.val > 1.0 {
-        lnt_0
-    } else {
-        StarAdOrder1::ONE
-    };
-    let resid_t = (ln_t_bc - lnt_0) / denom_t;
-    sys.save_eqn_residual(&model.layout, 0, model.layout.i_equ_l, &resid_t);
-}
-
-/// Interpolates total EOS pressure $P_{\mathrm{eos}}$ to interior face `k >= 1`
-/// with 3-cell stencil [`StarAdOrder1`] derivatives.
-#[inline]
-fn interp_peos_ad_to_face(model: &StarModel, k: usize) -> StarAdOrder1 {
-    let (alfa, beta) = model.get_face_weights(k);
-    let p_00 = model.ln_peos_ad[k].exp();
-    let p_m1 = model.ln_peos_ad[k - 1].shift_m1().exp();
-    p_00 * alfa + p_m1 * beta
-}
-
-/// Hydrostatic / hydrodynamic momentum equation at face `k` (`do1_momentum_eqn`
-/// in `star/private/hydro_momentum.f90:79-436`).
-///
-/// Evaluates the pressure-gradient balance across face `k` normalized by the
-/// mass-weighted face pressure $P_{\mathrm{face},k}$.
-pub fn do1_momentum_eqn(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
-    if k == 0 && !model.controls.use_momentum_outer_bc {
-        return;
-    }
-    let r_k = StarAdOrder1::variable(model.ln_r[k], I_LNR_00).exp();
-    let r2 = r_k * r_k;
-    let area = FOUR_PI * r2;
-    let g_hse = -model.cgrav[k] * model.m_grav[k] / r2;
-    let accel =
-        if (model.controls.v_flag || model.controls.u_flag) && model.dt > 0.0 {
-            let (v_curr, v_st) = if model.controls.v_flag {
-                (model.v[k], model.v_start[k])
-            } else {
-                (model.u[k], model.u_start[k])
-            };
-            (StarAdOrder1::variable(v_curr, I_V_00) - v_st) / model.dt
+    if !model.controls.use_rsp_l_eqn_outer_bc {
+        let lnt_0 = StarAdOrder1::variable(model.ln_t[0], I_LNT_00);
+        let t_0 = lnt_0.exp();
+        let peos_0 = model.ln_peos_ad[0].exp();
+        let dt_0 = dp_0 * model.gradt_ad[0] * (t_0 / peos_0);
+        let t_surf = model.ln_t_surf_ad.exp();
+        let ln_t_bc = (t_surf + dt_0).max(StarAdOrder1::constant(1.0)).ln();
+        let denom_t = if lnt_0.val > 1.0 {
+            lnt_0
         } else {
-            StarAdOrder1::ZERO
+            StarAdOrder1::ONE
         };
-    let dp_hse = (g_hse - accel) * (model.dm_bar[k] / area);
-
-    let resid = if k == 0 {
-        let p_0 = model.ln_peos_ad[0].exp();
-        let p_surf = model.ln_peos_surf_ad.exp();
-        (dp_hse - (p_surf - p_0)) / p_0
-    } else {
-        let p_00 = model.ln_peos_ad[k].exp();
-        let p_m1 = model.ln_peos_ad[k - 1].shift_m1().exp();
-        let p_avg = interp_peos_ad_to_face(model, k);
-        (dp_hse - (p_m1 - p_00)) / p_avg
-    };
-    sys.save_eqn_residual(&model.layout, k, model.layout.i_dv_dt, &resid);
-}
-
-/// Interior temperature transport equation at face `k >= 1`
-/// (`do1_dlnT_dm_eqn` in `star/private/hydro_temperature.f90:240-310`).
-///
-/// Compares the theoretical temperature difference predicted by $\nabla_{T,k}$
-/// against the finite-difference cell temperature contrast across face `k`.
-pub fn do1_temperature_eqn(
-    model: &StarModel,
-    k: usize,
-    sys: &mut HenyeySystem,
-) {
-    if k == 0 {
-        return;
+        let resid_t = (ln_t_bc - lnt_0) / denom_t;
+        sys.save_eqn_residual(&model.layout, 0, model.layout.i_equ_l, &resid_t);
     }
-    let (alfa, beta) = model.get_face_weights(k);
-    let p_point = interp_peos_ad_to_face(model, k);
-
-    let r_k = StarAdOrder1::variable(model.ln_r[k], I_LNR_00).exp();
-    let dlnp_dm_qhse =
-        -(model.cgrav[k] * model.m_grav[k]) / (FOUR_PI * r_k.pow4() * p_point);
-    let dm_k = 0.5 * (model.dm[k - 1] + model.dm[k]);
-    let dln_t_theory = dlnp_dm_qhse * model.gradt_ad[k] * dm_k;
-
-    let t_00 = StarAdOrder1::variable(model.ln_t[k], I_LNT_00).exp();
-    let t_m1 = StarAdOrder1::variable(model.ln_t[k - 1], I_LNT_M1).exp();
-    let t_point = t_00 * alfa + t_m1 * beta;
-    let dln_t_actual = (t_m1 - t_00) / t_point;
-
-    let resid = dln_t_theory - dln_t_actual;
-    sys.save_eqn_residual(&model.layout, k, model.layout.i_equ_l, &resid);
-}
-
-/// Energy conservation equation for cell `k` (`do1_energy_eqn` in
-/// `star/private/hydro_energy.f90:36-905`).
-pub fn do1_energy_eqn(
-    model: &StarModel,
-    k: usize,
-    include_chem: bool,
-    sys: &mut HenyeySystem,
-) {
-    let lum_00 = StarAdOrder1::variable(model.lum[k], I_L_00);
-    let lum_p1 = if k + 1 < model.nz {
-        StarAdOrder1::variable(model.lum[k + 1], I_L_P1)
-    } else {
-        StarAdOrder1::constant(model.l_center)
-    };
-    let dl_dm = (lum_00 - lum_p1) / model.dm[k];
-
-    let eps_nuc_ad = StarAdOrder1::from_dlnd_dlnt_00(
-        model.eps_nuc[k],
-        model.d_epsnuc_dlnd[k],
-        model.d_epsnuc_dlnt[k],
-    );
-    // Upstream MESA time-centers non-nuclear neutrino losses across the step
-    // (`star/private/hydro_energy.f90:255-261`):
-    //   non_nuc_neu_ad%val = 0.5d0*(s% non_nuc_neu_start(k) + s% non_nuc_neu(k))
-    //   non_nuc_neu_ad%d1Array(i_lnd_00) = 0.5d0*s% d_nonnucneu_dlnd(k)
-    //   non_nuc_neu_ad%d1Array(i_lnT_00) = 0.5d0*s% d_nonnucneu_dlnT(k)
-    let non_nuc_neu_start_k = model
-        .non_nuc_neu_start
-        .get(k)
-        .copied()
-        .unwrap_or(model.non_nuc_neu[k]);
-    let non_nuc_neu_ad = StarAdOrder1::from_dlnd_dlnt_00(
-        0.5 * (non_nuc_neu_start_k + model.non_nuc_neu[k]),
-        0.5 * model.d_non_nuc_neu_dlnd[k],
-        0.5 * model.d_non_nuc_neu_dlnt[k],
-    );
-    let sources = eps_nuc_ad - non_nuc_neu_ad + model.eps_mdot[k];
-    let dt = model.dt.max(1.0e-30);
-
-    let esum = match model.controls.energy_eqn_option {
-        EnergyEqnOption::EpsGrav => -dl_dm + sources + model.eps_grav_ad[k],
-        EnergyEqnOption::Dedt => {
-            let e_ad = model.ln_e_ad[k].exp();
-            let de_dt = (e_ad - model.energy_start[k]) / dt;
-            let p_ad = model.ln_peos_ad[k].exp();
-            let inv_rho_ad =
-                (-StarAdOrder1::variable(model.lnd[k], I_LND_00)).exp();
-            let inv_rho_start = (-model.lnd_start[k]).exp();
-            let pdv_dt = p_ad * (inv_rho_ad - inv_rho_start) / dt;
-            -dl_dm + sources - de_dt - pdv_dt
-        }
-    };
-
-    let mut scal = dt / model.energy_start[k].max(1.0);
-    if k == 0 {
-        scal *= 1.0e-6;
-    }
-    let resid = esum * scal;
-    let i_equ = model.layout.i_dlne_dt;
-    sys.save_eqn_residual(&model.layout, k, i_equ, &resid);
-
-    if include_chem {
-        for j in 0..model.species {
-            let d_eps_dx = model.d_epsnuc_dx[k * model.species + j];
-            sys.add_partial(
-                k,
-                i_equ,
-                k,
-                model.layout.chem_var_index(j),
-                scal * d_eps_dx,
-            );
-        }
-    }
-}
-
-/// Optional kinematic radius-velocity equation for face `k` (`do1_radius_eqn`
-/// in `star/private/hydro_momentum.f90:552-608`).
-pub fn do1_radius_eqn(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
-    let Some(i_dlnr_dt) = model.layout.i_dlnr_dt else {
-        return;
-    };
-    let vel_val = if model.controls.v_flag {
-        model.v[k]
-    } else {
-        model.u[k]
-    };
-    let v_ad = StarAdOrder1::variable(vel_val, I_V_00);
-    let lnr_ad = StarAdOrder1::variable(model.ln_r[k], I_LNR_00);
-    let r_start = model.ln_r_start[k].exp().max(1.0);
-    let resid = v_ad * (model.dt / r_start)
-        - ((lnr_ad - model.ln_r_start[k]).exp() - 1.0);
-    sys.save_eqn_residual(&model.layout, k, i_dlnr_dt, &resid);
 }
 
 /// Coupled nuclear burning and diffusive mixing equations for cell `k`
 /// (`do1_chem_eqns` in `star/private/hydro_chem_eqns.f90:50-222`).
 ///
 /// Combines start-of-step Lagrangian diffusive mixing $\sigma_k$ across faces
-/// `k` and `k + 1` with the reaction-network abundance rates $\dot{X}_{\mathrm{nuc},j,k}$
-/// and their partial derivatives with respect to $(\ln\rho_k, \ln T_k, X_{m,k})$.
+/// `k` and `k + 1` (gated by `do_mix` and `mix_factor`) with the
+/// reaction-network abundance rates $\dot{X}_{\mathrm{nuc},j,k}$ and their
+/// partial derivatives with respect to $(\ln\rho_k, \ln T_k, X_{m,k})$ (gated
+/// by `do_burn`, `dxdt_nuc_factor`, and `!doing_op_split_burn`).
 pub fn do1_chem_eqns(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
     let nz = model.nz;
     let species = model.species;
     let dt = model.dt.max(1.0e-30);
     let dm_k = model.dm[k].max(1.0e-30);
-    let sig_00 = if k > 0 { model.sig[k] } else { 0.0 };
-    let sig_p1 = if k + 1 < nz { model.sig[k + 1] } else { 0.0 };
+
+    let t_start_k = model
+        .ln_t_start
+        .get(k)
+        .copied()
+        .unwrap_or(model.ln_t[k])
+        .exp();
+    let doing_op_split_burn = model.controls.op_split_burn
+        && t_start_k >= model.controls.op_split_burn_min_t;
+    let active_burn = model.controls.do_burn
+        && model.controls.dxdt_nuc_factor != 0.0
+        && !doing_op_split_burn;
+
+    let mix_fac = if model.controls.do_mix {
+        model.controls.mix_factor
+    } else {
+        0.0
+    };
+    let sig_00 = if k > 0 { model.sig[k] * mix_fac } else { 0.0 };
+    let sig_p1 = if k + 1 < nz {
+        model.sig[k + 1] * mix_fac
+    } else {
+        0.0
+    };
     let sig_00_dm = sig_00 / dm_k;
     let sig_p1_dm = sig_p1 / dm_k;
 
@@ -457,7 +329,11 @@ pub fn do1_chem_eqns(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
         let i_var = model.layout.chem_var_index(j);
         let i_equ = i_var;
         let nuc_base = k * species * species + j * species;
-        let d_self = model.d_dxdt_nuc_dx[nuc_base + j].abs();
+        let d_self = if active_burn {
+            model.d_dxdt_nuc_dx[nuc_base + j].abs()
+        } else {
+            0.0
+        };
         let x_scale_kj = sys.x_scale[k * sys.nvar + i_var];
         let rate_scale =
             (1.0 / dt + sig_00_dm + sig_p1_dm + d_self).max(1.0e-30);
@@ -476,45 +352,49 @@ pub fn do1_chem_eqns(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
             0.0
         };
         let dxdt_mix = (f_00 - f_p1) / dm_k;
-        let dxdt_nuc = model.dxdt_nuc[kj];
+        let dxdt_nuc = if active_burn { model.dxdt_nuc[kj] } else { 0.0 };
         let dxdt_actual = (x_00 - x_start) / dt;
         sys.equ[k * sys.nvar + i_equ] =
             (dxdt_mix + dxdt_nuc - dxdt_actual) / eqn_scale;
 
-        sys.add_partial(
-            k,
-            i_equ,
-            k,
-            model.layout.i_lnd,
-            model.d_dxdt_nuc_dlnd[kj] / eqn_scale,
-        );
-        sys.add_partial(
-            k,
-            i_equ,
-            k,
-            model.layout.i_lnt,
-            model.d_dxdt_nuc_dlnt[kj] / eqn_scale,
-        );
+        if active_burn {
+            sys.add_partial(
+                k,
+                i_equ,
+                k,
+                model.layout.i_lnd,
+                model.d_dxdt_nuc_dlnd[kj] / eqn_scale,
+            );
+            sys.add_partial(
+                k,
+                i_equ,
+                k,
+                model.layout.i_lnt,
+                model.d_dxdt_nuc_dlnt[kj] / eqn_scale,
+            );
+        }
 
         let d_diag = (-(sig_00_dm + sig_p1_dm) - 1.0 / dt) / eqn_scale;
         sys.add_partial(k, i_equ, k, i_var, d_diag);
-        if k > 0 {
+        if k > 0 && sig_00_dm != 0.0 {
             sys.add_partial(k, i_equ, k - 1, i_var, sig_00_dm / eqn_scale);
         }
-        if k + 1 < nz {
+        if k + 1 < nz && sig_p1_dm != 0.0 {
             sys.add_partial(k, i_equ, k + 1, i_var, sig_p1_dm / eqn_scale);
         }
 
-        for m in 0..species {
-            let d_nuc = model.d_dxdt_nuc_dx[nuc_base + m];
-            if d_nuc != 0.0 {
-                sys.add_partial(
-                    k,
-                    i_equ,
-                    k,
-                    model.layout.chem_var_index(m),
-                    d_nuc / eqn_scale,
-                );
+        if active_burn {
+            for m in 0..species {
+                let d_nuc = model.d_dxdt_nuc_dx[nuc_base + m];
+                if d_nuc != 0.0 {
+                    sys.add_partial(
+                        k,
+                        i_equ,
+                        k,
+                        model.layout.chem_var_index(m),
+                        d_nuc / eqn_scale,
+                    );
+                }
             }
         }
     }

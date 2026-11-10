@@ -25,15 +25,17 @@
 
    $$\frac{\partial \ln T}{\partial \ln P} = \nabla_{T,k} \quad \Longrightarrow \quad R_{\ln T, k} = \left(\ln T_{k-1} - \ln T_k\right) - \nabla_{T,k}\,\left(\ln P_{k-1} - \ln P_k\right) = 0.$$
 
-4. **Thermal Energy Conservation & Nuclear Burning (`equ_L`)**:
+4. **Thermal Energy Conservation & Nuclear Burning (`equ_L`, `hydro_energy.rs`)**:
 
-   $$\frac{\partial L}{\partial m} = \epsilon_{\mathrm{nuc}} - \epsilon_\nu + \epsilon_{\mathrm{grav}} + \epsilon_{\dot{M}}, \qquad \epsilon_{\mathrm{grav}} = -\frac{\partial e}{\partial t} + \frac{P}{\rho^2}\frac{\partial \rho}{\partial t}.$$
+   $$\frac{\partial L}{\partial m} = \epsilon_{\mathrm{nuc}} - \bar{\epsilon}_{\nu,\mathrm{non\text{-}nuc}} + \epsilon_{\mathrm{grav}} + \epsilon_{\mathrm{extra}} + \epsilon_{\mathrm{diff}} + \epsilon_{\mathrm{premix}} + \epsilon_{\mathrm{phase}} + \epsilon_{\mathrm{irr}} + \epsilon_{\mathrm{drag}} + \epsilon_{\mathrm{RTI}} - \frac{\partial e_{\mathrm{turb}}}{\partial t},$$
 
-5. **Species Evolution (`equ_chem`)**:
+   where $\bar{\epsilon}_{\nu,\mathrm{non\text{-}nuc}} = \frac{1}{2}(\epsilon_{\nu,\mathrm{start}} + \epsilon_\nu)$ time-centers non-nuclear neutrino losses whenever `non_nuc_neu_start` is populated (`hydro_energy.f90:258`), luminosity gradients use velocity time-centering $\theta_L \in [0.5, 1]$ (`l_theta_for_velocity_time_centering`), mechanical work incorporates time-centered gas pressure $\theta_P \in [0.5, 1]$ (`p_theta_for_velocity_time_centering`), artificial viscosity $P_{\mathrm{vsc}}$ (`pvsc_cq`, `pvsc_zshock`), and MLT turbulent pressure $P_{\mathrm{turb}}$, and $\epsilon_{\mathrm{grav}}$ (`eps_grav.rs`) blends the base thermodynamic $(P, \rho, T)$ form (`eval_eps_grav_std_cell`) with the degenerate Potekhin & Chabrier (2010) entropy $\ln S$ form (`eval_eps_grav_lns_cell`) across $\Gamma \in [\Gamma_{\ln S,\mathrm{off}}, \Gamma_{\ln S,\mathrm{on}}]$ weighted by `eos_frac_pc`, time-centered specific heat and adiabatic gradients (`use_time_centered_eps_grav`), phase-transition latent heat (`latent_ddlnrho`, `latent_ddlnt`), and composition work (`include_composition_in_eps_grav`).
+
+5. **Species Evolution (`equ_chem`, `hydro_eqns.rs`)**:
 
    $$\frac{\partial X_{j,k}}{\partial t} = \left(\frac{\partial X_{j,k}}{\partial t}\right)_{\mathrm{burn}} + \frac{1}{dm_k}\left(\sigma_{k+1}\,\left[X_{j,k+1} - X_{j,k}\right] - \sigma_k\,\left[X_{j,k} - X_{j,k-1}\right]\right),$$
 
-   where $\sigma_k = (4\pi r_k^2 \rho_{\mathrm{face},k})^2 D_{\mathrm{mix},k} / dm_{\mathrm{bar},k}$ is the Lagrangian diffusive coupling conductance.
+   where $\sigma_k = f_{\mathrm{mix}} (4\pi r_k^2 \rho_{\{face\},k})^2 D_{\mathrm{mix},k} / dm_{\mathrm{bar},k}$ is the Lagrangian diffusive coupling conductance scaled by `mix_factor`, and nuclear burning is gated by `do_burn` and operator-split burning (`doing_op_split_burn`).
 
 ---
 

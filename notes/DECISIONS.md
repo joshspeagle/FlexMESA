@@ -161,3 +161,16 @@ Every choice that another developer could reasonably make differently and that a
 - **Alternatives Rejected**:
   - *Skipping `test_suite` cases that use `run_star_extras.f90` or deferred `RSP`/`GYRE` hooks*: Would leave 58% of the upstream `test_suite` unverified.
   - *Retaining wave-numbered (`Wave 0`–`Wave 5`) top-level documentation navigation*: Mixes internal engineering chronology with user-facing scientific concepts and API reference.
+
+---
+
+## DECISIONS #11: Track 3 Systematic Fortran-to-Rust Line-by-Line Fidelity Audit (`Fidelity-1`–`Fidelity-4`, Epic `#109`)
+
+- **Date**: 2026-11-09
+- **Decision**:
+  1. **`Fidelity-1` (`#112`) Six-Module Hydro Equation Architecture & `HydroAuxState` Extraction (`<= 600` LOC Ceiling)**: Split the 1D stellar structure equation assembly into six modular files mirroring upstream `star/private/` (`hydro_state.rs`, `eps_grav.rs`, `hydro_energy.rs`, `hydro_momentum.rs`, `hydro_temperature.rs`, and `hydro_eqns.rs`) and group auxiliary start-of-step and secondary heating/hydro vectors into `HydroAuxState` (`model.aux`) on `StarModel` so every file remains well below the 600-line ceiling while preserving public re-exports in `hydro_eqns.rs` and `lib.rs`.
+  2. **Line-by-Line `StarAdOrder1` Analytical Jacobian Parity Across `eps_grav`, `hydro_energy`, `hydro_momentum`, and `hydro_temperature`**: Restore all secondary physics terms and 3-cell `StarAdOrder1` analytical partial derivatives from `eps_grav.f90`, `hydro_energy.f90`, `hydro_momentum.f90`, `hydro_temperature.f90`, and `hydro_chem_eqns.f90`, including time-centered specific heat and adiabatic gradients (`use_time_centered_eps_grav`), PC entropy $\ln S$ blending (`eval_eps_grav_lns_cell`), phase-transition latent heat (`latent_ddlnrho`, `latent_ddlnt`), luminosity/pressure/velocity/area time-centering (`l_theta_for_velocity_time_centering`, `p_theta_for_velocity_time_centering`, `eval_face_area_time_centered_ad`), secondary heating channels (`burn_avg_epsnuc`, `nonlocal_nico_decay_heat`, `extra_heat`, `eps_wd_sedimentation`, `eps_diffusion`, `eps_pre_mix`, `eps_phase_separation`, `irradiation_heat`, `eq_ad`, `setup_rti_diffusion`, `drag_energy`), turbulent energy rate (`setup_d_turbulent_energy_dt`), artificial viscosity `Pvsc` (`pvsc_cq`, `pvsc_zshock`), MLT turbulent pressure `mlt_Pturb`, composition partials (`d_epsnuc_dx`, `dln_e_dxa_for_partials`, `d_eps_grav_dx`, `dln_peos_dxa_for_partials`), rotational $(f_P, f_T)$ distortion factors, and the Levermore & Pomraning (1981) radiation flux limiter (`do1_alt_dlnt_dm_eqn`).
+- **Why**: Ensures that optional hydrodynamic, rotational, white-dwarf crystallization, convective premixing, and pulsation terms in `star/private/hydro_*.f90` and `eps_grav.f90` retain exact 3-cell `StarAdOrder1` analytical Jacobians alongside the baseline hydrostatic terms.
+- **Alternatives Rejected**:
+  - *Evaluating secondary hydro terms as `f64` scalars without `StarAdOrder1` partials*: Degrades Henyey Newton-Raphson quadratic convergence whenever non-HSE, rotational, or flux-limited regimes activate.
+  - *Keeping all restored hydro equations in a single monolithic `hydro_eqns.rs` file*: Would exceed `1,600` LOC and violate the repository's 600-line modular file ceiling.

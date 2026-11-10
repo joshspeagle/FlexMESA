@@ -254,6 +254,13 @@ impl InlistBundle {
             reimers_scaling_factor, blocker_scaling_factor, vink_scaling_factor,
             dutch_scaling_factor, irradiation_flux, column_depth_for_irradiation,
             rsp_mass, rsp_teff, rsp_l, rsp_x, rsp_z,
+            l_theta_for_velocity_time_centering, p_theta_for_velocity_time_centering,
+            max_logt_for_include_p_and_l_in_velocity_time_centering, op_split_burn_min_t,
+            tdc_alpha_m, dedt_rti_diffusion_factor, dudt_rti_diffusion_factor,
+            drag_coefficient, min_q_for_drag, mlt_pturb_factor, pvsc_cq, pvsc_zshock,
+            eps_grav_factor, gamma_ln_s_eps_grav_full_on, gamma_ln_s_eps_grav_full_off,
+            velocity_q_upper_bound, velocity_tau_lower_bound, velocity_logt_lower_bound,
+            mix_factor,
         ]);
         map_strs!(ctrl, c, [
             zams_filename, cool_wind_rgb_scheme, cool_wind_agb_scheme, phase_separation_option,
@@ -265,6 +272,16 @@ impl InlistBundle {
             use_other_alpha_mlt, use_other_wind, use_other_adjust_mdot, use_other_torque,
             use_other_energy, use_other_eps_grav, use_other_neu, use_other_kap,
             use_other_surface_pt, use_other_overshooting_scheme, use_other_momentum_implicit,
+            using_velocity_time_centering, include_l_in_velocity_time_centering,
+            include_p_in_velocity_time_centering,
+            use_p_d_1_div_rho_form_of_work_when_time_centering_velocity,
+            nonlocal_nico_decay_heat, do_premix_heating,
+            tdc_include_eturb_in_energy_equation, rti_flag, use_drag_energy,
+            use_pvsc_art_visc, use_time_centered_eps_grav,
+            include_composition_in_eps_grav, use_gravity_rotation_correction,
+            use_mass_corrections, use_gradt_actual_vs_gradt_mlt_for_t_gradient_eqn,
+            use_dprad_dm_form_of_t_gradient_eqn, use_rsp_l_eqn_outer_bc,
+            do_burn, do_mix,
         ]);
         ctrl.bool_into(&mut self.job.use_other_build_initial_model, "use_other_build_initial_model");
         c.accretion_species_id = ctrl.get_indexed_strings("accretion_species_id");

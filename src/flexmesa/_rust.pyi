@@ -457,6 +457,15 @@ def star_build_pulse_points(model: RustStarModel, add_center_point: bool = True,
 def star_export_gyre(model: RustStarModel, add_center_point: bool = True) -> str: ...  # noqa: E501
 def star_export_fgong(model: RustStarModel, add_center_point: bool = True) -> str: ...  # noqa: E501
 def star_export_osc(model: RustStarModel, add_center_point: bool = True) -> str: ...  # noqa: E501
+def star_export_gsm(model: RustStarModel, add_center_point: bool = True) -> bytes: ...  # noqa: E501
+def star_export_saio(model: RustStarModel, add_center_point: bool = True) -> str: ...  # noqa: E501
+def star_export_cafein(model: RustStarModel, add_center_point: bool = True) -> str: ...  # noqa: E501
+def star_export_gr1d(model: RustStarModel, _add_center_point: bool = True) -> str: ...  # noqa: E501
+def star_export_pulse_by_format(model: RustStarModel, format: str, add_center_point: bool = True) -> str: ...  # noqa: E501
+def star_solve_gyre_mesa_modes(mesa_str: str, l: int, omega_min: float, omega_max: float, n_scan: int = 200, _nonadiabatic: bool = True) -> list[tuple[int, int, int, int, float, float, float, float, float]]: ...  # noqa: E501
+def star_solve_adipls_fgong_modes(fgong_str: str, l: int, freq_min_uhz: float, freq_max_uhz: float, n_scan: int = 500) -> list[tuple[int, int, int, int, float, float, float, float]]: ...  # noqa: E501
+def star_export_stella_pair(model: RustStarModel) -> tuple[str, str]: ...
+def star_run_stella_from_hyd_abn(hyd_str: str, abn_str: str, eta_str: str, times_days: list[float]) -> tuple[list[tuple[float, float]], list[tuple[float, float, float, float]]]: ...  # noqa: E501
 
 class RustBinarySystem:
     donor: RustStarModel

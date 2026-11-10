@@ -5,8 +5,12 @@
 use flexmesa_star::{
     build_pulse_points, eval_center_parabolic, eval_hllc_face,
     eval_hllc_surface_face, eval_riemann_momentum_residual,
-    eval_riemann_profile, eval_rsp2_face, eval_rsp2_zone, export_fgong,
-    export_gyre, export_osc, solve_stationary_rsp2_w, Rsp2Config,
+    eval_riemann_profile, eval_rsp2_face, eval_rsp2_zone, export_cafein,
+    export_fgong, export_gr1d, export_gsm, export_gyre, export_osc,
+    export_pulse_by_format, export_saio, export_stella_pair, parse_stella_abn,
+    parse_stella_hyd, run_stella_from_hyd_abn, solve_adipls_fgong_modes,
+    solve_gyre_mesa_modes, solve_stationary_rsp2_w, FeII5169EtaTable,
+    Rsp2Config, StellaExportOptions,
 };
 use numpy::{IntoPyArray, PyArray1, PyArray2, PyReadonlyArray1};
 use pyo3::prelude::*;
@@ -376,6 +380,179 @@ pub fn star_export_osc(
     py.detach(|| export_osc(&model.inner, add_center_point))
 }
 
+/// Exports `model` in `GYRE` `GSM` v110 binary/HDF-compatible format (`pulse_gsm.f90`).
+#[pyfunction]
+#[pyo3(signature = (model, add_center_point = true))]
+pub fn star_export_gsm(
+    py: Python<'_>,
+    model: &PyStarModel,
+    add_center_point: bool,
+) -> Vec<u8> {
+    py.detach(|| export_gsm(&model.inner, add_center_point).into_bytes())
+}
+
+/// Exports `model` in `SAIO` ASCII format (`pulse_saio.f90`).
+#[pyfunction]
+#[pyo3(signature = (model, add_center_point = true))]
+pub fn star_export_saio(
+    py: Python<'_>,
+    model: &PyStarModel,
+    add_center_point: bool,
+) -> String {
+    py.detach(|| export_saio(&model.inner, add_center_point, true))
+}
+
+/// Exports `model` in `CAFEIN` ASCII format (`pulse_cafein.f90`).
+#[pyfunction]
+#[pyo3(signature = (model, add_center_point = true))]
+pub fn star_export_cafein(
+    py: Python<'_>,
+    model: &PyStarModel,
+    add_center_point: bool,
+) -> String {
+    py.detach(|| export_cafein(&model.inner, add_center_point, true, false))
+}
+
+/// Exports `model` in `GR1D` ASCII format (`pulse_gr1d.f90`).
+#[pyfunction]
+#[pyo3(signature = (model, _add_center_point = true))]
+pub fn star_export_gr1d(
+    py: Python<'_>,
+    model: &PyStarModel,
+    _add_center_point: bool,
+) -> String {
+    py.detach(|| export_gr1d(&model.inner))
+}
+
+/// Exports `model` in any pulsation format (`gyre`, `fgong`, `osc`, `gsm`, `saio`,
+/// `cafein`, `gr1d`).
+#[pyfunction]
+#[pyo3(signature = (model, format, add_center_point = true))]
+pub fn star_export_pulse_by_format(
+    py: Python<'_>,
+    model: &PyStarModel,
+    format: &str,
+    add_center_point: bool,
+) -> String {
+    py.detach(|| {
+        export_pulse_by_format(&model.inner, format, add_center_point)
+            .unwrap_or_default()
+    })
+}
+
+/// Solves the 4th-order BVP on a `GYRE` MESA-format model string.
+#[pyfunction]
+#[pyo3(signature = (mesa_str, l, omega_min, omega_max, n_scan = 200, _nonadiabatic = true))]
+#[allow(clippy::type_complexity)]
+pub fn star_solve_gyre_mesa_modes(
+    py: Python<'_>,
+    mesa_str: &str,
+    l: usize,
+    omega_min: f64,
+    omega_max: f64,
+    n_scan: usize,
+    _nonadiabatic: bool,
+) -> Vec<(usize, i32, i32, i32, f64, f64, f64, f64, f64)> {
+    py.detach(|| {
+        solve_gyre_mesa_modes(mesa_str, l, omega_min, omega_max, n_scan)
+            .into_iter()
+            .map(|m| {
+                (
+                    m.l,
+                    m.n_p,
+                    m.n_g,
+                    m.n_pg,
+                    m.omega,
+                    m.omega_int,
+                    m.freq_uhz,
+                    m.e_norm,
+                    m.omega_imag,
+                )
+            })
+            .collect()
+    })
+}
+
+/// Solves the 4th-order `ADIPLS` BVP on an `FGONG` model string.
+#[pyfunction]
+#[pyo3(signature = (fgong_str, l, freq_min_uhz, freq_max_uhz, n_scan = 500))]
+#[allow(clippy::type_complexity)]
+pub fn star_solve_adipls_fgong_modes(
+    py: Python<'_>,
+    fgong_str: &str,
+    l: usize,
+    freq_min_uhz: f64,
+    freq_max_uhz: f64,
+    n_scan: usize,
+) -> Vec<(usize, i32, i32, i32, f64, f64, f64, f64)> {
+    py.detach(|| {
+        solve_adipls_fgong_modes(
+            fgong_str,
+            l,
+            freq_min_uhz,
+            freq_max_uhz,
+            n_scan,
+        )
+        .into_iter()
+        .map(|m| {
+            (
+                m.l,
+                m.n_p,
+                m.n_g,
+                m.n_pg,
+                m.freq_uhz,
+                m.freq_var_uhz,
+                m.e_adipls,
+                m.e_norm,
+            )
+        })
+        .collect()
+    })
+}
+
+/// Exports `model` as a `STELLA` `(hyd_str, abn_str)` pair (`stella_io.f90`).
+#[pyfunction]
+pub fn star_export_stella_pair(
+    py: Python<'_>,
+    model: &PyStarModel,
+) -> (String, String) {
+    py.detach(|| {
+        export_stella_pair(&model.inner, &StellaExportOptions::default())
+    })
+}
+
+/// Runs the `STELLA` radiation-hydrodynamics light-curve and Sobolev `Fe II` 5169
+/// line-velocity evaluation on `.hyd`, `.abn`, and `FeII_5169_eta.dat` strings.
+#[pyfunction]
+#[allow(clippy::type_complexity)]
+pub fn star_run_stella_from_hyd_abn(
+    py: Python<'_>,
+    hyd_str: &str,
+    abn_str: &str,
+    eta_str: &str,
+    times_days: Vec<f64>,
+) -> (Vec<(f64, f64)>, Vec<(f64, f64, f64, f64)>) {
+    py.detach(|| {
+        let hyd = parse_stella_hyd(hyd_str);
+        let abn = parse_stella_abn(abn_str);
+        let eta = FeII5169EtaTable::parse(eta_str);
+        let (lbol, vel) =
+            run_stella_from_hyd_abn(&hyd, &abn, &eta, &times_days);
+        let v_rows = vel
+            .into_iter()
+            .map(|r| {
+                (
+                    r.t_post_max_days,
+                    r.v_tau_lo_km_s,
+                    r.v_tau_med_km_s,
+                    r.v_tau_hi_km_s,
+                )
+            })
+            .collect();
+        (lbol, v_rows)
+    })
+}
+
 /// Registers Wave 5.2 functions on `flexmesa._rust`.
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(star_eval_hllc_face, m)?)?;
@@ -390,5 +567,14 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(star_export_gyre, m)?)?;
     m.add_function(wrap_pyfunction!(star_export_fgong, m)?)?;
     m.add_function(wrap_pyfunction!(star_export_osc, m)?)?;
+    m.add_function(wrap_pyfunction!(star_export_gsm, m)?)?;
+    m.add_function(wrap_pyfunction!(star_export_saio, m)?)?;
+    m.add_function(wrap_pyfunction!(star_export_cafein, m)?)?;
+    m.add_function(wrap_pyfunction!(star_export_gr1d, m)?)?;
+    m.add_function(wrap_pyfunction!(star_export_pulse_by_format, m)?)?;
+    m.add_function(wrap_pyfunction!(star_solve_gyre_mesa_modes, m)?)?;
+    m.add_function(wrap_pyfunction!(star_solve_adipls_fgong_modes, m)?)?;
+    m.add_function(wrap_pyfunction!(star_export_stella_pair, m)?)?;
+    m.add_function(wrap_pyfunction!(star_run_stella_from_hyd_abn, m)?)?;
     Ok(())
 }

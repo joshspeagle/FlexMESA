@@ -410,6 +410,7 @@ def _eval_pc_single_jit(
         g_full,
         mf_lim,
     )
+
     def _fn(r_in: jax.Array, t_in: jax.Array) -> jax.Array:
         return _eval_pc_res_single(r_in, t_in, *args)
 

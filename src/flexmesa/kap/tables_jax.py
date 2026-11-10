@@ -268,9 +268,7 @@ def ensure_indexed() -> memoryview:
     with jax.ensure_compile_time_eval():
         for _ in range(nzs_a):
             nx_a, nfco_a, nfc_a, nfn_a = u32(), u32(), u32(), u32()
-            xs_a = np.frombuffer(
-                mv, dtype="<f8", count=nx_a, offset=pos
-            ).copy()
+            xs_a = np.frombuffer(mv, dtype="<f8", count=nx_a, offset=pos).copy()
             pos += nx_a * 8
             fcos_a = np.frombuffer(
                 mv, dtype="<f8", count=nfco_a, offset=pos
@@ -299,6 +297,7 @@ def ensure_indexed() -> memoryview:
                     "fns": jnp.asarray(fns_a),
                     "total_slices": total_slices,
                     "offset": slice_start,
+                    "z_present": z_present,
                 }
             )
         AESOPUS_META.update(
@@ -360,13 +359,17 @@ def get_fixed_set_jax(prefix: str) -> dict[str, Any]:
     raw_grids: list[np.ndarray] = []
     log_rs_ref: np.ndarray | None = None
     log_ts_ref: np.ndarray | None = None
-    grid_idx_map = np.zeros((num_zs, max_xs), dtype=np.int32)
+    grid_idx_map = np.full((num_zs, max_xs), -1, dtype=np.int32)
 
     for iz, (_, x_list) in enumerate(z_list):
         for ix, (start, _) in enumerate(x_list):
             p = start + 1
-            (x_v, _z_v, lr_min, lr_max, lt_min, lt_max) = struct.unpack_from(
-                "<6d", mv, p
+            x_v, _z_v = struct.unpack_from("<2d", mv, p)
+            xs_grid[iz, ix] = x_v
+            if mv[start] == 0:
+                continue
+            lr_min, lr_max, lt_min, lt_max = struct.unpack_from(
+                "<4d", mv, p + 16
             )
             p += 48
             nlr, nlt = struct.unpack_from("<2I", mv, p)
@@ -383,7 +386,6 @@ def get_fixed_set_jax(prefix: str) -> dict[str, Any]:
             )
             if log_rs_ref is None:
                 log_rs_ref, log_ts_ref = lrs, lts
-            xs_grid[iz, ix] = x_v
             bounds[iz, ix] = [lr_min, lr_max, lt_min, lt_max]
             grid_idx_map[iz, ix] = len(raw_grids)
             raw_grids.append(vals)
@@ -392,7 +394,21 @@ def get_fixed_set_jax(prefix: str) -> dict[str, Any]:
             bounds[iz, ix] = bounds[iz, len(x_list) - 1]
             grid_idx_map[iz, ix] = grid_idx_map[iz, len(x_list) - 1]
 
-    assert log_rs_ref is not None and log_ts_ref is not None
+    if log_rs_ref is None or log_ts_ref is None:
+        log_rs_ref = np.linspace(-8.0, 1.0, 37, dtype=np.float64)
+        log_ts_ref = np.linspace(3.75, 8.70, 138, dtype=np.float64)
+        raw_grids.append(np.zeros((138, 37), dtype=np.float64))
+    default_bounds = [
+        float(log_rs_ref[0]),
+        float(log_rs_ref[-1]),
+        float(log_ts_ref[0]),
+        float(log_ts_ref[-1]),
+    ]
+    for iz in range(num_zs):
+        for ix in range(max_xs):
+            if grid_idx_map[iz, ix] < 0:
+                bounds[iz, ix] = default_bounds
+                grid_idx_map[iz, ix] = 0
     coeffs_flat, ili_r, ili_t = fit_bicubic_batch(
         log_rs_ref, log_ts_ref, np.stack(raw_grids, axis=0)
     )

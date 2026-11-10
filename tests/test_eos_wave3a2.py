@@ -238,9 +238,7 @@ def test_eval_helm_eos_full_table_off_golden_grid_parity_and_autodiff() -> None:
     res_r3 = np.asarray(zones_r.res[:, :3])
     res_j3 = np.asarray(zones_j.res[:, :3])
     assert _rel_diff(res_r3, res_j3) <= 1.0e-12
-    assert (
-        _rel_diff(np.asarray(zones_r.res), np.asarray(zones_j.res)) < 1.0e-9
-    )
+    assert _rel_diff(np.asarray(zones_r.res), np.asarray(zones_j.res)) < 1.0e-9
     assert (
         _rel_diff(np.asarray(zones_r.d_dlnd), np.asarray(zones_j.d_dlnd))
         < 1.0e-9

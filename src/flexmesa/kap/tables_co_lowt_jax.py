@@ -50,6 +50,9 @@ def get_co_meta_jax(prefix: str) -> dict[str, Any]:
         for ix, start in enumerate(x_offsets):
             p = start + 1
             x_v, z_v = struct.unpack_from("<2d", mv, p)
+            xs[iz, ix] = x_v
+            if mv[start] == 0:
+                continue
             p += 16
             nco, ngt = struct.unpack_from("<2I", mv, p)
             p += 8
@@ -63,13 +66,13 @@ def get_co_meta_jax(prefix: str) -> dict[str, Any]:
             p += nlt * 8
             if lrs_ref is None:
                 lrs_ref, lts_ref = lrs, lts
-            xs[iz, ix] = x_v
             bounds[iz, ix] = bds
             num_co[iz, ix] = nco
             num_gt[iz, ix] = ngt
             for n in range(nco):
                 dc, do = struct.unpack_from("<2d", mv, p)
-                p += 17 + nlr * nlt * 2
+                sub_present = mv[p + 16] != 0
+                p += 17 + (nlr * nlt * 2 if sub_present else 0)
                 dxc_arr[iz, ix, n] = dc
                 dxo_arr[iz, ix, n] = do
                 dxc_l_arr[iz, ix, n] = np.log10(z_v + 1.0e-3 + dc)
@@ -141,18 +144,22 @@ def get_co_z_coeffs_jax(prefix: str, iz: int) -> jax.Array:
     nx = len(x_offsets)
     raw = np.zeros((nx, 60, nlt, nlr), dtype=np.float64)
     for ix, start in enumerate(x_offsets):
+        if mv[start] == 0:
+            continue
         p = start + 17
         nco, _ = struct.unpack_from("<2I", mv, p)
         p += 48 + (nlr + nlt) * 8
         for n in range(nco):
+            sub_present = mv[p + 16] != 0
             p += 17
-            raw[ix, n] = (
-                np.frombuffer(mv, dtype="<i2", count=nlr * nlt, offset=p)
-                .astype(np.float64)
-                .reshape(nlt, nlr)
-                / 1000.0
-            )
-            p += nlr * nlt * 2
+            if sub_present:
+                raw[ix, n] = (
+                    np.frombuffer(mv, dtype="<i2", count=nlr * nlt, offset=p)
+                    .astype(np.float64)
+                    .reshape(nlt, nlr)
+                    / 1000.0
+                )
+                p += nlr * nlt * 2
     coeffs, _, _ = tables_jax.fit_bicubic_batch(
         lrs, lts, raw.reshape(nx * 60, nlt, nlr)
     )
@@ -193,14 +200,17 @@ def get_aesopus_z_coeffs_jax(iz: int) -> jax.Array:
     ns = int(ts["total_slices"])
     p = int(ts["offset"])
     raw = np.zeros((ns, nlt, nlr), dtype=np.float64)
-    for s in range(ns):
-        p += 1
-        raw[s] = (
-            np.frombuffer(mv, dtype="<f4", count=nlr * nlt, offset=p)
-            .astype(np.float64)
-            .reshape(nlt, nlr)
-        )
-        p += nlr * nlt * 4
+    if ts.get("z_present", True):
+        for s in range(ns):
+            sub_present = mv[p] != 0
+            p += 1
+            if sub_present:
+                raw[s] = (
+                    np.frombuffer(mv, dtype="<f4", count=nlr * nlt, offset=p)
+                    .astype(np.float64)
+                    .reshape(nlt, nlr)
+                )
+                p += nlr * nlt * 4
     coeffs, _, _ = tables_jax.fit_bicubic_batch(lrs, lts, raw)
     with jax.ensure_compile_time_eval():
         arr = jnp.asarray(coeffs)

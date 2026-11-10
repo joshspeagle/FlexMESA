@@ -105,7 +105,7 @@ fn test_wave5_2_riemann_rsp2_and_pulse_exporters_preserve_invariants() {
     let fgong_str = export_fgong(&model, true);
     assert_eq!(fgong_str.lines().count(), 5 + 3 + 8 * n_pts);
     let osc_str = export_osc(&model, true);
-    assert_eq!(osc_str.lines().count(), 2 + 3 + 5 * n_pts);
+    assert_eq!(osc_str.lines().count(), 6 + 3 + 8 * n_pts);
 }
 
 #[test]

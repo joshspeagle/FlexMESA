@@ -158,9 +158,7 @@ def electron_conduction_potekhin_jax(
     alfa = jnp.where(
         zlog <= lzs[0],
         0.0,
-        jnp.where(
-            zlog >= lzs[14], 1.0, (zlog - lzs[i1]) / (lzs[i2] - lzs[i1])
-        ),
+        jnp.where(zlog >= lzs[14], 1.0, (zlog - lzs[i1]) / (lzs[i2] - lzs[i1])),
     )
     beta = 1.0 - alfa
     log_k = alfa * lk2 + beta * lk1
@@ -223,15 +221,11 @@ def electron_conduction_jax(
     lzb = jnp.log10(jnp.maximum(zb, 1.0))
     alfa_12 = lzb / log2
     alfa_23 = (lzb - log2) / (log3 - log2)
-    frac_h = jnp.where(
-        zb <= 1.0, 1.0, jnp.where(zb <= 2.0, 1.0 - alfa_12, 0.0)
-    )
+    frac_h = jnp.where(zb <= 1.0, 1.0, jnp.where(zb <= 2.0, 1.0 - alfa_12, 0.0))
     frac_he = jnp.where(
         zb <= 1.0,
         0.0,
-        jnp.where(
-            zb <= 2.0, alfa_12, jnp.where(zb <= 3.0, 1.0 - alfa_23, 0.0)
-        ),
+        jnp.where(zb <= 2.0, alfa_12, jnp.where(zb <= 3.0, 1.0 - alfa_23, 0.0)),
     )
 
     ch, dch_r, dch_t = _blouin_term_jax(
@@ -444,9 +438,17 @@ def kap_get_results_jax(
 
     def _eval_high_t() -> tuple[jax.Array, jax.Array, jax.Array, jax.Array]:
         return _eval_high_t_jax(
-            z_a, x_a, zb_a, xc_a, xo_a, lr, lt,
-            kap_option=kap_option, kap_co_option=kap_co_option,
-            cubic_x=cubic_interpolation_in_x, cubic_z=cubic_interpolation_in_z,
+            z_a,
+            x_a,
+            zb_a,
+            xc_a,
+            xo_a,
+            lr,
+            lt,
+            kap_option=kap_option,
+            kap_co_option=kap_co_option,
+            cubic_x=cubic_interpolation_in_x,
+            cubic_z=cubic_interpolation_in_z,
             use_zbase_for_type1=use_zbase_for_type1,
             use_type2_opacities=use_type2_opacities,
             kap_type2_full_off_x=kap_type2_full_off_x,
@@ -510,9 +512,14 @@ def kap_get_results_jax(
     dblend_dt = (1.0 - br) * dbt_dt - 3.0 * (1.0 - bt) * dbr_dlr
 
     kc, dkc_dr, dkc_dt = compton_opacity_jax(
-        jnp.power(10.0, lr_in), jnp.power(10.0, lt),
-        lnfree_e, d_lnfree_e_dln_rho, d_lnfree_e_dln_t,
-        eta, d_eta_dln_rho, d_eta_dln_t,
+        jnp.power(10.0, lr_in),
+        jnp.power(10.0, lt),
+        lnfree_e,
+        d_lnfree_e_dln_rho,
+        d_lnfree_e_dln_t,
+        eta,
+        d_eta_dln_rho,
+        d_eta_dln_t,
     )
     lk_c = jnp.where(blend > 0.0, jnp.log10(jnp.maximum(kc, 1.0e-99)), 0.0)
     lk_tbl = jnp.where(blend < 1.0, jnp.log10(jnp.maximum(kr, 1.0e-99)), 0.0)
@@ -527,12 +534,14 @@ def kap_get_results_jax(
         + (1.0 - blend) * jnp.where(blend < 1.0, dkr_dt, 0.0)
         + dblend_dt * (lk_c - lk_tbl)
     )
-    fracs = jnp.stack([
-        jnp.where(blend < 1.0, (1.0 - blend) * f_low, 0.0),
-        jnp.where(blend < 1.0, (1.0 - blend) * f_high, 0.0),
-        jnp.where(blend < 1.0, f_t2, 0.0),
-        blend,
-    ])
+    fracs = jnp.stack(
+        [
+            jnp.where(blend < 1.0, (1.0 - blend) * f_low, 0.0),
+            jnp.where(blend < 1.0, (1.0 - blend) * f_high, 0.0),
+            jnp.where(blend < 1.0, f_t2, 0.0),
+            blend,
+        ]
+    )
     if not include_electron_conduction:
         return kap_rad, dlk_rad_dr, dlk_rad_dt, fracs
     k_ec, dec_dr, dec_dt = electron_conduction_jax(
@@ -565,12 +574,21 @@ def make_differentiable_kap(
     eval_fn = jax.jit(
         functools.partial(
             kap_get_results_jax,
-            z, x, zbase, xc, xn, xo, xne,
+            z,
+            x,
+            zbase,
+            xc,
+            xn,
+            xo,
+            xne,
             lnfree_e=lnfree_e,
             d_lnfree_e_dln_rho=d_lnfree_e_dln_rho,
             d_lnfree_e_dln_t=d_lnfree_e_dln_t,
-            eta=eta, d_eta_dln_rho=d_eta_dln_rho, d_eta_dln_t=d_eta_dln_t,
-            zbar=zbar, **kwargs,
+            eta=eta,
+            d_eta_dln_rho=d_eta_dln_rho,
+            d_eta_dln_t=d_eta_dln_t,
+            zbar=zbar,
+            **kwargs,
         )
     )
 

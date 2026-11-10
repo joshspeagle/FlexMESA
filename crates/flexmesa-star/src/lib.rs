@@ -86,7 +86,11 @@ pub mod overshoot;
 pub mod pre_ms;
 pub mod premix;
 pub mod pulse;
+pub mod pulse_bvp;
+pub mod pulse_bvp_recon;
+pub mod pulse_exporters;
 pub mod pulse_modes;
+pub mod pulse_utils;
 pub mod relax;
 pub mod riemann;
 pub mod rotation;
@@ -95,6 +99,7 @@ pub mod rsp_build;
 pub mod solver;
 pub mod star_ad;
 pub mod star_job_init;
+pub mod stella;
 pub mod struct_burn_mix;
 pub mod termination;
 pub mod tier1_extras;
@@ -115,6 +120,8 @@ mod tests_fidelity1;
 mod tests_fidelity2;
 #[cfg(test)]
 mod tests_fidelity4;
+#[cfg(test)]
+mod tests_phase3_pulse_stella;
 #[cfg(test)]
 mod tests_wave5;
 
@@ -190,14 +197,30 @@ pub use premix::{
     eval_castellani_penetration_vel, eval_phase_separation_shift,
 };
 pub use pulse::{
-    build_pulse_points, eval_center_parabolic, export_fgong, export_gyre,
-    export_osc, PulsePoint,
+    build_pulse_points, build_pulse_points_with_options, eval_center_d2,
+    eval_center_parabolic, eval_center_rho, eval_face, export_fgong,
+    export_fgong_with_version, export_gyre, export_gyre_with_schema,
+    export_osc, set_segment_indices, PulseExportOptions, PulsePoint,
+    PULSE_ISO_NAMES,
+};
+pub use pulse_bvp::{
+    shoot_determinant, steffen_slopes, BvpEigenmode, BvpModel, BvpPoint,
+    InertiaNormKind, OuterBoundKind,
+};
+pub use pulse_bvp_recon::{
+    classify_mode_orders, parse_fgong_model, parse_fortran_float,
+    parse_gyre_mesa_model, reconstruct_and_analyze_mode,
+};
+pub use pulse_exporters::{
+    export_cafein, export_gr1d, export_gsm, export_gsm_data,
+    export_pulse_by_format, export_saio, GsmData,
 };
 pub use pulse_modes::{
-    eval_acoustic_large_separation_hz, eval_astero_scaling_dnu_numax_uhz,
-    eval_buoyancy_period_spacing_s, eval_kappa_mechanism_growth,
-    eval_linear_oscillation_modes, eval_target_mode_frequency_and_growth,
-    LinearOscillationMode,
+    build_bvp_model_from_pulse_points, eval_acoustic_large_separation_hz,
+    eval_astero_scaling_dnu_numax_uhz, eval_buoyancy_period_spacing_s,
+    eval_kappa_mechanism_growth, eval_linear_oscillation_modes,
+    eval_target_mode_frequency_and_growth, solve_adipls_fgong_modes,
+    solve_bvp_eigenmodes, solve_gyre_mesa_modes, LinearOscillationMode,
 };
 pub use relax::{
     apply_composition_relaxation, apply_uniform_rotation, relax_core_boundary,
@@ -233,6 +256,12 @@ pub use star_ad::{
     I_OMEGA_M1, I_OMEGA_P1, I_V_00, I_V_M1, I_V_P1, NUM_STAR_AD_VARS,
 };
 pub use star_job_init::init_or_update_model_from_bundle;
+pub use stella::{
+    eval_sobolev_feii_5169_snapshot, export_stella_pair, parse_stella_abn,
+    parse_stella_hyd, parse_stella_lbol, run_stella_from_hyd_abn,
+    FeII5169EtaTable, StellaAbnZone, StellaExportOptions, StellaHydModel,
+    StellaHydZone, StellaVelFeIIRow,
+};
 pub use struct_burn_mix::{
     do_struct_burn_mix, op_split_burn_zones, solve_composition_diffusion,
     solve_omega_mix,

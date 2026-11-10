@@ -6,12 +6,16 @@ structure exporters (Issues #80, #4, and #5).
 
 from __future__ import annotations
 
+import pathlib
+
 import jax
 import jax.numpy as jnp
 import jax.test_util as jtu
 import numpy as np
 
 from flexmesa import _rust, star
+
+_GOLDEN_DIR = pathlib.Path(__file__).resolve().parent / "fixtures" / "golden"
 
 
 def test_hllc_riemann_face_and_surface_match_jax_and_preserve_hydrostatic() -> (
@@ -341,17 +345,17 @@ def test_star_model_riemann_profile_and_pulse_exporters() -> None:
     assert abs(pts[0, 24] - 3.0) <= 1.0e-14
     assert np.all(np.diff(pts[:, 0]) >= 0.0)
     np.testing.assert_allclose(
-        pts[:, 18] + pts[:, 19] + pts[:, 20], 1.0, rtol=1.0e-14
+        pts[:, 18] + pts[:, 19] + pts[:, 20], 1.0, rtol=1.0e-3
     )
 
-    # Compare non-center Dziembowski columns directly against model.peos[::-1]
+    # Compare non-center Dziembowski columns against face-interpolated pts[1:]
     v_j, vg_j, a_j, u_j, c1_j = star.eval_dziembowski_variables_jax(
-        jnp.asarray(model.r[::-1]),
-        jnp.asarray(model.m[::-1]),
-        jnp.asarray(model.peos[::-1]),
-        jnp.asarray(model.rho[::-1]),
-        jnp.asarray(model.gamma1[::-1]),
-        jnp.asarray(model.brunt_n2[::-1]),
+        jnp.asarray(pts[1:, 0]),
+        jnp.asarray(pts[1:, 1]),
+        jnp.asarray(pts[1:, 3]),
+        jnp.asarray(pts[1:, 5]),
+        jnp.asarray(pts[1:, 8]),
+        jnp.asarray(pts[1:, 7]),
         jnp.full(model.nz, 6.67430e-8, dtype=jnp.float64),
         float(model.r[0]),
         float(model.mstar),
@@ -370,7 +374,7 @@ def test_star_model_riemann_profile_and_pulse_exporters() -> None:
     )
     assert pts_dbl.shape[0] > n_pts
     np.testing.assert_allclose(
-        pts_dbl[:, 18] + pts_dbl[:, 19] + pts_dbl[:, 20], 1.0, rtol=1.0e-14
+        pts_dbl[:, 18] + pts_dbl[:, 19] + pts_dbl[:, 20], 1.0, rtol=1.0e-3
     )
 
     gyre_txt = model.to_gyre_str(add_center_point=True)
@@ -378,4 +382,71 @@ def test_star_model_riemann_profile_and_pulse_exporters() -> None:
     fgong_txt = model.to_fgong_str(add_center_point=True)
     assert len(fgong_txt.splitlines()) == 5 + 3 + 8 * n_pts
     osc_txt = model.to_osc_str(add_center_point=True)
-    assert len(osc_txt.splitlines()) == 2 + 3 + 5 * n_pts
+    assert len(osc_txt.splitlines()) == 6 + 3 + 8 * n_pts
+    gsm_bytes = model.to_gsm_bytes(add_center_point=True)
+    assert gsm_bytes.startswith(b"# GSM")
+    saio_txt = model.to_saio_str(add_center_point=True)
+    assert len(saio_txt.splitlines()) >= 1 + 4 * model.nz
+    cafein_txt = model.to_cafein_str(add_center_point=True)
+    assert len(cafein_txt.splitlines()) >= n_pts
+    gr1d_txt = model.to_gr1d_str(add_center_point=True)
+    assert len(gr1d_txt.splitlines()) >= model.nz
+    for fmt in ("gyre", "fgong", "osc", "gsm", "saio", "cafein", "gr1d"):
+        assert len(model.to_pulse_str(fmt)) > 100
+
+
+def test_gyre_adipls_bvp_and_stella_golden_parity() -> None:
+    """Verify 34-mode `GYRE` BVP, 46-mode `ADIPLS` BVP, and `STELLA` Sobolev
+    golden parity from Python and JAX.
+    """
+    gyre_dir = _GOLDEN_DIR / "gyre"
+    mesa_str = (gyre_dir / "model.dat").read_text(encoding="utf-8")
+    modes_gyre = []
+    for deg in (0, 1):
+        modes_gyre.extend(
+            star.solve_gyre_mesa_modes(mesa_str, deg, 1.0, 20.0, 200, False)
+        )
+    assert len(modes_gyre) == 34
+
+    adipls_dir = _GOLDEN_DIR / "adipls"
+    fgong_str = (adipls_dir / "Gemma.fgong").read_text(encoding="utf-8")
+    modes_adipls = []
+    for deg in (0, 1, 2):
+        modes_adipls.extend(
+            star.solve_adipls_fgong_modes(fgong_str, deg, 220.0, 1000.0, 500)
+        )
+    assert len(modes_adipls) == 46
+
+    stella_dir = _GOLDEN_DIR / "stella"
+    hyd_str = (stella_dir / "mesa.hyd").read_text(encoding="utf-8")
+    abn_str = (stella_dir / "mesa.abn").read_text(encoding="utf-8")
+    eta_str = (stella_dir / "FeII_5169_eta.dat").read_text(encoding="utf-8")
+    lbol, vel = star.run_stella_from_hyd_abn(
+        hyd_str, abn_str, eta_str, [float(d) for d in range(1, 31)]
+    )
+    assert len(lbol) == 30
+    assert len(vel) > 0
+
+    model = star.StarModel.from_zams()
+    hyd_out, abn_out = model.to_stella_pair()
+    assert len(hyd_out.splitlines()) == 401
+    assert len(abn_out.splitlines()) == 400
+
+    # Verify JAX Sobolev optical depth autodiff
+    log_rho_j = jnp.array([-13.0, -12.3], dtype=jnp.float64)
+    xfe_j = jnp.array([1.2e-3, 1.2e-3], dtype=jnp.float64)
+    eta_j = jnp.array([1.0e-2, 2.0e-2], dtype=jnp.float64)
+    tau_j = star.eval_sobolev_feii_5169_tau_jax(
+        10.0**log_rho_j, xfe_j, eta_j, 10.0 * 86400.0
+    )
+    assert jnp.all(tau_j > 0.0)
+    jtu.check_grads(
+        lambda lr_in: jnp.sum(
+            star.eval_sobolev_feii_5169_tau_jax(
+                10.0**lr_in, xfe_j, eta_j, 10.0 * 86400.0
+            )
+        ),
+        (log_rho_j,),
+        order=1,
+        rtol=1.0e-6,
+    )

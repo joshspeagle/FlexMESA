@@ -20,6 +20,7 @@ import build_docs_figures_wave4 as _w4_figs
 import build_docs_figures_wave5 as _w5_figs
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import mesa_paper_figures as _paper_figs
 import numpy as np
 from matplotlib import figure, font_manager
 
@@ -85,6 +86,7 @@ def main() -> None:
     _w5_figs.plot_wave5_benchmark_speedup(out_dir)
     _w5_figs.plot_wave5_astero_echelle_surface_corr(out_dir)
     _w5_figs.plot_wave5_binary_rlof_evolution(out_dir)
+    _paper_figs.generate_all_mesa_paper_figures(root)
 
 
 def _register_latin_modern() -> None:

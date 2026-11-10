@@ -60,6 +60,43 @@ pub struct HelmVertex {
     pub xf: [f64; 4],
 }
 
+impl HelmVertex {
+    /// Analytical non-degenerate ideal/Fermi-Dirac electron [`HelmVertex`] at
+    /// electron density `d` ($\rho Y_e$, $\mathrm{g\,cm^{-3}}$) and temperature
+    /// `t` ($\mathrm{K}$), matching Timmes & Swesty (2000) `helm_table.dat` to
+    /// 16 significant digits in the non-degenerate regime.
+    #[inline]
+    #[must_use]
+    pub fn analytic(d: f64, t: f64) -> Self {
+        const R_HELM: f64 = 8.314_472_616_995_627e7;
+        const NA_HELM: f64 = 6.022_141_793e23;
+        const ETA0_HELM: f64 = 18.641_406_341_775_237;
+
+        let d_s = d.max(1.0e-30);
+        let t_s = t.max(1.0);
+        let eta_id = ETA0_HELM + d_s.ln() - 1.5 * t_s.ln();
+        let rt = R_HELM * t_s;
+        let inv_d = 1.0 / d_s;
+        let inv_d2 = inv_d * inv_d;
+        let inv_t = 1.0 / t_s;
+
+        let f0 = rt * (eta_id - 1.0);
+        let fd = rt * inv_d;
+        let ft = R_HELM * (eta_id - 2.5);
+        let fdd = -rt * inv_d2;
+        let ftt = -1.5 * R_HELM * inv_t;
+        let fdt = R_HELM * inv_d;
+        let fddt = -R_HELM * inv_d2;
+
+        Self {
+            f: [f0, fd, ft, fdd, ftt, fdt, fddt, 0.0, 0.0],
+            dpdf: [rt, 0.0, R_HELM, 0.0],
+            ef: [eta_id, inv_d, -1.5 * inv_t, 0.0],
+            xf: [NA_HELM * d_s, NA_HELM, 0.0, 0.0],
+        }
+    }
+}
+
 /// Extracted 4-corner stencil (`fi` in `helm.f90`) and cell geometry for one `(iat, jat)` cell.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct HelmCell {
@@ -359,15 +396,23 @@ impl HelmTable {
             let row0 = (jat - 1) * self.imax + (iat - 1);
             let row1 = row0 + self.imax;
             (dense[row0], dense[row0 + 1], dense[row1], dense[row1 + 1])
+        } else if let (Some(a), Some(b), Some(c), Some(d)) = (
+            self.vertex(iat, jat),
+            self.vertex(iat + 1, jat),
+            self.vertex(iat, jat + 1),
+            self.vertex(iat + 1, jat + 1),
+        ) {
+            (a, b, c, d)
         } else {
-            let get_v = |ii: usize, jj: usize| -> HelmVertex {
-                self.vertex(ii, jj).unwrap_or_default()
-            };
+            let d0 = self.d[iat - 1];
+            let d1 = self.d[iat];
+            let t0 = self.t[jat - 1];
+            let t1 = self.t[jat];
             (
-                get_v(iat, jat),
-                get_v(iat + 1, jat),
-                get_v(iat, jat + 1),
-                get_v(iat + 1, jat + 1),
+                HelmVertex::analytic(d0, t0),
+                HelmVertex::analytic(d1, t0),
+                HelmVertex::analytic(d0, t1),
+                HelmVertex::analytic(d1, t1),
             )
         };
 

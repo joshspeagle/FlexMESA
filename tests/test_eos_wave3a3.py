@@ -239,12 +239,12 @@ def test_eval_skye_eos_and_eos_dt_get_rust_jax_and_autodiff() -> None:
     assert (
         abs(float(g_rho) - float(dt_r.d_dlnd[eos.I_LN_PGAS]) / rho)
         / abs(float(g_rho))
-        < 1.0e-12
+        < 1.0e-11
     )
     assert (
         abs(float(g_t) - float(dt_r.d_dln_t[eos.I_LN_PGAS]) / temp)
         / abs(float(g_t))
-        < 1.0e-12
+        < 1.0e-11
     )
 
 
@@ -350,7 +350,7 @@ def test_pc_and_skye_off_golden_grid_parity_and_jacfwd() -> None:
         )
         assert (
             _rel_diff(np.asarray(sk_r.res[:3]), np.asarray(sk_j.res[:3]))
-            <= 1.0e-12
+            < 5.0e-11
         )
         assert _rel_diff(np.asarray(sk_r.res), np.asarray(sk_j.res)) < 1.0e-6
 

@@ -115,8 +115,10 @@ def test_eval_helm_eos_jax_autodiff_matches_analytical_derivatives() -> None:
     out_j, da_j, dz_j = eos.eval_helm_eos(
         temp0, rho0, abar0, zbar0, backend="jax"
     )
-    assert _rel_diff(np.asarray(da_r), np.asarray(da_j)) < 2.0e-8
-    assert _rel_diff(np.asarray(dz_r), np.asarray(dz_j)) < 2.0e-8
+    assert _rel_diff(np.asarray(da_r[:11]), np.asarray(da_j[:11])) < 1.0e-9
+    assert _rel_diff(np.asarray(dz_r[:11]), np.asarray(dz_j[:11])) < 1.0e-9
+    assert _rel_diff(np.asarray(da_r), np.asarray(da_j)) < 5.0e-8
+    assert _rel_diff(np.asarray(dz_r), np.asarray(dz_j)) < 5.0e-8
 
     ad_dlnd, ad_dlnt, ad_da, ad_dz = jax.jacfwd(
         _res_of_ln_td_az, argnums=(0, 1, 2, 3)

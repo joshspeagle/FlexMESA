@@ -8,8 +8,6 @@ support.
 
 from __future__ import annotations
 
-import functools
-
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -298,23 +296,16 @@ def _eval_pc_res_single(
 
     tnk = rho * t * (8.31447e7 / cmi_mean)
     pgas = p_nkt0 * tnk
-    if include_radiation:
-        p_tot_nkt = p_nkt0 + prad_nkt
-        chit = chit0 * (p_nkt0 / p_tot_nkt) + prad_nkt * 4.0 / p_tot_nkt
-        chir = chir0 * (p_nkt0 / p_tot_nkt)
-        p_nkt = p_tot_nkt
-        u_nkt = u_nkt0 + prad_nkt * 3.0
-        s_nk = s_nk0 + prad_nkt * 4.0
-        cv_nkt = cv_nkt0 + prad_nkt * 12.0
-    else:
-        p_nkt, u_nkt, s_nk, cv_nkt, chir, chit = (
-            p_nkt0,
-            u_nkt0,
-            s_nk0,
-            cv_nkt0,
-            chir0,
-            chit0,
-        )
+    p_tot_nkt = p_nkt0 + prad_nkt
+    chit_rad = chit0 * (p_nkt0 / p_tot_nkt) + prad_nkt * 4.0 / p_tot_nkt
+    chir_rad = chir0 * (p_nkt0 / p_tot_nkt)
+    inc = jnp.asarray(include_radiation)
+    p_nkt = jnp.where(inc, p_tot_nkt, p_nkt0)
+    u_nkt = jnp.where(inc, u_nkt0 + prad_nkt * 3.0, u_nkt0)
+    s_nk = jnp.where(inc, s_nk0 + prad_nkt * 4.0, s_nk0)
+    cv_nkt = jnp.where(inc, cv_nkt0 + prad_nkt * 12.0, cv_nkt0)
+    chir = jnp.where(inc, chir_rad, chir0)
+    chit = jnp.where(inc, chit_rad, chit0)
 
     p = p_nkt * tnk
     n_ion = 1.0 / (abar * constants.AMU)
@@ -381,10 +372,7 @@ def _eval_pc_res_single(
     )
 
 
-@functools.partial(
-    jax.jit,
-    static_argnames=("include_radiation", "g_start", "g_full", "mf_lim"),
-)
+@jax.jit
 def _eval_pc_single_jit(
     rho: jax.Array,
     t: jax.Array,
@@ -393,10 +381,10 @@ def _eval_pc_single_jit(
     xa: jax.Array,
     azion: jax.Array,
     acmi: jax.Array,
-    include_radiation: bool,
-    g_start: float,
-    g_full: float,
-    mf_lim: float,
+    include_radiation: jax.Array,
+    g_start: jax.Array,
+    g_full: jax.Array,
+    mf_lim: jax.Array,
 ) -> tuple[jax.Array, jax.Array, jax.Array]:
     """Evaluate `(res, d_dlnd, d_dln_t)` for a single zone via forward JVP."""
     args = (
@@ -417,6 +405,14 @@ def _eval_pc_single_jit(
     res = _fn(rho, t)
     d_drho, d_dt = jax.jacfwd(_fn, argnums=(0, 1))(rho, t)
     return res, d_drho * rho, d_dt * t
+
+
+_eval_pc_zones_jit = jax.jit(
+    jax.vmap(
+        _eval_pc_single_jit,
+        in_axes=(0, 0, 0, 0, 0, None, None, None, None, None, None),
+    )
+)
 
 
 def eval_pc_eos_jax(
@@ -440,6 +436,12 @@ def eval_pc_eos_jax(
     g_full = float(pc_gamma_full_crystal)
     mf_lim = float(mass_fraction_limit)
     c_args = (inc_rad, g_start, g_full, mf_lim)
+    j_args = (
+        jnp.asarray(inc_rad),
+        jnp.asarray(g_start, dtype=jnp.float64),
+        jnp.asarray(g_full, dtype=jnp.float64),
+        jnp.asarray(mf_lim, dtype=jnp.float64),
+    )
 
     def _eval_pc_core(
         r_in: jax.Array,
@@ -467,18 +469,15 @@ def eval_pc_eos_jax(
         )
         if orig_shape == ():
             r_s, d_s, t_s = _eval_pc_single_jit(
-                r_a, t_a, a_a, z_a, x_a, az_a, ac_a, *c_args
+                r_a, t_a, a_a, z_a, x_a, az_a, ac_a, *j_args
             )
             return r_s, d_s, t_s
         r_1d, t_1d = r_a.reshape(-1), t_a.reshape(-1)
         a_1d, z_1d = a_a.reshape(-1), z_a.reshape(-1)
         x_2d = x_a.reshape((-1, sp))
-        vmapped = jax.vmap(
-            lambda ri, ti, ai, zi, xi: _eval_pc_single_jit(
-                ri, ti, ai, zi, xi, az_a, ac_a, *c_args
-            )
+        res_v, dlnd_v, dlnt_v = _eval_pc_zones_jit(
+            r_1d, t_1d, a_1d, z_1d, x_2d, az_a, ac_a, *j_args
         )
-        res_v, dlnd_v, dlnt_v = vmapped(r_1d, t_1d, a_1d, z_1d, x_2d)
         n = core.NUM_EOS_BASIC_RESULTS
         return (
             res_v.reshape((*orig_shape, n)),

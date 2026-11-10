@@ -47,7 +47,16 @@ _HELM_GRID_SINGLETON: (
 ) = None
 
 
-def _candidate_roots() -> list[Path]:
+def _cwd_roots() -> list[Path]:
+    roots: list[Path] = []
+    cwd = Path.cwd()
+    for anc in [cwd, *cwd.parents]:
+        if anc not in roots:
+            roots.append(anc)
+    return roots
+
+
+def _repo_roots() -> list[Path]:
     roots: list[Path] = []
     here = Path(__file__).resolve()
     for anc in [Path.cwd(), *here.parents]:
@@ -71,7 +80,7 @@ def resolve_mesa_data_dir() -> Path | None:
         p = Path(mesa_dir) / "data"
         if (p / "eosDT_data").is_dir():
             return p
-    for root in _candidate_roots():
+    for root in _cwd_roots():
         cand = root / ".mesa_temp_cache" / "mesa_data"
         if (cand / "eosDT_data").is_dir():
             return cand
@@ -85,7 +94,7 @@ def resolve_bin_cache_dir() -> Path | None:
         p = Path(val)
         p.mkdir(parents=True, exist_ok=True)
         return p
-    for root in _candidate_roots():
+    for root in _cwd_roots():
         cand = root / ".mesa_temp_cache" / "bin_cache"
         if cand.is_dir() or cand.is_symlink():
             return cand
@@ -151,7 +160,7 @@ def get_helm_np_arrays() -> tuple[
 
     if vertices_np is None:
         vertices_np = np.zeros((HELM_JMAX, HELM_IMAX, 21), dtype=np.float64)
-        for root in _candidate_roots():
+        for root in _repo_roots():
             patch_path = (
                 root / "crates" / "flexmesa-eos" / "data" / "helm_patches.bin"
             )
@@ -182,7 +191,7 @@ _CMS_SLICE_CACHE: dict[
 
 
 def _read_4d_patches_bytes() -> bytes | None:
-    for root in _candidate_roots():
+    for root in _repo_roots():
         p = (
             root
             / "crates"

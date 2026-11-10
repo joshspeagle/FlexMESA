@@ -65,6 +65,7 @@ pub mod diffusion;
 pub mod eps_grav;
 pub mod evolve;
 pub mod history;
+pub mod hydro_brunt_surf;
 pub mod hydro_energy;
 pub mod hydro_eqns;
 pub mod hydro_momentum;
@@ -109,6 +110,8 @@ pub mod zams;
 mod tests;
 #[cfg(test)]
 mod tests_fidelity1;
+#[cfg(test)]
+mod tests_fidelity2;
 #[cfg(test)]
 mod tests_wave5;
 
@@ -200,7 +203,8 @@ pub use riemann::{
 pub use rotation::{
     eval_magnetic_diffusivity, eval_omega_crit, eval_rotation_fp_ft,
     eval_rotational_mixing_zone, eval_thermal_diffusivity,
-    set_rotation_mixing_info, RotationalMixZone, RI_CRIT_DSI,
+    set_rotation_mixing_info, update_rotation_distortion_factors,
+    RotationalMixZone, RI_CRIT_DSI,
 };
 pub use rsp2::{
     eval_rsp2_face, eval_rsp2_zone, solve_stationary_rsp2_w, Rsp2Config,
@@ -271,8 +275,8 @@ pub use timestep::{
 };
 pub use winds::{
     do_adjust_mass, eval_blocker_wind, eval_de_jager_wind, eval_dutch_wind,
-    eval_nieuwenhuijzen_wind, eval_reimers_wind, eval_van_loon_wind,
-    eval_vink_wind, set_mdot, DutchLowTScheme, WindScheme,
+    eval_nieuwenhuijzen_wind, eval_nugis_lamers_wind, eval_reimers_wind,
+    eval_van_loon_wind, eval_vink_wind, set_mdot, DutchLowTScheme, WindScheme,
 };
 pub use zams::{
     interp_q, load_zams_model, load_zams_model_from_catalog,

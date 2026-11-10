@@ -195,6 +195,28 @@ pub fn eval_van_loon_wind(l_surf: f64, t_surf: f64, eta: f64) -> f64 {
     eta * 10.0_f64.powf(log_w)
 }
 
+/// Evaluates the Nugis & Lamers (2000) Wolf-Rayet wind mass-loss rate $w$ in
+/// $M_\odot\,\mathrm{yr}^{-1}$ (`eval_highT_Dutch` in `winds.f90:459-462`):
+/// $$\log_{10} w_{\mathrm{NL}} = -11.0 + 1.29 \log_{10}(L/L_\odot)
+///   + 1.7 \log_{10} Y + 0.5 \log_{10} Z.$$
+#[must_use]
+#[inline]
+pub fn eval_nugis_lamers_wind(
+    l_surf: f64,
+    y_surf: f64,
+    z_surf: f64,
+    eta: f64,
+) -> f64 {
+    if eta <= 0.0 || l_surf <= 0.0 || y_surf <= 0.0 || z_surf <= 0.0 {
+        return 0.0;
+    }
+    let log_w = -11.0
+        + 1.29 * (l_surf / L_SUN).log10()
+        + 1.7 * y_surf.max(1.0e-10).log10()
+        + 0.5 * z_surf.max(1.0e-10).log10();
+    eta * 10.0_f64.powf(log_w)
+}
+
 /// Evaluates the composite Dutch wind rate $w$ in $M_\odot\,\mathrm{yr}^{-1}$
 /// (`eval_Dutch_wind` and `eval_highT_Dutch` in `winds.f90:407-481`).
 #[must_use]
@@ -213,11 +235,7 @@ pub fn eval_dutch_wind(
         return 0.0;
     }
     let w_high = if x_surf < 0.4 {
-        let log_w_nl = -11.0
-            + 1.29 * (l_surf / L_SUN).log10()
-            + 1.7 * y_surf.max(1.0e-10).log10()
-            + 0.5 * z_surf.max(1.0e-10).log10();
-        let w_nl = eta * 10.0_f64.powf(log_w_nl);
+        let w_nl = eval_nugis_lamers_wind(l_surf, y_surf, z_surf, eta);
         if x_surf < 0.2 {
             w_nl
         } else {

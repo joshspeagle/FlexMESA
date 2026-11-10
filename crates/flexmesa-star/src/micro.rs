@@ -153,6 +153,7 @@ pub fn change_model_network(
     model
         .d_dxdt_nuc_dx
         .resize(nz * new_species * new_species, 0.0);
+    model.aux.resize(nz, new_species);
     Ok(())
 }
 

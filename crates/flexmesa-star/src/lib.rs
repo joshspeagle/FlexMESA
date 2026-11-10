@@ -65,7 +65,11 @@ pub mod diffusion;
 pub mod eps_grav;
 pub mod evolve;
 pub mod history;
+pub mod hydro_energy;
 pub mod hydro_eqns;
+pub mod hydro_momentum;
+pub mod hydro_state;
+pub mod hydro_temperature;
 pub mod hydro_vars;
 pub mod inlist;
 pub mod inlist_populate;
@@ -104,6 +108,8 @@ pub mod zams;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
+mod tests_fidelity1;
+#[cfg(test)]
 mod tests_wave5;
 
 pub use controls::{
@@ -125,11 +131,22 @@ pub use history::{
     extract_history_row, format_history_header, format_history_row,
     format_profile_string, HistoryRow,
 };
+pub use hydro_energy::{
+    eval_cell_pressure_for_work_ad, eval_face_area_time_centered_ad,
+    eval_pvsc_cell_ad, setup_d_turbulent_energy_dt, setup_dl_dm,
+    setup_sources_and_others,
+};
 pub use hydro_eqns::{
     compute_x_scale, do1_chem_eqns, do1_density_eqn, do1_energy_eqn,
     do1_momentum_eqn, do1_radius_eqn, do1_temperature_eqn, do_surf_bc_eqns,
     eval_henyey_equations, HenyeySystem,
 };
+pub use hydro_momentum::{
+    eval_cell_peos_time_centered_ad, eval_face_dm_bar, expected_hse_grav_term,
+    expected_non_hse_term,
+};
+pub use hydro_state::HydroAuxState;
+pub use hydro_temperature::{interp_p_point_ad, set_rsp_lsurf_bc};
 pub use hydro_vars::{
     check_for_redo_mlt, do_brunt_b, do_brunt_n2, eval_surf_bc, set_hydro_vars,
     set_mlt_vars, update_sig_from_d_mix,

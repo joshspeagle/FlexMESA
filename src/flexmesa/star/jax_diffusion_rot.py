@@ -10,7 +10,7 @@ import jax.numpy as jnp
 
 from flexmesa import constants
 
-jax.config.update("jax_enable_x64", True)  # type: ignore[no-untyped-call]
+jax.config.update("jax_enable_x64", True)
 
 _PI = float(constants.PI)
 _AMU = float(constants.AMU)

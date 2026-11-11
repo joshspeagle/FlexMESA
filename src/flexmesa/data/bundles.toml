@@ -1,0 +1,86 @@
+# SPDX-License-Identifier: LGPL-3.0-or-later
+# FlexMESA Release Data Bundles (DECISIONS #3 & #13)
+#
+# Maps canonical physics table and upstream verification archives hosted on
+# GitHub Releases (`data-v1`) to their SHA-256 checksums, byte sizes, and
+# relative extraction targets inside `$FLEXMESA_DATA_DIR`.
+
+[release]
+repo = "joshspeagle/FlexMESA"
+tag = "data-v1"
+
+[[bundles]]
+name = "helm_full"
+archive = "helm_table_full.bin.zst"
+kind = "single_zst"
+target_relpath = "helm_table_full.bin"
+archive_sha256 = "f22b692ac8d92b7f53bfdc33d31f804d10b994ade37be0c33881fbb0d5ec82d0"
+archive_size_bytes = 341684659
+unpacked_sha256 = "d4a799955e04ff86bd3bbef48105d930ce675a07bc613bc3a234a320194f9045"
+unpacked_size_bytes = 454221784
+test_only = false
+description = "Full 2701 x 1001 x 21 float64 Timmes & Swesty (2000) Helmholtz EOS table (FMHELM01)."
+
+[[bundles]]
+name = "kap_full"
+archive = "kap_tables_full.bin.zst"
+kind = "single_zst"
+target_relpath = "kap_full/kap_tables_full.bin"
+archive_sha256 = "67a2fb329f2dd06895d23d10f98616a03cb792f4c9f0c7c8ea7186226376dd24"
+archive_size_bytes = 83539797
+unpacked_sha256 = "d4511633f989bc75a1c9e9fa6c8709b6eabcd180dea41001e4067eaef032ab91"
+unpacked_size_bytes = 120223383
+test_only = false
+description = "Full radiative and conductive opacity tables: fixed-metal, Type-2 CO, AESOPUS_AGSS09, and kapCN (FMKAP001)."
+
+[[bundles]]
+name = "eos_opal_scvh"
+archive = "eos_opal_scvh_raw_v1.tar.zst"
+kind = "tar_zst"
+target_relpath = "eos_4d_raw"
+sentinel_relpaths = ["eos_4d_raw/mesa-eosDT_02z60x.raw", "eos_4d_raw/mesa-eosDT_00z00x.raw"]
+archive_sha256 = "fb8abee450644ce83c5f1d1e2229d02129f9109a5d41d2e8ea32502d5335aaa0"
+archive_size_bytes = 177174568
+unpacked_sha256 = ""
+unpacked_size_bytes = 330265920
+test_only = false
+description = "16 canonical OPAL/SCVH (Z, X) 4D EOS composition slices in compact FMDTRW01 binary format."
+
+[[bundles]]
+name = "eos_cms"
+archive = "eos_cms_raw_v1.tar.zst"
+kind = "tar_zst"
+target_relpath = "eos_4d_raw"
+sentinel_relpaths = ["eos_4d_raw/mesa-CMS_000x.raw", "eos_4d_raw/mesa-CMS_100x.raw"]
+archive_sha256 = "d25aec5dab9a701cf03589405d28744c355b3ec1c4f1ab977d3c5624389d1218"
+archive_size_bytes = 29930799
+unpacked_sha256 = ""
+unpacked_size_bytes = 47874244
+test_only = false
+description = "11 canonical Chabrier, Mazevet & Soubiran (2019) CMS H-He EOS slices in compact FMCMSR01 binary format."
+
+[[bundles]]
+name = "eos_free_eos"
+archive = "eos_free_eos_raw_v1.tar.zst"
+kind = "tar_zst"
+target_relpath = "eos_4d_raw"
+sentinel_relpaths = ["eos_4d_raw/mesa-FreeEOS_02z60x.raw", "eos_4d_raw/mesa-FreeEOS_00z00x.raw"]
+archive_sha256 = "9cc9178559cc254cc4de0f791dcc9384b7b12895ffecd428549e240f8e825fae"
+archive_size_bytes = 1535310155
+unpacked_sha256 = ""
+unpacked_size_bytes = 1833892404
+test_only = false
+description = "89 canonical FreeEOS (Z, X) 4D EOS composition slices in compact FMDTRW01 binary format."
+
+[[bundles]]
+name = "mesa_test_inputs"
+archive = "mesa-test-inputs-v1.tar.zst"
+kind = "tar_zst"
+target_relpath = "."
+sentinel_relpaths = ["star/test_suite/carbon_kh/inlist_carbon_kh", "kap/test/test_output", "auto_diff/test/test_output"]
+archive_sha256 = "abc7f7cf0f63718273fed4324f327cfa42bdcdcd6ecd5db4765c336103f907c4"
+archive_size_bytes = 40528397
+unpacked_sha256 = ""
+unpacked_size_bytes = 224269900
+test_only = true
+description = "3,142 upstream MESA r24.08.1 golden test_output and test_suite input files for CI parity verification."

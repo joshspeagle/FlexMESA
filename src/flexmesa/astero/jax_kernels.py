@@ -361,7 +361,7 @@ def _mean_chi2_jax(
     """Computes reduced $\\chi^2$ safely returning `0.0` on empty arrays."""
     obs_a = jnp.asarray(obs, dtype=jnp.float64)
     if obs_a.size == 0:
-        return jnp.float64(0.0)
+        return jnp.asarray(0.0, dtype=jnp.float64)
     sig_a = jnp.maximum(jnp.asarray(sigmas, dtype=jnp.float64), 1.0e-30)
     mod_a = jnp.asarray(model, dtype=jnp.float64)
     return jnp.mean(((mod_a - obs_a) / sig_a) ** 2)

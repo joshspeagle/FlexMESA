@@ -8,7 +8,7 @@ OPAL/SCVH -> HELM -> ideal`) to pure JAX (`jnp.float64`).
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 
 import jax
 import jax.numpy as jnp
@@ -17,11 +17,13 @@ import numpy as np
 from flexmesa import chem
 from flexmesa.eos import (
     _cache_io,
+    _inverse_solver,
     _pc_jax,
     _tables_4d_jax,
     core,
     helm,
     ideal,
+    pc,
     skye,
 )
 
@@ -55,6 +57,7 @@ def _trapezoid_jax(
     )
 
 
+@jax.jit
 def get_helm_alfa_jax(
     log_rho: jax.Array, log_t: jax.Array, helm_blend_width: float = 0.1
 ) -> tuple[jax.Array, jax.Array, jax.Array]:
@@ -154,6 +157,7 @@ def _clip_radial_jax(r: jax.Array) -> jax.Array:
     )
 
 
+@jax.jit
 def get_opal_scvh_alfa_jax(
     log_t: jax.Array, log_rho: jax.Array, z: float
 ) -> tuple[jax.Array, jax.Array, jax.Array]:
@@ -267,9 +271,12 @@ def get_opal_scvh_alfa_jax(
         )
 
         av = jax.lax.stop_gradient(a)
-        if z > z_no_helm and z < z_all_helm:
-            zf = (z - z_no_helm) / (z_all_helm - z_no_helm)
-            a = jnp.where(av < 1.0, zf + (1.0 - zf) * a, a)
+        zf = (z - z_no_helm) / (z_all_helm - z_no_helm)
+        a = jnp.where(
+            (z > z_no_helm) & (z < z_all_helm) & (av < 1.0),
+            zf + (1.0 - zf) * a,
+            a,
+        )
         return a
 
     val, (dr, dt) = jax.value_and_grad(_alfa_fn, argnums=(0, 1))(log_rho, log_t)
@@ -280,8 +287,8 @@ def _combine_jax(
     alfa: jax.Array,
     d_dlog_t: jax.Array,
     d_dlog_rho: jax.Array,
-    eval_1st: object,
-    eval_2nd: object,
+    eval_1st: Callable[[], core.EosEvalOutput],
+    eval_2nd: Callable[[], core.EosEvalOutput],
 ) -> core.EosEvalOutput:
     a_sg = jax.lax.stop_gradient(alfa)
     while isinstance(a_sg, jax.core.Tracer) and hasattr(a_sg, "primal"):
@@ -289,31 +296,69 @@ def _combine_jax(
     if not isinstance(a_sg, jax.core.Tracer):
         av = float(a_sg)
         if av >= 1.0:
-            out2_only: core.EosEvalOutput = eval_2nd()  # type: ignore[operator]
-            return out2_only
-        out1: core.EosEvalOutput = eval_1st()  # type: ignore[operator]
+            return eval_2nd()
+        out1 = eval_1st()
         lns1 = float(jax.lax.stop_gradient(out1.res[core.I_LN_S]))
         dlnd_s1 = float(jax.lax.stop_gradient(out1.d_dlnd[core.I_LN_S]))
         dlnt_s1 = float(jax.lax.stop_gradient(out1.d_dln_t[core.I_LN_S]))
         if not (
             np.isfinite(lns1) and np.isfinite(dlnd_s1) and np.isfinite(dlnt_s1)
         ):
-            out2_fb: core.EosEvalOutput = eval_2nd()  # type: ignore[operator]
-            return out2_fb
+            return eval_2nd()
         if av <= 0.0:
             return out1
-        out2: core.EosEvalOutput = eval_2nd()  # type: ignore[operator]
+        out2 = eval_2nd()
         return core.blend_eos_results(
             alfa, d_dlog_t, d_dlog_rho, False, out2, out1, backend="jax"
         )
-    out1_j: core.EosEvalOutput = eval_1st()  # type: ignore[operator]
-    out2_j: core.EosEvalOutput = eval_2nd()  # type: ignore[operator]
-    valid1 = (
-        jnp.isfinite(out1_j.res[core.I_LN_S])
-        & jnp.isfinite(out1_j.d_dlnd[core.I_LN_S])
-        & jnp.isfinite(out1_j.d_dln_t[core.I_LN_S])
-        & (alfa < 1.0)
-    )
+    if alfa.ndim == 0:
+        z26 = jnp.zeros(core.NUM_EOS_BASIC_RESULTS, dtype=jnp.float64)
+
+        def _run_1st(_: None) -> tuple[jax.Array, jax.Array, jax.Array]:
+            o1 = eval_1st()
+            return (
+                jnp.asarray(o1.res, dtype=jnp.float64),
+                jnp.asarray(o1.d_dlnd, dtype=jnp.float64),
+                jnp.asarray(o1.d_dln_t, dtype=jnp.float64),
+            )
+
+        def _run_2nd(_: None) -> tuple[jax.Array, jax.Array, jax.Array]:
+            o2 = eval_2nd()
+            return (
+                jnp.asarray(o2.res, dtype=jnp.float64),
+                jnp.asarray(o2.d_dlnd, dtype=jnp.float64),
+                jnp.asarray(o2.d_dln_t, dtype=jnp.float64),
+            )
+
+        r1_j, d1_j, t1_j = jax.lax.cond(
+            alfa >= 1.0,
+            lambda _: (z26, z26, z26),
+            _run_1st,
+            operand=None,
+        )
+        valid1 = (
+            jnp.isfinite(r1_j[core.I_LN_S])
+            & jnp.isfinite(d1_j[core.I_LN_S])
+            & jnp.isfinite(t1_j[core.I_LN_S])
+            & (alfa < 1.0)
+        )
+        r2_j, d2_j, t2_j = jax.lax.cond(
+            (~valid1) | (alfa > 0.0),
+            _run_2nd,
+            lambda _: (r1_j, d1_j, t1_j),
+            operand=None,
+        )
+        out1_j = core.EosEvalOutput(res=r1_j, d_dlnd=d1_j, d_dln_t=t1_j)
+        out2_j = core.EosEvalOutput(res=r2_j, d_dlnd=d2_j, d_dln_t=t2_j)
+    else:
+        out1_j = eval_1st()
+        out2_j = eval_2nd()
+        valid1 = (
+            jnp.isfinite(out1_j.res[core.I_LN_S])
+            & jnp.isfinite(out1_j.d_dlnd[core.I_LN_S])
+            & jnp.isfinite(out1_j.d_dln_t[core.I_LN_S])
+            & (alfa < 1.0)
+        )
     safe_out1 = core.EosEvalOutput(
         res=jnp.where(valid1, out1_j.res, out2_j.res),
         d_dlnd=jnp.where(valid1, out1_j.d_dlnd, out2_j.d_dlnd),
@@ -327,11 +372,171 @@ def _combine_jax(
     )
 
 
+_DtCfg = tuple[
+    tuple[int, ...], float, float, bool, bool, bool, str, bool, bool, bool
+]
+
+
+def _eval_dt_native_core(
+    cfg: _DtCfg,
+    r_in: jax.Array,
+    t_in: jax.Array,
+    abar: jax.Array,
+    zbar: jax.Array,
+    xa_j: jax.Array,
+    azion: jax.Array,
+    acmi: jax.Array,
+    a_baryon: jax.Array,
+) -> tuple[jax.Array, jax.Array, jax.Array]:
+    """Evaluate 7-level `eosDT_get` cascade on static `cfg` and primals."""
+    (
+        cids,
+        x_val,
+        z_val,
+        use_skye,
+        use_pc,
+        pc_use_gamma_limit,
+        skye_solid_mixing_rule,
+        use_cms,
+        use_free_eos,
+        use_opal_scvh,
+    ) = cfg
+    log_rho = jnp.log10(r_in)
+    log_t = jnp.log10(t_in)
+
+    def _lvl6() -> core.EosEvalOutput:
+        a, dt, dr = get_helm_alfa_jax(log_rho, log_t, 0.1)
+        return _combine_jax(
+            a,
+            dt,
+            dr,
+            lambda: helm.eval_helm_eos(t_in, r_in, abar, zbar, backend="jax")[
+                0
+            ],
+            lambda: ideal.eval_ideal_eos_from_weights(
+                t_in, r_in, abar, zbar, xa_j, acmi, a_baryon, backend="jax"
+            ),
+        )
+
+    def _lvl5() -> core.EosEvalOutput:
+        if not use_opal_scvh:
+            return _lvl6()
+        a, dr, dt = get_opal_scvh_alfa_jax(log_t, log_rho, z_val)
+        return _combine_jax(
+            a,
+            dt,
+            dr,
+            lambda: core.EosEvalOutput(
+                *_tables_4d_jax.eval_eosdt_table_jax(
+                    0, r_in, t_in, x_val, z_val
+                )
+            ),
+            _lvl6,
+        )
+
+    def _lvl4() -> core.EosEvalOutput:
+        if not use_free_eos:
+            return _lvl5()
+        a, dt, dr = get_free_eos_alfa_jax(log_rho, log_t, z_val)
+        return _combine_jax(
+            a,
+            dt,
+            dr,
+            lambda: core.EosEvalOutput(
+                *_tables_4d_jax.eval_eosdt_table_jax(
+                    1, r_in, t_in, x_val, z_val
+                )
+            ),
+            _lvl5,
+        )
+
+    def _lvl3() -> core.EosEvalOutput:
+        if not use_pc:
+            return _lvl4()
+        a, dt, dr = pc.get_pc_alfa_jax(
+            log_rho, log_t, abar, zbar, use_gamma_limit=pc_use_gamma_limit
+        )
+        return _combine_jax(
+            a,
+            dt,
+            dr,
+            lambda: core.EosEvalOutput(
+                *_pc_jax.eval_pc_eos_jax(
+                    r_in, t_in, abar, zbar, xa_j, azion, acmi
+                )
+            ),
+            _lvl4,
+        )
+
+    def _lvl2() -> core.EosEvalOutput:
+        if not use_skye:
+            return _lvl3()
+        a, dt, dr = skye.get_skye_alfa_jax(log_rho, log_t, abar, zbar)
+        return _combine_jax(
+            a,
+            dt,
+            dr,
+            lambda: core.EosEvalOutput(
+                *skye.eval_skye_eos_jax(
+                    r_in,
+                    t_in,
+                    abar,
+                    zbar,
+                    cids,
+                    xa_j,
+                    skye_solid_mixing_rule=skye_solid_mixing_rule,
+                )
+            ),
+            _lvl3,
+        )
+
+    if not use_cms:
+        out = _lvl2()
+    else:
+        a_cms, dt_cms, dr_cms = get_cms_alfa_jax(log_rho, log_t, z_val)
+        out = _combine_jax(
+            a_cms,
+            dt_cms,
+            dr_cms,
+            lambda: core.EosEvalOutput(
+                *_tables_4d_jax.eval_cms_eos_jax(r_in, t_in, x_val)
+            ),
+            _lvl2,
+        )
+    return (
+        jnp.asarray(out.res),
+        jnp.asarray(out.d_dlnd),
+        jnp.asarray(out.d_dln_t),
+    )
+
+
+_dt_native_jvp_fn = jax.custom_jvp(_eval_dt_native_core, nondiff_argnums=(0,))
+
+
+@_dt_native_jvp_fn.defjvp
+def _eval_dt_native_jvp(
+    cfg: _DtCfg,
+    primals: tuple[jax.Array, ...],
+    tangents: tuple[jax.Array, ...],
+) -> tuple[
+    tuple[jax.Array, jax.Array, jax.Array],
+    tuple[jax.Array, jax.Array, jax.Array],
+]:
+    res_0, dlnd_0, dlnt_0 = _dt_native_jvp_fn(cfg, *primals)
+    return core.pack_dt_jvp(
+        primals[0],
+        primals[1],
+        tangents[0],
+        tangents[1],
+        (res_0, dlnd_0, dlnt_0),
+    )
+
+
 def eos_dt_get_native_jax(
     rho: jax.Array,
     temp: jax.Array,
     chem_id: Sequence[int],
-    xa: jax.Array,
+    xa: np.ndarray | jax.Array,
     *,
     use_skye: bool = True,
     use_pc: bool = False,
@@ -342,149 +547,35 @@ def eos_dt_get_native_jax(
     use_opal_scvh: bool = True,
 ) -> tuple[jax.Array, jax.Array, jax.Array]:
     """Evaluate the 7-level `eosDT_get` cascade in pure native JAX."""
-    if isinstance(xa, np.ndarray):
-        xa_np = np.asarray(xa, dtype=np.float64)
-    else:
-        xa_sg = jax.lax.stop_gradient(xa)
-        while isinstance(xa_sg, jax.core.Tracer) and hasattr(xa_sg, "primal"):
-            xa_sg = xa_sg.primal
-        if isinstance(xa_sg, jax.core.Tracer) and hasattr(xa_sg, "val"):
-            xa_sg = xa_sg.val
-        xa_np = np.asarray(xa_sg, dtype=np.float64)
-    cids = [int(c) for c in chem_id]
-    comp = chem.get_composition_info(cids, xa_np)
-    x_val, z_val = float(comp.xh), float(comp.xz)
+    xa_np = _inverse_solver._concrete_xa_np(xa)
+    xa_j = jnp.asarray(xa_np, dtype=jnp.float64)
+    cids = tuple(int(c) for c in chem_id)
+    comp = chem.get_composition_info(list(cids), xa_np)
     abar = jnp.asarray(float(comp.abar), dtype=jnp.float64)
     zbar = jnp.asarray(float(comp.zbar), dtype=jnp.float64)
-
-    infos = [chem.get_nuclide_info(c) for c in cids]
-    azion = jnp.asarray([float(inf.z) for inf in infos], dtype=jnp.float64)
-    acmi = jnp.asarray([float(inf.w) for inf in infos], dtype=jnp.float64)
-    a_baryon = jnp.asarray([float(inf.a) for inf in infos], dtype=jnp.float64)
-
-    def _eval_dt_core(
-        r_in: jax.Array, t_in: jax.Array
-    ) -> tuple[jax.Array, jax.Array, jax.Array]:
-        log_rho = jnp.log10(r_in)
-        log_t = jnp.log10(t_in)
-
-        def _lvl6() -> core.EosEvalOutput:
-            a, dt, dr = get_helm_alfa_jax(log_rho, log_t, 0.1)
-            return _combine_jax(
-                a,
-                dt,
-                dr,
-                lambda: helm.eval_helm_eos(
-                    t_in, r_in, abar, zbar, backend="jax"
-                )[0],
-                lambda: ideal.eval_ideal_eos_from_weights(
-                    t_in, r_in, abar, zbar, xa, acmi, a_baryon, backend="jax"
-                ),
-            )
-
-        def _lvl5() -> core.EosEvalOutput:
-            if not use_opal_scvh:
-                return _lvl6()
-            a, dr, dt = get_opal_scvh_alfa_jax(log_t, log_rho, z_val)
-            return _combine_jax(
-                a,
-                dt,
-                dr,
-                lambda: core.EosEvalOutput(
-                    *_tables_4d_jax.eval_eosdt_table_jax(
-                        0, r_in, t_in, x_val, z_val
-                    )
-                ),
-                _lvl6,
-            )
-
-        def _lvl4() -> core.EosEvalOutput:
-            if not use_free_eos:
-                return _lvl5()
-            a, dt, dr = get_free_eos_alfa_jax(log_rho, log_t, z_val)
-            return _combine_jax(
-                a,
-                dt,
-                dr,
-                lambda: core.EosEvalOutput(
-                    *_tables_4d_jax.eval_eosdt_table_jax(
-                        1, r_in, t_in, x_val, z_val
-                    )
-                ),
-                _lvl5,
-            )
-
-        def _lvl3() -> core.EosEvalOutput:
-            if not use_pc:
-                return _lvl4()
-            a, dt, dr = _pc_jax.get_pc_alfa_jax(
-                log_rho, log_t, abar, zbar, use_gamma_limit=pc_use_gamma_limit
-            )
-            return _combine_jax(
-                a,
-                dt,
-                dr,
-                lambda: core.EosEvalOutput(
-                    *_pc_jax.eval_pc_eos_jax(
-                        r_in, t_in, abar, zbar, xa, azion, acmi
-                    )
-                ),
-                _lvl4,
-            )
-
-        def _lvl2() -> core.EosEvalOutput:
-            if not use_skye:
-                return _lvl3()
-            a, dt, dr = skye.get_skye_alfa_jax(log_rho, log_t, abar, zbar)
-            return _combine_jax(
-                a,
-                dt,
-                dr,
-                lambda: core.EosEvalOutput(
-                    *skye.eval_skye_eos_jax(
-                        r_in,
-                        t_in,
-                        abar,
-                        zbar,
-                        chem_id,
-                        xa,
-                        skye_solid_mixing_rule=skye_solid_mixing_rule,
-                    )
-                ),
-                _lvl3,
-            )
-
-        if not use_cms:
-            out = _lvl2()
-        else:
-            a_cms, dt_cms, dr_cms = get_cms_alfa_jax(log_rho, log_t, z_val)
-            out = _combine_jax(
-                a_cms,
-                dt_cms,
-                dr_cms,
-                lambda: core.EosEvalOutput(
-                    *_tables_4d_jax.eval_cms_eos_jax(r_in, t_in, x_val)
-                ),
-                _lvl2,
-            )
-        return (
-            jnp.asarray(out.res),
-            jnp.asarray(out.d_dlnd),
-            jnp.asarray(out.d_dln_t),
-        )
-
-    r_j = jnp.asarray(rho, dtype=jnp.float64)
-    t_j = jnp.asarray(temp, dtype=jnp.float64)
-    r_0 = jax.lax.stop_gradient(r_j)
-    t_0 = jax.lax.stop_gradient(t_j)
-    if not isinstance(r_0, jax.core.Tracer) and not isinstance(
-        t_0, jax.core.Tracer
-    ):
-        with jax._src.core.eval_context():
-            res_0, dlnd_0, dlnt_0 = _eval_dt_core(r_0, t_0)
-    else:
-        res_0, dlnd_0, dlnt_0 = _eval_dt_core(r_0, t_0)
-    dln_r = jnp.expand_dims((r_j - r_0) / r_0, axis=-1)
-    dln_t = jnp.expand_dims((t_j - t_0) / t_0, axis=-1)
-    res_o = res_0 + dlnd_0 * dln_r + dlnt_0 * dln_t
+    azion, acmi, a_baryon = core.nuclide_arrays_jax(cids)
+    cfg: _DtCfg = (
+        cids,
+        float(comp.xh),
+        float(comp.xz),
+        bool(use_skye),
+        bool(use_pc),
+        bool(pc_use_gamma_limit),
+        str(skye_solid_mixing_rule),
+        bool(use_cms),
+        bool(use_free_eos),
+        bool(use_opal_scvh),
+    )
+    sg = jax.lax.stop_gradient
+    res_o, dlnd_0, dlnt_0 = _dt_native_jvp_fn(
+        cfg,
+        jnp.asarray(rho, dtype=jnp.float64),
+        jnp.asarray(temp, dtype=jnp.float64),
+        sg(abar),
+        sg(zbar),
+        sg(xa_j),
+        sg(azion),
+        sg(acmi),
+        sg(a_baryon),
+    )
     return res_o, dlnd_0, dlnt_0

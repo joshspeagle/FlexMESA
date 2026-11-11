@@ -166,8 +166,9 @@ def eval_net_jax(
         return grad_x, grad_t, grad_rho
 
     _op.defvjp(_fwd, _bwd)
-    return _op(
+    eps_out, dxdt_out = _op(
         jnp.asarray(x, dtype=jnp.float64),
         jnp.asarray(temp, dtype=jnp.float64),
         jnp.asarray(rho, dtype=jnp.float64),
     )
+    return eps_out, dxdt_out

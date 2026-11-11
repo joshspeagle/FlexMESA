@@ -3,7 +3,6 @@
 //! and reciprocals), full `2701 x 1001` table loader, and 4-corner cell
 //! stencil extraction (`eos/private/helm_alloc.f90`).
 
-use std::collections::HashMap;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
 use std::sync::OnceLock;
@@ -60,43 +59,6 @@ pub struct HelmVertex {
     pub ef: [f64; 4],
     /// Electron number density table `[xf, xfd, xft, xfdt]`.
     pub xf: [f64; 4],
-}
-
-impl HelmVertex {
-    /// Analytical non-degenerate ideal/Fermi-Dirac electron [`HelmVertex`] at
-    /// electron density `d` ($\rho Y_e$, $\mathrm{g\,cm^{-3}}$) and temperature
-    /// `t` ($\mathrm{K}$), matching Timmes & Swesty (2000) `helm_table.dat` to
-    /// 16 significant digits in the non-degenerate regime.
-    #[inline]
-    #[must_use]
-    pub fn analytic(d: f64, t: f64) -> Self {
-        const R_HELM: f64 = 8.314_472_616_995_627e7;
-        const NA_HELM: f64 = 6.022_141_793e23;
-        const ETA0_HELM: f64 = 18.641_406_341_775_237;
-
-        let d_s = d.max(1.0e-30);
-        let t_s = t.max(1.0);
-        let eta_id = ETA0_HELM + d_s.ln() - 1.5 * t_s.ln();
-        let rt = R_HELM * t_s;
-        let inv_d = 1.0 / d_s;
-        let inv_d2 = inv_d * inv_d;
-        let inv_t = 1.0 / t_s;
-
-        let f0 = rt * (eta_id - 1.0);
-        let fd = rt * inv_d;
-        let ft = R_HELM * (eta_id - 2.5);
-        let fdd = -rt * inv_d2;
-        let ftt = -1.5 * R_HELM * inv_t;
-        let fdt = R_HELM * inv_d;
-        let fddt = -R_HELM * inv_d2;
-
-        Self {
-            f: [f0, fd, ft, fdd, ftt, fdt, fddt, 0.0, 0.0],
-            dpdf: [rt, 0.0, R_HELM, 0.0],
-            ef: [eta_id, inv_d, -1.5 * inv_t, 0.0],
-            xf: [NA_HELM * d_s, NA_HELM, 0.0, 0.0],
-        }
-    }
 }
 
 /// Extracted 4-corner stencil (`fi` in `helm.f90`) and cell geometry for one `(iat, jat)` cell.
@@ -199,54 +161,36 @@ pub struct HelmTable {
     pub dd2i_sav: Vec<f64>,
     /// Reciprocal cubed density step widths `dd3i_sav[0..imax-1]`.
     pub dd3i_sav: Vec<f64>,
-    /// Full dense vertex grid (`jmax * imax`) when loaded.
-    dense: Option<Vec<HelmVertex>>,
-    /// Sparse patch lookup table `(i_1based, j_1based) -> HelmVertex`.
-    patches: HashMap<(u16, u16), HelmVertex>,
+    /// Full dense vertex grid (`jmax * imax`).
+    dense: Vec<HelmVertex>,
 }
 
-const BUILTIN_PATCHES_BIN: &[u8] =
-    include_bytes!("../../data/helm_patches.bin");
 static BUILTIN_TABLE: OnceLock<HelmTable> = OnceLock::new();
-static SMOOTH_BUILTIN_TABLE: OnceLock<HelmTable> = OnceLock::new();
 
 impl HelmTable {
-    /// Returns a reference to the lazily initialized built-in [`HelmTable`].
+    /// Returns a reference to the lazily initialized full `2701 x 1001` [`HelmTable`].
     #[must_use]
     pub fn builtin() -> &'static Self {
         BUILTIN_TABLE.get_or_init(Self::load_builtin)
-    }
-
-    /// Returns a reference to the full dense [`HelmTable`] when available, or a
-    /// globally $C^2$-smooth analytical [`HelmTable`] without sparse patch
-    /// islands when the external table cache is absent.
-    #[must_use]
-    pub fn smooth_builtin() -> &'static Self {
-        let b = Self::builtin();
-        if b.is_full_table() {
-            b
-        } else {
-            SMOOTH_BUILTIN_TABLE.get_or_init(Self::new_empty_grid)
-        }
     }
 
     /// Returns `true` when all `2701 x 1001` vertices are populated in dense storage.
     #[inline]
     #[must_use]
     pub fn is_full_table(&self) -> bool {
-        self.dense.is_some()
+        self.dense.len() == self.imax * self.jmax
     }
 
-    /// Returns the dense `2701 x 1001` vertex slice when the full table is loaded.
+    /// Returns the dense `2701 x 1001` vertex slice.
     #[inline]
     #[must_use]
-    pub fn dense_vertices(&self) -> Option<&[HelmVertex]> {
-        self.dense.as_deref()
+    pub fn dense_vertices(&self) -> &[HelmVertex] {
+        &self.dense
     }
 
     /// Constructs the coordinate grids matching `alloc_helm_table` (`helm_alloc.f90` lines 171-323).
     #[must_use]
-    pub fn new_empty_grid() -> Self {
+    fn with_dense_vertices(dense: Vec<HelmVertex>) -> Self {
         let imax = HELM_IMAX;
         let jmax = HELM_JMAX;
         let logtlo = HELM_LOGTLO;
@@ -328,49 +272,14 @@ impl HelmTable {
             ddi_sav,
             dd2i_sav,
             dd3i_sav,
-            dense: None,
-            patches: HashMap::new(),
+            dense,
         }
     }
 
     fn load_builtin() -> Self {
-        let mut tbl = Self::new_empty_grid();
-        if let Some(dense) = load_or_build_full_helm_vertices() {
-            tbl.dense = Some(dense);
-            return tbl;
-        }
-        let raw = BUILTIN_PATCHES_BIN;
-        if raw.len() >= 4 {
-            let n =
-                u32::from_le_bytes([raw[0], raw[1], raw[2], raw[3]]) as usize;
-            tbl.patches.reserve(n);
-            let stride = 4 + 21 * 8;
-            for k in 0..n {
-                let base = 4 + k * stride;
-                if base + stride > raw.len() {
-                    break;
-                }
-                let i = u16::from_le_bytes([raw[base], raw[base + 1]]);
-                let j = u16::from_le_bytes([raw[base + 2], raw[base + 3]]);
-                let read_f64 = |idx: usize| -> f64 {
-                    let off = base + 4 + idx * 8;
-                    f64::from_le_bytes(
-                        raw[off..off + 8].try_into().unwrap_or([0; 8]),
-                    )
-                };
-                let mut v = HelmVertex::default();
-                for m in 0..9 {
-                    v.f[m] = read_f64(m);
-                }
-                for m in 0..4 {
-                    v.dpdf[m] = read_f64(9 + m);
-                    v.ef[m] = read_f64(13 + m);
-                    v.xf[m] = read_f64(17 + m);
-                }
-                tbl.patches.insert((i, j), v);
-            }
-        }
-        tbl
+        let dense = load_or_build_full_helm_vertices()
+            .unwrap_or_else(|err| panic!("{err}"));
+        Self::with_dense_vertices(dense)
     }
 
     /// Loads a full `helm_table.dat` ASCII file from disk.
@@ -382,9 +291,7 @@ impl HelmTable {
 
     /// Parses the full `helm_table.dat` stream (`helm_alloc.f90` lines 250-325).
     pub fn from_ascii_reader<R: BufRead>(reader: R) -> Result<Self, String> {
-        let mut tbl = Self::new_empty_grid();
-        tbl.dense = Some(parse_helm_ascii_reader(reader)?);
-        Ok(tbl)
+        Ok(Self::with_dense_vertices(parse_helm_ascii_reader(reader)?))
     }
 
     /// Looks up a 1-based vertex `(i, j)` (`1 <= i <= imax`, `1 <= j <= jmax`).
@@ -394,10 +301,7 @@ impl HelmTable {
         if i == 0 || i > self.imax || j == 0 || j > self.jmax {
             return None;
         }
-        if let Some(dense) = &self.dense {
-            return Some(dense[(j - 1) * self.imax + (i - 1)]);
-        }
-        self.patches.get(&(i as u16, j as u16)).copied()
+        self.dense.get((j - 1) * self.imax + (i - 1)).copied()
     }
 
     /// Extracts the 4-corner stencil [`HelmCell`] for `(log_temp, din)` (`helm.f90` lines 387-542).
@@ -409,29 +313,11 @@ impl HelmTable {
         let jat_raw = ((log_temp - self.logtlo) * self.logtstpi) as isize + 1;
         let jat = jat_raw.clamp(1, (self.jmax - 1) as isize) as usize;
 
-        let (v00, v10, v01, v11) = if let Some(dense) = &self.dense {
-            let row0 = (jat - 1) * self.imax + (iat - 1);
-            let row1 = row0 + self.imax;
-            (dense[row0], dense[row0 + 1], dense[row1], dense[row1 + 1])
-        } else if let (Some(a), Some(b), Some(c), Some(d)) = (
-            self.vertex(iat, jat),
-            self.vertex(iat + 1, jat),
-            self.vertex(iat, jat + 1),
-            self.vertex(iat + 1, jat + 1),
-        ) {
-            (a, b, c, d)
-        } else {
-            let d0 = self.d[iat - 1];
-            let d1 = self.d[iat];
-            let t0 = self.t[jat - 1];
-            let t1 = self.t[jat];
-            (
-                HelmVertex::analytic(d0, t0),
-                HelmVertex::analytic(d1, t0),
-                HelmVertex::analytic(d0, t1),
-                HelmVertex::analytic(d1, t1),
-            )
-        };
+        let dense = &self.dense;
+        let row0 = (jat - 1) * self.imax + (iat - 1);
+        let row1 = row0 + self.imax;
+        let (v00, v10, v01, v11) =
+            (dense[row0], dense[row0 + 1], dense[row1], dense[row1 + 1]);
 
         let fi_f = [
             v00.f[0], v10.f[0], v01.f[0], v11.f[0], v00.f[2], v10.f[2],

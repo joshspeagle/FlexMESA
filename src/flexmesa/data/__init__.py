@@ -9,10 +9,11 @@ MESA nuclear, abundance, and equation-of-state data tables (`isotopes.data`,
 
 from __future__ import annotations
 
-from flexmesa.data import converters, loader, manifest
+from flexmesa.data import converters, fetch, loader, manifest
 
 __all__ = (
     "converters",
+    "fetch",
     "loader",
     "manifest",
 )

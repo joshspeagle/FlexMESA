@@ -12,6 +12,8 @@ and 0-based conversions, `find_loc_in_sparse`), and block-tridiagonal
 
 from __future__ import annotations
 
+import os
+
 import hypothesis
 import jax
 import jax.numpy as jnp
@@ -21,6 +23,7 @@ import pytest
 from hypothesis import strategies
 
 from flexmesa import mtx
+from flexmesa.data import fetch
 
 
 def _blk_loss(
@@ -400,8 +403,6 @@ def test_prop_solve_dense_reconstructs_rhs(
 
 def test_upstream_mesa_block_tri_data_and_test_case_data_golden() -> None:
     """Verifies `test_case.data` and `block_tri.data` against `test_output`."""
-    import pathlib
-
     # Unconditional golden block-tridiagonal check (nvar = 4, nz = 5)
     rng = np.random.default_rng(1234)
     lblk_u, dblk_u, ublk_u, _ = _make_diag_dom_block_tridiag(rng, nz=5, nvar=4)
@@ -422,14 +423,11 @@ def test_upstream_mesa_block_tri_data_and_test_case_data_golden() -> None:
         atol=1e-13,
     )
 
-    root = (
-        pathlib.Path(__file__).resolve().parents[1]
-        / ".mesa_temp_cache"
-        / "mesa_root"
-        / "mtx"
-        / "test"
-    )
+    root = fetch.resolve_mesa_test_inputs_dir() / "mtx" / "test"
     out_path = root / "test_output"
+    if os.environ.get("MESA_DIR", "").strip():
+        assert out_path.is_file(), f"Missing {out_path}"
+        assert (root / "test_case.data").is_file()
     if out_path.exists():
         out_lines = out_path.read_text(encoding="utf-8").splitlines()
         assert (

@@ -181,16 +181,16 @@ def _eval_dt_cell_16_jit(
 
 
 def _lookup_dt_cell_np(
-    lq_min: float,
-    dq: float,
-    n_q: int,
-    lt_min: float,
-    dt: float,
-    n_t: int,
-    coeffs: np.ndarray,
+    kind: int,
+    ix_1b: int,
+    iz_1b: int,
+    stem: str,
     lq_a: np.ndarray,
     lt_a: np.ndarray,
 ) -> tuple[np.ndarray, ...]:
+    lq_min, dq, n_q, lt_min, dt, n_t, coeffs = _cache_io.load_dt_slice_jax(
+        kind, ix_1b, iz_1b, stem
+    )
     lq_f = np.asarray(lq_a, dtype=np.float64)
     lt_f = np.asarray(lt_a, dtype=np.float64)
     iq_raw = np.floor((lq_f - lq_min) / dq + 1.0e-4).astype(np.int64)
@@ -202,13 +202,17 @@ def _lookup_dt_cell_np(
     jt0 = np.clip(jt_raw, 0, max(0, n_t - 2))
     q0 = np.asarray(lq_min + iq0.astype(np.float64) * dq, dtype=np.float64)
     t0 = np.asarray(lt_min + jt0.astype(np.float64) * dt, dtype=np.float64)
+    q1 = np.asarray(q0 + dq, dtype=np.float64)
+    t1 = np.asarray(t0 + dt, dtype=np.float64)
     return (
         np.ascontiguousarray(coeffs[iq0, jt0], dtype=np.float64),
         np.ascontiguousarray(coeffs[iq0 + 1, jt0], dtype=np.float64),
         np.ascontiguousarray(coeffs[iq0, jt0 + 1], dtype=np.float64),
         np.ascontiguousarray(coeffs[iq0 + 1, jt0 + 1], dtype=np.float64),
         q0,
+        q1,
         t0,
+        t1,
         np.asarray(oob, dtype=np.bool_),
     )
 
@@ -217,43 +221,45 @@ def _eval_kind_ix_iz_16(
     kind: int, ix_1b: int, iz_1b: int, log_rho: jax.Array, log_t: jax.Array
 ) -> tuple[jax.Array, jax.Array, jax.Array]:
     stem = _dt_stem(kind, ix_1b, iz_1b)
-    lq_min, dq, n_q, lt_min, dt, n_t, coeffs = _cache_io.load_dt_slice_jax(
-        kind, ix_1b, iz_1b, stem
-    )
     log_q = log_rho - 2.0 * log_t + 12.0
     lq_sg = jax.lax.stop_gradient(jnp.asarray(log_q, dtype=jnp.float64))
     lt_sg = jax.lax.stop_gradient(jnp.asarray(log_t, dtype=jnp.float64))
+    while isinstance(lq_sg, jax.core.Tracer) and hasattr(lq_sg, "primal"):
+        lq_sg = lq_sg.primal
+    while isinstance(lt_sg, jax.core.Tracer) and hasattr(lt_sg, "primal"):
+        lt_sg = lt_sg.primal
     if not isinstance(lq_sg, jax.core.Tracer) and not isinstance(
         lt_sg, jax.core.Tracer
     ):
-        v00_n, v10_n, v01_n, v11_n, q0_n, t0_n, oob_n = _lookup_dt_cell_np(
-            lq_min,
-            dq,
-            n_q,
-            lt_min,
-            dt,
-            n_t,
-            coeffs,
-            np.asarray(lq_sg),
-            np.asarray(lt_sg),
+        v00_n, v10_n, v01_n, v11_n, q0_n, q1_n, t0_n, t1_n, oob_n = (
+            _lookup_dt_cell_np(
+                kind,
+                ix_1b,
+                iz_1b,
+                stem,
+                np.asarray(lq_sg),
+                np.asarray(lt_sg),
+            )
         )
         v00 = jnp.asarray(v00_n, dtype=jnp.float64)
         v10 = jnp.asarray(v10_n, dtype=jnp.float64)
         v01 = jnp.asarray(v01_n, dtype=jnp.float64)
         v11 = jnp.asarray(v11_n, dtype=jnp.float64)
         q0 = jnp.asarray(q0_n, dtype=jnp.float64)
+        q1 = jnp.asarray(q1_n, dtype=jnp.float64)
         t0 = jnp.asarray(t0_n, dtype=jnp.float64)
+        t1 = jnp.asarray(t1_n, dtype=jnp.float64)
         oob = jnp.asarray(oob_n, dtype=jnp.bool_)
     else:
         b_shape = lq_sg.shape
         s_v = jax.ShapeDtypeStruct((*b_shape, 16, 4), jnp.float64)
         s_s = jax.ShapeDtypeStruct(b_shape, jnp.float64)
         s_b = jax.ShapeDtypeStruct(b_shape, jnp.bool_)
-        v00, v10, v01, v11, q0, t0, oob = jax.pure_callback(
+        v00, v10, v01, v11, q0, q1, t0, t1, oob = jax.pure_callback(
             lambda q_a, t_a: _lookup_dt_cell_np(
-                lq_min, dq, n_q, lt_min, dt, n_t, coeffs, q_a, t_a
+                kind, ix_1b, iz_1b, stem, q_a, t_a
             ),
-            (s_v, s_v, s_v, s_v, s_s, s_s, s_b),
+            (s_v, s_v, s_v, s_v, s_s, s_s, s_s, s_s, s_b),
             lq_sg,
             lt_sg,
             vmap_method="expand_dims",
@@ -265,10 +271,10 @@ def _eval_kind_ix_iz_16(
         v11,
         q0,
         log_q,
-        q0 + dq,
+        q1,
         t0,
         log_t,
-        t0 + dt,
+        t1,
         oob,
     )
     return f, dlnd, dlnt
@@ -439,16 +445,14 @@ def _eval_cms_cell_16_jit(
 
 
 def _lookup_cms_cell_np(
-    lt_min: float,
-    dt: float,
-    n_t: int,
-    lr_min: float,
-    dr: float,
-    n_r: int,
-    coeffs: np.ndarray,
+    ix_1b: int,
+    stem: str,
     lr_a: np.ndarray,
     lt_a: np.ndarray,
 ) -> tuple[np.ndarray, ...]:
+    lt_min, dt, n_t, lr_min, dr, n_r, coeffs = _cache_io.load_cms_slice_jax(
+        ix_1b, stem
+    )
     lt_f = np.asarray(lt_a, dtype=np.float64)
     lr_f = np.asarray(lr_a, dtype=np.float64)
     it0 = np.clip(
@@ -463,64 +467,76 @@ def _lookup_cms_cell_np(
     )
     t0 = np.asarray(lt_min + it0.astype(np.float64) * dt, dtype=np.float64)
     r0 = np.asarray(lr_min + ir0.astype(np.float64) * dr, dtype=np.float64)
+    t1 = np.asarray(t0 + dt, dtype=np.float64)
+    r1 = np.asarray(r0 + dr, dtype=np.float64)
+    bounds = np.array(
+        [
+            lt_min,
+            lt_min + (n_t - 1) * dt,
+            lr_min,
+            lr_min + (n_r - 1) * dr,
+        ],
+        dtype=np.float64,
+    )
     return (
         np.ascontiguousarray(coeffs[it0, ir0], dtype=np.float64),
         np.ascontiguousarray(coeffs[it0 + 1, ir0], dtype=np.float64),
         np.ascontiguousarray(coeffs[it0, ir0 + 1], dtype=np.float64),
         np.ascontiguousarray(coeffs[it0 + 1, ir0 + 1], dtype=np.float64),
         t0,
+        t1,
         r0,
+        r1,
+        bounds,
     )
 
 
 def _eval_cms_slice_16(
-    lt_min: float,
-    dt: float,
-    n_t: int,
-    lr_min: float,
-    dr: float,
-    n_r: int,
-    coeffs: np.ndarray,
+    ix_1b: int,
+    stem: str,
     log_rho: jax.Array,
     log_t: jax.Array,
 ) -> tuple[jax.Array, jax.Array, jax.Array]:
     lr_sg = jax.lax.stop_gradient(jnp.asarray(log_rho, dtype=jnp.float64))
     lt_sg = jax.lax.stop_gradient(jnp.asarray(log_t, dtype=jnp.float64))
+    while isinstance(lr_sg, jax.core.Tracer) and hasattr(lr_sg, "primal"):
+        lr_sg = lr_sg.primal
+    while isinstance(lt_sg, jax.core.Tracer) and hasattr(lt_sg, "primal"):
+        lt_sg = lt_sg.primal
     if not isinstance(lr_sg, jax.core.Tracer) and not isinstance(
         lt_sg, jax.core.Tracer
     ):
-        v00_n, v10_n, v01_n, v11_n, t0_n, r0_n = _lookup_cms_cell_np(
-            lt_min,
-            dt,
-            n_t,
-            lr_min,
-            dr,
-            n_r,
-            coeffs,
-            np.asarray(lr_sg),
-            np.asarray(lt_sg),
+        v00_n, v10_n, v01_n, v11_n, t0_n, t1_n, r0_n, r1_n, b_n = (
+            _lookup_cms_cell_np(
+                ix_1b,
+                stem,
+                np.asarray(lr_sg),
+                np.asarray(lt_sg),
+            )
         )
         v00 = jnp.asarray(v00_n, dtype=jnp.float64)
         v10 = jnp.asarray(v10_n, dtype=jnp.float64)
         v01 = jnp.asarray(v01_n, dtype=jnp.float64)
         v11 = jnp.asarray(v11_n, dtype=jnp.float64)
         t0 = jnp.asarray(t0_n, dtype=jnp.float64)
+        t1 = jnp.asarray(t1_n, dtype=jnp.float64)
         r0 = jnp.asarray(r0_n, dtype=jnp.float64)
+        r1 = jnp.asarray(r1_n, dtype=jnp.float64)
+        b_j = jnp.asarray(b_n, dtype=jnp.float64)
     else:
         b_shape = lr_sg.shape
         s_v = jax.ShapeDtypeStruct((*b_shape, 16, 4), jnp.float64)
         s_s = jax.ShapeDtypeStruct(b_shape, jnp.float64)
-        v00, v10, v01, v11, t0, r0 = jax.pure_callback(
-            lambda lr_a, lt_a: _lookup_cms_cell_np(
-                lt_min, dt, n_t, lr_min, dr, n_r, coeffs, lr_a, lt_a
-            ),
-            (s_v, s_v, s_v, s_v, s_s, s_s),
+        s_4 = jax.ShapeDtypeStruct((4,), jnp.float64)
+        v00, v10, v01, v11, t0, t1, r0, r1, b_j = jax.pure_callback(
+            lambda lr_a, lt_a: _lookup_cms_cell_np(ix_1b, stem, lr_a, lt_a),
+            (s_v, s_v, s_v, s_v, s_s, s_s, s_s, s_s, s_4),
             lr_sg,
             lt_sg,
             vmap_method="expand_dims",
         )
-    my_lt = jnp.clip(log_t, lt_min, lt_min + (n_t - 1) * dt)
-    my_lr = jnp.clip(log_rho, lr_min, lr_min + (n_r - 1) * dr)
+    my_lt = jnp.clip(log_t, b_j[0], b_j[1])
+    my_lr = jnp.clip(log_rho, b_j[2], b_j[3])
     f, dlnt, dlnd = _eval_cms_cell_16_jit(
         v00,
         v10,
@@ -528,10 +544,10 @@ def _eval_cms_slice_16(
         v11,
         t0,
         my_lt,
-        t0 + dt,
+        t1,
         r0,
         my_lr,
-        r0 + dr,
+        r1,
     )
     return f, dlnt, dlnd
 
@@ -552,10 +568,12 @@ def eval_cms_eos_jax(
             if x < _CMS_XVALS[i - 1]:
                 ix = i - 1
                 break
-    t1 = _cache_io.load_cms_slice_jax(ix, f"mesa-CMS_{_CMS_XSTR[ix - 1]}x")
-    t2 = _cache_io.load_cms_slice_jax(ix + 1, f"mesa-CMS_{_CMS_XSTR[ix]}x")
-    r1, dt1, dr1 = _eval_cms_slice_16(*t1, log_rho, log_t)
-    r2, dt2, dr2 = _eval_cms_slice_16(*t2, log_rho, log_t)
+    r1, dt1, dr1 = _eval_cms_slice_16(
+        ix, f"mesa-CMS_{_CMS_XSTR[ix - 1]}x", log_rho, log_t
+    )
+    r2, dt2, dr2 = _eval_cms_slice_16(
+        ix + 1, f"mesa-CMS_{_CMS_XSTR[ix]}x", log_rho, log_t
+    )
     beta = (x - _CMS_XVALS[ix - 1]) / (_CMS_XVALS[ix] - _CMS_XVALS[ix - 1])
     alfa = 1.0 - beta
     f16 = alfa * r1 + beta * r2

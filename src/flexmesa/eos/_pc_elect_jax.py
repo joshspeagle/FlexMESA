@@ -12,6 +12,7 @@ from typing import NamedTuple
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 from flexmesa import constants
 
@@ -179,74 +180,107 @@ def _blend_series1(
     )
 
 
+_BLIN9A_AC_NP = np.array(_BLIN9A_AC, dtype=np.float64)
+_BLIN9A_AU_NP = np.array(_BLIN9A_AU, dtype=np.float64)
+_BLIN9A_AA_NP = np.exp(-_BLIN9A_AU_NP)
+_BLIN9B_AX_NP = np.array(_BLIN9B_AX, dtype=np.float64)
+_BLIN9B_AXI_NP = np.array(_BLIN9B_AXI, dtype=np.float64)
+_BLIN9B_AV_NP = np.array(_BLIN9B_AV, dtype=np.float64)
+_BLIN9B_KF_NP = np.arange(3, dtype=np.float64)[:, None]
+_BLIN9B_AH_AXK_NP = np.array(_BLIN9B_AH, dtype=np.float64)[None, :] * (
+    _BLIN9B_AX_NP[None, :] ** _BLIN9B_KF_NP
+)
+_BLIN9B_CE_NP = _BLIN9B_AX_NP - 1.0
+_BLIN9C_KJ_IDX = np.add.outer(np.arange(3), np.arange(5))
+_BLIN9C_CNU_NP = _BLIN9C_KJ_IDX.astype(np.float64) + 0.5
+_BLIN9C_C_NP = np.array(
+    [1.0, 0.25, -1.0 / 32.0, 1.0 / 128.0, -5.0 / 2048.0], dtype=np.float64
+)
+_BLIN9C_DC_NP = np.array(
+    [0.0, 0.25, -1.0 / 16.0, 3.0 / 128.0, -5.0 / 512.0], dtype=np.float64
+)
+_BLIN9C_KF3_NP = np.arange(3, dtype=np.float64)
+
+
 def blin9a_jax(
     temp: jax.Array, chi: jax.Array
 ) -> tuple[BlinSeries1, BlinSeries1, BlinSeries1]:
     """Evaluate `BLIN9a` (`pc_eos.f90` lines 2417-2526)."""
+    ac = jnp.asarray(_BLIN9A_AC_NP)
+    au = jnp.asarray(_BLIN9A_AU_NP)
+    aa = jnp.asarray(_BLIN9A_AA_NP)
     echi = jnp.exp(-jnp.clip(chi, -500.0, 500.0))
-    series: list[BlinSeries1] = []
-    for k in range(3):
-        w = jnp.zeros_like(temp)
-        wdx = jnp.zeros_like(temp)
-        wdt = jnp.zeros_like(temp)
-        for i in range(5):
-            ac = _BLIN9A_AC[k][i]
-            au = _BLIN9A_AU[k][i]
-            aa = jnp.exp(-au)
-            sq = jnp.sqrt(1.0 + 0.5 * au * temp)
-            dn = echi + aa
-            dn2 = dn * dn
-            w = w + sq / dn * ac
-            wdx = wdx + sq / dn2 * ac
-            wdt = wdt + (ac * au) / (sq * dn)
-        series.append(BlinSeries1(w=w, wdx=wdx * echi, wdt=wdt * 0.25))
-    return series[0], series[1], series[2]
+    sq = jnp.sqrt(1.0 + 0.5 * au * temp[..., None, None])
+    dn = echi[..., None, None] + aa
+    w = jnp.sum(sq / dn * ac, axis=-1)
+    wdx = jnp.sum(sq / (dn * dn) * ac, axis=-1) * echi[..., None]
+    wdt = jnp.sum((ac * au) / (sq * dn), axis=-1) * 0.25
+    return (
+        BlinSeries1(w[..., 0], wdx[..., 0], wdt[..., 0]),
+        BlinSeries1(w[..., 1], wdx[..., 1], wdt[..., 1]),
+        BlinSeries1(w[..., 2], wdx[..., 2], wdt[..., 2]),
+    )
 
 
 def blin9b_jax(
     temp: jax.Array, chi_in: jax.Array
 ) -> tuple[BlinSeries1, BlinSeries1, BlinSeries1]:
     """Evaluate `BLIN9b` (`pc_eos.f90` lines 2528-2653)."""
+    ax = jnp.asarray(_BLIN9B_AX_NP)
+    axi = jnp.asarray(_BLIN9B_AXI_NP)
+    av = jnp.asarray(_BLIN9B_AV_NP)
+    kf = jnp.asarray(_BLIN9B_KF_NP)
+    ah_axk = jnp.asarray(_BLIN9B_AH_AXK_NP)
+    ce = jnp.asarray(_BLIN9B_CE_NP)
+
     chi = jnp.maximum(chi_in, 1.0e-3)
     sqchi = jnp.sqrt(chi)
-    series: list[BlinSeries1] = []
-    for k in range(3):
-        kf = float(k)
-        w = jnp.zeros_like(temp)
-        wdx = jnp.zeros_like(temp)
-        wdt = jnp.zeros_like(temp)
-        chi_k1 = chi ** (k + 1)
-        for i in range(5):
-            ax = _BLIN9B_AX[i]
-            axi = _BLIN9B_AXI[i]
-            ah_axk = _BLIN9B_AH[i] * (ax**k)
-            av = _BLIN9B_AV[i]
-            ce = ax - 1.0
-            echi = jnp.exp(jnp.clip(chi * ce, -500.0, 500.0))
-            de = echi + 1.0
-            d = chi * temp * (0.5 * ax) + 1.0
-            h = chi_k1 * sqchi * jnp.sqrt(d) / de
-            hx = (kf + 1.5) / chi + temp * (0.25 * ax) / d - echi * ce / de
-            hdx = h * hx
-            hdt = h * (chi * (0.25 * ax) / d)
+    chi2 = chi * chi
+    chi_k1 = jnp.stack([chi, chi2, chi2 * chi], axis=-1)[..., :, None]
+    echi = jnp.exp(jnp.clip(chi[..., None] * ce, -500.0, 500.0))
+    de = echi + 1.0
+    d = chi[..., None] * temp[..., None] * (0.5 * ax) + 1.0
+    h = (
+        chi_k1
+        * sqchi[..., None, None]
+        * jnp.sqrt(d)[..., None, :]
+        / de[..., None, :]
+    )
+    hx = (kf + 1.5) / chi[..., None, None] + (
+        temp[..., None] * (0.25 * ax) / d - echi * ce / de
+    )[..., None, :]
+    hdx = h * hx
+    hdt = h * (chi[..., None] * (0.25 * ax) / d)[..., None, :]
 
-            xichi = chi + axi
-            dxi = xichi * temp * 0.5 + 1.0
-            v = (xichi**k) * jnp.sqrt(xichi * dxi)
-            vdx = v * ((kf + 0.5) / xichi + temp * 0.25 / dxi)
-            vdt = v * (xichi * 0.25 / dxi)
+    xichi = chi[..., None] + axi
+    dxi = xichi * temp[..., None] * 0.5 + 1.0
+    xichi_k = jnp.stack([jnp.ones_like(xichi), xichi, xichi * xichi], axis=-2)
+    v = xichi_k * jnp.sqrt(xichi * dxi)[..., None, :]
+    vdx = v * (
+        (kf + 0.5) / xichi[..., None, :]
+        + (temp[..., None] * 0.25 / dxi)[..., None, :]
+    )
+    vdt = v * (xichi * 0.25 / dxi)[..., None, :]
 
-            w = w + h * ah_axk + v * av
-            wdx = wdx + hdx * ah_axk + vdx * av
-            wdt = wdt + hdt * ah_axk + vdt * av
-        series.append(BlinSeries1(w=w, wdx=wdx, wdt=wdt))
-    return series[0], series[1], series[2]
+    w = jnp.sum(h * ah_axk + v * av, axis=-1)
+    wdx = jnp.sum(hdx * ah_axk + vdx * av, axis=-1)
+    wdt = jnp.sum(hdt * ah_axk + vdt * av, axis=-1)
+    return (
+        BlinSeries1(w[..., 0], wdx[..., 0], wdt[..., 0]),
+        BlinSeries1(w[..., 1], wdx[..., 1], wdt[..., 1]),
+        BlinSeries1(w[..., 2], wdx[..., 2], wdt[..., 2]),
+    )
 
 
 def blin9c_jax(
     temp: jax.Array, chi_in: jax.Array
 ) -> tuple[BlinSeries1, BlinSeries1, BlinSeries1]:
     """Evaluate `BLIN9c` (`pc_eos.f90` lines 2655-2887)."""
+    cnu = jnp.asarray(_BLIN9C_CNU_NP)
+    c_coeff = jnp.asarray(_BLIN9C_C_NP)
+    dc_coeff = jnp.asarray(_BLIN9C_DC_NP)
+    kf3 = jnp.asarray(_BLIN9C_KF3_NP)
+
     chi = jnp.maximum(chi_in, 1.0e-3)
     sqchi = jnp.sqrt(chi)
     chi2 = chi * chi
@@ -254,41 +288,31 @@ def blin9c_jax(
     chi4 = chi2 * chi2
     pi26_2_07 = 0.7 * _PI26 * _PI26
 
-    s_small: list[BlinSeries1] = []
-    for k in range(3):
-        w = jnp.zeros_like(temp)
-        wdx = jnp.zeros_like(temp)
-        wdt = jnp.zeros_like(temp)
-        c = jnp.zeros_like(temp)
-        for j in range(5):
-            cnu = float(k + j) + 0.5
-            chinu = (chi ** (k + j)) * sqchi
-            f = chinu * (
-                chi / (cnu + 1.0)
-                + (_PI26 * cnu) / chi
-                + (pi26_2_07 * cnu * (cnu - 1.0) * (cnu - 2.0)) / chi3
-            )
-            fdx = chinu * (
-                (_PI26 * cnu * (cnu - 1.0)) / chi2
-                + (pi26_2_07 * cnu * (cnu - 1.0) * (cnu - 2.0) * (cnu - 3.0))
-                / chi4
-                + 1.0
-            )
-            if j == 0:
-                w = f
-                wdx = fdx
-            elif j == 1:
-                c = temp * 0.25
-                w = w + c * f
-                wdx = wdx + c * fdx
-                wdt = f * 0.25
-            else:
-                jf = float(j)
-                c = -c * temp * ((2.0 * jf - 3.0) / (4.0 * jf))
-                w = w + c * f
-                wdx = wdx + c * fdx
-                wdt = wdt + (c * jf / temp) * f
-        s_small.append(BlinSeries1(w=w, wdx=wdx, wdt=wdt))
+    o_c = jnp.ones_like(chi)
+    chi_pows = jnp.stack(
+        [o_c, chi, chi2, chi3, chi4, chi4 * chi, chi3 * chi3], axis=-1
+    )
+    chinu = chi_pows[..., _BLIN9C_KJ_IDX] * sqchi[..., None, None]
+    f = chinu * (
+        chi[..., None, None] / (cnu + 1.0)
+        + (_PI26 * cnu) / chi[..., None, None]
+        + (pi26_2_07 * cnu * (cnu - 1.0) * (cnu - 2.0)) / chi3[..., None, None]
+    )
+    fdx = chinu * (
+        (_PI26 * cnu * (cnu - 1.0)) / chi2[..., None, None]
+        + (pi26_2_07 * cnu * (cnu - 1.0) * (cnu - 2.0) * (cnu - 3.0))
+        / chi4[..., None, None]
+        + 1.0
+    )
+    o_t = jnp.ones_like(temp)
+    t2 = temp * temp
+    t_pows = jnp.stack([o_t, temp, t2, t2 * temp, t2 * t2], axis=-1)
+    dt_pows = jnp.stack([o_t, o_t, temp, t2, t2 * temp], axis=-1)
+    c_j = c_coeff * t_pows[..., None, :]
+    dc_dt = dc_coeff * dt_pows[..., None, :]
+    w_sm = jnp.sum(c_j * f, axis=-1)
+    wdx_sm = jnp.sum(c_j * fdx, axis=-1)
+    wdt_sm = jnp.sum(dc_dt * f, axis=-1)
 
     d = chi * temp * 0.5 + 1.0
     r = jnp.sqrt(chi * d)
@@ -296,20 +320,19 @@ def blin9c_jax(
     rdx = r * rx
     rdt = chi2 * 0.25 / r
 
-    am: list[jax.Array] = []
-    amdx: list[jax.Array] = []
-    amdt: list[jax.Array] = []
-    for k in range(3):
-        kf = float(k)
-        dm = chi * temp * (0.5 * (kf + 1.0)) + (kf + 0.5)
-        am_k = (chi**k) * dm / r
-        fmx = (
-            (kf - 0.5) / chi + temp * (0.5 * (kf + 1.0)) / dm - temp * 0.25 / d
-        )
-        fmt = (0.5 * (kf + 1.0)) / dm * chi - chi * 0.25 / d
-        am.append(am_k)
-        amdx.append(am_k * fmx)
-        amdt.append(am_k * fmt)
+    dm = chi[..., None] * temp[..., None] * (0.5 * (kf3 + 1.0)) + (kf3 + 0.5)
+    chi_k3 = jnp.stack([o_c, chi, chi2], axis=-1)
+    am = chi_k3 * dm / r[..., None]
+    fmx = (
+        (kf3 - 0.5) / chi[..., None]
+        + temp[..., None] * (0.5 * (kf3 + 1.0)) / dm
+        - (temp * 0.25 / d)[..., None]
+    )
+    fmt = (0.5 * (kf3 + 1.0)) / dm * chi[..., None] - (chi * 0.25 / d)[
+        ..., None
+    ]
+    amdx = am * fmx
+    amdt = am * fmt
 
     sq2t = jnp.sqrt(temp * 2.0)
     sq2t3 = sq2t * sq2t * sq2t
@@ -321,11 +344,7 @@ def blin9c_jax(
     asq3 = a * sq2t3
     fj0 = xt1 * r * 0.5 - aln / sq2t3
     fj0dx = (r + xt1 * rdx) * 0.5 - adx / asq3
-    fj0dt = (
-        (xt1 * rdt - r / (temp * temp)) * 0.5
-        - adt / asq3
-        + aln * 0.75 / (temp * temp * sq2t)
-    )
+    fj0dt = (xt1 * rdt - r / t2) * 0.5 - adt / asq3 + aln * 0.75 / (t2 * sq2t)
     fj1 = (r * r * r / 1.5 - fj0) / temp
     fj1dx = (r * r * rdx * 2.0 - fj0dx) / temp
     fj1dt = (r * r * rdt * 2.0 - fj0dt - fj1) / temp
@@ -333,31 +352,17 @@ def blin9c_jax(
     fj2dx = (r * r * r * 0.5 + chi * r * r * rdx * 1.5 - fj1dx * 1.25) / temp
     fj2dt = (chi * r * r * rdt * 1.5 - fj1dt * 1.25 - fj2) / temp
 
-    s_large = (
-        BlinSeries1(
-            w=fj0 + am[0] * _PI26,
-            wdx=fj0dx + amdx[0] * _PI26,
-            wdt=fj0dt + amdt[0] * _PI26,
-        ),
-        BlinSeries1(
-            w=fj1 + am[1] * _PI26,
-            wdx=fj1dx + amdx[1] * _PI26,
-            wdt=fj1dt + amdt[1] * _PI26,
-        ),
-        BlinSeries1(
-            w=fj2 + am[2] * _PI26,
-            wdx=fj2dx + amdx[2] * _PI26,
-            wdt=fj2dt + amdt[2] * _PI26,
-        ),
-    )
-    cond = (chi_in * temp) < 0.1
-    return tuple(  # type: ignore[return-value]
-        BlinSeries1(
-            w=jnp.where(cond, sm.w, lg.w),
-            wdx=jnp.where(cond, sm.wdx, lg.wdx),
-            wdt=jnp.where(cond, sm.wdt, lg.wdt),
-        )
-        for sm, lg in zip(s_small, s_large, strict=True)
+    fj = jnp.stack([fj0, fj1, fj2], axis=-1)
+    fjdx = jnp.stack([fj0dx, fj1dx, fj2dx], axis=-1)
+    fjdt = jnp.stack([fj0dt, fj1dt, fj2dt], axis=-1)
+    cond = ((chi_in * temp) < 0.1)[..., None]
+    w_o = jnp.where(cond, w_sm, fj + am * _PI26)
+    wdx_o = jnp.where(cond, wdx_sm, fjdx + amdx * _PI26)
+    wdt_o = jnp.where(cond, wdt_sm, fjdt + amdt * _PI26)
+    return (
+        BlinSeries1(w_o[..., 0], wdx_o[..., 0], wdt_o[..., 0]),
+        BlinSeries1(w_o[..., 1], wdx_o[..., 1], wdt_o[..., 1]),
+        BlinSeries1(w_o[..., 2], wdx_o[..., 2], wdt_o[..., 2]),
     )
 
 

@@ -209,11 +209,11 @@ pub fn melange9(
     } else {
         let mut fmix = AutoDiffReal2VarOrder1::zero();
         for i in 0..nmix {
-            if ay[i] < TINY {
+            if ay[i] < TINY || azion[i] <= 0.0 {
                 continue;
             }
             for j in (i + 1)..nmix {
-                if ay[j] < TINY {
+                if ay[j] < TINY || azion[j] <= 0.0 {
                     continue;
                 }
                 let rz = azion[j] / azion[i];

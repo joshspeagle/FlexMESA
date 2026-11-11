@@ -18,9 +18,17 @@ concurrency:
   group: "pages-${{ github.event_name }}-${{ github.ref }}"
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+env:
+  OMP_NUM_THREADS: "4"
+  OPENBLAS_NUM_THREADS: "4"
+  MKL_NUM_THREADS: "4"
+  RAYON_NUM_THREADS: "4"
+  JAX_PLATFORMS: "cpu"
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 35
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -29,15 +37,34 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: "pip"
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust cargo target and registry
+        uses: Swatinem/rust-cache@v2
+
+      - name: Cache FlexMESA data-v1 and MESA test bundles
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/flexmesa
+          key: flexmesa-data-v1-${{ hashFiles('src/flexmesa/data/bundles.toml') }}
+
+      - name: Fetch verified data-v1 physics bundles
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          command -v zstd >/dev/null || (sudo apt-get update && sudo apt-get install -y zstd)
+          python3 src/flexmesa/data/fetch.py fetch --include-test-inputs
+          echo "FLEXMESA_DATA_DIR=$HOME/.cache/flexmesa/data" >> "$GITHUB_ENV"
+          echo "MESA_DIR=$HOME/.cache/flexmesa/mesa_test_inputs" >> "$GITHUB_ENV"
 
       - name: Install documentation and build dependencies
         run: |
           python -m pip install --upgrade pip
           python -m pip install maturin ruff matplotlib mkdocs-material "mkdocstrings[python]"
-          python -m pip install --no-build-isolation -e .
+          python -m pip install --no-build-isolation -e ".[docs]"
 
       - name: Generate publication-styled diagnostic figures
         run: python scripts/build_docs_figures.py

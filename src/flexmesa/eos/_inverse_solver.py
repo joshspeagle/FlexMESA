@@ -71,7 +71,11 @@ def _pack_inv(vals: tuple[Any, ...]) -> EosInverseOutput:
 
 def _concrete_xa_np(xa: Any) -> np.ndarray:
     """Extract a contiguous float64 NumPy array from `xa` without tracing."""
-    raw = xa.primal if isinstance(xa, jax.interpreters.ad.JVPTracer) else xa
+    raw = xa
+    while isinstance(raw, jax.core.Tracer) and hasattr(raw, "primal"):
+        raw = raw.primal
+    if isinstance(raw, jax.core.Tracer) and hasattr(raw, "val"):
+        raw = raw.val
     return np.ascontiguousarray(raw, dtype=np.float64)
 
 

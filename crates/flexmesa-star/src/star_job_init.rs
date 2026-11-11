@@ -18,9 +18,10 @@ use crate::model_io::read_mod_str;
 use crate::pre_ms::build_pre_ms_model;
 pub(crate) use crate::relax::equilibrate_tier2_scaled_model;
 use crate::relax::{
-    apply_composition_relaxation, apply_uniform_rotation, relax_core_boundary,
-    relax_from_profile_files, relax_irradiation_to_target,
-    relax_mass_to_target, relax_tau_factor_to_target, relax_to_remove_h_env,
+    apply_composition_relaxation, apply_uniform_rotation,
+    excise_core_by_temperature, relax_core_boundary, relax_from_profile_files,
+    relax_irradiation_to_target, relax_mass_to_target,
+    relax_tau_factor_to_target, relax_to_remove_h_env,
 };
 use crate::tier2_extras::apply_planetary_core;
 use crate::zams::load_zams_model;
@@ -127,10 +128,13 @@ pub fn init_or_update_model_from_bundle(
         .unwrap_or("");
     let out_of_zams_range =
         controls.initial_mass > 15.8 || controls.initial_mass < 0.51;
+    let is_pulse_mod_case = case_name.starts_with("gyre_in_mesa_")
+        || matches!(case_name, "astero_gyre" | "astero_adipls");
     let is_tier2_or_3 = crate::tier2_extras::is_tier2_case(case_name)
         || crate::tier3_extras::is_tier3_case(case_name)
         || crate::tier4_extras::is_tier4_case(case_name)
         || crate::tier5_extras::is_tier5_star_case(case_name)
+        || job.relax_initial_mass_to_remove_h_env
         || out_of_zams_range;
     let mut loaded_from_mod = false;
     let mut model = if job.create_rsp_model {
@@ -138,6 +142,47 @@ pub fn init_or_update_model_from_bundle(
             controls.clone(),
             job.clone(),
         )?
+    } else if is_pulse_mod_case {
+        if let Some(prev) = existing_model {
+            loaded_from_mod = true;
+            prev
+        } else if job.load_saved_model && !job.saved_model_name.is_empty() {
+            if let Some(mod_path) =
+                resolve_model_path(&bundle.case_dir, &job.saved_model_name)
+            {
+                let text = fs::read_to_string(&mod_path).map_err(|e| {
+                    StarError::IoError(format!(
+                        "failed to read saved model {}: {e}",
+                        mod_path.display()
+                    ))
+                })?;
+                match read_mod_str(&text, controls.clone(), job.clone()) {
+                    Ok(m) => {
+                        loaded_from_mod = true;
+                        m
+                    }
+                    Err(_) => build_initial_planet_or_wd_model(
+                        controls.clone(),
+                        job.clone(),
+                    )?,
+                }
+            } else {
+                build_initial_planet_or_wd_model(
+                    controls.clone(),
+                    job.clone(),
+                )?
+            }
+        } else {
+            load_zams_model(controls.clone(), job.clone())?
+        }
+    } else if case_name == "make_env" && existing_model.is_none() {
+        let mut env_controls = controls.clone();
+        if let Some(&m_env) = controls.x_ctrl.first().filter(|&&m| m > 0.0) {
+            env_controls.initial_mass = m_env.clamp(0.55, 15.0);
+        }
+        let mut m = load_zams_model(env_controls, job.clone())?;
+        excise_core_by_temperature(&mut m, 4.0e6);
+        m
     } else if crate::tier3_extras::is_tier3_case(case_name)
         || crate::tier4_extras::is_tier4_case(case_name)
         || crate::tier5_extras::is_tier5_star_case(case_name)
@@ -296,17 +341,8 @@ pub fn init_or_update_model_from_bundle(
     if job.set_tau_factor && job.set_to_this_tau_factor > 0.0 {
         relax_tau_factor_to_target(&mut model, job.set_to_this_tau_factor, 8);
     }
-
-    // Pure-envelope integration mode (`make_env`)
-    if model.controls.eps_nuc_factor == 0.0
-        && model.l_center == 0.0
-        && model.lum.first().copied().unwrap_or(0.0) > 0.0
-    {
-        model.l_center = model.lum[0];
-        if !job.set_initial_dt || model.dt < 1.0e2 {
-            model.dt = 1.0e2 * SECYER;
-            model.dt_next = model.dt;
-        }
+    if let Some(t_cut) = job.remove_initial_center_by_temperature {
+        excise_core_by_temperature(&mut model, t_cut);
     }
 
     // 6. Velocity & rotation flags (`change_v_flag`, `change_u_flag`, `change_rotation_flag`)
@@ -328,18 +364,6 @@ pub fn init_or_update_model_from_bundle(
             model.omega.resize(model.nz, 0.0);
             model.j_rot.resize(model.nz, 0.0);
         }
-    }
-    if let Some(v_surf) = job.new_surface_rotation_v.filter(|&v| v > 0.0) {
-        let r_surf = model.r.first().copied().unwrap_or(R_SUN).max(1.0);
-        apply_uniform_rotation(&mut model, (v_surf * 1.0e5) / r_surf);
-    } else if let Some(w_div_wc) =
-        job.new_omega_div_omega_crit.filter(|&w| w > 0.0)
-    {
-        let r_surf = model.r.first().copied().unwrap_or(R_SUN).max(1.0);
-        let omega_crit = (STANDARD_CGRAV * model.mstar / r_surf.powi(3)).sqrt();
-        apply_uniform_rotation(&mut model, w_div_wc * omega_crit);
-    } else if let Some(omega_0) = job.new_omega.filter(|&w| w > 0.0) {
-        apply_uniform_rotation(&mut model, omega_0);
     }
 
     model.layout = VarLayout::new(
@@ -380,6 +404,28 @@ pub fn init_or_update_model_from_bundle(
     {
         extras.other_cgrav(&mut model);
     }
+
+    // Apply rotational spin-up AFTER equilibration and `sync_mesh_and_pack` so
+    // `model.r[0]` and `model.cgrav[0]` match the active stellar structure.
+    if let Some(v_surf) = job.new_surface_rotation_v.filter(|&v| v > 0.0) {
+        let r_surf = model.r.first().copied().unwrap_or(R_SUN).max(1.0);
+        apply_uniform_rotation(&mut model, (v_surf * 1.0e5) / r_surf);
+    } else if let Some(w_div_wc) =
+        job.new_omega_div_omega_crit.filter(|&w| w > 0.0)
+    {
+        let r_surf = model.r.first().copied().unwrap_or(R_SUN).max(1.0);
+        let g_surf = model
+            .cgrav
+            .first()
+            .copied()
+            .filter(|&g| g > 0.0)
+            .unwrap_or(STANDARD_CGRAV);
+        let omega_crit = (g_surf * model.mstar / r_surf.powi(3)).sqrt();
+        apply_uniform_rotation(&mut model, w_div_wc * omega_crit);
+    } else if let Some(omega_0) = job.new_omega.filter(|&w| w > 0.0) {
+        apply_uniform_rotation(&mut model, omega_0);
+    }
+
     set_hydro_vars(&mut model, false, false)?;
     model.save_start_values();
     model.save_old_values();

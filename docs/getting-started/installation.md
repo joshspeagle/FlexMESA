@@ -113,19 +113,36 @@ Setting `RAYON_NUM_THREADS` to match the physical core count (typically 4 to 8 t
 
 ---
 
-## 5. Physics Data Tables (`flexmesa.data` & `FLEXMESA_DATA_DIR`)
+## 5. Physics Data Tables (`flexmesa data fetch` & `FLEXMESA_DATA_DIR`)
 
-Upstream Fortran MESA distributes over 2 GiB of ASCII text tables paired with platform-dependent Fortran unformatted binary cache files. `FlexMESA` replaces these with content-addressed, zero-copy `.safetensors` binary archives:
+Upstream Fortran MESA distributes over 2 GiB of ASCII text tables paired with platform-dependent Fortran unformatted binary cache files. `FlexMESA` replaces these with content-addressed, zero-copy `.safetensors` and IEEE-754 little-endian binary table bundles verified by `SHA-256` checksums:
 
-- **Bundled Core Tables**: The reference nuclide catalog (347 built-in reference nuclides plus full `isotopes.data` parser), 286 solar isotopes across 10 solar abundance scales (`AG89` through `AAG21`, including `lodders03`, `gs98`, and `asplund09`), the Timmes & Swesty (2000) biquintic Helmholtz electron-positron table (`helm_table.safetensors`), the Kurucz (2003) stellar atmosphere SED atlas (`lcb98cor.dat`), the 316 built-in REACLIB nuclear rates, and the 8-mass Zero-Age Main Sequence (`ZAMS`) stellar catalog are embedded directly into the repository and available immediately upon import without external downloads.
-- **Cryptographic Integrity (`manifest.toml`)**: Every `.safetensors` table bundle is registered in `src/flexmesa/data/manifest.toml` with a `TableArtifact` record specifying its exact byte size, required `float64`/`int64` tensor names, and 64-character lowercase hexadecimal `SHA-256` digest. You can inspect and verify the active manifest from Python:
+- **Full-Resolution `data-v1` Physics Bundles (`flexmesa data fetch`)**: After installing `FlexMESA`, fetch and verify the canonical full-resolution physics tables (`helm_table_full.bin`, full radiative and conductive opacity tables `kap_tables_full.bin`, and the 116 `OPAL`/`SCVH`, `FreeEOS`, and `CMS` 4D EOS composition slices) into `$FLEXMESA_DATA_DIR` (defaulting to `$XDG_CACHE_HOME/flexmesa/data` or `~/.cache/flexmesa/data`):
+
+```bash
+flexmesa data fetch
+flexmesa data verify
+flexmesa data status
+```
+
+  To also download the 3,142 upstream MESA `r24.08.1` golden `test_output` and `test_suite` input files into `~/.cache/flexmesa/mesa_test_inputs` for full end-to-end parity verification, pass `--include-test-inputs`:
+
+```bash
+flexmesa data fetch --include-test-inputs
+```
+
+- **Bundled Core Catalogs**: The reference nuclide catalog (347 built-in reference nuclides plus full `isotopes.data` parser), 286 solar isotopes across 10 solar abundance scales (`AG89` through `AAG21`, including `lodders03`, `gs98`, and `asplund09`), the Kurucz (2003) stellar atmosphere SED atlas (`lcb98cor.dat`), the 316 built-in REACLIB nuclear rates, and the Zero-Age Main Sequence (`ZAMS`) stellar catalog are embedded directly into the repository.
+- **Cryptographic Integrity (`manifest.toml` & `bundles.toml`)**: Every `.safetensors` table bundle in `src/flexmesa/data/manifest.toml` and every release archive in `src/flexmesa/data/bundles.toml` carries its exact byte size and 64-character lowercase hexadecimal `SHA-256` digest. You can inspect both manifests from Python:
 
 ```python
-from flexmesa.data import loader, manifest
+from flexmesa.data import fetch, manifest
 
 catalog = manifest.load_default_manifest()
 for name, artifact in catalog.items():
     print(f"{name}: {artifact.filename} ({artifact.size_bytes} bytes, sha256={artifact.sha256[:12]}...)")
+
+repo, tag, bundles = fetch.load_bundles_manifest()
+print(f"Release {repo}@{tag}: {len(bundles)} verified archives")
 ```
 
-- **Custom External Table Directory (`FLEXMESA_DATA_DIR`)**: When working with custom or extended `.safetensors` opacity (`kap`), 4D equation-of-state (`eosDT`, `FreeEOS`, `CMS`), or atmosphere (`atm`) table bundles stored on shared cluster storage, set the `FLEXMESA_DATA_DIR` environment variable to point to your table directory, or pass explicit paths to `flexmesa.data.loader.load_safetensors_bundle(path, expected_sha256=...)`. The loader validates the `SHA-256` checksum and memory-maps (`mmap`) the C-contiguous `float64` tensors directly into Safe Rust and NumPy without intermediate heap copies.
+- **Custom External Table Directory (`FLEXMESA_DATA_DIR`)**: When hosting physics table bundles on shared cluster storage, set the `FLEXMESA_DATA_DIR` environment variable (or pass `--dest` / `--data-dir` to `flexmesa data fetch`, `flexmesa data verify`, and `flexmesa data path`), and optionally set `MESA_DIR` to point to the extracted `mesa_test_inputs` directory. `flexmesa data fetch` and `flexmesa data verify` validate archive and unpacked `SHA-256` digests, byte sizes, and sentinel paths, while table loaders memory-map (`mmap`) binary physics tables directly into Safe Rust and JAX/NumPy without intermediate heap copies.

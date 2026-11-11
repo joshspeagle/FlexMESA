@@ -3,6 +3,6 @@ cepheid_p0_days,4.6730893154e+00
 cepheid_p1_over_p0,7.0500000000e-01
 cpm_bdy_gradr_over_grada,1.0002351712e+00
 cpm_core_mass_gain_frac,2.0000000000e-01
-diffusion_mass_rel_err,1.4495521291e-16
+diffusion_mass_rel_err,0.0000000000e+00
 levitation_fe_peak_over_g,1.3819129765e+00
 rrlyrae_p0_days,7.0146167120e-01

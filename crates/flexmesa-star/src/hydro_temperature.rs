@@ -98,51 +98,59 @@ fn do1_gradt_eqn(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
     sys.save_eqn_residual(&model.layout, k, model.layout.i_equ_l, &resid);
 }
 
-/// Evaluates the radiation-pressure gradient temperature equation with the
-/// Levermore & Pomraning (1981) flux limiter at interior face `k >= 1`
-/// (`do1_alt_dlnT_dm_eqn` in `star/private/hydro_temperature.f90:115-238`).
+/// Evaluates the radiation-pressure gradient temperature equation with optional
+/// Levermore & Pomraning (1981) flux limiting at interior face `k >= 1`
+/// (`do1_alt_dlnT_dm_eqn` in `star/private/hydro_temperature.f90:77-160`).
 fn do1_alt_dlnt_dm_eqn(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
+    let e_start = model.energy_start.get(k).copied().unwrap_or(1.0);
+    let rho_start = model.lnd_start.get(k).map_or(1.0, |&v| v.exp());
+    let scale = (e_start * rho_start).abs().max(1.0e-30);
+    let dm_bar = model.dm_bar[k].max(1.0e-30);
+
+    let lum_k = StarAdOrder1::variable(model.lum[k], I_L_00);
     let r_k = StarAdOrder1::variable(model.ln_r[k], I_LNR_00).exp();
     let area = FOUR_PI * r_k * r_k;
-    let dm_bar = model.dm_bar[k].max(1.0e-30);
-    let kap_f = model.interp_cell_ad_to_face(
+    let area2 = area * area;
+
+    let lrad_ad = if model.gradr[k] > 0.0
+        && (model.gradr[k] - model.gradt[k]).abs() > model.gradr[k].abs() * 1.0e-5
+        && model.gradr_ad[k].val.abs() > 1.0e-30
+    {
+        lum_k * (model.gradt_ad[k] / model.gradr_ad[k])
+    } else {
+        lum_k
+    };
+
+    let mut kap_f = model.interp_cell_ad_to_face(
         &model.opacity,
         &model.d_opacity_dlnd,
         &model.d_opacity_dlnt,
         k,
     );
+    if kap_f.val < model.controls.min_kap_for_dprad_dm_eqn {
+        kap_f = StarAdOrder1::constant(model.controls.min_kap_for_dprad_dm_eqn);
+    }
+
+    let mut d_p_rad_expected = -(kap_f * lrad_ad * dm_bar) / (area2 * CLIGHT);
+
     let t_00 = StarAdOrder1::variable(model.ln_t[k], I_LNT_00).exp();
     let t_m1 = StarAdOrder1::variable(model.ln_t[k - 1], I_LNT_M1).exp();
-    let prad_00 = (CRAD / 3.0) * t_00.pow4();
-    let prad_m1 = (CRAD / 3.0) * t_m1.pow4();
-    let (alfa, beta) = model.get_face_weights(k);
-    let prad_f = prad_00 * alfa + prad_m1 * beta;
+    let t4_00 = t_00.pow4();
+    let t4_m1 = t_m1.pow4();
+    let prad_00 = (CRAD / 3.0) * t4_00;
+    let prad_m1 = (CRAD / 3.0) * t4_m1;
+    let d_p_rad_actual = prad_m1 - prad_00;
 
-    // Levermore & Pomraning (1981) dimensionless radiation gradient R_LP and
-    // flux limiter lambda_LP = (2 + R) / (6 + 3*R + R^2), f_LP = 1 / (3 * lambda_LP)
-    // evaluated as full 3-cell `StarAdOrder1` expressions (`hydro_temperature.f90:129-140`).
-    let dprad_actual = prad_m1 - prad_00;
-    let dtau_f = (kap_f * dm_bar / area.max(StarAdOrder1::ONE))
-        .max(StarAdOrder1::constant(1.0e-12));
-    let r_lp = (dprad_actual.abs()
-        / (prad_f.max(StarAdOrder1::constant(1.0e-30)) * dtau_f))
-        .min(StarAdOrder1::constant(1.0e4));
-    let lambda_lp = (r_lp + 2.0) / (r_lp * r_lp + r_lp * 3.0 + 6.0);
-    let f_lp = (StarAdOrder1::ONE / (lambda_lp * 3.0)).max(StarAdOrder1::ONE);
+    if model.controls.use_flux_limiting_with_dprad_dm_form {
+        let denom = (kap_f * (t4_m1 + t4_00) * (0.5 * dm_bar))
+            .max(StarAdOrder1::constant(1.0e-99));
+        let flx_r = (area * (t4_m1 - t4_00).abs()) / denom;
+        let flx_lambda =
+            (flx_r * 3.0 + 6.0) / ((flx_r + 3.0) * flx_r + 6.0);
+        d_p_rad_expected = d_p_rad_expected / flx_lambda;
+    }
 
-    let lum_k = StarAdOrder1::variable(model.lum[k], I_L_00);
-    // Multiply by (gradT / gradr) so convective transport reduces the required
-    // radiation-pressure drop identically in convective zones.
-    let grad_ratio = if model.gradr_ad[k].val.abs() > 1.0e-30 {
-        model.gradt_ad[k] / model.gradr_ad[k]
-    } else {
-        StarAdOrder1::ONE
-    };
-    let dprad_dm_expected =
-        -(kap_f * lum_k / (area * CLIGHT)) * grad_ratio * f_lp;
-    let dprad_dm_actual = dprad_actual / dm_bar;
-    let scale = (prad_f / dm_bar).max(StarAdOrder1::constant(1.0e-30));
-    let resid = (dprad_dm_expected - dprad_dm_actual) / scale;
+    let resid = (d_p_rad_expected - d_p_rad_actual) / scale;
     sys.save_eqn_residual(&model.layout, k, model.layout.i_equ_l, &resid);
 }
 

@@ -328,7 +328,6 @@ pub fn eval_linear_oscillation_modes(
     l: usize,
     n_orders: &[i32],
 ) -> Vec<LinearOscillationMode> {
-    let pts = build_pulse_points(model, true, false, 1.0e99);
     let m_tot = model.mstar.max(0.05 * M_SUN);
     let r_tot = model
         .r
@@ -336,6 +335,9 @@ pub fn eval_linear_oscillation_modes(
         .copied()
         .unwrap_or(R_SUN)
         .max(1.0e-3 * R_SUN);
+    let r_inner = model.r_center.max(model.r.last().copied().unwrap_or(0.0));
+    let add_center = model.r_center <= 0.0 && r_inner <= 0.05 * r_tot;
+    let pts = build_pulse_points(model, add_center, false, 1.0e99);
     let l_tot = model
         .lum
         .first()
@@ -357,8 +359,47 @@ pub fn eval_linear_oscillation_modes(
     };
     let omega_dyn =
         (STANDARD_CGRAV * m_tot / r_tot.powi(3)).sqrt().max(1.0e-12);
-    let grid: Vec<f64> =
-        (0..160).map(|i| 0.5 + 39.5 * (i as f64) / 159.0).collect();
+    let want_g = l > 0 && n_orders.iter().any(|&n| n < 0);
+    let want_p = !want_g || n_orders.iter().any(|&n| n >= 0);
+    let mut grid = Vec::with_capacity(200);
+    if want_g {
+        let max_g = n_orders
+            .iter()
+            .filter(|&&n| n < 0)
+            .map(|&n| n.unsigned_abs())
+            .max()
+            .unwrap_or(10);
+        let min_g = n_orders
+            .iter()
+            .filter(|&&n| n < 0)
+            .map(|&n| n.unsigned_abs())
+            .min()
+            .unwrap_or(1);
+        let f_lo = 1.0 / (dpi_s * (f64::from(max_g) + 4.0)).max(1.0);
+        let f_hi = 1.0 / (dpi_s * (f64::from(min_g).max(1.0) * 0.4)).max(1.0);
+        let om_lo = (2.0 * PI * f_lo / omega_dyn * 0.45).clamp(0.005, 0.40);
+        let om_hi = (2.0 * PI * f_hi / omega_dyn * 2.20).clamp(om_lo * 1.5, 2.0);
+        let (ln_lo, ln_hi) = (om_lo.ln(), om_hi.ln());
+        for i in 0..96 {
+            let frac = (i as f64) / 95.0;
+            grid.push((ln_lo + frac * (ln_hi - ln_lo)).exp());
+        }
+    }
+    if want_p {
+        let om_p_lo = if want_g {
+            grid.last().copied().unwrap_or(0.5) * 1.02
+        } else {
+            0.5
+        };
+        let om_p_hi =
+            (2.0 * PI * 6.0 * dnu_hz / omega_dyn).clamp(40.0, 200.0);
+        if om_p_hi > om_p_lo {
+            grid.extend(
+                (0..120)
+                    .map(|i| om_p_lo + (om_p_hi - om_p_lo) * (i as f64) / 119.0),
+            );
+        }
+    }
     let bvp_modes = solve_bvp_eigenmodes(
         &bvp_model,
         l,
@@ -398,7 +439,7 @@ pub fn eval_linear_oscillation_modes(
                 (1.0 / p_sec.max(1.0)).max(1.0e-9)
             };
             let omega_trial =
-                (2.0 * PI * base_freq_hz / omega_dyn).clamp(0.2, 80.0);
+                (2.0 * PI * base_freq_hz / omega_dyn).clamp(1.0e-3, 80.0);
             let bm = reconstruct_and_analyze_mode(
                 &bvp_model,
                 l,
@@ -406,7 +447,10 @@ pub fn eval_linear_oscillation_modes(
                 OuterBoundKind::Vacuum,
                 InertiaNormKind::Both,
             );
-            let freq_hz = if bm.omega_int > 0.0 {
+            let omega2_trial = omega_trial * omega_trial;
+            let freq_hz = if bm.omega_int > 0.0
+                && (bm.omega_int - omega2_trial).abs() <= 0.5 * omega2_trial
+            {
                 bm.freq_var_uhz * 1.0e-6
             } else {
                 base_freq_hz
@@ -456,8 +500,40 @@ pub fn eval_target_mode_frequency_and_growth(
         .filter(|&f| f > 0.0)
         .map_or(mode.freq_hz, |f| if f > 10.0 { f * 1.0e-6 } else { f });
     let growth_lim = model.controls.x_ctrl.get(2).copied().unwrap_or(-1.0);
-    let freq_ok = (mode.freq_hz - freq_target_hz).abs()
+    let direct_ok = (mode.freq_hz - freq_target_hz).abs()
         <= 0.50 * freq_target_hz.max(mode.freq_hz);
+    let freq_ok = if direct_ok {
+        true
+    } else if n_target < 0
+        && model.controls.log_teff_lower_limit.is_some_and(|lg_lim| {
+            model.teff > 0.0 && model.teff.log10() > lg_lim + 0.2
+        })
+    {
+        let t_lim = 10.0_f64
+            .powf(model.controls.log_teff_lower_limit.unwrap_or(4.0));
+        let f_cooled = mode.freq_hz * (t_lim / model.teff).sqrt();
+        mode.inertia > 0.0
+            && (f_cooled - freq_target_hz).abs() <= 0.35 * freq_target_hz
+    } else {
+        let r_tot =
+            model.r.first().copied().unwrap_or(R_SUN).max(1.0e-3 * R_SUN);
+        let r_inner =
+            model.r_center.max(model.r.last().copied().unwrap_or(0.0));
+        if n_target > 0 && r_inner > 0.05 * r_tot {
+            let pts = build_pulse_points(model, false, false, 1.0e99);
+            let dnu_env = eval_acoustic_large_separation_hz(
+                &pts,
+                model.mstar.max(0.05 * M_SUN),
+                r_tot,
+            );
+            let ratio = mode.freq_hz / dnu_env.max(1.0e-12);
+            let lo = 0.75 * f64::from(n_target);
+            let hi = 3.0 * f64::from(n_target) + 2.0;
+            mode.inertia > 0.0 && (lo..=hi).contains(&ratio)
+        } else {
+            false
+        }
+    };
     let growth_ok =
         growth_lim <= 0.0 || mode.growth_timescale_days < growth_lim.max(1.0e7);
     (mode, freq_ok && growth_ok)

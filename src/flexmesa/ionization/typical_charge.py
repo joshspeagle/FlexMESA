@@ -62,7 +62,7 @@ def ionization_potential(z: int, stage: int) -> float:
     return float(_potentials_np()[zi - 1, ki - 1])
 
 
-@jax.jit  # type: ignore[untyped-decorator]
+@jax.jit
 def chi_info_jax(
     a1: jax.Array | float,
     z1: jax.Array | float,
@@ -101,7 +101,7 @@ def chi_info_jax(
     return chi, c0, c1, c2
 
 
-@jax.jit  # type: ignore[untyped-decorator]
+@jax.jit
 def chi_effective_jax(
     chi: jax.Array | float,
     c0: jax.Array | float,

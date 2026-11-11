@@ -249,6 +249,22 @@ fn test_e2e_1_tier1_physics_helpers_and_suite() {
             <= 1.0e-15
     );
 
+    let require_zero_skips =
+        std::env::var("FLEXMESA_REQUIRE_ZERO_SKIPS").as_deref() == Ok("1");
+    if require_zero_skips {
+        let mesa_dir = std::env::var("MESA_DIR")
+            .expect("MESA_DIR required when FLEXMESA_REQUIRE_ZERO_SKIPS=1");
+        for sub in [
+            "star/test_suite",
+            "astero/test_suite",
+            "star/dev_cases_star_to_RSP2",
+        ] {
+            assert!(
+                Path::new(&mesa_dir).join(sub).is_dir(),
+                "missing {sub} under {mesa_dir}"
+            );
+        }
+    }
     if let Ok(mesa_dir) = std::env::var("MESA_DIR") {
         let base = Path::new(&mesa_dir);
         let case_dir = base.join("star").join("test_suite").join("make_zams");
@@ -308,6 +324,14 @@ fn test_e2e_2_tier2_physics_helpers_and_suite() {
     let (v_flame, q_flame) = eval_conductive_flame_state(&model);
     assert!(v_flame > 0.0 && v_flame.is_finite());
     assert!(q_flame > 0.0 && q_flame <= 1.0);
+
+    let mesa_dir = flexmesa_utils::resolve_mesa_test_inputs_dir();
+    let case_dir = mesa_dir.join("star/test_suite/cburn_inward");
+    if case_dir.is_dir() {
+        let rep = run_test_suite_case(&case_dir, true, Some(2), true)
+            .expect("cburn_inward tier 2 run");
+        assert!(rep.passed);
+    }
 }
 
 #[test]
@@ -347,6 +371,22 @@ fn test_e2e_4_tier4_pulsation_astero_and_dev_cases() {
     assert!(lina[1].period_days < lina[0].period_days);
     assert!(lina[0].growth_rate > 0.0);
 
+    let require_zero_skips =
+        std::env::var("FLEXMESA_REQUIRE_ZERO_SKIPS").as_deref() == Ok("1");
+    if require_zero_skips {
+        let mesa_dir = std::env::var("MESA_DIR")
+            .expect("MESA_DIR required when FLEXMESA_REQUIRE_ZERO_SKIPS=1");
+        for sub in [
+            "star/test_suite",
+            "astero/test_suite",
+            "star/dev_cases_star_to_RSP2",
+        ] {
+            assert!(
+                Path::new(&mesa_dir).join(sub).is_dir(),
+                "missing {sub} under {mesa_dir}"
+            );
+        }
+    }
     if let Ok(mesa_dir) = std::env::var("MESA_DIR") {
         let base = Path::new(&mesa_dir);
         if base.join("star").join("test_suite").is_dir() {
@@ -414,6 +454,22 @@ fn test_e2e_5_tier5_star_hooks_and_91_active_star_inventory() {
     let (c1, c2) = verify_step_redo_bit_parity(&model).expect("redo parity");
     assert_eq!(c1, c2);
 
+    let require_zero_skips =
+        std::env::var("FLEXMESA_REQUIRE_ZERO_SKIPS").as_deref() == Ok("1");
+    if require_zero_skips {
+        let mesa_dir = std::env::var("MESA_DIR")
+            .expect("MESA_DIR required when FLEXMESA_REQUIRE_ZERO_SKIPS=1");
+        for sub in [
+            "star/test_suite",
+            "astero/test_suite",
+            "star/dev_cases_star_to_RSP2",
+        ] {
+            assert!(
+                Path::new(&mesa_dir).join(sub).is_dir(),
+                "missing {sub} under {mesa_dir}"
+            );
+        }
+    }
     if let Ok(mesa_dir) = std::env::var("MESA_DIR") {
         let base = Path::new(&mesa_dir);
         if base.join("star").join("test_suite").is_dir() {

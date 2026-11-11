@@ -1,11 +1,9 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 //! Full opacity table builder and binary cache manager (`FMKAP001` format).
 //!
-//! Resolves upstream MESA `kap_data` via `FLEXMESA_DATA_DIR`, `MESA_DIR`, or
-//! relative `.mesa_temp_cache/mesa_data/kap_data`, parses all fixed-metal,
-//! Type 2 C/O-enhanced, `kapCN`, and `AESOPUS_AGSS09.h5` tables in full, and
-//! caches the resulting `FMKAP001` binary payload in
-//! `.mesa_temp_cache/bin_cache/kap_full/kap_tables_full.bin`.
+//! Loads `$FLEXMESA_DATA_DIR/kap_full/kap_tables_full.bin` populated by
+//! `flexmesa data fetch`, or builds and caches the `FMKAP001` payload from
+//! upstream `MESA_DIR/data/kap_data` tables.
 
 use crate::loader::KapTables;
 use crate::loader_parse::parse_kap_tables;
@@ -16,14 +14,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 const FIXED_PREFIXES: &[&str] = &[
-    "gs98",
-    "gn93",
-    "a09",
-    "OP_gs98",
-    "OP_a09_nans_removed_by_hand",
-    "lowT_fa05_gs98",
-    "lowT_fa05_gn93",
-    "lowT_fa05_a09p",
+    "gs98", "gn93", "a09", "OP_gs98", "OP_a09_nans_removed_by_hand",
+    "lowT_fa05_gs98", "lowT_fa05_gn93", "lowT_fa05_a09p",
 ];
 
 const FIXED_ZS: [f64; 13] = [
@@ -44,24 +36,9 @@ const CO_ZS: [f64; 8] =
     [0.000, 0.001, 0.004, 0.010, 0.020, 0.030, 0.050, 0.100];
 const CO_XS: [f64; 5] = [0.00, 0.03, 0.10, 0.35, 0.70];
 
-fn find_relative_dir(rel: &str) -> Option<PathBuf> {
-    let mut roots = Vec::new();
-    if let Ok(cwd) = std::env::current_dir() {
-        roots.push(cwd);
-    }
-    roots.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")));
-    for root in roots {
-        for anc in root.ancestors() {
-            let candidate = anc.join(rel);
-            if candidate.exists() {
-                return Some(candidate);
-            }
-        }
-    }
-    None
-}
+use flexmesa_utils::resolve_flexmesa_data_dir;
 
-/// Resolve the upstream `kap_data` directory if available.
+/// Resolve an optional upstream MESA `kap_data` directory when raw ASCII tables are present.
 #[must_use]
 pub fn find_kap_data_dir() -> Option<PathBuf> {
     if let Ok(val) = std::env::var("FLEXMESA_DATA_DIR") {
@@ -79,53 +56,51 @@ pub fn find_kap_data_dir() -> Option<PathBuf> {
             return Some(p);
         }
     }
-    find_relative_dir(".mesa_temp_cache/mesa_data/kap_data")
-}
-
-/// Resolve the binary cache directory `.mesa_temp_cache/bin_cache/kap_full`.
-#[must_use]
-pub fn find_kap_cache_dir() -> Option<PathBuf> {
-    if let Ok(val) = std::env::var("FLEXMESA_CACHE_DIR") {
-        return Some(PathBuf::from(val).join("kap_full"));
-    }
-    if let Some(bin_cache) = find_relative_dir(".mesa_temp_cache/bin_cache") {
-        return Some(bin_cache.join("kap_full"));
-    }
     None
 }
 
-/// Load [`KapTables`] from the full binary cache, or build and cache it from
-/// `kap_data` when available, falling back to `embedded_bin` otherwise.
+/// Resolve the canonical `kap_full` binary cache directory (`$FLEXMESA_DATA_DIR/kap_full`).
 #[must_use]
-pub(crate) fn load_or_build_kap_tables(embedded_bin: &[u8]) -> KapTables {
+pub fn find_kap_cache_dir() -> PathBuf {
+    resolve_flexmesa_data_dir().join("kap_full")
+}
+
+/// Load [`KapTables`] from `$FLEXMESA_DATA_DIR/kap_full/kap_tables_full.bin`, or
+/// build and cache it from upstream `MESA_DIR/data/kap_data`.
+#[must_use]
+pub(crate) fn load_or_build_kap_tables() -> KapTables {
     let cache_dir = find_kap_cache_dir();
-    if let Some(ref cdir) = cache_dir {
-        let full_bin_path = cdir.join("kap_tables_full.bin");
-        if let Ok(bytes) = fs::read(&full_bin_path) {
-            if bytes.len() > 50_000_000 && bytes.starts_with(b"FMKAP001") {
-                return parse_kap_tables(&bytes);
-            }
+    let full_bin_path = cache_dir.join("kap_tables_full.bin");
+    if let Ok(bytes) = fs::read(&full_bin_path) {
+        if bytes.len() > 50_000_000 && bytes.starts_with(b"FMKAP001") {
+            return parse_kap_tables(&bytes);
         }
     }
     if let Some(kap_dir) = find_kap_data_dir() {
         if let Some(bytes) =
-            build_full_kap_tables_bytes(&kap_dir, cache_dir.as_deref())
+            build_full_kap_tables_bytes(&kap_dir, Some(&cache_dir))
         {
-            if let Some(ref cdir) = cache_dir {
-                let _ = fs::create_dir_all(cdir);
-                let tmp_path = cdir.join(format!(
-                    "kap_tables_full.{}.tmp",
-                    std::process::id()
-                ));
-                let dst_path = cdir.join("kap_tables_full.bin");
-                if fs::write(&tmp_path, &bytes).is_ok() {
-                    let _ = fs::rename(&tmp_path, &dst_path);
-                }
+            let _ = fs::create_dir_all(&cache_dir);
+            let tmp_path = cache_dir.join(format!(
+                "kap_tables_full.{}.tmp",
+                std::process::id()
+            ));
+            let dst_path = cache_dir.join("kap_tables_full.bin");
+            if fs::write(&tmp_path, &bytes).is_ok() {
+                let _ = fs::rename(&tmp_path, &dst_path);
             }
             return parse_kap_tables(&bytes);
         }
     }
-    parse_kap_tables(embedded_bin)
+    let expected = resolve_flexmesa_data_dir()
+        .join("kap_full")
+        .join("kap_tables_full.bin");
+    panic!(
+        "FlexMESA opacity tables not found at {}. \
+         Run 'flexmesa data fetch' (or set FLEXMESA_DATA_DIR) to download \
+         the verified data-v1 physics table bundle.",
+        expected.display()
+    );
 }
 
 fn push_u8(buf: &mut Vec<u8>, v: u8) {

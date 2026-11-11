@@ -376,9 +376,32 @@ fn test_upstream_mesa_block_tri_data_and_test_case_data_parity() {
         assert!((act - exp).abs() < 1.0e-13);
     }
 
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../.mesa_temp_cache/mesa_root/mtx/test");
+    let mesa_env = std::env::var_os("MESA_DIR");
+    let root = mesa_env
+        .as_ref()
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from)
+        .or_else(|| {
+            std::env::var_os("XDG_CACHE_HOME")
+                .filter(|v| !v.is_empty())
+                .map(|p| PathBuf::from(p).join("flexmesa/mesa_test_inputs"))
+        })
+        .or_else(|| {
+            std::env::var_os("HOME")
+                .filter(|v| !v.is_empty())
+                .map(|p| PathBuf::from(p).join(".cache/flexmesa/mesa_test_inputs"))
+        })
+        .unwrap_or_else(|| PathBuf::from(".flexmesa_test_inputs"))
+        .join("mtx/test");
     let out_path = root.join("test_output");
+    if mesa_env.as_ref().is_some_and(|v| !v.is_empty()) {
+        assert!(out_path.is_file(), "missing {}", out_path.display());
+        assert!(
+            root.join("test_case.data").is_file(),
+            "missing {}",
+            root.join("test_case.data").display()
+        );
+    }
     if out_path.exists() {
         let out_text = std::fs::read_to_string(&out_path)
             .expect("read mtx/test/test_output");

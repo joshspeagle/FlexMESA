@@ -212,13 +212,7 @@ pub fn set_basic_vars(model: &mut StarModel) -> Result<(), StarError> {
 /// # Errors
 /// Returns [`StarError::MicrophysicsError`] if EOS evaluation fails in any zone.
 pub fn do_eos(model: &mut StarModel) -> Result<(), StarError> {
-    let ht = HelmTable::smooth_builtin();
-    if (model.eos_config.use_free_eos || model.eos_config.use_opal_scvh)
-        && flexmesa_eos::EosDtTableSet::builtin().data_dir.is_none()
-    {
-        model.eos_config.use_free_eos = false;
-        model.eos_config.use_opal_scvh = false;
-    }
+    let ht = HelmTable::builtin();
     let eos_outputs = eos_dt_get_zones(
         ht,
         &model.rho,

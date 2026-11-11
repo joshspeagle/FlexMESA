@@ -9,6 +9,7 @@ and branchless ``@jax.jit`` (``float64``) evaluators.
 from __future__ import annotations
 
 import functools
+from typing import cast
 
 import jax
 import jax.numpy as jnp
@@ -118,15 +119,18 @@ def eval_colors_jax(
         1D array of shape ``(10,)`` containing
         ``[Mag_bol, Flux_bol, Interp_rad, B, I, J, M, R, U, V]``.
     """
-    return _eval_colors_single_jit(
-        teff,
-        log_g,
-        metallicity,
-        r,
-        d,
-        utils.get_builtin_colors_grid(),
-        mag_system_id,
-        method_id,
+    return cast(
+        jax.Array,
+        _eval_colors_single_jit(
+            teff,
+            log_g,
+            metallicity,
+            r,
+            d,
+            utils.get_builtin_colors_grid(),
+            mag_system_id,
+            method_id,
+        ),
     )
 
 
@@ -238,7 +242,10 @@ def eval_colors_dual(
             mag_system,
         )
     m_id, _ = _parse_mag_and_method_ids(mag_system, "Hermite")
-    return _eval_colors_dual_jax(teff, log_g, metallicity, r, d, m_id)
+    return cast(
+        tuple[jax.Array, jax.Array],
+        _eval_colors_dual_jax(teff, log_g, metallicity, r, d, m_id),
+    )
 
 
 @functools.partial(jax.jit, static_argnames=("mag_system_id", "method_id"))
@@ -270,15 +277,18 @@ def _eval_colors_zones_jax(
     method_id: int,
 ) -> jax.Array:
     """JIT-compiled ``vmap`` multi-zone evaluator in JAX ``float64``."""
-    return _eval_colors_zones_with_grid_jax(
-        teff,
-        log_g,
-        metallicity,
-        r,
-        d,
-        utils.get_builtin_colors_grid(),
-        mag_system_id,
-        method_id,
+    return cast(
+        jax.Array,
+        _eval_colors_zones_with_grid_jax(
+            teff,
+            log_g,
+            metallicity,
+            r,
+            d,
+            utils.get_builtin_colors_grid(),
+            mag_system_id,
+            method_id,
+        ),
     )
 
 

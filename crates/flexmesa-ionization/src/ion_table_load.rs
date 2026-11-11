@@ -354,22 +354,21 @@ fn resolve_ion_data_dir() -> Option<PathBuf> {
             return Some(p);
         }
     }
-    let rel = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../.mesa_temp_cache/mesa_data/ionization_data");
-    if rel.is_dir() {
-        return Some(rel);
-    }
     None
 }
 
 fn default_ion_cache_path() -> Option<PathBuf> {
-    let root =
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.mesa_temp_cache");
-    if root.is_dir() {
-        Some(root.join("bin_cache/ionization_full.bin"))
-    } else {
-        None
+    for var in ["FLEXMESA_DATA_DIR", "FLEXMESA_CACHE_DIR"] {
+        if let Some(val) = std::env::var_os(var).filter(|v| !v.is_empty()) {
+            return Some(PathBuf::from(val).join("ionization_full.bin"));
+        }
     }
+    if let Some(xdg) = std::env::var_os("XDG_CACHE_HOME").filter(|v| !v.is_empty()) {
+        return Some(PathBuf::from(xdg).join("flexmesa/data/ionization_full.bin"));
+    }
+    std::env::var_os("HOME")
+        .filter(|v| !v.is_empty())
+        .map(|h| PathBuf::from(h).join(".cache/flexmesa/data/ionization_full.bin"))
 }
 
 /// Format an upstream MESA `ion_*.data` file path (`Get_ion_Table_Filenames`).

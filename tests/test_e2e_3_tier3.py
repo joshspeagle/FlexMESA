@@ -203,8 +203,7 @@ def test_upstream_mesa_tier3_test_suite_case_passes_with_restart_parity(
     if not mesa_dir:
         pytest.skip("MESA_DIR not set; skipping upstream MESA Tier 3 case")
     case_dir = pathlib.Path(mesa_dir) / "star" / "test_suite" / case_name
-    if not case_dir.is_dir():
-        pytest.skip(f"Upstream case directory not found: {case_dir}")
+    assert case_dir.is_dir(), f"Upstream case directory not found: {case_dir}"
 
     rep = star.run_test_suite_case(
         case_dir,

@@ -35,6 +35,16 @@
 
 ## Commands
 
+- **Fetch & Verify Release-Hosted `data-v1` Physics & Upstream MESA Test Bundles**:
+  ```bash
+  flexmesa data fetch --include-test-inputs
+  flexmesa data verify --include-test-inputs
+  flexmesa data status
+  ```
+- **Clean-Room Local Pre-PR Verification Gate (Mirrors All 4 GitHub Actions CI Jobs)**:
+  ```bash
+  bash scripts/verify_ci.sh
+  ```
 - **Python Unit & Doctest Suite**:
   ```bash
   pytest

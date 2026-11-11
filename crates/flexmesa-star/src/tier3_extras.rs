@@ -308,7 +308,7 @@ impl StarExtras for Tier3CaseExtras {
     fn extras_startup(
         &mut self,
         model: &mut StarModel,
-        _restart: bool,
+        restart: bool,
     ) -> Result<(), StarError> {
         let cname = self.case_name.as_str();
         if matches!(
@@ -327,9 +327,14 @@ impl StarExtras for Tier3CaseExtras {
                 model.j_rot.resize(model.nz, 0.0);
             }
             let r_surf = model.r.first().copied().unwrap_or(R_SUN).max(1.0);
-            let omega_crit = (STANDARD_CGRAV * model.mstar.max(M_SUN)
-                / r_surf.powi(3))
-            .sqrt();
+            let g_surf = model
+                .cgrav
+                .first()
+                .copied()
+                .filter(|&g| g > 0.0)
+                .unwrap_or(STANDARD_CGRAV);
+            let omega_crit =
+                (g_surf * model.mstar.max(M_SUN) / r_surf.powi(3)).sqrt();
             let omega_0 = match cname {
                 "high_rot_darkening" => 0.98 * omega_crit,
                 "20M_z2m2_high_rotation" => 0.65 * omega_crit,
@@ -358,6 +363,11 @@ impl StarExtras for Tier3CaseExtras {
                 model.u.fill(1.2e9);
             }
             _ => {}
+        }
+        if !restart {
+            crate::hydro_vars::set_hydro_vars(model, false, false)?;
+            model.save_start_values();
+            model.save_old_values();
         }
         Ok(())
     }
@@ -468,7 +478,7 @@ impl StarExtras for Tier3CaseExtras {
     }
 
     fn other_adjust_mdot(&self, model: &StarModel, current_mdot: f64) -> f64 {
-        let log_mdot = model.controls.x_ctrl.get(1).copied().unwrap_or(-4.0);
+        let log_mdot = model.controls.x_ctrl.get(2).copied().unwrap_or(-4.0);
         current_mdot + 10.0_f64.powf(log_mdot) * M_SUN / SECYER
     }
 
@@ -533,6 +543,14 @@ mod tests {
             eval_tzo_core_accretion_step(&mut model, 1.0, 1.0, 1.4);
         assert!(m_core > 0.0 && l_edd > 0.0);
 
+        if std::env::var("FLEXMESA_REQUIRE_ZERO_SKIPS").as_deref() == Ok("1") {
+            let mesa_dir = std::env::var("MESA_DIR")
+                .expect("MESA_DIR required when FLEXMESA_REQUIRE_ZERO_SKIPS=1");
+            assert!(
+                Path::new(&mesa_dir).join("star/test_suite").is_dir(),
+                "missing star/test_suite under {mesa_dir}"
+            );
+        }
         if let Ok(mesa_dir) = std::env::var("MESA_DIR") {
             let p = Path::new(&mesa_dir);
             if p.join("star/test_suite").exists() {

@@ -51,18 +51,18 @@ def test_fidelity4_representative_multi_tier_physical_e2e_execution() -> None:
         pytest.skip("MESA_DIR not set; skipping upstream MESA E2E execution")
     base = pathlib.Path(mesa_dir)
     star_ts = base / "star" / "test_suite"
-    if star_ts.is_dir():
-        for cname in (
-            "1M_pre_ms_to_wd",
-            "make_co_wd",
-            "massive_rotating",
-            "gyre_in_mesa",
-            "relax_composition_j_entropy",
-        ):
-            cdir = star_ts / cname
-            if cdir.is_dir():
-                rep = star.run_test_suite_case(
-                    cdir, max_steps_per_stage=2, verify_restart=True
-                )
-                assert rep["passed"]
-                assert rep["photo_restart_verified"]
+    assert star_ts.is_dir(), f"Missing upstream star/test_suite: {star_ts}"
+    for cname in (
+        "1M_pre_ms_to_wd",
+        "make_co_wd",
+        "20M_z2m2_high_rotation",
+        "gyre_in_mesa_ms",
+        "relax_composition_j_entropy",
+    ):
+        cdir = star_ts / cname
+        assert cdir.is_dir(), f"Missing upstream case directory: {cdir}"
+        rep = star.run_test_suite_case(
+            cdir, max_steps_per_stage=2, verify_restart=True
+        )
+        assert rep["passed"]
+        assert rep["photo_restart_verified"]

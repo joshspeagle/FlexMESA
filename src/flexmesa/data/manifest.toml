@@ -37,8 +37,8 @@ description = "Nuclear ground-state masses, spins, mass excesses, and 24-point t
 [[tables]]
 name = "helm_table"
 filename = "helm_table.safetensors"
-sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-size_bytes = 908481920
+sha256 = "fa09ab08f7de771daaf5517de6977205ed99380fa5e0b58f295a64334213c860"
+size_bytes = 908505152
 tensors = [
   "log_d_grid",
   "log_t_grid",

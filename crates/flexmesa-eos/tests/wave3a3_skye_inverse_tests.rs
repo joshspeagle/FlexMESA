@@ -314,11 +314,13 @@ fn test_skye_alfa_blend_and_inverse_solvers_match_fortran_oracle() {
     assert!((dt_sm - (-2.5)).abs() < 1.0e-13);
     assert!((dr_sm - (-5.0)).abs() < 1.0e-13);
 
-    // eosdt_skye_helm_blend
+    // eosdt_skye_helm_blend (explicitly testing Skye + HELM with 4D tables disabled)
     let (chem_id, xa, abar, zbar) = make_comp(0.0, 1.0, 0.0);
     let mut cfg = EosConfig {
         use_skye: true,
         use_pc: false,
+        use_free_eos: false,
+        use_opal_scvh: false,
         ..EosConfig::default()
     };
     cfg.skye.skye_use_ion_offsets = false;

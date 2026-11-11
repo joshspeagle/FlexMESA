@@ -367,6 +367,10 @@ pub struct StarControls {
     pub use_gradt_actual_vs_gradt_mlt_for_t_gradient_eqn: bool,
     /// Use $dP_{\mathrm{rad}}/dm$ form of temperature equation (`use_dPrad_dm_form_of_T_gradient_eqn`).
     pub use_dprad_dm_form_of_t_gradient_eqn: bool,
+    /// Enable Levermore-Pomraning (1981) flux limiting in `do1_alt_dlnT_dm_eqn` (`use_flux_limiting_with_dPrad_dm_form`).
+    pub use_flux_limiting_with_dprad_dm_form: bool,
+    /// Minimum face opacity floor in $\mathrm{cm^2\,g^{-1}}$ for `do1_alt_dlnT_dm_eqn` (`min_kap_for_dPrad_dm_eqn`).
+    pub min_kap_for_dprad_dm_eqn: f64,
     /// Use RSP Stefan-Boltzmann outer luminosity boundary condition (`use_RSP_L_eqn_outer_BC`).
     pub use_rsp_l_eqn_outer_bc: bool,
     /// Upper $q$ bound above which velocity is zeroed (`velocity_q_upper_bound`).
@@ -558,6 +562,8 @@ impl Default for StarControls {
             use_mass_corrections: false,
             use_gradt_actual_vs_gradt_mlt_for_t_gradient_eqn: false,
             use_dprad_dm_form_of_t_gradient_eqn: false,
+            use_flux_limiting_with_dprad_dm_form: false,
+            min_kap_for_dprad_dm_eqn: 1.0e-4,
             use_rsp_l_eqn_outer_bc: false,
             velocity_q_upper_bound: 1.0,
             velocity_tau_lower_bound: 0.0,

@@ -14,7 +14,8 @@
 use flexmesa_chem::{get_composition_info, NuclideCatalog};
 use flexmesa_eos::{
     eos_dt_get, eval_pc_eos, get_pc_alfa, EosConfig, EosEvalOutput, HelmTable,
-    PcConfig, EOS_BASIC_RESULT_NAMES, NUM_EOS_BASIC_RESULTS,
+    PcConfig, EOS_BASIC_RESULT_NAMES, I_FRAC_FREE_EOS, I_FRAC_HELM, I_FRAC_PC,
+    NUM_EOS_BASIC_RESULTS,
 };
 
 fn make_comp(
@@ -355,12 +356,14 @@ fn test_pc_alfa_and_eosdt_pc_helm_blend_match_fortran_oracle() {
     assert!((dt3 - 10.0).abs() < 1.0e-13);
     assert!((dr3 - 0.0).abs() < 1.0e-14);
 
-    // eosdt_pc_helm_blend
+    // eosdt_pc_helm_blend (explicitly testing PC + HELM with 4D tables disabled)
     let ht = HelmTable::builtin();
     let (chem_id, xa, _, _) = make_comp(0.0, 1.0, 0.0);
     let mut cfg = EosConfig {
         use_skye: false,
         use_pc: true,
+        use_free_eos: false,
+        use_opal_scvh: false,
         ..EosConfig::default()
     };
     cfg.pc.pc_use_gamma_limit_instead_of_t = true;
@@ -456,4 +459,13 @@ fn test_pc_alfa_and_eosdt_pc_helm_blend_match_fortran_oracle() {
         [0.0; 3],
     ];
     assert_eos_case("eosdt_pc_helm_blend", &out, &exp_blend, 1.0e-11);
+
+    // With full data-v1 FreeEOS active, Z = 1.0 blends PC + FreeEOS directly
+    let mut cfg_free = cfg;
+    cfg_free.use_free_eos = true;
+    cfg_free.okay_to_convert_ierr_to_skip = false;
+    let out_free = eos_dt_get(ht, rho, t, &chem_id, &xa, &cfg_free).unwrap();
+    assert!((out_free.res[I_FRAC_FREE_EOS] - 4.9528902403170577e-1).abs() < 1.0e-14);
+    assert!((out_free.res[I_FRAC_PC] - 5.0471097596829417e-1).abs() < 1.0e-14);
+    assert_eq!(out_free.res[I_FRAC_HELM], 0.0);
 }

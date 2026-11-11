@@ -187,6 +187,7 @@ dependencies = [
  "flexmesa-const",
  "flexmesa-math",
  "flexmesa-testing",
+ "flexmesa-utils",
  "proptest",
 ]
 
@@ -459,6 +460,7 @@ dependencies = [
  "flexmesa-rates",
  "flexmesa-schema",
  "flexmesa-turb",
+ "flexmesa-utils",
  "rayon",
 ]
 

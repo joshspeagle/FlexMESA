@@ -9,6 +9,7 @@
 pub mod blend_alfa;
 pub mod slice_cache;
 pub mod spline;
+pub mod table_io;
 pub mod table_set;
 
 pub use blend_alfa::{
@@ -47,12 +48,8 @@ fn eval_kind_ix_iz_16(
     ),
     EosError,
 > {
-    if let Some(tbl) = tables.get_table_fast(kind, ix_1based, iz_1based) {
-        eval_xtable_16(tbl, log_rho, log_t)
-    } else {
-        let tbl = tables.get_table(kind, ix_1based, iz_1based)?;
-        eval_xtable_16(&tbl, log_rho, log_t)
-    }
+    let tbl = tables.get_table(kind, ix_1based, iz_1based)?;
+    eval_xtable_16(&tbl, log_rho, log_t)
 }
 
 #[inline]
@@ -64,12 +61,8 @@ fn eval_kind_ix_iz(
     log_rho: f64,
     log_t: f64,
 ) -> Result<EosEvalOutput, EosError> {
-    if let Some(tbl) = tables.get_table_fast(kind, ix_1based, iz_1based) {
-        eval_xtable(tbl, log_rho, log_t)
-    } else {
-        let tbl = tables.get_table(kind, ix_1based, iz_1based)?;
-        eval_xtable(&tbl, log_rho, log_t)
-    }
+    let tbl = tables.get_table(kind, ix_1based, iz_1based)?;
+    eval_xtable(&tbl, log_rho, log_t)
 }
 
 /// Evaluates `Get1_eosdt_for_X` at fixed metallicity index `iz_1based` and hydrogen fraction `x`.

@@ -8,7 +8,6 @@ pub use crate::cms::config::{
 use crate::helm::table_io::resolve_mesa_data_dir;
 use crate::tables_4d::slice_cache::load_or_build_cms_slice;
 use crate::tables_4d::spline::{EosDtVertex, NUM_EOS_TABLE_VALS};
-use crate::tables_4d::table_set::BUILTIN_4D_PATCHES;
 use crate::types::{
     EosError, I_CHI_RHO, I_CHI_T, I_CP, I_CV, I_DE_DRHO, I_DS_DRHO, I_DS_DT,
     I_ETA, I_GAMMA1, I_GAMMA3, I_GRAD_AD, I_LN_E, I_LN_FREE_E, I_LN_PGAS,
@@ -18,10 +17,13 @@ use flexmesa_const::LN10;
 use flexmesa_interp2d::{interp_mkbicub_db, BicubicBc};
 use flexmesa_math::safe_log;
 use flexmesa_utils::is_bad;
-use std::collections::HashMap;
-use std::io::BufRead;
+use rayon::prelude::*;
+use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, OnceLock, RwLock};
+use std::sync::{Arc, OnceLock};
+
+/// Magic header for compact raw `(logT, logRho)` `CMS` binary slices.
+pub const CMS_RAW_BIN_MAGIC: &[u8; 8] = b"FMCMSR01";
 
 /// Single fixed-$X$ `CMS` bicubic spline table (`eosCMS_X_Info`).
 #[derive(Debug, Clone)]
@@ -46,41 +48,172 @@ pub struct CmsXTable {
     pub log_rho_max: f64,
     /// Grid step $\Delta \log_{10} \rho$ (`0.05`).
     pub delta_log_rho: f64,
-    /// Sparse `(i_t, j_rho)` (1-based) vertices for built-in test patches.
-    pub patches: HashMap<(u16, u16), EosDtVertex>,
-    /// Optional full dense grid of `num_log_ts * num_log_rhos` vertices.
+    /// Full dense grid of `num_log_ts * num_log_rhos` vertices.
     pub dense: Option<Vec<EosDtVertex>>,
 }
 
 impl CmsXTable {
-    /// Creates an empty `CMS` table header with standard dimensions (`121 x 281`).
-    #[must_use]
-    pub fn new_standard_header(x: f64) -> Self {
-        Self {
-            version: 1,
-            x,
-            num_log_ts: 121,
-            log_t_min: 2.0,
-            log_t_max: 8.0,
-            delta_log_t: 0.05,
-            num_log_rhos: 281,
-            log_rho_min: -8.0,
-            log_rho_max: 6.0,
-            delta_log_rho: 0.05,
-            patches: HashMap::new(),
-            dense: None,
-        }
-    }
-
     /// Retrieves a 1-based `(i_t, j_rho)` vertex.
     #[must_use]
     pub fn get_vertex(&self, i_t: usize, j_rho: usize) -> Option<&EosDtVertex> {
-        if let Some(dense) = &self.dense {
-            let idx = (i_t - 1) * self.num_log_rhos + (j_rho - 1);
-            dense.get(idx)
-        } else {
-            self.patches.get(&(i_t as u16, j_rho as u16))
+        let dense = self.dense.as_ref()?;
+        let idx = (i_t - 1) * self.num_log_rhos + (j_rho - 1);
+        dense.get(idx)
+    }
+
+    #[inline]
+    fn store_mapped_cell(
+        raw_vars: &mut [f64],
+        ngrid: usize,
+        cell: usize,
+        vals: &[f64; 16],
+    ) {
+        raw_vars[I_LN_PGAS * ngrid + cell] = vals[0] * LN10;
+        raw_vars[I_LN_E * ngrid + cell] = vals[1] * LN10;
+        raw_vars[I_LN_S * ngrid + cell] = vals[2] * LN10;
+        raw_vars[I_CHI_RHO * ngrid + cell] = vals[3];
+        raw_vars[I_CHI_T * ngrid + cell] = vals[4];
+        raw_vars[I_CP * ngrid + cell] = safe_log(vals[5]);
+        raw_vars[I_CV * ngrid + cell] = safe_log(vals[6]);
+        raw_vars[I_DE_DRHO * ngrid + cell] = vals[7];
+        raw_vars[I_DS_DT * ngrid + cell] = vals[8];
+        raw_vars[I_DS_DRHO * ngrid + cell] = vals[9];
+        raw_vars[I_MU * ngrid + cell] = vals[10];
+        raw_vars[I_LN_FREE_E * ngrid + cell] = vals[11];
+        raw_vars[I_GAMMA1 * ngrid + cell] = vals[12];
+        raw_vars[I_GAMMA3 * ngrid + cell] = vals[13];
+        raw_vars[I_GRAD_AD * ngrid + cell] = vals[14];
+        raw_vars[I_ETA * ngrid + cell] = vals[15];
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn build_from_raw_vars(
+        version: i32,
+        x: f64,
+        num_log_ts: usize,
+        log_t_min: f64,
+        log_t_max: f64,
+        delta_log_t: f64,
+        num_log_rhos: usize,
+        log_rho_min: f64,
+        log_rho_max: f64,
+        delta_log_rho: f64,
+        raw_vars: &[f64],
+    ) -> Result<Self, EosError> {
+        let log_ts: Vec<f64> = (0..num_log_ts)
+            .map(|i| log_t_min + (i as f64) * delta_log_t)
+            .collect();
+        let log_rhos: Vec<f64> = (0..num_log_rhos)
+            .map(|j| log_rho_min + (j as f64) * delta_log_rho)
+            .collect();
+        let ngrid = num_log_ts * num_log_rhos;
+
+        let fitted: Vec<Vec<[f64; 4]>> = (0..NUM_EOS_TABLE_VALS)
+            .into_par_iter()
+            .map(|v| {
+                let z_slice = &raw_vars[v * ngrid..(v + 1) * ngrid];
+                interp_mkbicub_db(
+                    &log_ts,
+                    &log_rhos,
+                    z_slice,
+                    BicubicBc::NotAKnot,
+                    &[],
+                    BicubicBc::NotAKnot,
+                    &[],
+                    BicubicBc::NotAKnot,
+                    &[],
+                    BicubicBc::NotAKnot,
+                    &[],
+                )
+                .map(|(coeffs, _, _)| coeffs)
+                .map_err(|e| EosError::InvalidState {
+                    context: "CmsXTable::build_from_raw_vars",
+                    detail: format!(
+                        "interp_mkbicub_db failed for var {v}: {e}"
+                    ),
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let mut dense = vec![EosDtVertex::default(); ngrid];
+        for (v, coeffs) in fitted.iter().enumerate() {
+            for (cell, c4) in coeffs.iter().enumerate() {
+                for (m, &val) in c4.iter().enumerate() {
+                    dense[cell].coeffs[v * 4 + m] =
+                        if is_bad(val) { 0.0 } else { val };
+                }
+            }
         }
+
+        Ok(Self {
+            version,
+            x,
+            num_log_ts,
+            log_t_min,
+            log_t_max,
+            delta_log_t,
+            num_log_rhos,
+            log_rho_min,
+            log_rho_max,
+            delta_log_rho,
+            dense: Some(dense),
+        })
+    }
+
+    /// Reads a compact `FMCMSR01` raw binary slice (`eos_4d_raw/mesa-CMS_*.raw`) and fits its 16 bicubic splines.
+    pub fn from_raw_bin(path: &Path) -> Result<Self, EosError> {
+        let err = |msg: String| EosError::InvalidState {
+            context: "CmsXTable::from_raw_bin",
+            detail: msg,
+        };
+        let file = std::fs::File::open(path).map_err(|e| err(e.to_string()))?;
+        let mut reader = BufReader::with_capacity(256 * 1024, file);
+        let mut hdr = [0u8; 76];
+        reader
+            .read_exact(&mut hdr)
+            .map_err(|e| err(e.to_string()))?;
+        if &hdr[0..8] != CMS_RAW_BIN_MAGIC {
+            return Err(err("invalid FMCMSR01 magic".to_string()));
+        }
+        let f64_at = |off: usize| -> f64 {
+            f64::from_le_bytes(hdr[off..off + 8].try_into().unwrap_or([0; 8]))
+        };
+        let version =
+            i32::from_le_bytes(hdr[8..12].try_into().unwrap_or([0; 4]));
+        let x = f64_at(12);
+        let num_log_ts =
+            u32::from_le_bytes(hdr[20..24].try_into().unwrap_or([0; 4]))
+                as usize;
+        let log_t_min = f64_at(24);
+        let log_t_max = f64_at(32);
+        let delta_log_t = f64_at(40);
+        let num_log_rhos =
+            u32::from_le_bytes(hdr[48..52].try_into().unwrap_or([0; 4]))
+                as usize;
+        let log_rho_min = f64_at(52);
+        let log_rho_max = f64_at(60);
+        let delta_log_rho = f64_at(68);
+
+        let ngrid = num_log_ts * num_log_rhos;
+        let mut raw_vars = vec![0.0_f64; NUM_EOS_TABLE_VALS * ngrid];
+        let mut row_bytes = [0u8; NUM_EOS_TABLE_VALS * 8];
+        for cell in 0..ngrid {
+            reader
+                .read_exact(&mut row_bytes)
+                .map_err(|e| err(e.to_string()))?;
+            let vals: [f64; 16] = std::array::from_fn(|k| {
+                let s = k * 8;
+                f64::from_le_bytes(
+                    row_bytes[s..s + 8].try_into().unwrap_or([0; 8]),
+                )
+            });
+            Self::store_mapped_cell(&mut raw_vars, ngrid, cell, &vals);
+        }
+
+        Self::build_from_raw_vars(
+            version, x, num_log_ts, log_t_min, log_t_max, delta_log_t,
+            num_log_rhos, log_rho_min, log_rho_max, delta_log_rho, &raw_vars,
+        )
     }
 
     /// Parses a `mesa-CMS_*.data` ASCII file and builds its 16 bicubic splines (`load_eosCMS_table`).
@@ -167,74 +300,14 @@ impl CmsXTable {
                     })?;
                 }
                 let cell = it * num_log_rhos + jrho;
-                raw_vars[I_LN_PGAS * ngrid + cell] = vals[0] * LN10;
-                raw_vars[I_LN_E * ngrid + cell] = vals[1] * LN10;
-                raw_vars[I_LN_S * ngrid + cell] = vals[2] * LN10;
-                raw_vars[I_CHI_RHO * ngrid + cell] = vals[3];
-                raw_vars[I_CHI_T * ngrid + cell] = vals[4];
-                raw_vars[I_CP * ngrid + cell] = safe_log(vals[5]);
-                raw_vars[I_CV * ngrid + cell] = safe_log(vals[6]);
-                raw_vars[I_DE_DRHO * ngrid + cell] = vals[7];
-                raw_vars[I_DS_DT * ngrid + cell] = vals[8];
-                raw_vars[I_DS_DRHO * ngrid + cell] = vals[9];
-                raw_vars[I_MU * ngrid + cell] = vals[10];
-                raw_vars[I_LN_FREE_E * ngrid + cell] = vals[11];
-                raw_vars[I_GAMMA1 * ngrid + cell] = vals[12];
-                raw_vars[I_GAMMA3 * ngrid + cell] = vals[13];
-                raw_vars[I_GRAD_AD * ngrid + cell] = vals[14];
-                raw_vars[I_ETA * ngrid + cell] = vals[15];
+                Self::store_mapped_cell(&mut raw_vars, ngrid, cell, &vals);
             }
         }
 
-        let log_ts: Vec<f64> = (0..num_log_ts)
-            .map(|i| log_t_min + (i as f64) * delta_log_t)
-            .collect();
-        let log_rhos: Vec<f64> = (0..num_log_rhos)
-            .map(|j| log_rho_min + (j as f64) * delta_log_rho)
-            .collect();
-
-        let mut dense = vec![EosDtVertex::default(); ngrid];
-        for v in 0..NUM_EOS_TABLE_VALS {
-            let z_slice = &raw_vars[v * ngrid..(v + 1) * ngrid];
-            let (coeffs, _, _) = interp_mkbicub_db(
-                &log_ts,
-                &log_rhos,
-                z_slice,
-                BicubicBc::NotAKnot,
-                &[],
-                BicubicBc::NotAKnot,
-                &[],
-                BicubicBc::NotAKnot,
-                &[],
-                BicubicBc::NotAKnot,
-                &[],
-            )
-            .map_err(|e| EosError::InvalidState {
-                context: "CmsXTable::from_ascii_reader",
-                detail: format!("interp_mkbicub_db failed for var {v}: {e}"),
-            })?;
-            for (cell, c4) in coeffs.iter().enumerate() {
-                for (m, &val) in c4.iter().enumerate() {
-                    dense[cell].coeffs[v * 4 + m] =
-                        if is_bad(val) { 0.0 } else { val };
-                }
-            }
-        }
-
-        Ok(Self {
-            version,
-            x,
-            num_log_ts,
-            log_t_min,
-            log_t_max,
-            delta_log_t,
-            num_log_rhos,
-            log_rho_min,
-            log_rho_max,
-            delta_log_rho,
-            patches: HashMap::new(),
-            dense: Some(dense),
-        })
+        Self::build_from_raw_vars(
+            version, x, num_log_ts, log_t_min, log_t_max, delta_log_t,
+            num_log_rhos, log_rho_min, log_rho_max, delta_log_rho, &raw_vars,
+        )
     }
 
     /// Loads a `CMS` `.data` file from disk.
@@ -248,19 +321,18 @@ impl CmsXTable {
     }
 }
 
-/// Collection of the 11 `CMS` tables (`ix_1based in 1..=11`) with lazy loading.
+/// Collection of the 11 `CMS` tables (`ix_1based in 1..=11`, `~187 MB` total) with lock-free lazy caching.
 #[derive(Debug)]
 pub struct CmsTableSet {
-    /// Optional root MESA `data` directory.
+    /// Optional root MESA `data` directory for raw ASCII `.data` loading.
     pub data_dir: Option<PathBuf>,
-    dense_slots: [OnceLock<Arc<CmsXTable>>; CMS_NUM_XS],
-    tables: RwLock<HashMap<usize, Arc<CmsXTable>>>,
+    tables: [OnceLock<Arc<CmsXTable>>; CMS_NUM_XS],
 }
 
 static BUILTIN_CMS_TABLES: OnceLock<CmsTableSet> = OnceLock::new();
 
 impl CmsTableSet {
-    /// Returns a reference to the lazily initialized built-in `CmsTableSet`.
+    /// Returns a reference to the lazily initialized `CmsTableSet`.
     #[must_use]
     pub fn builtin() -> &'static Self {
         BUILTIN_CMS_TABLES.get_or_init(Self::load_builtin)
@@ -275,58 +347,9 @@ impl CmsTableSet {
     }
 
     fn load_builtin() -> Self {
-        let mut map: HashMap<usize, CmsXTable> = HashMap::new();
-        if BUILTIN_4D_PATCHES.len() >= 4 {
-            let dt_count = u32::from_le_bytes(
-                BUILTIN_4D_PATCHES[0..4].try_into().unwrap_or([0; 4]),
-            ) as usize;
-            let cms_offset = 4 + dt_count * (8 + 64 * 8);
-            if cms_offset + 4 <= BUILTIN_4D_PATCHES.len() {
-                let cms_count = u32::from_le_bytes(
-                    BUILTIN_4D_PATCHES[cms_offset..cms_offset + 4]
-                        .try_into()
-                        .unwrap_or([0; 4]),
-                ) as usize;
-                let mut pos = cms_offset + 4;
-                for _ in 0..cms_count {
-                    if pos + 8 + 64 * 8 > BUILTIN_4D_PATCHES.len() {
-                        break;
-                    }
-                    let ix = u16::from_le_bytes([
-                        BUILTIN_4D_PATCHES[pos],
-                        BUILTIN_4D_PATCHES[pos + 1],
-                    ]) as usize;
-                    let it = u16::from_le_bytes([
-                        BUILTIN_4D_PATCHES[pos + 2],
-                        BUILTIN_4D_PATCHES[pos + 3],
-                    ]);
-                    let jrho = u16::from_le_bytes([
-                        BUILTIN_4D_PATCHES[pos + 4],
-                        BUILTIN_4D_PATCHES[pos + 5],
-                    ]);
-                    pos += 8;
-                    let coeffs: [f64; 64] = std::array::from_fn(|k| {
-                        let s = pos + 8 * k;
-                        f64::from_le_bytes(
-                            BUILTIN_4D_PATCHES[s..s + 8]
-                                .try_into()
-                                .unwrap_or([0; 8]),
-                        )
-                    });
-                    pos += 64 * 8;
-                    let x = CMS_XVALS.get(ix - 1).copied().unwrap_or(0.0);
-                    let entry = map
-                        .entry(ix)
-                        .or_insert_with(|| CmsXTable::new_standard_header(x));
-                    entry.patches.insert((it, jrho), EosDtVertex { coeffs });
-                }
-            }
-        }
-        let arc_map = map.into_iter().map(|(k, v)| (k, Arc::new(v))).collect();
         Self {
             data_dir: resolve_mesa_data_dir(),
-            dense_slots: std::array::from_fn(|_| OnceLock::new()),
-            tables: RwLock::new(arc_map),
+            tables: std::array::from_fn(|_| OnceLock::new()),
         }
     }
 
@@ -341,36 +364,16 @@ impl CmsTableSet {
                 detail: format!("invalid CMS ix_1based={ix_1based}"),
             });
         }
-        if let Some(tbl) = self.dense_slots[ix_1based - 1].get() {
+        let slot = &self.tables[ix_1based - 1];
+        if let Some(tbl) = slot.get() {
             return Ok(Arc::clone(tbl));
         }
-        if let Ok(guard) = self.tables.read() {
-            if let Some(tbl) = guard.get(&ix_1based) {
-                if tbl.dense.is_some() || self.data_dir.is_none() {
-                    return Ok(Arc::clone(tbl));
-                }
-            }
-        }
-        if let Some(dir) = &self.data_dir {
-            let stem = format!("mesa-CMS_{}x", CMS_XSTR[ix_1based - 1]);
-            if let Ok(loaded_tbl) = load_or_build_cms_slice(dir, &stem) {
-                let loaded = Arc::new(loaded_tbl);
-                let _ =
-                    self.dense_slots[ix_1based - 1].set(Arc::clone(&loaded));
-                if let Ok(mut guard) = self.tables.write() {
-                    guard.insert(ix_1based, Arc::clone(&loaded));
-                }
-                return Ok(loaded);
-            }
-        }
-        if let Ok(guard) = self.tables.read() {
-            if let Some(tbl) = guard.get(&ix_1based) {
-                return Ok(Arc::clone(tbl));
-            }
-        }
-        Err(EosError::InvalidState {
-            context: "CmsTableSet::get_table",
-            detail: format!("CMS table ix={ix_1based} is not loaded"),
-        })
+        let stem = format!("mesa-CMS_{}x", CMS_XSTR[ix_1based - 1]);
+        let loaded = Arc::new(load_or_build_cms_slice(
+            self.data_dir.as_deref(),
+            &stem,
+        )?);
+        let _ = slot.set(Arc::clone(&loaded));
+        Ok(slot.get().map_or(loaded, Arc::clone))
     }
 }

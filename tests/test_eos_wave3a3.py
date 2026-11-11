@@ -143,6 +143,15 @@ def test_eval_pc_eos_and_zones_match_across_rust_and_jax() -> None:
     )
     assert zones_r.res.shape == (3, eos.NUM_EOS_BASIC_RESULTS)
     assert zones_j.res.shape == (3, eos.NUM_EOS_BASIC_RESULTS)
+    assert _rel_diff(np.asarray(zones_r.res), np.asarray(zones_j.res)) < 5.0e-12
+    assert (
+        _rel_diff(np.asarray(zones_r.d_dlnd), np.asarray(zones_j.d_dlnd))
+        < 1.0e-10
+    )
+    assert (
+        _rel_diff(np.asarray(zones_r.d_dln_t), np.asarray(zones_j.d_dln_t))
+        < 1.0e-10
+    )
 
 
 def test_eval_skye_eos_and_eos_dt_get_rust_jax_and_autodiff() -> None:
@@ -249,16 +258,47 @@ def test_eval_skye_eos_and_eos_dt_get_rust_jax_and_autodiff() -> None:
 
 
 def test_inverse_solvers_pt_dt_and_gamma_de_with_jax_ift_grad() -> None:
-    """Verify `eos_pt_get`, `eos_dt_get_t`, `eos_dt_get_rho`, and `jax.grad`."""
+    """Verify `eos_pt_get`, `eos_dt_get_t`, `eos_dt_get_rho`, and `jax.grad`.
+
+    Upstream Fortran MESA `eos/private/eospt_eval.f90:180-191`
+    (`Get_PT_Results_using_DT`) hardcodes `other_tol = 1d-8`,
+    `logRho_tol = 1d-8`, and `max_iter = 20`, terminating Newton iteration in
+    `num/private/mod_root.f90:102` (`do_safe_root_with_guess`) when
+    `|ln P_gas(x_i) - ln P_gas_target| < max(other_tol, |dy/dx| * logRho_tol)`.
+    On the `Skye`/`HELM` branch (`use_free_eos=False`), step `i = 3` reaches
+    `|rho - rho_true| / rho_true < 1e-10`; on the full `Z = 1` `FreeEOS` table
+    (`mesa-FreeEOS_100z00x_CO`), step `i = 2` reaches `|dy| = 3.31e-10 < 2.3e-8`
+    with `|log10_rho - 2.0| = 6.25e-11 < 1e-10`.
+    """
     chem_id, xa, abar, zbar = _c12_o16_composition()
     rho_true = 100.0
     temp_true = 1.0e7
+
+    fwd_helm = eos.eos_dt_get(
+        rho_true, temp_true, chem_id, xa, use_free_eos=False, backend="rust"
+    )
+    pt_helm = eos.eos_pt_get(
+        float(np.exp(fwd_helm.res[eos.I_LN_PGAS])),
+        temp_true,
+        chem_id,
+        xa,
+        use_free_eos=False,
+        backend="rust",
+    )
+    assert abs(float(pt_helm.rho) - rho_true) / rho_true < 1.0e-10
+
     fwd = eos.eos_dt_get(rho_true, temp_true, chem_id, xa, backend="rust")
     pgas_true = float(np.exp(fwd.res[eos.I_LN_PGAS]))
     ln_e_true = float(fwd.res[eos.I_LN_E])
 
     pt_r = eos.eos_pt_get(pgas_true, temp_true, chem_id, xa, backend="rust")
-    assert abs(float(pt_r.rho) - rho_true) / rho_true < 1.0e-10
+    pt_j = eos.eos_pt_get(pgas_true, temp_true, chem_id, xa, backend="jax")
+    assert abs(float(pt_r.log10_rho) - np.log10(rho_true)) < 1.0e-10
+    assert (
+        abs(float(pt_r.eos.res[eos.I_LN_PGAS]) - float(fwd.res[eos.I_LN_PGAS]))
+        < 1.0e-9
+    )
+    assert abs(float(pt_j.log10_rho) - float(pt_r.log10_rho)) < 1.0e-14
 
     inv_t = eos.eos_dt_get_t(
         rho_true, eos.I_LN_E, ln_e_true, chem_id, xa, log_t_guess=6.8
@@ -418,3 +458,135 @@ def test_pc_and_skye_off_golden_grid_parity_and_jacfwd() -> None:
     assert (
         _rel_diff(np.asarray(sk0.d_dln_t), np.asarray(jac_sk_t * t0)) <= 1.0e-12
     )
+
+
+def test_neutron_bearing_multispecies_buckets_and_multizone_dispatch() -> None:
+    """Verify `Z = 0` neutrons, `32`/`64` buckets, and `N_zones` paths."""
+    names_9 = ("neut", "h1", "he4", "c12", "n14", "o16", "ne20", "mg24", "si28")
+    cids_9 = [int(chem.get_nuclide_index(n) or 0) for n in names_9]
+    assert all(c > 0 for c in cids_9)
+    xa_9 = np.array(
+        [0.05, 0.02, 0.13, 0.25, 0.03, 0.30, 0.10, 0.07, 0.05], dtype=np.float64
+    )
+    comp_9 = chem.get_composition_info(cids_9, xa_9)
+    ab_9, zb_9 = float(comp_9.abar), float(comp_9.zbar)
+    ab_j, zb_j, xa_9j = jnp.float64(ab_9), jnp.float64(zb_9), jnp.asarray(xa_9)
+
+    for rho, temp in [(1.0e5, 1.0e8), (1.0e7, 2.0e6)]:
+        r_j, t_j = jnp.float64(rho), jnp.float64(temp)
+        sk_r = eos.eval_skye_eos(
+            rho,
+            temp,
+            ab_9,
+            zb_9,
+            cids_9,
+            xa_9,
+            mass_fraction_limit=0.0,
+            backend="rust",
+        )
+        sk_j = eos.eval_skye_eos(
+            r_j,
+            t_j,
+            ab_j,
+            zb_j,
+            cids_9,
+            xa_9j,
+            mass_fraction_limit=0.0,
+            backend="jax",
+        )
+        assert _rel_diff(np.asarray(sk_r.res), np.asarray(sk_j.res)) < 1.0e-6
+
+        pc_r = eos.eval_pc_eos(
+            rho,
+            temp,
+            ab_9,
+            zb_9,
+            cids_9,
+            xa_9,
+            mass_fraction_limit=0.0,
+            backend="rust",
+        )
+        pc_j = eos.eval_pc_eos(
+            r_j,
+            t_j,
+            ab_j,
+            zb_j,
+            cids_9,
+            xa_9j,
+            mass_fraction_limit=0.0,
+            backend="jax",
+        )
+        assert _rel_diff(np.asarray(pc_r.res), np.asarray(pc_j.res)) < 1.0e-11
+        assert (
+            _rel_diff(np.asarray(pc_r.d_dlnd), np.asarray(pc_j.d_dlnd))
+            < 1.0e-10
+        )
+        assert (
+            _rel_diff(np.asarray(pc_r.d_dln_t), np.asarray(pc_j.d_dln_t))
+            < 1.0e-10
+        )
+
+    dt_r = eos.eos_dt_get(1.0e6, 1.0e7, cids_9, xa_9, backend="rust")
+    dt_j = eos.eos_dt_get(
+        jnp.float64(1.0e6), jnp.float64(1.0e7), cids_9, xa_9j, backend="jax"
+    )
+    assert _rel_diff(np.asarray(dt_r.res), np.asarray(dt_j.res)) < 1.0e-10
+
+    # 35-species mixture (64-bucket) + N_zones = 20 (> 16 vmap) + N_zones = 0
+    cids_35 = list(range(1, 36))
+    xa_35 = np.full(35, 1.0 / 35.0, dtype=np.float64)
+    comp_35 = chem.get_composition_info(cids_35, xa_35)
+    infos_35 = [chem.get_nuclide_info(c) for c in cids_35]
+    z_35 = np.array([float(inf.z) for inf in infos_35], dtype=np.float64)
+    w_35 = np.array([inf.w for inf in infos_35], dtype=np.float64)
+    a_35 = np.array([float(inf.a) for inf in infos_35], dtype=np.float64)
+    z_35j, w_35j, a_35j = (
+        jnp.asarray(z_35),
+        jnp.asarray(w_35),
+        jnp.asarray(a_35),
+    )
+
+    nz = 20
+    r_20, t_20 = np.geomspace(1.0e4, 1.0e7, nz), np.geomspace(2.0e6, 5.0e7, nz)
+    ab_20 = np.full(nz, float(comp_35.abar), dtype=np.float64)
+    zb_20 = np.full(nz, float(comp_35.zbar), dtype=np.float64)
+    xa_20 = np.tile(xa_35, (nz, 1))
+    z_args_j = (
+        jnp.asarray(r_20),
+        jnp.asarray(t_20),
+        jnp.asarray(ab_20),
+        jnp.asarray(zb_20),
+        jnp.asarray(xa_20),
+    )
+
+    pc_z_r = eos.eval_pc_eos_zones(
+        r_20, t_20, ab_20, zb_20, xa_20, z_35, w_35, backend="rust"
+    )
+    pc_z_j = eos.eval_pc_eos_zones(*z_args_j, z_35j, w_35j, backend="jax")
+    assert _rel_diff(np.asarray(pc_z_r.res), np.asarray(pc_z_j.res)) < 1.0e-11
+
+    sk_z_r = eos.eval_skye_eos_zones(
+        r_20,
+        t_20,
+        ab_20,
+        zb_20,
+        xa_20,
+        z_35.astype(np.int64),
+        w_35,
+        a_35,
+        backend="rust",
+    )
+    sk_z_j = eos.eval_skye_eos_zones(
+        *z_args_j, z_35j, w_35j, a_35j, backend="jax"
+    )
+    assert _rel_diff(np.asarray(sk_z_r.res), np.asarray(sk_z_j.res)) < 1.0e-6
+
+    ef, ex = jnp.zeros((0,), jnp.float64), jnp.zeros((0, 35), jnp.float64)
+    pc_0 = eos.eval_pc_eos_zones(
+        ef, ef, ef, ef, ex, z_35j, w_35j, backend="jax"
+    )
+    sk_0 = eos.eval_skye_eos_zones(
+        ef, ef, ef, ef, ex, z_35j, w_35j, a_35j, backend="jax"
+    )
+    assert pc_0.res.shape == (0, eos.NUM_EOS_BASIC_RESULTS)
+    assert sk_0.res.shape == (0, eos.NUM_EOS_BASIC_RESULTS)

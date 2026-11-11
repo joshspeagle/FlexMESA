@@ -113,8 +113,10 @@ def quintic_basis_1d(
         `(*batch, 6)` for value, first, second, and third derivatives.
     """
     x = jnp.stack([z, 1.0 - z], axis=-1)
+    zx = z * (1.0 - z)
+    dp0_sym = -30.0 * zx * zx
     p0 = x * x * x * (x * (-6.0 * x + 15.0) - 10.0) + 1.0
-    dp0 = x * x * (x * (-30.0 * x + 60.0) - 30.0)
+    dp0 = jnp.stack([dp0_sym, dp0_sym], axis=-1)
     ddp0 = x * (x * (-120.0 * x + 180.0) - 60.0)
     dddp0 = x * (-360.0 * x + 360.0) - 60.0
     p1 = x * (x * x * (x * (-3.0 * x + 8.0) - 6.0) + 1.0)

@@ -238,8 +238,9 @@ def test_upstream_mesa_tier4_and_dev_cases_suites_pass() -> None:
     if not mesa_dir:
         pytest.skip("MESA_DIR not set; skipping upstream MESA Tier 4 suites")
     root = pathlib.Path(mesa_dir)
-    if not (root / "star" / "test_suite").is_dir():
-        pytest.skip(f"Upstream star/test_suite not found under {root}")
+    assert (root / "star" / "test_suite").is_dir(), (
+        f"Upstream star/test_suite not found under {root}"
+    )
 
     t4_reports = star.run_tier4_suite(
         root, max_steps_per_stage=2, verify_restart=True

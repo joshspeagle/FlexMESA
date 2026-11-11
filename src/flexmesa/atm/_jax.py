@@ -34,7 +34,7 @@ def eval_t_tau_jax(t_tau_id: int, tau: jax.Array, teff: jax.Array) -> jax.Array:
     teff_arr = jnp.asarray(teff, dtype=jnp.float64)
     teff4 = teff_arr * teff_arr * teff_arr * teff_arr
     if t_tau_id == _core.ATM_T_TAU_EDDINGTON:
-        q = 2.0 / 3.0
+        q: jax.Array | float = 2.0 / 3.0
     elif t_tau_id == _core.ATM_T_TAU_SOLAR_HOPF:
         q = (
             1.0361
@@ -259,7 +259,7 @@ def eval_table_jax(
     Returns:
         Tuple `(ln_t, ln_p)` as scalar JAX `float64` arrays.
     """
-    return _eval_table_jax_op(
+    ln_t, ln_p = _eval_table_jax_op(
         int(table_id),
         jnp.asarray(luminosity, dtype=jnp.float64),
         jnp.asarray(r, dtype=jnp.float64),
@@ -267,3 +267,4 @@ def eval_table_jax(
         jnp.asarray(cgrav, dtype=jnp.float64),
         jnp.asarray(z, dtype=jnp.float64),
     )
+    return ln_t, ln_p

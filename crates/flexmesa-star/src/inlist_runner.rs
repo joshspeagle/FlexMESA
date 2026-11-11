@@ -7,6 +7,7 @@ use std::fs;
 use std::path::Path;
 use std::time::Instant;
 
+use crate::case_staging::TempCaseStaging;
 use crate::controls::StarError;
 use crate::evolve::star_evolve_step;
 use crate::history::{extract_history_row, HistoryRow};
@@ -248,16 +249,27 @@ pub fn run_inlist_stage(
     let mut history_rows = Vec::new();
     let mut termination_code = String::from("max_steps_cap");
 
-    let cap = max_steps_cap.unwrap_or(50_000);
+    let job_step_cap = model.job.steps_to_take_before_terminate;
+    let cap = match (max_steps_cap, job_step_cap) {
+        (Some(a), Some(b)) => a.min(b),
+        (Some(a), None) => a,
+        (None, Some(b)) => b,
+        (None, None) => 50_000,
+    };
+    if job_step_cap.is_some_and(|b| b <= cap) {
+        termination_code = String::from("steps_to_take_before_terminate");
+    }
     let do_remesh = model.controls.mesh_delta_coeff > 0.0;
     let op_split_burn = model.controls.op_split_burn;
 
     let init_hr = extract_history_row(model);
     if cap == 0 {
-        if let Some(code) =
-            check_termination_limits_with_history(model, Some(&init_hr))
-        {
-            termination_code = code;
+        if job_step_cap != Some(0) {
+            if let Some(code) =
+                check_termination_limits_with_history(model, Some(&init_hr))
+            {
+                termination_code = code;
+            }
         }
     } else {
         for _ in 0..cap {
@@ -371,16 +383,6 @@ pub fn verify_photo_restart_parity(
         continued.controls.clone(),
         continued.job.clone(),
     )?;
-    let saved_vc = restarted.mlt_vc.clone();
-    let saved_vc_old = restarted.aux.mlt_vc_old.clone();
-    restarted.eos_config = continued.eos_config;
-    restarted.kap_config = continued.kap_config.clone();
-    set_hydro_vars(&mut restarted, false, false)?;
-    let dt_rest = restarted.dt;
-    crate::struct_burn_mix::refresh_mixing_state(&mut restarted, dt_rest, &[]);
-    restarted.save_start_values();
-    restarted.mlt_vc = saved_vc;
-    restarted.aux.mlt_vc_old = saved_vc_old;
 
     for _ in 0..n_verify_steps {
         star_evolve_step(&mut continued, do_remesh, op_split, true)?;
@@ -404,12 +406,14 @@ pub fn verify_photo_restart_parity(
 /// # Errors
 /// Returns [`StarError`] if `inlist` parsing or stage execution fails.
 pub fn run_test_suite_case(
-    case_dir: &Path,
+    orig_case_dir: &Path,
     skip_optional: bool,
     max_steps_per_stage: Option<usize>,
     verify_restart: bool,
 ) -> Result<CaseRunReport, StarError> {
     let t0 = Instant::now();
+    let staging = TempCaseStaging::new(orig_case_dir)?;
+    let case_dir = staging.staged_dir.as_path();
     let case_name = case_dir
         .file_name()
         .and_then(|s| s.to_str())
@@ -470,35 +474,30 @@ pub fn run_test_suite_case(
                 let bundle =
                     InlistBundle::from_file_in_case_dir(case_dir, inlist)?;
                 let use_tov = bundle.controls.use_other_cgrav;
-                let mut default_extras = DefaultStarExtras;
-                let mut tov_extras = TovGrStarExtras;
-                let mut tier1_extras = Tier1CaseExtras::new(&case_name);
-                let mut tier2_extras = Tier2CaseExtras::new(&case_name);
-                let mut tier3_extras = Tier3CaseExtras::new(&case_name);
-                let mut tier4_extras =
-                    Tier4CaseExtras::with_case_dir(&case_name, case_dir);
-                let mut tier5_extras =
-                    Tier5StarCaseExtras::with_case_dir(&case_name, case_dir);
-                let extras: &mut dyn StarExtras = match tier {
-                    1 => &mut tier1_extras,
-                    2 => &mut tier2_extras,
-                    3 => &mut tier3_extras,
-                    4 => &mut tier4_extras,
-                    5 => &mut tier5_extras,
-                    _ if use_tov => &mut tov_extras,
-                    _ => &mut default_extras,
+                let mut extras: Box<dyn StarExtras> = match tier {
+                    1 => Box::new(Tier1CaseExtras::new(&case_name)),
+                    2 => Box::new(Tier2CaseExtras::new(&case_name)),
+                    3 => Box::new(Tier3CaseExtras::new(&case_name)),
+                    4 => Box::new(Tier4CaseExtras::with_case_dir(
+                        &case_name, case_dir,
+                    )),
+                    5 => Box::new(Tier5StarCaseExtras::with_case_dir(
+                        &case_name, case_dir,
+                    )),
+                    _ if use_tov => Box::new(TovGrStarExtras),
+                    _ => Box::new(DefaultStarExtras),
                 };
 
                 let mut model = init_or_update_model_from_bundle(
                     &bundle,
                     current_model.take(),
-                    extras,
+                    extras.as_mut(),
                 )?;
 
                 let rep = run_inlist_stage(
                     &mut model,
                     &bundle,
-                    extras,
+                    extras.as_mut(),
                     max_steps_per_stage,
                 )?;
 

@@ -176,10 +176,92 @@ pub fn apply_uniform_rotation(model: &mut StarModel, omega_0: f64) {
         model.j_rot[k] = (2.0 / 3.0) * model.r[k].powi(2) * omega_0;
         let r_k = model.r[k].max(1.0);
         let m_k = model.m_grav[k].max(1.0);
-        let omega_crit =
-            (STANDARD_CGRAV * m_k / r_k.powi(3)).sqrt().max(1.0e-30);
+        let g_k = model
+            .cgrav
+            .get(k)
+            .copied()
+            .filter(|&g| g > 0.0)
+            .unwrap_or(STANDARD_CGRAV);
+        let omega_crit = (g_k * m_k / r_k.powi(3)).sqrt().max(1.0e-30);
         model.aux.w_div_wc[k] = (omega_0 / omega_crit).clamp(0.0, 1.0);
     }
+}
+
+/// Excises all interior zones hotter than `t_cut_k` (`K`) and replaces the
+/// interior with a rigid radiative/hydrostatic inner boundary `(M_center, R_center, L_center)`
+/// (`remove_initial_center_by_temperature` in `star/private/relax.f90`).
+pub fn excise_core_by_temperature(model: &mut StarModel, t_cut_k: f64) {
+    if t_cut_k <= 0.0 || model.nz < 32 {
+        return;
+    }
+    let ln_t_cut = t_cut_k.ln();
+    let Some(raw_cut) = (16..model.nz).find(|&k| model.ln_t[k] >= ln_t_cut)
+    else {
+        return;
+    };
+    let k_cut = raw_cut.min(model.nz - 4);
+    let _ = model.sync_mesh_and_pack();
+
+    let m_c = model.m[k_cut];
+    let r_c = model.r[k_cut];
+    let l_c = model.lum[k_cut].max(1.0);
+    if m_c <= 0.0 || m_c >= 0.999999 * model.mstar || r_c <= 0.0 {
+        return;
+    }
+
+    let species = model.species;
+    let mut trimmed = StarModel::new(
+        k_cut,
+        model.chem_id.clone(),
+        model.job.clone(),
+        model.controls.clone(),
+    );
+    trimmed.eos_config = model.eos_config;
+    trimmed.kap_config = model.kap_config.clone();
+    trimmed.model_number = model.model_number;
+    trimmed.star_age = model.star_age;
+    trimmed.star_age_old = model.star_age_old;
+    trimmed.dt = model.dt;
+    trimmed.dt_next = model.dt_next;
+    trimmed.dt_old = model.dt_old;
+    trimmed.mstar = model.mstar;
+    trimmed.mstar_start = model.mstar;
+    trimmed.mstar_old = model.mstar;
+    trimmed.m_center = m_c;
+    trimmed.r_center = r_c;
+    trimmed.l_center = l_c;
+    trimmed.xmstar = (model.mstar - m_c).max(1.0);
+    trimmed.teff = model.teff;
+    trimmed.tau_base = model.tau_base;
+
+    trimmed.lnd.copy_from_slice(&model.lnd[..k_cut]);
+    trimmed.ln_t.copy_from_slice(&model.ln_t[..k_cut]);
+    trimmed.ln_r.copy_from_slice(&model.ln_r[..k_cut]);
+    trimmed.lum.copy_from_slice(&model.lum[..k_cut]);
+    if model.v.len() >= k_cut {
+        trimmed.v.copy_from_slice(&model.v[..k_cut]);
+    }
+    if model.u.len() >= k_cut {
+        trimmed.u.copy_from_slice(&model.u[..k_cut]);
+    }
+    trimmed.dq.copy_from_slice(&model.dq[..k_cut]);
+    trimmed.xa.copy_from_slice(&model.xa[..k_cut * species]);
+    trimmed.cgrav.copy_from_slice(&model.cgrav[..k_cut]);
+    if model.omega.len() >= k_cut && trimmed.omega.len() == k_cut {
+        trimmed.omega.copy_from_slice(&model.omega[..k_cut]);
+    }
+    if model.j_rot.len() >= k_cut && trimmed.j_rot.len() == k_cut {
+        trimmed.j_rot.copy_from_slice(&model.j_rot[..k_cut]);
+    }
+
+    let dq_sum: f64 = trimmed.dq.iter().sum();
+    if dq_sum > 0.0 {
+        for dq_k in &mut trimmed.dq {
+            *dq_k /= dq_sum;
+        }
+    }
+    let _ = trimmed.sync_mesh_and_pack();
+    *model = trimmed;
 }
 
 /// Multi-step logarithmic mass relaxation (`do_relax_mass` / `do_relax_mass_scale`

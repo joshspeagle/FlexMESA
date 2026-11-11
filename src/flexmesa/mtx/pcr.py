@@ -177,9 +177,7 @@ def _solve_rust_ffi_primal(
 ) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array]:
     """Evaluates the primal block-tridiagonal solve via `jax.pure_callback`."""
     l64, d64, u64, b64, _, _ = validate_jax_blocks(lblk, dblk, ublk, b)
-    out_shape = jax.ShapeDtypeStruct(  # type: ignore[no-untyped-call]
-        b64.shape, jnp.float64
-    )
+    out_shape = jax.ShapeDtypeStruct(b64.shape, jnp.float64)
     out: jax.Array = jax.pure_callback(
         _rust_bcyclic_host_cb,
         out_shape,

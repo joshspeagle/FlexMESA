@@ -15,7 +15,7 @@ This test module verifies:
 
 from __future__ import annotations
 
-import pathlib
+import os
 
 import hypothesis
 import jax
@@ -24,6 +24,7 @@ import numpy as np
 from hypothesis import strategies as st
 
 from flexmesa import constants, utils
+from flexmesa.data import fetch
 from flexmesa.testing import golden
 
 _EXPECTED_CONST_VALUES: tuple[float, ...] = (
@@ -278,26 +279,15 @@ def test_tokenize_matches_upstream_mesa_token_txt() -> None:
     assert streamed == expected
     assert tz.next_token() == utils.Token(utils.TokenKind.EOF, "")
 
-    repo_root = pathlib.Path(__file__).resolve().parent.parent
-    upstream_token = (
-        repo_root
-        / ".mesa_temp_cache"
-        / "mesa_root"
-        / "utils"
-        / "test"
-        / "token.txt"
-    )
+    mesa_root = fetch.resolve_mesa_test_inputs_dir()
+    upstream_token = mesa_root / "utils" / "test" / "token.txt"
+    upstream_output = mesa_root / "utils" / "test" / "test_output"
+    if os.environ.get("MESA_DIR", "").strip():
+        assert upstream_token.is_file(), f"Missing {upstream_token}"
+        assert upstream_output.is_file(), f"Missing {upstream_output}"
     if upstream_token.exists():
         assert utils.tokenize(upstream_token.read_text()) == expected
 
-    upstream_output = (
-        repo_root
-        / ".mesa_temp_cache"
-        / "mesa_root"
-        / "utils"
-        / "test"
-        / "test_output"
-    )
     if upstream_output.exists():
         raw_lines = [
             line.strip()

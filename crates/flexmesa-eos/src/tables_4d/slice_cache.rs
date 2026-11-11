@@ -2,14 +2,13 @@
 //! Binary slice cache reader/writer (`eos_4d_slices/*.bin`) and upstream MESA
 //! Fortran `.bin` cache reader for `OPAL/SCVH`, `FreeEOS`, and `CMS` tables.
 
-use std::collections::HashMap;
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::Path;
 
 use flexmesa_utils::is_bad;
 
 use crate::cms::table::CmsXTable;
-use crate::helm::table_io::resolve_bin_cache_dir;
+use crate::helm::table_io::resolve_flexmesa_data_dir;
 use crate::tables_4d::spline::{
     EosDtTableKind, EosDtVertex, EosDtXzTable, NUM_EOS_TABLE_VALS,
 };
@@ -41,76 +40,101 @@ fn encode_dt_vertex(v: &EosDtVertex, out: &mut [u8; VERTEX_BYTES]) {
 
 /// Loads or builds a full `(Z, X)` `EosDtXzTable` slice, caching it in `eos_4d_slices/`.
 pub fn load_or_build_dt_slice(
-    data_dir: &Path,
+    mesa_data_dir: Option<&Path>,
     kind: EosDtTableKind,
     stem: &str,
 ) -> Result<EosDtXzTable, EosError> {
-    let slice_cache_dir =
-        resolve_bin_cache_dir().map(|d| d.join("eos_4d_slices"));
-    if let Some(ref cdir) = slice_cache_dir {
-        let bin_path = cdir.join(format!("{stem}.bin"));
-        if bin_path.is_file() {
-            if let Ok(tbl) = read_dt_slice_bin(&bin_path) {
-                return Ok(tbl);
-            }
+    let flex_dir = resolve_flexmesa_data_dir();
+    let slice_bin = flex_dir.join("eos_4d_slices").join(format!("{stem}.bin"));
+    if slice_bin.is_file() {
+        if let Ok(tbl) = read_dt_slice_bin(&slice_bin) {
+            return Ok(tbl);
         }
     }
 
-    let subdir = match kind {
-        EosDtTableKind::OpalScvh => "eosDT_data",
-        EosDtTableKind::FreeEos => "eosFreeEOS_data",
-    };
-    let mesa_cache_1 = data_dir
-        .join("eosDT_data")
-        .join("cache")
-        .join(format!("{stem}.bin"));
-    let mesa_cache_2 = data_dir
-        .join(subdir)
-        .join("cache")
-        .join(format!("{stem}.bin"));
-    let ascii_path = data_dir.join(subdir).join(format!("{stem}.data"));
-
-    let tbl = if mesa_cache_1.is_file() {
-        read_mesa_eosdt_cache_bin(&mesa_cache_1)
-            .or_else(|_| EosDtXzTable::from_data_file(&ascii_path))?
-    } else if mesa_cache_2.is_file() {
-        read_mesa_eosdt_cache_bin(&mesa_cache_2)
-            .or_else(|_| EosDtXzTable::from_data_file(&ascii_path))?
-    } else {
-        EosDtXzTable::from_data_file(&ascii_path)?
-    };
-
-    if let Some(ref cdir) = slice_cache_dir {
-        let bin_path = cdir.join(format!("{stem}.bin"));
-        let _ = write_dt_slice_bin_atomic(&bin_path, &tbl);
+    let raw_bin = flex_dir.join("eos_4d_raw").join(format!("{stem}.raw"));
+    if raw_bin.is_file() {
+        let tbl = EosDtXzTable::from_raw_bin(&raw_bin)?;
+        let _ = write_dt_slice_bin_atomic(&slice_bin, &tbl);
+        return Ok(tbl);
     }
-    Ok(tbl)
+
+    if let Some(data_dir) = mesa_data_dir {
+        let subdir = match kind {
+            EosDtTableKind::OpalScvh => "eosDT_data",
+            EosDtTableKind::FreeEos => "eosFreeEOS_data",
+        };
+        let mesa_cache_1 = data_dir
+            .join("eosDT_data")
+            .join("cache")
+            .join(format!("{stem}.bin"));
+        let mesa_cache_2 = data_dir
+            .join(subdir)
+            .join("cache")
+            .join(format!("{stem}.bin"));
+        let ascii_path = data_dir.join(subdir).join(format!("{stem}.data"));
+
+        let tbl = if mesa_cache_1.is_file() {
+            read_mesa_eosdt_cache_bin(&mesa_cache_1)
+                .or_else(|_| EosDtXzTable::from_data_file(&ascii_path))?
+        } else if mesa_cache_2.is_file() {
+            read_mesa_eosdt_cache_bin(&mesa_cache_2)
+                .or_else(|_| EosDtXzTable::from_data_file(&ascii_path))?
+        } else {
+            EosDtXzTable::from_data_file(&ascii_path)?
+        };
+        let _ = write_dt_slice_bin_atomic(&slice_bin, &tbl);
+        return Ok(tbl);
+    }
+
+    Err(EosError::InvalidState {
+        context: "load_or_build_dt_slice",
+        detail: format!(
+            "FlexMESA 4D EOS slice '{stem}' not found in {}. \
+             Run 'flexmesa data fetch' (or set FLEXMESA_DATA_DIR) to download \
+             the verified data-v1 physics table bundle.",
+            flex_dir.display()
+        ),
+    })
 }
 
 /// Loads or builds a full `CMS` `CmsXTable` slice, caching it in `eos_4d_slices/`.
 pub fn load_or_build_cms_slice(
-    data_dir: &Path,
+    mesa_data_dir: Option<&Path>,
     stem: &str,
 ) -> Result<CmsXTable, EosError> {
-    let slice_cache_dir =
-        resolve_bin_cache_dir().map(|d| d.join("eos_4d_slices"));
-    if let Some(ref cdir) = slice_cache_dir {
-        let bin_path = cdir.join(format!("{stem}.bin"));
-        if bin_path.is_file() {
-            if let Ok(tbl) = read_cms_slice_bin(&bin_path) {
-                return Ok(tbl);
-            }
+    let flex_dir = resolve_flexmesa_data_dir();
+    let slice_bin = flex_dir.join("eos_4d_slices").join(format!("{stem}.bin"));
+    if slice_bin.is_file() {
+        if let Ok(tbl) = read_cms_slice_bin(&slice_bin) {
+            return Ok(tbl);
         }
     }
 
-    let ascii_path = data_dir.join("eosCMS_data").join(format!("{stem}.data"));
-    let tbl = CmsXTable::from_data_file(&ascii_path)?;
-
-    if let Some(ref cdir) = slice_cache_dir {
-        let bin_path = cdir.join(format!("{stem}.bin"));
-        let _ = write_cms_slice_bin_atomic(&bin_path, &tbl);
+    let raw_bin = flex_dir.join("eos_4d_raw").join(format!("{stem}.raw"));
+    if raw_bin.is_file() {
+        let tbl = CmsXTable::from_raw_bin(&raw_bin)?;
+        let _ = write_cms_slice_bin_atomic(&slice_bin, &tbl);
+        return Ok(tbl);
     }
-    Ok(tbl)
+
+    if let Some(data_dir) = mesa_data_dir {
+        let ascii_path =
+            data_dir.join("eosCMS_data").join(format!("{stem}.data"));
+        let tbl = CmsXTable::from_data_file(&ascii_path)?;
+        let _ = write_cms_slice_bin_atomic(&slice_bin, &tbl);
+        return Ok(tbl);
+    }
+
+    Err(EosError::InvalidState {
+        context: "load_or_build_cms_slice",
+        detail: format!(
+            "FlexMESA CMS EOS slice '{stem}' not found in {}. \
+             Run 'flexmesa data fetch' (or set FLEXMESA_DATA_DIR) to download \
+             the verified data-v1 physics table bundle.",
+            flex_dir.display()
+        ),
+    })
 }
 
 /// Reads a cached `FMDT4D01` binary slice into an [`EosDtXzTable`].
@@ -119,41 +143,38 @@ pub fn read_dt_slice_bin(path: &Path) -> Result<EosDtXzTable, EosError> {
         context: "read_dt_slice_bin",
         detail: msg,
     };
-    let file = std::fs::File::open(path).map_err(|e| err(e.to_string()))?;
-    let mut reader = BufReader::with_capacity(512 * 1024, file);
-    let mut hdr = [0u8; 84];
-    reader
-        .read_exact(&mut hdr)
-        .map_err(|e| err(e.to_string()))?;
-    if &hdr[0..8] != DT_SLICE_BIN_MAGIC {
-        return Err(err("invalid FMDT4D01 magic".to_string()));
+    let bytes = std::fs::read(path).map_err(|e| err(e.to_string()))?;
+    if bytes.len() < 84 || &bytes[0..8] != DT_SLICE_BIN_MAGIC {
+        return Err(err("invalid FMDT4D01 magic or truncated header".to_string()));
     }
     let f64_at = |off: usize| -> f64 {
-        f64::from_le_bytes(hdr[off..off + 8].try_into().unwrap_or([0; 8]))
+        f64::from_le_bytes(bytes[off..off + 8].try_into().unwrap_or([0; 8]))
     };
-    let version = i32::from_le_bytes(hdr[8..12].try_into().unwrap_or([0; 4]));
+    let version = i32::from_le_bytes(bytes[8..12].try_into().unwrap_or([0; 4]));
     let x = f64_at(12);
     let z = f64_at(20);
     let num_log_ts =
-        u32::from_le_bytes(hdr[28..32].try_into().unwrap_or([0; 4])) as usize;
+        u32::from_le_bytes(bytes[28..32].try_into().unwrap_or([0; 4])) as usize;
     let log_t_min = f64_at(32);
     let log_t_max = f64_at(40);
     let del_log_t = f64_at(48);
     let num_log_qs =
-        u32::from_le_bytes(hdr[56..60].try_into().unwrap_or([0; 4])) as usize;
+        u32::from_le_bytes(bytes[56..60].try_into().unwrap_or([0; 4])) as usize;
     let log_q_min = f64_at(60);
     let log_q_max = f64_at(68);
     let del_log_q = f64_at(76);
 
     let ngrid = num_log_qs * num_log_ts;
-    let mut dense = Vec::with_capacity(ngrid);
-    let mut vbuf = [0u8; VERTEX_BYTES];
-    for _ in 0..ngrid {
-        reader
-            .read_exact(&mut vbuf)
-            .map_err(|e| err(e.to_string()))?;
-        dense.push(decode_dt_vertex(&vbuf));
+    let body = &bytes[84..];
+    if body.len() < ngrid * VERTEX_BYTES {
+        return Err(err("truncated FMDT4D01 body".to_string()));
     }
+    let dense: Vec<EosDtVertex> = body[..ngrid * VERTEX_BYTES]
+        .as_chunks::<VERTEX_BYTES>()
+        .0
+        .iter()
+        .map(decode_dt_vertex)
+        .collect();
     Ok(EosDtXzTable {
         version,
         x,
@@ -166,8 +187,6 @@ pub fn read_dt_slice_bin(path: &Path) -> Result<EosDtXzTable, EosError> {
         log_q_min,
         log_q_max,
         del_log_q,
-        patches: HashMap::new(),
-        patch_lut: Vec::new(),
         dense: Some(dense),
     })
 }
@@ -289,8 +308,6 @@ pub fn read_mesa_eosdt_cache_bin(
         log_q_min,
         log_q_max,
         del_log_q,
-        patches: HashMap::new(),
-        patch_lut: Vec::new(),
         dense: Some(dense),
     })
 }
@@ -301,40 +318,37 @@ pub fn read_cms_slice_bin(path: &Path) -> Result<CmsXTable, EosError> {
         context: "read_cms_slice_bin",
         detail: msg,
     };
-    let file = std::fs::File::open(path).map_err(|e| err(e.to_string()))?;
-    let mut reader = BufReader::with_capacity(256 * 1024, file);
-    let mut hdr = [0u8; 76];
-    reader
-        .read_exact(&mut hdr)
-        .map_err(|e| err(e.to_string()))?;
-    if &hdr[0..8] != CMS_SLICE_BIN_MAGIC {
-        return Err(err("invalid FMCMS001 magic".to_string()));
+    let bytes = std::fs::read(path).map_err(|e| err(e.to_string()))?;
+    if bytes.len() < 76 || &bytes[0..8] != CMS_SLICE_BIN_MAGIC {
+        return Err(err("invalid FMCMS001 magic or truncated header".to_string()));
     }
     let f64_at = |off: usize| -> f64 {
-        f64::from_le_bytes(hdr[off..off + 8].try_into().unwrap_or([0; 8]))
+        f64::from_le_bytes(bytes[off..off + 8].try_into().unwrap_or([0; 8]))
     };
-    let version = i32::from_le_bytes(hdr[8..12].try_into().unwrap_or([0; 4]));
+    let version = i32::from_le_bytes(bytes[8..12].try_into().unwrap_or([0; 4]));
     let x = f64_at(12);
     let num_log_ts =
-        u32::from_le_bytes(hdr[20..24].try_into().unwrap_or([0; 4])) as usize;
+        u32::from_le_bytes(bytes[20..24].try_into().unwrap_or([0; 4])) as usize;
     let log_t_min = f64_at(24);
     let log_t_max = f64_at(32);
     let delta_log_t = f64_at(40);
     let num_log_rhos =
-        u32::from_le_bytes(hdr[48..52].try_into().unwrap_or([0; 4])) as usize;
+        u32::from_le_bytes(bytes[48..52].try_into().unwrap_or([0; 4])) as usize;
     let log_rho_min = f64_at(52);
     let log_rho_max = f64_at(60);
     let delta_log_rho = f64_at(68);
 
     let ngrid = num_log_ts * num_log_rhos;
-    let mut dense = Vec::with_capacity(ngrid);
-    let mut vbuf = [0u8; VERTEX_BYTES];
-    for _ in 0..ngrid {
-        reader
-            .read_exact(&mut vbuf)
-            .map_err(|e| err(e.to_string()))?;
-        dense.push(decode_dt_vertex(&vbuf));
+    let body = &bytes[76..];
+    if body.len() < ngrid * VERTEX_BYTES {
+        return Err(err("truncated FMCMS001 body".to_string()));
     }
+    let dense: Vec<EosDtVertex> = body[..ngrid * VERTEX_BYTES]
+        .as_chunks::<VERTEX_BYTES>()
+        .0
+        .iter()
+        .map(decode_dt_vertex)
+        .collect();
     Ok(CmsXTable {
         version,
         x,
@@ -346,7 +360,6 @@ pub fn read_cms_slice_bin(path: &Path) -> Result<CmsXTable, EosError> {
         log_rho_min,
         log_rho_max,
         delta_log_rho,
-        patches: HashMap::new(),
         dense: Some(dense),
     })
 }

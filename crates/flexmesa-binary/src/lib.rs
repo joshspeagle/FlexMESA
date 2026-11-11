@@ -193,6 +193,19 @@ mod tests {
         );
         assert!(w_brott > 0.0 && w_brott.is_finite());
 
+        let require_zero_skips =
+            std::env::var("FLEXMESA_REQUIRE_ZERO_SKIPS").as_deref() == Ok("1");
+        if require_zero_skips {
+            let mesa_dir = std::env::var("MESA_DIR")
+                .expect("MESA_DIR required when FLEXMESA_REQUIRE_ZERO_SKIPS=1");
+            assert!(
+                Path::new(&mesa_dir)
+                    .join("binary")
+                    .join("test_suite")
+                    .is_dir(),
+                "missing binary/test_suite under {mesa_dir}"
+            );
+        }
         if let Ok(mesa_dir) = std::env::var("MESA_DIR") {
             let base = Path::new(&mesa_dir);
             if base.join("binary").join("test_suite").is_dir() {

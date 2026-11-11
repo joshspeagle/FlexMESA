@@ -10,6 +10,8 @@ lookup cube.
 
 from __future__ import annotations
 
+from typing import cast
+
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -197,7 +199,7 @@ def _eval_sed_hermite_with_grid(
                     + w_z * _sed_at_jax(grid, i, j, k_ext)
                 )
 
-    return utils.dilute_flux_jax(result, r, d)
+    return cast(jax.Array, utils.dilute_flux_jax(result, r, d))
 
 
 _eval_sed_hermite_jit = jax.jit(_eval_sed_hermite_with_grid)
@@ -223,8 +225,11 @@ def eval_sed_hermite_jax(
         Diluted 1D SED flux array of shape ``(1199,)`` in
         ``erg s^-1 cm^-2 Angstrom^-1``.
     """
-    return _eval_sed_hermite_jit(
-        teff, log_g, metallicity, r, d, utils.get_builtin_colors_grid()
+    return cast(
+        jax.Array,
+        _eval_sed_hermite_jit(
+            teff, log_g, metallicity, r, d, utils.get_builtin_colors_grid()
+        ),
     )
 
 
@@ -276,7 +281,7 @@ def eval_sed_linear_jax(
     lin_interp = jnp.sum(w_vec * c_floored, axis=0)
     log_interp = jnp.exp(jnp.sum(w_vec * jnp.log(c_floored), axis=0))
     result = jnp.where(lin_interp > 1.0e-10, log_interp, lin_interp)
-    return utils.dilute_flux_jax(result, r, d)
+    return cast(jax.Array, utils.dilute_flux_jax(result, r, d))
 
 
 @jax.jit
@@ -328,7 +333,7 @@ def eval_sed_knn_jax(
     inv_w = 1.0 / top_d
     w_norm = (inv_w / jnp.sum(inv_w))[:, None]
     result = jnp.sum(w_norm * top_s, axis=0)
-    return utils.dilute_flux_jax(result, r, d)
+    return cast(jax.Array, utils.dilute_flux_jax(result, r, d))
 
 
 def eval_sed(

@@ -13,6 +13,7 @@ flexmesa-math = { path = "../flexmesa-math" }
 
 [dev-dependencies]
 flexmesa-testing = { path = "../flexmesa-testing" }
+flexmesa-utils = { path = "../flexmesa-utils" }
 proptest = "1.5"
 
 [lints]

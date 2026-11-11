@@ -26,23 +26,22 @@ fn standard_chem_ids() -> [usize; 7] {
 #[test]
 fn test_helm_full_table_loaded_and_dense_across_full_grid() {
     let tbl = HelmTable::builtin();
-    if tbl.is_full_table() {
-        let dense = tbl.dense_vertices().expect("dense vertices");
-        assert_eq!(dense.len(), HELM_IMAX * HELM_JMAX);
-        for &(i, j) in &[
-            (1, 1),
-            (137, 42),
-            (999, 333),
-            (1845, 612),
-            (2540, 888),
-            (HELM_IMAX, HELM_JMAX),
-        ] {
-            let v = tbl.vertex(i, j).expect("dense vertex must exist");
-            assert!(v.f[0].is_finite());
-            assert!(v.dpdf[0].is_finite());
-            assert!(v.ef[0].is_finite());
-            assert!(v.xf[0].is_finite());
-        }
+    assert!(tbl.is_full_table(), "HelmTable::builtin() must load full dense grid");
+    let dense = tbl.dense_vertices();
+    assert_eq!(dense.len(), HELM_IMAX * HELM_JMAX);
+    for &(i, j) in &[
+        (1, 1),
+        (137, 42),
+        (999, 333),
+        (1845, 612),
+        (2540, 888),
+        (HELM_IMAX, HELM_JMAX),
+    ] {
+        let v = tbl.vertex(i, j).expect("dense vertex must exist");
+        assert!(v.f[0].is_finite());
+        assert!(v.dpdf[0].is_finite());
+        assert!(v.ef[0].is_finite());
+        assert!(v.xf[0].is_finite());
     }
 
     for it in 0..5 {
@@ -66,9 +65,6 @@ fn test_4d_tables_and_eos_dt_get_across_four_stellar_profiles() {
     let helm_tbl = HelmTable::builtin();
     let dt_tables = EosDtTableSet::builtin();
     let cms_tables = CmsTableSet::builtin();
-    if dt_tables.data_dir.is_none() {
-        return;
-    }
 
     let chem_id = standard_chem_ids();
     let xa_solar = [0.70, 0.28, 0.004, 0.001, 0.009, 0.003, 0.003];

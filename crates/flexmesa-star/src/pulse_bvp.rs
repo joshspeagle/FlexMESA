@@ -125,7 +125,7 @@ impl BvpModel {
             }
             pts.push(p);
         }
-        if pts.len() >= 2 && pts[0].x > 0.0 {
+        if pts.len() >= 2 && pts[0].x > 0.0 && pts[0].x < 0.01 {
             let (x1_2, x2_2) = (pts[0].x * pts[0].x, pts[1].x * pts[1].x);
             let denom = (x2_2 - x1_2).max(1.0e-30);
             let para = |v1: f64, v2: f64| (v1 * x2_2 - v2 * x1_2) / denom;
@@ -241,89 +241,75 @@ pub(crate) fn expm2(m: [[f64; 2]; 2]) -> [[f64; 2]; 2] {
 }
 
 #[must_use]
-fn step_compound6(a2: &[[f64; 6]; 6], w: [f64; 6]) -> [f64; 6] {
-    let norm = a2
-        .iter()
-        .map(|r| r.iter().map(|x| x.abs()).sum::<f64>())
-        .fold(0.0_f64, f64::max);
-    let k_scale = if norm > 0.5 {
-        ((norm * 2.0).log2().ceil() as u32).min(16)
-    } else {
-        0
-    };
-    let n_steps = 1_usize << k_scale;
-    let inv_n = 1.0 / (n_steps as f64);
-    let mut cur = w;
-    for _ in 0..n_steps {
-        let mut sum = cur;
-        let mut term = cur;
-        for deg in 1..=8 {
-            let mut next = [0.0; 6];
-            for i in 0..6 {
-                for j in 0..6 {
-                    next[i] += a2[i][j] * inv_n * term[j];
-                }
-            }
-            let inv_d = 1.0 / (deg as f64);
-            for i in 0..6 {
-                term[i] = next[i] * inv_d;
-                sum[i] += term[i];
-            }
-        }
-        cur = sum;
-    }
-    cur
-}
-
-#[must_use]
-pub(crate) fn expm4(a: [[f64; 4]; 4]) -> [[f64; 4]; 4] {
+fn expm_taylor<const N: usize>(
+    a: &[[f64; N]; N],
+    max_scale: u32,
+) -> [[f64; N]; N] {
     let norm = a
         .iter()
         .map(|r| r.iter().map(|x| x.abs()).sum::<f64>())
         .fold(0.0_f64, f64::max);
     let k_scale = if norm > 0.25 {
-        ((norm * 4.0).log2().ceil() as u32).min(16)
+        ((norm * 4.0).log2().ceil() as u32).min(max_scale)
     } else {
         0
     };
     let scale = 0.5_f64.powi(k_scale as i32);
-    let mut m = [[0.0; 4]; 4];
-    for i in 0..4 {
-        for j in 0..4 {
+    let mut m = [[0.0; N]; N];
+    for i in 0..N {
+        for j in 0..N {
             m[i][j] = a[i][j] * scale;
         }
     }
-    let mul4 = |x: [[f64; 4]; 4], y: [[f64; 4]; 4]| -> [[f64; 4]; 4] {
-        let mut z = [[0.0; 4]; 4];
-        for i in 0..4 {
-            for k in 0..4 {
-                for j in 0..4 {
-                    z[i][j] += x[i][k] * y[k][j];
+    let mul = |x: &[[f64; N]; N], y: &[[f64; N]; N]| -> [[f64; N]; N] {
+        let mut z = [[0.0; N]; N];
+        for i in 0..N {
+            for k in 0..N {
+                let xik = x[i][k];
+                for j in 0..N {
+                    z[i][j] += xik * y[k][j];
                 }
             }
         }
         z
     };
-    let mut sum = [[0.0; 4]; 4];
-    let mut term = [[0.0; 4]; 4];
-    for i in 0..4 {
+    let mut sum = [[0.0; N]; N];
+    let mut term = [[0.0; N]; N];
+    for i in 0..N {
         sum[i][i] = 1.0;
         term[i][i] = 1.0;
     }
     for deg in 1..=10 {
-        term = mul4(term, m);
+        term = mul(&term, &m);
         let inv_d = 1.0 / (deg as f64);
-        for i in 0..4 {
-            for j in 0..4 {
+        for i in 0..N {
+            for j in 0..N {
                 term[i][j] *= inv_d;
                 sum[i][j] += term[i][j];
             }
         }
     }
     for _ in 0..k_scale {
-        sum = mul4(sum, sum);
+        sum = mul(&sum, &sum);
     }
     sum
+}
+
+#[must_use]
+fn step_compound6(a2: &[[f64; 6]; 6], w: [f64; 6]) -> [f64; 6] {
+    let exp_a2 = expm_taylor(a2, 20);
+    let mut out = [0.0; 6];
+    for i in 0..6 {
+        for j in 0..6 {
+            out[i] += exp_a2[i][j] * w[j];
+        }
+    }
+    out
+}
+
+#[must_use]
+pub(crate) fn expm4(a: [[f64; 4]; 4]) -> [[f64; 4]; 4] {
+    expm_taylor(&a, 16)
 }
 
 #[must_use]
@@ -359,30 +345,21 @@ pub(crate) fn ad_matrix4(
 fn compound_matrix6(a: [[f64; 4]; 4]) -> [[f64; 6]; 6] {
     const PAIRS: [(usize, usize); 6] =
         [(0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3)];
-    let idx_sign = |p: usize, q: usize| -> Option<(usize, f64)> {
-        match p.cmp(&q) {
-            std::cmp::Ordering::Equal => None,
-            std::cmp::Ordering::Less => {
-                PAIRS.iter().position(|&ij| ij == (p, q)).map(|k| (k, 1.0))
-            }
-            std::cmp::Ordering::Greater => {
-                PAIRS.iter().position(|&ij| ij == (q, p)).map(|k| (k, -1.0))
-            }
-        }
-    };
+    const PAIR_LUT: [[(usize, f64); 4]; 4] = [
+        [(0, 0.0), (0, 1.0), (1, 1.0), (2, 1.0)],
+        [(0, -1.0), (0, 0.0), (3, 1.0), (4, 1.0)],
+        [(1, -1.0), (3, -1.0), (0, 0.0), (5, 1.0)],
+        [(2, -1.0), (4, -1.0), (5, -1.0), (0, 0.0)],
+    ];
     let mut a2 = [[0.0; 6]; 6];
     for (row, &(i, j)) in PAIRS.iter().enumerate() {
         a2[row][row] += a[i][i] + a[j][j];
         for k in 0..4 {
-            if k != i {
-                if let Some((col, sgn)) = idx_sign(k, j) {
-                    a2[row][col] += sgn * a[i][k];
-                }
-            }
-            if k != j {
-                if let Some((col, sgn)) = idx_sign(i, k) {
-                    a2[row][col] += sgn * a[j][k];
-                }
+            if k != i && k != j {
+                let (col1, sgn1) = PAIR_LUT[k][j];
+                a2[row][col1] += sgn1 * a[i][k];
+                let (col2, sgn2) = PAIR_LUT[i][k];
+                a2[row][col2] += sgn2 * a[j][k];
             }
         }
     }
@@ -426,7 +403,11 @@ pub fn shoot_determinant(
 ) -> f64 {
     let om2 = omega * omega;
     if l == 0 {
-        let mut y = [1.0, (model.pts[0].c_1 * om2) / 3.0];
+        let mut y = if model.pts[0].x > 0.0 {
+            [0.0, 1.0]
+        } else {
+            [1.0, (model.pts[0].c_1 * om2) / 3.0]
+        };
         for (i, mid) in model.mids.iter().enumerate() {
             let dlnx = (model.pts[i + 1].x - model.pts[i].x) / mid.x;
             let vg = mid.v_2 * mid.x * mid.x / mid.gamma_1;

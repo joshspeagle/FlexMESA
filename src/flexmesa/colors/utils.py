@@ -9,7 +9,7 @@ and branchless ``@jax.jit`` (``float64``) kernels.
 from __future__ import annotations
 
 import functools
-from typing import NamedTuple
+from typing import NamedTuple, cast
 
 import jax
 import jax.numpy as jnp
@@ -158,7 +158,10 @@ def dilute_flux(
     if resolved == "rust":
         arr = _dispatch.as_c_f64(surface_flux)
         return _rust.py_colors_dilute_flux(arr, float(r), float(d))
-    return dilute_flux_jax(jnp.asarray(surface_flux, dtype=jnp.float64), r, d)
+    return cast(
+        jax.Array,
+        dilute_flux_jax(jnp.asarray(surface_flux, dtype=jnp.float64), r, d),
+    )
 
 
 @jax.jit
@@ -199,9 +202,12 @@ def trapezoidal_integration(
         x_arr = _dispatch.as_c_f64(x)
         y_arr = _dispatch.as_c_f64(y)
         return _rust.py_colors_trapezoidal_integration(x_arr, y_arr)
-    return trapezoidal_integration_jax(
-        jnp.asarray(x, dtype=jnp.float64),
-        jnp.asarray(y, dtype=jnp.float64),
+    return cast(
+        jax.Array,
+        trapezoidal_integration_jax(
+            jnp.asarray(x, dtype=jnp.float64),
+            jnp.asarray(y, dtype=jnp.float64),
+        ),
     )
 
 
@@ -271,9 +277,12 @@ def simpson_integration(
         x_arr = _dispatch.as_c_f64(x)
         y_arr = _dispatch.as_c_f64(y)
         return _rust.py_colors_simpson_integration(x_arr, y_arr)
-    return simpson_integration_jax(
-        jnp.asarray(x, dtype=jnp.float64),
-        jnp.asarray(y, dtype=jnp.float64),
+    return cast(
+        jax.Array,
+        simpson_integration_jax(
+            jnp.asarray(x, dtype=jnp.float64),
+            jnp.asarray(y, dtype=jnp.float64),
+        ),
     )
 
 
@@ -323,8 +332,11 @@ def interpolate_array(
         yi = _dispatch.as_c_f64(y_in)
         xo = _dispatch.as_c_f64(x_out)
         return _rust.py_colors_interpolate_array(xi, yi, xo)
-    return interpolate_array_jax(
-        jnp.asarray(x_in, dtype=jnp.float64),
-        jnp.asarray(y_in, dtype=jnp.float64),
-        jnp.asarray(x_out, dtype=jnp.float64),
+    return cast(
+        jax.Array,
+        interpolate_array_jax(
+            jnp.asarray(x_in, dtype=jnp.float64),
+            jnp.asarray(y_in, dtype=jnp.float64),
+            jnp.asarray(x_out, dtype=jnp.float64),
+        ),
     )

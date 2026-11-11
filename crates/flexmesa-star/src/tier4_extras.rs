@@ -216,14 +216,22 @@ impl StarExtras for Tier4CaseExtras {
     fn extras_controls(&mut self, model: &mut StarModel) {
         self.step_count = 0;
         self.rsp_num_periods = 0;
+        let is_pulse_mod_case = (self.case_name.starts_with("gyre_in_mesa_")
+            || matches!(
+                self.case_name.as_str(),
+                "astero_gyre" | "astero_adipls"
+            ))
+            && model.model_number >= 10;
         model.controls.op_split_burn = true;
         model.controls.min_logt_for_net = 8.5;
         model.controls.mesh_delta_coeff = 0.0;
-        model.controls.atm_option = AtmOption::Table;
+        if !is_pulse_mod_case {
+            model.controls.atm_option = AtmOption::Table;
+            model.controls.mlt_option = flexmesa_turb::MltOption::Cox;
+            model.controls.mixing_length_alpha = 2.0;
+            model.controls.tau_factor = 1.0;
+        }
         model.controls.energy_eqn_option = EnergyEqnOption::EpsGrav;
-        model.controls.mlt_option = flexmesa_turb::MltOption::Cox;
-        model.controls.mixing_length_alpha = 2.0;
-        model.controls.tau_factor = 1.0;
         model.controls.v_flag = false;
         model.controls.u_flag = false;
         model.controls.rotation_flag = false;
@@ -259,7 +267,11 @@ impl StarExtras for Tier4CaseExtras {
         model.controls.remnant_mass_min_limit = None;
         model.controls.center_r_lower_limit = None;
         model.controls.varcontrol_target = 1.0e-3;
-        model.dt = 1.0e1 * SECYER;
+        model.dt = if is_pulse_mod_case {
+            1.0e-2 * SECYER
+        } else {
+            1.0e1 * SECYER
+        };
         model.dt_next = model.dt;
         model.controls.max_years_for_timestep = Some(1.0e2);
 

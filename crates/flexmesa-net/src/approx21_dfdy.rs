@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 //! Hardwired `approx21` and `approx21_plus_co56` analytical Jacobian
 //! (`approx21_dfdy`, light-through-`s32` rows; delegates iron-group rows to
-//! [`crate::approx21_eval::approx21_dfdy_heavy`]).
+//! `approx21_dfdy_heavy`).
 
 use crate::approx21::Approx21Indices;
 use crate::approx21_dfdy_heavy::approx21_dfdy_heavy;

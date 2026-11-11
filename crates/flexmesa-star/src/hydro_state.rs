@@ -88,6 +88,8 @@ pub struct HydroAuxState {
     /// EOS total pressure composition partials $\partial\ln P_{\mathrm{eos},k}/\partial X_{j,k}$
     /// (`dlnPeos_dxa_for_partials`, `len = nz * species`).
     pub dln_peos_dxa_for_partials: Vec<f64>,
+    /// Radial Stellar Pulsation (`RSP` / `RSP2`) zone arrays and cycle state.
+    pub rsp: crate::rsp_def::RspState,
 }
 
 impl HydroAuxState {
@@ -132,6 +134,7 @@ impl HydroAuxState {
             uq_ad: vec![StarAdOrder1::ZERO; nz],
             dln_e_dxa_for_partials: vec![0.0; nz * species],
             dln_peos_dxa_for_partials: vec![0.0; nz * species],
+            rsp: crate::rsp_def::RspState::new(nz),
         }
     }
 
@@ -180,6 +183,7 @@ impl HydroAuxState {
         self.d_eps_grav_dx.resize(n_sp, 0.0);
         self.dln_e_dxa_for_partials.resize(n_sp, 0.0);
         self.dln_peos_dxa_for_partials.resize(n_sp, 0.0);
+        self.rsp.resize(nz);
     }
 
     /// Snapshots start-of-step thermodynamic and turbulent velocity arrays.

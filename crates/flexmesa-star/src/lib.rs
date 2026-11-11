@@ -98,6 +98,10 @@ pub mod riemann;
 pub mod rotation;
 pub mod rsp2;
 pub mod rsp_build;
+pub mod rsp_config;
+pub mod rsp_def;
+pub mod rsp_eos_inv;
+pub mod rsp_eos_kap;
 pub mod solver;
 pub mod star_ad;
 pub mod star_job_init;
@@ -247,6 +251,17 @@ pub use rsp2::{
 pub use rsp_build::{
     build_rsp_envelope_model, eval_rsp_2nd_crossing_edges, eval_rsp_lina_modes,
     RspLinaMode,
+};
+pub use rsp_config::{Rsp2Controls, RspConfig};
+pub use rsp_def::{
+    RspDerivedConsts, RspState, F_EDD_FREE_STREAM, F_EDD_ISOTROPIC, MAX_RSP_NZN,
+};
+pub use rsp_eos_kap::{
+    compute_standard_metals_xa, eval1_gamma_pt_get_rho, eval1_mesa_eos_and_kap,
+    eval1_mesa_eos_de_and_kap, eval1_mesa_eos_degas_and_kap,
+    eval1_mesa_rho_given_pt, eval1_mesa_t_given_dp, eval_mesa_eos_and_kap,
+    get_surf_p_t_kap, set_rho_for_new_pgas, set_t_for_new_egas,
+    set_t_for_new_energy, set_t_for_new_pgas, RspChemCache, RspEosKapOut,
 };
 pub use solver::{
     compute_corr_coeff, compute_correction_norms, compute_vector_norms,

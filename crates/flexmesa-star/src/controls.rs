@@ -269,6 +269,10 @@ pub struct StarControls {
     pub rsp_x: f64,
     /// RSP metal mass fraction $Z$ (`RSP_Z`).
     pub rsp_z: f64,
+    /// Full nonlinear `RSP1` namelist controls (`controls.defaults:3063-3333`).
+    pub rsp: crate::rsp_config::RspConfig,
+    /// Full coupled Henyey `RSP2` namelist controls (`controls_dev.defaults:59-131`).
+    pub rsp2: crate::rsp_config::Rsp2Controls,
 
     // --- `other_*` Physics Hook Enables & User `x_ctrl` Arrays ---
     /// Enable custom `other_cgrav` hook (`use_other_cgrav`).
@@ -509,12 +513,14 @@ impl Default for StarControls {
             stop_at_phase_ne_burn: false,
             stop_at_phase_o_burn: false,
             rsp_max_num_periods: None,
-            rsp_target_steps_per_cycle: 150,
+            rsp_target_steps_per_cycle: 600,
             rsp_mass: 0.65,
             rsp_teff: 6500.0,
             rsp_l: 45.0,
             rsp_x: 0.75,
             rsp_z: 0.0004,
+            rsp: crate::rsp_config::RspConfig::default(),
+            rsp2: crate::rsp_config::Rsp2Controls::default(),
             use_other_cgrav: false,
             use_other_alpha_mlt: false,
             use_other_wind: false,

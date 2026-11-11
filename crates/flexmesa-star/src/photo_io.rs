@@ -114,6 +114,8 @@ pub fn write_photo_bytes(model: &StarModel) -> Vec<u8> {
         u8::from(model.controls.u_flag),
         u8::from(model.controls.rotation_flag),
         u8::from(model.controls.op_split_burn),
+        u8::from(model.controls.rsp_flag),
+        u8::from(model.controls.rsp2_flag),
     ]);
 
     write_i32(&mut buf, 2);
@@ -225,6 +227,51 @@ pub fn write_photo_bytes(model: &StarModel) -> Vec<u8> {
     );
 
     write_i32(&mut buf, 6);
+    let r = &model.aux.rsp;
+    let has_rsp = model.controls.rsp_flag
+        || model.controls.rsp2_flag
+        || r.num_periods > 0
+        || r.have_set_velocities
+        || r.et_rsp.iter().any(|&x| x != 0.0)
+        || r.erad_rsp.iter().any(|&x| x != 0.0)
+        || r.hp_face.iter().any(|&x| x != 0.0);
+    buf.push(u8::from(has_rsp));
+    if has_rsp {
+        for s in [
+            &r.et_rsp,
+            &r.erad_rsp,
+            &r.fr_rsp,
+            &r.lc_rsp,
+            &r.lt_rsp,
+            &r.ptrb_rsp,
+            &r.pvsc_rsp,
+            &r.egas_rsp,
+            &r.hp_face,
+            &r.vol_start,
+            &r.w_start,
+            &r.fr_start,
+            &r.erad_start,
+            &r.egas_start,
+            &r.pgas_start,
+            &r.prad_start,
+            &r.opacity_start,
+            &r.qq_start,
+            &r.lc_start,
+            &r.lt_start,
+            &r.ppp0,
+            &r.ppq0,
+            &r.ppt0,
+            &r.ppc0,
+            &r.vv0,
+            &r.work,
+            &r.workq,
+            &r.workt,
+            &r.workc,
+        ] {
+            write_f64_slice(&mut buf, s);
+        }
+        write_f64_slice(&mut buf, &r.pack_scalars());
+    }
     write_i32(&mut buf, 7);
     buf
 }
@@ -294,12 +341,14 @@ pub fn read_photo_bytes(
         .ok_or_else(|| eof("EOF net_name"))?;
     pos += net_len;
     let saved_net_name = std::str::from_utf8(net_slice)
-        .map_err(|e| StarError::IoError(format!("invalid UTF-8 net_name: {e}")))?
+        .map_err(|e| {
+            StarError::IoError(format!("invalid UTF-8 net_name: {e}"))
+        })?
         .to_owned();
     let job_tags = bytes
-        .get(pos..pos + 4)
+        .get(pos..pos + 6)
         .ok_or_else(|| eof("EOF job/controls flags"))?;
-    pos += 4;
+    pos += 6;
     let mut job = job;
     let mut controls = controls;
     job.net_name = saved_net_name;
@@ -307,6 +356,8 @@ pub fn read_photo_bytes(
     controls.u_flag = job_tags[1] != 0;
     controls.rotation_flag = job_tags[2] != 0;
     controls.op_split_burn = job_tags[3] != 0;
+    controls.rsp_flag = job_tags[4] != 0;
+    controls.rsp2_flag = job_tags[5] != 0;
 
     let mut model = StarModel::new(nz, chem_id, job, controls);
 
@@ -409,6 +460,49 @@ pub fn read_photo_bytes(
     model.kap_config.log_r_compton_blend_lo = cfg_f64[9];
 
     expect_part(&mut pos, 6)?;
+    let has_rsp = *bytes.get(pos).ok_or_else(|| eof("EOF has_rsp"))? != 0;
+    pos += 1;
+    let saved_rsp = if has_rsp {
+        let mut rsp = crate::rsp_def::RspState::new(nz);
+        for dst in [
+            &mut rsp.et_rsp,
+            &mut rsp.erad_rsp,
+            &mut rsp.fr_rsp,
+            &mut rsp.lc_rsp,
+            &mut rsp.lt_rsp,
+            &mut rsp.ptrb_rsp,
+            &mut rsp.pvsc_rsp,
+            &mut rsp.egas_rsp,
+            &mut rsp.hp_face,
+            &mut rsp.vol_start,
+            &mut rsp.w_start,
+            &mut rsp.fr_start,
+            &mut rsp.erad_start,
+            &mut rsp.egas_start,
+            &mut rsp.pgas_start,
+            &mut rsp.prad_start,
+            &mut rsp.opacity_start,
+            &mut rsp.qq_start,
+            &mut rsp.lc_start,
+            &mut rsp.lt_start,
+            &mut rsp.ppp0,
+            &mut rsp.ppq0,
+            &mut rsp.ppt0,
+            &mut rsp.ppc0,
+            &mut rsp.vv0,
+            &mut rsp.work,
+            &mut rsp.workq,
+            &mut rsp.workt,
+            &mut rsp.workc,
+        ] {
+            *dst = read_f64_vec(&mut pos, nz)?;
+        }
+        let sc = read_f64_vec(&mut pos, 34)?;
+        rsp.unpack_scalars(&sc);
+        Some(rsp)
+    } else {
+        None
+    };
     expect_part(&mut pos, 7)?;
 
     model.xmstar = (model.mstar - model.m_center).max(0.0);
@@ -432,9 +526,15 @@ pub fn read_photo_bytes(
     model.set_m_and_dm();
     model.set_m_grav_and_grav();
     model.pack_xh();
-    crate::hydro_vars::set_hydro_vars(&mut model, false, false)?;
-    let dt_photo = model.dt;
-    crate::struct_burn_mix::refresh_mixing_state(&mut model, dt_photo, &[]);
+    if model.controls.rsp_flag {
+        crate::micro::set_basic_vars(&mut model)?;
+        crate::micro::do_eos(&mut model)?;
+        crate::micro::do_kap(&mut model)?;
+    } else {
+        crate::hydro_vars::set_hydro_vars(&mut model, false, false)?;
+        let dt_photo = model.dt;
+        crate::struct_burn_mix::refresh_mixing_state(&mut model, dt_photo, &[]);
+    }
     model.save_start_values();
     model.mstar_start = saved_mstar_start;
     if saved_lnd_start.len() == nz {
@@ -446,6 +546,9 @@ pub fn read_photo_bytes(
     model.sig = saved_sig;
     model.mlt_vc = saved_mlt_vc;
     model.aux.mlt_vc_old = saved_mlt_vc_old;
+    if let Some(rsp) = saved_rsp {
+        model.aux.rsp = rsp;
+    }
 
     Ok(model)
 }

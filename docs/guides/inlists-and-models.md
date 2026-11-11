@@ -73,7 +73,7 @@ print("Validated controls:", validated)
 
 Many upstream MESA `test_suite` cases chain multiple evolutionary stages inside a `./rn` bash script using `do_one <inlist> <final_mod>` helper calls, where Stage 1 relaxes a pre-MS or ZAMS model and saves `stage1.mod`, and Stage 2 loads `stage1.mod` (`load_saved_model = .true.`) to evolve through helium burning or mass transfer.
 
-`star.parse_rn_stages` extracts the ordered list of `(stage_kind, inlist_name, output_mod)` stages from a case directory (respecting `MESA_SKIP_OPTIONAL` conditional blocks when `skip_optional=True`), and `star.run_test_suite_case` executes the entire multi-stage pipeline end-to-end with optional `.photo` restart verification. For upstream `star/test_suite` cases that include custom Fortran `src/run_star_extras.f90` hooks, `star.TIER1_CASES`, `star.run_tier1_case`, and `star.run_tier1_suite` automatically attach the built-in `Tier1CaseExtras` hook registry and verify physical end-of-run invariants:
+`star.parse_rn_stages` extracts the ordered list of `(stage_kind, inlist_name, output_mod)` stages from a case directory (respecting `MESA_SKIP_OPTIONAL` conditional blocks when `skip_optional=True`), and `star.run_test_suite_case` executes the entire multi-stage pipeline end-to-end with optional `.photo` restart verification. For upstream `star/test_suite` cases that include custom Fortran `src/run_star_extras.f90` hooks, `star.TIER1_CASES`, `star.run_test_suite_case`, and `star.run_tier1_suite` automatically attach the built-in `Tier1CaseExtras` hook registry and verify physical end-of-run invariants:
 
 ```python
 import pathlib
@@ -171,9 +171,11 @@ print(
 
 ---
 
-## 4. Managing `.safetensors` Physics Tables (`flexmesa.data`)
+## 4. Managing Physics Data Bundles and `.safetensors` Tables (`flexmesa.data`)
 
-To eliminate slow startup parsing of legacy ASCII tables (`isotopes.data`, `lodders03.data`, `helm_table.dat`), `flexmesa.data` stores tabulated physics payloads in 64-byte-aligned `.safetensors` files verified against SHA-256 digests in `manifest.toml`. You can inspect the built-in manifest, verify checksums, and round-trip custom `float64` tensor bundles in memory or on disk:
+Full-grid equation-of-state and opacity tables (`helm_table_full.bin`, `kap_tables_full.bin`, and 4D `OPAL`/`SCvH`/`CMS`/`FreeEOS` binaries) plus upstream MESA verification inputs are distributed via the `data-v1` release manifest (`bundles.toml`) and fetched on demand with `flexmesa data fetch` (or `flexmesa data fetch --include-test-inputs`), which verifies every compressed `.zst` archive against its pinned `SHA-256` digest before unpacking into `$FLEXMESA_DATA_DIR`.
+
+In addition, `flexmesa.data` stores custom tabulated physics payloads in 64-byte-aligned `.safetensors` files verified against `SHA-256` digests in `manifest.toml`. You can inspect the built-in manifest, verify checksums, and round-trip custom `float64` tensor bundles in memory or on disk:
 
 ```python
 import pathlib

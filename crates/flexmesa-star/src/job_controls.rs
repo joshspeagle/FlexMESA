@@ -365,6 +365,10 @@ pub struct StarJobControls {
     pub new_rti_flag: bool,
     /// Expected termination code string for `test_suite` verification (`required_termination_code_string`).
     pub required_termination_code_string: String,
+    /// Optional exact number of evolutionary steps to take before terminating (`steps_to_take_before_terminate`).
+    pub steps_to_take_before_terminate: Option<usize>,
+    /// Optional inner temperature cut in K (`remove_initial_center_by_temperature`).
+    pub remove_initial_center_by_temperature: Option<f64>,
     /// Whether `pgstar` live plotting was requested in the inlist (accepted as no-op).
     pub pgstar_flag: bool,
 }
@@ -452,6 +456,8 @@ impl Default for StarJobControls {
             change_initial_rti_flag: false,
             new_rti_flag: false,
             required_termination_code_string: String::new(),
+            steps_to_take_before_terminate: None,
+            remove_initial_center_by_temperature: None,
             pgstar_flag: false,
         }
     }

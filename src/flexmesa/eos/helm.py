@@ -69,6 +69,10 @@ def _lookup_helm_cell_jax(
     """Look up `HelmCell` bounds and 4-corner Hermite stencils in JAX."""
     temp_sg = jax.lax.stop_gradient(jnp.asarray(temp, dtype=jnp.float64))
     din_sg = jax.lax.stop_gradient(jnp.asarray(din, dtype=jnp.float64))
+    while isinstance(temp_sg, jax.core.Tracer) and hasattr(temp_sg, "primal"):
+        temp_sg = temp_sg.primal
+    while isinstance(din_sg, jax.core.Tracer) and hasattr(din_sg, "primal"):
+        din_sg = din_sg.primal
     if not isinstance(temp_sg, jax.core.Tracer) and not isinstance(
         din_sg, jax.core.Tracer
     ):

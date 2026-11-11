@@ -12,7 +12,7 @@ unscreened rate dispatchers (`set_raw_rate`, `set_raw_rates`,
 from __future__ import annotations
 
 import dataclasses
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import jax.numpy as jnp
 import numpy as np
@@ -263,11 +263,14 @@ def eval_fl_epsnuc_3alf(
     """
     resolved = _dispatch.resolve_backend(backend, temp, rho, y_he4, mu_e)
     if resolved == "jax":
-        return jax_kernels.eval_fl_epsnuc_3alf_jax(
-            jnp.asarray(temp),
-            jnp.asarray(rho),
-            jnp.asarray(y_he4),
-            jnp.asarray(mu_e),
+        return cast(
+            "jax.Array",
+            jax_kernels.eval_fl_epsnuc_3alf_jax(
+                jnp.asarray(temp),
+                jnp.asarray(rho),
+                jnp.asarray(y_he4),
+                jnp.asarray(mu_e),
+            ),
         )
     return float(
         _rust.rates_eval_fl_epsnuc_3alf(

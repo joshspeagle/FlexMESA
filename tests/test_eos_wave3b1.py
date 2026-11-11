@@ -8,10 +8,8 @@ from typing import Any
 import jax
 import jax.numpy as jnp
 import numpy as np
-import pytest
 
 from flexmesa import chem, constants, eos
-from flexmesa.eos import _cache_io
 
 
 def _solar_composition() -> tuple[list[int], np.ndarray]:
@@ -185,8 +183,6 @@ def test_4d_tables_and_eos_dt_get_across_stellar_profiles_and_autodiff() -> (
     None
 ):
     """Verify full 4D tables & `eos_dt_get` across 4 stellar profiles and AD."""
-    if _cache_io.resolve_mesa_data_dir() is None:
-        pytest.skip("requires upstream MESA 4D EOS data tables")
     # 1. Off-golden (X, Z, logRho, logT) slices across OPAL/SCVH, FreeEOS, CMS
     for x_val, z_val, log_rho, log_t in [
         (0.72, 0.015, -3.25, 4.35),

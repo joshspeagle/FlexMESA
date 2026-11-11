@@ -310,8 +310,7 @@ def test_upstream_tier1_test_suite_case_reproduction_and_restart_parity(
     if not mesa_dir:
         pytest.skip("MESA_DIR environment variable is not set")
     case_dir = pathlib.Path(mesa_dir) / "star" / "test_suite" / case_name
-    if not case_dir.is_dir():
-        pytest.skip(f"Upstream case directory not found: {case_dir}")
+    assert case_dir.is_dir(), f"Upstream case directory not found: {case_dir}"
 
     rep = e2e.run_test_suite_case(
         case_dir,

@@ -55,8 +55,8 @@ def eval_ideal_eos(
 def eval_ideal_eos_from_weights(
     temp: float | jax.Array,
     rho: float | jax.Array,
-    abar: float,
-    zbar: float,
+    abar: float | jax.Array,
+    zbar: float | jax.Array,
     xa: np.ndarray | jax.Array,
     weights: np.ndarray | jax.Array,
     a: np.ndarray | jax.Array,
@@ -149,11 +149,7 @@ def eval_ideal_eos_zones(
             in_axes=(0, 0, None, None, None, None, None),
         )
         res_j, dlnd_j, dlnt_j = vmapped(t_j, r_j, ab_j, zb_j, xa_j, w_j, a_j)
-        return core.EosEvalOutput(
-            res=cast(jax.Array, res_j),
-            d_dlnd=cast(jax.Array, dlnd_j),
-            d_dln_t=cast(jax.Array, dlnt_j),
-        )
+        return core.EosEvalOutput(res=res_j, d_dlnd=dlnd_j, d_dln_t=dlnt_j)
     out = _rust.eos_eval_ideal_zones(
         np.ascontiguousarray(temp, dtype=np.float64),
         np.ascontiguousarray(rho, dtype=np.float64),

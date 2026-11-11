@@ -197,7 +197,7 @@ def _wrap_host_2arg_jit(eval_1d_fn: Any, n_cols: int) -> tuple[Any, Any]:
         )
 
     def _core(x_in: jax.Array, y_in: jax.Array) -> jax.Array:
-        spec = jax.ShapeDtypeStruct((*x_in.shape, n_cols), jnp.float64)  # type: ignore[no-untyped-call]
+        spec = jax.ShapeDtypeStruct((*x_in.shape, n_cols), jnp.float64)
         res = jax.pure_callback(
             _host_cb, spec, x_in, y_in, vmap_method="expand_dims"
         )

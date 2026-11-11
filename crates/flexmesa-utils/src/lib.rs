@@ -10,6 +10,73 @@
 //!   used to parse nuclear reaction network (`.net`) definition files.
 
 use std::collections::BTreeMap;
+use std::path::PathBuf;
+
+/// Resolve the canonical `FlexMESA` physics table directory (`DECISIONS #3` & `#13`).
+///
+/// Precedence:
+/// 1. `FLEXMESA_DATA_DIR` (or legacy `FLEXMESA_BIN_CACHE_DIR` / `FLEXMESA_CACHE_DIR`) when set and non-empty.
+/// 2. `XDG_CACHE_HOME/flexmesa/data` when `XDG_CACHE_HOME` is set and non-empty.
+/// 3. `HOME/.cache/flexmesa/data` (or `LOCALAPPDATA/flexmesa/data` on Windows).
+#[must_use]
+pub fn resolve_flexmesa_data_dir() -> PathBuf {
+    for var in [
+        "FLEXMESA_DATA_DIR",
+        "FLEXMESA_BIN_CACHE_DIR",
+        "FLEXMESA_CACHE_DIR",
+    ] {
+        if let Some(val) = std::env::var_os(var) {
+            if !val.is_empty() {
+                return PathBuf::from(val);
+            }
+        }
+    }
+    if let Some(xdg) = std::env::var_os("XDG_CACHE_HOME") {
+        if !xdg.is_empty() {
+            return PathBuf::from(xdg).join("flexmesa").join("data");
+        }
+    }
+    if let Some(home) = std::env::var_os("HOME") {
+        if !home.is_empty() {
+            return PathBuf::from(home)
+                .join(".cache")
+                .join("flexmesa")
+                .join("data");
+        }
+    }
+    if let Some(local) = std::env::var_os("LOCALAPPDATA") {
+        if !local.is_empty() {
+            return PathBuf::from(local).join("flexmesa").join("data");
+        }
+    }
+    PathBuf::from(".flexmesa_data")
+}
+
+/// Resolve the upstream MESA `r24.08.1` verification directory (`MESA_DIR` or `mesa_test_inputs`).
+#[must_use]
+pub fn resolve_mesa_test_inputs_dir() -> PathBuf {
+    if let Some(val) = std::env::var_os("MESA_DIR") {
+        if !val.is_empty() {
+            return PathBuf::from(val);
+        }
+    }
+    if let Some(xdg) = std::env::var_os("XDG_CACHE_HOME") {
+        if !xdg.is_empty() {
+            return PathBuf::from(xdg)
+                .join("flexmesa")
+                .join("mesa_test_inputs");
+        }
+    }
+    if let Some(home) = std::env::var_os("HOME") {
+        if !home.is_empty() {
+            return PathBuf::from(home)
+                .join(".cache")
+                .join("flexmesa")
+                .join("mesa_test_inputs");
+        }
+    }
+    PathBuf::from(".flexmesa_test_inputs")
+}
 
 /// Return `true` when `x` is `NaN` or $\pm\infty$ (`!x.is_finite()`).
 ///

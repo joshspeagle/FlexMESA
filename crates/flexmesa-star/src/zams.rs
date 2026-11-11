@@ -510,18 +510,14 @@ pub fn load_zams_model_from_catalog(
     } else {
         m_target * M_SUN
     };
-    model.xmstar = model.mstar;
-    model.mstar_start = model.mstar;
-    model.mstar_old = model.mstar;
+    (model.xmstar, model.mstar_start, model.mstar_old) =
+        (model.mstar, model.mstar, model.mstar);
     if m_target < e1.m_msun * (1.0 - 1.0e-7) {
         crate::relax::relax_mass_to_target(&mut model, m_target, 8, true);
     }
-    model.model_number = 1;
-    model.star_age = 0.0;
+    (model.model_number, model.star_age) = (1, 0.0);
     let dt_sec = yrs_for_init_timestep(m_target) * SECYER;
-    model.dt = dt_sec;
-    model.dt_next = dt_sec;
-    model.dt_old = 0.0;
+    (model.dt, model.dt_next, model.dt_old) = (dt_sec, dt_sec, 0.0);
     model.finish_init_model()?;
     Ok(model)
 }
@@ -554,9 +550,15 @@ mod zams_catalog_tests {
                 <= 1.0e-10
         );
 
-        let ascii_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(
-            "../../.mesa_temp_cache/mesa_data/star_data/zams_models/zams_z2m2_y28.data",
-        );
+        let ascii_path = flexmesa_utils::resolve_mesa_test_inputs_dir()
+            .join("data/star_data/zams_models/zams_z2m2_y28.data");
+        if std::env::var_os("MESA_DIR")
+            .is_some_and(|v| !v.is_empty())
+            || std::env::var("FLEXMESA_REQUIRE_ZERO_SKIPS").as_deref()
+                == Ok("1")
+        {
+            assert!(ascii_path.is_file(), "missing {}", ascii_path.display());
+        }
         if ascii_path.is_file() {
             let text = std::fs::read_to_string(&ascii_path)
                 .expect("read zams_z2m2_y28.data");

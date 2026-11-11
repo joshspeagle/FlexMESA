@@ -25,7 +25,7 @@ $$\Gamma_3 - 1 = \frac{P\,\chi_T}{\rho\,T\,c_V}, \qquad \Gamma_1 = \chi_\rho + \
 | Component | Entry Point | Physical Regime & Formulation |
 | :--- | :--- | :--- |
 | **1. `Ideal`** | `eval_ideal_eos` | Low-density, low-temperature neutral atomic gas ($\mu = \bar{A}$) plus blackbody radiation pressure $P_{\mathrm{rad}} = \frac{1}{3}a T^4$ and cumulative NIST ground-state ionization offsets $E_{\mathrm{ion}}(\mathbf{X})$. |
-| **2. `HELM`** | `eval_helm_eos` | Timmes & Swesty (2000) biquintic/bicubic Hermite electron-positron plasma table (`helm_table.safetensors`, $541 \times 201$ grid in $\log_{10}(\rho Y_e)$ and $\log_{10}T$) with ideal ions and Yakovlev & Shalybkov (1989) Coulomb corrections. |
+| **2. `HELM`** | `eval_helm_eos` | Timmes & Swesty (2000) biquintic/bicubic Hermite electron-positron plasma table (`helm_table_full.bin`, $2701 \times 1001$ grid in $\log_{10}(\rho Y_e)$ and $\log_{10}T$) with ideal ions and Yakovlev & Shalybkov (1989) Coulomb corrections. |
 | **3. `PC`** | `eval_pc_eos` | Potekhin & Chabrier (2000, 2010) strongly coupled one-component plasma (`OCP`) liquid and body-centered cubic (`bcc`) solid free energies with Baiko et al. (2001) lattice phonons and linear multi-ion mixing. |
 | **4. `Skye`** | `eval_skye_eos` | Jermyn et al. (2021) third-order free-energy minimization EOS combining `HELM` electrons, Tanaka & Ichimaru (`EXCOR7`) screening, Ogata et al. (1993) non-ideal solid/liquid mixing, and smoothed crystallization latent heat. |
 | **5. `OPAL/SCVH`** | `eval_opal_scvh_eos` | Rogers & Nayfonov (2002) `OPAL` blended with Saumon, Chabrier & Van Horn (1995) `SCVH` 4D $(X, Z, \log_{10} Q, \log_{10} T)$ partial-ionization tables for main-sequence and cool stellar envelopes. |

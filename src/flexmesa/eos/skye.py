@@ -8,16 +8,15 @@ JAX interfaces for `get_skye_alfa`, `get_skye_alfa_simple`, and `eval_skye_eos`.
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from typing import cast
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 
-from flexmesa import _dispatch, _rust, chem, constants
+from flexmesa import _dispatch, _rust, constants
 from flexmesa.eos import _skye_jax, core, helm
 
-_eval_skye_cell_zone_jit = jax.jit(_skye_jax.eval_skye_cell_zone_jax)
+_eval_skye_cell_zone_jit = _skye_jax.eval_skye_cell_zone_jax
 eval_skye_cell_zones_jit = _skye_jax.eval_skye_cell_zones_jit
 
 
@@ -53,6 +52,7 @@ def _is_contained_jax(coords: jax.Array, pt: jax.Array) -> jax.Array:
     return jnp.sum(inc) != 0
 
 
+@jax.jit
 def get_skye_alfa_jax(
     log_rho: jax.Array,
     log_t: jax.Array,
@@ -113,8 +113,9 @@ def get_skye_alfa_jax(
         sdist = jnp.where(contained, -dist, dist) / skye_blend_width
         return jnp.where(sdist <= 0.0, 0.0, jnp.where(sdist >= 1.0, 1.0, sdist))
 
-    alfa = _alfa_fn(log_rho_f, log_t_f)
-    d_dlr, d_dlt = jax.grad(_alfa_fn, argnums=(0, 1))(log_rho_f, log_t_f)
+    alfa, (d_dlt, d_dlr) = jax.value_and_grad(_alfa_fn, argnums=(1, 0))(
+        log_rho_f, log_t_f
+    )
     return alfa, d_dlt, d_dlr
 
 
@@ -125,6 +126,7 @@ def _ramp_01(x: jax.Array, x_lo: float, x_hi: float) -> jax.Array:
     )
 
 
+@jax.jit
 def get_skye_alfa_simple_jax(
     log_rho: jax.Array,
     log_t: jax.Array,
@@ -156,8 +158,7 @@ def get_skye_alfa_simple_jax(
         )
         return (1.0 - b_lr) * (1.0 - b_lt)
 
-    alfa = _fn(lr, lt)
-    dlr, dlt = jax.grad(_fn, argnums=(0, 1))(lr, lt)
+    alfa, (dlt, dlr) = jax.value_and_grad(_fn, argnums=(1, 0))(lr, lt)
     return alfa, dlt, dlr
 
 
@@ -183,12 +184,13 @@ def get_skye_alfa(
         pure `Skye` and `alfa == 1` means pure `HELM`/other.
     """
     if _dispatch.resolve_backend(backend, log_rho, log_t, abar, zbar) == "jax":
-        return get_skye_alfa_jax(
+        a_j, dt_j, dr_j = get_skye_alfa_jax(
             jnp.asarray(log_rho, dtype=jnp.float64),
             jnp.asarray(log_t, dtype=jnp.float64),
             jnp.asarray(abar, dtype=jnp.float64),
             jnp.asarray(zbar, dtype=jnp.float64),
         )
+        return a_j, dt_j, dr_j
     return _rust.eos_get_skye_alfa(
         float(log_rho), float(log_t), float(abar), float(zbar)
     )
@@ -211,10 +213,11 @@ def get_skye_alfa_simple(
         Tuple `(alfa, d_alfa_dlogT, d_alfa_dlogRho)`.
     """
     if _dispatch.resolve_backend(backend, log_rho, log_t) == "jax":
-        return get_skye_alfa_simple_jax(
+        a_j, dt_j, dr_j = get_skye_alfa_simple_jax(
             jnp.asarray(log_rho, dtype=jnp.float64),
             jnp.asarray(log_t, dtype=jnp.float64),
         )
+        return a_j, dt_j, dr_j
     return _rust.eos_get_skye_alfa_simple(float(log_rho), float(log_t))
 
 
@@ -247,18 +250,70 @@ def eval_host_dt_jvp(
     ]:
         r_p, t_p = primals
         dr, dt = tangents
-        res, d_dlnd, d_dln_t = _eval_core(r_p, t_p)
-        dres = d_dlnd * (dr / r_p) + d_dln_t * (dt / t_p)
-        z = jnp.zeros_like(res)
-        return (res, d_dlnd, d_dln_t), (dres, z, z)
+        return core.pack_dt_jvp(r_p, t_p, dr, dt, _eval_core(r_p, t_p))
 
     _eval.defjvp(_eval_jvp)
-    return cast(
-        tuple[jax.Array, jax.Array, jax.Array],
-        _eval(
-            jnp.asarray(rho, dtype=jnp.float64),
-            jnp.asarray(temp, dtype=jnp.float64),
-        ),
+    res_s, dlnd_s, dlnt_s = _eval(
+        jnp.asarray(rho, dtype=jnp.float64),
+        jnp.asarray(temp, dtype=jnp.float64),
+    )
+    return res_s, dlnd_s, dlnt_s
+
+
+def _eval_skye_native_core(
+    r_in: jax.Array,
+    t_in: jax.Array,
+    ab_in: jax.Array,
+    zb_in: jax.Array,
+    xa_in: jax.Array,
+    az_in: jax.Array,
+    ac_in: jax.Array,
+    a_in: jax.Array,
+    use_off_in: jax.Array,
+    use_og_in: jax.Array,
+    mf_lim_in: jax.Array,
+) -> tuple[jax.Array, jax.Array, jax.Array]:
+    """Evaluate single-zone `Skye` EOS after `HELM` cell lookup."""
+    t_lo, dth, d_lo, dd, fi_f, _, fi_ef, _ = helm._lookup_helm_cell_jax(
+        t_in, (zb_in / ab_in) * r_in
+    )
+    return _eval_skye_cell_zone_jit(
+        r_in,
+        t_in,
+        ab_in,
+        zb_in,
+        xa_in,
+        az_in,
+        ac_in,
+        a_in,
+        t_lo,
+        dth,
+        d_lo,
+        dd,
+        fi_f,
+        fi_ef,
+        use_off_in,
+        use_og_in,
+        mf_lim_in,
+    )
+
+
+_skye_native_jvp_fn = jax.custom_jvp(_eval_skye_native_core)
+
+
+@_skye_native_jvp_fn.defjvp
+def _skye_native_jvp(
+    primals: tuple[jax.Array, ...], tangents: tuple[jax.Array, ...]
+) -> tuple[
+    tuple[jax.Array, jax.Array, jax.Array],
+    tuple[jax.Array, jax.Array, jax.Array],
+]:
+    return core.pack_dt_jvp(
+        primals[0],
+        primals[1],
+        tangents[0],
+        tangents[1],
+        _skye_native_jvp_fn(*primals),
     )
 
 
@@ -290,74 +345,28 @@ def eval_skye_eos_jax(
     Returns:
         Tuple `(res, d_dlnd, d_dln_t)` of JAX arrays with shape `(26,)`.
     """
-    infos = [chem.get_nuclide_info(int(cid)) for cid in chem_id]
-    azion = jnp.asarray([float(inf.z) for inf in infos], dtype=jnp.float64)
-    acmi = jnp.asarray([float(inf.w) for inf in infos], dtype=jnp.float64)
-    a_in = jnp.asarray([float(inf.a) for inf in infos], jnp.float64)
+    azion, acmi, a_in = core.nuclide_arrays_jax(chem_id)
     r_j, t_j = jnp.asarray(rho, jnp.float64), jnp.asarray(temp, jnp.float64)
     ab_j, zb_j = jnp.asarray(abar, jnp.float64), jnp.asarray(zbar, jnp.float64)
     xa_j = jnp.asarray(xa, jnp.float64)
     use_off = jnp.asarray(bool(skye_use_ion_offsets))
     use_og = jnp.asarray(str(skye_solid_mixing_rule).lower() == "ogata")
-    mf_lim = float(mass_fraction_limit)
-
-    r_0 = jax.lax.stop_gradient(r_j)
-    t_0 = jax.lax.stop_gradient(t_j)
-    ab_0 = jax.lax.stop_gradient(ab_j)
-    zb_0 = jax.lax.stop_gradient(zb_j)
-    xa_0 = jax.lax.stop_gradient(xa_j)
-    t_lo, dth, d_lo, dd, fi_f, _, fi_ef, _ = helm._lookup_helm_cell_jax(
-        t_0, (zb_0 / ab_0) * r_0
+    mf_lim = jnp.asarray(float(mass_fraction_limit), dtype=jnp.float64)
+    sg = jax.lax.stop_gradient
+    res, d_dlnd_0, d_dln_t_0 = _skye_native_jvp_fn(
+        r_j,
+        t_j,
+        sg(ab_j),
+        sg(zb_j),
+        sg(xa_j),
+        sg(azion),
+        sg(acmi),
+        sg(a_in),
+        sg(use_off),
+        sg(use_og),
+        sg(mf_lim),
     )
-    if not isinstance(r_0, jax.core.Tracer) and not isinstance(
-        t_0, jax.core.Tracer
-    ):
-        with jax._src.core.eval_context():
-            res_0, d_dlnd_0, d_dln_t_0 = _eval_skye_cell_zone_jit(
-                r_0,
-                t_0,
-                ab_0,
-                zb_0,
-                xa_0,
-                azion,
-                acmi,
-                a_in,
-                t_lo,
-                dth,
-                d_lo,
-                dd,
-                fi_f,
-                fi_ef,
-                use_off,
-                use_og,
-                mf_lim,
-            )
-    else:
-        res_0, d_dlnd_0, d_dln_t_0 = _eval_skye_cell_zone_jit(
-            r_0,
-            t_0,
-            ab_0,
-            zb_0,
-            xa_0,
-            azion,
-            acmi,
-            a_in,
-            t_lo,
-            dth,
-            d_lo,
-            dd,
-            fi_f,
-            fi_ef,
-            use_off,
-            use_og,
-            mf_lim,
-        )
-    dln_r = jnp.expand_dims((r_j - r_0) / r_0, axis=-1)
-    dln_t = jnp.expand_dims((t_j - t_0) / t_0, axis=-1)
-    res = res_0 + d_dlnd_0 * dln_r + d_dln_t_0 * dln_t
-    return cast(
-        tuple[jax.Array, jax.Array, jax.Array], (res, d_dlnd_0, d_dln_t_0)
-    )
+    return res, d_dlnd_0, d_dln_t_0
 
 
 def eval_skye_eos(
@@ -456,6 +465,11 @@ def eval_skye_eos_zones(
     """
     if _dispatch.resolve_backend(backend, rho, temp, abar, zbar, xa) == "jax":
         r_j, t_j = jnp.asarray(rho, jnp.float64), jnp.asarray(temp, jnp.float64)
+        if r_j.size == 0:
+            empty = jnp.zeros(
+                (*r_j.shape, core.NUM_EOS_BASIC_RESULTS), dtype=jnp.float64
+            )
+            return core.EosEvalOutput(res=empty, d_dlnd=empty, d_dln_t=empty)
         ab_j = jnp.asarray(abar, jnp.float64)
         zb_j = jnp.asarray(zbar, jnp.float64)
         xa_j = jnp.asarray(xa, jnp.float64)
@@ -468,7 +482,10 @@ def eval_skye_eos_zones(
         t_lo, dth, d_lo, dd, fi_f, _, fi_ef, _ = helm._lookup_helm_cell_jax(
             t_j, (zb_j / ab_j) * r_j
         )
-        if r_j.ndim == 1 and r_j.shape[0] <= 16:
+        traced = any(
+            isinstance(v, jax.core.Tracer) for v in (r_j, t_j, ab_j, zb_j, xa_j)
+        )
+        if not traced and r_j.ndim == 1 and r_j.shape[0] <= 16:
             rows = [
                 _eval_skye_cell_zone_jit(
                     r_j[k],

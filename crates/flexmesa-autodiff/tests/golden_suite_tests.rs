@@ -5,8 +5,7 @@
 //! `chain_rule` case from `auto_diff/test/src/test_auto_diff.f90` across
 //! `AutoDiffReal1VarOrder1`, `AutoDiffReal2VarOrder1`,
 //! `AutoDiffReal2VarOrder2`, and `AutoDiffRealStarOrder1`, and verifies all
-//! 209 numeric records and 42 boolean records against
-//! `.mesa_temp_cache/mesa_root/auto_diff/test/test_output`.
+//! 209 numeric and 42 boolean records against `auto_diff/test/test_output`.
 
 #![allow(
     clippy::approx_constant,
@@ -430,10 +429,14 @@ fn test_auto_diff_full_golden_test_output_parity() {
         .unwrap();
     }
 
-    let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
-    let output_path = manifest_dir
-        .join("../../.mesa_temp_cache/mesa_root/auto_diff/test/test_output");
-    if output_path.exists() {
+    let output_path = flexmesa_utils::resolve_mesa_test_inputs_dir()
+        .join("auto_diff/test/test_output");
+    if std::env::var_os("MESA_DIR").is_some_and(|v| !v.is_empty())
+        || std::env::var("FLEXMESA_REQUIRE_ZERO_SKIPS").as_deref() == Ok("1")
+    {
+        assert!(output_path.is_file(), "missing {}", output_path.display());
+    }
+    if output_path.is_file() {
         let text = std::fs::read_to_string(&output_path)
             .expect("read auto_diff/test/test_output");
         let (golden_nums, golden_bools) =
@@ -484,35 +487,31 @@ fn test_auto_diff_2var_order2_complete_operator_and_chain_rule_sweep() {
     assert!(x_cmp == 3.1 && x_cmp > 2.9 && x_cmp <= 3.1);
 
     // Binary operator parity between Order2Var2 and Order1Var2
-    let x = AutoDiffReal2VarOrder2::var1(3.0);
-    let y = AutoDiffReal2VarOrder2::var2(2.0);
-    let z_mul = x * y;
+    let jet2 = |z: AutoDiffReal2VarOrder2| {
+        [
+            z.val,
+            z.d1val1,
+            z.d1val2,
+            z.d2val1,
+            z.d1val1_d1val2,
+            z.d2val2,
+        ]
+    };
+    let (x, y) = (
+        AutoDiffReal2VarOrder2::var1(3.0),
+        AutoDiffReal2VarOrder2::var2(2.0),
+    );
     assert_values_match(
-        &[
-            z_mul.val,
-            z_mul.d1val1,
-            z_mul.d1val2,
-            z_mul.d2val1,
-            z_mul.d1val1_d1val2,
-            z_mul.d2val2,
-        ],
+        &jet2(x * y),
         &[6.0, 2.0, 3.0, 0.0, 1.0, 0.0],
         TOL,
         TOL,
         "Order2Var2 mul",
     )
     .unwrap();
-
     let z_div = x / y;
     assert_values_match(
-        &[
-            z_div.val,
-            z_div.d1val1,
-            z_div.d1val2,
-            z_div.d2val1,
-            z_div.d1val1_d1val2,
-            z_div.d2val2,
-        ],
+        &jet2(z_div),
         &[1.5, 0.5, -0.75, 0.0, -0.25, 0.75],
         TOL,
         TOL,
@@ -520,19 +519,13 @@ fn test_auto_diff_2var_order2_complete_operator_and_chain_rule_sweep() {
     )
     .unwrap();
 
-    let x_p = AutoDiffReal2VarOrder2::var1(2.0);
-    let y_p = AutoDiffReal2VarOrder2::var2(2.0);
-    let z_pow = x_p.pow(y_p);
+    let (x_p, y_p) = (
+        AutoDiffReal2VarOrder2::var1(2.0),
+        AutoDiffReal2VarOrder2::var2(2.0),
+    );
     let ln2 = log(2.0);
     assert_values_match(
-        &[
-            z_pow.val,
-            z_pow.d1val1,
-            z_pow.d1val2,
-            z_pow.d2val1,
-            z_pow.d1val1_d1val2,
-            z_pow.d2val2,
-        ],
+        &jet2(x_p.pow(y_p)),
         &[4.0, 4.0, 4.0 * ln2, 2.0, 2.0 + 4.0 * ln2, 4.0 * ln2 * ln2],
         TOL,
         TOL,

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 //! Typed control struct population (`InlistBundle::populate_typed_structs`)
 //! mapping flattened `&star_job`, `&eos`, `&kap`, and `&controls` namelist
-//! sections into [`StarJobControls`], [`EosConfig`], [`KapConfig`], and
-//! [`StarControls`].
+//! sections into [`crate::StarJobControls`], [`flexmesa_eos::EosConfig`],
+//! [`flexmesa_kap::KapConfig`], and [`crate::StarControls`].
 
 use flexmesa_rates::ScreeningMode;
 use flexmesa_schema::ControlValue;
@@ -208,6 +208,10 @@ impl InlistBundle {
         if let Some(b) = sj.any_bool(&["change_initial_rti_flag", "change_rti_flag"]) {
             j.change_initial_rti_flag = b;
         }
+        if let Some(v) = sj.get_i64("steps_to_take_before_terminate").filter(|&v| v >= 0) {
+            j.steps_to_take_before_terminate = Some(v as usize);
+        }
+        j.remove_initial_center_by_temperature = sj.get_f64("remove_initial_center_by_temperature").filter(|&v| v > 0.0);
     }
 
     fn populate_eos_kap(&mut self) {
@@ -223,6 +227,21 @@ impl InlistBundle {
             if let Some(v) = kap.get_f64("zbase") {
                 self.kap_config.zbase = v;
                 self.controls.zbase = v;
+            }
+            if let Some(s) = kap.get_str("kap_file_prefix") {
+                if let Some(opt) = flexmesa_kap::KapOption::from_prefix(s) {
+                    self.kap_config.kap_option = opt;
+                }
+            }
+            if let Some(s) = kap.get_str("kap_co_prefix") {
+                if let Some(opt) = flexmesa_kap::KapCoOption::from_prefix(s) {
+                    self.kap_config.kap_co_option = opt;
+                }
+            }
+            if let Some(s) = kap.get_str("kap_lowt_prefix") {
+                if let Some(opt) = flexmesa_kap::KapLowTOption::from_prefix(s) {
+                    self.kap_config.kap_low_t_option = opt;
+                }
             }
             kap.bool_into(
                 &mut self.kap_config.use_type2_opacities,
@@ -260,7 +279,7 @@ impl InlistBundle {
             drag_coefficient, min_q_for_drag, mlt_pturb_factor, pvsc_cq, pvsc_zshock,
             eps_grav_factor, gamma_ln_s_eps_grav_full_on, gamma_ln_s_eps_grav_full_off,
             velocity_q_upper_bound, velocity_tau_lower_bound, velocity_logt_lower_bound,
-            mix_factor, pextra_factor,
+            mix_factor, pextra_factor, min_kap_for_dprad_dm_eqn,
         ]);
         map_strs!(ctrl, c, [
             zams_filename, cool_wind_rgb_scheme, cool_wind_agb_scheme, phase_separation_option,
@@ -281,8 +300,8 @@ impl InlistBundle {
             use_pvsc_art_visc, use_time_centered_eps_grav,
             include_composition_in_eps_grav, use_gravity_rotation_correction,
             use_mass_corrections, use_gradt_actual_vs_gradt_mlt_for_t_gradient_eqn,
-            use_dprad_dm_form_of_t_gradient_eqn, use_rsp_l_eqn_outer_bc,
-            do_burn, do_mix,
+            use_dprad_dm_form_of_t_gradient_eqn, use_flux_limiting_with_dprad_dm_form,
+            use_rsp_l_eqn_outer_bc, do_burn, do_mix,
         ]);
         ctrl.bool_into(&mut self.job.use_other_build_initial_model, "use_other_build_initial_model");
         c.accretion_species_id = ctrl.get_indexed_strings("accretion_species_id");

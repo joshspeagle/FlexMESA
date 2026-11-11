@@ -16,10 +16,60 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  OMP_NUM_THREADS: "4"
+  OPENBLAS_NUM_THREADS: "4"
+  MKL_NUM_THREADS: "4"
+  RAYON_NUM_THREADS: "4"
+  JAX_PLATFORMS: "cpu"
+  FLEXMESA_REQUIRE_ZERO_SKIPS: "1"
+
 jobs:
-  rust-and-python:
+  rust:
+    name: Safe Rust Workspace & Golden Oracles
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache Rust cargo target and registry
+        uses: Swatinem/rust-cache@v2
+
+      - name: Cache FlexMESA data-v1 and MESA test bundles
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/flexmesa
+          key: flexmesa-data-v1-${{ hashFiles('src/flexmesa/data/bundles.toml') }}
+
+      - name: Fetch verified data-v1 physics and MESA test bundles
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          command -v zstd >/dev/null || (sudo apt-get update && sudo apt-get install -y zstd)
+          python3 src/flexmesa/data/fetch.py fetch --include-test-inputs
+          echo "FLEXMESA_DATA_DIR=$HOME/.cache/flexmesa/data" >> "$GITHUB_ENV"
+          echo "MESA_DIR=$HOME/.cache/flexmesa/mesa_test_inputs" >> "$GITHUB_ENV"
+
+      - name: Run Cargo Clippy and rustdoc
+        run: |
+          cargo clippy --workspace --all-targets -- -D warnings
+          RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --exclude flexmesa-py
+
+      - name: Run Safe Rust unit, integration, and doc tests
+        run: |
+          cargo test --workspace --exclude flexmesa-py --release
+          cargo test --workspace --exclude flexmesa-py --doc
+
+  python-jax:
+    name: Python, PyO3 & JAX Parity Suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -32,45 +82,159 @@ jobs:
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy, rustfmt
 
       - name: Cache Rust cargo target and registry
         uses: Swatinem/rust-cache@v2
 
-      - name: Run Cargo Clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Cache FlexMESA data-v1 and MESA test bundles
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/flexmesa
+          key: flexmesa-data-v1-${{ hashFiles('src/flexmesa/data/bundles.toml') }}
 
-      - name: Run Rust unit and integration tests
-        run: cargo test --workspace --exclude flexmesa-py
+      - name: Cache persistent JAX XLA compilation artifacts
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/flexmesa-jax
+          key: flexmesa-jax-${{ runner.os }}-py312-${{ hashFiles('pyproject.toml', 'src/flexmesa/**/*.py') }}
+          restore-keys: |
+            flexmesa-jax-${{ runner.os }}-py312-
 
-      - name: Install Python build and test dependencies
+      - name: Fetch verified data-v1 physics and MESA test bundles
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          command -v zstd >/dev/null || (sudo apt-get update && sudo apt-get install -y zstd)
+          python3 src/flexmesa/data/fetch.py fetch --include-test-inputs
+          echo "FLEXMESA_DATA_DIR=$HOME/.cache/flexmesa/data" >> "$GITHUB_ENV"
+          echo "MESA_DIR=$HOME/.cache/flexmesa/mesa_test_inputs" >> "$GITHUB_ENV"
+          echo "JAX_COMPILATION_CACHE_DIR=$HOME/.cache/flexmesa-jax" >> "$GITHUB_ENV"
+
+      - name: Install FlexMESA and test dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install maturin pytest hypothesis ruff mkdocs-material "mkdocstrings[python]"
+          python -m pip install maturin
+          python -m pip install --no-build-isolation -e ".[test]"
+
+      - name: Run Python, PyO3, and JAX parity tests
+        run: |
+          pytest src tests \
+            --ignore=tests/test_docs_snippets.py \
+            --ignore=tests/test_mesa_paper_figures.py \
+            --ignore-glob="tests/test_e2e_*.py" \
+            -v
+
+  e2e:
+    name: Upstream MESA End-to-End Suites
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust cargo target and registry
+        uses: Swatinem/rust-cache@v2
+
+      - name: Cache FlexMESA data-v1 and MESA test bundles
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/flexmesa
+          key: flexmesa-data-v1-${{ hashFiles('src/flexmesa/data/bundles.toml') }}
+
+      - name: Cache persistent JAX XLA compilation artifacts
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/flexmesa-jax
+          key: flexmesa-jax-${{ runner.os }}-py312-${{ hashFiles('pyproject.toml', 'src/flexmesa/**/*.py') }}
+          restore-keys: |
+            flexmesa-jax-${{ runner.os }}-py312-
+
+      - name: Fetch verified data-v1 physics and MESA test bundles
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          command -v zstd >/dev/null || (sudo apt-get update && sudo apt-get install -y zstd)
+          python3 src/flexmesa/data/fetch.py fetch --include-test-inputs
+          echo "FLEXMESA_DATA_DIR=$HOME/.cache/flexmesa/data" >> "$GITHUB_ENV"
+          echo "MESA_DIR=$HOME/.cache/flexmesa/mesa_test_inputs" >> "$GITHUB_ENV"
+          echo "JAX_COMPILATION_CACHE_DIR=$HOME/.cache/flexmesa-jax" >> "$GITHUB_ENV"
+
+      - name: Install FlexMESA and test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install maturin
+          python -m pip install --no-build-isolation -e ".[test]"
+
+      - name: Run upstream MESA Tier 1-5 and dev_cases E2E suites
+        run: pytest tests/test_e2e_*.py -v
+
+  docs:
+    name: Ruff, Figures, MkDocs (Strict) & Snippets
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust cargo target and registry
+        uses: Swatinem/rust-cache@v2
+
+      - name: Cache FlexMESA data-v1 and MESA test bundles
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/flexmesa
+          key: flexmesa-data-v1-${{ hashFiles('src/flexmesa/data/bundles.toml') }}
+
+      - name: Cache persistent JAX XLA compilation artifacts
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/flexmesa-jax
+          key: flexmesa-jax-${{ runner.os }}-py312-${{ hashFiles('pyproject.toml', 'src/flexmesa/**/*.py') }}
+          restore-keys: |
+            flexmesa-jax-${{ runner.os }}-py312-
+
+      - name: Fetch verified data-v1 physics and MESA test bundles
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          command -v zstd >/dev/null || (sudo apt-get update && sudo apt-get install -y zstd)
+          python3 src/flexmesa/data/fetch.py fetch --include-test-inputs
+          echo "FLEXMESA_DATA_DIR=$HOME/.cache/flexmesa/data" >> "$GITHUB_ENV"
+          echo "MESA_DIR=$HOME/.cache/flexmesa/mesa_test_inputs" >> "$GITHUB_ENV"
+          echo "JAX_COMPILATION_CACHE_DIR=$HOME/.cache/flexmesa-jax" >> "$GITHUB_ENV"
+
+      - name: Install FlexMESA, linter, and documentation dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install maturin ruff mkdocs-material "mkdocstrings[python]"
           python -m pip install --no-build-isolation -e ".[test,docs]"
 
-      - name: Run Ruff formatter and linter
+      - name: Run Ruff formatter, linter, and Mypy strict type checker
         run: |
           ruff format --check --line-length 80 src tests
           ruff check src tests
+          mypy --strict src tests
 
-      - name: Build MkDocs Material documentation (strict)
-        env:
-          OMP_NUM_THREADS: "4"
-          OPENBLAS_NUM_THREADS: "4"
-          MKL_NUM_THREADS: "4"
-          JAX_PLATFORMS: "cpu"
-          JAX_COMPILATION_CACHE_DIR: "${{ runner.temp }}/jax-cache"
+      - name: Build diagnostic figures, MkDocs site, and verify snippets
         run: |
           python scripts/build_docs_figures.py
           mkdocs build --strict --site-dir site
-
-      - name: Run Pytest suite (Safe Rust, PyO3, and JAX parity)
-        env:
-          OMP_NUM_THREADS: "4"
-          OPENBLAS_NUM_THREADS: "4"
-          MKL_NUM_THREADS: "4"
-          JAX_PLATFORMS: "cpu"
-          JAX_COMPILATION_CACHE_DIR: "${{ runner.temp }}/jax-cache"
-        run: pytest -v
+          pytest tests/test_docs_snippets.py tests/test_mesa_paper_figures.py -v

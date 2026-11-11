@@ -8,13 +8,14 @@ JAX interfaces for Wave 3a.1 (`eos_def`, `eos_blend`, and `ion_offset`).
 from __future__ import annotations
 
 import dataclasses
+from collections.abc import Sequence
 from typing import cast
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 
-from flexmesa import _dispatch, _rust, constants
+from flexmesa import _dispatch, _rust, chem, constants
 
 NUM_EOS_BASIC_RESULTS: int = 26
 NUM_EOS_D_DXA_RESULTS: int = 2
@@ -345,12 +346,64 @@ def compute_ion_offset_from_za(
         a_j = jnp.asarray(a, dtype=jnp.float64)
         valid = (z_j >= 1) & (z_j <= 28) & (a_j > 0.0)
         idx = jnp.clip(z_j - 1, 0, 27)
-        ev = jnp.where(valid, NIST_IONIZATION_TABLE_EV[idx] * xa_j / a_j, 0.0)
+        a_safe = jnp.maximum(a_j, 1.0)
+        ev = jnp.where(
+            valid, NIST_IONIZATION_TABLE_EV[idx] * xa_j / a_safe, 0.0
+        )
         return jnp.sum(ev) * constants.EV2ERG / constants.AMU
     xa_np = np.ascontiguousarray(xa, dtype=np.float64)
     a_np = np.ascontiguousarray(a, dtype=np.float64)
     z_vals = [int(v) for v in z]
     return float(_rust.eos_compute_ion_offset_from_za(xa_np, z_vals, a_np))
+
+
+def nuclide_arrays_jax(
+    chem_id: Sequence[int],
+) -> tuple[jax.Array, jax.Array, jax.Array]:
+    """Return `(azion, acmi, a_baryon)` as `jnp.float64` arrays for `chem_id`.
+
+    Args:
+        chem_id: 1-based MESA nuclide identifiers of length `N_species`.
+
+    Returns:
+        Tuple `(azion, acmi, a_baryon)` of shape `(N_species,)` in `float64`.
+    """
+    infos = [chem.get_nuclide_info(int(cid)) for cid in chem_id]
+    return (
+        jnp.asarray([float(inf.z) for inf in infos], dtype=jnp.float64),
+        jnp.asarray([float(inf.w) for inf in infos], dtype=jnp.float64),
+        jnp.asarray([float(inf.a) for inf in infos], dtype=jnp.float64),
+    )
+
+
+def pack_dt_jvp(
+    r_p: jax.Array,
+    t_p: jax.Array,
+    dr: jax.Array,
+    dt: jax.Array,
+    primal_out: tuple[jax.Array, jax.Array, jax.Array],
+) -> tuple[
+    tuple[jax.Array, jax.Array, jax.Array],
+    tuple[jax.Array, jax.Array, jax.Array],
+]:
+    """Assemble `(primal, tangent)` for `(rho, T)` `custom_jvp` EOS rules.
+
+    Args:
+        r_p: Primal mass density $\\rho$ in `g cm^-3`.
+        t_p: Primal temperature $T$ in `K`.
+        dr: Tangent $\\delta \\rho$ in `g cm^-3`.
+        dt: Tangent $\\delta T$ in `K`.
+        primal_out: Tuple `(res, d_dlnd, d_dln_t)` at `(r_p, t_p)`.
+
+    Returns:
+        `(primal_out, (dres, zero, zero))` matching logarithmic EOS partials.
+    """
+    res_0, dlnd_0, dlnt_0 = primal_out
+    dln_r = jnp.expand_dims(dr / r_p, axis=-1)
+    dln_t = jnp.expand_dims(dt / t_p, axis=-1)
+    dres = dlnd_0 * dln_r + dlnt_0 * dln_t
+    z = jnp.zeros_like(res_0)
+    return primal_out, (dres, z, z)
 
 
 def compute_ion_offset(

@@ -3,14 +3,14 @@
 
 Verifies:
     1. Golden baseline parity ($\\le 10^{-10}$ relative error) against all
-       10,000 rows of `.mesa_temp_cache/mesa_root/neu/test/test_output`
+       10,000 rows of upstream MESA `neu/test/test_output`
        spanning low-temperature cosine cutoffs (`log10_t <= 7.5`), degenerate
        cutoffs, all three photoneutrino Fourier bands ($10^7\\text{--}10^8$,
        $10^8\\text{--}10^9$, $\\ge 10^9\\,\\mathrm{K}$), bremsstrahlung
        blending, recombination (`reco`), and both $T_9 < 10$ and $T_9 \\ge 10$
        pair-production fits.
     2. Solar stellar-profile sweep across all 194 zones of
-       `.mesa_temp_cache/mesa_root/neu/test/test_1.0.data`.
+       upstream MESA `neu/test/test_1.0.data`.
     3. Native JAX `float64` `neu_channels_jax` and `neu_get_jax` (all 5
        Itoh et al. 1996 channels: `pair`, `plas`, `phot`, `brem`, `reco`)
        and `jax.jacfwd` partial derivatives against `neu_get` and golden
@@ -32,6 +32,7 @@ import pytest
 
 from flexmesa import constants as _const
 from flexmesa import neu
+from flexmesa.data import fetch
 
 
 def _exp10(x: float) -> float:
@@ -41,12 +42,7 @@ def _exp10(x: float) -> float:
 
 def _mesa_neu_test_dir() -> pathlib.Path:
     """Locates the upstream MESA `neu/test` directory."""
-    if env_dir := os.environ.get("MESA_DIR"):
-        p = pathlib.Path(env_dir) / "neu" / "test"
-        if p.exists():
-            return p
-    repo_root = pathlib.Path(__file__).resolve().parents[1]
-    return repo_root / ".mesa_temp_cache" / "mesa_root" / "neu" / "test"
+    return fetch.resolve_mesa_test_inputs_dir() / "neu" / "test"
 
 
 def _parse_fortran_float(tok: str) -> float:
@@ -197,6 +193,8 @@ def test_golden_rows_parity_against_upstream_mesa() -> None:
 def test_all_10000_golden_rows_and_jax_parity() -> None:
     """Verifies all 10,000 rows of `neu/test/test_output` in Python and JAX."""
     path = _mesa_neu_test_dir() / "test_output"
+    if os.environ.get("MESA_DIR", "").strip():
+        assert path.is_file(), f"Missing {path}"
     if path.exists():
         raw_lines = [
             line.strip()

@@ -3,15 +3,34 @@
 
 use crate::helm::table_io::resolve_mesa_data_dir;
 use crate::tables_4d::slice_cache::load_or_build_dt_slice;
-use crate::tables_4d::spline::{EosDtTableKind, EosDtVertex, EosDtXzTable};
+use crate::tables_4d::spline::{EosDtTableKind, EosDtXzTable};
 use crate::types::EosError;
-use std::collections::HashMap;
+use std::cell::RefCell;
+use std::collections::VecDeque;
 use std::path::PathBuf;
-use std::sync::{Arc, OnceLock, RwLock};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
 
-/// Built-in binary patch table for `OPAL/SCVH`, `FreeEOS`, and `CMS` test coverage.
-pub(crate) const BUILTIN_4D_PATCHES: &[u8] =
-    include_bytes!("../../data/eos_tables_4d_patches.bin");
+/// Maximum number of `FreeEOS` `(ix, iz)` slices retained simultaneously in RAM.
+///
+/// All 16 `OPAL/SCVH` slices (`~0.8 GiB`) are cached permanently via `OnceLock`,
+/// while 36 `FreeEOS` slices (`~2.8 GiB` max) cover the entire `Z in {0.00, 0.02, 0.04}`
+/// grid (`33` slices) plus high-$Z$ C/O core slices with true LRU promotion so
+/// concurrent multi-star evolution experiences zero cache thrashing while staying
+/// well under GitHub Actions' `16 GiB` runner memory budget.
+const MAX_CACHED_FREE_TABLES: usize = 36;
+
+/// Thread-local `FreeEOS` fast-path capacity (`8` slices = one full `(2 Z x 4 X)` cubic stencil).
+const TL_FREE_CACHE_CAP: usize = 12;
+
+static NEXT_SET_ID: AtomicU64 = AtomicU64::new(1);
+
+type TlFreeKey = (u64, usize, usize);
+
+thread_local! {
+    static TL_FREE_CACHE: RefCell<VecDeque<(TlFreeKey, Arc<EosDtXzTable>)>> =
+        RefCell::new(VecDeque::with_capacity(TL_FREE_CACHE_CAP));
+}
 
 /// Composition $(X, Z)$ grid layout for a 4D tabulated EOS (`DT_xz_Info`).
 #[derive(Debug, Clone)]
@@ -118,37 +137,32 @@ pub fn eosdt_relative_data_path(
     }
 }
 
-/// Collection of `OPAL/SCVH` and `FreeEOS` 4D tables with lazy per-`(ix, iz)` loading.
+/// Collection of `OPAL/SCVH` and `FreeEOS` 4D tables with lock-free `OPAL` and LRU `FreeEOS` caching.
 #[derive(Debug)]
 pub struct EosDtTableSet {
+    set_id: u64,
     /// Composition grid for `OPAL/SCVH`.
     pub opal_xz: DtXzInfo,
     /// Composition grid for `FreeEOS`.
     pub free_xz: DtXzInfo,
-    /// Optional root MESA `data` directory for on-demand `.data` loading.
+    /// Optional root MESA `data` directory for raw ASCII `.data` loading.
     pub data_dir: Option<PathBuf>,
-    /// Lock-free built-in `OPAL/SCVH` patch tables indexed by `[iz - 1][ix - 1]`.
-    builtin_opal: Vec<Vec<Option<Arc<EosDtXzTable>>>>,
-    /// Lock-free built-in `FreeEOS` patch tables indexed by `[iz - 1][ix - 1]`.
-    builtin_free: Vec<Vec<Option<Arc<EosDtXzTable>>>>,
-    /// Lock-free lazily loaded full `OPAL/SCVH` slices indexed by `[iz - 1][ix - 1]`.
-    dense_opal: Vec<Vec<OnceLock<Arc<EosDtXzTable>>>>,
-    /// Lock-free lazily loaded full `FreeEOS` slices indexed by `[iz - 1][ix - 1]`.
-    dense_free: Vec<Vec<OnceLock<Arc<EosDtXzTable>>>>,
-    /// Loaded or sparse-patched `(kind, ix_1based, iz_1based)` tables.
-    tables: RwLock<HashMap<(EosDtTableKind, usize, usize), Arc<EosDtXzTable>>>,
+    /// Lock-free `[iz][ix]` slots for all 16 `OPAL/SCVH` slices (`~0.8 GiB` total).
+    opal_tables: Vec<Vec<OnceLock<Arc<EosDtXzTable>>>>,
+    /// True-LRU cache of `(ix_1based, iz_1based)` `FreeEOS` slices (`MAX_CACHED_FREE_TABLES`).
+    free_tables: Mutex<VecDeque<((usize, usize), Arc<EosDtXzTable>)>>,
 }
 
 static BUILTIN_DT_TABLES: OnceLock<EosDtTableSet> = OnceLock::new();
 
 impl EosDtTableSet {
-    /// Returns a reference to the lazily initialized built-in `EosDtTableSet`.
+    /// Returns a reference to the lazily initialized `EosDtTableSet`.
     #[must_use]
     pub fn builtin() -> &'static Self {
         BUILTIN_DT_TABLES.get_or_init(Self::load_builtin)
     }
 
-    /// Creates a new `EosDtTableSet` backed by the built-in patches and an explicit `data_dir`.
+    /// Creates a new `EosDtTableSet` backed by an explicit MESA `data_dir`.
     #[must_use]
     pub fn with_data_dir(data_dir: impl Into<PathBuf>) -> Self {
         let mut set = Self::load_builtin();
@@ -158,163 +172,21 @@ impl EosDtTableSet {
 
     fn load_builtin() -> Self {
         let opal_xz = DtXzInfo::opal_scvh();
-        let free_xz = DtXzInfo::free_eos();
-        let mut map: HashMap<(EosDtTableKind, usize, usize), EosDtXzTable> =
-            HashMap::new();
-
-        if BUILTIN_4D_PATCHES.len() >= 4 {
-            let count = u32::from_le_bytes(
-                BUILTIN_4D_PATCHES[0..4].try_into().unwrap_or([0; 4]),
-            ) as usize;
-            let mut pos = 4;
-            for _ in 0..count {
-                if pos + 8 + 64 * 8 > BUILTIN_4D_PATCHES.len() {
-                    break;
-                }
-                let kind = if BUILTIN_4D_PATCHES[pos] == 0 {
-                    EosDtTableKind::OpalScvh
-                } else {
-                    EosDtTableKind::FreeEos
-                };
-                let ix = BUILTIN_4D_PATCHES[pos + 1] as usize;
-                let iz = BUILTIN_4D_PATCHES[pos + 2] as usize;
-                let iq = u16::from_le_bytes([
-                    BUILTIN_4D_PATCHES[pos + 4],
-                    BUILTIN_4D_PATCHES[pos + 5],
-                ]);
-                let jt = u16::from_le_bytes([
-                    BUILTIN_4D_PATCHES[pos + 6],
-                    BUILTIN_4D_PATCHES[pos + 7],
-                ]);
-                pos += 8;
-
-                let coeffs: [f64; 64] = std::array::from_fn(|k| {
-                    let s = pos + 8 * k;
-                    f64::from_le_bytes(
-                        BUILTIN_4D_PATCHES[s..s + 8]
-                            .try_into()
-                            .unwrap_or([0; 8]),
-                    )
-                });
-                pos += 64 * 8;
-
-                let xz = match kind {
-                    EosDtTableKind::OpalScvh => &opal_xz,
-                    EosDtTableKind::FreeEos => &free_xz,
-                };
-                let entry = map.entry((kind, ix, iz)).or_insert_with(|| {
-                    let z = xz.zs.get(iz - 1).copied().unwrap_or(0.0);
-                    let x = xz
-                        .xs_for_z
-                        .get(iz - 1)
-                        .and_then(|v| v.get(ix - 1))
-                        .copied()
-                        .unwrap_or(0.0);
-                    EosDtXzTable::new_standard_header(x, z)
-                });
-                entry.patches.insert((iq, jt), EosDtVertex { coeffs });
-            }
-        }
-
-        let mut builtin_opal: Vec<Vec<Option<Arc<EosDtXzTable>>>> = opal_xz
-            .xs_for_z
-            .iter()
-            .map(|xs| vec![None; xs.len()])
-            .collect();
-        let mut builtin_free: Vec<Vec<Option<Arc<EosDtXzTable>>>> = free_xz
-            .xs_for_z
-            .iter()
-            .map(|xs| vec![None; xs.len()])
-            .collect();
-        let dense_opal: Vec<Vec<OnceLock<Arc<EosDtXzTable>>>> = opal_xz
+        let opal_tables = opal_xz
             .xs_for_z
             .iter()
             .map(|xs| (0..xs.len()).map(|_| OnceLock::new()).collect())
             .collect();
-        let dense_free: Vec<Vec<OnceLock<Arc<EosDtXzTable>>>> = free_xz
-            .xs_for_z
-            .iter()
-            .map(|xs| (0..xs.len()).map(|_| OnceLock::new()).collect())
-            .collect();
-
-        let mut arc_map = HashMap::with_capacity(map.len());
-        for ((kind, ix, iz), mut tbl) in map {
-            tbl.finalize_patches();
-            let arc_tbl = Arc::new(tbl);
-            let grid = match kind {
-                EosDtTableKind::OpalScvh => &mut builtin_opal,
-                EosDtTableKind::FreeEos => &mut builtin_free,
-            };
-            if let Some(row) = grid.get_mut(iz.wrapping_sub(1)) {
-                if let Some(slot) = row.get_mut(ix.wrapping_sub(1)) {
-                    *slot = Some(Arc::clone(&arc_tbl));
-                }
-            }
-            arc_map.insert((kind, ix, iz), arc_tbl);
-        }
-
         Self {
+            set_id: NEXT_SET_ID.fetch_add(1, Ordering::Relaxed),
             opal_xz,
-            free_xz,
+            free_xz: DtXzInfo::free_eos(),
             data_dir: resolve_mesa_data_dir(),
-            builtin_opal,
-            builtin_free,
-            dense_opal,
-            dense_free,
-            tables: RwLock::new(arc_map),
+            opal_tables,
+            free_tables: Mutex::new(VecDeque::with_capacity(
+                MAX_CACHED_FREE_TABLES,
+            )),
         }
-    }
-
-    #[inline]
-    fn dense_slot(
-        &self,
-        kind: EosDtTableKind,
-        ix_1based: usize,
-        iz_1based: usize,
-    ) -> Option<&OnceLock<Arc<EosDtXzTable>>> {
-        let grid = match kind {
-            EosDtTableKind::OpalScvh => &self.dense_opal,
-            EosDtTableKind::FreeEos => &self.dense_free,
-        };
-        grid.get(iz_1based.wrapping_sub(1))
-            .and_then(|row| row.get(ix_1based.wrapping_sub(1)))
-    }
-
-    #[inline]
-    fn builtin_arc(
-        &self,
-        kind: EosDtTableKind,
-        ix_1based: usize,
-        iz_1based: usize,
-    ) -> Option<&Arc<EosDtXzTable>> {
-        if let Some(slot) = self.dense_slot(kind, ix_1based, iz_1based) {
-            if let Some(tbl) = slot.get() {
-                return Some(tbl);
-            }
-        }
-        if self.data_dir.is_some() {
-            return None;
-        }
-        let grid = match kind {
-            EosDtTableKind::OpalScvh => &self.builtin_opal,
-            EosDtTableKind::FreeEos => &self.builtin_free,
-        };
-        grid.get(iz_1based.wrapping_sub(1))
-            .and_then(|row| row.get(ix_1based.wrapping_sub(1)))
-            .and_then(Option::as_ref)
-    }
-
-    /// Fast lock-free reference lookup for loaded full slices or built-in patch tables.
-    #[inline]
-    #[must_use]
-    pub fn get_table_fast(
-        &self,
-        kind: EosDtTableKind,
-        ix_1based: usize,
-        iz_1based: usize,
-    ) -> Option<&EosDtXzTable> {
-        self.builtin_arc(kind, ix_1based, iz_1based)
-            .map(Arc::as_ref)
     }
 
     /// Retrieves or lazily loads the `(ix_1based, iz_1based)` table for `kind`.
@@ -324,48 +196,91 @@ impl EosDtTableSet {
         ix_1based: usize,
         iz_1based: usize,
     ) -> Result<Arc<EosDtXzTable>, EosError> {
-        if let Some(tbl) = self.builtin_arc(kind, ix_1based, iz_1based) {
-            return Ok(Arc::clone(tbl));
-        }
-        let key = (kind, ix_1based, iz_1based);
-        if let Ok(guard) = self.tables.read() {
-            if let Some(tbl) = guard.get(&key) {
-                if tbl.dense.is_some() || self.data_dir.is_none() {
-                    return Ok(Arc::clone(tbl));
-                }
-            }
-        }
-
-        if let Some(dir) = &self.data_dir {
-            let xz = match kind {
-                EosDtTableKind::OpalScvh => &self.opal_xz,
-                EosDtTableKind::FreeEos => &self.free_xz,
-            };
-            let stem = eosdt_table_stem(kind, xz, ix_1based, iz_1based);
-            if let Ok(loaded_tbl) = load_or_build_dt_slice(dir, kind, &stem) {
-                let loaded = Arc::new(loaded_tbl);
-                if let Some(slot) = self.dense_slot(kind, ix_1based, iz_1based)
-                {
-                    let _ = slot.set(Arc::clone(&loaded));
-                }
-                if let Ok(mut guard) = self.tables.write() {
-                    guard.insert(key, Arc::clone(&loaded));
-                }
-                return Ok(loaded);
-            }
-        }
-
-        if let Ok(guard) = self.tables.read() {
-            if let Some(tbl) = guard.get(&key) {
+        if kind == EosDtTableKind::OpalScvh {
+            let slot = self
+                .opal_tables
+                .get(iz_1based.wrapping_sub(1))
+                .and_then(|row| row.get(ix_1based.wrapping_sub(1)))
+                .ok_or_else(|| EosError::InvalidState {
+                    context: "EosDtTableSet::get_table",
+                    detail: format!(
+                        "invalid OPAL/SCVH indices (ix={ix_1based}, iz={iz_1based})"
+                    ),
+                })?;
+            if let Some(tbl) = slot.get() {
                 return Ok(Arc::clone(tbl));
             }
+            let stem =
+                eosdt_table_stem(kind, &self.opal_xz, ix_1based, iz_1based);
+            let loaded = Arc::new(load_or_build_dt_slice(
+                self.data_dir.as_deref(),
+                kind,
+                &stem,
+            )?);
+            let _ = slot.set(Arc::clone(&loaded));
+            return Ok(slot.get().map_or(loaded, Arc::clone));
         }
 
-        Err(EosError::InvalidState {
-            context: "EosDtTableSet::get_table",
-            detail: format!(
-                "table ({kind:?}, ix={ix_1based}, iz={iz_1based}) is not loaded"
-            ),
-        })
+        let tl_key = (self.set_id, ix_1based, iz_1based);
+        if let Some(hit) = TL_FREE_CACHE.with(|tl| {
+            let mut cache = tl.borrow_mut();
+            if let Some(pos) = cache.iter().position(|(k, _)| *k == tl_key) {
+                if pos > 0 {
+                    let entry = cache.remove(pos)?;
+                    let arc = Arc::clone(&entry.1);
+                    cache.push_front(entry);
+                    return Some(arc);
+                }
+                return cache.front().map(|(_, tbl)| Arc::clone(tbl));
+            }
+            None
+        }) {
+            return Ok(hit);
+        }
+
+        let key = (ix_1based, iz_1based);
+        if let Ok(mut guard) = self.free_tables.lock() {
+            if let Some(pos) = guard.iter().position(|(k, _)| *k == key) {
+                if let Some(entry) = guard.remove(pos) {
+                    let arc = Arc::clone(&entry.1);
+                    guard.push_front(entry);
+                    Self::record_tl_free(tl_key, &arc);
+                    return Ok(arc);
+                }
+            }
+        }
+
+        let stem = eosdt_table_stem(kind, &self.free_xz, ix_1based, iz_1based);
+        let loaded = Arc::new(load_or_build_dt_slice(
+            self.data_dir.as_deref(),
+            kind,
+            &stem,
+        )?);
+        if let Ok(mut guard) = self.free_tables.lock() {
+            if let Some(pos) = guard.iter().position(|(k, _)| *k == key) {
+                if let Some(entry) = guard.remove(pos) {
+                    let arc = Arc::clone(&entry.1);
+                    guard.push_front(entry);
+                    Self::record_tl_free(tl_key, &arc);
+                    return Ok(arc);
+                }
+            }
+            guard.push_front((key, Arc::clone(&loaded)));
+            while guard.len() > MAX_CACHED_FREE_TABLES {
+                let _ = guard.pop_back();
+            }
+        }
+        Self::record_tl_free(tl_key, &loaded);
+        Ok(loaded)
+    }
+
+    fn record_tl_free(tl_key: TlFreeKey, tbl: &Arc<EosDtXzTable>) {
+        TL_FREE_CACHE.with(|tl| {
+            let mut cache = tl.borrow_mut();
+            cache.push_front((tl_key, Arc::clone(tbl)));
+            while cache.len() > TL_FREE_CACHE_CAP {
+                let _ = cache.pop_back();
+            }
+        });
     }
 }

@@ -33,7 +33,7 @@ def test_adaptive_remeshing_and_mesh_gval_jax_parity() -> None:
     assert gval[-1] == pytest.approx(expected_gval[-1], rel=1.0e-14)
     assert np.any(gval > 1.0)
 
-    test_util.check_grads(  # type: ignore[no-untyped-call]
+    test_util.check_grads(
         lambda lnp, lnt: jnp.sum(
             star.eval_mesh_gval_jax(lnp, lnt, mesh_delta_coeff=0.5) ** 2
         ),
@@ -106,7 +106,7 @@ def test_varcontrol_and_h211_timestep_filter_rust_vs_jax() -> None:
     )
     np.testing.assert_allclose(dt_next_rust, dt_next_jax, rtol=1.0e-12)
 
-    test_util.check_grads(  # type: ignore[no-untyped-call]
+    test_util.check_grads(
         lambda w_curr, w_prev: star.eval_h211_timestep_jax(
             1.2e8, 1.0e8, w_curr, w_prev, max_timestep_factor=10.0
         ),

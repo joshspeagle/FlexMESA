@@ -9,9 +9,9 @@ use flexmesa_chem::NuclideCatalog;
 use flexmesa_colors::{
     builtin_sed_cube, MagSystem, SedInterpMethod, D_10PC_CM,
 };
-use flexmesa_const::{L_SUN, R_SUN, STANDARD_CGRAV};
+use flexmesa_const::{L_SUN, R_SUN, SECYER, STANDARD_CGRAV};
 
-use crate::controls::{AtmTTauRelation, StarError};
+use crate::controls::{AtmOption, AtmTTauRelation, EnergyEqnOption, StarError};
 use crate::diffusion::{
     do_element_diffusion, eval_radiative_levitation_accel, DiffusionScheme,
 };
@@ -393,6 +393,18 @@ impl StarExtras for Tier1CaseExtras {
             )
         {
             model.controls.op_split_burn = true;
+        }
+        if self.case_name == "make_env" {
+            model.controls.mlt_option = flexmesa_turb::MltOption::Cox;
+            model.controls.atm_option = AtmOption::Table;
+            model.controls.tau_factor = 1.0;
+            model.dt = 1.0e2 * SECYER;
+            model.dt_next = model.dt;
+        } else if self.case_name == "make_sdb" {
+            model.controls.atm_option = AtmOption::Table;
+            model.controls.energy_eqn_option = EnergyEqnOption::EpsGrav;
+            model.dt = 1.0e2 * SECYER;
+            model.dt_next = model.dt;
         }
     }
 

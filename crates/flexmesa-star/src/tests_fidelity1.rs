@@ -341,6 +341,7 @@ fn test_hydro_temperature_gradt_dprad_lp_limiter_and_rsp_lsurf_bc() {
         .controls
         .use_gradt_actual_vs_gradt_mlt_for_t_gradient_eqn = false;
     model.controls.use_dprad_dm_form_of_t_gradient_eqn = true;
+    model.controls.use_flux_limiting_with_dprad_dm_form = true;
     model.dm_bar[k] = 1.0e15;
     model.d_opacity_dlnt[k] = 0.0;
     model.gradt_ad[k] = StarAdOrder1::constant(model.gradt[k]);

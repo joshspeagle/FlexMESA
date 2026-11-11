@@ -106,21 +106,19 @@ def test_e2e_5_tier5_star_and_binary_suites_execution() -> None:
     if not mesa_dir:
         pytest.skip("MESA_DIR not set; skipping upstream MESA Tier 5 suites")
     base = pathlib.Path(mesa_dir)
-    if (base / "star" / "test_suite").is_dir():
-        star_reps = star.run_tier5_star_suite(
-            base, max_steps_per_stage=2, verify_restart=True
-        )
-        assert len(star_reps) == 4
-        assert all(
-            r["passed"] and r["photo_restart_verified"] for r in star_reps
-        )
+    assert (base / "star" / "test_suite").is_dir()
+    star_reps = star.run_tier5_star_suite(
+        base, max_steps_per_stage=2, verify_restart=True
+    )
+    assert len(star_reps) == 4
+    assert all(r["passed"] and r["photo_restart_verified"] for r in star_reps)
 
-    if (base / "binary" / "test_suite").is_dir():
-        bin_reps = binary.run_binary_suite(base, max_steps_cap=4)
-        assert len(bin_reps) == 8
-        assert all(r["passed"] for r in bin_reps)
-        by_name = {r["case_name"]: r for r in bin_reps}
-        assert by_name["jdot_gr_check"]["max_relative_oracle_error"] < 1.0e-2
-        assert by_name["jdot_ml_check"]["max_relative_oracle_error"] < 1.0e-4
-        assert by_name["jdot_ls_check"]["max_relative_oracle_error"] < 1.0e-12
-        assert by_name["wind_fed_bhhmxb"]["max_relative_oracle_error"] < 1.0e-14
+    assert (base / "binary" / "test_suite").is_dir()
+    bin_reps = binary.run_binary_suite(base, max_steps_cap=4)
+    assert len(bin_reps) == 8
+    assert all(r["passed"] for r in bin_reps)
+    by_name = {r["case_name"]: r for r in bin_reps}
+    assert by_name["jdot_gr_check"]["max_relative_oracle_error"] < 1.0e-2
+    assert by_name["jdot_ml_check"]["max_relative_oracle_error"] < 1.0e-4
+    assert by_name["jdot_ls_check"]["max_relative_oracle_error"] < 1.0e-12
+    assert by_name["wind_fed_bhhmxb"]["max_relative_oracle_error"] < 1.0e-14

@@ -26,6 +26,7 @@ flexmesa-num = { path = "../flexmesa-num" }
 flexmesa-rates = { path = "../flexmesa-rates" }
 flexmesa-schema = { path = "../flexmesa-schema" }
 flexmesa-turb = { path = "../flexmesa-turb" }
+flexmesa-utils = { path = "../flexmesa-utils" }
 rayon.workspace = true
 
 [lints]

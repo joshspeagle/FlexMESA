@@ -8,7 +8,7 @@ frameless legends, and colorblind-safe Okabe-Ito semantic palettes.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -92,7 +92,7 @@ def mesa_rc_params() -> dict[str, Any]:
 
 def use_mesa_plot_style() -> None:
     """Applies the canonical `FlexMESA` publication style to `mpl.rcParams`."""
-    mpl.rcParams.update(mesa_rc_params())
+    cast(Any, mpl.rcParams).update(mesa_rc_params())
 
 
 def init_ax(

@@ -25,9 +25,8 @@ _EXPECTED_WAVE4_CHECKSUMS_N8: dict[str, float] = {
     "star_hydro_eqns": 4.660073228335436e6,
     "star_newton_step": 1.33327716396219e2,
     "star_remesh": 4.203476959958853e2,
-    "star_evolve_step": 9.931845982528495e1,
+    "star_evolve_step": 9.987143083869501e1,
 }
-_EXPECTED_WAVE4_EVOLVE_ALT_N8: float = 9.987143083869501e1
 
 
 def test_wave4_bench_kernels_return_positive_throughput() -> None:
@@ -48,11 +47,6 @@ def test_wave4_bench_kernels_return_positive_throughput() -> None:
         assert np.isfinite(rec.checksum)
         exp_sum = _EXPECTED_WAVE4_CHECKSUMS_N8[rec.workload]
         rel_err = abs(rec.checksum - exp_sum) / abs(exp_sum)
-        if rec.workload == "star_evolve_step":
-            alt_err = abs(rec.checksum - _EXPECTED_WAVE4_EVOLVE_ALT_N8) / abs(
-                _EXPECTED_WAVE4_EVOLVE_ALT_N8
-            )
-            rel_err = min(rel_err, alt_err)
         assert rel_err <= 1.0e-12, (
             f"{rec.workload} (N=8) checksum {rec.checksum:.15e} "
             f"!= {exp_sum:.15e} (rel {rel_err:.3e})"

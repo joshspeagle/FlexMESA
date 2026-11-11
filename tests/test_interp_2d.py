@@ -456,7 +456,7 @@ def test_renka790_cshep2_cubic_and_scattered_2d_parity() -> None:
             - 0.2 * np.exp(-((9.0 * xx - 4.0) ** 2) - (9.0 * yy - 7.0) ** 2)
         )
 
-    w2 = tstfn1(x2, y2)
+    w2 = np.asarray(tstfn1(x2, y2), dtype=np.float64)
     franke = interp_2d.interp_cshep2_db(x2, y2, w2, nc=17, nw=30, nr=6)
     p_grid = np.linspace(0.0, 1.0, 33)
     errs = [

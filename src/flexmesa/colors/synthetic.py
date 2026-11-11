@@ -8,6 +8,8 @@ evaluators.
 
 from __future__ import annotations
 
+from typing import cast
+
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -94,9 +96,12 @@ def calculate_bolometric_phot(
         w_arr = _dispatch.as_c_f64(wavelengths)
         f_arr = _dispatch.as_c_f64(fluxes)
         return _rust.py_colors_calculate_bolometric_phot(w_arr, f_arr)
-    return calculate_bolometric_phot_jax(
-        jnp.asarray(wavelengths, dtype=jnp.float64),
-        jnp.asarray(fluxes, dtype=jnp.float64),
+    return cast(
+        tuple[jax.Array, jax.Array],
+        calculate_bolometric_phot_jax(
+            jnp.asarray(wavelengths, dtype=jnp.float64),
+            jnp.asarray(fluxes, dtype=jnp.float64),
+        ),
     )
 
 
@@ -123,7 +128,7 @@ def calculate_synthetic_flux_jax(
     fg = jnp.asarray(filter_on_sed_grid, dtype=jnp.float64)
     num = utils.simpson_integration_jax(w, cf * w)
     den = utils.simpson_integration_jax(w, fg * w)
-    return num / den
+    return cast(jax.Array, num / den)
 
 
 @jax.jit
@@ -196,12 +201,15 @@ def calculate_synthetic(
             _dispatch.as_c_f64(filter_trans),
             float(zero_point_flux),
         )
-    return calculate_synthetic_jax(
-        jnp.asarray(wavelengths, dtype=jnp.float64),
-        jnp.asarray(fluxes, dtype=jnp.float64),
-        jnp.asarray(filter_wavelengths, dtype=jnp.float64),
-        jnp.asarray(filter_trans, dtype=jnp.float64),
-        zero_point_flux,
+    return cast(
+        jax.Array,
+        calculate_synthetic_jax(
+            jnp.asarray(wavelengths, dtype=jnp.float64),
+            jnp.asarray(fluxes, dtype=jnp.float64),
+            jnp.asarray(filter_wavelengths, dtype=jnp.float64),
+            jnp.asarray(filter_trans, dtype=jnp.float64),
+            zero_point_flux,
+        ),
     )
 
 
@@ -240,7 +248,9 @@ def compute_vega_zero_point(
     fw = jnp.asarray(filt_wave, dtype=jnp.float64)
     ft = jnp.asarray(filt_trans, dtype=jnp.float64)
     f_on_vega = utils.interpolate_array_jax(fw, ft, vw)
-    return calculate_synthetic_flux_jax(vw, vf * f_on_vega, f_on_vega)
+    return cast(
+        jax.Array, calculate_synthetic_flux_jax(vw, vf * f_on_vega, f_on_vega)
+    )
 
 
 def compute_ab_zero_point(
@@ -270,7 +280,7 @@ def compute_ab_zero_point(
     ab_f = jnp.where(
         fw > 0.0, 3.631e-20 * ((constants.CLIGHT * 1.0e8) / (fw * fw)), 0.0
     )
-    return calculate_synthetic_flux_jax(fw, ab_f * ft, ft)
+    return cast(jax.Array, calculate_synthetic_flux_jax(fw, ab_f * ft, ft))
 
 
 def compute_st_zero_point(
@@ -297,4 +307,4 @@ def compute_st_zero_point(
         )
     fw = jnp.asarray(filt_wave, dtype=jnp.float64)
     ft = jnp.asarray(filt_trans, dtype=jnp.float64)
-    return calculate_synthetic_flux_jax(fw, 3.63e-9 * ft, ft)
+    return cast(jax.Array, calculate_synthetic_flux_jax(fw, 3.63e-9 * ft, ft))

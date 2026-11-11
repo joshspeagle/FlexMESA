@@ -397,11 +397,6 @@ def fition9_jax(gami: jax.Array) -> tuple[jax.Array, ...]:
     return f, u, p, u - f, cv, pdt, pdr
 
 
-def _hlfit_f_mid(eta: jax.Array) -> jax.Array:
-    """Evaluate intermediate-regime bcc phonon free energy `f_mid(eta)`."""
-    return _hlfit_mid(eta)[0]
-
-
 def _hlfit_mid(eta: jax.Array) -> tuple[jax.Array, jax.Array, jax.Array]:
     """Evaluate intermediate-regime bcc phonon `(f_mid, u_mid, cv_mid)`."""
     alpha, beta, gamma = 0.265764, 0.334547, 0.932446
@@ -552,46 +547,42 @@ def fharm12_anharm8_jax(
     pdr_harm = u0 / 2.25 + 0.75 * u_th - 0.25 * cv_th
 
     b1 = 0.12
-    aa = (10.9, 247.0, 1.765e5)
-    ck = b1 / aa[0]
+    ck = b1 / 10.9
     tpt2 = tpt * tpt
     tpt4 = tpt2 * tpt2
     tq = b1 * tpt2 / gami
     tk2 = ck * tpt2
-    sup_gn = jnp.exp(-tk2)
-    f_ah = jnp.zeros_like(gami)
-    u_ah = jnp.zeros_like(gami)
-    p_ah = jnp.zeros_like(gami)
-    cv_ah = jnp.zeros_like(gami)
-    pdt_ah = jnp.zeros_like(gami)
-    pdr_ah = jnp.zeros_like(gami)
-    for idx, acn in enumerate(aa):
-        cn = float(idx + 1)
-        sup_gn = sup_gn / gami
-        f_ah = f_ah - sup_gn * (acn / cn)
-        u_ah = u_ah + (1.0 + 2.0 / cn * tk2) * acn * sup_gn
-        pn = acn / 3.0 + acn / cn * tk2
-        p_ah = p_ah + pn * sup_gn
-        cv_ah = (
-            cv_ah
-            + (
-                (cn + 1.0) * acn
-                + (4.0 - 2.0 / cn) * acn * tk2
-                + 4.0 * acn * ck * ck / cn * tpt4
-            )
-            * sup_gn
+    acn = jnp.array([10.9, 247.0, 1.765e5], dtype=jnp.float64)
+    cn = jnp.array([1.0, 2.0, 3.0], dtype=jnp.float64)
+    s1 = jnp.exp(-tk2) / gami
+    s2 = s1 / gami
+    sup_gn = jnp.stack([s1, s2, s2 / gami], axis=-1)
+    tk2_e = tk2[..., None]
+    tpt4_e = tpt4[..., None]
+    pn = acn / 3.0 + (acn / cn) * tk2_e
+    f_ah = -jnp.sum(sup_gn * (acn / cn), axis=-1) - tq
+    u_ah = jnp.sum((1.0 + (2.0 / cn) * tk2_e) * acn * sup_gn, axis=-1) - tq
+    p_ah = jnp.sum(pn * sup_gn, axis=-1) - tq / 1.5
+    cv_ah = jnp.sum(
+        (
+            (cn + 1.0) * acn
+            + (4.0 - 2.0 / cn) * acn * tk2_e
+            + (4.0 * ck * ck * acn / cn) * tpt4_e
         )
-        pdt_ah = (
-            pdt_ah
-            + (pn * (cn + 1.0 + 2.0 * tk2) - 2.0 * acn / cn * tk2) * sup_gn
+        * sup_gn,
+        axis=-1,
+    )
+    pdt_ah = jnp.sum(
+        (pn * (cn + 1.0 + 2.0 * tk2_e) - (2.0 * acn / cn) * tk2_e) * sup_gn,
+        axis=-1,
+    )
+    pdr_ah = (
+        jnp.sum(
+            (pn * (1.0 - cn / 3.0 - tk2_e) + (acn / cn) * tk2_e) * sup_gn,
+            axis=-1,
         )
-        pdr_ah = (
-            pdr_ah + (pn * (1.0 - cn / 3.0 - tk2) + acn / cn * tk2) * sup_gn
-        )
-    f_ah = f_ah - tq
-    u_ah = u_ah - tq
-    p_ah = p_ah - tq / 1.5
-    pdr_ah = pdr_ah - tq / 4.5
+        - tq / 4.5
+    )
     return (
         f_harm + f_ah,
         u_harm + u_ah,

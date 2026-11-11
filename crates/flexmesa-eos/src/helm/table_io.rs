@@ -16,14 +16,16 @@ const FLOATS_PER_VERTEX: usize = 21;
 /// Byte size of one serialized [`HelmVertex`] (`21 * 8 = 168` bytes).
 const BYTES_PER_VERTEX: usize = FLOATS_PER_VERTEX * 8;
 
-/// Resolves the upstream MESA `data` directory without machine-specific paths.
-///
-/// Checks `FLEXMESA_DATA_DIR`, `FLEXMESA_EOS_DATA_DIR`, `MESA_DIR`, and walks
-/// upward from the current working directory looking for `.mesa_temp_cache/mesa_data`.
+pub use flexmesa_utils::resolve_flexmesa_data_dir;
+
+/// Resolves an optional upstream MESA `data` directory containing raw ASCII `eosDT_data/`.
 #[must_use]
 pub(crate) fn resolve_mesa_data_dir() -> Option<PathBuf> {
-    for var in ["FLEXMESA_DATA_DIR", "FLEXMESA_EOS_DATA_DIR", "MESA_DIR"] {
+    for var in ["FLEXMESA_EOS_DATA_DIR", "FLEXMESA_DATA_DIR", "MESA_DIR"] {
         if let Some(val) = std::env::var_os(var) {
+            if val.is_empty() {
+                continue;
+            }
             let p = PathBuf::from(val);
             if p.join("eosDT_data").is_dir() {
                 return Some(p);
@@ -34,62 +36,27 @@ pub(crate) fn resolve_mesa_data_dir() -> Option<PathBuf> {
             }
         }
     }
-    if let Ok(cwd) = std::env::current_dir() {
-        for anc in cwd.ancestors() {
-            let candidate = anc.join(".mesa_temp_cache").join("mesa_data");
-            if candidate.join("eosDT_data").is_dir() {
-                return Some(candidate);
-            }
-        }
-    }
     None
 }
 
-/// Resolves the binary cache directory (`.mesa_temp_cache/bin_cache` or `FLEXMESA_BIN_CACHE_DIR`).
-#[must_use]
-pub(crate) fn resolve_bin_cache_dir() -> Option<PathBuf> {
-    if let Some(val) = std::env::var_os("FLEXMESA_BIN_CACHE_DIR") {
-        let p = PathBuf::from(val);
-        let _ = std::fs::create_dir_all(&p);
-        if p.is_dir() {
-            return Some(p);
-        }
-    }
-    if let Ok(cwd) = std::env::current_dir() {
-        for anc in cwd.ancestors() {
-            let root_cache = anc.join(".mesa_temp_cache");
-            if root_cache.is_dir() {
-                let bin_cache = root_cache.join("bin_cache");
-                let _ = std::fs::create_dir_all(&bin_cache);
-                if bin_cache.is_dir() {
-                    return Some(bin_cache);
-                }
-            }
-        }
-    }
-    None
-}
-
-/// Loads or builds the full dense `2701 x 1001` `HELM` vertex grid when MESA data or cache is available.
-#[must_use]
-pub(crate) fn load_or_build_full_helm_vertices() -> Option<Vec<HelmVertex>> {
-    let bin_cache_dir = resolve_bin_cache_dir();
-    if let Some(ref cache_dir) = bin_cache_dir {
-        let full_bin = cache_dir.join("helm_table_full.bin");
-        if full_bin.is_file() {
-            if let Ok(vertices) = read_helm_full_bin(&full_bin) {
-                return Some(vertices);
-            }
-        }
+/// Loads or builds the full dense `2701 x 1001` `HELM` vertex grid (`FMHELM01`).
+///
+/// # Errors
+/// Returns an actionable error when neither `helm_table_full.bin` in the
+/// FlexMESA data directory nor upstream `MESA_DIR/data/eosDT_data` is present.
+pub(crate) fn load_or_build_full_helm_vertices() -> Result<Vec<HelmVertex>, String>
+{
+    let data_root = resolve_flexmesa_data_dir();
+    let full_bin = data_root.join("helm_table_full.bin");
+    if full_bin.is_file() {
+        return read_helm_full_bin(&full_bin);
     }
 
-    let data_dir = resolve_mesa_data_dir()?;
-    let eosdt_dir = data_dir.join("eosDT_data");
-
-    let vertices = {
+    if let Some(mesa_data) = resolve_mesa_data_dir() {
+        let eosdt_dir = mesa_data.join("eosDT_data");
         let mesa_cache = eosdt_dir.join("cache").join("helm_table.bin");
         let ascii_dat = eosdt_dir.join("helm_table.dat");
-        if mesa_cache.is_file() {
+        let parsed = if mesa_cache.is_file() {
             read_mesa_helm_cache_bin(&mesa_cache).or_else(|_| {
                 let file = std::fs::File::open(&ascii_dat)
                     .map_err(|e| e.to_string())?;
@@ -99,19 +66,24 @@ pub(crate) fn load_or_build_full_helm_vertices() -> Option<Vec<HelmVertex>> {
                 ))
             })
         } else if ascii_dat.is_file() {
-            let file = std::fs::File::open(&ascii_dat).ok()?;
+            let file =
+                std::fs::File::open(&ascii_dat).map_err(|e| e.to_string())?;
             parse_helm_ascii_reader(BufReader::with_capacity(1024 * 1024, file))
         } else {
-            return None;
+            Err("eosDT_data missing helm_table.dat".to_string())
+        };
+        if let Ok(vertices) = parsed {
+            let _ = write_helm_full_bin_atomic(&full_bin, &vertices);
+            return Ok(vertices);
         }
     }
-    .ok()?;
 
-    if let Some(ref cache_dir) = bin_cache_dir {
-        let full_bin = cache_dir.join("helm_table_full.bin");
-        let _ = write_helm_full_bin_atomic(&full_bin, &vertices);
-    }
-    Some(vertices)
+    Err(format!(
+        "FlexMESA Helmholtz EOS table not found at {}. \
+         Run 'flexmesa data fetch' (or set FLEXMESA_DATA_DIR) to download \
+         the verified data-v1 physics table bundle.",
+        full_bin.display()
+    ))
 }
 
 #[inline]

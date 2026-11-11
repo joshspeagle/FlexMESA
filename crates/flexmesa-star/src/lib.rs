@@ -60,6 +60,7 @@
     clippy::unreadable_literal
 )]
 
+pub mod case_staging;
 pub mod controls;
 pub mod diffusion;
 pub mod eps_grav;
@@ -83,6 +84,7 @@ pub mod mix_info;
 pub mod model;
 pub mod model_io;
 pub mod overshoot;
+pub mod photo_io;
 pub mod pre_ms;
 pub mod premix;
 pub mod pulse;

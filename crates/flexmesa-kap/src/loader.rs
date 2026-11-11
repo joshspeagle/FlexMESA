@@ -9,8 +9,6 @@ use crate::spline::fit_bicubic_not_a_knot;
 use crate::types::KapError;
 use std::sync::OnceLock;
 
-const KAP_TABLES_BIN: &[u8] = include_bytes!("../data/kap_tables.bin");
-
 /// Reference $\delta X_{\mathrm{C}}, \delta X_{\mathrm{O}}$ grid in Type 2 tables (`kap_def.f90`).
 pub const KAP_CO_DXS: [f64; 8] =
     [0.00, 0.01, 0.03, 0.10, 0.20, 0.40, 0.60, 1.00];
@@ -309,5 +307,5 @@ static KAP_TABLES: OnceLock<KapTables> = OnceLock::new();
 /// Return a reference to the lazily parsed master [`KapTables`].
 #[must_use]
 pub fn kap_tables() -> &'static KapTables {
-    KAP_TABLES.get_or_init(|| load_or_build_kap_tables(KAP_TABLES_BIN))
+    KAP_TABLES.get_or_init(load_or_build_kap_tables)
 }

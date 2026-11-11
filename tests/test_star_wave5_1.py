@@ -133,7 +133,7 @@ def test_burgers_diffusion_and_caplan_ocp_rust_jax_parity_and_mass_flux() -> (
     dlnt_dr = -1.5e-10
     g_grav = 2.74e4
 
-    v_r, d_r, ee_r = _rust.star_eval_burgers_velocities(
+    v_r, diff_r, ee_r = _rust.star_eval_burgers_velocities(
         a, z, x, rho, t, dlnt_dr, g_grav, None, "stanton_murillo"
     )
     v_j, d_j, ee_j = star.eval_burgers_velocities_jax(
@@ -146,7 +146,9 @@ def test_burgers_diffusion_and_caplan_ocp_rust_jax_parity_and_mass_flux() -> (
         jnp.asarray(g_grav),
     )
     np.testing.assert_allclose(v_r, np.asarray(v_j), rtol=1.0e-12, atol=1.0e-14)
-    np.testing.assert_allclose(d_r, np.asarray(d_j), rtol=1.0e-12, atol=1.0e-14)
+    np.testing.assert_allclose(
+        diff_r, np.asarray(d_j), rtol=1.0e-12, atol=1.0e-14
+    )
     assert abs(ee_r - float(ee_j)) / abs(ee_r) <= 1.0e-12
 
     # H1 floats (> 0), He4 and O16 sink (< 0), and sum(X_i * v_i) == 0

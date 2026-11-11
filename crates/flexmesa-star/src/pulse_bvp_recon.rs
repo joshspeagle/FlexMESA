@@ -31,7 +31,11 @@ pub fn reconstruct_and_analyze_mode(
     let mut y_grid = vec![[0.0; 4]; n];
 
     if l == 0 {
-        let mut y = [1.0, (model.pts[0].c_1 * om2) / 3.0];
+        let mut y = if model.pts[0].x > 0.0 {
+            [0.0, 1.0]
+        } else {
+            [1.0, (model.pts[0].c_1 * om2) / 3.0]
+        };
         y_grid[0] = [y[0], y[1], 0.0, -model.pts[0].u * y[0]];
         let mut scales = vec![1.0; n - 1];
         for (i, mid) in model.mids.iter().enumerate() {
@@ -155,7 +159,7 @@ pub fn reconstruct_and_analyze_mode(
     for (i, pt) in model.pts.iter().enumerate() {
         let [y1, y2, y3, y4] = y_grid[i];
         let x_li1 = if l == 0 {
-            if i == 0 {
+            if pt.x == 0.0 {
                 0.0
             } else {
                 1.0 / pt.x

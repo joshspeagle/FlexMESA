@@ -9,8 +9,9 @@ to `<= 1e-15`, `test_auto_diff.f90` cases across `DualOrder1` and
 
 from __future__ import annotations
 
-import pathlib
+import os
 from collections.abc import Sequence
+from typing import Any
 
 import hypothesis
 import jax
@@ -23,6 +24,7 @@ from jax import test_util
 from flexmesa import auto_diff as ad
 from flexmesa import constants
 from flexmesa import math as fmath
+from flexmesa.data import fetch
 from flexmesa.testing import golden
 
 # Standard evaluation grid used in upstream MESA's math/test.
@@ -400,7 +402,7 @@ def _run_order1_comparisons(cls: type[ad.DualOrder1]) -> list[bool]:
     ]
 
 
-def _run_order1_unary(u: object, rec: object) -> list[list[float]]:
+def _run_order1_unary(u: Any, rec: Any) -> list[list[float]]:
     """Run the 36 shared unary operator cases for `u(val)`."""
     pi = constants.PI
     e1 = float(fmath.exp(1.0))
@@ -536,15 +538,14 @@ def test_auto_diff_complete_golden_test_output_and_order2_sweep() -> None:
     assert len(all_bools) == 42
     assert len(all_nums) == 206
 
-    repo_root = pathlib.Path(__file__).resolve().parent.parent
     out_path = (
-        repo_root
-        / ".mesa_temp_cache"
-        / "mesa_root"
+        fetch.resolve_mesa_test_inputs_dir()
         / "auto_diff"
         / "test"
         / "test_output"
     )
+    if os.environ.get("MESA_DIR", "").strip():
+        assert out_path.is_file(), f"Missing {out_path}"
     if out_path.exists():
         golden_nums, golden_bools = _parse_upstream_auto_diff_output(
             out_path.read_text()

@@ -3,10 +3,8 @@
 //!
 //! Verifies:
 //! 1. All 10,000 rows (300,000 output values and partial derivatives) of
-//!    upstream `.mesa_temp_cache/mesa_root/neu/test/test_output` (Plus the 6
-//!    inlined golden rows when the upstream cache is absent).
-//! 2. All 194 solar-profile zones of
-//!    `.mesa_temp_cache/mesa_root/neu/test/test_1.0.data`.
+//!    upstream `neu/test/test_output` (plus the 6 inlined golden rows).
+//! 2. All 194 solar-profile zones of `neu/test/test_1.0.data`.
 //! 3. Exact zero cutoff below $\log_{10} T = 7.0$ ($T \le 10^7\,\mathrm{K}$).
 //! 4. Channel flag isolation and additive consistency across all 5 channels.
 //! 5. Centered finite-difference partial derivative verification across all
@@ -23,7 +21,7 @@
 )]
 
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use flexmesa_math::{exp10, log10};
 use flexmesa_neu::{neu_get, NeuChannel, NeuError, NeuFlags, NeuRate};
@@ -113,15 +111,26 @@ const GOLDEN_ROWS: [[f64; 34]; 6] = [
     ],
 ];
 
-fn mesa_neu_test_dir() -> PathBuf {
-    if let Ok(dir) = std::env::var("MESA_DIR") {
-        let p = PathBuf::from(dir).join("neu/test");
-        if p.exists() {
-            return p;
-        }
+fn mesa_neu_test_dir() -> (PathBuf, bool) {
+    if let Some(dir) = std::env::var_os("MESA_DIR").filter(|v| !v.is_empty()) {
+        return (PathBuf::from(dir).join("neu/test"), true);
     }
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../.mesa_temp_cache/mesa_root/neu/test")
+    if let Some(xdg) =
+        std::env::var_os("XDG_CACHE_HOME").filter(|v| !v.is_empty())
+    {
+        return (
+            PathBuf::from(xdg).join("flexmesa/mesa_test_inputs/neu/test"),
+            false,
+        );
+    }
+    if let Some(home) = std::env::var_os("HOME").filter(|v| !v.is_empty()) {
+        return (
+            PathBuf::from(home)
+                .join(".cache/flexmesa/mesa_test_inputs/neu/test"),
+            false,
+        );
+    }
+    (PathBuf::from(".flexmesa_test_inputs/neu/test"), false)
 }
 
 /// Parses a Fortran floating-point token, handling 3-digit exponents formatted
@@ -196,7 +205,7 @@ fn verify_row(row_idx: usize, row: &[f64], rtol: f64) {
     }
 }
 
-/// Verifies all 10,000 rows of `.mesa_temp_cache/mesa_root/neu/test/test_output`
+/// Verifies all 10,000 rows of upstream `neu/test/test_output`
 /// and the 6 representative inlined golden rows.
 #[test]
 fn test_all_10000_golden_rows_parity_against_upstream_mesa() {
@@ -204,8 +213,12 @@ fn test_all_10000_golden_rows_parity_against_upstream_mesa() {
         verify_row(idx, row, 1e-12);
     }
 
-    let path = mesa_neu_test_dir().join("test_output");
-    if path.exists() {
+    let (dir, strict) = mesa_neu_test_dir();
+    let path = dir.join("test_output");
+    if strict {
+        assert!(path.is_file(), "missing {}", path.display());
+    }
+    if path.is_file() {
         let content = fs::read_to_string(&path).unwrap_or_else(|e| {
             panic!("failed to read {}: {e}", path.display())
         });
@@ -255,8 +268,12 @@ fn test_solar_profile_test_1_0_data_all_194_zones() {
         }
     }
 
-    let path = mesa_neu_test_dir().join("test_1.0.data");
-    if path.exists() {
+    let (dir, strict) = mesa_neu_test_dir();
+    let path = dir.join("test_1.0.data");
+    if strict {
+        assert!(path.is_file(), "missing {}", path.display());
+    }
+    if path.is_file() {
         let content = fs::read_to_string(&path).unwrap_or_else(|e| {
             panic!("failed to read {}: {e}", path.display())
         });

@@ -10,6 +10,8 @@ import os
 import pathlib
 import tempfile
 
+import pytest
+
 from flexmesa import star
 
 
@@ -146,13 +148,13 @@ def test_optional_upstream_mesa_dir_inlists_and_mods_parse() -> None:
     `astero/test_suite` parse without error.
     """
     mesa_dir = os.environ.get("MESA_DIR", "")
-    if not mesa_dir or not pathlib.Path(mesa_dir).is_dir():
-        return
+    if not mesa_dir:
+        pytest.skip("MESA_DIR not set; skipping upstream MESA parse audit")
     base = pathlib.Path(mesa_dir)
+    assert base.is_dir(), f"MESA_DIR is not a directory: {base}"
     for suite in ("star/test_suite", "binary/test_suite", "astero/test_suite"):
         suite_dir = base / suite
-        if not suite_dir.is_dir():
-            continue
+        assert suite_dir.is_dir(), f"Missing upstream suite dir: {suite_dir}"
         for case_dir in sorted(suite_dir.iterdir()):
             if not case_dir.is_dir():
                 continue

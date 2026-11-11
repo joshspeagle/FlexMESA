@@ -380,12 +380,8 @@ pub fn build_pre_ms_model(
     controls: StarControls,
     job: StarJobControls,
 ) -> Result<StarModel, StarError> {
-    let ht = HelmTable::smooth_builtin();
-    let mut eos_cfg = EosConfig::default();
-    if flexmesa_eos::EosDtTableSet::builtin().data_dir.is_none() {
-        eos_cfg.use_free_eos = false;
-        eos_cfg.use_opal_scvh = false;
-    }
+    let ht = HelmTable::builtin();
+    let eos_cfg = EosConfig::default();
     let kap_cfg = KapConfig {
         zbase: controls.zbase,
         ..KapConfig::default()

@@ -2,7 +2,7 @@
 //! Auxiliary start-of-step thermodynamic arrays, heating channels, turbulent
 //! work/viscosity variables, rotational distortion factors, Rayleigh-Taylor
 //! instability (RTI) profiles, and EOS composition partial derivatives on
-//! [`StarModel`] (`star_data_step_work.inc` and `star/private/alloc.f90`).
+//! [`crate::StarModel`] (`star_data_step_work.inc` and `star/private/alloc.f90`).
 
 use crate::star_ad::{StarAdExt, StarAdOrder1};
 

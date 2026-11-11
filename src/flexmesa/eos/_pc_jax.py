@@ -1,19 +1,17 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
 """Native `@jax.jit` kernels and `custom_jvp` rules for the `PC` EOS.
 
-Provides `get_pc_alfa_jax` and `eval_pc_eos_jax` in pure vectorized JAX
-(`jnp.float64`), alongside explicit `solver_mode="rust_ffi"` host callback
-support.
+Provides `eval_pc_eos_jax` in pure vectorized JAX (`jnp.float64`).
 """
 
 from __future__ import annotations
 
 import jax
 import jax.numpy as jnp
-import numpy as np
 
-from flexmesa import _rust, constants
+from flexmesa import constants
 from flexmesa.eos import (
+    _jet_jax,
     _pc_coulomb_jax,
     _pc_elect_jax,
     _pc_screen_jax,
@@ -31,141 +29,6 @@ _RSIMELT: float = 140.0
 _RAD: float = 2.5568570411948021e-07
 
 
-def get_pc_alfa_jax(
-    log_rho: jax.Array,
-    log_t: jax.Array,
-    abar: jax.Array,
-    zbar: jax.Array,
-    use_gamma_limit: bool = True,
-    log_rho1: float = 2.999,
-    log_rho2: float = 2.8,
-    log_t1: float = 7.6,
-    log_t2: float = 7.7,
-    log_gamma_e_all_helm: float = -1.8,
-    log_gamma_e_all_pc: float = -1.7,
-) -> tuple[jax.Array, jax.Array, jax.Array]:
-    """Evaluate `Get_PC_alfa` (`eospc_eval.f90` lines 31-96) in JAX."""
-    log_rho_lo0 = jnp.asarray(log_rho2, dtype=jnp.float64)
-    log_rho_hi = jnp.asarray(log_rho1, dtype=jnp.float64)
-
-    log_ge0 = jnp.log10(
-        constants.QE
-        * constants.QE
-        * jnp.power(
-            constants.FOUR_THIRDS_PI * constants.AVO * zbar / abar,
-            constants.ONE_THIRD,
-        )
-        / constants.KERG
-    )
-    log_ge = log_ge0 + log_rho / 3.0 - log_t
-    log_ge_lo = jnp.asarray(log_gamma_e_all_helm, dtype=jnp.float64)
-    log_ge_hi = jnp.asarray(log_gamma_e_all_pc, dtype=jnp.float64)
-    log_t_lo_g = log_ge0 + log_rho_lo0 / 3.0 - log_ge_lo
-    log_t_hi_g = log_ge0 + log_rho_hi / 3.0 - log_ge_hi
-
-    span_ge = log_ge_hi - log_ge_lo
-    alfa_ge = (log_ge_hi - log_ge) / span_ge
-    dt_ge = jnp.ones_like(log_rho) / span_ge
-    dr_ge = -(1.0 / 3.0) * jnp.ones_like(log_rho) / span_ge
-
-    log_rho_lo_eff = jnp.where(
-        log_t >= log_t_lo_g,
-        (log_t_lo_g + log_ge_lo - log_ge0) * 3.0,
-        log_rho_lo0,
-    )
-    span_r = log_rho_hi - log_rho_lo_eff
-    alfa_r = (log_rho_hi - log_rho) / span_r
-    dr_r = -1.0 / span_r
-
-    out_outside_g = (log_rho <= log_rho_lo0) | (log_ge <= log_ge_lo)
-    out_inside_g = (log_rho >= log_rho_hi) & (log_ge >= log_ge_hi)
-    use_ge_branch = log_t >= log_t_hi_g
-
-    alfa_g = jnp.where(
-        out_outside_g,
-        1.0,
-        jnp.where(out_inside_g, 0.0, jnp.where(use_ge_branch, alfa_ge, alfa_r)),
-    )
-    dt_g = jnp.where(
-        out_outside_g | out_inside_g,
-        0.0,
-        jnp.where(use_ge_branch, dt_ge, 0.0),
-    )
-    dr_g = jnp.where(
-        out_outside_g | out_inside_g,
-        0.0,
-        jnp.where(use_ge_branch, dr_ge, dr_r),
-    )
-
-    span_t = log_t2 - log_t1
-    alfa_t_br = (log_t - log_t1) / span_t
-    dt_t_br = jnp.ones_like(log_rho) / span_t
-    span_r0 = log_rho_hi - log_rho_lo0
-    alfa_r0 = (log_rho_hi - log_rho) / span_r0
-    dr_r0 = -jnp.ones_like(log_rho) / span_r0
-
-    out_outside_t = (log_rho <= log_rho_lo0) | (log_t >= log_t2)
-    out_inside_t = (log_rho >= log_rho_hi) & (log_t <= log_t1)
-    use_t_branch = log_t >= log_t1
-
-    alfa_t = jnp.where(
-        out_outside_t,
-        1.0,
-        jnp.where(
-            out_inside_t, 0.0, jnp.where(use_t_branch, alfa_t_br, alfa_r0)
-        ),
-    )
-    dt_t = jnp.where(
-        out_outside_t | out_inside_t,
-        0.0,
-        jnp.where(use_t_branch, dt_t_br, 0.0),
-    )
-    dr_t = jnp.where(
-        out_outside_t | out_inside_t,
-        0.0,
-        jnp.where(use_t_branch, 0.0, dr_r0),
-    )
-
-    use_g = jnp.asarray(use_gamma_limit)
-    return (
-        jnp.where(use_g, alfa_g, alfa_t),
-        jnp.where(use_g, dt_g, dt_t),
-        jnp.where(use_g, dr_g, dr_t),
-    )
-
-
-def _solid_fmix_coeff_jax(ay: jax.Array, azion: jax.Array) -> jax.Array:
-    """Compute solid pair-mixing coefficient (`melange9` lines 210-233)."""
-    n = ay.shape[0]
-    idx = jnp.arange(n)
-    upper = idx[:, None] < idx[None, :]
-    valid_i = (ay >= _TINY) & (azion > 0.0)
-    pair_mask = upper & valid_i[:, None] & valid_i[None, :]
-
-    zi = jnp.where(valid_i, azion, 1.0)[:, None]
-    zj = jnp.where(valid_i, azion, 1.0)[None, :]
-    yi = jnp.where(valid_i, ay, 0.0)[:, None]
-    yj = jnp.where(valid_i, ay, 0.0)[None, :]
-
-    rz = zj / zi
-    ysum_ij = jnp.maximum(yi + yj, 1.0e-99)
-    x2 = jnp.where(pair_mask, yj / ysum_ij, 0.5)
-    x1 = jnp.maximum(1.0 - x2, 1.0e-99)
-    pair_mask = pair_mask & (x2 >= _TINY) & ((1.0 - x2) > 0.0)
-
-    x = x2 / rz + (1.0 - 1.0 / rz) * jnp.power(jnp.maximum(x2, 1.0e-99), rz)
-    delta_g = (
-        0.012
-        * (1.0 - 1.0 / (rz * rz))
-        * (x1 + x2 * jnp.power(rz, 5.0 / 3.0))
-        * (x / jnp.maximum(x2, 1.0e-99))
-        * jnp.maximum(1.0 - x, 0.0)
-        / x1
-    )
-    terms = jnp.power(zi, 5.0 / 3.0) * yi * yj * delta_g
-    return jnp.sum(jnp.where(pair_mask, terms, 0.0))
-
-
 def _eval_pc_res_single(
     rho: jax.Array,
     t: jax.Array,
@@ -174,19 +37,26 @@ def _eval_pc_res_single(
     xa: jax.Array,
     azion: jax.Array,
     acmi: jax.Array,
-    include_radiation: bool,
-    g_start: float,
-    g_full: float,
-    mf_lim: float,
+    include_radiation: jax.Array | bool,
+    g_start: jax.Array | float,
+    g_full: jax.Array | float,
+    mf_lim: jax.Array | float,
+    n_real: jax.Array,
 ) -> jax.Array:
     """Evaluate the 26-channel `PC` `res` vector for a single zone in JAX."""
-    ay_raw = jnp.where(xa >= mf_lim, xa / jnp.maximum(acmi, 1.0e-99), 0.0)
+    ay_raw = jnp.where(
+        (xa >= mf_lim) & (azion >= 0.0),
+        xa / jnp.maximum(acmi, 1.0e-99),
+        0.0,
+    )
     y_sum = jnp.sum(ay_raw)
     ay = jnp.where(
         jnp.abs(y_sum - 1.0) > _TINY,
         ay_raw / jnp.maximum(y_sum, 1.0e-99),
         ay_raw,
     )
+    mask_all = (ay >= _TINY) & (azion >= 0.0)
+    cmi_mean = jnp.sum(jnp.where(mask_all, ay * acmi, 0.0))
     mask = (ay >= _TINY) & (azion > 0.0)
     y = jnp.where(mask, ay, 0.0)
     z = jnp.where(mask, azion, 1.0)
@@ -199,7 +69,6 @@ def _eval_pc_res_single(
     z73 = jnp.sum(y * (z13**7))
     z52 = jnp.sum(y * (jnp.sqrt(z) ** 5))
     z321 = jnp.sum(y * z * (jnp.sqrt(z + 1.0) ** 3))
-    cmi_mean = jnp.sum(y * cmi_s)
 
     temp_au = t * (1.0e-6 / _UN_T6)
     t_au2 = temp_au * temp_au
@@ -231,6 +100,7 @@ def _eval_pc_res_single(
     densi = dens / zmean
     pressi = densi * temp_au
     ctp = (1.0 / t_au2) * (4.0 * jnp.pi / _AUM)
+    xc_zone = _pc_screen_jax.PcContrib(*_pc_coulomb_jax.excor7_jax(rs, game))
 
     def _species_contrib(
         cmi_i: jax.Array, z_i: jax.Array, y_i: jax.Array
@@ -238,7 +108,9 @@ def _eval_pc_res_single(
         gami_i = game * jnp.power(z_i, 5.0 / 3.0)
         dni = densi * y_i
         pri = dni * temp_au
-        c0, c1 = _pc_screen_jax.eosfi8_c2_pair_jax(cmi_i, z_i, rs, gami_i)
+        c0, c1 = _pc_screen_jax.eosfi8_c2_pair_jax(
+            cmi_i, z_i, rs, gami_i, xc=xc_zone
+        )
         c2 = tuple(alfa * v1 + beta * v0 for v0, v1 in zip(c0, c1, strict=True))
         return (
             c2[1] * pri,
@@ -250,16 +122,28 @@ def _eval_pc_res_single(
             ctp * dni * (z_i * z_i / cmi_i),
         )
 
-    du, ds, dp, dcv, dpdlt, dpdlr, dtpt2 = jax.vmap(_species_contrib)(
-        cmi_s, z, y
+    def _sp_step(
+        i: jax.Array, acc: tuple[jax.Array, ...]
+    ) -> tuple[jax.Array, ...]:
+        m_i = mask[i]
+        contrib = _species_contrib(cmi_s[i], z[i], y[i])
+        return tuple(
+            a_k + jnp.where(m_i, c_k, 0.0)
+            for a_k, c_k in zip(acc, contrib, strict=True)
+        )
+
+    init_acc = (
+        uinte,
+        se_id * dens,
+        presse,
+        cve * dens,
+        presse * chite,
+        presse * chire,
+        jnp.zeros_like(rho),
     )
-    uint = uinte + jnp.sum(jnp.where(mask, du, 0.0))
-    s_tot = se_id * dens + jnp.sum(jnp.where(mask, ds, 0.0))
-    press = presse + jnp.sum(jnp.where(mask, dp, 0.0))
-    cv_tot = cve * dens + jnp.sum(jnp.where(mask, dcv, 0.0))
-    pdlt = presse * chite + jnp.sum(jnp.where(mask, dpdlt, 0.0))
-    pdlr = presse * chire + jnp.sum(jnp.where(mask, dpdlr, 0.0))
-    tpt2 = jnp.sum(jnp.where(mask, dtpt2, 0.0))
+    uint, s_tot, press, cv_tot, pdlt, pdlr, tpt2 = jax.lax.fori_loop(
+        0, n_real, _sp_step, init_acc
+    )
 
     fwk = jnp.where(is_liq, tpt2 / 24.0, 0.0)
     uwk = fwk * 2.0
@@ -271,7 +155,7 @@ def _eval_pc_res_single(
     pdlr = pdlr + uwk * pressi
 
     mix_liq = _pc_screen_jax.cormix_jax(rs, game, zmean, z2mean, z52, z53, z321)
-    fmix_sol = game * _solid_fmix_coeff_jax(ay, azion)
+    fmix_sol = game * _pc_screen_jax.solid_fmix_coeff_jax(ay, azion)
     z0 = jnp.zeros_like(fmix_sol)
     mix_sol = (fmix_sol, fmix_sol, fmix_sol / 3.0, z0, z0, z0, fmix_sol / 2.25)
     mix = tuple(
@@ -372,8 +256,59 @@ def _eval_pc_res_single(
     )
 
 
-@jax.jit
-def _eval_pc_single_jit(
+def _pad_pc_species(
+    xa: jax.Array, azion: jax.Array, acmi: jax.Array
+) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array]:
+    """Pad species arrays to bucket size `8` or `32` with `-1.0` sentinel."""
+    n_sp = int(azion.shape[-1])
+    bucket = _jet_jax.bucket_size(n_sp)
+    return (
+        jnp.int32(n_sp),
+        _jet_jax.pad_trailing(xa, bucket, -1.0),
+        _jet_jax.pad_trailing(azion, bucket, -1.0),
+        _jet_jax.pad_trailing(acmi, bucket, 1.0),
+    )
+
+
+def _eval_pc_jvp_dir(
+    rho: jax.Array,
+    t: jax.Array,
+    drho: jax.Array,
+    dt: jax.Array,
+    abar: jax.Array,
+    zbar: jax.Array,
+    xa: jax.Array,
+    azion: jax.Array,
+    acmi: jax.Array,
+    include_radiation: jax.Array,
+    g_start: jax.Array,
+    g_full: jax.Array,
+    mf_lim: jax.Array,
+    n_real: jax.Array,
+) -> tuple[jax.Array, jax.Array]:
+    """Evaluate `(res, d_res)` along `(drho, dt)` for a single zone."""
+    res_p, d_res = jax.jvp(
+        lambda r_in, t_in: _eval_pc_res_single(
+            r_in,
+            t_in,
+            abar,
+            zbar,
+            xa,
+            azion,
+            acmi,
+            include_radiation,
+            g_start,
+            g_full,
+            mf_lim,
+            n_real,
+        ),
+        (rho, t),
+        (drho, dt),
+    )
+    return res_p, d_res
+
+
+def _eval_pc_single_traced(
     rho: jax.Array,
     t: jax.Array,
     abar: jax.Array,
@@ -385,8 +320,10 @@ def _eval_pc_single_jit(
     g_start: jax.Array,
     g_full: jax.Array,
     mf_lim: jax.Array,
+    n_real: jax.Array,
 ) -> tuple[jax.Array, jax.Array, jax.Array]:
-    """Evaluate `(res, d_dlnd, d_dln_t)` for a single zone via forward JVP."""
+    """Evaluate `(res, d_dlnd, d_dln_t)` with DCE-friendly primal `res`."""
+    z0 = jnp.zeros_like(rho)
     args = (
         abar,
         zbar,
@@ -397,22 +334,135 @@ def _eval_pc_single_jit(
         g_start,
         g_full,
         mf_lim,
+        n_real,
     )
-
-    def _fn(r_in: jax.Array, t_in: jax.Array) -> jax.Array:
-        return _eval_pc_res_single(r_in, t_in, *args)
-
-    res = _fn(rho, t)
-    d_drho, d_dt = jax.jacfwd(_fn, argnums=(0, 1))(rho, t)
-    return res, d_drho * rho, d_dt * t
+    res = _eval_pc_res_single(rho, t, *args)
+    _, d_dlnd = _eval_pc_jvp_dir(rho, t, rho, z0, *args)
+    _, d_dln_t = _eval_pc_jvp_dir(rho, t, z0, t, *args)
+    return res, d_dlnd, d_dln_t
 
 
-_eval_pc_zones_jit = jax.jit(
+_eval_pc_jvp_dir_jit = jax.jit(_eval_pc_jvp_dir)
+_eval_pc_zones_vmap = jax.vmap(
+    _eval_pc_single_traced,
+    in_axes=(0, 0, 0, 0, 0, None, None, None, None, None, None, None),
+)
+_eval_pc_zones_jvp_dir_jit = jax.jit(
     jax.vmap(
-        _eval_pc_single_jit,
-        in_axes=(0, 0, 0, 0, 0, None, None, None, None, None, None),
+        _eval_pc_jvp_dir,
+        in_axes=(0, 0, 0, 0, 0, 0, 0, None, None, None, None, None, None, None),
     )
 )
+
+
+def _eval_pc_single_eager(
+    r_s: jax.Array,
+    t_s: jax.Array,
+    *tail: jax.Array,
+) -> tuple[jax.Array, jax.Array, jax.Array]:
+    """Evaluate single-zone `(res, d_dlnd, d_dln_t)` via directional JVPs."""
+    z0 = jnp.zeros((), dtype=jnp.float64)
+    res_s, dlnd_s = _eval_pc_jvp_dir_jit(r_s, t_s, r_s, z0, *tail)
+    _, dlnt_s = _eval_pc_jvp_dir_jit(r_s, t_s, z0, t_s, *tail)
+    return res_s, dlnd_s, dlnt_s
+
+
+def _eval_pc_native_core(
+    r_in: jax.Array,
+    t_in: jax.Array,
+    a_in: jax.Array,
+    z_in: jax.Array,
+    x_in: jax.Array,
+    az_in: jax.Array,
+    ac_in: jax.Array,
+    inc_rad_j: jax.Array,
+    g_start_j: jax.Array,
+    g_full_j: jax.Array,
+    mf_lim_j: jax.Array,
+) -> tuple[jax.Array, jax.Array, jax.Array]:
+    """Evaluate native JAX `PC` EOS on bucketed species arrays."""
+    orig_shape = r_in.shape
+    n = core.NUM_EOS_BASIC_RESULTS
+    if r_in.size == 0:
+        empty = jnp.zeros((*orig_shape, n), dtype=jnp.float64)
+        return empty, empty, empty
+    n_real, x_p, az_a, ac_a = _pad_pc_species(
+        x_in, az_in.reshape(-1), ac_in.reshape(-1)
+    )
+    j_args = (inc_rad_j, g_start_j, g_full_j, mf_lim_j, n_real)
+    a_a = jnp.broadcast_to(a_in, orig_shape)
+    z_a = jnp.broadcast_to(z_in, orig_shape)
+    sp = az_a.shape[0]
+    x_a = jnp.broadcast_to(x_p, (*orig_shape, sp))
+    traced = any(
+        isinstance(v, jax.core.Tracer)
+        for v in (r_in, t_in, a_a, z_a, x_a, az_a, ac_a)
+    )
+    if not orig_shape:
+        if traced:
+            return _eval_pc_single_traced(
+                r_in, t_in, a_a, z_a, x_a, az_a, ac_a, *j_args
+            )
+        return _eval_pc_single_eager(
+            r_in, t_in, a_a, z_a, x_a, az_a, ac_a, *j_args
+        )
+
+    r_1d, t_1d = r_in.reshape(-1), t_in.reshape(-1)
+    a_1d, z_1d = a_a.reshape(-1), z_a.reshape(-1)
+    x_2d = x_a.reshape((-1, sp))
+    if traced:
+        res_v, dlnd_v, dlnt_v = _eval_pc_zones_vmap(
+            r_1d, t_1d, a_1d, z_1d, x_2d, az_a, ac_a, *j_args
+        )
+    elif r_1d.shape[0] <= 16:
+        rows = [
+            _eval_pc_single_eager(
+                r_1d[k],
+                t_1d[k],
+                a_1d[k],
+                z_1d[k],
+                x_2d[k],
+                az_a,
+                ac_a,
+                *j_args,
+            )
+            for k in range(r_1d.shape[0])
+        ]
+        res_v = jnp.stack([row[0] for row in rows], axis=0)
+        dlnd_v = jnp.stack([row[1] for row in rows], axis=0)
+        dlnt_v = jnp.stack([row[2] for row in rows], axis=0)
+    else:
+        z0_1d = jnp.zeros_like(r_1d)
+        res_v, dlnd_v = _eval_pc_zones_jvp_dir_jit(
+            r_1d, t_1d, r_1d, z0_1d, a_1d, z_1d, x_2d, az_a, ac_a, *j_args
+        )
+        _, dlnt_v = _eval_pc_zones_jvp_dir_jit(
+            r_1d, t_1d, z0_1d, t_1d, a_1d, z_1d, x_2d, az_a, ac_a, *j_args
+        )
+    return (
+        res_v.reshape((*orig_shape, n)),
+        dlnd_v.reshape((*orig_shape, n)),
+        dlnt_v.reshape((*orig_shape, n)),
+    )
+
+
+_pc_native_jvp_fn = jax.custom_jvp(_eval_pc_native_core)
+
+
+@_pc_native_jvp_fn.defjvp
+def _eval_pc_native_jvp(
+    primals: tuple[jax.Array, ...], tangents: tuple[jax.Array, ...]
+) -> tuple[
+    tuple[jax.Array, jax.Array, jax.Array],
+    tuple[jax.Array, jax.Array, jax.Array],
+]:
+    return core.pack_dt_jvp(
+        primals[0],
+        primals[1],
+        tangents[0],
+        tangents[1],
+        _pc_native_jvp_fn(*primals),
+    )
 
 
 def eval_pc_eos_jax(
@@ -428,191 +478,21 @@ def eval_pc_eos_jax(
     pc_gamma_start_crystal: float = 170.0,
     pc_gamma_full_crystal: float = 180.0,
     mass_fraction_limit: float = 1.0e-4,
-    solver_mode: str = "jax",
 ) -> tuple[jax.Array, jax.Array, jax.Array]:
     """Evaluate 26-channel `PC` EOS in native `@jax.jit` with `custom_jvp`."""
-    inc_rad = bool(include_radiation)
-    g_start = float(pc_gamma_start_crystal)
-    g_full = float(pc_gamma_full_crystal)
-    mf_lim = float(mass_fraction_limit)
-    c_args = (inc_rad, g_start, g_full, mf_lim)
-    j_args = (
-        jnp.asarray(inc_rad),
-        jnp.asarray(g_start, dtype=jnp.float64),
-        jnp.asarray(g_full, dtype=jnp.float64),
-        jnp.asarray(mf_lim, dtype=jnp.float64),
+    f64 = jnp.float64
+    sg = jax.lax.stop_gradient
+    res_o, dlnd_0, dlnt_0 = _pc_native_jvp_fn(
+        jnp.asarray(rho, f64),
+        jnp.asarray(temp, f64),
+        sg(jnp.asarray(abar, f64)),
+        sg(jnp.asarray(zbar, f64)),
+        sg(jnp.asarray(xa, f64)),
+        sg(jnp.asarray(azion, f64)).reshape(-1),
+        sg(jnp.asarray(acmi, f64)).reshape(-1),
+        sg(jnp.asarray(bool(include_radiation))),
+        sg(jnp.asarray(float(pc_gamma_start_crystal), dtype=f64)),
+        sg(jnp.asarray(float(pc_gamma_full_crystal), dtype=f64)),
+        sg(jnp.asarray(float(mass_fraction_limit), dtype=f64)),
     )
-
-    def _eval_pc_core(
-        r_in: jax.Array,
-        t_in: jax.Array,
-        a_in: jax.Array,
-        z_in: jax.Array,
-        x_in: jax.Array,
-        az_in: jax.Array,
-        ac_in: jax.Array,
-    ) -> tuple[jax.Array, jax.Array, jax.Array]:
-        if solver_mode == "rust_ffi":
-            return _eval_pc_rust_ffi_core(
-                r_in, t_in, a_in, z_in, x_in, az_in, ac_in, *c_args
-            )
-        r_a = jnp.asarray(r_in, dtype=jnp.float64)
-        t_a = jnp.asarray(t_in, dtype=jnp.float64)
-        orig_shape = r_a.shape
-        a_a = jnp.broadcast_to(jnp.asarray(a_in, dtype=jnp.float64), orig_shape)
-        z_a = jnp.broadcast_to(jnp.asarray(z_in, dtype=jnp.float64), orig_shape)
-        az_a = jnp.asarray(az_in, dtype=jnp.float64).reshape(-1)
-        ac_a = jnp.asarray(ac_in, dtype=jnp.float64).reshape(-1)
-        sp = az_a.shape[0]
-        x_a = jnp.broadcast_to(
-            jnp.asarray(x_in, dtype=jnp.float64), (*orig_shape, sp)
-        )
-        if orig_shape == ():
-            r_s, d_s, t_s = _eval_pc_single_jit(
-                r_a, t_a, a_a, z_a, x_a, az_a, ac_a, *j_args
-            )
-            return r_s, d_s, t_s
-        r_1d, t_1d = r_a.reshape(-1), t_a.reshape(-1)
-        a_1d, z_1d = a_a.reshape(-1), z_a.reshape(-1)
-        x_2d = x_a.reshape((-1, sp))
-        if r_1d.shape[0] <= 16:
-            rows = [
-                _eval_pc_single_jit(
-                    r_1d[k],
-                    t_1d[k],
-                    a_1d[k],
-                    z_1d[k],
-                    x_2d[k],
-                    az_a,
-                    ac_a,
-                    *j_args,
-                )
-                for k in range(r_1d.shape[0])
-            ]
-            res_v = jnp.stack([row[0] for row in rows], axis=0)
-            dlnd_v = jnp.stack([row[1] for row in rows], axis=0)
-            dlnt_v = jnp.stack([row[2] for row in rows], axis=0)
-        else:
-            res_v, dlnd_v, dlnt_v = _eval_pc_zones_jit(
-                r_1d, t_1d, a_1d, z_1d, x_2d, az_a, ac_a, *j_args
-            )
-        n = core.NUM_EOS_BASIC_RESULTS
-        return (
-            res_v.reshape((*orig_shape, n)),
-            dlnd_v.reshape((*orig_shape, n)),
-            dlnt_v.reshape((*orig_shape, n)),
-        )
-
-    r_j = jnp.asarray(rho, dtype=jnp.float64)
-    t_j = jnp.asarray(temp, dtype=jnp.float64)
-    r_0 = jax.lax.stop_gradient(r_j)
-    t_0 = jax.lax.stop_gradient(t_j)
-    if not isinstance(r_0, jax.core.Tracer) and not isinstance(
-        t_0, jax.core.Tracer
-    ):
-        with jax._src.core.eval_context():
-            res_0, dlnd_0, dlnt_0 = _eval_pc_core(
-                r_0,
-                t_0,
-                jax.lax.stop_gradient(abar),
-                jax.lax.stop_gradient(zbar),
-                jax.lax.stop_gradient(xa),
-                jax.lax.stop_gradient(azion),
-                jax.lax.stop_gradient(acmi),
-            )
-    else:
-        res_0, dlnd_0, dlnt_0 = _eval_pc_core(
-            r_0,
-            t_0,
-            jax.lax.stop_gradient(abar),
-            jax.lax.stop_gradient(zbar),
-            jax.lax.stop_gradient(xa),
-            jax.lax.stop_gradient(azion),
-            jax.lax.stop_gradient(acmi),
-        )
-    dln_r = jnp.expand_dims((r_j - r_0) / r_0, axis=-1)
-    dln_t = jnp.expand_dims((t_j - t_0) / t_0, axis=-1)
-    res_o = res_0 + dlnd_0 * dln_r + dlnt_0 * dln_t
     return res_o, dlnd_0, dlnt_0
-
-
-def _eval_pc_rust_ffi_core(
-    r_in: jax.Array,
-    t_in: jax.Array,
-    a_in: jax.Array,
-    z_in: jax.Array,
-    x_in: jax.Array,
-    az_in: jax.Array,
-    ac_in: jax.Array,
-    inc_rad: bool,
-    g_start: float,
-    g_full: float,
-    mf_lim: float,
-) -> tuple[jax.Array, jax.Array, jax.Array]:
-    """Explicit `solver_mode='rust_ffi'` host callback for `PC` EOS."""
-
-    def _host_eval_pc(
-        rho_np: np.ndarray,
-        temp_np: np.ndarray,
-        abar_np: np.ndarray,
-        zbar_np: np.ndarray,
-        xa_np: np.ndarray,
-        azion_np: np.ndarray,
-        acmi_np: np.ndarray,
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        orig_shape = np.shape(rho_np)
-        r_1d = np.ascontiguousarray(np.asarray(rho_np, np.float64).reshape(-1))
-        t_1d = np.ascontiguousarray(np.asarray(temp_np, np.float64).reshape(-1))
-        nz = r_1d.size
-        a_1d = np.broadcast_to(
-            np.asarray(abar_np, np.float64), orig_shape
-        ).reshape(nz)
-        z_1d = np.broadcast_to(
-            np.asarray(zbar_np, np.float64), orig_shape
-        ).reshape(nz)
-        az_1d = np.ascontiguousarray(
-            np.asarray(azion_np, np.float64).reshape(-1)
-        )
-        ac_1d = np.ascontiguousarray(
-            np.asarray(acmi_np, np.float64).reshape(-1)
-        )
-        sp = az_1d.size
-        xa_2d = np.broadcast_to(
-            np.asarray(xa_np, np.float64), (*orig_shape, sp)
-        ).reshape(-1)
-        out = _rust.eos_eval_pc_zones(
-            r_1d,
-            t_1d,
-            np.ascontiguousarray(a_1d),
-            np.ascontiguousarray(z_1d),
-            np.ascontiguousarray(xa_2d),
-            az_1d,
-            ac_1d,
-            inc_rad,
-            g_start,
-            g_full,
-            mf_lim,
-            True,
-        )
-        n = core.NUM_EOS_BASIC_RESULTS
-        return (
-            out[:, :n].reshape((*orig_shape, n)),
-            out[:, n : 2 * n].reshape((*orig_shape, n)),
-            out[:, 2 * n : 3 * n].reshape((*orig_shape, n)),
-        )
-
-    shape = (*r_in.shape, core.NUM_EOS_BASIC_RESULTS)
-    vc = jax.ShapeDtypeStruct(shape, jnp.float64)
-    r_c, d_c, t_c = jax.pure_callback(
-        _host_eval_pc,
-        (vc, vc, vc),
-        r_in,
-        t_in,
-        a_in,
-        z_in,
-        x_in,
-        az_in,
-        ac_in,
-        vmap_method="expand_dims",
-    )
-    return r_c, d_c, t_c

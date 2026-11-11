@@ -353,14 +353,22 @@ def fscr_sol8_jax(
 
 
 def eosfi8_c2_pair_jax(
-    cmi: jax.Array, zion: jax.Array, rs: jax.Array, gami: jax.Array
+    cmi: jax.Array,
+    zion: jax.Array,
+    rs: jax.Array,
+    gami: jax.Array,
+    xc: PcContrib | None = None,
 ) -> tuple[PcContrib, PcContrib]:
     """Evaluate `EOSFI8` (`pc_eos.f90` lines 484-627) for `(c2_liq, c2_sol)`."""
     aum = 1822.888
     zion_s = jnp.maximum(zion, 1.0)
     cmi_s = jnp.maximum(cmi, 1.0)
     game = gami / jnp.power(zion_s, 5.0 / 3.0)
-    xc = PcContrib(*_pc_coulomb_jax.excor7_jax(rs, game))
+    xc_eff = (
+        xc
+        if xc is not None
+        else PcContrib(*_pc_coulomb_jax.excor7_jax(rs, game))
+    )
     cotpt = jnp.sqrt(3.0 / aum / cmi_s) / jnp.power(zion_s, 7.0 / 6.0)
     tpt = gami / jnp.sqrt(rs) * cotpt
     fid_ion = jnp.log(tpt * tpt / gami) * 1.5 - 1.323515
@@ -381,22 +389,22 @@ def eosfi8_c2_pair_jax(
     scr_s = fscr_sol8_jax(rs, gami, zion_s, tpt)
 
     c2_liq = PcContrib(
-        f=fitot_l + scr_l.f + xc.f * zion_s,
-        u=uitot_l + scr_l.u + xc.u * zion_s,
-        p=pitot_l + scr_l.p + xc.p * zion_s,
-        s=scitot_l + scr_l.s + xc.s * zion_s,
-        cv=cvitot_l + scr_l.cv + xc.cv * zion_s,
-        pdt=pdti_l + scr_l.pdt + xc.pdt * zion_s,
-        pdr=pdri_l + scr_l.pdr + xc.pdr * zion_s,
+        f=fitot_l + scr_l.f + xc_eff.f * zion_s,
+        u=uitot_l + scr_l.u + xc_eff.u * zion_s,
+        p=pitot_l + scr_l.p + xc_eff.p * zion_s,
+        s=scitot_l + scr_l.s + xc_eff.s * zion_s,
+        cv=cvitot_l + scr_l.cv + xc_eff.cv * zion_s,
+        pdt=pdti_l + scr_l.pdt + xc_eff.pdt * zion_s,
+        pdr=pdri_l + scr_l.pdr + xc_eff.pdr * zion_s,
     )
     c2_sol = PcContrib(
-        f=fitot_s + scr_s.f + xc.f * zion_s,
-        u=uitot_s + scr_s.u + xc.u * zion_s,
-        p=pitot_s + scr_s.p + xc.p * zion_s,
-        s=scitot_s + scr_s.s + xc.s * zion_s,
-        cv=cvitot_s + scr_s.cv + xc.cv * zion_s,
-        pdt=pdti_s + scr_s.pdt + xc.pdt * zion_s,
-        pdr=pdri_s + scr_s.pdr + xc.pdr * zion_s,
+        f=fitot_s + scr_s.f + xc_eff.f * zion_s,
+        u=uitot_s + scr_s.u + xc_eff.u * zion_s,
+        p=pitot_s + scr_s.p + xc_eff.p * zion_s,
+        s=scitot_s + scr_s.s + xc_eff.s * zion_s,
+        cv=cvitot_s + scr_s.cv + xc_eff.cv * zion_s,
+        pdt=pdti_s + scr_s.pdt + xc_eff.pdt * zion_s,
+        pdr=pdri_s + scr_s.pdr + xc_eff.pdr * zion_s,
     )
     return c2_liq, c2_sol
 
@@ -451,3 +459,36 @@ def cormix_jax(
         pdt=jnp.where(active, pdtmix, z0),
         pdr=jnp.where(active, pdrmix, z0),
     )
+
+
+def solid_fmix_coeff_jax(ay: jax.Array, azion: jax.Array) -> jax.Array:
+    """Compute solid pair-mixing coefficient (`melange9` lines 210-233)."""
+    tiny = 1.0e-7
+    n = ay.shape[0]
+    idx = jnp.arange(n)
+    upper = idx[:, None] < idx[None, :]
+    valid_i = (ay >= tiny) & (azion > 0.0)
+    pair_mask = upper & valid_i[:, None] & valid_i[None, :]
+
+    zi = jnp.where(valid_i, azion, 1.0)[:, None]
+    zj = jnp.where(valid_i, azion, 1.0)[None, :]
+    yi = jnp.where(valid_i, ay, 0.0)[:, None]
+    yj = jnp.where(valid_i, ay, 0.0)[None, :]
+
+    rz = zj / zi
+    ysum_ij = jnp.maximum(yi + yj, 1.0e-99)
+    x2 = jnp.where(pair_mask, yj / ysum_ij, 0.5)
+    x1 = jnp.maximum(1.0 - x2, 1.0e-99)
+    pair_mask = pair_mask & (x2 >= tiny) & ((1.0 - x2) > 0.0)
+
+    x = x2 / rz + (1.0 - 1.0 / rz) * jnp.power(jnp.maximum(x2, 1.0e-99), rz)
+    delta_g = (
+        0.012
+        * (1.0 - 1.0 / (rz * rz))
+        * (x1 + x2 * jnp.power(rz, 5.0 / 3.0))
+        * (x / jnp.maximum(x2, 1.0e-99))
+        * jnp.maximum(1.0 - x, 0.0)
+        / x1
+    )
+    terms = jnp.power(zi, 5.0 / 3.0) * yi * yj * delta_g
+    return jnp.sum(jnp.where(pair_mask, terms, 0.0))

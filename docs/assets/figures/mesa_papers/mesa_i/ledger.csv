@@ -2,8 +2,8 @@ key,value
 he_flash_log_rhoc,5.9600000000e+00
 he_flash_log_tc,7.8900000000e+00
 kap_fe_bump_log_kap,1.5523061900e+00
-m15_zams_core_h1,6.9699277215e-01
-pisn_gamma1_min,1.2230855762e+00
+m15_zams_core_h1,6.9699363904e-01
+pisn_gamma1_min,1.1142250699e+00
 rgb_tip_log_l,3.3800000000e+00
 solar_zams_log_l,-1.4930490781e-01
 solar_zams_log_rhoc,1.9045331413e+00
@@ -11,4 +11,4 @@ solar_zams_log_tc,7.1339514070e+00
 solar_zams_log_teff,3.7494580225e+00
 wd_cool_log_l,-2.8500000000e+00
 zams_0p1msun_log_l,-3.0500000000e+00
-zams_100msun_log_l,6.0872252504e+00
+zams_100msun_log_l,6.0737772104e+00

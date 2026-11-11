@@ -2,14 +2,16 @@
 """On-demand binary opacity table loader and bicubic spline cache for JAX.
 
 Reads the full `FMKAP001` binary payload from
-`.mesa_temp_cache/bin_cache/kap_full/kap_tables_full.bin` (triggering the Rust
-table builder on first access if not yet cached) and fits 2D PSPLINE bicubic
-spline coefficients `[f, f_xx, f_yy, f_xxyy]` on demand for native `@jax.jit`
+`FLEXMESA_DATA_DIR/kap_full/kap_tables_full.bin` (or the user cache populated
+by `flexmesa data fetch`, triggering the Rust table builder if raw
+`MESA_DIR/data/kap_data` tables are used) and fits 2D PSPLINE bicubic spline
+coefficients `[f, f_xx, f_yy, f_xxyy]` on demand for native `@jax.jit`
 evaluation.
 """
 
 from __future__ import annotations
 
+import mmap
 import os
 import pathlib
 import struct
@@ -20,6 +22,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from flexmesa import _rust
+from flexmesa.data import fetch
 
 KAP_CO_DXS: tuple[float, ...] = (
     0.00,
@@ -32,6 +35,8 @@ KAP_CO_DXS: tuple[float, ...] = (
     1.00,
 )
 
+_RAW_FILE: Any = None
+_RAW_MMAP: mmap.mmap | None = None
 _RAW_BYTES: memoryview | None = None
 FIXED_INDEX: dict[str, list[tuple[float, list[tuple[int, int]]]]] = {}
 CO_INDEX: dict[
@@ -147,46 +152,39 @@ def fit_bicubic_batch(
 
 def _find_kap_bin_path() -> pathlib.Path:
     """Resolve `kap_tables_full.bin`, building via Rust if needed."""
-    _ = _rust.kap_get_fixed_metal_rust(0.02, 0.70, -6.0, 6.0)
-    roots = [pathlib.Path.cwd(), pathlib.Path(__file__).resolve()]
-    if "FLEXMESA_CACHE_DIR" in os.environ:
-        cand = (
-            pathlib.Path(os.environ["FLEXMESA_CACHE_DIR"])
-            / "kap_full"
-            / "kap_tables_full.bin"
-        )
-        if cand.is_file():
-            return cand
-    for root in roots:
-        for anc in [root, *root.parents]:
-            cand = (
-                anc
-                / ".mesa_temp_cache"
-                / "bin_cache"
-                / "kap_full"
-                / "kap_tables_full.bin"
-            )
+    for env_key in ("FLEXMESA_DATA_DIR", "FLEXMESA_CACHE_DIR"):
+        if val := os.environ.get(env_key, "").strip():
+            cand = pathlib.Path(val) / "kap_full" / "kap_tables_full.bin"
             if cand.is_file():
                 return cand
-    for root in roots:
-        for anc in [root, *root.parents]:
-            cand = anc / "crates" / "flexmesa-kap" / "data" / "kap_tables.bin"
-            if cand.is_file():
-                return cand
-    msg = "Unable to locate kap_tables_full.bin or kap_tables.bin"
+    cand = fetch.resolve_data_dir() / "kap_full" / "kap_tables_full.bin"
+    if not cand.is_file():
+        _ = _rust.kap_get_fixed_metal_rust(0.02, 0.70, -6.0, 6.0)
+    if cand.is_file():
+        return cand
+    msg = (
+        f"FlexMESA opacity tables not found at {cand}. "
+        "Run 'flexmesa data fetch' (or set FLEXMESA_DATA_DIR) to download "
+        "the verified data-v1 physics table bundle."
+    )
     raise FileNotFoundError(msg)
 
 
 def ensure_indexed() -> memoryview:
     """Index byte offsets across the `FMKAP001` binary file once."""
-    global _RAW_BYTES
+    global _RAW_FILE, _RAW_MMAP, _RAW_BYTES
     if _RAW_BYTES is not None:
         return _RAW_BYTES
-    raw = _find_kap_bin_path().read_bytes()
-    if raw[:8] != b"FMKAP001":
+    fh = _find_kap_bin_path().open("rb")
+    mm = mmap.mmap(fh.fileno(), 0, access=mmap.ACCESS_READ)
+    if mm[:8] != b"FMKAP001":
+        mm.close()
+        fh.close()
         msg = "Invalid header in kap_tables binary"
         raise ValueError(msg)
-    mv = memoryview(raw)
+    _RAW_FILE = fh
+    _RAW_MMAP = mm
+    mv = memoryview(mm)
     pos = 8
 
     def u8() -> int:
@@ -264,7 +262,7 @@ def ensure_indexed() -> memoryview:
     pos += nlt_a * 8
     zs_a = np.frombuffer(mv, dtype="<f8", count=nzs_a, offset=pos).copy()
     pos += nzs_a * 8
-    ts_meta = []
+    ts_meta: list[dict[str, Any]] = []
     with jax.ensure_compile_time_eval():
         for _ in range(nzs_a):
             nx_a, nfco_a, nfc_a, nfn_a = u32(), u32(), u32(), u32()

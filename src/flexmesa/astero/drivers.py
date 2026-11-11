@@ -153,8 +153,16 @@ def eval_astero_chi2(
         c_freq = jax_kernels._mean_chi2_jax(
             obs_freqs, obs_sigmas, corr_model_freqs
         )
-        c_r010 = jax_kernels._mean_chi2_jax(r010_o, r010_s, r010_m)
-        c_r02 = jax_kernels._mean_chi2_jax(r02_o, r02_s, r02_m)
+        c_r010 = jax_kernels._mean_chi2_jax(
+            jnp.asarray(r010_o, dtype=jnp.float64),
+            jnp.asarray(r010_s, dtype=jnp.float64),
+            jnp.asarray(r010_m, dtype=jnp.float64),
+        )
+        c_r02 = jax_kernels._mean_chi2_jax(
+            jnp.asarray(r02_o, dtype=jnp.float64),
+            jnp.asarray(r02_s, dtype=jnp.float64),
+            jnp.asarray(r02_m, dtype=jnp.float64),
+        )
         c_spec = jax_kernels._mean_chi2_jax(
             spectro_obs, spectro_sigmas, spectro_model
         )

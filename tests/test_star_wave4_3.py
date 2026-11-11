@@ -71,7 +71,7 @@ def test_convective_boundaries_overshoot_and_jax_mixing_parity() -> None:
     rho_sub = jnp.asarray(zams.rho[-12:])
     dq_sub = jnp.asarray(zams.dq[-12:])
     dmix_sub = jnp.asarray(np.maximum(zams.d_mix[-12:], 1.0e12))
-    jtu.check_grads(  # type: ignore[no-untyped-call]
+    jtu.check_grads(
         lambda rho_v, d_v: jnp.sum(
             star.eval_convection_sigmas_jax(
                 r_sub, rho_v, dq_sub, d_v, float(zams.mstar), dt
@@ -85,7 +85,7 @@ def test_convective_boundaries_overshoot_and_jax_mixing_parity() -> None:
     xa_sub = jnp.asarray(zams.xa[-12:, :3])
     sig_sub = jnp.asarray(zams.sig[-12:]).at[0].set(0.0)
     dm_sub = jnp.asarray(zams.dm[-12:])
-    jtu.check_grads(  # type: ignore[no-untyped-call]
+    jtu.check_grads(
         lambda x_v, s_v: jnp.sum(star.eval_dxdt_mix_jax(x_v, s_v, dm_sub) ** 2),
         (xa_sub, sig_sub),
         order=1,
@@ -191,7 +191,7 @@ def test_stellar_winds_and_3_region_mass_adjustment_parity() -> None:
         np.testing.assert_allclose(w_rust, w_jax, rtol=1.0e-11)
 
     # Verify autodiff gradients on `eval_winds_jax` via `check_grads`.
-    jtu.check_grads(  # type: ignore[no-untyped-call]
+    jtu.check_grads(
         lambda l_s, m_s, t_s: star.eval_winds_jax(l_s, m_s, t_s)["w_dutch"],
         (
             jnp.asarray(float(zams.lum[0])),

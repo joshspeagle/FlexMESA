@@ -78,10 +78,10 @@ fn py_ion_builtin_cell_grid<'py>(
     let n_rows = NUM_ION_ZS * NUM_ION_XS * NUM_ION_VALS;
     let row_len = grid.num_log_qs * grid.num_log_ts * 4;
     let mut flat = Vec::with_capacity(n_rows * row_len);
-    for iz in 0..NUM_ION_ZS {
-        for ix in 0..NUM_ION_XS {
-            for v in 0..NUM_ION_VALS {
-                flat.extend_from_slice(&grid.coeffs[iz][ix][v]);
+    for z_plane in grid.coeffs.iter().take(NUM_ION_ZS) {
+        for x_row in z_plane.iter().take(NUM_ION_XS) {
+            for vals in x_row.iter().take(NUM_ION_VALS) {
+                flat.extend_from_slice(vals);
             }
         }
     }

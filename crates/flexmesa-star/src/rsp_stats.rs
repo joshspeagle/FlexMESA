@@ -65,10 +65,6 @@ pub(crate) fn rsp_set_gyre_linear_analysis(
         }
     }
 
-    for (m_idx, md) in modes.iter().take(3).enumerate() {
-        model.aux.rsp.lina_periods[m_idx] =
-            1.0 / (md.freq_uhz * 1.0e-6).max(1.0e-30);
-    }
     let mode_idx = model
         .controls
         .rsp

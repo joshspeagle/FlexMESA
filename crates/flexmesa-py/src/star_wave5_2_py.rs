@@ -12,7 +12,9 @@ use flexmesa_star::{
     solve_gyre_mesa_modes, solve_stationary_rsp2_w, FeII5169EtaTable,
     Rsp2Config, StellaExportOptions,
 };
-use numpy::{IntoPyArray, PyArray1, PyArray2, PyReadonlyArray1};
+use numpy::{
+    IntoPyArray, PyArray1, PyArray2, PyArrayMethods, PyReadonlyArray1,
+};
 use pyo3::prelude::*;
 
 use crate::star_py::PyStarModel;
@@ -129,14 +131,13 @@ pub fn star_eval_riemann_profile<'py>(
     let (faces, residuals) = py.detach(|| {
         eval_riemann_profile(&model.inner, u_s, u_old_s, p_surf_bc, parallel)
     });
-    let rows: Vec<Vec<f64>> = faces
-        .into_iter()
-        .map(|f| {
-            let (a, b, c, d, e, g, h) = f.to_tuple();
-            vec![a, b, c, d, e, g, h]
-        })
-        .collect();
-    let arr_faces = PyArray2::from_vec2(py, &rows)?;
+    let n_faces = faces.len();
+    let mut flat = Vec::with_capacity(n_faces * 7);
+    for f in faces {
+        let (a, b, c, d, e, g, h) = f.to_tuple();
+        flat.extend_from_slice(&[a, b, c, d, e, g, h]);
+    }
+    let arr_faces = flat.into_pyarray(py).reshape([n_faces, 7])?;
     Ok((arr_faces, residuals.into_pyarray(py)))
 }
 
@@ -149,7 +150,8 @@ pub fn star_eval_riemann_profile<'py>(
     w, t, rho, p, cp, grad_ad, delta, kappa, hp_cell, grad_t,
     r_outer, r_inner, u_outer, u_inner, dm, dlnd_dt = 0.0,
     alfa = 1.5, alfap = 1.0, alfas = 1.0, alfac = 1.0, alfad = 1.0,
-    alfam = 0.25, alfat = 0.01, gammar = 1.0, min_w2_for_turbulence = 1.0e-4
+    alfam = 0.25, alfat = 0.01, gammar = 1.0, min_w2_for_turbulence = 0.0,
+    w_min_for_damping = 0.0
 ))]
 pub fn star_eval_rsp2_zone(
     w: f64,
@@ -177,6 +179,7 @@ pub fn star_eval_rsp2_zone(
     alfat: f64,
     gammar: f64,
     min_w2_for_turbulence: f64,
+    w_min_for_damping: f64,
 ) -> (f64, f64, f64, f64, f64, f64, f64) {
     let cfg = Rsp2Config {
         alfa,
@@ -188,6 +191,7 @@ pub fn star_eval_rsp2_zone(
         alfat,
         gammar,
         min_w2_for_turbulence,
+        w_min_for_damping,
     };
     let z = eval_rsp2_zone(
         w, t, rho, p, cp, grad_ad, delta, kappa, hp_cell, grad_t, r_outer,

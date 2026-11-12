@@ -163,7 +163,12 @@ pub fn calculate_energies(
     for i in 1..=nzn {
         let k0 = nzn - i;
         let dm = model.dm[k0];
-        ethe += (model.aux.rsp.egas_rsp[k0] + model.aux.rsp.erad_rsp[k0]) * dm;
+        let e_therm = if model.controls.rsp2_flag {
+            model.energy.get(k0).copied().unwrap_or(0.0)
+        } else {
+            model.aux.rsp.egas_rsp[k0] + model.aux.rsp.erad_rsp[k0]
+        };
+        ethe += e_therm * dm;
         econ += wk.w[k0].powi(2) * dm;
 
         let v1 = if k0 + 1 < nzn {
@@ -188,9 +193,21 @@ pub fn calculate_energies(
     let total_radiation = if model.controls.rsp.hydro_only {
         0.0
     } else {
+        let (wtr, wtr1) = if model.controls.rsp2_flag {
+            let l_th = if model.controls.using_velocity_time_centering
+                && model.controls.include_l_in_velocity_time_centering
+            {
+                model.controls.l_theta_for_velocity_time_centering
+            } else {
+                1.0
+            };
+            (l_th, 1.0 - l_th)
+        } else {
+            (dc.wtr, dc.wtr1)
+        };
         model.dt
             * (model.l_center
-                - (dc.wtr * model.lum[0] + dc.wtr1 * model.lum_start[0]))
+                - (wtr * model.lum[0] + wtr1 * model.lum_start[0]))
     };
 
     let rsp = &mut model.aux.rsp;

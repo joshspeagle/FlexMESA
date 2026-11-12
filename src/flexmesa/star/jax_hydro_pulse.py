@@ -1,8 +1,11 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
-"""Branchless `@jax.jit` kernels for Wave 5.2: HLLC Riemann hydrodynamics,
-`RSP2` time-dependent turbulent convection, and Dziembowski pulsation
-variables (`hydro_riemann.f90`, `hydro_momentum.f90`, `hydro_rsp2.f90`,
-`rsp2_solve.f90`, and `pulse_utils.f90`).
+r"""Branchless `@jax.jit` kernels for Wave 5.2: HLLC Riemann hydrodynamics,
+Dziembowski pulsation variables, `STELLA` Sobolev optical depths, and `GYRE` /
+`ADIPLS` BVP wrappers (`hydro_riemann.f90`, `hydro_momentum.f90`,
+`pulse_utils.f90`, and `parse_swd_vel_feii.f90`).
+
+`RSP2` time-dependent turbulent convection kernels are defined in
+`flexmesa.star.jax_rsp` and re-exported here for backwards compatibility.
 """
 
 from __future__ import annotations
@@ -11,17 +14,18 @@ import jax
 import jax.numpy as jnp
 
 from flexmesa import _rust, constants
+from flexmesa.star import jax_rsp
 
-X_ALFAP: float = constants.TWO_THIRDS
-X_ALFAS: float = 0.5 * constants.SQRT_2_DIV_3
-X_ALFAC: float = 0.5 * constants.SQRT_2_DIV_3
-X_CEDE: float = (8.0 / 3.0) * constants.SQRT_2_DIV_3
-X_GAMMAR: float = 3.464_101_615_137_754_4
+X_ALFAP: float = jax_rsp.X_ALFAP
+X_ALFAS: float = jax_rsp.X_ALFAS
+X_ALFAC: float = jax_rsp.X_ALFAC
+X_CEDE: float = jax_rsp.X_CEDE
+X_GAMMAR: float = jax_rsp.X_GAMMAR
+eval_rsp2_zone_jax = jax_rsp.eval_rsp2_zone_jax
+eval_rsp2_face_jax = jax_rsp.eval_rsp2_face_jax
+solve_stationary_rsp2_w_jax = jax_rsp.solve_stationary_rsp2_w_jax
 
 type _Arr5 = tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]
-type _Arr6 = tuple[
-    jax.Array, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array
-]
 type _Arr7 = tuple[
     jax.Array,
     jax.Array,
@@ -49,8 +53,17 @@ def eval_hllc_face_jax(
     m_grav_face: jax.Array,
     cgrav_face: jax.Array,
 ) -> _Arr7:
-    """Evaluate the well-balanced Lagrangian HLLC Riemann state at interior
+    r"""Evaluate the well-balanced Lagrangian HLLC Riemann state at interior
     faces (`do1_Riemann_Types` in `star/private/hydro_riemann.f90`).
+
+    Args:
+        p_l, rho_l, cs_l, u_l, dm_l: Left (inner) cell pressure (`dyn cm^-2`),
+            density (`g cm^-3`), sound speed (`cm s^-1`), velocity (`cm s^-1`),
+            and mass (`g`), shape `(*batch,)`.
+        p_r, rho_r, cs_r, u_r, dm_r: Right (outer) cell state, shape
+            `(*batch,)`.
+        r_face, m_grav_face, cgrav_face: Face radius (`cm`), gravitational mass
+            (`g`), and effective gravitational constant (`cm^3 g^-1 s^-2`).
 
     Returns:
         7-tuple `(p_l_star, p_r_star, s_l, s_r, u_face, p_face, ke_flux)` of
@@ -96,8 +109,20 @@ def eval_hllc_surface_face_jax(
     cgrav_surf: jax.Array,
     p_bc: jax.Array,
 ) -> _Arr7:
-    """Evaluate the surface ($k = 0$) HLLC Riemann boundary state
+    r"""Evaluate the surface ($k = 0$) HLLC Riemann boundary state
     (`setup_for_surf_Riemann` in `star/private/hydro_riemann.f90`).
+
+    Args:
+        p_surf_cell, rho_surf, cs_surf, u_surf, dm_surf: Outermost cell
+            pressure (`dyn cm^-2`), density (`g cm^-3`), sound speed
+            (`cm s^-1`), velocity (`cm s^-1`), and mass (`g`).
+        r_surf, m_surf, cgrav_surf: Surface radius (`cm`), mass (`g`), and
+            gravitational constant (`cm^3 g^-1 s^-2`).
+        p_bc: Exterior surface boundary pressure (`dyn cm^-2`).
+
+    Returns:
+        7-tuple `(p_l_star, p_r_star, s_l, s_r, u_face, p_face, ke_flux)` of
+        shape `(*batch,)`.
     """
     r2 = jnp.maximum(r_surf * r_surf, 1.0e-30)
     area = constants.PI4 * r2
@@ -132,7 +157,7 @@ def eval_riemann_momentum_residual_jax(
     p_cell_k: jax.Array,
     g_cell_k: jax.Array,
 ) -> jax.Array:
-    """Evaluate the spherical Lagrangian HLLC momentum residual
+    r"""Evaluate the spherical Lagrangian HLLC momentum residual
     (`do1_momentum_eqn` in `star/private/hydro_momentum.f90`).
 
     Args:
@@ -159,304 +184,6 @@ def eval_riemann_momentum_residual_jax(
     return du_dt - dp_force / jnp.maximum(dm_k, 1.0e-99) + g_cell_k
 
 
-def _rsp2_rate_coeffs_jax(
-    t: jax.Array,
-    rho_s: jax.Array,
-    p: jax.Array,
-    cp: jax.Array,
-    grad_ad: jax.Array,
-    delta: jax.Array,
-    kappa: jax.Array,
-    hp_s: jax.Array,
-    grad_t: jax.Array,
-    alfa: float,
-    alfas: float,
-    alfad: float,
-    gammar: float,
-) -> tuple[jax.Array, jax.Array, jax.Array]:
-    """Compute local `RSP2` rate coefficients `(c_s, c_d, c_dr)`."""
-    y_super = grad_t - grad_ad
-    a_cell = t * p * delta / (rho_s * hp_s)
-    c_s = X_ALFAS * alfa * alfas * a_cell * y_super
-    alfa_pos = alfa > 0.0
-    safe_alfa = jnp.where(alfa_pos, alfa, 1.0)
-    c_d = jnp.where(alfa_pos, (X_CEDE * alfad / safe_alfa) / hp_s, 0.0)
-    c_dr_pref = jnp.where(alfa_pos, (X_GAMMAR * gammar / safe_alfa) ** 2, 0.0)
-    rad_cond = (
-        constants.CLIGHT
-        * constants.CRAD
-        * (t**3)
-        * delta
-        / (
-            rho_s
-            * rho_s
-            * (jnp.maximum(cp, 1.0e-30) ** 2)
-            * jnp.maximum(kappa, 1.0e-30)
-        )
-    )
-    c_dr = c_dr_pref * rad_cond / (hp_s * hp_s)
-    return c_s, c_d, c_dr
-
-
-@jax.jit
-def eval_rsp2_zone_jax(
-    w: jax.Array,
-    t: jax.Array,
-    rho: jax.Array,
-    p: jax.Array,
-    cp: jax.Array,
-    grad_ad: jax.Array,
-    delta: jax.Array,
-    kappa: jax.Array,
-    hp_cell: jax.Array,
-    grad_t: jax.Array,
-    r_outer: jax.Array,
-    r_inner: jax.Array,
-    u_outer: jax.Array,
-    u_inner: jax.Array,
-    dm: jax.Array,
-    dlnd_dt: jax.Array,
-    alfa: float = 1.5,
-    alfap: float = 1.0,
-    alfas: float = 1.0,
-    alfad: float = 1.0,
-    alfam: float = 0.25,
-    gammar: float = 1.0,
-    min_w2_for_turbulence: float = 1.0e-4,
-) -> _Arr7:
-    """Evaluate cell-centered `RSP2` turbulent pressure, eddy viscosity, and
-    turbulent energy sources/sinks (`compute_cell_et_source_and_sink` in
-    `star/private/hydro_rsp2.f90`).
-
-    Args:
-        w: Specific turbulent velocity $\\sqrt{e_t}$ (`cm s^-1`).
-        t, rho, p, cp, grad_ad, delta, kappa: Cell thermodynamic state and
-            opacity (`K`, `g cm^-3`, `dyn cm^-2`, `erg g^-1 K^-1`,
-            dimensionless, dimensionless, `cm^2 g^-1`).
-        hp_cell, grad_t: Cell pressure scale height (`cm`) and temperature
-            gradient.
-        r_outer, r_inner, u_outer, u_inner: Bounding radii (`cm`) and
-            velocities (`cm s^-1`).
-        dm: Cell mass (`g`).
-        dlnd_dt: Logarithmic density rate $\\mathrm{d}\\ln\\rho/\\mathrm{d}t$
-            (`s^-1`).
-        alfa, alfap, alfas, alfad, alfam, gammar, min_w2_for_turbulence:
-            Kuhfuss (1986) `RSP2` model parameters.
-
-    Returns:
-        7-tuple `(p_turb, chi_turb, eq_visc, source_s, sink_d, sink_dr,
-        de_t_dt)` of shape `(*batch,)`.
-    """
-    w_pos = jnp.maximum(w, 0.0)
-    w2 = w_pos * w_pos
-    rho_s = jnp.maximum(rho, 1.0e-99)
-    hp_s = jnp.maximum(hp_cell, 1.0)
-
-    p_turb = X_ALFAP * alfap * rho_s * w2
-    use_ramp = (min_w2_for_turbulence > 0.0) & (w2 < min_w2_for_turbulence)
-    safe_min_w2 = jnp.where(
-        min_w2_for_turbulence > 0.0, min_w2_for_turbulence, 1.0
-    )
-    f_eddy = jnp.where(use_ramp, jnp.clip(w2 / safe_min_w2, 0.0, 1.0), 1.0)
-    vol_mid = constants.FOUR_THIRDS_PI * 0.5 * (r_outer**3 + r_inner**3)
-    chi_turb = (
-        f_eddy
-        * constants.FOUR_THIRDS
-        * alfam
-        * hp_s
-        * rho_s
-        * rho_s
-        * w_pos
-        * vol_mid
-        * vol_mid
-    )
-
-    u_over_r_out = jnp.where(
-        r_outer > 0.0, u_outer / jnp.where(r_outer > 0.0, r_outer, 1.0), 0.0
-    )
-    u_over_r_in = jnp.where(
-        r_inner > 0.0, u_inner / jnp.where(r_inner > 0.0, r_inner, 1.0), 0.0
-    )
-    du_over_r = u_over_r_out - u_over_r_in
-    dm_s = jnp.maximum(dm, 1.0e-99)
-    eq_visc = jnp.maximum(chi_turb * ((du_over_r / dm_s) ** 2), 0.0)
-
-    c_s, c_d, c_dr = _rsp2_rate_coeffs_jax(
-        t,
-        rho_s,
-        p,
-        cp,
-        grad_ad,
-        delta,
-        kappa,
-        hp_s,
-        grad_t,
-        alfa,
-        alfas,
-        alfad,
-        gammar,
-    )
-    source_s = c_s * w_pos
-    sink_d = c_d * w2 * w_pos
-    sink_dr = c_dr * w2
-    pdv_turb = p_turb * dlnd_dt / rho_s
-    de_t_dt = source_s + eq_visc - sink_d - sink_dr + pdv_turb
-    return p_turb, chi_turb, eq_visc, source_s, sink_d, sink_dr, de_t_dt
-
-
-@jax.jit
-def eval_rsp2_face_jax(
-    r_face: jax.Array,
-    m_grav_face: jax.Array,
-    cgrav_face: jax.Array,
-    p_face: jax.Array,
-    rho_face: jax.Array,
-    t_face: jax.Array,
-    cp_face: jax.Array,
-    grad_ad_face: jax.Array,
-    kappa_face: jax.Array,
-    w_inner: jax.Array,
-    w_outer: jax.Array,
-    t4_inner: jax.Array,
-    t4_outer: jax.Array,
-    lnp_inner: jax.Array,
-    lnp_outer: jax.Array,
-    chi_face: jax.Array,
-    du_over_r_face: jax.Array,
-    dm_bar: jax.Array,
-    alfa: float = 1.5,
-    alfac: float = 1.0,
-    alfat: float = 0.01,
-) -> _Arr6:
-    """Evaluate face-centered `RSP2` scale height, superadiabaticity, viscous
-    stress, and radiative/convective/turbulent luminosities (`do1_face` and
-    `do1_Lr_Lc_Lt` in `star/private/hydro_rsp2.f90`).
-
-    Args:
-        r_face, m_grav_face, cgrav_face: Face radius (`cm`), gravitational mass
-            (`g`), and effective gravitational constant (`cm^3 g^-1 s^-2`).
-        p_face, rho_face, t_face, cp_face, grad_ad_face, kappa_face:
-            Interpolated face thermodynamic state and opacity.
-        w_inner, w_outer: Adjacent cell turbulent velocities (`cm s^-1`).
-        t4_inner, t4_outer: Adjacent cell $T^4$ (`K^4`).
-        lnp_inner, lnp_outer: Adjacent cell $\\ln P$.
-        chi_face: Face eddy viscosity $\\mathrm{X}_{\\mathrm{face},k}$
-            (`g^2 s^-1`).
-        du_over_r_face: Face shear difference $\\Delta(u/r)_k$ (`s^-1`).
-        dm_bar: Face mass spacing $\\overline{\\Delta m}_k$ (`g`).
-        alfa, alfac, alfat: `RSP2` mixing-length, convective flux, and
-            turbulent kinetic flux multipliers.
-
-    Returns:
-        6-tuple `(hp_face, y_face, pi_face, l_r, l_c, l_t)` of shape
-        `(*batch,)`.
-    """
-    r2 = jnp.maximum(r_face * r_face, 1.0e-30)
-    area = constants.PI4 * r2
-    rho_s = jnp.maximum(rho_face, 1.0e-99)
-    gm = jnp.maximum(cgrav_face * m_grav_face, 1.0e-30)
-    hp_face = jnp.maximum(r2 * p_face / (rho_s * gm), 1.0)
-
-    dm_s = jnp.maximum(dm_bar, 1.0e-99)
-    dlnp_dm = (lnp_outer - lnp_inner) / dm_s
-    dt4_dm = (t4_outer - t4_inner) / dm_s
-    t4_face = jnp.maximum(t_face**4, 1.0e-30)
-    valid_dlnp = jnp.abs(dlnp_dm) > 1.0e-99
-    safe_dlnp = jnp.where(valid_dlnp, dlnp_dm, 1.0)
-    grad_face = jnp.where(
-        valid_dlnp, 0.25 * (dt4_dm / t4_face) / safe_dlnp, 0.0
-    )
-    y_face = grad_face - grad_ad_face
-
-    pi_face = chi_face * du_over_r_face / dm_s
-    l_r = (
-        -(area * area)
-        * (
-            constants.CLIGHT
-            * constants.CRAD
-            / (3.0 * jnp.maximum(kappa_face, 1.0e-30))
-        )
-        * dt4_dm
-    )
-
-    w_face = 0.5 * (jnp.maximum(w_inner, 0.0) + jnp.maximum(w_outer, 0.0))
-    l_c = (
-        area
-        * rho_s
-        * t_face
-        * cp_face
-        * w_face
-        * (X_ALFAS * alfa * alfac * y_face)
-    )
-
-    dw2_dm = (w_outer * w_outer - w_inner * w_inner) / dm_s
-    l_t = (
-        -(area * area)
-        * alfa
-        * alfat
-        * (rho_s * rho_s * hp_face * w_face)
-        * dw2_dm
-    )
-    return hp_face, y_face, pi_face, l_r, l_c, l_t
-
-
-@jax.jit
-def solve_stationary_rsp2_w_jax(
-    t: jax.Array,
-    rho: jax.Array,
-    p: jax.Array,
-    cp: jax.Array,
-    grad_ad: jax.Array,
-    delta: jax.Array,
-    kappa: jax.Array,
-    hp_cell: jax.Array,
-    grad_t: jax.Array,
-    alfa: float = 1.5,
-    alfas: float = 1.0,
-    alfad: float = 1.0,
-    gammar: float = 1.0,
-) -> jax.Array:
-    """Solve the stationary local `RSP2` turbulent balance
-    $S(w) - D(w) - D_r(w) = 0$ for $w$ (`star/private/rsp2_solve.f90`).
-
-    Args:
-        t, rho, p, cp, grad_ad, delta, kappa: Cell thermodynamic state and
-            opacity (`(*batch,)`).
-        hp_cell, grad_t: Cell pressure scale height (`cm`) and temperature
-            gradient (`(*batch,)`).
-        alfa, alfas, alfad, gammar: `RSP2` model multipliers.
-
-    Returns:
-        Equilibrium turbulent velocity $w$ (`cm s^-1`) of shape `(*batch,)`.
-    """
-    rho_s = jnp.maximum(rho, 1.0e-99)
-    hp_s = jnp.maximum(hp_cell, 1.0)
-    c_s, c_d, c_dr = _rsp2_rate_coeffs_jax(
-        t,
-        rho_s,
-        p,
-        cp,
-        grad_ad,
-        delta,
-        kappa,
-        hp_s,
-        grad_t,
-        alfa,
-        alfas,
-        alfad,
-        gammar,
-    )
-    active = (grad_t > grad_ad) & (alfa > 0.0) & (alfad > 0.0)
-    disc_raw = c_dr * c_dr + 4.0 * c_d * c_s
-    disc_pos = active & (disc_raw > 0.0)
-    disc_safe = jnp.where(disc_pos, disc_raw, 1.0)
-    sqrt_disc = jnp.where(disc_pos, jnp.sqrt(disc_safe), 0.0)
-    w_pos = jnp.maximum(
-        (-c_dr + sqrt_disc) / (2.0 * jnp.maximum(c_d, 1.0e-99)), 0.0
-    )
-    return jnp.where(active, w_pos, 0.0)
-
-
 @jax.jit
 def eval_dziembowski_variables_jax(
     r: jax.Array,
@@ -469,13 +196,13 @@ def eval_dziembowski_variables_jax(
     r_tot: float | jax.Array,
     m_tot: float | jax.Array,
 ) -> _Arr5:
-    """Evaluate the 5 dimensionless Dziembowski pulsation variables
+    r"""Evaluate the 5 dimensionless Dziembowski pulsation variables
     $(V, V_g, A_*, U, c_1)$ across a stellar profile (`pulse_utils.f90`).
 
     Args:
         r, m, p, rho, gamma1, n2, cgrav: Zone radius (`cm`), enclosed mass
             (`g`), pressure (`dyn cm^-2`), density (`g cm^-3`), adiabatic
-            exponent $\\Gamma_1$, squared Brunt-Väisälä frequency (`s^-2`), and
+            exponent $\Gamma_1$, squared Brunt-Väisälä frequency (`s^-2`), and
             gravitational constant (`cm^3 g^-1 s^-2`).
         r_tot, m_tot: Total stellar radius $R$ (`cm`) and mass $M$ (`g`).
 
@@ -504,17 +231,17 @@ def eval_sobolev_feii_5169_tau_jax(
     eta: jax.Array,
     t_exp_s: float | jax.Array,
 ) -> jax.Array:
-    """Evaluate the `STELLA` homologous Sobolev optical depth
-    $\\tau_{\\mathrm{Sob}}$ for `Fe II` 5169 (`parse_swd_vel_feii.f90`).
+    r"""Evaluate the `STELLA` homologous Sobolev optical depth
+    $\tau_{\mathrm{Sob}}$ for `Fe II` 5169 (`parse_swd_vel_feii.f90`).
 
     Args:
         rho: Zone mass density (`g cm^-3`) of shape `(*batch,)`.
         x_fe: Iron mass fraction (`dimensionless`) of shape `(*batch,)`.
-        eta: Population fraction $\\eta(\\rho, T)$ of shape `(*batch,)`.
+        eta: Population fraction $\eta(\rho, T)$ of shape `(*batch,)`.
         t_exp_s: Time since shock breakout (`s`).
 
     Returns:
-        Sobolev optical depth $\\tau_{\\mathrm{Sob}}$ of shape `(*batch,)`.
+        Sobolev optical depth $\tau_{\mathrm{Sob}}$ of shape `(*batch,)`.
     """
     n_fe = (
         jnp.maximum(rho, 0.0) * jnp.maximum(x_fe, 0.0) / (56.0 * constants.AMU)
@@ -539,7 +266,19 @@ def solve_gyre_mesa_modes(
     n_scan: int = 200,
     nonadiabatic: bool = True,
 ) -> list[tuple[int, int, int, int, float, float, float, float, float]]:
-    """Solve the 4th/6th-order `GYRE` BVP on a `GYRE` MESA model string."""
+    r"""Solve the 4th/6th-order `GYRE` BVP on a `GYRE` MESA model string.
+
+    Args:
+        mesa_str: `GYRE` v101/v120 structure table text.
+        l_deg: Spherical harmonic degree $\ell$.
+        omega_min, omega_max: Dimensionless frequency scan bounds.
+        n_scan: Number of scan intervals.
+        nonadiabatic: Whether to include radiative cooling perturbations.
+
+    Returns:
+        List of eigenmode tuples `(l, n_p, n_g, n_pg, omega_re, omega_im,
+        freq_uhz, inertia, eta_growth)`.
+    """
     return list(
         _rust.star_solve_gyre_mesa_modes(
             str(mesa_str),
@@ -559,7 +298,18 @@ def solve_adipls_fgong_modes(
     freq_max_uhz: float,
     n_scan: int = 500,
 ) -> list[tuple[int, int, int, int, float, float, float, float]]:
-    """Solve the 4th/6th-order `ADIPLS` BVP on an `FGONG` model string."""
+    r"""Solve the 4th/6th-order `ADIPLS` BVP on an `FGONG` model string.
+
+    Args:
+        fgong_str: `FGONG` structure file text.
+        l_deg: Spherical harmonic degree $\ell$.
+        freq_min_uhz, freq_max_uhz: Frequency scan bounds (`uHz`).
+        n_scan: Number of scan intervals.
+
+    Returns:
+        List of eigenmode tuples `(l, n_p, n_g, n_pg, sigma2, freq_uhz,
+        inertia, delta_nu_share)`.
+    """
     return list(
         _rust.star_solve_adipls_fgong_modes(
             str(fgong_str),
@@ -577,7 +327,17 @@ def run_stella_from_hyd_abn(
     eta_str: str,
     times_days: list[float],
 ) -> tuple[list[tuple[float, float]], list[tuple[float, float, float, float]]]:
-    """Run the `STELLA` bolometric light-curve and `Fe II` 5169 solver."""
+    r"""Run the `STELLA` bolometric light-curve and `Fe II` 5169 solver.
+
+    Args:
+        hyd_str: `.hyd` hydrodynamic profile table text.
+        abn_str: `.abn` abundance table text.
+        eta_str: `Fe II` 5169 $\eta(\rho, T)$ lookup table text.
+        times_days: Post-breakout epochs (`days`).
+
+    Returns:
+        2-tuple `(lbol_curve, feii_velocities)`.
+    """
     lbol, vel = _rust.star_run_stella_from_hyd_abn(
         str(hyd_str),
         str(abn_str),

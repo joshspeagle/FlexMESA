@@ -138,10 +138,11 @@ pub fn change_model_network(
     model.chem_id = new_chem_id;
     model.iso_names = new_iso_names;
     model.net_iso = new_net_iso;
-    model.layout = VarLayout::new(
+    model.layout = VarLayout::with_rsp2(
         new_species,
         model.controls.v_flag,
         model.controls.u_flag,
+        model.controls.rsp2_flag,
     );
     model.xa.clone_from(&new_xa);
     model.xa_start.clone_from(&new_xa);

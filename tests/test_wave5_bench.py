@@ -49,7 +49,7 @@ def test_wave5_bench_kernels_return_positive_throughput_and_parity() -> None:
 
     expected_n8 = {
         "w5_diff_rot": 3.082380424983001e5,
-        "w5_riemann_rsp2": -2.543418211343195e5,
+        "w5_riemann_rsp2": -2.543418211346364e5,
         "w5_binary_rlof": 6.234702123446103,
         "w5_astero_seism": 7.563537818023943e1,
     }

@@ -19,9 +19,9 @@ pub use crate::hydro_temperature::do1_temperature_eqn;
 use crate::hydro_vars::set_hydro_vars;
 use crate::model::StarModel;
 use crate::star_ad::{
-    StarAdExt, StarAdOrder1, I_LND_00, I_LND_M1, I_LND_P1, I_LNR_00, I_LNR_M1,
-    I_LNR_P1, I_LNT_00, I_LNT_M1, I_LNT_P1, I_L_00, I_L_M1, I_L_P1, I_V_00,
-    I_V_M1, I_V_P1,
+    StarAdExt, StarAdOrder1, I_HP_00, I_HP_M1, I_HP_P1, I_LND_00, I_LND_M1,
+    I_LND_P1, I_LNR_00, I_LNR_M1, I_LNR_P1, I_LNT_00, I_LNT_M1, I_LNT_P1,
+    I_L_00, I_L_M1, I_L_P1, I_V_00, I_V_M1, I_V_P1, I_W_00, I_W_M1, I_W_P1,
 };
 
 /// Assembled 1D Henyey residual vector and scaled block-tridiagonal Jacobian
@@ -148,6 +148,26 @@ impl HenyeySystem {
                 resid.d1[I_V_P1],
             );
         }
+        if let Some(iw) = layout.i_w {
+            self.add_stencil_partials(
+                k,
+                i_equ,
+                iw,
+                resid.d1[I_W_M1],
+                resid.d1[I_W_00],
+                resid.d1[I_W_P1],
+            );
+        }
+        if let Some(ihp) = layout.i_hp {
+            self.add_stencil_partials(
+                k,
+                i_equ,
+                ihp,
+                resid.d1[I_HP_M1],
+                resid.d1[I_HP_00],
+                resid.d1[I_HP_P1],
+            );
+        }
     }
 }
 
@@ -179,6 +199,15 @@ pub fn compute_x_scale(model: &StarModel, include_chem: bool) -> Vec<f64> {
                 model.ln_r_start[k].exp().max(1.0) / model.dt.max(1.0e-30);
             x_scale[base + iv] =
                 r_over_dt.min(model.csound[k].max(1.0)).max(1.0e-30);
+        }
+        if let Some(iw) = layout.i_w {
+            let w_s =
+                model.aux.rsp.w_start.get(k).copied().unwrap_or(0.0).abs();
+            x_scale[base + iw] = w_s.max(1.0e3);
+        }
+        if let Some(ihp) = layout.i_hp {
+            let hp = model.aux.rsp.hp_face.get(k).copied().unwrap_or(1.0).abs();
+            x_scale[base + ihp] = hp.max(1.0);
         }
         if include_chem {
             for j in 0..model.species {
@@ -254,7 +283,9 @@ pub fn do_surf_bc_eqns(model: &StarModel, sys: &mut HenyeySystem) {
         / (2.0 * FOUR_PI))
         / r_0.pow4();
 
-    if !model.controls.use_momentum_outer_bc {
+    let use_surf_momentum_bc = model.controls.use_momentum_outer_bc
+        || model.controls.use_zero_pgas_outer_bc;
+    if !use_surf_momentum_bc {
         let p_surf = model.ln_peos_surf_ad.exp();
         let ln_p_bc = (p_surf + dp_0).max(StarAdOrder1::constant(1.0e-30)).ln();
         let ln_peos_0 = model.ln_peos_ad[0];
@@ -267,11 +298,18 @@ pub fn do_surf_bc_eqns(model: &StarModel, sys: &mut HenyeySystem) {
         sys.save_eqn_residual(&model.layout, 0, model.layout.i_dv_dt, &resid_p);
     }
 
-    if !model.controls.use_rsp_l_eqn_outer_bc {
+    let skip_surf_t_bc = model.controls.use_rsp_l_eqn_outer_bc
+        || (model.controls.rsp2_flag
+            && model.controls.rsp2.use_l_eqn_at_surface);
+    if !skip_surf_t_bc {
         let lnt_0 = StarAdOrder1::variable(model.ln_t[0], I_LNT_00);
         let t_0 = lnt_0.exp();
         let peos_0 = model.ln_peos_ad[0].exp();
-        let dt_0 = dp_0 * model.gradt_ad[0] * (t_0 / peos_0);
+        let dt_0 = if model.controls.rsp2_flag {
+            StarAdOrder1::ZERO
+        } else {
+            dp_0 * model.gradt_ad[0] * (t_0 / peos_0)
+        };
         let t_surf = model.ln_t_surf_ad.exp();
         let ln_t_bc = (t_surf + dt_0).max(StarAdOrder1::constant(1.0)).ln();
         let denom_t = if lnt_0.val > 1.0 {
@@ -424,12 +462,17 @@ pub fn eval_henyey_equations(
     for k in 0..nz {
         do1_density_eqn(model, k, &mut sys)?;
         do1_momentum_eqn(model, k, &mut sys);
-        do1_temperature_eqn(model, k, &mut sys);
+        if !model.controls.rsp2_flag {
+            do1_temperature_eqn(model, k, &mut sys);
+        }
         do1_energy_eqn(model, k, include_chem, &mut sys);
         do1_radius_eqn(model, k, &mut sys);
         if include_chem {
             do1_chem_eqns(model, k, &mut sys);
         }
+    }
+    if model.controls.rsp2_flag {
+        crate::rsp2_ad::eval_and_save_rsp2_eqns(model, &mut sys);
     }
     Ok(sys)
 }

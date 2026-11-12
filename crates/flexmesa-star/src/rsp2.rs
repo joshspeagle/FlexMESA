@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 //! Time-dependent Radial Stellar Pulsation (`RSP2`) turbulent convection
-//! equations and stationary pre-solver (`star/private/hydro_rsp2.f90` and
-//! `star/private/rsp2_solve.f90`, resolving Issue #5).
+//! kernels and stationary quadratic pre-solver (`star/private/hydro_rsp2.f90`
+//! and `star/private/rsp2_solve.f90`, resolving Issue #5).
 //!
 //! # Physical Formulation
 //! Implements the Kuhfuss (1986) and Smolec & Moskalik (2008) 1-equation
@@ -15,21 +15,23 @@
 //!   \frac{P_{\mathrm{trb},k}}{\rho_k}
 //!   \frac{\mathrm{d}\ln\rho_k}{\mathrm{d}t},$$
 //! where $P_{\mathrm{trb},k} = \frac{2}{3}\alpha_p \rho_k w_k^2$ is the
-//! turbulent pressure, $S_k$ is buoyant convective driving, $D_k \propto w_k^3
-//! / H_p$ is the Kolmogorov cascade sink, $D_{r,k} \propto w_k^2 / H_p^2$ is
-//! radiative cooling of eddies, and $E_{q,\mathrm{cell},k}$ is eddy-viscous
-//! shear heating.
+//! turbulent pressure, $S_k$ is buoyant convective driving,
+//! $D_k = (\alpha_d x_{\mathrm{cede}} / \alpha)(w_k^3 - w_{\min}^3) / H_{p,k}$
+//! is the Kolmogorov cascade sink,
+//! $D_{r,k} = 4\sigma_{\mathrm{SB}}(x_{\gamma_r}\gamma_r/\alpha)^2
+//! T_k^3 w_k^2 / (\rho_k^2 C_{P,k} \kappa_k H_{p,k}^2)$ is radiative cooling of
+//! eddies, and $E_{q,\mathrm{cell},k} = 4\pi \mathrm{X}_k \Delta(u/r)_k /
+//! \Delta m_k$ is eddy-viscous shear heating.
 
 use flexmesa_const::{
-    CLIGHT, CRAD, FOUR_THIRDS, FOUR_THIRDS_PI, PI4, SQRT_2_DIV_3, TWO_THIRDS,
+    BOLTZ_SIGMA, CLIGHT, CRAD, PI, PI4, SQRT_2_DIV_3, TWO_THIRDS,
 };
 
 /// Geometric constant $x_{\alpha_p} = \frac{2}{3}$ for isotropic turbulent
-/// pressure.
+/// pressure (`hydro_rsp2.f90`).
 pub const X_ALFAP: f64 = TWO_THIRDS;
 
-/// Kuhfuss (1986) buoyant source & convective flux prefactor
-/// $x_{\alpha_s} = x_{\alpha_c} = \frac{1}{2}\sqrt{2/3}$.
+/// Kuhfuss (1986) buoyant source prefactor $x_{\alpha_s} = \frac{1}{2}\sqrt{2/3}$.
 pub const X_ALFAS: f64 = 0.5 * SQRT_2_DIV_3;
 
 /// Kuhfuss (1986) convective enthalpy flux prefactor
@@ -44,7 +46,7 @@ pub const X_CEDE: f64 = (8.0 / 3.0) * SQRT_2_DIV_3;
 pub const X_GAMMAR: f64 = 3.464_101_615_137_754_4;
 
 /// Dimensionless `RSP2` turbulent convection control parameters
-/// (`star/defaults/controls.defaults`).
+/// (`star/defaults/controls_dev.defaults`).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Rsp2Config {
     /// Mixing-length scale parameter $\alpha$ ($\Lambda = \alpha H_p$).
@@ -61,11 +63,12 @@ pub struct Rsp2Config {
     pub alfam: f64,
     /// Non-local turbulent kinetic flux multiplier $\alpha_t$.
     pub alfat: f64,
-    /// Radiative eddy-cooling multiplier $\gamma_r$.
+    /// Radiative eddy-cooling multiplier $\gamma_r$ (`RSP2_alfar`).
     pub gammar: f64,
-    /// Smooth turn-on threshold $w_{\min}^2$ ($\mathrm{cm^2\,s^{-2}}$) for
-    /// eddy viscosity (`RSP2_min_w2_for_turbulence`).
+    /// Optional low-$w^2$ floor (`0.0` in upstream `compute_Chi_cell`).
     pub min_w2_for_turbulence: f64,
+    /// Minimum turbulent velocity threshold $w_{\min}$ for Kolmogorov damping (`RSP2_w_min_for_damping`).
+    pub w_min_for_damping: f64,
 }
 
 impl Default for Rsp2Config {
@@ -79,7 +82,8 @@ impl Default for Rsp2Config {
             alfam: 0.25,
             alfat: 0.01,
             gammar: 1.0,
-            min_w2_for_turbulence: 1.0e-4,
+            min_w2_for_turbulence: 0.0,
+            w_min_for_damping: 0.0,
         }
     }
 }
@@ -87,45 +91,37 @@ impl Default for Rsp2Config {
 /// Cell-centered `RSP2` turbulent pressure, eddy viscosity, sources, and sinks.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Rsp2ZoneResult {
-    /// Turbulent pressure
-    /// $P_{\mathrm{trb},k} = \frac{2}{3}\alpha_p \rho_k w_k^2$
+    /// Turbulent pressure $P_{\mathrm{trb},k} = \frac{2}{3}\alpha_p \rho_k w_k^2$
     /// ($\mathrm{dyn\,cm^{-2}}$).
     pub p_turb: f64,
-    /// Turbulent eddy viscosity $\mathrm{X}_{\mathrm{cell},k}$
-    /// ($\mathrm{g^2\,s^{-1}}$).
+    /// Eddy viscosity energy $\mathrm{X}_{\mathrm{cell},k}$ ($\mathrm{erg}$,
+    /// `compute_Chi_cell` in `hydro_rsp2.f90:717-757`).
     pub chi_turb: f64,
-    /// Viscous shear heating $E_{q,\mathrm{cell},k}$
-    /// ($\mathrm{erg\,g^{-1}\,s^{-1}}$).
+    /// Viscous shear heating $E_{q,\mathrm{cell},k} = 4\pi \mathrm{X}_k
+    /// \Delta(u/r)_k / \Delta m_k$ ($\mathrm{erg\,g^{-1}\,s^{-1}}$).
     pub eq_visc: f64,
     /// Buoyant convective source $S_k$ ($\mathrm{erg\,g^{-1}\,s^{-1}}$).
     pub source_s: f64,
-    /// Kolmogorov cascade dissipation sink $D_k$
-    /// ($\mathrm{erg\,g^{-1}\,s^{-1}}$).
+    /// Kolmogorov cascade dissipation sink $D_k$ ($\mathrm{erg\,g^{-1}\,s^{-1}}$).
     pub sink_d: f64,
-    /// Radiative eddy-cooling sink $D_{r,k}$
-    /// ($\mathrm{erg\,g^{-1}\,s^{-1}}$).
+    /// Radiative eddy-cooling sink $D_{r,k}$ ($\mathrm{erg\,g^{-1}\,s^{-1}}$).
     pub sink_dr: f64,
     /// Net local turbulent energy rate
     /// $S_k + E_{q,\mathrm{cell},k} - D_k - D_{r,k} + P_{\mathrm{trb},k}
-    /// (\mathrm{d}\ln\rho_k/\mathrm{d}t)/\rho_k$
-    /// ($\mathrm{erg\,g^{-1}\,s^{-1}}$).
+    /// (\mathrm{d}\ln\rho_k/\mathrm{d}t)/\rho_k$ ($\mathrm{erg\,g^{-1}\,s^{-1}}$).
     pub de_t_dt: f64,
 }
 
-/// Face-centered `RSP2` scale height, superadiabaticity, viscous stress, and
-/// radiative/convective/turbulent luminosities.
+/// Face-centered `RSP2` scale height, superadiabaticity, convective enthalpy
+/// factor $\Pi_k$, and radiative/convective/turbulent luminosities.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Rsp2FaceResult {
-    /// Face pressure scale height
-    /// $H_{p,\mathrm{face},k} = r_k^2 P_{\mathrm{face},k} /
-    /// (\rho_{\mathrm{face},k} G m_k)$ ($\mathrm{cm}$).
+    /// Face pressure scale height $H_{p,\mathrm{face},k}$ ($\mathrm{cm}$).
     pub hp_face: f64,
-    /// Face superadiabatic temperature gradient
-    /// $Y_{\mathrm{face},k} = \nabla_k - \nabla_{\mathrm{ad},k}$
-    /// (dimensionless).
+    /// Face superadiabatic gradient $Y_{\mathrm{face},k}$ (dimensionless).
     pub y_face: f64,
-    /// Face eddy-viscous momentum stress $\Pi_{\mathrm{face},k}$
-    /// ($\mathrm{g\,cm\,s^{-2}}$).
+    /// Face convective transport factor $\Pi_{\mathrm{face},k}$
+    /// ($\mathrm{erg\,g^{-1}\,K^{-1}}$, `compute_PII_face` in `hydro_rsp2.f90:546-608`).
     pub pi_face: f64,
     /// Radiative luminosity $L_{r,k}$ ($\mathrm{erg\,s^{-1}}$).
     pub l_r: f64,
@@ -135,7 +131,44 @@ pub struct Rsp2FaceResult {
     pub l_t: f64,
 }
 
-fn rsp2_rate_coeffs(
+/// Quintic $C^2$ smootherstep enthalpy flux limiter (`flux_limiter_function`
+/// in `star/private/hydro_rsp2.f90:610-642`), returning `(FL, dFL_dX)`.
+#[must_use]
+#[inline]
+pub fn rsp2_flux_limiter(x: f64) -> (f64, f64) {
+    const X0: f64 = 0.95;
+    const X1: f64 = 1.0;
+    if x < X0 {
+        (x, 1.0)
+    } else if x >= X1 {
+        (1.0, 0.0)
+    } else {
+        let s = (x - X0) / (X1 - X0);
+        let ds_dx = 1.0 / (X1 - X0);
+        let p = s * s * s * (10.0 + s * (-15.0 + 6.0 * s));
+        let dp_ds = 30.0 * s * s * (1.0 - s) * (1.0 - s);
+        let fl = x + (1.0 - x) * p;
+        let dfl_dx = 1.0 - p + (1.0 - x) * dp_ds * ds_dx;
+        (fl, dfl_dx)
+    }
+}
+
+/// Face eddy-viscous acceleration
+/// $U_{q,\mathrm{face},k} = 4\pi (\mathrm{X}_{k-1} - \mathrm{X}_k) / (r_k \overline{\Delta m}_k)$
+/// (`compute_Uq_face` in `hydro_rsp2.f90:785-817`, $\mathrm{cm\,s^{-2}}$).
+#[must_use]
+#[inline]
+pub fn compute_rsp2_uq_face(
+    chi_outer: f64,
+    chi_inner: f64,
+    r_face: f64,
+    dm_bar: f64,
+) -> f64 {
+    let denom = r_face.max(1.0e-30) * dm_bar.max(1.0e-99);
+    PI4 * (chi_outer - chi_inner) / denom
+}
+
+pub(crate) fn rsp2_rate_coeffs(
     t: f64,
     rho_s: f64,
     p: f64,
@@ -155,21 +188,21 @@ fn rsp2_rate_coeffs(
     } else {
         0.0
     };
-    let c_dr_pref = if cfg.alfa > 0.0 {
-        (X_GAMMAR * cfg.gammar / cfg.alfa).powi(2)
+    let pom = if cfg.alfa > 0.0 && cfg.gammar != 0.0 {
+        4.0 * BOLTZ_SIGMA * (X_GAMMAR * cfg.gammar / cfg.alfa).powi(2)
     } else {
         0.0
     };
-    let rad_cond = CLIGHT * CRAD * t.powi(3) * delta
-        / (rho_s * rho_s * cp.max(1.0e-30).powi(2) * kappa.max(1.0e-30));
-    let c_dr = c_dr_pref * rad_cond / (hp_s * hp_s);
+    let pom2 =
+        t.powi(3) / (rho_s * rho_s * cp.max(1.0e-30) * kappa.max(1.0e-30));
+    let c_dr = pom * pom2 / (hp_s * hp_s);
     (c_s, c_d, c_dr)
 }
 
-/// Evaluates the cell-centered `RSP2` turbulent pressure, eddy viscosity,
-/// viscous heating, buoyant source $S_k$, dissipation sink $D_k$, and radiative
-/// cooling sink $D_{r,k}$ (`compute_cell_et_source_and_sink` in
-/// `star/private/hydro_rsp2.f90`).
+/// Evaluates the cell-centered `RSP2` turbulent pressure, eddy viscosity
+/// (`compute_Chi_cell`), viscous heating (`compute_Eq_cell`), buoyant source
+/// $S_k$, dissipation sink $D_k$, and radiative cooling sink $D_{r,k}$
+/// (`star/private/hydro_rsp2.f90:717-934`).
 #[must_use]
 pub fn eval_rsp2_zone(
     w: f64,
@@ -194,6 +227,7 @@ pub fn eval_rsp2_zone(
     let w2 = w_pos * w_pos;
     let rho_s = rho.max(1.0e-99);
     let hp_s = hp_cell.max(1.0);
+    let dm_s = dm.max(1.0e-99);
 
     let p_turb = X_ALFAP * cfg.alfap * rho_s * w2;
 
@@ -203,17 +237,6 @@ pub fn eval_rsp2_zone(
         } else {
             1.0
         };
-    let vol_mid = FOUR_THIRDS_PI * 0.5 * (r_outer.powi(3) + r_inner.powi(3));
-    let chi_turb = f_eddy
-        * FOUR_THIRDS
-        * cfg.alfam
-        * hp_s
-        * rho_s
-        * rho_s
-        * w_pos
-        * vol_mid
-        * vol_mid;
-
     let u_over_r_out = if r_outer > 0.0 {
         u_outer / r_outer
     } else {
@@ -225,14 +248,16 @@ pub fn eval_rsp2_zone(
         0.0
     };
     let du_over_r = u_over_r_out - u_over_r_in;
-    let dm_s = dm.max(1.0e-99);
-    let eq_visc = (chi_turb * (du_over_r / dm_s).powi(2)).max(0.0);
+    let r6_cell = 0.5 * (r_outer.powi(6) + r_inner.powi(6));
+    let f_chi = f_eddy * (16.0 / 3.0) * PI * (cfg.alfam * cfg.alfa) / dm_s;
+    let chi_turb = f_chi * rho_s * rho_s * r6_cell * du_over_r * hp_s * w_pos;
+    let eq_visc = PI4 * chi_turb * du_over_r / dm_s;
 
     let (c_s, c_d, c_dr) = rsp2_rate_coeffs(
         t, rho_s, p, cp, grad_ad, delta, kappa, hp_s, grad_t, cfg,
     );
     let source_s = c_s * w_pos;
-    let sink_d = c_d * w2 * w_pos;
+    let sink_d = c_d * (w2 * w_pos - cfg.w_min_for_damping.powi(3));
     let sink_dr = c_dr * w2;
 
     let pdv_turb = p_turb * dlnd_dt / rho_s;
@@ -250,10 +275,10 @@ pub fn eval_rsp2_zone(
 }
 
 /// Evaluates the face-centered `RSP2` scale height $H_{p,\mathrm{face},k}$,
-/// superadiabaticity $Y_{\mathrm{face},k}$, viscous stress
+/// superadiabaticity $Y_{\mathrm{face},k}$, convective transport factor
 /// $\Pi_{\mathrm{face},k}$, radiative luminosity $L_{r,k}$, convective
-/// luminosity $L_{c,k}$, and turbulent kinetic energy flux $L_{t,k}$
-/// (`do1_face` and `do1_Lr_Lc_Lt` in `star/private/hydro_rsp2.f90`).
+/// luminosity $L_{c,k}$, and turbulent kinetic energy luminosity $L_{t,k}$
+/// (`star/private/hydro_rsp2.f90:230-285, 436-608, 1015-1172`).
 #[must_use]
 pub fn eval_rsp2_face(
     r_face: f64,
@@ -276,6 +301,7 @@ pub fn eval_rsp2_face(
     dm_bar: f64,
     cfg: &Rsp2Config,
 ) -> Rsp2FaceResult {
+    let _ = (chi_face, du_over_r_face);
     let r2 = (r_face * r_face).max(1.0e-30);
     let area = PI4 * r2;
     let rho_s = rho_face.max(1.0e-99);
@@ -293,18 +319,18 @@ pub fn eval_rsp2_face(
     };
     let y_face = grad_face - grad_ad_face;
 
-    let pi_face = chi_face * du_over_r_face / dm_s;
+    let pi_face = X_ALFAS * cfg.alfa * cp_face * y_face;
     let l_r = -(area * area)
         * (CLIGHT * CRAD / (3.0 * kappa_face.max(1.0e-30)))
         * dt4_dm;
 
     let w_face = 0.5 * (w_inner.max(0.0) + w_outer.max(0.0));
     let l_c = area
-        * rho_s
-        * t_face
-        * cp_face
-        * w_face
-        * (X_ALFAS * cfg.alfa * cfg.alfac * y_face);
+        * (X_ALFAC / X_ALFAS)
+        * cfg.alfac
+        * (t_face * rho_s)
+        * pi_face
+        * w_face;
 
     let dw2_dm = (w_outer * w_outer - w_inner * w_inner) / dm_s;
     let l_t = -(area * area)
@@ -325,13 +351,8 @@ pub fn eval_rsp2_face(
 
 /// Solves the stationary local `RSP2` turbulent balance
 /// $S(w) - D(w) - D_r(w) = 0$ for the equilibrium turbulent velocity $w$
-/// ($\mathrm{cm\,s^{-1}}$), matching the quadratic pre-solver in
-/// `star/private/rsp2_solve.f90`.
-///
-/// For $w > 0$ in a superadiabatic zone ($Y_{\mathrm{super}} = \nabla -
-/// \nabla_{\mathrm{ad}} > 0$), dividing $c_S w - c_{Dr} w^2 - c_D w^3 = 0$ by
-/// $w$ yields the exact positive root:
-/// $$w = \frac{-c_{Dr} + \sqrt{c_{Dr}^2 + 4 c_D c_S}}{2 c_D}.$$
+/// ($\mathrm{cm\,s^{-1}}$), matching `RSP2_adjust_vars_before_call_solver` in
+/// `star/private/hydro_rsp2.f90:1195-1253`.
 #[must_use]
 pub fn solve_stationary_rsp2_w(
     t: f64,

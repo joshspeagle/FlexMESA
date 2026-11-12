@@ -61,6 +61,10 @@ pub struct HydroAuxState {
     pub etrb: Vec<f64>,
     /// Start-of-step turbulent specific kinetic energy $e_{\mathrm{trb,start},k}$ (`etrb_start`).
     pub etrb_start: Vec<f64>,
+    /// Previous-step `RSP2` turbulent energy $e_{t,\mathrm{old},k}$ for step retry (`et_rsp_old`).
+    pub et_rsp_old: Vec<f64>,
+    /// Previous-step `RSP2` pressure scale height $H_{P,\mathrm{old},k}$ for step retry (`hp_face_old`).
+    pub hp_face_old: Vec<f64>,
     /// Start-of-step face convective velocity $v_{c,\mathrm{old},k}$ in $\mathrm{cm\,s^{-1}}$ (`mlt_vc_old`).
     pub mlt_vc_old: Vec<f64>,
     /// Rayleigh-Taylor instability Lagrangian diffusion coefficient $\sigma_{\mathrm{RTI},k}$ (`sig_RTI`).
@@ -124,6 +128,8 @@ impl HydroAuxState {
             eq_ad: vec![StarAdOrder1::ZERO; nz],
             etrb: vec![0.0; nz],
             etrb_start: vec![0.0; nz],
+            et_rsp_old: vec![0.0; nz],
+            hp_face_old: vec![0.0; nz],
             mlt_vc_old: vec![0.0; nz],
             sig_rti: vec![0.0; nz],
             source_plus_alpha_rti: vec![0.0; nz],
@@ -163,6 +169,8 @@ impl HydroAuxState {
             &mut self.irradiation_heat,
             &mut self.etrb,
             &mut self.etrb_start,
+            &mut self.et_rsp_old,
+            &mut self.hp_face_old,
             &mut self.mlt_vc_old,
             &mut self.sig_rti,
             &mut self.source_plus_alpha_rti,

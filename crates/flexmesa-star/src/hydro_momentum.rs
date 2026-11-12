@@ -205,6 +205,13 @@ pub fn expected_non_hse_term(
         non_hse = non_hse - (area / dm_face.max(1.0e-30)) * (pvsc_m1 - pvsc_00);
     }
 
+    if k > 0 && model.controls.rsp2_flag && model.controls.rsp2.alfap != 0.0 {
+        let ptrb_00 = crate::rsp2_ad::eval_rsp2_ptrb_cell_ad(model, k, false);
+        let ptrb_m1 =
+            crate::rsp2_ad::eval_rsp2_ptrb_cell_ad(model, k - 1, true);
+        non_hse = non_hse - (area / dm_face.max(1.0e-30)) * (ptrb_m1 - ptrb_00);
+    }
+
     if k > 0 && model.controls.mlt_pturb_factor > 0.0 {
         let fac = (1.0 / 3.0) * model.controls.mlt_pturb_factor;
         let vc_00 = model.aux.mlt_vc_old.get(k).copied().unwrap_or(0.0);
@@ -230,7 +237,9 @@ pub fn expected_non_hse_term(
 /// Hydrostatic / hydrodynamic momentum equation at face `k` (`do1_momentum_eqn`
 /// in `star/private/hydro_momentum.f90:79-436`).
 pub fn do1_momentum_eqn(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
-    if k == 0 && !model.controls.use_momentum_outer_bc {
+    let use_surf_momentum_bc = model.controls.use_momentum_outer_bc
+        || model.controls.use_zero_pgas_outer_bc;
+    if k == 0 && !use_surf_momentum_bc {
         return;
     }
     let lnr_k = StarAdOrder1::variable(model.ln_r[k], I_LNR_00);
@@ -256,8 +265,16 @@ pub fn do1_momentum_eqn(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
     let i_equ = model.layout.i_dv_dt;
     if k == 0 {
         let (p_0, _p_theta) = eval_cell_peos_time_centered_ad(model, 0, false);
+        let mut p_tot_0 = p_0;
+        if model.controls.use_pvsc_art_visc && model.controls.v_flag {
+            p_tot_0 = p_tot_0 + eval_pvsc_cell_ad(model, 0);
+        }
+        if model.controls.rsp2_flag && model.controls.rsp2.alfap != 0.0 {
+            p_tot_0 = p_tot_0
+                + crate::rsp2_ad::eval_rsp2_ptrb_cell_ad(model, 0, false);
+        }
         let p_surf = model.ln_peos_surf_ad.exp();
-        let resid = (dp_expected - (p_surf - p_0)) / p_0;
+        let resid = (dp_expected - (p_surf - p_tot_0)) / p_0;
         sys.save_eqn_residual(&model.layout, 0, i_equ, &resid);
     } else {
         let (p_00, p_theta_00) =

@@ -320,8 +320,15 @@ impl InlistBundle {
             include_composition_in_eps_grav, use_gravity_rotation_correction,
             use_mass_corrections, use_gradt_actual_vs_gradt_mlt_for_t_gradient_eqn,
             use_dprad_dm_form_of_t_gradient_eqn, use_flux_limiting_with_dprad_dm_form,
-            use_rsp_l_eqn_outer_bc, do_burn, do_mix,
+            use_rsp_l_eqn_outer_bc, use_momentum_outer_bc, use_zero_pgas_outer_bc,
+            do_burn, do_mix,
         ]);
+        if let Some(v) = ctrl.get_f64("pvsc_zsh") {
+            c.pvsc_zshock = v;
+        }
+        if ctrl.get_i64("steps_before_use_velocity_time_centering") == Some(0) {
+            c.using_velocity_time_centering = true;
+        }
         ctrl.bool_into(&mut self.job.use_other_build_initial_model, "use_other_build_initial_model");
         c.accretion_species_id = ctrl.get_indexed_strings("accretion_species_id");
         c.accretion_species_xa = ctrl.get_indexed_f64s("accretion_species_xa");

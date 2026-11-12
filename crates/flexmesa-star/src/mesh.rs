@@ -274,7 +274,7 @@ impl StarModel {
         }
     }
 
-    /// Packs `(lnd, ln_t, ln_r, lum, [v | u])` into `xh` (`pack_xh`).
+    /// Packs `(lnd, ln_t, ln_r, lum, [v | u], [w, hp])` into `xh` (`pack_xh`).
     pub fn pack_xh(&mut self) {
         let nvar = self.layout.nvar_hydro;
         self.xh.resize(self.nz * nvar, 0.0);
@@ -290,12 +290,19 @@ impl StarModel {
             if let Some(iu) = self.layout.i_u {
                 self.xh[base + iu] = self.u[k];
             }
+            if let Some(iw) = self.layout.i_w {
+                self.xh[base + iw] = self.aux.rsp.et_rsp[k].max(0.0).sqrt();
+            }
+            if let Some(ihp) = self.layout.i_hp {
+                self.xh[base + ihp] = self.aux.rsp.hp_face[k].max(1.0);
+            }
         }
     }
 
-    /// Unpacks `xh` into `(lnd, ln_t, ln_r, lum, [v | u])` (`unpack_xh`).
+    /// Unpacks `xh` into `(lnd, ln_t, ln_r, lum, [v | u], [w, hp])` (`unpack_xh`).
     pub fn unpack_xh(&mut self) {
         let nvar = self.layout.nvar_hydro;
+        let w_fix = self.controls.rsp2.w_fix_if_neg;
         for k in 0..self.nz {
             let base = k * nvar;
             self.lnd[k] = self.xh[base + self.layout.i_lnd];
@@ -308,11 +315,37 @@ impl StarModel {
             if let Some(iu) = self.layout.i_u {
                 self.u[k] = self.xh[base + iu];
             }
+            if let Some(iw) = self.layout.i_w {
+                let mut w = self.xh[base + iw];
+                if !w.is_finite() || w < 0.0 {
+                    w = w_fix.max(0.0);
+                    self.xh[base + iw] = w;
+                }
+                let et = w * w;
+                self.aux.rsp.et_rsp[k] = et;
+                self.aux.etrb[k] = et;
+            }
+            if let Some(ihp) = self.layout.i_hp {
+                let hp = self.xh[base + ihp].max(1.0);
+                self.xh[base + ihp] = hp;
+                self.aux.rsp.hp_face[k] = hp;
+            }
         }
     }
 
     /// Snapshots current state into `*_start` arrays at the beginning of a step.
     pub fn save_start_values(&mut self) {
+        if self.controls.rsp2_flag {
+            let alfap = crate::rsp2::X_ALFAP * self.controls.rsp2.alfap;
+            for k in 0..self.nz {
+                let et = self.aux.rsp.et_rsp[k].max(0.0);
+                self.aux.etrb[k] = et;
+                self.aux.rsp.w_start[k] = et.sqrt();
+                self.aux.rsp.ptrb_start[k] = alfap * self.rho[k] * et;
+            }
+            self.aux.rsp.lt_start.clone_from(&self.aux.rsp.lt_rsp);
+            self.aux.rsp.csound_start_rsp.clone_from(&self.csound);
+        }
         self.pack_xh();
         self.mstar_start = self.mstar;
         self.lnd_start.clone_from(&self.lnd);
@@ -351,8 +384,11 @@ impl StarModel {
         self.ln_t_old.clone_from(&self.ln_t);
         self.ln_r_old.clone_from(&self.ln_r);
         self.lum_old.clone_from(&self.lum);
+        self.v_old.clone_from(&self.v);
         self.xa_old.clone_from(&self.xa);
         self.dq_old.clone_from(&self.dq);
+        self.aux.et_rsp_old.clone_from(&self.aux.rsp.et_rsp);
+        self.aux.hp_face_old.clone_from(&self.aux.rsp.hp_face);
     }
 
     /// Updates `ln_peos_ad`, `ln_e_ad`, and `ln_s_ad` from EOS values and partials.
@@ -415,6 +451,7 @@ impl StarModel {
             &mut self.ln_t_old,
             &mut self.ln_r_old,
             &mut self.lum_old,
+            &mut self.v_old,
             &mut self.dq_old,
             &mut self.dq,
             &mut self.q,

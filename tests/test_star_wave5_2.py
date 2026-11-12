@@ -10,7 +10,7 @@ import pathlib
 
 import jax
 import jax.numpy as jnp
-import jax.test_util as jtu
+import jax.test_util
 import numpy as np
 
 from flexmesa import _rust, star
@@ -108,7 +108,7 @@ def test_hllc_riemann_face_and_surface_match_jax_and_preserve_hydrostatic() -> (
     assert f_shock_r[4] > 0.0
 
     # Central finite-difference verification of `eval_hllc_face_jax`
-    jtu.check_grads(
+    jax.test_util.check_grads(
         lambda pl, pr: star.eval_hllc_face_jax(
             pl,
             jnp.asarray(12.0),
@@ -244,51 +244,17 @@ def test_rsp2_zone_face_and_stationary_solver_match_jax_and_autodiff() -> None:
     assert abs(z_r[6]) / max(abs(z_r[3]), abs(z_r[4]), 1.0) <= 1.0e-13
 
     # Face evaluation parity
-    f_r = _rust.star_eval_rsp2_face(
-        5.0e10,
-        1.0e33,
-        6.67430e-8,
-        1.0e8,
-        1.0e-5,
-        1.0e5,
-        3.0e8,
-        0.40,
-        2.0,
-        w_eq_r,
-        0.8 * w_eq_r,
-        (1.05e5) ** 4,
-        (0.95e5) ** 4,
-        18.5,
-        18.3,
-        z_r[1],
-        -1.0e-5,
-        1.0e28,
-    )
-    f_j = star.eval_rsp2_face_jax(
-        jnp.asarray(5.0e10),
-        jnp.asarray(1.0e33),
-        jnp.asarray(6.67430e-8),
-        jnp.asarray(1.0e8),
-        jnp.asarray(1.0e-5),
-        jnp.asarray(1.0e5),
-        jnp.asarray(3.0e8),
-        jnp.asarray(0.40),
-        jnp.asarray(2.0),
-        jnp.asarray(w_eq_r),
-        jnp.asarray(0.8 * w_eq_r),
-        jnp.asarray((1.05e5) ** 4),
-        jnp.asarray((0.95e5) ** 4),
-        jnp.asarray(18.5),
-        jnp.asarray(18.3),
-        jnp.asarray(z_r[1]),
-        jnp.asarray(-1.0e-5),
-        jnp.asarray(1.0e28),
-    )
+    face_args = (5.0e10, 1.0e33, 6.67430e-8, 1.0e8, 1.0e-5, 1.0e5, 3.0e8, 0.40)
+    face_args2 = (2.0, w_eq_r, 0.8 * w_eq_r, (1.05e5) ** 4, (0.95e5) ** 4)
+    face_args3 = (18.5, 18.3, z_r[1], -1.0e-5, 1.0e28)
+    all_face = (*face_args, *face_args2, *face_args3)
+    f_r = _rust.star_eval_rsp2_face(*all_face)
+    f_j = star.eval_rsp2_face_jax(*(jnp.asarray(v) for v in all_face))
     for r_val, j_val in zip(f_r, f_j, strict=True):
         np.testing.assert_allclose(r_val, float(j_val), rtol=1.0e-13)
 
     # Central finite-difference verification of `solve_stationary_rsp2_w_jax`
-    jtu.check_grads(
+    jax.test_util.check_grads(
         lambda gt_in: star.solve_stationary_rsp2_w_jax(
             jnp.asarray(t),
             jnp.asarray(rho),
@@ -323,6 +289,141 @@ def test_rsp2_zone_face_and_stationary_solver_match_jax_and_autodiff() -> None:
     )(jnp.asarray(0.25))
     assert jnp.isfinite(grad_sub)
     assert float(grad_sub) == 0.0
+
+    # Verify `jax_rsp` flux limiter C^2 smoothness, Uq_face, turbulent residual,
+    # and Stellingwerf / Richtmyer-Morton HYD fluxes + autodiff
+    x_pts = jnp.array([0.80, 0.95, 0.975, 1.0, 1.2], dtype=jnp.float64)
+    fl_j, dfl_j = star.rsp2_flux_limiter_jax(x_pts)
+    np.testing.assert_allclose(
+        np.asarray(fl_j[:2]), np.array([0.80, 0.95]), rtol=1.0e-15
+    )
+    np.testing.assert_allclose(
+        np.asarray(fl_j[3:]), np.array([1.0, 1.0]), rtol=1.0e-15
+    )
+    np.testing.assert_allclose(
+        np.asarray(dfl_j[:2]), np.array([1.0, 1.0]), rtol=1.0e-15
+    )
+    np.testing.assert_allclose(
+        np.asarray(dfl_j[3:]), np.array([0.0, 0.0]), atol=1.0e-15
+    )
+    np.testing.assert_allclose(
+        float(
+            jax.grad(lambda x_in: star.rsp2_flux_limiter_jax(x_in)[0])(0.975)
+        ),
+        float(dfl_j[2]),
+        rtol=1.0e-15,
+    )
+    jax.test_util.check_grads(
+        lambda x_in: star.rsp2_flux_limiter_jax(x_in)[0],
+        (jnp.asarray(0.975, dtype=jnp.float64),),
+        order=1,
+        eps=1.0e-7,
+        rtol=1.0e-8,
+    )
+
+    uq_j = float(
+        star.compute_rsp2_uq_face_jax(
+            jnp.asarray(1.2e40),
+            jnp.asarray(1.0e40),
+            jnp.asarray(3.0e12),
+            jnp.asarray(2.0e28),
+        )
+    )
+    np.testing.assert_allclose(
+        uq_j, 4.0 * np.pi * 0.2e40 / (3.0e12 * 2.0e28), rtol=1.0e-15
+    )
+
+    res_et = star.eval_rsp2_turbulent_eqn_residual_jax(
+        jnp.asarray(w_eq_r),
+        jnp.asarray(w_eq_r),
+        jnp.asarray(rho),
+        jnp.asarray(rho),
+        jnp.asarray(z_r[0]),
+        jnp.asarray(0.0),
+        jnp.asarray(0.0),
+        jnp.asarray(z_r[3] - z_r[4] - z_r[5]),
+        jnp.asarray(z_r[2]),
+        jnp.asarray(1.0e28),
+        jnp.asarray(1.0),
+        jnp.asarray(cp),
+        jnp.asarray(t),
+    )
+    assert abs(float(res_et)) <= 1.0e-12
+    res_et_pert = star.eval_rsp2_turbulent_eqn_residual_jax(
+        jnp.asarray(1.1 * w_eq_r),
+        jnp.asarray(w_eq_r),
+        jnp.asarray(rho),
+        jnp.asarray(rho),
+        jnp.asarray(z_r[0]),
+        jnp.asarray(0.0),
+        jnp.asarray(0.0),
+        jnp.asarray(z_r[3] - z_r[4] - z_r[5]),
+        jnp.asarray(z_r[2]),
+        jnp.asarray(1.0e28),
+        jnp.asarray(1.0),
+        jnp.asarray(cp),
+        jnp.asarray(t),
+    )
+    np.testing.assert_allclose(
+        float(res_et_pert),
+        ((1.21 - 1.0) * (w_eq_r**2) - (z_r[3] - z_r[4] - z_r[5] + z_r[2]))
+        / (cp * t),
+        rtol=1.0e-14,
+    )
+
+    def _rsp2_grad_pytree(
+        scale: jax.Array,
+    ) -> tuple[
+        tuple[jax.Array, ...],
+        tuple[jax.Array, ...],
+        jax.Array,
+    ]:
+        w_in = scale * (1.1 * w_eq_r)
+        z_tail = (t, rho, p, cp, grad_ad, delta, kappa, hp_cell, grad_t)
+        z_geom = (5.05e10, 5.00e10, -2.0e5, -1.5e5, 1.0e28, 0.0)
+        z_out = star.eval_rsp2_zone_jax(w_in, *z_tail, *z_geom)
+        f_head = (5.0e10, 1.0e33, 6.67430e-8, p, rho, t, cp, grad_ad, kappa)
+        f_tail = ((1.05e5) ** 4, (0.95e5) ** 4, 18.5, 18.3, z_r[1], -1e-5, 1e28)
+        f_out = star.eval_rsp2_face_jax(*f_head, w_in, 0.8 * w_in, *f_tail)
+        et_args = (w_eq_r, rho, 0.97 * rho, z_r[0], 1.0e34, 0.8e34)
+        et_args2 = (z_r[3] - z_r[4] - z_r[5], z_r[2], 1.0e28, 1.0, cp, t)
+        et_out = star.eval_rsp2_turbulent_eqn_residual_jax(
+            w_in, *et_args, *et_args2
+        )
+        return z_out, f_out, et_out
+
+    jax.test_util.check_grads(
+        _rsp2_grad_pytree,
+        (jnp.asarray(1.0, dtype=jnp.float64),),
+        order=1,
+        eps=1.0e-6,
+        rtol=1.0e-6,
+    )
+    jax.test_util.check_grads(
+        lambda lt_in: sum(
+            star.eval_rsp_hyd_fluxes_jax(
+                jnp.asarray(3.0e12),
+                0.98 * (10.0**lt_in),
+                10.0**lt_in,
+                jnp.asarray(1.5),
+                jnp.asarray(1.8),
+                jnp.asarray(rho),
+                0.99 * (10.0**lt_in),
+                jnp.asarray(f_r[2]),
+                jnp.asarray(0.8 * w_eq_r),
+                jnp.asarray(w_eq_r),
+                jnp.asarray(hp_cell),
+                jnp.asarray(1.0e28),
+                jnp.asarray(5.0e5),
+                jnp.asarray(2.0e6),
+                jnp.asarray(rho),
+            )
+        ),
+        (jnp.asarray(5.0, dtype=jnp.float64),),
+        order=1,
+        eps=1.0e-6,
+        rtol=1.0e-6,
+    )
 
 
 def test_star_model_riemann_profile_and_pulse_exporters() -> None:
@@ -425,7 +526,7 @@ def test_gyre_adipls_bvp_and_stella_golden_parity() -> None:
         hyd_str, abn_str, eta_str, [float(d) for d in range(1, 31)]
     )
     assert len(lbol) == 30
-    assert len(vel) > 0
+    assert vel
 
     model = star.StarModel.from_zams()
     hyd_out, abn_out = model.to_stella_pair()
@@ -440,7 +541,7 @@ def test_gyre_adipls_bvp_and_stella_golden_parity() -> None:
         10.0**log_rho_j, xfe_j, eta_j, 10.0 * 86400.0
     )
     assert jnp.all(tau_j > 0.0)
-    jtu.check_grads(
+    jax.test_util.check_grads(
         lambda lr_in: jnp.sum(
             star.eval_sobolev_feii_5169_tau_jax(
                 10.0**lr_in, xfe_j, eta_j, 10.0 * 86400.0

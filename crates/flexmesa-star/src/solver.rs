@@ -68,10 +68,58 @@ pub fn compute_correction_norms(
     for k in 0..nz {
         let base = k * nvar;
         for j in 0..nvar {
-            if j == layout.i_lum {
+            if j == layout.i_lum || Some(j) == layout.i_hp {
                 continue;
             }
             let a = dx_scaled[base + j].abs();
+            sum_abs += a;
+            count += 1;
+            if a > max_abs || a.is_nan() {
+                max_abs = a;
+            }
+        }
+    }
+    if count == 0 {
+        (0.0, 0.0)
+    } else {
+        (sum_abs / (count as f64), max_abs)
+    }
+}
+
+fn compute_model_correction_norms(
+    model: &StarModel,
+    nz: usize,
+    nvar: usize,
+    dx_scaled: &[f64],
+    x_scale: &[f64],
+) -> (f64, f64) {
+    let layout = &model.layout;
+    if layout.i_w.is_none() {
+        return compute_correction_norms(layout, nz, nvar, dx_scaled);
+    }
+    if nz == 0 || nvar == 0 || dx_scaled.is_empty() {
+        return (0.0, 0.0);
+    }
+    let mut sum_abs = 0.0;
+    let mut max_abs = 0.0_f64;
+    let mut count = 0_usize;
+    for k in 0..nz {
+        let base = k * nvar;
+        for j in 0..nvar {
+            if j == layout.i_lum || Some(j) == layout.i_hp {
+                continue;
+            }
+            let a = if Some(j) == layout.i_w {
+                let w_k = model.aux.rsp.et_rsp[k].max(0.0).sqrt();
+                if w_k < 1.0 {
+                    0.0
+                } else {
+                    (dx_scaled[base + j] * x_scale[base + j]).abs()
+                        / (1.0e3 + w_k)
+                }
+            } else {
+                dx_scaled[base + j].abs()
+            };
             sum_abs += a;
             count += 1;
             if a > max_abs || a.is_nan() {
@@ -117,6 +165,13 @@ pub fn compute_corr_coeff(
             let dval = (dx_scaled[base + ivar] * x_scale[base + ivar]).abs();
             if dval > max_dln {
                 coeff = coeff.min(max_dln / dval);
+            }
+        }
+        if let Some(ihp) = layout.i_hp {
+            let hp_old = model.aux.rsp.hp_face[k];
+            let dhp = dx_scaled[base + ihp] * x_scale[base + ihp];
+            if hp_old > 1.0 && hp_old + dhp < 0.1 * hp_old {
+                coeff = coeff.min(-0.9 * hp_old / dhp);
             }
         }
         if nvar > layout.nvar_hydro {
@@ -263,11 +318,12 @@ pub fn solve_henyey_step(
     for iter in 1..=max_iters {
         iter_used = iter;
         let dx_scaled = solve_linear_henyey_system(&sys, use_bcyclic)?;
-        (correction_norm, max_correction) = compute_correction_norms(
-            &model.layout,
+        (correction_norm, max_correction) = compute_model_correction_norms(
+            model,
             sys.nz,
             sys.nvar,
             &dx_scaled,
+            &sys.x_scale,
         );
 
         let base_coeff = compute_corr_coeff(

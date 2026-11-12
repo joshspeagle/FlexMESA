@@ -127,6 +127,8 @@ pub struct StarControls {
     pub column_depth_for_irradiation: f64,
     /// Whether to use momentum equation at outer boundary $k = 0$.
     pub use_momentum_outer_bc: bool,
+    /// Whether outer boundary sets $P_{\mathrm{gas}} = 0$ so $P_{\mathrm{surf}} = P_{\mathrm{rad}}(T_{\mathrm{surf}})$ (`use_zero_Pgas_outer_BC`).
+    pub use_zero_pgas_outer_bc: bool,
     /// Constant mass-change rate $\dot{M}$ in $M_\odot\,\mathrm{yr}^{-1}$ (`mass_change`).
     pub mass_change: f64,
     /// Whether accreted material matches surface composition (`accrete_same_as_surface`).
@@ -449,6 +451,7 @@ impl Default for StarControls {
             irradiation_flux: 0.0,
             column_depth_for_irradiation: 0.0,
             use_momentum_outer_bc: false,
+            use_zero_pgas_outer_bc: false,
             mass_change: 0.0,
             accrete_same_as_surface: true,
             accrete_given_mass_fractions: false,

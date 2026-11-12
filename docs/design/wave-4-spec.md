@@ -34,9 +34,9 @@ Each stellar model is discretized into $\mathrm{nz}$ concentric spherical shells
 
 $$\Delta m_k = M_\star \Delta q_k, \qquad \overline{\Delta m}_k = \begin{cases} \tfrac{1}{2} \Delta m_0, & k = 0, \\ \tfrac{1}{2}(\Delta m_{k-1} + \Delta m_k), & 1 \le k < \mathrm{nz}. \end{cases}$$
 
-The primary structure variables per zone are `i_lnd` ($\ln\rho_k$, cell center), `i_lnt` ($\ln T_k$, cell center), `i_lnr` ($\ln r_k$, outer face), and `i_lum` ($L_k$, outer face), optionally followed by `i_v` ($v_k$) and $\mathrm{species}$ nuclear mass fractions $X_{j,k}$ (`basic.net`: ${}^1\mathrm{H}, {}^3\mathrm{He}, {}^4\mathrm{He}, {}^{12}\mathrm{C}, {}^{14}\mathrm{N}, {}^{16}\mathrm{O}, {}^{20}\mathrm{Ne}, {}^{24}\mathrm{Mg}$).
+The primary structure variables per zone are `i_lnd` ($\ln\rho_k$, cell center), `i_lnt` ($\ln T_k$, cell center), `i_lnr` ($\ln r_k$, outer face), and `i_lum` ($L_k$, outer face), optionally followed by `i_v` ($v_k$), `RSP2` turbulent speed and face scale height (`i_w`, `i_hp`), and $\mathrm{species}$ nuclear mass fractions $X_{j,k}$ (`basic.net`: ${}^1\mathrm{H}, {}^3\mathrm{He}, {}^4\mathrm{He}, {}^{12}\mathrm{C}, {}^{14}\mathrm{N}, {}^{16}\mathrm{O}, {}^{20}\mathrm{Ne}, {}^{24}\mathrm{Mg}$).
 
-Local face and cell equations depend on primary variables in at most three adjacent shells ($k - 1$, $k$, and $k + 1$). `StarAdOrder1` (`crates/flexmesa-star/src/star_ad.rs`) propagates an 18-component first-order tangent vector across the 3-cell stencil (`m1`, `00`, `p1` for `lnd`, `lnt`, `lnr`, `lum`, `v`, `w_div_wc`), assembling exact diagonal (`dblk`), sub-diagonal (`lblk`), and super-diagonal (`ublk`) Jacobian blocks in a single forward pass.
+Local face and cell equations depend on primary variables in at most three adjacent shells ($k - 1$, $k$, and $k + 1$). `StarAdOrder1` (`crates/flexmesa-star/src/star_ad.rs`) propagates a 24-component first-order tangent vector across the 3-cell stencil (`m1`, `00`, `p1` for `lnd`, `lnt`, `lnr`, `lum`, `v`, `w_div_wc`, `w`, `hp`), assembling exact diagonal (`dblk`), sub-diagonal (`lblk`), and super-diagonal (`ublk`) Jacobian blocks in a single forward pass.
 
 ---
 

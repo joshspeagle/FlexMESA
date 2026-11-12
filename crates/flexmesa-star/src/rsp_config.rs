@@ -366,6 +366,8 @@ pub struct Rsp2Controls {
     pub new_rsp2_flag: bool,
     /// Build `RSP2` model on startup (`false`).
     pub create_rsp2_model: bool,
+    /// Apply quintic enthalpy flux limiter to `PII` (`use_TDC_enthalpy_flux_limiter`, `false`).
+    pub use_tdc_enthalpy_flux_limiter: bool,
 }
 
 impl Default for Rsp2Controls {
@@ -403,6 +405,7 @@ impl Default for Rsp2Controls {
             change_rsp2_flag_at_model_number: -111,
             new_rsp2_flag: false,
             create_rsp2_model: false,
+            use_tdc_enthalpy_flux_limiter: false,
         }
     }
 }
@@ -548,6 +551,7 @@ pub(crate) fn populate_rsp_inlist(
         ("rsp2_use_mass_interp_face_values", &mut r2.use_mass_interp_face_values),
         ("rsp2_use_stellingwerf_lr", &mut r2.use_stellingwerf_lr),
         ("rsp2_remesh_when_load", &mut r2.remesh_when_load),
+        ("use_tdc_enthalpy_flux_limiter", &mut r2.use_tdc_enthalpy_flux_limiter),
     ] {
         if let Some(v) = ctrl.get_bool(k) { *dst = v; }
     }

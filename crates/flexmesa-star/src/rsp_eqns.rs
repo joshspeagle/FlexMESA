@@ -3,7 +3,6 @@
 //! and 21-diagonal banded Newton solver (`star/private/rsp_step.f90:60-196,
 //! 744-942, 2585-3120, 3760-3833`).
 
-use flexmesa_const::CLIGHT;
 use flexmesa_mtx::{dgbtrf, dgbtrs};
 
 use crate::controls::StarError;
@@ -47,7 +46,6 @@ const I_R_DW_OUT2: usize = I_R_DW_OUT + NV;
 const I_R_DER_00: usize = I_R_DER_IN + NV;
 const I_R_DER_OUT: usize = I_R_DER_00 + NV;
 const I_R_DER_OUT2: usize = I_R_DER_OUT + NV;
-const I_R_DFR_00: usize = 5 + NV;
 
 const I_FR_DFR_00: usize = 1 + 2 * NV;
 const I_FR_DR_IN: usize = 2 + NV;
@@ -196,9 +194,8 @@ fn acceleration_eqn(
     band.hd[ir] = [0.0; LD_HD + 1];
 
     let dt = model.dt;
-    let use_prad = true;
-    let xp_out = rsp_calc_xp(model, dc, wk, p_surf, i + 1, use_prad);
-    let xp_00 = rsp_calc_xp(model, dc, wk, p_surf, i, use_prad);
+    let xp_out = rsp_calc_xp(model, dc, wk, p_surf, i + 1, true);
+    let xp_00 = rsp_calc_xp(model, dc, wk, p_surf, i, true);
 
     let r_k = model.r[k0];
     let r_st = model.aux.rsp.r_start_rsp[k0];
@@ -280,74 +277,27 @@ fn acceleration_eqn(
     let d_uq_dr_out = uq1 * (d_chi_out_dr_out - d_chi_00_dr_out);
     let d_uq_dr_out2 = uq1 * d_chi_out_dr_out2;
 
-    let (
-        fr_term,
-        d_fr_dfr_00,
-        d_fr_dt_00,
-        d_fr_dt_out,
-        d_fr_dr_in,
-        d_fr_dr_00,
-        d_fr_dr_out,
-    ) = if use_prad {
-        (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
-    } else {
-        let (kap_f, dk_dt0, dk_dto, dk_dri, dk_dr0, dk_dro) = if k0 == 0 {
-            (
-                model.opacity[0],
-                wk.dk_dt[i],
-                0.0,
-                wk.dk_dr_in[i],
-                wk.dk_dr_00[i],
-                0.0,
-            )
-        } else {
-            (
-                0.5 * (model.opacity[k0] + model.opacity[k0 - 1]),
-                0.5 * wk.dk_dt[i],
-                0.5 * wk.dk_dt[i + 1],
-                0.5 * wk.dk_dr_in[i],
-                0.5 * (wk.dk_dr_00[i] + wk.dk_dr_in[i + 1]),
-                0.5 * wk.dk_dr_00[i + 1],
-            )
-        };
-        let fr_tw = dc.wtr * model.aux.rsp.fr_rsp[k0]
-            + dc.wtr1 * model.aux.rsp.fr_start[k0];
-        let ft = fr_tw * kap_f / CLIGHT;
-        (
-            ft,
-            dc.wtr * kap_f / CLIGHT,
-            ft * dk_dt0 / kap_f,
-            ft * dk_dto / kap_f,
-            ft * dk_dri / kap_f,
-            ft * dk_dr0 / kap_f,
-            ft * dk_dro / kap_f,
-        )
-    };
-
     let residual = (model.v[k0] - model.aux.rsp.v_start_rsp[k0]) / dt
         + area * dxp_dm
         - grav
-        - uq
-        - fr_term;
+        - uq;
     band.hr[ir] = -residual;
 
     let h = &mut band.hd[ir];
-    h[I_R_DFR_00] = -d_fr_dfr_00;
     h[I_R_DT_IN] = -d_uq_dt_in;
-    h[I_R_DT_00] = a_dm * (-xp_00.d_xp_dt_00) - d_uq_dt_00 - d_fr_dt_00;
-    h[I_R_DT_OUT] = a_dm * xp_out.d_xp_dt_00 - d_uq_dt_out - d_fr_dt_out;
+    h[I_R_DT_00] = a_dm * (-xp_00.d_xp_dt_00) - d_uq_dt_00;
+    h[I_R_DT_OUT] = a_dm * xp_out.d_xp_dt_00 - d_uq_dt_out;
     h[I_R_DT_OUT2] = -d_uq_dt_out2;
 
     h[I_R_DR_IN2] = -d_uq_dr_in2;
-    h[I_R_DR_IN] = a_dm * (-xp_00.d_xp_dr_in) - d_uq_dr_in - d_fr_dr_in;
+    h[I_R_DR_IN] = a_dm * (-xp_00.d_xp_dr_in) - d_uq_dr_in;
     h[I_R_DR_00] = dv_dr / dt
         + d_area_dr_00 * dxp_dm
         + a_dm * (xp_out.d_xp_dr_in - xp_00.d_xp_dr_00)
         + grav / r_k
         - d_uq_dr_00
-        - d_fr_dr_00
         + 0.5 * uq1 / r_00 * (chi_out - chi_00);
-    h[I_R_DR_OUT] = a_dm * xp_out.d_xp_dr_00 - d_uq_dr_out - d_fr_dr_out;
+    h[I_R_DR_OUT] = a_dm * xp_out.d_xp_dr_00 - d_uq_dr_out;
     h[I_R_DR_OUT2] = -d_uq_dr_out2;
 
     h[I_R_DER_IN] = -d_uq_der_in;

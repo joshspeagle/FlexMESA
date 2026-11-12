@@ -176,7 +176,7 @@ impl StarExtras for Tier4CaseExtras {
     fn extras_controls(&mut self, model: &mut StarModel) {
         self.step_count = 0;
         self.rsp_num_periods = 0;
-        if model.controls.rsp_flag {
+        if model.controls.rsp_flag || model.controls.rsp2_flag {
             if self.case_name == "rsp_check_2nd_crossing" {
                 self.crossing_delta_teff =
                     model.controls.x_ctrl.get(1).copied().unwrap_or(100.0);
@@ -297,9 +297,6 @@ impl StarExtras for Tier4CaseExtras {
             ));
         }
         self.step_count += 1;
-        if !model.controls.rsp_flag {
-            self.rsp_num_periods += 5;
-        }
         ExtrasDirective::KeepGoing
     }
 
@@ -333,30 +330,37 @@ impl StarExtras for Tier4CaseExtras {
     }
 
     fn extras_finish_step(&mut self, model: &mut StarModel) -> ExtrasDirective {
-        if model.controls.rsp_flag {
+        if model.controls.rsp_flag || model.controls.rsp2_flag {
             self.rsp_num_periods = model.aux.rsp.num_periods as i64;
             if model.aux.rsp.period > 0.0 {
                 self.rsp_period_days = model.aux.rsp.period / 86_400.0;
             }
-            let target_cycle =
-                model.controls.x_integer_ctrl.get(1).copied().unwrap_or(0);
+            let target_idx = if self.case_name.starts_with("dev_rsp2_") {
+                7
+            } else {
+                1
+            };
+            let target_cycle = model
+                .controls
+                .x_integer_ctrl
+                .get(target_idx)
+                .copied()
+                .unwrap_or(0);
             if target_cycle > 0 && self.rsp_num_periods >= target_cycle {
                 return ExtrasDirective::Terminate(String::from(
                     "extras_finish_step",
                 ));
             }
+            if model.controls.rsp2_flag
+                && model.controls.rsp2.max_num_periods > 0
+                && (model.aux.rsp.num_periods as isize)
+                    >= model.controls.rsp2.max_num_periods
+            {
+                return ExtrasDirective::Terminate(String::from(
+                    "rsp2_max_num_periods",
+                ));
+            }
             return ExtrasDirective::KeepGoing;
-        }
-        let target_cycle =
-            model.controls.x_integer_ctrl.get(1).copied().unwrap_or(0);
-        if (self.case_name.starts_with("rsp_")
-            || self.case_name.starts_with("dev_rsp2_"))
-            && target_cycle > 0
-            && self.rsp_num_periods >= target_cycle
-        {
-            return ExtrasDirective::Terminate(String::from(
-                "extras_finish_step",
-            ));
         }
         if self.step_count >= 2 {
             let code = if let Some(sp) = model
@@ -401,8 +405,12 @@ pub fn verify_tier4_case_assertions(
         let (_mode, matched) = eval_target_mode_frequency_and_growth(model);
         return matched;
     }
-    if case_name.starts_with("rsp_") && case_name != "rsp_check_2nd_crossing" {
-        if model.controls.rsp_flag && model.aux.total_energy != 0.0 {
+    if (case_name.starts_with("rsp_") || case_name.starts_with("dev_rsp2_"))
+        && case_name != "rsp_check_2nd_crossing"
+    {
+        if (model.controls.rsp_flag || model.controls.rsp2_flag)
+            && model.aux.total_energy != 0.0
+        {
             let rel_e = (model.aux.cumulative_energy_error
                 / model.aux.total_energy)
                 .abs();
@@ -410,21 +418,41 @@ pub fn verify_tier4_case_assertions(
                 return false;
             }
         }
-        let target_cycle =
-            model.controls.x_integer_ctrl.get(1).copied().unwrap_or(0);
-        if model.aux.rsp.num_periods > 0 && model.aux.rsp.period > 0.0 {
-            if let Some(p_tgt) =
-                model.controls.x_ctrl.get(1).copied().filter(|&p| p > 0.0)
-            {
-                let p_days = model.aux.rsp.period / 86_400.0;
-                if target_cycle > 0
-                    && (model.aux.rsp.num_periods as i64) >= target_cycle
+        let ctrl_idx = if case_name.starts_with("dev_rsp2_") {
+            7
+        } else {
+            1
+        };
+        let target_cycle = model
+            .controls
+            .x_integer_ctrl
+            .get(ctrl_idx)
+            .copied()
+            .unwrap_or(0);
+        let target_p_ctrl = model
+            .controls
+            .x_ctrl
+            .get(ctrl_idx)
+            .copied()
+            .filter(|&p| p > 0.0);
+        let rsp = &model.aux.rsp;
+        if rsp.num_periods > 0 && rsp.period > 0.0 {
+            if let Some(p_tgt) = target_p_ctrl {
+                let p_days = rsp.period / 86_400.0;
+                if target_cycle > 0 && (rsp.num_periods as i64) >= target_cycle
                 {
                     return (p_days - p_tgt).abs() <= 1.0e-2;
                 }
                 return (p_days - p_tgt).abs() / p_tgt <= 0.15;
             }
             return true;
+        }
+        if model.controls.rsp2_flag {
+            return model.layout.nvar_hydro == 7
+                && rsp.hp_face.len() == model.nz
+                && rsp.hp_face.iter().all(|&h| h.is_finite() && h >= 1.0)
+                && rsp.et_rsp.iter().all(|&e| e.is_finite() && e >= 0.0)
+                && model.v.iter().any(|&vk| vk.is_finite() && vk.abs() > 0.0);
         }
         let (lina, target_p) = eval_model_rsp_lina_modes(model, 3);
         if lina.is_empty() {

@@ -14,6 +14,7 @@ use crate::controls::{AtmOption, StarError};
 use crate::model::StarModel;
 use crate::star_ad::{
     StarAdExt, StarAdOrder1, I_LND_00, I_LNR_00, I_LNT_00, I_L_00,
+    NUM_STAR_AD_VARS,
 };
 
 /// Evaluates the face-centered composition gradient term $B_k$ (`do_brunt_B`
@@ -172,6 +173,20 @@ pub fn eval_surf_bc(model: &mut StarModel) -> Result<(), StarError> {
     let teff = atm_teff(l_surf, r_surf);
     model.teff = teff;
 
+    if model.controls.use_zero_pgas_outer_bc {
+        let t_start_0 = model
+            .ln_t_start
+            .first()
+            .copied()
+            .unwrap_or(model.ln_t[0])
+            .exp()
+            .max(1.0);
+        model.ln_t_surf_ad = StarAdOrder1::constant(t_start_0.ln());
+        let p_rad_0 = ((CRAD / 3.0) * t_start_0.powi(4)).max(1.0e-30);
+        model.ln_peos_surf_ad = StarAdOrder1::constant(p_rad_0.ln());
+        return Ok(());
+    }
+
     if model.controls.atm_option == AtmOption::SimplePhotosphere {
         // Direct radiation-pressure corrected simple photosphere (`hydro_vars.f90:857-916`):
         // P_surf = (tau_surf * g / kap_0) * (1 + 1.6e-4 * pextra_factor * kap_0 * (L/Lsun)/(M/Msun))
@@ -273,7 +288,7 @@ pub fn eval_surf_bc(model: &mut StarModel) -> Result<(), StarError> {
         StarError::MicrophysicsError(format!("eval_t_tau_uniform failed: {e}"))
     })?;
 
-    let mut d1_lnp = [0.0; 18];
+    let mut d1_lnp = [0.0; NUM_STAR_AD_VARS];
     d1_lnp[I_LND_00] = atm_out.dln_p_dln_kap * dlnkap_dlnd;
     d1_lnp[I_LNT_00] = atm_out.dln_p_dln_kap * dlnkap_dlnt;
     d1_lnp[I_LNR_00] = atm_out.dln_p_dln_r;
@@ -283,7 +298,7 @@ pub fn eval_surf_bc(model: &mut StarModel) -> Result<(), StarError> {
         d1: d1_lnp,
     };
 
-    let mut d1_lnt = [0.0; 18];
+    let mut d1_lnt = [0.0; NUM_STAR_AD_VARS];
     d1_lnt[I_LND_00] = atm_out.dln_t_dln_kap * dlnkap_dlnd;
     d1_lnt[I_LNT_00] = atm_out.dln_t_dln_kap * dlnkap_dlnt;
     d1_lnt[I_LNR_00] = atm_out.dln_t_dln_r;

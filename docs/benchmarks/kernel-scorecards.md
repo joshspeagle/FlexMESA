@@ -68,7 +68,7 @@ Full per-size tables ($N_{\mathrm{zones}} \in \{128, 512, 1024\}$) and the `star
 | Workload ($N_{\mathrm{zones}} = 1024$) | Fortran 1t Stage 2 ($\mu\mathrm{s}$) | Fortran 4t Stage 3 ($\mu\mathrm{s}$) | Safe Rust 1t Stage 2 ($\mu\mathrm{s}$) | Safe Rust 4t Stage 3 ($\mu\mathrm{s}$) | PyO3 1t Stage 0 ($\mu\mathrm{s}$) | JAX `@jit` Stage 2 ($\mu\mathrm{s}$) | JAX Batch/Hybrid Stage 3 ($\mu\mathrm{s}$) | `FlexMESA` Checksum |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | `star_micro_vars` | `9775.37` | `2553.10` | `8237.61` | `3323.26` | `7116.21` | `172.58` | `53.42` | `3.36128273e4` |
-| `star_hydro_eqns` | `11513.95` | `2955.19` | `8673.74` | `3427.20` | `7950.37` | `132.00` | `60.07` | `1.51974833e13` |
+| `star_hydro_eqns` | `11513.95` | `2955.19` | `8673.74` | `3427.20` | `7950.37` | `132.00` | `60.07` | `6.71126771e7` |
 | `star_newton_step` | `12262.13` | `3174.67` | `8060.87` | `4098.13` | `254.39` (solve) | `5950.96` | `778.28` | `1.28749954e5` |
 | `star_remesh` | `5.75` | `5.77` | `3.22` | `92.19` | `122.61` | `43.07` | `13.16` | `4.21132239e2` |
 | `star_evolve_step` | `522751.51` | `163495.99` | `78067.93` | `25951.86` | `43055.64` | `76951.25` | `74358.93` | `1.45655282e4` |

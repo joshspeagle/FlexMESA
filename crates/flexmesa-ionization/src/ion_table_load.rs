@@ -324,10 +324,10 @@ impl IonTableGrid {
         out.extend_from_slice(&self.log_t_min.to_le_bytes());
         out.extend_from_slice(&self.del_log_t.to_le_bytes());
         out.extend_from_slice(&(self.num_log_ts as u64).to_le_bytes());
-        for iz in 0..NUM_ION_ZS {
-            for ix in 0..NUM_ION_XS {
-                for v in 0..NUM_ION_VALS {
-                    for &val in &self.coeffs[iz][ix][v] {
+        for z_plane in self.coeffs.iter().take(NUM_ION_ZS) {
+            for x_row in z_plane.iter().take(NUM_ION_XS) {
+                for vals in x_row.iter().take(NUM_ION_VALS) {
+                    for &val in vals {
                         out.extend_from_slice(&val.to_le_bytes());
                     }
                 }
@@ -363,12 +363,16 @@ fn default_ion_cache_path() -> Option<PathBuf> {
             return Some(PathBuf::from(val).join("ionization_full.bin"));
         }
     }
-    if let Some(xdg) = std::env::var_os("XDG_CACHE_HOME").filter(|v| !v.is_empty()) {
-        return Some(PathBuf::from(xdg).join("flexmesa/data/ionization_full.bin"));
+    if let Some(xdg) =
+        std::env::var_os("XDG_CACHE_HOME").filter(|v| !v.is_empty())
+    {
+        return Some(
+            PathBuf::from(xdg).join("flexmesa/data/ionization_full.bin"),
+        );
     }
-    std::env::var_os("HOME")
-        .filter(|v| !v.is_empty())
-        .map(|h| PathBuf::from(h).join(".cache/flexmesa/data/ionization_full.bin"))
+    std::env::var_os("HOME").filter(|v| !v.is_empty()).map(|h| {
+        PathBuf::from(h).join(".cache/flexmesa/data/ionization_full.bin")
+    })
 }
 
 /// Format an upstream MESA `ion_*.data` file path (`Get_ion_Table_Filenames`).

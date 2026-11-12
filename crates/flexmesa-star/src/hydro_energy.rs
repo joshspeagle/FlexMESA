@@ -36,8 +36,7 @@ use crate::controls::EnergyEqnOption;
 use crate::hydro_eqns::HenyeySystem;
 use crate::model::StarModel;
 use crate::star_ad::{
-    StarAdExt, StarAdOrder1, I_LND_00, I_LNR_00, I_LNR_P1, I_L_00, I_L_P1,
-    I_V_00, I_V_P1,
+    StarAdExt, StarAdOrder1, I_LND_00, I_L_00, I_L_P1, I_V_00, I_V_P1,
 };
 
 /// Evaluates artificial viscosity pressure $P_{\mathrm{vsc},k}$ in cell `k`
@@ -56,33 +55,14 @@ pub fn eval_pvsc_cell_ad(model: &StarModel, k: usize) -> StarAdOrder1 {
     } else {
         StarAdOrder1::constant(model.v_center)
     };
-    let (v_out, v_in) = if model.controls.using_velocity_time_centering {
-        let vs_00 = model.v_start.get(k).copied().unwrap_or(model.v[k]);
-        let vs_p1 = if k + 1 < model.nz {
-            model.v_start.get(k + 1).copied().unwrap_or(model.v[k + 1])
-        } else {
-            model.v_center
-        };
-        ((v_00 + vs_00) * 0.5, (v_p1 + vs_p1) * 0.5)
-    } else {
-        (v_00, v_p1)
-    };
-
-    let r_00 = StarAdOrder1::variable(model.ln_r[k], I_LNR_00).exp();
-    let r_p1 = if k + 1 < model.nz {
-        StarAdOrder1::variable(model.ln_r[k + 1], I_LNR_P1).exp()
-    } else {
-        StarAdOrder1::constant(model.r_center.max(1.0))
-    };
-    let dr = (r_00 - r_p1).max(StarAdOrder1::constant(1.0));
-    let div_v_over_r = v_out / r_00 - v_in / r_p1
-        + (model.controls.pvsc_zshock * model.csound[k]) / dr;
-    if div_v_over_r.val >= 0.0 {
+    let peos_00 = model.ln_peos_ad[k].exp();
+    let rho_00 = StarAdOrder1::variable(model.lnd[k], I_LND_00).exp();
+    let peos_div_rho = (peos_00 / rho_00).max(StarAdOrder1::constant(1.0e-30));
+    let dv = (v_p1 - v_00) - model.controls.pvsc_zshock * peos_div_rho.sqrt();
+    if dv.val <= 0.0 {
         return StarAdOrder1::ZERO;
     }
-    let rho_00 = StarAdOrder1::variable(model.lnd[k], I_LND_00).exp();
-    let cq2 = model.controls.pvsc_cq * model.controls.pvsc_cq;
-    rho_00 * cq2 * (dr * dr) * (div_v_over_r * div_v_over_r)
+    rho_00 * model.controls.pvsc_cq * (dv * dv)
 }
 
 /// Evaluates effective cell pressure $P_{\mathrm{cell},k}$ including optional
@@ -103,18 +83,8 @@ pub fn eval_cell_pressure_for_work_ad(
     if model.controls.rsp2_flag && model.controls.rsp2.alfap != 0.0 {
         p_ad = p_ad + crate::rsp2_ad::eval_rsp2_ptrb_cell_ad(model, k, false);
     }
-    if model.controls.mlt_pturb_factor > 0.0 {
-        let vc_old = model.aux.mlt_vc_old.get(k).copied().unwrap_or(0.0);
-        if vc_old > 0.0 {
-            let rho_00 = StarAdOrder1::variable(model.lnd[k], I_LND_00).exp();
-            let pturb = rho_00
-                * ((1.0 / 3.0)
-                    * model.controls.mlt_pturb_factor
-                    * vc_old
-                    * vc_old);
-            p_ad = p_ad + pturb;
-        }
-    }
+    p_ad =
+        p_ad + crate::hydro_momentum::eval_mlt_pturb_cell_ad(model, k, false);
     (p_ad, p_theta)
 }
 
@@ -124,17 +94,18 @@ pub fn eval_cell_pressure_for_work_ad(
 #[must_use]
 pub fn setup_dl_dm(model: &StarModel, k: usize) -> StarAdOrder1 {
     let logt = model.ln_t[k] / LN10;
-    let l_theta = if model.controls.using_velocity_time_centering
-        && model.controls.include_l_in_velocity_time_centering
-        && logt
-            <= model
-                .controls
-                .max_logt_for_include_p_and_l_in_velocity_time_centering
-    {
-        model.controls.l_theta_for_velocity_time_centering
-    } else {
-        1.0
-    };
+    let l_theta =
+        if model.controls.is_velocity_time_centered(model.model_number)
+            && model.controls.include_l_in_velocity_time_centering
+            && logt
+                <= model
+                    .controls
+                    .max_logt_for_include_p_and_l_in_velocity_time_centering
+        {
+            model.controls.l_theta_for_velocity_time_centering
+        } else {
+            1.0
+        };
     let l_start_00 = model.lum_start.get(k).copied().unwrap_or(model.lum[k]);
     let lum_00 = StarAdOrder1::variable(model.lum[k], I_L_00) * l_theta
         + l_start_00 * (1.0 - l_theta);
@@ -384,6 +355,39 @@ pub fn eval_face_area_time_centered_ad(
     }
 }
 
+/// Evaluates the inverse specific-power equation scale factor `scal` in
+/// $(\mathrm{erg\,g^{-1}\,s^{-1}})^{-1}$ for cell `k` (`set_energy_eqn_scal` in
+/// `star/private/star_utils.f90:3691-3710`).
+///
+/// In thin envelope zones where $e_{\mathrm{start},k}\Delta m_k /
+/// E_{\mathrm{int,start}} < \mathrm{dedt\_eqn\_r\_scale}^{-1}$, caps the dimensionless
+/// prefactor at `cell_energy_fraction_start * dedt_eqn_r_scale` so IEEE-754 ULP
+/// differences in $L_k - L_{k+1}$ are measured relative to
+/// $E_{\mathrm{int,start}} / \mathrm{dedt\_eqn\_r\_scale}$ rather than amplified
+/// by $1 / \Delta m_k$.
+#[must_use]
+pub fn set_energy_eqn_scal(model: &StarModel, k: usize) -> f64 {
+    let dt = model.dt.max(1.0e-30);
+    let mut scal: f64 = if k > 0 { 1.0 } else { 1.0e-6 };
+    if model.controls.dedt_eqn_r_scale > 0.0 {
+        let total_e = if model.aux.total_internal_energy_start > 0.0 {
+            model.aux.total_internal_energy_start
+        } else {
+            (0..model.nz)
+                .map(|j| model.energy_start[j].max(0.0) * model.dm[j])
+                .sum::<f64>()
+        };
+        if total_e > 0.0 {
+            let cell_energy_fraction_start =
+                (model.energy_start[k].max(0.0) * model.dm[k]) / total_e;
+            scal = scal.min(
+                cell_energy_fraction_start * model.controls.dedt_eqn_r_scale,
+            );
+        }
+    }
+    scal * dt / model.energy_start[k].max(1.0)
+}
+
 /// Energy conservation equation for cell `k` (`do1_energy_eqn` in
 /// `star/private/hydro_energy.f90:36-905`).
 pub fn do1_energy_eqn(
@@ -397,85 +401,159 @@ pub fn do1_energy_eqn(
     let d_eturb_dt = setup_d_turbulent_energy_dt(model, k);
     let dt = model.dt.max(1.0e-30);
 
-    let (esum, p_theta) = match model.controls.energy_eqn_option {
-        EnergyEqnOption::EpsGrav => {
-            (-dl_dm + sources - d_eturb_dt + model.eps_grav_ad[k], 0.0)
+    let v_flag_only = model.controls.v_flag && !model.controls.u_flag;
+    let u_flag_only = model.controls.u_flag && !model.controls.v_flag;
+    let vel_tc = model.controls.is_velocity_time_centered(model.model_number)
+        && model.dt > 0.0
+        && !model.ln_r_start.is_empty();
+
+    let mut dwork_fac_m1 = 0.0_f64;
+    let mut dwork_fac_00 = 0.0_f64;
+    let mut dwork_fac_p1 = 0.0_f64;
+    let mut has_dedt_dxa = false;
+
+    let esum = if u_flag_only {
+        has_dedt_dxa = true;
+        let total_rates =
+            crate::riemann_ad::eval_u_flag_total_energy_rates_ad(model, k, dt);
+        -dl_dm + sources - d_eturb_dt - total_rates
+    } else if v_flag_only {
+        let simple_pdv = vel_tc
+            && model
+                .controls
+                .use_p_d_1_div_rho_form_of_work_when_time_centering_velocity;
+        match model.controls.energy_eqn_option {
+            EnergyEqnOption::EpsGrav => {
+                let dwork_dm = if simple_pdv {
+                    crate::hydro_work::eval_v_flag_simple_pdv_dm_ad(
+                        model, k, true, vel_tc,
+                    )
+                    .0
+                } else {
+                    crate::hydro_work::eval_v_flag_dwork_dm_ad(
+                        model, k, true, vel_tc,
+                    )
+                    .0
+                };
+                -dl_dm + sources - d_eturb_dt - dwork_dm + model.eps_grav_ad[k]
+            }
+            EnergyEqnOption::Dedt => {
+                has_dedt_dxa = true;
+                let de_dt =
+                    (model.ln_e_ad[k].exp() - model.energy_start[k]) / dt;
+                if simple_pdv {
+                    let (dwork_dm, fac_00) =
+                        crate::hydro_work::eval_v_flag_simple_pdv_dm_ad(
+                            model, k, false, vel_tc,
+                        );
+                    dwork_fac_00 = fac_00;
+                    -dl_dm + sources - d_eturb_dt - dwork_dm - de_dt
+                } else {
+                    let (dwork_dm, f_m1, f_00, f_p1) =
+                        crate::hydro_work::eval_v_flag_dwork_dm_ad(
+                            model, k, false, vel_tc,
+                        );
+                    dwork_fac_m1 = f_m1;
+                    dwork_fac_00 = f_00;
+                    dwork_fac_p1 = f_p1;
+                    let dke_dt =
+                        crate::hydro_work::eval_v_flag_dke_dt_ad(model, k, dt);
+                    let dpe_dt =
+                        crate::hydro_work::eval_cell_dpe_dt_ad(model, k, dt);
+                    -dl_dm + sources
+                        - d_eturb_dt
+                        - dwork_dm
+                        - dke_dt
+                        - dpe_dt
+                        - de_dt
+                }
+            }
         }
-        EnergyEqnOption::Dedt => {
-            let e_ad = model.ln_e_ad[k].exp();
-            let de_dt = (e_ad - model.energy_start[k]) / dt;
-            let (p_ad, p_th) = eval_cell_pressure_for_work_ad(model, k);
-            let inv_rho_ad =
-                (-StarAdOrder1::variable(model.lnd[k], I_LND_00)).exp();
-            let inv_rho_start = (-model.lnd_start[k]).exp();
-            let pdv_dt = p_ad * (inv_rho_ad - inv_rho_start) / dt;
-            (-dl_dm + sources - d_eturb_dt - de_dt - pdv_dt, p_th)
+    } else {
+        match model.controls.energy_eqn_option {
+            EnergyEqnOption::EpsGrav => {
+                -dl_dm + sources - d_eturb_dt + model.eps_grav_ad[k]
+            }
+            EnergyEqnOption::Dedt => {
+                has_dedt_dxa = true;
+                let e_ad = model.ln_e_ad[k].exp();
+                let de_dt = (e_ad - model.energy_start[k]) / dt;
+                let (p_ad, p_th) = eval_cell_pressure_for_work_ad(model, k);
+                let inv_rho_ad =
+                    (-StarAdOrder1::variable(model.lnd[k], I_LND_00)).exp();
+                let inv_rho_start = (-model.lnd_start[k]).exp();
+                let d_inv_rho_dt = (inv_rho_ad.val - inv_rho_start) / dt;
+                dwork_fac_00 = p_th * model.peos[k] * d_inv_rho_dt;
+                let pdv_dt = p_ad * (inv_rho_ad - inv_rho_start) / dt;
+                -dl_dm + sources - d_eturb_dt - de_dt - pdv_dt
+            }
         }
     };
 
-    let mut scal = dt / model.energy_start[k].max(1.0);
-    if k == 0 {
-        scal *= 1.0e-6;
-    }
+    let scal = set_energy_eqn_scal(model, k);
     let resid = esum * scal;
     let i_equ = model.layout.i_dlne_dt;
     sys.save_eqn_residual(&model.layout, k, i_equ, &resid);
 
     if include_chem {
-        let base = k * model.species;
-        let inv_rho = (-model.lnd[k]).exp();
-        let inv_rho_s = (-model.lnd_start[k]).exp();
-        let d_inv_rho_dt = (inv_rho - inv_rho_s) / dt;
-        for j in 0..model.species {
-            let mut d_equ_dx = if !doing_op_split_burn
-                && model.controls.eps_nuc_factor != 0.0
-                && !model.controls.nonlocal_nico_decay_heat
-            {
+        let sp = model.species;
+        let base = k * sp;
+        let active_nuc_dxa = !doing_op_split_burn
+            && model.controls.eps_nuc_factor != 0.0
+            && !model.controls.nonlocal_nico_decay_heat;
+        let dlnp = |cell: usize, j: usize| {
+            model
+                .aux
+                .dln_peos_dxa_for_partials
+                .get(cell * sp + j)
+                .copied()
+                .unwrap_or(0.0)
+        };
+        for j in 0..sp {
+            let ivar = model.layout.chem_var_index(j);
+            let mut d_equ_dx = if active_nuc_dxa {
                 scal * model.d_epsnuc_dx[base + j]
             } else {
                 0.0
             };
-
-            match model.controls.energy_eqn_option {
-                EnergyEqnOption::EpsGrav => {
-                    if model.controls.include_composition_in_eps_grav {
-                        let deg_dx = model
-                            .aux
-                            .d_eps_grav_dx
-                            .get(base + j)
-                            .copied()
-                            .unwrap_or(0.0);
-                        d_equ_dx += scal * deg_dx;
-                    }
+            if has_dedt_dxa {
+                let dlne_dx = model
+                    .aux
+                    .dln_e_dxa_for_partials
+                    .get(base + j)
+                    .copied()
+                    .unwrap_or(0.0);
+                d_equ_dx -= scal
+                    * ((model.energy[k] / dt) * dlne_dx
+                        + dwork_fac_00 * dlnp(k, j));
+                if k > 0 && dwork_fac_m1 != 0.0 {
+                    sys.add_partial(
+                        k,
+                        i_equ,
+                        k - 1,
+                        ivar,
+                        -scal * dwork_fac_m1 * dlnp(k - 1, j),
+                    );
                 }
-                EnergyEqnOption::Dedt => {
-                    let dlne_dx = model
-                        .aux
-                        .dln_e_dxa_for_partials
-                        .get(base + j)
-                        .copied()
-                        .unwrap_or(0.0);
-                    let dlnp_dx = model
-                        .aux
-                        .dln_peos_dxa_for_partials
-                        .get(base + j)
-                        .copied()
-                        .unwrap_or(0.0);
-                    d_equ_dx -= scal * (model.energy[k] / dt) * dlne_dx;
-                    d_equ_dx -=
-                        scal * p_theta * model.peos[k] * d_inv_rho_dt * dlnp_dx;
+                if k + 1 < model.nz && dwork_fac_p1 != 0.0 {
+                    sys.add_partial(
+                        k,
+                        i_equ,
+                        k + 1,
+                        ivar,
+                        -scal * dwork_fac_p1 * dlnp(k + 1, j),
+                    );
                 }
+            } else if model.controls.include_composition_in_eps_grav {
+                let deg_dx = model
+                    .aux
+                    .d_eps_grav_dx
+                    .get(base + j)
+                    .copied()
+                    .unwrap_or(0.0);
+                d_equ_dx += scal * deg_dx;
             }
-
-            if d_equ_dx != 0.0 {
-                sys.add_partial(
-                    k,
-                    i_equ,
-                    k,
-                    model.layout.chem_var_index(j),
-                    d_equ_dx,
-                );
-            }
+            sys.add_partial(k, i_equ, k, ivar, d_equ_dx);
         }
     }
 }

@@ -378,7 +378,8 @@ pub fn eval_linear_oscillation_modes(
         let f_lo = 1.0 / (dpi_s * (f64::from(max_g) + 4.0)).max(1.0);
         let f_hi = 1.0 / (dpi_s * (f64::from(min_g).max(1.0) * 0.4)).max(1.0);
         let om_lo = (2.0 * PI * f_lo / omega_dyn * 0.45).clamp(0.005, 0.40);
-        let om_hi = (2.0 * PI * f_hi / omega_dyn * 2.20).clamp(om_lo * 1.5, 2.0);
+        let om_hi =
+            (2.0 * PI * f_hi / omega_dyn * 2.20).clamp(om_lo * 1.5, 2.0);
         let (ln_lo, ln_hi) = (om_lo.ln(), om_hi.ln());
         for i in 0..96 {
             let frac = (i as f64) / 95.0;
@@ -391,12 +392,12 @@ pub fn eval_linear_oscillation_modes(
         } else {
             0.5
         };
-        let om_p_hi =
-            (2.0 * PI * 6.0 * dnu_hz / omega_dyn).clamp(40.0, 200.0);
+        let om_p_hi = (2.0 * PI * 6.0 * dnu_hz / omega_dyn).clamp(40.0, 200.0);
         if om_p_hi > om_p_lo {
             grid.extend(
-                (0..120)
-                    .map(|i| om_p_lo + (om_p_hi - om_p_lo) * (i as f64) / 119.0),
+                (0..120).map(|i| {
+                    om_p_lo + (om_p_hi - om_p_lo) * (i as f64) / 119.0
+                }),
             );
         }
     }
@@ -509,14 +510,18 @@ pub fn eval_target_mode_frequency_and_growth(
             model.teff > 0.0 && model.teff.log10() > lg_lim + 0.2
         })
     {
-        let t_lim = 10.0_f64
-            .powf(model.controls.log_teff_lower_limit.unwrap_or(4.0));
+        let t_lim =
+            10.0_f64.powf(model.controls.log_teff_lower_limit.unwrap_or(4.0));
         let f_cooled = mode.freq_hz * (t_lim / model.teff).sqrt();
         mode.inertia > 0.0
             && (f_cooled - freq_target_hz).abs() <= 0.35 * freq_target_hz
     } else {
-        let r_tot =
-            model.r.first().copied().unwrap_or(R_SUN).max(1.0e-3 * R_SUN);
+        let r_tot = model
+            .r
+            .first()
+            .copied()
+            .unwrap_or(R_SUN)
+            .max(1.0e-3 * R_SUN);
         let r_inner =
             model.r_center.max(model.r.last().copied().unwrap_or(0.0));
         if n_target > 0 && r_inner > 0.05 * r_tot {

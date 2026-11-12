@@ -552,8 +552,7 @@ mod zams_catalog_tests {
 
         let ascii_path = flexmesa_utils::resolve_mesa_test_inputs_dir()
             .join("data/star_data/zams_models/zams_z2m2_y28.data");
-        if std::env::var_os("MESA_DIR")
-            .is_some_and(|v| !v.is_empty())
+        if std::env::var_os("MESA_DIR").is_some_and(|v| !v.is_empty())
             || std::env::var("FLEXMESA_REQUIRE_ZERO_SKIPS").as_deref()
                 == Ok("1")
         {

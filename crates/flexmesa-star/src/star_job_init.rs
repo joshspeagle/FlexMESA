@@ -143,15 +143,23 @@ pub fn init_or_update_model_from_bundle(
         controls.initial_mass > 15.8 || controls.initial_mass < 0.51;
     let is_pulse_mod_case = case_name.starts_with("gyre_in_mesa_")
         || matches!(case_name, "astero_gyre" | "astero_adipls");
+    let is_pulsation_env_mod = crate::tier4_extras::is_tier4_case(case_name)
+        && job.load_saved_model
+        && !job.saved_model_name.is_empty()
+        && controls.use_dprad_dm_form_of_t_gradient_eqn
+        && controls.use_momentum_outer_bc
+        && controls.eps_nuc_factor == 0.0;
     let is_rsp2_mod_case = controls.rsp2_flag
         || (controls.rsp2.change_rsp2_flag && controls.rsp2.new_rsp2_flag)
-        || case_name.starts_with("dev_rsp2_");
+        || case_name.starts_with("dev_rsp2_")
+        || is_pulsation_env_mod;
     let is_tier2_or_3 = crate::tier2_extras::is_tier2_case(case_name)
         || crate::tier3_extras::is_tier3_case(case_name)
         || crate::tier4_extras::is_tier4_case(case_name)
         || crate::tier5_extras::is_tier5_star_case(case_name)
         || job.relax_initial_mass_to_remove_h_env
         || out_of_zams_range;
+    let had_existing_model = existing_model.is_some();
     let mut loaded_from_mod = false;
     let mut model = if is_pulse_mod_case || is_rsp2_mod_case {
         if let Some(prev) = existing_model {
@@ -270,16 +278,23 @@ pub fn init_or_update_model_from_bundle(
 
     // Preserve active model state across stages / `.mod` loads unless overridden
     let preserved_net = model.job.net_name.clone();
-    let (preserved_v, preserved_u, preserved_rot) = (
+    let (preserved_v, preserved_u, preserved_rot, preserved_rti) = (
         model.controls.v_flag,
         model.controls.u_flag,
         model.controls.rotation_flag,
+        model.controls.rti_flag,
     );
-    let (preserved_tau, preserved_m, preserved_z, preserved_y) = (
+    let explicit_rti_in_controls = bundle
+        .sections
+        .get("controls")
+        .and_then(|c| c.get_bool("rti_flag"))
+        .is_some();
+    let (preserved_tau, preserved_m, preserved_z, preserved_y, preserved_opac) = (
         model.controls.tau_factor,
         model.controls.initial_mass,
         model.controls.initial_z,
         model.controls.initial_y,
+        model.controls.opacity_factor,
     );
 
     model.job = job.clone();
@@ -290,12 +305,22 @@ pub fn init_or_update_model_from_bundle(
         model.controls.u_flag,
         model.controls.rotation_flag,
     ) = (preserved_v, preserved_u, preserved_rot);
+    if !explicit_rti_in_controls {
+        model.controls.rti_flag = preserved_rti;
+    }
     (
         model.controls.tau_factor,
         model.controls.initial_mass,
         model.controls.initial_z,
         model.controls.initial_y,
     ) = (preserved_tau, preserved_m, preserved_z, preserved_y);
+    if had_existing_model
+        && !loaded_from_mod
+        && is_tier2_or_3
+        && (model.controls.opacity_factor - 1.0).abs() < 1.0e-12
+    {
+        model.controls.opacity_factor = preserved_opac;
+    }
     model.eos_config = bundle.eos_config;
     model.kap_config = bundle.kap_config.clone();
 
@@ -349,9 +374,6 @@ pub fn init_or_update_model_from_bundle(
     if job.set_tau_factor && job.set_to_this_tau_factor > 0.0 {
         relax_tau_factor_to_target(&mut model, job.set_to_this_tau_factor, 8);
     }
-    if let Some(t_cut) = job.remove_initial_center_by_temperature {
-        excise_core_by_temperature(&mut model, t_cut);
-    }
 
     // 6. Velocity & rotation flags (`change_v_flag`, `change_u_flag`, `change_rotation_flag`)
     if job.change_v_flag {
@@ -374,6 +396,10 @@ pub fn init_or_update_model_from_bundle(
         }
     }
 
+    if job.change_initial_rti_flag {
+        model.controls.rti_flag = job.new_rti_flag;
+    }
+
     if model.controls.rsp2.change_rsp_flag {
         model.controls.rsp_flag = model.controls.rsp2.new_rsp_flag;
     }
@@ -384,29 +410,13 @@ pub fn init_or_update_model_from_bundle(
         model.controls.rsp_flag = false;
     }
 
-    model.layout = VarLayout::with_rsp2(
+    model.layout = VarLayout::with_flags(
         model.species,
         model.controls.v_flag,
         model.controls.u_flag,
         model.controls.rsp2_flag,
+        model.controls.rti_flag,
     );
-    if model.controls.rsp2_flag {
-        crate::rsp2_remesh::seed_rsp2_w_from_mlt_vc_if_needed(&mut model);
-        if model.controls.rsp2.remesh_when_load
-            && model.controls.rsp2.nz >= 2
-            && model.nz != model.controls.rsp2.nz
-        {
-            crate::rsp2_remesh::remesh_for_rsp2(&mut model)?;
-        } else {
-            for k in 0..model.nz {
-                if model.aux.rsp.hp_face[k] <= 0.0 {
-                    model.aux.rsp.hp_face[k] =
-                        crate::rsp2_eqns::eval_rsp2_hp_face_zone(&model, k);
-                }
-            }
-            model.pack_xh();
-        }
-    }
 
     // 7. Age, model number, and initial timestep overrides
     if job.set_initial_age {
@@ -427,8 +437,61 @@ pub fn init_or_update_model_from_bundle(
     }
 
     extras.extras_controls(&mut model);
-    if !loaded_from_mod && is_tier2_or_3 {
+    if model.controls.v_flag && model.v.len() != model.nz {
+        model.v.resize(model.nz, 0.0);
+        model.v_start.resize(model.nz, 0.0);
+    }
+    if model.controls.u_flag && model.u.len() != model.nz {
+        model.u.resize(model.nz, 0.0);
+        model.u_start.resize(model.nz, 0.0);
+    }
+    if model.controls.rti_flag {
+        if model.aux.alpha_rti.len() != model.nz {
+            model.aux.alpha_rti.resize(model.nz, 0.0);
+        }
+        if model.aux.alpha_rti_start.len() != model.nz {
+            model.aux.alpha_rti_start.resize(model.nz, 0.0);
+        }
+        if model.aux.alpha_rti_old.len() != model.nz {
+            model.aux.alpha_rti_old.resize(model.nz, 0.0);
+        }
+    }
+    model.layout = VarLayout::with_flags(
+        model.species,
+        model.controls.v_flag,
+        model.controls.u_flag,
+        model.controls.rsp2_flag,
+        model.controls.rti_flag,
+    );
+    let did_mass_or_core_relax = job.relax_mass
+        || job.relax_initial_mass_to_remove_h_env
+        || job.relax_m_center;
+    if !loaded_from_mod
+        && is_tier2_or_3
+        && (!had_existing_model || did_mass_or_core_relax)
+        && (model.m_center == 0.0 || job.relax_m_center)
+    {
         equilibrate_tier2_scaled_model(&mut model);
+    }
+    if let Some(t_cut) = job.remove_initial_center_by_temperature {
+        excise_core_by_temperature(&mut model, t_cut);
+    }
+    if model.controls.rsp2_flag {
+        crate::rsp2_remesh::seed_rsp2_w_from_mlt_vc_if_needed(&mut model);
+        if model.controls.rsp2.remesh_when_load
+            && model.controls.rsp2.nz >= 2
+            && model.nz != model.controls.rsp2.nz
+        {
+            crate::rsp2_remesh::remesh_for_rsp2(&mut model)?;
+        } else {
+            for k in 0..model.nz {
+                if model.aux.rsp.hp_face[k] <= 0.0 {
+                    model.aux.rsp.hp_face[k] =
+                        crate::rsp2_eqns::eval_rsp2_hp_face_zone(&model, k);
+                }
+            }
+            model.pack_xh();
+        }
     }
     model.sync_mesh_and_pack()?;
     if job.relax_mass && job.new_mass > 0.3 && !is_tier2_or_3 {

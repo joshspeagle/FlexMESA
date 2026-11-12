@@ -296,10 +296,13 @@ impl StarModel {
             if let Some(ihp) = self.layout.i_hp {
                 self.xh[base + ihp] = self.aux.rsp.hp_face[k].max(1.0);
             }
+            if let Some(ia) = self.layout.i_alpha_rti {
+                self.xh[base + ia] = self.aux.alpha_rti[k].max(0.0);
+            }
         }
     }
 
-    /// Unpacks `xh` into `(lnd, ln_t, ln_r, lum, [v | u], [w, hp])` (`unpack_xh`).
+    /// Unpacks `xh` into `(lnd, ln_t, ln_r, lum, [v | u], [w, hp], [alpha_rti])` (`unpack_xh`).
     pub fn unpack_xh(&mut self) {
         let nvar = self.layout.nvar_hydro;
         let w_fix = self.controls.rsp2.w_fix_if_neg;
@@ -317,8 +320,8 @@ impl StarModel {
             }
             if let Some(iw) = self.layout.i_w {
                 let mut w = self.xh[base + iw];
-                if !w.is_finite() || w < 0.0 {
-                    w = w_fix.max(0.0);
+                if w < 0.0 {
+                    w = if w_fix < 0.0 { 0.0 } else { w_fix };
                     self.xh[base + iw] = w;
                 }
                 let et = w * w;
@@ -326,9 +329,16 @@ impl StarModel {
                 self.aux.etrb[k] = et;
             }
             if let Some(ihp) = self.layout.i_hp {
-                let hp = self.xh[base + ihp].max(1.0);
+                let raw_hp = self.xh[base + ihp];
+                let hp = if raw_hp < 1.0 { 1.0 } else { raw_hp };
                 self.xh[base + ihp] = hp;
                 self.aux.rsp.hp_face[k] = hp;
+            }
+            if let Some(ia) = self.layout.i_alpha_rti {
+                let raw_a = self.xh[base + ia];
+                let a = if raw_a < 0.0 { 0.0 } else { raw_a };
+                self.xh[base + ia] = a;
+                self.aux.alpha_rti[k] = a;
             }
         }
     }
@@ -359,6 +369,9 @@ impl StarModel {
         self.ln_e_start.clone_from(&self.ln_e);
         self.ln_s_start.clone_from(&self.ln_s);
         self.energy_start.clone_from(&self.energy);
+        self.aux.total_internal_energy_start = (0..self.nz)
+            .map(|k| self.energy_start[k].max(0.0) * self.dm[k])
+            .sum();
         self.peos_start.clone_from(&self.peos);
         self.non_nuc_neu_start.clone_from(&self.non_nuc_neu);
         self.xa_start.clone_from(&self.xa);
@@ -368,10 +381,23 @@ impl StarModel {
             &self.grada,
             &self.chi_t,
             &self.chi_rho,
+            &self.csound,
             &self.mlt_vc,
         );
         if self.sig.iter().all(|&s| s == 0.0) {
             crate::hydro_vars::update_sig_from_d_mix(self);
+        }
+        if self.controls.rti_flag {
+            crate::hydro_rti::set_rti_mixing_info(self);
+        }
+        if self.controls.u_flag {
+            self.aux.p_face_start.resize(self.nz, -1.0);
+            self.aux.p_face_start.fill(-1.0);
+            self.aux.u_face_start.resize(self.nz, 0.0);
+            let _ = crate::riemann_ad::do_uface_and_pface(self);
+        }
+        if self.controls.rti_flag {
+            crate::hydro_rti::set_dpdr_drhodr_info(self);
         }
     }
 
@@ -385,10 +411,12 @@ impl StarModel {
         self.ln_r_old.clone_from(&self.ln_r);
         self.lum_old.clone_from(&self.lum);
         self.v_old.clone_from(&self.v);
+        self.u_old.clone_from(&self.u);
         self.xa_old.clone_from(&self.xa);
         self.dq_old.clone_from(&self.dq);
         self.aux.et_rsp_old.clone_from(&self.aux.rsp.et_rsp);
         self.aux.hp_face_old.clone_from(&self.aux.rsp.hp_face);
+        self.aux.alpha_rti_old.clone_from(&self.aux.alpha_rti);
     }
 
     /// Updates `ln_peos_ad`, `ln_e_ad`, and `ln_s_ad` from EOS values and partials.
@@ -452,6 +480,7 @@ impl StarModel {
             &mut self.ln_r_old,
             &mut self.lum_old,
             &mut self.v_old,
+            &mut self.u_old,
             &mut self.dq_old,
             &mut self.dq,
             &mut self.q,

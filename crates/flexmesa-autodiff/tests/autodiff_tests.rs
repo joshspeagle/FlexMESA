@@ -190,12 +190,12 @@ fn test_auto_diff_1var_4var_and_star_order1_propagate_partials_correctly() {
         let xi = AutoDiffRealStarOrder1::independent(1.0 + idx as f64, idx);
         star_sum = star_sum + xi.pow2();
     }
-    for idx in 0..15 {
+    for (idx, &d1_val) in star_sum.d1.iter().enumerate().take(15) {
         let expected = 2.0 * (1.0 + idx as f64);
-        assert_allclose(&[star_sum.d1[idx]], &[expected], TOL, TOL);
+        assert_allclose(&[d1_val], &[expected], TOL, TOL);
     }
-    for idx in 15..33 {
-        assert_eq!(star_sum.d1[idx], 0.0);
+    for &d1_val in &star_sum.d1[15..33] {
+        assert_eq!(d1_val, 0.0);
     }
 }
 

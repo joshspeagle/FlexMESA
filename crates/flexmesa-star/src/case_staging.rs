@@ -36,10 +36,9 @@ fn is_readonly_mesa_case_dir(orig_case_dir: &Path) -> bool {
             if orig_case_dir.starts_with(mesa_path) {
                 return true;
             }
-            if let (Ok(canon_case), Ok(canon_mesa)) = (
-                fs::canonicalize(orig_case_dir),
-                fs::canonicalize(mesa_path),
-            ) {
+            if let (Ok(canon_case), Ok(canon_mesa)) =
+                (fs::canonicalize(orig_case_dir), fs::canonicalize(mesa_path))
+            {
                 if canon_case.starts_with(&canon_mesa) {
                     return true;
                 }
@@ -190,8 +189,8 @@ fn link_sibling_entries(
         }
         let dst = staged_dir.join(&name);
         if !dst.exists() {
-            let src = fs::canonicalize(entry.path())
-                .unwrap_or_else(|_| entry.path());
+            let src =
+                fs::canonicalize(entry.path()).unwrap_or_else(|_| entry.path());
             std::os::unix::fs::symlink(&src, &dst).map_err(|e| {
                 StarError::IoError(format!(
                     "symlink {} -> {}: {e}",

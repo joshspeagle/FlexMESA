@@ -312,8 +312,8 @@ fn run_star_order1_suite() -> Vec<Vec<f64>> {
 
     // Assignment: x = 3.0, x%d1Array(4) = 1.0 (1-indexed -> index 3)
     let x_assign = AutoDiffRealStarOrder1::independent(3.0, 3);
-    for i in 0..15 {
-        nums.push(vec![x_assign.d1[i]]);
+    for &d1_val in &x_assign.d1[..15] {
+        nums.push(vec![d1_val]);
     }
 
     // Unary: y = pow2(x), then x = pow2(x)
@@ -323,22 +323,22 @@ fn run_star_order1_suite() -> Vec<Vec<f64>> {
     }
     let x_base = AutoDiffRealStarOrder1::new(3.0, d1_seq);
     let y_pow2 = x_base.pow2();
-    for i in 0..15 {
-        nums.push(vec![y_pow2.d1[i]]);
+    for &d1_val in &y_pow2.d1[..15] {
+        nums.push(vec![d1_val]);
     }
     let x_pow2 = x_base.pow2();
-    for i in 0..15 {
-        nums.push(vec![x_pow2.d1[i]]);
+    for &d1_val in &x_pow2.d1[..15] {
+        nums.push(vec![d1_val]);
     }
 
     // Binary: y = x + 1.0, y = x + x, y = exp(x) * z
     let y_add1 = x_base + 1.0;
-    for i in 0..15 {
-        nums.push(vec![y_add1.d1[i]]);
+    for &d1_val in &y_add1.d1[..15] {
+        nums.push(vec![d1_val]);
     }
     let y_addx = x_base + x_base;
-    for i in 0..15 {
-        nums.push(vec![y_addx.d1[i]]);
+    for &d1_val in &y_addx.d1[..15] {
+        nums.push(vec![d1_val]);
     }
     let mut z_d1 = [0.0; 33];
     for (i, slot) in z_d1.iter_mut().enumerate().take(15) {
@@ -346,8 +346,8 @@ fn run_star_order1_suite() -> Vec<Vec<f64>> {
     }
     let z = AutoDiffRealStarOrder1::new(2.0, z_d1);
     let y_chain = x_base.exp() * z;
-    for i in 0..15 {
-        nums.push(vec![y_chain.d1[i]]);
+    for &d1_val in &y_chain.d1[..15] {
+        nums.push(vec![d1_val]);
     }
 
     nums

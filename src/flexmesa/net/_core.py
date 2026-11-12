@@ -106,6 +106,37 @@ class Burn1ZoneOutput:
 
 
 @dataclasses.dataclass(frozen=True)
+class BurnConstDensityOutput:
+    """Output of `burn_1_zone_const_density` (constant-density variable-T burn).
+
+    Attributes:
+        ending_x: Final mass fractions (`(S,)`).
+        ending_log10_t: Final $\\log_{10}(T_{\\mathrm{end}} / \\mathrm{K})$.
+        eps_nuc_categories: Final category-resolved energy rates (`(24,)`).
+        avg_eps_nuc: Time-averaged net nuclear energy rate
+            ($\\mathrm{erg\\,g^{-1}\\,s^{-1}}$).
+        eps_neu_total: Final neutrino loss rate
+            ($\\mathrm{erg\\,g^{-1}\\,s^{-1}}$).
+        nfcn: Total right-hand-side evaluations.
+        njac: Total Jacobian evaluations.
+        nstep: Total integration substeps.
+        naccpt: Accepted substeps.
+        nrejct: Rejected substeps.
+    """
+
+    ending_x: _ArrF64
+    ending_log10_t: float
+    eps_nuc_categories: _ArrF64
+    avg_eps_nuc: float
+    eps_neu_total: float
+    nfcn: int
+    njac: int
+    nstep: int
+    naccpt: int
+    nrejct: int
+
+
+@dataclasses.dataclass(frozen=True)
 class BurnConstPOutput:
     """Output of a constant-pressure one-zone burn (`burn_1_zone_const_p`).
 
@@ -331,6 +362,80 @@ def burn_1_zone(
         nstep=int(out[6]),
         naccpt=int(out[7]),
         nrejct=int(out[8]),
+    )
+
+
+def burn_1_zone_const_density(
+    net_name: str,
+    t_start: float,
+    t_end: float,
+    starting_x: npt.ArrayLike,
+    starting_log10_t: float,
+    log10_rho: float,
+    rate_factors: npt.ArrayLike | None = None,
+    weak_rate_factor: float = 1.0,
+    screening_mode: str = "extended",
+    stptry_in: float = 0.0,
+    max_steps: int = 10000,
+    eps: float = 1.0e-5,
+    odescal: float = 1.0e-5,
+) -> BurnConstDensityOutput:
+    """Integrate a constant-density variable-T burn via Bader-Deuflhard.
+
+    Co-evolves molar abundances $Y_i = X_i / A_i$ and $\\ln T$ at fixed mass
+    density $\\rho = 10^{\\log_{10}\\rho}$ using
+    $d\\ln T / dt = \\epsilon_{\\mathrm{nuc}} / (c_V T)$.
+
+    Args:
+        net_name: Network filename (e.g., `"basic.net"`, `"approx21.net"`).
+        t_start: Starting time $t_{\\mathrm{start}}$ ($\\mathrm{s}$).
+        t_end: Ending time $t_{\\mathrm{end}}$ ($\\mathrm{s}$).
+        starting_x: Initial mass fractions (`(S,)`).
+        starting_log10_t: Initial $\\log_{10}(T_0 / \\mathrm{K})$.
+        log10_rho: Fixed $\\log_{10}(\\rho / \\mathrm{g\\,cm^{-3}})$.
+        rate_factors: Optional per-reaction multipliers (`(R,)`).
+        weak_rate_factor: Global weak-rate multiplier.
+        screening_mode: Plasma screening mode.
+        stptry_in: Initial step size guess (`0.0` for automatic).
+        max_steps: Maximum allowed substeps.
+        eps: Relative integration error tolerance.
+        odescal: Abundance scaling floor.
+
+    Returns:
+        Populated `BurnConstDensityOutput` dataclass.
+    """
+    x_arr = np.ascontiguousarray(starting_x, dtype=np.float64)
+    rf_arr = (
+        np.ascontiguousarray(rate_factors, dtype=np.float64)
+        if rate_factors is not None
+        else None
+    )
+    out = _rust.net_burn_1_zone_const_density(
+        str(net_name),
+        float(t_start),
+        float(t_end),
+        x_arr,
+        float(starting_log10_t),
+        float(log10_rho),
+        rf_arr,
+        float(weak_rate_factor),
+        str(screening_mode),
+        float(stptry_in),
+        int(max_steps),
+        float(eps),
+        float(odescal),
+    )
+    return BurnConstDensityOutput(
+        ending_x=np.asarray(out[0], dtype=np.float64),
+        ending_log10_t=float(out[1]),
+        eps_nuc_categories=np.asarray(out[2], dtype=np.float64),
+        avg_eps_nuc=float(out[3]),
+        eps_neu_total=float(out[4]),
+        nfcn=int(out[5]),
+        njac=int(out[6]),
+        nstep=int(out[7]),
+        naccpt=int(out[8]),
+        nrejct=int(out[9]),
     )
 
 

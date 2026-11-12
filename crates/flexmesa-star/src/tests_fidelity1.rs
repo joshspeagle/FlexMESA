@@ -50,7 +50,8 @@ fn test_eps_grav_time_centering_pc_blending_and_latent_heat_match_fortran() {
     let mut model = build_solar_test_model(false);
     let k = model.nz / 2;
 
-    // 1. Standard eps_grav vs time-centered eps_grav
+    // 1. Standard uncentered eps_grav vs default time-centered eps_grav
+    model.controls.use_time_centered_eps_grav = false;
     let std_uncentered = eval_eps_grav_std_cell(&model, k);
     model.controls.use_time_centered_eps_grav = true;
     model.aux.cp_start[k] = model.cp[k] * 1.10;
@@ -103,8 +104,8 @@ fn test_eps_grav_time_centering_pc_blending_and_latent_heat_match_fortran() {
             < 1.0e-12
     );
 
-    // 3. PC blending across [gamma_ln_s_eps_grav_full_off, gamma_ln_s_eps_grav_full_on]
-    model.gam[k] = 140.0; // midpoint of [120, 160] -> w_gam = 0.5
+    // 3. PC blending across [gamma_ln_s_eps_grav_full_off, gamma_ln_s_eps_grav_full_on] = [120, 150]
+    model.gam[k] = 135.0; // midpoint of [120, 150] -> w_gam = 0.5
     model.aux.eos_frac_pc[k] = 0.8; // alfa_lns = 0.4
     model.controls.eps_grav_factor = 0.75;
     model.controls.include_composition_in_eps_grav = true;
@@ -201,13 +202,25 @@ fn test_hydro_energy_pressure_time_centering_pvsc_pturb_and_chem_partials() {
     model.controls.mlt_pturb_factor = 0.6;
     model.aux.mlt_vc_old[k] = 2.0e5;
 
-    // Make cell k strongly compressing so Pvsc > 0
-    model.v[k] = -5.0e6;
-    model.v_start[k] = -5.0e6;
-    model.v[k + 1] = 1.0e6;
-    model.v_start[k + 1] = 1.0e6;
+    // Subsonic compression stays below `pvsc_zshock = 0.1`, while supersonic shock triggers Pvsc > 0
+    model.v[k] = -1.0e4;
+    model.v_start[k] = -1.0e4;
+    model.v[k + 1] = 0.0;
+    model.v_start[k + 1] = 0.0;
+    assert_eq!(eval_pvsc_cell_ad(&model, k).val, 0.0);
+
+    let dr_k = (model.r[k] - model.r[k + 1]).max(1.0);
+    let v_shock = -0.25 * model.csound[k] * (model.r[k] / dr_k);
+    model.v[k] = v_shock;
+    model.v_start[k] = v_shock;
+    model.v[k + 1] = 0.0;
+    model.v_start[k + 1] = 0.0;
     let pvsc = eval_pvsc_cell_ad(&model, k);
-    assert!(pvsc.val > 0.0 && pvsc.d1[I_V_00] < 0.0);
+    let dv_exp = (model.v[k + 1] - model.v[k])
+        - model.controls.pvsc_zshock * (model.peos[k] / model.rho[k]).sqrt();
+    let pvsc_exp = model.controls.pvsc_cq * model.rho[k] * dv_exp * dv_exp;
+    assert!((pvsc.val - pvsc_exp).abs() / pvsc_exp < 1.0e-14);
+    assert!(pvsc.d1[I_V_00] < 0.0);
 
     // Time-centered spherical area formula
     let lnr_ad =
@@ -219,10 +232,15 @@ fn test_hydro_energy_pressure_time_centering_pvsc_pturb_and_chem_partials() {
     let expected_area = (FOUR_PI / 3.0) * (r * r + r * rs + rs * rs);
     assert!((area_tc.val - expected_area).abs() / expected_area < 1.0e-12);
 
-    // Populate EOS composition partial derivatives and check Jacobian entries
+    // Populate EOS composition partial derivatives and check spherical `eval_dwork_dm`
+    // tridiagonal Jacobian entries (`lblk`, `dblk`, `ublk`) when `use_p_d_1_div_rho... == false`
     let base = k * model.species;
+    let base_m1 = (k - 1) * model.species;
+    let base_p1 = (k + 1) * model.species;
     model.aux.dln_e_dxa_for_partials[base] = 0.85;
+    model.aux.dln_peos_dxa_for_partials[base_m1] = -0.31;
     model.aux.dln_peos_dxa_for_partials[base] = -0.42;
+    model.aux.dln_peos_dxa_for_partials[base_p1] = -0.53;
 
     let nvar = model.layout.nvar(true);
     let x_scale = compute_x_scale(&model, true);
@@ -233,19 +251,29 @@ fn test_hydro_energy_pressure_time_centering_pvsc_pturb_and_chem_partials() {
     let j_chem0 = model.layout.chem_var_index(0);
     let dblk_chem = sys.dblk[k * nvar * nvar + i_equ * nvar + j_chem0]
         / x_scale[k * nvar + j_chem0];
+    let lblk_chem = sys.lblk[k * nvar * nvar + i_equ * nvar + j_chem0]
+        / x_scale[(k - 1) * nvar + j_chem0];
+    let ublk_chem = sys.ublk[k * nvar * nvar + i_equ * nvar + j_chem0]
+        / x_scale[(k + 1) * nvar + j_chem0];
 
-    let mut scal = model.dt / model.energy_start[k].max(1.0);
-    if k == 0 {
-        scal *= 1.0e-6;
-    }
-    let d_inv_rho_dt =
-        ((-model.lnd[k]).exp() - (-model.lnd_start[k]).exp()) / model.dt;
-    let expected_d_chem = scal * model.d_epsnuc_dx[base]
+    let scal = crate::hydro_energy::set_energy_eqn_scal(&model, k);
+    let (_, fac_m1, fac_00, fac_p1) =
+        crate::hydro_work::eval_v_flag_dwork_dm_ad(&model, k, false, true);
+    let expected_d00 = scal * model.d_epsnuc_dx[base]
         - scal * (model.energy[k] / model.dt) * 0.85
-        - scal * 0.55 * model.peos[k] * d_inv_rho_dt * (-0.42);
+        - scal * fac_00 * (-0.42);
+    let expected_dm1 = -scal * fac_m1 * (-0.31);
+    let expected_dp1 = -scal * fac_p1 * (-0.53);
     assert!(
-        (dblk_chem - expected_d_chem).abs()
-            / expected_d_chem.abs().max(1.0e-20)
+        (dblk_chem - expected_d00).abs() / expected_d00.abs().max(1.0e-20)
+            < 1.0e-12
+    );
+    assert!(
+        (lblk_chem - expected_dm1).abs() / expected_dm1.abs().max(1.0e-20)
+            < 1.0e-12
+    );
+    assert!(
+        (ublk_chem - expected_dp1).abs() / expected_dp1.abs().max(1.0e-20)
             < 1.0e-12
     );
 }
@@ -269,10 +297,10 @@ fn test_hydro_momentum_and_radius_rotational_fp_drag_pvsc_rti_and_bounds() {
     model.aux.mlt_vc_old[k - 1] = 1.2e5;
     model.controls.rti_flag = true;
     model.controls.dudt_rti_diffusion_factor = 1.2;
-    model.aux.sig_rti[k - 1] = 1.0e22;
-    model.aux.sig_rti[k] = 1.5e22;
-    model.aux.sig_rti[k + 1] = 2.0e22;
-    model.aux.source_plus_alpha_rti[k] = 5.0;
+    model.controls.dlnddt_rti_diffusion_factor = 1.0;
+    model.aux.sigmid_rti[k - 1] = 1.0e22;
+    model.aux.sigmid_rti[k] = 1.5e22;
+    model.aux.eta_rti[k] = 1.0e14;
 
     let nvar = model.layout.nvar(false);
     let x_scale = compute_x_scale(&model, false);

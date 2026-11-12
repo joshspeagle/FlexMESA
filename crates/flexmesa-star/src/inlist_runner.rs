@@ -233,7 +233,8 @@ pub fn run_inlist_stage(
     if job_step_cap.is_some_and(|b| b <= cap) {
         termination_code = String::from("steps_to_take_before_terminate");
     }
-    let do_remesh = model.controls.mesh_delta_coeff > 0.0;
+    let do_remesh =
+        model.controls.okay_to_remesh && model.controls.mesh_delta_coeff > 0.0;
     let op_split_burn = model.controls.op_split_burn;
 
     let init_hr = extract_history_row(model);
@@ -352,7 +353,8 @@ pub fn verify_photo_restart_parity(
     n_verify_steps: usize,
 ) -> Result<(u64, u64), StarError> {
     let mut continued = model.clone();
-    let do_remesh = continued.controls.mesh_delta_coeff > 0.0;
+    let do_remesh = continued.controls.okay_to_remesh
+        && continued.controls.mesh_delta_coeff > 0.0;
     let op_split = continued.controls.op_split_burn;
     if continued.lnd_old.is_empty() {
         star_evolve_step(&mut continued, do_remesh, op_split, true)?;

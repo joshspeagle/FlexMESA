@@ -415,10 +415,16 @@ impl Default for Rsp2Controls {
 pub(crate) fn populate_rsp_inlist(
     sj: Option<&SectionControls>,
     ctrl: Option<&SectionControls>,
-    _job: &mut StarJobControls,
+    job: &mut StarJobControls,
     c: &mut StarControls,
 ) {
     if let Some(sj) = sj {
+        if sj.get_bool("load_saved_model_for_rsp2") == Some(true) {
+            job.load_saved_model = true;
+            c.rsp2.change_rsp2_flag = true;
+            c.rsp2.new_rsp2_flag = true;
+            c.rsp2_flag = true;
+        }
         if let Some(b) = sj.get_bool("change_rsp_flag").or_else(|| sj.get_bool("change_initial_rsp_flag")) {
             c.rsp2.change_rsp_flag = b;
         }

@@ -107,7 +107,7 @@ print(
 
 ## Nuclear Reaction Networks & Stiff Burners (`flexmesa.net`)
 
-`flexmesa.net` constructs arbitrary reaction topologies (`basic.net`, `pp_and_cno_extras.net`, `co_burn.net`, `approx21.net`), evaluates specific nuclear energy generation $\epsilon_{\mathrm{nuc}}$, reaction neutrino losses $\epsilon_{\nu,\mathrm{nuc}}$, molar abundance derivatives $dY_i/dt$, and exact analytical sparse/dense Jacobians $\partial(dY_i/dt)/\partial Y_j$, and integrates stiff 1-zone constant-$(T, \rho)$ networks via semi-implicit Bader-Deuflhard / Rosenbrock time stepping.
+`flexmesa.net` constructs arbitrary reaction topologies (`basic.net`, `pp_and_cno_extras.net`, `co_burn.net`, `approx21.net`, `mesa_80.net`), evaluates specific nuclear energy generation $\epsilon_{\mathrm{nuc}}$, reaction neutrino losses $\epsilon_{\nu,\mathrm{nuc}}$, molar abundance derivatives $dY_i/dt$, and exact analytical sparse/dense Jacobians $\partial(dY_i/dt)/\partial Y_j$ backed by thread-local `NetWorkState` buffers, and integrates stiff 1-zone prescribed-trajectory (`burn_1_zone`), constant-density variable-temperature (`burn_1_zone_const_density`), and constant-pressure (`burn_1_zone_const_p`) networks via semi-implicit Bader-Deuflhard and Rosenbrock time stepping.
 
 ::: flexmesa.net._core
 

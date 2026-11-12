@@ -8,65 +8,37 @@ use crate::controls::{StarControls, StarError, StarJobControls};
 use crate::model::StarModel;
 use crate::model_io::STAR_DEF_VERSION;
 
-fn kap_option_to_u8(opt: KapOption) -> u8 {
-    match opt {
-        KapOption::Gn93 => 0,
-        KapOption::Gs98 => 1,
-        KapOption::A09 => 2,
-        KapOption::OpGs98 => 3,
-        KapOption::OpA09 => 4,
-    }
+const KAP_OPTS: [KapOption; 5] = [
+    KapOption::Gn93,
+    KapOption::Gs98,
+    KapOption::A09,
+    KapOption::OpGs98,
+    KapOption::OpA09,
+];
+const KAP_CO_OPTS: [KapCoOption; 3] =
+    [KapCoOption::Gn93Co, KapCoOption::Gs98Co, KapCoOption::A09Co];
+const KAP_LOW_T_OPTS: [KapLowTOption; 6] = [
+    KapLowTOption::LowTFa05Gs98,
+    KapLowTOption::LowTFa05Gn93,
+    KapLowTOption::LowTFa05A09p,
+    KapLowTOption::LowTFreedman11,
+    KapLowTOption::KapCn,
+    KapLowTOption::Aesopus,
+];
+
+fn enum_to_u8<T: PartialEq>(table: &[T], val: &T) -> u8 {
+    u8::try_from(table.iter().position(|x| x == val).unwrap_or(0)).unwrap_or(0)
 }
 
-fn kap_option_from_u8(v: u8) -> Result<KapOption, StarError> {
-    match v {
-        0 => Ok(KapOption::Gn93),
-        1 => Ok(KapOption::Gs98),
-        2 => Ok(KapOption::A09),
-        3 => Ok(KapOption::OpGs98),
-        4 => Ok(KapOption::OpA09),
-        _ => Err(StarError::IoError(format!("invalid KapOption tag {v}"))),
-    }
-}
-
-fn kap_co_option_to_u8(opt: KapCoOption) -> u8 {
-    match opt {
-        KapCoOption::Gn93Co => 0,
-        KapCoOption::Gs98Co => 1,
-        KapCoOption::A09Co => 2,
-    }
-}
-
-fn kap_co_option_from_u8(v: u8) -> Result<KapCoOption, StarError> {
-    match v {
-        0 => Ok(KapCoOption::Gn93Co),
-        1 => Ok(KapCoOption::Gs98Co),
-        2 => Ok(KapCoOption::A09Co),
-        _ => Err(StarError::IoError(format!("invalid KapCoOption tag {v}"))),
-    }
-}
-
-fn kap_low_t_option_to_u8(opt: KapLowTOption) -> u8 {
-    match opt {
-        KapLowTOption::LowTFa05Gs98 => 0,
-        KapLowTOption::LowTFa05Gn93 => 1,
-        KapLowTOption::LowTFa05A09p => 2,
-        KapLowTOption::LowTFreedman11 => 3,
-        KapLowTOption::KapCn => 4,
-        KapLowTOption::Aesopus => 5,
-    }
-}
-
-fn kap_low_t_option_from_u8(v: u8) -> Result<KapLowTOption, StarError> {
-    match v {
-        0 => Ok(KapLowTOption::LowTFa05Gs98),
-        1 => Ok(KapLowTOption::LowTFa05Gn93),
-        2 => Ok(KapLowTOption::LowTFa05A09p),
-        3 => Ok(KapLowTOption::LowTFreedman11),
-        4 => Ok(KapLowTOption::KapCn),
-        5 => Ok(KapLowTOption::Aesopus),
-        _ => Err(StarError::IoError(format!("invalid KapLowTOption tag {v}"))),
-    }
+fn enum_from_u8<T: Copy>(
+    table: &[T],
+    v: u8,
+    name: &str,
+) -> Result<T, StarError> {
+    table
+        .get(usize::from(v))
+        .copied()
+        .ok_or_else(|| StarError::IoError(format!("invalid {name} tag {v}")))
 }
 
 /// Computes a deterministic 64-bit FNV-1a checksum of `.photo` restart bytes
@@ -116,6 +88,7 @@ pub fn write_photo_bytes(model: &StarModel) -> Vec<u8> {
         u8::from(model.controls.op_split_burn),
         u8::from(model.controls.rsp_flag),
         u8::from(model.controls.rsp2_flag),
+        u8::from(model.controls.rti_flag),
     ]);
 
     write_i32(&mut buf, 2);
@@ -132,10 +105,17 @@ pub fn write_photo_bytes(model: &StarModel) -> Vec<u8> {
 
     write_i32(&mut buf, 3);
     write_u64(&mut buf, model.lnd_old.len() as u64);
-    for s in [&model.lnd_old, &model.ln_t_old, &model.ln_r_old] {
-        write_f64_slice(&mut buf, s);
-    }
-    for s in [&model.lum_old, &model.dq_old, &model.xa_old] {
+    for s in [
+        &model.lnd_old,
+        &model.ln_t_old,
+        &model.ln_r_old,
+        &model.lum_old,
+        &model.v_old,
+        &model.u_old,
+        &model.dq_old,
+        &model.aux.alpha_rti_old,
+        &model.xa_old,
+    ] {
         write_f64_slice(&mut buf, s);
     }
     write_u64(&mut buf, model.lnd_start.len() as u64);
@@ -144,7 +124,17 @@ pub fn write_photo_bytes(model: &StarModel) -> Vec<u8> {
         &model.ln_t_start,
         &model.ln_r_start,
         &model.lum_start,
+        &model.v_start,
+        &model.u_start,
     ] {
+        write_f64_slice(&mut buf, s);
+    }
+    for s in [
+        &model.aux.alpha_rti_start,
+        &model.aux.p_face_start,
+        &model.aux.u_face_start,
+    ] {
+        write_u64(&mut buf, s.len() as u64);
         write_f64_slice(&mut buf, s);
     }
 
@@ -202,9 +192,9 @@ pub fn write_photo_bytes(model: &StarModel) -> Vec<u8> {
         u8::from(ec.use_opal_scvh),
         u8::from(ec.okay_to_convert_ierr_to_skip),
         u8::from(ec.linear_blend),
-        kap_option_to_u8(kc.kap_option),
-        kap_co_option_to_u8(kc.kap_co_option),
-        kap_low_t_option_to_u8(kc.kap_low_t_option),
+        enum_to_u8(&KAP_OPTS, &kc.kap_option),
+        enum_to_u8(&KAP_CO_OPTS, &kc.kap_co_option),
+        enum_to_u8(&KAP_LOW_T_OPTS, &kc.kap_low_t_option),
         u8::from(kc.cubic_interpolation_in_x),
         u8::from(kc.cubic_interpolation_in_z),
         u8::from(kc.include_electron_conduction),
@@ -318,7 +308,7 @@ pub fn read_photo_bytes(
     expect_part(&mut pos, 1)?;
     let (nz, species) =
         (read_u64(&mut pos)? as usize, read_u64(&mut pos)? as usize);
-    let _nvar_hydro = read_u64(&mut pos)? as usize;
+    let nvar_hydro = read_u64(&mut pos)? as usize;
     let mut chem_id = Vec::with_capacity(species);
     for _ in 0..species {
         chem_id.push(read_u64(&mut pos)? as usize);
@@ -334,9 +324,9 @@ pub fn read_photo_bytes(
         })?
         .to_owned();
     let job_tags = bytes
-        .get(pos..pos + 6)
+        .get(pos..pos + 7)
         .ok_or_else(|| eof("EOF job/controls flags"))?;
-    pos += 6;
+    pos += 7;
     let mut job = job;
     let mut controls = controls;
     job.net_name = saved_net_name;
@@ -346,8 +336,15 @@ pub fn read_photo_bytes(
     controls.op_split_burn = job_tags[3] != 0;
     controls.rsp_flag = job_tags[4] != 0;
     controls.rsp2_flag = job_tags[5] != 0;
+    controls.rti_flag = job_tags[6] != 0;
 
     let mut model = StarModel::new(nz, chem_id, job, controls);
+    if nvar_hydro != model.layout.nvar_hydro {
+        return Err(StarError::IoError(format!(
+            "photo nvar_hydro mismatch: saved {nvar_hydro}, reconstructed {}",
+            model.layout.nvar_hydro
+        )));
+    }
 
     expect_part(&mut pos, 2)?;
     for dst in [
@@ -374,7 +371,10 @@ pub fn read_photo_bytes(
         &mut model.ln_t_old,
         &mut model.ln_r_old,
         &mut model.lum_old,
+        &mut model.v_old,
+        &mut model.u_old,
         &mut model.dq_old,
+        &mut model.aux.alpha_rti_old,
     ] {
         *dst = read_f64_vec(&mut pos, nz_old)?;
     }
@@ -384,6 +384,14 @@ pub fn read_photo_bytes(
     let saved_ln_t_start = read_f64_vec(&mut pos, nz_start)?;
     let saved_ln_r_start = read_f64_vec(&mut pos, nz_start)?;
     let saved_lum_start = read_f64_vec(&mut pos, nz_start)?;
+    let saved_v_start = read_f64_vec(&mut pos, nz_start)?;
+    let saved_u_start = read_f64_vec(&mut pos, nz_start)?;
+    let n_arti_s = read_u64(&mut pos)? as usize;
+    let saved_alpha_rti_start = read_f64_vec(&mut pos, n_arti_s)?;
+    let n_pf_s = read_u64(&mut pos)? as usize;
+    let saved_p_face_start = read_f64_vec(&mut pos, n_pf_s)?;
+    let n_uf_s = read_u64(&mut pos)? as usize;
+    let saved_u_face_start = read_f64_vec(&mut pos, n_uf_s)?;
 
     expect_part(&mut pos, 4)?;
     model.model_number = read_u64(&mut pos)? as usize;
@@ -427,9 +435,12 @@ pub fn read_photo_bytes(
     model.eos_config.use_opal_scvh = cfg_tags[4] != 0;
     model.eos_config.okay_to_convert_ierr_to_skip = cfg_tags[5] != 0;
     model.eos_config.linear_blend = cfg_tags[6] != 0;
-    model.kap_config.kap_option = kap_option_from_u8(cfg_tags[7])?;
-    model.kap_config.kap_co_option = kap_co_option_from_u8(cfg_tags[8])?;
-    model.kap_config.kap_low_t_option = kap_low_t_option_from_u8(cfg_tags[9])?;
+    model.kap_config.kap_option =
+        enum_from_u8(&KAP_OPTS, cfg_tags[7], "KapOption")?;
+    model.kap_config.kap_co_option =
+        enum_from_u8(&KAP_CO_OPTS, cfg_tags[8], "KapCoOption")?;
+    model.kap_config.kap_low_t_option =
+        enum_from_u8(&KAP_LOW_T_OPTS, cfg_tags[9], "KapLowTOption")?;
     model.kap_config.cubic_interpolation_in_x = cfg_tags[10] != 0;
     model.kap_config.cubic_interpolation_in_z = cfg_tags[11] != 0;
     model.kap_config.include_electron_conduction = cfg_tags[12] != 0;
@@ -473,20 +484,40 @@ pub fn read_photo_bytes(
         (None, None)
     };
     expect_part(&mut pos, 7)?;
+    if pos != bytes.len() {
+        return Err(StarError::IoError(format!(
+            "photo trailing bytes: consumed {pos} of {}",
+            bytes.len()
+        )));
+    }
 
     model.xmstar = (model.mstar - model.m_center).max(0.0);
     model.mstar_start = saved_mstar_start;
-    if saved_lnd_start.len() == nz {
-        model.lnd_start.clone_from(&saved_lnd_start);
-        model.ln_t_start.clone_from(&saved_ln_t_start);
-        model.ln_r_start.clone_from(&saved_ln_r_start);
-        model.lum_start.clone_from(&saved_lum_start);
+    let start_src = if saved_lnd_start.len() == nz {
+        (
+            &saved_lnd_start,
+            &saved_ln_t_start,
+            &saved_ln_r_start,
+            &saved_lum_start,
+            &saved_v_start,
+            &saved_u_start,
+        )
     } else {
-        model.lnd_start.clone_from(&model.lnd);
-        model.ln_t_start.clone_from(&model.ln_t);
-        model.ln_r_start.clone_from(&model.ln_r);
-        model.lum_start.clone_from(&model.lum);
-    }
+        (
+            &model.lnd,
+            &model.ln_t,
+            &model.ln_r,
+            &model.lum,
+            &model.v,
+            &model.u,
+        )
+    };
+    model.lnd_start.clone_from(start_src.0);
+    model.ln_t_start.clone_from(start_src.1);
+    model.ln_r_start.clone_from(start_src.2);
+    model.lum_start.clone_from(start_src.3);
+    model.v_start.clone_from(start_src.4);
+    model.u_start.clone_from(start_src.5);
     model.sig.clone_from(&saved_sig);
     model.mlt_vc.clone_from(&saved_mlt_vc);
     model.aux.mlt_vc_old.clone_from(&saved_mlt_vc_old);
@@ -527,16 +558,30 @@ pub fn read_photo_bytes(
     }
     model.mstar_start = saved_mstar_start;
     if saved_lnd_start.len() == nz {
-        model.lnd_start = saved_lnd_start;
-        model.ln_t_start = saved_ln_t_start;
-        model.ln_r_start = saved_ln_r_start;
-        model.lum_start = saved_lum_start;
+        (model.lnd_start, model.ln_t_start, model.ln_r_start) =
+            (saved_lnd_start, saved_ln_t_start, saved_ln_r_start);
+        (model.lum_start, model.v_start, model.u_start) =
+            (saved_lum_start, saved_v_start, saved_u_start);
     }
+    model.aux.alpha_rti_start = saved_alpha_rti_start;
+    model.aux.p_face_start = saved_p_face_start;
+    model.aux.u_face_start = saved_u_face_start;
     model.sig = saved_sig;
     model.mlt_vc = saved_mlt_vc;
     model.aux.mlt_vc_old = saved_mlt_vc_old;
     if let Some(rsp) = saved_rsp {
         model.aux.rsp = rsp;
+    }
+    if !model.controls.rsp_flag {
+        if model.controls.rti_flag {
+            crate::hydro_rti::set_rti_mixing_info(&mut model);
+        }
+        if model.controls.u_flag {
+            crate::riemann_ad::do_uface_and_pface(&mut model)?;
+        }
+        if model.controls.rti_flag {
+            crate::hydro_rti::set_dpdr_drhodr_info(&mut model);
+        }
     }
 
     Ok(model)

@@ -169,6 +169,8 @@ pub fn write_photo_bytes(model: &StarModel) -> Vec<u8> {
             model.teff,
             model.tau_base,
             model.mstar_start,
+            model.aux.total_energy,
+            model.aux.cumulative_energy_error,
         ],
     );
     write_u64(&mut buf, model.total_num_solver_iterations as u64);
@@ -237,40 +239,26 @@ pub fn write_photo_bytes(model: &StarModel) -> Vec<u8> {
         || r.hp_face.iter().any(|&x| x != 0.0);
     buf.push(u8::from(has_rsp));
     if has_rsp {
-        for s in [
-            &r.et_rsp,
-            &r.erad_rsp,
-            &r.fr_rsp,
-            &r.lc_rsp,
-            &r.lt_rsp,
-            &r.ptrb_rsp,
-            &r.pvsc_rsp,
-            &r.egas_rsp,
-            &r.hp_face,
-            &r.vol_start,
-            &r.w_start,
-            &r.fr_start,
-            &r.erad_start,
-            &r.egas_start,
-            &r.pgas_start,
-            &r.prad_start,
-            &r.opacity_start,
-            &r.qq_start,
-            &r.lc_start,
-            &r.lt_start,
-            &r.ppp0,
-            &r.ppq0,
-            &r.ppt0,
-            &r.ppc0,
-            &r.vv0,
-            &r.work,
-            &r.workq,
-            &r.workt,
-            &r.workc,
-        ] {
+        for s in r.zone_vecs() {
             write_f64_slice(&mut buf, s);
         }
         write_f64_slice(&mut buf, &r.pack_scalars());
+        if model.controls.rsp_flag {
+            for s in [
+                &model.t,
+                &model.pgas,
+                &model.prad,
+                &model.opacity,
+                &model.csound,
+                &model.cp,
+                &model.r,
+                &model.m,
+                &model.dm,
+                &model.dm_bar,
+            ] {
+                write_f64_slice(&mut buf, s);
+            }
+        }
     }
     write_i32(&mut buf, 7);
     buf
@@ -399,7 +387,7 @@ pub fn read_photo_bytes(
 
     expect_part(&mut pos, 4)?;
     model.model_number = read_u64(&mut pos)? as usize;
-    let s = read_f64_vec(&mut pos, 16)?;
+    let s = read_f64_vec(&mut pos, 18)?;
     (model.star_age, model.star_age_old, model.dt) = (s[0], s[1], s[2]);
     (model.dt_next, model.dt_old, model.dt_limit_ratio_old) =
         (s[3], s[4], s[5]);
@@ -407,6 +395,8 @@ pub fn read_photo_bytes(
     (model.m_center, model.r_center, model.l_center) = (s[9], s[10], s[11]);
     (model.v_center, model.teff, model.tau_base) = (s[12], s[13], s[14]);
     let saved_mstar_start = s[15];
+    model.aux.total_energy = s[16];
+    model.aux.cumulative_energy_error = s[17];
     model.total_num_solver_iterations = read_u64(&mut pos)? as usize;
     model.num_retries = read_u64(&mut pos)? as usize;
 
@@ -462,46 +452,25 @@ pub fn read_photo_bytes(
     expect_part(&mut pos, 6)?;
     let has_rsp = *bytes.get(pos).ok_or_else(|| eof("EOF has_rsp"))? != 0;
     pos += 1;
-    let saved_rsp = if has_rsp {
+    let (saved_rsp, saved_rsp_model_vecs) = if has_rsp {
         let mut rsp = crate::rsp_def::RspState::new(nz);
-        for dst in [
-            &mut rsp.et_rsp,
-            &mut rsp.erad_rsp,
-            &mut rsp.fr_rsp,
-            &mut rsp.lc_rsp,
-            &mut rsp.lt_rsp,
-            &mut rsp.ptrb_rsp,
-            &mut rsp.pvsc_rsp,
-            &mut rsp.egas_rsp,
-            &mut rsp.hp_face,
-            &mut rsp.vol_start,
-            &mut rsp.w_start,
-            &mut rsp.fr_start,
-            &mut rsp.erad_start,
-            &mut rsp.egas_start,
-            &mut rsp.pgas_start,
-            &mut rsp.prad_start,
-            &mut rsp.opacity_start,
-            &mut rsp.qq_start,
-            &mut rsp.lc_start,
-            &mut rsp.lt_start,
-            &mut rsp.ppp0,
-            &mut rsp.ppq0,
-            &mut rsp.ppt0,
-            &mut rsp.ppc0,
-            &mut rsp.vv0,
-            &mut rsp.work,
-            &mut rsp.workq,
-            &mut rsp.workt,
-            &mut rsp.workc,
-        ] {
+        for dst in rsp.zone_vecs_mut() {
             *dst = read_f64_vec(&mut pos, nz)?;
         }
-        let sc = read_f64_vec(&mut pos, 34)?;
+        let sc = read_f64_vec(&mut pos, 155)?;
         rsp.unpack_scalars(&sc);
-        Some(rsp)
+        let mvecs = if model.controls.rsp_flag {
+            let mut arr: [Vec<f64>; 10] = Default::default();
+            for v in &mut arr {
+                *v = read_f64_vec(&mut pos, nz)?;
+            }
+            Some(arr)
+        } else {
+            None
+        };
+        (Some(rsp), mvecs)
     } else {
-        None
+        (None, None)
     };
     expect_part(&mut pos, 7)?;
 
@@ -528,14 +497,34 @@ pub fn read_photo_bytes(
     model.pack_xh();
     if model.controls.rsp_flag {
         crate::micro::set_basic_vars(&mut model)?;
-        crate::micro::do_eos(&mut model)?;
-        crate::micro::do_kap(&mut model)?;
+        if let Some([t, pg, pr, kap, cs, cp, r, m, dm, dmb]) =
+            saved_rsp_model_vecs
+        {
+            (model.t, model.pgas, model.prad) = (t, pg, pr);
+            (model.opacity, model.csound, model.cp) = (kap, cs, cp);
+            (model.r, model.m, model.dm, model.dm_bar) = (r, m, dm, dmb);
+            model.set_m_grav_and_grav();
+            model.pack_xh();
+            for k in 0..nz {
+                model.rho[k] = model.lnd[k].exp();
+                model.peos[k] = model.pgas[k] + model.prad[k];
+                let r_in = if k + 1 < nz {
+                    model.r[k + 1]
+                } else {
+                    model.r_center
+                };
+                model.rmid[k] = 0.5 * (model.r[k] + r_in);
+            }
+        } else {
+            crate::micro::do_eos(&mut model)?;
+            crate::micro::do_kap(&mut model)?;
+        }
     } else {
         crate::hydro_vars::set_hydro_vars(&mut model, false, false)?;
         let dt_photo = model.dt;
         crate::struct_burn_mix::refresh_mixing_state(&mut model, dt_photo, &[]);
+        model.save_start_values();
     }
-    model.save_start_values();
     model.mstar_start = saved_mstar_start;
     if saved_lnd_start.len() == nz {
         model.lnd_start = saved_lnd_start;

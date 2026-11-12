@@ -103,6 +103,11 @@ pub fn write_mod_string(model: &StarModel) -> Result<String, StarError> {
             model.controls.opacity_factor,
             model.controls.opacity_factor != 1.0,
         ),
+        (
+            "total_energy",
+            model.aux.total_energy,
+            write_rsp && model.aux.total_energy != 0.0,
+        ),
         ("cumulative_energy_error", c_err, c_err != 0.0),
     ] {
         if show {
@@ -241,6 +246,7 @@ pub fn read_mod_str(
     let (mut xmstar_opt, mut m_center_opt) = (None, None);
     let (mut r_center, mut l_center, mut v_center, mut cum_energy_err) =
         (0.0_f64, 0.0_f64, 0.0_f64, 0.0_f64);
+    let mut total_energy = 0.0_f64;
     let mut header_cols: Vec<String> = Vec::new();
 
     for line in lines.by_ref() {
@@ -286,6 +292,7 @@ pub fn read_mod_str(
             "R_center" => r_center = parse_fortran_f64(v)?,
             "L_center" => l_center = parse_fortran_f64(v)?,
             "v_center" => v_center = parse_fortran_f64(v)?,
+            "total_energy" => total_energy = parse_fortran_f64(v)?,
             "cumulative_energy_error" => cum_energy_err = parse_fortran_f64(v)?,
             "tau_factor" if !job.set_tau_factor => {
                 controls.tau_factor = parse_fortran_f64(v)?;
@@ -346,6 +353,9 @@ pub fn read_mod_str(
     } else {
         controls.rsp2_flag || (w_idx.is_some() && hp_idx.is_some())
     };
+    if controls.rsp2_flag {
+        controls.rsp_flag = false;
+    }
 
     let iso_names = &header_cols[iso_start_idx..];
     let species = iso_names.len();
@@ -367,6 +377,7 @@ pub fn read_mod_str(
     }
     (model.r_center, model.l_center, model.v_center) =
         (r_center, l_center, v_center);
+    model.aux.total_energy = total_energy;
     model.aux.cumulative_energy_error = cum_energy_err;
     (model.model_number, model.num_retries) = (model_number, num_retries);
     (model.star_age, model.teff) = (star_age, teff);
@@ -475,14 +486,29 @@ pub fn read_mod_str(
     let saved_dq = model.dq.clone();
     let saved_vc = vc_idx.map(|_| model.mlt_vc.clone());
     let saved_hp = hp_idx.map(|_| model.aux.rsp.hp_face.clone());
-    model.finish_init_model()?;
-    if (saved_dq.iter().sum::<f64>() - 1.0).abs() <= 1.0e-12 {
-        model.dq.clone_from(&saved_dq);
-        model.dq_old = saved_dq;
+    if model.controls.rsp_flag {
+        if (saved_dq.iter().sum::<f64>() - 1.0).abs() <= 1.0e-12 {
+            model.dq.clone_from(&saved_dq);
+            model.dq_old = saved_dq;
+        }
         model.set_qs();
         model.set_xqs();
         model.set_m_and_dm();
         model.set_m_grav_and_grav();
+        model.pack_xh();
+        crate::micro::set_basic_vars(&mut model)?;
+        model.save_start_values();
+        model.save_old_values();
+    } else {
+        model.finish_init_model()?;
+        if (saved_dq.iter().sum::<f64>() - 1.0).abs() <= 1.0e-12 {
+            model.dq.clone_from(&saved_dq);
+            model.dq_old = saved_dq;
+            model.set_qs();
+            model.set_xqs();
+            model.set_m_and_dm();
+            model.set_m_grav_and_grav();
+        }
     }
     if let Some(vc) = saved_vc {
         model.conv_vel.clone_from(&vc);

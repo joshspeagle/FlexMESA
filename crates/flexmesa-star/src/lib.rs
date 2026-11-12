@@ -101,13 +101,23 @@ pub mod rsp_build;
 pub mod rsp_config;
 pub mod rsp_crossing;
 pub mod rsp_def;
+pub mod rsp_driver;
 pub mod rsp_eos_inv;
 pub mod rsp_eos_kap;
+pub mod rsp_eqns;
+pub(crate) mod rsp_eqns_cell;
 pub mod rsp_grid;
+pub mod rsp_hyd;
+pub mod rsp_hyd_flux;
+pub mod rsp_hyd_turb;
+pub mod rsp_hyd_vars;
+pub mod rsp_hyd_work;
 pub mod rsp_lina;
 pub(crate) mod rsp_lina_io;
 pub mod rsp_relax_env;
 pub mod rsp_stah;
+pub(crate) mod rsp_state_io;
+pub(crate) mod rsp_stats;
 pub mod rsp_turb_partials;
 pub mod rsp_zone_micro;
 pub mod solver;
@@ -265,6 +275,9 @@ pub use rsp_build::{
 pub use rsp_config::{Rsp2Controls, RspConfig};
 pub use rsp_def::{
     RspDerivedConsts, RspState, F_EDD_FREE_STREAM, F_EDD_ISOTROPIC, MAX_RSP_NZN,
+};
+pub use rsp_driver::{
+    rsp_one_step, rsp_setup_model, rsp_total_energy_integrals,
 };
 pub use rsp_eos_kap::{
     compute_standard_metals_xa, eval1_gamma_pt_get_rho, eval1_mesa_eos_and_kap,

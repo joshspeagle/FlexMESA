@@ -190,6 +190,14 @@ pub struct RspConfig {
     pub atm_t_tau_errtol: f64,
     /// Maximum iterations for grey $T(\tau)$ opacity solve (`50`).
     pub atm_t_tau_max_iters: usize,
+    /// Maximum per-step timestep growth factor (`1.2` in `controls.defaults`).
+    pub max_timestep_factor: f64,
+    /// Hard upper bound on timestep in $\mathrm{s}$ (`0.0` disables).
+    pub max_timestep: f64,
+    /// Forced fixed timestep in $\mathrm{s}$ (`0.0` disables).
+    pub force_timestep: f64,
+    /// Forced minimum timestep floor in $\mathrm{s}$ (`0.0` disables).
+    pub force_timestep_min: f64,
 }
 
 impl Default for RspConfig {
@@ -282,6 +290,10 @@ impl Default for RspConfig {
             max_logt_for_opacity_factor_off: -1.0,
             atm_t_tau_errtol: 1.0e-4,
             atm_t_tau_max_iters: 50,
+            max_timestep_factor: 1.2,
+            max_timestep: 0.0,
+            force_timestep: 0.0,
+            force_timestep_min: 0.0,
         }
     }
 }
@@ -466,6 +478,10 @@ pub(crate) fn populate_rsp_inlist(
         ("max_logt_for_opacity_factor_on", &mut r.max_logt_for_opacity_factor_on),
         ("max_logt_for_opacity_factor_off", &mut r.max_logt_for_opacity_factor_off),
         ("atm_t_tau_errtol", &mut r.atm_t_tau_errtol),
+        ("max_timestep_factor", &mut r.max_timestep_factor),
+        ("max_timestep", &mut r.max_timestep),
+        ("force_timestep", &mut r.force_timestep),
+        ("force_timestep_min", &mut r.force_timestep_min),
     ] {
         if let Some(v) = ctrl.get_f64(k) { *dst = v; }
     }

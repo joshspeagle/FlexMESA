@@ -54,80 +54,56 @@ pub trait StarExtras {
     /// Invoked after `inlist` controls are loaded before model initialization.
     fn extras_controls(&mut self, _model: &mut StarModel) {}
 
-    /// Invoked once at the start of an evolutionary stage after model loading
-    /// and `&star_job` relaxation.
+    /// Invoked once at the start of an evolutionary stage after model loading.
     ///
     /// # Errors
     /// Returns [`StarError`] if custom startup initialization fails.
     fn extras_startup(
         &mut self,
-        _model: &mut StarModel,
-        _restart: bool,
+        _m: &mut StarModel,
+        _r: bool,
     ) -> Result<(), StarError> {
         Ok(())
     }
-
     /// Invoked at the start of each evolutionary step before remeshing.
-    fn extras_start_step(&mut self, _model: &mut StarModel) -> ExtrasDirective {
+    fn extras_start_step(&mut self, _m: &mut StarModel) -> ExtrasDirective {
         ExtrasDirective::KeepGoing
     }
-
     /// Invoked immediately after a step converges to check custom limits.
-    fn extras_check_model(
-        &mut self,
-        _model: &mut StarModel,
-    ) -> ExtrasDirective {
+    fn extras_check_model(&mut self, _m: &mut StarModel) -> ExtrasDirective {
         ExtrasDirective::KeepGoing
     }
-
     /// Invoked at the end of a step after history extraction.
-    fn extras_finish_step(
-        &mut self,
-        _model: &mut StarModel,
-    ) -> ExtrasDirective {
+    fn extras_finish_step(&mut self, _m: &mut StarModel) -> ExtrasDirective {
         ExtrasDirective::KeepGoing
     }
-
     /// Invoked once after the evolutionary loop terminates.
-    fn extras_after_evolve(&mut self, _model: &mut StarModel) {}
-
-    /// Custom effective gravitational constant profile $G_{\mathrm{eff}}(k)$
-    /// invoked when `controls.use_other_cgrav` is true.
-    fn other_cgrav(&self, _model: &mut StarModel) {}
-
-    /// Custom mixing-length parameter profile $\alpha_{\mathrm{MLT}}(k)$
-    /// invoked when `controls.use_other_alpha_mlt` is true.
-    fn other_alpha_mlt(&self, _model: &mut StarModel) {}
-
-    /// Custom wind mass-loss rate $\dot{M}$ ($M_\odot\,\mathrm{yr^{-1}}$)
-    /// invoked when `controls.use_other_wind` is true.
+    fn extras_after_evolve(&mut self, _m: &mut StarModel) {}
+    /// Custom effective gravitational constant profile $G_{\mathrm{eff}}(k)$.
+    fn other_cgrav(&self, _m: &mut StarModel) {}
+    /// Custom mixing-length parameter profile $\alpha_{\mathrm{MLT}}(k)$.
+    fn other_alpha_mlt(&self, _m: &mut StarModel) {}
+    /// Custom wind mass-loss rate $\dot{M}$ ($M_\odot\,\mathrm{yr^{-1}}$).
     fn other_wind(
         &self,
-        _model: &StarModel,
+        _m: &StarModel,
         _l: f64,
-        _m: f64,
+        _ms: f64,
         _r: f64,
         _t: f64,
     ) -> Option<f64> {
         None
     }
-
-    /// Custom multiplier or adjustment on $\dot{M}$ (`g s^-1`) invoked when
-    /// `controls.use_other_adjust_mdot` is true.
-    fn other_adjust_mdot(&self, _model: &StarModel, current_mdot: f64) -> f64 {
+    /// Custom multiplier or adjustment on $\dot{M}$ ($\mathrm{g\,s^{-1}}$).
+    fn other_adjust_mdot(&self, _m: &StarModel, current_mdot: f64) -> f64 {
         current_mdot
     }
-
-    /// Custom specific angular momentum torque $\dot{j}_{\mathrm{extra}}(k)$
-    /// ($\mathrm{cm^2\,s^{-2}}$) invoked when `controls.use_other_torque` is true.
-    fn other_torque(&self, _model: &StarModel) -> Option<Vec<f64>> {
+    /// Custom specific angular momentum torque $\dot{j}_{\mathrm{extra}}(k)$ ($\mathrm{cm^2\,s^{-2}}$).
+    fn other_torque(&self, _m: &StarModel) -> Option<Vec<f64>> {
         None
     }
-
-    /// Custom extra specific energy generation $\epsilon_{\mathrm{extra}}(k)$
-    /// ($\mathrm{erg\,g^{-1}\,s^{-1}}$) invoked when `controls.use_other_energy`
-    /// is true.
-    fn other_energy(&self, _model: &StarModel) -> Option<Vec<f64>> {
+    /// Custom extra specific energy generation $\epsilon_{\mathrm{extra}}(k)$ ($\mathrm{erg\,g^{-1}\,s^{-1}}$).
+    fn other_energy(&self, _m: &StarModel) -> Option<Vec<f64>> {
         None
     }
 }
@@ -152,7 +128,7 @@ fn write_mod_if_missing(
     model: &StarModel,
     out_path: &Path,
 ) -> Result<(), StarError> {
-    if !out_path.exists() {
+    if !out_path.exists() || model.controls.rsp_flag {
         let mod_text = write_mod_string(model)?;
         fs::write(out_path, mod_text).map_err(|e| {
             StarError::IoError(format!(
@@ -243,19 +219,17 @@ pub fn run_inlist_stage(
     max_steps_cap: Option<usize>,
 ) -> Result<StageRunReport, StarError> {
     let t0 = Instant::now();
-    let mut steps_taken = 0_usize;
-    let mut total_newton_iterations = 0_usize;
-    let mut total_retries = 0_usize;
+    let (mut steps_taken, mut total_newton_iterations, mut total_retries) =
+        (0, 0, 0);
     let mut history_rows = Vec::new();
     let mut termination_code = String::from("max_steps_cap");
 
     let job_step_cap = model.job.steps_to_take_before_terminate;
-    let cap = match (max_steps_cap, job_step_cap) {
-        (Some(a), Some(b)) => a.min(b),
-        (Some(a), None) => a,
-        (None, Some(b)) => b,
-        (None, None) => 50_000,
-    };
+    let cap = max_steps_cap
+        .into_iter()
+        .chain(job_step_cap)
+        .min()
+        .unwrap_or(50_000);
     if job_step_cap.is_some_and(|b| b <= cap) {
         termination_code = String::from("steps_to_take_before_terminate");
     }
@@ -291,10 +265,9 @@ pub fn run_inlist_stage(
             }
             if model.controls.use_other_torque {
                 if let Some(jdot) = extras.other_torque(model) {
-                    let dt = model.dt;
                     for (j_k, &dj_k) in model.j_rot.iter_mut().zip(jdot.iter())
                     {
-                        *j_k = (*j_k + dj_k * dt).max(1.0e10);
+                        *j_k = (*j_k + dj_k * model.dt).max(1.0e10);
                     }
                 }
             }
@@ -308,20 +281,28 @@ pub fn run_inlist_stage(
             let check_dir = extras.extras_check_model(model);
             let finish_dir = extras.extras_finish_step(model);
             model.mstar_start = model.mstar;
-            model.sync_mesh_and_pack()?;
-            set_hydro_vars(model, false, false)?;
-            let dt_cur = model.dt;
-            crate::struct_burn_mix::refresh_mixing_state(model, dt_cur, &[]);
-            model.save_start_values();
+            if !model.controls.rsp_flag {
+                model.sync_mesh_and_pack()?;
+                set_hydro_vars(model, false, false)?;
+                crate::struct_burn_mix::refresh_mixing_state(
+                    model,
+                    model.dt,
+                    &[],
+                );
+                model.save_start_values();
+            }
             let hr = extract_history_row(model);
             history_rows.push(hr);
 
-            if let ExtrasDirective::Terminate(reason) = check_dir {
-                termination_code = reason;
-                break;
+            for dir in [check_dir, finish_dir] {
+                if let ExtrasDirective::Terminate(reason) = dir {
+                    termination_code = reason;
+                    break;
+                }
             }
-            if let ExtrasDirective::Terminate(reason) = finish_dir {
-                termination_code = reason;
+            if termination_code != "max_steps_cap"
+                && termination_code != "steps_to_take_before_terminate"
+            {
                 break;
             }
             if let Some(code) =
@@ -389,11 +370,20 @@ pub fn verify_photo_restart_parity(
         star_evolve_step(&mut restarted, do_remesh, op_split, true)?;
     }
 
-    let c_cont = compute_photo_checksum(&write_photo_bytes(&continued));
-    let c_rest = compute_photo_checksum(&write_photo_bytes(&restarted));
+    let (b_cont, b_rest) =
+        (write_photo_bytes(&continued), write_photo_bytes(&restarted));
+    let (c_cont, c_rest) = (
+        compute_photo_checksum(&b_cont),
+        compute_photo_checksum(&b_rest),
+    );
     if c_cont != c_rest {
+        let diff_at = b_cont
+            .iter()
+            .zip(&b_rest)
+            .position(|(a, b)| a != b)
+            .unwrap_or_else(|| b_cont.len().min(b_rest.len()));
         return Err(StarError::IoError(format!(
-            "photo restart parity mismatch: continued={c_cont:#x} != restarted={c_rest:#x}"
+            "photo restart parity mismatch at byte {diff_at}: {c_cont:#x} != {c_rest:#x}"
         )));
     }
     Ok((c_cont, c_rest))
@@ -420,6 +410,7 @@ pub fn run_test_suite_case(
         .unwrap_or("unknown")
         .to_string();
 
+    let is_multi_star = case_dir.join("inlist_multi_stars_job").exists();
     let rn_stages = parse_rn_stages(case_dir, skip_optional)?;
     let tier = if is_tier1_case(&case_name) {
         1
@@ -438,17 +429,15 @@ pub fn run_test_suite_case(
     let mut current_model: Option<StarModel> = None;
     let mut twin_star1_hr: Option<HistoryRow> = None;
     let mut stage_reports = Vec::with_capacity(rn_stages.len());
-    let mut total_steps = 0_usize;
-    let mut total_newton = 0_usize;
-    let mut total_retries = 0_usize;
+    let (mut total_steps, mut total_newton, mut total_retries) = (0, 0, 0);
     let mut photo_restart_verified = false;
 
     for stage in &rn_stages {
         match stage {
             RnStage::CopyCheckpoint { src_mod, dst_mod } => {
                 current_model = None;
-                let src = case_dir.join(src_mod);
-                let dst = case_dir.join(dst_mod);
+                let (src, dst) =
+                    (case_dir.join(src_mod), case_dir.join(dst_mod));
                 if src.exists() {
                     fs::copy(&src, &dst).map_err(|e| {
                         StarError::IoError(format!(
@@ -462,9 +451,11 @@ pub fn run_test_suite_case(
             RnStage::DoOne {
                 inlist, output_mod, ..
             } => {
-                if case_name == "twin_studies" {
+                if is_multi_star {
                     if let Some(m1) = current_model.take() {
-                        twin_star1_hr = Some(extract_history_row(&m1));
+                        if case_name == "twin_studies" {
+                            twin_star1_hr = Some(extract_history_row(&m1));
+                        }
                     }
                 }
                 if InlistBundle::resolve_inlist_path(case_dir, inlist).is_none()

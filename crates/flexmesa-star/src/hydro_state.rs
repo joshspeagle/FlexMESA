@@ -13,6 +13,9 @@ pub struct HydroAuxState {
     /// Whether the model is currently in an initialization relaxation phase
     /// (`doing_relax` in `star_data_def.f90`).
     pub doing_relax: bool,
+    /// Total integrated model energy $E_{\mathrm{tot}}$ in $\mathrm{erg}$
+    /// (`total_energy` in `star_data_step_work.inc`).
+    pub total_energy: f64,
     /// Cumulative global energy conservation error in $\mathrm{erg}$
     /// (`cumulative_energy_error` in `star_data_step_work.inc`).
     pub cumulative_energy_error: f64,
@@ -99,6 +102,7 @@ impl HydroAuxState {
     pub fn new(nz: usize, species: usize) -> Self {
         Self {
             doing_relax: false,
+            total_energy: 0.0,
             cumulative_energy_error: 0.0,
             cp_start: vec![0.0; nz],
             grada_start: vec![0.0; nz],

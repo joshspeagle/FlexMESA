@@ -78,6 +78,18 @@ impl InlistBundle {
             &mut self.job,
             &mut self.controls,
         );
+        let has_kap_zbase = self
+            .sections
+            .get("kap")
+            .and_then(|k| k.get_f64("zbase"))
+            .is_some();
+        if self.job.create_rsp_model
+            && !has_kap_zbase
+            && self.controls.rsp_z > 0.0
+        {
+            self.controls.zbase = self.controls.rsp_z;
+            self.kap_config.zbase = self.controls.rsp_z;
+        }
     }
 
     #[rustfmt::skip]
@@ -97,15 +109,16 @@ impl InlistBundle {
             load_saved_model, save_model_when_terminate, save_photo_when_terminate,
             save_pulse_data_when_terminate, save_stella_data_when_terminate,
             auto_extend_net, set_initial_age, set_initial_model_number, set_initial_dt,
-            set_uniform_initial_composition, relax_initial_to_xaccrete,
-            set_initial_v_center, set_initial_l_center, new_rti_flag, pgstar_flag,
+            set_initial_cumulative_energy_error, set_uniform_initial_composition,
+            relax_initial_to_xaccrete, set_initial_v_center, set_initial_l_center,
+            new_rti_flag, pgstar_flag,
         ]);
         map_f64s!(sj, j, [
             pre_ms_t_c, pre_ms_guess_rho_c, pre_ms_d_log10_p,
             pre_ms_log_p_surf_limit, pre_ms_log_t_surf_limit, pre_ms_log_lum_factor,
             radius_in_cm_for_create_initial_model, mass_in_gm_for_create_initial_model,
             initial_age, years_for_initial_dt, seconds_for_initial_dt,
-            initial_h1, initial_h2, initial_he3, initial_he4,
+            new_cumulative_energy_error, initial_h1, initial_h2, initial_he3, initial_he4,
             new_mass, new_z, new_y, core_avg_rho, core_avg_eps, new_r_center, new_l_center,
         ]);
         map_strs!(sj, j, [

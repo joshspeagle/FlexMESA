@@ -27,7 +27,7 @@ use crate::tier2_extras::apply_planetary_core;
 use crate::zams::load_zams_model;
 
 /// Resolves a `.mod` model file path against `case_dir`.
-fn resolve_model_path(
+pub(crate) fn resolve_model_path(
     case_dir: &Path,
     model_name: &str,
 ) -> Option<std::path::PathBuf> {
@@ -116,9 +116,16 @@ fn build_initial_planet_or_wd_model(
 /// evaluation fails.
 pub fn init_or_update_model_from_bundle(
     bundle: &InlistBundle,
-    existing_model: Option<StarModel>,
+    mut existing_model: Option<StarModel>,
     extras: &mut dyn StarExtras,
 ) -> Result<StarModel, StarError> {
+    if let Some(rsp_m) = crate::rsp_driver::init_rsp_model_from_bundle(
+        bundle,
+        &mut existing_model,
+        extras,
+    )? {
+        return Ok(rsp_m);
+    }
     let job = bundle.job.clone();
     let controls = bundle.controls.clone();
     let case_name = bundle
@@ -137,12 +144,7 @@ pub fn init_or_update_model_from_bundle(
         || job.relax_initial_mass_to_remove_h_env
         || out_of_zams_range;
     let mut loaded_from_mod = false;
-    let mut model = if job.create_rsp_model {
-        crate::rsp_build::build_rsp_envelope_model(
-            controls.clone(),
-            job.clone(),
-        )?
-    } else if is_pulse_mod_case {
+    let mut model = if is_pulse_mod_case {
         if let Some(prev) = existing_model {
             loaded_from_mod = true;
             prev
@@ -167,10 +169,7 @@ pub fn init_or_update_model_from_bundle(
                     )?,
                 }
             } else {
-                build_initial_planet_or_wd_model(
-                    controls.clone(),
-                    job.clone(),
-                )?
+                build_initial_planet_or_wd_model(controls.clone(), job.clone())?
             }
         } else {
             load_zams_model(controls.clone(), job.clone())?
@@ -188,7 +187,7 @@ pub fn init_or_update_model_from_bundle(
         || crate::tier5_extras::is_tier5_star_case(case_name)
         || out_of_zams_range
     {
-        if let Some(prev) = existing_model {
+        if let Some(prev) = existing_model.filter(|p| !p.controls.rsp_flag) {
             prev
         } else {
             let mut init_controls = controls.clone();

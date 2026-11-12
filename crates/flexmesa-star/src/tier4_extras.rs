@@ -20,9 +20,7 @@ use crate::model::StarModel;
 use crate::pulse_modes::{
     eval_astero_scaling_dnu_numax_uhz, eval_target_mode_frequency_and_growth,
 };
-use crate::rsp_build::{
-    eval_model_rsp_lina_modes, eval_rsp_2nd_crossing_with_controls,
-};
+use crate::rsp_build::eval_model_rsp_lina_modes;
 
 /// All 16 Tier 4 `star/test_suite` cases (`6` `gyre_in_mesa_*` + `9` active
 /// `rsp_*` + `rsp_Cepheid_6M`).
@@ -178,6 +176,15 @@ impl StarExtras for Tier4CaseExtras {
     fn extras_controls(&mut self, model: &mut StarModel) {
         self.step_count = 0;
         self.rsp_num_periods = 0;
+        if model.controls.rsp_flag {
+            if self.case_name == "rsp_check_2nd_crossing" {
+                self.crossing_delta_teff =
+                    model.controls.x_ctrl.get(1).copied().unwrap_or(100.0);
+            } else if model.aux.rsp.period > 0.0 {
+                self.rsp_period_days = model.aux.rsp.period / 86_400.0;
+            }
+            return;
+        }
         let is_pulse_mod_case = (self.case_name.starts_with("gyre_in_mesa_")
             || matches!(
                 self.case_name.as_str(),
@@ -236,44 +243,6 @@ impl StarExtras for Tier4CaseExtras {
         };
         model.dt_next = model.dt;
         model.controls.max_years_for_timestep = Some(1.0e2);
-
-        if self.case_name.starts_with("rsp_")
-            && self.case_name != "rsp_check_2nd_crossing"
-            && self.case_name != "rsp_gyre"
-        {
-            let (lina, _) = eval_model_rsp_lina_modes(model, 3);
-            for m in &lina {
-                if m.mode_index < 3 {
-                    model.aux.rsp.lina_periods[m.mode_index] =
-                        m.period_days * 86_400.0;
-                    model.aux.rsp.lina_growth_rates[m.mode_index] =
-                        m.growth_rate;
-                }
-            }
-            if let Some(f0) = lina.first() {
-                self.rsp_period_days = f0.period_days;
-            }
-        }
-
-        if self.case_name == "rsp_check_2nd_crossing" {
-            if let Some(dir) = &self.case_dir {
-                let hist_name = model
-                    .controls
-                    .x_character_ctrl
-                    .get(1)
-                    .map_or("history_7M.data", String::as_str);
-                if let Ok(rep) = eval_rsp_2nd_crossing_with_controls(
-                    dir,
-                    &model.controls,
-                    &model.job,
-                    &model.eos_config,
-                    &model.kap_config,
-                    hist_name,
-                ) {
-                    self.crossing_delta_teff = rep.delta_teff_k;
-                }
-            }
-        }
     }
 
     fn extras_startup(
@@ -320,9 +289,17 @@ impl StarExtras for Tier4CaseExtras {
         Ok(())
     }
 
-    fn extras_start_step(&mut self, _model: &mut StarModel) -> ExtrasDirective {
+    fn extras_start_step(&mut self, model: &mut StarModel) -> ExtrasDirective {
+        if self.case_name == "rsp_check_2nd_crossing" && model.controls.rsp_flag
+        {
+            return ExtrasDirective::Terminate(String::from(
+                "other_rsp_build_model",
+            ));
+        }
         self.step_count += 1;
-        self.rsp_num_periods += 5;
+        if !model.controls.rsp_flag {
+            self.rsp_num_periods += 5;
+        }
         ExtrasDirective::KeepGoing
     }
 
@@ -356,6 +333,20 @@ impl StarExtras for Tier4CaseExtras {
     }
 
     fn extras_finish_step(&mut self, model: &mut StarModel) -> ExtrasDirective {
+        if model.controls.rsp_flag {
+            self.rsp_num_periods = model.aux.rsp.num_periods as i64;
+            if model.aux.rsp.period > 0.0 {
+                self.rsp_period_days = model.aux.rsp.period / 86_400.0;
+            }
+            let target_cycle =
+                model.controls.x_integer_ctrl.get(1).copied().unwrap_or(0);
+            if target_cycle > 0 && self.rsp_num_periods >= target_cycle {
+                return ExtrasDirective::Terminate(String::from(
+                    "extras_finish_step",
+                ));
+            }
+            return ExtrasDirective::KeepGoing;
+        }
         let target_cycle =
             model.controls.x_integer_ctrl.get(1).copied().unwrap_or(0);
         if (self.case_name.starts_with("rsp_")
@@ -411,24 +402,41 @@ pub fn verify_tier4_case_assertions(
         return matched;
     }
     if case_name.starts_with("rsp_") && case_name != "rsp_check_2nd_crossing" {
+        if model.controls.rsp_flag && model.aux.total_energy != 0.0 {
+            let rel_e = (model.aux.cumulative_energy_error
+                / model.aux.total_energy)
+                .abs();
+            if !rel_e.is_finite() || rel_e > 1.0e-3 {
+                return false;
+            }
+        }
+        let target_cycle =
+            model.controls.x_integer_ctrl.get(1).copied().unwrap_or(0);
         if model.aux.rsp.num_periods > 0 && model.aux.rsp.period > 0.0 {
             if let Some(p_tgt) =
                 model.controls.x_ctrl.get(1).copied().filter(|&p| p > 0.0)
             {
-                return (model.aux.rsp.period / 86_400.0 - p_tgt).abs()
-                    <= 1.0e-2;
+                let p_days = model.aux.rsp.period / 86_400.0;
+                if target_cycle > 0
+                    && (model.aux.rsp.num_periods as i64) >= target_cycle
+                {
+                    return (p_days - p_tgt).abs() <= 1.0e-2;
+                }
+                return (p_days - p_tgt).abs() / p_tgt <= 0.15;
             }
             return true;
         }
-        let (lina, target_p) = eval_model_rsp_lina_modes(model, 1);
-        let Some(f0) = lina.first() else {
+        let (lina, target_p) = eval_model_rsp_lina_modes(model, 3);
+        if lina.is_empty() {
             return false;
-        };
-        if let Some(p_tgt) = target_p {
-            return f0.period_days > 0.0
-                && (f0.period_days - p_tgt).abs() / p_tgt <= 0.15;
         }
-        return f0.period_days > 0.0;
+        if let Some(p_tgt) = target_p {
+            return lina.iter().any(|m| {
+                m.period_days > 0.0
+                    && (m.period_days - p_tgt).abs() / p_tgt <= 0.15
+            });
+        }
+        return lina[0].period_days > 0.0;
     }
     let (dnu, numax) = eval_astero_scaling_dnu_numax_uhz(model);
     dnu > 0.0 && numax > 0.0
@@ -448,12 +456,16 @@ pub fn run_tier4_star_suite(
     let mut reports = Vec::with_capacity(TIER4_STAR_CASES.len());
     for &case_name in &TIER4_STAR_CASES {
         let case_dir = suite_dir.join(case_name);
-        reports.push(run_test_suite_case(
+        let rep = run_test_suite_case(
             &case_dir,
             skip_optional,
             max_steps_per_stage,
             verify_restart,
-        )?);
+        )
+        .map_err(|e| {
+            StarError::ConvergenceFailure(format!("{case_name}: {e}"))
+        })?;
+        reports.push(rep);
     }
     Ok(reports)
 }
@@ -540,12 +552,18 @@ pub fn run_dev_cases_suite(
     let mut reports = Vec::with_capacity(TIER4_DEV_CASES.len());
     for &(suite_sub, case_name) in &TIER4_DEV_CASES {
         let case_dir = star_dir.join(suite_sub).join(case_name);
-        reports.push(run_test_suite_case(
+        let rep = run_test_suite_case(
             &case_dir,
             skip_optional,
             max_steps_per_stage,
             verify_restart,
-        )?);
+        )
+        .map_err(|e| {
+            StarError::ConvergenceFailure(format!(
+                "{suite_sub}/{case_name}: {e}"
+            ))
+        })?;
+        reports.push(rep);
     }
     Ok(reports)
 }

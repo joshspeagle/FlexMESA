@@ -6,6 +6,7 @@
 use flexmesa_const::{BOLTZ_SIGMA, L_SUN, M_SUN, PI, R_SUN, STANDARD_CGRAV};
 
 pub use crate::rsp_config::{Rsp2Controls, RspConfig};
+use crate::rsp_grid::MesaRanmar;
 
 /// Isotropic Eddington factor $f_{\mathrm{Edd}} = 1/3$ (`rsp_def.f90:33`).
 pub const F_EDD_ISOTROPIC: f64 = 1.0 / 3.0;
@@ -25,7 +26,7 @@ pub struct RspDerivedConsts {
     pub p4: f64,
     /// $4\pi / 3$.
     pub p43: f64,
-    /// CGS constants $(G, \sigma_{\mathrm{SB}}, L_\odot, M_\odot, R_\odot)$ and $C_L = \frac{4}{3}(4\pi)^2\sigma_{\mathrm{SB}}$.
+    /// CGS gravitational constant $G$.
     pub g: f64,
     /// Stefan-Boltzmann constant $\sigma_{\mathrm{SB}}$.
     pub sig: f64,
@@ -37,8 +38,7 @@ pub struct RspDerivedConsts {
     pub sunr: f64,
     /// Radiative diffusion prefactor $C_L = \frac{4}{3}(4\pi)^2 \sigma_{\mathrm{SB}}$.
     pub cl: f64,
-    /// Scaled Smolec & Moskalik (2008) parameters:
-    /// $(\alpha, \frac{2}{3}\alpha_p, \alpha_m, \alpha_t, \frac{1}{2}\sqrt{2/3}\alpha_s, \frac{1}{2}\sqrt{2/3}\alpha_c, \frac{8}{3}\sqrt{2/3}\alpha_d, 2\sqrt{3}\gamma_r)$.
+    /// Mixing-length parameter $\alpha$.
     pub alfa: f64,
     /// Scaled turbulent pressure coefficient $\frac{2}{3}\alpha_p$.
     pub alfap: f64,
@@ -54,7 +54,7 @@ pub struct RspDerivedConsts {
     pub cede: f64,
     /// Scaled radiative loss coefficient $2\sqrt{3}\,\gamma_r$.
     pub gammar: f64,
-    /// Artificial viscosity parameters $(C_q, z_{\mathrm{sh}})$, flux limiter `efl0`, and opacity factors.
+    /// Artificial viscosity $C_q$.
     pub cq: f64,
     /// Mach threshold $z_{\mathrm{sh}}$.
     pub zsh: f64,
@@ -64,7 +64,7 @@ pub struct RspDerivedConsts {
     pub kape_factor: f64,
     /// Flux opacity factor (`1.0`).
     pub kapp_factor: f64,
-    /// End-of-step and start-of-step time-centering weights.
+    /// End-of-step pressure time-centering weight $\theta$.
     pub theta: f64,
     /// $1 - \theta$.
     pub theta1: f64,
@@ -165,15 +165,20 @@ impl RspDerivedConsts {
 
     /// Restores user time-centering weights (`turn_on_time_weighting` in `rsp_def.f90:212-232`).
     pub fn turn_on_time_weighting(&mut self, cfg: &RspConfig) {
-        self.theta = cfg.theta;
-        self.thetat = cfg.thetat;
-        self.thetaq = cfg.thetaq;
-        self.thetae = cfg.thetae;
-        self.thetau = cfg.thetau;
-        self.wtr = cfg.wtr;
-        self.wtc = cfg.wtc;
-        self.wtt = cfg.wtt;
-        self.gam = cfg.gam;
+        (
+            self.theta,
+            self.thetat,
+            self.thetaq,
+            self.thetae,
+            self.thetau,
+            self.wtr,
+            self.wtc,
+            self.wtt,
+            self.gam,
+        ) = (
+            cfg.theta, cfg.thetat, cfg.thetaq, cfg.thetae, cfg.thetau, cfg.wtr,
+            cfg.wtc, cfg.wtt, cfg.gam,
+        );
         self.theta1 = 1.0 - self.theta;
         self.thetat1 = 1.0 - self.thetat;
         self.thetaq1 = 1.0 - self.thetaq;
@@ -213,50 +218,88 @@ impl RspDerivedConsts {
 }
 
 /// Dynamic zone arrays (`k = 0..nz-1`, surface-to-center) and cycle-level
-/// energy/work integrators for `RSP` and `RSP2` (`rsp_def.f90:85-116, 365-444`),
+/// energy/work integrators for `RSP` and `RSP2` (`rsp_def.f90:85-116, 365-489`),
 /// persisted across `.mod` (`32812`) and `.photo` checkpoints.
 #[derive(Debug, Clone)]
 pub struct RspState {
-    /// Specific turbulent kinetic energy $e_t = w^2$ in $\mathrm{erg\,g^{-1}}$ (`et_RSP`).
+    /// Specific turbulent energy $e_t = w^2$ (`et_RSP`), radiation energy `erad_RSP`, and flux `Fr_RSP`.
     pub et_rsp: Vec<f64>,
-    /// Specific radiation energy $e_{\mathrm{rad}}$ in $\mathrm{erg\,g^{-1}}$ (`erad_RSP`).
+    /// Specific radiation energy $e_{\mathrm{rad}}$ ($\mathrm{erg\,g^{-1}}$).
     pub erad_rsp: Vec<f64>,
-    /// Face radiative flux $F_r = L_r / (4\pi r^2)$ in $\mathrm{erg\,cm^{-2}\,s^{-1}}$ (`Fr_RSP`).
+    /// Face radiative flux $F_r = L_r / (4\pi r^2)$ ($\mathrm{erg\,cm^{-2}\,s^{-1}}$).
     pub fr_rsp: Vec<f64>,
-    /// Face convective and turbulent luminosities $(L_c, L_t)$ in $\mathrm{erg\,s^{-1}}$.
+    /// Face convective and turbulent luminosities $(L_c, L_t)$ ($\mathrm{erg\,s^{-1}}$).
     pub lc_rsp: Vec<f64>,
     /// Face turbulent luminosity $L_t$ ($\mathrm{erg\,s^{-1}}$).
     pub lt_rsp: Vec<f64>,
-    /// Turbulent and artificial-viscosity pressures $(P_{\mathrm{trb}}, P_{\mathrm{vsc}})$ in $\mathrm{dyn\,cm^{-2}}$.
+    /// Turbulent and artificial-viscosity pressures $(P_{\mathrm{trb}}, P_{\mathrm{vsc}})$ ($\mathrm{dyn\,cm^{-2}}$).
     pub ptrb_rsp: Vec<f64>,
     /// Artificial viscosity pressure $P_{\mathrm{vsc}}$ ($\mathrm{dyn\,cm^{-2}}$).
     pub pvsc_rsp: Vec<f64>,
-    /// Specific gas energy $e_{\mathrm{gas}}$ ($\mathrm{erg\,g^{-1}}$) and `RSP2` face scale height $H_p$ ($\mathrm{cm}$).
+    /// Specific gas energy $e_{\mathrm{gas}}$ ($\mathrm{erg\,g^{-1}}$) and face scale height $H_p$ ($\mathrm{cm}$).
     pub egas_rsp: Vec<f64>,
     /// Face pressure scale height $H_{p,\mathrm{face}}$ ($\mathrm{cm}$).
     pub hp_face: Vec<f64>,
-    /// Start-of-step `RSP` thermodynamic and flux profiles (`len = nz`).
+    /// Active zone specific volume $V_k = 1/\rho_k$ ($\mathrm{cm^3\,g^{-1}}$).
+    pub vol_rsp: Vec<f64>,
+    /// Zone Eddington factor $f_{\mathrm{Edd},k}$.
+    pub f_edd_rsp: Vec<f64>,
+    /// Face superadiabatic gradient $Y_k$ and source coefficient $\Pi_k$.
+    pub y_face_rsp: Vec<f64>,
+    /// Face turbulent source coefficient $\Pi_k$.
+    pub pii_rsp: Vec<f64>,
+    /// Face eddy-viscosity stress $\chi_k$, radiative coupling `COUPL`, and zone dissipation $E_q$.
+    pub chi_rsp: Vec<f64>,
+    /// Turbulent radiative cooling `COUPL` ($\mathrm{erg\,g^{-1}\,s^{-1}}$).
+    pub coupl_rsp: Vec<f64>,
+    /// Zone eddy-viscosity dissipation $E_q$ ($\mathrm{erg\,g^{-1}\,s^{-1}}$).
+    pub eq_rsp: Vec<f64>,
+    /// Zone thermal expansion $Q_k$, turbulent source $S_k$, and dissipations $(D_k, D_{r,k})$.
+    pub qq_rsp: Vec<f64>,
+    /// Turbulent buoyancy generation `SOURCE` ($\mathrm{erg\,g^{-1}\,s^{-1}}$).
+    pub source_rsp: Vec<f64>,
+    /// Kuhfuss turbulent dissipation `DAMP` ($\mathrm{erg\,g^{-1}\,s^{-1}}$).
+    pub damp_rsp: Vec<f64>,
+    /// Radiative turbulent dissipation `DAMPR` ($\mathrm{erg\,g^{-1}\,s^{-1}}$).
+    pub dampr_rsp: Vec<f64>,
+    /// Start-of-step `RSP` dynamic, thermodynamic, and flux profiles (`len = nz`).
     pub vol_start: Vec<f64>,
-    /// Start-of-step turbulent speed $w_0$ ($\mathrm{cm\,s^{-1}}$).
+    /// Start-of-step turbulent speed $w_0$ ($\mathrm{cm\,s^{-1}}$) or $e_{t,0}$ ($\mathrm{erg\,g^{-1}}$).
     pub w_start: Vec<f64>,
-    /// Start-of-step radiative flux $F_{r,0}$ ($\mathrm{erg\,cm^{-2}\,s^{-1}}$).
+    /// Start-of-step radiative flux $F_{r,0}$.
     pub fr_start: Vec<f64>,
-    /// Start-of-step specific radiation energy $e_{\mathrm{rad},0}$ ($\mathrm{erg\,g^{-1}}$).
+    /// Start-of-step specific radiation energy $e_{\mathrm{rad},0}$.
     pub erad_start: Vec<f64>,
-    /// Start-of-step specific gas energy $e_{\mathrm{gas},0}$ ($\mathrm{erg\,g^{-1}}$).
+    /// Start-of-step specific gas energy $e_{\mathrm{gas},0}$.
     pub egas_start: Vec<f64>,
-    /// Start-of-step gas pressure $P_{\mathrm{gas},0}$ ($\mathrm{dyn\,cm^{-2}}$).
+    /// Start-of-step gas pressure $P_{\mathrm{gas},0}$.
     pub pgas_start: Vec<f64>,
-    /// Start-of-step radiation pressure $P_{\mathrm{rad},0}$ ($\mathrm{dyn\,cm^{-2}}$).
+    /// Start-of-step radiation pressure $P_{\mathrm{rad},0}$.
     pub prad_start: Vec<f64>,
-    /// Start-of-step Rosseland opacity $\kappa_0$ ($\mathrm{cm^2\,g^{-1}}$).
+    /// Start-of-step Rosseland opacity $\kappa_0$.
     pub opacity_start: Vec<f64>,
-    /// Start-of-step thermal expansion coefficient $Q_0$ ($\mathrm{K^{-1}}$).
+    /// Start-of-step thermal expansion $Q_0$.
     pub qq_start: Vec<f64>,
-    /// Start-of-step convective luminosity $L_{c,0}$ ($\mathrm{erg\,s^{-1}}$).
+    /// Start-of-step convective luminosity $L_{c,0}$.
     pub lc_start: Vec<f64>,
-    /// Start-of-step turbulent luminosity $L_{t,0}$ ($\mathrm{erg\,s^{-1}}$).
+    /// Start-of-step turbulent luminosity $L_{t,0}$.
     pub lt_start: Vec<f64>,
+    /// Start-of-step temperature $T_0$, radius $R_0$, velocity $v_0$, sound speed $c_{s,0}$.
+    pub t_start_rsp: Vec<f64>,
+    /// Start-of-step outer face radius $R_0$ ($\mathrm{cm}$).
+    pub r_start_rsp: Vec<f64>,
+    /// Start-of-step face velocity $v_0$ ($\mathrm{cm\,s^{-1}}$).
+    pub v_start_rsp: Vec<f64>,
+    /// Start-of-step adiabatic sound speed $c_{s,0}$ ($\mathrm{cm\,s^{-1}}$).
+    pub csound_start_rsp: Vec<f64>,
+    /// Start-of-step artificial viscosity $P_{\mathrm{vsc},0}$, turbulent pressure $P_{\mathrm{trb},0}$, $\chi_0$, `COUPL_0`.
+    pub pvsc_start: Vec<f64>,
+    /// Start-of-step turbulent pressure $P_{\mathrm{trb},0}$.
+    pub ptrb_start: Vec<f64>,
+    /// Start-of-step eddy-viscosity stress $\chi_0$.
+    pub chi_start: Vec<f64>,
+    /// Start-of-step radiative coupling `COUPL_0`.
+    pub coupl_start: Vec<f64>,
     /// Previous-step pressures `PPP0..PPC0`, `VV0`, and cumulative cycle work integrals `WORK..WORKC`.
     pub ppp0: Vec<f64>,
     /// Previous-step eddy-viscosity work integrand `PPQ0`.
@@ -275,7 +318,9 @@ pub struct RspState {
     pub workt: Vec<f64>,
     /// Cumulative cycle artificial-viscosity work profile `WORKC` ($\mathrm{erg}$).
     pub workc: Vec<f64>,
-    /// Linear radial periods `[P_0, P_1, P_2]` in $\mathrm{s}$ and growth rates `[\eta_0, \eta_1, \eta_2]`.
+    /// Deterministic Marsaglia-Zaman `RANMAR` generator (`rsp_def.f90:78`).
+    pub rng: MesaRanmar,
+    /// Linear radial periods `[P_0, P_1, P_2]` ($\mathrm{s}$) and growth rates `[\eta_0, \eta_1, \eta_2]`.
     pub lina_periods: [f64; 3],
     /// Linear fractional growth rates `[\eta_0, \eta_1, \eta_2]`.
     pub lina_growth_rates: [f64; 3],
@@ -299,7 +344,7 @@ pub struct RspState {
     pub grekm_avg_abs: f64,
     /// Surface boundary pressure $P_{\mathrm{surf,atm}}$ ($\mathrm{dyn\,cm^{-2}}$).
     pub psurf_from_atm: f64,
-    /// Global energy conservation registers $(E_{\mathrm{tot}}, E_0, E_{\mathrm{start}}, E_{\mathrm{con}})$ in $\mathrm{erg}$.
+    /// Global energy registers $(E_{\mathrm{tot}}, E_0, E_{\mathrm{start}}, E_{\mathrm{con}}, E_{\mathrm{grv}}, E_{\mathrm{the}}, E_{\mathrm{kin}}, E_{\mathrm{tot,old}})$.
     pub etot: f64,
     /// Initial benchmark energy $E_0$ ($\mathrm{erg}$).
     pub e0: f64,
@@ -307,12 +352,26 @@ pub struct RspState {
     pub ede_start: f64,
     /// Cumulative radiated boundary energy $E_{\mathrm{con}}$ ($\mathrm{erg}$).
     pub econ: f64,
-    /// Cycle timing and extrema registers $(t_{\mathrm{start}}, t_{\mathrm{cross}}, u_N, R_{\max/\min}, L_{\max/\min}, E_{K,\max/\min})$.
+    /// Gravitational potential energy $E_{\mathrm{grv}}$ ($\mathrm{erg}$).
+    pub egrv: f64,
+    /// Thermal + radiation + turbulent internal energy $E_{\mathrm{the}}$ ($\mathrm{erg}$).
+    pub ethe: f64,
+    /// Bulk radial kinetic energy $E_{\mathrm{kin}}$ ($\mathrm{erg}$).
+    pub ekin: f64,
+    /// Previous-step `StarModel` total energy $E_{\mathrm{tot,old}}$ ($\mathrm{erg}$).
+    pub total_energy_old: f64,
+    /// Cycle timing and extrema registers $(t_{\mathrm{start}}, t_{\mathrm{cross}}, u_N, u_{N,\mathrm{prev}}, R_{\max/\min}, L_{\max/\min}, E_{K,\max/\min})$.
     pub te_start: f64,
     /// Timestamp of most recent downward $v_1 = 0$ crossing ($\mathrm{s}$).
     pub tt1: f64,
-    /// Previous-step surface velocity $v_1$ ($\mathrm{cm\,s^{-1}}$).
+    /// Previous-step surface velocity $v_1$ (`UN`, $\mathrm{cm\,s^{-1}}$).
     pub un: f64,
+    /// Two-steps-ago surface velocity (`ULL`, $\mathrm{cm\,s^{-1}}$).
+    pub ull: f64,
+    /// Cycle kinetic-energy excursion `EKDEL` ($\mathrm{erg}$) and peak speed `VMAX` ($\mathrm{km\,s^{-1}}$).
+    pub ekdel: f64,
+    /// Cycle peak surface speed `VMAX` ($\mathrm{km\,s^{-1}}$).
+    pub vmax: f64,
     /// Cycle maximum radius ($\mathrm{cm}$).
     pub rmax: f64,
     /// Cycle minimum radius ($\mathrm{cm}$).
@@ -329,8 +388,30 @@ pub struct RspState {
     pub ekmaxl: f64,
     /// Cycle $P\,\mathrm{d}V$ work sum ($\mathrm{erg}$).
     pub pdvwork: f64,
-    /// Velocity initialization flag and step-within-cycle counter.
+    /// Courant / diffusion diagnostics, cycle state flags, and step time registers.
+    pub min_dr_div_cs: f64,
+    /// Minimum radiative diffusion timescale across zones ($\mathrm{s}$).
+    pub min_rad_diff_time: f64,
+    /// Surface Eddington factor $g_{\mathrm{Edd}}$ (`0.5`) and saved optical depth factor.
+    pub g_edd: f64,
+    /// Saved `RSP` `tau_factor`.
+    pub rsp_tau_factor: f64,
+    /// Exact elapsed simulation time `TIME` and `TIME_OLD` ($\mathrm{s}$).
+    pub time_sec: f64,
+    /// Previous step simulation time `TIME_OLD` ($\mathrm{s}$).
+    pub time_old_sec: f64,
+    /// Cycle-detection flags (`FIRST`, `INSIDE`), step counter `ID`, turbulent-flux floor `min_k`, and velocity flags.
+    pub first: i32,
+    /// Cycle phase state `INSIDE` (`1` before first downward crossing, `0` inside cycle).
+    pub inside: i32,
+    /// Cumulative `HYD` step counter `ID`.
+    pub id_step: usize,
+    /// Outermost 1-based Smolec index (`k_smolec`) allowed to carry nonzero $L_t$.
+    pub min_k_for_turbulent_flux: usize,
+    /// Whether initial velocities have been applied (`have_set_velocities`).
     pub have_set_velocities: bool,
+    /// Whether velocities were freshly injected on the current step (`just_set_velocities`).
+    pub just_set_velocities: bool,
     /// Step-within-cycle counter (`IWORK`).
     pub iwork: usize,
 }
@@ -349,6 +430,17 @@ impl RspState {
             pvsc_rsp: vec![0.0; nz],
             egas_rsp: vec![0.0; nz],
             hp_face: vec![0.0; nz],
+            vol_rsp: vec![0.0; nz],
+            f_edd_rsp: vec![F_EDD_ISOTROPIC; nz],
+            y_face_rsp: vec![0.0; nz],
+            pii_rsp: vec![0.0; nz],
+            chi_rsp: vec![0.0; nz],
+            coupl_rsp: vec![0.0; nz],
+            eq_rsp: vec![0.0; nz],
+            qq_rsp: vec![0.0; nz],
+            source_rsp: vec![0.0; nz],
+            damp_rsp: vec![0.0; nz],
+            dampr_rsp: vec![0.0; nz],
             vol_start: vec![0.0; nz],
             w_start: vec![0.0; nz],
             fr_start: vec![0.0; nz],
@@ -360,6 +452,14 @@ impl RspState {
             qq_start: vec![0.0; nz],
             lc_start: vec![0.0; nz],
             lt_start: vec![0.0; nz],
+            t_start_rsp: vec![0.0; nz],
+            r_start_rsp: vec![0.0; nz],
+            v_start_rsp: vec![0.0; nz],
+            csound_start_rsp: vec![0.0; nz],
+            pvsc_start: vec![0.0; nz],
+            ptrb_start: vec![0.0; nz],
+            chi_start: vec![0.0; nz],
+            coupl_start: vec![0.0; nz],
             ppp0: vec![0.0; nz],
             ppq0: vec![0.0; nz],
             ppt0: vec![0.0; nz],
@@ -369,6 +469,7 @@ impl RspState {
             workq: vec![0.0; nz],
             workt: vec![0.0; nz],
             workc: vec![0.0; nz],
+            rng: MesaRanmar::new(),
             lina_periods: [0.0; 3],
             lina_growth_rates: [0.0; 3],
             num_periods: 0,
@@ -385,9 +486,16 @@ impl RspState {
             e0: 0.0,
             ede_start: 0.0,
             econ: 0.0,
+            egrv: 0.0,
+            ethe: 0.0,
+            ekin: 0.0,
+            total_energy_old: 0.0,
             te_start: 0.0,
             tt1: 0.0,
             un: 0.0,
+            ull: 0.0,
+            ekdel: 0.0,
+            vmax: -1.0e99,
             rmax: -1.0e99,
             rmin: 1.0e99,
             lmax: -1.0e99,
@@ -396,122 +504,19 @@ impl RspState {
             ekmin: 1.0e99,
             ekmaxl: 0.0,
             pdvwork: 0.0,
+            min_dr_div_cs: 1.0e99,
+            min_rad_diff_time: 1.0e99,
+            g_edd: 0.5,
+            rsp_tau_factor: 0.0,
+            time_sec: 0.0,
+            time_old_sec: 0.0,
+            first: 0,
+            inside: 1,
+            id_step: 0,
+            min_k_for_turbulent_flux: 0,
             have_set_velocities: false,
+            just_set_velocities: false,
             iwork: 0,
         }
-    }
-
-    /// Resizes all zone-indexed `RSP` vectors to `nz`.
-    pub fn resize(&mut self, nz: usize) {
-        for v in [
-            &mut self.et_rsp,
-            &mut self.erad_rsp,
-            &mut self.fr_rsp,
-            &mut self.lc_rsp,
-            &mut self.lt_rsp,
-            &mut self.ptrb_rsp,
-            &mut self.pvsc_rsp,
-            &mut self.egas_rsp,
-            &mut self.hp_face,
-            &mut self.vol_start,
-            &mut self.w_start,
-            &mut self.fr_start,
-            &mut self.erad_start,
-            &mut self.egas_start,
-            &mut self.pgas_start,
-            &mut self.prad_start,
-            &mut self.opacity_start,
-            &mut self.qq_start,
-            &mut self.lc_start,
-            &mut self.lt_start,
-            &mut self.ppp0,
-            &mut self.ppq0,
-            &mut self.ppt0,
-            &mut self.ppc0,
-            &mut self.vv0,
-            &mut self.work,
-            &mut self.workq,
-            &mut self.workt,
-            &mut self.workc,
-        ] {
-            v.resize(nz, 0.0);
-        }
-    }
-
-    /// Packs scalar `RSP` cycle state into a fixed-length `[f64; 34]` array for `.photo` I/O.
-    #[must_use]
-    pub fn pack_scalars(&self) -> [f64; 34] {
-        [
-            self.lina_periods[0],
-            self.lina_periods[1],
-            self.lina_periods[2],
-            self.lina_growth_rates[0],
-            self.lina_growth_rates[1],
-            self.lina_growth_rates[2],
-            self.num_periods as f64,
-            self.period,
-            self.period_lin,
-            self.rsp_dt,
-            self.delta_r,
-            self.delta_mag,
-            self.grpdv,
-            self.grekm,
-            self.grekm_avg_abs,
-            self.psurf_from_atm,
-            self.etot,
-            self.e0,
-            self.ede_start,
-            self.econ,
-            self.te_start,
-            self.tt1,
-            self.un,
-            self.rmax,
-            self.rmin,
-            self.lmax,
-            self.lmin,
-            self.ekmax,
-            self.ekmin,
-            self.ekmaxl,
-            self.pdvwork,
-            f64::from(u8::from(self.have_set_velocities)),
-            self.iwork as f64,
-            0.0,
-        ]
-    }
-
-    /// Unpacks scalar `RSP` cycle state from a `[f64]` slice read during `.photo` I/O.
-    pub fn unpack_scalars(&mut self, s: &[f64]) {
-        if s.len() < 33 {
-            return;
-        }
-        self.lina_periods = [s[0], s[1], s[2]];
-        self.lina_growth_rates = [s[3], s[4], s[5]];
-        self.num_periods = s[6].max(0.0) as usize;
-        self.period = s[7];
-        self.period_lin = s[8];
-        self.rsp_dt = s[9];
-        self.delta_r = s[10];
-        self.delta_mag = s[11];
-        self.grpdv = s[12];
-        self.grekm = s[13];
-        self.grekm_avg_abs = s[14];
-        self.psurf_from_atm = s[15];
-        self.etot = s[16];
-        self.e0 = s[17];
-        self.ede_start = s[18];
-        self.econ = s[19];
-        self.te_start = s[20];
-        self.tt1 = s[21];
-        self.un = s[22];
-        self.rmax = s[23];
-        self.rmin = s[24];
-        self.lmax = s[25];
-        self.lmin = s[26];
-        self.ekmax = s[27];
-        self.ekmin = s[28];
-        self.ekmaxl = s[29];
-        self.pdvwork = s[30];
-        self.have_set_velocities = s[31] != 0.0;
-        self.iwork = s[32].max(0.0) as usize;
     }
 }

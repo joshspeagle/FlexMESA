@@ -301,6 +301,10 @@ pub struct StarJobControls {
     pub years_for_initial_dt: f64,
     /// Initial timestep in seconds (`seconds_for_initial_dt`).
     pub seconds_for_initial_dt: f64,
+    /// Whether to reset cumulative energy error on startup (`set_initial_cumulative_energy_error`).
+    pub set_initial_cumulative_energy_error: bool,
+    /// Target cumulative energy error in erg (`new_cumulative_energy_error`).
+    pub new_cumulative_energy_error: f64,
     /// Whether to impose uniform initial composition (`set_uniform_initial_composition`).
     pub set_uniform_initial_composition: bool,
     /// Uniform initial $^1\mathrm{H}$ mass fraction (`initial_h1`).
@@ -424,6 +428,8 @@ impl Default for StarJobControls {
             set_initial_dt: false,
             years_for_initial_dt: 0.0,
             seconds_for_initial_dt: 0.0,
+            set_initial_cumulative_energy_error: false,
+            new_cumulative_energy_error: 0.0,
             set_uniform_initial_composition: false,
             initial_h1: -1.0,
             initial_h2: -1.0,

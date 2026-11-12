@@ -115,6 +115,51 @@ pub fn star_evolve_step(
 ) -> Result<EvolveStepReport, StarError> {
     const MAX_RETRIES: usize = 16;
 
+    if model.controls.rsp_flag {
+        if model.dt_next > 0.0 {
+            model.dt = model.dt_next;
+        }
+        let prev_dt_old = model.dt_old;
+        model.save_old_values();
+        model.dt_old = prev_dt_old;
+        model.aux.rsp.time_old_sec = model.aux.rsp.time_sec;
+        let (e_old, _) = crate::rsp_driver::rsp_total_energy_integrals(model);
+        model.aux.rsp.total_energy_old = e_old;
+        model.model_number += 1;
+
+        let (iterations, retries) =
+            crate::rsp_driver::rsp_one_step(model, None)?;
+        model.total_num_solver_iterations += iterations;
+        model.num_retries += retries;
+        model.star_age = model.aux.rsp.time_sec / SECYER;
+        model.dt_next = model.aux.rsp.rsp_dt;
+        model.dt_old = model.dt;
+
+        let (etot, mut total_radiation) =
+            crate::rsp_driver::rsp_total_energy_integrals(model);
+        if model.aux.rsp.just_set_velocities {
+            model.aux.rsp.total_energy_old = etot;
+            total_radiation = 0.0;
+            model.aux.cumulative_energy_error = 0.0;
+        }
+        let err_e = etot - (model.aux.rsp.total_energy_old - total_radiation);
+        model.aux.cumulative_energy_error += err_e;
+        model.aux.total_energy = etot;
+
+        return Ok(EvolveStepReport {
+            model_number: model.model_number,
+            star_age: model.star_age,
+            dt: model.dt,
+            dt_next: model.dt_next,
+            iterations,
+            retries,
+            num_splits: 0,
+            num_merges: 0,
+            varcontrol: 0.0,
+            converged: true,
+        });
+    }
+
     if model.dt_next > 0.0 {
         model.dt = model.dt_next;
     }

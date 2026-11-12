@@ -250,7 +250,13 @@ pub fn stah(
                         h / 1.05
                     }
                 };
-                if n == 0 && (grid.t[1] - tin).abs() < tin * tin_tol {
+                let h_bracket_converged = have_h_large
+                    && have_h_small
+                    && (h_large - h_small).abs() <= 1.0e-13 * h.abs();
+                if n == 0
+                    && ((grid.t[1] - tin).abs() < tin * tin_tol
+                        || h_bracket_converged)
+                {
                     let m_center_raw = s.m_0 - s.dm_0;
                     model.mstar = model.controls.rsp_mass * dc.sunm;
                     model.xmstar = model.mstar - m_center_raw;
@@ -337,7 +343,13 @@ pub fn stah(
                         dmn * 0.5
                     };
                 }
-                if nzn - n + 1 == nzt && (s.t_0 - th0).abs() < th0_tol * th0 {
+                let dmn_bracket_converged = have_dmn_large
+                    && have_dmn_small
+                    && (dmn_large - dmn_small).abs() <= 1.0e-13 * dmn.abs();
+                if nzn - n + 1 == nzt
+                    && ((s.t_0 - th0).abs() < th0_tol * th0
+                        || dmn_bracket_converged)
+                {
                     adjusting_dmn = false;
                 }
                 continue 'top;

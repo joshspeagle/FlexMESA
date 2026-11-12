@@ -6,7 +6,6 @@
 
 use std::path::Path;
 
-use flexmesa_const::{M_SUN, SECYER};
 use flexmesa_eos::EosConfig;
 use flexmesa_kap::{KapCoOption, KapConfig, KapLowTOption, KapOption};
 
@@ -15,11 +14,10 @@ use crate::micro::get_or_load_net;
 use crate::model::StarModel;
 use crate::rsp_def::{RspDerivedConsts, MAX_RSP_NZN};
 use crate::rsp_eos_kap::RspChemCache;
-use crate::rsp_grid::{cleanup_for_lina, finish_build_rsp_model, MesaRanmar};
+use crate::rsp_grid::{cleanup_for_lina, finish_build_rsp_model};
 use crate::rsp_lina::{do_lina, RspLinaOutput};
 use crate::rsp_relax_env::relax_env;
 use crate::rsp_stah::stah;
-use crate::zams::load_zams_model;
 
 pub use crate::rsp_crossing::{
     eval_rsp_2nd_crossing_edges, eval_rsp_2nd_crossing_with_controls,
@@ -79,7 +77,7 @@ pub fn do_rsp_build_model(
         &model.job,
         &model.controls,
     )?;
-    let mut rng = MesaRanmar::new();
+    let mut rng = model.aux.rsp.rng.clone();
 
     let mx = model.controls.rsp_mass * dc_init.sunm;
     let l_surf = model.controls.rsp_l * dc_init.sunl;
@@ -129,8 +127,14 @@ pub fn do_rsp_build_model(
         let mode_idx = model.controls.rsp.mode_for_setting_periodlin;
         let p_lin = lina_opt
             .as_ref()
-            .and_then(|lo| lo.periods_sec.get(mode_idx).copied())
-            .unwrap_or(0.0);
+            .and_then(|lo| {
+                lo.periods_sec
+                    .get(mode_idx)
+                    .or_else(|| lo.periods_sec.first())
+                    .copied()
+            })
+            .filter(|&p| p > 0.0)
+            .unwrap_or(model.controls.rsp.default_periodlin);
         model.aux.rsp.period_lin = p_lin;
         model.aux.rsp.period = p_lin;
         let amix1 = model.controls.rsp.fraction_1st_overtone;
@@ -144,6 +148,7 @@ pub fn do_rsp_build_model(
                 model.v[nzn - i] = kick
                     * ((1.0 - amix1 - amix2) * v0 + amix1 * v1 + amix2 * v2);
             }
+            model.aux.rsp.have_set_velocities = true;
         }
         if model.controls.rsp.avel != 0.0 || model.controls.rsp.arnd != 0.0 {
             for i in 1..=nzn {
@@ -169,7 +174,9 @@ pub fn do_rsp_build_model(
     model.dt = model.aux.rsp.rsp_dt;
     model.dt_next = model.aux.rsp.rsp_dt;
 
+    model.aux.rsp.rng = rng;
     finish_build_rsp_model(&mut model, &chem, &dc, &grid, l_surf);
+    crate::rsp_driver::rsp_setup_model(&mut model, true, false)?;
     model.mstar_start = model.mstar;
     model.mstar_old = model.mstar;
     model.save_start_values();
@@ -260,6 +267,15 @@ pub fn eval_model_rsp_lina_modes(
     }
 
     let mut ctrl = model.controls.clone();
+    if ctrl.rsp_mass <= 0.0 {
+        ctrl.rsp_mass = model.mstar / flexmesa_const::M_SUN;
+    }
+    if ctrl.rsp_l <= 0.0 {
+        ctrl.rsp_l = model.l_center / flexmesa_const::L_SUN;
+    }
+    if ctrl.rsp_teff <= 0.0 {
+        ctrl.rsp_teff = model.teff;
+    }
     ctrl.rsp.nmodes = count;
     ctrl.rsp.use_other_rsp_build_model = false;
     ctrl.rsp.use_other_rsp_linear_analysis = false;
@@ -297,55 +313,25 @@ pub fn eval_model_rsp_lina_modes(
     (fallback, target_p)
 }
 
-/// Builds a temporary Henyey-compatible envelope model for `create_RSP_model`
-/// until Commit 4 wires `rsp_one_step` (`HYD`) into `star_evolve_step`.
+/// Builds a static `RSP` envelope [`StarModel`] from `controls` and `job`
+/// using default `A09` opacities (`create_RSP_model = .true.`).
 ///
 /// # Errors
-/// Returns [`StarError`] if base model loading fails.
+/// Returns [`StarError`] if `do_rsp_build_model` fails to converge.
 pub fn build_rsp_envelope_model(
     mut controls: StarControls,
     job: StarJobControls,
 ) -> Result<StarModel, StarError> {
-    let rsp_m = if controls.rsp_mass > 0.0 {
-        controls.rsp_mass
-    } else {
-        controls.initial_mass.max(0.25)
-    };
-    let rsp_teff = if controls.rsp_teff > 0.0 {
-        controls.rsp_teff
-    } else {
-        6000.0
-    };
-    let mut base_ctrl = controls.clone();
-    base_ctrl.initial_mass = 1.0;
-    let mut model = load_zams_model(base_ctrl, job.clone())?;
-    controls.initial_mass = rsp_m;
-    controls.rsp_flag = true;
-    model.controls = controls;
-    model.job = job;
-
-    let old_mstar = model.mstar.max(1.0);
-    let new_mstar = rsp_m.max(1.0e-5) * M_SUN;
-    let dln_r = (new_mstar / old_mstar).ln() / 3.0;
-    let l_scale = new_mstar / old_mstar;
-    for k in 0..model.nz {
-        model.ln_r[k] += dln_r;
-        model.r[k] = model.ln_r[k].exp();
-        model.lum[k] *= l_scale;
+    if controls.zbase <= 0.0 || controls.zbase == 0.02 {
+        controls.zbase = controls.rsp_z;
     }
-    model.mstar = new_mstar;
-    model.xmstar = (new_mstar - model.m_center).max(0.0);
-    model.mstar_start = model.mstar;
-    model.mstar_old = model.mstar;
-    model.controls.op_split_burn = true;
-    model.controls.min_logt_for_net = 8.5;
-    crate::star_job_init::equilibrate_tier2_scaled_model(&mut model);
-    model.sync_mesh_and_pack()?;
-    crate::hydro_vars::set_hydro_vars(&mut model, false, false)?;
-    model.save_start_values();
-    model.teff = rsp_teff;
-    let p_sec = model.controls.rsp.default_periodlin.max(60.0);
-    model.dt = (p_sec / 40.0).min(0.1 * SECYER);
-    model.dt_next = model.dt;
-    Ok(model)
+    let kap = KapConfig {
+        kap_option: KapOption::A09,
+        kap_co_option: KapCoOption::A09Co,
+        kap_low_t_option: KapLowTOption::LowTFa05A09p,
+        zbase: controls.zbase,
+        ..KapConfig::default()
+    };
+    do_rsp_build_model(controls, job, EosConfig::default(), kap, None)
+        .map(|(m, _)| m)
 }

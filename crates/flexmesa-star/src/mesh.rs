@@ -134,13 +134,16 @@ impl StarModel {
                 self.cgrav[k] * self.m_grav[k] / (self.r[k] * self.r[k]);
         }
         for k in 0..nz {
-            let r_outer3 = self.r[k].powi(3);
-            let r_inner3 = if k + 1 < nz {
-                self.r[k + 1].powi(3)
+            let r_inner = if k + 1 < nz {
+                self.r[k + 1]
             } else {
-                self.r_center.powi(3)
+                self.r_center
             };
-            self.rmid[k] = (0.5 * (r_outer3 + r_inner3)).cbrt();
+            self.rmid[k] = if self.controls.rsp_flag {
+                0.5 * (self.r[k] + r_inner)
+            } else {
+                (0.5 * (self.r[k].powi(3) + r_inner.powi(3))).cbrt()
+            };
         }
     }
 

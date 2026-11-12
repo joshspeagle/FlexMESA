@@ -89,6 +89,78 @@ impl MesaRanmar {
         }
         uni
     }
+
+    /// Packs internal `RANMAR` state into `103` `f64` slots for `.photo` checkpoints.
+    #[must_use]
+    pub fn pack(&self) -> [f64; 103] {
+        let mut out = [0.0_f64; 103];
+        out[..98].copy_from_slice(&self.u);
+        out[98] = self.c;
+        out[99] = self.cd;
+        out[100] = self.cm;
+        out[101] = self.i97 as f64;
+        out[102] = self.j97 as f64;
+        out
+    }
+
+    /// Unpacks internal `RANMAR` state from `103` `f64` slots.
+    pub fn unpack(&mut self, s: &[f64]) {
+        if s.len() < 103 {
+            return;
+        }
+        self.u.copy_from_slice(&s[..98]);
+        self.c = s[98];
+        self.cd = s[99];
+        self.cm = s[100];
+        self.i97 = (s[101] as usize).clamp(1, 97);
+        self.j97 = (s[102] as usize).clamp(1, 97);
+    }
+}
+
+/// Evaluates `t1 * (r_out^3 - r_in^3)` in 106-bit Dekker/Knuth double-double
+/// precision to eliminate thin-shell cancellation (`real(qp)` in
+/// `rsp_def.f90:572-580, 845-851` and `rsp_step.f90:1098-1114`).
+#[must_use]
+pub(crate) fn vol_shell_qp(t1: f64, r_out: f64, r_in: f64) -> f64 {
+    #[inline]
+    fn two_sum(a: f64, b: f64) -> (f64, f64) {
+        let s = a + b;
+        let v = s - a;
+        (s, (a - (s - v)) + (b - v))
+    }
+    #[inline]
+    fn split_f64(a: f64) -> (f64, f64) {
+        let c = 134_217_729.0 * a;
+        let hi = c - (c - a);
+        (hi, a - hi)
+    }
+    #[inline]
+    fn two_prod(a: f64, b: f64) -> (f64, f64) {
+        let p = a * b;
+        let (ah, al) = split_f64(a);
+        let (bh, bl) = split_f64(b);
+        let err = ((ah * bh - p) + ah * bl + al * bh) + al * bl;
+        (p, err)
+    }
+    #[inline]
+    fn dd_mul(a: (f64, f64), b: (f64, f64)) -> (f64, f64) {
+        let (p, e) = two_prod(a.0, b.0);
+        two_sum(p, e + a.0 * b.1 + a.1 * b.0)
+    }
+    #[inline]
+    fn dd_sub(a: (f64, f64), b: (f64, f64)) -> (f64, f64) {
+        let (s, e) = two_sum(a.0, -b.0);
+        let (t, f) = two_sum(a.1, -b.1);
+        let (hi, lo1) = two_sum(s, e + t);
+        two_sum(hi, lo1 + f)
+    }
+    let q2 = (r_out, 0.0);
+    let q3 = (r_in, 0.0);
+    let q2_3 = dd_mul(dd_mul(q2, q2), q2);
+    let q3_3 = dd_mul(dd_mul(q3, q3), q3);
+    let diff = dd_sub(q2_3, q3_3);
+    let res = dd_mul((t1, 0.0), diff);
+    res.0 + res.1
 }
 
 /// 1-based center-to-surface (`1..=nzn`) Smolec envelope arrays (`rsp_build.f90:70-76`).
@@ -323,19 +395,19 @@ pub fn copy_results(model: &mut StarModel, dc: &RspDerivedConsts) {
         model.peos[k] = model.pgas[k] + model.prad[k];
     }
     for k in 0..nzn {
-        let r_in3 = if k + 1 < nzn {
-            model.r[k + 1].powi(3)
+        let r_in = if k + 1 < nzn {
+            model.r[k + 1]
         } else {
-            model.r_center.powi(3)
+            model.r_center
         };
-        model.rmid[k] = (0.5 * (model.r[k].powi(3) + r_in3)).cbrt();
+        model.rmid[k] = 0.5 * (model.r[k] + r_in);
     }
     for i in 1..=nzn {
         let k = nzn - i;
         let vol = if i == 1 {
             dc.p43 / model.dm[k] * (model.r[k].powi(3) - model.r_center.powi(3))
         } else {
-            dc.p43 / model.dm[k] * (model.r[k].powi(3) - model.r[k + 1].powi(3))
+            vol_shell_qp(dc.p43 / model.dm[k], model.r[k], model.r[k + 1])
         };
         model.lnd[k] = (1.0 / vol).ln();
         model.rho[k] = model.lnd[k].exp();
@@ -363,7 +435,7 @@ pub fn copy_results(model: &mut StarModel, dc: &RspDerivedConsts) {
 pub fn finish_build_rsp_model(
     model: &mut StarModel,
     chem: &RspChemCache,
-    dc: &RspDerivedConsts,
+    _dc: &RspDerivedConsts,
     grid: &RspEnvGrid,
     l_surf: f64,
 ) {
@@ -402,14 +474,48 @@ pub fn finish_build_rsp_model(
     model.set_xqs();
     model.set_m_and_dm();
     model.set_m_grav_and_grav();
+    model.set_dm_bar();
 
-    // `set_star_vars` (`rsp_def.f90:520-586`) + `finish_after_build_model`
-    // (`rsp_def.f90:447-456`) + `copy_results` (`rsp_def.f90:785-868`).
-    let sum_dm: f64 = model.dm[..nzn].iter().sum();
-    for k in 0..nzn {
-        model.dq[k] = model.dm[k] / sum_dm;
+    model.aux.rsp.f_edd_rsp.resize(nzn, F_EDD_ISOTROPIC);
+    model.aux.rsp.f_edd_rsp.fill(F_EDD_ISOTROPIC);
+    model.pack_xh();
+}
+
+/// Unpacks `(lnR, lnT, lnd)` from a loaded `.mod` into `(r, t, rho, vol_rsp)`
+/// (`copy_from_xh_to_rsp` in `rsp_def.f90:492-517`).
+pub fn copy_from_xh_to_rsp(model: &mut StarModel, dc: &RspDerivedConsts) {
+    let nzn = model.nz;
+    if model.aux.rsp.vol_rsp.len() != nzn {
+        model.aux.rsp.resize(nzn);
     }
-    model.xmstar = sum_dm;
+    for k in 0..nzn {
+        model.r[k] = model.ln_r[k].exp();
+        model.t[k] = model.ln_t[k].exp();
+        model.rho[k] = model.lnd[k].exp();
+    }
+    for k in 0..nzn {
+        model.aux.rsp.vol_rsp[k] = if k + 1 == nzn {
+            dc.p43 / model.dm[k] * (model.r[k].powi(3) - model.r_center.powi(3))
+        } else {
+            vol_shell_qp(dc.p43 / model.dm[k], model.r[k], model.r[k + 1])
+        };
+    }
+}
+
+/// Synchronizes mass coordinates, `lnR`/`lnT`/`lnd` rounding, `vol_rsp`, and
+/// `prad` prior to `init_hyd` (`set_star_vars` in `rsp_def.f90:520-586`).
+pub fn set_star_vars_rsp(model: &mut StarModel, dc: &RspDerivedConsts) {
+    let nzn = model.nz;
+    if model.aux.rsp.vol_rsp.len() != nzn {
+        model.aux.rsp.resize(nzn);
+    }
+    let sum_dm: f64 = model.dm[..nzn].iter().sum();
+    if sum_dm > 0.0 {
+        for k in 0..nzn {
+            model.dq[k] = model.dm[k] / sum_dm;
+        }
+        model.xmstar = sum_dm;
+    }
     let _ = model.normalize_dqs();
     model.set_qs();
     model.set_xqs();
@@ -425,7 +531,7 @@ pub fn finish_build_rsp_model(
         let vol_s = if k + 1 == nzn {
             dc.p43 / model.dm[k] * (model.r[k].powi(3) - model.r_center.powi(3))
         } else {
-            dc.p43 / model.dm[k] * (model.r[k].powi(3) - model.r[k + 1].powi(3))
+            vol_shell_qp(dc.p43 / model.dm[k], model.r[k], model.r[k + 1])
         };
         model.lnd[k] = (1.0 / vol_s).ln();
         model.rho[k] = model.lnd[k].exp();
@@ -436,10 +542,32 @@ pub fn finish_build_rsp_model(
         let vol_hyd = if k + 1 == nzn {
             dc.p43 / model.dm[k] * (model.r[k].powi(3) - model.r_center.powi(3))
         } else {
-            dc.p43 / model.dm[k] * (model.r[k].powi(3) - model.r[k + 1].powi(3))
+            vol_shell_qp(dc.p43 / model.dm[k], model.r[k], model.r[k + 1])
         };
-        model.aux.rsp.erad_rsp[k] = CRAD * model.t[k].powi(4) * vol_hyd;
-        model.prad[k] = F_EDD_ISOTROPIC * model.aux.rsp.erad_rsp[k] / vol_hyd;
+        model.aux.rsp.vol_rsp[k] = vol_hyd;
+        if model.aux.rsp.erad_rsp[k] == 0.0 {
+            model.aux.rsp.erad_rsp[k] = CRAD * model.t[k].powi(4) * vol_hyd;
+        }
+        let f_edd = model.aux.rsp.f_edd_rsp[k];
+        model.prad[k] = f_edd * model.aux.rsp.erad_rsp[k] / vol_hyd;
     }
-    copy_results(model, dc);
+    model.pack_xh();
+}
+
+/// Syncs `lnR`/`lnT`/`lnd` from `(r, t, vol_rsp)` after `init_hyd`
+/// (`finish_after_build_model` in `rsp_def.f90:447-456`).
+pub fn finish_after_build_model(model: &mut StarModel) {
+    let nzn = model.nz;
+    for k in 0..nzn {
+        model.ln_r[k] = model.r[k].ln();
+        model.r[k] = model.ln_r[k].exp();
+        model.ln_t[k] = model.t[k].ln();
+        model.t[k] = model.ln_t[k].exp();
+        let vol = model.aux.rsp.vol_rsp[k];
+        if vol > 0.0 {
+            model.lnd[k] = (1.0 / vol).ln();
+            model.rho[k] = model.lnd[k].exp();
+        }
+    }
+    model.pack_xh();
 }

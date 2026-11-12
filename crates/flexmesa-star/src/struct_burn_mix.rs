@@ -1,33 +1,39 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-//! Operator-split and coupled structure-burn-mix driver (`do_struct_burn_mix`),
-//! implicit tridiagonal species diffusion (`solve_composition_diffusion`), and
-//! substepped rotational angular momentum diffusion (`solve_omega_mix`)
-//! corresponding to `star/private/struct_burn_mix.f90` and
-//! `star/private/solve_omega_mix.f90`.
+//! Coupled and thresholded operator-split structure-burn-mix driver
+//! (`do_struct_burn_mix`), implicit tridiagonal species diffusion
+//! (`solve_composition_diffusion`), and substepped rotational angular momentum
+//! diffusion (`solve_omega_mix`) corresponding to
+//! `star/private/struct_burn_mix.f90` and `star/private/solve_omega_mix.f90`.
 //!
-//! # Operator-Split vs. Coupled Burn + Mix
-//! In `do_struct_burn_mix`, each evolutionary timestep $\Delta t$ proceeds via:
-//! 1. **Hydro & Mixing Setup**: Evaluates `set_hydro_vars`, cleans mixing
-//!    glitches (`clean_mixing_glitches`), locates sub-cell convective
-//!    boundaries (`locate_convection_boundaries`), applies convective
-//!    overshooting (`apply_overshooting`), and computes Lagrangian face coupling
-//!    factors $\sigma_k$ (`compute_convection_sigmas`).
-//! 2. **Optional 1-Zone Operator-Split Burn (`op_split_burn_zones`)**: For zones
-//!    with $\log_{10}(T/\mathrm{K}) \ge \mathrm{min\_logt\_for\_net}$, integrates
-//!    the reaction network over $[0, \Delta t]$ via `burn_1_zone` at constant
-//!    $(\rho_k, T_k)$, updating `xa`, `xa_start`, and `eps_nuc` while zeroing
-//!    `dxdt_nuc` for the subsequent structure solve.
-//! 3. **Henyey Structure + Diffusion Solve**: Runs `solve_henyey_step` (coupled
-//!    with species when `!op_split_burn`, or followed by implicit tridiagonal
-//!    species diffusion `solve_composition_diffusion` when `op_split_burn`).
+//! # Thresholded Operator-Split vs. Coupled Burn + Mix
+//! Following upstream `struct_burn_mix.f90:33-224`:
+//! 1. **Optional High-$T$ 1-Zone Burn (`op_split_burn_zones`)**: When
+//!    `op_split_burn && do_burn`, zones with $T_{\mathrm{start},k} \ge
+//!    \mathrm{op\_split\_burn\_min\_T}$ (`2e9` K default) integrate the reaction
+//!    network over $[0, \Delta t]$ in parallel (`burn_1_zone` or variable-$T$
+//!    `burn_1_zone_const_density`), updating `xa` and `burn_avg_epsnuc` and
+//!    refreshing EOS/opacity (`non_epsnuc_energy_change_from_split_burn`), while
+//!    cooler zones ($T_{\mathrm{start},k} < \mathrm{op\_split\_burn\_min\_T}$)
+//!    remain coupled in the Henyey system.
+//! 2. **Fixed Start-of-Step Convective Coupling (`sig`)**: Evaluates glitch
+//!    cleanup, sub-cell convective boundaries, overshooting, and Lagrangian face
+//!    coupling $\sigma_k$ once before `save_start_values`.
+//! 3. **Coupled Henyey Solve**: Solves the `(nvar_hydro + species)` block-tridiagonal
+//!    system when `(do_burn || do_mix) && species > 0`, or `nvar_hydro` when
+//!    neither burning nor mixing is active.
 
+use flexmesa_chem::NUM_CATEGORIES;
 use flexmesa_const::{FOUR_PI, LN10};
 use flexmesa_eos::HelmTable;
-use flexmesa_net::{burn_1_zone, Burn1ZoneInput};
+use flexmesa_net::{
+    burn_1_zone, burn_1_zone_const_density, Burn1ZoneInput,
+    BurnConstDensityInput,
+};
+use rayon::prelude::*;
 
 use crate::controls::StarError;
 use crate::hydro_vars::set_hydro_vars;
-use crate::micro::resolve_model_net;
+use crate::micro::{do_eos, do_kap, resolve_model_net, set_basic_vars};
 use crate::mix_info::{
     clean_mixing_glitches, compute_convection_sigmas,
     locate_convection_boundaries,
@@ -36,13 +42,23 @@ use crate::model::StarModel;
 use crate::overshoot::{apply_overshooting, OvershootConfig};
 use crate::solver::{solve_henyey_step, HenyeySolverReport};
 
-/// Integrates the 1-zone nuclear reaction network over $[0, \Delta t]$ in all
-/// active burning zones (`burn_zones` in `struct_burn_mix.f90:819-1224`).
+struct SplitZoneOutcome {
+    k: usize,
+    xa_after: Vec<f64>,
+    dxdt_split: Vec<f64>,
+    avg_epsnuc: f64,
+    eps_neu_total: f64,
+    eps_cats: [f64; NUM_CATEGORIES],
+}
+
+/// Integrates the 1-zone nuclear reaction network over $[0, \Delta t]$ in
+/// parallel across all zones with $T_{\mathrm{start},k} \ge
+/// \mathrm{op\_split\_burn\_min\_T}$ (`do_burn` and `burn1_zone` in
+/// `star/private/struct_burn_mix.f90:819-1151`).
 ///
-/// Updates `xa` and `xa_start` with the post-burn mass fractions, stores the
-/// time-averaged nuclear energy generation rate in `eps_nuc`, and zeroes
-/// `dxdt_nuc` and its partials so the subsequent step does not double-count
-/// nuclear reactions.
+/// Cooler zones ($T_{\mathrm{start},k} < \mathrm{op\_split\_burn\_min\_T}$) set
+/// `burn_avg_epsnuc[k] = 0` and retain their coupled `do_net` rates and
+/// Jacobians for the subsequent Henyey solve.
 ///
 /// # Errors
 /// Returns [`StarError::MicrophysicsError`] if 1-zone integration fails.
@@ -50,7 +66,7 @@ pub fn op_split_burn_zones(
     model: &mut StarModel,
     dt: f64,
 ) -> Result<(), StarError> {
-    if dt <= 0.0 {
+    if dt <= 0.0 || model.nz == 0 || model.species == 0 {
         return Ok(());
     }
     let nz = model.nz;
@@ -58,93 +74,192 @@ pub fn op_split_burn_zones(
     let Some(net_info) = resolve_model_net(model) else {
         return Ok(());
     };
-    let ht = HelmTable::builtin();
-    let num_reactions = net_info.num_reactions;
-    let rate_factors = vec![1.0; num_reactions];
-    let reaction_qs = vec![0.0; num_reactions];
-    let reaction_neu_qs = vec![0.0; num_reactions];
-    let min_logt = if species > 12 {
-        model.controls.min_logt_for_net.max(8.3)
-    } else {
-        model.controls.min_logt_for_net
-    };
-    let eps_nuc_factor = model.controls.eps_nuc_factor;
-    let screening_mode = model.controls.screening_mode;
+    if model.aux.burn_avg_epsnuc.len() != nz {
+        model.aux.burn_avg_epsnuc.resize(nz, 0.0);
+    }
+    if model.aux.eps_nuc_categories.len() != nz {
+        model
+            .aux
+            .eps_nuc_categories
+            .resize(nz, [0.0; NUM_CATEGORIES]);
+    }
 
+    let min_t_split = model.controls.op_split_burn_min_t;
+    let min_t_var = model.controls.op_split_burn_min_t_for_variable_t_solver;
+    let min_logt_net = model.controls.min_logt_for_net;
+    let max_abar = model.controls.max_abar_for_burning;
+    let eps_nuc_factor = model.controls.eps_nuc_factor;
+    let dxdt_nuc_factor = model.controls.dxdt_nuc_factor;
+    let screening_mode = model.controls.screening_mode;
+    let burn_eps = model.controls.op_split_burn_eps;
+    let burn_odescal = model.controls.op_split_burn_odescal;
+    let max_steps = model.controls.burn_steps_hard_limit.max(1);
+
+    let min_v_start = model.v_start.iter().copied().fold(0.0_f64, f64::min);
+    let skip_burn =
+        min_v_start < -model.controls.op_split_burn_eps_nuc_infall_limit;
+
+    let mut split_indices = Vec::new();
     for k in 0..nz {
-        let log_t = model.ln_t[k] / LN10;
-        let log_rho = model.lnd[k] / LN10;
-        if log_t < min_logt {
-            model.eps_nuc[k] = 0.0;
+        let t_start_k = model
+            .ln_t_start
+            .get(k)
+            .copied()
+            .unwrap_or(model.ln_t[k])
+            .exp();
+        if t_start_k < min_t_split {
             model.aux.burn_avg_epsnuc[k] = 0.0;
-            model.eps_nuc_neu_total[k] = 0.0;
-            model.d_epsnuc_dlnd[k] = 0.0;
-            model.d_epsnuc_dlnt[k] = 0.0;
-            for j in 0..species {
-                model.d_epsnuc_dx[k * species + j] = 0.0;
-                model.dxdt_nuc[k * species + j] = 0.0;
-                model.d_dxdt_nuc_dlnd[k * species + j] = 0.0;
-                model.d_dxdt_nuc_dlnt[k * species + j] = 0.0;
+        } else {
+            split_indices.push(k);
+        }
+    }
+    if split_indices.is_empty() {
+        return Ok(());
+    }
+
+    let ht = HelmTable::builtin();
+    let rate_factors = vec![1.0_f64; net_info.num_reactions];
+    let eos_cfg = &model.eos_config;
+
+    let outcomes: Result<Vec<SplitZoneOutcome>, StarError> = split_indices
+        .into_par_iter()
+        .map(|k| {
+            let start_x = &model.xa[k * species..(k + 1) * species];
+            let log_t = model.ln_t[k] / LN10;
+            let log_rho = model.lnd[k] / LN10;
+            if skip_burn
+                || (eps_nuc_factor == 0.0 && dxdt_nuc_factor == 0.0)
+                || model.abar[k] > max_abar
+                || log_t < min_logt_net
+            {
+                return Ok(SplitZoneOutcome {
+                    k,
+                    xa_after: start_x.to_vec(),
+                    dxdt_split: vec![0.0; species],
+                    avg_epsnuc: 0.0,
+                    eps_neu_total: 0.0,
+                    eps_cats: [0.0; NUM_CATEGORIES],
+                });
             }
-            continue;
-        }
-        let start_x = model.xa[k * species..(k + 1) * species].to_vec();
-        let times = [0.0, dt];
-        let log10_ts = [log_t, log_t];
-        let log10_rhos = [log_rho, log_rho];
-        let etas = [model.eta[k], model.eta[k]];
-        let input = Burn1ZoneInput {
-            t_start: 0.0,
-            t_end: dt,
-            starting_x: &start_x,
-            times: &times,
-            log10_ts: &log10_ts,
-            log10_rhos: &log10_rhos,
-            etas: &etas,
-            dxdt_source_term: None,
-            rate_factors: &rate_factors,
-            weak_rate_factor: 1.0,
-            reaction_qs: &reaction_qs,
-            reaction_neu_qs: &reaction_neu_qs,
-            screening_mode,
-            stptry_in: 0.0,
-            max_steps: 500,
-            eps: 1.0e-6,
-            odescal: 1.0e-12,
-        };
-        let out = burn_1_zone(&net_info, ht, &model.eos_config, &input)
-            .map_err(|e| {
-                StarError::MicrophysicsError(format!(
-                    "op_split_burn failed at zone {k}: {e}"
-                ))
-            })?;
-        let mut x_sum = 0.0;
-        for (j, &xj) in out.ending_x.iter().enumerate() {
-            let x_clamped = xj.clamp(0.0, 1.0);
-            model.xa[k * species + j] = x_clamped;
-            x_sum += x_clamped;
-        }
-        if x_sum > 0.0 {
-            for j in 0..species {
-                let x_norm = model.xa[k * species + j] / x_sum;
-                model.xa[k * species + j] = x_norm;
-                model.xa_start[k * species + j] = x_norm;
+
+            let (ending_x, avg_raw, eps_neu, mut cats) =
+                if model.t[k] >= min_t_var {
+                    let input = BurnConstDensityInput {
+                        t_start: 0.0,
+                        t_end: dt,
+                        starting_x: start_x,
+                        starting_log10_t: log_t,
+                        log10_rho: log_rho,
+                        rate_factors: &rate_factors,
+                        weak_rate_factor: 1.0,
+                        reaction_qs: &[],
+                        reaction_neu_qs: &[],
+                        screening_mode,
+                        stptry_in: 0.0,
+                        max_steps,
+                        eps: burn_eps,
+                        odescal: burn_odescal,
+                    };
+                    let out = burn_1_zone_const_density(
+                        &net_info, ht, eos_cfg, &input,
+                    )
+                    .map_err(|e| {
+                        StarError::MicrophysicsError(format!(
+                            "burn_1_zone_const_density failed at zone {k}: {e}"
+                        ))
+                    })?;
+                    (
+                        out.ending_x,
+                        out.avg_eps_nuc,
+                        out.eps_neu_total,
+                        out.eps_nuc_categories,
+                    )
+                } else {
+                    let times = [0.0, dt];
+                    let log10_ts = [log_t, log_t];
+                    let log10_rhos = [log_rho, log_rho];
+                    let etas = [model.eta[k], model.eta[k]];
+                    let input = Burn1ZoneInput {
+                        t_start: 0.0,
+                        t_end: dt,
+                        starting_x: start_x,
+                        times: &times,
+                        log10_ts: &log10_ts,
+                        log10_rhos: &log10_rhos,
+                        etas: &etas,
+                        dxdt_source_term: None,
+                        rate_factors: &rate_factors,
+                        weak_rate_factor: 1.0,
+                        reaction_qs: &[],
+                        reaction_neu_qs: &[],
+                        screening_mode,
+                        stptry_in: 0.0,
+                        max_steps,
+                        eps: burn_eps,
+                        odescal: burn_odescal,
+                    };
+                    let out = burn_1_zone(&net_info, ht, eos_cfg, &input)
+                        .map_err(|e| {
+                            StarError::MicrophysicsError(format!(
+                                "op_split_burn failed at zone {k}: {e}"
+                            ))
+                        })?;
+                    (
+                        out.ending_x,
+                        out.avg_eps_nuc,
+                        out.eps_neu_total,
+                        out.eps_nuc_categories,
+                    )
+                };
+
+            let mut xa_after = vec![0.0_f64; species];
+            let mut x_sum = 0.0_f64;
+            for (j, &xj) in ending_x.iter().enumerate() {
+                let xc = xj.clamp(0.0, 1.0);
+                xa_after[j] = xc;
+                x_sum += xc;
             }
-        }
-        model.eps_nuc[k] = out.avg_eps_nuc * eps_nuc_factor;
-        model.aux.burn_avg_epsnuc[k] = out.avg_eps_nuc * eps_nuc_factor;
+            if x_sum > 0.0 {
+                for x in &mut xa_after {
+                    *x /= x_sum;
+                }
+            }
+            let dxdt_split: Vec<f64> = (0..species)
+                .map(|j| (xa_after[j] - start_x[j]) / dt)
+                .collect();
+            for c in &mut cats {
+                *c *= eps_nuc_factor;
+            }
+
+            Ok(SplitZoneOutcome {
+                k,
+                xa_after,
+                dxdt_split,
+                avg_epsnuc: avg_raw * eps_nuc_factor,
+                eps_neu_total: eps_neu * eps_nuc_factor,
+                eps_cats: cats,
+            })
+        })
+        .collect();
+
+    for out in outcomes? {
+        let k = out.k;
+        let base_s = k * species;
+        let base_ss = k * species * species;
+        model.xa[base_s..base_s + species].copy_from_slice(&out.xa_after);
+        model.xa_start[base_s..base_s + species].copy_from_slice(&out.xa_after);
+        model.eps_nuc[k] = out.avg_epsnuc;
+        model.aux.burn_avg_epsnuc[k] = out.avg_epsnuc;
+        model.aux.eps_nuc_categories[k] = out.eps_cats;
         model.eps_nuc_neu_total[k] = out.eps_neu_total;
         model.d_epsnuc_dlnd[k] = 0.0;
         model.d_epsnuc_dlnt[k] = 0.0;
-        for j in 0..species {
-            model.d_epsnuc_dx[k * species + j] = 0.0;
-            model.dxdt_nuc[k * species + j] = 0.0;
-            model.d_dxdt_nuc_dlnd[k * species + j] = 0.0;
-            model.d_dxdt_nuc_dlnt[k * species + j] = 0.0;
-            for m in 0..species {
-                model.d_dxdt_nuc_dx[(k * species + j) * species + m] = 0.0;
-            }
-        }
+        model.d_epsnuc_dx[base_s..base_s + species].fill(0.0);
+        model.dxdt_nuc[base_s..base_s + species]
+            .copy_from_slice(&out.dxdt_split);
+        model.d_dxdt_nuc_dlnd[base_s..base_s + species].fill(0.0);
+        model.d_dxdt_nuc_dlnt[base_s..base_s + species].fill(0.0);
+        model.d_dxdt_nuc_dx[base_ss..base_ss + species * species].fill(0.0);
     }
     Ok(())
 }
@@ -248,8 +363,6 @@ pub fn solve_omega_mix(
     let steps = n_substeps.max(1);
     let dt_sub = dt / (steps as f64);
 
-    // Specific moment of inertia `i_rot[k]` on faces (`model.aux.i_rot[k]` when
-    // populated by `update_rotation_distortion_factors`, or `(2/3) * r[k]^2`).
     let i_rot: Vec<f64> = (0..nz)
         .map(|k| {
             let ir = model.aux.i_rot.get(k).copied().unwrap_or(0.0);
@@ -261,8 +374,6 @@ pub fn solve_omega_mix(
         })
         .collect();
 
-    // Cell-centered harmonic-mean rotational coupling `am_sig_omega[k]` for
-    // cell `k` (`0..nz-1`, `hydro_rotation.f90:399-490`).
     let mut c_omega = vec![0.0; nz - 1];
     for (k, c_om_k) in c_omega.iter_mut().enumerate() {
         let nu0 = nu_omega[k].max(0.0);
@@ -355,33 +466,83 @@ pub fn do_struct_burn_mix(
     model.dt = dt;
     let saved_op_split = model.controls.op_split_burn;
     model.controls.op_split_burn = op_split_burn;
-    set_hydro_vars(model, false, false)?;
-    model.save_start_values();
-    if model.controls.rsp2_flag {
-        crate::rsp2_eqns::rsp2_adjust_vars_before_call_solver(model);
-        model.pack_xh();
-    }
-    refresh_mixing_state(model, dt, overshoot_configs);
+    model.aux.doing_struct_burn_mix = false;
 
-    let report = if op_split_burn {
-        if model.controls.do_burn && model.controls.dxdt_nuc_factor != 0.0 {
+    if let Err(e) = set_hydro_vars(model, false, false) {
+        model.controls.op_split_burn = saved_op_split;
+        return Err(e);
+    }
+    model.ln_t_start.clone_from(&model.ln_t);
+    model.v_start.clone_from(&model.v);
+    model.aux.doing_struct_burn_mix = true;
+    model.aux.non_epsnuc_energy_change_from_split_burn = 0.0;
+
+    let do_burn =
+        model.controls.do_burn && model.controls.dxdt_nuc_factor > 0.0;
+    let do_mix = model.controls.do_mix && model.controls.mix_factor > 0.0;
+
+    let step_res: Result<HenyeySolverReport, StarError> = (|| {
+        if op_split_burn && do_burn {
+            let e_before: f64 =
+                (0..model.nz).map(|k| model.energy[k] * model.dm[k]).sum();
             op_split_burn_zones(model, dt)?;
+            set_basic_vars(model)?;
+            do_eos(model)?;
+            do_kap(model)?;
+            let e_after: f64 =
+                (0..model.nz).map(|k| model.energy[k] * model.dm[k]).sum();
+            model.aux.non_epsnuc_energy_change_from_split_burn =
+                e_after - e_before;
         }
-        let res = solve_henyey_step(model, false, use_bcyclic);
-        model.controls.op_split_burn = saved_op_split;
-        let rep = res?;
-        if model.controls.do_mix && model.controls.mix_factor != 0.0 {
-            solve_composition_diffusion(model, dt);
+
+        if do_mix {
+            refresh_mixing_state(model, dt, overshoot_configs);
+        } else {
+            model.sig.fill(0.0);
         }
-        set_hydro_vars(model, false, false)?;
-        rep
-    } else {
-        let res = solve_henyey_step(model, true, use_bcyclic);
-        model.controls.op_split_burn = saved_op_split;
-        let rep = res?;
-        set_hydro_vars(model, false, false)?;
-        rep
+
+        if model.controls.rsp2_flag {
+            crate::rsp2_eqns::rsp2_adjust_vars_before_call_solver(model);
+            model.pack_xh();
+        }
+        model.save_start_values();
+
+        let do_chem = (do_burn || do_mix) && model.species > 0;
+        let rep = solve_henyey_step(model, do_chem, use_bcyclic)?;
+        Ok(rep)
+    })();
+
+    model.aux.doing_struct_burn_mix = false;
+    let report = match step_res {
+        Ok(rep) => rep,
+        Err(e) => {
+            model.controls.op_split_burn = saved_op_split;
+            return Err(e);
+        }
     };
-    refresh_mixing_state(model, dt, overshoot_configs);
+
+    let final_res = set_hydro_vars(model, false, false);
+    if op_split_burn {
+        let min_t_split = model.controls.op_split_burn_min_t;
+        for k in 0..model.nz {
+            let t_start_k = model
+                .ln_t_start
+                .get(k)
+                .copied()
+                .unwrap_or(model.ln_t[k])
+                .exp();
+            if t_start_k >= min_t_split {
+                if let Some(&avg_eps) = model.aux.burn_avg_epsnuc.get(k) {
+                    model.eps_nuc[k] = avg_eps;
+                }
+            }
+        }
+    }
+    model.controls.op_split_burn = saved_op_split;
+    final_res?;
+
+    if do_mix {
+        refresh_mixing_state(model, dt, overshoot_configs);
+    }
     Ok(report)
 }

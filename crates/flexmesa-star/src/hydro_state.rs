@@ -13,12 +13,18 @@ pub struct HydroAuxState {
     /// Whether the model is currently in an initialization relaxation phase
     /// (`doing_relax` in `star_data_def.f90`).
     pub doing_relax: bool,
+    /// Whether the model is currently inside `do_struct_burn_mix`
+    /// (`doing_struct_burn_mix` in `star_data_step_work.inc`).
+    pub doing_struct_burn_mix: bool,
     /// Total integrated model energy $E_{\mathrm{tot}}$ in $\mathrm{erg}$
     /// (`total_energy` in `star_data_step_work.inc`).
     pub total_energy: f64,
     /// Cumulative global energy conservation error in $\mathrm{erg}$
     /// (`cumulative_energy_error` in `star_data_step_work.inc`).
     pub cumulative_energy_error: f64,
+    /// Internal energy change from operator-split composition change at fixed
+    /// $(\rho, T)$ (`non_epsnuc_energy_change_from_split_burn`).
+    pub non_epsnuc_energy_change_from_split_burn: f64,
     /// Start-of-step specific heat at constant pressure $C_{P,\mathrm{start},k}$ (`Cp_start`).
     pub cp_start: Vec<f64>,
     /// Start-of-step adiabatic temperature gradient $\nabla_{\mathrm{ad,start},k}$ (`grada_start`).
@@ -39,6 +45,9 @@ pub struct HydroAuxState {
     /// Operator-split time-averaged nuclear energy rate $\bar{\epsilon}_{\mathrm{nuc},k}$
     /// (`burn_avg_epsnuc`).
     pub burn_avg_epsnuc: Vec<f64>,
+    /// Category-resolved nuclear energy generation rates (`eps_nuc_categories`,
+    /// `len = nz`).
+    pub eps_nuc_categories: Vec<[f64; flexmesa_chem::NUM_CATEGORIES]>,
     /// Extra specific heating rate $\epsilon_{\mathrm{extra},k}$ in $\mathrm{erg\,g^{-1}\,s^{-1}}$ (`extra_heat`).
     pub extra_heat: Vec<f64>,
     /// Partial derivative $\partial\epsilon_{\mathrm{extra},k}/\partial\ln\rho_k$ (`d_extra_heat_dlnd`).
@@ -106,8 +115,10 @@ impl HydroAuxState {
     pub fn new(nz: usize, species: usize) -> Self {
         Self {
             doing_relax: false,
+            doing_struct_burn_mix: false,
             total_energy: 0.0,
             cumulative_energy_error: 0.0,
+            non_epsnuc_energy_change_from_split_burn: 0.0,
             cp_start: vec![0.0; nz],
             grada_start: vec![0.0; nz],
             chi_t_start: vec![0.0; nz],
@@ -117,6 +128,7 @@ impl HydroAuxState {
             latent_ddlnt: vec![0.0; nz],
             d_eps_grav_dx: vec![0.0; nz * species],
             burn_avg_epsnuc: vec![0.0; nz],
+            eps_nuc_categories: vec![[0.0; flexmesa_chem::NUM_CATEGORIES]; nz],
             extra_heat: vec![0.0; nz],
             d_extra_heat_dlnd: vec![0.0; nz],
             d_extra_heat_dlnt: vec![0.0; nz],
@@ -192,6 +204,8 @@ impl HydroAuxState {
             ad.resize(nz, StarAdOrder1::ZERO);
         }
         let n_sp = nz * species;
+        self.eps_nuc_categories
+            .resize(nz, [0.0; flexmesa_chem::NUM_CATEGORIES]);
         self.d_eps_grav_dx.resize(n_sp, 0.0);
         self.dln_e_dxa_for_partials.resize(n_sp, 0.0);
         self.dln_peos_dxa_for_partials.resize(n_sp, 0.0);

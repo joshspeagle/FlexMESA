@@ -43,7 +43,7 @@ pub struct StarControls {
     pub mlt_option: MltOption,
     /// Whether to use the Ledoux criterion (`true`) or Schwarzschild (`false`).
     pub use_ledoux_criterion: bool,
-    /// Semiconvection efficiency parameter $\alpha_{\mathrm{sc}}$.
+    /// Semiconvective efficiency parameter $\alpha_{\mathrm{sc}}$.
     pub alpha_semiconvection: f64,
     /// Semiconvective mixing prescription (`semiconvection_option`).
     pub semiconvection_option: SemiconvectionOption,
@@ -73,6 +73,10 @@ pub struct StarControls {
     pub non_nuc_neu_factor: f64,
     /// Minimum $\log_{10}(T/\mathrm{K})$ for nuclear network evaluation.
     pub min_logt_for_net: f64,
+    /// Maximum $\log_{10}(T/\mathrm{K})$ above which network $T$ is clipped (`max_logT_for_net`).
+    pub max_logt_for_net: f64,
+    /// Maximum mean atomic mass $\bar{A}$ for nuclear burning (`max_abar_for_burning`).
+    pub max_abar_for_burning: f64,
     /// Whether operator-split 1-zone burning is active (`op_split_burn`).
     pub op_split_burn: bool,
     /// Nuclear energy generation multiplicative factor (`1.0`).
@@ -97,9 +101,9 @@ pub struct StarControls {
     pub tol_correction_norm: f64,
     /// Convergence tolerance on maximum scaled correction (`tol_max_correction`).
     pub tol_max_correction: f64,
-    /// Convergence tolerance on mean residual (`tol_residual_norm1`).
+    /// Legacy fallback convergence tolerance on mean residual (`tol_residual_norm`).
     pub tol_residual_norm: f64,
-    /// Convergence tolerance on maximum residual (`tol_max_residual1`).
+    /// Legacy fallback convergence tolerance on maximum residual (`tol_max_residual`).
     pub tol_max_residual: f64,
     /// Whether hydrodynamic face velocity $v_k$ is an active variable (`v_flag`).
     pub v_flag: bool,
@@ -325,8 +329,18 @@ pub struct StarControls {
     pub max_logt_for_include_p_and_l_in_velocity_time_centering: f64,
     /// Use $P\,d(1/\rho)/dt$ form of work when time-centering velocity (`use_P_d_1_div_rho_form_of_work_when_time_centering_velocity`).
     pub use_p_d_1_div_rho_form_of_work_when_time_centering_velocity: bool,
-    /// Minimum temperature (K) for operator-split burning (`op_split_burn_min_T`).
+    /// Minimum temperature (K) for operator-split burning (`op_split_burn_min_T`, `2e9` default).
     pub op_split_burn_min_t: f64,
+    /// Relative tolerance for 1-zone operator-split burning (`op_split_burn_eps`, `1e-5` default).
+    pub op_split_burn_eps: f64,
+    /// Abundance scaling floor for 1-zone operator-split burning (`op_split_burn_odescal`, `1e-5` default).
+    pub op_split_burn_odescal: f64,
+    /// Infall velocity cutoff in $\mathrm{cm\,s^{-1}}$ for operator-split burning (`op_split_burn_eps_nuc_infall_limit`).
+    pub op_split_burn_eps_nuc_infall_limit: f64,
+    /// Temperature threshold in K for variable-$T$ constant-density 1-zone burning (`op_split_burn_min_T_for_variable_T_solver`).
+    pub op_split_burn_min_t_for_variable_t_solver: f64,
+    /// Hard substep limit per zone in 1-zone burning (`burn_steps_hard_limit`, `20000` default).
+    pub burn_steps_hard_limit: usize,
     /// Whether non-local $^{56}\mathrm{Ni}/^{56}\mathrm{Co}$ decay heating replaces local `eps_nuc` (`nonlocal_NiCo_decay_heat`).
     pub nonlocal_nico_decay_heat: bool,
     /// Whether convective premixing energy release is included (`do_premix_heating`).
@@ -337,10 +351,32 @@ pub struct StarControls {
     pub tdc_include_eturb_in_energy_equation: bool,
     /// Whether Rayleigh-Taylor instability (`RTI_flag`) transport is active.
     pub rti_flag: bool,
+    /// Multiplicative factor for $\alpha_{\mathrm{RTI}}$ diffusion (`alpha_RTI_diffusion_factor`).
+    pub alpha_rti_diffusion_factor: f64,
     /// Multiplicative factor for RTI internal-energy diffusion (`dedt_RTI_diffusion_factor`).
     pub dedt_rti_diffusion_factor: f64,
     /// Multiplicative factor for RTI momentum diffusion (`dudt_RTI_diffusion_factor`).
     pub dudt_rti_diffusion_factor: f64,
+    /// Multiplicative factor for RTI density diffusion (`dlnddt_RTI_diffusion_factor`).
+    pub dlnddt_rti_diffusion_factor: f64,
+    /// Multiplicative factor for RTI composition diffusion (`composition_RTI_diffusion_factor`).
+    pub composition_rti_diffusion_factor: f64,
+    /// Minimum $|v|/c_s$ for $\alpha_{\mathrm{RTI}}$ source growth (`alpha_RTI_src_min_v_div_cs`).
+    pub alpha_rti_src_min_v_div_cs: f64,
+    /// Minimum enclosed mass fraction $q$ for $\alpha_{\mathrm{RTI}}$ source (`alpha_RTI_src_min_q`).
+    pub alpha_rti_src_min_q: f64,
+    /// Maximum enclosed mass fraction $q$ for $\alpha_{\mathrm{RTI}}$ source (`alpha_RTI_src_max_q`).
+    pub alpha_rti_src_max_q: f64,
+    /// Duffell (2016) RTI growth coefficient $A$ (`RTI_A`).
+    pub rti_a: f64,
+    /// Duffell (2016) RTI growth coefficient $B$ (`RTI_B`).
+    pub rti_b: f64,
+    /// Duffell (2016) RTI diffusivity coefficient $C$ (`RTI_C`).
+    pub rti_c: f64,
+    /// Duffell (2016) RTI damping coefficient $D$ (`RTI_D`).
+    pub rti_d: f64,
+    /// Saturation cap on $\alpha_{\mathrm{RTI}}$ (`RTI_max_alpha`).
+    pub rti_max_alpha: f64,
     /// Include velocity drag heating in the energy equation (`use_drag_energy`).
     pub use_drag_energy: bool,
     /// Velocity drag coefficient (`drag_coefficient`).
@@ -373,7 +409,7 @@ pub struct StarControls {
     pub use_gradt_actual_vs_gradt_mlt_for_t_gradient_eqn: bool,
     /// Use $dP_{\mathrm{rad}}/dm$ form of temperature equation (`use_dPrad_dm_form_of_T_gradient_eqn`).
     pub use_dprad_dm_form_of_t_gradient_eqn: bool,
-    /// Enable Levermore-Pomraning (1981) flux limiting in `do1_alt_dlnT_dm_eqn` (`use_flux_limiting_with_dPrad_dm_form`).
+    /// Enable Levermore-Pomraning (1981) flux limiting in `do1_alt_dlnT_dm_eqn` (`use_flux_limiting_with_dPrad_dm_eqn`).
     pub use_flux_limiting_with_dprad_dm_form: bool,
     /// Minimum face opacity floor in $\mathrm{cm^2\,g^{-1}}$ for `do1_alt_dlnT_dm_eqn` (`min_kap_for_dPrad_dm_eqn`).
     pub min_kap_for_dprad_dm_eqn: f64,
@@ -391,195 +427,80 @@ pub struct StarControls {
     pub do_mix: bool,
     /// Multiplicative factor on diffusive mixing $\sigma_k$ (`mix_factor`).
     pub mix_factor: f64,
-}
 
-impl Default for StarControls {
-    fn default() -> Self {
-        Self {
-            initial_mass: 1.0,
-            initial_z: 0.02,
-            initial_y: -1.0,
-            zbase: 0.02,
-            zams_filename: String::new(),
-            max_model_number: None,
-            max_age: None,
-            max_age_in_seconds: None,
-            max_years_for_timestep: None,
-            min_timestep_limit: 1.0e-6,
-            mixing_length_alpha: 2.0,
-            mlt_option: MltOption::Cox,
-            use_ledoux_criterion: false,
-            alpha_semiconvection: 0.0,
-            semiconvection_option: SemiconvectionOption::Langer85GradTIsGradr,
-            thermohaline_coeff: 0.0,
-            thermohaline_option: ThermohalineOption::Kippenhahn,
-            pextra_factor: 1.0,
-            min_d_mix: 0.0,
-            remove_mixing_glitches: true,
-            redo_conv_for_dr_lt_mixing_length: false,
-            atm_option: AtmOption::TTau,
-            atm_t_tau_relation: AtmTTauRelation::Eddington,
-            tau_factor: 1.0,
-            opacity_factor: 1.0,
-            min_t_for_neu: 1.0e7,
-            non_nuc_neu_factor: 1.0,
-            min_logt_for_net: 6.3,
-            op_split_burn: false,
-            eps_nuc_factor: 1.0,
-            dxdt_nuc_factor: 1.0,
-            screening_mode: ScreeningMode::Extended,
-            calculate_brunt_n2: true,
-            use_brunt_gradmux_form: false,
-            energy_eqn_option: EnergyEqnOption::Dedt,
-            mesh_delta_coeff: 1.0,
-            varcontrol_target: 1.0e-4,
-            max_newton_iters: 25,
-            tol_correction_norm: 3.0e-5,
-            tol_max_correction: 3.0e-3,
-            tol_residual_norm: 1.0e-4,
-            tol_max_residual: 1.0e-2,
-            v_flag: false,
-            u_flag: false,
-            rotation_flag: false,
-            rsp_flag: false,
-            rsp2_flag: false,
-            do_element_diffusion: false,
-            do_conv_premix: false,
-            do_phase_separation: false,
-            do_phase_separation_heating: false,
-            phase_separation_option: String::from("CO"),
-            irradiation_flux: 0.0,
-            column_depth_for_irradiation: 0.0,
-            use_momentum_outer_bc: false,
-            use_zero_pgas_outer_bc: false,
-            mass_change: 0.0,
-            accrete_same_as_surface: true,
-            accrete_given_mass_fractions: false,
-            accretion_h1: -1.0,
-            accretion_he4: -1.0,
-            accretion_species_id: Vec::new(),
-            accretion_species_xa: Vec::new(),
-            super_eddington_scaling_factor: 0.0,
-            hot_wind_full_on_t: 1.0e4,
-            cool_wind_full_on_t: 1.0e4,
-            reimers_scaling_factor: 0.0,
-            blocker_scaling_factor: 0.0,
-            vink_scaling_factor: 0.0,
-            dutch_scaling_factor: 0.0,
-            cool_wind_rgb_scheme: String::new(),
-            cool_wind_agb_scheme: String::new(),
-            stop_near_zams: false,
-            lnuc_div_l_zams_limit: 0.99,
-            xa_central_lower_limit_species: Vec::new(),
-            xa_central_lower_limit: Vec::new(),
-            xa_central_upper_limit_species: Vec::new(),
-            xa_central_upper_limit: Vec::new(),
-            log_l_upper_limit: None,
-            log_l_lower_limit: None,
-            teff_upper_limit: None,
-            teff_lower_limit: None,
-            log_teff_upper_limit: None,
-            log_teff_lower_limit: None,
-            log_center_temp_upper_limit: None,
-            log_center_temp_lower_limit: None,
-            log_center_density_upper_limit: None,
-            log_center_density_lower_limit: None,
-            log_max_temp_upper_limit: None,
-            log_g_upper_limit: None,
-            log_g_lower_limit: None,
-            log_psurf_upper_limit: None,
-            log_rsurf_upper_limit: None,
-            center_r_lower_limit: None,
-            he_core_mass_limit: None,
-            co_core_mass_limit: None,
-            one_core_mass_limit: None,
-            envelope_mass_limit: None,
-            he_layer_mass_lower_limit: None,
-            power_nuc_burn_upper_limit: None,
-            power_nuc_burn_lower_limit: None,
-            power_he_burn_upper_limit: None,
-            star_mass_max_limit: None,
-            star_mass_min_limit: None,
-            remnant_mass_min_limit: None,
-            star_species_mass_min_limit: None,
-            star_species_mass_min_limit_iso: String::new(),
-            star_species_mass_max_limit: None,
-            star_species_mass_max_limit_iso: String::new(),
-            fe_core_infall_limit: None,
-            v_surf_div_v_kh_upper_limit: None,
-            gamma_center_limit: None,
-            v_surf_div_v_esc_limit: None,
-            surf_omega_div_omega_crit_limit: None,
-            conv_core_gap_dq_limit: None,
-            stop_at_phase_tp_agb: false,
-            stop_at_phase_c_burn: false,
-            stop_at_phase_ne_burn: false,
-            stop_at_phase_o_burn: false,
-            rsp_max_num_periods: None,
-            rsp_target_steps_per_cycle: 600,
-            rsp_mass: 0.65,
-            rsp_teff: 6500.0,
-            rsp_l: 45.0,
-            rsp_x: 0.75,
-            rsp_z: 0.0004,
-            rsp: crate::rsp_config::RspConfig::default(),
-            rsp2: crate::rsp_config::Rsp2Controls::default(),
-            use_other_cgrav: false,
-            use_other_alpha_mlt: false,
-            use_other_wind: false,
-            use_other_adjust_mdot: false,
-            use_other_torque: false,
-            use_other_energy: false,
-            use_other_eps_grav: false,
-            use_other_neu: false,
-            use_other_kap: false,
-            use_other_surface_pt: false,
-            use_other_overshooting_scheme: false,
-            use_other_momentum_implicit: false,
-            x_ctrl: vec![0.0; 100],
-            x_integer_ctrl: vec![0; 100],
-            x_logical_ctrl: vec![false; 100],
-            x_character_ctrl: vec![String::new(); 100],
-            using_velocity_time_centering: false,
-            include_l_in_velocity_time_centering: false,
-            include_p_in_velocity_time_centering: false,
-            l_theta_for_velocity_time_centering: 0.5,
-            p_theta_for_velocity_time_centering: 0.5,
-            max_logt_for_include_p_and_l_in_velocity_time_centering: 99.0,
-            use_p_d_1_div_rho_form_of_work_when_time_centering_velocity: true,
-            op_split_burn_min_t: 0.0,
-            nonlocal_nico_decay_heat: false,
-            do_premix_heating: false,
-            tdc_alpha_m: 0.0,
-            tdc_include_eturb_in_energy_equation: false,
-            rti_flag: false,
-            dedt_rti_diffusion_factor: 1.0,
-            dudt_rti_diffusion_factor: 1.0,
-            use_drag_energy: true,
-            drag_coefficient: 0.0,
-            min_q_for_drag: 0.0,
-            mlt_pturb_factor: 0.0,
-            use_pvsc_art_visc: false,
-            pvsc_cq: 4.0,
-            pvsc_zshock: 0.0,
-            use_time_centered_eps_grav: false,
-            include_composition_in_eps_grav: false,
-            eps_grav_factor: 1.0,
-            gamma_ln_s_eps_grav_full_on: 160.0,
-            gamma_ln_s_eps_grav_full_off: 120.0,
-            use_gravity_rotation_correction: true,
-            use_mass_corrections: false,
-            use_gradt_actual_vs_gradt_mlt_for_t_gradient_eqn: false,
-            use_dprad_dm_form_of_t_gradient_eqn: false,
-            use_flux_limiting_with_dprad_dm_form: false,
-            min_kap_for_dprad_dm_eqn: 1.0e-4,
-            use_rsp_l_eqn_outer_bc: false,
-            velocity_q_upper_bound: 1.0,
-            velocity_tau_lower_bound: 0.0,
-            velocity_logt_lower_bound: 0.0,
-            do_burn: true,
-            do_mix: true,
-            mix_factor: 1.0,
-        }
-    }
+    // --- Upstream `star_solver.f90` & `sizeB` Convergence Controls ---
+    /// Include $L_k$ in `sizeB` correction norms (`include_L_in_correction_limits`).
+    pub include_l_in_correction_limits: bool,
+    /// Include $v_k$ in `sizeB` correction norms (`include_v_in_correction_limits`).
+    pub include_v_in_correction_limits: bool,
+    /// Include $u_k$ in `sizeB` correction norms (`include_u_in_correction_limits`).
+    pub include_u_in_correction_limits: bool,
+    /// Include $w_k$ in `sizeB` correction norms (`include_w_in_correction_limits`).
+    pub include_w_in_correction_limits: bool,
+    /// Abundance threshold below which `sizeB` excludes species corrections (`correction_xa_limit`).
+    pub correction_xa_limit: f64,
+    /// Minimum species variable scale floor (`xa_scale`, `1e-5` default).
+    pub xa_scale: f64,
+    /// Ignore `i_equ_L` residuals in convergence norm (`convergence_ignore_equL_residuals`).
+    pub convergence_ignore_equl_residuals: bool,
+    /// Ignore `i_dalpha_RTI_dt` residuals in convergence norm (`convergence_ignore_alpha_RTI_residuals`).
+    pub convergence_ignore_alpha_rti_residuals: bool,
+    /// Stage-1 non-gold residual norm tolerance (`tol_residual_norm1`).
+    pub tol_residual_norm1: f64,
+    /// Stage-1 non-gold max residual tolerance (`tol_max_residual1`).
+    pub tol_max_residual1: f64,
+    /// Iteration threshold for stage-2 non-gold residual tolerances (`iter_for_resid_tol2`).
+    pub iter_for_resid_tol2: usize,
+    /// Stage-2 non-gold residual norm tolerance (`tol_residual_norm2`).
+    pub tol_residual_norm2: f64,
+    /// Stage-2 non-gold max residual tolerance (`tol_max_residual2`).
+    pub tol_max_residual2: f64,
+    /// Iteration threshold for stage-3 non-gold residual tolerances (`iter_for_resid_tol3`).
+    pub iter_for_resid_tol3: usize,
+    /// Stage-3 non-gold residual norm tolerance (`tol_residual_norm3`).
+    pub tol_residual_norm3: f64,
+    /// Stage-3 non-gold max residual tolerance (`tol_max_residual3`).
+    pub tol_max_residual3: f64,
+    /// Enable level-1 gold solver tolerances (`use_gold_tolerances`).
+    pub use_gold_tolerances: bool,
+    /// Step delay before enabling gold tolerances (`steps_before_use_gold_tolerances`, `-1` disabled).
+    pub steps_before_use_gold_tolerances: isize,
+    /// Maximum temperature (K) for gold tolerances (`maxT_for_gold_tolerances`).
+    pub max_t_for_gold_tolerances: f64,
+    /// Stage-1 gold residual norm tolerance (`gold_tol_residual_norm1`).
+    pub gold_tol_residual_norm1: f64,
+    /// Stage-1 gold max residual tolerance (`gold_tol_max_residual1`).
+    pub gold_tol_max_residual1: f64,
+    /// Iteration threshold for stage-2 gold tolerances (`gold_iter_for_resid_tol2`).
+    pub gold_iter_for_resid_tol2: usize,
+    /// Stage-2 gold residual norm tolerance (`gold_tol_residual_norm2`).
+    pub gold_tol_residual_norm2: f64,
+    /// Stage-2 gold max residual tolerance (`gold_tol_max_residual2`).
+    pub gold_tol_max_residual2: f64,
+    /// Iteration threshold for stage-3 gold tolerances (`gold_iter_for_resid_tol3`).
+    pub gold_iter_for_resid_tol3: usize,
+    /// Stage-3 gold residual norm tolerance (`gold_tol_residual_norm3`).
+    pub gold_tol_residual_norm3: f64,
+    /// Stage-3 gold max residual tolerance (`gold_tol_max_residual3`).
+    pub gold_tol_max_residual3: f64,
+    /// Enable level-2 gold solver tolerances (`use_gold2_tolerances`).
+    pub use_gold2_tolerances: bool,
+    /// Step delay before enabling gold2 tolerances (`steps_before_use_gold2_tolerances`).
+    pub steps_before_use_gold2_tolerances: isize,
+    /// Stage-1 gold2 residual norm tolerance (`gold2_tol_residual_norm1`).
+    pub gold2_tol_residual_norm1: f64,
+    /// Stage-1 gold2 max residual tolerance (`gold2_tol_max_residual1`).
+    pub gold2_tol_max_residual1: f64,
+    /// Iteration threshold for stage-2 gold2 tolerances (`gold2_iter_for_resid_tol2`).
+    pub gold2_iter_for_resid_tol2: usize,
+    /// Stage-2 gold2 residual norm tolerance (`gold2_tol_residual_norm2`).
+    pub gold2_tol_residual_norm2: f64,
+    /// Stage-2 gold2 max residual tolerance (`gold2_tol_max_residual2`).
+    pub gold2_tol_max_residual2: f64,
+    /// Iteration threshold for stage-3 gold2 tolerances (`gold2_iter_for_resid_tol3`).
+    pub gold2_iter_for_resid_tol3: usize,
+    /// Stage-3 gold2 residual norm tolerance (`gold2_tol_residual_norm3`).
+    pub gold2_tol_residual_norm3: f64,
+    /// Stage-3 gold2 max residual tolerance (`gold2_tol_max_residual3`).
+    pub gold2_tol_max_residual3: f64,
 }

@@ -12,15 +12,16 @@ use flexmesa_chem::{get_composition_info, NuclideCatalog};
 use flexmesa_const::{AVO, CRAD, FOUR_PI, KERG, QE};
 use flexmesa_eos::{
     eos_dt_get_zones, HelmTable, I_CHI_RHO, I_CHI_T, I_CP, I_CV, I_ETA,
-    I_GAMMA1, I_GAMMA3, I_GRAD_AD, I_LN_E, I_LN_FREE_E, I_LN_PGAS, I_LN_S,
-    I_MU,
+    I_FRAC_PC, I_GAMMA1, I_GAMMA3, I_GRAD_AD, I_LATENT_DDLNRHO, I_LATENT_DDLNT,
+    I_LN_E, I_LN_FREE_E, I_LN_PGAS, I_LN_S, I_MU,
 };
 use flexmesa_kap::get_kap_results;
-use flexmesa_net::{net_get, NetEvalResult, NetGeneralInfo};
+use flexmesa_net::NetGeneralInfo;
 use flexmesa_neu::{neu_get, NeuFlags, NeuResult};
 use rayon::prelude::*;
 
 use crate::controls::{StarError, VarLayout};
+pub use crate::micro_net::do_net;
 use crate::model::StarModel;
 use crate::star_ad::{StarAdExt, StarAdOrder1};
 
@@ -207,8 +208,9 @@ pub fn set_basic_vars(model: &mut StarModel) -> Result<(), StarError> {
 }
 
 /// Evaluates `eos_dt_get_zones` across all `nz` zones in parallel and populates
-/// all cell-centered thermodynamic quantities and `StarAdOrder1` variables
-/// (`do_eos` in `star/private/micro.f90:151-656`).
+/// all cell-centered thermodynamic quantities, composition partial derivatives
+/// (`dln_e_dxa_for_partials`, `dln_peos_dxa_for_partials`), and `StarAdOrder1`
+/// variables (`do_eos` in `star/private/micro.f90:151-656`).
 ///
 /// # Errors
 /// Returns [`StarError::MicrophysicsError`] if EOS evaluation fails in any zone.
@@ -224,6 +226,25 @@ pub fn do_eos(model: &mut StarModel) -> Result<(), StarError> {
     )
     .map_err(|e| StarError::MicrophysicsError(format!("do_eos failed: {e}")))?;
 
+    let nz = model.nz;
+    let species = model.species;
+    let n_sp = nz * species;
+    if model.aux.eos_frac_pc.len() != nz {
+        model.aux.eos_frac_pc.resize(nz, 0.0);
+    }
+    if model.aux.latent_ddlnt.len() != nz {
+        model.aux.latent_ddlnt.resize(nz, 0.0);
+    }
+    if model.aux.latent_ddlnrho.len() != nz {
+        model.aux.latent_ddlnrho.resize(nz, 0.0);
+    }
+    if model.aux.dln_e_dxa_for_partials.len() != n_sp {
+        model.aux.dln_e_dxa_for_partials.resize(n_sp, 0.0);
+    }
+    if model.aux.dln_peos_dxa_for_partials.len() != n_sp {
+        model.aux.dln_peos_dxa_for_partials.resize(n_sp, 0.0);
+    }
+
     for (k, out) in eos_outputs.into_iter().enumerate() {
         let t_k = model.t[k];
         let rho_k = model.rho[k];
@@ -233,8 +254,6 @@ pub fn do_eos(model: &mut StarModel) -> Result<(), StarError> {
         let peos = pgas + prad;
         let ln_peos = peos.ln();
 
-        // Gas and total pressure logarithmic derivatives
-        // d(ln Pgas)/d(lnd) and d(ln Pgas)/d(lnT) from EOS res/d_dlnd/d_dln_t
         let d_lnpgas_dlnd = out.d_dlnd[I_LN_PGAS];
         let d_lnpgas_dlnt = out.d_dln_t[I_LN_PGAS];
         let alfa_rad = prad / peos;
@@ -249,7 +268,6 @@ pub fn do_eos(model: &mut StarModel) -> Result<(), StarError> {
         let gamma1 = out.res[I_GAMMA1];
         let csound = (gamma1 * peos / rho_k).max(0.0).sqrt();
 
-        // Coulomb coupling parameter Gamma_Coulomb (`micro.f90:619`)
         let a_e = (3.0
             / (FOUR_PI * AVO * rho_k * model.zbar[k].max(1.0e-10)
                 / model.abar[k]))
@@ -277,6 +295,18 @@ pub fn do_eos(model: &mut StarModel) -> Result<(), StarError> {
         model.mu[k] = out.res[I_MU];
         model.lnfree_e[k] = out.res[I_LN_FREE_E];
         model.csound[k] = csound;
+
+        model.aux.eos_frac_pc[k] = out.res[I_FRAC_PC];
+        model.aux.latent_ddlnt[k] = out.res[I_LATENT_DDLNT];
+        model.aux.latent_ddlnrho[k] = out.res[I_LATENT_DDLNRHO];
+        let sp_base = k * species;
+        for j in 0..species {
+            let [d_lnpgas_dxa, d_lne_dxa] =
+                out.d_dxa.get(j).copied().unwrap_or([0.0, 0.0]);
+            model.aux.dln_e_dxa_for_partials[sp_base + j] = d_lne_dxa;
+            model.aux.dln_peos_dxa_for_partials[sp_base + j] =
+                beta_gas * d_lnpgas_dxa;
+        }
 
         model.ln_peos_ad[k] = StarAdOrder1::from_dlnd_dlnt_00(
             ln_peos,
@@ -370,8 +400,6 @@ pub fn do_kap(model: &mut StarModel) -> Result<(), StarError> {
     let nz = model.nz;
     let species = model.species;
     let catalog = NuclideCatalog::builtin_ref();
-    // Sum all isotopes of C (Z=6), N (Z=7), O (Z=8), and Ne (Z=10) for Type 2
-    // CO-enhanced opacities (`micro.f90:694-702`).
     let iso_z: Vec<usize> = model
         .chem_id
         .iter()
@@ -454,100 +482,4 @@ pub fn get_tau(model: &mut StarModel) {
             / (FOUR_PI * model.rmid[k - 1] * model.rmid[k - 1]);
         model.tau[k] = model.tau[k - 1] + dtau;
     }
-}
-
-/// Evaluates the nuclear reaction network (`net_get`) across all `nz` zones in
-/// parallel (`do_net` in `star/private/net.f90:62-436`).
-///
-/// # Errors
-/// Returns [`StarError::MicrophysicsError`] if `net_get` fails.
-pub fn do_net(
-    model: &mut StarModel,
-    net_info: &NetGeneralInfo,
-    skip_jacobian: bool,
-) -> Result<(), StarError> {
-    let nz = model.nz;
-    let species = model.species;
-    let min_logt = model.controls.min_logt_for_net;
-    let eps_fac = model.controls.eps_nuc_factor;
-    let dxdt_fac = model.controls.dxdt_nuc_factor;
-    let screening_mode = model.controls.screening_mode;
-    let rate_factors = vec![1.0; net_info.num_reactions];
-
-    let net_results: Result<Vec<Option<NetEvalResult>>, StarError> = (0..nz)
-        .into_par_iter()
-        .map(|k| {
-            let t_k = model.t[k];
-            let log_t = t_k.log10();
-            if log_t < min_logt {
-                return Ok(None);
-            }
-            let rho_k = model.rho[k];
-            let log_rho = rho_k.log10();
-            let xa_k = &model.xa[k * species..(k + 1) * species];
-            let res = net_get(
-                net_info,
-                skip_jacobian,
-                xa_k,
-                t_k,
-                log_t,
-                rho_k,
-                log_rho,
-                model.abar[k],
-                model.zbar[k],
-                model.z2bar[k],
-                model.ye[k],
-                model.eta[k],
-                model.eos_d_dlnt[k][I_ETA],
-                model.eos_d_dlnd[k][I_ETA],
-                &rate_factors,
-                1.0,
-                screening_mode,
-            )
-            .map_err(|e| {
-                StarError::MicrophysicsError(format!(
-                    "net_get failed at zone {k}: {e}"
-                ))
-            })?;
-            Ok(Some(res))
-        })
-        .collect();
-
-    for (k, opt_res) in net_results?.into_iter().enumerate() {
-        let base_s = k * species;
-        let base_ss = k * species * species;
-        if let Some(res) = opt_res {
-            let rho_k = model.rho[k];
-            let t_k = model.t[k];
-            model.eps_nuc[k] = res.eps_nuc * eps_fac;
-            model.d_epsnuc_dlnd[k] = res.d_eps_nuc_drho * rho_k * eps_fac;
-            model.d_epsnuc_dlnt[k] = res.d_eps_nuc_dt * t_k * eps_fac;
-            model.eps_nuc_neu_total[k] = res.eps_neu_total * eps_fac;
-            for j in 0..species {
-                model.d_epsnuc_dx[base_s + j] = res.d_eps_nuc_dx[j] * eps_fac;
-                model.dxdt_nuc[base_s + j] = res.dxdt[j] * dxdt_fac;
-                model.d_dxdt_nuc_dlnd[base_s + j] =
-                    res.d_dxdt_drho[j] * rho_k * dxdt_fac;
-                model.d_dxdt_nuc_dlnt[base_s + j] =
-                    res.d_dxdt_dt[j] * t_k * dxdt_fac;
-            }
-            if !skip_jacobian && res.d_dxdt_dx.len() == species * species {
-                for idx in 0..species * species {
-                    model.d_dxdt_nuc_dx[base_ss + idx] =
-                        res.d_dxdt_dx[idx] * dxdt_fac;
-                }
-            }
-        } else {
-            model.eps_nuc[k] = 0.0;
-            model.d_epsnuc_dlnd[k] = 0.0;
-            model.d_epsnuc_dlnt[k] = 0.0;
-            model.eps_nuc_neu_total[k] = 0.0;
-            model.d_epsnuc_dx[base_s..base_s + species].fill(0.0);
-            model.dxdt_nuc[base_s..base_s + species].fill(0.0);
-            model.d_dxdt_nuc_dlnd[base_s..base_s + species].fill(0.0);
-            model.d_dxdt_nuc_dlnt[base_s..base_s + species].fill(0.0);
-            model.d_dxdt_nuc_dx[base_ss..base_ss + species * species].fill(0.0);
-        }
-    }
-    Ok(())
 }

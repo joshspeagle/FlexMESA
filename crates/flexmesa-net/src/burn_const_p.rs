@@ -6,7 +6,7 @@
 //! (`net/private/net_burn_const_p.f90` and `num/private/mod_rosenbrock.f`).
 
 use flexmesa_chem::{get_composition_info, NuclideCatalog};
-use flexmesa_const::{CRAD, LN10};
+use flexmesa_const::{CRAD, LN10, QCONV};
 use flexmesa_eos::{
     eos_pt_get, EosConfig, HelmTable, I_CHI_RHO, I_CHI_T, I_CP, I_ETA, I_LN_S,
 };
@@ -17,8 +17,9 @@ use flexmesa_rates::ScreeningMode;
 use flexmesa_utils::is_bad;
 
 use crate::burn_stepper::tableau_for;
-use crate::derivs::eval_net;
-use crate::types::{NetError, NetGeneralInfo};
+use crate::derivs::{eval_net_with_work, with_thread_local_work};
+use crate::f64x2::F64x2;
+use crate::types::{NetError, NetGeneralInfo, NUM_RVS};
 
 /// Configuration inputs for [`burn_1_zone_const_p`].
 #[derive(Debug, Clone)]
@@ -111,6 +112,16 @@ pub fn burn_1_zone_const_p(
     y[num_isos] = input.starting_temp.ln();
 
     let nuclides = NuclideCatalog::builtin_ref();
+    let mut aion = vec![0.0_f64; num_isos];
+    for i in 0..num_isos {
+        let cid = g.chem_id[i];
+        let nuc = nuclides.get_by_id(cid).ok_or_else(|| {
+            NetError::InvalidReactionOrIso(format!("unknown cid {cid}"))
+        })?;
+        aion[i] = nuc.z_plus_n as f64;
+    }
+    let mut x_buf = vec![0.0_f64; num_isos];
+    let mut dydt_buf = vec![[F64x2::ZERO; NUM_RVS]; num_isos];
 
     let mut ending_rho = 0.0_f64;
     let mut ending_lns = 0.0_f64;
@@ -133,14 +144,14 @@ pub fn burn_1_zone_const_p(
         for val in v.iter_mut().take(num_isos) {
             *val /= sum_v;
         }
-        let mut x = v[0..num_isos].to_vec();
+        x_buf.copy_from_slice(&v[0..num_isos]);
         if input.clip {
-            for val in &mut x {
+            for val in &mut x_buf {
                 *val = val.clamp(0.0, 1.0);
             }
         }
 
-        let comp = get_composition_info(nuclides, &g.chem_id, &x, false)
+        let comp = get_composition_info(nuclides, &g.chem_id, &x_buf, false)
             .map_err(|e| NetError::IntegrationError(e.to_string()))?;
 
         let log_t = v[num_isos] / LN10;
@@ -154,7 +165,7 @@ pub fn burn_1_zone_const_p(
         }
         let lg_pgas = pgas.log10();
 
-        let pt = eos_pt_get(ht, &g.chem_id, &x, lg_pgas, log_t, eos_cfg)
+        let pt = eos_pt_get(ht, &g.chem_id, &x_buf, lg_pgas, log_t, eos_cfg)
             .map_err(|e| NetError::IntegrationError(e.to_string()))?;
         let rho = pt.rho;
         let log_rho = pt.log10_rho;
@@ -176,60 +187,71 @@ pub fn burn_1_zone_const_p(
             )));
         }
 
-        let work = eval_net(
-            g,
-            false,
-            false,
-            &x,
-            temp,
-            log_t,
-            rho,
-            log_rho,
-            comp.abar,
-            comp.zbar,
-            comp.z2bar,
-            comp.ye,
-            eta,
-            d_eta_dlnt,
-            d_eta_dlnrho,
-            input.rate_factors,
-            input.weak_rate_factor,
-            input.screening_mode,
-            false,
-            false,
-            false,
-            false,
-        )?;
-
-        f[0..num_isos].copy_from_slice(&work.dxdt[0..num_isos]);
-        let dlnt_dt = work.eps_nuc / (cp * temp);
-        f[num_isos] = dlnt_dt;
-
-        if let Some(dfdv) = dfdv_opt {
-            let dlnrho_dlnt_const_p =
-                -pt.eos.res[I_CHI_T] / pt.eos.res[I_CHI_RHO];
-            let d_epsnuc_dlnt_const_p =
-                (work.d_eps_nuc_drho * rho * dlnrho_dlnt_const_p)
-                    .mul_add(1.0, work.d_eps_nuc_dt * temp);
-            let d_cp_dlnt = pt.eos.d_dlnd[I_CP]
-                .mul_add(dlnrho_dlnt_const_p, pt.eos.d_dln_t[I_CP]);
+        let just_dxdt = dfdv_opt.is_none();
+        with_thread_local_work(g, |w| {
+            let (eps_nuc, d_eps_nuc_dt, d_eps_nuc_drho, _eps_neu) =
+                eval_net_with_work(
+                    g,
+                    w,
+                    &mut dydt_buf,
+                    just_dxdt,
+                    &x_buf,
+                    temp,
+                    log_t,
+                    rho,
+                    log_rho,
+                    comp.abar,
+                    comp.zbar,
+                    comp.z2bar,
+                    comp.ye,
+                    eta,
+                    d_eta_dlnt,
+                    d_eta_dlnrho,
+                    input.rate_factors,
+                    input.weak_rate_factor,
+                    input.screening_mode,
+                    false,
+                    false,
+                    false,
+                )?;
 
             for i in 0..num_isos {
-                for j in 0..num_isos {
-                    dfdv[i * nvar + j] = work.d_dxdt_dx[i * num_isos + j];
+                f[i] = aion[i] * dydt_buf[i][0].to_f64();
+            }
+            let dlnt_dt = eps_nuc / (cp * temp);
+            f[num_isos] = dlnt_dt;
+
+            if let Some(dfdv) = dfdv_opt {
+                let dlnrho_dlnt_const_p =
+                    -pt.eos.res[I_CHI_T] / pt.eos.res[I_CHI_RHO];
+                let d_epsnuc_dlnt_const_p =
+                    (d_eps_nuc_drho * rho * dlnrho_dlnt_const_p)
+                        .mul_add(1.0, d_eps_nuc_dt * temp);
+                let d_cp_dlnt = pt.eos.d_dlnd[I_CP]
+                    .mul_add(dlnrho_dlnt_const_p, pt.eos.d_dln_t[I_CP]);
+
+                for i in 0..num_isos {
+                    let ai = aion[i];
+                    for j in 0..num_isos {
+                        dfdv[i * nvar + j] =
+                            w.d_dydt_dy[i * num_isos + j] * ai / aion[j];
+                    }
+                    let d_dxdt_drho_i = ai * dydt_buf[i][2].to_f64();
+                    let d_dxdt_dt_i = ai * dydt_buf[i][1].to_f64();
+                    dfdv[i * nvar + num_isos] =
+                        (d_dxdt_drho_i * rho * dlnrho_dlnt_const_p)
+                            .mul_add(1.0, d_dxdt_dt_i * temp);
                 }
-                dfdv[i * nvar + num_isos] =
-                    (work.d_dxdt_drho[i] * rho * dlnrho_dlnt_const_p)
-                        .mul_add(1.0, work.d_dxdt_dt[i] * temp);
+                for j in 0..num_isos {
+                    let d_eps_dx_j = QCONV * w.d_eps_nuc_dy[j] / aion[j];
+                    dfdv[num_isos * nvar + j] = d_eps_dx_j / (cp * temp);
+                }
+                dfdv[num_isos * nvar + num_isos] = d_epsnuc_dlnt_const_p
+                    / (cp * temp)
+                    - dlnt_dt * (1.0 + d_cp_dlnt / cp);
             }
-            for j in 0..num_isos {
-                dfdv[num_isos * nvar + j] = work.d_eps_nuc_dx[j] / (cp * temp);
-            }
-            dfdv[num_isos * nvar + num_isos] = d_epsnuc_dlnt_const_p
-                / (cp * temp)
-                - dlnt_dt * (1.0 + d_cp_dlnt / cp);
-        }
-        Ok(())
+            Ok::<_, NetError>(())
+        })
     };
 
     let tab = tableau_for(input.solver);

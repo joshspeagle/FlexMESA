@@ -62,6 +62,7 @@
 
 pub mod case_staging;
 pub mod controls;
+mod controls_defaults;
 pub mod diffusion;
 pub mod eps_grav;
 pub mod evolve;
@@ -75,11 +76,13 @@ pub mod hydro_temperature;
 pub mod hydro_vars;
 pub mod inlist;
 pub mod inlist_populate;
+mod inlist_populate_limits;
 pub mod inlist_runner;
 pub mod job_controls;
 pub mod mesh;
 pub mod mesh_adjust;
 pub mod micro;
+pub mod micro_net;
 pub mod mix_info;
 pub mod model;
 pub mod model_io;

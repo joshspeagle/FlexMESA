@@ -449,8 +449,7 @@ pub fn eval_henyey_equations(
     model: &mut StarModel,
     include_chem: bool,
 ) -> Result<HenyeySystem, StarError> {
-    let skip_net = model.controls.op_split_burn && !include_chem;
-    set_hydro_vars(model, skip_net, !include_chem)?;
+    set_hydro_vars(model, false, !include_chem)?;
     eval_eps_grav(model);
 
     let nz = model.nz;

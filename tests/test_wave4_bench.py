@@ -25,7 +25,7 @@ _EXPECTED_WAVE4_CHECKSUMS_N8: dict[str, float] = {
     "star_hydro_eqns": 4.660073228335436e6,
     "star_newton_step": 1.33327716396219e2,
     "star_remesh": 4.203476959958853e2,
-    "star_evolve_step": 9.987143083869501e1,
+    "star_evolve_step": 9.987143083921163e1,
 }
 
 

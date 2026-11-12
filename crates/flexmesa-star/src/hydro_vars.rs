@@ -46,7 +46,7 @@ pub fn set_mlt_vars(model: &mut StarModel) -> Result<(), StarError> {
     if model.controls.redo_conv_for_dr_lt_mixing_length {
         check_for_redo_mlt(model)?;
     }
-    if model.sig.iter().all(|&s| s == 0.0) {
+    if !model.aux.doing_struct_burn_mix && model.sig.iter().all(|&s| s == 0.0) {
         update_sig_from_d_mix(model);
     }
     Ok(())
@@ -495,7 +495,7 @@ pub fn set_hydro_vars(
                 model.gradt[k] = model.aux.rsp.y_face_rsp[k] + grada_f;
             }
         }
-        if sig_was_zero {
+        if !model.aux.doing_struct_burn_mix && sig_was_zero {
             model.sig.fill(0.0);
             update_sig_from_d_mix(model);
         }

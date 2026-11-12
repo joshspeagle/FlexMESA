@@ -6,7 +6,7 @@
 use flexmesa_mtx::{dgetrf, dgetrs};
 use flexmesa_num::RosenbrockVariant;
 
-use crate::types::{NetError, NetEvalResult};
+use crate::types::NetError;
 
 pub(crate) struct RodasTableau {
     pub(crate) ns: usize,
@@ -209,7 +209,7 @@ impl Default for StifbsState {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn netint<D, J>(
+pub(crate) fn netint<W, D, J>(
     start: f64,
     stptry: f64,
     stpmin: f64,
@@ -222,23 +222,13 @@ pub(crate) fn netint<D, J>(
     odescal: f64,
     dens_dfdy: &mut [f64],
     dmat: &mut [f64],
-    work: &mut Option<NetEvalResult>,
+    work: &mut W,
     derivs: &mut D,
     jakob: &mut J,
 ) -> Result<(usize, usize, usize), NetError>
 where
-    D: FnMut(
-        f64,
-        &mut [f64],
-        &mut [f64],
-        &mut Option<NetEvalResult>,
-    ) -> Result<(), NetError>,
-    J: FnMut(
-        f64,
-        &mut [f64],
-        &mut [f64],
-        &mut Option<NetEvalResult>,
-    ) -> Result<(), NetError>,
+    D: FnMut(f64, &mut [f64], &mut [f64], &mut W) -> Result<(), NetError>,
+    J: FnMut(f64, &mut [f64], &mut [f64], &mut W) -> Result<(), NetError>,
 {
     let mut state = StifbsState::default();
     let mut x = start;
@@ -287,7 +277,7 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-fn stifbs<D, J>(
+fn stifbs<W, D, J>(
     y: &mut [f64],
     dydx: &[f64],
     nvar: usize,
@@ -300,23 +290,13 @@ fn stifbs<D, J>(
     state: &mut StifbsState,
     dens_dfdy: &mut [f64],
     dmat: &mut [f64],
-    work: &mut Option<NetEvalResult>,
+    work: &mut W,
     derivs: &mut D,
     jakob: &mut J,
 ) -> Result<(), NetError>
 where
-    D: FnMut(
-        f64,
-        &mut [f64],
-        &mut [f64],
-        &mut Option<NetEvalResult>,
-    ) -> Result<(), NetError>,
-    J: FnMut(
-        f64,
-        &mut [f64],
-        &mut [f64],
-        &mut Option<NetEvalResult>,
-    ) -> Result<(), NetError>,
+    D: FnMut(f64, &mut [f64], &mut [f64], &mut W) -> Result<(), NetError>,
+    J: FnMut(f64, &mut [f64], &mut [f64], &mut W) -> Result<(), NetError>,
 {
     const SAFE1: f64 = 0.25;
     const SAFE2: f64 = 0.7;
@@ -476,7 +456,7 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-fn simpr<D>(
+fn simpr<W, D>(
     y: &[f64],
     dydx: &[f64],
     nvar: usize,
@@ -486,16 +466,11 @@ fn simpr<D>(
     yout: &mut [f64],
     dens_dfdy: &[f64],
     dmat: &mut [f64],
-    work: &mut Option<NetEvalResult>,
+    work: &mut W,
     derivs: &mut D,
 ) -> Result<(), NetError>
 where
-    D: FnMut(
-        f64,
-        &mut [f64],
-        &mut [f64],
-        &mut Option<NetEvalResult>,
-    ) -> Result<(), NetError>,
+    D: FnMut(f64, &mut [f64], &mut [f64], &mut W) -> Result<(), NetError>,
 {
     let h = htot / (nstep as f64);
     for i in 0..nvar {

@@ -47,6 +47,7 @@ pub mod approx21_eps;
 pub mod approx21_eval;
 pub mod approx21_special;
 pub mod burn;
+pub mod burn_const_density;
 pub mod burn_const_p;
 pub(crate) mod burn_stepper;
 pub mod derivs;
@@ -67,6 +68,10 @@ pub use approx21_eval::eval_net_approx21_procs;
 pub use burn::{
     burn_1_zone, Burn1ZoneInput, Burn1ZoneOutput,
     Burn1ZoneOutput as OneZoneBurnResult,
+};
+pub use burn_const_density::{
+    burn_1_zone_const_density, BurnConstDensityInput, BurnConstDensityOutput,
+    BurnConstDensityOutput as OneZoneBurnConstDensityResult,
 };
 pub use burn_const_p::{
     burn_1_zone_const_p, BurnConstPInput, BurnConstPOutput,

@@ -5,7 +5,6 @@
 //! [`flexmesa_kap::KapConfig`], and [`crate::StarControls`].
 
 use flexmesa_rates::ScreeningMode;
-use flexmesa_schema::ControlValue;
 use flexmesa_turb::{MltOption, SemiconvectionOption, ThermohalineOption};
 
 use crate::controls::{AtmOption, AtmTTauRelation, EnergyEqnOption};
@@ -35,30 +34,46 @@ macro_rules! map_opt_f64s {
     };
 }
 
+pub(crate) use {map_bools, map_f64s, map_opt_f64s, map_strs};
+
 impl SectionControls {
     #[inline]
-    fn f64_into(&self, dst: &mut f64, key: &str) {
+    pub(crate) fn f64_into(&self, dst: &mut f64, key: &str) {
         if let Some(v) = self.get_f64(key) {
             *dst = v;
         }
     }
 
     #[inline]
-    fn bool_into(&self, dst: &mut bool, key: &str) {
+    pub(crate) fn bool_into(&self, dst: &mut bool, key: &str) {
         if let Some(v) = self.get_bool(key) {
             *dst = v;
         }
     }
 
     #[inline]
-    fn str_into(&self, dst: &mut String, key: &str) {
+    pub(crate) fn str_into(&self, dst: &mut String, key: &str) {
         if let Some(s) = self.get_str(key) {
             *dst = s.to_string();
         }
     }
 
     #[inline]
-    fn any_bool(&self, keys: &[&str]) -> Option<bool> {
+    pub(crate) fn usize_into(&self, dst: &mut usize, key: &str) {
+        if let Some(v) = self.get_i64(key).filter(|&v| v >= 0) {
+            *dst = v as usize;
+        }
+    }
+
+    #[inline]
+    pub(crate) fn isize_into(&self, dst: &mut isize, key: &str) {
+        if let Some(v) = self.get_i64(key) {
+            *dst = v as isize;
+        }
+    }
+
+    #[inline]
+    pub(crate) fn any_bool(&self, keys: &[&str]) -> Option<bool> {
         keys.iter().find_map(|k| self.get_bool(k))
     }
 }
@@ -70,6 +85,7 @@ impl InlistBundle {
         self.populate_star_job();
         self.populate_eos_kap();
         self.populate_controls_physics();
+        self.populate_controls_solver();
         self.populate_controls_limits();
         self.populate_user_x_controls();
         crate::rsp_config::populate_rsp_inlist(
@@ -101,9 +117,7 @@ impl InlistBundle {
         if let Some(b) = sj.any_bool(&["create_pre_main_sequence_model", "create_pre_ms_model"]) {
             j.create_pre_ms_model = b;
         }
-        if let Some(v) = sj.get_i64("pre_ms_relax_num_steps").filter(|&v| v >= 0) {
-            j.pre_ms_relax_num_steps = v as usize;
-        }
+        sj.usize_into(&mut j.pre_ms_relax_num_steps, "pre_ms_relax_num_steps");
         map_bools!(sj, j, [
             create_initial_model, use_other_build_initial_model, create_rsp_model,
             load_saved_model, save_model_when_terminate, save_photo_when_terminate,
@@ -169,9 +183,7 @@ impl InlistBundle {
             }
         }
         map_opt_f64s!(sj, j, [new_omega, new_omega_div_omega_crit, new_surface_rotation_v]);
-        if let Some(v) = sj.get_i64("initial_model_number").filter(|&v| v >= 0) {
-            j.initial_model_number = v as usize;
-        }
+        sj.usize_into(&mut j.initial_model_number, "initial_model_number");
         if let Some(v) = sj.get_i64("initial_zfracs") {
             j.initial_zfracs = v as i32;
         }
@@ -226,6 +238,9 @@ impl InlistBundle {
         }
         if let Some(b) = sj.any_bool(&["change_initial_rti_flag", "change_rti_flag"]) {
             j.change_initial_rti_flag = b;
+        }
+        if j.change_initial_rti_flag {
+            self.controls.rti_flag = j.new_rti_flag;
         }
         if let Some(v) = sj.get_i64("steps_to_take_before_terminate").filter(|&v| v >= 0) {
             j.steps_to_take_before_terminate = Some(v as usize);
@@ -286,20 +301,29 @@ impl InlistBundle {
         map_f64s!(ctrl, c, [
             initial_mass, initial_y, min_timestep_limit, mixing_length_alpha,
             alpha_semiconvection, thermohaline_coeff, min_d_mix, tau_factor,
-            opacity_factor, non_nuc_neu_factor, eps_nuc_factor, dxdt_nuc_factor,
+            opacity_factor, min_t_for_neu, non_nuc_neu_factor,
+            min_logt_for_net, max_logt_for_net, max_abar_for_burning,
+            eps_nuc_factor, dxdt_nuc_factor,
             mesh_delta_coeff, varcontrol_target, mass_change, accretion_h1, accretion_he4,
             super_eddington_scaling_factor, hot_wind_full_on_t, cool_wind_full_on_t,
             reimers_scaling_factor, blocker_scaling_factor, vink_scaling_factor,
             dutch_scaling_factor, irradiation_flux, column_depth_for_irradiation,
             rsp_mass, rsp_teff, rsp_l, rsp_x, rsp_z,
             l_theta_for_velocity_time_centering, p_theta_for_velocity_time_centering,
-            max_logt_for_include_p_and_l_in_velocity_time_centering, op_split_burn_min_t,
-            tdc_alpha_m, dedt_rti_diffusion_factor, dudt_rti_diffusion_factor,
+            max_logt_for_include_p_and_l_in_velocity_time_centering,
+            op_split_burn_min_t, op_split_burn_eps, op_split_burn_odescal,
+            op_split_burn_eps_nuc_infall_limit, op_split_burn_min_t_for_variable_t_solver,
+            tdc_alpha_m, alpha_rti_diffusion_factor, dedt_rti_diffusion_factor,
+            dudt_rti_diffusion_factor, dlnddt_rti_diffusion_factor,
+            composition_rti_diffusion_factor, alpha_rti_src_min_v_div_cs,
+            alpha_rti_src_min_q, alpha_rti_src_max_q,
+            rti_a, rti_b, rti_c, rti_d, rti_max_alpha,
             drag_coefficient, min_q_for_drag, mlt_pturb_factor, pvsc_cq, pvsc_zshock,
             eps_grav_factor, gamma_ln_s_eps_grav_full_on, gamma_ln_s_eps_grav_full_off,
             velocity_q_upper_bound, velocity_tau_lower_bound, velocity_logt_lower_bound,
             mix_factor, pextra_factor, min_kap_for_dprad_dm_eqn,
         ]);
+        ctrl.usize_into(&mut c.burn_steps_hard_limit, "burn_steps_hard_limit");
         map_strs!(ctrl, c, [
             zams_filename, cool_wind_rgb_scheme, cool_wind_agb_scheme, phase_separation_option,
         ]);
@@ -321,7 +345,7 @@ impl InlistBundle {
             use_mass_corrections, use_gradt_actual_vs_gradt_mlt_for_t_gradient_eqn,
             use_dprad_dm_form_of_t_gradient_eqn, use_flux_limiting_with_dprad_dm_form,
             use_rsp_l_eqn_outer_bc, use_momentum_outer_bc, use_zero_pgas_outer_bc,
-            do_burn, do_mix,
+            do_burn, do_mix, remove_mixing_glitches, redo_conv_for_dr_lt_mixing_length,
         ]);
         if let Some(v) = ctrl.get_f64("pvsc_zsh") {
             c.pvsc_zshock = v;
@@ -391,114 +415,6 @@ impl InlistBundle {
         }
         if let Some(v) = ctrl.get_i64("rsp_target_steps_per_cycle").filter(|&v| v > 0) {
             c.rsp_target_steps_per_cycle = v as usize;
-        }
-    }
-
-    #[rustfmt::skip]
-    fn populate_controls_limits(&mut self) {
-        let Some(ctrl) = self.sections.get("controls") else {
-            return;
-        };
-        let c = &mut self.controls;
-        if let Some(v) = ctrl.get_i64("max_model_number").filter(|&v| v > 0) {
-            c.max_model_number = Some(v as usize);
-        }
-        c.max_age = ctrl.get_f64("max_age").filter(|&v| v > 0.0);
-        c.max_age_in_seconds = ctrl.get_f64("max_age_in_seconds").filter(|&v| v > 0.0);
-        c.max_years_for_timestep = ctrl.get_f64("max_years_for_timestep").filter(|&v| v > 0.0);
-        ctrl.bool_into(&mut c.stop_near_zams, "stop_near_zams");
-        if let Some(v) = ctrl.get_f64("lnuc_div_l_zams_limit") {
-            c.lnuc_div_l_zams_limit = v;
-            if ctrl.get_bool("stop_near_zams").is_none() {
-                c.stop_near_zams = true;
-            }
-        }
-        c.xa_central_lower_limit_species = ctrl.get_indexed_strings("xa_central_lower_limit_species");
-        c.xa_central_lower_limit = ctrl.get_indexed_f64s("xa_central_lower_limit");
-        c.xa_central_upper_limit_species = ctrl.get_indexed_strings("xa_central_upper_limit_species");
-        c.xa_central_upper_limit = ctrl.get_indexed_f64s("xa_central_upper_limit");
-
-        map_opt_f64s!(ctrl, c, [
-            log_l_upper_limit, log_l_lower_limit, teff_upper_limit, teff_lower_limit,
-            log_teff_upper_limit, log_teff_lower_limit, log_center_temp_upper_limit,
-            log_center_temp_lower_limit, log_center_density_upper_limit,
-            log_center_density_lower_limit, log_max_temp_upper_limit, log_g_upper_limit,
-            log_g_lower_limit, log_psurf_upper_limit, log_rsurf_upper_limit,
-            center_r_lower_limit, he_core_mass_limit, co_core_mass_limit,
-            one_core_mass_limit, envelope_mass_limit, he_layer_mass_lower_limit,
-            power_nuc_burn_upper_limit, power_nuc_burn_lower_limit,
-            power_he_burn_upper_limit, star_mass_max_limit, star_mass_min_limit,
-            remnant_mass_min_limit, star_species_mass_min_limit,
-            star_species_mass_max_limit, fe_core_infall_limit,
-            v_surf_div_v_kh_upper_limit, gamma_center_limit, v_surf_div_v_esc_limit,
-            surf_omega_div_omega_crit_limit, conv_core_gap_dq_limit,
-        ]);
-        map_strs!(ctrl, c, [star_species_mass_min_limit_iso, star_species_mass_max_limit_iso]);
-        map_bools!(ctrl, c, [
-            stop_at_phase_tp_agb, stop_at_phase_c_burn,
-            stop_at_phase_ne_burn, stop_at_phase_o_burn,
-        ]);
-    }
-
-    fn populate_user_x_controls(&mut self) {
-        let Some(ctrl) = self.sections.get("controls") else {
-            return;
-        };
-        Self::apply_indexed_slice(
-            ctrl,
-            "x_ctrl",
-            &mut self.controls.x_ctrl,
-            |val| match val {
-                ControlValue::Float(f) => Some(*f),
-                ControlValue::Integer(i) => Some(*i as f64),
-                _ => None,
-            },
-        );
-        Self::apply_indexed_slice(
-            ctrl,
-            "x_integer_ctrl",
-            &mut self.controls.x_integer_ctrl,
-            |val| match val {
-                ControlValue::Integer(i) => Some(*i),
-                _ => None,
-            },
-        );
-        Self::apply_indexed_slice(
-            ctrl,
-            "x_logical_ctrl",
-            &mut self.controls.x_logical_ctrl,
-            |val| match val {
-                ControlValue::Logical(b) => Some(*b),
-                _ => None,
-            },
-        );
-        Self::apply_indexed_slice(
-            ctrl,
-            "x_character_ctrl",
-            &mut self.controls.x_character_ctrl,
-            |val| match val {
-                ControlValue::String(s) => Some(s.clone()),
-                _ => None,
-            },
-        );
-    }
-
-    fn apply_indexed_slice<T>(
-        ctrl: &SectionControls,
-        key: &str,
-        dst: &mut [T],
-        extract: impl Fn(&ControlValue) -> Option<T>,
-    ) {
-        if let Some(list) = ctrl.indexed.get(key) {
-            for (sub, val) in list {
-                if let Ok(idx) = sub.trim().parse::<usize>() {
-                    if idx < dst.len() {
-                        if let Some(v) = extract(val) {
-                            dst[idx] = v;
-                        }
-                    }
-                }
-            }
         }
     }
 }

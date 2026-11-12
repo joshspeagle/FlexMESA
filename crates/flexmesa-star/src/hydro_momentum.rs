@@ -37,6 +37,105 @@ use crate::star_ad::{
     I_V_P1,
 };
 
+/// Evaluates the pressure time-centering weight $\theta_P \in [0, 1]$ at cell
+/// or face `k` (`hydro_momentum.f90:151-162`).
+#[must_use]
+#[inline]
+pub fn eval_p_theta(model: &StarModel, k: usize) -> f64 {
+    let logt = model.ln_t[k] / LN10;
+    if model.controls.is_velocity_time_centered(model.model_number)
+        && model.controls.include_p_in_velocity_time_centering
+        && logt
+            <= model
+                .controls
+                .max_logt_for_include_p_and_l_in_velocity_time_centering
+    {
+        model.controls.p_theta_for_velocity_time_centering
+    } else {
+        1.0
+    }
+}
+
+/// Evaluates cell MLT turbulent pressure
+/// $P_{\mathrm{turb,MLT},k} = \tfrac{1}{3}\,\mathrm{mlt\_pturb\_factor}\,\rho_k v_{\mathrm{conv,old},k}^2$
+/// (`star/private/star_utils.f90`).
+#[must_use]
+#[inline]
+pub fn eval_mlt_pturb_cell_ad(
+    model: &StarModel,
+    k: usize,
+    shift_m1: bool,
+) -> StarAdOrder1 {
+    if model.controls.mlt_pturb_factor <= 0.0 {
+        return StarAdOrder1::ZERO;
+    }
+    let vc_old = model.aux.mlt_vc_old.get(k).copied().unwrap_or(0.0);
+    if vc_old <= 0.0 {
+        return StarAdOrder1::ZERO;
+    }
+    let rho_slot = if shift_m1 { I_LND_M1 } else { I_LND_00 };
+    let rho_ad = StarAdOrder1::variable(model.lnd[k], rho_slot).exp();
+    rho_ad * ((1.0 / 3.0) * model.controls.mlt_pturb_factor * vc_old * vc_old)
+}
+
+/// Evaluates time-centered face geometry `(r2, area)` at face `k` for HSE
+/// momentum and temperature-gradient equations (`hydro_momentum.f90:167-182`
+/// and `hydro_temperature.f90:157-194`).
+#[must_use]
+pub fn eval_time_centered_hse_geom_ad(
+    model: &StarModel,
+    k: usize,
+) -> (StarAdOrder1, StarAdOrder1) {
+    let lnr_k = StarAdOrder1::variable(model.ln_r[k], I_LNR_00);
+    let r_k = lnr_k.exp();
+    let using_v_tc =
+        model.controls.is_velocity_time_centered(model.model_number)
+            && (model.controls.v_flag || model.controls.u_flag)
+            && model.dt > 0.0
+            && !model.ln_r_start.is_empty();
+    let lnr_start_k = model.ln_r_start.get(k).copied().unwrap_or(model.ln_r[k]);
+    let r2 = if using_v_tc {
+        let r_start = lnr_start_k.exp().max(1.0);
+        (r_k * r_start).max(StarAdOrder1::ONE)
+    } else {
+        (r_k * r_k).max(StarAdOrder1::ONE)
+    };
+    let area = eval_face_area_time_centered_ad(lnr_k, lnr_start_k, using_v_tc)
+        .max(StarAdOrder1::ONE);
+    (r2, area)
+}
+
+/// Returns `true` when an explicit outer-boundary momentum equation is active
+/// at `k = 0` (`use_momentum_outer_bc`, `use_zero_pgas_outer_bc`, or
+/// `use_fixed_psurf_outer_bc`).
+#[must_use]
+#[inline]
+pub const fn has_surf_momentum_bc(c: &crate::controls::StarControls) -> bool {
+    c.use_momentum_outer_bc
+        || c.use_zero_pgas_outer_bc
+        || c.use_fixed_psurf_outer_bc
+}
+
+/// Evaluates the outer-boundary surface pressure $P_{\mathrm{surf}}$ for
+/// momentum outer boundary conditions (`use_zero_pgas_outer_bc`,
+/// `use_fixed_psurf_outer_bc`, or `use_momentum_outer_bc`).
+#[must_use]
+pub fn eval_surf_momentum_bc_pressure_ad(model: &StarModel) -> StarAdOrder1 {
+    if model.controls.use_zero_pgas_outer_bc {
+        let t_s0 = model
+            .ln_t_start
+            .first()
+            .copied()
+            .unwrap_or_else(|| model.ln_t.first().copied().unwrap_or(0.0))
+            .exp();
+        StarAdOrder1::constant((flexmesa_const::CRAD / 3.0) * t_s0.powi(4))
+    } else if model.controls.use_fixed_psurf_outer_bc {
+        StarAdOrder1::constant(model.controls.fixed_psurf)
+    } else {
+        model.ln_peos_surf_ad.exp()
+    }
+}
+
 /// Evaluates total EOS pressure $P_{\mathrm{eos}}$ in cell `k` with optional
 /// $\theta_P$ velocity time-centering (`hydro_momentum.f90:151-162`).
 #[must_use]
@@ -45,19 +144,7 @@ pub fn eval_cell_peos_time_centered_ad(
     k: usize,
     shift_m1: bool,
 ) -> (StarAdOrder1, f64) {
-    let logt = model.ln_t[k] / LN10;
-    let p_theta =
-        if model.controls.is_velocity_time_centered(model.model_number)
-            && model.controls.include_p_in_velocity_time_centering
-            && logt
-                <= model
-                    .controls
-                    .max_logt_for_include_p_and_l_in_velocity_time_centering
-        {
-            model.controls.p_theta_for_velocity_time_centering
-        } else {
-            1.0
-        };
+    let p_theta = eval_p_theta(model, k);
     let peos_ad = if shift_m1 {
         model.ln_peos_ad[k].shift_m1().exp()
     } else {
@@ -217,15 +304,9 @@ pub fn expected_non_hse_term(
     }
 
     if k > 0 && model.controls.mlt_pturb_factor > 0.0 {
-        let fac = (1.0 / 3.0) * model.controls.mlt_pturb_factor;
-        let vc_00 = model.aux.mlt_vc_old.get(k).copied().unwrap_or(0.0);
-        let vc_m1 = model.aux.mlt_vc_old.get(k - 1).copied().unwrap_or(0.0);
-        if vc_00 > 0.0 || vc_m1 > 0.0 {
-            let rho_00 = StarAdOrder1::variable(model.lnd[k], I_LND_00).exp();
-            let rho_m1 =
-                StarAdOrder1::variable(model.lnd[k - 1], I_LND_M1).exp();
-            let pturb_00 = rho_00 * (fac * vc_00 * vc_00);
-            let pturb_m1 = rho_m1 * (fac * vc_m1 * vc_m1);
+        let pturb_00 = eval_mlt_pturb_cell_ad(model, k, false);
+        let pturb_m1 = eval_mlt_pturb_cell_ad(model, k - 1, true);
+        if pturb_00.val > 0.0 || pturb_m1.val > 0.0 {
             non_hse =
                 non_hse - (area / dm_face.max(1.0e-30)) * (pturb_m1 - pturb_00);
         }
@@ -241,28 +322,10 @@ pub fn expected_non_hse_term(
 /// Hydrostatic / hydrodynamic momentum equation at face `k` (`do1_momentum_eqn`
 /// in `star/private/hydro_momentum.f90:79-436`).
 pub fn do1_momentum_eqn(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
-    let use_surf_momentum_bc = model.controls.use_momentum_outer_bc
-        || model.controls.use_zero_pgas_outer_bc
-        || model.controls.use_fixed_psurf_outer_bc;
-    if k == 0 && !use_surf_momentum_bc {
+    if k == 0 && !has_surf_momentum_bc(&model.controls) {
         return;
     }
-    let lnr_k = StarAdOrder1::variable(model.ln_r[k], I_LNR_00);
-    let r_k = lnr_k.exp();
-    let using_v_tc =
-        model.controls.is_velocity_time_centered(model.model_number)
-            && (model.controls.v_flag || model.controls.u_flag)
-            && model.dt > 0.0
-            && !model.ln_r_start.is_empty();
-    let lnr_start_k = model.ln_r_start.get(k).copied().unwrap_or(model.ln_r[k]);
-    let r2 = if using_v_tc {
-        let r_start = lnr_start_k.exp().max(1.0);
-        (r_k * r_start).max(StarAdOrder1::ONE)
-    } else {
-        (r_k * r_k).max(StarAdOrder1::ONE)
-    };
-    let area = eval_face_area_time_centered_ad(lnr_k, lnr_start_k, using_v_tc)
-        .max(StarAdOrder1::ONE);
+    let (r2, area) = eval_time_centered_hse_geom_ad(model, k);
     let dm_face = eval_face_dm_bar(model, k);
     let g_hse = expected_hse_grav_term(model, k, r2);
     let non_hse = expected_non_hse_term(model, k, area, dm_face);
@@ -279,19 +342,7 @@ pub fn do1_momentum_eqn(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
             p_tot_0 = p_tot_0
                 + crate::rsp2_ad::eval_rsp2_ptrb_cell_ad(model, 0, false);
         }
-        let p_surf = if model.controls.use_zero_pgas_outer_bc {
-            let t_s0 = model
-                .ln_t_start
-                .first()
-                .copied()
-                .unwrap_or(model.ln_t[0])
-                .exp();
-            StarAdOrder1::constant((flexmesa_const::CRAD / 3.0) * t_s0.powi(4))
-        } else if model.controls.use_fixed_psurf_outer_bc {
-            StarAdOrder1::constant(model.controls.fixed_psurf)
-        } else {
-            model.ln_peos_surf_ad.exp()
-        };
+        let p_surf = eval_surf_momentum_bc_pressure_ad(model);
         let resid = (dp_expected - (p_surf - p_tot_0)) / p_0;
         sys.save_eqn_residual(&model.layout, 0, i_equ, &resid);
         if sys.nvar > model.layout.nvar_hydro && model.species > 0 {

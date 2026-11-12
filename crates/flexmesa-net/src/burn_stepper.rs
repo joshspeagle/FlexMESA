@@ -4,173 +4,9 @@
 //! `net/private/net_burn.f90` and `net/private/net_burn_support.f90`.
 
 use flexmesa_mtx::{dgetrf, dgetrs};
-use flexmesa_num::RosenbrockVariant;
 
+pub(crate) use crate::rosenbrock_tableau::tableau_for;
 use crate::types::NetError;
-
-pub(crate) struct RodasTableau {
-    pub(crate) ns: usize,
-    pub(crate) gamma: f64,
-    pub(crate) elo: f64,
-    pub(crate) no_aux_in_error: bool,
-    pub(crate) newf: [bool; 6],
-    pub(crate) alpha: [f64; 6],
-    pub(crate) ra: [[f64; 6]; 6],
-    pub(crate) rc: [[f64; 6]; 6],
-    pub(crate) ros_m: [f64; 6],
-    pub(crate) ros_e: [f64; 6],
-}
-
-pub(crate) fn tableau_for(variant: RosenbrockVariant) -> RodasTableau {
-    let mut tab = RodasTableau {
-        ns: 6,
-        gamma: 0.25,
-        elo: 4.0,
-        no_aux_in_error: false,
-        newf: [true; 6],
-        alpha: [0.0, 0.386, 0.210, 0.630, 1.0, 1.0],
-        ra: [[0.0; 6]; 6],
-        rc: [[0.0; 6]; 6],
-        ros_m: [0.0; 6],
-        ros_e: [0.0, 0.0, 0.0, 0.0, 0.0, 1.0],
-    };
-    match variant {
-        RosenbrockVariant::Ros3p => {
-            tab.ns = 3;
-            tab.gamma = 0.78867513459481286;
-            tab.elo = 3.0;
-            tab.no_aux_in_error = true;
-            tab.newf = [true, true, false, false, false, false];
-            tab.alpha = [0.0, 1.0, 1.0, 0.0, 0.0, 0.0];
-            tab.ra[1][0] = 1.26794919243112273;
-            tab.ra[2][0] = 1.26794919243112273;
-            tab.rc[1][0] = -1.60769515458673630;
-            tab.rc[2][0] = -3.46410161513775469;
-            tab.rc[2][1] = -1.73205080756887734;
-            tab.ros_m[0..3].copy_from_slice(&[
-                2.0,
-                0.57735026918962578,
-                0.42264973081037424,
-            ]);
-            tab.ros_e = [
-                2.0 - 2.11324865405187124,
-                0.57735026918962578 - 1.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-            ];
-        }
-        RosenbrockVariant::Ros3pl => {
-            tab.ns = 4;
-            tab.gamma = 0.435866521508459;
-            tab.elo = 3.0;
-            tab.no_aux_in_error = true;
-            tab.newf = [true, true, true, false, false, false];
-            tab.alpha = [0.0, 0.5, 1.0, 1.0, 0.0, 0.0];
-            tab.ra[1][0] = 1.147140180139521;
-            tab.ra[2][0] = 2.463070773030053;
-            tab.ra[2][1] = 1.147140180139521;
-            tab.ra[3][0] = 2.463070773030053;
-            tab.ra[3][1] = 1.147140180139521;
-            tab.rc[1][0] = -2.631861185781065;
-            tab.rc[2][0] = -1.302364158113095;
-            tab.rc[2][1] = 2.769432022251304;
-            tab.rc[3][0] = -1.552568958732400;
-            tab.rc[3][1] = 2.587743501215153;
-            tab.rc[3][2] = -1.416993298352020;
-            tab.ros_m[0..4].copy_from_slice(&[
-                2.463070773030053,
-                1.147140180139521,
-                0.0,
-                1.0,
-            ]);
-            tab.ros_e = [
-                2.463070773030053 - 2.346947683513665,
-                1.147140180139521 - 0.456530569451895,
-                -0.056949243945495,
-                1.0 - 0.738684936166224,
-                0.0,
-                0.0,
-            ];
-        }
-        RosenbrockVariant::Rodasp => {
-            tab.alpha = [0.0, 0.750, 0.210, 0.630, 1.0, 1.0];
-            tab.ra[1][0] = 3.0;
-            tab.ra[2][0] = 0.1831036793486759e1;
-            tab.ra[2][1] = 0.4955183967433795;
-            tab.ra[3][0] = 0.2304376582692669e1;
-            tab.ra[3][1] = -0.5249275245743001e-1;
-            tab.ra[3][2] = -0.1176798761832782e1;
-            tab.ra[4][0] = -0.7170454962423024e1;
-            tab.ra[4][1] = -0.4741636671481785e1;
-            tab.ra[4][2] = -0.1631002631330971e2;
-            tab.ra[4][3] = -0.1062004044111401e1;
-            let ra4 = [tab.ra[4][0], tab.ra[4][1], tab.ra[4][2], tab.ra[4][3]];
-            tab.ra[5][0..4].copy_from_slice(&ra4);
-            tab.ra[5][4] = 1.0;
-
-            tab.rc[1][0] = -12.0;
-            tab.rc[2][0] = -0.8791795173947035e1;
-            tab.rc[2][1] = -0.2207865586973518e1;
-            tab.rc[3][0] = 0.1081793056857153e2;
-            tab.rc[3][1] = 0.6780270611428266e1;
-            tab.rc[3][2] = 0.1953485944642410e2;
-            tab.rc[4][0] = 0.3419095006749676e2;
-            tab.rc[4][1] = 0.1549671153725963e2;
-            tab.rc[4][2] = 0.5474760875964130e2;
-            tab.rc[4][3] = 0.1416005392148534e2;
-            tab.rc[5][0] = 0.3462605830930532e2;
-            tab.rc[5][1] = 0.1530084976114473e2;
-            tab.rc[5][2] = 0.5699955578662667e2;
-            tab.rc[5][3] = 0.1840807009793095e2;
-            tab.rc[5][4] = -0.5714285714285717e1;
-
-            tab.ros_m[0..4].copy_from_slice(&tab.ra[4][0..4]);
-            tab.ros_m[4] = 1.0;
-            tab.ros_m[5] = 1.0;
-        }
-        RosenbrockVariant::Rodas4
-        | RosenbrockVariant::Rodas3
-        | RosenbrockVariant::Ros2
-        | RosenbrockVariant::Rose2 => {
-            tab.ra[1][0] = 1.544;
-            tab.ra[2][0] = 0.9466785280815826;
-            tab.ra[2][1] = 0.2557011698983284;
-            tab.ra[3][0] = 0.3314825187068521e1;
-            tab.ra[3][1] = 0.2896124015972201e1;
-            tab.ra[3][2] = 0.9986419139977817;
-            tab.ra[4][0] = 0.1221224509226641e1;
-            tab.ra[4][1] = 0.6019134481288629e1;
-            tab.ra[4][2] = 0.1253708332932087e2;
-            tab.ra[4][3] = -0.6878860361058950;
-            let ra4 = [tab.ra[4][0], tab.ra[4][1], tab.ra[4][2], tab.ra[4][3]];
-            tab.ra[5][0..4].copy_from_slice(&ra4);
-            tab.ra[5][4] = 1.0;
-
-            tab.rc[1][0] = -5.6688;
-            tab.rc[2][0] = -0.2430093356833875e1;
-            tab.rc[2][1] = -0.2063599157091915;
-            tab.rc[3][0] = -0.1073529058151375;
-            tab.rc[3][1] = -0.9594562251023355e1;
-            tab.rc[3][2] = -0.2047028614809616e2;
-            tab.rc[4][0] = 0.7496443313967647e1;
-            tab.rc[4][1] = -0.1024680431464352e2;
-            tab.rc[4][2] = -0.3399990352819905e2;
-            tab.rc[4][3] = 0.1170890893206160e2;
-            tab.rc[5][0] = 0.8083246795921522e1;
-            tab.rc[5][1] = -0.7981132988064893e1;
-            tab.rc[5][2] = -0.3152159432874371e2;
-            tab.rc[5][3] = 0.1631930543123136e2;
-            tab.rc[5][4] = -0.6058818238834054e1;
-
-            tab.ros_m[0..4].copy_from_slice(&tab.ra[4][0..4]);
-            tab.ros_m[4] = 1.0;
-            tab.ros_m[5] = 1.0;
-        }
-    }
-    tab
-}
 
 const QCOL_IMAX: usize = 13;
 const KMAXX: usize = 7;
@@ -189,6 +25,14 @@ struct StifbsState {
     kmax: usize,
     kopt: usize,
     nvold: usize,
+    ysav: Vec<f64>,
+    yseq: Vec<f64>,
+    yerr: Vec<f64>,
+    qcol: Vec<[f64; QCOL_IMAX + 1]>,
+    ipiv: Vec<usize>,
+    del: Vec<f64>,
+    ytemp: Vec<f64>,
+    d_pz: Vec<f64>,
 }
 
 impl Default for StifbsState {
@@ -204,6 +48,29 @@ impl Default for StifbsState {
             kmax: KMAXX,
             kopt: KMAXX,
             nvold: 0,
+            ysav: Vec::new(),
+            yseq: Vec::new(),
+            yerr: Vec::new(),
+            qcol: Vec::new(),
+            ipiv: Vec::new(),
+            del: Vec::new(),
+            ytemp: Vec::new(),
+            d_pz: Vec::new(),
+        }
+    }
+}
+
+impl StifbsState {
+    fn ensure_scratch(&mut self, nvar: usize) {
+        if self.ysav.len() != nvar {
+            self.ysav.resize(nvar, 0.0);
+            self.yseq.resize(nvar, 0.0);
+            self.yerr.resize(nvar, 0.0);
+            self.qcol.resize(nvar, [0.0; QCOL_IMAX + 1]);
+            self.ipiv.resize(nvar, 0);
+            self.del.resize(nvar, 0.0);
+            self.ytemp.resize(nvar, 0.0);
+            self.d_pz.resize(nvar, 0.0);
         }
     }
 }
@@ -339,8 +206,9 @@ where
         state.kmax = state.kopt;
     }
 
+    state.ensure_scratch(nvar);
     let mut h = htry;
-    let ysav = y.to_vec();
+    state.ysav.copy_from_slice(&y[..nvar]);
     jakob(*x, y, dens_dfdy, work)?;
 
     if h != *hnext || *x != state.xnew {
@@ -348,10 +216,10 @@ where
         state.kopt = state.kmax;
     }
     let mut reduct = false;
-    let mut yseq = vec![0.0_f64; nvar];
-    let mut yerr = vec![0.0_f64; nvar];
+    state.yseq.fill(0.0);
+    state.yerr.fill(0.0);
     let mut err = [0.0_f64; KMAXX + 1];
-    let mut qcol = vec![[0.0_f64; QCOL_IMAX + 1]; nvar];
+    state.qcol.fill([0.0_f64; QCOL_IMAX + 1]);
     let mut x_pzextr = [0.0_f64; QCOL_IMAX + 1];
     let mut km = 1_usize;
 
@@ -367,8 +235,20 @@ where
                 ));
             }
             if simpr(
-                &ysav, dydx, nvar, *x, h, NSEQ[k], &mut yseq, dens_dfdy, dmat,
-                work, derivs,
+                &state.ysav,
+                dydx,
+                nvar,
+                *x,
+                h,
+                NSEQ[k],
+                &mut state.yseq,
+                dens_dfdy,
+                dmat,
+                &mut state.ipiv,
+                &mut state.del,
+                &mut state.ytemp,
+                work,
+                derivs,
             )
             .is_err()
             {
@@ -380,17 +260,18 @@ where
             net_pzextr(
                 k,
                 h_sub * h_sub,
-                &yseq,
+                &state.yseq,
                 y,
-                &mut yerr,
+                &mut state.yerr,
                 nvar,
-                &mut qcol,
+                &mut state.qcol,
                 &mut x_pzextr,
+                &mut state.d_pz,
             );
             let mut errmax = TINY;
             if k != 1 {
                 for i in 0..nvar {
-                    errmax = errmax.max((yerr[i] / yscal[i]).abs());
+                    errmax = errmax.max((state.yerr[i] / yscal[i]).abs());
                 }
                 errmax /= eps;
                 km = k - 1;
@@ -466,6 +347,9 @@ fn simpr<W, D>(
     yout: &mut [f64],
     dens_dfdy: &[f64],
     dmat: &mut [f64],
+    ipiv: &mut [usize],
+    del: &mut [f64],
+    ytemp: &mut [f64],
     work: &mut W,
     derivs: &mut D,
 ) -> Result<(), NetError>
@@ -479,40 +363,41 @@ where
         }
         dmat[i * nvar + i] += 1.0;
     }
-    let mut ipiv = vec![0_usize; nvar];
-    dgetrf(nvar, dmat, &mut ipiv)
+    ipiv[..nvar].fill(0);
+    dgetrf(nvar, dmat, ipiv)
         .map_err(|e| NetError::IntegrationError(e.to_string()))?;
 
     for i in 0..nvar {
         yout[i] = h * dydx[i];
     }
-    dgetrs(nvar, dmat, &ipiv, yout)
+    dgetrs(nvar, dmat, ipiv, yout)
         .map_err(|e| NetError::IntegrationError(e.to_string()))?;
 
-    let mut del = yout.to_vec();
-    let mut ytemp: Vec<f64> =
-        y.iter().zip(&del).map(|(yi, di)| yi + di).collect();
+    del[..nvar].copy_from_slice(&yout[..nvar]);
+    for i in 0..nvar {
+        ytemp[i] = y[i] + del[i];
+    }
     let mut x = xs + h;
-    derivs(x, &mut ytemp, yout, work)?;
+    derivs(x, ytemp, yout, work)?;
 
     for _nn in 2..=nstep {
         for i in 0..nvar {
             yout[i] = h.mul_add(yout[i], -del[i]);
         }
-        dgetrs(nvar, dmat, &ipiv, yout)
+        dgetrs(nvar, dmat, ipiv, yout)
             .map_err(|e| NetError::IntegrationError(e.to_string()))?;
         for i in 0..nvar {
             del[i] = 2.0_f64.mul_add(yout[i], del[i]);
             ytemp[i] += del[i];
         }
         x += h;
-        derivs(x, &mut ytemp, yout, work)?;
+        derivs(x, ytemp, yout, work)?;
     }
 
     for i in 0..nvar {
         yout[i] = h.mul_add(yout[i], -del[i]);
     }
-    dgetrs(nvar, dmat, &ipiv, yout)
+    dgetrs(nvar, dmat, ipiv, yout)
         .map_err(|e| NetError::IntegrationError(e.to_string()))?;
     for i in 0..nvar {
         yout[i] += ytemp[i];
@@ -520,6 +405,7 @@ where
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn net_pzextr(
     iest: usize,
     xest: f64,
@@ -529,6 +415,7 @@ fn net_pzextr(
     nvar: usize,
     qcol: &mut [[f64; QCOL_IMAX + 1]],
     x: &mut [f64; QCOL_IMAX + 1],
+    d: &mut [f64],
 ) {
     x[iest] = xest;
     dy[..nvar].copy_from_slice(&yest[..nvar]);
@@ -538,7 +425,7 @@ fn net_pzextr(
             qcol[j][1] = yest[j];
         }
     } else {
-        let mut d = yest.to_vec();
+        d[..nvar].copy_from_slice(&yest[..nvar]);
         for k1 in 1..iest {
             let delta = 1.0 / (x[iest - k1] - xest);
             let f1 = xest * delta;

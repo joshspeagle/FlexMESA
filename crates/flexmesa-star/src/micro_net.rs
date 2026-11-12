@@ -84,38 +84,33 @@ pub fn do_net(
     let d_dxdt_dlnt = &mut model.d_dxdt_nuc_dlnt[..nz * species];
     let d_dxdt_dx = &mut model.d_dxdt_nuc_dx[..nz * species * species];
 
-    eps_nuc
-        .par_iter_mut()
-        .zip(d_eps_dlnd.par_iter_mut())
-        .zip(d_eps_dlnt.par_iter_mut())
-        .zip(eps_neu.par_iter_mut())
-        .zip(eps_cats.par_iter_mut())
-        .zip(d_eps_dx.par_chunks_mut(species))
-        .zip(dxdt_nuc.par_chunks_mut(species))
-        .zip(d_dxdt_dlnd.par_chunks_mut(species))
-        .zip(d_dxdt_dlnt.par_chunks_mut(species))
-        .zip(d_dxdt_dx.par_chunks_mut(species * species))
+    (
+        eps_nuc.par_iter_mut(),
+        d_eps_dlnd.par_iter_mut(),
+        d_eps_dlnt.par_iter_mut(),
+        eps_neu.par_iter_mut(),
+        eps_cats.par_iter_mut(),
+        d_eps_dx.par_chunks_mut(species),
+        dxdt_nuc.par_chunks_mut(species),
+        d_dxdt_dlnd.par_chunks_mut(species),
+        d_dxdt_dlnt.par_chunks_mut(species),
+        d_dxdt_dx.par_chunks_mut(species * species),
+    )
+        .into_par_iter()
         .enumerate()
         .try_for_each(
             |(
                 k,
                 (
-                    (
-                        (
-                            (
-                                (
-                                    (
-                                        (((eps_k, deps_d_k), deps_t_k), neu_k),
-                                        cats_k,
-                                    ),
-                                    deps_x_k,
-                                ),
-                                dxdt_k,
-                            ),
-                            ddxdt_d_k,
-                        ),
-                        ddxdt_t_k,
-                    ),
+                    eps_k,
+                    deps_d_k,
+                    deps_t_k,
+                    neu_k,
+                    cats_k,
+                    deps_x_k,
+                    dxdt_k,
+                    ddxdt_d_k,
+                    ddxdt_t_k,
                     ddxdt_x_k,
                 ),
             )| {
@@ -158,9 +153,9 @@ pub fn do_net(
                 let log_rho = rho_k.log10();
                 let xa_k = &xa_slice[k * species..(k + 1) * species];
 
-                let mut stack_dydt = [[F64x2::ZERO; NUM_RVS]; 32];
+                let mut stack_dydt = [[F64x2::ZERO; NUM_RVS]; 128];
                 let mut heap_dydt = Vec::new();
-                let dydt: &mut [[F64x2; NUM_RVS]] = if species <= 32 {
+                let dydt: &mut [[F64x2; NUM_RVS]] = if species <= 128 {
                     &mut stack_dydt[..species]
                 } else {
                     heap_dydt.resize(species, [F64x2::ZERO; NUM_RVS]);

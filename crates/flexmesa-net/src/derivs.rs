@@ -119,9 +119,9 @@ pub fn eval_net(
         return Ok(res);
     }
 
-    let mut stack_dydt = [[F64x2::ZERO; NUM_RVS]; 32];
+    let mut stack_dydt = [[F64x2::ZERO; NUM_RVS]; 128];
     let mut heap_dydt = Vec::new();
-    let dydt: &mut [[F64x2; NUM_RVS]] = if ni <= 32 {
+    let dydt: &mut [[F64x2; NUM_RVS]] = if ni <= 128 {
         &mut stack_dydt[..ni]
     } else {
         heap_dydt.resize(ni, [F64x2::ZERO; NUM_RVS]);
@@ -141,22 +141,30 @@ pub fn eval_net(
     }
 
     let nuclides = NuclideCatalog::builtin_ref();
+    let mut stack_aion = [1.0_f64; 128];
+    let mut heap_aion = Vec::new();
+    let aion: &mut [f64] = if ni <= 128 {
+        &mut stack_aion[..ni]
+    } else {
+        heap_aion.resize(ni, 1.0);
+        &mut heap_aion[..]
+    };
+    for (i, a_slot) in aion.iter_mut().enumerate() {
+        *a_slot = nuclides.get_by_id(g.chem_id[i]).unwrap().z_plus_n as f64;
+    }
     for k in 0..NUM_CATEGORIES {
         res.eps_nuc_categories[k] = QCONV * w.eps_nuc_categories[k];
     }
     for i in 0..ni {
-        let a_i = nuclides.get_by_id(g.chem_id[i]).unwrap().z_plus_n as f64;
-        res.dxdt[i] = a_i * dydt[i][0].to_f64();
+        res.dxdt[i] = aion[i] * dydt[i][0].to_f64();
     }
     if !just_dxdt {
         for i in 0..ni {
-            let a_i = nuclides.get_by_id(g.chem_id[i]).unwrap().z_plus_n as f64;
+            let a_i = aion[i];
             res.d_eps_nuc_dx[i] = QCONV * w.d_eps_nuc_dy[i] / a_i;
             res.d_dxdt_drho[i] = a_i * dydt[i][2].to_f64();
             res.d_dxdt_dt[i] = a_i * dydt[i][1].to_f64();
-            for j in 0..ni {
-                let a_j =
-                    nuclides.get_by_id(g.chem_id[j]).unwrap().z_plus_n as f64;
+            for (j, &a_j) in aion.iter().enumerate() {
                 res.d_dxdt_dx[i * ni + j] = w.d_dydt_dy[i * ni + j] * a_i / a_j;
             }
         }
@@ -226,19 +234,21 @@ pub fn eval_net_with_work(
             z2bar, ye, eta, weak_rate_factor, screening_mode, use_3a_fl87,
         )?;
         let nuclides = NuclideCatalog::builtin_ref();
+        let mut aion = [1.0_f64; 32];
+        for (i, a_slot) in aion[..ni].iter_mut().enumerate() {
+            *a_slot = nuclides.get_by_id(g.chem_id[i]).unwrap().z_plus_n as f64;
+        }
         for k in 0..NUM_CATEGORIES {
             w.eps_nuc_categories[k] = res.eps_nuc_categories[k] / QCONV;
         }
         for i in 0..ni {
-            let a_i = nuclides.get_by_id(g.chem_id[i]).unwrap().z_plus_n as f64;
+            let a_i = aion[i];
             dydt[i][0] = F64x2::from_f64(res.dxdt[i] / a_i);
             if !just_dxdt {
                 dydt[i][1] = F64x2::from_f64(res.d_dxdt_dt[i] / a_i);
                 dydt[i][2] = F64x2::from_f64(res.d_dxdt_drho[i] / a_i);
                 w.d_eps_nuc_dy[i] = res.d_eps_nuc_dx[i] * a_i / QCONV;
-                for j in 0..ni {
-                    let a_j =
-                        nuclides.get_by_id(g.chem_id[j]).unwrap().z_plus_n as f64;
+                for (j, &a_j) in aion[..ni].iter().enumerate() {
                     w.d_dydt_dy[i * ni + j] =
                         res.d_dxdt_dx[i * ni + j] * a_j / a_i;
                 }

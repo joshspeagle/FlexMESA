@@ -176,9 +176,15 @@ impl StarExtras for Tier4CaseExtras {
     fn extras_controls(&mut self, model: &mut StarModel) {
         self.step_count = 0;
         self.rsp_num_periods = 0;
-        let is_tdc_mod = self.case_name == "dev_compare_Cepheid_RSP2_TDC"
-            && model.m_center > 0.0;
-        if model.controls.rsp_flag || model.controls.rsp2_flag || is_tdc_mod {
+        let is_tdc_envelope =
+            model.controls.use_dprad_dm_form_of_t_gradient_eqn
+                && model.controls.use_momentum_outer_bc
+                && model.m_center > 0.0
+                && model.l_center > 0.0;
+        if model.controls.rsp_flag
+            || model.controls.rsp2_flag
+            || is_tdc_envelope
+        {
             if self.case_name == "rsp_check_2nd_crossing" {
                 self.crossing_delta_teff =
                     model.controls.x_ctrl.get(1).copied().unwrap_or(100.0);
@@ -193,58 +199,53 @@ impl StarExtras for Tier4CaseExtras {
                 "astero_gyre" | "astero_adipls"
             ))
             && model.model_number >= 10;
-        model.controls.op_split_burn = true;
-        model.controls.min_logt_for_net = 8.5;
-        model.controls.mesh_delta_coeff = 0.0;
+        let c = &mut model.controls;
+        c.op_split_burn = true;
+        c.min_logt_for_net = 8.5;
+        c.mesh_delta_coeff = 0.0;
         if !is_pulse_mod_case {
-            model.controls.atm_option = AtmOption::Table;
-            model.controls.mlt_option = flexmesa_turb::MltOption::Cox;
-            model.controls.mixing_length_alpha = 2.0;
-            model.controls.tau_factor = 1.0;
+            c.atm_option = AtmOption::Table;
+            c.mlt_option = flexmesa_turb::MltOption::Cox;
+            c.mixing_length_alpha = 2.0;
+            c.tau_factor = 1.0;
         }
-        model.controls.energy_eqn_option = EnergyEqnOption::EpsGrav;
-        model.controls.v_flag = false;
-        model.controls.u_flag = false;
-        model.controls.rotation_flag = false;
+        c.energy_eqn_option = EnergyEqnOption::EpsGrav;
+        (c.v_flag, c.u_flag, c.rotation_flag) = (false, false, false);
         model.layout = VarLayout::new(model.species, false, false);
-        if model.v.len() != model.nz {
-            model.v.resize(model.nz, 0.0);
+        for buf in [&mut model.v, &mut model.u] {
+            if buf.len() != model.nz {
+                buf.resize(model.nz, 0.0);
+            }
         }
-        if model.u.len() != model.nz {
-            model.u.resize(model.nz, 0.0);
-        }
-        model.controls.use_other_cgrav = false;
-        model.controls.use_other_alpha_mlt = false;
-        model.controls.use_other_wind = false;
-        model.controls.use_other_adjust_mdot = false;
-        model.controls.use_other_torque = false;
-        model.controls.use_other_energy = false;
-        model.controls.use_other_momentum_implicit = false;
-        model.controls.do_element_diffusion = false;
-        model.controls.do_conv_premix = false;
-        model.controls.do_phase_separation = false;
-        model.controls.reimers_scaling_factor = 0.0;
-        model.controls.blocker_scaling_factor = 0.0;
-        model.controls.vink_scaling_factor = 0.0;
-        model.controls.dutch_scaling_factor = 0.0;
-        model.controls.super_eddington_scaling_factor = 0.0;
-        model.controls.mass_change = 0.0;
-        model.controls.eps_nuc_factor = 1.0;
-        model.controls.dxdt_nuc_factor = 0.0;
-        model.controls.non_nuc_neu_factor = 0.0;
-        model.controls.conv_core_gap_dq_limit = None;
-        model.controls.surf_omega_div_omega_crit_limit = None;
-        model.controls.v_surf_div_v_esc_limit = None;
-        model.controls.remnant_mass_min_limit = None;
-        model.controls.center_r_lower_limit = None;
-        model.controls.varcontrol_target = 1.0e-3;
-        model.dt = if is_pulse_mod_case {
-            1.0e-2 * SECYER
-        } else {
-            1.0e1 * SECYER
-        };
+        let c = &mut model.controls;
+        c.use_other_cgrav = false;
+        c.use_other_alpha_mlt = false;
+        c.use_other_wind = false;
+        c.use_other_adjust_mdot = false;
+        c.use_other_torque = false;
+        c.use_other_energy = false;
+        c.use_other_momentum_implicit = false;
+        c.do_element_diffusion = false;
+        c.do_conv_premix = false;
+        c.do_phase_separation = false;
+        c.reimers_scaling_factor = 0.0;
+        c.blocker_scaling_factor = 0.0;
+        c.vink_scaling_factor = 0.0;
+        c.dutch_scaling_factor = 0.0;
+        c.super_eddington_scaling_factor = 0.0;
+        c.mass_change = 0.0;
+        c.eps_nuc_factor = 1.0;
+        c.dxdt_nuc_factor = 0.0;
+        c.non_nuc_neu_factor = 0.0;
+        c.conv_core_gap_dq_limit = None;
+        c.surf_omega_div_omega_crit_limit = None;
+        c.v_surf_div_v_esc_limit = None;
+        c.remnant_mass_min_limit = None;
+        c.center_r_lower_limit = None;
+        c.varcontrol_target = 1.0e-3;
+        c.max_years_for_timestep = Some(1.0e2);
+        model.dt = if is_pulse_mod_case { 1.0e-2 } else { 1.0e1 } * SECYER;
         model.dt_next = model.dt;
-        model.controls.max_years_for_timestep = Some(1.0e2);
     }
 
     fn extras_startup(

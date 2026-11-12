@@ -57,6 +57,7 @@ pub mod f64x2;
 pub mod initialize;
 pub mod parser;
 pub mod reaction_synth;
+pub(crate) mod rosenbrock_tableau;
 pub mod screen;
 pub mod screen_combo;
 pub mod types;

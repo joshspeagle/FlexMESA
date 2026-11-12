@@ -83,18 +83,8 @@ pub fn eval_cell_pressure_for_work_ad(
     if model.controls.rsp2_flag && model.controls.rsp2.alfap != 0.0 {
         p_ad = p_ad + crate::rsp2_ad::eval_rsp2_ptrb_cell_ad(model, k, false);
     }
-    if model.controls.mlt_pturb_factor > 0.0 {
-        let vc_old = model.aux.mlt_vc_old.get(k).copied().unwrap_or(0.0);
-        if vc_old > 0.0 {
-            let rho_00 = StarAdOrder1::variable(model.lnd[k], I_LND_00).exp();
-            let pturb = rho_00
-                * ((1.0 / 3.0)
-                    * model.controls.mlt_pturb_factor
-                    * vc_old
-                    * vc_old);
-            p_ad = p_ad + pturb;
-        }
-    }
+    p_ad =
+        p_ad + crate::hydro_momentum::eval_mlt_pturb_cell_ad(model, k, false);
     (p_ad, p_theta)
 }
 

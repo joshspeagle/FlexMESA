@@ -8,23 +8,42 @@
 use crate::controls::{StarControls, VarLayout};
 use crate::model::StarModel;
 
+#[derive(Default)]
+struct NormAcc {
+    sum_abs: f64,
+    max_abs: f64,
+    count: usize,
+}
+
+impl NormAcc {
+    #[inline]
+    fn push(&mut self, a: f64) {
+        self.sum_abs += a;
+        self.count += 1;
+        if a > self.max_abs || a.is_nan() {
+            self.max_abs = a;
+        }
+    }
+
+    #[inline]
+    fn finish(self) -> (f64, f64) {
+        if self.count == 0 {
+            (0.0, 0.0)
+        } else {
+            (self.sum_abs / (self.count as f64), self.max_abs)
+        }
+    }
+}
+
 /// Computes `(mean_abs, max_abs)` across all elements of `v` (`sizequ` raw
 /// helper).
 #[must_use]
 pub fn compute_vector_norms(v: &[f64]) -> (f64, f64) {
-    if v.is_empty() {
-        return (0.0, 0.0);
-    }
-    let mut sum_abs = 0.0;
-    let mut max_abs = 0.0_f64;
+    let mut acc = NormAcc::default();
     for &x in v {
-        let a = x.abs();
-        sum_abs += a;
-        if a > max_abs || a.is_nan() {
-            max_abs = a;
-        }
+        acc.push(x.abs());
     }
-    (sum_abs / (v.len() as f64), max_abs)
+    acc.finish()
 }
 
 /// Computes equation residual norms `(residual_norm, max_residual)` (`sizequ`
@@ -48,9 +67,7 @@ pub fn compute_residual_norms(
     if !(c.convergence_ignore_equl_residuals || ignore_rti) {
         return compute_vector_norms(equ);
     }
-    let mut sum_abs = 0.0;
-    let mut max_abs = 0.0_f64;
-    let mut count = 0_usize;
+    let mut acc = NormAcc::default();
     for k in 0..nz {
         let base = k * nvar;
         for j in 0..nvar {
@@ -61,24 +78,13 @@ pub fn compute_residual_norms(
             if c.convergence_ignore_equl_residuals && j == layout.i_equ_l {
                 continue;
             }
-            if c.convergence_ignore_alpha_rti_residuals
-                && Some(j) == layout.i_dalpha_rti_dt
-            {
+            if ignore_rti && Some(j) == layout.i_dalpha_rti_dt {
                 continue;
             }
-            let a = val.abs();
-            sum_abs += a;
-            count += 1;
-            if a > max_abs {
-                max_abs = a;
-            }
+            acc.push(val.abs());
         }
     }
-    if count == 0 {
-        (0.0, 0.0)
-    } else {
-        (sum_abs / (count as f64), max_abs)
-    }
+    acc.finish()
 }
 
 /// Computes `(correction_norm, max_correction)` from layout-only metadata,
@@ -93,9 +99,7 @@ pub fn compute_correction_norms(
     if nz == 0 || nvar == 0 || dx_scaled.is_empty() {
         return (0.0, 0.0);
     }
-    let mut sum_abs = 0.0;
-    let mut max_abs = 0.0_f64;
-    let mut count = 0_usize;
+    let mut acc = NormAcc::default();
     for k in 0..nz {
         let base = k * nvar;
         for j in 0..nvar {
@@ -109,19 +113,10 @@ pub fn compute_correction_norms(
             {
                 continue;
             }
-            let a = val.abs();
-            sum_abs += a;
-            count += 1;
-            if a > max_abs {
-                max_abs = a;
-            }
+            acc.push(val.abs());
         }
     }
-    if count == 0 {
-        (0.0, 0.0)
-    } else {
-        (sum_abs / (count as f64), max_abs)
-    }
+    acc.finish()
 }
 
 /// Computes `(correction_norm, max_correction)` matching `sizeB` in
@@ -148,9 +143,7 @@ pub fn compute_model_correction_norms(
     let lum_surf_ref =
         0.1 * model.lum_start.first().copied().unwrap_or(0.0).abs();
 
-    let mut sum_abs = 0.0;
-    let mut max_abs = 0.0_f64;
-    let mut count = 0_usize;
+    let mut acc = NormAcc::default();
 
     for k in 0..nz {
         let base = k * nvar;
@@ -166,74 +159,43 @@ pub fn compute_model_correction_norms(
                 continue;
             }
             if j == layout.i_lum {
-                if !c.include_l_in_correction_limits {
-                    continue;
-                }
-                let dx = (dx_scaled[base + j] * x_scale[base + j]).abs();
-                let denom = (lum_surf_ref + model.lum[k].abs()).max(1.0e-30);
-                let a = dx / denom;
-                sum_abs += a;
-                count += 1;
-                if a > max_abs || a.is_nan() {
-                    max_abs = a;
+                if c.include_l_in_correction_limits {
+                    let dx = (dx_scaled[base + j] * x_scale[base + j]).abs();
+                    let denom =
+                        (lum_surf_ref + model.lum[k].abs()).max(1.0e-30);
+                    acc.push(dx / denom);
                 }
                 continue;
             }
-            if Some(j) == layout.i_v {
-                if !(c.v_flag && c.include_v_in_correction_limits) {
-                    continue;
-                }
-                let cs_s = model
-                    .aux
-                    .csound_start
-                    .get(k)
-                    .copied()
-                    .filter(|&cs| cs > 0.0)
-                    .unwrap_or(model.csound[k]);
-                let dx = (dx_scaled[base + j] * x_scale[base + j]).abs();
-                let a = dx / (0.1 * cs_s + model.v[k].abs()).max(1.0);
-                sum_abs += a;
-                count += 1;
-                if a > max_abs || a.is_nan() {
-                    max_abs = a;
-                }
-                continue;
-            }
-            if Some(j) == layout.i_u {
-                if !(c.u_flag && c.include_u_in_correction_limits) {
-                    continue;
-                }
-                let cs_s = model
-                    .aux
-                    .csound_start
-                    .get(k)
-                    .copied()
-                    .filter(|&cs| cs > 0.0)
-                    .unwrap_or(model.csound[k]);
-                let dx = (dx_scaled[base + j] * x_scale[base + j]).abs();
-                let a = dx / (0.1 * cs_s + model.u[k].abs()).max(1.0);
-                sum_abs += a;
-                count += 1;
-                if a > max_abs || a.is_nan() {
-                    max_abs = a;
+            if Some(j) == layout.i_v || Some(j) == layout.i_u {
+                let (active, vel_k) = if Some(j) == layout.i_v {
+                    (c.v_flag && c.include_v_in_correction_limits, model.v[k])
+                } else {
+                    (c.u_flag && c.include_u_in_correction_limits, model.u[k])
+                };
+                if active {
+                    let cs_s = model
+                        .aux
+                        .csound_start
+                        .get(k)
+                        .copied()
+                        .filter(|&cs| cs > 0.0)
+                        .unwrap_or(model.csound[k]);
+                    let dx = (dx_scaled[base + j] * x_scale[base + j]).abs();
+                    acc.push(dx / (0.1 * cs_s + vel_k.abs()).max(1.0));
                 }
                 continue;
             }
             if Some(j) == layout.i_w {
-                if !(c.rsp2_flag && c.include_w_in_correction_limits) {
-                    continue;
-                }
-                let w_k = model.aux.rsp.et_rsp[k].max(0.0).sqrt();
-                let a = if w_k < 1.0 {
-                    0.0
-                } else {
-                    (dx_scaled[base + j] * x_scale[base + j]).abs()
-                        / (1.0e3 + w_k)
-                };
-                sum_abs += a;
-                count += 1;
-                if a > max_abs || a.is_nan() {
-                    max_abs = a;
+                if c.rsp2_flag && c.include_w_in_correction_limits {
+                    let w_k = model.aux.rsp.et_rsp[k].max(0.0).sqrt();
+                    let a = if w_k < 1.0 {
+                        0.0
+                    } else {
+                        (dx_scaled[base + j] * x_scale[base + j]).abs()
+                            / (1.0e3 + w_k)
+                    };
+                    acc.push(a);
                 }
                 continue;
             }
@@ -254,41 +216,27 @@ pub fn compute_model_correction_norms(
                 sum_xa_corr += a;
                 num_xa_terms += 1;
                 if !c.ignore_species_in_max_correction
-                    && (a > max_abs || a.is_nan())
+                    && (a > acc.max_abs || a.is_nan())
                 {
-                    max_abs = a;
+                    acc.max_abs = a;
                 }
                 continue;
             }
 
-            let a = dx_scaled[base + j].abs();
-            sum_abs += a;
-            count += 1;
-            if a > max_abs || a.is_nan() {
-                max_abs = a;
-            }
+            acc.push(dx_scaled[base + j].abs());
         }
         if num_xa_terms > 0 {
-            sum_abs += sum_xa_corr / (num_xa_terms as f64);
-            count += 1;
+            acc.sum_abs += sum_xa_corr / (num_xa_terms as f64);
+            acc.count += 1;
         }
     }
 
-    if count == 0 {
-        (0.0, 0.0)
-    } else {
-        (sum_abs / (count as f64), max_abs)
-    }
+    acc.finish()
 }
 
-fn active_gold_level(model: &StarModel) -> u8 {
+pub(crate) fn active_gold_level(model: &StarModel) -> u8 {
     let c = &model.controls;
     let mnum = model.model_number as isize;
-    let max_t = model
-        .ln_t
-        .iter()
-        .fold(0.0_f64, |acc, &lnt| acc.max(lnt.exp()));
-
     let use_gold2 = (c.use_gold2_tolerances
         && c.steps_before_use_gold2_tolerances < 0)
         || (c.steps_before_use_gold2_tolerances >= 0
@@ -297,24 +245,28 @@ fn active_gold_level(model: &StarModel) -> u8 {
         return 2;
     }
 
-    let use_gold = ((c.use_gold_tolerances
+    let use_gold_step = (c.use_gold_tolerances
         && c.steps_before_use_gold_tolerances < 0)
         || (c.steps_before_use_gold_tolerances >= 0
-            && mnum > c.steps_before_use_gold_tolerances))
-        && (c.max_t_for_gold_tolerances <= 0.0
-            || max_t <= c.max_t_for_gold_tolerances);
-    u8::from(use_gold)
+            && mnum > c.steps_before_use_gold_tolerances);
+    if !use_gold_step {
+        return 0;
+    }
+    if c.max_t_for_gold_tolerances <= 0.0 {
+        return 1;
+    }
+    let max_t = model
+        .ln_t
+        .iter()
+        .fold(0.0_f64, |acc, &lnt| acc.max(lnt.exp()));
+    u8::from(max_t <= c.max_t_for_gold_tolerances)
 }
 
-/// Returns `(tol_residual_norm, tol_max_residual, tol_correction_norm, tol_max_correction)`
-/// for 1-based Newton iteration `iter` (`struct_burn_mix.f90:531-553` and
-/// `star_solver.f90:198-239`).
-#[must_use]
-pub fn active_solver_tolerances(
-    model: &StarModel,
+pub(crate) fn active_solver_tolerances_with_gold(
+    c: &StarControls,
+    gold_level: u8,
     iter: usize,
 ) -> (f64, f64, f64, f64) {
-    let c: &StarControls = &model.controls;
     // Honor explicit caller overrides of the legacy scalar `tol_residual_norm` /
     // `tol_max_residual` fields when `tol_residual_norm1` was left untouched.
     let has_custom_scalar_tol = ((c.tol_residual_norm - 1.0e-4).abs()
@@ -330,36 +282,49 @@ pub fn active_solver_tolerances(
         );
     }
 
-    match active_gold_level(model) {
+    let (rn, mr) = match gold_level {
         2 => {
-            let (rn, mr) = if iter < c.gold2_iter_for_resid_tol2 {
+            if iter < c.gold2_iter_for_resid_tol2 {
                 (c.gold2_tol_residual_norm1, c.gold2_tol_max_residual1)
             } else if iter < c.gold2_iter_for_resid_tol3 {
                 (c.gold2_tol_residual_norm2, c.gold2_tol_max_residual2)
             } else {
                 (c.gold2_tol_residual_norm3, c.gold2_tol_max_residual3)
-            };
-            (rn, mr, c.tol_correction_norm, c.tol_max_correction)
+            }
         }
         1 => {
-            let (rn, mr) = if iter < c.gold_iter_for_resid_tol2 {
+            if iter < c.gold_iter_for_resid_tol2 {
                 (c.gold_tol_residual_norm1, c.gold_tol_max_residual1)
             } else if iter < c.gold_iter_for_resid_tol3 {
                 (c.gold_tol_residual_norm2, c.gold_tol_max_residual2)
             } else {
                 (c.gold_tol_residual_norm3, c.gold_tol_max_residual3)
-            };
-            (rn, mr, c.tol_correction_norm, c.tol_max_correction)
+            }
         }
         _ => {
-            let (rn, mr) = if iter < c.iter_for_resid_tol2 {
+            if iter < c.iter_for_resid_tol2 {
                 (c.tol_residual_norm1, c.tol_max_residual1)
             } else if iter < c.iter_for_resid_tol3 {
                 (c.tol_residual_norm2, c.tol_max_residual2)
             } else {
                 (c.tol_residual_norm3, c.tol_max_residual3)
-            };
-            (rn, mr, c.tol_correction_norm, c.tol_max_correction)
+            }
         }
-    }
+    };
+    (rn, mr, c.tol_correction_norm, c.tol_max_correction)
+}
+
+/// Returns `(tol_residual_norm, tol_max_residual, tol_correction_norm, tol_max_correction)`
+/// for 1-based Newton iteration `iter` (`struct_burn_mix.f90:531-553` and
+/// `star_solver.f90:198-239`).
+#[must_use]
+pub fn active_solver_tolerances(
+    model: &StarModel,
+    iter: usize,
+) -> (f64, f64, f64, f64) {
+    active_solver_tolerances_with_gold(
+        &model.controls,
+        active_gold_level(model),
+        iter,
+    )
 }

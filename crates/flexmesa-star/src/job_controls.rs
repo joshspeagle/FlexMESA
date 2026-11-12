@@ -203,14 +203,7 @@ impl VarLayout {
         };
         let has_vel = v_flag || u_flag;
         let (i_equ_l, i_dv_dt, i_dlnd_dt, i_dlne_dt, i_dlnr_dt) = if has_vel {
-            let iv = if let Some(idx) = i_v {
-                idx
-            } else if let Some(idx) = i_u {
-                idx
-            } else {
-                4
-            };
-            (i_lum, iv, i_lnd, i_lnt, Some(i_lnr))
+            (i_lum, 4, i_lnd, i_lnt, Some(i_lnr))
         } else {
             (i_lnd, i_lnt, i_lnr, i_lum, None)
         };

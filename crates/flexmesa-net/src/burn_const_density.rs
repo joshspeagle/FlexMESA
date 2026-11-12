@@ -12,10 +12,13 @@ use flexmesa_math::exp10;
 use flexmesa_rates::ScreeningMode;
 use flexmesa_utils::is_bad;
 
+use crate::burn::{
+    collect_aion, compute_post_burn_energetics, unpack_clamped_molar_y,
+    OneZoneStepBuf,
+};
 use crate::burn_stepper::netint;
 use crate::derivs::{eval_net_with_work, with_thread_local_work};
-use crate::f64x2::F64x2;
-use crate::types::{NetError, NetGeneralInfo, NUM_RVS};
+use crate::types::{NetError, NetGeneralInfo};
 
 /// Configuration inputs for [`burn_1_zone_const_density`].
 #[derive(Debug, Clone)]
@@ -95,16 +98,9 @@ pub fn burn_1_zone_const_density(
     }
     let nvar = species + 1;
     let nuclides = NuclideCatalog::builtin_ref();
-    let mut aion = vec![0.0_f64; species];
-    let mut save_x = vec![0.0_f64; species];
+    let aion = collect_aion(nuclides, &g.chem_id)?;
     let mut ending_y = vec![0.0_f64; nvar];
     for i in 0..species {
-        let cid = g.chem_id[i];
-        let nuc = nuclides.get_by_id(cid).ok_or_else(|| {
-            NetError::InvalidReactionOrIso(format!("unknown cid {cid}"))
-        })?;
-        aion[i] = nuc.z_plus_n as f64;
-        save_x[i] = input.starting_x[i];
         ending_y[i] = input.starting_x[i] / aion[i];
     }
     ending_y[species] = input.starting_log10_t * LN10;
@@ -120,16 +116,7 @@ pub fn burn_1_zone_const_density(
     };
     let stpmin = stptry * 1.0e-12;
 
-    struct StepBuf {
-        last_eval: Option<([f64; NUM_CATEGORIES], f64)>,
-        x_buf: Vec<f64>,
-        dydt_buf: Vec<[F64x2; NUM_RVS]>,
-    }
-    let mut step_buf = StepBuf {
-        last_eval: None,
-        x_buf: vec![0.0_f64; species],
-        dydt_buf: vec![[F64x2::ZERO; NUM_RVS]; species],
-    };
+    let mut step_buf = OneZoneStepBuf::new(species);
     let mut dens_dfdy = vec![0.0_f64; nvar * nvar];
     let mut dmat = vec![0.0_f64; nvar * nvar];
 
@@ -140,18 +127,9 @@ pub fn burn_1_zone_const_density(
                      y: &mut [f64],
                      f_out: Option<&mut [f64]>,
                      dfdy_out: Option<&mut [f64]>,
-                     buf: &mut StepBuf|
+                     buf: &mut OneZoneStepBuf|
      -> Result<(), NetError> {
-        for i in 0..species {
-            if is_bad(y[i]) {
-                return Err(NetError::IntegrationError(format!(
-                    "bad y[{i}]={} at time={time}",
-                    y[i]
-                )));
-            }
-            y[i] = y[i].clamp(1.0e-30, 1.0);
-            buf.x_buf[i] = y[i] * aion[i];
-        }
+        unpack_clamped_molar_y(time, y, &aion, &mut buf.x_buf)?;
         if is_bad(y[species]) {
             return Err(NetError::IntegrationError(format!(
                 "bad lnT={} at time={time}",
@@ -269,23 +247,21 @@ pub fn burn_1_zone_const_density(
         },
     )?;
 
-    let mut ending_x = vec![0.0_f64; species];
-    let mut burn_ergs = 0.0_f64;
-    for i in 0..species {
-        ending_x[i] = ending_y[i] * aion[i];
-        let dx = ending_x[i] - save_x[i];
-        let cid = g.chem_id[i];
-        let q_iso = nuclides.get_q(cid).unwrap_or(0.0);
-        burn_ergs += q_iso * dx / aion[i];
-    }
-    burn_ergs *= QCONV;
     let (eps_nuc_categories, eps_neu_total) =
         step_buf.last_eval.ok_or_else(|| {
             NetError::IntegrationError(
                 "no eval_net result in burn_1_zone_const_density".to_string(),
             )
         })?;
-    let avg_eps_nuc = burn_ergs / (stopp - start) - eps_neu_total;
+    let (ending_x, avg_eps_nuc) = compute_post_burn_energetics(
+        nuclides,
+        &g.chem_id,
+        &aion,
+        input.starting_x,
+        &ending_y,
+        stopp - start,
+        eps_neu_total,
+    );
     let ending_log10_t = ending_y[species] / LN10;
 
     Ok(BurnConstDensityOutput {
@@ -307,6 +283,7 @@ mod tests {
     use flexmesa_eos::I_LN_E;
 
     use super::*;
+    use crate::{F64x2, NUM_RVS};
 
     #[test]
     fn test_burn_1_zone_const_density_first_law_energy_and_jacobian_parity() {

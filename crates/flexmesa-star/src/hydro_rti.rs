@@ -33,15 +33,12 @@ pub fn set_dpdr_drhodr_info(model: &mut StarModel) {
         return;
     }
 
-    let mut p_face = vec![0.0_f64; nz];
-    let mut rho_face = vec![0.0_f64; nz];
-    p_face[0] = model.peos[0];
-    rho_face[0] = model.rho[0];
-    for k in 1..nz {
-        let (alfa, beta) = model.get_face_weights(k);
-        p_face[k] = alfa * model.peos[k] + beta * model.peos[k - 1];
-        rho_face[k] = alfa * model.rho[k] + beta * model.rho[k - 1];
-    }
+    let p_face: Vec<f64> = (0..nz)
+        .map(|k| model.interp_val_to_pt(&model.peos, k))
+        .collect();
+    let rho_face: Vec<f64> = (0..nz)
+        .map(|k| model.interp_val_to_pt(&model.rho, k))
+        .collect();
 
     let min_mach = model.controls.alpha_rti_src_min_v_div_cs;
     let mut dpdr = vec![0.0_f64; nz];
@@ -179,7 +176,7 @@ pub fn set_rti_mixing_info(model: &mut StarModel) {
         let eta_k = c_base * alpha_face * cs_face * model.r[k];
         model.aux.eta_rti[k] = eta_k;
 
-        let rho_f = alfa * model.rho[k] + beta * model.rho[k - 1];
+        let rho_f = model.interp_val_to_pt(&model.rho, k);
         let area_rho = FOUR_PI * model.r[k] * model.r[k] * rho_f;
         let dm_bar_k = model.dm_bar[k].max(1.0e-30);
         let mut sig_k = mix_fac * eta_k * (area_rho * area_rho) / dm_bar_k;

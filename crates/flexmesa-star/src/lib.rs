@@ -101,6 +101,7 @@ pub mod pulse_utils;
 pub mod relax;
 pub mod riemann;
 pub mod riemann_ad;
+pub mod riemann_eqns;
 pub mod rotation;
 pub mod rsp2;
 pub mod rsp2_ad;

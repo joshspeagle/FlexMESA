@@ -16,6 +16,7 @@ use flexmesa_num::RosenbrockVariant;
 use flexmesa_rates::ScreeningMode;
 use flexmesa_utils::is_bad;
 
+use crate::burn::collect_aion;
 use crate::burn_stepper::tableau_for;
 use crate::derivs::{eval_net_with_work, with_thread_local_work};
 use crate::f64x2::F64x2;
@@ -112,14 +113,7 @@ pub fn burn_1_zone_const_p(
     y[num_isos] = input.starting_temp.ln();
 
     let nuclides = NuclideCatalog::builtin_ref();
-    let mut aion = vec![0.0_f64; num_isos];
-    for i in 0..num_isos {
-        let cid = g.chem_id[i];
-        let nuc = nuclides.get_by_id(cid).ok_or_else(|| {
-            NetError::InvalidReactionOrIso(format!("unknown cid {cid}"))
-        })?;
-        aion[i] = nuc.z_plus_n as f64;
-    }
+    let aion = collect_aion(nuclides, &g.chem_id)?;
     let mut x_buf = vec![0.0_f64; num_isos];
     let mut dydt_buf = vec![[F64x2::ZERO; NUM_RVS]; num_isos];
 

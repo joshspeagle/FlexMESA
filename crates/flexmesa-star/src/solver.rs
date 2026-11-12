@@ -11,8 +11,11 @@
 use flexmesa_mtx::{solve_block_tridiag_bcyclic, solve_block_tridiagonal};
 
 use crate::controls::StarError;
-use crate::hydro_eqns::{eval_henyey_equations, HenyeySystem};
+use crate::hydro_eqns::{eval_henyey_equations_into, HenyeySystem};
 use crate::model::StarModel;
+use crate::solver_norms::{
+    active_gold_level, active_solver_tolerances_with_gold,
+};
 pub use crate::solver_norms::{
     active_solver_tolerances, compute_correction_norms,
     compute_model_correction_norms, compute_residual_norms,
@@ -174,15 +177,17 @@ fn normalize_species_fractions(model: &mut StarModel) {
 fn solve_linear_henyey_system(
     sys: &HenyeySystem,
     use_bcyclic: bool,
+    rhs_buf: &mut Vec<f64>,
 ) -> Result<Vec<f64>, StarError> {
-    let rhs: Vec<f64> = sys.equ.iter().map(|&r| -r).collect();
+    rhs_buf.clear();
+    rhs_buf.extend(sys.equ.iter().map(|&r| -r));
     let res = if use_bcyclic && sys.nz >= 2 {
         solve_block_tridiag_bcyclic(
-            sys.nvar, sys.nz, &sys.lblk, &sys.dblk, &sys.ublk, &rhs, true,
+            sys.nvar, sys.nz, &sys.lblk, &sys.dblk, &sys.ublk, rhs_buf, true,
         )
     } else {
         solve_block_tridiagonal(
-            sys.nvar, sys.nz, &sys.lblk, &sys.dblk, &sys.ublk, &rhs,
+            sys.nvar, sys.nz, &sys.lblk, &sys.dblk, &sys.ublk, rhs_buf,
         )
     };
     res.map_err(|e| {
@@ -214,7 +219,8 @@ pub fn solve_henyey_step(
     use_bcyclic: bool,
 ) -> Result<HenyeySolverReport, StarError> {
     model.pack_xh();
-    let mut sys = eval_henyey_equations(model, include_chem)?;
+    let mut sys = HenyeySystem::new(0, 0, Vec::new());
+    eval_henyey_equations_into(model, include_chem, &mut sys)?;
     let (mut residual_norm, mut max_residual) =
         compute_residual_norms(model, sys.nvar, &sys.equ);
     let mut correction_norm = 0.0;
@@ -225,10 +231,14 @@ pub fn solve_henyey_step(
     let mut iter_used = 0;
     let mut xh_prev = Vec::with_capacity(model.xh.len());
     let mut xa_prev = Vec::with_capacity(model.xa.len());
+    let mut rhs_buf = Vec::with_capacity(sys.equ.len());
+    let mut trial_sys = HenyeySystem::new(0, 0, Vec::new());
+    let mut best_sys_buf = HenyeySystem::new(0, 0, Vec::new());
 
     for iter in 1..=max_iters {
         iter_used = iter;
-        let dx_scaled = solve_linear_henyey_system(&sys, use_bcyclic)?;
+        let dx_scaled =
+            solve_linear_henyey_system(&sys, use_bcyclic, &mut rhs_buf)?;
         (correction_norm, max_correction) = compute_model_correction_norms(
             model,
             sys.nz,
@@ -252,7 +262,7 @@ pub fn solve_henyey_step(
         let mut accepted_alpha = base_coeff;
         let mut step_accepted = false;
         let mut best_rnorm = f64::INFINITY;
-        let mut best_sys: Option<(f64, f64, f64, HenyeySystem)> = None;
+        let mut best_meta: Option<(f64, f64, f64)> = None;
         for _bt in 0..8 {
             apply_damped_correction(
                 model,
@@ -263,14 +273,19 @@ pub fn solve_henyey_step(
                 alpha,
                 include_chem,
             );
-            if let Ok(next_sys) = eval_henyey_equations(model, include_chem) {
-                let (next_rnorm, next_rmax) =
-                    compute_residual_norms(model, next_sys.nvar, &next_sys.equ);
+            if eval_henyey_equations_into(model, include_chem, &mut trial_sys)
+                .is_ok()
+            {
+                let (next_rnorm, next_rmax) = compute_residual_norms(
+                    model,
+                    trial_sys.nvar,
+                    &trial_sys.equ,
+                );
                 if next_rnorm.is_finite() && next_rmax.is_finite() {
                     if iter == 1
                         || next_rnorm <= 1.5 * prev_residual_norm.max(1.0e-4)
                     {
-                        sys = next_sys;
+                        std::mem::swap(&mut sys, &mut trial_sys);
                         residual_norm = next_rnorm;
                         max_residual = next_rmax;
                         accepted_alpha = alpha;
@@ -279,8 +294,8 @@ pub fn solve_henyey_step(
                     }
                     if next_rnorm < best_rnorm {
                         best_rnorm = next_rnorm;
-                        best_sys =
-                            Some((alpha, next_rnorm, next_rmax, next_sys));
+                        best_sys_buf.copy_from(&trial_sys);
+                        best_meta = Some((alpha, next_rnorm, next_rmax));
                     }
                 }
             }
@@ -288,9 +303,7 @@ pub fn solve_henyey_step(
         }
 
         if !step_accepted {
-            if let Some((best_alpha, best_rnorm, best_rmax, saved_sys)) =
-                best_sys
-            {
+            if let Some((best_alpha, best_rnorm, best_rmax)) = best_meta {
                 if best_alpha > 0.0
                     && best_rnorm < 1.0e6
                     && (best_rnorm <= prev_residual_norm * 2.0
@@ -305,7 +318,7 @@ pub fn solve_henyey_step(
                         best_alpha,
                         include_chem,
                     );
-                    sys = saved_sys;
+                    std::mem::swap(&mut sys, &mut best_sys_buf);
                     residual_norm = best_rnorm;
                     max_residual = best_rmax;
                     accepted_alpha = best_alpha;
@@ -327,7 +340,11 @@ pub fn solve_henyey_step(
         model.total_num_solver_iterations += 1;
 
         let (tol_rn, tol_mr, tol_cn, tol_mc) =
-            active_solver_tolerances(model, iter);
+            active_solver_tolerances_with_gold(
+                &model.controls,
+                active_gold_level(model),
+                iter,
+            );
         let alpha_tol = accepted_alpha.clamp(1.0e-12, 1.0);
         let pass_corr_with_coeff = correction_norm <= tol_cn * alpha_tol
             && max_correction <= tol_mc * alpha_tol;

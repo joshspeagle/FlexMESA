@@ -290,12 +290,15 @@ pub fn solve_composition_diffusion(model: &mut StarModel, dt: f64) {
         du[k] = -a_p1;
     }
 
+    let factor = ScalarTridiagFactor::factor(&dl, &d, &du);
     let mut rhs = vec![0.0; nz];
+    let mut sol = vec![0.0; nz];
+    let mut d_prime = vec![0.0; nz];
     for j in 0..species {
         for (k, r_k) in rhs.iter_mut().enumerate() {
             *r_k = model.xa[k * species + j];
         }
-        let sol = solve_scalar_tridiag(&dl, &d, &du, &rhs);
+        factor.solve_into(&dl, &rhs, &mut sol, &mut d_prime);
         for (k, &val) in sol.iter().enumerate() {
             model.xa[k * species + j] = val.clamp(0.0, 1.0);
         }
@@ -311,33 +314,51 @@ pub fn solve_composition_diffusion(model: &mut StarModel, dt: f64) {
     }
 }
 
-pub(crate) fn solve_scalar_tridiag(
-    dl: &[f64],
-    d: &[f64],
-    du: &[f64],
-    rhs: &[f64],
-) -> Vec<f64> {
-    let n = d.len();
-    if n == 0 {
-        return Vec::new();
-    }
-    let mut c_prime = vec![0.0; n];
-    let mut d_prime = vec![0.0; n];
-    let mut x = vec![0.0; n];
+pub(crate) struct ScalarTridiagFactor {
+    denom: Vec<f64>,
+    c_prime: Vec<f64>,
+}
 
-    let b0 = d[0];
-    c_prime[0] = if n > 1 { du[0] / b0 } else { 0.0 };
-    d_prime[0] = rhs[0] / b0;
-    for i in 1..n {
-        let denom = d[i] - dl[i] * c_prime[i - 1];
-        c_prime[i] = if i + 1 < n { du[i] / denom } else { 0.0 };
-        d_prime[i] = (rhs[i] - dl[i] * d_prime[i - 1]) / denom;
+impl ScalarTridiagFactor {
+    pub(crate) fn factor(dl: &[f64], d: &[f64], du: &[f64]) -> Self {
+        let n = d.len();
+        if n == 0 {
+            return Self {
+                denom: Vec::new(),
+                c_prime: Vec::new(),
+            };
+        }
+        let mut denom = vec![0.0; n];
+        let mut c_prime = vec![0.0; n];
+        denom[0] = d[0];
+        c_prime[0] = if n > 1 { du[0] / denom[0] } else { 0.0 };
+        for i in 1..n {
+            denom[i] = d[i] - dl[i] * c_prime[i - 1];
+            c_prime[i] = if i + 1 < n { du[i] / denom[i] } else { 0.0 };
+        }
+        Self { denom, c_prime }
     }
-    x[n - 1] = d_prime[n - 1];
-    for i in (0..(n - 1)).rev() {
-        x[i] = d_prime[i] - c_prime[i] * x[i + 1];
+
+    pub(crate) fn solve_into(
+        &self,
+        dl: &[f64],
+        rhs: &[f64],
+        x: &mut [f64],
+        d_prime: &mut [f64],
+    ) {
+        let n = self.denom.len();
+        if n == 0 {
+            return;
+        }
+        d_prime[0] = rhs[0] / self.denom[0];
+        for i in 1..n {
+            d_prime[i] = (rhs[i] - dl[i] * d_prime[i - 1]) / self.denom[i];
+        }
+        x[n - 1] = d_prime[n - 1];
+        for i in (0..(n - 1)).rev() {
+            x[i] = d_prime[i] - self.c_prime[i] * x[i + 1];
+        }
     }
-    x
 }
 
 /// Solves rotational angular momentum transport (`do_solve_omega_mix` in
@@ -402,8 +423,11 @@ pub fn solve_omega_mix(
         du[k] = -f_k * c_00;
     }
 
+    let factor = ScalarTridiagFactor::factor(&dl, &d, &du);
+    let mut rhs = vec![0.0; nz];
+    let mut d_omega = vec![0.0; nz];
+    let mut d_prime = vec![0.0; nz];
     for _ in 0..steps {
-        let mut rhs = vec![0.0; nz];
         for (k, r_k) in rhs.iter_mut().enumerate() {
             let denom = (model.dm_bar[k] * i_rot[k]).max(1.0e-99);
             let f_k = dt_sub / denom;
@@ -419,7 +443,7 @@ pub fn solve_omega_mix(
             };
             *r_k = f_k * (torque_m1 - torque_00);
         }
-        let d_omega = solve_scalar_tridiag(&dl, &d, &du, &rhs);
+        factor.solve_into(&dl, &rhs, &mut d_omega, &mut d_prime);
         for (k, &dw) in d_omega.iter().enumerate() {
             model.omega[k] += dw;
         }
@@ -456,6 +480,43 @@ pub(crate) fn refresh_mixing_state(
     }
 }
 
+fn run_struct_burn_mix_core(
+    model: &mut StarModel,
+    dt: f64,
+    op_split_burn: bool,
+    do_burn: bool,
+    do_mix: bool,
+    use_bcyclic: bool,
+    overshoot_configs: &[OvershootConfig],
+) -> Result<HenyeySolverReport, StarError> {
+    if op_split_burn && do_burn {
+        let e_before: f64 =
+            (0..model.nz).map(|k| model.energy[k] * model.dm[k]).sum();
+        op_split_burn_zones(model, dt)?;
+        set_basic_vars(model)?;
+        do_eos(model)?;
+        do_kap(model)?;
+        let e_after: f64 =
+            (0..model.nz).map(|k| model.energy[k] * model.dm[k]).sum();
+        model.aux.non_epsnuc_energy_change_from_split_burn = e_after - e_before;
+    }
+
+    if do_mix {
+        refresh_mixing_state(model, dt, overshoot_configs);
+    } else {
+        model.sig.fill(0.0);
+    }
+
+    if model.controls.rsp2_flag {
+        crate::rsp2_eqns::rsp2_adjust_vars_before_call_solver(model);
+        model.pack_xh();
+    }
+    model.save_start_values();
+
+    let do_chem = (do_burn || do_mix) && model.species > 0;
+    solve_henyey_step(model, do_chem, use_bcyclic)
+}
+
 /// Executes a full structure + nuclear burn + convective mixing step
 /// (`do_struct_burn_mix` in `star/private/struct_burn_mix.f90:33-224`).
 ///
@@ -486,36 +547,15 @@ pub fn do_struct_burn_mix(
         model.controls.do_burn && model.controls.dxdt_nuc_factor > 0.0;
     let do_mix = model.controls.do_mix && model.controls.mix_factor > 0.0;
 
-    let step_res: Result<HenyeySolverReport, StarError> = (|| {
-        if op_split_burn && do_burn {
-            let e_before: f64 =
-                (0..model.nz).map(|k| model.energy[k] * model.dm[k]).sum();
-            op_split_burn_zones(model, dt)?;
-            set_basic_vars(model)?;
-            do_eos(model)?;
-            do_kap(model)?;
-            let e_after: f64 =
-                (0..model.nz).map(|k| model.energy[k] * model.dm[k]).sum();
-            model.aux.non_epsnuc_energy_change_from_split_burn =
-                e_after - e_before;
-        }
-
-        if do_mix {
-            refresh_mixing_state(model, dt, overshoot_configs);
-        } else {
-            model.sig.fill(0.0);
-        }
-
-        if model.controls.rsp2_flag {
-            crate::rsp2_eqns::rsp2_adjust_vars_before_call_solver(model);
-            model.pack_xh();
-        }
-        model.save_start_values();
-
-        let do_chem = (do_burn || do_mix) && model.species > 0;
-        let rep = solve_henyey_step(model, do_chem, use_bcyclic)?;
-        Ok(rep)
-    })();
+    let step_res = run_struct_burn_mix_core(
+        model,
+        dt,
+        op_split_burn,
+        do_burn,
+        do_mix,
+        use_bcyclic,
+        overshoot_configs,
+    );
 
     model.aux.doing_struct_burn_mix = false;
     let report = match step_res {

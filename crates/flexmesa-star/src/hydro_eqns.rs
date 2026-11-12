@@ -14,7 +14,10 @@ use flexmesa_const::{FOUR_PI, L_SUN};
 use crate::controls::{StarError, VarLayout};
 use crate::eps_grav::eval_eps_grav;
 pub use crate::hydro_energy::do1_energy_eqn;
-pub use crate::hydro_momentum::{do1_momentum_eqn, do1_radius_eqn};
+pub use crate::hydro_momentum::{
+    do1_momentum_eqn, do1_radius_eqn, eval_surf_momentum_bc_pressure_ad,
+    has_surf_momentum_bc,
+};
 pub use crate::hydro_temperature::do1_temperature_eqn;
 use crate::hydro_vars::set_hydro_vars;
 use crate::model::StarModel;
@@ -123,62 +126,52 @@ impl HenyeySystem {
     ) {
         self.equ[k * self.nvar + i_equ] = resid.val;
         let slots = [
-            (layout.i_lnd, I_LND_M1, I_LND_00, I_LND_P1),
-            (layout.i_lnt, I_LNT_M1, I_LNT_00, I_LNT_P1),
-            (layout.i_lnr, I_LNR_M1, I_LNR_00, I_LNR_P1),
-            (layout.i_lum, I_L_M1, I_L_00, I_L_P1),
+            (Some(layout.i_lnd), I_LND_M1, I_LND_00, I_LND_P1),
+            (Some(layout.i_lnt), I_LNT_M1, I_LNT_00, I_LNT_P1),
+            (Some(layout.i_lnr), I_LNR_M1, I_LNR_00, I_LNR_P1),
+            (Some(layout.i_lum), I_L_M1, I_L_00, I_L_P1),
+            (layout.i_v.or(layout.i_u), I_V_M1, I_V_00, I_V_P1),
+            (layout.i_w, I_W_M1, I_W_00, I_W_P1),
+            (layout.i_hp, I_HP_M1, I_HP_00, I_HP_P1),
         ];
-        for (j_var, m1_slot, d0_slot, p1_slot) in slots {
-            self.add_stencil_partials(
-                k,
-                i_equ,
-                j_var,
-                resid.d1[m1_slot],
-                resid.d1[d0_slot],
-                resid.d1[p1_slot],
-            );
+        for (j_opt, m1_slot, d0_slot, p1_slot) in slots {
+            if let Some(j_var) = j_opt {
+                self.add_stencil_partials(
+                    k,
+                    i_equ,
+                    j_var,
+                    resid.d1[m1_slot],
+                    resid.d1[d0_slot],
+                    resid.d1[p1_slot],
+                );
+            }
         }
-        if let Some(iv) = layout.i_v.or(layout.i_u) {
-            self.add_stencil_partials(
-                k,
-                i_equ,
-                iv,
-                resid.d1[I_V_M1],
-                resid.d1[I_V_00],
-                resid.d1[I_V_P1],
-            );
-        }
-        if let Some(iw) = layout.i_w {
-            self.add_stencil_partials(
-                k,
-                i_equ,
-                iw,
-                resid.d1[I_W_M1],
-                resid.d1[I_W_00],
-                resid.d1[I_W_P1],
-            );
-        }
-        if let Some(ihp) = layout.i_hp {
-            self.add_stencil_partials(
-                k,
-                i_equ,
-                ihp,
-                resid.d1[I_HP_M1],
-                resid.d1[I_HP_00],
-                resid.d1[I_HP_P1],
-            );
-        }
+    }
+    /// Copies `other` into `self`, reusing allocated capacities across Newton
+    /// backtracking evaluations.
+    pub fn copy_from(&mut self, other: &Self) {
+        self.nvar = other.nvar;
+        self.nz = other.nz;
+        self.x_scale.clone_from(&other.x_scale);
+        self.equ.clone_from(&other.equ);
+        self.lblk.clone_from(&other.lblk);
+        self.dblk.clone_from(&other.dblk);
+        self.ublk.clone_from(&other.ublk);
     }
 }
 
-/// Computes the per-zone variable scaling vector `x_scale` (`set_xscale_info`
-/// in `star/private/solver_support.f90:312-363`).
-#[must_use]
-pub fn compute_x_scale(model: &StarModel, include_chem: bool) -> Vec<f64> {
+/// Populates the per-zone variable scaling vector `x_scale` in place
+/// (`set_xscale_info` in `star/private/solver_support.f90:312-363`).
+pub fn compute_x_scale_into(
+    model: &StarModel,
+    include_chem: bool,
+    x_scale: &mut Vec<f64>,
+) {
     let nz = model.nz;
     let layout = &model.layout;
     let nvar = layout.nvar(include_chem);
-    let mut x_scale = vec![1.0; nz * nvar];
+    x_scale.clear();
+    x_scale.resize(nz * nvar, 1.0);
 
     let max_abs_l = model
         .lum_start
@@ -228,6 +221,14 @@ pub fn compute_x_scale(model: &StarModel, include_chem: bool) -> Vec<f64> {
             }
         }
     }
+}
+
+/// Computes the per-zone variable scaling vector `x_scale` (`set_xscale_info`
+/// in `star/private/solver_support.f90:312-363`).
+#[must_use]
+pub fn compute_x_scale(model: &StarModel, include_chem: bool) -> Vec<f64> {
+    let mut x_scale = Vec::new();
+    compute_x_scale_into(model, include_chem, &mut x_scale);
     x_scale
 }
 
@@ -298,9 +299,6 @@ pub fn do_surf_bc_eqns(model: &StarModel, sys: &mut HenyeySystem) {
             / r_0.pow4()
     };
 
-    let use_surf_momentum_bc = model.controls.use_momentum_outer_bc
-        || model.controls.use_zero_pgas_outer_bc
-        || model.controls.use_fixed_psurf_outer_bc;
     if model.controls.use_compression_outer_bc && model.nz >= 2 {
         let lnd_0 = StarAdOrder1::variable(model.lnd[0], I_LND_00);
         let lnd_1 = StarAdOrder1::variable(model.lnd[1], I_LND_P1);
@@ -331,7 +329,7 @@ pub fn do_surf_bc_eqns(model: &StarModel, sys: &mut HenyeySystem) {
             .max(1.0);
         let resid_v = (vsurf - model.controls.fixed_vsurf) / cs_0;
         sys.save_eqn_residual(&model.layout, 0, model.layout.i_dv_dt, &resid_v);
-    } else if !use_surf_momentum_bc {
+    } else if !has_surf_momentum_bc(&model.controls) {
         let p_surf = model.ln_peos_surf_ad.exp();
         let ln_p_bc = (p_surf + dp_0).max(StarAdOrder1::constant(1.0e-30)).ln();
         let ln_peos_0 = model.ln_peos_ad[0];
@@ -500,7 +498,7 @@ pub fn assemble_henyey_system(
         .sum();
     sys.nvar = nvar;
     sys.nz = nz;
-    sys.x_scale = compute_x_scale(model, include_chem);
+    compute_x_scale_into(model, include_chem, &mut sys.x_scale);
     sys.equ.clear();
     sys.equ.resize(nz * nvar, 0.0);
     let blk_len = nz * nvar * nvar;
@@ -512,31 +510,12 @@ pub fn assemble_henyey_system(
     sys.ublk.resize(blk_len, 0.0);
 
     do_surf_bc_eqns(model, sys);
-    let riemann_p_surf = if model.controls.u_flag
+    let riemann_p_surf = (model.controls.u_flag
         && !model.controls.v_flag
         && !model.controls.use_compression_outer_bc
         && !model.controls.use_fixed_vsurf_outer_bc
-    {
-        if model.controls.use_zero_pgas_outer_bc {
-            let t_s0 = model
-                .ln_t_start
-                .first()
-                .copied()
-                .unwrap_or_else(|| model.ln_t.first().copied().unwrap_or(0.0))
-                .exp();
-            Some(StarAdOrder1::constant(
-                (flexmesa_const::CRAD / 3.0) * t_s0.powi(4),
-            ))
-        } else if model.controls.use_fixed_psurf_outer_bc {
-            Some(StarAdOrder1::constant(model.controls.fixed_psurf))
-        } else if model.controls.use_momentum_outer_bc {
-            Some(model.ln_peos_surf_ad.exp())
-        } else {
-            None
-        }
-    } else {
-        None
-    };
+        && has_surf_momentum_bc(&model.controls))
+    .then(|| eval_surf_momentum_bc_pressure_ad(model));
 
     for k in 0..nz {
         do1_density_eqn(model, k, sys)?;
@@ -570,8 +549,23 @@ pub fn assemble_henyey_system(
 
 /// Evaluates microphysics (`set_hydro_vars`), gravitational energy generation
 /// (`eval_eps_grav`), and all coupled 1D Henyey residual equations and scaled
-/// block-tridiagonal Jacobian blocks (`eval_equations` in
+/// block-tridiagonal Jacobian blocks in place into `sys` (`eval_equations` in
 /// `star/private/hydro_eqns.f90:91-265`).
+///
+/// # Errors
+/// Returns [`StarError`] if microphysics or volume equation evaluation fails.
+pub fn eval_henyey_equations_into(
+    model: &mut StarModel,
+    include_chem: bool,
+    sys: &mut HenyeySystem,
+) -> Result<(), StarError> {
+    set_hydro_vars(model, false, !include_chem)?;
+    eval_eps_grav(model);
+    assemble_henyey_system(model, include_chem, sys)
+}
+
+/// Evaluates microphysics (`set_hydro_vars`), gravitational energy generation
+/// (`eval_eps_grav`), and returns a newly allocated [`HenyeySystem`].
 ///
 /// # Errors
 /// Returns [`StarError`] if microphysics or volume equation evaluation fails.
@@ -579,9 +573,7 @@ pub fn eval_henyey_equations(
     model: &mut StarModel,
     include_chem: bool,
 ) -> Result<HenyeySystem, StarError> {
-    set_hydro_vars(model, false, !include_chem)?;
-    eval_eps_grav(model);
     let mut sys = HenyeySystem::new(0, 0, Vec::new());
-    assemble_henyey_system(model, include_chem, &mut sys)?;
+    eval_henyey_equations_into(model, include_chem, &mut sys)?;
     Ok(sys)
 }

@@ -5,7 +5,7 @@
 //! `u_flag` hydrodynamics (`star/private/hydro_energy.f90:582-902` and
 //! `star/private/star_utils.f90:2197-2338`).
 
-use flexmesa_const::{FOUR_PI, LN10};
+use flexmesa_const::FOUR_PI;
 
 use crate::hydro_energy::{eval_face_area_time_centered_ad, eval_pvsc_cell_ad};
 use crate::model::StarModel;
@@ -158,15 +158,8 @@ pub fn eval1_work_v_flag_ad(
     } else {
         (1.0, 0.0)
     };
-    let logt_f = model.ln_t[f_idx] / LN10;
-    let inc_p_tc = vel_tc
-        && model.controls.include_p_in_velocity_time_centering
-        && logt_f
-            <= model
-                .controls
-                .max_logt_for_include_p_and_l_in_velocity_time_centering;
-    let p_theta = if inc_p_tc {
-        model.controls.p_theta_for_velocity_time_centering
+    let p_theta = if vel_tc {
+        crate::hydro_momentum::eval_p_theta(model, f_idx)
     } else {
         1.0
     };
@@ -318,16 +311,8 @@ pub fn eval_v_flag_simple_pdv_dm_ad(
             p_tot_ad + crate::rsp2_ad::eval_rsp2_ptrb_cell_ad(model, k, false);
     }
     if k > 0 && model.controls.mlt_pturb_factor > 0.0 {
-        let vc_old = model.aux.mlt_vc_old.get(k).copied().unwrap_or(0.0);
-        if vc_old > 0.0 {
-            let rho_00 = StarAdOrder1::variable(model.lnd[k], I_LND_00).exp();
-            p_tot_ad = p_tot_ad
-                + rho_00
-                    * ((1.0 / 3.0)
-                        * model.controls.mlt_pturb_factor
-                        * vc_old
-                        * vc_old);
-        }
+        p_tot_ad = p_tot_ad
+            + crate::hydro_momentum::eval_mlt_pturb_cell_ad(model, k, false);
     }
     let fac_dm_dxa00 = if skip_peos {
         0.0

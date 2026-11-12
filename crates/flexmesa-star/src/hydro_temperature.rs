@@ -23,15 +23,14 @@
 
 use flexmesa_const::{CLIGHT, CRAD, FOUR_PI, L_SUN};
 
-use crate::hydro_energy::eval_face_area_time_centered_ad;
 use crate::hydro_eqns::HenyeySystem;
 use crate::hydro_momentum::{
-    eval_cell_peos_time_centered_ad, expected_hse_grav_term,
+    eval_cell_peos_time_centered_ad, eval_mlt_pturb_cell_ad,
+    expected_hse_grav_term,
 };
 use crate::model::StarModel;
 use crate::star_ad::{
-    StarAdExt, StarAdOrder1, I_LND_00, I_LND_M1, I_LNR_00, I_LNT_00, I_LNT_M1,
-    I_L_00,
+    StarAdExt, StarAdOrder1, I_LNR_00, I_LNT_00, I_LNT_M1, I_L_00,
 };
 
 /// Evaluates face-interpolated total pressure $P_{\mathrm{point},k}$ at
@@ -43,18 +42,8 @@ pub fn interp_p_point_ad(model: &StarModel, k: usize) -> StarAdOrder1 {
     let (mut p_00, _) = eval_cell_peos_time_centered_ad(model, k, false);
     let (mut p_m1, _) = eval_cell_peos_time_centered_ad(model, k - 1, true);
     if model.controls.mlt_pturb_factor > 0.0 {
-        let fac = (1.0 / 3.0) * model.controls.mlt_pturb_factor;
-        let vc_00 = model.aux.mlt_vc_old.get(k).copied().unwrap_or(0.0);
-        let vc_m1 = model.aux.mlt_vc_old.get(k - 1).copied().unwrap_or(0.0);
-        if vc_00 > 0.0 {
-            let rho_00 = StarAdOrder1::variable(model.lnd[k], I_LND_00).exp();
-            p_00 = p_00 + rho_00 * (fac * vc_00 * vc_00);
-        }
-        if vc_m1 > 0.0 {
-            let rho_m1 =
-                StarAdOrder1::variable(model.lnd[k - 1], I_LND_M1).exp();
-            p_m1 = p_m1 + rho_m1 * (fac * vc_m1 * vc_m1);
-        }
+        p_00 = p_00 + eval_mlt_pturb_cell_ad(model, k, false);
+        p_m1 = p_m1 + eval_mlt_pturb_cell_ad(model, k - 1, true);
     }
     p_00 * alfa + p_m1 * beta
 }
@@ -185,22 +174,8 @@ pub fn do1_temperature_eqn(
 
     let (alfa, beta) = model.get_face_weights(k);
     let p_point = interp_p_point_ad(model, k);
-    let lnr_k = StarAdOrder1::variable(model.ln_r[k], I_LNR_00);
-    let r_k = lnr_k.exp();
-    let using_v_tc =
-        model.controls.is_velocity_time_centered(model.model_number)
-            && (model.controls.v_flag || model.controls.u_flag)
-            && model.dt > 0.0
-            && !model.ln_r_start.is_empty();
-    let lnr_start_k = model.ln_r_start.get(k).copied().unwrap_or(model.ln_r[k]);
-    let r2 = if using_v_tc {
-        let r_start = lnr_start_k.exp().max(1.0);
-        (r_k * r_start).max(StarAdOrder1::ONE)
-    } else {
-        (r_k * r_k).max(StarAdOrder1::ONE)
-    };
-    let area = eval_face_area_time_centered_ad(lnr_k, lnr_start_k, using_v_tc)
-        .max(StarAdOrder1::ONE);
+    let (r2, area) =
+        crate::hydro_momentum::eval_time_centered_hse_geom_ad(model, k);
     let g_hse = expected_hse_grav_term(model, k, r2);
     let dlnp_dm_qhse = g_hse / (area * p_point);
     let dm_k = 0.5 * (model.dm[k - 1] + model.dm[k]);

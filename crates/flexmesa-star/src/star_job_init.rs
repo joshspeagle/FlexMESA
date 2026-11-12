@@ -143,10 +143,16 @@ pub fn init_or_update_model_from_bundle(
         controls.initial_mass > 15.8 || controls.initial_mass < 0.51;
     let is_pulse_mod_case = case_name.starts_with("gyre_in_mesa_")
         || matches!(case_name, "astero_gyre" | "astero_adipls");
+    let is_pulsation_env_mod = crate::tier4_extras::is_tier4_case(case_name)
+        && job.load_saved_model
+        && !job.saved_model_name.is_empty()
+        && controls.use_dprad_dm_form_of_t_gradient_eqn
+        && controls.use_momentum_outer_bc
+        && controls.eps_nuc_factor == 0.0;
     let is_rsp2_mod_case = controls.rsp2_flag
         || (controls.rsp2.change_rsp2_flag && controls.rsp2.new_rsp2_flag)
         || case_name.starts_with("dev_rsp2_")
-        || case_name == "dev_compare_Cepheid_RSP2_TDC";
+        || is_pulsation_env_mod;
     let is_tier2_or_3 = crate::tier2_extras::is_tier2_case(case_name)
         || crate::tier3_extras::is_tier3_case(case_name)
         || crate::tier4_extras::is_tier4_case(case_name)

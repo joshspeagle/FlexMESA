@@ -11,7 +11,7 @@ use flexmesa_ionization::eval_typical_charge;
 use flexmesa_mtx::solve_dense;
 
 use crate::model::StarModel;
-use crate::struct_burn_mix::solve_scalar_tridiag;
+use crate::struct_burn_mix::ScalarTridiagFactor;
 
 /// Collision-integral formulation for multi-species Burgers diffusion
 /// (`diffusion_use_paquette`, `diffusion_use_stanton_murillo`,
@@ -534,12 +534,15 @@ pub fn do_element_diffusion(
             }
         }
 
+        let factor = ScalarTridiagFactor::factor(&dl, &dd, &du);
         let mut rhs = vec![0.0; nz];
+        let mut sol = vec![0.0; nz];
+        let mut d_prime = vec![0.0; nz];
         for j in 0..nc {
             for k in 0..nz {
                 rhs[k] = model.xa[k * nc + j] + adv_rhs[k * nc + j];
             }
-            let sol = solve_scalar_tridiag(&dl, &dd, &du, &rhs);
+            factor.solve_into(&dl, &rhs, &mut sol, &mut d_prime);
             for k in 0..nz {
                 model.xa[k * nc + j] = sol[k];
             }

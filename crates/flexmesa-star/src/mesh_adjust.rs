@@ -239,6 +239,7 @@ pub fn remap_onto_dq(
     let v_old = model.v.clone();
     let u_old = model.u.clone();
     let omega_old = model.omega.clone();
+    let alpha_rti_old = model.aux.alpha_rti.clone();
 
     model.resize_zones(nz_new);
     model.dq.copy_from_slice(dq_new);
@@ -264,6 +265,7 @@ pub fn remap_onto_dq(
         let mut v_acc = 0.0;
         let mut u_acc = 0.0;
         let mut omega_acc = 0.0;
+        let mut alpha_rti_acc = 0.0;
 
         while kk_start + 1 < nz_old && xq_old[kk_start + 1] <= a0 {
             kk_start += 1;
@@ -286,6 +288,8 @@ pub fn remap_onto_dq(
                 v_acc += ov * v_old[kk];
                 u_acc += ov * u_old[kk];
                 omega_acc += ov * omega_old[kk];
+                alpha_rti_acc +=
+                    ov * alpha_rti_old.get(kk).copied().unwrap_or(0.0);
             }
         }
         let mut sum_x = 0.0;
@@ -306,6 +310,9 @@ pub fn remap_onto_dq(
         model.v[k] = v_acc / dx;
         model.u[k] = u_acc / dx;
         model.omega[k] = omega_acc / dx;
+        let a_remapped = alpha_rti_acc / dx;
+        model.aux.alpha_rti[k] =
+            if a_remapped < 0.0 { 0.0 } else { a_remapped };
     }
 
     model.reconstruct_ln_r_from_lnd_and_dm();

@@ -8,9 +8,10 @@ use std::sync::{Arc, Mutex, OnceLock};
 use flexmesa_chem::NuclideCatalog;
 use flexmesa_eos::{EosConfig, HelmTable};
 use flexmesa_net::{
-    builtin_net_files, burn_1_zone, burn_1_zone_const_p, eval_net_with_work,
-    net_get, with_thread_local_work, Burn1ZoneInput, BurnConstPInput, F64x2,
-    NetError, NetGeneralInfo, NUM_RVS,
+    builtin_net_files, burn_1_zone, burn_1_zone_const_density,
+    burn_1_zone_const_p, eval_net_with_work, net_get, with_thread_local_work,
+    Burn1ZoneInput, BurnConstDensityInput, BurnConstPInput, F64x2, NetError,
+    NetGeneralInfo, NUM_RVS,
 };
 use flexmesa_num::RosenbrockVariant;
 use flexmesa_rates::ScreeningMode;
@@ -262,6 +263,79 @@ pub fn net_burn_1_zone<'py>(
     ))
 }
 
+/// Integrates a constant-density variable-temperature one-zone burn
+/// (`burn_1_zone_const_density`).
+#[pyfunction]
+#[pyo3(signature = (
+    net_name, t_start, t_end, starting_x, starting_log10_t, log10_rho,
+    rate_factors=None, weak_rate_factor=1.0, screening_mode="extended",
+    stptry_in=0.0, max_steps=10000, eps=1.0e-5, odescal=1.0e-5
+))]
+pub fn net_burn_1_zone_const_density<'py>(
+    py: Python<'py>,
+    net_name: &str,
+    t_start: f64,
+    t_end: f64,
+    starting_x: PyReadonlyArray1<'py, f64>,
+    starting_log10_t: f64,
+    log10_rho: f64,
+    rate_factors: Option<PyReadonlyArray1<'py, f64>>,
+    weak_rate_factor: f64,
+    screening_mode: &str,
+    stptry_in: f64,
+    max_steps: usize,
+    eps: f64,
+    odescal: f64,
+) -> PyResult<(
+    Bound<'py, PyArray1<f64>>,
+    f64,
+    Bound<'py, PyArray1<f64>>,
+    f64,
+    f64,
+    usize,
+    usize,
+    usize,
+    usize,
+    usize,
+)> {
+    let g = cached_net(net_name)?;
+    let sc = parse_screening(screening_mode)?;
+    let rf_vec = match rate_factors {
+        Some(rf) => rf.as_slice()?.to_vec(),
+        None => vec![1.0; g.num_reactions],
+    };
+    let input = BurnConstDensityInput {
+        t_start,
+        t_end,
+        starting_x: starting_x.as_slice()?,
+        starting_log10_t,
+        log10_rho,
+        rate_factors: &rf_vec,
+        weak_rate_factor,
+        screening_mode: sc,
+        stptry_in,
+        max_steps,
+        eps,
+        odescal,
+    };
+    let ht = HelmTable::builtin();
+    let eos_cfg = EosConfig::default();
+    let out = burn_1_zone_const_density(&g, ht, &eos_cfg, &input)
+        .map_err(to_py_err)?;
+    Ok((
+        PyArray1::from_vec(py, out.ending_x),
+        out.ending_log10_t,
+        PyArray1::from_slice(py, &out.eps_nuc_categories),
+        out.avg_eps_nuc,
+        out.eps_neu_total,
+        out.nfcn,
+        out.njac,
+        out.nstep,
+        out.naccpt,
+        out.nrejct,
+    ))
+}
+
 /// Integrates a constant-pressure one-zone burn (`burn_1_zone_const_p`).
 #[pyfunction]
 #[pyo3(signature = (
@@ -449,6 +523,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(net_eval, m)?)?;
     m.add_function(wrap_pyfunction!(net_eval_zones, m)?)?;
     m.add_function(wrap_pyfunction!(net_burn_1_zone, m)?)?;
+    m.add_function(wrap_pyfunction!(net_burn_1_zone_const_density, m)?)?;
     m.add_function(wrap_pyfunction!(net_burn_1_zone_const_p, m)?)?;
     Ok(())
 }

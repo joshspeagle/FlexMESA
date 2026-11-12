@@ -481,29 +481,37 @@ pub fn do1_chem_eqns(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
     }
 }
 
-/// Evaluates microphysics (`set_hydro_vars`), gravitational energy generation
-/// (`eval_eps_grav`), and all coupled 1D Henyey residual equations and scaled
-/// block-tridiagonal Jacobian blocks (`eval_equations` in
-/// `star/private/hydro_eqns.f90:91-265`).
+/// Assembles the coupled 1D Henyey residual vector and scaled block-tridiagonal
+/// Jacobian blocks into `sys` from the current microphysical and [`StarAdOrder1`]
+/// fields on `model` without re-running `set_hydro_vars` or `eval_eps_grav`.
 ///
 /// # Errors
-/// Returns [`StarError`] if microphysics or volume equation evaluation fails.
-pub fn eval_henyey_equations(
+/// Returns [`StarError`] if the continuity volume equation encounters a
+/// non-positive trial shell volume.
+pub fn assemble_henyey_system(
     model: &mut StarModel,
     include_chem: bool,
-) -> Result<HenyeySystem, StarError> {
-    set_hydro_vars(model, false, !include_chem)?;
-    eval_eps_grav(model);
-
+    sys: &mut HenyeySystem,
+) -> Result<(), StarError> {
     let nz = model.nz;
+    let nvar = model.layout.nvar(include_chem);
     model.aux.total_internal_energy_start = (0..nz)
         .map(|k| model.energy_start[k].max(0.0) * model.dm[k])
         .sum();
-    let nvar = model.layout.nvar(include_chem);
-    let x_scale = compute_x_scale(model, include_chem);
-    let mut sys = HenyeySystem::new(nz, nvar, x_scale);
+    sys.nvar = nvar;
+    sys.nz = nz;
+    sys.x_scale = compute_x_scale(model, include_chem);
+    sys.equ.clear();
+    sys.equ.resize(nz * nvar, 0.0);
+    let blk_len = nz * nvar * nvar;
+    sys.lblk.clear();
+    sys.lblk.resize(blk_len, 0.0);
+    sys.dblk.clear();
+    sys.dblk.resize(blk_len, 0.0);
+    sys.ublk.clear();
+    sys.ublk.resize(blk_len, 0.0);
 
-    do_surf_bc_eqns(model, &mut sys);
+    do_surf_bc_eqns(model, sys);
     let riemann_p_surf = if model.controls.u_flag
         && !model.controls.v_flag
         && !model.controls.use_compression_outer_bc
@@ -531,31 +539,49 @@ pub fn eval_henyey_equations(
     };
 
     for k in 0..nz {
-        do1_density_eqn(model, k, &mut sys)?;
+        do1_density_eqn(model, k, sys)?;
         if model.controls.u_flag && !model.controls.v_flag {
             crate::riemann_ad::do1_riemann_momentum_eqn(
                 model,
                 k,
                 if k == 0 { riemann_p_surf } else { None },
-                &mut sys,
+                sys,
             );
         } else {
-            do1_momentum_eqn(model, k, &mut sys);
+            do1_momentum_eqn(model, k, sys);
         }
         if !model.controls.rsp2_flag {
-            do1_temperature_eqn(model, k, &mut sys);
+            do1_temperature_eqn(model, k, sys);
         }
-        do1_energy_eqn(model, k, include_chem, &mut sys);
-        do1_radius_eqn(model, k, &mut sys);
+        do1_energy_eqn(model, k, include_chem, sys);
+        do1_radius_eqn(model, k, sys);
         if model.controls.rti_flag {
-            crate::hydro_rti::do1_dalpha_rti_dt_eqn(model, k, &mut sys);
+            crate::hydro_rti::do1_dalpha_rti_dt_eqn(model, k, sys);
         }
         if include_chem {
-            do1_chem_eqns(model, k, &mut sys);
+            do1_chem_eqns(model, k, sys);
         }
     }
     if model.controls.rsp2_flag {
-        crate::rsp2_ad::eval_and_save_rsp2_eqns(model, &mut sys);
+        crate::rsp2_ad::eval_and_save_rsp2_eqns(model, sys);
     }
+    Ok(())
+}
+
+/// Evaluates microphysics (`set_hydro_vars`), gravitational energy generation
+/// (`eval_eps_grav`), and all coupled 1D Henyey residual equations and scaled
+/// block-tridiagonal Jacobian blocks (`eval_equations` in
+/// `star/private/hydro_eqns.f90:91-265`).
+///
+/// # Errors
+/// Returns [`StarError`] if microphysics or volume equation evaluation fails.
+pub fn eval_henyey_equations(
+    model: &mut StarModel,
+    include_chem: bool,
+) -> Result<HenyeySystem, StarError> {
+    set_hydro_vars(model, false, !include_chem)?;
+    eval_eps_grav(model);
+    let mut sys = HenyeySystem::new(0, 0, Vec::new());
+    assemble_henyey_system(model, include_chem, &mut sys)?;
     Ok(sys)
 }

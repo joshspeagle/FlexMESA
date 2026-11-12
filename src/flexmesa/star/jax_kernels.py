@@ -367,6 +367,9 @@ def eval_hydro_residuals_jax(
     r_center: float | jax.Array = 0.0,
     l_center: float | jax.Array = 0.0,
     cgrav: float | jax.Array = _G_CGS,
+    non_nuc_neu_start: jax.Array | None = None,
+    dedt_eqn_r_scale: float | jax.Array = 1.0e8,
+    use_momentum_outer_bc: bool | jax.Array = False,
 ) -> jax.Array:
     """Evaluate the 4-equation hydrostatic Henyey residual array `(nz, 4)`.
 
@@ -397,6 +400,13 @@ def eval_hydro_residuals_jax(
         r_center: Inner core radius in centimeters (`cm`).
         l_center: Inner core luminosity in `erg s^-1`.
         cgrav: Gravitational constant (`cm^3 g^-1 s^-2`).
+        non_nuc_neu_start: Optional start-of-step cell thermal neutrino loss
+            rate of shape `(nz,)` (`erg g^-1 s^-1`) for trapezoidal
+            time-centering `0.5 * (non_nuc_neu_start + non_nuc_neu)`.
+        dedt_eqn_r_scale: Energy equation relative cell-fraction scale cap
+            (`1.0e8` default; `<= 0` disables cell-fraction capping).
+        use_momentum_outer_bc: When `True`, zeroes the half-cell hydrostatic
+            surface pressure offset `dp_0` (`hydro_eqns.f90:479`).
 
     Returns:
         Dimensionless residual matrix `equ` of shape `(nz, 4)`.
@@ -418,8 +428,9 @@ def eval_hydro_residuals_jax(
     dr3 = (3.0 * dm / _FOUR_PI) / rho
     equ_dlnd = ln_r - jnp.log(r_p1_cubed + dr3) / 3.0
 
-    # Surface BC helper dp_0
-    dp_0 = (cgrav * m_grav[0] * dm[0] / (2.0 * _FOUR_PI)) / (r[0] ** 4)
+    # Surface BC dp_0 (`hydro_eqns.f90:479`: zeroed for momentum outer BC)
+    dp_0_hse = (cgrav * m_grav[0] * dm[0] / (2.0 * _FOUR_PI)) / (r[0] ** 4)
+    dp_0 = jnp.where(use_momentum_outer_bc, 0.0, dp_0_hse)
     p_surf = jnp.exp(ln_peos_surf)
     t_surf = jnp.exp(ln_t_surf)
 
@@ -455,7 +466,12 @@ def eval_hydro_residuals_jax(
         [lum[1:], jnp.asarray([l_center], dtype=lum.dtype)]
     )
     dl_dm = (lum - lum_p1) / dm
-    sources = eps_nuc - non_nuc_neu + eps_mdot
+    neu_eff = (
+        non_nuc_neu
+        if non_nuc_neu_start is None
+        else 0.5 * (non_nuc_neu_start + non_nuc_neu)
+    )
+    sources = eps_nuc - neu_eff + eps_mdot
     dt_safe = jnp.maximum(dt, 1.0e-30)
     de_dt = (energy - energy_start) / dt_safe
     pdv_dt = peos * (jnp.exp(-lnd) - jnp.exp(-lnd_start)) / dt_safe
@@ -464,8 +480,11 @@ def eval_hydro_residuals_jax(
         jnp.sum(jnp.maximum(energy_start, 0.0) * dm), 1.0e-30
     )
     cell_e_frac = (jnp.maximum(energy_start, 0.0) * dm) / total_e_start
-    base_scal = jnp.minimum(
-        jnp.where(idx == 0, 1.0e-6, 1.0), cell_e_frac * 1.0e8
+    surf_cap = jnp.where(idx == 0, 1.0e-6, 1.0)
+    base_scal = jnp.where(
+        dedt_eqn_r_scale > 0.0,
+        jnp.minimum(surf_cap, cell_e_frac * dedt_eqn_r_scale),
+        surf_cap,
     )
     scal = base_scal * dt_safe / jnp.maximum(energy_start, 1.0)
     equ_dlne = esum * scal

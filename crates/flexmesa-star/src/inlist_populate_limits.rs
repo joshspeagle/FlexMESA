@@ -22,6 +22,7 @@ impl InlistBundle {
             c.max_newton_iters = v as usize;
         }
         map_f64s!(ctrl, c, [
+            tol_residual_norm, tol_max_residual,
             tol_correction_norm, tol_max_correction,
             correction_xa_limit, xa_scale,
             min_chem_eqn_scale, dedt_eqn_r_scale,

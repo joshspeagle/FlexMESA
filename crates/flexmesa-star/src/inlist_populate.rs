@@ -353,7 +353,13 @@ impl InlistBundle {
         if let Some(v) = ctrl.get_f64("pvsc_zsh") {
             c.pvsc_zshock = v;
         }
-        if ctrl.get_i64("steps_before_use_velocity_time_centering") == Some(0) {
+        ctrl.f64_into(&mut c.gamma_ln_s_eps_grav_full_on, "gamma_lns_eps_grav_full_on");
+        ctrl.f64_into(&mut c.gamma_ln_s_eps_grav_full_off, "gamma_lns_eps_grav_full_off");
+        ctrl.isize_into(
+            &mut c.steps_before_use_velocity_time_centering,
+            "steps_before_use_velocity_time_centering",
+        );
+        if c.steps_before_use_velocity_time_centering == 0 {
             c.using_velocity_time_centering = true;
         }
         ctrl.bool_into(&mut self.job.use_other_build_initial_model, "use_other_build_initial_model");

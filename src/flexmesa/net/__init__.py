@@ -6,10 +6,12 @@ from __future__ import annotations
 from flexmesa.net import _core, _jax
 
 Burn1ZoneOutput = _core.Burn1ZoneOutput
+BurnConstDensityOutput = _core.BurnConstDensityOutput
 BurnConstPOutput = _core.BurnConstPOutput
 NetEvalOutput = _core.NetEvalOutput
 NetInfo = _core.NetInfo
 burn_1_zone = _core.burn_1_zone
+burn_1_zone_const_density = _core.burn_1_zone_const_density
 burn_1_zone_const_p = _core.burn_1_zone_const_p
 eval_net = _core.eval_net
 eval_net_jax = _jax.eval_net_jax
@@ -18,10 +20,12 @@ list_networks = _core.list_networks
 
 __all__: list[str] = [
     "Burn1ZoneOutput",
+    "BurnConstDensityOutput",
     "BurnConstPOutput",
     "NetEvalOutput",
     "NetInfo",
     "burn_1_zone",
+    "burn_1_zone_const_density",
     "burn_1_zone_const_p",
     "eval_net",
     "eval_net_jax",

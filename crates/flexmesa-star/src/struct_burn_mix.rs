@@ -152,8 +152,6 @@ pub fn op_split_burn_zones(
                         log10_rho: log_rho,
                         rate_factors: &rate_factors,
                         weak_rate_factor: 1.0,
-                        reaction_qs: &[],
-                        reaction_neu_qs: &[],
                         screening_mode,
                         stptry_in: 0.0,
                         max_steps,
@@ -449,6 +447,13 @@ pub(crate) fn refresh_mixing_state(
         apply_overshooting(model, &boundaries, overshoot_configs);
     }
     compute_convection_sigmas(model, dt, 1.0, 1.0e10);
+    if model.controls.rti_flag
+        && model.controls.do_mix
+        && model.controls.mix_factor > 0.0
+    {
+        crate::hydro_rti::set_rti_mixing_info(model);
+        crate::hydro_rti::augment_mixing_with_rti(model);
+    }
 }
 
 /// Executes a full structure + nuclear burn + convective mixing step

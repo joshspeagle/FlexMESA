@@ -23,8 +23,11 @@
 
 use flexmesa_const::{CLIGHT, CRAD, FOUR_PI, L_SUN};
 
+use crate::hydro_energy::eval_face_area_time_centered_ad;
 use crate::hydro_eqns::HenyeySystem;
-use crate::hydro_momentum::eval_cell_peos_time_centered_ad;
+use crate::hydro_momentum::{
+    eval_cell_peos_time_centered_ad, expected_hse_grav_term,
+};
 use crate::model::StarModel;
 use crate::star_ad::{
     StarAdExt, StarAdOrder1, I_LND_00, I_LND_M1, I_LNR_00, I_LNT_00, I_LNT_M1,
@@ -182,17 +185,24 @@ pub fn do1_temperature_eqn(
 
     let (alfa, beta) = model.get_face_weights(k);
     let p_point = interp_p_point_ad(model, k);
-    let fp = if model.controls.rotation_flag
-        && model.controls.use_gravity_rotation_correction
-    {
-        model.aux.fp_rot.get(k).copied().unwrap_or(1.0)
+    let lnr_k = StarAdOrder1::variable(model.ln_r[k], I_LNR_00);
+    let r_k = lnr_k.exp();
+    let using_v_tc =
+        model.controls.is_velocity_time_centered(model.model_number)
+            && (model.controls.v_flag || model.controls.u_flag)
+            && model.dt > 0.0
+            && !model.ln_r_start.is_empty();
+    let lnr_start_k = model.ln_r_start.get(k).copied().unwrap_or(model.ln_r[k]);
+    let r2 = if using_v_tc {
+        let r_start = lnr_start_k.exp().max(1.0);
+        (r_k * r_start).max(StarAdOrder1::ONE)
     } else {
-        1.0
+        (r_k * r_k).max(StarAdOrder1::ONE)
     };
-
-    let r_k = StarAdOrder1::variable(model.ln_r[k], I_LNR_00).exp();
-    let dlnp_dm_qhse = -(model.cgrav[k] * model.m_grav[k] * fp)
-        / (FOUR_PI * r_k.pow4() * p_point);
+    let area = eval_face_area_time_centered_ad(lnr_k, lnr_start_k, using_v_tc)
+        .max(StarAdOrder1::ONE);
+    let g_hse = expected_hse_grav_term(model, k, r2);
+    let dlnp_dm_qhse = g_hse / (area * p_point);
     let dm_k = 0.5 * (model.dm[k - 1] + model.dm[k]);
     let dln_t_theory = dlnp_dm_qhse * model.gradt_ad[k] * dm_k;
 

@@ -18,8 +18,8 @@ use crate::hydro_energy::eval_face_area_time_centered_ad;
 use crate::hydro_eqns::HenyeySystem;
 use crate::model::StarModel;
 use crate::star_ad::{
-    StarAdExt, StarAdOrder1, I_LND_00, I_LND_M1, I_LNR_00, I_LNR_P1, I_V_00,
-    I_V_M1, I_V_P1,
+    StarAdExt, StarAdOrder1, I_LND_00, I_LND_M1, I_LNR_00, I_V_00, I_V_M1,
+    I_V_P1,
 };
 
 /// Evaluates total cell pressure $P_{\mathrm{tot},k} = P_{\mathrm{eos},k} +
@@ -165,7 +165,9 @@ pub fn do_uface_and_pface(model: &mut StarModel) -> Result<(), StarError> {
         model.aux.p_face_ad[k] = (p_face_l + p_face_r) * 0.5;
     }
 
-    if model.aux.p_face_start.len() != nz {
+    if model.aux.p_face_start.len() != nz
+        || model.aux.p_face_start.iter().any(|&p| p < 0.0)
+    {
         model.aux.p_face_start =
             model.aux.p_face_ad.iter().map(|p| p.val).collect();
         model.aux.u_face_start =
@@ -204,9 +206,10 @@ pub fn do1_riemann_momentum_eqn(
     }
     let nz = model.nz;
     let dt = model.dt.max(1.0e-30);
-    let using_v_tc = model.controls.using_velocity_time_centering
-        && model.dt > 0.0
-        && !model.ln_r_start.is_empty();
+    let using_v_tc =
+        model.controls.is_velocity_time_centered(model.model_number)
+            && model.dt > 0.0
+            && !model.ln_r_start.is_empty();
 
     let lnr_00 = StarAdOrder1::variable(model.ln_r[k], I_LNR_00);
     let lnr_s_00 = model.ln_r_start.get(k).copied().unwrap_or(model.ln_r[k]);
@@ -374,9 +377,10 @@ fn eval1_work_u_flag_ad(model: &StarModel, f_idx: usize) -> StarAdOrder1 {
             FOUR_PI * model.r_center * model.r_center * p_in * model.v_center,
         );
     }
-    let using_v_tc = model.controls.using_velocity_time_centering
-        && model.dt > 0.0
-        && !model.ln_r_start.is_empty();
+    let using_v_tc =
+        model.controls.is_velocity_time_centered(model.model_number)
+            && model.dt > 0.0
+            && !model.ln_r_start.is_empty();
     let lnr_f = StarAdOrder1::variable(model.ln_r[f_idx], I_LNR_00);
     let lnr_s_f = model
         .ln_r_start
@@ -452,49 +456,7 @@ pub fn eval_u_flag_total_energy_rates_ad(
     let u_00 = StarAdOrder1::variable(model.u[k], I_V_00);
     let u_st = model.u_start.get(k).copied().unwrap_or(model.u[k]);
     let dke_dt = (u_00 * u_00 - u_st * u_st) * (0.5 * mc / dt);
-
-    let r_00 = StarAdOrder1::variable(model.ln_r[k], I_LNR_00)
-        .exp()
-        .max(StarAdOrder1::ONE);
-    let grav00 = -(model.cgrav[k] * model.m_grav[k]) / r_00;
-    let gravp1 = if k + 1 < model.nz {
-        let r_p1 = StarAdOrder1::variable(model.ln_r[k + 1], I_LNR_P1)
-            .exp()
-            .max(StarAdOrder1::ONE);
-        -(model.cgrav[k + 1] * model.m_grav[k + 1]) / r_p1
-    } else if model.r_center > 0.0 {
-        StarAdOrder1::constant(
-            -model.cgrav[model.nz - 1] * model.m_center / model.r_center,
-        )
-    } else {
-        StarAdOrder1::ZERO
-    };
-    let pe_ad = (grav00 + gravp1) * (0.5 * mc);
-
-    let rs_00 = model
-        .ln_r_start
-        .get(k)
-        .copied()
-        .unwrap_or(model.ln_r[k])
-        .exp()
-        .max(1.0);
-    let grav00_s = -model.cgrav[k] * model.m_grav[k] / rs_00;
-    let gravp1_s = if k + 1 < model.nz {
-        let rs_p1 = model
-            .ln_r_start
-            .get(k + 1)
-            .copied()
-            .unwrap_or(model.ln_r[k + 1])
-            .exp()
-            .max(1.0);
-        -model.cgrav[k + 1] * model.m_grav[k + 1] / rs_p1
-    } else if model.r_center > 0.0 {
-        -model.cgrav[model.nz - 1] * model.m_center / model.r_center
-    } else {
-        0.0
-    };
-    let pe_start = 0.5 * mc * (grav00_s + gravp1_s);
-    let dpe_dt = (pe_ad - pe_start) / dt;
+    let dpe_dt = crate::hydro_work::eval_cell_dpe_dt_ad(model, k, dt);
 
     let work_00 = eval1_work_u_flag_ad(model, k);
     let work_p1 = if k + 1 < model.nz {

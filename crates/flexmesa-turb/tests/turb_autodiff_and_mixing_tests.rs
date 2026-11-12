@@ -381,3 +381,92 @@ fn test_semiconvection_and_thermohaline_prescriptions() {
         1.0e-6,
     );
 }
+
+#[test]
+fn test_mlt_marginal_superadiabaticity_series_eliminates_cardano_cancellation()
+{
+    let params = MltParams {
+        option: MltOption::Cox,
+        mixing_length_alpha: 1.8,
+        henyey_nu: 8.0,
+        henyey_y: 1.0 / 3.0,
+        max_conv_vel: 1.0e99,
+    };
+    let c = |x: f64| DualOrder1::<1>::constant(x);
+
+    // 1. Low-efficiency optically thin envelope (`A ~ 1e-2`): tiny `gradr - gradl`
+    //    must smoothly approach the radiative limit (`grad_t -> gradr`,
+    //    `d(grad_t)/d(gradr) -> 1`) without positive-ULP Cardano spikes.
+    let t_env = 1.0e5;
+    let rho_env = 1.0e-9;
+    let grav_env = 1.0e3;
+    let cp_env = 2.5 * KERG / MP;
+    let p_env = rho_env * t_env * KERG / MP;
+    let lam_env = p_env / (rho_env * grav_env);
+    let gradl = 0.4;
+    for exp_idx in [16_i32, 15, 14, 13, 12, 10, 8] {
+        let dgrad = 10.0_f64.powi(-exp_idx);
+        let gradr = gradl + dgrad;
+        let out = set_mlt(
+            &params,
+            &MltInputs {
+                chi_t: c(1.0),
+                chi_rho: c(1.0),
+                cp: c(cp_env),
+                grav: c(grav_env),
+                lambda: c(lam_env),
+                rho: c(rho_env),
+                p: c(p_env),
+                t: c(t_env),
+                opacity: c(0.4),
+                gradr: DualOrder1::<1>::independent(gradr, 0),
+                grada: c(gradl),
+                gradl: c(gradl),
+            },
+        )
+        .unwrap();
+        assert!(
+            (out.grad_t.val - gradr).abs() <= dgrad,
+            "spurious jump at dgrad={dgrad:.1e}: grad_t={} vs gradr={gradr}",
+            out.grad_t.val
+        );
+        assert!(
+            (out.grad_t.d1[0] - 1.0).abs() < 1.0e-8,
+            "bad d(grad_t)/d(gradr)={} at dgrad={dgrad:.1e}",
+            out.grad_t.d1[0]
+        );
+        assert!(out.gamma.val > 0.0 && out.conv_vel.val > 0.0);
+    }
+
+    // 2. High-efficiency deep convective core (`A >> 1e7`): tiny `gradr - gradl = 1e-13`
+    //    still has `delta = A^2 * dgrad >> 1` and must remain strongly adiabatic (`grad_t ~ gradl`).
+    let t_core = 2.0e7;
+    let rho_core = 100.0;
+    let grav_core = 2.0e5;
+    let p_core = rho_core * t_core * KERG / MP;
+    let lam_core = p_core / (rho_core * grav_core);
+    let out_core = set_mlt(
+        &params,
+        &MltInputs {
+            chi_t: c(1.0),
+            chi_rho: c(1.0),
+            cp: c(cp_env),
+            grav: c(grav_core),
+            lambda: c(lam_core),
+            rho: c(rho_core),
+            p: c(p_core),
+            t: c(t_core),
+            opacity: c(1.0),
+            gradr: DualOrder1::<1>::independent(gradl + 1.0e-13, 0),
+            grada: c(gradl),
+            gradl: c(gradl),
+        },
+    )
+    .unwrap();
+    assert!(
+        (out_core.grad_t.val - gradl).abs() < 1.0e-13,
+        "deep convective core lost adiabaticity: grad_t={}",
+        out_core.grad_t.val
+    );
+    assert!(out_core.conv_vel.val > 0.0);
+}

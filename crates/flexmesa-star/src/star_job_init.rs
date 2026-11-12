@@ -272,11 +272,17 @@ pub fn init_or_update_model_from_bundle(
 
     // Preserve active model state across stages / `.mod` loads unless overridden
     let preserved_net = model.job.net_name.clone();
-    let (preserved_v, preserved_u, preserved_rot) = (
+    let (preserved_v, preserved_u, preserved_rot, preserved_rti) = (
         model.controls.v_flag,
         model.controls.u_flag,
         model.controls.rotation_flag,
+        model.controls.rti_flag,
     );
+    let explicit_rti_in_controls = bundle
+        .sections
+        .get("controls")
+        .and_then(|c| c.get_bool("rti_flag"))
+        .is_some();
     let (preserved_tau, preserved_m, preserved_z, preserved_y, preserved_opac) = (
         model.controls.tau_factor,
         model.controls.initial_mass,
@@ -293,6 +299,9 @@ pub fn init_or_update_model_from_bundle(
         model.controls.u_flag,
         model.controls.rotation_flag,
     ) = (preserved_v, preserved_u, preserved_rot);
+    if !explicit_rti_in_controls {
+        model.controls.rti_flag = preserved_rti;
+    }
     (
         model.controls.tau_factor,
         model.controls.initial_mass,
@@ -422,6 +431,32 @@ pub fn init_or_update_model_from_bundle(
     }
 
     extras.extras_controls(&mut model);
+    if model.controls.v_flag && model.v.len() != model.nz {
+        model.v.resize(model.nz, 0.0);
+        model.v_start.resize(model.nz, 0.0);
+    }
+    if model.controls.u_flag && model.u.len() != model.nz {
+        model.u.resize(model.nz, 0.0);
+        model.u_start.resize(model.nz, 0.0);
+    }
+    if model.controls.rti_flag {
+        if model.aux.alpha_rti.len() != model.nz {
+            model.aux.alpha_rti.resize(model.nz, 0.0);
+        }
+        if model.aux.alpha_rti_start.len() != model.nz {
+            model.aux.alpha_rti_start.resize(model.nz, 0.0);
+        }
+        if model.aux.alpha_rti_old.len() != model.nz {
+            model.aux.alpha_rti_old.resize(model.nz, 0.0);
+        }
+    }
+    model.layout = VarLayout::with_flags(
+        model.species,
+        model.controls.v_flag,
+        model.controls.u_flag,
+        model.controls.rsp2_flag,
+        model.controls.rti_flag,
+    );
     let did_mass_or_core_relax = job.relax_mass
         || job.relax_initial_mass_to_remove_h_env
         || job.relax_m_center;

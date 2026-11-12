@@ -196,25 +196,10 @@ pub fn set_mlt<T: TurbScalar>(
         };
 
         // Solve cubic efficiency equation:
-        // a0 * Gamma^3 + Gamma^2 + Gamma - a0 * B^3 = 0.
+        // a0 * Gamma^3 + Gamma^2 + Gamma - a0 * B^3 = 0, with delta = a0 * B^3.
         let b_cubed = (a_val.pow2() / a0) * (inp.gradr - inp.gradl);
         let delta = a0 * b_cubed;
-        let f = T::from_f64(-2.0)
-            + T::from_f64(9.0) * a0
-            + T::from_f64(27.0) * a0 * a0 * delta;
-        let f0 = if f.val() > 1.0e100 {
-            f
-        } else {
-            let term = T::from_f64(-1.0) + T::from_f64(3.0) * a0;
-            let f0_sq = f.pow2() + T::from_f64(4.0) * term * term * term;
-            if f0_sq.val() <= 0.0 {
-                f
-            } else {
-                f0_sq.sqrt()
-            }
-        };
-        let f1_arg = f + f0;
-        if f1_arg.val() <= 0.0 {
+        let (gamma_val, zeta_val) = if delta.val() <= 0.0 {
             return Ok(TurbOutput {
                 gamma: zero,
                 grad_t: inp.gradr,
@@ -223,21 +208,60 @@ pub fn set_mlt<T: TurbScalar>(
                 d: zero,
                 mixing_type: MixingType::NoMixing,
             });
-        }
-        let f1 = f1_arg.powf(ONE_THIRD);
-        let f2 = T::from_f64(2.0 * TWO_13) * (one - T::from_f64(3.0) * a0) / f1;
-        let gamma_val = (T::from_f64(FOUR_13) * f1 + f2 - T::from_f64(2.0))
-            / (T::from_f64(6.0) * a0);
-        if gamma_val.val() <= 0.0 {
-            return Ok(TurbOutput {
-                gamma: gamma_val,
-                grad_t: inp.gradr,
-                y_face: inp.gradr - inp.gradl,
-                conv_vel: zero,
-                d: zero,
-                mixing_type: MixingType::NoMixing,
-            });
-        }
+        } else if delta.val() <= 1.0e-6 {
+            // Exact 3-term small-delta cubic expansion:
+            // Gamma(delta) = delta * (1 - delta + (2 - a0) * delta^2) + O(delta^4),
+            // Zeta(delta) = Gamma^3 / B^3 = a0 * delta^2 * (Gamma / delta)^3,
+            // avoiding Cardano cube-root cancellation below delta ~ 1e-11 while
+            // preserving smooth DualOrder1 tangents across all efficiency A.
+            let poly = one - delta + (T::from_f64(2.0) - a0) * delta.pow2();
+            let g = delta * poly;
+            let z = a0 * delta.pow2() * poly * poly.pow2();
+            (g, z)
+        } else {
+            let f = T::from_f64(-2.0)
+                + T::from_f64(9.0) * a0
+                + T::from_f64(27.0) * a0 * a0 * delta;
+            let f0 = if f.val() > 1.0e100 {
+                f
+            } else {
+                let term = T::from_f64(-1.0) + T::from_f64(3.0) * a0;
+                let f0_sq = f.pow2() + T::from_f64(4.0) * term * term * term;
+                if f0_sq.val() <= 0.0 {
+                    f
+                } else {
+                    f0_sq.sqrt()
+                }
+            };
+            let f1_arg = f + f0;
+            if f1_arg.val() <= 0.0 {
+                return Ok(TurbOutput {
+                    gamma: zero,
+                    grad_t: inp.gradr,
+                    y_face: inp.gradr - inp.gradl,
+                    conv_vel: zero,
+                    d: zero,
+                    mixing_type: MixingType::NoMixing,
+                });
+            }
+            let f1 = f1_arg.powf(ONE_THIRD);
+            let f2 =
+                T::from_f64(2.0 * TWO_13) * (one - T::from_f64(3.0) * a0) / f1;
+            let g = (T::from_f64(FOUR_13) * f1 + f2 - T::from_f64(2.0))
+                / (T::from_f64(6.0) * a0);
+            if g.val() <= 0.0 {
+                return Ok(TurbOutput {
+                    gamma: zero,
+                    grad_t: inp.gradr,
+                    y_face: inp.gradr - inp.gradl,
+                    conv_vel: zero,
+                    d: zero,
+                    mixing_type: MixingType::NoMixing,
+                });
+            }
+            let z = (T::from_f64(3.0) * g.log() - b_cubed.log()).exp();
+            (g, z)
+        };
 
         let mut vc = T::from_f64(params.mixing_length_alpha)
             * (q * inp.p / (T::from_f64(8.0) * inp.rho)).sqrt()
@@ -247,8 +271,6 @@ pub fn set_mlt<T: TurbScalar>(
             vc = vc.with_val(params.max_conv_vel);
         }
         let d_val = vc * inp.lambda / T::from_f64(3.0);
-        let zeta_val =
-            (T::from_f64(3.0) * gamma_val.log() - b_cubed.log()).exp();
         (gamma_val, zeta_val, vc, d_val)
     } else {
         (T::from_f64(-1.0e99), zero, zero, zero)

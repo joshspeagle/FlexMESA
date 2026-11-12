@@ -500,6 +500,9 @@ pub fn set_hydro_vars(
             update_sig_from_d_mix(model);
         }
         do_brunt_n2(model);
+        if model.controls.u_flag {
+            crate::riemann_ad::do_uface_and_pface(model)?;
+        }
         return Ok(());
     }
     do_brunt_n2(model);

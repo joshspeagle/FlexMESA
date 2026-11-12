@@ -320,8 +320,8 @@ impl StarModel {
             }
             if let Some(iw) = self.layout.i_w {
                 let mut w = self.xh[base + iw];
-                if !w.is_finite() || w < 0.0 {
-                    w = w_fix.max(0.0);
+                if w < 0.0 {
+                    w = if w_fix < 0.0 { 0.0 } else { w_fix };
                     self.xh[base + iw] = w;
                 }
                 let et = w * w;
@@ -329,12 +329,14 @@ impl StarModel {
                 self.aux.etrb[k] = et;
             }
             if let Some(ihp) = self.layout.i_hp {
-                let hp = self.xh[base + ihp].max(1.0);
+                let raw_hp = self.xh[base + ihp];
+                let hp = if raw_hp < 1.0 { 1.0 } else { raw_hp };
                 self.xh[base + ihp] = hp;
                 self.aux.rsp.hp_face[k] = hp;
             }
             if let Some(ia) = self.layout.i_alpha_rti {
-                let a = self.xh[base + ia].max(0.0);
+                let raw_a = self.xh[base + ia];
+                let a = if raw_a < 0.0 { 0.0 } else { raw_a };
                 self.xh[base + ia] = a;
                 self.aux.alpha_rti[k] = a;
             }
@@ -385,14 +387,17 @@ impl StarModel {
         if self.sig.iter().all(|&s| s == 0.0) {
             crate::hydro_vars::update_sig_from_d_mix(self);
         }
+        if self.controls.rti_flag {
+            crate::hydro_rti::set_rti_mixing_info(self);
+        }
         if self.controls.u_flag {
-            self.aux.p_face_start.clear();
-            self.aux.u_face_start.clear();
+            self.aux.p_face_start.resize(self.nz, -1.0);
+            self.aux.p_face_start.fill(-1.0);
+            self.aux.u_face_start.resize(self.nz, 0.0);
             let _ = crate::riemann_ad::do_uface_and_pface(self);
         }
         if self.controls.rti_flag {
             crate::hydro_rti::set_dpdr_drhodr_info(self);
-            crate::hydro_rti::set_rti_mixing_info(self);
         }
     }
 

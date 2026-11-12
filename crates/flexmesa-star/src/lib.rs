@@ -75,6 +75,7 @@ pub mod hydro_rti;
 pub mod hydro_state;
 pub mod hydro_temperature;
 pub mod hydro_vars;
+pub mod hydro_work;
 pub mod inlist;
 pub mod inlist_populate;
 mod inlist_populate_limits;

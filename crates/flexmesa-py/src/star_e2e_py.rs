@@ -61,9 +61,27 @@ pub fn star_parse_inlist_bundle<'py>(
     dict.set_item("stop_near_zams", bundle.controls.stop_near_zams)?;
     dict.set_item("v_flag", bundle.controls.v_flag)?;
     dict.set_item("u_flag", bundle.controls.u_flag)?;
+    dict.set_item("rti_flag", bundle.controls.rti_flag)?;
     dict.set_item("rotation_flag", bundle.controls.rotation_flag)?;
     dict.set_item("rsp_flag", bundle.controls.rsp_flag)?;
     dict.set_item("rsp2_flag", bundle.controls.rsp2_flag)?;
+    dict.set_item(
+        "load_saved_model_for_rsp2",
+        bundle
+            .sections
+            .get("star_job")
+            .and_then(|sj| sj.get_bool("load_saved_model_for_rsp2"))
+            .unwrap_or(false),
+    )?;
+    dict.set_item("okay_to_remesh", bundle.controls.okay_to_remesh)?;
+    dict.set_item("use_gold_tolerances", bundle.controls.use_gold_tolerances)?;
+    dict.set_item(
+        "use_gold2_tolerances",
+        bundle.controls.use_gold2_tolerances,
+    )?;
+    dict.set_item("op_split_burn", bundle.controls.op_split_burn)?;
+    dict.set_item("op_split_burn_min_t", bundle.controls.op_split_burn_min_t)?;
+    dict.set_item("max_newton_iters", bundle.controls.max_newton_iters)?;
     dict.set_item("use_other_cgrav", bundle.controls.use_other_cgrav)?;
     let sections: Vec<String> = bundle.sections.keys().cloned().collect();
     dict.set_item("sections", sections)?;

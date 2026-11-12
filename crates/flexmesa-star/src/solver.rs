@@ -124,10 +124,12 @@ fn apply_damped_correction(
                 + alpha * dx_scaled[s_base + i] * x_scale[s_base + i];
         }
         if let Some(iw) = model.layout.i_w {
-            model.xh[h_base + iw] = model.xh[h_base + iw].max(0.0);
+            let v = model.xh[h_base + iw];
+            model.xh[h_base + iw] = if v < 0.0 { 0.0 } else { v };
         }
         if let Some(ia) = model.layout.i_alpha_rti {
-            model.xh[h_base + ia] = model.xh[h_base + ia].max(0.0);
+            let v = model.xh[h_base + ia];
+            model.xh[h_base + ia] = if v < 0.0 { 0.0 } else { v };
         }
         if include_chem && model.species > 0 {
             let c_base = k * model.species;

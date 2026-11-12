@@ -11,7 +11,7 @@
 //! block-tridiagonal Henyey system with exact 3-point `(k - 1, k, k + 1)`
 //! Jacobian entries.
 
-use flexmesa_const::{FOUR_PI, LN10};
+use flexmesa_const::FOUR_PI;
 
 use crate::hydro_eqns::HenyeySystem;
 use crate::model::StarModel;
@@ -39,20 +39,14 @@ pub fn set_dpdr_drhodr_info(model: &mut StarModel) {
     rho_face[0] = model.rho[0];
     for k in 1..nz {
         let (alfa, beta) = model.get_face_weights(k);
-        p_face[k] = if model.controls.u_flag
-            && model.aux.p_face_start.get(k).copied().unwrap_or(-1.0) > 0.0
-        {
-            model.aux.p_face_start[k]
-        } else {
-            alfa * model.peos[k] + beta * model.peos[k - 1]
-        };
+        p_face[k] = alfa * model.peos[k] + beta * model.peos[k - 1];
         rho_face[k] = alfa * model.rho[k] + beta * model.rho[k - 1];
     }
 
     let min_mach = model.controls.alpha_rti_src_min_v_div_cs;
     let mut dpdr = vec![0.0_f64; nz];
     let mut drhodr = vec![0.0_f64; nz];
-    for k in 0..(nz - 1) {
+    for k in 1..(nz - 1) {
         let a_start = model
             .aux
             .alpha_rti_start
@@ -60,14 +54,14 @@ pub fn set_dpdr_drhodr_info(model: &mut StarModel) {
             .copied()
             .unwrap_or(model.aux.alpha_rti[k]);
         let vel_k = if model.controls.u_flag {
-            model.u[k].abs()
+            model.u[k]
         } else if model.controls.v_flag {
-            model.v[k].abs()
+            model.v[k]
         } else {
             0.0
         };
         let cs_k = model.csound[k].max(1.0);
-        if a_start <= 0.0 && min_mach > 0.0 && vel_k / cs_k < min_mach {
+        if a_start <= 0.0 && vel_k / cs_k < min_mach {
             continue;
         }
         let r_in = model.r[k + 1];
@@ -79,29 +73,45 @@ pub fn set_dpdr_drhodr_info(model: &mut StarModel) {
         drhodr[k] = (rho_face[k] - rho_face[k + 1]) / dr_k;
     }
 
-    // Optional 3-point smoothing (`rti_smooth_fraction = 0.5` default in MESA)
-    let f = 0.5_f64;
-    if nz >= 4 {
-        let dp_orig = dpdr.clone();
-        let dr_orig = drhodr.clone();
-        for k in 1..(nz - 2) {
-            dpdr[k] = (1.0 - f) * dp_orig[k]
-                + 0.5 * f * (dp_orig[k - 1] + dp_orig[k + 1]);
-            drhodr[k] = (1.0 - f) * dr_orig[k]
-                + 0.5 * f * (dr_orig[k - 1] + dr_orig[k + 1]);
+    // 3-point smoothing (`rti_smooth_fraction = 0.5` default in `mix_info.f90:2188-2211`)
+    let c = 0.5_f64;
+    let d = 0.5 * (1.0 - c);
+    let dp_orig = dpdr.clone();
+    let dr_orig = drhodr.clone();
+    for k in 1..(nz - 1) {
+        dpdr[k] = c * dp_orig[k] + d * (dp_orig[k - 1] + dp_orig[k + 1]);
+        if !(dr_orig[k - 1] == 0.0 && dr_orig[k] == 0.0) {
+            drhodr[k] = c * dr_orig[k] + d * (dr_orig[k - 1] + dr_orig[k + 1]);
         }
     }
+    dpdr[nz - 1] = c * dp_orig[nz - 2] + 2.0 * d * dp_orig[nz - 3];
+    drhodr[nz - 1] = c * dr_orig[nz - 2] + 2.0 * d * dr_orig[nz - 3];
 
     for k in 0..nz {
         model.aux.dpdr_drhodr_info[k] = (dpdr[k] * drhodr[k]).min(0.0);
+    }
+    refresh_alpha_rti_diagnostic_sources(model);
+}
+
+fn refresh_alpha_rti_diagnostic_sources(model: &mut StarModel) {
+    let nz = model.nz;
+    if model.aux.source_plus_alpha_rti.len() != nz {
+        model.aux.source_plus_alpha_rti.resize(nz, 0.0);
+    }
+    if model.aux.source_minus_alpha_rti.len() != nz {
+        model.aux.source_minus_alpha_rti.resize(nz, 0.0);
+    }
+    for k in 0..nz {
+        let (sp, _, sm, _) = eval_alpha_rti_sources(model, k);
+        model.aux.source_plus_alpha_rti[k] = sp;
+        model.aux.source_minus_alpha_rti[k] = sm;
     }
 }
 
 /// Evaluates start-of-step Duffell (2016) RTI kinematic diffusivity
 /// $\eta_{\mathrm{RTI},k} = C \alpha_{\mathrm{RTI,face},k} c_{s,k} r_k$ and
-/// Lagrangian mass-diffusion coefficients `sig_rti` and `sigmid_rti`,
-/// optionally augmenting `d_mix` and `sig` when
-/// `composition_rti_diffusion_factor > 0` (`set_RTI_mixing_info` in
+/// Lagrangian mass-diffusion coefficients `sig_rti` and `sigmid_rti` without
+/// mutating convective `d_mix` or `sig` (`set_RTI_mixing_info` in
 /// `star/private/mix_info.f90:1966-2121`).
 pub fn set_rti_mixing_info(model: &mut StarModel) {
     let nz = model.nz;
@@ -177,13 +187,6 @@ pub fn set_rti_mixing_info(model: &mut StarModel) {
             sig_k = sig_k.min(1.0e6 * dm_bar_k / dt);
         }
         model.aux.sig_rti[k] = sig_k;
-
-        if model.controls.composition_rti_diffusion_factor > 0.0 {
-            let d_add = model.controls.composition_rti_diffusion_factor * eta_k;
-            model.d_mix[k] += d_add;
-            model.sig[k] +=
-                model.controls.composition_rti_diffusion_factor * sig_k;
-        }
     }
 
     for k in 0..nz {
@@ -216,18 +219,28 @@ pub fn set_rti_mixing_info(model: &mut StarModel) {
         model.aux.sigmid_rti[k] = sigmid;
     }
 
-    // Populate diagnostic `source_plus_alpha_rti` and `source_minus_alpha_rti`
-    let _ = LN10;
-    if model.aux.source_plus_alpha_rti.len() != nz {
-        model.aux.source_plus_alpha_rti.resize(nz, 0.0);
+    refresh_alpha_rti_diagnostic_sources(model);
+}
+
+/// Augments `d_mix` and `sig` with `composition_rti_diffusion_factor * (eta_rti, sig_rti)`
+/// once per fresh convective mixing pass (`mix_info.f90:2038-2046`).
+pub fn augment_mixing_with_rti(model: &mut StarModel) {
+    let f_comp = model.controls.composition_rti_diffusion_factor;
+    if !model.controls.rti_flag
+        || !model.controls.do_mix
+        || model.controls.mix_factor <= 0.0
+        || f_comp <= 0.0
+    {
+        return;
     }
-    if model.aux.source_minus_alpha_rti.len() != nz {
-        model.aux.source_minus_alpha_rti.resize(nz, 0.0);
-    }
-    for k in 0..nz {
-        let (sp, _, sm, _) = eval_alpha_rti_sources(model, k);
-        model.aux.source_plus_alpha_rti[k] = sp;
-        model.aux.source_minus_alpha_rti[k] = sm;
+    let nz = model.nz;
+    for k in 1..nz {
+        let eta_k = model.aux.eta_rti.get(k).copied().unwrap_or(0.0);
+        let sig_k = model.aux.sig_rti.get(k).copied().unwrap_or(0.0);
+        if eta_k > 0.0 || sig_k > 0.0 {
+            model.d_mix[k] += f_comp * eta_k;
+            model.sig[k] += f_comp * sig_k;
+        }
     }
 }
 

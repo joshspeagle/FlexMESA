@@ -329,6 +329,8 @@ pub struct StarControls {
     // --- Fidelity-1 Hydrodynamic, Energy & `eps_grav` Controls (`hydro_*.f90`, `eps_grav.f90`) ---
     /// Whether velocity time-centering is active (`using_velocity_time_centering`).
     pub using_velocity_time_centering: bool,
+    /// Step threshold at or after which velocity time-centering activates (`steps_before_use_velocity_time_centering`, `-1` disables).
+    pub steps_before_use_velocity_time_centering: isize,
     /// Whether luminosity $L_k$ is time-centered during velocity time-centering (`include_L_in_velocity_time_centering`).
     pub include_l_in_velocity_time_centering: bool,
     /// Whether total pressure $P_{\mathrm{eos},k}$ is time-centered (`include_P_in_velocity_time_centering`).
@@ -421,7 +423,7 @@ pub struct StarControls {
     pub use_gradt_actual_vs_gradt_mlt_for_t_gradient_eqn: bool,
     /// Use $dP_{\mathrm{rad}}/dm$ form of temperature equation (`use_dPrad_dm_form_of_T_gradient_eqn`).
     pub use_dprad_dm_form_of_t_gradient_eqn: bool,
-    /// Enable Levermore-Pomraning (1981) flux limiting in `do1_alt_dlnT_dm_eqn` (`use_flux_limiting_with_dPrad_dm_eqn`).
+    /// Enable Levermore-Pomraning (1981) flux limiting in `do1_alt_dlnT_dm_eqn` (`use_flux_limiting_with_dPrad_dm_form`).
     pub use_flux_limiting_with_dprad_dm_form: bool,
     /// Minimum face opacity floor in $\mathrm{cm^2\,g^{-1}}$ for `do1_alt_dlnT_dm_eqn` (`min_kap_for_dPrad_dm_eqn`).
     pub min_kap_for_dprad_dm_eqn: f64,
@@ -521,4 +523,16 @@ pub struct StarControls {
     pub gold2_tol_residual_norm3: f64,
     /// Stage-3 gold2 max residual tolerance (`gold2_tol_max_residual3`).
     pub gold2_tol_max_residual3: f64,
+}
+
+impl StarControls {
+    /// Returns `true` when velocity time-centering is active at `model_number`
+    /// (`star/private/evolve.f90:386-388`).
+    #[must_use]
+    pub fn is_velocity_time_centered(&self, model_number: usize) -> bool {
+        self.using_velocity_time_centering
+            || (self.steps_before_use_velocity_time_centering >= 0
+                && (model_number as isize)
+                    >= self.steps_before_use_velocity_time_centering)
+    }
 }

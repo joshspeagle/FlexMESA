@@ -200,7 +200,9 @@ pub fn excise_core_by_temperature(model: &mut StarModel, t_cut_k: f64) {
         return;
     };
     let k_cut = raw_cut.min(model.nz - 4);
-    let _ = model.sync_mesh_and_pack();
+    if model.sync_mesh_and_pack().is_err() {
+        return;
+    }
 
     let m_c = model.m[k_cut];
     let r_c = model.r[k_cut];
@@ -244,6 +246,14 @@ pub fn excise_core_by_temperature(model: &mut StarModel, t_cut_k: f64) {
     if model.u.len() >= k_cut {
         trimmed.u.copy_from_slice(&model.u[..k_cut]);
     }
+    if model.aux.alpha_rti.len() >= k_cut
+        && trimmed.aux.alpha_rti.len() == k_cut
+    {
+        trimmed
+            .aux
+            .alpha_rti
+            .copy_from_slice(&model.aux.alpha_rti[..k_cut]);
+    }
     trimmed.dq.copy_from_slice(&model.dq[..k_cut]);
     trimmed.xa.copy_from_slice(&model.xa[..k_cut * species]);
     trimmed.cgrav.copy_from_slice(&model.cgrav[..k_cut]);
@@ -260,8 +270,9 @@ pub fn excise_core_by_temperature(model: &mut StarModel, t_cut_k: f64) {
             *dq_k /= dq_sum;
         }
     }
-    let _ = trimmed.sync_mesh_and_pack();
-    *model = trimmed;
+    if trimmed.sync_mesh_and_pack().is_ok() {
+        *model = trimmed;
+    }
 }
 
 /// Multi-step logarithmic mass relaxation (`do_relax_mass` / `do_relax_mass_scale`

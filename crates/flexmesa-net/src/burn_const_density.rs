@@ -34,10 +34,6 @@ pub struct BurnConstDensityInput<'a> {
     pub rate_factors: &'a [f64],
     /// Global weak-reaction multiplier.
     pub weak_rate_factor: f64,
-    /// Total reaction $Q$-values (`std_reaction_Qs`).
-    pub reaction_qs: &'a [f64],
-    /// Neutrino-loss $Q_{\nu}$-values (`std_reaction_neuQs`).
-    pub reaction_neu_qs: &'a [f64],
     /// Plasma screening prescription (`ScreeningMode`).
     pub screening_mode: ScreeningMode,
     /// Suggested initial step size (`stptry_in`, or `0.0` for automatic).
@@ -117,7 +113,11 @@ pub fn burn_1_zone_const_density(
     let rho = exp10(lg_rho);
     let start = input.t_start;
     let stopp = input.t_end;
-    let stptry = (start * 1.0e-10).max(1.0e-16);
+    let stptry = if input.stptry_in > 0.0 {
+        input.stptry_in
+    } else {
+        (start * 1.0e-10).max(1.0e-16)
+    };
     let stpmin = stptry * 1.0e-12;
 
     struct StepBuf {
@@ -222,8 +222,8 @@ pub fn burn_1_zone_const_density(
                     dfdy[row_n + species] = 0.0;
                 }
                 for j in 0..species {
-                    let d_eps_dx_j = QCONV * w.d_eps_nuc_dy[j] / aion[j];
-                    dfdy[species * nvar + j] = d_eps_dx_j / (cv * temp);
+                    let d_eps_dy_j = QCONV * w.d_eps_nuc_dy[j];
+                    dfdy[species * nvar + j] = d_eps_dy_j / (cv * temp);
                 }
                 let df_t_t = d_eps_nuc_dt / cv
                     - (1.0 + d_cv_dlnt / cv) * eps_nuc / (cv * temp);
@@ -304,57 +304,219 @@ pub fn burn_1_zone_const_density(
 
 #[cfg(test)]
 mod tests {
+    use flexmesa_eos::I_LN_E;
+
     use super::*;
 
     #[test]
-    fn test_burn_1_zone_const_density_he_ignition_heats_and_conserves_baryons()
-    {
+    fn test_burn_1_zone_const_density_first_law_energy_and_jacobian_parity() {
         let g = NetGeneralInfo::from_name("basic.net").expect("basic.net");
         let ht = HelmTable::builtin();
         let eos_cfg = EosConfig::default();
-        // Pure He4 at logT = 8.3, logRho = 4.0 over dt = 1e4 s
-        let mut x0 = vec![0.0_f64; g.num_isos];
-        let i_he4 = g
-            .chem_id
-            .iter()
-            .position(|&c| {
-                NuclideCatalog::builtin_ref()
-                    .get_by_id(c)
-                    .is_some_and(|n| n.name == "he4")
-            })
-            .expect("he4 in basic.net");
-        x0[i_he4] = 1.0;
+        let nuclides = NuclideCatalog::builtin_ref();
+        let species = g.num_isos;
+
+        let mut x0 = vec![0.0_f64; species];
+        let idx_of = |name: &str| {
+            g.chem_id
+                .iter()
+                .position(|&c| {
+                    nuclides.get_by_id(c).is_some_and(|n| n.name == name)
+                })
+                .expect("isotope in basic.net")
+        };
+        let i_he4 = idx_of("he4");
+        let i_c12 = idx_of("c12");
+        let i_o16 = idx_of("o16");
+        x0[i_he4] = 0.85;
+        x0[i_c12] = 0.10;
+        x0[i_o16] = 0.05;
+
         let rate_factors = vec![1.0_f64; g.num_reactions];
-        let qs = vec![0.0_f64; g.num_reactions];
+        let dt = 10.0;
+        let lg_rho = 4.0;
+        let rho = exp10(lg_rho);
+        let lg_t0 = 8.50;
         let input = BurnConstDensityInput {
             t_start: 0.0,
-            t_end: 1.0e4,
+            t_end: dt,
             starting_x: &x0,
-            starting_log10_t: 8.3,
-            log10_rho: 4.0,
+            starting_log10_t: lg_t0,
+            log10_rho: lg_rho,
             rate_factors: &rate_factors,
-            weak_rate_factor: 1.0,
-            reaction_qs: &qs,
-            reaction_neu_qs: &qs,
+            weak_rate_factor: 0.0,
             screening_mode: ScreeningMode::Extended,
-            stptry_in: 0.0,
-            max_steps: 500,
-            eps: 1.0e-6,
-            odescal: 1.0e-8,
+            stptry_in: 1.0e-6,
+            max_steps: 1000,
+            eps: 1.0e-9,
+            odescal: 1.0e-10,
         };
         let out = burn_1_zone_const_density(&g, ht, &eos_cfg, &input)
             .expect("burn_1_zone_const_density succeeds");
+
         let x_sum: f64 = out.ending_x.iter().sum();
         assert!(
             (x_sum - 1.0).abs() < 1.0e-12,
             "baryon sum {x_sum} deviates from 1.0"
         );
-        assert!(out.ending_x[i_he4] < 1.0, "he4 should burn into c12/o16");
-        assert!(
-            out.ending_log10_t > 8.3,
-            "exothermic 3-alpha burning must raise log10(T): {}",
-            out.ending_log10_t
-        );
+        assert!(out.ending_x[i_he4] < x0[i_he4]);
+        assert!(out.ending_log10_t > lg_t0);
         assert!(out.avg_eps_nuc > 0.0);
+
+        // Tier 1 First-Law Oracle: int_{T0}^{T1} Cv(rho, T, X_mid) dT == dt * avg_eps_nuc
+        let x_mid: Vec<f64> = (0..species)
+            .map(|i| 0.5 * (x0[i] + out.ending_x[i]))
+            .collect();
+        let e0 =
+            eos_dt_get(ht, rho, exp10(lg_t0), &g.chem_id, &x_mid, &eos_cfg)
+                .unwrap()
+                .res[I_LN_E]
+                .exp();
+        let e1 = eos_dt_get(
+            ht,
+            rho,
+            exp10(out.ending_log10_t),
+            &g.chem_id,
+            &x_mid,
+            &eos_cfg,
+        )
+        .unwrap()
+        .res[I_LN_E]
+            .exp();
+        let de_eos = e1 - e0;
+        let de_nuc = dt * out.avg_eps_nuc;
+        let rel_err = (de_eos - de_nuc).abs() / de_nuc.abs();
+        assert!(
+            rel_err <= 2.0e-4,
+            "first-law Cv*dT integral mismatch: de_eos={de_eos:.8e}, de_nuc={de_nuc:.8e}, rel={rel_err:.3e}"
+        );
+
+        // Tier 1 Central-FD Jacobian verification on the (species + 1) state vector
+        let aion: Vec<f64> = g
+            .chem_id
+            .iter()
+            .map(|&c| nuclides.get_by_id(c).unwrap().z_plus_n as f64)
+            .collect();
+        let nvar = species + 1;
+        let mut y_base: Vec<f64> =
+            (0..species).map(|i| x0[i] / aion[i]).collect();
+        y_base.push(lg_t0 * LN10);
+
+        let eval_rhs = |y: &[f64],
+                        freeze_comp: Option<(
+            f64,
+            f64,
+            f64,
+            f64,
+            f64,
+            f64,
+            f64,
+        )>| {
+            let x_cur: Vec<f64> =
+                (0..species).map(|i| y[i] * aion[i]).collect();
+            let lg_t = y[species] / LN10;
+            let temp = exp10(lg_t);
+            let comp =
+                get_composition_info(nuclides, &g.chem_id, &x_cur, false)
+                    .unwrap();
+            let eos = eos_dt_get(ht, rho, temp, &g.chem_id, &x_cur, &eos_cfg)
+                .unwrap();
+            let (abar, zbar, z2bar, ye, cv, eta, d_eta_dlnt) = freeze_comp
+                .unwrap_or((
+                    comp.abar,
+                    comp.zbar,
+                    comp.z2bar,
+                    comp.ye,
+                    eos.res[I_CV],
+                    eos.res[I_ETA],
+                    eos.d_dln_t[I_ETA],
+                ));
+            let d_cv_dlnt = eos.d_dln_t[I_CV];
+            let mut dydt_buf = vec![[F64x2::ZERO; NUM_RVS]; species];
+            let mut f = vec![0.0; nvar];
+            let mut dfdy = vec![0.0; nvar * nvar];
+            with_thread_local_work(&g, |w| {
+                let (eps_nuc, d_eps_dt, _, _) = eval_net_with_work(
+                    &g,
+                    w,
+                    &mut dydt_buf,
+                    false,
+                    &x_cur,
+                    temp,
+                    lg_t,
+                    rho,
+                    lg_rho,
+                    abar,
+                    zbar,
+                    z2bar,
+                    ye,
+                    eta,
+                    d_eta_dlnt,
+                    0.0,
+                    &rate_factors,
+                    0.0,
+                    ScreeningMode::Extended,
+                    false,
+                    false,
+                    false,
+                )
+                .unwrap();
+                for j in 0..species {
+                    f[j] = dydt_buf[j][0].to_f64();
+                }
+                f[species] = eps_nuc / (cv * temp);
+                for i in 0..species {
+                    dfdy[i * nvar..i * nvar + species].copy_from_slice(
+                        &w.d_dydt_dy[i * species..(i + 1) * species],
+                    );
+                }
+                for j in 0..species {
+                    dfdy[species * nvar + j] =
+                        (QCONV * w.d_eps_nuc_dy[j]) / (cv * temp);
+                }
+                dfdy[species * nvar + species] = d_eps_dt / cv
+                    - (1.0 + d_cv_dlnt / cv) * eps_nuc / (cv * temp);
+            });
+            (f, dfdy, (abar, zbar, z2bar, ye, cv, eta, d_eta_dlnt))
+        };
+
+        let (f_base, dfdy, frozen) = eval_rhs(&y_base, None);
+        // Check (d lnT/dt) / d lnT entry via central FD wrt lnT
+        let h_lnt = 1.0e-6;
+        let mut y_p = y_base.clone();
+        let mut y_m = y_base.clone();
+        y_p[species] += h_lnt;
+        y_m[species] -= h_lnt;
+        let (f_p, _, _) = eval_rhs(&y_p, None);
+        let (f_m, _, _) = eval_rhs(&y_m, None);
+        let fd_tt = (f_p[species] - f_m[species]) / (2.0 * h_lnt);
+        let an_tt = dfdy[species * nvar + species];
+        assert!(
+            (an_tt - fd_tt).abs() / an_tt.abs().max(fd_tt.abs()) <= 1.0e-5,
+            "df_lnT/dlnT mismatch: analytic={an_tt:.8e}, fd={fd_tt:.8e}"
+        );
+
+        // Check molar abundance columns (0..species) at frozen macro moments/Cv
+        for &j in &[i_he4, i_c12, i_o16] {
+            let h_y = 1.0e-6 * y_base[j].max(1.0e-3);
+            let mut yp = y_base.clone();
+            let mut ym = y_base.clone();
+            yp[j] += h_y;
+            ym[j] -= h_y;
+            let (fp, _, _) = eval_rhs(&yp, Some(frozen));
+            let (fm, _, _) = eval_rhs(&ym, Some(frozen));
+            for i in 0..=species {
+                let fd_ij = (fp[i] - fm[i]) / (2.0 * h_y);
+                let an_ij = dfdy[i * nvar + j];
+                let scale = an_ij.abs().max(fd_ij.abs());
+                let roundoff_floor =
+                    32.0 * f64::EPSILON * f_base[i].abs() / h_y;
+                assert!(
+                    (an_ij - fd_ij).abs() <= roundoff_floor.max(1.0e-18)
+                        || (an_ij - fd_ij).abs() <= 1.0e-6 * scale,
+                    "df[{i}]/dy[{j}] mismatch: analytic={an_ij:.8e}, fd={fd_ij:.8e}"
+                );
+            }
+        }
     }
 }

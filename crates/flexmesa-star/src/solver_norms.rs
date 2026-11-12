@@ -54,6 +54,10 @@ pub fn compute_residual_norms(
     for k in 0..nz {
         let base = k * nvar;
         for j in 0..nvar {
+            let val = equ[base + j];
+            if val.is_nan() {
+                return (f64::NAN, f64::NAN);
+            }
             if c.convergence_ignore_equl_residuals && j == layout.i_equ_l {
                 continue;
             }
@@ -62,10 +66,10 @@ pub fn compute_residual_norms(
             {
                 continue;
             }
-            let a = equ[base + j].abs();
+            let a = val.abs();
             sum_abs += a;
             count += 1;
-            if a > max_abs || a.is_nan() {
+            if a > max_abs {
                 max_abs = a;
             }
         }
@@ -95,16 +99,20 @@ pub fn compute_correction_norms(
     for k in 0..nz {
         let base = k * nvar;
         for j in 0..nvar {
+            let val = dx_scaled[base + j];
+            if val.is_nan() {
+                return (f64::NAN, f64::NAN);
+            }
             if j == layout.i_lum
                 || Some(j) == layout.i_hp
                 || Some(j) == layout.i_alpha_rti
             {
                 continue;
             }
-            let a = dx_scaled[base + j].abs();
+            let a = val.abs();
             sum_abs += a;
             count += 1;
-            if a > max_abs || a.is_nan() {
+            if a > max_abs {
                 max_abs = a;
             }
         }
@@ -149,6 +157,11 @@ pub fn compute_model_correction_norms(
         let mut sum_xa_corr = 0.0;
         let mut num_xa_terms = 0_usize;
         for j in 0..nvar {
+            if dx_scaled[base + j].is_nan()
+                || x_scale.get(base + j).is_some_and(|s| s.is_nan())
+            {
+                return (f64::NAN, f64::NAN);
+            }
             if Some(j) == layout.i_hp || Some(j) == layout.i_alpha_rti {
                 continue;
             }

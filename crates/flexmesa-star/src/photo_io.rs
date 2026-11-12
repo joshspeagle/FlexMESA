@@ -116,6 +116,7 @@ pub fn write_photo_bytes(model: &StarModel) -> Vec<u8> {
         u8::from(model.controls.op_split_burn),
         u8::from(model.controls.rsp_flag),
         u8::from(model.controls.rsp2_flag),
+        u8::from(model.controls.rti_flag),
     ]);
 
     write_i32(&mut buf, 2);
@@ -132,10 +133,17 @@ pub fn write_photo_bytes(model: &StarModel) -> Vec<u8> {
 
     write_i32(&mut buf, 3);
     write_u64(&mut buf, model.lnd_old.len() as u64);
-    for s in [&model.lnd_old, &model.ln_t_old, &model.ln_r_old] {
-        write_f64_slice(&mut buf, s);
-    }
-    for s in [&model.lum_old, &model.dq_old, &model.xa_old] {
+    for s in [
+        &model.lnd_old,
+        &model.ln_t_old,
+        &model.ln_r_old,
+        &model.lum_old,
+        &model.v_old,
+        &model.u_old,
+        &model.dq_old,
+        &model.aux.alpha_rti_old,
+        &model.xa_old,
+    ] {
         write_f64_slice(&mut buf, s);
     }
     write_u64(&mut buf, model.lnd_start.len() as u64);
@@ -144,6 +152,8 @@ pub fn write_photo_bytes(model: &StarModel) -> Vec<u8> {
         &model.ln_t_start,
         &model.ln_r_start,
         &model.lum_start,
+        &model.v_start,
+        &model.u_start,
     ] {
         write_f64_slice(&mut buf, s);
     }
@@ -334,9 +344,9 @@ pub fn read_photo_bytes(
         })?
         .to_owned();
     let job_tags = bytes
-        .get(pos..pos + 6)
+        .get(pos..pos + 7)
         .ok_or_else(|| eof("EOF job/controls flags"))?;
-    pos += 6;
+    pos += 7;
     let mut job = job;
     let mut controls = controls;
     job.net_name = saved_net_name;
@@ -346,6 +356,7 @@ pub fn read_photo_bytes(
     controls.op_split_burn = job_tags[3] != 0;
     controls.rsp_flag = job_tags[4] != 0;
     controls.rsp2_flag = job_tags[5] != 0;
+    controls.rti_flag = job_tags[6] != 0;
 
     let mut model = StarModel::new(nz, chem_id, job, controls);
 
@@ -374,7 +385,10 @@ pub fn read_photo_bytes(
         &mut model.ln_t_old,
         &mut model.ln_r_old,
         &mut model.lum_old,
+        &mut model.v_old,
+        &mut model.u_old,
         &mut model.dq_old,
+        &mut model.aux.alpha_rti_old,
     ] {
         *dst = read_f64_vec(&mut pos, nz_old)?;
     }
@@ -384,6 +398,8 @@ pub fn read_photo_bytes(
     let saved_ln_t_start = read_f64_vec(&mut pos, nz_start)?;
     let saved_ln_r_start = read_f64_vec(&mut pos, nz_start)?;
     let saved_lum_start = read_f64_vec(&mut pos, nz_start)?;
+    let saved_v_start = read_f64_vec(&mut pos, nz_start)?;
+    let saved_u_start = read_f64_vec(&mut pos, nz_start)?;
 
     expect_part(&mut pos, 4)?;
     model.model_number = read_u64(&mut pos)? as usize;
@@ -481,11 +497,15 @@ pub fn read_photo_bytes(
         model.ln_t_start.clone_from(&saved_ln_t_start);
         model.ln_r_start.clone_from(&saved_ln_r_start);
         model.lum_start.clone_from(&saved_lum_start);
+        model.v_start.clone_from(&saved_v_start);
+        model.u_start.clone_from(&saved_u_start);
     } else {
         model.lnd_start.clone_from(&model.lnd);
         model.ln_t_start.clone_from(&model.ln_t);
         model.ln_r_start.clone_from(&model.ln_r);
         model.lum_start.clone_from(&model.lum);
+        model.v_start.clone_from(&model.v);
+        model.u_start.clone_from(&model.u);
     }
     model.sig.clone_from(&saved_sig);
     model.mlt_vc.clone_from(&saved_mlt_vc);
@@ -531,6 +551,8 @@ pub fn read_photo_bytes(
         model.ln_t_start = saved_ln_t_start;
         model.ln_r_start = saved_ln_r_start;
         model.lum_start = saved_lum_start;
+        model.v_start = saved_v_start;
+        model.u_start = saved_u_start;
     }
     model.sig = saved_sig;
     model.mlt_vc = saved_mlt_vc;

@@ -91,6 +91,8 @@ pub struct StarControls {
     pub use_brunt_gradmux_form: bool,
     /// Energy equation form (`EnergyEqnOption::Dedt` default).
     pub energy_eqn_option: EnergyEqnOption,
+    /// Whether adaptive mesh adjustment is permitted (`okay_to_remesh`, `true` default).
+    pub okay_to_remesh: bool,
     /// Mesh spacing multiplier `mesh_delta_coeff` (`1.0` default, `0.5` in `star/test`).
     pub mesh_delta_coeff: f64,
     /// Structural variation target `varcontrol_target` (`1e-4` default, `1e-3` in `star/test`).
@@ -133,6 +135,16 @@ pub struct StarControls {
     pub use_momentum_outer_bc: bool,
     /// Whether outer boundary sets $P_{\mathrm{gas}} = 0$ so $P_{\mathrm{surf}} = P_{\mathrm{rad}}(T_{\mathrm{surf}})$ (`use_zero_Pgas_outer_BC`).
     pub use_zero_pgas_outer_bc: bool,
+    /// Whether outer boundary enforces zero compression gradient (`use_compression_outer_BC`).
+    pub use_compression_outer_bc: bool,
+    /// Whether outer boundary enforces fixed surface pressure `fixed_psurf` (`use_fixed_Psurf_outer_BC`).
+    pub use_fixed_psurf_outer_bc: bool,
+    /// Fixed surface pressure in $\mathrm{dyn\,cm^{-2}}$ (`fixed_Psurf`).
+    pub fixed_psurf: f64,
+    /// Whether outer boundary enforces fixed surface velocity `fixed_vsurf` (`use_fixed_vsurf_outer_BC`).
+    pub use_fixed_vsurf_outer_bc: bool,
+    /// Fixed surface velocity in $\mathrm{cm\,s^{-1}}$ (`fixed_vsurf`).
+    pub fixed_vsurf: f64,
     /// Constant mass-change rate $\dot{M}$ in $M_\odot\,\mathrm{yr}^{-1}$ (`mass_change`).
     pub mass_change: f64,
     /// Whether accreted material matches surface composition (`accrete_same_as_surface`).
@@ -439,8 +451,14 @@ pub struct StarControls {
     pub include_w_in_correction_limits: bool,
     /// Abundance threshold below which `sizeB` excludes species corrections (`correction_xa_limit`).
     pub correction_xa_limit: f64,
+    /// Exclude species from `max_correction` (`ignore_species_in_max_correction`).
+    pub ignore_species_in_max_correction: bool,
     /// Minimum species variable scale floor (`xa_scale`, `1e-5` default).
     pub xa_scale: f64,
+    /// Minimum chemical equation rate scale in $\mathrm{s^{-1}}$ (`min_chem_eqn_scale`, `1.0` default).
+    pub min_chem_eqn_scale: f64,
+    /// Relative cell internal-energy scale factor in `set_energy_eqn_scal` (`dedt_eqn_r_scale`, `1e8` default).
+    pub dedt_eqn_r_scale: f64,
     /// Ignore `i_equ_L` residuals in convergence norm (`convergence_ignore_equL_residuals`).
     pub convergence_ignore_equl_residuals: bool,
     /// Ignore `i_dalpha_RTI_dt` residuals in convergence norm (`convergence_ignore_alpha_RTI_residuals`).

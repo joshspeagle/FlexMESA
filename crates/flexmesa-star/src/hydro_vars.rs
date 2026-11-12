@@ -505,5 +505,8 @@ pub fn set_hydro_vars(
     do_brunt_n2(model);
     eval_surf_bc(model)?;
     crate::eps_grav::eval_eps_grav(model);
+    if model.controls.u_flag {
+        crate::riemann_ad::do_uface_and_pface(model)?;
+    }
     Ok(())
 }

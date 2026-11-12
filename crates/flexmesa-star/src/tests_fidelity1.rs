@@ -234,10 +234,7 @@ fn test_hydro_energy_pressure_time_centering_pvsc_pturb_and_chem_partials() {
     let dblk_chem = sys.dblk[k * nvar * nvar + i_equ * nvar + j_chem0]
         / x_scale[k * nvar + j_chem0];
 
-    let mut scal = model.dt / model.energy_start[k].max(1.0);
-    if k == 0 {
-        scal *= 1.0e-6;
-    }
+    let scal = crate::hydro_energy::set_energy_eqn_scal(&model, k);
     let d_inv_rho_dt =
         ((-model.lnd[k]).exp() - (-model.lnd_start[k]).exp()) / model.dt;
     let expected_d_chem = scal * model.d_epsnuc_dx[base]
@@ -269,10 +266,10 @@ fn test_hydro_momentum_and_radius_rotational_fp_drag_pvsc_rti_and_bounds() {
     model.aux.mlt_vc_old[k - 1] = 1.2e5;
     model.controls.rti_flag = true;
     model.controls.dudt_rti_diffusion_factor = 1.2;
-    model.aux.sig_rti[k - 1] = 1.0e22;
-    model.aux.sig_rti[k] = 1.5e22;
-    model.aux.sig_rti[k + 1] = 2.0e22;
-    model.aux.source_plus_alpha_rti[k] = 5.0;
+    model.controls.dlnddt_rti_diffusion_factor = 1.0;
+    model.aux.sigmid_rti[k - 1] = 1.0e22;
+    model.aux.sigmid_rti[k] = 1.5e22;
+    model.aux.eta_rti[k] = 1.0e14;
 
     let nvar = model.layout.nvar(false);
     let x_scale = compute_x_scale(&model, false);

@@ -176,7 +176,9 @@ impl StarExtras for Tier4CaseExtras {
     fn extras_controls(&mut self, model: &mut StarModel) {
         self.step_count = 0;
         self.rsp_num_periods = 0;
-        if model.controls.rsp_flag || model.controls.rsp2_flag {
+        let is_tdc_mod = self.case_name == "dev_compare_Cepheid_RSP2_TDC"
+            && model.m_center > 0.0;
+        if model.controls.rsp_flag || model.controls.rsp2_flag || is_tdc_mod {
             if self.case_name == "rsp_check_2nd_crossing" {
                 self.crossing_delta_teff =
                     model.controls.x_ctrl.get(1).copied().unwrap_or(100.0);

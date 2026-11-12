@@ -71,6 +71,7 @@ pub mod hydro_brunt_surf;
 pub mod hydro_energy;
 pub mod hydro_eqns;
 pub mod hydro_momentum;
+pub mod hydro_rti;
 pub mod hydro_state;
 pub mod hydro_temperature;
 pub mod hydro_vars;
@@ -98,6 +99,7 @@ pub mod pulse_modes;
 pub mod pulse_utils;
 pub mod relax;
 pub mod riemann;
+pub mod riemann_ad;
 pub mod rotation;
 pub mod rsp2;
 pub mod rsp2_ad;
@@ -127,6 +129,7 @@ pub(crate) mod rsp_stats;
 pub mod rsp_turb_partials;
 pub mod rsp_zone_micro;
 pub mod solver;
+pub mod solver_norms;
 pub mod star_ad;
 pub mod star_job_init;
 pub mod stella;
@@ -187,6 +190,10 @@ pub use hydro_eqns::{
 pub use hydro_momentum::{
     eval_cell_peos_time_centered_ad, eval_face_dm_bar, expected_hse_grav_term,
     expected_non_hse_term,
+};
+pub use hydro_rti::{
+    do1_dalpha_rti_dt_eqn, eval_alpha_rti_sources, set_dpdr_drhodr_info,
+    set_rti_mixing_info,
 };
 pub use hydro_state::HydroAuxState;
 pub use hydro_temperature::{interp_p_point_ad, set_rsp_lsurf_bc};
@@ -261,6 +268,9 @@ pub use riemann::{
     eval_hllc_face, eval_hllc_surface_face, eval_riemann_momentum_residual,
     eval_riemann_profile, HllcFaceState,
 };
+pub use riemann_ad::{
+    calc_ptot_cell_ad, do1_riemann_momentum_eqn, do_uface_and_pface,
+};
 pub use rotation::{
     eval_magnetic_diffusivity, eval_omega_crit, eval_rotation_fp_ft,
     eval_rotational_mixing_zone, eval_thermal_diffusivity,
@@ -309,8 +319,9 @@ pub use rsp_lina::{do_lina, RspLinaOutput};
 pub use rsp_relax_env::relax_env;
 pub use rsp_stah::stah;
 pub use solver::{
-    compute_corr_coeff, compute_correction_norms, compute_vector_norms,
-    solve_henyey_step, HenyeySolverReport,
+    active_solver_tolerances, compute_corr_coeff, compute_correction_norms,
+    compute_model_correction_norms, compute_residual_norms,
+    compute_vector_norms, solve_henyey_step, HenyeySolverReport,
 };
 pub use star_ad::{
     StarAdExt, StarAdOrder1, I_HP_00, I_HP_M1, I_HP_P1, I_LND_00, I_LND_M1,

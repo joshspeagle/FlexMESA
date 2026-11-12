@@ -322,6 +322,7 @@ impl InlistBundle {
             eps_grav_factor, gamma_ln_s_eps_grav_full_on, gamma_ln_s_eps_grav_full_off,
             velocity_q_upper_bound, velocity_tau_lower_bound, velocity_logt_lower_bound,
             mix_factor, pextra_factor, min_kap_for_dprad_dm_eqn,
+            fixed_psurf, fixed_vsurf,
         ]);
         ctrl.usize_into(&mut c.burn_steps_hard_limit, "burn_steps_hard_limit");
         map_strs!(ctrl, c, [
@@ -345,7 +346,9 @@ impl InlistBundle {
             use_mass_corrections, use_gradt_actual_vs_gradt_mlt_for_t_gradient_eqn,
             use_dprad_dm_form_of_t_gradient_eqn, use_flux_limiting_with_dprad_dm_form,
             use_rsp_l_eqn_outer_bc, use_momentum_outer_bc, use_zero_pgas_outer_bc,
-            do_burn, do_mix, remove_mixing_glitches, redo_conv_for_dr_lt_mixing_length,
+            use_compression_outer_bc, use_fixed_psurf_outer_bc, use_fixed_vsurf_outer_bc,
+            okay_to_remesh, do_burn, do_mix, remove_mixing_glitches,
+            redo_conv_for_dr_lt_mixing_length,
         ]);
         if let Some(v) = ctrl.get_f64("pvsc_zsh") {
             c.pvsc_zshock = v;

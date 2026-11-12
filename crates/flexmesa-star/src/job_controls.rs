@@ -109,8 +109,10 @@ pub struct VarLayout {
     pub i_w: Option<usize>,
     /// Optional face-centered pressure scale height $H_P$ variable slot (`RSP2_flag`).
     pub i_hp: Option<usize>,
+    /// Optional cell-centered Rayleigh-Taylor instability amplitude $\alpha_{\mathrm{RTI}}$ slot (`RTI_flag`).
+    pub i_alpha_rti: Option<usize>,
     /// Number of hydrodynamic variables per zone (`4` in hydrostatic mode, `5`
-    /// with velocity, `7` with velocity and `RSP2_flag`).
+    /// with velocity, `6` with velocity + `RTI_flag`, `7` with velocity + `RSP2_flag`).
     pub nvar_hydro: usize,
     /// Number of nuclear network species (`species`).
     pub species: usize,
@@ -130,6 +132,8 @@ pub struct VarLayout {
     pub i_turbulent_energy: Option<usize>,
     /// Optional `RSP2` pressure scale height algebraic equation slot (`i_equ_Hp`).
     pub i_equ_hp: Option<usize>,
+    /// Optional Rayleigh-Taylor amplitude transport equation slot (`i_dalpha_RTI_dt`).
+    pub i_dalpha_rti_dt: Option<usize>,
 }
 
 impl VarLayout {
@@ -137,7 +141,7 @@ impl VarLayout {
     /// matching `set_var_info` in `star/private/alloc.f90:2002-2110`.
     #[must_use]
     pub const fn new(species: usize, v_flag: bool, u_flag: bool) -> Self {
-        Self::with_rsp2(species, v_flag, u_flag, false)
+        Self::with_flags(species, v_flag, u_flag, false, false)
     }
 
     /// Constructs the variable and equation layout including optional `RSP2`
@@ -148,6 +152,20 @@ impl VarLayout {
         v_flag: bool,
         u_flag: bool,
         rsp2_flag: bool,
+    ) -> Self {
+        Self::with_flags(species, v_flag, u_flag, rsp2_flag, false)
+    }
+
+    /// Constructs the full variable and equation layout including optional
+    /// `RSP2` `(w, Hp)` and `RTI` `alpha_RTI` variables
+    /// (`star/private/alloc.f90:2342-2426`).
+    #[must_use]
+    pub const fn with_flags(
+        species: usize,
+        v_flag: bool,
+        u_flag: bool,
+        rsp2_flag: bool,
+        rti_flag: bool,
     ) -> Self {
         let i_lnd = 0;
         let i_lnt = 1;
@@ -176,6 +194,13 @@ impl VarLayout {
         } else {
             (None, None)
         };
+        let i_alpha_rti = if rti_flag {
+            let ia = nvar_hydro;
+            nvar_hydro += 1;
+            Some(ia)
+        } else {
+            None
+        };
         let has_vel = v_flag || u_flag;
         let (i_equ_l, i_dv_dt, i_dlnd_dt, i_dlne_dt, i_dlnr_dt) = if has_vel {
             let iv = if let Some(idx) = i_v {
@@ -198,6 +223,7 @@ impl VarLayout {
             i_u,
             i_w,
             i_hp,
+            i_alpha_rti,
             nvar_hydro,
             species,
             nvar_total: nvar_hydro + species,
@@ -208,6 +234,7 @@ impl VarLayout {
             i_dlnr_dt,
             i_turbulent_energy: i_w,
             i_equ_hp: i_hp,
+            i_dalpha_rti_dt: i_alpha_rti,
         }
     }
 

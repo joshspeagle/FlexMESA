@@ -49,6 +49,7 @@ impl Default for StarControls {
             calculate_brunt_n2: true,
             use_brunt_gradmux_form: false,
             energy_eqn_option: EnergyEqnOption::Dedt,
+            okay_to_remesh: true,
             mesh_delta_coeff: 1.0,
             varcontrol_target: 1.0e-4,
             max_newton_iters: 25,
@@ -70,6 +71,11 @@ impl Default for StarControls {
             column_depth_for_irradiation: 0.0,
             use_momentum_outer_bc: false,
             use_zero_pgas_outer_bc: false,
+            use_compression_outer_bc: false,
+            use_fixed_psurf_outer_bc: false,
+            fixed_psurf: 0.0,
+            use_fixed_vsurf_outer_bc: false,
+            fixed_vsurf: 0.0,
             mass_change: 0.0,
             accrete_same_as_surface: true,
             accrete_given_mass_fractions: false,
@@ -219,6 +225,7 @@ impl Default for StarControls {
             include_u_in_correction_limits: true,
             include_w_in_correction_limits: true,
             correction_xa_limit: 5.0e-3,
+            ignore_species_in_max_correction: false,
             xa_scale: 1.0e-5,
             convergence_ignore_equl_residuals: false,
             convergence_ignore_alpha_rti_residuals: false,
@@ -251,6 +258,8 @@ impl Default for StarControls {
             gold2_iter_for_resid_tol3: 10,
             gold2_tol_residual_norm3: 1.0e-8,
             gold2_tol_max_residual3: 1.0e-5,
+            min_chem_eqn_scale: 1.0,
+            dedt_eqn_r_scale: 1.0e8,
         }
     }
 }

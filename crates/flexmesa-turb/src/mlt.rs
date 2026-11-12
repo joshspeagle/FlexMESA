@@ -217,8 +217,8 @@ pub fn set_mlt<T: TurbScalar>(
         if f1_arg.val() <= 0.0 {
             return Ok(TurbOutput {
                 gamma: zero,
-                grad_t: zero,
-                y_face: zero,
+                grad_t: inp.gradr,
+                y_face: inp.gradr - inp.gradl,
                 conv_vel: zero,
                 d: zero,
                 mixing_type: MixingType::NoMixing,
@@ -231,8 +231,8 @@ pub fn set_mlt<T: TurbScalar>(
         if gamma_val.val() <= 0.0 {
             return Ok(TurbOutput {
                 gamma: gamma_val,
-                grad_t: zero,
-                y_face: zero,
+                grad_t: inp.gradr,
+                y_face: inp.gradr - inp.gradl,
                 conv_vel: zero,
                 d: zero,
                 mixing_type: MixingType::NoMixing,

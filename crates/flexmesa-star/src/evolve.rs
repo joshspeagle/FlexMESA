@@ -76,10 +76,12 @@ pub fn restore_from_old(model: &mut StarModel) -> Result<(), StarError> {
     model.ln_r.clone_from(&model.ln_r_old);
     model.lum.clone_from(&model.lum_old);
     model.v.clone_from(&model.v_old);
+    model.u.clone_from(&model.u_old);
     model.xa.clone_from(&model.xa_old);
     model.dq.clone_from(&model.dq_old);
     model.aux.rsp.et_rsp.clone_from(&model.aux.et_rsp_old);
     model.aux.rsp.hp_face.clone_from(&model.aux.hp_face_old);
+    model.aux.alpha_rti.clone_from(&model.aux.alpha_rti_old);
     model.set_qs();
     model.set_xqs();
     model.set_m_and_dm();
@@ -168,7 +170,10 @@ pub fn star_evolve_step(
     }
     let prev_dt_old = model.dt_old;
 
-    let (num_splits, num_merges) = if do_remesh && !model.controls.rsp2_flag {
+    let (num_splits, num_merges) = if do_remesh
+        && model.controls.okay_to_remesh
+        && !model.controls.rsp2_flag
+    {
         set_hydro_vars(model, false, false)?;
         let dt_curr = model.dt.max(1.0);
         crate::struct_burn_mix::refresh_mixing_state(model, dt_curr, &[]);

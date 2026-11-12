@@ -209,11 +209,22 @@ pub fn compute_x_scale(model: &StarModel, include_chem: bool) -> Vec<f64> {
             let hp = model.aux.rsp.hp_face.get(k).copied().unwrap_or(1.0).abs();
             x_scale[base + ihp] = hp.max(1.0);
         }
+        if let Some(ia) = layout.i_alpha_rti {
+            let a_s = model
+                .aux
+                .alpha_rti_start
+                .get(k)
+                .copied()
+                .unwrap_or(model.aux.alpha_rti[k])
+                .abs();
+            x_scale[base + ia] = a_s.max(1.0);
+        }
         if include_chem {
+            let xa_min = model.controls.xa_scale.max(1.0e-30);
             for j in 0..model.species {
                 let ivar = layout.chem_var_index(j);
                 x_scale[base + ivar] =
-                    model.xa_start[k * model.species + j].max(1.0e-4);
+                    model.xa_start[k * model.species + j].max(xa_min);
             }
         }
     }
@@ -279,13 +290,48 @@ pub fn do_surf_bc_eqns(model: &StarModel, sys: &mut HenyeySystem) {
     } else {
         1.0
     };
-    let dp_0 = (model.cgrav[0] * model.m_grav[0] * fp_0 * model.dm[0] * mc_0
-        / (2.0 * FOUR_PI))
-        / r_0.pow4();
+    let dp_0 = if model.controls.use_momentum_outer_bc {
+        StarAdOrder1::ZERO
+    } else {
+        (model.cgrav[0] * model.m_grav[0] * fp_0 * model.dm[0] * mc_0
+            / (2.0 * FOUR_PI))
+            / r_0.pow4()
+    };
 
     let use_surf_momentum_bc = model.controls.use_momentum_outer_bc
-        || model.controls.use_zero_pgas_outer_bc;
-    if !use_surf_momentum_bc {
+        || model.controls.use_zero_pgas_outer_bc
+        || model.controls.use_fixed_psurf_outer_bc;
+    if model.controls.use_compression_outer_bc && model.nz >= 2 {
+        let lnd_0 = StarAdOrder1::variable(model.lnd[0], I_LND_00);
+        let lnd_1 = StarAdOrder1::variable(model.lnd[1], I_LND_P1);
+        let rho_0 = lnd_0.exp();
+        let rho_1 = lnd_1.exp();
+        let dlnd_0 =
+            lnd_0 - model.lnd_start.first().copied().unwrap_or(model.lnd[0]);
+        let dlnd_1 =
+            lnd_1 - model.lnd_start.get(1).copied().unwrap_or(model.lnd[1]);
+        let resid_c = (rho_1 * dlnd_0 - rho_0 * dlnd_1) / model.dt.max(1.0e-30);
+        sys.save_eqn_residual(&model.layout, 0, model.layout.i_dv_dt, &resid_c);
+    } else if model.controls.use_fixed_vsurf_outer_bc
+        && (model.controls.v_flag || model.controls.u_flag)
+    {
+        let vsurf_val = if model.controls.v_flag {
+            model.v[0]
+        } else {
+            model.u[0]
+        };
+        let vsurf = StarAdOrder1::variable(vsurf_val, I_V_00);
+        let cs_0 = model
+            .aux
+            .csound_start
+            .first()
+            .copied()
+            .filter(|&c| c > 0.0)
+            .unwrap_or(model.csound[0])
+            .max(1.0);
+        let resid_v = (vsurf - model.controls.fixed_vsurf) / cs_0;
+        sys.save_eqn_residual(&model.layout, 0, model.layout.i_dv_dt, &resid_v);
+    } else if !use_surf_momentum_bc {
         let p_surf = model.ln_peos_surf_ad.exp();
         let ln_p_bc = (p_surf + dp_0).max(StarAdOrder1::constant(1.0e-30)).ln();
         let ln_peos_0 = model.ln_peos_ad[0];
@@ -367,15 +413,12 @@ pub fn do1_chem_eqns(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
         let i_var = model.layout.chem_var_index(j);
         let i_equ = i_var;
         let nuc_base = k * species * species + j * species;
-        let d_self = if active_burn {
-            model.d_dxdt_nuc_dx[nuc_base + j].abs()
-        } else {
-            0.0
-        };
         let x_scale_kj = sys.x_scale[k * sys.nvar + i_var];
-        let rate_scale =
-            (1.0 / dt + sig_00_dm + sig_p1_dm + d_self).max(1.0e-30);
-        let eqn_scale = (x_scale_kj * rate_scale).max(1.0e-12);
+        let eqn_scale = model
+            .controls
+            .min_chem_eqn_scale
+            .max(x_scale_kj / dt)
+            .max(1.0e-30);
 
         let x_00 = model.xa[kj];
         let x_start = model.xa_start[kj];
@@ -453,19 +496,60 @@ pub fn eval_henyey_equations(
     eval_eps_grav(model);
 
     let nz = model.nz;
+    model.aux.total_internal_energy_start = (0..nz)
+        .map(|k| model.energy_start[k].max(0.0) * model.dm[k])
+        .sum();
     let nvar = model.layout.nvar(include_chem);
     let x_scale = compute_x_scale(model, include_chem);
     let mut sys = HenyeySystem::new(nz, nvar, x_scale);
 
     do_surf_bc_eqns(model, &mut sys);
+    let riemann_p_surf = if model.controls.u_flag
+        && !model.controls.v_flag
+        && !model.controls.use_compression_outer_bc
+        && !model.controls.use_fixed_vsurf_outer_bc
+    {
+        if model.controls.use_zero_pgas_outer_bc {
+            let t_s0 = model
+                .ln_t_start
+                .first()
+                .copied()
+                .unwrap_or_else(|| model.ln_t.first().copied().unwrap_or(0.0))
+                .exp();
+            Some(StarAdOrder1::constant(
+                (flexmesa_const::CRAD / 3.0) * t_s0.powi(4),
+            ))
+        } else if model.controls.use_fixed_psurf_outer_bc {
+            Some(StarAdOrder1::constant(model.controls.fixed_psurf))
+        } else if model.controls.use_momentum_outer_bc {
+            Some(model.ln_peos_surf_ad.exp())
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
     for k in 0..nz {
         do1_density_eqn(model, k, &mut sys)?;
-        do1_momentum_eqn(model, k, &mut sys);
+        if model.controls.u_flag && !model.controls.v_flag {
+            crate::riemann_ad::do1_riemann_momentum_eqn(
+                model,
+                k,
+                if k == 0 { riemann_p_surf } else { None },
+                &mut sys,
+            );
+        } else {
+            do1_momentum_eqn(model, k, &mut sys);
+        }
         if !model.controls.rsp2_flag {
             do1_temperature_eqn(model, k, &mut sys);
         }
         do1_energy_eqn(model, k, include_chem, &mut sys);
         do1_radius_eqn(model, k, &mut sys);
+        if model.controls.rti_flag {
+            crate::hydro_rti::do1_dalpha_rti_dt_eqn(model, k, &mut sys);
+        }
         if include_chem {
             do1_chem_eqns(model, k, &mut sys);
         }

@@ -113,7 +113,8 @@ fn do1_alt_dlnt_dm_eqn(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
     let area2 = area * area;
 
     let lrad_ad = if model.gradr[k] > 0.0
-        && (model.gradr[k] - model.gradt[k]).abs() > model.gradr[k].abs() * 1.0e-5
+        && (model.gradr[k] - model.gradt[k]).abs()
+            > model.gradr[k].abs() * 1.0e-5
         && model.gradr_ad[k].val.abs() > 1.0e-30
     {
         lum_k * (model.gradt_ad[k] / model.gradr_ad[k])
@@ -145,8 +146,7 @@ fn do1_alt_dlnt_dm_eqn(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
         let denom = (kap_f * (t4_m1 + t4_00) * (0.5 * dm_bar))
             .max(StarAdOrder1::constant(1.0e-99));
         let flx_r = (area * (t4_m1 - t4_00).abs()) / denom;
-        let flx_lambda =
-            (flx_r * 3.0 + 6.0) / ((flx_r + 3.0) * flx_r + 6.0);
+        let flx_lambda = (flx_r * 3.0 + 6.0) / ((flx_r + 3.0) * flx_r + 6.0);
         d_p_rad_expected = d_p_rad_expected / flx_lambda;
     }
 

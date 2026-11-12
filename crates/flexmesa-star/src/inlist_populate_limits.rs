@@ -14,12 +14,17 @@ impl InlistBundle {
             return;
         };
         let c = &mut self.controls;
-        if let Some(v) = ctrl.get_i64("max_tries1").filter(|&v| v > 0) {
+        if let Some(v) = ctrl
+            .get_i64("solver_max_tries_before_reject")
+            .or_else(|| ctrl.get_i64("max_tries1"))
+            .filter(|&v| v > 0)
+        {
             c.max_newton_iters = v as usize;
         }
         map_f64s!(ctrl, c, [
             tol_correction_norm, tol_max_correction,
             correction_xa_limit, xa_scale,
+            min_chem_eqn_scale, dedt_eqn_r_scale,
             tol_residual_norm1, tol_max_residual1,
             tol_residual_norm2, tol_max_residual2,
             tol_residual_norm3, tol_max_residual3,
@@ -36,6 +41,7 @@ impl InlistBundle {
         map_bools!(ctrl, c, [
             include_l_in_correction_limits, include_v_in_correction_limits,
             include_u_in_correction_limits, include_w_in_correction_limits,
+            ignore_species_in_max_correction,
             convergence_ignore_equl_residuals, convergence_ignore_alpha_rti_residuals,
             use_gold_tolerances, use_gold2_tolerances,
         ]);

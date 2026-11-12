@@ -107,54 +107,57 @@ pub fn expected_hse_grav_term(
 }
 
 /// Evaluates Rayleigh-Taylor instability (`RTI`) momentum diffusion and source
-/// terms at interior face `k >= 1` (`setup_RTI_terms` in
+/// terms at interior face `1 <= k < nz - 1` (`setup_RTI_terms` in
 /// `star/private/hydro_momentum.f90:250-284`).
 #[must_use]
 fn setup_rti_momentum_terms(
     model: &StarModel,
     k: usize,
+    area: StarAdOrder1,
     dm_face: f64,
 ) -> StarAdOrder1 {
     if k == 0
+        || k + 1 >= model.nz
         || !model.controls.rti_flag
-        || model.controls.dudt_rti_diffusion_factor <= 0.0
         || !(model.controls.v_flag || model.controls.u_flag)
     {
         return StarAdOrder1::ZERO;
     }
-    let fac = model.controls.dudt_rti_diffusion_factor;
-    let sig_00 = model.aux.sig_rti.get(k).copied().unwrap_or(0.0) * fac;
-    let sig_m1 = model.aux.sig_rti.get(k - 1).copied().unwrap_or(0.0) * fac;
-    let sig_p1 = if k + 1 < model.nz {
-        model.aux.sig_rti.get(k + 1).copied().unwrap_or(0.0) * fac
+    let dvdt_diffusion = if model.controls.dudt_rti_diffusion_factor > 0.0 {
+        let fac = model.controls.dudt_rti_diffusion_factor;
+        let sig_m1 =
+            model.aux.sigmid_rti.get(k - 1).copied().unwrap_or(0.0) * fac;
+        let sig_00 = model.aux.sigmid_rti.get(k).copied().unwrap_or(0.0) * fac;
+        let v_val = |idx: usize| {
+            if model.controls.v_flag {
+                model.v[idx]
+            } else {
+                model.u[idx]
+            }
+        };
+        let v_00 = StarAdOrder1::variable(v_val(k), I_V_00);
+        let v_m1 = StarAdOrder1::variable(v_val(k - 1), I_V_M1);
+        let v_p1 = StarAdOrder1::variable(v_val(k + 1), I_V_P1);
+        ((v_p1 - v_00) * sig_00 - (v_00 - v_m1) * sig_m1)
+            / model.dm_bar[k].max(1.0e-30)
     } else {
-        0.0
+        StarAdOrder1::ZERO
     };
-    let v_val = |idx: usize| {
-        if model.controls.v_flag {
-            model.v[idx]
-        } else {
-            model.u[idx]
-        }
-    };
-    let v_00 = StarAdOrder1::variable(v_val(k), I_V_00);
-    let v_m1 = StarAdOrder1::variable(v_val(k - 1), I_V_M1);
-    let v_p1 = if k + 1 < model.nz {
-        StarAdOrder1::variable(v_val(k + 1), I_V_P1)
+    let eta_k = model.aux.eta_rti.get(k).copied().unwrap_or(0.0);
+    let dvdt_kick = if eta_k > 0.0
+        && model.controls.dlnddt_rti_diffusion_factor > 0.0
+        && model.dt > 0.0
+    {
+        let f = area
+            * (model.controls.dlnddt_rti_diffusion_factor * eta_k
+                / dm_face.max(1.0e-30));
+        let rho_00 = StarAdOrder1::variable(model.lnd[k], I_LND_00).exp();
+        let rho_m1 = StarAdOrder1::variable(model.lnd[k - 1], I_LND_M1).exp();
+        f * (rho_00 - rho_m1) / model.dt
     } else {
-        StarAdOrder1::constant(model.v_center)
+        StarAdOrder1::ZERO
     };
-    let sig_top = sig_m1.min(sig_00);
-    let sig_bot = sig_00.min(sig_p1);
-    let diff = ((v_m1 - v_00) * sig_top - (v_00 - v_p1) * sig_bot)
-        / dm_face.max(1.0e-30);
-    let kick = model
-        .aux
-        .source_plus_alpha_rti
-        .get(k)
-        .copied()
-        .unwrap_or(0.0);
-    diff + kick
+    dvdt_diffusion + dvdt_kick
 }
 
 /// Evaluates all non-HSE acceleration and momentum-flux terms at face `k`
@@ -228,7 +231,7 @@ pub fn expected_non_hse_term(
     }
 
     if k > 0 && model.controls.rti_flag {
-        non_hse = non_hse + setup_rti_momentum_terms(model, k, dm_face);
+        non_hse = non_hse + setup_rti_momentum_terms(model, k, area, dm_face);
     }
 
     non_hse
@@ -238,7 +241,8 @@ pub fn expected_non_hse_term(
 /// in `star/private/hydro_momentum.f90:79-436`).
 pub fn do1_momentum_eqn(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
     let use_surf_momentum_bc = model.controls.use_momentum_outer_bc
-        || model.controls.use_zero_pgas_outer_bc;
+        || model.controls.use_zero_pgas_outer_bc
+        || model.controls.use_fixed_psurf_outer_bc;
     if k == 0 && !use_surf_momentum_bc {
         return;
     }
@@ -264,7 +268,7 @@ pub fn do1_momentum_eqn(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
 
     let i_equ = model.layout.i_dv_dt;
     if k == 0 {
-        let (p_0, _p_theta) = eval_cell_peos_time_centered_ad(model, 0, false);
+        let (p_0, p_theta_0) = eval_cell_peos_time_centered_ad(model, 0, false);
         let mut p_tot_0 = p_0;
         if model.controls.use_pvsc_art_visc && model.controls.v_flag {
             p_tot_0 = p_tot_0 + eval_pvsc_cell_ad(model, 0);
@@ -273,9 +277,44 @@ pub fn do1_momentum_eqn(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
             p_tot_0 = p_tot_0
                 + crate::rsp2_ad::eval_rsp2_ptrb_cell_ad(model, 0, false);
         }
-        let p_surf = model.ln_peos_surf_ad.exp();
+        let p_surf = if model.controls.use_zero_pgas_outer_bc {
+            let t_s0 = model
+                .ln_t_start
+                .first()
+                .copied()
+                .unwrap_or(model.ln_t[0])
+                .exp();
+            StarAdOrder1::constant((flexmesa_const::CRAD / 3.0) * t_s0.powi(4))
+        } else if model.controls.use_fixed_psurf_outer_bc {
+            StarAdOrder1::constant(model.controls.fixed_psurf)
+        } else {
+            model.ln_peos_surf_ad.exp()
+        };
         let resid = (dp_expected - (p_surf - p_tot_0)) / p_0;
         sys.save_eqn_residual(&model.layout, 0, i_equ, &resid);
+        if sys.nvar > model.layout.nvar_hydro && model.species > 0 {
+            let p_0_val = p_0.val.max(1.0e-30);
+            let resid_val = resid.val;
+            for j in 0..model.species {
+                let dlnp_0 = model
+                    .aux
+                    .dln_peos_dxa_for_partials
+                    .get(j)
+                    .copied()
+                    .unwrap_or(0.0);
+                if dlnp_0 != 0.0 {
+                    let dp_0 = p_theta_0 * model.peos[0] * dlnp_0;
+                    let d_res_0 = (dp_0 - resid_val * dp_0) / p_0_val;
+                    sys.add_partial(
+                        0,
+                        i_equ,
+                        0,
+                        model.layout.chem_var_index(j),
+                        d_res_0,
+                    );
+                }
+            }
+        }
     } else {
         let (p_00, p_theta_00) =
             eval_cell_peos_time_centered_ad(model, k, false);
@@ -361,7 +400,16 @@ pub fn do1_radius_eqn(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
         let cs = model.csound[k].max(1.0);
         -v_var / cs
     } else {
-        let v_ad = if model.controls.using_velocity_time_centering {
+        let v_ad = if model.controls.u_flag && !model.controls.v_flag {
+            let uf_ad = model.aux.u_face_ad.get(k).copied().unwrap_or(v_var);
+            if model.controls.using_velocity_time_centering {
+                let uf_s =
+                    model.aux.u_face_start.get(k).copied().unwrap_or(vel_start);
+                (uf_ad + uf_s) * 0.5
+            } else {
+                uf_ad
+            }
+        } else if model.controls.using_velocity_time_centering {
             (v_var + vel_start) * 0.5
         } else {
             v_var

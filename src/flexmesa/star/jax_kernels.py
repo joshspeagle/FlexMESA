@@ -460,8 +460,14 @@ def eval_hydro_residuals_jax(
     de_dt = (energy - energy_start) / dt_safe
     pdv_dt = peos * (jnp.exp(-lnd) - jnp.exp(-lnd_start)) / dt_safe
     esum = -dl_dm + sources - de_dt - pdv_dt
-    scal = dt_safe / jnp.maximum(energy_start, 1.0)
-    scal = jnp.where(idx == 0, scal * 1.0e-6, scal)
+    total_e_start = jnp.maximum(
+        jnp.sum(jnp.maximum(energy_start, 0.0) * dm), 1.0e-30
+    )
+    cell_e_frac = (jnp.maximum(energy_start, 0.0) * dm) / total_e_start
+    base_scal = jnp.minimum(
+        jnp.where(idx == 0, 1.0e-6, 1.0), cell_e_frac * 1.0e8
+    )
+    scal = base_scal * dt_safe / jnp.maximum(energy_start, 1.0)
     equ_dlne = esum * scal
 
     return jnp.stack([equ_l, equ_dv, equ_dlnd, equ_dlne], axis=-1)

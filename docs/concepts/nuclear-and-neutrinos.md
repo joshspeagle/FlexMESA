@@ -80,8 +80,8 @@ $$\frac{dY_i}{dt} = \sum_{r} \nu_{i,r}\,R_r(\rho, T, \mathbf{Y}), \qquad \epsilo
    Assembles the molar abundance rate vector $dY_i/dt$, net nuclear energy generation $\epsilon_{\mathrm{nuc}}$, weak neutrino loss $\epsilon_{\mathrm{neu}}$, and the full analytical Jacobian $(\partial \dot{X}_i/\partial X_j, \partial \dot{X}_i/\partial T, \partial \dot{X}_i/\partial \rho)$ using 2-lane SIMD dual numbers (`F64x2`) and thread-local preallocated workspace buffers (`with_thread_local_work`) across built-in networks (`basic.net`, `approx21.net`, `cno_extras.net`, `pp_and_cno_extras.net`, `co_burn.net`).
 2. **Reverse-Mode `@jax.custom_vjp` Network Wrapper (`eval_net_jax`)**:
    Wraps `eval_net` in a `@jax.custom_vjp` rule backed by the exact analytical Jacobian from Safe Rust so that `jax.grad` differentiates through nuclear energy generation and abundance rates with zero finite-difference overhead.
-3. **Stiff Single-Zone Burn Integrators (`burn_1_zone`, `burn_1_zone_const_p`)**:
-   Integrates stiff single-zone burning trajectories at constant density or constant pressure using 4th-order L-stable Kaps-Rentrop / Hairer-Wanner `RODAS4` Rosenbrock and Bader-Deuflhard semi-implicit midpoint solvers.
+3. **Stiff Single-Zone Burn Integrators & Temperature-Thresholded Operator Splitting (`burn_1_zone`, `burn_1_zone_const_density`, `burn_1_zone_const_p`)**:
+   Integrates stiff single-zone burning trajectories at constant density (`burn_1_zone_const_density`) or constant pressure (`burn_1_zone_const_p`) using 4th-order L-stable Kaps-Rentrop / Hairer-Wanner `RODAS4` Rosenbrock and Bader-Deuflhard semi-implicit midpoint solvers backed by thread-local `NetWorkState` buffers. During coupled stellar evolution (`do_struct_burn_mix`), setting `op_split_burn = true` restricts operator-split stiff burning to hot shells satisfying $T_{\mathrm{start},k} \ge T_{\mathrm{op\_split,min}}$ (`op_split_burn_min_t = 2.0e9 K` by default) while retaining fully coupled implicit burning and mixing in cooler zones.
 
 === "Python & JAX (`flexmesa.chem`, `flexmesa.neu`, `flexmesa.net`)"
 

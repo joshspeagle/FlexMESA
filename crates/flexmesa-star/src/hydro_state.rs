@@ -19,6 +19,9 @@ pub struct HydroAuxState {
     /// Total integrated model energy $E_{\mathrm{tot}}$ in $\mathrm{erg}$
     /// (`total_energy` in `star_data_step_work.inc`).
     pub total_energy: f64,
+    /// Start-of-step total integrated internal energy $\sum_k \Delta m_k e_{\mathrm{start},k}$
+    /// in $\mathrm{erg}$ (`total_internal_energy_old` in `star_utils.f90:3706`).
+    pub total_internal_energy_start: f64,
     /// Cumulative global energy conservation error in $\mathrm{erg}$
     /// (`cumulative_energy_error` in `star_data_step_work.inc`).
     pub cumulative_energy_error: f64,
@@ -74,14 +77,38 @@ pub struct HydroAuxState {
     pub et_rsp_old: Vec<f64>,
     /// Previous-step `RSP2` pressure scale height $H_{P,\mathrm{old},k}$ for step retry (`hp_face_old`).
     pub hp_face_old: Vec<f64>,
+    /// Start-of-step adiabatic sound speed $c_{s,\mathrm{start},k}$ (`csound_start`).
+    pub csound_start: Vec<f64>,
     /// Start-of-step face convective velocity $v_{c,\mathrm{old},k}$ in $\mathrm{cm\,s^{-1}}$ (`mlt_vc_old`).
     pub mlt_vc_old: Vec<f64>,
+    /// Rayleigh-Taylor instability face kinematic diffusivity $\eta_{\mathrm{RTI},k}$ (`eta_RTI`).
+    pub eta_rti: Vec<f64>,
+    /// Rayleigh-Taylor instability cell kinematic diffusivity $\eta_{\mathrm{mid,RTI},k}$ (`etamid_RTI`).
+    pub etamid_rti: Vec<f64>,
     /// Rayleigh-Taylor instability Lagrangian diffusion coefficient $\sigma_{\mathrm{RTI},k}$ (`sig_RTI`).
     pub sig_rti: Vec<f64>,
-    /// Rayleigh-Taylor instability momentum source term (`source_plus_alpha_RTI`).
+    /// Rayleigh-Taylor instability cell-mid Lagrangian diffusion coefficient (`sigmid_RTI`).
+    pub sigmid_rti: Vec<f64>,
+    /// Rayleigh-Taylor baroclinic instability product $(\partial P/\partial r)(\partial\rho/\partial r)$ (`dPdr_dRhodr_info`).
+    pub dpdr_drhodr_info: Vec<f64>,
+    /// Rayleigh-Taylor instability growth source term (`source_plus_alpha_RTI`).
     pub source_plus_alpha_rti: Vec<f64>,
+    /// Rayleigh-Taylor instability damping sink term (`source_minus_alpha_RTI`).
+    pub source_minus_alpha_rti: Vec<f64>,
     /// Rayleigh-Taylor instability amplitude $\alpha_{\mathrm{RTI},k}$ (`alpha_RTI`).
     pub alpha_rti: Vec<f64>,
+    /// Start-of-step Rayleigh-Taylor amplitude $\alpha_{\mathrm{RTI,start},k}$ (`alpha_RTI_start`).
+    pub alpha_rti_start: Vec<f64>,
+    /// Previous-step Rayleigh-Taylor amplitude $\alpha_{\mathrm{RTI,old},k}$ for step retry.
+    pub alpha_rti_old: Vec<f64>,
+    /// HLLC Riemann contact velocity $u_{\mathrm{face},k}$ with 3-cell AD partials (`u_face_ad`).
+    pub u_face_ad: Vec<StarAdOrder1>,
+    /// HLLC Riemann contact pressure $P_{\mathrm{face},k}$ with 3-cell AD partials (`P_face_ad`).
+    pub p_face_ad: Vec<StarAdOrder1>,
+    /// Start-of-step HLLC contact velocity $u_{\mathrm{face,start},k}$ (`u_face_start`).
+    pub u_face_start: Vec<f64>,
+    /// Start-of-step HLLC contact pressure $P_{\mathrm{face,start},k}$ (`P_face_start`, `-1` sentinel).
+    pub p_face_start: Vec<f64>,
     /// Rotational velocity to critical velocity ratio $\omega_k / \omega_{\mathrm{crit},k}$ (`w_div_wc`).
     pub w_div_wc: Vec<f64>,
     /// Rotational pressure distortion correction factor $f_{P,\mathrm{rot},k}$ (`fp_rot`).
@@ -117,6 +144,7 @@ impl HydroAuxState {
             doing_relax: false,
             doing_struct_burn_mix: false,
             total_energy: 0.0,
+            total_internal_energy_start: 0.0,
             cumulative_energy_error: 0.0,
             non_epsnuc_energy_change_from_split_burn: 0.0,
             cp_start: vec![0.0; nz],
@@ -142,10 +170,22 @@ impl HydroAuxState {
             etrb_start: vec![0.0; nz],
             et_rsp_old: vec![0.0; nz],
             hp_face_old: vec![0.0; nz],
+            csound_start: vec![0.0; nz],
             mlt_vc_old: vec![0.0; nz],
+            eta_rti: vec![0.0; nz],
+            etamid_rti: vec![0.0; nz],
             sig_rti: vec![0.0; nz],
+            sigmid_rti: vec![0.0; nz],
+            dpdr_drhodr_info: vec![0.0; nz],
             source_plus_alpha_rti: vec![0.0; nz],
+            source_minus_alpha_rti: vec![0.0; nz],
             alpha_rti: vec![0.0; nz],
+            alpha_rti_start: vec![0.0; nz],
+            alpha_rti_old: vec![0.0; nz],
+            u_face_ad: vec![StarAdOrder1::ZERO; nz],
+            p_face_ad: vec![StarAdOrder1::ZERO; nz],
+            u_face_start: vec![0.0; nz],
+            p_face_start: vec![-1.0; nz],
             w_div_wc: vec![0.0; nz],
             fp_rot: vec![1.0; nz],
             ft_rot: vec![1.0; nz],
@@ -183,16 +223,26 @@ impl HydroAuxState {
             &mut self.etrb_start,
             &mut self.et_rsp_old,
             &mut self.hp_face_old,
+            &mut self.csound_start,
             &mut self.mlt_vc_old,
+            &mut self.eta_rti,
+            &mut self.etamid_rti,
             &mut self.sig_rti,
+            &mut self.sigmid_rti,
+            &mut self.dpdr_drhodr_info,
             &mut self.source_plus_alpha_rti,
+            &mut self.source_minus_alpha_rti,
             &mut self.alpha_rti,
+            &mut self.alpha_rti_start,
+            &mut self.alpha_rti_old,
+            &mut self.u_face_start,
             &mut self.w_div_wc,
             &mut self.i_rot,
             &mut self.brunt_n2_composition_term,
         ] {
             v.resize(nz, 0.0);
         }
+        self.p_face_start.resize(nz, -1.0);
         for v in [
             &mut self.fp_rot,
             &mut self.ft_rot,
@@ -200,7 +250,13 @@ impl HydroAuxState {
         ] {
             v.resize(nz, 1.0);
         }
-        for ad in [&mut self.eq_ad, &mut self.extra_grav, &mut self.uq_ad] {
+        for ad in [
+            &mut self.eq_ad,
+            &mut self.extra_grav,
+            &mut self.uq_ad,
+            &mut self.u_face_ad,
+            &mut self.p_face_ad,
+        ] {
             ad.resize(nz, StarAdOrder1::ZERO);
         }
         let n_sp = nz * species;
@@ -219,13 +275,16 @@ impl HydroAuxState {
         grada: &[f64],
         chi_t: &[f64],
         chi_rho: &[f64],
+        csound: &[f64],
         mlt_vc: &[f64],
     ) {
         self.cp_start.clone_from_slice(cp);
         self.grada_start.clone_from_slice(grada);
         self.chi_t_start.clone_from_slice(chi_t);
         self.chi_rho_start.clone_from_slice(chi_rho);
+        self.csound_start.clone_from_slice(csound);
         self.etrb_start.clone_from(&self.etrb);
+        self.alpha_rti_start.clone_from(&self.alpha_rti);
         self.mlt_vc_old.clone_from_slice(mlt_vc);
     }
 }

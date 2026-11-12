@@ -10,9 +10,14 @@
 
 use flexmesa_mtx::{solve_block_tridiag_bcyclic, solve_block_tridiagonal};
 
-use crate::controls::{StarError, VarLayout};
+use crate::controls::StarError;
 use crate::hydro_eqns::{eval_henyey_equations, HenyeySystem};
 use crate::model::StarModel;
+pub use crate::solver_norms::{
+    active_solver_tolerances, compute_correction_norms,
+    compute_model_correction_norms, compute_residual_norms,
+    compute_vector_norms,
+};
 
 /// Convergence and diagnostic summary returned by [`solve_henyey_step`].
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -29,109 +34,6 @@ pub struct HenyeySolverReport {
     pub correction_norm: f64,
     /// Maximum absolute dimensionless correction $\max |\delta\tilde{x}|$.
     pub max_correction: f64,
-}
-
-/// Computes `(mean_abs, max_abs)` for a residual vector (`sizequ` in
-/// `star/private/solver_support.f90:230-313`).
-#[must_use]
-pub fn compute_vector_norms(v: &[f64]) -> (f64, f64) {
-    if v.is_empty() {
-        return (0.0, 0.0);
-    }
-    let mut sum_abs = 0.0;
-    let mut max_abs = 0.0_f64;
-    for &x in v {
-        let a = x.abs();
-        sum_abs += a;
-        if a > max_abs || a.is_nan() {
-            max_abs = a;
-        }
-    }
-    (sum_abs / (v.len() as f64), max_abs)
-}
-
-/// Computes `(correction_norm, max_correction)` skipping `i_lum` by default
-/// (`sizeB` in `star/private/solver_support.f90:316-570`).
-#[must_use]
-pub fn compute_correction_norms(
-    layout: &VarLayout,
-    nz: usize,
-    nvar: usize,
-    dx_scaled: &[f64],
-) -> (f64, f64) {
-    if nz == 0 || nvar == 0 || dx_scaled.is_empty() {
-        return (0.0, 0.0);
-    }
-    let mut sum_abs = 0.0;
-    let mut max_abs = 0.0_f64;
-    let mut count = 0_usize;
-    for k in 0..nz {
-        let base = k * nvar;
-        for j in 0..nvar {
-            if j == layout.i_lum || Some(j) == layout.i_hp {
-                continue;
-            }
-            let a = dx_scaled[base + j].abs();
-            sum_abs += a;
-            count += 1;
-            if a > max_abs || a.is_nan() {
-                max_abs = a;
-            }
-        }
-    }
-    if count == 0 {
-        (0.0, 0.0)
-    } else {
-        (sum_abs / (count as f64), max_abs)
-    }
-}
-
-fn compute_model_correction_norms(
-    model: &StarModel,
-    nz: usize,
-    nvar: usize,
-    dx_scaled: &[f64],
-    x_scale: &[f64],
-) -> (f64, f64) {
-    let layout = &model.layout;
-    if layout.i_w.is_none() {
-        return compute_correction_norms(layout, nz, nvar, dx_scaled);
-    }
-    if nz == 0 || nvar == 0 || dx_scaled.is_empty() {
-        return (0.0, 0.0);
-    }
-    let mut sum_abs = 0.0;
-    let mut max_abs = 0.0_f64;
-    let mut count = 0_usize;
-    for k in 0..nz {
-        let base = k * nvar;
-        for j in 0..nvar {
-            if j == layout.i_lum || Some(j) == layout.i_hp {
-                continue;
-            }
-            let a = if Some(j) == layout.i_w {
-                let w_k = model.aux.rsp.et_rsp[k].max(0.0).sqrt();
-                if w_k < 1.0 {
-                    0.0
-                } else {
-                    (dx_scaled[base + j] * x_scale[base + j]).abs()
-                        / (1.0e3 + w_k)
-                }
-            } else {
-                dx_scaled[base + j].abs()
-            };
-            sum_abs += a;
-            count += 1;
-            if a > max_abs || a.is_nan() {
-                max_abs = a;
-            }
-        }
-    }
-    if count == 0 {
-        (0.0, 0.0)
-    } else {
-        (sum_abs / (count as f64), max_abs)
-    }
 }
 
 /// Computes the step damping factor `corr_coeff` $\in (0, 1]$ limiting the
@@ -221,6 +123,12 @@ fn apply_damped_correction(
             model.xh[h_base + i] = xh_base[h_base + i]
                 + alpha * dx_scaled[s_base + i] * x_scale[s_base + i];
         }
+        if let Some(iw) = model.layout.i_w {
+            model.xh[h_base + iw] = model.xh[h_base + iw].max(0.0);
+        }
+        if let Some(ia) = model.layout.i_alpha_rti {
+            model.xh[h_base + ia] = model.xh[h_base + ia].max(0.0);
+        }
         if include_chem && model.species > 0 {
             let c_base = k * model.species;
             for j in 0..model.species {
@@ -305,7 +213,8 @@ pub fn solve_henyey_step(
 ) -> Result<HenyeySolverReport, StarError> {
     model.pack_xh();
     let mut sys = eval_henyey_equations(model, include_chem)?;
-    let (mut residual_norm, mut max_residual) = compute_vector_norms(&sys.equ);
+    let (mut residual_norm, mut max_residual) =
+        compute_residual_norms(model, sys.nvar, &sys.equ);
     let mut correction_norm = 0.0;
     let mut max_correction = 0.0;
 
@@ -338,6 +247,7 @@ pub fn solve_henyey_step(
         let prev_residual_norm = residual_norm;
 
         let mut alpha = base_coeff;
+        let mut accepted_alpha = base_coeff;
         let mut step_accepted = false;
         let mut best_rnorm = f64::INFINITY;
         let mut best_sys: Option<(f64, f64, f64, HenyeySystem)> = None;
@@ -353,7 +263,7 @@ pub fn solve_henyey_step(
             );
             if let Ok(next_sys) = eval_henyey_equations(model, include_chem) {
                 let (next_rnorm, next_rmax) =
-                    compute_vector_norms(&next_sys.equ);
+                    compute_residual_norms(model, next_sys.nvar, &next_sys.equ);
                 if next_rnorm.is_finite() && next_rmax.is_finite() {
                     if iter == 1
                         || next_rnorm <= 1.5 * prev_residual_norm.max(1.0e-4)
@@ -361,6 +271,7 @@ pub fn solve_henyey_step(
                         sys = next_sys;
                         residual_norm = next_rnorm;
                         max_residual = next_rmax;
+                        accepted_alpha = alpha;
                         step_accepted = true;
                         break;
                     }
@@ -395,6 +306,7 @@ pub fn solve_henyey_step(
                     sys = saved_sys;
                     residual_norm = best_rnorm;
                     max_residual = best_rmax;
+                    accepted_alpha = best_alpha;
                     step_accepted = true;
                 }
             }
@@ -412,18 +324,24 @@ pub fn solve_henyey_step(
 
         model.total_num_solver_iterations += 1;
 
-        let corr_ok = correction_norm <= model.controls.tol_correction_norm
-            && max_correction <= model.controls.tol_max_correction;
-        let resid_ok = residual_norm <= model.controls.tol_residual_norm
-            && max_residual <= model.controls.tol_max_residual;
-        let tight_resid = residual_norm <= 1.0e-10 && max_residual <= 1.0e-8;
-        let mean_norm_ok = iter >= 5
-            && residual_norm <= model.controls.tol_residual_norm
-            && correction_norm <= model.controls.tol_correction_norm
-            && max_residual <= 0.1
-            && max_correction <= 0.05;
+        let (tol_rn, tol_mr, tol_cn, tol_mc) =
+            active_solver_tolerances(model, iter);
+        let alpha_tol = accepted_alpha.clamp(1.0e-12, 1.0);
+        let pass_corr_with_coeff = correction_norm <= tol_cn * alpha_tol
+            && max_correction <= tol_mc * alpha_tol;
+        let pass_corr_without_coeff =
+            correction_norm <= tol_cn && max_correction <= tol_mc;
+        let disabled_resid_tests = tol_mr > 1.0e2 && tol_rn > 1.0e2;
+        let pass_resid_tests =
+            residual_norm <= tol_rn && max_residual <= tol_mr;
+        let tight_resid = residual_norm <= 1.0e-12
+            && max_residual <= 1.0e-10
+            && pass_corr_without_coeff;
 
-        if (corr_ok && resid_ok) || tight_resid || mean_norm_ok {
+        if (pass_resid_tests && pass_corr_with_coeff)
+            || (disabled_resid_tests && pass_corr_without_coeff)
+            || tight_resid
+        {
             converged = true;
             break;
         }

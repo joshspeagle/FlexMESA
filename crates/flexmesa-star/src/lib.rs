@@ -99,9 +99,17 @@ pub mod rotation;
 pub mod rsp2;
 pub mod rsp_build;
 pub mod rsp_config;
+pub mod rsp_crossing;
 pub mod rsp_def;
 pub mod rsp_eos_inv;
 pub mod rsp_eos_kap;
+pub mod rsp_grid;
+pub mod rsp_lina;
+pub(crate) mod rsp_lina_io;
+pub mod rsp_relax_env;
+pub mod rsp_stah;
+pub mod rsp_turb_partials;
+pub mod rsp_zone_micro;
 pub mod solver;
 pub mod star_ad;
 pub mod star_job_init;
@@ -249,7 +257,9 @@ pub use rsp2::{
     X_GAMMAR,
 };
 pub use rsp_build::{
-    build_rsp_envelope_model, eval_rsp_2nd_crossing_edges, eval_rsp_lina_modes,
+    build_rsp_envelope_model, do_rsp_build_model, eval_rsp_2nd_crossing_edges,
+    eval_rsp_2nd_crossing_with_controls, eval_rsp_lina_modes,
+    Rsp2ndCrossingOffset, Rsp2ndCrossingPoint, Rsp2ndCrossingReport,
     RspLinaMode,
 };
 pub use rsp_config::{Rsp2Controls, RspConfig};
@@ -263,6 +273,13 @@ pub use rsp_eos_kap::{
     get_surf_p_t_kap, set_rho_for_new_pgas, set_t_for_new_egas,
     set_t_for_new_energy, set_t_for_new_pgas, RspChemCache, RspEosKapOut,
 };
+pub use rsp_grid::{
+    cleanup_for_lina, copy_results, eop, finish_build_rsp_model, mesa_eos_kap,
+    MesaRanmar, RspEnvGrid, RspTotalEosKap,
+};
+pub use rsp_lina::{do_lina, RspLinaOutput};
+pub use rsp_relax_env::relax_env;
+pub use rsp_stah::stah;
 pub use solver::{
     compute_corr_coeff, compute_correction_norms, compute_vector_norms,
     solve_henyey_step, HenyeySolverReport,

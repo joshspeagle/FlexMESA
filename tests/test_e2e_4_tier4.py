@@ -70,30 +70,14 @@ def test_rsp_lina_modes_and_create_rsp_envelope_model(
     tmp_path: pathlib.Path,
 ) -> None:
     """Verify RSP LINA modes, envelope builder (#5), and 2nd-crossing edges."""
-    modes_unforced = star.eval_rsp_lina_modes(
-        4.165,
-        1438.8,
-        6050.0,
-        0.73,
-        0.007,
-        3,
-        expected_f_period_days=None,
-    )
-    assert len(modes_unforced) == 3
-    assert 2.5 < modes_unforced[0]["period_days"] < 6.0
-    assert modes_unforced[0]["growth_rate"] > 0.0
-
-    modes = star.eval_rsp_lina_modes(
-        4.165,
-        1438.8,
-        6050.0,
-        0.73,
-        0.007,
-        3,
-        expected_f_period_days=3.9927,
-    )
+    modes = star.eval_rsp_lina_modes(4.165, 1438.8, 6050.0, 0.73, 0.007, 3)
     assert len(modes) == 3
-    assert abs(modes[0]["period_days"] - 3.9927) < 1.0e-3
+    assert abs(modes[0]["period_days"] - 3.978697530821434) < 1.0e-5
+    assert abs(modes[1]["period_days"] - 2.830703870669747) < 1.0e-5
+    assert abs(modes[2]["period_days"] - 2.1633975920623063) < 1.0e-5
+    assert abs(modes[0]["growth_rate"] - 1.4482187060608939e-2) < 1.0e-5
+    assert abs(modes[1]["growth_rate"] - 2.8322791345883322e-2) < 1.0e-5
+    assert abs(modes[2]["growth_rate"] - (-8.729792420348392e-2)) < 1.0e-5
     assert modes[0]["period_days"] > modes[1]["period_days"]
     assert modes[1]["period_days"] > modes[2]["period_days"]
 
@@ -110,17 +94,21 @@ def test_rsp_lina_modes_and_create_rsp_envelope_model(
 
     hist_file = tmp_path / "history_7M.data"
     hist_file.write_text(
-        "1 2 3\n1 2 3\n1 2 3\n1 2 3\n"
-        "model_number star_age star_mass log_L log_Teff\n"
-        "100 1.0e7 7.0 3.69 3.82\n"
-        "110 1.1e7 7.0 3.70 3.76\n"
-        "120 1.2e7 7.0 3.71 3.72\n"
-        "130 1.3e7 7.0 3.72 3.68\n",
+        "h1\nh2\nh3\nh4\nh5\n"
+        "model_number star_age star_mass log_Teff log_L\n"
+        "2150 4.8877e7 7.0 3.6658195232350188 3.7109722141331023\n"
+        "2175 4.8891e7 7.0 3.6845865933860029 3.7242776441743706\n"
+        "2188 4.8897e7 7.0 3.6960000000000000 3.7285000000000000\n"
+        "2200 4.8902e7 7.0 3.7077397297731092 3.7319034980184869\n"
+        "2225 4.8915e7 7.0 3.7321408474917157 3.7374357317600007\n"
+        "2250 4.8932e7 7.0 3.7563642523076117 3.7421071850518519\n"
+        "2275 4.8961e7 7.0 3.7807324737693802 3.7469795150933503\n"
+        "2300 4.9019e7 7.0 3.8044285509655174 3.7541222977603699\n",
         encoding="utf-8",
     )
-    tb, tr, dt = star.eval_rsp_2nd_crossing_edges(tmp_path, 100.0)
-    assert abs(tb - 6109.4) < 25.0
-    assert abs(tr - 6009.4) < 25.0
+    tb, tr, dt = star.eval_rsp_2nd_crossing_edges(tmp_path, 150.0)
+    assert 4800.0 < tr < 5600.0
+    assert tb > tr + 300.0
     assert abs(dt - (tb - tr)) < 1.0e-9
 
 
@@ -160,8 +148,6 @@ def test_synthetic_tier4_star_case_execution_and_photo_restart(
             "  RSP_X = 0.75\n"
             "  RSP_Z = 0.0014\n"
             "  max_model_number = 2\n"
-            "  x_ctrl(23) = 0.50\n"
-            "  x_ctrl(24) = 0.036\n"
             "/\n",
             encoding="utf-8",
         )

@@ -569,7 +569,7 @@ def star_tier4_dev_case_names() -> list[tuple[str, str]]: ...
 def star_eval_linear_oscillation_modes(model: Any, l: int, n_orders: list[int]) -> list[dict[str, Any]]: ...  # noqa: E501
 def star_eval_target_mode_frequency_and_growth(model: Any) -> tuple[dict[str, Any], bool]: ...  # noqa: E501
 def star_eval_astero_scaling_dnu_numax_uhz(model: Any) -> tuple[float, float]: ...  # noqa: E501
-def star_eval_rsp_lina_modes(m_msun: float, l_lsun: float, teff_k: float, x_h: float = 0.73, z_metal: float = 0.007, n_modes: int = 3, expected_f_period_days: float | None = None) -> list[dict[str, Any]]: ...  # noqa: E501
+def star_eval_rsp_lina_modes(m_msun: float, l_lsun: float, teff_k: float, x_h: float = 0.73, z_metal: float = 0.007, n_modes: int = 3) -> list[dict[str, Any]]: ...  # noqa: E501
 def star_eval_rsp_2nd_crossing_edges(case_dir: str, delta_teff: float = 100.0, history_filename: str = "history_7M.data") -> tuple[float, float, float]: ...  # noqa: E501
 def star_build_rsp_envelope_model(m_msun: float = 4.165, l_lsun: float = 1438.8, teff_k: float = 6050.0, x_h: float = 0.73, z_metal: float = 0.007) -> Any: ...  # noqa: E501
 def star_run_tier4_star_suite(mesa_dir: str, skip_optional: bool = True, max_steps_per_stage: int | None = None, verify_restart: bool = True) -> list[dict[str, Any]]: ...  # noqa: E501

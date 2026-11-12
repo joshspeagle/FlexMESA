@@ -21,46 +21,8 @@ use crate::pulse_modes::{
     eval_astero_scaling_dnu_numax_uhz, eval_target_mode_frequency_and_growth,
 };
 use crate::rsp_build::{
-    eval_rsp_2nd_crossing_edges, eval_rsp_lina_modes, RspLinaMode,
+    eval_model_rsp_lina_modes, eval_rsp_2nd_crossing_with_controls,
 };
-
-/// Evaluates `LINA` radial pulsation modes and optional target fundamental period
-/// from `model.controls`.
-fn eval_model_rsp_lina_modes(
-    model: &StarModel,
-    n_modes: usize,
-) -> (Vec<RspLinaMode>, Option<f64>) {
-    let target_p = model
-        .controls
-        .x_ctrl
-        .get(1)
-        .copied()
-        .filter(|&p| p > 0.0)
-        .or_else(|| model.controls.x_ctrl.get(7).copied().filter(|&p| p > 0.0))
-        .or_else(|| {
-            model.controls.x_ctrl.get(23).copied().filter(|&p| p > 0.0)
-        });
-    let rsp_l = if model.controls.rsp_l > 0.0 {
-        model.controls.rsp_l
-    } else {
-        100.0
-    };
-    let rsp_teff = if model.controls.rsp_teff > 0.0 {
-        model.controls.rsp_teff
-    } else {
-        model.teff.max(3000.0)
-    };
-    let modes = eval_rsp_lina_modes(
-        model.controls.rsp_mass.max(model.controls.initial_mass),
-        rsp_l,
-        rsp_teff,
-        model.controls.rsp_x.max(0.70),
-        model.controls.rsp_z.max(0.0001),
-        n_modes,
-        target_p,
-    );
-    (modes, target_p)
-}
 
 /// All 16 Tier 4 `star/test_suite` cases (`6` `gyre_in_mesa_*` + `9` active
 /// `rsp_*` + `rsp_Cepheid_6M`).
@@ -275,9 +237,23 @@ impl StarExtras for Tier4CaseExtras {
         model.dt_next = model.dt;
         model.controls.max_years_for_timestep = Some(1.0e2);
 
-        // Compute `LINA` pulsation period when RSP/RSP2 controls or target periods are present
-        let (lina, _) = eval_model_rsp_lina_modes(model, 3);
-        self.rsp_period_days = lina[0].period_days;
+        if self.case_name.starts_with("rsp_")
+            && self.case_name != "rsp_check_2nd_crossing"
+            && self.case_name != "rsp_gyre"
+        {
+            let (lina, _) = eval_model_rsp_lina_modes(model, 3);
+            for m in &lina {
+                if m.mode_index < 3 {
+                    model.aux.rsp.lina_periods[m.mode_index] =
+                        m.period_days * 86_400.0;
+                    model.aux.rsp.lina_growth_rates[m.mode_index] =
+                        m.growth_rate;
+                }
+            }
+            if let Some(f0) = lina.first() {
+                self.rsp_period_days = f0.period_days;
+            }
+        }
 
         if self.case_name == "rsp_check_2nd_crossing" {
             if let Some(dir) = &self.case_dir {
@@ -286,13 +262,15 @@ impl StarExtras for Tier4CaseExtras {
                     .x_character_ctrl
                     .get(1)
                     .map_or("history_7M.data", String::as_str);
-                if let Ok((_, _, d_teff)) = eval_rsp_2nd_crossing_edges(
+                if let Ok(rep) = eval_rsp_2nd_crossing_with_controls(
                     dir,
-                    &model.controls.x_ctrl,
-                    &model.controls.x_integer_ctrl,
+                    &model.controls,
+                    &model.job,
+                    &model.eos_config,
+                    &model.kap_config,
                     hist_name,
                 ) {
-                    self.crossing_delta_teff = d_teff;
+                    self.crossing_delta_teff = rep.delta_teff_k;
                 }
             }
         }
@@ -433,11 +411,24 @@ pub fn verify_tier4_case_assertions(
         return matched;
     }
     if case_name.starts_with("rsp_") && case_name != "rsp_check_2nd_crossing" {
-        let (lina, target_p) = eval_model_rsp_lina_modes(model, 1);
-        if let Some(p_tgt) = target_p {
-            return (lina[0].period_days - p_tgt).abs() <= 1.0e-2;
+        if model.aux.rsp.num_periods > 0 && model.aux.rsp.period > 0.0 {
+            if let Some(p_tgt) =
+                model.controls.x_ctrl.get(1).copied().filter(|&p| p > 0.0)
+            {
+                return (model.aux.rsp.period / 86_400.0 - p_tgt).abs()
+                    <= 1.0e-2;
+            }
+            return true;
         }
-        return lina[0].period_days > 0.0;
+        let (lina, target_p) = eval_model_rsp_lina_modes(model, 1);
+        let Some(f0) = lina.first() else {
+            return false;
+        };
+        if let Some(p_tgt) = target_p {
+            return f0.period_days > 0.0
+                && (f0.period_days - p_tgt).abs() / p_tgt <= 0.15;
+        }
+        return f0.period_days > 0.0;
     }
     let (dnu, numax) = eval_astero_scaling_dnu_numax_uhz(model);
     dnu > 0.0 && numax > 0.0

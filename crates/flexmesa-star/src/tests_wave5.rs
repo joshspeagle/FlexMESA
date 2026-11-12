@@ -357,18 +357,12 @@ fn test_e2e_4_tier4_pulsation_astero_and_dev_cases() {
     let (dnu, numax) = eval_astero_scaling_dnu_numax_uhz(&model);
     assert!(dnu > 50.0 && numax > 1000.0);
 
-    let lina = eval_rsp_lina_modes(
-        4.165,
-        1438.8,
-        6050.0,
-        0.73,
-        0.007,
-        3,
-        Some(3.92305),
-    );
+    let lina = eval_rsp_lina_modes(4.165, 1438.8, 6050.0, 0.73, 0.007, 3)
+        .expect("LINA modes");
     assert_eq!(lina.len(), 3);
-    assert!((lina[0].period_days - 3.92305).abs() < 1.0e-12);
+    assert!((lina[0].period_days - 3.92305).abs() < 0.15);
     assert!(lina[1].period_days < lina[0].period_days);
+    assert!(lina[2].period_days < lina[1].period_days);
     assert!(lina[0].growth_rate > 0.0);
 
     let require_zero_skips =

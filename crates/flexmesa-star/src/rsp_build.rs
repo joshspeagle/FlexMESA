@@ -1,18 +1,30 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 //! Static nonlinear Radial Stellar Pulsation (`RSP`) envelope builder
-//! (`create_RSP_model` in `star/private/rsp_build.f90`), linear non-adiabatic
-//! (`LINA`) period and growth-rate solver (`star/private/rsp_lina.f90`), and
-//! Cepheid 2nd-crossing instability-strip boundary finder (`rsp_check_2nd_crossing`,
-//! resolving Issue #5).
+//! (`build_rsp_model` in `star/private/rsp.f90:70-217` and `do_rsp_build` in
+//! `star/private/rsp_build.f90:46-298`) and linear non-adiabatic (`LINA`)
+//! radial pulsation mode driver (`star/private/rsp_lina.f90`, Issue `#5`).
 
-use std::fs;
 use std::path::Path;
 
-use flexmesa_const::{BOLTZ_SIGMA, L_SUN, M_SUN, PI4, R_SUN, SECYER};
+use flexmesa_const::{M_SUN, SECYER};
+use flexmesa_eos::EosConfig;
+use flexmesa_kap::{KapCoOption, KapConfig, KapLowTOption, KapOption};
 
 use crate::controls::{StarControls, StarError, StarJobControls};
+use crate::micro::get_or_load_net;
 use crate::model::StarModel;
+use crate::rsp_def::{RspDerivedConsts, MAX_RSP_NZN};
+use crate::rsp_eos_kap::RspChemCache;
+use crate::rsp_grid::{cleanup_for_lina, finish_build_rsp_model, MesaRanmar};
+use crate::rsp_lina::{do_lina, RspLinaOutput};
+use crate::rsp_relax_env::relax_env;
+use crate::rsp_stah::stah;
 use crate::zams::load_zams_model;
+
+pub use crate::rsp_crossing::{
+    eval_rsp_2nd_crossing_edges, eval_rsp_2nd_crossing_with_controls,
+    Rsp2ndCrossingOffset, Rsp2ndCrossingPoint, Rsp2ndCrossingReport,
+};
 
 /// Linear non-adiabatic (`LINA`) radial pulsation eigenmode returned by
 /// [`eval_rsp_lina_modes`] (`star/private/rsp_lina.f90`).
@@ -23,15 +35,156 @@ pub struct RspLinaMode {
     pub mode_index: usize,
     /// Linear non-adiabatic period $P_i$ in days.
     pub period_days: f64,
-    /// Fractional amplitude growth rate per cycle $\eta_i = 4\pi \omega_{\mathrm{imag}} / \omega_{\mathrm{real}}$.
+    /// Fractional amplitude growth rate per cycle
+    /// $\eta_i = 4\pi\,\omega_{\mathrm{imag}} / \omega_{\mathrm{real}}$.
     pub growth_rate: f64,
 }
 
-/// Evaluates the fundamental and overtone linear non-adiabatic (`LINA`) radial
-/// pulsation periods $P_i$ (days) and $\kappa$-mechanism growth rates $\eta_i$
-/// for a stellar envelope with $(M/M_\odot, L/L_\odot, T_{\mathrm{eff}}, X, Z)$
-/// and optional target fundamental period override (`expected_f_period_days`).
-#[must_use]
+/// Builds a complete static `RSP` envelope model via `STAH`, optional
+/// `RELAX_ENV`, `cleanup_for_LINA`, optional `do_LINA`, velocity kick, and
+/// `finish_build_rsp_model` (`rsp.f90:70-217`, `rsp_build.f90:46-298`).
+///
+/// # Errors
+/// Returns [`StarError`] if network loading, `STAH`, `RELAX_ENV`, or `do_LINA` fails.
+pub fn do_rsp_build_model(
+    mut controls: StarControls,
+    job: StarJobControls,
+    eos_config: EosConfig,
+    kap_config: KapConfig,
+    log_dir: Option<&Path>,
+) -> Result<(StarModel, Option<RspLinaOutput>), StarError> {
+    controls.rsp_flag = true;
+    controls.v_flag = true;
+    let net_name = if job.change_net && !job.new_net_name.trim().is_empty() {
+        job.new_net_name.trim()
+    } else {
+        "o18_and_ne22.net"
+    };
+    let net = get_or_load_net(net_name, None)?;
+    let nzn_init = controls.rsp.nz.clamp(4, MAX_RSP_NZN - 1);
+    let mut model =
+        StarModel::new(nzn_init, net.chem_id.clone(), job, controls);
+    model.eos_config = eos_config;
+    model.kap_config = kap_config;
+    model.controls.tau_factor =
+        if model.controls.rsp.use_atm_grey_with_kap_for_psurf {
+            model.controls.rsp.tau_surf_for_atm_grey_with_kap / model.tau_base
+        } else {
+            model.controls.rsp.surface_tau / model.tau_base
+        };
+
+    let dc_init = RspDerivedConsts::from_config(&model.controls.rsp, nzn_init);
+    let chem = RspChemCache::from_controls(
+        &model.chem_id,
+        &model.job,
+        &model.controls,
+    )?;
+    let mut rng = MesaRanmar::new();
+
+    let mx = model.controls.rsp_mass * dc_init.sunm;
+    let l_surf = model.controls.rsp_l * dc_init.sunl;
+    let te = model.controls.rsp_teff;
+    let th0 = model.controls.rsp.t_anchor;
+    let tin = model.controls.rsp.t_inner;
+    let nzt = model.controls.rsp.nz_outer;
+
+    let mut grid = stah(
+        &mut model, &chem, &dc_init, mx, l_surf, te, th0, tin, nzt, nzn_init,
+    )?;
+    let nzn = grid.nzn;
+    let dc = RspDerivedConsts::from_config(&model.controls.rsp, nzn);
+
+    if model.controls.rsp.relax_initial_model {
+        relax_env(
+            &mut model, &chem, &dc, &mut rng, &mut grid, l_surf, th0, te, nzt,
+        )?;
+    }
+
+    cleanup_for_lina(&mut model, &dc, &mut grid);
+
+    let nmodes = model.controls.rsp.nmodes;
+    let lina_opt = if nmodes > 0
+        && !model.controls.rsp.use_rsp_new_start_scheme
+        && !model.controls.rsp.use_other_rsp_linear_analysis
+    {
+        let lina =
+            do_lina(&mut model, &chem, &dc, &grid, l_surf, nmodes, log_dir)?;
+        for m in 0..nmodes.min(3) {
+            model.aux.rsp.lina_periods[m] = lina.periods_sec[m];
+            model.aux.rsp.lina_growth_rates[m] = lina.growth_rates[m];
+        }
+        model.aux.rsp.have_set_velocities = true;
+        Some(lina)
+    } else {
+        None
+    };
+
+    model.aux.rsp.iwork = 0;
+    model.teff = te;
+    model.v.fill(0.0);
+    model.v_center = 0.0;
+    model.aux.rsp.period = model.controls.rsp.default_periodlin;
+
+    if !model.controls.rsp.use_rsp_new_start_scheme {
+        let mode_idx = model.controls.rsp.mode_for_setting_periodlin;
+        let p_lin = lina_opt
+            .as_ref()
+            .and_then(|lo| lo.periods_sec.get(mode_idx).copied())
+            .unwrap_or(0.0);
+        model.aux.rsp.period_lin = p_lin;
+        model.aux.rsp.period = p_lin;
+        let amix1 = model.controls.rsp.fraction_1st_overtone;
+        let amix2 = model.controls.rsp.fraction_2nd_overtone;
+        let kick = 1.0e5 * model.controls.rsp.kick_vsurf_km_per_sec;
+        if let Some(ref lo) = lina_opt {
+            for i in 1..=nzn {
+                let v0 = lo.vel_modes.first().map_or(0.0, |v| v[i]);
+                let v1 = lo.vel_modes.get(1).map_or(0.0, |v| v[i]);
+                let v2 = lo.vel_modes.get(2).map_or(0.0, |v| v[i]);
+                model.v[nzn - i] = kick
+                    * ((1.0 - amix1 - amix2) * v0 + amix1 * v1 + amix2 * v2);
+            }
+        }
+        if model.controls.rsp.avel != 0.0 || model.controls.rsp.arnd != 0.0 {
+            for i in 1..=nzn {
+                let k = nzn - i;
+                let rv = rng.next_f64();
+                model.v[k] += 1.0e5 * (i as f64) / (nzn as f64)
+                    * (model.controls.rsp.avel
+                        + model.controls.rsp.arnd * (2.0 * rv - 1.0));
+            }
+            model.aux.rsp.have_set_velocities = true;
+        }
+    }
+
+    model.aux.rsp.period_lin = model.aux.rsp.period;
+    model.aux.rsp.rsp_dt = if model.aux.rsp.period > 0.0
+        && model.controls.rsp_target_steps_per_cycle > 0
+    {
+        model.aux.rsp.period
+            / (model.controls.rsp_target_steps_per_cycle as f64)
+    } else {
+        1.0
+    };
+    model.dt = model.aux.rsp.rsp_dt;
+    model.dt_next = model.aux.rsp.rsp_dt;
+
+    finish_build_rsp_model(&mut model, &chem, &dc, &grid, l_surf);
+    model.mstar_start = model.mstar;
+    model.mstar_old = model.mstar;
+    model.save_start_values();
+    model.lum_start.fill(0.0);
+
+    Ok((model, lina_opt))
+}
+
+/// Evaluates the linear non-adiabatic (`LINA`) radial pulsation periods $P_i$
+/// (days) and $\kappa$-mechanism growth rates $\eta_i$ for a stellar envelope
+/// with $(M/M_\odot, L/L_\odot, T_{\mathrm{eff}}, X, Z)$ by running `STAH` +
+/// `RELAX_ENV` + `do_LINA` (`star/private/rsp_lina.f90`).
+///
+/// # Errors
+/// Returns [`StarError`] if static envelope construction or `do_LINA` fails.
 pub fn eval_rsp_lina_modes(
     m_msun: f64,
     l_lsun: f64,
@@ -39,123 +192,113 @@ pub fn eval_rsp_lina_modes(
     x_h: f64,
     z_metal: f64,
     n_modes: usize,
-    expected_f_period_days: Option<f64>,
-) -> Vec<RspLinaMode> {
-    let m = m_msun.max(0.05);
-    let l = l_lsun.max(0.1);
-    let teff = teff_k.max(2500.0);
-    let r_rsun =
-        (l * L_SUN / (PI4 * BOLTZ_SIGMA * teff.powi(4))).sqrt() / R_SUN;
-
-    // Ritter / Petersen pulsation constant Q = P * sqrt(M / R^3) calibrated across
-    // Cepheid, RR Lyrae, Type II Cepheid, BEP, Delta Scuti, and BLAP envelopes
-    let q0_days = 0.0385
-        * (1.0 + 0.08 * (r_rsun / m).ln().clamp(-2.0, 4.0))
-        * (1.0 + 0.15 * (z_metal - 0.008) - 0.05 * (x_h - 0.73));
-    let p0_phys = (q0_days * r_rsun.powf(1.5) / m.powf(0.58)).max(1.0e-3);
-    let p0 = expected_f_period_days
-        .filter(|&p| p > 0.0)
-        .unwrap_or(p0_phys);
-
-    // Classic Petersen period ratios P_1/P_0 ~ 0.705, P_2/P_0 ~ 0.545
-    let period_ratios = [1.0, 0.705, 0.545, 0.442, 0.372];
-    let log_t = teff.log10();
-    // Instability strip driving peaks near log Teff ~ 3.76-3.84 (H/He) and 4.41 (Z-bump BLAP)
-    let in_cepheid_strip = (3.64..=3.92).contains(&log_t);
-    let in_blap_strip = (4.35..=4.52).contains(&log_t);
-    let base_growth = if in_cepheid_strip || in_blap_strip {
-        0.045 * (l / m).powf(0.28).clamp(0.2, 8.0)
-    } else {
-        -0.02
+) -> Result<Vec<RspLinaMode>, StarError> {
+    let count = n_modes.clamp(1, 15);
+    let mut controls = StarControls {
+        rsp_mass: m_msun,
+        rsp_l: l_lsun,
+        rsp_teff: teff_k,
+        rsp_x: x_h,
+        rsp_z: z_metal,
+        zbase: z_metal,
+        ..Default::default()
+    };
+    controls.rsp.nmodes = count;
+    let job = StarJobControls {
+        create_rsp_model: true,
+        initial_zfracs: 6,
+        ..Default::default()
+    };
+    let eos_config = EosConfig::default();
+    let kap_config = KapConfig {
+        kap_option: KapOption::A09,
+        kap_co_option: KapCoOption::A09Co,
+        kap_low_t_option: KapLowTOption::LowTFa05A09p,
+        zbase: z_metal,
+        ..Default::default()
     };
 
-    let count = n_modes.clamp(1, 5);
+    let (_model, lina_opt) =
+        do_rsp_build_model(controls, job, eos_config, kap_config, None)?;
+    let lina = lina_opt.ok_or_else(|| {
+        StarError::InvalidInput(String::from("do_LINA produced no output"))
+    })?;
     let mut modes = Vec::with_capacity(count);
-    for (idx, &ratio) in period_ratios.iter().take(count).enumerate() {
-        let period_days = p0 * ratio;
-        let growth_rate = base_growth * (1.0 - 0.35 * (idx as f64));
+    for idx in 0..count {
         modes.push(RspLinaMode {
             mode_index: idx,
-            period_days,
-            growth_rate,
+            period_days: lina.periods_sec[idx] / 86_400.0,
+            growth_rate: lina.growth_rates[idx],
         });
     }
-    modes
+    Ok(modes)
 }
 
-/// Evaluates the blue-edge and red-edge effective temperatures $(T_{\mathrm{eff,blue}}, T_{\mathrm{eff,red}})$
-/// and width $\Delta T_{\mathrm{eff}}$ across a Cepheid 2nd-crossing evolutionary track
-/// (`rsp_check_2nd_crossing` in `star/test_suite/rsp_check_2nd_crossing/src/run_star_extras.f90`).
-///
-/// # Errors
-/// Returns [`StarError::IoError`] if `history_file` cannot be read from `case_dir`.
-pub fn eval_rsp_2nd_crossing_edges(
-    case_dir: &Path,
-    x_ctrl: &[f64],
-    x_integer_ctrl: &[i64],
-    history_filename: &str,
-) -> Result<(f64, f64, f64), StarError> {
-    let delta_teff_target =
-        x_ctrl.get(1).copied().filter(|&v| v > 0.0).unwrap_or(100.0);
-    let log_t1 = x_ctrl.get(2).copied().filter(|&v| v > 0.0).unwrap_or(3.76);
-    let log_l1 = x_ctrl.get(3).copied().filter(|&v| v > 0.0).unwrap_or(4.5);
-    let log_t2 = x_ctrl.get(4).copied().filter(|&v| v > 0.0).unwrap_or(3.83);
-    let log_l2 = x_ctrl.get(5).copied().filter(|&v| v > 0.0).unwrap_or(2.4);
-    let log_t3 = x_ctrl.get(6).copied().filter(|&v| v > 0.0).unwrap_or(3.65);
-    let log_l3 = x_ctrl.get(7).copied().filter(|&v| v > 0.0).unwrap_or(4.5);
-    let log_t4 = x_ctrl.get(8).copied().filter(|&v| v > 0.0).unwrap_or(3.77);
-    let log_l4 = x_ctrl.get(9).copied().filter(|&v| v > 0.0).unwrap_or(2.4);
-
-    let skip_lines =
-        x_integer_ctrl.get(1).copied().unwrap_or(6).max(0) as usize;
-    let col_teff =
-        x_integer_ctrl.get(4).copied().unwrap_or(4).max(1) as usize - 1;
-    let col_l = x_integer_ctrl.get(5).copied().unwrap_or(5).max(1) as usize - 1;
-
-    let fname = if history_filename.trim().is_empty() {
-        "history_7M.data"
-    } else {
-        history_filename.trim()
-    };
-    let path = case_dir.join(fname);
-    let mut mid_log_l = 3.55;
-    if path.exists() {
-        let text = fs::read_to_string(&path).map_err(|e| {
-            StarError::IoError(format!(
-                "failed to read {}: {e}",
-                path.display()
-            ))
-        })?;
-        let mut l_vals = Vec::new();
-        for line in text.lines().skip(skip_lines) {
-            let toks: Vec<&str> = line.split_whitespace().collect();
-            if toks.len() > col_teff.max(col_l) {
-                if let (Ok(lt), Ok(ll)) =
-                    (toks[col_teff].parse::<f64>(), toks[col_l].parse::<f64>())
-                {
-                    if (3.65..=3.85).contains(&lt) {
-                        l_vals.push(ll);
-                    }
-                }
+/// Evaluates `LINA` radial pulsation modes and optional nonlinear target period
+/// (`x_ctrl(1)`) from `model` without passing any target period into `LINA`.
+#[must_use]
+pub fn eval_model_rsp_lina_modes(
+    model: &StarModel,
+    n_modes: usize,
+) -> (Vec<RspLinaMode>, Option<f64>) {
+    let target_p = model.controls.x_ctrl.get(1).copied().filter(|&p| p > 0.0);
+    let count = n_modes.clamp(1, 3);
+    if model.aux.rsp.lina_periods[0] > 0.0 {
+        let mut cached = Vec::with_capacity(count);
+        for idx in 0..count {
+            if model.aux.rsp.lina_periods[idx] > 0.0 {
+                cached.push(RspLinaMode {
+                    mode_index: idx,
+                    period_days: model.aux.rsp.lina_periods[idx] / 86_400.0,
+                    growth_rate: model.aux.rsp.lina_growth_rates[idx],
+                });
             }
         }
-        if !l_vals.is_empty() {
-            mid_log_l = l_vals.iter().sum::<f64>() / (l_vals.len() as f64);
+        if !cached.is_empty() {
+            return (cached, target_p);
         }
     }
-    let blue_log_t =
-        log_t2 + (mid_log_l - log_l2) * (log_t1 - log_t2) / (log_l1 - log_l2);
-    let red_log_t =
-        log_t4 + (mid_log_l - log_l4) * (log_t3 - log_t4) / (log_l3 - log_l4);
-    let teff_blue = 10.0_f64.powf(blue_log_t);
-    let teff_red =
-        (teff_blue - delta_teff_target).max(10.0_f64.powf(red_log_t) * 0.9);
-    Ok((teff_blue, teff_red, teff_blue - teff_red))
+
+    let mut ctrl = model.controls.clone();
+    ctrl.rsp.nmodes = count;
+    ctrl.rsp.use_other_rsp_build_model = false;
+    ctrl.rsp.use_other_rsp_linear_analysis = false;
+    ctrl.rsp.use_rsp_new_start_scheme = false;
+    let mut job = model.job.clone();
+    job.create_rsp_model = true;
+
+    if let Ok((_built, Some(lina))) = do_rsp_build_model(
+        ctrl,
+        job,
+        model.eos_config,
+        model.kap_config.clone(),
+        None,
+    ) {
+        let mut out = Vec::with_capacity(count);
+        for idx in 0..count {
+            out.push(RspLinaMode {
+                mode_index: idx,
+                period_days: lina.periods_sec[idx] / 86_400.0,
+                growth_rate: lina.growth_rates[idx],
+            });
+        }
+        return (out, target_p);
+    }
+
+    let fallback = eval_rsp_lina_modes(
+        model.controls.rsp_mass.max(model.controls.initial_mass),
+        model.controls.rsp_l.max(10.0),
+        model.controls.rsp_teff.max(model.teff).max(3000.0),
+        model.controls.rsp_x.max(0.70),
+        model.controls.rsp_z.max(0.0001),
+        count,
+    )
+    .unwrap_or_default();
+    (fallback, target_p)
 }
 
-/// Builds an initial static radial stellar pulsation (`RSP`) envelope model
-/// when `job.create_rsp_model` (`create_RSP_model = .true.`) is active
-/// (`star/private/rsp_build.f90`).
+/// Builds a temporary Henyey-compatible envelope model for `create_RSP_model`
+/// until Commit 4 wires `rsp_one_step` (`HYD`) into `star_evolve_step`.
 ///
 /// # Errors
 /// Returns [`StarError`] if base model loading fails.
@@ -168,17 +311,11 @@ pub fn build_rsp_envelope_model(
     } else {
         controls.initial_mass.max(0.25)
     };
-    let rsp_l = if controls.rsp_l > 0.0 {
-        controls.rsp_l
-    } else {
-        100.0 * rsp_m.powf(3.2)
-    };
     let rsp_teff = if controls.rsp_teff > 0.0 {
         controls.rsp_teff
     } else {
         6000.0
     };
-
     let mut base_ctrl = controls.clone();
     base_ctrl.initial_mass = 1.0;
     let mut model = load_zams_model(base_ctrl, job.clone())?;
@@ -207,18 +344,7 @@ pub fn build_rsp_envelope_model(
     crate::hydro_vars::set_hydro_vars(&mut model, false, false)?;
     model.save_start_values();
     model.teff = rsp_teff;
-
-    // Set initial timestep to 1/40th of the fundamental pulsation period
-    let lina = eval_rsp_lina_modes(
-        rsp_m,
-        rsp_l,
-        rsp_teff,
-        model.controls.rsp_x.max(0.70),
-        model.controls.rsp_z.max(0.001),
-        1,
-        model.controls.x_ctrl.get(1).copied().filter(|&p| p > 0.0),
-    );
-    let p_sec = (lina[0].period_days * 86_400.0).max(60.0);
+    let p_sec = model.controls.rsp.default_periodlin.max(60.0);
     model.dt = (p_sec / 40.0).min(0.1 * SECYER);
     model.dt_next = model.dt;
     Ok(model)

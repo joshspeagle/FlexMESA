@@ -113,7 +113,12 @@ impl StarModel {
             self.dm_bar[k] = 0.5 * (self.dm[k - 1] + self.dm[k]);
         }
         if nz >= 2 {
-            self.dm_bar[nz - 1] = 0.5 * self.dm[nz - 2] + self.dm[nz - 1];
+            self.dm_bar[nz - 1] =
+                if self.controls.rsp_flag || self.controls.rsp2_flag {
+                    0.5 * (self.dm[nz - 2] + self.dm[nz - 1])
+                } else {
+                    0.5 * self.dm[nz - 2] + self.dm[nz - 1]
+                };
         }
     }
 

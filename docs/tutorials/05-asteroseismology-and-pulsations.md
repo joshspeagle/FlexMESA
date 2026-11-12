@@ -166,7 +166,7 @@ plt.close(fig)
 
 For radially pulsating RR Lyrae, Cepheid, and $\delta$ Scuti variables, `FlexMESA` provides both:
 
-1. **Kuhfuss (1986) / Smolec & Moskalik (2008) `RSP2` Turbulent Convection Kernels**: `_rust.star_solve_stationary_rsp2_w` (`star.solve_stationary_rsp2_w_jax`), `_rust.star_eval_rsp2_zone` (`star.eval_rsp2_zone_jax`), and `_rust.star_eval_rsp2_face` (`star.eval_rsp2_face_jax`) compute the stationary turbulent velocity $w = \sqrt{e_t}$, buoyant source $S$, radiative cooling $\mathcal{C}$, turbulent dissipation $\epsilon_d$, turbulent pressure $P_t$, eddy viscosity $P_{\mathrm{visc}}$, and face convective luminosity $L_{\mathrm{conv}}$.
+1. **Kuhfuss (1986) / Smolec & Moskalik (2008) `RSP` & `RSP2` Turbulent Convection Kernels**: `_rust.star_solve_stationary_rsp2_w` (`star.solve_stationary_rsp2_w_jax`), `_rust.star_eval_rsp2_zone` (`star.eval_rsp2_zone_jax`), `_rust.star_eval_rsp2_face` (`star.eval_rsp2_face_jax`), `star.rsp2_flux_limiter_jax`, `star.compute_rsp2_uq_face_jax`, and `star.eval_rsp_hyd_fluxes_jax` compute the stationary turbulent velocity $w = \sqrt{e_t}$, buoyant source $S$, radiative eddy cooling $D_r$, Kolmogorov cascade dissipation $D$, turbulent pressure $P_{\mathrm{trb}}$, eddy viscosity $\mathrm{X}_{\mathrm{cell}}$, viscous shear heating $E_{q,\mathrm{cell}}$, quintic $C^2$ flux-limited convective enthalpy factor $\Pi_{\mathrm{face}}$, and Stellingwerf / Richtmyer-Morton fluxes $(L_r, L_c, L_t, Q_{\mathrm{visc}})$.
 2. **Pulsation Structure Exporters (`to_gyre_str`, `to_fgong_str`, `to_osc_str`)**: Format the 1D stellar profile (including the center point $r = 0$ and Dziembowski dimensionless variables $V_g, A^\ast, U, c_1, \Gamma_1$) directly into `GYRE` (`v120`, 19 columns), `FGONG` (`ivers = 1300`, 40 variables), and `OSC` (`ivers = 1300`, 24 variables) oscillation code inputs.
 
 ```python
@@ -209,9 +209,11 @@ rsp2_zone = star.eval_rsp2_zone_jax(
 print(
     f"RSP2 zone {k}: stationary w = {float(w_stat):.3e} cm/s, "
     f"P_turb = {float(rsp2_zone[0]):.3e} dyn/cm^2, "
-    f"chi_turb = {float(rsp2_zone[1]):.3e} g^2/s, "
+    f"chi_turb = {float(rsp2_zone[1]):.3e} erg, "
     f"eq_visc = {float(rsp2_zone[2]):.3e} erg/g/s"
 )
+fl_val, dfl_val = star.rsp2_flux_limiter_jax(jnp.asarray([0.975]))
+print(f"RSP2 C^2 flux limiter at X=0.975: FL={float(fl_val[0]):.6f}, dFL/dX={float(dfl_val[0]):.6f}")
 
 # 2. Export GYRE, FGONG, and OSC structure strings
 gyre_text = model.to_gyre_str(add_center_point=True)

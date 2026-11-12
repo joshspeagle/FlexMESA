@@ -66,9 +66,15 @@ print(f"nz={model.nz}, Teff={model.teff:.1f} K, log10(T_c)={model.ln_t[-1] / 2.3
 
 ---
 
-## HLLC Hydrodynamics, `RSP2` & Pulsation Kernels (`flexmesa.star.jax_hydro_pulse`)
+## HLLC Hydrodynamics & Pulsation Kernels (`flexmesa.star.jax_hydro_pulse`)
 
 ::: flexmesa.star.jax_hydro_pulse
+
+---
+
+## `RSP` & `RSP2` Turbulent Pulsation Kernels (`flexmesa.star.jax_rsp`)
+
+::: flexmesa.star.jax_rsp
 
 ---
 

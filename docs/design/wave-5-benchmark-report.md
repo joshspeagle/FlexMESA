@@ -40,7 +40,7 @@ Across all $N_{\mathrm{zones}} \in \{128, 512, 1024\}$, Upstream Fortran MESA, S
 | `w5_astero_seism` | `512` | `7.36575750E+01` | `7.36575750e1` | `7.36575750e+01` | `1.929e-15` |
 | `w5_astero_seism` | `1024` | `7.36379793E+01` | `7.36379793e1` | `7.36379793e+01` | `5.596e-15` |
 
-*(Note: `(norm)` denotes the profile-norm relative error $\max_k |v^{\mathrm{Rust}}_k - v^{\mathrm{JAX}}_k| / \max_k |v^{\mathrm{Rust}}_k|$ across the $s \approx 0.435$ zero crossing of `w5_riemann_rsp2`; see `DECISIONS #9`.)*
+*(Note: `(norm)` denotes the profile-norm relative error $\max_k |v^{\mathrm{Rust}}_k - v^{\mathrm{JAX}}_k| / \max_k |v^{\mathrm{Rust}}_k|$ across the $s \approx 0.435$ zero crossing of `w5_riemann_rsp2`; see the [Tolerance & Discrepancy Ledger](../benchmarks/tolerance-and-discrepancy-ledger.md#25-profile-norm-scaling-across-zero-crossings-in-w5_riemann_rsp2).)*
 
 ---
 

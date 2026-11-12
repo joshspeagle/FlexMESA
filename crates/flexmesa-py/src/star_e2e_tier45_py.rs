@@ -132,7 +132,7 @@ pub fn star_eval_astero_scaling_dnu_numax_uhz(
 /// Evaluates linear non-adiabatic (`LINA`) radial pulsation periods (days) and
 /// growth rates for an `RSP` envelope with $(M/M_\odot, L/L_\odot, T_{\mathrm{eff}}, X, Z)$.
 #[pyfunction]
-#[pyo3(signature = (m_msun, l_lsun, teff_k, x_h=0.73, z_metal=0.007, n_modes=3, expected_f_period_days=None))]
+#[pyo3(signature = (m_msun, l_lsun, teff_k, x_h=0.73, z_metal=0.007, n_modes=3))]
 pub fn star_eval_rsp_lina_modes<'py>(
     py: Python<'py>,
     m_msun: f64,
@@ -141,17 +141,10 @@ pub fn star_eval_rsp_lina_modes<'py>(
     x_h: f64,
     z_metal: f64,
     n_modes: usize,
-    expected_f_period_days: Option<f64>,
 ) -> PyResult<Bound<'py, PyList>> {
-    let modes = eval_rsp_lina_modes(
-        m_msun,
-        l_lsun,
-        teff_k,
-        x_h,
-        z_metal,
-        n_modes,
-        expected_f_period_days,
-    );
+    let modes =
+        eval_rsp_lina_modes(m_msun, l_lsun, teff_k, x_h, z_metal, n_modes)
+            .map_err(to_py_err)?;
     let out = PyList::empty(py);
     for m in modes {
         let d = PyDict::new(py);

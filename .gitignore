@@ -32,6 +32,7 @@ pgo-data/
 *.bin
 !crates/**/data/*.bin
 *.mod
+!tests/fixtures/**/*.mod
 *.h5
 *.hdf5
 *.safetensors

@@ -97,7 +97,32 @@ pub mod relax;
 pub mod riemann;
 pub mod rotation;
 pub mod rsp2;
+pub mod rsp2_ad;
+pub mod rsp2_eqns;
+pub mod rsp2_remesh;
 pub mod rsp_build;
+pub mod rsp_config;
+pub mod rsp_crossing;
+pub mod rsp_def;
+pub mod rsp_driver;
+pub mod rsp_eos_inv;
+pub mod rsp_eos_kap;
+pub mod rsp_eqns;
+pub(crate) mod rsp_eqns_cell;
+pub mod rsp_grid;
+pub mod rsp_hyd;
+pub mod rsp_hyd_flux;
+pub mod rsp_hyd_turb;
+pub mod rsp_hyd_vars;
+pub mod rsp_hyd_work;
+pub mod rsp_lina;
+pub(crate) mod rsp_lina_io;
+pub mod rsp_relax_env;
+pub mod rsp_stah;
+pub(crate) mod rsp_state_io;
+pub(crate) mod rsp_stats;
+pub mod rsp_turb_partials;
+pub mod rsp_zone_micro;
 pub mod solver;
 pub mod star_ad;
 pub mod star_job_init;
@@ -240,22 +265,55 @@ pub use rotation::{
     RotationalMixZone, RI_CRIT_DSI,
 };
 pub use rsp2::{
-    eval_rsp2_face, eval_rsp2_zone, solve_stationary_rsp2_w, Rsp2Config,
-    Rsp2FaceResult, Rsp2ZoneResult, X_ALFAC, X_ALFAP, X_ALFAS, X_CEDE,
-    X_GAMMAR,
+    compute_rsp2_uq_face, eval_rsp2_face, eval_rsp2_zone, rsp2_flux_limiter,
+    solve_stationary_rsp2_w, Rsp2Config, Rsp2FaceResult, Rsp2ZoneResult,
+    X_ALFAC, X_ALFAP, X_ALFAS, X_CEDE, X_GAMMAR,
 };
+pub use rsp2_ad::{
+    eval_and_save_rsp2_eqns, eval_rsp2_hp_face_ad, eval_rsp2_ptrb_cell_ad,
+    update_rsp2_vars_ad,
+};
+pub use rsp2_eqns::{
+    eval_rsp2_hp_face_zone, eval_rsp2_profile_equations,
+    rsp2_adjust_vars_before_call_solver, Rsp2ProfileResiduals,
+};
+pub use rsp2_remesh::{remesh_for_rsp2, seed_rsp2_w_from_mlt_vc_if_needed};
 pub use rsp_build::{
-    build_rsp_envelope_model, eval_rsp_2nd_crossing_edges, eval_rsp_lina_modes,
+    build_rsp_envelope_model, do_rsp_build_model, eval_rsp_2nd_crossing_edges,
+    eval_rsp_2nd_crossing_with_controls, eval_rsp_lina_modes,
+    Rsp2ndCrossingOffset, Rsp2ndCrossingPoint, Rsp2ndCrossingReport,
     RspLinaMode,
 };
+pub use rsp_config::{Rsp2Controls, RspConfig};
+pub use rsp_def::{
+    RspDerivedConsts, RspState, F_EDD_FREE_STREAM, F_EDD_ISOTROPIC, MAX_RSP_NZN,
+};
+pub use rsp_driver::{
+    rsp_one_step, rsp_setup_model, rsp_total_energy_integrals,
+};
+pub use rsp_eos_kap::{
+    compute_standard_metals_xa, eval1_gamma_pt_get_rho, eval1_mesa_eos_and_kap,
+    eval1_mesa_eos_de_and_kap, eval1_mesa_eos_degas_and_kap,
+    eval1_mesa_rho_given_pt, eval1_mesa_t_given_dp, eval_mesa_eos_and_kap,
+    get_surf_p_t_kap, set_rho_for_new_pgas, set_t_for_new_egas,
+    set_t_for_new_energy, set_t_for_new_pgas, RspChemCache, RspEosKapOut,
+};
+pub use rsp_grid::{
+    cleanup_for_lina, copy_results, eop, finish_build_rsp_model, mesa_eos_kap,
+    MesaRanmar, RspEnvGrid, RspTotalEosKap,
+};
+pub use rsp_lina::{do_lina, RspLinaOutput};
+pub use rsp_relax_env::relax_env;
+pub use rsp_stah::stah;
 pub use solver::{
     compute_corr_coeff, compute_correction_norms, compute_vector_norms,
     solve_henyey_step, HenyeySolverReport,
 };
 pub use star_ad::{
-    StarAdExt, StarAdOrder1, I_LND_00, I_LND_M1, I_LND_P1, I_LNR_00, I_LNR_M1,
-    I_LNR_P1, I_LNT_00, I_LNT_M1, I_LNT_P1, I_L_00, I_L_M1, I_L_P1, I_OMEGA_00,
-    I_OMEGA_M1, I_OMEGA_P1, I_V_00, I_V_M1, I_V_P1, NUM_STAR_AD_VARS,
+    StarAdExt, StarAdOrder1, I_HP_00, I_HP_M1, I_HP_P1, I_LND_00, I_LND_M1,
+    I_LND_P1, I_LNR_00, I_LNR_M1, I_LNR_P1, I_LNT_00, I_LNT_M1, I_LNT_P1,
+    I_L_00, I_L_M1, I_L_P1, I_OMEGA_00, I_OMEGA_M1, I_OMEGA_P1, I_V_00, I_V_M1,
+    I_V_P1, I_W_00, I_W_M1, I_W_P1, NUM_STAR_AD_VARS,
 };
 pub use star_job_init::init_or_update_model_from_bundle;
 pub use stella::{

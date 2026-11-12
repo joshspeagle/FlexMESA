@@ -357,14 +357,22 @@ pub fn do_struct_burn_mix(
     model.controls.op_split_burn = op_split_burn;
     set_hydro_vars(model, false, false)?;
     model.save_start_values();
+    if model.controls.rsp2_flag {
+        crate::rsp2_eqns::rsp2_adjust_vars_before_call_solver(model);
+        model.pack_xh();
+    }
     refresh_mixing_state(model, dt, overshoot_configs);
 
     let report = if op_split_burn {
-        op_split_burn_zones(model, dt)?;
+        if model.controls.do_burn && model.controls.dxdt_nuc_factor != 0.0 {
+            op_split_burn_zones(model, dt)?;
+        }
         let res = solve_henyey_step(model, false, use_bcyclic);
         model.controls.op_split_burn = saved_op_split;
         let rep = res?;
-        solve_composition_diffusion(model, dt);
+        if model.controls.do_mix && model.controls.mix_factor != 0.0 {
+            solve_composition_diffusion(model, dt);
+        }
         set_hydro_vars(model, false, false)?;
         rep
     } else {

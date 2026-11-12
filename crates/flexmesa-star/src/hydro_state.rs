@@ -13,6 +13,9 @@ pub struct HydroAuxState {
     /// Whether the model is currently in an initialization relaxation phase
     /// (`doing_relax` in `star_data_def.f90`).
     pub doing_relax: bool,
+    /// Total integrated model energy $E_{\mathrm{tot}}$ in $\mathrm{erg}$
+    /// (`total_energy` in `star_data_step_work.inc`).
+    pub total_energy: f64,
     /// Cumulative global energy conservation error in $\mathrm{erg}$
     /// (`cumulative_energy_error` in `star_data_step_work.inc`).
     pub cumulative_energy_error: f64,
@@ -58,6 +61,10 @@ pub struct HydroAuxState {
     pub etrb: Vec<f64>,
     /// Start-of-step turbulent specific kinetic energy $e_{\mathrm{trb,start},k}$ (`etrb_start`).
     pub etrb_start: Vec<f64>,
+    /// Previous-step `RSP2` turbulent energy $e_{t,\mathrm{old},k}$ for step retry (`et_rsp_old`).
+    pub et_rsp_old: Vec<f64>,
+    /// Previous-step `RSP2` pressure scale height $H_{P,\mathrm{old},k}$ for step retry (`hp_face_old`).
+    pub hp_face_old: Vec<f64>,
     /// Start-of-step face convective velocity $v_{c,\mathrm{old},k}$ in $\mathrm{cm\,s^{-1}}$ (`mlt_vc_old`).
     pub mlt_vc_old: Vec<f64>,
     /// Rayleigh-Taylor instability Lagrangian diffusion coefficient $\sigma_{\mathrm{RTI},k}$ (`sig_RTI`).
@@ -88,6 +95,8 @@ pub struct HydroAuxState {
     /// EOS total pressure composition partials $\partial\ln P_{\mathrm{eos},k}/\partial X_{j,k}$
     /// (`dlnPeos_dxa_for_partials`, `len = nz * species`).
     pub dln_peos_dxa_for_partials: Vec<f64>,
+    /// Radial Stellar Pulsation (`RSP` / `RSP2`) zone arrays and cycle state.
+    pub rsp: crate::rsp_def::RspState,
 }
 
 impl HydroAuxState {
@@ -97,6 +106,7 @@ impl HydroAuxState {
     pub fn new(nz: usize, species: usize) -> Self {
         Self {
             doing_relax: false,
+            total_energy: 0.0,
             cumulative_energy_error: 0.0,
             cp_start: vec![0.0; nz],
             grada_start: vec![0.0; nz],
@@ -118,6 +128,8 @@ impl HydroAuxState {
             eq_ad: vec![StarAdOrder1::ZERO; nz],
             etrb: vec![0.0; nz],
             etrb_start: vec![0.0; nz],
+            et_rsp_old: vec![0.0; nz],
+            hp_face_old: vec![0.0; nz],
             mlt_vc_old: vec![0.0; nz],
             sig_rti: vec![0.0; nz],
             source_plus_alpha_rti: vec![0.0; nz],
@@ -132,6 +144,7 @@ impl HydroAuxState {
             uq_ad: vec![StarAdOrder1::ZERO; nz],
             dln_e_dxa_for_partials: vec![0.0; nz * species],
             dln_peos_dxa_for_partials: vec![0.0; nz * species],
+            rsp: crate::rsp_def::RspState::new(nz),
         }
     }
 
@@ -156,6 +169,8 @@ impl HydroAuxState {
             &mut self.irradiation_heat,
             &mut self.etrb,
             &mut self.etrb_start,
+            &mut self.et_rsp_old,
+            &mut self.hp_face_old,
             &mut self.mlt_vc_old,
             &mut self.sig_rti,
             &mut self.source_plus_alpha_rti,
@@ -180,6 +195,7 @@ impl HydroAuxState {
         self.d_eps_grav_dx.resize(n_sp, 0.0);
         self.dln_e_dxa_for_partials.resize(n_sp, 0.0);
         self.dln_peos_dxa_for_partials.resize(n_sp, 0.0);
+        self.rsp.resize(nz);
     }
 
     /// Snapshots start-of-step thermodynamic and turbulent velocity arrays.

@@ -27,7 +27,7 @@ use crate::tier2_extras::apply_planetary_core;
 use crate::zams::load_zams_model;
 
 /// Resolves a `.mod` model file path against `case_dir`.
-fn resolve_model_path(
+pub(crate) fn resolve_model_path(
     case_dir: &Path,
     model_name: &str,
 ) -> Option<std::path::PathBuf> {
@@ -39,6 +39,12 @@ fn resolve_model_path(
         let local_fname = case_dir.join(fname);
         if local_fname.exists() {
             return Some(local_fname);
+        }
+        let rsp_golden = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../tests/fixtures/golden/rsp")
+            .join(fname);
+        if rsp_golden.exists() {
+            return Some(rsp_golden);
         }
     }
     None
@@ -116,9 +122,16 @@ fn build_initial_planet_or_wd_model(
 /// evaluation fails.
 pub fn init_or_update_model_from_bundle(
     bundle: &InlistBundle,
-    existing_model: Option<StarModel>,
+    mut existing_model: Option<StarModel>,
     extras: &mut dyn StarExtras,
 ) -> Result<StarModel, StarError> {
+    if let Some(rsp_m) = crate::rsp_driver::init_rsp_model_from_bundle(
+        bundle,
+        &mut existing_model,
+        extras,
+    )? {
+        return Ok(rsp_m);
+    }
     let job = bundle.job.clone();
     let controls = bundle.controls.clone();
     let case_name = bundle
@@ -130,6 +143,9 @@ pub fn init_or_update_model_from_bundle(
         controls.initial_mass > 15.8 || controls.initial_mass < 0.51;
     let is_pulse_mod_case = case_name.starts_with("gyre_in_mesa_")
         || matches!(case_name, "astero_gyre" | "astero_adipls");
+    let is_rsp2_mod_case = controls.rsp2_flag
+        || (controls.rsp2.change_rsp2_flag && controls.rsp2.new_rsp2_flag)
+        || case_name.starts_with("dev_rsp2_");
     let is_tier2_or_3 = crate::tier2_extras::is_tier2_case(case_name)
         || crate::tier3_extras::is_tier3_case(case_name)
         || crate::tier4_extras::is_tier4_case(case_name)
@@ -137,12 +153,7 @@ pub fn init_or_update_model_from_bundle(
         || job.relax_initial_mass_to_remove_h_env
         || out_of_zams_range;
     let mut loaded_from_mod = false;
-    let mut model = if job.create_rsp_model {
-        crate::rsp_build::build_rsp_envelope_model(
-            controls.clone(),
-            job.clone(),
-        )?
-    } else if is_pulse_mod_case {
+    let mut model = if is_pulse_mod_case || is_rsp2_mod_case {
         if let Some(prev) = existing_model {
             loaded_from_mod = true;
             prev
@@ -167,10 +178,7 @@ pub fn init_or_update_model_from_bundle(
                     )?,
                 }
             } else {
-                build_initial_planet_or_wd_model(
-                    controls.clone(),
-                    job.clone(),
-                )?
+                build_initial_planet_or_wd_model(controls.clone(), job.clone())?
             }
         } else {
             load_zams_model(controls.clone(), job.clone())?
@@ -188,7 +196,7 @@ pub fn init_or_update_model_from_bundle(
         || crate::tier5_extras::is_tier5_star_case(case_name)
         || out_of_zams_range
     {
-        if let Some(prev) = existing_model {
+        if let Some(prev) = existing_model.filter(|p| !p.controls.rsp_flag) {
             prev
         } else {
             let mut init_controls = controls.clone();
@@ -366,11 +374,39 @@ pub fn init_or_update_model_from_bundle(
         }
     }
 
-    model.layout = VarLayout::new(
+    if model.controls.rsp2.change_rsp_flag {
+        model.controls.rsp_flag = model.controls.rsp2.new_rsp_flag;
+    }
+    if model.controls.rsp2.change_rsp2_flag {
+        model.controls.rsp2_flag = model.controls.rsp2.new_rsp2_flag;
+    }
+    if model.controls.rsp2_flag {
+        model.controls.rsp_flag = false;
+    }
+
+    model.layout = VarLayout::with_rsp2(
         model.species,
         model.controls.v_flag,
         model.controls.u_flag,
+        model.controls.rsp2_flag,
     );
+    if model.controls.rsp2_flag {
+        crate::rsp2_remesh::seed_rsp2_w_from_mlt_vc_if_needed(&mut model);
+        if model.controls.rsp2.remesh_when_load
+            && model.controls.rsp2.nz >= 2
+            && model.nz != model.controls.rsp2.nz
+        {
+            crate::rsp2_remesh::remesh_for_rsp2(&mut model)?;
+        } else {
+            for k in 0..model.nz {
+                if model.aux.rsp.hp_face[k] <= 0.0 {
+                    model.aux.rsp.hp_face[k] =
+                        crate::rsp2_eqns::eval_rsp2_hp_face_zone(&model, k);
+                }
+            }
+            model.pack_xh();
+        }
+    }
 
     // 7. Age, model number, and initial timestep overrides
     if job.set_initial_age {
@@ -427,6 +463,13 @@ pub fn init_or_update_model_from_bundle(
     }
 
     set_hydro_vars(&mut model, false, false)?;
+    if model.controls.rsp2_flag {
+        let (e0, _) = crate::rsp_driver::rsp_total_energy_integrals(&mut model);
+        model.aux.total_energy = e0;
+        model.aux.rsp.total_energy_old = e0;
+        model.aux.rsp.time_sec = model.star_age * SECYER;
+        model.aux.rsp.time_old_sec = model.aux.rsp.time_sec;
+    }
     model.save_start_values();
     model.save_old_values();
     if loaded_from_mod && crate::tier2_extras::is_tier2_case(case_name) {

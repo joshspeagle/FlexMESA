@@ -70,7 +70,7 @@ const EXPECTED_WAVE4_CHECKSUMS_N8: [(&str, f64); 5] = [
 /// and `benchmarks/fortran_mesa/run_wave5_bench.f90`).
 const EXPECTED_WAVE5_CHECKSUMS_N8: [(&str, f64); 4] = [
     ("w5_diff_rot", 3.082_380_424_983_001e5),
-    ("w5_riemann_rsp2", -2.543_418_211_343_195e5),
+    ("w5_riemann_rsp2", -2.543_418_211_346_364e5),
     ("w5_binary_rlof", 6.234_702_123_446_103),
     ("w5_astero_seism", 7.563_537_818_023_943e1),
 ];

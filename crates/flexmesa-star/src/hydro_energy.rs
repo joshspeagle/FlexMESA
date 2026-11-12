@@ -100,6 +100,9 @@ pub fn eval_cell_pressure_for_work_ad(
     if model.controls.use_pvsc_art_visc && model.controls.v_flag {
         p_ad = p_ad + eval_pvsc_cell_ad(model, k);
     }
+    if model.controls.rsp2_flag && model.controls.rsp2.alfap != 0.0 {
+        p_ad = p_ad + crate::rsp2_ad::eval_rsp2_ptrb_cell_ad(model, k, false);
+    }
     if model.controls.mlt_pturb_factor > 0.0 {
         let vc_old = model.aux.mlt_vc_old.get(k).copied().unwrap_or(0.0);
         if vc_old > 0.0 {
@@ -326,9 +329,20 @@ pub fn setup_d_turbulent_energy_dt(
 ) -> StarAdOrder1 {
     let dt = model.dt.max(1.0e-30);
     if model.controls.rsp2_flag {
-        let etrb = model.aux.etrb.get(k).copied().unwrap_or(0.0);
+        let etrb = if model.layout.i_w.is_some() {
+            model.aux.rsp.et_rsp.get(k).copied().unwrap_or(0.0).max(0.0)
+        } else {
+            model.aux.etrb.get(k).copied().unwrap_or(0.0).max(0.0)
+        };
         let etrb_s = model.aux.etrb_start.get(k).copied().unwrap_or(etrb);
-        return StarAdOrder1::constant((etrb - etrb_s) / dt);
+        let et_ad = if model.layout.i_w.is_some() {
+            let w_00 =
+                StarAdOrder1::variable(etrb.sqrt(), crate::star_ad::I_W_00);
+            w_00 * w_00
+        } else {
+            StarAdOrder1::constant(etrb)
+        };
+        return (et_ad - etrb_s) / dt;
     }
     if model.controls.mlt_option == MltOption::Tdc
         && model.controls.tdc_include_eturb_in_energy_equation

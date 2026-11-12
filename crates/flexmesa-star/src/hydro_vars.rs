@@ -462,8 +462,46 @@ pub fn set_hydro_vars(
             do_net(model, &net_info, skip_net_jacobian)?;
         }
     }
+    let sig_was_zero = model.sig.iter().all(|&s| s == 0.0);
     do_brunt_b(model);
     set_mlt_vars(model)?;
+    if model.controls.rsp2_flag {
+        eval_surf_bc(model)?;
+        crate::eps_grav::eval_eps_grav(model);
+        crate::rsp2_ad::update_rsp2_vars_ad(model);
+        let alpha = model.controls.mixing_length_alpha;
+        for k in 0..model.nz {
+            if k == 0 || crate::rsp2_eqns::is_nonturbulent_cell(model, k) {
+                model.conv_vel[k] = 0.0;
+                model.d_mix[k] = 0.0;
+                model.mixing_type[k] = MixingType::NoMixing;
+                model.gradt[k] = model.gradr[k];
+            } else {
+                let (alfa, beta) =
+                    crate::rsp2_eqns::rsp2_face_weights(model, k);
+                let w_00 = model.aux.rsp.et_rsp[k].max(0.0).sqrt();
+                let w_m1 = model.aux.rsp.et_rsp[k - 1].max(0.0).sqrt();
+                let vc =
+                    flexmesa_const::SQRT_2_DIV_3 * (alfa * w_00 + beta * w_m1);
+                let d_mix = vc * alpha * model.aux.rsp.hp_face[k] / 3.0;
+                model.conv_vel[k] = vc;
+                model.d_mix[k] = d_mix;
+                model.mixing_type[k] = if d_mix > 0.0 {
+                    MixingType::ConvectiveMixing
+                } else {
+                    MixingType::NoMixing
+                };
+                let grada_f = alfa * model.grada[k] + beta * model.grada[k - 1];
+                model.gradt[k] = model.aux.rsp.y_face_rsp[k] + grada_f;
+            }
+        }
+        if sig_was_zero {
+            model.sig.fill(0.0);
+            update_sig_from_d_mix(model);
+        }
+        do_brunt_n2(model);
+        return Ok(());
+    }
     do_brunt_n2(model);
     eval_surf_bc(model)?;
     crate::eps_grav::eval_eps_grav(model);

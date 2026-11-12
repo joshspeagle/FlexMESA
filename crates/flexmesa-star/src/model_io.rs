@@ -17,23 +17,64 @@ use crate::zams::parse_fortran_f64;
 pub const STAR_DEF_VERSION: i32 = 19;
 
 /// Serializes a [`StarModel`] into an upstream MESA ASCII `.mod` string
-/// (`write_model.f90`), preserving core boundary headers and dynamic columns.
+/// (`write_model.f90`), preserving the exact `file_type` bitmask (`32812` for
+/// `RSP`), core boundary headers, and `RSP` / `RSP2` zone columns.
 ///
 /// # Errors
 /// Returns [`StarError::IoError`] if formatting fails.
 pub fn write_mod_string(model: &StarModel) -> Result<String, StarError> {
-    let mut out = String::with_capacity(model.nz * 200 + 1024);
+    let nz = model.nz;
+    let write_v = model.controls.v_flag && model.v.len() == nz;
+    let write_u = model.controls.u_flag && model.u.len() == nz;
+    let write_rot = model.controls.rotation_flag
+        && model.omega.len() == nz
+        && model.j_rot.len() == nz;
+    let write_rti = model.controls.rti_flag && model.aux.alpha_rti.len() == nz;
+    let write_rsp = model.controls.rsp_flag
+        && model.aux.rsp.et_rsp.len() == nz
+        && model.aux.rsp.erad_rsp.len() == nz
+        && model.aux.rsp.fr_rsp.len() == nz;
+    let write_rsp2 = !write_rsp
+        && model.controls.rsp2_flag
+        && model.aux.rsp.hp_face.len() == nz;
+    let write_mlt_vc = model.mlt_vc.len() == nz
+        && (write_rsp || model.mlt_vc.iter().any(|&x| x != 0.0));
+
+    let mut file_type = 4_u32;
+    if write_v {
+        file_type |= 8;
+    }
+    if write_rot {
+        file_type |= 16 | 4096;
+    }
+    if write_mlt_vc {
+        file_type |= 32;
+    }
+    if write_rsp2 {
+        file_type |= 64;
+    }
+    if write_rti {
+        file_type |= 128;
+    }
+    if write_u {
+        file_type |= 512;
+    }
+    if write_rsp {
+        file_type |= 32768;
+    }
+
+    let mut out = String::with_capacity(nz * 260 + 1200);
     writeln!(out, "! note: initial lines of file can contain comments\n!")
         .unwrap();
-    writeln!(out, "           1 -- model with uniform dq\n").unwrap();
+    writeln!(out, "{file_type:14} -- model for mesa/star, cgs units.\n")
+        .unwrap();
 
     let (m_msun, dt_yrs, z_init) = (
         model.mstar / M_SUN,
         model.dt / SECYER,
         model.controls.initial_z,
     );
-    let (mn, age, nz, sp) =
-        (model.model_number, model.star_age, model.nz, model.species);
+    let (mn, age, sp) = (model.model_number, model.star_age, model.species);
     writeln!(out, "             M/Msun      {m_msun:26.16E}").unwrap();
     writeln!(out, "       model_number      {mn:26}").unwrap();
     writeln!(out, "           star_age      {age:26.16E}").unwrap();
@@ -44,10 +85,29 @@ pub fn write_mod_string(model: &StarModel) -> Result<String, StarError> {
     let c_err = model.aux.cumulative_energy_error;
     for (k_str, val, show) in [
         ("xmstar", model.xmstar, model.m_center > 0.0),
-        ("M_center", model.m_center, model.m_center > 0.0),
+        (
+            "M_center",
+            model.m_center,
+            model.m_center > 0.0 && !write_rsp,
+        ),
         ("R_center", model.r_center, model.r_center > 0.0),
         ("L_center", model.l_center, model.l_center > 0.0),
         ("v_center", model.v_center, model.v_center != 0.0),
+        (
+            "tau_factor",
+            model.controls.tau_factor,
+            model.controls.tau_factor != 1.0,
+        ),
+        (
+            "opacity_factor",
+            model.controls.opacity_factor,
+            model.controls.opacity_factor != 1.0,
+        ),
+        (
+            "total_energy",
+            model.aux.total_energy,
+            write_rsp && model.aux.total_energy != 0.0,
+        ),
         ("cumulative_energy_error", c_err, c_err != 0.0),
     ] {
         if show {
@@ -55,27 +115,39 @@ pub fn write_mod_string(model: &StarModel) -> Result<String, StarError> {
         }
     }
     writeln!(out, "               Teff      {:26.16E}", model.teff).unwrap();
-    writeln!(out, "   year_for_time_step      {dt_yrs:26.16E}\n").unwrap();
-
-    let write_v = model.controls.v_flag && model.v.len() == model.nz;
-    let write_u = model.controls.u_flag && model.u.len() == model.nz;
-    let write_rot = model.controls.rotation_flag
-        && model.omega.len() == model.nz
-        && model.j_rot.len() == model.nz;
-    let write_rti =
-        model.controls.rti_flag && model.aux.alpha_rti.len() == model.nz;
+    if model.num_retries > 0 || write_rsp {
+        writeln!(out, "        num_retries      {:26}", model.num_retries)
+            .unwrap();
+    }
+    if !write_rsp {
+        writeln!(out, "   year_for_time_step      {dt_yrs:26.16E}").unwrap();
+    }
+    writeln!(out).unwrap();
 
     write!(
         out,
-        "        lnd                       lnT                       lnR                       L                         dq"
+        "        lnd                       lnT                       lnR"
     )
     .unwrap();
+    if write_rsp {
+        for col in ["et_RSP", "erad_RSP", "Fr_RSP"] {
+            write!(out, "  {col:>24}").unwrap();
+        }
+    } else if write_rsp2 {
+        for col in ["w", "Hp"] {
+            write!(out, "  {col:>24}").unwrap();
+        }
+    }
+    for col in ["L", "dq"] {
+        write!(out, "  {col:>24}").unwrap();
+    }
     for (col_name, show) in [
         ("v", write_v),
         ("u", write_u),
         ("omega", write_rot),
         ("j_rot", write_rot),
         ("alpha_RTI", write_rti),
+        ("mlt_vc", write_mlt_vc),
     ] {
         if show {
             write!(out, "  {col_name:>24}").unwrap();
@@ -86,18 +158,43 @@ pub fn write_mod_string(model: &StarModel) -> Result<String, StarError> {
     }
     writeln!(out).unwrap();
 
-    for k in 0..model.nz {
+    for k in 0..nz {
         write!(
             out,
-            "{:5}  {:24.16E}  {:24.16E}  {:24.16E}  {:24.16E}  {:24.16E}",
+            "{:5}  {:24.16E}  {:24.16E}  {:24.16E}",
             k + 1,
             model.lnd[k],
             model.ln_t[k],
             model.ln_r[k],
-            model.lum[k],
-            model.dq[k],
         )
         .unwrap();
+        if write_rsp {
+            write!(
+                out,
+                "  {:24.16E}  {:24.16E}  {:24.16E}",
+                model.aux.rsp.et_rsp[k],
+                model.aux.rsp.erad_rsp[k],
+                model.aux.rsp.fr_rsp[k],
+            )
+            .unwrap();
+        } else if write_rsp2 {
+            let w_k = model
+                .aux
+                .etrb
+                .get(k)
+                .copied()
+                .unwrap_or(0.0)
+                .max(0.0)
+                .sqrt();
+            let hp_k = if model.aux.rsp.hp_face[k] > 0.0 {
+                model.aux.rsp.hp_face[k]
+            } else {
+                model.scale_height.get(k).copied().unwrap_or(0.0)
+            };
+            write!(out, "  {w_k:24.16E}  {hp_k:24.16E}").unwrap();
+        }
+        write!(out, "  {:24.16E}  {:24.16E}", model.lum[k], model.dq[k])
+            .unwrap();
         for (val, show) in [
             (model.v.get(k).copied().unwrap_or(0.0), write_v),
             (model.u.get(k).copied().unwrap_or(0.0), write_u),
@@ -107,6 +204,7 @@ pub fn write_mod_string(model: &StarModel) -> Result<String, StarError> {
                 model.aux.alpha_rti.get(k).copied().unwrap_or(0.0),
                 write_rti,
             ),
+            (model.mlt_vc.get(k).copied().unwrap_or(0.0), write_mlt_vc),
         ] {
             if show {
                 write!(out, "  {val:24.16E}").unwrap();
@@ -129,7 +227,8 @@ pub fn write_mod_string(model: &StarModel) -> Result<String, StarError> {
 }
 
 /// Parses an upstream MESA ASCII `.mod` string into a [`StarModel`]
-/// (`read_model.f90`), supporting all upstream `.mod` column layouts.
+/// (`read_model.f90`), supporting all standard, `RSP` (`32812`), and `RSP2`
+/// `.mod` column layouts.
 ///
 /// # Errors
 /// Returns [`StarError::IoError`] if the `.mod` text is malformed.
@@ -147,6 +246,7 @@ pub fn read_mod_str(
     let (mut xmstar_opt, mut m_center_opt) = (None, None);
     let (mut r_center, mut l_center, mut v_center, mut cum_energy_err) =
         (0.0_f64, 0.0_f64, 0.0_f64, 0.0_f64);
+    let mut total_energy = 0.0_f64;
     let mut header_cols: Vec<String> = Vec::new();
 
     for line in lines.by_ref() {
@@ -192,6 +292,7 @@ pub fn read_mod_str(
             "R_center" => r_center = parse_fortran_f64(v)?,
             "L_center" => l_center = parse_fortran_f64(v)?,
             "v_center" => v_center = parse_fortran_f64(v)?,
+            "total_energy" => total_energy = parse_fortran_f64(v)?,
             "cumulative_energy_error" => cum_energy_err = parse_fortran_f64(v)?,
             "tau_factor" if !job.set_tau_factor => {
                 controls.tau_factor = parse_fortran_f64(v)?;
@@ -229,8 +330,10 @@ pub fn read_mod_str(
     let col_pos = |name: &str| pre_iso_cols.iter().position(|c| c == name);
     let (v_idx, u_idx) = (col_pos("v"), col_pos("u"));
     let (omega_idx, j_rot_idx) = (col_pos("omega"), col_pos("j_rot"));
-    let (w_div_wc_idx, w_idx, et_rsp_idx) =
-        (col_pos("w_div_wc"), col_pos("w"), col_pos("et_RSP"));
+    let (w_div_wc_idx, w_idx, hp_idx) =
+        (col_pos("w_div_wc"), col_pos("w"), col_pos("Hp"));
+    let (et_rsp_idx, erad_rsp_idx, fr_rsp_idx) =
+        (col_pos("et_RSP"), col_pos("erad_RSP"), col_pos("Fr_RSP"));
     let rti_idx = pre_iso_cols
         .iter()
         .position(|c| c.eq_ignore_ascii_case("alpha_rti"));
@@ -240,6 +343,19 @@ pub fn read_mod_str(
     controls.u_flag |= u_idx.is_some() && !job.change_u_flag;
     controls.rotation_flag |= omega_idx.is_some() && !job.change_rotation_flag;
     controls.rti_flag |= rti_idx.is_some() && !job.change_initial_rti_flag;
+    controls.rsp_flag = if controls.rsp2.change_rsp_flag {
+        controls.rsp2.new_rsp_flag
+    } else {
+        controls.rsp_flag || et_rsp_idx.is_some()
+    };
+    controls.rsp2_flag = if controls.rsp2.change_rsp2_flag {
+        controls.rsp2.new_rsp2_flag
+    } else {
+        controls.rsp2_flag || (w_idx.is_some() && hp_idx.is_some())
+    };
+    if controls.rsp2_flag {
+        controls.rsp_flag = false;
+    }
 
     let iso_names = &header_cols[iso_start_idx..];
     let species = iso_names.len();
@@ -261,6 +377,7 @@ pub fn read_mod_str(
     }
     (model.r_center, model.l_center, model.v_center) =
         (r_center, l_center, v_center);
+    model.aux.total_energy = total_energy;
     model.aux.cumulative_energy_error = cum_energy_err;
     (model.model_number, model.num_retries) = (model_number, num_retries);
     (model.star_age, model.teff) = (star_age, teff);
@@ -300,6 +417,8 @@ pub fn read_mod_str(
             (j_rot_idx, &mut model.j_rot[k]),
             (w_div_wc_idx, &mut model.aux.w_div_wc[k]),
             (rti_idx, &mut model.aux.alpha_rti[k]),
+            (erad_rsp_idx, &mut model.aux.rsp.erad_rsp[k]),
+            (fr_rsp_idx, &mut model.aux.rsp.fr_rsp[k]),
         ] {
             if let Some(idx) = opt_idx {
                 *dst = parse_fortran_f64(toks[offset + idx])?;
@@ -307,9 +426,18 @@ pub fn read_mod_str(
         }
         if let Some(idx) = w_idx {
             let w_val = parse_fortran_f64(toks[offset + idx])?;
-            model.aux.etrb[k] = w_val * w_val;
+            let et = w_val * w_val;
+            model.aux.etrb[k] = et;
+            model.aux.rsp.et_rsp[k] = et;
         } else if let Some(idx) = et_rsp_idx {
-            model.aux.etrb[k] = parse_fortran_f64(toks[offset + idx])?;
+            let et = parse_fortran_f64(toks[offset + idx])?;
+            model.aux.etrb[k] = et;
+            model.aux.rsp.et_rsp[k] = et;
+        }
+        if let Some(idx) = hp_idx {
+            let hp = parse_fortran_f64(toks[offset + idx])?;
+            model.aux.rsp.hp_face[k] = hp;
+            model.scale_height[k] = hp;
         }
         if let Some(idx) = vc_idx {
             let vc = parse_fortran_f64(toks[offset + idx])?;
@@ -355,7 +483,42 @@ pub fn read_mod_str(
         }
     }
 
-    model.finish_init_model()?;
+    let saved_dq = model.dq.clone();
+    let saved_vc = vc_idx.map(|_| model.mlt_vc.clone());
+    let saved_hp = hp_idx.map(|_| model.aux.rsp.hp_face.clone());
+    if model.controls.rsp_flag {
+        if (saved_dq.iter().sum::<f64>() - 1.0).abs() <= 1.0e-12 {
+            model.dq.clone_from(&saved_dq);
+            model.dq_old = saved_dq;
+        }
+        model.set_qs();
+        model.set_xqs();
+        model.set_m_and_dm();
+        model.set_m_grav_and_grav();
+        model.pack_xh();
+        crate::micro::set_basic_vars(&mut model)?;
+        model.save_start_values();
+        model.save_old_values();
+    } else {
+        model.finish_init_model()?;
+        if (saved_dq.iter().sum::<f64>() - 1.0).abs() <= 1.0e-12 {
+            model.dq.clone_from(&saved_dq);
+            model.dq_old = saved_dq;
+            model.set_qs();
+            model.set_xqs();
+            model.set_m_and_dm();
+            model.set_m_grav_and_grav();
+        }
+    }
+    if let Some(vc) = saved_vc {
+        model.conv_vel.clone_from(&vc);
+        model.aux.mlt_vc_old.clone_from(&vc);
+        model.mlt_vc = vc;
+    }
+    if let Some(hp) = saved_hp {
+        model.scale_height.clone_from(&hp);
+        model.aux.rsp.hp_face = hp;
+    }
     (model.mstar_old, model.dt_old) = (parsed_mstar_old, parsed_dt_old);
 
     Ok(model)

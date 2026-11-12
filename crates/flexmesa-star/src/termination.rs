@@ -110,6 +110,18 @@ pub fn check_termination_limits_with_history(
             return Some(String::from("max_age_in_seconds"));
         }
     }
+    if let Some(lim) = c.rsp_max_num_periods {
+        if lim >= 0 && (model.aux.rsp.num_periods as isize) >= lim {
+            return Some(String::from("RSP_max_num_periods"));
+        }
+    }
+    if c.rsp_flag
+        && c.rsp.grekm_avg_abs_limit > 0.0
+        && model.aux.rsp.num_periods >= 2
+        && model.aux.rsp.grekm_avg_abs < c.rsp.grekm_avg_abs_limit
+    {
+        return Some(String::from("RSP_GREKM_avg_abs_limit"));
+    }
 
     let catalog = NuclideCatalog::builtin_ref();
     let center_xa = model.cell_xa(nz - 1);

@@ -23,7 +23,7 @@
 //!    $\Delta t / \mathrm{SECYER}$, and computes $\Delta t_{\mathrm{next}}$ via
 //!    the Söderlind & Wang (2006) H211 digital filter.
 
-use flexmesa_const::SECYER;
+use flexmesa_const::{R_SUN, SECYER};
 
 use crate::controls::StarError;
 use crate::hydro_vars::set_hydro_vars;
@@ -75,8 +75,11 @@ pub fn restore_from_old(model: &mut StarModel) -> Result<(), StarError> {
     model.ln_t.clone_from(&model.ln_t_old);
     model.ln_r.clone_from(&model.ln_r_old);
     model.lum.clone_from(&model.lum_old);
+    model.v.clone_from(&model.v_old);
     model.xa.clone_from(&model.xa_old);
     model.dq.clone_from(&model.dq_old);
+    model.aux.rsp.et_rsp.clone_from(&model.aux.et_rsp_old);
+    model.aux.rsp.hp_face.clone_from(&model.aux.hp_face_old);
     model.set_qs();
     model.set_xqs();
     model.set_m_and_dm();
@@ -115,12 +118,57 @@ pub fn star_evolve_step(
 ) -> Result<EvolveStepReport, StarError> {
     const MAX_RETRIES: usize = 16;
 
+    if model.controls.rsp_flag {
+        if model.dt_next > 0.0 {
+            model.dt = model.dt_next;
+        }
+        let prev_dt_old = model.dt_old;
+        model.save_old_values();
+        model.dt_old = prev_dt_old;
+        model.aux.rsp.time_old_sec = model.aux.rsp.time_sec;
+        let (e_old, _) = crate::rsp_driver::rsp_total_energy_integrals(model);
+        model.aux.rsp.total_energy_old = e_old;
+        model.model_number += 1;
+
+        let (iterations, retries) =
+            crate::rsp_driver::rsp_one_step(model, None)?;
+        model.total_num_solver_iterations += iterations;
+        model.num_retries += retries;
+        model.star_age = model.aux.rsp.time_sec / SECYER;
+        model.dt_next = model.aux.rsp.rsp_dt;
+        model.dt_old = model.dt;
+
+        let (etot, mut total_radiation) =
+            crate::rsp_driver::rsp_total_energy_integrals(model);
+        if model.aux.rsp.just_set_velocities {
+            model.aux.rsp.total_energy_old = etot;
+            total_radiation = 0.0;
+            model.aux.cumulative_energy_error = 0.0;
+        }
+        let err_e = etot - (model.aux.rsp.total_energy_old - total_radiation);
+        model.aux.cumulative_energy_error += err_e;
+        model.aux.total_energy = etot;
+
+        return Ok(EvolveStepReport {
+            model_number: model.model_number,
+            star_age: model.star_age,
+            dt: model.dt,
+            dt_next: model.dt_next,
+            iterations,
+            retries,
+            num_splits: 0,
+            num_merges: 0,
+            varcontrol: 0.0,
+            converged: true,
+        });
+    }
+
     if model.dt_next > 0.0 {
         model.dt = model.dt_next;
     }
     let prev_dt_old = model.dt_old;
 
-    let (num_splits, num_merges) = if do_remesh {
+    let (num_splits, num_merges) = if do_remesh && !model.controls.rsp2_flag {
         set_hydro_vars(model, false, false)?;
         let dt_curr = model.dt.max(1.0);
         crate::struct_burn_mix::refresh_mixing_state(model, dt_curr, &[]);
@@ -134,9 +182,20 @@ pub fn star_evolve_step(
     // previous step's `dt_old` for the H211 filter.
     model.save_old_values();
     model.dt_old = prev_dt_old;
+    let rsp2_e_old = if model.controls.rsp2_flag {
+        crate::rsp_driver::rsp_total_energy_integrals(model).0
+    } else {
+        0.0
+    };
 
     let dt_floor = model.controls.min_timestep_limit.clamp(1.0e-20, 1.0);
     let mut dt_try = model.dt.max(dt_floor);
+    if let Some(max_yr) = model.controls.max_years_for_timestep {
+        dt_try = dt_try.min(max_yr * SECYER);
+    }
+    if model.controls.rsp.max_timestep > 0.0 {
+        dt_try = dt_try.min(model.controls.rsp.max_timestep);
+    }
     let mut retries = 0_usize;
     let (wind_scheme, wind_eta) = active_wind(model);
 
@@ -167,13 +226,32 @@ pub fn star_evolve_step(
                 model.star_age += dt_try / SECYER;
                 model.dt = dt_try;
                 let ts_rep = pick_next_timestep(model, 1.2, 0.5, 1.0e-2);
+                let mut dt_next = ts_rep.dt_next;
+                if let Some(max_yr) = model.controls.max_years_for_timestep {
+                    dt_next = dt_next.min(max_yr * SECYER);
+                }
+                if model.controls.rsp.max_timestep > 0.0 {
+                    dt_next = dt_next.min(model.controls.rsp.max_timestep);
+                }
+                if model.controls.rsp2_flag {
+                    model.aux.rsp.time_old_sec = model.aux.rsp.time_sec;
+                    model.aux.rsp.time_sec += dt_try;
+                    let (etot, total_rad) =
+                        crate::rsp_driver::rsp_total_energy_integrals(model);
+                    model.aux.rsp.total_energy_old = rsp2_e_old;
+                    model.aux.cumulative_energy_error +=
+                        etot - (rsp2_e_old - total_rad);
+                    model.aux.total_energy = etot;
+                    update_rsp2_cycle_stats(model, dt_try, &mut dt_next);
+                }
+                model.dt_next = dt_next;
                 model.dt_old = dt_try;
 
                 return Ok(EvolveStepReport {
                     model_number: model.model_number,
                     star_age: model.star_age,
                     dt: dt_try,
-                    dt_next: ts_rep.dt_next,
+                    dt_next,
                     iterations: rep.iterations,
                     retries,
                     num_splits,
@@ -198,6 +276,51 @@ pub fn star_evolve_step(
                 model.dt_old = prev_dt_old;
             }
         }
+    }
+}
+
+fn update_rsp2_cycle_stats(
+    model: &mut StarModel,
+    dt_try: f64,
+    dt_next: &mut f64,
+) {
+    if model.nz == 0 {
+        return;
+    }
+    let r_surf = model.r[0];
+    if model.aux.rsp.rmax <= 0.0 {
+        model.aux.rsp.rmax = r_surf;
+        model.aux.rsp.rmin = r_surf;
+    } else {
+        model.aux.rsp.rmax = model.aux.rsp.rmax.max(r_surf);
+        model.aux.rsp.rmin = model.aux.rsp.rmin.min(r_surf);
+    }
+    if model.controls.v_flag {
+        let v_beg = model.v_start[0];
+        let v_end = model.v[0];
+        if v_end <= 0.0 && v_beg >= 0.0 && (v_beg - v_end).abs() > 0.0 {
+            let frac = (v_beg / (v_beg - v_end)).clamp(0.0, 1.0);
+            let t_cross = model.aux.rsp.time_old_sec + frac * dt_try;
+            if model.aux.rsp.tt1 > 0.0 {
+                let p_new = t_cross - model.aux.rsp.tt1;
+                if p_new > 0.0 {
+                    model.aux.rsp.period = p_new;
+                    model.aux.rsp.num_periods += 1;
+                    model.aux.rsp.delta_r =
+                        (model.aux.rsp.rmax - model.aux.rsp.rmin) / R_SUN;
+                }
+            }
+            model.aux.rsp.tt1 = t_cross;
+            model.aux.rsp.rmax = r_surf;
+            model.aux.rsp.rmin = r_surf;
+        }
+    }
+    if model.controls.rsp2.target_steps_per_cycle > 0
+        && model.aux.rsp.period > 0.0
+    {
+        let dt_cap = model.aux.rsp.period
+            / (model.controls.rsp2.target_steps_per_cycle as f64);
+        *dt_next = (*dt_next).min(dt_cap);
     }
 }
 

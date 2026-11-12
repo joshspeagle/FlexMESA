@@ -27,6 +27,9 @@ pub mod block_io;
 pub mod block_tridiag;
 pub mod dense;
 mod dense_ops;
+pub mod eigen;
+mod eigen_prep;
+mod eigen_vecs;
 pub mod sparse;
 mod sparse_band;
 
@@ -52,6 +55,7 @@ pub use dense_ops::{
     lu_factored_square_mm, lu_factored_square_mv, multiply_xa,
     multiply_xa_plus_c,
 };
+pub use eigen::{dgeev_eigenvalues, dgeev_right, EigenResult};
 pub use sparse::{
     col_sparse_0_based_to_dense, column_sparse_to_dense, dense_to_col_0_based,
     dense_to_col_sparse, dense_to_col_sparse_with_diag,

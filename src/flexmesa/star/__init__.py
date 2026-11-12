@@ -14,6 +14,7 @@ from flexmesa.star import (
     jax_evolve,
     jax_hydro_pulse,
     jax_kernels,
+    jax_rsp,
     jax_winds_mix,
     model,
 )
@@ -34,6 +35,7 @@ TIER4_DEV_CASES = e2e_tier45.TIER4_DEV_CASES
 TIER4_STAR_CASES = e2e_tier45.TIER4_STAR_CASES
 TIER5_STAR_CASES = e2e_tier45.TIER5_STAR_CASES
 build_rsp_envelope_model = e2e_tier45.build_rsp_envelope_model
+compute_rsp2_uq_face_jax = jax_rsp.compute_rsp2_uq_face_jax
 compute_staggered_grid_jax = jax_kernels.compute_staggered_grid_jax
 eval_astero_scaling_dnu_numax_uhz = e2e_tier45.eval_astero_scaling_dnu_numax_uhz
 eval_burgers_velocities_jax = jax_diffusion_rot.eval_burgers_velocities_jax
@@ -64,9 +66,13 @@ eval_rotation_fp_ft_jax = jax_diffusion_rot.eval_rotation_fp_ft_jax
 eval_rotational_mixing_zone_jax = (
     jax_diffusion_rot.eval_rotational_mixing_zone_jax
 )
-eval_rsp2_face_jax = jax_hydro_pulse.eval_rsp2_face_jax
-eval_rsp2_zone_jax = jax_hydro_pulse.eval_rsp2_zone_jax
+eval_rsp2_face_jax = jax_rsp.eval_rsp2_face_jax
+eval_rsp2_turbulent_eqn_residual_jax = (
+    jax_rsp.eval_rsp2_turbulent_eqn_residual_jax
+)
+eval_rsp2_zone_jax = jax_rsp.eval_rsp2_zone_jax
 eval_rsp_2nd_crossing_edges = e2e_tier45.eval_rsp_2nd_crossing_edges
+eval_rsp_hyd_fluxes_jax = jax_rsp.eval_rsp_hyd_fluxes_jax
 eval_rsp_lina_modes = e2e_tier45.eval_rsp_lina_modes
 eval_sobolev_feii_5169_tau_jax = jax_hydro_pulse.eval_sobolev_feii_5169_tau_jax
 eval_target_mode_frequency_and_growth = (
@@ -78,6 +84,7 @@ face_weights_jax = jax_kernels.face_weights_jax
 interp_q = model.interp_q
 parse_inlist_bundle = e2e.parse_inlist_bundle
 parse_rn_stages = e2e.parse_rn_stages
+rsp2_flux_limiter_jax = jax_rsp.rsp2_flux_limiter_jax
 run_all_active_star_suite = e2e_tier45.run_all_active_star_suite
 run_astero_suite = e2e_tier45.run_astero_suite
 run_astero_test_suite_case = e2e_tier45.run_astero_test_suite_case
@@ -93,7 +100,7 @@ run_tier5_star_suite = e2e_tier45.run_tier5_star_suite
 solve_adipls_fgong_modes = jax_hydro_pulse.solve_adipls_fgong_modes
 solve_gyre_mesa_modes = jax_hydro_pulse.solve_gyre_mesa_modes
 solve_henyey_linear_jax = jax_kernels.solve_henyey_linear_jax
-solve_stationary_rsp2_w_jax = jax_hydro_pulse.solve_stationary_rsp2_w_jax
+solve_stationary_rsp2_w_jax = jax_rsp.solve_stationary_rsp2_w_jax
 verify_step_redo_bit_parity = e2e_tier45.verify_step_redo_bit_parity
 yrs_for_init_timestep = model.yrs_for_init_timestep
 
@@ -114,6 +121,7 @@ __all__ = [
     "JaxStarState",
     "StarModel",
     "build_rsp_envelope_model",
+    "compute_rsp2_uq_face_jax",
     "compute_staggered_grid_jax",
     "e2e",
     "e2e_tier45",
@@ -139,8 +147,10 @@ __all__ = [
     "eval_rotation_fp_ft_jax",
     "eval_rotational_mixing_zone_jax",
     "eval_rsp2_face_jax",
+    "eval_rsp2_turbulent_eqn_residual_jax",
     "eval_rsp2_zone_jax",
     "eval_rsp_2nd_crossing_edges",
+    "eval_rsp_hyd_fluxes_jax",
     "eval_rsp_lina_modes",
     "eval_sobolev_feii_5169_tau_jax",
     "eval_target_mode_frequency_and_growth",
@@ -152,10 +162,12 @@ __all__ = [
     "jax_evolve",
     "jax_hydro_pulse",
     "jax_kernels",
+    "jax_rsp",
     "jax_winds_mix",
     "model",
     "parse_inlist_bundle",
     "parse_rn_stages",
+    "rsp2_flux_limiter_jax",
     "run_all_active_star_suite",
     "run_astero_suite",
     "run_astero_test_suite_case",

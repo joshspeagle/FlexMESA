@@ -150,6 +150,8 @@ pub struct StarModel {
     pub ln_r_old: Vec<f64>,
     /// Previous-step luminosity $L$ (`L_old`).
     pub lum_old: Vec<f64>,
+    /// Previous-step radial velocity $v$ (`v_old`).
+    pub v_old: Vec<f64>,
     /// Previous-step species mass fractions (`xa_old`).
     pub xa_old: Vec<f64>,
     /// Previous-step zone mass fractions (`dq_old`).
@@ -378,7 +380,12 @@ impl StarModel {
                 net_iso[cid] = Some(j);
             }
         }
-        let layout = VarLayout::new(species, controls.v_flag, controls.u_flag);
+        let layout = VarLayout::with_rsp2(
+            species,
+            controls.v_flag,
+            controls.u_flag,
+            controls.rsp2_flag,
+        );
         let mstar = controls.initial_mass * M_SUN;
         let kap_config = KapConfig {
             zbase: controls.zbase,
@@ -443,6 +450,7 @@ impl StarModel {
             ln_t_old: vec![0.0; nz],
             ln_r_old: vec![0.0; nz],
             lum_old: vec![0.0; nz],
+            v_old: vec![0.0; nz],
             xa_old: vec![0.0; nz * species],
             dq_old: vec![0.0; nz],
             dq: vec![1.0 / (nz.max(1) as f64); nz],

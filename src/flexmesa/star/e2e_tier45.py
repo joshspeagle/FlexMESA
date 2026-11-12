@@ -95,7 +95,6 @@ def eval_rsp_lina_modes(
     x_h: float = 0.73,
     z_metal: float = 0.007,
     n_modes: int = 3,
-    expected_f_period_days: float | None = None,
 ) -> list[dict[str, Any]]:
     """Evaluate linear non-adiabatic (`LINA`) radial pulsation periods and
     growth rates for an `RSP` envelope (`Issue #5`).
@@ -106,8 +105,7 @@ def eval_rsp_lina_modes(
         teff_k: Effective temperature in `K`.
         x_h: Hydrogen mass fraction $X$.
         z_metal: Metal mass fraction $Z$.
-        n_modes: Number of radial modes to compute (`1..=5`).
-        expected_f_period_days: Optional target fundamental period in `days`.
+        n_modes: Number of radial modes to compute (`1..=15`).
 
     Returns:
         List of dictionaries with keys `("mode_index", "period_days",
@@ -120,9 +118,6 @@ def eval_rsp_lina_modes(
         float(x_h),
         float(z_metal),
         int(n_modes),
-        None
-        if expected_f_period_days is None
-        else float(expected_f_period_days),
     )
     return [dict(item) for item in raw]
 

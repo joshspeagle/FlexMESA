@@ -15,7 +15,8 @@
 module bench_kernels_wave5
    use const_def, only: dp, pi, pi4, ln10, one_third, two_thirds, &
       four_thirds, four_thirds_pi, sqrt_2_div_3, standard_cgrav, &
-      clight, crad, kerg, hbar, amu, me, mp, qe, msun, rsun, lsun, secyer
+      boltz_sigma, clight, crad, kerg, hbar, amu, me, mp, qe, msun, &
+      rsun, lsun, secyer
    use hydro_rotation, only: rot_a_poly => a, log_term_power
    use binary_utils, only: eval_rlobe
    use binary_tides, only: hut_f3 => f3, hut_f4 => f4
@@ -214,7 +215,7 @@ contains
 
       dt = 100.0_dp; grad_ad = 0.395_dp; delta = 1.0_dp
       alfa = 1.5_dp; alfap = 1.0_dp; alfas = 1.0_dp; alfad = 1.0_dp
-      alfam = 0.25_dp; gammar = 1.0_dp; min_w2 = 1.0e-4_dp
+      alfam = 0.25_dp; gammar = 1.0_dp; min_w2 = 0.0_dp
 
       do k = 1, nz
          s = (real(k, dp) - 0.5_dp) / real(nz, dp)
@@ -292,9 +293,8 @@ contains
          a_cell = t(k) * p(k) * delta / (rho(k) * hp(k))
          c_s = X_ALFAS * alfa * alfas * a_cell * y_sup
          c_d = (X_CEDE * alfad / alfa) / hp(k)
-         c_dr_p = (X_GAMMAR * gammar / alfa)**2
-         rad_cond = clight * crad * (t(k)**3) * delta / &
-            (rho(k) * rho(k) * cp(k) * cp(k) * kappa(k))
+         c_dr_p = 4.0_dp * boltz_sigma * ((X_GAMMAR * gammar / alfa)**2)
+         rad_cond = (t(k)**3) / (rho(k) * rho(k) * cp(k) * kappa(k))
          c_dr = c_dr_p * rad_cond / (hp(k) * hp(k))
          if (grad_t(k) > grad_ad) then
             disc = max(c_dr * c_dr + 4.0_dp * c_d * c_s, 0.0_dp)
@@ -304,13 +304,13 @@ contains
          end if
          w = w_st + 2.0e4_dp * (1.0_dp - s); w2 = w * w
          p_turb = X_ALFAP * alfap * rho(k) * w2
-         f_eddy = merge(clamp_dp(w2 / min_w2, 0.0_dp, 1.0_dp), 1.0_dp, &
-            w2 < min_w2)
-         vol_mid = four_thirds_pi * 0.5_dp * ((r_out(k)**3) + (r_in(k)**3))
-         chi_turb = f_eddy * four_thirds * alfam * hp(k) * rho(k) * rho(k) * &
-            w * vol_mid * vol_mid
+         f_eddy = merge(clamp_dp(w2 / max(min_w2, 1.0_dp), 0.0_dp, 1.0_dp), &
+            1.0_dp, min_w2 > 0.0_dp .and. w2 < min_w2)
          du_r = (u(k) / r_out(k)) - (0.95_dp * u(k) / r_in(k))
-         eq_visc = max(chi_turb * ((du_r / dm(k))**2), 0.0_dp)
+         vol_mid = 0.5_dp * ((r_out(k)**6) + (r_in(k)**6))
+         chi_turb = f_eddy * (16.0_dp / 3.0_dp) * pi * (alfam * alfa / dm(k)) * &
+            rho(k) * rho(k) * vol_mid * du_r * hp(k) * w
+         eq_visc = pi4 * chi_turb * du_r / dm(k)
          src_s = c_s * w; snk_d = c_d * w2 * w; snk_dr = c_dr * w2
          de_t_dt = src_s + eq_visc - snk_d - snk_dr + &
             p_turb * dlnd_dt(k) / rho(k)
@@ -542,21 +542,18 @@ contains
       call run_zone_bench('w5_diff_rot', 1, nz, n_warm, n_rep, rec)
    end subroutine bench_w5_diff_rot
 
-   !> Runs the four-stage benchmark for w5_binary_rlof.
    subroutine bench_w5_binary_rlof(nz, n_warm, n_rep, rec)
       integer, intent(in) :: nz, n_warm, n_rep
       type(BenchRecord), intent(out) :: rec
       call run_zone_bench('w5_binary_rlof', 2, nz, n_warm, n_rep, rec)
    end subroutine bench_w5_binary_rlof
 
-   !> Runs the four-stage benchmark for w5_riemann_rsp2.
    subroutine bench_w5_riemann_rsp2(nz, n_warm, n_rep, rec)
       integer, intent(in) :: nz, n_warm, n_rep
       type(BenchRecord), intent(out) :: rec
       real(dp) :: out_s(nz, 0:3), samples(n_rep), t0
       type(LatencyStats) :: stats
       integer :: stg, iter
-
       rec%workload = 'w5_riemann_rsp2'; rec%n_zones = nz
       do stg = 0, 3
          do iter = 1, n_warm + n_rep
@@ -573,14 +570,12 @@ contains
       rec%checksum = sum(out_s(:, 0)) / real(nz, dp)
    end subroutine bench_w5_riemann_rsp2
 
-   !> Runs the four-stage benchmark for w5_astero_seism.
    subroutine bench_w5_astero_seism(nz, n_warm, n_rep, rec)
       integer, intent(in) :: nz, n_warm, n_rep
       type(BenchRecord), intent(out) :: rec
       real(dp) :: c(1, 0:3), samples(n_rep), t0
       type(LatencyStats) :: stats
       integer :: stg, iter
-
       rec%workload = 'w5_astero_seism'; rec%n_zones = nz
       do stg = 0, 3
          do iter = 1, n_warm + n_rep

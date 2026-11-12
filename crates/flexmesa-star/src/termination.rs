@@ -2,55 +2,23 @@
 //! Built-in `&controls` evolutionary termination condition checker
 //! (`check_termination_limits`, `check_termination_limits_with_history`) and
 //! core boundary mass integration (`compute_core_masses_msun`) corresponding to
-//! `star/private/do_one_utils.f90`.
+//! `star/private/do_one_utils.f90` and `star/private/report.f90`.
 
 use flexmesa_chem::NuclideCatalog;
 use flexmesa_const::{L_SUN, M_SUN, R_SUN, SECYER, STANDARD_CGRAV};
 
+use crate::core_boundaries::{
+    compute_core_masses, compute_power_categories, CoreMasses,
+};
 use crate::history::{extract_history_row, HistoryRow};
 use crate::model::StarModel;
 
-/// Computes core boundary masses ($M_\odot$) from cell composition profiles:
-/// - `he_core_mass`: enclosed mass where $X(\mathrm{^1H}) \le 0.01$
-/// - `co_core_mass`: enclosed mass where $X(\mathrm{^1H}) \le 0.01$ and $X(\mathrm{^4He}) \le 0.01$
-/// - `one_core_mass`: enclosed mass where $X(\mathrm{^{12}C}) \le 0.01$ inside the CO core
+/// Computes `(he_core_mass, co_core_mass, one_core_mass)` in solar masses
+/// ($M_\odot$) via [`compute_core_masses`] (`report.f90:1029-1259`).
 #[must_use]
 pub fn compute_core_masses_msun(model: &StarModel) -> (f64, f64, f64) {
-    let catalog = NuclideCatalog::builtin_ref();
-    let h1_id = catalog.get_nuclide_index("h1").unwrap_or(1);
-    let he4_id = catalog.get_nuclide_index("he4").unwrap_or(3);
-    let c12_id = catalog.get_nuclide_index("c12").unwrap_or(4);
-
-    let h1_j = model.chem_id.iter().position(|&id| id == h1_id);
-    let he4_j = model.chem_id.iter().position(|&id| id == he4_id);
-    let c12_j = model.chem_id.iter().position(|&id| id == c12_id);
-
-    let thresh = 0.01;
-    let mut he_core_m = 0.0;
-    let mut co_core_m = 0.0;
-    let mut one_core_m = 0.0;
-
-    for k in (0..model.nz).rev() {
-        let row = model.cell_xa(k);
-        let x_h = h1_j.map_or(0.0, |j| row[j]);
-        let x_he = he4_j.map_or(0.0, |j| row[j]);
-        let x_c = c12_j.map_or(0.0, |j| row[j]);
-        let m_msun = model.m[k] / M_SUN;
-
-        if x_h <= thresh {
-            he_core_m = m_msun;
-            if x_he <= thresh {
-                co_core_m = m_msun;
-                if x_c <= thresh && x_h + x_he + x_c <= 0.1 {
-                    one_core_m = m_msun;
-                }
-            }
-        } else {
-            break;
-        }
-    }
-
-    (he_core_m, co_core_m, one_core_m)
+    let cores = compute_core_masses(model);
+    (cores.he_core_mass, cores.co_core_mass, cores.one_core_mass)
 }
 
 fn species_col_index(
@@ -73,6 +41,83 @@ fn species_total_mass_msun(model: &StarModel, j: usize) -> f64 {
     iso_mass_g / M_SUN
 }
 
+fn eval_core_infall_termination(
+    model: &StarModel,
+    cores: &CoreMasses,
+) -> Option<String> {
+    let c = &model.controls;
+    let ts = &c.ts_stop;
+    let vel = if c.u_flag && !model.u.is_empty() {
+        &model.u
+    } else if !model.v.is_empty() {
+        &model.v
+    } else {
+        return None;
+    };
+
+    if let Some(lim) = c.fe_core_infall_limit {
+        if cores.fe_core_mass > 0.0 {
+            let m_fe_g = cores.fe_core_mass * M_SUN;
+            let mut mass_sum = 0.0_f64;
+            let mut peak_infall = 0.0_f64;
+            for k in (0..model.nz).rev() {
+                if model.m[k] > m_fe_g {
+                    break;
+                }
+                let v_in = -vel[k];
+                peak_infall = peak_infall.max(v_in);
+                if v_in > lim {
+                    mass_sum += model.dm[k];
+                }
+            }
+            let hit = if ts.check_mass_sum_for_infall
+                || cores.fe_core_mass > ts.fe_core_infall_mass
+            {
+                mass_sum > ts.fe_core_infall_mass * M_SUN && peak_infall >= lim
+            } else {
+                peak_infall >= lim
+            };
+            if hit {
+                return Some(String::from("fe_core_infall_limit"));
+            }
+        } else if !ts.check_mass_sum_for_infall {
+            let max_infall = vel.iter().map(|&v| -v).fold(0.0_f64, f64::max);
+            if max_infall >= lim {
+                return Some(String::from("fe_core_infall_limit"));
+            }
+        }
+    }
+
+    if let Some(lim) = ts.non_fe_core_infall_limit {
+        if cores.he_core_mass > 0.0 {
+            let m_he_g = cores.he_core_mass * M_SUN;
+            let m_fe_g = cores.fe_core_mass * M_SUN;
+            let mut mass_sum = 0.0_f64;
+            let mut peak_infall = 0.0_f64;
+            for k in 0..model.nz {
+                if model.m[k] > m_he_g {
+                    continue;
+                }
+                if model.m[k] < m_fe_g {
+                    break;
+                }
+                let v_in = -vel[k];
+                peak_infall = peak_infall.max(v_in);
+                if v_in > lim {
+                    mass_sum += model.dm[k];
+                }
+            }
+            if mass_sum > ts.non_fe_core_infall_mass * M_SUN
+                && peak_infall >= lim
+            {
+                return Some(String::from("non_fe_core_infall_limit"));
+            }
+        }
+    }
+
+    None
+}
+
 /// Evaluates all built-in `&controls` termination conditions on `model`
 /// (`star/private/do_one_utils.f90`). Returns `Some(termination_code)` if any
 /// active limit is satisfied.
@@ -90,6 +135,7 @@ pub fn check_termination_limits_with_history(
     cached_hr: Option<&HistoryRow>,
 ) -> Option<String> {
     let c = &model.controls;
+    let ts = &c.ts_stop;
     let nz = model.nz;
     if nz == 0 {
         return None;
@@ -226,42 +272,78 @@ pub fn check_termination_limits_with_history(
     let need_cores = c.he_core_mass_limit.is_some()
         || c.co_core_mass_limit.is_some()
         || c.one_core_mass_limit.is_some()
-        || c.power_he_burn_upper_limit.is_some()
         || c.envelope_mass_limit.is_some()
         || c.he_layer_mass_lower_limit.is_some()
+        || c.fe_core_infall_limit.is_some()
+        || ts.non_fe_core_infall_limit.is_some()
         || c.stop_at_phase_tp_agb;
-    let (he_core_m, co_core_m, one_core_m) = if need_cores {
-        compute_core_masses_msun(model)
+    let cores = if need_cores {
+        compute_core_masses(model)
     } else {
-        (0.0, 0.0, 0.0)
+        CoreMasses::default()
     };
 
-    if c.he_core_mass_limit.is_some_and(|lim| he_core_m >= lim) {
+    if c.he_core_mass_limit
+        .is_some_and(|lim| cores.he_core_mass >= lim)
+    {
         return Some(String::from("he_core_mass_limit"));
     }
-    if c.co_core_mass_limit.is_some_and(|lim| co_core_m >= lim) {
+    if c.co_core_mass_limit
+        .is_some_and(|lim| cores.co_core_mass >= lim)
+    {
         return Some(String::from("co_core_mass_limit"));
     }
-    if c.one_core_mass_limit.is_some_and(|lim| one_core_m >= lim) {
+    if c.one_core_mass_limit
+        .is_some_and(|lim| cores.one_core_mass >= lim)
+    {
         return Some(String::from("one_core_mass_limit"));
     }
 
-    let power_nuc_lsun = 10.0_f64.powf(hr.log_lh);
+    let powers = compute_power_categories(model);
     if c.power_nuc_burn_upper_limit
-        .is_some_and(|lim| power_nuc_lsun >= lim)
+        .is_some_and(|lim| powers.power_nuc_burn >= lim)
     {
         return Some(String::from("power_nuc_burn_upper_limit"));
     }
     if c.power_nuc_burn_lower_limit
-        .is_some_and(|lim| power_nuc_lsun <= lim)
+        .is_some_and(|lim| powers.power_nuc_burn <= lim)
     {
         return Some(String::from("power_nuc_burn_lower_limit"));
     }
-    let power_he_lsun = if he_core_m > 0.0 { power_nuc_lsun } else { 0.0 };
+    if ts
+        .power_h_burn_upper_limit
+        .is_some_and(|lim| powers.power_h_burn >= lim)
+    {
+        return Some(String::from("power_h_burn_upper_limit"));
+    }
+    if ts
+        .power_h_burn_lower_limit
+        .is_some_and(|lim| powers.power_h_burn <= lim)
+    {
+        return Some(String::from("power_h_burn_lower_limit"));
+    }
     if c.power_he_burn_upper_limit
-        .is_some_and(|lim| power_he_lsun >= lim)
+        .is_some_and(|lim| powers.power_he_burn >= lim)
     {
         return Some(String::from("power_he_burn_upper_limit"));
+    }
+    if ts
+        .power_he_burn_lower_limit
+        .is_some_and(|lim| powers.power_he_burn <= lim)
+    {
+        return Some(String::from("power_he_burn_lower_limit"));
+    }
+    if ts
+        .power_z_burn_upper_limit
+        .is_some_and(|lim| powers.power_z_burn >= lim)
+    {
+        return Some(String::from("power_z_burn_upper_limit"));
+    }
+    if ts
+        .power_z_burn_lower_limit
+        .is_some_and(|lim| powers.power_z_burn <= lim)
+    {
+        return Some(String::from("power_z_burn_lower_limit"));
     }
 
     if c.star_mass_max_limit.is_some_and(|lim| hr.star_mass >= lim) {
@@ -276,15 +358,18 @@ pub fn check_termination_limits_with_history(
         return Some(String::from("remnant_mass_min_limit"));
     }
 
-    let env_mass = (hr.star_mass - he_core_m).max(0.0);
-    if c.envelope_mass_limit.is_some_and(|lim| env_mass <= lim) {
+    let env_mass = (hr.star_mass - cores.he_core_mass).max(0.0);
+    if c.envelope_mass_limit.is_some_and(|lim| env_mass < lim) {
         return Some(String::from("envelope_mass_limit"));
     }
-    let he_layer_mass = (he_core_m - co_core_m).max(0.0);
-    if c.he_layer_mass_lower_limit
-        .is_some_and(|lim| he_layer_mass <= lim)
-    {
-        return Some(String::from("he_layer_mass_lower_limit"));
+    if let Some(lim) = c.he_layer_mass_lower_limit {
+        if cores.he_core_mass >= cores.co_core_mass
+            && cores.co_core_mass > 0.0
+            && hr.center_he4 < 1.0e-4
+            && cores.he_core_mass - cores.co_core_mass < lim
+        {
+            return Some(String::from("he_layer_mass_lower_limit"));
+        }
     }
 
     if let Some(lim) = c.star_species_mass_min_limit {
@@ -325,14 +410,8 @@ pub fn check_termination_limits_with_history(
         return Some(String::from("log_Rsurf_upper_limit"));
     }
 
-    if let Some(lim) = c.fe_core_infall_limit {
-        if !model.v.is_empty() {
-            let max_infall =
-                model.v.iter().map(|&v| -v).fold(0.0_f64, f64::max);
-            if max_infall >= lim {
-                return Some(String::from("fe_core_infall_limit"));
-            }
-        }
+    if let Some(code) = eval_core_infall_termination(model, &cores) {
+        return Some(code);
     }
 
     if let Some(lim) = c.v_surf_div_v_kh_upper_limit {
@@ -347,12 +426,15 @@ pub fn check_termination_limits_with_history(
         }
     }
 
-    if c.stop_at_phase_tp_agb && co_core_m > 0.45 && power_he_lsun > 1.0e3 {
+    if c.stop_at_phase_tp_agb
+        && cores.co_core_mass > 0.45
+        && powers.power_he_burn > 1.0e3
+    {
         return Some(String::from("stop_at_phase_TP_AGB"));
     }
     if c.stop_at_phase_c_burn
         && hr.center_he4 < 1.0e-2
-        && (hr.log_center_t >= 8.5 || power_nuc_lsun >= 1.0)
+        && (hr.log_center_t >= 8.5 || powers.power_z_burn >= 1.0)
     {
         return Some(String::from("stop_at_phase_C_burn"));
     }
@@ -366,6 +448,11 @@ pub fn check_termination_limits_with_history(
     if let Some(lim) = c.gamma_center_limit {
         if model.gam[nz - 1] >= lim {
             return Some(String::from("gamma_center_limit"));
+        }
+    }
+    if let Some(lim) = ts.eta_center_limit {
+        if model.eta[nz - 1] >= lim {
+            return Some(String::from("eta_center_limit"));
         }
     }
     if let Some(lim) = c.v_surf_div_v_esc_limit {

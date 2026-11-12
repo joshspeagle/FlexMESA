@@ -6,6 +6,71 @@
 
 use crate::star_ad::{StarAdExt, StarAdOrder1};
 
+/// Per-step scalar history, solver/substep counters, and retry-hold state
+/// consumed by [`crate::timestep_limits::timestep_controller`] and
+/// [`crate::evolve`] (`star_data_step_work.inc`).
+#[derive(Debug, Clone)]
+pub struct StepHistoryScalars {
+    /// Previous step effective temperature $T_{\mathrm{eff,old}}$ in K (`Teff_old`).
+    pub teff_old: f64,
+    /// Previous step surface luminosity $L_{\mathrm{surf,old}} / L_\odot$ (`L_surf_old`).
+    pub l_surf_old: f64,
+    /// Previous step mass-change rate $\dot{M}_{\mathrm{old}}$ in $\mathrm{g\,s^{-1}}$ (`mstar_dot_old`).
+    pub mstar_dot_old: f64,
+    /// Previous step H-burning luminosity in $L_\odot$ (`power_h_burn_old`).
+    pub power_h_burn_old: f64,
+    /// Previous step He-burning luminosity in $L_\odot$ (`power_he_burn_old`).
+    pub power_he_burn_old: f64,
+    /// Previous step Z-burning luminosity in $L_\odot$ (`power_z_burn_old`).
+    pub power_z_burn_old: f64,
+    /// Previous step photodisintegration luminosity in $L_\odot$ (`power_photo_old`).
+    pub power_photo_old: f64,
+    /// Previous step total nuclear luminosity in $L_\odot$ (`power_nuc_burn_old`).
+    pub power_nuc_burn_old: f64,
+    /// Previous step rotational mass-loss boost factor (`rotational_mdot_boost`).
+    pub rotational_mdot_boost_old: f64,
+    /// Newton iterations used on the just-completed step (`num_solver_iterations`).
+    pub last_solver_iterations: usize,
+    /// Peak 1-zone burn substeps across zones on the current step (`burn_num_iters`).
+    pub burn_max_num_substeps: usize,
+    /// Element diffusion substeps taken on the current step (`num_diffusion_solver_steps`).
+    pub num_diffusion_solver_steps: usize,
+    /// Element diffusion solver iterations taken on the current step (`num_diffusion_solver_iters`).
+    pub num_diffusion_solver_iters: usize,
+    /// Model-number ceiling below which $\Delta t$ is held non-increasing (`timestep_hold`).
+    pub timestep_hold: usize,
+    /// Model number at which the most recent step retry occurred (`model_number_for_last_retry`).
+    pub model_number_for_last_retry: Option<usize>,
+    /// Per-step global energy conservation residual in $\mathrm{erg}$ (`error_in_energy_conservation`).
+    pub error_in_energy_conservation: f64,
+    /// End-of-step total energy in $\mathrm{erg}$ (`total_energy_end`).
+    pub total_energy_end: f64,
+}
+
+impl Default for StepHistoryScalars {
+    fn default() -> Self {
+        Self {
+            teff_old: 0.0,
+            l_surf_old: -1.0,
+            mstar_dot_old: 0.0,
+            power_h_burn_old: -1.0,
+            power_he_burn_old: -1.0,
+            power_z_burn_old: -1.0,
+            power_photo_old: -1.0,
+            power_nuc_burn_old: -1.0,
+            rotational_mdot_boost_old: 1.0,
+            last_solver_iterations: 0,
+            burn_max_num_substeps: 0,
+            num_diffusion_solver_steps: 0,
+            num_diffusion_solver_iters: 0,
+            timestep_hold: 0,
+            model_number_for_last_retry: None,
+            error_in_energy_conservation: 0.0,
+            total_energy_end: 0.0,
+        }
+    }
+}
+
 /// Auxiliary hydrodynamic, thermodynamic, and heating state vectors for
 /// `flexmesa-star` (`star_data_step_work.inc`).
 #[derive(Debug, Clone)]
@@ -133,6 +198,12 @@ pub struct HydroAuxState {
     pub dln_peos_dxa_for_partials: Vec<f64>,
     /// Radial Stellar Pulsation (`RSP` / `RSP2`) zone arrays and cycle state.
     pub rsp: crate::rsp_def::RspState,
+    /// Previous-step rotational angular velocity $\Omega_{\mathrm{old},k}$ (`omega_old`).
+    pub omega_old: Vec<f64>,
+    /// Previous-step specific angular momentum $j_{\mathrm{rot,old},k}$ (`j_rot_old`).
+    pub j_rot_old: Vec<f64>,
+    /// Per-step scalar history, solver/substep counters, and retry-hold state.
+    pub step_hist: StepHistoryScalars,
 }
 
 impl HydroAuxState {
@@ -197,6 +268,9 @@ impl HydroAuxState {
             dln_e_dxa_for_partials: vec![0.0; nz * species],
             dln_peos_dxa_for_partials: vec![0.0; nz * species],
             rsp: crate::rsp_def::RspState::new(nz),
+            omega_old: vec![0.0; nz],
+            j_rot_old: vec![0.0; nz],
+            step_hist: StepHistoryScalars::default(),
         }
     }
 
@@ -239,6 +313,8 @@ impl HydroAuxState {
             &mut self.w_div_wc,
             &mut self.i_rot,
             &mut self.brunt_n2_composition_term,
+            &mut self.omega_old,
+            &mut self.j_rot_old,
         ] {
             v.resize(nz, 0.0);
         }

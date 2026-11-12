@@ -63,6 +63,9 @@
 pub mod case_staging;
 pub mod controls;
 mod controls_defaults;
+pub mod controls_mix_wind;
+pub mod controls_timestep_stop;
+pub mod core_boundaries;
 pub mod diffusion;
 pub mod eps_grav;
 pub mod evolve;
@@ -79,6 +82,7 @@ pub mod hydro_work;
 pub mod inlist;
 pub mod inlist_populate;
 mod inlist_populate_limits;
+mod inlist_populate_phase5b;
 pub mod inlist_runner;
 pub mod job_controls;
 pub mod mesh;
@@ -144,6 +148,8 @@ pub mod tier3_physics;
 pub mod tier4_extras;
 pub mod tier5_extras;
 pub mod timestep;
+mod timestep_checks;
+pub mod timestep_limits;
 pub mod winds;
 pub mod zams;
 
@@ -163,6 +169,15 @@ mod tests_wave5;
 pub use controls::{
     AtmOption, AtmTTauRelation, EnergyEqnOption, StarControls, StarError,
     StarJobControls, VarLayout,
+};
+pub use controls_mix_wind::{
+    MixWindControls, OvershootParamSet, PredictiveParamSet,
+    NUM_OVERSHOOT_PARAM_SETS, NUM_PREDICTIVE_PARAM_SETS,
+};
+pub use controls_timestep_stop::{TimestepStopControls, MAX_DX_LIMIT_CTRLS};
+pub use core_boundaries::{
+    compute_core_masses, compute_power_categories, snapshot_step_history_old,
+    CoreMasses, PowerCategories,
 };
 pub use diffusion::{
     do_element_diffusion, eval_burgers_velocities, eval_caplan_ocp_dstar,
@@ -384,8 +399,9 @@ pub use tier5_extras::{
 };
 pub use timestep::{
     eval_dx_nuc_drop_ratio, eval_h211_factor, eval_varcontrol, filter_limit,
-    pick_next_timestep, TimestepLimitReason, TimestepReport,
+    pick_next_timestep, TimestepAction, TimestepLimitReason, TimestepReport,
 };
+pub use timestep_limits::timestep_controller;
 pub use winds::{
     do_adjust_mass, eval_blocker_wind, eval_de_jager_wind, eval_dutch_wind,
     eval_nieuwenhuijzen_wind, eval_nugis_lamers_wind, eval_reimers_wind,

@@ -158,16 +158,11 @@ pub fn reconstruct_and_analyze_mode(
 
     for (i, pt) in model.pts.iter().enumerate() {
         let [y1, y2, y3, y4] = y_grid[i];
-        let x_li1 = if l == 0 {
-            if pt.x == 0.0 {
-                0.0
-            } else {
-                1.0 / pt.x
-            }
-        } else if l == 1 {
-            1.0
-        } else {
-            pt.x.powi((l as i32) - 1)
+        let x_li1 = match l {
+            0 if pt.x == 0.0 => 0.0,
+            0 => 1.0 / pt.x,
+            1 => 1.0,
+            _ => pt.x.powi((l as i32) - 1),
         };
         let xi_r = x_li1 * y1;
         let xi_h = if l == 0 {
@@ -223,20 +218,40 @@ pub fn reconstruct_and_analyze_mode(
         }
     };
     let omega_int = ((zeta + s_surf) / e_tot).max(0.0).sqrt();
-    let x_li1_ref = if l == 0 {
-        1.0 / surf.x
-    } else if l == 1 {
-        1.0
+    let (x_ref, c1_ref, [yr1, yr2, yr3, _], norm_kind) = if surf.x > 1.0 + 1e-7
+    {
+        let idx = (0..(n - 1))
+            .find(|&i| model.pts[i].x <= 1.0 && model.pts[i + 1].x >= 1.0)
+            .unwrap_or(n - 1);
+        if idx < n - 1 {
+            let (p0, p1) = (&model.pts[idx], &model.pts[idx + 1]);
+            let w = ((1.0 - p0.x) / (p1.x - p0.x).max(1.0e-30)).clamp(0.0, 1.0);
+            let (y0, y1) = (y_grid[idx], y_grid[idx + 1]);
+            let y_p = std::array::from_fn(|k| (1.0 - w) * y0[k] + w * y1[k]);
+            (
+                1.0,
+                (1.0 - w) * p0.c_1 + w * p1.c_1,
+                y_p,
+                InertiaNormKind::Both,
+            )
+        } else {
+            (surf.x, surf.c_1, y_grid[n - 1], InertiaNormKind::Both)
+        }
     } else {
-        surf.x.powi((l as i32) - 1)
+        (surf.x, surf.c_1, y_grid[n - 1], inertia_norm)
     };
-    let xi_r_ref = x_li1_ref * ys1;
+    let x_li1_ref = match l {
+        0 => 1.0 / x_ref,
+        1 => 1.0,
+        _ => x_ref.powi((l as i32) - 1),
+    };
+    let xi_r_ref = x_li1_ref * yr1;
     let xi_h_ref = if l == 0 {
         0.0
     } else {
-        x_li1_ref * (ys2 + ys3) / (surf.c_1 * om2)
+        x_li1_ref * (yr2 + yr3) / (c1_ref * om2)
     };
-    let a2_ref = match inertia_norm {
+    let a2_ref = match norm_kind {
         InertiaNormKind::Both => {
             xi_r_ref * xi_r_ref + lam * xi_h_ref * xi_h_ref
         }
@@ -321,13 +336,9 @@ pub fn classify_mode_orders(
         let (a, b) = (y1[j], y1[j + 1]);
         if (a >= 0.0 && b < 0.0) || (a <= 0.0 && b > 0.0) {
             let y2_cross = y2[j] - a * (y2[j + 1] - y2[j]) / (b - a);
-            if a >= 0.0 && b < 0.0 {
-                if y2_cross >= 0.0 {
-                    n_a += 1;
-                } else {
-                    n_c += 1;
-                }
-            } else if y2_cross <= 0.0 {
+            let is_a = (a >= 0.0 && b < 0.0 && y2_cross >= 0.0)
+                || (a <= 0.0 && b > 0.0 && y2_cross <= 0.0);
+            if is_a {
                 n_a += 1;
             } else {
                 n_c += 1;
@@ -339,15 +350,7 @@ pub fn classify_mode_orders(
     } else {
         (n_a, n_c)
     };
-    let n_pg = if l == 1 {
-        if n_p >= n_g {
-            n_p - n_g + 1
-        } else {
-            n_p - n_g
-        }
-    } else {
-        n_p - n_g
-    };
+    let n_pg = n_p - n_g + i32::from(l == 1 && n_p >= n_g);
     (n_p, n_g, n_pg)
 }
 

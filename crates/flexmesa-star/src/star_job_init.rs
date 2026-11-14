@@ -141,9 +141,11 @@ pub fn init_or_update_model_from_bundle(
         .unwrap_or("");
     let out_of_zams_range =
         controls.initial_mass > 15.8 || controls.initial_mass < 0.51;
-    let is_pulse_mod_case = case_name.starts_with("gyre_in_mesa_")
-        || matches!(case_name, "astero_gyre" | "astero_adipls");
+    let is_astero_case =
+        crate::tier4_extras::TIER4_ASTERO_CASES.contains(&case_name);
+    let is_pulse_mod_case = case_name.starts_with("gyre_in_mesa_");
     let is_pulsation_env_mod = crate::tier4_extras::is_tier4_case(case_name)
+        && !is_astero_case
         && job.load_saved_model
         && !job.saved_model_name.is_empty()
         && controls.use_dprad_dm_form_of_t_gradient_eqn
@@ -155,7 +157,7 @@ pub fn init_or_update_model_from_bundle(
         || is_pulsation_env_mod;
     let is_tier2_or_3 = crate::tier2_extras::is_tier2_case(case_name)
         || crate::tier3_extras::is_tier3_case(case_name)
-        || crate::tier4_extras::is_tier4_case(case_name)
+        || (crate::tier4_extras::is_tier4_case(case_name) && !is_astero_case)
         || crate::tier5_extras::is_tier5_star_case(case_name)
         || job.relax_initial_mass_to_remove_h_env
         || out_of_zams_range;
@@ -200,7 +202,7 @@ pub fn init_or_update_model_from_bundle(
         excise_core_by_temperature(&mut m, 4.0e6);
         m
     } else if crate::tier3_extras::is_tier3_case(case_name)
-        || crate::tier4_extras::is_tier4_case(case_name)
+        || (crate::tier4_extras::is_tier4_case(case_name) && !is_astero_case)
         || crate::tier5_extras::is_tier5_star_case(case_name)
         || out_of_zams_range
     {

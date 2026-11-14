@@ -292,8 +292,9 @@ pub use pulse_modes::{
     build_bvp_model_from_pulse_points, eval_acoustic_large_separation_hz,
     eval_astero_scaling_dnu_numax_uhz, eval_buoyancy_period_spacing_s,
     eval_kappa_mechanism_growth, eval_linear_oscillation_modes,
-    eval_target_mode_frequency_and_growth, solve_adipls_fgong_modes,
-    solve_bvp_eigenmodes, solve_gyre_mesa_modes, LinearOscillationMode,
+    eval_target_mode_frequency_and_growth, scan_bounds_from_targets,
+    scan_star_bvp_eigenmodes, solve_adipls_fgong_modes, solve_bvp_eigenmodes,
+    solve_gyre_mesa_modes, LinearOscillationMode, PulseModeScanOptions,
 };
 pub use relax::{
     apply_composition_relaxation, apply_uniform_rotation, relax_core_boundary,

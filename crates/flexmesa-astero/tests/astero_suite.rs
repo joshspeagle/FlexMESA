@@ -1,0 +1,245 @@
+// SPDX-License-Identifier: LGPL-3.0-or-later
+//! Integration tests for `flexmesa-astero` across all 8 upstream MESA
+//! `astero/test_suite` cases (`astero_adipls`, `astero_gyre`, `example_astero`,
+//! `fast_from_file`, `fast_newuoa`, `fast_scan_grid`, `fast_simplex`,
+//! `surface_effects`) and offline synthetic staging.
+
+#![forbid(unsafe_code)]
+#![allow(clippy::similar_names, clippy::too_many_lines)]
+
+use std::fs;
+use std::path::PathBuf;
+
+use flexmesa_astero::{
+    eval_combined_corr, eval_cubic_corr, eval_kjeldsen_corr,
+    eval_model_astero_sample, eval_power_law_corr, eval_sonoi_corr,
+    interpolate_l0_inertia, parse_astero_search_controls, run_astero_suite,
+    run_astero_test_suite_case, run_star_astero, TempCaseStaging,
+    TIER4_ASTERO_CASES,
+};
+use flexmesa_math::pow;
+use flexmesa_star::inlist::InlistBundle;
+use flexmesa_star::inlist_runner::DefaultStarExtras;
+use flexmesa_star::star_job_init::init_or_update_model_from_bundle;
+
+fn astero_suite_dir() -> PathBuf {
+    let base = std::env::var("MESA_DIR").map_or_else(
+        |_| {
+            let home =
+                std::env::var("HOME").unwrap_or_else(|_| String::from("."));
+            PathBuf::from(home)
+                .join(".cache")
+                .join("flexmesa")
+                .join("mesa_test_inputs")
+        },
+        PathBuf::from,
+    );
+    base.join("astero").join("test_suite")
+}
+
+#[test]
+fn test_offline_synthetic_mock_case_runs_two_steps_with_restart_parity() {
+    let tmp_root = std::env::temp_dir().join(format!(
+        "flexmesa_astero_mock_{}",
+        std::process::id()
+    ));
+    let tmp = tmp_root.join("example_astero");
+    let _ = fs::remove_dir_all(&tmp_root);
+    fs::create_dir_all(&tmp).expect("create temp mock dir");
+    fs::write(tmp.join("rn"), "#!/bin/sh\ndo_one inlist final.mod\n")
+        .expect("write rn");
+    fs::write(
+        tmp.join("inlist"),
+        "&star_job\n  save_model_when_terminate = .true.\n  save_model_filename = 'final.mod'\n/\n&controls\n  initial_mass = 1.1\n  initial_z = 0.02\n  max_model_number = 2\n/\n",
+    )
+    .expect("write inlist");
+    fs::write(
+        tmp.join("inlist_astero_search_controls"),
+        "&astero_search_controls\n  chi2_seismo_fraction = 0.666\n/\n",
+    )
+    .expect("write inlist_astero_search_controls");
+
+    let rep = run_astero_test_suite_case(&tmp, true, Some(2), true)
+        .expect("synthetic mock case should succeed");
+    let _ = fs::remove_dir_all(&tmp_root);
+    assert_eq!(rep.case_name, "example_astero");
+    assert_eq!(rep.tier, 4);
+    assert!(rep.passed);
+    assert!(rep.photo_restart_verified);
+    assert!(rep.assertions_passed);
+    assert!(rep.total_steps >= 1);
+}
+
+#[test]
+fn test_surface_effects_case_recovers_synthetic_targets_and_bison_solar_fits() {
+    let case_dir = astero_suite_dir().join("surface_effects");
+    assert!(
+        case_dir.exists(),
+        "missing surface_effects directory: {}",
+        case_dir.display()
+    );
+    let staging =
+        TempCaseStaging::new(&case_dir).expect("stage surface_effects");
+    let staged = staging.staged_dir.as_path();
+
+    let ctrl = parse_astero_search_controls(staged)
+        .expect("parse surface_effects controls");
+    assert_eq!(ctrl.nl, [23, 21, 20, 17]);
+    assert_eq!(ctrl.l0_n_obs.len(), 23);
+    assert!(!ctrl.add_atmosphere);
+    assert!(!ctrl.keep_surface_point);
+    assert!(ctrl.add_center_point);
+
+    let bundle = InlistBundle::from_file_in_case_dir(staged, "inlist")
+        .expect("parse surface_effects inlist");
+    let mut extras = DefaultStarExtras;
+    let model = init_or_update_model_from_bundle(&bundle, None, &mut extras)
+        .expect("load s1.mod");
+
+    let sample = eval_model_astero_sample(
+        &model,
+        &ctrl,
+        ctrl.first_params(),
+        1,
+        staged,
+    );
+    let (mut obs_f, mut obs_sig, mut mod_f, mut mod_in) =
+        (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+    for l in 0..4 {
+        obs_f.extend_from_slice(&ctrl.freq_target[l]);
+        obs_sig.extend_from_slice(&ctrl.freq_sigma[l]);
+        mod_f.extend_from_slice(&sample.model_freqs[l]);
+        mod_in.extend_from_slice(&sample.model_inertias[l]);
+    }
+    assert_eq!(mod_f.len(), 81);
+
+    let l0_f = &sample.model_freqs[0];
+    let l0_in = &sample.model_inertias[0];
+    let q_nl: Vec<f64> = mod_f
+        .iter()
+        .zip(&mod_in)
+        .map(|(&f, &e)| e / interpolate_l0_inertia(f, l0_f, l0_in))
+        .collect();
+    let nu_max = ctrl.nu_max;
+
+    let target_a_div_r = -4.322_017_649_527_42_f64;
+    let target_a3 = -1.979_289_417_129_323_8e-18_f64;
+    let target_b1 = -5.125_972_793_567_201e-5_f64;
+    let target_b3 = -1.446_307_489_879_336_1e-18_f64;
+    let target_p0 = -6.157_582_281_235_104_f64;
+    let target_p1 = 4.342_864_640_344_271_f64;
+    let target_s0 = -4.380_735_022_728_04e-3_f64;
+    let target_s1 = 7.143_783_592_158_95_f64;
+
+    // 1. Synthetic data recovery (`< 1e-12`)
+    let syn_cubic: Vec<f64> = mod_f
+        .iter()
+        .zip(&mod_in)
+        .map(|(&f, &e)| f + target_a3 * (f * f * f) / e)
+        .collect();
+    let (_, a3_syn) =
+        eval_cubic_corr(&syn_cubic, &obs_sig, &mod_f, &mod_in, 1.0);
+    assert!(((a3_syn / target_a3) - 1.0).abs() < 1.0e-12);
+
+    let syn_comb: Vec<f64> = mod_f
+        .iter()
+        .zip(&mod_in)
+        .map(|(&f, &e)| f + (target_b1 / f + target_b3 * (f * f * f)) / e)
+        .collect();
+    let (_, b3_syn, b1_syn) =
+        eval_combined_corr(&syn_comb, &obs_sig, &mod_f, &mod_in, 1.0);
+    assert!(((b1_syn / target_b1) - 1.0).abs() < 1.0e-12);
+    assert!(((b3_syn / target_b3) - 1.0).abs() < 1.0e-12);
+
+    let syn_pl: Vec<f64> = mod_f
+        .iter()
+        .zip(&q_nl)
+        .map(|(&f, &q)| f + target_p0 * pow(f / nu_max, target_p1) / q)
+        .collect();
+    let (_, p0_syn, p1_syn) = eval_power_law_corr(
+        &syn_pl, &obs_sig, &mod_f, &mod_in, l0_f, l0_in, nu_max, 1.0,
+    );
+    assert!(((p0_syn / target_p0) - 1.0).abs() < 1.0e-12);
+    assert!(((p1_syn / target_p1) - 1.0).abs() < 1.0e-12);
+
+    let syn_sonoi: Vec<f64> = mod_f
+        .iter()
+        .zip(&q_nl)
+        .map(|(&f, &q)| {
+            f + target_s0
+                * nu_max
+                * (1.0 - 1.0 / (1.0 + pow(f / nu_max, target_s1)))
+                / q
+        })
+        .collect();
+    let (_, s0_syn, s1_syn) = eval_sonoi_corr(
+        &syn_sonoi, &obs_sig, &mod_f, &mod_in, l0_f, l0_in, nu_max, 1.0,
+    );
+    assert!(((s0_syn / target_s0) - 1.0).abs() < 1.0e-12);
+    assert!(((s1_syn / target_s1) - 1.0).abs() < 1.0e-12);
+
+    // 2. BiSON solar fits (`solar_tol = 10.0`)
+    let (_, a_div_r, r_k) = eval_kjeldsen_corr(
+        &ctrl.freq_target[0],
+        l0_f,
+        l0_in,
+        &ctrl.l0_n_obs,
+        ctrl.delta_nu,
+        &mod_f,
+        &mod_in,
+        nu_max,
+        ctrl.correction_b,
+        1.0,
+    );
+    assert!(r_k > 0.95 && r_k < 1.05, "unexpected homology factor r={r_k}");
+    assert!(
+        ((a_div_r / target_a_div_r) - 1.0).abs() < 10.0,
+        "a_div_r={a_div_r} vs target={target_a_div_r}"
+    );
+}
+
+#[test]
+fn test_all_eight_astero_test_suite_cases_run_uncapped_and_pass() {
+    let suite_dir = astero_suite_dir();
+    assert!(
+        suite_dir.exists(),
+        "missing astero test_suite directory: {}",
+        suite_dir.display()
+    );
+
+    // 1. Run `example_astero` explicitly and verify `1.0 < best_chi2 < 15.0`
+    {
+        let case_dir = suite_dir.join("example_astero");
+        let staging =
+            TempCaseStaging::new(&case_dir).expect("stage example_astero");
+        let staged = staging.staged_dir.as_path();
+        let ctrl = parse_astero_search_controls(staged)
+            .expect("parse example_astero controls");
+        let search = run_star_astero(staged, "inlist", None, &ctrl)
+            .expect("run example_astero");
+        assert_eq!(search.samples.len(), 1);
+        assert!(
+            search.best_chi2 > 1.0 && search.best_chi2 < 15.0,
+            "example_astero best_chi2={} outside (1.0, 15.0)",
+            search.best_chi2
+        );
+    }
+
+    // 2. Run all 8 `astero/test_suite` cases uncapped (`max_steps_per_stage = None`)
+    let reports = run_astero_suite(&suite_dir, true, None, true)
+        .expect("run all 8 astero cases uncapped");
+    assert_eq!(reports.len(), TIER4_ASTERO_CASES.len());
+    for (rep, &expected_name) in reports.iter().zip(&TIER4_ASTERO_CASES) {
+        assert_eq!(rep.case_name, expected_name);
+        assert!(
+            rep.passed,
+            "astero case {} failed: assertions_passed={}, restart_verified={}, term={}",
+            rep.case_name,
+            rep.assertions_passed,
+            rep.photo_restart_verified,
+            rep.termination_code
+        );
+        assert!(rep.photo_restart_verified);
+        assert!(rep.assertions_passed);
+    }
+}

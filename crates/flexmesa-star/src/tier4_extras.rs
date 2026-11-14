@@ -138,10 +138,6 @@ pub struct Tier4CaseExtras {
     pub rsp_period_days: f64,
     /// Whether `gyre_in_mesa_*` / `astero_gyre` / `astero_adipls` matched its target frequency.
     pub matched_target_frequency: bool,
-    /// Latest asteroseismic + spectroscopic $\chi^2$ (`best_chi2` in `astero_def`).
-    pub best_chi2: f64,
-    /// Maximum synthetic surface-effect residual (`surface_effects` test case).
-    pub surface_effects_max_err: f64,
     /// Blue-edge and red-edge $\Delta T_{\mathrm{eff}}$ (`K`) for `rsp_check_2nd_crossing`.
     pub crossing_delta_teff: f64,
 }
@@ -157,8 +153,6 @@ impl Tier4CaseExtras {
             rsp_num_periods: 0,
             rsp_period_days: 0.0,
             matched_target_frequency: false,
-            best_chi2: 3.25,
-            surface_effects_max_err: 0.0,
             crossing_delta_teff: 100.0,
         }
     }
@@ -193,12 +187,11 @@ impl StarExtras for Tier4CaseExtras {
             }
             return;
         }
-        let is_pulse_mod_case = (self.case_name.starts_with("gyre_in_mesa_")
-            || matches!(
-                self.case_name.as_str(),
-                "astero_gyre" | "astero_adipls"
-            ))
-            && model.model_number >= 10;
+        if TIER4_ASTERO_CASES.contains(&self.case_name.as_str()) {
+            return;
+        }
+        let is_pulse_mod_case =
+            self.case_name.starts_with("gyre_in_mesa_") && model.model_number >= 10;
         let c = &mut model.controls;
         c.op_split_burn = true;
         c.min_logt_for_net = 8.5;
@@ -314,25 +307,13 @@ impl StarExtras for Tier4CaseExtras {
                 self.matched_target_frequency = true;
             }
         }
-        if matches!(
-            self.case_name.as_str(),
-            "example_astero"
-                | "fast_from_file"
-                | "fast_newuoa"
-                | "fast_scan_grid"
-                | "fast_simplex"
-        ) {
-            let (dnu, _numax) = eval_astero_scaling_dnu_numax_uhz(model);
-            let _ = dnu;
-            self.best_chi2 = 2.85;
-        }
-        if self.case_name == "surface_effects" {
-            self.surface_effects_max_err = 0.0;
-        }
         ExtrasDirective::KeepGoing
     }
 
     fn extras_finish_step(&mut self, model: &mut StarModel) -> ExtrasDirective {
+        if TIER4_ASTERO_CASES.contains(&self.case_name.as_str()) {
+            return ExtrasDirective::KeepGoing;
+        }
         if model.controls.rsp_flag || model.controls.rsp2_flag {
             self.rsp_num_periods = model.aux.rsp.num_periods as i64;
             if model.aux.rsp.period > 0.0 {

@@ -133,6 +133,8 @@ pub fn write_photo_bytes(model: &StarModel) -> Vec<u8> {
         &model.aux.alpha_rti_start,
         &model.aux.p_face_start,
         &model.aux.u_face_start,
+        &model.aux.omega_old,
+        &model.aux.j_rot_old,
     ] {
         write_u64(&mut buf, s.len() as u64);
         write_f64_slice(&mut buf, s);
@@ -161,10 +163,14 @@ pub fn write_photo_bytes(model: &StarModel) -> Vec<u8> {
             model.mstar_start,
             model.aux.total_energy,
             model.aux.cumulative_energy_error,
+            model.aux.step_hist.rotational_mdot_boost_old,
+            model.aux.step_hist.total_energy_old,
+            model.aux.step_hist.cumulative_energy_error_old,
         ],
     );
     write_u64(&mut buf, model.total_num_solver_iterations as u64);
     write_u64(&mut buf, model.num_retries as u64);
+    write_u64(&mut buf, model.aux.step_hist.timestep_hold as u64);
 
     write_i32(&mut buf, 5);
     for s in [
@@ -386,16 +392,19 @@ pub fn read_photo_bytes(
     let saved_lum_start = read_f64_vec(&mut pos, nz_start)?;
     let saved_v_start = read_f64_vec(&mut pos, nz_start)?;
     let saved_u_start = read_f64_vec(&mut pos, nz_start)?;
-    let n_arti_s = read_u64(&mut pos)? as usize;
-    let saved_alpha_rti_start = read_f64_vec(&mut pos, n_arti_s)?;
-    let n_pf_s = read_u64(&mut pos)? as usize;
-    let saved_p_face_start = read_f64_vec(&mut pos, n_pf_s)?;
-    let n_uf_s = read_u64(&mut pos)? as usize;
-    let saved_u_face_start = read_f64_vec(&mut pos, n_uf_s)?;
+    let read_prefixed_vec = |pos: &mut usize| -> Result<Vec<f64>, StarError> {
+        let n = read_u64(pos)? as usize;
+        read_f64_vec(pos, n)
+    };
+    let saved_alpha_rti_start = read_prefixed_vec(&mut pos)?;
+    let saved_p_face_start = read_prefixed_vec(&mut pos)?;
+    let saved_u_face_start = read_prefixed_vec(&mut pos)?;
+    let saved_omega_old = read_prefixed_vec(&mut pos)?;
+    let saved_j_rot_old = read_prefixed_vec(&mut pos)?;
 
     expect_part(&mut pos, 4)?;
     model.model_number = read_u64(&mut pos)? as usize;
-    let s = read_f64_vec(&mut pos, 18)?;
+    let s = read_f64_vec(&mut pos, 21)?;
     (model.star_age, model.star_age_old, model.dt) = (s[0], s[1], s[2]);
     (model.dt_next, model.dt_old, model.dt_limit_ratio_old) =
         (s[3], s[4], s[5]);
@@ -405,8 +414,12 @@ pub fn read_photo_bytes(
     let saved_mstar_start = s[15];
     model.aux.total_energy = s[16];
     model.aux.cumulative_energy_error = s[17];
+    model.aux.step_hist.rotational_mdot_boost_old = s[18];
+    model.aux.step_hist.total_energy_old = s[19];
+    model.aux.step_hist.cumulative_energy_error_old = s[20];
     model.total_num_solver_iterations = read_u64(&mut pos)? as usize;
     model.num_retries = read_u64(&mut pos)? as usize;
+    model.aux.step_hist.timestep_hold = read_u64(&mut pos)? as usize;
 
     expect_part(&mut pos, 5)?;
     for dst in [
@@ -493,34 +506,25 @@ pub fn read_photo_bytes(
 
     model.xmstar = (model.mstar - model.m_center).max(0.0);
     model.mstar_start = saved_mstar_start;
-    let start_src = if saved_lnd_start.len() == nz {
-        (
-            &saved_lnd_start,
-            &saved_ln_t_start,
-            &saved_ln_r_start,
-            &saved_lum_start,
-            &saved_v_start,
-            &saved_u_start,
-        )
+    if saved_lnd_start.len() == nz {
+        model.lnd_start.clone_from(&saved_lnd_start);
+        model.ln_t_start.clone_from(&saved_ln_t_start);
+        model.ln_r_start.clone_from(&saved_ln_r_start);
+        model.lum_start.clone_from(&saved_lum_start);
+        model.v_start.clone_from(&saved_v_start);
+        model.u_start.clone_from(&saved_u_start);
     } else {
-        (
-            &model.lnd,
-            &model.ln_t,
-            &model.ln_r,
-            &model.lum,
-            &model.v,
-            &model.u,
-        )
-    };
-    model.lnd_start.clone_from(start_src.0);
-    model.ln_t_start.clone_from(start_src.1);
-    model.ln_r_start.clone_from(start_src.2);
-    model.lum_start.clone_from(start_src.3);
-    model.v_start.clone_from(start_src.4);
-    model.u_start.clone_from(start_src.5);
+        model.lnd_start.clone_from(&model.lnd);
+        model.ln_t_start.clone_from(&model.ln_t);
+        model.ln_r_start.clone_from(&model.ln_r);
+        model.lum_start.clone_from(&model.lum);
+        model.v_start.clone_from(&model.v);
+        model.u_start.clone_from(&model.u);
+    }
     model.sig.clone_from(&saved_sig);
     model.mlt_vc.clone_from(&saved_mlt_vc);
     model.aux.mlt_vc_old.clone_from(&saved_mlt_vc_old);
+    // Preserve exact serialized `dq` bytes (`normalize_dqs` breaks 0 ULP parity).
     model.set_qs();
     model.set_xqs();
     model.set_m_and_dm();
@@ -552,6 +556,9 @@ pub fn read_photo_bytes(
         }
     } else {
         crate::hydro_vars::set_hydro_vars(&mut model, false, false)?;
+        if model.controls.op_split_burn {
+            crate::struct_burn_mix::apply_burn_avg_epsnuc(&mut model);
+        }
         let dt_photo = model.dt;
         crate::struct_burn_mix::refresh_mixing_state(&mut model, dt_photo, &[]);
         model.save_start_values();
@@ -563,6 +570,9 @@ pub fn read_photo_bytes(
         (model.lum_start, model.v_start, model.u_start) =
             (saved_lum_start, saved_v_start, saved_u_start);
     }
+    model.aux.omega_old = saved_omega_old;
+    model.aux.j_rot_old = saved_j_rot_old;
+    model.aux.eps_mdot_old.clone_from(&model.eps_mdot);
     model.aux.alpha_rti_start = saved_alpha_rti_start;
     model.aux.p_face_start = saved_p_face_start;
     model.aux.u_face_start = saved_u_face_start;

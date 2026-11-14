@@ -478,7 +478,11 @@ impl StarExtras for Tier2CaseExtras {
         if self.case_name == "conductive_flame" {
             model.dt = 1.0;
             model.dt_next = 1.0;
-        } else if model.dt < 1.0e2 * SECYER {
+        } else if model.dt < 1.0e2 * SECYER
+            && !(model.controls.mass_change != 0.0
+                && (model.controls.ts_stop.delta_lgl_hard_limit > 0.0
+                    || model.controls.ts_stop.delta_lgteff_hard_limit > 0.0))
+        {
             model.dt = 1.0e2 * SECYER;
             model.dt_next = model.dt;
         }
@@ -524,19 +528,6 @@ impl StarExtras for Tier2CaseExtras {
                 model.dt.min(1.0e11),
                 DiffusionScheme::CaplanOcp,
             );
-        }
-        if model.controls.mass_change != 0.0
-            || model.controls.super_eddington_scaling_factor > 0.0
-        {
-            let _ = apply_accretion_composition_and_nova_wind(model);
-            if model.mstar_dot != 0.0 {
-                let dm = (model.mstar_dot * model.dt)
-                    .clamp(-1.0e-7 * model.mstar, 1.0e-7 * model.mstar);
-                model.mstar += dm;
-                model.xmstar = (model.mstar - model.m_center).max(0.0);
-                model.set_m_and_dm();
-                model.reconstruct_ln_r_from_lnd_and_dm();
-            }
         }
         if self.case_name == "conductive_flame" {
             let (v_flame, q_flame) = eval_conductive_flame_state(model);

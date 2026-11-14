@@ -245,3 +245,19 @@ Every choice that another developer could reasonably make differently and that a
 - **Alternatives Rejected**:
   - *Retaining operator-split-only `u_flag` updates outside the Henyey matrix*: Drops acoustic Courant-bypassing implicit pressure-velocity coupling required by supernova shock (`ccsn_*`) and dynamic envelope (`v_flag` / `u_flag`) stages.
   - *Loosening `gold_tol_max_residual` to absorb thin-zone `L[k] - L[k+1]` ULP noise*: Violates `DECISIONS #9`; upstream `set_energy_eqn_scal` (`dedt_eqn_r_scale = 1e8`) resolves thin-zone quantization directly from first principles.
+
+---
+
+## DECISIONS #16: Phase 5b Remesh, Winds, Overshooting, Diffusion & Control Architecture (`Issue #113`, `PR #136`)
+
+- **Date**: 2026-11-13
+- **Decision**:
+  1. **Cancellation-Free `eps_mdot` & Neumaier 3-Region Mass Adjustment (`eps_mdot.rs`, `adjust_mass.rs`)**: Compute $\Delta(e_{\mathrm{tot}})$ in `calculate_eps_mdot_with_change` (`PrevMassState`) directly from linearized volume and gravitational-potential increments in `f64`; preserve bit-identical Region III `dm` across `do_adjust_mass_regions` via Neumaier-compensated summation (`neumaier_sum`) and post-`set_basic_vars` `dm`/`m` restoration (`adjust_mass.rs`), gating redundant `eps_mdot` EOS passes when `dt <= 0` or `eps_mdot_factor == 0`.
+  2. **Post-Diffusion & Envelope Composition Normalization (`diffusion.rs`, `premix.rs`, `micro.rs`, `jax_winds_mix.py`)**: Clamp tridiagonal `do_element_diffusion` and `do_phase_separation` composition updates to `[0.0, 1.0]` with per-zone Neumaier normalization and apply `clamp_unit_roundoff` (`[-1e-12, 1 + 1e-12]`) in `set_basic_vars` so x86_64 FMA contraction noise on pure-H white dwarf envelopes (`co_wd_settled.mod` in `wd_cool_0.6M`, $X_{\mathrm{H}} = 1 - 5.77 \times 10^{-15}$) never triggers `InvalidComposition(X outside [0, 1])` in `kap`; guard `z_s_safe = jnp.maximum(z_s, 1.0e-30)` in `w_wr` so `jax.grad` of `eval_winds_jax` stays finite at `z_surf = 0.0`.
+  3. **Wind Temperature Blending, 16-Set Overshoot/Predictive Controls, Core Reporting & Step Rollback (`winds.rs`, `winds_driver.rs`, `overshoot.rs`, `premix.rs`, `core_boundaries.rs`, `hydro_state.rs`, `evolve.rs`, `photo_io.rs`)**: Align default Dutch wind blend bounds to `cool_wind_full_on_t = 8.0e3` K and `hot_wind_full_on_t = 1.2e4` K alongside `Bjorklund` and `Nugis-Lamers` winds (`WindScheme::parse_name` shared with `flexmesa-py`); wire 16-entry `overshoot_sets` (`'none'` short-circuiting, CZ radial-thickness $H_P$ cap, Péclet damping) and `predictive_sets`; compute sub-cell `CoreMasses` (`flexmesa_num::find0`) and `PowerCategories`; and persist `eps_mdot_old` across `.photo` restarts and `TimestepAction::Terminate` / `Retry` rollbacks.
+  4. **Post-Load `doing_relax` Settling (`relax.rs`, `star_job_init.rs`)**: Run logarithmic `doing_relax` settling (`settle_relaxed_loaded_model`) after non-fallback `.mod` relaxation when `dt < 10 yr`.
+- **Why**: Direct differencing of `te` in `f64` loses digits on small wind/accretion steps compared to upstream `real(qp)`, naive `sum_dq` normalization shifts interior masses above `1e-11` H1 bounds, FMA rounding in Thomas diffusion otherwise pushes near-unity H envelopes above `1.0`, and relaxed `.mod` envelopes otherwise inject spurious initial thermal transients (`wd_stable_h_burn`).
+- **Alternatives Rejected**:
+  - *Emulated `f128` software floats for `eps_mdot`*: Adds cross-platform complexity and slows wind/accretion inner steps unnecessarily when analytical differencing recovers full `f64` precision.
+  - *Loosening `tests/test_star_wave4_3.py` H1 conservation tolerance or `kap` `[0, 1]` composition validation*: Violates `DECISIONS #9` and hides unphysical overshoot past `1.0`.
+  - *Hard-clamping `dt <= 100 yr` under nonzero `mass_change`*: Suppresses legitimate physical timesteps on mass-transferring and accreting models.

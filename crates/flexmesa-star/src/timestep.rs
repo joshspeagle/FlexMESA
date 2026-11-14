@@ -17,29 +17,59 @@
 
 use crate::model::StarModel;
 
+/// Outcome of [`crate::timestep_limits::timestep_controller`] on a completed
+/// candidate step (`keep_going`, `retry`, or `terminate` in `timestep.f90:39`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TimestepAction {
+    /// Step satisfies all hard limits; proceed with `report.dt_next`.
+    KeepGoing,
+    /// Step violated a hard limit; revert to pre-step state and retry with smaller $\Delta t$.
+    Retry(String),
+    /// Fatal timestep configuration or unrecoverable $\Delta t$ collapse.
+    Terminate(String),
+}
+
 /// Dominant constraint determining the next proposed timestep
 /// $\Delta t_{\mathrm{next}}$.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TimestepLimitReason {
-    /// Structural variation target `varcontrol_target` (`w_vc`).
+    /// Structural variation target `varcontrol_target` (`Tlim_struc`).
     Varcontrol,
     /// Nuclear fuel depletion limit (`dX_nuc_drop_limit`).
     NuclearBurn,
+    /// Non-convective abundance change limit (`dX_limit` / `dX_div_X_limit`).
+    AbundanceChange,
+    /// Structural variable change limit (`delta_lgP/Rho/T/E/R`, `dL_div_L`, `*_cntr`, `delta_lgT_max`).
+    StructuralChange,
+    /// Luminosity or HR-diagram change limit (`delta_lgL_*`, `delta_lgTeff`, `delta_HR`).
+    LuminosityChange,
+    /// Total mass change limit (`delta_lg_star_mass_limit`).
+    MassChange,
+    /// Per-step relative energy conservation error (`limit_for_rel_error_in_energy_conservation`).
+    EnergyConservation,
+    /// Acoustic Courant or cell-collapse limit (`dt_div_min_dr_div_cs`, `dt_div_dt_cell_collapse`).
+    CourantOrCollapse,
+    /// Solver iteration or operator-split substep limit (`solver_iters`, `burn_steps`, `diffusion_*`).
+    SolverOrSubsteps,
+    /// Post-retry timestep growth hold (`timestep_hold > model_number`).
+    TimestepHold,
+    /// Explicit maximum or forced timestep ceiling (`max_timestep`, `max_years_for_timestep`, `force_timestep`).
+    MaxTimestep,
     /// Clamped by `max_timestep_factor` (`1.2` default).
     MaxTimestepFactor,
-    /// Clamped by `min_timestep_factor` (`0.5` default).
+    /// Clamped by `min_timestep_factor` (`0.8` default).
     MinTimestepFactor,
 }
 
-/// Summary of the timestep selection pass (`pick_next_timestep` in
-/// `timestep.f90`).
+/// Summary of the timestep selection pass (`pick_next_timestep` and
+/// [`crate::timestep_limits::timestep_controller`] in `timestep.f90`).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TimestepReport {
     /// Proposed next timestep $\Delta t_{\mathrm{next}}$ in seconds (`s`).
     pub dt_next: f64,
     /// Measured normalized structural variation `varcontrol`.
     pub varcontrol: f64,
-    /// Effective limiter ratio $w_n = \max(w_{\mathrm{vc}}, w_{\mathrm{burn}})$.
+    /// Effective limiter ratio $w_n = \max_m w_m$.
     pub dt_limit_ratio: f64,
     /// Dominant constraint determining $\Delta t_{\mathrm{next}}$.
     pub reason: TimestepLimitReason,
@@ -56,6 +86,15 @@ pub fn filter_limit(x: f64) -> f64 {
     1.0 + KAPPA * ((x - 1.0) / KAPPA).atan()
 }
 
+/// Evaluates the upstream 5-point boxcar variation sum for a single structural
+/// variable (`eval_varcontrol` in `star/private/timestep.f90:2337-2353`).
+///
+/// Note on upstream Fortran MESA (`r24.08.1`) parity (`DECISIONS #9`):
+/// `timestep.f90:2347-2349` computes the 3-point sum at `k = nz - 1`
+/// (`0`-based `nz - 2`) into `sumj` without accumulating `sumterm(j) = sumterm(j) + sumj`
+/// (an upstream dead-store), whereas `k = 2` (`0`-based `1`) IS accumulated at
+/// `timestep.f90:2350-2353`. Both Safe Rust and `eval_varcontrol_jax` preserve
+/// this exact upstream expression for 16-digit cross-backend parity.
 fn smoothed_var_sum(v: &[f64], v_old: &[f64]) -> f64 {
     let nz = v.len();
     if nz == 0 || v_old.len() != nz {
@@ -88,7 +127,8 @@ fn smoothed_var_sum(v: &[f64], v_old: &[f64]) -> f64 {
 /// Evaluates the normalized structural variation `varcontrol` between the
 /// current state `(\ln\rho, \ln T, \ln R)` and the previous step's `*_old`
 /// snapshot using a 5-point boxcar filter (`eval_varcontrol` in
-/// `timestep.f90:2299-2364`).
+/// `timestep.f90:2299-2364`; lines `2326-2335` explicitly exclude `L`, `v`,
+/// `u`, `w`, `Hp`, `j_rot`, `w_div_wc`, `alpha_RTI`, and `Et_RSP`).
 #[must_use]
 pub fn eval_varcontrol(model: &StarModel) -> f64 {
     let nz = model.nz;
@@ -113,8 +153,7 @@ pub fn eval_varcontrol(model: &StarModel) -> f64 {
 /// Evaluates the maximum fractional nuclear fuel depletion ratio
 /// $w_{\mathrm{burn}} = \max_{k, j} \max(X_{\mathrm{old},j,k} - X_{j,k}, 0)
 /// / \Delta X_{\mathrm{limit}}$ across zones where
-/// $X_{\mathrm{old},j,k} \ge X_{\min}$ (`check_dX_nuc_drop` in
-/// `timestep.f90:360-520`).
+/// $X_{\mathrm{old},j,k} \ge X_{\min}$.
 #[must_use]
 pub fn eval_dx_nuc_drop_ratio(
     model: &StarModel,
@@ -130,7 +169,6 @@ pub fn eval_dx_nuc_drop_ratio(
     {
         return 0.0;
     }
-    // Check H1 (`j = 0`) and He4 (`j = 1` or `2` in `basic.net`).
     let mut max_drop = 0.0_f64;
     for k in 0..nz {
         for j in 0..species.min(3) {
@@ -167,9 +205,15 @@ pub fn eval_h211_factor(
         1.0 / ratio_curr
     };
 
-    let hit_max = raw_factor > max_timestep_factor;
-    let hit_min = raw_factor < min_timestep_factor;
-    let clamped = raw_factor.clamp(min_timestep_factor, max_timestep_factor);
+    let hit_max = max_timestep_factor > 0.0 && raw_factor > max_timestep_factor;
+    let hit_min = min_timestep_factor > 0.0 && raw_factor < min_timestep_factor;
+    let mut clamped = raw_factor;
+    if max_timestep_factor > 0.0 {
+        clamped = clamped.min(max_timestep_factor);
+    }
+    if min_timestep_factor > 0.0 {
+        clamped = clamped.max(min_timestep_factor);
+    }
     (clamped, hit_max, hit_min)
 }
 

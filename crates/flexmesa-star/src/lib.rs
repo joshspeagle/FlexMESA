@@ -60,12 +60,18 @@
     clippy::unreadable_literal
 )]
 
+pub mod adjust_mass;
 pub mod case_staging;
 pub mod controls;
 mod controls_defaults;
+pub mod controls_mix_wind;
+pub mod controls_timestep_stop;
+pub mod core_boundaries;
 pub mod diffusion;
 pub mod eps_grav;
+pub mod eps_mdot;
 pub mod evolve;
+pub(crate) mod evolve_support;
 pub mod history;
 pub mod hydro_brunt_surf;
 pub mod hydro_energy;
@@ -79,15 +85,18 @@ pub mod hydro_work;
 pub mod inlist;
 pub mod inlist_populate;
 mod inlist_populate_limits;
+mod inlist_populate_phase5b;
 pub mod inlist_runner;
 pub mod job_controls;
 pub mod mesh;
 pub mod mesh_adjust;
+pub(crate) mod mesh_remap;
 pub mod micro;
 pub mod micro_net;
 pub mod mix_info;
 pub mod model;
 pub mod model_io;
+pub mod omega_mix;
 pub mod overshoot;
 pub mod photo_io;
 pub mod pre_ms;
@@ -144,7 +153,10 @@ pub mod tier3_physics;
 pub mod tier4_extras;
 pub mod tier5_extras;
 pub mod timestep;
+mod timestep_checks;
+pub mod timestep_limits;
 pub mod winds;
+pub(crate) mod winds_driver;
 pub mod zams;
 
 #[cfg(test)]
@@ -160,9 +172,22 @@ mod tests_phase3_pulse_stella;
 #[cfg(test)]
 mod tests_wave5;
 
+pub use adjust_mass::{
+    build_accreted_xa, do_adjust_mass, do_adjust_mass_step,
+    do_adjust_mass_with_dt,
+};
 pub use controls::{
     AtmOption, AtmTTauRelation, EnergyEqnOption, StarControls, StarError,
     StarJobControls, VarLayout,
+};
+pub use controls_mix_wind::{
+    MixWindControls, OvershootParamSet, PredictiveParamSet,
+    NUM_OVERSHOOT_PARAM_SETS, NUM_PREDICTIVE_PARAM_SETS,
+};
+pub use controls_timestep_stop::{TimestepStopControls, MAX_DX_LIMIT_CTRLS};
+pub use core_boundaries::{
+    compute_core_masses, compute_power_categories, snapshot_step_history_old,
+    CoreMasses, PowerCategories,
 };
 pub use diffusion::{
     do_element_diffusion, eval_burgers_velocities, eval_caplan_ocp_dstar,
@@ -172,8 +197,16 @@ pub use diffusion::{
 pub use eps_grav::{
     eval_eps_grav, eval_eps_grav_lns_cell, eval_eps_grav_std_cell,
 };
+pub use eps_mdot::{
+    calculate_eps_mdot, calculate_eps_mdot_with_change,
+    eval_specific_total_energy_profile, find_mass_flux, PrevMassState,
+};
 pub use evolve::{
     restore_from_old, star_evolve, star_evolve_step, EvolveStepReport,
+};
+pub use evolve_support::{
+    apply_step_pre_physics, eval_total_energy_integrals,
+    update_step_energy_conservation,
 };
 pub use history::{
     extract_history_row, format_history_header, format_history_row,
@@ -232,8 +265,9 @@ pub use pre_ms::{
     PreMsShell,
 };
 pub use premix::{
-    add_predictive_mixing, do_conv_premix, do_phase_separation,
-    eval_castellani_penetration_vel, eval_phase_separation_shift,
+    add_predictive_mixing, apply_predictive_mixing_from_controls,
+    do_conv_premix, do_phase_separation, eval_castellani_penetration_vel,
+    eval_phase_separation_shift,
 };
 pub use pulse::{
     build_pulse_points, build_pulse_points_with_options, eval_center_d2,
@@ -384,12 +418,14 @@ pub use tier5_extras::{
 };
 pub use timestep::{
     eval_dx_nuc_drop_ratio, eval_h211_factor, eval_varcontrol, filter_limit,
-    pick_next_timestep, TimestepLimitReason, TimestepReport,
+    pick_next_timestep, TimestepAction, TimestepLimitReason, TimestepReport,
 };
+pub use timestep_limits::timestep_controller;
 pub use winds::{
-    do_adjust_mass, eval_blocker_wind, eval_de_jager_wind, eval_dutch_wind,
-    eval_nieuwenhuijzen_wind, eval_nugis_lamers_wind, eval_reimers_wind,
-    eval_van_loon_wind, eval_vink_wind, set_mdot, DutchLowTScheme, WindScheme,
+    do_set_mdot, eval_bjorklund_wind, eval_blocker_wind, eval_de_jager_wind,
+    eval_dutch_wind, eval_nieuwenhuijzen_wind, eval_nugis_lamers_wind,
+    eval_reimers_wind, eval_van_loon_wind, eval_vink_wind, set_mdot,
+    DutchLowTScheme, WindScheme,
 };
 pub use zams::{
     interp_q, load_zams_model, load_zams_model_from_catalog,

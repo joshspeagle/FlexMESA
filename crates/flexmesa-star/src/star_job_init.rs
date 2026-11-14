@@ -535,6 +535,7 @@ pub fn init_or_update_model_from_bundle(
     }
     model.save_start_values();
     model.save_old_values();
+    let mut fell_back = false;
     if loaded_from_mod && crate::tier2_extras::is_tier2_case(case_name) {
         let needs_fallback = matches!(
             case_name,
@@ -573,7 +574,11 @@ pub fn init_or_update_model_from_bundle(
             fallback.save_start_values();
             fallback.save_old_values();
             model = fallback;
+            fell_back = true;
         }
+    }
+    if loaded_from_mod && !fell_back {
+        crate::relax::settle_relaxed_loaded_model(&mut model)?;
     }
     extras.extras_startup(&mut model, false)?;
 

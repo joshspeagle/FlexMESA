@@ -18,6 +18,7 @@ _SECYER = float(constants.SECYER)
 _CRAD = float(constants.CRAD)
 _CLIGHT = float(constants.CLIGHT)
 _PI = float(constants.PI)
+_STANDARD_CGRAV = float(constants.STANDARD_CGRAV)
 
 
 @jax.jit
@@ -108,16 +109,19 @@ def eval_winds_jax(
     """Evaluate differentiable wind mass-loss rates (`M_sun yr^-1`, `g s^-1`).
 
     Args:
-        l_surf: Surface luminosity in `erg s^-1`.
-        m_surf: Stellar mass in grams (`g`).
-        t_surf: Effective temperature in Kelvin (`K`).
-        x_surf: Surface hydrogen mass fraction `X`.
-        y_surf: Surface helium mass fraction `Y`.
-        z_surf: Surface metal mass fraction `Z`.
+        l_surf: Surface luminosity in `erg s^-1`, scalar or shape `(*batch,)`.
+        m_surf: Stellar mass in grams (`g`), scalar or shape `(*batch,)`.
+        t_surf: Effective temperature in Kelvin (`K`), scalar or shape
+            `(*batch,)`.
+        x_surf: Surface hydrogen mass fraction `X`, scalar or shape
+            `(*batch,)`.
+        y_surf: Surface helium mass fraction `Y`, scalar or shape `(*batch,)`.
+        z_surf: Surface metal mass fraction `Z`, scalar or shape `(*batch,)`.
         eta: Wind scaling multiplier (`1.0` default).
 
     Returns:
-        Dictionary containing `w_reimers`, `w_blocker`, `w_vink`,
+        Dictionary of arrays with shape `(*batch,)` (matching broadcast
+        inputs) containing `w_reimers`, `w_blocker`, `w_vink`, `w_bjorklund`,
         `w_nieuwenhuijzen`, `w_de_jager`, `w_van_loon`, `w_dutch` in
         `M_sun yr^-1` and `mdot_dutch` in `g s^-1`.
     """
@@ -193,16 +197,31 @@ def eval_winds_jax(
         )
     )
 
-    w_wr = 1.0e-11 * (l_lsun**1.29) * (y_s**1.7) * jnp.sqrt(z_s)
+    z_s_safe = jnp.maximum(z_s, 1.0e-30)
+    w_wr = 1.0e-11 * (l_lsun**1.29) * (y_s**1.7) * jnp.sqrt(z_s_safe)
     w_high = jnp.where(x_s < 0.4, w_wr, w_vink_1)
     alpha_dutch = jnp.clip((t_s - 10_000.0) / 1000.0, 0.0, 1.0)
     w_dutch = eta * (alpha_dutch * w_high + (1.0 - alpha_dutch) * w_de_jager_1)
     mdot_dutch = -w_dutch * _M_SUN / _SECYER
 
+    gamma_e = 0.34 * l_s / (_FOUR_PI * _CLIGHT * _STANDARD_CGRAV * m_s)
+    m_eff = jnp.maximum(m_s * (1.0 - gamma_e), 1.0e-6 * m_s)
+    log_t_45k = jnp.log10(t_s / 4.5e4)
+    log_z_bj = jnp.log10(jnp.maximum(z_s / 0.014, 1.0e-10))
+    log_w_bjork = (
+        -5.52
+        + 2.39 * jnp.log10(l_lsun / 1.0e6)
+        - 1.48 * jnp.log10((m_eff / _M_SUN) / 45.0)
+        + 2.12 * log_t_45k
+        + (0.75 - 1.87 * log_t_45k) * log_z_bj
+    )
+    w_bjorklund = eta * (10.0**log_w_bjork)
+
     return {
         "w_reimers": w_reimers,
         "w_blocker": w_blocker,
         "w_vink": w_vink,
+        "w_bjorklund": w_bjorklund,
         "w_nieuwenhuijzen": w_nieuw,
         "w_de_jager": w_de_jager,
         "w_van_loon": w_van_loon,

@@ -523,6 +523,10 @@ pub struct StarControls {
     pub gold2_tol_residual_norm3: f64,
     /// Stage-3 gold2 max residual tolerance (`gold2_tol_max_residual3`).
     pub gold2_tol_max_residual3: f64,
+    /// Overshooting, predictive mixing, premixing, wind, `eps_mdot`, and mesh controls.
+    pub mix_wind: crate::controls_mix_wind::MixWindControls,
+    /// Core-boundary thresholds, extended stopping criteria, and timestep limits.
+    pub ts_stop: crate::controls_timestep_stop::TimestepStopControls,
 }
 
 impl StarControls {

@@ -5,6 +5,7 @@ rotational angular momentum diffusion, and stellar winds (`flexmesa.star`).
 
 from __future__ import annotations
 
+import jax
 import jax.numpy as jnp
 import jax.test_util as jtu
 import numpy as np
@@ -182,6 +183,7 @@ def test_stellar_winds_and_3_region_mass_adjustment_parity() -> None:
         ("de Jager", "w_de_jager"),
         ("van Loon", "w_van_loon"),
         ("Dutch", "w_dutch"),
+        ("Bjorklund", "w_bjorklund"),
     ]:
         mdot_rust = zams.apply_wind_and_adjust_mass(
             scheme=scheme, eta=1.0, dt=0.0
@@ -191,17 +193,21 @@ def test_stellar_winds_and_3_region_mass_adjustment_parity() -> None:
         np.testing.assert_allclose(w_rust, w_jax, rtol=1.0e-11)
 
     # Verify autodiff gradients on `eval_winds_jax` via `check_grads`.
-    jtu.check_grads(
-        lambda l_s, m_s, t_s: star.eval_winds_jax(l_s, m_s, t_s)["w_dutch"],
-        (
-            jnp.asarray(float(zams.lum[0])),
-            jnp.asarray(float(zams.mstar)),
-            jnp.asarray(float(zams.teff)),
-        ),
-        order=1,
-        rtol=1.0e-4,
-        atol=1.0e-8,
-    )
+    l_s0 = jnp.asarray(float(zams.lum[0]))
+    m_s0 = jnp.asarray(float(zams.mstar))
+    t_s0 = jnp.asarray(float(zams.teff))
+    for key in ("w_dutch", "w_bjorklund"):
+        jtu.check_grads(
+            lambda l_s, m_s, t_s, k=key: star.eval_winds_jax(l_s, m_s, t_s)[k],
+            (l_s0, m_s0, t_s0),
+            order=1,
+            rtol=1.0e-4,
+            atol=1.0e-8,
+        )
+    dutch_dz = jax.grad(
+        lambda z_s: star.eval_winds_jax(l_s0, m_s0, t_s0, z_surf=z_s)["w_dutch"]
+    )(jnp.float64(0.0))
+    assert bool(jnp.isfinite(dutch_dz))
 
     # Impose a composition step inside Region II (`0.95 < q < 0.98`) while
     # keeping the lost outer shell (`q > 0.98`) uniform so species mass loss

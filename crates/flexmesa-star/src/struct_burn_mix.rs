@@ -23,7 +23,7 @@
 //!    neither burning nor mixing is active.
 
 use flexmesa_chem::NUM_CATEGORIES;
-use flexmesa_const::{FOUR_PI, LN10};
+use flexmesa_const::LN10;
 use flexmesa_eos::HelmTable;
 use flexmesa_net::{
     burn_1_zone, burn_1_zone_const_density, Burn1ZoneInput,
@@ -39,6 +39,7 @@ use crate::mix_info::{
     locate_convection_boundaries,
 };
 use crate::model::StarModel;
+pub use crate::omega_mix::solve_omega_mix;
 use crate::overshoot::{apply_overshooting, OvershootConfig};
 use crate::solver::{solve_henyey_step, HenyeySolverReport};
 
@@ -49,6 +50,7 @@ struct SplitZoneOutcome {
     avg_epsnuc: f64,
     eps_neu_total: f64,
     eps_cats: [f64; NUM_CATEGORIES],
+    nstep: usize,
 }
 
 /// Integrates the 1-zone nuclear reaction network over $[0, \Delta t]$ in
@@ -139,10 +141,11 @@ pub fn op_split_burn_zones(
                     avg_epsnuc: 0.0,
                     eps_neu_total: 0.0,
                     eps_cats: [0.0; NUM_CATEGORIES],
+                    nstep: 0,
                 });
             }
 
-            let (ending_x, avg_raw, eps_neu, mut cats) =
+            let (ending_x, avg_raw, eps_neu, mut cats, nstep_zone) =
                 if model.t[k] >= min_t_var {
                     let input = BurnConstDensityInput {
                         t_start: 0.0,
@@ -171,6 +174,7 @@ pub fn op_split_burn_zones(
                         out.avg_eps_nuc,
                         out.eps_neu_total,
                         out.eps_nuc_categories,
+                        out.nstep,
                     )
                 } else {
                     let times = [0.0, dt];
@@ -207,6 +211,7 @@ pub fn op_split_burn_zones(
                         out.avg_eps_nuc,
                         out.eps_neu_total,
                         out.eps_nuc_categories,
+                        out.nstep,
                     )
                 };
 
@@ -236,11 +241,14 @@ pub fn op_split_burn_zones(
                 avg_epsnuc: avg_raw * eps_nuc_factor,
                 eps_neu_total: eps_neu * eps_nuc_factor,
                 eps_cats: cats,
+                nstep: nstep_zone,
             })
         })
         .collect();
 
+    let mut max_nstep = 0_usize;
     for out in outcomes? {
+        max_nstep = max_nstep.max(out.nstep);
         let k = out.k;
         let base_s = k * species;
         let base_ss = k * species * species;
@@ -259,6 +267,8 @@ pub fn op_split_burn_zones(
         model.d_dxdt_nuc_dlnt[base_s..base_s + species].fill(0.0);
         model.d_dxdt_nuc_dx[base_ss..base_ss + species * species].fill(0.0);
     }
+    model.aux.step_hist.burn_max_num_substeps =
+        model.aux.step_hist.burn_max_num_substeps.max(max_nstep);
     Ok(())
 }
 
@@ -361,103 +371,27 @@ impl ScalarTridiagFactor {
     }
 }
 
-/// Solves rotational angular momentum transport (`do_solve_omega_mix` in
-/// `star/private/solve_omega_mix.f90:32-667`).
-///
-/// Evolves face angular velocity $\Omega_k$ and specific angular momentum
-/// $j_{\mathrm{rot},k} = i_{\mathrm{rot},k} \Omega_k$ ($i_{\mathrm{rot},k} = \tfrac{2}{3} r_k^2$)
-/// over `dt` using `n_substeps` implicit backward-Euler tridiagonal steps,
-/// conserving total angular momentum $J_{\mathrm{tot}} = \sum_{k=0}^{\mathrm{nz}-1} \overline{\Delta m}_k j_{\mathrm{rot},k}$
-/// to machine precision.
-pub fn solve_omega_mix(
-    model: &mut StarModel,
-    dt: f64,
-    nu_omega: &[f64],
-    n_substeps: usize,
-) {
-    let nz = model.nz;
-    if nz < 2 || dt <= 0.0 || nu_omega.len() != nz {
-        return;
-    }
-    let steps = n_substeps.max(1);
-    let dt_sub = dt / (steps as f64);
-
-    let i_rot: Vec<f64> = (0..nz)
-        .map(|k| {
-            let ir = model.aux.i_rot.get(k).copied().unwrap_or(0.0);
-            if ir > 0.0 {
-                ir
-            } else {
-                (2.0 / 3.0) * model.r[k] * model.r[k]
+/// Restores time-averaged split-burn `eps_nuc` for zones above
+/// `op_split_burn_min_t` after synchronous EOS/network evaluation.
+pub(crate) fn apply_burn_avg_epsnuc(model: &mut StarModel) {
+    let min_t_split = model.controls.op_split_burn_min_t;
+    for k in 0..model.nz {
+        let t_start_k = model
+            .ln_t_start
+            .get(k)
+            .copied()
+            .unwrap_or(model.ln_t[k])
+            .exp();
+        if t_start_k >= min_t_split {
+            if let Some(&avg_eps) = model.aux.burn_avg_epsnuc.get(k) {
+                model.eps_nuc[k] = avg_eps;
             }
-        })
-        .collect();
-
-    let mut c_omega = vec![0.0; nz - 1];
-    for (k, c_om_k) in c_omega.iter_mut().enumerate() {
-        let nu0 = nu_omega[k].max(0.0);
-        let nu1 = nu_omega[k + 1].max(0.0);
-        let d_harm = if nu0 + nu1 > 1.0e-99 {
-            2.0 * nu0 * nu1 / (nu0 + nu1)
-        } else {
-            0.0
-        };
-        let r_mid = 0.5 * (model.r[k] + model.r[k + 1]);
-        let area_rho = FOUR_PI * r_mid * r_mid * model.rho[k];
-        let am_sig_raw =
-            (area_rho * area_rho * d_harm) / model.dm[k].max(1.0e-99);
-        let i_mid = 0.5 * (i_rot[k] + i_rot[k + 1]);
-        *c_om_k = am_sig_raw * i_mid;
-    }
-
-    let mut dl = vec![0.0; nz];
-    let mut d = vec![1.0; nz];
-    let mut du = vec![0.0; nz];
-    for k in 0..nz {
-        let denom = (model.dm_bar[k] * i_rot[k]).max(1.0e-99);
-        let f_k = dt_sub / denom;
-        let c_m1 = if k > 0 { c_omega[k - 1] } else { 0.0 };
-        let c_00 = if k + 1 < nz { c_omega[k] } else { 0.0 };
-        dl[k] = -f_k * c_m1;
-        d[k] = 1.0 + f_k * (c_m1 + c_00);
-        du[k] = -f_k * c_00;
-    }
-
-    let factor = ScalarTridiagFactor::factor(&dl, &d, &du);
-    let mut rhs = vec![0.0; nz];
-    let mut d_omega = vec![0.0; nz];
-    let mut d_prime = vec![0.0; nz];
-    for _ in 0..steps {
-        for (k, r_k) in rhs.iter_mut().enumerate() {
-            let denom = (model.dm_bar[k] * i_rot[k]).max(1.0e-99);
-            let f_k = dt_sub / denom;
-            let torque_m1 = if k > 0 {
-                c_omega[k - 1] * (model.omega[k - 1] - model.omega[k])
-            } else {
-                0.0
-            };
-            let torque_00 = if k + 1 < nz {
-                c_omega[k] * (model.omega[k] - model.omega[k + 1])
-            } else {
-                0.0
-            };
-            *r_k = f_k * (torque_m1 - torque_00);
         }
-        factor.solve_into(&dl, &rhs, &mut d_omega, &mut d_prime);
-        for (k, &dw) in d_omega.iter().enumerate() {
-            model.omega[k] += dw;
-        }
-        if model.dm_bar[0] <= 0.0 && nz >= 2 {
-            model.omega[0] = model.omega[1];
-        }
-    }
-    for (k, &ir) in i_rot.iter().enumerate() {
-        model.j_rot[k] = ir * model.omega[k];
     }
 }
 
-/// Applies glitch cleanup, convective boundary detection, overshooting, and
-/// Lagrangian coupling factor (`sig`) evaluation.
+/// Applies glitch cleanup, predictive mixing, convective boundary detection,
+/// overshooting, and Lagrangian coupling factor (`sig`) evaluation.
 pub(crate) fn refresh_mixing_state(
     model: &mut StarModel,
     dt: f64,
@@ -466,10 +400,11 @@ pub(crate) fn refresh_mixing_state(
     if model.controls.remove_mixing_glitches {
         clean_mixing_glitches(model, 1.0, 0.1);
     }
-    let (_cz_bdy_dq, boundaries) = locate_convection_boundaries(model);
-    if !overshoot_configs.is_empty() {
-        apply_overshooting(model, &boundaries, overshoot_configs);
+    if model.controls.do_mix && model.controls.mix_factor > 0.0 {
+        crate::premix::apply_predictive_mixing_from_controls(model);
     }
+    let (_cz_bdy_dq, boundaries) = locate_convection_boundaries(model);
+    apply_overshooting(model, &boundaries, overshoot_configs);
     compute_convection_sigmas(model, dt, 1.0, 1.0e10);
     if model.controls.rti_flag
         && model.controls.do_mix
@@ -542,6 +477,7 @@ pub fn do_struct_burn_mix(
     model.v_start.clone_from(&model.v);
     model.aux.doing_struct_burn_mix = true;
     model.aux.non_epsnuc_energy_change_from_split_burn = 0.0;
+    model.aux.step_hist.burn_max_num_substeps = 0;
 
     let do_burn =
         model.controls.do_burn && model.controls.dxdt_nuc_factor > 0.0;
@@ -565,23 +501,11 @@ pub fn do_struct_burn_mix(
             return Err(e);
         }
     };
+    model.aux.step_hist.last_solver_iterations = report.iterations;
 
     let final_res = set_hydro_vars(model, false, false);
     if op_split_burn {
-        let min_t_split = model.controls.op_split_burn_min_t;
-        for k in 0..model.nz {
-            let t_start_k = model
-                .ln_t_start
-                .get(k)
-                .copied()
-                .unwrap_or(model.ln_t[k])
-                .exp();
-            if t_start_k >= min_t_split {
-                if let Some(&avg_eps) = model.aux.burn_avg_epsnuc.get(k) {
-                    model.eps_nuc[k] = avg_eps;
-                }
-            }
-        }
+        apply_burn_avg_epsnuc(model);
     }
     model.controls.op_split_burn = saved_op_split;
     final_res?;

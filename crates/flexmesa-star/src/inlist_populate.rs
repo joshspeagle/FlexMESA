@@ -87,6 +87,7 @@ impl InlistBundle {
         self.populate_controls_physics();
         self.populate_controls_solver();
         self.populate_controls_limits();
+        self.populate_controls_phase5b();
         self.populate_user_x_controls();
         crate::rsp_config::populate_rsp_inlist(
             self.sections.get("star_job"),
@@ -205,7 +206,14 @@ impl InlistBundle {
         ]) {
             j.set_tau_factor = b;
         }
-        if let Some(v) = sj.get_f64("set_to_this_tau_factor").or_else(|| sj.get_f64("relax_to_this_tau_factor")) {
+        if let Some(b) = sj.any_bool(&["relax_tau_factor", "relax_initial_tau_factor"]) {
+            j.relax_tau_factor = b;
+        }
+        if let Some(v) = sj
+            .get_f64("set_to_this_tau_factor")
+            .or_else(|| sj.get_f64("relax_to_this_tau_factor"))
+            .or_else(|| sj.get_f64("relax_initial_to_this_tau_factor"))
+        {
             j.set_to_this_tau_factor = v;
         }
         if let Some(b) = sj.any_bool(&[

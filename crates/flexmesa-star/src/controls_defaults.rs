@@ -84,8 +84,8 @@ impl Default for StarControls {
             accretion_species_id: Vec::new(),
             accretion_species_xa: Vec::new(),
             super_eddington_scaling_factor: 0.0,
-            hot_wind_full_on_t: 1.0e4,
-            cool_wind_full_on_t: 1.0e4,
+            hot_wind_full_on_t: 1.2e4,
+            cool_wind_full_on_t: 8.0e3,
             reimers_scaling_factor: 0.0,
             blocker_scaling_factor: 0.0,
             vink_scaling_factor: 0.0,
@@ -261,6 +261,9 @@ impl Default for StarControls {
             gold2_tol_max_residual3: 1.0e-5,
             min_chem_eqn_scale: 1.0,
             dedt_eqn_r_scale: 1.0e8,
+            mix_wind: crate::controls_mix_wind::MixWindControls::default(),
+            ts_stop:
+                crate::controls_timestep_stop::TimestepStopControls::default(),
         }
     }
 }

@@ -14,12 +14,6 @@ use crate::model::StarModel;
 /// Evaluates the Blouin et al. (2020, 2021) 5th-order polynomial distillation
 /// shift $\Delta x_{\mathrm{heavy}}$ between the solid crystal and coexisting
 /// liquid phase at crystallization (`phase_separation.f90:279-302`).
-///
-/// # Arguments
-/// * `x_heavy` - Mass fraction of the heavier ion species ($X_{\mathrm{O}}$ in
-///   a C/O white dwarf or $X_{\mathrm{Ne}}$ in an O/Ne white dwarf).
-/// * `is_one_mixture` - `false` for C/O mixture (Blouin et al. 2020), `true`
-///   for O/Ne mixture (Blouin et al. 2021).
 #[must_use]
 pub fn eval_phase_separation_shift(x_heavy: f64, is_one_mixture: bool) -> f64 {
     let x = x_heavy.clamp(0.0, 1.0);
@@ -65,9 +59,26 @@ pub fn eval_castellani_penetration_vel(
     (conv_vel.max(0.0) * geom * super_ad * abar_in.max(1.0) / d_abar).max(0.0)
 }
 
-fn refresh_convective_state(model: &mut StarModel) -> Result<(), StarError> {
+fn refresh_convective_state_const_p(
+    model: &mut StarModel,
+    p_fixed: &[f64],
+) -> Result<(), StarError> {
     set_basic_vars(model)?;
     do_eos(model)?;
+    if model.controls.mix_wind.conv_premix_fix_pgas {
+        // One damped Newton step on `lnd` at fixed `(T, p_fixed)` so mixing
+        // happens at constant total pressure (`conv_premix.f90:1010-1085`).
+        for (k, &p_tar) in p_fixed.iter().enumerate() {
+            if p_tar > 0.0 && model.peos[k] > 0.0 {
+                let d_lnp_dlnd = model.chi_rho[k].max(0.1);
+                let step = ((p_tar / model.peos[k]).ln() / d_lnp_dlnd)
+                    .clamp(-0.1, 0.1);
+                model.lnd[k] += step;
+            }
+        }
+        set_basic_vars(model)?;
+        do_eos(model)?;
+    }
     do_kap(model)?;
     do_brunt_b(model);
     set_mlt_vars(model)
@@ -76,7 +87,8 @@ fn refresh_convective_state(model: &mut StarModel) -> Result<(), StarError> {
 /// Performs iterative convective premixing (`conv_premix.f90:do_conv_premix`),
 /// testing whether homogenizing each cell immediately adjacent to a convective
 /// boundary makes the newly mixed boundary cell convectively unstable
-/// ($\nabla_{\mathrm{rad}}(\bar{X}) > \nabla_L(\bar{X})$).
+/// ($\nabla_{\mathrm{rad}}(\bar{X}) > \nabla_L(\bar{X})$) at constant pressure,
+/// and populates `model.aux.eps_pre_mix` when `do_premix_heating` is enabled.
 ///
 /// Returns the total number of cells absorbed across all convective boundaries.
 pub fn do_conv_premix(
@@ -86,10 +98,16 @@ pub fn do_conv_premix(
 ) -> usize {
     let nz = model.nz;
     let nc = model.species;
+    if model.aux.eps_pre_mix.len() != nz {
+        model.aux.eps_pre_mix.resize(nz, 0.0);
+    }
+    model.aux.eps_pre_mix.fill(0.0);
     if nz < 4 || nc == 0 {
         return 0;
     }
 
+    let e_before = model.energy.clone();
+    let p_fixed = model.peos.clone();
     let mut total_advanced = 0usize;
     let (_cz_bdy_dq, boundaries) = locate_convection_boundaries(model);
 
@@ -136,10 +154,11 @@ pub fn do_conv_premix(
             }
 
             let saved_xa = model.xa[k_lo * nc..(k_hi + 1) * nc].to_vec();
+            let saved_lnd = model.lnd[k_lo..=k_hi].to_vec();
             for k in k_lo..=k_hi {
                 model.xa[k * nc..(k + 1) * nc].copy_from_slice(&x_bar);
             }
-            let ok = refresh_convective_state(model).is_ok();
+            let ok = refresh_convective_state_const_p(model, &p_fixed).is_ok();
 
             if ok && model.gradr[k_rad] > model.gradl[k_rad] {
                 model.mixing_type[k_rad] = MixingType::ConvectiveMixing;
@@ -148,22 +167,29 @@ pub fn do_conv_premix(
                 total_advanced += 1;
             } else {
                 model.xa[k_lo * nc..(k_hi + 1) * nc].copy_from_slice(&saved_xa);
-                let _ = refresh_convective_state(model);
+                model.lnd[k_lo..=k_hi].copy_from_slice(&saved_lnd);
+                let _ = refresh_convective_state_const_p(model, &p_fixed);
                 break;
             }
+        }
+    }
+
+    if total_advanced > 0 && model.controls.do_premix_heating && model.dt > 0.0
+    {
+        for k in 0..nz {
+            model.aux.eps_pre_mix[k] =
+                -(model.energy[k] - e_before[k]) / model.dt;
         }
     }
     total_advanced
 }
 
-/// Applies predictive mixing (`predictive_mix.f90:add_predictive_mixing`) at
-/// convective boundaries, extending `model.d_mix` and `model.conv_vel` into
-/// adjacent zones where the homogenized radiative gradient exceeds the
-/// adiabatic gradient while respecting the Spruit (2015) ingestion rate cap.
-pub fn add_predictive_mixing(
+fn add_predictive_mixing_in_q_range(
     model: &mut StarModel,
     ingested_mass_limit_coeff: f64,
     superad_thresh: f64,
+    bdy_q_min: f64,
+    bdy_q_max: f64,
 ) -> usize {
     let nz = model.nz;
     if nz < 4 {
@@ -171,10 +197,19 @@ pub fn add_predictive_mixing(
     }
     let (_cz_bdy_dq, boundaries) = locate_convection_boundaries(model);
     let mut n_extended = 0usize;
+    let use_ledoux = model.controls.use_ledoux_criterion;
 
     for bdy in &boundaries {
+        if bdy.conv_bdy_q < bdy_q_min || bdy.conv_bdy_q > bdy_q_max {
+            continue;
+        }
         let k_bdy = bdy.conv_bdy_loc.min(nz - 1);
-        let superad = (model.gradr[k_bdy] - model.grada[k_bdy]).max(0.0);
+        let grad_crit_bdy = if use_ledoux {
+            model.gradl[k_bdy]
+        } else {
+            model.grada[k_bdy]
+        };
+        let superad = (model.gradr[k_bdy] - grad_crit_bdy).max(0.0);
         if superad < superad_thresh.max(0.0) {
             continue;
         }
@@ -190,13 +225,16 @@ pub fn add_predictive_mixing(
             k_bdy + 1
         };
 
-        // Predicted radiative gradient when adjacent shell is homogenized with
-        // the convective boundary opacity/flux
         let kap_ratio =
             (model.opacity[k_bdy] / model.opacity[k_adj].max(1.0e-10)).max(1.0);
         let gradr_pred = model.gradr[k_adj] * kap_ratio
             + 0.5 * (model.gradr[k_bdy] - model.gradr[k_adj]).max(0.0);
-        if gradr_pred > model.grada[k_adj] {
+        let grad_crit_adj = if use_ledoux {
+            model.gradl[k_adj]
+        } else {
+            model.grada[k_adj]
+        };
+        if gradr_pred > grad_crit_adj {
             let d_ing =
                 ingested_mass_limit_coeff.max(0.01) * model.mlt_d[k_bdy];
             if d_ing > model.d_mix[k_adj] {
@@ -210,14 +248,56 @@ pub fn add_predictive_mixing(
     n_extended
 }
 
+/// Applies predictive mixing (`predictive_mix.f90:add_predictive_mixing`) at
+/// convective boundaries, extending `model.d_mix` and `model.conv_vel` into
+/// adjacent zones where the homogenized radiative gradient exceeds the
+/// convective stability threshold (`gradL` when `use_ledoux_criterion`, else
+/// `grada`) while respecting the Constantino et al. (2015) ingestion cap.
+pub fn add_predictive_mixing(
+    model: &mut StarModel,
+    ingested_mass_limit_coeff: f64,
+    superad_thresh: f64,
+) -> usize {
+    add_predictive_mixing_in_q_range(
+        model,
+        ingested_mass_limit_coeff,
+        superad_thresh,
+        0.0,
+        1.0,
+    )
+}
+
+/// Evaluates all enabled `predictive_mix` rules in `model.controls.mix_wind`.
+pub fn apply_predictive_mixing_from_controls(model: &mut StarModel) -> usize {
+    let sets = model.controls.mix_wind.predictive_sets.clone();
+    if !sets.iter().any(|ps| ps.predictive_mix) {
+        return 0;
+    }
+    let mut total = 0_usize;
+    for ps in &sets {
+        if !ps.predictive_mix {
+            continue;
+        }
+        let ing_coeff = if ps.ingestion_factor > 0.0 {
+            ps.ingestion_factor.clamp(0.01, 1.0)
+        } else {
+            1.0
+        };
+        let thresh = ps.superad_thresh.max(0.0);
+        total += add_predictive_mixing_in_q_range(
+            model,
+            ing_coeff,
+            thresh,
+            ps.bdy_q_min,
+            ps.bdy_q_max,
+        );
+    }
+    total
+}
+
 /// Executes white-dwarf crystallization phase separation
 /// (`phase_separation.f90:do_phase_separation`) across zones reaching plasma
-/// coupling $\Gamma_k \ge \Gamma_{\mathrm{cryst}}$ (`~175`), enriching the
-/// solid core in the heavier species ($\mathrm{^{16}O}$ or
-/// $\mathrm{^{20}Ne}$), redistributing the depleted liquid outward until
-/// Rayleigh-Taylor stability is restored, and returning the gravothermal
-/// phase-separation heating profile $\epsilon_{\mathrm{phase\_sep},k}$
-/// ($\mathrm{erg\,g^{-1}\,s^{-1}}$).
+/// coupling $\Gamma_k \ge \Gamma_{\mathrm{cryst}}$ (`~175`).
 pub fn do_phase_separation(
     model: &mut StarModel,
     dt: f64,
@@ -287,8 +367,10 @@ pub fn do_phase_separation(
                 e_before = Some(model.energy.clone());
             }
             let delta_m_heavy = dm_solid * dx;
-            model.xa[k * nc + j_heavy] += dx;
-            model.xa[k * nc + j_light] -= dx;
+            model.xa[k * nc + j_heavy] =
+                (model.xa[k * nc + j_heavy] + dx).clamp(0.0, 1.0);
+            model.xa[k * nc + j_light] =
+                (model.xa[k * nc + j_light] - dx).clamp(0.0, 1.0);
 
             let frac = delta_m_heavy / avail_heavy;
             for kl in k_top..k {
@@ -296,8 +378,10 @@ pub fn do_phase_separation(
                     .min(1.0 - model.xa[kl * nc + j_light])
                     .clamp(0.0, 0.5);
                 let shift = frac * cap;
-                model.xa[kl * nc + j_heavy] -= shift;
-                model.xa[kl * nc + j_light] += shift;
+                model.xa[kl * nc + j_heavy] =
+                    (model.xa[kl * nc + j_heavy] - shift).clamp(0.0, 1.0);
+                model.xa[kl * nc + j_light] =
+                    (model.xa[kl * nc + j_light] + shift).clamp(0.0, 1.0);
             }
         }
     }

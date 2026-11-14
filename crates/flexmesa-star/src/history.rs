@@ -68,25 +68,14 @@ pub fn extract_history_row(model: &StarModel) -> HistoryRow {
         .unwrap_or(1.0e-30)
         .max(1.0e-30);
 
-    let l_nuc_erg: f64 = model
-        .dm
-        .iter()
-        .zip(&model.eps_nuc)
-        .map(|(&dm_k, &eps_k)| dm_k * eps_k.max(0.0))
-        .sum();
-    let l_nuc_lsun = (l_nuc_erg / L_SUN).max(1.0e-30);
+    let powers = crate::core_boundaries::compute_power_categories(model);
+    let l_nuc_lsun = powers.power_nuc_burn.max(1.0e-30);
 
     let center_h1 = model.xh_mass.get(c_idx).copied().unwrap_or(0.0);
     let center_he4 = model.yhe_mass.get(c_idx).copied().unwrap_or(0.0);
 
-    // Helium core boundary: outermost zone where X_H < 0.01 and Y_He >= 0.10.
-    let mut he_core_mass = 0.0_f64;
-    for k in 0..nz {
-        if model.xh_mass[k] < 0.01 && model.yhe_mass[k] >= 0.10 {
-            he_core_mass = model.m[k] / M_SUN;
-            break;
-        }
-    }
+    let he_core_mass =
+        crate::core_boundaries::compute_core_masses(model).he_core_mass;
 
     HistoryRow {
         model_number: model.model_number,

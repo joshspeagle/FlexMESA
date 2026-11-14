@@ -201,11 +201,20 @@ pub fn set_basic_vars(model: &mut StarModel) -> Result<(), StarError> {
         model.z2bar[k] = comp.z2bar;
         model.z53bar[k] = comp.z53bar;
         model.ye[k] = comp.ye;
-        model.xh_mass[k] = comp.xh;
-        model.yhe_mass[k] = comp.xhe;
-        model.z_mass[k] = comp.xz;
+        model.xh_mass[k] = clamp_unit_roundoff(comp.xh);
+        model.yhe_mass[k] = clamp_unit_roundoff(comp.xhe);
+        model.z_mass[k] = clamp_unit_roundoff(comp.xz);
     }
     Ok(())
+}
+
+#[inline]
+fn clamp_unit_roundoff(val: f64) -> f64 {
+    if (-1.0e-12..=1.0 + 1.0e-12).contains(&val) {
+        val.clamp(0.0, 1.0)
+    } else {
+        val
+    }
 }
 
 /// Evaluates `eos_dt_get_zones` across all `nz` zones in parallel and populates

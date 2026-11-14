@@ -492,3 +492,82 @@ pub fn relax_from_profile_files(model: &mut StarModel, case_dir: &Path) {
         }
     }
 }
+
+/// Settles a loaded `.mod` file after initial mass or `tau_factor` relaxation
+/// with logarithmic `doing_relax` pseudo-evolution steps (`do_internal_evolve`
+/// in `relax.f90:1431`).
+///
+/// # Errors
+/// Returns [`StarError`] if refreshing hydrodynamic state fails after settling.
+pub(crate) fn settle_relaxed_loaded_model(
+    model: &mut StarModel,
+) -> Result<(), crate::controls::StarError> {
+    if !(model.job.relax_tau_factor || model.job.relax_mass)
+        || model.dt >= 10.0 * flexmesa_const::SECYER
+    {
+        return Ok(());
+    }
+
+    let saved = (
+        model.dt,
+        model.dt_next,
+        model.dt_old,
+        model.star_age,
+        model.star_age_old,
+        model.model_number,
+        model.num_retries,
+        model.mstar_dot,
+        model.aux.cumulative_energy_error,
+        model.controls.mass_change,
+        model.controls.super_eddington_scaling_factor,
+        model.controls.eps_nuc_factor,
+        model.controls.mesh_delta_coeff,
+    );
+
+    model.aux.doing_relax = true;
+    model.controls.mass_change = 0.0;
+    model.controls.super_eddington_scaling_factor = 0.0;
+    model.controls.eps_nuc_factor = 0.0;
+    model.controls.mesh_delta_coeff = 0.0;
+    model.mstar_dot = 0.0;
+
+    for dt_yr in [100.0, 10.0, 1.0, 0.1, 1.0e-2, 1.0e-3, 1.0e-4] {
+        model.dt = dt_yr * flexmesa_const::SECYER;
+        model.dt_next = model.dt;
+        let _ = crate::evolve::star_evolve_step(
+            model,
+            false,
+            model.controls.op_split_burn,
+            true,
+        );
+    }
+
+    (
+        model.dt,
+        model.dt_next,
+        model.dt_old,
+        model.star_age,
+        model.star_age_old,
+        model.model_number,
+        model.num_retries,
+        model.mstar_dot,
+        model.aux.cumulative_energy_error,
+        model.controls.mass_change,
+        model.controls.super_eddington_scaling_factor,
+        model.controls.eps_nuc_factor,
+        model.controls.mesh_delta_coeff,
+    ) = saved;
+    model.aux.doing_relax = false;
+    model.aux.step_hist.model_number_for_last_retry = None;
+    model.aux.step_hist.timestep_hold = 0;
+    model.dt_limit_ratio_old = 0.0;
+
+    crate::hydro_vars::set_hydro_vars(model, false, false)?;
+    let etot = crate::evolve_support::eval_total_energy_integrals(model).5;
+    model.aux.total_energy = etot;
+    crate::core_boundaries::snapshot_step_history_old(model);
+    model.aux.step_hist.total_energy_old = etot;
+    model.save_start_values();
+    model.save_old_values();
+    Ok(())
+}

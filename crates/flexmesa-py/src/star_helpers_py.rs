@@ -111,17 +111,9 @@ pub fn build_overshoot_configs(
 
 /// Parses a wind prescription string into [`WindScheme`].
 pub fn parse_wind_scheme(scheme: &str) -> PyResult<WindScheme> {
-    match scheme.to_ascii_lowercase().as_str() {
-        "" | "none" => Ok(WindScheme::None),
-        "reimers" => Ok(WindScheme::Reimers),
-        "blocker" => Ok(WindScheme::Blocker),
-        "vink" => Ok(WindScheme::Vink),
-        "nieuwenhuijzen" => Ok(WindScheme::Nieuwenhuijzen),
-        "de jager" | "de_jager" | "dejager" => Ok(WindScheme::DeJager),
-        "van loon" | "van_loon" | "vanloon" => Ok(WindScheme::VanLoon),
-        "dutch" => Ok(WindScheme::Dutch),
-        s => Err(PyValueError::new_err(format!("unknown wind scheme: {s}"))),
-    }
+    WindScheme::parse_name(scheme).ok_or_else(|| {
+        PyValueError::new_err(format!("unknown wind scheme: {scheme}"))
+    })
 }
 
 impl PyStarModel {

@@ -19,8 +19,8 @@ eval_gr_expected_separation_rsun = e2e_tier45.eval_gr_expected_separation_rsun
 eval_tauris_vdh_expected_separation_rsun = (
     e2e_tier45.eval_tauris_vdh_expected_separation_rsun
 )
-run_binary_suite = e2e_tier45.run_binary_suite
-run_binary_test_suite_case = e2e_tier45.run_binary_test_suite_case
+run_binary_suite = system.run_binary_suite
+run_binary_test_suite_case = system.run_binary_test_suite_case
 
 eval_rlobe = orbit_mdot.eval_rlobe
 eval_rl_relative_gap = orbit_mdot.eval_rl_relative_gap

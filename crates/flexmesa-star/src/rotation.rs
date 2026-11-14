@@ -349,8 +349,8 @@ pub fn update_rotation_distortion_factors(model: &mut StarModel) {
                 model.cgrav[k],
                 m_k,
                 r_k,
-                model.lum[k],
-                model.opacity[k],
+                0.0,
+                0.0,
                 0.99,
             );
             let w = if om_crit > 0.0 {

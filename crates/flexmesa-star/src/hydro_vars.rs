@@ -35,7 +35,7 @@ use crate::star_ad::{
 /// # Errors
 /// Returns [`StarError::MicrophysicsError`] if `set_mlt` fails at any face.
 pub fn set_mlt_vars(model: &mut StarModel) -> Result<(), StarError> {
-    if model.controls.rotation_flag {
+    if model.controls.rotation_flag && !model.aux.doing_struct_burn_mix {
         update_rotation_distortion_factors(model);
     }
     let nz = model.nz;
@@ -505,7 +505,9 @@ pub fn set_hydro_vars(
         }
         return Ok(());
     }
-    do_brunt_n2(model);
+    if !model.aux.doing_struct_burn_mix {
+        do_brunt_n2(model);
+    }
     eval_surf_bc(model)?;
     crate::eps_grav::eval_eps_grav(model);
     if model.controls.u_flag {

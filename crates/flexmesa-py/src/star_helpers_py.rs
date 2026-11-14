@@ -119,6 +119,7 @@ pub fn parse_wind_scheme(scheme: &str) -> PyResult<WindScheme> {
         "nieuwenhuijzen" => Ok(WindScheme::Nieuwenhuijzen),
         "de jager" | "de_jager" | "dejager" => Ok(WindScheme::DeJager),
         "van loon" | "van_loon" | "vanloon" => Ok(WindScheme::VanLoon),
+        "bjorklund" => Ok(WindScheme::Bjorklund),
         "dutch" => Ok(WindScheme::Dutch),
         s => Err(PyValueError::new_err(format!("unknown wind scheme: {s}"))),
     }

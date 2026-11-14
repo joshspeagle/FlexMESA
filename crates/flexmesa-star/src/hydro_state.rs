@@ -45,6 +45,10 @@ pub struct StepHistoryScalars {
     pub error_in_energy_conservation: f64,
     /// End-of-step total energy in $\mathrm{erg}$ (`total_energy_end`).
     pub total_energy_end: f64,
+    /// Previous accepted step total energy in $\mathrm{erg}$ for rollback on retry.
+    pub total_energy_old: f64,
+    /// Previous accepted step cumulative energy error in $\mathrm{erg}$ for rollback on retry.
+    pub cumulative_energy_error_old: f64,
 }
 
 impl Default for StepHistoryScalars {
@@ -67,6 +71,8 @@ impl Default for StepHistoryScalars {
             model_number_for_last_retry: None,
             error_in_energy_conservation: 0.0,
             total_energy_end: 0.0,
+            total_energy_old: 0.0,
+            cumulative_energy_error_old: 0.0,
         }
     }
 }

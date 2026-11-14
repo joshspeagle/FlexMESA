@@ -361,4 +361,6 @@ pub fn snapshot_step_history_old(model: &mut StarModel) {
     sh.power_z_burn_old = powers.power_z_burn;
     sh.power_photo_old = powers.power_photo;
     sh.power_nuc_burn_old = powers.power_nuc_burn;
+    sh.total_energy_old = model.aux.total_energy;
+    sh.cumulative_energy_error_old = model.aux.cumulative_energy_error;
 }

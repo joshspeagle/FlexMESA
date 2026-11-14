@@ -26,12 +26,19 @@
 use flexmesa_const::{R_SUN, SECYER};
 
 use crate::controls::StarError;
+use crate::core_boundaries::snapshot_step_history_old;
+use crate::evolve_support::{
+    apply_step_pre_physics, eval_total_energy_integrals,
+    update_step_energy_conservation,
+};
 use crate::hydro_vars::set_hydro_vars;
 use crate::mesh_adjust::{do_adjust_mesh, MeshFunctionConfig};
 use crate::model::StarModel;
-use crate::struct_burn_mix::do_struct_burn_mix;
-use crate::timestep::pick_next_timestep;
-use crate::winds::{do_adjust_mass, set_mdot, DutchLowTScheme, WindScheme};
+use crate::struct_burn_mix::{do_struct_burn_mix, refresh_mixing_state};
+use crate::termination::check_termination_limits;
+use crate::timestep::TimestepAction;
+use crate::timestep_limits::timestep_controller;
+use crate::winds::{do_adjust_mass_step, do_set_mdot};
 
 /// Diagnostic report returned by a single evolutionary step.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -82,33 +89,29 @@ pub fn restore_from_old(model: &mut StarModel) -> Result<(), StarError> {
     model.aux.rsp.et_rsp.clone_from(&model.aux.et_rsp_old);
     model.aux.rsp.hp_face.clone_from(&model.aux.hp_face_old);
     model.aux.alpha_rti.clone_from(&model.aux.alpha_rti_old);
+    if model.aux.omega_old.len() == model.nz {
+        model.omega.clone_from(&model.aux.omega_old);
+        model.j_rot.clone_from(&model.aux.j_rot_old);
+    }
+    model.mstar_dot = model.aux.step_hist.mstar_dot_old;
+    model.aux.total_energy = model.aux.step_hist.total_energy_old;
+    model.aux.cumulative_energy_error =
+        model.aux.step_hist.cumulative_energy_error_old;
     model.set_qs();
     model.set_xqs();
     model.set_m_and_dm();
     model.set_m_grav_and_grav();
     model.pack_xh();
     set_hydro_vars(model, false, false)?;
+    model.aux.burn_avg_epsnuc.fill(0.0);
     model.save_start_values();
     Ok(())
 }
 
-fn active_wind(model: &StarModel) -> (WindScheme, f64) {
-    if model.controls.dutch_scaling_factor > 0.0 {
-        (WindScheme::Dutch, model.controls.dutch_scaling_factor)
-    } else if model.controls.vink_scaling_factor > 0.0 {
-        (WindScheme::Vink, model.controls.vink_scaling_factor)
-    } else if model.controls.reimers_scaling_factor > 0.0 {
-        (WindScheme::Reimers, model.controls.reimers_scaling_factor)
-    } else if model.controls.blocker_scaling_factor > 0.0 {
-        (WindScheme::Blocker, model.controls.blocker_scaling_factor)
-    } else {
-        (WindScheme::None, 0.0)
-    }
-}
-
 /// Executes a single evolutionary step (`star_evolve_step` in `evolve.f90`):
-/// remeshing $\to$ stellar wind mass adjustment $\to$ structure/burn/mix solve
-/// with automatic $\Delta t$ retry halving $\to$ H211 timestep control.
+/// remeshing $\to$ stellar wind mass adjustment $\to$ pre-physics hooks $\to$
+/// structure/burn/mix solve with automatic $\Delta t$ retry cascade $\to$
+/// energy conservation and `timestep_controller`.
 ///
 /// # Errors
 /// Returns [`StarError::ConvergenceFailure`] if all retry attempts fail.
@@ -118,8 +121,6 @@ pub fn star_evolve_step(
     op_split_burn: bool,
     use_bcyclic: bool,
 ) -> Result<EvolveStepReport, StarError> {
-    const MAX_RETRIES: usize = 16;
-
     if model.controls.rsp_flag {
         if model.dt_next > 0.0 {
             model.dt = model.dt_next;
@@ -176,8 +177,15 @@ pub fn star_evolve_step(
     {
         set_hydro_vars(model, false, false)?;
         let dt_curr = model.dt.max(1.0);
-        crate::struct_burn_mix::refresh_mixing_state(model, dt_curr, &[]);
-        do_adjust_mesh(model, &MeshFunctionConfig::default())?
+        refresh_mixing_state(model, dt_curr, &[]);
+        let mut mesh_cfg = MeshFunctionConfig::from_controls(&model.controls);
+        if model.nz < 400 {
+            mesh_cfg.max_dq = mesh_cfg.max_dq.max(0.1);
+            mesh_cfg.max_surface_cell_dq =
+                mesh_cfg.max_surface_cell_dq.max(1.0);
+            mesh_cfg.max_center_cell_dq = mesh_cfg.max_center_cell_dq.max(1.0);
+        }
+        do_adjust_mesh(model, &mesh_cfg)?
     } else {
         (0, 0)
     };
@@ -185,6 +193,10 @@ pub fn star_evolve_step(
     // Snapshot post-remesh state into `*_old` so `varcontrol` and
     // `restore_from_old` operate on the current `nz` zone grid, preserving the
     // previous step's `dt_old` for the H211 filter.
+    if !model.controls.rsp2_flag && model.aux.total_energy == 0.0 {
+        model.aux.total_energy = eval_total_energy_integrals(model).5;
+    }
+    snapshot_step_history_old(model);
     model.save_old_values();
     model.dt_old = prev_dt_old;
     let rsp2_e_old = if model.controls.rsp2_flag {
@@ -201,86 +213,118 @@ pub fn star_evolve_step(
     if model.controls.rsp.max_timestep > 0.0 {
         dt_try = dt_try.min(model.controls.rsp.max_timestep);
     }
+    let prev_dt_limit_ratio_old = model.dt_limit_ratio_old;
+    let prev_rot_boost_old = model.aux.step_hist.rotational_mdot_boost_old;
+    let max_retries = model.controls.ts_stop.retry_limit.clamp(1, 100);
+    let retry_fac = model
+        .controls
+        .ts_stop
+        .timestep_factor_for_retries
+        .clamp(0.05, 0.95);
     let mut retries = 0_usize;
-    let (wind_scheme, wind_eta) = active_wind(model);
 
     loop {
         model.dt = dt_try;
-        let mass_ok = if wind_scheme != WindScheme::None && wind_eta > 0.0 {
-            let mdot = set_mdot(
-                model,
-                wind_scheme,
-                DutchLowTScheme::DeJager,
-                wind_eta,
-            );
-            if mdot == 0.0 {
-                Ok(())
-            } else {
-                do_adjust_mass(model, mdot * dt_try, None, 0.99, 0.95)
-            }
-        } else {
-            Ok(())
-        };
-
-        let attempt = mass_ok.and_then(|()| {
-            do_struct_burn_mix(model, dt_try, op_split_burn, use_bcyclic, &[])
-        });
+        if !model.controls.use_other_adjust_mdot {
+            do_set_mdot(model)?;
+        }
+        let attempt = do_adjust_mass_step(model, dt_try)
+            .and_then(|()| apply_step_pre_physics(model, dt_try))
+            .and_then(|()| {
+                do_struct_burn_mix(
+                    model,
+                    dt_try,
+                    op_split_burn,
+                    use_bcyclic,
+                    &[],
+                )
+            });
         match attempt {
             Ok(rep) if rep.converged => {
                 model.model_number += 1;
                 model.star_age += dt_try / SECYER;
                 model.dt = dt_try;
-                let ts_rep = pick_next_timestep(model, 1.2, 0.5, 1.0e-2);
-                let mut dt_next = ts_rep.dt_next;
-                if let Some(max_yr) = model.controls.max_years_for_timestep {
-                    dt_next = dt_next.min(max_yr * SECYER);
-                }
-                if model.controls.rsp.max_timestep > 0.0 {
-                    dt_next = dt_next.min(model.controls.rsp.max_timestep);
-                }
-                if model.controls.rsp2_flag {
-                    model.aux.rsp.time_old_sec = model.aux.rsp.time_sec;
-                    model.aux.rsp.time_sec += dt_try;
-                    let (etot, total_rad) =
-                        crate::rsp_driver::rsp_total_energy_integrals(model);
-                    model.aux.rsp.total_energy_old = rsp2_e_old;
-                    model.aux.cumulative_energy_error +=
-                        etot - (rsp2_e_old - total_rad);
-                    model.aux.total_energy = etot;
-                    update_rsp2_cycle_stats(model, dt_try, &mut dt_next);
-                }
-                model.dt_next = dt_next;
-                model.dt_old = dt_try;
+                update_step_energy_conservation(model, dt_try);
+                let (ts_action, ts_rep) = timestep_controller(model);
+                match ts_action {
+                    TimestepAction::KeepGoing => {
+                        let mut dt_next = ts_rep.dt_next;
+                        if let Some(max_yr) =
+                            model.controls.max_years_for_timestep
+                        {
+                            dt_next = dt_next.min(max_yr * SECYER);
+                        }
+                        if model.controls.rsp.max_timestep > 0.0 {
+                            dt_next =
+                                dt_next.min(model.controls.rsp.max_timestep);
+                        }
+                        if model.controls.rsp2_flag {
+                            model.aux.rsp.time_old_sec = model.aux.rsp.time_sec;
+                            model.aux.rsp.time_sec += dt_try;
+                            let (etot, total_rad) =
+                                crate::rsp_driver::rsp_total_energy_integrals(
+                                    model,
+                                );
+                            model.aux.rsp.total_energy_old = rsp2_e_old;
+                            model.aux.cumulative_energy_error +=
+                                etot - (rsp2_e_old - total_rad);
+                            model.aux.total_energy = etot;
+                            update_rsp2_cycle_stats(
+                                model,
+                                dt_try,
+                                &mut dt_next,
+                            );
+                        }
+                        model.dt_next = dt_next;
+                        model.dt_old = dt_try;
 
-                return Ok(EvolveStepReport {
-                    model_number: model.model_number,
-                    star_age: model.star_age,
-                    dt: dt_try,
-                    dt_next,
-                    iterations: rep.iterations,
-                    retries,
-                    num_splits,
-                    num_merges,
-                    varcontrol: ts_rep.varcontrol,
-                    converged: true,
-                });
-            }
-            Ok(_) | Err(_) => {
-                if retries >= MAX_RETRIES {
-                    restore_from_old(model)?;
-                    model.dt_old = prev_dt_old;
-                    return Err(StarError::ConvergenceFailure(format!(
-                        "star_evolve_step failed after {MAX_RETRIES} retries \
-                         (dt={dt_try:.3e} s)"
-                    )));
+                        return Ok(EvolveStepReport {
+                            model_number: model.model_number,
+                            star_age: model.star_age,
+                            dt: dt_try,
+                            dt_next,
+                            iterations: rep.iterations,
+                            retries,
+                            num_splits,
+                            num_merges,
+                            varcontrol: ts_rep.varcontrol,
+                            converged: true,
+                        });
+                    }
+                    TimestepAction::Retry(_) => {
+                        let target_mod = model.model_number;
+                        model.model_number -= 1;
+                        model.aux.step_hist.model_number_for_last_retry =
+                            Some(target_mod);
+                        model.aux.step_hist.timestep_hold =
+                            target_mod + model.controls.ts_stop.retry_hold;
+                    }
+                    TimestepAction::Terminate(reason) => {
+                        return Err(StarError::InvalidInput(reason));
+                    }
                 }
-                retries += 1;
-                model.num_retries += 1;
-                dt_try *= if retries >= 4 { 0.2 } else { 0.5 };
-                restore_from_old(model)?;
-                model.dt_old = prev_dt_old;
             }
+            Ok(_) | Err(_) => {}
         }
+        model.dt_limit_ratio_old = prev_dt_limit_ratio_old;
+        model.aux.step_hist.rotational_mdot_boost_old = prev_rot_boost_old;
+        if retries >= max_retries {
+            restore_from_old(model)?;
+            model.dt_old = prev_dt_old;
+            return Err(StarError::ConvergenceFailure(format!(
+                "star_evolve_step failed after {max_retries} retries \
+                 (dt={dt_try:.3e} s)"
+            )));
+        }
+        retries += 1;
+        model.num_retries += 1;
+        dt_try *= if retries >= 4 {
+            retry_fac.min(0.2)
+        } else {
+            retry_fac
+        };
+        restore_from_old(model)?;
+        model.dt_old = prev_dt_old;
     }
 }
 
@@ -367,6 +411,9 @@ pub fn star_evolve(
         let rep =
             star_evolve_step(model, do_remesh, op_split_burn, use_bcyclic)?;
         reports.push(rep);
+        if check_termination_limits(model).is_some() {
+            break;
+        }
     }
     Ok(reports)
 }

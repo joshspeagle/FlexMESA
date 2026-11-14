@@ -60,6 +60,7 @@
     clippy::unreadable_literal
 )]
 
+pub mod adjust_mass;
 pub mod case_staging;
 pub mod controls;
 mod controls_defaults;
@@ -68,7 +69,9 @@ pub mod controls_timestep_stop;
 pub mod core_boundaries;
 pub mod diffusion;
 pub mod eps_grav;
+pub mod eps_mdot;
 pub mod evolve;
+pub mod evolve_support;
 pub mod history;
 pub mod hydro_brunt_surf;
 pub mod hydro_energy;
@@ -87,11 +90,13 @@ pub mod inlist_runner;
 pub mod job_controls;
 pub mod mesh;
 pub mod mesh_adjust;
+pub mod mesh_remap;
 pub mod micro;
 pub mod micro_net;
 pub mod mix_info;
 pub mod model;
 pub mod model_io;
+pub mod omega_mix;
 pub mod overshoot;
 pub mod photo_io;
 pub mod pre_ms;
@@ -151,6 +156,7 @@ pub mod timestep;
 mod timestep_checks;
 pub mod timestep_limits;
 pub mod winds;
+pub mod winds_driver;
 pub mod zams;
 
 #[cfg(test)]
@@ -187,8 +193,15 @@ pub use diffusion::{
 pub use eps_grav::{
     eval_eps_grav, eval_eps_grav_lns_cell, eval_eps_grav_std_cell,
 };
+pub use eps_mdot::{
+    calculate_eps_mdot, eval_specific_total_energy_profile, find_mass_flux,
+};
 pub use evolve::{
     restore_from_old, star_evolve, star_evolve_step, EvolveStepReport,
+};
+pub use evolve_support::{
+    apply_step_pre_physics, eval_total_energy_integrals,
+    update_step_energy_conservation,
 };
 pub use history::{
     extract_history_row, format_history_header, format_history_row,
@@ -247,8 +260,9 @@ pub use pre_ms::{
     PreMsShell,
 };
 pub use premix::{
-    add_predictive_mixing, do_conv_premix, do_phase_separation,
-    eval_castellani_penetration_vel, eval_phase_separation_shift,
+    add_predictive_mixing, apply_predictive_mixing_from_controls,
+    do_conv_premix, do_phase_separation, eval_castellani_penetration_vel,
+    eval_phase_separation_shift,
 };
 pub use pulse::{
     build_pulse_points, build_pulse_points_with_options, eval_center_d2,
@@ -403,7 +417,8 @@ pub use timestep::{
 };
 pub use timestep_limits::timestep_controller;
 pub use winds::{
-    do_adjust_mass, eval_blocker_wind, eval_de_jager_wind, eval_dutch_wind,
+    do_adjust_mass, do_adjust_mass_step, do_set_mdot, eval_bjorklund_wind,
+    eval_blocker_wind, eval_de_jager_wind, eval_dutch_wind,
     eval_nieuwenhuijzen_wind, eval_nugis_lamers_wind, eval_reimers_wind,
     eval_van_loon_wind, eval_vink_wind, set_mdot, DutchLowTScheme, WindScheme,
 };

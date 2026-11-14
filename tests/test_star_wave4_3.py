@@ -182,6 +182,7 @@ def test_stellar_winds_and_3_region_mass_adjustment_parity() -> None:
         ("de Jager", "w_de_jager"),
         ("van Loon", "w_van_loon"),
         ("Dutch", "w_dutch"),
+        ("Bjorklund", "w_bjorklund"),
     ]:
         mdot_rust = zams.apply_wind_and_adjust_mass(
             scheme=scheme, eta=1.0, dt=0.0

@@ -184,10 +184,14 @@ pub struct MixWindControls {
     pub min_q_for_k_below_const_q: f64,
     /// Upper $q$ bound for Region I/II transition `k_below_const_q` (`max_q_for_k_below_const_q`).
     pub max_q_for_k_below_const_q: f64,
+    /// Maximum $\log_{10} T$ allowed for Region I/II transition `k_below_const_q` (`max_logT_for_k_below_const_q`).
+    pub max_logt_for_k_below_const_q: f64,
     /// Lower $q$ bound for Region II/III transition `k_const_mass` (`min_q_for_k_const_mass`).
     pub min_q_for_k_const_mass: f64,
     /// Upper $q$ bound for Region II/III transition `k_const_mass` (`max_q_for_k_const_mass`).
     pub max_q_for_k_const_mass: f64,
+    /// Maximum $\log_{10} T$ allowed for Region II/III transition `k_const_mass` (`max_logT_for_k_const_mass`).
+    pub max_logt_for_k_const_mass: f64,
     /// Multiplicative factor on `eps_mdot` (`eps_mdot_factor`, `1.0` default).
     pub eps_mdot_factor: f64,
     /// Multiplicative factor on radiative leakage in `eps_mdot` (`eps_mdot_leak_frac_factor`, `1.0` default).
@@ -281,10 +285,12 @@ impl Default for MixWindControls {
             min_star_mass_for_loss: -1.0,
             use_accreted_material_j: false,
             accreted_material_j: 0.0,
-            min_q_for_k_below_const_q: 0.995,
-            max_q_for_k_below_const_q: 0.999,
-            min_q_for_k_const_mass: 0.99,
-            max_q_for_k_const_mass: 0.995,
+            min_q_for_k_below_const_q: 0.999,
+            max_q_for_k_below_const_q: 1.0,
+            max_logt_for_k_below_const_q: 5.0,
+            min_q_for_k_const_mass: 0.995,
+            max_q_for_k_const_mass: 1.0,
+            max_logt_for_k_const_mass: 6.0,
             eps_mdot_factor: 1.0,
             eps_mdot_leak_frac_factor: 1.0,
             eps_wd_sedimentation_factor: 1.0,

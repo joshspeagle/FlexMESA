@@ -438,6 +438,7 @@ pub fn do_element_diffusion(
     let mut v_gt_all = vec![0.0; nz * nc];
     let mut d_self_all = vec![0.0; nz * nc];
     let mut eps_wd_sed = vec![0.0; nz];
+    let wd_sed_fac = model.controls.mix_wind.eps_wd_sedimentation_factor;
 
     for k in 0..nz {
         let t_k = model.t[k].max(1.0e3);
@@ -469,10 +470,11 @@ pub fn do_element_diffusion(
             v_gt_all[k * nc + j] = res.v_gt[j];
             d_self_all[k * nc + j] = res.d_self[j];
         }
-        if model.gam[k] > 1.0 {
-            eps_wd_sed[k] = eval_wd_sedimentation_heating(
-                &a_iso, &z_typ, x_slice, &res.v_gt, abar_k, zbar_k, g_k,
-            );
+        if model.gam[k] > 1.0 && wd_sed_fac != 0.0 {
+            eps_wd_sed[k] = wd_sed_fac
+                * eval_wd_sedimentation_heating(
+                    &a_iso, &z_typ, x_slice, &res.v_gt, abar_k, zbar_k, g_k,
+                );
         }
     }
 
@@ -547,6 +549,8 @@ pub fn do_element_diffusion(
                 model.xa[k * nc + j] = sol[k];
             }
         }
+        model.aux.step_hist.num_diffusion_solver_steps = 1;
+        model.aux.step_hist.num_diffusion_solver_iters = nc;
     }
 
     (v_gt_all, eps_wd_sed)

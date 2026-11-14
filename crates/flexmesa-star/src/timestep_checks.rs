@@ -353,14 +353,22 @@ pub(crate) fn check_structural_limits(
     if !model.aux.doing_relax && nz > 0 {
         let c_idx = nz - 1;
         if model.ln_t_start.len() == nz {
-            ratio = ratio.max(check_change(
-                (model.ln_t[c_idx] - model.ln_t_start[c_idx]) / LN_10,
-                ts.delta_lgt_cntr_limit,
-                ts.delta_lgt_cntr_hard_limit,
-                coeff,
-                "delta_lgT_cntr",
-                skip_hard_limit,
-            )?);
+            let p_cat = compute_power_categories(model);
+            let l_surf_lsun = model.surface_l_lsun();
+            let before_near_zams = model.xh_mass[c_idx] > 0.1
+                && l_surf_lsun > 0.0
+                && (p_cat.power_nuc_burn / l_surf_lsun)
+                    < model.controls.lnuc_div_l_zams_limit;
+            if !before_near_zams {
+                ratio = ratio.max(check_change(
+                    (model.ln_t[c_idx] - model.ln_t_start[c_idx]) / LN_10,
+                    ts.delta_lgt_cntr_limit,
+                    ts.delta_lgt_cntr_hard_limit,
+                    coeff,
+                    "delta_lgT_cntr",
+                    skip_hard_limit,
+                )?);
+            }
             let lnt_max =
                 model.ln_t.iter().copied().fold(f64::NEG_INFINITY, f64::max);
             let lnt_max_s = model

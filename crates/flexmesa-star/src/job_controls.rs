@@ -383,6 +383,8 @@ pub struct StarJobControls {
     pub new_y: f64,
     /// Whether to set or relax `tau_factor` (`set_tau_factor` / `relax_tau_factor`).
     pub set_tau_factor: bool,
+    /// Whether optical depth should be relaxed (`relax_tau_factor` / `relax_initial_tau_factor`).
+    pub relax_tau_factor: bool,
     /// Target `tau_factor` (`set_to_this_tau_factor` / `relax_to_this_tau_factor`).
     pub set_to_this_tau_factor: f64,
     /// Whether to relax inner core boundary (`relax_core` / `relax_M_center`).
@@ -495,6 +497,7 @@ impl Default for StarJobControls {
             relax_y: false,
             new_y: -1.0,
             set_tau_factor: false,
+            relax_tau_factor: false,
             set_to_this_tau_factor: 1.0,
             relax_m_center: false,
             new_core_mass: 0.0,

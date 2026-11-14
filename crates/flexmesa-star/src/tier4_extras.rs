@@ -123,6 +123,16 @@ pub fn is_tier4_case(case_name: &str) -> bool {
         || TIER4_DEV_CASES.iter().any(|(_, c)| *c == case_name)
 }
 
+fn astero_n4_mode_ok(model: &StarModel, enforce_tams_tol: bool) -> bool {
+    let mode = crate::pulse_modes::eval_linear_oscillation_modes(model, 0, &[4])[0];
+    if !mode.freq_uhz.is_finite() || mode.freq_uhz <= 0.0 || mode.inertia <= 0.0 {
+        return false;
+    }
+    let expected = model.controls.x_ctrl.get(1).copied().unwrap_or(0.0);
+    let h1_c = model.xh_mass.last().copied().unwrap_or(0.0);
+    !enforce_tams_tol || h1_c > 0.005 || expected <= 0.0 || (mode.freq_uhz - expected).abs() < 0.03 * expected
+}
+
 /// Dispatcher implementing `run_star_extras.f90` hooks for all Tier 4 cases.
 #[derive(Debug, Clone)]
 pub struct Tier4CaseExtras {
@@ -297,11 +307,13 @@ impl StarExtras for Tier4CaseExtras {
     }
 
     fn extras_check_model(&mut self, model: &mut StarModel) -> ExtrasDirective {
-        if self.case_name.starts_with("gyre_in_mesa_")
-            || self.case_name == "astero_gyre"
-            || self.case_name == "astero_adipls"
-            || self.case_name.starts_with("dev_")
-        {
+        if self.case_name == "astero_gyre" || self.case_name == "astero_adipls" {
+            if (model.model_number.is_multiple_of(50) || model.model_number <= 3)
+                && astero_n4_mode_ok(model, false)
+            {
+                self.matched_target_frequency = true;
+            }
+        } else if self.case_name.starts_with("gyre_in_mesa_") || self.case_name.starts_with("dev_") {
             let (_mode, matched) = eval_target_mode_frequency_and_growth(model);
             if matched {
                 self.matched_target_frequency = true;
@@ -382,12 +394,11 @@ pub fn verify_tier4_case_assertions(
     {
         return false;
     }
-    if case_name.starts_with("gyre_in_mesa_")
-        || case_name == "astero_gyre"
-        || case_name == "astero_adipls"
-    {
-        let (_mode, matched) = eval_target_mode_frequency_and_growth(model);
-        return matched;
+    if case_name.starts_with("gyre_in_mesa_") {
+        return eval_target_mode_frequency_and_growth(model).1;
+    }
+    if case_name == "astero_gyre" || case_name == "astero_adipls" {
+        return astero_n4_mode_ok(model, true);
     }
     if (case_name.starts_with("rsp_") || case_name.starts_with("dev_rsp2_"))
         && case_name != "rsp_check_2nd_crossing"

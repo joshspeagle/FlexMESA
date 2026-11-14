@@ -215,10 +215,15 @@ fn assert_uncapped_case_passes(case_name: &str) {
     assert_eq!(rep.case_name, case_name);
     assert!(
         rep.passed,
-        "astero case {} failed: assertions_passed={}, restart_verified={}, term={}",
+        "astero case {} failed: assertions_passed={}, restart_verified={}, steps={}, teff={:.1}, logL={:.4}, logR={:.4}, h1c={:.5}, term={}",
         rep.case_name,
         rep.assertions_passed,
         rep.photo_restart_verified,
+        rep.total_steps,
+        rep.final_teff,
+        rep.final_log_l,
+        rep.final_log_r,
+        rep.final_center_h1,
         rep.termination_code
     );
     assert!(rep.photo_restart_verified);

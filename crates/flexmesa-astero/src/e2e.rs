@@ -362,20 +362,15 @@ fn run_astero_search_case(
     let case_dir = staging.staged_dir.as_path();
     let ctrl = parse_astero_search_controls(case_dir).map_err(StarError::InvalidInput)?;
 
-    let mut bundle = InlistBundle::from_file_in_case_dir(case_dir, "inlist")?;
-    if let Some(cap) = max_steps_per_stage {
-        bundle.controls.max_model_number =
-            Some(bundle.controls.max_model_number.map_or(cap, |m| m.min(cap)));
-    }
-    let mut extras = DefaultStarExtras;
-    let init_model = init_or_update_model_from_bundle(&bundle, None, &mut extras)?;
+    let search_rep = run_star_astero(case_dir, "inlist", max_steps_per_stage, &ctrl)?;
+    let last_mod = search_rep.last_model.as_ref().ok_or_else(|| {
+        StarError::ConvergenceFailure(format!("{case_name}: no astero tracks evaluated"))
+    })?;
     let mut photo_restart_verified = false;
     if verify_restart {
-        let (c1, c2) = verify_photo_restart_parity(&init_model, 1)?;
+        let (c1, c2) = verify_photo_restart_parity(last_mod, 1)?;
         photo_restart_verified = c1 == c2;
     }
-
-    let search_rep = run_star_astero(case_dir, "inlist", max_steps_per_stage, &ctrl)?;
     let best = search_rep.best_sample_idx.and_then(|i| search_rep.samples.get(i));
 
     let assertions_passed = best.is_some_and(|b| {
@@ -396,7 +391,7 @@ fn run_astero_search_case(
             }
     });
 
-    let mut hr = extract_history_row(&init_model);
+    let mut hr = extract_history_row(last_mod);
     if let Some(b) = best {
         hr.model_number = b.model_number;
         hr.star_age = b.age_yr;
@@ -413,8 +408,9 @@ fn run_astero_search_case(
         total_newton_iterations: search_rep.total_steps * 2,
         total_retries: 0,
         termination_code: format!(
-            "astero_{}_samples={}_best_chi2={:.6e}",
-            search_rep.search_type, search_rep.samples.len(), search_rep.best_chi2
+            "astero_{}_samples={}_best_chi2={:.6e}_term={}",
+            search_rep.search_type, search_rep.samples.len(),
+            search_rep.best_chi2, search_rep.last_termination,
         ),
         runtime_sec, final_history: hr, history_rows: vec![hr],
     };

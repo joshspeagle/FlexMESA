@@ -195,7 +195,7 @@ fn eval_face_mlt(
                 MixingType::NoMixing,
             )
         } else {
-            let mlt_opt = if model.controls.steps_before_use_tdc > 0 {
+            let mlt_opt = if !model.aux.doing_relax && model.controls.steps_before_use_tdc > 0 {
                 if (model.model_number as isize) >= model.controls.steps_before_use_tdc {
                     MltOption::Tdc
                 } else {
@@ -556,9 +556,12 @@ pub(crate) fn eval_conv_mx1_bot(model: &StarModel) -> f64 {
 /// being fully convective) or `L_nuc / L_phot > 0.1`, then resets age and step.
 pub(crate) fn relax_pre_ms_to_radiative_core(model: &mut StarModel) -> Result<(), StarError> {
     let saved_ctrl = model.controls.clone();
-    let (saved_dt, saved_dt_next, saved_dt_old) = (model.dt, model.dt_next, model.dt_old);
     model.aux.doing_relax = true;
+    model.model_number = 0;
     let c = &mut model.controls;
+    if c.mlt_option == MltOption::Tdc {
+        c.mlt_option = MltOption::Cox;
+    }
     (c.atm_option, c.atm_t_tau_relation, c.pextra_factor) =
         (crate::job_controls::AtmOption::TTau, crate::job_controls::AtmTTauRelation::Eddington, 2.0);
     (c.dxdt_nuc_factor, c.ts_stop.max_timestep_factor, c.mass_change, c.use_other_wind) =
@@ -582,7 +585,6 @@ pub(crate) fn relax_pre_ms_to_radiative_core(model: &mut StarModel) -> Result<()
         }
     }
     model.controls = saved_ctrl;
-    (model.dt, model.dt_next, model.dt_old) = (saved_dt, saved_dt_next, saved_dt_old);
     model.aux.doing_relax = false;
     (model.star_age, model.star_age_old, model.model_number, model.num_retries) = (0.0, 0.0, 1, 0);
     model.aux.cumulative_energy_error = 0.0;

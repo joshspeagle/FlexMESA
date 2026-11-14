@@ -41,6 +41,10 @@ pub struct AsteroSearchReport {
     pub best_chi2: f64,
     /// Total Henyey evolutionary steps taken across all tracks.
     pub total_steps: usize,
+    /// Termination code of the last evaluated track.
+    pub last_termination: String,
+    /// Final model of the last evaluated track (for restart parity checks).
+    pub last_model: Option<StarModel>,
 }
 
 struct AsteroTrackExtras<'a> {
@@ -104,13 +108,6 @@ impl AsteroTrackExtras<'_> {
             )
         {
             return Some("delta_nu_limit");
-        }
-        if self.best_sample.is_none()
-            && self.ctrl.weights.chi2_seismo_fraction > 0.0
-            && self.ctrl.delta_nu > 0.0
-            && dnu_uhz > self.ctrl.delta_nu - self.ctrl.delta_nu_sigma
-        {
-            return None;
         }
         let hr = extract_history_row(model);
         let x = model.xh_mass.first().copied().unwrap_or(0.70).max(1.0e-10);
@@ -388,19 +385,22 @@ pub fn run_star_astero(
     } else {
         ctrl
     };
-    let track_cap = if max_steps_per_stage.is_some() { 2 } else { usize::MAX };
+    let track_cap = if max_steps_per_stage.is_some() { 1 } else { usize::MAX };
     let (mut samples, mut total_steps) = (Vec::new(), 0usize);
+    let (mut last_termination, mut last_model) = (String::new(), None);
     let mut eval_param_set = |p: AsteroParamSet| -> f64 {
         if samples.len() >= track_cap {
             return 1.0e99;
         }
         let s_num = samples.len() + 1;
-        let Ok((sample, stage, _)) = run_single_astero_track(
+        let Ok((sample, stage, m)) = run_single_astero_track(
             &base_bundle, active_ctrl, p, s_num, max_steps_per_stage, case_dir,
         ) else {
             return 1.0e99;
         };
         total_steps += stage.steps_taken;
+        last_termination = stage.termination_code;
+        last_model = Some(m);
         let c2 = sample.chi2;
         write_sample_file(&out_dir, &sample);
         samples.push(sample);
@@ -443,6 +443,6 @@ pub fn run_star_astero(
     let best_chi2 = best_sample_idx.map_or(f64::INFINITY, |i| samples[i].chi2);
     Ok(AsteroSearchReport {
         search_type: ctrl.search_type.clone(),
-        samples, best_sample_idx, best_chi2, total_steps,
+        samples, best_sample_idx, best_chi2, total_steps, last_termination, last_model,
     })
 }

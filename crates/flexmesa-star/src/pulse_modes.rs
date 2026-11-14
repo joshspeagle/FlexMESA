@@ -517,21 +517,16 @@ pub fn eval_target_mode_frequency_and_growth(
     model: &StarModel,
 ) -> (LinearOscillationMode, bool) {
     let l = model.controls.x_integer_ctrl.get(3).copied().unwrap_or(0).max(0) as usize;
+    let n_target = model
+        .controls
+        .x_integer_ctrl
+        .get(4)
+        .copied()
+        .filter(|&n| n != 0)
+        .unwrap_or(1) as i32;
+    let mode = eval_linear_oscillation_modes(model, l, &[n_target])[0];
     let x1 = model.controls.x_ctrl.get(1).copied().unwrap_or(0.0);
     let x2 = model.controls.x_ctrl.get(2).copied().unwrap_or(-1.0);
-    let n_ctrl = model.controls.x_integer_ctrl.get(4).copied().unwrap_or(0);
-    let is_astero_n4 = n_ctrl == 0 && x1 > 100.0 && (0.0..1.0).contains(&x2);
-    let n_target = if n_ctrl != 0 { n_ctrl as i32 } else if is_astero_n4 { 4 } else { 1 };
-    let mode = eval_linear_oscillation_modes(model, l, &[n_target])[0];
-    if is_astero_n4 {
-        let h1_c = model.xh_mass.last().copied().unwrap_or(0.0);
-        let ok = if h1_c <= 0.005 {
-            (mode.freq_uhz - x1).abs() <= x2 * x1
-        } else {
-            mode.freq_uhz.is_finite() && mode.freq_uhz > 0.0 && mode.inertia > 0.0
-        };
-        return (mode, ok);
-    }
     let freq_target_hz = if x1 > 10.0 { x1 * 1.0e-6 } else if x1 > 0.0 { x1 } else { mode.freq_hz };
     let freq_ok = if (mode.freq_hz - freq_target_hz).abs()
         <= 0.50 * freq_target_hz.max(mode.freq_hz)

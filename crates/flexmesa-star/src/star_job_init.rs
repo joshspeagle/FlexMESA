@@ -581,7 +581,6 @@ pub fn init_or_update_model_from_bundle(
         crate::relax::settle_relaxed_loaded_model(&mut model)?;
     }
     if did_create_pre_ms
-        && model.controls.max_model_number.is_none_or(|m| m > 10)
         && model.mstar / M_SUN >= 0.3
         && bundle
             .sections

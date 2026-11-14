@@ -10,6 +10,15 @@ use crate::controls::StarError;
 use crate::model::StarModel;
 use crate::winds::{eval_scheme_rate, DutchLowTScheme, WindScheme};
 
+#[inline]
+fn surface_teff(model: &StarModel, l_surf: f64, r_surf: f64) -> f64 {
+    if model.teff > 0.0 {
+        model.teff
+    } else {
+        (l_surf / (PI * r_surf * r_surf * CRAD * CLIGHT)).powf(0.25)
+    }
+}
+
 /// Evaluates a single wind scheme and writes `model.mstar_dot` (`g s^-1`).
 pub fn set_mdot(
     model: &mut StarModel,
@@ -24,11 +33,7 @@ pub fn set_mdot(
     let l_surf = model.lum[0].max(1.0);
     let m_surf = model.m_grav[0].max(1.0);
     let r_surf = model.r[0].max(1.0);
-    let t_surf = if model.teff > 0.0 {
-        model.teff
-    } else {
-        (l_surf / (PI * r_surf * r_surf * CRAD * CLIGHT)).powf(0.25)
-    };
+    let t_surf = surface_teff(model, l_surf, r_surf);
     let cgrav = model.cgrav.first().copied().unwrap_or(STANDARD_CGRAV);
     let x_surf = model.xh_mass.first().copied().unwrap_or(0.70);
     let y_surf = model.yhe_mass.first().copied().unwrap_or(0.28);
@@ -90,11 +95,7 @@ pub fn do_set_mdot(model: &mut StarModel) -> Result<f64, StarError> {
 
     let l1 = model.lum[0].max(1.0);
     let m1 = model.m_grav[0].max(1.0);
-    let t1 = if model.teff > 0.0 {
-        model.teff
-    } else {
-        (l1 / (PI * model.r[0].max(1.0).powi(2) * CRAD * CLIGHT)).powf(0.25)
-    };
+    let t1 = surface_teff(model, l1, model.r[0].max(1.0));
     let r1 = (l1 / (PI * CRAD * CLIGHT * t1.powi(4))).sqrt().max(1.0);
     let cgrav = model.cgrav.first().copied().unwrap_or(STANDARD_CGRAV);
     let kap_surf = model.opacity.first().copied().unwrap_or(0.34).max(1.0e-4);
@@ -275,10 +276,9 @@ pub fn do_set_mdot(model: &mut StarModel) -> Result<f64, StarError> {
     let mut rot_boost = 1.0_f64;
     if mdot_out < 0.0 && c.rotation_flag && mw.mdot_omega_power > 0.0 {
         let base_w = -mdot_out;
-        let gamma_edd = (l1 / l_edd.max(1.0)).clamp(0.0, 0.999_999);
-        let omega_crit = ((1.0 - gamma_edd) * cgrav * m1 / r1.powi(3))
-            .max(0.0)
-            .sqrt();
+        let omega_crit = crate::rotation::eval_omega_crit(
+            cgrav, m1, r1, l1, kap_surf, 0.999_999,
+        );
         let w_div_wc = if omega_crit > 0.0 {
             (model.omega[0].abs() / omega_crit).clamp(0.0, 1.0)
         } else {

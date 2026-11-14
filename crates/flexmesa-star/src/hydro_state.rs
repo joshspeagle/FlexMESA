@@ -208,6 +208,8 @@ pub struct HydroAuxState {
     pub omega_old: Vec<f64>,
     /// Previous-step specific angular momentum $j_{\mathrm{rot,old},k}$ (`j_rot_old`).
     pub j_rot_old: Vec<f64>,
+    /// Previous-step mass-change heating rate $\epsilon_{\dot{M},\mathrm{old},k}$ for step retry.
+    pub eps_mdot_old: Vec<f64>,
     /// Per-step scalar history, solver/substep counters, and retry-hold state.
     pub step_hist: StepHistoryScalars,
 }
@@ -276,6 +278,7 @@ impl HydroAuxState {
             rsp: crate::rsp_def::RspState::new(nz),
             omega_old: vec![0.0; nz],
             j_rot_old: vec![0.0; nz],
+            eps_mdot_old: vec![0.0; nz],
             step_hist: StepHistoryScalars::default(),
         }
     }
@@ -321,6 +324,7 @@ impl HydroAuxState {
             &mut self.brunt_n2_composition_term,
             &mut self.omega_old,
             &mut self.j_rot_old,
+            &mut self.eps_mdot_old,
         ] {
             v.resize(nz, 0.0);
         }

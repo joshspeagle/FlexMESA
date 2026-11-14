@@ -501,10 +501,8 @@ pub fn relax_from_profile_files(model: &mut StarModel, case_dir: &Path) {
 /// Returns [`StarError`] if refreshing hydrodynamic state fails after settling.
 pub(crate) fn settle_relaxed_loaded_model(
     model: &mut StarModel,
-    active: bool,
 ) -> Result<(), crate::controls::StarError> {
-    if !active
-        || !(model.job.relax_tau_factor || model.job.relax_mass)
+    if !(model.job.relax_tau_factor || model.job.relax_mass)
         || model.dt >= 10.0 * flexmesa_const::SECYER
     {
         return Ok(());

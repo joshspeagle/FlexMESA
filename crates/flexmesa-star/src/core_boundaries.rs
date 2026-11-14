@@ -67,16 +67,11 @@ pub struct PowerCategories {
 }
 
 #[inline]
-fn find0(x1: f64, y1: f64, x2: f64, y2: f64) -> f64 {
-    let dy = y2 - y1;
-    if dy.abs() <= 1.0e-99 {
-        0.5 * (x1 + x2)
-    } else {
-        x1 - y1 * (x2 - x1) / dy
-    }
+fn find0_or_mid(x1: f64, y1: f64, x2: f64, y2: f64) -> f64 {
+    flexmesa_num::find0(x1, y1, x2, y2).unwrap_or(0.5 * (x1 + x2))
 }
 
-fn dominant_species_index(row: &[f64]) -> usize {
+pub(crate) fn dominant_species_index(row: &[f64]) -> usize {
     let mut best_j = 0usize;
     let mut best_x = f64::NEG_INFINITY;
     for (j, &x) in row.iter().enumerate() {
@@ -86,6 +81,34 @@ fn dominant_species_index(row: &[f64]) -> usize {
         }
     }
     best_j
+}
+
+/// Sub-cell core mass fraction $q_{\mathrm{core}}$ from crossing `target` between
+/// zones `k - 1` and `k`.
+fn interp_core_q_threshold(
+    model: &StarModel,
+    k: usize,
+    y_m1: f64,
+    y_00: f64,
+    target: f64,
+) -> f64 {
+    if k == 0 {
+        return 1.0;
+    }
+    let qm1 = model.q[k - 1] - 0.5 * model.dq[k - 1];
+    let q00 = model.q[k] - 0.5 * model.dq[k];
+    let dm1 = y_m1 - target;
+    let d00 = y_00 - target;
+    let core_q = if dm1 * d00 > 0.0 || (dm1 == 0.0 && d00 == 0.0) {
+        0.5 * (qm1 + q00)
+    } else if dm1 == 0.0 {
+        qm1
+    } else if d00 == 0.0 {
+        q00
+    } else {
+        find0_or_mid(qm1, dm1, q00, d00)
+    };
+    core_q.clamp(0.0, 1.0)
 }
 
 /// Sub-cell core mass fraction $q_{\mathrm{core}}$ from dominant-species
@@ -110,7 +133,7 @@ fn interp_core_q_species(model: &StarModel, k: usize) -> f64 {
     } else if d00 == 0.0 {
         q00
     } else {
-        find0(qm1, dm1, q00, d00)
+        find0_or_mid(qm1, dm1, q00, d00)
     };
     core_q.clamp(0.0, 1.0)
 }
@@ -160,24 +183,29 @@ pub fn compute_core_masses(model: &StarModel) -> CoreMasses {
 
     for k in 0..nz {
         if model.ye[k] <= ts.neutron_rich_core_boundary_ye_max {
-            let core_q = interp_core_q_species(model, k);
+            let core_q = if k == 0 {
+                1.0
+            } else {
+                interp_core_q_threshold(
+                    model,
+                    k,
+                    model.ye[k - 1],
+                    model.ye[k],
+                    ts.neutron_rich_core_boundary_ye_max,
+                )
+            };
             out.neutron_rich_core_k = Some(k);
             out.neutron_rich_core_mass = q_to_core_mass_msun(model, core_q);
             break;
         }
     }
 
-    let mut have_fe = false;
-    let mut have_one = false;
-    let mut have_co = false;
-    let mut have_he = false;
-
     for k in 0..nz {
         let row = model.cell_xa(k);
         let j_dom = dominant_species_index(row);
         let a_max = a_of[j_dom];
 
-        if !have_fe {
+        if out.fe_core_k.is_none() {
             let hit_fe = if ts.fe_core_boundary_si28_fraction < 0.0 {
                 a_max >= A_MAX_FE
             } else if let Some(j_si) = si28 {
@@ -194,16 +222,27 @@ pub fn compute_core_masses(model: &StarModel) -> CoreMasses {
                 false
             };
             if hit_fe {
-                let core_q = interp_core_q_species(model, k);
+                let core_q =
+                    if ts.fe_core_boundary_si28_fraction < 0.0 || k == 0 {
+                        interp_core_q_species(model, k)
+                    } else if let Some(j_si) = si28 {
+                        interp_core_q_threshold(
+                            model,
+                            k,
+                            model.cell_xa(k - 1)[j_si],
+                            row[j_si],
+                            ts.fe_core_boundary_si28_fraction,
+                        )
+                    } else {
+                        interp_core_q_species(model, k)
+                    };
                 out.fe_core_k = Some(k);
                 out.fe_core_mass = q_to_core_mass_msun(model, core_q);
-                have_fe = true;
-                let _ = have_fe;
                 break;
             }
         }
 
-        if !have_one {
+        if out.one_core_k.is_none() {
             let hit_one = if ts.one_core_boundary_he4_c12_fraction < 0.0 {
                 a_max >= A_MAX_ONE
             } else if let (Some(j_he), Some(j_c), Some(j_o), Some(j_ne)) =
@@ -215,14 +254,27 @@ pub fn compute_core_masses(model: &StarModel) -> CoreMasses {
                 false
             };
             if hit_one {
-                let core_q = interp_core_q_species(model, k);
+                let core_q =
+                    if ts.one_core_boundary_he4_c12_fraction < 0.0 || k == 0 {
+                        interp_core_q_species(model, k)
+                    } else if let (Some(j_he), Some(j_c)) = (he4, c12) {
+                        let row_m1 = model.cell_xa(k - 1);
+                        interp_core_q_threshold(
+                            model,
+                            k,
+                            row_m1[j_he] + row_m1[j_c],
+                            row[j_he] + row[j_c],
+                            ts.one_core_boundary_he4_c12_fraction,
+                        )
+                    } else {
+                        interp_core_q_species(model, k)
+                    };
                 out.one_core_k = Some(k);
                 out.one_core_mass = q_to_core_mass_msun(model, core_q);
-                have_one = true;
             }
         }
 
-        if !have_co {
+        if out.co_core_k.is_none() {
             let hit_co = if ts.co_core_boundary_he4_fraction < 0.0 {
                 a_max >= A_MAX_CO
             } else if let (Some(j_he), Some(j_c), Some(j_o)) = (he4, c12, o16) {
@@ -232,14 +284,26 @@ pub fn compute_core_masses(model: &StarModel) -> CoreMasses {
                 false
             };
             if hit_co {
-                let core_q = interp_core_q_species(model, k);
+                let core_q = if ts.co_core_boundary_he4_fraction < 0.0 || k == 0
+                {
+                    interp_core_q_species(model, k)
+                } else if let Some(j_he) = he4 {
+                    interp_core_q_threshold(
+                        model,
+                        k,
+                        model.cell_xa(k - 1)[j_he],
+                        row[j_he],
+                        ts.co_core_boundary_he4_fraction,
+                    )
+                } else {
+                    interp_core_q_species(model, k)
+                };
                 out.co_core_k = Some(k);
                 out.co_core_mass = q_to_core_mass_msun(model, core_q);
-                have_co = true;
             }
         }
 
-        if !have_he {
+        if out.he_core_k.is_none() {
             let hit_he = if ts.he_core_boundary_h1_fraction < 0.0 {
                 a_max >= A_MAX_HE
             } else if let (Some(j_h), Some(j_he)) = (h1, he4) {
@@ -249,10 +313,22 @@ pub fn compute_core_masses(model: &StarModel) -> CoreMasses {
                 false
             };
             if hit_he {
-                let core_q = interp_core_q_species(model, k);
+                let core_q = if ts.he_core_boundary_h1_fraction < 0.0 || k == 0
+                {
+                    interp_core_q_species(model, k)
+                } else if let Some(j_h) = h1 {
+                    interp_core_q_threshold(
+                        model,
+                        k,
+                        model.cell_xa(k - 1)[j_h],
+                        row[j_h],
+                        ts.he_core_boundary_h1_fraction,
+                    )
+                } else {
+                    interp_core_q_species(model, k)
+                };
                 out.he_core_k = Some(k);
                 out.he_core_mass = q_to_core_mass_msun(model, core_q);
-                have_he = true;
             }
         }
     }
@@ -352,6 +428,7 @@ pub fn snapshot_step_history_old(model: &mut StarModel) {
     let mdot = model.mstar_dot;
     model.aux.omega_old.clone_from(&model.omega);
     model.aux.j_rot_old.clone_from(&model.j_rot);
+    model.aux.eps_mdot_old.clone_from(&model.eps_mdot);
     let sh = &mut model.aux.step_hist;
     sh.teff_old = teff;
     sh.l_surf_old = l_surf;

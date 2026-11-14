@@ -523,9 +523,14 @@ pub(crate) fn check_luminosity_and_hr_limits(
     }
 
     if !model.aux.doing_relax {
-        if model.teff > 0.0 && sh.teff_old > 0.0 {
+        let dlgteff = if model.teff > 0.0 && sh.teff_old > 0.0 {
+            Some((model.teff / sh.teff_old).log10())
+        } else {
+            None
+        };
+        if let Some(dt_eff) = dlgteff {
             ratio = ratio.max(check_change(
-                (model.teff / sh.teff_old).log10(),
+                dt_eff,
                 ts.delta_lgteff_limit,
                 ts.delta_lgteff_hard_limit,
                 coeff,
@@ -547,10 +552,9 @@ pub(crate) fn check_luminosity_and_hr_limits(
                 "delta_lgL",
                 skip_hard_limit,
             )?);
-            if model.teff > 0.0 && sh.teff_old > 0.0 {
-                let dlgteff = (model.teff / sh.teff_old).log10();
+            if let Some(dt_eff) = dlgteff {
                 let dhr = ((ts.delta_hr_ds_l * dlgl).powi(2)
-                    + (ts.delta_hr_ds_teff * dlgteff).powi(2))
+                    + (ts.delta_hr_ds_teff * dt_eff).powi(2))
                 .sqrt();
                 ratio = ratio.max(check_change(
                     dhr,

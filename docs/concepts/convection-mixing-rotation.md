@@ -51,12 +51,12 @@ Because `FlexMESA` applies the Implicit Function Theorem at the converged scalar
 - **Salt-Finger Thermohaline Mixing (`set_thermohaline` in `set_mlt_vars`)**: In Schwarzschild-stable faces ($\nabla_r < \nabla_L$) destabilized by an inverted mean-molecular-weight gradient ($B_k < 0$) with `thermohaline_coeff > 0`, `set_mlt_vars` dispatches to `set_thermohaline` (`Kippenhahn`, `TraxlerGaraudStellmach11`, or `BrownGaraudStellmach13`) to compute double-diffusive salt-finger diffusivity $D_{\mathrm{thrm}}$.
 
 ### 2.2 Overshooting, Convective Premixing (`CPM`) & Predictive Mixing (`flexmesa.star`)
-- **Exponential & Step Convective Overshooting (`OvershootConfig`, `update_mixing`)**: `model.update_mixing()` (backed by `flexmesa_star::locate_convection_boundaries` in Safe Rust) detects sub-cell Schwarzschild or Ledoux sign crossings $(\nabla_r - \nabla_{\mathrm{crit}} = 0)$ and extends the convective diffusion coefficient beyond the boundary from an anchor point $r_0$ at distance $f_0 H_P$ inside the convection zone:
+- **16-Set Exponential & Step Convective Overshooting (`OvershootConfig`, `OvershootParamSet`, `update_mixing`)**: `model.update_mixing()` (backed by `flexmesa_star::locate_convection_boundaries` and `apply_overshooting` in Safe Rust) detects sub-cell Schwarzschild or Ledoux sign crossings $(\nabla_r - \nabla_{\mathrm{crit}} = 0)$, evaluates up to 16 `overshoot_sets` in upstream MESA priority order with `'none'` short-circuiting, optionally caps $H_{P,\mathrm{cb}}$ by the convection-zone radial thickness (`limit_overshoot_Hp_using_size_of_convection_zone`), applies Péclet-number thermal damping (`peclet_function_full_on`/`off`), and extends the convective diffusion coefficient beyond the boundary from an anchor point $r_0$ at distance $f_0 H_P$ inside the convection zone:
 
   $$D_{\mathrm{ov}}(r) = D_0 \exp\!\left(-\frac{2\,|r - r_0|}{f\,H_P}\right).$$
 
 - **Convective Premixing (`do_conv_premix`)**: Following Paxton et al. (2019, §5), iteratively tests whether mixing an adjacent radiative shell into a convective core or shell causes that radiative shell to become convectively unstable ($\nabla_r > \nabla_{\mathrm{ad}}$), advancing the convective boundary to self-consistent neutrality before the coupled Henyey step.
-- **Predictive Mixing (`add_predictive_mixing`)**: Following Paxton et al. (2018, §2), regulates convective boundary growth during core hydrogen and helium burning by limiting single-step mass ingestion and enforcing a minimum superadiabaticity threshold ($\nabla_r / \nabla_{\mathrm{ad}} - 1 > \delta_{\mathrm{superad}}$) on the convective side of the boundary.
+- **Multi-Set Predictive Mixing (`add_predictive_mixing`, `apply_predictive_mixing_from_controls`)**: Following Paxton et al. (2018, §2), evaluates enabled `predictive_sets` across $q$ intervals to regulate convective boundary growth during core hydrogen and helium burning by limiting single-step mass ingestion (`ingestion_factor`) and enforcing a minimum superadiabaticity threshold ($\nabla_r / \nabla_{\mathrm{ad}} - 1 > \delta_{\mathrm{superad}}$) on the convective side of the boundary.
 
 ---
 
@@ -65,7 +65,7 @@ Because `FlexMESA` applies the Implicit Function Theorem at the converged scalar
 In radiative stellar envelopes, solar interiors, subdwarfs, and white dwarfs, microscopic gravitational settling, thermal diffusion, and concentration gradients stratify chemical elements over evolutionary timescales:
 
 1. **Burgers (1969) Multi-Fluid Resistance Equations (`do_element_diffusion`, `eval_burgers_velocities_jax`)**:
-   Solves the coupled Burgers (1969) momentum and heat-flow equations across all ions and electrons simultaneously, enforcing zero net charge density ($n_e = \sum_i Z_i n_i$) and zero electric current ($J_e = 0$) via Gauss-Seidel relaxation with Stanton & Murillo (2016) or Paquette et al. (1986) screened Coulomb collision integrals and radiative levitation accelerations.
+   Solves the coupled Burgers (1969) momentum and heat-flow equations across all ions and electrons simultaneously via a tridiagonal Thomas solve, enforcing zero net charge density ($n_e = \sum_i Z_i n_i$) and zero electric current ($J_e = 0$) with Stanton & Murillo (2016) or Paquette et al. (1986) screened Coulomb collision integrals and radiative levitation accelerations. After both `do_element_diffusion` and `do_phase_separation`, species mass fractions are clamped to $[0, 1]$ and renormalized per zone with Neumaier-compensated summation so near-pure hydrogen white-dwarf envelopes ($X_{\mathrm{H}} \approx 1 - 10^{-15}$) remain strictly inside $[0, 1]$ during subsequent `kap` and `eos` table lookups (`clamp_unit_roundoff` in `set_basic_vars`).
 2. **Caplan, Bauer & Freeman (2022) Strong-Coupling OCP (`eval_caplan_ocp_dstar_jax`)**:
    In strongly coupled white-dwarf and neutron-star interiors ($\Gamma \ge 1$), classical binary collision integrals break down. `FlexMESA` evaluates the Caplan, Bauer & Freeman (2022) screened one-component plasma (`OCP`) dimensionless self-diffusion parameterization $D^*(\Gamma, \kappa)$ to capture liquid-state correlation suppression.
 3. **White-Dwarf Crystallization Phase Separation (`do_phase_separation`, `eval_phase_separation_shift_jax`)**:
@@ -73,10 +73,10 @@ In radiative stellar envelopes, solar interiors, subdwarfs, and white dwarfs, mi
 
 ---
 
-## 4. Roche Shellular Rotation, Five Instabilities & Spruit-Tayler Dynamo
+## 4. Roche Shellular Rotation, Angular Momentum Mixing, Five Instabilities & Spruit-Tayler Dynamo
 
-### 4.1 Rotational Distortion Factors $(f_P, f_T)$
-In the Endal & Sofia (1976) and Paxton et al. (2019) shellular rotation formalism, angular velocity $\Omega(m)$ is constant on isobars of volume-equivalent radius $r_P$. Centrifugal forces distort isobaric surfaces relative to the Eddington-reduced critical break-up rate $\Omega_{\mathrm{crit}} = \sqrt{G m (1 - \Gamma_{\mathrm{Edd}}) / r_P^3}$ and modify the hydrostatic pressure gradient and radiative temperature gradient via the dimensionless correction factors $(f_P, f_T)$ (`eval_rotation_fp_ft_jax`, `set_rotation_mixing_info`):
+### 4.1 Rotational Distortion Factors $(f_P, f_T)$, `solve_omega_mix` & Wind Boost
+In the Endal & Sofia (1976) and Paxton et al. (2019) shellular rotation formalism, angular velocity $\Omega(m)$ is constant on isobars of volume-equivalent radius $r_P$. Centrifugal forces distort isobaric surfaces relative to the Eddington-reduced critical break-up rate $\Omega_{\mathrm{crit}} = \sqrt{G m (1 - \Gamma_{\mathrm{Edd}}) / r_P^3}$ (`eval_omega_crit`), enhance mass-loss rates near critical rotation in `do_set_mdot` alongside Björklund, Nugis-Lamers, and Dutch wind prescriptions (with differentiable JAX `z_surf = 0` Wolf-Rayet guards in `eval_winds_jax`), diffuse internal angular momentum implicitly via `solve_omega_mix`, and modify the hydrostatic pressure gradient and radiative temperature gradient via the dimensionless correction factors $(f_P, f_T)$ (`eval_rotation_fp_ft_jax`, `set_rotation_mixing_info`):
 
 $$\frac{\partial P}{\partial m} = -\frac{G m}{4\pi r_P^4}\,f_P, \qquad \nabla_{\mathrm{rad,rot}} = \nabla_{\mathrm{rad}}\,\frac{f_T}{f_P}.$$
 

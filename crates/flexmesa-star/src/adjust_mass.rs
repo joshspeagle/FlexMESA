@@ -5,29 +5,17 @@
 //! $\epsilon_{\dot{M}}$ evaluation.
 
 use flexmesa_chem::NuclideCatalog;
+use flexmesa_num::neumaier_sum;
 
 use crate::controls::StarError;
+use crate::core_boundaries::dominant_species_index;
 use crate::eps_mdot::{
     calculate_eps_mdot_with_change, eval_specific_kinetic_energy_profile,
     eval_specific_total_energy_profile, PrevMassState,
 };
+use crate::mesh_remap::normalize_and_assign_remapped_xa;
 use crate::micro::{do_eos, set_basic_vars};
 use crate::model::StarModel;
-
-fn neumaier_sum(xs: &[f64]) -> f64 {
-    let mut sum = 0.0_f64;
-    let mut c = 0.0_f64;
-    for &x in xs {
-        let t = sum + x;
-        if sum.abs() >= x.abs() {
-            c += (sum - t) + x;
-        } else {
-            c += (x - t) + sum;
-        }
-        sum = t;
-    }
-    sum + c
-}
 
 fn sync_enclosed_mass_from_dm(model: &mut StarModel, dm_target: &[f64]) {
     model.dm.copy_from_slice(dm_target);
@@ -39,16 +27,16 @@ fn sync_enclosed_mass_from_dm(model: &mut StarModel, dm_target: &[f64]) {
     model.m[0] = model.mstar;
 }
 
-fn dominant_species(model: &StarModel, k: usize) -> usize {
-    let mut best_j = 0_usize;
-    let mut best_x = f64::NEG_INFINITY;
-    for (j, &x) in model.cell_xa(k).iter().enumerate() {
-        if x > best_x {
-            best_x = x;
-            best_j = j;
+fn normalize_or_surface(mut xa: Vec<f64>, model: &StarModel) -> Vec<f64> {
+    let sum: f64 = xa.iter().map(|&x| x.max(0.0)).sum();
+    if sum > 0.0 {
+        for x in &mut xa {
+            *x = x.max(0.0) / sum;
         }
+        xa
+    } else {
+        model.cell_xa(0).to_vec()
     }
-    best_j
 }
 
 /// Builds the normalized accreted mass-fraction vector `x_accreted` (`len =
@@ -112,14 +100,7 @@ pub fn build_accreted_xa(model: &StarModel) -> Vec<f64> {
             }
         }
 
-        let sum: f64 = xa.iter().map(|&x| x.max(0.0)).sum();
-        if sum > 0.0 {
-            for x in &mut xa {
-                *x = x.max(0.0) / sum;
-            }
-            return xa;
-        }
-        return model.cell_xa(0).to_vec();
+        return normalize_or_surface(xa, model);
     }
 
     if model.controls.accretion_h1 < 0.0 && model.controls.accretion_he4 < 0.0 {
@@ -168,15 +149,7 @@ pub fn build_accreted_xa(model: &StarModel) -> Vec<f64> {
         }
     }
 
-    let sum: f64 = xa.iter().map(|&x| x.max(0.0)).sum();
-    if sum > 0.0 {
-        for x in &mut xa {
-            *x = x.max(0.0) / sum;
-        }
-        xa
-    } else {
-        model.cell_xa(0).to_vec()
-    }
+    normalize_or_surface(xa, model)
 }
 
 /// Applies the 3-region pseudo-Lagrangian mass adjustment (`do_adjust_mass` in
@@ -267,23 +240,41 @@ fn do_adjust_mass_regions(
     let k_a = k_a.clamp(1, nz.saturating_sub(2));
     let k_b = k_b.clamp(k_a + 1, nz - 1);
 
-    if dt > 0.0 {
+    let need_eps_mdot =
+        dt > 0.0 && model.controls.mix_wind.eps_mdot_factor != 0.0;
+    if need_eps_mdot {
         model.reconstruct_ln_r_from_lnd_and_dm();
         model.set_m_grav_and_grav();
     }
     let prev_dm = model.dm.clone();
-    let prev_r = model.r.clone();
-    let prev_m_grav = model.m_grav.clone();
-    let prev_energy = model.energy.clone();
-    let prev_peos = model.peos.clone();
-    let prev_rho = model.rho.clone();
-    let (prev_te, prev_ke) = if dt > 0.0 {
+    let (
+        prev_r,
+        prev_m_grav,
+        prev_energy,
+        prev_peos,
+        prev_rho,
+        prev_te,
+        prev_ke,
+    ) = if need_eps_mdot {
         (
+            model.r.clone(),
+            model.m_grav.clone(),
+            model.energy.clone(),
+            model.peos.clone(),
+            model.rho.clone(),
             eval_specific_total_energy_profile(model),
             eval_specific_kinetic_energy_profile(model),
         )
     } else {
-        (Vec::new(), Vec::new())
+        (
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        )
     };
 
     let dq_old = model.dq.clone();
@@ -415,17 +406,11 @@ fn do_adjust_mass_regions(
                     jr_acc += ov * j_rot_old.get(kk).copied().unwrap_or(0.0);
                 }
             }
-            let mut sum_x = 0.0;
-            for j in 0..species {
-                let xj = (accum[j] / dx).clamp(0.0, 1.0);
-                model.xa[k * species + j] = xj;
-                sum_x += xj;
-            }
-            if sum_x > 0.0 {
-                for j in 0..species {
-                    model.xa[k * species + j] /= sum_x;
-                }
-            }
+            normalize_and_assign_remapped_xa(
+                &mut model.xa[k * species..(k + 1) * species],
+                &accum,
+                dx,
+            );
             if model.controls.rotation_flag {
                 model.j_rot[k] = jr_acc / dx;
             }
@@ -447,7 +432,7 @@ fn do_adjust_mass_regions(
     sync_enclosed_mass_from_dm(model, &dm_target);
     model.set_dm_bar();
     model.set_m_grav_and_grav();
-    if dt > 0.0 {
+    if need_eps_mdot {
         do_eos(model)?;
         let prev = PrevMassState {
             dm: &prev_dm,
@@ -552,8 +537,8 @@ pub fn do_adjust_mass_step(
             }
             if qfrac > 0.50
                 && qfrac < 2.00
-                && dominant_species(model, k_b)
-                    != dominant_species(model, k_b + 1)
+                && dominant_species_index(model.cell_xa(k_b))
+                    != dominant_species_index(model.cell_xa(k_b + 1))
             {
                 k_b = k_b.saturating_sub(5).max(k_a + 1);
                 break;

@@ -25,6 +25,7 @@
 
 use flexmesa_const::{R_SUN, SECYER};
 
+use crate::adjust_mass::do_adjust_mass_step;
 use crate::controls::StarError;
 use crate::core_boundaries::snapshot_step_history_old;
 use crate::evolve_support::{
@@ -34,11 +35,12 @@ use crate::evolve_support::{
 use crate::hydro_vars::set_hydro_vars;
 use crate::mesh_adjust::{do_adjust_mesh, MeshFunctionConfig};
 use crate::model::StarModel;
+use crate::solver::HenyeySolverReport;
 use crate::struct_burn_mix::{do_struct_burn_mix, refresh_mixing_state};
 use crate::termination::check_termination_limits;
 use crate::timestep::TimestepAction;
 use crate::timestep_limits::timestep_controller;
-use crate::winds::{do_adjust_mass_step, do_set_mdot};
+use crate::winds::do_set_mdot;
 
 /// Diagnostic report returned by a single evolutionary step.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -92,6 +94,11 @@ pub fn restore_from_old(model: &mut StarModel) -> Result<(), StarError> {
     if model.aux.omega_old.len() == model.nz {
         model.omega.clone_from(&model.aux.omega_old);
         model.j_rot.clone_from(&model.aux.j_rot_old);
+    }
+    if model.aux.eps_mdot_old.len() == model.nz {
+        model.eps_mdot.clone_from(&model.aux.eps_mdot_old);
+    } else {
+        model.eps_mdot.fill(0.0);
     }
     model.mstar_dot = model.aux.step_hist.mstar_dot_old;
     model.aux.total_energy = model.aux.step_hist.total_energy_old;
@@ -248,48 +255,17 @@ pub fn star_evolve_step(
                 let (ts_action, ts_rep) = timestep_controller(model);
                 match ts_action {
                     TimestepAction::KeepGoing => {
-                        let mut dt_next = ts_rep.dt_next;
-                        if let Some(max_yr) =
-                            model.controls.max_years_for_timestep
-                        {
-                            dt_next = dt_next.min(max_yr * SECYER);
-                        }
-                        if model.controls.rsp.max_timestep > 0.0 {
-                            dt_next =
-                                dt_next.min(model.controls.rsp.max_timestep);
-                        }
-                        if model.controls.rsp2_flag {
-                            model.aux.rsp.time_old_sec = model.aux.rsp.time_sec;
-                            model.aux.rsp.time_sec += dt_try;
-                            let (etot, total_rad) =
-                                crate::rsp_driver::rsp_total_energy_integrals(
-                                    model,
-                                );
-                            model.aux.rsp.total_energy_old = rsp2_e_old;
-                            model.aux.cumulative_energy_error +=
-                                etot - (rsp2_e_old - total_rad);
-                            model.aux.total_energy = etot;
-                            update_rsp2_cycle_stats(
-                                model,
-                                dt_try,
-                                &mut dt_next,
-                            );
-                        }
-                        model.dt_next = dt_next;
-                        model.dt_old = dt_try;
-
-                        return Ok(EvolveStepReport {
-                            model_number: model.model_number,
-                            star_age: model.star_age,
-                            dt: dt_try,
-                            dt_next,
-                            iterations: rep.iterations,
+                        return Ok(finalize_accepted_step(
+                            model,
+                            &rep,
+                            ts_rep.varcontrol,
+                            ts_rep.dt_next,
+                            dt_try,
+                            rsp2_e_old,
                             retries,
                             num_splits,
                             num_merges,
-                            varcontrol: ts_rep.varcontrol,
-                            converged: true,
-                        });
+                        ));
                     }
                     TimestepAction::Retry(_) => {
                         let target_mod = model.model_number;
@@ -300,6 +276,12 @@ pub fn star_evolve_step(
                             target_mod + model.controls.ts_stop.retry_hold;
                     }
                     TimestepAction::Terminate(reason) => {
+                        model.model_number -= 1;
+                        let _ = restore_from_old(model);
+                        model.dt_old = prev_dt_old;
+                        model.dt_limit_ratio_old = prev_dt_limit_ratio_old;
+                        model.aux.step_hist.rotational_mdot_boost_old =
+                            prev_rot_boost_old;
                         return Err(StarError::InvalidInput(reason));
                     }
                 }
@@ -325,6 +307,51 @@ pub fn star_evolve_step(
         };
         restore_from_old(model)?;
         model.dt_old = prev_dt_old;
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn finalize_accepted_step(
+    model: &mut StarModel,
+    rep: &HenyeySolverReport,
+    varcontrol: f64,
+    mut dt_next: f64,
+    dt_try: f64,
+    rsp2_e_old: f64,
+    retries: usize,
+    num_splits: usize,
+    num_merges: usize,
+) -> EvolveStepReport {
+    if let Some(max_yr) = model.controls.max_years_for_timestep {
+        dt_next = dt_next.min(max_yr * SECYER);
+    }
+    if model.controls.rsp.max_timestep > 0.0 {
+        dt_next = dt_next.min(model.controls.rsp.max_timestep);
+    }
+    if model.controls.rsp2_flag {
+        model.aux.rsp.time_old_sec = model.aux.rsp.time_sec;
+        model.aux.rsp.time_sec += dt_try;
+        let (etot, total_rad) =
+            crate::rsp_driver::rsp_total_energy_integrals(model);
+        model.aux.rsp.total_energy_old = rsp2_e_old;
+        model.aux.cumulative_energy_error += etot - (rsp2_e_old - total_rad);
+        model.aux.total_energy = etot;
+        update_rsp2_cycle_stats(model, dt_try, &mut dt_next);
+    }
+    model.dt_next = dt_next;
+    model.dt_old = dt_try;
+
+    EvolveStepReport {
+        model_number: model.model_number,
+        star_age: model.star_age,
+        dt: dt_try,
+        dt_next,
+        iterations: rep.iterations,
+        retries,
+        num_splits,
+        num_merges,
+        varcontrol,
+        converged: true,
     }
 }
 

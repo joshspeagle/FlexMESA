@@ -9,6 +9,24 @@ use crate::controls::StarError;
 use crate::hydro_vars::set_hydro_vars;
 use crate::model::StarModel;
 
+pub(crate) fn normalize_and_assign_remapped_xa(
+    dst: &mut [f64],
+    accum: &[f64],
+    dx: f64,
+) {
+    let mut sum_x = 0.0;
+    for (d, &acc) in dst.iter_mut().zip(accum.iter()) {
+        let xj = (acc / dx).clamp(0.0, 1.0);
+        *d = xj;
+        sum_x += xj;
+    }
+    if sum_x > 0.0 {
+        for d in dst {
+            *d /= sum_x;
+        }
+    }
+}
+
 /// Computes monotone, sum-preserving linear slopes `xa_c1` (`(nz_old, species)`)
 /// in exterior mass coordinate `xq` (`get1_lpp` in `mesh_adjust.f90:266-299`).
 #[must_use]
@@ -71,9 +89,7 @@ pub fn compute_monotone_xa_slopes(
                     }
                 }
             }
-            xa_c1[base + j_piv] = 0.0;
-            let rem_sum: f64 = xa_c1[base..base + species].iter().sum();
-            xa_c1[base + j_piv] = -rem_sum;
+            xa_c1[base + j_piv] -= slope_sum;
         }
 
         // Zero all slopes in cell `k` if any species would leave `[0, 1]` at
@@ -285,18 +301,37 @@ pub fn remap_onto_dq(
         while kk_start + 1 < nz_old && xq_old[kk_start + 1] <= a0 {
             kk_start += 1;
         }
-        let mut exact_match: Option<usize> = None;
+        let exact_match = (kk_start..(kk_start + 2).min(nz_old)).find(|&kk| {
+            let b0 = xq_old[kk];
+            let b1 = if kk + 1 < nz_old { xq_old[kk + 1] } else { 1.0 };
+            (a0 - b0).abs() <= 1.0e-15 * dx && (a1 - b1).abs() <= 1.0e-15 * dx
+        });
+        if let Some(kk) = exact_match {
+            unchanged[k] = true;
+            model.xa[k * species..(k + 1) * species]
+                .copy_from_slice(&xa_old[kk * species..(kk + 1) * species]);
+            e_target[k] = e_old[kk];
+            model.energy[k] = e_old[kk];
+            model.lnd[k] = lnd_old[kk];
+            model.ln_t[k] = lnt_old[kk];
+            model.lum[k] = lum_old[kk];
+            model.v[k] = v_old[kk];
+            model.u[k] = u_old[kk];
+            model.aux.rsp.et_rsp[k] =
+                et_rsp_old.get(kk).copied().unwrap_or(0.0);
+            model.aux.rsp.hp_face[k] =
+                hp_face_old.get(kk).copied().unwrap_or(0.0);
+            model.omega[k] = omega_old[kk];
+            model.aux.alpha_rti[k] =
+                alpha_rti_old.get(kk).copied().unwrap_or(0.0);
+            continue;
+        }
         for kk in kk_start..nz_old {
             let b0 = xq_old[kk];
             if b0 >= a1 {
                 break;
             }
             let b1 = if kk + 1 < nz_old { xq_old[kk + 1] } else { 1.0 };
-            if (a0 - b0).abs() <= 1.0e-15 * dx
-                && (a1 - b1).abs() <= 1.0e-15 * dx
-            {
-                exact_match = Some(kk);
-            }
             let lo = a0.max(b0);
             let hi = a1.min(b1);
             let ov = (hi - lo).max(0.0);
@@ -325,59 +360,33 @@ pub fn remap_onto_dq(
             }
         }
 
-        if let Some(kk) = exact_match {
-            unchanged[k] = true;
-            model.xa[k * species..(k + 1) * species]
-                .copy_from_slice(&xa_old[kk * species..(kk + 1) * species]);
-            e_target[k] = e_old[kk];
-            model.energy[k] = e_old[kk];
-            model.lnd[k] = lnd_old[kk];
-            model.ln_t[k] = lnt_old[kk];
-            model.lum[k] = lum_old[kk];
-            model.v[k] = v_old[kk];
-            model.u[k] = u_old[kk];
-            model.aux.rsp.et_rsp[k] =
-                et_rsp_old.get(kk).copied().unwrap_or(0.0);
-            model.aux.rsp.hp_face[k] =
-                hp_face_old.get(kk).copied().unwrap_or(0.0);
-            model.omega[k] = omega_old[kk];
-            model.aux.alpha_rti[k] =
-                alpha_rti_old.get(kk).copied().unwrap_or(0.0);
+        normalize_and_assign_remapped_xa(
+            &mut model.xa[k * species..(k + 1) * species],
+            &accum,
+            dx,
+        );
+        e_target[k] = e_acc / dx;
+        model.energy[k] = e_target[k];
+        let inv_rho = (inv_rho_acc / dx).max(1.0e-99);
+        model.lnd[k] = -(inv_rho.ln());
+        model.ln_t[k] = lnt_acc / dx;
+        model.lum[k] = lum_acc / dx;
+        let v_mean = v_acc / dx;
+        model.v[k] = if model.controls.v_flag && v_mean != 0.0 {
+            v_mean.signum() * (v2_acc / dx).max(0.0).sqrt()
         } else {
-            let mut sum_x = 0.0;
-            for j in 0..species {
-                let xj = (accum[j] / dx).clamp(0.0, 1.0);
-                model.xa[k * species + j] = xj;
-                sum_x += xj;
-            }
-            if sum_x > 0.0 {
-                for j in 0..species {
-                    model.xa[k * species + j] /= sum_x;
-                }
-            }
-            e_target[k] = e_acc / dx;
-            model.energy[k] = e_target[k];
-            let inv_rho = (inv_rho_acc / dx).max(1.0e-99);
-            model.lnd[k] = -(inv_rho.ln());
-            model.ln_t[k] = lnt_acc / dx;
-            model.lum[k] = lum_acc / dx;
-            let v_mean = v_acc / dx;
-            model.v[k] = if model.controls.v_flag && v_mean != 0.0 {
-                v_mean.signum() * (v2_acc / dx).max(0.0).sqrt()
-            } else {
-                v_mean
-            };
-            let u_mean = u_acc / dx;
-            model.u[k] = if model.controls.u_flag && u_mean != 0.0 {
-                u_mean.signum() * (u2_acc / dx).max(0.0).sqrt()
-            } else {
-                u_mean
-            };
-            model.aux.rsp.et_rsp[k] = (et_acc / dx).max(0.0);
-            model.aux.rsp.hp_face[k] = (hp_acc / dx).max(0.0);
-            model.omega[k] = omega_acc / dx;
-            model.aux.alpha_rti[k] = (alpha_rti_acc / dx).max(0.0);
-        }
+            v_mean
+        };
+        let u_mean = u_acc / dx;
+        model.u[k] = if model.controls.u_flag && u_mean != 0.0 {
+            u_mean.signum() * (u2_acc / dx).max(0.0).sqrt()
+        } else {
+            u_mean
+        };
+        model.aux.rsp.et_rsp[k] = (et_acc / dx).max(0.0);
+        model.aux.rsp.hp_face[k] = (hp_acc / dx).max(0.0);
+        model.omega[k] = omega_acc / dx;
+        model.aux.alpha_rti[k] = (alpha_rti_acc / dx).max(0.0);
     }
 
     model.reconstruct_ln_r_from_lnd_and_dm();

@@ -524,6 +524,7 @@ pub fn read_photo_bytes(
     model.sig.clone_from(&saved_sig);
     model.mlt_vc.clone_from(&saved_mlt_vc);
     model.aux.mlt_vc_old.clone_from(&saved_mlt_vc_old);
+    // Preserve exact serialized `dq` bytes (`normalize_dqs` breaks 0 ULP parity).
     model.set_qs();
     model.set_xqs();
     model.set_m_and_dm();
@@ -571,6 +572,7 @@ pub fn read_photo_bytes(
     }
     model.aux.omega_old = saved_omega_old;
     model.aux.j_rot_old = saved_j_rot_old;
+    model.aux.eps_mdot_old.clone_from(&model.eps_mdot);
     model.aux.alpha_rti_start = saved_alpha_rti_start;
     model.aux.p_face_start = saved_p_face_start;
     model.aux.u_face_start = saved_u_face_start;

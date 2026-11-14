@@ -9,6 +9,7 @@ use flexmesa_chem::NuclideCatalog;
 use flexmesa_const::{AMU, CLIGHT, HBAR, KERG, ME, PI, QE};
 use flexmesa_ionization::eval_typical_charge;
 use flexmesa_mtx::solve_dense;
+use flexmesa_num::neumaier_sum;
 
 use crate::model::StarModel;
 use crate::struct_burn_mix::ScalarTridiagFactor;
@@ -440,6 +441,7 @@ pub fn do_element_diffusion(
     let mut eps_wd_sed = vec![0.0; nz];
     let wd_sed_fac = model.controls.mix_wind.eps_wd_sedimentation_factor;
 
+    let mut z_typ = vec![1.0; nc];
     for k in 0..nz {
         let t_k = model.t[k].max(1.0e3);
         let log10_t = t_k.log10();
@@ -449,7 +451,7 @@ pub fn do_element_diffusion(
         let zbar_k = model.zbar[k].max(1.0);
         let free_e = model.lnfree_e[k].exp().max(0.1);
 
-        let mut z_typ = vec![1.0; nc];
+        z_typ.fill(1.0);
         for (j, &cid) in model.chem_id.iter().enumerate() {
             z_typ[j] = eval_typical_charge(
                 catalog, cid, abar_k, free_e, t_k, log10_t, rho_k, log10_rho,
@@ -486,6 +488,8 @@ pub fn do_element_diffusion(
         let mut dd = vec![1.0; nz];
         let mut du = vec![0.0; nz];
         let mut adv_rhs = vec![0.0; nz * nc];
+        let mut x_f = vec![0.0; nc];
+        let mut dm_trans = vec![0.0; nc];
 
         for k in 1..nz {
             let area = 4.0 * PI * model.r[k].powi(2);
@@ -496,7 +500,6 @@ pub fn do_element_diffusion(
 
             let mut d_mean = 0.0;
             let mut v_cm_f = 0.0;
-            let mut x_f = vec![0.0; nc];
             for j in 0..nc {
                 let xj =
                     0.5 * (model.xa[(k - 1) * nc + j] + model.xa[k * nc + j]);
@@ -519,7 +522,6 @@ pub fn do_element_diffusion(
             // Zero-sum settling mass transfer across face k (positive = outward
             // into k - 1, negative = inward into k) capped to 25% of donor cell
             let max_dm = 0.25 * dm_up.min(dm_dn);
-            let mut dm_trans = vec![0.0; nc];
             for j in 0..nc {
                 let v_rel = v_gt_all[k * nc + j] - v_cm_f;
                 let raw = dt * area * rho_f * (x_f[j] / x_sum) * v_rel;
@@ -546,7 +548,15 @@ pub fn do_element_diffusion(
             }
             factor.solve_into(&dl, &rhs, &mut sol, &mut d_prime);
             for k in 0..nz {
-                model.xa[k * nc + j] = sol[k];
+                model.xa[k * nc + j] = sol[k].clamp(0.0, 1.0);
+            }
+        }
+        for k in 0..nz {
+            let sum_x = neumaier_sum(model.cell_xa(k));
+            if sum_x > 0.0 {
+                for x in model.cell_xa_mut(k) {
+                    *x = (*x / sum_x).clamp(0.0, 1.0);
+                }
             }
         }
         model.aux.step_hist.num_diffusion_solver_steps = 1;

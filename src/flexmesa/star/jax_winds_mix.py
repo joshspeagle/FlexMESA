@@ -109,18 +109,21 @@ def eval_winds_jax(
     """Evaluate differentiable wind mass-loss rates (`M_sun yr^-1`, `g s^-1`).
 
     Args:
-        l_surf: Surface luminosity in `erg s^-1`.
-        m_surf: Stellar mass in grams (`g`).
-        t_surf: Effective temperature in Kelvin (`K`).
-        x_surf: Surface hydrogen mass fraction `X`.
-        y_surf: Surface helium mass fraction `Y`.
-        z_surf: Surface metal mass fraction `Z`.
+        l_surf: Surface luminosity in `erg s^-1`, scalar or shape `(*batch,)`.
+        m_surf: Stellar mass in grams (`g`), scalar or shape `(*batch,)`.
+        t_surf: Effective temperature in Kelvin (`K`), scalar or shape
+            `(*batch,)`.
+        x_surf: Surface hydrogen mass fraction `X`, scalar or shape
+            `(*batch,)`.
+        y_surf: Surface helium mass fraction `Y`, scalar or shape `(*batch,)`.
+        z_surf: Surface metal mass fraction `Z`, scalar or shape `(*batch,)`.
         eta: Wind scaling multiplier (`1.0` default).
 
     Returns:
-        Dictionary containing `w_reimers`, `w_blocker`, `w_vink`,
-        `w_bjorklund`, `w_nieuwenhuijzen`, `w_de_jager`, `w_van_loon`,
-        `w_dutch` in `M_sun yr^-1` and `mdot_dutch` in `g s^-1`.
+        Dictionary of arrays with shape `(*batch,)` (matching broadcast
+        inputs) containing `w_reimers`, `w_blocker`, `w_vink`, `w_bjorklund`,
+        `w_nieuwenhuijzen`, `w_de_jager`, `w_van_loon`, `w_dutch` in
+        `M_sun yr^-1` and `mdot_dutch` in `g s^-1`.
     """
     l_s = jnp.asarray(l_surf, dtype=jnp.float64)
     m_s = jnp.asarray(m_surf, dtype=jnp.float64)
@@ -194,7 +197,8 @@ def eval_winds_jax(
         )
     )
 
-    w_wr = 1.0e-11 * (l_lsun**1.29) * (y_s**1.7) * jnp.sqrt(z_s)
+    z_s_safe = jnp.maximum(z_s, 1.0e-30)
+    w_wr = 1.0e-11 * (l_lsun**1.29) * (y_s**1.7) * jnp.sqrt(z_s_safe)
     w_high = jnp.where(x_s < 0.4, w_wr, w_vink_1)
     alpha_dutch = jnp.clip((t_s - 10_000.0) / 1000.0, 0.0, 1.0)
     w_dutch = eta * (alpha_dutch * w_high + (1.0 - alpha_dutch) * w_de_jager_1)

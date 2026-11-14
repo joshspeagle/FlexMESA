@@ -148,26 +148,23 @@ fn matches_param_set(
     burn_flags: (bool, bool, bool),
 ) -> bool {
     let (bh, bhe, bz) = burn_flags;
-    let zt_ok = match set.zone_type.trim().to_ascii_lowercase().as_str() {
-        "" | "any" => true,
-        "burn_h" => bh,
-        "burn_he" => bhe,
-        "burn_z" => bz,
-        "nonburn" => !(bh || bhe || bz),
-        _ => false,
-    };
-    let zl_ok = match set.zone_loc.trim().to_ascii_lowercase().as_str() {
-        "" | "any" => true,
-        "core" => is_core,
-        "shell" => !is_core,
-        _ => false,
-    };
-    let bl_ok = match set.bdy_loc.trim().to_ascii_lowercase().as_str() {
-        "" | "any" => true,
-        "top" => top_conv_bdy,
-        "bottom" => !top_conv_bdy,
-        _ => false,
-    };
+    let zt = set.zone_type.trim();
+    let zt_ok = zt.is_empty()
+        || zt.eq_ignore_ascii_case("any")
+        || (zt.eq_ignore_ascii_case("burn_h") && bh)
+        || (zt.eq_ignore_ascii_case("burn_he") && bhe)
+        || (zt.eq_ignore_ascii_case("burn_z") && bz)
+        || (zt.eq_ignore_ascii_case("nonburn") && !(bh || bhe || bz));
+    let zl = set.zone_loc.trim();
+    let zl_ok = zl.is_empty()
+        || zl.eq_ignore_ascii_case("any")
+        || (zl.eq_ignore_ascii_case("core") && is_core)
+        || (zl.eq_ignore_ascii_case("shell") && !is_core);
+    let bl = set.bdy_loc.trim();
+    let bl_ok = bl.is_empty()
+        || bl.eq_ignore_ascii_case("any")
+        || (bl.eq_ignore_ascii_case("top") && top_conv_bdy)
+        || (bl.eq_ignore_ascii_case("bottom") && !top_conv_bdy);
     zt_ok && zl_ok && bl_ok
 }
 
@@ -245,7 +242,7 @@ pub fn apply_overshooting(
                     && cfg.f0 > 0.0
                 {
                     apply_single_boundary_overshoot(
-                        model, boundaries, i, cfg, None,
+                        model, boundaries, i, cfg, false,
                     );
                 }
             }
@@ -275,11 +272,7 @@ pub fn apply_overshooting(
             }
             if let Some(cfg) = config_from_param_set(model, bdy, set) {
                 apply_single_boundary_overshoot(
-                    model,
-                    boundaries,
-                    i,
-                    &cfg,
-                    Some(set),
+                    model, boundaries, i, &cfg, true,
                 );
             }
             break;
@@ -292,7 +285,7 @@ fn apply_single_boundary_overshoot(
     boundaries: &[ConvBoundary],
     bdy_idx: usize,
     cfg: &OvershootConfig,
-    param_set: Option<&OvershootParamSet>,
+    apply_peclet: bool,
 ) {
     let nz = model.nz;
     let bdy = &boundaries[bdy_idx];
@@ -374,7 +367,15 @@ fn apply_single_boundary_overshoot(
             let dr = (model.r[k] - r_ob).max(0.0);
             let inside_cz = model.r[k] <= r_cb;
             if !update_overshoot_face(
-                model, cfg, param_set, k, dr, hp_cb, d_ob, vc_ob, inside_cz,
+                model,
+                cfg,
+                apply_peclet,
+                k,
+                dr,
+                hp_cb,
+                d_ob,
+                vc_ob,
+                inside_cz,
             ) {
                 break;
             }
@@ -390,7 +391,15 @@ fn apply_single_boundary_overshoot(
             let dr = (r_ob - model.r[k]).max(0.0);
             let inside_cz = model.r[k] >= r_cb;
             if !update_overshoot_face(
-                model, cfg, param_set, k, dr, hp_cb, d_ob, vc_ob, inside_cz,
+                model,
+                cfg,
+                apply_peclet,
+                k,
+                dr,
+                hp_cb,
+                d_ob,
+                vc_ob,
+                inside_cz,
             ) {
                 break;
             }
@@ -402,7 +411,7 @@ fn apply_single_boundary_overshoot(
 fn update_overshoot_face(
     model: &mut StarModel,
     cfg: &OvershootConfig,
-    param_set: Option<&OvershootParamSet>,
+    apply_peclet: bool,
     k: usize,
     dr: f64,
     hp_cb: f64,
@@ -413,7 +422,7 @@ fn update_overshoot_face(
     let mut factor = cfg.eval_factor(dr, hp_cb);
     let peclet_on = model.controls.mix_wind.peclet_function_full_on;
     let peclet_off = model.controls.mix_wind.peclet_function_full_off;
-    if param_set.is_some() && peclet_on > peclet_off && peclet_on > 0.0 {
+    if apply_peclet && peclet_on > peclet_off && peclet_on > 0.0 {
         let k_rad = (16.0
             * flexmesa_const::CRAD
             * flexmesa_const::CLIGHT

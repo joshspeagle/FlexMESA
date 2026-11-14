@@ -367,8 +367,10 @@ pub fn do_phase_separation(
                 e_before = Some(model.energy.clone());
             }
             let delta_m_heavy = dm_solid * dx;
-            model.xa[k * nc + j_heavy] += dx;
-            model.xa[k * nc + j_light] -= dx;
+            model.xa[k * nc + j_heavy] =
+                (model.xa[k * nc + j_heavy] + dx).clamp(0.0, 1.0);
+            model.xa[k * nc + j_light] =
+                (model.xa[k * nc + j_light] - dx).clamp(0.0, 1.0);
 
             let frac = delta_m_heavy / avail_heavy;
             for kl in k_top..k {
@@ -376,8 +378,10 @@ pub fn do_phase_separation(
                     .min(1.0 - model.xa[kl * nc + j_light])
                     .clamp(0.0, 0.5);
                 let shift = frac * cap;
-                model.xa[kl * nc + j_heavy] -= shift;
-                model.xa[kl * nc + j_light] += shift;
+                model.xa[kl * nc + j_heavy] =
+                    (model.xa[kl * nc + j_heavy] - shift).clamp(0.0, 1.0);
+                model.xa[kl * nc + j_light] =
+                    (model.xa[kl * nc + j_light] + shift).clamp(0.0, 1.0);
             }
         }
     }

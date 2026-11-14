@@ -577,10 +577,9 @@ pub fn init_or_update_model_from_bundle(
             fell_back = true;
         }
     }
-    crate::relax::settle_relaxed_loaded_model(
-        &mut model,
-        loaded_from_mod && !fell_back,
-    )?;
+    if loaded_from_mod && !fell_back {
+        crate::relax::settle_relaxed_loaded_model(&mut model)?;
+    }
     extras.extras_startup(&mut model, false)?;
 
     Ok(model)

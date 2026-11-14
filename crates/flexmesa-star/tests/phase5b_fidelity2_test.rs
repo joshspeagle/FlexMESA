@@ -10,15 +10,15 @@ use flexmesa_const::{
 };
 use flexmesa_star::{
     apply_overshooting, apply_predictive_mixing_from_controls,
-    apply_step_pre_physics, check_termination_limits, do_adjust_mass_step,
-    do_adjust_mesh, do_conv_premix, do_set_mdot, eval_bjorklund_wind,
-    eval_de_jager_wind, eval_dutch_wind, eval_nieuwenhuijzen_wind,
-    eval_nugis_lamers_wind, eval_omega_crit, eval_van_loon_wind,
-    eval_vink_wind, find_mass_flux, load_zams_model,
-    locate_convection_boundaries, set_hydro_vars, star_evolve,
-    star_evolve_step, timestep_controller, DutchLowTScheme, EnergyEqnOption,
-    MeshFunctionConfig, StarControls, StarJobControls, StarModel,
-    TimestepAction,
+    apply_step_pre_physics, check_termination_limits, compute_core_masses,
+    do_adjust_mass_step, do_adjust_mesh, do_conv_premix, do_element_diffusion,
+    do_kap, do_set_mdot, eval_bjorklund_wind, eval_de_jager_wind,
+    eval_dutch_wind, eval_nieuwenhuijzen_wind, eval_nugis_lamers_wind,
+    eval_omega_crit, eval_van_loon_wind, eval_vink_wind, find_mass_flux,
+    load_zams_model, locate_convection_boundaries, set_basic_vars,
+    set_hydro_vars, star_evolve, star_evolve_step, timestep_controller,
+    DiffusionScheme, DutchLowTScheme, EnergyEqnOption, MeshFunctionConfig,
+    StarControls, StarJobControls, StarModel, TimestepAction,
 };
 
 fn rel_err(a: f64, b: f64) -> f64 {
@@ -215,7 +215,7 @@ fn test_do_adjust_mass_step_and_eps_mdot_conserve_accreted_species_and_angular_m
     let mut ctrl = StarControls {
         mass_change: 1.0e-6,
         accrete_same_as_surface: false,
-        accrete_given_mass_fractions: true,
+        accrete_given_mass_fractions: false,
         accretion_h1: 0.40,
         accretion_he4: 0.58,
         rotation_flag: true,
@@ -238,6 +238,13 @@ fn test_do_adjust_mass_step_and_eps_mdot_conserve_accreted_species_and_angular_m
     let mstar_before = model.mstar;
     let x_surf_before = model.cell_xa(0)[0];
     let dm_before = model.dm.clone();
+    let m_h1_before = species_total_masses(&model)[0];
+    let j_tot_before: f64 = model
+        .dm
+        .iter()
+        .zip(&model.j_rot)
+        .map(|(dm, j)| dm * j)
+        .sum();
 
     let mdot = do_set_mdot(&mut model).expect("set accretion mdot");
     assert!(mdot > 0.0);
@@ -250,6 +257,15 @@ fn test_do_adjust_mass_step_and_eps_mdot_conserve_accreted_species_and_angular_m
         model.cell_xa(0)[0] < x_surf_before,
         "surface H1 should decrease toward accreted 0.40"
     );
+    let m_h1_after = species_total_masses(&model)[0];
+    let j_tot_after: f64 = model
+        .dm
+        .iter()
+        .zip(&model.j_rot)
+        .map(|(dm, j)| dm * j)
+        .sum();
+    assert!(rel_err(m_h1_after - m_h1_before, 0.40 * dm_total) < 1.0e-11);
+    assert!(rel_err(j_tot_after - j_tot_before, 1.0e17 * dm_total) < 1.0e-11);
 
     let d_dm: Vec<f64> = model
         .dm
@@ -330,6 +346,45 @@ fn test_overshoot_16_param_sets_and_peclet_damping_follow_mesa_rules() {
         .count();
 
     assert!(n_ov_exp > 0, "expected OvershootMixing zones from set 0");
+    let bdy = &boundaries[0];
+    let dr_cz = (base.r[bdy.cell_index] - base.r_center).max(0.0);
+    let alpha = base.controls.mixing_length_alpha.max(1.0e-6);
+    let hp_cb = if base
+        .controls
+        .mix_wind
+        .limit_overshoot_hp_using_size_of_convection_zone
+        && dr_cz > 0.0
+        && alpha * bdy.hp_cb > dr_cz
+    {
+        dr_cz / alpha
+    } else {
+        bdy.hp_cb
+    };
+    let r_ob = (bdy.r_cb - 0.005 * hp_cb).max(base.r[base.nz - 1]);
+    let mut k_ob = bdy.cell_index;
+    while k_ob + 1 < base.nz && base.r[k_ob] > r_ob && base.r[k_ob + 1] > r_ob {
+        k_ob += 1;
+    }
+    let k_next = (k_ob + 1).min(base.nz - 1);
+    let w_ob = ((base.r[k_ob].powi(3) - r_ob.powi(3)).abs()
+        / (base.r[k_ob].powi(3) - base.r[k_next].powi(3))
+            .abs()
+            .max(1.0e-99))
+    .clamp(0.0, 1.0);
+    let vc_ob = ((1.0 - w_ob) * base.mlt_vc[k_ob] + w_ob * base.mlt_vc[k_next])
+        .max(0.0);
+    let hp_anchor = (1.0 - w_ob) * base.scale_height[k_ob]
+        + w_ob * base.scale_height[k_next];
+    let d_ob =
+        (vc_ob * alpha * hp_anchor / 3.0).max(base.mlt_d[bdy.conv_bdy_loc]);
+    let ov_face_idx = m_exp
+        .mixing_type
+        .iter()
+        .position(|&mt| mt == MixingType::OvershootMixing)
+        .expect("first overshoot face");
+    let dr_ov = (m_exp.r[ov_face_idx] - r_ob).max(0.0);
+    let expected_d_ov = d_ob * (-2.0 * dr_ov / (0.02 * hp_cb)).exp();
+    assert!(rel_err(m_exp.d_mix[ov_face_idx], expected_d_ov) < 1.0e-11);
     assert_eq!(n_ov_short, 0, "'none' in set 0 must short-circuit set 1");
     assert_eq!(
         n_ov_peclet, 0,
@@ -348,6 +403,7 @@ fn test_conv_premix_predictive_mixing_and_extra_heat_in_evolve_step() {
     let mut m_pm = load_zams_model(ctrl, StarJobControls::default())
         .expect("load 4 Msun ZAMS");
     set_hydro_vars(&mut m_pm, false, false).expect("set_hydro_vars");
+    let mut m_pred = m_pm.clone();
 
     let _absorbed = do_conv_premix(&mut m_pm, 5, true);
     assert!(m_pm.aux.eps_pre_mix.iter().all(|v| v.is_finite()));
@@ -357,10 +413,18 @@ fn test_conv_premix_predictive_mixing_and_extra_heat_in_evolve_step() {
     }
 
     assert_eq!(apply_predictive_mixing_from_controls(&mut m_pm), 0);
-    m_pm.controls.mix_wind.predictive_sets[0].predictive_mix = true;
-    let _extended = apply_predictive_mixing_from_controls(&mut m_pm);
-    assert!(m_pm.d_mix.iter().all(|v| v.is_finite()));
-    assert!(m_pm.conv_vel.iter().all(|v| v.is_finite()));
+    let (_, b_pred) = locate_convection_boundaries(&m_pred);
+    let k_bdy = b_pred[0].conv_bdy_loc;
+    m_pred.gradr[k_bdy] = m_pred.grada[k_bdy] + 0.5;
+    m_pred.controls.mix_wind.predictive_sets[0].predictive_mix = true;
+    m_pred.controls.mix_wind.predictive_sets[0].superad_thresh = 0.0;
+    let extended = apply_predictive_mixing_from_controls(&mut m_pred);
+    assert!(
+        extended > 0,
+        "predictive mixing must extend superadiabatic core"
+    );
+    assert!(m_pred.d_mix.iter().all(|v| v.is_finite()));
+    assert!(m_pred.conv_vel.iter().all(|v| v.is_finite()));
 
     let mut m_heat =
         load_zams_model(StarControls::default(), StarJobControls::default())
@@ -438,4 +502,90 @@ fn test_timestep_controller_hard_limit_triggers_retry_and_termination_stops_evol
         star_evolve(&mut m_term, 6, false, false, true).expect("star_evolve");
     assert_eq!(reports.len(), 2);
     assert!(check_termination_limits(&m_term).is_some());
+}
+
+#[test]
+fn test_element_diffusion_pure_h_envelope_preserves_unit_composition_and_do_kap(
+) {
+    let mut m =
+        load_zams_model(StarControls::default(), StarJobControls::default())
+            .expect("load 1 Msun ZAMS");
+    set_hydro_vars(&mut m, false, false).expect("set_hydro_vars");
+    let nc = m.species;
+    for k in 0..5.min(m.nz) {
+        m.xa[k * nc..(k + 1) * nc].fill(0.0);
+        m.xa[k * nc] = 1.0 - 5.0e-15;
+        m.xa[k * nc + 1] = 5.0e-15;
+    }
+    let _ =
+        do_element_diffusion(&mut m, 1.0e8, DiffusionScheme::StantonMurillo);
+    assert!(m.xa.iter().all(|&x| (0.0..=1.0).contains(&x)));
+    for k in 0..m.nz {
+        assert!((m.cell_xa(k).iter().sum::<f64>() - 1.0).abs() < 1.0e-12);
+    }
+    set_basic_vars(&mut m).expect("set_basic_vars");
+    do_kap(&mut m).expect("do_kap");
+    assert!(m.opacity.iter().all(|v| v.is_finite() && *v > 0.0));
+}
+
+#[test]
+fn test_compute_core_masses_matches_subcell_find0_oracles() {
+    let mut m =
+        load_zams_model(StarControls::default(), StarJobControls::default())
+            .expect("load 1 Msun ZAMS");
+    set_hydro_vars(&mut m, false, false).expect("set_hydro_vars");
+    let nc = m.species;
+    let j_he4 = m.iso_names.iter().position(|n| n == "he4").unwrap();
+    m.controls.ts_stop.he_core_boundary_h1_fraction = 0.01;
+    m.controls.ts_stop.neutron_rich_core_boundary_ye_max = 0.49;
+    let (k_he, k_nr) = (m.nz / 2, (3 * m.nz) / 4);
+    for k in 0..m.nz {
+        m.xa[k * nc..(k + 1) * nc].fill(0.0);
+        let xh = match (k + 1).cmp(&k_he) {
+            std::cmp::Ordering::Less => 0.70,
+            std::cmp::Ordering::Equal => 0.03,
+            std::cmp::Ordering::Greater => 0.005,
+        };
+        m.xa[k * nc] = xh;
+        m.xa[k * nc + j_he4] = 1.0 - xh;
+        m.ye[k] = match (k + 1).cmp(&k_nr) {
+            std::cmp::Ordering::Less => 0.50,
+            std::cmp::Ordering::Equal => 0.496,
+            std::cmp::Ordering::Greater => 0.486,
+        };
+    }
+    let cores = compute_core_masses(&m);
+    assert_eq!(cores.he_core_k, Some(k_he));
+    assert_eq!(cores.neutron_rich_core_k, Some(k_nr));
+    let q_mid = |k: usize| m.q[k] - 0.5 * m.dq[k];
+    let q_he = q_mid(k_he - 1)
+        + ((0.03 - 0.01) / (0.03 - 0.005)) * (q_mid(k_he) - q_mid(k_he - 1));
+    let q_nr = q_mid(k_nr - 1)
+        + ((0.496 - 0.49) / (0.496 - 0.486)) * (q_mid(k_nr) - q_mid(k_nr - 1));
+    let m_he = (m.m_center + m.xmstar * q_he) / M_SUN;
+    let m_nr = (m.m_center + m.xmstar * q_nr) / M_SUN;
+    assert!((cores.he_core_mass - m_he).abs() < 1.0e-12);
+    assert!((cores.neutron_rich_core_mass - m_nr).abs() < 1.0e-12);
+}
+
+#[test]
+fn test_star_evolve_step_terminate_rolls_back_state_and_eps_mdot() {
+    let mut ctrl = StarControls {
+        mass_change: -1.0e-7,
+        ..Default::default()
+    };
+    ctrl.mix_wind.eps_mdot_factor = 1.0;
+    let mut m = load_zams_model(ctrl, StarJobControls::default())
+        .expect("load 1 Msun ZAMS");
+    set_hydro_vars(&mut m, false, false).expect("set_hydro_vars");
+    star_evolve_step(&mut m, false, false, true).expect("baseline step");
+    assert!(m.eps_mdot.iter().any(|&v| v.abs() > 0.0));
+    let (mod0, age0, eps0) = (m.model_number, m.star_age, m.eps_mdot.clone());
+    m.controls.mass_change = 1.0e-6;
+    m.controls.varcontrol_target = 1.0e-12;
+    m.controls.ts_stop.min_allowed_varcontrol_target = 1.0e-6;
+    assert!(star_evolve_step(&mut m, false, false, true).is_err());
+    assert_eq!(m.model_number, mod0);
+    assert_eq!(m.star_age, age0);
+    assert_eq!(m.eps_mdot, eps0);
 }

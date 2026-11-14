@@ -4,7 +4,8 @@
 //! conditions (`eval_surf_bc` in `star/private/hydro_vars.f90`).
 
 use flexmesa_atm::{
-    atm_teff, eval_t_tau_uniform, AtmEosCallbackResult, AtmError,
+    atm_teff, eval_t_tau_uniform, eval_table, get_table_alfa_beta,
+    get_table_base, AtmEosCallbackResult, AtmError, AtmEvalOutput,
     AtmKapCallbackResult,
 };
 use flexmesa_const::{CLIGHT, CRAD, FOUR_PI, L_SUN, M_SUN, PI};
@@ -212,42 +213,144 @@ pub fn eval_surf_bc(model: &mut StarModel) -> Result<(), StarError> {
         return Ok(());
     }
 
-    let (kap_surf, dlnkap_dlnd, dlnkap_dlnt) =
-        if model.controls.atm_option == AtmOption::Table {
-            let dln_d = if model.lnd_start.is_empty() {
-                0.0
-            } else {
-                model.lnd_start[0] - model.lnd[0]
-            };
-            let dln_t = if model.ln_t_start.is_empty() {
-                0.0
-            } else {
-                model.ln_t_start[0] - model.ln_t[0]
-            };
-            let p_start = model.peos[0]
-                * (model.chi_rho[0] * dln_d + model.chi_t[0] * dln_t)
-                    .clamp(-5.0, 5.0)
-                    .exp();
-            let r_s = if model.ln_r_start.is_empty() {
-                r_surf
-            } else {
-                model.ln_r_start[0].exp().max(1.0)
-            };
-            let dp_0 =
-                (cgrav * m_surf * model.dm[0] / (2.0 * FOUR_PI)) / r_s.powi(4);
-            let p_rad = (1.0 / 3.0) * CRAD * teff.powi(4);
-            let p_gas_surf = (p_start - dp_0 - 0.5 * p_rad).max(1.0);
-            let g_s = cgrav * m_surf / (r_s * r_s);
-            let kap_eff = (tau_surf * g_s / p_gas_surf).max(1.0e-10);
-            (kap_eff, 0.0, 0.0)
+    if model.controls.atm_option == AtmOption::Table
+        && !model.controls.atm_table.is_empty()
+    {
+        let table_id = crate::inlist_populate::atm_table_id(&model.controls.atm_table)
+            .ok_or_else(|| {
+                StarError::MicrophysicsError(format!(
+                    "unknown atm_table {:?}",
+                    model.controls.atm_table
+                ))
+            })?;
+        model.tau_base = get_table_base(table_id).map_err(|e| {
+            StarError::MicrophysicsError(format!("get_table_base failed: {e}"))
+        })?;
+        let tbl_tau_surf = model.controls.tau_factor * model.tau_base;
+        let z_surf = model.z_mass.first().copied().unwrap_or(0.02);
+        let (alfa, beta) =
+            get_table_alfa_beta(l_surf, teff, r_surf, m_surf, cgrav, table_id)
+                .unwrap_or((1.0, 0.0));
+        if beta > 0.0 && alfa < 1.0 {
+            if let Ok(tbl_out) =
+                eval_table(l_surf, r_surf, m_surf, cgrav, table_id, z_surf, false, teff)
+            {
+                let (tbl_lnp, tbl_lnt) = atm_out_to_ad(&tbl_out, 0.0, 0.0);
+                if alfa <= 0.0 {
+                    model.ln_peos_surf_ad = tbl_lnp;
+                    model.ln_t_surf_ad = tbl_lnt;
+                } else {
+                    let (grey_lnp, grey_lnt) = eval_grey_t_tau_surf(
+                        model, tbl_tau_surf, l_surf, r_surf, m_surf, cgrav, teff, false,
+                    )?;
+                    model.ln_peos_surf_ad = blend_surf_ad(alfa, grey_lnp, beta, tbl_lnp);
+                    model.ln_t_surf_ad = blend_surf_ad(alfa, grey_lnt, beta, tbl_lnt);
+                }
+                return Ok(());
+            }
+        }
+        let (grey_lnp, grey_lnt) = eval_grey_t_tau_surf(
+            model, tbl_tau_surf, l_surf, r_surf, m_surf, cgrav, teff, false,
+        )?;
+        model.ln_peos_surf_ad = grey_lnp;
+        model.ln_t_surf_ad = grey_lnt;
+        return Ok(());
+    }
+
+    let legacy_table_proxy = model.controls.atm_option == AtmOption::Table;
+    let (lnp_ad, lnt_ad) = eval_grey_t_tau_surf(
+        model, tau_surf, l_surf, r_surf, m_surf, cgrav, teff, legacy_table_proxy,
+    )?;
+    model.ln_peos_surf_ad = lnp_ad;
+    model.ln_t_surf_ad = lnt_ad;
+    Ok(())
+}
+
+fn atm_out_to_ad(
+    atm_out: &AtmEvalOutput,
+    dlnkap_dlnd: f64,
+    dlnkap_dlnt: f64,
+) -> (StarAdOrder1, StarAdOrder1) {
+    let mut d1_lnp = [0.0; NUM_STAR_AD_VARS];
+    d1_lnp[I_LND_00] = atm_out.dln_p_dln_kap * dlnkap_dlnd;
+    d1_lnp[I_LNT_00] = atm_out.dln_p_dln_kap * dlnkap_dlnt;
+    d1_lnp[I_LNR_00] = atm_out.dln_p_dln_r;
+    d1_lnp[I_L_00] = atm_out.dln_p_dl;
+
+    let mut d1_lnt = [0.0; NUM_STAR_AD_VARS];
+    d1_lnt[I_LND_00] = atm_out.dln_t_dln_kap * dlnkap_dlnd;
+    d1_lnt[I_LNT_00] = atm_out.dln_t_dln_kap * dlnkap_dlnt;
+    d1_lnt[I_LNR_00] = atm_out.dln_t_dln_r;
+    d1_lnt[I_L_00] = atm_out.dln_t_dl;
+
+    (
+        StarAdOrder1 { val: atm_out.ln_p, d1: d1_lnp },
+        StarAdOrder1 { val: atm_out.ln_t, d1: d1_lnt },
+    )
+}
+
+fn blend_surf_ad(
+    alfa: f64,
+    grey: StarAdOrder1,
+    beta: f64,
+    tbl: StarAdOrder1,
+) -> StarAdOrder1 {
+    let mut d1 = [0.0; NUM_STAR_AD_VARS];
+    for (i, slot) in d1.iter_mut().enumerate() {
+        *slot = alfa * grey.d1[i] + beta * tbl.d1[i];
+    }
+    StarAdOrder1 {
+        val: alfa * grey.val + beta * tbl.val,
+        d1,
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn eval_grey_t_tau_surf(
+    model: &StarModel,
+    tau_surf: f64,
+    l_surf: f64,
+    r_surf: f64,
+    m_surf: f64,
+    cgrav: f64,
+    teff: f64,
+    use_table_proxy_kap: bool,
+) -> Result<(StarAdOrder1, StarAdOrder1), StarError> {
+    let (kap_surf, dlnkap_dlnd, dlnkap_dlnt) = if use_table_proxy_kap {
+        let dln_d = if model.lnd_start.is_empty() {
+            0.0
         } else {
-            let k0 = model.opacity[0].max(1.0e-10);
-            (
-                k0,
-                model.d_opacity_dlnd[0] / k0,
-                model.d_opacity_dlnt[0] / k0,
-            )
+            model.lnd_start[0] - model.lnd[0]
         };
+        let dln_t = if model.ln_t_start.is_empty() {
+            0.0
+        } else {
+            model.ln_t_start[0] - model.ln_t[0]
+        };
+        let p_start = model.peos[0]
+            * (model.chi_rho[0] * dln_d + model.chi_t[0] * dln_t)
+                .clamp(-5.0, 5.0)
+                .exp();
+        let r_s = if model.ln_r_start.is_empty() {
+            r_surf
+        } else {
+            model.ln_r_start[0].exp().max(1.0)
+        };
+        let dp_0 =
+            (cgrav * m_surf * model.dm[0] / (2.0 * FOUR_PI)) / r_s.powi(4);
+        let p_rad = (1.0 / 3.0) * CRAD * teff.powi(4);
+        let p_gas_surf = (p_start - dp_0 - 0.5 * p_rad).max(1.0);
+        let g_s = cgrav * m_surf / (r_s * r_s);
+        let kap_eff = (tau_surf * g_s / p_gas_surf).max(1.0e-10);
+        (kap_eff, 0.0, 0.0)
+    } else {
+        let k0 = model.opacity[0].max(1.0e-10);
+        (
+            k0,
+            model.d_opacity_dlnd[0] / k0,
+            model.d_opacity_dlnt[0] / k0,
+        )
+    };
 
     let relation_id = model.controls.atm_t_tau_relation.id();
 
@@ -288,22 +391,8 @@ pub fn eval_surf_bc(model: &mut StarModel) -> Result<(), StarError> {
         StarError::MicrophysicsError(format!("eval_t_tau_uniform failed: {e}"))
     })?;
 
-    let mut d1_lnp = [0.0; NUM_STAR_AD_VARS];
-    d1_lnp[I_LND_00] = atm_out.dln_p_dln_kap * dlnkap_dlnd;
-    d1_lnp[I_LNT_00] = atm_out.dln_p_dln_kap * dlnkap_dlnt;
-    d1_lnp[I_LNR_00] = atm_out.dln_p_dln_r;
-    d1_lnp[I_L_00] = atm_out.dln_p_dl;
-    model.ln_peos_surf_ad = StarAdOrder1 {
-        val: atm_out.ln_p,
-        d1: d1_lnp,
-    };
-
-    let mut d1_lnt = [0.0; NUM_STAR_AD_VARS];
-    d1_lnt[I_LND_00] = atm_out.dln_t_dln_kap * dlnkap_dlnd;
-    d1_lnt[I_LNT_00] = atm_out.dln_t_dln_kap * dlnkap_dlnt;
-    d1_lnt[I_LNR_00] = atm_out.dln_t_dln_r;
-    d1_lnt[I_L_00] = atm_out.dln_t_dl;
-    let ln_t_surf_val = if model.controls.atm_option == AtmOption::Table
+    let (lnp_ad, mut lnt_ad) = atm_out_to_ad(&atm_out, dlnkap_dlnd, dlnkap_dlnt);
+    if use_table_proxy_kap
         && !model.ln_t_start.is_empty()
         && !model.ln_r_start.is_empty()
         && !model.lum_start.is_empty()
@@ -312,14 +401,8 @@ pub fn eval_surf_bc(model: &mut StarModel) -> Result<(), StarError> {
             model.lum_start[0].max(1.0),
             model.ln_r_start[0].exp().max(1.0),
         );
-        model.ln_t_start[0] + (teff / teff_s.max(1.0)).ln()
-    } else {
-        atm_out.ln_t
-    };
-    model.ln_t_surf_ad = StarAdOrder1 {
-        val: ln_t_surf_val,
-        d1: d1_lnt,
-    };
+        lnt_ad.val = model.ln_t_start[0] + (teff / teff_s.max(1.0)).ln();
+    }
 
-    Ok(())
+    Ok((lnp_ad, lnt_ad))
 }

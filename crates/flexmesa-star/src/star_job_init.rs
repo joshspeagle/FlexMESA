@@ -112,6 +112,30 @@ fn build_initial_planet_or_wd_model(
     Ok(model)
 }
 
+/// Loads `model_name` from `case_dir` if readable and parseable, or falls back
+/// to `build_initial_planet_or_wd_model`.
+fn load_mod_or_fallback(
+    case_dir: &Path,
+    model_name: &str,
+    controls: StarControls,
+    job: StarJobControls,
+    loaded_from_mod: &mut bool,
+) -> Result<StarModel, StarError> {
+    if let Some(mod_path) = resolve_model_path(case_dir, model_name) {
+        let text = fs::read_to_string(&mod_path).map_err(|e| {
+            StarError::IoError(format!(
+                "failed to read saved model {}: {e}",
+                mod_path.display()
+            ))
+        })?;
+        if let Ok(m) = read_mod_str(&text, controls.clone(), job.clone()) {
+            *loaded_from_mod = true;
+            return Ok(m);
+        }
+    }
+    build_initial_planet_or_wd_model(controls, job)
+}
+
 /// Initializes a [`StarModel`] from `bundle` (or updates `existing_model` for
 /// subsequent multi-inlist stages) and executes all `&star_job` startup and
 /// relaxation directives (`star/private/star_job_controls_io.f90` &
@@ -163,33 +187,19 @@ pub fn init_or_update_model_from_bundle(
         || out_of_zams_range;
     let had_existing_model = existing_model.is_some();
     let mut loaded_from_mod = false;
+    let mut did_create_pre_ms = false;
     let mut model = if is_pulse_mod_case || is_rsp2_mod_case {
         if let Some(prev) = existing_model {
             loaded_from_mod = true;
             prev
         } else if job.load_saved_model && !job.saved_model_name.is_empty() {
-            if let Some(mod_path) =
-                resolve_model_path(&bundle.case_dir, &job.saved_model_name)
-            {
-                let text = fs::read_to_string(&mod_path).map_err(|e| {
-                    StarError::IoError(format!(
-                        "failed to read saved model {}: {e}",
-                        mod_path.display()
-                    ))
-                })?;
-                match read_mod_str(&text, controls.clone(), job.clone()) {
-                    Ok(m) => {
-                        loaded_from_mod = true;
-                        m
-                    }
-                    Err(_) => build_initial_planet_or_wd_model(
-                        controls.clone(),
-                        job.clone(),
-                    )?,
-                }
-            } else {
-                build_initial_planet_or_wd_model(controls.clone(), job.clone())?
-            }
+            load_mod_or_fallback(
+                &bundle.case_dir,
+                &job.saved_model_name,
+                controls.clone(),
+                job.clone(),
+                &mut loaded_from_mod,
+            )?
         } else {
             load_zams_model(controls.clone(), job.clone())?
         }
@@ -244,33 +254,21 @@ pub fn init_or_update_model_from_bundle(
     } else if job.load_saved_model && !job.saved_model_name.is_empty() {
         if let Some(prev) = existing_model {
             prev
-        } else if let Some(mod_path) =
-            resolve_model_path(&bundle.case_dir, &job.saved_model_name)
-        {
-            let text = fs::read_to_string(&mod_path).map_err(|e| {
-                StarError::IoError(format!(
-                    "failed to read saved model {}: {e}",
-                    mod_path.display()
-                ))
-            })?;
-            match read_mod_str(&text, controls.clone(), job.clone()) {
-                Ok(m) => {
-                    loaded_from_mod = true;
-                    m
-                }
-                Err(_) => build_initial_planet_or_wd_model(
-                    controls.clone(),
-                    job.clone(),
-                )?,
-            }
         } else {
-            build_initial_planet_or_wd_model(controls.clone(), job.clone())?
+            load_mod_or_fallback(
+                &bundle.case_dir,
+                &job.saved_model_name,
+                controls.clone(),
+                job.clone(),
+                &mut loaded_from_mod,
+            )?
         }
     } else if matches!(case_name, "make_he_wd" | "make_co_wd" | "make_o_ne_wd")
         && existing_model.is_none()
     {
         build_initial_planet_or_wd_model(controls.clone(), job.clone())?
     } else if job.create_pre_ms_model {
+        did_create_pre_ms = true;
         build_pre_ms_model(controls.clone(), job.clone())?
     } else if let Some(prev) = existing_model {
         prev
@@ -581,6 +579,17 @@ pub fn init_or_update_model_from_bundle(
     }
     if loaded_from_mod && !fell_back {
         crate::relax::settle_relaxed_loaded_model(&mut model)?;
+    }
+    if did_create_pre_ms
+        && model.controls.max_model_number.is_none_or(|m| m > 10)
+        && model.mstar / M_SUN >= 0.3
+        && bundle
+            .sections
+            .get("star_job")
+            .and_then(|sj| sj.get_bool("pre_ms_relax_to_start_radiative_core"))
+            .unwrap_or(true)
+    {
+        crate::hydro_vars::relax_pre_ms_to_radiative_core(&mut model)?;
     }
     extras.extras_startup(&mut model, false)?;
 

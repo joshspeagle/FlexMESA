@@ -232,10 +232,10 @@ pub fn reconstruct_and_analyze_mode(
                 1.0,
                 (1.0 - w) * p0.c_1 + w * p1.c_1,
                 y_p,
-                InertiaNormKind::Both,
+                inertia_norm,
             )
         } else {
-            (surf.x, surf.c_1, y_grid[n - 1], InertiaNormKind::Both)
+            (surf.x, surf.c_1, y_grid[n - 1], inertia_norm)
         }
     } else {
         (surf.x, surf.c_1, y_grid[n - 1], inertia_norm)

@@ -26,7 +26,7 @@ use flexmesa_star::star_job_init::init_or_update_model_from_bundle;
 pub use flexmesa_star::tier4_extras::TIER4_ASTERO_CASES;
 
 use crate::inlist_astero::parse_astero_search_controls;
-use crate::sample_eval::eval_model_astero_sample;
+use crate::sample_eval::{eval_model_astero_sample, parse_gyre_outer_bound};
 use crate::search_driver::run_star_astero;
 use crate::surface_corr::{
     eval_combined_corr, eval_cubic_corr, eval_kjeldsen_corr,
@@ -146,16 +146,7 @@ fn run_pulse_tams_case(
     let t0 = Instant::now();
     let staging = TempCaseStaging::new(orig_case_dir)?;
     let case_dir = staging.staged_dir.as_path();
-    let mut bundle = InlistBundle::from_file_in_case_dir(case_dir, "inlist")?;
-    if !bundle.job.set_initial_dt {
-        bundle.job.set_initial_dt = true;
-        bundle.job.years_for_initial_dt = 5.0e7;
-    }
-    if bundle.controls.max_years_for_timestep.unwrap_or(0.0) <= 0.0
-        || bundle.controls.max_years_for_timestep.unwrap_or(0.0) > 2.5e8
-    {
-        bundle.controls.max_years_for_timestep = Some(2.0e8);
-    }
+    let bundle = InlistBundle::from_file_in_case_dir(case_dir, "inlist")?;
 
     let mut extras = DefaultStarExtras;
     let mut model = init_or_update_model_from_bundle(&bundle, None, &mut extras)?;
@@ -165,40 +156,41 @@ fn run_pulse_tams_case(
         photo_restart_verified = c1 == c2;
     }
 
-    let outer_bc = if case_name == "astero_gyre" {
-        OuterBoundKind::Vacuum
-    } else {
-        OuterBoundKind::AdiplsIsothermal
-    };
     let rep = run_inlist_stage(&mut model, &bundle, &mut extras, max_steps_per_stage)?;
 
-    let scan_opts = PulseModeScanOptions {
-        l: 0,
-        freq_min_uhz: 150.0,
-        freq_max_uhz: 750.0,
-        n_freq: 220,
-        add_center_point: true,
-        keep_surface_point: false,
-        add_atmosphere: false,
-        outer_bc,
-        inertia_norm: InertiaNormKind::Both,
+    let scan_opts = if case_name == "astero_gyre" {
+        PulseModeScanOptions {
+            l: 0,
+            freq_min_uhz: 100.0,
+            freq_max_uhz: 1000.0,
+            n_freq: 200,
+            add_center_point: true,
+            keep_surface_point: false,
+            add_atmosphere: false,
+            outer_bc: parse_gyre_outer_bound(case_dir, "gyre.in"),
+            inertia_norm: InertiaNormKind::Both,
+        }
+    } else {
+        PulseModeScanOptions {
+            l: 0,
+            freq_min_uhz: 50.0,
+            freq_max_uhz: 1000.0,
+            n_freq: 200,
+            add_center_point: true,
+            keep_surface_point: false,
+            add_atmosphere: true,
+            outer_bc: OuterBoundKind::AdiplsIsothermal,
+            inertia_norm: InertiaNormKind::Both,
+        }
     };
     let modes = scan_star_bvp_eigenmodes(&model, &scan_opts);
     let h1_c = model.xh_mass.last().copied().unwrap_or(0.0);
-    let assertions_passed = if h1_c <= 0.01 {
-        let target_uhz = 375.0_f64;
-        let np4_match = modes
-            .iter()
-            .find(|m| m.n_p == 4)
-            .or_else(|| {
-                modes.iter().min_by(|a, b| {
-                    (a.freq_uhz - target_uhz)
-                        .abs()
-                        .total_cmp(&(b.freq_uhz - target_uhz).abs())
-                })
-            })
-            .is_some_and(|m| ((m.freq_uhz - target_uhz) / target_uhz).abs() < 0.03);
-        np4_match || !modes.is_empty()
+    let target_uhz = model.controls.x_ctrl.get(1).copied().filter(|&f| f > 0.0).unwrap_or(375.0);
+    let assertions_passed = if max_steps_per_stage.is_none() {
+        h1_c <= 0.0015
+            && modes
+                .iter()
+                .any(|m| m.n_p == 4 && ((m.freq_uhz - target_uhz) / target_uhz).abs() < 0.03)
     } else {
         !modes.is_empty() && modes.iter().all(|m| m.freq_uhz.is_finite() && m.freq_uhz > 0.0)
     };
@@ -370,7 +362,11 @@ fn run_astero_search_case(
     let case_dir = staging.staged_dir.as_path();
     let ctrl = parse_astero_search_controls(case_dir).map_err(StarError::InvalidInput)?;
 
-    let bundle = InlistBundle::from_file_in_case_dir(case_dir, "inlist")?;
+    let mut bundle = InlistBundle::from_file_in_case_dir(case_dir, "inlist")?;
+    if let Some(cap) = max_steps_per_stage {
+        bundle.controls.max_model_number =
+            Some(bundle.controls.max_model_number.map_or(cap, |m| m.min(cap)));
+    }
     let mut extras = DefaultStarExtras;
     let init_model = init_or_update_model_from_bundle(&bundle, None, &mut extras)?;
     let mut photo_restart_verified = false;
@@ -385,13 +381,18 @@ fn run_astero_search_case(
     let assertions_passed = best.is_some_and(|b| {
         b.chi2.is_finite()
             && b.chi2 > 0.0
-            && match case_name {
-                "example_astero" => search_rep.samples.len() == 1,
-                "fast_scan_grid" => search_rep.samples.len() == 4,
-                "fast_simplex" => !search_rep.samples.is_empty() && search_rep.samples.len() <= 5,
-                "fast_newuoa" => search_rep.samples.len() >= 2,
-                "fast_from_file" => search_rep.samples.len() == 2,
-                _ => !search_rep.samples.is_empty(),
+            && if max_steps_per_stage.is_some() {
+                !search_rep.samples.is_empty() && search_rep.samples.len() <= 2
+            } else {
+                b.chi2 < 1.0e90
+                    && match case_name {
+                        "example_astero" => search_rep.samples.len() == 1 && b.chi2 > 1.0 && b.chi2 < 15.0,
+                        "fast_scan_grid" => search_rep.samples.len() == 4,
+                        "fast_simplex" => !search_rep.samples.is_empty() && search_rep.samples.len() <= 5,
+                        "fast_newuoa" => search_rep.samples.len() >= 4 && b.chi2 < search_rep.samples[0].chi2,
+                        "fast_from_file" => search_rep.samples.len() == 2,
+                        _ => !search_rep.samples.is_empty(),
+                    }
             }
     });
 
@@ -411,7 +412,10 @@ fn run_astero_search_case(
         steps_taken: search_rep.total_steps,
         total_newton_iterations: search_rep.total_steps * 2,
         total_retries: 0,
-        termination_code: format!("astero_{}", search_rep.search_type),
+        termination_code: format!(
+            "astero_{}_samples={}_best_chi2={:.6e}",
+            search_rep.search_type, search_rep.samples.len(), search_rep.best_chi2
+        ),
         runtime_sec, final_history: hr, history_rows: vec![hr],
     };
     let passed = assertions_passed && (!verify_restart || photo_restart_verified);

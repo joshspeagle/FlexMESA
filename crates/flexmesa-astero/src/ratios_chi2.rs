@@ -87,15 +87,25 @@ pub fn get_max_sequence(freqs: &[f64], dnu: f64) -> (usize, usize) {
 /// Full output of `get_frequency_ratios` (`astero_support.f90:318-416`).
 #[derive(Debug, Clone, Default)]
 pub struct FrequencyRatiosR010 {
+    /// Number of $r_{01}$ and $r_{10}$ ratio pairs.
     pub n: usize,
+    /// Starting 0-based index in `l0_freqs`.
     pub l0_first: usize,
+    /// Starting 0-based index in `l1_freqs`.
     pub l1_first: usize,
+    /// 5-point smoothed $r_{01}(i)$ ratios (`len = n`).
     pub ratios_r01: Vec<f64>,
+    /// Propagated $1\sigma$ uncertainties $\sigma_{r_{01}}(i)$ (`len = n`).
     pub sigmas_r01: Vec<f64>,
+    /// 5-point smoothed $r_{10}(i)$ ratios (`len = n`).
     pub ratios_r10: Vec<f64>,
+    /// Propagated $1\sigma$ uncertainties $\sigma_{r_{10}}(i)$ (`len = n`).
     pub sigmas_r10: Vec<f64>,
+    /// Interleaved $(r_{01}, r_{10})$ sequence (`len = 2 * n`).
     pub ratios_r010: Vec<f64>,
+    /// Interleaved $(\sigma_{r_{01}}, \sigma_{r_{10}})$ uncertainties (`len = 2 * n`).
     pub sigmas_r010: Vec<f64>,
+    /// Central frequencies $\nu$ ($\mu\mathrm{Hz}$) corresponding to `ratios_r010` (`len = 2 * n`).
     pub r010_freqs: Vec<f64>,
 }
 
@@ -328,15 +338,20 @@ pub fn interpolate_ratio_r010(freq: f64, r010_freqs: &[f64], r010_vals: &[f64]) 
 }
 
 /// Linearly interpolates a model $r_{02}$ frequency separation ratio at target
-/// frequency `freq` using radial frequencies `l0_freqs[1..=n]` corresponding to
-/// `r02_vals[0..n]` (`interpolate_ratio_r02` in `astero_support.f90:523-550`).
+/// frequency `freq` using radial frequencies `l0_freqs` corresponding to
+/// `r02_vals` (`interpolate_ratio_r02` in `astero_support.f90:523-550`).
 #[must_use]
 pub fn interpolate_ratio_r02(freq: f64, l0_freqs: &[f64], r02_vals: &[f64]) -> f64 {
-    if l0_freqs.len() < 2 || r02_vals.is_empty() {
+    if l0_freqs.is_empty() || r02_vals.is_empty() {
         return 0.0;
     }
-    let n = r02_vals.len().min(l0_freqs.len() - 1);
-    interpolate_ratio_r010(freq, &l0_freqs[1..=n], &r02_vals[..n])
+    if l0_freqs.len() > r02_vals.len() {
+        let n = r02_vals.len().min(l0_freqs.len() - 1);
+        interpolate_ratio_r010(freq, &l0_freqs[1..=n], &r02_vals[..n])
+    } else {
+        let n = r02_vals.len().min(l0_freqs.len());
+        interpolate_ratio_r010(freq, &l0_freqs[..n], &r02_vals[..n])
+    }
 }
 
 /// Weights and normalization controls for `eval_astero_chi2`
@@ -344,15 +359,25 @@ pub fn interpolate_ratio_r02(freq: f64, l0_freqs: &[f64], r02_vals: &[f64]) -> f
 #[derive(Debug, Clone)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct AsteroChi2Weights {
+    /// Weight $f_{\mathrm{seismo}} \in [0, 1]$ on $\chi^2_{\mathrm{seismo}}$ in total $\chi^2$.
     pub chi2_seismo_fraction: f64,
+    /// Optional explicit weight on $\chi^2_{\mathrm{freq}}$ inside $\chi^2_{\mathrm{seismo}}$.
     pub chi2_seismo_freq_fraction: Option<f64>,
+    /// Weight on $\chi^2_{\Delta\nu}$ inside $\chi^2_{\mathrm{seismo}}$.
     pub chi2_seismo_delta_nu_fraction: f64,
+    /// Weight on $\chi^2_{\nu_{\max}}$ inside $\chi^2_{\mathrm{seismo}}$.
     pub chi2_seismo_nu_max_fraction: f64,
+    /// Weight on $\chi^2_{r_{010}}$ inside $\chi^2_{\mathrm{seismo}}$.
     pub chi2_seismo_r_010_fraction: f64,
+    /// Weight on $\chi^2_{r_{02}}$ inside $\chi^2_{\mathrm{seismo}}$.
     pub chi2_seismo_r_02_fraction: f64,
+    /// Divide $\chi^2_{\mathrm{freq}}$ by the number of matched frequencies.
     pub normalize_chi2_seismo_frequencies: bool,
+    /// Divide $\chi^2_{r_{010}}$ by the number of $r_{010}$ terms.
     pub normalize_chi2_seismo_r_010: bool,
+    /// Divide $\chi^2_{r_{02}}$ by the number of $r_{02}$ terms.
     pub normalize_chi2_seismo_r_02: bool,
+    /// Divide $\chi^2_{\mathrm{spectro}}$ by the number of active spectroscopic constraints.
     pub normalize_chi2_spectro: bool,
 }
 

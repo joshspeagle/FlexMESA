@@ -176,6 +176,11 @@ where
     let mut u = vec![0.0_f64; n_eff];
     let r_beg = rhobeg.max(1.0e-6);
     let r_end = rhoend.clamp(1.0e-12, r_beg);
+    let max_evals_eff = if rhoend >= r_beg {
+        max_evals.min(npt + 1)
+    } else {
+        max_evals
+    };
     let mut best_x: Vec<f64> = (0..n)
         .map(|i| x_first[i].clamp(x_lower[i], x_upper[i]))
         .collect();
@@ -188,15 +193,16 @@ where
         &mut u,
         r_beg,
         r_end,
-        max_evals,
+        max_evals_eff,
         1.0e10,
         |u_try| -> Result<f64, NumError> {
-            if evals >= max_evals {
+            if evals >= max_evals_eff {
                 return Ok(best_f.min(1.0e10));
             }
-            if u_try[..n].iter().any(|&ui| !(-1.0..=1.0).contains(&ui)) {
-                return Ok(1.0e99);
-            }
+            let out_pen: f64 = u_try[..n]
+                .iter()
+                .map(|&ui| (ui.abs() - 1.0).max(0.0).powi(2))
+                .sum();
             let phys: Vec<f64> = (0..n)
                 .map(|i| {
                     map_bobyqa_param(u_try[i], x_first[i], x_lower[i], x_upper[i])
@@ -208,10 +214,11 @@ where
                 best_f = f;
                 best_x = phys;
             }
+            let f_pen = f + 1.0e4 * out_pen;
             Ok(if n_eff > n {
-                f + 1.0e-6 * u_try[n].powi(2)
+                f_pen + 1.0e-6 * u_try[n].powi(2)
             } else {
-                f
+                f_pen
             })
         },
     );
@@ -243,6 +250,11 @@ where
     let xu = vec![1.0_f64; n_eff];
     let r_beg = rhobeg.clamp(1.0e-6, 0.95);
     let r_end = rhoend.clamp(1.0e-12, r_beg);
+    let max_evals_eff = if rhoend >= r_beg {
+        max_evals.min(npt + 1)
+    } else {
+        max_evals
+    };
     let mut best_x: Vec<f64> = (0..n)
         .map(|i| x_first[i].clamp(x_lower[i], x_upper[i]))
         .collect();
@@ -257,10 +269,10 @@ where
         &xu,
         r_beg,
         r_end,
-        max_evals,
+        max_evals_eff,
         1.0e10,
         |u_try| -> Result<f64, NumError> {
-            if evals >= max_evals {
+            if evals >= max_evals_eff {
                 return Ok(best_f.min(1.0e10));
             }
             let phys: Vec<f64> = (0..n)

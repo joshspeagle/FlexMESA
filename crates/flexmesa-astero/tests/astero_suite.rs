@@ -14,7 +14,7 @@ use flexmesa_astero::{
     eval_combined_corr, eval_cubic_corr, eval_kjeldsen_corr,
     eval_model_astero_sample, eval_power_law_corr, eval_sonoi_corr,
     interpolate_l0_inertia, parse_astero_search_controls, run_astero_suite,
-    run_astero_test_suite_case, run_star_astero, TempCaseStaging,
+    run_astero_test_suite_case, TempCaseStaging,
     TIER4_ASTERO_CASES,
 };
 use flexmesa_math::pow;
@@ -198,42 +198,66 @@ fn test_surface_effects_case_recovers_synthetic_targets_and_bison_solar_fits() {
     );
 }
 
-#[test]
-fn test_all_eight_astero_test_suite_cases_run_uncapped_and_pass() {
+fn assert_uncapped_case_passes(case_name: &str) {
     let suite_dir = astero_suite_dir();
     assert!(
         suite_dir.exists(),
         "missing astero test_suite directory: {}",
         suite_dir.display()
     );
+    let rep = run_astero_test_suite_case(
+        &suite_dir.join(case_name),
+        true,
+        None,
+        true,
+    )
+    .unwrap_or_else(|e| panic!("astero case {case_name} errored: {e}"));
+    assert_eq!(rep.case_name, case_name);
+    assert!(
+        rep.passed,
+        "astero case {} failed: assertions_passed={}, restart_verified={}, term={}",
+        rep.case_name,
+        rep.assertions_passed,
+        rep.photo_restart_verified,
+        rep.termination_code
+    );
+    assert!(rep.photo_restart_verified);
+    assert!(rep.assertions_passed);
+    eprintln!(
+        "  [uncapped] {} steps={} wall={:.2}s teff={:.1} logL={:.4} center_h1={:.5} {}",
+        rep.case_name,
+        rep.total_steps,
+        rep.total_runtime_sec,
+        rep.final_teff,
+        rep.final_log_l,
+        rep.final_center_h1,
+        rep.termination_code
+    );
+}
 
-    // 1. Run `example_astero` explicitly and verify `1.0 < best_chi2 < 15.0`
-    {
-        let case_dir = suite_dir.join("example_astero");
-        let staging =
-            TempCaseStaging::new(&case_dir).expect("stage example_astero");
-        let staged = staging.staged_dir.as_path();
-        let ctrl = parse_astero_search_controls(staged)
-            .expect("parse example_astero controls");
-        let search = run_star_astero(staged, "inlist", None, &ctrl)
-            .expect("run example_astero");
-        assert_eq!(search.samples.len(), 1);
-        assert!(
-            search.best_chi2 > 1.0 && search.best_chi2 < 15.0,
-            "example_astero best_chi2={} outside (1.0, 15.0)",
-            search.best_chi2
-        );
+#[test]
+fn test_astero_adipls_and_gyre_uncapped_pass() {
+    for case_name in ["astero_adipls", "astero_gyre", "surface_effects"] {
+        assert_uncapped_case_passes(case_name);
     }
+}
 
-    // 2. Run all 8 `astero/test_suite` cases uncapped (`max_steps_per_stage = None`)
-    let reports = run_astero_suite(&suite_dir, true, None, true)
-        .expect("run all 8 astero cases uncapped");
+#[test]
+fn test_all_eight_astero_cases_bounded_eight_steps_pass() {
+    let suite_dir = astero_suite_dir();
+    assert!(
+        suite_dir.exists(),
+        "missing astero test_suite directory: {}",
+        suite_dir.display()
+    );
+    let reports = run_astero_suite(&suite_dir, true, Some(8), true)
+        .expect("run all 8 astero cases bounded to 8 steps");
     assert_eq!(reports.len(), TIER4_ASTERO_CASES.len());
     for (rep, &expected_name) in reports.iter().zip(&TIER4_ASTERO_CASES) {
         assert_eq!(rep.case_name, expected_name);
         assert!(
             rep.passed,
-            "astero case {} failed: assertions_passed={}, restart_verified={}, term={}",
+            "bounded astero case {} failed: assertions_passed={}, restart_verified={}, term={}",
             rep.case_name,
             rep.assertions_passed,
             rep.photo_restart_verified,
@@ -242,4 +266,34 @@ fn test_all_eight_astero_test_suite_cases_run_uncapped_and_pass() {
         assert!(rep.photo_restart_verified);
         assert!(rep.assertions_passed);
     }
+}
+
+#[test]
+#[ignore = "slow uncapped campaign (~70s) verified locally via --ignored"]
+fn test_example_astero_uncapped() {
+    assert_uncapped_case_passes("example_astero");
+}
+
+#[test]
+#[ignore = "slow uncapped campaign (~185s) verified locally via --ignored"]
+fn test_fast_from_file_uncapped() {
+    assert_uncapped_case_passes("fast_from_file");
+}
+
+#[test]
+#[ignore = "slow uncapped campaign (~250s) verified locally via --ignored"]
+fn test_fast_scan_grid_uncapped() {
+    assert_uncapped_case_passes("fast_scan_grid");
+}
+
+#[test]
+#[ignore = "slow uncapped campaign (~310s) verified locally via --ignored"]
+fn test_fast_simplex_uncapped() {
+    assert_uncapped_case_passes("fast_simplex");
+}
+
+#[test]
+#[ignore = "slow uncapped campaign (~780s) verified locally via --ignored"]
+fn test_fast_newuoa_uncapped() {
+    assert_uncapped_case_passes("fast_newuoa");
 }

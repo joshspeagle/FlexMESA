@@ -9,7 +9,6 @@
 
 #![forbid(unsafe_code)]
 #![allow(
-    missing_docs,
     clippy::cast_possible_truncation,
     clippy::cast_precision_loss,
     clippy::cast_sign_loss,
@@ -33,11 +32,13 @@
 
 pub mod e2e;
 pub mod inlist_astero;
+pub mod inlist_parser;
 pub mod optimize;
 pub mod ratios_chi2;
 pub mod sample_eval;
 pub mod scaling;
 pub mod search_driver;
+mod search_methods;
 pub mod surface_corr;
 
 pub use e2e::{

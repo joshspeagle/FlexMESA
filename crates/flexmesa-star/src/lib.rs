@@ -109,6 +109,7 @@ pub mod pulse_exporters;
 pub mod pulse_modes;
 pub mod pulse_utils;
 pub mod relax;
+pub mod relax_comp;
 pub mod riemann;
 pub mod riemann_ad;
 pub mod riemann_eqns;
@@ -309,6 +310,7 @@ pub use relax::{
     relax_from_profile_files, relax_irradiation_to_target,
     relax_mass_to_target, relax_tau_factor_to_target, relax_to_remove_h_env,
 };
+pub use relax_comp::relax_composition_with_henyey;
 pub use riemann::{
     eval_hllc_face, eval_hllc_surface_face, eval_riemann_momentum_residual,
     eval_riemann_profile, HllcFaceState,

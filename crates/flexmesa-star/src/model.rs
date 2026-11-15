@@ -140,6 +140,8 @@ pub struct StarModel {
     pub non_nuc_neu_start: Vec<f64>,
     /// Start-of-step species mass fractions (`xa_start`).
     pub xa_start: Vec<f64>,
+    /// Accumulated Newton step species increments `xa - xa_start` (`xa_sub_xa_start`).
+    pub xa_sub_xa_start: Vec<f64>,
     /// Start-of-step packed hydro vector (`xh_start`).
     pub xh_start: Vec<f64>,
     /// Previous-step $\ln\rho$ (`lnd_old`).
@@ -448,6 +450,7 @@ impl StarModel {
             peos_start: vec![0.0; nz],
             non_nuc_neu_start: vec![0.0; nz],
             xa_start: vec![0.0; nz * species],
+            xa_sub_xa_start: Vec::new(),
             xh_start: vec![0.0; nz * layout.nvar_hydro],
             lnd_old: vec![0.0; nz],
             ln_t_old: vec![0.0; nz],

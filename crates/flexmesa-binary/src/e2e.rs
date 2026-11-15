@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-//! Stage `E2E-5` (`#96` / `#114`) genuine coupled `binary/test_suite` execution
-//! driver across all 8 active `binary/test_suite` cases (`double_bh`,
+//! Stage `E2E-5` (`#96` / `#114` / `#137`) genuine coupled `binary/test_suite`
+//! execution driver across all 8 active `binary/test_suite` cases (`double_bh`,
 //! `evolve_both_stars`, `jdot_gr_check`, `jdot_ls_check`, `jdot_ml_check`,
 //! `star_plus_point_mass`, `star_plus_point_mass_explicit_mdot`,
 //! `wind_fed_bhhmxb`).
@@ -10,13 +10,14 @@ use std::path::Path;
 use std::sync::OnceLock;
 use std::time::Instant;
 
-use flexmesa_const::{CLIGHT, MSUN, PI, RSUN, SECDAY, SECYER};
+use flexmesa_const::{MSUN, RSUN, SECDAY, SECYER};
 use flexmesa_star::{
     DefaultStarExtras, InlistBundle, StarError, StarModel, ZamsCatalog,
     init_or_update_model_from_bundle, load_zams_model,
-    load_zams_model_from_catalog, set_basic_vars, set_hydro_vars,
+    load_zams_model_from_catalog, relax_composition_with_henyey,
 };
 
+use crate::e2e_extras::build_test_suite_extras;
 pub use crate::e2e_oracles::{
     BinaryInlistControls, TIER5_BINARY_CASES, eval_brott_wind_msun_yr,
     eval_gr_expected_separation_rsun, eval_tauris_vdh_expected_separation_rsun,
@@ -50,62 +51,35 @@ fn init_binary_star_component(
 ) -> Result<StarModel, StarError> {
     let mut bundle = InlistBundle::from_file_in_case_dir(case_dir, inlist_name)?;
     bundle.controls.initial_mass = mass_msun;
+    let needs_henyey_yz_relax = bundle.job.relax_z || bundle.job.relax_y;
+    let mut init_bundle = bundle.clone();
+    if needs_henyey_yz_relax {
+        init_bundle.job.relax_z = false;
+        init_bundle.job.relax_y = false;
+    }
     let seed_zams = if let Some(cat) = resolve_full_zams_catalog(case_dir) {
         Some(load_zams_model_from_catalog(
             cat,
-            bundle.controls.clone(),
-            bundle.job.clone(),
+            init_bundle.controls.clone(),
+            init_bundle.job.clone(),
         )?)
     } else {
-        Some(load_zams_model(bundle.controls.clone(), bundle.job.clone())?)
+        Some(load_zams_model(
+            init_bundle.controls.clone(),
+            init_bundle.job.clone(),
+        )?)
     };
-    let mut extras = DefaultStarExtras;
-    let mut model =
-        init_or_update_model_from_bundle(&bundle, seed_zams, &mut extras)?;
-    if bundle.job.set_uniform_initial_composition
-        && (bundle.job.relax_z || bundle.job.relax_y)
-    {
-        let mut relax_job = bundle.job.clone();
-        relax_job.set_uniform_initial_composition = false;
-        flexmesa_star::relax::apply_composition_relaxation(
-            &mut model,
-            &relax_job,
-        );
-        model.pack_xh();
-        set_basic_vars(&mut model)?;
-        set_hydro_vars(&mut model, false, false)?;
-        model.save_start_values();
-        model.save_old_values();
+    let mut star_extras = DefaultStarExtras;
+    let mut model = init_or_update_model_from_bundle(
+        &init_bundle,
+        seed_zams,
+        &mut star_extras,
+    )?;
+    model.job = bundle.job.clone();
+    if needs_henyey_yz_relax {
+        relax_composition_with_henyey(&mut model, &bundle.job)?;
     }
     Ok(model)
-}
-
-fn species_frac(star: &StarModel, zone: usize, iso: &str, fallback: f64) -> f64 {
-    if star.nz == 0 || star.species == 0 {
-        return fallback;
-    }
-    let k = zone.min(star.nz - 1);
-    star.iso_names
-        .iter()
-        .position(|n| n.eq_ignore_ascii_case(iso))
-        .map_or(fallback, |j| star.cell_xa(k)[j])
-}
-
-fn center_h1(star: &StarModel) -> f64 {
-    species_frac(star, star.nz.saturating_sub(1), "h1", 0.7)
-}
-
-fn center_he4(star: &StarModel) -> f64 {
-    species_frac(star, star.nz.saturating_sub(1), "he4", 0.28)
-}
-
-fn surface_he4(star: &StarModel) -> f64 {
-    species_frac(star, 0, "he4", 0.28)
-}
-
-fn total_lnuc_erg_s(star: &StarModel) -> f64 {
-    flexmesa_star::compute_power_categories(star).power_nuc_burn
-        * flexmesa_const::LSUN
 }
 
 /// Telemetry and verification report for a single `binary/test_suite` case.
@@ -137,9 +111,9 @@ pub struct BinaryCaseRunReport {
 }
 
 /// Executes a single `binary/test_suite/<case>` directory through genuine
-/// coupled [`BinarySystem::try_step`] + [`StarModel`] Henyey evolution and
-/// verifies its upstream `run_binary_extras.f90` / `run_star_extras.f90`
-/// physical and analytical assertions.
+/// coupled [`BinarySystem::try_step_with_extras`] + [`StarModel`] Henyey
+/// evolution and verifies its upstream `run_binary_extras.f90` /
+/// `run_star_extras.f90` physical and analytical assertions.
 ///
 /// When `max_steps_cap` is `None` (the default), evolves to physical
 /// termination. When `Some(cap)` is supplied, evolves up to `cap` coupled
@@ -173,209 +147,25 @@ pub fn run_binary_test_suite_case(
 
     let uncapped = max_steps_cap.is_none();
     let step_limit = max_steps_cap.unwrap_or(100_000).max(1);
-    let a0_rsun = bin.separation / RSUN;
-    let q0 = bctrl.m1_msun / bctrl.m2_msun.max(1.0e-12);
-    let j_conserved_0 = bin.total_angular_momentum_conserved();
+    let mut case_extras = build_test_suite_extras(&case_name, &bin, &bctrl);
 
     let mut dt_next = match &bin.companion {
-        crate::system::BinaryCompanion::PointMass { .. } => bin.donor.dt_next,
-        crate::system::BinaryCompanion::Star(s2) => {
-            bin.donor.dt_next.min(s2.dt_next)
-        }
+        BinaryCompanion::PointMass { .. } => bin.donor.dt_next,
+        BinaryCompanion::Star(s2) => bin.donor.dt_next.min(s2.dt_next),
     }
     .max(1.0);
 
-    let mut max_rel_err = 0.0_f64;
-    let mut saw_sub_edd = false;
-    let mut saw_super_edd = false;
-    let mut max_qhe_diff = 0.0_f64;
-    let mut failed_mid_run = false;
     let mut term_code = String::from("MaxStepsCap");
-
     while bin.model_number < step_limit {
-        let (suggested_dt, _) = bin.try_step(dt_next).map_err(|e| {
-            StarError::ConvergenceFailure(format!(
-                "[{case_name} step {}] {e}",
-                bin.model_number + 1
-            ))
-        })?;
+        let (suggested_dt, _) = bin
+            .try_step_with_extras(dt_next, case_extras.as_mut())
+            .map_err(|e| {
+                StarError::ConvergenceFailure(format!(
+                    "[{case_name} step {}] {e}",
+                    bin.model_number + 1
+                ))
+            })?;
         dt_next = suggested_dt;
-
-        match case_name.as_str() {
-            "jdot_gr_check" => {
-                if bin.donor.mstar_dot != 0.0 {
-                    term_code = String::from("GrCheckPass");
-                    break;
-                }
-                let a_exp = eval_gr_expected_separation_rsun(
-                    a0_rsun,
-                    bctrl.m1_msun,
-                    bctrl.m2_msun,
-                    bin.donor.star_age * SECYER,
-                );
-                let rel = ((bin.separation / RSUN) - a_exp).abs()
-                    / a_exp.max(1.0e-30);
-                max_rel_err = max_rel_err.max(rel);
-                if rel > 1.0e-2 {
-                    failed_mid_run = true;
-                    term_code = String::from("GrErrorExceeded");
-                    break;
-                }
-            }
-            "jdot_ml_check" => {
-                let [m1_g, m2_g] = bin.star_masses_g();
-                let q = m1_g / m2_g.max(1.0);
-                let a_exp = eval_tauris_vdh_expected_separation_rsun(
-                    a0_rsun,
-                    q0,
-                    q,
-                    bin.controls.mass_transfer_alpha,
-                    bin.controls.mass_transfer_beta,
-                    bin.controls.mass_transfer_delta,
-                    bin.controls.mass_transfer_gamma,
-                );
-                let rel = ((bin.separation / RSUN) - a_exp).abs()
-                    / a_exp.max(1.0e-30);
-                max_rel_err = max_rel_err.max(rel);
-                if rel > 1.0e-4 {
-                    failed_mid_run = true;
-                    term_code = String::from("MlErrorExceeded");
-                    break;
-                }
-            }
-            "jdot_ls_check" => {
-                let j_cur = bin.total_angular_momentum_conserved();
-                let rel = (j_cur - j_conserved_0).abs()
-                    / j_conserved_0.abs().max(1.0e-30);
-                max_rel_err = max_rel_err.max(rel);
-                if rel >= 1.0e-12 {
-                    failed_mid_run = true;
-                    term_code = String::from("LsConservationExceeded");
-                    break;
-                }
-            }
-            "wind_fed_bhhmxb" => {
-                let acct = &bin.last_mdot;
-                let max_allowed = acct.mdot_edd
-                    * (1.0 - acct.mdot_edd_eta)
-                    * (1.0 + 1.0e-10);
-                if acct.component_mdot[1] > max_allowed {
-                    failed_mid_run = true;
-                    term_code = String::from("ExceededEddington");
-                    break;
-                }
-                let expected_sys = if -acct.actual_mtransfer_rate > acct.mdot_edd {
-                    saw_super_edd = true;
-                    acct.actual_mtransfer_rate + acct.mdot_edd
-                        - acct.accretion_luminosity / (CLIGHT * CLIGHT)
-                } else {
-                    saw_sub_edd = true;
-                    -acct.accretion_luminosity / (CLIGHT * CLIGHT)
-                };
-                let frac_bh = (acct.mdot_system_transfer[1] - expected_sys).abs()
-                    / expected_sys.abs();
-                let donor_wind_mdot = bin.donor.mstar_dot - bin.mtransfer_rate;
-                let exp_wtr = donor_wind_mdot * acct.wind_xfer_fraction[0];
-                let err_wtr = (acct.mdot_wind_transfer[0] - exp_wtr).abs()
-                    / acct.mdot_wind_transfer[0].abs();
-                let exp_wsys = donor_wind_mdot * (1.0 - acct.wind_xfer_fraction[0]);
-                let err_wsys =
-                    (acct.mdot_system_wind[0] - exp_wsys).abs() / exp_wsys.abs();
-                if bin.model_number > 1 {
-                    max_rel_err = max_rel_err.max(frac_bh);
-                }
-                if (bin.model_number > 1
-                    && (!frac_bh.is_finite() || frac_bh > 1.0e-15))
-                    || !err_wtr.is_finite()
-                    || err_wtr > 1.0e-10
-                    || !err_wsys.is_finite()
-                    || err_wsys > 1.0e-10
-                {
-                    failed_mid_run = true;
-                    term_code = String::from("WindFedAccountingExceeded");
-                    break;
-                }
-            }
-            "star_plus_point_mass" | "star_plus_point_mass_explicit_mdot" => {
-                let acct = &bin.last_mdot;
-                if acct.mdot_edd > 0.0
-                    && acct.component_mdot[1] > acct.mdot_edd * (1.0 + 1.0e-12)
-                {
-                    failed_mid_run = true;
-                    term_code = String::from("PointMassExceededEddington");
-                    break;
-                }
-            }
-            "double_bh" => {
-                if bin.ignore_rlof_flag {
-                    let zams_settled = bin.star_ref(1).map(|s1| {
-                        let lnuc = total_lnuc_erg_s(s1).abs();
-                        let lsurf = s1.lum[0].abs().max(1.0);
-                        s1.star_age > 100.0 && (lnuc / lsurf).log10().abs() < 0.005
-                    });
-                    if let Some(settled) = zams_settled {
-                        if settled {
-                            let gap1 = bin.rl_relative_gap_by_star()[0];
-                            if gap1 > 0.320_819_224 {
-                                failed_mid_run = true;
-                                term_code = String::from("L2OverflowAtZams");
-                                break;
-                            }
-                            if gap1 > 0.0 {
-                                bin.controls.max_implicit_abs_mdot = 1.0e-3;
-                                bin.donor.controls.mix_wind.delta_mdot_hard_limit = -1.0;
-                                if let BinaryCompanion::Star(ref mut s2) = bin.companion {
-                                    s2.controls.mix_wind.delta_mdot_hard_limit = -1.0;
-                                }
-                            }
-                            bin.set_ignore_rlof_flag(false);
-                            bin.controls.terminate_if_l2_overflow = true;
-                        } else {
-                            bin.set_period_eccentricity(
-                                bctrl.initial_period_in_days * SECDAY,
-                                0.0,
-                            );
-                        }
-                    }
-                }
-                for s_idx in [1_usize, 2_usize] {
-                    if let Some(st) = bin.star_ref(s_idx) {
-                        if center_h1(st) > 1.0e-3 {
-                            let diff = center_he4(st) - surface_he4(st);
-                            max_qhe_diff = max_qhe_diff.max(diff);
-                            if diff > 0.2 {
-                                failed_mid_run = true;
-                                term_code =
-                                    String::from("InhomogeneousEvolution");
-                                break;
-                            }
-                        }
-                    }
-                }
-                if failed_mid_run {
-                    break;
-                }
-                if bin.point_mass_i == 0 {
-                    let s1_he = bin.star_ref(1).map_or(1.0, center_he4);
-                    let s2_he = bin.star_ref(2).map_or(1.0, center_he4);
-                    if s1_he < 1.0e-5 {
-                        bin.set_point_mass_i(1);
-                    } else if s2_he < 1.0e-5 {
-                        bin.set_point_mass_i(2);
-                    }
-                }
-                if bin.point_mass_i != 0 {
-                    let rem_idx = 3 - bin.point_mass_i;
-                    if bin.star_ref(rem_idx).is_some_and(|s| center_he4(s) < 1.0e-5)
-                    {
-                        term_code = String::from("DoubleBhPass");
-                        break;
-                    }
-                }
-            }
-            _ => {}
-        }
-
         if let Some(ref reason) = bin.last_termination_reason {
             term_code.clone_from(reason);
             break;
@@ -385,65 +175,15 @@ pub fn run_binary_test_suite_case(
     let [m1_final_g, m2_final_g] = bin.star_masses_g();
     let m1_msun = m1_final_g / MSUN;
     let m2_msun = m2_final_g / MSUN;
-
-    let passed = !failed_mid_run
-        && match case_name.as_str() {
-            "jdot_gr_check" => {
-                max_rel_err < 1.0e-2
-                    && (bin.separation / RSUN) < a0_rsun
-                    && (!uncapped
-                        || (term_code == "GrCheckPass"
-                            && bin.donor.mstar_dot < 0.0))
-            }
-            "jdot_ml_check" => {
-                let target_age = bin.donor.controls.max_age.unwrap_or(1.4e10);
-                max_rel_err < 1.0e-4
-                    && (!uncapped
-                        || (term_code == "max_age"
-                            && bin.donor.star_age >= target_age * (1.0 - 1.0e-6)
-                            && m1_msun < bctrl.m1_msun - 1.0e-3))
-            }
-            "jdot_ls_check" => {
-                let target_age = bin.donor.controls.max_age.unwrap_or(1.0e10);
-                let omega_orb = 2.0 * PI / bin.period;
-                let omega_surf =
-                    bin.donor.omega.first().copied().unwrap_or(0.0);
-                let sync_err = (omega_surf - omega_orb).abs() / omega_orb;
-                max_rel_err < 1.0e-12
-                    && (!uncapped
-                        || (term_code == "max_age"
-                            && bin.donor.star_age >= target_age * (1.0 - 1.0e-6)
-                            && sync_err < 1.0e-2))
-            }
-            "wind_fed_bhhmxb" => {
-                max_rel_err <= 1.0e-15
-                    && (!uncapped
-                        || (term_code == "xa_central_lower_limit(h1)"
-                            && saw_sub_edd
-                            && saw_super_edd
-                            && center_h1(&bin.donor) < 1.0e-2))
-            }
-            "star_plus_point_mass" | "star_plus_point_mass_explicit_mdot" => {
-                !uncapped
-                    || (term_code == "xa_central_lower_limit(h1)"
-                        && center_h1(&bin.donor) < 1.0e-2
-                        && m1_msun < bctrl.m1_msun)
-            }
-            "evolve_both_stars" => {
-                !uncapped
-                    || (term_code == "accretor_overflow_terminate"
-                        && bin.rl_relative_gap[1] >= 0.0)
-            }
-            "double_bh" => {
-                max_qhe_diff <= 0.2
-                    && m1_msun > 20.0
-                    && m2_msun > 20.0
-                    && (!uncapped
-                        || (bin.point_mass_i != 0
-                            && term_code == "DoubleBhPass"))
-            }
-            _ => bin.separation.is_finite() && bin.period.is_finite(),
-        };
+    let passed = case_extras.evaluate_pass(&bin, uncapped, &term_code);
+    let max_rel_err = case_extras.max_relative_oracle_error();
+    let wall_ms = t0.elapsed().as_secs_f64() * 1000.0;
+    if std::env::var("FLEXMESA_BENCH_LOG").is_ok() {
+        eprintln!(
+            "[binary_e2e] case={case_name} uncapped={uncapped} passed={passed} steps={} term={term_code} m1={m1_msun:.4} m2={m2_msun:.4} sep={:.4} max_rel_err={max_rel_err:.3e} wall_s={:.2}",
+            bin.model_number, bin.separation / RSUN, wall_ms / 1000.0
+        );
+    }
 
     Ok(BinaryCaseRunReport {
         case_name,
@@ -456,7 +196,7 @@ pub fn run_binary_test_suite_case(
         final_period_days: bin.period / SECDAY,
         final_abs_mdot_msun_yr: bin.mtransfer_rate.abs() * SECYER / MSUN,
         max_relative_oracle_error: max_rel_err,
-        wall_time_ms: t0.elapsed().as_secs_f64() * 1000.0,
+        wall_time_ms: wall_ms,
     })
 }
 

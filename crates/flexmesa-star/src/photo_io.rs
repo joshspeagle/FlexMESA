@@ -106,35 +106,23 @@ pub fn write_photo_bytes(model: &StarModel) -> Vec<u8> {
     write_i32(&mut buf, 3);
     write_u64(&mut buf, model.lnd_old.len() as u64);
     for s in [
-        &model.lnd_old,
-        &model.ln_t_old,
-        &model.ln_r_old,
-        &model.lum_old,
-        &model.v_old,
-        &model.u_old,
-        &model.dq_old,
-        &model.aux.alpha_rti_old,
+        &model.lnd_old, &model.ln_t_old, &model.ln_r_old, &model.lum_old,
+        &model.v_old, &model.u_old, &model.dq_old, &model.aux.alpha_rti_old,
         &model.xa_old,
     ] {
         write_f64_slice(&mut buf, s);
     }
     write_u64(&mut buf, model.lnd_start.len() as u64);
     for s in [
-        &model.lnd_start,
-        &model.ln_t_start,
-        &model.ln_r_start,
-        &model.lum_start,
-        &model.v_start,
-        &model.u_start,
+        &model.lnd_start, &model.ln_t_start, &model.ln_r_start,
+        &model.lum_start, &model.v_start, &model.u_start,
     ] {
         write_f64_slice(&mut buf, s);
     }
     for s in [
-        &model.aux.alpha_rti_start,
-        &model.aux.p_face_start,
-        &model.aux.u_face_start,
-        &model.aux.omega_old,
-        &model.aux.j_rot_old,
+        &model.aux.alpha_rti_start, &model.aux.p_face_start,
+        &model.aux.u_face_start, &model.aux.omega_old, &model.aux.j_rot_old,
+        &model.aux.eps_mdot_old,
     ] {
         write_u64(&mut buf, s.len() as u64);
         write_f64_slice(&mut buf, s);
@@ -142,47 +130,42 @@ pub fn write_photo_bytes(model: &StarModel) -> Vec<u8> {
 
     write_i32(&mut buf, 4);
     write_u64(&mut buf, model.model_number as u64);
+    let sh = &model.aux.step_hist;
     write_f64_slice(
         &mut buf,
         &[
-            model.star_age,
-            model.star_age_old,
-            model.dt,
-            model.dt_next,
-            model.dt_old,
-            model.dt_limit_ratio_old,
-            model.mstar,
-            model.mstar_old,
-            model.mstar_dot,
-            model.m_center,
-            model.r_center,
-            model.l_center,
-            model.v_center,
-            model.teff,
-            model.tau_base,
-            model.mstar_start,
-            model.aux.total_energy,
-            model.aux.cumulative_energy_error,
-            model.aux.step_hist.rotational_mdot_boost_old,
-            model.aux.step_hist.total_energy_old,
-            model.aux.step_hist.cumulative_energy_error_old,
+            model.star_age, model.star_age_old, model.dt, model.dt_next,
+            model.dt_old, model.dt_limit_ratio_old, model.mstar,
+            model.mstar_old, model.mstar_dot, model.m_center, model.r_center,
+            model.l_center, model.v_center, model.teff, model.tau_base,
+            model.mstar_start, model.aux.total_energy,
+            model.aux.cumulative_energy_error, sh.rotational_mdot_boost_old,
+            sh.total_energy_old, sh.cumulative_energy_error_old, sh.teff_old,
+            sh.l_surf_old, sh.mstar_dot_old, sh.power_h_burn_old,
+            sh.power_he_burn_old, sh.power_z_burn_old, sh.power_photo_old,
+            sh.power_nuc_burn_old, sh.error_in_energy_conservation,
+            sh.total_energy_end,
         ],
     );
-    write_u64(&mut buf, model.total_num_solver_iterations as u64);
-    write_u64(&mut buf, model.num_retries as u64);
-    write_u64(&mut buf, model.aux.step_hist.timestep_hold as u64);
+    for v in [
+        model.total_num_solver_iterations as u64,
+        model.num_retries as u64,
+        sh.timestep_hold as u64,
+        sh.last_solver_iterations as u64,
+        sh.burn_max_num_substeps as u64,
+        sh.num_diffusion_solver_steps as u64,
+        sh.num_diffusion_solver_iters as u64,
+        sh.model_number_for_last_retry.map_or(u64::MAX, |n| n as u64),
+    ] {
+        write_u64(&mut buf, v);
+    }
+    buf.push(u8::from(sh.was_in_implicit_wind_limit));
 
     write_i32(&mut buf, 5);
     for s in [
-        &model.eps_mdot,
-        &model.cgrav,
-        &model.aux.irradiation_heat,
-        &model.aux.etrb,
-        &model.aux.alpha_rti,
-        &model.aux.w_div_wc,
-        &model.mlt_vc,
-        &model.aux.mlt_vc_old,
-        &model.aux.burn_avg_epsnuc,
+        &model.eps_mdot, &model.cgrav, &model.aux.irradiation_heat,
+        &model.aux.etrb, &model.aux.alpha_rti, &model.aux.w_div_wc,
+        &model.mlt_vc, &model.aux.mlt_vc_old, &model.aux.burn_avg_epsnuc,
         &model.sig,
     ] {
         write_f64_slice(&mut buf, s);
@@ -401,25 +384,39 @@ pub fn read_photo_bytes(
     let saved_u_face_start = read_prefixed_vec(&mut pos)?;
     let saved_omega_old = read_prefixed_vec(&mut pos)?;
     let saved_j_rot_old = read_prefixed_vec(&mut pos)?;
+    let saved_eps_mdot_old = read_prefixed_vec(&mut pos)?;
 
     expect_part(&mut pos, 4)?;
     model.model_number = read_u64(&mut pos)? as usize;
-    let s = read_f64_vec(&mut pos, 21)?;
+    let s = read_f64_vec(&mut pos, 31)?;
     (model.star_age, model.star_age_old, model.dt) = (s[0], s[1], s[2]);
-    (model.dt_next, model.dt_old, model.dt_limit_ratio_old) =
-        (s[3], s[4], s[5]);
+    (model.dt_next, model.dt_old, model.dt_limit_ratio_old) = (s[3], s[4], s[5]);
     (model.mstar, model.mstar_old, model.mstar_dot) = (s[6], s[7], s[8]);
     (model.m_center, model.r_center, model.l_center) = (s[9], s[10], s[11]);
     (model.v_center, model.teff, model.tau_base) = (s[12], s[13], s[14]);
     let saved_mstar_start = s[15];
     model.aux.total_energy = s[16];
     model.aux.cumulative_energy_error = s[17];
-    model.aux.step_hist.rotational_mdot_boost_old = s[18];
-    model.aux.step_hist.total_energy_old = s[19];
-    model.aux.step_hist.cumulative_energy_error_old = s[20];
+    let sh = &mut model.aux.step_hist;
+    (sh.rotational_mdot_boost_old, sh.total_energy_old, sh.cumulative_energy_error_old) =
+        (s[18], s[19], s[20]);
+    (sh.teff_old, sh.l_surf_old, sh.mstar_dot_old) = (s[21], s[22], s[23]);
+    (sh.power_h_burn_old, sh.power_he_burn_old, sh.power_z_burn_old) = (s[24], s[25], s[26]);
+    (sh.power_photo_old, sh.power_nuc_burn_old) = (s[27], s[28]);
+    (sh.error_in_energy_conservation, sh.total_energy_end) = (s[29], s[30]);
     model.total_num_solver_iterations = read_u64(&mut pos)? as usize;
     model.num_retries = read_u64(&mut pos)? as usize;
     model.aux.step_hist.timestep_hold = read_u64(&mut pos)? as usize;
+    model.aux.step_hist.last_solver_iterations = read_u64(&mut pos)? as usize;
+    model.aux.step_hist.burn_max_num_substeps = read_u64(&mut pos)? as usize;
+    model.aux.step_hist.num_diffusion_solver_steps = read_u64(&mut pos)? as usize;
+    model.aux.step_hist.num_diffusion_solver_iters = read_u64(&mut pos)? as usize;
+    let last_retry_raw = read_u64(&mut pos)?;
+    model.aux.step_hist.model_number_for_last_retry =
+        (last_retry_raw != u64::MAX).then_some(last_retry_raw as usize);
+    model.aux.step_hist.was_in_implicit_wind_limit =
+        *bytes.get(pos).ok_or_else(|| eof("EOF was_in_implicit_wind_limit"))? != 0;
+    pos += 1;
 
     expect_part(&mut pos, 5)?;
     for dst in [
@@ -572,7 +569,7 @@ pub fn read_photo_bytes(
     }
     model.aux.omega_old = saved_omega_old;
     model.aux.j_rot_old = saved_j_rot_old;
-    model.aux.eps_mdot_old.clone_from(&model.eps_mdot);
+    model.aux.eps_mdot_old = saved_eps_mdot_old;
     model.aux.alpha_rti_start = saved_alpha_rti_start;
     model.aux.p_face_start = saved_p_face_start;
     model.aux.u_face_start = saved_u_face_start;

@@ -34,8 +34,10 @@
 
 pub mod disk;
 pub mod e2e;
+pub mod e2e_extras;
 pub mod e2e_oracles;
 pub mod edd_wind;
+pub mod extras;
 pub mod inlist;
 pub mod jdot_tides;
 pub mod mdot;
@@ -62,6 +64,7 @@ pub use edd_wind::{
     eval_mdot_edd, eval_mdot_edd_with_overrides,
     eval_point_mass_edd_and_retention, eval_tout_wind_enhancement,
 };
+pub use extras::{BinaryExtras, BinaryExtrasAction, DefaultBinaryExtras};
 pub use jdot_tides::{
     check_jdot_mb_conditions, eval_edot_gr, eval_edot_tidal_hut, eval_jdot_gr,
     eval_jdot_ls, eval_jdot_ls_with_winds, eval_jdot_mb,
@@ -88,7 +91,8 @@ pub use system::{BinaryCompanion, BinarySystem};
 pub use system_jdot::{JdotBreakdown, eval_coupled_edot, eval_gated_jdot};
 pub use system_rlof::{
     BinaryStepSnapshot, CoupledMdotAccounting, blend_explicit_mdot,
-    eval_scheme_explicit_mdot, prepare_coupled_mdots,
+    eval_scheme_explicit_mdot, eval_star_intrinsic_wind_cgs_with_extras,
+    prepare_coupled_mdots, prepare_coupled_mdots_with_extras,
 };
 pub use timestep::{
     B_TLIM_COMP, B_TLIM_DM, B_TLIM_ECC, B_TLIM_ENV, B_TLIM_JORB, B_TLIM_ROCHE,

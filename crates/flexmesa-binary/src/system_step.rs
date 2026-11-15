@@ -10,6 +10,7 @@ use flexmesa_star::{
     sync_post_henyey_rotation,
 };
 
+use crate::extras::{BinaryExtras, BinaryExtrasAction, DefaultBinaryExtras};
 use crate::mdot_implicit::{
     ImplicitMdotSolver, ImplicitStepAction, update_change_factor_after_step,
 };
@@ -23,7 +24,7 @@ use crate::system_jdot::{
 };
 use crate::system_rlof::{
     blend_explicit_mdot, eval_scheme_explicit_mdot, evolve_single_star_without_term_rewind,
-    prepare_coupled_mdots, star_exceeds_delta_mdot_hard_limit,
+    prepare_coupled_mdots_with_extras, star_exceeds_delta_mdot_hard_limit,
 };
 use crate::timestep::{
     B_TLIM_COMP, BinaryTimestepControls, binary_pick_next_timestep, violates_binary_hard_limits,
@@ -36,14 +37,30 @@ enum SingleTrialOutcome {
 }
 
 impl BinarySystem {
-    /// Advances the coupled binary system by one timestep `dt` (s).
+    /// Advances the coupled binary system by one timestep `dt` (s) using [`DefaultBinaryExtras`].
     pub fn step(&mut self, dt: f64) -> (f64, i32) {
-        self.try_step(dt).unwrap_or((0.5 * dt.max(1.0), B_TLIM_COMP))
+        self.step_with_extras(dt, &mut DefaultBinaryExtras)
     }
 
-    /// Advances the coupled binary system by one timestep `dt` (s), returning
-    /// `(next_dt_sec, limit_reason)` or [`StarError`] on unrecoverable solver failure.
+    /// Advances the coupled binary system by one timestep `dt` (s) with custom [`BinaryExtras`].
+    pub fn step_with_extras(&mut self, dt: f64, extras: &mut dyn BinaryExtras) -> (f64, i32) {
+        self.try_step_with_extras(dt, extras)
+            .unwrap_or((0.5 * dt.max(1.0), B_TLIM_COMP))
+    }
+
+    /// Advances the coupled binary system by one timestep `dt` (s) using [`DefaultBinaryExtras`],
+    /// returning `(next_dt_sec, limit_reason)` or [`StarError`] on unrecoverable solver failure.
     pub fn try_step(&mut self, dt: f64) -> Result<(f64, i32), StarError> {
+        self.try_step_with_extras(dt, &mut DefaultBinaryExtras)
+    }
+
+    /// Advances the coupled binary system by one timestep `dt` (s) with custom [`BinaryExtras`],
+    /// returning `(next_dt_sec, limit_reason)` or [`StarError`] on unrecoverable solver failure.
+    pub fn try_step_with_extras(
+        &mut self,
+        dt: f64,
+        extras: &mut dyn BinaryExtras,
+    ) -> Result<(f64, i32), StarError> {
         self.controls.mass_transfer_alpha = self.mass_transfer_alpha;
         self.controls.mass_transfer_beta = self.mass_transfer_beta;
         self.controls.mass_transfer_delta = self.mass_transfer_delta;
@@ -80,7 +97,7 @@ impl BinarySystem {
             }
             if !implicit_mode {
                 let pre_mdot = if self.ignore_rlof_flag { 0.0 } else { self.mtransfer_rate };
-                match self.run_single_trial(pre_mdot, dt_try, outer_retry == 0) {
+                match self.run_single_trial(pre_mdot, dt_try, outer_retry == 0, extras) {
                     Ok(SingleTrialOutcome::Completed { dt_used, ts_ctrl }) => {
                         if outer_retry < 12 && dt_used > 1.0 && self.exceeds_hard_limits(&ts_ctrl) {
                             dt_try = 0.5 * dt_used;
@@ -98,7 +115,7 @@ impl BinarySystem {
                                 self.controls.max_explicit_abs_mdot,
                             )
                         };
-                        return Ok(self.finish_accepted_step(dt_used, &ts_ctrl));
+                        return Ok(self.finish_accepted_step(dt_used, &ts_ctrl, extras));
                     }
                     Ok(SingleTrialOutcome::CutDt(dt_cut)) => {
                         dt_try = check_cut_dt(dt_cut, dt_try)?;
@@ -137,7 +154,7 @@ impl BinarySystem {
                 if try_idx > 1 {
                     self.restore_snapshot(&trial_snap)?;
                 }
-                let (dt_used, ts_ctrl) = match self.run_single_trial(trial_mdot, dt_try, false) {
+                let (dt_used, ts_ctrl) = match self.run_single_trial(trial_mdot, dt_try, false, extras) {
                     Ok(SingleTrialOutcome::Completed { dt_used, ts_ctrl }) => (dt_used, ts_ctrl),
                     Ok(SingleTrialOutcome::CutDt(dt_cut)) => {
                         dt_try = check_cut_dt(dt_cut, dt_try)?;
@@ -181,7 +198,7 @@ impl BinarySystem {
                         } else {
                             self.restore_snapshot(&trial_snap)?;
                             if let Ok(SingleTrialOutcome::Completed { dt_used: dt0, ts_ctrl: ts0 }) =
-                                self.run_single_trial(0.0, dt_try, false)
+                                self.run_single_trial(0.0, dt_try, false, extras)
                             {
                                 self.mtransfer_rate = 0.0;
                                 accepted = Some((dt0, ts0));
@@ -217,7 +234,7 @@ impl BinarySystem {
                     dt_try = (0.5 * dt_used).max(dt_floor);
                     continue;
                 }
-                return Ok(self.finish_accepted_step(dt_used, &ts_ctrl));
+                return Ok(self.finish_accepted_step(dt_used, &ts_ctrl, extras));
             }
         }
         Err(StarError::ConvergenceFailure(String::from(
@@ -241,6 +258,7 @@ impl BinarySystem {
         trial_mdot: f64,
         dt_try: f64,
         allow_remesh: bool,
+        extras: &mut dyn BinaryExtras,
     ) -> Result<SingleTrialOutcome, StarError> {
         let _ = self.refresh_tidal_deformation_hooks(false);
         let (m_d_old, m_a_old) = (self.donor.mstar, self.accretor_mass_g());
@@ -264,9 +282,9 @@ impl BinarySystem {
             BinaryCompanion::PointMass { .. } => None,
             BinaryCompanion::Star(s2) => Some(&mut **s2),
         };
-        let mut acct = prepare_coupled_mdots(
+        let mut acct = prepare_coupled_mdots_with_extras(
             &self.controls, &mut self.donor, acc_opt, pm_state, self.donor_i,
-            self.rl, self.separation, self.eccentricity, trial_mdot, self.ignore_rlof_flag,
+            self.rl, self.separation, self.eccentricity, trial_mdot, self.ignore_rlof_flag, extras,
         )?;
 
         let dt_used =
@@ -471,7 +489,12 @@ impl BinarySystem {
         Ok(SingleTrialOutcome::Completed { dt_used, ts_ctrl })
     }
 
-    fn finish_accepted_step(&mut self, dt_used: f64, ts_ctrl: &BinaryTimestepControls) -> (f64, i32) {
+    fn finish_accepted_step(
+        &mut self,
+        dt_used: f64,
+        ts_ctrl: &BinaryTimestepControls,
+        extras: &mut dyn BinaryExtras,
+    ) -> (f64, i32) {
         self.binary_age_yr += dt_used / SECYER;
         self.model_number += 1;
         self.update_stage_varcontrol();
@@ -523,31 +546,12 @@ impl BinarySystem {
                     BinaryCompanion::Star(s2) => check_termination_limits(s2),
                 });
         }
-        (next_dt, reason)
-    }
-
-    pub(crate) fn update_stage_varcontrol(&mut self) {
-        let xh_d = center_h1_frac(&self.donor);
-        if self.mtransfer_rate.abs() * SECYER / MSUN > 1.0e-20 {
-            let vc = if xh_d > 1.0e-12 { self.controls.varcontrol_case_a } else { self.controls.varcontrol_case_b };
-            if vc > 0.0 {
-                self.donor.controls.varcontrol_target = vc;
-                if let BinaryCompanion::Star(ref mut s2) = self.companion {
-                    s2.controls.varcontrol_target = vc;
-                }
-            }
-        } else {
-            let vc_d = if xh_d > 1.0e-12 { self.controls.varcontrol_ms } else { self.controls.varcontrol_post_ms };
-            if vc_d > 0.0 {
-                self.donor.controls.varcontrol_target = vc_d;
-            }
-            if let BinaryCompanion::Star(ref mut s2) = self.companion {
-                let vc_a = if center_h1_frac(s2) > 1.0e-12 { self.controls.varcontrol_ms } else { self.controls.varcontrol_post_ms };
-                if vc_a > 0.0 {
-                    s2.controls.varcontrol_target = vc_a;
-                }
-            }
+        if let BinaryExtrasAction::Terminate(reason_str) = extras.check_model(self) {
+            self.last_termination_reason = Some(reason_str);
+        } else if let BinaryExtrasAction::Terminate(reason_str) = extras.finish_step(self) {
+            self.last_termination_reason = Some(reason_str);
         }
+        (next_dt, reason)
     }
 
     fn record_retry_holds(&self, holds: &mut [(Option<usize>, usize); 2]) {
@@ -584,14 +588,6 @@ fn finalize_star_post_binary_torques(star: &mut StarModel) -> Result<(), StarErr
         sync_post_henyey_rotation(star, 0.0);
         set_hydro_vars(star, false, false)?;
         star.aux.total_energy = eval_total_energy_integrals(star).5;
-        star.save_start_values();
     }
     Ok(())
-}
-
-fn center_h1_frac(star: &StarModel) -> f64 {
-    if star.nz == 0 || star.species == 0 {
-        return 0.7;
-    }
-    star.iso_names.iter().position(|n| n.eq_ignore_ascii_case("h1")).map_or(0.7, |j| star.cell_xa(star.nz - 1)[j])
 }

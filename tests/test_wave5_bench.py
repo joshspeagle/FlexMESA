@@ -48,7 +48,7 @@ def test_wave5_bench_kernels_return_positive_throughput_and_parity() -> None:
         assert np.isfinite(rec.checksum)
 
     expected_n8 = {
-        "w5_diff_rot": 3.082380424983001e5,
+        "w5_diff_rot": 2.551374595308515e3,
         "w5_riemann_rsp2": -2.543418211346364e5,
         "w5_binary_rlof": 6.234702123446103,
         "w5_astero_seism": 7.563537818023943e1,
@@ -59,7 +59,7 @@ def test_wave5_bench_kernels_return_positive_throughput_and_parity() -> None:
         assert rel < 1.0e-12, f"{name} N=8 checksum {actual} != {expected}"
 
     expected_n128 = {
-        "w5_diff_rot": 3.12459668e5,
+        "w5_diff_rot": 2.60059307e3,
         "w5_riemann_rsp2": -2.69003013e5,
         "w5_binary_rlof": 6.27865748,
         "w5_astero_seism": 7.37762193e1,

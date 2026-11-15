@@ -449,7 +449,18 @@ fn run_struct_burn_mix_core(
         crate::rsp2_eqns::rsp2_adjust_vars_before_call_solver(model);
         model.pack_xh();
     }
-    model.save_start_values();
+    let pre_burn_start = (
+        model.lnd.clone(),
+        model.ln_t.clone(),
+        model.ln_r.clone(),
+        model.v.clone(),
+        model.csound.clone(),
+    );
+    model.lnd_start.clone_from(&pre_burn_start.0);
+    model.ln_t_start.clone_from(&pre_burn_start.1);
+    model.ln_r_start.clone_from(&pre_burn_start.2);
+    model.v_start.clone_from(&pre_burn_start.3);
+    model.aux.csound_start.clone_from(&pre_burn_start.4);
 
     if op_split_burn && do_burn {
         let e_before: f64 =
@@ -468,6 +479,15 @@ fn run_struct_burn_mix_core(
     } else {
         model.sig.fill(0.0);
     }
+
+    model.save_start_values();
+    (
+        model.lnd_start,
+        model.ln_t_start,
+        model.ln_r_start,
+        model.v_start,
+        model.aux.csound_start,
+    ) = pre_burn_start;
 
     let do_chem = (do_burn || do_mix) && model.species > 0;
     solve_henyey_step(model, do_chem, use_bcyclic)

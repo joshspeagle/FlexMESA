@@ -308,7 +308,7 @@ pub fn sync_post_henyey_rotation(model: &mut StarModel, dt: f64) {
     crate::rotation_mix::sync_post_henyey_rotation(model, dt);
 }
 
-/// Evaluates shellular distortion, runs pre-Henyey Strang half-step, and returns diagnostics.
+/// Evaluates shellular distortion and returns rotational mixing diagnostics.
 pub fn set_rotation_mixing_info(model: &mut StarModel) -> Vec<RotationalMixZone> {
     let nz = model.nz;
     let mut zones = vec![RotationalMixZone::default(); nz];
@@ -319,10 +319,6 @@ pub fn set_rotation_mixing_info(model: &mut StarModel) -> Vec<RotationalMixZone>
     for k in 0..nz {
         let (r_k, m_k) = (model.r[k].max(1.0e5), model.m_grav[k].max(1.0e20));
         model.grav[k] = model.aux.fp_rot[k] * model.cgrav[k] * m_k / (r_k * r_k);
-    }
-    if model.controls.mix_wind.premix_omega && model.dt > 0.0 {
-        crate::rotation_mix::solve_omega_transport(model, 0.5 * model.dt);
-        conserve_shell_j_rot_and_distortion(model);
     }
     for k in 1..(nz - 1) {
         let r_k = model.r[k].max(1.0e5);

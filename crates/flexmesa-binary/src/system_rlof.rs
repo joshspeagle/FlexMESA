@@ -7,16 +7,16 @@
 //! `binary/private/binary_wind.f90:33-170`, and
 //! `binary/private/binary_evolve.f90:257-620`.
 
-use flexmesa_const::{CLIGHT, CRAD, LSUN, MSUN, PI, RSUN, SECYER};
+use flexmesa_const::{CLIGHT, CRAD, MSUN, PI, SECYER};
 use flexmesa_star::{
     EvolveStepReport, StarError, StarModel, do_set_mdot, star_evolve_step,
 };
 
-use crate::e2e_oracles::eval_brott_wind_msun_yr;
 use crate::edd_wind::{
     eval_accreted_material_j, eval_bondi_hoyle_wind_fraction,
     eval_point_mass_edd_and_retention, eval_tout_wind_enhancement,
 };
+use crate::extras::{BinaryExtras, DefaultBinaryExtras};
 use crate::inlist::BinaryInlistControls;
 use crate::mdot::{
     eval_arras_mdot_thin, eval_kolb_mdot_eccentric, eval_kolb_mdot_thick,
@@ -182,7 +182,7 @@ impl BinaryStepSnapshot {
     }
 }
 
-fn surface_h1_and_he4(star: &StarModel) -> (f64, f64) {
+pub(crate) fn surface_h1_and_he4(star: &StarModel) -> (f64, f64) {
     let mut x = star.xh_mass.first().copied().unwrap_or(0.7);
     let mut y = star.yhe_mass.first().copied().unwrap_or(0.28);
     if star.nz > 0 && star.species > 0 {
@@ -198,10 +198,7 @@ fn surface_h1_and_he4(star: &StarModel) -> (f64, f64) {
 }
 
 /// Evaluates intrinsic stellar wind $\dot{M}_{\mathrm{wind}} \le 0$ ($\mathrm{g\,s^{-1}}$)
-/// without RLOF `mass_change`, honoring Brott et al. (2011) `use_other_wind`
-/// (`double_bh/src/run_star_extras.f90:55-206`), rotational boost/caps
-/// (`star/private/winds.f90:431-475`), and Tout & Eggleton (1988) tidal wind
-/// enhancement (`binary_wind.f90:131-170`).
+/// without RLOF `mass_change` using [`DefaultBinaryExtras`].
 pub fn eval_star_intrinsic_wind_cgs(
     star: &mut StarModel,
     rl_cm: f64,
@@ -209,34 +206,46 @@ pub fn eval_star_intrinsic_wind_cgs(
     b_wind: f64,
     ignore_rlof: bool,
 ) -> Result<f64, StarError> {
-    let mut wind_cgs = if star.controls.use_other_wind {
-        if ignore_rlof {
-            return Ok(0.0);
-        }
-        let (x_surf, y_surf) = surface_h1_and_he4(star);
-        let z_base = if star.controls.zbase > 0.0 {
-            star.controls.zbase
-        } else {
-            (1.0 - x_surf - y_surf).clamp(1.0e-6, 0.1)
-        };
-        let l1 = star.lum[0].max(1.0);
+    eval_star_intrinsic_wind_cgs_with_extras(
+        star,
+        1,
+        rl_cm,
+        do_enhance,
+        b_wind,
+        ignore_rlof,
+        &mut DefaultBinaryExtras,
+    )
+}
+
+/// Evaluates intrinsic stellar wind $\dot{M}_{\mathrm{wind}} \le 0$ ($\mathrm{g\,s^{-1}}$)
+/// without RLOF `mass_change`, routing `use_other_wind` through [`BinaryExtras::other_wind_cgs`]
+/// before applying rotational boost/caps (`star/private/winds.f90:431-475`) and
+/// Tout & Eggleton (1988) tidal wind enhancement (`binary_wind.f90:131-170`).
+pub fn eval_star_intrinsic_wind_cgs_with_extras(
+    star: &mut StarModel,
+    star_idx: usize,
+    rl_cm: f64,
+    do_enhance: bool,
+    b_wind: f64,
+    ignore_rlof: bool,
+    extras: &mut dyn BinaryExtras,
+) -> Result<f64, StarError> {
+    let custom_raw = if star.controls.use_other_wind {
+        extras.other_wind_cgs(star, star_idx, ignore_rlof)?
+    } else {
+        None
+    };
+    let mut wind_cgs = if let Some(raw_wind_cgs) = custom_raw {
+        let mut wind_mdot = (-raw_wind_cgs).max(0.0);
+        let l1 = star.lum.first().copied().unwrap_or(1.0).max(1.0);
         let t1 = if star.teff > 0.0 {
             star.teff
         } else {
-            (l1 / (PI * star.r[0].max(1.0).powi(2) * CRAD * CLIGHT)).powf(0.25)
+            let r0 = star.r.first().copied().unwrap_or(1.0).max(1.0);
+            (l1 / (PI * r0 * r0 * CRAD * CLIGHT)).powf(0.25)
         }
         .max(100.0);
         let r1 = (l1 / (PI * CRAD * CLIGHT * t1.powi(4))).sqrt().max(1.0);
-        let w_msun_yr = eval_brott_wind_msun_yr(
-            (l1 / LSUN).max(1.0e-10),
-            (star.mstar / MSUN).max(1.0e-5),
-            (r1 / RSUN).max(1.0e-5),
-            t1,
-            x_surf,
-            y_surf,
-            z_base / 0.017,
-        );
-        let mut wind_mdot = (w_msun_yr * (MSUN / SECYER)).max(0.0);
         let mw = star.controls.mix_wind.clone();
         if mw.max_wind > 0.0 {
             wind_mdot = wind_mdot.min(mw.max_wind * (MSUN / SECYER));
@@ -265,18 +274,22 @@ pub fn eval_star_intrinsic_wind_cgs(
                 wind_mdot = wind_mdot.min(mw.max_wind * (MSUN / SECYER));
             }
         }
-        -wind_mdot
+        if wind_mdot > 0.0 { -wind_mdot } else { 0.0 }
     } else {
         let saved_mc = star.controls.mass_change;
         let saved_other = star.controls.use_other_adjust_mdot;
+        let saved_other_w = star.controls.use_other_wind;
         let saved_mdot = star.mstar_dot;
         star.controls.mass_change = 0.0;
         star.controls.use_other_adjust_mdot = false;
-        do_set_mdot(star)?;
+        star.controls.use_other_wind = false;
+        let res = do_set_mdot(star);
         let w = star.mstar_dot.min(0.0);
         star.controls.mass_change = saved_mc;
         star.controls.use_other_adjust_mdot = saved_other;
+        star.controls.use_other_wind = saved_other_w;
         star.mstar_dot = saved_mdot;
+        res?;
         w
     };
     if do_enhance && wind_cgs < 0.0 {
@@ -285,12 +298,42 @@ pub fn eval_star_intrinsic_wind_cgs(
     Ok(wind_cgs)
 }
 
+/// Evaluates coupled winds, Bondi-Hoyle wind transfer, and Eddington retention
+/// (`binary_mdot.f90:428-622`) using [`DefaultBinaryExtras`].
+#[allow(clippy::too_many_arguments)]
+pub fn prepare_coupled_mdots(
+    ctrl: &BinaryInlistControls,
+    donor: &mut StarModel,
+    accretor_star: Option<&mut StarModel>,
+    point_mass_state: Option<(f64, f64)>,
+    donor_i: usize,
+    rl: [f64; 2],
+    separation: f64,
+    eccentricity: f64,
+    trial_mtransfer_rate: f64,
+    ignore_rlof: bool,
+) -> Result<CoupledMdotAccounting, StarError> {
+    prepare_coupled_mdots_with_extras(
+        ctrl,
+        donor,
+        accretor_star,
+        point_mass_state,
+        donor_i,
+        rl,
+        separation,
+        eccentricity,
+        trial_mtransfer_rate,
+        ignore_rlof,
+        &mut DefaultBinaryExtras,
+    )
+}
+
 /// Evaluates coupled winds, Bondi-Hoyle wind transfer, decoupled Eddington
 /// retention vs. radiation-corrected accretion (`binary_mdot.f90:428-622`), and
 /// configures `donor` and optional `accretor` `mass_change` and `mstar_dot`
 /// before calling `star_evolve_step`.
 #[allow(clippy::too_many_arguments)]
-pub fn prepare_coupled_mdots(
+pub fn prepare_coupled_mdots_with_extras(
     ctrl: &BinaryInlistControls,
     donor: &mut StarModel,
     mut accretor_star: Option<&mut StarModel>,
@@ -301,6 +344,7 @@ pub fn prepare_coupled_mdots(
     eccentricity: f64,
     trial_mtransfer_rate: f64,
     ignore_rlof: bool,
+    extras: &mut dyn BinaryExtras,
 ) -> Result<CoupledMdotAccounting, StarError> {
     let mtransfer_rate = if ignore_rlof { 0.0 } else { trial_mtransfer_rate.min(0.0) };
     let (enh_d, b_d, do_wt_d, abh_d, bbh_d, maxf_d, enh_a, b_a, do_wt_a, abh_a, bbh_a, maxf_a) =
@@ -326,9 +370,14 @@ pub fn prepare_coupled_mdots(
         .or_else(|| accretor_star.as_deref().map(|s| s.mstar))
         .unwrap_or(0.0);
 
-    let w_d = eval_star_intrinsic_wind_cgs(donor, rl[0], enh_d, b_d, ignore_rlof)?;
+    let acc_i = 3 - donor_i;
+    let w_d = eval_star_intrinsic_wind_cgs_with_extras(
+        donor, donor_i, rl[0], enh_d, b_d, ignore_rlof, extras,
+    )?;
     let w_a = match accretor_star.as_deref_mut() {
-        Some(acc) => eval_star_intrinsic_wind_cgs(acc, rl[1], enh_a, b_a, ignore_rlof)?,
+        Some(acc) => eval_star_intrinsic_wind_cgs_with_extras(
+            acc, acc_i, rl[1], enh_a, b_a, ignore_rlof, extras,
+        )?,
         None => 0.0,
     };
 

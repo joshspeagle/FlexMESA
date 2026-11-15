@@ -390,7 +390,7 @@ pub(crate) fn sync_post_henyey_rotation(model: &mut StarModel, dt: f64) {
         return;
     }
     conserve_shell_j_rot_and_distortion(model);
-    if nz >= 2 && model.controls.mix_wind.am_nu_factor > 0.0 && model.controls.mix_wind.am_d_mix_factor > 0.0 {
+    if nz >= 2 && model.controls.mix_wind.am_nu_factor > 0.0 {
         let dt_tr = if model.controls.mix_wind.premix_omega { 0.5 * dt } else { dt };
         solve_omega_transport(model, dt_tr);
         conserve_shell_j_rot_and_distortion(model);

@@ -192,6 +192,9 @@ pub fn apply_step_pre_physics(
 
     if model.controls.rotation_flag {
         conserve_shell_j_rot_and_distortion(model);
+        if model.controls.mix_wind.premix_omega && dt > 0.0 {
+            crate::rotation::sync_post_henyey_rotation(model, dt);
+        }
         let _ = set_rotation_mixing_info(model);
         need_hydro_refresh = true;
     }

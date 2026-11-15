@@ -297,7 +297,7 @@ fn test_uncapped_wind_fed_bhhmxb_campaign() {
 }
 
 #[test]
-#[ignore = "slow multi-hundred-step campaign; run explicitly with --ignored"]
+#[ignore = "tracked in #139: core-He implicit rotational-wind outer retry parity"]
 fn test_uncapped_double_bh_campaign() {
     let rep = assert_slow_uncapped_case("double_bh");
     assert_eq!(rep.termination_code, "DoubleBhPass");

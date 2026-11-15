@@ -23,9 +23,9 @@ from flexmesa import bench, star
 _EXPECTED_WAVE4_CHECKSUMS_N8: dict[str, float] = {
     "star_micro_vars": 2.497297961588147e2,
     "star_hydro_eqns": 4.253224624211422e6,
-    "star_newton_step": 1.33327716396219e2,
+    "star_newton_step": 1.454270997871555e2,
     "star_remesh": 4.203476959958853e2,
-    "star_evolve_step": 9.987143125142524e1,
+    "star_evolve_step": 1.005913169168671e2,
 }
 
 

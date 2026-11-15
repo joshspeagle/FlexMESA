@@ -60,16 +60,16 @@ const EXPECTED_WAVE3B_CHECKSUMS_N8: [(&str, f64); 5] = [
 const EXPECTED_WAVE4_CHECKSUMS_N8: [(&str, f64); 5] = [
     ("star_micro_vars", 2.497_297_961_588_147e2),
     ("star_hydro_eqns", 4.253_224_624_211_422e6),
-    ("star_newton_step", 1.333_277_163_962_19e2),
+    ("star_newton_step", 1.454_270_997_871_555e2),
     ("star_remesh", 4.203_476_959_958_853e2),
-    ("star_evolve_step", 9.987_143_125_142_524e1),
+    ("star_evolve_step", 1.005_913_169_168_671e2),
 ];
 
 /// Pinned cross-language reference checksums for $N_{\mathrm{zones}} = 8$
 /// across all four Wave 5 workloads (shared with `tests/test_wave5_bench.py`
 /// and `benchmarks/fortran_mesa/run_wave5_bench.f90`).
 const EXPECTED_WAVE5_CHECKSUMS_N8: [(&str, f64); 4] = [
-    ("w5_diff_rot", 3.082_380_424_983_001e5),
+    ("w5_diff_rot", 2.551_374_595_308_515e3),
     ("w5_riemann_rsp2", -2.543_418_211_346_364e5),
     ("w5_binary_rlof", 6.234_702_123_446_103),
     ("w5_astero_seism", 7.563_537_818_023_943e1),

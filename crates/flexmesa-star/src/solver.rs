@@ -113,7 +113,7 @@ pub fn compute_corr_coeff(
 fn apply_damped_correction(
     model: &mut StarModel,
     xh_base: &[f64],
-    xa_base: &[f64],
+    dx_chem_base: &[f64],
     dx_scaled: &[f64],
     x_scale: &[f64],
     alpha: f64,
@@ -141,13 +141,15 @@ fn apply_damped_correction(
         if include_chem && model.species > 0 {
             let c_base = k * model.species;
             for j in 0..model.species {
+                let idx = c_base + j;
                 let ivar = model.layout.chem_var_index(j);
-                let x_new = (xa_base[c_base + j]
-                    + alpha
-                        * dx_scaled[s_base + ivar]
-                        * x_scale[s_base + ivar])
-                    .clamp(-5.0e-5, 1.0 + 5.0e-5);
-                model.xa[c_base + j] = x_new;
+                let step =
+                    alpha * dx_scaled[s_base + ivar] * x_scale[s_base + ivar];
+                let x_start = model.xa_start[idx];
+                let dx_new = (dx_chem_base[idx] + step)
+                    .clamp(-5.0e-5 - x_start, 1.0 + 5.0e-5 - x_start);
+                model.xa_sub_xa_start[idx] = dx_new;
+                model.xa[idx] = x_start + dx_new;
             }
         }
     }
@@ -156,7 +158,7 @@ fn apply_damped_correction(
 }
 
 /// Normalizes cell species mass fractions `xa` so $\sum_{j=0}^{\mathrm{species}-1} X_{j,k} = 1$
-/// in every zone `k`.
+/// when $|\sum_j X_{j,k} - 1| > 10^{-12}$ (`solver_support.f90:1459`).
 fn normalize_species_fractions(model: &mut StarModel) {
     if model.species == 0 {
         return;
@@ -169,7 +171,7 @@ fn normalize_species_fractions(model: &mut StarModel) {
             model.xa[c_base + j] = x_clamped;
             sum_x += x_clamped;
         }
-        if sum_x > 0.0 {
+        if sum_x > 0.0 && (sum_x - 1.0).abs() > 1.0e-12 {
             for j in 0..model.species {
                 model.xa[c_base + j] /= sum_x;
             }
@@ -223,8 +225,20 @@ pub fn solve_henyey_step(
     use_bcyclic: bool,
 ) -> Result<HenyeySolverReport, StarError> {
     model.pack_xh();
+    if include_chem && model.species > 0 && model.xa.len() == model.xa_start.len()
+    {
+        model.xa_sub_xa_start.clear();
+        model.xa_sub_xa_start.extend(
+            model.xa.iter().zip(&model.xa_start).map(|(&x, &xs)| x - xs),
+        );
+    } else {
+        model.xa_sub_xa_start.clear();
+    }
     let mut sys = HenyeySystem::new(0, 0, Vec::new());
-    eval_henyey_equations_into(model, include_chem, &mut sys)?;
+    if let Err(e) = eval_henyey_equations_into(model, include_chem, &mut sys) {
+        model.xa_sub_xa_start.clear();
+        return Err(e);
+    }
     let (mut residual_norm, mut max_residual) =
         compute_residual_norms(model, sys.nvar, &sys.equ);
     let mut correction_norm = 0.0;
@@ -240,6 +254,7 @@ pub fn solve_henyey_step(
     let mut iter_used = 0;
     let mut xh_prev = Vec::with_capacity(model.xh.len());
     let mut xa_prev = Vec::with_capacity(model.xa.len());
+    let mut dx_chem_prev = Vec::with_capacity(model.xa_sub_xa_start.len());
     let mut rhs_buf = Vec::with_capacity(sys.equ.len());
     let mut trial_sys = HenyeySystem::new(0, 0, Vec::new());
     let mut best_sys_buf = HenyeySystem::new(0, 0, Vec::new());
@@ -247,7 +262,13 @@ pub fn solve_henyey_step(
     for iter in 1..=max_iters {
         iter_used = iter;
         let dx_scaled =
-            solve_linear_henyey_system(&sys, use_bcyclic, &mut rhs_buf)?;
+            match solve_linear_henyey_system(&sys, use_bcyclic, &mut rhs_buf) {
+                Ok(v) => v,
+                Err(e) => {
+                    model.xa_sub_xa_start.clear();
+                    return Err(e);
+                }
+            };
         (correction_norm, max_correction) = compute_model_correction_norms(
             model,
             sys.nz,
@@ -265,6 +286,7 @@ pub fn solve_henyey_step(
         );
         xh_prev.clone_from(&model.xh);
         xa_prev.clone_from(&model.xa);
+        dx_chem_prev.clone_from(&model.xa_sub_xa_start);
         let prev_residual_norm = residual_norm;
 
         let mut alpha = base_coeff;
@@ -276,7 +298,7 @@ pub fn solve_henyey_step(
             apply_damped_correction(
                 model,
                 &xh_prev,
-                &xa_prev,
+                &dx_chem_prev,
                 &dx_scaled,
                 &sys.x_scale,
                 alpha,
@@ -317,7 +339,7 @@ pub fn solve_henyey_step(
                     apply_damped_correction(
                         model,
                         &xh_prev,
-                        &xa_prev,
+                        &dx_chem_prev,
                         &dx_scaled,
                         &sys.x_scale,
                         best_alpha,
@@ -335,6 +357,7 @@ pub fn solve_henyey_step(
         if !step_accepted {
             model.xh.clone_from(&xh_prev);
             model.xa.clone_from(&xa_prev);
+            model.xa_sub_xa_start.clear();
             model.unpack_xh();
             model.set_m_grav_and_grav();
             return Err(StarError::ConvergenceFailure(format!(
@@ -374,6 +397,7 @@ pub fn solve_henyey_step(
     if include_chem {
         normalize_species_fractions(model);
     }
+    model.xa_sub_xa_start.clear();
 
     Ok(HenyeySolverReport {
         converged,

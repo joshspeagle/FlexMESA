@@ -214,67 +214,63 @@ fn do_adjust_mass_regions(
     let j_rot_old = model.j_rot.clone();
     let starting_j_rot_surf = j_rot_old.first().copied().unwrap_or(0.0);
 
-    let mold_o_mnew = xm_old / xm_new;
     let dq_acc_raw = delta_m / xm_new;
     let dxq_ii = (xq_old[k_b] - xq_old[k_a]).max(1.0e-99);
     let qfrac = 1.0 + dq_acc_raw * (1.0 - xq_old[k_b]) / dxq_ii;
     let uniform_fallback = qfrac <= 0.0;
-    let (outer_fac, mid_fac, inner_fac, k_b_remap) = if uniform_fallback {
-        (1.0, 1.0, 1.0, nz)
-    } else {
-        (1.0, qfrac, mold_o_mnew, k_b)
-    };
+    let k_b_remap = if uniform_fallback { nz } else { k_b };
 
-    let mut dq_new = vec![0.0_f64; nz];
+    let mut dm_target = prev_dm_raw.clone();
+    let old_outer_mass = neumaier_sum(&prev_dm_raw[..k_b_remap]);
+    let new_outer_mass = (old_outer_mass + delta_m).max(1.0e-99);
+    let scale_i = xm_new / sum_prev_dm;
+    if uniform_fallback {
+        for k in 0..nz {
+            dm_target[k] = (prev_dm_raw[k] * scale_i).max(1.0e-99);
+        }
+    } else {
+        for k in 0..k_a {
+            dm_target[k] = (prev_dm_raw[k] * scale_i).max(1.0e-99);
+        }
+        let sum_i = neumaier_sum(&dm_target[..k_a]);
+        let target_ii = (new_outer_mass - sum_i).max(1.0e-99);
+        let old_ii = neumaier_sum(&prev_dm_raw[k_a..k_b]).max(1.0e-99);
+        let scale_ii = target_ii / old_ii;
+        for k in k_a..k_b {
+            dm_target[k] = (prev_dm_raw[k] * scale_ii).max(1.0e-99);
+        }
+    }
+    let dm_resid = new_outer_mass - neumaier_sum(&dm_target[..k_b_remap]);
+    if dm_target[k_b_remap - 1] + dm_resid > 1.0e-99 {
+        dm_target[k_b_remap - 1] += dm_resid;
+    }
+
+    let mut dq_new: Vec<f64> =
+        dm_target.iter().map(|&d| (d / xm_new).max(1.0e-99)).collect();
+    let dq_resid = 1.0 - neumaier_sum(&dq_new);
+    if dq_new[k_b_remap - 1] + dq_resid > 1.0e-99 {
+        dq_new[k_b_remap - 1] += dq_resid;
+    }
+
+    let mut change_in_dm = vec![0.0_f64; nz];
+    let mut prev_mesh_dm = vec![0.0_f64; nz];
     for k in 0..nz {
-        let f_k = if k < k_a {
-            outer_fac
-        } else if k < k_b {
-            mid_fac
+        change_in_dm[k] = if k < k_b_remap {
+            dm_target[k] - prev_dm_raw[k]
         } else {
-            inner_fac
+            0.0
         };
-        dq_new[k] = (f_k * dq_old[k]).max(1.0e-99);
+        prev_mesh_dm[k] = prev_dm_raw[k].max(1.0e-99);
     }
-    let renorm = 1.0 / neumaier_sum(&dq_new).max(1.0e-99);
-    for d in &mut dq_new {
-        *d *= renorm;
-    }
-
-    let rel_dm = delta_m / xm_old;
-    let (outer_sub1, mid_sub1, inner_sub1) = if uniform_fallback {
-        (rel_dm, rel_dm, rel_dm)
-    } else {
-        (rel_dm, rel_dm * (1.0 - xq_old[k_a]) / dxq_ii, 0.0)
-    };
 
     model.mstar += delta_m;
     model.xmstar = xm_new;
     model.dq = dq_new;
     model.set_qs();
-    model.dq[nz - 1] = model.q[nz - 1].max(1.0e-99);
     model.set_xqs();
-
-    let dm_target: Vec<f64> = model.dq.iter().map(|&dq| dq * xm_new).collect();
-    let mut change_in_dm = vec![0.0_f64; nz];
-    let mut prev_mesh_dm = vec![0.0_f64; nz];
-    for k in 0..nz {
-        let sub1 = if k < k_a {
-            outer_sub1
-        } else if k < k_b {
-            mid_sub1
-        } else {
-            inner_sub1
-        };
-        change_in_dm[k] = sub1 * prev_dm_raw[k];
-        prev_mesh_dm[k] = (dm_target[k] - change_in_dm[k]).max(1.0e-99);
-    }
     sync_enclosed_mass_from_dm(model, &dm_target);
     model.set_dm_bar();
 
-    let xm_new_eff = model.xmstar;
-    let mnew_o_mold = xm_new_eff / xm_old;
-    let dq_acc = delta_m / xm_new_eff;
     let built_acc = build_accreted_xa(model);
     let x_acc = x_accreted.unwrap_or(&built_acc);
     let j_acc = if model.controls.mix_wind.use_accreted_material_j {
@@ -283,13 +279,25 @@ fn do_adjust_mass_regions(
         starting_j_rot_surf
     };
 
+    let mut cum_old = vec![0.0_f64; k_b_remap + 1];
+    let mut cum_new = vec![0.0_f64; k_b_remap + 1];
+    for k in 0..k_b_remap {
+        cum_old[k + 1] = cum_old[k] + prev_dm_raw[k];
+        cum_new[k + 1] = cum_new[k] + dm_target[k];
+    }
+    let bdy_resid = (cum_old[k_b_remap] + delta_m) - cum_new[k_b_remap];
+    if dm_target[k_b_remap - 1] + bdy_resid > 1.0e-99 {
+        dm_target[k_b_remap - 1] += bdy_resid;
+        cum_new[k_b_remap] = cum_old[k_b_remap] + delta_m;
+        sync_enclosed_mass_from_dm(model, &dm_target);
+        model.set_dm_bar();
+    }
+
     let mut accum = vec![0.0; species];
     let mut kk_start = 0_usize;
     for k in 0..k_b_remap {
-        let xq_00 = model.xq[k];
-        let xq_p1 = xq_00 + model.dq[k];
-        let x_00 = (xq_00 - dq_acc) * mnew_o_mold;
-        let x_p1 = (xq_p1 - dq_acc) * mnew_o_mold;
+        let x_00 = cum_new[k] - delta_m;
+        let x_p1 = cum_new[k + 1] - delta_m;
         let dx = (x_p1 - x_00).max(1.0e-99);
 
         if x_p1 <= 0.0 {
@@ -308,15 +316,15 @@ fn do_adjust_mass_regions(
                 jr_acc += w_acc * j_acc;
             }
             let a_start = x_00.max(0.0);
-            while kk_start + 1 < nz && xq_old[kk_start] + dq_old[kk_start] <= a_start {
+            while kk_start + 1 < k_b_remap && cum_old[kk_start + 1] <= a_start {
                 kk_start += 1;
             }
-            for kk in kk_start..nz {
-                let b0 = xq_old[kk];
+            for kk in kk_start..k_b_remap {
+                let b0 = cum_old[kk];
                 if b0 >= x_p1 {
                     break;
                 }
-                let b1 = b0 + dq_old[kk];
+                let b1 = cum_old[kk + 1];
                 let ov = (x_p1.min(b1) - a_start.max(b0)).max(0.0);
                 if ov > 0.0 {
                     for j in 0..species {
@@ -371,6 +379,7 @@ fn do_adjust_mass_regions(
     model.set_m_grav_and_grav();
     if need_eps_mdot {
         set_hydro_vars(model, false, false)?;
+        sync_enclosed_mass_from_dm(model, &dm_target);
         if model.controls.rotation_flag {
             conserve_shell_j_rot_and_distortion(model);
         }

@@ -436,15 +436,16 @@ macro_rules! impl_py_star_model {
 impl_py_star_model!(
     scalars: [
         nz: usize, species: usize, model_number: usize, star_age: f64,
-        dt: f64, dt_next: f64, dt_old: f64, mstar: f64, teff: f64
+        dt: f64, dt_next: f64, dt_old: f64, mstar: f64, teff: f64,
+        r_center: f64, l_center: f64, m_center: f64, v_center: f64
     ],
     arrays: [
-        lnd, lnd_start, ln_t, ln_r, lum, dq, q, xq, m, dm, dm_bar, r, rmid,
-        grav, rho, t, xh_mass, yhe_mass, pgas, prad, peos, ln_peos, energy,
-        energy_start, entropy, grada, cp, cv, chi_rho, chi_t, gamma1, eta, mu,
-        csound, opacity, tau, non_nuc_neu, eps_nuc, eps_mdot, gradt, gradr,
-        gradl, scale_height, mlt_vc, mlt_d, mlt_cdc, d_mix, conv_vel, sig,
-        omega, j_rot, brunt_b, brunt_n2
+        lnd, lnd_start, ln_t, ln_r, ln_r_start, lum, dq, q, xq, m, dm, dm_bar,
+        r, rmid, grav, rho, t, xh_mass, yhe_mass, pgas, prad, peos, peos_start,
+        ln_peos, energy, energy_start, entropy, grada, cp, cv, chi_rho, chi_t,
+        gamma1, eta, mu, csound, opacity, tau, non_nuc_neu, non_nuc_neu_start,
+        eps_nuc, eps_mdot, gradt, gradr, gradl, scale_height, mlt_vc, mlt_d,
+        mlt_cdc, d_mix, conv_vel, sig, omega, j_rot, brunt_b, brunt_n2
     ]
 );
 

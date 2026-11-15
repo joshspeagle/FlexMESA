@@ -128,3 +128,58 @@ print(
     f"(max_res={henyey_rep.max_residual:.2e}, conv boundaries={n_conv_bdy})"
 )
 ```
+
+---
+
+## 4. Replacing `run_binary_extras.f90` (`BinaryExtras` & Orbital Step Loops)
+
+In Fortran MESA's `binary` module, custom wind prescriptions (`s% other_wind`), custom mass-transfer laws, and binary stopping triggers (`extras_binary_finish_step`) live in `src/run_binary_extras.f90`. In Safe Rust (`flexmesa_binary`), the `BinaryExtras` trait (`other_wind_cgs` and `finish_step` returning `BinaryExtrasAction::KeepGoing` or `BinaryExtrasAction::Terminate`) plugs directly into `BinarySystem::step_with_extras` and `BinarySystem::try_step_with_extras` without embedding test-suite logic inside the core binary solver:
+
+```rust
+use flexmesa_binary::{BinaryExtras, BinaryExtrasAction, BinarySystem};
+use flexmesa_const::{MSUN, SECYER};
+use flexmesa_star::{StarError, StarModel};
+
+struct ConstantWindExtras {
+    mdot_msun_yr: f64,
+    max_steps: usize,
+}
+
+impl BinaryExtras for ConstantWindExtras {
+    fn other_wind_cgs(
+        &mut self,
+        _star: &StarModel,
+        _star_idx: usize,
+        ignore_rlof_flag: bool,
+    ) -> Result<Option<f64>, StarError> {
+        if ignore_rlof_flag {
+            return Ok(Some(0.0));
+        }
+        Ok(Some(-self.mdot_msun_yr * (MSUN / SECYER)))
+    }
+
+    fn finish_step(&mut self, binary: &mut BinarySystem) -> BinaryExtrasAction {
+        if binary.model_number >= self.max_steps {
+            BinaryExtrasAction::Terminate(String::from("MaxStepsReached"))
+        } else {
+            BinaryExtrasAction::KeepGoing
+        }
+    }
+}
+```
+
+From Python, you drive `binary.BinarySystem.step(dt)` inside a standard loop and inspect orbital separation, Roche-lobe gaps, and component profiles after every step:
+
+```python
+from flexmesa import binary, constants, star
+
+donor = star.StarModel.from_zams(initial_mass=2.0, initial_z=0.02)
+sys_bin = binary.BinarySystem.from_point_mass(
+    donor, companion_mass_msun=1.4, initial_period_days=3.0
+)
+dt_taken, retries = sys_bin.step(100.0 * constants.SECYER)
+print(
+    f"step={sys_bin.model_number}, dt={dt_taken / constants.SECYER:.1f} yr, "
+    f"P={sys_bin.period / 86400.0:.4f} d, retries={retries}"
+)
+```

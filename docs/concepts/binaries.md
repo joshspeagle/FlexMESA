@@ -70,6 +70,8 @@ When the companion is an accreting black hole (`is_black_hole=True` in `BinarySy
    Evaluates spin-orbit angular momentum exchange $\dot{J}_{\mathrm{ls}} = -\sum_{i=1}^2 (\Delta S_i - \dot{M}_{\mathrm{wind},i} j_{\mathrm{surf},i}\Delta t) / \Delta t$ after subtracting stellar wind spin loss (`binary_jdot.f90:129-145`) alongside the companion's missing stellar wind angular momentum torque (`default_jdot_missing_wind`).
 4. **Hut (1981) Weak-Friction Tidal Circularization & Synchronization (`eval_edot_tidal_hut_jax`)**:
    Evaluates the Hut (1981, A&A, 99, 126) fifth-order eccentricity polynomials $f_1(e^2)$ through $f_5(e^2)$ to compute the tidal circularization rate $\dot{e}_{\mathrm{tidal}}$ and spin-orbit synchronization timescales for convective and radiative envelopes, paired with monotonically wrapped $[0, 1)$ true-anomaly phase grids (`build_anomaly_grid`) for eccentric phase-dependent RLOF integration.
+5. **Custom Binary Winds, Post-Step Hooks & Composition Relaxation (`BinaryExtras`, `relax_composition_with_henyey`)**:
+   In Safe Rust, `BinarySystem::step_with_extras` and `BinarySystem::try_step_with_extras` accept custom `BinaryExtras` implementations (`other_wind_cgs`, `finish_step` returning `BinaryExtrasAction`, with `step` and `try_step` delegating to `DefaultBinaryExtras`), and `binary/test_suite` startup with `relax_initial_Z` or `relax_initial_Y` equilibrates ZAMS components via `relax_composition_with_henyey` before orbital evolution begins.
 
 === "Python & JAX (`flexmesa.binary`)"
 

@@ -27,9 +27,9 @@ Across all $N_{\mathrm{zones}} \in \{128, 512, 1024\}$, Upstream Fortran MESA, S
 
 | Workload | $N_{\mathrm{zones}}$ | Upstream Fortran MESA Checksum | Safe Rust Checksum | Python/JAX Checksum | Max Rust vs. JAX Rel. Diff |
 | :--- | :---: | :---: | :---: | :---: | :---: |
-| `w5_diff_rot` | `128` | `3.12459668E+05` | `3.12459668e5` | `3.12459668e+05` | `2.292e-15` |
-| `w5_diff_rot` | `512` | `3.12476430E+05` | `3.12476430e5` | `3.12476430e+05` | `3.634e-15` |
-| `w5_diff_rot` | `1024` | `3.12476375E+05` | `3.12476375e5` | `3.12476375e+05` | `2.996e-15` |
+| `w5_diff_rot` | `128` | `3.12459668E+05`† | `2.60059307e3` | `2.60059307e+03` | `2.292e-15` |
+| `w5_diff_rot` | `512` | `3.12476430E+05`† | `2.60090094e3` | `2.60090094e+03` | `3.634e-15` |
+| `w5_diff_rot` | `1024` | `3.12476375E+05`† | `2.60091642e3` | `2.60091642e+03` | `2.996e-15` |
 | `w5_riemann_rsp2` | `128` | `-2.69003013E+05` | `-2.69003013e5` | `-2.69003013e+05` | `1.027e-15` (norm) |
 | `w5_riemann_rsp2` | `512` | `-2.71777204E+05` | `-2.71777204e5` | `-2.71777204e+05` | `1.372e-15` (norm) |
 | `w5_riemann_rsp2` | `1024` | `-2.72283698E+05` | `-2.72283698e5` | `-2.72283698e+05` | `1.449e-15` (norm) |
@@ -40,7 +40,7 @@ Across all $N_{\mathrm{zones}} \in \{128, 512, 1024\}$, Upstream Fortran MESA, S
 | `w5_astero_seism` | `512` | `7.36575750E+01` | `7.36575750e1` | `7.36575750e+01` | `1.929e-15` |
 | `w5_astero_seism` | `1024` | `7.36379793E+01` | `7.36379793e1` | `7.36379793e+01` | `5.596e-15` |
 
-*(Note: `(norm)` denotes the profile-norm relative error $\max_k |v^{\mathrm{Rust}}_k - v^{\mathrm{JAX}}_k| / \max_k |v^{\mathrm{Rust}}_k|$ across the $s \approx 0.435$ zero crossing of `w5_riemann_rsp2`; see the [Tolerance & Discrepancy Ledger](../benchmarks/tolerance-and-discrepancy-ledger.md#25-profile-norm-scaling-across-zero-crossings-in-w5_riemann_rsp2).)*
+*(Notes: `†` The `Upstream Fortran MESA Checksum` entries for `w5_diff_rot` reflect the standalone `bench_kernels_wave5.f90` Wave 5.5 `gfortran` run using the piecewise branch Spruit-Tayler expression, whereas the Safe Rust and Python/JAX kernels were updated in Phase 5c (`#114`) to upstream MESA `am_mixing.f90`'s continuous two-regime harmonic-blend dynamo and match each other to $\le 3.64 \times 10^{-15}$. `(norm)` denotes the profile-norm relative error $\max_k |v^{\mathrm{Rust}}_k - v^{\mathrm{JAX}}_k| / \max_k |v^{\mathrm{Rust}}_k|$ across the $s \approx 0.435$ zero crossing of `w5_riemann_rsp2`; see the [Tolerance & Discrepancy Ledger](../benchmarks/tolerance-and-discrepancy-ledger.md#25-profile-norm-scaling-across-zero-crossings-in-w5_riemann_rsp2).)*
 
 ---
 

@@ -196,6 +196,20 @@ pub struct BinaryInlistControls {
     pub circ_type_1: String,
     /// Circularization prescription for star 2 (`circ_type_2`).
     pub circ_type_2: String,
+    /// Enable eccentric mass-loss eccentricity enhancement (`use_eccentricity_enhancement`).
+    pub use_eccentricity_enhancement: bool,
+    /// Upper ceiling on $\dot{e}_{\mathrm{enhance}}$ in $\mathrm{s}^{-1}$ (`max_abs_edot_enhance`).
+    pub max_abs_edot_enhance: f64,
+    /// Number of true-anomaly quadrature points (`anomaly_steps`, default `500`).
+    pub anomaly_steps: usize,
+    /// Enable full Roche-lobe tidal distortion tables (`use_tidal_deformation`).
+    pub use_tidal_deformation: bool,
+    /// Synchronicity sigmoid midpoint (`f_sync_switch_from_rot_defor`, default `0.8`).
+    pub f_sync_switch_from_rot_defor: f64,
+    /// Synchronicity sigmoid width (`f_sync_switch_width`, default `0.1`).
+    pub f_sync_switch_width: f64,
+    /// Synchronicity sigmoid cutoff limit (`f_sync_switch_lim`, default `0.01`).
+    pub f_sync_switch_lim: f64,
 
     // --- Binary timestep soft/hard limits & stage `varcontrol` ---
     /// Global binary timestep multiplier (`time_delta_coeff`).
@@ -335,6 +349,13 @@ impl Default for BinaryInlistControls {
             do_tidal_circ: false,
             circ_type_1: String::from("Hut_conv"),
             circ_type_2: String::from("Hut_conv"),
+            use_eccentricity_enhancement: false,
+            max_abs_edot_enhance: 1.0e-6,
+            anomaly_steps: 500,
+            use_tidal_deformation: false,
+            f_sync_switch_from_rot_defor: 0.8,
+            f_sync_switch_width: 0.1,
+            f_sync_switch_lim: 0.01,
             time_delta_coeff: 1.0,
             fm: 0.01,
             fm_hard: -1.0,
@@ -415,6 +436,9 @@ impl BinaryInlistControls {
         if let Some(v) = s.get_i64("max_tries_to_achieve") {
             self.max_tries_to_achieve = v;
         }
+        if let Some(v) = s.get_i64("anomaly_steps") {
+            self.anomaly_steps = v.max(2) as usize;
+        }
         for (dst, key) in [
             (&mut self.mdot_scheme, "mdot_scheme"), (&mut self.solver_type, "solver_type"),
             (&mut self.sync_type_1, "sync_type_1"), (&mut self.sync_type_2, "sync_type_2"),
@@ -448,6 +472,8 @@ impl BinaryInlistControls {
             (&mut self.do_initial_orbit_sync_1, "do_initial_orbit_sync_1"),
             (&mut self.do_initial_orbit_sync_2, "do_initial_orbit_sync_2"),
             (&mut self.do_tidal_circ, "do_tidal_circ"),
+            (&mut self.use_eccentricity_enhancement, "use_eccentricity_enhancement"),
+            (&mut self.use_tidal_deformation, "use_tidal_deformation"),
         ] {
             if let Some(v) = s.get_bool(key) {
                 *dst = v;
@@ -461,6 +487,10 @@ impl BinaryInlistControls {
             (&mut self.min_eccentricity, "min_eccentricity"),
             (&mut self.max_eccentricity, "max_eccentricity"),
             (&mut self.max_abs_edot_tidal, "max_abs_edot_tidal"),
+            (&mut self.max_abs_edot_enhance, "max_abs_edot_enhance"),
+            (&mut self.f_sync_switch_from_rot_defor, "f_sync_switch_from_rot_defor"),
+            (&mut self.f_sync_switch_width, "f_sync_switch_width"),
+            (&mut self.f_sync_switch_lim, "f_sync_switch_lim"),
             (&mut self.initial_bh_spin, "initial_bh_spin"),
             (&mut self.mdot_limit_donor_switch, "mdot_limit_donor_switch"),
             (&mut self.implicit_scheme_tolerance, "implicit_scheme_tolerance"),

@@ -412,10 +412,12 @@ pub fn do1_chem_eqns(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
         let i_equ = i_var;
         let nuc_base = k * species * species + j * species;
         let x_scale_kj = sys.x_scale[k * sys.nvar + i_var];
+        let mix_scale = 1.0e-6 * (sig_00_dm + sig_p1_dm) * x_scale_kj;
         let eqn_scale = model
             .controls
             .min_chem_eqn_scale
             .max(x_scale_kj / dt)
+            .max(mix_scale)
             .max(1.0e-30);
 
         let x_00 = model.xa[kj];

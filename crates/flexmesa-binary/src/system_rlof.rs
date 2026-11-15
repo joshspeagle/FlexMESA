@@ -7,10 +7,9 @@
 //! `binary/private/binary_wind.f90:33-170`, and
 //! `binary/private/binary_evolve.f90:257-620`.
 
-use flexmesa_const::{LSUN, MSUN, RSUN, SECYER};
+use flexmesa_const::{CLIGHT, CRAD, LSUN, MSUN, PI, RSUN, SECYER};
 use flexmesa_star::{
-    EvolveStepReport, StarError, StarModel, do_set_mdot, eval_omega_crit,
-    read_photo_bytes, star_evolve_step, write_photo_bytes,
+    EvolveStepReport, StarError, StarModel, do_set_mdot, star_evolve_step,
 };
 
 use crate::e2e_oracles::eval_brott_wind_msun_yr;
@@ -57,14 +56,14 @@ pub struct CoupledMdotAccounting {
     pub actual_mtransfer_rate: f64,
 }
 
-/// Complete binary + `.photo` stellar snapshot for implicit RLOF redo iterations
-/// and timestep-cut retries (`binary_evolve.f90`).
+/// Complete binary + in-memory stellar snapshot for implicit RLOF redo
+/// iterations and timestep-cut retries (`binary_evolve.f90`).
 #[derive(Debug, Clone)]
 pub struct BinaryStepSnapshot {
-    /// Serialized `.photo` bytes of `donor`.
-    pub donor_photo: Vec<u8>,
-    /// Serialized `.photo` bytes of `Star` companion (`None` when point mass).
-    pub companion_photo: Option<Vec<u8>>,
+    /// Cloned in-memory state of `donor`.
+    pub donor_state: StarModel,
+    /// Cloned in-memory state of `Star` companion (`None` when point mass).
+    pub companion_state: Option<StarModel>,
     /// Point-mass state `(mass_g, m_bh_zero_eq_g, is_black_hole)` when companion is a point mass.
     pub point_mass_state: Option<(f64, f64, bool)>,
     /// Point-mass index `point_mass_i` in `{0, 1, 2}`.
@@ -106,7 +105,8 @@ pub struct BinaryStepSnapshot {
 }
 
 impl BinaryStepSnapshot {
-    /// Captures a full binary + `.photo` stellar snapshot before advancing a step.
+    /// Captures a full binary + in-memory stellar snapshot before advancing a step.
+    #[allow(clippy::too_many_arguments)]
     #[must_use]
     pub fn capture(
         donor: &StarModel,
@@ -132,8 +132,8 @@ impl BinaryStepSnapshot {
         last_jdot: JdotBreakdown,
     ) -> Self {
         Self {
-            donor_photo: write_photo_bytes(donor),
-            companion_photo: companion_star.map(write_photo_bytes),
+            donor_state: donor.clone(),
+            companion_state: companion_star.cloned(),
             point_mass_state,
             point_mass_i,
             donor_i,
@@ -156,8 +156,8 @@ impl BinaryStepSnapshot {
         }
     }
 
-    /// Deserializes the saved `.photo` donor and optional companion star models,
-    /// preserving each model's in-memory `StarControls` and `StarJobControls`.
+    /// Restores the saved in-memory donor and optional companion star models,
+    /// preserving each model's active `StarControls` and `StarJobControls`.
     pub fn restore_stars(
         &self,
         donor: &mut StarModel,
@@ -165,14 +165,18 @@ impl BinaryStepSnapshot {
     ) -> Result<(), StarError> {
         let d_ctrl = donor.controls.clone();
         let d_job = donor.job.clone();
-        *donor = read_photo_bytes(&self.donor_photo, d_ctrl, d_job)?;
+        *donor = self.donor_state.clone();
+        donor.controls = d_ctrl;
+        donor.job = d_job;
 
-        if let (Some(acc), Some(bytes)) =
-            (companion_star, self.companion_photo.as_deref())
+        if let (Some(acc), Some(comp)) =
+            (companion_star, self.companion_state.as_ref())
         {
             let a_ctrl = acc.controls.clone();
             let a_job = acc.job.clone();
-            *acc = read_photo_bytes(bytes, a_ctrl, a_job)?;
+            *acc = comp.clone();
+            acc.controls = a_ctrl;
+            acc.job = a_job;
         }
         Ok(())
     }
@@ -195,8 +199,9 @@ fn surface_h1_and_he4(star: &StarModel) -> (f64, f64) {
 
 /// Evaluates intrinsic stellar wind $\dot{M}_{\mathrm{wind}} \le 0$ ($\mathrm{g\,s^{-1}}$)
 /// without RLOF `mass_change`, honoring Brott et al. (2011) `use_other_wind`
-/// (`double_bh/src/run_star_extras.f90:55-206`) and Tout & Eggleton (1988) tidal
-/// wind enhancement (`binary_wind.f90:131-170`).
+/// (`double_bh/src/run_star_extras.f90:55-206`), rotational boost/caps
+/// (`star/private/winds.f90:431-475`), and Tout & Eggleton (1988) tidal wind
+/// enhancement (`binary_wind.f90:131-170`).
 pub fn eval_star_intrinsic_wind_cgs(
     star: &mut StarModel,
     rl_cm: f64,
@@ -206,40 +211,61 @@ pub fn eval_star_intrinsic_wind_cgs(
 ) -> Result<f64, StarError> {
     let mut wind_cgs = if star.controls.use_other_wind {
         if ignore_rlof {
-            0.0
-        } else {
-            let (x_surf, y_surf) = surface_h1_and_he4(star);
-            let z_base = if star.controls.zbase > 0.0 {
-                star.controls.zbase
-            } else {
-                (1.0 - x_surf - y_surf).clamp(1.0e-6, 0.1)
-            };
-            let w_msun_yr = eval_brott_wind_msun_yr(
-                (star.lum[0] / LSUN).max(1.0e-10),
-                (star.mstar / MSUN).max(1.0e-5),
-                (star.r[0] / RSUN).max(1.0e-5),
-                star.t[0].max(100.0),
-                x_surf,
-                y_surf,
-                z_base / 0.017,
-            );
-            let mut w = -w_msun_yr * (MSUN / SECYER);
-            if star.controls.rotation_flag && star.controls.mix_wind.mdot_omega_power > 0.0 {
-                let om_surf = star.omega.first().copied().unwrap_or(0.0).abs();
-                let om_crit = eval_omega_crit(
-                    star.cgrav[0], star.m_grav[0].max(1.0e20), star.r[0].max(1.0e5),
-                    star.lum[0], star.opacity[0], 0.99,
-                );
-                if om_crit > 0.0 && om_surf > 0.0 {
-                    let ratio = (om_surf / om_crit).min(0.99);
-                    let boost = (1.0 - ratio)
-                        .powf(-star.controls.mix_wind.mdot_omega_power)
-                        .min(star.controls.mix_wind.max_rotational_mdot_boost.max(1.0));
-                    w *= boost;
-                }
-            }
-            w
+            return Ok(0.0);
         }
+        let (x_surf, y_surf) = surface_h1_and_he4(star);
+        let z_base = if star.controls.zbase > 0.0 {
+            star.controls.zbase
+        } else {
+            (1.0 - x_surf - y_surf).clamp(1.0e-6, 0.1)
+        };
+        let l1 = star.lum[0].max(1.0);
+        let t1 = if star.teff > 0.0 {
+            star.teff
+        } else {
+            (l1 / (PI * star.r[0].max(1.0).powi(2) * CRAD * CLIGHT)).powf(0.25)
+        }
+        .max(100.0);
+        let r1 = (l1 / (PI * CRAD * CLIGHT * t1.powi(4))).sqrt().max(1.0);
+        let w_msun_yr = eval_brott_wind_msun_yr(
+            (l1 / LSUN).max(1.0e-10),
+            (star.mstar / MSUN).max(1.0e-5),
+            (r1 / RSUN).max(1.0e-5),
+            t1,
+            x_surf,
+            y_surf,
+            z_base / 0.017,
+        );
+        let mut wind_mdot = (w_msun_yr * (MSUN / SECYER)).max(0.0);
+        let mw = star.controls.mix_wind.clone();
+        if mw.max_wind > 0.0 {
+            wind_mdot = wind_mdot.min(mw.max_wind * (MSUN / SECYER));
+        }
+        if star.controls.rotation_flag && mw.mdot_omega_power > 0.0 && wind_mdot > 0.0 {
+            let m1 = star.mstar;
+            let cgrav = star
+                .cgrav
+                .first()
+                .copied()
+                .unwrap_or(flexmesa_const::STANDARD_CGRAV);
+            let t_kh = (0.75 * cgrav * m1 * m1 / (r1 * l1)).max(1.0);
+            let w_lim = (mw.rotational_mdot_kh_fac.max(0.0) * m1 / t_kh)
+                .min(wind_mdot * mw.rotational_mdot_boost_fac.max(1.0));
+            let w_div_wc = flexmesa_star::eval_surf_avg_w_div_w_crit(star);
+            let mut enh = (1.0 - w_div_wc).max(1.0e-22).powf(-mw.mdot_omega_power);
+            if mw.max_rotational_mdot_boost > 0.0 {
+                enh = enh.min(mw.max_rotational_mdot_boost);
+            }
+            wind_mdot = (wind_mdot * enh).min(w_lim);
+            let prev_w = -star.aux.step_hist.mstar_dot_old;
+            if prev_w > 0.0 && mw.max_mdot_jump_for_rotation > 0.0 {
+                wind_mdot = wind_mdot.min(mw.max_mdot_jump_for_rotation * prev_w);
+            }
+            if mw.max_wind > 0.0 {
+                wind_mdot = wind_mdot.min(mw.max_wind * (MSUN / SECYER));
+            }
+        }
+        -wind_mdot
     } else {
         let saved_mc = star.controls.mass_change;
         let saved_other = star.controls.use_other_adjust_mdot;
@@ -306,13 +332,13 @@ pub fn prepare_coupled_mdots(
         None => 0.0,
     };
 
-    let f_wt_d = if do_wt_d && !ignore_rlof {
+    let f_wt_d = if do_wt_d {
         eval_bondi_hoyle_wind_fraction(m_d, m_a, donor.r[0], separation, eccentricity, abh_d, bbh_d, maxf_d)
     } else {
         0.0
     };
     let f_wt_a = match accretor_star.as_deref() {
-        Some(acc) if do_wt_a && !ignore_rlof => {
+        Some(acc) if do_wt_a => {
             eval_bondi_hoyle_wind_fraction(m_a, m_d, acc.r[0], separation, eccentricity, abh_a, bbh_a, maxf_a)
         }
         _ => 0.0,
@@ -323,6 +349,9 @@ pub fn prepare_coupled_mdots(
     let donor_net_mdot = mtransfer_rate + w_d - w_tr_a;
     donor.controls.mass_change = mtransfer_rate / MSUN * SECYER;
     donor.controls.use_other_adjust_mdot = true;
+    if donor.aux.step_hist.mstar_dot_old == 0.0 && donor.model_number > 0 {
+        donor.aux.step_hist.mstar_dot_old = donor.mstar_dot;
+    }
     donor.mstar_dot = donor_net_mdot;
 
     let mut out = CoupledMdotAccounting {
@@ -359,6 +388,9 @@ pub fn prepare_coupled_mdots(
         let acc_net_mdot = retained + w_a;
         acc.controls.mass_change = retained / MSUN * SECYER;
         acc.controls.use_other_adjust_mdot = true;
+        if acc.aux.step_hist.mstar_dot_old == 0.0 && acc.model_number > 0 {
+            acc.aux.step_hist.mstar_dot_old = acc.mstar_dot;
+        }
         acc.mstar_dot = acc_net_mdot;
         if retained > 0.0 && donor.nz > 0 && donor.species == acc.species {
             acc.controls.accrete_same_as_surface = false;
@@ -445,49 +477,51 @@ pub fn blend_explicit_mdot(
     blended.min(0.0).max(-cap_cgs)
 }
 
+/// Checks `check_delta_mdot` (`star/private/timestep.f90:1889-1917`) at the
+/// accepted coupled binary step (`run_binary_support.f90:546-558`).
+#[must_use]
+pub fn star_exceeds_delta_mdot_hard_limit(star: &StarModel) -> bool {
+    let mw = &star.controls.mix_wind;
+    let hard_lim = mw.delta_mdot_hard_limit * star.controls.ts_stop.time_delta_coeff.max(1.0e-6);
+    if hard_lim <= 0.0 || star.model_number <= 1 {
+        return false;
+    }
+    let (mdot, mdot_old) = (star.mstar_dot, star.aux.step_hist.mstar_dot_old);
+    if (mdot - mdot_old).abs() == 0.0 {
+        return false;
+    }
+    let denom = mw.delta_mdot_atol.max(0.0) * (MSUN / SECYER)
+        + mw.delta_mdot_rtol.max(0.0) * mdot.abs().max(mdot_old.abs());
+    denom > 0.0 && (mdot - mdot_old).abs() / denom > hard_lim
+}
+
 /// Advances a single [`StarModel`] through `star_evolve_step` at trial timestep
-/// `dt_try` (s), deferring `StarControls` stopping checks to the outer coupled
-/// binary step so accepted steps are never rewound into `InvalidInput` errors.
+/// `dt_try` (s), deferring `StarControls` stopping checks and binary-coupled
+/// `delta_mdot_hard_limit` retries (`run_binary_support.f90:546-558`) to the
+/// outer coupled binary step.
 pub fn evolve_single_star_without_term_rewind(
     star: &mut StarModel,
     dt_try: f64,
+    allow_remesh: bool,
 ) -> Result<EvolveStepReport, StarError> {
-    let capped_retry = star.controls.ts_stop.retry_limit.min(12);
     let saved_limits = (
         star.controls.max_model_number.take(),
         star.controls.max_age.take(),
         star.controls.max_age_in_seconds.take(),
         std::mem::take(&mut star.controls.xa_central_lower_limit),
         std::mem::take(&mut star.controls.xa_central_upper_limit),
-        star.controls.surf_omega_div_omega_crit_limit.take(),
         std::mem::replace(&mut star.controls.stop_near_zams, false),
-        std::mem::replace(&mut star.controls.ts_stop.retry_limit, capped_retry),
+        std::mem::replace(&mut star.controls.mix_wind.delta_mdot_hard_limit, -1.0),
     );
 
     star.dt = dt_try;
     star.dt_next = dt_try;
-    let do_remesh = star.controls.okay_to_remesh
+    let do_remesh = allow_remesh
+        && star.controls.okay_to_remesh
         && star.controls.mesh_delta_coeff > 0.0
-        && star.nz < 400
-        && star.model_number >= 5
-        && star.model_number.is_multiple_of(5);
-    let pre_rot = if do_remesh && star.controls.rotation_flag && star.nz > 0 {
-        let q_mid: Vec<f64> = (0..star.nz)
-            .map(|k| star.q[k] - 0.5 * star.dq[k])
-            .collect();
-        Some((q_mid, star.omega.clone()))
-    } else {
-        None
-    };
+        && dt_try >= star.controls.mix_wind.remesh_dt_limit;
     let op_split = star.controls.op_split_burn;
     let res = star_evolve_step(star, do_remesh, op_split, true);
-    if let (Ok(rep), Some((q_mid_old, om_old))) = (&res, pre_rot.as_ref()) {
-        if rep.num_splits + rep.num_merges > 0 {
-            crate::system_jdot::restore_smooth_omega_after_remesh(
-                star, q_mid_old, om_old,
-            );
-        }
-    }
 
     (
         star.controls.max_model_number,
@@ -495,9 +529,8 @@ pub fn evolve_single_star_without_term_rewind(
         star.controls.max_age_in_seconds,
         star.controls.xa_central_lower_limit,
         star.controls.xa_central_upper_limit,
-        star.controls.surf_omega_div_omega_crit_limit,
         star.controls.stop_near_zams,
-        star.controls.ts_stop.retry_limit,
+        star.controls.mix_wind.delta_mdot_hard_limit,
     ) = saved_limits;
     res
 }

@@ -10,9 +10,7 @@
 use flexmesa_const::{LSUN, MSUN, MixingType, PI, RSUN};
 use flexmesa_math::{exp, pow};
 use flexmesa_star::{
-    StarError, StarModel, apply_uniform_rotation, compute_convection_sigmas,
-    set_basic_vars, set_hydro_vars, set_rotation_mixing_info,
-    solve_composition_diffusion, update_rotation_distortion_factors,
+    StarError, StarModel, apply_uniform_rotation, update_rotation_distortion_factors,
 };
 
 use crate::inlist::BinaryInlistControls;
@@ -22,6 +20,8 @@ use crate::jdot_tides::{
     eval_jdot_ml, eval_k_div_t_convective, eval_k_div_t_radiative, eval_tsync,
     hut_f2, hut_f5,
 };
+use crate::mdot::eval_edot_enhancement_isotropic;
+use crate::orbit::eval_rlobe;
 
 /// Component-by-component breakdown of the orbital torque $\dot{J}_{\mathrm{orb}}$
 /// ($\mathrm{g\,cm^2\,s^{-2}}$) in `get_jdot` (`binary_jdot.f90:33-93`).
@@ -82,16 +82,17 @@ pub fn eval_star_r_gyr_sq(star: &StarModel) -> f64 {
 }
 
 /// Estimates outer convective envelope mass ($M_\odot$) and radial thickness ($R_\odot$)
-/// for Hurley et al. (2002) convective-envelope tidal dissipation (`binary_tides.f90:260-358`).
+/// for Hurley et al. (2002) convective-envelope tidal dissipation (`binary_tides.f90:418-427`).
 #[must_use]
 pub fn eval_convective_envelope_mass_and_size(star: &StarModel) -> (f64, f64) {
-    if star.nz < 2 {
+    if star.nz == 0 {
         return (0.0, 0.0);
     }
+    let m_top = star.m.first().copied().unwrap_or(star.mstar);
     let r_top = star.r[0];
-    let mut m_env_g = 0.0_f64;
-    let mut r_base = r_top;
-    let mut found_conv = false;
+    let rho_top = star.rho[0];
+    let mut m_env = (m_top / MSUN).max(0.0);
+    let mut r_env = (r_top / RSUN).max(0.0);
     for k in 0..star.nz {
         let is_conv = star
             .mixing_type
@@ -100,15 +101,13 @@ pub fn eval_convective_envelope_mass_and_size(star: &StarModel) -> (f64, f64) {
             .map_or(star.gradr[k] > star.grada[k], |mt| {
                 mt == MixingType::ConvectiveMixing
             });
-        if is_conv {
-            found_conv = true;
-            m_env_g += star.dm[k];
-            r_base = star.r[k];
-        } else if found_conv && star.q[k] < 0.99 {
+        if !is_conv && star.rho[k] > 1.0e5 * rho_top {
+            r_env = ((r_top - star.r[k]).max(0.0)) / RSUN;
+            m_env = ((m_top - star.m[k]).max(0.0)) / MSUN;
             break;
         }
     }
-    ((m_env_g / MSUN).max(0.0), ((r_top - r_base).max(0.0)) / RSUN)
+    (m_env, r_env)
 }
 
 /// Synchronizes a stellar model uniformly to orbital period `period_sec` (s) at
@@ -123,52 +122,6 @@ pub fn apply_initial_orbit_sync(
     star.controls.rotation_flag = true;
     apply_uniform_rotation(star, 2.0 * PI / period_sec);
     update_rotation_distortion_factors(star);
-    Ok(())
-}
-
-/// Applies operator-split rotational chemical mixing (`set_rotation_mixing_info` +
-/// `solve_composition_diffusion`) after the coupled convective/overshoot Henyey
-/// solve while preserving the pre-tidal `(omega, j_rot)` profile.
-pub fn apply_post_step_mixing(star: &mut StarModel, dt: f64) -> Result<(), StarError> {
-    if !star.controls.rotation_flag
-        || !star.controls.do_mix
-        || star.controls.mix_factor <= 0.0
-        || star.nz < 2
-        || star.species == 0
-        || dt <= 0.0
-    {
-        return Ok(());
-    }
-    let saved_omega = star.omega.clone();
-    let saved_j_rot = star.j_rot.clone();
-    let base_mlt_d: Vec<f64> = (0..star.nz)
-        .map(|k| star.mlt_d.get(k).copied().unwrap_or(0.0))
-        .collect();
-    let zones = set_rotation_mixing_info(star);
-    let mut has_rot_mix = false;
-    for k in 0..star.nz {
-        let z = &zones[k];
-        let d_hydro_rot = (z.d_dsi + z.d_ssi + z.d_es + z.d_gsf) / 30.0;
-        if d_hydro_rot > 0.0 {
-            has_rot_mix = true;
-        }
-        star.d_mix[k] = base_mlt_d[k] + d_hydro_rot;
-    }
-    star.sig.fill(0.0);
-    if has_rot_mix && star.nz >= 2 {
-        star.d_mix[0] = star.d_mix[0].max(star.d_mix[1]);
-        let last = star.nz - 1;
-        star.d_mix[last] = star.d_mix[last].max(star.d_mix[last - 1]);
-        compute_convection_sigmas(star, dt, star.controls.mix_factor, 1.0e10);
-        if star.sig.iter().any(|&s| s > 0.0) {
-            solve_composition_diffusion(star, dt);
-            star.pack_xh();
-            set_basic_vars(star)?;
-            set_hydro_vars(star, false, false)?;
-        }
-    }
-    star.omega = saved_omega;
-    star.j_rot = saved_j_rot;
     Ok(())
 }
 
@@ -290,7 +243,13 @@ pub fn apply_tidal_spin_sync(
     if !t_sync.is_finite() || t_sync <= 0.0 {
         return;
     }
-    let _ = sync_mode;
+    if sync_mode.eq_ignore_ascii_case("tdyn_div_tkh") {
+        apply_tdyn_div_tkh_sync(star, omega_orb, t_sync, dt);
+        return;
+    }
+    if !sync_mode.eq_ignore_ascii_case("Uniform") {
+        return;
+    }
     let a1 = hut_f2(eccentricity);
     let a2 = pow((1.0 - eccentricity * eccentricity).max(1.0e-12), 1.5) * hut_f5(eccentricity);
     let relax_frac = 1.0 - exp(-(a2 * dt / t_sync).min(100.0));
@@ -298,6 +257,83 @@ pub fn apply_tidal_spin_sync(
     for k in 0..star.nz {
         let j_sync = omega_orb * star.aux.i_rot[k];
         star.j_rot[k] -= relax_frac * (star.j_rot[k] - sync_ratio * j_sync);
+        star.omega[k] = star.j_rot[k] / star.aux.i_rot[k].max(1.0e-30);
+    }
+}
+
+fn interp_val_to_face(vals: &[f64], dq: &[f64], k: usize) -> f64 {
+    if k == 0 || k >= vals.len() {
+        return vals.first().copied().unwrap_or(0.0);
+    }
+    let dq_m1 = dq.get(k - 1).copied().unwrap_or(1.0);
+    let dq_00 = dq.get(k).copied().unwrap_or(1.0);
+    let sum = (dq_m1 + dq_00).max(1.0e-30);
+    (dq_00 * vals[k - 1] + dq_m1 * vals[k]) / sum
+}
+
+fn apply_tdyn_div_tkh_sync(star: &mut StarModel, omega_orb: f64, t_sync: f64, dt: f64) {
+    let nz = star.nz;
+    let mut tdyn_div_tkh = vec![0.0_f64; nz];
+    let mut j_sync = vec![0.0_f64; nz];
+    let mut delta_total_j = 0.0_f64;
+    for k in 0..nz {
+        let rho_f = interp_val_to_face(&star.rho, &star.dq, k);
+        let cv_f = interp_val_to_face(&star.cv, &star.dq, k);
+        let t_f = interp_val_to_face(&star.t, &star.dq, k);
+        let cs_f = interp_val_to_face(&star.csound, &star.dq, k).max(1.0e-30);
+        let tkh = 4.0 * PI * star.r[k] * star.r[k] * rho_f * cv_f * t_f / star.lum[k].abs().max(1.0e-30);
+        let tdyn = 1.0 / cs_f;
+        tdyn_div_tkh[k] = if tkh > 0.0 { tdyn / tkh } else { 0.0 };
+        j_sync[k] = omega_orb * star.aux.i_rot[k];
+        let dm_k = star.dm_bar.get(k).copied().unwrap_or(star.dm[k]);
+        delta_total_j += (star.j_rot[k] - j_sync[k]).abs() * dm_k;
+    }
+    delta_total_j *= 1.0 - exp(-(dt / t_sync).min(100.0));
+    let mut layers_in_sync = vec![false; nz];
+    let mut delta_j = vec![0.0_f64; nz];
+    let mut num_sync_layers = 0_usize;
+    loop {
+        let (mut sum_j_sync, mut sum_j_non_sync) = (0.0_f64, 0.0_f64);
+        for k in 0..nz {
+            let dj = star.j_rot[k] - j_sync[k];
+            delta_j[k] = dj;
+            let dm_k = star.dm_bar.get(k).copied().unwrap_or(star.dm[k]);
+            if layers_in_sync[k] {
+                sum_j_sync += dm_k * dj.abs();
+            } else {
+                sum_j_non_sync += dm_k * dj.abs() * tdyn_div_tkh[k] * tdyn_div_tkh[k];
+            }
+        }
+        if sum_j_non_sync <= 0.0 || delta_total_j <= sum_j_sync {
+            for k in 0..nz {
+                if !layers_in_sync[k] {
+                    delta_j[k] = 0.0;
+                }
+            }
+            break;
+        }
+        let ff = (delta_total_j - sum_j_sync) / sum_j_non_sync;
+        for k in 0..nz {
+            if layers_in_sync[k] {
+                continue;
+            }
+            let dj_full = star.j_rot[k] - j_sync[k];
+            let scaled = dj_full * tdyn_div_tkh[k] * tdyn_div_tkh[k] * ff;
+            if (dj_full >= 0.0 && scaled >= dj_full) || (dj_full < 0.0 && scaled <= dj_full) {
+                delta_j[k] = dj_full;
+                layers_in_sync[k] = true;
+            } else {
+                delta_j[k] = scaled;
+            }
+        }
+        let new_sync_count = layers_in_sync.iter().filter(|&&b| b).count();
+        if new_sync_count == num_sync_layers {
+            break;
+        }
+        num_sync_layers = new_sync_count;
+    }
+    for k in 0..nz {
+        star.j_rot[k] -= delta_j[k];
         star.omega[k] = star.j_rot[k] / star.aux.i_rot[k].max(1.0e-30);
     }
 }
@@ -312,9 +348,9 @@ fn eval_star_k_div_t(
 ) -> f64 {
     if prescription.eq_ignore_ascii_case("Hut_rad") {
         eval_k_div_t_radiative(star.mstar, m_companion, star.r[0], separation)
-    } else {
+    } else if prescription.eq_ignore_ascii_case("Hut_conv") {
         let (m_env_msun, r_env_rsun) = eval_convective_envelope_mass_and_size(star);
-        if m_env_msun > 1.0e-10 && r_env_rsun > 1.0e-10 {
+        if m_env_msun > 0.0 && r_env_rsun > 0.0 {
             eval_k_div_t_convective(
                 star.mstar / MSUN,
                 m_env_msun,
@@ -326,8 +362,10 @@ fn eval_star_k_div_t(
                 tidal_reduction,
             )
         } else {
-            eval_k_div_t_radiative(star.mstar, m_companion, star.r[0], separation)
+            0.0
         }
+    } else {
+        0.0
     }
 }
 
@@ -421,7 +459,7 @@ pub fn eval_gated_jdot(
     };
     let jdot_ls = if ctrl.do_jdot_ls {
         let mw_d = if donor.mstar_dot < 0.0 { mdot_sys_wind_donor } else { 0.0 };
-        let mw_a = accretor_star.filter(|a| a.mstar_dot < 0.0).map_or(0.0, |a| a.mstar_dot);
+        let mw_a = if accretor_star.is_some() { mdot_sys_wind_accretor.min(0.0) } else { 0.0 };
         eval_jdot_ls_with_winds(
             s_pre_donor, s_post_donor, mw_d, j_surf_pre_donor,
             s_pre_accretor, s_post_accretor, mw_a, j_surf_pre_accretor, dt,
@@ -478,13 +516,30 @@ pub fn eval_coupled_edot(
                 acc.omega.first().copied().unwrap_or(0.0), period, ftid_a,
             );
         }
-        if ctrl.max_abs_edot_tidal > 0.0 {
-            et.clamp(-ctrl.max_abs_edot_tidal, ctrl.max_abs_edot_tidal)
+        if ctrl.max_abs_edot_tidal > 0.0 && et < -ctrl.max_abs_edot_tidal {
+            -ctrl.max_abs_edot_tidal
         } else {
             et
         }
     } else {
         0.0
     };
-    edot_gr + edot_tidal
+    let edot_enhance = if ctrl.use_eccentricity_enhancement && donor.nz > 0 {
+        let rl_d = eval_rlobe(m_donor, m_accretor, separation);
+        let is_kolb = ctrl.mdot_scheme.eq_ignore_ascii_case("Kolb");
+        let mut enh = eval_edot_enhancement_isotropic(
+            m_donor, m_accretor, donor.r[0], rl_d, eccentricity,
+            donor.rho[0].max(1.0e-30), donor.peos[0].max(1.0),
+            donor.t[0].max(10.0), donor.mu[0].max(0.5),
+            &donor.r, &donor.peos, &donor.t, &donor.mu, &donor.gamma1,
+            is_kolb, ctrl.anomaly_steps,
+        );
+        if ctrl.max_abs_edot_enhance > 0.0 && enh > ctrl.max_abs_edot_enhance {
+            enh = ctrl.max_abs_edot_enhance;
+        }
+        enh
+    } else {
+        0.0
+    };
+    edot_gr + edot_tidal + edot_enhance
 }

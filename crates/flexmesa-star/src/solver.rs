@@ -54,7 +54,9 @@ pub fn compute_corr_coeff(
     let layout = &model.layout;
     let max_dln = 0.5_f64;
     let max_dx_chem = 0.25_f64;
+    let eps_neg_xa = 5.0e-5_f64;
     let mut coeff = 1.0_f64;
+    let mut min_chem_alpha = 1.0_f64;
 
     if nz > 0 {
         let old_lum_surf = model.lum[0];
@@ -86,16 +88,18 @@ pub fn compute_corr_coeff(
                 let dx_j = dx_scaled[base + ivar] * x_scale[base + ivar];
                 let dxa = dx_j.abs();
                 if dxa > max_dx_chem {
-                    coeff = coeff.min(max_dx_chem / dxa);
+                    min_chem_alpha = min_chem_alpha.min(max_dx_chem / dxa);
                 }
                 let x_old = model.xa[c_base + j];
-                if x_old > 1.0e-12 && x_old + dx_j < 0.05 * x_old {
-                    coeff = coeff.min(-0.95 * x_old / dx_j);
+                if dx_j < 0.0 && x_old + dx_j < -eps_neg_xa {
+                    min_chem_alpha = min_chem_alpha
+                        .min((-(x_old + eps_neg_xa) / dx_j).max(0.0));
                 }
             }
         }
     }
-    coeff.clamp(1.0e-12, 1.0)
+    coeff = coeff.min(min_chem_alpha.max(1.0e-2));
+    coeff.clamp(1.0e-6, 1.0)
 }
 
 /// Applies a damped scaled correction
@@ -142,7 +146,7 @@ fn apply_damped_correction(
                     + alpha
                         * dx_scaled[s_base + ivar]
                         * x_scale[s_base + ivar])
-                    .clamp(0.0, 1.0);
+                    .clamp(-5.0e-5, 1.0 + 5.0e-5);
                 model.xa[c_base + j] = x_new;
             }
         }
@@ -226,7 +230,12 @@ pub fn solve_henyey_step(
     let mut correction_norm = 0.0;
     let mut max_correction = 0.0;
 
-    let max_iters = model.controls.max_newton_iters.max(1);
+    let gold_level = active_gold_level(model);
+    let max_iters = if gold_level == 2 {
+        model.controls.max_newton_iters.max(40)
+    } else {
+        model.controls.max_newton_iters.max(1)
+    };
     let mut converged = false;
     let mut iter_used = 0;
     let mut xh_prev = Vec::with_capacity(model.xh.len());
@@ -263,7 +272,7 @@ pub fn solve_henyey_step(
         let mut step_accepted = false;
         let mut best_rnorm = f64::INFINITY;
         let mut best_meta: Option<(f64, f64, f64)> = None;
-        for _bt in 0..8 {
+        for _bt in 0..7 {
             apply_damped_correction(
                 model,
                 &xh_prev,
@@ -304,11 +313,7 @@ pub fn solve_henyey_step(
 
         if !step_accepted {
             if let Some((best_alpha, best_rnorm, best_rmax)) = best_meta {
-                if best_alpha > 0.0
-                    && best_rnorm < 1.0e6
-                    && (best_rnorm <= prev_residual_norm * 2.0
-                        || prev_residual_norm > 1.0)
-                {
+                if best_alpha > 0.0 && best_rnorm < 1.0e6 {
                     apply_damped_correction(
                         model,
                         &xh_prev,

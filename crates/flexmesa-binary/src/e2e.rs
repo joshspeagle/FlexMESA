@@ -22,7 +22,7 @@ pub use crate::e2e_oracles::{
     eval_gr_expected_separation_rsun, eval_tauris_vdh_expected_separation_rsun,
     is_tier5_binary_case,
 };
-use crate::system::BinarySystem;
+use crate::system::{BinaryCompanion, BinarySystem};
 
 static FULL_ZAMS_CATALOG: OnceLock<Option<ZamsCatalog>> = OnceLock::new();
 
@@ -172,7 +172,7 @@ pub fn run_binary_test_suite_case(
     };
 
     let uncapped = max_steps_cap.is_none();
-    let step_limit = max_steps_cap.unwrap_or(10_000).max(1);
+    let step_limit = max_steps_cap.unwrap_or(100_000).max(1);
     let a0_rsun = bin.separation / RSUN;
     let q0 = bctrl.m1_msun / bctrl.m2_msun.max(1.0e-12);
     let j_conserved_0 = bin.total_angular_momentum_conserved();
@@ -193,7 +193,7 @@ pub fn run_binary_test_suite_case(
     let mut term_code = String::from("MaxStepsCap");
 
     while bin.model_number < step_limit {
-        let (suggested_dt, _reason) = bin.try_step(dt_next).map_err(|e| {
+        let (suggested_dt, _) = bin.try_step(dt_next).map_err(|e| {
             StarError::ConvergenceFailure(format!(
                 "[{case_name} step {}] {e}",
                 bin.model_number + 1
@@ -273,26 +273,22 @@ pub fn run_binary_test_suite_case(
                     -acct.accretion_luminosity / (CLIGHT * CLIGHT)
                 };
                 let frac_bh = (acct.mdot_system_transfer[1] - expected_sys).abs()
-                    / expected_sys.abs().max(1.0e-30);
+                    / expected_sys.abs();
                 let donor_wind_mdot = bin.donor.mstar_dot - bin.mtransfer_rate;
                 let exp_wtr = donor_wind_mdot * acct.wind_xfer_fraction[0];
-                let err_wtr = if acct.mdot_wind_transfer[0].abs() > 0.0 {
-                    (acct.mdot_wind_transfer[0] - exp_wtr).abs()
-                        / acct.mdot_wind_transfer[0].abs()
-                } else {
-                    0.0
-                };
+                let err_wtr = (acct.mdot_wind_transfer[0] - exp_wtr).abs()
+                    / acct.mdot_wind_transfer[0].abs();
                 let exp_wsys = donor_wind_mdot * (1.0 - acct.wind_xfer_fraction[0]);
-                let err_wsys = if exp_wsys.abs() > 0.0 {
-                    (acct.mdot_system_wind[0] - exp_wsys).abs() / exp_wsys.abs()
-                } else {
-                    0.0
-                };
+                let err_wsys =
+                    (acct.mdot_system_wind[0] - exp_wsys).abs() / exp_wsys.abs();
                 if bin.model_number > 1 {
                     max_rel_err = max_rel_err.max(frac_bh);
                 }
-                if (bin.model_number > 1 && frac_bh > 1.0e-15)
+                if (bin.model_number > 1
+                    && (!frac_bh.is_finite() || frac_bh > 1.0e-15))
+                    || !err_wtr.is_finite()
                     || err_wtr > 1.0e-10
+                    || !err_wsys.is_finite()
                     || err_wsys > 1.0e-10
                 {
                     failed_mid_run = true;
@@ -312,13 +308,13 @@ pub fn run_binary_test_suite_case(
             }
             "double_bh" => {
                 if bin.ignore_rlof_flag {
-                    if let Some(s1) = bin.star_ref(1) {
-                        let age_yr = s1.star_age;
+                    let zams_settled = bin.star_ref(1).map(|s1| {
                         let lnuc = total_lnuc_erg_s(s1).abs();
                         let lsurf = s1.lum[0].abs().max(1.0);
-                        let zams_settled = age_yr > 100.0
-                            && (lnuc / lsurf).log10().abs() < 0.005;
-                        if zams_settled {
+                        s1.star_age > 100.0 && (lnuc / lsurf).log10().abs() < 0.005
+                    });
+                    if let Some(settled) = zams_settled {
+                        if settled {
                             let gap1 = bin.rl_relative_gap_by_star()[0];
                             if gap1 > 0.320_819_224 {
                                 failed_mid_run = true;
@@ -327,6 +323,10 @@ pub fn run_binary_test_suite_case(
                             }
                             if gap1 > 0.0 {
                                 bin.controls.max_implicit_abs_mdot = 1.0e-3;
+                                bin.donor.controls.mix_wind.delta_mdot_hard_limit = -1.0;
+                                if let BinaryCompanion::Star(ref mut s2) = bin.companion {
+                                    s2.controls.mix_wind.delta_mdot_hard_limit = -1.0;
+                                }
                             }
                             bin.set_ignore_rlof_flag(false);
                             bin.controls.terminate_if_l2_overflow = true;
@@ -363,7 +363,8 @@ pub fn run_binary_test_suite_case(
                     } else if s2_he < 1.0e-5 {
                         bin.set_point_mass_i(2);
                     }
-                } else {
+                }
+                if bin.point_mass_i != 0 {
                     let rem_idx = 3 - bin.point_mass_i;
                     if bin.star_ref(rem_idx).is_some_and(|s| center_he4(s) < 1.0e-5)
                     {
@@ -388,40 +389,44 @@ pub fn run_binary_test_suite_case(
     let passed = !failed_mid_run
         && match case_name.as_str() {
             "jdot_gr_check" => {
-                if term_code != "GrCheckPass" && !uncapped {
-                    term_code = String::from("GrCheckPass");
-                }
                 max_rel_err < 1.0e-2
                     && (bin.separation / RSUN) < a0_rsun
-                    && (!uncapped || bin.donor.mstar_dot < 0.0)
+                    && (!uncapped
+                        || (term_code == "GrCheckPass"
+                            && bin.donor.mstar_dot < 0.0))
             }
             "jdot_ml_check" => {
-                term_code = String::from("MlCheckPass");
+                let target_age = bin.donor.controls.max_age.unwrap_or(1.4e10);
                 max_rel_err < 1.0e-4
-                    && (!uncapped || m1_msun < bctrl.m1_msun - 1.0e-3)
+                    && (!uncapped
+                        || (term_code == "max_age"
+                            && bin.donor.star_age >= target_age * (1.0 - 1.0e-6)
+                            && m1_msun < bctrl.m1_msun - 1.0e-3))
             }
             "jdot_ls_check" => {
-                term_code = String::from("LsCheckPass");
+                let target_age = bin.donor.controls.max_age.unwrap_or(1.0e10);
                 let omega_orb = 2.0 * PI / bin.period;
                 let omega_surf =
                     bin.donor.omega.first().copied().unwrap_or(0.0);
                 let sync_err = (omega_surf - omega_orb).abs() / omega_orb;
-                max_rel_err < 1.0e-12 && sync_err < 0.25
+                max_rel_err < 1.0e-12
+                    && (!uncapped
+                        || (term_code == "max_age"
+                            && bin.donor.star_age >= target_age * (1.0 - 1.0e-6)
+                            && sync_err < 1.0e-2))
             }
             "wind_fed_bhhmxb" => {
-                term_code = String::from("WindFedBhHmxbPass");
                 max_rel_err <= 1.0e-15
                     && (!uncapped
-                        || (saw_sub_edd
+                        || (term_code == "xa_central_lower_limit(h1)"
+                            && saw_sub_edd
                             && saw_super_edd
                             && center_h1(&bin.donor) < 1.0e-2))
             }
             "star_plus_point_mass" | "star_plus_point_mass_explicit_mdot" => {
-                if !uncapped {
-                    term_code = String::from("BinaryEvolutionPass");
-                }
                 !uncapped
-                    || (center_h1(&bin.donor) < 1.0e-2
+                    || (term_code == "xa_central_lower_limit(h1)"
+                        && center_h1(&bin.donor) < 1.0e-2
                         && m1_msun < bctrl.m1_msun)
             }
             "evolve_both_stars" => {

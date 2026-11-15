@@ -132,6 +132,10 @@ pub struct MixWindControls {
     pub conv_premix_time_factor: f64,
     /// Hold $P_{\mathrm{gas}}$ fixed (`true`) or $P_{\mathrm{tot}}$ fixed (`false`) during `do_conv_premix` (`conv_premix_fix_pgas`).
     pub conv_premix_fix_pgas: bool,
+    /// Latch radiative faces to `NoMixing` after Newton iteration 3 (`make_gradr_sticky_in_solver_iters`).
+    pub make_gradr_sticky_in_solver_iters: bool,
+    /// Peak $\log_{10}(T/\mathrm{K})$ threshold enabling `make_gradr_sticky_in_solver_iters` (`min_logT_for_make_gradr_sticky_in_solver_iters`).
+    pub min_logt_for_make_gradr_sticky_in_solver_iters: f64,
 
     // --- Winds, Rotational Enhancement, Accretion & `eps_mdot` ---
     /// Hot-star wind prescription name (`hot_wind_scheme`, `""` default).
@@ -162,6 +166,22 @@ pub struct MixWindControls {
     pub rotational_mdot_boost_fac: f64,
     /// Kelvin-Helmholtz mass-loss cap multiplier for rotational boost (`rotational_mdot_kh_fac`, `0.3` default).
     pub rotational_mdot_kh_fac: f64,
+    /// Maximum implicit mass-loss redo iterations per step (`max_mdot_redo_cnt`, `0` default).
+    pub max_mdot_redo_cnt: usize,
+    /// Minimum timestep in years required to trigger rotational `mdot` redo (`min_years_dt_for_redo_mdot`, `0.0` default).
+    pub min_years_dt_for_redo_mdot: f64,
+    /// Relative convergence tolerance on critical-rotation mass loss (`surf_omega_div_omega_crit_tol`, `0.05` default).
+    pub surf_omega_div_omega_crit_tol: f64,
+    /// Multiplicative revision factor per `mdot` redo iteration (`mdot_revise_factor`, `1.1` default).
+    pub mdot_revise_factor: f64,
+    /// Additive fraction of initial $|\dot{M}|$ on odd `mdot` redo tries (`implicit_mdot_boost`, `0.1` default).
+    pub implicit_mdot_boost: f64,
+    /// Minimum optical depth for surface rotation averaging (`surf_avg_tau_min`, `1.0` default).
+    pub surf_avg_tau_min: f64,
+    /// Maximum optical depth for surface rotation averaging (`surf_avg_tau`, `100.0` default).
+    pub surf_avg_tau: f64,
+    /// Rotational mixing diffusivity scale factor (`am_D_mix_factor`, `0.0` default).
+    pub am_d_mix_factor: f64,
     /// Suppress stellar wind while `rotation_flag` is false (`no_wind_if_no_rotation`).
     pub no_wind_if_no_rotation: bool,
     /// Divisor on $L$ for super-Eddington wind onset (`super_eddington_wind_Ledd_factor`, `1.0` default).
@@ -214,6 +234,16 @@ pub struct MixWindControls {
     pub min_dq: f64,
     /// Minimum cell $\Delta q$ eligible for splitting (`min_dq_for_split`, `1e-14` default).
     pub min_dq_for_split: f64,
+    /// Minimum cell $\Delta q$ for composition-driven splitting (`min_dq_for_xa`, `1e-14` default).
+    pub min_dq_for_xa: f64,
+    /// Minimum cell $\Delta q$ for composition-driven splitting in convective zones (`min_dq_for_xa_convective`, `1e-6` default).
+    pub min_dq_for_xa_convective: f64,
+    /// Minimum $\Delta\ln R$ across a cell during mesh refinement (`mesh_min_dlnR`, `1e-9` default).
+    pub mesh_min_dlnr: f64,
+    /// Maximum allowed adjacent cell $\Delta q$ ratio (`mesh_max_allowed_ratio`, `2.5` default).
+    pub mesh_max_allowed_ratio: f64,
+    /// Maximum composition jump allowed when merging adjacent cells (`max_delta_x_for_merge`, `0.1` default).
+    pub max_delta_x_for_merge: f64,
     /// Maximum surface cell mass fraction (`max_surface_cell_dq`, `1e-8` default).
     pub max_surface_cell_dq: f64,
     /// Maximum center cell mass fraction (`max_center_cell_dq`, `1e-6` default).
@@ -226,6 +256,8 @@ pub struct MixWindControls {
     pub r_function_weight: f64,
     /// Mass gradient weight in mesh spacing function (`M_function_weight`, `0.0` default).
     pub m_function_weight: f64,
+    /// Temperature-gradient weight in mesh spacing function (`gradT_function_weight`, `0.0` default).
+    pub gradt_function_weight: f64,
     /// Angular-velocity gradient weight in mesh spacing function (`omega_function_weight`, `0.0` default).
     pub omega_function_weight: f64,
     /// Coulomb $\Gamma$ gradient weight in mesh spacing function (`gam_function_weight`, `0.0` default).
@@ -236,6 +268,70 @@ pub struct MixWindControls {
     pub xa_function_weight: Vec<f64>,
     /// Transition scales for abundance mesh spacing functions (`xa_function_param(1..)`).
     pub xa_function_param: Vec<f64>,
+    /// Minimum timestep in seconds required to execute adaptive remeshing (`remesh_dt_limit`, `-1.0` default).
+    pub remesh_dt_limit: f64,
+    /// Absolute mass-loss tolerance in $M_\odot\,\mathrm{yr}^{-1}$ for `check_delta_mdot` (`delta_mdot_atol`, `1e-3` default).
+    pub delta_mdot_atol: f64,
+    /// Relative mass-loss tolerance for `check_delta_mdot` (`delta_mdot_rtol`, `0.5` default).
+    pub delta_mdot_rtol: f64,
+    /// Soft timestep limit on normalized $|\Delta\dot{M}|$ (`delta_mdot_limit`, `-1.0` default).
+    pub delta_mdot_limit: f64,
+    /// Hard retry limit on normalized $|\Delta\dot{M}|$ (`delta_mdot_hard_limit`, `-1.0` default).
+    pub delta_mdot_hard_limit: f64,
+    /// Upper cap on shellular $\Omega / \Omega_{\mathrm{crit,Roche}}$ in distortion factors (`w_div_wcrit_max`, `0.89` default).
+    pub w_div_wcrit_max: f64,
+    /// Mean-molecular-weight barrier scale factor in rotational instabilities (`am_gradmu_factor`, `0.05` default).
+    pub am_gradmu_factor: f64,
+    /// Dynamical shear instability scale factor (`D_DSI_factor`, `0.0` default).
+    pub d_dsi_factor: f64,
+    /// Solberg-Hoiland instability scale factor (`D_SH_factor`, `0.0` default).
+    pub d_sh_factor: f64,
+    /// Secular shear instability scale factor (`D_SSI_factor`, `0.0` default).
+    pub d_ssi_factor: f64,
+    /// Eddington-Sweet circulation scale factor (`D_ES_factor`, `0.0` default).
+    pub d_es_factor: f64,
+    /// Goldreich-Schubert-Fricke instability scale factor (`D_GSF_factor`, `0.0` default).
+    pub d_gsf_factor: f64,
+    /// Spruit-Tayler magnetic compositional diffusivity scale factor (`D_ST_factor`, `0.0` default).
+    pub d_st_factor: f64,
+    /// Kinematic shear viscosity compositional diffusivity scale factor (`D_visc_factor`, `0.0` default).
+    pub d_visc_factor: f64,
+    /// Overall rotational angular-momentum viscosity multiplier (`am_nu_factor`, `1.0` default).
+    pub am_nu_factor: f64,
+    /// Non-rotational (`MLT`/overshoot) angular-momentum viscosity factor (`am_nu_non_rotation_factor`, `1.0` default).
+    pub am_nu_non_rotation_factor: f64,
+    /// Dynamical shear angular-momentum viscosity factor (`am_nu_DSI_factor`, `-1.0` default).
+    pub am_nu_dsi_factor: f64,
+    /// Solberg-Hoiland angular-momentum viscosity factor (`am_nu_SH_factor`, `-1.0` default).
+    pub am_nu_sh_factor: f64,
+    /// Secular shear angular-momentum viscosity factor (`am_nu_SSI_factor`, `-1.0` default).
+    pub am_nu_ssi_factor: f64,
+    /// Eddington-Sweet angular-momentum viscosity factor (`am_nu_ES_factor`, `-1.0` default).
+    pub am_nu_es_factor: f64,
+    /// Goldreich-Schubert-Fricke angular-momentum viscosity factor (`am_nu_GSF_factor`, `-1.0` default).
+    pub am_nu_gsf_factor: f64,
+    /// Spruit-Tayler magnetic angular-momentum viscosity factor (`am_nu_ST_factor`, `-1.0` default).
+    pub am_nu_st_factor: f64,
+    /// Kinematic shear angular-momentum viscosity factor (`am_nu_visc_factor`, `1.0` default).
+    pub am_nu_visc_factor: f64,
+    /// Dimensionless tridiagonal stiffness cap for `solve_omega_mix` (`am_sig_term_limit`, `1e13` default).
+    pub am_sig_term_limit: f64,
+    /// Strang-split half-step angular-momentum transport before and after Henyey (`premix_omega`, `true` default).
+    pub premix_omega: bool,
+    /// Remove surface angular momentum deficit after mass loss (`do_adjust_J_lost`, `true` default).
+    pub do_adjust_j_lost: bool,
+    /// Fraction of surface angular momentum removed by mass loss (`adjust_J_fraction`, `1.0` default).
+    pub adjust_j_fraction: f64,
+    /// Upper $q$ threshold below which `adjust_J_lost` stops (`min_q_for_adjust_J_lost`, `0.995` default).
+    pub min_q_for_adjust_j_lost: f64,
+    /// Minimum ratio $J_{\mathrm{env}} / |\Delta J|$ for `adjust_J_lost` (`min_J_div_delta_J`, `3.0` default).
+    pub min_j_div_delta_j: f64,
+    /// Zero rotational instability diffusivities inside convective zones (`skip_rotation_in_convection_zones`, `false` default).
+    pub skip_rotation_in_convection_zones: bool,
+    /// Half-width cell count for triangular smoothing of $\nabla_L$ composition term (`num_cells_for_smooth_gradL_composition_term`, `3` default).
+    pub num_cells_for_smooth_gradl_composition_term: usize,
+    /// Half-width cell count for triangular smoothing of Brunt $B$ (`num_cells_for_smooth_brunt_B`, `2` default).
+    pub num_cells_for_smooth_brunt_b: usize,
 }
 
 impl Default for MixWindControls {
@@ -262,6 +358,8 @@ impl Default for MixWindControls {
             conv_premix_avoid_increase: true,
             conv_premix_time_factor: 0.0,
             conv_premix_fix_pgas: true,
+            make_gradr_sticky_in_solver_iters: false,
+            min_logt_for_make_gradr_sticky_in_solver_iters: 1.0e99,
             hot_wind_scheme: String::new(),
             rgb_to_agb_wind_switch: 1.0e-4,
             dutch_wind_lowt_scheme: String::from("de Jager"),
@@ -276,6 +374,14 @@ impl Default for MixWindControls {
             max_mdot_jump_for_rotation: 2.0,
             rotational_mdot_boost_fac: 1.0e5,
             rotational_mdot_kh_fac: 0.3,
+            max_mdot_redo_cnt: 0,
+            min_years_dt_for_redo_mdot: 0.0,
+            surf_omega_div_omega_crit_tol: 0.05,
+            mdot_revise_factor: 1.1,
+            implicit_mdot_boost: 0.1,
+            surf_avg_tau_min: 1.0,
+            surf_avg_tau: 100.0,
+            am_d_mix_factor: 0.0,
             no_wind_if_no_rotation: false,
             super_eddington_wind_ledd_factor: 1.0,
             wind_boost_full_off_l_div_ledd: 1.5,
@@ -301,17 +407,55 @@ impl Default for MixWindControls {
             max_dq: 1.0e-2,
             min_dq: 1.0e-14,
             min_dq_for_split: 1.0e-14,
+            min_dq_for_xa: 1.0e-14,
+            min_dq_for_xa_convective: 1.0e-6,
+            mesh_min_dlnr: 1.0e-9,
+            mesh_max_allowed_ratio: 2.5,
+            max_delta_x_for_merge: 0.1,
             max_surface_cell_dq: 1.0e-8,
             max_center_cell_dq: 1.0e-6,
             p_function_weight: 30.0,
             t_function1_weight: 110.0,
             r_function_weight: 0.0,
             m_function_weight: 0.0,
+            gradt_function_weight: 0.0,
             omega_function_weight: 0.0,
             gam_function_weight: 0.0,
             xa_function_species: Vec::new(),
             xa_function_weight: Vec::new(),
             xa_function_param: Vec::new(),
+            remesh_dt_limit: -1.0,
+            delta_mdot_atol: 1.0e-3,
+            delta_mdot_rtol: 0.5,
+            delta_mdot_limit: -1.0,
+            delta_mdot_hard_limit: -1.0,
+            w_div_wcrit_max: 0.89,
+            am_gradmu_factor: 0.05,
+            d_dsi_factor: 0.0,
+            d_sh_factor: 0.0,
+            d_ssi_factor: 0.0,
+            d_es_factor: 0.0,
+            d_gsf_factor: 0.0,
+            d_st_factor: 0.0,
+            d_visc_factor: 0.0,
+            am_nu_factor: 1.0,
+            am_nu_non_rotation_factor: 1.0,
+            am_nu_dsi_factor: -1.0,
+            am_nu_sh_factor: -1.0,
+            am_nu_ssi_factor: -1.0,
+            am_nu_es_factor: -1.0,
+            am_nu_gsf_factor: -1.0,
+            am_nu_st_factor: -1.0,
+            am_nu_visc_factor: 1.0,
+            am_sig_term_limit: 1.0e13,
+            premix_omega: true,
+            do_adjust_j_lost: true,
+            adjust_j_fraction: 1.0,
+            min_q_for_adjust_j_lost: 0.995,
+            min_j_div_delta_j: 3.0,
+            skip_rotation_in_convection_zones: false,
+            num_cells_for_smooth_gradl_composition_term: 3,
+            num_cells_for_smooth_brunt_b: 2,
         }
     }
 }

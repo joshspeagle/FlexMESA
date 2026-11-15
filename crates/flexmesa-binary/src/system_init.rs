@@ -19,7 +19,10 @@ fn log10_lnuc_over_lsurf(star: &StarModel) -> f64 {
 }
 
 fn regularize_zams_mesh(star: &mut StarModel) -> Result<(), StarError> {
-    let mcfg = MeshFunctionConfig::from_controls(&star.controls);
+    let mut mcfg = MeshFunctionConfig::from_controls(&star.controls);
+    mcfg.max_dq = mcfg.max_dq.max(0.1);
+    mcfg.max_surface_cell_dq = mcfg.max_surface_cell_dq.max(1.0);
+    mcfg.max_center_cell_dq = mcfg.max_center_cell_dq.max(1.0);
     for _ in 0..8 {
         set_hydro_vars(star, false, false)?;
         let (ns, nm) = do_adjust_mesh(star, &mcfg)?;
@@ -102,7 +105,17 @@ fn settle_cno_gold_equilibrium(
     update_rotation_distortion_factors(star);
     set_hydro_vars(star, false, false)?;
 
-    for &dt_yr in &[0.5_f64, 2.0, 8.0, 25.0, 80.0, 200.0] {
+    for (idx, &dt_yr) in [0.1_f64, 0.5, 2.0, 8.0, 25.0, 80.0, 200.0]
+        .iter()
+        .enumerate()
+    {
+        if idx < 2 {
+            star.controls.use_gold_tolerances = false;
+            star.controls.use_gold2_tolerances = false;
+        } else {
+            star.controls.use_gold_tolerances = saved_controls.use_gold_tolerances;
+            star.controls.use_gold2_tolerances = saved_controls.use_gold2_tolerances;
+        }
         let dt_s = dt_yr * SECYER;
         let backup = star.clone();
         star.dt = dt_s;

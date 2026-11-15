@@ -4,7 +4,9 @@
 //! `run_binary_support.f90`, and `binary_evolve.f90:103-255`).
 
 use flexmesa_const::{MSUN, RSUN, SECDAY, SECYER};
-use flexmesa_star::{StarError, StarModel};
+use flexmesa_star::{
+    StarError, StarModel, set_hydro_vars, sync_post_henyey_rotation,
+};
 
 use crate::edd_wind::bh_initial_equatorial_mass;
 use crate::inlist::BinaryInlistControls;
@@ -12,6 +14,7 @@ use crate::orbit::{
     eval_j_orb, eval_rl_relative_gap, eval_rlobe, period_from_separation,
     separation_from_period,
 };
+use crate::roche_deformation::BinaryTidalDeformationHook;
 use crate::system_init::prep_and_settle_binary_star;
 use crate::system_jdot::{JdotBreakdown, apply_initial_orbit_sync, eval_star_spin_j};
 use crate::system_rlof::{BinaryStepSnapshot, CoupledMdotAccounting};
@@ -217,6 +220,37 @@ impl BinarySystem {
                 apply_initial_orbit_sync(s2, period)?;
             }
         }
+        let r_a_init = match &companion {
+            BinaryCompanion::PointMass { .. } => 0.0,
+            BinaryCompanion::Star(s2) => s2.r[0],
+        };
+        let (rl_init, _) = compute_rl_and_gaps(
+            m_d, m_a, donor.r[0], r_a_init, separation, eccentricity,
+        );
+        if controls.use_tidal_deformation {
+            donor.aux.tidal_deformation = BinaryTidalDeformationHook::new_handle(
+                m_d,
+                m_a,
+                separation,
+                rl_init[0],
+                period,
+                controls.f_sync_switch_from_rot_defor,
+                controls.f_sync_switch_width,
+                controls.f_sync_switch_lim,
+            );
+            if let BinaryCompanion::Star(ref mut s2) = companion {
+                s2.aux.tidal_deformation = BinaryTidalDeformationHook::new_handle(
+                    m_a,
+                    m_d,
+                    separation,
+                    rl_init[1],
+                    period,
+                    controls.f_sync_switch_from_rot_defor,
+                    controls.f_sync_switch_width,
+                    controls.f_sync_switch_lim,
+                );
+            }
+        }
         prep_and_settle_binary_star(&mut donor)?;
         if let BinaryCompanion::Star(ref mut s2) = companion {
             prep_and_settle_binary_star(s2)?;
@@ -237,7 +271,7 @@ impl BinarySystem {
             false
         };
 
-        Ok(Self {
+        let mut sys = Self {
             donor,
             companion,
             separation,
@@ -266,7 +300,63 @@ impl BinarySystem {
             last_mdot: CoupledMdotAccounting::default(),
             last_jdot: JdotBreakdown::default(),
             last_termination_reason: None,
-        })
+        };
+        sys.refresh_tidal_deformation_hooks(false)?;
+        sys.update_stage_varcontrol();
+        Ok(sys)
+    }
+
+    /// Attaches or updates the `use_tidal_deformation` Roche-potential hooks on
+    /// active stellar components (`run_binary_support.f90:269-277`).
+    pub fn refresh_tidal_deformation_hooks(
+        &mut self,
+        recompute_hydro: bool,
+    ) -> Result<(), StarError> {
+        if !self.controls.use_tidal_deformation {
+            self.donor.aux.tidal_deformation = None;
+            if let BinaryCompanion::Star(ref mut s2) = self.companion {
+                s2.aux.tidal_deformation = None;
+            }
+            return Ok(());
+        }
+        let m_d = self.donor.mstar;
+        let m_a = self.accretor_mass_g();
+        self.donor.aux.tidal_deformation =
+            BinaryTidalDeformationHook::new_handle(
+                m_d,
+                m_a,
+                self.separation,
+                self.rl[0],
+                self.period,
+                self.controls.f_sync_switch_from_rot_defor,
+                self.controls.f_sync_switch_width,
+                self.controls.f_sync_switch_lim,
+            );
+        sync_post_henyey_rotation(&mut self.donor, 0.0);
+        if recompute_hydro {
+            set_hydro_vars(&mut self.donor, false, false)?;
+            self.donor.save_start_values();
+            self.donor.save_old_values();
+        }
+        if let BinaryCompanion::Star(ref mut s2) = self.companion {
+            s2.aux.tidal_deformation = BinaryTidalDeformationHook::new_handle(
+                m_a,
+                m_d,
+                self.separation,
+                self.rl[1],
+                self.period,
+                self.controls.f_sync_switch_from_rot_defor,
+                self.controls.f_sync_switch_width,
+                self.controls.f_sync_switch_lim,
+            );
+            sync_post_henyey_rotation(s2, 0.0);
+            if recompute_hydro {
+                set_hydro_vars(s2, false, false)?;
+                s2.save_start_values();
+                s2.save_old_values();
+            }
+        }
+        Ok(())
     }
 
     /// Returns the current accretor mass $M_a$ (g).
@@ -354,6 +444,7 @@ impl BinarySystem {
         );
         self.rl = rl;
         self.rl_relative_gap = gaps;
+        let _ = self.refresh_tidal_deformation_hooks(false);
     }
 
     /// Dynamically converts star `new_point_mass_i` (`1` or `2`) into a compact
@@ -380,12 +471,18 @@ impl BinarySystem {
         self.point_mass_i = new_point_mass_i;
         self.donor_i = 3 - new_point_mass_i;
         self.mtransfer_rate = 0.0;
+        self.change_factor = self.controls.max_change_factor;
+        self.last_mdot = CoupledMdotAccounting::default();
+        self.last_jdot = JdotBreakdown::default();
+        self.last_termination_reason = None;
         let (rl, gaps) = compute_rl_and_gaps(
             self.donor.mstar, self.accretor_mass_g(), self.donor.r[0], 0.0,
             self.separation, self.eccentricity,
         );
         self.rl = rl;
         self.rl_relative_gap = gaps;
+        let _ = self.refresh_tidal_deformation_hooks(false);
+        self.update_stage_varcontrol();
     }
 
     /// Checks whether the companion star overfills its Roche lobe more deeply
@@ -406,6 +503,7 @@ impl BinarySystem {
             self.donor_i = 3 - self.donor_i;
             self.rl.swap(0, 1);
             self.rl_relative_gap.swap(0, 1);
+            let _ = self.refresh_tidal_deformation_hooks(false);
             return true;
         }
         false
@@ -482,6 +580,7 @@ impl BinarySystem {
         self.cumulative_j_ext = snap.cumulative_j_ext;
         self.last_mdot = snap.last_mdot;
         self.last_jdot = snap.last_jdot;
+        let _ = self.refresh_tidal_deformation_hooks(false);
         Ok(())
     }
 }

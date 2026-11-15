@@ -167,7 +167,7 @@ impl ImplicitRlofSolver {
         let limit = max_tries.max(1);
         for iter in 1..=limit {
             let f = eval_f(mdot);
-            match state.record_and_propose(iter, limit, mdot, f, false) {
+            match state.record_and_propose(iter, limit, mdot, f, false, false) {
                 ImplicitStepAction::Converged(m_ok) => return (m_ok, iter, f),
                 ImplicitStepAction::Detached => {
                     let f0 = eval_f(0.0);
@@ -223,6 +223,8 @@ pub struct ImplicitMdotSolver {
     pub use_quadratic: bool,
     /// Enable additive `use_sum` search across $\dot{M} = 0$ (`mdot_scheme == "contact"`).
     pub use_sum: bool,
+    /// Constant additive step size $\Delta\dot{M} > 0$ ($\mathrm{g\,s^{-1}}$) for `use_sum` (`fixed_delta_mdot`).
+    pub fixed_delta_mdot: f64,
     have_lo: bool,
     have_hi: bool,
     have_prev: bool,
@@ -277,6 +279,7 @@ impl ImplicitMdotSolver {
             starting_mdot_cgs: starting_msun_yr * u,
             use_quadratic,
             use_sum,
+            fixed_delta_mdot: starting_msun_yr * u * (change_factor.max(1.01) - 1.0),
             have_lo: false,
             have_hi: false,
             have_prev: false,
@@ -341,63 +344,40 @@ impl ImplicitMdotSolver {
                     ImplicitStepAction::TryNextMdot(seed)
                 };
             }
-            return self.record_and_propose(
-                num_tries,
-                max_tries,
-                mdot_current,
-                f,
-                false,
-            );
+            return self.record_and_propose(num_tries, max_tries, mdot_current, f, false, false);
         }
 
-        let (f, detach_allowed) = if is_contact {
+        let (f, trial_use_sum, detach_allowed) = if is_contact {
             let q = q_accretor_over_donor.max(1.0e-12);
             let sc = pow(q, -0.52);
             let companion_detached = gap_accretor < 0.0
-                && (gap_donor * sc - gap_accretor > self.tolerance
-                    || gap_donor < -self.tolerance);
+                && (gap_donor * sc - gap_accretor > self.tolerance || gap_donor < -self.tolerance);
             if companion_detached {
-                (helper.roche_lobe_objective(gap_donor), true)
+                (helper.roche_lobe_objective(gap_donor), false, true)
             } else {
-                (
-                    helper.contact_objective(gap_donor, gap_accretor, q),
-                    gap_donor < 0.0 && gap_accretor < 0.0,
-                )
+                (helper.contact_objective(gap_donor, gap_accretor, q), true, false)
             }
         } else {
-            (helper.roche_lobe_objective(gap_donor), true)
+            (helper.roche_lobe_objective(gap_donor), false, true)
         };
-        self.record_and_propose(
-            num_tries,
-            max_tries,
-            mdot_current,
-            f,
-            detach_allowed,
-        )
+        self.record_and_propose(num_tries, max_tries, mdot_current, f, trial_use_sum, detach_allowed)
     }
 
     /// Flip sign of bracket endpoints after a mid-step `"contact"` donor switch
     /// (`binary_evolve.f90:222-233`).
     pub fn flip_for_contact_donor_switch(&mut self) {
-        if self.have_lo && self.have_hi {
-            std::mem::swap(&mut self.mdot_lo, &mut self.mdot_hi);
-            std::mem::swap(&mut self.f_lo, &mut self.f_hi);
-            self.mdot_lo = -self.mdot_lo;
-            self.mdot_hi = -self.mdot_hi;
-            self.f_lo = -self.f_lo;
-            self.f_hi = -self.f_hi;
-        } else if self.have_lo {
-            self.have_hi = true;
-            self.have_lo = false;
-            self.mdot_hi = -self.mdot_lo;
-            self.f_hi = -self.f_lo;
-        } else if self.have_hi {
-            self.have_lo = true;
+        let mdot_hi_temp = self.mdot_hi;
+        let f_hi_temp = self.f_hi;
+        self.mdot_hi = -self.mdot_lo;
+        self.f_hi = -self.f_lo;
+        self.mdot_lo = -mdot_hi_temp;
+        self.f_lo = -f_hi_temp;
+        if !self.have_lo {
             self.have_hi = false;
-            self.mdot_lo = -self.mdot_hi;
-            self.f_lo = -self.f_hi;
         }
+        self.have_lo = true;
         self.have_prev = false;
+        self.fixed_delta_mdot *= 0.5;
     }
 
     fn record_and_propose(
@@ -406,100 +386,157 @@ impl ImplicitMdotSolver {
         max_tries: usize,
         mdot: f64,
         f: f64,
+        trial_use_sum: bool,
         detach_allowed: bool,
     ) -> ImplicitStepAction {
-        if (f < 0.0 && mdot == 0.0 && (!self.use_sum || detach_allowed))
+        if num_tries == 1 {
+            self.fixed_delta_mdot = (-mdot).max(self.starting_mdot_cgs)
+                * (self.change_factor - 1.0);
+        }
+        if (f < 0.0 && mdot == 0.0 && detach_allowed)
             || f.abs() <= self.tolerance
             || (f > 0.0
                 && (-mdot - self.max_abs_mdot_cgs).abs()
                     <= 1.0e-12 * self.max_abs_mdot_cgs)
             || self.try_detach
         {
-            return ImplicitStepAction::Converged(mdot);
+            return ImplicitStepAction::Converged(mdot.min(0.0));
         }
         if num_tries >= max_tries {
             return ImplicitStepAction::ExceededMaxTries;
         }
 
-        if f < 0.0 {
-            if self.have_hi {
-                self.mdot_prev = self.mdot_hi;
-                self.f_prev = self.f_hi;
-                self.have_prev = true;
-            }
-            self.have_hi = true;
-            self.mdot_hi = mdot;
-            self.f_hi = f;
-        } else {
-            if self.have_lo {
-                self.mdot_prev = self.mdot_lo;
-                self.f_prev = self.f_lo;
-                self.have_prev = true;
-            }
-            self.have_lo = true;
-            self.mdot_lo = mdot;
-            self.f_lo = f;
-        }
-
         let raw_next = if self.have_lo && self.have_hi {
-            if (self.mdot_hi - self.mdot_lo).abs()
-                < self.tiny_factor
-                    * self.mdot_hi.abs().min(self.mdot_lo.abs()).max(1.0)
-            {
-                return ImplicitStepAction::Converged(
-                    0.5 * (self.mdot_lo + self.mdot_hi),
-                );
-            }
-            let quad = if self.use_quadratic
-                && self.have_prev
-                && num_tries.is_multiple_of(2)
-            {
+            let do_quad = self.use_quadratic && num_tries.is_multiple_of(2);
+            let quad_or_sec = if do_quad {
                 find0_quadratic(
                     self.mdot_lo,
                     self.f_lo,
+                    mdot,
+                    f,
                     self.mdot_hi,
                     self.f_hi,
-                    self.mdot_prev,
-                    self.f_prev,
                 )
+                .or_else(|| {
+                    if (self.f_hi - self.f_lo).abs() > 1.0e-30 {
+                        let sec = (self.mdot_lo * self.f_hi
+                            - self.mdot_hi * self.f_lo)
+                            / (self.f_hi - self.f_lo);
+                        (sec > self.mdot_hi && sec < self.mdot_lo)
+                            .then_some(sec)
+                    } else {
+                        None
+                    }
+                })
             } else {
                 None
             };
-            if let Some(q_root) = quad {
-                q_root
-            } else if num_tries.is_multiple_of(2)
-                && (self.f_hi - self.f_lo).abs() > 1.0e-30
+            if f < 0.0 {
+                self.mdot_prev = self.mdot_hi;
+                self.f_prev = self.f_hi;
+                self.have_prev = true;
+                self.mdot_hi = mdot;
+                self.f_hi = f;
+            } else {
+                self.mdot_prev = self.mdot_lo;
+                self.f_prev = self.f_lo;
+                self.have_prev = true;
+                self.mdot_lo = mdot;
+                self.f_lo = f;
+            }
+            if self.mdot_lo <= 0.0
+                && self.mdot_hi <= 0.0
+                && (self.mdot_hi - self.mdot_lo).abs()
+                    < self.tiny_factor
+                        * self.mdot_hi.abs().min(self.mdot_lo.abs())
             {
-                let sec = (self.mdot_lo * self.f_hi - self.mdot_hi * self.f_lo)
-                    / (self.f_hi - self.f_lo);
-                if sec > self.mdot_hi && sec < self.mdot_lo {
-                    sec
-                } else {
-                    0.5 * (self.mdot_lo + self.mdot_hi)
+                return ImplicitStepAction::Converged(mdot.min(0.0));
+            }
+            quad_or_sec.unwrap_or(0.5 * (self.mdot_lo + self.mdot_hi))
+        } else if self.have_lo {
+            if f < 0.0 {
+                self.have_hi = true;
+                self.mdot_hi = mdot;
+                self.f_hi = f;
+                if self.mdot_lo <= 0.0
+                    && self.mdot_hi <= 0.0
+                    && (self.mdot_hi - self.mdot_lo).abs()
+                        < self.tiny_factor
+                            * self.mdot_hi.abs().min(self.mdot_lo.abs())
+                {
+                    return ImplicitStepAction::Converged(mdot.min(0.0));
                 }
+                0.5 * (self.mdot_hi + self.mdot_lo)
             } else {
-                0.5 * (self.mdot_lo + self.mdot_hi)
+                self.mdot_lo = mdot;
+                self.f_lo = f;
+                if self.mdot_lo >= 0.0 || self.mdot_lo.abs() < self.starting_mdot_cgs {
+                    -self.starting_mdot_cgs
+                } else {
+                    self.mdot_lo * self.change_factor
+                }
             }
-        } else if !self.have_hi {
-            if self.mdot_lo.abs() < self.starting_mdot_cgs {
+        } else if self.have_hi {
+            if f >= 0.0 {
+                self.have_lo = true;
+                self.mdot_lo = mdot;
+                self.f_lo = f;
+                if self.mdot_lo <= 0.0
+                    && self.mdot_hi <= 0.0
+                    && (self.mdot_hi - self.mdot_lo).abs()
+                        < self.tiny_factor
+                            * self.mdot_hi.abs().min(self.mdot_lo.abs())
+                {
+                    return ImplicitStepAction::Converged(mdot.min(0.0));
+                }
+                0.5 * (self.mdot_hi + self.mdot_lo)
+            } else {
+                self.mdot_hi = mdot;
+                self.f_hi = f;
+                if trial_use_sum
+                    && (num_tries.is_multiple_of(2) || self.mdot_hi == 0.0)
+                {
+                    self.mdot_hi + self.fixed_delta_mdot
+                } else if detach_allowed && num_tries == 3 {
+                    0.0
+                } else {
+                    self.mdot_hi / self.change_factor
+                }
+            }
+        } else if mdot > -self.starting_mdot_cgs && mdot == 0.0 {
+            if trial_use_sum && f < 0.0 {
+                self.have_hi = true;
+                self.mdot_hi = 0.0;
+                self.f_hi = f;
+                self.fixed_delta_mdot
+            } else {
                 -self.starting_mdot_cgs
-            } else if self.use_sum {
-                self.mdot_lo - 2.0 * (self.change_factor - 1.0) * self.mdot_lo.abs()
-            } else {
-                self.mdot_lo * self.change_factor
             }
-        } else if self.use_sum {
-            let step = (self.change_factor - 1.0)
-                * self.mdot_hi.abs().max(self.starting_mdot_cgs);
-            self.mdot_hi + step
+        } else if f >= 0.0 {
+            self.have_lo = true;
+            self.mdot_lo = mdot;
+            self.f_lo = f;
+            self.mdot_lo * self.change_factor
         } else {
-            self.mdot_hi / self.change_factor
+            self.have_hi = true;
+            self.mdot_hi = mdot;
+            self.f_hi = f;
+            if trial_use_sum
+                && (num_tries.is_multiple_of(2) || self.mdot_hi == 0.0)
+            {
+                self.mdot_hi + self.fixed_delta_mdot
+            } else {
+                self.mdot_hi / self.change_factor
+            }
         };
 
         let next_mdot = raw_next.max(-self.max_abs_mdot_cgs);
         if detach_allowed && -next_mdot < self.roche_min_mdot_cgs && f < 0.0 {
             self.try_detach = true;
             return ImplicitStepAction::Detached;
+        }
+        if !(self.have_lo && self.have_hi) && num_tries.is_multiple_of(20) {
+            self.change_factor = (1.1 * self.change_factor).min(1.5);
         }
         ImplicitStepAction::TryNextMdot(next_mdot)
     }

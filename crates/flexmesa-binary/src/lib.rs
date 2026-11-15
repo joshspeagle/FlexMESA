@@ -41,6 +41,7 @@ pub mod jdot_tides;
 pub mod mdot;
 pub mod mdot_implicit;
 pub mod orbit;
+pub mod roche_deformation;
 pub mod system;
 pub mod system_init;
 pub mod system_jdot;
@@ -70,14 +71,18 @@ pub use jdot_tides::{
 };
 pub use mdot::{
     ImplicitMdotSolver, ImplicitRlofSolver, ImplicitStepAction,
-    eval_arras_mdot_thin, eval_kolb_mdot_eccentric, eval_kolb_mdot_thick,
-    eval_ritter_mdot_eccentric, eval_ritter_mdot_thin, kolb_f3,
-    update_change_factor_after_step,
+    eval_arras_mdot_thin, eval_edot_enhancement_isotropic,
+    eval_kolb_mdot_eccentric, eval_kolb_mdot_thick, eval_ritter_mdot_eccentric,
+    eval_ritter_mdot_thin, kolb_f3, update_change_factor_after_step,
 };
 pub use orbit::{
     build_anomaly_grid, eval_j_orb, eval_l2_overflow_limit,
     eval_rl_relative_gap, eval_rlobe, eval_rlobe_ad, period_from_separation,
     separation_from_j_orb, separation_from_period,
+};
+pub use roche_deformation::{
+    BinaryTidalDeformationHook, ROCHE_NUDGE, RocheDeformationTables,
+    RocheTable2D, eval_synchronicity_switch,
 };
 pub use system::{BinaryCompanion, BinarySystem};
 pub use system_jdot::{JdotBreakdown, eval_coupled_edot, eval_gated_jdot};

@@ -289,3 +289,70 @@ pub fn eval_arras_mdot_thin(
     let rho_l1 = (rho_surf / exp(0.5)) * exp(my_ritter_exponent);
     -rho_l1 * v_th * area
 }
+
+/// Evaluates the isotropic phase-dependent mass-transfer eccentricity
+/// enhancement $\dot{e}_{\mathrm{enhance}}$ ($\mathrm{s}^{-1}$) over an
+/// eccentric orbit (`edot_enhancement_Isotropic` in `binary/private/binary_edot.f90:188-228`).
+#[allow(clippy::too_many_arguments)]
+#[must_use]
+pub fn eval_edot_enhancement_isotropic(
+    m_donor: f64,
+    m_accretor: f64,
+    r_donor: f64,
+    rl_donor: f64,
+    eccentricity: f64,
+    rho_surf: f64,
+    p_surf: f64,
+    t_surf: f64,
+    mu_surf: f64,
+    r_profile: &[f64],
+    p_profile: &[f64],
+    t_profile: &[f64],
+    mu_profile: &[f64],
+    gamma1_profile: &[f64],
+    is_kolb_scheme: bool,
+    anomaly_steps: usize,
+) -> f64 {
+    if eccentricity <= 0.0 || (m_donor + m_accretor) <= 0.0 {
+        return 0.0;
+    }
+    let (theta_co, time_co) = build_anomaly_grid(anomaly_steps, eccentricity);
+    let n = theta_co.len();
+    let one_m_e2 = 1.0 - eccentricity * eccentricity;
+    let m_tot = (m_donor + m_accretor).max(1.0);
+    let mut edot_prev = 0.0_f64;
+    let mut de = 0.0_f64;
+    for i in 0..n {
+        let cos_th = theta_co[i].cos();
+        let rl_i = rl_donor * one_m_e2 / (1.0 + eccentricity * cos_th);
+        let mut mdot_i = eval_ritter_mdot_thin(
+            m_donor,
+            m_accretor,
+            r_donor,
+            rl_i,
+            rho_surf,
+            p_surf,
+            t_surf,
+            mu_surf,
+            is_kolb_scheme,
+        );
+        if is_kolb_scheme && !r_profile.is_empty() {
+            mdot_i += eval_kolb_mdot_thick(
+                m_donor,
+                m_accretor,
+                rl_i,
+                r_profile,
+                p_profile,
+                t_profile,
+                mu_profile,
+                gamma1_profile,
+            );
+        }
+        let edot_i = -mdot_i / m_tot * (eccentricity + cos_th);
+        if i > 0 {
+            de += 0.5 * (edot_prev + edot_i) * (time_co[i] - time_co[i - 1]);
+        }
+        edot_prev = edot_i;
+    }
+    de
+}

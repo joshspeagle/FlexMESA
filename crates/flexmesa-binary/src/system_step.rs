@@ -6,7 +6,8 @@
 use flexmesa_const::{MSUN, SECYER};
 use flexmesa_star::{
     StarError, StarModel, check_termination_limits, compute_core_masses_msun,
-    eval_total_energy_integrals, set_hydro_vars,
+    eval_total_energy_integrals, remesh_star_before_step, set_hydro_vars,
+    sync_post_henyey_rotation,
 };
 
 use crate::mdot_implicit::{
@@ -17,12 +18,12 @@ use crate::orbit::{
 };
 use crate::system::{BinaryCompanion, BinarySystem, compute_rl_and_gaps};
 use crate::system_jdot::{
-    JdotBreakdown, apply_post_step_mixing, apply_tidal_spin_sync, conserve_spin_after_henyey,
+    JdotBreakdown, apply_tidal_spin_sync, conserve_spin_after_henyey,
     eval_coupled_edot, eval_gated_jdot, eval_star_spin_j,
 };
 use crate::system_rlof::{
     blend_explicit_mdot, eval_scheme_explicit_mdot, evolve_single_star_without_term_rewind,
-    prepare_coupled_mdots,
+    prepare_coupled_mdots, star_exceeds_delta_mdot_hard_limit,
 };
 use crate::timestep::{
     B_TLIM_COMP, BinaryTimestepControls, binary_pick_next_timestep, violates_binary_hard_limits,
@@ -53,18 +54,33 @@ impl BinarySystem {
         self.last_termination_reason = None;
         self.maybe_switch_donor_at_step_start();
 
-        let mut snap = self.capture_snapshot();
-        let mut dt_try = dt.min(self.max_timestep_sec).max(1.0e-2);
+        let pre_step_snap = self.capture_snapshot();
+        let mut retry_holds = [(None, 0_usize); 2];
+        let s2_min = match &self.companion {
+            BinaryCompanion::PointMass { .. } => 0.0,
+            BinaryCompanion::Star(s2) => s2.controls.min_timestep_limit,
+        };
+        let dt_floor = self.donor.controls.min_timestep_limit.max(s2_min).clamp(1.0e-12, 1.0e-2);
+        let check_cut_dt = |dt_cut: f64, cur_dt: f64| -> Result<f64, StarError> {
+            let next_dt = dt_cut.max(dt_floor);
+            if next_dt >= 0.999_999 * cur_dt {
+                return Err(StarError::ConvergenceFailure(format!("CutDt hit dt_floor ({dt_cut:.3e} s)")));
+            }
+            Ok(next_dt)
+        };
+        let mut dt_try = dt.min(self.max_timestep_sec).max(dt_floor);
         let implicit_mode = !self.ignore_rlof_flag && self.controls.max_tries_to_achieve > 0;
         let max_tries = self.controls.max_tries_to_achieve.max(1) as usize;
 
         for outer_retry in 0..16_usize {
             if outer_retry > 0 {
-                self.restore_snapshot(&snap)?;
+                self.record_retry_holds(&mut retry_holds);
+                self.restore_snapshot(&pre_step_snap)?;
+                self.apply_retry_holds(&retry_holds);
             }
             if !implicit_mode {
                 let pre_mdot = if self.ignore_rlof_flag { 0.0 } else { self.mtransfer_rate };
-                match self.run_single_trial(pre_mdot, dt_try) {
+                match self.run_single_trial(pre_mdot, dt_try, outer_retry == 0) {
                     Ok(SingleTrialOutcome::Completed { dt_used, ts_ctrl }) => {
                         if outer_retry < 12 && dt_used > 1.0 && self.exceeds_hard_limits(&ts_ctrl) {
                             dt_try = 0.5 * dt_used;
@@ -85,40 +101,53 @@ impl BinarySystem {
                         return Ok(self.finish_accepted_step(dt_used, &ts_ctrl));
                     }
                     Ok(SingleTrialOutcome::CutDt(dt_cut)) => {
-                        dt_try = dt_cut.max(1.0e-2);
+                        dt_try = check_cut_dt(dt_cut, dt_try)?;
                         continue;
                     }
-                    Err(_) if outer_retry < 2 && dt_try > 1.0 => {
-                        dt_try = (0.25 * dt_try).max(1.0);
+                    Err(_) if outer_retry < 10 && dt_try > dt_floor => {
+                        let cut = if outer_retry == 0 { 0.5 } else { 0.25 };
+                        dt_try = (cut * dt_try).max(dt_floor);
                         continue;
                     }
                     Err(e) => return Err(e),
                 }
             }
 
+            let mut remeshed_outer0 = false;
+            if outer_retry == 0 {
+                let _ = self.refresh_tidal_deformation_hooks(false);
+                if self.donor.controls.mesh_delta_coeff > 0.0 {
+                    let (ns, nm, _) = remesh_star_before_step(&mut self.donor, dt_try)?;
+                    remeshed_outer0 |= ns + nm > 0;
+                }
+                if let BinaryCompanion::Star(ref mut s2) = self.companion {
+                    if s2.controls.mesh_delta_coeff > 0.0 {
+                        let (ns, nm, _) = remesh_star_before_step(s2, dt_try)?;
+                        remeshed_outer0 |= ns + nm > 0;
+                    }
+                }
+                let _ = self.refresh_tidal_deformation_hooks(false);
+            }
+            let mut trial_snap = self.capture_snapshot();
             let mut solver = ImplicitMdotSolver::from_controls(&self.controls, self.change_factor);
-            let mut trial_mdot = if self.mtransfer_rate < 0.0 {
-                self.mtransfer_rate.max(-solver.max_abs_mdot_cgs)
-            } else {
-                0.0
-            };
+            let mut trial_mdot = if self.mtransfer_rate < 0.0 { self.mtransfer_rate.max(-solver.max_abs_mdot_cgs) } else { 0.0 };
             let mut accepted: Option<(f64, BinaryTimestepControls)> = None;
 
             for try_idx in 1..=max_tries {
                 if try_idx > 1 {
-                    self.restore_snapshot(&snap)?;
+                    self.restore_snapshot(&trial_snap)?;
                 }
-                let (dt_used, ts_ctrl) = match self.run_single_trial(trial_mdot, dt_try) {
+                let (dt_used, ts_ctrl) = match self.run_single_trial(trial_mdot, dt_try, false) {
                     Ok(SingleTrialOutcome::Completed { dt_used, ts_ctrl }) => (dt_used, ts_ctrl),
                     Ok(SingleTrialOutcome::CutDt(dt_cut)) => {
-                        dt_try = dt_cut.max(1.0e-2);
+                        dt_try = check_cut_dt(dt_cut, dt_try)?;
                         break;
                     }
                     Err(e) => {
-                        if outer_retry >= 2 || dt_try <= 1.0 {
+                        if outer_retry >= 10 || dt_try <= dt_floor {
                             return Err(e);
                         }
-                        dt_try = (0.25 * dt_try).max(1.0);
+                        dt_try = ((if remeshed_outer0 { 0.5 } else { 0.25 }) * dt_try).max(dt_floor);
                         break;
                     }
                 };
@@ -131,35 +160,42 @@ impl BinarySystem {
                     &self.controls.mdot_scheme, &self.donor, m_a,
                     self.rl[0], self.separation, self.eccentricity,
                 );
-                match solver.evaluate_trial(
+                let act = solver.evaluate_trial(
                     &self.controls.mdot_scheme, try_idx, max_tries, trial_mdot, m_exp,
                     self.rl_relative_gap[0], self.rl_relative_gap[1], m_a / m_d.max(1.0),
-                ) {
+                );
+                match act {
                     ImplicitStepAction::Converged(m_conv) => {
-                        self.mtransfer_rate = m_conv;
+                        let m_acc = m_conv.min(0.0);
+                        self.mtransfer_rate = m_acc;
                         self.change_factor = update_change_factor_after_step(
-                            self.change_factor, snap.mtransfer_rate, m_conv, try_idx, &self.controls,
+                            self.change_factor, pre_step_snap.mtransfer_rate, m_acc, try_idx, &self.controls,
                         );
                         accepted = Some((dt_used, ts_ctrl));
                         break;
                     }
                     ImplicitStepAction::Detached => {
-                        self.restore_snapshot(&snap)?;
-                        if let Ok(SingleTrialOutcome::Completed { dt_used: dt0, ts_ctrl: ts0 }) =
-                            self.run_single_trial(0.0, dt_try)
-                        {
+                        if trial_mdot == 0.0 {
                             self.mtransfer_rate = 0.0;
-                            accepted = Some((dt0, ts0));
+                            accepted = Some((dt_used, ts_ctrl));
                         } else {
-                            dt_try = (0.5 * dt_try).max(1.0e-2);
+                            self.restore_snapshot(&trial_snap)?;
+                            if let Ok(SingleTrialOutcome::Completed { dt_used: dt0, ts_ctrl: ts0 }) =
+                                self.run_single_trial(0.0, dt_try, false)
+                            {
+                                self.mtransfer_rate = 0.0;
+                                accepted = Some((dt0, ts0));
+                            } else {
+                                dt_try = (0.5 * dt_try).max(dt_floor);
+                            }
                         }
                         break;
                     }
                     ImplicitStepAction::TryNextMdot(next_m) => {
                         if next_m > 0.0 && self.point_mass_i == 0 {
-                            self.restore_snapshot(&snap)?;
+                            self.restore_snapshot(&trial_snap)?;
                             let _ = self.swap_donor_and_accretor();
-                            snap = self.capture_snapshot();
+                            trial_snap = self.capture_snapshot();
                             solver.flip_for_contact_donor_switch();
                             trial_mdot = -next_m;
                         } else {
@@ -167,15 +203,18 @@ impl BinarySystem {
                         }
                     }
                     ImplicitStepAction::ExceededMaxTries => {
-                        dt_try = (0.5 * dt_try).max(1.0e-2);
+                        dt_try = (0.5 * dt_try).max(dt_floor);
                         break;
                     }
                 }
             }
 
             if let Some((dt_used, ts_ctrl)) = accepted {
-                if outer_retry < 12 && dt_used > 1.0 && self.exceeds_hard_limits(&ts_ctrl) {
-                    dt_try = (0.5 * dt_used).max(1.0e-2);
+                let dmdot_hard = outer_retry < 6
+                    && (star_exceeds_delta_mdot_hard_limit(&self.donor)
+                        || matches!(&self.companion, BinaryCompanion::Star(s2) if star_exceeds_delta_mdot_hard_limit(s2)));
+                if outer_retry < 12 && dt_used > 1.0 && (self.exceeds_hard_limits(&ts_ctrl) || dmdot_hard) {
+                    dt_try = (0.5 * dt_used).max(dt_floor);
                     continue;
                 }
                 return Ok(self.finish_accepted_step(dt_used, &ts_ctrl));
@@ -187,6 +226,9 @@ impl BinarySystem {
     }
 
     fn exceeds_hard_limits(&self, ts_ctrl: &BinaryTimestepControls) -> bool {
+        if self.model_number == 0 {
+            return false;
+        }
         violates_binary_hard_limits(
             ts_ctrl, self.controls.fm_hard, self.controls.fr_hard,
             self.controls.fj_hard, self.controls.fa_hard,
@@ -198,16 +240,18 @@ impl BinarySystem {
         &mut self,
         trial_mdot: f64,
         dt_try: f64,
+        allow_remesh: bool,
     ) -> Result<SingleTrialOutcome, StarError> {
+        let _ = self.refresh_tidal_deformation_hooks(false);
         let (m_d_old, m_a_old) = (self.donor.mstar, self.accretor_mass_g());
         let (j_old, a_old, e_old, gap_old) = (
             self.angular_momentum_j, self.separation, self.eccentricity, self.rl_relative_gap,
         );
         let env_d_old = (m_d_old / MSUN - compute_core_masses_msun(&self.donor).0).max(0.0);
 
-        let s_pre_d = eval_star_spin_j(&self.donor);
+        let mut s_pre_d = eval_star_spin_j(&self.donor);
         let j_surf_pre_d = self.donor.j_rot.first().copied().unwrap_or(0.0);
-        let (s_pre_a, j_surf_pre_a) = match &self.companion {
+        let (mut s_pre_a, j_surf_pre_a) = match &self.companion {
             BinaryCompanion::PointMass { .. } => (0.0, 0.0),
             BinaryCompanion::Star(s2) => (eval_star_spin_j(s2), s2.j_rot.first().copied().unwrap_or(0.0)),
         };
@@ -220,37 +264,55 @@ impl BinarySystem {
             BinaryCompanion::PointMass { .. } => None,
             BinaryCompanion::Star(s2) => Some(&mut **s2),
         };
-        let acct = prepare_coupled_mdots(
+        let mut acct = prepare_coupled_mdots(
             &self.controls, &mut self.donor, acc_opt, pm_state, self.donor_i,
             self.rl, self.separation, self.eccentricity, trial_mdot, self.ignore_rlof_flag,
         )?;
 
-        let dt_used = evolve_single_star_without_term_rewind(&mut self.donor, dt_try)?.dt;
+        let dt_used =
+            evolve_single_star_without_term_rewind(&mut self.donor, dt_try, allow_remesh)?.dt;
+        let extra_w_d = (self.donor.mstar_dot - acct.component_mdot[0]).min(0.0);
+        if extra_w_d < 0.0 {
+            acct.mdot_wind_intrinsic[0] += extra_w_d;
+            let dw_tr = extra_w_d * acct.wind_xfer_fraction[0];
+            acct.mdot_wind_transfer[0] += dw_tr;
+            acct.mdot_system_wind[0] += extra_w_d - dw_tr;
+            acct.component_mdot[0] = self.donor.mstar_dot;
+        }
         if let BinaryCompanion::Star(ref mut s2) = self.companion {
-            let rep_a = evolve_single_star_without_term_rewind(s2, dt_used)?;
+            let rep_a = evolve_single_star_without_term_rewind(s2, dt_used, allow_remesh)?;
             if rep_a.dt < 0.999_999 * dt_used {
                 return Ok(SingleTrialOutcome::CutDt(rep_a.dt));
             }
+            let extra_w_a = (s2.mstar_dot - acct.component_mdot[1]).min(0.0);
+            if extra_w_a < 0.0 {
+                acct.mdot_wind_intrinsic[1] += extra_w_a;
+                let dw_tr = extra_w_a * acct.wind_xfer_fraction[1];
+                acct.mdot_wind_transfer[1] += dw_tr;
+                acct.mdot_system_wind[1] += extra_w_a - dw_tr;
+                acct.component_mdot[1] = s2.mstar_dot;
+            }
         }
 
-        let ds_mdot_d = if self.donor.mstar_dot < 0.0 {
-            self.donor.mstar_dot * j_surf_pre_d * dt_used
+        let ds_mdot_d = self.donor.mstar_dot.min(0.0) * j_surf_pre_d * dt_used;
+        if self.donor.mstar_dot >= 0.0 {
+            conserve_spin_after_henyey(&mut self.donor, s_pre_d, ds_mdot_d);
         } else {
-            0.0
-        };
-        conserve_spin_after_henyey(&mut self.donor, s_pre_d, ds_mdot_d);
+            s_pre_d = eval_star_spin_j(&self.donor) - ds_mdot_d;
+        }
 
-        let mut ds_acc_j_a = 0.0_f64;
         if let BinaryCompanion::Star(ref mut s2) = self.companion {
-            let ds_mdot_a = if s2.mstar_dot < 0.0 {
-                s2.mstar_dot * j_surf_pre_a * dt_used
-            } else if self.controls.do_j_accretion && acct.retained_accretion_rate > 0.0 {
-                ds_acc_j_a = acct.retained_accretion_rate * acct.accreted_material_j * dt_used;
-                ds_acc_j_a
+            let ds_wind_a = acct.mdot_system_wind[1].min(0.0) * j_surf_pre_a * dt_used;
+            let ds_acc_j_a = if self.controls.do_j_accretion {
+                acct.retained_accretion_rate.max(0.0) * acct.accreted_material_j * dt_used
             } else {
                 0.0
             };
-            conserve_spin_after_henyey(s2, s_pre_a, ds_mdot_a);
+            if s2.mstar_dot >= 0.0 {
+                conserve_spin_after_henyey(s2, s_pre_a, ds_wind_a + ds_acc_j_a);
+            } else {
+                s_pre_a = eval_star_spin_j(s2) - (ds_wind_a + ds_acc_j_a);
+            }
         }
 
         if self.controls.do_tidal_sync {
@@ -277,18 +339,8 @@ impl BinarySystem {
             }
         }
 
-        apply_post_step_mixing(&mut self.donor, dt_used)?;
-        if let BinaryCompanion::Star(ref mut s2) = self.companion {
-            apply_post_step_mixing(s2, dt_used)?;
-        }
-
         if let BinaryCompanion::PointMass { ref mut mass_g, .. } = self.companion {
             *mass_g = (m_a_old + acct.retained_accretion_rate * dt_used).max(1.0e20);
-        }
-
-        finalize_star_post_binary_torques(&mut self.donor)?;
-        if let BinaryCompanion::Star(ref mut s2) = self.companion {
-            finalize_star_post_binary_torques(s2)?;
         }
 
         let (m_d_new, m_a_new) = (self.donor.mstar, self.accretor_mass_g());
@@ -325,7 +377,11 @@ impl BinarySystem {
             let ed0 = eval_coupled_edot(&self.controls, &self.donor, acc_ref, self.donor_i, md0, ma0, a0_s, p0_s, e_cur);
 
             let (md_m, ma_m) = (m_d_old + (m_d_new - m_d_old) * f_mid, m_a_old + (m_a_new - m_a_old) * f_mid);
-            let j_m = (j_cur + 0.5 * jb0.jdot_total * h).max(1.0e35);
+            let j_m = j_cur + 0.5 * jb0.jdot_total * h;
+            if j_m <= 0.0 {
+                let f_j = self.controls.dt_reduction_factor_for_j.clamp(0.05, 0.5);
+                return Ok(SingleTrialOutcome::CutDt(dt_used * f_j));
+            }
             let e_m = (e_cur + 0.5 * ed0 * h).clamp(self.controls.min_eccentricity, self.controls.max_eccentricity);
             let a_m = separation_from_j_orb(md_m, ma_m, j_m, e_m);
             let p_m = period_from_separation(md_m, ma_m, a_m);
@@ -341,7 +397,11 @@ impl BinarySystem {
             if sub + 1 == n_sub {
                 self.using_jdot_mb = mb_mid;
             }
-            j_cur = (j_cur + jb_m.jdot_total * h).max(1.0e35);
+            j_cur += jb_m.jdot_total * h;
+            if j_cur <= 0.0 {
+                let f_j = self.controls.dt_reduction_factor_for_j.clamp(0.05, 0.5);
+                return Ok(SingleTrialOutcome::CutDt(dt_used * f_j));
+            }
             e_cur = (e_cur + ed_m * h).clamp(self.controls.min_eccentricity, self.controls.max_eccentricity);
             dj_non_ls_accum += (jb_m.jdot_total - jb_m.jdot_ls) * h;
             last_jb = jb_m;
@@ -359,25 +419,38 @@ impl BinarySystem {
         self.rl_relative_gap = gap_new;
         self.last_mdot = acct;
         self.last_jdot = last_jb;
+        let _ = self.refresh_tidal_deformation_hooks(false);
+        finalize_star_post_binary_torques(&mut self.donor)?;
+        if let BinaryCompanion::Star(ref mut s2) = self.companion {
+            finalize_star_post_binary_torques(s2)?;
+        }
+        if self.controls.do_jdot_ls && !self.controls.use_tidal_deformation {
+            let s_fin_a = match &self.companion {
+                BinaryCompanion::PointMass { .. } => 0.0,
+                BinaryCompanion::Star(s2) => eval_star_spin_j(s2),
+            };
+            self.angular_momentum_j -= (eval_star_spin_j(&self.donor) - s_post_d) + (s_fin_a - s_post_a);
+        }
 
         let wind_spin_d = if self.donor.mstar_dot < 0.0 { acct.mdot_system_wind[0] * j_surf_pre_d * dt_used } else { 0.0 };
         let wind_spin_a = match &self.companion {
-            BinaryCompanion::Star(s2) if s2.mstar_dot < 0.0 => s2.mstar_dot * j_surf_pre_a * dt_used,
-            _ => 0.0,
+            BinaryCompanion::Star(_) => acct.mdot_system_wind[1].min(0.0) * j_surf_pre_a * dt_used,
+            BinaryCompanion::PointMass { .. } => 0.0,
         };
-        let non_ls_spin_delta = if self.controls.do_jdot_ls {
+        let ext_spin_delta = if self.controls.do_jdot_ls {
             wind_spin_d + wind_spin_a
         } else {
-            (s_post_d - s_pre_d) + (s_post_a - s_pre_a) - ds_acc_j_a
+            (s_post_d - s_pre_d) + (s_post_a - s_pre_a)
         };
-        self.cumulative_j_ext += dj_non_ls_accum + non_ls_spin_delta + ds_acc_j_a;
+        self.cumulative_j_ext += dj_non_ls_accum + ext_spin_delta;
 
         let env_d_new = (m_d_new / MSUN - compute_core_masses_msun(&self.donor).0).max(0.0);
+        let c = &self.controls;
         let ts_ctrl = BinaryTimestepControls {
             donor_time_step_yr: dt_used / SECYER,
             max_timestep_sec: self.max_timestep_sec,
-            time_delta_coeff: self.controls.time_delta_coeff,
-            dt_softening_factor: self.controls.dt_softening_factor,
+            time_delta_coeff: c.time_delta_coeff,
+            dt_softening_factor: c.dt_softening_factor,
             rl_relative_gap: self.rl_relative_gap,
             rl_relative_gap_old: gap_old,
             angular_momentum_j: self.angular_momentum_j,
@@ -391,16 +464,9 @@ impl BinarySystem {
             m: [m_d_new, m_a_new],
             m_old: [m_d_old, m_a_old],
             is_point_mass_companion: self.point_mass_i != 0,
-            fm: self.controls.fm,
-            fm_limit: self.controls.fm_limit,
-            fr: self.controls.fr,
-            fr_limit: self.controls.fr_limit,
-            fr_dt_limit: self.controls.fr_dt_limit,
-            fj: self.controls.fj,
-            fa: self.controls.fa,
-            fe: self.controls.fe,
-            fe_limit: self.controls.fe_limit,
-            fdm: self.controls.fdm,
+            fm: c.fm, fm_limit: c.fm_limit, fr: c.fr, fr_limit: c.fr_limit,
+            fr_dt_limit: c.fr_dt_limit, fj: c.fj, fa: c.fa, fe: c.fe,
+            fe_limit: c.fe_limit, fdm: c.fdm,
         };
         Ok(SingleTrialOutcome::Completed { dt_used, ts_ctrl })
     }
@@ -410,7 +476,11 @@ impl BinarySystem {
         self.model_number += 1;
         self.update_stage_varcontrol();
 
-        let (bin_max_dt, reason) = binary_pick_next_timestep(ts_ctrl);
+        let (bin_max_dt, reason) = if self.model_number == 1 {
+            (self.max_timestep_sec, B_TLIM_COMP)
+        } else {
+            binary_pick_next_timestep(ts_ctrl)
+        };
         self.max_timestep_sec = bin_max_dt;
         let star_next = match &self.companion {
             BinaryCompanion::PointMass { .. } => self.donor.dt_next,
@@ -456,20 +526,53 @@ impl BinarySystem {
         (next_dt, reason)
     }
 
-    fn update_stage_varcontrol(&mut self) {
-        let xh_c = center_h1_frac(&self.donor);
-        let vc = if self.mtransfer_rate.abs() > 0.0 {
-            if xh_c > 1.0e-6 { self.controls.varcontrol_case_a } else { self.controls.varcontrol_case_b }
-        } else if xh_c > 1.0e-6 {
-            self.controls.varcontrol_ms
-        } else {
-            self.controls.varcontrol_post_ms
-        };
-        if vc > 0.0 {
-            self.donor.controls.varcontrol_target = vc;
-            if let BinaryCompanion::Star(ref mut s2) = self.companion {
-                s2.controls.varcontrol_target = vc;
+    pub(crate) fn update_stage_varcontrol(&mut self) {
+        let xh_d = center_h1_frac(&self.donor);
+        if self.mtransfer_rate.abs() * SECYER / MSUN > 1.0e-20 {
+            let vc = if xh_d > 1.0e-12 { self.controls.varcontrol_case_a } else { self.controls.varcontrol_case_b };
+            if vc > 0.0 {
+                self.donor.controls.varcontrol_target = vc;
+                if let BinaryCompanion::Star(ref mut s2) = self.companion {
+                    s2.controls.varcontrol_target = vc;
+                }
             }
+        } else {
+            let vc_d = if xh_d > 1.0e-12 { self.controls.varcontrol_ms } else { self.controls.varcontrol_post_ms };
+            if vc_d > 0.0 {
+                self.donor.controls.varcontrol_target = vc_d;
+            }
+            if let BinaryCompanion::Star(ref mut s2) = self.companion {
+                let vc_a = if center_h1_frac(s2) > 1.0e-12 { self.controls.varcontrol_ms } else { self.controls.varcontrol_post_ms };
+                if vc_a > 0.0 {
+                    s2.controls.varcontrol_target = vc_a;
+                }
+            }
+        }
+    }
+
+    fn record_retry_holds(&self, holds: &mut [(Option<usize>, usize); 2]) {
+        let upd = |slot: &mut (Option<usize>, usize), s: &StarModel| {
+            let sh = &s.aux.step_hist;
+            slot.0 = slot.0.max(sh.model_number_for_last_retry);
+            slot.1 = slot.1.max(sh.timestep_hold);
+        };
+        let d_idx = (self.donor_i - 1).min(1);
+        upd(&mut holds[d_idx], &self.donor);
+        if let BinaryCompanion::Star(ref s2) = self.companion {
+            upd(&mut holds[1 - d_idx], s2);
+        }
+    }
+
+    fn apply_retry_holds(&mut self, holds: &[(Option<usize>, usize); 2]) {
+        let app = |s: &mut StarModel, slot: (Option<usize>, usize)| {
+            let sh = &mut s.aux.step_hist;
+            sh.model_number_for_last_retry = sh.model_number_for_last_retry.max(slot.0);
+            sh.timestep_hold = sh.timestep_hold.max(slot.1);
+        };
+        let d_idx = (self.donor_i - 1).min(1);
+        app(&mut self.donor, holds[d_idx]);
+        if let BinaryCompanion::Star(ref mut s2) = self.companion {
+            app(s2, holds[1 - d_idx]);
         }
     }
 }
@@ -478,6 +581,7 @@ fn finalize_star_post_binary_torques(star: &mut StarModel) -> Result<(), StarErr
     star.mstar_start = star.mstar;
     if !star.controls.rsp_flag {
         star.sync_mesh_and_pack()?;
+        sync_post_henyey_rotation(star, 0.0);
         set_hydro_vars(star, false, false)?;
         star.aux.total_energy = eval_total_energy_integrals(star).5;
         star.save_start_values();
@@ -489,8 +593,5 @@ fn center_h1_frac(star: &StarModel) -> f64 {
     if star.nz == 0 || star.species == 0 {
         return 0.7;
     }
-    star.iso_names
-        .iter()
-        .position(|n| n.eq_ignore_ascii_case("h1"))
-        .map_or(0.7, |j| star.cell_xa(star.nz - 1)[j])
+    star.iso_names.iter().position(|n| n.eq_ignore_ascii_case("h1")).map_or(0.7, |j| star.cell_xa(star.nz - 1)[j])
 }

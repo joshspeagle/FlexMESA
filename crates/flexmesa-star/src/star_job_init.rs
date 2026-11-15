@@ -588,7 +588,7 @@ pub fn init_or_update_model_from_bundle(
             .and_then(|sj| sj.get_bool("pre_ms_relax_to_start_radiative_core"))
             .unwrap_or(true)
     {
-        crate::hydro_vars::relax_pre_ms_to_radiative_core(&mut model)?;
+        crate::evolve_support::relax_pre_ms_to_radiative_core(&mut model)?;
     }
     extras.extras_startup(&mut model, false)?;
 

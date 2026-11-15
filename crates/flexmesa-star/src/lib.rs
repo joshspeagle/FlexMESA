@@ -88,6 +88,7 @@ mod inlist_populate_limits;
 mod inlist_populate_phase5b;
 pub mod inlist_runner;
 pub mod job_controls;
+pub mod mdot_redo;
 pub mod mesh;
 pub mod mesh_adjust;
 pub(crate) mod mesh_remap;
@@ -112,6 +113,7 @@ pub mod riemann;
 pub mod riemann_ad;
 pub mod riemann_eqns;
 pub mod rotation;
+pub(crate) mod rotation_mix;
 pub mod rsp2;
 pub mod rsp2_ad;
 pub mod rsp2_eqns;
@@ -206,7 +208,7 @@ pub use evolve::{
 };
 pub use evolve_support::{
     apply_step_pre_physics, eval_total_energy_integrals,
-    update_step_energy_conservation,
+    remesh_star_before_step, update_step_energy_conservation,
 };
 pub use history::{
     extract_history_row, format_history_header, format_history_row,
@@ -230,7 +232,13 @@ pub use hydro_rti::{
     do1_dalpha_rti_dt_eqn, eval_alpha_rti_sources, set_dpdr_drhodr_info,
     set_rti_mixing_info,
 };
-pub use hydro_state::HydroAuxState;
+pub use hydro_state::{
+    HydroAuxState, TidalDeformationHandle, TidalDeformationHook,
+    TidalShellDeformation,
+};
+pub use mdot_redo::{
+    eval_surf_avg_w_div_w_crit, MdotRedoState, SelectMdotAction,
+};
 pub use hydro_temperature::{interp_p_point_ad, set_rsp_lsurf_bc};
 pub use hydro_vars::{
     check_for_redo_mlt, do_brunt_b, do_brunt_n2, eval_surf_bc, set_hydro_vars,
@@ -311,8 +319,8 @@ pub use riemann_ad::{
 pub use rotation::{
     eval_magnetic_diffusivity, eval_omega_crit, eval_rotation_fp_ft,
     eval_rotational_mixing_zone, eval_thermal_diffusivity,
-    set_rotation_mixing_info, update_rotation_distortion_factors,
-    RotationalMixZone, RI_CRIT_DSI,
+    set_rotation_mixing_info, sync_post_henyey_rotation,
+    update_rotation_distortion_factors, RotationalMixZone, RI_CRIT_DSI,
 };
 pub use rsp2::{
     compute_rsp2_uq_face, eval_rsp2_face, eval_rsp2_zone, rsp2_flux_limiter,

@@ -6,26 +6,27 @@
 //! `star/private/evolve.f90:605-665,1101-1373,1646-1681` and
 //! `star/private/star_utils.f90:2452-2612`.
 
+use flexmesa_const::MixingType;
 use flexmesa_turb::MltOption;
 
 use crate::controls::{EnergyEqnOption, StarError};
 use crate::diffusion::{do_element_diffusion, DiffusionScheme};
 use crate::hydro_energy::{
-    eval_cell_pressure_for_work_ad, setup_d_turbulent_energy_dt, setup_dl_dm,
-    setup_sources_and_others,
+    setup_d_turbulent_energy_dt, setup_dl_dm, setup_sources_and_others,
 };
 use crate::hydro_vars::set_hydro_vars;
+use crate::mesh_adjust::{do_adjust_mesh, MeshFunctionConfig};
 use crate::hydro_work::{
     eval_cell_dpe_dt_ad, eval_v_flag_dke_dt_ad, eval_v_flag_dwork_dm_ad,
     eval_v_flag_simple_pdv_dm_ad,
 };
 use crate::model::StarModel;
-use crate::omega_mix::solve_omega_mix;
 use crate::premix::{do_conv_premix, do_phase_separation};
 use crate::riemann_ad::eval_u_flag_total_energy_rates_ad;
 use crate::rotation::{
-    set_rotation_mixing_info, update_rotation_distortion_factors,
+    conserve_shell_j_rot_and_distortion, set_rotation_mixing_info,
 };
+use crate::struct_burn_mix::refresh_mixing_state;
 
 /// Evaluates domain-integrated `(e_int, e_grav, e_kin, e_rot, e_turb, e_tot)`
 /// in $\mathrm{erg}$ (`eval_total_energy_integrals` in
@@ -190,10 +191,8 @@ pub fn apply_step_pre_physics(
     }
 
     if model.controls.rotation_flag {
-        update_rotation_distortion_factors(model);
-        let zones = set_rotation_mixing_info(model);
-        let nu_omega: Vec<f64> = zones.iter().map(|z| z.nu_st).collect();
-        solve_omega_mix(model, dt, &nu_omega, 2);
+        conserve_shell_j_rot_and_distortion(model);
+        let _ = set_rotation_mixing_info(model);
         need_hydro_refresh = true;
     }
 
@@ -259,11 +258,14 @@ pub fn update_step_energy_conservation(model: &mut StarModel, dt: f64) {
             }
         } else {
             let de_dt = (model.energy[k] - e_start_k) / dt;
-            let (p_ad, _) = eval_cell_pressure_for_work_ad(model, k);
-            let lnd_s = model.lnd_start.get(k).copied().unwrap_or(model.lnd[k]);
-            let pdv_dt =
-                p_ad.val * ((-model.lnd[k]).exp() - (-lnd_s).exp()) / dt;
-            de_dt + pdv_dt
+            if simple_pdv {
+                eval_v_flag_simple_pdv_dm_ad(model, k, false, vel_tc).0.val
+                    + de_dt
+            } else {
+                eval_v_flag_dwork_dm_ad(model, k, false, vel_tc).0.val
+                    + eval_cell_dpe_dt_ad(model, k, dt).val
+                    + de_dt
+            }
         };
 
         err_erg +=
@@ -273,4 +275,205 @@ pub fn update_step_energy_conservation(model: &mut StarModel, dt: f64) {
     model.aux.step_hist.error_in_energy_conservation = err_erg;
     model.aux.cumulative_energy_error =
         model.aux.step_hist.cumulative_energy_error_old + err_erg;
+}
+
+/// Executes pre-step adaptive remeshing (`do_adjust_mesh` + hydro/rotation
+/// smoothing) once before a step or coupled binary RLOF trial loop, returning
+/// `(num_splits, num_merges, pre_remesh_snapshot)`.
+///
+/// # Errors
+/// Returns [`StarError`] if microphysics or mesh adjustment fails.
+pub fn remesh_star_before_step(
+    model: &mut StarModel,
+    dt_try: f64,
+) -> Result<(usize, usize, Option<StarModel>), StarError> {
+    let recent_retry = model
+        .aux
+        .step_hist
+        .model_number_for_last_retry
+        .is_some_and(|m_ret| model.model_number <= m_ret + 1);
+    let sharp_dt_drop = !model.controls.rsp_flag
+        && dt_try > 0.0
+        && model.dt_old > 0.0
+        && dt_try < 0.25 * model.dt_old;
+    let min_remesh_dt = model.controls.mix_wind.remesh_dt_limit;
+    let dt_remesh_ok =
+        model.controls.rsp_flag || dt_try <= 0.0 || dt_try >= min_remesh_dt;
+    if model.controls.okay_to_remesh
+        && !model.controls.rsp2_flag
+        && !recent_retry
+        && !sharp_dt_drop
+        && dt_remesh_ok
+    {
+        set_hydro_vars(model, false, false)?;
+        let dt_curr = dt_try.max(1.0);
+        refresh_mixing_state(model, dt_curr, &[]);
+        let mesh_cfg = MeshFunctionConfig::from_controls(&model.controls);
+        let snap = model.clone();
+        let (ns, nm) = do_adjust_mesh(model, &mesh_cfg)?;
+        if ns + nm > 0 {
+            crate::hydro_state::smooth_post_remesh_hydro_and_rotation(model, &snap);
+            set_hydro_vars(model, false, false)?;
+            model.save_start_values();
+            return Ok((ns, nm, Some(snap)));
+        }
+        Ok((ns, nm, None))
+    } else {
+        Ok((0, 0, None))
+    }
+}
+
+/// Updates sticky-`gradr` solver MLT flip-tracking and zero-initialized `sig`
+/// immediately after face MLT evaluation (`mlt_info.f90` solver iteration hysteresis).
+pub(crate) fn update_mlt_sticky_and_sig_after_hydro(model: &mut StarModel) {
+    let nz = model.nz;
+    if !model.aux.doing_struct_burn_mix {
+        for k in 0..nz {
+            model.aux.mlt_prev_conv[k] =
+                u8::from(model.mixing_type[k] == MixingType::ConvectiveMixing);
+        }
+        if model.sig.iter().all(|&s| s == 0.0) {
+            crate::hydro_vars::update_sig_from_d_mix(model);
+        }
+    } else if !model.controls.rsp2_flag {
+        model.aux.solver_mlt_eval_count += 1;
+        let mw = &model.controls.mix_wind;
+        let sticky_ctrl = mw.make_gradr_sticky_in_solver_iters
+            || (mw.min_logt_for_make_gradr_sticky_in_solver_iters < 1.0e20
+                && model
+                    .ln_t_start
+                    .iter()
+                    .copied()
+                    .fold(f64::NEG_INFINITY, f64::max)
+                    / std::f64::consts::LN_10
+                    >= mw.min_logt_for_make_gradr_sticky_in_solver_iters);
+        let eval_cnt = model.aux.solver_mlt_eval_count;
+        for k in 0..nz {
+            if model.aux.fixed_gradr_sticky[k] {
+                continue;
+            }
+            let is_conv =
+                u8::from(model.mixing_type[k] == MixingType::ConvectiveMixing);
+            if is_conv != model.aux.mlt_prev_conv[k] {
+                model.aux.mlt_prev_conv[k] = is_conv;
+                model.aux.mlt_flip_count[k] =
+                    model.aux.mlt_flip_count[k].saturating_add(1);
+                if model.aux.mlt_flip_count[k] >= 2 {
+                    model.aux.solver_had_mlt_flip = true;
+                }
+            }
+        }
+        if sticky_ctrl && eval_cnt > 3 {
+            for k in 0..nz {
+                if model.mixing_type[k] != MixingType::ConvectiveMixing {
+                    model.aux.fixed_gradr_sticky[k] = true;
+                }
+            }
+        } else if model.aux.solver_had_mlt_flip && eval_cnt >= 3 {
+            for k in 0..nz {
+                if model.t[k] > 1.0e6
+                    && model.mixing_type[k] != MixingType::ConvectiveMixing
+                {
+                    model.aux.fixed_gradr_sticky[k] = true;
+                }
+            }
+        }
+    }
+}
+
+/// Bottom fractional mass `q` of the largest convective mixing region
+/// (`conv_mx1_bot` in `star/private/report.f90:620-638`).
+pub(crate) fn eval_conv_mx1_bot(model: &StarModel) -> f64 {
+    let nz = model.nz;
+    let (mut best_dq, mut best_bot, mut k) = (0.0_f64, 0.0_f64, 0usize);
+    while k < nz {
+        if model.mixing_type[k] == MixingType::ConvectiveMixing {
+            let (mut sum_dq, mut kbot) = (0.0, k);
+            while kbot < nz
+                && model.mixing_type[kbot] == MixingType::ConvectiveMixing
+            {
+                sum_dq += model.dq[kbot];
+                kbot += 1;
+            }
+            if sum_dq > best_dq {
+                best_dq = sum_dq;
+                best_bot = (model.q[kbot - 1] - model.dq[kbot - 1]).max(0.0);
+            }
+            k = kbot;
+        } else {
+            k += 1;
+        }
+    }
+    best_bot
+}
+
+/// Upstream `do_relax_to_radiative_core` (`star/private/init.f90:1103` &
+/// `star/private/relax.f90:3295-3408`): contracts a pre-MS model with frozen
+/// nuclear composition until a radiative core forms (`conv_mx1_bot > 1e-3` after
+/// being fully convective) or `L_nuc / L_phot > 0.1`, then resets age and step.
+pub(crate) fn relax_pre_ms_to_radiative_core(
+    model: &mut StarModel,
+) -> Result<(), StarError> {
+    let saved_ctrl = model.controls.clone();
+    model.aux.doing_relax = true;
+    model.model_number = 0;
+    let c = &mut model.controls;
+    if c.mlt_option == MltOption::Tdc {
+        c.mlt_option = MltOption::Cox;
+    }
+    (c.atm_option, c.atm_t_tau_relation, c.pextra_factor) = (
+        crate::job_controls::AtmOption::TTau,
+        crate::job_controls::AtmTTauRelation::Eddington,
+        2.0,
+    );
+    (
+        c.dxdt_nuc_factor,
+        c.ts_stop.max_timestep_factor,
+        c.mass_change,
+        c.use_other_wind,
+    ) = (0.0, 2.0, 0.0, false);
+    (c.max_years_for_timestep, c.max_age, c.max_model_number) =
+        (None, None, None);
+    (
+        c.reimers_scaling_factor,
+        c.blocker_scaling_factor,
+        c.vink_scaling_factor,
+        c.dutch_scaling_factor,
+    ) = (0.0, 0.0, 0.0, 0.0);
+    let mut min_conv_mx1_bot = 1.0e99_f64;
+    for step in 0..600usize {
+        if crate::evolve::star_evolve_step(
+            model,
+            false,
+            model.controls.op_split_burn,
+            true,
+        )
+        .is_err()
+        {
+            break;
+        }
+        let conv_bot = eval_conv_mx1_bot(model);
+        min_conv_mx1_bot = min_conv_mx1_bot.min(conv_bot);
+        let l_nuc: f64 =
+            (0..model.nz).map(|k| model.eps_nuc[k] * model.dm[k]).sum();
+        let l_phot = model.lum.first().copied().unwrap_or(0.0);
+        if (l_phot > 0.0 && l_nuc / l_phot > 0.1)
+            || (step >= 1 && min_conv_mx1_bot < 1.0e-6 && conv_bot > 1.0e-3)
+        {
+            break;
+        }
+    }
+    model.controls = saved_ctrl;
+    model.aux.doing_relax = false;
+    (
+        model.star_age,
+        model.star_age_old,
+        model.model_number,
+        model.num_retries,
+    ) = (0.0, 0.0, 1, 0);
+    model.aux.cumulative_energy_error = 0.0;
+    set_hydro_vars(model, false, false)?;
+    model.save_start_values();
+    model.save_old_values();
+    Ok(())
 }

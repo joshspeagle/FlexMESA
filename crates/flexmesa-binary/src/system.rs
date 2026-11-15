@@ -1,40 +1,42 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-//! Coupled `BinarySystem` evolution driver (`Donor + PointMass` or
-//! `Donor + Accretor`).
-//!
-//! Corresponds to `binary/private/binary_evolve.f90` and
-//! `binary/private/run_binary_support.f90`.
+//! Coupled `BinarySystem` state container, constructors, component switching,
+//! and `.photo` + orbital state snapshot helpers (`binary_def.f90`,
+//! `run_binary_support.f90`, and `binary_evolve.f90:103-255`).
 
-use flexmesa_const::{MSUN, SECDAY, SECYER};
-use flexmesa_star::StarModel;
+use flexmesa_const::{MSUN, RSUN, SECDAY, SECYER};
+use flexmesa_star::{
+    StarError, StarModel, set_hydro_vars, sync_post_henyey_rotation,
+};
 
-use crate::edd_wind::{bh_initial_equatorial_mass, eval_mdot_edd};
-use crate::jdot_tides::{
-    eval_edot_gr, eval_jdot_gr, eval_jdot_mb, eval_jdot_ml,
-};
-use crate::mdot::{
-    eval_kolb_mdot_thick, eval_ritter_mdot_thin, ImplicitRlofSolver,
-};
+use crate::edd_wind::bh_initial_equatorial_mass;
+use crate::inlist::BinaryInlistControls;
 use crate::orbit::{
     eval_j_orb, eval_rl_relative_gap, eval_rlobe, period_from_separation,
-    separation_from_j_orb, separation_from_period,
+    separation_from_period,
 };
-use crate::timestep::{binary_pick_next_timestep, BinaryTimestepControls};
+use crate::roche_deformation::BinaryTidalDeformationHook;
+use crate::system_init::prep_and_settle_binary_star;
+use crate::system_jdot::{JdotBreakdown, apply_initial_orbit_sync, eval_star_spin_j};
+use crate::system_rlof::{BinaryStepSnapshot, CoupledMdotAccounting};
 
 #[inline]
-fn compute_rl_and_gaps(
-    m1: f64,
-    m2: f64,
-    r1: f64,
-    r2: f64,
+pub(crate) fn compute_rl_and_gaps(
+    m_d: f64,
+    m_a: f64,
+    r_d: f64,
+    r_a: f64,
     separation: f64,
     eccentricity: f64,
 ) -> ([f64; 2], [f64; 2]) {
-    let rl1 = eval_rlobe(m1, m2, separation);
-    let rl2 = eval_rlobe(m2, m1, separation);
-    let gap1 = eval_rl_relative_gap(r1, rl1, eccentricity);
-    let gap2 = eval_rl_relative_gap(r2, rl2, eccentricity);
-    ([rl1, rl2], [gap1, gap2])
+    let rl_d = eval_rlobe(m_d, m_a, separation);
+    let rl_a = eval_rlobe(m_a, m_d, separation);
+    (
+        [rl_d, rl_a],
+        [
+            eval_rl_relative_gap(r_d, rl_d, eccentricity),
+            eval_rl_relative_gap(r_a, rl_a, eccentricity),
+        ],
+    )
 }
 
 /// Companion representation in a coupled [`BinarySystem`].
@@ -42,7 +44,7 @@ fn compute_rl_and_gaps(
 pub enum BinaryCompanion {
     /// Point-mass compact object (white dwarf, neutron star, or Kerr black hole).
     PointMass {
-        /// Current mass $M_2$ (g).
+        /// Current mass $M_{\mathrm{pm}}$ (g).
         mass_g: f64,
         /// Initial equivalent non-rotating BH mass $M_{\mathrm{BH},0}^{\mathrm{eq}}$ (g).
         m_bh_zero_eq_g: f64,
@@ -56,7 +58,7 @@ pub enum BinaryCompanion {
 /// Coupled binary star evolution state and step driver (`binary_info`).
 #[derive(Debug, Clone)]
 pub struct BinarySystem {
-    /// Donor star model (`s_donor`).
+    /// Active donor star model (`s_donor`).
     pub donor: StarModel,
     /// Companion (point mass or secondary `StarModel`).
     pub companion: BinaryCompanion,
@@ -92,12 +94,30 @@ pub struct BinarySystem {
     pub mass_transfer_gamma: f64,
     /// Whether to use the implicit Roche-lobe overflow solver.
     pub use_implicit_rlof: bool,
+    /// Full `&binary_job` and `&binary_controls` settings.
+    pub controls: BinaryInlistControls,
+    /// Point-mass component index (`0` for two stars, `1` or `2` when one star is a point mass).
+    pub point_mass_i: usize,
+    /// Active donor star index (`1` or `2`).
+    pub donor_i: usize,
+    /// Suppress RLOF mass transfer when `true` (`ignore_rlof_flag`).
+    pub ignore_rlof_flag: bool,
+    /// Adaptive implicit RLOF step multiplier (`change_factor`).
+    pub change_factor: f64,
+    /// Latched magnetic-braking flags `[star_1, star_2]`.
+    pub using_jdot_mb: [bool; 2],
+    /// Cumulative non-spin-orbit angular momentum removed/added ($\mathrm{g\,cm^2\,s^{-1}}$).
+    pub cumulative_j_ext: f64,
+    /// Last accepted step wind/RLOF/Eddington accounting.
+    pub last_mdot: CoupledMdotAccounting,
+    /// Last accepted step orbital torque breakdown.
+    pub last_jdot: JdotBreakdown,
+    /// Binary or stellar termination reason triggered at the end of the latest step.
+    pub last_termination_reason: Option<String>,
 }
 
 impl BinarySystem {
-    /// Constructs a new `BinarySystem` with a donor `StarModel` and a point-mass
-    /// companion of `companion_mass_msun` ($M_\odot$) at initial orbital period
-    /// `initial_period_days` (days) and `eccentricity`.
+    /// Constructs a new `BinarySystem` with a donor `StarModel` and a point-mass companion.
     #[must_use]
     pub fn new_point_mass(
         donor: StarModel,
@@ -107,18 +127,19 @@ impl BinarySystem {
         is_black_hole: bool,
         initial_bh_spin: f64,
     ) -> Self {
-        let m2 = companion_mass_msun * MSUN;
-        let m_bh_eq = bh_initial_equatorial_mass(m2, initial_bh_spin);
-        Self::from_components(
-            donor,
-            BinaryCompanion::PointMass {
-                mass_g: m2,
-                m_bh_zero_eq_g: m_bh_eq,
-                is_black_hole,
-            },
-            initial_period_days,
-            eccentricity,
-        )
+        let ctrl = BinaryInlistControls {
+            m1_msun: donor.mstar / MSUN,
+            m2_msun: companion_mass_msun,
+            initial_period_in_days: initial_period_days,
+            initial_eccentricity: eccentricity,
+            initial_bh_spin: initial_bh_spin.clamp(0.0, 1.0),
+            use_radiation_corrected_transfer_rate: is_black_hole,
+            limit_retention_by_mdot_edd: is_black_hole,
+            mdot_scheme: String::from("roche_lobe"),
+            terminate_if_initial_overflow: false,
+            ..BinaryInlistControls::default()
+        };
+        Self::from_controls_point_mass(donor, ctrl).expect("valid BinarySystem::new_point_mass")
     }
 
     /// Constructs a new `BinarySystem` with two evolved `StarModel` instances.
@@ -129,37 +150,128 @@ impl BinarySystem {
         initial_period_days: f64,
         eccentricity: f64,
     ) -> Self {
-        Self::from_components(
-            donor,
-            BinaryCompanion::Star(Box::new(accretor)),
-            initial_period_days,
-            eccentricity,
-        )
+        let ctrl = BinaryInlistControls {
+            evolve_both_stars: true,
+            m1_msun: donor.mstar / MSUN,
+            m2_msun: accretor.mstar / MSUN,
+            initial_period_in_days: initial_period_days,
+            initial_eccentricity: eccentricity,
+            mdot_scheme: String::from("roche_lobe"),
+            terminate_if_initial_overflow: false,
+            ..BinaryInlistControls::default()
+        };
+        Self::from_controls_two_stars(donor, accretor, ctrl)
+            .expect("valid BinarySystem::new_two_stars")
     }
 
-    fn from_components(
+    /// Constructs a `Donor + PointMass` [`BinarySystem`] from [`BinaryInlistControls`],
+    /// honoring `initial_separation_in_rsuns` whenever `initial_period_in_days <= 0`.
+    pub fn from_controls_point_mass(
         donor: StarModel,
-        companion: BinaryCompanion,
-        initial_period_days: f64,
-        eccentricity: f64,
-    ) -> Self {
-        let m1 = donor.mstar;
-        let m2 = match &companion {
+        controls: BinaryInlistControls,
+    ) -> Result<Self, StarError> {
+        let m2 = controls.m2_msun * MSUN;
+        let m_bh_eq = bh_initial_equatorial_mass(m2, controls.initial_bh_spin);
+        let companion = BinaryCompanion::PointMass {
+            mass_g: m2,
+            m_bh_zero_eq_g: m_bh_eq,
+            is_black_hole: controls.use_radiation_corrected_transfer_rate,
+        };
+        Self::from_controls_inner(donor, companion, 2, 1, controls)
+    }
+
+    /// Constructs a two-star [`BinarySystem`] from [`BinaryInlistControls`].
+    pub fn from_controls_two_stars(
+        donor: StarModel,
+        accretor: StarModel,
+        controls: BinaryInlistControls,
+    ) -> Result<Self, StarError> {
+        Self::from_controls_inner(donor, BinaryCompanion::Star(Box::new(accretor)), 0, 1, controls)
+    }
+
+    fn from_controls_inner(
+        mut donor: StarModel,
+        mut companion: BinaryCompanion,
+        point_mass_i: usize,
+        donor_i: usize,
+        controls: BinaryInlistControls,
+    ) -> Result<Self, StarError> {
+        let m_d = donor.mstar;
+        let m_a = match &companion {
             BinaryCompanion::PointMass { mass_g, .. } => *mass_g,
             BinaryCompanion::Star(s2) => s2.mstar,
         };
-        let period = initial_period_days * SECDAY;
-        let separation = separation_from_period(m1, m2, period);
-        let j_orb = eval_j_orb(m1, m2, separation, eccentricity);
-        let r1 = donor.r[0];
-        let r2 = match &companion {
+        let eccentricity = controls
+            .initial_eccentricity
+            .clamp(controls.min_eccentricity, controls.max_eccentricity);
+        let (separation, period) = if controls.initial_period_in_days > 0.0 {
+            let p = controls.initial_period_in_days * SECDAY;
+            (separation_from_period(m_d, m_a, p), p)
+        } else {
+            let a = controls.initial_separation_in_rsuns * RSUN;
+            (a, period_from_separation(m_d, m_a, a))
+        };
+
+        if controls.do_initial_orbit_sync_1 && point_mass_i != 1 {
+            apply_initial_orbit_sync(&mut donor, period)?;
+        }
+        if controls.do_initial_orbit_sync_2 && point_mass_i != 2 {
+            if let BinaryCompanion::Star(ref mut s2) = companion {
+                apply_initial_orbit_sync(s2, period)?;
+            }
+        }
+        let r_a_init = match &companion {
+            BinaryCompanion::PointMass { .. } => 0.0,
+            BinaryCompanion::Star(s2) => s2.r[0],
+        };
+        let (rl_init, _) = compute_rl_and_gaps(
+            m_d, m_a, donor.r[0], r_a_init, separation, eccentricity,
+        );
+        if controls.use_tidal_deformation {
+            donor.aux.tidal_deformation = BinaryTidalDeformationHook::new_handle(
+                m_d,
+                m_a,
+                separation,
+                rl_init[0],
+                period,
+                controls.f_sync_switch_from_rot_defor,
+                controls.f_sync_switch_width,
+                controls.f_sync_switch_lim,
+            );
+            if let BinaryCompanion::Star(ref mut s2) = companion {
+                s2.aux.tidal_deformation = BinaryTidalDeformationHook::new_handle(
+                    m_a,
+                    m_d,
+                    separation,
+                    rl_init[1],
+                    period,
+                    controls.f_sync_switch_from_rot_defor,
+                    controls.f_sync_switch_width,
+                    controls.f_sync_switch_lim,
+                );
+            }
+        }
+        prep_and_settle_binary_star(&mut donor)?;
+        if let BinaryCompanion::Star(ref mut s2) = companion {
+            prep_and_settle_binary_star(s2)?;
+        }
+
+        let j_orb = eval_j_orb(m_d, m_a, separation, eccentricity);
+        let r_a = match &companion {
             BinaryCompanion::PointMass { .. } => 0.0,
             BinaryCompanion::Star(s2) => s2.r[0],
         };
         let (rl, rl_relative_gap) =
-            compute_rl_and_gaps(m1, m2, r1, r2, separation, eccentricity);
+            compute_rl_and_gaps(m_d, m_a, donor.r[0], r_a, separation, eccentricity);
+        let ignore_rlof = if controls.change_initial_ignore_rlof_flag
+            || controls.change_ignore_rlof_flag
+        {
+            controls.new_ignore_rlof_flag
+        } else {
+            false
+        };
 
-        Self {
+        let mut sys = Self {
             donor,
             companion,
             separation,
@@ -172,16 +284,82 @@ impl BinarySystem {
             jdot: 0.0,
             binary_age_yr: 0.0,
             model_number: 0,
-            max_timestep_sec: 1.0e14,
-            mass_transfer_alpha: 0.0,
-            mass_transfer_beta: 0.0,
-            mass_transfer_delta: 0.0,
-            mass_transfer_gamma: 0.0,
-            use_implicit_rlof: true,
-        }
+            max_timestep_sec: 1.0e99,
+            mass_transfer_alpha: controls.mass_transfer_alpha,
+            mass_transfer_beta: controls.mass_transfer_beta,
+            mass_transfer_delta: controls.mass_transfer_delta,
+            mass_transfer_gamma: controls.mass_transfer_gamma,
+            use_implicit_rlof: controls.max_tries_to_achieve > 0,
+            change_factor: controls.initial_change_factor,
+            controls,
+            point_mass_i,
+            donor_i,
+            ignore_rlof_flag: ignore_rlof,
+            using_jdot_mb: [false; 2],
+            cumulative_j_ext: 0.0,
+            last_mdot: CoupledMdotAccounting::default(),
+            last_jdot: JdotBreakdown::default(),
+            last_termination_reason: None,
+        };
+        sys.refresh_tidal_deformation_hooks(false)?;
+        sys.update_stage_varcontrol();
+        Ok(sys)
     }
 
-    /// Returns the current accretor mass $M_2$ (g).
+    /// Attaches or updates the `use_tidal_deformation` Roche-potential hooks on
+    /// active stellar components (`run_binary_support.f90:269-277`).
+    pub fn refresh_tidal_deformation_hooks(
+        &mut self,
+        recompute_hydro: bool,
+    ) -> Result<(), StarError> {
+        if !self.controls.use_tidal_deformation {
+            self.donor.aux.tidal_deformation = None;
+            if let BinaryCompanion::Star(ref mut s2) = self.companion {
+                s2.aux.tidal_deformation = None;
+            }
+            return Ok(());
+        }
+        let m_d = self.donor.mstar;
+        let m_a = self.accretor_mass_g();
+        self.donor.aux.tidal_deformation =
+            BinaryTidalDeformationHook::new_handle(
+                m_d,
+                m_a,
+                self.separation,
+                self.rl[0],
+                self.period,
+                self.controls.f_sync_switch_from_rot_defor,
+                self.controls.f_sync_switch_width,
+                self.controls.f_sync_switch_lim,
+            );
+        sync_post_henyey_rotation(&mut self.donor, 0.0);
+        if recompute_hydro {
+            set_hydro_vars(&mut self.donor, false, false)?;
+            self.donor.save_start_values();
+            self.donor.save_old_values();
+        }
+        if let BinaryCompanion::Star(ref mut s2) = self.companion {
+            s2.aux.tidal_deformation = BinaryTidalDeformationHook::new_handle(
+                m_a,
+                m_d,
+                self.separation,
+                self.rl[1],
+                self.period,
+                self.controls.f_sync_switch_from_rot_defor,
+                self.controls.f_sync_switch_width,
+                self.controls.f_sync_switch_lim,
+            );
+            sync_post_henyey_rotation(s2, 0.0);
+            if recompute_hydro {
+                set_hydro_vars(s2, false, false)?;
+                s2.save_start_values();
+                s2.save_old_values();
+            }
+        }
+        Ok(())
+    }
+
+    /// Returns the current accretor mass $M_a$ (g).
     #[must_use]
     pub fn accretor_mass_g(&self) -> f64 {
         match &self.companion {
@@ -190,7 +368,7 @@ impl BinarySystem {
         }
     }
 
-    /// Returns the current accretor photospheric radius $R_2$ (cm).
+    /// Returns the current accretor photospheric radius $R_a$ (cm).
     #[must_use]
     pub fn accretor_radius_cm(&self) -> f64 {
         match &self.companion {
@@ -199,228 +377,210 @@ impl BinarySystem {
         }
     }
 
-    fn accretor_mass_and_sys_loss(
-        &self,
-        mdot_tr: f64,
-        dt: f64,
-        xfer_frac: f64,
-    ) -> (f64, f64) {
-        let m2_old = self.accretor_mass_g();
-        let raw_acc = -xfer_frac * mdot_tr;
-        if let BinaryCompanion::PointMass {
-            m_bh_zero_eq_g,
-            is_black_hole: true,
-            ..
-        } = &self.companion
-        {
-            let kappa = 0.2 * (1.0 + self.donor.xh_mass[0]);
-            let (mdot_edd, eta) = eval_mdot_edd(m2_old, *m_bh_zero_eq_g, kappa);
-            let capped = raw_acc.min(mdot_edd);
-            // Include the radiated energy fraction `eta * capped` in the
-            // system mass-loss rate (`binary/private/binary_mdot.f90:582-618`).
-            let sys_tr_acc = (-raw_acc + (1.0 - eta) * capped)
-                + self.mass_transfer_beta * mdot_tr;
-            let m2_new = m2_old + (1.0 - eta) * capped * dt;
-            (m2_new, sys_tr_acc)
+    /// Returns `[m(1), m(2)]` in grams ordered by star index (`1` and `2`).
+    #[must_use]
+    pub fn star_masses_g(&self) -> [f64; 2] {
+        if self.donor_i == 1 {
+            [self.donor.mstar, self.accretor_mass_g()]
         } else {
-            (m2_old + raw_acc * dt, self.mass_transfer_beta * mdot_tr)
+            [self.accretor_mass_g(), self.donor.mstar]
         }
     }
 
-    /// Advances the coupled binary system by one timestep `dt` (s).
-    pub fn step(&mut self, dt: f64) -> (f64, i32) {
-        let m1_old = self.donor.mstar;
-        let m2_old = self.accretor_mass_g();
-        let j_old = self.angular_momentum_j;
-        let a_old = self.separation;
-        let e_old = self.eccentricity;
-        let gap_old = self.rl_relative_gap;
-
-        let r1 = self.donor.r[0];
-        let rho1 = self.donor.rho[0];
-        let p1 = self.donor.peos[0].max(1.0);
-        let t1 = self.donor.t[0];
-        let mu1 = self.donor.mu[0].max(0.5);
-
-        let xfer_frac = (1.0
-            - self.mass_transfer_alpha
-            - self.mass_transfer_beta
-            - self.mass_transfer_delta)
-            .clamp(0.0, 1.0);
-
-        let explicit_mdot = eval_ritter_mdot_thin(
-            m1_old, m2_old, r1, self.rl[0], rho1, p1, t1, mu1, true,
-        ) + eval_kolb_mdot_thick(
-            m1_old,
-            m2_old,
-            self.rl[0],
-            &self.donor.r,
-            &self.donor.peos,
-            &self.donor.t,
-            &self.donor.mu,
-            &self.donor.gamma1,
-        );
-
-        let mdot_tr = if self.use_implicit_rlof
-            && self.rl_relative_gap[0] > -1.0e-3
-        {
-            let solver = ImplicitRlofSolver::default();
-            let rl0 = self.rl[0];
-            let e = self.eccentricity;
-            let (mdot_imp, _, _) =
-                solver.solve_roche_lobe_mdot(explicit_mdot, 15, |trial_mdot| {
-                    let dm = trial_mdot * dt;
-                    let m1_trial = (m1_old + dm).max(0.05 * MSUN);
-                    let r_trial = r1 * (m1_trial / m1_old).sqrt();
-                    let (m2_trial, _) = self
-                        .accretor_mass_and_sys_loss(trial_mdot, dt, xfer_frac);
-                    let rl_trial = eval_rlobe(m1_trial, m2_trial, a_old);
-                    eval_rl_relative_gap(r_trial, rl_trial.max(0.1 * rl0), e)
-                });
-            mdot_imp
+    /// Returns `[rl_relative_gap(1), rl_relative_gap(2)]` ordered by star index.
+    #[must_use]
+    pub fn rl_relative_gap_by_star(&self) -> [f64; 2] {
+        if self.donor_i == 1 {
+            self.rl_relative_gap
         } else {
-            explicit_mdot
-        };
-        self.mtransfer_rate = mdot_tr;
+            [self.rl_relative_gap[1], self.rl_relative_gap[0]]
+        }
+    }
 
-        let dm_donor = mdot_tr * dt;
-        let m1_new = (m1_old + dm_donor).max(0.05 * MSUN);
-        let scale = m1_new / m1_old;
-        self.donor.mstar = m1_new;
-        for m_k in &mut self.donor.m {
-            *m_k *= scale;
+    /// Returns a reference to star `idx` (`1` or `2`) when that component is an evolved star.
+    #[must_use]
+    pub fn star_ref(&self, idx: usize) -> Option<&StarModel> {
+        if self.point_mass_i == idx {
+            return None;
         }
-        for r_k in &mut self.donor.r {
-            *r_k *= scale.sqrt();
-        }
-        for lnr_k in &mut self.donor.ln_r {
-            *lnr_k += 0.5 * scale.ln();
-        }
-
-        let (m2_new, mdot_sys_tr_accretor) =
-            self.accretor_mass_and_sys_loss(mdot_tr, dt, xfer_frac);
-        match &mut self.companion {
-            BinaryCompanion::PointMass { mass_g, .. } => {
-                *mass_g = m2_new;
-            }
-            BinaryCompanion::Star(s2) => {
-                let scale2 = m2_new / s2.mstar;
-                s2.mstar = m2_new;
-                for m_k in &mut s2.m {
-                    *m_k *= scale2;
-                }
-            }
-        }
-
-        // Estimate outer convective envelope mass fraction from gradr > grada
-        let mut dm_conv_env = 0.0_f64;
-        for k in 0..(self.donor.nz / 2) {
-            if self.donor.gradr[k] > self.donor.grada[k] {
-                dm_conv_env += self.donor.dm[k];
-            }
-        }
-        let q_conv_env = (dm_conv_env / m1_new.max(1.0)).clamp(0.0, 1.0);
-        let jdot_mb = if q_conv_env > 1.0e-6 && q_conv_env < 0.99 {
-            eval_jdot_mb(
-                m1_new,
-                self.donor.r[0],
-                self.rl[0],
-                self.period,
-                3.0,
-                q_conv_env,
-                true,
-            )
+        if self.donor_i == idx {
+            Some(&self.donor)
+        } else if let BinaryCompanion::Star(ref s2) = self.companion {
+            Some(s2)
         } else {
-            0.0
-        };
-        let jdot_gr = eval_jdot_gr(m1_new, m2_new, self.separation, j_old);
-        let jdot_ml = eval_jdot_ml(
-            m1_new,
-            m2_new,
-            self.separation,
-            self.period,
-            self.eccentricity,
-            self.mass_transfer_alpha * mdot_tr,
-            0.0,
-            mdot_sys_tr_accretor,
-            0.0,
-            self.mass_transfer_delta * mdot_tr,
-            self.mass_transfer_gamma,
-        );
-        self.jdot = jdot_gr + jdot_mb + jdot_ml;
-        self.angular_momentum_j = (j_old + self.jdot * dt).max(1.0e40);
-        if self.eccentricity > 0.0 {
-            let edot_gr = eval_edot_gr(
-                m1_new,
-                m2_new,
-                self.separation,
-                self.eccentricity,
-            );
-            self.eccentricity =
-                (self.eccentricity + edot_gr * dt).clamp(0.0, 0.9999_9999);
+            None
         }
-        self.separation = separation_from_j_orb(
-            m1_new,
-            m2_new,
-            self.angular_momentum_j,
-            self.eccentricity,
-        );
-        self.period = period_from_separation(m1_new, m2_new, self.separation);
-        let r1_new = self.donor.r[0];
-        let r2_new = self.accretor_radius_cm();
-        let (rl_new, gap_new) = compute_rl_and_gaps(
-            m1_new,
-            m2_new,
-            r1_new,
-            r2_new,
-            self.separation,
-            self.eccentricity,
-        );
-        self.rl = rl_new;
-        self.rl_relative_gap = gap_new;
+    }
 
-        self.binary_age_yr += dt / SECYER;
-        self.model_number += 1;
-
-        let ctrl = BinaryTimestepControls {
-            donor_time_step_yr: dt / SECYER,
-            max_timestep_sec: self.max_timestep_sec,
-            rl_relative_gap: self.rl_relative_gap,
-            rl_relative_gap_old: gap_old,
-            angular_momentum_j: self.angular_momentum_j,
-            angular_momentum_j_old: j_old,
-            separation: self.separation,
-            separation_old: a_old,
-            eccentricity: self.eccentricity,
-            eccentricity_old: e_old,
-            m: [m1_new, m2_new],
-            m_old: [m1_old, m2_old],
-            is_point_mass_companion: matches!(
-                self.companion,
-                BinaryCompanion::PointMass { .. }
-            ),
-            ..BinaryTimestepControls::default()
+    /// Returns conserved spin-orbit quantity $J_{\mathrm{orb}} + S_1 + S_2 - J_{\mathrm{ext}}$.
+    #[must_use]
+    pub fn total_angular_momentum_conserved(&self) -> f64 {
+        let s_d = eval_star_spin_j(&self.donor);
+        let s_a = match &self.companion {
+            BinaryCompanion::PointMass { .. } => 0.0,
+            BinaryCompanion::Star(s2) => eval_star_spin_j(s2),
         };
-        let (next_dt, reason) = binary_pick_next_timestep(&ctrl);
-        self.max_timestep_sec = next_dt;
-        (next_dt, reason)
+        self.angular_momentum_j + s_d + s_a - self.cumulative_j_ext
+    }
+
+    /// Updates `ignore_rlof_flag` (`binary_set_ignore_rlof_flag`).
+    pub fn set_ignore_rlof_flag(&mut self, flag: bool) {
+        self.ignore_rlof_flag = flag;
+        if flag {
+            self.mtransfer_rate = 0.0;
+        }
+    }
+
+    /// Updates orbital period `period_sec` (s) and `eccentricity`, recomputing $a$, $J_{\mathrm{orb}}$, and $R_L$.
+    pub fn set_period_eccentricity(&mut self, period_sec: f64, eccentricity: f64) {
+        let (m_d, m_a) = (self.donor.mstar, self.accretor_mass_g());
+        self.period = period_sec;
+        self.eccentricity = eccentricity
+            .clamp(self.controls.min_eccentricity, self.controls.max_eccentricity);
+        self.separation = separation_from_period(m_d, m_a, self.period);
+        self.angular_momentum_j = eval_j_orb(m_d, m_a, self.separation, self.eccentricity);
+        let (rl, gaps) = compute_rl_and_gaps(
+            m_d, m_a, self.donor.r[0], self.accretor_radius_cm(), self.separation, self.eccentricity,
+        );
+        self.rl = rl;
+        self.rl_relative_gap = gaps;
+        let _ = self.refresh_tidal_deformation_hooks(false);
+    }
+
+    /// Dynamically converts star `new_point_mass_i` (`1` or `2`) into a compact
+    /// point mass (`binary_set_point_mass_i` in `binary_evolve.f90:140-200`).
+    pub fn set_point_mass_i(&mut self, new_point_mass_i: usize) {
+        if new_point_mass_i == self.point_mass_i || new_point_mass_i == 0 || new_point_mass_i > 2 {
+            return;
+        }
+        let pm_mass = self.star_masses_g()[new_point_mass_i - 1];
+        let m_bh_eq = bh_initial_equatorial_mass(pm_mass, self.controls.initial_bh_spin);
+        let is_bh = self.controls.use_radiation_corrected_transfer_rate;
+        let pm = BinaryCompanion::PointMass {
+            mass_g: pm_mass,
+            m_bh_zero_eq_g: m_bh_eq,
+            is_black_hole: is_bh,
+        };
+        if self.donor_i == new_point_mass_i {
+            if let BinaryCompanion::Star(other_star) = std::mem::replace(&mut self.companion, pm) {
+                self.donor = *other_star;
+            }
+        } else {
+            self.companion = pm;
+        }
+        self.point_mass_i = new_point_mass_i;
+        self.donor_i = 3 - new_point_mass_i;
+        self.mtransfer_rate = 0.0;
+        self.change_factor = self.controls.max_change_factor;
+        self.last_mdot = CoupledMdotAccounting::default();
+        self.last_jdot = JdotBreakdown::default();
+        self.last_termination_reason = None;
+        let (rl, gaps) = compute_rl_and_gaps(
+            self.donor.mstar, self.accretor_mass_g(), self.donor.r[0], 0.0,
+            self.separation, self.eccentricity,
+        );
+        self.rl = rl;
+        self.rl_relative_gap = gaps;
+        let _ = self.refresh_tidal_deformation_hooks(false);
+        self.update_stage_varcontrol();
     }
 
     /// Checks whether the companion star overfills its Roche lobe more deeply
-    /// than the current donor ($g_2 > g_1$) and swaps the donor and accretor
-    /// roles when `keep_donor_fixed` is `false` (`binary_evolve.f90:240-290`).
+    /// than the current donor and swaps donor/accretor roles (`binary_evolve.f90:210-255`).
     pub fn check_donor_switch(&mut self, keep_donor_fixed: bool) -> bool {
         if keep_donor_fixed
+            || self.point_mass_i != 0
             || self.rl_relative_gap[1] <= self.rl_relative_gap[0]
         {
             return false;
         }
-        if let BinaryCompanion::Star(s2) = &mut self.companion {
+        self.swap_donor_and_accretor()
+    }
+
+    pub(crate) fn swap_donor_and_accretor(&mut self) -> bool {
+        if let BinaryCompanion::Star(ref mut s2) = self.companion {
             std::mem::swap(&mut self.donor, s2);
+            self.donor_i = 3 - self.donor_i;
             self.rl.swap(0, 1);
             self.rl_relative_gap.swap(0, 1);
+            let _ = self.refresh_tidal_deformation_hooks(false);
             return true;
         }
         false
+    }
+
+    pub(crate) fn maybe_switch_donor_at_step_start(&mut self) {
+        if self.point_mass_i != 0 || self.ignore_rlof_flag {
+            return;
+        }
+        let is_contact = self.controls.mdot_scheme.eq_ignore_ascii_case("contact");
+        if self.controls.keep_donor_fixed && !is_contact {
+            return;
+        }
+        if self.mtransfer_rate.abs() * SECYER / MSUN >= self.controls.mdot_limit_donor_switch {
+            return;
+        }
+        let tol = self.controls.implicit_scheme_tolerance;
+        if (self.controls.mdot_scheme.eq_ignore_ascii_case("roche_lobe")
+            && self.rl_relative_gap[1] > self.rl_relative_gap[0])
+            || (is_contact
+                && self.rl_relative_gap[1] > self.rl_relative_gap[0]
+                && self.rl_relative_gap[1] < -tol
+                && self.rl_relative_gap[0] < -tol)
+        {
+            let _ = self.swap_donor_and_accretor();
+        }
+    }
+
+    pub(crate) fn capture_snapshot(&self) -> BinaryStepSnapshot {
+        let (comp_star, pm_state) = match &self.companion {
+            BinaryCompanion::PointMass { mass_g, m_bh_zero_eq_g, is_black_hole } => {
+                (None, Some((*mass_g, *m_bh_zero_eq_g, *is_black_hole)))
+            }
+            BinaryCompanion::Star(s2) => (Some(&**s2), None),
+        };
+        BinaryStepSnapshot::capture(
+            &self.donor, comp_star, pm_state, self.point_mass_i, self.donor_i,
+            self.separation, self.period, self.eccentricity, self.angular_momentum_j,
+            self.rl, self.rl_relative_gap, self.mtransfer_rate, self.jdot,
+            self.binary_age_yr, self.model_number, self.max_timestep_sec,
+            self.change_factor, self.using_jdot_mb, self.cumulative_j_ext,
+            self.last_mdot, self.last_jdot,
+        )
+    }
+
+    pub(crate) fn restore_snapshot(&mut self, snap: &BinaryStepSnapshot) -> Result<(), StarError> {
+        let comp_mut = match &mut self.companion {
+            BinaryCompanion::PointMass { mass_g, m_bh_zero_eq_g, is_black_hole } => {
+                if let Some((m, meq, bh)) = snap.point_mass_state {
+                    *mass_g = m;
+                    *m_bh_zero_eq_g = meq;
+                    *is_black_hole = bh;
+                }
+                None
+            }
+            BinaryCompanion::Star(s2) => Some(&mut **s2),
+        };
+        snap.restore_stars(&mut self.donor, comp_mut)?;
+        self.point_mass_i = snap.point_mass_i;
+        self.donor_i = snap.donor_i;
+        self.separation = snap.separation;
+        self.period = snap.period;
+        self.eccentricity = snap.eccentricity;
+        self.angular_momentum_j = snap.angular_momentum_j;
+        self.rl = snap.rl;
+        self.rl_relative_gap = snap.rl_relative_gap;
+        self.mtransfer_rate = snap.mtransfer_rate;
+        self.jdot = snap.jdot;
+        self.binary_age_yr = snap.binary_age_yr;
+        self.model_number = snap.model_number;
+        self.max_timestep_sec = snap.max_timestep_sec;
+        self.change_factor = snap.change_factor;
+        self.using_jdot_mb = snap.using_jdot_mb;
+        self.cumulative_j_ext = snap.cumulative_j_ext;
+        self.last_mdot = snap.last_mdot;
+        self.last_jdot = snap.last_jdot;
+        let _ = self.refresh_tidal_deformation_hooks(false);
+        Ok(())
     }
 }

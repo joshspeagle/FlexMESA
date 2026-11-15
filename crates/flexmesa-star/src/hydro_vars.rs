@@ -35,20 +35,34 @@ use crate::star_ad::{
 /// # Errors
 /// Returns [`StarError::MicrophysicsError`] if `set_mlt` fails at any face.
 pub fn set_mlt_vars(model: &mut StarModel) -> Result<(), StarError> {
-    if model.controls.rotation_flag {
-        update_rotation_distortion_factors(model);
+    if model.controls.rotation_flag && !model.aux.doing_struct_burn_mix {
+        if model.aux.solver_mlt_eval_count > 0 {
+            crate::rotation::conserve_shell_j_rot_and_distortion(model);
+        } else {
+            update_rotation_distortion_factors(model);
+        }
     }
     let nz = model.nz;
+    if model.aux.fixed_gradr_sticky.len() != nz {
+        model.aux.fixed_gradr_sticky.resize(nz, false);
+        model.aux.mlt_prev_conv.resize(nz, 0);
+        model.aux.mlt_flip_count.resize(nz, 0);
+    }
+    if !model.aux.doing_struct_burn_mix {
+        model.aux.solver_mlt_eval_count = 0;
+        model.aux.solver_had_mlt_flip = false;
+        model.aux.fixed_gradr_sticky.fill(false);
+        model.aux.mlt_flip_count.fill(0);
+    }
+    let use_sm_b = crate::hydro_state::use_smoothed_brunt_b(model);
     for k in 0..nz {
-        eval_face_mlt(model, k, None)?;
+        eval_face_mlt(model, k, None, use_sm_b)?;
     }
 
     if model.controls.redo_conv_for_dr_lt_mixing_length {
         check_for_redo_mlt(model)?;
     }
-    if !model.aux.doing_struct_burn_mix && model.sig.iter().all(|&s| s == 0.0) {
-        update_sig_from_d_mix(model);
-    }
+    crate::evolve_support::update_mlt_sticky_and_sig_after_hydro(model);
     Ok(())
 }
 
@@ -82,6 +96,7 @@ fn eval_face_mlt(
     model: &mut StarModel,
     k: usize,
     custom_length: Option<f64>,
+    use_sm_b: bool,
 ) -> Result<(), StarError> {
     let (alfa, beta) = model.get_face_weights(k);
 
@@ -170,7 +185,7 @@ fn eval_face_mlt(
     }
 
     let b_term = if model.controls.use_ledoux_criterion {
-        model.brunt_b[k]
+        if use_sm_b { model.aux.smoothed_brunt_b[k] } else { model.brunt_b[k] }
     } else {
         0.0
     };
@@ -185,8 +200,10 @@ fn eval_face_mlt(
     };
     let lambda_f = hp_f * alpha_mlt;
 
+    let sticky_no_conv = model.aux.doing_struct_burn_mix
+        && model.aux.fixed_gradr_sticky.get(k).copied().unwrap_or(false);
     let (mut grad_t_f, mut conv_vel_f, mut d_f, mut gamma_val, mut mix_type) =
-        if alpha_mlt <= 0.0 {
+        if alpha_mlt <= 0.0 || sticky_no_conv {
             (
                 gradr_f,
                 StarAdOrder1::ZERO,
@@ -445,8 +462,9 @@ pub fn check_for_redo_mlt(model: &mut StarModel) -> Result<(), StarError> {
                 min_lambda = min_lambda.min(alpha * model.scale_height[k]);
             }
             if dr < min_lambda {
+                let use_sm_b = crate::hydro_state::use_smoothed_brunt_b(model);
                 for k in k_top..=k_bot {
-                    eval_face_mlt(model, k, Some(dr))?;
+                    eval_face_mlt(model, k, Some(dr), use_sm_b)?;
                 }
             }
         }
@@ -475,7 +493,10 @@ pub fn set_hydro_vars(
         }
     }
     let sig_was_zero = model.sig.iter().all(|&s| s == 0.0);
-    do_brunt_b(model);
+    if !model.aux.doing_struct_burn_mix {
+        do_brunt_b(model);
+        crate::hydro_state::refresh_smoothed_brunt_b(model);
+    }
     set_mlt_vars(model)?;
     if model.controls.rsp2_flag {
         eval_surf_bc(model)?;
@@ -517,79 +538,22 @@ pub fn set_hydro_vars(
         }
         return Ok(());
     }
-    do_brunt_n2(model);
+    if !model.aux.doing_struct_burn_mix {
+        do_brunt_n2(model);
+        if model.controls.rotation_flag
+            && (model.controls.mix_wind.am_d_mix_factor > 0.0
+                || model.controls.mix_wind.d_visc_factor > 0.0)
+        {
+            crate::rotation::augment_d_mix_with_rotation(model);
+            if sig_was_zero {
+                update_sig_from_d_mix(model);
+            }
+        }
+    }
     eval_surf_bc(model)?;
     crate::eps_grav::eval_eps_grav(model);
     if model.controls.u_flag {
         crate::riemann_ad::do_uface_and_pface(model)?;
     }
-    Ok(())
-}
-
-/// Bottom fractional mass `q` of the largest convective mixing region
-/// (`conv_mx1_bot` in `star/private/report.f90:620-638`).
-pub(crate) fn eval_conv_mx1_bot(model: &StarModel) -> f64 {
-    let nz = model.nz;
-    let (mut best_dq, mut best_bot, mut k) = (0.0_f64, 0.0_f64, 0usize);
-    while k < nz {
-        if model.mixing_type[k] == MixingType::ConvectiveMixing {
-            let (mut sum_dq, mut kbot) = (0.0, k);
-            while kbot < nz && model.mixing_type[kbot] == MixingType::ConvectiveMixing {
-                sum_dq += model.dq[kbot];
-                kbot += 1;
-            }
-            if sum_dq > best_dq {
-                best_dq = sum_dq;
-                best_bot = (model.q[kbot - 1] - model.dq[kbot - 1]).max(0.0);
-            }
-            k = kbot;
-        } else {
-            k += 1;
-        }
-    }
-    best_bot
-}
-
-/// Upstream `do_relax_to_radiative_core` (`star/private/init.f90:1103` &
-/// `star/private/relax.f90:3295-3408`): contracts a pre-MS model with frozen
-/// nuclear composition until a radiative core forms (`conv_mx1_bot > 1e-3` after
-/// being fully convective) or `L_nuc / L_phot > 0.1`, then resets age and step.
-pub(crate) fn relax_pre_ms_to_radiative_core(model: &mut StarModel) -> Result<(), StarError> {
-    let saved_ctrl = model.controls.clone();
-    model.aux.doing_relax = true;
-    model.model_number = 0;
-    let c = &mut model.controls;
-    if c.mlt_option == MltOption::Tdc {
-        c.mlt_option = MltOption::Cox;
-    }
-    (c.atm_option, c.atm_t_tau_relation, c.pextra_factor) =
-        (crate::job_controls::AtmOption::TTau, crate::job_controls::AtmTTauRelation::Eddington, 2.0);
-    (c.dxdt_nuc_factor, c.ts_stop.max_timestep_factor, c.mass_change, c.use_other_wind) =
-        (0.0, 2.0, 0.0, false);
-    (c.max_years_for_timestep, c.max_age, c.max_model_number) = (None, None, None);
-    (c.reimers_scaling_factor, c.blocker_scaling_factor, c.vink_scaling_factor, c.dutch_scaling_factor) =
-        (0.0, 0.0, 0.0, 0.0);
-    let mut min_conv_mx1_bot = 1.0e99_f64;
-    for step in 0..600usize {
-        if crate::evolve::star_evolve_step(model, false, model.controls.op_split_burn, true).is_err() {
-            break;
-        }
-        let conv_bot = eval_conv_mx1_bot(model);
-        min_conv_mx1_bot = min_conv_mx1_bot.min(conv_bot);
-        let l_nuc: f64 = (0..model.nz).map(|k| model.eps_nuc[k] * model.dm[k]).sum();
-        let l_phot = model.lum.first().copied().unwrap_or(0.0);
-        if (l_phot > 0.0 && l_nuc / l_phot > 0.1)
-            || (step >= 1 && min_conv_mx1_bot < 1.0e-6 && conv_bot > 1.0e-3)
-        {
-            break;
-        }
-    }
-    model.controls = saved_ctrl;
-    model.aux.doing_relax = false;
-    (model.star_age, model.star_age_old, model.model_number, model.num_retries) = (0.0, 0.0, 1, 0);
-    model.aux.cumulative_energy_error = 0.0;
-    set_hydro_vars(model, false, false)?;
-    model.save_start_values();
-    model.save_old_values();
     Ok(())
 }

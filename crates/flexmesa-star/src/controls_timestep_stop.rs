@@ -251,6 +251,36 @@ pub struct TimestepStopControls {
     pub delta_lgt_max_limit: f64,
     /// Hard retry limit on $|\Delta\max_k\log_{10} T_k|$.
     pub delta_lgt_max_hard_limit: f64,
+    /// Soft/hard/min/max limits on central $\log_{10} X(^1\mathrm{H})_c$ (`delta_lg_XH_cntr_*`).
+    pub delta_lg_xh_cntr_min: f64,
+    /// Upper $\log_{10} X(^1\mathrm{H})_c$ bound for `delta_lg_XH_cntr`.
+    pub delta_lg_xh_cntr_max: f64,
+    /// Soft limit on $|\Delta\log_{10} X(^1\mathrm{H})_c|$.
+    pub delta_lg_xh_cntr_limit: f64,
+    /// Hard retry limit on $|\Delta\log_{10} X(^1\mathrm{H})_c|$.
+    pub delta_lg_xh_cntr_hard_limit: f64,
+    /// Only limit decreases in $\log_{10} X(^1\mathrm{H})_c$ (`delta_lg_XH_drop_only`).
+    pub delta_lg_xh_drop_only: bool,
+    /// Soft/hard/min/max limits on central $\log_{10} X(^4\mathrm{He})_c$ (`delta_lg_XHe_cntr_*`).
+    pub delta_lg_xhe_cntr_min: f64,
+    /// Upper $\log_{10} X(^4\mathrm{He})_c$ bound for `delta_lg_XHe_cntr`.
+    pub delta_lg_xhe_cntr_max: f64,
+    /// Soft limit on $|\Delta\log_{10} X(^4\mathrm{He})_c|$.
+    pub delta_lg_xhe_cntr_limit: f64,
+    /// Hard retry limit on $|\Delta\log_{10} X(^4\mathrm{He})_c|$.
+    pub delta_lg_xhe_cntr_hard_limit: f64,
+    /// Only limit decreases in $\log_{10} X(^4\mathrm{He})_c$ (`delta_lg_XHe_drop_only`).
+    pub delta_lg_xhe_drop_only: bool,
+    /// Soft/hard/min/max limits on central $\log_{10} X(^{12}\mathrm{C})_c$ (`delta_lg_XC_cntr_*`).
+    pub delta_lg_xc_cntr_min: f64,
+    /// Upper $\log_{10} X(^{12}\mathrm{C})_c$ bound for `delta_lg_XC_cntr`.
+    pub delta_lg_xc_cntr_max: f64,
+    /// Soft limit on $|\Delta\log_{10} X(^{12}\mathrm{C})_c|$.
+    pub delta_lg_xc_cntr_limit: f64,
+    /// Hard retry limit on $|\Delta\log_{10} X(^{12}\mathrm{C})_c|$.
+    pub delta_lg_xc_cntr_hard_limit: f64,
+    /// Only limit decreases in $\log_{10} X(^{12}\mathrm{C})_c$ (`delta_lg_XC_drop_only`).
+    pub delta_lg_xc_drop_only: bool,
     /// HR-diagram step weights & limits (`delta_HR_*`).
     pub delta_hr_ds_l: f64,
     /// HR-diagram $\log_{10} T_{\mathrm{eff}}$ weight (`delta_HR_ds_Teff`).
@@ -406,6 +436,21 @@ impl Default for TimestepStopControls {
             delta_lgp_cntr_hard_limit: -1.0,
             delta_lgt_max_limit: -1.0,
             delta_lgt_max_hard_limit: -1.0,
+            delta_lg_xh_cntr_min: -6.0,
+            delta_lg_xh_cntr_max: 0.0,
+            delta_lg_xh_cntr_limit: 0.05,
+            delta_lg_xh_cntr_hard_limit: -1.0,
+            delta_lg_xh_drop_only: true,
+            delta_lg_xhe_cntr_min: -6.0,
+            delta_lg_xhe_cntr_max: 0.0,
+            delta_lg_xhe_cntr_limit: 0.1,
+            delta_lg_xhe_cntr_hard_limit: -1.0,
+            delta_lg_xhe_drop_only: true,
+            delta_lg_xc_cntr_min: -5.0,
+            delta_lg_xc_cntr_max: 0.0,
+            delta_lg_xc_cntr_limit: 0.1,
+            delta_lg_xc_cntr_hard_limit: -1.0,
+            delta_lg_xc_drop_only: true,
             delta_hr_ds_l: 1.0,
             delta_hr_ds_teff: 1.0,
             delta_hr_limit: -1.0,

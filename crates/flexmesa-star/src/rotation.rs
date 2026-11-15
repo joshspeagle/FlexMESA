@@ -1,43 +1,32 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-//! Shellular rotation distortion polynomials (`hydro_rotation.f90`), five
-//! hydrodynamic rotational mixing instabilities (`rotation_mix_info.f90`), and
-//! the Spruit-Tayler (2002) magnetic dynamo (`magnetic_diffusion.f90`).
+//! Shellular rotation distortion polynomials (`hydro_rotation.f90`), local
+//! rotational mixing instabilities (`rotation_mix_info.f90`), Spruit-Tayler
+//! (2002) dynamo (`magnetic_diffusion.f90`), and post-remesh reconstruction.
 
 use flexmesa_const::{AMU, CLIGHT, CRAD, KERG, PI, QE};
 
 use crate::diffusion::eval_effective_kt;
-use crate::hydro_vars::update_sig_from_d_mix;
 use crate::model::StarModel;
 
-/// Critical Richardson number $\mathrm{Ri}_{\mathrm{crit}} = 1/4$ for the
-/// dynamical shear instability (`rotation_mix_info.f90`).
+/// Critical Richardson number $\mathrm{Ri}_{\mathrm{crit}} = 1/4$ (`rotation_mix_info.f90`).
 pub const RI_CRIT_DSI: f64 = 0.25;
 
-/// Rotational instability diffusion coefficients and Spruit-Tayler magnetic
-/// dynamo outputs at a single zone interface (`rotation_mix_info.f90`,
-/// `magnetic_diffusion.f90`).
+/// Rotational instability diffusivities and Spruit-Tayler outputs at a single face.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct RotationalMixZone {
-    /// Dynamical shear instability diffusivity $D_{\mathrm{DSI}}$
-    /// ($\mathrm{cm^2\,s^{-1}}$).
+    /// Dynamical shear instability diffusivity $D_{\mathrm{DSI}}$ ($\mathrm{cm^2\,s^{-1}}$).
     pub d_dsi: f64,
-    /// Solberg-Høiland instability diffusivity $D_{\mathrm{SH}}$
-    /// ($\mathrm{cm^2\,s^{-1}}$).
+    /// Solberg-Hoiland instability diffusivity $D_{\mathrm{SH}}$ ($\mathrm{cm^2\,s^{-1}}$).
     pub d_sh: f64,
-    /// Secular shear instability diffusivity $D_{\mathrm{SSI}}$
-    /// ($\mathrm{cm^2\,s^{-1}}$).
+    /// Secular shear instability diffusivity $D_{\mathrm{SSI}}$ ($\mathrm{cm^2\,s^{-1}}$).
     pub d_ssi: f64,
-    /// Eddington-Sweet meridional circulation diffusivity $D_{\mathrm{ES}}$
-    /// ($\mathrm{cm^2\,s^{-1}}$).
+    /// Eddington-Sweet meridional circulation diffusivity $D_{\mathrm{ES}}$ ($\mathrm{cm^2\,s^{-1}}$).
     pub d_es: f64,
-    /// Goldreich-Schubert-Fricke instability diffusivity $D_{\mathrm{GSF}}$
-    /// ($\mathrm{cm^2\,s^{-1}}$).
+    /// Goldreich-Schubert-Fricke instability diffusivity $D_{\mathrm{GSF}}$ ($\mathrm{cm^2\,s^{-1}}$).
     pub d_gsf: f64,
-    /// Spruit-Tayler magnetic compositional diffusivity $D_{\mathrm{ST}}$
-    /// ($\mathrm{cm^2\,s^{-1}}$).
+    /// Spruit-Tayler magnetic compositional diffusivity $D_{\mathrm{ST}}$ ($\mathrm{cm^2\,s^{-1}}$).
     pub d_st: f64,
-    /// Spruit-Tayler magnetic angular momentum viscosity $\nu_{\mathrm{ST}}$
-    /// ($\mathrm{cm^2\,s^{-1}}$).
+    /// Spruit-Tayler magnetic angular momentum viscosity $\nu_{\mathrm{ST}}$ ($\mathrm{cm^2\,s^{-1}}$).
     pub nu_st: f64,
     /// Spruit-Tayler azimuthal magnetic field $B_\phi$ in Gauss (`b_phi`).
     pub b_phi: f64,
@@ -46,152 +35,135 @@ pub struct RotationalMixZone {
 }
 
 impl RotationalMixZone {
-    /// Returns the total compositional diffusion coefficient from all active
-    /// rotational instabilities and the Spruit-Tayler dynamo.
+    /// Returns weighted compositional diffusivity sum across active rotational modes.
     #[must_use]
     #[inline]
     pub fn total_d_rot(
-        &self,
-        f_dsi: f64,
-        f_sh: f64,
-        f_ssi: f64,
-        f_es: f64,
-        f_gsf: f64,
-        f_st: f64,
+        &self, f_dsi: f64, f_sh: f64, f_ssi: f64, f_es: f64, f_gsf: f64, f_st: f64,
     ) -> f64 {
-        f_dsi * self.d_dsi
-            + f_sh * self.d_sh
-            + f_ssi * self.d_ssi
-            + f_es * self.d_es
-            + f_gsf * self.d_gsf
-            + f_st * self.d_st
+        f_dsi * self.d_dsi + f_sh * self.d_sh + f_ssi * self.d_ssi
+            + f_es * self.d_es + f_gsf * self.d_gsf + f_st * self.d_st
     }
 }
 
-/// Evaluates the Fabry, Marchant & Sana (2022) / Paxton et al. (2019 MESA V)
-/// Roche rotational distortion factors $(f_P, f_T, i_{\mathrm{rot}}/r^2)$ as a
-/// function of dimensionless rotation rate
-/// $w = |\Omega / \Omega_{\mathrm{crit}}|$
-/// (`star/private/hydro_rotation.f90:eval_fp_ft`).
-///
-/// The polynomials match numerical Roche integrations up to $w \to 1$:
-/// $$A(w) = 1 + 0.3293 w^4 - 0.4926 w^6 - 0.5560 \ln(1 - w^{5.626}),$$
-/// $$f_P(w) = \frac{1 - \tfrac{2}{3} w^2 - 0.2133 w^4 - 0.1068 w^6}{A(w)},
-///   \quad
-///   f_T(w) = \frac{1 - 0.07955 w^4 - 0.2322 w^6}{A(w)}.$$
+/// Evaluates Roche distortion factors $(f_P, f_T, i_{\mathrm{rot}}/r^2)$ (`hydro_rotation.f90`).
 #[must_use]
-pub fn eval_rotation_fp_ft(
-    w_div_w_crit: f64,
-    fp_min: f64,
-    ft_min: f64,
-) -> (f64, f64, f64) {
+pub fn eval_rotation_fp_ft(w_div_w_crit: f64, fp_min: f64, ft_min: f64) -> (f64, f64, f64) {
     let w = w_div_w_crit.abs().min(0.9999);
-    let w2 = w * w;
-    let w4 = w2 * w2;
-    let w6 = w4 * w2;
-    let one_m_w56 = (1.0 - w.powf(5.626)).max(1.0e-12);
-    let a_w =
-        (1.0 + 0.3293 * w4 - 0.4926 * w6 - 0.5560 * one_m_w56.ln()).max(1.0);
-
-    let fp_raw = (1.0 - (2.0 / 3.0) * w2 - 0.2133 * w4 - 0.1068 * w6) / a_w;
-    let ft_raw = (1.0 - 0.07955 * w4 - 0.2322 * w6) / a_w;
-    let fp = fp_raw.clamp(fp_min, 1.0);
-    let ft = ft_raw.clamp(ft_min, 1.0);
-
-    let i_rot_over_r2 =
-        (2.0 / 3.0) * (1.0 + 0.1325 * w2 + 0.0480 * w4) / (1.0 + 0.0450 * w2);
+    let (w2, w4) = (w * w, w.powi(4));
+    let w6 = w2 * w4;
+    let a_w = (1.0 + 0.3293 * w4 - 0.4926 * w6 - 0.5560 * (1.0 - w.powf(5.626)).max(1.0e-12).ln()).max(1.0);
+    let fp = ((1.0 - (2.0 / 3.0) * w2 - 0.2133 * w4 - 0.1068 * w6) / a_w).clamp(fp_min, 1.0);
+    let ft = ((1.0 - 0.07955 * w4 - 0.2322 * w6) / a_w).clamp(ft_min, 1.0);
+    let i_rot_over_r2 = (2.0 / 3.0) * (1.0 + 0.1325 * w2 + 0.0480 * w4) / (1.0 + 0.0450 * w2);
     (fp, ft, i_rot_over_r2)
 }
 
-/// Evaluates the local critical Roche angular velocity
-/// $\Omega_{\mathrm{crit}} =
-/// \sqrt{(1 - \Gamma_{\mathrm{Edd}}) G m_{\mathrm{grav}} / r_{\mathrm{eq}}^3}$
-/// in $\mathrm{rad\,s^{-1}}$ (`hydro_rotation.f90:w_div_w_crit_roche`).
+/// Evaluates local critical Roche angular velocity $\Omega_{\mathrm{crit}}$ ($\mathrm{rad\,s^{-1}}$).
 #[must_use]
 pub fn eval_omega_crit(
-    cgrav: f64,
-    m_grav: f64,
-    r_polar: f64,
-    lum: f64,
-    opacity: f64,
-    max_gamma_edd: f64,
+    cgrav: f64, m_grav: f64, r_polar: f64, lum: f64, opacity: f64, max_gamma_edd: f64,
 ) -> f64 {
-    let m_eff = m_grav.max(1.0e20);
-    let r_eff = r_polar.max(1.0e5);
+    let (m_eff, r_eff) = (m_grav.max(1.0e20), r_polar.max(1.0e5));
     let l_edd = (4.0 * PI * CLIGHT * cgrav * m_eff) / opacity.max(1.0e-10);
     let gamma_edd = (lum.max(0.0) / l_edd.max(1.0)).clamp(0.0, max_gamma_edd);
-    ((1.0 - gamma_edd) * cgrav * m_eff / r_eff.powi(3))
-        .max(0.0)
-        .sqrt()
+    ((1.0 - gamma_edd) * cgrav * m_eff / r_eff.powi(3)).max(0.0).sqrt()
 }
 
-/// Evaluates the thermal diffusivity
-/// $K = \frac{4 a c T^3}{3 \kappa \rho^2 C_P}$ in $\mathrm{cm^2\,s^{-1}}$
-/// (`rotation_mix_info.f90`).
+/// Evaluates thermal diffusivity $K = 4 a c T^3 / (3 \kappa \rho^2 C_P)$ ($\mathrm{cm^2\,s^{-1}}$).
 #[must_use]
 #[inline]
-pub fn eval_thermal_diffusivity(
-    t: f64,
-    rho: f64,
-    opacity: f64,
-    cp: f64,
-) -> f64 {
-    let denom =
-        3.0 * opacity.max(1.0e-10) * rho.max(1.0e-20).powi(2) * cp.max(1.0);
-    (4.0 * CRAD * CLIGHT * t.max(10.0).powi(3)) / denom
+pub fn eval_thermal_diffusivity(t: f64, rho: f64, opacity: f64, cp: f64) -> f64 {
+    (4.0 * CRAD * CLIGHT * t.max(10.0).powi(3))
+        / (3.0 * opacity.max(1.0e-10) * rho.max(1.0e-20).powi(2) * cp.max(1.0))
 }
 
-/// Evaluates the Spitzer + Nandkumar & Pethick (1984) electrical conductivity
-/// $\sigma_e$ and magnetic diffusivity $\eta_m = c^2 / (4\pi \sigma_e)$ in
-/// $\mathrm{cm^2\,s^{-1}}$ (`magnetic_diffusion.f90`).
+/// Evaluates Spitzer + Nandkumar & Pethick (1984) magnetic diffusivity ($\mathrm{cm^2\,s^{-1}}$).
 #[must_use]
-pub fn eval_magnetic_diffusivity(
-    t: f64,
-    rho: f64,
-    zbar: f64,
-    abar: f64,
-) -> f64 {
-    let kt = KERG * t.max(100.0);
-    let e2 = QE * QE;
-    let z = zbar.max(1.0);
-    let a = abar.max(1.0);
-    let n_i = rho.max(1.0e-15) / (a * AMU);
-    let n_e = (n_i * z).max(1.0e-10);
-
+pub fn eval_magnetic_diffusivity(t: f64, rho: f64, zbar: f64, abar: f64) -> f64 {
+    let (kt, e2, z, a) = (KERG * t.max(100.0), QE * QE, zbar.max(1.0), abar.max(1.0));
+    let n_e = (rho.max(1.0e-15) / (a * AMU) * z).max(1.0e-10);
     let kt_eff = eval_effective_kt(n_e, kt);
     let lam_d = (kt_eff / (4.0 * PI * e2 * n_e * (1.0 + z))).sqrt();
-    let x_lam = (3.0 * kt_eff * lam_d / (z * e2)).max(1.5);
-    let ln_lam = x_lam.ln().max(0.5);
-
-    let t_eff = (kt_eff / KERG).max(100.0);
-    let eta_m = 7.0e11 * z * ln_lam * t_eff.powf(-1.5);
-    eta_m.clamp(1.0e-6, 1.0e16)
+    let ln_lam = (3.0 * kt_eff * lam_d / (z * e2)).max(1.5).ln().max(0.5);
+    (7.0e11 * z * ln_lam * (kt_eff / KERG).max(100.0).powf(-1.5)).clamp(1.0e-6, 1.0e16)
 }
 
-/// Evaluates all five hydrodynamic rotational instabilities (`DSI`, `SH`,
-/// `SSI`, `ES`, `GSF`) and the Spruit-Tayler (2002) magnetic dynamo (`ST`) at a
-/// single spherical shell interface (`rotation_mix_info.f90`,
-/// `magnetic_diffusion.f90`).
+pub(crate) fn eval_spruit_tayler_dynamo(
+    r: f64, rho: f64, t: f64, cp: f64, opacity: f64, brunt_n2_t: f64, brunt_n2_mu: f64,
+    omega: f64, q_shear_raw: f64, abar: f64, zbar: f64, cap_d: f64,
+) -> (f64, f64, f64, f64) {
+    let om = omega.abs();
+    if om <= 1.0e-20 || r <= 1.0e5 || rho <= 1.0e-20 || (brunt_n2_t + brunt_n2_mu) <= 0.0 {
+        return (0.0, 0.0, 0.0, 0.0);
+    }
+    let q = q_shear_raw.abs().clamp(1.0e-30, 1.0e30);
+    let k_th = eval_thermal_diffusivity(t, rho, opacity, cp).max(1.0e-30);
+    let eta_m = eval_magnetic_diffusivity(t, rho, zbar, abar);
+    let s4pd = (4.0 * PI * rho).sqrt();
+
+    let (mut s0, mut eta0, mut q0, mut bphi0, mut br0) = (0.0, 0.0, 0.0, 0.0, 0.0);
+    if brunt_n2_mu > 0.0 {
+        let n_mu = brunt_n2_mu.sqrt();
+        let wn = om / n_mu;
+        q0 = (n_mu / om).powf(1.75) * (eta_m / (r * r * n_mu)).max(1.0e-99).powf(0.25);
+        s0 = rho * om * om * r * r * q.powi(3) * wn.powi(4);
+        eta0 = r * r * om * q.powi(4) * wn.powi(6);
+        bphi0 = (q * wn * om) * s4pd * r;
+        br0 = bphi0 * q * wn * wn;
+    }
+
+    let (mut s1, mut eta1, mut q1, mut bphi1, mut br1) = (0.0, 0.0, 0.0, 0.0, 0.0);
+    if brunt_n2_t > 0.0 {
+        let nt = brunt_n2_t.sqrt();
+        let wn = om / nt;
+        let kr2n = (k_th / (r * r * nt)).max(1.0e-99);
+        q1 = if wn > 1.0e-42 {
+            (nt / om).powf(1.75)
+                * (eta_m / (r * r * nt)).max(1.0e-99).powf(0.25)
+                * (eta_m / k_th).powf(0.75)
+        } else {
+            0.0
+        };
+        let s1a = rho * (om * r).powi(2) * q * (wn * kr2n).sqrt();
+        let s1b = rho * (om * r).powi(2) * q.powi(3) * wn.powi(4);
+        s1 = s1a.max(s1b);
+        let eta1a = r * r * om * q * (wn * kr2n).powf(0.75);
+        let eta1b = r * r * om * q.powi(4) * wn.powi(6);
+        eta1 = eta1a.max(eta1b);
+        bphi1 = q.sqrt() * om * (wn * kr2n).powf(0.125) * s4pd * r;
+        br1 = bphi1 * (wn * kr2n).powf(0.25);
+    }
+
+    let (sm, etam, qm, b_phi, b_r) = if brunt_n2_t > 0.0 && brunt_n2_mu > 0.0 && (s0 + s1) > 0.0 {
+        let et = if eta0 + eta1 > 0.0 { eta0 * eta1 / (eta0 + eta1) } else { 0.0 };
+        let w0 = s1 / (s0 + s1);
+        (s0 * w0, et, q0 + q1, w0 * bphi0 + (1.0 - w0) * bphi1, w0 * br0 + (1.0 - w0) * br1)
+    } else if brunt_n2_t <= 0.0 && brunt_n2_mu > 0.0 {
+        (s0, eta0, q0, bphi0, br0)
+    } else if brunt_n2_t > 0.0 {
+        (s1, eta1, q1, bphi1, br1)
+    } else {
+        return (0.0, 0.0, 0.0, 0.0);
+    };
+
+    let f_mag = (1.0 - (qm / q).min(1.0)).max(0.0);
+    if f_mag <= 0.0 || !sm.is_finite() || !etam.is_finite() {
+        return (0.0, 0.0, 0.0, 0.0);
+    }
+    let nu_st = ((f_mag * sm) / (om * q * rho)).clamp(0.0, cap_d);
+    let d_st = (f_mag * etam).min(nu_st).clamp(0.0, cap_d);
+    let f_b = f_mag.sqrt();
+    (d_st, nu_st, (f_b * b_phi).clamp(0.0, 1.0e12), (f_b * b_r).clamp(0.0, 1.0e12))
+}
+
+/// Evaluates hydrodynamic rotational instabilities and Spruit-Tayler dynamo at one face.
 #[must_use]
+#[allow(clippy::too_many_arguments)]
 pub fn eval_rotational_mixing_zone(
-    r: f64,
-    hp: f64,
-    grav: f64,
-    rho: f64,
-    t: f64,
-    cp: f64,
-    opacity: f64,
-    chi_t: f64,
-    chi_rho: f64,
-    grada: f64,
-    gradt: f64,
-    brunt_n2_t: f64,
-    brunt_n2_mu: f64,
-    omega: f64,
-    dln_omega_dln_r: f64,
-    abar: f64,
-    zbar: f64,
-    d_visc: f64,
+    r: f64, hp: f64, grav: f64, rho: f64, t: f64, cp: f64, opacity: f64,
+    chi_t: f64, chi_rho: f64, grada: f64, gradt: f64, brunt_n2_t: f64,
+    brunt_n2_mu: f64, omega: f64, dln_omega_dln_r: f64, abar: f64, zbar: f64, d_visc: f64,
 ) -> RotationalMixZone {
     let _ = (chi_t, chi_rho, d_visc);
     let om = omega.abs();
@@ -202,258 +174,177 @@ pub fn eval_rotational_mixing_zone(
     let k_therm = eval_thermal_diffusivity(t, rho, opacity, cp);
     let n2_tot = brunt_n2_t + brunt_n2_mu;
     let tau_dyn = (r / grav.max(1.0)).sqrt().max(1.0e-6);
-
-    // 1. Dynamical Shear Instability (DSI; Heger et al. 2000 Eq. 31)
     let shear_rate = om * q_shear;
     let d_dsi = if shear_rate > 0.0 && n2_tot >= 0.0 {
         let ri = n2_tot / (shear_rate * shear_rate).max(1.0e-30);
-        if ri < RI_CRIT_DSI {
-            let f_ri = (1.0 - ri / RI_CRIT_DSI).powi(2);
-            (hp * hp / tau_dyn) * f_ri
-        } else {
-            0.0
-        }
+        if ri < RI_CRIT_DSI { (hp * hp / tau_dyn) * (1.0 - ri / RI_CRIT_DSI).powi(2) } else { 0.0 }
     } else {
         0.0
     };
-
-    // 2. Solberg-Hoiland Instability (SH; epicyclic + buoyancy < 0)
-    let kappa_epi2 = 4.0 * om * om * (1.0 + 0.5 * dln_omega_dln_r);
-    let sh_crit = n2_tot + kappa_epi2;
-    let d_sh = if sh_crit < 0.0 {
-        let growth = (-sh_crit).sqrt();
-        hp * hp * growth.min(1.0 / tau_dyn)
-    } else {
-        0.0
-    };
-
-    // 3. Secular Shear Instability (SSI; Endal & Sofia 1978 / Zahn 1992)
-    let peclet_crit = 6.0;
-    let n2_eff_ssi = (brunt_n2_t / peclet_crit).max(0.0) + brunt_n2_mu.max(0.0);
+    let sh_crit = n2_tot + 4.0 * om * om * (1.0 + 0.5 * dln_omega_dln_r);
+    let d_sh = if sh_crit < 0.0 { hp * hp * (-sh_crit).sqrt().min(1.0 / tau_dyn) } else { 0.0 };
+    let n2_eff_ssi = (brunt_n2_t / 6.0).max(0.0) + brunt_n2_mu.max(0.0);
     let d_ssi = if shear_rate > 0.0 && n2_eff_ssi > 0.0 {
         let ri_sec = n2_eff_ssi / (shear_rate * shear_rate);
-        if ri_sec < RI_CRIT_DSI {
-            k_therm * (shear_rate * shear_rate / n2_eff_ssi) * RI_CRIT_DSI
-        } else {
-            0.0
-        }
+        if ri_sec < RI_CRIT_DSI { k_therm * (RI_CRIT_DSI / ri_sec) } else { 0.0 }
     } else {
         0.0
     };
-
-    // 4. Eddington-Sweet Meridional Circulation (ES; Kippenhahn 1974)
-    let grad_sub = (grada - gradt).abs().max(1.0e-4);
-    let f_cen = (om * om * r / grav.max(1.0)).min(0.9);
-    let v_es = k_therm / (hp * grad_sub) * f_cen;
-    let d_es = (hp * v_es).max(0.0);
-
-    // 5. Goldreich-Schubert-Fricke Instability (GSF; Goldreich & Schubert 1967)
-    let d_gsf = if q_shear > 1.0e-6 && brunt_n2_mu <= 1.0e-6 * brunt_n2_t.abs()
-    {
+    let d_es = (k_therm / (grada - gradt).abs().max(1.0e-4) * (om * om * r / grav.max(1.0)).min(0.9)).max(0.0);
+    let d_gsf = if q_shear > 1.0e-6 && brunt_n2_mu <= 1.0e-6 * brunt_n2_t.abs() {
         k_therm * (om * om * r / grav.max(1.0)) * q_shear * (r / hp).min(10.0)
     } else {
         0.0
     };
-
-    // 6. Spruit-Tayler (2002) Magnetic Dynamo (ST; Spruit 2002 Eqs. 19-33)
-    let eta_m = eval_magnetic_diffusivity(t, rho, zbar, abar);
-    let n_t2 = brunt_n2_t.max(0.0);
-    let n_mu2 = brunt_n2_mu.max(0.0);
-    let n_eff2 = n_mu2 + (eta_m / k_therm.max(eta_m)) * n_t2;
-    let mut d_st = 0.0;
-    let mut nu_st = 0.0;
-    let mut b_phi = 0.0;
-    let mut b_r = 0.0;
-
-    if q_shear > 1.0e-8 && n_eff2 > 1.0e-20 && om > 1.0e-15 {
-        let n_eff = n_eff2.sqrt();
-        let q_min =
-            (n_eff / om).powf(7.0 / 4.0) * (eta_m / (r * r * n_eff)).powf(0.25);
-        if q_shear > q_min {
-            let f_damp = (1.0 - (q_min / q_shear).sqrt()).clamp(0.0, 1.0);
-            if n_mu2 >= (eta_m / k_therm.max(eta_m)) * n_t2 && n_mu2 > 0.0 {
-                let n_mu = n_mu2.sqrt();
-                b_phi = (4.0 * PI * rho).sqrt()
-                    * r
-                    * om
-                    * q_shear.sqrt()
-                    * (om / n_mu);
-                b_r = b_phi * (om / n_mu) * q_shear.sqrt();
-                nu_st = (r * r * om / q_shear) * (om / n_mu).powi(4) * f_damp;
-                d_st = (r * r * om)
-                    * (om / n_mu).powi(4)
-                    * (eta_m / (r * r * om)).max(1.0e-12).powf(0.25)
-                    * f_damp;
-            } else if n_t2 > 0.0 {
-                let n_t = n_t2.sqrt();
-                let eps_k = (eta_m / (r * r * n_t)).max(1.0e-20);
-                b_phi = (4.0 * PI * rho).sqrt()
-                    * r
-                    * om
-                    * (om / n_t).powf(0.5)
-                    * q_shear.powf(0.5)
-                    * (k_therm / (r * r * n_t)).max(1.0e-20).powf(0.125);
-                b_r = b_phi * (om / n_t).powf(0.5) * eps_k.powf(0.125);
-                nu_st = r
-                    * r
-                    * om
-                    * q_shear.powf(0.5)
-                    * (om / n_t).powf(0.5)
-                    * (k_therm / (r * r * n_t)).max(1.0e-20).powf(0.25)
-                    * f_damp;
-                d_st = nu_st
-                    * (eta_m / k_therm.max(eta_m)).sqrt().clamp(1.0e-4, 1.0);
-            }
-        }
-    }
-
+    let (d_st, nu_st, b_phi, b_r) = eval_spruit_tayler_dynamo(
+        r, rho, t, cp, opacity, brunt_n2_t, brunt_n2_mu, omega, q_shear, abar, zbar, 1.0e18,
+    );
     RotationalMixZone {
-        d_dsi: d_dsi.clamp(0.0, 1.0e18),
-        d_sh: d_sh.clamp(0.0, 1.0e18),
-        d_ssi: d_ssi.clamp(0.0, 1.0e18),
-        d_es: d_es.clamp(0.0, 1.0e18),
-        d_gsf: d_gsf.clamp(0.0, 1.0e18),
-        d_st: d_st.clamp(0.0, 1.0e18),
-        nu_st: nu_st.clamp(0.0, 1.0e18),
-        b_phi: b_phi.clamp(0.0, 1.0e12),
-        b_r: b_r.clamp(0.0, 1.0e12),
+        d_dsi: d_dsi.clamp(0.0, 1.0e18), d_sh: d_sh.clamp(0.0, 1.0e18),
+        d_ssi: d_ssi.clamp(0.0, 1.0e18), d_es: d_es.clamp(0.0, 1.0e18),
+        d_gsf: d_gsf.clamp(0.0, 1.0e18), d_st, nu_st, b_phi, b_r,
     }
 }
 
-/// Updates shellular rotational distortion factors (`fp_rot`, `ft_rot`) and
-/// specific moment of inertia `i_rot` on `model.aux` across all faces
-/// (`eval_fp_ft` in `star/private/hydro_rotation.f90:753-811`).
+/// Updates shellular distortion (`fp_rot`, `ft_rot`, `i_rot`) across faces (`hydro_rotation.f90`).
 pub fn update_rotation_distortion_factors(model: &mut StarModel) {
     let nz = model.nz;
     if nz == 0 {
         return;
     }
-    if model.aux.fp_rot.len() != nz {
+    if model.aux.fp_rot.len() != nz || model.aux.d_fp_rot_dlnr.len() != nz {
         model.aux.resize(nz, model.species);
     }
     if !model.controls.rotation_flag {
         model.aux.fp_rot.fill(1.0);
         model.aux.ft_rot.fill(1.0);
+        model.aux.d_fp_rot_dlnr.fill(0.0);
+        model.aux.d_ft_rot_dlnr.fill(0.0);
         for k in 0..nz {
-            let r_k = model.r[k].max(1.0);
-            model.aux.i_rot[k] = (2.0 / 3.0) * r_k * r_k;
+            let ir = (2.0 / 3.0) * model.r[k].max(1.0).powi(2);
+            model.aux.i_rot[k] = ir;
+            model.aux.d_i_rot_dlnr[k] = 2.0 * ir;
         }
         return;
     }
+    let max_w = model.controls.mix_wind.w_div_wcrit_max.clamp(0.0, 0.99);
+    let tidal = model.aux.tidal_deformation.clone();
     for k in 0..nz {
-        let r_k = model.r[k].max(1.0e5);
-        let m_k = model.m_grav[k].max(1.0e20);
-        let om_k = model.omega[k];
-        if om_k.abs() > 0.0 {
-            let om_crit = eval_omega_crit(
-                model.cgrav[k],
-                m_k,
-                r_k,
-                model.lum[k],
-                model.opacity[k],
-                0.99,
-            );
-            let w = if om_crit > 0.0 {
-                (om_k.abs() / om_crit).min(0.99)
-            } else {
-                0.0
-            };
-            let (fp, ft, i_rot_over_r2) = eval_rotation_fp_ft(w, 0.75, 0.95);
-            model.aux.fp_rot[k] = fp;
-            model.aux.ft_rot[k] = ft;
-            model.aux.i_rot[k] = i_rot_over_r2 * r_k * r_k;
+        let (r_k, m_k, om_k) = (model.r[k].max(1.0e5), model.m_grav[k].max(1.0e20), model.omega[k]);
+        let (fp_s, ft_s, i_rot_s) = if om_k.abs() > 0.0 {
+            let om_c = eval_omega_crit(model.cgrav[k], m_k, r_k, 0.0, 0.0, 0.99);
+            let w = if om_c > 0.0 { (om_k.abs() / om_c).min(max_w) } else { 0.0 };
+            let (fp, ft, i_r2) = eval_rotation_fp_ft(w, 0.75, 0.95);
+            (fp, ft, i_r2 * r_k * r_k)
         } else {
-            if model.aux.fp_rot[k] <= 0.0 {
-                model.aux.fp_rot[k] = 1.0;
-            }
-            if model.aux.ft_rot[k] <= 0.0 {
-                model.aux.ft_rot[k] = 1.0;
-            }
-            if model.aux.i_rot[k] <= 0.0 {
-                model.aux.i_rot[k] = (2.0 / 3.0) * r_k * r_k;
-            }
+            let fp0 = if model.aux.fp_rot[k] > 0.0 { model.aux.fp_rot[k] } else { 1.0 };
+            let ft0 = if model.aux.ft_rot[k] > 0.0 { model.aux.ft_rot[k] } else { 1.0 };
+            let ir0 = if model.aux.i_rot[k] > 0.0 { model.aux.i_rot[k] } else { (2.0 / 3.0) * r_k * r_k };
+            (fp0, ft0, ir0)
+        };
+        if let Some(ref hook) = tidal {
+            let td = hook.0.eval_shell(k, r_k, om_k);
+            let (f_sw, f_1m) = (td.f_switch.clamp(0.0, 1.0), 1.0 - td.f_switch.clamp(0.0, 1.0));
+            model.aux.fp_rot[k] = (f_sw * td.fp + f_1m * fp_s).clamp(0.05, 2.0);
+            model.aux.d_fp_rot_dlnr[k] = f_sw * td.d_fp_dlnr;
+            model.aux.ft_rot[k] = (f_sw * td.ft + f_1m * ft_s).clamp(0.05, 2.0);
+            model.aux.d_ft_rot_dlnr[k] = f_sw * td.d_ft_dlnr;
+            model.aux.i_rot[k] = (f_sw * td.i_rot + f_1m * i_rot_s).max(1.0e-30);
+            model.aux.d_i_rot_dlnr[k] = f_sw * td.d_irot_dlnr + f_1m * (2.0 * i_rot_s);
+        } else {
+            model.aux.fp_rot[k] = fp_s;
+            model.aux.d_fp_rot_dlnr[k] = 0.0;
+            model.aux.ft_rot[k] = ft_s;
+            model.aux.d_ft_rot_dlnr[k] = 0.0;
+            model.aux.i_rot[k] = i_rot_s;
+            model.aux.d_i_rot_dlnr[k] = 2.0 * i_rot_s;
         }
         model.j_rot[k] = model.aux.i_rot[k] * om_k;
     }
 }
 
-/// Evaluates shellular rotational distortion $(f_P, f_T)$, specific angular
-/// momentum $j_{\mathrm{rot},k}$, and rotational mixing instabilities across
-/// all faces of `model`, updating `model.grav`, `model.gradr`, `model.j_rot`,
-/// `model.d_mix`, and `model.sig` when `model.controls.rotation_flag` is
-/// enabled.
-pub fn set_rotation_mixing_info(
-    model: &mut StarModel,
-) -> Vec<RotationalMixZone> {
+/// Recomputes $(f_P, f_T, i_{\mathrm{rot}})$ and $\Omega_k = j_{\mathrm{rot},k} / i_{\mathrm{rot},k}$.
+pub fn conserve_shell_j_rot_and_distortion(model: &mut StarModel) {
+    let nz = model.nz;
+    if !model.controls.rotation_flag || nz == 0 || model.j_rot.len() != nz
+        || (model.j_rot.iter().all(|&j| j == 0.0) && model.omega.iter().any(|&w| w != 0.0))
+    {
+        update_rotation_distortion_factors(model);
+        return;
+    }
+    let j_target = model.j_rot.clone();
+    for _ in 0..25 {
+        let mut max_rel = 0.0_f64;
+        for k in 0..nz {
+            let ir = model.aux.i_rot.get(k).copied().filter(|&v| v > 0.0)
+                .unwrap_or_else(|| (2.0 / 3.0) * model.r[k].max(1.0).powi(2));
+            let om_new = j_target[k] / ir;
+            let scale = om_new.abs().max(model.omega[k].abs());
+            if scale > 0.0 {
+                max_rel = max_rel.max((om_new - model.omega[k]).abs() / scale);
+            }
+            model.omega[k] = om_new;
+        }
+        update_rotation_distortion_factors(model);
+        if max_rel < 1.0e-15 {
+            break;
+        }
+    }
+    for k in 0..nz {
+        model.omega[k] = j_target[k] / model.aux.i_rot[k].max(1.0e-30);
+        model.j_rot[k] = j_target[k];
+        let (r_k, m_k) = (model.r[k].max(1.0e5), model.m_grav[k].max(1.0e20));
+        model.grav[k] = model.aux.fp_rot[k] * model.cgrav[k] * m_k / (r_k * r_k);
+    }
+}
+
+/// Augments `model.d_mix` with Heger et al. (2000) and Spruit (2002) diffusivities.
+pub fn augment_d_mix_with_rotation(model: &mut StarModel) {
+    crate::rotation_mix::augment_d_mix_with_rotation(model);
+}
+
+/// Updates post-Henyey $\Omega_k = j_{\mathrm{rot},k} / i_{\mathrm{rot},k}$ and $\Omega$ transport.
+pub fn sync_post_henyey_rotation(model: &mut StarModel, dt: f64) {
+    crate::rotation_mix::sync_post_henyey_rotation(model, dt);
+}
+
+/// Evaluates shellular distortion, runs pre-Henyey Strang half-step, and returns diagnostics.
+pub fn set_rotation_mixing_info(model: &mut StarModel) -> Vec<RotationalMixZone> {
     let nz = model.nz;
     let mut zones = vec![RotationalMixZone::default(); nz];
     if !model.controls.rotation_flag || nz < 2 {
         return zones;
     }
-    update_rotation_distortion_factors(model);
-
+    conserve_shell_j_rot_and_distortion(model);
     for k in 0..nz {
-        let r_k = model.r[k].max(1.0e5);
-        let m_k = model.m_grav[k].max(1.0e20);
-        let g_sph = model.cgrav[k] * m_k / (r_k * r_k);
-        let fp = model.aux.fp_rot[k];
-        model.grav[k] = fp * g_sph;
-
-        if k > 0 && k + 1 < nz {
-            let dr_ln =
-                (model.ln_r[k - 1] - model.ln_r[k + 1]).abs().max(1.0e-6);
-            let om_up = model.omega[k - 1].abs().max(1.0e-20);
-            let om_dn = model.omega[k + 1].abs().max(1.0e-20);
-            let dln_om_dln_r = (om_up.ln() - om_dn.ln()) / dr_ln;
-            let n2_tot = model.brunt_n2[k];
-            let stored_n2_mu = model
-                .aux
-                .brunt_n2_composition_term
-                .get(k)
-                .copied()
-                .unwrap_or(0.0);
-            let n2_mu = if stored_n2_mu.abs() > 0.0 {
-                stored_n2_mu
-            } else {
-                let g_hp = model.grav[k] / model.scale_height[k].max(1.0e5);
-                let delta =
-                    (model.chi_t[k] / model.chi_rho[k].max(1.0e-6)).abs();
-                g_hp * delta * model.brunt_b[k]
-            };
-            let n2_t = n2_tot - n2_mu;
-
-            let z_mix = eval_rotational_mixing_zone(
-                r_k,
-                model.scale_height[k],
-                model.grav[k],
-                model.rho[k],
-                model.t[k],
-                model.cp[k],
-                model.opacity[k],
-                model.chi_t[k],
-                model.chi_rho[k],
-                model.grada[k],
-                model.gradt[k],
-                n2_t,
-                n2_mu,
-                model.omega[k],
-                dln_om_dln_r,
-                model.abar[k],
-                model.zbar[k],
-                model.mlt_d[k],
-            );
-            let d_rot = z_mix.total_d_rot(
-                1.0 / 30.0,
-                1.0 / 30.0,
-                1.0 / 30.0,
-                1.0 / 30.0,
-                1.0 / 30.0,
-                1.0,
-            );
-            model.d_mix[k] += d_rot;
-            zones[k] = z_mix;
-        }
+        let (r_k, m_k) = (model.r[k].max(1.0e5), model.m_grav[k].max(1.0e20));
+        model.grav[k] = model.aux.fp_rot[k] * model.cgrav[k] * m_k / (r_k * r_k);
     }
-    update_sig_from_d_mix(model);
+    if model.controls.mix_wind.premix_omega && model.dt > 0.0 {
+        crate::rotation_mix::solve_omega_transport(model, 0.5 * model.dt);
+        conserve_shell_j_rot_and_distortion(model);
+    }
+    for k in 1..(nz - 1) {
+        let r_k = model.r[k].max(1.0e5);
+        let dr_ln = (model.ln_r[k - 1] - model.ln_r[k + 1]).abs().max(1.0e-6);
+        let dln_om = (model.omega[k - 1].abs().max(1.0e-20).ln()
+            - model.omega[k + 1].abs().max(1.0e-20).ln()) / dr_ln;
+        let stored_n2_mu = model.aux.brunt_n2_composition_term.get(k).copied().unwrap_or(0.0);
+        let n2_mu = if stored_n2_mu.abs() > 0.0 {
+            stored_n2_mu
+        } else {
+            (model.grav[k] / model.scale_height[k].max(1.0e5))
+                * (model.chi_t[k] / model.chi_rho[k].max(1.0e-6)).abs()
+                * model.brunt_b[k]
+        };
+        let mut z_mix = eval_rotational_mixing_zone(
+            r_k, model.scale_height[k], model.grav[k], model.rho[k], model.t[k],
+            model.cp[k], model.opacity[k], model.chi_t[k], model.chi_rho[k],
+            model.grada[k], model.gradt[k], model.brunt_n2[k] - n2_mu, n2_mu,
+            model.omega[k], dln_om, model.abar[k], model.zbar[k], model.mlt_d[k],
+        );
+        z_mix.nu_st = 0.0;
+        zones[k] = z_mix;
+    }
     zones
 }

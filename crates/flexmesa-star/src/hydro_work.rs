@@ -124,12 +124,20 @@ pub fn eval1_a_times_v_face_v_flag_ad(
         .copied()
         .unwrap_or(model.ln_r[f_idx]);
     let area_f = eval_face_area_time_centered_ad(lnr_f, lnr_s_f, vel_tc);
-    let v_f = StarAdOrder1::variable(model.v[f_idx], I_V_00);
-    let vc_f = if vel_tc {
-        let vs_f = model.v_start.get(f_idx).copied().unwrap_or(model.v[f_idx]);
-        (v_f + vs_f) * 0.5
+    let vc_f = if model.controls.v_flag {
+        let v_f = StarAdOrder1::variable(model.v[f_idx], I_V_00);
+        if vel_tc {
+            let vs_f = model.v_start.get(f_idx).copied().unwrap_or(model.v[f_idx]);
+            (v_f + vs_f) * 0.5
+        } else {
+            v_f
+        }
     } else {
-        v_f
+        let dt = model.dt.max(1.0e-30);
+        let r_f = lnr_f.exp();
+        let rs_f = lnr_s_f.exp();
+        let scale = if vel_tc { 0.5 / dt } else { 1.0 / dt };
+        (r_f - rs_f) * scale
     };
     area_f * vc_f
 }

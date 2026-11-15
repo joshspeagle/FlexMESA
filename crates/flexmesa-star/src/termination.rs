@@ -465,17 +465,6 @@ pub fn check_termination_limits_with_history(
             return Some(String::from("v_surf_div_v_esc_limit"));
         }
     }
-    if let Some(lim) = c.surf_omega_div_omega_crit_limit {
-        let omega_surf = model.omega.first().copied().unwrap_or(0.0).abs();
-        let r_surf = model.r[0].max(1.0);
-        let omega_crit = (STANDARD_CGRAV * model.mstar.max(1.0)
-            / r_surf.powi(3))
-        .sqrt()
-        .max(1.0e-30);
-        if omega_surf / omega_crit >= lim {
-            return Some(String::from("surf_omega_div_omega_crit_limit"));
-        }
-    }
     if let Some(lim) = c.conv_core_gap_dq_limit {
         let mut last_conv_q: Option<f64> = None;
         let mut in_conv = false;

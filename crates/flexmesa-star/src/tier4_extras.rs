@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 //! Stage `E2E-4` (`#95`) `run_star_extras.f90` hooks and end-to-end runners for
-//! all Tier 4 radial pulsation (`RSP1`/`RSP2`/`TDC`), `GYRE`/`ADIPLS`
-//! oscillation (`gyre_in_mesa_*`), asteroseismology (`astero/test_suite/*`),
-//! and `star/dev_cases_*` suites (`24` `star/test_suite` cases, `8`
-//! `astero/test_suite` cases, and `32` `star/dev_cases_*` cases, closing
-//! Issues `#4` and `#5`).
+//! Tier 4 radial pulsation (`RSP1`/`RSP2`/`TDC`), `GYRE`/`ADIPLS` oscillation
+//! (`gyre_in_mesa_*`), and `star/dev_cases_*` suites (`16` `star/test_suite`
+//! cases and `32` `star/dev_cases_*` cases, closing Issues `#4` and `#5`), plus
+//! case-inventory metadata (`TIER4_ASTERO_CASES`) shared with canonical
+//! `astero/test_suite` execution in `flexmesa-astero`.
 
 use std::fmt::Write as _;
 use std::fs;
@@ -490,74 +490,6 @@ pub fn run_tier4_star_suite(
         })?;
         reports.push(rep);
     }
-    Ok(reports)
-}
-
-/// Executes a single `astero/test_suite/<case_name>` case directory.
-///
-/// # Errors
-/// Returns [`StarError`] if `inlist` parsing or execution fails.
-pub fn run_astero_test_suite_case(
-    case_dir: &Path,
-    skip_optional: bool,
-    max_steps_per_stage: Option<usize>,
-    verify_restart: bool,
-) -> Result<CaseRunReport, StarError> {
-    run_test_suite_case(
-        case_dir,
-        skip_optional,
-        max_steps_per_stage,
-        verify_restart,
-    )
-}
-
-/// Executes all 8 `astero/test_suite` cases under `mesa_dir`.
-///
-/// # Errors
-/// Returns [`StarError`] if any case fails to execute.
-pub fn run_astero_suite(
-    mesa_dir: &Path,
-    skip_optional: bool,
-    max_steps_per_stage: Option<usize>,
-    verify_restart: bool,
-) -> Result<Vec<CaseRunReport>, StarError> {
-    let suite_dir = mesa_dir.join("astero").join("test_suite");
-    let mut reports = Vec::with_capacity(TIER4_ASTERO_CASES.len());
-    for &case_name in &TIER4_ASTERO_CASES {
-        let case_dir = suite_dir.join(case_name);
-        reports.push(run_astero_test_suite_case(
-            &case_dir,
-            skip_optional,
-            max_steps_per_stage,
-            verify_restart,
-        )?);
-    }
-    Ok(reports)
-}
-
-/// Executes all 24 Tier 4 `test_suite` cases (`16` in `star/test_suite` + `8`
-/// in `astero/test_suite`) under `mesa_dir`.
-///
-/// # Errors
-/// Returns [`StarError`] if any case fails to execute.
-pub fn run_tier4_suite(
-    mesa_dir: &Path,
-    skip_optional: bool,
-    max_steps_per_stage: Option<usize>,
-    verify_restart: bool,
-) -> Result<Vec<CaseRunReport>, StarError> {
-    let mut reports = run_tier4_star_suite(
-        mesa_dir,
-        skip_optional,
-        max_steps_per_stage,
-        verify_restart,
-    )?;
-    reports.extend(run_astero_suite(
-        mesa_dir,
-        skip_optional,
-        max_steps_per_stage,
-        verify_restart,
-    )?);
     Ok(reports)
 }
 

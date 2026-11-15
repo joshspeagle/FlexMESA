@@ -12,6 +12,11 @@ drivers across Safe Rust and JAX.
 from __future__ import annotations
 
 from flexmesa.astero import drivers, jax_kernels, scaling_corr
+from flexmesa.star import e2e_tier45
+
+TIER4_ASTERO_CASES = e2e_tier45.TIER4_ASTERO_CASES
+run_astero_suite = e2e_tier45.run_astero_suite
+run_astero_test_suite_case = e2e_tier45.run_astero_test_suite_case
 
 eval_acoustic_profile = scaling_corr.eval_acoustic_profile
 eval_delta_nu_asymptotic = scaling_corr.eval_delta_nu_asymptotic
@@ -32,6 +37,7 @@ powell_quadratic_minimize = drivers.powell_quadratic_minimize
 scan_cartesian_grid = drivers.scan_cartesian_grid
 
 __all__ = [
+    "TIER4_ASTERO_CASES",
     "drivers",
     "eval_acoustic_profile",
     "eval_astero_chi2",
@@ -50,6 +56,8 @@ __all__ = [
     "match_modes_by_degree",
     "nelder_mead_minimize",
     "powell_quadratic_minimize",
+    "run_astero_suite",
+    "run_astero_test_suite_case",
     "scaling_corr",
     "scan_cartesian_grid",
 ]

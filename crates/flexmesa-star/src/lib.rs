@@ -405,8 +405,7 @@ pub use tier3_physics::{
     eval_tzo_core_accretion_step, export_stella_ascii,
 };
 pub use tier4_extras::{
-    is_tier4_case, run_astero_suite, run_astero_test_suite_case,
-    run_dev_cases_suite, run_tier4_star_suite, run_tier4_suite,
+    is_tier4_case, run_dev_cases_suite, run_tier4_star_suite,
     verify_tier4_case_assertions, Tier4CaseExtras, TIER4_ACTIVE_STAR_CASES,
     TIER4_ASTERO_CASES, TIER4_DEV_CASES, TIER4_STAR_CASES,
 };

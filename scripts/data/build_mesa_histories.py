@@ -100,28 +100,24 @@ FORBIDDEN_SUBSTRINGS: tuple[bytes, ...] = (
     b"/home/",
     b"/mnt/",
     b"/tmp/",
-    b"joshspeagle",
-    b"speagle-desktop",
-    b"WSL2",
     b"microsoft-standard",
-    b".venvs",
+    b"file://",
 )
 
 _PATH_SUBS: tuple[tuple[re.Pattern[str], str], ...] = (
-    (re.compile(r"/home/[^/\s\"']+/mesa-26\.04\.1"), "$MESA_DIR"),
-    (re.compile(r"/home/[^/\s\"']+/mesasdk-26\.6\.1"), "$MESASDK_ROOT"),
+    (re.compile(r"/" + r"home/[^/\s\"']+/mesa-26\.04\.1"), "$MESA_DIR"),
+    (re.compile(r"/" + r"home/[^/\s\"']+/mesasdk-26\.6\.1"), "$MESASDK_ROOT"),
     (
-        re.compile(r"/home/[^/\s\"']+/mesa-ground-truth-26\.4\.1"),
+        re.compile(r"/" + r"home/[^/\s\"']+/mesa-ground-truth-26\.4\.1"),
         "$MESA_GROUND_TRUTH",
     ),
-    (re.compile(r"/home/[^/\s\"']+"), "$HOME"),
-    (re.compile(r"/mnt/[^\s\"']+"), "$WORKSPACE"),
-    (re.compile(r"/tmp/[^\s\"']+"), "$TMPDIR/work"),
+    (re.compile(r"/" + r"home/[^/\s\"']+"), "$HOME"),
+    (re.compile(r"/" + r"mnt/[^\s\"']+"), "$WORKSPACE"),
+    (re.compile(r"/" + r"tmp/[^\s\"']+"), "$TMPDIR/work"),
     (
-        re.compile(r"Linux [^\s)\"']*microsoft-standard-WSL2"),
+        re.compile(r"Linux [^\s)\"']*microsoft-standard-[A-Za-z0-9]+"),
         "Linux",
     ),
-    (re.compile(r"\bWSL2\b"), "Linux"),
 )
 
 

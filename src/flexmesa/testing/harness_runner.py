@@ -13,6 +13,7 @@ import dataclasses
 import json
 import os
 import pathlib
+import re
 import signal
 import subprocess
 import sys
@@ -172,6 +173,58 @@ def resolve_case_dir(
     if not target.is_dir():
         raise FileNotFoundError(f"missing {suite} case directory: {target}")
     return target.resolve()
+
+
+def resolve_reference_history_path(
+    reference_path: str,
+    root_dir: pathlib.Path | None = None,
+) -> pathlib.Path:
+    """Resolve ``reference_path`` against the repo root or ``mesa_histories``.
+
+    Args:
+        reference_path: Relative path from ``case_manifest.toml`` (either under
+            ``benchmarks/history_harness/reference_histories/`` in the
+            repository or ``thinned/`` inside ``mesa-histories-v1.tar.zst``).
+        root_dir: Optional repository or manifest directory override.
+
+    Returns:
+        Resolved ``pathlib.Path`` to the existing reference history file.
+
+    Raises:
+        FileNotFoundError: If ``reference_path`` is empty or absent in both the
+            repository root and the unpacked ``mesa_histories`` cache.
+    """
+    if not reference_path:
+        raise FileNotFoundError("empty reference_path")
+    base = case_manifest.repo_root() if root_dir is None else root_dir
+    repo_cand = base / reference_path
+    if repo_cand.is_file():
+        return repo_cand
+    cache_cand = fetch.resolve_mesa_histories_dir() / reference_path
+    if cache_cand.is_file():
+        return cache_cand
+    raise FileNotFoundError(
+        f"missing reference history {reference_path!r} "
+        "(run 'flexmesa data fetch --include-test-inputs')"
+    )
+
+
+def _sanitize_error_message(msg: str) -> str:
+    if not msg:
+        return ""
+    cleaned = msg
+    for raw_dir, token in (
+        (str(fetch.resolve_mesa_test_inputs_dir()), "$MESA_DIR"),
+        (str(fetch.resolve_mesa_histories_dir()), "$FLEXMESA_HISTORIES_DIR"),
+        (str(fetch.resolve_data_dir()), "$FLEXMESA_DATA_DIR"),
+        (str(case_manifest.repo_root()), "<repo>"),
+        (str(pathlib.Path.home()), "~"),
+    ):
+        if raw_dir:
+            cleaned = cleaned.replace(raw_dir, token)
+    cleaned = re.sub(r"/(?:tmp|var/folders)/[^\s:'\")\]]+", "<tmpdir>", cleaned)
+    cleaned = re.sub(r"/(?:home|Users|mnt)/[^\s:'\")\]]+", "<path>", cleaned)
+    return cleaned
 
 
 def _proc_rss_kb(pid: int) -> int:
@@ -361,6 +414,7 @@ def _build_worker_env(worker_tmp: pathlib.Path) -> dict[str, str]:
         f"{src_root}{os.pathsep}{existing_py}" if existing_py else src_root
     )
     env.setdefault("JAX_PLATFORMS", "cpu")
+    env.setdefault("PYTHONWARNINGS", "ignore::RuntimeWarning:runpy")
     tmp_str = str(worker_tmp)
     env["TMPDIR"] = tmp_str
     env["TEMP"] = tmp_str
@@ -611,6 +665,7 @@ def evaluate_case_record(
     *,
     max_steps: int | None = None,
     root_dir: pathlib.Path | None = None,
+    precomputed_comparison: history_compare.HistoryComparison | None = None,
 ) -> CaseHarnessRecord:
     """Combine manifest metadata, run outcome, and comparison into a verdict.
 
@@ -620,6 +675,8 @@ def evaluate_case_record(
         outcome: Optional ``TraceRunOutcome`` if executed, else ``None``.
         max_steps: Step cap if run in smoke mode, else ``None``.
         root_dir: Base directory for resolving relative ``spec.reference_path``.
+        precomputed_comparison: Optional deserialized ``HistoryComparison`` when
+            re-evaluating stored baseline outcomes without re-running models.
 
     Returns:
         Evaluated ``CaseHarnessRecord``.
@@ -627,7 +684,8 @@ def evaluate_case_record(
     Raises:
         FileNotFoundError: If ``spec.reference_path`` is configured on an
             executed case and the reference file is missing.
-        ValueError: If the stored reference file is malformed.
+        ValueError: If the stored reference file is malformed or carries a
+            non-``r26.4.1`` MESA header version.
         KeyError: If the stored reference file lacks ``spec.independent_var``.
     """
     gap = known_gaps.get(spec.key)
@@ -665,15 +723,31 @@ def evaluate_case_record(
     term_ok = case_manifest.termination_matches(
         spec.required_termination, outcome.termination_code
     )
-    comp: history_compare.HistoryComparison | None = None
-    comp_err = outcome.error_message
+    comp: history_compare.HistoryComparison | None = precomputed_comparison
+    comp_err = _sanitize_error_message(outcome.error_message)
 
-    if spec.reference_status != "no_reference_yet" and spec.reference_path:
-        ref_file = base / spec.reference_path
+    if (
+        comp is None
+        and spec.reference_status != "no_reference_yet"
+        and spec.reference_path
+    ):
+        ref_file = resolve_reference_history_path(
+            spec.reference_path, root_dir=base
+        )
         ref_tbl = history_compare.load_history_file(ref_file)
+        if (
+            spec.reference_status == "mesa_26_4_1"
+            and not ref_tbl.provenance_comment
+            and ref_tbl.mesa_version_number != "r26.4.1"
+        ):
+            raise ValueError(
+                f"{spec.reference_path}: expected MESA version_number "
+                f"'r26.4.1', got {ref_tbl.mesa_version_number!r}"
+            )
         if spec.independent_var not in ref_tbl.columns:
             raise KeyError(
-                f"{ref_file}: missing independent_var {spec.independent_var!r}"
+                f"{spec.reference_path}: missing independent_var "
+                f"{spec.independent_var!r}"
             )
         if outcome.history_path is not None:
             try:
@@ -682,7 +756,8 @@ def evaluate_case_record(
                 )
                 comp = history_compare.compare_histories(ref_tbl, run_tbl, spec)
             except (OSError, ValueError, KeyError) as err:
-                comp_err = f"{comp_err}; compare error: {err}".strip("; ")
+                err_s = _sanitize_error_message(str(err))
+                comp_err = f"{comp_err}; compare error: {err_s}".strip("; ")
 
     tol_ok = (
         comp is not None

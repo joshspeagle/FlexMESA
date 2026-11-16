@@ -14,6 +14,7 @@ from __future__ import annotations
 import dataclasses
 import math
 import pathlib
+import shlex
 from typing import Any
 
 import numpy as np
@@ -41,11 +42,14 @@ class HistoryTable:
         num_rows: Number of stored evolutionary rows ``n_models``.
         provenance_comment: Leading ``# ...`` provenance note when loaded from
             a thinned TSV file, or empty string for raw 6-line MESA logs.
+        mesa_version_number: ``version_number`` token from a 6-line MESA header
+            (such as ``"r26.4.1"``), or empty string for TSV files.
     """
 
     columns: dict[str, np.ndarray]
     num_rows: int
     provenance_comment: str = ""
+    mesa_version_number: str = ""
 
 
 @dataclasses.dataclass(frozen=True)
@@ -121,6 +125,25 @@ def _parse_float_fast(token: str) -> float:
         return golden.parse_fortran_float(token)
 
 
+def _extract_mesa_version_number(
+    header_names_line: str,
+    header_vals_line: str,
+) -> str:
+    hdr_names = header_names_line.split()
+    if "version_number" not in hdr_names:
+        return ""
+    v_idx = hdr_names.index("version_number")
+    try:
+        hdr_vals = shlex.split(header_vals_line)
+    except ValueError:
+        hdr_vals = [
+            tok.strip('"').strip("'") for tok in header_vals_line.split()
+        ]
+    if v_idx < len(hdr_vals):
+        return hdr_vals[v_idx].strip('"').strip("'")
+    return ""
+
+
 def load_history_file(path: pathlib.Path | str) -> HistoryTable:
     """Load a MESA 6-line ``history.data`` file or a thinned TSV history file.
 
@@ -147,6 +170,7 @@ def load_history_file(path: pathlib.Path | str) -> HistoryTable:
         raise ValueError(f"{fpath}: empty history file")
 
     provenance = ""
+    mesa_ver = ""
     if raw_lines[0].startswith("#") or "\t" in raw_lines[0]:
         comments = [ln[1:].strip() for ln in raw_lines if ln.startswith("#")]
         provenance = " ".join(comments).strip()
@@ -163,6 +187,7 @@ def load_history_file(path: pathlib.Path | str) -> HistoryTable:
             raise ValueError(
                 f"{fpath}: MESA log has fewer than 7 lines ({len(raw_lines)})"
             )
+        mesa_ver = _extract_mesa_version_number(raw_lines[1], raw_lines[2])
         names = raw_lines[5].split()
         rows = [
             [_parse_float_fast(tok) for tok in ln.split()]
@@ -204,6 +229,7 @@ def load_history_file(path: pathlib.Path | str) -> HistoryTable:
         columns=cols,
         num_rows=num_rows,
         provenance_comment=provenance,
+        mesa_version_number=mesa_ver,
     )
 
 
@@ -490,3 +516,64 @@ def comparison_to_dict(comp: HistoryComparison) -> dict[str, Any]:
         "first_diverging_step": comp.first_diverging_step,
         "first_diverging_x": _json_safe_float(comp.first_diverging_x),
     }
+
+
+def _restore_json_float(val: Any) -> float:
+    fval = float(val)
+    if abs(fval) >= SENTINEL_ABS_THRESHOLD:
+        return float("inf") if fval > 0.0 else float("-inf")
+    return fval
+
+
+def _restore_json_opt_float(val: Any) -> float | None:
+    if val is None:
+        return None
+    return _restore_json_float(val)
+
+
+def comparison_from_dict(raw: dict[str, Any]) -> HistoryComparison:
+    """Deserialize a ``HistoryComparison`` produced by ``comparison_to_dict``.
+
+    Args:
+        raw: JSON dictionary previously emitted by ``comparison_to_dict``.
+
+    Returns:
+        Reconstructed ``HistoryComparison`` with sentinel values restored to
+        signed infinities.
+    """
+    devs = tuple(
+        TrackDeviation(
+            column=str(d["column"]),
+            max_abs_diff=_restore_json_float(d["max_abs_diff"]),
+            median_abs_diff=_restore_json_float(d["median_abs_diff"]),
+            x_at_max=_restore_json_float(d["x_at_max"]),
+            tolerance=_restore_json_opt_float(d.get("tolerance")),
+            within_tolerance=bool(d["within_tolerance"]),
+        )
+        for d in raw.get("track_deviations", ())
+    )
+    f_step_raw = raw.get("first_diverging_step")
+    return HistoryComparison(
+        independent_var=str(raw["independent_var"]),
+        ref_rows=int(raw["ref_rows"]),
+        run_rows=int(raw["run_rows"]),
+        overlap_min=_restore_json_float(raw["overlap_min"]),
+        overlap_max=_restore_json_float(raw["overlap_max"]),
+        final_diffs={
+            str(k): _restore_json_float(v)
+            for k, v in dict(raw.get("final_diffs", {})).items()
+        },
+        within_final_tolerances=bool(raw["within_final_tolerances"]),
+        failed_final_columns=tuple(
+            str(c) for c in raw.get("failed_final_columns", ())
+        ),
+        track_deviations=devs,
+        within_track_tolerances=bool(raw["within_track_tolerances"]),
+        failed_track_columns=tuple(
+            str(c) for c in raw.get("failed_track_columns", ())
+        ),
+        first_diverging_step=int(f_step_raw)
+        if f_step_raw is not None
+        else None,
+        first_diverging_x=_restore_json_opt_float(raw.get("first_diverging_x")),
+    )

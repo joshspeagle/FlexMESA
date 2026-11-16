@@ -14,6 +14,7 @@ import pytest
 from flexmesa import _rust, cli
 from flexmesa.testing import (
     case_manifest,
+    case_report,
     harness_runner,
     history_compare,
 )
@@ -45,7 +46,7 @@ def test_case_manifest_covers_all_106_mesa_26_4_1_cases_and_known_gaps() -> (
         1 for c in manifest.cases if c.reference_status == "no_reference_yet"
     )
     n_26 = sum(1 for c in manifest.cases if c.reference_status == "mesa_26_4_1")
-    assert (n_26, n_interim, n_none) == (0, 9, 97)
+    assert (n_26, n_interim, n_none) == (102, 0, 4)
 
     by_key = manifest.by_key()
     assert (
@@ -57,7 +58,12 @@ def test_case_manifest_covers_all_106_mesa_26_4_1_cases_and_known_gaps() -> (
     root = case_manifest.repo_root()
     for entry in manifest.cases:
         if entry.reference_status != "no_reference_yet":
-            assert (root / entry.reference_path).is_file()
+            ref_file = harness_runner.resolve_reference_history_path(
+                entry.reference_path, root_dir=root
+            )
+            assert ref_file.is_file()
+            ref_tbl = history_compare.load_history_file(ref_file)
+            assert ref_tbl.mesa_version_number == "r26.4.1"
 
     for key, spec in gaps.items():
         assert key in by_key
@@ -67,6 +73,11 @@ def test_case_manifest_covers_all_106_mesa_26_4_1_cases_and_known_gaps() -> (
 def test_generated_baseline_case_table_matches_committed_file() -> None:
     """Committed notes/audit/case_table.md must match script output exactly."""
     assert cli.main(["harness", "table", "--check"]) == 0
+    manifest, gaps, records = case_report.build_manifest_inventory_records()
+    summary = case_report.summarize_records(manifest, records, gaps)
+    assert summary["executed_cases"] == 102
+    assert summary["undeclared_failures"] == []
+    assert summary["stale_known_gaps"] == []
 
 
 def test_compare_histories_detects_first_diverging_step_and_late_spikes(

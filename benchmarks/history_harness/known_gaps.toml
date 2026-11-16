@@ -1,147 +1,591 @@
-# Declared known gaps for upstream MESA 26.4.1 test-suite cases (#143, #144).
-# Every entry links an open sub-issue of #140. CI fails on undeclared failures
-# and flags declared gaps that begin passing.
+# Declared known gaps for upstream MESA 26.4.1 test-suite cases (#141, #143, #144).
+# Every entry links an open sub-issue of #140 and records measured 26.4.1 numbers.
+# CI fails on undeclared failures and flags declared gaps that begin passing.
 
 [[gaps]]
 suite = "star"
 case = "1.3M_ms_high_Z"
 issue = "#152"
-reason = "Reaches log_L_upper_limit, but the final age is +0.95% against a 0.1% tolerance and the track departs after the main sequence (max |d log_center_Rho| about 0.59 and max |d log_center_T| about 0.11 at 3.59-3.68 Gyr, from step 91); step counts differ under non-upstream Newton and retry control (audit M-1, interim reference)."
+reason = "Newton iteration/retry control and default mismatches (audit M-1, #149). Terminates with 'log_L_upper_limit' (expected 'log_L_upper_limit') in 346 steps (final rel_star_age=+0.95%, final d_log_L=+0.001001, final d_log_center_T=-0.01004, max |d_log_center_Rho|=0.5916, first_div_step=2)."
+
+[[gaps]]
+suite = "star"
+case = "1.5M_with_diffusion"
+issue = "#156"
+reason = "Atomic diffusion shortens main-sequence age relative to MESA 26.4.1. Terminates with 'xa_central_lower_limit(h1)' (expected 'xa_central_lower_limit') in 174 steps (final rel_star_age=-59.00%, final d_log_L=-0.1232, final d_log_Teff=+0.03615, max |d_log_center_Rho|=0.264, first_div_step=15)."
+
+[[gaps]]
+suite = "star"
+case = "12M_pre_ms_to_core_collapse"
+issue = "#148"
+reason = "Case-keyed Tier3CaseExtras terminates after 1 step instead of evolving to core collapse (#152, #161). Terminates with 'fe_core_infall_limit' (expected 'fe_core_infall_limit') in 1 steps (final rel_star_age=-100.00%, final d_log_L=-4.227, final d_log_Teff=+0.3094)."
+
+[[gaps]]
+suite = "star"
+case = "15M_dynamo"
+issue = "#158"
+reason = "Spruit-Tayler dynamo and rotational mixing time out. Reaches 300s wall-time guard at step 534 (final rel_star_age=+1575.45%, final d_log_L=-4.079, final d_log_Teff=+0.7456, max |d_log_L|=3.424, first_div_step=141)."
+
+[[gaps]]
+suite = "star"
+case = "16M_conv_premix"
+issue = "#155"
+reason = "Convective premixing hits max_model_number before core H exhaustion. Terminates with 'max_model_number' (expected 'xa_central_lower_limit') in 1499 steps (final rel_star_age=+1359.73%, final d_log_L=-3.702, final d_log_Teff=-0.6375, max |d_log_L|=3.714, first_div_step=2)."
+
+[[gaps]]
+suite = "star"
+case = "16M_predictive_mix"
+issue = "#155"
+reason = "Predictive mixing hits max_model_number before core H exhaustion. Terminates with 'max_model_number' (expected 'xa_central_lower_limit') in 1999 steps (final rel_star_age=+1911.53%, final d_log_L=-3.665, final d_log_Teff=-0.6378, max |d_log_L|=3.677, first_div_step=2)."
+
+[[gaps]]
+suite = "star"
+case = "1M_pre_ms_to_wd"
+issue = "#152"
+reason = "Multi-stage pre-MS-to-WD campaign times out under non-upstream solver/mesh/defaults (#152, #153, #149). Reaches 300s wall-time guard at step 707 (final rel_star_age=-1.01%, final d_log_L=+4.401, final d_log_Teff=-0.9234)."
 
 [[gaps]]
 suite = "star"
 case = "1M_thermohaline"
 issue = "#152"
-reason = "Exceeds 20-minute wall-time guard under non-upstream Newton and retry control (audit M-4)."
+reason = "Exceeds wall-time guard under non-upstream Newton and retry control (audit M-4). Reaches 300s wall-time guard at step 1895 (final rel_star_age=+0.87%, final d_log_L=-0.865, final d_log_Teff=+0.03946, max |d_log_L|=0.9704, first_div_step=2)."
 
 [[gaps]]
 suite = "star"
-case = "semiconvection"
-issue = "#152"
-reason = "Reaches xa_central_lower_limit, but the final age is +0.6% against a 0.1% tolerance, final log_L is -0.0047 against 0.001, and the largest log_L difference on the track is about 0.03 against 0.005; 345 steps against 293 under non-upstream Newton and retry control (audit M-3, interim reference)."
+case = "20M_pre_ms_to_core_collapse"
+issue = "#148"
+reason = "Case-keyed Tier3CaseExtras terminates after 1 step instead of evolving to core collapse (#152, #161). Terminates with 'fe_core_infall_limit' (expected 'fe_core_infall_limit') in 1 steps (final rel_star_age=-100.00%, final d_log_L=-4.404, final d_log_Teff=+0.3155)."
 
 [[gaps]]
 suite = "star"
 case = "20M_z2m2_high_rotation"
 issue = "#157"
-reason = "Case history_columns.list requests unported MLT++ gradT_excess_* columns."
+reason = "Case history_columns.list requests unported MLT++ gradT_excess_alpha column (rotation also tracked in #158). Fails loudly at startup (ValueError: invalid star input: history_columns.list line 930: unsupported or unknown history column \"gradT_excess_alpha\")."
+
+[[gaps]]
+suite = "star"
+case = "5M_cepheid_blue_loop"
+issue = "#155"
+reason = "Core/shell convective boundary and Newton retry loop time out (#155, #152). Reaches 300s wall-time guard at step 561 (final rel_star_age=+1.45%, final d_log_L=+0.03018, final d_log_Teff=+0.002962, max |d_log_center_Rho|=0.1694, first_div_step=2113)."
+
+[[gaps]]
+suite = "star"
+case = "7M_prems_to_AGB"
+issue = "#152"
+reason = "Pre-MS-to-AGB campaign times out under non-upstream solver and retry control (#152, #153). Reaches 300s wall-time guard at step 2115 (final rel_star_age=-2.00%, final d_log_L=-0.3242, final d_log_Teff=+0.4762, max |d_log_center_Rho|=1.892, first_div_step=55)."
+
+[[gaps]]
+suite = "star"
+case = "R_CrB_star"
+issue = "#152"
+reason = "R CrB evolution departs from MESA 26.4.1 under non-upstream solver/defaults (#152, #149). Terminates with 'Teff_lower_limit' (expected 'Teff_lower_limit') in 164 steps (final rel_star_age=-5.12%, final d_log_L=-0.002814, final d_log_R=-0.002123, max |d_log_R|=0.06222, first_div_step=2)."
+
+[[gaps]]
+suite = "star"
+case = "T_tau_gradr"
+issue = "#161"
+reason = "T(tau) atmosphere gradr reconstruction departs from MESA 26.4.1. Terminates with 'max_model_number' (expected 'max_model_number') in 49 steps (final rel_star_age=-56.10%, final d_log_L=-0.02995, final d_log_Teff=-0.003605, max |d_log_L|=0.04677, first_div_step=2)."
+
+[[gaps]]
+suite = "star"
+case = "accreted_material_j"
+issue = "#158"
+reason = "Accreted angular-momentum transport times out (#158, #159). Reaches 300s wall-time guard at step 544 (final rel_star_age=+2280731.15%, final d_log_L=-3.737, final d_log_Teff=-0.1403, max |d_log_L|=4.194, first_div_step=1)."
 
 [[gaps]]
 suite = "star"
 case = "adjust_net"
 issue = "#157"
-reason = "Case inlist enables okay_to_reduce_gradT_excess and requests unported MLT++ history columns."
+reason = "Case inlist enables okay_to_reduce_gradT_excess and requests unported MLT++ gradT_excess_alpha column. Fails loudly at startup (ValueError: invalid star input: history_columns.list line 930: unsupported or unknown history column \"gradT_excess_alpha\")."
+
+[[gaps]]
+suite = "star"
+case = "c13_pocket"
+issue = "#152"
+reason = "AGB third-dredge-up C13-pocket evolution times out (#152, #155). Reaches 300s wall-time guard at step 12 (final rel_star_age=-99.81%, final d_log_L=+0.3268, final d_log_Teff=-0.03854, max |d_log_L|=0.0274, first_div_step=2)."
+
+[[gaps]]
+suite = "star"
+case = "carbon_kh"
+issue = "#152"
+reason = "Carbon Kelvin-Helmholtz contraction takes 2474 steps and exceeds track tolerances (#152, #149). Terminates with 'log_center_density_upper_limit' (expected 'log_center_density_upper_limit') in 2474 steps (final rel_star_age=+7.34%, final d_log_L=+0.2405, final d_log_Teff=+0.05326, max |d_log_center_Rho|=2.651, first_div_step=1)."
 
 [[gaps]]
 suite = "star"
 case = "cburn_inward"
 issue = "#157"
-reason = "Case history_columns.list requests unported MLT++ gradT_excess_* columns."
+reason = "Case history_columns.list requests unported MLT++ gradT_excess_alpha column. Fails loudly at startup (ValueError: invalid star input: history_columns.list line 930: unsupported or unknown history column \"gradT_excess_alpha\")."
 
 [[gaps]]
 suite = "star"
 case = "ccsn_IIp"
 issue = "#161"
-reason = "Case history_columns.list requests unported hydro shock and colors bolometric columns."
+reason = "Case history_columns.list requests unported hydro shock and bolometric colors columns. Fails loudly at startup (ValueError: invalid star input: history_columns.list line 716: unsupported or unknown history column \"shock_mass\")."
+
+[[gaps]]
+suite = "star"
+case = "check_pulse_atm"
+issue = "#161"
+reason = "Atmosphere boundary reconstruction departs from MESA 26.4.1 (#161, #162). Terminates with 'max_model_number' (expected 'max_model_number') in 74 steps (final rel_star_age=+44.25%, final d_log_L=+0.08715, final d_log_Teff=+0.007786, max |d_log_R|=0.02125, first_div_step=2)."
+
+[[gaps]]
+suite = "star"
+case = "check_redo"
+issue = "#148"
+reason = "Tier5CaseExtras overrides controls and times out under non-upstream redo/retry semantics (#152). Reaches 300s wall-time guard at step 501 (final rel_star_age=+311.88%, final d_log_L=-2.943, final d_log_Teff=-0.07968, max |d_log_L|=3.45, first_div_step=8)."
+
+[[gaps]]
+suite = "star"
+case = "conductive_flame"
+issue = "#148"
+reason = "Case-keyed Tier2CaseExtras terminates after 1 step with flame_reached_target (#161). Terminates with 'flame_reached_target' (expected 'flame reached halfway point') in 1 steps (final rel_star_age=+5109324450724.71%, final d_log_L=+11.05, final d_log_Teff=-4.236)."
 
 [[gaps]]
 suite = "star"
 case = "conserve_angular_momentum"
 issue = "#152"
-reason = "Exceeds 20-minute wall-time guard under non-upstream solver and retry control (audit M-9)."
+reason = "Exceeds wall-time guard under non-upstream solver and rotational retry control (audit M-9, #158). Reaches 300s wall-time guard at step 375 (final rel_star_age=+48523.57%, final d_log_L=-9.781, final d_log_Teff=-1.159, max |d_log_L|=4.903, first_div_step=37)."
+
+[[gaps]]
+suite = "star"
+case = "conv_core_cpm"
+issue = "#155"
+reason = "Convective premixing shortens main-sequence lifetime. Terminates with 'xa_central_lower_limit(h1)' (expected 'xa_central_lower_limit') in 81 steps (final rel_star_age=-15.88%, final d_log_L=-0.02203, final d_log_Teff=-0.001362, max |d_log_L|=0.01291, first_div_step=3)."
 
 [[gaps]]
 suite = "star"
 case = "custom_colors"
 issue = "#159"
-reason = "Case history_columns.list requests unported phase_of_evolution and colors columns."
+reason = "Case history_columns.list requests unported phase_of_evolution and colors columns. Fails loudly at startup (ValueError: invalid star input: history_columns.list line 12: unsupported or unknown history column \"phase_of_evolution\")."
+
+[[gaps]]
+suite = "star"
+case = "custom_rates"
+issue = "#161"
+reason = "Custom rate table evolution fails to converge after retries (#161, #152). Solver fails at step 475 (ValueError: star solver convergence failure: star_evolve_step failed after 18/100 retries (dt=1.000e-6 s, dt_floor=1.000e-6 s)) (final rel_star_age=+13.05%, final d_log_L=+0.06099, final d_log_Teff=+0.05092, max |d_log_center_T|=0.2405, first_div_step=92)."
+
+[[gaps]]
+suite = "star"
+case = "diffusion_smoothness"
+issue = "#156"
+reason = "Atomic diffusion profile and age depart from MESA 26.4.1. Terminates with 'max_age' (expected 'max_age') in 27 steps (final rel_star_age=+15.96%, final d_log_L=+0.006895, final d_log_Teff=+0.001476, max |d_log_center_Rho|=0.0118, first_div_step=4)."
+
+[[gaps]]
+suite = "star"
+case = "extended_convective_penetration"
+issue = "#155"
+reason = "Extended convective penetration departs from upstream core H burning lifetime. Terminates with 'xa_central_lower_limit(h1)' (expected 'xa_central_lower_limit') in 106 steps (final rel_star_age=-23.92%, final d_log_L=-0.06786, final d_log_Teff=+0.001329, max |d_log_center_Rho|=0.09198, first_div_step=3)."
+
+[[gaps]]
+suite = "star"
+case = "gyre_in_mesa_bcep"
+issue = "#170"
+reason = "Depends on bundled GYRE (#170) and Tier4CaseExtras 2-step cutoff (#148). Terminates with 'xa_central_lower_limit(h1)' (expected 'xa_central_lower_limit') in 2 steps (final rel_star_age=-100.00%, final d_log_L=-0.2872, final d_log_Teff=+0.06398)."
+
+[[gaps]]
+suite = "star"
+case = "gyre_in_mesa_envelope"
+issue = "#170"
+reason = "Depends on bundled GYRE (#170) and Tier4CaseExtras 4-step cutoff (#148). Terminates with 'max_model_number' (expected 'steps_to_take_before_terminate|extras_finish_step') in 4 steps (final rel_star_age=-99.29%, final d_log_L=-0.2988, final d_log_Teff=+0.05616)."
+
+[[gaps]]
+suite = "star"
+case = "gyre_in_mesa_ms"
+issue = "#170"
+reason = "Depends on bundled GYRE (#170) and Tier4CaseExtras 2-step cutoff (#148). Terminates with 'xa_central_lower_limit(h1)' (expected 'xa_central_lower_limit') in 2 steps (final rel_star_age=-100.00%, final d_log_L=-0.2674, final d_log_Teff=-0.008542)."
+
+[[gaps]]
+suite = "star"
+case = "gyre_in_mesa_rsg"
+issue = "#170"
+reason = "Depends on bundled GYRE (#170) and Tier4CaseExtras 2-step cutoff (#148). Terminates with 'max_model_number' (expected 'max_model_number|extras_finish_step') in 2 steps (final rel_star_age=-99.83%, final d_log_L=+0.1083, final d_log_Teff=-0.004561)."
+
+[[gaps]]
+suite = "star"
+case = "gyre_in_mesa_spb"
+issue = "#170"
+reason = "Depends on bundled GYRE (#170) and Tier4CaseExtras 2-step cutoff (#148). Terminates with 'xa_central_lower_limit(h1)' (expected 'xa_central_lower_limit') in 2 steps (final rel_star_age=-100.00%, final d_log_L=-0.1575, final d_log_Teff=+0.04933)."
 
 [[gaps]]
 suite = "star"
 case = "gyre_in_mesa_wd"
 issue = "#157"
-reason = "Case history_columns.list requests unported MLT++ gradT_excess_* columns and depends on GYRE (#170)."
+reason = "Case history_columns.list requests unported MLT++ gradT_excess_alpha column and depends on bundled GYRE (#170). Fails loudly at startup (ValueError: invalid star input: history_columns.list line 930: unsupported or unknown history column \"gradT_excess_alpha\")."
 
 [[gaps]]
 suite = "star"
 case = "hb_2M"
 issue = "#155"
-reason = "Core helium-burning lifetime is 71.4 Myr vs 135.6 Myr upstream because predictive mixing does not grow the core (audit M-2)."
+reason = "Predictive mixing does not grow convective He-burning core to upstream lifetime (audit M-2). Terminates with 'xa_central_lower_limit(he4)' (expected 'xa_central_lower_limit') in 226 steps (final rel_star_age=-48.88%, final d_log_L=-0.2017, final d_log_Teff=+0.01592, max |d_log_center_Rho|=0.5478, first_div_step=2)."
+
+[[gaps]]
+suite = "star"
+case = "high_mass"
+issue = "#152"
+reason = "High-mass evolution times out under non-upstream solver and MLT++/TDC defaults (#152, #157). Reaches 300s wall-time guard at step 604 (final rel_star_age=+8158.35%, final d_log_L=-4.699, final d_log_Teff=+0.106, max |d_log_L|=4.823, first_div_step=18)."
 
 [[gaps]]
 suite = "star"
 case = "high_rot_darkening"
 issue = "#158"
-reason = "Case history_columns.list requests unported gravity-darkening columns."
+reason = "Case history_columns.list requests unported gravity-darkening grav_dark_L_polar column. Fails loudly at startup (ValueError: invalid star input: history_columns.list line 553: unsupported or unknown history column \"grav_dark_L_polar\")."
+
+[[gaps]]
+suite = "star"
+case = "high_z"
+issue = "#152"
+reason = "High-metallicity core He burning exceeds track tolerances (#152, #155). Terminates with 'xa_central_lower_limit(he4)' (expected 'xa_central_lower_limit') in 328 steps (final rel_star_age=-0.19%, final d_log_L=+0.01573, final d_log_Teff=-0.001029, max |d_log_center_Rho|=2.093, first_div_step=3)."
 
 [[gaps]]
 suite = "star"
 case = "hot_cool_wind"
 issue = "#152"
-reason = "Exceeds 20-minute wall-time guard under non-upstream solver and retry control (audit M-7)."
+reason = "Exceeds wall-time guard under non-upstream solver and wind retry control (audit M-7, #159). Reaches 300s wall-time guard at step 370 (final rel_star_age=+11635566.69%, final d_log_L=-11.64, final d_log_Teff=-1.027, max |d_log_R|=2.904, first_div_step=23)."
+
+[[gaps]]
+suite = "star"
+case = "hse_riemann"
+issue = "#151"
+reason = "Riemann hydro energy accounting and max_age_in_seconds stop condition (#151, #159). Terminates with 'max_age_in_seconds' (expected 'max_age') in 2001 steps (final rel_star_age=+0.01%, final d_log_L=-4.279, final d_log_Teff=-0.7665, max |d_log_center_Rho|=4.865, first_div_step=1)."
+
+[[gaps]]
+suite = "star"
+case = "irradiated_planet"
+issue = "#154"
+reason = "Planetary initial model and column-depth irradiation relaxation (#154, #159). Reaches 300s wall-time guard at step 313 (final rel_star_age=-98.29%, final d_log_L=+5.747, final d_log_Teff=+2.148, max |d_log_center_Rho|=5.224, first_div_step=1)."
+
+[[gaps]]
+suite = "star"
+case = "low_z"
+issue = "#152"
+reason = "Low-metallicity main-sequence evolution exceeds tolerances (#152, #149). Terminates with 'xa_central_lower_limit(h1)' (expected 'xa_central_lower_limit') in 201 steps (final rel_star_age=-0.10%, final d_log_L=-0.01252, final d_log_Teff=-0.00833, max |d_log_center_Rho|=0.1608, first_div_step=394)."
 
 [[gaps]]
 suite = "star"
 case = "magnetic_braking"
 issue = "#150"
-reason = "Timestep collapses to floor after 24 retries and case requests unported gradT_excess_* columns (audit M-8, #157)."
+reason = "Case history_columns.list requests unported MLT++ gradT_excess_alpha column (#157) and rotational retry control (#150, #158). Fails loudly at startup (ValueError: invalid star input: history_columns.list line 930: unsupported or unknown history column \"gradT_excess_alpha\")."
 
 [[gaps]]
 suite = "star"
 case = "make_brown_dwarf"
 issue = "#154"
-reason = "create_initial_model rescales a ZAMS model instead of relaxing a polytrope, producing a 17x smaller radius (audit M-6)."
+reason = "create_initial_model rescales ZAMS instead of relaxing a polytrope (audit M-6). Reaches 300s wall-time guard at step 582 (final rel_star_age=-99.19%, final d_log_L=+5.655, final d_log_Teff=+1.897, max |d_log_center_Rho|=3.851, first_div_step=2)."
 
 [[gaps]]
 suite = "star"
 case = "make_co_wd"
 issue = "#157"
-reason = "Case history_columns.list requests unported MLT++ gradT_excess_* columns."
+reason = "Case history_columns.list requests unported MLT++ gradT_excess_alpha column. Fails loudly at startup (ValueError: invalid star input: history_columns.list line 930: unsupported or unknown history column \"gradT_excess_alpha\")."
+
+[[gaps]]
+suite = "star"
+case = "make_env"
+issue = "#154"
+reason = "Envelope initial-model construction and boundary relaxation (#154). Terminates with 'max_age' (expected 'max_age') in 58 steps (final rel_star_age=+2.70%, final d_log_L=-0.5663, final d_log_Teff=-2.552, max |d_log_center_Rho|=6.608, first_div_step=1)."
+
+[[gaps]]
+suite = "star"
+case = "make_he_wd"
+issue = "#154"
+reason = "Mass-removal / He-WD relaxation times out (#154, #159). Reaches 300s wall-time guard at step 71 (final rel_star_age=-99.30%, final d_log_L=+3.85, final d_log_Teff=+0.9237, max |d_log_L|=1.261, first_div_step=14)."
+
+[[gaps]]
+suite = "star"
+case = "make_metals"
+issue = "#154"
+reason = "Initial composition/entropy relaxation and burning trajectory (#154, #152). Terminates with 'xa_central_lower_limit(he4)' (expected 'xa_central_lower_limit') in 1326 steps (final rel_star_age=+60.20%, final d_log_L=-0.3215, final d_log_Teff=-0.4091, max |d_log_center_Rho|=1.714, first_div_step=2)."
 
 [[gaps]]
 suite = "star"
 case = "make_o_ne_wd"
 issue = "#157"
-reason = "Case history_columns.list requests unported MLT++ gradT_excess_* columns."
+reason = "Case history_columns.list requests unported MLT++ gradT_excess_alpha column. Fails loudly at startup (ValueError: invalid star input: history_columns.list line 930: unsupported or unknown history column \"gradT_excess_alpha\")."
+
+[[gaps]]
+suite = "star"
+case = "make_planets"
+issue = "#154"
+reason = "create_initial_model planetary relaxation not yet faithful to upstream. Reaches 300s wall-time guard at step 583 (final rel_star_age=-98.41%, final d_log_L=+1.419, final d_log_Teff=+1.02, max |d_log_center_Rho|=4.925, first_div_step=2)."
+
+[[gaps]]
+suite = "star"
+case = "make_sdb"
+issue = "#154"
+reason = "sdB envelope relaxation and He-core ignition time out (#154, #152). Reaches 300s wall-time guard at step 672 (final rel_star_age=+1321734.30%, final d_log_L=+0.1829, final d_log_Teff=-0.7302, max |d_log_center_Rho|=2.445, first_div_step=3)."
+
+[[gaps]]
+suite = "star"
+case = "make_zams"
+issue = "#154"
+reason = "Pre-MS relaxation and Lnuc_div_L_zams_limit default mismatch (#149, #154). Terminates with 'Lnuc_div_L_zams_limit' (expected 'Lnuc_div_L_zams_limit') in 565 steps (final rel_star_age=-7.69%, final d_log_L=+0.03998, final d_log_Teff=+0.005377, max |d_log_center_Rho|=0.1111, first_div_step=2)."
+
+[[gaps]]
+suite = "star"
+case = "make_zams_low_mass"
+issue = "#154"
+reason = "Pre-MS initial model construction and ZAMS stopping threshold (#149, #154). Terminates with 'Lnuc_div_L_zams_limit' (expected 'Lnuc_div_L_zams_limit') in 9 steps (final rel_star_age=-99.96%, final d_log_L=+2.235, final d_log_Teff=+0.2711, max |d_log_center_Rho|=2.572, first_div_step=2)."
+
+[[gaps]]
+suite = "star"
+case = "make_zams_ultra_high_mass"
+issue = "#154"
+reason = "Pre-MS initial model construction exits after 1 step (#149, #154). Terminates with 'Lnuc_div_L_zams_limit' (expected 'Lnuc_div_L_zams_limit') in 1 steps (final rel_star_age=+1186186.72%, final d_log_L=-4.895, final d_log_Teff=-1.117)."
 
 [[gaps]]
 suite = "star"
 case = "ns_c"
 issue = "#157"
-reason = "Case history_columns.list requests unported MLT++ gradT_excess_* columns."
+reason = "Case history_columns.list requests unported MLT++ gradT_excess_alpha column. Fails loudly at startup (ValueError: invalid star input: history_columns.list line 930: unsupported or unknown history column \"gradT_excess_alpha\")."
+
+[[gaps]]
+suite = "star"
+case = "ns_h"
+issue = "#161"
+reason = "Neutron-star H envelope burning stops on max_age_in_seconds (#161, #159). Terminates with 'max_age_in_seconds' (expected 'max_age') in 8 steps (final rel_star_age=+10.45%, final d_log_L=-0.8088, final d_log_Teff=-2.622, max |d_log_center_Rho|=5.094, first_div_step=1)."
+
+[[gaps]]
+suite = "star"
+case = "ns_he"
+issue = "#161"
+reason = "Neutron-star He envelope burning hits max_model_number instead of power_nuc_burn_upper_limit (#161, #159). Terminates with 'max_model_number' (expected 'power_nuc_burn_upper_limit') in 2000 steps (final rel_star_age=+896496.58%, final d_log_L=-1.753, final d_log_Teff=-2.859)."
+
+[[gaps]]
+suite = "star"
+case = "other_physics_hooks"
+issue = "#148"
+reason = "Tier5CaseExtras hits max_model_number with case-keyed hook overrides (#155, #159). Terminates with 'max_model_number' (expected 'xa_central_lower_limit') in 500 steps (final rel_star_age=-98.61%, final d_log_L=+0.2506, final d_log_Teff=+0.5686, max |d_log_center_Rho|=2.804, first_div_step=30)."
 
 [[gaps]]
 suite = "star"
 case = "pisn"
 issue = "#161"
-reason = "Case history_columns.list requests unported hydro shock and pair-instability diagnostics."
+reason = "Case history_columns.list requests unported hydro shock_mass and pair-instability columns. Fails loudly at startup (ValueError: invalid star input: history_columns.list line 716: unsupported or unknown history column \"shock_mass\")."
+
+[[gaps]]
+suite = "star"
+case = "ppisn"
+issue = "#148"
+reason = "Case-keyed Tier3CaseExtras terminates after 1 step instead of evolving pair-instability pulses (#161). Terminates with 'Successful test: evolved 100 days past first relax' (expected 'Successful test: evolved 100 days past first relax') in 1 steps (final rel_star_age=-99.97%, final d_log_L=-4.807, final d_log_Teff=-0.2627)."
+
+[[gaps]]
+suite = "star"
+case = "relax_composition_j_entropy"
+issue = "#154"
+reason = "3-stage composition, angular-momentum, and entropy relaxation times out (#154, #148). Reaches 300s wall-time guard at step 350 (final rel_star_age=+643104785.72%, final d_log_L=-11.83, final d_log_Teff=-0.9736, max |d_log_L|=3.841, first_div_step=2)."
+
+[[gaps]]
+suite = "star"
+case = "rsp_BEP"
+issue = "#162"
+reason = "Trajectory matches within all tolerances across 7255 steps, but Tier4CaseExtras emits extras_finish_step instead of native RSP_max_num_periods (#148, #159). Terminates with 'extras_finish_step' (expected 'RSP_max_num_periods|max_model_number') in 7255 steps (final rel_star_age=+0.00%)."
+
+[[gaps]]
+suite = "star"
+case = "rsp_Delta_Scuti"
+issue = "#162"
+reason = "RSP pulsation period and age drift over 100 cycles (#162). Terminates with 'extras_finish_step' (expected 'extras_finish_step') in 7973 steps (final rel_star_age=+34.79%, final d_log_L=-0.001474)."
+
+[[gaps]]
+suite = "star"
+case = "rsp_Type_II_Cepheid"
+issue = "#162"
+reason = "Tier4CaseExtras emits extras_finish_step instead of RSP_max_num_periods and log_L/log_Teff exceed strict tolerances (#162). Terminates with 'extras_finish_step' (expected 'RSP_max_num_periods|max_model_number') in 14650 steps (final rel_star_age=+0.05%, final d_log_L=-0.002298, final d_log_Teff=-0.0005743, max |d_log_L|=0.009513, first_div_step=4387)."
+
+[[gaps]]
+suite = "star"
+case = "rsp_gyre"
+issue = "#170"
+reason = "Depends on bundled GYRE linear modes in run_star_extras (#170). Terminates with 'extras_finish_step' (expected 'extras_finish_step') in 7328 steps (final rel_star_age=+133.88%)."
+
+[[gaps]]
+suite = "star"
+case = "semiconvection"
+issue = "#152"
+reason = "Newton iteration/retry control and default mismatches (audit M-3, #149). Terminates with 'xa_central_lower_limit(h1)' (expected 'xa_central_lower_limit') in 358 steps (final rel_star_age=+4.90%, final d_log_L=+0.001077, final d_log_Teff=-0.001652, max |d_log_center_Rho|=0.0456, first_div_step=3)."
+
+[[gaps]]
+suite = "star"
+case = "simplex_solar_calibration"
+issue = "#162"
+reason = "Simplex solar calibration optimizer times out under non-upstream simplex/solver loop (#162, #152). Reaches 300s wall-time guard at step 627 (final rel_star_age=+26.94%, final d_log_L=+0.03711, final d_log_Teff=+0.006018, max |d_log_center_Rho|=0.2166, first_div_step=1)."
+
+[[gaps]]
+suite = "star"
+case = "split_burn_big_net"
+issue = "#148"
+reason = "Case-keyed Tier3CaseExtras terminates after 1 step instead of evolving big-network Si burning (#161). Terminates with 'xa_central_lower_limit(si28)' (expected 'xa_central_lower_limit') in 1 steps (final rel_star_age=+67348937.02%, final d_log_L=-4.028, final d_log_Teff=+0.03881)."
 
 [[gaps]]
 suite = "star"
 case = "starspots"
 issue = "#158"
-reason = "Case history_columns.list requests unported starspot history columns."
+reason = "Case history_columns.list requests unported starspot cz_bot_radius column. Fails loudly at startup (ValueError: invalid star input: history_columns.list line 62: unsupported or unknown history column \"cz_bot_radius\")."
+
+[[gaps]]
+suite = "star"
+case = "timing"
+issue = "#148"
+reason = "Tier5CaseExtras hits max_model_number with case-keyed control overrides (#152). Terminates with 'max_model_number' (expected 'xa_central_lower_limit') in 500 steps (final rel_star_age=-91.02%, final d_log_L=-0.2788, final d_log_Teff=+0.5068, max |d_log_center_Rho|=2.94, first_div_step=26)."
+
+[[gaps]]
+suite = "star"
+case = "twin_studies"
+issue = "#148"
+reason = "Case-keyed Tier3CaseExtras terminates after 4 steps with overridden controls (#154). Terminates with 'stars have reached stopping age' (expected 'xa_central_lower_limit') in 4 steps (final rel_star_age=-1.00%, final d_log_L=-3.737, final d_log_Teff=-0.5858, max |d_log_L|=3.731, first_div_step=2)."
 
 [[gaps]]
 suite = "star"
 case = "tzo"
 issue = "#161"
-reason = "Case history_columns.list requests unported hydro shock history columns."
+reason = "Case history_columns.list requests unported colors add_abs_mag and hydro shock columns. Fails loudly at startup (ValueError: invalid star input: history_columns.list line 985: unsupported or unknown history column \"add_abs_mag\")."
 
 [[gaps]]
 suite = "star"
 case = "wd_acc_small_dm"
 issue = "#159"
-reason = "Case history_columns.list requests unported mass-adjustment energy-accounting columns."
+reason = "Case history_columns.list requests unported mass-adjustment logxq_below_const_q column. Fails loudly at startup (ValueError: invalid star input: history_columns.list line 957: unsupported or unknown history column \"logxq_below_const_q\")."
+
+[[gaps]]
+suite = "star"
+case = "wd_aic"
+issue = "#152"
+reason = "Accretion-induced collapse WD fails to converge on dt floor (#152, #159). Solver fails at step 88 (ValueError: star solver convergence failure: star_evolve_step failed after 4/100 retries (dt=1.000e-6 s, dt_floor=1.000e-6 s)) (final rel_star_age=-100.00%, final d_log_L=-5.074, final d_log_Teff=-2.584)."
+
+[[gaps]]
+suite = "star"
+case = "wd_c_core_ignition"
+issue = "#152"
+reason = "Accreting CO WD carbon ignition times out (#152, #159). Reaches 300s wall-time guard at step 344 (final rel_star_age=-86.33%, final d_log_L=+1.017, final d_log_Teff=-0.5797)."
 
 [[gaps]]
 suite = "star"
 case = "wd_cool_0.6M"
 issue = "#148"
-reason = "Case-keyed tier-2 overrides disable remeshing and burning, shortening cooling age by 9.5% (audit M-5)."
+reason = "Case-keyed Tier2CaseExtras disables remeshing and burning (audit M-5). Terminates with 'log_center_temp_lower_limit' (expected 'log_center_temp_lower_limit') in 404 steps (final rel_star_age=-17.19%, final d_log_L=+0.01348, final d_log_Teff=+0.003571, max |d_log_L|=0.1597, first_div_step=3)."
+
+[[gaps]]
+suite = "star"
+case = "wd_diffusion"
+issue = "#148"
+reason = "Case-keyed Tier2CaseExtras terminates after 1 step instead of evolving WD diffusion (#156). Terminates with 'Teff_lower_limit' (expected 'Teff_lower_limit') in 1 steps (final rel_star_age=-99.99%, final d_log_L=+2.968, final d_log_Teff=-0.184)."
+
+[[gaps]]
+suite = "star"
+case = "wd_he_shell_ignition"
+issue = "#152"
+reason = "Accreting WD He-shell ignition fails to converge on dt floor (#152, #159). Solver fails at step 454 (ValueError: star solver convergence failure: star_evolve_step failed after 29/100 retries (dt=1.000e-12 s, dt_floor=1.000e-12 s)) (final rel_star_age=-76.63%, final d_log_L=-1.42, final d_log_Teff=-0.531, max |d_log_L|=1.304, first_div_step=10)."
+
+[[gaps]]
+suite = "star"
+case = "wd_nova_burst"
+issue = "#152"
+reason = "Classical nova burst fails or times out under non-upstream solver/mass-change control (#152, #159). Reaches 300s wall-time guard at step 628 (final rel_star_age=-55.43%, final d_log_L=-4.212, final d_log_Teff=-1.493, max |d_log_L|=0.9861, first_div_step=1)."
+
+[[gaps]]
+suite = "star"
+case = "wd_stable_h_burn"
+issue = "#152"
+reason = "Stable H-burning accreting WD fails to converge on dt floor (#152, #159). Solver fails at step 79 (ValueError: star solver convergence failure: star_evolve_step failed after 12/100 retries (dt=1.000e-12 s, dt_floor=1.000e-12 s)) (final rel_star_age=-92.62%, final d_log_L=-3.226, final d_log_Teff=-0.9145, max |d_log_L|=0.4399, first_div_step=22)."
+
+[[gaps]]
+suite = "star"
+case = "zams_to_cc_80"
+issue = "#148"
+reason = "Case-keyed Tier3CaseExtras terminates after 1 step instead of evolving to core collapse (#152, #161). Terminates with 'fe_core_infall_limit' (expected 'fe_core_infall_limit') in 1 steps (final rel_star_age=-100.00%, final d_log_L=-5.024, final d_log_Teff=-1.611)."
 
 [[gaps]]
 suite = "binary"
 case = "double_bh"
 issue = "#161"
-reason = "Component stellar history_columns.list requests unported hydro/colors columns and coupled orbit departs (#160)."
+reason = "Component history_columns.list requests unported gradT_excess_alpha/hydro/colors columns (#157, #161) and coupled binary orbit (#160). Fails loudly at startup (ValueError: invalid star input: history_columns.list line 55: unsupported or unknown history column \"gradT_excess_alpha\")."
+
+[[gaps]]
+suite = "binary"
+case = "evolve_both_stars"
+issue = "#160"
+reason = "Coupled two-star binary RLOF evolution times out. Reaches 300s wall-time guard at step 978 (final rel_age=+6.48%, final d_star_1_mass=+0.002816, final d_star_2_mass=-0.002816, max |d_star_1_mass|=0.03454, first_div_step=183)."
+
+[[gaps]]
+suite = "binary"
+case = "jdot_gr_check"
+issue = "#160"
+reason = "Coupled binary gravitational-wave inspiral age differs from MESA 26.4.1. Terminates with 'GrCheckPass' (expected 'max_age|extras_binary_finish_step') in 225 steps (final rel_age=-0.59%, max |d_star_1_mass|=0)."
+
+[[gaps]]
+suite = "binary"
+case = "jdot_ls_check"
+issue = "#160"
+reason = "Coupled binary spin-orbit synchronization age differs from MESA 26.4.1. Terminates with 'max_age' (expected 'max_age|max_model_number') in 224 steps (final rel_age=+0.23%)."
+
+[[gaps]]
+suite = "binary"
+case = "jdot_ml_check"
+issue = "#160"
+reason = "Coupled binary mass-loss orbital evolution differs from MESA 26.4.1. Terminates with 'max_age' (expected 'max_age|extras_binary_finish_step') in 885 steps (final rel_age=+0.05%, final d_star_1_mass=+0.002021, max |d_star_1_mass|=0.002181, first_div_step=462)."
+
+[[gaps]]
+suite = "binary"
+case = "star_plus_point_mass"
+issue = "#160"
+reason = "Implicit RLOF star+point-mass age and component masses differ from MESA 26.4.1. Terminates with 'xa_central_lower_limit(h1)' (expected 'xa_central_lower_limit') in 307 steps (final rel_age=+3.10%, final d_star_1_mass=-0.04402, final d_star_2_mass=+0.04402, max |d_star_2_mass|=0.03087, first_div_step=108)."
+
+[[gaps]]
+suite = "binary"
+case = "star_plus_point_mass_explicit_mdot"
+issue = "#160"
+reason = "Explicit RLOF star+point-mass age and component masses differ from MESA 26.4.1. Terminates with 'xa_central_lower_limit(h1)' (expected 'xa_central_lower_limit') in 596 steps (final rel_age=+3.16%, final d_star_1_mass=-0.03721, final d_star_2_mass=+0.03721, max |d_star_1_mass|=0.03119, first_div_step=109)."
+
+[[gaps]]
+suite = "binary"
+case = "wind_fed_bhhmxb"
+issue = "#160"
+reason = "Wind-fed BH-HMXB donor mass and age differ from MESA 26.4.1. Terminates with 'xa_central_lower_limit(h1)' (expected 'xa_central_lower_limit') in 393 steps (final rel_age=+0.23%, final d_star_1_mass=+0.1784, final d_star_2_mass=+0.001071, max |d_star_1_mass|=2.398, first_div_step=128)."
+
+[[gaps]]
+suite = "astero"
+case = "astero_adipls"
+issue = "#171"
+reason = "Depends on bundled ADIPLS (#171) and astero mode-matching driver (#162). Terminates with 'xa_central_lower_limit(h1)' (expected 'xa_central_lower_limit') in 480 steps (final rel_star_age=+2.05%, final d_log_L=+0.002377, final d_log_Teff=-0.0006405, max |d_log_L|=0.07016, first_div_step=2)."
+
+[[gaps]]
+suite = "astero"
+case = "astero_gyre"
+issue = "#170"
+reason = "Depends on bundled GYRE (#170) and astero mode-matching driver (#162). Terminates with 'xa_central_lower_limit(h1)' (expected 'xa_central_lower_limit') in 480 steps (final rel_star_age=+2.05%, final d_log_L=+0.002377, final d_log_Teff=-0.0006405, max |d_log_L|=0.07016, first_div_step=2)."
+
+[[gaps]]
+suite = "astero"
+case = "example_astero"
+issue = "#162"
+reason = "Asteroseismic search driver and in-house pulsation scaffolding (#162, #171). Terminates with 'astero_use_first_values_samples=1_best_chi2=1.819976e1_term=limit_num_chi2_too_big' (expected 'xtra1') in 910 steps (final rel_star_age=+0.53%, final d_log_Teff=-0.001856, final d_log_g=-0.007276, max |d_log_L|=0.1611, first_div_step=2)."
+
+[[gaps]]
+suite = "astero"
+case = "fast_from_file"
+issue = "#162"
+reason = "Asteroseismic from_file driver and in-house pulsation scaffolding (#162, #171). Terminates with 'astero_from_file_samples=2_best_chi2=6.300590e0_term=xtra1' (expected 'xtra1') in 934 steps (final rel_star_age=+3.82%, max |d_log_L|=0.1057, first_div_step=2)."
+
+[[gaps]]
+suite = "astero"
+case = "fast_newuoa"
+issue = "#162"
+reason = "Asteroseismic NEWUOA optimizer times out with in-house pulsation scaffolding (#162, #171). Reaches 300s wall-time guard at step 533 (final rel_star_age=+0.00%, final d_log_L=+0.02289, final d_log_Teff=+0.001545, max |d_log_L|=0.1228, first_div_step=2)."
+
+[[gaps]]
+suite = "astero"
+case = "fast_scan_grid"
+issue = "#162"
+reason = "Asteroseismic scan_grid driver and in-house pulsation scaffolding (#162, #171). Terminates with 'astero_scan_grid_samples=4_best_chi2=9.929687e0_term=xtra1' (expected 'xtra1') in 1733 steps (final rel_star_age=+107.34%, final d_log_L=-0.01692, final d_log_Teff=-0.00293, max |d_log_g|=0.07131, first_div_step=2)."
+
+[[gaps]]
+suite = "astero"
+case = "fast_simplex"
+issue = "#162"
+reason = "Asteroseismic simplex optimizer and in-house pulsation scaffolding (#162, #171). Terminates with 'astero_simplex_samples=5_best_chi2=1.127609e4_term=xtra1' (expected 'xtra1') in 2619 steps (final rel_star_age=+112.09%, final d_log_L=+0.5806, final d_log_Teff=+0.04953, max |d_log_L|=0.7878, first_div_step=2)."
+
+[[gaps]]
+suite = "astero"
+case = "surface_effects"
+issue = "#162"
+reason = "Asteroseismic surface-effects starting model and ADIPLS scaffolding (#162, #171). Terminates with 'max_model_number' (expected 'max_model_number') in 0 steps (final rel_star_age=-0.00%, final d_log_L=-0.005853, final d_log_Teff=-0.001466)."

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import contextlib
 import json
 import os
@@ -11,6 +12,7 @@ import pathlib
 import sys
 import tempfile
 
+from flexmesa.data import fetch
 from flexmesa.testing import case_manifest, case_report, harness_runner
 
 
@@ -214,6 +216,7 @@ def _build_harness_parser() -> argparse.ArgumentParser:
     )
     p_tbl.add_argument("--manifest", default=None)
     p_tbl.add_argument("--known-gaps", default=None)
+    p_tbl.add_argument("--baseline-json", default=None)
     p_tbl.add_argument(
         "--markdown-out",
         default=str(
@@ -246,11 +249,22 @@ def _build_harness_parser() -> argparse.ArgumentParser:
         help="Explicit case names or '<suite>/<case>' identifiers to execute.",
     )
     p_run.add_argument("--work-dir", default=None)
+    p_run.add_argument(
+        "--jobs",
+        type=int,
+        default=1,
+        help="Number of concurrent case workers to launch.",
+    )
     p_run.add_argument("--max-steps", type=_non_negative_int, default=None)
     p_run.add_argument("--timeout-sec", type=float, default=600.0)
     p_run.add_argument("--max-rss-gb", type=float, default=6.0)
     p_run.add_argument("--markdown-out", default=None)
     p_run.add_argument("--json-out", default=None)
+    p_run.add_argument(
+        "--save-baseline",
+        default=None,
+        help="Write timing-normalized baseline JSON for 'harness table'.",
+    )
     p_run.add_argument(
         "--gate",
         action="store_true",
@@ -264,7 +278,7 @@ def _build_harness_parser() -> argparse.ArgumentParser:
 
 def _handle_table_subcommand(ns: argparse.Namespace) -> int:
     manifest, gaps, records = case_report.build_manifest_inventory_records(
-        ns.manifest, ns.known_gaps
+        ns.manifest, ns.known_gaps, ns.baseline_json
     )
     payload = case_report.build_report_payload(manifest, records, gaps)
     md_text = case_report.render_case_table_markdown(
@@ -296,6 +310,37 @@ def _handle_table_subcommand(ns: argparse.Namespace) -> int:
     return 0
 
 
+def _execute_one_entry(
+    entry: case_manifest.CaseManifestEntry,
+    gaps: dict[tuple[str, str], case_manifest.KnownGapSpec],
+    work_root: pathlib.Path,
+    mesa_dir: str | None,
+    max_steps: int | None,
+    timeout_sec: float | None,
+    max_rss_gb: float | None,
+    base_dir: pathlib.Path | None,
+) -> harness_runner.CaseHarnessRecord:
+    case_dir = harness_runner.resolve_case_dir(
+        entry.suite, entry.case, mesa_dir=mesa_dir
+    )
+    out_dir = work_root / entry.suite / entry.case
+    outcome = harness_runner.run_traced_case(
+        entry.suite,
+        case_dir,
+        out_dir,
+        max_steps=max_steps,
+        timeout_sec=timeout_sec,
+        max_rss_gb=max_rss_gb,
+    )
+    return harness_runner.evaluate_case_record(
+        entry,
+        gaps,
+        outcome,
+        max_steps=max_steps,
+        root_dir=base_dir,
+    )
+
+
 def harness_main(argv: list[str] | None = None) -> int:
     """Execute ``flexmesa harness table|run``.
 
@@ -310,6 +355,11 @@ def harness_main(argv: list[str] | None = None) -> int:
     if ns.subcommand == "table":
         return _handle_table_subcommand(ns)
 
+    print(
+        f"[harness] upstream reference: "
+        f"{fetch.load_upstream_reference().summary_line()}",
+        flush=True,
+    )
     manifest = case_manifest.load_case_manifest(ns.manifest)
     gaps = case_manifest.load_known_gaps(ns.known_gaps)
     selected = _select_entries(manifest, ns.preset, ns.cases)
@@ -325,33 +375,58 @@ def harness_main(argv: list[str] | None = None) -> int:
             work_root = pathlib.Path(ns.work_dir)
             work_root.mkdir(parents=True, exist_ok=True)
 
-        records = []
-        for entry in selected:
-            case_dir = harness_runner.resolve_case_dir(
-                entry.suite, entry.case, mesa_dir=ns.mesa_dir
-            )
-            out_dir = work_root / entry.suite / entry.case
-            outcome = harness_runner.run_traced_case(
-                entry.suite,
-                case_dir,
-                out_dir,
-                max_steps=ns.max_steps,
-                timeout_sec=ns.timeout_sec,
-                max_rss_gb=ns.max_rss_gb,
-            )
-            rec = harness_runner.evaluate_case_record(
-                entry,
-                gaps,
-                outcome,
-                max_steps=ns.max_steps,
-                root_dir=base_dir,
-            )
-            records.append(rec)
-            print(
-                f"[harness] {rec.suite}/{rec.case}: verdict={rec.verdict} "
-                f"term={rec.observed_termination or 'none'} "
-                f"steps={rec.steps} wall={rec.wall_time_sec:.1f}s"
-            )
+        jobs = max(1, int(ns.jobs))
+        if jobs == 1:
+            records: list[harness_runner.CaseHarnessRecord] = []
+            for entry in selected:
+                rec = _execute_one_entry(
+                    entry,
+                    gaps,
+                    work_root,
+                    ns.mesa_dir,
+                    ns.max_steps,
+                    ns.timeout_sec,
+                    ns.max_rss_gb,
+                    base_dir,
+                )
+                records.append(rec)
+                print(
+                    f"[harness] {rec.suite}/{rec.case}: verdict={rec.verdict} "
+                    f"term={rec.observed_termination or 'none'} "
+                    f"steps={rec.steps} wall={rec.wall_time_sec:.1f}s",
+                    flush=True,
+                )
+        else:
+            indexed_records: dict[int, harness_runner.CaseHarnessRecord] = {}
+            with concurrent.futures.ThreadPoolExecutor(
+                max_workers=jobs
+            ) as pool:
+                fut_to_idx = {
+                    pool.submit(
+                        _execute_one_entry,
+                        entry,
+                        gaps,
+                        work_root,
+                        ns.mesa_dir,
+                        ns.max_steps,
+                        ns.timeout_sec,
+                        ns.max_rss_gb,
+                        base_dir,
+                    ): idx
+                    for idx, entry in enumerate(selected)
+                }
+                for fut in concurrent.futures.as_completed(fut_to_idx):
+                    idx = fut_to_idx[fut]
+                    rec = fut.result()
+                    indexed_records[idx] = rec
+                    print(
+                        f"[harness] [{len(indexed_records)}/{len(selected)}] "
+                        f"{rec.suite}/{rec.case}: verdict={rec.verdict} "
+                        f"term={rec.observed_termination or 'none'} "
+                        f"steps={rec.steps} wall={rec.wall_time_sec:.1f}s",
+                        flush=True,
+                    )
+            records = [indexed_records[i] for i in range(len(selected))]
 
         payload = case_report.build_report_payload(manifest, records, gaps)
         if ns.markdown_out:
@@ -369,6 +444,16 @@ def harness_main(argv: list[str] | None = None) -> int:
             jpath.parent.mkdir(parents=True, exist_ok=True)
             jpath.write_text(
                 json.dumps(payload, indent=2, allow_nan=False) + "\n",
+                encoding="utf-8",
+            )
+        if ns.save_baseline:
+            bpath = pathlib.Path(ns.save_baseline)
+            bpath.parent.mkdir(parents=True, exist_ok=True)
+            b_payload = case_report.build_deterministic_baseline_payload(
+                manifest, records, gaps
+            )
+            bpath.write_text(
+                json.dumps(b_payload, indent=2, allow_nan=False) + "\n",
                 encoding="utf-8",
             )
 

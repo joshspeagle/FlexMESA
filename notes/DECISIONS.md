@@ -35,6 +35,7 @@ Scope and the `v0.1.0` definition are in [`SCOPE.md`](SCOPE.md). Work is tracked
 | 18 | Upstream MESA 26.4.1 LOGS/history.data, profileN.data, profiles.index, and binary_history.data Architecture | In force | below |
 | 19 | Upstream-History End-to-End Harness, Reference-Availability Manifest, and Per-PR Trajectory Gate | In force | below |
 | 20 | History-Harness Tolerances for Strict Mode | In force | below |
+| 21 | Packages Are Closed on Evidence by the Authoring Agent | In force; replaces the "ready for verification" hand-off in decision 17 | below |
 
 ## Pre-audit decisions still in force
 
@@ -186,3 +187,14 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
   - *Keeping the earlier values until `#141` supplies the `26.4.1` histories*: the first acceptance passes would then be judged by tolerances nobody decided.
   - *Bit-identical trajectories as the criterion*: that is the goal tracked by the first diverging step (`#165`, level 3), but it cannot be the gate while operation order in the solver and mesh still differs from upstream's.
   - *Tolerances derived from the spread between two real MESA builds*: the right basis eventually; it needs `#141` to run the suite on two machines and is recorded there as a follow-up.
+
+---
+
+## DECISIONS #21: Packages Are Closed on Evidence by the Authoring Agent
+
+- **Date**: 2026-11-16
+- **Decision**: The authoring agent closes its own package issue when the pull request is merged and a closing comment links every acceptance criterion to its evidence: a CI run, a script-generated artifact committed in the repository, or a `file:line`. Criteria about agreement with MESA need a script-generated comparison against real MESA `26.4.1` output whose header records the MESA version string, compiler and SDK; the agent with the local MESA build runs it and commits the reference outputs and their recipe. Unmet criteria are named and moved to a specific open issue. The independent review audits closed packages afterwards and reopens any whose evidence does not hold. This replaces the "ready for verification" hand-off in `DECISIONS #17`.
+- **Why**: Under the earlier rule the author could not close a package and the reviewing session often could not either, because it has neither the built Python extension nor the local MESA `26.4.1` build. Three packages (`#145`, `#163`, `#143`) were left open with nobody able to finish them. What the earlier rule was protecting against is completion by assertion; requiring linked, generated evidence keeps that protection without requiring a second party to be present.
+- **Alternatives Rejected**:
+  - *Keeping the reviewer as the only one who may close*: stalls every package on an environment the reviewer does not have.
+  - *Letting the author close on its own report*: this is what produced the unsupported claims the audit found.

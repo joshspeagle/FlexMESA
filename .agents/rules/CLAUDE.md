@@ -94,7 +94,13 @@
 3. **Translate Upstream Faithfully**: Port upstream's algorithm in upstream's order of operations; do not substitute a simpler stand-in routine under the same name, and do not rearrange arithmetic on the strict path. Cite upstream `<module>/private/<file>.f90:<line>` for every behavioural change.
 4. **Fail Loudly on Unsupported Inputs (`#147`)**: Unknown controls, unhandled option strings, missing data tables, and unreadable model files must return explicit errors, never silent defaults or synthesized fallbacks.
 5. **Bit-Identical Refactors**: Pure structural refactors are allowed only when strict-mode output is bit-identical before and after, verified with the harness.
-6. **Handoff Status**: No agent declares its own package complete. Mark finished packages `"ready for verification"`; completion is decided by a scheduled real-MESA run or an independent review session.
+6. **Closing a Package on Evidence (`DECISIONS #21`)**: A package is closed on evidence, not on a reviewer's sign-off. The authoring agent closes its own package issue once all of the following hold:
+   - The pull request is merged.
+   - A closing comment on the issue lists every acceptance criterion with a link to its evidence: a CI run, a script-generated artifact committed in the repository (case table, comparison report, reference vectors), or a `file:line`. A statement by the author without such a link is not evidence.
+   - Every criterion that concerns agreement with MESA is evidenced by a script-generated comparison against real MESA `26.4.1` output, where the reference file's own header records the MESA version string, compiler and SDK. The agent that has the local MESA `26.4.1` build runs that comparison itself and commits the reference outputs with the recipe that produced them.
+   - Any criterion not met is named and moved to a specific open issue in the closing comment.
+
+   If a criterion cannot be evidenced, the package stays open with a comment saying which one and what is needed. The independent review audits closed packages afterwards and reopens any whose evidence does not hold.
 
 ## Verification, Expected Values, Pass Criteria & Reporting Rules (`#145`, `DECISIONS #9` & `#17`)
 

@@ -13,7 +13,7 @@
 
 set -eu
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+ROOT_DIR="${MESA_GROUND_TRUTH_ROOT:-$HOME/mesa-ground-truth-26.4.1}"
 
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/env_mesa.sh"

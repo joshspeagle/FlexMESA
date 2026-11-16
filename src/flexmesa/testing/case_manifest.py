@@ -119,6 +119,13 @@ class CaseManifestEntry:
             cases cannot count as passing under ``notes/SCOPE.md``.
         scaffolding_issue: Linked ``#<number>`` issue when
             ``uses_pulsation_scaffolding`` is True.
+        uses_library_extras: True when running the case dispatches per-case
+            hooks inside library crates (``Tier1CaseExtras`` through
+            ``Tier5StarCaseExtras`` or ``tier5_extras``) slated for removal
+            under ``#148``; such cases emit ``declared gap (#148)`` rather than
+            ``pass``.
+        library_extras_issue: Linked ``#<number>`` issue when
+            ``uses_library_extras`` is True.
         departures: Tuple of documented ``DepartureSpec`` items.
     """
 
@@ -133,6 +140,8 @@ class CaseManifestEntry:
     pr_ci: bool = False
     uses_pulsation_scaffolding: bool = False
     scaffolding_issue: str = ""
+    uses_library_extras: bool = False
+    library_extras_issue: str = ""
     departures: tuple[DepartureSpec, ...] = ()
 
     @property
@@ -220,7 +229,8 @@ def load_case_manifest(
 
     defaults_raw = data.get("defaults", {})
     suite_defaults: dict[
-        str, tuple[str, dict[str, float], dict[str, float]]
+        str,
+        tuple[str, dict[str, float], dict[str, float], bool, str],
     ] = {}
     for s_name in VALID_SUITES:
         s_block = defaults_raw.get(s_name, {})
@@ -235,7 +245,13 @@ def load_case_manifest(
             {},
             f"defaults.{s_name}.track_tolerances",
         )
-        suite_defaults[s_name] = (xcol, ftol, ttol)
+        def_lib_ext = bool(s_block.get("uses_library_extras", False))
+        def_lib_iss = str(s_block.get("library_extras_issue", "")).strip()
+        if def_lib_ext:
+            def_lib_iss = _validate_issue_ref(
+                def_lib_iss, f"defaults.{s_name}.library_extras_issue"
+            )
+        suite_defaults[s_name] = (xcol, ftol, ttol, def_lib_ext, def_lib_iss)
 
     raw_cases = data.get("cases", [])
     if not raw_cases:
@@ -273,7 +289,9 @@ def load_case_manifest(
         if not req_term:
             raise ValueError(f"{ctx}: required_termination cannot be empty")
 
-        def_x, def_ftol, def_ttol = suite_defaults[suite]
+        def_x, def_ftol, def_ttol, def_lib_ext, def_lib_iss = suite_defaults[
+            suite
+        ]
         inherit_defaults = bool(raw.get("inherit_default_tolerances", True))
         base_ftol = def_ftol if inherit_defaults else {}
         base_ttol = def_ttol if inherit_defaults else {}
@@ -290,6 +308,15 @@ def load_case_manifest(
         if uses_scaff:
             scaff_issue = _validate_issue_ref(
                 scaff_issue, f"{ctx}.scaffolding_issue"
+            )
+
+        uses_lib_ext = bool(raw.get("uses_library_extras", def_lib_ext))
+        lib_ext_issue = str(
+            raw.get("library_extras_issue", def_lib_iss)
+        ).strip()
+        if uses_lib_ext:
+            lib_ext_issue = _validate_issue_ref(
+                lib_ext_issue, f"{ctx}.library_extras_issue"
             )
 
         deps: list[DepartureSpec] = []
@@ -315,6 +342,8 @@ def load_case_manifest(
                 pr_ci=bool(raw.get("pr_ci", False)),
                 uses_pulsation_scaffolding=uses_scaff,
                 scaffolding_issue=scaff_issue,
+                uses_library_extras=uses_lib_ext,
+                library_extras_issue=lib_ext_issue,
                 departures=tuple(deps),
             )
         )

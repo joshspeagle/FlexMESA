@@ -7,12 +7,12 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 
 | Namelist | Upstream `26.4.1` Scalars | Matched in `FlexMESA` | Agree | Value Mismatch | Active Limit Disabled (`None`) | Unimplemented in `FlexMESA` |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| star &controls | 1396 | 512 | 463 | 33 | 16 | 884 |
-| star &star_job | 431 | 78 | 61 | 11 | 6 | 353 |
+| star &controls | 1396 | 582 | 534 | 32 | 16 | 814 |
+| star &star_job | 431 | 80 | 63 | 11 | 6 | 351 |
 | binary &binary_controls + &binary_job | 209 | 120 | 117 | 3 | 0 | 89 |
-| astero &astero_search_controls | 150 | 71 | 68 | 3 | 0 | 79 |
-| eos &eos | 102 | 35 | 23 | 12 | 0 | 67 |
-| kap &kap | 36 | 11 | 9 | 2 | 0 | 25 |
+| astero &astero_search_controls | 150 | 73 | 70 | 3 | 0 | 77 |
+| eos &eos | 102 | 54 | 42 | 12 | 0 | 48 |
+| kap &kap | 36 | 16 | 14 | 2 | 0 | 20 |
 
 ## star &controls
 
@@ -20,7 +20,6 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | `accretion_h1` | `star/defaults/controls.defaults:5669` | `0` | `crates/flexmesa-star/src/controls_defaults.rs:84` | `-1.0` | numeric mismatch |
 | `accretion_he4` | `star/defaults/controls.defaults:5672` | `0` | `crates/flexmesa-star/src/controls_defaults.rs:85` | `-1.0` | numeric mismatch |
-| `atm_T_tau_errtol` | `star/defaults/controls.defaults:4452` | `1d-7` | `crates/flexmesa-star/src/rsp_config.rs:291` | `1.0e-4` | numeric mismatch |
 | `atm_table` | `star/defaults/controls.defaults:4521` | `'tau_100'` | `crates/flexmesa-star/src/controls_defaults.rs:37` | `String::new()` | string/option mismatch |
 | `column_depth_for_irradiation` | `star/defaults/controls.defaults:4713` | `-1` | `crates/flexmesa-star/src/controls_defaults.rs:73` | `0.0` | numeric mismatch |
 | `conv_core_gap_dq_limit` | `star/defaults/controls.defaults:857` | `0d0` | `crates/flexmesa-star/src/controls_defaults.rs:139` | `None` | active upstream limit disabled as None |

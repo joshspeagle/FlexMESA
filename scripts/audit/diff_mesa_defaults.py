@@ -12,10 +12,12 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import math
+import os
 import pathlib
 import re
 import sys
 
+os.environ.setdefault("JAX_PLATFORMS", "cpu")
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
@@ -53,6 +55,22 @@ ENUM_VALUE_MAP: dict[str, str] = {
     "AtmTTauRelation::TrampedachSolar": "Trampedach_solar",
     "EnergyEqnOption::Dedt": "dedt",
     "EnergyEqnOption::EpsGrav": "eps_grav",
+    "KapOption::Gn93": "gn93",
+    "KapOption::Gs98": "gs98",
+    "KapOption::A09": "a09",
+    "KapOption::OpGs98": "OP_gs98",
+    "KapOption::OpA09": "OP_a09_nans_removed_by_hand",
+    "KapCoOption::Gn93Co": "gn93_co",
+    "KapCoOption::Gs98Co": "gs98_co",
+    "KapCoOption::A09Co": "a09_co",
+    "KapLowTOption::LowTFa05Gs98": "lowT_fa05_gs98",
+    "KapLowTOption::LowTFa05Gn93": "lowT_fa05_gn93",
+    "KapLowTOption::LowTFa05A09p": "lowT_fa05_a09p",
+    "KapLowTOption::LowTFreedman11": "lowT_Freedman11",
+    "KapLowTOption::KapCn": "kapCN",
+    "KapLowTOption::Aesopus": "AESOPUS",
+    "SkyeSolidMixingRule::Pc": "PC",
+    "SkyeSolidMixingRule::Ogata": "Ogata",
 }
 
 FIELD_ALIASES: dict[str, str] = {
@@ -64,6 +82,11 @@ FIELD_ALIASES: dict[str, str] = {
     "kap_prefix": "kap_file_prefix",
     "co_prefix": "kap_co_prefix",
     "low_t_prefix": "kap_lowt_prefix",
+    "kap_option": "kap_file_prefix",
+    "kap_co_option": "kap_co_prefix",
+    "kap_low_t_option": "kap_lowt_prefix",
+    "kap_blend_log_t_upper_bdy": "kap_blend_logt_upper_bdy",
+    "kap_blend_log_t_lower_bdy": "kap_blend_logt_lower_bdy",
     "blend_logt_upper": "kap_blend_logt_upper_bdy",
     "blend_logt_lower": "kap_blend_logt_lower_bdy",
     "include_electron_conduction": "use_simple_es_for_kap",
@@ -243,44 +266,57 @@ def _parse_rust_expr(expr: str) -> tuple[bool | float | str | None, bool]:
         return None, False
 
 
+STRUCT_PREFIX_MAP: dict[str, str] = {
+    "RspConfig": "rsp_",
+}
+SKIP_DEFAULT_STRUCTS: frozenset[str] = frozenset({"Rsp2Config"})
+
+
 def parse_rust_defaults(rel_files: tuple[str, ...]) -> dict[str, RustDefault]:
     """Extract scalar field initializers inside ``impl Default`` blocks."""
     out: dict[str, RustDefault] = {}
+    impl_re = re.compile(r"impl\s+Default\s+for\s+([A-Za-z_][A-Za-z0-9_]*)")
     field_re = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)\s*:\s*([^,\n]+)")
     for rel in rel_files:
         fpath = REPO_ROOT / rel
         lines = fpath.read_text(encoding="utf-8").splitlines()
         in_default = False
+        cur_struct = ""
         brace_depth = 0
         for lno, raw_line in enumerate(lines, 1):
             code = raw_line.split("//", 1)[0]
             if not in_default:
-                if "impl Default for" in code:
+                im = impl_re.search(code)
+                if im is not None:
+                    cur_struct = im.group(1)
                     in_default = True
                     brace_depth = code.count("{") - code.count("}")
                 continue
             brace_depth += code.count("{") - code.count("}")
-            for match in field_re.finditer(code):
-                fname, expr = match.group(1), match.group(2).strip()
-                if fname == "Self":
-                    continue
-                val, is_none = _parse_rust_expr(expr)
-                if val is None and not is_none:
-                    continue
-                rec = RustDefault(
-                    field=fname,
-                    rel_file=rel,
-                    line=lno,
-                    raw_expr=expr,
-                    parsed=val,
-                    is_option_none=is_none,
-                )
-                low = fname.lower()
-                out.setdefault(low, rec)
-                if low in FIELD_ALIASES:
-                    out.setdefault(FIELD_ALIASES[low], rec)
+            if cur_struct not in SKIP_DEFAULT_STRUCTS:
+                prefix = STRUCT_PREFIX_MAP.get(cur_struct, "")
+                for match in field_re.finditer(code):
+                    fname, expr = match.group(1), match.group(2).strip()
+                    if fname == "Self":
+                        continue
+                    val, is_none = _parse_rust_expr(expr)
+                    if val is None and not is_none:
+                        continue
+                    rec = RustDefault(
+                        field=fname,
+                        rel_file=rel,
+                        line=lno,
+                        raw_expr=expr,
+                        parsed=val,
+                        is_option_none=is_none,
+                    )
+                    low = f"{prefix}{fname.lower()}"
+                    out.setdefault(low, rec)
+                    if low in FIELD_ALIASES:
+                        out.setdefault(FIELD_ALIASES[low], rec)
             if brace_depth <= 0:
                 in_default = False
+                cur_struct = ""
     return out
 
 
@@ -357,6 +393,9 @@ def generate_markdown(mesa_root: pathlib.Path) -> str:
         for uf in up_files:
             up_map.update(parse_mesa_defaults_file(mesa_root, uf))
         rust_map = parse_rust_defaults(rust_files)
+        rust_collapsed: dict[str, RustDefault] = {}
+        for rk, rv in rust_map.items():
+            rust_collapsed.setdefault(rk.replace("_", ""), rv)
 
         n_up = len(up_map)
         n_matched = 0
@@ -368,6 +407,8 @@ def generate_markdown(mesa_root: pathlib.Path) -> str:
         for key in sorted(up_map):
             u_ent = up_map[key]
             r_ent = rust_map.get(key)
+            if r_ent is None:
+                r_ent = rust_collapsed.get(key.replace("_", ""))
             if r_ent is None:
                 continue
             n_matched += 1

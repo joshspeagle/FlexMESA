@@ -353,7 +353,15 @@ def build_manifest_inventory_records(
     resolved_baseline: pathlib.Path | None = None
     if baseline_json_path is not None:
         resolved_baseline = pathlib.Path(baseline_json_path)
-    elif manifest_path is None:
+        if not resolved_baseline.is_file():
+            raise FileNotFoundError(
+                f"missing baseline JSON: {resolved_baseline}"
+            )
+    elif (
+        manifest_path is None
+        or pathlib.Path(manifest_path).resolve()
+        == case_manifest.default_manifest_path().resolve()
+    ):
         cand = default_baseline_json_path()
         if cand.is_file():
             resolved_baseline = cand

@@ -186,7 +186,7 @@ reason = "Depends on bundled GYRE (#170) and Tier4CaseExtras 2-step cutoff (#148
 suite = "star"
 case = "gyre_in_mesa_envelope"
 issue = "#170"
-reason = "Depends on bundled GYRE (#170) and Tier4CaseExtras 4-step cutoff (#148). Terminates with 'max_model_number' (expected 'steps_to_take_before_terminate|extras_finish_step') in 4 steps (final rel_star_age=-99.29%, final d_log_L=-0.2988, final d_log_Teff=+0.05616)."
+reason = "Depends on bundled GYRE (#170) and Tier4CaseExtras 4-step cutoff (#148). Terminates with 'max_model_number' in 4 steps vs 500 in MESA 26.4.1 (final rel_star_age=-99.29%, final d_log_L=-0.2988, final d_log_Teff=+0.05616)."
 
 [[gaps]]
 suite = "star"
@@ -377,8 +377,20 @@ reason = "3-stage composition, angular-momentum, and entropy relaxation times ou
 [[gaps]]
 suite = "star"
 case = "rsp_BEP"
-issue = "#162"
-reason = "Trajectory matches within all tolerances across 7255 steps, but Tier4CaseExtras emits extras_finish_step instead of native RSP_max_num_periods (#148, #159). Terminates with 'extras_finish_step' (expected 'RSP_max_num_periods|max_model_number') in 7255 steps (final rel_star_age=+0.00%)."
+issue = "#148"
+reason = "Meets all MESA 26.4.1 tolerances across 7255 steps (rel_star_age=+5.25e-10, d_log_L=+1.68e-10, d_log_Teff=-3.12e-10, d_log_R=+7.13e-10, max |d_log_L|=1.19e-3), but crates/flexmesa-star/src/inlist_runner.rs:599-601 dispatches library-side Tier4CaseExtras (tier4_extras.rs:145-326) slated for removal under #148 (and omits run_star_extras.f90:153-183 extra history columns)."
+
+[[gaps]]
+suite = "star"
+case = "rsp_BLAP"
+issue = "#148"
+reason = "Meets all MESA 26.4.1 tolerances across 7318 steps (rel_star_age=-1.10e-10, d_log_L=+6.74e-12, d_log_Teff=-2.03e-12, d_log_R=+7.43e-12, max |d_log_L|=6.99e-5), but crates/flexmesa-star/src/inlist_runner.rs:599-601 dispatches library-side Tier4CaseExtras (tier4_extras.rs:145-326) slated for removal under #148 (and omits run_star_extras.f90:153-183 extra history columns)."
+
+[[gaps]]
+suite = "star"
+case = "rsp_Cepheid"
+issue = "#148"
+reason = "Meets all MESA 26.4.1 tolerances across 7266 steps (rel_star_age=-4.62e-9, d_log_L=+1.92e-10, d_log_Teff=+4.21e-11, d_log_R=+1.13e-11, max |d_log_L|=1.17e-3), but crates/flexmesa-star/src/inlist_runner.rs:599-601 dispatches library-side Tier4CaseExtras (tier4_extras.rs:145-326) slated for removal under #148 (and omits run_star_extras.f90:153-183 extra history columns)."
 
 [[gaps]]
 suite = "star"
@@ -388,15 +400,27 @@ reason = "RSP pulsation period and age drift over 100 cycles (#162). Terminates 
 
 [[gaps]]
 suite = "star"
+case = "rsp_RR_Lyrae"
+issue = "#148"
+reason = "Meets all MESA 26.4.1 tolerances across 7220 steps (rel_star_age=-2.14e-9, d_log_L=+6.86e-11, d_log_Teff=+1.14e-11, d_log_R=+1.07e-11, max |d_log_L|=8.56e-4), but crates/flexmesa-star/src/inlist_runner.rs:599-601 dispatches library-side Tier4CaseExtras (tier4_extras.rs:145-326) slated for removal under #148 (and omits run_star_extras.f90:153-183 extra history columns)."
+
+[[gaps]]
+suite = "star"
 case = "rsp_Type_II_Cepheid"
 issue = "#162"
-reason = "Tier4CaseExtras emits extras_finish_step instead of RSP_max_num_periods and log_L/log_Teff exceed strict tolerances (#162). Terminates with 'extras_finish_step' (expected 'RSP_max_num_periods|max_model_number') in 14650 steps (final rel_star_age=+0.05%, final d_log_L=-0.002298, final d_log_Teff=-0.0005743, max |d_log_L|=0.009513, first_div_step=4387)."
+reason = "Nonlinear RSP luminosity and Teff exceed strict tolerances over 20 cycles (#162) while running Tier4CaseExtras (#148). Terminates with 'extras_finish_step' in 14650 steps vs 14683 in MESA 26.4.1 (final rel_star_age=+0.05%, final d_log_L=-0.002298, final d_log_Teff=-0.0005743, max |d_log_L|=0.009513, first_div_step=4387)."
 
 [[gaps]]
 suite = "star"
 case = "rsp_gyre"
 issue = "#170"
 reason = "Depends on bundled GYRE linear modes in run_star_extras (#170). Terminates with 'extras_finish_step' (expected 'extras_finish_step') in 7328 steps (final rel_star_age=+133.88%)."
+
+[[gaps]]
+suite = "star"
+case = "rsp_save_and_load_file"
+issue = "#148"
+reason = "Meets all MESA 26.4.1 tolerances across 7266 2-stage save/load steps (rel_star_age=-5.54e-9, d_log_L=+2.30e-10, d_log_Teff=+4.98e-11, d_log_R=+1.54e-11, max |d_log_L|=8.00e-7), but crates/flexmesa-star/src/inlist_runner.rs:599-601 dispatches library-side Tier4CaseExtras (tier4_extras.rs:145-326) slated for removal under #148."
 
 [[gaps]]
 suite = "star"
@@ -432,7 +456,7 @@ reason = "Tier5CaseExtras hits max_model_number with case-keyed control override
 suite = "star"
 case = "twin_studies"
 issue = "#148"
-reason = "Case-keyed Tier3CaseExtras terminates after 4 steps with overridden controls (#154). Terminates with 'stars have reached stopping age' (expected 'xa_central_lower_limit') in 4 steps (final rel_star_age=-1.00%, final d_log_L=-3.737, final d_log_Teff=-0.5858, max |d_log_L|=3.731, first_div_step=2)."
+reason = "Case-keyed Tier3CaseExtras terminates after 4 steps with overridden controls (#154). Terminates with 'stars have reached stopping age' (expected 'forced_stop') in 4 steps (final rel_star_age=-1.00%, final d_log_L=-3.737, final d_log_Teff=-0.5858, max |d_log_L|=3.731, first_div_step=2)."
 
 [[gaps]]
 suite = "star"

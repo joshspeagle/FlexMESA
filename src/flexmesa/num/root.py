@@ -19,6 +19,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from flexmesa.num import brent as _brent
+
 
 def look_for_brackets(
     x: float,
@@ -71,19 +73,14 @@ def look_for_brackets(
             x1 = max(float(xmin), x1 - jump)
             x3 = min(float(xmax), x3 + jump)
             move_x1, move_x3 = True, True
-        elif y1 > 0.0:
-            if (y1 < y3 and x1 > xmin) or x3 >= xmax:
+        else:
+            prefer_left = (y1 < y3) if y1 > 0.0 else (y1 > y3)
+            if (prefer_left and x1 > xmin) or x3 >= xmax:
                 x1 = max(float(xmin), x1 - jump)
                 move_x1, move_x3 = True, False
             else:
                 x3 = min(float(xmax), x3 + jump)
                 move_x1, move_x3 = False, True
-        elif (y1 > y3 and x1 > xmin) or x3 >= xmax:
-            x1 = max(float(xmin), x1 - jump)
-            move_x1, move_x3 = True, False
-        else:
-            x3 = min(float(xmax), x3 + jump)
-            move_x1, move_x3 = False, True
 
         if move_x1:
             f1, _ = func(x1)
@@ -110,7 +107,7 @@ def safe_root_with_brackets(
     epsx: float = 1e-12,
     epsy: float = 1e-12,
 ) -> tuple[float, float]:
-    """Finds a root $x \\in [x_1, x_3]$ via Brent (`mod_root.f90:42-44`).
+    """Finds a root $x \\in [x_1, x_3]$ via Brent (`mod_root.f90:27-45`).
 
     Args:
         func: Callable returning ``(f(x), df_dx(x))``.
@@ -129,8 +126,6 @@ def safe_root_with_brackets(
         ValueError: If ``y1_in`` and ``y3_in`` have the same strict sign.
         RuntimeError: If iteration fails to converge.
     """
-    from flexmesa.num import brent as _brent
-
     max_iter = max(int(imax), 200)
     return _brent.brent_safe_zero(
         float(x1_in),
@@ -293,8 +288,8 @@ def safe_root_jax(
 ) -> jax.Array:
     """Solves $f(x^*(p), p) = 0$ on $[x_1, x_3]$ with implicit JAX VJP.
 
-    Uses safeguarded Newton-Raphson + bisection for the primal solve and
-    propagates reverse-mode cotangents via the implicit function theorem:
+    Uses safeguarded Brent root-finding (`brent_safe_zero`) for the primal solve
+    and propagates reverse-mode cotangents via the implicit function theorem:
     $$\\frac{\\partial x^*}{\\partial p}
       = -\\left(\\frac{\\partial f}{\\partial x}(x^*, p)\\right)^{-1}
         \\frac{\\partial f}{\\partial p}(x^*, p).$$

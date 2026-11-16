@@ -45,6 +45,7 @@ manifest-path = "crates/flexmesa-py/Cargo.toml"
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["src", "tests"]
+xfail_strict = true
 addopts = "--doctest-modules --strict-markers -m 'not slow'"
 markers = [
   "slow: marks full-grid or multi-step stellar evolution tests (> 5 s)",

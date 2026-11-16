@@ -13,10 +13,10 @@
     "reference_interim_0b2e6bb": 0,
     "reference_none_yet": 4,
     "executed_cases": 102,
-    "reaching_upstream_termination": 46,
-    "passing_mesa_26_4_1": 4,
+    "reaching_upstream_termination": 49,
+    "passing_mesa_26_4_1": 0,
     "interim_within_tolerance": 0,
-    "declared_known_gaps": 98,
+    "declared_known_gaps": 102,
     "undeclared_failures": [],
     "stale_known_gaps": []
   },
@@ -46,6 +46,7 @@
         "run_rows": 346,
         "overlap_min": 1528461.9711484513,
         "overlap_max": 4636012816.162683,
+        "ref_span": 4634484354.191534,
         "final_diffs": {
           "star_age": 44023132.05998707,
           "rel_star_age": 0.009495903873800303,
@@ -258,6 +259,7 @@
         "run_rows": 174,
         "overlap_min": 3417959.6895186016,
         "overlap_max": 867441373.2698476,
+        "ref_span": 2112287141.9150064,
         "final_diffs": {
           "star_age": -1248263728.3346775,
           "rel_star_age": -0.5899989215831684,
@@ -450,6 +452,7 @@
         "run_rows": 1,
         "overlap_min": 21522722.520769663,
         "overlap_max": 100.0,
+        "ref_span": 0.0024681054055690765,
         "final_diffs": {
           "star_age": -21522622.52323777,
           "rel_star_age": -0.9999953537476547,
@@ -522,6 +525,7 @@
         "run_rows": 534,
         "overlap_min": 12898537.049082298,
         "overlap_max": 13159900.437575571,
+        "ref_span": 261363.3884932734,
         "final_diffs": {
           "star_age": 207327462.36098337,
           "rel_star_age": 15.754485631897303,
@@ -714,6 +718,7 @@
         "run_rows": 1499,
         "overlap_min": 100000.0,
         "overlap_max": 10223762.758217627,
+        "ref_span": 10223762.757896123,
         "final_diffs": {
           "star_age": 139015981.45855674,
           "rel_star_age": 13.59734030866658,
@@ -906,6 +911,7 @@
         "run_rows": 1999,
         "overlap_min": 100000.0,
         "overlap_max": 9897046.674554497,
+        "ref_span": 9897046.674232993,
         "final_diffs": {
           "star_age": 189184794.51257834,
           "rel_star_age": 19.11527759073585,
@@ -1098,6 +1104,7 @@
         "run_rows": 707,
         "overlap_min": 12390663692.376759,
         "overlap_max": 12283976957.859339,
+        "ref_span": 18588854.476963043,
         "final_diffs": {
           "star_age": -125275588.99438286,
           "rel_star_age": -0.010095337210793216,
@@ -1169,6 +1176,7 @@
         "run_rows": 1895,
         "overlap_min": 380816.2417315671,
         "overlap_max": 12428193662.04219,
+        "ref_span": 12427812845.800459,
         "final_diffs": {
           "star_age": 108263599.55699539,
           "rel_star_age": 0.008711129107011807,
@@ -1361,6 +1369,7 @@
         "run_rows": 1,
         "overlap_min": 10136396.733443212,
         "overlap_max": 100.0,
+        "ref_span": 0.0008601993322372437,
         "final_diffs": {
           "star_age": -10136296.734303411,
           "rel_star_age": -0.9999901345613613,
@@ -1455,6 +1464,7 @@
         "run_rows": 561,
         "overlap_min": 98428376.62439732,
         "overlap_max": 107720082.69217448,
+        "ref_span": 9291706.067777157,
         "final_diffs": {
           "star_age": 1564286.2638684213,
           "rel_star_age": 0.014521769987297473,
@@ -1647,6 +1657,7 @@
         "run_rows": 2115,
         "overlap_min": 0.554033710999872,
         "overlap_max": 48548631.73280738,
+        "ref_span": 49538503.74532847,
         "final_diffs": {
           "star_age": -989872.5665547997,
           "rel_star_age": -0.01998188238734419,
@@ -1839,6 +1850,7 @@
         "run_rows": 164,
         "overlap_min": 992.1836857784873,
         "overlap_max": 21391.925373391874,
+        "ref_span": 21554.711029955037,
         "final_diffs": {
           "star_age": -1154.9693423416502,
           "rel_star_age": -0.0512252067037727,
@@ -2030,6 +2042,7 @@
         "run_rows": 49,
         "overlap_min": 50000.0,
         "overlap_max": 733797943.2589427,
+        "ref_span": 1671306239.5868287,
         "final_diffs": {
           "star_age": -937558296.327886,
           "rel_star_age": -0.5609565896972731,
@@ -2222,6 +2235,7 @@
         "run_rows": 544,
         "overlap_min": 100.0,
         "overlap_max": 5000.746544576547,
+        "ref_span": 4999.746544576547,
         "final_diffs": {
           "star_age": 114053584.18958129,
           "rel_star_age": 22807.311502974622,
@@ -2436,6 +2450,7 @@
         "run_rows": 12,
         "overlap_min": 21.736188011338538,
         "overlap_max": 235.3564031052803,
+        "ref_span": 125306.21748574817,
         "final_diffs": {
           "star_age": -125092.59727065424,
           "rel_star_age": -0.9981220757524061,
@@ -2627,6 +2642,7 @@
         "run_rows": 2474,
         "overlap_min": 1.0,
         "overlap_max": 195608.38124304623,
+        "ref_span": 195607.38124304623,
         "final_diffs": {
           "star_age": 14366.291726277675,
           "rel_star_age": 0.07344415221363829,
@@ -2862,6 +2878,7 @@
         "run_rows": 74,
         "overlap_min": 100000.0,
         "overlap_max": 5210518063.195497,
+        "ref_span": 5210418063.195497,
         "final_diffs": {
           "star_age": 2305902527.300912,
           "rel_star_age": 0.44254765060477547,
@@ -3054,6 +3071,7 @@
         "run_rows": 501,
         "overlap_min": 1088.4189829566064,
         "overlap_max": 10717878.392899124,
+        "ref_span": 10716789.973916167,
         "final_diffs": {
           "star_age": 33427209.211576715,
           "rel_star_age": 3.118827065039581,
@@ -3246,6 +3264,7 @@
         "run_rows": 1,
         "overlap_min": 3.168808781402895e-08,
         "overlap_max": 6.202011267637173e-19,
+        "ref_span": 6.201694386759032e-19,
         "final_diffs": {
           "star_age": 3.168808781340875e-08,
           "rel_star_age": 51093244507.24708,
@@ -3317,6 +3336,7 @@
         "run_rows": 375,
         "overlap_min": 363612.9822656518,
         "overlap_max": 12315976089.998549,
+        "ref_span": 12315612477.016283,
         "final_diffs": {
           "star_age": 5976151099239.8125,
           "rel_star_age": 485.23568538695633,
@@ -3509,6 +3529,7 @@
         "run_rows": 81,
         "overlap_min": 3417959.8657887755,
         "overlap_max": 751984195.862869,
+        "ref_span": 890522108.1647046,
         "final_diffs": {
           "star_age": -141955872.16762435,
           "rel_star_age": -0.15879797454473432,
@@ -3681,7 +3702,7 @@
       "case": "custom_colors",
       "reference_status": "mesa_26_4_1",
       "reference_path": "thinned/star/custom_colors.data",
-      "required_termination": "my termination condition",
+      "required_termination": "xa_central_lower_limit",
       "verdict": "declared gap (#159)",
       "executed": true,
       "run_status": "error",
@@ -3723,6 +3744,7 @@
         "run_rows": 475,
         "overlap_min": 440001000.0,
         "overlap_max": 752541428.9931339,
+        "ref_span": 312540428.9931339,
         "final_diffs": {
           "star_age": 98200352.40487432,
           "rel_star_age": 0.13049162294793779,
@@ -3914,6 +3936,7 @@
         "run_rows": 27,
         "overlap_min": 5101846.363211302,
         "overlap_max": 3000000000.0,
+        "ref_span": 2994898153.636789,
         "final_diffs": {
           "star_age": 478708023.0215006,
           "rel_star_age": 0.15956934100716685,
@@ -4103,6 +4126,7 @@
         "run_rows": 106,
         "overlap_min": 2802.786532097622,
         "overlap_max": 51547442.478481114,
+        "ref_span": 67755648.47101386,
         "final_diffs": {
           "star_age": -16211008.779064849,
           "rel_star_age": -0.23924703823952145,
@@ -4294,6 +4318,7 @@
         "run_rows": 2,
         "overlap_min": 1474.372167986484,
         "overlap_max": 22.0,
+        "ref_span": 14664093.10630788,
         "final_diffs": {
           "star_age": -14665545.478475865,
           "rel_star_age": -0.9999984998875746,
@@ -4345,18 +4370,18 @@
       "case": "gyre_in_mesa_envelope",
       "reference_status": "mesa_26_4_1",
       "reference_path": "benchmarks/history_harness/reference_histories/star/gyre_in_mesa_envelope.data",
-      "required_termination": "steps_to_take_before_terminate|extras_finish_step",
+      "required_termination": "max_model_number",
       "verdict": "declared gap (#170)",
       "executed": true,
       "run_status": "ok",
       "observed_termination": "max_model_number",
-      "termination_matches": false,
+      "termination_matches": true,
       "steps": 4,
       "retries": 0,
       "wall_time_sec": 0.0,
       "peak_rss_gb": 0.0,
       "known_gap_issue": "#170",
-      "known_gap_reason": "Depends on bundled GYRE (#170) and Tier4CaseExtras 4-step cutoff (#148). Terminates with 'max_model_number' (expected 'steps_to_take_before_terminate|extras_finish_step') in 4 steps (final rel_star_age=-99.29%, final d_log_L=-0.2988, final d_log_Teff=+0.05616).",
+      "known_gap_reason": "Depends on bundled GYRE (#170) and Tier4CaseExtras 4-step cutoff (#148). Terminates with 'max_model_number' in 4 steps vs 500 in MESA 26.4.1 (final rel_star_age=-99.29%, final d_log_L=-0.2988, final d_log_Teff=+0.05616).",
       "is_undeclared_failure": false,
       "is_stale_known_gap": false,
       "comparison": {
@@ -4365,6 +4390,7 @@
         "run_rows": 2,
         "overlap_min": 14781208.500205703,
         "overlap_max": 105489.53982036727,
+        "ref_span": 1627.7821997664869,
         "final_diffs": {
           "star_age": -14677346.742585102,
           "rel_star_age": -0.9928640527565119,
@@ -4435,6 +4461,7 @@
         "run_rows": 2,
         "overlap_min": 363612.9822656518,
         "overlap_max": 22.0,
+        "ref_span": 8721633751.126102,
         "final_diffs": {
           "star_age": -8721997342.108368,
           "rel_star_age": -0.999999997477642,
@@ -4506,6 +4533,7 @@
         "run_rows": 2,
         "overlap_min": 89.06569364597105,
         "overlap_max": 18.0,
+        "ref_span": 10806.374419526946,
         "final_diffs": {
           "star_age": -10877.440113172917,
           "rel_star_age": -0.9983479327302953,
@@ -4578,6 +4606,7 @@
         "run_rows": 2,
         "overlap_min": 2802.786532097622,
         "overlap_max": 22.0,
+        "ref_span": 83007851.88649274,
         "final_diffs": {
           "star_age": -83010632.67302485,
           "rel_star_age": -0.9999997349737804,
@@ -4671,6 +4700,7 @@
         "run_rows": 226,
         "overlap_min": 439.41915894598986,
         "overlap_max": 68857176.04441305,
+        "ref_span": 134692347.95966595,
         "final_diffs": {
           "star_age": -65835611.334411845,
           "rel_star_age": -0.48878349476314936,
@@ -4863,6 +4893,7 @@
         "run_rows": 604,
         "overlap_min": 6005.246191074635,
         "overlap_max": 2135512.862968997,
+        "ref_span": 2129507.6167779225,
         "final_diffs": {
           "star_age": 174222691.91507456,
           "rel_star_age": 81.58353664648654,
@@ -5077,6 +5108,7 @@
         "run_rows": 328,
         "overlap_min": 733.5744070839502,
         "overlap_max": 35235910.25609703,
+        "ref_span": 35301004.88153188,
         "final_diffs": {
           "star_age": -65828.19984193146,
           "rel_star_age": -0.0018647296909780628,
@@ -5269,6 +5301,7 @@
         "run_rows": 370,
         "overlap_min": 21747.411236354033,
         "overlap_max": 51557428.62760033,
+        "ref_span": 51535681.216363974,
         "final_diffs": {
           "star_age": 5998998990010.35,
           "rel_star_age": 116355.66686890383,
@@ -5461,6 +5494,7 @@
         "run_rows": 2001,
         "overlap_min": 1.5844043907014475e-06,
         "overlap_max": 0.003168808781402895,
+        "ref_span": 0.003168708781402895,
         "final_diffs": {
           "star_age": 2.0604966527362073e-07,
           "rel_star_age": 6.502432916838814e-05,
@@ -5661,6 +5695,7 @@
         "run_rows": 313,
         "overlap_min": 37831056.03254128,
         "overlap_max": 257155801.63471395,
+        "ref_span": 14999708601.534147,
         "final_diffs": {
           "star_age": -14742844198.365286,
           "rel_star_age": -0.9828562798910191,
@@ -5853,6 +5888,7 @@
         "run_rows": 201,
         "overlap_min": 22236951.914203722,
         "overlap_max": 11809774231.905138,
+        "ref_span": 11799735951.138933,
         "final_diffs": {
           "star_age": -12198671.14799881,
           "rel_star_age": -0.0010318642453366127,
@@ -6067,6 +6103,7 @@
         "run_rows": 582,
         "overlap_min": 100000.0,
         "overlap_max": 162368825.57593933,
+        "ref_span": 19999999999.99999,
         "final_diffs": {
           "star_age": -19837631174.42406,
           "rel_star_age": -0.9918815587212031,
@@ -6281,6 +6318,7 @@
         "run_rows": 58,
         "overlap_min": 100.0,
         "overlap_max": 10000000.0,
+        "ref_span": 9999999.9999999,
         "final_diffs": {
           "star_age": 270302.05219632015,
           "rel_star_age": 0.027030205219632016,
@@ -6473,6 +6511,7 @@
         "run_rows": 71,
         "overlap_min": 9714389.58221416,
         "overlap_max": 69936516.84341651,
+        "ref_span": 9990285610.417786,
         "final_diffs": {
           "star_age": -9930063483.156584,
           "rel_star_age": -0.9930063483156584,
@@ -6665,6 +6704,7 @@
         "run_rows": 1326,
         "overlap_min": 71.34165069685403,
         "overlap_max": 223916408.27583474,
+        "ref_span": 223916408.27582473,
         "final_diffs": {
           "star_age": 134795672.0045219,
           "rel_star_age": 0.6019910422932109,
@@ -6879,6 +6919,7 @@
         "run_rows": 583,
         "overlap_min": 244000.0,
         "overlap_max": 159113924.12833804,
+        "ref_span": 9999997796.271845,
         "final_diffs": {
           "star_age": -9840886075.871662,
           "rel_star_age": -0.9840886075871662,
@@ -7093,6 +7134,7 @@
         "run_rows": 672,
         "overlap_min": 265.33879823972745,
         "overlap_max": 904588.5527474639,
+        "ref_span": 904323.2139492242,
         "final_diffs": {
           "star_age": 11956257195.700823,
           "rel_star_age": 13217.343022290797,
@@ -7285,6 +7327,7 @@
         "run_rows": 565,
         "overlap_min": 250.0459542522452,
         "overlap_max": 1197794.8893112969,
+        "ref_span": 1297630.6728814545,
         "final_diffs": {
           "star_age": -99835.78358015767,
           "rel_star_age": -0.07693697880745828,
@@ -7477,6 +7520,7 @@
         "run_rows": 9,
         "overlap_min": 100000.0,
         "overlap_max": 696041.4509001226,
+        "ref_span": 1575095053.8411932,
         "final_diffs": {
           "star_age": -1574399012.3903031,
           "rel_star_age": -0.9995580955897216,
@@ -7669,6 +7713,7 @@
         "run_rows": 1,
         "overlap_min": 100000.0,
         "overlap_max": 8.429665322426615,
+        "ref_span": 0.0,
         "final_diffs": {
           "star_age": 99991.57033467757,
           "rel_star_age": 11861.867169110028,
@@ -7762,6 +7807,7 @@
         "run_rows": 7,
         "overlap_min": 0.001,
         "overlap_max": 0.00633761756280579,
+        "ref_span": 0.006337617559636981,
         "final_diffs": {
           "star_age": 0.0006623824371942101,
           "rel_star_age": 0.10451600000000003,
@@ -7954,6 +8000,7 @@
         "run_rows": 2000,
         "overlap_min": 1.0,
         "overlap_max": 0.22306576198885963,
+        "ref_span": 0.22306576198885933,
         "final_diffs": {
           "star_age": 1999.776934238011,
           "rel_star_age": 8964.965830739566,
@@ -8025,6 +8072,7 @@
         "run_rows": 500,
         "overlap_min": 100000.0,
         "overlap_max": 77478081.71796408,
+        "ref_span": 5578528340.841555,
         "final_diffs": {
           "star_age": -5501150259.12359,
           "rel_star_age": -0.9861116251192535,
@@ -8239,6 +8287,7 @@
         "run_rows": 1,
         "overlap_min": 284087.3792464975,
         "overlap_max": 100.0,
+        "ref_span": 3589.9872825387283,
         "final_diffs": {
           "star_age": -287577.36652903626,
           "rel_star_age": -0.9996523883640672,
@@ -8332,6 +8381,7 @@
         "run_rows": 350,
         "overlap_min": 100.0,
         "overlap_max": 931534.8157100048,
+        "ref_span": 931534.8057099731,
         "final_diffs": {
           "star_age": 5990744980513.632,
           "rel_star_age": 6431047.857237153,
@@ -8504,18 +8554,18 @@
       "case": "rsp_BEP",
       "reference_status": "mesa_26_4_1",
       "reference_path": "thinned/star/rsp_BEP.data",
-      "required_termination": "RSP_max_num_periods|max_model_number",
-      "verdict": "declared gap (#162)",
+      "required_termination": "extras_finish_step",
+      "verdict": "declared gap (#148)",
       "executed": true,
       "run_status": "ok",
       "observed_termination": "extras_finish_step",
-      "termination_matches": false,
+      "termination_matches": true,
       "steps": 7255,
       "retries": 0,
       "wall_time_sec": 0.0,
       "peak_rss_gb": 0.0,
-      "known_gap_issue": "#162",
-      "known_gap_reason": "Trajectory matches within all tolerances across 7255 steps, but Tier4CaseExtras emits extras_finish_step instead of native RSP_max_num_periods (#148, #159). Terminates with 'extras_finish_step' (expected 'RSP_max_num_periods|max_model_number') in 7255 steps (final rel_star_age=+0.00%).",
+      "known_gap_issue": "#148",
+      "known_gap_reason": "Meets all MESA 26.4.1 tolerances across 7255 steps (rel_star_age=+5.25e-10, d_log_L=+1.68e-10, d_log_Teff=-3.12e-10, d_log_R=+7.13e-10, max |d_log_L|=1.19e-3), but crates/flexmesa-star/src/inlist_runner.rs:599-601 dispatches library-side Tier4CaseExtras (tier4_extras.rs:145-326) slated for removal under #148 (and omits run_star_extras.f90:153-183 extra history columns).",
       "is_undeclared_failure": false,
       "is_stale_known_gap": false,
       "comparison": {
@@ -8524,6 +8574,7 @@
         "run_rows": 7255,
         "overlap_min": 2.4888451827386262e-08,
         "overlap_max": 0.019444211511807388,
+        "ref_span": 0.01944418662335573,
         "final_diffs": {
           "star_age": 1.0215502055377357e-11,
           "rel_star_age": 5.253749708068158e-10,
@@ -8737,8 +8788,8 @@
       "case": "rsp_BLAP",
       "reference_status": "mesa_26_4_1",
       "reference_path": "thinned/star/rsp_BLAP.data",
-      "required_termination": "max_model_number|extras_finish_step",
-      "verdict": "pass",
+      "required_termination": "extras_finish_step",
+      "verdict": "declared gap (#148)",
       "executed": true,
       "run_status": "ok",
       "observed_termination": "extras_finish_step",
@@ -8747,8 +8798,8 @@
       "retries": 0,
       "wall_time_sec": 0.0,
       "peak_rss_gb": 0.0,
-      "known_gap_issue": "",
-      "known_gap_reason": "",
+      "known_gap_issue": "#148",
+      "known_gap_reason": "Meets all MESA 26.4.1 tolerances across 7318 steps (rel_star_age=-1.10e-10, d_log_L=+6.74e-12, d_log_Teff=-2.03e-12, d_log_R=+7.43e-12, max |d_log_L|=6.99e-5), but crates/flexmesa-star/src/inlist_runner.rs:599-601 dispatches library-side Tier4CaseExtras (tier4_extras.rs:145-326) slated for removal under #148 (and omits run_star_extras.f90:153-183 extra history columns).",
       "is_undeclared_failure": false,
       "is_stale_known_gap": false,
       "comparison": {
@@ -8757,6 +8808,7 @@
         "run_rows": 7318,
         "overlap_min": 2.1428562852593187e-09,
         "overlap_max": 0.0017032084379578517,
+        "ref_span": 0.0017032062952888815,
         "final_diffs": {
           "star_age": -1.8731457357423764e-13,
           "rel_star_age": -1.099774809583656e-10,
@@ -8971,7 +9023,7 @@
       "reference_status": "mesa_26_4_1",
       "reference_path": "thinned/star/rsp_Cepheid.data",
       "required_termination": "extras_finish_step",
-      "verdict": "pass",
+      "verdict": "declared gap (#148)",
       "executed": true,
       "run_status": "ok",
       "observed_termination": "extras_finish_step",
@@ -8980,8 +9032,8 @@
       "retries": 0,
       "wall_time_sec": 0.0,
       "peak_rss_gb": 0.0,
-      "known_gap_issue": "",
-      "known_gap_reason": "",
+      "known_gap_issue": "#148",
+      "known_gap_reason": "Meets all MESA 26.4.1 tolerances across 7266 steps (rel_star_age=-4.62e-9, d_log_L=+1.92e-10, d_log_Teff=+4.21e-11, d_log_R=+1.13e-11, max |d_log_L|=1.17e-3), but crates/flexmesa-star/src/inlist_runner.rs:599-601 dispatches library-side Tier4CaseExtras (tier4_extras.rs:145-326) slated for removal under #148 (and omits run_star_extras.f90:153-183 extra history columns).",
       "is_undeclared_failure": false,
       "is_stale_known_gap": false,
       "comparison": {
@@ -8990,6 +9042,7 @@
         "run_rows": 7266,
         "overlap_min": 1.549975986355335e-07,
         "overlap_max": 0.12191889346799746,
+        "ref_span": 0.12191873903392779,
         "final_diffs": {
           "star_age": -5.635289596073179e-10,
           "rel_star_age": -4.6221626605438005e-09,
@@ -9223,6 +9276,7 @@
         "run_rows": 7973,
         "overlap_min": 6.930717880323957e-09,
         "overlap_max": 0.002877639516717317,
+        "ref_span": 0.0028776325859994367,
         "final_diffs": {
           "star_age": 0.001001239545955034,
           "rel_star_age": 0.34793779420196574,
@@ -9440,7 +9494,7 @@
       "reference_status": "mesa_26_4_1",
       "reference_path": "thinned/star/rsp_RR_Lyrae.data",
       "required_termination": "extras_finish_step",
-      "verdict": "pass",
+      "verdict": "declared gap (#148)",
       "executed": true,
       "run_status": "ok",
       "observed_termination": "extras_finish_step",
@@ -9449,8 +9503,8 @@
       "retries": 0,
       "wall_time_sec": 0.0,
       "peak_rss_gb": 0.0,
-      "known_gap_issue": "",
-      "known_gap_reason": "",
+      "known_gap_issue": "#148",
+      "known_gap_reason": "Meets all MESA 26.4.1 tolerances across 7220 steps (rel_star_age=-2.14e-9, d_log_L=+6.86e-11, d_log_Teff=+1.14e-11, d_log_R=+1.07e-11, max |d_log_L|=8.56e-4), but crates/flexmesa-star/src/inlist_runner.rs:599-601 dispatches library-side Tier4CaseExtras (tier4_extras.rs:145-326) slated for removal under #148 (and omits run_star_extras.f90:153-183 extra history columns).",
       "is_undeclared_failure": false,
       "is_stale_known_gap": false,
       "comparison": {
@@ -9459,6 +9513,7 @@
         "run_rows": 7220,
         "overlap_min": 2.8373312235021175e-08,
         "overlap_max": 0.021564353276019396,
+        "ref_span": 0.02156432494880168,
         "final_diffs": {
           "star_age": -4.60945032143556e-11,
           "rel_star_age": -2.1375323676915653e-09,
@@ -9672,18 +9727,18 @@
       "case": "rsp_Type_II_Cepheid",
       "reference_status": "mesa_26_4_1",
       "reference_path": "thinned/star/rsp_Type_II_Cepheid.data",
-      "required_termination": "RSP_max_num_periods|max_model_number",
+      "required_termination": "extras_finish_step",
       "verdict": "declared gap (#162)",
       "executed": true,
       "run_status": "ok",
       "observed_termination": "extras_finish_step",
-      "termination_matches": false,
+      "termination_matches": true,
       "steps": 14650,
       "retries": 0,
       "wall_time_sec": 0.0,
       "peak_rss_gb": 0.0,
       "known_gap_issue": "#162",
-      "known_gap_reason": "Tier4CaseExtras emits extras_finish_step instead of RSP_max_num_periods and log_L/log_Teff exceed strict tolerances (#162). Terminates with 'extras_finish_step' (expected 'RSP_max_num_periods|max_model_number') in 14650 steps (final rel_star_age=+0.05%, final d_log_L=-0.002298, final d_log_Teff=-0.0005743, max |d_log_L|=0.009513, first_div_step=4387).",
+      "known_gap_reason": "Nonlinear RSP luminosity and Teff exceed strict tolerances over 20 cycles (#162) while running Tier4CaseExtras (#148). Terminates with 'extras_finish_step' in 14650 steps vs 14683 in MESA 26.4.1 (final rel_star_age=+0.05%, final d_log_L=-0.002298, final d_log_Teff=-0.0005743, max |d_log_L|=0.009513, first_div_step=4387).",
       "is_undeclared_failure": false,
       "is_stale_known_gap": false,
       "comparison": {
@@ -9692,6 +9747,7 @@
         "run_rows": 14650,
         "overlap_min": 3.143956004164919e-08,
         "overlap_max": 0.050482972240958865,
+        "ref_span": 0.050482940801398826,
         "final_diffs": {
           "star_age": 2.5264070301393715e-05,
           "rel_star_age": 0.0005004473623463865,
@@ -9911,7 +9967,7 @@
       "case": "rsp_check_2nd_crossing",
       "reference_status": "no_reference_yet",
       "reference_path": "",
-      "required_termination": "extras_finish_step",
+      "required_termination": "other_rsp_build_model",
       "verdict": "no reference yet",
       "executed": false,
       "run_status": "not_run",
@@ -9953,6 +10009,7 @@
         "run_rows": 7328,
         "overlap_min": 1.2879422580910934e-05,
         "overlap_max": 0.04730755561024902,
+        "ref_span": 0.04729470903275342,
         "final_diffs": {
           "star_age": 0.06333313701237885,
           "rel_star_age": 1.3387531060399565,
@@ -10123,8 +10180,8 @@
       "case": "rsp_save_and_load_file",
       "reference_status": "mesa_26_4_1",
       "reference_path": "thinned/star/rsp_save_and_load_file.data",
-      "required_termination": "extras_finish_step|max_model_number",
-      "verdict": "pass",
+      "required_termination": "extras_finish_step",
+      "verdict": "declared gap (#148)",
       "executed": true,
       "run_status": "ok",
       "observed_termination": "extras_finish_step",
@@ -10133,8 +10190,8 @@
       "retries": 0,
       "wall_time_sec": 0.0,
       "peak_rss_gb": 0.0,
-      "known_gap_issue": "",
-      "known_gap_reason": "",
+      "known_gap_issue": "#148",
+      "known_gap_reason": "Meets all MESA 26.4.1 tolerances across 7266 2-stage save/load steps (rel_star_age=-5.54e-9, d_log_L=+2.30e-10, d_log_Teff=+4.98e-11, d_log_R=+1.54e-11, max |d_log_L|=8.00e-7), but crates/flexmesa-star/src/inlist_runner.rs:599-601 dispatches library-side Tier4CaseExtras (tier4_extras.rs:145-326) slated for removal under #148.",
       "is_undeclared_failure": false,
       "is_stale_known_gap": false,
       "comparison": {
@@ -10143,6 +10200,7 @@
         "run_rows": 7216,
         "overlap_min": 1.2916466552961125e-05,
         "overlap_max": 0.12152282583411314,
+        "ref_span": 0.12150991004041592,
         "final_diffs": {
           "star_age": -6.728557433444138e-10,
           "rel_star_age": -5.53686712764065e-09,
@@ -10376,6 +10434,7 @@
         "run_rows": 358,
         "overlap_min": 53014.4746373025,
         "overlap_max": 1365021829.1656713,
+        "ref_span": 1364968814.691034,
         "final_diffs": {
           "star_age": 66899293.736745596,
           "rel_star_age": 0.049009687836007565,
@@ -10568,6 +10627,7 @@
         "run_rows": 627,
         "overlap_min": 1020458.4695560609,
         "overlap_max": 4610000000.0,
+        "ref_span": 4608979541.530444,
         "final_diffs": {
           "star_age": 1241918794.219614,
           "rel_star_age": 0.2693967015660768,
@@ -10760,6 +10820,7 @@
         "run_rows": 1,
         "overlap_min": 100.0,
         "overlap_max": 0.0001484802224733398,
+        "ref_span": 0.00012810775863465377,
         "final_diffs": {
           "star_age": 99.99985151977752,
           "rel_star_age": 673489.3701936154,
@@ -10854,6 +10915,7 @@
         "run_rows": 500,
         "overlap_min": 48223.31856915444,
         "overlap_max": 77681552.55530642,
+        "ref_span": 865046560.3108844,
         "final_diffs": {
           "star_age": -787413231.0741471,
           "rel_star_age": -0.9102045763940477,
@@ -11026,7 +11088,7 @@
       "case": "twin_studies",
       "reference_status": "mesa_26_4_1",
       "reference_path": "benchmarks/history_harness/reference_histories/star/twin_studies.data",
-      "required_termination": "xa_central_lower_limit",
+      "required_termination": "forced_stop",
       "verdict": "declared gap (#148)",
       "executed": true,
       "run_status": "ok",
@@ -11037,7 +11099,7 @@
       "wall_time_sec": 0.0,
       "peak_rss_gb": 0.0,
       "known_gap_issue": "#148",
-      "known_gap_reason": "Case-keyed Tier3CaseExtras terminates after 4 steps with overridden controls (#154). Terminates with 'stars have reached stopping age' (expected 'xa_central_lower_limit') in 4 steps (final rel_star_age=-1.00%, final d_log_L=-3.737, final d_log_Teff=-0.5858, max |d_log_L|=3.731, first_div_step=2).",
+      "known_gap_reason": "Case-keyed Tier3CaseExtras terminates after 4 steps with overridden controls (#154). Terminates with 'stars have reached stopping age' (expected 'forced_stop') in 4 steps (final rel_star_age=-1.00%, final d_log_L=-3.737, final d_log_Teff=-0.5858, max |d_log_L|=3.731, first_div_step=2).",
       "is_undeclared_failure": false,
       "is_stale_known_gap": false,
       "comparison": {
@@ -11046,6 +11108,7 @@
         "run_rows": 2,
         "overlap_min": 27887.787799730555,
         "overlap_max": 10130000.0,
+        "ref_span": 10204537.008768627,
         "final_diffs": {
           "star_age": -102424.79656835832,
           "rel_star_age": -0.010009826468767056,
@@ -11291,6 +11354,7 @@
         "run_rows": 88,
         "overlap_min": 233868.23168454974,
         "overlap_max": 5.819889873285063,
+        "ref_span": 14991.268730971584,
         "final_diffs": {
           "star_age": -248853.68052564803,
           "rel_star_age": -0.9999766137524845,
@@ -11362,6 +11426,7 @@
         "run_rows": 344,
         "overlap_min": 82042419.98389603,
         "overlap_max": 71475808.44167973,
+        "ref_span": 440681663.13550967,
         "final_diffs": {
           "star_age": -451248274.677726,
           "rel_star_age": -0.8632628364563939,
@@ -11433,6 +11498,7 @@
         "run_rows": 404,
         "overlap_min": 100.0,
         "overlap_max": 8120015358.087089,
+        "ref_span": 9805874135.657417,
         "final_diffs": {
           "star_age": -1685858827.5703287,
           "rel_star_age": -0.1719233589633603,
@@ -11623,6 +11689,7 @@
         "run_rows": 1,
         "overlap_min": 432796663.3037861,
         "overlap_max": 100000.0,
+        "ref_span": 816149101.6944962,
         "final_diffs": {
           "star_age": -1248845764.9982822,
           "rel_star_age": -0.9999199324720076,
@@ -11694,6 +11761,7 @@
         "run_rows": 454,
         "overlap_min": 0.0004463129088000001,
         "overlap_max": 93328763.91272265,
+        "ref_span": 399296272.7281608,
         "final_diffs": {
           "star_age": -305967508.8158845,
           "rel_star_age": -0.7662668792900149,
@@ -11886,6 +11954,7 @@
         "run_rows": 628,
         "overlap_min": 100.0,
         "overlap_max": 11018.336880503055,
+        "ref_span": 24720.978086508978,
         "final_diffs": {
           "star_age": -13702.641211005925,
           "rel_star_age": -0.55429203327972,
@@ -12077,6 +12146,7 @@
         "run_rows": 79,
         "overlap_min": 0.004174816959999999,
         "overlap_max": 30.210340046639704,
+        "ref_span": 409.6008004258632,
         "final_diffs": {
           "star_age": -379.3946351961835,
           "rel_star_age": -0.9262451828649534,
@@ -12267,6 +12337,7 @@
         "run_rows": 1,
         "overlap_min": 3690397.983180085,
         "overlap_max": 100.0,
+        "ref_span": 0.00047679711133241653,
         "final_diffs": {
           "star_age": -3690297.9836568823,
           "rel_star_age": -0.9999729026515723,
@@ -12361,6 +12432,7 @@
         "run_rows": 978,
         "overlap_min": 744160.0,
         "overlap_max": 55490786.49122759,
+        "ref_span": 54746626.49122759,
         "final_diffs": {
           "age": 3595192.68431139,
           "rel_age": 0.06478900213244852,
@@ -12589,6 +12661,7 @@
         "run_rows": 225,
         "overlap_min": 744160.0,
         "overlap_max": 3684855507.907339,
+        "ref_span": 3705912136.17164,
         "final_diffs": {
           "age": -21800788.264300823,
           "rel_age": -0.005881524080562154,
@@ -12814,6 +12887,7 @@
         "run_rows": 224,
         "overlap_min": 7.4416,
         "overlap_max": 10000000000.0,
+        "ref_span": 9999999992.5584,
         "final_diffs": {
           "age": 23095945.05422783,
           "rel_age": 0.002309594505422783,
@@ -13036,6 +13110,7 @@
         "run_rows": 885,
         "overlap_min": 744160.0,
         "overlap_max": 14000000000.000017,
+        "ref_span": 13999255840.000017,
         "final_diffs": {
           "age": 7123249.3848667145,
           "rel_age": 0.000508803527490479,
@@ -13260,6 +13335,7 @@
         "run_rows": 307,
         "overlap_min": 13311.938769089946,
         "overlap_max": 125537636.6466656,
+        "ref_span": 125524324.70789652,
         "final_diffs": {
           "age": 3893409.1840215325,
           "rel_age": 0.031013879885120055,
@@ -13488,6 +13564,7 @@
         "run_rows": 596,
         "overlap_min": 13311.938769089946,
         "overlap_max": 125127336.17509712,
+        "ref_span": 125114024.23632804,
         "final_diffs": {
           "age": 3952666.3659849316,
           "rel_age": 0.03158915139417467,
@@ -13716,6 +13793,7 @@
         "run_rows": 393,
         "overlap_min": 415.9980865340611,
         "overlap_max": 12827335.70029865,
+        "ref_span": 12826919.702212116,
         "final_diffs": {
           "age": 30142.63959230855,
           "rel_age": 0.002349875320687737,
@@ -13943,6 +14021,7 @@
         "run_rows": 480,
         "overlap_min": 63393.81452606091,
         "overlap_max": 4277703008.688843,
+        "ref_span": 4277639614.8743167,
         "final_diffs": {
           "star_age": 87773122.5967722,
           "rel_star_age": 0.0205187509320979,
@@ -14085,6 +14164,7 @@
         "run_rows": 480,
         "overlap_min": 63393.81452606091,
         "overlap_max": 4277703008.688843,
+        "ref_span": 4277639614.8743167,
         "final_diffs": {
           "star_age": 87773122.5967722,
           "rel_star_age": 0.0205187509320979,
@@ -14227,6 +14307,7 @@
         "run_rows": 910,
         "overlap_min": 17015.726330294026,
         "overlap_max": 4795334365.366854,
+        "ref_span": 4795334365.366844,
         "final_diffs": {
           "star_age": 25401786.69525242,
           "rel_star_age": 0.005297187799605946,
@@ -14368,6 +14449,7 @@
         "run_rows": 466,
         "overlap_min": 25570.955381877142,
         "overlap_max": 1179116471.5697277,
+        "ref_span": 1179116471.5697176,
         "final_diffs": {
           "star_age": 45017508.333822966,
           "rel_star_age": 0.038179017441671646,
@@ -14507,6 +14589,7 @@
         "run_rows": 533,
         "overlap_min": 25954.45271829678,
         "overlap_max": 4569500000.0,
+        "ref_span": 4569499999.99999,
         "final_diffs": {
           "star_age": 0.0,
           "rel_star_age": 0.0,
@@ -14648,6 +14731,7 @@
         "run_rows": 532,
         "overlap_min": 25309.28387682625,
         "overlap_max": 905382863.2784371,
+        "ref_span": 905382863.2784271,
         "final_diffs": {
           "star_age": 971818933.5086381,
           "rel_star_age": 1.0733789791311408,
@@ -14790,6 +14874,7 @@
         "run_rows": 524,
         "overlap_min": 14846.342703118951,
         "overlap_max": 945426777.441193,
+        "ref_span": 945426777.441183,
         "final_diffs": {
           "star_age": 1059696369.540047,
           "rel_star_age": 1.1208656183910148,
@@ -14932,6 +15017,7 @@
         "run_rows": 1,
         "overlap_min": 4610000000.000001,
         "overlap_max": 4610000000.0,
+        "ref_span": 0.0,
         "final_diffs": {
           "star_age": -9.5367431640625e-07,
           "rel_star_age": -2.0687078446990234e-16,

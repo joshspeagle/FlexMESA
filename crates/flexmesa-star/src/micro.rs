@@ -77,7 +77,7 @@ pub fn resolve_model_net(model: &StarModel) -> Option<Arc<NetGeneralInfo>> {
 }
 
 /// Projects `model` from its current isotope set onto `new_net_name`
-/// (`change_net` in `star/private/adjust_xyz.f90:584-712`), preserving exact
+/// (`change_net` in `star/private/adjust_xyz.f90:51-59`), preserving exact
 /// mass fractions for shared isotopes and dumping any removed trace mass into
 /// the heaviest retained metal so $\sum_j X_{j,k} = 1$ in every zone.
 ///

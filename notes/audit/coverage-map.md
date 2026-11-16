@@ -1,7 +1,5 @@
 # C1 (Task A): upstream coverage map, MESA `0b2e6bb` vs FlexMESA PR #138 (`91eda0b`)
 
-> **Reference note (`#141`):** Line numbers, commit diffs, and pre-rebaseline measurements in this historical audit register refer to MESA `main` at commit `0b2e6bb` (2026-11-04) and `FlexMESA` commit `91eda0b`. Active repository inputs, module goldens, `case_table.md`, and `defaults_diff_26_4_1.md` target **MESA release `26.4.1`** (tag `26.4.1`, commit `c8c2026`, Zenodo `19722306`).
-
 Upstream root `the upstream checkout`, FlexMESA root `the audited tree`. LOC = `wc -l` of the upstream file.
 Status: PORTED / PARTIAL / STUB / ABSENT. "quick" = classified from the mechanical cross-reference (grep of upstream
 file name and of every upstream subroutine name of length > 5 in `crates/flexmesa-{star,binary,astero}/src`) plus a skim

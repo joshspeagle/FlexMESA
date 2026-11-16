@@ -48,25 +48,20 @@ _STAR_TEST_HISTORY = (
 
 def _load_star_test_history_26_4_1() -> dict[int, dict[str, float]]:
     """Parse committed MESA `26.4.1` `star/test/LOGS/history.data` rows."""
-    lines = _STAR_TEST_HISTORY.read_text(encoding="utf-8").splitlines()
-    hdr_names = lines[1].split()
-    hdr_vals = [tok.strip('"') for tok in lines[2].split()]
-    header = dict(zip(hdr_names, hdr_vals, strict=True))
-    assert header["version_number"] == "r26.4.1"
-    col_names = lines[5].split()
+    from flexmesa.testing import history_compare
+
+    tbl = history_compare.load_history_file(_STAR_TEST_HISTORY)
+    assert tbl.mesa_version_number == "r26.4.1"
     rows: dict[int, dict[str, float]] = {}
-    for raw in lines[6:]:
-        stripped = raw.strip()
-        if not stripped:
-            continue
-        vals = [float(tok) for tok in stripped.split()]
-        row = dict(zip(col_names, vals, strict=True))
+    for idx in range(tbl.num_rows):
+        row = {name: float(arr[idx]) for name, arr in tbl.columns.items()}
         rows[round(row["model_number"])] = row
     return rows
 
 
-def _evolve_four_msun_zams_by_step() -> dict[int, star.HistoryRow]:
-    """Run 11 steps of `StarModel.from_zams(4.0, 0.02)` to `1.0e5 yr`."""
+@pytest.fixture(scope="module")
+def evolved_four_msun_zams_by_step() -> dict[int, star.HistoryRow]:
+    """Run 11 steps of `StarModel.from_zams(4.0, 0.02)` to `1.0e5 yr` once."""
     model = star.StarModel.from_zams(initial_mass=4.0, initial_z=0.02)
     logged: dict[int, star.HistoryRow] = {}
     for step_idx in range(1, 11):
@@ -123,9 +118,9 @@ def test_zams_catalog_masses_initialize_without_error() -> None:
         assert np.all(model.chi_t > 0.0)
 
 
-def test_four_msun_zams_evolve_matches_upstream_fortran_mesa_star_test() -> (
-    None
-):
+def test_four_msun_zams_evolve_matches_upstream_fortran_mesa_star_test(
+    evolved_four_msun_zams_by_step: dict[int, star.HistoryRow],
+) -> None:
     """Compare 4 Msun ZAMS evolution against MESA `26.4.1` `star/test` history.
 
     Note (`G1-4`): Over `1.0e5 yr` on the ZAMS, `center_h1` decreases by
@@ -135,17 +130,17 @@ def test_four_msun_zams_evolve_matches_upstream_fortran_mesa_star_test() -> (
     """
     ref_rows = _load_star_test_history_26_4_1()
     assert sorted(ref_rows) == [1, 5, 10, 11]
-    logged = _evolve_four_msun_zams_by_step()
+    logged = evolved_four_msun_zams_by_step
 
     # Step 1 precedes MESA's step-2 remesh (both models have 2,464 zones).
     step1 = logged[1]
     ref1 = ref_rows[1]
-    assert abs(step1.log_center_rho - ref1["log_cntr_Rho"]) < 1.0e-4
+    assert abs(step1.log_center_rho - ref1["log_center_Rho"]) < 1.0e-4
 
     for mod_num, ref in ref_rows.items():
         row = logged[mod_num]
         assert abs(row.star_age - ref["star_age"]) < 1.0e-6
-        assert abs(row.log_center_t - ref["log_cntr_T"]) < 1.0e-3
+        assert abs(row.log_center_t - ref["log_center_T"]) < 1.0e-3
         assert abs(row.log_l - ref["log_L"]) < 1.0e-3
         assert abs(row.log_r - ref["log_R"]) < 1.0e-3
         assert abs(row.log_teff - ref["log_Teff"]) < 1.0e-3
@@ -159,11 +154,16 @@ def test_four_msun_zams_evolve_matches_upstream_fortran_mesa_star_test() -> (
         "log_cntr_Rho differs by 1.11e-3 > 1.0e-3 at step 11 (#153)"
     ),
 )
-def test_four_msun_zams_evolve_log_cntr_rho_matches_mesa_26_4_1() -> None:
+def test_four_msun_zams_evolve_log_cntr_rho_matches_mesa_26_4_1(
+    evolved_four_msun_zams_by_step: dict[int, star.HistoryRow],
+) -> None:
     """Assert `< 1e-3` dex on `log_cntr_Rho` across all `star/test` steps."""
     ref_rows = _load_star_test_history_26_4_1()
-    logged = _evolve_four_msun_zams_by_step()
     for mod_num, ref in ref_rows.items():
         assert (
-            abs(logged[mod_num].log_center_rho - ref["log_cntr_Rho"]) < 1.0e-3
+            abs(
+                evolved_four_msun_zams_by_step[mod_num].log_center_rho
+                - ref["log_center_Rho"]
+            )
+            < 1.0e-3
         )

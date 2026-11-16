@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import dataclasses
+import functools
 import hashlib
 import os
 import pathlib
@@ -21,7 +22,7 @@ import tarfile
 import tomllib
 import urllib.request
 from collections.abc import Iterator
-from typing import IO
+from typing import IO, Any
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -69,6 +70,7 @@ class ReleaseBundle:
     sentinel_relpaths: tuple[str, ...] = ()
     bundle_root: str = "data"
     manifest_file: str = ""
+    manifest_dir: str = ""
 
 
 def resolve_data_dir(
@@ -97,26 +99,28 @@ def resolve_data_dir(
     return (pathlib.Path.home() / ".cache" / "flexmesa" / "data").resolve()
 
 
+def _resolve_sibling_bundle_dir(
+    explicit: str | pathlib.Path | None,
+    env_var: str,
+    subdir: str,
+    data_dir: pathlib.Path | None,
+) -> pathlib.Path:
+    if explicit is not None:
+        return pathlib.Path(explicit).expanduser().resolve()
+    if raw := os.environ.get(env_var, "").strip():
+        return pathlib.Path(raw).expanduser().resolve()
+    base = data_dir if data_dir is not None else resolve_data_dir()
+    return (base.parent / subdir).resolve()
+
+
 def resolve_mesa_test_inputs_dir(
     explicit: str | pathlib.Path | None = None,
     data_dir: pathlib.Path | None = None,
 ) -> pathlib.Path:
-    """Resolve the extraction root for ``mesa-test-inputs-v2.tar.zst``.
-
-    Args:
-        explicit: Optional explicit target directory.
-        data_dir: Resolved physics data directory (defaults to sibling
-            ``mesa_test_inputs`` next to ``data_dir``).
-
-    Returns:
-        Resolved ``pathlib.Path`` for upstream MESA test inputs.
-    """
-    if explicit is not None:
-        return pathlib.Path(explicit).expanduser().resolve()
-    if mesa_dir := os.environ.get("MESA_DIR", "").strip():
-        return pathlib.Path(mesa_dir).expanduser().resolve()
-    base = data_dir if data_dir is not None else resolve_data_dir()
-    return (base.parent / "mesa_test_inputs").resolve()
+    """Resolve the extraction root for ``mesa-test-inputs-v2.tar.zst``."""
+    return _resolve_sibling_bundle_dir(
+        explicit, "MESA_DIR", "mesa_test_inputs", data_dir
+    )
 
 
 def resolve_mesa_histories_dir(
@@ -124,12 +128,9 @@ def resolve_mesa_histories_dir(
     data_dir: pathlib.Path | None = None,
 ) -> pathlib.Path:
     """Resolve the extraction root for ``mesa-histories-v1.tar.zst``."""
-    if explicit is not None:
-        return pathlib.Path(explicit).expanduser().resolve()
-    if hist_dir := os.environ.get("FLEXMESA_HISTORIES_DIR", "").strip():
-        return pathlib.Path(hist_dir).expanduser().resolve()
-    base = data_dir if data_dir is not None else resolve_data_dir()
-    return (base.parent / "mesa_histories").resolve()
+    return _resolve_sibling_bundle_dir(
+        explicit, "FLEXMESA_HISTORIES_DIR", "mesa_histories", data_dir
+    )
 
 
 def resolve_mesa_module_hex_dir(
@@ -137,12 +138,14 @@ def resolve_mesa_module_hex_dir(
     data_dir: pathlib.Path | None = None,
 ) -> pathlib.Path:
     """Resolve the extraction root for ``mesa-module-hex-v1.tar.zst``."""
-    if explicit is not None:
-        return pathlib.Path(explicit).expanduser().resolve()
-    if hex_dir := os.environ.get("FLEXMESA_MODULE_HEX_DIR", "").strip():
-        return pathlib.Path(hex_dir).expanduser().resolve()
-    base = data_dir if data_dir is not None else resolve_data_dir()
-    return (base.parent / "mesa_module_hex").resolve()
+    return _resolve_sibling_bundle_dir(
+        explicit, "FLEXMESA_MODULE_HEX_DIR", "mesa_module_hex", data_dir
+    )
+
+
+@functools.lru_cache(maxsize=4)
+def _read_bundles_toml(resolved_path: pathlib.Path) -> dict[str, Any]:
+    return tomllib.loads(resolved_path.read_text(encoding="utf-8"))
 
 
 def load_upstream_reference(
@@ -153,8 +156,8 @@ def load_upstream_reference(
         manifest_path
         if manifest_path is not None
         else pathlib.Path(__file__).with_name("bundles.toml")
-    )
-    raw = tomllib.loads(path.read_text(encoding="utf-8"))
+    ).resolve()
+    raw = _read_bundles_toml(path)
     ref = raw["upstream_reference"]
     return UpstreamReference(
         name=str(ref["name"]),
@@ -176,20 +179,13 @@ def load_upstream_reference(
 def load_bundles_manifest(
     manifest_path: pathlib.Path | None = None,
 ) -> tuple[str, str, tuple[ReleaseBundle, ...]]:
-    """Parse ``bundles.toml`` into ``(repo, tag, bundles)``.
-
-    Args:
-        manifest_path: Optional override path to ``bundles.toml``.
-
-    Returns:
-        Tuple ``(repo, tag, bundles)``.
-    """
+    """Parse ``bundles.toml`` into ``(repo, tag, bundles)``."""
     path = (
         manifest_path
         if manifest_path is not None
         else pathlib.Path(__file__).with_name("bundles.toml")
-    )
-    raw = tomllib.loads(path.read_text(encoding="utf-8"))
+    ).resolve()
+    raw = _read_bundles_toml(path)
     rel = raw["release"]
     repo = str(rel["repo"])
     tag = str(rel["tag"])
@@ -213,6 +209,7 @@ def load_bundles_manifest(
                 sentinel_relpaths=sentinels,
                 bundle_root=str(entry.get("bundle_root", default_root)),
                 manifest_file=str(entry.get("manifest_file", "")),
+                manifest_dir=str(path.parent),
             )
         )
     return repo, tag, tuple(items)
@@ -234,21 +231,22 @@ def _resolve_bundle_target_root(
 
 def _sha256_file(path: pathlib.Path) -> str:
     """Compute the lowercase 64-character SHA-256 hex digest of ``path``."""
-    digest = hashlib.sha256()
     with path.open("rb") as fh:
-        while chunk := fh.read(4 * 1024 * 1024):
-            digest.update(chunk)
-    return digest.hexdigest()
+        return hashlib.file_digest(fh, "sha256").hexdigest()
 
 
 def _verify_per_file_manifest(
     root: pathlib.Path,
     manifest_relpath: str,
+    manifest_dir: pathlib.Path | None = None,
 ) -> bool:
     """Verify every unpacked file listed in ``manifest_relpath`` (`N1-10`)."""
-    mpath = pathlib.Path(__file__).with_name("bundles.toml").parent / (
-        manifest_relpath
+    base_dir = (
+        manifest_dir
+        if manifest_dir is not None
+        else pathlib.Path(__file__).with_name("bundles.toml").parent
     )
+    mpath = base_dir / manifest_relpath
     if not mpath.is_file():
         return False
     for raw in mpath.read_text(encoding="utf-8").splitlines():
@@ -344,15 +342,21 @@ def verify_bundles(
     dest: str | pathlib.Path | None = None,
     include_test_inputs: bool = False,
     mesa_test_dest: str | pathlib.Path | None = None,
+    manifest_path: pathlib.Path | None = None,
     quiet: bool = False,
 ) -> bool:
     """Verify unpacked ``data-v1`` bundles and per-file SHA-256 manifests."""
     data_root = resolve_data_dir(dest)
     test_root = resolve_mesa_test_inputs_dir(mesa_test_dest, data_dir=data_root)
-    _, _, bundles = load_bundles_manifest()
+    _, _, bundles = load_bundles_manifest(manifest_path)
+    manifest_dir = (
+        manifest_path.parent
+        if manifest_path is not None
+        else pathlib.Path(__file__).with_name("bundles.toml").parent
+    )
     if not quiet:
         try:
-            ref = load_upstream_reference()
+            ref = load_upstream_reference(manifest_path)
             print(
                 f"[flexmesa-data] reference: {ref.summary_line()}",
                 flush=True,
@@ -368,7 +372,10 @@ def verify_bundles(
         if ok and b.kind == "single_zst" and b.unpacked_sha256:
             ok = _sha256_file(root / b.target_relpath) == b.unpacked_sha256
         if ok and b.manifest_file:
-            ok = _verify_per_file_manifest(root, b.manifest_file)
+            mdir = (
+                pathlib.Path(b.manifest_dir) if b.manifest_dir else manifest_dir
+            )
+            ok = _verify_per_file_manifest(root, b.manifest_file, mdir)
         if not quiet:
             status = "VERIFIED" if ok else "FAILED"
             print(f"[flexmesa-data] {b.name:18s} {status} ({root})", flush=True)

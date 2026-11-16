@@ -20,6 +20,7 @@ import subprocess
 import time
 from typing import Any
 
+SCRIPT_DIR = pathlib.Path(__file__).resolve().parent
 ROOT_DIR = pathlib.Path(
     os.environ.get(
         "MESA_GROUND_TRUTH_ROOT",
@@ -29,8 +30,8 @@ ROOT_DIR = pathlib.Path(
 MESA_DIR = pathlib.Path(
     os.environ.get("MESA_DIR", str(pathlib.Path.home() / "mesa-26.04.1"))
 )
-ENV_SCRIPT = ROOT_DIR / "scripts/env_mesa.sh"
-HEX_TAP_SRC = ROOT_DIR / "scripts/gfortran_hex_tap.c"
+ENV_SCRIPT = SCRIPT_DIR / "env_mesa.sh"
+HEX_TAP_SRC = SCRIPT_DIR / "gfortran_hex_tap.c"
 HEX_TAP_SO = ROOT_DIR / "build/libgfortran_hex_tap.so"
 OUT_ROOT = ROOT_DIR / "module_tests"
 

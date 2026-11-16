@@ -254,7 +254,7 @@ pub fn eval_jdot_missing_wind(
 
 /// Evaluates the Peters (1964, PhRv 136, B1224) gravitational-wave orbital
 /// circularization rate $\dot{e}_{\mathrm{gr}}$ ($\mathrm{s}^{-1}$)
-/// (`default_edot_gr` in `binary/private/binary_edot.f90:92-116`).
+/// (`get_edot` in `binary/private/binary_edot.f90:33-99`).
 #[must_use]
 pub fn eval_edot_gr(
     m_donor: f64,

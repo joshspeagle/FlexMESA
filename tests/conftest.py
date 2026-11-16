@@ -5,7 +5,10 @@ from __future__ import annotations
 
 import gc
 import os
+import re
 import sys
+from collections.abc import Generator
+from typing import Any
 
 import hypothesis
 import jax
@@ -22,6 +25,7 @@ hypothesis.settings.register_profile(
 hypothesis.settings.load_profile("flexmesa_ci")
 
 _SKIPPED_NODEIDS: list[str] = []
+_ISSUE_LINK_RE = re.compile(r"#[1-9][0-9]*\b")
 _LINUX_MAPS_PATH: str = "/proc/self/maps"
 _JAX_CACHE_VMA_LIMIT: int = 24_000
 
@@ -57,16 +61,28 @@ def pytest_runtest_teardown(
         gc.collect()
 
 
-def pytest_runtest_logreport(report: pytest.TestReport) -> None:
-    """Record unauthorized skipped test node IDs during execution.
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(
+    item: pytest.Item, call: pytest.CallInfo[object]
+) -> Generator[None, Any, None]:
+    """Record unauthorized skips or unlinked/non-strict xfails during execution.
 
-    Under `CLAUDE.md`, bare skips are forbidden in zero-skip CI mode, whereas
-    `@pytest.mark.xfail(strict=True, reason="... #NNN ...")` linked to an open
-    issue is permitted for declared upstream gaps (`#144`).
+    Under `CLAUDE.md`, bare skips and imperative `pytest.xfail(...)` calls are
+    forbidden in zero-skip CI mode; only `@pytest.mark.xfail(strict=True,
+    reason="... #NNN ...")` linked to an open `#<number>` issue is permitted.
     """
+    del call
+    outcome = yield
+    report: pytest.TestReport = outcome.get_result()
     if not report.skipped:
         return
-    if hasattr(report, "wasxfail") and "#" in str(report.wasxfail):
+    xfail_mark = item.get_closest_marker("xfail")
+    if (
+        hasattr(report, "wasxfail")
+        and xfail_mark is not None
+        and xfail_mark.kwargs.get("strict", True) is True
+        and _ISSUE_LINK_RE.search(str(report.wasxfail)) is not None
+    ):
         return
     if report.nodeid not in _SKIPPED_NODEIDS:
         _SKIPPED_NODEIDS.append(report.nodeid)

@@ -1,7 +1,5 @@
 # C1 (Task B): inventory of behaviour upstream MESA does not have
 
-> **Reference note (`#141`):** Line numbers, commit diffs, and pre-rebaseline measurements in this historical audit register refer to MESA `main` at commit `0b2e6bb` (2026-11-04) and `FlexMESA` commit `91eda0b`. Active repository inputs, module goldens, `case_table.md`, and `defaults_diff_26_4_1.md` target **MESA release `26.4.1`** (tag `26.4.1`, commit `c8c2026`, Zenodo `19722306`).
-
 Tree under audit: `the audited tree` (PR #138 head `91eda0b`). Upstream: `the upstream checkout` at `0b2e6bb`.
 Paths below are relative to those roots. Written incrementally; later sections appended.
 

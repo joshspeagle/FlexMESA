@@ -15,6 +15,8 @@ zenodo_record = "19722306"
 
 [defaults.star]
 independent_var = "star_age"
+uses_library_extras = true
+library_extras_issue = "#148"
 
 [defaults.star.final_tolerances]
 rel_star_age = 0.001
@@ -33,6 +35,8 @@ log_center_Rho = 0.005
 
 [defaults.binary]
 independent_var = "age"
+uses_library_extras = true
+library_extras_issue = "#148"
 
 [defaults.binary.final_tolerances]
 rel_age = 0.001
@@ -46,6 +50,8 @@ star_2_mass = 0.002
 
 [defaults.astero]
 independent_var = "star_age"
+uses_library_extras = true
+library_extras_issue = "#148"
 
 [defaults.astero.final_tolerances]
 rel_star_age = 0.001
@@ -247,7 +253,7 @@ suite = "star"
 case = "custom_colors"
 reference_status = "mesa_26_4_1"
 reference_path = "thinned/star/custom_colors.data"
-required_termination = "my termination condition"
+required_termination = "xa_central_lower_limit"
 inherit_default_tolerances = false
 
 [cases.final_tolerances]
@@ -296,7 +302,7 @@ suite = "star"
 case = "gyre_in_mesa_envelope"
 reference_status = "mesa_26_4_1"
 reference_path = "benchmarks/history_harness/reference_histories/star/gyre_in_mesa_envelope.data"
-required_termination = "steps_to_take_before_terminate|extras_finish_step"
+required_termination = "max_model_number"
 uses_pulsation_scaffolding = true
 scaffolding_issue = "#170"
 
@@ -546,14 +552,14 @@ suite = "star"
 case = "rsp_BEP"
 reference_status = "mesa_26_4_1"
 reference_path = "thinned/star/rsp_BEP.data"
-required_termination = "RSP_max_num_periods|max_model_number"
+required_termination = "extras_finish_step"
 
 [[cases]]
 suite = "star"
 case = "rsp_BLAP"
 reference_status = "mesa_26_4_1"
 reference_path = "thinned/star/rsp_BLAP.data"
-required_termination = "max_model_number|extras_finish_step"
+required_termination = "extras_finish_step"
 
 [[cases]]
 suite = "star"
@@ -581,15 +587,15 @@ suite = "star"
 case = "rsp_Type_II_Cepheid"
 reference_status = "mesa_26_4_1"
 reference_path = "thinned/star/rsp_Type_II_Cepheid.data"
-required_termination = "RSP_max_num_periods|max_model_number"
+required_termination = "extras_finish_step"
 
 [[cases]]
 suite = "star"
-case = "rsp_check_2nd_crossing"
 # Post-processes saved history_7M.data in extras_rsp_build_model (0 evolutionary steps; tested in rsp_crossing_test.rs).
+case = "rsp_check_2nd_crossing"
 reference_status = "no_reference_yet"
 reference_path = ""
-required_termination = "extras_finish_step"
+required_termination = "other_rsp_build_model"
 
 [[cases]]
 suite = "star"
@@ -605,7 +611,7 @@ suite = "star"
 case = "rsp_save_and_load_file"
 reference_status = "mesa_26_4_1"
 reference_path = "thinned/star/rsp_save_and_load_file.data"
-required_termination = "extras_finish_step|max_model_number"
+required_termination = "extras_finish_step"
 
 [[cases]]
 suite = "star"
@@ -648,7 +654,7 @@ suite = "star"
 case = "twin_studies"
 reference_status = "mesa_26_4_1"
 reference_path = "benchmarks/history_harness/reference_histories/star/twin_studies.data"
-required_termination = "xa_central_lower_limit"
+required_termination = "forced_stop"
 
 [[cases]]
 suite = "star"

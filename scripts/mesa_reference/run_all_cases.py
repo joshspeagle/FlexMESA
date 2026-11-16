@@ -29,6 +29,7 @@ import time
 from typing import Any
 
 
+SCRIPT_DIR = pathlib.Path(__file__).resolve().parent
 ROOT_DIR = pathlib.Path(
     os.environ.get(
         "MESA_GROUND_TRUTH_ROOT",
@@ -39,10 +40,10 @@ MESA_DIR = pathlib.Path(
     os.environ.get("MESA_DIR", str(pathlib.Path.home() / "mesa-26.04.1"))
 )
 FLEXMESA_DIR = pathlib.Path(
-    os.environ.get("FLEXMESA_DIR", str(pathlib.Path.cwd() / "FlexMESA"))
+    os.environ.get("FLEXMESA_DIR", str(SCRIPT_DIR.parents[1]))
 )
 THIN_SCRIPT = FLEXMESA_DIR / "notes/audit/tools/thin_mesa_history.py"
-RUN_SCRIPT = ROOT_DIR / "scripts/run_mesa_case_26_4_1.sh"
+RUN_SCRIPT = SCRIPT_DIR / "run_mesa_case_26_4_1.sh"
 
 PROVENANCE_NOTE_PREFIX = (
     "MESA 26.4.1 (c8c2026), MESA SDK 26.6.1 (gfortran 15.2.0), "
@@ -638,6 +639,8 @@ def run_single_case(
         try:
             thinned_files = write_thinned_histories(entry, dest, result)
         except Exception as exc:
+            result["status"] = "failed"
+            result["reason"] = f"thin_mesa_history failed: {exc}"
             result["thin_error"] = str(exc)
     result["thinned_files"] = thinned_files
 

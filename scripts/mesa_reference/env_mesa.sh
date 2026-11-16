@@ -8,7 +8,7 @@ set +u
 # shellcheck disable=SC1091
 source "$MESASDK_ROOT/bin/mesasdk_init.sh"
 set -u
-export MESA_DIR="$HOME/mesa-26.04.1"
+export MESA_DIR="${MESA_DIR:-$HOME/mesa-26.04.1}"
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-4}"
 export OPENBLAS_NUM_THREADS="${OPENBLAS_NUM_THREADS:-4}"
 unset DISPLAY || true

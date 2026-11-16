@@ -161,7 +161,7 @@ impl HenyeySystem {
 }
 
 /// Populates the per-zone variable scaling vector `x_scale` in place
-/// (`set_xscale_info` in `star/private/solver_support.f90:312-363`).
+/// (`set_xscale_info` in `star/private/solver_support.f90:42-86`).
 pub fn compute_x_scale_into(
     model: &StarModel,
     include_chem: bool,

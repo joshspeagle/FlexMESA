@@ -14,11 +14,11 @@ from __future__ import annotations
 import dataclasses
 import math
 import pathlib
-import shlex
 from typing import Any
 
 import numpy as np
 
+from flexmesa import _rust
 from flexmesa.testing import case_manifest, golden
 
 COLUMN_ALIASES: dict[str, str] = {
@@ -116,6 +116,7 @@ class HistoryComparison:
     failed_track_columns: tuple[str, ...]
     first_diverging_step: int | None
     first_diverging_x: float | None
+    ref_span: float = 0.0
 
 
 def _parse_float_fast(token: str) -> float:
@@ -123,25 +124,6 @@ def _parse_float_fast(token: str) -> float:
         return float(token)
     except ValueError:
         return golden.parse_fortran_float(token)
-
-
-def _extract_mesa_version_number(
-    header_names_line: str,
-    header_vals_line: str,
-) -> str:
-    hdr_names = header_names_line.split()
-    if "version_number" not in hdr_names:
-        return ""
-    v_idx = hdr_names.index("version_number")
-    try:
-        hdr_vals = shlex.split(header_vals_line)
-    except ValueError:
-        hdr_vals = [
-            tok.strip('"').strip("'") for tok in header_vals_line.split()
-        ]
-    if v_idx < len(hdr_vals):
-        return hdr_vals[v_idx].strip('"').strip("'")
-    return ""
 
 
 def load_history_file(path: pathlib.Path | str) -> HistoryTable:
@@ -163,15 +145,17 @@ def load_history_file(path: pathlib.Path | str) -> HistoryTable:
         ValueError: If the file contains no header or zero data rows.
     """
     fpath = pathlib.Path(path)
+    if not fpath.is_file():
+        raise FileNotFoundError(f"missing history file: {fpath}")
     with fpath.open(encoding="utf-8") as fh:
-        raw_lines = fh.read().splitlines()
-
-    if not raw_lines:
+        first_line = fh.readline()
+    if not first_line:
         raise ValueError(f"{fpath}: empty history file")
 
     provenance = ""
     mesa_ver = ""
-    if raw_lines[0].startswith("#") or "\t" in raw_lines[0]:
+    if first_line.startswith("#") or "\t" in first_line:
+        raw_lines = fpath.read_text(encoding="utf-8").splitlines()
         comments = [ln[1:].strip() for ln in raw_lines if ln.startswith("#")]
         provenance = " ".join(comments).strip()
         body = [ln for ln in raw_lines if ln.strip() and not ln.startswith("#")]
@@ -182,27 +166,23 @@ def load_history_file(path: pathlib.Path | str) -> HistoryTable:
             [_parse_float_fast(tok) for tok in ln.split("\t")]
             for ln in body[1:]
         ]
-    else:
-        if len(raw_lines) < 7:
+        if not rows:
+            raise ValueError(f"{fpath}: history file contains zero data rows")
+        matrix = np.asarray(rows, dtype=np.float64)
+        if matrix.ndim != 2 or matrix.shape[1] != len(names):
             raise ValueError(
-                f"{fpath}: MESA log has fewer than 7 lines ({len(raw_lines)})"
+                f"{fpath}: column mismatch ({matrix.shape} vs {len(names)})"
             )
-        mesa_ver = _extract_mesa_version_number(raw_lines[1], raw_lines[2])
-        names = raw_lines[5].split()
-        rows = [
-            [_parse_float_fast(tok) for tok in ln.split()]
-            for ln in raw_lines[6:]
-            if ln.strip()
+    else:
+        parsed = _rust.mesa_read_log_file(str(fpath))
+        if int(parsed["num_rows"]) == 0:
+            raise ValueError(f"{fpath}: history file contains zero data rows")
+        mesa_ver = str(parsed["header"].get("version_number", "")).strip()
+        names = [str(n) for n in parsed["column_names"]]
+        col_vecs = [
+            np.asarray(arr, dtype=np.float64) for arr in parsed["column_values"]
         ]
-
-    if not rows:
-        raise ValueError(f"{fpath}: history file contains zero data rows")
-
-    matrix = np.asarray(rows, dtype=np.float64)
-    if matrix.ndim != 2 or matrix.shape[1] != len(names):
-        raise ValueError(
-            f"{fpath}: column count mismatch ({matrix.shape} vs {len(names)})"
-        )
+        matrix = np.column_stack(col_vecs)
 
     canon_names = [COLUMN_ALIASES.get(n, n) for n in names]
     if "stage" in canon_names:
@@ -469,32 +449,117 @@ def compare_histories(
         failed_track_columns=tuple(failed_track),
         first_diverging_step=first_step,
         first_diverging_x=first_x,
+        ref_span=ref_span,
     )
 
 
-def _json_safe_float(val: float | None) -> float | None:
+def re_evaluate_comparison(
+    comp: HistoryComparison,
+    spec: case_manifest.CaseManifestEntry,
+) -> HistoryComparison:
+    """Re-evaluate ``comp`` against ``spec``'s current tolerances."""
+    failed_final: list[str] = []
+    for col, tol in spec.final_tolerances.items():
+        if col not in comp.final_diffs:
+            failed_final.append(col)
+            continue
+        diff_val = comp.final_diffs[col]
+        if (
+            not math.isfinite(diff_val)
+            or abs(diff_val) >= SENTINEL_ABS_THRESHOLD
+            or abs(diff_val) > tol
+        ):
+            failed_final.append(col)
+
+    has_overlap = (
+        comp.overlap_max > comp.overlap_min
+        and comp.ref_rows >= 2
+        and comp.run_rows >= 2
+    )
+    xcol = spec.independent_var
+    span_tol = spec.final_tolerances.get(f"rel_{xcol}", 0.05)
+    if comp.ref_span > 0.0:
+        span_ok = (comp.overlap_max - comp.overlap_min) >= max(
+            0.0, 1.0 - 2.0 * span_tol
+        ) * comp.ref_span
+    else:
+        x_diff = abs(comp.final_diffs.get(xcol, 0.0))
+        span_ok = math.isfinite(x_diff) and x_diff <= span_tol
+
+    new_devs: list[TrackDeviation] = []
+    failed_track: list[str] = []
+    seen_cols: set[str] = set()
+    for d in comp.track_deviations:
+        seen_cols.add(d.column)
+        tol_opt = spec.track_tolerances.get(d.column)
+        bad_d = (
+            not math.isfinite(d.max_abs_diff)
+            or abs(d.max_abs_diff) >= SENTINEL_ABS_THRESHOLD
+        )
+        ok = tol_opt is None or (not bad_d and d.max_abs_diff <= tol_opt)
+        if not ok:
+            failed_track.append(d.column)
+        new_devs.append(
+            TrackDeviation(
+                column=d.column,
+                max_abs_diff=d.max_abs_diff,
+                median_abs_diff=d.median_abs_diff,
+                x_at_max=d.x_at_max,
+                tolerance=tol_opt,
+                within_tolerance=ok,
+            )
+        )
+    if has_overlap:
+        for col in spec.track_tolerances:
+            if col not in seen_cols and col not in failed_track:
+                failed_track.append(col)
+    elif comp.ref_span == 0.0 and span_ok:
+        for col, tol in spec.track_tolerances.items():
+            d_val = comp.final_diffs.get(col, float("inf"))
+            if (
+                not math.isfinite(d_val)
+                or abs(d_val) >= SENTINEL_ABS_THRESHOLD
+                or abs(d_val) > tol
+            ):
+                failed_track.append(col)
+    else:
+        for col in spec.track_tolerances:
+            if col not in failed_track:
+                failed_track.append(col)
+    if not span_ok:
+        for col in spec.track_tolerances:
+            if col not in failed_track:
+                failed_track.append(col)
+
+    return dataclasses.replace(
+        comp,
+        within_final_tolerances=(len(failed_final) == 0),
+        failed_final_columns=tuple(failed_final),
+        track_deviations=tuple(new_devs),
+        within_track_tolerances=(len(failed_track) == 0 and span_ok),
+        failed_track_columns=tuple(failed_track),
+    )
+
+
+def _json_safe_float(val: float | None) -> float | str | None:
     if val is None:
         return None
-    if not math.isfinite(val):
-        return 1.0e99 if val > 0.0 else -1.0e99
+    if math.isnan(val):
+        return "nan"
+    if math.isinf(val):
+        return "inf" if val > 0.0 else "-inf"
     return val
 
 
 def comparison_to_dict(comp: HistoryComparison) -> dict[str, Any]:
-    """Serialize a ``HistoryComparison`` into a strict JSON-safe dictionary.
-
-    Args:
-        comp: ``HistoryComparison`` instance.
-
-    Returns:
-        Dictionary free of ``NaN``/``Inf`` tokens suitable for ``json.dumps``.
-    """
+    """Serialize a ``HistoryComparison`` into a strict JSON-safe dictionary."""
     return {
         "independent_var": comp.independent_var,
         "ref_rows": comp.ref_rows,
         "run_rows": comp.run_rows,
         "overlap_min": _json_safe_float(comp.overlap_min),
         "overlap_max": _json_safe_float(comp.overlap_max),
+        "ref_span": _json_safe_float(comp.ref_span),
         "final_diffs": {
             k: _json_safe_float(v) for k, v in comp.final_diffs.items()
         },
@@ -519,6 +584,14 @@ def comparison_to_dict(comp: HistoryComparison) -> dict[str, Any]:
 
 
 def _restore_json_float(val: Any) -> float:
+    if isinstance(val, str):
+        low = val.strip().lower()
+        if low == "nan":
+            return float("nan")
+        if low in ("inf", "+inf", "infinity"):
+            return float("inf")
+        if low in ("-inf", "-infinity"):
+            return float("-inf")
     fval = float(val)
     if abs(fval) >= SENTINEL_ABS_THRESHOLD:
         return float("inf") if fval > 0.0 else float("-inf")
@@ -532,15 +605,7 @@ def _restore_json_opt_float(val: Any) -> float | None:
 
 
 def comparison_from_dict(raw: dict[str, Any]) -> HistoryComparison:
-    """Deserialize a ``HistoryComparison`` produced by ``comparison_to_dict``.
-
-    Args:
-        raw: JSON dictionary previously emitted by ``comparison_to_dict``.
-
-    Returns:
-        Reconstructed ``HistoryComparison`` with sentinel values restored to
-        signed infinities.
-    """
+    """Deserialize a ``HistoryComparison`` from ``comparison_to_dict``."""
     devs = tuple(
         TrackDeviation(
             column=str(d["column"]),
@@ -553,12 +618,20 @@ def comparison_from_dict(raw: dict[str, Any]) -> HistoryComparison:
         for d in raw.get("track_deviations", ())
     )
     f_step_raw = raw.get("first_diverging_step")
+    ov_min = _restore_json_float(raw["overlap_min"])
+    ov_max = _restore_json_float(raw["overlap_max"])
+    if "ref_span" in raw and raw["ref_span"] is not None:
+        r_span = _restore_json_float(raw["ref_span"])
+    else:
+        r_span = (
+            max(0.0, ov_max - ov_min) if math.isfinite(ov_max - ov_min) else 0.0
+        )
     return HistoryComparison(
         independent_var=str(raw["independent_var"]),
         ref_rows=int(raw["ref_rows"]),
         run_rows=int(raw["run_rows"]),
-        overlap_min=_restore_json_float(raw["overlap_min"]),
-        overlap_max=_restore_json_float(raw["overlap_max"]),
+        overlap_min=ov_min,
+        overlap_max=ov_max,
         final_diffs={
             str(k): _restore_json_float(v)
             for k, v in dict(raw.get("final_diffs", {})).items()
@@ -576,4 +649,5 @@ def comparison_from_dict(raw: dict[str, Any]) -> HistoryComparison:
         if f_step_raw is not None
         else None,
         first_diverging_x=_restore_json_opt_float(raw.get("first_diverging_x")),
+        ref_span=r_span,
     )

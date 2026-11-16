@@ -106,7 +106,6 @@ pub fn compute_ion_offset(
     }
     let catalog = NuclideCatalog::builtin_ref();
     let mut norm = 0.0_f64;
-    let mut entries = Vec::with_capacity(xa.len());
     for (&xk, &cid) in xa.iter().zip(chem_id.iter()) {
         let entry =
             catalog
@@ -115,18 +114,19 @@ pub fn compute_ion_offset(
                     context: "compute_ion_offset",
                     detail: format!("unknown chem_id {cid}"),
                 })?;
-        let ya_k = xk / (entry.z_plus_n as f64);
-        norm += ya_k;
-        entries.push((entry.z, ya_k));
+        norm += xk / (entry.z_plus_n as f64);
     }
     if norm == 0.0 {
         return Ok(0.0);
     }
     let mut offset_ev = 0.0_f64;
-    for (zk, ya_k) in entries {
-        if (1..=28).contains(&zk) {
-            // Reproduces eos/private/ion_offset.f90:67-77 (see #192).
-            offset_ev += NIST_IONIZATION_TABLE_EV[zk - 1] * (ya_k / norm);
+    for (&xk, &cid) in xa.iter().zip(chem_id.iter()) {
+        if let Some(entry) = catalog.get_by_id(cid) {
+            if (1..=28).contains(&entry.z) {
+                let ya_k = xk / (entry.z_plus_n as f64);
+                // Reproduces eos/private/ion_offset.f90:67-77 (see #192).
+                offset_ev += NIST_IONIZATION_TABLE_EV[entry.z - 1] * (ya_k / norm);
+            }
         }
     }
     Ok(offset_ev * EV2ERG / AMU)

@@ -8,7 +8,6 @@ from __future__ import annotations
 import importlib
 import pathlib
 import re
-import subprocess
 import sys
 import textwrap
 
@@ -220,11 +219,13 @@ def test_executable_python_snippets_in_docs() -> None:
 
 def test_upstream_mesa_26_4_1_citations_and_defaults_diff_resolve() -> None:
     """Every upstream file:line citation and defaults diff must match 26.4.1."""
+    import importlib.util
+
     mesa_root = fetch.resolve_mesa_test_inputs_dir()
     assert (mesa_root / "star" / "private").is_dir()
 
     by_basename: dict[str, list[pathlib.Path]] = {}
-    for up_path in mesa_root.rglob("*"):
+    for up_path in sorted(mesa_root.rglob("*")):
         if (
             up_path.is_file()
             and up_path.suffix in {".f90", ".f", ".inc", ".dek", ".defaults"}
@@ -243,17 +244,57 @@ def test_upstream_mesa_26_4_1_citations_and_defaults_diff_resolve() -> None:
             )
         return line_count_cache[target]
 
-    cite_re = re.compile(
-        r"\b([A-Za-z0-9_./-]+\.(?:f90|f|inc|dek|defaults)):(\d+)(?:[-\u2013](\d+))?"
+    colon_re = re.compile(
+        r"\b([A-Za-z0-9_./-]+\.(?:f90|f|inc|dek|defaults)"
+        r"|[A-Za-z0-9_]+/test/test_output):"
+        r"(\d+(?:[-\u2013]\d+)?(?:\s*,\s*\d+(?:[-\u2013]\d+)?)*)"
     )
+    prose_re = re.compile(
+        r"`?([A-Za-z0-9_./-]+\.(?:f90|f|inc|dek|defaults))`?\s+lines?\s+"
+        r"(\d+)(?:(?:\s*(?:[-\u2013]|to)\s*)(\d+))?"
+    )
+    range_item_re = re.compile(r"^(\d+)(?:[-\u2013](\d+))?$")
+
+    frozen_jax_dirs = {"star", "binary", "astero"}
+    non_frozen_py = [
+        p
+        for p in sorted((REPO_ROOT / "src" / "flexmesa").rglob("*.py"))
+        if p.relative_to(REPO_ROOT / "src" / "flexmesa").parts[0]
+        not in frozen_jax_dirs
+    ]
     scan_paths: list[pathlib.Path] = [
         REPO_ROOT / "CLAUDE.md",
         REPO_ROOT / "notes" / "DECISIONS.md",
         REPO_ROOT / "notes" / "SCOPE.md",
+        REPO_ROOT / "notes" / "audit" / "defaults_diff_26_4_1.md",
         *sorted((REPO_ROOT / ".claude" / "rules").glob("*.md")),
         *sorted(DOCS_DIR.rglob("*.md")),
         *sorted((REPO_ROOT / "crates").rglob("*.rs")),
+        *non_frozen_py,
+        *sorted((REPO_ROOT / "tests").rglob("*.py")),
     ]
+
+    def _resolve_target(
+        raw_fp: str, rel_src: pathlib.Path, lno: int, cite_tok: str
+    ) -> pathlib.Path:
+        if "/" in raw_fp:
+            cand = mesa_root / raw_fp
+            assert cand.is_file(), (
+                f"{rel_src}:{lno}: upstream MESA 26.4.1 file not found "
+                f"for citation {cite_tok!r}"
+            )
+            return cand
+        cands = by_basename.get(raw_fp, [])
+        assert cands, (
+            f"{rel_src}:{lno}: upstream MESA 26.4.1 file not found "
+            f"for citation {cite_tok!r}"
+        )
+        assert len(cands) == 1, (
+            f"{rel_src}:{lno}: ambiguous bare basename {raw_fp!r} in "
+            f"{cite_tok!r}; matches "
+            f"{[str(p.relative_to(mesa_root)) for p in cands]}"
+        )
+        return cands[0]
 
     checked = 0
     for src_path in scan_paths:
@@ -261,37 +302,46 @@ def test_upstream_mesa_26_4_1_citations_and_defaults_diff_resolve() -> None:
         for lno, line in enumerate(
             src_path.read_text(encoding="utf-8").splitlines(), start=1
         ):
-            for match in cite_re.finditer(line):
+            for match in colon_re.finditer(line):
                 raw_fp = match.group(1)
+                target = _resolve_target(raw_fp, rel_src, lno, match.group(0))
+                n_max = _num_lines(target)
+                for part in match.group(2).split(","):
+                    rm = range_item_re.match(part.strip())
+                    assert rm is not None
+                    lo = int(rm.group(1))
+                    hi = int(rm.group(2)) if rm.group(2) else lo
+                    assert 1 <= lo <= hi <= n_max, (
+                        f"{rel_src}:{lno}: citation {match.group(0)!r} out of "
+                        f"bounds (1..={n_max}) in "
+                        f"{target.relative_to(mesa_root)}"
+                    )
+                    checked += 1
+            for match in prose_re.finditer(line):
+                raw_fp = match.group(1)
+                target = _resolve_target(raw_fp, rel_src, lno, match.group(0))
+                n_max = _num_lines(target)
                 lo = int(match.group(2))
                 hi = int(match.group(3)) if match.group(3) else lo
-                if "/" in raw_fp:
-                    cands = (
-                        [mesa_root / raw_fp]
-                        if (mesa_root / raw_fp).is_file()
-                        else []
-                    )
-                else:
-                    cands = by_basename.get(raw_fp, [])
-                assert cands, (
-                    f"{rel_src}:{lno}: upstream MESA 26.4.1 file not found "
-                    f"for citation {match.group(0)!r}"
-                )
-                n_max = _num_lines(cands[0])
                 assert 1 <= lo <= hi <= n_max, (
                     f"{rel_src}:{lno}: citation {match.group(0)!r} out of "
-                    f"bounds (1..={n_max}) in {cands[0].relative_to(mesa_root)}"
+                    f"bounds (1..={n_max}) in {target.relative_to(mesa_root)}"
                 )
                 checked += 1
 
-    assert checked >= 850
+    assert checked >= 1100
 
-    # Verify generated notes/audit/defaults_diff_26_4_1.md is up to date.
-    rc = subprocess.call(
-        [
-            sys.executable,
-            str(REPO_ROOT / "scripts" / "audit" / "diff_mesa_defaults.py"),
-            "--check",
-        ]
+    # Verify generated defaults_diff_26_4_1.md is up to date in-process.
+    spec = importlib.util.spec_from_file_location(
+        "diff_mesa_defaults",
+        REPO_ROOT / "scripts" / "audit" / "diff_mesa_defaults.py",
     )
-    assert rc == 0
+    assert spec is not None and spec.loader is not None
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules["diff_mesa_defaults"] = mod
+    spec.loader.exec_module(mod)
+    expected_md = mod.generate_markdown(mesa_root)
+    actual_md = (
+        REPO_ROOT / "notes" / "audit" / "defaults_diff_26_4_1.md"
+    ).read_text(encoding="utf-8")
+    assert actual_md == expected_md

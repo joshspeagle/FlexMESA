@@ -12,9 +12,8 @@
 //!
 //! - [`look_for_brackets`] expands outward geometrically from `x` inside
 //!   `[xmin, xmax]` while verifying finite function evaluations at every step.
-//! - [`safe_root_with_brackets`] combines Newton-Raphson with bisection so the
-//!   iterate never leaves the sign-change bracket and converges superlinearly
-//!   near simple roots.
+//! - [`safe_root_with_brackets`] delegates to [`brent_safe_zero`] so the
+//!   iterate never leaves the sign-change bracket (`mod_root.f90:27-45`).
 //! - [`safe_root_with_guess`] tries guarded Newton steps before bracketing.
 
 use crate::brent::brent_safe_zero;
@@ -73,20 +72,15 @@ where
             x1 = (x1 - jump).max(xmin);
             x3 = (x3 + jump).min(xmax);
             (true, true)
-        } else if y1 > 0.0 {
-            if (y1 < y3 && x1 > xmin) || x3 >= xmax {
+        } else {
+            let prefer_left = if y1 > 0.0 { y1 < y3 } else { y1 > y3 };
+            if (prefer_left && x1 > xmin) || x3 >= xmax {
                 x1 = (x1 - jump).max(xmin);
                 (true, false)
             } else {
                 x3 = (x3 + jump).min(xmax);
                 (false, true)
             }
-        } else if (y1 > y3 && x1 > xmin) || x3 >= xmax {
-            x1 = (x1 - jump).max(xmin);
-            (true, false)
-        } else {
-            x3 = (x3 + jump).min(xmax);
-            (false, true)
         };
 
         if move_x1 {
@@ -118,7 +112,7 @@ where
 
 /// Finds a root $x \in [\min(x_1, x_3), \max(x_1, x_3)]$ of $f(x) = 0$ by
 /// delegating to [`brent_safe_zero`] with relative tolerance `1e-14`, matching
-/// `do_safe_root_with_brackets` in `num/private/mod_root.f90:42-44`.
+/// `do_safe_root_with_brackets` in `num/private/mod_root.f90:27-45`.
 ///
 /// # Errors
 ///

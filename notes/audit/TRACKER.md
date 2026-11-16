@@ -39,31 +39,67 @@ week or more.
 | C11 | #162 | Pulsation, asteroseismology and optimizers | F3-15 to F3-20, N1-1 to N1-5, T2-5, T2-10 | A0, A2 | L |
 | C12 | #163 | History and profile output with upstream column definitions | F4-28, coverage map | none | M |
 | C13 | #164 | Data pipeline provenance and runtime caches | N1-10 to N1-14, F2-4 | A0 | M |
-| C14 | #165 | Math kernels and the bit-level parity decision | N1-6, N1-7 | none | M |
-| C15 | #166 | Scope and honesty of the Python/JAX layer | N1-23 to N1-27, T1-11 | none | M |
+| C14 | #165 | Numerics policy: strict and fast modes from one Rust source | N1-6, N1-7, N1-8 | A0 for exact reference outputs | M |
+| C15 | #166 | JAX contract: derived, differentiable and batched; validated against Rust strict mode | N1-23 to N1-27, T1-11 | C14 | M |
+| A6 | #168 | Profile a real evolution; measure fast math, batching and waste removal | N1-9, N1-17, N1-18, G1-5 | none; B4 and C14 for later parts | S to M |
+| D1 | #170 | Port GYRE | F3-15, F3-16 | A0, A2, C14, C1 to C3 | L |
+| D2 | #171 | Port ADIPLS | F3-15 | A0, A2, C14, C11 | L |
+| D3 | #172 | Port STELLA, after all test-suite cases pass | coverage map | v0.1.0 criteria | L |
+| E1 | #173 | Plotting as we go: pgstar and pgbinary replacement | G1-10, coverage map | C12, A2 | M, then incremental |
+| E2 | #174 | Generated progress dashboard in README and docs | G1-7, G1-9, coverage map | none; A2 for the case table | M |
 
 ## Suggested order
 
-1. In parallel, first: A0, A2, A4, A1, C12. None touches the physics code
-   paths.
-2. Then A3, A5, B1, B4, C13, C14, C15. B1 and B4 both touch the star driver;
-   do them one after the other.
-3. Then B2 and B3, each followed by a regenerated case table. After B2 most
-   tier 2 to 5 cases will no longer run, which is the correct status.
-4. Then Phase C: C1 and C2 first, because they change every trajectory; then
-   C3 and C4; then the rest in the order the generated case table shows to
-   matter.
+Phase 0 is serial, one pull request at a time, before any parallel work:
 
-## Decisions needed from the project lead
+1. PR #138 landed as unverified code with its claims removed (instructions
+   on the pull request).
+2. A4 (#145): the rules. From this point the new rules apply to every agent.
+3. A2 (#143) with a small per-pull-request CI job, and C12 (#163).
+4. A0 (#141): the 26.4.1 reference, exact reference outputs, reference
+   histories.
+5. C14 (#165): the math layer, the routing lint and the cross-machine check.
+6. E2 (#174): the dashboard, so progress is visible from the start.
 
-| Decision | Package | Options |
+After Phase 0, in parallel where files do not collide:
+
+- A1, A3, A5, A6, B1, B4, C13, C15, E1. B1 and B4 both touch the star
+  driver; do them one after the other.
+- Then B2 and B3, each followed by a regenerated case table. After B2 most
+  tier 2 to 5 cases will no longer run, which is the correct status.
+- Then Phase C: C1 and C2 first, because they change every trajectory; then
+  C3 and C4; then the rest in the order the generated case table and the
+  per-case unsupported-feature report show to matter.
+- D1 and D2 after the core engine; D3 after every test-suite case passes.
+
+Collision groups (never run concurrently): B1, B4 and C1 (star step driver
+and solver); B2 and C3 (model initialisation).
+
+## Decisions made by the project lead (2026-11-16)
+
+| Topic | Decision | Recorded in |
 | :-- | :-- | :-- |
-| Upstream reference | A0 | Release 26.4.1 (proposed) |
-| Parity target | C14 | Bit-level at kernel level through a correctly rounded math layer, or stated tolerances everywhere |
-| Scope of the JAX layer while the Rust engine is unverified | C15 | Freeze `star`, `binary`, `astero` twins; keep microphysics twins |
-| Orbital integrator | C9 | Match upstream's first-order step by default, offer the higher-order one as an option |
-| Mode frequencies | C11 | Link GYRE and ADIPLS, or validate the in-house solver against GYRE |
-| Treatment of upstream bugs found in passing | C1, C10 | Match upstream by default and document; never diverge silently |
+| Upstream reference | MESA release 26.4.1 | #141 |
+| Numerics | Strict (hardware-independent, default, judged against MESA) and fast modes from one Rust source; three fidelity levels | #165 |
+| Architecture | Rust canonical; Python front end; JAX derived, for derivatives and batching, validated against Rust strict; JAX engine twins frozen | #166 |
+| Departures from upstream | None before v0.1.0, and no option flags. Bugs and enhancements are deferred issues under #169. Existing departures are removed | #145, #169, #175 to #178 |
+| Bundled codes | GYRE, ADIPLS and STELLA are in scope and are ported; STELLA last | #170, #171, #172 |
+| Plotting | Built as the port proceeds | #173 |
+| Progress reporting | Generated dashboard in README and docs | #174 |
+| v0.1.0 | Defined in [`../SCOPE.md`](../SCOPE.md) | #145 |
+| PR #138 | Merge the code, not the claims | PR #138 |
+| Earlier issues | Closed as superseded; #140 is the only tracker | below |
+
+Still open: whether the 32 upstream development cases are part of a later
+milestone; what to do with behaviour that cannot be reproduced exactly (asked
+case by case).
+
+## Post-parity backlog
+
+Parent issue #169. Sub-issues so far: #175 (higher-order orbit integrator
+and gravitational-wave eccentricity term), #176 (upstream bug in the
+HELM-edge blend derivatives), #177 (upstream bugs in `check_dX` and
+`sizequ`), #178 (RSP2 "intentional fixes" to verify and remove).
 
 ## Data and release assets to plan
 
@@ -78,13 +114,18 @@ week or more.
 
 ## How earlier issues map onto the packages
 
-| Earlier issue | Status after the audit | Now depends on |
-| :-- | :-- | :-- |
-| #89 end-to-end epic, #91 to #96 tiers | Open; re-scoped so that a case counts only when judged against a stored MESA history | A2, A3, B1, B2, then Phase C |
-| #109 fidelity epic | Open as umbrella; Fidelity-1 confirmed for the default path, Fidelity-2 not confirmed | Phase C |
-| #114 Fidelity-3 | Open until PR #138 is resolved | B3, C6, C9, C10, C11 |
-| #115 Fidelity-4 | Open; the shortcuts it set out to remove are still present | B1, B2, C3 |
-| #137, #139 `double_bh` | Open; claims checked in `binary-astero.md` Part 2 | B2, B4, C1, C3, C7, C8, C9 |
-| #110 paper figures, #116 to #121 | Blocked; current atlas is synthetic | A1, A2, then the relevant Phase C packages |
-| #90 documentation | Open | A1, A5, A0, C15 |
-| #3 plotting | Deferred, unchanged | C12 provides the output files plotting would read |
+All of these were closed on 2026-11-16 as superseded by #140. Each carries a
+comment explaining how the audit changed its status.
+
+| Earlier issue | Carried by |
+| :-- | :-- |
+| #89 end-to-end epic, #91 to #96 tiers | A2, A3, B1, B2, then Phase C; acceptance is the generated case table |
+| #109 fidelity epic | Phase C |
+| #114 Fidelity-3 | B3, C6, C9, C10, C11 |
+| #115 Fidelity-4 | B1, B2, C3 |
+| #137, #139 `double_bh` | B2, B4, C1, C3, C7, C8, C9 |
+| #110 paper figures, #116 to #121 | A1, then E1 once the cases behind each figure pass |
+| #3 plotting | E1 (#173) |
+
+Still open from before the audit: #90 (documentation), which depends on A1,
+A5, A0 and C15.

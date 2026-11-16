@@ -18,6 +18,8 @@ pub struct BinaryInlistControls {
     // --- `&binary_job` controls ---
     /// Stellar inlist filenames `[inlist1, inlist2]`.
     pub inlist_names: [String; 2],
+    /// Custom `binary_history_columns.list` path (`binary_history_columns_file`, `binary_job.defaults:31`).
+    pub binary_history_columns_file: String,
     /// Evolve both components simultaneously (`evolve_both_stars`).
     pub evolve_both_stars: bool,
     /// Override initial `ignore_rlof_flag` (`change_initial_ignore_rlof_flag`).
@@ -26,6 +28,17 @@ pub struct BinaryInlistControls {
     pub change_ignore_rlof_flag: bool,
     /// Target `ignore_rlof_flag` value (`new_ignore_rlof_flag`).
     pub new_ignore_rlof_flag: bool,
+
+    // --- Binary history output controls (`binary_controls.defaults:65-122`) ---
+    /// Output directory for `binary_history.data` (`log_directory`, default `"."`).
+    pub log_directory: String,
+    /// Output filename for binary history (`history_name`, default `"binary_history.data"`).
+    pub history_name: String,
+    /// Step interval between binary history writes (`history_interval`, default `5`).
+    pub history_interval: usize,
+    /// Whether to append binary history columns to each component star's `history.data`
+    /// (`append_to_star_history`, default `true`).
+    pub append_to_star_history: bool,
 
     // --- Initial orbital & component specifications ---
     /// Initial primary mass $M_1$ in $M_\odot$ (`m1`).
@@ -264,10 +277,15 @@ impl Default for BinaryInlistControls {
     fn default() -> Self {
         Self {
             inlist_names: [String::from("inlist1"), String::from("inlist2")],
+            binary_history_columns_file: String::new(),
             evolve_both_stars: false,
             change_initial_ignore_rlof_flag: false,
             change_ignore_rlof_flag: false,
             new_ignore_rlof_flag: false,
+            log_directory: String::from("."),
+            history_name: String::from("binary_history.data"),
+            history_interval: 5,
+            append_to_star_history: true,
             m1_msun: 1.0,
             m2_msun: 0.8,
             initial_period_in_days: 0.5,
@@ -420,6 +438,9 @@ impl BinaryInlistControls {
                 *dst = n.trim().to_string();
             }
         }
+        if let Some(v) = bjob.get_str("binary_history_columns_file") {
+            self.binary_history_columns_file = v.trim().to_string();
+        }
         for (dst, key) in [
             (&mut self.evolve_both_stars, "evolve_both_stars"),
             (&mut self.change_initial_ignore_rlof_flag, "change_initial_ignore_rlof_flag"),
@@ -439,7 +460,12 @@ impl BinaryInlistControls {
         if let Some(v) = s.get_i64("anomaly_steps") {
             self.anomaly_steps = v.max(2) as usize;
         }
+        if let Some(v) = s.get_i64("history_interval") {
+            self.history_interval = v.max(0) as usize;
+        }
         for (dst, key) in [
+            (&mut self.log_directory, "log_directory"),
+            (&mut self.history_name, "history_name"),
             (&mut self.mdot_scheme, "mdot_scheme"), (&mut self.solver_type, "solver_type"),
             (&mut self.sync_type_1, "sync_type_1"), (&mut self.sync_type_2, "sync_type_2"),
             (&mut self.sync_mode_1, "sync_mode_1"), (&mut self.sync_mode_2, "sync_mode_2"),
@@ -450,6 +476,7 @@ impl BinaryInlistControls {
             }
         }
         for (dst, key) in [
+            (&mut self.append_to_star_history, "append_to_star_history"),
             (&mut self.keep_donor_fixed, "keep_donor_fixed"),
             (&mut self.terminate_if_initial_overflow, "terminate_if_initial_overflow"),
             (&mut self.terminate_if_l2_overflow, "terminate_if_l2_overflow"),

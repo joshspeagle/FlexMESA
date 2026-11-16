@@ -17,6 +17,7 @@ use flexmesa_star::{
     load_zams_model_from_catalog, relax_composition_with_henyey,
 };
 
+use crate::binary_history::BinaryLogsWriter;
 use crate::e2e_extras::build_test_suite_extras;
 pub use crate::e2e_oracles::{
     BinaryInlistControls, TIER5_BINARY_CASES, eval_brott_wind_msun_yr,
@@ -110,6 +111,22 @@ pub struct BinaryCaseRunReport {
     pub wall_time_ms: f64,
 }
 
+/// Configuration for incremental MESA `binary_history.data` and component
+/// `LOGS1/`/`LOGS2/` output during `binary/test_suite` execution (`#163`).
+#[derive(Debug, Clone, Copy, Default)]
+pub struct BinaryLogsOptions<'a> {
+    /// Optional root directory under which `<log_directory>/<history_name>` and
+    /// component `LOGS1/` / `LOGS2/` files are written.
+    pub output_root: Option<&'a Path>,
+    /// Optional explicit output file path for `binary_history.data`.
+    pub explicit_binary_history_file: Option<&'a Path>,
+    /// Optional override for `history_interval` (`Some(1)` writes every step).
+    pub history_interval_override: Option<usize>,
+    /// Whether to also write component stellar `LOGS1/` / `LOGS2/` files when
+    /// `output_root` is provided (`true` by default when targeting a directory).
+    pub write_star_logs: bool,
+}
+
 /// Executes a single `binary/test_suite/<case>` directory through genuine
 /// coupled [`BinarySystem::try_step_with_extras`] + [`StarModel`] Henyey
 /// evolution and verifies its upstream `run_binary_extras.f90` /
@@ -121,6 +138,21 @@ pub struct BinaryCaseRunReport {
 pub fn run_binary_test_suite_case(
     case_dir: &Path,
     max_steps_cap: Option<usize>,
+) -> Result<BinaryCaseRunReport, StarError> {
+    run_binary_test_suite_case_with_logs(
+        case_dir,
+        max_steps_cap,
+        BinaryLogsOptions::default(),
+    )
+}
+
+/// Executes a single `binary/test_suite/<case>` directory while optionally
+/// streaming incremental MESA-format `binary_history.data` (and component
+/// `LOGS1/` / `LOGS2/` files) according to `logs_opts` (`#163`).
+pub fn run_binary_test_suite_case_with_logs(
+    case_dir: &Path,
+    max_steps_cap: Option<usize>,
+    logs_opts: BinaryLogsOptions<'_>,
 ) -> Result<BinaryCaseRunReport, StarError> {
     let t0 = Instant::now();
     let case_name = case_dir
@@ -145,6 +177,30 @@ pub fn run_binary_test_suite_case(
         BinarySystem::from_controls_point_mass(donor, bctrl.clone())?
     };
 
+    let mut logs_writer = if logs_opts.output_root.is_some()
+        || logs_opts.explicit_binary_history_file.is_some()
+    {
+        let root = logs_opts
+            .output_root
+            .or_else(|| {
+                logs_opts
+                    .explicit_binary_history_file
+                    .and_then(Path::parent)
+                    .filter(|p| !p.as_os_str().is_empty())
+            })
+            .unwrap_or_else(|| Path::new("."));
+        Some(BinaryLogsWriter::for_run(
+            &bin,
+            case_dir,
+            root,
+            logs_opts.explicit_binary_history_file,
+            logs_opts.history_interval_override,
+            logs_opts.write_star_logs,
+        )?)
+    } else {
+        None
+    };
+
     let uncapped = max_steps_cap.is_none();
     let step_limit = max_steps_cap.unwrap_or(100_000).max(1);
     let mut case_extras = build_test_suite_extras(&case_name, &bin, &bctrl);
@@ -166,6 +222,11 @@ pub fn run_binary_test_suite_case(
                 ))
             })?;
         dt_next = suggested_dt;
+        let has_term = bin.last_termination_reason.is_some();
+        let is_terminating = has_term || bin.model_number >= step_limit;
+        if let Some(ref mut lw) = logs_writer {
+            lw.record_step(&bin, bin.model_number == 1, is_terminating)?;
+        }
         if let Some(ref reason) = bin.last_termination_reason {
             term_code.clone_from(reason);
             break;

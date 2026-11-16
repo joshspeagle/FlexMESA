@@ -435,6 +435,7 @@ impl BinarySystem {
         );
         self.rl = rl_new;
         self.rl_relative_gap = gap_new;
+        self.step_mtransfer_rate = mtr_eff;
         self.last_mdot = acct;
         self.last_jdot = last_jb;
         let _ = self.refresh_tidal_deformation_hooks(false);

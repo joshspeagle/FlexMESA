@@ -429,6 +429,16 @@ pub struct StarJobControls {
     pub remove_initial_center_by_temperature: Option<f64>,
     /// Whether `pgstar` live plotting was requested in the inlist (accepted as no-op).
     pub pgstar_flag: bool,
+    /// Custom `history_columns.list` path (`history_columns_file` in `star/defaults/star_job.defaults:214`).
+    pub history_columns_file: String,
+    /// Custom `profile_columns.list` path (`profile_columns_file` in `star/defaults/star_job.defaults:224`).
+    pub profile_columns_file: String,
+    /// Save an explicit radial profile upon stage termination (`write_profile_when_terminate` in `star_job.defaults:306`).
+    pub write_profile_when_terminate: bool,
+    /// Output filename when `write_profile_when_terminate` is enabled (`filename_for_profile_when_terminate` in `star_job.defaults:307`).
+    pub filename_for_profile_when_terminate: String,
+    /// Save a priority-3 profile of the starting model before step 1 (`profile_starting_model` in `star_job.defaults:282`).
+    pub profile_starting_model: bool,
 }
 
 impl Default for StarJobControls {
@@ -520,6 +530,11 @@ impl Default for StarJobControls {
             steps_to_take_before_terminate: None,
             remove_initial_center_by_temperature: None,
             pgstar_flag: false,
+            history_columns_file: String::new(),
+            profile_columns_file: String::new(),
+            write_profile_when_terminate: false,
+            filename_for_profile_when_terminate: String::new(),
+            profile_starting_model: false,
         }
     }
 }

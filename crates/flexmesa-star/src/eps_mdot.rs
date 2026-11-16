@@ -25,37 +25,46 @@ pub(crate) fn eval_specific_kinetic_energy_profile(
     (0..model.nz).map(|k| eval_cell_ke(model, k)).collect()
 }
 
-/// Computes the specific total energy profile $e_{\mathrm{tot},k} = e_k -
+/// Evaluates the single-zone specific total energy $e_{\mathrm{tot},k} = e_k -
 /// \frac{1}{2} c_{\mathrm{mc}} \left(\frac{G m_{\mathrm{grav},k}}{r_k} +
 /// \frac{G m_{\mathrm{grav},k+1}}{r_{k+1}}\right) + \tfrac{1}{2} v_k^2$
+/// ($\mathrm{erg\,g^{-1}}$) at zone `k` (`eval_cell_section_total_energy` in
+/// `star/private/star_utils.f90:2245-2283` and `profile_getval.f90:2022-2023`).
+#[must_use]
+#[inline]
+pub fn eval_cell_specific_total_energy(model: &StarModel, k: usize) -> f64 {
+    let nz = model.nz;
+    if k >= nz {
+        return 0.0;
+    }
+    let mc = if model.controls.use_mass_corrections {
+        model.aux.mass_correction.get(k).copied().unwrap_or(1.0)
+    } else {
+        1.0
+    };
+    let grav_00 = if model.r[k] > 0.0 {
+        -model.cgrav[k] * model.m_grav[k] / model.r[k]
+    } else {
+        0.0
+    };
+    let (r_p1, m_p1, g_p1) = if k + 1 < nz {
+        (model.r[k + 1], model.m_grav[k + 1], model.cgrav[k + 1])
+    } else {
+        (model.r_center, model.m_center, model.cgrav[k])
+    };
+    let grav_p1 = if r_p1 > 0.0 { -g_p1 * m_p1 / r_p1 } else { 0.0 };
+    let e_grav = 0.5 * mc * (grav_00 + grav_p1);
+    model.energy[k] + e_grav + eval_cell_ke(model, k)
+}
+
+/// Computes the specific total energy profile $e_{\mathrm{tot},k}$
 /// ($\mathrm{erg\,g^{-1}}$) across all `0..nz` zones
 /// (`cell_specific_PE` in `star_utils.f90:2245-2283`).
 #[must_use]
 pub fn eval_specific_total_energy_profile(model: &StarModel) -> Vec<f64> {
-    let nz = model.nz;
-    let use_mc = model.controls.use_mass_corrections;
-    let mut te = vec![0.0; nz];
-    for (k, te_k) in te.iter_mut().enumerate() {
-        let mc = if use_mc {
-            model.aux.mass_correction.get(k).copied().unwrap_or(1.0)
-        } else {
-            1.0
-        };
-        let grav_00 = if model.r[k] > 0.0 {
-            -model.cgrav[k] * model.m_grav[k] / model.r[k]
-        } else {
-            0.0
-        };
-        let (r_p1, m_p1, g_p1) = if k + 1 < nz {
-            (model.r[k + 1], model.m_grav[k + 1], model.cgrav[k + 1])
-        } else {
-            (model.r_center, model.m_center, model.cgrav[k])
-        };
-        let grav_p1 = if r_p1 > 0.0 { -g_p1 * m_p1 / r_p1 } else { 0.0 };
-        let e_grav = 0.5 * mc * (grav_00 + grav_p1);
-        *te_k = model.energy[k] + e_grav + eval_cell_ke(model, k);
-    }
-    te
+    (0..model.nz)
+        .map(|k| eval_cell_specific_total_energy(model, k))
+        .collect()
 }
 
 /// Computes downward inter-cell mass flux $F_k$ (`len = nz + 1`, with

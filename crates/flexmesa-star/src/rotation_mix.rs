@@ -254,6 +254,36 @@ fn eval_heger_rot_diffusivities(model: &StarModel) -> RotDiffArrays {
     }
 }
 
+pub(crate) fn eval_d_mix_non_rotation_vec(model: &StarModel) -> Vec<f64> {
+    let nz = model.nz;
+    let mw = &model.controls.mix_wind;
+    if !model.controls.rotation_flag || (mw.am_d_mix_factor <= 0.0 && mw.d_visc_factor <= 0.0) {
+        return (0..nz)
+            .map(|k| match model.mixing_type.get(k).copied() {
+                Some(MixingType::NoMixing | MixingType::RotationMixing) | None => 0.0,
+                Some(_) => model.d_mix.get(k).copied().unwrap_or(0.0),
+            })
+            .collect();
+    }
+    let diffs = eval_heger_rot_diffusivities(model);
+    (0..nz)
+        .map(|k| match model.mixing_type.get(k).copied() {
+            Some(MixingType::NoMixing | MixingType::RotationMixing) | None => 0.0,
+            Some(_) => {
+                let d_rot_k = mw.d_visc_factor.max(0.0) * diffs.d_visc[k]
+                    + mw.am_d_mix_factor.max(0.0)
+                        * (mw.d_dsi_factor * diffs.d_dsi[k]
+                            + mw.d_sh_factor * diffs.d_sh[k]
+                            + mw.d_ssi_factor * diffs.d_ssi[k]
+                            + mw.d_es_factor * diffs.d_es[k]
+                            + mw.d_gsf_factor * diffs.d_gsf[k]
+                            + mw.d_st_factor * diffs.d_st[k]);
+                (model.d_mix[k] - d_rot_k).max(0.0)
+            }
+        })
+        .collect()
+}
+
 pub(crate) fn augment_d_mix_with_rotation(model: &mut StarModel) {
     let mw = model.controls.mix_wind.clone();
     if !model.controls.rotation_flag || (mw.am_d_mix_factor <= 0.0 && mw.d_visc_factor <= 0.0) {

@@ -76,6 +76,15 @@ pub struct BinarySystem {
     pub rl_relative_gap: [f64; 2],
     /// Current mass transfer rate $\dot{M}_{\mathrm{tr}} \le 0$ ($\mathrm{g\,s^{-1}}$).
     pub mtransfer_rate: f64,
+    /// Mass transfer rate actually applied during the most recent accepted step
+    /// (`b% step_mtransfer_rate` in `run_binary_support.f90:415`, $\mathrm{g\,s^{-1}}$).
+    pub step_mtransfer_rate: f64,
+    /// Initial component masses `[initial_mass(1), initial_mass(2)]` in $M_\odot$
+    /// (`binary_def.f90:32` and `binary_evolve.f90:75-87`).
+    pub initial_mass_msun: [f64; 2],
+    /// Initial orbital period in seconds (`initial_binary_period` in
+    /// `binary_def.f90:29` and `binary_evolve.f90:173`).
+    pub initial_binary_period_sec: f64,
     /// Total orbital angular momentum derivative $\dot{J}_{\mathrm{orb}}$ ($\mathrm{g\,cm^2\,s^{-2}}$).
     pub jdot: f64,
     /// Binary age (yr).
@@ -271,6 +280,11 @@ impl BinarySystem {
             false
         };
 
+        let init_masses_msun = if donor_i == 1 {
+            [donor.mstar / MSUN, m_a / MSUN]
+        } else {
+            [m_a / MSUN, donor.mstar / MSUN]
+        };
         let mut sys = Self {
             donor,
             companion,
@@ -281,6 +295,9 @@ impl BinarySystem {
             rl,
             rl_relative_gap,
             mtransfer_rate: 0.0,
+            step_mtransfer_rate: 0.0,
+            initial_mass_msun: init_masses_msun,
+            initial_binary_period_sec: period,
             jdot: 0.0,
             binary_age_yr: 0.0,
             model_number: 0,
@@ -471,6 +488,7 @@ impl BinarySystem {
         self.point_mass_i = new_point_mass_i;
         self.donor_i = 3 - new_point_mass_i;
         self.mtransfer_rate = 0.0;
+        self.step_mtransfer_rate = 0.0;
         self.change_factor = self.controls.max_change_factor;
         self.last_mdot = CoupledMdotAccounting::default();
         self.last_jdot = JdotBreakdown::default();
@@ -542,8 +560,8 @@ impl BinarySystem {
         BinaryStepSnapshot::capture(
             &self.donor, comp_star, pm_state, self.point_mass_i, self.donor_i,
             self.separation, self.period, self.eccentricity, self.angular_momentum_j,
-            self.rl, self.rl_relative_gap, self.mtransfer_rate, self.jdot,
-            self.binary_age_yr, self.model_number, self.max_timestep_sec,
+            self.rl, self.rl_relative_gap, self.mtransfer_rate, self.step_mtransfer_rate,
+            self.jdot, self.binary_age_yr, self.model_number, self.max_timestep_sec,
             self.change_factor, self.using_jdot_mb, self.cumulative_j_ext,
             self.last_mdot, self.last_jdot,
         )
@@ -571,6 +589,7 @@ impl BinarySystem {
         self.rl = snap.rl;
         self.rl_relative_gap = snap.rl_relative_gap;
         self.mtransfer_rate = snap.mtransfer_rate;
+        self.step_mtransfer_rate = snap.step_mtransfer_rate;
         self.jdot = snap.jdot;
         self.binary_age_yr = snap.binary_age_yr;
         self.model_number = snap.model_number;

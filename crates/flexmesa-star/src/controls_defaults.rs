@@ -47,6 +47,7 @@ impl Default for StarControls {
             eps_nuc_factor: 1.0,
             dxdt_nuc_factor: 1.0,
             screening_mode: ScreeningMode::Extended,
+            calculate_brunt_b: true,
             calculate_brunt_n2: true,
             use_brunt_gradmux_form: false,
             energy_eqn_option: EnergyEqnOption::Dedt,
@@ -267,6 +268,7 @@ impl Default for StarControls {
             mix_wind: crate::controls_mix_wind::MixWindControls::default(),
             ts_stop:
                 crate::controls_timestep_stop::TimestepStopControls::default(),
+            output: crate::controls_output::OutputControls::default(),
         }
     }
 }

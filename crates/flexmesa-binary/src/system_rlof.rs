@@ -22,7 +22,7 @@ use crate::mdot::{
     eval_arras_mdot_thin, eval_kolb_mdot_eccentric, eval_kolb_mdot_thick,
     eval_ritter_mdot_eccentric,
 };
-use crate::system_jdot::JdotBreakdown;
+use crate::system_jdot::{EdotBreakdown, JdotBreakdown};
 
 /// Per-step wind, RLOF, Eddington, and system mass-loss accounting (`adjust_mdots`
 /// in `binary/private/binary_mdot.f90:506-660`, indexed `[donor_slot, accretor_slot]`).
@@ -104,6 +104,8 @@ pub struct BinaryStepSnapshot {
     pub last_mdot: CoupledMdotAccounting,
     /// Previous torque breakdown.
     pub last_jdot: JdotBreakdown,
+    /// Previous eccentricity-rate breakdown.
+    pub last_edot: EdotBreakdown,
 }
 
 impl BinaryStepSnapshot {
@@ -133,6 +135,7 @@ impl BinaryStepSnapshot {
         cumulative_j_ext: f64,
         last_mdot: CoupledMdotAccounting,
         last_jdot: JdotBreakdown,
+        last_edot: EdotBreakdown,
     ) -> Self {
         Self {
             donor_state: donor.clone(),
@@ -157,6 +160,7 @@ impl BinaryStepSnapshot {
             cumulative_j_ext,
             last_mdot,
             last_jdot,
+            last_edot,
         }
     }
 

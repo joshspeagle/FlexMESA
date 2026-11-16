@@ -475,6 +475,24 @@ pub fn eval_gated_jdot(
     }
 }
 
+/// Eccentricity-rate terms applied by the orbital update ($\mathrm{s}^{-1}$).
+///
+/// These are the values the engine used, stored so that `binary_history.data`
+/// reports them (`b% edot`, `b% edot_tidal`, `b% edot_enhance` in
+/// `binary/private/binary_history.f90`) and never a recomputed quantity.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct EdotBreakdown {
+    /// Gravitational-wave term. Not present upstream (`binary_edot.f90:93`);
+    /// removed under `#160`, tracked as `#175` under `#169`.
+    pub edot_gr: f64,
+    /// Tidal circularisation term (`edot_tidal`).
+    pub edot_tidal: f64,
+    /// Eccentricity-enhancement term (`edot_enhance`).
+    pub edot_enhance: f64,
+    /// Sum applied to the eccentricity (`edot`).
+    pub edot_total: f64,
+}
+
 /// Evaluates gated orbital eccentricity derivative $\dot{e}$ ($\mathrm{s}^{-1}$)
 /// (`get_edot` in `binary/private/binary_edot.f90:33-182`).
 #[allow(clippy::too_many_arguments)]
@@ -490,8 +508,35 @@ pub fn eval_coupled_edot(
     period: f64,
     eccentricity: f64,
 ) -> f64 {
+    eval_coupled_edot_breakdown(
+        ctrl, donor, accretor_star, donor_i, m_donor, m_accretor, separation, period,
+        eccentricity,
+    )
+    .edot_total
+}
+
+/// Evaluates the terms of the gated orbital eccentricity derivative
+/// (`get_edot` in `binary/private/binary_edot.f90:33-182`).
+///
+/// Departures from upstream that are still in this routine, both owed under
+/// `#160`: the gravitational-wave term (`#175`), and the use of each star's
+/// own `Ftid` where upstream uses `Ftid_1` for both (`binary_edot.f90:172`,
+/// `#186`).
+#[allow(clippy::too_many_arguments)]
+#[must_use]
+pub fn eval_coupled_edot_breakdown(
+    ctrl: &BinaryInlistControls,
+    donor: &StarModel,
+    accretor_star: Option<&StarModel>,
+    donor_i: usize,
+    m_donor: f64,
+    m_accretor: f64,
+    separation: f64,
+    period: f64,
+    eccentricity: f64,
+) -> EdotBreakdown {
     if eccentricity <= 0.0 {
-        return 0.0;
+        return EdotBreakdown::default();
     }
     let edot_gr = if ctrl.do_jdot_gr {
         eval_edot_gr(m_donor, m_accretor, separation, eccentricity)
@@ -541,5 +586,10 @@ pub fn eval_coupled_edot(
     } else {
         0.0
     };
-    edot_gr + edot_tidal + edot_enhance
+    EdotBreakdown {
+        edot_gr,
+        edot_tidal,
+        edot_enhance,
+        edot_total: edot_gr + edot_tidal + edot_enhance,
+    }
 }

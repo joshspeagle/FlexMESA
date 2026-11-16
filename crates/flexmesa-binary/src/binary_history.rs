@@ -24,11 +24,9 @@ use flexmesa_star::{
 
 use crate::edd_wind::eval_accreted_material_j;
 use crate::jdot_tides::{
-    eval_edot_tidal_hut, eval_k_div_t_convective, eval_k_div_t_radiative,
+    eval_k_div_t_convective, eval_k_div_t_radiative,
     eval_tsync,
 };
-use crate::mdot::eval_edot_enhancement_isotropic;
-use crate::orbit::eval_rlobe;
 use crate::system::{BinaryCompanion, BinarySystem};
 use crate::system_jdot::eval_star_spin_j;
 
@@ -473,123 +471,6 @@ fn eval_star_tsync_sec(
     if ts.is_finite() && ts > 0.0 { ts } else { 0.0 }
 }
 
-fn eval_edot_components(sys: &BinarySystem) -> (f64, f64, f64) {
-    // `binary_evolve.f90:331-340`: `edot* = 0` on `doing_first_model_of_run` (`model_number <= 1`).
-    if sys.eccentricity <= 0.0 || sys.model_number <= 1 {
-        return (0.0, 0.0, 0.0);
-    }
-    let m_d = sys.donor.mstar;
-    let m_a = sys.accretor_mass_g();
-    let acc_star = match &sys.companion {
-        BinaryCompanion::PointMass { .. } => None,
-        BinaryCompanion::Star(s2) => Some(&**s2),
-    };
-    let edot_tidal = if sys.controls.do_tidal_circ {
-        let (circ_d, circ_a) = if sys.donor_i == 1 {
-            (
-                sys.controls.circ_type_1.as_str(),
-                sys.controls.circ_type_2.as_str(),
-            )
-        } else {
-            (
-                sys.controls.circ_type_2.as_str(),
-                sys.controls.circ_type_1.as_str(),
-            )
-        };
-        let phot_d = eval_photosphere_info(&sys.donor);
-        let r_phot_d = phot_d.r_rsun * RSUN;
-        let omega_d = eval_surf_avg_rotation_info(&sys.donor).omega;
-        let kt_d = eval_upstream_k_div_t(
-            &sys.donor,
-            circ_d,
-            r_phot_d,
-            phot_d.l_lsun,
-            omega_d,
-            m_a,
-            sys.separation,
-            sys.period,
-            sys.controls.tidal_reduction,
-        );
-        // Reproduces `binary_edot.f90:172` verbatim (`b% Ftid_1` on both stars, `#186` under `#169`).
-        let mut et = eval_edot_tidal_hut(
-            kt_d,
-            m_d,
-            m_a,
-            r_phot_d,
-            sys.separation,
-            sys.eccentricity,
-            omega_d,
-            sys.period,
-            sys.controls.ftid_1,
-        );
-        if let Some(acc) = acc_star {
-            let phot_a = eval_photosphere_info(acc);
-            let r_phot_a = phot_a.r_rsun * RSUN;
-            let omega_a = eval_surf_avg_rotation_info(acc).omega;
-            let kt_a = eval_upstream_k_div_t(
-                acc,
-                circ_a,
-                r_phot_a,
-                phot_a.l_lsun,
-                omega_a,
-                m_d,
-                sys.separation,
-                sys.period,
-                sys.controls.tidal_reduction,
-            );
-            et += eval_edot_tidal_hut(
-                kt_a,
-                m_a,
-                m_d,
-                r_phot_a,
-                sys.separation,
-                sys.eccentricity,
-                omega_a,
-                sys.period,
-                sys.controls.ftid_1,
-            );
-        }
-        if sys.controls.max_abs_edot_tidal > 0.0 && et < -sys.controls.max_abs_edot_tidal {
-            -sys.controls.max_abs_edot_tidal
-        } else {
-            et
-        }
-    } else {
-        0.0
-    };
-    let edot_enhance = if sys.controls.use_eccentricity_enhancement && sys.donor.nz > 0 {
-        let rl_d = eval_rlobe(m_d, m_a, sys.separation);
-        let is_kolb = sys.controls.mdot_scheme.eq_ignore_ascii_case("Kolb");
-        let r_phot_d = eval_photosphere_info(&sys.donor).r_rsun * RSUN;
-        let mut enh = eval_edot_enhancement_isotropic(
-            m_d,
-            m_a,
-            r_phot_d,
-            rl_d,
-            sys.eccentricity,
-            sys.donor.rho[0].max(1.0e-30),
-            sys.donor.peos[0].max(1.0),
-            sys.donor.t[0].max(10.0),
-            sys.donor.mu[0].max(0.5),
-            &sys.donor.r,
-            &sys.donor.peos,
-            &sys.donor.t,
-            &sys.donor.mu,
-            &sys.donor.gamma1,
-            is_kolb,
-            sys.controls.anomaly_steps,
-        );
-        if sys.controls.max_abs_edot_enhance > 0.0 && enh > sys.controls.max_abs_edot_enhance {
-            enh = sys.controls.max_abs_edot_enhance;
-        }
-        enh
-    } else {
-        0.0
-    };
-    // Reproduces `binary_edot.f90:93` verbatim (`edot = edot_tidal + edot_enhance`, `#175` under `#169`).
-    (edot_tidal + edot_enhance, edot_tidal, edot_enhance)
-}
-
 /// Evaluates all requested [`BinaryHistoryColumnSpec`] columns on `sys`
 /// matching `binary_history_getval` (`binary/private/binary_history.f90:507-749`).
 #[must_use]
@@ -628,7 +509,16 @@ pub fn evaluate_binary_history_row(
         - sys.mass_transfer_alpha
         - sys.mass_transfer_beta
         - sys.mass_transfer_delta;
-    let (edot_tot, edot_tidal, edot_enhance) = eval_edot_components(sys);
+    // `binary_history.f90` writes the stored `b% edot`, `b% edot_tidal` and
+    // `b% edot_enhance`, so report the terms the orbital update applied.
+    // While the engine still carries the gravitational-wave term (`#175`)
+    // and per-star `Ftid` (`#186`), both owed under `#160`, these columns
+    // show that departure instead of hiding it.
+    let (edot_tot, edot_tidal, edot_enhance) = (
+        sys.last_edot.edot_total,
+        sys.last_edot.edot_tidal,
+        sys.last_edot.edot_enhance,
+    );
 
     // `binary_mdot.f90:562-565, 964-982` and `binary_history.f90:671-675`.
     let (accretion_mode, acc_am_div_kep_am) = if sys.controls.do_j_accretion
@@ -662,6 +552,7 @@ pub fn evaluate_binary_history_row(
                 "period_hr" => MesaCellValue::Float(sys.period / 3600.0),
                 "period_minutes" => MesaCellValue::Float(sys.period / 60.0),
                 // Reproduces `binary_history.f90:538` verbatim (`safe_log10(b% separation)` in cm).
+                // Reproduces `binary_history.f90:538` verbatim (no division by `Rsun`; `#183` under `#169`).
                 "lg_separation" => MesaCellValue::Float(safe_log10(sys.separation)),
                 "binary_separation" => MesaCellValue::Float(sys.separation / RSUN),
                 "eccentricity" => MesaCellValue::Float(sys.eccentricity),
@@ -745,7 +636,8 @@ pub fn evaluate_binary_history_row(
                 "star_1_div_star_2_mass" => {
                     MesaCellValue::Float(m_by_star[0] / m_by_star[1].max(1.0e-99))
                 }
-                // Reproduces `binary_history.f90:610-612` verbatim (`b% m(i) - initial_mass(i)`).
+                // Reproduces `binary_history.f90:610-612` verbatim (`b% m(i) - initial_mass(i)`,
+                // grams minus solar masses; `#183` under `#169`).
                 "delta_star_1_mass" => {
                     MesaCellValue::Float(m_by_star[0] - sys.initial_mass_msun[0])
                 }

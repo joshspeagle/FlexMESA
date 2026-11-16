@@ -19,8 +19,8 @@ use crate::orbit::{
 };
 use crate::system::{BinaryCompanion, BinarySystem, compute_rl_and_gaps};
 use crate::system_jdot::{
-    JdotBreakdown, apply_tidal_spin_sync, conserve_spin_after_henyey,
-    eval_coupled_edot, eval_gated_jdot, eval_star_spin_j,
+    EdotBreakdown, JdotBreakdown, apply_tidal_spin_sync, conserve_spin_after_henyey,
+    eval_coupled_edot, eval_coupled_edot_breakdown, eval_gated_jdot, eval_star_spin_j,
 };
 use crate::system_rlof::{
     blend_explicit_mdot, eval_scheme_explicit_mdot, evolve_single_star_without_term_rewind,
@@ -372,6 +372,7 @@ impl BinarySystem {
         let h = dt_used / (n_sub as f64);
         let (mut j_cur, mut e_cur, mut dj_non_ls_accum) = (j_old, e_old, 0.0_f64);
         let mut last_jb = JdotBreakdown::default();
+        let mut last_eb = EdotBreakdown::default();
         let acc_ref = match &self.companion {
             BinaryCompanion::PointMass { .. } => None,
             BinaryCompanion::Star(s2) => Some(&**s2),
@@ -411,7 +412,8 @@ impl BinarySystem {
                 acct.mdot_system_transfer[1], acct.mdot_system_wind[1], acct.mdot_system_cct,
                 s_pre_d, s_post_d, j_surf_pre_d, s_pre_a, s_post_a, j_surf_pre_a, dt_used, 0.0, &mut mb_mid,
             );
-            let ed_m = eval_coupled_edot(&self.controls, &self.donor, acc_ref, self.donor_i, md_m, ma_m, a_m, p_m, e_m);
+            let eb_m = eval_coupled_edot_breakdown(&self.controls, &self.donor, acc_ref, self.donor_i, md_m, ma_m, a_m, p_m, e_m);
+            let ed_m = eb_m.edot_total;
             if sub + 1 == n_sub {
                 self.using_jdot_mb = mb_mid;
             }
@@ -423,6 +425,7 @@ impl BinarySystem {
             e_cur = (e_cur + ed_m * h).clamp(self.controls.min_eccentricity, self.controls.max_eccentricity);
             dj_non_ls_accum += (jb_m.jdot_total - jb_m.jdot_ls) * h;
             last_jb = jb_m;
+            last_eb = eb_m;
         }
 
         self.angular_momentum_j = j_cur;
@@ -438,6 +441,7 @@ impl BinarySystem {
         self.step_mtransfer_rate = mtr_eff;
         self.last_mdot = acct;
         self.last_jdot = last_jb;
+        self.last_edot = last_eb;
         let _ = self.refresh_tidal_deformation_hooks(false);
         finalize_star_post_binary_torques(&mut self.donor)?;
         if let BinaryCompanion::Star(ref mut s2) = self.companion {

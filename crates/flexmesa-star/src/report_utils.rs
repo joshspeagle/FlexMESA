@@ -626,7 +626,8 @@ pub fn eval_photosphere_info(model: &StarModel) -> PhotosphereInfo {
                 } else if model.controls.v_flag {
                     v = model.v[k] + (model.v[k + 1] - model.v[k]) * frac;
                 }
-                // Reproduces `star/private/star_utils.f90:1186-1189` verbatim.
+                // Reproduces `star/private/star_utils.f90:1186-1189` verbatim
+                // (surface `L` and surface `cgrav`; `#182` under `#169`).
                 l_erg = model.lum[0].max(1.0);
                 logg = safe_log10(model.cgrav[0] * m / (r * r).max(1.0e-99));
                 k_phot_0 = k;
@@ -780,7 +781,8 @@ pub fn eval_surf_avg_rotation_info(model: &StarModel) -> SurfAvgRotationInfo {
         let omega = 0.5 * (model.omega[k] + model.omega[k + 1]);
         let j_rot = 0.5 * (model.j_rot[k] + model.j_rot[k + 1]);
 
-        // Reproduces `hydro_rotation.f90:707` AND `:722` verbatim.
+        // Reproduces `hydro_rotation.f90:707` AND `:722` verbatim (`kap_sum`
+        // accumulated twice; `#181` under `#169`).
         kap_sum += dm * kap;
         j_rot_sum += dm * j_rot;
 

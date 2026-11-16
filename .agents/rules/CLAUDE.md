@@ -100,7 +100,7 @@
   - Every trajectory-changing pull request must include the script-generated before-and-after case table and trajectory comparison figure (`#143`, `#173`).
 - **Forbidden Pass-Manufacturing Practices**:
   - Never make a test or case pass by loosening a tolerance (`DECISIONS #9`), changing an expected value, capping step counts, adding `#[ignore]` or `xfail`, clamping physical state, adding convergence fallbacks, or branching on a test-case name or mass range.
-  - Library crates (`crates/flexmesa-*` outside dedicated test-suite harnesses/extras) must contain **zero** test-case names (`"double_bh"`, `"hb_2M"`, ...) or case-specific parameter overrides (`#148`).
+  - Library crates (`crates/flexmesa-*`) must contain **zero** test-case names (`"double_bh"`, `"hb_2M"`, ...) or case-specific parameter overrides, with no exception for files named as harnesses or extras: the existing `tier1_extras.rs` to `tier5_extras.rs` and the case-name branches in `star_job_init.rs` are removed under `#148`. Per-case hooks live in test-side code and port only what upstream's own `run_star_extras.f90` or `run_binary_extras.f90` does.
 - **No Undeclared Failures (Replacing `"All Green Before Merge"`, `#144`)**:
   - Removing fabricated behaviour or placeholder physics is expected to make unfinished cases fail; a failing case due to unported physics is an accurate measurement.
   - Record known failures in the declared known-gaps manifest with an open issue link (`#144`). CI gates on **zero undeclared failures** (and flags declared gaps that begin passing). Every `#[ignore]` or `xfail(strict=True)` in the repository must carry an open `#<issue>` link.

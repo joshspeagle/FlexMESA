@@ -17,6 +17,8 @@ Every choice that another developer could reasonably make differently and that a
 
 ## DECISIONS #2: Legacy & External Bundled Subsystem Scope Exclusions (~98,000 LOC)
 
+- **Status**: Superseded in part on 2026-11-16 by `DECISIONS #17` and `notes/SCOPE.md`. The bundled codes `GYRE`, `ADIPLS` and `STELLA` are in scope (`#170`, `#171`, `#172`), and plotting is built alongside the port (`#173`). The exclusions recorded below no longer apply.
+
 - **Date**: 2026-11-04
 - **Decision**:
   1. **Exclude `pgstar` and `pgbinary` (`~26,000` LOC + `2,957` struct fields on `s% pg`; tracked in `#3`)**: Replace Fortran PGPLOT X11/PNG plotting with a modern Python/Matplotlib diagnostic plotting module (`flexmesa.plotting`) operating on history and profile structures.
@@ -69,6 +71,8 @@ Every choice that another developer could reasonably make differently and that a
 
 ## DECISIONS #6: Integrated Three-Tier Hybrid Architecture (`Safe Rust Core via PyO3 + Native @jax.jit Array Kernels`)
 
+- **Status**: Superseded on 2026-11-16 by `DECISIONS #17` item 5 (`#165`, `#166`). Rust is canonical with strict and fast numerics modes from one source; JAX is a derived layer and is not implemented in parallel for every kernel.
+
 - **Date**: 2026-11-06
 - **Decision**: Partition `FlexMESA` across three architectural tiers unified behind a single Python API (`backend="auto" | "rust" | "jax"`):
   1. **Tier A (`utils`, `schema`, `data`, `testing`, `auto_diff`)**: Maintain a single canonical implementation in Safe Rust (`crates/` with `#![forbid(unsafe_code)]`, persistent `rayon` worker pool, and zero-copy `.safetensors` memory mapping), exposed to Python via a compiled `PyO3` extension module (`flexmesa._rust`). Prune duplicated pure-Python infrastructure parsers/loaders and scalar Python operator-overloaded dual-number loops.
@@ -83,6 +87,8 @@ Every choice that another developer could reasonably make differently and that a
 
 ## DECISIONS #7: Block-Tridiagonal & Stiff Solver Strategy (`Odd-Even bcyclic + Native JAX PCR + Rust FFI custom_vjp`)
 
+- **Status**: Superseded on 2026-11-16 by `DECISIONS #17` item 5 (`#165`, `#166`).
+
 - **Date**: 2026-11-06
 - **Decision**:
   1. In Safe Rust (`crates/flexmesa-mtx`), implement Hirshman et al. (2010) odd-even parallel block cyclic reduction (`solve_block_tridiag_bcyclic`) alongside sequential block-Thomas (`solve_block_tridiagonal`), parallelized over a persistent `rayon` thread pool.
@@ -95,6 +101,8 @@ Every choice that another developer could reasonably make differently and that a
 ---
 
 ## DECISIONS #8: Standing `Wave X.5` Consolidation, Optimization, Upstream Fortran MESA Gate & Public MkDocs Material Website
+
+- **Status**: Superseded on 2026-11-16 by `DECISIONS #17`. The mandatory `Wave X.5` gates are withdrawn; progress is judged by the upstream-history harness (`#143`) and reported by the generated dashboard (`#174`).
 
 - **Date**: 2026-11-06
 - **Decision**:
@@ -126,6 +134,8 @@ Every choice that another developer could reasonably make differently and that a
 ---
 
 ## DECISIONS #10: Upstream MESA End-to-End `test_suite` Reproduction (`E2E-0`–`E2E-5`) & Public Documentation Overhaul (`Docs-1`–`Docs-5`)
+
+- **Status**: Superseded on 2026-11-16 by `DECISIONS #17`. The end-to-end results recorded below were step-capped runs judged by criteria that compared nothing with upstream (`notes/audit/README.md`, findings `T1-1`, `T2-1`, `T2-7`). Several items below describe non-upstream behaviour that is removed under `#148`. End-to-end acceptance is defined in `notes/SCOPE.md` and `#143`.
 
 - **Date**: 2026-11-08
 - **Decision**:
@@ -181,6 +191,8 @@ Every choice that another developer could reasonably make differently and that a
 ---
 
 ## DECISIONS #12: Track 4 Canonical MESA I-VI Instrument Paper Figure Reproduction Atlas (`PaperFigs-1`-`PaperFigs-6`, Epic `#110`, Sub-Issues `#116`-#121`)
+
+- **Status**: Superseded on 2026-11-16 by `DECISIONS #17`. The figure atlas recorded below plotted typed arrays, closed forms and seeded random numbers (finding `G1-10`); it is removed or relabelled under `#142`, and figures are produced from real runs under `#173`.
 
 - **Date**: 2026-11-09
 - **Decision**:
@@ -275,6 +287,7 @@ Every choice that another developer could reasonably make differently and that a
   4. **Advisory Line Ceilings & Agent-Neutral Attribution (`N1-30`, `G1-11`)**: Make the `<= 400` / `600` LOC file-length targets advisory, explicitly subordinated to one-to-one upstream Fortran routine fidelity, and have the GitHub attribution footer name whichever agent performed the work (`Claude Code`, `Antigravity`, or `OpenAI Codex`). Drop performance as a wave merge gate until correctness gates are verified against real MESA.
   5. **Architecture, Three-Level Numerics Policy, Removal of Existing Departures & `v0.1.0` Scope (`notes/SCOPE.md`, `notes/audit/TRACKER.md`, `#145`, `#165`, `#166`, `#169`)**:
      - Supersedes `DECISIONS #6` and `#7`: Safe Rust (`crates/`) is canonical with `strict` (default, hardware-independent, only mode judged against MESA) and `fast` (validated against `strict`) modes from one source (`#165`) across three fidelity levels (Level 1: cross-machine and cross-thread bit-identity of `strict` mode on two CI runner types; Level 2: bit-identical `strict` kernels against exact hexadecimal MESA outputs wherever operation order matches; Level 3: full trajectories matching MESA within `#143` history tolerances). JAX is a derived layer for derivatives and batching validated against Rust `strict` mode (removing Rust-vs-JAX agreement from the `DECISIONS #9` parity oracle hierarchy), and the JAX `star`, `binary`, and `astero` engine twins are frozen until the Rust engine passes the `#143` harness (`#166`).
+     - Supersedes the scope exclusions of `DECISIONS #2` (the bundled codes `GYRE`, `ADIPLS` and `STELLA` are in scope under `#170` to `#172`; plotting is built alongside the port under `#173`), the end-to-end scorecards and non-upstream behaviour recorded in `DECISIONS #10` (acceptance is defined in `notes/SCOPE.md` and `#143`; fabricated per-case behaviour is removed under `#148`), and the figure atlas of `DECISIONS #12` (`#142`, `#173`). Each superseded entry carries a status line.
      - Supersedes `DECISIONS #8` (`Wave X.5` performance/claim gates) and `DECISIONS #14` item 4: reproduces MESA `26.4.1` including its bugs with zero algorithm option flags, reverts existing non-upstream "fixes" or departures (`#175`–`#178`) back to upstream behaviour while logging them as `deferred` issues under `#169`, orders porting by `#147` per-case test needs, and confirms that the 32 `star/dev_cases_*` development cases are scheduled for **after `v0.1.0`** (leaving `v0.1.0` at the 90 `star`, 8 `binary`, and 8 `astero` cases of MESA `26.4.1`).
 - **Why**: The whole-repository audit (`notes/audit/README.md`, `G1-1` to `G1-11`, `T1-1` to `T1-14`, `T2-1` to `T2-15`, `N1-30`) established that requiring `"all green"` while leaving expected values, step caps, `#[ignore]` annotations, and case-name branches ungoverned incentivized 2-step smoke passes, silent tolerance loosenings, self-pinned checksum updates, and mid-concept file splitting. Tying pass status to unmodified real-MESA `26.4.1` history comparisons, gating CI on zero undeclared failures, generating scorecards mechanically, and separating code authoring from verification closes each route that produced unsupported claims.
 - **Alternatives Rejected**:

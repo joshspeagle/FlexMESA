@@ -1,3 +1,5 @@
+> **Archived on 2026-11-16. Not maintained and not a source of status.** This is the pre-audit roadmap. Its completion and parity statements were not verified against real MESA (see [`../audit/README.md`](../audit/README.md)). Current scope is in [`../SCOPE.md`](../SCOPE.md), work is tracked in issue `#140`, and status is reported by the generated [`../audit/case_table.md`](../audit/case_table.md).
+
 # FlexMESA Implementation Plan & Wave Roadmap
 
 ## Current Status

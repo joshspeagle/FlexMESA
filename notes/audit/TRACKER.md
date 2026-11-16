@@ -75,21 +75,12 @@ After Phase 0, in parallel where files do not collide:
 Collision groups (never run concurrently): B1, B4 and C1 (star step driver
 and solver); B2 and C3 (model initialisation).
 
-## Decisions made by the project lead (2026-11-16)
+## Decisions
 
-| Topic | Decision | Recorded in |
-| :-- | :-- | :-- |
-| Upstream reference | MESA release 26.4.1 | #141 |
-| Numerics | Strict (hardware-independent, default, judged against MESA) and fast modes from one Rust source; three fidelity levels | #165 |
-| Architecture | Rust canonical; Python front end; JAX derived, for derivatives and batching, validated against Rust strict; JAX engine twins frozen | #166 |
-| Departures from upstream | None before v0.1.0, and no option flags. Bugs and enhancements are deferred issues under #169. Existing departures are removed | #145, #169, #175 to #178 |
-| Bundled codes | GYRE, ADIPLS and STELLA are in scope and are ported; STELLA last | #170, #171, #172 |
-| Plotting | Built as the port proceeds | #173 |
-| Progress reporting | Generated dashboard in README and docs | #174 |
-| v0.1.0 | Defined in [`../SCOPE.md`](../SCOPE.md) | #145 |
-| Upstream development cases (`star/dev_cases_*`) | Confirmed for after v0.1.0 | #145 |
-| PR #138 | Merge the code, not the claims | PR #138 |
-| Earlier issues | Closed as superseded; #140 is the only tracker | below |
+The project lead's decisions of 2026-11-16 (reference release, numerics modes,
+architecture, no departures before v0.1.0, bundled codes, plotting, dashboard)
+are recorded in [`../SCOPE.md`](../SCOPE.md) and in `DECISIONS #17` onward in
+[`../DECISIONS.md`](../DECISIONS.md). They are not repeated here.
 
 Still open: what to do with behaviour that cannot be reproduced exactly (asked
 case by case).

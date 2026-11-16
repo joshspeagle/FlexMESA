@@ -138,7 +138,7 @@ as findings.
   (N1-15, N1-16)
 - Unfavourable benchmark timings are reported, not hidden. README and
   CHANGELOG are restrained; the strong claims live in `notes/PLAN.md`,
-  `notes/LOG.md`, `docs/benchmarks/` and commit messages. (G1)
+  `notes/LOG.md` (both since moved to `notes/archive/`), `docs/benchmarks/` and commit messages. (G1)
 
 ## Index of findings
 

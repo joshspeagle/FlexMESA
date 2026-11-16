@@ -21,7 +21,7 @@
 | [`benchmarks/`](benchmarks/) | Upstream Fortran MESA (`benchmarks/fortran_mesa/`) and 4-way benchmark harnesses |
 | [`docs/`](docs/) | Public MkDocs Material documentation website (`mkdocs.yml`), design specifications (`docs/design/`), module physics & numerics explainers (`docs/modules/`), and publication-styled figures (`docs/assets/figures/`) |
 | [`scripts/`](scripts/) | Reproducible figure generation (`scripts/build_docs_figures.py`) |
-| [`notes/`](notes/) | Active roadmap ([`PLAN.md`](notes/PLAN.md)), architectural decisions ([`DECISIONS.md`](notes/DECISIONS.md)), open questions ([`QUESTIONS.md`](notes/QUESTIONS.md)), and milestone log ([`LOG.md`](notes/LOG.md)) |
+| [`notes/`](notes/) | Scope and the `v0.1.0` definition ([`SCOPE.md`](notes/SCOPE.md)), decisions in force ([`DECISIONS.md`](notes/DECISIONS.md)), the audit and the generated case table ([`audit/`](notes/audit/)), and unmaintained pre-audit documents ([`archive/`](notes/archive/)) |
 
 ## Development Quickstart
 

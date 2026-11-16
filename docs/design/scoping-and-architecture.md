@@ -299,7 +299,7 @@ Per [`notes/DECISIONS.md`](https://github.com/joshspeagle/FlexMESA/blob/main/not
 
 ## 6. Wave Execution Strategy (`Waves 0 through 5`)
 
-Because MESA's 12-tier dependency DAG is strictly acyclic and **every module from Tier 0 to Tier 8 has its own standalone golden unit test (`<pkg>/test/test_output`)**, the migration proceeds across six waves ([`notes/PLAN.md`](https://github.com/joshspeagle/FlexMESA/blob/main/notes/PLAN.md)):
+Because MESA's 12-tier dependency DAG is strictly acyclic and **every module from Tier 0 to Tier 8 has its own standalone golden unit test (`<pkg>/test/test_output`)**, the migration proceeds across six waves ([`notes/archive/PLAN.md`](https://github.com/joshspeagle/FlexMESA/blob/main/notes/archive/PLAN.md)):
 
 ```mermaid
 flowchart LR

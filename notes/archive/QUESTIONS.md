@@ -1,6 +1,8 @@
+> **Archived on 2026-11-16.** These pre-audit questions were closed by decisions that have since been superseded in part; see the index in [`../DECISIONS.md`](../DECISIONS.md). Open questions for the project lead are now raised on the relevant issue.
+
 # Open Architectural Questions (`QUESTIONS.md`)
 
-All foundational architectural questions for Wave 0, Wave 1, Wave 1.5, and the Three-Tier Hybrid Architecture for Waves 2–5 have been resolved and recorded in [`notes/DECISIONS.md`](./DECISIONS.md):
+All foundational architectural questions for Wave 0, Wave 1, Wave 1.5, and the Three-Tier Hybrid Architecture for Waves 2–5 have been resolved and recorded in [`notes/DECISIONS.md`](../DECISIONS.md):
 
 1. **Target Language & Pilot Scope (`DECISIONS #1`)**: Wave 1 Dual-Track (`crates/` Safe Rust + `src/flexmesa/` Python/JAX `float64`) covering all 8 foundational numerical modules (`const`, `utils`, `math`, `auto_diff`, `interp_1d`, `interp_2d`, `mtx`, `num`) plus stateless Tier 3/5 microphysics modules `neu` and `turb`.
 2. **Legacy & External Bundled Subsystem Exclusions (`DECISIONS #2`)**: Exclude `pgstar`/`pgbinary` (`#3`), external `stella`/`adipls`/`gyre` source ports (`#4`), and legacy `RSP1` (`#5`), replacing `pgstar` with Python/Matplotlib diagnostics, exporting `GYRE`/`FGONG` structures at the pulsation boundary, and porting unified `TDC`/`RSP2`.

@@ -324,3 +324,35 @@ Every choice that another developer could reasonably make differently and that a
 - **Alternatives Rejected**:
   - *Counting `0b2e6bb` interim comparisons or `no_reference_yet` cases as `"pass"`*: Violates `#145` (`DECISIONS #17`) and conflates diagnostic `0b2e6bb` tracks with `26.4.1` acceptance.
   - *Running guarded simulations in-process without a child worker*: A wall-clock or memory overrun cannot safely pre-empt a native Rust Newton loop without terminating a child process; running inside a worker subprocess lets `SIGKILL` stop runaway runs while leaving flushed `LOGS/` tracks intact for post-mortem inspection.
+
+---
+
+## DECISIONS #20: History-Harness Tolerances for Strict Mode (`Issue #143`)
+
+- **Date**: 2026-11-16
+- **Decision**: By direction of the project lead, the default tolerances in `benchmarks/history_harness/case_manifest.toml` are tightened. They apply to strict numerics mode, the only mode judged against MESA (`#165`); fast mode is validated against strict mode separately and has no tolerances in this manifest. Final-state values are absolute differences except `rel_<x>`, which is relative; track values are the largest absolute difference after interpolation onto the common grid.
+
+  | Suite | Quantity | Final: old | Final: new | Track: old | Track: new |
+  | :-- | :-- | --: | --: | --: | --: |
+  | star | `rel_star_age` | 0.02 | 0.001 | none | none |
+  | star | `log_L` | 0.02 | 0.001 | 0.15 | 0.005 |
+  | star | `log_Teff` | 0.01 | 0.0005 | 0.05 | 0.002 |
+  | star | `log_R` | 0.02 | 0.001 | 0.10 | 0.005 |
+  | star | `log_center_T` | 0.02 | 0.001 | 0.05 | 0.002 |
+  | star | `log_center_Rho` | 0.05 | 0.002 | 0.15 | 0.005 |
+  | binary | `rel_age` | 0.02 | 0.001 | none | none |
+  | binary | `star_1_mass`, `star_2_mass` (Msun) | 0.02 | 0.001 | 0.05 | 0.002 |
+  | binary | `period_days` (days) | 0.05 | 0.001 | none | none |
+  | astero | `rel_star_age` | 0.02 | 0.001 | none | none |
+  | astero | `log_L` | 0.02 | 0.001 | 0.15 | 0.005 |
+  | astero | `log_Teff` | 0.01 | 0.0005 | 0.05 | 0.002 |
+  | astero | `log_g` | 0.02 | 0.001 | 0.05 | 0.002 |
+
+  The per-case block for `star/custom_colors` carries the same new values for the quantities it lists. `star/semiconvection` is added to `known_gaps.toml` under `#152`, and the reason for `star/1.3M_ms_high_Z` is rewritten against the new values.
+- **Why**: The earlier values were chosen without a recorded source, and the `log_L` track tolerance of 0.15 sat just above the 0.12 deviation measured for `1.3M_ms_high_Z` in the audit (`notes/audit/measurements.md`, M-1). A 2% age error or a 40% luminosity error along the track is not a port of MESA. The new values are not derived from a measured MESA-to-MESA scatter; they are a deliberately strict starting point, to be tightened further as the Newton control, retry policy and mesh planner become upstream's (`#152`, `#153`) and the first diverging step moves toward the end of each run. Under them the two cases that complete today (`1.3M_ms_high_Z`, `semiconvection`) are declared gaps, which is their correct status while step counts differ from upstream's by 20 to 60%.
+- **Source of the new values**: project-lead direction on 2026-11-16 ("feel free to tighten them, especially for the strict Rust port"), with the specific numbers proposed by the reviewing session. No test expectation is changed by this entry; no case changes from failing to passing.
+- **Rule going forward**: Changing a default tolerance or adding a per-case override requires a `DECISIONS` entry with the old value, the new value and the reason, and is never done to move a case from a declared gap to passing.
+- **Alternatives Rejected**:
+  - *Keeping the earlier values until `#141` supplies the `26.4.1` histories*: the first acceptance passes would then be judged by tolerances nobody decided.
+  - *Bit-identical trajectories as the criterion*: that is the goal tracked by the first diverging step (`#165`, level 3), but it cannot be the gate while operation order in the solver and mesh still differs from upstream's.
+  - *Tolerances derived from the spread between two real MESA builds*: the right basis eventually; it needs `#141` to run the suite on two machines and is recorded there as a follow-up.

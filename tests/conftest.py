@@ -11,6 +11,8 @@ import hypothesis
 import jax
 import pytest
 
+from flexmesa.data import fetch
+
 # Disable per-example timing deadlines so first-call JAX JIT compilation or
 # parallel pytest-xdist worker initialization never triggers FlakyFailure.
 hypothesis.settings.register_profile(
@@ -22,6 +24,13 @@ hypothesis.settings.load_profile("flexmesa_ci")
 _SKIPPED_NODEIDS: list[str] = []
 _LINUX_MAPS_PATH: str = "/proc/self/maps"
 _JAX_CACHE_VMA_LIMIT: int = 24_000
+
+
+def pytest_report_header(config: pytest.Config) -> str:
+    """Print the pinned upstream MESA reference in every pytest header."""
+    del config
+    ref = fetch.load_upstream_reference()
+    return f"flexmesa upstream reference: {ref.summary_line()}"
 
 
 def _vma_count_exceeds(limit: int) -> bool:

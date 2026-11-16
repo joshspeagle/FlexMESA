@@ -235,6 +235,15 @@ def test_bundles_manifest_and_directory_resolution(
     tmp_path: pathlib.Path,
 ) -> None:
     """Verify `bundles.toml` integrity and directory resolution precedence."""
+    ref = fetch.load_upstream_reference()
+    assert ref.name == "MESA 26.4.1"
+    assert ref.version_number == "r26.4.1"
+    assert ref.git_tag == "26.4.1"
+    assert ref.git_commit == "c8c202662922a22b3efefa824473ad615c623afd"
+    assert ref.zenodo_record == "19722306"
+    assert ref.zenodo_doi == "10.5281/zenodo.19722306"
+    assert "MESA 26.4.1" in ref.summary_line()
+
     repo, tag, bundles = fetch.load_bundles_manifest()
     assert repo == "joshspeagle/FlexMESA"
     assert tag == "data-v1"
@@ -246,11 +255,14 @@ def test_bundles_manifest_and_directory_resolution(
         "eos_cms",
         "eos_free_eos",
         "mesa_test_inputs",
+        "mesa_histories",
+        "mesa_module_hex",
     }
     for b in bundles:
         assert manifest.is_valid_sha256_hex(b.archive_sha256)
         assert b.archive_size_bytes > 0
         assert b.unpacked_size_bytes > 0
+        assert b.manifest_file.startswith("bundle_hashes/")
         if b.kind == "single_zst":
             assert manifest.is_valid_sha256_hex(b.unpacked_sha256)
 

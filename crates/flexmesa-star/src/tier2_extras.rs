@@ -25,10 +25,10 @@ use crate::premix::do_phase_separation;
 /// Elementary charge squared $e^2$ in CGS ($\mathrm{erg\,cm}$).
 const E_CHARGE_SQ_CGS: f64 = 2.307_077_5e-19;
 
-/// Canonical inventory of all 17 Tier 2 substellar, planetary, white dwarf,
+/// Canonical inventory of all 16 Tier 2 substellar, planetary, white dwarf,
 /// phase-separation, accretion, nova, and conductive flame `star/test_suite`
-/// cases (`#93`).
-pub const TIER2_CASES: [&str; 17] = [
+/// cases in MESA release `26.4.1` (`#93`, `#141`).
+pub const TIER2_CASES: [&str; 16] = [
     "make_brown_dwarf",
     "make_planets",
     "irradiated_planet",
@@ -37,7 +37,6 @@ pub const TIER2_CASES: [&str; 17] = [
     "make_o_ne_wd",
     "wd_cool_0.6M",
     "wd_diffusion",
-    "wd_o_ne_3_phase",
     "wd_acc_small_dm",
     "wd_stable_h_burn",
     "wd_nova_burst",
@@ -48,7 +47,7 @@ pub const TIER2_CASES: [&str; 17] = [
     "conductive_flame",
 ];
 
-/// Returns `true` if `case_name` belongs to the 17-case Tier 2 inventory.
+/// Returns `true` if `case_name` belongs to the 16-case Tier 2 inventory.
 #[must_use]
 pub fn is_tier2_case(case_name: &str) -> bool {
     TIER2_CASES.contains(&case_name)

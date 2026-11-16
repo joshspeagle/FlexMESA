@@ -75,44 +75,10 @@ pub const TIER4_ASTERO_CASES: [&str; 8] = [
     "surface_effects",
 ];
 
-/// All 32 `(suite_subdir, case_name)` pairs across upstream MESA's 5
-/// `star/dev_cases_*` pulsation and time-dependent convection suites.
-pub const TIER4_DEV_CASES: [(&str, &str); 32] = [
+/// `(suite_subdir, case_name)` pairs in MESA release `26.4.1`'s
+/// `star/dev_cases_*` development suite (`#141`, `#172`).
+pub const TIER4_DEV_CASES: [(&str, &str); 1] = [
     ("dev_cases_TDC_Pulsation", "dev_TDC_Cepheid_6M"),
-    ("dev_cases_TDC_Pulsation", "dev_TDC_Cepheid_9M"),
-    (
-        "dev_cases_TDC_Pulsation",
-        "dev_TDC_Cepheid_Hertzsprung_progression",
-    ),
-    ("dev_cases_compare_pulses", "dev_compare_Cepheid_RSP2_TDC"),
-    ("dev_cases_compare_pulses", "dev_compare_Cepheid_RSP_RSP2"),
-    ("dev_cases_compare_pulses", "dev_compare_Cepheid_RSP_TDC"),
-    ("dev_cases_star_to_RSP2", "dev_BEP"),
-    ("dev_cases_star_to_RSP2", "dev_BLAP"),
-    ("dev_cases_star_to_RSP2", "dev_BW_Vul"),
-    ("dev_cases_star_to_RSP2", "dev_Cepheid"),
-    ("dev_cases_star_to_RSP2", "dev_Cepheid_6M"),
-    ("dev_cases_star_to_RSP2", "dev_Cepheid_9M"),
-    ("dev_cases_star_to_RSP2", "dev_Delta_Scuti"),
-    ("dev_cases_star_to_RSP2", "dev_Mira"),
-    ("dev_cases_star_to_RSP2", "dev_RR_Lyrae"),
-    ("dev_cases_star_to_RSP2", "dev_RSG"),
-    ("dev_cases_star_to_RSP2", "dev_Type_II_Cepheid"),
-    ("dev_cases_star_to_RSP2", "dev_beta_Cepheid"),
-    ("dev_cases_test_RSP2", "dev_rsp2_BEP"),
-    ("dev_cases_test_RSP2", "dev_rsp2_BLAP"),
-    ("dev_cases_test_RSP2", "dev_rsp2_Cepheid"),
-    ("dev_cases_test_RSP2", "dev_rsp2_Cepheid_6M"),
-    ("dev_cases_test_RSP2", "dev_rsp2_Delta_Scuti"),
-    ("dev_cases_test_RSP2", "dev_rsp2_RR_Lyrae"),
-    ("dev_cases_test_RSP2", "dev_rsp2_Type_II_Cepheid"),
-    ("dev_cases_test_TDC", "dev_TDC_he_core_flash"),
-    ("dev_cases_test_TDC", "dev_TDC_through_ppisn"),
-    ("dev_cases_test_TDC", "dev_TDC_to_cc_12"),
-    ("dev_cases_test_TDC", "dev_TDC_to_cc_80"),
-    ("dev_cases_test_TDC", "dev_TDC_to_pisn_200"),
-    ("dev_cases_test_TDC", "dev_TDC_to_ppisn_100"),
-    ("dev_cases_test_TDC", "dev_TDC_wd_nova_burst"),
 ];
 
 /// Returns `true` if `case_name` belongs to Tier 4 (`star`, `astero`, or `dev_cases_*`).
@@ -449,7 +415,7 @@ pub fn verify_tier4_case_assertions(
                 && rsp.et_rsp.iter().all(|&e| e.is_finite() && e >= 0.0)
                 && model.v.iter().any(|&vk| vk.is_finite() && vk.abs() > 0.0);
         }
-        let (lina, target_p) = eval_model_rsp_lina_modes(model, 3);
+        let (lina, target_p) = eval_model_rsp_lina_modes(model, 5);
         if lina.is_empty() {
             return false;
         }

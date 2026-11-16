@@ -280,7 +280,7 @@ fn test_e2e_1_tier1_physics_helpers_and_suite() {
 
 #[test]
 fn test_e2e_2_tier2_physics_helpers_and_suite() {
-    assert_eq!(TIER2_CASES.len(), 17);
+    assert_eq!(TIER2_CASES.len(), 16);
     assert!(is_tier2_case("make_brown_dwarf"));
     assert!(is_tier2_case("conductive_flame"));
     assert!(!is_tier2_case("make_zams"));
@@ -341,7 +341,7 @@ fn test_e2e_4_tier4_pulsation_astero_and_dev_cases() {
     assert_eq!(TIER4_STAR_CASES.len(), 16);
     assert_eq!(TIER4_ACTIVE_STAR_CASES.len(), 15);
     assert_eq!(TIER4_ASTERO_CASES.len(), 8);
-    assert_eq!(TIER4_DEV_CASES.len(), 32);
+    assert_eq!(TIER4_DEV_CASES.len(), 1);
     assert!(is_tier4_case("gyre_in_mesa_ms"));
     assert!(is_tier4_case("rsp_Cepheid"));
     assert!(is_tier4_case("example_astero"));

@@ -25,6 +25,34 @@ from typing import IO
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
+class UpstreamReference:
+    """Machine-readable provenance record for the pinned MESA release."""
+
+    name: str
+    version_number: str
+    git_tag: str
+    git_commit: str
+    release_date: str
+    zenodo_record: str
+    zenodo_doi: str
+    archive: str
+    archive_md5: str
+    sdk_version: str
+    sdk_zenodo_record: str
+    compiler: str
+    math_backend: str
+
+    def summary_line(self) -> str:
+        """Return a concise single-line provenance summary."""
+        short = self.git_commit[:7]
+        return (
+            f"{self.name} (tag {self.git_tag}, commit {short}, "
+            f"DOI {self.zenodo_doi}, SDK {self.sdk_version}, "
+            f"{self.compiler}, {self.math_backend})"
+        )
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
 class ReleaseBundle:
     """Metadata and checksum record for one ``data-v1`` release archive."""
 
@@ -39,6 +67,8 @@ class ReleaseBundle:
     test_only: bool
     description: str
     sentinel_relpaths: tuple[str, ...] = ()
+    bundle_root: str = "data"
+    manifest_file: str = ""
 
 
 def resolve_data_dir(
@@ -71,7 +101,7 @@ def resolve_mesa_test_inputs_dir(
     explicit: str | pathlib.Path | None = None,
     data_dir: pathlib.Path | None = None,
 ) -> pathlib.Path:
-    """Resolve the extraction root for ``mesa-test-inputs-v1.tar.zst``.
+    """Resolve the extraction root for ``mesa-test-inputs-v2.tar.zst``.
 
     Args:
         explicit: Optional explicit target directory.
@@ -87,6 +117,60 @@ def resolve_mesa_test_inputs_dir(
         return pathlib.Path(mesa_dir).expanduser().resolve()
     base = data_dir if data_dir is not None else resolve_data_dir()
     return (base.parent / "mesa_test_inputs").resolve()
+
+
+def resolve_mesa_histories_dir(
+    explicit: str | pathlib.Path | None = None,
+    data_dir: pathlib.Path | None = None,
+) -> pathlib.Path:
+    """Resolve the extraction root for ``mesa-histories-v1.tar.zst``."""
+    if explicit is not None:
+        return pathlib.Path(explicit).expanduser().resolve()
+    if hist_dir := os.environ.get("FLEXMESA_HISTORIES_DIR", "").strip():
+        return pathlib.Path(hist_dir).expanduser().resolve()
+    base = data_dir if data_dir is not None else resolve_data_dir()
+    return (base.parent / "mesa_histories").resolve()
+
+
+def resolve_mesa_module_hex_dir(
+    explicit: str | pathlib.Path | None = None,
+    data_dir: pathlib.Path | None = None,
+) -> pathlib.Path:
+    """Resolve the extraction root for ``mesa-module-hex-v1.tar.zst``."""
+    if explicit is not None:
+        return pathlib.Path(explicit).expanduser().resolve()
+    if hex_dir := os.environ.get("FLEXMESA_MODULE_HEX_DIR", "").strip():
+        return pathlib.Path(hex_dir).expanduser().resolve()
+    base = data_dir if data_dir is not None else resolve_data_dir()
+    return (base.parent / "mesa_module_hex").resolve()
+
+
+def load_upstream_reference(
+    manifest_path: pathlib.Path | None = None,
+) -> UpstreamReference:
+    """Load ``[upstream_reference]`` metadata from ``bundles.toml``."""
+    path = (
+        manifest_path
+        if manifest_path is not None
+        else pathlib.Path(__file__).with_name("bundles.toml")
+    )
+    raw = tomllib.loads(path.read_text(encoding="utf-8"))
+    ref = raw["upstream_reference"]
+    return UpstreamReference(
+        name=str(ref["name"]),
+        version_number=str(ref["version_number"]),
+        git_tag=str(ref["git_tag"]),
+        git_commit=str(ref["git_commit"]),
+        release_date=str(ref["release_date"]),
+        zenodo_record=str(ref["zenodo_record"]),
+        zenodo_doi=str(ref["zenodo_doi"]),
+        archive=str(ref["archive"]),
+        archive_md5=str(ref["archive_md5"]),
+        sdk_version=str(ref["sdk_version"]),
+        sdk_zenodo_record=str(ref["sdk_zenodo_record"]),
+        compiler=str(ref["compiler"]),
+        math_backend=str(ref["math_backend"]),
+    )
 
 
 def load_bundles_manifest(
@@ -112,6 +196,8 @@ def load_bundles_manifest(
     items: list[ReleaseBundle] = []
     for entry in raw["bundles"]:
         sentinels = tuple(str(p) for p in entry.get("sentinel_relpaths", ()))
+        test_only = bool(entry.get("test_only", False))
+        default_root = "mesa_test_inputs" if test_only else "data"
         items.append(
             ReleaseBundle(
                 name=str(entry["name"]),
@@ -122,12 +208,28 @@ def load_bundles_manifest(
                 archive_size_bytes=int(entry["archive_size_bytes"]),
                 unpacked_sha256=str(entry.get("unpacked_sha256", "")).lower(),
                 unpacked_size_bytes=int(entry["unpacked_size_bytes"]),
-                test_only=bool(entry.get("test_only", False)),
+                test_only=test_only,
                 description=str(entry.get("description", "")),
                 sentinel_relpaths=sentinels,
+                bundle_root=str(entry.get("bundle_root", default_root)),
+                manifest_file=str(entry.get("manifest_file", "")),
             )
         )
     return repo, tag, tuple(items)
+
+
+def _resolve_bundle_target_root(
+    bundle: ReleaseBundle,
+    data_root: pathlib.Path,
+    test_root: pathlib.Path,
+) -> pathlib.Path:
+    if bundle.bundle_root == "mesa_test_inputs":
+        return test_root
+    if bundle.bundle_root == "mesa_histories":
+        return resolve_mesa_histories_dir(data_dir=data_root)
+    if bundle.bundle_root == "mesa_module_hex":
+        return resolve_mesa_module_hex_dir(data_dir=data_root)
+    return data_root
 
 
 def _sha256_file(path: pathlib.Path) -> str:
@@ -137,6 +239,34 @@ def _sha256_file(path: pathlib.Path) -> str:
         while chunk := fh.read(4 * 1024 * 1024):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _verify_per_file_manifest(
+    root: pathlib.Path,
+    manifest_relpath: str,
+) -> bool:
+    """Verify every unpacked file listed in ``manifest_relpath`` (`N1-10`)."""
+    mpath = pathlib.Path(__file__).with_name("bundles.toml").parent / (
+        manifest_relpath
+    )
+    if not mpath.is_file():
+        return False
+    for raw in mpath.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = line.split("\t")
+        if len(parts) != 3:
+            return False
+        exp_sha, exp_sz_str, rel = parts
+        fpath = root / rel
+        if not fpath.is_file():
+            return False
+        if fpath.stat().st_size != int(exp_sz_str):
+            return False
+        if _sha256_file(fpath) != exp_sha.lower():
+            return False
+    return True
 
 
 @contextlib.contextmanager
@@ -216,18 +346,29 @@ def verify_bundles(
     mesa_test_dest: str | pathlib.Path | None = None,
     quiet: bool = False,
 ) -> bool:
-    """Verify unpacked ``data-v1`` bundles, sizes, sentinels, and SHA-256."""
+    """Verify unpacked ``data-v1`` bundles and per-file SHA-256 manifests."""
     data_root = resolve_data_dir(dest)
     test_root = resolve_mesa_test_inputs_dir(mesa_test_dest, data_dir=data_root)
     _, _, bundles = load_bundles_manifest()
+    if not quiet:
+        try:
+            ref = load_upstream_reference()
+            print(
+                f"[flexmesa-data] reference: {ref.summary_line()}",
+                flush=True,
+            )
+        except (KeyError, OSError):
+            pass
     all_ok = True
     for b in bundles:
         if b.test_only and not include_test_inputs:
             continue
-        root = test_root if b.test_only else data_root
+        root = _resolve_bundle_target_root(b, data_root, test_root)
         ok = is_bundle_ready(root, b)
         if ok and b.kind == "single_zst" and b.unpacked_sha256:
             ok = _sha256_file(root / b.target_relpath) == b.unpacked_sha256
+        if ok and b.manifest_file:
+            ok = _verify_per_file_manifest(root, b.manifest_file)
         if not quiet:
             status = "VERIFIED" if ok else "FAILED"
             print(f"[flexmesa-data] {b.name:18s} {status} ({root})", flush=True)
@@ -353,7 +494,8 @@ def fetch_bundles(
     Args:
         dest: Physics table destination directory (defaults to
             ``resolve_data_dir()``).
-        include_test_inputs: Also fetch ``mesa-test-inputs-v1.tar.zst``.
+        include_test_inputs: Also fetch MESA 26.4.1 test-input, history, and
+            module-hex verification bundles.
         mesa_test_dest: Destination directory for ``mesa_test_inputs``.
         source_dir: Optional local directory containing pre-downloaded ``.zst``
             archives (for offline/staging installation).
@@ -380,10 +522,20 @@ def fetch_bundles(
         else None
     )
 
+    if not quiet:
+        try:
+            ref = load_upstream_reference()
+            print(
+                f"[flexmesa-data] reference: {ref.summary_line()}",
+                flush=True,
+            )
+        except (KeyError, OSError):
+            pass
+
     for bundle in bundles:
         if bundle.test_only and not include_test_inputs:
             continue
-        target_root = test_root if bundle.test_only else data_root
+        target_root = _resolve_bundle_target_root(bundle, data_root, test_root)
         if is_bundle_ready(target_root, bundle):
             if not quiet:
                 print(
@@ -465,7 +617,10 @@ def build_parser(
     p_fetch.add_argument(
         "--include-test-inputs",
         action="store_true",
-        help="Also fetch and unpack mesa-test-inputs-v1.tar.zst.",
+        help=(
+            "Also fetch and unpack MESA 26.4.1 test-input, history, and "
+            "module-hex bundles."
+        ),
     )
     p_fetch.add_argument(
         "--source-dir",
@@ -493,7 +648,7 @@ def build_parser(
     p_verify.add_argument(
         "--include-test-inputs",
         action="store_true",
-        help="Also verify mesa-test-inputs-v1.",
+        help="Also verify MESA 26.4.1 test-input, history, and hex bundles.",
     )
     p_verify.add_argument(
         "--quiet",
@@ -533,11 +688,23 @@ def main(argv: list[str] | None = None) -> int:
             args.mesa_test_dest, data_dir=data_root
         )
         _, tag, bundles = load_bundles_manifest()
+        try:
+            ref = load_upstream_reference()
+            print(f"Upstream ref:    {ref.summary_line()}")
+        except (KeyError, OSError):
+            pass
         print(f"Release tag:     {tag}")
         print(f"Data directory:  {data_root}")
         print(f"Test inputs dir: {test_root}")
+        print(
+            f"Histories dir:   {resolve_mesa_histories_dir(data_dir=data_root)}"
+        )
+        print(
+            f"Module hex dir:  "
+            f"{resolve_mesa_module_hex_dir(data_dir=data_root)}"
+        )
         for b in bundles:
-            root = test_root if b.test_only else data_root
+            root = _resolve_bundle_target_root(b, data_root, test_root)
             state = "READY" if is_bundle_ready(root, b) else "MISSING"
             kind_tag = " [test-only]" if b.test_only else ""
             print(f"  - {b.name:18s} {state:8s} ({b.archive}){kind_tag}")

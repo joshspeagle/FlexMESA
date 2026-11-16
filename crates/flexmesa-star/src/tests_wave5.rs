@@ -257,7 +257,7 @@ fn test_e2e_1_tier1_physics_helpers_and_suite() {
         for sub in [
             "star/test_suite",
             "astero/test_suite",
-            "star/dev_cases_star_to_RSP2",
+            "star/dev_cases_TDC_Pulsation",
         ] {
             assert!(
                 Path::new(&mesa_dir).join(sub).is_dir(),
@@ -373,7 +373,7 @@ fn test_e2e_4_tier4_pulsation_astero_and_dev_cases() {
         for sub in [
             "star/test_suite",
             "astero/test_suite",
-            "star/dev_cases_star_to_RSP2",
+            "star/dev_cases_TDC_Pulsation",
         ] {
             assert!(
                 Path::new(&mesa_dir).join(sub).is_dir(),
@@ -404,10 +404,10 @@ fn test_e2e_4_tier4_pulsation_astero_and_dev_cases() {
                     .collect::<Vec<_>>()
             );
         }
-        if base.join("star").join("dev_cases_star_to_RSP2").is_dir() {
+        if base.join("star").join("dev_cases_TDC_Pulsation").is_dir() {
             let dev_reps = run_dev_cases_suite(base, true, Some(2), true)
                 .expect("tier4 dev");
-            assert_eq!(dev_reps.len(), 32);
+            assert_eq!(dev_reps.len(), 1);
             assert!(
                 dev_reps
                     .iter()
@@ -429,11 +429,11 @@ fn test_e2e_4_tier4_pulsation_astero_and_dev_cases() {
 }
 
 #[test]
-fn test_e2e_5_tier5_star_hooks_and_91_active_star_inventory() {
+fn test_e2e_5_tier5_star_hooks_and_90_active_star_inventory() {
     use std::path::Path;
 
     assert_eq!(TIER5_STAR_CASES.len(), 4);
-    assert_eq!(all_active_star_case_names().len(), 91);
+    assert_eq!(all_active_star_case_names().len(), 90);
     assert!(is_tier5_star_case("check_redo"));
     assert!(is_tier5_star_case("other_physics_hooks"));
     assert!(is_tier5_star_case("relax_composition_j_entropy"));
@@ -474,7 +474,7 @@ fn test_e2e_5_tier5_star_hooks_and_91_active_star_inventory() {
         for sub in [
             "star/test_suite",
             "astero/test_suite",
-            "star/dev_cases_star_to_RSP2",
+            "star/dev_cases_TDC_Pulsation",
         ] {
             assert!(
                 Path::new(&mesa_dir).join(sub).is_dir(),

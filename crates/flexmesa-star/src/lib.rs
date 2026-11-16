@@ -294,8 +294,8 @@ pub use mix_info::{
 };
 pub use model::StarModel;
 pub use model_io::{
-    compute_photo_checksum, read_mod_str, read_photo_bytes, write_mod_string,
-    write_photo_bytes, STAR_DEF_VERSION,
+    compute_photo_checksum, photo_numerics_mode, read_mod_str,
+    read_photo_bytes, write_mod_string, write_photo_bytes, STAR_DEF_VERSION,
 };
 pub use overshoot::{apply_overshooting, OvershootConfig, OvershootScheme};
 pub use pre_ms::{

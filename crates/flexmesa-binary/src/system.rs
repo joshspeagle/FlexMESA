@@ -217,6 +217,7 @@ impl BinarySystem {
         donor_i: usize,
         controls: BinaryInlistControls,
     ) -> Result<Self, StarError> {
+        flexmesa_math::math_init();
         let m_d = donor.mstar;
         let m_a = match &companion {
             BinaryCompanion::PointMass { mass_g, .. } => *mass_g,

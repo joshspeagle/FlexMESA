@@ -13,7 +13,13 @@ trigonometric functions (`sinpi`, `cospi`, `tanpi`, `asinpi`, `acospi`,
 
 from __future__ import annotations
 
+from flexmesa import _dispatch
 from flexmesa.math import intrinsics, trig
+
+NumericsMode = _dispatch.NumericsMode
+get_numerics_mode = _dispatch.get_numerics_mode
+numerics_mode_context = _dispatch.numerics_mode_context
+set_numerics_mode = _dispatch.set_numerics_mode
 
 # Domain-safe floor and fallback constants for safe_log / safe_log10.
 SAFE_LOG_FLOOR = intrinsics.SAFE_LOG_FLOOR
@@ -71,6 +77,7 @@ str_to_vector = trig.str_to_vector
 __all__: list[str] = [
     "SAFE_LOG_BAD_RETURN",
     "SAFE_LOG_FLOOR",
+    "NumericsMode",
     "acos",
     "acosh",
     "acospi",
@@ -86,12 +93,14 @@ __all__: list[str] = [
     "exp",
     "exp10",
     "expm1",
+    "get_numerics_mode",
     "heaviside",
     "hypot",
     "log",
     "log1p",
     "log2",
     "log10",
+    "numerics_mode_context",
     "pow",
     "pow2",
     "pow3",
@@ -105,6 +114,7 @@ __all__: list[str] = [
     "safe_log",
     "safe_log10",
     "safe_sqrt",
+    "set_numerics_mode",
     "sgn",
     "sin",
     "sinh",

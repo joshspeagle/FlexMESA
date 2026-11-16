@@ -14,7 +14,9 @@ Provides the :data:`Backend` type alias (``"auto" | "rust" | "jax"``) and
 
 from __future__ import annotations
 
-from typing import Any, Literal
+import contextlib
+from collections.abc import Iterator
+from typing import Any, Literal, cast
 
 import jax
 import numpy as np
@@ -23,6 +25,7 @@ import numpy.typing as npt
 from flexmesa import _rust
 
 Backend = Literal["auto", "rust", "jax"]
+NumericsMode = Literal["strict", "fast"]
 _JAX_TYPES: tuple[type[Any], ...] = (jax.Array, jax.core.Tracer)
 
 
@@ -84,10 +87,60 @@ def as_c_f64(arr: Any) -> npt.NDArray[np.float64]:
     return np.ascontiguousarray(arr, dtype=np.float64).ravel()
 
 
+def get_numerics_mode() -> NumericsMode:
+    """Return the active Rust arithmetic mode (``"strict"`` or ``"fast"``).
+
+    Returns:
+        Active :data:`NumericsMode` (defaults to ``"strict"``).
+    """
+    return cast(NumericsMode, _rust.get_numerics_mode())
+
+
+def set_numerics_mode(mode: NumericsMode | str) -> None:
+    """Set the process-wide Rust arithmetic mode (``"strict"`` or ``"fast"``).
+
+    ``"strict"`` (default) evaluates vendored ``crlibm`` (``CRMATH``) routines
+    with no fused multiply-add contraction and is the sole mode compared
+    against MESA. ``"fast"`` evaluates platform ``f64`` methods with ``fma``
+    enabled and is validated against ``"strict"``.
+
+    Args:
+        mode: Target numerics mode (``"strict"`` or ``"fast"``).
+
+    Raises:
+        ValueError: If ``mode`` is not ``"strict"`` or ``"fast"``.
+    """
+    _rust.set_numerics_mode(mode)
+
+
+@contextlib.contextmanager
+def numerics_mode_context(
+    mode: NumericsMode | str,
+) -> Iterator[NumericsMode]:
+    """Temporarily switch the Rust arithmetic mode and restore on exit.
+
+    Args:
+        mode: Target numerics mode (``"strict"`` or ``"fast"``).
+
+    Yields:
+        Normalized active :data:`NumericsMode`.
+    """
+    prev = get_numerics_mode()
+    set_numerics_mode(mode)
+    try:
+        yield get_numerics_mode()
+    finally:
+        set_numerics_mode(prev)
+
+
 __all__ = [
     "Backend",
+    "NumericsMode",
     "_rust",
     "as_c_f64",
+    "get_numerics_mode",
     "is_jax_input",
+    "numerics_mode_context",
     "resolve_backend",
+    "set_numerics_mode",
 ]

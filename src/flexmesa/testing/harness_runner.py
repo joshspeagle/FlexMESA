@@ -288,6 +288,7 @@ def run_trace_inprocess(
     respect_intervals: bool = False,
     write_profiles: bool = False,
     is_logs_dir: bool = True,
+    numerics_mode: str = "strict",
 ) -> dict[str, Any]:
     """Invoke the compiled Safe Rust tracer directly in the current process.
 
@@ -300,15 +301,21 @@ def run_trace_inprocess(
         respect_intervals: Honor ``history_interval`` instead of every step.
         write_profiles: Enable writing radial ``profileN.data`` files.
         is_logs_dir: Treat ``out_target`` as a root directory when True.
+        numerics_mode: Arithmetic mode (``"strict"`` or ``"fast"``).
 
     Returns:
         Raw telemetry dictionary returned by ``flexmesa._rust``.
 
     Raises:
-        ValueError: If ``max_steps < 0`` or ``suite`` is unknown.
+        ValueError: If ``max_steps < 0``, ``numerics_mode`` is invalid, or
+            ``suite`` is unknown.
     """
     if max_steps is not None and max_steps < 0:
         raise ValueError(f"max_steps must be non-negative, got {max_steps}")
+    if numerics_mode not in ("strict", "fast"):
+        raise ValueError(
+            f"numerics_mode must be 'strict' or 'fast', got {numerics_mode!r}"
+        )
     if is_logs_dir:
         out_target.mkdir(parents=True, exist_ok=True)
     else:
@@ -326,6 +333,7 @@ def run_trace_inprocess(
                 respect_intervals=respect_intervals,
                 write_profiles=write_profiles,
                 is_logs_dir=is_logs_dir,
+                numerics_mode=numerics_mode,
             )
         )
     if suite == "binary":
@@ -336,6 +344,7 @@ def run_trace_inprocess(
                 max_steps=max_steps,
                 respect_intervals=respect_intervals,
                 is_logs_dir=is_logs_dir,
+                numerics_mode=numerics_mode,
             )
         )
     if suite == "astero":
@@ -348,6 +357,7 @@ def run_trace_inprocess(
                 respect_intervals=respect_intervals,
                 write_profiles=write_profiles,
                 is_logs_dir=is_logs_dir,
+                numerics_mode=numerics_mode,
             )
         )
     raise ValueError(f"unsupported suite {suite!r}")
@@ -390,6 +400,7 @@ def _run_traced_worker(
     respect_intervals: bool,
     write_profiles: bool,
     is_logs_dir: bool,
+    numerics_mode: str,
     timeout_sec: float | None,
     max_rss_gb: float | None,
     t0: float,
@@ -412,6 +423,8 @@ def _run_traced_worker(
             str(out_target),
             str(meta_json),
             "--is-logs-dir" if is_logs_dir else "--explicit-file",
+            "--numerics-mode",
+            numerics_mode,
         ]
         if max_steps is not None:
             cmd.extend(["--max-steps", str(max_steps)])
@@ -516,6 +529,7 @@ def run_traced_case(
     respect_intervals: bool = False,
     write_profiles: bool = False,
     is_logs_dir: bool = True,
+    numerics_mode: str = "strict",
     timeout_sec: float | None = None,
     max_rss_gb: float | None = None,
 ) -> TraceRunOutcome:
@@ -530,6 +544,7 @@ def run_traced_case(
         respect_intervals: Honor ``history_interval`` instead of every step.
         write_profiles: Enable writing radial ``profileN.data`` files.
         is_logs_dir: Treat ``out_target`` as a root directory when True.
+        numerics_mode: Arithmetic mode (``"strict"`` or ``"fast"``).
         timeout_sec: Optional wall-clock timeout in seconds (``s``).
         max_rss_gb: Optional resident-memory ceiling in gigabytes (``GB``).
 
@@ -538,10 +553,14 @@ def run_traced_case(
         usage, and emitted history path.
 
     Raises:
-        ValueError: If ``max_steps < 0``.
+        ValueError: If ``max_steps < 0`` or ``numerics_mode`` is invalid.
     """
     if max_steps is not None and max_steps < 0:
         raise ValueError(f"max_steps must be non-negative, got {max_steps}")
+    if numerics_mode not in ("strict", "fast"):
+        raise ValueError(
+            f"numerics_mode must be 'strict' or 'fast', got {numerics_mode!r}"
+        )
     _clear_stale_history_outputs(out_target, is_logs_dir)
     case_name = case_dir.name
     t0 = time.monotonic()
@@ -556,6 +575,7 @@ def run_traced_case(
             respect_intervals=respect_intervals,
             write_profiles=write_profiles,
             is_logs_dir=is_logs_dir,
+            numerics_mode=numerics_mode,
             timeout_sec=timeout_sec,
             max_rss_gb=max_rss_gb,
             t0=t0,
@@ -571,6 +591,7 @@ def run_traced_case(
             respect_intervals=respect_intervals,
             write_profiles=write_profiles,
             is_logs_dir=is_logs_dir,
+            numerics_mode=numerics_mode,
         )
         wall = time.monotonic() - t0
         hist = locate_written_history(suite, out_target, is_logs_dir)

@@ -476,3 +476,19 @@ def test_flexmesa_trace_and_harness_run_cli_smoke(
         ]
     )
     assert rc_fail == 1
+
+    # Fast mode must never be accepted under --gate (#165).
+    rc_fast_gate = cli.main(
+        [
+            "harness",
+            "run",
+            "--cases",
+            "wd_cool_0.6M",
+            "--max-steps",
+            "1",
+            "--numerics-mode",
+            "fast",
+            "--gate",
+        ]
+    )
+    assert rc_fast_gate == 1

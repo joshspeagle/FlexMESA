@@ -137,7 +137,7 @@ def log10(val: ArrayLike) -> jax.Array:
 
 
 def log1p(val: ArrayLike) -> jax.Array:
-    """Compute $\\ln(1 + x)$ matching MESA's `log1p` definition.
+    """Compute $\\ln(1 + x)$ without cancellation near $x = 0$.
 
     Args:
         val: Scalar or array of shape `(*batch,)` with $x > -1$.
@@ -145,11 +145,11 @@ def log1p(val: ArrayLike) -> jax.Array:
     Returns:
         `float64` JAX array of shape `(*batch,)`.
     """
-    return jnp.log(1.0 + as_f64(val))
+    return jnp.log1p(as_f64(val))
 
 
 def log2(val: ArrayLike) -> jax.Array:
-    """Compute $\\log_{2}(x) = \\ln(x) / \\ln(2)$ matching MESA's `log2`.
+    """Compute $\\log_{2}(x)$ in `float64`.
 
     Args:
         val: Positive scalar or array of shape `(*batch,)`.
@@ -157,7 +157,7 @@ def log2(val: ArrayLike) -> jax.Array:
     Returns:
         `float64` JAX array of shape `(*batch,)`.
     """
-    return jnp.log(as_f64(val)) / constants.LN2
+    return jnp.log2(as_f64(val))
 
 
 def exp(val: ArrayLike) -> jax.Array:
@@ -173,7 +173,7 @@ def exp(val: ArrayLike) -> jax.Array:
 
 
 def expm1(val: ArrayLike) -> jax.Array:
-    """Compute $e^{x} - 1$ matching MESA's `expm1` definition.
+    """Compute $e^{x} - 1$ without cancellation near $x = 0$.
 
     Args:
         val: Scalar or array of shape `(*batch,)`.
@@ -181,7 +181,7 @@ def expm1(val: ArrayLike) -> jax.Array:
     Returns:
         `float64` JAX array of shape `(*batch,)`.
     """
-    return jnp.exp(as_f64(val)) - 1.0
+    return jnp.expm1(as_f64(val))
 
 
 def exp10(val: ArrayLike) -> jax.Array:

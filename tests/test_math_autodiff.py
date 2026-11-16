@@ -583,3 +583,23 @@ def test_auto_diff_complete_golden_test_output_and_order2_sweep() -> None:
         [float(chain_22.val), float(chain_22.d1val1), float(chain_22.d1val2)],
         TOL_AD,
     )
+
+
+def test_numerics_mode_api_and_small_arg_log1p_expm1() -> None:
+    """Verify numerics-mode switching and small-argument log1p/expm1."""
+    import flexmesa
+
+    assert flexmesa.get_numerics_mode() == "strict"
+    assert fmath.get_numerics_mode() == "strict"
+
+    with flexmesa.numerics_mode_context("fast") as active:
+        assert active == "fast"
+        assert flexmesa.get_numerics_mode() == "fast"
+    assert flexmesa.get_numerics_mode() == "strict"
+
+    with pytest.raises(ValueError, match="invalid numerics mode"):
+        flexmesa.set_numerics_mode("invalid")
+
+    tiny = 1.0e-15
+    assert abs(float(fmath.log1p(tiny)) - tiny) < 1.0e-29
+    assert abs(float(fmath.expm1(tiny)) - tiny) < 1.0e-29

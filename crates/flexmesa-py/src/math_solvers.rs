@@ -309,8 +309,26 @@ fn block_multiply_xa<'py>(
     PyArray1::from_vec(py, out).reshape([nz, nvar])
 }
 
+/// Returns the active process-wide numerics mode (`"strict"` or `"fast"`).
+#[pyfunction]
+fn get_numerics_mode() -> &'static str {
+    flexmesa_math::numerics_mode().as_str()
+}
+
+/// Sets the process-wide numerics mode (`"strict"` or `"fast"`).
+#[pyfunction]
+fn set_numerics_mode(mode: &str) -> PyResult<()> {
+    let parsed = mode
+        .parse::<flexmesa_math::NumericsMode>()
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    flexmesa_math::set_numerics_mode(parsed);
+    Ok(())
+}
+
 /// Registers Tier A/B/C `auto_diff`, `math`, and `mtx` functions on `m`.
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(get_numerics_mode, m)?)?;
+    m.add_function(wrap_pyfunction!(set_numerics_mode, m)?)?;
     m.add_function(wrap_pyfunction!(eval_autodiff_order2_zone, m)?)?;
     m.add_function(wrap_pyfunction!(eval_autodiff_order2_batch, m)?)?;
     m.add_function(wrap_pyfunction!(safe_sqrt, m)?)?;

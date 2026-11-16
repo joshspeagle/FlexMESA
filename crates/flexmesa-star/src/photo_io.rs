@@ -89,6 +89,9 @@ pub fn write_photo_bytes(model: &StarModel) -> Vec<u8> {
         u8::from(model.controls.rsp_flag),
         u8::from(model.controls.rsp2_flag),
         u8::from(model.controls.rti_flag),
+        u8::from(
+            flexmesa_math::numerics_mode() == flexmesa_math::NumericsMode::Fast,
+        ),
     ]);
 
     write_i32(&mut buf, 2);
@@ -353,9 +356,15 @@ pub fn read_photo_bytes(
         })?
         .to_owned();
     let job_tags = bytes
-        .get(pos..pos + 7)
+        .get(pos..pos + 8)
         .ok_or_else(|| eof("EOF job/controls flags"))?;
-    pos += 7;
+    pos += 8;
+    if job_tags[7] > 1 {
+        return Err(StarError::IoError(format!(
+            "invalid photo numerics_mode tag {}",
+            job_tags[7]
+        )));
+    }
     let mut job = job;
     let mut controls = controls;
     job.net_name = saved_net_name;
@@ -644,4 +653,63 @@ pub fn read_photo_bytes(
     }
 
     Ok(model)
+}
+
+/// Extracts the [`flexmesa_math::NumericsMode`] recorded in the Part 1 header
+/// of serialized `.photo` checkpoint `bytes` (`#165`).
+pub fn photo_numerics_mode(
+    bytes: &[u8],
+) -> Result<flexmesa_math::NumericsMode, StarError> {
+    let eof = |ctx: &str| StarError::IoError(format!("photo {ctx}"));
+    let mut pos = 0usize;
+    let read_i32 = |pos: &mut usize| -> Result<i32, StarError> {
+        let s: [u8; 4] = bytes
+            .get(*pos..*pos + 4)
+            .ok_or_else(|| eof("EOF i32"))?
+            .try_into()
+            .map_err(|_| eof("EOF i32"))?;
+        *pos += 4;
+        Ok(i32::from_le_bytes(s))
+    };
+    let read_u64 = |pos: &mut usize| -> Result<u64, StarError> {
+        let s: [u8; 8] = bytes
+            .get(*pos..*pos + 8)
+            .ok_or_else(|| eof("EOF u64"))?
+            .try_into()
+            .map_err(|_| eof("EOF u64"))?;
+        *pos += 8;
+        Ok(u64::from_le_bytes(s))
+    };
+    let version = read_i32(&mut pos)?;
+    if version != STAR_DEF_VERSION {
+        return Err(StarError::IoError(format!(
+            "unsupported photo version {version} (expected {STAR_DEF_VERSION})"
+        )));
+    }
+    let part = read_i32(&mut pos)?;
+    if part != 1 {
+        return Err(StarError::IoError(format!(
+            "photo sentinel mismatch: expected part 1, got {part}"
+        )));
+    }
+    let _nz = read_u64(&mut pos)?;
+    let species = read_u64(&mut pos)? as usize;
+    let _nvar_hydro = read_u64(&mut pos)?;
+    pos = pos
+        .checked_add(8 * species)
+        .ok_or_else(|| eof("species overflow"))?;
+    let net_len = read_u64(&mut pos)? as usize;
+    pos = pos
+        .checked_add(net_len)
+        .ok_or_else(|| eof("net_name overflow"))?;
+    let job_tags = bytes
+        .get(pos..pos + 8)
+        .ok_or_else(|| eof("EOF job/controls flags"))?;
+    match job_tags[7] {
+        0 => Ok(flexmesa_math::NumericsMode::Strict),
+        1 => Ok(flexmesa_math::NumericsMode::Fast),
+        other => Err(StarError::IoError(format!(
+            "invalid photo numerics_mode tag {other}"
+        ))),
+    }
 }

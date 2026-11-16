@@ -263,6 +263,7 @@ where
 #[allow(clippy::used_underscore_items)]
 #[pymodule]
 fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    flexmesa_math::math_init();
     tier_a_parse::register(m)?;
     tier_a_data::register(m)?;
     math_solvers::register(m)?;

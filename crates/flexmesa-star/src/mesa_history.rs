@@ -2812,7 +2812,10 @@ pub fn format_star_history_file_header_with_extra(
         ("compiler", format_mesa_header_str("rustc")),
         ("build", format_mesa_header_str("flexmesa")),
         ("MESA_SDK_version", format_mesa_header_str("flexmesa-0.1")),
-        ("math_backend", format_mesa_header_str("strict")),
+        (
+            "math_backend",
+            format_mesa_header_str(flexmesa_math::numerics_mode().as_str()),
+        ),
         ("date", format_mesa_header_str("20260401")),
         ("burn_min1", format_mesa_dbl(o.burn_min1)),
         ("burn_min2", format_mesa_dbl(o.burn_min2)),

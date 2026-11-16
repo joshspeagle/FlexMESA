@@ -1248,7 +1248,10 @@ fn format_star_profile_parts_with_ctx(
         hdr.push(("compiler", format_mesa_header_str("rustc")));
         hdr.push(("build", format_mesa_header_str("flexmesa")));
         hdr.push(("MESA_SDK_version", format_mesa_header_str("flexmesa-0.1")));
-        hdr.push(("math_backend", format_mesa_header_str("strict")));
+        hdr.push((
+            "math_backend",
+            format_mesa_header_str(flexmesa_math::numerics_mode().as_str()),
+        ));
         hdr.push(("date", format_mesa_header_str("20260401")));
     }
     hdr.push(("msun", format_mesa_dbl(M_SUN)));

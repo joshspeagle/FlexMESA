@@ -779,7 +779,7 @@ pub fn format_binary_history_file_header(
     specs: &[BinaryHistoryColumnSpec],
 ) -> String {
     let w = BINARY_LOG_COL_WIDTH;
-    let hdr_items: [(&str, String); 8] = [
+    let hdr_items: [(&str, String); 9] = [
         (
             "version_number",
             format_mesa_header_str_width(MESA_REF_VERSION_NUMBER, w),
@@ -801,6 +801,13 @@ pub fn format_binary_history_file_header(
         (
             "MESA_SDK_version",
             format_mesa_header_str_width("flexmesa-0.1", w),
+        ),
+        (
+            "math_backend",
+            format_mesa_header_str_width(
+                flexmesa_math::numerics_mode().as_str(),
+                w,
+            ),
         ),
         ("date", format_mesa_header_str_width("20260401", w)),
     ];

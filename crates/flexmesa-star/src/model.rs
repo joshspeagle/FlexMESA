@@ -371,6 +371,8 @@ impl StarModel {
         job: StarJobControls,
         controls: StarControls,
     ) -> Self {
+        // Match `star_def_init` (`star/private/star_private_def.f90:449`).
+        flexmesa_math::math_init();
         let species = chem_id.len();
         let catalog = NuclideCatalog::builtin_ref();
         let mut iso_names = Vec::with_capacity(species);

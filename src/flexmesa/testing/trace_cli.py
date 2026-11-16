@@ -35,6 +35,11 @@ def _run_worker(argv: list[str]) -> int:
     parser.add_argument("--full-stages", action="store_true")
     parser.add_argument("--respect-intervals", action="store_true")
     parser.add_argument("--write-profiles", action="store_true")
+    parser.add_argument(
+        "--numerics-mode",
+        choices=("strict", "fast"),
+        default="strict",
+    )
     ns = parser.parse_args(argv)
 
     rep = harness_runner.run_trace_inprocess(
@@ -46,6 +51,7 @@ def _run_worker(argv: list[str]) -> int:
         respect_intervals=ns.respect_intervals,
         write_profiles=ns.write_profiles,
         is_logs_dir=bool(ns.is_logs_dir),
+        numerics_mode=ns.numerics_mode,
     )
     payload = {
         "termination_code": rep.get("termination_code", ""),
@@ -117,6 +123,12 @@ def _build_trace_parser() -> argparse.ArgumentParser:
         help="Enable radial profileN.data output when targeting a directory.",
     )
     parser.add_argument(
+        "--numerics-mode",
+        choices=("strict", "fast"),
+        default="strict",
+        help="Arithmetic mode ('strict' default, or 'fast'; #165).",
+    )
+    parser.add_argument(
         "--timeout-sec",
         type=float,
         default=None,
@@ -157,6 +169,7 @@ def trace_main(argv: list[str] | None = None) -> int:
         respect_intervals=ns.respect_intervals,
         write_profiles=ns.write_profiles,
         is_logs_dir=not ns.explicit_file,
+        numerics_mode=ns.numerics_mode,
         timeout_sec=ns.timeout_sec,
         max_rss_gb=ns.max_rss_gb,
     )
@@ -247,6 +260,12 @@ def _build_harness_parser() -> argparse.ArgumentParser:
     )
     p_run.add_argument("--work-dir", default=None)
     p_run.add_argument("--max-steps", type=_non_negative_int, default=None)
+    p_run.add_argument(
+        "--numerics-mode",
+        choices=("strict", "fast"),
+        default="strict",
+        help="Arithmetic mode ('strict' default, or 'fast'; #165).",
+    )
     p_run.add_argument("--timeout-sec", type=float, default=600.0)
     p_run.add_argument("--max-rss-gb", type=float, default=6.0)
     p_run.add_argument("--markdown-out", default=None)
@@ -309,6 +328,13 @@ def harness_main(argv: list[str] | None = None) -> int:
     ns = _build_harness_parser().parse_args(cli_args)
     if ns.subcommand == "table":
         return _handle_table_subcommand(ns)
+    if ns.gate and ns.numerics_mode != "strict":
+        print(
+            "--gate requires --numerics-mode strict "
+            "(#165: only strict mode is judged against MESA)",
+            file=sys.stderr,
+        )
+        return 1
 
     manifest = case_manifest.load_case_manifest(ns.manifest)
     gaps = case_manifest.load_known_gaps(ns.known_gaps)
@@ -336,6 +362,7 @@ def harness_main(argv: list[str] | None = None) -> int:
                 case_dir,
                 out_dir,
                 max_steps=ns.max_steps,
+                numerics_mode=ns.numerics_mode,
                 timeout_sec=ns.timeout_sec,
                 max_rss_gb=ns.max_rss_gb,
             )
@@ -353,7 +380,12 @@ def harness_main(argv: list[str] | None = None) -> int:
                 f"steps={rec.steps} wall={rec.wall_time_sec:.1f}s"
             )
 
-        payload = case_report.build_report_payload(manifest, records, gaps)
+        payload = case_report.build_report_payload(
+            manifest,
+            records,
+            gaps,
+            numerics_mode=ns.numerics_mode,
+        )
         if ns.markdown_out:
             md_text = case_report.render_case_table_markdown(
                 manifest,

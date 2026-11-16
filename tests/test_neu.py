@@ -30,14 +30,14 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from flexmesa import _rust, neu
 from flexmesa import constants as _const
-from flexmesa import neu
 from flexmesa.data import fetch
 
 
 def _exp10(x: float) -> float:
-    """Evaluates $10^x = \\exp(x \\ln 10)$ matching upstream `exp10`."""
-    return math.exp(x * _const.LN10)
+    """Evaluates $10^x$ via `_rust.exp10` matching upstream `exp10`."""
+    return float(_rust.exp10(x))
 
 
 def _mesa_neu_test_dir() -> pathlib.Path:

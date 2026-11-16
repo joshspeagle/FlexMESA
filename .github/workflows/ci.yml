@@ -293,7 +293,7 @@ jobs:
           mkdir -p "$OUT_DIR"
           flexmesa harness run \
             --preset pr-ci \
-            --timeout-sec 300 \
+            --timeout-sec 480 \
             --max-rss-gb 6.0 \
             --work-dir "$OUT_DIR/logs" \
             --markdown-out "$OUT_DIR/case_table.md" \

@@ -16,14 +16,14 @@ Generated mechanically by `flexmesa harness` from `benchmarks/history_harness/ca
 | Executed cases reaching upstream termination | 0 |
 | Acceptance passes against MESA `26.4.1` (`pass`) | 0 |
 | Interim `0b2e6bb` comparisons within manifest tolerance | 0 |
-| Declared known gaps (`known_gaps.toml`) | 22 |
+| Declared known gaps (`known_gaps.toml`) | 23 |
 | Undeclared failures | 0 |
 
 ## Per-Case Status and Reference Availability
 
 | Suite | Case | Reference Status | Required Termination | Observed Term | Steps | Final Coord Diff | Max Track Diff | First Div Step | Declared Gap | Verdict |
 | :--- | :--- | :--- | :--- | :--- | ---: | ---: | :--- | ---: | :--- | :--- |
-| `star` | `1.3M_ms_high_Z` | `interim_0b2e6bb` | `log_L_upper_limit` | - | - | - | - | - | - | interim reference (not run) |
+| `star` | `1.3M_ms_high_Z` | `interim_0b2e6bb` | `log_L_upper_limit` | - | - | - | - | - | #152 | interim reference (not run) |
 | `star` | `1.4M_ms_op_mono` | `no_reference_yet` | `max_model_number` | - | - | - | - | - | - | no reference yet |
 | `star` | `1.5M_with_diffusion` | `no_reference_yet` | `xa_central_lower_limit` | - | - | - | - | - | - | no reference yet |
 | `star` | `12M_pre_ms_to_core_collapse` | `no_reference_yet` | `fe_core_infall_limit` | - | - | - | - | - | - | no reference yet |

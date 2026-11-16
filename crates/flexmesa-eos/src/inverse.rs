@@ -195,8 +195,9 @@ where
             } else {
                 let q0 = fa / fc;
                 let r = fb / fc;
+                // Reproduces num/private/mod_brent.f90:653 at tag 26.4.1 (#194).
                 (
-                    s * (2.0 * m * q0 * (q0 - r) - (sb - sa) * (r - 1.0)),
+                    s * (2.0 * m * a * (q0 - r) - (sb - sa) * (r - 1.0)),
                     (q0 - 1.0) * (r - 1.0) * (s - 1.0),
                 )
             };

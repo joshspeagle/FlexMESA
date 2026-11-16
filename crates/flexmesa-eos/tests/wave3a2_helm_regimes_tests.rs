@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-//! Golden parity integration tests for Wave 3a.2 (`HELM` degenerate,
-//! relativistic pair-production, crystallized WD, and Hermite basis regimes)
-//! against upstream Fortran MESA (`eos_helm_eval.f90` / `helm.f90`).
+//! Regression snapshot tests for Wave 3a.2 (`HELM` degenerate, relativistic
+//! pair-production, crystallized WD, and Hermite basis regimes; `#146`).
+//! Real compiled MESA `26.4.1` component oracle comparisons are in
+//! `mesa_26_4_1_component_oracles_test.rs` (`T2-15`).
 
 #![allow(
     clippy::excessive_precision,
@@ -51,7 +52,7 @@ fn assert_helm_case(
 }
 
 #[test]
-fn test_helm_eos_degenerate_and_pair_regimes_match_fortran_oracle() {
+fn test_helm_eos_degenerate_and_pair_regimes_match_regression_snapshot() {
     // 1. test_components (degenerate, plasg > 1): logT = 6.0, logRho = 3.5
     let expected_comp: [[f64; 5]; 16] = [
         [

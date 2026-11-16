@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-//! Golden parity integration tests for Wave 3a.3 (`Skye` equation of state,
+//! Regression snapshot tests for Wave 3a.3 (`Skye` equation of state,
 //! `get_skye_alfa`, `eosDT_get` `Skye`/`HELM` blending, and `eosPT_get` /
-//! `eosDT_get_T` / `eosDT_get_Rho` / `eos_gamma_DE_get` inverse solvers)
-//! against upstream Fortran MESA (`skye.f90`, `eosdt_eval.f90`,
-//! `eospt_eval.f90`, and `eosde_eval.f90`).
+//! `eosDT_get_T` / `eosDT_get_Rho` / `eos_gamma_DE_get` inverse solvers; `#146`).
+//! Real compiled MESA `26.4.1` component oracle comparisons are in
+//! `mesa_26_4_1_component_oracles_test.rs` (`T2-15`).
 
 #![allow(
     clippy::approx_constant,
@@ -66,7 +66,7 @@ fn assert_eos_case(
 
 #[test]
 #[rustfmt::skip]
-fn test_skye_liquid_and_ion_offset_regimes_match_fortran_oracle() {
+fn test_skye_liquid_and_ion_offset_regimes_match_regression_snapshot() {
     let ht = HelmTable::builtin();
     let (chem_id, xa, abar, zbar) = make_comp(0.0, 1.0, 0.0);
 
@@ -108,12 +108,12 @@ fn test_skye_liquid_and_ion_offset_regimes_match_fortran_oracle() {
     ];
     assert_eos_case("skye_c12_liq", &out1, &exp_c12_liq, 1.0e-12);
 
-    // 2. skye_c12_liq_ion (use_ion_offsets = true)
+    // 2. skye_c12_liq_ion (use_ion_offsets = true; MESA 26.4.1 #192 row 1)
     cfg.skye_use_ion_offsets = true;
     let out2 = eval_skye_eos(&cfg, ht, 1.0e6, 1.0e8, abar, zbar, &chem_id, &xa)
         .unwrap();
     let mut exp_c12_liq_ion = exp_c12_liq;
-    exp_c12_liq_ion[1] = [3.8291950165675473e1, 5.8894582629837955e-1, 6.1591201653728764e-2];
+    exp_c12_liq_ion[1] = [3.8313083880713144e1, 5.7662981298294269e-1, 6.0303208725000439e-2];
     assert_eos_case("skye_c12_liq_ion", &out2, &exp_c12_liq_ion, 1.0e-12);
 
     // 3. skye_co_liq
@@ -163,7 +163,7 @@ fn test_skye_liquid_and_ion_offset_regimes_match_fortran_oracle() {
 
 #[test]
 #[rustfmt::skip]
-fn test_skye_solid_and_phase_transition_regimes_match_fortran_oracle() {
+fn test_skye_solid_and_phase_transition_regimes_match_regression_snapshot() {
     let ht = HelmTable::builtin();
     let (chem_id_co, xa_co, abar_co, zbar_co) = make_comp(0.0, 0.5, 0.5);
     let mut cfg = SkyeConfig {
@@ -297,7 +297,7 @@ fn test_skye_solid_and_phase_transition_regimes_match_fortran_oracle() {
 
 #[test]
 #[rustfmt::skip]
-fn test_skye_alfa_blend_and_inverse_solvers_match_fortran_oracle() {
+fn test_skye_alfa_blend_and_inverse_solvers_match_regression_snapshot() {
     let ht = HelmTable::builtin();
     let skye_cfg = SkyeConfig::default();
 

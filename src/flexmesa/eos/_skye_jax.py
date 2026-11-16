@@ -261,11 +261,14 @@ def _eval_skye_cell_zone_core(
     ya_n = jnp.sum(yj)
     ya = yj / jnp.where(ya_n > 0.0, ya_n, 1.0)
 
+    real_sp = (azion >= 0.0) & (a_in > 0.0)
+    ya_raw = jnp.where(real_sp, xa / jnp.where(real_sp, a_in, 1.0), 0.0)
+    # Reproduces eos/private/ion_offset.f90:58-81 at tag 26.4.1 (see #192).
+    ion_norm = jnp.sum(ya_raw)
+    ya_ion = ya_raw / jnp.where(ion_norm != 0.0, ion_norm, 1.0)
     z_idx = jnp.clip(jnp.round(azion).astype(jnp.int32) - 1, 0, 27)
-    z_ok = (azion >= 1.0) & (azion <= 28.0) & (a_in > 0.0)
-    ev_sum = jnp.sum(
-        jnp.where(z_ok, _NIST_EV[z_idx] * xa / jnp.maximum(a_in, 1.0), 0.0)
-    )
+    z_ok = (azion >= 1.0) & (azion <= 28.0) & real_sp
+    ev_sum = jnp.sum(jnp.where(z_ok, _NIST_EV[z_idx] * ya_ion, 0.0))
     ion_off = jnp.where(
         use_ion_offsets, ev_sum * constants.EV2ERG / constants.AMU, 0.0
     )

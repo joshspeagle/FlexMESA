@@ -206,13 +206,27 @@ fn test_brent_safe_zero_and_minimization_match_analytical_oracles() {
 }
 
 /// Verifies [`safe_root_with_brackets`], [`safe_root_with_guess`], and
-/// [`safe_root_without_brackets`] against `test_num.f90` (`test_root1`..`3`).
+/// [`safe_root_without_brackets`] against MESA `26.4.1` `num/test/test_output:230-240`.
 #[test]
 fn test_safe_root_with_brackets_and_guess_match_upstream_golden_values() {
-    // Upstream test_root_with_brackets: f(x) = x - 3*sin(1 - x) on [0, 10]
+    // Upstream test_root_with_brackets (`test_support.f90:95-127`, `test_output:230`):
+    // f(x) = x - 3*sin(1 - x) on [0, 10] with epsx = epsy = 1e-6.
     let f1 = |x: f64| -> Result<(f64, f64), NumError> {
         Ok((x - 3.0 * (1.0 - x).sin(), 1.0 + 3.0 * (1.0 - x).cos()))
     };
+    let (root_mesa, _) = safe_root_with_brackets(
+        f1,
+        0.0,
+        10.0,
+        f1(0.0).unwrap().0,
+        f1(10.0).unwrap().0,
+        100,
+        1e-6,
+        1e-6,
+    )
+    .unwrap();
+    assert!((root_mesa - 7.480_061_088_059_349e-1).abs() <= 1e-14);
+
     let ((x1, x3), (y1, y3)) =
         look_for_brackets(5.0, 1.0, 0.0, 10.0, f1, 50).unwrap();
     let (root1, res1) =
@@ -220,18 +234,36 @@ fn test_safe_root_with_brackets_and_guess_match_upstream_golden_values() {
     assert!((root1 - 0.748_006_110_748_124_4).abs() <= 1e-11);
     assert!(res1.abs() <= 1e-11);
 
-    // Upstream test_root2 / test_root3: f(x) = tanh(x) - tanh(0.5) => x* = 0.5
+    // Upstream test_root2 (`test_support.f90:142-172`, `test_output:232-236`):
+    // f(x) = tanh(x) - 0.4621171572600098, x = -1, dx = 0.1, epsx = epsy = 1e-10
     let f2 = |x: f64| -> Result<(f64, f64), NumError> {
         let t = x.tanh();
-        Ok((t - 0.462_117_157_260_009_8, 1.0 - t * t))
+        let c = x.cosh();
+        Ok((t - 0.462_117_157_260_009_8, 1.0 / (c * c)))
     };
-    let (root2, _) = safe_root_without_brackets(
-        f2, 0.0, 0.1, 10, 50, -10.0, 10.0, 1e-12, 1e-12,
+    let ((r2_x1, r2_x3), (r2_y1, r2_y3)) =
+        look_for_brackets(-1.0, 0.1, -1.0e30, 1.0e30, f2, 50).unwrap();
+    assert!((r2_x1 - (-1.2)).abs() <= 1e-15);
+    assert!((r2_x3 - 2.0).abs() <= 1e-15);
+    let (root2_mesa, _) =
+        safe_root_with_brackets(f2, r2_x1, r2_x3, r2_y1, r2_y3, 50, 1e-10, 1e-10)
+            .unwrap();
+    assert!((root2_mesa - 5.000_000_000_000_001e-1).abs() <= 1e-14);
+
+    // Upstream test_root3 (`test_support.f90:174-209`, `test_output:239-240`):
+    let (root3_first, _) = safe_root_without_brackets(
+        f2, 0.1, 0.1, 10, 50, -1.0e30, 1.0e30, 1e-10, 1e-10,
     )
     .unwrap();
-    assert!((root2 - 0.5).abs() <= 1e-10);
+    assert!((root3_first - 4.999_999_999_999_936e-1).abs() <= 1e-14);
 
-    let (root3, _) = safe_root_with_guess(
+    let (root3_second, _) = safe_root_without_brackets(
+        f2, -1.0, 0.1, 10, 50, -1.0e30, 1.0e30, 1e-10, 1e-10,
+    )
+    .unwrap();
+    assert!((root3_second - 5.000_000_000_000_038e-1).abs() <= 1e-14);
+
+    let (root_explicit, _) = safe_root_with_guess(
         f2,
         0.1,
         0.2,
@@ -247,7 +279,7 @@ fn test_safe_root_with_brackets_and_guess_match_upstream_golden_values() {
         1e-12,
     )
     .unwrap();
-    assert!((root3 - 0.5).abs() <= 1e-10);
+    assert!((root_explicit - 0.5).abs() <= 1e-10);
 }
 
 /// Verifies [`safe_root_dual`] implicit differentiation on

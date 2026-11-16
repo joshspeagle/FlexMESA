@@ -271,8 +271,9 @@ def plas_neu(inp: _inputs.NeuInputs) -> _inputs.NeuRate:
     s2da = gl6 * s1da + dgl6_dgl2 * gl2da * s1
     s2dz = gl6 * s1dz + dgl6_dgl2 * gl2dz * s1
 
-    pref = _inputs.TFAC0 * 3.0e21 * inp.xl9
-    dpref_dt = _inputs.TFAC0 * 3.0e21 * 9.0 * inp.xl8 * inp.xldt
+    # Reproduces neu/private/mod_neu.f90:1582-1583 at tag 26.4.1 (see #193).
+    pref = _inputs.PLAS_WEINBERG_PREF * 3.0e21 * inp.xl9
+    dpref_dt = _inputs.PLAS_WEINBERG_PREF * 3.0e21 * 9.0 * inp.xl8 * inp.xldt
     return _inputs.NeuRate(
         val=pref * s2,
         d_t=pref * s2dt + dpref_dt * s2,

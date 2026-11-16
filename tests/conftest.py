@@ -49,8 +49,17 @@ def pytest_runtest_teardown(
 
 
 def pytest_runtest_logreport(report: pytest.TestReport) -> None:
-    """Record skipped test node IDs during execution."""
-    if report.skipped and report.nodeid not in _SKIPPED_NODEIDS:
+    """Record unauthorized skipped test node IDs during execution.
+
+    Under `CLAUDE.md`, bare skips are forbidden in zero-skip CI mode, whereas
+    `@pytest.mark.xfail(strict=True, reason="... #NNN ...")` linked to an open
+    issue is permitted for declared upstream gaps (`#144`).
+    """
+    if not report.skipped:
+        return
+    if hasattr(report, "wasxfail") and "#" in str(report.wasxfail):
+        return
+    if report.nodeid not in _SKIPPED_NODEIDS:
         _SKIPPED_NODEIDS.append(report.nodeid)
 
 

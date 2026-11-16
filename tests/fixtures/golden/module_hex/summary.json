@@ -1,0 +1,242 @@
+{
+  "total_packages_in_install": 26,
+  "packages_with_test_dir": 25,
+  "all_checks_passed": true,
+  "total_exact_values_captured": 348321,
+  "modules": [
+    {
+      "module": "const",
+      "has_test_dir": true,
+      "check_passed": true,
+      "wall_seconds": 0.008,
+      "exact_values_captured": 23,
+      "exact_values_file": "module_tests/const/exact_tested_values.tsv",
+      "test_output_file": "module_tests/const/test_output_actual.txt"
+    },
+    {
+      "module": "utils",
+      "has_test_dir": true,
+      "check_passed": true,
+      "wall_seconds": 0.006,
+      "exact_values_captured": 0,
+      "exact_values_file": "module_tests/utils/exact_tested_values.tsv",
+      "test_output_file": "module_tests/utils/test_output_actual.txt"
+    },
+    {
+      "module": "math",
+      "has_test_dir": true,
+      "check_passed": true,
+      "wall_seconds": 0.009,
+      "exact_values_captured": 102,
+      "exact_values_file": "module_tests/math/exact_tested_values.tsv",
+      "test_output_file": "module_tests/math/test_output_actual.txt"
+    },
+    {
+      "module": "mtx",
+      "has_test_dir": true,
+      "check_passed": true,
+      "wall_seconds": 0.058,
+      "exact_values_captured": 22,
+      "exact_values_file": "module_tests/mtx/exact_tested_values.tsv",
+      "test_output_file": "module_tests/mtx/test_output_actual.txt"
+    },
+    {
+      "module": "auto_diff",
+      "has_test_dir": true,
+      "check_passed": true,
+      "wall_seconds": 0.007,
+      "exact_values_captured": 774,
+      "exact_values_file": "module_tests/auto_diff/exact_tested_values.tsv",
+      "test_output_file": "module_tests/auto_diff/test_output_actual.txt"
+    },
+    {
+      "module": "forum",
+      "has_test_dir": true,
+      "check_passed": true,
+      "wall_seconds": 0.009,
+      "exact_values_captured": 0,
+      "exact_values_file": "module_tests/forum/exact_tested_values.tsv",
+      "test_output_file": "module_tests/forum/test_output_actual.txt"
+    },
+    {
+      "module": "num",
+      "has_test_dir": true,
+      "check_passed": true,
+      "wall_seconds": 0.272,
+      "exact_values_captured": 570,
+      "exact_values_file": "module_tests/num/exact_tested_values.tsv",
+      "test_output_file": "module_tests/num/test_output_actual.txt"
+    },
+    {
+      "module": "interp_1d",
+      "has_test_dir": true,
+      "check_passed": true,
+      "wall_seconds": 0.009,
+      "exact_values_captured": 234,
+      "exact_values_file": "module_tests/interp_1d/exact_tested_values.tsv",
+      "test_output_file": "module_tests/interp_1d/test_output_actual.txt"
+    },
+    {
+      "module": "interp_2d",
+      "has_test_dir": true,
+      "check_passed": true,
+      "wall_seconds": 0.008,
+      "exact_values_captured": 104,
+      "exact_values_file": "module_tests/interp_2d/exact_tested_values.tsv",
+      "test_output_file": "module_tests/interp_2d/test_output_actual.txt"
+    },
+    {
+      "module": "chem",
+      "has_test_dir": true,
+      "check_passed": true,
+      "wall_seconds": 0.171,
+      "exact_values_captured": 1102,
+      "exact_values_file": "module_tests/chem/exact_tested_values.tsv",
+      "test_output_file": "module_tests/chem/test_output_actual.txt"
+    },
+    {
+      "module": "colors",
+      "has_test_dir": true,
+      "check_passed": true,
+      "wall_seconds": 0.094,
+      "exact_values_captured": 234,
+      "exact_values_file": "module_tests/colors/exact_tested_values.tsv",
+      "test_output_file": "module_tests/colors/test_output_actual.txt"
+    },
+    {
+      "module": "eos",
+      "has_test_dir": true,
+      "check_passed": true,
+      "wall_seconds": 2.348,
+      "exact_values_captured": 391,
+      "exact_values_file": "module_tests/eos/exact_tested_values.tsv",
+      "test_output_file": "module_tests/eos/test_output_actual.txt"
+    },
+    {
+      "module": "kap",
+      "has_test_dir": true,
+      "check_passed": true,
+      "wall_seconds": 1.999,
+      "exact_values_captured": 54,
+      "exact_values_file": "module_tests/kap/exact_tested_values.tsv",
+      "test_output_file": "module_tests/kap/test_output_actual.txt"
+    },
+    {
+      "module": "rates",
+      "has_test_dir": true,
+      "check_passed": true,
+      "wall_seconds": 0.867,
+      "exact_values_captured": 3685,
+      "exact_values_file": "module_tests/rates/exact_tested_values.tsv",
+      "test_output_file": "module_tests/rates/test_output_actual.txt"
+    },
+    {
+      "module": "neu",
+      "has_test_dir": true,
+      "check_passed": true,
+      "wall_seconds": 0.512,
+      "exact_values_captured": 340000,
+      "exact_values_file": "module_tests/neu/exact_tested_values.tsv",
+      "test_output_file": "module_tests/neu/test_output_actual.txt"
+    },
+    {
+      "module": "net",
+      "has_test_dir": true,
+      "check_passed": true,
+      "wall_seconds": 2.689,
+      "exact_values_captured": 140,
+      "exact_values_file": "module_tests/net/exact_tested_values.tsv",
+      "test_output_file": "module_tests/net/test_output_actual.txt"
+    },
+    {
+      "module": "ionization",
+      "has_test_dir": true,
+      "check_passed": true,
+      "wall_seconds": 0.602,
+      "exact_values_captured": 41,
+      "exact_values_file": "module_tests/ionization/exact_tested_values.tsv",
+      "test_output_file": "module_tests/ionization/test_output_actual.txt"
+    },
+    {
+      "module": "atm",
+      "has_test_dir": true,
+      "check_passed": true,
+      "wall_seconds": 2.671,
+      "exact_values_captured": 90,
+      "exact_values_file": "module_tests/atm/exact_tested_values.tsv",
+      "test_output_file": "module_tests/atm/test_output_actual.txt"
+    },
+    {
+      "module": "turb",
+      "has_test_dir": true,
+      "check_passed": true,
+      "wall_seconds": 0.013,
+      "exact_values_captured": 136,
+      "exact_values_file": "module_tests/turb/exact_tested_values.tsv",
+      "test_output_file": "module_tests/turb/test_output_actual.txt"
+    },
+    {
+      "module": "sample",
+      "has_test_dir": false,
+      "check_passed": true,
+      "note": "Package has no test/ directory in upstream MESA 26.4.1 (library client example only).",
+      "exact_values_captured": 0
+    },
+    {
+      "module": "star_data",
+      "has_test_dir": true,
+      "check_passed": true,
+      "wall_seconds": 0.007,
+      "exact_values_captured": 0,
+      "exact_values_file": "module_tests/star_data/exact_tested_values.tsv",
+      "test_output_file": "module_tests/star_data/test_output_actual.txt"
+    },
+    {
+      "module": "gyre",
+      "has_test_dir": true,
+      "check_passed": true,
+      "wall_seconds": 4.244,
+      "exact_values_captured": 136,
+      "exact_values_file": "module_tests/gyre/exact_tested_values.tsv",
+      "test_output_file": "module_tests/gyre/test_output_actual.txt"
+    },
+    {
+      "module": "adipls",
+      "has_test_dir": true,
+      "check_passed": true,
+      "wall_seconds": 0.516,
+      "exact_values_captured": 92,
+      "exact_values_file": "module_tests/adipls/exact_tested_values.tsv",
+      "test_output_file": "module_tests/adipls/test_output_actual.txt"
+    },
+    {
+      "module": "star",
+      "has_test_dir": true,
+      "check_passed": true,
+      "wall_seconds": 11.303,
+      "exact_values_captured": 386,
+      "exact_values_file": "module_tests/star/exact_tested_values.tsv",
+      "test_output_file": "module_tests/star/test_output_actual.txt",
+      "star_history_hex_file": "module_tests/star/history_exact_hex.tsv",
+      "star_history_hex_cells": 240
+    },
+    {
+      "module": "binary",
+      "has_test_dir": true,
+      "check_passed": true,
+      "wall_seconds": 0.014,
+      "exact_values_captured": 5,
+      "exact_values_file": "module_tests/binary/exact_tested_values.tsv",
+      "test_output_file": "module_tests/binary/test_output_actual.txt"
+    },
+    {
+      "module": "astero",
+      "has_test_dir": true,
+      "check_passed": true,
+      "wall_seconds": 0.007,
+      "exact_values_captured": 0,
+      "exact_values_file": "module_tests/astero/exact_tested_values.tsv",
+      "test_output_file": "module_tests/astero/test_output_actual.txt"
+    }
+  ]
+}

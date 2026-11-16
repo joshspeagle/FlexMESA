@@ -17,6 +17,7 @@
 //!   near simple roots.
 //! - [`safe_root_with_guess`] tries guarded Newton steps before bracketing.
 
+use crate::brent::brent_safe_zero;
 use crate::NumError;
 use flexmesa_autodiff::DualOrder1;
 
@@ -56,73 +57,73 @@ where
     }
     let mut x1 = x.clamp(xmin, xmax);
     let mut x3 = x1;
-    let (y0, _) = func(x1)?;
-    if !y0.is_finite() {
-        return Err(NumError::NonFiniteValue(
-            "non-finite f(x) in look_for_brackets",
-        ));
-    }
-    if y0 == 0.0 {
-        return Ok(((x1, x1), (0.0, 0.0)));
-    }
-    let mut y1 = y0;
-    let mut y3 = y0;
-    let mut step = dx.abs();
+    let mut y1 = 0.0_f64;
+    let mut y3 = 0.0_f64;
+    let step0 = dx.abs();
     let max_tries = if ntry == 0 { 50 } else { ntry };
 
-    // Expand bracket geometrically in both directions until a sign flip occurs
-    for _iter in 0..max_tries {
-        let can_move_left = x1 > xmin;
-        let can_move_right = x3 < xmax;
-        if !can_move_left && !can_move_right {
+    // Matches `do_look_for_brackets` in `num/private/mod_root.f90:197-252`,
+    // clamped to `[xmin, xmax]`.
+    for i in 1..=max_tries {
+        if x1 <= xmin && x3 >= xmax && i > 1 {
             break;
         }
-        if can_move_left {
-            let x_new = (x1 - step).max(xmin);
-            let (y_new, _) = func(x_new)?;
-            if !y_new.is_finite() {
+        let jump = ((1_u64 << i.min(50)) as f64) * step0;
+        let (move_x1, move_x3) = if i == 1 {
+            x1 = (x1 - jump).max(xmin);
+            x3 = (x3 + jump).min(xmax);
+            (true, true)
+        } else if y1 > 0.0 {
+            if (y1 < y3 && x1 > xmin) || x3 >= xmax {
+                x1 = (x1 - jump).max(xmin);
+                (true, false)
+            } else {
+                x3 = (x3 + jump).min(xmax);
+                (false, true)
+            }
+        } else if (y1 > y3 && x1 > xmin) || x3 >= xmax {
+            x1 = (x1 - jump).max(xmin);
+            (true, false)
+        } else {
+            x3 = (x3 + jump).min(xmax);
+            (false, true)
+        };
+
+        if move_x1 {
+            let (f1, _) = func(x1)?;
+            if !f1.is_finite() {
                 return Err(NumError::NonFiniteValue(
                     "non-finite f(x) in look_for_brackets",
                 ));
             }
-            if y_new == 0.0 || (y_new > 0.0) != (y1 > 0.0) {
-                return Ok(((x_new, x1), (y_new, y1)));
-            }
-            x1 = x_new;
-            y1 = y_new;
+            y1 = f1;
         }
-        if can_move_right {
-            let x_new = (x3 + step).min(xmax);
-            let (y_new, _) = func(x_new)?;
-            if !y_new.is_finite() {
+        if move_x3 {
+            let (f3, _) = func(x3)?;
+            if !f3.is_finite() {
                 return Err(NumError::NonFiniteValue(
                     "non-finite f(x) in look_for_brackets",
                 ));
             }
-            if y_new == 0.0 || (y_new > 0.0) != (y3 > 0.0) {
-                return Ok(((x3, x_new), (y3, y_new)));
-            }
-            x3 = x_new;
-            y3 = y_new;
+            y3 = f3;
         }
-        step *= 2.0;
+        if y1 * y3 <= 0.0 {
+            return Ok(((x1, x3), (y1, y3)));
+        }
     }
     Err(NumError::BracketingFailed(
         "failed to bracket root in look_for_brackets",
     ))
 }
 
-/// Finds a root $x \in [\min(x_1, x_3), \max(x_1, x_3)]$ of $f(x) = 0$ via
-/// safeguarded Newton-Raphson and bisection (`do_safe_root_with_brackets`).
-///
-/// The callback `func(x)` returns `Ok((f(x), df_dx(x)))`; when `df_dx == 0.0`
-/// or a Newton step would exit the current bracket or contract slower than
-/// bisection, a bisection step is taken automatically.
+/// Finds a root $x \in [\min(x_1, x_3), \max(x_1, x_3)]$ of $f(x) = 0$ by
+/// delegating to [`brent_safe_zero`] with relative tolerance `1e-14`, matching
+/// `do_safe_root_with_brackets` in `num/private/mod_root.f90:42-44`.
 ///
 /// # Errors
 ///
-/// Returns [`NumError::BracketingFailed`] if `y1` and `y3` have the same strict
-/// sign, or [`NumError::ConvergenceFailed`] if `imax` is exceeded.
+/// Returns [`NumError::BracketingFailed`] if `y1_in` and `y3_in` have the same
+/// strict sign, or [`NumError::ConvergenceFailed`] if iteration fails.
 pub fn safe_root_with_brackets<F>(
     mut func: F,
     x1_in: f64,
@@ -136,104 +137,27 @@ pub fn safe_root_with_brackets<F>(
 where
     F: FnMut(f64) -> Result<(f64, f64), NumError>,
 {
-    // Reject non-finite bracket endpoints or function evaluations
-    if !(x1_in.is_finite()
-        && x3_in.is_finite()
-        && y1_in.is_finite()
-        && y3_in.is_finite())
-    {
-        return Err(NumError::NonFiniteValue(
-            "non-finite bracket endpoint in safe_root_with_brackets",
-        ));
-    }
-    if y1_in == 0.0 {
-        return Ok((x1_in, 0.0));
-    }
-    if y3_in == 0.0 {
-        return Ok((x3_in, 0.0));
-    }
-    if (y1_in > 0.0 && y3_in > 0.0) || (y1_in < 0.0 && y3_in < 0.0) {
-        return Err(NumError::BracketingFailed(
-            "y1 and y3 must have opposite signs in safe_root_with_brackets",
-        ));
-    }
-    // Orient the search so that f(xl) < 0 and f(xh) > 0
-    let (mut xl, mut xh, mut fl, mut fh) = if y1_in < 0.0 {
-        (x1_in, x3_in, y1_in, y3_in)
-    } else {
-        (x3_in, x1_in, y3_in, y1_in)
-    };
-    let mut rts = f64::midpoint(x1_in, x3_in);
-    let mut dxold = (x3_in - x1_in).abs();
-    let mut dx = dxold;
-    let (mut f, mut df) = func(rts)?;
-    if !f.is_finite() {
-        return Err(NumError::NonFiniteValue(
-            "non-finite f(x) in safe_root_with_brackets",
-        ));
-    }
-    let max_iter = if imax == 0 { 100 } else { imax };
-
-    for _iter in 0..max_iter {
-        if f.abs() <= epsy || dx.abs() <= epsx || (xh - xl).abs() <= epsx {
-            return Ok((rts, f));
-        }
-        // Bisect if Newton step jumps out of (xl, xh) or decreases too slowly
-        let out_of_bracket =
-            ((rts - xh) * df - f) * ((rts - xl) * df - f) > 0.0;
-        let slow_decrease = (2.0 * f).abs() > (dxold * df).abs();
-        if df == 0.0 || !df.is_finite() || out_of_bracket || slow_decrease {
-            dxold = dx;
-            dx = 0.5 * (xh - xl);
-            rts = xl + dx;
-            if xl == rts {
-                return Ok((rts, f));
-            }
-        } else {
-            dxold = dx;
-            dx = f / df;
-            let temp = rts;
-            rts -= dx;
-            if temp == rts {
-                return Ok((rts, f));
-            }
-        }
-        if dx.abs() <= epsx {
-            let (f_final, _) = func(rts)?;
-            if !f_final.is_finite() {
-                return Err(NumError::NonFiniteValue(
-                    "non-finite f(x) in safe_root_with_brackets",
-                ));
-            }
-            return Ok((rts, f_final));
-        }
-        let (f_new, df_new) = func(rts)?;
-        if !f_new.is_finite() {
-            return Err(NumError::NonFiniteValue(
-                "non-finite f(x) in safe_root_with_brackets",
-            ));
-        }
-        f = f_new;
-        df = df_new;
-        if f < 0.0 {
-            xl = rts;
-            fl = f;
-        } else {
-            xh = rts;
-            fh = f;
-        }
-        let _ = (fl, fh);
-    }
-    Err(NumError::ConvergenceFailed(
-        "safe_root_with_brackets exceeded imax",
-    ))
+    let max_iter = imax.max(200);
+    brent_safe_zero(
+        x1_in,
+        x3_in,
+        1.0e-14,
+        epsx,
+        epsy,
+        |x| Ok(func(x)?.0),
+        Some(y1_in),
+        Some(y3_in),
+        max_iter,
+    )
 }
 
 /// Finds a root of $f(x) = 0$ starting from initial guess `x_guess` with
-/// optional bracket bounds `(x1, x3, y1, y3)` (`do_safe_root_with_guess`).
+/// optional bracket bounds `(x1, x3, y1, y3)` (`do_safe_root_with_guess` in
+/// `num/private/mod_root.f90:47-151`).
 ///
-/// Attempts up to `newt_imax` pure Newton steps inside `[xmin, xmax]`. If not
-/// yet converged, uses the supplied bracket `(x1, x3)` when valid or calls
+/// Attempts up to `newt_imax` guarded Newton steps inside `[xmin, xmax]`,
+/// recording sign-change brackets encountered along the trajectory. If not yet
+/// converged, uses any bracket accumulated (or supplied) or calls
 /// [`look_for_brackets`] and finishes via [`safe_root_with_brackets`].
 ///
 /// # Errors
@@ -258,7 +182,6 @@ pub fn safe_root_with_guess<F>(
 where
     F: FnMut(f64) -> Result<(f64, f64), NumError>,
 {
-    // Validate finite guess and ordered domain bounds before clamping
     if xmin >= xmax
         || !(x_guess.is_finite() && xmin.is_finite() && xmax.is_finite())
     {
@@ -266,43 +189,62 @@ where
             "require finite x_guess and xmin < xmax in safe_root_with_guess",
         ));
     }
-    // Try up to newt_imax pure Newton steps from x_guess if within [xmin, xmax]
+    let mut x1 = x1_opt;
+    let mut x3 = x3_opt;
+    let mut y1 = y1_opt;
+    let mut y3 = y3_opt;
     let mut x = x_guess.clamp(xmin, xmax);
-    for _ in 0..newt_imax {
-        let (fx, dfx) = func(x)?;
-        if fx.abs() <= epsy {
-            return Ok((x, fx));
-        }
-        if dfx == 0.0 || !dfx.is_finite() {
+    let mut absy_prev = 0.0_f64;
+
+    for i in 0..newt_imax {
+        let Ok((y, dydx)) = func(x) else {
+            break;
+        };
+        if !y.is_finite() {
             break;
         }
-        let step = fx / dfx;
-        let x_next = x - step;
+        let absy = y.abs();
+        if absy == 0.0 || absy < epsy.max(dydx.abs() * epsx) {
+            return Ok((x, y));
+        }
+        if dydx == 0.0 || !dydx.is_finite() {
+            break;
+        }
+        if i > 0 && absy > absy_prev {
+            break;
+        }
+        absy_prev = absy;
+        if y < 0.0 {
+            x1 = Some(x);
+            y1 = Some(y);
+        } else {
+            x3 = Some(x);
+            y3 = Some(y);
+        }
+        let x_next = x - y / dydx;
         if x_next < xmin || x_next > xmax {
             break;
         }
         x = x_next;
-        if step.abs() <= epsx {
-            let (fx_end, _) = func(x)?;
-            if fx_end.abs() <= epsy.max(1e-12) {
-                return Ok((x, fx_end));
-            }
-            break;
-        }
     }
 
-    let ((bx1, bx3), (by1, by3)) =
-        if let (Some(x1), Some(x3), Some(y1), Some(y3)) =
-            (x1_opt, x3_opt, y1_opt, y3_opt)
-        {
-            if (y1 <= 0.0 && y3 >= 0.0) || (y1 >= 0.0 && y3 <= 0.0) {
-                ((x1, x3), (y1, y3))
-            } else {
-                look_for_brackets(x_guess, dx, xmin, xmax, &mut func, imax)?
-            }
+    let ((bx1, bx3), (by1, by3)) = if let (Some(xv1), Some(xv3)) = (x1, x3) {
+        let yv1 = match y1 {
+            Some(v) => v,
+            None => func(xv1)?.0,
+        };
+        let yv3 = match y3 {
+            Some(v) => v,
+            None => func(xv3)?.0,
+        };
+        if (yv1 <= 0.0 && yv3 >= 0.0) || (yv1 >= 0.0 && yv3 <= 0.0) {
+            ((xv1, xv3), (yv1, yv3))
         } else {
             look_for_brackets(x_guess, dx, xmin, xmax, &mut func, imax)?
-        };
+        }
+    } else {
+        look_for_brackets(x_guess, dx, xmin, xmax, &mut func, imax)?
+    };
 
     safe_root_with_brackets(func, bx1, bx3, by1, by3, imax, epsx, epsy)
 }

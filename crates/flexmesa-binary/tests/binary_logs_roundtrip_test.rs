@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 
 use flexmesa_binary::{
     BINARY_LOG_COL_WIDTH, BinaryLogsWriter, BinarySystem, DefaultBinaryExtras,
-    IncrementalBinaryHistoryWriter, default_binary_history_specs,
+    EdotBreakdown, IncrementalBinaryHistoryWriter, default_binary_history_specs,
     evaluate_binary_history_row, parse_binary_history_columns,
 };
 use flexmesa_const::{MSUN, SECYER};
@@ -284,4 +284,47 @@ fn test_binary_logs_writer_coupled_stepping_intervals() {
         (star1_hist.column_values[72][1] - expected_lg_mtr).abs() < 1.0e-12,
         "appended lg_mtransfer_rate in LOGS1/history.data must match binary_history.data"
     );
+}
+
+/// `binary_history.f90` writes the stored `b% edot`, `b% edot_tidal` and
+/// `b% edot_enhance`. The columns must therefore report the terms the orbital
+/// update applied (`BinarySystem::last_edot`), not values recomputed from the
+/// end-of-step state.
+#[test]
+fn test_binary_history_edot_columns_report_applied_terms() {
+    let c1 = StarControls {
+        initial_mass: 2.0,
+        initial_z: 0.02,
+        ..StarControls::default()
+    };
+    let mut c2 = c1.clone();
+    c2.initial_mass = 1.2;
+    let s1 = load_zams_model(c1, StarJobControls::default()).expect("s1");
+    let s2 = load_zams_model(c2, StarJobControls::default()).expect("s2");
+    let mut sys = BinarySystem::new_two_stars(s1, s2, 2.5, 0.3);
+    sys.model_number = 7;
+    // Tidal circularisation is switched on so that a recomputed value would
+    // be non-zero and would differ from the stored sentinels below.
+    sys.controls.do_tidal_circ = true;
+    sys.last_edot = EdotBreakdown {
+        edot_gr: -1.0e-21,
+        edot_tidal: -3.0e-19,
+        edot_enhance: 5.0e-20,
+        edot_total: -2.51e-19,
+    };
+
+    let specs = parse_binary_history_columns("edot\nedot_tidal\nedot_enhance\n", None)
+        .expect("edot columns");
+    let row = evaluate_binary_history_row(&sys, &specs);
+    let get = |name: &str| -> f64 {
+        row.iter()
+            .find_map(|(k, v)| match *v {
+                MesaCellValue::Float(x) if k == name => Some(x),
+                _ => None,
+            })
+            .unwrap_or_else(|| panic!("missing binary column {name}"))
+    };
+    assert_eq!(get("edot").to_bits(), sys.last_edot.edot_total.to_bits());
+    assert_eq!(get("edot_tidal").to_bits(), sys.last_edot.edot_tidal.to_bits());
+    assert_eq!(get("edot_enhance").to_bits(), sys.last_edot.edot_enhance.to_bits());
 }

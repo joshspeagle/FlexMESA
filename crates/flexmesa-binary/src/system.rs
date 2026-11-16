@@ -16,7 +16,7 @@ use crate::orbit::{
 };
 use crate::roche_deformation::BinaryTidalDeformationHook;
 use crate::system_init::prep_and_settle_binary_star;
-use crate::system_jdot::{JdotBreakdown, apply_initial_orbit_sync, eval_star_spin_j};
+use crate::system_jdot::{EdotBreakdown, JdotBreakdown, apply_initial_orbit_sync, eval_star_spin_j};
 use crate::system_rlof::{BinaryStepSnapshot, CoupledMdotAccounting};
 
 #[inline]
@@ -121,6 +121,9 @@ pub struct BinarySystem {
     pub last_mdot: CoupledMdotAccounting,
     /// Last accepted step orbital torque breakdown.
     pub last_jdot: JdotBreakdown,
+    /// Eccentricity-rate terms applied by the most recent orbital update
+    /// (`b% edot`, `b% edot_tidal`, `b% edot_enhance`).
+    pub last_edot: EdotBreakdown,
     /// Binary or stellar termination reason triggered at the end of the latest step.
     pub last_termination_reason: Option<String>,
 }
@@ -316,6 +319,7 @@ impl BinarySystem {
             cumulative_j_ext: 0.0,
             last_mdot: CoupledMdotAccounting::default(),
             last_jdot: JdotBreakdown::default(),
+            last_edot: EdotBreakdown::default(),
             last_termination_reason: None,
         };
         sys.refresh_tidal_deformation_hooks(false)?;
@@ -492,6 +496,7 @@ impl BinarySystem {
         self.change_factor = self.controls.max_change_factor;
         self.last_mdot = CoupledMdotAccounting::default();
         self.last_jdot = JdotBreakdown::default();
+        self.last_edot = EdotBreakdown::default();
         self.last_termination_reason = None;
         let (rl, gaps) = compute_rl_and_gaps(
             self.donor.mstar, self.accretor_mass_g(), self.donor.r[0], 0.0,
@@ -563,7 +568,7 @@ impl BinarySystem {
             self.rl, self.rl_relative_gap, self.mtransfer_rate, self.step_mtransfer_rate,
             self.jdot, self.binary_age_yr, self.model_number, self.max_timestep_sec,
             self.change_factor, self.using_jdot_mb, self.cumulative_j_ext,
-            self.last_mdot, self.last_jdot,
+            self.last_mdot, self.last_jdot, self.last_edot,
         )
     }
 
@@ -599,6 +604,7 @@ impl BinarySystem {
         self.cumulative_j_ext = snap.cumulative_j_ext;
         self.last_mdot = snap.last_mdot;
         self.last_jdot = snap.last_jdot;
+        self.last_edot = snap.last_edot;
         let _ = self.refresh_tidal_deformation_hooks(false);
         Ok(())
     }

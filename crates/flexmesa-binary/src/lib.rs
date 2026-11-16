@@ -104,7 +104,10 @@ pub use roche_deformation::{
     RocheTable2D, eval_synchronicity_switch,
 };
 pub use system::{BinaryCompanion, BinarySystem};
-pub use system_jdot::{JdotBreakdown, eval_coupled_edot, eval_gated_jdot};
+pub use system_jdot::{
+    EdotBreakdown, JdotBreakdown, eval_coupled_edot, eval_coupled_edot_breakdown,
+    eval_gated_jdot,
+};
 pub use system_rlof::{
     BinaryStepSnapshot, CoupledMdotAccounting, blend_explicit_mdot,
     eval_scheme_explicit_mdot, eval_star_intrinsic_wind_cgs_with_extras,

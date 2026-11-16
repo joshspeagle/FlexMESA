@@ -3,7 +3,7 @@
 """Verify `NumericsMode::Strict` cross-machine and thread-count bit-identity.
 
 Implements Items 15 and 16 of `#165`:
-1. Evaluates all `474,068` MESA `26.4.1` reference inputs in
+1. Evaluates all `474,062` MESA `26.4.1` reference inputs in
    `benchmarks/fortran_mesa/math_hex_vectors/mesa_26_4_1_math_vectors.txt`
    under `NumericsMode::Strict` and records the canonicalized `SHA-256` digest.
 2. Runs a short `strict` stellar evolution (`star/1.3M_ms_high_Z`, 5 steps) in
@@ -29,8 +29,6 @@ import subprocess
 import sys
 import tempfile
 from typing import Any
-
-from flexmesa import _rust
 
 _REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 _DEFAULT_VECTORS = (
@@ -117,6 +115,8 @@ def _measure(
     max_steps: int,
 ) -> dict[str, Any]:
     """Compute strict reference-vector and 1-vs-4-thread evolution digests."""
+    from flexmesa import _rust
+
     vec_count, vec_sha = _rust.strict_math_vectors_sha256(str(vectors_path))
     sha_1t, bytes_1t = _run_strict_evolution(suite, case, max_steps, threads=1)
     sha_4t, bytes_4t = _run_strict_evolution(suite, case, max_steps, threads=4)

@@ -1,6 +1,6 @@
 # Kernel Performance Scorecards
 
-This page consolidates the four-stage optimization staircase across all 28 `FlexMESA` benchmark workloads. All measurements report `median` execution latency in microseconds ($\mu\mathrm{s}$) on a 16-core x86\_64 Linux workstation (30 GiB RAM, NVIDIA GeForce RTX 5080 GPU with 16 GiB GDDR7 VRAM), with CPU thread pools capped at 4 threads (`OMP_NUM_THREADS=4`, `RAYON_NUM_THREADS=4`) and JAX configured in strict IEEE-754 double precision (`jax_enable_x64=True`).
+This page consolidates the four-stage optimization staircase across the 28 `FlexMESA` benchmark workloads (`#142`, `#146`). All measurements report `median` execution latency in microseconds ($\mu\mathrm{s}$) on a 16-core x86\_64 Linux workstation (30 GiB RAM, NVIDIA GeForce RTX 5080 GPU with 16 GiB GDDR7 VRAM), with CPU thread pools capped at 4 threads (`OMP_NUM_THREADS=4`, `RAYON_NUM_THREADS=4`) and JAX configured in IEEE-754 double precision (`jax_enable_x64=True`). For `NumericsMode::Fast` vs. `NumericsMode::Strict` arithmetic differences (`#165`), see `notes/audit/fast_vs_strict.md`.
 
 ---
 

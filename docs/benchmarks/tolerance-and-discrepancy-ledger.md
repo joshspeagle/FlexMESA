@@ -1,18 +1,26 @@
 # Tolerance & Discrepancy Ledger
 
-`FlexMESA` enforces a strict numerical verification policy: **test tolerances are never widened to mask a regression**. Every discrepancy between analytical calculus (forward/reverse automatic differentiation), Safe Rust (`f64`), JAX (`float64`), and upstream Fortran MESA (`main` at commit `0b2e6bb`) is isolated to its exact mathematical or floating-point root cause and documented below.
+`FlexMESA` enforces a strict numerical governance policy (`notes/SCOPE.md`, `DECISIONS #9`, `#17`, `#20`, `#22`): **test tolerances are never widened to mask a regression**, and **only Safe Rust `"strict"` mode is judged against MESA `26.4.1`** (`#165`). Safe Rust `"fast"` mode (`std` `f64` intrinsics with `mul_add`) and the derived JAX layer (`#166`) are validated against Rust `"strict"` mode and are never treated as upstream MESA oracles.
 
 ---
 
-## 1. Three-Tier Numerical Verification Hierarchy
+## 1. Three-Level Numerics Policy (`#165`) & Test-Suite Tolerance Classes
 
-All automated test suites (`pytest` in `tests/` and `cargo test --workspace` in `crates/`) classify numerical assertions into three tiers based on the mathematical conditioning of the underlying operator:
+### 1.1 Three Fidelity Levels for Canonical Rust `"strict"` Mode
 
-| Verification Tier | Target Operators & Modules | Relative Error Bound | Reference Oracle |
+| Level | Requirement | Enforcement Gate |
+| :--- | :--- | :--- |
+| **Level 1** | `"strict"` mode is bit-identical across machines (`x86_64` and `aarch64`) and thread counts (`1` vs. `4` threads) | Enforced per PR in CI (`strict-determinism` and `strict-cross-machine-gate` jobs running `scripts/check_strict_determinism.py`) |
+| **Level 2** | `"strict"` kernels are bit-identical to MESA `26.4.1` wherever operations and evaluation order match | Tested against exact 16-digit hexadecimal MESA `26.4.1` outputs (`474,062` math vectors across `47` sections in `mesa_26_4_1_vectors.rs`, extended module by module under `#141` and Phase C) |
+| **Level 3** | Full evolutionary trajectories match stored real MESA `26.4.1` histories | Enforced via `benchmarks/history_harness/case_manifest.toml` tolerances (`DECISIONS #20`, `#143`), tracking `first_diverging_step` toward zero |
+
+### 1.2 Automated Test-Suite Tolerance Classes (`pytest` & `cargo test`)
+
+| Check Class | Target Operators & Modules | Relative Bound | Comparison Target |
 | :--- | :--- | :--- | :--- |
-| **Tier 1: Exact Closed-Form, Linear & Spline Oracles** | Physical constants (`constants`), elementary intrinsics (`math`), dual/hyperdual numbers (`auto_diff`), 1D/2D spline evaluation (`interp_1d`, `interp_2d`), dense/banded/block-tridiagonal solves (`mtx`), composition moments (`chem`), thermal neutrinos (`neu`), REACLIB rates (`rates`), reaction network RHS & Jacobians (`net`), HLLC Riemann fluxes, Roche-lobe geometry (`binary`), and acoustic integrals (`astero`) | $\le 10^{-14}$ to $10^{-12}$ (primal values)<br>$\le 10^{-10}$ (1st-order AD vs. `jax.jacfwd`) | Upstream Fortran MESA 16-digit `<pkg>/test/test_output` files and exact dual-number / `jax.jacfwd` identities |
-| **Tier 2: Iterative Root-Finding, Stiff ODE & 3rd-Order Free-Energy Solvers** | Brent/Newton root finders (`num`), Rosenbrock stiff 1-zone burners (`net`), `(P_gas, T)` EOS inversions (`eos_pt_get`), implicit Kuhfuss `TDC` (`set_tdc`), and 3rd-order `Skye` free-energy heat capacities ($c_V \propto \partial^2 F/\partial T^2$ and $\partial c_V/\partial\ln T \propto \partial^3 F/\partial T^3$) | $\le 10^{-10}$ to $10^{-8}$ (converged roots & 2nd derivatives)<br>$\le 2 \times 10^{-6}$ (3rd-order `Skye` derivatives across CPU/XLA FMA orders) | Implicit Function Theorem identities ($\partial y^*/\partial\theta = -(\partial Q/\partial y)^{-1}(\partial Q/\partial\theta)$) and cross-backend Rust vs. JAX parity |
-| **Tier 3: Multi-Step Coupled Henyey & Evolutionary Trajectories** | Coupled 1D Henyey Newton-Raphson steps (`star`), Zero-Age Main Sequence (`ZAMS`) structure profiles, `star/test` ($4.0\,M_\odot, Z = 0.02$) evolution, and upstream `test_suite` multi-stage runs | $\le 10^{-3}\,\mathrm{dex}$ on $\log_{10} T_c, \log_{10}\rho_c, \log_{10} L, \log_{10} R, \log_{10} T_{\mathrm{eff}}$<br>$\le 5 \times 10^{-5}$ on central $X_{\mathrm{H}}$ | Upstream Fortran MESA `star/test/LOGS/history.data` and committed `standard_*.mod` checkpoints |
+| **Module Reference & Autodiff Checks** | Physical constants (`constants`), elementary intrinsics (`math`), dual/hyperdual numbers (`auto_diff`), 1D/2D spline evaluation (`interp_1d`, `interp_2d`), dense/banded/block-tridiagonal solves (`mtx`), composition moments (`chem`), thermal neutrinos (`neu`), REACLIB rates (`rates`), reaction network RHS & Jacobians (`net`), Roche-lobe geometry (`binary`), and acoustic integrals (`astero`) | $\le 10^{-14}$ to $10^{-10}$ (module `test_output` rows)<br>$\le 10^{-10}$ (1st-order AD vs. `jax.jacfwd`) | Upstream Fortran MESA `<pkg>/test/test_output` files (`#141`) and forward/reverse AD identities |
+| **Iterative Solvers & Derived-JAX Validation (`#166`)** | Brent/Newton root finders (`num`), Rosenbrock stiff 1-zone burners (`net`), `(P_gas, T)` EOS inversions (`eos_pt_get`), implicit Kuhfuss `TDC` (`set_tdc`), and 3rd-order `Skye` free-energy heat capacities ($c_V \propto \partial^2 F/\partial T^2$ and $\partial c_V/\partial\ln T \propto \partial^3 F/\partial T^3$) | $\le 10^{-10}$ to $10^{-8}$ (converged roots & 2nd derivatives)<br>$\le 3 \times 10^{-6}$ (3rd-order `Skye` JAX vs. Rust `strict` across `crlibm` `RZ` vs. XLA `RN`/FMA) | Implicit Function Theorem identities ($\partial y^*/\partial\theta = -(\partial Q/\partial y)^{-1}(\partial Q/\partial\theta)$) and JAX validated against Rust `strict` |
+| **End-to-End Trajectory Harness (`#143`, `DECISIONS #20`)** | Uncapped `star` (`90`), `binary` (`8`), and `astero` (`8`) `test_suite` evolutions in `"strict"` mode | Final `0.0005`–`0.002`, track `0.002`–`0.005` (`case_manifest.toml`) | Stored real Fortran MESA `26.4.1` `LOGS/history.data` and `binary_history.data` (`#141`, `#143`) |
 
 ---
 
@@ -87,7 +95,7 @@ $$H_P = \min\!\left(\frac{P}{\rho g},\, \sqrt{\frac{P}{G\rho^2}}\right)$$
 - **Root Cause**: During static envelope integration (`create_RSP_model`), upstream Fortran MESA's `stah` subroutine solves for the anchor shell mass $\Delta m_N$ where the zone-$N$ temperature equals $T_{\mathrm{anchor}} = 1.1 \times 10^4\,\mathrm{K}$ to relative tolerance `TH0_tol = 1d-8`. Two upstream properties interact in this loop:
   1. Line 772 writes `D = F2 * (T4_0 - T4_0) / (F2 - F1)` (subtracting `T4_0` from itself rather than `T4_0 - T4_prev`), which evaluates identically to `0.0d0` so the outer `stah` iteration reduces to pure bisection on `[dmN_small, dmN_large]` after initial sign bracketing.
   2. Each shell temperature step invokes `get_T_estimate` with loose root-finding tolerances `epsx = 1d-5, epsy = 1d-5` (`rsp_build.f90:675-676`). On low-metallicity `Gs98` opacity tables (`Z = 0.0014`), discrete switching of the internal `brent_safe_zero` iteration count introduces $\sim 2 \times 10^{-5}$ quantization jumps in $T_N(\Delta m_N)$ that exceed `TH0_tol = 1d-8` even when the bisection interval width has converged to machine precision.
-- **`FlexMESA` Resolution**: `crates/flexmesa-star/src/rsp_stah.rs` preserves upstream Fortran MESA's exact `epsx = 1e-5, epsy = 1e-5` inner step and bisection update (achieving `0 ULP` to `< 1e-12` parity across all 7 `main` at commit `0b2e6bb` `rsp_*` golden `.mod` models in `rsp_build_lina_test.rs`) while accepting bisection termination once $|\Delta m_{N,\mathrm{large}} - \Delta m_{N,\mathrm{small}}| \le 10^{-13}|\Delta m_N|$ so discontinuous `1e-5` inner-root quantization never stalls envelope construction at machine precision.
+- **`FlexMESA` Note**: `crates/flexmesa-star/src/rsp_stah.rs` preserves upstream Fortran MESA's `epsx = 1e-5, epsy = 1e-5` inner step and bisection update (tested against the bundled `rsp_*` `.mod` fixtures in `rsp_build_lina_test.rs`; removal of non-upstream departures is tracked under [#178](https://github.com/joshspeagle/FlexMESA/issues/178)).
 
 ### 2.9 Dimensional $w^4$ Turbulent Pressure, `Cp` vs. `T` Flux-Limiter Typo, and Dropped $\partial D_r / \partial w$ in `RSP2`
 
@@ -108,116 +116,29 @@ $$H_P = \min\!\left(\frac{P}{\rho g},\, \sqrt{\frac{P}{G\rho^2}}\right)$$
 ### 2.11 Mass-Change Heating & 3-Region Mass Conservation (`eps_mdot.f90` / `adjust_mass.f90`)
 
 - **Upstream `MESA` Behavior**: Upstream `adjust_mass` evaluates $\delta e_{\mathrm{tot}}$ across small wind and accretion steps using 128-bit quadruple-precision (`real(qp)`) total-energy arrays so changes in gravitational potential $\Delta(-G m_{\mathrm{grav}}/r)$ do not suffer catastrophic cancellation against $-G M / r$.
-- **`FlexMESA` Resolution**: `crates/flexmesa-star/src/eps_mdot.rs` (`calculate_eps_mdot_with_change`, given pre-step `PrevMassState` arrays) computes $\Delta r_k = \frac{3}{4\pi} \Delta V_k / (r_{\mathrm{new},k}^2 + r_{\mathrm{new},k} r_{\mathrm{old},k} + r_{\mathrm{old},k}^2)$ and $\Delta\phi_k = -G (r_{\mathrm{old},k} \Delta m_{\mathrm{grav},k} - m_{\mathrm{grav},\mathrm{old},k} \Delta r_k) / (r_{\mathrm{old},k} r_{\mathrm{new},k})$ directly in native `f64` alongside `eval_specific_total_energy_profile`. In `crates/flexmesa-star/src/adjust_mass.rs`, `do_adjust_mass_regions` applies Neumaier-compensated summation (`neumaier_sum`) to Region I/II mass changes and normalized `dq`, keeping Region III zone masses bit-identical to pre-step values across multi-thousand-zone grids without requiring software `f128` emulation. Similarly, on near-pure hydrogen white-dwarf envelopes ($X_{\mathrm{H}} \approx 1 - 5.77 \times 10^{-15}$ in `wd_cool_0.6M`), tridiagonal Thomas diffusion solves (`crates/flexmesa-star/src/diffusion.rs`) and phase-separation updates (`premix.rs`) clamp outputs to $[0, 1]$ and renormalize with `neumaier_sum`, while `set_basic_vars` (`micro.rs`) snaps $[-10^{-12}, 1 + 10^{-12}]$ `f64` contraction roundoff cleanly back to $[0, 1]$ before `kap` table lookups.
+- **`FlexMESA` Note**: `crates/flexmesa-star/src/eps_mdot.rs` (`calculate_eps_mdot_with_change`, given pre-step `PrevMassState` arrays) computes $\Delta r_k = \frac{3}{4\pi} \Delta V_k / (r_{\mathrm{new},k}^2 + r_{\mathrm{new},k} r_{\mathrm{old},k} + r_{\mathrm{old},k}^2)$ and $\Delta\phi_k = -G (r_{\mathrm{old},k} \Delta m_{\mathrm{grav},k} - m_{\mathrm{grav},\mathrm{old},k} \Delta r_k) / (r_{\mathrm{old},k} r_{\mathrm{new},k})$ in `f64` alongside `eval_specific_total_energy_profile`. In `crates/flexmesa-star/src/adjust_mass.rs`, `do_adjust_mass_regions` applies Neumaier-compensated summation (`neumaier_sum`) to Region I/II mass changes and normalized `dq`, preserving Region III zone masses across remapping without software `f128` emulation (upstream-fidelity review of mass adjustment and clamping is tracked under [#155](https://github.com/joshspeagle/FlexMESA/issues/155) and [#177](https://github.com/joshspeagle/FlexMESA/issues/177)).
 
 ---
 
-## 3. End-to-End `star/test_suite` Verification Scorecard (`E2E-1` & `E2E-2`)
+## 3. Script-Generated Trajectory & Numerics Reports (`#142`, `#143`, `#165`, `#174`)
 
-| Stage | Physics Scope | Cases Verified | `.photo` Restart Parity |
-| :--- | :--- | :---: | :---: |
-| **`E2E-1` (`TIER1_CASES`)** | Hydrostatic ZAMS, Solar Calibration, Convective Premixing, Predictive Mixing, Atomic Diffusion & Radiative Levitation | `33 / 33` Verified | `0 ULP` (`33 / 33`) |
-| **`E2E-2` (`TIER2_CASES`)** | Substellar Brown Dwarfs, Irradiated Planets, White Dwarf Cooling, 2/3-Phase Separation, Accretion, Classical Novae & Conductive Flames | `17 / 17` Verified | `0 ULP` (`17 / 17`) |
+Earlier hand-typed `E2E-1` through `E2E-5` tables on this page claimed `107 / 107` cases verified at `0 ULP` from step-capped runs and have been removed following the repository audit (`notes/audit/README.md`, [#142](https://github.com/joshspeagle/FlexMESA/issues/142), `DECISIONS #17`). Under current governance:
 
-### Tier 2 (`E2E-2`) Case-by-Case Verification Table (17 Cases)
-
-| # | `test_suite` Case | Primary Physics & Hook Exercised | Status | `.photo` Restart |
-| :---: | :--- | :--- | :---: | :---: |
-| 1 | `make_brown_dwarf` | Substellar contraction (`create_initial_model`, $M = 0.01\,M_\odot$) | Verified | `0 ULP` |
-| 2 | `make_planets` | Planetary contraction + inert rocky core (`apply_planetary_core`, $10\,M_\oplus$) | Verified | `0 ULP` |
-| 3 | `irradiated_planet` | Surface stellar irradiation ($\Sigma_\star$ attenuation, `eval_planetary_irradiation_heating`) | Verified | `0 ULP` |
-| 4 | `make_he_wd` | Low-mass He white dwarf mass relaxation (`relax_initial_mass = 0.15`) | Verified | `0 ULP` |
-| 5 | `make_co_wd` | Multi-stage ZAMS $\to$ TP-AGB $\to$ envelope removal $\to$ C/O WD settling | Verified | `0 ULP` |
-| 6 | `make_o_ne_wd` | Off-center carbon burning (`co_burn_plus.net`) $\to$ O/Ne WD settling | Verified | `0 ULP` |
-| 7 | `wd_cool_0.6M` | $0.6\,M_\odot$ C/O white dwarf crystallization & 2-component phase separation (`eval_wd_phase_separation`) | Verified | `0 ULP` |
-| 8 | `wd_diffusion` | Strong-coupling Caplan OCP diffusion & ${}^{22}\mathrm{Ne}$ sedimentation heating (`wd_sedimentation.rs`) | Verified | `0 ULP` |
-| 9 | `wd_o_ne_3_phase` | $1.1\,M_\odot$ O/Ne white dwarf 3-component C/O/Ne distillation (`phase_separation_option = 'ONe'`) | Verified | `0 ULP` |
-| 10 | `wd_acc_small_dm` | Small-$\delta m$ H/He accretion onto $1.0\,M_\odot$ C/O white dwarf (`apply_accretion_composition_and_nova_wind`) | Verified | `0 ULP` |
-| 11 | `wd_stable_h_burn` | Stable surface hydrogen shell burning (`cno_extras.net`, `gamma_center_limit`) | Verified | `0 ULP` |
-| 12 | `wd_nova_burst` | Classical nova thermonuclear runaway & super-Eddington wind (`super_eddington_scaling_factor = 1`) | Verified | `0 ULP` |
-| 13 | `wd_he_shell_ignition` | Accreting white dwarf helium shell flash (`co_burn.net`, `gamma_center_limit`) | Verified | `0 ULP` |
-| 14 | `wd_c_core_ignition` | Near-Chandrasekhar C/O white dwarf core carbon ignition (`approx21.net`, `power_nuc_burn_upper_limit`) | Verified | `0 ULP` |
-| 15 | `wd_aic` | Accretion-induced collapse of O/Ne white dwarf (`sagb_NeNa_MgAl.net`, `log_center_temp_upper_limit`) | Verified | `0 ULP` |
-| 16 | `cburn_inward` | Super-AGB off-center carbon flame inward propagation (`eval_conductive_flame_state`) | Verified | `0 ULP` |
-| 17 | `conductive_flame` | Degenerate conductive deflagration front speed & custom microphysics (`use_other_build_initial_model`) | Verified | `0 ULP` |
+- **End-to-End `test_suite` Status (`106` MESA `26.4.1` Cases)**: Reported exclusively by the script-generated table in [`notes/audit/case_table.md`](https://github.com/joshspeagle/FlexMESA/blob/main/notes/audit/case_table.md) (`flexmesa harness table`, [#143](https://github.com/joshspeagle/FlexMESA/issues/143)) and the generated port dashboard ([#174](https://github.com/joshspeagle/FlexMESA/issues/174)).
+- **`Fast` vs. `Strict` Numerics Differences (`#165`)**: Reported by the script-generated table in [`notes/audit/fast_vs_strict.md`](https://github.com/joshspeagle/FlexMESA/blob/main/notes/audit/fast_vs_strict.md) (`scripts/generate_fast_vs_strict_report.py`), covering all `47` math vector sections (`474,062` inputs) and a short `star/1.3M_ms_high_Z` evolution.
 
 ---
 
-## Stage `E2E-3` Tier 3 Massive, Rotation, Dynamo, Core-Collapse, Supernova, Neutron-Star & Twin-Star Verification (`22 / 22` Cases)
-
-All 22 Tier 3 upstream `star/test_suite` cases ([#94](https://github.com/joshspeagle/FlexMESA/issues/94)) execute end-to-end through `flexmesa.star.run_test_suite_case` (`tests/test_e2e_3_tier3.py`), passing physical target assertions and `0 ULP` `.photo` restart parity (`72 / 107` active `test_suite` cases cumulative):
-
-| # | Case Name | Physical Regime & Active Operators | Status | `.photo` Restart Parity |
-| ---: | :--- | :--- | :--- | :--- |
-| 1 | `high_mass` | Massive $80\,M_\odot$ core hydrogen burning & radiation-dominated envelope | Verified | `0 ULP` |
-| 2 | `hot_cool_wind` | Temperature-blended Vink + Reimers/Blöcker stellar wind (`eval_hot_cool_blended_wind_mdot`) | Verified | `0 ULP` |
-| 3 | `20M_z2m2_high_rotation` | Rapidly rotating $20\,M_\odot$ massive star (`o18_and_ne22.net`) | Verified | `0 ULP` |
-| 4 | `high_rot_darkening` | Roche oblateness $R_{\mathrm{eq}}/R_{\mathrm{pol}}$ & Espinosa Lara-Rieutord gravity darkening (`eval_roche_gravity_darkening`) | Verified | `0 ULP` |
-| 5 | `15M_dynamo` | Spruit-Tayler magnetic dynamo 13-channel transport invariants (`eval_spruit_tayler_dynamo_diagnostics`) | Verified | `0 ULP` |
-| 6 | `conserve_angular_momentum` | Total angular momentum $J_{\mathrm{tot}}$ conservation across remeshing & mass shells | Verified | `0 ULP` |
-| 7 | `accreted_material_j` | Centrifugal spin-up by accreted specific angular momentum (`other_adjust_mdot`) | Verified | `0 ULP` |
-| 8 | `magnetic_braking` | ud-Doula, Owocki & Townsend (2009) magnetospheric wind braking (`eval_magnetic_braking_torque`) | Verified | `0 ULP` |
-| 9 | `split_burn_big_net` | Operator-split nuclear burning on the 80-isotope `mesa_80.net` network | Verified | `0 ULP` |
-| 10 | `12M_pre_ms_to_core_collapse` | $12\,M_\odot$ pre-MS to iron-core infall (`eval_fe_core_infall_state`) | Verified | `0 ULP` |
-| 11 | `20M_pre_ms_to_core_collapse` | $20\,M_\odot$ pre-MS to iron-core infall (`approx21_cr60_plus_co56.net`) | Verified | `0 ULP` |
-| 12 | `zams_to_cc_80` | $16\,M_\odot$ ZAMS to core collapse on `mesa_80.net` | Verified | `0 ULP` |
-| 13 | `make_pre_ccsn_13bvn` | Stripped-envelope Type Ib progenitor (`iPTF13bvn`) to iron-core infall | Verified | `0 ULP` |
-| 14 | `ccsn_IIp` | Type II-P supernova explosion, Duffell (2016) RTI shock mixing, and `STELLA` `.hyd`/`.abn` ASCII export | Verified | `0 ULP` |
-| 15 | `pisn` | Pair-instability supernova energetics ($E_{\mathrm{tot}} > 0$ and finite $\langle\Gamma_1 - 4/3\rangle_P$, `eval_pair_instability_gamma1_and_energy`) | Verified | `0 ULP` |
-| 16 | `ppisn` | Pulsational pair-instability mass ejection and hydrostatic relaxation | Verified | `0 ULP` |
-| 17 | `hse_riemann` | Hydrostatic stability under HLLC Riemann hydro (`max_mach <= 0.1`) | Verified | `0 ULP` |
-| 18 | `ns_h` | Neutron-star envelope steady hydrogen burning with post-Newtonian TOV gravity (`eval_tov_effective_cgrav`) | Verified | `0 ULP` |
-| 19 | `ns_he` | Neutron-star envelope helium accretion & Type I X-ray burst ignition | Verified | `0 ULP` |
-| 20 | `ns_c` | Neutron-star ocean carbon superburst ignition (`co_burn.net`) | Verified | `0 ULP` |
-| 21 | `tzo` | Thorne-Zytkow object Eddington-limited neutron core growth (`eval_tzo_core_accretion_step`) | Verified | `0 ULP` |
-| 22 | `twin_studies` | Synchronous `multi_stars_job` dual-star evolution (`inlist_star1_header`, `inlist_star2_header`) | Verified | `0 ULP` |
-
-!!! note "Tier 3 Homologous Scaling & 4-Variable Hydrostatic Structure Solve"
-    For Tier 3 cases spanning $1.4\,M_\odot$ to $140\,M_\odot$ (`high_mass`, `pisn`, `ppisn`, `12M_pre_ms_to_core_collapse`, `20M_pre_ms_to_core_collapse`, `zams_to_cc_80`, `make_pre_ccsn_13bvn`, `ccsn_IIp`, `ns_h`, `ns_he`, `ns_c`, `tzo`), `build_initial_planet_or_wd_model` applies homologous $(M / M_\odot)^{-2/3}$ scaling to `cgrav` and `opacity_factor` with `min_logt_for_net = 8.5`, solving the 4-variable hydrostatic Henyey system (`v_flag = false`, `u_flag = false`) while updating radial velocity `v` and Riemann velocity `u` vectors explicitly in `Tier3CaseExtras::extras_finish_step`.
-
----
-
-## Stage `E2E-4` (`#95`, Closing `#4` & `#5`): Tier 4 Pulsation (`16` `star`), `astero/test_suite` (`8`), and `star/dev_cases_*` (`32`) Parity
-
-All 16 Tier 4 `star/test_suite` cases (`15` active in `do_all_test_suite` plus `rsp_Cepheid_6M`), all 8 `astero/test_suite` cases (`95 / 107` cumulative active `test_suite` cases across Tiers 1–4), and all 32 `star/dev_cases_*` (`RSP2` and `TDC`) cases execute and verify `0 ULP` `.photo` restart parity:
-
-| Category | Cases (`Count`) | Physical Assertion & Target Criterion | `.photo` Restart Parity |
-| :--- | :--- | :--- | :--- |
-| **`gyre_in_mesa_*` (`6` cases)** | `gyre_in_mesa_bcep`, `gyre_in_mesa_envelope`, `gyre_in_mesa_ms`, `gyre_in_mesa_rsg`, `gyre_in_mesa_spb`, `gyre_in_mesa_wd` | Linear adiabatic & non-adiabatic $\kappa$-mechanism eigenfrequencies $\nu$ and growth rates $\eta$ (`eval_target_mode_frequency_and_growth`, `eval_linear_oscillation_modes`, Issue `#4`) match `x_ctrl(1..2)` within $3\%$ | `0 ULP` (`6 / 6`) |
-| **`rsp_*` `star/test_suite` (`10` cases)** | `rsp_BEP`, `rsp_BLAP`, `rsp_Cepheid`, `rsp_Delta_Scuti`, `rsp_RR_Lyrae`, `rsp_Type_II_Cepheid`, `rsp_check_2nd_crossing`, `rsp_gyre`, `rsp_save_and_load_file`, `rsp_Cepheid_6M` | `LINA` radial fundamental/overtone periods $P_0, P_1, P_2$ and growth rates (`eval_rsp_lina_modes`), `create_RSP_model` static envelope builder (`build_rsp_envelope_model`, Issue `#5`), and 2nd-crossing instability strip blue/red edges (`eval_rsp_2nd_crossing_edges`) | `0 ULP` (`10 / 10`) |
-| **`astero/test_suite` (`8` cases)** | `astero_adipls`, `astero_gyre`, `example_astero`, `fast_from_file`, `fast_newuoa`, `fast_scan_grid`, `fast_simplex`, `surface_effects` | Global $(\Delta\nu, \nu_{\max})$ scaling (`eval_astero_scaling_dnu_numax_uhz`), 5-scheme empirical surface corrections, 5-point frequency separation ratios $(r_{01}, r_{10}, r_{02})$, and Nelder-Mead / Powell BOBYQA / Cartesian grid $\chi^2$ minimization | `0 ULP` (`8 / 8`) |
-| **`star/dev_cases_*` (`32` cases)** | `dev_cases_TDC_Pulsation` (`3`), `dev_cases_compare_pulses` (`3`), `dev_cases_star_to_RSP2` (`12`), `dev_cases_test_RSP2` (`7`), `dev_cases_test_TDC` (`7`) | Multi-stage `create_RSP_model` / `.mod` loading, `RSP2` and `TDC` turbulent convection radial pulsation evolution, and `0 ULP` `.photo` restart parity | `0 ULP` (`32 / 32`) |
-
----
-
-## Stage `E2E-5` (`#96`, Closing Epic `#89`): Tier 5/6 `binary/test_suite` (`8`) & `star/test_suite` (`4`) Parity (`107 / 107` Complete Active Inventory)
-
-Stage `E2E-5` completes the reproduction of all **107 active upstream MESA `test_suite` cases** (`91` in `star/test_suite`, `8` in `binary/test_suite`, `8` in `astero/test_suite`) plus the **32 `star/dev_cases_*` (`RSP2` and `TDC`) cases**:
-
-| Category | Cases (`Count`) | Physical Assertion & Target Criterion | `.photo` Restart Parity |
-| :--- | :--- | :--- | :--- |
-| **Tier 5/6 `star/test_suite` (`4` cases)** | `check_redo`, `other_physics_hooks`, `relax_composition_j_entropy`, `timing` | Bit-identical step-redo rollback parity (`verify_step_redo_bit_parity`), double-exponential overshoot (`eval_overshoot_dbl_exp`), Gräfener & Kudritzki (2008) WR wind (`eval_grafener_kudritzki_wind_msun_yr`), composition-gradient mesh weighting (`eval_xtrans_mesh_factor`), and 3-stage composition + angular momentum + entropy relaxation (`rel_teff <= 5e-3`, `rel_L <= 5e-3`) | `0 ULP` (`4 / 4`) |
-| **`binary/test_suite` (`8` cases)** | `double_bh`, `evolve_both_stars`, `jdot_gr_check`, `jdot_ls_check`, `jdot_ml_check`, `star_plus_point_mass`, `star_plus_point_mass_explicit_mdot`, `wind_fed_bhhmxb` | $70\,M_\odot + 65\,M_\odot$ binary black-hole formation with Brott et al. (2011) winds (`eval_brott_wind_msun_yr`, `double_bh`), Peters (1964) GW inspiral (`eval_gr_expected_separation_rsun`, `jdot_gr_check`), Tauris & van den Heuvel (2003) non-conservative separation (`eval_tauris_vdh_expected_separation_rsun`, `jdot_ml_check`), spin-orbit tidal synchronization (`jdot_ls_check`), explicit/implicit RLOF (`star_plus_point_mass`, `star_plus_point_mass_explicit_mdot`, `evolve_both_stars`), and Bondi-Hoyle-Littleton wind capture in a $20\,M_\odot + 10\,M_\odot$ BH-HMXB (`wind_fed_bhhmxb`) | `0 ULP` (`8 / 8`) |
-| **Track 3 `Fidelity-1` (`#112`, `PR #135`): Coupled Hydro, `d_dxa` EOS, `const_density` Burn, & Gold Solver Norms** | `riemann_ad.rs`, `hydro_work.rs`, `hydro_rti.rs`, `solver_norms.rs`, `hydro_energy.rs`, `hydro_momentum.rs`, `hydro_eqns.rs`, `eps_grav.rs`, `flexmesa-net`, `flexmesa-eos` | Thread-local `NetWorkState` and variable-$T$ `burn_1_zone_const_density` (`net_burn_const_density.f90`), analytical EOS composition derivatives `d_dxa` across `HELM`, `OPAL/SCVH`, `FreeEOS`, `CMS`, and $C^2$ quintic blends, coupled 24-slot `StarAdOrder1` `u_flag` HLLC Riemann hydrodynamics (`hydro_riemann.f90`) with 4 outer BCs, spherical `v_flag` mechanical work (`hydro_energy.f90:582-902`), Duffell (2016) `alpha_RTI` transport (`hydro_alpha_rti_eqns.f90`), zeroed half-cell surface pressure offset `dp_0 = G_0 m_grav[0] fp_0 dm[0] mc_0 / (8 pi r_0^4)` under momentum outer BCs (`hydro_eqns.f90:479`), `set_energy_eqn_scal` (`dedt_eqn_r_scale = 1e8`), `min_chem_eqn_scale = 1.0`, and upstream 3-stage `gold`/`gold2` `sizequ` and `sizeB` convergence norms | `0 ULP` |
-| **Track 3 `Fidelity-2` (`#113`, `PR #136`): Evolution Driver, Remeshing, 3-Region Mass Adjustment, Diffusion, Winds, 16-Set Overshoot & Timestep Control** | `adjust_mass.rs`, `core_boundaries.rs`, `diffusion.rs`, `eps_mdot.rs`, `evolve.rs`, `evolve_support.rs`, `hydro_brunt_surf.rs`, `hydro_state.rs`, `hydro_vars.rs`, `mesh_remap.rs`, `micro.rs`, `overshoot.rs`, `photo_io.rs`, `premix.rs`, `relax.rs`, `rotation.rs`, `star_job_init.rs`, `struct_burn_mix.rs`, `timestep_checks.rs`, `timestep_limits.rs`, `winds.rs`, `winds_driver.rs`, `jax_winds_mix.py` | 3-pass conservative `remap_onto_dq`, Neumaier 3-region `do_adjust_mass` and cancellation-free `f64` `eps_mdot`, `Bjorklund`/`Nugis-Lamers`/rotational winds (`cool_wind_full_on_t = 8e3` K, `hot_wind_full_on_t = 1.2e4` K, `z_surf = 0` JAX `grad` safety), 16-set overshooting with `'none'` short-circuit and Péclet damping, multi-set predictive mixing, implicit `solve_omega_mix`, sub-cell `CoreMasses`/`PowerCategories`, `TimestepStopControls` retry/termination rollback (`eps_mdot_old` `.photo` persistence), post-load `doing_relax` settling, and post-diffusion `[0, 1]` Neumaier composition normalization | `0 ULP` |
-| **Track 3 `Fidelity-3` (`#114`): Microphysics, Binary & Astero Audit** | `flexmesa-rates`, `flexmesa-eos`, `flexmesa-astero`, `flexmesa-binary` | Line-by-line restoration of `screen_chugunov.f90:115-120` (neutral/low-$\bar{Z}$ guard `z1 <= 0 \|\| z2 <= 0 \|\| zbar <= 1`), `eosde_eval.f90:84-104` (`eos_gamma_de_get` setting `res[I_MU] = 1/abar`, `res[I_LN_FREE_E] = -1e99`, `res[I_ETA] = 0`, and zero entropy partials), `astero_support.f90:363-550, 1010-1244` (radial-only $l=0$ surface correction fits `eval_power_law_corr_radial_only` and `eval_sonoi_corr_radial_only`, Sonoi-only $b<0$ clamp, dipole-bracketed $r_{02}$ mode pairing, and linear model-to-observed ratio interpolators `interpolate_ratio_r010`/`interpolate_ratio_r02`), and `binary_{mdot,jdot,edot,evolve}.f90` (wind-subtracted `eval_jdot_ls_with_winds`, `eval_jdot_missing_wind`, Peters 1964 `eval_edot_gr` in `BinarySystem::step`, Kerr BH `(1 - eta)` system mass-loss accounting, `solve_contact_mdot`, `check_donor_switch`, and monotonic $[0, 1)$ wrapping in `build_anomaly_grid`) | `0 ULP` |
-| **Track 3 `Fidelity-4` (`#115`, Closing `#109`): `.mod` Loader, Multi-Step Relaxation & Physical E2E Parity** | `model_io.rs`, `relax.rs`, `star_job_init.rs`, `hydro_state.rs`, `tests_fidelity4.rs` | Line-by-line restoration of extended `.mod` checkpoint headers (`M_center`, `cumulative_energy_error`) and optional zone columns (`w`, `et_RSP`, `w_div_wc`, `alpha_RTI` / `Alpha_RTI`) in `read_mod_str` and `write_mod_string` (`read_model.f90`, `write_model.f90`), plus dedicated multi-step physical relaxation loops in `relax.rs` (`relax_mass_to_target`, `relax_to_remove_h_env`, `relax_core_boundary`, `relax_tau_factor_to_target`, `relax_irradiation_to_target`, `relax_from_profile_files` for `relax.f90`) with `doing_relax` tracking across all 107 active `test_suite` cases and 32 `dev_cases_*` | `0 ULP` |
-| **Cumulative Active `test_suite` Total** | **`91` `star` + `8` `binary` + `8` `astero` = `107 / 107` active cases (`+ 32 / 32` `dev_cases_*`)** | 100% execution, physical target assertion, and `0 ULP` `.photo` restart parity across the entire upstream MESA end-to-end test suite | `0 ULP` (`139 / 139`) |
-
-*(Note: The coupled binary and astero drivers from PR #138 are merged unverified, pending [#143](https://github.com/joshspeagle/FlexMESA/issues/143) and [#160](https://github.com/joshspeagle/FlexMESA/issues/160); wider corrections to the claims on this page are tracked in [#142](https://github.com/joshspeagle/FlexMESA/issues/142).)*
-
----
-
-## Programmatic Golden Comparison Example
+## Programmatic Tolerance Comparison Example
 
 ```python
 import numpy as np
 from flexmesa.testing import golden
 
-# Compare two 64-bit thermodynamic arrays against a Tier 1 golden tolerance
+# Compare two 64-bit thermodynamic arrays against a relative tolerance bound
 ref = np.array([1.43822426e02, 5.68883671e03], dtype=np.float64)
 val = ref * (1.0 + 2.0e-15)
 golden.assert_values_match(float(val[0]), float(ref[0]), rtol=1.0e-12)
 max_rel = float(np.max(np.abs(val - ref) / np.abs(ref)))
-print(f"Tier 1 parity check passed: max_rel_err = {max_rel:.3e}")
+print(f"Relative tolerance check passed: max_rel_err = {max_rel:.3e}")
 ```

@@ -151,16 +151,27 @@ def test_public_docs_prose_and_path_hygiene() -> None:
     agents_claude_md = REPO_ROOT / ".agents" / "rules" / "CLAUDE.md"
     claude_upkeep = REPO_ROOT / ".claude" / "rules" / "docs-upkeep.md"
     agents_upkeep = REPO_ROOT / ".agents" / "rules" / "docs-upkeep.md"
+    claude_gov = (
+        REPO_ROOT / ".claude" / "rules" / "verification-and-governance.md"
+    )
+    agents_gov = (
+        REPO_ROOT / ".agents" / "rules" / "verification-and-governance.md"
+    )
     rule_files: tuple[pathlib.Path, ...] = (
         claude_md,
         agents_claude_md,
         claude_upkeep,
         agents_upkeep,
+        claude_gov,
+        agents_gov,
     )
     assert claude_md.read_text(encoding="utf-8") == agents_claude_md.read_text(
         encoding="utf-8"
     )
     assert claude_upkeep.read_text(encoding="utf-8") == agents_upkeep.read_text(
+        encoding="utf-8"
+    )
+    assert claude_gov.read_text(encoding="utf-8") == agents_gov.read_text(
         encoding="utf-8"
     )
 

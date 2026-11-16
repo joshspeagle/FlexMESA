@@ -233,7 +233,7 @@ Stage `E2E-5` provides analytical physics oracles and multi-stage runners for al
 
 - **Peters (1964) GW Inspiral & Tauris & van den Heuvel (2003) Non-Conservative Oracles (`binary.eval_gr_expected_separation_rsun`, `binary.eval_tauris_vdh_expected_separation_rsun`)**: Closed-form orbital separation trajectories $a(t)$ (`jdot_gr_check`) and $a(q; \alpha, \beta, \delta, \gamma)$ (`jdot_ml_check`).
 - **Brott et al. (2011) Bi-Stability Massive-Star Winds (`binary.eval_brott_wind_msun_yr`, `binary/test_suite/double_bh`)**: Combines Vink et al. (2001), Nieuwenhuijzen & de Jager (1990), and Hamann et al. (1995) Wolf-Rayet winds across the bi-stability jump for $70\,M_\odot + 65\,M_\odot$ binary black-hole progenitors (`double_bh`).
-- **Custom `other_*` Physics Hooks & Step-Redo Parity (`star.eval_overshoot_dbl_exp`, `star.eval_grafener_kudritzki_wind_msun_yr`, `star.verify_step_redo_bit_parity`)**: Evaluates double-exponential convective overshooting $D_{\mathrm{ov}}(r)$, Gräfener & Kudritzki (2008) Wolf-Rayet optically thick wind mass-loss rates, and `0 ULP` `.photo` step-redo parity (`check_redo`).
+- **Custom `other_*` Physics Hooks & Step-Redo Rollback (`star.eval_overshoot_dbl_exp`, `star.eval_grafener_kudritzki_wind_msun_yr`, `star.verify_step_redo_bit_parity`)**: Evaluates double-exponential convective overshooting $D_{\mathrm{ov}}(r)$, Gräfener & Kudritzki (2008) Wolf-Rayet optically thick wind mass-loss rates, and `.photo` step-redo rollback consistency (`check_redo`).
 
 ```python
 from flexmesa import binary, constants, star

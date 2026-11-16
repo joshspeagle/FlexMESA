@@ -9,8 +9,8 @@
 Building and running `FlexMESA` requires:
 
 - **Python (`>= 3.12`)**: Required for modern type annotations (`type` aliases and PEP 695 generics) and `tomllib` manifest parsing.
-- **Rust Toolchain (`>= 1.80`, `stable`)**: Required to compile the 21 Safe Rust workspace crates (`crates/flexmesa-*`) and the `flexmesa._rust` native extension module via `cargo` and `maturin`.
-- **C/C++ Linker (`gcc` or `clang`)**: Standard platform linker used by `rustc` when producing the shared `PyO3` library (`_rust.abi3.so` on Linux/macOS or `_rust.pyd` on Windows). No Fortran compiler (`gfortran`) or MESA SDK installation is required to build or run `FlexMESA`.
+- **Rust Toolchain (`>= 1.80`, `stable`)**: Required to compile the Cargo workspace crates (`crates/flexmesa-*`, enforcing `#![forbid(unsafe_code)]` across all crates except the sole vendored `crlibm` FFI wrapper `flexmesa-crlibm-sys`) and the `flexmesa._rust` native extension module via `cargo` and `maturin`.
+- **C/C++ Compiler & Linker (`gcc` or `clang`)**: Compiles the vendored C99 `crlibm 1.0beta4` sources inside `crates/flexmesa-crlibm-sys` using fixed committed target headers (no `autoconf` or system `crlibm` required) and links the shared `PyO3` library (`_rust.abi3.so` on Linux/macOS or `_rust.pyd` on Windows). No Fortran compiler (`gfortran`) or MESA SDK installation is required to build or run `FlexMESA`.
 
 To verify your Python and Rust toolchains before installation:
 
@@ -125,7 +125,7 @@ flexmesa data verify
 flexmesa data status
 ```
 
-  To also download the 3,142 upstream MESA `main` at commit `0b2e6bb` golden `test_output` and `test_suite` input files into `~/.cache/flexmesa/mesa_test_inputs` for full end-to-end parity verification, pass `--include-test-inputs`:
+  To also download the bundled upstream MESA `test_output` and `test_suite` input files into `~/.cache/flexmesa/mesa_test_inputs` for local test execution, pass `--include-test-inputs`:
 
 ```bash
 flexmesa data fetch --include-test-inputs

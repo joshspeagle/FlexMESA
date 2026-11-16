@@ -1,6 +1,6 @@
 # Tutorial 6: End-to-End Differentiable JAX Workflows (`float64`)
 
-A central scientific motivation of `FlexMESA` is enabling gradient-based calibration, sensitivity analysis, and Hamiltonian Monte Carlo inference across stellar microphysics, 1D Henyey structure solvers, binary mass transfer, and asteroseismology. Because importing `flexmesa` automatically enables 64-bit IEEE-754 floating-point precision (`jax_enable_x64 = True`), every `_jax` kernel and `backend="jax"` dispatch entry point supports exact forward-mode (`jax.jacfwd`, `jax.jvp`) and reverse-mode (`jax.grad`, `jax.vjp`) automatic differentiation alongside vectorized batching (`jax.vmap`).
+A central scientific motivation of `FlexMESA` is enabling gradient-based calibration, sensitivity analysis, and Hamiltonian Monte Carlo inference across stellar microphysics, 1D Henyey structure solvers, binary mass transfer, and asteroseismology. In `FlexMESA`'s architecture, Safe Rust (`"strict"` mode) is the canonical physics engine compared against MESA `26.4.1` (`#165`), while JAX (`backend="jax"`) serves as the derived layer for automatic differentiation and vectorized batching validated against Rust `"strict"` mode (`#166`). Importing `flexmesa` automatically enables 64-bit IEEE-754 floating-point precision (`jax_enable_x64 = True`), so every `_jax` kernel and `backend="jax"` dispatch entry point supports forward-mode (`jax.jacfwd`, `jax.jvp`) and reverse-mode (`jax.grad`, `jax.vjp`) automatic differentiation alongside `jax.vmap`.
 
 This tutorial demonstrates end-to-end differentiable workflows across six core modules:
 
@@ -147,7 +147,7 @@ def loss_ffi(scale: jax.Array) -> jax.Array:
 g_pcr = jax.grad(loss_pcr)(jnp.float64(1.0))
 g_ffi = jax.grad(loss_ffi)(jnp.float64(1.0))
 print(
-    f"Block-tridiagonal adjoint gradient parity: "
+    f"Block-tridiagonal adjoint gradient agreement: "
     f"grad(PCR) = {float(g_pcr):.12f}, grad(rust_ffi) = {float(g_ffi):.12f}, "
     f"rel_diff = {abs(float(g_pcr - g_ffi)) / abs(float(g_pcr)):.2e}"
 )

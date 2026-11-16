@@ -35,9 +35,30 @@ CODATA physical constants and IAU/MESA solar reference quantities in CGS units (
 
 ---
 
-## IEEE-754 Elementary Intrinsics (`flexmesa.math`)
+## Numerics Modes (`strict` vs. `fast`) & `CRMATH` Elementary Intrinsics (`flexmesa.math`)
 
-Bit-reproducible elementary and base-10/base-2 transcendental functions (`exp10`, `log10`, `pow`, `safe_log10`, `sinpi`, `cospi`) matching MESA's `math/` module.
+`flexmesa.math` (backed in Rust by `crates/flexmesa-math` and `crates/flexmesa-crlibm-sys`) provides the single arithmetic layer called by all physics crates (`#165`). Two run-level numerics modes are compiled from the same Rust physics source and selected via `flexmesa.set_numerics_mode`, `flexmesa.numerics_mode_context`, or `--numerics-mode {strict,fast}` on the CLI:
+
+- **`"strict"` (default)**: Evaluates vendored `crlibm 1.0beta4` (`CRMATH 1.2` from MESA SDK `26.6.1`, encapsulated in `flexmesa-crlibm-sys`, the sole workspace crate permitted to use `unsafe` FFI under `#![deny(unsafe_op_in_unsafe_fn)]`). Its contract is `"correctly rounded toward zero as CRMATH does it"` (`*_rz`, with `*_rd` for `exp`, `acos`, and `acospi`, plus `*_rn` on `atan2` and `intrinsic_{log,log10,exp,pow}` for upstream platform-`libm` call sites tracked in `#196` and `#198`), explicit multiplication chains for `pow2` through `pow8` and `pow_i_`/`pow_r_`/`exp10_`, and `a * b + c` with no fused multiply-add contraction. `"strict"` is the **only** mode judged against MESA `26.4.1`, across three fidelity levels:
+  1. **Level 1**: `"strict"` mode is bit-identical across machines (`x86_64` and `aarch64`) and thread counts (`1` vs. `4` `rayon` threads), enforced in CI.
+  2. **Level 2**: `"strict"` kernels are bit-identical to MESA `26.4.1` against exact hexadecimal reference outputs wherever operations and evaluation order match (`474,062` tested inputs across `47` math sections in `mesa_26_4_1_vectors.rs`).
+  3. **Level 3**: Whole evolutionary trajectories are compared against real MESA `26.4.1` histories within the `#143` history-harness tolerances (`notes/audit/case_table.md`).
+- **`"fast"`**: Evaluates platform `std` `f64` intrinsics with hardware `mul_add` permitted. `"fast"` results are hardware-dependent, are validated exclusively against `"strict"` (`notes/audit/fast_vs_strict.md`), and are never compared against MESA.
+
+```python
+import flexmesa
+from flexmesa import _rust
+
+assert flexmesa.get_numerics_mode() == "strict"
+strict_val = _rust.exp10(1.25)
+
+with flexmesa.numerics_mode_context("fast") as active_mode:
+    assert active_mode == "fast"
+    fast_val = _rust.exp10(1.25)
+
+assert flexmesa.get_numerics_mode() == "strict"
+print(f"exp10(1.25): strict={strict_val:.16e}, |fast - strict|={abs(fast_val - strict_val):.2e}")
+```
 
 ::: flexmesa.math.intrinsics
 

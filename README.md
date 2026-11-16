@@ -1,6 +1,6 @@
 # FlexMESA
 
-**FlexMESA** is a modern, modular, and verifiable re-engineering of [MESA (Modules for Experiments in Stellar Astrophysics)](https://github.com/MESAHub/mesa) built on an **Integrated Three-Tier Hybrid Architecture** combining **Safe Rust (`#![forbid(unsafe_code)]`)**, zero-copy **Python (`PyO3` / `flexmesa._rust`)**, and **JAX (`float64` `@jax.jit` + `jax.vmap`)**.
+**FlexMESA** is a modular re-engineering of [MESA (Modules for Experiments in Stellar Astrophysics)](https://github.com/MESAHub/mesa) combining a canonical **Safe Rust** engine (`crates/`, enforcing `#![forbid(unsafe_code)]` across all crates except the sole vendored `crlibm` FFI wrapper `flexmesa-crlibm-sys`), zero-copy **Python (`PyO3` / `flexmesa._rust`)** bindings, and a derived **JAX (`float64` `@jax.jit` + `jax.vmap`)** layer for automatic differentiation and batching.
 
 ## Project Goals
 
@@ -9,14 +9,14 @@
    - **Tier A (`utils`, `schema`, `data`, `testing`, `auto_diff`)**: Canonical implementation in Safe Rust (`crates/`) with zero-copy `.safetensors` memory-mapping (`memmap2`) and a persistent `rayon` worker pool, exposed to Python via `flexmesa._rust`.
    - **Tier B (`const`, `math`, `interp_1d`, `interp_2d`, `neu`, `turb`, plus Waves 2–3 microphysics)**: Monomorphized Safe Rust CPU kernels (`f64` + `DualOrder1<N>`) paired with branchless `@jax.jit` flat-array GPU kernels behind a unified `backend="auto" | "rust" | "jax"` Python dispatcher.
    - **Tier C (`mtx`, `num`, `net`, `star_solver`)**: Sequential block-Thomas and parallel Hirshman et al. (2010) `bcyclic` odd-even block cyclic reduction in Safe Rust, paired with $\lceil \log_2 N_{\mathrm{zones}} \rceil$ vectorized Parallel Cyclic Reduction (`solver_mode="pcr"`) and analytical Implicit Function Theorem `@jax.custom_vjp` FFI bindings (`solver_mode="rust_ffi"`) in JAX.
-3. **Two-Tier Numerical Verification and Mandatory Post-Wave `Phase X.5` Gates**: Validate every migrated module against MESA's 21 standalone module unit-test suites (`18,885` lines of 16-digit golden outputs), exact forward and reverse automatic differentiation checks (`jax.test_util.check_grads`), property-based fuzzing (`hypothesis` and `proptest`), and end-of-wave 4-way parity and performance benchmarks against compiled upstream Fortran MESA static archives (`benchmarks/fortran_mesa/`).
+3. **Single-Source Strict/Fast Numerics & Evidence-Gated Verification (`#143`, `#165`, `#166`)**: Build hardware-independent `strict` mode (default; vendored `crlibm 1.0beta4` matching MESA `26.4.1` `CRMATH` rounding and operation order, no FMA) and `fast` mode (platform `f64` intrinsics and `mul_add`, validated against `strict`) from one Rust physics source. Only `strict` mode is compared against MESA `26.4.1` across three levels: (1) cross-machine and cross-thread bit-identity on `x86_64` and `aarch64` CI runners, (2) bit-identical kernel outputs against exact hexadecimal MESA vectors where operation order matches, and (3) full-trajectory agreement within `#143` history tolerances (`notes/audit/case_table.md`).
 
 ## Repository Layout
 
 | Directory | Contents |
 | :--- | :--- |
-| [`src/flexmesa/`](src/flexmesa/) | Unified Python, zero-copy `PyO3` (`flexmesa._rust`), and JAX (`float64`) package |
-| [`crates/`](crates/) | Safe Rust (`#![forbid(unsafe_code)]`) Cargo workspace crates + `crates/flexmesa-py` (`PyO3` extension) |
+| [`src/flexmesa/`](src/flexmesa/) | Unified Python front end, zero-copy `PyO3` (`flexmesa._rust`), and derived JAX (`float64`) package |
+| [`crates/`](crates/) | Canonical Safe Rust Cargo workspace crates (`#![forbid(unsafe_code)]` across all crates except `flexmesa-crlibm-sys`) + `crates/flexmesa-py` (`PyO3` extension) |
 | [`tests/`](tests/) | Unit, doctest, hybrid bridge, autodiff, and `hypothesis` property test suites |
 | [`benchmarks/`](benchmarks/) | Upstream Fortran MESA (`benchmarks/fortran_mesa/`) and 4-way benchmark harnesses |
 | [`docs/`](docs/) | Public MkDocs Material documentation website (`mkdocs.yml`), design specifications (`docs/design/`), module physics & numerics explainers (`docs/modules/`), and publication-styled figures (`docs/assets/figures/`) |

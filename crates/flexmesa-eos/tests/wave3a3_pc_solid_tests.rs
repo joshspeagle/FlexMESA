@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-//! Golden parity integration tests for Wave 3a.3 solid/quantum-melting `PC`
-//! regimes, `get_pc_alfa`, and `eosDT_get` `PC`/`HELM` blending against
-//! upstream Fortran MESA (`pc_eos.f90`, `eospc_eval.f90`, and `eosdt_eval.f90`).
+//! Regression snapshot tests for Wave 3a.3 solid/quantum-melting `PC`
+//! regimes, `get_pc_alfa`, and `eosDT_get` `PC`/`HELM` blending (`#146`).
+//! Real compiled MESA `26.4.1` component oracle comparisons are in
+//! `mesa_26_4_1_component_oracles_test.rs` (`T2-15`).
 
 #![allow(
     clippy::approx_constant,
@@ -61,7 +62,7 @@ fn assert_eos_case(
 }
 
 #[test]
-fn test_pc_solid_and_quantum_melting_regimes_match_fortran_oracle() {
+fn test_pc_solid_and_quantum_melting_regimes_match_regression_snapshot() {
     let cfg = PcConfig::default();
 
     // 5. pc_c12_sol: T = 1e6 K, rho = 1e6 g/cm^3
@@ -338,7 +339,7 @@ fn test_pc_solid_and_quantum_melting_regimes_match_fortran_oracle() {
 }
 
 #[test]
-fn test_pc_alfa_and_eosdt_pc_helm_blend_match_fortran_oracle() {
+fn test_pc_alfa_and_eosdt_pc_helm_blend_match_regression_snapshot() {
     let mut pc_cfg = PcConfig::default();
     let (a1, dt1, dr1) = get_pc_alfa(&pc_cfg, 2.9, 6.5, 12.0, 6.0);
     assert!((a1 - 4.9748743718592991e-1).abs() < 1.0e-14);

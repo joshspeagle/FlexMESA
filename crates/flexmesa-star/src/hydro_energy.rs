@@ -16,16 +16,16 @@
 //!     `eps_phase_separation`, `irradiation_heat`, and `eps_mdot`,
 //!   - `RSP2` and `TDC` turbulent work heating `eq_ad`,
 //!   - Rayleigh-Taylor instability (`RTI`) internal energy diffusion
-//!     (`setup_RTI_diffusion`, `hydro_energy.f90:333-373`),
+//!     (`setup_RTI_diffusion`, `star/private/hydro_energy.f90:312-352`),
 //!   - Velocity drag heating $\tfrac{1}{2} c_{\mathrm{drag}}(v_k^2 + v_{k+1}^2)/\Delta t$.
 //! - **Turbulent energy time derivative (`setup_d_turbulent_energy_dt`,
-//!   `hydro_energy.f90:375-408`)** for `RSP2` and `TDC`.
+//!   `star/private/hydro_energy.f90:354-387`)** for `RSP2` and `TDC`.
 //! - **Internal energy rate and mechanical work (`setup_de_dt_and_friends`,
-//!   `eval_simple_PdV_work`, `eval_dwork`, `hydro_energy.f90:109-209, 441-902`)**
+//!   `eval_simple_PdV_work`, `eval_dwork`, `star/private/hydro_energy.f90:109-209, 420-877`)**
 //!   including time-centered pressure $\theta_P$, artificial viscosity
 //!   $P_{\mathrm{vsc}}$, MLT turbulent pressure $P_{\mathrm{turb,MLT}}$, and
 //!   time-centered spherical face area $A_k = \tfrac{4\pi}{3}(r_k^2 + r_k r_{\mathrm{start},k} + r_{\mathrm{start},k}^2)$.
-//! - **Composition partial derivatives (`unpack_res18`, `hydro_energy.f90:490-553`)**
+//! - **Composition partial derivatives (`unpack_res18`, `star/private/hydro_energy.f90:469-532`)**
 //!   including `d_epsnuc_dx`, `dln_e_dxa_for_partials`, `d_eps_grav_dx`, and
 //!   `dln_peos_dxa_for_partials`.
 
@@ -389,7 +389,7 @@ pub fn set_energy_eqn_scal(model: &StarModel, k: usize) -> f64 {
 }
 
 /// Energy conservation equation for cell `k` (`do1_energy_eqn` in
-/// `star/private/hydro_energy.f90:36-905`).
+/// `star/private/hydro_energy.f90:36-879`).
 pub fn do1_energy_eqn(
     model: &StarModel,
     k: usize,

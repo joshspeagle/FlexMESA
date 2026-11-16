@@ -116,7 +116,7 @@ impl HenyeySystem {
 
     /// Stores `equ[k, i_equ] = resid.val` and unpacks the 3-cell stencil
     /// [`StarAdOrder1`] partials into `lblk`, `dblk`, and `ublk`
-    /// (`save_eqn_residual_info` in `star/private/hydro_eqns.f90:1032-1190`).
+    /// (`save_eqn_residual_info` in `star/private/star_utils.f90:1603-1614`).
     pub fn save_eqn_residual(
         &mut self,
         layout: &VarLayout,
@@ -161,7 +161,7 @@ impl HenyeySystem {
 }
 
 /// Populates the per-zone variable scaling vector `x_scale` in place
-/// (`set_xscale_info` in `star/private/solver_support.f90:312-363`).
+/// (`set_xscale_info` in `star/private/solver_support.f90:42-86`).
 pub fn compute_x_scale_into(
     model: &StarModel,
     include_chem: bool,

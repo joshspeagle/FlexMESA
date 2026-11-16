@@ -17,7 +17,7 @@ use flexmesa_bench::{
 const WAVE1_REGRESSION_SNAPSHOTS_N8: [(&str, f64); 6] = [
     ("auto_diff", 1.089_274_155_553_244e4),
     ("interp_2d", 3.622_775_349_153_983e2),
-    ("neu", 9.868_900_412_911_318e12),
+    ("neu", 9.873_195_638_253_145e12),
     ("mtx_tridiag", 1.065_650_530_823_759e1),
     ("turb_mlt", 3.419_048_546_150_96),
     ("turb_tdc", 3.318_734_224_165_011_5),
@@ -54,15 +54,15 @@ const WAVE3B_REGRESSION_SNAPSHOTS_N8: [(&str, f64); 5] = [
 
 /// `FlexMESA` regression snapshots for $N_{\mathrm{zones}} = 8$ across all five
 /// Wave 4 1D stellar engine workloads (internal self-consistency check, not an
-/// upstream MESA output; `star_newton_step` shifted from `1.33327716396219e2`
-/// to `1.454270997871555e2` and `star_evolve_step` from `9.987143125142524e1`
-/// to `1.005913169168671e2` in `642da54`; tracked in #146).
+/// upstream MESA output; `star_hydro_eqns`, `star_newton_step`, and
+/// `star_evolve_step` shifted under `#141` when `neu` `#193` and `num` `#194`
+/// were aligned to MESA `26.4.1`; tracked in #146).
 const WAVE4_REGRESSION_SNAPSHOTS_N8: [(&str, f64); 5] = [
     ("star_micro_vars", 2.497_297_961_588_147e2),
-    ("star_hydro_eqns", 4.253_224_624_211_422e6),
-    ("star_newton_step", 1.454_270_997_871_555e2),
+    ("star_hydro_eqns", 4.253_179_678_462_525e6),
+    ("star_newton_step", 1.451_336_644_709_231e2),
     ("star_remesh", 4.203_476_959_958_853e2),
-    ("star_evolve_step", 1.005_913_169_168_671e2),
+    ("star_evolve_step", 1.005_942_875_453_512e2),
 ];
 
 /// `FlexMESA` regression snapshots for $N_{\mathrm{zones}} = 8$ across all four

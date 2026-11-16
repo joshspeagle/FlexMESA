@@ -304,7 +304,8 @@ impl HelmTable {
         self.dense.get((j - 1) * self.imax + (i - 1)).copied()
     }
 
-    /// Extracts the 4-corner stencil [`HelmCell`] for `(log_temp, din)` (`helm.f90` lines 387-542).
+    /// Extracts the 4-corner stencil [`HelmCell`] for `(log_temp, din)`
+    /// (`eos/private/helm_electron_positron.dek:20-62`).
     #[must_use]
     pub fn cell(&self, log_temp: f64, din: f64) -> HelmCell {
         let ldin = din.log10();

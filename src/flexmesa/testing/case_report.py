@@ -7,6 +7,8 @@ Produces deterministic, non-hand-typed case tables and headline summaries from
 
 from __future__ import annotations
 
+import dataclasses
+import json
 import math
 import pathlib
 from typing import Any
@@ -142,6 +144,39 @@ def build_report_payload(
         "summary": summarize_records(manifest, records, known_gaps),
         "cases": [record_to_dict(r) for r in records],
     }
+
+
+def default_baseline_json_path() -> pathlib.Path:
+    """Return the committed MESA ``26.4.1`` baseline harness JSON path."""
+    return (
+        case_manifest.repo_root()
+        / "benchmarks"
+        / "history_harness"
+        / "baseline_run_26_4_1.json"
+    )
+
+
+def build_deterministic_baseline_payload(
+    manifest: case_manifest.HarnessManifest,
+    records: list[harness_runner.CaseHarnessRecord],
+    known_gaps: dict[tuple[str, str], case_manifest.KnownGapSpec] | None = None,
+) -> dict[str, Any]:
+    """Build a deterministic baseline JSON payload omitting volatile timings.
+
+    Args:
+        manifest: ``HarnessManifest`` instance.
+        records: Evaluated ``CaseHarnessRecord`` entries.
+        known_gaps: Optional ``known_gaps.toml`` mapping.
+
+    Returns:
+        JSON-serializable dictionary with ``wall_time_sec`` and ``peak_rss_gb``
+        normalized to ``0.0`` for deterministic git diffs.
+    """
+    normalized = [
+        dataclasses.replace(r, wall_time_sec=0.0, peak_rss_gb=0.0)
+        for r in records
+    ]
+    return build_report_payload(manifest, normalized, known_gaps)
 
 
 def _fmt_max_dev(rec: harness_runner.CaseHarnessRecord) -> str:
@@ -292,24 +327,84 @@ def render_case_table_markdown(
 def build_manifest_inventory_records(
     manifest_path: pathlib.Path | str | None = None,
     known_gaps_path: pathlib.Path | str | None = None,
+    baseline_json_path: pathlib.Path | str | None = None,
 ) -> tuple[
     case_manifest.HarnessManifest,
     dict[tuple[str, str], case_manifest.KnownGapSpec],
     list[harness_runner.CaseHarnessRecord],
 ]:
-    """Build baseline ``CaseHarnessRecord`` entries without running models.
+    """Build ``CaseHarnessRecord`` entries from manifest and baseline JSON.
+
+    Re-evaluates verdicts dynamically against ``case_manifest.toml`` and
+    ``known_gaps.toml`` using stored MESA ``26.4.1`` baseline measurements when
+    present.
 
     Args:
         manifest_path: Optional path to ``case_manifest.toml``.
         known_gaps_path: Optional path to ``known_gaps.toml``.
+        baseline_json_path: Optional path to ``baseline_run_26_4_1.json``.
 
     Returns:
         Tuple ``(manifest, known_gaps, records)`` across all manifest entries.
     """
     manifest = case_manifest.load_case_manifest(manifest_path)
     gaps = case_manifest.load_known_gaps(known_gaps_path)
-    records = [
-        harness_runner.evaluate_case_record(entry, gaps, None)
-        for entry in manifest.cases
-    ]
+
+    resolved_baseline: pathlib.Path | None = None
+    if baseline_json_path is not None:
+        resolved_baseline = pathlib.Path(baseline_json_path)
+        if not resolved_baseline.is_file():
+            raise FileNotFoundError(
+                f"missing baseline JSON: {resolved_baseline}"
+            )
+    elif (
+        manifest_path is None
+        or pathlib.Path(manifest_path).resolve()
+        == case_manifest.default_manifest_path().resolve()
+    ):
+        cand = default_baseline_json_path()
+        if cand.is_file():
+            resolved_baseline = cand
+
+    stored_by_key: dict[tuple[str, str], dict[str, Any]] = {}
+    if resolved_baseline is not None and resolved_baseline.is_file():
+        raw_payload = json.loads(resolved_baseline.read_text(encoding="utf-8"))
+        for item in raw_payload.get("cases", ()):
+            if item.get("executed"):
+                stored_by_key[(str(item["suite"]), str(item["case"]))] = item
+
+    records: list[harness_runner.CaseHarnessRecord] = []
+    for entry in manifest.cases:
+        stored = stored_by_key.get(entry.key)
+        if stored is None:
+            records.append(
+                harness_runner.evaluate_case_record(entry, gaps, None)
+            )
+            continue
+        outcome = harness_runner.TraceRunOutcome(
+            suite=entry.suite,
+            case=entry.case,
+            status=str(stored.get("run_status", "error")),
+            termination_code=str(stored.get("observed_termination", "")),
+            steps=int(stored.get("steps", 0)),
+            retries=int(stored.get("retries", 0)),
+            wall_time_sec=float(stored.get("wall_time_sec", 0.0)),
+            peak_rss_gb=float(stored.get("peak_rss_gb", 0.0)),
+            history_path=None,
+            error_message=str(stored.get("error_message", "")),
+        )
+        raw_comp = stored.get("comparison")
+        comp = (
+            history_compare.comparison_from_dict(raw_comp)
+            if isinstance(raw_comp, dict)
+            else None
+        )
+        records.append(
+            harness_runner.evaluate_case_record(
+                entry,
+                gaps,
+                outcome,
+                precomputed_comparison=comp,
+            )
+        )
     return manifest, gaps, records

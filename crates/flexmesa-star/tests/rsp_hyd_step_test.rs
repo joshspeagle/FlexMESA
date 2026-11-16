@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-//! Upstream Fortran MESA (`main` at commit `0b2e6bb`) golden parity tests for
+//! Upstream Fortran MESA (release `26.4.1`, commit
+//! `c8c202662922a22b3efefa824473ad615c623afd`) parity tests for
 //! nonlinear `RSP` `HYD` time integration (`star/private/rsp_step.f90` &
 //! `star/private/rsp.f90`), multi-cycle period/amplitude detection, `GYRE`
 //! `l = 0` BVP velocity kick (`rsp_gyre`), lossless `.mod` save/load
-//! continuation, and bit-identical `.photo` restart parity (Issue `#5`).
+//! continuation, and bit-identical `.photo` restart parity (`#5`, `#141`).
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -58,11 +59,11 @@ struct GoldenStep1Case {
 
 #[test]
 #[allow(clippy::too_many_lines)]
-fn test_rsp_hyd_step1_matches_all_7_r24_08_1_golden_models() {
+fn test_rsp_hyd_step1_matches_all_7_mesa_26_4_1_reference_models() {
     let gdir = golden_rsp_dir();
     let cases = [
         GoldenStep1Case {
-            fname: "rsp_cepheid_step1_r24.mod",
+            fname: "rsp_cepheid_step1_26_4_1.mod",
             configure: |c| {
                 c.rsp_mass = 4.165;
                 c.rsp_teff = 6050.0;
@@ -72,7 +73,7 @@ fn test_rsp_hyd_step1_matches_all_7_r24_08_1_golden_models() {
             },
         },
         GoldenStep1Case {
-            fname: "rsp_cepheid_6M_step1_r24.mod",
+            fname: "rsp_cepheid_6M_step1_26_4_1.mod",
             configure: |c| {
                 c.rsp_mass = 6.0;
                 c.rsp_teff = 4892.0;
@@ -82,7 +83,7 @@ fn test_rsp_hyd_step1_matches_all_7_r24_08_1_golden_models() {
             },
         },
         GoldenStep1Case {
-            fname: "rsp_RR_Lyrae_step1_r24.mod",
+            fname: "rsp_RR_Lyrae_step1_26_4_1.mod",
             configure: |c| {
                 c.rsp_mass = 0.65;
                 c.rsp_teff = 6500.0;
@@ -92,7 +93,7 @@ fn test_rsp_hyd_step1_matches_all_7_r24_08_1_golden_models() {
             },
         },
         GoldenStep1Case {
-            fname: "rsp_BEP_step1_r24.mod",
+            fname: "rsp_BEP_step1_26_4_1.mod",
             configure: |c| {
                 c.rsp_mass = 0.26;
                 c.rsp_teff = 6968.0;
@@ -102,7 +103,7 @@ fn test_rsp_hyd_step1_matches_all_7_r24_08_1_golden_models() {
             },
         },
         GoldenStep1Case {
-            fname: "rsp_BLAP_step1_r24.mod",
+            fname: "rsp_BLAP_step1_26_4_1.mod",
             configure: |c| {
                 c.rsp_mass = 0.36;
                 c.rsp_teff = 26_000.0;
@@ -117,7 +118,7 @@ fn test_rsp_hyd_step1_matches_all_7_r24_08_1_golden_models() {
             },
         },
         GoldenStep1Case {
-            fname: "rsp_Delta_Scuti_step1_r24.mod",
+            fname: "rsp_Delta_Scuti_step1_26_4_1.mod",
             configure: |c| {
                 c.rsp_mass = 2.0;
                 c.rsp_teff = 6900.0;
@@ -131,7 +132,7 @@ fn test_rsp_hyd_step1_matches_all_7_r24_08_1_golden_models() {
             },
         },
         GoldenStep1Case {
-            fname: "rsp_Type_II_Cepheid_step1_r24.mod",
+            fname: "rsp_Type_II_Cepheid_step1_26_4_1.mod",
             configure: |c| {
                 c.rsp_mass = 0.55;
                 c.rsp_teff = 6410.0;
@@ -153,6 +154,10 @@ fn test_rsp_hyd_step1_matches_all_7_r24_08_1_golden_models() {
         let fname = case.fname;
         let raw = fs::read_to_string(gdir.join(fname))
             .unwrap_or_else(|e| panic!("read {fname}: {e}"));
+        assert!(
+            raw.contains("'r26.4.1'"),
+            "{fname}: expected MESA version_number 'r26.4.1' in header"
+        );
         let golden = read_mod_str(
             &raw,
             StarControls::default(),

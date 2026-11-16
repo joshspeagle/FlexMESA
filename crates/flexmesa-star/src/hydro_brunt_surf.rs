@@ -156,9 +156,9 @@ pub fn do_brunt_n2(model: &mut StarModel) {
 
 /// Evaluates the surface atmosphere boundary condition
 /// $(P_{\mathrm{surf}}, T_{\mathrm{surf}})$ and its 3-cell stencil
-/// [`StarAdOrder1`] partials (`eval_surf_bc` and
-/// `get_simple_photosphere_results` in
-/// `star/private/hydro_vars.f90:857-916, 2902-3224`).
+/// [`StarAdOrder1`] partials (`get_surf_PT` in
+/// `star/private/hydro_vars.f90:779-1030` and `get_atm_PT` in
+/// `star/private/atm_support.f90:37-147`).
 ///
 /// # Errors
 /// Returns [`StarError::MicrophysicsError`] if `eval_t_tau_uniform` fails.

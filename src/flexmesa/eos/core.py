@@ -50,37 +50,42 @@ I_FRAC_IDEAL: int = 25
 
 EOS_BASIC_RESULT_NAMES: tuple[str, ...] = tuple(_rust.eos_basic_result_names())
 
+# Reproduces `eos/private/ion_offset.f90:49-52` at tag 26.4.1, where unsuffixed
+# Fortran literals are evaluated in default `real(4)` before widening (#192).
 NIST_IONIZATION_TABLE_EV: jnp.ndarray = jnp.asarray(
-    [
-        13.598434599702,
-        79.0051545,
-        203.4861711,
-        399.14864,
-        670.9809,
-        1030.1085,
-        1486.058,
-        2043.8428,
-        2715.89,
-        3511.696,
-        4420.0,
-        5451.06,
-        6604.95,
-        7888.53,
-        9305.8,
-        10859.7,
-        12556.4,
-        14400.8,
-        16382.0,
-        18510.0,
-        20788.0,
-        23221.0,
-        25820.0,
-        28582.0,
-        31514.0,
-        34619.0,
-        37899.0,
-        41356.0,
-    ],
+    np.asarray(
+        [
+            13.598434599702,
+            79.0051545,
+            203.4861711,
+            399.14864,
+            670.9809,
+            1030.1085,
+            1486.058,
+            2043.8428,
+            2715.89,
+            3511.696,
+            4420.0,
+            5451.06,
+            6604.95,
+            7888.53,
+            9305.8,
+            10859.7,
+            12556.4,
+            14400.8,
+            16382.0,
+            18510.0,
+            20788.0,
+            23221.0,
+            25820.0,
+            28582.0,
+            31514.0,
+            34619.0,
+            37899.0,
+            41356.0,
+        ],
+        dtype=np.float32,
+    ),
     dtype=jnp.float64,
 )
 
@@ -344,12 +349,15 @@ def compute_ion_offset_from_za(
         xa_j = jnp.asarray(xa, dtype=jnp.float64)
         z_j = jnp.asarray(z, dtype=jnp.int32)
         a_j = jnp.asarray(a, dtype=jnp.float64)
-        valid = (z_j >= 1) & (z_j <= 28) & (a_j > 0.0)
+        has_a = a_j > 0.0
+        a_safe = jnp.where(has_a, a_j, 1.0)
+        ya_raw = jnp.where(has_a, xa_j / a_safe, 0.0)
+        # Reproduces eos/private/ion_offset.f90:58-81 at tag 26.4.1 (see #192).
+        norm = jnp.sum(ya_raw)
+        ya_norm = ya_raw / jnp.where(norm != 0.0, norm, 1.0)
+        valid = (z_j >= 1) & (z_j <= 28) & has_a
         idx = jnp.clip(z_j - 1, 0, 27)
-        a_safe = jnp.maximum(a_j, 1.0)
-        ev = jnp.where(
-            valid, NIST_IONIZATION_TABLE_EV[idx] * xa_j / a_safe, 0.0
-        )
+        ev = jnp.where(valid, NIST_IONIZATION_TABLE_EV[idx] * ya_norm, 0.0)
         return jnp.sum(ev) * constants.EV2ERG / constants.AMU
     xa_np = np.ascontiguousarray(xa, dtype=np.float64)
     a_np = np.ascontiguousarray(a, dtype=np.float64)

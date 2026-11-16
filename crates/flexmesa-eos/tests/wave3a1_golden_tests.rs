@@ -151,13 +151,16 @@ fn test_ion_offset_matches_nist_binding_table() {
     assert!((h_offset - expected_h).abs() / expected_h < 1.0e-15);
 
     // Solar-like mixture (X=0.70 H1, Y=0.28 He4, Z=0.02 C12)
+    // Reproduces `eos/private/ion_offset.f90:58-81` at tag 26.4.1 (#192).
     let xa = [0.70, 0.28, 0.02];
     let z = [1_usize, 2, 6];
     let a = [1.0, 4.0, 12.0];
     let mix_offset = compute_ion_offset_from_za(&xa, &z, &a);
-    let expected_mix = (0.70 * NIST_IONIZATION_TABLE_EV[0] / 1.0
+    let norm = 0.70 / 1.0 + 0.28 / 4.0 + 0.02 / 12.0;
+    let expected_mix = ((0.70 * NIST_IONIZATION_TABLE_EV[0] / 1.0
         + 0.28 * NIST_IONIZATION_TABLE_EV[1] / 4.0
         + 0.02 * NIST_IONIZATION_TABLE_EV[5] / 12.0)
+        / norm)
         * EV2ERG
         / AMU;
     assert!((mix_offset - expected_mix).abs() / expected_mix < 1.0e-15);

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-//! Upstream Fortran MESA (`main` at commit `0b2e6bb`) default values for [`StarControls`]
-//! (`star/defaults/controls.defaults` and `controls_dev.defaults`).
+//! Default values for [`StarControls`] (alignment with MESA release `26.4.1`
+//! `star/defaults/controls.defaults` and `controls_dev.defaults` is tracked in `#149`).
 
 use flexmesa_rates::ScreeningMode;
 use flexmesa_turb::{MltOption, SemiconvectionOption, ThermohalineOption};

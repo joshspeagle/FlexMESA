@@ -38,8 +38,9 @@ pub(crate) const CA: f64 = 0.5;
 /// Neutral-current axial coupling for $\mu, \tau$ neutrinos ($1 - C_A$).
 pub(crate) const CAP: f64 = 1.0 - CA;
 
-/// Weak coupling combination $C_V^2 + (N_\nu - 1) C_V'^2$ (`tfac0`).
-pub(crate) const TFAC0: f64 = CV * CV + (NUM_NEU_FAM - 1.0) * (CVP * CVP);
+/// Hardcoded plasma-neutrino Weinberg prefactor in `neu/private/mod_neu.f90:1582-1583`
+/// at tag `26.4.1` (reproduced verbatim for parity; logged as deferred bug `#193`).
+pub(crate) const PLAS_WEINBERG_PREF: f64 = 0.93153;
 
 /// Weak coupling combination $C_V^2 + C_A^2 + (N_\nu - 1)(C_V'^2 + C_A'^2)$.
 pub(crate) const TFAC1: f64 =

@@ -17,11 +17,11 @@ from flexmesa import star
 from flexmesa.star import e2e
 
 
-def test_tier2_cases_inventory_has_17_canonical_entries() -> None:
-    """Verify `TIER2_CASES` contains all 17 canonical Tier 2 case names."""
+def test_tier2_cases_inventory_has_16_canonical_entries() -> None:
+    """Verify `TIER2_CASES` contains all 16 MESA 26.4.1 Tier 2 case names."""
     assert isinstance(star.TIER2_CASES, tuple)
-    assert len(star.TIER2_CASES) == 17
-    assert len(set(star.TIER2_CASES)) == 17
+    assert len(star.TIER2_CASES) == 16
+    assert len(set(star.TIER2_CASES)) == 16
     assert star.TIER2_CASES[0] == "make_brown_dwarf"
     assert star.TIER2_CASES[-1] == "conductive_flame"
     assert set(star.TIER1_CASES).isdisjoint(set(star.TIER2_CASES))
@@ -210,7 +210,7 @@ def test_conductive_flame_speed_and_front_propagation() -> None:
             "/\n",
         ),
         (
-            "wd_o_ne_3_phase",
+            "make_o_ne_wd",
             "&star_job\n"
             "  relax_initial_mass_to_remove_h_env = .true.\n"
             "  new_mass = 1.10\n"

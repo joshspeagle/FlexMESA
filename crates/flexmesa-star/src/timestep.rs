@@ -87,13 +87,13 @@ pub fn filter_limit(x: f64) -> f64 {
 }
 
 /// Evaluates the upstream 5-point boxcar variation sum for a single structural
-/// variable (`eval_varcontrol` in `star/private/timestep.f90:2337-2353`).
+/// variable (`eval_varcontrol` in `star/private/timestep.f90:2332-2347`).
 ///
-/// Note on upstream Fortran MESA (`main` at commit `0b2e6bb`) parity (`DECISIONS #9`):
-/// `timestep.f90:2347-2349` computes the 3-point sum at `k = nz - 1`
+/// Note on upstream Fortran MESA (release `26.4.1`) parity (`DECISIONS #9`):
+/// `star/private/timestep.f90:2342-2343` computes the 3-point sum at `k = nz - 1`
 /// (`0`-based `nz - 2`) into `sumj` without accumulating `sumterm(j) = sumterm(j) + sumj`
 /// (an upstream dead-store), whereas `k = 2` (`0`-based `1`) IS accumulated at
-/// `timestep.f90:2350-2353`. Both Safe Rust and `eval_varcontrol_jax` preserve
+/// `star/private/timestep.f90:2339-2341`. Both Safe Rust and `eval_varcontrol_jax` preserve
 /// this exact upstream expression for 16-digit cross-backend parity.
 fn smoothed_var_sum(v: &[f64], v_old: &[f64]) -> f64 {
     let nz = v.len();

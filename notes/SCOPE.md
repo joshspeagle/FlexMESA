@@ -8,8 +8,9 @@ issue #145; the work is tracked in issue #140 and mirrored in
 ## Principles
 
 1. **Reference.** The reference is MESA release 26.4.1 (git tag `26.4.1`,
-   Zenodo record 19722306). Until issue #141 lands, the bundled inputs are
-   still those of MESA `main` at commit `0b2e6bb`.
+   commit `c8c2026`, Zenodo record 19722306). All bundled test inputs, module
+   golden outputs, exact hexadecimal module test outputs, and stored reference
+   histories come from MESA 26.4.1 (#141, `DECISIONS #22`).
 2. **Everything MESA ships is in scope.** That includes the third-party codes
    MESA bundles (GYRE, ADIPLS, STELLA) and a replacement for its plotting.
    The goal is a single package that can reproduce every test case in the
@@ -43,40 +44,39 @@ and no departures from upstream.
 ## Modules
 
 Upstream line counts are Fortran source and include files, excluding test
-programs and test suites, counted at `0b2e6bb` (to be recounted on 26.4.1
-under #141). "Status today" is from the audit
-([`audit/coverage-map.md`](audit/coverage-map.md)); it will be replaced by the
-generated dashboard (#174).
+programs and test suites, counted on MESA 26.4.1 (#141). "Status today" is from
+the audit ([`audit/coverage-map.md`](audit/coverage-map.md)); it will be
+replaced by the generated dashboard (#174).
 
 ### Core, required for v0.1.0
 
 | Upstream module | Lines | Status today | Packages |
 | :-- | --: | :-- | :-- |
-| `star` (evolution engine, excluding plotting) | about 135,000 | about 16% ported, 48% partial, 21% stub, 15% absent | #147 to #159, #161, #163 |
-| `star_data` | 7,000 | replaced by Rust state structs; controls coverage 43% of `&controls`, 25% of `&star_job` | #147, #149 |
-| `binary` (excluding plotting) | about 12,600 | closed-form kernels match; step structure does not | #160 |
-| `astero` | 8,500 | chi-squared and surface corrections match; searches and mode sources do not | #162 |
-| `eos` | 28,600 | kernels compared so far match; 5 of 102 controls read; several components not yet compared | #161 |
-| `kap` | 19,300 | blends and conduction match; 5 of 36 controls read; OP monochromatic opacities absent | #161 |
+| `star` (evolution engine, excluding plotting) | about 120,500 | about 16% ported, 48% partial, 21% stub, 15% absent | #147 to #159, #161, #163 |
+| `star_data` | 7,300 | replaced by Rust state structs; controls coverage 43% of `&controls`, 25% of `&star_job` | #147, #149 |
+| `binary` (excluding plotting) | about 11,600 | closed-form kernels match; step structure does not | #160 |
+| `astero` | 8,300 | chi-squared and surface corrections match; searches and mode sources do not | #162 |
+| `eos` | 28,700 | kernels compared so far match; 5 of 102 controls read; several components not yet compared | #161 |
+| `kap` | 22,400 | blends and conduction match; 5 of 36 controls read; OP monochromatic opacities absent | #161 |
 | `net` | 13,500 | driver and screening match; `approx21` and general-net paths not yet compared | #161 |
 | `rates` | 17,200 | table interpolation matches; 29 of 183 rate routines present | #161 |
 | `neu` | 2,200 | driver matches; fits not yet compared; golden test covers all 10,000 rows | #161 |
-| `atm` | 6,700 | T(tau) relations match; tables and other paths not yet compared | #161 |
-| `turb` | 2,100 | MLT, semiconvection and thermohaline match; TDC kernel not yet compared; state handling wrong in `star` | #157 |
-| `chem`, `ionization`, `colors` | 11,700 | golden tests cover substantial parts; data tables not compared | #161 |
+| `atm` | 6,900 | T(tau) relations match; tables and other paths not yet compared | #161 |
+| `turb` | 2,000 | MLT, semiconvection and thermohaline match; TDC kernel not yet compared; state handling wrong in `star` | #157 |
+| `chem`, `ionization`, `colors` | 11,900 | golden tests cover substantial parts; data tables not compared | #161 |
 | `num` | 20,000 | several integrators and optimizers are simplified stand-ins; golden coverage about 8% | #162, #161 |
 | `mtx` | 5,800 | block solvers algebraically faithful, not in upstream operation order | #165 |
 | `interp_1d`, `interp_2d` | 18,500 | golden tests cover selected rows | #161 |
 | `auto_diff` | 14,300 | golden test covers all records | none open |
 | `math` | 900 | ports the non-default math file; physics crates bypass it | #165 |
-| `const`, `utils` | 3,800 | values and goldens match | none open |
+| `const`, `utils` | 3,700 | values and goldens match | none open |
 
 ### Bundled third-party codes
 
 | Code | Lines | Needed by | When | Package |
 | :-- | --: | :-- | :-- | :-- |
-| GYRE 9.1.1 (with ForUM) | about 61,000 | `gyre_in_mesa_*` (6 cases), `rsp_gyre`, astero cases using `gyre` | after the core engine; required for v0.1.0 | #170 |
-| ADIPLS | about 31,000 | astero cases using `adipls` | after the core engine; required for v0.1.0 | #171 |
+| GYRE 8.1 | about 55,700 | `gyre_in_mesa_*` (6 cases), `rsp_gyre`, astero cases using `gyre` | after the core engine; required for v0.1.0 | #170 |
+| ADIPLS | about 30,900 | astero cases using `adipls` | after the core engine; required for v0.1.0 | #171 |
 | STELLA | about 62,000 | no test case runs it; `ccsn_IIp` writes its input files | after every test-suite case passes; not required for v0.1.0 | #172 |
 
 Until GYRE and ADIPLS are ported, real GYRE and ADIPLS (which run inside the
@@ -88,7 +88,7 @@ scaffolding and no case that depends on it counts as passing.
 
 | Upstream | Lines | Approach | Package |
 | :-- | --: | :-- | :-- |
-| `pgstar`, `pgbinary` and their controls | about 33,000 | Not translated line by line. Replaced by Python plotting that reads history and profile output, built incrementally as the port proceeds, with upstream's panel definitions as the specification | #173 |
+| `pgstar`, `pgbinary` and their controls | about 35,300 | Not translated line by line. Replaced by Python plotting that reads history and profile output, built incrementally as the port proceeds, with upstream's panel definitions as the specification | #173 |
 
 Plotting is built as we go. It is required for inspecting behaviour during
 development, and comparison figures are part of every trajectory-changing

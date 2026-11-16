@@ -280,9 +280,9 @@ def test_atm_uniform_varying_and_irradiated_match_mesa_golden() -> None:
         low_t_option="lowT_Freedman11",
     )
     np.testing.assert_allclose(
-        irr_out.ln_t / constants.LN10, 3.1180735947393834, rtol=1e-12
+        irr_out.ln_t / constants.LN10, 3.1115766787614829, rtol=1e-12
     )
-    np.testing.assert_allclose(irr_out.tau, 3.1669763036977079, rtol=1e-11)
+    np.testing.assert_allclose(irr_out.tau, 2.9101126947637423, rtol=1e-11)
 
 
 def test_net_eval_and_jax_custom_vjp_match_finite_differences() -> None:

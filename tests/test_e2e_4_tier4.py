@@ -15,7 +15,7 @@ from flexmesa import star
 
 
 def test_tier4_cases_inventory_and_cumulative_counts() -> None:
-    """Verify Tier 4 inventories and cumulative 95/107 + 32/32 case counts."""
+    """Verify Tier 4 inventories and MESA 26.4.1 case counts (`#141`)."""
     assert len(star.TIER4_STAR_CASES) == 16
     assert len(set(star.TIER4_STAR_CASES)) == 16
     assert len(star.TIER4_ACTIVE_STAR_CASES) == 15
@@ -25,20 +25,20 @@ def test_tier4_cases_inventory_and_cumulative_counts() -> None:
     }
     assert len(star.TIER4_ASTERO_CASES) == 8
     assert len(set(star.TIER4_ASTERO_CASES)) == 8
-    assert len(star.TIER4_DEV_CASES) == 32
-    assert len(set(star.TIER4_DEV_CASES)) == 32
+    assert len(star.TIER4_DEV_CASES) == 1
+    assert len(set(star.TIER4_DEV_CASES)) == 1
 
     prior_star = (
         set(star.TIER1_CASES) | set(star.TIER2_CASES) | set(star.TIER3_CASES)
     )
-    assert len(prior_star) == 72
+    assert len(prior_star) == 71
     assert set(star.TIER4_STAR_CASES).isdisjoint(prior_star)
     cumulative_active = (
         len(prior_star)
         + len(star.TIER4_ACTIVE_STAR_CASES)
         + len(star.TIER4_ASTERO_CASES)
     )
-    assert cumulative_active == 95
+    assert cumulative_active == 94
 
 
 def test_linear_oscillation_modes_and_astero_scaling_invariants() -> None:
@@ -72,12 +72,13 @@ def test_rsp_lina_modes_and_create_rsp_envelope_model(
     """Verify RSP LINA modes, envelope builder (#5), and 2nd-crossing edges."""
     modes = star.eval_rsp_lina_modes(4.165, 1438.8, 6050.0, 0.73, 0.007, 3)
     assert len(modes) == 3
-    assert abs(modes[0]["period_days"] - 3.978697530821434) < 1.0e-5
-    assert abs(modes[1]["period_days"] - 2.830703870669747) < 1.0e-5
-    assert abs(modes[2]["period_days"] - 2.1633975920623063) < 1.0e-5
-    assert abs(modes[0]["growth_rate"] - 1.4482187060608939e-2) < 1.0e-5
-    assert abs(modes[1]["growth_rate"] - 2.8322791345883322e-2) < 1.0e-5
-    assert abs(modes[2]["growth_rate"] - (-8.729792420348392e-2)) < 1.0e-5
+    # MESA 26.4.1 reference (`tests/fixtures/golden/rsp/lina_26_4_1.tsv`):
+    assert abs(modes[0]["period_days"] - 3.978609425761593) < 1.0e-5
+    assert abs(modes[1]["period_days"] - 2.830643645081431) < 1.0e-5
+    assert abs(modes[2]["period_days"] - 2.163348404507672) < 1.0e-5
+    assert abs(modes[0]["growth_rate"] - 1.4481857441727532e-2) < 1.0e-5
+    assert abs(modes[1]["growth_rate"] - 2.828851181618169e-2) < 1.0e-5
+    assert abs(modes[2]["growth_rate"] - (-8.73972025237343e-2)) < 1.0e-5
     assert modes[0]["period_days"] > modes[1]["period_days"]
     assert modes[1]["period_days"] > modes[2]["period_days"]
 
@@ -237,5 +238,5 @@ def test_upstream_mesa_tier4_and_dev_cases_suites_pass() -> None:
     dev_reports = star.run_dev_cases_suite(
         root, max_steps_per_stage=2, verify_restart=True
     )
-    assert len(dev_reports) == 32
+    assert len(dev_reports) == 1
     assert all(r["passed"] and r["assertions_passed"] for r in dev_reports)

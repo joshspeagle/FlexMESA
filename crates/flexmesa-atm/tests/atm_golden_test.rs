@@ -386,23 +386,25 @@ fn test_section3_t_tau_uniform_and_irradiated_match_golden_oracle() {
         )
         .unwrap();
 
+        // Expected values from MESA 26.4.1 `atm/test/test_output:88,95,99,100`
+        // (`lowT_Freedman11` at `Z = 0.01`, `kap/public/kap_def.f90:616-622`).
         assert!(
-            (out.kap - 4.749_836_820_148_591_7e-3).abs() < 1.0e-14,
+            (out.kap - 4.364_974_864_230_488_2e-3).abs() < 1.0e-14,
             "irradiated kap got {:.16e}",
             out.kap
         );
         assert!(
-            (out.tau - 3.166_976_303_697_707_9).abs() < 1.0e-12,
+            (out.tau - 2.910_112_694_763_742_3).abs() < 1.0e-12,
             "irradiated tau got {:.16e}",
             out.tau
         );
         assert!(
-            (out.ln_t.exp() - 1.312_422_280_827_965_6e3).abs() < 1.0e-10,
+            (out.ln_t.exp() - 1.292_934_960_441_607e3).abs() < 1.0e-10,
             "irradiated T got {:.16e}",
             out.ln_t.exp()
         );
         assert!(
-            (out.ln_t / LN10 - 3.118_073_594_739_383_4).abs() < 1.0e-13,
+            (out.ln_t / LN10 - 3.111_576_678_761_482_9).abs() < 1.0e-13,
             "irradiated logT got {:.16e}",
             out.ln_t / LN10
         );

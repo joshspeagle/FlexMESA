@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-//! Golden parity integration tests for Wave 3a.2 (`HELM` equation of state)
-//! against upstream Fortran MESA (`eos_helm_eval.f90` / `helm.f90`).
+//! Regression snapshot tests for Wave 3a.2 (`HELM` equation of state; `#146`).
+//! Real compiled MESA `26.4.1` component oracle comparisons are in
+//! `mesa_26_4_1_component_oracles_test.rs` (`T2-15`).
 
 #![allow(
     clippy::excessive_precision,
@@ -43,7 +44,7 @@ fn assert_helm_case(
 }
 
 #[test]
-fn test_helm_eos_pure_helium_matches_fortran_oracle() {
+fn test_helm_eos_pure_helium_matches_regression_snapshot() {
     let expected: [[f64; 5]; 16] = [
         [
             4.1667504138634065e1,
@@ -156,7 +157,7 @@ fn test_helm_eos_pure_helium_matches_fortran_oracle() {
 }
 
 #[test]
-fn test_helm_eos_pure_hydrogen_and_solar_match_fortran_oracle() {
+fn test_helm_eos_pure_hydrogen_and_solar_match_regression_snapshot() {
     let expected_h: [[f64; 5]; 16] = [
         [
             4.2648539097061040e1,

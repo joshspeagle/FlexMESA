@@ -72,11 +72,6 @@ def brent_safe_zero(
     limit = 200 if max_iter <= 0 else max_iter
 
     for _ in range(limit):
-        if (fc > 0.0 and fb > 0.0) or (fc < 0.0 and fb < 0.0):
-            c = sa
-            fc = fa
-            e = sb - sa
-            d = e
         if abs(fc) < abs(fb):
             sa = sb
             sb = c
@@ -86,7 +81,7 @@ def brent_safe_zero(
             fc = fa
         tol = 2.0 * eps * abs(sb) + t
         m = 0.5 * (c - sb)
-        if abs(m) <= tol or fb == 0.0 or (epsy > 0.0 and abs(fb) <= epsy):
+        if abs(m) <= tol or fb == 0.0:
             return sb, fb
         if abs(e) < tol or abs(fa) <= abs(fb):
             e = m
@@ -99,7 +94,8 @@ def brent_safe_zero(
             else:
                 q0 = fa / fc
                 r = fb / fc
-                p = s * (2.0 * m * q0 * (q0 - r) - (sb - sa) * (r - 1.0))
+                # Reproduces num/private/mod_brent.f90:653 at tag 26.4.1 (#194).
+                p = s * (2.0 * m * float(a) * (q0 - r) - (sb - sa) * (r - 1.0))
                 q = (q0 - 1.0) * (r - 1.0) * (s - 1.0)
             if p > 0.0:
                 q = -q
@@ -125,6 +121,13 @@ def brent_safe_zero(
         fb = float(func(sb))
         if not math.isfinite(fb):
             raise ValueError("non-finite f(x) in brent_safe_zero")
+        if abs(fb) < epsy:
+            return sb, fb
+        if (fb > 0.0 and fc > 0.0) or (fb <= 0.0 and fc <= 0.0):
+            c = sa
+            fc = fa
+            e = sb - sa
+            d = e
 
     raise RuntimeError("brent_safe_zero exceeded max_iter")
 

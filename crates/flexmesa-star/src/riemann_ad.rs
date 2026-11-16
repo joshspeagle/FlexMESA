@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 //! Coupled 3-cell stencil [`StarAdOrder1`] HLLC Riemann contact solver
 //! (`do_uface_and_pface`) for `u_flag` hydrodynamics
-//! (`star/private/hydro_riemann.f90:323-461`).
+//! (`star/private/hydro_riemann.f90:289-459`).
 //!
 //! All face contact states `(u_face_ad[k], p_face_ad[k])` depend exclusively on
 //! cells `k - 1` (`_m1`) and `k` (`_00`), so shifting `p_face_ad[k + 1]` and
@@ -51,7 +51,7 @@ pub fn calc_ptot_cell_ad(
 /// Evaluates HLLC contact velocity `u_face_ad[k]` and contact pressure
 /// `p_face_ad[k]` across all faces `k = 0..nz-1` with full 3-cell stencil
 /// [`StarAdOrder1`] derivatives (`do_uface_and_Pface` in
-/// `star/private/hydro_riemann.f90:323-461`).
+/// `star/private/hydro_riemann.f90:289-459`).
 ///
 /// # Errors
 /// Returns [`StarError::ConvergenceFailure`] if the acoustic impedance

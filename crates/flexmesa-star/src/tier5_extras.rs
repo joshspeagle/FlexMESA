@@ -3,7 +3,7 @@
 //! registry (`check_redo`, `other_physics_hooks`,
 //! `relax_composition_j_entropy`, `timing`), custom physics hooks
 //! (`eval_overshoot_dbl_exp`, `eval_grafener_kudritzki_wind_msun_yr`,
-//! `eval_xtrans_mesh_factor`, `verify_step_redo_bit_parity`), and full 91-case
+//! `eval_xtrans_mesh_factor`, `verify_step_redo_bit_parity`), and full 90-case
 //! active `star/test_suite` runner (`run_all_active_star_suite`).
 
 use std::fmt::Write as _;

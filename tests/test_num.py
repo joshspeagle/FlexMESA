@@ -181,12 +181,18 @@ def test_brent_all_ten_minimization_and_five_root_functions() -> None:
 
 
 def test_safe_root_matches_mesa_golden_sin_root() -> None:
-    """Verifies safe_root solvers on upstream test_support.f90 sin root."""
-    (x1, x3), (y1, y3) = num.look_for_brackets(0.0, 0.5, -10.0, 10.0, _fn_sin)
+    """Verifies safe_root solvers on MESA 26.4.1 `test_support.f90:95-127`."""
     r_mesa, _ = num.safe_root_with_brackets(
-        _fn_sin, x1, x3, y1, y3, epsx=1e-6, epsy=1e-6
+        _fn_sin,
+        0.0,
+        10.0,
+        _fn_sin(0.0)[0],
+        _fn_sin(10.0)[0],
+        epsx=1e-6,
+        epsy=1e-6,
     )
-    assert abs(r_mesa - 0.7480060995063712) < 1e-7
+    assert abs(r_mesa - 0.7480061088059349) < 1e-14
+    (x1, x3), (y1, y3) = num.look_for_brackets(0.0, 0.5, -10.0, 10.0, _fn_sin)
     r_exact, f_exact = num.safe_root_with_brackets(
         _fn_sin, x1, x3, y1, y3, epsx=1e-14, epsy=1e-14
     )

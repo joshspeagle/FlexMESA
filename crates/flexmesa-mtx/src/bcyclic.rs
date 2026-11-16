@@ -9,29 +9,37 @@
 //!
 //! # Algorithm
 //!
+//! Mirrors upstream MESA `mtx/private/bcyclic.f90` and
+//! `star/private/star_bcyclic.f90` (`cycle_onestep`, `cycle_rhs`, `cycle_solve`)
+//! in upstream's exact floating-point operation order (`#165`, `N1-8`):
+//!
 //! At reduction level $s \ge 0$ with stride $p = 2^s$:
-//! 1. **Odd-Row Normalization**: For every active odd multiple $j = (2m + 1)p <
-//!    N_z$, factor $D_j^{(s)} = P_j^{-1} L_j^{(D)} U_j^{(D)}$ and normalize the
-//!    off-diagonal blocks and right-hand side in place via $\tilde{L}_j =
-//!    (D_j^{(s)})^{-1} L_j^{(s)}$, $\tilde{U}_j = (D_j^{(s)})^{-1} U_j^{(s)}$,
-//!    and $\tilde{b}_j = (D_j^{(s)})^{-1} b_j^{(s)}$.
-//! 2. **Even-Row Schur Update**: Substitute $x_j = \tilde{b}_j - \tilde{L}_j
-//!    x_{j-p} - \tilde{U}_j x_{j+p}$ into every active even multiple
-//!    $k = 2m p < N_z$ to obtain $D_k^{(s+1)} = D_k^{(s)} - L_k^{(s)}
-//!    \tilde{U}_{k-p} - U_k^{(s)} \tilde{L}_{k+p}$, $L_k^{(s+1)} = -L_k^{(s)}
-//!    \tilde{L}_{k-p}$, $U_k^{(s+1)} = -U_k^{(s)} \tilde{U}_{k+p}$, and
-//!    $b_k^{(s+1)} = b_k^{(s)} - L_k^{(s)} \tilde{b}_{k-p} - U_k^{(s)}
-//!    \tilde{b}_{k+p}$.
+//! 1. **Odd-Row Normalization**: For every eliminated row $j = (2m + 1)p < N_z$
+//!    (upstream 1-based even block index `ns = 2, 4, ...`), factor
+//!    $D_j^{(s)} = P_j^{-1} L_j^{(D)} U_j^{(D)}$, negate the normalized
+//!    off-diagonal blocks $\hat{L}_j = -(D_j^{(s)})^{-1} L_j^{(s)}$ and
+//!    $\hat{U}_j = -(D_j^{(s)})^{-1} U_j^{(s)}$, and solve
+//!    $\hat{b}_j = (D_j^{(s)})^{-1} b_j^{(s)}$.
+//! 2. **Surviving-Row Schur Update**: For every surviving row $k = 2m p < N_z$
+//!    (upstream 1-based odd block index `ns = 1, 3, ...`), update
+//!    $D_k^{(s+1)} = D_k^{(s)} + U_k^{(s)} \hat{L}_{k+p} + L_k^{(s)} \hat{U}_{k-p}$
+//!    via `my_gemm_plus_mm` (`umat0 * lnext` interleaved with `lmat0 * uprev`),
+//!    $L_k^{(s+1)} = L_k^{(s)} \hat{L}_{k-p}$, $U_k^{(s+1)} = U_k^{(s)} \hat{U}_{k+p}$,
+//!    and $b_k^{(s+1)} = b_k^{(s)} - U_k^{(s)} \hat{b}_{k+p} - L_k^{(s)} \hat{b}_{k-p}$
+//!    via `my_gemv_mv`.
 //! 3. **Root Solve & Backward Substitution**: Once $2^s \ge N_z$, solve row
 //!    $k = 0$ via $x_0 = \left(D_0^{(s)}\right)^{-1} b_0^{(s)}$, then traverse
-//!    levels $s = S-1 \dots 0$ in reverse to recover all odd-multiple shells:
-//!    $$x_j = \tilde{b}_j - \tilde{L}_j x_{j-p} - \tilde{U}_j x_{j+p}.$$
+//!    levels $s = S-1 \dots 0$ in reverse via `my_gemv_p_mv`:
+//!    $$x_j = \hat{b}_j + \hat{U}_j x_{j+p} + \hat{L}_j x_{j-p}.$$
 
 use std::ops::Range;
 
 use rayon::prelude::*;
 
-use crate::block_tridiag::{accum_block_mv, check_blocks, sub_block_mm};
+use crate::block_tridiag::{
+    add_block_mm, add_block_mv, add_two_block_mm, add_two_block_mv,
+    check_blocks, sub_block_mv, sub_two_block_mv,
+};
 use crate::dense::{dgetrf, dgetrs, dgetrs_multi};
 use crate::MtxError;
 use flexmesa_utils::is_bad_slice;
@@ -53,19 +61,19 @@ const fn vec_range(r: usize, nvar: usize) -> Range<usize> {
     (r * nvar)..((r + 1) * nvar)
 }
 
-/// Negated block product $C \leftarrow -A B$ for $n \times n$ row-major blocks.
+/// Block product $C \leftarrow A B$ in upstream `my_gemm0_p1` order
+/// (`mtx/public/mtx_solve_routines.inc:313-325`).
 #[inline]
-fn neg_block_mm(n: usize, a: &[f64], b: &[f64], c: &mut [f64]) {
+fn zero_then_add_block_mm(n: usize, a: &[f64], b: &[f64], c: &mut [f64]) {
     c.fill(0.0);
-    sub_block_mm(n, a, b, c);
+    add_block_mm(n, a, b, c);
 }
 
-/// Normalizes a single odd block row $j = (2m + 1)p$ in place by factoring
-/// $D_j$ and solving $D_j \tilde{L}_j = L_j$, $D_j \tilde{U}_j = U_j$, and
-/// $D_j \tilde{b}_j = b_j$.
-///
-/// Because $j = (2m + 1)p \ge p$ for all $m \ge 0$, every odd row has a valid
-/// left neighbor $j - p = 2m p \ge 0$.
+/// Normalizes an eliminated block row $j = (2m + 1)p$ in place matching
+/// `cycle_onestep` (`star/private/star_bcyclic.f90:312-355`) and `cycle_rhs`
+/// (`star/private/star_bcyclic.f90:467-485`): factors $D_j$, solves and negates
+/// $\hat{L}_j = -D_j^{-1} L_j$ and $\hat{U}_j = -D_j^{-1} U_j$, and solves
+/// $\hat{b}_j = D_j^{-1} b_j$.
 fn normalize_odd_row(
     nvar: usize,
     row_idx: usize,
@@ -81,18 +89,23 @@ fn normalize_odd_row(
         other => other,
     })?;
     dgetrs_multi(nvar, nvar, d_j, ipiv, l_j)?;
+    for val in l_j.iter_mut() {
+        *val = -*val;
+    }
     if has_right {
         dgetrs_multi(nvar, nvar, d_j, ipiv, u_j)?;
+        for val in u_j.iter_mut() {
+            *val = -*val;
+        }
     } else {
         u_j.fill(0.0);
     }
     dgetrs(nvar, d_j, ipiv, b_j)
 }
 
-/// Computes the Schur complement update for even row $k = 2m p$ from normalized
-/// odd neighbors $k - p$ and $k + p$, updating `d_k` in place and writing the
-/// updated off-diagonal blocks and right-hand side into `(l_next, u_next,
-/// b_next)`.
+/// Computes the Schur complement update for surviving row $k = 2m p$ from
+/// normalized neighbors $k - p$ and $k + p$ in upstream `cycle_onestep` /
+/// `cycle_rhs` order (`star/private/star_bcyclic.f90:402-426, 506-524`).
 #[allow(clippy::too_many_arguments)]
 fn update_even_row(
     nvar: usize,
@@ -112,15 +125,14 @@ fn update_even_row(
     let u_k = &u_cur[blk_range(k, blk_sz)];
     b_next.copy_from_slice(&b_cur[vec_range(k, nvar)]);
 
-    if k >= stride {
+    let has_left = k >= stride;
+    let has_right = k + stride < nz;
+
+    if has_left {
         let jm = k - stride;
-        let l_jm = &l_cur[blk_range(jm, blk_sz)];
-        let u_jm = &u_cur[blk_range(jm, blk_sz)];
-        let b_jm = &b_cur[vec_range(jm, nvar)];
-        sub_block_mm(nvar, l_k, u_jm, d_k);
-        accum_block_mv(l_k, b_jm, -1.0, b_next);
         if jm >= stride {
-            neg_block_mm(nvar, l_k, l_jm, l_next);
+            let l_jm = &l_cur[blk_range(jm, blk_sz)];
+            zero_then_add_block_mm(nvar, l_k, l_jm, l_next);
         } else {
             l_next.fill(0.0);
         }
@@ -128,20 +140,38 @@ fn update_even_row(
         l_next.fill(0.0);
     }
 
-    if k + stride < nz {
+    if has_right {
         let jp = k + stride;
-        let l_jp = &l_cur[blk_range(jp, blk_sz)];
-        let u_jp = &u_cur[blk_range(jp, blk_sz)];
-        let b_jp = &b_cur[vec_range(jp, nvar)];
-        sub_block_mm(nvar, u_k, l_jp, d_k);
-        accum_block_mv(u_k, b_jp, -1.0, b_next);
         if jp + stride < nz {
-            neg_block_mm(nvar, u_k, u_jp, u_next);
+            let u_jp = &u_cur[blk_range(jp, blk_sz)];
+            zero_then_add_block_mm(nvar, u_k, u_jp, u_next);
         } else {
             u_next.fill(0.0);
         }
     } else {
         u_next.fill(0.0);
+    }
+
+    if has_right {
+        let jp = k + stride;
+        let l_jp = &l_cur[blk_range(jp, blk_sz)];
+        let b_jp = &b_cur[vec_range(jp, nvar)];
+        if has_left {
+            let jm = k - stride;
+            let u_jm = &u_cur[blk_range(jm, blk_sz)];
+            let b_jm = &b_cur[vec_range(jm, nvar)];
+            add_two_block_mm(nvar, u_k, l_jp, l_k, u_jm, d_k);
+            sub_two_block_mv(u_k, b_jp, l_k, b_jm, b_next);
+        } else {
+            add_block_mm(nvar, u_k, l_jp, d_k);
+            sub_block_mv(u_k, b_jp, b_next);
+        }
+    } else if has_left {
+        let jm = k - stride;
+        let u_jm = &u_cur[blk_range(jm, blk_sz)];
+        let b_jm = &b_cur[vec_range(jm, nvar)];
+        add_block_mm(nvar, l_k, u_jm, d_k);
+        sub_block_mv(l_k, b_jm, b_next);
     }
 }
 
@@ -312,7 +342,8 @@ pub fn solve_block_tridiag_bcyclic(
         &mut b_work[0..nvar],
     )?;
 
-    // Step 4: In-place backward substitution across strides in reverse order.
+    // Step 4: In-place backward substitution across strides in reverse order
+    // matching `cycle_solve` (`star/private/star_bcyclic.f90:561-585`).
     let mut x = b_work;
     for &p in strides.iter().rev() {
         let step = 2 * p;
@@ -322,20 +353,15 @@ pub fn solve_block_tridiag_bcyclic(
             let jm = j - p;
             let (left, rest) = x.split_at_mut(j * nvar);
             let (x_j, right) = rest.split_at_mut(nvar);
-            accum_block_mv(
-                &l_work[blk_range(j, blk_sz)],
-                &left[vec_range(jm, nvar)],
-                -1.0,
-                x_j,
-            );
+            let l_hat = &l_work[blk_range(j, blk_sz)];
+            let x_prev = &left[vec_range(jm, nvar)];
             if j + p < nz {
                 let right_off = (p - 1) * nvar;
-                accum_block_mv(
-                    &u_work[blk_range(j, blk_sz)],
-                    &right[right_off..right_off + nvar],
-                    -1.0,
-                    x_j,
-                );
+                let u_hat = &u_work[blk_range(j, blk_sz)];
+                let x_next = &right[right_off..right_off + nvar];
+                add_two_block_mv(u_hat, x_next, l_hat, x_prev, x_j);
+            } else {
+                add_block_mv(l_hat, x_prev, x_j);
             }
         }
     }

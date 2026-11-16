@@ -335,18 +335,26 @@ fn test_bcyclic_matches_block_thomas_across_grid_sizes() {
         let x_ref =
             solve_block_tridiagonal(nvar, nz, &lblk, &dblk, &ublk, &rhs)
                 .unwrap();
-        for &par in &[false, true] {
-            let x_bc = solve_block_tridiag_bcyclic(
-                nvar, nz, &lblk, &dblk, &ublk, &rhs, par,
-            )
-            .unwrap();
-            for (a, b) in x_ref.iter().zip(x_bc.iter()) {
-                let rel = (a - b).abs() / a.abs().max(1.0);
-                assert!(
-                    rel < 1.0e-13,
-                    "nz={nz} par={par} rel={rel:e} a={a} b={b}"
-                );
-            }
+        let x_serial = solve_block_tridiag_bcyclic(
+            nvar, nz, &lblk, &dblk, &ublk, &rhs, false,
+        )
+        .unwrap();
+        let x_parallel = solve_block_tridiag_bcyclic(
+            nvar, nz, &lblk, &dblk, &ublk, &rhs, true,
+        )
+        .unwrap();
+        for (idx, (&s_val, &p_val)) in
+            x_serial.iter().zip(x_parallel.iter()).enumerate()
+        {
+            assert_eq!(
+                s_val.to_bits(),
+                p_val.to_bits(),
+                "bcyclic serial vs parallel bit mismatch at nz={nz} idx={idx}: {s_val:e} vs {p_val:e}"
+            );
+        }
+        for (a, b) in x_ref.iter().zip(x_serial.iter()) {
+            let rel = (a - b).abs() / a.abs().max(1.0);
+            assert!(rel < 1.0e-13, "nz={nz} rel={rel:e} a={a} b={b}");
         }
     }
 }

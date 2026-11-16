@@ -70,12 +70,26 @@ pub fn dgetrf(
                 a.swap(k * n + j, pivot_row * n + j);
             }
         }
-        let diag = a[k * n + k];
-        for i in (k + 1)..n {
-            let mult = a[i * n + k] / diag;
-            a[i * n + k] = mult;
-            for j in (k + 1)..n {
-                a[i * n + j] -= mult * a[k * n + j];
+        // Match `my_getf2` (`mtx/private/my_lapack95.f90:280-315` and
+        // `mtx/public/mtx_solve_routines.inc:25-45`): scale by `da = 1 / a[k,k]`
+        // when `|a[k,k]| >= sfmin`, falling back to direct division near underflow.
+        if k + 1 < n {
+            let diag = a[k * n + k];
+            if diag.abs() >= f64::MIN_POSITIVE {
+                let da = 1.0 / diag;
+                for i in (k + 1)..n {
+                    a[i * n + k] *= da;
+                }
+            } else {
+                for i in (k + 1)..n {
+                    a[i * n + k] /= diag;
+                }
+            }
+            for i in (k + 1)..n {
+                let mult = a[i * n + k];
+                for j in (k + 1)..n {
+                    a[i * n + j] -= mult * a[k * n + j];
+                }
             }
         }
     }
@@ -118,28 +132,35 @@ pub fn dgetrs_trans(
     }
 
     if !trans {
+        for i in 0..n {
+            if lu[i * n + i] == 0.0 {
+                return Err(MtxError::SingularMatrix(i));
+            }
+        }
+        // Match `my_getrs` / `my_getrs1` (`mtx/public/mtx_solve_routines.inc:145-168,
+        // 218-240`): row swaps, column-oriented forward substitution skipping
+        // exact zeros, and downward column-oriented back-substitution.
         for (k, &piv) in ipiv.iter().enumerate() {
             if piv != k {
                 rhs.swap(k, piv);
             }
         }
-        for i in 0..n {
-            let mut sum = rhs[i];
-            for j in 0..i {
-                sum -= lu[i * n + j] * rhs[j];
+        for k in 0..n {
+            let b_k = rhs[k];
+            if b_k != 0.0 {
+                for i in (k + 1)..n {
+                    rhs[i] -= b_k * lu[i * n + k];
+                }
             }
-            rhs[i] = sum;
         }
-        for i in (0..n).rev() {
-            let diag = lu[i * n + i];
-            if diag == 0.0 {
-                return Err(MtxError::SingularMatrix(i));
+        for k in (0..n).rev() {
+            if rhs[k] != 0.0 {
+                rhs[k] /= lu[k * n + k];
+                let b_k = rhs[k];
+                for i in 0..k {
+                    rhs[i] -= b_k * lu[i * n + k];
+                }
             }
-            let mut sum = rhs[i];
-            for j in (i + 1)..n {
-                sum -= lu[i * n + j] * rhs[j];
-            }
-            rhs[i] = sum / diag;
         }
     } else {
         for i in 0..n {

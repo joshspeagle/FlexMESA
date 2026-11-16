@@ -16,7 +16,7 @@ Generated mechanically by `flexmesa harness` from `benchmarks/history_harness/ca
 | Executed cases reaching upstream termination | 0 |
 | Acceptance passes against MESA `26.4.1` (`pass`) | 0 |
 | Interim `0b2e6bb` comparisons within manifest tolerance | 0 |
-| Declared known gaps (`known_gaps.toml`) | 23 |
+| Declared known gaps (`known_gaps.toml`) | 24 |
 | Undeclared failures | 0 |
 
 ## Per-Case Status and Reference Availability
@@ -97,7 +97,7 @@ Generated mechanically by `flexmesa harness` from `benchmarks/history_harness/ca
 | `star` | `rsp_check_2nd_crossing` | `no_reference_yet` | `extras_finish_step` | - | - | - | - | - | - | no reference yet |
 | `star` | `rsp_gyre` | `no_reference_yet` | `extras_finish_step` | - | - | - | - | - | - | no reference yet |
 | `star` | `rsp_save_and_load_file` | `no_reference_yet` | `extras_finish_step|max_model_number` | - | - | - | - | - | - | no reference yet |
-| `star` | `semiconvection` | `interim_0b2e6bb` | `xa_central_lower_limit` | - | - | - | - | - | - | interim reference (not run) |
+| `star` | `semiconvection` | `interim_0b2e6bb` | `xa_central_lower_limit` | - | - | - | - | - | #152 | interim reference (not run) |
 | `star` | `simplex_solar_calibration` | `no_reference_yet` | `max_model_number|extras_finish_step` | - | - | - | - | - | - | no reference yet |
 | `star` | `split_burn_big_net` | `no_reference_yet` | `xa_central_lower_limit` | - | - | - | - | - | - | no reference yet |
 | `star` | `starspots` | `no_reference_yet` | `max_age` | - | - | - | - | - | #158 | no reference yet |

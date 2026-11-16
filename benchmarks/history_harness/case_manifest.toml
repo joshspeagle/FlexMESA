@@ -1,5 +1,13 @@
 # Canonical MESA 26.4.1 end-to-end trajectory manifest and reference-availability table (#143).
 # Generated from MESA release 26.4.1 test_suite/do1_test_source and final-stage ./rn inlists.
+#
+# Tolerances are for strict numerics mode, the only mode judged against MESA
+# (#165). They were set by the project lead's direction on 2026-11-16
+# (DECISIONS #20) and are expected to tighten further as the solver and mesh
+# become upstream's. Changing any of them, or adding a per-case override,
+# needs a DECISIONS entry with the old value, the new value and the reason.
+# Final tolerances on log quantities and masses are absolute differences;
+# `rel_<x>` is the relative difference in the independent variable.
 
 [metadata]
 mesa_release = "26.4.1"
@@ -9,46 +17,46 @@ zenodo_record = "19722306"
 independent_var = "star_age"
 
 [defaults.star.final_tolerances]
-rel_star_age = 0.02
-log_L = 0.02
-log_Teff = 0.01
-log_R = 0.02
-log_center_T = 0.02
-log_center_Rho = 0.05
+rel_star_age = 0.001
+log_L = 0.001
+log_Teff = 0.0005
+log_R = 0.001
+log_center_T = 0.001
+log_center_Rho = 0.002
 
 [defaults.star.track_tolerances]
-log_L = 0.15
-log_Teff = 0.05
-log_R = 0.10
-log_center_T = 0.05
-log_center_Rho = 0.15
+log_L = 0.005
+log_Teff = 0.002
+log_R = 0.005
+log_center_T = 0.002
+log_center_Rho = 0.005
 
 [defaults.binary]
 independent_var = "age"
 
 [defaults.binary.final_tolerances]
-rel_age = 0.02
-star_1_mass = 0.02
-star_2_mass = 0.02
-period_days = 0.05
+rel_age = 0.001
+star_1_mass = 0.001
+star_2_mass = 0.001
+period_days = 0.001
 
 [defaults.binary.track_tolerances]
-star_1_mass = 0.05
-star_2_mass = 0.05
+star_1_mass = 0.002
+star_2_mass = 0.002
 
 [defaults.astero]
 independent_var = "star_age"
 
 [defaults.astero.final_tolerances]
-rel_star_age = 0.02
-log_L = 0.02
-log_Teff = 0.01
-log_g = 0.02
+rel_star_age = 0.001
+log_L = 0.001
+log_Teff = 0.0005
+log_g = 0.001
 
 [defaults.astero.track_tolerances]
-log_L = 0.15
-log_Teff = 0.05
-log_g = 0.05
+log_L = 0.005
+log_Teff = 0.002
+log_g = 0.002
 
 [[cases]]
 suite = "star"
@@ -242,15 +250,15 @@ required_termination = "my termination condition"
 inherit_default_tolerances = false
 
 [cases.final_tolerances]
-rel_star_age = 0.02
-log_L = 0.02
-log_Teff = 0.01
-log_R = 0.02
+rel_star_age = 0.001
+log_L = 0.001
+log_Teff = 0.0005
+log_R = 0.001
 
 [cases.track_tolerances]
-log_L = 0.15
-log_Teff = 0.05
-log_R = 0.10
+log_L = 0.005
+log_Teff = 0.002
+log_R = 0.005
 
 [[cases]]
 suite = "star"

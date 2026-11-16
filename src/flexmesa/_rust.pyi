@@ -588,5 +588,9 @@ def binary_eval_tauris_vdh_expected_separation_rsun(a0_rsun: float, q0: float, q
 def binary_eval_brott_wind_msun_yr(l_surf_lsun: float, m_surf_msun: float, r_surf_rsun: float, t_surf_k: float, x_surf: float, y_surf: float, z_div_z_solar: float) -> float: ...  # noqa: E501
 def binary_run_test_suite_case(case_dir: str, max_steps_cap: int | None = None) -> dict[str, Any]: ...  # noqa: E501
 def binary_run_suite(mesa_dir: str, max_steps_cap: int | None = None) -> list[dict[str, Any]]: ...  # noqa: E501
+def trace_star_case(case_dir: str, out_target: str, max_steps_per_stage: int | None = None, skip_optional: bool = True, respect_intervals: bool = False, write_profiles: bool = False, is_logs_dir: bool = True) -> dict[str, Any]: ...  # noqa: E501
+def trace_binary_case(case_dir: str, out_target: str, max_steps: int | None = None, respect_intervals: bool = False, is_logs_dir: bool = True) -> dict[str, Any]: ...  # noqa: E501
+def trace_astero_case(case_dir: str, out_target: str, max_steps_per_stage: int | None = None, skip_optional: bool = True, respect_intervals: bool = False, write_profiles: bool = False, is_logs_dir: bool = True) -> dict[str, Any]: ...  # noqa: E501
+def mesa_read_log_file(path: str) -> dict[str, Any]: ...
 
 # fmt: on

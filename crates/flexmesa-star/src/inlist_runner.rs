@@ -220,6 +220,66 @@ pub struct StarLogsOptions<'a> {
     pub write_profiles_override: Option<bool>,
 }
 
+impl<'a> StarLogsOptions<'a> {
+    /// Constructs [`StarLogsOptions`] targeting either a `LOGS/` root directory
+    /// (`is_logs_dir = true`) or an explicit `history.data` path (`false`).
+    #[must_use]
+    pub fn from_target(
+        out_target: &'a Path,
+        is_logs_dir: bool,
+        respect_intervals: bool,
+        write_profiles: bool,
+    ) -> Self {
+        let history_interval_override = (!respect_intervals).then_some(1);
+        if is_logs_dir {
+            Self {
+                output_root: Some(out_target),
+                explicit_history_file: None,
+                history_interval_override,
+                write_profiles_override: Some(write_profiles),
+            }
+        } else {
+            Self {
+                output_root: None,
+                explicit_history_file: Some(out_target),
+                history_interval_override,
+                write_profiles_override: Some(false),
+            }
+        }
+    }
+
+    /// Builds the per-stage [`StarLogsWriter`] configured by `self` (if any).
+    ///
+    /// # Errors
+    /// Returns [`StarError`] if column resolution or output directory setup fails.
+    pub fn build_writer(
+        &self,
+        model: &StarModel,
+        case_dir: &Path,
+        stage_logs_dir: Option<&str>,
+    ) -> Result<Option<StarLogsWriter>, StarError> {
+        if let Some(exp_hist) = self.explicit_history_file {
+            Ok(Some(StarLogsWriter::for_explicit_history_file(
+                model,
+                case_dir,
+                exp_hist.to_path_buf(),
+                self.history_interval_override,
+            )?))
+        } else if let Some(out_root) = self.output_root {
+            Ok(Some(StarLogsWriter::for_stage_with_logs_dir(
+                model,
+                case_dir,
+                out_root,
+                stage_logs_dir,
+                self.history_interval_override,
+                self.write_profiles_override,
+            )?))
+        } else {
+            Ok(None)
+        }
+    }
+}
+
 /// Executes a single `inlist` stage on `model`, stepping until either a
 /// built-in `&controls` termination limit, an [`ExtrasDirective::Terminate`],
 /// or `max_steps_cap` is reached.
@@ -552,27 +612,11 @@ pub fn run_test_suite_case_with_logs(
                     extras.as_mut(),
                 )?;
 
-                let mut stage_logs = if let Some(exp_hist) =
-                    logs_opts.explicit_history_file
-                {
-                    Some(StarLogsWriter::for_explicit_history_file(
-                        &model,
-                        case_dir,
-                        exp_hist.to_path_buf(),
-                        logs_opts.history_interval_override,
-                    )?)
-                } else if let Some(out_root) = logs_opts.output_root {
-                    Some(StarLogsWriter::for_stage_with_logs_dir(
-                        &model,
-                        case_dir,
-                        out_root,
-                        logs_dir.as_deref(),
-                        logs_opts.history_interval_override,
-                        logs_opts.write_profiles_override,
-                    )?)
-                } else {
-                    None
-                };
+                let mut stage_logs = logs_opts.build_writer(
+                    &model,
+                    case_dir,
+                    logs_dir.as_deref(),
+                )?;
 
                 let rep = run_inlist_stage_with_logs(
                     &mut model,

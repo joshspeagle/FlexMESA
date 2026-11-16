@@ -1,0 +1,141 @@
+# Declared known gaps for upstream MESA 26.4.1 test-suite cases (#143, #144).
+# Every entry links an open sub-issue of #140. CI fails on undeclared failures
+# and flags declared gaps that begin passing.
+
+[[gaps]]
+suite = "star"
+case = "1.3M_ms_high_Z"
+issue = "#152"
+reason = "Reaches log_L_upper_limit within final tolerances (+0.95% age), but +0.95% TAMS age offset shifts post-TAMS core contraction at 3.59-3.68 Gyr by max |d log_center_Rho| = 0.592 > 0.15 and max |d log_center_T| = 0.110 > 0.05 starting at step 91 (audit M-1)."
+
+[[gaps]]
+suite = "star"
+case = "1M_thermohaline"
+issue = "#152"
+reason = "Exceeds 20-minute wall-time guard under non-upstream Newton and retry control (audit M-4)."
+
+[[gaps]]
+suite = "star"
+case = "20M_z2m2_high_rotation"
+issue = "#157"
+reason = "Case history_columns.list requests unported MLT++ gradT_excess_* columns."
+
+[[gaps]]
+suite = "star"
+case = "adjust_net"
+issue = "#157"
+reason = "Case inlist enables okay_to_reduce_gradT_excess and requests unported MLT++ history columns."
+
+[[gaps]]
+suite = "star"
+case = "cburn_inward"
+issue = "#157"
+reason = "Case history_columns.list requests unported MLT++ gradT_excess_* columns."
+
+[[gaps]]
+suite = "star"
+case = "ccsn_IIp"
+issue = "#161"
+reason = "Case history_columns.list requests unported hydro shock and colors bolometric columns."
+
+[[gaps]]
+suite = "star"
+case = "conserve_angular_momentum"
+issue = "#152"
+reason = "Exceeds 20-minute wall-time guard under non-upstream solver and retry control (audit M-9)."
+
+[[gaps]]
+suite = "star"
+case = "custom_colors"
+issue = "#159"
+reason = "Case history_columns.list requests unported phase_of_evolution and colors columns."
+
+[[gaps]]
+suite = "star"
+case = "gyre_in_mesa_wd"
+issue = "#157"
+reason = "Case history_columns.list requests unported MLT++ gradT_excess_* columns and depends on GYRE (#170)."
+
+[[gaps]]
+suite = "star"
+case = "hb_2M"
+issue = "#155"
+reason = "Core helium-burning lifetime is 71.4 Myr vs 135.6 Myr upstream because predictive mixing does not grow the core (audit M-2)."
+
+[[gaps]]
+suite = "star"
+case = "high_rot_darkening"
+issue = "#158"
+reason = "Case history_columns.list requests unported gravity-darkening columns."
+
+[[gaps]]
+suite = "star"
+case = "hot_cool_wind"
+issue = "#152"
+reason = "Exceeds 20-minute wall-time guard under non-upstream solver and retry control (audit M-7)."
+
+[[gaps]]
+suite = "star"
+case = "magnetic_braking"
+issue = "#150"
+reason = "Timestep collapses to floor after 24 retries and case requests unported gradT_excess_* columns (audit M-8, #157)."
+
+[[gaps]]
+suite = "star"
+case = "make_brown_dwarf"
+issue = "#154"
+reason = "create_initial_model rescales a ZAMS model instead of relaxing a polytrope, producing a 17x smaller radius (audit M-6)."
+
+[[gaps]]
+suite = "star"
+case = "make_co_wd"
+issue = "#157"
+reason = "Case history_columns.list requests unported MLT++ gradT_excess_* columns."
+
+[[gaps]]
+suite = "star"
+case = "make_o_ne_wd"
+issue = "#157"
+reason = "Case history_columns.list requests unported MLT++ gradT_excess_* columns."
+
+[[gaps]]
+suite = "star"
+case = "ns_c"
+issue = "#157"
+reason = "Case history_columns.list requests unported MLT++ gradT_excess_* columns."
+
+[[gaps]]
+suite = "star"
+case = "pisn"
+issue = "#161"
+reason = "Case history_columns.list requests unported hydro shock and pair-instability diagnostics."
+
+[[gaps]]
+suite = "star"
+case = "starspots"
+issue = "#158"
+reason = "Case history_columns.list requests unported starspot history columns."
+
+[[gaps]]
+suite = "star"
+case = "tzo"
+issue = "#161"
+reason = "Case history_columns.list requests unported hydro shock history columns."
+
+[[gaps]]
+suite = "star"
+case = "wd_acc_small_dm"
+issue = "#159"
+reason = "Case history_columns.list requests unported mass-adjustment energy-accounting columns."
+
+[[gaps]]
+suite = "star"
+case = "wd_cool_0.6M"
+issue = "#148"
+reason = "Case-keyed tier-2 overrides disable remeshing and burning, shortening cooling age by 9.5% (audit M-5)."
+
+[[gaps]]
+suite = "binary"
+case = "double_bh"
+issue = "#161"
+reason = "Component stellar history_columns.list requests unported hydro/colors columns and coupled orbit departs (#160)."

@@ -94,6 +94,8 @@ pub mod star_wave5_py;
 pub mod tier_a_data;
 /// Tier A bindings for `utils`, `testing`, and `schema`.
 pub mod tier_a_parse;
+/// PyO3 bindings for `flexmesa trace` (`star`, `binary`, `astero`) and MESA log reading.
+pub mod trace_py;
 /// Tier B bindings for `turb` (`MLT` and `TDC` convective transport).
 pub mod turb_py;
 /// Batch PyO3 bindings for the Wave 5 benchmark suite.
@@ -287,6 +289,7 @@ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     star_wave5_2_py::register(m)?;
     binary_py::register(m)?;
     astero_py::register(m)?;
+    trace_py::register(m)?;
     wave5_bench_py::register(m)?;
     Ok(())
 }

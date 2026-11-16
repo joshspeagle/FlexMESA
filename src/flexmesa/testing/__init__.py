@@ -8,6 +8,20 @@ format with standard `E` or Fortran `D` exponents).
 
 from __future__ import annotations
 
-from flexmesa.testing import golden
+from flexmesa.testing import (
+    case_manifest,
+    case_report,
+    golden,
+    harness_runner,
+    history_compare,
+    trace_cli,
+)
 
-__all__: list[str] = ["golden"]
+__all__: list[str] = [
+    "case_manifest",
+    "case_report",
+    "golden",
+    "harness_runner",
+    "history_compare",
+    "trace_cli",
+]

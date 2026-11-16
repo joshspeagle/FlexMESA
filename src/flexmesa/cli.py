@@ -7,6 +7,7 @@ import argparse
 import sys
 
 from flexmesa.data import fetch
+from flexmesa.testing import trace_cli
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -21,6 +22,10 @@ def main(argv: list[str] | None = None) -> int:
     args_list = list(sys.argv[1:] if argv is None else argv)
     if args_list and args_list[0] == "data":
         return fetch.main(args_list[1:])
+    if args_list and args_list[0] == "trace":
+        return trace_cli.trace_main(args_list[1:])
+    if args_list and args_list[0] == "harness":
+        return trace_cli.harness_main(args_list[1:])
 
     parser = argparse.ArgumentParser(
         prog="flexmesa",
@@ -35,6 +40,14 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser(
         "data",
         help="Download, verify, or inspect FlexMESA physics & test bundles.",
+    )
+    sub.add_parser(
+        "trace",
+        help="Run a star, binary, or astero case and stream MESA history logs.",
+    )
+    sub.add_parser(
+        "harness",
+        help="Generate the 106-case reference table or run trajectory gates.",
     )
     parsed = parser.parse_args(args_list)
     if parsed.version:

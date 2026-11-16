@@ -11,7 +11,8 @@ use flexmesa_star::controls::StarError;
 use flexmesa_star::history::extract_history_row;
 use flexmesa_star::inlist::InlistBundle;
 use flexmesa_star::inlist_runner::{
-    run_inlist_stage, ExtrasDirective, StageRunReport, StarExtras,
+    run_inlist_stage_with_logs, ExtrasDirective, StageRunReport, StarExtras,
+    StarLogsOptions,
 };
 use flexmesa_star::model::StarModel;
 use flexmesa_star::star_job_init::init_or_update_model_from_bundle;
@@ -345,6 +346,27 @@ pub fn run_single_astero_track(
     max_steps_cap: Option<usize>,
     case_dir: &Path,
 ) -> Result<(AsteroSampleResult, StageRunReport, StarModel), StarError> {
+    run_single_astero_track_with_logs(
+        base_bundle,
+        ctrl,
+        params,
+        sample_number,
+        max_steps_cap,
+        case_dir,
+        StarLogsOptions::default(),
+    )
+}
+
+/// Evolves one stellar track for `params`, optionally streaming `LOGS/history.data` (`#143`).
+pub fn run_single_astero_track_with_logs(
+    base_bundle: &InlistBundle,
+    ctrl: &AsteroSearchControls,
+    params: AsteroParamSet,
+    sample_number: usize,
+    max_steps_cap: Option<usize>,
+    case_dir: &Path,
+    logs_opts: StarLogsOptions<'_>,
+) -> Result<(AsteroSampleResult, StageRunReport, StarModel), StarError> {
     let mut bundle = base_bundle.clone();
     apply_params_to_bundle(&mut bundle, ctrl, &params);
     if let Some(cap) = max_steps_cap {
@@ -357,7 +379,14 @@ pub fn run_single_astero_track(
         entered_warm: false, entered_hot: false, passed_lnuc_limit: false, bad_count: 0,
     };
     let mut model = init_or_update_model_from_bundle(&bundle, None, &mut extras)?;
-    let stage = run_inlist_stage(&mut model, &bundle, &mut extras, max_steps_cap)?;
+    let mut logs_writer = logs_opts.build_writer(&model, case_dir, None)?;
+    let stage = run_inlist_stage_with_logs(
+        &mut model,
+        &bundle,
+        &mut extras,
+        max_steps_cap,
+        logs_writer.as_mut(),
+    )?;
     let best = extras.best_sample.unwrap_or_else(|| {
         let fb_mod = extras.fallback_model.as_ref().map_or(&model, |(_, m)| m);
         eval_model_astero_sample(fb_mod, ctrl, params, sample_number, case_dir)
@@ -372,8 +401,27 @@ pub fn run_star_astero(
     max_steps_per_stage: Option<usize>,
     ctrl: &AsteroSearchControls,
 ) -> Result<AsteroSearchReport, StarError> {
+    run_star_astero_with_logs(
+        case_dir,
+        entry_inlist,
+        max_steps_per_stage,
+        ctrl,
+        StarLogsOptions::default(),
+    )
+}
+
+/// Runs the multi-track asteroseismic search driver while streaming `LOGS/` and
+/// search results into `logs_opts.output_root` when requested (`#143`).
+pub fn run_star_astero_with_logs(
+    case_dir: &Path,
+    entry_inlist: &str,
+    max_steps_per_stage: Option<usize>,
+    ctrl: &AsteroSearchControls,
+    logs_opts: StarLogsOptions<'_>,
+) -> Result<AsteroSearchReport, StarError> {
     let base_bundle = InlistBundle::from_file_in_case_dir(case_dir, entry_inlist)?;
-    let out_dir: PathBuf = case_dir.join(&ctrl.astero_results_directory);
+    let results_base = logs_opts.output_root.unwrap_or(case_dir);
+    let out_dir: PathBuf = results_base.join(&ctrl.astero_results_directory);
     let _ = fs::create_dir_all(&out_dir);
 
     let mut smoke_ctrl;
@@ -386,6 +434,9 @@ pub fn run_star_astero(
         ctrl
     };
     let track_cap = if max_steps_per_stage.is_some() { 1 } else { usize::MAX };
+    let want_logs =
+        logs_opts.output_root.is_some() || logs_opts.explicit_history_file.is_some();
+    let mut best_chi2_seen = f64::INFINITY;
     let (mut samples, mut total_steps) = (Vec::new(), 0usize);
     let (mut last_termination, mut last_model) = (String::new(), None);
     let mut eval_param_set = |p: AsteroParamSet| -> f64 {
@@ -393,15 +444,42 @@ pub fn run_star_astero(
             return 1.0e99;
         }
         let s_num = samples.len() + 1;
-        let Ok((sample, stage, m)) = run_single_astero_track(
-            &base_bundle, active_ctrl, p, s_num, max_steps_per_stage, case_dir,
+        let sample_hist_path = out_dir.join(format!("sample_{s_num:04}_history.data"));
+        let trial_logs = if want_logs {
+            StarLogsOptions {
+                output_root: None,
+                explicit_history_file: Some(sample_hist_path.as_path()),
+                history_interval_override: logs_opts.history_interval_override,
+                write_profiles_override: Some(false),
+            }
+        } else {
+            StarLogsOptions::default()
+        };
+        let Ok((sample, stage, m)) = run_single_astero_track_with_logs(
+            &base_bundle, active_ctrl, p, s_num, max_steps_per_stage, case_dir, trial_logs,
         ) else {
             return 1.0e99;
         };
         total_steps += stage.steps_taken;
         last_termination = stage.termination_code;
-        last_model = Some(m);
         let c2 = sample.chi2;
+        if want_logs && (c2 < best_chi2_seen || samples.is_empty()) && sample_hist_path.is_file() {
+            best_chi2_seen = best_chi2_seen.min(c2);
+            if let Some(exp_dst) = logs_opts.explicit_history_file {
+                if let Some(parent) = exp_dst.parent() {
+                    let _ = fs::create_dir_all(parent);
+                }
+                let _ = fs::copy(&sample_hist_path, exp_dst);
+            } else if let Some(out_root) = logs_opts.output_root {
+                let dst_dir = out_root.join(&m.controls.output.log_directory);
+                let _ = fs::create_dir_all(&dst_dir);
+                let _ = fs::copy(
+                    &sample_hist_path,
+                    dst_dir.join(&m.controls.output.star_history_name),
+                );
+            }
+        }
+        last_model = Some(m);
         write_sample_file(&out_dir, &sample);
         samples.push(sample);
         c2

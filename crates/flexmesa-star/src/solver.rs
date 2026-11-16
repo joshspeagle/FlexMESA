@@ -360,6 +360,14 @@ pub fn solve_henyey_step(
             model.xa_sub_xa_start.clear();
             model.unpack_xh();
             model.set_m_grav_and_grav();
+            if crate::step_trace::enabled(model.model_number + 1) {
+                eprintln!(
+                    "[trace] solver model={} dt={:.4e} line search failed at iter {iter} \
+                     rnorm={residual_norm:.3e} rmax={max_residual:.3e}",
+                    model.model_number + 1,
+                    model.dt,
+                );
+            }
             return Err(StarError::ConvergenceFailure(format!(
                 "line search failed at Newton iteration {iter}"
             )));
@@ -392,6 +400,38 @@ pub fn solve_henyey_step(
             converged = true;
             break;
         }
+    }
+
+    if crate::step_trace::enabled(model.model_number + 1) {
+        let (k_max, i_max, v_max) =
+            crate::step_trace::argmax_abs(&sys.equ, sys.nvar);
+        let (tol_rn, tol_mr, tol_cn, tol_mc) =
+            active_solver_tolerances_with_gold(
+                &model.controls,
+                active_gold_level(model),
+                iter_used,
+            );
+        eprintln!(
+            "[trace] solver model={} dt={:.4e} nz={} conv={} iters={} \
+             rnorm={:.3e}/{:.1e} rmax={:.3e}/{:.1e} at k={} eq={} (nvar_hydro={}) \
+             cnorm={:.3e}/{:.1e} cmax={:.3e}/{:.1e}",
+            model.model_number + 1,
+            model.dt,
+            sys.nz,
+            converged,
+            iter_used,
+            residual_norm,
+            tol_rn,
+            v_max,
+            tol_mr,
+            k_max,
+            i_max,
+            model.layout.nvar_hydro,
+            correction_norm,
+            tol_cn,
+            max_correction,
+            tol_mc,
+        );
     }
 
     if include_chem {

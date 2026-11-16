@@ -211,3 +211,22 @@ with tempfile.TemporaryDirectory() as tmpdir:
         f"loaded shapes={[v.shape for v in loaded.tensors.values()]}"
     )
 ```
+
+---
+
+## 5. Incremental Trajectory Tracing and Harness Comparisons (`flexmesa trace`, `flexmesa harness`)
+
+To run any upstream `star`, `binary`, or `astero` test-suite case and stream MESA-formatted `LOGS/history.data` or `binary_history.data` rows on every accepted step (preserving partial trajectories if a wall-clock or memory guard stops the run), invoke `flexmesa trace`:
+
+```bash
+flexmesa trace star 1.3M_ms_high_Z --out ./run_out --timeout-sec 600 --max-rss-gb 6.0
+flexmesa trace binary jdot_gr_check --out ./bin_out --timeout-sec 600 --max-rss-gb 6.0
+flexmesa trace astero surface_effects --out ./astero_out
+```
+
+To regenerate the 106-case MESA `26.4.1` reference-availability table (`notes/audit/case_table.md`) or run guarded trajectory comparisons against `benchmarks/history_harness/case_manifest.toml` and `benchmarks/history_harness/known_gaps.toml`, invoke `flexmesa harness`:
+
+```bash
+flexmesa harness table --check
+flexmesa harness run --preset pr-ci --markdown-out case_table.md --json-out case_table.json --gate
+```

@@ -54,6 +54,27 @@ impl MesaLogTable {
     }
 }
 
+fn parse_mesa_float_token(tok: &str) -> Result<f64, std::num::ParseFloatError> {
+    if let Ok(fv) = tok.parse::<f64>() {
+        return Ok(fv);
+    }
+    let normalized = tok.replace(['d', 'D'], "E");
+    if let Ok(fv) = normalized.parse::<f64>() {
+        return Ok(fv);
+    }
+    let bytes = normalized.as_bytes();
+    for idx in (1..bytes.len()).rev() {
+        let ch = bytes[idx];
+        let prev = bytes[idx - 1];
+        if (ch == b'+' || ch == b'-') && prev != b'E' && prev != b'e' {
+            let candidate =
+                format!("{}E{}", &normalized[..idx], &normalized[idx..]);
+            return candidate.parse::<f64>();
+        }
+    }
+    normalized.parse::<f64>()
+}
+
 fn tokenize_header_values(line: &str) -> Result<Vec<MesaHeaderValue>, StarError> {
     let mut out = Vec::new();
     let bytes = line.as_bytes();
@@ -88,8 +109,7 @@ fn tokenize_header_values(line: &str) -> Result<Vec<MesaHeaderValue>, StarError>
             if let Ok(iv) = tok.parse::<i64>() {
                 out.push(MesaHeaderValue::Int(iv));
             } else {
-                let normalized = tok.replace(['d', 'D'], "E");
-                let fv = normalized.parse::<f64>().map_err(|e| {
+                let fv = parse_mesa_float_token(tok).map_err(|e| {
                     StarError::IoError(format!(
                         "invalid numeric token {tok:?} in MESA log header: {e}"
                     ))
@@ -174,17 +194,13 @@ pub fn read_mesa_log_str(text: &str) -> Result<MesaLogTable, StarError> {
                 seen = j + 1 + trimmed.split_whitespace().skip(j + 1).count();
                 break;
             }
-            let v = if let Ok(fv) = tok.parse::<f64>() {
-                fv
-            } else {
-                tok.replace(['d', 'D'], "E").parse::<f64>().map_err(|e| {
-                    StarError::IoError(format!(
-                        "MESA log line {} col {}: invalid float {tok:?}: {e}",
-                        offset + 7,
-                        j + 1
-                    ))
-                })?
-            };
+            let v = parse_mesa_float_token(tok).map_err(|e| {
+                StarError::IoError(format!(
+                    "MESA log line {} col {}: invalid float {tok:?}: {e}",
+                    offset + 7,
+                    j + 1
+                ))
+            })?;
             col_vecs[j].push(v);
             seen = j + 1;
         }

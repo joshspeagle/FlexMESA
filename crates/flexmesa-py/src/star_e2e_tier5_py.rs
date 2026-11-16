@@ -22,7 +22,7 @@ use crate::star_e2e_tier4_py::{run_star_suite_detached, str_slice_to_vec};
 use crate::star_helpers_py::to_py_err;
 use crate::star_py::PyStarModel;
 
-fn binary_report_to_pydict<'py>(
+pub(crate) fn binary_report_to_pydict<'py>(
     py: Python<'py>,
     rep: &BinaryCaseRunReport,
 ) -> PyResult<Bound<'py, PyDict>> {

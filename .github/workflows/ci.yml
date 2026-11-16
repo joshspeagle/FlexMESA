@@ -121,6 +121,7 @@ jobs:
           pytest src tests \
             --ignore=tests/test_docs_snippets.py \
             --ignore=tests/test_mesa_paper_figures.py \
+            --ignore=tests/test_history_harness.py \
             --ignore-glob="tests/test_e2e_*.py" \
             -v
 
@@ -238,3 +239,71 @@ jobs:
           python scripts/build_docs_figures.py
           mkdocs build --strict --site-dir site
           pytest tests/test_docs_snippets.py tests/test_mesa_paper_figures.py -v
+
+  history-harness:
+    name: Upstream History Harness (PR Subset)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust cargo target and registry
+        uses: Swatinem/rust-cache@v2
+
+      - name: Cache FlexMESA data-v1 and MESA test bundles
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/flexmesa
+          key: flexmesa-data-v1-${{ hashFiles('src/flexmesa/data/bundles.toml') }}
+
+      - name: Fetch verified data-v1 physics and MESA test bundles
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          command -v zstd >/dev/null || (sudo apt-get update && sudo apt-get install -y zstd)
+          python3 src/flexmesa/data/fetch.py fetch --include-test-inputs
+          echo "FLEXMESA_DATA_DIR=$HOME/.cache/flexmesa/data" >> "$GITHUB_ENV"
+          echo "MESA_DIR=$HOME/.cache/flexmesa/mesa_test_inputs" >> "$GITHUB_ENV"
+
+      - name: Install FlexMESA in release mode
+        env:
+          MATURIN_PEP517_ARGS: "--profile=release"
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install maturin
+          python -m pip install --no-build-isolation -e ".[test]"
+
+      - name: Run harness unit suite and verify generated case table
+        run: |
+          pytest tests/test_history_harness.py -v
+
+      - name: Run PR uncapped trajectory subset
+        run: |
+          OUT_DIR="${{ runner.temp }}/flexmesa-pr-harness"
+          mkdir -p "$OUT_DIR"
+          flexmesa harness run \
+            --preset pr-ci \
+            --timeout-sec 480 \
+            --max-rss-gb 6.0 \
+            --work-dir "$OUT_DIR/logs" \
+            --markdown-out "$OUT_DIR/case_table.md" \
+            --json-out "$OUT_DIR/case_table.json" \
+            --gate
+
+      - name: Upload PR trajectory table and histories
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-history-harness-artifacts
+          if-no-files-found: ignore
+          path: ${{ runner.temp }}/flexmesa-pr-harness/

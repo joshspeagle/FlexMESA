@@ -47,8 +47,8 @@ mod search_methods;
 pub mod surface_corr;
 
 pub use e2e::{
-    run_astero_suite, run_astero_test_suite_case, TempCaseStaging,
-    TIER4_ASTERO_CASES,
+    run_astero_suite, run_astero_test_suite_case,
+    run_astero_test_suite_case_with_logs, TempCaseStaging, TIER4_ASTERO_CASES,
 };
 pub use inlist_astero::{
     parse_astero_search_controls, AsteroParamSet, AsteroSearchControls,
@@ -75,7 +75,8 @@ pub use scaling::{
     eval_radial_delta_nu_ols, DELTA_NU_SUN, NU_MAX_SUN, TEFF_SUN_ASTERO,
 };
 pub use search_driver::{
-    run_single_astero_track, run_star_astero, AsteroSearchReport,
+    run_single_astero_track, run_single_astero_track_with_logs,
+    run_star_astero, run_star_astero_with_logs, AsteroSearchReport,
 };
 pub use surface_corr::{
     estimate_l0_n_obs, eval_combined_corr, eval_cubic_corr, eval_kjeldsen_corr,

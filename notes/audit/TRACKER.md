@@ -87,11 +87,11 @@ and solver); B2 and C3 (model initialisation).
 | Plotting | Built as the port proceeds | #173 |
 | Progress reporting | Generated dashboard in README and docs | #174 |
 | v0.1.0 | Defined in [`../SCOPE.md`](../SCOPE.md) | #145 |
+| Upstream development cases (`star/dev_cases_*`) | Confirmed for after v0.1.0 | #145 |
 | PR #138 | Merge the code, not the claims | PR #138 |
 | Earlier issues | Closed as superseded; #140 is the only tracker | below |
 
-Still open: whether the 32 upstream development cases are part of a later
-milestone; what to do with behaviour that cannot be reproduced exactly (asked
+Still open: what to do with behaviour that cannot be reproduced exactly (asked
 case by case).
 
 ## Post-parity backlog

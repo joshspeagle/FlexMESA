@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-//! Upstream Fortran MESA (`r24.08.1`, commit `0b2e6bb`) golden parity tests for
+//! Upstream Fortran MESA (`main` at commit `0b2e6bb`) golden parity tests for
 //! static `RSP` envelope integration (`STAH`), Kuhfuss/Smolec envelope
 //! relaxation (`RELAX_ENV`), linear non-adiabatic radial pulsation stability
 //! (`do_LINA`), and Cepheid 2nd-crossing instability-strip boundary

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-//! Upstream Fortran MESA (`r24.08.1`, commit `0b2e6bb`) golden parity tests for
+//! Upstream Fortran MESA (`main` at commit `0b2e6bb`) golden parity tests for
 //! nonlinear `RSP` `HYD` time integration (`star/private/rsp_step.f90` &
 //! `star/private/rsp.f90`), multi-cycle period/amplitude detection, `GYRE`
 //! `l = 0` BVP velocity kick (`rsp_gyre`), lossless `.mod` save/load

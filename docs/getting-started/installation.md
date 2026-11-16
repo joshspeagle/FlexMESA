@@ -125,7 +125,7 @@ flexmesa data verify
 flexmesa data status
 ```
 
-  To also download the 3,142 upstream MESA `r24.08.1` golden `test_output` and `test_suite` input files into `~/.cache/flexmesa/mesa_test_inputs` for full end-to-end parity verification, pass `--include-test-inputs`:
+  To also download the 3,142 upstream MESA `main` at commit `0b2e6bb` golden `test_output` and `test_suite` input files into `~/.cache/flexmesa/mesa_test_inputs` for full end-to-end parity verification, pass `--include-test-inputs`:
 
 ```bash
 flexmesa data fetch --include-test-inputs

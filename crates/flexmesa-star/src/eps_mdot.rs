@@ -188,24 +188,16 @@ pub fn calculate_eps_mdot(
 /// cancellation-free `prev` state snapshots (`adjust_mass.f90:98-132` and
 /// `eps_mdot.f90:620-634`).
 pub fn calculate_eps_mdot_with_change(
-    model: &mut StarModel,
-    prev: &PrevMassState<'_>,
-    change_in_dm: &[f64],
-    dt: f64,
+    model: &mut StarModel, prev: &PrevMassState<'_>, change_in_dm: &[f64], dt: f64,
 ) {
     let nz = model.nz;
     if model.eps_mdot.len() != nz {
         model.eps_mdot.resize(nz, 0.0);
     }
     let eps_fac = model.controls.mix_wind.eps_mdot_factor;
-    if nz == 0
-        || dt <= 0.0
-        || eps_fac == 0.0
-        || prev.dm.len() != nz
-        || prev.peos.len() != nz
-        || prev.rho.len() != nz
-        || prev.te.len() != nz
-        || change_in_dm.len() != nz
+    if nz == 0 || dt <= 0.0 || eps_fac == 0.0
+        || prev.dm.len() != nz || prev.peos.len() != nz
+        || prev.rho.len() != nz || prev.te.len() != nz || change_in_dm.len() != nz
     {
         model.eps_mdot.fill(0.0);
         return;
@@ -219,25 +211,16 @@ pub fn calculate_eps_mdot_with_change(
 
     let mut rho_w_flux = vec![0.0; nz + 1];
     for k in (0..nz).rev() {
-        rho_w_flux[k] =
-            rho_w_flux[k + 1] + change_in_dm[k] / prev.rho[k].max(1.0e-99);
+        rho_w_flux[k] = rho_w_flux[k + 1] + change_in_dm[k] / model.rho[k].max(1.0e-99);
     }
 
-    let p_bar: Vec<f64> = (0..=nz)
-        .map(|k| interpolate_onto_faces(prev.peos, prev.dm, k))
-        .collect();
-    let rho_bar: Vec<f64> = (0..=nz)
-        .map(|k| interpolate_onto_faces(prev.rho, prev.dm, k).max(1.0e-99))
-        .collect();
-    let te_bar: Vec<f64> = (0..=nz)
-        .map(|k| interpolate_onto_faces(prev.te, prev.dm, k))
-        .collect();
+    let p_bar: Vec<f64> = (0..=nz).map(|k| interpolate_onto_faces(&model.peos, prev.dm, k)).collect();
+    let rho_bar: Vec<f64> = (0..=nz).map(|k| interpolate_onto_faces(&model.rho, prev.dm, k).max(1.0e-99)).collect();
+    let te_bar: Vec<f64> = (0..=nz).map(|k| interpolate_onto_faces(prev.te, prev.dm, k)).collect();
 
     let use_mc = model.controls.use_mass_corrections;
-    let cancellation_free = prev.r.len() == nz
-        && prev.m_grav.len() == nz
-        && prev.energy.len() == nz
-        && prev.ke.len() == nz;
+    let cancellation_free = prev.r.len() == nz && prev.m_grav.len() == nz
+        && prev.energy.len() == nz && prev.ke.len() == nz;
 
     let d_r: Vec<f64> = if cancellation_free {
         (0..nz)
@@ -245,8 +228,7 @@ pub fn calculate_eps_mdot_with_change(
                 if rho_w_flux[k] == 0.0 {
                     0.0
                 } else {
-                    let r_old = prev.r[k].max(1.0);
-                    let r_new = model.r[k].max(1.0);
+                    let (r_old, r_new) = (prev.r[k].max(1.0), model.r[k].max(1.0));
                     (3.0 / (4.0 * std::f64::consts::PI)) * rho_w_flux[k]
                         / (r_new * r_new + r_new * r_old + r_old * r_old)
                 }
@@ -313,73 +295,298 @@ pub fn calculate_eps_mdot_with_change(
     }
 
     let leak_frac = compute_leak_frac(
-        model,
-        &mass_flux,
-        dt,
-        model.controls.mix_wind.eps_mdot_leak_frac_factor,
+        model, &mass_flux, dt, model.controls.mix_wind.eps_mdot_leak_frac_factor,
     );
-
-    // Propagate un-leaked entropy perturbations along the direction of mass
-    // flow (`leak_control` / `leak` in `eps_mdot.f90:189-470`).
-    let mut eps_out = vec![0.0; nz];
-    if mass_flux[0] > 0.0 {
-        let mut carried_erg_s = 0.0_f64;
-        for k in 0..nz {
-            let dm_k = model.dm[k].max(1.0e-99);
-            if mass_flux[k] <= 0.0 && mass_flux[k + 1] <= 0.0 {
-                if carried_erg_s != 0.0 {
-                    let target = k.saturating_sub(1);
-                    let dm_t = model.dm[target].max(1.0e-99);
-                    eps_out[target] += carried_erg_s / dm_t;
-                    carried_erg_s = 0.0;
-                }
-                eps_out[k] = power_cells[k] / dm_k;
-                continue;
-            }
-            if leak_frac[k] >= 1.0 {
-                eps_out[k] = (power_cells[k] + carried_erg_s) / dm_k;
-                carried_erg_s = 0.0;
-            } else {
-                let stay_frac =
-                    (dm_k / total_mass_through_cell[k]).clamp(0.0, 1.0);
-                let stay_power = stay_frac * power_cells[k];
-                let thru_power =
-                    (1.0 - stay_frac) * power_cells[k] + carried_erg_s;
-                let is_last_down = mass_flux[k + 1] <= 0.0;
-                if is_last_down {
-                    eps_out[k] = (stay_power + thru_power) / dm_k;
-                    carried_erg_s = 0.0;
-                } else {
-                    eps_out[k] =
-                        (stay_power + leak_frac[k] * thru_power) / dm_k;
-                    carried_erg_s = (1.0 - leak_frac[k]) * thru_power;
-                }
-            }
-        }
-    } else {
-        let mut carried_erg_s = 0.0_f64;
-        for k in (0..nz).rev() {
-            let dm_k = model.dm[k].max(1.0e-99);
-            if mass_flux[k] >= 0.0 {
-                eps_out[k] = power_cells[k] / dm_k;
-                continue;
-            }
-            if leak_frac[k] >= 1.0 {
-                eps_out[k] = (power_cells[k] + carried_erg_s) / dm_k;
-                carried_erg_s = 0.0;
-            } else {
-                let stay_frac =
-                    (dm_k / total_mass_through_cell[k]).clamp(0.0, 1.0);
-                let stay_power = stay_frac * power_cells[k];
-                let thru_power =
-                    (1.0 - stay_frac) * power_cells[k] + carried_erg_s;
-                eps_out[k] = (stay_power + leak_frac[k] * thru_power) / dm_k;
-                carried_erg_s = (1.0 - leak_frac[k]) * thru_power;
-            }
-        }
-    }
-
+    let eps_out = leak_control_parcel(
+        nz, &mass_flux, &model.dm, prev.dm, &total_mass_through_cell, &power_cells, &leak_frac,
+    );
     for k in 0..nz {
         model.eps_mdot[k] = eps_fac * eps_out[k];
     }
+}
+
+fn make_compressed_intersect(
+    dm1: &[f64],
+    dm2: &[f64],
+    nz: usize,
+) -> (Vec<f64>, Vec<[i32; 2]>) {
+    let mut intersects = vec![0.0_f64; 2 * nz + 1];
+    let mut ranges = vec![[-1_i32, -1_i32]; 2 * nz + 1];
+    let mut rem1 = dm1.to_vec();
+    let mut rem2 = dm2.to_vec();
+    let mut j = nz;
+    let mut k = nz;
+    let mut counter = 2 * nz;
+    let (mut side, mut diff) = if dm1[j] > dm2[j] {
+        ranges[counter] = [j as i32, k as i32];
+        intersects[counter] = dm2[k];
+        counter -= 1;
+        rem1[j] -= dm2[k];
+        rem2[j] -= dm2[k];
+        (1_u8, dm1[j] - dm2[k])
+    } else {
+        ranges[counter] = [j as i32, k as i32];
+        intersects[counter] = dm1[j];
+        counter -= 1;
+        rem1[j] -= dm1[j];
+        rem2[j] -= dm1[j];
+        (2_u8, dm2[k] - dm1[j])
+    };
+    while k > 0 && j > 0 && ((side == 1 && k > 1) || (side == 2 && j > 1)) {
+        if side == 1 {
+            k -= 1;
+            ranges[counter] = [j as i32, k as i32];
+            if dm2[k] < diff {
+                intersects[counter] = dm2[k];
+                rem1[j] -= dm2[k];
+                rem2[k] -= dm2[k];
+                diff -= dm2[k];
+            } else {
+                intersects[counter] = diff;
+                rem1[j] -= diff;
+                rem2[k] -= diff;
+                diff = dm2[k] - diff;
+                side = 2;
+            }
+            counter -= 1;
+        } else {
+            j -= 1;
+            ranges[counter] = [j as i32, k as i32];
+            if dm1[j] < diff {
+                intersects[counter] = dm1[j];
+                rem1[j] -= dm1[j];
+                rem2[k] -= dm1[j];
+                diff -= dm1[j];
+            } else {
+                intersects[counter] = diff;
+                rem1[j] -= diff;
+                rem2[k] -= diff;
+                diff = dm1[j] - diff;
+                side = 1;
+            }
+            counter -= 1;
+        }
+    }
+    if j > 1 {
+        for i in (1..=j).rev() {
+            ranges[counter] = [i as i32, 0];
+            intersects[counter] = rem1[i];
+            counter -= 1;
+        }
+    } else {
+        for i in (1..=k).rev() {
+            ranges[counter] = [0, i as i32];
+            intersects[counter] = rem2[i];
+            counter -= 1;
+        }
+    }
+    (intersects, ranges)
+}
+
+fn compute_pass_fraction(
+    i: i32,
+    j: usize,
+    i_min: &[i32],
+    i_max: &[i32],
+    pf: &[Vec<f64>],
+) -> f64 {
+    let ji = j as i32;
+    if i >= i_min[j] && i <= i_max[j] {
+        pf[j][(i - i_min[j]) as usize]
+    } else if i > ji.max(i_max[j]) || i < ji.min(i_min[j]) {
+        0.0
+    } else {
+        1.0
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn leak_segment(
+    nz: usize, i_start: i32, i_end: i32, i_min: &[i32], i_max: &[i32],
+    j_min: &[i32], j_max: &[i32], pf: &[Vec<f64>], dm: &[f64], delta_m: f64,
+    eps_per_tot: &[f64], leak_frac: &[f64], accumulated: &mut [f64],
+) {
+    if i_start == i_end {
+        return;
+    }
+    let dir = if i_start < i_end { 1_i32 } else { -1_i32 };
+    let mut excess = vec![0.0_f64; nz + 1];
+    let mut i = i_start;
+    while i != i_end + dir {
+        let iu = i as usize;
+        if leak_frac[iu] >= 1.0 {
+            if i != i_start && leak_frac[(i - dir) as usize] < 1.0 {
+                for j in j_min[iu]..=j_max[iu] {
+                    if j >= 0 {
+                        accumulated[iu] += excess[j as usize];
+                        excess[j as usize] = 0.0;
+                    }
+                }
+            }
+        } else {
+            for j in j_min[iu]..=j_max[iu] {
+                if j < 0 {
+                    continue;
+                }
+                let ju = j as usize;
+                if (i == i_end && j > 0) || j == i {
+                    accumulated[iu] += excess[ju];
+                    excess[ju] = 0.0;
+                } else if i == i_end && i == 1 && j == 0 {
+                    let pf_10 = compute_pass_fraction(1, 0, i_min, i_max, pf);
+                    excess[0] -= delta_m * pf_10 * eps_per_tot[1];
+                    accumulated[1] += leak_frac[1] * excess[0];
+                    excess[0] = 0.0;
+                } else {
+                    let pf_ij = compute_pass_fraction(i, ju, i_min, i_max, pf);
+                    let pass_mass = if j > 0 { pf_ij * dm[ju] } else { -pf_ij * delta_m };
+                    let next = excess[ju] + dm[iu] * eps_per_tot[iu] * pass_mass;
+                    accumulated[iu] += leak_frac[iu] * next;
+                    excess[ju] = (1.0 - leak_frac[iu]) * next;
+                }
+            }
+        }
+        i += dir;
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn leak_control_parcel(
+    nz: usize, mass_flux_0: &[f64], dm_0: &[f64], prev_dm_0: &[f64],
+    tot_mass_0: &[f64], power_0: &[f64], leak_0: &[f64],
+) -> Vec<f64> {
+    let mut dm = vec![0.0_f64; nz + 1];
+    let mut prev_dm = vec![0.0_f64; nz + 1];
+    let mut tot_mass = vec![0.0_f64; nz + 1];
+    let mut eps_per_tot = vec![0.0_f64; nz + 1];
+    let mut leak_frac = vec![1.0_f64; nz + 1];
+    for k in 0..nz {
+        dm[k + 1] = dm_0[k].max(1.0e-99);
+        prev_dm[k + 1] = prev_dm_0[k].max(1.0e-99);
+        tot_mass[k + 1] = tot_mass_0[k].max(1.0e-99);
+        eps_per_tot[k + 1] = power_0[k] / (dm[k + 1] * tot_mass[k + 1]);
+        leak_frac[k + 1] = leak_0[k];
+    }
+    let mut mf = vec![0.0_f64; nz + 2];
+    mf[1..=(nz + 1)].copy_from_slice(&mass_flux_0[..=nz]);
+    let delta_m = if mf[1] == 0.0 { -1.0 } else { mf[1] };
+
+    let (intersects, ranges) = make_compressed_intersect(&dm, &prev_dm, nz);
+    let mut i_min = vec![(nz + 1) as i32; nz + 1];
+    let mut i_max = vec![-1_i32; nz + 1];
+    for &[j, i] in &ranges[1..=(2 * nz)] {
+        if j >= 0 {
+            let ju = j as usize;
+            i_min[ju] = i_min[ju].min(i);
+            i_max[ju] = i_max[ju].max(i);
+        }
+    }
+    let mut pf: Vec<Vec<f64>> = (0..=nz)
+        .map(|j| vec![0.0_f64; (i_max[j] - i_min[j] + 1).max(0) as usize])
+        .collect();
+    let mut counter = 1_usize;
+    for j in 0..=nz {
+        for i in i_min[j]..=i_max[j] {
+            pf[j][(i - i_min[j]) as usize] = intersects[counter];
+            counter += 1;
+        }
+        let ji = j as i32;
+        for i in (i_min[j] + 1)..=ji.min(i_max[j]) {
+            let idx = (i - i_min[j]) as usize;
+            pf[j][idx] += pf[j][idx - 1];
+        }
+        for i in (ji.max(i_min[j])..i_max[j]).rev() {
+            let idx = (i - i_min[j]) as usize;
+            pf[j][idx] += pf[j][idx + 1];
+        }
+        let denom = if j > 0 { dm[j] } else { -delta_m };
+        for v in &mut pf[j] {
+            *v /= denom;
+        }
+    }
+
+    let mut j_min = vec![(nz + 1) as i32; nz + 1];
+    let mut j_max = vec![-1_i32; nz + 1];
+    for i in 1..=nz {
+        let ii = i as i32;
+        if mf[i] >= 0.0 && mf[i + 1] >= 0.0 {
+            j_min[i] = ii;
+        }
+        if mf[i] <= 0.0 && mf[i + 1] <= 0.0 {
+            j_max[i] = ii;
+        }
+        if mf[i] >= 0.0 && mf[i + 1] <= 0.0 {
+            j_min[i] = ii;
+            j_max[i] = ii;
+        }
+    }
+    for &[j, i] in &ranges[1..=(2 * nz)] {
+        if i > 0 {
+            let iu = i as usize;
+            if mf[iu] >= 0.0 && mf[iu + 1] >= 0.0 {
+                j_max[iu] = j_max[iu].max(j);
+            }
+            if mf[iu] <= 0.0 && mf[iu + 1] <= 0.0 {
+                j_min[iu] = j_min[iu].min(j);
+            }
+            if mf[iu] <= 0.0 && mf[iu + 1] >= 0.0 {
+                j_min[iu] = j_min[iu].min(j);
+                j_max[iu] = j_max[iu].max(j);
+            }
+        }
+    }
+
+    let mut accumulated = vec![0.0_f64; nz + 1];
+    let (mut i_start, mut i_end) = (1_i32, 1_i32);
+    let mut sgn = if mf[1] > 0.0 { 1 } else if mf[1] < 0.0 { -1 } else { 0 };
+    let nzi = nz as i32;
+    while i_start <= nzi && i_end <= nzi {
+        match sgn.cmp(&0) {
+            std::cmp::Ordering::Greater => {
+                let next_mf = mf[(i_end + 1) as usize];
+                if next_mf > 0.0 {
+                    i_end += 1;
+                } else {
+                    leak_segment(nz, i_start, i_end, &i_min, &i_max, &j_min, &j_max, &pf, &dm, delta_m, &eps_per_tot, &leak_frac, &mut accumulated);
+                    i_start = i_end;
+                    sgn = if next_mf < 0.0 { -1 } else { 0 };
+                }
+            }
+            std::cmp::Ordering::Less => {
+                let next_mf = mf[(i_start + 1) as usize];
+                if next_mf < 0.0 {
+                    i_start += 1;
+                } else {
+                    leak_segment(nz, i_start, i_end, &i_min, &i_max, &j_min, &j_max, &pf, &dm, delta_m, &eps_per_tot, &leak_frac, &mut accumulated);
+                    i_end = i_start;
+                    sgn = i32::from(next_mf > 0.0);
+                }
+            }
+            std::cmp::Ordering::Equal => {
+                let next_mf = mf[(i_start + 1) as usize];
+                if next_mf > 0.0 {
+                    sgn = 1;
+                } else if next_mf < 0.0 {
+                    sgn = -1;
+                } else {
+                    leak_segment(nz, i_start, i_end, &i_min, &i_max, &j_min, &j_max, &pf, &dm, delta_m, &eps_per_tot, &leak_frac, &mut accumulated);
+                }
+                i_start += 1;
+                i_end += 1;
+            }
+        }
+    }
+
+    let mut out = vec![0.0_f64; nz];
+    for j in 1..=nz {
+        let mut val = accumulated[j] / dm[j];
+        if leak_frac[j] >= 1.0 {
+            val += eps_per_tot[j] * tot_mass[j];
+        } else {
+            let pf_jj = compute_pass_fraction(j as i32, j, &i_min, &i_max, &pf);
+            val += eps_per_tot[j] * dm[j] * pf_jj;
+        }
+        out[j - 1] = val;
+    }
+    out
 }

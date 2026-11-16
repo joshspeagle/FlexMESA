@@ -411,6 +411,13 @@ class StarModel(_arrays.StarModelArrays):
                 float(self.ln_peos_surf),
                 float(self.ln_t_surf),
                 float(self.dt),
+                r_center=float(self.r_center),
+                l_center=float(self.l_center),
+                non_nuc_neu_start=jnp.asarray(self.non_nuc_neu_start),
+                ln_r_start=jnp.asarray(self.ln_r_start),
+                m_center=float(self.m_center),
+                v_center=float(self.v_center),
+                peos_start=jnp.asarray(self.peos_start),
             )
         )
 

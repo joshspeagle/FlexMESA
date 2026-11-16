@@ -61,6 +61,8 @@ pub struct StarControls {
     pub redo_conv_for_dr_lt_mixing_length: bool,
     /// Surface boundary condition option (`AtmOption`).
     pub atm_option: AtmOption,
+    /// Named atmosphere table when `atm_option == AtmOption::Table` (e.g., `"photosphere"`).
+    pub atm_table: String,
     /// Grey $T(\tau)$ relation (`AtmTTauRelation::Eddington` default).
     pub atm_t_tau_relation: AtmTTauRelation,
     /// Optical depth multiplicative factor $\tau_{\mathrm{factor}}$ (`1.0`).
@@ -359,6 +361,10 @@ pub struct StarControls {
     pub nonlocal_nico_decay_heat: bool,
     /// Whether convective premixing energy release is included (`do_premix_heating`).
     pub do_premix_heating: bool,
+    /// Step threshold at or after which TDC replaces Cox MLT (`steps_before_use_tdc`, `0` disables override).
+    pub steps_before_use_tdc: isize,
+    /// TDC radiative damping coefficient $\alpha_r$ (`TDC_alpha_R`, `0.0` default).
+    pub tdc_alpha_r: f64,
     /// TDC turbulent pressure/work coefficient $\alpha_m$ (`TDC_alpha_M`).
     pub tdc_alpha_m: f64,
     /// Include TDC turbulent energy in the energy equation (`TDC_include_eturb_in_energy_equation`).

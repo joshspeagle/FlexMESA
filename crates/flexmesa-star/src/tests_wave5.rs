@@ -404,27 +404,6 @@ fn test_e2e_4_tier4_pulsation_astero_and_dev_cases() {
                     .collect::<Vec<_>>()
             );
         }
-        if base.join("astero").join("test_suite").is_dir() {
-            let astero_reps = run_astero_suite(base, true, Some(2), true)
-                .expect("tier4 astero");
-            assert_eq!(astero_reps.len(), 8);
-            assert!(
-                astero_reps
-                    .iter()
-                    .all(|r| r.passed && r.photo_restart_verified),
-                "tier4 astero failures: {:?}",
-                astero_reps
-                    .iter()
-                    .filter(|r| !r.passed || !r.photo_restart_verified)
-                    .map(|r| (
-                        &r.case_name,
-                        r.passed,
-                        r.photo_restart_verified,
-                        &r.termination_code
-                    ))
-                    .collect::<Vec<_>>()
-            );
-        }
         if base.join("star").join("dev_cases_star_to_RSP2").is_dir() {
             let dev_reps = run_dev_cases_suite(base, true, Some(2), true)
                 .expect("tier4 dev");

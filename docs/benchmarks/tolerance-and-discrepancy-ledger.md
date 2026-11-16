@@ -204,6 +204,8 @@ Stage `E2E-5` completes the reproduction of all **107 active upstream MESA `test
 | **Track 3 `Fidelity-4` (`#115`, Closing `#109`): `.mod` Loader, Multi-Step Relaxation & Physical E2E Parity** | `model_io.rs`, `relax.rs`, `star_job_init.rs`, `hydro_state.rs`, `tests_fidelity4.rs` | Line-by-line restoration of extended `.mod` checkpoint headers (`M_center`, `cumulative_energy_error`) and optional zone columns (`w`, `et_RSP`, `w_div_wc`, `alpha_RTI` / `Alpha_RTI`) in `read_mod_str` and `write_mod_string` (`read_model.f90`, `write_model.f90`), plus dedicated multi-step physical relaxation loops in `relax.rs` (`relax_mass_to_target`, `relax_to_remove_h_env`, `relax_core_boundary`, `relax_tau_factor_to_target`, `relax_irradiation_to_target`, `relax_from_profile_files` for `relax.f90`) with `doing_relax` tracking across all 107 active `test_suite` cases and 32 `dev_cases_*` | `0 ULP` |
 | **Cumulative Active `test_suite` Total** | **`91` `star` + `8` `binary` + `8` `astero` = `107 / 107` active cases (`+ 32 / 32` `dev_cases_*`)** | 100% execution, physical target assertion, and `0 ULP` `.photo` restart parity across the entire upstream MESA end-to-end test suite | `0 ULP` (`139 / 139`) |
 
+*(Note: The coupled binary and astero drivers from PR #138 are merged unverified, pending [#143](https://github.com/joshspeagle/FlexMESA/issues/143) and [#160](https://github.com/joshspeagle/FlexMESA/issues/160); wider corrections to the claims on this page are tracked in [#142](https://github.com/joshspeagle/FlexMESA/issues/142).)*
+
 ---
 
 ## Programmatic Golden Comparison Example

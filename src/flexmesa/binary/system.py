@@ -3,12 +3,20 @@
 
 from __future__ import annotations
 
+import pathlib
+from typing import Any
+
 from flexmesa import _rust
 from flexmesa.star import model as star_model
 
 
 class BinarySystem:
-    """Coupled binary system (`Donor + PointMass` or `Donor + Accretor`)."""
+    """Coupled binary system (`Donor + PointMass` or `Donor + Accretor`).
+
+    Note:
+        The coupled step sequence, orbital integrator, and implicit RLOF search
+        are unverified against real MESA output (pending #143 and #160).
+    """
 
     def __init__(self, rust_sys: _rust.RustBinarySystem) -> None:
         """Initialize from a compiled `RustBinarySystem` handle."""
@@ -147,3 +155,49 @@ class BinarySystem:
     def max_timestep_sec(self) -> float:
         """Next maximum binary timestep (s)."""
         return self._inner.max_timestep_sec
+
+
+def run_binary_test_suite_case(
+    case_dir: str | pathlib.Path,
+    max_steps_cap: int | None = None,
+) -> dict[str, Any]:
+    """Execute a single `binary/test_suite/<case>` directory through coupled
+    `BinarySystem` + `StarModel` evolution.
+
+    Args:
+        case_dir: Path to the `binary/test_suite/<case>` directory.
+        max_steps_cap: Optional maximum coupled binary steps (`None` evolves
+            uncapped to physical termination).
+
+    Returns:
+        `BinaryCaseRunReport` dictionary.
+    """
+    return dict(
+        _rust.binary_run_test_suite_case(
+            str(case_dir),
+            None if max_steps_cap is None else int(max_steps_cap),
+        )
+    )
+
+
+def run_binary_suite(
+    mesa_dir: str | pathlib.Path,
+    max_steps_cap: int | None = None,
+) -> list[dict[str, Any]]:
+    """Execute all 8 `binary/test_suite` cases under `mesa_dir` through coupled
+    `BinarySystem` + `StarModel` evolution.
+
+    Args:
+        mesa_dir: Root path of the MESA installation containing
+            `binary/test_suite`.
+        max_steps_cap: Optional maximum coupled binary steps (`None` evolves
+            uncapped to physical termination).
+
+    Returns:
+        List of 8 `BinaryCaseRunReport` dictionaries.
+    """
+    raw = _rust.binary_run_suite(
+        str(mesa_dir),
+        None if max_steps_cap is None else int(max_steps_cap),
+    )
+    return [dict(item) for item in raw]

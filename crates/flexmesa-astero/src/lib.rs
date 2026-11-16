@@ -1,11 +1,16 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 //! Asteroseismic scaling relations, surface-effect frequency corrections,
 //! separation ratios ($r_{01}, r_{10}, r_{02}$), composite $\chi^2$ evaluation,
-//! and optimization drivers for `FlexMESA`.
+//! optimization drivers, and `astero/test_suite` runner for `FlexMESA`.
 //!
 //! Corresponds to the upstream Fortran MESA `astero/` module (`astero_def`,
 //! `astero_lib`, `astero_support`, `astero_run_support`, `extras_support`, and
 //! `pgstar_astero_plots`) and `star/private/report.f90` / `star_utils.f90`.
+//!
+//! **Status**: Closed-form surface corrections, separation ratios, and $\chi^2$
+//! kernels are unit-tested; the coupled asteroseismic search driver, in-house
+//! pulsation scaffolding, and `astero/test_suite` runner are **unverified**
+//! against real MESA output (pending #143, #162, #170, and #171).
 
 #![forbid(unsafe_code)]
 #![allow(
@@ -26,23 +31,42 @@
     clippy::suboptimal_flops,
     clippy::too_many_arguments,
     clippy::too_many_lines,
+    clippy::type_complexity,
     clippy::unreadable_literal
 )]
 
+pub mod e2e;
+pub mod inlist_astero;
+pub mod inlist_parser;
 pub mod optimize;
 pub mod ratios_chi2;
+pub mod sample_eval;
 pub mod scaling;
+pub mod search_driver;
+mod search_methods;
 pub mod surface_corr;
 
+pub use e2e::{
+    run_astero_suite, run_astero_test_suite_case, TempCaseStaging,
+    TIER4_ASTERO_CASES,
+};
+pub use inlist_astero::{
+    parse_astero_search_controls, AsteroParamSet, AsteroSearchControls,
+    AsteroSearchParam, SpectroConstraint,
+};
 pub use optimize::{
-    map_bobyqa_param, nelder_mead_minimize, powell_quadratic_minimize,
-    scan_cartesian_grid,
+    bobyqa_minimize, map_bobyqa_param, nelder_mead_minimize, newuoa_minimize,
+    powell_quadratic_minimize, scan_cartesian_grid,
+    simplex_minimize_with_options, unmap_bobyqa_param,
 };
 pub use ratios_chi2::{
-    eval_astero_chi2, eval_frequency_ratios_r01_r10, eval_frequency_ratios_r02,
+    eval_astero_chi2, eval_frequency_ratios_r01_r10,
+    eval_frequency_ratios_r02, eval_frequency_ratios_r02_with_dnu,
+    eval_frequency_ratios_with_trimming, get_max_sequence,
     interpolate_ratio_r010, interpolate_ratio_r02, match_modes_by_degree,
-    AsteroChi2Weights,
+    AsteroChi2Weights, FrequencyRatiosR010,
 };
+pub use sample_eval::{eval_model_astero_sample, AsteroSampleResult};
 pub use scaling::{
     eval_acoustic_profile, eval_delta_nu_asymptotic,
     eval_delta_nu_radius_scaling, eval_delta_nu_scaling,
@@ -50,8 +74,11 @@ pub use scaling::{
     eval_glitch_acoustic_depths, eval_nu_ac, eval_nu_max,
     eval_radial_delta_nu_ols, DELTA_NU_SUN, NU_MAX_SUN, TEFF_SUN_ASTERO,
 };
+pub use search_driver::{
+    run_single_astero_track, run_star_astero, AsteroSearchReport,
+};
 pub use surface_corr::{
-    eval_combined_corr, eval_cubic_corr, eval_kjeldsen_corr,
+    estimate_l0_n_obs, eval_combined_corr, eval_cubic_corr, eval_kjeldsen_corr,
     eval_power_law_corr, eval_power_law_corr_radial_only, eval_sonoi_corr,
     eval_sonoi_corr_radial_only, interpolate_l0_inertia,
 };
@@ -89,8 +116,13 @@ mod tests {
             .zip(&l0_inertias)
             .map(|(&f, &e)| f + target_a3 * (f * f * f) / e)
             .collect();
-        let (corr_cubic, a3_fit) =
-            eval_cubic_corr(&obs_cubic, &sigmas, &l0_freqs, &l0_inertias, 1.0);
+        let (corr_cubic, a3_fit) = eval_cubic_corr(
+            &obs_cubic,
+            &sigmas,
+            &l0_freqs,
+            &l0_inertias,
+            1.0,
+        );
         assert!((a3_fit / target_a3 - 1.0).abs() < 1.0e-12);
         for (c, o) in corr_cubic.iter().zip(&obs_cubic) {
             assert!((c - o).abs() < 1.0e-11);
@@ -130,8 +162,8 @@ mod tests {
             nu_max,
             1.0,
         );
-        assert!((p0_fit / target_p0 - 1.0).abs() < 1.0e-8);
-        assert!((p1_fit / target_p1 - 1.0).abs() < 1.0e-8);
+        assert!((p0_fit / target_p0 - 1.0).abs() < 1.0e-12);
+        assert!((p1_fit / target_p1 - 1.0).abs() < 1.0e-12);
 
         // 4. Sonoi et al. (2015) modified Lorentzian
         let obs_sonoi: Vec<f64> = l0_freqs
@@ -152,8 +184,8 @@ mod tests {
             nu_max,
             1.0,
         );
-        assert!((s0_fit / target_s0 - 1.0).abs() < 1.0e-6);
-        assert!((s1_fit / target_s1 - 1.0).abs() < 1.0e-6);
+        assert!((s0_fit / target_s0 - 1.0).abs() < 1.0e-12);
+        assert!((s1_fit / target_s1 - 1.0).abs() < 1.0e-12);
     }
 
     #[test]
@@ -212,10 +244,10 @@ mod tests {
             nu_max,
             1.0,
         );
-        assert!((a_ro - target_a).abs() < 1.0e-6);
-        assert!((b_ro - target_b).abs() < 1.0e-6);
+        assert!((a_ro - target_a).abs() < 1.0e-10);
+        assert!((b_ro - target_b).abs() < 1.0e-10);
         for (c, o) in corr_ro.iter().zip(&l0_obs) {
-            assert!((c - o).abs() < 1.0e-6);
+            assert!((c - o).abs() < 1.0e-9);
         }
 
         let l1_freqs: Vec<f64> = l0_freqs.iter().map(|&f| f + 62.0).collect();

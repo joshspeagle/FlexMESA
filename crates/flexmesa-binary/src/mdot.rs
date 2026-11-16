@@ -1,16 +1,18 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-//! Explicit and implicit Roche-lobe overflow (RLOF) mass transfer prescriptions.
+//! Explicit Roche-lobe overflow (RLOF) mass transfer prescriptions and re-exports
+//! of the implicit RLOF root solvers.
 //!
 //! Implements Ritter (1988) optically thin overflow, Kolb & Ritter (1990)
 //! optically thick overflow, eccentric phase-integrated Ritter/Kolb overflow,
-//! the Arras potential-expansion scheme, and the upstream MESA implicit RLOF
-//! root solver (`"roche_lobe"`, `"contact"`, `"Ritter"`, `"Kolb"`).
-//!
-//! Corresponds to `binary/private/binary_mdot.f90`.
+//! and the Arras potential-expansion scheme (`binary/private/binary_mdot.f90`).
 
-use flexmesa_const::{KERG, MP, MSUN, ONE_THIRD, PI, SECYER, STANDARD_CGRAV};
+use flexmesa_const::{KERG, MP, ONE_THIRD, PI, STANDARD_CGRAV};
 use flexmesa_math::{exp, log10, pow};
 
+pub use crate::mdot_implicit::{
+    update_change_factor_after_step, ImplicitMdotSolver, ImplicitRlofSolver,
+    ImplicitStepAction,
+};
 use crate::orbit::{build_anomaly_grid, eval_rlobe};
 
 /// Evaluates the Ritter (1988, A&A 202, 93) optically thin Roche-lobe overflow
@@ -59,6 +61,8 @@ pub fn eval_ritter_mdot_thin(
 
     if is_kolb_scheme && ritter_exponent > 0.0 {
         -mdot0
+    } else if ritter_exponent < -100.0 {
+        0.0
     } else {
         -mdot0 * exp(ritter_exponent.min(60.0))
     }
@@ -137,8 +141,6 @@ pub fn kolb_f3(gamma1: f64) -> f64 {
 /// overflow mass transfer rate $\dot{M}_{\mathrm{thick}} \le 0$ ($\mathrm{g\,s^{-1}}$)
 /// integrated over outer donor zones where $r_k > R_{L,d}$.
 ///
-/// Input slices are ordered surface-to-center (`0..nz`), matching upstream MESA.
-///
 /// Corresponds to `calculate_kolb_mdot_thick` and `get_info_for_kolb` in
 /// `binary/private/binary_mdot.f90:729-788`.
 #[allow(clippy::too_many_arguments)]
@@ -190,9 +192,7 @@ pub fn eval_kolb_mdot_thick(
 
 /// Evaluates the phase-averaged Kolb & Ritter (1990) optically thick mass
 /// transfer rate $\dot{M}_{\mathrm{thick}} \le 0$ ($\mathrm{g\,s^{-1}}$) over
-/// an eccentric orbit.
-///
-/// Corresponds to `get_info_for_kolb_eccentric` in `binary_mdot.f90:898-948`.
+/// an eccentric orbit (`get_info_for_kolb_eccentric` in `binary_mdot.f90:898-948`).
 #[allow(clippy::too_many_arguments)]
 #[must_use]
 pub fn eval_kolb_mdot_eccentric(
@@ -253,9 +253,7 @@ pub fn eval_kolb_mdot_eccentric(
 
 /// Evaluates the Arras optically thin Roche-lobe overflow mass transfer rate
 /// $\dot{M}_{\mathrm{thin}} \le 0$ ($\mathrm{g\,s^{-1}}$) using the multipole
-/// expansion of the $L_1$ potential difference.
-///
-/// Corresponds to `get_info_for_arras` in `binary/private/binary_mdot.f90:790-831`.
+/// expansion of the $L_1$ potential difference (`binary_mdot.f90:790-831`).
 #[must_use]
 pub fn eval_arras_mdot_thin(
     m_donor: f64,
@@ -292,258 +290,69 @@ pub fn eval_arras_mdot_thin(
     -rho_l1 * v_th * area
 }
 
-/// Bracketing and root-finding state for the implicit Roche-lobe overflow
-/// solver (`check_implicit_rlo` & `pick_mdot_for_implicit_rlo`).
-#[derive(Debug, Clone)]
-pub struct ImplicitRlofSolver {
-    /// Target tolerance on $|f(\dot{M}_{\mathrm{tr}})|$ (`implicit_scheme_tolerance`).
-    pub tolerance: f64,
-    /// Step multiplication factor (`change_factor`, in `[1.05, 1.50]`).
-    pub change_factor: f64,
-    /// Maximum allowed implicit $|\dot{M}_{\mathrm{tr}}|$ ($M_\odot\,\mathrm{yr}^{-1}$).
-    pub max_implicit_abs_mdot_msun_yr: f64,
-    /// Minimum $|\dot{M}_{\mathrm{tr}}|$ before detachment ($M_\odot\,\mathrm{yr}^{-1}$).
-    pub roche_min_mdot_msun_yr: f64,
-    /// Starting trial $|\dot{M}_{\mathrm{tr}}|$ ($M_\odot\,\mathrm{yr}^{-1}$).
-    pub starting_mdot_msun_yr: f64,
-    /// Whether to use 3-point quadratic interpolation when bracketed (`use_quadratic`).
-    pub use_quadratic: bool,
-}
-
-impl Default for ImplicitRlofSolver {
-    fn default() -> Self {
-        Self {
-            tolerance: 1.0e-4,
-            change_factor: 1.25,
-            max_implicit_abs_mdot_msun_yr: 1.0e-1,
-            roche_min_mdot_msun_yr: 1.0e-14,
-            starting_mdot_msun_yr: 1.0e-12,
-            use_quadratic: true,
+/// Evaluates the isotropic phase-dependent mass-transfer eccentricity
+/// enhancement $\dot{e}_{\mathrm{enhance}}$ ($\mathrm{s}^{-1}$) over an
+/// eccentric orbit (`edot_enhancement_Isotropic` in `binary/private/binary_edot.f90:188-228`).
+#[allow(clippy::too_many_arguments)]
+#[must_use]
+pub fn eval_edot_enhancement_isotropic(
+    m_donor: f64,
+    m_accretor: f64,
+    r_donor: f64,
+    rl_donor: f64,
+    eccentricity: f64,
+    rho_surf: f64,
+    p_surf: f64,
+    t_surf: f64,
+    mu_surf: f64,
+    r_profile: &[f64],
+    p_profile: &[f64],
+    t_profile: &[f64],
+    mu_profile: &[f64],
+    gamma1_profile: &[f64],
+    is_kolb_scheme: bool,
+    anomaly_steps: usize,
+) -> f64 {
+    if eccentricity <= 0.0 || (m_donor + m_accretor) <= 0.0 {
+        return 0.0;
+    }
+    let (theta_co, time_co) = build_anomaly_grid(anomaly_steps, eccentricity);
+    let n = theta_co.len();
+    let one_m_e2 = 1.0 - eccentricity * eccentricity;
+    let m_tot = (m_donor + m_accretor).max(1.0);
+    let mut edot_prev = 0.0_f64;
+    let mut de = 0.0_f64;
+    for i in 0..n {
+        let cos_th = theta_co[i].cos();
+        let rl_i = rl_donor * one_m_e2 / (1.0 + eccentricity * cos_th);
+        let mut mdot_i = eval_ritter_mdot_thin(
+            m_donor,
+            m_accretor,
+            r_donor,
+            rl_i,
+            rho_surf,
+            p_surf,
+            t_surf,
+            mu_surf,
+            is_kolb_scheme,
+        );
+        if is_kolb_scheme && !r_profile.is_empty() {
+            mdot_i += eval_kolb_mdot_thick(
+                m_donor,
+                m_accretor,
+                rl_i,
+                r_profile,
+                p_profile,
+                t_profile,
+                mu_profile,
+                gamma1_profile,
+            );
         }
-    }
-}
-
-#[inline]
-fn find0_quadratic(
-    x1: f64,
-    y1: f64,
-    x2: f64,
-    y2: f64,
-    x3: f64,
-    y3: f64,
-) -> Option<f64> {
-    let d12 = x1 - x2;
-    let d23 = x2 - x3;
-    let d13 = x1 - x3;
-    if d12.abs() < 1.0e-40 || d23.abs() < 1.0e-40 || d13.abs() < 1.0e-40 {
-        return None;
-    }
-    let s12 = (y1 - y2) / d12;
-    let s23 = (y2 - y3) / d23;
-    let a = (s12 - s23) / d13;
-    let b = s12 - a * (x1 + x2);
-    let c = y1 - a * x1 * x1 - b * x1;
-    let disc = b * b - 4.0 * a * c;
-    if disc < 0.0 || a.abs() < 1.0e-40 {
-        return None;
-    }
-    let root_sqrt = disc.sqrt();
-    let r1 = (-b + root_sqrt) / (2.0 * a);
-    let r2 = (-b - root_sqrt) / (2.0 * a);
-    let lo = x1.min(x2).min(x3);
-    let hi = x1.max(x2).max(x3);
-    if r1 > lo && r1 < hi {
-        Some(r1)
-    } else if r2 > lo && r2 < hi {
-        Some(r2)
-    } else {
-        None
-    }
-}
-
-impl ImplicitRlofSolver {
-    /// Evaluates the `"roche_lobe"` implicit objective function:
-    ///
-    /// $$f(\dot{M}_{\mathrm{tr}}) = 2\left(g_d + \frac{1}{2}\mathrm{tol}\right)$$
-    ///
-    /// Corresponds to `binary_mdot.f90:102-112`.
-    #[must_use]
-    pub fn roche_lobe_objective(&self, rl_relative_gap_donor: f64) -> f64 {
-        2.0 * (rl_relative_gap_donor + 0.5 * self.tolerance)
-    }
-
-    /// Evaluates the `"contact"` overcontact equipotential objective function
-    /// with mass ratio $q = M_a / M_d$ and Marchant et al. (2016) slope
-    /// $s_c = q^{-0.52}$ (`check_implicit_rlo` in `binary_mdot.f90:113-147`):
-    ///
-    /// $$f_{\mathrm{contact}}(\dot{M}_{\mathrm{tr}}) = \begin{cases}
-    ///   2(g_d + \tfrac{1}{2}\mathrm{tol}) & \text{if } g_a < 0 \text{ and } (g_d s_c - g_a > \mathrm{tol} \text{ or } g_d < -\mathrm{tol}), \\
-    ///   g_d s_c - g_a & \text{if } q < 1, \\
-    ///   g_d - g_a / s_c & \text{if } q \ge 1.
-    /// \end{cases}$$
-    #[must_use]
-    pub fn contact_objective(
-        &self,
-        rl_relative_gap_donor: f64,
-        rl_relative_gap_accretor: f64,
-        q_accretor_over_donor: f64,
-    ) -> f64 {
-        let q = q_accretor_over_donor.max(1.0e-12);
-        let slope_contact = pow(q, -0.52);
-        if rl_relative_gap_accretor < 0.0
-            && (rl_relative_gap_donor * slope_contact
-                - rl_relative_gap_accretor
-                > self.tolerance
-                || rl_relative_gap_donor < -self.tolerance)
-        {
-            self.roche_lobe_objective(rl_relative_gap_donor)
-        } else if q < 1.0 {
-            rl_relative_gap_donor * slope_contact - rl_relative_gap_accretor
-        } else {
-            rl_relative_gap_donor - rl_relative_gap_accretor / slope_contact
+        let edot_i = -mdot_i / m_tot * (eccentricity + cos_th);
+        if i > 0 {
+            de += 0.5 * (edot_prev + edot_i) * (time_co[i] - time_co[i - 1]);
         }
+        edot_prev = edot_i;
     }
-
-    /// Solves for the implicit mass transfer rate $\dot{M}_{\mathrm{tr}} \le 0$
-    /// ($\mathrm{g\,s^{-1}}$) given a callable `eval_gap(mdot_g_s) -> rl_relative_gap_donor`,
-    /// following the bracketing and quadratic/secant/bisection algorithm of
-    /// `check_implicit_rlo` and `pick_mdot_for_implicit_rlo`
-    /// (`binary_mdot.f90:36-425`).
-    ///
-    /// Returns `(converged_mdot_g_s, num_iterations, final_objective)`.
-    pub fn solve_roche_lobe_mdot<F>(
-        &self,
-        initial_mdot_g_s: f64,
-        max_tries: usize,
-        mut eval_gap: F,
-    ) -> (f64, usize, f64)
-    where
-        F: FnMut(f64) -> f64,
-    {
-        self.solve_with_objective(initial_mdot_g_s, max_tries, |mdot| {
-            self.roche_lobe_objective(eval_gap(mdot))
-        })
-    }
-
-    /// Solves for the implicit contact-binary mass transfer rate
-    /// $\dot{M}_{\mathrm{tr}} \le 0$ ($\mathrm{g\,s^{-1}}$) driving
-    /// `contact_objective(gap_d, gap_a, q_accretor_over_donor) = 0` when both
-    /// components are in overcontact (`"contact"` scheme in `binary_mdot.f90:113-147`).
-    pub fn solve_contact_mdot<F>(
-        &self,
-        initial_mdot_g_s: f64,
-        q_accretor_over_donor: f64,
-        max_tries: usize,
-        mut eval_gaps: F,
-    ) -> (f64, usize, f64)
-    where
-        F: FnMut(f64) -> (f64, f64),
-    {
-        self.solve_with_objective(initial_mdot_g_s, max_tries, |mdot| {
-            let (gap_d, gap_a) = eval_gaps(mdot);
-            self.contact_objective(gap_d, gap_a, q_accretor_over_donor)
-        })
-    }
-
-    fn solve_with_objective<F>(
-        &self,
-        initial_mdot_g_s: f64,
-        max_tries: usize,
-        mut eval_f: F,
-    ) -> (f64, usize, f64)
-    where
-        F: FnMut(f64) -> f64,
-    {
-        let msun_per_yr = MSUN / SECYER;
-        let max_abs = self.max_implicit_abs_mdot_msun_yr * msun_per_yr;
-        let min_abs = self.roche_min_mdot_msun_yr * msun_per_yr;
-
-        let mut mdot = initial_mdot_g_s.min(0.0).max(-max_abs);
-        let mut have_lo = false;
-        let mut have_hi = false;
-        let mut mdot_lo = 0.0_f64;
-        let mut mdot_hi = 0.0_f64;
-        let mut f_lo = 0.0_f64;
-        let mut f_hi = 0.0_f64;
-        let mut mdot_prev = 0.0_f64;
-        let mut f_prev = 0.0_f64;
-        let mut have_prev = false;
-
-        for iter in 1..=max_tries.max(1) {
-            let f = eval_f(mdot);
-            if f.abs() <= self.tolerance
-                || (f < 0.0 && mdot == 0.0)
-                || (f > 0.0 && (-mdot - max_abs).abs() <= 1.0e-12 * max_abs)
-            {
-                return (mdot, iter, f);
-            }
-            if f < 0.0 {
-                if have_hi {
-                    mdot_prev = mdot_hi;
-                    f_prev = f_hi;
-                    have_prev = true;
-                }
-                have_hi = true;
-                mdot_hi = mdot;
-                f_hi = f;
-            } else {
-                if have_lo {
-                    mdot_prev = mdot_lo;
-                    f_prev = f_lo;
-                    have_prev = true;
-                }
-                have_lo = true;
-                mdot_lo = mdot;
-                f_lo = f;
-            }
-
-            let raw_next = if have_lo && have_hi {
-                let quad_cand =
-                    if self.use_quadratic && have_prev && iter % 2 == 0 {
-                        find0_quadratic(
-                            mdot_lo, f_lo, mdot_hi, f_hi, mdot_prev, f_prev,
-                        )
-                    } else {
-                        None
-                    };
-                if let Some(q_root) = quad_cand {
-                    q_root
-                } else if iter % 2 == 0 && (f_hi - f_lo).abs() > 1.0e-30 {
-                    let sec = (mdot_lo * f_hi - mdot_hi * f_lo) / (f_hi - f_lo);
-                    if sec > mdot_hi && sec < mdot_lo {
-                        sec
-                    } else {
-                        0.5 * (mdot_lo + mdot_hi)
-                    }
-                } else {
-                    0.5 * (mdot_lo + mdot_hi)
-                }
-            } else if !have_hi {
-                if mdot_lo == 0.0 {
-                    -self.starting_mdot_msun_yr * msun_per_yr
-                } else {
-                    mdot_lo * self.change_factor
-                }
-            } else {
-                mdot_hi / self.change_factor
-            };
-
-            let next_mdot = raw_next.max(-max_abs);
-            if -next_mdot < min_abs && f < 0.0 {
-                let f_zero = eval_f(0.0);
-                return (0.0, iter, f_zero);
-            }
-            if have_lo
-                && have_hi
-                && (mdot_hi - mdot_lo).abs()
-                    < 1.0e-6 * mdot_hi.abs().min(mdot_lo.abs())
-            {
-                let f_next = eval_f(next_mdot);
-                return (next_mdot, iter, f_next);
-            }
-            mdot = next_mdot;
-        }
-        let final_f = eval_f(mdot);
-        (mdot, max_tries, final_f)
-    }
+    de
 }

@@ -42,7 +42,7 @@ pub struct MeshFunctionConfig {
     pub m_function_weight: f64,
     /// Scale $\alpha_M$ for $f_M$ (`1.0e-2`).
     pub m_function_param: f64,
-    /// Weight $w_\nabla$ on convective boundary transition (`10.0`).
+    /// Weight $w_\nabla$ on temperature gradient $\nabla_T$ (`gradT_function_weight`, `0.0`).
     pub grad_function_weight: f64,
     /// Weight $w_\Omega$ on rotational shear profile (`0.0`).
     pub omega_function_weight: f64,
@@ -62,6 +62,16 @@ pub struct MeshFunctionConfig {
     pub max_dq: f64,
     /// Minimum post-split relative mass fraction (`1e-14`).
     pub min_dq_for_split: f64,
+    /// Minimum cell $\Delta q$ for composition-driven splitting (`min_dq_for_xa`, `1e-14`).
+    pub min_dq_for_xa: f64,
+    /// Minimum cell $\Delta q$ for composition-driven splitting at convective zones (`1e-6`).
+    pub min_dq_for_xa_convective: f64,
+    /// Minimum $\Delta\ln R$ across a split subcell (`mesh_min_dlnR`, `1e-9`).
+    pub mesh_min_dlnr: f64,
+    /// Maximum allowed adjacent cell $\Delta q$ ratio (`mesh_max_allowed_ratio`, `2.5`).
+    pub mesh_max_allowed_ratio: f64,
+    /// Maximum species difference allowed when merging cells (`max_delta_x_for_merge`, `0.1`).
+    pub max_delta_x_for_merge: f64,
     /// Maximum surface cell relative mass fraction (`1.0`).
     pub max_surface_cell_dq: f64,
     /// Maximum center cell relative mass fraction (`1.0`).
@@ -77,7 +87,7 @@ impl Default for MeshFunctionConfig {
             r_function_param: 1.0e-4,
             m_function_weight: 0.0,
             m_function_param: 1.0e-2,
-            grad_function_weight: 10.0,
+            grad_function_weight: 0.0,
             omega_function_weight: 0.0,
             gam_function_weight: 0.0,
             gam_function_param1: 170.0,
@@ -87,6 +97,11 @@ impl Default for MeshFunctionConfig {
             min_dq: 1.0e-12,
             max_dq: 1.0e-1,
             min_dq_for_split: 1.0e-14,
+            min_dq_for_xa: 1.0e-14,
+            min_dq_for_xa_convective: 1.0e-6,
+            mesh_min_dlnr: 1.0e-9,
+            mesh_max_allowed_ratio: 2.5,
+            max_delta_x_for_merge: 0.1,
             max_surface_cell_dq: 1.0,
             max_center_cell_dq: 1.0,
         }
@@ -117,7 +132,7 @@ impl MeshFunctionConfig {
             r_function_param: def.r_function_param,
             m_function_weight: mw.m_function_weight,
             m_function_param: def.m_function_param,
-            grad_function_weight: def.grad_function_weight,
+            grad_function_weight: mw.gradt_function_weight,
             omega_function_weight: mw.omega_function_weight,
             gam_function_weight: mw.gam_function_weight,
             gam_function_param1: def.gam_function_param1,
@@ -127,68 +142,79 @@ impl MeshFunctionConfig {
             min_dq: mw.min_dq,
             max_dq: mw.max_dq,
             min_dq_for_split: mw.min_dq_for_split,
+            min_dq_for_xa: mw.min_dq_for_xa,
+            min_dq_for_xa_convective: mw.min_dq_for_xa_convective,
+            mesh_min_dlnr: mw.mesh_min_dlnr,
+            mesh_max_allowed_ratio: mw.mesh_max_allowed_ratio,
+            max_delta_x_for_merge: mw.max_delta_x_for_merge,
             max_surface_cell_dq: mw.max_surface_cell_dq,
             max_center_cell_dq: mw.max_center_cell_dq,
         }
     }
 }
 
-/// Evaluates the dimensionless mesh variation indicator $g_k$ across all zones
-/// `0..nz` (`eval_mesh_functions` in `mesh_functions.f90` and `mesh_plan.f90`).
-#[must_use]
-pub fn eval_mesh_gval(model: &StarModel, cfg: &MeshFunctionConfig) -> Vec<f64> {
+fn eval_mesh_gval_parts(
+    model: &StarModel,
+    cfg: &MeshFunctionConfig,
+) -> (Vec<f64>, Vec<f64>) {
     let nz = model.nz;
     if nz < 2 {
-        return vec![0.0; nz];
+        return (vec![0.0; nz], vec![0.0; nz]);
     }
-    let coeff = model.controls.mesh_delta_coeff.max(0.0);
+    let coeff = if model.controls.mesh_delta_coeff > 0.0 {
+        model.controls.mesh_delta_coeff
+    } else {
+        1.0
+    };
     let inv_ln10 = 1.0 / LN10;
     let a_r = cfg.r_function_param.max(1.0e-30);
     let a_m = cfg.m_function_param.max(1.0e-30);
     let x0 = cfg.xa_function_param.max(1.0e-30);
     let gam_w = cfg.gam_function_param2.max(1.0);
-    let mut gval = vec![0.0; nz];
+    let mut g_struct = vec![0.0; nz];
+    let mut g_xa = vec![0.0; nz];
 
-    for (k, g_k) in gval.iter_mut().enumerate().take(nz - 1) {
+    for k in 0..(nz - 1) {
         let k1 = k + 1;
-        let mut max_df = 0.0_f64;
+        let mut max_struct = 0.0_f64;
+        let mut max_xa = 0.0_f64;
 
         if cfg.p_function_weight > 0.0 {
             let df = cfg.p_function_weight
                 * (model.ln_peos[k] - model.ln_peos[k1]).abs()
                 * inv_ln10;
-            max_df = max_df.max(df);
+            max_struct = max_struct.max(df);
         }
         if cfg.t_function1_weight > 0.0 {
             let df = cfg.t_function1_weight
                 * (model.ln_t[k] - model.ln_t[k1]).abs()
                 * inv_ln10;
-            max_df = max_df.max(df);
+            max_struct = max_struct.max(df);
         }
         if cfg.r_function_weight > 0.0 {
             let f0 = (1.0 + (model.r[k] / R_SUN) / a_r).log10();
             let f1 = (1.0 + (model.r[k1] / R_SUN) / a_r).log10();
-            max_df = max_df.max(cfg.r_function_weight * (f0 - f1).abs());
+            max_struct = max_struct.max(cfg.r_function_weight * (f0 - f1).abs());
         }
         if cfg.m_function_weight > 0.0 {
             let f0 = (1.0 + (model.m[k] / M_SUN) / a_m).log10();
             let f1 = (1.0 + (model.m[k1] / M_SUN) / a_m).log10();
-            max_df = max_df.max(cfg.m_function_weight * (f0 - f1).abs());
+            max_struct = max_struct.max(cfg.m_function_weight * (f0 - f1).abs());
         }
         if cfg.grad_function_weight > 0.0 {
-            let f0 = ((model.gradr[k] - model.gradl[k]) / 0.01).tanh();
-            let f1 = ((model.gradr[k1] - model.gradl[k1]) / 0.01).tanh();
-            max_df = max_df.max(cfg.grad_function_weight * (f0 - f1).abs());
+            max_struct = max_struct.max(
+                cfg.grad_function_weight * (model.gradt[k] - model.gradt[k1]).abs(),
+            );
         }
         if cfg.omega_function_weight > 0.0 && model.controls.rotation_flag {
             let f0 = (model.omega[k].abs() + 1.0e-8).log10();
             let f1 = (model.omega[k1].abs() + 1.0e-8).log10();
-            max_df = max_df.max(cfg.omega_function_weight * (f0 - f1).abs());
+            max_struct = max_struct.max(cfg.omega_function_weight * (f0 - f1).abs());
         }
         if cfg.gam_function_weight > 0.0 {
             let f0 = ((model.gam[k] - cfg.gam_function_param1) / gam_w).tanh();
             let f1 = ((model.gam[k1] - cfg.gam_function_param1) / gam_w).tanh();
-            max_df = max_df.max(cfg.gam_function_weight * (f0 - f1).abs());
+            max_struct = max_struct.max(cfg.gam_function_weight * (f0 - f1).abs());
         }
         if cfg.xa_function_weight > 0.0 {
             for j in 0..model.species {
@@ -196,14 +222,35 @@ pub fn eval_mesh_gval(model: &StarModel, cfg: &MeshFunctionConfig) -> Vec<f64> {
                 let x_k1 = model.xa[k1 * model.species + j];
                 let df = cfg.xa_function_weight
                     * ((x_k + x0).log10() - (x_k1 + x0).log10()).abs();
-                max_df = max_df.max(df);
+                max_xa = max_xa.max(df);
             }
         }
 
-        *g_k = coeff * max_df;
+        g_struct[k] = max_struct / coeff;
+        g_xa[k] = max_xa / coeff;
     }
-    gval[nz - 1] = gval[nz - 2];
-    gval
+    g_struct[nz - 1] = g_struct[nz - 2];
+    g_xa[nz - 1] = g_xa[nz - 2];
+    (g_struct, g_xa)
+}
+
+/// Evaluates the dimensionless mesh variation indicator $g_k$ across all zones
+/// `0..nz` (`eval_mesh_functions` in `mesh_functions.f90` and `mesh_plan.f90`).
+#[must_use]
+pub fn eval_mesh_gval(model: &StarModel, cfg: &MeshFunctionConfig) -> Vec<f64> {
+    let (g_non_xa, g_xa) = eval_mesh_gval_parts(model, cfg);
+    g_non_xa.into_iter().zip(g_xa).map(|(a, b)| a.max(b)).collect()
+}
+
+fn subcell_dlnr_ok(model: &StarModel, k: usize, dq_sub: f64, min_dlnr: f64) -> bool {
+    if min_dlnr <= 0.0 || k + 1 >= model.nz {
+        return true;
+    }
+    let dq_old = model.dq[k].max(1.0e-99);
+    let r_l = model.r[k + 1].max(1.0);
+    let dr_old = (model.r[k] - r_l).max(0.0);
+    let dlnr_new = ((r_l + dr_old * (dq_sub / dq_old)) / r_l).ln();
+    dlnr_new >= 2.0 * min_dlnr
 }
 
 /// Plans cell splits and merges from $g_k$ (`mesh_plan` in `mesh_plan.f90`),
@@ -217,9 +264,17 @@ pub fn plan_mesh(
     if nz < 4 {
         return (model.dq.clone(), 0, 0);
     }
-    let gval = eval_mesh_gval(model, cfg);
+    let (g_non_xa, g_xa) = eval_mesh_gval_parts(model, cfg);
+    let gval: Vec<f64> = g_non_xa.iter().zip(&g_xa).map(|(&a, &b)| a.max(b)).collect();
+    let d_coeff = if model.controls.mesh_delta_coeff > 0.0 {
+        model.controls.mesh_delta_coeff
+    } else {
+        1.0
+    };
     let min_dq = cfg.min_dq.max(cfg.min_dq_for_split).max(1.0e-15);
-    let max_dq = cfg.max_dq.clamp(min_dq * 4.0, 1.0);
+    let max_dq = (cfg.max_dq * d_coeff).clamp(min_dq * 4.0, 1.0);
+    let max_surf_dq = (cfg.max_surface_cell_dq * d_coeff).min(1.0);
+    let max_cen_dq = (cfg.max_center_cell_dq * d_coeff).min(1.0);
 
     let mut dq_new = Vec::with_capacity(nz + nz / 4);
     let mut num_splits = 0_usize;
@@ -229,24 +284,43 @@ pub fn plan_mesh(
     while k < nz {
         let dq_k = model.dq[k];
         let g_k = gval[k];
-        let surf_over = k == 0 && dq_k > cfg.max_surface_cell_dq;
-        let cen_over = k + 1 == nz && dq_k > cfg.max_center_cell_dq;
+        let surf_over = k == 0 && dq_k > max_surf_dq;
+        let cen_over = k + 1 == nz && dq_k > max_cen_dq;
+        let non_xa_split = g_non_xa[k] > 1.0 || dq_k > max_dq || surf_over || cen_over;
+        let xa_only_split = !non_xa_split && g_xa[k] > 1.0;
 
-        let need_split = g_k > 1.0 || dq_k > max_dq || surf_over || cen_over;
-        if need_split && dq_k >= 2.0 * min_dq {
-            let n_split = (g_k.ceil() as usize).clamp(2, 4);
-            let n_eff = if dq_k / (n_split as f64) >= min_dq {
-                n_split
+        let eff_min_dq = if xa_only_split {
+            let xa_floor = if model.gradr[k] > model.grada[k]
+                && cfg.min_dq_for_xa_convective > 0.0
+            {
+                cfg.min_dq_for_xa_convective
             } else {
-                2
+                cfg.min_dq_for_xa
             };
-            let sub_dq = dq_k / (n_eff as f64);
-            for _ in 0..n_eff {
-                dq_new.push(sub_dq);
+            min_dq.max(xa_floor)
+        } else {
+            min_dq
+        };
+
+        if (non_xa_split || xa_only_split) && dq_k >= 2.0 * eff_min_dq {
+            let mut n_eff = (g_k.ceil() as usize).clamp(2, 4);
+            while n_eff > 2 && dq_k / (n_eff as f64) < eff_min_dq {
+                n_eff -= 1;
             }
-            num_splits += n_eff - 1;
-            k += 1;
-            continue;
+            while n_eff >= 2
+                && !subcell_dlnr_ok(model, k, dq_k / (n_eff as f64), cfg.mesh_min_dlnr)
+            {
+                n_eff -= 1;
+            }
+            if n_eff >= 2 && dq_k / (n_eff as f64) >= eff_min_dq {
+                let sub_dq = dq_k / (n_eff as f64);
+                for _ in 0..n_eff {
+                    dq_new.push(sub_dq);
+                }
+                num_splits += n_eff - 1;
+                k += 1;
+                continue;
+            }
         }
 
         if k >= 2

@@ -35,20 +35,34 @@ use crate::star_ad::{
 /// # Errors
 /// Returns [`StarError::MicrophysicsError`] if `set_mlt` fails at any face.
 pub fn set_mlt_vars(model: &mut StarModel) -> Result<(), StarError> {
-    if model.controls.rotation_flag {
-        update_rotation_distortion_factors(model);
+    if model.controls.rotation_flag && !model.aux.doing_struct_burn_mix {
+        if model.aux.solver_mlt_eval_count > 0 {
+            crate::rotation::conserve_shell_j_rot_and_distortion(model);
+        } else {
+            update_rotation_distortion_factors(model);
+        }
     }
     let nz = model.nz;
+    if model.aux.fixed_gradr_sticky.len() != nz {
+        model.aux.fixed_gradr_sticky.resize(nz, false);
+        model.aux.mlt_prev_conv.resize(nz, 0);
+        model.aux.mlt_flip_count.resize(nz, 0);
+    }
+    if !model.aux.doing_struct_burn_mix {
+        model.aux.solver_mlt_eval_count = 0;
+        model.aux.solver_had_mlt_flip = false;
+        model.aux.fixed_gradr_sticky.fill(false);
+        model.aux.mlt_flip_count.fill(0);
+    }
+    let use_sm_b = crate::hydro_state::use_smoothed_brunt_b(model);
     for k in 0..nz {
-        eval_face_mlt(model, k, None)?;
+        eval_face_mlt(model, k, None, use_sm_b)?;
     }
 
     if model.controls.redo_conv_for_dr_lt_mixing_length {
         check_for_redo_mlt(model)?;
     }
-    if !model.aux.doing_struct_burn_mix && model.sig.iter().all(|&s| s == 0.0) {
-        update_sig_from_d_mix(model);
-    }
+    crate::evolve_support::update_mlt_sticky_and_sig_after_hydro(model);
     Ok(())
 }
 
@@ -82,6 +96,7 @@ fn eval_face_mlt(
     model: &mut StarModel,
     k: usize,
     custom_length: Option<f64>,
+    use_sm_b: bool,
 ) -> Result<(), StarError> {
     let (alfa, beta) = model.get_face_weights(k);
 
@@ -170,7 +185,7 @@ fn eval_face_mlt(
     }
 
     let b_term = if model.controls.use_ledoux_criterion {
-        model.brunt_b[k]
+        if use_sm_b { model.aux.smoothed_brunt_b[k] } else { model.brunt_b[k] }
     } else {
         0.0
     };
@@ -185,8 +200,10 @@ fn eval_face_mlt(
     };
     let lambda_f = hp_f * alpha_mlt;
 
+    let sticky_no_conv = model.aux.doing_struct_burn_mix
+        && model.aux.fixed_gradr_sticky.get(k).copied().unwrap_or(false);
     let (mut grad_t_f, mut conv_vel_f, mut d_f, mut gamma_val, mut mix_type) =
-        if alpha_mlt <= 0.0 {
+        if alpha_mlt <= 0.0 || sticky_no_conv {
             (
                 gradr_f,
                 StarAdOrder1::ZERO,
@@ -195,8 +212,17 @@ fn eval_face_mlt(
                 MixingType::NoMixing,
             )
         } else {
+            let mlt_opt = if !model.aux.doing_relax && model.controls.steps_before_use_tdc > 0 {
+                if (model.model_number as isize) >= model.controls.steps_before_use_tdc {
+                    MltOption::Tdc
+                } else {
+                    MltOption::Cox
+                }
+            } else {
+                model.controls.mlt_option
+            };
             let vc_old = model.aux.mlt_vc_old.get(k).copied().unwrap_or(0.0);
-            let tdc_res = if model.controls.mlt_option == MltOption::Tdc
+            let tdc_res = if mlt_opt == MltOption::Tdc
                 && model.dt > 0.0
                 && k > 0
                 && vc_old > 0.0
@@ -217,7 +243,7 @@ fn eval_face_mlt(
                     conv_vel_start: vc_old,
                     mixing_length_alpha: alpha_mlt,
                     tdc_alpha_d: 1.0,
-                    tdc_alpha_r: 1.0,
+                    tdc_alpha_r: model.controls.tdc_alpha_r,
                     tdc_alpha_pt: 0.0,
                     tdc_alpha_c: 1.0,
                     tdc_alpha_s: 1.0,
@@ -234,7 +260,10 @@ fn eval_face_mlt(
                         .max(1.0e20),
                     max_conv_vel: 1.0e99,
                     include_mlt_corr_to_tdc: true,
-                    use_tdc_enthalpy_flux_limiter: true,
+                    use_tdc_enthalpy_flux_limiter: model
+                        .controls
+                        .rsp2
+                        .use_tdc_enthalpy_flux_limiter,
                     y_face_guess: (gradr_f.val - gradl_f.val).max(0.0),
                 };
                 let tdc_in = TdcInputs {
@@ -264,7 +293,7 @@ fn eval_face_mlt(
                 tdc_out
             } else {
                 let mlt_params = MltParams {
-                    option: model.controls.mlt_option,
+                    option: mlt_opt,
                     mixing_length_alpha: alpha_mlt,
                     henyey_nu: 8.0,
                     henyey_y: 1.0 / 3.0,
@@ -433,8 +462,9 @@ pub fn check_for_redo_mlt(model: &mut StarModel) -> Result<(), StarError> {
                 min_lambda = min_lambda.min(alpha * model.scale_height[k]);
             }
             if dr < min_lambda {
+                let use_sm_b = crate::hydro_state::use_smoothed_brunt_b(model);
                 for k in k_top..=k_bot {
-                    eval_face_mlt(model, k, Some(dr))?;
+                    eval_face_mlt(model, k, Some(dr), use_sm_b)?;
                 }
             }
         }
@@ -463,7 +493,10 @@ pub fn set_hydro_vars(
         }
     }
     let sig_was_zero = model.sig.iter().all(|&s| s == 0.0);
-    do_brunt_b(model);
+    if !model.aux.doing_struct_burn_mix {
+        do_brunt_b(model);
+        crate::hydro_state::refresh_smoothed_brunt_b(model);
+    }
     set_mlt_vars(model)?;
     if model.controls.rsp2_flag {
         eval_surf_bc(model)?;
@@ -505,7 +538,18 @@ pub fn set_hydro_vars(
         }
         return Ok(());
     }
-    do_brunt_n2(model);
+    if !model.aux.doing_struct_burn_mix {
+        do_brunt_n2(model);
+        if model.controls.rotation_flag
+            && (model.controls.mix_wind.am_d_mix_factor > 0.0
+                || model.controls.mix_wind.d_visc_factor > 0.0)
+        {
+            crate::rotation::augment_d_mix_with_rotation(model);
+            if sig_was_zero {
+                update_sig_from_d_mix(model);
+            }
+        }
+    }
     eval_surf_bc(model)?;
     crate::eps_grav::eval_eps_grav(model);
     if model.controls.u_flag {

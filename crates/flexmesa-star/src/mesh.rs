@@ -375,6 +375,7 @@ impl StarModel {
         self.peos_start.clone_from(&self.peos);
         self.non_nuc_neu_start.clone_from(&self.non_nuc_neu);
         self.xa_start.clone_from(&self.xa);
+        self.xa_sub_xa_start.clear();
         self.xh_start.clone_from(&self.xh);
         self.aux.save_start(
             &self.cp,
@@ -566,6 +567,7 @@ impl StarModel {
             v.resize(nz * sp, 0.0);
         }
         self.xh.resize(nz * nv, 0.0);
+        self.xa_sub_xa_start.clear();
         self.xh_start.resize(nz * nv, 0.0);
         self.d_dxdt_nuc_dx.resize(nz * sp * sp, 0.0);
         self.eos_res.resize(nz, [0.0; NUM_EOS_BASIC_RESULTS]);

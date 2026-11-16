@@ -476,16 +476,31 @@ pub fn do1_energy_eqn(
             }
             EnergyEqnOption::Dedt => {
                 has_dedt_dxa = true;
-                let e_ad = model.ln_e_ad[k].exp();
-                let de_dt = (e_ad - model.energy_start[k]) / dt;
-                let (p_ad, p_th) = eval_cell_pressure_for_work_ad(model, k);
-                let inv_rho_ad =
-                    (-StarAdOrder1::variable(model.lnd[k], I_LND_00)).exp();
-                let inv_rho_start = (-model.lnd_start[k]).exp();
-                let d_inv_rho_dt = (inv_rho_ad.val - inv_rho_start) / dt;
-                dwork_fac_00 = p_th * model.peos[k] * d_inv_rho_dt;
-                let pdv_dt = p_ad * (inv_rho_ad - inv_rho_start) / dt;
-                -dl_dm + sources - d_eturb_dt - de_dt - pdv_dt
+                let de_dt =
+                    (model.ln_e_ad[k].exp() - model.energy_start[k]) / dt;
+                let simple_pdv = vel_tc
+                    && model
+                        .controls
+                        .use_p_d_1_div_rho_form_of_work_when_time_centering_velocity;
+                if simple_pdv {
+                    let (dwork_dm, fac_00) =
+                        crate::hydro_work::eval_v_flag_simple_pdv_dm_ad(
+                            model, k, false, vel_tc,
+                        );
+                    dwork_fac_00 = fac_00;
+                    -dl_dm + sources - d_eturb_dt - dwork_dm - de_dt
+                } else {
+                    let (dwork_dm, f_m1, f_00, f_p1) =
+                        crate::hydro_work::eval_v_flag_dwork_dm_ad(
+                            model, k, false, vel_tc,
+                        );
+                    dwork_fac_m1 = f_m1;
+                    dwork_fac_00 = f_00;
+                    dwork_fac_p1 = f_p1;
+                    let dpe_dt =
+                        crate::hydro_work::eval_cell_dpe_dt_ad(model, k, dt);
+                    -dl_dm + sources - d_eturb_dt - dwork_dm - dpe_dt - de_dt
+                }
             }
         }
     };

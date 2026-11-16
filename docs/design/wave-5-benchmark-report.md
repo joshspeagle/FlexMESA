@@ -1,6 +1,6 @@
-# Wave 5.5 Four-Way Benchmark & Parity Report
+# Wave 5.5 Four-Way Benchmark Report
 
-This report records the **Wave 5.5 (`Post-Wave 5 Review & Full-Workspace Fortran MESA Gate`)** four-way benchmark and golden checksum parity campaign across **Upstream Fortran MESA (`gfortran -O2 -fopenmp`)**, **Safe Rust (`cargo --release` + persistent 4-thread worker team)**, **Python (`PyO3` / `flexmesa._rust`)**, and **Python (`JAX float64` `@jax.jit` + `jax.vmap`)** across $N_{\mathrm{zones}} \in \{128, 512, 1024\}$.
+This report records the Wave 5.5 benchmark runs across the standalone Fortran comparator (`benchmarks/fortran_mesa/bench_kernels_wave5.f90`, `gfortran -O2 -fopenmp`), Safe Rust (`cargo --release` + persistent 4-thread worker team), Python (`PyO3` / `flexmesa._rust`), and Python (`JAX float64` `@jax.jit` + `jax.vmap`) across $N_{\mathrm{zones}} \in \{128, 512, 1024\}$. Benchmark provenance and replacement of hand-written Fortran comparators with upstream MESA calls are tracked in [#146](https://github.com/joshspeagle/FlexMESA/issues/146).
 
 ![Four-way Wave 5.5 runtime comparison and zone-count scaling](../assets/figures/wave5_benchmark_speedup.png)
 
@@ -21,15 +21,15 @@ All four Wave 5 workloads evaluate identical radial profiles $s_k = (k - 0.5) / 
 
 ---
 
-## 2. Golden Checksum & Cross-Backend Numerical Parity
+## 2. Regression Snapshots & Rust-vs-JAX Consistency
 
-Across all $N_{\mathrm{zones}} \in \{128, 512, 1024\}$, Upstream Fortran MESA, Safe Rust, Python/PyO3, and JAX match to **9 out of 9 printed significant digits** ($\le 10^{-15}$ relative checksum difference between Safe Rust and JAX):
+Safe Rust and Python/JAX agree internally to $\le 5.6 \times 10^{-15}$ across $N_{\mathrm{zones}} \in \{128, 512, 1024\}$. The Fortran column below comes from `benchmarks/fortran_mesa/bench_kernels_wave5.f90`, a hand-written Fortran comparator that calls selected MESA helper functions rather than full MESA step routines; these numbers are not upstream MESA outputs ([#146](https://github.com/joshspeagle/FlexMESA/issues/146)). On `w5_diff_rot`, `bench_kernels_wave5.f90` (`3.1246e5`) and the current Rust/JAX regression snapshots (`2.6006e3`, changed from `3.1246e5` in `642da54`) evaluate different Spruit-Tayler expressions and have not been checked against upstream `star/private/rotation_mix_info.f90` (`set_ST`; [#146](https://github.com/joshspeagle/FlexMESA/issues/146), [#158](https://github.com/joshspeagle/FlexMESA/issues/158)):
 
-| Workload | $N_{\mathrm{zones}}$ | Upstream Fortran MESA Checksum | Safe Rust Checksum | Python/JAX Checksum | Max Rust vs. JAX Rel. Diff |
+| Workload | $N_{\mathrm{zones}}$ | Standalone Fortran Harness | Safe Rust Regression Snapshot | Python/JAX Regression Snapshot | Max Rust vs. JAX Rel. Diff |
 | :--- | :---: | :---: | :---: | :---: | :---: |
-| `w5_diff_rot` | `128` | `3.12459668E+05` | `3.12459668e5` | `3.12459668e+05` | `2.292e-15` |
-| `w5_diff_rot` | `512` | `3.12476430E+05` | `3.12476430e5` | `3.12476430e+05` | `3.634e-15` |
-| `w5_diff_rot` | `1024` | `3.12476375E+05` | `3.12476375e5` | `3.12476375e+05` | `2.996e-15` |
+| `w5_diff_rot` | `128` | `3.12459668E+05` | `2.60059307e3` | `2.60059307e+03` | `2.292e-15` |
+| `w5_diff_rot` | `512` | `3.12476430E+05` | `2.60090094e3` | `2.60090094e+03` | `3.634e-15` |
+| `w5_diff_rot` | `1024` | `3.12476375E+05` | `2.60091642e3` | `2.60091642e+03` | `2.996e-15` |
 | `w5_riemann_rsp2` | `128` | `-2.69003013E+05` | `-2.69003013e5` | `-2.69003013e+05` | `1.027e-15` (norm) |
 | `w5_riemann_rsp2` | `512` | `-2.71777204E+05` | `-2.71777204e5` | `-2.71777204e+05` | `1.372e-15` (norm) |
 | `w5_riemann_rsp2` | `1024` | `-2.72283698E+05` | `-2.72283698e5` | `-2.72283698e+05` | `1.449e-15` (norm) |

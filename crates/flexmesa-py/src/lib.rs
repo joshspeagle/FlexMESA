@@ -15,104 +15,88 @@
 //!   Dense, banded, sequential block-Thomas, and parallel `bcyclic` odd-even
 //!   cyclic reduction solvers, plus bracketed root-finding and minimization.
 
-#![deny(unsafe_code, missing_docs)]
+#![forbid(unsafe_code)]
+#![deny(missing_docs)]
 #![allow(
     clippy::cast_possible_truncation,
     clippy::cast_possible_wrap,
     clippy::cast_precision_loss,
     clippy::cast_sign_loss,
     clippy::doc_markdown,
+    clippy::elidable_lifetime_names,
+    clippy::fn_params_excessive_bools,
+    clippy::implicit_clone,
     clippy::many_single_char_names,
+    clippy::map_unwrap_or,
+    clippy::missing_errors_doc,
+    clippy::missing_panics_doc,
+    clippy::must_use_candidate,
     clippy::needless_pass_by_value,
     clippy::similar_names,
     clippy::too_many_arguments,
     clippy::type_complexity,
-    clippy::unnecessary_wraps
+    clippy::unnecessary_wraps,
+    clippy::unreadable_literal
 )]
 
 /// Tier B/C bindings for Wave 5.4 `astero` (scaling relations, surface effects, optimization).
-#[allow(unsafe_code)]
 pub mod astero_py;
 /// Tier B bindings for `atm` (surface boundary conditions, $T(\tau)$, tables).
-#[allow(unsafe_code)]
 pub mod atm_py;
 /// Tier B/C bindings for Wave 5.3 `binary` (orbital mechanics, RLOF, tides, binary evolution).
-#[allow(unsafe_code)]
 pub mod binary_py;
 /// Tier A and Tier B bindings for `chem` (elements, nuclides, solar scales,
 /// composition).
-#[allow(unsafe_code)]
 pub mod chem_py;
 /// Tier B bindings for `colors` (Kurucz2003 SEDs, bolometric and synthetic
 /// photometry).
-#[allow(unsafe_code)]
 pub mod colors_py;
 /// Tier B bindings for `eos` Wave 3a.2 (`HELM` equation of state).
-#[allow(unsafe_code)]
 pub mod eos_helm_py;
 /// Tier B bindings for `eos` Wave 3a.3 (`PC` and `Skye` equations of state).
-#[allow(unsafe_code)]
 pub mod eos_pc_skye_py;
 /// Tier B bindings for `eos` Wave 3a (`ideal`, `gauss_fermi`, `ion_offset`).
-#[allow(unsafe_code)]
 pub mod eos_py;
 /// Tier B bindings for `eos` Wave 3a.3 (`eosDT_get` blend and inverse solvers).
-#[allow(unsafe_code)]
 pub mod eos_solver_py;
 /// Tier B bindings for 1D piecewise-monotonic and MP cubic interpolation.
-#[allow(unsafe_code)]
 pub mod interp_1d;
 /// Tier B bindings for 2D bicubic and piecewise-monotonic interpolation.
-#[allow(unsafe_code)]
 pub mod interp_2d;
 /// Tier B bindings for `ionization` (`Fe56` in `He4`, 4D tables,
 /// `typical_charge`).
-#[allow(unsafe_code)]
 pub mod ionization_py;
 /// Tier B bindings for `kap` (`kap` radiative, conductive, and Compton opacities).
-#[allow(unsafe_code)]
 pub mod kap_py;
 /// Tier A/B/C bindings for `auto_diff`, `math`, and `mtx`.
-#[allow(unsafe_code)]
 pub mod math_solvers;
 /// Tier B/C bindings for `net` (nuclear networks, analytical Jacobians, burners).
-#[allow(unsafe_code)]
 pub mod net_py;
 /// Tier B bindings for `neu` (Itoh et al. 1996 thermal neutrino losses).
-#[allow(unsafe_code)]
 pub mod neu_py;
 /// Tier B bindings for `rates` (nuclear reaction rates, screening, and weak rates).
-#[allow(unsafe_code)]
 pub mod rates_py;
 /// PyO3 bindings for `star` end-to-end `inlist` parsing and `test_suite` runner.
-#[allow(unsafe_code)]
 pub mod star_e2e_py;
-/// PyO3 bindings for Stage `E2E-4` and `E2E-5` pulsation, `astero`, and `dev_cases_*` suites.
-#[allow(unsafe_code)]
-pub mod star_e2e_tier45_py;
+/// PyO3 bindings for Stage `E2E-4` pulsation, `astero`, and `dev_cases_*` suites.
+pub mod star_e2e_tier4_py;
+/// PyO3 bindings for Stage `E2E-5` Tier 5 `star` and `binary/test_suite` suites.
+pub mod star_e2e_tier5_py;
 /// Internal helper routines for [`star_py::PyStarModel`].
-#[allow(unsafe_code)]
 pub mod star_helpers_py;
 /// Tier A/B/C bindings for `star` (stellar structure, ZAMS/pre-MS, I/O, microphysics).
-#[allow(unsafe_code)]
 pub mod star_py;
 /// Tier A/B bindings for Wave 5.2 `star` hydrodynamics and pulsation export.
-#[allow(unsafe_code)]
 pub mod star_wave5_2_py;
 /// Tier B/C bindings for Wave 5.1 `star` extensions (diffusion, rotation, premix).
-#[allow(unsafe_code)]
 pub mod star_wave5_py;
 /// Tier A bindings for `data` (`SHA-256` hashing and `.safetensors` parsers).
-#[allow(unsafe_code)]
 pub mod tier_a_data;
 /// Tier A bindings for `utils`, `testing`, and `schema`.
-#[allow(unsafe_code)]
 pub mod tier_a_parse;
 /// Tier B bindings for `turb` (`MLT` and `TDC` convective transport).
-#[allow(unsafe_code)]
 pub mod turb_py;
 /// Batch PyO3 bindings for the Wave 5 benchmark suite.
-#[allow(unsafe_code)]
 pub mod wave5_bench_py;
 
 use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
@@ -274,7 +258,7 @@ where
 
 /// Registers all Tier A, Tier B, and Tier C functions on the `flexmesa._rust`
 /// Python extension module.
-#[allow(unsafe_code)]
+#[allow(clippy::used_underscore_items)]
 #[pymodule]
 fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     tier_a_parse::register(m)?;
@@ -297,7 +281,8 @@ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     net_py::register(m)?;
     star_py::register(m)?;
     star_e2e_py::register(m)?;
-    star_e2e_tier45_py::register_star_e2e_tier45(m)?;
+    star_e2e_tier4_py::register(m)?;
+    star_e2e_tier5_py::register(m)?;
     star_wave5_py::register(m)?;
     star_wave5_2_py::register(m)?;
     binary_py::register(m)?;

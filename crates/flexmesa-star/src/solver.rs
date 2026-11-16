@@ -54,7 +54,9 @@ pub fn compute_corr_coeff(
     let layout = &model.layout;
     let max_dln = 0.5_f64;
     let max_dx_chem = 0.25_f64;
+    let eps_neg_xa = 5.0e-5_f64;
     let mut coeff = 1.0_f64;
+    let mut min_chem_alpha = 1.0_f64;
 
     if nz > 0 {
         let old_lum_surf = model.lum[0];
@@ -86,16 +88,18 @@ pub fn compute_corr_coeff(
                 let dx_j = dx_scaled[base + ivar] * x_scale[base + ivar];
                 let dxa = dx_j.abs();
                 if dxa > max_dx_chem {
-                    coeff = coeff.min(max_dx_chem / dxa);
+                    min_chem_alpha = min_chem_alpha.min(max_dx_chem / dxa);
                 }
                 let x_old = model.xa[c_base + j];
-                if x_old > 1.0e-12 && x_old + dx_j < 0.05 * x_old {
-                    coeff = coeff.min(-0.95 * x_old / dx_j);
+                if dx_j < 0.0 && x_old + dx_j < -eps_neg_xa {
+                    min_chem_alpha = min_chem_alpha
+                        .min((-(x_old + eps_neg_xa) / dx_j).max(0.0));
                 }
             }
         }
     }
-    coeff.clamp(1.0e-12, 1.0)
+    coeff = coeff.min(min_chem_alpha.max(1.0e-2));
+    coeff.clamp(1.0e-6, 1.0)
 }
 
 /// Applies a damped scaled correction
@@ -109,7 +113,7 @@ pub fn compute_corr_coeff(
 fn apply_damped_correction(
     model: &mut StarModel,
     xh_base: &[f64],
-    xa_base: &[f64],
+    dx_chem_base: &[f64],
     dx_scaled: &[f64],
     x_scale: &[f64],
     alpha: f64,
@@ -137,13 +141,15 @@ fn apply_damped_correction(
         if include_chem && model.species > 0 {
             let c_base = k * model.species;
             for j in 0..model.species {
+                let idx = c_base + j;
                 let ivar = model.layout.chem_var_index(j);
-                let x_new = (xa_base[c_base + j]
-                    + alpha
-                        * dx_scaled[s_base + ivar]
-                        * x_scale[s_base + ivar])
-                    .clamp(0.0, 1.0);
-                model.xa[c_base + j] = x_new;
+                let step =
+                    alpha * dx_scaled[s_base + ivar] * x_scale[s_base + ivar];
+                let x_start = model.xa_start[idx];
+                let dx_new = (dx_chem_base[idx] + step)
+                    .clamp(-5.0e-5 - x_start, 1.0 + 5.0e-5 - x_start);
+                model.xa_sub_xa_start[idx] = dx_new;
+                model.xa[idx] = x_start + dx_new;
             }
         }
     }
@@ -152,7 +158,7 @@ fn apply_damped_correction(
 }
 
 /// Normalizes cell species mass fractions `xa` so $\sum_{j=0}^{\mathrm{species}-1} X_{j,k} = 1$
-/// in every zone `k`.
+/// when $|\sum_j X_{j,k} - 1| > 10^{-12}$ (`solver_support.f90:1459`).
 fn normalize_species_fractions(model: &mut StarModel) {
     if model.species == 0 {
         return;
@@ -165,7 +171,7 @@ fn normalize_species_fractions(model: &mut StarModel) {
             model.xa[c_base + j] = x_clamped;
             sum_x += x_clamped;
         }
-        if sum_x > 0.0 {
+        if sum_x > 0.0 && (sum_x - 1.0).abs() > 1.0e-12 {
             for j in 0..model.species {
                 model.xa[c_base + j] /= sum_x;
             }
@@ -219,18 +225,36 @@ pub fn solve_henyey_step(
     use_bcyclic: bool,
 ) -> Result<HenyeySolverReport, StarError> {
     model.pack_xh();
+    if include_chem && model.species > 0 && model.xa.len() == model.xa_start.len()
+    {
+        model.xa_sub_xa_start.clear();
+        model.xa_sub_xa_start.extend(
+            model.xa.iter().zip(&model.xa_start).map(|(&x, &xs)| x - xs),
+        );
+    } else {
+        model.xa_sub_xa_start.clear();
+    }
     let mut sys = HenyeySystem::new(0, 0, Vec::new());
-    eval_henyey_equations_into(model, include_chem, &mut sys)?;
+    if let Err(e) = eval_henyey_equations_into(model, include_chem, &mut sys) {
+        model.xa_sub_xa_start.clear();
+        return Err(e);
+    }
     let (mut residual_norm, mut max_residual) =
         compute_residual_norms(model, sys.nvar, &sys.equ);
     let mut correction_norm = 0.0;
     let mut max_correction = 0.0;
 
-    let max_iters = model.controls.max_newton_iters.max(1);
+    let gold_level = active_gold_level(model);
+    let max_iters = if gold_level == 2 {
+        model.controls.max_newton_iters.max(40)
+    } else {
+        model.controls.max_newton_iters.max(1)
+    };
     let mut converged = false;
     let mut iter_used = 0;
     let mut xh_prev = Vec::with_capacity(model.xh.len());
     let mut xa_prev = Vec::with_capacity(model.xa.len());
+    let mut dx_chem_prev = Vec::with_capacity(model.xa_sub_xa_start.len());
     let mut rhs_buf = Vec::with_capacity(sys.equ.len());
     let mut trial_sys = HenyeySystem::new(0, 0, Vec::new());
     let mut best_sys_buf = HenyeySystem::new(0, 0, Vec::new());
@@ -238,7 +262,13 @@ pub fn solve_henyey_step(
     for iter in 1..=max_iters {
         iter_used = iter;
         let dx_scaled =
-            solve_linear_henyey_system(&sys, use_bcyclic, &mut rhs_buf)?;
+            match solve_linear_henyey_system(&sys, use_bcyclic, &mut rhs_buf) {
+                Ok(v) => v,
+                Err(e) => {
+                    model.xa_sub_xa_start.clear();
+                    return Err(e);
+                }
+            };
         (correction_norm, max_correction) = compute_model_correction_norms(
             model,
             sys.nz,
@@ -256,6 +286,7 @@ pub fn solve_henyey_step(
         );
         xh_prev.clone_from(&model.xh);
         xa_prev.clone_from(&model.xa);
+        dx_chem_prev.clone_from(&model.xa_sub_xa_start);
         let prev_residual_norm = residual_norm;
 
         let mut alpha = base_coeff;
@@ -263,11 +294,11 @@ pub fn solve_henyey_step(
         let mut step_accepted = false;
         let mut best_rnorm = f64::INFINITY;
         let mut best_meta: Option<(f64, f64, f64)> = None;
-        for _bt in 0..8 {
+        for _bt in 0..7 {
             apply_damped_correction(
                 model,
                 &xh_prev,
-                &xa_prev,
+                &dx_chem_prev,
                 &dx_scaled,
                 &sys.x_scale,
                 alpha,
@@ -304,15 +335,11 @@ pub fn solve_henyey_step(
 
         if !step_accepted {
             if let Some((best_alpha, best_rnorm, best_rmax)) = best_meta {
-                if best_alpha > 0.0
-                    && best_rnorm < 1.0e6
-                    && (best_rnorm <= prev_residual_norm * 2.0
-                        || prev_residual_norm > 1.0)
-                {
+                if best_alpha > 0.0 && best_rnorm < 1.0e6 {
                     apply_damped_correction(
                         model,
                         &xh_prev,
-                        &xa_prev,
+                        &dx_chem_prev,
                         &dx_scaled,
                         &sys.x_scale,
                         best_alpha,
@@ -330,6 +357,7 @@ pub fn solve_henyey_step(
         if !step_accepted {
             model.xh.clone_from(&xh_prev);
             model.xa.clone_from(&xa_prev);
+            model.xa_sub_xa_start.clear();
             model.unpack_xh();
             model.set_m_grav_and_grav();
             return Err(StarError::ConvergenceFailure(format!(
@@ -369,6 +397,7 @@ pub fn solve_henyey_step(
     if include_chem {
         normalize_species_fractions(model);
     }
+    model.xa_sub_xa_start.clear();
 
     Ok(HenyeySolverReport {
         converged,

@@ -25,6 +25,7 @@
 use flexmesa_chem::NUM_CATEGORIES;
 use flexmesa_const::LN10;
 use flexmesa_eos::HelmTable;
+use flexmesa_turb::MixingType;
 use flexmesa_net::{
     burn_1_zone, burn_1_zone_const_density, Burn1ZoneInput,
     BurnConstDensityInput,
@@ -397,6 +398,23 @@ pub(crate) fn refresh_mixing_state(
     dt: f64,
     overshoot_configs: &[OvershootConfig],
 ) {
+    let has_rot_mix = model.controls.rotation_flag
+        && (model.controls.mix_wind.am_d_mix_factor > 0.0
+            || model.controls.mix_wind.d_visc_factor > 0.0);
+    if has_rot_mix {
+        for k in 0..model.nz {
+            model.d_mix[k] = model.mlt_d[k];
+            if model.mixing_type[k] == MixingType::RotationMixing {
+                model.mixing_type[k] = if model.mlt_d[k] <= 0.0 {
+                    MixingType::NoMixing
+                } else if model.gradr[k] > model.grada[k] {
+                    MixingType::SemiconvectiveMixing
+                } else {
+                    MixingType::ThermohalineMixing
+                };
+            }
+        }
+    }
     if model.controls.remove_mixing_glitches {
         clean_mixing_glitches(model, 1.0, 0.1);
     }
@@ -405,7 +423,10 @@ pub(crate) fn refresh_mixing_state(
     }
     let (_cz_bdy_dq, boundaries) = locate_convection_boundaries(model);
     apply_overshooting(model, &boundaries, overshoot_configs);
-    compute_convection_sigmas(model, dt, 1.0, 1.0e10);
+    if has_rot_mix {
+        crate::rotation::augment_d_mix_with_rotation(model);
+    }
+    compute_convection_sigmas(model, dt, 1.0, 1.0e13);
     if model.controls.rti_flag
         && model.controls.do_mix
         && model.controls.mix_factor > 0.0
@@ -424,6 +445,23 @@ fn run_struct_burn_mix_core(
     use_bcyclic: bool,
     overshoot_configs: &[OvershootConfig],
 ) -> Result<HenyeySolverReport, StarError> {
+    if model.controls.rsp2_flag {
+        crate::rsp2_eqns::rsp2_adjust_vars_before_call_solver(model);
+        model.pack_xh();
+    }
+    let pre_burn_start = (
+        model.lnd.clone(),
+        model.ln_t.clone(),
+        model.ln_r.clone(),
+        model.v.clone(),
+        model.csound.clone(),
+    );
+    model.lnd_start.clone_from(&pre_burn_start.0);
+    model.ln_t_start.clone_from(&pre_burn_start.1);
+    model.ln_r_start.clone_from(&pre_burn_start.2);
+    model.v_start.clone_from(&pre_burn_start.3);
+    model.aux.csound_start.clone_from(&pre_burn_start.4);
+
     if op_split_burn && do_burn {
         let e_before: f64 =
             (0..model.nz).map(|k| model.energy[k] * model.dm[k]).sum();
@@ -442,11 +480,14 @@ fn run_struct_burn_mix_core(
         model.sig.fill(0.0);
     }
 
-    if model.controls.rsp2_flag {
-        crate::rsp2_eqns::rsp2_adjust_vars_before_call_solver(model);
-        model.pack_xh();
-    }
     model.save_start_values();
+    (
+        model.lnd_start,
+        model.ln_t_start,
+        model.ln_r_start,
+        model.v_start,
+        model.aux.csound_start,
+    ) = pre_burn_start;
 
     let do_chem = (do_burn || do_mix) && model.species > 0;
     solve_henyey_step(model, do_chem, use_bcyclic)

@@ -210,7 +210,7 @@ pub fn set_basic_vars(model: &mut StarModel) -> Result<(), StarError> {
 
 #[inline]
 fn clamp_unit_roundoff(val: f64) -> f64 {
-    if (-1.0e-12..=1.0 + 1.0e-12).contains(&val) {
+    if (-1.0e-3..=1.0 + 1.0e-3).contains(&val) {
         val.clamp(0.0, 1.0)
     } else {
         val

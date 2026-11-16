@@ -51,37 +51,39 @@ _FACE_MLT_BATCH_JIT = jax.jit(
 
 def _hydro_res_obs(*args: jax.Array | float) -> jax.Array:
     """Evaluate `|equ| + |diag(dblk)|` via `eval_hydro_residuals_jax`."""
-    equ = star.eval_hydro_residuals_jax(*args[:-1])
-    return jnp.asarray(jnp.abs(equ) + jnp.abs(args[-1]))
+    rc, lc, mc, vc, lnrs, ps, eneus, diag = args[19:]
+    equ = star.eval_hydro_residuals_jax(
+        *args[:19],
+        r_center=rc,
+        l_center=lc,
+        non_nuc_neu_start=eneus,
+        ln_r_start=lnrs,
+        m_center=mc,
+        v_center=vc,
+        peos_start=ps,
+    )
+    return jnp.asarray(jnp.abs(equ) + jnp.abs(diag))
 
 
 _HYDRO_RES_JIT = jax.jit(_hydro_res_obs)
+_HYDRO_RES_IN_AXES = (
+    None,
+    None,
+    None,
+    None,
+    0,
+    0,
+    0,
+    0,
+    None,
+    0,
+    0,
+    None,
+    0,
+    *(None,) * 14,
+)
 _HYDRO_RES_BATCH_JIT = jax.jit(
-    jax.vmap(
-        _hydro_res_obs,
-        in_axes=(
-            None,
-            None,
-            None,
-            None,
-            0,
-            0,
-            0,
-            0,
-            None,
-            0,
-            0,
-            None,
-            0,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-        ),
-    )
+    jax.vmap(_hydro_res_obs, in_axes=_HYDRO_RES_IN_AXES)
 )
 
 _SOLVE_PCR_JIT = jax.jit(
@@ -291,6 +293,11 @@ def bench_star_hydro_eqns(
     lnps = float(model.ln_peos_surf)
     lnts = float(model.ln_t_surf)
     dt = float(model.dt)
+    rc, lc = float(model.r_center), float(model.l_center)
+    mc, vc = float(model.m_center), float(model.v_center)
+    lnrs_j = jnp.asarray(model.ln_r_start)
+    ps_j = jnp.asarray(model.peos_start)
+    eneus_j = jnp.asarray(model.non_nuc_neu_start)
     sys_init = model.eval_equations(include_chem=False)
     diag_j = jnp.asarray(np.diagonal(sys_init.dblk, axis1=1, axis2=2))
 
@@ -306,6 +313,7 @@ def bench_star_hydro_eqns(
         diag = np.diagonal(sys.dblk, axis1=1, axis2=2)
         return np.abs(sys.equ) + np.abs(diag)
 
+    tail = (lnps, lnts, dt, rc, lc, mc, vc, lnrs_j, ps_j, eneus_j, diag_j)
     s2_args = (
         dq_j,
         dm_j,
@@ -323,10 +331,7 @@ def bench_star_hydro_eqns(
         en_j,
         eneu_j,
         em_j,
-        lnps,
-        lnts,
-        dt,
-        diag_j,
+        *tail,
     )
     s3_args = (
         dq_j,
@@ -345,10 +350,7 @@ def bench_star_hydro_eqns(
         en_j,
         eneu_j,
         em_j,
-        lnps,
-        lnts,
-        dt,
-        diag_j,
+        *tail,
     )
     s0, v0 = _h.measure_and_capture(n_warmup, n_repeats, _s0)
     s1, v1 = _h.measure_and_capture(n_warmup, n_repeats, _s0)

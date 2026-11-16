@@ -3,7 +3,9 @@
 angular momentum loss, tidal evolution, and coupled binary star evolution
 (`flexmesa.binary`).
 
-Corresponds to the upstream Fortran MESA `binary/` module.
+Corresponds to the upstream Fortran MESA `binary/` module. The coupled
+`BinarySystem` evolution driver and `binary/test_suite` runner are unverified
+against real MESA output (pending #143, #154, and #160).
 """
 
 from __future__ import annotations
@@ -19,8 +21,8 @@ eval_gr_expected_separation_rsun = e2e_tier45.eval_gr_expected_separation_rsun
 eval_tauris_vdh_expected_separation_rsun = (
     e2e_tier45.eval_tauris_vdh_expected_separation_rsun
 )
-run_binary_suite = e2e_tier45.run_binary_suite
-run_binary_test_suite_case = e2e_tier45.run_binary_test_suite_case
+run_binary_suite = system.run_binary_suite
+run_binary_test_suite_case = system.run_binary_test_suite_case
 
 eval_rlobe = orbit_mdot.eval_rlobe
 eval_rl_relative_gap = orbit_mdot.eval_rl_relative_gap

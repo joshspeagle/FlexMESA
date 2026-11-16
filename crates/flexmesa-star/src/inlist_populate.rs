@@ -321,7 +321,7 @@ impl InlistBundle {
             max_logt_for_include_p_and_l_in_velocity_time_centering,
             op_split_burn_min_t, op_split_burn_eps, op_split_burn_odescal,
             op_split_burn_eps_nuc_infall_limit, op_split_burn_min_t_for_variable_t_solver,
-            tdc_alpha_m, alpha_rti_diffusion_factor, dedt_rti_diffusion_factor,
+            tdc_alpha_r, tdc_alpha_m, alpha_rti_diffusion_factor, dedt_rti_diffusion_factor,
             dudt_rti_diffusion_factor, dlnddt_rti_diffusion_factor,
             composition_rti_diffusion_factor, alpha_rti_src_min_v_div_cs,
             alpha_rti_src_min_q, alpha_rti_src_max_q,
@@ -363,6 +363,7 @@ impl InlistBundle {
         }
         ctrl.f64_into(&mut c.gamma_ln_s_eps_grav_full_on, "gamma_lns_eps_grav_full_on");
         ctrl.f64_into(&mut c.gamma_ln_s_eps_grav_full_off, "gamma_lns_eps_grav_full_off");
+        ctrl.isize_into(&mut c.steps_before_use_tdc, "steps_before_use_tdc");
         ctrl.isize_into(
             &mut c.steps_before_use_velocity_time_centering,
             "steps_before_use_velocity_time_centering",
@@ -394,6 +395,10 @@ impl InlistBundle {
                 "simple_photosphere" => AtmOption::SimplePhotosphere,
                 _ => AtmOption::TTau,
             };
+        }
+        if let Some(s) = ctrl.get_str("atm_table") {
+            c.atm_table = s.trim_matches(|ch: char| ch.is_whitespace() || ch == '\'' || ch == '"')
+                .to_ascii_lowercase();
         }
         if let Some(s) = ctrl.get_str("atm_t_tau_relation") {
             c.atm_t_tau_relation = match s.to_ascii_lowercase().as_str() {
@@ -433,5 +438,19 @@ impl InlistBundle {
         if let Some(v) = ctrl.get_i64("rsp_target_steps_per_cycle").filter(|&v| v > 0) {
             c.rsp_target_steps_per_cycle = v as usize;
         }
+    }
+}
+
+/// Maps an upstream `atm_table` string to the corresponding `flexmesa_atm` table ID.
+pub(crate) fn atm_table_id(name: &str) -> Option<i32> {
+    match name.trim().to_ascii_lowercase().as_str() {
+        "photosphere" => Some(flexmesa_atm::ATM_TABLE_PHOTOSPHERE),
+        "tau_100" => Some(flexmesa_atm::ATM_TABLE_TAU_100),
+        "tau_10" => Some(flexmesa_atm::ATM_TABLE_TAU_10),
+        "tau_1" => Some(flexmesa_atm::ATM_TABLE_TAU_1),
+        "tau_1m1" => Some(flexmesa_atm::ATM_TABLE_TAU_1M1),
+        "wd_tau_25" => Some(flexmesa_atm::ATM_TABLE_WD_TAU_25),
+        "db_wd_tau_25" => Some(flexmesa_atm::ATM_TABLE_DB_WD_TAU_25),
+        _ => None,
     }
 }

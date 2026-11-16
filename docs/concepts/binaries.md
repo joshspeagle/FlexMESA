@@ -60,7 +60,7 @@ When the companion is an accreting black hole (`is_black_hole=True` in `BinarySy
 `flexmesa.binary` evolves orbital angular momentum $J_{\mathrm{orb}}$, eccentricity $e$, and component spin rates $\Omega_{1,2}$ under four secular torque mechanisms:
 
 1. **Peters (1964) Gravitational-Wave Radiation & Eccentricity Decay (`eval_jdot_gr_jax`, `eval_edot_gr`)**:
-   Quadrupole gravitational-wave emission extracts orbital angular momentum (`eval_jdot_gr`) and circularizes eccentric orbits (`eval_edot_gr`, coupled directly into `BinarySystem::step` matching `binary_edot.f90:96`):
+   Quadrupole gravitational-wave emission extracts orbital angular momentum (`eval_jdot_gr`) and evaluates Peters (1964) eccentricity decay (`eval_edot_gr`; alignment with upstream `binary_edot.f90`, which omits a gravitational-wave eccentricity term, is tracked in [#160](https://github.com/joshspeagle/FlexMESA/issues/160) and [#175](https://github.com/joshspeagle/FlexMESA/issues/175)):
 
    $$\frac{\dot{J}_{\mathrm{gr}}}{J_{\mathrm{orb}}} = -\frac{32}{5}\,\frac{G^3}{c^5}\,\frac{M_1 M_2 (M_1 + M_2)}{a^4\,(1 - e^2)^{5/2}}\left(1 + \frac{7}{8}e^2\right), \qquad \dot{e}_{\mathrm{gr}} = -\frac{304}{15}\,\frac{G^3 M_1 M_2 (M_1 + M_2)}{c^5\,a^4\,(1 - e^2)^{5/2}}\,e\left(1 + \frac{121}{304}e^2\right).$$
 
@@ -70,6 +70,8 @@ When the companion is an accreting black hole (`is_black_hole=True` in `BinarySy
    Evaluates spin-orbit angular momentum exchange $\dot{J}_{\mathrm{ls}} = -\sum_{i=1}^2 (\Delta S_i - \dot{M}_{\mathrm{wind},i} j_{\mathrm{surf},i}\Delta t) / \Delta t$ after subtracting stellar wind spin loss (`binary_jdot.f90:129-145`) alongside the companion's missing stellar wind angular momentum torque (`default_jdot_missing_wind`).
 4. **Hut (1981) Weak-Friction Tidal Circularization & Synchronization (`eval_edot_tidal_hut_jax`)**:
    Evaluates the Hut (1981, A&A, 99, 126) fifth-order eccentricity polynomials $f_1(e^2)$ through $f_5(e^2)$ to compute the tidal circularization rate $\dot{e}_{\mathrm{tidal}}$ and spin-orbit synchronization timescales for convective and radiative envelopes, paired with monotonically wrapped $[0, 1)$ true-anomaly phase grids (`build_anomaly_grid`) for eccentric phase-dependent RLOF integration.
+5. **Custom Binary Winds, Post-Step Hooks & Composition Relaxation (`BinaryExtras`, `relax_composition_with_henyey`)**:
+   In Safe Rust, `BinarySystem::step_with_extras` and `BinarySystem::try_step_with_extras` accept custom `BinaryExtras` implementations (`other_wind_cgs`, `finish_step` returning `BinaryExtrasAction`, with `step` and `try_step` delegating to `DefaultBinaryExtras`), and `binary/test_suite` startup invokes `relax_composition_with_henyey` for `relax_initial_Z` or `relax_initial_Y` (coupled binary step structure and upstream `do_relax_Z` / `do_relax_Y` alignment are unverified against real MESA output, pending [#143](https://github.com/joshspeagle/FlexMESA/issues/143), [#154](https://github.com/joshspeagle/FlexMESA/issues/154), and [#160](https://github.com/joshspeagle/FlexMESA/issues/160)).
 
 === "Python & JAX (`flexmesa.binary`)"
 

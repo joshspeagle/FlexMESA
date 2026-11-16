@@ -88,6 +88,7 @@ mod inlist_populate_limits;
 mod inlist_populate_phase5b;
 pub mod inlist_runner;
 pub mod job_controls;
+pub mod mdot_redo;
 pub mod mesh;
 pub mod mesh_adjust;
 pub(crate) mod mesh_remap;
@@ -108,10 +109,12 @@ pub mod pulse_exporters;
 pub mod pulse_modes;
 pub mod pulse_utils;
 pub mod relax;
+pub mod relax_comp;
 pub mod riemann;
 pub mod riemann_ad;
 pub mod riemann_eqns;
 pub mod rotation;
+pub(crate) mod rotation_mix;
 pub mod rsp2;
 pub mod rsp2_ad;
 pub mod rsp2_eqns;
@@ -206,7 +209,7 @@ pub use evolve::{
 };
 pub use evolve_support::{
     apply_step_pre_physics, eval_total_energy_integrals,
-    update_step_energy_conservation,
+    remesh_star_before_step, update_step_energy_conservation,
 };
 pub use history::{
     extract_history_row, format_history_header, format_history_row,
@@ -230,7 +233,13 @@ pub use hydro_rti::{
     do1_dalpha_rti_dt_eqn, eval_alpha_rti_sources, set_dpdr_drhodr_info,
     set_rti_mixing_info,
 };
-pub use hydro_state::HydroAuxState;
+pub use hydro_state::{
+    HydroAuxState, TidalDeformationHandle, TidalDeformationHook,
+    TidalShellDeformation,
+};
+pub use mdot_redo::{
+    eval_surf_avg_w_div_w_crit, MdotRedoState, SelectMdotAction,
+};
 pub use hydro_temperature::{interp_p_point_ad, set_rsp_lsurf_bc};
 pub use hydro_vars::{
     check_for_redo_mlt, do_brunt_b, do_brunt_n2, eval_surf_bc, set_hydro_vars,
@@ -292,14 +301,16 @@ pub use pulse_modes::{
     build_bvp_model_from_pulse_points, eval_acoustic_large_separation_hz,
     eval_astero_scaling_dnu_numax_uhz, eval_buoyancy_period_spacing_s,
     eval_kappa_mechanism_growth, eval_linear_oscillation_modes,
-    eval_target_mode_frequency_and_growth, solve_adipls_fgong_modes,
-    solve_bvp_eigenmodes, solve_gyre_mesa_modes, LinearOscillationMode,
+    eval_target_mode_frequency_and_growth, scan_bounds_from_targets,
+    scan_star_bvp_eigenmodes, solve_adipls_fgong_modes, solve_bvp_eigenmodes,
+    solve_gyre_mesa_modes, LinearOscillationMode, PulseModeScanOptions,
 };
 pub use relax::{
     apply_composition_relaxation, apply_uniform_rotation, relax_core_boundary,
     relax_from_profile_files, relax_irradiation_to_target,
     relax_mass_to_target, relax_tau_factor_to_target, relax_to_remove_h_env,
 };
+pub use relax_comp::relax_composition_with_henyey;
 pub use riemann::{
     eval_hllc_face, eval_hllc_surface_face, eval_riemann_momentum_residual,
     eval_riemann_profile, HllcFaceState,
@@ -310,8 +321,8 @@ pub use riemann_ad::{
 pub use rotation::{
     eval_magnetic_diffusivity, eval_omega_crit, eval_rotation_fp_ft,
     eval_rotational_mixing_zone, eval_thermal_diffusivity,
-    set_rotation_mixing_info, update_rotation_distortion_factors,
-    RotationalMixZone, RI_CRIT_DSI,
+    set_rotation_mixing_info, sync_post_henyey_rotation,
+    update_rotation_distortion_factors, RotationalMixZone, RI_CRIT_DSI,
 };
 pub use rsp2::{
     compute_rsp2_uq_face, eval_rsp2_face, eval_rsp2_zone, rsp2_flux_limiter,
@@ -404,8 +415,7 @@ pub use tier3_physics::{
     eval_tzo_core_accretion_step, export_stella_ascii,
 };
 pub use tier4_extras::{
-    is_tier4_case, run_astero_suite, run_astero_test_suite_case,
-    run_dev_cases_suite, run_tier4_star_suite, run_tier4_suite,
+    is_tier4_case, run_dev_cases_suite, run_tier4_star_suite,
     verify_tier4_case_assertions, Tier4CaseExtras, TIER4_ACTIVE_STAR_CASES,
     TIER4_ASTERO_CASES, TIER4_DEV_CASES, TIER4_STAR_CASES,
 };

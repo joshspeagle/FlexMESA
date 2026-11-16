@@ -171,7 +171,6 @@ def eval_rotational_mixing_zone_jax(
     valid = (om_abs >= 1.0e-20) & (r >= 1.0e5) & (hp >= 1.0e3)
     om = jnp.maximum(om_abs, 1.0e-30)
     q_shear = _safe_abs(dln_omega_dln_r)
-    q_safe = jnp.maximum(q_shear, 1.0e-30)
 
     denom_k = (
         3.0
@@ -244,73 +243,104 @@ def eval_rotational_mixing_zone_jax(
         7.0e11 * z * ln_lam * jnp.power(t_eff, -1.5), 1.0e-6, 1.0e16
     )
 
-    n_t2 = jnp.maximum(brunt_n2_t, 0.0)
-    n_mu2 = jnp.maximum(brunt_n2_mu, 0.0)
-    n_eff2 = n_mu2 + (eta_m / jnp.maximum(k_therm, eta_m)) * n_t2
-    n_eff = jnp.sqrt(jnp.maximum(n_eff2, 1.0e-30))
-    q_min = jnp.power(n_eff / om, 1.75) * jnp.power(
-        eta_m / jnp.maximum(r * r * n_eff, 1.0e-30), 0.25
+    q_st = jnp.clip(q_shear, 1.0e-30, 1.0e30)
+    k_th = jnp.maximum(k_therm, 1.0e-30)
+    om_st = jnp.where(om_abs > 1.0e-20, om_abs, 1.0)
+    r_st = jnp.maximum(r, 1.0e5)
+    rho_st = jnp.maximum(rho, 1.0e-20)
+    s4pd = jnp.sqrt(4.0 * _PI * rho_st)
+
+    has_mu = brunt_n2_mu > 0.0
+    n_mu = jnp.sqrt(jnp.where(has_mu, brunt_n2_mu, 1.0))
+    wn0 = om_st / n_mu
+    q0 = jnp.where(
+        has_mu,
+        jnp.power(n_mu / om_st, 1.75)
+        * jnp.power(jnp.maximum(eta_m / (r_st * r_st * n_mu), 1.0e-99), 0.25),
+        0.0,
     )
-    f_damp = jnp.clip(
-        1.0 - jnp.sqrt(jnp.maximum(q_min, 1.0e-30) / q_safe), 0.0, 1.0
+    s0 = jnp.where(
+        has_mu,
+        rho_st * om_st * om_st * r_st * r_st * (q_st**3) * (wn0**4),
+        0.0,
+    )
+    eta0 = jnp.where(has_mu, r_st * r_st * om_st * (q_st**4) * (wn0**6), 0.0)
+    bphi0 = jnp.where(has_mu, (q_st * wn0 * om_st) * s4pd * r_st, 0.0)
+    br0 = jnp.where(has_mu, bphi0 * q_st * wn0 * wn0, 0.0)
+
+    has_t = brunt_n2_t > 0.0
+    nt = jnp.sqrt(jnp.where(has_t, brunt_n2_t, 1.0))
+    wn1 = om_st / nt
+    kr2n = jnp.maximum(k_th / (r_st * r_st * nt), 1.0e-99)
+    wn1_pos = jnp.where(wn1 > 1.0e-42, wn1, 1.0)
+    q1 = jnp.where(
+        has_t & (wn1 > 1.0e-42),
+        jnp.power(1.0 / wn1_pos, 1.75)
+        * jnp.power(jnp.maximum(eta_m / (r_st * r_st * nt), 1.0e-99), 0.25)
+        * jnp.power(jnp.maximum(eta_m / k_th, 1.0e-99), 0.75),
+        0.0,
+    )
+    wn_kr2n = jnp.maximum(wn1 * kr2n, 1.0e-198)
+    s1a = rho_st * jnp.square(om_st * r_st) * q_st * jnp.sqrt(wn_kr2n)
+    s1b = rho_st * jnp.square(om_st * r_st) * (q_st**3) * (wn1**4)
+    s1 = jnp.where(has_t, jnp.maximum(s1a, s1b), 0.0)
+    eta1a = r_st * r_st * om_st * q_st * jnp.power(wn_kr2n, 0.75)
+    eta1b = r_st * r_st * om_st * (q_st**4) * (wn1**6)
+    eta1 = jnp.where(has_t, jnp.maximum(eta1a, eta1b), 0.0)
+    bphi1 = jnp.where(
+        has_t,
+        jnp.sqrt(q_st) * om_st * jnp.power(wn_kr2n, 0.125) * s4pd * r_st,
+        0.0,
+    )
+    br1 = jnp.where(has_t, bphi1 * jnp.power(wn_kr2n, 0.25), 0.0)
+
+    both = has_t & has_mu & ((s0 + s1) > 0.0)
+    s_sum_safe = jnp.where(both, s0 + s1, 1.0)
+    eta_sum = eta0 + eta1
+    eta_sum_safe = jnp.where(eta_sum > 0.0, eta_sum, 1.0)
+    et_both = jnp.where(eta_sum > 0.0, eta0 * eta1 / eta_sum_safe, 0.0)
+    w0 = s1 / s_sum_safe
+    only_mu = (~has_t) & has_mu
+
+    sm = jnp.where(
+        both, s0 * w0, jnp.where(only_mu, s0, jnp.where(has_t, s1, 0.0))
+    )
+    etam = jnp.where(
+        both, et_both, jnp.where(only_mu, eta0, jnp.where(has_t, eta1, 0.0))
+    )
+    qm = jnp.where(
+        both, q0 + q1, jnp.where(only_mu, q0, jnp.where(has_t, q1, 0.0))
+    )
+    b_phi_raw = jnp.where(
+        both,
+        w0 * bphi0 + (1.0 - w0) * bphi1,
+        jnp.where(only_mu, bphi0, jnp.where(has_t, bphi1, 0.0)),
+    )
+    b_r_raw = jnp.where(
+        both,
+        w0 * br0 + (1.0 - w0) * br1,
+        jnp.where(only_mu, br0, jnp.where(has_t, br1, 0.0)),
     )
 
-    n_mu = jnp.sqrt(jnp.maximum(n_mu2, 1.0e-30))
-    q_sqrt = jnp.sqrt(q_safe)
-    b_phi_0 = (
-        jnp.sqrt(4.0 * _PI * jnp.maximum(rho, 1.0e-30))
-        * r
-        * om
-        * q_sqrt
-        * (om / n_mu)
-    )
-    b_r_0 = b_phi_0 * (om / n_mu) * q_sqrt
-    nu_st_0 = (r * r * om / q_safe) * jnp.power(om / n_mu, 4) * f_damp
-    d_st_0 = (
-        (r * r * om)
-        * jnp.power(om / n_mu, 4)
-        * jnp.power(jnp.maximum(eta_m / (r * r * om), 1.0e-12), 0.25)
-        * f_damp
-    )
-
-    n_t = jnp.sqrt(jnp.maximum(n_t2, 1.0e-30))
-    eps_k = jnp.maximum(eta_m / (r * r * n_t), 1.0e-20)
-    b_phi_1 = (
-        jnp.sqrt(4.0 * _PI * jnp.maximum(rho, 1.0e-30))
-        * r
-        * om
-        * jnp.sqrt(om / n_t)
-        * q_sqrt
-        * jnp.power(jnp.maximum(k_therm / (r * r * n_t), 1.0e-20), 0.125)
-    )
-    b_r_1 = b_phi_1 * jnp.sqrt(om / n_t) * jnp.power(eps_k, 0.125)
-    nu_st_1 = (
-        r
-        * r
-        * om
-        * q_sqrt
-        * jnp.sqrt(om / n_t)
-        * jnp.power(jnp.maximum(k_therm / (r * r * n_t), 1.0e-20), 0.25)
-        * f_damp
-    )
-    d_st_1 = nu_st_1 * jnp.clip(
-        jnp.sqrt(eta_m / jnp.maximum(k_therm, eta_m)), 1.0e-4, 1.0
-    )
-
-    use_case0 = (n_mu2 >= (eta_m / jnp.maximum(k_therm, eta_m)) * n_t2) & (
-        n_mu2 > 0.0
-    )
-    active = (
+    f_mag = jnp.maximum(1.0 - jnp.minimum(qm / q_st, 1.0), 0.0)
+    st_active = (
         valid
-        & (q_shear > q_min)
-        & (q_shear > 1.0e-8)
-        & (n_eff2 > 1.0e-20)
-        & (om_abs > 1.0e-15)
+        & (om_abs > 1.0e-20)
+        & (r > 1.0e5)
+        & (rho > 1.0e-20)
+        & ((brunt_n2_t + brunt_n2_mu) > 0.0)
+        & (has_t | has_mu)
+        & (f_mag > 0.0)
+        & jnp.isfinite(sm)
+        & jnp.isfinite(etam)
     )
-    d_st = jnp.where(active, jnp.where(use_case0, d_st_0, d_st_1), 0.0)
-    nu_st = jnp.where(active, jnp.where(use_case0, nu_st_0, nu_st_1), 0.0)
-    b_phi = jnp.where(active, jnp.where(use_case0, b_phi_0, b_phi_1), 0.0)
-    b_r = jnp.where(active, jnp.where(use_case0, b_r_0, b_r_1), 0.0)
+    f_b = jnp.where(st_active, jnp.sqrt(jnp.where(st_active, f_mag, 1.0)), 0.0)
+    nu_st_raw = jnp.clip((f_mag * sm) / (om_st * q_st * rho_st), 0.0, 1.0e18)
+    d_st_raw = jnp.clip(jnp.minimum(f_mag * etam, nu_st_raw), 0.0, 1.0e18)
+    d_st = jnp.where(st_active, d_st_raw, 0.0)
+    nu_st = jnp.where(st_active, nu_st_raw, 0.0)
+    b_phi = jnp.where(st_active, jnp.clip(f_b * b_phi_raw, 0.0, 1.0e12), 0.0)
+    b_r = jnp.where(st_active, jnp.clip(f_b * b_r_raw, 0.0, 1.0e12), 0.0)
 
     return (
         jnp.where(valid, jnp.clip(d_dsi, 0.0, 1.0e18), 0.0),

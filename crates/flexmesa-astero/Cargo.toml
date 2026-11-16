@@ -11,6 +11,7 @@ description = "Asteroseismic scaling relations, surface corrections, separation 
 flexmesa-autodiff = { path = "../flexmesa-autodiff" }
 flexmesa-const = { path = "../flexmesa-const" }
 flexmesa-math = { path = "../flexmesa-math" }
+flexmesa-num = { path = "../flexmesa-num" }
 flexmesa-star = { path = "../flexmesa-star" }
 
 [lints]

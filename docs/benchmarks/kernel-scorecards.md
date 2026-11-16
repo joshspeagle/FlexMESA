@@ -79,9 +79,11 @@ Full per-size tables ($N_{\mathrm{zones}} \in \{128, 512, 1024\}$) and the `star
 
 Full per-size tables ($N_{\mathrm{zones}} \in \{128, 512, 1024\}$) are archived in the [Advanced Star, Binaries & Asteroseismology Benchmark Report](../design/wave-5-benchmark-report.md).
 
-| Workload ($N_{\mathrm{zones}} = 1024$) | Fortran 1t Stage 2 ($\mu\mathrm{s}$) | Fortran 4t Stage 3 ($\mu\mathrm{s}$) | Safe Rust 1t Stage 2 ($\mu\mathrm{s}$) | Safe Rust 4t Stage 3 ($\mu\mathrm{s}$) | PyO3 4t Stage 1 ($\mu\mathrm{s}$) | JAX `@jit` Stage 2 ($\mu\mathrm{s}$) | JAX `vmap` Stage 3 ($\mu\mathrm{s}$) | Golden Checksum |
+| Workload ($N_{\mathrm{zones}} = 1024$) | Standalone Fortran 1t Stage 2 ($\mu\mathrm{s}$) | Standalone Fortran 4t Stage 3 ($\mu\mathrm{s}$) | Safe Rust 1t Stage 2 ($\mu\mathrm{s}$) | Safe Rust 4t Stage 3 ($\mu\mathrm{s}$) | PyO3 4t Stage 1 ($\mu\mathrm{s}$) | JAX `@jit` Stage 2 ($\mu\mathrm{s}$) | JAX `vmap` Stage 3 ($\mu\mathrm{s}$) | Rust/JAX Regression Snapshot |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `w5_diff_rot` | `182.87` | `91.83` | `190.48` | `70.41` | `49.62` | `248.95` | `120.91` | `3.12476375e5` |
+| `w5_diff_rot` | `182.87` | `91.83` | `190.48` | `70.41` | `49.62` | `248.95` | `120.91` | `2.60091642e3` |
 | `w5_riemann_rsp2` | `63.94` | `46.46` | `28.15` | `7.94` | `33.29` | `204.14` | `89.90` | `-2.72283698e5` |
 | `w5_binary_rlof` | `111.57` | `28.29` | `115.63` | `57.79` | `60.69` | `220.69` | `101.77` | `6.27887032e0` |
 | `w5_astero_seism` | `5.83` | `5.83` | `7.25` | `7.25` | `7.48` | `84.06` | `26.75` | `7.36379793e1` |
+
+*(Note: Section 5's Fortran timings come from the hand-written `benchmarks/fortran_mesa/bench_kernels_wave5.f90` comparator rather than full upstream MESA routines; on `w5_diff_rot`, `bench_kernels_wave5.f90` prints `3.12476375e5` while the current Rust/JAX regression snapshot is `2.60091642e3`. Provenance and upstream-routine benchmarking are tracked in [#146](https://github.com/joshspeagle/FlexMESA/issues/146).)*

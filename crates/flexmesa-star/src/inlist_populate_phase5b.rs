@@ -82,12 +82,16 @@ impl InlistBundle {
             max_y_for_burn_z_mix_region, max_x_for_burn_he_mix_region,
             peclet_function_full_on, peclet_function_full_off,
             conv_premix_time_factor,
+            min_logt_for_make_gradr_sticky_in_solver_iters,
             rgb_to_agb_wind_switch, bjorklund_scaling_factor,
             de_jager_scaling_factor, van_loon_scaling_factor,
             nieuwenhuijzen_scaling_factor, min_wind, max_wind,
             mdot_omega_power, max_rotational_mdot_boost,
             max_mdot_jump_for_rotation, rotational_mdot_boost_fac,
-            rotational_mdot_kh_fac, super_eddington_wind_ledd_factor,
+            rotational_mdot_kh_fac, min_years_dt_for_redo_mdot,
+            surf_omega_div_omega_crit_tol, mdot_revise_factor,
+            implicit_mdot_boost, surf_avg_tau_min, surf_avg_tau,
+            am_d_mix_factor, super_eddington_wind_ledd_factor,
             wind_boost_full_off_l_div_ledd, wind_boost_full_on_l_div_ledd,
             super_eddington_wind_max_boost, max_star_mass_for_gain,
             min_star_mass_for_loss, accreted_material_j,
@@ -99,17 +103,40 @@ impl InlistBundle {
             eps_wd_sedimentation_factor, extra_power_source,
             inject_uniform_extra_heat, min_q_for_uniform_extra_heat,
             max_q_for_uniform_extra_heat,
-            max_dq, min_dq, min_dq_for_split, max_surface_cell_dq,
+            max_dq, min_dq, min_dq_for_split, min_dq_for_xa,
+            min_dq_for_xa_convective, mesh_min_dlnr, mesh_max_allowed_ratio,
+            max_delta_x_for_merge, max_surface_cell_dq,
             max_center_cell_dq, p_function_weight, t_function1_weight,
-            r_function_weight, m_function_weight, omega_function_weight,
-            gam_function_weight,
+            r_function_weight, m_function_weight, gradt_function_weight,
+            omega_function_weight,
+            gam_function_weight, remesh_dt_limit,
+            delta_mdot_atol, delta_mdot_rtol,
+            delta_mdot_limit, delta_mdot_hard_limit, w_div_wcrit_max,
+            am_gradmu_factor, d_dsi_factor, d_sh_factor,
+            d_ssi_factor, d_es_factor, d_gsf_factor, d_st_factor, d_visc_factor,
+            am_nu_factor, am_nu_non_rotation_factor, am_nu_dsi_factor,
+            am_nu_sh_factor, am_nu_ssi_factor, am_nu_es_factor,
+            am_nu_gsf_factor, am_nu_st_factor, am_nu_visc_factor,
+            am_sig_term_limit,
+            adjust_j_fraction, min_q_for_adjust_j_lost, min_j_div_delta_j,
         ]);
         map_bools!(ctrl, mw, [
             limit_overshoot_hp_using_size_of_convection_zone,
             conv_premix_avoid_increase, conv_premix_fix_pgas,
+            make_gradr_sticky_in_solver_iters,
             no_wind_if_no_rotation, use_accreted_material_j,
+            premix_omega, do_adjust_j_lost, skip_rotation_in_convection_zones,
         ]);
         map_strs!(ctrl, mw, [hot_wind_scheme, dutch_wind_lowt_scheme]);
+        ctrl.usize_into(&mut mw.max_mdot_redo_cnt, "max_mdot_redo_cnt");
+        ctrl.usize_into(
+            &mut mw.num_cells_for_smooth_gradl_composition_term,
+            "num_cells_for_smooth_gradl_composition_term",
+        );
+        ctrl.usize_into(
+            &mut mw.num_cells_for_smooth_brunt_b,
+            "num_cells_for_smooth_brunt_b",
+        );
 
         // Legacy wind aliases (`RGB_wind_scheme`, `AGB_wind_scheme`, `*_wind_eta`).
         ctrl.str_into(&mut self.controls.cool_wind_rgb_scheme, "rgb_wind_scheme");
@@ -186,6 +213,12 @@ impl InlistBundle {
             delta_lgrho_cntr_limit, delta_lgrho_cntr_hard_limit,
             delta_lgp_cntr_limit, delta_lgp_cntr_hard_limit,
             delta_lgt_max_limit, delta_lgt_max_hard_limit,
+            delta_lg_xh_cntr_min, delta_lg_xh_cntr_max,
+            delta_lg_xh_cntr_limit, delta_lg_xh_cntr_hard_limit,
+            delta_lg_xhe_cntr_min, delta_lg_xhe_cntr_max,
+            delta_lg_xhe_cntr_limit, delta_lg_xhe_cntr_hard_limit,
+            delta_lg_xc_cntr_min, delta_lg_xc_cntr_max,
+            delta_lg_xc_cntr_limit, delta_lg_xc_cntr_hard_limit,
             delta_hr_ds_l, delta_hr_ds_teff, delta_hr_limit, delta_hr_hard_limit,
             delta_lg_star_mass_limit, delta_lg_star_mass_hard_limit,
             limit_for_rel_error_in_energy_conservation,
@@ -196,6 +229,7 @@ impl InlistBundle {
         map_bools!(ctrl, ts, [
             check_mass_sum_for_infall, use_dt_low_pass_controller,
             never_skip_hard_limits, relax_hard_limits_after_retry,
+            delta_lg_xh_drop_only, delta_lg_xhe_drop_only, delta_lg_xc_drop_only,
         ]);
         map_opt_f64s!(ctrl, ts, [
             non_fe_core_infall_limit, power_h_burn_upper_limit,

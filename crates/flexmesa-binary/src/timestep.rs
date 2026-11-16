@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-//! Binary timestep controller (`binary_pick_next_timestep`).
+//! Binary timestep controller (`binary_pick_next_timestep`) and hard-limit retry
+//! checks.
 //!
 //! Corresponds to `binary/private/binary_timestep.f90:99-322`.
 
@@ -214,11 +215,96 @@ pub fn binary_pick_next_timestep(ctrl: &BinaryTimestepControls) -> (f64, i32) {
     if dt_set_yr < 1.0e-7 {
         dt_set_yr = 1.0e-7;
     }
+    if reason == B_TLIM_COMP {
+        return (1.0e99, B_TLIM_COMP);
+    }
 
+    let prev_max = if ctrl.max_timestep_sec <= 0.0
+        || ctrl.max_timestep_sec >= 1.0e90
+    {
+        (dt_yr * SECYER).max(1.0e-7 * SECYER)
+    } else {
+        ctrl.max_timestep_sec
+    };
     let f_soft = ctrl.dt_softening_factor;
     let max_timestep_new = exp10(
-        f_soft * log10(ctrl.max_timestep_sec)
-            + (1.0 - f_soft) * log10(dt_set_yr * SECYER),
+        f_soft * log10(prev_max) + (1.0 - f_soft) * log10(dt_set_yr * SECYER),
     );
     (max_timestep_new, reason)
+}
+
+/// Checks binary hard relative-change limits (`fm_hard`, `fr_hard`, `fj_hard`,
+/// `fa_hard`, `fe_hard`, `fdm_hard` in `binary_timestep.f90:155-265`), returning
+/// `true` if the trial step exceeded a configured hard limit and must retry.
+#[allow(clippy::too_many_arguments)]
+#[must_use]
+pub fn violates_binary_hard_limits(
+    ctrl: &BinaryTimestepControls,
+    fm_hard: f64,
+    fr_hard: f64,
+    fj_hard: f64,
+    fa_hard: f64,
+    fe_hard: f64,
+    fdm_hard: f64,
+) -> bool {
+    let c_dt = ctrl.time_delta_coeff.max(1.0e-12);
+    if fj_hard > 0.0
+        && ctrl.angular_momentum_j > 0.0
+        && ctrl.angular_momentum_j_old != 0.0
+    {
+        let rj = (ctrl.angular_momentum_j - ctrl.angular_momentum_j_old).abs()
+            / ctrl.angular_momentum_j;
+        if rj > fj_hard * c_dt {
+            return true;
+        }
+    }
+    if fm_hard > 0.0 && ctrl.env_donor_old != 0.0 {
+        let rm = (ctrl.env_donor - ctrl.env_donor_old).abs()
+            / ctrl.env_donor.max(ctrl.fm_limit);
+        if rm > fm_hard * c_dt {
+            return true;
+        }
+    }
+    if fr_hard > 0.0 && ctrl.rl_relative_gap_old[0] != 0.0 {
+        let rr_d = (ctrl.rl_relative_gap_old[0] - ctrl.rl_relative_gap[0]).abs()
+            / ctrl.rl_relative_gap[0].abs().max(ctrl.fr_limit);
+        if rr_d > fr_hard * c_dt {
+            return true;
+        }
+        if !ctrl.is_point_mass_companion && ctrl.rl_relative_gap_old[1] != 0.0 {
+            let rr_a =
+                (ctrl.rl_relative_gap_old[1] - ctrl.rl_relative_gap[1]).abs()
+                    / ctrl.rl_relative_gap[1].abs().max(ctrl.fr_limit);
+            if rr_a > fr_hard * c_dt {
+                return true;
+            }
+        }
+    }
+    if fa_hard > 0.0 && ctrl.separation > 0.0 && ctrl.separation_old != 0.0 {
+        let ra =
+            (ctrl.separation_old - ctrl.separation).abs() / ctrl.separation;
+        if ra > fa_hard * c_dt {
+            return true;
+        }
+    }
+    if fe_hard > 0.0 && ctrl.eccentricity_old != 0.0 {
+        let re = (ctrl.eccentricity_old - ctrl.eccentricity).abs()
+            / ctrl.eccentricity.max(ctrl.fe_limit);
+        if re > fe_hard * c_dt {
+            return true;
+        }
+    }
+    if fdm_hard > 0.0 && ctrl.m_old[0] > 0.0 {
+        let rdm_d = (ctrl.m[0] - ctrl.m_old[0]).abs() / ctrl.m_old[0];
+        if rdm_d > fdm_hard * c_dt {
+            return true;
+        }
+        if !ctrl.is_point_mass_companion && ctrl.m_old[1] > 0.0 {
+            let rdm_a = (ctrl.m[1] - ctrl.m_old[1]).abs() / ctrl.m_old[1];
+            if rdm_a > fdm_hard * c_dt {
+                return true;
+            }
+        }
+    }
+    false
 }

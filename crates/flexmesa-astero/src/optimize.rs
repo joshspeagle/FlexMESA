@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-//! Derivative-free asteroseismic optimization drivers: Nelder-Mead simplex,
-//! Powell trust-region coordinate/quadratic search, and Cartesian grid scans.
-//!
-//! Corresponds to `astero/private/astero_run_support.f90:366-982` and
-//! `num/private/mod_simplex.f90:30-384`.
+//! Derivative-free asteroseismic optimization drivers: Nelder-Mead simplex
+//! (`flexmesa_num::nm_simplex`), Powell trust-region `NEWUOA` / `BOBYQA`
+//! (`flexmesa_num::{newuoa, bobyqa}`), and Cartesian grid scans
+//! (`astero/private/astero_run_support.f90:366-982`).
+
+use flexmesa_num::{bobyqa, newuoa, nm_simplex, NumError, SimplexConfig};
 
 /// Minimizes a scalar objective `eval_fn(x)` over bounded parameter space
-/// `x_lower <= x <= x_upper` using the upstream MESA Nelder-Mead simplex
-/// algorithm (`mod_simplex.f90:30-384`).
+/// `x_lower <= x <= x_upper` using `flexmesa_num::nm_simplex`
+/// (`mod_simplex.f90:30-384`, `astero_run_support.f90:710-808`).
 ///
 /// Returns `(x_best, f_best, num_evaluations)`.
 #[allow(clippy::too_many_arguments)]
@@ -20,169 +21,97 @@ pub fn nelder_mead_minimize<F>(
     x_rtol: f64,
     chi2_tol: f64,
     centroid_weight_power: f64,
+    eval_fn: F,
+) -> (Vec<f64>, f64, usize)
+where
+    F: FnMut(&[f64]) -> f64,
+{
+    simplex_minimize_with_options(
+        x_first,
+        x_lower,
+        x_upper,
+        max_evals,
+        x_atol,
+        x_rtol,
+        chi2_tol,
+        centroid_weight_power,
+        true,
+        false,
+        107_461_921,
+        eval_fn,
+    )
+}
+
+/// Full-featured Nelder-Mead wrapper around `flexmesa_num::nm_simplex`
+/// supporting `simplex_enforce_bounds`, `simplex_adaptive_random_search`, and `simplex_seed`.
+#[allow(clippy::too_many_arguments)]
+pub fn simplex_minimize_with_options<F>(
+    x_first: &[f64],
+    x_lower: &[f64],
+    x_upper: &[f64],
+    max_evals: usize,
+    x_atol: f64,
+    x_rtol: f64,
+    chi2_tol: f64,
+    centroid_weight_power: f64,
+    enforce_bounds: bool,
+    adaptive_random_search: bool,
+    seed: i32,
     mut eval_fn: F,
 ) -> (Vec<f64>, f64, usize)
 where
     F: FnMut(&[f64]) -> f64,
 {
     let n = x_first.len().min(x_lower.len()).min(x_upper.len());
-    if n == 0 {
+    if n == 0 || max_evals == 0 {
         return (Vec::new(), 0.0, 0);
     }
-    let clamp_vec = |v: &[f64]| -> Vec<f64> {
-        (0..n).map(|i| v[i].clamp(x_lower[i], x_upper[i])).collect()
+    let cfg = SimplexConfig {
+        max_evals,
+        x_tol: x_rtol.max(x_atol).max(1.0e-12),
+        f_tol: chi2_tol.max(0.0),
+        alpha: 1.0,
+        beta: 2.0,
+        gamma: 0.5,
+        delta: 0.5,
+        enforce_bounds,
+        adaptive_random_search,
+        seed,
+        centroid_weight_power,
     };
-
-    let mut vertices: Vec<Vec<f64>> = Vec::with_capacity(n + 1);
-    let mut f_vals: Vec<f64> = Vec::with_capacity(n + 1);
+    let x_init: Vec<f64> = (0..n)
+        .map(|i| x_first[i].clamp(x_lower[i], x_upper[i]))
+        .collect();
+    let mut best_x = x_init.clone();
+    let mut best_f = f64::INFINITY;
     let mut evals = 0usize;
-
-    let v0 = clamp_vec(x_first);
-    let f0 = eval_fn(&v0);
-    evals += 1;
-    vertices.push(v0.clone());
-    f_vals.push(f0);
-
-    for j in 0..n {
-        let mut vj = v0.clone();
-        let span = x_upper[j] - x_lower[j];
-        let step = if (v0[j] - x_lower[j]) < (x_upper[j] - v0[j]) {
-            0.25 * span
-        } else {
-            -0.25 * span
-        };
-        vj[j] = (vj[j] + step).clamp(x_lower[j], x_upper[j]);
-        let fj = eval_fn(&vj);
-        evals += 1;
-        vertices.push(vj);
-        f_vals.push(fj);
-    }
-
-    let alpha = 1.0_f64;
-    let beta = 2.0_f64;
-    let gamma = 0.5_f64;
-    let delta = 0.5_f64;
-    let mut order: Vec<usize> = (0..=n).collect();
-    let mut centroid = vec![0.0_f64; n];
-
-    while evals < max_evals {
-        order.sort_by(|&a, &b| {
-            f_vals[a]
-                .partial_cmp(&f_vals[b])
-                .unwrap_or(std::cmp::Ordering::Equal)
+    let res =
+        nm_simplex(n, &x_lower[..n], &x_upper[..n], &x_init, &cfg, |x_try| {
+            if evals >= max_evals {
+                return Ok(best_f.min(1.0e99));
+            }
+            let x_clamped: Vec<f64> = if enforce_bounds {
+                (0..n)
+                    .map(|i| x_try[i].clamp(x_lower[i], x_upper[i]))
+                    .collect()
+            } else {
+                x_try[..n].to_vec()
+            };
+            let f = eval_fn(&x_clamped);
+            evals += 1;
+            if f < best_f {
+                best_f = f;
+                best_x = x_clamped;
+            }
+            Ok(f)
         });
-        let l_idx = order[0];
-        let s_idx = order[n - 1];
-        let h_idx = order[n];
-
-        if f_vals[l_idx] <= chi2_tol {
-            break;
-        }
-        let mut max_rel = 0.0_f64;
-        for &j in &order[1..] {
-            for i in 0..n {
-                let diff = (vertices[j][i] - vertices[l_idx][i]).abs();
-                let scale = x_atol
-                    + x_rtol
-                        * vertices[j][i].abs().max(vertices[l_idx][i].abs());
-                max_rel = max_rel.max(diff / scale.max(1.0e-30));
-            }
-        }
-        if max_rel <= 1.0 {
-            break;
-        }
-
-        centroid.fill(0.0);
-        let mut w_sum = 0.0_f64;
-        for &j in &order[..n] {
-            let w = if centroid_weight_power == 0.0 {
-                1.0
-            } else {
-                f_vals[j].max(1.0e-30).powf(-centroid_weight_power)
-            };
-            w_sum += w;
-            for i in 0..n {
-                centroid[i] += w * vertices[j][i];
-            }
-        }
-        for c_i in &mut centroid {
-            *c_i /= w_sum.max(1.0e-30);
-        }
-
-        let xr: Vec<f64> = (0..n)
-            .map(|i| {
-                (centroid[i] + alpha * (centroid[i] - vertices[h_idx][i]))
-                    .clamp(x_lower[i], x_upper[i])
-            })
-            .collect();
-        let fr = eval_fn(&xr);
-        evals += 1;
-
-        if fr < f_vals[l_idx] {
-            let xe: Vec<f64> = (0..n)
-                .map(|i| {
-                    (centroid[i] + beta * (xr[i] - centroid[i]))
-                        .clamp(x_lower[i], x_upper[i])
-                })
-                .collect();
-            let fe = eval_fn(&xe);
-            evals += 1;
-            if fe < f_vals[l_idx] {
-                vertices[h_idx] = xe;
-                f_vals[h_idx] = fe;
-            } else {
-                vertices[h_idx] = xr;
-                f_vals[h_idx] = fr;
-            }
-        } else if fr < f_vals[s_idx] {
-            vertices[h_idx] = xr;
-            f_vals[h_idx] = fr;
-        } else {
-            let xc: Vec<f64> = if fr < f_vals[h_idx] {
-                (0..n)
-                    .map(|i| {
-                        (centroid[i] + gamma * (xr[i] - centroid[i]))
-                            .clamp(x_lower[i], x_upper[i])
-                    })
-                    .collect()
-            } else {
-                (0..n)
-                    .map(|i| {
-                        (centroid[i]
-                            + gamma * (vertices[h_idx][i] - centroid[i]))
-                            .clamp(x_lower[i], x_upper[i])
-                    })
-                    .collect()
-            };
-            let fc = eval_fn(&xc);
-            evals += 1;
-            if fc < f_vals[h_idx].min(fr) {
-                vertices[h_idx] = xc;
-                f_vals[h_idx] = fc;
-            } else {
-                let best_v = vertices[l_idx].clone();
-                for &j in &order[1..] {
-                    for i in 0..n {
-                        vertices[j][i] =
-                            best_v[i] + delta * (vertices[j][i] - best_v[i]);
-                    }
-                    f_vals[j] = eval_fn(&vertices[j]);
-                    evals += 1;
-                    if evals >= max_evals {
-                        break;
-                    }
-                }
-            }
+    if let Ok(r) = res {
+        if r.f_min < best_f {
+            best_f = r.f_min;
+            best_x = r.x_min;
         }
     }
-
-    let mut best_idx = 0usize;
-    for j in 1..vertices.len() {
-        if f_vals[j] < f_vals[best_idx] {
-            best_idx = j;
-        }
-    }
-    (vertices[best_idx].clone(), f_vals[best_idx], evals)
+    (best_x, best_f, evals)
 }
 
 /// Maps normalized trust-region coordinate $u_i \in [-1, 1]$ to physical
@@ -205,12 +134,28 @@ pub fn map_bobyqa_param(
     }
 }
 
-/// Minimizes `eval_fn(x)` using a bounded quadratic trust-region / 3-point
-/// parabolic coordinate interpolation search in normalized `bobyqa_param`
+/// Inverse of [`map_bobyqa_param`], mapping physical parameter $p_i$ to
+/// normalized trust-region coordinate $u_i \in [-1, 1]$.
+#[inline]
+#[must_use]
+pub fn unmap_bobyqa_param(
+    p: f64,
+    p_first: f64,
+    p_lower: f64,
+    p_upper: f64,
+) -> f64 {
+    if p >= p_first {
+        let span = (p_upper - p_first).max(1.0e-30);
+        ((p - p_first) / span).clamp(-1.0, 1.0)
+    } else {
+        let span = (p_first - p_lower).max(1.0e-30);
+        ((p - p_first) / span).clamp(-1.0, 1.0)
+    }
+}
+
+/// Minimizes `eval_fn(x)` using `flexmesa_num::newuoa` in normalized unit-cube
 /// coordinates (`do_bobyqa_or_newuoa`, `astero_run_support.f90:534-707`).
-///
-/// Returns `(x_best, f_best, num_evaluations)`.
-pub fn powell_quadratic_minimize<F>(
+pub fn newuoa_minimize<F>(
     x_first: &[f64],
     x_lower: &[f64],
     x_upper: &[f64],
@@ -223,77 +168,152 @@ where
     F: FnMut(&[f64]) -> f64,
 {
     let n = x_first.len().min(x_lower.len()).min(x_upper.len());
-    if n == 0 {
+    if n == 0 || max_evals == 0 {
         return (Vec::new(), 0.0, 0);
     }
-    let fill_phys = |u: &[f64], dst: &mut [f64]| {
-        for i in 0..n {
-            dst[i] = map_bobyqa_param(u[i], x_first[i], x_lower[i], x_upper[i]);
-        }
+    let n_eff = n.max(2);
+    let npt = 2 * n_eff + 1;
+    let mut u = vec![0.0_f64; n_eff];
+    let r_beg = rhobeg.max(1.0e-6);
+    let r_end = rhoend.clamp(1.0e-12, r_beg);
+    let max_evals_eff = if rhoend >= r_beg {
+        max_evals.min(npt + 1)
+    } else {
+        max_evals
     };
+    let mut best_x: Vec<f64> = (0..n)
+        .map(|i| x_first[i].clamp(x_lower[i], x_upper[i]))
+        .collect();
+    let mut best_f = f64::INFINITY;
+    let mut evals = 0usize;
 
-    let mut u_best = vec![0.0_f64; n];
-    let mut trial = vec![0.0_f64; n];
-    let mut phys_buf = vec![0.0_f64; n];
-    fill_phys(&u_best, &mut phys_buf);
-    let mut f_best = eval_fn(&phys_buf);
-    let mut evals = 1usize;
-    let mut rho = rhobeg.max(rhoend);
-
-    while rho >= rhoend && evals < max_evals {
-        let mut improved = false;
-        for i in 0..n {
-            if evals + 2 > max_evals {
-                break;
+    let _ = newuoa(
+        n_eff,
+        npt,
+        &mut u,
+        r_beg,
+        r_end,
+        max_evals_eff,
+        1.0e10,
+        |u_try| -> Result<f64, NumError> {
+            if evals >= max_evals_eff {
+                return Ok(best_f.min(1.0e10));
             }
-            let u_c = u_best[i];
-            let u_p = (u_c + rho).min(1.0);
-            let u_m = (u_c - rho).max(-1.0);
-
-            trial.copy_from_slice(&u_best);
-            trial[i] = u_p;
-            fill_phys(&trial, &mut phys_buf);
-            let f_p = eval_fn(&phys_buf);
+            let out_pen: f64 = u_try[..n]
+                .iter()
+                .map(|&ui| (ui.abs() - 1.0).max(0.0).powi(2))
+                .sum();
+            let phys: Vec<f64> = (0..n)
+                .map(|i| {
+                    map_bobyqa_param(u_try[i], x_first[i], x_lower[i], x_upper[i])
+                })
+                .collect();
+            let f = eval_fn(&phys);
             evals += 1;
+            if f < best_f {
+                best_f = f;
+                best_x = phys;
+            }
+            let f_pen = f + 1.0e4 * out_pen;
+            Ok(if n_eff > n {
+                f_pen + 1.0e-6 * u_try[n].powi(2)
+            } else {
+                f_pen
+            })
+        },
+    );
+    (best_x, best_f, evals)
+}
 
-            trial[i] = u_m;
-            fill_phys(&trial, &mut phys_buf);
-            let f_m = eval_fn(&phys_buf);
-            evals += 1;
-
-            let denom =
-                (u_p - u_c) * (f_m - f_best) + (u_c - u_m) * (f_p - f_best);
-            if denom > 1.0e-30 && evals < max_evals {
-                let numer = (u_p - u_c).powi(2) * (f_m - f_best)
-                    - (u_c - u_m).powi(2) * (f_p - f_best);
-                let u_q = (u_c + 0.5 * numer / denom).clamp(u_m, u_p);
-                trial[i] = u_q;
-                fill_phys(&trial, &mut phys_buf);
-                let f_q = eval_fn(&phys_buf);
-                evals += 1;
-                if f_q < f_best {
-                    f_best = f_q;
-                    u_best[i] = u_q;
-                    improved = true;
-                }
-            }
-            if f_p < f_best {
-                f_best = f_p;
-                u_best[i] = u_p;
-                improved = true;
-            }
-            if f_m < f_best {
-                f_best = f_m;
-                u_best[i] = u_m;
-                improved = true;
-            }
-        }
-        if !improved {
-            rho *= 0.5;
-        }
+/// Minimizes `eval_fn(x)` using `flexmesa_num::bobyqa` on $[-1, 1]^n$ normalized
+/// unit-cube coordinates (`do_bobyqa_or_newuoa`, `astero_run_support.f90:534-707`).
+pub fn bobyqa_minimize<F>(
+    x_first: &[f64],
+    x_lower: &[f64],
+    x_upper: &[f64],
+    max_evals: usize,
+    rhobeg: f64,
+    rhoend: f64,
+    mut eval_fn: F,
+) -> (Vec<f64>, f64, usize)
+where
+    F: FnMut(&[f64]) -> f64,
+{
+    let n = x_first.len().min(x_lower.len()).min(x_upper.len());
+    if n == 0 || max_evals == 0 {
+        return (Vec::new(), 0.0, 0);
     }
-    fill_phys(&u_best, &mut phys_buf);
-    (phys_buf, f_best, evals)
+    let n_eff = n.max(2);
+    let npt = 2 * n_eff + 1;
+    let mut u = vec![0.0_f64; n_eff];
+    let xl = vec![-1.0_f64; n_eff];
+    let xu = vec![1.0_f64; n_eff];
+    let r_beg = rhobeg.clamp(1.0e-6, 0.95);
+    let r_end = rhoend.clamp(1.0e-12, r_beg);
+    let max_evals_eff = if rhoend >= r_beg {
+        max_evals.min(npt + 1)
+    } else {
+        max_evals
+    };
+    let mut best_x: Vec<f64> = (0..n)
+        .map(|i| x_first[i].clamp(x_lower[i], x_upper[i]))
+        .collect();
+    let mut best_f = f64::INFINITY;
+    let mut evals = 0usize;
+
+    let _ = bobyqa(
+        n_eff,
+        npt,
+        &mut u,
+        &xl,
+        &xu,
+        r_beg,
+        r_end,
+        max_evals_eff,
+        1.0e10,
+        |u_try| -> Result<f64, NumError> {
+            if evals >= max_evals_eff {
+                return Ok(best_f.min(1.0e10));
+            }
+            let phys: Vec<f64> = (0..n)
+                .map(|i| {
+                    map_bobyqa_param(u_try[i], x_first[i], x_lower[i], x_upper[i])
+                })
+                .collect();
+            let f = eval_fn(&phys);
+            evals += 1;
+            if f < best_f {
+                best_f = f;
+                best_x = phys;
+            }
+            Ok(if n_eff > n {
+                f + 1.0e-6 * u_try[n].powi(2)
+            } else {
+                f
+            })
+        },
+    );
+    (best_x, best_f, evals)
+}
+
+/// Minimizes `eval_fn(x)` using Powell's `BOBYQA` trust-region quadratic
+/// interpolation in normalized `bobyqa_param` coordinates
+/// (`do_bobyqa_or_newuoa`, `astero_run_support.f90:534-707`).
+pub fn powell_quadratic_minimize<F>(
+    x_first: &[f64],
+    x_lower: &[f64],
+    x_upper: &[f64],
+    max_evals: usize,
+    rhobeg: f64,
+    rhoend: f64,
+    eval_fn: F,
+) -> (Vec<f64>, f64, usize)
+where
+    F: FnMut(&[f64]) -> f64,
+{
+    bobyqa_minimize(
+        x_first, x_lower, x_upper, max_evals, rhobeg, rhoend, eval_fn,
+    )
 }
 
 /// Evaluates `eval_fn` across a Cartesian grid `x_lower..=x_upper` with step

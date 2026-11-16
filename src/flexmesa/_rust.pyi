@@ -72,19 +72,9 @@ def interp_m3q(x: _ArrF64, y: _ArrF64) -> _ArrF64: ...
 def interp_values(init_x: _ArrF64, coeffs_flat: _ArrF64, x_query: _ArrF64) -> _ArrF64: ...  # noqa: E501
 def interp_values_and_slopes(init_x: _ArrF64, coeffs_flat: _ArrF64, x_query: _ArrF64) -> tuple[_ArrF64, _ArrF64]: ...  # noqa: E501
 def integrate_values(init_x: _ArrF64, coeffs_flat: _ArrF64, x_query: _ArrF64) -> _ArrF64: ...  # noqa: E501
-def interp_mkbicub_db(
-    x: _ArrF64, y: _ArrF64, z_flat: _ArrF64, ibcxmin: int, bcxmin: _ArrF64,
-    ibcxmax: int, bcxmax: _ArrF64, ibcymin: int, bcymin: _ArrF64, ibcymax: int,
-    bcymax: _ArrF64,
-) -> tuple[_ArrF64, bool, bool]: ...
-def interp_evbicub_db(
-    xget: float, yget: float, x: _ArrF64, y: _ArrF64, ilinx: bool, iliny: bool,
-    coeffs_flat: _ArrF64,
-) -> list[float]: ...
-def interp_evbicub_batch(
-    x_q: _ArrF64, y_q: _ArrF64, x: _ArrF64, y: _ArrF64, coeffs_flat: _ArrF64,
-    parallel: bool = False,
-) -> _ArrF64: ...
+def interp_mkbicub_db(x: _ArrF64, y: _ArrF64, z_flat: _ArrF64, ibcxmin: int, bcxmin: _ArrF64, ibcxmax: int, bcxmax: _ArrF64, ibcymin: int, bcymin: _ArrF64, ibcymax: int, bcymax: _ArrF64) -> tuple[_ArrF64, bool, bool]: ...  # noqa: E501
+def interp_evbicub_db(xget: float, yget: float, x: _ArrF64, y: _ArrF64, ilinx: bool, iliny: bool, coeffs_flat: _ArrF64) -> list[float]: ...  # noqa: E501
+def interp_evbicub_batch(x_q: _ArrF64, y_q: _ArrF64, x: _ArrF64, y: _ArrF64, coeffs_flat: _ArrF64, parallel: bool = False) -> _ArrF64: ...  # noqa: E501
 def interp_mkbipm_db(x: _ArrF64, y: _ArrF64, z_flat: _ArrF64) -> _ArrF64: ...
 def interp_evbipm_db(xget: float, yget: float, x: _ArrF64, y: _ArrF64, coeffs_flat: _ArrF64) -> float: ...  # noqa: E501
 def neu_get(
@@ -340,6 +330,10 @@ class RustStarModel:
     dt_old: float
     mstar: float
     teff: float
+    r_center: float
+    l_center: float
+    m_center: float
+    v_center: float
     ln_peos_surf: float
     ln_t_surf: float
     iso_names: list[str]
@@ -348,6 +342,7 @@ class RustStarModel:
     lnd_start: _ArrF64
     ln_t: _ArrF64
     ln_r: _ArrF64
+    ln_r_start: _ArrF64
     lum: _ArrF64
     dq: _ArrF64
     q: _ArrF64
@@ -366,6 +361,7 @@ class RustStarModel:
     pgas: _ArrF64
     prad: _ArrF64
     peos: _ArrF64
+    peos_start: _ArrF64
     ln_peos: _ArrF64
     energy: _ArrF64
     energy_start: _ArrF64
@@ -382,6 +378,7 @@ class RustStarModel:
     opacity: _ArrF64
     tau: _ArrF64
     non_nuc_neu: _ArrF64
+    non_nuc_neu_start: _ArrF64
     eps_nuc: _ArrF64
     eps_grav: _ArrF64
     eps_mdot: _ArrF64

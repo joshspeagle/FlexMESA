@@ -47,12 +47,21 @@ pub fn interpolate_l0_inertia(
     l0_inertias[n - 1]
 }
 
+/// Estimates radial orders `l0_n_obs(j) = int(l0_obs(1) / delta_nu) + j - 1` when omitted (`astero_support.f90:655-664`).
+#[must_use]
+pub fn estimate_l0_n_obs(l0_obs_freqs: &[f64], delta_nu: f64) -> Vec<f64> {
+    if l0_obs_freqs.is_empty() || delta_nu <= 0.0 {
+        return Vec::new();
+    }
+    let n_first = (l0_obs_freqs[0] / delta_nu).trunc();
+    (0..l0_obs_freqs.len())
+        .map(|j| n_first + (j as f64))
+        .collect()
+}
+
 /// Evaluates the Kjeldsen, Bedding & Christensen-Dalsgaard (2008) radial
-/// surface-effect parameters `(a_div_r, r_scale)` and corrected frequencies.
-///
-/// Corresponds to `get_one_el_info` (`astero_support.f90:186-214`) and
-/// `get_kjeldsen_radial_freq_corr` / `get_kjeldsen_nonradial_freq_corr`
-/// (`astero_support.f90:727-777`).
+/// surface-effect parameters `(a_div_r, r_scale)` and corrected frequencies
+/// (`astero_support.f90:182-215, 727-777`).
 #[allow(clippy::too_many_arguments)]
 #[must_use]
 pub fn eval_kjeldsen_corr(
@@ -73,7 +82,14 @@ pub fn eval_kjeldsen_corr(
     }
     let avg_obs = l0_obs_freqs[..n0].iter().sum::<f64>() / (n0 as f64);
     let avg_mod = l0_model_freqs[..n0].iter().sum::<f64>() / (n0 as f64);
-    let dnu_mod = eval_radial_delta_nu_ols(l0_orders, l0_model_freqs);
+    let est_orders;
+    let orders_slice = if l0_orders.len() >= n0 && l0_orders[0] > 0.0 {
+        &l0_orders[..n0]
+    } else {
+        est_orders = estimate_l0_n_obs(&l0_obs_freqs[..n0], delta_nu_obs);
+        &est_orders
+    };
+    let dnu_mod = eval_radial_delta_nu_ols(orders_slice, &l0_model_freqs[..n0]);
     let denom_r = b_power * (avg_mod / avg_obs.max(1.0e-30))
         - dnu_mod / delta_nu_obs.max(1.0e-30);
     let r_scale = (b_power - 1.0) / denom_r;
@@ -85,30 +101,30 @@ pub fn eval_kjeldsen_corr(
         / sum_nu_b.max(1.0e-30);
     let a_div_r = a_val / r_scale;
 
-    let mut corr = Vec::with_capacity(all_model_freqs.len());
-    for (idx, &f_mod) in all_model_freqs.iter().enumerate() {
-        let q_nl = if idx < all_inertias.len() && !l0_model_freqs.is_empty() {
-            let e0 = interpolate_l0_inertia(f_mod, l0_model_freqs, l0_inertias);
-            (all_inertias[idx] / e0.max(1.0e-30)).max(1.0e-30)
-        } else {
-            1.0
-        };
-        let df = correction_factor
-            * (a_div_r / q_nl)
-            * pow(f_mod / nu_max.max(1.0e-30), b_power);
-        corr.push(f_mod + df);
-    }
+    let corr = all_model_freqs
+        .iter()
+        .enumerate()
+        .map(|(idx, &f_mod)| {
+            let is_l0 = idx < n0 && (f_mod - l0_model_freqs[idx]).abs() <= 1e-12;
+            let q_nl = if is_l0 {
+                1.0
+            } else if idx < all_inertias.len() && !l0_model_freqs.is_empty() {
+                let e0 =
+                    interpolate_l0_inertia(f_mod, l0_model_freqs, l0_inertias);
+                (all_inertias[idx] / e0.max(1.0e-30)).max(1.0e-30)
+            } else {
+                1.0
+            };
+            f_mod
+                + correction_factor
+                    * (a_div_r / q_nl)
+                    * pow(f_mod / nu_max.max(1.0e-30), b_power)
+        })
+        .collect();
     (corr, a_div_r, r_scale)
 }
 
-/// Evaluates the Ball & Gizon (2014) 1-term cubic surface correction
-/// (`correction_scheme = "cubic"` / `"bg14_1"`):
-///
-/// $$\delta\nu_{li} = \frac{a_3\,(\nu_{li}^{\mathrm{model}})^3}{\mathcal{I}_{li}}$$
-///
-/// Returns `(corrected_freqs, a3)`.
-///
-/// Corresponds to `get_cubic_all_freq_corr` in `astero_support.f90:865-927`.
+/// Evaluates the Ball & Gizon (2014) 1-term cubic surface correction (`astero_support.f90:865-927`).
 #[must_use]
 pub fn eval_cubic_corr(
     obs_freqs: &[f64],
@@ -122,8 +138,7 @@ pub fn eval_cubic_corr(
         .min(obs_sigmas.len())
         .min(model_freqs.len())
         .min(model_inertias.len());
-    let mut xtx = 0.0_f64;
-    let mut xty = 0.0_f64;
+    let (mut xtx, mut xty) = (0.0_f64, 0.0_f64);
     for i in 0..n {
         let f_m = model_freqs[i];
         let sig = obs_sigmas[i].max(1.0e-30);
@@ -134,24 +149,17 @@ pub fn eval_cubic_corr(
         xty += x_i * y_i;
     }
     let a3 = if xtx > 0.0 { xty / xtx } else { 0.0 };
-    let mut corr = Vec::with_capacity(n);
-    for i in 0..n {
-        let f_m = model_freqs[i];
-        let ine = model_inertias[i].max(1.0e-30);
-        corr.push(f_m + correction_factor * a3 * (f_m * f_m * f_m) / ine);
-    }
+    let corr = (0..n)
+        .map(|i| {
+            let f_m = model_freqs[i];
+            f_m + correction_factor * a3 * (f_m * f_m * f_m)
+                / model_inertias[i].max(1.0e-30)
+        })
+        .collect();
     (corr, a3)
 }
 
-/// Evaluates the Ball & Gizon (2014) 2-term inverse + cubic surface correction
-/// (`correction_scheme = "combined"` / `"bg14_2"`):
-///
-/// $$\delta\nu_{li} = \frac{a_{-1}(\nu_{li}^{\mathrm{model}})^{-1}
-///   + a_3(\nu_{li}^{\mathrm{model}})^3}{\mathcal{I}_{li}}$$
-///
-/// Returns `(corrected_freqs, a3, a_minus1)` matching the argument order
-/// `(x0, x1) = (b3, b1)` of `astero_get_combined_all_freq_corr`
-/// (`astero_support.f90:929-1007`).
+/// Evaluates the Ball & Gizon (2014) 2-term inverse + cubic surface correction (`astero_support.f90:929-1007`).
 #[must_use]
 pub fn eval_combined_corr(
     obs_freqs: &[f64],
@@ -165,11 +173,7 @@ pub fn eval_combined_corr(
         .min(obs_sigmas.len())
         .min(model_freqs.len())
         .min(model_inertias.len());
-    let mut s11 = 0.0_f64;
-    let mut s12 = 0.0_f64;
-    let mut s22 = 0.0_f64;
-    let mut r1 = 0.0_f64;
-    let mut r2 = 0.0_f64;
+    let (mut s11, mut s12, mut s22, mut r1, mut r2) = (0.0, 0.0, 0.0, 0.0, 0.0);
     for i in 0..n {
         let f_m = model_freqs[i];
         let sig = obs_sigmas[i].max(1.0e-30);
@@ -189,13 +193,14 @@ pub fn eval_combined_corr(
     } else {
         (0.0, 0.0)
     };
-    let mut corr = Vec::with_capacity(n);
-    for i in 0..n {
-        let f_m = model_freqs[i];
-        let ine = model_inertias[i].max(1.0e-30);
-        let df = (a_minus1 / f_m + a3 * (f_m * f_m * f_m)) / ine;
-        corr.push(f_m + correction_factor * df);
-    }
+    let corr = (0..n)
+        .map(|i| {
+            let f_m = model_freqs[i];
+            let df = (a_minus1 / f_m + a3 * (f_m * f_m * f_m))
+                / model_inertias[i].max(1.0e-30);
+            f_m + correction_factor * df
+        })
+        .collect();
     (corr, a3, a_minus1)
 }
 
@@ -222,29 +227,24 @@ where
         .min(obs_sigmas.len())
         .min(model_freqs.len())
         .min(model_inertias.len());
-    let mut a = a_init;
-    let mut b = b_init;
-
-    let mut q_arr = Vec::with_capacity(n);
-    for i in 0..n {
-        let e0 = interpolate_l0_inertia(model_freqs[i], l0_freqs, l0_inertias);
-        q_arr.push(model_inertias[i] / e0.max(1.0e-30));
-    }
+    let (mut a, mut b) = (a_init, b_init);
+    let q_arr: Vec<f64> = (0..n)
+        .map(|i| {
+            let e0 =
+                interpolate_l0_inertia(model_freqs[i], l0_freqs, l0_inertias);
+            model_inertias[i] / e0.max(1.0e-30)
+        })
+        .collect();
 
     for _iter in 0..1000 {
         let a_ad = DualOrder1::<2>::independent(a, 0);
         let b_ad = DualOrder1::<2>::independent(b, 1);
-        let mut s11 = 0.0_f64;
-        let mut s12 = 0.0_f64;
-        let mut s22 = 0.0_f64;
-        let mut r1 = 0.0_f64;
-        let mut r2 = 0.0_f64;
-
+        let (mut s11, mut s12, mut s22, mut r1, mut r2) =
+            (0.0, 0.0, 0.0, 0.0, 0.0);
         for i in 0..n {
             let f_ad = eval_term(a_ad, b_ad, model_freqs[i], nu_max);
             let sig = obs_sigmas[i].max(1.0e-30);
-            let x1 = -f_ad.d1[0] / sig;
-            let x2 = -f_ad.d1[1] / sig;
+            let (x1, x2) = (-f_ad.d1[0] / sig, -f_ad.d1[1] / sig);
             let y =
                 ((obs_freqs[i] - model_freqs[i]) * q_arr[i] - f_ad.val) / sig;
             s11 += x1 * x1;
@@ -264,14 +264,15 @@ where
         }
         a -= da;
         b -= db;
-        if da.abs() < 1.0e-8 && db.abs() < 1.0e-6 {
+        if da.abs() <= 1.0e-14 * a.abs().max(1.0e-30)
+            && db.abs() <= 1.0e-14 * b.abs().max(1.0e-30)
+        {
             break;
         }
     }
     if zero_a_when_b_neg && b < 0.0 {
         a = 0.0;
     }
-
     let corr = apply_two_param_surface_corr(
         model_freqs,
         model_inertias,
@@ -337,15 +338,7 @@ where
     corr
 }
 
-/// Evaluates the Ball & Gizon (2017) free power-law surface correction
-/// (`correction_scheme = "power_law"`) using forward-mode `DualOrder1<2>`
-/// Gauss-Newton iteration:
-///
-/// $$\delta\nu_{\mathrm{PL}}(\nu; a, b) = \frac{a}{Q_{nl}} \left(\frac{\nu}{\nu_{\max}}\right)^b$$
-///
-/// Returns `(corrected_freqs, a, b)`.
-///
-/// Corresponds to `get_power_law_all_freq_corr` in `astero_support.f90:1010-1138`.
+/// Evaluates the Ball & Gizon (2017) free power-law surface correction (`astero_support.f90:1010-1138`).
 #[allow(clippy::too_many_arguments)]
 #[must_use]
 pub fn eval_power_law_corr(
@@ -359,25 +352,13 @@ pub fn eval_power_law_corr(
     correction_factor: f64,
 ) -> (Vec<f64>, f64, f64) {
     fit_two_param_surface_corr(
-        obs_freqs,
-        obs_sigmas,
-        model_freqs,
-        model_inertias,
-        l0_freqs,
-        l0_inertias,
-        nu_max,
-        correction_factor,
-        -5.25,
-        5.37,
-        false,
+        obs_freqs, obs_sigmas, model_freqs, model_inertias, l0_freqs,
+        l0_inertias, nu_max, correction_factor, -5.25, 5.37, false,
         power_law_term,
     )
 }
 
-/// Evaluates the radial-only ($l=0$) Ball & Gizon (2017) power-law surface
-/// correction (`get_power_law_freq_corr(..., radial_only=.true.)` in
-/// `astero_support.f90:1010-1089`), fitting $(a, b)$ exclusively to radial
-/// modes before correcting all `model_freqs` via $Q_{nl}$.
+/// Evaluates the radial-only ($l=0$) Ball & Gizon (2017) power-law surface correction (`astero_support.f90:1010-1089`).
 #[allow(clippy::too_many_arguments)]
 #[must_use]
 pub fn eval_power_law_corr_radial_only(
@@ -391,39 +372,17 @@ pub fn eval_power_law_corr_radial_only(
     correction_factor: f64,
 ) -> (Vec<f64>, f64, f64) {
     let (_, a, b) = eval_power_law_corr(
-        l0_obs_freqs,
-        l0_obs_sigmas,
-        l0_freqs,
-        l0_inertias,
-        l0_freqs,
-        l0_inertias,
-        nu_max,
-        correction_factor,
+        l0_obs_freqs, l0_obs_sigmas, l0_freqs, l0_inertias, l0_freqs,
+        l0_inertias, nu_max, correction_factor,
     );
     let corr = apply_two_param_surface_corr(
-        model_freqs,
-        model_inertias,
-        l0_freqs,
-        l0_inertias,
-        nu_max,
-        correction_factor,
-        a,
-        b,
-        power_law_term,
+        model_freqs, model_inertias, l0_freqs, l0_inertias, nu_max,
+        correction_factor, a, b, power_law_term,
     );
     (corr, a, b)
 }
 
-/// Evaluates the Sonoi et al. (2015) modified Lorentzian surface correction
-/// (`correction_scheme = "sonoi"`) using forward-mode `DualOrder1<2>`
-/// Gauss-Newton iteration:
-///
-/// $$\delta\nu_{\mathrm{Sonoi}}(\nu; a, b) = \frac{a\,\nu_{\max}}{Q_{nl}}
-///   \left[1 - \frac{1}{1 + (\nu / \nu_{\max})^b}\right]$$
-///
-/// Returns `(corrected_freqs, a, b)`.
-///
-/// Corresponds to `get_sonoi_all_freq_corr` in `astero_support.f90:1140-1269`.
+/// Evaluates the Sonoi et al. (2015) modified Lorentzian surface correction (`astero_support.f90:1140-1269`).
 #[allow(clippy::too_many_arguments)]
 #[must_use]
 pub fn eval_sonoi_corr(
@@ -437,25 +396,13 @@ pub fn eval_sonoi_corr(
     correction_factor: f64,
 ) -> (Vec<f64>, f64, f64) {
     fit_two_param_surface_corr(
-        obs_freqs,
-        obs_sigmas,
-        model_freqs,
-        model_inertias,
-        l0_freqs,
-        l0_inertias,
-        nu_max,
-        correction_factor,
-        -3.59e-3,
-        11.26,
-        true,
+        obs_freqs, obs_sigmas, model_freqs, model_inertias, l0_freqs,
+        l0_inertias, nu_max, correction_factor, -3.59e-3, 11.26, true,
         sonoi_term,
     )
 }
 
-/// Evaluates the radial-only ($l=0$) Sonoi et al. (2015) modified Lorentzian
-/// surface correction (`get_sonoi_freq_corr(..., radial_only=.true.)` in
-/// `astero_support.f90:1140-1219`), fitting $(a, b)$ exclusively to radial
-/// modes before correcting all `model_freqs` via $Q_{nl}$.
+/// Evaluates the radial-only ($l=0$) Sonoi et al. (2015) modified Lorentzian surface correction (`astero_support.f90:1140-1219`).
 #[allow(clippy::too_many_arguments)]
 #[must_use]
 pub fn eval_sonoi_corr_radial_only(
@@ -469,25 +416,12 @@ pub fn eval_sonoi_corr_radial_only(
     correction_factor: f64,
 ) -> (Vec<f64>, f64, f64) {
     let (_, a, b) = eval_sonoi_corr(
-        l0_obs_freqs,
-        l0_obs_sigmas,
-        l0_freqs,
-        l0_inertias,
-        l0_freqs,
-        l0_inertias,
-        nu_max,
-        correction_factor,
+        l0_obs_freqs, l0_obs_sigmas, l0_freqs, l0_inertias, l0_freqs,
+        l0_inertias, nu_max, correction_factor,
     );
     let corr = apply_two_param_surface_corr(
-        model_freqs,
-        model_inertias,
-        l0_freqs,
-        l0_inertias,
-        nu_max,
-        correction_factor,
-        a,
-        b,
-        sonoi_term,
+        model_freqs, model_inertias, l0_freqs, l0_inertias, nu_max,
+        correction_factor, a, b, sonoi_term,
     );
     (corr, a, b)
 }

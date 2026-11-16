@@ -370,6 +370,10 @@ def eval_hydro_residuals_jax(
     non_nuc_neu_start: jax.Array | None = None,
     dedt_eqn_r_scale: float | jax.Array = 1.0e8,
     use_momentum_outer_bc: bool | jax.Array = False,
+    ln_r_start: jax.Array | None = None,
+    m_center: float | jax.Array = 0.0,
+    v_center: float | jax.Array = 0.0,
+    peos_start: jax.Array | None = None,
 ) -> jax.Array:
     """Evaluate the 4-equation hydrostatic Henyey residual array `(nz, 4)`.
 
@@ -407,6 +411,12 @@ def eval_hydro_residuals_jax(
             (`1.0e8` default; `<= 0` disables cell-fraction capping).
         use_momentum_outer_bc: When `True`, zeroes the half-cell hydrostatic
             surface pressure offset `dp_0` (`hydro_eqns.f90:479`).
+        ln_r_start: Optional start-of-step face `ln(r)` of shape `(nz,)` for
+            spherical face mechanical work and gravitational potential rates.
+        m_center: Inner core mass in grams (`g`).
+        v_center: Inner core boundary velocity in `cm s^-1`.
+        peos_start: Optional start-of-step cell pressure of shape `(nz,)`
+            (`dyn cm^-2`).
 
     Returns:
         Dimensionless residual matrix `equ` of shape `(nz, 4)`.
@@ -462,10 +472,11 @@ def eval_hydro_residuals_jax(
     equ_l = jnp.where(idx == 0, resid_t_surf, resid_t_int)
 
     # 4. Energy conservation equation (`i_dlne_dt = 3`)
+    dm_safe = jnp.maximum(dm, 1.0e-30)
     lum_p1 = jnp.concatenate(
         [lum[1:], jnp.asarray([l_center], dtype=lum.dtype)]
     )
-    dl_dm = (lum - lum_p1) / dm
+    dl_dm = (lum - lum_p1) / dm_safe
     neu_eff = (
         non_nuc_neu
         if non_nuc_neu_start is None
@@ -474,8 +485,38 @@ def eval_hydro_residuals_jax(
     sources = eps_nuc - neu_eff + eps_mdot
     dt_safe = jnp.maximum(dt, 1.0e-30)
     de_dt = (energy - energy_start) / dt_safe
-    pdv_dt = peos * (jnp.exp(-lnd) - jnp.exp(-lnd_start)) / dt_safe
-    esum = -dl_dm + sources - de_dt - pdv_dt
+
+    lnr_s = jax.lax.stop_gradient(ln_r) if ln_r_start is None else ln_r_start
+    rs = jnp.exp(lnr_s)
+    vc_f = (r - rs) / dt_safe
+    work_f = (_FOUR_PI * r * r) * vc_f * p_avg
+    p_in = (
+        jax.lax.stop_gradient(peos[-1])
+        if peos_start is None
+        else peos_start[-1]
+    )
+    work_c = _FOUR_PI * (r_center**2) * p_in * v_center
+    work_p1 = jnp.concatenate(
+        [work_f[1:], jnp.asarray([work_c], dtype=r.dtype)]
+    )
+    dwork_dm = (work_f - work_p1) / dm_safe
+
+    cgrav_arr = jnp.broadcast_to(jnp.asarray(cgrav, dtype=r.dtype), (nz,))
+    grav00 = -(cgrav_arr * m_grav) / jnp.maximum(r, 1.0)
+    r_c_safe = jnp.where(r_center > 0.0, r_center, 1.0)
+    grav_c = jnp.where(
+        r_center > 0.0, -cgrav_arr[-1] * m_center / r_c_safe, 0.0
+    )
+    gravp1 = jnp.concatenate([grav00[1:], jnp.asarray([grav_c], dtype=r.dtype)])
+    pe_now = 0.5 * (grav00 + gravp1)
+    grav00_s = -(cgrav_arr * m_grav) / jnp.maximum(rs, 1.0)
+    gravp1_s = jnp.concatenate(
+        [grav00_s[1:], jnp.asarray([grav_c], dtype=r.dtype)]
+    )
+    pe_start = 0.5 * (grav00_s + gravp1_s)
+    dpe_dt = (pe_now - pe_start) / dt_safe
+
+    esum = -dl_dm + sources - dwork_dm - dpe_dt - de_dt
     total_e_start = jnp.maximum(
         jnp.sum(jnp.maximum(energy_start, 0.0) * dm), 1.0e-30
     )

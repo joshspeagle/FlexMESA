@@ -185,6 +185,26 @@ class StarModelArrays:
         return self._rust_model.teff
 
     @property
+    def r_center(self) -> float:
+        """Inner core radius in centimeters (`cm`)."""
+        return self._rust_model.r_center
+
+    @property
+    def l_center(self) -> float:
+        """Inner core luminosity in `erg s^-1`."""
+        return self._rust_model.l_center
+
+    @property
+    def m_center(self) -> float:
+        """Inner core mass in grams (`g`)."""
+        return self._rust_model.m_center
+
+    @property
+    def v_center(self) -> float:
+        """Inner core boundary velocity in `cm s^-1`."""
+        return self._rust_model.v_center
+
+    @property
     def ln_peos_surf(self) -> float:
         """Surface natural log total pressure from atmosphere BC."""
         return self._rust_model.ln_peos_surf
@@ -223,6 +243,11 @@ class StarModelArrays:
     def ln_r(self) -> _ArrF64:
         """Face natural log radius of shape `(nz,)` (`ln(cm)`)."""
         return self._rust_model.ln_r
+
+    @property
+    def ln_r_start(self) -> _ArrF64:
+        """Start-of-step face natural log radius of shape `(nz,)` (`ln(cm)`)."""
+        return self._rust_model.ln_r_start
 
     @property
     def lum(self) -> _ArrF64:
@@ -315,6 +340,11 @@ class StarModelArrays:
         return self._rust_model.peos
 
     @property
+    def peos_start(self) -> _ArrF64:
+        """Start-of-step cell total pressure of shape `(nz,)` (`dyn cm^-2`)."""
+        return self._rust_model.peos_start
+
+    @property
     def ln_peos(self) -> _ArrF64:
         """Cell natural log total pressure of shape `(nz,)`."""
         return self._rust_model.ln_peos
@@ -393,6 +423,11 @@ class StarModelArrays:
     def non_nuc_neu(self) -> _ArrF64:
         """Cell thermal neutrino energy loss rate (`erg g^-1 s^-1`)."""
         return self._rust_model.non_nuc_neu
+
+    @property
+    def non_nuc_neu_start(self) -> _ArrF64:
+        """Start-of-step cell thermal neutrino loss rate (`erg g^-1 s^-1`)."""
+        return self._rust_model.non_nuc_neu_start
 
     @property
     def eps_nuc(self) -> _ArrF64:

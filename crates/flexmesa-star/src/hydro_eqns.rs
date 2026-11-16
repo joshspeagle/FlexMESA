@@ -406,20 +406,26 @@ pub fn do1_chem_eqns(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
     let sig_00_dm = sig_00 / dm_k;
     let sig_p1_dm = sig_p1 / dm_k;
 
+    let has_dx = model.xa_sub_xa_start.len() == model.xa.len()
+        && model.xa_start.len() == model.xa.len();
+    let valid_dx = |idx: usize| -> bool {
+        has_dx && {
+            let x = model.xa[idx];
+            (model.xa_start[idx] + model.xa_sub_xa_start[idx] - x).abs()
+                <= 4.0 * f64::EPSILON * (1.0 + x.abs())
+        }
+    };
+
     for j in 0..species {
         let kj = k * species + j;
         let i_var = model.layout.chem_var_index(j);
         let i_equ = i_var;
         let nuc_base = k * species * species + j * species;
         let x_scale_kj = sys.x_scale[k * sys.nvar + i_var];
-        let eqn_scale = model
-            .controls
-            .min_chem_eqn_scale
-            .max(x_scale_kj / dt)
-            .max(1.0e-30);
+        let eqn_scale =
+            model.controls.min_chem_eqn_scale.max(x_scale_kj / dt).max(1.0e-30);
 
         let x_00 = model.xa[kj];
-        let x_start = model.xa_start[kj];
         let f_00 = if k > 0 {
             sig_00 * (model.xa[(k - 1) * species + j] - x_00)
         } else {
@@ -432,7 +438,11 @@ pub fn do1_chem_eqns(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
         };
         let dxdt_mix = (f_00 - f_p1) / dm_k;
         let dxdt_nuc = if active_burn { model.dxdt_nuc[kj] } else { 0.0 };
-        let dxdt_actual = (x_00 - x_start) / dt;
+        let dxdt_actual = if valid_dx(kj) {
+            model.xa_sub_xa_start[kj]
+        } else {
+            model.xa[kj] - model.xa_start[kj]
+        } / dt;
         sys.equ[k * sys.nvar + i_equ] =
             (dxdt_mix + dxdt_nuc - dxdt_actual) / eqn_scale;
 

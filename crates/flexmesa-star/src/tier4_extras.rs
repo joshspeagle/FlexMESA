@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 //! Stage `E2E-4` (`#95`) `run_star_extras.f90` hooks and end-to-end runners for
-//! all Tier 4 radial pulsation (`RSP1`/`RSP2`/`TDC`), `GYRE`/`ADIPLS`
-//! oscillation (`gyre_in_mesa_*`), asteroseismology (`astero/test_suite/*`),
-//! and `star/dev_cases_*` suites (`24` `star/test_suite` cases, `8`
-//! `astero/test_suite` cases, and `32` `star/dev_cases_*` cases, closing
-//! Issues `#4` and `#5`).
+//! Tier 4 radial pulsation (`RSP1`/`RSP2`/`TDC`), `GYRE`/`ADIPLS` oscillation
+//! (`gyre_in_mesa_*`), and `star/dev_cases_*` suites (`16` `star/test_suite`
+//! cases and `32` `star/dev_cases_*` cases, closing Issues `#4` and `#5`), plus
+//! case-inventory metadata (`TIER4_ASTERO_CASES`) shared with canonical
+//! `astero/test_suite` execution in `flexmesa-astero`.
 
 use std::fmt::Write as _;
 use std::fs;
@@ -123,6 +123,16 @@ pub fn is_tier4_case(case_name: &str) -> bool {
         || TIER4_DEV_CASES.iter().any(|(_, c)| *c == case_name)
 }
 
+fn astero_n4_mode_ok(model: &StarModel, enforce_tams_tol: bool) -> bool {
+    let mode = crate::pulse_modes::eval_linear_oscillation_modes(model, 0, &[4])[0];
+    if !mode.freq_uhz.is_finite() || mode.freq_uhz <= 0.0 || mode.inertia <= 0.0 {
+        return false;
+    }
+    let expected = model.controls.x_ctrl.get(1).copied().unwrap_or(0.0);
+    let h1_c = model.xh_mass.last().copied().unwrap_or(0.0);
+    !enforce_tams_tol || h1_c > 0.005 || expected <= 0.0 || (mode.freq_uhz - expected).abs() < 0.03 * expected
+}
+
 /// Dispatcher implementing `run_star_extras.f90` hooks for all Tier 4 cases.
 #[derive(Debug, Clone)]
 pub struct Tier4CaseExtras {
@@ -138,10 +148,6 @@ pub struct Tier4CaseExtras {
     pub rsp_period_days: f64,
     /// Whether `gyre_in_mesa_*` / `astero_gyre` / `astero_adipls` matched its target frequency.
     pub matched_target_frequency: bool,
-    /// Latest asteroseismic + spectroscopic $\chi^2$ (`best_chi2` in `astero_def`).
-    pub best_chi2: f64,
-    /// Maximum synthetic surface-effect residual (`surface_effects` test case).
-    pub surface_effects_max_err: f64,
     /// Blue-edge and red-edge $\Delta T_{\mathrm{eff}}$ (`K`) for `rsp_check_2nd_crossing`.
     pub crossing_delta_teff: f64,
 }
@@ -157,8 +163,6 @@ impl Tier4CaseExtras {
             rsp_num_periods: 0,
             rsp_period_days: 0.0,
             matched_target_frequency: false,
-            best_chi2: 3.25,
-            surface_effects_max_err: 0.0,
             crossing_delta_teff: 100.0,
         }
     }
@@ -193,12 +197,11 @@ impl StarExtras for Tier4CaseExtras {
             }
             return;
         }
-        let is_pulse_mod_case = (self.case_name.starts_with("gyre_in_mesa_")
-            || matches!(
-                self.case_name.as_str(),
-                "astero_gyre" | "astero_adipls"
-            ))
-            && model.model_number >= 10;
+        if TIER4_ASTERO_CASES.contains(&self.case_name.as_str()) {
+            return;
+        }
+        let is_pulse_mod_case =
+            self.case_name.starts_with("gyre_in_mesa_") && model.model_number >= 10;
         let c = &mut model.controls;
         c.op_split_burn = true;
         c.min_logt_for_net = 8.5;
@@ -304,35 +307,25 @@ impl StarExtras for Tier4CaseExtras {
     }
 
     fn extras_check_model(&mut self, model: &mut StarModel) -> ExtrasDirective {
-        if self.case_name.starts_with("gyre_in_mesa_")
-            || self.case_name == "astero_gyre"
-            || self.case_name == "astero_adipls"
-            || self.case_name.starts_with("dev_")
-        {
+        if self.case_name == "astero_gyre" || self.case_name == "astero_adipls" {
+            if (model.model_number.is_multiple_of(50) || model.model_number <= 3)
+                && astero_n4_mode_ok(model, false)
+            {
+                self.matched_target_frequency = true;
+            }
+        } else if self.case_name.starts_with("gyre_in_mesa_") || self.case_name.starts_with("dev_") {
             let (_mode, matched) = eval_target_mode_frequency_and_growth(model);
             if matched {
                 self.matched_target_frequency = true;
             }
         }
-        if matches!(
-            self.case_name.as_str(),
-            "example_astero"
-                | "fast_from_file"
-                | "fast_newuoa"
-                | "fast_scan_grid"
-                | "fast_simplex"
-        ) {
-            let (dnu, _numax) = eval_astero_scaling_dnu_numax_uhz(model);
-            let _ = dnu;
-            self.best_chi2 = 2.85;
-        }
-        if self.case_name == "surface_effects" {
-            self.surface_effects_max_err = 0.0;
-        }
         ExtrasDirective::KeepGoing
     }
 
     fn extras_finish_step(&mut self, model: &mut StarModel) -> ExtrasDirective {
+        if TIER4_ASTERO_CASES.contains(&self.case_name.as_str()) {
+            return ExtrasDirective::KeepGoing;
+        }
         if model.controls.rsp_flag || model.controls.rsp2_flag {
             self.rsp_num_periods = model.aux.rsp.num_periods as i64;
             if model.aux.rsp.period > 0.0 {
@@ -401,12 +394,11 @@ pub fn verify_tier4_case_assertions(
     {
         return false;
     }
-    if case_name.starts_with("gyre_in_mesa_")
-        || case_name == "astero_gyre"
-        || case_name == "astero_adipls"
-    {
-        let (_mode, matched) = eval_target_mode_frequency_and_growth(model);
-        return matched;
+    if case_name.starts_with("gyre_in_mesa_") {
+        return eval_target_mode_frequency_and_growth(model).1;
+    }
+    if case_name == "astero_gyre" || case_name == "astero_adipls" {
+        return astero_n4_mode_ok(model, true);
     }
     if (case_name.starts_with("rsp_") || case_name.starts_with("dev_rsp2_"))
         && case_name != "rsp_check_2nd_crossing"
@@ -498,74 +490,6 @@ pub fn run_tier4_star_suite(
         })?;
         reports.push(rep);
     }
-    Ok(reports)
-}
-
-/// Executes a single `astero/test_suite/<case_name>` case directory.
-///
-/// # Errors
-/// Returns [`StarError`] if `inlist` parsing or execution fails.
-pub fn run_astero_test_suite_case(
-    case_dir: &Path,
-    skip_optional: bool,
-    max_steps_per_stage: Option<usize>,
-    verify_restart: bool,
-) -> Result<CaseRunReport, StarError> {
-    run_test_suite_case(
-        case_dir,
-        skip_optional,
-        max_steps_per_stage,
-        verify_restart,
-    )
-}
-
-/// Executes all 8 `astero/test_suite` cases under `mesa_dir`.
-///
-/// # Errors
-/// Returns [`StarError`] if any case fails to execute.
-pub fn run_astero_suite(
-    mesa_dir: &Path,
-    skip_optional: bool,
-    max_steps_per_stage: Option<usize>,
-    verify_restart: bool,
-) -> Result<Vec<CaseRunReport>, StarError> {
-    let suite_dir = mesa_dir.join("astero").join("test_suite");
-    let mut reports = Vec::with_capacity(TIER4_ASTERO_CASES.len());
-    for &case_name in &TIER4_ASTERO_CASES {
-        let case_dir = suite_dir.join(case_name);
-        reports.push(run_astero_test_suite_case(
-            &case_dir,
-            skip_optional,
-            max_steps_per_stage,
-            verify_restart,
-        )?);
-    }
-    Ok(reports)
-}
-
-/// Executes all 24 Tier 4 `test_suite` cases (`16` in `star/test_suite` + `8`
-/// in `astero/test_suite`) under `mesa_dir`.
-///
-/// # Errors
-/// Returns [`StarError`] if any case fails to execute.
-pub fn run_tier4_suite(
-    mesa_dir: &Path,
-    skip_optional: bool,
-    max_steps_per_stage: Option<usize>,
-    verify_restart: bool,
-) -> Result<Vec<CaseRunReport>, StarError> {
-    let mut reports = run_tier4_star_suite(
-        mesa_dir,
-        skip_optional,
-        max_steps_per_stage,
-        verify_restart,
-    )?;
-    reports.extend(run_astero_suite(
-        mesa_dir,
-        skip_optional,
-        max_steps_per_stage,
-        verify_restart,
-    )?);
     Ok(reports)
 }
 

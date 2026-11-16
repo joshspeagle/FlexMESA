@@ -7,6 +7,11 @@
 //! `binary_lib`, `binary_utils`, `binary_mdot`, `binary_disk`, `binary_wind`,
 //! `binary_jdot`, `binary_tides`, `binary_edot`, `binary_timestep`, and
 //! `binary_evolve`).
+//!
+//! **Status**: Closed-form Roche-lobe, torque, and mass-transfer kernels are
+//! unit-tested; the coupled `BinarySystem` evolution driver, orbital step
+//! sequence, implicit mass-transfer search, and `binary/test_suite` runner are
+//! **unverified** against real MESA output (pending #143, #154, and #160).
 
 #![forbid(unsafe_code)]
 #![allow(
@@ -16,6 +21,7 @@
     clippy::doc_markdown,
     clippy::excessive_precision,
     clippy::float_cmp,
+    clippy::fn_params_excessive_bools,
     clippy::manual_midpoint,
     clippy::many_single_char_names,
     clippy::missing_errors_doc,
@@ -24,6 +30,7 @@
     clippy::must_use_candidate,
     clippy::needless_range_loop,
     clippy::similar_names,
+    clippy::struct_excessive_bools,
     clippy::suboptimal_flops,
     clippy::too_many_arguments,
     clippy::too_many_lines,
@@ -32,45 +39,70 @@
 
 pub mod disk;
 pub mod e2e;
+pub mod e2e_extras;
 pub mod e2e_oracles;
 pub mod edd_wind;
+pub mod extras;
+pub mod inlist;
 pub mod jdot_tides;
 pub mod mdot;
+pub mod mdot_implicit;
 pub mod orbit;
+pub mod roche_deformation;
 pub mod system;
+pub mod system_init;
+pub mod system_jdot;
+pub mod system_rlof;
+pub mod system_step;
 pub mod timestep;
 
 pub use disk::eval_l2_mass_loss_fraction;
 pub use e2e::{
+    BinaryCaseRunReport, BinaryInlistControls, TIER5_BINARY_CASES,
     eval_brott_wind_msun_yr, eval_gr_expected_separation_rsun,
     eval_tauris_vdh_expected_separation_rsun, is_tier5_binary_case,
-    run_binary_suite, run_binary_test_suite_case, BinaryCaseRunReport,
-    BinaryInlistControls, TIER5_BINARY_CASES,
+    run_binary_suite, run_binary_test_suite_case,
 };
 pub use edd_wind::{
-    bh_initial_equatorial_mass, eval_accreted_material_j, eval_bh_spin,
-    eval_bondi_hoyle_wind_fraction, eval_mdot_edd, eval_tout_wind_enhancement,
+    PointMassEddRetention, bh_initial_equatorial_mass,
+    eval_accreted_material_j, eval_bh_spin, eval_bondi_hoyle_wind_fraction,
+    eval_mdot_edd, eval_mdot_edd_with_overrides,
+    eval_point_mass_edd_and_retention, eval_tout_wind_enhancement,
 };
+pub use extras::{BinaryExtras, BinaryExtrasAction, DefaultBinaryExtras};
 pub use jdot_tides::{
-    eval_edot_gr, eval_edot_tidal_hut, eval_jdot_gr, eval_jdot_ls,
-    eval_jdot_ls_with_winds, eval_jdot_mb, eval_jdot_missing_wind,
-    eval_jdot_ml, eval_k_div_t_convective, eval_k_div_t_radiative, eval_tsync,
-    hut_f2, hut_f3, hut_f4, hut_f5,
+    check_jdot_mb_conditions, eval_edot_gr, eval_edot_tidal_hut, eval_jdot_gr,
+    eval_jdot_ls, eval_jdot_ls_with_winds, eval_jdot_mb,
+    eval_jdot_mb_with_scale_mass, eval_jdot_missing_wind, eval_jdot_ml,
+    eval_k_div_t_convective, eval_k_div_t_radiative, eval_tsync, hut_f2,
+    hut_f3, hut_f4, hut_f5,
 };
 pub use mdot::{
-    eval_arras_mdot_thin, eval_kolb_mdot_eccentric, eval_kolb_mdot_thick,
-    eval_ritter_mdot_eccentric, eval_ritter_mdot_thin, kolb_f3,
-    ImplicitRlofSolver,
+    ImplicitMdotSolver, ImplicitRlofSolver, ImplicitStepAction,
+    eval_arras_mdot_thin, eval_edot_enhancement_isotropic,
+    eval_kolb_mdot_eccentric, eval_kolb_mdot_thick, eval_ritter_mdot_eccentric,
+    eval_ritter_mdot_thin, kolb_f3, update_change_factor_after_step,
 };
 pub use orbit::{
     build_anomaly_grid, eval_j_orb, eval_l2_overflow_limit,
     eval_rl_relative_gap, eval_rlobe, eval_rlobe_ad, period_from_separation,
     separation_from_j_orb, separation_from_period,
 };
+pub use roche_deformation::{
+    BinaryTidalDeformationHook, ROCHE_NUDGE, RocheDeformationTables,
+    RocheTable2D, eval_synchronicity_switch,
+};
 pub use system::{BinaryCompanion, BinarySystem};
+pub use system_jdot::{JdotBreakdown, eval_coupled_edot, eval_gated_jdot};
+pub use system_rlof::{
+    BinaryStepSnapshot, CoupledMdotAccounting, blend_explicit_mdot,
+    eval_scheme_explicit_mdot, eval_star_intrinsic_wind_cgs_with_extras,
+    prepare_coupled_mdots, prepare_coupled_mdots_with_extras,
+};
 pub use timestep::{
-    binary_pick_next_timestep, BinaryTimestepControls, B_TLIM_COMP, B_TLIM_DM,
-    B_TLIM_ECC, B_TLIM_ENV, B_TLIM_JORB, B_TLIM_ROCHE, B_TLIM_SEP,
+    B_TLIM_COMP, B_TLIM_DM, B_TLIM_ECC, B_TLIM_ENV, B_TLIM_JORB, B_TLIM_ROCHE,
+    B_TLIM_SEP, BinaryTimestepControls, binary_pick_next_timestep,
+    violates_binary_hard_limits,
 };
 
 #[cfg(test)]

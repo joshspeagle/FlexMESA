@@ -49,9 +49,9 @@ C_VP: float = 1.0 - C_V
 # Neutral-current axial-vector weak coupling C_A' = 1 - C_A.
 C_AP: float = 1.0 - C_A
 
-# Squared vector weak coupling C_V^2 + (N_nu - 1) C_V'^2 (`tfac0` in
-# `mod_neu.f90`).
-TFAC0: float = C_V * C_V + SNEUT_Z * (C_VP * C_VP)
+# Hardcoded plasma-neutrino Weinberg prefactor (`neu/private/mod_neu.f90:1582`
+# at tag 26.4.1; reproduced verbatim for parity, see #193).
+PLAS_WEINBERG_PREF: float = 0.93153
 
 # Sum of squared electron weak couplings (`tfac1` in `mod_neu.f90`).
 TFAC1: float = C_V * C_V + C_A * C_A + SNEUT_Z * (C_VP * C_VP + C_AP * C_AP)

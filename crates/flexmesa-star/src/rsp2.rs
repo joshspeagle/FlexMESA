@@ -355,7 +355,7 @@ pub fn eval_rsp2_face(
 /// Solves the stationary local `RSP2` turbulent balance
 /// $S(w) - D(w) - D_r(w) = 0$ for the equilibrium turbulent velocity $w$
 /// ($\mathrm{cm\,s^{-1}}$), matching `RSP2_adjust_vars_before_call_solver` in
-/// `star/private/hydro_rsp2.f90:1195-1253`.
+/// `star/private/hydro_rsp2.f90:1183-1243`.
 #[must_use]
 pub fn solve_stationary_rsp2_w(
     t: f64,

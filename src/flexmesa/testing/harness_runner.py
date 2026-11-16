@@ -9,7 +9,6 @@ verdicts against ``case_manifest.toml`` and ``known_gaps.toml``.
 
 from __future__ import annotations
 
-import dataclasses
 import json
 import os
 import pathlib
@@ -22,94 +21,28 @@ from typing import Any
 
 from flexmesa import _rust
 from flexmesa.data import fetch
-from flexmesa.testing import case_manifest, history_compare
+from flexmesa.testing import history_compare
+from flexmesa.testing._case_verdict import (
+    CaseHarnessRecord,
+    TraceRunOutcome,
+    _sanitize_error_message,
+    evaluate_case_record,
+    resolve_reference_history_path,
+)
 
-
-@dataclasses.dataclass(frozen=True)
-class TraceRunOutcome:
-    """Execution telemetry from a ``star``, ``binary``, or ``astero`` run.
-
-    Attributes:
-        suite: Suite name (``"star"``, ``"binary"``, or ``"astero"``).
-        case: Case directory name.
-        status: Execution status (``"ok"``, ``"error"``, ``"timeout"``, or
-            ``"oom_killed"``).
-        termination_code: Observed termination code (or empty string on crash).
-        steps: Total evolutionary steps completed before exit.
-        retries: Total step retries recorded.
-        wall_time_sec: Elapsed wall-clock time in seconds (``s``).
-        peak_rss_gb: Peak resident memory of the worker in gigabytes (``GB``).
-        history_path: Path to the emitted ``history.data`` or
-            ``binary_history.data`` file if present on disk, else ``None``.
-        error_message: Diagnostic error string when ``status != "ok"``.
-    """
-
-    suite: str
-    case: str
-    status: str
-    termination_code: str
-    steps: int
-    retries: int
-    wall_time_sec: float
-    peak_rss_gb: float
-    history_path: pathlib.Path | None
-    error_message: str = ""
-
-
-@dataclasses.dataclass(frozen=True)
-class CaseHarnessRecord:
-    """Manifest, execution, and trajectory-comparison record for one case.
-
-    Attributes:
-        suite: Suite name (``"star"``, ``"binary"``, or ``"astero"``).
-        case: Case directory name.
-        reference_status: Reference status from ``case_manifest.toml``.
-        reference_path: Stored reference path (or empty string).
-        required_termination: Expected upstream termination string.
-        verdict: Governed verdict label (for example ``"no reference yet"``,
-            ``"smoke: 3 steps"``, ``"interim reference (within tol)"``,
-            ``"pass"``, ``"declared gap (#155)"``, or ``"fail (undeclared)"``).
-        executed: True when ``FlexMESA`` ran the case in this invocation.
-        run_status: Execution status (``"not_run"``, ``"ok"``, ``"error"``,
-            ``"timeout"``, or ``"oom_killed"``).
-        observed_termination: Observed termination string when executed.
-        termination_matches: True when ``observed_termination`` satisfies
-            ``required_termination``.
-        steps: Steps completed (``0`` if not executed).
-        retries: Retries recorded (``0`` if not executed).
-        wall_time_sec: Elapsed runtime in seconds (``s``).
-        peak_rss_gb: Peak resident memory in gigabytes (``GB``).
-        known_gap_issue: Linked ``#<issue>`` from ``known_gaps.toml`` if any.
-        known_gap_reason: Declared gap explanation if any.
-        comparison: ``HistoryComparison`` when both reference and run histories
-            exist, else ``None``.
-        error_message: Error detail if execution or log parsing failed.
-        is_undeclared_failure: True when an uncapped run fails without an entry
-            in ``known_gaps.toml``.
-        is_stale_known_gap: True when a case in ``known_gaps.toml`` meets all
-            termination and trajectory criteria.
-    """
-
-    suite: str
-    case: str
-    reference_status: str
-    reference_path: str
-    required_termination: str
-    verdict: str
-    executed: bool
-    run_status: str
-    observed_termination: str
-    termination_matches: bool
-    steps: int
-    retries: int
-    wall_time_sec: float
-    peak_rss_gb: float
-    known_gap_issue: str
-    known_gap_reason: str
-    comparison: history_compare.HistoryComparison | None
-    error_message: str = ""
-    is_undeclared_failure: bool = False
-    is_stale_known_gap: bool = False
+__all__ = [
+    "CaseHarnessRecord",
+    "TraceRunOutcome",
+    "_sanitize_error_message",
+    "evaluate_case_record",
+    "locate_written_history",
+    "proc_rss_gb",
+    "resolve_case_dir",
+    "resolve_mesa_test_root",
+    "resolve_reference_history_path",
+    "run_trace_inprocess",
+    "run_traced_case",
+]
 
 
 def resolve_mesa_test_root(
@@ -371,6 +304,7 @@ def _build_worker_env(worker_tmp: pathlib.Path) -> dict[str, str]:
         f"{src_root}{os.pathsep}{existing_py}" if existing_py else src_root
     )
     env.setdefault("JAX_PLATFORMS", "cpu")
+    env.setdefault("PYTHONWARNINGS", "ignore::RuntimeWarning:runpy")
     tmp_str = str(worker_tmp)
     env["TMPDIR"] = tmp_str
     env["TEMP"] = tmp_str
@@ -623,150 +557,3 @@ def run_traced_case(
             history_path=hist,
             error_message=str(err),
         )
-
-
-def evaluate_case_record(
-    spec: case_manifest.CaseManifestEntry,
-    known_gaps: dict[tuple[str, str], case_manifest.KnownGapSpec],
-    outcome: TraceRunOutcome | None,
-    *,
-    max_steps: int | None = None,
-    root_dir: pathlib.Path | None = None,
-) -> CaseHarnessRecord:
-    """Combine manifest metadata, run outcome, and comparison into a verdict.
-
-    Args:
-        spec: ``CaseManifestEntry`` for the target case.
-        known_gaps: Mapping from ``(suite, case)`` to ``KnownGapSpec``.
-        outcome: Optional ``TraceRunOutcome`` if executed, else ``None``.
-        max_steps: Step cap if run in smoke mode, else ``None``.
-        root_dir: Base directory for resolving relative ``spec.reference_path``.
-
-    Returns:
-        Evaluated ``CaseHarnessRecord``.
-
-    Raises:
-        FileNotFoundError: If ``spec.reference_path`` is configured on an
-            executed case and the reference file is missing.
-        ValueError: If the stored reference file is malformed.
-        KeyError: If the stored reference file lacks ``spec.independent_var``.
-    """
-    gap = known_gaps.get(spec.key)
-    gap_issue = gap.issue if gap is not None else ""
-    gap_reason = gap.reason if gap is not None else ""
-    base = case_manifest.repo_root() if root_dir is None else root_dir
-
-    if outcome is None:
-        if spec.reference_status == "no_reference_yet":
-            verdict = "no reference yet"
-        elif spec.reference_status == "interim_0b2e6bb":
-            verdict = "interim reference (not run)"
-        else:
-            verdict = "not run"
-        return CaseHarnessRecord(
-            suite=spec.suite,
-            case=spec.case,
-            reference_status=spec.reference_status,
-            reference_path=spec.reference_path,
-            required_termination=spec.required_termination,
-            verdict=verdict,
-            executed=False,
-            run_status="not_run",
-            observed_termination="",
-            termination_matches=False,
-            steps=0,
-            retries=0,
-            wall_time_sec=0.0,
-            peak_rss_gb=0.0,
-            known_gap_issue=gap_issue,
-            known_gap_reason=gap_reason,
-            comparison=None,
-        )
-
-    term_ok = case_manifest.termination_matches(
-        spec.required_termination, outcome.termination_code
-    )
-    comp: history_compare.HistoryComparison | None = None
-    comp_err = outcome.error_message
-
-    if spec.reference_status != "no_reference_yet" and spec.reference_path:
-        ref_file = base / spec.reference_path
-        ref_tbl = history_compare.load_history_file(ref_file)
-        if spec.independent_var not in ref_tbl.columns:
-            raise KeyError(
-                f"{ref_file}: missing independent_var {spec.independent_var!r}"
-            )
-        if outcome.history_path is not None:
-            try:
-                run_tbl = history_compare.load_history_file(
-                    outcome.history_path
-                )
-                comp = history_compare.compare_histories(ref_tbl, run_tbl, spec)
-            except (OSError, ValueError, KeyError) as err:
-                comp_err = f"{comp_err}; compare error: {err}".strip("; ")
-
-    tol_ok = (
-        comp is not None
-        and comp.within_final_tolerances
-        and comp.within_track_tolerances
-    )
-    is_undeclared = False
-    is_stale_gap = False
-
-    if max_steps is not None:
-        if outcome.status == "ok":
-            verdict = f"smoke: {outcome.steps} steps"
-        else:
-            verdict = f"smoke: {outcome.status} ({outcome.steps} steps)"
-    elif spec.reference_status == "no_reference_yet":
-        verdict = "no reference yet"
-    elif spec.reference_status == "interim_0b2e6bb":
-        if outcome.status in ("timeout", "oom_killed"):
-            verdict = f"interim reference ({outcome.status})"
-        elif outcome.status != "ok" or comp is None:
-            verdict = "interim reference (run failed)"
-        elif not term_ok:
-            verdict = "interim reference (wrong termination)"
-        elif tol_ok:
-            verdict = "interim reference (within tol)"
-        else:
-            verdict = "interim reference (outside tol)"
-        if verdict == "interim reference (within tol)":
-            is_stale_gap = gap is not None
-        else:
-            is_undeclared = gap is None
-    else:
-        if outcome.status == "ok" and term_ok and tol_ok:
-            if spec.uses_pulsation_scaffolding:
-                verdict = f"scaffolding ({spec.scaffolding_issue})"
-            else:
-                verdict = "pass"
-                is_stale_gap = gap is not None
-        elif gap is not None:
-            verdict = f"declared gap ({gap.issue})"
-        else:
-            verdict = "fail (undeclared)"
-            is_undeclared = True
-
-    return CaseHarnessRecord(
-        suite=spec.suite,
-        case=spec.case,
-        reference_status=spec.reference_status,
-        reference_path=spec.reference_path,
-        required_termination=spec.required_termination,
-        verdict=verdict,
-        executed=True,
-        run_status=outcome.status,
-        observed_termination=outcome.termination_code,
-        termination_matches=term_ok,
-        steps=outcome.steps,
-        retries=outcome.retries,
-        wall_time_sec=outcome.wall_time_sec,
-        peak_rss_gb=outcome.peak_rss_gb,
-        known_gap_issue=gap_issue,
-        known_gap_reason=gap_reason,
-        comparison=comp,
-        error_message=comp_err,
-        is_undeclared_failure=is_undeclared,
-        is_stale_known_gap=is_stale_gap,
-    )

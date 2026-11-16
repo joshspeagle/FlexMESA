@@ -288,10 +288,11 @@ fn test_wave3b1_golden_get_rho_t_inversions_match_fortran_mesa() {
     )
     .expect("eos_dt_get_t given logPtot must converge");
 
+    // Expected values from MESA 26.4.1 `eos/test/test_output:413,415` (#194).
     assert_rel_close(
         "found logT (logP)",
         inv_t_p.log10_result,
-        4.800_965_466_497_445_7,
+        4.800_961_315_559_555_4,
         1.0e-12,
     );
     let t_res = exp10(inv_t_p.log10_result);
@@ -299,7 +300,7 @@ fn test_wave3b1_golden_get_rho_t_inversions_match_fortran_mesa() {
         CRAD * flexmesa_math::pow4(t_res) / 3.0
             + flexmesa_math::exp(inv_t_p.eos.res[I_LN_PGAS]),
     );
-    assert_rel_close("got logP", got_log_p, 5.945_434_039_207_868_6, 1.0e-12);
+    assert_rel_close("got logP", got_log_p, 5.945_429_253_933_702_4, 1.0e-12);
 }
 
 #[test]

@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-//! Upstream Fortran MESA (`main` at commit `0b2e6bb`) golden parity tests for
-//! static `RSP` envelope integration (`STAH`), Kuhfuss/Smolec envelope
-//! relaxation (`RELAX_ENV`), linear non-adiabatic radial pulsation stability
-//! (`do_LINA`), and Cepheid 2nd-crossing instability-strip boundary
-//! interpolation (`rsp_check_2nd_crossing`, Issue `#5`).
+//! Upstream Fortran MESA (release `26.4.1`, commit
+//! `c8c202662922a22b3efefa824473ad615c623afd`) parity tests for static `RSP`
+//! envelope integration (`STAH`), Kuhfuss/Smolec envelope relaxation
+//! (`RELAX_ENV`), linear non-adiabatic radial pulsation stability (`do_LINA`),
+//! and Cepheid 2nd-crossing instability-strip boundary interpolation
+//! (`rsp_check_2nd_crossing`, Issue `#5`, re-baselined in `#141`).
 
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -43,30 +45,52 @@ fn base_rsp_job() -> StarJobControls {
     }
 }
 
-struct GoldenRspCase {
+fn load_lina_26_4_1(path: &Path) -> HashMap<String, ([f64; 3], [f64; 3])> {
+    let raw = fs::read_to_string(path)
+        .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+    assert!(
+        raw.contains("# mesa_version_number=r26.4.1"),
+        "missing r26.4.1 header in {}",
+        path.display()
+    );
+    let mut out = HashMap::new();
+    for line in raw.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        let cols: Vec<&str> = trimmed.split('\t').collect();
+        assert_eq!(cols.len(), 7, "unexpected LINA row: {trimmed}");
+        let periods = [
+            cols[1].parse::<f64>().expect("p0"),
+            cols[3].parse::<f64>().expect("p1"),
+            cols[5].parse::<f64>().expect("p2"),
+        ];
+        let growths = [
+            cols[2].parse::<f64>().expect("g0"),
+            cols[4].parse::<f64>().expect("g1"),
+            cols[6].parse::<f64>().expect("g2"),
+        ];
+        out.insert(cols[0].to_string(), (periods, growths));
+    }
+    out
+}
+
+struct RspReferenceCase {
+    slug: &'static str,
     fname: &'static str,
-    periods_sec: [f64; 3],
-    growth_rates: [f64; 3],
     configure: fn(&mut StarControls),
 }
 
 #[test]
 #[allow(clippy::too_many_lines)]
-fn test_rsp_build_and_lina_match_all_7_r24_08_1_golden_models() {
+fn test_rsp_build_and_lina_match_all_7_mesa_26_4_1_reference_models() {
     let gdir = golden_rsp_dir();
+    let lina_refs = load_lina_26_4_1(&gdir.join("lina_26_4_1.tsv"));
     let cases = [
-        GoldenRspCase {
-            fname: "rsp_cepheid_init_r24.mod",
-            periods_sec: [
-                3.437_594_666_629_719e5,
-                2.445_728_144_258_661_2e5,
-                1.869_175_519_541_832_6e5,
-            ],
-            growth_rates: [
-                1.448_218_706_060_893_9e-2,
-                2.832_279_134_588_332_2e-2,
-                -8.729_792_420_348_392e-2,
-            ],
+        RspReferenceCase {
+            slug: "rsp_cepheid",
+            fname: "rsp_cepheid_init_26_4_1.mod",
             configure: |c| {
                 c.rsp_mass = 4.165;
                 c.rsp_teff = 6050.0;
@@ -75,18 +99,9 @@ fn test_rsp_build_and_lina_match_all_7_r24_08_1_golden_models() {
                 c.rsp_z = 0.007;
             },
         },
-        GoldenRspCase {
-            fname: "rsp_cepheid_6M_init_r24.mod",
-            periods_sec: [
-                1.685_039_581_255_813_4e6,
-                1.024_492_940_651_358_6e6,
-                7.184_241_879_354_038e5,
-            ],
-            growth_rates: [
-                -3.240_294_802_432_712e-2,
-                -1.937_301_362_027_289_4e-1,
-                -2.921_241_693_949_774e-1,
-            ],
+        RspReferenceCase {
+            slug: "rsp_cepheid_6M",
+            fname: "rsp_cepheid_6M_init_26_4_1.mod",
             configure: |c| {
                 c.rsp_mass = 6.0;
                 c.rsp_teff = 4892.0;
@@ -95,18 +110,9 @@ fn test_rsp_build_and_lina_match_all_7_r24_08_1_golden_models() {
                 c.rsp_z = 0.003;
             },
         },
-        GoldenRspCase {
-            fname: "rsp_RR_Lyrae_init_r24.mod",
-            periods_sec: [
-                6.069_707_926_490_174_6e4,
-                4.477_071_797_338_348_6e4,
-                3.447_269_805_105_282e4,
-            ],
-            growth_rates: [
-                3.033_911_230_917_817_8e-2,
-                1.894_849_716_330_139_5e-2,
-                -1.036_883_853_911_131_9e-1,
-            ],
+        RspReferenceCase {
+            slug: "rsp_RR_Lyrae",
+            fname: "rsp_RR_Lyrae_init_26_4_1.mod",
             configure: |c| {
                 c.rsp_mass = 0.65;
                 c.rsp_teff = 6500.0;
@@ -115,18 +121,9 @@ fn test_rsp_build_and_lina_match_all_7_r24_08_1_golden_models() {
                 c.rsp_z = 0.0004;
             },
         },
-        GoldenRspCase {
-            fname: "rsp_BEP_init_r24.mod",
-            periods_sec: [
-                5.482_092_622_149_857e4,
-                3.927_329_732_257_694e4,
-                2.899_262_276_863_794e4,
-            ],
-            growth_rates: [
-                1.597_408_974_806_609e-2,
-                -5.471_814_147_342_12e-2,
-                -4.134_710_726_758_465e-1,
-            ],
+        RspReferenceCase {
+            slug: "rsp_BEP",
+            fname: "rsp_BEP_init_26_4_1.mod",
             configure: |c| {
                 c.rsp_mass = 0.26;
                 c.rsp_teff = 6968.0;
@@ -135,18 +132,9 @@ fn test_rsp_build_and_lina_match_all_7_r24_08_1_golden_models() {
                 c.rsp_z = 0.01;
             },
         },
-        GoldenRspCase {
-            fname: "rsp_BLAP_init_r24.mod",
-            periods_sec: [
-                4.781_288_732_677_035e3,
-                3.381_132_151_645_098_5e3,
-                2.641_235_651_243_388_5e3,
-            ],
-            growth_rates: [
-                2.968_583_434_358_451e-2,
-                -1.864_785_307_640_226_5e-1,
-                -3.645_866_163_423_907e-1,
-            ],
+        RspReferenceCase {
+            slug: "rsp_BLAP",
+            fname: "rsp_BLAP_init_26_4_1.mod",
             configure: |c| {
                 c.rsp_mass = 0.36;
                 c.rsp_teff = 26_000.0;
@@ -160,18 +148,9 @@ fn test_rsp_build_and_lina_match_all_7_r24_08_1_golden_models() {
                 c.rsp.kick_vsurf_km_per_sec = 0.5;
             },
         },
-        GoldenRspCase {
-            fname: "rsp_Delta_Scuti_init_r24.mod",
-            periods_sec: [
-                1.477_096_710_202_621_2e4,
-                1.093_582_896_802_943e4,
-                8.509_078_847_937_462e3,
-            ],
-            growth_rates: [
-                1.031_356_637_333_276_4e-5,
-                5.899_497_559_683_98e-5,
-                -4.115_919_947_307_024_3e-4,
-            ],
+        RspReferenceCase {
+            slug: "rsp_Delta_Scuti",
+            fname: "rsp_Delta_Scuti_init_26_4_1.mod",
             configure: |c| {
                 c.rsp_mass = 2.0;
                 c.rsp_teff = 6900.0;
@@ -184,18 +163,9 @@ fn test_rsp_build_and_lina_match_all_7_r24_08_1_golden_models() {
                 c.rsp.fraction_1st_overtone = 0.5;
             },
         },
-        GoldenRspCase {
-            fname: "rsp_Type_II_Cepheid_init_r24.mod",
-            periods_sec: [
-                1.421_140_390_920_954e5,
-                9.921_261_881_928_619e4,
-                7.185_248_489_518_021e4,
-            ],
-            growth_rates: [
-                1.648_116_805_650_379_2e-1,
-                4.438_102_393_856_967_4e-5,
-                -5.367_501_851_688_521e-1,
-            ],
+        RspReferenceCase {
+            slug: "rsp_Type_II_Cepheid",
+            fname: "rsp_Type_II_Cepheid_init_26_4_1.mod",
             configure: |c| {
                 c.rsp_mass = 0.55;
                 c.rsp_teff = 6410.0;
@@ -215,8 +185,15 @@ fn test_rsp_build_and_lina_match_all_7_r24_08_1_golden_models() {
 
     for case in &cases {
         let fname = case.fname;
+        let &(ref_periods_sec, ref_growth_rates) = lina_refs
+            .get(case.slug)
+            .unwrap_or_else(|| panic!("missing LINA row for {}", case.slug));
         let raw = fs::read_to_string(gdir.join(fname))
             .unwrap_or_else(|e| panic!("read {fname}: {e}"));
+        assert!(
+            raw.contains("'r26.4.1'"),
+            "{fname}: expected MESA version_number 'r26.4.1' in header"
+        );
         let golden = read_mod_str(
             &raw,
             StarControls::default(),
@@ -283,11 +260,11 @@ fn test_rsp_build_and_lina_match_all_7_r24_08_1_golden_models() {
         let mut max_abs_g = 0.0_f64;
         for m in 0..3 {
             max_rel_p = max_rel_p.max(
-                (lina.periods_sec[m] - case.periods_sec[m]).abs()
-                    / case.periods_sec[m],
+                (lina.periods_sec[m] - ref_periods_sec[m]).abs()
+                    / ref_periods_sec[m],
             );
             max_abs_g = max_abs_g
-                .max((lina.growth_rates[m] - case.growth_rates[m]).abs());
+                .max((lina.growth_rates[m] - ref_growth_rates[m]).abs());
         }
 
         eprintln!(

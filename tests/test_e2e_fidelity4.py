@@ -41,10 +41,10 @@ def test_fidelity4_representative_multi_tier_physical_e2e_execution() -> None:
     """Verify representative physical E2E runs across Tiers 1-5 when `MESA_DIR`
     is available (`#115`, closing `#109`).
     """
-    assert len(star.ALL_ACTIVE_STAR_CASES) == 91
+    assert len(star.ALL_ACTIVE_STAR_CASES) == 90
     assert len(star.TIER4_ASTERO_CASES) == 8
     assert len(binary.TIER5_BINARY_CASES) == 8
-    assert len(star.TIER4_DEV_CASES) == 32
+    assert len(star.TIER4_DEV_CASES) == 1
 
     mesa_dir = os.environ.get("MESA_DIR", "")
     if not mesa_dir:

@@ -23,29 +23,27 @@ import pytest
 from flexmesa import binary, star
 
 
-def test_e2e_5_complete_107_active_test_suite_and_32_dev_cases_inventory() -> (
-    None
-):
-    """Verify exact 1-to-1 inventory coverage across all 107 active MESA
-    `test_suite` cases (`91` `star` + `8` `astero` + `8` `binary`) and 32
-    `star/dev_cases_*` cases (`Epic #89`).
+def test_e2e_5_complete_106_active_test_suite_and_dev_cases_inventory() -> None:
+    """Verify exact 1-to-1 inventory coverage across all 106 active MESA
+    `26.4.1` `test_suite` cases (`90` `star` + `8` `astero` + `8` `binary`) and
+    `dev_cases_*` (`#141`).
     """
     assert len(star.TIER1_CASES) == 33
-    assert len(star.TIER2_CASES) == 17
+    assert len(star.TIER2_CASES) == 16
     assert len(star.TIER3_CASES) == 22
     assert len(star.TIER4_ACTIVE_STAR_CASES) == 15
     assert len(star.TIER5_STAR_CASES) == 4
-    assert len(star.ALL_ACTIVE_STAR_CASES) == 91
-    assert len(set(star.ALL_ACTIVE_STAR_CASES)) == 91
+    assert len(star.ALL_ACTIVE_STAR_CASES) == 90
+    assert len(set(star.ALL_ACTIVE_STAR_CASES)) == 90
     assert len(star.TIER4_ASTERO_CASES) == 8
     assert len(binary.TIER5_BINARY_CASES) == 8
     assert (
         len(star.ALL_ACTIVE_STAR_CASES)
         + len(star.TIER4_ASTERO_CASES)
         + len(binary.TIER5_BINARY_CASES)
-        == 107
+        == 106
     )
-    assert len(star.TIER4_DEV_CASES) == 32
+    assert len(star.TIER4_DEV_CASES) == 1
 
 
 def test_e2e_5_tier5_star_hooks_and_step_redo_bit_parity() -> None:

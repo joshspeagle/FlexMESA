@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-//! Strict-mode regression snapshot tests for `HELM` (`eos_helm_eval.f90` /
-//! `helm.f90`; self-generated `FlexMESA` regression snapshots tracked for
-//! real-MESA `26.4.1` replacement under `#146`, `Audit T2-15`).
+//! Strict-mode regression snapshot tests for Wave 3a.2 (`HELM` equation of
+//! state; `#146`). Real compiled MESA `26.4.1` component oracle comparisons are
+//! in `mesa_26_4_1_component_oracles_test.rs` (`T2-15`).
 
 #![allow(
     clippy::excessive_precision,

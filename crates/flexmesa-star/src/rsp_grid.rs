@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 //! Smolec 1-based (`1..=nzn`) center-to-surface envelope grid, Marsaglia-Zaman
-//! `RANMAR` generator (`star_utils.f90:3487-3535`), combined gas+radiation EOS
-//! and `EOP` volume root-finder (`rsp_lina.f90:1170-1204`, `rsp_relax_env.f90:36-124`),
-//! and `StarModel` synchronization helpers (`rsp_def.f90:492-517, 719-868`, `rsp.f90:154-201`).
+//! `RANMAR` generator (`init_random` in `star/private/star_utils.f90:3474-3504`), combined gas+radiation EOS
+//! and `EOP` volume root-finder (`star/private/rsp_lina.f90:1170-1204`, `star/private/rsp_relax_env.f90:36-124`),
+//! and `StarModel` synchronization helpers (`star/private/rsp_def.f90:513-622, 778-861`, `star/private/rsp.f90:154-201`).
 
 use flexmesa_const::{MixingType, CRAD, PI};
 
@@ -382,7 +382,7 @@ pub fn cleanup_for_lina(
 }
 
 /// Applies exact `lnR`/`lnT`/`lnd` round-trip rounding and updates `Vol`, `L`,
-/// `mixing_type`, `R_center`, and `M_center` (`copy_results` in `rsp_def.f90:785-868`).
+/// `mixing_type`, `R_center`, and `M_center` (`copy_results` in `star/private/rsp_def.f90:778-861`).
 pub fn copy_results(model: &mut StarModel, dc: &RspDerivedConsts) {
     let nzn = model.nz;
     for i in 1..=nzn {
@@ -439,8 +439,8 @@ pub fn copy_results(model: &mut StarModel, dc: &RspDerivedConsts) {
 
 /// Copies post-`LINA` static fields onto `StarModel` and runs the exact
 /// `finish_build_rsp_model` + `set_star_vars` + `finish_after_build_model` +
-/// `copy_results` initialization sequence (`rsp_def.f90:447-586, 785-868` and
-/// `rsp.f90:154-201, 294-317`).
+/// `copy_results` initialization sequence (`star/private/rsp_def.f90:440-579, 778-861` and
+/// `star/private/rsp.f90:154-201, 294-317`).
 pub fn finish_build_rsp_model(
     model: &mut StarModel,
     chem: &RspChemCache,
@@ -493,7 +493,7 @@ pub fn finish_build_rsp_model(
 }
 
 /// Unpacks `(lnR, lnT, lnd)` from a loaded `.mod` into `(r, t, rho, vol_rsp)`
-/// (`copy_from_xh_to_rsp` in `rsp_def.f90:492-517`).
+/// (`copy_from_xh_to_rsp` in `star/private/rsp_def.f90:582-622`).
 pub fn copy_from_xh_to_rsp(model: &mut StarModel, dc: &RspDerivedConsts) {
     let nzn = model.nz;
     if model.aux.rsp.vol_rsp.len() != nzn {

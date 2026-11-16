@@ -52,7 +52,7 @@ pub fn resolve_flexmesa_data_dir() -> PathBuf {
     PathBuf::from(".flexmesa_data")
 }
 
-/// Resolve the upstream MESA `main` at commit `0b2e6bb` verification directory (`MESA_DIR` or `mesa_test_inputs`).
+/// Resolve the upstream MESA release `26.4.1` verification directory (`MESA_DIR` or `mesa_test_inputs`).
 #[must_use]
 pub fn resolve_mesa_test_inputs_dir() -> PathBuf {
     if let Some(val) = std::env::var_os("MESA_DIR") {

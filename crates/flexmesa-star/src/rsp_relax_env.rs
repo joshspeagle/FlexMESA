@@ -176,11 +176,9 @@ pub fn relax_env(
                     for _ in 1..=100 {
                         let arg = 1.0 - (summ / aone) * (1.0 - haha);
                         // `star/private/rsp_relax_env.f90:471-478` calls `dlog10` and `10.d0**POM` (#198).
-                        let next_h = flexmesa_math::intrinsic_pow(
-                            10.0,
-                            flexmesa_math::intrinsic_log10(arg)
-                                / (n_anchor as f64),
-                        );
+                        let pom = (1.0 / (n_anchor as f64))
+                            * flexmesa_math::intrinsic_log10(arg);
+                        let next_h = flexmesa_math::intrinsic_pow(10.0, pom);
                         if (haha - next_h).abs() < 1.0e-10 {
                             haha = next_h;
                             converged_h = true;
@@ -203,7 +201,7 @@ pub fn relax_env(
                                 grid.dm[i] = dmn;
                             } else {
                                 grid.dm[i] = aone
-                                    * flexmesa_math::powi_f90(
+                                    * flexmesa_math::powi(
                                         haha,
                                         (n_anchor - i) as i32,
                                     );

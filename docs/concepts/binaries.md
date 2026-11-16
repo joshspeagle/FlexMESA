@@ -51,7 +51,7 @@ When the companion is an accreting black hole (`is_black_hole=True` in `BinarySy
   $$\eta_{\mathrm{ISCO}}(a_*) = 1 - \sqrt{1 - \frac{2}{3\,r_{\mathrm{ISCO}}(a_*)}}, \qquad \dot{M}_{\mathrm{Edd}} = \frac{4\pi G M_{\mathrm{BH}}}{c\,\kappa_{\mathrm{es}}\,\eta_{\mathrm{ISCO}}(a_*)}.$$
 
 - **Rest-Mass vs. Gravitational-Mass Growth & System Mass-Loss Bookkeeping**:
-  A rest-mass accretion step $\Delta M_0 = \min(|\dot{M}_{\mathrm{tr}}|, \dot{M}_{\mathrm{Edd}})\,\Delta t$ increases the black-hole gravitational mass by $\Delta M_{\mathrm{BH}} = (1 - \eta_{\mathrm{ISCO}})\,\Delta M_0$ (`binary_evolve.f90:296-309`), while the radiated accretion energy $\eta_{\mathrm{ISCO}}\,\Delta M_0$ is accounted for in the system mass-loss rate $\dot{M}_{\mathrm{system\_transfer}}(\text{accretor})$ so total gravitating mass-momentum bookkeeping remains exact (`BinarySystem::accretor_mass_and_sys_loss`).
+  A rest-mass accretion step $\Delta M_0 = \min(|\dot{M}_{\mathrm{tr}}|, \dot{M}_{\mathrm{Edd}})\,\Delta t$ increases the black-hole gravitational mass by $\Delta M_{\mathrm{BH}} = (1 - \eta_{\mathrm{ISCO}})\,\Delta M_0$ (`binary/private/binary_mdot.f90:588-591`, `binary/private/binary_evolve.f90:159`), while the radiated accretion energy $\eta_{\mathrm{ISCO}}\,\Delta M_0$ is accounted for in the system mass-loss rate $\dot{M}_{\mathrm{system\_transfer}}(\text{accretor})$ so total gravitating mass-momentum bookkeeping remains exact (`BinarySystem::accretor_mass_and_sys_loss`).
 
 ---
 
@@ -67,7 +67,7 @@ When the companion is an accreting black hole (`is_black_hole=True` in `BinarySy
 2. **Rappaport, Verbunt & Joss (1983) Magnetic Braking (`eval_jdot_mb_jax`)**:
    Magnetized stellar winds coupled to a donor with a convective envelope and radiative core extract spin and orbital angular momentum at rate $\dot{J}_{\mathrm{mb}} = -3.8 \times 10^{-30}\,M_1 R_\odot^4\,(R_1 / R_\odot)^{\gamma_{\mathrm{mb}}}\,\Omega_{\mathrm{orb}}^3\,\mathrm{dyn\,cm}$ (default $\gamma_{\mathrm{mb}} = 3.0$).
 3. **Spin-Orbit Tidal Coupling & Missing Stellar Wind Torque (`eval_jdot_ls_with_winds`, `eval_jdot_missing_wind`)**:
-   Evaluates spin-orbit angular momentum exchange $\dot{J}_{\mathrm{ls}} = -\sum_{i=1}^2 (\Delta S_i - \dot{M}_{\mathrm{wind},i} j_{\mathrm{surf},i}\Delta t) / \Delta t$ after subtracting stellar wind spin loss (`binary_jdot.f90:129-145`) alongside the companion's missing stellar wind angular momentum torque (`default_jdot_missing_wind`).
+   Evaluates spin-orbit angular momentum exchange $\dot{J}_{\mathrm{ls}} = -\sum_{i=1}^2 (\Delta S_i - \dot{M}_{\mathrm{wind},i} j_{\mathrm{surf},i}\Delta t) / \Delta t$ after subtracting stellar wind spin loss (`binary/private/binary_jdot.f90:136-174`) alongside the companion's missing stellar wind angular momentum torque (`default_jdot_missing_wind`).
 4. **Hut (1981) Weak-Friction Tidal Circularization & Synchronization (`eval_edot_tidal_hut_jax`)**:
    Evaluates the Hut (1981, A&A, 99, 126) fifth-order eccentricity polynomials $f_1(e^2)$ through $f_5(e^2)$ to compute the tidal circularization rate $\dot{e}_{\mathrm{tidal}}$ and spin-orbit synchronization timescales for convective and radiative envelopes, paired with monotonically wrapped $[0, 1)$ true-anomaly phase grids (`build_anomaly_grid`) for eccentric phase-dependent RLOF integration.
 5. **Custom Binary Winds, Post-Step Hooks & Composition Relaxation (`BinaryExtras`, `relax_composition_with_henyey`)**:

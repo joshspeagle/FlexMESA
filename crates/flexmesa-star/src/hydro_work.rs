@@ -2,7 +2,7 @@
 //! Spherical face mechanical work (`eval_dwork`, `eval1_work`,
 //! `eval_simple_PdV_work`) and cell-specific kinetic/gravitational-potential
 //! energy rates (`cell_specific_KE_qp`, `cell_specific_PE_qp`) for `v_flag` and
-//! `u_flag` hydrodynamics (`star/private/hydro_energy.f90:582-902` and
+//! `u_flag` hydrodynamics (`star/private/hydro_energy.f90:582-879` and
 //! `star/private/star_utils.f90:2197-2338`).
 
 use flexmesa_const::FOUR_PI;
@@ -288,7 +288,7 @@ pub fn eval_v_flag_dwork_dm_ad(
 
 /// Evaluates `eval_simple_PdV_work` divided by $\Delta m_k$ (`P_tot * (A_k v_{c,k}
 /// - A_{k+1} v_{c,k+1}) / dm_k`) and diagonal composition prefactor `fac_dm_dxa00`
-/// (`star/private/hydro_energy.f90:850-902`).
+/// (`star/private/hydro_energy.f90:830-879`).
 #[must_use]
 pub fn eval_v_flag_simple_pdv_dm_ad(
     model: &StarModel,

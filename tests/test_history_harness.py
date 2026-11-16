@@ -14,6 +14,7 @@ import pytest
 from flexmesa import _rust, cli
 from flexmesa.testing import (
     case_manifest,
+    case_report,
     harness_runner,
     history_compare,
 )
@@ -45,7 +46,7 @@ def test_case_manifest_covers_all_106_mesa_26_4_1_cases_and_known_gaps() -> (
         1 for c in manifest.cases if c.reference_status == "no_reference_yet"
     )
     n_26 = sum(1 for c in manifest.cases if c.reference_status == "mesa_26_4_1")
-    assert (n_26, n_interim, n_none) == (0, 9, 97)
+    assert (n_26, n_interim, n_none) == (102, 0, 4)
 
     by_key = manifest.by_key()
     assert (
@@ -57,7 +58,12 @@ def test_case_manifest_covers_all_106_mesa_26_4_1_cases_and_known_gaps() -> (
     root = case_manifest.repo_root()
     for entry in manifest.cases:
         if entry.reference_status != "no_reference_yet":
-            assert (root / entry.reference_path).is_file()
+            ref_file = harness_runner.resolve_reference_history_path(
+                entry.reference_path, root_dir=root
+            )
+            assert ref_file.is_file()
+            ref_tbl = history_compare.load_history_file(ref_file)
+            assert ref_tbl.mesa_version_number == "r26.4.1"
 
     for key, spec in gaps.items():
         assert key in by_key
@@ -67,6 +73,11 @@ def test_case_manifest_covers_all_106_mesa_26_4_1_cases_and_known_gaps() -> (
 def test_generated_baseline_case_table_matches_committed_file() -> None:
     """Committed notes/audit/case_table.md must match script output exactly."""
     assert cli.main(["harness", "table", "--check"]) == 0
+    manifest, gaps, records = case_report.build_manifest_inventory_records()
+    summary = case_report.summarize_records(manifest, records, gaps)
+    assert summary["executed_cases"] == 102
+    assert summary["undeclared_failures"] == []
+    assert summary["stale_known_gaps"] == []
 
 
 def test_compare_histories_detects_first_diverging_step_and_late_spikes(
@@ -492,3 +503,177 @@ def test_flexmesa_trace_and_harness_run_cli_smoke(
         ]
     )
     assert rc_fast_gate == 1
+
+
+def test_comparison_json_roundtrip_preserves_nan_and_signed_infinity() -> None:
+    """JSON serialization must keep NaN, +inf, and -inf distinct."""
+    import math
+
+    comp = history_compare.HistoryComparison(
+        independent_var="star_age",
+        ref_rows=4,
+        run_rows=4,
+        overlap_min=0.0,
+        overlap_max=10.0,
+        final_diffs={
+            "star_age": 0.0,
+            "rel_star_age": float("nan"),
+            "log_L": float("inf"),
+            "log_Teff": float("-inf"),
+        },
+        within_final_tolerances=False,
+        failed_final_columns=("rel_star_age", "log_L", "log_Teff"),
+        track_deviations=(
+            history_compare.TrackDeviation(
+                column="log_L",
+                max_abs_diff=float("inf"),
+                median_abs_diff=float("nan"),
+                x_at_max=0.0,
+                tolerance=0.005,
+                within_tolerance=False,
+            ),
+        ),
+        within_track_tolerances=False,
+        failed_track_columns=("log_L",),
+        first_diverging_step=1,
+        first_diverging_x=0.0,
+        ref_span=10.0,
+    )
+    dumped = json.dumps(
+        history_compare.comparison_to_dict(comp), allow_nan=False
+    )
+    restored = history_compare.comparison_from_dict(json.loads(dumped))
+    assert math.isnan(restored.final_diffs["rel_star_age"])
+    assert math.isinf(restored.final_diffs["log_L"])
+    assert restored.final_diffs["log_L"] > 0.0
+    assert math.isinf(restored.final_diffs["log_Teff"])
+    assert restored.final_diffs["log_Teff"] < 0.0
+    assert math.isnan(restored.track_deviations[0].median_abs_diff)
+
+
+def test_precomputed_comparison_re_evaluates_updated_manifest_tolerances() -> (
+    None
+):
+    """Tightening tolerances on precomputed comparisons flips verdict."""
+    comp = history_compare.HistoryComparison(
+        independent_var="star_age",
+        ref_rows=10,
+        run_rows=10,
+        overlap_min=0.0,
+        overlap_max=100.0,
+        final_diffs={"star_age": 0.0, "rel_star_age": 0.0, "log_L": 0.002},
+        within_final_tolerances=True,
+        failed_final_columns=(),
+        track_deviations=(
+            history_compare.TrackDeviation(
+                column="log_L",
+                max_abs_diff=0.003,
+                median_abs_diff=0.001,
+                x_at_max=50.0,
+                tolerance=0.01,
+                within_tolerance=True,
+            ),
+        ),
+        within_track_tolerances=True,
+        failed_track_columns=(),
+        first_diverging_step=None,
+        first_diverging_x=None,
+        ref_span=100.0,
+    )
+    tight_spec = case_manifest.CaseManifestEntry(
+        suite="star",
+        case="1.3M_ms_high_Z",
+        reference_status="mesa_26_4_1",
+        reference_path="dummy.data",
+        required_termination="max_age",
+        independent_var="star_age",
+        final_tolerances={"rel_star_age": 0.001, "log_L": 0.001},
+        track_tolerances={"log_L": 0.002},
+    )
+    outcome = harness_runner.TraceRunOutcome(
+        suite="star",
+        case="1.3M_ms_high_Z",
+        status="ok",
+        termination_code="max_age",
+        steps=10,
+        retries=0,
+        wall_time_sec=0.1,
+        peak_rss_gb=0.1,
+        history_path=None,
+    )
+    rec = harness_runner.evaluate_case_record(
+        tight_spec, {}, outcome, precomputed_comparison=comp
+    )
+    assert rec.verdict == "fail (undeclared)"
+    assert rec.is_undeclared_failure is True
+    assert rec.comparison is not None
+    assert rec.comparison.failed_final_columns == ("log_L",)
+    assert rec.comparison.failed_track_columns == ("log_L",)
+
+
+def test_library_extras_flag_prevents_pass_verdict_until_148_lands(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Cases with uses_library_extras=True emit declared gap (#148)."""
+    comp = history_compare.HistoryComparison(
+        independent_var="star_age",
+        ref_rows=10,
+        run_rows=10,
+        overlap_min=0.0,
+        overlap_max=10.0,
+        final_diffs={"star_age": 0.0, "rel_star_age": 0.0, "log_L": 0.0},
+        within_final_tolerances=True,
+        failed_final_columns=(),
+        track_deviations=(),
+        within_track_tolerances=True,
+        failed_track_columns=(),
+        first_diverging_step=None,
+        first_diverging_x=None,
+        ref_span=10.0,
+    )
+    spec = case_manifest.CaseManifestEntry(
+        suite="star",
+        case="rsp_BLAP",
+        reference_status="mesa_26_4_1",
+        reference_path="dummy.data",
+        required_termination="extras_finish_step",
+        independent_var="star_age",
+        final_tolerances={"rel_star_age": 0.001, "log_L": 0.001},
+        track_tolerances={"log_L": 0.005},
+        uses_library_extras=True,
+        library_extras_issue="#148",
+    )
+    outcome = harness_runner.TraceRunOutcome(
+        suite="star",
+        case="rsp_BLAP",
+        status="ok",
+        termination_code="extras_finish_step",
+        steps=7318,
+        retries=0,
+        wall_time_sec=1.0,
+        peak_rss_gb=0.2,
+        history_path=None,
+    )
+    rec_undecl = harness_runner.evaluate_case_record(
+        spec, {}, outcome, precomputed_comparison=comp
+    )
+    assert rec_undecl.verdict == "fail (undeclared)"
+    assert rec_undecl.is_undeclared_failure is True
+
+    gap = case_manifest.KnownGapSpec(
+        suite="star",
+        case="rsp_BLAP",
+        issue="#148",
+        reason="Tier4CaseExtras in library code (#148).",
+    )
+    rec_decl = harness_runner.evaluate_case_record(
+        spec, {("star", "rsp_BLAP"): gap}, outcome, precomputed_comparison=comp
+    )
+    assert rec_decl.verdict == "declared gap (#148)"
+    assert rec_decl.is_undeclared_failure is False
+    assert rec_decl.is_stale_known_gap is False
+
+    with pytest.raises(FileNotFoundError, match="missing baseline JSON"):
+        case_report.build_manifest_inventory_records(
+            baseline_json_path=tmp_path / "nonexistent_baseline.json"
+        )

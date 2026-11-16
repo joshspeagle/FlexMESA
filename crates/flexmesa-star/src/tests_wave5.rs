@@ -257,7 +257,7 @@ fn test_e2e_1_tier1_physics_helpers_and_suite() {
         for sub in [
             "star/test_suite",
             "astero/test_suite",
-            "star/dev_cases_star_to_RSP2",
+            "star/dev_cases_TDC_Pulsation",
         ] {
             assert!(
                 Path::new(&mesa_dir).join(sub).is_dir(),
@@ -280,7 +280,7 @@ fn test_e2e_1_tier1_physics_helpers_and_suite() {
 
 #[test]
 fn test_e2e_2_tier2_physics_helpers_and_suite() {
-    assert_eq!(TIER2_CASES.len(), 17);
+    assert_eq!(TIER2_CASES.len(), 16);
     assert!(is_tier2_case("make_brown_dwarf"));
     assert!(is_tier2_case("conductive_flame"));
     assert!(!is_tier2_case("make_zams"));
@@ -341,7 +341,7 @@ fn test_e2e_4_tier4_pulsation_astero_and_dev_cases() {
     assert_eq!(TIER4_STAR_CASES.len(), 16);
     assert_eq!(TIER4_ACTIVE_STAR_CASES.len(), 15);
     assert_eq!(TIER4_ASTERO_CASES.len(), 8);
-    assert_eq!(TIER4_DEV_CASES.len(), 32);
+    assert_eq!(TIER4_DEV_CASES.len(), 1);
     assert!(is_tier4_case("gyre_in_mesa_ms"));
     assert!(is_tier4_case("rsp_Cepheid"));
     assert!(is_tier4_case("example_astero"));
@@ -373,7 +373,7 @@ fn test_e2e_4_tier4_pulsation_astero_and_dev_cases() {
         for sub in [
             "star/test_suite",
             "astero/test_suite",
-            "star/dev_cases_star_to_RSP2",
+            "star/dev_cases_TDC_Pulsation",
         ] {
             assert!(
                 Path::new(&mesa_dir).join(sub).is_dir(),
@@ -404,10 +404,10 @@ fn test_e2e_4_tier4_pulsation_astero_and_dev_cases() {
                     .collect::<Vec<_>>()
             );
         }
-        if base.join("star").join("dev_cases_star_to_RSP2").is_dir() {
+        if base.join("star").join("dev_cases_TDC_Pulsation").is_dir() {
             let dev_reps = run_dev_cases_suite(base, true, Some(2), true)
                 .expect("tier4 dev");
-            assert_eq!(dev_reps.len(), 32);
+            assert_eq!(dev_reps.len(), 1);
             assert!(
                 dev_reps
                     .iter()
@@ -429,11 +429,11 @@ fn test_e2e_4_tier4_pulsation_astero_and_dev_cases() {
 }
 
 #[test]
-fn test_e2e_5_tier5_star_hooks_and_91_active_star_inventory() {
+fn test_e2e_5_tier5_star_hooks_and_90_active_star_inventory() {
     use std::path::Path;
 
     assert_eq!(TIER5_STAR_CASES.len(), 4);
-    assert_eq!(all_active_star_case_names().len(), 91);
+    assert_eq!(all_active_star_case_names().len(), 90);
     assert!(is_tier5_star_case("check_redo"));
     assert!(is_tier5_star_case("other_physics_hooks"));
     assert!(is_tier5_star_case("relax_composition_j_entropy"));
@@ -474,7 +474,7 @@ fn test_e2e_5_tier5_star_hooks_and_91_active_star_inventory() {
         for sub in [
             "star/test_suite",
             "astero/test_suite",
-            "star/dev_cases_star_to_RSP2",
+            "star/dev_cases_TDC_Pulsation",
         ] {
             assert!(
                 Path::new(&mesa_dir).join(sub).is_dir(),

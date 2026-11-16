@@ -421,7 +421,7 @@ fn parse_profile_columns_inner(
 }
 
 /// Resolves `profile_columns_file` for `model` relative to `case_dir`
-/// (`set_profile_columns` in `star/private/profile.f90:76-95`).
+/// (`set_profile_columns` in `star/private/profile.f90:261-294`).
 pub fn resolve_star_profile_columns(
     model: &StarModel,
     case_dir: Option<&Path>,

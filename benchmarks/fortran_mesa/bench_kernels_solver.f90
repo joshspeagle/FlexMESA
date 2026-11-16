@@ -220,7 +220,7 @@ contains
             chi_t, chi_rho, gradr, r, p, t, rho, dv, cp, opacity, &
             scale_height, gradl, grada, conv_vel, d, y_face, grad_t, &
             tdc_num_iters, 1.0e99_dp, eq_div_w, grav, .true., 1.0_dp, &
-            1.0_dp, .false., energy, 0.0_dp, ierr)
+            1.0_dp, .false., energy, ierr)
       else
          call set_MLT( &
             'Cox', 2.0_dp, 0.0_dp, 0.0_dp, chi_t, chi_rho, cp, grav, lambda, &

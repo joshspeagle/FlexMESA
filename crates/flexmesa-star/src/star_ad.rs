@@ -105,7 +105,7 @@ pub trait StarAdExt: Sized {
     fn from_dlnd_dlnt_p1(val: f64, d_dlnd: f64, d_dlnt: f64) -> Self;
 
     /// Shifts a quantity evaluated in cell $(k-1)$'s frame into cell $k$'s
-    /// stencil (`shift_m1` in `auto_diff_support.f90:390`).
+    /// stencil (`shift_m1` in `star/private/auto_diff_support.f90:46-55`).
     #[must_use]
     fn shift_m1(&self) -> Self;
 

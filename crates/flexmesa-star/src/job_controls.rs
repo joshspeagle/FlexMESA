@@ -138,14 +138,14 @@ pub struct VarLayout {
 
 impl VarLayout {
     /// Constructs the variable and equation layout for `(species, v_flag, u_flag)`
-    /// matching `set_var_info` in `star/private/alloc.f90:2002-2110`.
+    /// matching `set_var_info` in `star/private/alloc.f90:2301-2437`.
     #[must_use]
     pub const fn new(species: usize, v_flag: bool, u_flag: bool) -> Self {
         Self::with_flags(species, v_flag, u_flag, false, false)
     }
 
     /// Constructs the variable and equation layout including optional `RSP2`
-    /// coupled `(w, Hp)` variables (`star/private/alloc.f90:2048-2106`).
+    /// coupled `(w, Hp)` variables (`star/private/alloc.f90:2347-2405`).
     #[must_use]
     pub const fn with_rsp2(
         species: usize,

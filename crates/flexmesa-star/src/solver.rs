@@ -41,8 +41,8 @@ pub struct HenyeySolverReport {
 
 /// Computes the step damping factor `corr_coeff` $\in (0, 1]$ limiting the
 /// maximum per-iteration change in $\ln\rho, \ln T, \ln R$, surface $L_0 > 0$,
-/// and $X_{j,k}$ (`Bdomain` and `adjust_correction` in
-/// `star/private/solver_support.f90:573-950`).
+/// and $X_{j,k}$ (`Bdomain` in `star/private/solver_support.f90:623-730` and
+/// `adjust_correction` in `star/private/star_solver.f90:737-953`).
 #[must_use]
 pub fn compute_corr_coeff(
     model: &StarModel,

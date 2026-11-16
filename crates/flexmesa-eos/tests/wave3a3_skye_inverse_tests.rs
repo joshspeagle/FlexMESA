@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-//! Strict-mode regression snapshot tests for `Skye`, `get_skye_alfa`,
-//! `eosDT_get` `Skye`/`HELM` blending, and `(P, T)` / `(D, E)` inverse
-//! solvers (self-generated `FlexMESA` regression snapshots tracked under
-//! `#146`, `Audit T2-15`).
+//! Strict-mode regression snapshot tests for Wave 3a.3 (`Skye` equation of
+//! state, `get_skye_alfa`, `eosDT_get` `Skye`/`HELM` blending, and `eosPT_get`
+//! / `eosDT_get_T` / `eosDT_get_Rho` / `eos_gamma_DE_get` inverse solvers;
+//! `#146`). Real compiled MESA `26.4.1` component oracle comparisons are in
+//! `mesa_26_4_1_component_oracles_test.rs` (`T2-15`).
 
 #![allow(
     clippy::approx_constant,
@@ -107,12 +108,12 @@ fn test_skye_liquid_and_ion_offset_regimes_match_strict_regression_snapshot() {
     ];
     assert_eos_case("skye_c12_liq", &out1, &exp_c12_liq, 1.0e-12);
 
-    // 2. skye_c12_liq_ion (use_ion_offsets = true)
+    // 2. skye_c12_liq_ion (use_ion_offsets = true; MESA 26.4.1 #192 row 1)
     cfg.skye_use_ion_offsets = true;
     let out2 = eval_skye_eos(&cfg, ht, 1.0e6, 1.0e8, abar, zbar, &chem_id, &xa)
         .unwrap();
     let mut exp_c12_liq_ion = exp_c12_liq;
-    exp_c12_liq_ion[1] = [3.8291950165675473e1, 5.8894582629837955e-1, 6.1591201653728764e-2];
+    exp_c12_liq_ion[1] = [3.8313083880713144e1, 5.7662981298294269e-1, 6.0303208725000439e-2];
     assert_eos_case("skye_c12_liq_ion", &out2, &exp_c12_liq_ion, 1.0e-12);
 
     // 3. skye_co_liq

@@ -88,13 +88,6 @@ where
     let iter_limit = if max_iter == 0 { 200 } else { max_iter };
 
     for _iter in 0..iter_limit {
-        // Ensure sb and c always bracket the zero with |f(sb)| <= |f(c)|
-        if (fc > 0.0 && fb > 0.0) || (fc < 0.0 && fb < 0.0) {
-            c = sa;
-            fc = fa;
-            e = sb - sa;
-            d = e;
-        }
         if fc.abs() < fb.abs() {
             sa = sb;
             sb = c;
@@ -105,7 +98,7 @@ where
         }
         let tol = 2.0 * eps * sb.abs() + t;
         let m = 0.5 * (c - sb);
-        if m.abs() <= tol || fb == 0.0 || (epsy > 0.0 && fb.abs() <= epsy) {
+        if m.abs() <= tol || fb == 0.0 {
             return Ok((sb, fb));
         }
         // Choose bisection if previous step was too small or did not improve
@@ -115,14 +108,16 @@ where
         } else {
             let s = fb / fa;
             // Secant step when only two distinct points are available;
-            // inverse quadratic interpolation when sa, sb, c are all distinct
+            // inverse quadratic interpolation when sa, sb, c are all distinct.
+            // Reproduces `num/private/mod_brent.f90:653` at tag 26.4.1, which
+            // multiplies by initial endpoint `a` rather than `q0` (deferred bug #194).
             let (mut p, mut q) = if sa == c {
                 (2.0 * m * s, 1.0 - s)
             } else {
                 let q0 = fa / fc;
                 let r = fb / fc;
                 (
-                    s * (2.0 * m * q0 * (q0 - r) - (sb - sa) * (r - 1.0)),
+                    s * (2.0 * m * a * (q0 - r) - (sb - sa) * (r - 1.0)),
                     (q0 - 1.0) * (r - 1.0) * (s - 1.0),
                 )
             };
@@ -156,6 +151,15 @@ where
             return Err(NumError::NonFiniteValue(
                 "non-finite function value in brent_safe_zero",
             ));
+        }
+        if fb.abs() < epsy {
+            return Ok((sb, fb));
+        }
+        if (fb > 0.0 && fc > 0.0) || (fb <= 0.0 && fc <= 0.0) {
+            c = sa;
+            fc = fa;
+            e = sb - sa;
+            d = e;
         }
     }
     Err(NumError::ConvergenceFailed(

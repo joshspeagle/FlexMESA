@@ -33,9 +33,8 @@ const FIXED_XS: [f64; 10] =
 const FIXED_NUM_XS: [usize; 13] =
     [10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 9, 9, 8];
 
-const FREEDMAN_ZS: [f64; 7] = [
-    0.007452, 0.014760, 0.029024, 0.069840, 0.130292, 0.321456, 0.428844,
-];
+// Matches `kap_lowT_Freedman11_Zs` in `kap/public/kap_def.f90:616-622` at tag 26.4.1.
+const FREEDMAN_ZS: [f64; 7] = [0.01, 0.02, 0.04, 0.10, 0.20, 0.63, 1.00];
 
 const CO_PREFIXES: &[&str] = &["gn93_co", "gs98_co", "a09_co"];
 const CO_ZS: [f64; 8] =

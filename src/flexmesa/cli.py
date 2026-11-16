@@ -53,7 +53,8 @@ def main(argv: list[str] | None = None) -> int:
     if parsed.version:
         import flexmesa
 
-        print(flexmesa.__version__)
+        ref = fetch.load_upstream_reference()
+        print(f"{flexmesa.__version__} (upstream: {ref.summary_line()})")
         return 0
     parser.print_help(sys.stderr)
     return 2

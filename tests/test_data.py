@@ -235,6 +235,15 @@ def test_bundles_manifest_and_directory_resolution(
     tmp_path: pathlib.Path,
 ) -> None:
     """Verify `bundles.toml` integrity and directory resolution precedence."""
+    ref = fetch.load_upstream_reference()
+    assert ref.name == "MESA 26.4.1"
+    assert ref.version_number == "r26.4.1"
+    assert ref.git_tag == "26.4.1"
+    assert ref.git_commit == "c8c202662922a22b3efefa824473ad615c623afd"
+    assert ref.zenodo_record == "19722306"
+    assert ref.zenodo_doi == "10.5281/zenodo.19722306"
+    assert "MESA 26.4.1" in ref.summary_line()
+
     repo, tag, bundles = fetch.load_bundles_manifest()
     assert repo == "joshspeagle/FlexMESA"
     assert tag == "data-v1"
@@ -246,11 +255,31 @@ def test_bundles_manifest_and_directory_resolution(
         "eos_cms",
         "eos_free_eos",
         "mesa_test_inputs",
+        "mesa_histories",
+        "mesa_module_hex",
     }
+    data_pkg_dir = pathlib.Path(fetch.__file__).resolve().parent
     for b in bundles:
         assert manifest.is_valid_sha256_hex(b.archive_sha256)
         assert b.archive_size_bytes > 0
         assert b.unpacked_size_bytes > 0
+        assert b.manifest_file.startswith("bundle_hashes/")
+        mfile = data_pkg_dir / b.manifest_file
+        assert mfile.is_file()
+        total_sz = 0
+        row_count = 0
+        for ln in mfile.read_text(encoding="utf-8").splitlines():
+            s = ln.strip()
+            if not s or s.startswith("#"):
+                continue
+            sha_s, sz_s, rel_s = s.split("\t")
+            assert manifest.is_valid_sha256_hex(sha_s)
+            assert int(sz_s) >= 0
+            assert rel_s
+            total_sz += int(sz_s)
+            row_count += 1
+        assert row_count >= 1
+        assert total_sz == b.unpacked_size_bytes
         if b.kind == "single_zst":
             assert manifest.is_valid_sha256_hex(b.unpacked_sha256)
 
@@ -271,6 +300,22 @@ def test_bundles_manifest_and_directory_resolution(
     assert (
         fetch.resolve_mesa_test_inputs_dir(data_dir=exp_dir)
         == (tmp_path / "mesa_test_inputs").resolve()
+    )
+    hist_env = tmp_path / "hist_env"
+    monkeypatch.setenv("FLEXMESA_HISTORIES_DIR", str(hist_env))
+    assert fetch.resolve_mesa_histories_dir() == hist_env.resolve()
+    monkeypatch.delenv("FLEXMESA_HISTORIES_DIR")
+    assert (
+        fetch.resolve_mesa_histories_dir(data_dir=exp_dir)
+        == (tmp_path / "mesa_histories").resolve()
+    )
+    hex_env = tmp_path / "hex_env"
+    monkeypatch.setenv("FLEXMESA_MODULE_HEX_DIR", str(hex_env))
+    assert fetch.resolve_mesa_module_hex_dir() == hex_env.resolve()
+    monkeypatch.delenv("FLEXMESA_MODULE_HEX_DIR")
+    assert (
+        fetch.resolve_mesa_module_hex_dir(data_dir=exp_dir)
+        == (tmp_path / "mesa_module_hex").resolve()
     )
 
 
@@ -307,6 +352,15 @@ def test_fetch_and_cli_verify_unpack_and_reject_corrupted_archives(
     tar_sha = hashlib.sha256(tar_zst).hexdigest()
     (src_dir / "mini_tests.tar.zst").write_bytes(tar_zst)
 
+    hashes_dir = tmp_path / "bundle_hashes"
+    hashes_dir.mkdir()
+    data_sha = hashlib.sha256(data_bytes).hexdigest()
+    (hashes_dir / "mini_tests.sha256.tsv").write_text(
+        f"# sha256\tsize_bytes\trelpath\n"
+        f"{data_sha}\t{len(data_bytes)}\tneu/test/test_output\n",
+        encoding="utf-8",
+    )
+
     custom_toml = tmp_path / "bundles.toml"
     custom_toml.write_text(
         f'[release]\nrepo = "joshspeagle/FlexMESA"\ntag = "data-v1"\n\n'
@@ -322,6 +376,7 @@ def test_fetch_and_cli_verify_unpack_and_reject_corrupted_archives(
         f'archive_sha256 = "{tar_sha}"\n'
         f"archive_size_bytes = {len(tar_zst)}\n"
         f'unpacked_sha256 = ""\nunpacked_size_bytes = {len(data_bytes)}\n'
+        f'manifest_file = "bundle_hashes/mini_tests.sha256.tsv"\n'
         f"test_only = true\n",
         encoding="utf-8",
     )
@@ -377,6 +432,30 @@ def test_fetch_and_cli_verify_unpack_and_reject_corrupted_archives(
         )
         == 0
     )
+    assert (
+        fetch.verify_bundles(
+            dest=data_dest,
+            mesa_test_dest=test_dest,
+            include_test_inputs=True,
+            manifest_path=custom_toml,
+            quiet=True,
+        )
+        is True
+    )
+    # Same-size 1-byte mutation in unpacked tar file must fail per-file SHA-256.
+    unpacked_file = test_dest / "neu" / "test" / "test_output"
+    unpacked_file.write_bytes(b"golden_row 2.0\n")
+    assert (
+        fetch.verify_bundles(
+            dest=data_dest,
+            mesa_test_dest=test_dest,
+            include_test_inputs=True,
+            manifest_path=custom_toml,
+            quiet=True,
+        )
+        is False
+    )
+    unpacked_file.write_bytes(data_bytes)
     assert cli.main(["data", "path", "--data-dir", str(data_dest)]) == 0
     assert (
         cli.main(

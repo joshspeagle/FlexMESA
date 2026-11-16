@@ -26,7 +26,7 @@
 //!   dimensionless plasma frequency and $f_T(\gamma)$, $f_L(\gamma)$ are the
 //!   transverse and longitudinal plasmon decay form factors.
 
-use crate::inputs::{TFAC0, TFAC3, TFAC4};
+use crate::inputs::{PLAS_WEINBERG_PREF, TFAC3, TFAC4};
 use crate::{NeuInputs, NeuRate};
 use flexmesa_const::{ILN10, ONE_SIXTH, TWO_THIRDS};
 use flexmesa_math::{cos, exp, log10, pow, sin};
@@ -296,8 +296,9 @@ pub fn plas_neu(input: &NeuInputs) -> NeuRate {
     splasda = gl6 * splasda + dgl6_dgl2 * gl2da * s2;
     splasdz = gl6 * splasdz + dgl6_dgl2 * gl2dz * s2;
 
-    let pref = TFAC0 * 3.0e21 * input.xl9;
-    let dpref_dt = TFAC0 * 3.0e21 * 9.0 * input.xl8 * input.xldt;
+    // Reproduces neu/private/mod_neu.f90:1582-1583 at tag 26.4.1 (see #193).
+    let pref = PLAS_WEINBERG_PREF * 3.0e21 * input.xl9;
+    let dpref_dt = PLAS_WEINBERG_PREF * 3.0e21 * 9.0 * input.xl8 * input.xldt;
     let s3 = splas;
     NeuRate {
         val: pref * s3,

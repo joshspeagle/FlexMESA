@@ -254,7 +254,6 @@ dependencies = [
  "flexmesa-autodiff",
  "flexmesa-const",
  "flexmesa-math",
- "flexmesa-utils",
  "rayon",
 ]
 

@@ -12,7 +12,7 @@ FC ?= gfortran
 BUILD_DIR ?= build
 FFLAGS ?= -O2 -fopenmp -cpp -ffree-form -ffree-line-length-none
 
-MESA_INC := -I$(MESA_DIR)/include -I$(MESA_DIR)/build/interp_2d/modules
+MESA_INC := -I$(MESA_DIR)/include -I$(MESA_DIR)/interp_2d/make
 MESA_LIBS := \
 	$(MESA_DIR)/lib/libatm.a \
 	$(MESA_DIR)/lib/libnet.a \

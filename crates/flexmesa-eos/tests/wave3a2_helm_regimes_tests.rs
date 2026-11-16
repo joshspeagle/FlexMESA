@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-//! Strict-mode regression snapshot tests for `HELM` degenerate,
-//! pair-production, crystallized-WD, and Hermite basis regimes (self-generated
-//! `FlexMESA` regression snapshots tracked under `#146`, `Audit T2-15`).
+//! Strict-mode regression snapshot tests for Wave 3a.2 (`HELM` degenerate,
+//! relativistic pair-production, crystallized WD, and Hermite basis regimes;
+//! `#146`). Real compiled MESA `26.4.1` component oracle comparisons are in
+//! `mesa_26_4_1_component_oracles_test.rs` (`T2-15`).
 
 #![allow(
     clippy::excessive_precision,

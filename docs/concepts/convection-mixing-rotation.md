@@ -44,7 +44,7 @@ Because `FlexMESA` applies the Implicit Function Theorem at the converged scalar
   $$B_k = \frac{\ln\!\left[P_{\mathrm{rad},f} + P_{\mathrm{gas}}(\rho_f, T_f, \mathbf{X}_k)\right] - \ln\!\left[P_{\mathrm{rad},f} + P_{\mathrm{gas}}(\rho_f, T_f, \mathbf{X}_{k-1})\right]}{(\ln P_{\mathrm{eos},k-1} - \ln P_{\mathrm{eos},k})\,\chi_{T,f}},$$
 
   capturing partial-ionization and Coulomb/degeneracy shifts across chemical boundaries in both gas- and radiation-dominated interiors, while `use_brunt_gradmux_form = true` evaluates $B_k = (\chi_{\rho,f}/\chi_{T,f})\,(\Delta \ln \mu / \Delta \ln P_{\mathrm{eos}})$.
-- **Langer, El Eid, & Fricke (1985) Semiconvection (`set_semiconvection` in `set_mlt_vars`)**: In Ledoux-stable, Schwarzschild-unstable faces ($\nabla_{\mathrm{ad}} < \nabla_r < \nabla_L$, $B_k > 0$) with `use_ledoux_criterion = true` and `alpha_semiconvection > 0`, `set_mlt_vars` dispatches to `set_semiconvection` (`Langer85GradTIsGradr` or `Langer85`) to evaluate compositional diffusion $D_{\mathrm{sc}}$ and $\nabla_T$ while zeroing `mlt_vc` (`turb_support.f90:440`):
+- **Langer, El Eid, & Fricke (1985) Semiconvection (`set_semiconvection` in `set_mlt_vars`)**: In Ledoux-stable, Schwarzschild-unstable faces ($\nabla_{\mathrm{ad}} < \nabla_r < \nabla_L$, $B_k > 0$) with `use_ledoux_criterion = true` and `alpha_semiconvection > 0`, `set_mlt_vars` dispatches to `set_semiconvection` (`Langer85GradTIsGradr` or `Langer85`) to evaluate compositional diffusion $D_{\mathrm{sc}}$ and $\nabla_T$ while zeroing `mlt_vc` (`star/private/turb_support.f90:410`):
 
   $$D_{\mathrm{sc}} = \alpha_{\mathrm{sc}}\,\frac{K_{\mathrm{rad}}}{6 c_P \rho}\,\frac{\nabla_r - \nabla_{\mathrm{ad}}}{\nabla_L - \nabla_r}, \qquad K_{\mathrm{rad}} = \frac{4 a c T^3}{3 \kappa \rho}.$$
 

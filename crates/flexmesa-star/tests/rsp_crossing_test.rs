@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-//! Upstream Fortran MESA (`main` at commit `0b2e6bb`) Cepheid 2nd-crossing
+//! Upstream Fortran MESA (release `26.4.1`, commit
+//! `c8c202662922a22b3efefa824473ad615c623afd`) Cepheid 2nd-crossing
 //! instability-strip boundary interpolation tests (`rsp_check_2nd_crossing`,
-//! Issue `#5`).
+//! `#5`, `#141`).
 
 use std::fmt::Write as _;
 use std::fs;
+use std::path::{Path, PathBuf};
 
 use flexmesa_eos::EosConfig;
 use flexmesa_kap::{KapCoOption, KapConfig, KapLowTOption, KapOption};
@@ -12,6 +14,17 @@ use flexmesa_star::{
     eval_rsp_2nd_crossing_with_controls, StarControls, StarJobControls,
 };
 use flexmesa_utils::resolve_mesa_test_inputs_dir;
+
+fn golden_rsp_dir() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(Path::parent)
+        .expect("workspace root")
+        .join("tests")
+        .join("fixtures")
+        .join("golden")
+        .join("rsp")
+}
 
 fn a09_kap_config(zbase: f64) -> KapConfig {
     KapConfig {
@@ -31,132 +44,81 @@ fn base_rsp_job() -> StarJobControls {
     }
 }
 
+type CrossingPoint = (i64, f64, f64, f64, f64);
+
+fn load_crossing_5m_26_4_1(path: &Path) -> (Vec<CrossingPoint>, f64, f64) {
+    let raw = fs::read_to_string(path)
+        .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+    assert!(
+        raw.contains("# mesa_version_number=r26.4.1"),
+        "missing r26.4.1 header in {}",
+        path.display()
+    );
+    let mut pts = Vec::new();
+    let mut teff_red = None;
+    let mut teff_blue = None;
+    for line in raw.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        let cols: Vec<&str> = trimmed.split('\t').collect();
+        match cols[0] {
+            "PT" => {
+                assert_eq!(cols.len(), 6, "unexpected PT row: {trimmed}");
+                pts.push((
+                    cols[1].parse::<i64>().expect("modnum"),
+                    cols[2].parse::<f64>().expect("teff"),
+                    cols[3].parse::<f64>().expect("lum"),
+                    cols[4].parse::<f64>().expect("period_days"),
+                    cols[5].parse::<f64>().expect("growth_rate"),
+                ));
+            }
+            "EDGE" => {
+                assert_eq!(cols.len(), 3, "unexpected EDGE row: {trimmed}");
+                let val = cols[2].parse::<f64>().expect("edge val");
+                match cols[1] {
+                    "Teff_red_edge" => teff_red = Some(val),
+                    "Teff_blue_edge" => teff_blue = Some(val),
+                    other => panic!("unexpected edge name: {other}"),
+                }
+            }
+            other => panic!("unexpected row prefix: {other}"),
+        }
+    }
+    (
+        pts,
+        teff_red.expect("Teff_red_edge"),
+        teff_blue.expect("Teff_blue_edge"),
+    )
+}
+
 #[test]
 #[allow(clippy::too_many_lines)]
-fn test_rsp_lina_and_steffen_edges_match_golden_5m_list() {
+fn test_rsp_lina_and_steffen_edges_match_mesa_26_4_1_5m_reference() {
     // 13 sampled 2nd-crossing points up to `num_beyond_blue_edge == 2`
-    // (`run_star_extras.f90:223` in MESA `main` at commit `0b2e6bb`), storing both exact
-    // 17-digit MESA `main` at commit `0b2e6bb` (`FreeEOS`) `LINA` reference values and
+    // (`star/test_suite/rsp_check_2nd_crossing/src/run_star_extras.f90:223` in
+    // MESA release `26.4.1`), parsed from `crossing_5m_26_4_1.tsv` alongside
     // historical MESA `v11461` (`OPAL` EOS) `list` values.
-    let golden_pts: [(i64, f64, f64, f64, f64, f64, f64); 13] = [
-        (
-            2182,
-            5_117.814_030_014_12,
-            1_515.874_556_268_378_7,
-            6.015_024_817_638_153e5 / 86_400.0,
-            -1.464_218_682_915_794_7e-2,
-            6.9798,
-            -1.4649e-2,
-        ),
-        (
-            2194,
-            5_219.704_046_631_389,
-            1_539.199_742_418_412_8,
-            5.607_115_052_868_42e5 / 86_400.0,
-            -9.901_928_079_745_98e-3,
-            6.5072,
-            -9.8892e-3,
-        ),
-        (
-            2205,
-            5_329.114_836_734_605,
-            1_559.631_654_892_086_3,
-            5.215_282_297_889_703e5 / 86_400.0,
-            -4.863_571_008_226_757e-3,
-            6.0527,
-            -4.869_439_213_642_279e-3,
-        ),
-        (
-            2215,
-            5_436.915_620_674_93,
-            1_578.414_513_983_107_6,
-            4.874_781_823_508_197_6e5 / 86_400.0,
-            -1.044_680_598_213_734_6e-4,
-            5.6574,
-            -2.440_425_682_565_504e-4,
-        ),
-        (
-            2224,
-            5_538.172_717_431_118,
-            1_595.663_842_458_941,
-            4.589_592_835_194_748e5 / 86_400.0,
-            4.073_300_166_790_113e-3,
-            5.3266,
-            4.045_355_766_436_185e-3,
-        ),
-        (
-            2233,
-            5_641.070_412_718_255,
-            1_612.966_443_952_483_4,
-            4.327_848_595_051_984e5 / 86_400.0,
-            8.085_525_277_106_233e-3,
-            5.0226,
-            8.141_442_149_700_16e-3,
-        ),
-        (
-            2242,
-            5_747.635_013_234_617,
-            1_630.692_294_723_043_2,
-            4.081_325_912_454_219e5 / 86_400.0,
-            1.133_212_228_545_723_4e-2,
-            4.7364,
-            1.1213e-2,
-        ),
-        (
-            2251,
-            5_857.062_559_238_12,
-            1_648.779_536_817_859_3,
-            3.850_341_405_518_177e5 / 86_400.0,
-            1.262_171_509_132_802_4e-2,
-            4.4683,
-            1.2694e-2,
-        ),
-        (
-            2260,
-            5_969.348_676_651_82,
-            1_667.201_609_538_533_6,
-            3.633_405_009_525_161_6e5 / 86_400.0,
-            1.142_481_483_142_316e-2,
-            4.2169,
-            1.1268e-2,
-        ),
-        (
-            2268,
-            6_071.304_465_353_705,
-            1_683.971_577_622_985_7,
-            3.452_702_916_275_847e5 / 86_400.0,
-            8.381_239_237_986_78e-3,
-            4.0071,
-            8.689_902_602_617_62e-3,
-        ),
-        (
-            2276,
-            6_176.179_601_321_493,
-            1_701.172_948_889_821_8,
-            3.281_073_459_697_96e5 / 86_400.0,
-            4.248_266_288_919_205e-3,
-            3.8078,
-            4.316_245_731_944_837e-3,
-        ),
-        (
-            2284,
-            6_284.581_093_120_282,
-            1_718.874_374_974_722_5,
-            3.117_201_220_586_360_4e5 / 86_400.0,
-            -4.136_798_069_435_589e-4,
-            3.6174,
-            -2.786_712_154_970_167_4e-4,
-        ),
-        (
-            2292,
-            6_396.226_491_520_547,
-            1_737.050_610_191_606,
-            2.960_904_036_216_642e5 / 86_400.0,
-            -5.133_231_648_719_714_5e-3,
-            3.4361,
-            -5.184_950_937_238_88e-3,
-        ),
+    let (ref_pts, ref_teff_red_k, ref_teff_blue_k) = load_crossing_5m_26_4_1(
+        &golden_rsp_dir().join("crossing_5m_26_4_1.tsv"),
+    );
+    let legacy_v11461: [(f64, f64); 13] = [
+        (6.9798, -1.4649e-2),
+        (6.5072, -9.8892e-3),
+        (6.0527, -4.869_439_213_642_279e-3),
+        (5.6574, -2.440_425_682_565_504e-4),
+        (5.3266, 4.045_355_766_436_185e-3),
+        (5.0226, 8.141_442_149_700_16e-3),
+        (4.7364, 1.1213e-2),
+        (4.4683, 1.2694e-2),
+        (4.2169, 1.1268e-2),
+        (4.0071, 8.689_902_602_617_62e-3),
+        (3.8078, 4.316_245_731_944_837e-3),
+        (3.6174, -2.786_712_154_970_167_4e-4),
+        (3.4361, -5.184_950_937_238_88e-3),
     ];
+    assert_eq!(ref_pts.len(), 13);
 
     let tmp_dir = std::env::temp_dir()
         .join(format!("flexmesa_rsp_5m_crossing_{}", std::process::id()));
@@ -165,8 +127,7 @@ fn test_rsp_lina_and_steffen_edges_match_golden_5m_list() {
         "h1\nh2\nh3\nh4\nh5\nmodel_number star_age star_mass log_Teff log_L\n",
     );
     hist.push_str("2100 5.0e7 5.0 3.6800000000000000 3.1600000000000000\n");
-    for (idx, &(modnum, teff, lum, _, _, _, _)) in golden_pts.iter().enumerate()
-    {
+    for (idx, &(modnum, teff, lum, _, _)) in ref_pts.iter().enumerate() {
         let idx_f64 = f64::from(u32::try_from(idx).expect("idx fits in u32"));
         let _ = writeln!(
             hist,
@@ -214,22 +175,22 @@ fn test_rsp_lina_and_steffen_edges_match_golden_5m_list() {
     .expect("eval_rsp_2nd_crossing_with_controls");
 
     assert_eq!(rep.points.len(), 13);
-    for (p, &(_m, _t, _l, p_r24, g_r24, p_v11461, g_v11461)) in
-        rep.points.iter().zip(golden_pts.iter())
+    for ((p, &(_m, _t, _l, p_ref, g_ref)), &(p_v11461, g_v11461)) in
+        rep.points.iter().zip(ref_pts.iter()).zip(&legacy_v11461)
     {
-        let rel_p_r24 = (p.period_days - p_r24).abs() / p_r24;
-        let abs_g_r24 = (p.growth_rate - g_r24).abs();
+        let rel_p_ref = (p.period_days - p_ref).abs() / p_ref;
+        let abs_g_ref = (p.growth_rate - g_ref).abs();
         let rel_p_legacy = (p.period_days - p_v11461).abs() / p_v11461;
         let abs_g_legacy = (p.growth_rate - g_v11461).abs();
         assert!(
-            rel_p_r24 < 1.0e-6,
-            "mod {}: P_days={} vs r24 {p_r24} (rel={rel_p_r24:.3e})",
+            rel_p_ref < 1.0e-6,
+            "mod {}: P_days={} vs 26.4.1 {p_ref} (rel={rel_p_ref:.3e})",
             p.model_number,
             p.period_days
         );
         assert!(
-            abs_g_r24 < 5.0e-6,
-            "mod {}: growth={} vs r24 {g_r24} (diff={abs_g_r24:.3e})",
+            abs_g_ref < 5.0e-6,
+            "mod {}: growth={} vs 26.4.1 {g_ref} (diff={abs_g_ref:.3e})",
             p.model_number,
             p.growth_rate
         );
@@ -237,8 +198,16 @@ fn test_rsp_lina_and_steffen_edges_match_golden_5m_list() {
         assert!(abs_g_legacy < 5.0e-4);
     }
 
-    assert!((rep.teff_red_k - 5_442.635_091_792_743).abs() < 5.0);
-    assert!((rep.teff_blue_k - 6_278.109_355_229_067).abs() < 5.0);
+    assert!(
+        (rep.teff_red_k - ref_teff_red_k).abs() < 5.0,
+        "Teff_red_k={} vs 26.4.1 {ref_teff_red_k}",
+        rep.teff_red_k
+    );
+    assert!(
+        (rep.teff_blue_k - ref_teff_blue_k).abs() < 5.0,
+        "Teff_blue_k={} vs 26.4.1 {ref_teff_blue_k}",
+        rep.teff_blue_k
+    );
     assert_eq!(rep.offsets.len(), 10);
     assert!(tmp_dir.join("blue_edge_5M_A.data").is_file());
 
@@ -263,6 +232,23 @@ fn test_rsp_check_2nd_crossing_on_7m_mesa_test_suite() {
         );
         return;
     }
+
+    let ref_7b = fs::read_to_string(
+        golden_rsp_dir().join("7B_2nd_crossing_26_4_1.data"),
+    )
+    .expect("read 7B_2nd_crossing_26_4_1.data");
+    let mut ref_7m_red = None;
+    let mut ref_7m_blue = None;
+    for line in ref_7b.lines() {
+        let cols: Vec<&str> = line.split_whitespace().collect();
+        if cols.len() == 2 && cols[0] == "Teff_red_edge" {
+            ref_7m_red = Some(cols[1].parse::<f64>().expect("7M red"));
+        } else if cols.len() == 2 && cols[0] == "Teff_blue_edge" {
+            ref_7m_blue = Some(cols[1].parse::<f64>().expect("7M blue"));
+        }
+    }
+    let expected_red = ref_7m_red.expect("Teff_red_edge in 7B");
+    let expected_blue = ref_7m_blue.expect("Teff_blue_edge in 7B");
 
     let mut ctrl = StarControls {
         rsp_mass: 7.0,
@@ -300,9 +286,16 @@ fn test_rsp_check_2nd_crossing_on_7m_mesa_test_suite() {
     )
     .expect("7M rsp_check_2nd_crossing");
 
-    assert!(rep.teff_red_k > 4300.0 && rep.teff_red_k < 5600.0);
+    assert_eq!(rep.points.len(), 16);
     assert!(
-        rep.teff_blue_k > rep.teff_red_k + 300.0 && rep.teff_blue_k < 6500.0
+        (rep.teff_red_k - expected_red).abs() < 5.0,
+        "7M Teff_red_k={} vs 26.4.1 {expected_red}",
+        rep.teff_red_k
     );
-    assert!(rep.offsets.len() >= 4);
+    assert!(
+        (rep.teff_blue_k - expected_blue).abs() < 5.0,
+        "7M Teff_blue_k={} vs 26.4.1 {expected_blue}",
+        rep.teff_blue_k
+    );
+    assert_eq!(rep.offsets.len(), 11);
 }

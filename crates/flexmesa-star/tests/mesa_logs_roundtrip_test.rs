@@ -568,7 +568,6 @@ fn test_upstream_test_suite_history_column_lists_parse_or_fail_loudly() {
         "starspots",
         "tzo",
         "wd_acc_small_dm",
-        "wd_o_ne_3_phase",
     ];
     let mut unexpected_failures = Vec::new();
     let mut loud_error_cases = std::collections::BTreeSet::new();

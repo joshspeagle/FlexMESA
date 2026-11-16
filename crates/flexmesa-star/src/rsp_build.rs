@@ -249,8 +249,10 @@ pub fn eval_model_rsp_lina_modes(
     n_modes: usize,
 ) -> (Vec<RspLinaMode>, Option<f64>) {
     let target_p = model.controls.x_ctrl.get(1).copied().filter(|&p| p > 0.0);
-    let count = n_modes.clamp(1, 3);
-    if model.aux.rsp.lina_periods[0] > 0.0 {
+    let count = n_modes.clamp(1, 10);
+    if count <= model.aux.rsp.lina_periods.len()
+        && model.aux.rsp.lina_periods[0] > 0.0
+    {
         let mut cached = Vec::with_capacity(count);
         for idx in 0..count {
             if model.aux.rsp.lina_periods[idx] > 0.0 {
@@ -261,7 +263,7 @@ pub fn eval_model_rsp_lina_modes(
                 });
             }
         }
-        if !cached.is_empty() {
+        if cached.len() == count {
             return (cached, target_p);
         }
     }

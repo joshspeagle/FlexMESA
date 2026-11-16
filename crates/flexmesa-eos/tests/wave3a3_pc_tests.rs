@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-//! Strict-mode regression snapshot tests for `PC` liquid and transition
-//! regimes (self-generated `FlexMESA` regression snapshots tracked under
-//! `#146`, `Audit T2-15`).
+//! Strict-mode regression snapshot tests for Wave 3a.3 (`PC` equation of state;
+//! `#146`). Real compiled MESA `26.4.1` component oracle comparisons are in
+//! `mesa_26_4_1_component_oracles_test.rs` (`T2-15`).
 
 #![allow(
     clippy::approx_constant,

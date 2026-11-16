@@ -5,7 +5,7 @@
 //! # Contract of the `Strict` and `Fast` Backends
 //!
 //! All `FlexMESA` physics crates call elementary and power functions exclusively
-//! through this crate from a single Rust source (`DECISIONS #22`):
+//! through this crate from a single Rust source (`DECISIONS #23`):
 //!
 //! - **[`NumericsMode::Strict`] (default)**: *Correctly rounded toward zero as
 //!   `CRMATH` does it.* Specifically, `strict` mode binds the vendored INRIA

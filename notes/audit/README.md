@@ -1,5 +1,7 @@
 # FlexMESA whole-repository audit
 
+> **Reference note (`#141`):** This audit folder is a frozen historical record from 2026-11-15 to 2026-11-16 against MESA `main` at commit `0b2e6bb` (2026-11-04) and `FlexMESA` commit `91eda0b`, including the nine `notes/audit/upstream_histories/*.tsv` files kept as the interim `0b2e6bb` set referenced by [`measurements.md`](measurements.md) and the reproduction recipe below. Active repository inputs, module goldens, [`case_table.md`](case_table.md), [`defaults_diff_26_4_1.md`](defaults_diff_26_4_1.md), `benchmarks/history_harness/reference_histories/*.data`, and the `data-v1` release bundles target **MESA release `26.4.1`** (tag `26.4.1`, commit `c8c2026`, Zenodo `19722306`, built via `scripts/mesa_reference/` and `scripts/data/`).
+
 Audit dates: 2026-11-15 to 2026-11-16. This directory is the findings
 register. It records how far the repository is from a complete, verified port
 of MESA, with the evidence for each statement, and a plan for closing the gap.

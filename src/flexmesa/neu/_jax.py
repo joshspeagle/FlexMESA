@@ -221,7 +221,16 @@ def _plas_vol_jax(
     a3_val = c_val / (0.57 - 0.25 * xnum_s)
     fxy_in = 1.05 + (p_a1 - p_b1) * jnp.exp(-a3_val * a3_val)
     fxy = jnp.where((jnp.abs(xnum) > 0.7) | (xden < 0.0), 1.0, fxy_in)
-    return _inputs.TFAC0 * 3.0e21 * xl9 * gl6 * jnp.exp(-gl_p) * (ft + fl) * fxy
+    # Reproduces neu/private/mod_neu.f90:1582-1583 at tag 26.4.1 (see #193).
+    return (
+        _inputs.PLAS_WEINBERG_PREF
+        * 3.0e21
+        * xl9
+        * gl6
+        * jnp.exp(-gl_p)
+        * (ft + fl)
+        * fxy
+    )
 
 
 def _phot_vol_jax(

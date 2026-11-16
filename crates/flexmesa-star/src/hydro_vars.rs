@@ -195,7 +195,7 @@ fn eval_face_mlt(
     };
     let gradl_f = grada_f + b_term;
 
-    // In `check_for_redo_mlt` (`mlt_info.f90:312`), `alfa = dr / scale_height(k)`
+    // In `check_for_redo_MLT` (`star/private/turb_info.f90:602`), `alfa = dr / scale_height(k)`
     // and `mixing_length = alfa * scale_height(k)`.
     let alpha_mlt = if let Some(dr) = custom_length {
         (dr / hp_f.val.max(1.0)).max(1.0e-6)
@@ -442,8 +442,8 @@ fn eval_face_mlt(
 
 /// Checks for geometrically thin convection zones where
 /// $\Delta r_{\mathrm{cz}} < \alpha_{\mathrm{MLT}} H_P$ and re-evaluates MLT
-/// using $\Lambda = \Delta r_{\mathrm{cz}}$ (`check_for_redo_mlt` in
-/// `star/private/mlt_info.f90:233-348`).
+/// using $\Lambda = \Delta r_{\mathrm{cz}}$ (`check_for_redo_MLT` in
+/// `star/private/turb_info.f90:522-605`).
 pub fn check_for_redo_mlt(model: &mut StarModel) -> Result<(), StarError> {
     let nz = model.nz;
     if nz < 2 {

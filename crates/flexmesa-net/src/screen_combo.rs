@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 //! Compound reaction branch weighting (`set_combo_screen_rates` and
-//! `rate_for_pg_pa_branches` in `net/private/net_screen.f90` lines 530–784).
+//! `rate_for_pg_pa_branches` in `net/private/net_screen.f90:314-558`).
 
 use crate::types::{NetError, NetGeneralInfo, IH1};
 

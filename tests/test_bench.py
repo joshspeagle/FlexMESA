@@ -16,7 +16,7 @@ from flexmesa import bench
 _EXPECTED_CHECKSUMS_N8: tuple[tuple[str, float], ...] = (
     ("auto_diff", 1.0892741555532441e04),
     ("interp_2d", 3.6227753491539829e02),
-    ("neu", 9.8689004129113184e12),
+    ("neu", 9.873195638253145e12),
     ("mtx_tridiag", 1.0656505308237591e01),
     ("turb_mlt", 3.4190485461509601e00),
     ("turb_tdc", 3.3187342241650115e00),

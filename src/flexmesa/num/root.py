@@ -19,6 +19,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from flexmesa.num import brent as _brent
+
 
 def look_for_brackets(
     x: float,
@@ -58,38 +60,40 @@ def look_for_brackets(
         raise ValueError("require finite arguments, dx != 0, and xmin < xmax")
     x1 = min(max(float(x), float(xmin)), float(xmax))
     x3 = x1
-    y0, _ = func(x1)
-    if not np.isfinite(y0):
-        raise ValueError("non-finite f(x) in look_for_brackets")
-    if y0 == 0.0:
-        return (x1, x1), (0.0, 0.0)
-    y1 = float(y0)
-    y3 = float(y0)
-    step = abs(float(dx))
+    y1 = 0.0
+    y3 = 0.0
+    step0 = abs(float(dx))
     limit = 50 if ntry <= 0 else ntry
 
-    for _ in range(limit):
-        can_left = x1 > xmin
-        can_right = x3 < xmax
-        if not can_left and not can_right:
+    for i in range(1, limit + 1):
+        if x1 <= xmin and x3 >= xmax and i > 1:
             break
-        if can_left:
-            x_new = max(float(xmin), x1 - step)
-            y_new, _ = func(x_new)
-            if not np.isfinite(y_new):
+        jump = float(1 << min(i, 50)) * step0
+        if i == 1:
+            x1 = max(float(xmin), x1 - jump)
+            x3 = min(float(xmax), x3 + jump)
+            move_x1, move_x3 = True, True
+        else:
+            prefer_left = (y1 < y3) if y1 > 0.0 else (y1 > y3)
+            if (prefer_left and x1 > xmin) or x3 >= xmax:
+                x1 = max(float(xmin), x1 - jump)
+                move_x1, move_x3 = True, False
+            else:
+                x3 = min(float(xmax), x3 + jump)
+                move_x1, move_x3 = False, True
+
+        if move_x1:
+            f1, _ = func(x1)
+            if not np.isfinite(f1):
                 raise ValueError("non-finite f(x) in look_for_brackets")
-            if y_new == 0.0 or (y_new > 0.0) != (y1 > 0.0):
-                return (x_new, x1), (float(y_new), y1)
-            x1, y1 = x_new, float(y_new)
-        if can_right:
-            x_new = min(float(xmax), x3 + step)
-            y_new, _ = func(x_new)
-            if not np.isfinite(y_new):
+            y1 = float(f1)
+        if move_x3:
+            f3, _ = func(x3)
+            if not np.isfinite(f3):
                 raise ValueError("non-finite f(x) in look_for_brackets")
-            if y_new == 0.0 or (y_new > 0.0) != (y3 > 0.0):
-                return (x3, x_new), (y3, float(y_new))
-            x3, y3 = x_new, float(y_new)
-        step *= 2.0
+            y3 = float(f3)
+        if y1 * y3 <= 0.0:
+            return (x1, x3), (y1, y3)
     raise RuntimeError("failed to bracket root in look_for_brackets")
 
 
@@ -103,7 +107,7 @@ def safe_root_with_brackets(
     epsx: float = 1e-12,
     epsy: float = 1e-12,
 ) -> tuple[float, float]:
-    """Finds a root $x \\in [x_1, x_3]$ via safeguarded Newton + bisection.
+    """Finds a root $x \\in [x_1, x_3]$ via Brent (`mod_root.f90:27-45`).
 
     Args:
         func: Callable returning ``(f(x), df_dx(x))``.
@@ -120,66 +124,20 @@ def safe_root_with_brackets(
 
     Raises:
         ValueError: If ``y1_in`` and ``y3_in`` have the same strict sign.
-        RuntimeError: If ``imax`` is exceeded.
+        RuntimeError: If iteration fails to converge.
     """
-    if not (
-        np.isfinite(x1_in)
-        and np.isfinite(x3_in)
-        and np.isfinite(y1_in)
-        and np.isfinite(y3_in)
-    ):
-        raise ValueError("non-finite bracket in safe_root_with_brackets")
-    if y1_in == 0.0:
-        return float(x1_in), 0.0
-    if y3_in == 0.0:
-        return float(x3_in), 0.0
-    if (y1_in > 0.0 and y3_in > 0.0) or (y1_in < 0.0 and y3_in < 0.0):
-        raise ValueError("y1_in and y3_in must have opposite signs")
-    if y1_in < 0.0:
-        xl, xh = float(x1_in), float(x3_in)
-    else:
-        xl, xh = float(x3_in), float(x1_in)
-
-    rts = 0.5 * (x1_in + x3_in)
-    dxold = abs(x3_in - x1_in)
-    dx = dxold
-    f, df = func(rts)
-    if not np.isfinite(f):
-        raise ValueError("non-finite f(x) in safe_root_with_brackets")
-    limit = 100 if imax <= 0 else imax
-
-    for _ in range(limit):
-        if abs(f) <= epsy or abs(dx) <= epsx or abs(xh - xl) <= epsx:
-            return float(rts), float(f)
-        out_of_bracket = ((rts - xh) * df - f) * ((rts - xl) * df - f) > 0.0
-        slow_decrease = abs(2.0 * f) > abs(dxold * df)
-        if df == 0.0 or not np.isfinite(df) or out_of_bracket or slow_decrease:
-            dxold = dx
-            dx = 0.5 * (xh - xl)
-            rts = xl + dx
-            if xl == rts:
-                return float(rts), float(f)
-        else:
-            dxold = dx
-            dx = f / df
-            temp = rts
-            rts -= dx
-            if temp == rts:
-                return float(rts), float(f)
-        if abs(dx) <= epsx:
-            f_end, _ = func(rts)
-            if not np.isfinite(f_end):
-                raise ValueError("non-finite f(x) in safe_root_with_brackets")
-            return float(rts), float(f_end)
-        f, df = func(rts)
-        if not np.isfinite(f):
-            raise ValueError("non-finite f(x) in safe_root_with_brackets")
-        if f < 0.0:
-            xl = rts
-        else:
-            xh = rts
-
-    raise RuntimeError("safe_root_with_brackets exceeded imax")
+    max_iter = max(int(imax), 200)
+    return _brent.brent_safe_zero(
+        float(x1_in),
+        float(x3_in),
+        1.0e-14,
+        float(epsx),
+        float(epsy),
+        lambda xv: float(func(xv)[0]),
+        df_a=float(y1_in),
+        df_b=float(y3_in),
+        max_iter=max_iter,
+    )
 
 
 def safe_root_with_guess(
@@ -225,33 +183,45 @@ def safe_root_with_guess(
         np.isfinite(x_guess) and np.isfinite(xmin) and np.isfinite(xmax)
     ):
         raise ValueError("require finite x_guess and xmin < xmax")
+    x1 = x1_opt
+    x3 = x3_opt
+    y1 = y1_opt
+    y3 = y3_opt
     x = min(max(float(x_guess), float(xmin)), float(xmax))
-    for _ in range(newt_imax):
-        fx, dfx = func(x)
-        if abs(fx) <= epsy:
-            return x, float(fx)
-        if dfx == 0.0 or not np.isfinite(dfx):
+    absy_prev = 0.0
+    for i in range(newt_imax):
+        y, dydx = func(x)
+        if not np.isfinite(y):
             break
-        step = fx / dfx
-        x_next = x - step
+        absy = abs(y)
+        if absy == 0.0 or absy < max(epsy, abs(dydx) * epsx):
+            return x, float(y)
+        if dydx == 0.0 or not np.isfinite(dydx):
+            break
+        if i > 0 and absy > absy_prev:
+            break
+        absy_prev = absy
+        if y < 0.0:
+            x1 = x
+            y1 = float(y)
+        else:
+            x3 = x
+            y3 = float(y)
+        x_next = x - y / dydx
         if x_next < xmin or x_next > xmax:
             break
         x = x_next
-        if abs(step) <= epsx:
-            fx_end, _ = func(x)
-            if abs(fx_end) <= max(epsy, 1e-12):
-                return x, float(fx_end)
-            break
 
-    if (
-        x1_opt is not None
-        and x3_opt is not None
-        and y1_opt is not None
-        and y3_opt is not None
-        and ((y1_opt <= 0.0 <= y3_opt) or (y3_opt <= 0.0 <= y1_opt))
-    ):
-        bx1, bx3 = float(x1_opt), float(x3_opt)
-        by1, by3 = float(y1_opt), float(y3_opt)
+    if x1 is not None and x3 is not None:
+        yv1 = float(func(float(x1))[0]) if y1 is None else float(y1)
+        yv3 = float(func(float(x3))[0]) if y3 is None else float(y3)
+        if (yv1 <= 0.0 <= yv3) or (yv3 <= 0.0 <= yv1):
+            bx1, bx3 = float(x1), float(x3)
+            by1, by3 = yv1, yv3
+        else:
+            (bx1, bx3), (by1, by3) = look_for_brackets(
+                x_guess, dx, xmin, xmax, func, imax
+            )
     else:
         (bx1, bx3), (by1, by3) = look_for_brackets(
             x_guess, dx, xmin, xmax, func, imax
@@ -318,8 +288,8 @@ def safe_root_jax(
 ) -> jax.Array:
     """Solves $f(x^*(p), p) = 0$ on $[x_1, x_3]$ with implicit JAX VJP.
 
-    Uses safeguarded Newton-Raphson + bisection for the primal solve and
-    propagates reverse-mode cotangents via the implicit function theorem:
+    Uses safeguarded Brent root-finding (`brent_safe_zero`) for the primal solve
+    and propagates reverse-mode cotangents via the implicit function theorem:
     $$\\frac{\\partial x^*}{\\partial p}
       = -\\left(\\frac{\\partial f}{\\partial x}(x^*, p)\\right)^{-1}
         \\frac{\\partial f}{\\partial p}(x^*, p).$$

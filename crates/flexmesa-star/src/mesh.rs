@@ -58,7 +58,7 @@ impl StarModel {
 
     /// Computes enclosed mass fractions `q` from `dq` by summing inward from
     /// the surface to `midq` and outward from the center to `midq + 1`
-    /// (`set_qs` in `star/private/star_utils.f90:1592`).
+    /// (`set_qs` in `star/private/star_utils.f90:712-752`).
     pub fn set_qs(&mut self) {
         let nz = self.nz;
         if nz == 0 {
@@ -190,7 +190,7 @@ impl StarModel {
     }
 
     /// Returns face interpolation weights $(\alpha_k, \beta_k)$ at face `k`
-    /// (`get_face_weights` in `star/private/star_utils.f90:1947`):
+    /// (`get_face_weights` in `star/private/star_utils.f90:4063-4071`):
     /// $f_{\mathrm{face},k} = \alpha_k f_k + \beta_k f_{k-1}$.
     #[must_use]
     #[inline]

@@ -30,13 +30,44 @@ fn quick_two_sum(a: f64, b: f64) -> (f64, f64) {
     (s, e)
 }
 
-/// Error-free Dekker (1971) `two_prod` using hardware fused multiply-add
-/// (`f64::mul_add`), returning `(p, e)` with $p + e = a \cdot b$ exactly.
+/// Veltkamp (1968) splitting factor $2^{27} + 1$.
+const VELTKAMP_SPLITTER: f64 = 134_217_729.0;
+/// Threshold $2^{996}$ above which `VELTKAMP_SPLITTER * x` could overflow.
+const SPLIT_HI_THRESH: f64 = f64::from_bits(0x7e30_0000_0000_0000);
+/// Exact power-of-two rescaling factors $2^{-28}$ and $2^{28}$.
+const SPLIT_SCALE_DOWN: f64 = f64::from_bits(0x3e30_0000_0000_0000);
+const SPLIT_SCALE_UP: f64 = 268_435_456.0;
+
+#[inline]
+#[must_use]
+fn veltkamp_split(x: f64) -> (f64, f64) {
+    if x.abs() > SPLIT_HI_THRESH {
+        let xs = x * SPLIT_SCALE_DOWN;
+        let c = VELTKAMP_SPLITTER * xs;
+        let hi = c - (c - xs);
+        let lo = xs - hi;
+        (hi * SPLIT_SCALE_UP, lo * SPLIT_SCALE_UP)
+    } else {
+        let c = VELTKAMP_SPLITTER * x;
+        let hi = c - (c - x);
+        let lo = x - hi;
+        (hi, lo)
+    }
+}
+
+/// Error-free Dekker (1971) `two_prod` using pure IEEE-754 Veltkamp splitting
+/// (hardware-independent without FMA), returning `(p, e)` with
+/// $p + e = a \cdot b$.
 #[inline]
 #[must_use]
 fn two_prod(a: f64, b: f64) -> (f64, f64) {
     let p = a * b;
-    let e = a.mul_add(b, -p);
+    if !p.is_finite() || p == 0.0 {
+        return (p, 0.0);
+    }
+    let (ah, al) = veltkamp_split(a);
+    let (bh, bl) = veltkamp_split(b);
+    let e = ((ah * bh - p) + ah * bl + al * bh) + al * bl;
     (p, e)
 }
 
@@ -214,7 +245,11 @@ impl Mul for F64x2 {
     #[inline]
     fn mul(self, rhs: Self) -> Self::Output {
         let (p1, p2) = two_prod(self.hi, rhs.hi);
-        let p2 = self.lo.mul_add(rhs.hi, self.hi.mul_add(rhs.lo, p2));
+        let p2 = flexmesa_math::fma(
+            self.lo,
+            rhs.hi,
+            flexmesa_math::fma(self.hi, rhs.lo, p2),
+        );
         let (hi, lo) = quick_two_sum(p1, p2);
         Self { hi, lo }
     }
@@ -226,7 +261,7 @@ impl Mul<f64> for F64x2 {
     #[inline]
     fn mul(self, rhs: f64) -> Self::Output {
         let (p1, p2) = two_prod(self.hi, rhs);
-        let (hi, lo) = quick_two_sum(p1, self.lo.mul_add(rhs, p2));
+        let (hi, lo) = quick_two_sum(p1, flexmesa_math::fma(self.lo, rhs, p2));
         Self { hi, lo }
     }
 }

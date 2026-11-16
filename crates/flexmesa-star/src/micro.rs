@@ -186,8 +186,8 @@ pub fn set_basic_vars(model: &mut StarModel) -> Result<(), StarError> {
                 "non-finite primary state at zone {k}: lnd={lnd_k}, lnT={lnt_k}"
             )));
         }
-        model.rho[k] = lnd_k.exp();
-        model.t[k] = lnt_k.exp();
+        model.rho[k] = flexmesa_math::exp(lnd_k);
+        model.t[k] = flexmesa_math::exp(lnt_k);
 
         let xa_k = &model.xa[k * species..(k + 1) * species];
         let comp = get_composition_info(catalog, &model.chem_id, xa_k, false)
@@ -259,10 +259,10 @@ pub fn do_eos(model: &mut StarModel) -> Result<(), StarError> {
         let t_k = model.t[k];
         let rho_k = model.rho[k];
         let ln_pgas = out.res[I_LN_PGAS];
-        let pgas = ln_pgas.exp();
-        let prad = CRAD * t_k.powi(4) / 3.0;
+        let pgas = flexmesa_math::exp(ln_pgas);
+        let prad = CRAD * flexmesa_math::pow4(t_k) / 3.0;
         let peos = pgas + prad;
-        let ln_peos = peos.ln();
+        let ln_peos = flexmesa_math::log(peos);
 
         let d_lnpgas_dlnd = out.d_dlnd[I_LN_PGAS];
         let d_lnpgas_dlnt = out.d_dln_t[I_LN_PGAS];
@@ -272,16 +272,17 @@ pub fn do_eos(model: &mut StarModel) -> Result<(), StarError> {
         let d_lnpeos_dlnt = beta_gas * d_lnpgas_dlnt + 4.0 * alfa_rad;
 
         let ln_e = out.res[I_LN_E];
-        let energy = ln_e.exp();
+        let energy = flexmesa_math::exp(ln_e);
         let ln_s = out.res[I_LN_S];
-        let entropy = ln_s.exp();
+        let entropy = flexmesa_math::exp(ln_s);
         let gamma1 = out.res[I_GAMMA1];
         let csound = (gamma1 * peos / rho_k).max(0.0).sqrt();
 
-        let a_e = (3.0
-            / (FOUR_PI * AVO * rho_k * model.zbar[k].max(1.0e-10)
-                / model.abar[k]))
-            .cbrt();
+        let a_e = flexmesa_math::pow(
+            3.0 / (FOUR_PI * AVO * rho_k * model.zbar[k].max(1.0e-10)
+                / model.abar[k]),
+            1.0 / 3.0,
+        );
         let gam = model.z53bar[k] * QE * QE / (a_e * KERG * t_k);
 
         model.pgas[k] = pgas;
@@ -366,8 +367,8 @@ pub fn do_neu(model: &mut StarModel) -> Result<(), StarError> {
                 return Ok((0.0, 0.0, 0.0));
             }
             let rho_k = model.rho[k];
-            let log_t = t_k.log10();
-            let log_rho = rho_k.log10();
+            let log_t = flexmesa_math::log10(t_k);
+            let log_rho = flexmesa_math::log10(rho_k);
             let NeuResult { total, .. } = neu_get(
                 Some(t_k),
                 Some(log_t),
@@ -447,8 +448,8 @@ pub fn do_kap(model: &mut StarModel) -> Result<(), StarError> {
                 xn,
                 xo,
                 xne,
-                rho_k.log10(),
-                t_k.log10(),
+                flexmesa_math::log10(rho_k),
+                flexmesa_math::log10(t_k),
                 lnfree_e,
                 model.eos_d_dlnd[k][I_LN_FREE_E],
                 model.eos_d_dlnt[k][I_LN_FREE_E],

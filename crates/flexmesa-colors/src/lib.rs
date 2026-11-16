@@ -269,8 +269,9 @@ mod tests {
                 (actual_flux - flux_exp_golden).abs() / flux_exp_golden
                     < 1.0e-12
             );
-            let stefan_flux =
-                BOLTZ_SIGMA * teff.powi(4) * (RSUN / D_10PC_CM).powi(2);
+            let stefan_flux = BOLTZ_SIGMA
+                * flexmesa_math::pow4(teff)
+                * flexmesa_math::pow2(RSUN / D_10PC_CM);
             let rel_err = (actual_flux - stefan_flux).abs() / stefan_flux;
             assert!(rel_err < 5.0e-3);
         }

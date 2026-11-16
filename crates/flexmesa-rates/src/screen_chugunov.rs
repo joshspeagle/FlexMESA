@@ -29,9 +29,9 @@ pub fn screen_chugunov(
     }
     let mav = abar * AMU;
     let ntot = den / mav;
-    let ae = (3.0 / (4.0 * PI * ntot * zbar)).powf(ONE_THIRD);
-    let r1 = ae * f64::from(z1 as i32).powf(ONE_THIRD);
-    let r2 = ae * f64::from(z2 as i32).powf(ONE_THIRD);
+    let ae = flexmesa_math::pow(3.0 / (4.0 * PI * ntot * zbar), ONE_THIRD);
+    let r1 = ae * flexmesa_math::pow(f64::from(z1 as i32), ONE_THIRD);
+    let r2 = ae * flexmesa_math::pow(f64::from(z2 as i32), ONE_THIRD);
     let rav = 0.5 * (r1 + r2);
     let dravdd = -rav / (3.0 * den);
 
@@ -44,12 +44,18 @@ pub fn screen_chugunov(
     let dtndd = -tn * dtpdd / tp;
 
     let (tk, dtkdt, dtkdd, denom) = if tn > 0.2 {
-        (temp, 1.0, 0.0, tp * temp * dtpdd / temp.powi(3))
+        (
+            temp,
+            1.0,
+            0.0,
+            tp * temp * dtpdd / flexmesa_math::pow3(temp),
+        )
     } else if tn <= 0.1 {
         (0.1 * tp, 0.0, 0.1 * dtpdd, 0.0)
     } else {
-        let alfa = 0.5 * (1.0 - (PI * (tn - 0.1) / 0.1).cos());
-        let dalfadtn = 0.5 * PI * (PI * (tn - 0.1) / 0.1).sin() / 0.1;
+        let alfa = 0.5 * (1.0 - flexmesa_math::cos(PI * (tn - 0.1) / 0.1));
+        let dalfadtn =
+            0.5 * PI * flexmesa_math::sin(PI * (tn - 0.1) / 0.1) / 0.1;
         let dalfadt = dalfadtn * dtndt;
         let dalfadd = dalfadtn * dtndd;
         let beta = 1.0 - alfa;
@@ -59,12 +65,13 @@ pub fn screen_chugunov(
         let dtk_dt = (dbetadt * 0.1 + dalfadt * 0.2) * tp;
         let dtk_dd = (dbetadd * 0.1 + dalfadd * 0.2) * tp
             + (beta * 0.1 + alfa * 0.2) * dtpdd;
-        let den_v = tp * (tk_v * dtpdd - tp * dtk_dd) / tk_v.powi(3);
+        let den_v =
+            tp * (tk_v * dtpdd - tp * dtk_dd) / flexmesa_math::pow3(tk_v);
         (tk_v, dtk_dt, dtk_dd, den_v)
     };
 
     let u_zeta = 4.0 * tp * tp / (3.0 * PI * PI * tk * tk);
-    let zeta = u_zeta.powf(ONE_THIRD);
+    let zeta = flexmesa_math::pow(u_zeta, ONE_THIRD);
     let dzetadt = -2.0 * zeta * dtkdt / (3.0 * tk);
     let dzetadd = (zeta / (3.0 * u_zeta)) * (8.0 / (3.0 * PI * PI)) * denom;
 
@@ -77,8 +84,9 @@ pub fn screen_chugunov(
         dgamdt = 0.0;
         dgamdd = 0.0;
     } else if gam >= 590.0 {
-        let alfa = 0.5 * (1.0 - (PI * (gam - 590.0) / 10.0).cos());
-        let dalfadgam = 0.5 * PI * (PI * (gam - 590.0) / 10.0).sin() / 10.0;
+        let alfa = 0.5 * (1.0 - flexmesa_math::cos(PI * (gam - 590.0) / 10.0));
+        let dalfadgam =
+            0.5 * PI * flexmesa_math::sin(PI * (gam - 590.0) / 10.0) / 10.0;
         let dalfadt = dalfadgam * dgamdt;
         let dalfadd = dalfadgam * dgamdd;
         let beta = 1.0 - alfa;
@@ -100,19 +108,20 @@ pub fn screen_chugunov(
     let dg_z_dt = -2.2 * dgamdt / (gam * gam);
     let dg_z_dd = -2.2 * dgamdd / (gam * gam);
 
-    let u = 1.0 + a_z * zeta + b_z * zeta * zeta + g_z * zeta.powi(3);
+    let u =
+        1.0 + a_z * zeta + b_z * zeta * zeta + g_z * flexmesa_math::pow3(zeta);
     let dudt = a_z * dzetadt
         + db_z_dt * zeta * zeta
         + 2.0 * b_z * zeta * dzetadt
-        + dg_z_dt * zeta.powi(3)
+        + dg_z_dt * flexmesa_math::pow3(zeta)
         + 3.0 * g_z * zeta * zeta * dzetadt;
     let dudd = a_z * dzetadd
         + db_z_dd * zeta * zeta
         + 2.0 * b_z * zeta * dzetadd
-        + dg_z_dd * zeta.powi(3)
+        + dg_z_dd * flexmesa_math::pow3(zeta)
         + 3.0 * g_z * zeta * zeta * dzetadd;
 
-    let u13 = u.powf(ONE_THIRD);
+    let u13 = flexmesa_math::pow(u, ONE_THIRD);
     let tgam = gam / u13;
     let dtgamdt = (dgamdt - ONE_THIRD * gam * dudt / u) / u13;
     let dtgamdd = (dgamdd - ONE_THIRD * gam * dudd / u) / u13;
@@ -126,13 +135,13 @@ pub fn screen_chugunov(
     let cb4 = 65.0_f64;
 
     let t1_g = ca1 / (ca2 + tgam).sqrt();
-    let dt1g_dt = -0.5 * ca1 * dtgamdt / (ca2 + tgam).powf(1.5);
-    let dt1g_dd = -0.5 * ca1 * dtgamdd / (ca2 + tgam).powf(1.5);
+    let dt1g_dt = -0.5 * ca1 * dtgamdt / flexmesa_math::pow(ca2 + tgam, 1.5);
+    let dt1g_dd = -0.5 * ca1 * dtgamdd / flexmesa_math::pow(ca2 + tgam, 1.5);
     let t2_g = ca3 / (1.0 + tgam);
     let dt2g_dt = -ca3 * dtgamdt / ((1.0 + tgam) * (1.0 + tgam));
     let dt2g_dd = -ca3 * dtgamdd / ((1.0 + tgam) * (1.0 + tgam));
 
-    let tg32 = tgam.powf(1.5);
+    let tg32 = flexmesa_math::pow(tgam, 1.5);
     let dtg32_dt = 1.5 * tgam.sqrt() * dtgamdt;
     let dtg32_dd = 1.5 * tgam.sqrt() * dtgamdd;
     let t3_g = tg32 * (t1_g + t2_g);
@@ -160,7 +169,7 @@ pub fn screen_chugunov(
         dh0dt = 0.0;
         dh0dd = 0.0;
     }
-    let scor = h0.exp();
+    let scor = flexmesa_math::exp(h0);
     ScreenEval {
         scor,
         dscor_dt: scor * dh0dt,

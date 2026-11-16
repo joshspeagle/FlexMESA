@@ -50,9 +50,9 @@ fn eval_other_residual(
     t: f64,
     out: &EosEvalOutput,
 ) -> (f64, f64) {
-    let pgas = out.res[I_LN_PGAS].exp();
+    let pgas = flexmesa_math::exp(out.res[I_LN_PGAS]);
     let prad = CRAD * t * t * t * t / 3.0;
-    let energy = out.res[I_LN_E].exp();
+    let energy = flexmesa_math::exp(out.res[I_LN_E]);
 
     if which_other == -1 {
         let erad = CRAD * pow4(t) / rho;
@@ -66,7 +66,7 @@ fn eval_other_residual(
         (f, dfdx)
     } else if which_other == -2 {
         let p_tot = pgas + prad;
-        let f = p_tot.log10() - other_value;
+        let f = flexmesa_math::log10(p_tot) - other_value;
         let dfdx = if doing_rho {
             pgas * out.d_dlnd[I_LN_PGAS] / p_tot * LN10
         } else {

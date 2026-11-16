@@ -128,7 +128,7 @@ impl StarModel {
     pub fn set_m_grav_and_grav(&mut self) {
         let nz = self.nz;
         for k in 0..nz {
-            self.r[k] = self.ln_r[k].exp();
+            self.r[k] = flexmesa_math::exp(self.ln_r[k]);
             self.m_grav[k] = self.m[k];
             self.grav[k] =
                 self.cgrav[k] * self.m_grav[k] / (self.r[k] * self.r[k]);
@@ -142,7 +142,11 @@ impl StarModel {
             self.rmid[k] = if self.controls.rsp_flag {
                 0.5 * (self.r[k] + r_inner)
             } else {
-                (0.5 * (self.r[k].powi(3) + r_inner.powi(3))).cbrt()
+                flexmesa_math::pow(
+                    0.5 * (flexmesa_math::pow3(self.r[k])
+                        + flexmesa_math::pow3(r_inner)),
+                    1.0 / 3.0,
+                )
             };
         }
     }
@@ -151,11 +155,12 @@ impl StarModel {
     /// densities `lnd` and cell masses `dm` so the spherical continuity
     /// equation $\Delta(r^3) = 3\,\Delta m / (4\pi\rho)$ holds identically.
     pub fn reconstruct_ln_r_from_lnd_and_dm(&mut self) {
-        let mut r3 = self.r_center.powi(3);
+        let mut r3 = flexmesa_math::pow3(self.r_center);
         for k in (0..self.nz).rev() {
-            let rho_k = self.lnd[k].exp().max(1.0e-30);
+            let rho_k = flexmesa_math::exp(self.lnd[k]).max(1.0e-30);
             r3 += 3.0 * self.dm[k] / (flexmesa_const::FOUR_PI * rho_k);
-            self.ln_r[k] = r3.max(1.0).cbrt().ln();
+            self.ln_r[k] =
+                flexmesa_math::log(flexmesa_math::pow(r3.max(1.0), 1.0 / 3.0));
         }
     }
 

@@ -14,8 +14,14 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 const FIXED_PREFIXES: &[&str] = &[
-    "gs98", "gn93", "a09", "OP_gs98", "OP_a09_nans_removed_by_hand",
-    "lowT_fa05_gs98", "lowT_fa05_gn93", "lowT_fa05_a09p",
+    "gs98",
+    "gn93",
+    "a09",
+    "OP_gs98",
+    "OP_a09_nans_removed_by_hand",
+    "lowT_fa05_gs98",
+    "lowT_fa05_gn93",
+    "lowT_fa05_a09p",
 ];
 
 const FIXED_ZS: [f64; 13] = [
@@ -81,10 +87,8 @@ pub(crate) fn load_or_build_kap_tables() -> KapTables {
             build_full_kap_tables_bytes(&kap_dir, Some(&cache_dir))
         {
             let _ = fs::create_dir_all(&cache_dir);
-            let tmp_path = cache_dir.join(format!(
-                "kap_tables_full.{}.tmp",
-                std::process::id()
-            ));
+            let tmp_path = cache_dir
+                .join(format!("kap_tables_full.{}.tmp", std::process::id()));
             let dst_path = cache_dir.join("kap_tables_full.bin");
             if fs::write(&tmp_path, &bytes).is_ok() {
                 let _ = fs::rename(&tmp_path, &dst_path);

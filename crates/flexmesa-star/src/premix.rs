@@ -71,7 +71,8 @@ fn refresh_convective_state_const_p(
         for (k, &p_tar) in p_fixed.iter().enumerate() {
             if p_tar > 0.0 && model.peos[k] > 0.0 {
                 let d_lnp_dlnd = model.chi_rho[k].max(0.1);
-                let step = ((p_tar / model.peos[k]).ln() / d_lnp_dlnd)
+                let step = (flexmesa_math::log(p_tar / model.peos[k])
+                    / d_lnp_dlnd)
                     .clamp(-0.1, 0.1);
                 model.lnd[k] += step;
             }

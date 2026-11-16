@@ -225,7 +225,9 @@ pub fn solve_henyey_step(
     use_bcyclic: bool,
 ) -> Result<HenyeySolverReport, StarError> {
     model.pack_xh();
-    if include_chem && model.species > 0 && model.xa.len() == model.xa_start.len()
+    if include_chem
+        && model.species > 0
+        && model.xa.len() == model.xa_start.len()
     {
         model.xa_sub_xa_start.clear();
         model.xa_sub_xa_start.extend(

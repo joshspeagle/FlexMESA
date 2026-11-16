@@ -62,9 +62,10 @@ pub fn do1_specific_volume(
     let t1 = dc.p43 / model.dm[k0];
     let vol = if i == 1 {
         wk.dvol_dr_in[i] = 0.0;
-        t1 * (model.r[k0].powi(3) - model.r_center.powi(3))
+        t1 * (flexmesa_math::pow3(model.r[k0])
+            - flexmesa_math::pow3(model.r_center))
     } else {
-        wk.dvol_dr_in[i] = -3.0 * t1 * model.r[k0 + 1].powi(2);
+        wk.dvol_dr_in[i] = -3.0 * t1 * flexmesa_math::pow2(model.r[k0 + 1]);
         vol_shell_qp(t1, model.r[k0], model.r[k0 + 1])
     };
     if !(vol > 0.0 && vol.is_finite()) {
@@ -73,7 +74,7 @@ pub fn do1_specific_volume(
         )));
     }
     model.aux.rsp.vol_rsp[k0] = vol;
-    wk.dvol_dr_00[i] = 3.0 * t1 * model.r[k0].powi(2);
+    wk.dvol_dr_00[i] = 3.0 * t1 * flexmesa_math::pow2(model.r[k0]);
     Ok(())
 }
 
@@ -89,8 +90,8 @@ pub fn do1_eos_and_kap(
     let t_in = model.t[k0];
     let vol = model.aux.rsp.vol_rsp[k0];
     let out = eval_mesa_eos_and_kap(model, chem, Some(k0), t_in, vol)?;
-    model.rho[k0] = model.lnd[k0].exp();
-    model.t[k0] = model.ln_t[k0].exp();
+    model.rho[k0] = flexmesa_math::exp(model.lnd[k0]);
+    model.t[k0] = flexmesa_math::exp(model.ln_t[k0]);
     model.pgas[k0] = out.pgas;
     model.aux.rsp.egas_rsp[k0] = out.egas;
     model.csound[k0] = out.csnd;
@@ -413,12 +414,13 @@ fn check_omega(
             / (0.5
                 * (model.aux.rsp.hp_face[k0] + model.aux.rsp.hp_face[k0 + 1]));
         let pom3 = (dc.gammar * dc.gammar) / (dc.alfa * dc.alfa) * 4.0 * dc.sig;
-        let pom4 = model.t[k0].powi(3) * model.aux.rsp.vol_rsp[k0].powi(2)
+        let pom4 = flexmesa_math::pow3(model.t[k0])
+            * flexmesa_math::pow2(model.aux.rsp.vol_rsp[k0])
             / (model.cp[k0] * model.opacity[k0]);
         let damprs = pom3 * pom4
             / (0.5
-                * (model.aux.rsp.hp_face[k0].powi(2)
-                    + model.aux.rsp.hp_face[k0 + 1].powi(2)));
+                * (flexmesa_math::pow2(model.aux.rsp.hp_face[k0])
+                    + flexmesa_math::pow2(model.aux.rsp.hp_face[k0 + 1])));
         let delta = damprs * damprs + 4.0 * damps * sours;
         let mut sol = if delta >= 0.0 {
             (-damprs + delta.sqrt()) / (2.0 * damps)

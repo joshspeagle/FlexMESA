@@ -106,8 +106,8 @@ fn eval_pre_ms_gradt(
 ) -> Result<(f64, f64, f64), StarError> {
     let eos = eos_dt_get(ctx.ht, rho, t, ctx.chem_id, ctx.xa, ctx.eos_cfg)
         .map_err(|e| StarError::MicrophysicsError(format!("eos error: {e}")))?;
-    let log_rho = rho.log10();
-    let log_t = t.log10();
+    let log_rho = flexmesa_math::log10(rho);
+    let log_t = flexmesa_math::log10(t);
     let lnfree_e = eos.res[I_LN_FREE_E];
     let d_lnfree_e_dlnd = eos.d_dlnd[I_LN_FREE_E];
     let d_lnfree_e_dlnt = eos.d_dln_t[I_LN_FREE_E];
@@ -136,8 +136,8 @@ fn eval_pre_ms_gradt(
     )
     .map_err(|e| StarError::MicrophysicsError(format!("kap error: {e}")))?;
 
-    let pgas = eos.res[I_LN_PGAS].exp();
-    let prad = CRAD * t.powi(4) / 3.0;
+    let pgas = flexmesa_math::exp(eos.res[I_LN_PGAS]);
+    let prad = CRAD * flexmesa_math::pow4(t) / 3.0;
     let p = pgas + prad;
     let grav = STANDARD_CGRAV * m / (r * r);
     let kap = kap_out.kap * ctx.controls.opacity_factor;
@@ -210,18 +210,19 @@ pub fn build1_pre_ms_model(
     let xn = xa.get(4).copied().unwrap_or(0.0);
     let xo = xa.get(5).copied().unwrap_or(0.0);
 
-    let rho_c = ln_rho_c.exp();
+    let rho_c = flexmesa_math::exp(ln_rho_c);
     let eos_c = eos_dt_get(ht, rho_c, t_c, chem_id, xa, eos_cfg)
         .map_err(|e| StarError::MicrophysicsError(format!("eos_c: {e}")))?;
-    let pgas_c = eos_c.res[I_LN_PGAS].exp();
-    let prad_c = CRAD * t_c.powi(4) / 3.0;
+    let pgas_c = flexmesa_math::exp(eos_c.res[I_LN_PGAS]);
+    let prad_c = CRAD * flexmesa_math::pow4(t_c) / 3.0;
     let p_c = pgas_c + prad_c;
 
     // Estimated total luminosity `l_star` (`pre_ms_model.f90:407`)
-    let r_est = (1.430 * mstar / (FOUR_PI * rho_c / 3.0)).cbrt();
+    let r_est =
+        flexmesa_math::pow(1.430 * mstar / (FOUR_PI * rho_c / 3.0), 1.0 / 3.0);
     let l_star = L_SUN
-        * (mstar / M_SUN).powf(1.5)
-        * (r_est / R_SUN).powi(2)
+        * flexmesa_math::pow(mstar / M_SUN, 1.5)
+        * flexmesa_math::pow2(r_est / R_SUN)
         * exp10(job.pre_ms_log_lum_factor);
 
     // Inner-most shell (`pre_ms_model.f90:451-474`, using Kippenhahn & Weigert
@@ -230,11 +231,11 @@ pub fn build1_pre_ms_model(
     let d_log10_p = job.pre_ms_d_log10_p.max(1.0e-4);
     let dp_target_c = p_c * (1.0 - exp10(-0.5 * d_log10_p));
     let kw_factor = (3.0 * STANDARD_CGRAV / (8.0 * std::f64::consts::PI))
-        * (FOUR_PI * rho_c / 3.0).powf(4.0 / 3.0);
-    let m_kw = (dp_target_c / kw_factor).powf(1.5);
+        * flexmesa_math::pow(FOUR_PI * rho_c / 3.0, 4.0 / 3.0);
+    let m_kw = flexmesa_math::pow(dp_target_c / kw_factor, 1.5);
     let q_c = (m_kw / mstar).clamp(1.0e-5, 0.05);
     let m_c = q_c * mstar;
-    let r_c = (m_c / (FOUR_PI * rho_c / 3.0)).cbrt();
+    let r_c = flexmesa_math::pow(m_c / (FOUR_PI * rho_c / 3.0), 1.0 / 3.0);
     let lum_c = q_c * l_star;
     let ctx = PreMsGradtCtx {
         ht,
@@ -252,9 +253,9 @@ pub fn build1_pre_ms_model(
     };
     let (_, _, gradt_c) = eval_pre_ms_gradt(&ctx, rho_c, t_c, r_c, m_c, lum_c)?;
 
-    let dp_c = -kw_factor * m_c.powf(2.0 / 3.0);
+    let dp_c = -kw_factor * flexmesa_math::pow(m_c, 2.0 / 3.0);
     let p_outer_c = (p_c + dp_c).max(0.5 * p_c);
-    let dlnp_c = p_outer_c.ln() - p_c.ln();
+    let dlnp_c = flexmesa_math::log(p_outer_c) - flexmesa_math::log(p_c);
     let t_outer_c = t_c * (1.0 + dlnp_c * gradt_c).max(0.5);
 
     let mut shells_center_to_surf = Vec::with_capacity(1200);
@@ -270,13 +271,13 @@ pub fn build1_pre_ms_model(
     let mut t_prev = t_outer_c;
     let mut p_prev = p_outer_c;
     let mut pgas_prev =
-        (p_prev - CRAD * t_prev.powi(4) / 3.0).max(0.1 * p_prev);
+        (p_prev - CRAD * flexmesa_math::pow4(t_prev) / 3.0).max(0.1 * p_prev);
     let mut rho_prev = rho_c;
     let mut gradt_prev = gradt_c;
 
     let max_shells = 4000_usize;
     for _step in 0..max_shells {
-        let log_pgas_mid = pgas_prev.log10() - 0.5 * d_log10_p;
+        let log_pgas_mid = flexmesa_math::log10(pgas_prev) - 0.5 * d_log10_p;
         let pgas_mid = exp10(log_pgas_mid);
 
         let mut m_curr = m_prev;
@@ -291,12 +292,12 @@ pub fn build1_pre_ms_model(
             let dlnp_half = if i_pass == 1 {
                 -0.5 * d_log10_p * LN10 * (pgas_prev / p_prev)
             } else {
-                p_mid.ln() - p_prev.ln()
+                flexmesa_math::log(p_mid) - flexmesa_math::log(p_prev)
             };
 
             for _ii in 1..=2 {
                 t_mid = (t_prev * (1.0 + dlnp_half * gradt_mid)).max(100.0);
-                let log_t_mid = t_mid.log10();
+                let log_t_mid = flexmesa_math::log10(t_mid);
                 if let Ok(pt_out) = eos_pt_get(
                     ht,
                     chem_id,
@@ -310,25 +311,37 @@ pub fn build1_pre_ms_model(
                     rho_mid = pgas_mid * comp.abar * MP
                         / (KERG * t_mid * (1.0 + comp.zbar));
                 }
-                p_mid = pgas_mid + CRAD * t_mid.powi(4) / 3.0;
+                p_mid = pgas_mid + CRAD * flexmesa_math::pow4(t_mid) / 3.0;
             }
 
-            let dlnp_full = 2.0 * (p_mid.ln() - p_prev.ln());
-            let dp_step = p_prev * dlnp_full.exp_m1();
+            let dlnp_full =
+                2.0 * (flexmesa_math::log(p_mid) - flexmesa_math::log(p_prev));
+            let dp_step = p_prev * flexmesa_math::expm1(dlnp_full);
 
             // 9 inner iterations for (m_curr, r_curr) (`pre_ms_model.f90:548-556`)
             for _j in 1..=9 {
-                let r_bar = (0.5 * (r_prev.powi(3) + r_curr.powi(3))).cbrt();
+                let r_bar = flexmesa_math::pow(
+                    0.5 * (flexmesa_math::pow3(r_prev)
+                        + flexmesa_math::pow3(r_curr)),
+                    1.0 / 3.0,
+                );
                 let m_bar = 0.5 * (m_prev + m_curr);
-                let dm_step = (-FOUR_PI * r_bar.powi(4) * dp_step
+                let dm_step = (-FOUR_PI * flexmesa_math::pow4(r_bar) * dp_step
                     / (STANDARD_CGRAV * m_bar))
                     .max(1.0e-12 * mstar);
                 m_curr = m_prev + dm_step;
                 let dv = 3.0 * dm_step / (FOUR_PI * rho_mid);
-                r_curr = (r_prev.powi(3) + dv).cbrt();
+                r_curr = flexmesa_math::pow(
+                    flexmesa_math::pow3(r_prev) + dv,
+                    1.0 / 3.0,
+                );
             }
 
-            let r_mid = (0.5 * (r_prev.powi(3) + r_curr.powi(3))).cbrt();
+            let r_mid = flexmesa_math::pow(
+                0.5 * (flexmesa_math::pow3(r_prev)
+                    + flexmesa_math::pow3(r_curr)),
+                1.0 / 3.0,
+            );
             let m_mid = 0.5 * (m_prev + m_curr);
             let lum_mid = (m_mid / mstar) * l_star;
             if let Ok((_, _, gt)) =
@@ -347,18 +360,18 @@ pub fn build1_pre_ms_model(
             rho: rho_mid,
         });
 
-        let log_pgas_next = pgas_prev.log10() - d_log10_p;
+        let log_pgas_next = flexmesa_math::log10(pgas_prev) - d_log10_p;
         pgas_prev = exp10(log_pgas_next);
-        let dlnp_half = p_mid.ln() - p_prev.ln();
+        let dlnp_half = flexmesa_math::log(p_mid) - flexmesa_math::log(p_prev);
         t_prev = (t_mid * (1.0 + dlnp_half * gradt_mid)).max(100.0);
-        p_prev = pgas_prev + CRAD * t_prev.powi(4) / 3.0;
+        p_prev = pgas_prev + CRAD * flexmesa_math::pow4(t_prev) / 3.0;
         rho_prev = rho_mid;
         m_prev = m_curr;
         r_prev = r_curr;
         gradt_prev = gradt_mid;
 
-        if p_mid.log10() <= job.pre_ms_log_p_surf_limit
-            || t_mid.log10() <= job.pre_ms_log_t_surf_limit
+        if flexmesa_math::log10(p_mid) <= job.pre_ms_log_p_surf_limit
+            || flexmesa_math::log10(t_mid) <= job.pre_ms_log_t_surf_limit
             || m_curr >= 5.0 * mstar
         {
             break;
@@ -399,11 +412,11 @@ pub fn build_pre_ms_model(
         let mu_est = 0.61;
         let r_rsun = 0.6929 * mu_est * controls.initial_mass * (1.0e6 / t_c);
         let r_cgs = (r_rsun * R_SUN).max(0.1 * R_SUN);
-        let vol_fac = FOUR_PI * r_cgs.powi(3) / 3.0;
+        let vol_fac = FOUR_PI * flexmesa_math::pow3(r_cgs) / 3.0;
         (1.430 * mstar / vol_fac).clamp(1.0e-5, 1.0e2)
     };
 
-    let mut x1 = rho_c_guess.ln();
+    let mut x1 = flexmesa_math::log(rho_c_guess);
     let eval_f = |ln_rc: f64| -> Result<(f64, Vec<PreMsShell>), StarError> {
         let (m1, shells) = build1_pre_ms_model(
             ht, &eos_cfg, &kap_cfg, &controls, &job, &chem_id, &xa_single,
@@ -484,9 +497,9 @@ pub fn build_pre_ms_model(
 
     for k in 0..nz {
         let sh = &best_shells[k];
-        model.lnd[k] = sh.rho.ln();
-        model.ln_t[k] = sh.t.ln();
-        model.ln_r[k] = sh.r.ln();
+        model.lnd[k] = flexmesa_math::log(sh.rho);
+        model.ln_t[k] = flexmesa_math::log(sh.t);
+        model.ln_r[k] = flexmesa_math::log(sh.r);
         model.lum[k] = sh.lum;
         let m_inner = if k + 1 < nz {
             best_shells[k + 1].m
@@ -498,11 +511,11 @@ pub fn build_pre_ms_model(
     }
 
     model.sync_mesh_and_pack()?;
-    let mut r_inner3 = model.r_center.powi(3);
+    let mut r_inner3 = flexmesa_math::pow3(model.r_center);
     for k in (0..nz).rev() {
-        let rho_k = model.lnd[k].exp();
+        let rho_k = flexmesa_math::exp(model.lnd[k]);
         let r_outer3 = r_inner3 + 3.0 * model.dm[k] / (FOUR_PI * rho_k);
-        model.ln_r[k] = r_outer3.ln() / 3.0;
+        model.ln_r[k] = flexmesa_math::log(r_outer3) / 3.0;
         r_inner3 = r_outer3;
     }
     model.finish_init_model()?;

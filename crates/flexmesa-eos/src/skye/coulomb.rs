@@ -63,8 +63,8 @@ pub fn extrapolate_free_energy(
     max_gamma_for_liquid: f64,
 ) -> AutoDiffReal2VarOrder3 {
     let zi = (zion as i64) as f64;
-    let z5_3 = zi.powf(5.0 / 3.0);
-    let z7_6 = zi.powf(7.0 / 6.0);
+    let z5_3 = flexmesa_math::pow(zi, 5.0 / 3.0);
+    let z7_6 = flexmesa_math::pow(zi, 7.0 / 6.0);
     let gami = (z5_3 * QE * QE) / ((RBOHR * BOLTZM) * temp * rs);
     let cotpt = (3.0 * ME_IN_AMU / cmi).sqrt() / z7_6;
     let tpt = gami * cotpt / rs.sqrt();
@@ -210,10 +210,10 @@ pub fn nonideal_corrections(
         let z = azion[ix];
         zmean += y * z;
         z2mean += y * z * z;
-        z53 += y * z.powf(FIVE_THIRDS);
-        z52 += y * z.sqrt().powi(5);
-        z321 += y * z * (z + 1.0).sqrt().powi(3);
-        s_mix -= y * y.ln();
+        z53 += y * flexmesa_math::pow(z, FIVE_THIRDS);
+        z52 += y * flexmesa_math::pow5(z.sqrt());
+        z321 += y * z * flexmesa_math::pow3((z + 1.0).sqrt());
+        s_mix -= y * flexmesa_math::log(y);
     }
 
     let dens = xnefer * (RBOHR * RBOHR * RBOHR);

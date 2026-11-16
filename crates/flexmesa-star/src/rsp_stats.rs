@@ -146,7 +146,7 @@ pub(crate) fn gather_pulse_statistics(
         rsp.rmax = -dc.sunr;
         rsp.rmin = dc.sunr;
         if rsp.lmax > 0.0 && rsp.lmin > 0.0 {
-            rsp.delta_mag = 2.5 * (rsp.lmax / rsp.lmin).log10();
+            rsp.delta_mag = 2.5 * flexmesa_math::log10(rsp.lmax / rsp.lmin);
         }
         rsp.lmin = 10.0e10;
         rsp.lmax = -10.0e10;
@@ -279,7 +279,7 @@ pub(crate) fn calculate_work_integrals(
                         buf,
                         "{:3} {:7.4} {:16.10e} {:16.10e} {:16.10e} {:16.10e}",
                         i,
-                        dm_ext.max(1.0e-99).log10(),
+                        flexmesa_math::log10(dm_ext.max(1.0e-99)),
                         rsp.work[idx] / ekd,
                         rsp.workq[idx] / ekd,
                         rsp.workt[idx] / ekd,

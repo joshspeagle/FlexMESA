@@ -207,7 +207,7 @@ pub fn check_termination_limits_with_history(
     };
 
     if c.stop_near_zams && c.lnuc_div_l_zams_limit > 0.0 && hr.log_l > -20.0 {
-        let ratio = 10.0_f64.powf(hr.log_lh - hr.log_l);
+        let ratio = flexmesa_math::exp10(hr.log_lh - hr.log_l);
         if ratio >= c.lnuc_div_l_zams_limit {
             return Some(String::from("Lnuc_div_L_zams_limit"));
         }
@@ -220,7 +220,7 @@ pub fn check_termination_limits_with_history(
         return Some(String::from("log_L_lower_limit"));
     }
 
-    let teff = 10.0_f64.powf(hr.log_teff);
+    let teff = flexmesa_math::exp10(hr.log_teff);
     if c.teff_lower_limit.is_some_and(|lim| teff <= lim) {
         return Some(String::from("Teff_lower_limit"));
     }
@@ -402,7 +402,7 @@ pub fn check_termination_limits_with_history(
         return Some(String::from("center_R_lower_limit"));
     }
     if let Some(lim) = c.log_psurf_upper_limit {
-        if model.peos[0].max(1.0e-30).log10() >= lim {
+        if flexmesa_math::log10(model.peos[0].max(1.0e-30)) >= lim {
             return Some(String::from("log_Psurf_upper_limit"));
         }
     }

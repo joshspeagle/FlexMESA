@@ -38,15 +38,15 @@ impl Drop for TempTestDir {
 }
 
 use flexmesa_chem::category_id;
-use flexmesa_const::{L_SUN, MixingType, SECYER};
+use flexmesa_const::{MixingType, L_SUN, SECYER};
 use flexmesa_star::{
-    IncrementalHistoryWriter, MesaCellValue, MesaHeaderValue, OutputControls,
-    StarControls, StarError, StarJobControls, StarLogsWriter,
     default_star_history_specs, evaluate_star_history_row, extract_history_row,
     format_mesa_dbl, format_mesa_int, load_zams_model,
     parse_star_history_columns, parse_star_profile_columns, read_mesa_log_file,
     read_mesa_log_str, read_profiles_index_file, read_profiles_index_str,
-    safe_log10, set_hydro_vars, star_evolve_step,
+    safe_log10, set_hydro_vars, star_evolve_step, IncrementalHistoryWriter,
+    MesaCellValue, MesaHeaderValue, OutputControls, StarControls, StarError,
+    StarJobControls, StarLogsWriter,
 };
 
 /// Verbatim 10-line output produced by upstream Fortran MESA `26.4.1` (`gfortran 15.2.0`,
@@ -132,8 +132,9 @@ fn test_real_mesa_26_4_1_logs_roundtrip_and_default_column_alignment() {
         Some(&MesaHeaderValue::Int(2464))
     );
 
-    let idx = read_profiles_index_str(REAL_MESA_26_4_1_STAR_TEST_PROFILES_INDEX)
-        .expect("parse real MESA 26.4.1 profiles.index");
+    let idx =
+        read_profiles_index_str(REAL_MESA_26_4_1_STAR_TEST_PROFILES_INDEX)
+            .expect("parse real MESA 26.4.1 profiles.index");
     assert_eq!(idx.entries.len(), 2);
     assert_eq!(idx.format_text(), REAL_MESA_26_4_1_STAR_TEST_PROFILES_INDEX);
 }
@@ -168,8 +169,7 @@ fn test_f4_28_log_lh_separates_hydrogen_helium_and_metal_burning_powers() {
             0.25 * target_lh_lsun * L_SUN / m_tot;
         model.aux.eps_nuc_categories[k][i_cno] =
             0.75 * target_lh_lsun * L_SUN / m_tot;
-        model.aux.eps_nuc_categories[k][i_3a] =
-            target_lhe_lsun * L_SUN / m_tot;
+        model.aux.eps_nuc_categories[k][i_3a] = target_lhe_lsun * L_SUN / m_tot;
         model.aux.eps_nuc_categories[k][i_ca] = target_lz_lsun * L_SUN / m_tot;
         model.aux.eps_nuc_categories[k][i_pn] =
             target_photo_lsun * L_SUN / m_tot;
@@ -228,16 +228,26 @@ fn test_f4_28_log_lh_separates_hydrogen_helium_and_metal_burning_powers() {
             .unwrap_or_else(|| panic!("missing column {col}"))
     };
     assert!((find_f64("log_LH") - safe_log10(target_lh_lsun)).abs() < 1.0e-12);
-    assert!((find_f64("log_LHe") - safe_log10(target_lhe_lsun)).abs() < 1.0e-12);
-    assert!((find_f64("log_LZ") - safe_log10(expected_lz_lsun)).abs() < 1.0e-12);
-    assert!((find_f64("log_Lnuc") - safe_log10(expected_lnuc_nonphoto)).abs() < 1.0e-12);
-    assert!((find_f64("tri_alpha") - safe_log10(target_lhe_lsun)).abs() < 1.0e-12);
+    assert!(
+        (find_f64("log_LHe") - safe_log10(target_lhe_lsun)).abs() < 1.0e-12
+    );
+    assert!(
+        (find_f64("log_LZ") - safe_log10(expected_lz_lsun)).abs() < 1.0e-12
+    );
+    assert!(
+        (find_f64("log_Lnuc") - safe_log10(expected_lnuc_nonphoto)).abs()
+            < 1.0e-12
+    );
+    assert!(
+        (find_f64("tri_alpha") - safe_log10(target_lhe_lsun)).abs() < 1.0e-12
+    );
     assert_eq!(find_f64("mix_type_1") as i64, 1);
     assert!(find_f64("mix_qtop_1") > 0.0 && find_f64("mix_qtop_1") < 1.0);
 }
 
 #[test]
-fn test_incremental_flush_survives_mid_run_drop_and_profiles_evict_by_priority() {
+fn test_incremental_flush_survives_mid_run_drop_and_profiles_evict_by_priority()
+{
     let tmp = TempTestDir::new("flush_evict");
     let controls = StarControls {
         initial_mass: 1.0,
@@ -281,8 +291,9 @@ fn test_incremental_flush_survives_mid_run_drop_and_profiles_evict_by_priority()
     // - step 3 (`% 3 == 0`): history only
     // - step 4 (`% 4 == 0`): priority-2 profile -> evicts priority-1 model 2 (reusing slot 2!)
     // - step 5 (`is_terminating = true`): priority-3 profile -> evicts oldest priority-2 model 1 (reusing slot 1!)
-    let mut logs = StarLogsWriter::for_stage(&model, tmp.path(), tmp.path(), None, None)
-        .expect("init StarLogsWriter");
+    let mut logs =
+        StarLogsWriter::for_stage(&model, tmp.path(), tmp.path(), None, None)
+            .expect("init StarLogsWriter");
     for step in 1..=5_usize {
         model.model_number = step;
         model.star_age = (step as f64) * 1.0e3;
@@ -291,8 +302,8 @@ fn test_incremental_flush_survives_mid_run_drop_and_profiles_evict_by_priority()
     }
 
     let log_dir = tmp.path().join("LOGS");
-    let hist_tbl =
-        read_mesa_log_file(&log_dir.join("history.data")).expect("history.data");
+    let hist_tbl = read_mesa_log_file(&log_dir.join("history.data"))
+        .expect("history.data");
     assert_eq!(
         hist_tbl.column("model_number"),
         Some(&[1.0, 2.0, 3.0, 4.0, 5.0][..])
@@ -319,15 +330,20 @@ fn test_incremental_flush_survives_mid_run_drop_and_profiles_evict_by_priority()
 
 #[test]
 fn test_unknown_history_and_profile_columns_fail_loudly() {
-    let model = load_zams_model(StarControls::default(), StarJobControls::default())
-        .expect("zams");
-    let err_h =
-        parse_star_history_columns("model_number\nnot_a_mesa_col\n", None, &model)
-            .expect_err("unknown history column must fail");
+    let model =
+        load_zams_model(StarControls::default(), StarJobControls::default())
+            .expect("zams");
+    let err_h = parse_star_history_columns(
+        "model_number\nnot_a_mesa_col\n",
+        None,
+        &model,
+    )
+    .expect_err("unknown history column must fail");
     assert!(matches!(err_h, StarError::InvalidInput(_)));
 
-    let err_p = parse_star_profile_columns("zone\nnot_a_mesa_profile_col\n", None)
-        .expect_err("unknown profile column must fail");
+    let err_p =
+        parse_star_profile_columns("zone\nnot_a_mesa_profile_col\n", None)
+            .expect_err("unknown profile column must fail");
     assert!(matches!(err_p, StarError::InvalidInput(_)));
 }
 
@@ -364,8 +380,9 @@ fn test_two_step_evolve_writes_mesa_logs_and_split_headers() {
             .expect("record");
     }
 
-    let hist = read_mesa_log_file(&tmp.path().join("LOGS").join("history.data"))
-        .expect("read written history.data");
+    let hist =
+        read_mesa_log_file(&tmp.path().join("LOGS").join("history.data"))
+            .expect("read written history.data");
     assert_eq!(hist.num_rows, 2);
     assert!(hist.column("star_age").expect("star_age")[1] > 0.0);
 
@@ -373,8 +390,10 @@ fn test_two_step_evolve_writes_mesa_logs_and_split_headers() {
     // and stale-file clearing across stages.
     let split_tmp = TempTestDir::new("split_headers");
     let mut split_model = model;
-    split_model.controls.output.star_history_header_name = String::from("history.hdr");
-    split_model.controls.output.profile_data_header_suffix = String::from(".hdr");
+    split_model.controls.output.star_history_header_name =
+        String::from("history.hdr");
+    split_model.controls.output.profile_data_header_suffix =
+        String::from(".hdr");
     split_model.controls.output.write_profiles_flag = true;
     split_model.controls.output.profile_interval = 1;
     let mut split_logs = StarLogsWriter::for_stage(
@@ -389,19 +408,24 @@ fn test_two_step_evolve_writes_mesa_logs_and_split_headers() {
         .record_step(&split_model, true, true)
         .expect("record split");
     let log_dir = split_tmp.path().join("LOGS");
-    let h_hdr = fs::read_to_string(log_dir.join("history.hdr")).expect("history.hdr");
-    let h_dat = fs::read_to_string(log_dir.join("history.data")).expect("history.data");
+    let h_hdr =
+        fs::read_to_string(log_dir.join("history.hdr")).expect("history.hdr");
+    let h_dat =
+        fs::read_to_string(log_dir.join("history.data")).expect("history.data");
     assert_eq!(h_hdr.lines().count(), 6);
     assert_eq!(h_dat.lines().count(), 1);
     let combined_h = format!("{h_hdr}{h_dat}");
     assert_eq!(
-        read_mesa_log_str(&combined_h).expect("parse split hist").num_rows,
+        read_mesa_log_str(&combined_h)
+            .expect("parse split hist")
+            .num_rows,
         1
     );
 
-    let p_hdr =
-        fs::read_to_string(log_dir.join("profile1.data.hdr")).expect("profile1.data.hdr");
-    let p_dat = fs::read_to_string(log_dir.join("profile1.data")).expect("profile1.data");
+    let p_hdr = fs::read_to_string(log_dir.join("profile1.data.hdr"))
+        .expect("profile1.data.hdr");
+    let p_dat = fs::read_to_string(log_dir.join("profile1.data"))
+        .expect("profile1.data");
     assert_eq!(p_hdr.lines().count(), 6);
     assert_eq!(p_dat.lines().count(), split_model.nz);
 
@@ -450,10 +474,12 @@ fn test_multistage_rn_logs_dir_routing() {
     )
     .expect("run 2-stage case");
     assert_eq!(rep.stages.len(), 2);
-    let h1 = read_mesa_log_file(&ms_out.path().join("LOGS_s1").join("history.data"))
-        .expect("LOGS_s1/history.data");
-    let h2 = read_mesa_log_file(&ms_out.path().join("LOGS_s2").join("history.data"))
-        .expect("LOGS_s2/history.data");
+    let h1 =
+        read_mesa_log_file(&ms_out.path().join("LOGS_s1").join("history.data"))
+            .expect("LOGS_s1/history.data");
+    let h2 =
+        read_mesa_log_file(&ms_out.path().join("LOGS_s2").join("history.data"))
+            .expect("LOGS_s2/history.data");
     assert_eq!(h1.num_rows, 1);
     assert_eq!(h2.num_rows, 1);
     assert!(!ms_out.path().join("LOGS").exists());
@@ -475,7 +501,9 @@ fn resolve_test_mesa_root() -> Option<PathBuf> {
         .or_else(|| {
             std::env::var("HOME")
                 .ok()
-                .map(|p| PathBuf::from(p).join(".cache/flexmesa/mesa_test_inputs"))
+                .map(|p| {
+                    PathBuf::from(p).join(".cache/flexmesa/mesa_test_inputs")
+                })
                 .filter(|p| p.join("star/test_suite").is_dir())
         })
 }
@@ -490,10 +518,14 @@ fn case_history_column_files(case_dir: &std::path::Path) -> Vec<String> {
         for st in stages {
             if let flexmesa_star::RnStage::DoOne { inlist, .. } = st {
                 if let Ok(b) =
-                    flexmesa_star::InlistBundle::from_file_in_case_dir(case_dir, &inlist)
+                    flexmesa_star::InlistBundle::from_file_in_case_dir(
+                        case_dir, &inlist,
+                    )
                 {
                     let hcf = b.job.history_columns_file.trim();
-                    if !hcf.is_empty() && !candidate_files.iter().any(|f| f == hcf) {
+                    if !hcf.is_empty()
+                        && !candidate_files.iter().any(|f| f == hcf)
+                    {
                         candidate_files.push(hcf.to_owned());
                     }
                 }
@@ -506,7 +538,8 @@ fn case_history_column_files(case_dir: &std::path::Path) -> Vec<String> {
 #[test]
 fn test_upstream_test_suite_history_column_lists_parse_or_fail_loudly() {
     let model =
-        load_zams_model(StarControls::default(), StarJobControls::default()).expect("zams");
+        load_zams_model(StarControls::default(), StarJobControls::default())
+            .expect("zams");
     let mesa_root = resolve_test_mesa_root();
     assert!(
         mesa_root.is_some()
@@ -539,7 +572,9 @@ fn test_upstream_test_suite_history_column_lists_parse_or_fail_loudly() {
     ];
     let mut unexpected_failures = Vec::new();
     let mut loud_error_cases = std::collections::BTreeSet::new();
-    for rel_suite in ["star/test_suite", "binary/test_suite", "astero/test_suite"] {
+    for rel_suite in
+        ["star/test_suite", "binary/test_suite", "astero/test_suite"]
+    {
         let suite = base.join(rel_suite);
         if !suite.is_dir() {
             continue;
@@ -549,15 +584,17 @@ fn test_upstream_test_suite_history_column_lists_parse_or_fail_loudly() {
             if !case_dir.is_dir() {
                 continue;
             }
-            let cname = case_dir
-                .file_name()
-                .and_then(|s| s.to_str())
-                .unwrap_or("");
+            let cname =
+                case_dir.file_name().and_then(|s| s.to_str()).unwrap_or("");
             for fname in case_history_column_files(&case_dir) {
                 let p = case_dir.join(&fname);
                 if p.is_file() {
                     let txt = fs::read_to_string(&p).expect("read list");
-                    match parse_star_history_columns(&txt, Some(&case_dir), &model) {
+                    match parse_star_history_columns(
+                        &txt,
+                        Some(&case_dir),
+                        &model,
+                    ) {
                         Ok(_) => {}
                         Err(StarError::InvalidInput(_))
                             if expected_unported.contains(&cname) =>
@@ -565,7 +602,8 @@ fn test_upstream_test_suite_history_column_lists_parse_or_fail_loudly() {
                             loud_error_cases.insert(cname.to_owned());
                         }
                         Err(e) => {
-                            unexpected_failures.push(format!("{}: {e:?}", p.display()));
+                            unexpected_failures
+                                .push(format!("{}: {e:?}", p.display()));
                         }
                     }
                 }
@@ -578,15 +616,16 @@ fn test_upstream_test_suite_history_column_lists_parse_or_fail_loudly() {
         unexpected_failures.join("\n")
     );
     if base.join("binary/test_suite/double_bh").is_dir() {
-        let expected_present: std::collections::BTreeSet<String> = expected_unported
-            .iter()
-            .copied()
-            .filter(|c| {
-                base.join("star/test_suite").join(c).is_dir()
-                    || base.join("binary/test_suite").join(c).is_dir()
-            })
-            .map(str::to_owned)
-            .collect();
+        let expected_present: std::collections::BTreeSet<String> =
+            expected_unported
+                .iter()
+                .copied()
+                .filter(|c| {
+                    base.join("star/test_suite").join(c).is_dir()
+                        || base.join("binary/test_suite").join(c).is_dir()
+                })
+                .map(str::to_owned)
+                .collect();
         assert_eq!(loud_error_cases, expected_present);
     }
 }

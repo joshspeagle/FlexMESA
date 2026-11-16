@@ -8,6 +8,7 @@
 
 #![allow(
     clippy::approx_constant,
+    clippy::disallowed_methods,
     clippy::excessive_precision,
     clippy::float_cmp,
     clippy::too_many_lines,

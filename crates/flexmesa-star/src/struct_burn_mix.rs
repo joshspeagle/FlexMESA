@@ -25,11 +25,11 @@
 use flexmesa_chem::NUM_CATEGORIES;
 use flexmesa_const::LN10;
 use flexmesa_eos::HelmTable;
-use flexmesa_turb::MixingType;
 use flexmesa_net::{
     burn_1_zone, burn_1_zone_const_density, Burn1ZoneInput,
     BurnConstDensityInput,
 };
+use flexmesa_turb::MixingType;
 use rayon::prelude::*;
 
 use crate::controls::StarError;
@@ -104,12 +104,9 @@ pub fn op_split_burn_zones(
 
     let mut split_indices = Vec::new();
     for k in 0..nz {
-        let t_start_k = model
-            .ln_t_start
-            .get(k)
-            .copied()
-            .unwrap_or(model.ln_t[k])
-            .exp();
+        let t_start_k = flexmesa_math::exp(
+            model.ln_t_start.get(k).copied().unwrap_or(model.ln_t[k]),
+        );
         if t_start_k < min_t_split {
             model.aux.burn_avg_epsnuc[k] = 0.0;
         } else {
@@ -377,12 +374,9 @@ impl ScalarTridiagFactor {
 pub(crate) fn apply_burn_avg_epsnuc(model: &mut StarModel) {
     let min_t_split = model.controls.op_split_burn_min_t;
     for k in 0..model.nz {
-        let t_start_k = model
-            .ln_t_start
-            .get(k)
-            .copied()
-            .unwrap_or(model.ln_t[k])
-            .exp();
+        let t_start_k = flexmesa_math::exp(
+            model.ln_t_start.get(k).copied().unwrap_or(model.ln_t[k]),
+        );
         if t_start_k >= min_t_split {
             if let Some(&avg_eps) = model.aux.burn_avg_epsnuc.get(k) {
                 model.eps_nuc[k] = avg_eps;

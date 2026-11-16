@@ -188,8 +188,8 @@ pub fn compute_x_scale_into(
             .max(max_abs_l * model.q[k].min(1.0))
             .max(model.lum_start[k].abs());
         if let Some(iv) = layout.i_v.or(layout.i_u) {
-            let r_over_dt =
-                model.ln_r_start[k].exp().max(1.0) / model.dt.max(1.0e-30);
+            let r_over_dt = flexmesa_math::exp(model.ln_r_start[k]).max(1.0)
+                / model.dt.max(1.0e-30);
             x_scale[base + iv] =
                 r_over_dt.min(model.csound[k].max(1.0)).max(1.0e-30);
         }
@@ -251,7 +251,7 @@ pub fn do1_density_eqn(
             .exp()
             .powi(3)
     } else {
-        StarAdOrder1::constant(model.r_center.powi(3))
+        StarAdOrder1::constant(flexmesa_math::pow3(model.r_center))
     };
     let rho_00 = StarAdOrder1::variable(model.lnd[k], I_LND_00).exp();
     let mc = if model.controls.use_mass_corrections {
@@ -380,12 +380,9 @@ pub fn do1_chem_eqns(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
     let dt = model.dt.max(1.0e-30);
     let dm_k = model.dm[k].max(1.0e-30);
 
-    let t_start_k = model
-        .ln_t_start
-        .get(k)
-        .copied()
-        .unwrap_or(model.ln_t[k])
-        .exp();
+    let t_start_k = flexmesa_math::exp(
+        model.ln_t_start.get(k).copied().unwrap_or(model.ln_t[k]),
+    );
     let doing_op_split_burn = model.controls.op_split_burn
         && t_start_k >= model.controls.op_split_burn_min_t;
     let active_burn = model.controls.do_burn
@@ -422,8 +419,11 @@ pub fn do1_chem_eqns(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
         let i_equ = i_var;
         let nuc_base = k * species * species + j * species;
         let x_scale_kj = sys.x_scale[k * sys.nvar + i_var];
-        let eqn_scale =
-            model.controls.min_chem_eqn_scale.max(x_scale_kj / dt).max(1.0e-30);
+        let eqn_scale = model
+            .controls
+            .min_chem_eqn_scale
+            .max(x_scale_kj / dt)
+            .max(1.0e-30);
 
         let x_00 = model.xa[kj];
         let f_00 = if k > 0 {

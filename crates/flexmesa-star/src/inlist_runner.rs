@@ -682,7 +682,7 @@ pub fn run_test_suite_case_with_logs(
         total_retries,
         total_runtime_sec: runtime_sec,
         wall_time_ms: runtime_sec * 1000.0,
-        final_teff: final_hr.map_or(0.0, |h| 10.0_f64.powf(h.log_teff)),
+        final_teff: final_hr.map_or(0.0, |h| flexmesa_math::exp10(h.log_teff)),
         final_log_l: final_hr.map_or(0.0, |h| h.log_l),
         final_log_r: final_hr.map_or(0.0, |h| h.log_r),
         final_log_tc: final_hr.map_or(0.0, |h| h.log_center_t),

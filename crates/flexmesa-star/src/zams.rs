@@ -331,9 +331,9 @@ pub fn yrs_for_init_timestep(m_msun: f64) -> f64 {
     if m_msun < 0.3 {
         1.0e7
     } else if m_msun <= 30.0 {
-        1.0e5 / m_msun.powf(2.5)
+        1.0e5 / flexmesa_math::pow(m_msun, 2.5)
     } else {
-        20.0 * (30.0 / m_msun).powf(1.5)
+        20.0 * flexmesa_math::pow(30.0 / m_msun, 1.5)
     }
 }
 
@@ -466,8 +466,9 @@ pub fn load_zams_model_from_catalog(
     } else {
         // Upstream MESA `get1_mass`:
         // alfa = (log(m) - log(m2)) / (log(m1) - log(m2)), beta = 1 - alfa
-        let alfa = (m_target.ln() - e2.m_msun.ln())
-            / (e1.m_msun.ln() - e2.m_msun.ln());
+        let alfa = (flexmesa_math::log(m_target)
+            - flexmesa_math::log(e2.m_msun))
+            / (flexmesa_math::log(e1.m_msun) - flexmesa_math::log(e2.m_msun));
         let beta = 1.0 - alfa;
 
         let lnd2 = interp_q(&e2.dq, &e2.lnd, &e1.dq)?;

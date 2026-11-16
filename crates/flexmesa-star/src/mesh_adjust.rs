@@ -192,36 +192,47 @@ fn eval_mesh_gval_parts(
             max_struct = max_struct.max(df);
         }
         if cfg.r_function_weight > 0.0 {
-            let f0 = (1.0 + (model.r[k] / R_SUN) / a_r).log10();
-            let f1 = (1.0 + (model.r[k1] / R_SUN) / a_r).log10();
-            max_struct = max_struct.max(cfg.r_function_weight * (f0 - f1).abs());
+            let f0 = flexmesa_math::log10(1.0 + (model.r[k] / R_SUN) / a_r);
+            let f1 = flexmesa_math::log10(1.0 + (model.r[k1] / R_SUN) / a_r);
+            max_struct =
+                max_struct.max(cfg.r_function_weight * (f0 - f1).abs());
         }
         if cfg.m_function_weight > 0.0 {
-            let f0 = (1.0 + (model.m[k] / M_SUN) / a_m).log10();
-            let f1 = (1.0 + (model.m[k1] / M_SUN) / a_m).log10();
-            max_struct = max_struct.max(cfg.m_function_weight * (f0 - f1).abs());
+            let f0 = flexmesa_math::log10(1.0 + (model.m[k] / M_SUN) / a_m);
+            let f1 = flexmesa_math::log10(1.0 + (model.m[k1] / M_SUN) / a_m);
+            max_struct =
+                max_struct.max(cfg.m_function_weight * (f0 - f1).abs());
         }
         if cfg.grad_function_weight > 0.0 {
             max_struct = max_struct.max(
-                cfg.grad_function_weight * (model.gradt[k] - model.gradt[k1]).abs(),
+                cfg.grad_function_weight
+                    * (model.gradt[k] - model.gradt[k1]).abs(),
             );
         }
         if cfg.omega_function_weight > 0.0 && model.controls.rotation_flag {
-            let f0 = (model.omega[k].abs() + 1.0e-8).log10();
-            let f1 = (model.omega[k1].abs() + 1.0e-8).log10();
-            max_struct = max_struct.max(cfg.omega_function_weight * (f0 - f1).abs());
+            let f0 = flexmesa_math::log10(model.omega[k].abs() + 1.0e-8);
+            let f1 = flexmesa_math::log10(model.omega[k1].abs() + 1.0e-8);
+            max_struct =
+                max_struct.max(cfg.omega_function_weight * (f0 - f1).abs());
         }
         if cfg.gam_function_weight > 0.0 {
-            let f0 = ((model.gam[k] - cfg.gam_function_param1) / gam_w).tanh();
-            let f1 = ((model.gam[k1] - cfg.gam_function_param1) / gam_w).tanh();
-            max_struct = max_struct.max(cfg.gam_function_weight * (f0 - f1).abs());
+            let f0 = flexmesa_math::tanh(
+                (model.gam[k] - cfg.gam_function_param1) / gam_w,
+            );
+            let f1 = flexmesa_math::tanh(
+                (model.gam[k1] - cfg.gam_function_param1) / gam_w,
+            );
+            max_struct =
+                max_struct.max(cfg.gam_function_weight * (f0 - f1).abs());
         }
         if cfg.xa_function_weight > 0.0 {
             for j in 0..model.species {
                 let x_k = model.xa[k * model.species + j];
                 let x_k1 = model.xa[k1 * model.species + j];
                 let df = cfg.xa_function_weight
-                    * ((x_k + x0).log10() - (x_k1 + x0).log10()).abs();
+                    * (flexmesa_math::log10(x_k + x0)
+                        - flexmesa_math::log10(x_k1 + x0))
+                    .abs();
                 max_xa = max_xa.max(df);
             }
         }
@@ -239,17 +250,26 @@ fn eval_mesh_gval_parts(
 #[must_use]
 pub fn eval_mesh_gval(model: &StarModel, cfg: &MeshFunctionConfig) -> Vec<f64> {
     let (g_non_xa, g_xa) = eval_mesh_gval_parts(model, cfg);
-    g_non_xa.into_iter().zip(g_xa).map(|(a, b)| a.max(b)).collect()
+    g_non_xa
+        .into_iter()
+        .zip(g_xa)
+        .map(|(a, b)| a.max(b))
+        .collect()
 }
 
-fn subcell_dlnr_ok(model: &StarModel, k: usize, dq_sub: f64, min_dlnr: f64) -> bool {
+fn subcell_dlnr_ok(
+    model: &StarModel,
+    k: usize,
+    dq_sub: f64,
+    min_dlnr: f64,
+) -> bool {
     if min_dlnr <= 0.0 || k + 1 >= model.nz {
         return true;
     }
     let dq_old = model.dq[k].max(1.0e-99);
     let r_l = model.r[k + 1].max(1.0);
     let dr_old = (model.r[k] - r_l).max(0.0);
-    let dlnr_new = ((r_l + dr_old * (dq_sub / dq_old)) / r_l).ln();
+    let dlnr_new = flexmesa_math::log((r_l + dr_old * (dq_sub / dq_old)) / r_l);
     dlnr_new >= 2.0 * min_dlnr
 }
 
@@ -265,7 +285,11 @@ pub fn plan_mesh(
         return (model.dq.clone(), 0, 0);
     }
     let (g_non_xa, g_xa) = eval_mesh_gval_parts(model, cfg);
-    let gval: Vec<f64> = g_non_xa.iter().zip(&g_xa).map(|(&a, &b)| a.max(b)).collect();
+    let gval: Vec<f64> = g_non_xa
+        .iter()
+        .zip(&g_xa)
+        .map(|(&a, &b)| a.max(b))
+        .collect();
     let d_coeff = if model.controls.mesh_delta_coeff > 0.0 {
         model.controls.mesh_delta_coeff
     } else {
@@ -286,7 +310,8 @@ pub fn plan_mesh(
         let g_k = gval[k];
         let surf_over = k == 0 && dq_k > max_surf_dq;
         let cen_over = k + 1 == nz && dq_k > max_cen_dq;
-        let non_xa_split = g_non_xa[k] > 1.0 || dq_k > max_dq || surf_over || cen_over;
+        let non_xa_split =
+            g_non_xa[k] > 1.0 || dq_k > max_dq || surf_over || cen_over;
         let xa_only_split = !non_xa_split && g_xa[k] > 1.0;
 
         let eff_min_dq = if xa_only_split {
@@ -308,7 +333,12 @@ pub fn plan_mesh(
                 n_eff -= 1;
             }
             while n_eff >= 2
-                && !subcell_dlnr_ok(model, k, dq_k / (n_eff as f64), cfg.mesh_min_dlnr)
+                && !subcell_dlnr_ok(
+                    model,
+                    k,
+                    dq_k / (n_eff as f64),
+                    cfg.mesh_min_dlnr,
+                )
             {
                 n_eff -= 1;
             }

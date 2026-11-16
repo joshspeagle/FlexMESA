@@ -69,11 +69,11 @@ fn build_compact_zams(
         let (k0, k1) = (bounds[dst_k], bounds[dst_k + 1]);
         let dm_tot: f64 = full.dm[k0..k1].iter().sum();
         let vol_sum: f64 = (k0..k1)
-            .map(|s| full.dm[s] / full.lnd[s].exp().max(1.0e-30))
+            .map(|s| full.dm[s] / flexmesa_math::exp(full.lnd[s]).max(1.0e-30))
             .sum();
         let lnt_sum: f64 = (k0..k1).map(|s| full.dm[s] * full.ln_t[s]).sum();
         m.dq[dst_k] = full.dq[k0..k1].iter().sum();
-        m.lnd[dst_k] = (dm_tot / vol_sum.max(1.0e-30)).ln();
+        m.lnd[dst_k] = flexmesa_math::log(dm_tot / vol_sum.max(1.0e-30));
         m.ln_t[dst_k] = lnt_sum / dm_tot.max(1.0e-30);
         (m.ln_r[dst_k], m.lum[dst_k]) = (full.ln_r[k0], full.lum[k0]);
         for j in 0..m.species {
@@ -151,9 +151,15 @@ fn eval_frozen_pde_system(
     include_chem: bool,
 ) -> HenyeySystem {
     for k in 0..m.nz {
-        (m.rho[k], m.t[k], m.r[k]) =
-            (m.lnd[k].exp(), m.ln_t[k].exp(), m.ln_r[k].exp());
-        let r_in = m.ln_r.get(k + 1).map_or(m.r_center, |&lr| lr.exp());
+        (m.rho[k], m.t[k], m.r[k]) = (
+            flexmesa_math::exp(m.lnd[k]),
+            flexmesa_math::exp(m.ln_t[k]),
+            flexmesa_math::exp(m.ln_r[k]),
+        );
+        let r_in = m
+            .ln_r
+            .get(k + 1)
+            .map_or(m.r_center, |&lr| flexmesa_math::exp(lr));
         m.rmid[k] = f64::midpoint(m.r[k], r_in);
     }
     m.set_m_grav_and_grav();
@@ -242,7 +248,7 @@ fn assert_tridiagonal_jacobian_matches_fd(
             let j_var = nvar_hydro + j_sp;
             let x_sc = sys0.x_scale[k_var * nvar + j_var];
             let xa_0 = base_model.xa[k_var * m0.species + j_sp];
-            let opt_dx = f64::EPSILON.cbrt();
+            let opt_dx = flexmesa_math::pow(f64::EPSILON, 1.0 / 3.0);
             let delta = if xa_0 > 4.0 * opt_dx {
                 opt_dx
             } else if xa_0 > 0.0 {

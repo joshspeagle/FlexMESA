@@ -12,6 +12,7 @@ flexmesa-autodiff = { path = "../flexmesa-autodiff" }
 flexmesa-utils = { path = "../flexmesa-utils" }
 
 [dev-dependencies]
+flexmesa-math = { path = "../flexmesa-math" }
 flexmesa-testing = { path = "../flexmesa-testing" }
 proptest = "1.5"
 

@@ -112,8 +112,8 @@ pub fn eval_blocker_wind(
     }
     let w_reimers_1 = eval_reimers_wind(l_surf, m_surf, r_surf, 1.0);
     eta * 4.83e-9
-        * (m_surf / M_SUN).powf(-2.1)
-        * (l_surf / L_SUN).powf(2.7)
+        * flexmesa_math::pow(m_surf / M_SUN, -2.1)
+        * flexmesa_math::pow(l_surf / L_SUN, 2.7)
         * w_reimers_1
 }
 
@@ -137,7 +137,7 @@ pub fn eval_vink_wind(
     }
     let z_solar = 0.019;
     let z_rat = (z_surf / z_solar).max(1.0e-10);
-    let log_z_rat = z_rat.log10();
+    let log_z_rat = flexmesa_math::log10(z_rat);
 
     let d_t = 100.0;
     let t_jump = 1.0e3 * (61.2 + 2.59 * (-13.636 + 0.889 * log_z_rat));
@@ -149,28 +149,28 @@ pub fn eval_vink_wind(
         ((t_surf - (t_jump - d_t)) / (2.0 * d_t)).clamp(0.0, 1.0)
     };
 
-    let log_l_1e5 = (l_surf / L_SUN / 1.0e5).log10();
-    let log_m_30 = (m_surf / M_SUN / 30.0).log10();
+    let log_l_1e5 = flexmesa_math::log10(l_surf / L_SUN / 1.0e5);
+    let log_m_30 = flexmesa_math::log10(m_surf / M_SUN / 30.0);
 
-    let vinf_hot = 2.6 * z_rat.powf(0.13);
-    let log_t_4e4 = (t_surf / 4.0e4).log10();
+    let vinf_hot = 2.6 * flexmesa_math::pow(z_rat, 0.13);
+    let log_t_4e4 = flexmesa_math::log10(t_surf / 4.0e4);
     let log_w1 = -6.697 + 2.194 * log_l_1e5
         - 1.313 * log_m_30
-        - 1.226 * (vinf_hot / 2.0).log10()
+        - 1.226 * flexmesa_math::log10(vinf_hot / 2.0)
         + 0.933 * log_t_4e4
         - 10.92 * log_t_4e4 * log_t_4e4
         + 0.85 * log_z_rat;
 
-    let vinf_cool = 1.3 * z_rat.powf(0.13);
-    let log_t_2e4 = (t_surf / 2.0e4).log10();
+    let vinf_cool = 1.3 * flexmesa_math::pow(z_rat, 0.13);
+    let log_t_2e4 = flexmesa_math::log10(t_surf / 2.0e4);
     let log_w2 = -6.688 + 2.210 * log_l_1e5
         - 1.339 * log_m_30
-        - 1.601 * (vinf_cool / 2.0).log10()
+        - 1.601 * flexmesa_math::log10(vinf_cool / 2.0)
         + 1.07 * log_t_2e4
         + 0.85 * log_z_rat;
 
-    eta * (alpha * 10.0_f64.powf(log_w1)
-        + (1.0 - alpha) * 10.0_f64.powf(log_w2))
+    eta * (alpha * flexmesa_math::exp10(log_w1)
+        + (1.0 - alpha) * flexmesa_math::exp10(log_w2))
 }
 
 /// Evaluates the Björklund et al. (2023) radiation-driven O-star wind rate $w$
@@ -196,12 +196,13 @@ pub fn eval_bjorklund_wind(
     let z_bjork = 0.014;
     let gamma_e = 0.34 * l_surf / (FOUR_PI * CLIGHT * cgrav_surf * m_surf);
     let m_eff = (m_surf * (1.0 - gamma_e)).max(1.0e-6 * m_surf);
-    let log_t_45k = (t_surf / 4.5e4).log10();
-    let log_w = -5.52 + 2.39 * (l_surf / (1.0e6 * L_SUN)).log10()
-        - 1.48 * (m_eff / (45.0 * M_SUN)).log10()
+    let log_t_45k = flexmesa_math::log10(t_surf / 4.5e4);
+    let log_w = -5.52 + 2.39 * flexmesa_math::log10(l_surf / (1.0e6 * L_SUN))
+        - 1.48 * flexmesa_math::log10(m_eff / (45.0 * M_SUN))
         + 2.12 * log_t_45k
-        + (0.75 - 1.87 * log_t_45k) * (z_surf / z_bjork).max(1.0e-10).log10();
-    eta * 10.0_f64.powf(log_w)
+        + (0.75 - 1.87 * log_t_45k)
+            * flexmesa_math::log10((z_surf / z_bjork).max(1.0e-10));
+    eta * flexmesa_math::exp10(log_w)
 }
 
 /// Evaluates the Nieuwenhuijzen & de Jager (1990) wind rate $w$ in
@@ -219,10 +220,10 @@ pub fn eval_nieuwenhuijzen_wind(
         return 0.0;
     }
     let log_w = -14.02
-        + 1.24 * (l_surf / L_SUN).log10()
-        + 0.16 * (m_surf / M_SUN).log10()
-        + 0.81 * (r_surf / R_SUN).log10();
-    eta * 10.0_f64.powf(log_w)
+        + 1.24 * flexmesa_math::log10(l_surf / L_SUN)
+        + 0.16 * flexmesa_math::log10(m_surf / M_SUN)
+        + 0.81 * flexmesa_math::log10(r_surf / R_SUN);
+    eta * flexmesa_math::exp10(log_w)
 }
 
 /// Evaluates the de Jager et al. (1988) wind rate $w$ in
@@ -233,9 +234,10 @@ pub fn eval_de_jager_wind(l_surf: f64, t_surf: f64, eta: f64) -> f64 {
     if eta <= 0.0 || l_surf <= 0.0 || t_surf <= 0.0 {
         return 0.0;
     }
-    let log_w =
-        1.769 * (l_surf / L_SUN).log10() - 1.676 * t_surf.log10() - 8.158;
-    eta * 10.0_f64.powf(log_w)
+    let log_w = 1.769 * flexmesa_math::log10(l_surf / L_SUN)
+        - 1.676 * flexmesa_math::log10(t_surf)
+        - 8.158;
+    eta * flexmesa_math::exp10(log_w)
 }
 
 /// Evaluates the van Loon et al. (2005) wind rate $w$ in
@@ -246,9 +248,9 @@ pub fn eval_van_loon_wind(l_surf: f64, t_surf: f64, eta: f64) -> f64 {
     if eta <= 0.0 || l_surf <= 0.0 || t_surf <= 0.0 {
         return 0.0;
     }
-    let log_w = -5.65 + 1.05 * (l_surf / (1.0e4 * L_SUN)).log10()
-        - 6.3 * (t_surf / 3.5e3).log10();
-    eta * 10.0_f64.powf(log_w)
+    let log_w = -5.65 + 1.05 * flexmesa_math::log10(l_surf / (1.0e4 * L_SUN))
+        - 6.3 * flexmesa_math::log10(t_surf / 3.5e3);
+    eta * flexmesa_math::exp10(log_w)
 }
 
 /// Evaluates the Nugis & Lamers (2000) Wolf-Rayet wind mass-loss rate $w$ in
@@ -266,8 +268,8 @@ pub fn eval_nugis_lamers_wind(
         return 0.0;
     }
     eta * 1.0e-11
-        * (l_surf / L_SUN).powf(1.29)
-        * y_surf.powf(1.7)
+        * flexmesa_math::pow(l_surf / L_SUN, 1.29)
+        * flexmesa_math::pow(y_surf, 1.7)
         * z_surf.sqrt()
 }
 

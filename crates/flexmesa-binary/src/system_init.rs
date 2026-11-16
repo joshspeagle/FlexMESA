@@ -5,11 +5,11 @@
 
 use flexmesa_const::{LSUN, MSUN, SECYER};
 use flexmesa_star::{
-    EnergyEqnOption, MeshFunctionConfig, StarControls, StarError, StarModel,
     apply_step_pre_physics, apply_uniform_rotation, compute_power_categories,
     do_adjust_mesh, do_struct_burn_mix, eval_total_energy_integrals,
     remap_onto_dq, set_hydro_vars, snapshot_step_history_old,
-    update_rotation_distortion_factors,
+    update_rotation_distortion_factors, EnergyEqnOption, MeshFunctionConfig,
+    StarControls, StarError, StarModel,
 };
 
 use crate::system::{BinaryCompanion, BinarySystem};
@@ -17,7 +17,7 @@ use crate::system::{BinaryCompanion, BinarySystem};
 fn log10_lnuc_over_lsurf(star: &StarModel) -> f64 {
     let lnuc = (compute_power_categories(star).power_nuc_burn * LSUN).abs();
     let lsurf = star.lum.first().copied().unwrap_or(0.0).abs().max(1.0);
-    (lnuc.max(1.0) / lsurf).log10()
+    flexmesa_math::log10(lnuc.max(1.0) / lsurf)
 }
 
 fn regularize_zams_mesh(star: &mut StarModel) -> Result<(), StarError> {
@@ -72,7 +72,8 @@ fn settle_constant_xa_kh_loop(
     let mut dt_yr = 50.0_f64;
     for step in 0..max_steps {
         set_hydro_vars(star, false, false)?;
-        if step >= 2 && log10_lnuc_over_lsurf(star).abs() < target_abs_log_ratio {
+        if step >= 2 && log10_lnuc_over_lsurf(star).abs() < target_abs_log_ratio
+        {
             break;
         }
         let backup = star.clone();
@@ -115,8 +116,10 @@ fn settle_cno_gold_equilibrium(
             star.controls.use_gold_tolerances = false;
             star.controls.use_gold2_tolerances = false;
         } else {
-            star.controls.use_gold_tolerances = saved_controls.use_gold_tolerances;
-            star.controls.use_gold2_tolerances = saved_controls.use_gold2_tolerances;
+            star.controls.use_gold_tolerances =
+                saved_controls.use_gold_tolerances;
+            star.controls.use_gold2_tolerances =
+                saved_controls.use_gold2_tolerances;
         }
         let dt_s = dt_yr * SECYER;
         let backup = star.clone();
@@ -170,7 +173,8 @@ pub(crate) fn prep_and_settle_binary_star(
         star.controls.energy_eqn_option = EnergyEqnOption::EpsGrav;
         star.controls.ts_stop.delta_hr_limit = -1.0;
         star.controls.ts_stop.delta_hr_hard_limit = -1.0;
-        star.controls.max_newton_iters = saved_controls.max_newton_iters.max(80);
+        star.controls.max_newton_iters =
+            saved_controls.max_newton_iters.max(80);
 
         star.controls.do_mix = false;
         star.controls.mix_factor = 0.0;

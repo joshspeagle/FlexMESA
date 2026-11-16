@@ -253,9 +253,9 @@ fn kapcn_interp(
     let mut log_z_ary = [0.0_f64; 4];
     for (k, &izz) in [iz - 1, iz, iz + 1, iz + 2].iter().enumerate() {
         res_z[k] = kapcn_interp_fixed_z(kcn, izz, x, fc, fn_val, log_r, log_t)?;
-        log_z_ary[k] = kcn.zs[izz].log10();
+        log_z_ary[k] = flexmesa_math::log10(kcn.zs[izz]);
     }
-    let x_new = [my_z.log10()];
+    let x_new = [flexmesa_math::log10(my_z)];
     let mut result = [0.0_f64; 3];
     for c in 0..3 {
         let v_old = [res_z[0][c], res_z[1][c], res_z[2][c], res_z[3][c]];

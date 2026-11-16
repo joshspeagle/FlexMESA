@@ -579,6 +579,6 @@ impl StarModel {
     #[must_use]
     #[inline]
     pub fn surface_r_rsun(&self) -> f64 {
-        self.ln_r.first().copied().unwrap_or(0.0).exp() / R_SUN
+        flexmesa_math::exp(self.ln_r.first().copied().unwrap_or(0.0)) / R_SUN
     }
 }

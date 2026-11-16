@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-//! Golden parity integration tests for Wave 3a.3 (`PC` equation of state,
-//! `get_pc_alfa`, and `eosDT_get` `PC`/`HELM` blending) against upstream
-//! Fortran MESA (`pc_eos.f90`, `eospc_eval.f90`, and `eosdt_eval.f90`).
+//! Strict-mode regression snapshot tests for `PC` liquid and transition
+//! regimes (self-generated `FlexMESA` regression snapshots tracked under
+//! `#146`, `Audit T2-15`).
 
 #![allow(
     clippy::approx_constant,
@@ -64,7 +64,7 @@ fn assert_eos_case(
 }
 
 #[test]
-fn test_pc_liquid_and_transition_regimes_match_fortran_oracle() {
+fn test_pc_liquid_and_transition_regimes_match_strict_regression_snapshot() {
     let cfg = PcConfig::default();
 
     // 1. pc_c12_liq: pure C12 at T = 1e8 K, rho = 1e6 g/cm^3

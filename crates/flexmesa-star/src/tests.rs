@@ -9,7 +9,7 @@ fn test_star_ad_order1_shifts_and_chain_rule_match_analytic_derivatives() {
     let lnd_00 = StarAdOrder1::variable(2.0, I_LND_00);
     let lnt_00 = StarAdOrder1::variable(16.0, I_LNT_00);
     let f_cell = (lnd_00 * 1.5 + lnt_00 * 0.5).exp();
-    let expected_val = (2.0_f64 * 1.5 + 16.0 * 0.5).exp();
+    let expected_val = flexmesa_math::exp(2.0_f64 * 1.5 + 16.0 * 0.5);
     assert!((f_cell.val - expected_val).abs() <= 1.0e-12 * expected_val);
     assert!(
         (f_cell.d1[I_LND_00] - 1.5 * expected_val).abs()

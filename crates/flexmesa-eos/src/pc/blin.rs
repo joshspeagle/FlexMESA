@@ -168,7 +168,7 @@ pub fn blin9a(
         for i in 0..5 {
             let ac = AC[k][i];
             let au = AU[k][i];
-            let aa = (-au).exp();
+            let aa = flexmesa_math::exp(-au);
             let sq = (1.0 + 0.5 * au * temp).sqrt();
             let dn = echi + aa;
             let dn2 = dn * dn;
@@ -272,7 +272,7 @@ pub fn blin9b(
         for i in 0..5 {
             let ax = AX[i];
             let axi = AXI[i];
-            let ah_axk = AH[i] * ax.powi(k as i32);
+            let ah_axk = AH[i] * flexmesa_math::powi_f90(ax, k as i32);
             let av = AV[i];
 
             let ce = ax - 1.0;

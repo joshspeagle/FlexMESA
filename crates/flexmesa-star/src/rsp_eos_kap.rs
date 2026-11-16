@@ -358,23 +358,23 @@ fn store_eos_cell(
     eos: &EosEvalOutput,
 ) {
     model.rho[k] = rho;
-    model.lnd[k] = rho.ln();
+    model.lnd[k] = flexmesa_math::log(rho);
     model.t[k] = t;
-    model.ln_t[k] = t.ln();
+    model.ln_t[k] = flexmesa_math::log(t);
     model.abar[k] = chem.abar;
     model.zbar[k] = chem.zbar;
     model.z53bar[k] = chem.z53bar;
     let ln_pgas = eos.res[I_LN_PGAS];
-    let pgas = ln_pgas.exp();
-    let prad = CRAD * t.powi(4) / 3.0;
+    let pgas = flexmesa_math::exp(ln_pgas);
+    let prad = CRAD * flexmesa_math::pow4(t) / 3.0;
     let peos = pgas + prad;
     model.ln_pgas[k] = ln_pgas;
     model.pgas[k] = pgas;
     model.prad[k] = prad;
     model.peos[k] = peos;
-    model.ln_peos[k] = peos.ln();
+    model.ln_peos[k] = flexmesa_math::log(peos);
     model.ln_e[k] = eos.res[I_LN_E];
-    model.energy[k] = eos.res[I_LN_E].exp();
+    model.energy[k] = flexmesa_math::exp(eos.res[I_LN_E]);
     model.cp[k] = eos.res[I_CP];
     model.chi_rho[k] = eos.res[I_CHI_RHO];
     model.chi_t[k] = eos.res[I_CHI_T];
@@ -449,8 +449,8 @@ pub fn eval1_mesa_eos_and_kap(
         )));
     }
     let rho = 1.0 / vol;
-    let log_rho = rho.log10();
-    let log_t = t.log10();
+    let log_rho = flexmesa_math::log10(rho);
+    let log_t = flexmesa_math::log10(t);
     let dlnd_dv = -rho;
     let eos = chem.eval_eos_dt(model, rho, log_rho, t, log_t)?;
     if let Some(k) = cell_k.filter(|&idx| idx < model.nz) {
@@ -464,13 +464,13 @@ pub fn eval1_mesa_eos_and_kap(
         )?
     };
 
-    let prad = CRAD * t.powi(4) / 3.0;
+    let prad = CRAD * flexmesa_math::pow4(t) / 3.0;
     let d_pr_dt = 4.0 * prad / t;
     let erad = 3.0 * prad / rho;
     let d_erad_dt = 3.0 * d_pr_dt / rho;
     let d_erad_dv = 3.0 * prad;
 
-    let e_tot = eos.res[I_LN_E].exp();
+    let e_tot = flexmesa_math::exp(eos.res[I_LN_E]);
     let de_dv = e_tot * eos.d_dlnd[I_LN_E] * dlnd_dv;
     let de_dt = e_tot * eos.d_dln_t[I_LN_E] / t;
     let egas = e_tot - erad;
@@ -479,7 +479,7 @@ pub fn eval1_mesa_eos_and_kap(
             "non-positive RSP egas={egas} at T={t}, V={vol}"
         )));
     }
-    let pgas = eos.res[I_LN_PGAS].exp();
+    let pgas = flexmesa_math::exp(eos.res[I_LN_PGAS]);
     let csnd = (eos.res[I_GAMMA1] * (prad + pgas) / rho).max(0.0).sqrt();
     let chi_t = eos.res[I_CHI_T];
     let chi_rho = eos.res[I_CHI_RHO];

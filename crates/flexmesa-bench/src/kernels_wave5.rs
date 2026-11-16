@@ -58,12 +58,12 @@ pub fn eval_diff_rot_zone(k: usize, nz: usize) -> f64 {
     let cgrav = STANDARD_CGRAV;
     let lum = LSUN * (0.04 + 0.96 * s);
     let opacity = 0.34 + 1.40 * (1.0 - s);
-    let rho = (LN10 * (2.0 * (1.0 - s) - 0.8 * s)).exp();
-    let t = (LN10 * (7.15 - 1.35 * s)).exp();
+    let rho = flexmesa_math::exp(LN10 * (2.0 * (1.0 - s) - 0.8 * s));
+    let t = flexmesa_math::exp(LN10 * (7.15 - 1.35 * s));
     let cp = 2.4e8 * (1.0 + 0.25 * s);
     let hp = 0.085 * r;
     let grada = 0.398;
-    let gradt = 0.26 + 0.06 * (5.0 * s).sin();
+    let gradt = 0.26 + 0.06 * flexmesa_math::sin(5.0 * s);
     let brunt_n2_t = 1.6e-6 * (0.4 + s);
     let brunt_n2_mu = 4.5e-7 * (1.0 - 0.4 * s);
     let w_div_wc = 0.12 + 0.58 * s;
@@ -150,12 +150,13 @@ impl RiemannRsp2Grid {
             let s = ((k as f64) + 0.5) / nz_f;
             let r_out = RSUN * (1.0 - 0.85 * ((k as f64) / nz_f));
             let r_in = RSUN * (1.0 - 0.85 * (((k + 1) as f64) / nz_f));
-            let m_grav = MSUN * (1.0 - 0.92 * ((k as f64) / nz_f)).powi(2);
-            let rho = (LN10 * (-4.5 + 5.5 * s)).exp();
-            let t = (LN10 * (3.85 + 3.15 * s)).exp();
+            let m_grav =
+                MSUN * flexmesa_math::pow2(1.0 - 0.92 * ((k as f64) / nz_f));
+            let rho = flexmesa_math::exp(LN10 * (-4.5 + 5.5 * s));
+            let t = flexmesa_math::exp(LN10 * (3.85 + 3.15 * s));
             let p = 1.25e8 * rho * t;
             let cs = ((5.0 / 3.0) * p / rho).sqrt();
-            let u = 1.5e5 * (1.0 - s) * (4.0 * s).sin();
+            let u = 1.5e5 * (1.0 - s) * flexmesa_math::sin(4.0 * s);
             zones.push(RiemannZone {
                 r_out,
                 r_in,
@@ -169,9 +170,9 @@ impl RiemannRsp2Grid {
                 dm: (MSUN * 0.85 / nz_f) * (0.4 + 1.2 * s * (1.0 - s)),
                 cp: 2.1e8 * (1.0 + 0.15 * s),
                 grad_t: 0.445 - 0.10 * s,
-                kappa: 0.40 + 2.5 * (1.0 - s).powi(2),
+                kappa: 0.40 + 2.5 * flexmesa_math::pow2(1.0 - s),
                 hp: 0.06 * r_out,
-                dlnd_dt: -1.0e-6 * (3.0 * s).cos(),
+                dlnd_dt: -1.0e-6 * flexmesa_math::cos(3.0 * s),
             });
         }
         let p_bc = 0.65 * zones[0].p;
@@ -273,8 +274,8 @@ impl RiemannRsp2Grid {
         let v_dz = g_out * zk.r_out * zk.rho / zk.p;
         let v_g = v_dz / (5.0 / 3.0);
         let a_st = zk.r_out * (1.0e-6 * s) / g_out;
-        let u_dz = PI4 * zk.r_out.powi(3) * zk.rho / zk.m_grav;
-        let c_1 = (zk.r_out / RSUN).powi(3) / (zk.m_grav / MSUN);
+        let u_dz = PI4 * flexmesa_math::pow3(zk.r_out) * zk.rho / zk.m_grav;
+        let c_1 = flexmesa_math::pow3(zk.r_out / RSUN) / (zk.m_grav / MSUN);
 
         (u_f / 1.0e6)
             + (p_f_out / zk.p)
@@ -386,11 +387,13 @@ pub fn eval_astero_seism_workload(nz: usize) -> f64 {
     for m in 0..N_MODES {
         let n_ord = (14 + m) as f64;
         let f0 = 135.0 * (n_ord + 1.45);
-        let q0 = 1.0e-7 * ((3100.0 - f0) / 1000.0).exp();
+        let q0 = 1.0e-7 * flexmesa_math::exp((3100.0 - f0) / 1000.0);
         l0_freq[m] = f0;
         l0_ine[m] = q0;
-        l0_obs[m] = f0 + (target_b1 / f0 + target_b3 * f0.powi(3)) / q0;
-        l1_mod[m] = 135.0 * (n_ord + 1.93) - 1.8 * (0.3 * n_ord).sin();
+        l0_obs[m] =
+            f0 + (target_b1 / f0 + target_b3 * flexmesa_math::pow3(f0)) / q0;
+        l1_mod[m] =
+            135.0 * (n_ord + 1.93) - 1.8 * flexmesa_math::sin(0.3 * n_ord);
     }
 
     let (corr_cub, _) =

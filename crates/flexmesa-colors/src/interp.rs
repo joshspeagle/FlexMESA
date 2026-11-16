@@ -292,9 +292,9 @@ impl SedCube {
             };
             let mut val = blend(corners);
             if val > TINY {
-                let log_v = blend(corners.map(f64::ln));
+                let log_v = blend(corners.map(flexmesa_math::log));
                 if log_v.is_finite() {
-                    val = log_v.exp();
+                    val = flexmesa_math::exp(log_v);
                 }
             }
             if !val.is_finite() || val <= 0.0 {
@@ -356,18 +356,18 @@ impl SedCube {
         let dg_sq: Vec<f64> = self
             .logg_grid
             .iter()
-            .map(|&gv| ((gv - g_min) * g_inv - ng_v).powi(2))
+            .map(|&gv| flexmesa_math::pow2((gv - g_min) * g_inv - ng_v))
             .collect();
         let dm_sq: Vec<f64> = self
             .meta_grid
             .iter()
-            .map(|&mv| ((mv - m_min) * m_inv - nm_v).powi(2))
+            .map(|&mv| flexmesa_math::pow2((mv - m_min) * m_inv - nm_v))
             .collect();
 
         let mut best_d2 = [f64::INFINITY; 4];
         let mut best_idx = [(0usize, 0usize, 0usize); 4];
         for (it, &tv) in self.teff_grid.iter().enumerate() {
-            let dt = ((tv - t_min) * t_inv - nt_v).powi(2);
+            let dt = flexmesa_math::pow2((tv - t_min) * t_inv - nt_v);
             for (ig, &dg) in dg_sq.iter().enumerate() {
                 let dt_dg = dt + dg;
                 for (im, &dm) in dm_sq.iter().enumerate() {

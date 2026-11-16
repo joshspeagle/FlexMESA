@@ -120,20 +120,40 @@ fn test_auto_diff_2var_order1_unary_operators_match_mesa_test_suite() {
 
     // Inverse trigonometric and hyperbolic functions at x = 0.5 and x = 2.0.
     let x_half = AutoDiffReal2VarOrder1::new(0.5, [1.0, 0.0]);
-    check_2var_order1(x_half.asin(), 0.5_f64.asin(), 2.0 / 3.0_f64.sqrt(), 0.0);
+    check_2var_order1(
+        x_half.asin(),
+        flexmesa_math::asin(0.5_f64),
+        2.0 / 3.0_f64.sqrt(),
+        0.0,
+    );
     check_2var_order1(
         x_half.acos(),
-        0.5_f64.acos(),
+        flexmesa_math::acos(0.5_f64),
         -2.0 / 3.0_f64.sqrt(),
         0.0,
     );
-    check_2var_order1(x_half.atan(), 0.5_f64.atan(), 0.8, 0.0);
-    check_2var_order1(x_half.atanh(), 0.5_f64.atanh(), 4.0 / 3.0, 0.0);
+    check_2var_order1(x_half.atan(), flexmesa_math::atan(0.5_f64), 0.8, 0.0);
+    check_2var_order1(
+        x_half.atanh(),
+        flexmesa_math::atanh(0.5_f64),
+        4.0 / 3.0,
+        0.0,
+    );
 
     // Fixed integer powers pow2..pow8 and scalar base/exponent powers.
     let x2 = AutoDiffReal2VarOrder1::new(2.0, [1.0, 0.0]);
-    check_2var_order1(x2.asinh(), 2.0_f64.asinh(), 1.0 / 5.0_f64.sqrt(), 0.0);
-    check_2var_order1(x2.acosh(), 2.0_f64.acosh(), 1.0 / 3.0_f64.sqrt(), 0.0);
+    check_2var_order1(
+        x2.asinh(),
+        flexmesa_math::asinh(2.0_f64),
+        1.0 / 5.0_f64.sqrt(),
+        0.0,
+    );
+    check_2var_order1(
+        x2.acosh(),
+        flexmesa_math::acosh(2.0_f64),
+        1.0 / 3.0_f64.sqrt(),
+        0.0,
+    );
     check_2var_order1(x2.pow3(), 8.0, 12.0, 0.0);
     check_2var_order1(x2.pow4(), 16.0, 32.0, 0.0);
     check_2var_order1(x2.pow6(), 64.0, 192.0, 0.0);
@@ -179,7 +199,12 @@ fn test_auto_diff_1var_4var_and_star_order1_propagate_partials_correctly() {
     let q = a * b + c.exp() - d.sinpi();
     assert_allclose(
         &q.d1,
-        &[2.5, 1.5, (-0.5_f64).exp(), -PI * (0.25 * PI).cos()],
+        &[
+            2.5,
+            1.5,
+            flexmesa_math::exp(-0.5_f64),
+            -PI * flexmesa_math::cos(0.25 * PI),
+        ],
         TOL,
         TOL,
     );
@@ -210,18 +235,18 @@ fn test_auto_diff_2var_order2_hessian_and_differentiate_match_exact_calculus() {
     // Closed-form analytical first and second partial derivatives.
     let xv = 1.2_f64;
     let yv = 0.7_f64;
-    let exy = (xv * yv).exp();
-    let sy = yv.sin();
-    let cy = yv.cos();
+    let exy = flexmesa_math::exp(xv * yv);
+    let sy = flexmesa_math::sin(yv);
+    let cy = flexmesa_math::cos(yv);
 
-    let expected_val = exy + xv.powi(3) / sy;
-    let expected_dx = yv * exy + 3.0 * xv.powi(2) / sy;
-    let expected_dy = xv * exy - xv.powi(3) * cy / (sy * sy);
+    let expected_val = exy + flexmesa_math::pow3(xv) / sy;
+    let expected_dx = yv * exy + 3.0 * flexmesa_math::pow2(xv) / sy;
+    let expected_dy = xv * exy - flexmesa_math::pow3(xv) * cy / (sy * sy);
     let expected_dxx = yv * yv * exy + 6.0 * xv / sy;
     let expected_dxy =
-        exy * (1.0 + xv * yv) - 3.0 * xv.powi(2) * cy / (sy * sy);
-    let expected_dyy =
-        xv * xv * exy + xv.powi(3) * (1.0 + cy * cy) / (sy * sy * sy);
+        exy * (1.0 + xv * yv) - 3.0 * flexmesa_math::pow2(xv) * cy / (sy * sy);
+    let expected_dyy = xv * xv * exy
+        + flexmesa_math::pow3(xv) * (1.0 + cy * cy) / (sy * sy * sy);
 
     assert_allclose(
         &[

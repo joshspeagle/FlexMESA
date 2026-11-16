@@ -310,7 +310,8 @@ fn test_bcyclic_matches_block_thomas_across_grid_sizes() {
             let kf = k as f64;
             let s = (k + 1) as f64 / (nz as f64);
             for i in 0..nvar {
-                rhs[k * nvar + i] = (0.3 * kf + 0.7 * (i as f64)).sin();
+                rhs[k * nvar + i] =
+                    flexmesa_math::sin(0.3 * kf + 0.7 * (i as f64));
                 for j in 0..nvar {
                     let idx = k * blk_sz + i * nvar + j;
                     let d_off =
@@ -387,9 +388,9 @@ fn test_upstream_mesa_block_tri_data_and_test_case_data_parity() {
                 .map(|p| PathBuf::from(p).join("flexmesa/mesa_test_inputs"))
         })
         .or_else(|| {
-            std::env::var_os("HOME")
-                .filter(|v| !v.is_empty())
-                .map(|p| PathBuf::from(p).join(".cache/flexmesa/mesa_test_inputs"))
+            std::env::var_os("HOME").filter(|v| !v.is_empty()).map(|p| {
+                PathBuf::from(p).join(".cache/flexmesa/mesa_test_inputs")
+            })
         })
         .unwrap_or_else(|| PathBuf::from(".flexmesa_test_inputs"))
         .join("mtx/test");

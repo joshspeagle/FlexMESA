@@ -55,23 +55,44 @@ pub fn build_accreted_xa(model: &StarModel) -> Vec<f64> {
     }
 
     if model.controls.accrete_given_mass_fractions {
-        let has_custom = model.controls.accretion_species_id.iter()
+        let has_custom = model
+            .controls
+            .accretion_species_id
+            .iter()
             .zip(&model.controls.accretion_species_xa)
             .any(|(iso, &val)| {
-                val >= 0.0 && !iso.is_empty()
-                    && model.iso_names.iter().any(|n| n.eq_ignore_ascii_case(iso))
+                val >= 0.0
+                    && !iso.is_empty()
+                    && model
+                        .iso_names
+                        .iter()
+                        .any(|n| n.eq_ignore_ascii_case(iso))
             });
-        let mut xa = if has_custom { vec![0.0; species] } else { model.cell_xa(0).to_vec() };
-        for (iso, &val) in model.controls.accretion_species_id.iter()
+        let mut xa = if has_custom {
+            vec![0.0; species]
+        } else {
+            model.cell_xa(0).to_vec()
+        };
+        for (iso, &val) in model
+            .controls
+            .accretion_species_id
+            .iter()
             .zip(&model.controls.accretion_species_xa)
         {
             if val >= 0.0 && !iso.is_empty() {
-                if let Some(j) = model.iso_names.iter().position(|n| n.eq_ignore_ascii_case(iso)) {
+                if let Some(j) = model
+                    .iso_names
+                    .iter()
+                    .position(|n| n.eq_ignore_ascii_case(iso))
+                {
                     xa[j] = val;
                 }
             }
         }
-        for (iso, val) in [("h1", model.controls.accretion_h1), ("he4", model.controls.accretion_he4)] {
+        for (iso, val) in [
+            ("h1", model.controls.accretion_h1),
+            ("he4", model.controls.accretion_he4),
+        ] {
             if val >= 0.0 {
                 if let Some(j) = model.iso_names.iter().position(|n| n == iso) {
                     xa[j] = val;
@@ -85,7 +106,10 @@ pub fn build_accreted_xa(model: &StarModel) -> Vec<f64> {
         return model.cell_xa(0).to_vec();
     }
 
-    let (h1, he4) = (model.controls.accretion_h1.max(0.0), model.controls.accretion_he4.max(0.0));
+    let (h1, he4) = (
+        model.controls.accretion_h1.max(0.0),
+        model.controls.accretion_he4.max(0.0),
+    );
     let z_rem = (1.0 - h1 - he4).max(0.0);
     let catalog = NuclideCatalog::builtin_ref();
     let surf_xa = model.cell_xa(0);
@@ -93,7 +117,11 @@ pub fn build_accreted_xa(model: &StarModel) -> Vec<f64> {
     let mut is_metal = vec![false; species];
     let (mut metal_count, mut surf_z_sum) = (0usize, 0.0_f64);
     for j in 0..species {
-        let z = model.chem_id.get(j).and_then(|&cid| catalog.get_by_id(cid)).map_or(0, |e| e.z);
+        let z = model
+            .chem_id
+            .get(j)
+            .and_then(|&cid| catalog.get_by_id(cid))
+            .map_or(0, |e| e.z);
         if z > 2 {
             is_metal[j] = true;
             metal_count += 1;
@@ -108,7 +136,9 @@ pub fn build_accreted_xa(model: &StarModel) -> Vec<f64> {
             xa[j] = h1;
         } else if name.eq_ignore_ascii_case("he4") {
             xa[j] = he4;
-        } else if name.eq_ignore_ascii_case("h2") || name.eq_ignore_ascii_case("he3") {
+        } else if name.eq_ignore_ascii_case("h2")
+            || name.eq_ignore_ascii_case("he3")
+        {
             xa[j] = 0.0;
         } else if is_metal[j] {
             xa[j] = if surf_z_sum > 1.0e-30 {
@@ -127,10 +157,20 @@ pub fn build_accreted_xa(model: &StarModel) -> Vec<f64> {
 /// # Errors
 /// Returns [`StarError`] if `xm_new <= 0` or microphysics fails.
 pub fn do_adjust_mass(
-    model: &mut StarModel, delta_m: f64, x_accreted: Option<&[f64]>,
-    q_below_const_q: f64, q_const_mass: f64,
+    model: &mut StarModel,
+    delta_m: f64,
+    x_accreted: Option<&[f64]>,
+    q_below_const_q: f64,
+    q_const_mass: f64,
 ) -> Result<(), StarError> {
-    do_adjust_mass_with_dt(model, delta_m, 0.0, x_accreted, q_below_const_q, q_const_mass)
+    do_adjust_mass_with_dt(
+        model,
+        delta_m,
+        0.0,
+        x_accreted,
+        q_below_const_q,
+        q_const_mass,
+    )
 }
 
 /// Executes 3-region mass adjustment and, when `dt > 0`, evaluates
@@ -139,8 +179,12 @@ pub fn do_adjust_mass(
 /// # Errors
 /// Returns [`StarError`] if `xm_new <= 0` or microphysics fails.
 pub fn do_adjust_mass_with_dt(
-    model: &mut StarModel, delta_m: f64, dt: f64, x_accreted: Option<&[f64]>,
-    q_below_const_q: f64, q_const_mass: f64,
+    model: &mut StarModel,
+    delta_m: f64,
+    dt: f64,
+    x_accreted: Option<&[f64]>,
+    q_below_const_q: f64,
+    q_const_mass: f64,
 ) -> Result<(), StarError> {
     let nz = model.nz;
     if delta_m == 0.0 || nz < 3 {
@@ -159,14 +203,19 @@ pub fn do_adjust_mass_with_dt(
 }
 
 fn do_adjust_mass_regions(
-    model: &mut StarModel, delta_m: f64, dt: f64, x_accreted: Option<&[f64]>,
-    k_a: usize, k_b: usize,
+    model: &mut StarModel,
+    delta_m: f64,
+    dt: f64,
+    x_accreted: Option<&[f64]>,
+    k_a: usize,
+    k_b: usize,
 ) -> Result<(), StarError> {
     let (nz, species) = (model.nz, model.species);
     if let Some(x_acc) = x_accreted {
         if x_acc.len() < species {
             return Err(StarError::InvalidInput(format!(
-                "x_accreted length {} < species {species}", x_acc.len()
+                "x_accreted length {} < species {species}",
+                x_acc.len()
             )));
         }
     }
@@ -184,7 +233,8 @@ fn do_adjust_mass_regions(
     let k_a = k_a.clamp(1, nz.saturating_sub(2));
     let k_b = k_b.clamp(k_a + 1, nz - 1);
 
-    let need_eps_mdot = dt > 0.0 && model.controls.mix_wind.eps_mdot_factor != 0.0;
+    let need_eps_mdot =
+        dt > 0.0 && model.controls.mix_wind.eps_mdot_factor != 0.0;
     if need_eps_mdot {
         model.reconstruct_ln_r_from_lnd_and_dm();
         model.set_m_grav_and_grav();
@@ -192,20 +242,39 @@ fn do_adjust_mass_regions(
         do_eos(model)?;
     }
     let prev_dm_raw = model.dm.clone();
-    let (prev_r, prev_m_grav, prev_energy, prev_peos, prev_rho, prev_te, prev_ke) =
-        if need_eps_mdot {
-            (
-                model.r.clone(), model.m_grav.clone(), model.energy.clone(),
-                model.peos.clone(), model.rho.clone(),
-                eval_specific_total_energy_profile(model),
-                eval_specific_kinetic_energy_profile(model),
-            )
-        } else {
-            (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new())
-        };
+    let (
+        prev_r,
+        prev_m_grav,
+        prev_energy,
+        prev_peos,
+        prev_rho,
+        prev_te,
+        prev_ke,
+    ) = if need_eps_mdot {
+        (
+            model.r.clone(),
+            model.m_grav.clone(),
+            model.energy.clone(),
+            model.peos.clone(),
+            model.rho.clone(),
+            eval_specific_total_energy_profile(model),
+            eval_specific_kinetic_energy_profile(model),
+        )
+    } else {
+        (
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        )
+    };
 
     let sum_prev_dm = neumaier_sum(&prev_dm_raw).max(1.0e-99);
-    let dq_old: Vec<f64> = prev_dm_raw.iter().map(|&d| d / sum_prev_dm).collect();
+    let dq_old: Vec<f64> =
+        prev_dm_raw.iter().map(|&d| d / sum_prev_dm).collect();
     let mut xq_old = vec![0.0_f64; nz];
     for k in 1..nz {
         xq_old[k] = xq_old[k - 1] + dq_old[k - 1];
@@ -245,8 +314,10 @@ fn do_adjust_mass_regions(
         dm_target[k_b_remap - 1] += dm_resid;
     }
 
-    let mut dq_new: Vec<f64> =
-        dm_target.iter().map(|&d| (d / xm_new).max(1.0e-99)).collect();
+    let mut dq_new: Vec<f64> = dm_target
+        .iter()
+        .map(|&d| (d / xm_new).max(1.0e-99))
+        .collect();
     let dq_resid = 1.0 - neumaier_sum(&dq_new);
     if dq_new[k_b_remap - 1] + dq_resid > 1.0e-99 {
         dq_new[k_b_remap - 1] += dq_resid;
@@ -384,8 +455,14 @@ fn do_adjust_mass_regions(
             conserve_shell_j_rot_and_distortion(model);
         }
         let prev = PrevMassState {
-            dm: &prev_mesh_dm, r: &prev_r, m_grav: &prev_m_grav, energy: &prev_energy,
-            peos: &prev_peos, rho: &prev_rho, te: &prev_te, ke: &prev_ke,
+            dm: &prev_mesh_dm,
+            r: &prev_r,
+            m_grav: &prev_m_grav,
+            energy: &prev_energy,
+            peos: &prev_peos,
+            rho: &prev_rho,
+            te: &prev_te,
+            ke: &prev_ke,
         };
         calculate_eps_mdot_with_change(model, &prev, &change_in_dm, dt);
     } else {
@@ -445,7 +522,9 @@ fn remap_j_rot_and_adjust_j_lost(
         let a0 = new_xout[k];
         let a1 = a0 + new_dmbar[k];
         let dx = new_dmbar[k].max(1.0e-99);
-        while kk_start + 1 < nz && old_xout[kk_start] + old_dmbar[kk_start] <= a0 {
+        while kk_start + 1 < nz
+            && old_xout[kk_start] + old_dmbar[kk_start] <= a0
+        {
             kk_start += 1;
         }
         let mut jr_acc = 0.0_f64;
@@ -466,7 +545,8 @@ fn remap_j_rot_and_adjust_j_lost(
         return Ok(());
     }
     let f_adj = mw.adjust_j_fraction.clamp(0.0, 1.0);
-    let actual_j_lost = f_adj * mass_lost * starting_j_rot_surf + (1.0 - f_adj) * j_removed;
+    let actual_j_lost =
+        f_adj * mass_lost * starting_j_rot_surf + (1.0 - f_adj) * j_removed;
     let delta_j = actual_j_lost - j_removed;
     if delta_j == 0.0 {
         return Ok(());
@@ -474,9 +554,15 @@ fn remap_j_rot_and_adjust_j_lost(
 
     let (mut j_sum, mut last_k) = (0.0_f64, nz);
     for k in 0..nz {
-        let dm_f = if k == 0 { 0.5 * new_dm[0] } else { 0.5 * (new_dm[k - 1] + new_dm[k]) };
+        let dm_f = if k == 0 {
+            0.5 * new_dm[0]
+        } else {
+            0.5 * (new_dm[k - 1] + new_dm[k])
+        };
         j_sum += dm_f * model.j_rot[k];
-        if j_sum >= mw.min_j_div_delta_j * delta_j.abs() && model.q[k] <= mw.min_q_for_adjust_j_lost {
+        if j_sum >= mw.min_j_div_delta_j * delta_j.abs()
+            && model.q[k] <= mw.min_q_for_adjust_j_lost
+        {
             last_k = k;
             break;
         }
@@ -489,7 +575,11 @@ fn remap_j_rot_and_adjust_j_lost(
     let qlast = model.q[last_k];
     let denom: f64 = (0..last_k)
         .map(|k| {
-            let dm_f = if k == 0 { 0.5 * new_dm[0] } else { 0.5 * (new_dm[k - 1] + new_dm[k]) };
+            let dm_f = if k == 0 {
+                0.5 * new_dm[0]
+            } else {
+                0.5 * (new_dm[k - 1] + new_dm[k])
+            };
             (model.q[k] - qlast) * model.j_rot[k] * dm_f
         })
         .sum();

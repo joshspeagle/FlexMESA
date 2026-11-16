@@ -153,8 +153,8 @@ pub fn reconstruct_and_analyze_mode(
     let mut de_dx = vec![0.0; n];
     let mut dzeta_dx = vec![0.0; n];
     let mut dw_dx = vec![0.0; n];
-    let tdyn_tkh = (model.l_star * model.r_star.powf(2.5))
-        / (model.cgrav * model.m_star).powf(2.5).max(1.0e-30);
+    let tdyn_tkh = (model.l_star * flexmesa_math::pow(model.r_star, 2.5))
+        / flexmesa_math::pow(model.cgrav * model.m_star, 2.5).max(1.0e-30);
 
     for (i, pt) in model.pts.iter().enumerate() {
         let [y1, y2, y3, y4] = y_grid[i];
@@ -162,7 +162,7 @@ pub fn reconstruct_and_analyze_mode(
             0 if pt.x == 0.0 => 0.0,
             0 => 1.0 / pt.x,
             1 => 1.0,
-            _ => pt.x.powi((l as i32) - 1),
+            _ => flexmesa_math::powi_f90(pt.x, (l as i32) - 1),
         };
         let xi_r = x_li1 * y1;
         let xi_h = if l == 0 {
@@ -175,7 +175,7 @@ pub fn reconstruct_and_analyze_mode(
         let x_2li = if l == 0 {
             1.0
         } else {
-            pt.x.powi(2 * (l as i32))
+            flexmesa_math::powi_f90(pt.x, 2 * (l as i32))
         };
         let term_g = y4 + (lf + 1.0) * y3;
         dzeta_dx[i] = x_2li
@@ -187,12 +187,19 @@ pub fn reconstruct_and_analyze_mode(
         let v = pt.v_2 * pt.x * pt.x;
         let lag_p = pt.v_2
             * (y2 - y1)
-            * (if l == 0 { 1.0 } else { pt.x.powi(l as i32) });
+            * (if l == 0 {
+                1.0
+            } else {
+                flexmesa_math::powi_f90(pt.x, l as i32)
+            });
         let lag_t_ad = pt.nabla_ad * lag_p;
         let c_kap_ad = pt.nabla_ad * pt.kap_t + pt.kap_rho / pt.gamma_1;
         let dl_r_rel = -c_kap_ad * lag_p + 4.0 * lag_t_ad;
-        let phase_lag =
-            1.0 / (1.0 + (omega * pt.c_thk / pt.c_rad.max(1.0e-30)).powi(2));
+        let phase_lag = 1.0
+            / (1.0
+                + flexmesa_math::pow2(
+                    omega * pt.c_thk / pt.c_rad.max(1.0e-30),
+                ));
         let im_lag_s =
             -phase_lag * v * pt.nabla * dl_r_rel / omega.max(1.0e-12);
         dw_dx[i] = PI * lag_t_ad * im_lag_s * pt.c_thk * pt.x * pt.x * tdyn_tkh;
@@ -212,7 +219,7 @@ pub fn reconstruct_and_analyze_mode(
     let s_surf = match outer_bc {
         OuterBoundKind::Vacuum => 0.0,
         OuterBoundKind::AdiplsIsothermal => {
-            surf.x.powi(2 * (l as i32) + 1)
+            flexmesa_math::powi_f90(surf.x, 2 * (l as i32) + 1)
                 * (surf.u * (ys2 + ys3) * ys1 + ys3 * (ys4 + (lf + 1.0) * ys3))
                 / (surf.c_1 * surf.c_1)
         }
@@ -228,12 +235,7 @@ pub fn reconstruct_and_analyze_mode(
             let w = ((1.0 - p0.x) / (p1.x - p0.x).max(1.0e-30)).clamp(0.0, 1.0);
             let (y0, y1) = (y_grid[idx], y_grid[idx + 1]);
             let y_p = std::array::from_fn(|k| (1.0 - w) * y0[k] + w * y1[k]);
-            (
-                1.0,
-                (1.0 - w) * p0.c_1 + w * p1.c_1,
-                y_p,
-                inertia_norm,
-            )
+            (1.0, (1.0 - w) * p0.c_1 + w * p1.c_1, y_p, inertia_norm)
         } else {
             (surf.x, surf.c_1, y_grid[n - 1], inertia_norm)
         }
@@ -243,7 +245,7 @@ pub fn reconstruct_and_analyze_mode(
     let x_li1_ref = match l {
         0 => 1.0 / x_ref,
         1 => 1.0,
-        _ => x_ref.powi((l as i32) - 1),
+        _ => flexmesa_math::powi_f90(x_ref, (l as i32) - 1),
     };
     let xi_r_ref = x_li1_ref * yr1;
     let xi_h_ref = if l == 0 {
@@ -274,7 +276,8 @@ pub fn reconstruct_and_analyze_mode(
     } else {
         0.0
     };
-    let omega_dyn = (model.cgrav * model.m_star / model.r_star.powi(3)).sqrt();
+    let omega_dyn =
+        (model.cgrav * model.m_star / flexmesa_math::pow3(model.r_star)).sqrt();
     let freq_scale_uhz = 1.0e6 * omega_dyn / (2.0 * PI);
 
     BvpEigenmode {
@@ -315,7 +318,7 @@ pub fn classify_mode_orders(
                 (1.0 - pts[i].u / 3.0) * y[i][0] + (y[i][2] - y[i][3]) / 3.0;
             y2[i] = y[i][1] - y[i][0];
         } else {
-            let scale = pts[i].x.powi(l as i32 - 1);
+            let scale = flexmesa_math::powi_f90(pts[i].x, l as i32 - 1);
             y1[i] = scale * y[i][0];
             y2[i] = scale * (y[i][1] + y[i][2]);
         }
@@ -407,22 +410,32 @@ pub(crate) fn make_bvp_point_from_cgs(
     let (v_2, u, c_1) = if x > 0.0 && m_r > 0.0 {
         (
             cgrav * m_r * rho / (p * r * x * x),
-            4.0 * PI * rho * r.powi(3) / m_r,
-            x.powi(3) / (m_r / m_star),
+            4.0 * PI * rho * flexmesa_math::pow3(r) / m_r,
+            flexmesa_math::pow3(x) / (m_r / m_star),
         )
     } else {
         (
             4.0 * PI * cgrav * rho * rho * r_star * r_star / (3.0 * p),
             3.0,
-            3.0 * (m_star / r_star.powi(3)) / (4.0 * PI * rho),
+            3.0 * (m_star / flexmesa_math::pow3(r_star)) / (4.0 * PI * rho),
         )
     };
-    let c_rad = 16.0 * PI * CRAD * CLIGHT * t.powi(4) * r_star * nabla * v_2
+    let c_rad = 16.0
+        * PI
+        * CRAD
+        * CLIGHT
+        * flexmesa_math::pow4(t)
+        * r_star
+        * nabla
+        * v_2
         / (3.0 * kap * rho * l_star.max(1.0e-30)).max(1.0e-30);
-    let c_thn = cp * omega_dyn / (CRAD * CLIGHT * kap * t.powi(3)).max(1.0e-30);
-    let c_thk = 4.0 * PI * rho * t * cp * omega_dyn * r_star.powi(3)
+    let c_thn = cp * omega_dyn
+        / (CRAD * CLIGHT * kap * flexmesa_math::pow3(t)).max(1.0e-30);
+    let c_thk =
+        4.0 * PI * rho * t * cp * omega_dyn * flexmesa_math::pow3(r_star)
+            / l_star.max(1.0e-30);
+    let c_eps = 4.0 * PI * rho * eps * flexmesa_math::pow3(r_star)
         / l_star.max(1.0e-30);
-    let c_eps = 4.0 * PI * rho * eps * r_star.powi(3) / l_star.max(1.0e-30);
     BvpPoint {
         x,
         v_2,
@@ -454,7 +467,7 @@ pub fn parse_gyre_mesa_model(content: &str) -> BvpModel {
     let l_star = h.get(3).map_or(L_SUN, |s| parse_fortran_float(s));
     let version = h.get(4).and_then(|s| s.parse::<usize>().ok()).unwrap_or(1);
     let cgrav = STANDARD_CGRAV;
-    let omega_dyn = (cgrav * m_star / r_star.powi(3)).sqrt();
+    let omega_dyn = (cgrav * m_star / flexmesa_math::pow3(r_star)).sqrt();
 
     let mut raw_pts = Vec::new();
     for line in lines {
@@ -498,7 +511,7 @@ pub fn parse_gyre_mesa_model(content: &str) -> BvpModel {
             (mr, gam1, nad, ut, cp, kr, kt, krho, ep, et, er)
         };
         let a_star = if r > 0.0 && m_r > 0.0 {
-            r.powi(3) * n2r / (cgrav * m_r)
+            flexmesa_math::pow3(r) * n2r / (cgrav * m_r)
         } else {
             0.0
         };
@@ -554,7 +567,7 @@ pub fn parse_fgong_model(content: &str) -> BvpModel {
     let l_star = nums.get(2).copied().unwrap_or(L_SUN);
     let cg = nums.get(14).copied().unwrap_or(0.0);
     let cgrav = if cg > 1.0e-10 { cg } else { 6.67232e-8 };
-    let omega_dyn = (cgrav * m_star / r_star.powi(3)).sqrt();
+    let omega_dyn = (cgrav * m_star / flexmesa_math::pow3(r_star)).sqrt();
 
     let mut pts_rev = Vec::with_capacity(nn);
     for i in (0..nn).rev() {
@@ -564,7 +577,7 @@ pub fn parse_fgong_model(content: &str) -> BvpModel {
         }
         let (r, m_r, t, p, rho) = (
             nums[b],
-            nums[b + 1].exp() * m_star,
+            flexmesa_math::exp(nums[b + 1]) * m_star,
             nums[b + 2].max(100.0),
             nums[b + 3].max(1.0e-30),
             nums[b + 4].max(1.0e-30),

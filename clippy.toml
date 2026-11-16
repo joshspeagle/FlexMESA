@@ -1,0 +1,37 @@
+# SPDX-License-Identifier: LGPL-3.0-or-later
+# Workspace Clippy configuration (#165 Item 12).
+#
+# All elementary transcendental, power, hypotenuse, and fused multiply-add
+# methods on `f64` are forbidden outside `flexmesa-math` and
+# `flexmesa-crlibm-sys` so that every physics and numerical crate routes
+# arithmetic through `flexmesa-math` (`NumericsMode::Strict` / `Fast`).
+
+disallowed-methods = [
+  { path = "f64::exp", reason = "use `flexmesa_math::exp` (#165)" },
+  { path = "f64::exp2", reason = "use `flexmesa_math::pow(2.0, x)` (#165)" },
+  { path = "f64::exp_m1", reason = "use `flexmesa_math::expm1` (#165)" },
+  { path = "f64::ln", reason = "use `flexmesa_math::log` (#165)" },
+  { path = "f64::ln_1p", reason = "use `flexmesa_math::log1p` (#165)" },
+  { path = "f64::log", reason = "use `flexmesa_math::log(x) / flexmesa_math::log(base)` (#165)" },
+  { path = "f64::log2", reason = "use `flexmesa_math::log2` (#165)" },
+  { path = "f64::log10", reason = "use `flexmesa_math::log10` (#165)" },
+  { path = "f64::powf", reason = "use `flexmesa_math::pow` (#165)" },
+  { path = "f64::powi", reason = "use `flexmesa_math::{pow2..pow8, powi, powi_f90}` (#165)" },
+  { path = "f64::sin", reason = "use `flexmesa_math::sin` (#165)" },
+  { path = "f64::cos", reason = "use `flexmesa_math::cos` (#165)" },
+  { path = "f64::sin_cos", reason = "use `flexmesa_math::sin_cos` (#165)" },
+  { path = "f64::tan", reason = "use `flexmesa_math::tan` (#165)" },
+  { path = "f64::asin", reason = "use `flexmesa_math::asin` (#165)" },
+  { path = "f64::acos", reason = "use `flexmesa_math::acos` (#165)" },
+  { path = "f64::atan", reason = "use `flexmesa_math::atan` (#165)" },
+  { path = "f64::atan2", reason = "use `flexmesa_math::atan2` (#165)" },
+  { path = "f64::sinh", reason = "use `flexmesa_math::sinh` (#165)" },
+  { path = "f64::cosh", reason = "use `flexmesa_math::cosh` (#165)" },
+  { path = "f64::tanh", reason = "use `flexmesa_math::tanh` (#165)" },
+  { path = "f64::asinh", reason = "use `flexmesa_math::asinh` (#165)" },
+  { path = "f64::acosh", reason = "use `flexmesa_math::acosh` (#165)" },
+  { path = "f64::atanh", reason = "use `flexmesa_math::atanh` (#165)" },
+  { path = "f64::cbrt", reason = "use `flexmesa_math::pow(x, 1.0 / 3.0)` (#165)" },
+  { path = "f64::hypot", reason = "use `flexmesa_math::hypot` (#165)" },
+  { path = "f64::mul_add", reason = "use `a * b + c` or `flexmesa_math::fma` (#165)" },
+]

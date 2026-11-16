@@ -143,8 +143,8 @@ fn test_find_max_quadratic_matches_upstream_and_fixes_y3_concavity_bug() {
 fn test_dfridr_and_integrate_match_upstream_simp38_oracles() {
     // Derivative of sin(x) at x = 1.0 is cos(1.0)
     let x0 = 1.0_f64;
-    let (df, err) = dfridr(0.1, |h| (x0 + h).sin()).unwrap();
-    assert!((df - x0.cos()).abs() <= 1e-12);
+    let (df, err) = dfridr(0.1, |h| flexmesa_math::sin(x0 + h)).unwrap();
+    assert!((df - flexmesa_math::cos(x0)).abs() <= 1e-12);
     assert!(err <= 1e-11);
 
     let pi = std::f64::consts::PI;
@@ -152,18 +152,22 @@ fn test_dfridr_and_integrate_match_upstream_simp38_oracles() {
     let (i1, _) = integrate(|x| x, 0.0, 1.0, 1e-10, 10_000).unwrap();
     assert!((i1 - 0.5).abs() <= 1e-12);
     // Upstream test 2: int_0^pi sin(x) dx = 2.0
-    let (i2, _) = integrate(f64::sin, 0.0, pi, 1e-8, 10_000).unwrap();
+    let (i2, _) = integrate(flexmesa_math::sin, 0.0, pi, 1e-8, 10_000).unwrap();
     assert!((i2 - 2.0).abs() <= 1e-8);
     // Upstream test 3: int_0^{2*pi} sin(x) dx = 0.0
-    let (i3, _) = integrate(f64::sin, 0.0, 2.0 * pi, 1e-8, 10_000).unwrap();
+    let (i3, _) =
+        integrate(flexmesa_math::sin, 0.0, 2.0 * pi, 1e-8, 10_000).unwrap();
     assert!(i3.abs() <= 1e-8);
     // Upstream test 4: int_0^2 exp(x) dx = exp(2) - 1
-    let (i4, _) = integrate(f64::exp, 0.0, 2.0, 1e-8, 10_000).unwrap();
-    assert!((i4 - (2.0_f64.exp() - 1.0)).abs() <= 1e-8);
+    let (i4, _) =
+        integrate(flexmesa_math::exp, 0.0, 2.0, 1e-8, 10_000).unwrap();
+    assert!((i4 - (flexmesa_math::exp(2.0_f64) - 1.0)).abs() <= 1e-8);
     // Upstream test 5: int_0^{10} exp(x) dx = exp(10) - 1
-    let (i5, _) = integrate(f64::exp, 0.0, 10.0, 1e-6, 50_000).unwrap();
+    let (i5, _) =
+        integrate(flexmesa_math::exp, 0.0, 10.0, 1e-6, 50_000).unwrap();
     assert!(
-        (i5 - (10.0_f64.exp() - 1.0)).abs() <= 1e-6 * (10.0_f64.exp() - 1.0)
+        (i5 - (flexmesa_math::exp(10.0_f64) - 1.0)).abs()
+            <= 1e-6 * (flexmesa_math::exp(10.0_f64) - 1.0)
     );
 }
 
@@ -178,7 +182,7 @@ fn test_brent_safe_zero_and_minimization_match_analytical_oracles() {
         1e-14,
         1e-14,
         1e-14,
-        |x| Ok(x - 3.0 * (1.0 - x).sin()),
+        |x| Ok(x - 3.0 * flexmesa_math::sin(1.0 - x)),
         None,
         None,
         200,
@@ -211,7 +215,10 @@ fn test_brent_safe_zero_and_minimization_match_analytical_oracles() {
 fn test_safe_root_with_brackets_and_guess_match_upstream_golden_values() {
     // Upstream test_root_with_brackets: f(x) = x - 3*sin(1 - x) on [0, 10]
     let f1 = |x: f64| -> Result<(f64, f64), NumError> {
-        Ok((x - 3.0 * (1.0 - x).sin(), 1.0 + 3.0 * (1.0 - x).cos()))
+        Ok((
+            x - 3.0 * flexmesa_math::sin(1.0 - x),
+            1.0 + 3.0 * flexmesa_math::cos(1.0 - x),
+        ))
     };
     let ((x1, x3), (y1, y3)) =
         look_for_brackets(5.0, 1.0, 0.0, 10.0, f1, 50).unwrap();
@@ -222,7 +229,7 @@ fn test_safe_root_with_brackets_and_guess_match_upstream_golden_values() {
 
     // Upstream test_root2 / test_root3: f(x) = tanh(x) - tanh(0.5) => x* = 0.5
     let f2 = |x: f64| -> Result<(f64, f64), NumError> {
-        let t = x.tanh();
+        let t = flexmesa_math::tanh(x);
         Ok((t - 0.462_117_157_260_009_8, 1.0 - t * t))
     };
     let (root2, _) = safe_root_without_brackets(
@@ -276,9 +283,9 @@ fn test_safe_root_dual_matches_implicit_function_theorem_derivatives() {
     .unwrap();
 
     let xs = root_dual.val;
-    assert!((p0 * xs.powi(3) + xs - p1).abs() <= 1e-13);
+    assert!((p0 * flexmesa_math::pow3(xs) + xs - p1).abs() <= 1e-13);
     let denom = 3.0 * p0 * xs * xs + 1.0;
-    let exact_dp0 = -(xs.powi(3)) / denom;
+    let exact_dp0 = -(flexmesa_math::pow3(xs)) / denom;
     let exact_dp1 = 1.0 / denom;
     assert!((root_dual.d1[0] - exact_dp0).abs() <= 1e-12);
     assert!((root_dual.d1[1] - exact_dp1).abs() <= 1e-12);
@@ -381,6 +388,7 @@ fn test_newuoa_and_bobyqa_match_upstream_chebyquad_suite() {
 /// Verifies [`nm_simplex`] on all 6 benchmark functions (`FR4`, `ER`, `WD`,
 /// `BLE`, `PS`, `TR`) from `num/test/src/test_simplex.f90` (`num/test/test_output:131-149`).
 #[test]
+#[allow(clippy::too_many_lines)]
 fn test_nm_simplex_matches_all_six_upstream_benchmarks() {
     let base = SimplexConfig {
         max_evals: 10_000,
@@ -419,7 +427,8 @@ fn test_nm_simplex_matches_all_six_upstream_benchmarks() {
     let r_er = nm_simplex(4, &[-2.0; 4], &[5.0; 4], &[3.0; 4], &base, |x| {
         Ok((0..3)
             .map(|i| {
-                100.0 * (x[i + 1] - x[i] * x[i]).powi(2) + (1.0 - x[i]).powi(2)
+                100.0 * flexmesa_math::pow2(x[i + 1] - x[i] * x[i])
+                    + flexmesa_math::pow2(1.0 - x[i])
             })
             .sum())
     })
@@ -433,12 +442,12 @@ fn test_nm_simplex_matches_all_six_upstream_benchmarks() {
         &[-3.0, -1.0, -3.0, -1.0],
         &base,
         |x| {
-            Ok(100.0 * (x[1] - x[0] * x[0]).powi(2)
-                + (1.0 - x[0]).powi(2)
-                + 90.0 * (x[3] - x[2] * x[2]).powi(2)
-                + (1.0 - x[2]).powi(2)
-                + 100.0 * (x[1] + x[3] - 2.0).powi(2)
-                + (x[1] - x[3]).powi(2) / 10.0_f64.sqrt())
+            Ok(100.0 * flexmesa_math::pow2(x[1] - x[0] * x[0])
+                + flexmesa_math::pow2(1.0 - x[0])
+                + 90.0 * flexmesa_math::pow2(x[3] - x[2] * x[2])
+                + flexmesa_math::pow2(1.0 - x[2])
+                + 100.0 * flexmesa_math::pow2(x[1] + x[3] - 2.0)
+                + flexmesa_math::pow2(x[1] - x[3]) / 10.0_f64.sqrt())
         },
     )
     .unwrap();
@@ -448,9 +457,9 @@ fn test_nm_simplex_matches_all_six_upstream_benchmarks() {
         Ok((0..2)
             .map(|i| {
                 let (u, v) = (x[2 * i], x[2 * i + 1]);
-                (1.5 - u * (1.0 - v)).powi(2)
-                    + (2.25 - u * (1.0 - v * v)).powi(2)
-                    + (2.625 - u * (1.0 - v * v * v)).powi(2)
+                flexmesa_math::pow2(1.5 - u * (1.0 - v))
+                    + flexmesa_math::pow2(2.25 - u * (1.0 - v * v))
+                    + flexmesa_math::pow2(2.625 - u * (1.0 - v * v * v))
             })
             .sum())
     })
@@ -464,21 +473,24 @@ fn test_nm_simplex_matches_all_six_upstream_benchmarks() {
         &[3.0, -1.0, 0.0, 1.0],
         &base,
         |x| {
-            Ok((x[0] + 10.0 * x[1]).powi(2)
-                + 5.0 * (x[2] - x[3]).powi(2)
-                + (x[1] - 2.0 * x[2]).powi(4)
-                + 10.0 * (x[0] - x[3]).powi(4))
+            Ok(flexmesa_math::pow2(x[0] + 10.0 * x[1])
+                + 5.0 * flexmesa_math::pow2(x[2] - x[3])
+                + flexmesa_math::pow4(x[1] - 2.0 * x[2])
+                + 10.0 * flexmesa_math::pow4(x[0] - x[3]))
         },
     )
     .unwrap();
     assert!(r_ps.f_min < 1e-10);
 
     let r_tr = nm_simplex(4, &[-0.1; 4], &[0.1; 4], &[0.01; 4], &base, |x| {
-        let sc: f64 = x.iter().map(|&v| v.cos()).sum();
+        let sc: f64 = x.iter().map(|&v| flexmesa_math::cos(v)).sum();
         Ok((0..4)
             .map(|i| {
-                (4.0 - sc + ((i + 1) as f64) * (1.0 - x[i].cos()) - x[i].sin())
-                    .powi(2)
+                flexmesa_math::pow2(
+                    4.0 - sc
+                        + ((i + 1) as f64) * (1.0 - flexmesa_math::cos(x[i]))
+                        - flexmesa_math::sin(x[i]),
+                )
             })
             .sum())
     })
@@ -510,12 +522,12 @@ fn test_brent_all_ten_minimization_and_five_root_functions() {
         assert!(x.abs() <= 1e-5 && fx.abs() <= 1e-10);
     }
     let (x4, fx4) = glomin(10_000, -10.0, 10.0, 0.0, 72.0, e, e, |x| {
-        Ok((x + x.sin()) * (-x * x).exp())
+        Ok((x + flexmesa_math::sin(x)) * flexmesa_math::exp(-x * x))
     })
     .unwrap();
     assert!((x4 - (-0.679_578_66)).abs() <= 1e-5 && fx4 < -0.824);
     let (x5, fx5) = glomin(10_000, -10.0, 10.0, 0.0, 72.0, e, e, |x| {
-        Ok((x - x.sin()) * (-x * x).exp())
+        Ok((x - flexmesa_math::sin(x)) * flexmesa_math::exp(-x * x))
     })
     .unwrap();
     assert!(
@@ -526,34 +538,36 @@ fn test_brent_all_ten_minimization_and_five_root_functions() {
     let eps = 10.0 * e;
     let (xg1, fg1) =
         local_min(10_000, 0.0, std::f64::consts::PI, eps, eps, |x| {
-            Ok((x - 2.0).powi(2) + 1.0)
+            Ok(flexmesa_math::pow2(x - 2.0) + 1.0)
         })
         .unwrap();
     assert!((xg1 - 2.0).abs() <= 1e-6 && (fg1 - 1.0).abs() <= 1e-12);
-    let (xg2, _) =
-        local_min(10_000, 0.0, 1.0, eps, eps, |x| Ok(x * x + (-x).exp()))
-            .unwrap();
-    assert!((2.0 * xg2 - (-xg2).exp()).abs() <= 1e-6);
+    let (xg2, _) = local_min(10_000, 0.0, 1.0, eps, eps, |x| {
+        Ok(x * x + flexmesa_math::exp(-x))
+    })
+    .unwrap();
+    assert!((2.0 * xg2 - flexmesa_math::exp(-xg2)).abs() <= 1e-6);
     let (xg3, _) = local_min(10_000, -2.0, 2.0, eps, eps, |x| {
         Ok(((x * x + 2.0) * x + 1.0) * x + 3.0)
     })
     .unwrap();
-    assert!((4.0 * xg3.powi(3) + 4.0 * xg3 + 1.0).abs() <= 1e-6);
-    let (xg4, _) =
-        local_min(10_000, 1e-4, 1.0, eps, eps, |x| Ok(x.exp() + 0.01 / x))
-            .unwrap();
-    assert!((xg4.exp() - 0.01 / (xg4 * xg4)).abs() <= 1e-5);
+    assert!((4.0 * flexmesa_math::pow3(xg3) + 4.0 * xg3 + 1.0).abs() <= 1e-6);
+    let (xg4, _) = local_min(10_000, 1e-4, 1.0, eps, eps, |x| {
+        Ok(flexmesa_math::exp(x) + 0.01 / x)
+    })
+    .unwrap();
+    assert!((flexmesa_math::exp(xg4) - 0.01 / (xg4 * xg4)).abs() <= 1e-5);
     let (xg5, _) = local_min(10_000, 2e-4, 2.0, eps, eps, |x| {
-        Ok(x.exp() - 2.0 * x + 0.01 / x - 1e-6 / (x * x))
+        Ok(flexmesa_math::exp(x) - 2.0 * x + 0.01 / x - 1e-6 / (x * x))
     })
     .unwrap();
     assert!(xg5 > 0.05 && xg5 < 1.0);
 
     let root_cases: [(f64, f64, fn(f64) -> f64); 5] = [
-        (1.0, 2.0, |x| x.sin() - 0.5 * x),
-        (0.0, 1.0, |x| 2.0 * x - (-x).exp()),
-        (-1.0, 0.5, |x| x * (-x).exp()),
-        (1e-4, 20.0, |x| x.exp() - 0.01 / (x * x)),
+        (1.0, 2.0, |x| flexmesa_math::sin(x) - 0.5 * x),
+        (0.0, 1.0, |x| 2.0 * x - flexmesa_math::exp(-x)),
+        (-1.0, 0.5, |x| x * flexmesa_math::exp(-x)),
+        (1e-4, 20.0, |x| flexmesa_math::exp(x) - 0.01 / (x * x)),
         (-5.0, 2.0, |x| (x + 3.0) * (x - 1.0) * (x - 1.0)),
     ];
     for (a, b, f) in root_cases {

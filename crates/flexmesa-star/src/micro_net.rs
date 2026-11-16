@@ -118,14 +118,14 @@ pub fn do_net(
                     let t_start_k = lnt_start_slice
                         .get(k)
                         .copied()
-                        .map_or(t_slice[k], f64::exp);
+                        .map_or(t_slice[k], flexmesa_math::exp);
                     if t_start_k >= split_min_t {
                         return Ok(());
                     }
                 }
 
                 let mut t_k = t_slice[k];
-                let mut log_t = t_k.log10();
+                let mut log_t = flexmesa_math::log10(t_k);
                 if (eps_fac == 0.0 && dxdt_fac == 0.0)
                     || abar_slice[k] > max_abar
                     || log_t < min_logt
@@ -150,7 +150,7 @@ pub fn do_net(
                 }
 
                 let rho_k = rho_slice[k];
-                let log_rho = rho_k.log10();
+                let log_rho = flexmesa_math::log10(rho_k);
                 let xa_k = &xa_slice[k * species..(k + 1) * species];
 
                 let mut stack_dydt = [[F64x2::ZERO; NUM_RVS]; 128];

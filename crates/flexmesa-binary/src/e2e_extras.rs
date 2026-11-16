@@ -7,14 +7,19 @@ use flexmesa_const::{CLIGHT, CRAD, LSUN, MSUN, PI, RSUN, SECDAY, SECYER};
 use flexmesa_star::{StarError, StarModel};
 
 use crate::e2e_oracles::{
-    BinaryInlistControls, eval_brott_wind_msun_yr, eval_gr_expected_separation_rsun,
-    eval_tauris_vdh_expected_separation_rsun,
+    eval_brott_wind_msun_yr, eval_gr_expected_separation_rsun,
+    eval_tauris_vdh_expected_separation_rsun, BinaryInlistControls,
 };
 use crate::extras::{BinaryExtras, BinaryExtrasAction};
 use crate::system::{BinaryCompanion, BinarySystem};
 use crate::system_rlof::surface_h1_and_he4;
 
-fn species_frac(star: &StarModel, zone: usize, iso: &str, fallback: f64) -> f64 {
+fn species_frac(
+    star: &StarModel,
+    zone: usize,
+    iso: &str,
+    fallback: f64,
+) -> f64 {
     if star.nz == 0 || star.species == 0 {
         return fallback;
     }
@@ -25,16 +30,29 @@ fn species_frac(star: &StarModel, zone: usize, iso: &str, fallback: f64) -> f64 
         .map_or(fallback, |j| star.cell_xa(k)[j])
 }
 
-fn center_h1(star: &StarModel) -> f64 { species_frac(star, star.nz.saturating_sub(1), "h1", 0.7) }
-fn center_he4(star: &StarModel) -> f64 { species_frac(star, star.nz.saturating_sub(1), "he4", 0.28) }
-fn surface_he4(star: &StarModel) -> f64 { species_frac(star, 0, "he4", 0.28) }
+fn center_h1(star: &StarModel) -> f64 {
+    species_frac(star, star.nz.saturating_sub(1), "h1", 0.7)
+}
+fn center_he4(star: &StarModel) -> f64 {
+    species_frac(star, star.nz.saturating_sub(1), "he4", 0.28)
+}
+fn surface_he4(star: &StarModel) -> f64 {
+    species_frac(star, 0, "he4", 0.28)
+}
 fn total_lnuc_erg_s(star: &StarModel) -> f64 {
     flexmesa_star::compute_power_categories(star).power_nuc_burn * LSUN
 }
 
 pub(crate) trait TestSuiteBinaryExtras: BinaryExtras {
-    fn max_relative_oracle_error(&self) -> f64 { 0.0 }
-    fn evaluate_pass(&self, bin: &BinarySystem, uncapped: bool, term_code: &str) -> bool;
+    fn max_relative_oracle_error(&self) -> f64 {
+        0.0
+    }
+    fn evaluate_pass(
+        &self,
+        bin: &BinarySystem,
+        uncapped: bool,
+        term_code: &str,
+    ) -> bool;
 }
 
 /// Peters (1964) gravitational-wave inspiral verifier (`jdot_gr_check`).
@@ -67,19 +85,29 @@ impl BinaryExtras for JdotGrCheckExtras {
         self.max_rel_err = self.max_rel_err.max(rel);
         if rel > 1.0e-2 {
             self.failed_mid_run = true;
-            return BinaryExtrasAction::Terminate(String::from("GrErrorExceeded"));
+            return BinaryExtrasAction::Terminate(String::from(
+                "GrErrorExceeded",
+            ));
         }
         BinaryExtrasAction::KeepGoing
     }
 }
 
 impl TestSuiteBinaryExtras for JdotGrCheckExtras {
-    fn max_relative_oracle_error(&self) -> f64 { self.max_rel_err }
-    fn evaluate_pass(&self, bin: &BinarySystem, uncapped: bool, term_code: &str) -> bool {
+    fn max_relative_oracle_error(&self) -> f64 {
+        self.max_rel_err
+    }
+    fn evaluate_pass(
+        &self,
+        bin: &BinarySystem,
+        uncapped: bool,
+        term_code: &str,
+    ) -> bool {
         !self.failed_mid_run
             && self.max_rel_err < 1.0e-2
             && (bin.separation / RSUN) < self.a0_rsun
-            && (!uncapped || (term_code == "GrCheckPass" && bin.donor.mstar_dot < 0.0))
+            && (!uncapped
+                || (term_code == "GrCheckPass" && bin.donor.mstar_dot < 0.0))
     }
 }
 
@@ -115,15 +143,24 @@ impl BinaryExtras for JdotMlCheckExtras {
         self.max_rel_err = self.max_rel_err.max(rel);
         if rel > 1.0e-4 {
             self.failed_mid_run = true;
-            return BinaryExtrasAction::Terminate(String::from("MlErrorExceeded"));
+            return BinaryExtrasAction::Terminate(String::from(
+                "MlErrorExceeded",
+            ));
         }
         BinaryExtrasAction::KeepGoing
     }
 }
 
 impl TestSuiteBinaryExtras for JdotMlCheckExtras {
-    fn max_relative_oracle_error(&self) -> f64 { self.max_rel_err }
-    fn evaluate_pass(&self, bin: &BinarySystem, uncapped: bool, term_code: &str) -> bool {
+    fn max_relative_oracle_error(&self) -> f64 {
+        self.max_rel_err
+    }
+    fn evaluate_pass(
+        &self,
+        bin: &BinarySystem,
+        uncapped: bool,
+        term_code: &str,
+    ) -> bool {
         let target_age = bin.donor.controls.max_age.unwrap_or(1.4e10);
         let m1_msun = bin.star_masses_g()[0] / MSUN;
         !self.failed_mid_run
@@ -149,19 +186,29 @@ pub struct JdotLsCheckExtras {
 impl BinaryExtras for JdotLsCheckExtras {
     fn finish_step(&mut self, bin: &mut BinarySystem) -> BinaryExtrasAction {
         let j_cur = bin.total_angular_momentum_conserved();
-        let rel = (j_cur - self.j_conserved_0).abs() / self.j_conserved_0.abs().max(1.0e-30);
+        let rel = (j_cur - self.j_conserved_0).abs()
+            / self.j_conserved_0.abs().max(1.0e-30);
         self.max_rel_err = self.max_rel_err.max(rel);
         if rel >= 1.0e-12 {
             self.failed_mid_run = true;
-            return BinaryExtrasAction::Terminate(String::from("LsConservationExceeded"));
+            return BinaryExtrasAction::Terminate(String::from(
+                "LsConservationExceeded",
+            ));
         }
         BinaryExtrasAction::KeepGoing
     }
 }
 
 impl TestSuiteBinaryExtras for JdotLsCheckExtras {
-    fn max_relative_oracle_error(&self) -> f64 { self.max_rel_err }
-    fn evaluate_pass(&self, bin: &BinarySystem, uncapped: bool, term_code: &str) -> bool {
+    fn max_relative_oracle_error(&self) -> f64 {
+        self.max_rel_err
+    }
+    fn evaluate_pass(
+        &self,
+        bin: &BinarySystem,
+        uncapped: bool,
+        term_code: &str,
+    ) -> bool {
         let target_age = bin.donor.controls.max_age.unwrap_or(1.0e10);
         let omega_orb = 2.0 * PI / bin.period;
         let omega_surf = bin.donor.omega.first().copied().unwrap_or(0.0);
@@ -191,24 +238,31 @@ pub struct WindFedBhHmxbExtras {
 impl BinaryExtras for WindFedBhHmxbExtras {
     fn finish_step(&mut self, bin: &mut BinarySystem) -> BinaryExtrasAction {
         let acct = &bin.last_mdot;
-        let max_allowed = acct.mdot_edd * (1.0 - acct.mdot_edd_eta) * (1.0 + 1.0e-10);
+        let max_allowed =
+            acct.mdot_edd * (1.0 - acct.mdot_edd_eta) * (1.0 + 1.0e-10);
         if acct.component_mdot[1] > max_allowed {
             self.failed_mid_run = true;
-            return BinaryExtrasAction::Terminate(String::from("ExceededEddington"));
+            return BinaryExtrasAction::Terminate(String::from(
+                "ExceededEddington",
+            ));
         }
         let expected_sys = if -acct.actual_mtransfer_rate > acct.mdot_edd {
             self.saw_super_edd = true;
-            acct.actual_mtransfer_rate + acct.mdot_edd - acct.accretion_luminosity / (CLIGHT * CLIGHT)
+            acct.actual_mtransfer_rate + acct.mdot_edd
+                - acct.accretion_luminosity / (CLIGHT * CLIGHT)
         } else {
             self.saw_sub_edd = true;
             -acct.accretion_luminosity / (CLIGHT * CLIGHT)
         };
-        let frac_bh = (acct.mdot_system_transfer[1] - expected_sys).abs() / expected_sys.abs();
+        let frac_bh = (acct.mdot_system_transfer[1] - expected_sys).abs()
+            / expected_sys.abs();
         let donor_wind_mdot = bin.donor.mstar_dot - bin.mtransfer_rate;
         let exp_wtr = donor_wind_mdot * acct.wind_xfer_fraction[0];
-        let err_wtr = (acct.mdot_wind_transfer[0] - exp_wtr).abs() / acct.mdot_wind_transfer[0].abs();
+        let err_wtr = (acct.mdot_wind_transfer[0] - exp_wtr).abs()
+            / acct.mdot_wind_transfer[0].abs();
         let exp_wsys = donor_wind_mdot * (1.0 - acct.wind_xfer_fraction[0]);
-        let err_wsys = (acct.mdot_system_wind[0] - exp_wsys).abs() / exp_wsys.abs();
+        let err_wsys =
+            (acct.mdot_system_wind[0] - exp_wsys).abs() / exp_wsys.abs();
         if bin.model_number > 1 {
             self.max_rel_err = self.max_rel_err.max(frac_bh);
         }
@@ -219,15 +273,24 @@ impl BinaryExtras for WindFedBhHmxbExtras {
             || err_wsys > 1.0e-10
         {
             self.failed_mid_run = true;
-            return BinaryExtrasAction::Terminate(String::from("WindFedAccountingExceeded"));
+            return BinaryExtrasAction::Terminate(String::from(
+                "WindFedAccountingExceeded",
+            ));
         }
         BinaryExtrasAction::KeepGoing
     }
 }
 
 impl TestSuiteBinaryExtras for WindFedBhHmxbExtras {
-    fn max_relative_oracle_error(&self) -> f64 { self.max_rel_err }
-    fn evaluate_pass(&self, bin: &BinarySystem, uncapped: bool, term_code: &str) -> bool {
+    fn max_relative_oracle_error(&self) -> f64 {
+        self.max_rel_err
+    }
+    fn evaluate_pass(
+        &self,
+        bin: &BinarySystem,
+        uncapped: bool,
+        term_code: &str,
+    ) -> bool {
         !self.failed_mid_run
             && self.max_rel_err <= 1.0e-15
             && (!uncapped
@@ -250,16 +313,25 @@ pub struct PointMassEddExtras {
 impl BinaryExtras for PointMassEddExtras {
     fn finish_step(&mut self, bin: &mut BinarySystem) -> BinaryExtrasAction {
         let acct = &bin.last_mdot;
-        if acct.mdot_edd > 0.0 && acct.component_mdot[1] > acct.mdot_edd * (1.0 + 1.0e-12) {
+        if acct.mdot_edd > 0.0
+            && acct.component_mdot[1] > acct.mdot_edd * (1.0 + 1.0e-12)
+        {
             self.failed_mid_run = true;
-            return BinaryExtrasAction::Terminate(String::from("PointMassExceededEddington"));
+            return BinaryExtrasAction::Terminate(String::from(
+                "PointMassExceededEddington",
+            ));
         }
         BinaryExtrasAction::KeepGoing
     }
 }
 
 impl TestSuiteBinaryExtras for PointMassEddExtras {
-    fn evaluate_pass(&self, bin: &BinarySystem, uncapped: bool, term_code: &str) -> bool {
+    fn evaluate_pass(
+        &self,
+        bin: &BinarySystem,
+        uncapped: bool,
+        term_code: &str,
+    ) -> bool {
         let m1_msun = bin.star_masses_g()[0] / MSUN;
         !self.failed_mid_run
             && (!uncapped
@@ -276,8 +348,15 @@ pub struct EvolveBothStarsExtras;
 impl BinaryExtras for EvolveBothStarsExtras {}
 
 impl TestSuiteBinaryExtras for EvolveBothStarsExtras {
-    fn evaluate_pass(&self, bin: &BinarySystem, uncapped: bool, term_code: &str) -> bool {
-        !uncapped || (term_code == "accretor_overflow_terminate" && bin.rl_relative_gap[1] >= 0.0)
+    fn evaluate_pass(
+        &self,
+        bin: &BinarySystem,
+        uncapped: bool,
+        term_code: &str,
+    ) -> bool {
+        !uncapped
+            || (term_code == "accretor_overflow_terminate"
+                && bin.rl_relative_gap[1] >= 0.0)
     }
 }
 
@@ -314,10 +393,12 @@ impl BinaryExtras for DoubleBhExtras {
             star.teff
         } else {
             let r0 = star.r.first().copied().unwrap_or(1.0).max(1.0);
-            (l1 / (PI * r0 * r0 * CRAD * CLIGHT)).powf(0.25)
+            flexmesa_math::pow(l1 / (PI * r0 * r0 * CRAD * CLIGHT), 0.25)
         }
         .max(100.0);
-        let r1 = (l1 / (PI * CRAD * CLIGHT * t1.powi(4))).sqrt().max(1.0);
+        let r1 = (l1 / (PI * CRAD * CLIGHT * flexmesa_math::pow4(t1)))
+            .sqrt()
+            .max(1.0);
         let w_msun_yr = eval_brott_wind_msun_yr(
             (l1 / LSUN).max(1.0e-10),
             (star.mstar / MSUN).max(1.0e-5),
@@ -335,26 +416,34 @@ impl BinaryExtras for DoubleBhExtras {
             let zams_settled = bin.star_ref(1).map(|s1| {
                 let lnuc = total_lnuc_erg_s(s1).abs();
                 let lsurf = s1.lum[0].abs().max(1.0);
-                s1.star_age > 100.0 && (lnuc / lsurf).log10().abs() < 0.005
+                s1.star_age > 100.0
+                    && flexmesa_math::log10(lnuc / lsurf).abs() < 0.005
             });
             if let Some(settled) = zams_settled {
                 if settled {
                     let gap1 = bin.rl_relative_gap_by_star()[0];
                     if gap1 > 0.320_819_224 {
                         self.failed_mid_run = true;
-                        return BinaryExtrasAction::Terminate(String::from("L2OverflowAtZams"));
+                        return BinaryExtrasAction::Terminate(String::from(
+                            "L2OverflowAtZams",
+                        ));
                     }
                     if gap1 > 0.0 {
                         bin.controls.max_implicit_abs_mdot = 1.0e-3;
-                        bin.donor.controls.mix_wind.delta_mdot_hard_limit = -1.0;
-                        if let BinaryCompanion::Star(ref mut s2) = bin.companion {
+                        bin.donor.controls.mix_wind.delta_mdot_hard_limit =
+                            -1.0;
+                        if let BinaryCompanion::Star(ref mut s2) = bin.companion
+                        {
                             s2.controls.mix_wind.delta_mdot_hard_limit = -1.0;
                         }
                     }
                     bin.set_ignore_rlof_flag(false);
                     bin.controls.terminate_if_l2_overflow = true;
                 } else {
-                    bin.set_period_eccentricity(self.initial_period_in_days * SECDAY, 0.0);
+                    bin.set_period_eccentricity(
+                        self.initial_period_in_days * SECDAY,
+                        0.0,
+                    );
                 }
             }
         }
@@ -383,8 +472,13 @@ impl BinaryExtras for DoubleBhExtras {
         }
         if bin.point_mass_i != 0 {
             let rem_idx = 3 - bin.point_mass_i;
-            if bin.star_ref(rem_idx).is_some_and(|s| center_he4(s) < 1.0e-5) {
-                return BinaryExtrasAction::Terminate(String::from("DoubleBhPass"));
+            if bin
+                .star_ref(rem_idx)
+                .is_some_and(|s| center_he4(s) < 1.0e-5)
+            {
+                return BinaryExtrasAction::Terminate(String::from(
+                    "DoubleBhPass",
+                ));
             }
         }
         BinaryExtrasAction::KeepGoing
@@ -392,14 +486,20 @@ impl BinaryExtras for DoubleBhExtras {
 }
 
 impl TestSuiteBinaryExtras for DoubleBhExtras {
-    fn evaluate_pass(&self, bin: &BinarySystem, uncapped: bool, term_code: &str) -> bool {
+    fn evaluate_pass(
+        &self,
+        bin: &BinarySystem,
+        uncapped: bool,
+        term_code: &str,
+    ) -> bool {
         let [m1_g, m2_g] = bin.star_masses_g();
         let (m1_msun, m2_msun) = (m1_g / MSUN, m2_g / MSUN);
         !self.failed_mid_run
             && self.max_qhe_diff <= 0.2
             && m1_msun > 20.0
             && m2_msun > 20.0
-            && (!uncapped || (bin.point_mass_i != 0 && term_code == "DoubleBhPass"))
+            && (!uncapped
+                || (bin.point_mass_i != 0 && term_code == "DoubleBhPass"))
     }
 }
 

@@ -10,15 +10,16 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use flexmesa_binary::{
-    BINARY_LOG_COL_WIDTH, BinaryLogsWriter, BinarySystem, DefaultBinaryExtras,
-    EdotBreakdown, IncrementalBinaryHistoryWriter, default_binary_history_specs,
-    evaluate_binary_history_row, parse_binary_history_columns,
+    default_binary_history_specs, evaluate_binary_history_row,
+    parse_binary_history_columns, BinaryLogsWriter, BinarySystem,
+    DefaultBinaryExtras, EdotBreakdown, IncrementalBinaryHistoryWriter,
+    BINARY_LOG_COL_WIDTH,
 };
 use flexmesa_const::{MSUN, SECYER};
 use flexmesa_star::{
-    MesaCellValue, MesaHeaderValue, OutputControls, StarControls, StarError,
-    StarJobControls, load_zams_model, read_mesa_log_file, read_mesa_log_str,
-    safe_log10, set_hydro_vars,
+    load_zams_model, read_mesa_log_file, read_mesa_log_str, safe_log10,
+    set_hydro_vars, MesaCellValue, MesaHeaderValue, OutputControls,
+    StarControls, StarError, StarJobControls,
 };
 
 /// Verbatim 8-line prefix (6 header lines + first 2 data rows) from real Fortran
@@ -57,8 +58,10 @@ impl Drop for TempTestDir {
 
 #[test]
 fn test_real_mesa_26_4_1_binary_history_roundtrip_and_loud_parser_errors() {
-    let tbl = read_mesa_log_str(REAL_MESA_26_4_1_EVOLVE_BOTH_STARS_BINARY_HISTORY_HEAD)
-        .expect("parse real MESA 26.4.1 binary_history.data");
+    let tbl = read_mesa_log_str(
+        REAL_MESA_26_4_1_EVOLVE_BOTH_STARS_BINARY_HISTORY_HEAD,
+    )
+    .expect("parse real MESA 26.4.1 binary_history.data");
     assert_eq!(tbl.header.len(), 8);
     assert_eq!(
         tbl.header_value("version_number"),
@@ -75,7 +78,8 @@ fn test_real_mesa_26_4_1_binary_history_roundtrip_and_loud_parser_errors() {
     assert_eq!(tbl.num_rows, 2);
     assert_eq!(tbl.column("model_number"), Some(&[5.0, 10.0][..]));
     assert!(
-        (tbl.column("period_days").unwrap()[0] - 4.999_876_314_395_511e-1).abs()
+        (tbl.column("period_days").unwrap()[0] - 4.999_876_314_395_511e-1)
+            .abs()
             < 1.0e-16
     );
 
@@ -114,7 +118,8 @@ fn test_binary_history_donor_switch_mapping_and_width_32() {
     c2.initial_mass = 1.2;
     c2.output.log_directory = String::from("LOGS2");
 
-    let s1 = load_zams_model(c1.clone(), StarJobControls::default()).expect("s1");
+    let s1 =
+        load_zams_model(c1.clone(), StarJobControls::default()).expect("s1");
     let s2 = load_zams_model(c2, StarJobControls::default()).expect("s2");
 
     // Verify colliding component `log_directory` paths fail loudly.
@@ -141,10 +146,8 @@ fn test_binary_history_donor_switch_mapping_and_width_32() {
     sys.model_number = 1;
     sys.binary_age_yr = 1.0e4;
     sys.step_mtransfer_rate = -1.0e-7 * MSUN / SECYER;
-    sys.last_mdot.component_mdot = [
-        -1.0e-7 * MSUN / SECYER,
-        0.8e-7 * MSUN / SECYER,
-    ];
+    sys.last_mdot.component_mdot =
+        [-1.0e-7 * MSUN / SECYER, 0.8e-7 * MSUN / SECYER];
 
     let specs = default_binary_history_specs();
     assert_eq!(specs.len(), 31);
@@ -164,7 +167,8 @@ fn test_binary_history_donor_switch_mapping_and_width_32() {
     assert_eq!(get_val(&row_d1, "donor_index") as i64, 1);
     assert!((get_val(&row_d1, "lg_mstar_dot_1") - (-7.0)).abs() < 1.0e-12);
     assert!(
-        (get_val(&row_d1, "lg_mstar_dot_2") - safe_log10(0.8e-6 * 0.1)).abs() < 1.0e-12
+        (get_val(&row_d1, "lg_mstar_dot_2") - safe_log10(0.8e-6 * 0.1)).abs()
+            < 1.0e-12
     );
 
     // Force donor switch (`donor_i = 2`): star 1 must remain 2.0 Msun and star 2
@@ -181,10 +185,12 @@ fn test_binary_history_donor_switch_mapping_and_width_32() {
     assert!((get_val(&row_d2, "star_1_mass") - 2.0).abs() < 1.0e-10);
     assert!((get_val(&row_d2, "star_2_mass") - 1.2).abs() < 1.0e-10);
     assert!(
-        (get_val(&row_d2, "lg_mstar_dot_1") - safe_log10(1.5e-6)).abs() < 1.0e-12
+        (get_val(&row_d2, "lg_mstar_dot_1") - safe_log10(1.5e-6)).abs()
+            < 1.0e-12
     );
     assert!(
-        (get_val(&row_d2, "lg_mstar_dot_2") - safe_log10(3.0e-6)).abs() < 1.0e-12
+        (get_val(&row_d2, "lg_mstar_dot_2") - safe_log10(3.0e-6)).abs()
+            < 1.0e-12
     );
     assert!((get_val(&row_d2, "eff_xfer_fraction") - 0.5).abs() < 1.0e-12);
 
@@ -221,7 +227,8 @@ fn test_binary_logs_writer_coupled_stepping_intervals() {
     // Step a close donor + point-mass binary across 5 real `try_step_with_extras`
     // steps (`s1.model_number` starting at 10 vs `sys.model_number` starting at 0,
     // `history_interval = 5`, `history_interval_override = None`, explicit mass transfer).
-    let mut donor_pm = load_zams_model(c1, StarJobControls::default()).expect("donor_pm");
+    let mut donor_pm =
+        load_zams_model(c1, StarJobControls::default()).expect("donor_pm");
     donor_pm.model_number = 10;
     donor_pm.dt = 1.0e2 * SECYER;
     donor_pm.dt_next = donor_pm.dt;
@@ -260,14 +267,17 @@ fn test_binary_logs_writer_coupled_stepping_intervals() {
     // `binary_history.data` (`history_interval = 5`, `is_terminating = false`)
     // writes ONLY step 5, whereas `LOGS1/history.data` writes step 1 (`is_first_step`)
     // and step 5 (`15 % 5 == 0`) with distinct stellar vs binary `model_number`!
-    let bin_tbl = read_mesa_log_file(&step_tmp.path().join("binary_history.data"))
-        .expect("read binary_history.data");
+    let bin_tbl =
+        read_mesa_log_file(&step_tmp.path().join("binary_history.data"))
+            .expect("read binary_history.data");
     assert_eq!(bin_tbl.num_rows, 1);
     assert_eq!(bin_tbl.column("model_number"), Some(&[5.0][..]));
     assert!(sys_pm.step_mtransfer_rate < 0.0);
-    let expected_lg_mtr = safe_log10((-sys_pm.step_mtransfer_rate) / (MSUN / SECYER));
+    let expected_lg_mtr =
+        safe_log10((-sys_pm.step_mtransfer_rate) / (MSUN / SECYER));
     assert!(
-        (bin_tbl.column("lg_mtransfer_rate").unwrap()[0] - expected_lg_mtr).abs()
+        (bin_tbl.column("lg_mtransfer_rate").unwrap()[0] - expected_lg_mtr)
+            .abs()
             < 1.0e-12
     );
 
@@ -313,8 +323,9 @@ fn test_binary_history_edot_columns_report_applied_terms() {
         edot_total: -2.51e-19,
     };
 
-    let specs = parse_binary_history_columns("edot\nedot_tidal\nedot_enhance\n", None)
-        .expect("edot columns");
+    let specs =
+        parse_binary_history_columns("edot\nedot_tidal\nedot_enhance\n", None)
+            .expect("edot columns");
     let row = evaluate_binary_history_row(&sys, &specs);
     let get = |name: &str| -> f64 {
         row.iter()
@@ -325,6 +336,12 @@ fn test_binary_history_edot_columns_report_applied_terms() {
             .unwrap_or_else(|| panic!("missing binary column {name}"))
     };
     assert_eq!(get("edot").to_bits(), sys.last_edot.edot_total.to_bits());
-    assert_eq!(get("edot_tidal").to_bits(), sys.last_edot.edot_tidal.to_bits());
-    assert_eq!(get("edot_enhance").to_bits(), sys.last_edot.edot_enhance.to_bits());
+    assert_eq!(
+        get("edot_tidal").to_bits(),
+        sys.last_edot.edot_tidal.to_bits()
+    );
+    assert_eq!(
+        get("edot_enhance").to_bits(),
+        sys.last_edot.edot_enhance.to_bits()
+    );
 }

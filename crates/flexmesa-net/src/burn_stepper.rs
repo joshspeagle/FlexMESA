@@ -182,7 +182,8 @@ where
         }
         for iq in 2..=KMAXX {
             for k in 1..iq {
-                state.alf[k][iq] = eps1.powf(
+                state.alf[k][iq] = flexmesa_math::pow(
+                    eps1,
                     (state.a[k + 1] - state.a[iq + 1])
                         / ((state.a[iq + 1] - state.a[1] + 1.0)
                             * ((2 * k + 1) as f64)),
@@ -275,7 +276,10 @@ where
                 }
                 errmax /= eps;
                 km = k - 1;
-                err[km] = (errmax / SAFE1).powf(1.0 / ((2 * km + 1) as f64));
+                err[km] = flexmesa_math::pow(
+                    errmax / SAFE1,
+                    1.0 / ((2 * km + 1) as f64),
+                );
             }
             if k != 1 && (k >= state.kopt - 1 || state.first) {
                 if errmax < 1.0 {
@@ -382,12 +386,12 @@ where
 
     for _nn in 2..=nstep {
         for i in 0..nvar {
-            yout[i] = h.mul_add(yout[i], -del[i]);
+            yout[i] = flexmesa_math::fma(h, yout[i], -del[i]);
         }
         dgetrs(nvar, dmat, ipiv, yout)
             .map_err(|e| NetError::IntegrationError(e.to_string()))?;
         for i in 0..nvar {
-            del[i] = 2.0_f64.mul_add(yout[i], del[i]);
+            del[i] = flexmesa_math::fma(2.0_f64, yout[i], del[i]);
             ytemp[i] += del[i];
         }
         x += h;
@@ -395,7 +399,7 @@ where
     }
 
     for i in 0..nvar {
-        yout[i] = h.mul_add(yout[i], -del[i]);
+        yout[i] = flexmesa_math::fma(h, yout[i], -del[i]);
     }
     dgetrs(nvar, dmat, ipiv, yout)
         .map_err(|e| NetError::IntegrationError(e.to_string()))?;

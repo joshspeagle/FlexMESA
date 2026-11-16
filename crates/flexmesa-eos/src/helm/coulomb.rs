@@ -66,7 +66,7 @@ pub fn eval_helm_coulomb(
     let dsdaa = y_s * xni.daa;
     let dsdaz = forthpi * xni.da;
 
-    let aele_val = sinv.powf(third);
+    let aele_val = flexmesa_math::pow(sinv, third);
     let aeleinv = 1.0 / aele_val;
     let z_a = -third * aele_val * sinv;
     let y_a = -forth * z_a * sinv;
@@ -98,8 +98,8 @@ pub fn eval_helm_coulomb(
     let deplasgdaz = y_e * daeledz * daeleda + z_e * daeledaz;
     let deplasgdzz = y_e * daeledz * daeledz + z_e * daeledzz;
 
-    let x_z = zbar.powf(third);
-    let z_z = x_z.powi(5);
+    let x_z = flexmesa_math::pow(zbar, third);
+    let z_z = flexmesa_math::pow5(x_z);
     let ww_z = fiveth * x_z * x_z;
     let plasg_val = z_z * eplasg;
     if plasg_val < 0.0 {
@@ -137,7 +137,7 @@ pub fn eval_helm_coulomb(
             (0.0, 0.0)
         } else {
             let ratio = coulomb_temp_cut / temp;
-            let cf = (1.0 - ratio * ratio).exp();
+            let cf = flexmesa_math::exp(1.0 - ratio * ratio);
             (cf, cf * 2.0 * ratio * ratio / temp)
         };
         for var in [&mut pcoul, &mut ecoul, &mut scoul] {
@@ -247,7 +247,9 @@ fn eval_strong_coulomb(
         dzz: y_p * ecoul.dzz,
     };
 
-    let u0_s = 3.0 * B1 * p1 - 5.0 * C1 * p2 + D1 * (plasg.val.ln() - 1.0) - E1;
+    let u0_s = 3.0 * B1 * p1 - 5.0 * C1 * p2
+        + D1 * (flexmesa_math::log(plasg.val) - 1.0)
+        - E1;
     let du0_s = 0.75 * B1 * p3 + 1.25 * C1 * p4 + D1 * plasginv;
     let ddu0_s =
         -0.5625 * B1 * p5 - 1.5625 * C1 * p6 - D1 * plasginv * plasginv;
@@ -304,7 +306,7 @@ fn eval_weak_coulomb(
     let third = 1.0 / 3.0;
     let x_p = plasg.val.sqrt();
     let p1 = plasg.val * x_p;
-    let p2 = plasg.val.powf(B2);
+    let p2 = flexmesa_math::pow(plasg.val, B2);
     let p3 = x_p;
     let p4 = p2 * plasginv;
     let p5 = p3 * plasginv;

@@ -86,9 +86,12 @@ pub(crate) fn calc_lt(
     }
     let k0 = nzn - i;
     let ko = k0 - 1;
-    let pom3 = (wk.w[ko].powi(3) - wk.w[k0].powi(3)) / model.dm_bar[k0];
-    let pom =
-        -2.0 / 3.0 * dc.alfa * dc.alfat * (dc.p4 * model.r[k0].powi(2)).powi(2);
+    let pom3 = (flexmesa_math::pow3(wk.w[ko]) - flexmesa_math::pow3(wk.w[k0]))
+        / model.dm_bar[k0];
+    let pom = -2.0 / 3.0
+        * dc.alfa
+        * dc.alfat
+        * flexmesa_math::pow2(dc.p4 * flexmesa_math::pow2(model.r[k0]));
     let (v0, vo) = (model.aux.rsp.vol_rsp[k0], model.aux.rsp.vol_rsp[ko]);
     let rho2_face = 0.5 * (1.0 / (v0 * v0) + 1.0 / (vo * vo));
     let hp = model.aux.rsp.hp_face[k0];
@@ -103,19 +106,19 @@ pub(crate) fn calc_lt(
     RspLtOut {
         lt_00,
         dlt_dr_00: 4.0 * lt_00 / model.r[k0]
-            - tem2 / v0.powi(3) * wk.dvol_dr_00[i]
-            - tem2 / vo.powi(3) * wk.dvol_dr_in[i + 1]
+            - tem2 / flexmesa_math::pow3(v0) * wk.dvol_dr_00[i]
+            - tem2 / flexmesa_math::pow3(vo) * wk.dvol_dr_in[i + 1]
             + tem1 * wk.dhp_dr_00[i],
-        dlt_dr_in: -tem2 / v0.powi(3) * wk.dvol_dr_in[i]
+        dlt_dr_in: -tem2 / flexmesa_math::pow3(v0) * wk.dvol_dr_in[i]
             + tem1 * wk.dhp_dr_in[i],
-        dlt_dr_out: -tem2 / vo.powi(3) * wk.dvol_dr_00[i + 1]
+        dlt_dr_out: -tem2 / flexmesa_math::pow3(vo) * wk.dvol_dr_00[i + 1]
             + tem1 * wk.dhp_dr_out[i],
         dlt_dt_00: tem1 * wk.dhp_dt_00[i],
         dlt_dt_out: tem1 * wk.dhp_dt_out[i],
         dlt_der_00: tem1 * wk.dhp_der_00[i],
         dlt_der_out: tem1 * wk.dhp_der_out[i],
-        dlt_dw_00: -tem_w * wk.w[k0].powi(2),
-        dlt_dw_out: tem_w * wk.w[ko].powi(2),
+        dlt_dw_00: -tem_w * flexmesa_math::pow2(wk.w[k0]),
+        dlt_dw_out: tem_w * flexmesa_math::pow2(wk.w[ko]),
     }
 }
 
@@ -192,13 +195,13 @@ pub(crate) fn t_form_of_calc_fr(
             model.l_center
         };
         return RspFrTOut {
-            fr_00: l_in / (4.0 * PI * model.r_center.powi(2)),
+            fr_00: l_in / (4.0 * PI * flexmesa_math::pow2(model.r_center)),
             ..RspFrTOut::default()
         };
     }
     let k0 = nzn - i;
     if i == nzn {
-        let fr_00 = 2.0 * dc.sig * model.t[k0].powi(4);
+        let fr_00 = 2.0 * dc.sig * flexmesa_math::pow4(model.t[k0]);
         return RspFrTOut {
             fr_00,
             dfr_dt_00: 4.0 * fr_00 / model.t[k0],
@@ -206,18 +209,19 @@ pub(crate) fn t_form_of_calc_fr(
         };
     }
     let ko = k0 - 1;
-    let w = model.t[k0].powi(4);
-    let wp = model.t[ko].powi(4);
+    let w = flexmesa_math::pow4(model.t[k0]);
+    let wp = flexmesa_math::pow4(model.t[ko]);
     let bw = 4.0 * (model.ln_t[ko] - model.ln_t[k0]);
     if bw.abs() < 1.0e-20 {
         return RspFrTOut::default();
     }
     let (op0, opo) = (model.opacity[k0], model.opacity[ko]);
-    let bk = (opo / op0).ln();
+    let bk = flexmesa_math::log(opo / op0);
     if (1.0 - bk / bw).abs() < 1.0e-15 || (bw - bk).abs() < 1.0e-15 {
         return RspFrTOut::default();
     }
-    let t1 = -dc.cl * model.r[k0].powi(2) / (4.0 * PI * model.dm_bar[k0]);
+    let t1 = -dc.cl * flexmesa_math::pow2(model.r[k0])
+        / (4.0 * PI * model.dm_bar[k0]);
     let t2 = (wp / opo - w / op0) / (1.0 - bk / bw);
     let fr_00 = t1 * t2;
     let t3 = t1 / (bw - bk);
@@ -253,7 +257,7 @@ pub(crate) fn rsp_calc_xp(
         let xp = if model.controls.rsp.use_atm_grey_with_kap_for_psurf {
             p_surf
         } else if model.controls.rsp.use_prad_for_psurf {
-            CRAD * model.aux.rsp.t_start_rsp[0].powi(4) / 3.0
+            CRAD * flexmesa_math::pow4(model.aux.rsp.t_start_rsp[0]) / 3.0
         } else {
             0.0
         };

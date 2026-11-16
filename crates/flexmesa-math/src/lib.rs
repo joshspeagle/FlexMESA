@@ -5,7 +5,7 @@
 //! # Contract of the `Strict` and `Fast` Backends
 //!
 //! All `FlexMESA` physics crates call elementary and power functions exclusively
-//! through this crate from a single Rust source (`DECISIONS #21`):
+//! through this crate from a single Rust source (`DECISIONS #22`):
 //!
 //! - **[`NumericsMode::Strict`] (default)**: *Correctly rounded toward zero as
 //!   `CRMATH` does it.* Specifically, `strict` mode binds the vendored INRIA
@@ -272,7 +272,11 @@ pub fn safe_log(x: f64) -> f64 {
     if !x.is_finite() {
         return SAFE_LOG_BAD_RETURN;
     }
-    log(if x < SAFE_LOG_FLOOR { SAFE_LOG_FLOOR } else { x })
+    log(if x < SAFE_LOG_FLOOR {
+        SAFE_LOG_FLOOR
+    } else {
+        x
+    })
 }
 
 /// Compute the domain-safe base-10 logarithm $\log_{10}(\max(10^{-99}, x))$
@@ -292,7 +296,11 @@ pub fn safe_log10(x: f64) -> f64 {
     if !x.is_finite() {
         return SAFE_LOG_BAD_RETURN;
     }
-    log10(if x < SAFE_LOG_FLOOR { SAFE_LOG_FLOOR } else { x })
+    log10(if x < SAFE_LOG_FLOOR {
+        SAFE_LOG_FLOOR
+    } else {
+        x
+    })
 }
 
 /// Compute the natural logarithm $\ln(x)$ (`math/public/math_lib_crmath.f90:65`,

@@ -308,7 +308,7 @@ pub fn eop(
             "EOP non-positive (T, P) = ({t}, {p})"
         )));
     }
-    let prad = CRAD * t.powi(4) / 3.0;
+    let prad = CRAD * flexmesa_math::pow4(t) / 3.0;
     if p <= prad {
         return Err(StarError::MicrophysicsError(format!(
             "EOP P ({p}) <= Prad ({prad}) at T={t}"
@@ -353,9 +353,10 @@ pub fn cleanup_for_lina(
         model.dq[k] = grid.dm[i] / model.xmstar;
         model.r[k] = grid.r[i];
         model.t[k] = grid.t[i];
-        model.aux.rsp.et_rsp[k] = grid.et[i].max(0.0).sqrt().powi(2);
+        model.aux.rsp.et_rsp[k] =
+            flexmesa_math::pow2(grid.et[i].max(0.0).sqrt());
         model.peos[k] = grid.p[i];
-        model.prad[k] = CRAD * model.t[k].powi(4) / 3.0;
+        model.prad[k] = CRAD * flexmesa_math::pow4(model.t[k]) / 3.0;
         model.pgas[k] = model.peos[k] - model.prad[k];
     }
     model.dq[nzn - 1] = (model.m[nzn - 1] - model.m_center) / model.xmstar;
@@ -388,10 +389,10 @@ pub fn copy_results(model: &mut StarModel, dc: &RspDerivedConsts) {
         let k = nzn - i;
         let w = model.aux.rsp.et_rsp[k].max(0.0).sqrt();
         model.aux.rsp.et_rsp[k] = w * w;
-        model.ln_r[k] = model.r[k].ln();
-        model.r[k] = model.ln_r[k].exp();
-        model.ln_t[k] = model.t[k].ln();
-        model.t[k] = model.ln_t[k].exp();
+        model.ln_r[k] = flexmesa_math::log(model.r[k]);
+        model.r[k] = flexmesa_math::exp(model.ln_r[k]);
+        model.ln_t[k] = flexmesa_math::log(model.t[k]);
+        model.t[k] = flexmesa_math::exp(model.ln_t[k]);
         model.peos[k] = model.pgas[k] + model.prad[k];
     }
     for k in 0..nzn {
@@ -405,14 +406,19 @@ pub fn copy_results(model: &mut StarModel, dc: &RspDerivedConsts) {
     for i in 1..=nzn {
         let k = nzn - i;
         let vol = if i == 1 {
-            dc.p43 / model.dm[k] * (model.r[k].powi(3) - model.r_center.powi(3))
+            dc.p43 / model.dm[k]
+                * (flexmesa_math::pow3(model.r[k])
+                    - flexmesa_math::pow3(model.r_center))
         } else {
             vol_shell_qp(dc.p43 / model.dm[k], model.r[k], model.r[k + 1])
         };
-        model.lnd[k] = (1.0 / vol).ln();
-        model.rho[k] = model.lnd[k].exp();
+        model.lnd[k] = flexmesa_math::log(1.0 / vol);
+        model.rho[k] = flexmesa_math::exp(model.lnd[k]);
         let vol_rev = 1.0 / model.rho[k];
-        model.lum[k] = 4.0 * PI * model.r[k].powi(2) * model.aux.rsp.fr_rsp[k]
+        model.lum[k] = 4.0
+            * PI
+            * flexmesa_math::pow2(model.r[k])
+            * model.aux.rsp.fr_rsp[k]
             + model.aux.rsp.lc_rsp[k]
             + model.aux.rsp.lt_rsp[k];
         model.mixing_type[k] = if model.aux.rsp.et_rsp[k].sqrt() > 1.0e4 {
@@ -421,8 +427,11 @@ pub fn copy_results(model: &mut StarModel, dc: &RspDerivedConsts) {
             MixingType::NoMixing
         };
         if i == 1 {
-            model.r_center =
-                (model.r[k].powi(3) - vol_rev * model.dm[k] / dc.p43).cbrt();
+            model.r_center = flexmesa_math::pow(
+                flexmesa_math::pow3(model.r[k])
+                    - vol_rev * model.dm[k] / dc.p43,
+                1.0 / 3.0,
+            );
         }
     }
     model.m_center = model.mstar - model.xmstar;
@@ -446,18 +455,20 @@ pub fn finish_build_rsp_model(
         model.dm[k] = grid.dm[i];
         model.dm_bar[k] = grid.dm_bar[i];
         model.r[k] = grid.r[i];
-        model.ln_r[k] = grid.r[i].ln();
+        model.ln_r[k] = flexmesa_math::log(grid.r[i]);
         model.t[k] = grid.t[i];
-        model.ln_t[k] = grid.t[i].ln();
+        model.ln_t[k] = flexmesa_math::log(grid.t[i]);
         let rho = 1.0 / grid.vol[i];
-        model.lnd[k] = rho.ln();
-        model.rho[k] = model.lnd[k].exp();
+        model.lnd[k] = flexmesa_math::log(rho);
+        model.rho[k] = flexmesa_math::exp(model.lnd[k]);
         let w = grid.et[i].max(0.0).sqrt();
         model.aux.rsp.et_rsp[k] = w * w;
-        model.aux.rsp.fr_rsp[k] = grid.lr[i] / (4.0 * PI * model.r[k].powi(2));
+        model.aux.rsp.fr_rsp[k] =
+            grid.lr[i] / (4.0 * PI * flexmesa_math::pow2(model.r[k]));
         model.aux.rsp.lc_rsp[k] = 0.0;
         model.aux.rsp.lt_rsp[k] = 0.0;
-        model.aux.rsp.erad_rsp[k] = CRAD * model.t[k].powi(4) * grid.vol[i];
+        model.aux.rsp.erad_rsp[k] =
+            CRAD * flexmesa_math::pow4(model.t[k]) * grid.vol[i];
         model.prad[k] =
             F_EDD_ISOTROPIC * model.aux.rsp.erad_rsp[k] / grid.vol[i];
         model.peos[k] = grid.p[i];
@@ -489,13 +500,15 @@ pub fn copy_from_xh_to_rsp(model: &mut StarModel, dc: &RspDerivedConsts) {
         model.aux.rsp.resize(nzn);
     }
     for k in 0..nzn {
-        model.r[k] = model.ln_r[k].exp();
-        model.t[k] = model.ln_t[k].exp();
-        model.rho[k] = model.lnd[k].exp();
+        model.r[k] = flexmesa_math::exp(model.ln_r[k]);
+        model.t[k] = flexmesa_math::exp(model.ln_t[k]);
+        model.rho[k] = flexmesa_math::exp(model.lnd[k]);
     }
     for k in 0..nzn {
         model.aux.rsp.vol_rsp[k] = if k + 1 == nzn {
-            dc.p43 / model.dm[k] * (model.r[k].powi(3) - model.r_center.powi(3))
+            dc.p43 / model.dm[k]
+                * (flexmesa_math::pow3(model.r[k])
+                    - flexmesa_math::pow3(model.r_center))
         } else {
             vol_shell_qp(dc.p43 / model.dm[k], model.r[k], model.r[k + 1])
         };
@@ -529,24 +542,29 @@ pub fn set_star_vars_rsp(model: &mut StarModel, dc: &RspDerivedConsts) {
     model.set_m_grav_and_grav();
     for k in 0..nzn {
         let vol_s = if k + 1 == nzn {
-            dc.p43 / model.dm[k] * (model.r[k].powi(3) - model.r_center.powi(3))
+            dc.p43 / model.dm[k]
+                * (flexmesa_math::pow3(model.r[k])
+                    - flexmesa_math::pow3(model.r_center))
         } else {
             vol_shell_qp(dc.p43 / model.dm[k], model.r[k], model.r[k + 1])
         };
-        model.lnd[k] = (1.0 / vol_s).ln();
-        model.rho[k] = model.lnd[k].exp();
-        model.ln_t[k] = model.t[k].ln();
-        model.t[k] = model.ln_t[k].exp();
-        model.ln_r[k] = model.r[k].ln();
-        model.r[k] = model.ln_r[k].exp();
+        model.lnd[k] = flexmesa_math::log(1.0 / vol_s);
+        model.rho[k] = flexmesa_math::exp(model.lnd[k]);
+        model.ln_t[k] = flexmesa_math::log(model.t[k]);
+        model.t[k] = flexmesa_math::exp(model.ln_t[k]);
+        model.ln_r[k] = flexmesa_math::log(model.r[k]);
+        model.r[k] = flexmesa_math::exp(model.ln_r[k]);
         let vol_hyd = if k + 1 == nzn {
-            dc.p43 / model.dm[k] * (model.r[k].powi(3) - model.r_center.powi(3))
+            dc.p43 / model.dm[k]
+                * (flexmesa_math::pow3(model.r[k])
+                    - flexmesa_math::pow3(model.r_center))
         } else {
             vol_shell_qp(dc.p43 / model.dm[k], model.r[k], model.r[k + 1])
         };
         model.aux.rsp.vol_rsp[k] = vol_hyd;
         if model.aux.rsp.erad_rsp[k] == 0.0 {
-            model.aux.rsp.erad_rsp[k] = CRAD * model.t[k].powi(4) * vol_hyd;
+            model.aux.rsp.erad_rsp[k] =
+                CRAD * flexmesa_math::pow4(model.t[k]) * vol_hyd;
         }
         let f_edd = model.aux.rsp.f_edd_rsp[k];
         model.prad[k] = f_edd * model.aux.rsp.erad_rsp[k] / vol_hyd;
@@ -559,14 +577,14 @@ pub fn set_star_vars_rsp(model: &mut StarModel, dc: &RspDerivedConsts) {
 pub fn finish_after_build_model(model: &mut StarModel) {
     let nzn = model.nz;
     for k in 0..nzn {
-        model.ln_r[k] = model.r[k].ln();
-        model.r[k] = model.ln_r[k].exp();
-        model.ln_t[k] = model.t[k].ln();
-        model.t[k] = model.ln_t[k].exp();
+        model.ln_r[k] = flexmesa_math::log(model.r[k]);
+        model.r[k] = flexmesa_math::exp(model.ln_r[k]);
+        model.ln_t[k] = flexmesa_math::log(model.t[k]);
+        model.t[k] = flexmesa_math::exp(model.ln_t[k]);
         let vol = model.aux.rsp.vol_rsp[k];
         if vol > 0.0 {
-            model.lnd[k] = (1.0 / vol).ln();
-            model.rho[k] = model.lnd[k].exp();
+            model.lnd[k] = flexmesa_math::log(1.0 / vol);
+            model.rho[k] = flexmesa_math::exp(model.lnd[k]);
         }
     }
     model.pack_xh();

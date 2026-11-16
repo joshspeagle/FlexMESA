@@ -162,11 +162,11 @@ fn test_wave3b1_golden_doit_16_points_match_fortran_mesa() {
             let g = &pts[c_idx * 4 + p_idx];
             let out = eos_dt_get(ht, g.rho, g.t, &chem_id, &xa, &cfg)
                 .expect("eos_dt_get must succeed");
-            let prad = CRAD * g.t.powi(4) / 3.0;
-            let pgas = out.res[I_LN_PGAS].exp();
+            let prad = CRAD * flexmesa_math::pow4(g.t) / 3.0;
+            let pgas = flexmesa_math::exp(out.res[I_LN_PGAS]);
             let p = pgas + prad;
-            let e = out.res[I_LN_E].exp();
-            let s = out.res[I_LN_S].exp();
+            let e = flexmesa_math::exp(out.res[I_LN_E]);
+            let s = flexmesa_math::exp(out.res[I_LN_S]);
 
             let rtol = if p_idx < 3 { 1.0e-12 } else { 5.0e-11 };
             let tag = format!("comp={c_idx} pt={p_idx}");
@@ -203,13 +203,13 @@ fn test_wave3b1_golden_get_rho_t_inversions_match_fortran_mesa() {
     let log_t = 4.8_f64;
     let t = exp10(log_t);
     let rho = 1.0e-7_f64;
-    let log_rho = rho.log10();
-    let ln_s = (2.968_064_512e9_f64).ln();
+    let log_rho = flexmesa_math::log10(rho);
+    let ln_s = flexmesa_math::log(2.968_064_512e9_f64);
     let tol = 1.0e-5;
     let othertol = 1.0e-12;
     let max_iter = 100;
 
-    let log_rho_guess = (rho * 0.5).log10();
+    let log_rho_guess = flexmesa_math::log10(rho * 0.5);
     let inv_rho = eos_dt_get_rho(
         ht,
         &chem_id,
@@ -238,7 +238,7 @@ fn test_wave3b1_golden_get_rho_t_inversions_match_fortran_mesa() {
         1.0e-12,
     );
 
-    let log_t_guess = (t * 2.0).log10();
+    let log_t_guess = flexmesa_math::log10(t * 2.0);
     let inv_t_s = eos_dt_get_t(
         ht,
         &chem_id,
@@ -268,10 +268,10 @@ fn test_wave3b1_golden_get_rho_t_inversions_match_fortran_mesa() {
     );
 
     let t_from_log = exp10(log_t);
-    let prad = CRAD * t_from_log.powi(4) / 3.0;
-    let pgas = inv_t_s.eos.res[I_LN_PGAS].exp();
-    let log_p = (prad + pgas).log10();
-    let log_t_guess_p = (t_from_log * 2.0).log10();
+    let prad = CRAD * flexmesa_math::pow4(t_from_log) / 3.0;
+    let pgas = flexmesa_math::exp(inv_t_s.eos.res[I_LN_PGAS]);
+    let log_p = flexmesa_math::log10(prad + pgas);
+    let log_t_guess_p = flexmesa_math::log10(t_from_log * 2.0);
 
     let inv_t_p = eos_dt_get_t(
         ht,
@@ -295,8 +295,10 @@ fn test_wave3b1_golden_get_rho_t_inversions_match_fortran_mesa() {
         1.0e-12,
     );
     let t_res = exp10(inv_t_p.log10_result);
-    let got_log_p =
-        (CRAD * t_res.powi(4) / 3.0 + inv_t_p.eos.res[I_LN_PGAS].exp()).log10();
+    let got_log_p = flexmesa_math::log10(
+        CRAD * flexmesa_math::pow4(t_res) / 3.0
+            + flexmesa_math::exp(inv_t_p.eos.res[I_LN_PGAS]),
+    );
     assert_rel_close("got logP", got_log_p, 5.945_434_039_207_868_6, 1.0e-12);
 }
 
@@ -331,19 +333,19 @@ fn test_wave3b1_golden_eospt_for_ck_matches_fortran_mesa() {
 
     let t = exp10(3.0);
     let pgas = exp10(4.2);
-    let prad = CRAD * t.powi(4) / 3.0;
+    let prad = CRAD * flexmesa_math::pow4(t) / 3.0;
     let p = pgas + prad;
 
     let expected_slots = [
         ("eosPT P", p, 1.584_893_444_652_220_0e4),
         (
             "eosPT E",
-            pt.eos.res[I_LN_E].exp(),
+            flexmesa_math::exp(pt.eos.res[I_LN_E]),
             8.182_690_709_432_792_7e10,
         ),
         (
             "eosPT S",
-            pt.eos.res[I_LN_S].exp(),
+            flexmesa_math::exp(pt.eos.res[I_LN_S]),
             8.970_017_467_992_692_0e8,
         ),
         ("eosPT mu", pt.eos.res[I_MU], 1.900_000_000_000_000_1),

@@ -85,10 +85,14 @@ pub fn get_pc_alfa(
     let log_rho_hi = config.log_rho1_pc_limit;
 
     if config.pc_use_gamma_limit_instead_of_t {
-        let log_ge0 =
-            (QE * QE * (FOUR_THIRDS_PI * AVO * zbar / abar).powf(ONE_THIRD)
-                / KERG)
-                .log10();
+        let log_ge0 = flexmesa_math::log10(
+            QE * QE
+                * flexmesa_math::pow(
+                    FOUR_THIRDS_PI * AVO * zbar / abar,
+                    ONE_THIRD,
+                )
+                / KERG,
+        );
         let log_ge = log_ge0 + log_rho / 3.0 - log_t;
         let log_ge_lo = config.log_gamma_e_all_helm;
         let log_ge_hi = config.log_gamma_e_all_pc;
@@ -136,7 +140,7 @@ pub fn get_pc_alfa(
 #[inline(always)]
 fn safe_log_order1(x: AutoDiffReal2VarOrder1) -> AutoDiffReal2VarOrder1 {
     if x.val < 1.0e-99 {
-        AutoDiffReal2VarOrder1::constant(1.0e-99_f64.ln())
+        AutoDiffReal2VarOrder1::constant(flexmesa_math::log(1.0e-99_f64))
     } else {
         x.ln()
     }
@@ -226,7 +230,8 @@ pub fn eval_pc_eos_from_weights(
     let ds_dt = cv / t;
     let ds_drho = -p * chit / (rho * rho * t);
     let mu = AutoDiffReal2VarOrder1::constant(abar / (1.0 + zbar));
-    let lnfree_e = AutoDiffReal2VarOrder1::constant((zbar / abar).ln());
+    let lnfree_e =
+        AutoDiffReal2VarOrder1::constant(flexmesa_math::log(zbar / abar));
     let ln_pgas = pgas.ln();
     let ln_e = safe_log_order1(u_nkt * t * (n * KERG));
     let ln_s = safe_log_order1(s_nk * (n * KERG));

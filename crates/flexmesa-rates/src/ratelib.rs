@@ -30,7 +30,8 @@ fn rnacre(
     e1: f64,
     e2: f64,
 ) -> f64 {
-    let aa = a0 * tf.t9i23 * (-a1 * tf.t9i13 - tf.t92 * (a2 * a2)).exp();
+    let aa =
+        a0 * tf.t9i23 * flexmesa_math::exp(-a1 * tf.t9i13 - tf.t92 * (a2 * a2));
     let bb = (1.0
         + b0 * tf.t9
         + b1 * tf.t92
@@ -38,15 +39,16 @@ fn rnacre(
         + b3 * tf.t94
         + b4 * tf.t95)
         .max(0.0);
-    let cc = c0 * tf.t9i32 * (-c1 * tf.t9i).exp();
-    let dd = d0 * tf.t9i32 * (-d1 * tf.t9i).exp();
-    let ee = e0 * tf.t9.powf(e1) * (-e2 * tf.t9i).exp();
+    let cc = c0 * tf.t9i32 * flexmesa_math::exp(-c1 * tf.t9i);
+    let dd = d0 * tf.t9i32 * flexmesa_math::exp(-d1 * tf.t9i);
+    let ee =
+        e0 * flexmesa_math::pow(tf.t9, e1) * flexmesa_math::exp(-e2 * tf.t9i);
     aa * bb + cc + dd + ee
 }
 
 #[inline]
 fn rnacre_rev(tf: &TFactors, a0: f64, a1: f64) -> f64 {
-    a0 * tf.t932 * (-a1 * tf.t9i).exp()
+    a0 * tf.t932 * flexmesa_math::exp(-a1 * tf.t9i)
 }
 
 /// Evaluates an analytical `ratelib.f90` subroutine (`op_code` in `3..=28`)
@@ -95,7 +97,7 @@ fn rate_be7em_fxt(tf: &TFactors) -> (f64, f64) {
         return (0.0, 0.0);
     }
     let term = if (1.0e-3..=3.0).contains(&tf.t9) {
-        let aa = 0.0027 * tf.t9i * (2.515e-3 * tf.t9i).exp();
+        let aa = 0.0027 * tf.t9i * flexmesa_math::exp(2.515e-3 * tf.t9i);
         let bb = 1.0 - 0.537 * tf.t913 + 3.86 * tf.t923 + aa;
         1.34e-10 * tf.t9i12 * bb
     } else {
@@ -122,20 +124,22 @@ fn rate_c12ag_nacre(tf: &TFactors) -> (f64, f64) {
     if tf.t9 < LOW_T9_CUTOFF {
         return (0.0, 0.0);
     }
-    let aa1 =
-        6.66e7 * tf.t9i2 * (-32.123 * tf.t9i13 - tf.t92 / (4.6 * 4.6)).exp();
+    let aa1 = 6.66e7
+        * tf.t9i2
+        * flexmesa_math::exp(-32.123 * tf.t9i13 - tf.t92 / (4.6 * 4.6));
     let bb1 = (1.0 + 2.54 * tf.t9 + 1.04 * tf.t92 - 0.226 * tf.t93).max(0.0);
-    let cc1 = 1.39e3 * tf.t9i32 * (-28.930 * tf.t9i).exp();
+    let cc1 = 1.39e3 * tf.t9i32 * flexmesa_math::exp(-28.930 * tf.t9i);
     let term_e1 = aa1 * bb1 + cc1;
 
-    let aa2 =
-        6.56e7 * tf.t9i2 * (-32.123 * tf.t9i13 - tf.t92 / (1.3 * 1.3)).exp();
+    let aa2 = 6.56e7
+        * tf.t9i2
+        * flexmesa_math::exp(-32.123 * tf.t9i13 - tf.t92 / (1.3 * 1.3));
     let bb2 = 1.0 + 9.23 * tf.t9 - 13.7 * tf.t92 + 7.4 * tf.t93;
     let term_e2 = aa2 * bb2;
 
-    let term_res = 19.2 * tf.t92 * (-26.9 * tf.t9i).exp();
+    let term_res = 19.2 * tf.t92 * flexmesa_math::exp(-26.9 * tf.t9i);
     let term = term_e1 + term_e2 + term_res;
-    let rev = 5.132e10 * tf.t932 * (-83.109 * tf.t9i).exp();
+    let rev = 5.132e10 * tf.t932 * flexmesa_math::exp(-83.109 * tf.t9i);
     (term, rev * term)
 }
 
@@ -145,17 +149,19 @@ fn rate_c12c12_fxt_multi(tf: &TFactors) -> (f64, f64) {
         return (0.0, 0.0);
     }
     let t9a = tf.t9 / (1.0 + 0.0396 * tf.t9);
-    let t9a13 = t9a.powf(ONE_THIRD);
-    let t9a56 = t9a.powf(FIVE_SIXTHS);
-    let aa =
-        4.27e26 * t9a56 * tf.t9i32 * (-84.165 / t9a13 - 2.12e-3 * tf.t93).exp();
+    let t9a13 = flexmesa_math::pow(t9a, ONE_THIRD);
+    let t9a56 = flexmesa_math::pow(t9a, FIVE_SIXTHS);
+    let aa = 4.27e26
+        * t9a56
+        * tf.t9i32
+        * flexmesa_math::exp(-84.165 / t9a13 - 2.12e-3 * tf.t93);
     let b24n = if tf.t9 >= 1.5 {
-        let bb = 0.055 * (0.976 - 0.789 * tf.t9).exp();
+        let bb = 0.055 * flexmesa_math::exp(0.976 - 0.789 * tf.t9);
         0.055 - bb
     } else {
         let bb = 1.0 + 0.0789 * tf.t9 + 7.74 * tf.t92;
         let cc = 0.766 * tf.t9i3;
-        0.859 * (-bb * cc).exp()
+        0.859 * flexmesa_math::exp(-bb * cc)
     };
     let (b24p, b24a) = if tf.t9 > 3.0 {
         let bp = ONE_THIRD * (1.0 - b24n);
@@ -166,19 +172,19 @@ fn rate_c12c12_fxt_multi(tf: &TFactors) -> (f64, f64) {
     };
     let fr1 = aa * b24n;
     let rr1 = if tf.t9 > 0.1 {
-        3.93 * (30.16100515 * tf.t9i).exp() * fr1
+        3.93 * flexmesa_math::exp(30.16100515 * tf.t9i) * fr1
     } else {
         0.0
     };
     let fr2 = aa * b24p;
     let rr2 = if tf.t9 > 0.1 {
-        3.93 * (-25.98325915 * tf.t9i).exp() * fr2
+        3.93 * flexmesa_math::exp(-25.98325915 * tf.t9i) * fr2
     } else {
         0.0
     };
     let fr3 = aa * b24a;
     let rr3 = if tf.t9 > 0.1 {
-        2.42 * (-53.576110995 * tf.t9i).exp() * fr3
+        2.42 * flexmesa_math::exp(-53.576110995 * tf.t9i) * fr3
     } else {
         0.0
     };
@@ -191,13 +197,14 @@ fn rate_c12o16_fxt(tf: &TFactors) -> (f64, f64) {
         return (0.0, 0.0);
     }
     let t9a = tf.t9 / (1.0 + 0.055 * tf.t9);
-    let t9a13 = t9a.powf(ONE_THIRD);
+    let t9a13 = flexmesa_math::pow(t9a, ONE_THIRD);
     let t9a23 = t9a13 * t9a13;
-    let t9a56 = t9a.powf(FIVE_SIXTHS);
-    let aa = (-0.18 * t9a * t9a).exp();
-    let bb = 1.06e-3 * (2.562 * t9a23).exp();
+    let t9a56 = flexmesa_math::pow(t9a, FIVE_SIXTHS);
+    let aa = flexmesa_math::exp(-0.18 * t9a * t9a);
+    let bb = 1.06e-3 * flexmesa_math::exp(2.562 * t9a23);
     let cc = aa + bb;
-    let term = 1.72e31 * t9a56 * tf.t9i32 * (-106.594 / t9a13).exp() / cc;
+    let term =
+        1.72e31 * t9a56 * tf.t9i32 * flexmesa_math::exp(-106.594 / t9a13) / cc;
     (term, 0.0)
 }
 
@@ -237,7 +244,7 @@ fn rate_c13pg_nacre(tf: &TFactors) -> (f64, f64) {
         tf, 9.57e7, 13.72, 1.0, 3.56, 0.0, 0.0, 0.0, 0.0, 1.50e6, 5.930, 0.0,
         0.0, 6.83e5, -0.864, 12.057,
     );
-    let bb = (2.070 * (-37.938 * tf.t9i).exp()).min(1.0);
+    let bb = (2.070 * flexmesa_math::exp(-37.938 * tf.t9i)).min(1.0);
     let term = gs * (1.0 - bb);
     let rev = rnacre_rev(tf, 1.190e10, 87.619);
     (term, rev * term)
@@ -248,10 +255,10 @@ fn rate_dpg_fxt(tf: &TFactors) -> (f64, f64) {
     if tf.t9 < LOW_T9_PP_CUTOFF {
         return (0.0, 0.0);
     }
-    let aa = 2.24e3 * tf.t9i23 * (-3.720 * tf.t9i13).exp();
+    let aa = 2.24e3 * tf.t9i23 * flexmesa_math::exp(-3.720 * tf.t9i13);
     let bb = 1.0 + 0.112 * tf.t913 + 3.38 * tf.t923 + 2.65 * tf.t9;
     let term = aa * bb;
-    let rev = 1.63e10 * tf.t932 * (-63.750 * tf.t9i).exp();
+    let rev = 1.63e10 * tf.t932 * flexmesa_math::exp(-63.750 * tf.t9i);
     (term, rev * term)
 }
 
@@ -298,9 +305,11 @@ fn rate_f19pa_nacre(tf: &TFactors) -> (f64, f64) {
         -0.193,
         6.587,
     );
-    let dd = 7.30e8 * tf.t9.powf(-0.201) * (-16.249 * tf.t9i).exp();
+    let dd = 7.30e8
+        * flexmesa_math::pow(tf.t9, -0.201)
+        * flexmesa_math::exp(-16.249 * tf.t9i);
     gs += dd;
-    let bb = 0.755 * (-1.755 * tf.t9i - 0.174 * tf.t9).exp();
+    let bb = 0.755 * flexmesa_math::exp(-1.755 * tf.t9i - 0.174 * tf.t9);
     let term = gs * (1.0 + bb);
     let rev = rnacre_rev(tf, 6.538e-1, 94.154);
     (term, rev * term)
@@ -338,7 +347,7 @@ fn rate_he3ng_fxt(tf: &TFactors) -> (f64, f64) {
         return (0.0, 0.0);
     }
     let term = 6.62 * (1.0 + 905.0 * tf.t9);
-    let rev = 2.61e10 * tf.t932 * (-238.81 * tf.t9i).exp();
+    let rev = 2.61e10 * tf.t932 * flexmesa_math::exp(-238.81 * tf.t9i);
     (term, rev * term)
 }
 
@@ -348,7 +357,7 @@ fn rate_hep_fxt(tf: &TFactors) -> (f64, f64) {
         return (0.0, 0.0);
     }
     let term = if tf.t9 <= 3.0 {
-        8.78e-13 * tf.t9i23 * (-6.141 * tf.t9i13).exp()
+        8.78e-13 * tf.t9i23 * flexmesa_math::exp(-6.141 * tf.t9i13)
     } else {
         5.9733434e-15
     };
@@ -442,15 +451,18 @@ fn rate_ne20pg_nacre(tf: &TFactors) -> (f64, f64) {
         return (0.0, 0.0);
     }
     let gs = 2.35e7
-        * tf.t9.powf(-1.84)
-        * (-19.451 * tf.t9i13).exp()
+        * flexmesa_math::pow(tf.t9, -1.84)
+        * flexmesa_math::exp(-19.451 * tf.t9i13)
         * (1.0 + 10.80 * tf.t9)
-        + 18.0 * tf.t9i32 * (-4.247 * tf.t9i).exp()
-        + 9.83 * tf.t9i32 * (-4.619 * tf.t9i).exp()
-        + 6.76e4 * tf.t9.powf(-0.641) * (-11.922 * tf.t9i).exp();
-    let bb = (7.929 * (-20.108 * tf.t9i - 0.327 * tf.t9).exp()).min(1.0);
+        + 18.0 * tf.t9i32 * flexmesa_math::exp(-4.247 * tf.t9i)
+        + 9.83 * tf.t9i32 * flexmesa_math::exp(-4.619 * tf.t9i)
+        + 6.76e4
+            * flexmesa_math::pow(tf.t9, -0.641)
+            * flexmesa_math::exp(-11.922 * tf.t9i);
+    let bb =
+        (7.929 * flexmesa_math::exp(-20.108 * tf.t9i - 0.327 * tf.t9)).min(1.0);
     let term = gs * (1.0 - bb);
-    let rev = 4.637e9 * tf.t932 * (-28.214 * tf.t9i).exp();
+    let rev = 4.637e9 * tf.t932 * flexmesa_math::exp(-28.214 * tf.t9i);
     (term, rev * term)
 }
 
@@ -489,9 +501,10 @@ fn rate_o16o16g_fxt(tf: &TFactors) -> (f64, f64) {
     let term = 0.10
         * 7.10e36
         * tf.t9i23
-        * (-135.93 * tf.t9i13 - 0.629 * tf.t923 - 0.445 * tf.t943
-            + 0.0103 * tf.t9 * tf.t9)
-            .exp();
+        * flexmesa_math::exp(
+            -135.93 * tf.t9i13 - 0.629 * tf.t923 - 0.445 * tf.t943
+                + 0.0103 * tf.t9 * tf.t9,
+        );
     (term, 0.0)
 }
 
@@ -500,8 +513,10 @@ fn rate_o16pg_nacre(tf: &TFactors) -> (f64, f64) {
     if tf.t9 < LOW_T9_CUTOFF {
         return (0.0, 0.0);
     }
-    let aa = 7.37e7 * tf.t9.powf(-0.82) * (-16.696 * tf.t9i13).exp();
-    let bb = 1.0 + 202.0 * (-70.348 * tf.t9i - 0.161 * tf.t9).exp();
+    let aa = 7.37e7
+        * flexmesa_math::pow(tf.t9, -0.82)
+        * flexmesa_math::exp(-16.696 * tf.t9i13);
+    let bb = 1.0 + 202.0 * flexmesa_math::exp(-70.348 * tf.t9i - 0.161 * tf.t9);
     let term = aa * bb;
     let rev = rnacre_rev(tf, 3.037e9, 6.966);
     (term, rev * term)
@@ -530,7 +545,8 @@ fn rate_o18pa_nacre(tf: &TFactors) -> (f64, f64) {
         -0.378,
         6.395,
     );
-    let bb = (1.968 * (-25.673 * tf.t9i - 0.083 * tf.t9).exp()).min(1.0);
+    let bb =
+        (1.968 * flexmesa_math::exp(-25.673 * tf.t9i - 0.083 * tf.t9)).min(1.0);
     let term = gs * (1.0 - bb);
     let rev = rnacre_rev(tf, 1.660e-1, 46.192);
     (term, rev * term)
@@ -542,7 +558,7 @@ fn rate_pep_fxt(tf: &TFactors) -> (f64, f64) {
         return (0.0, 0.0);
     }
     let term = if tf.t9 <= 3.0 {
-        let aa = 1.36e-20 * tf.t9i76 * (-3.380 * tf.t9i13).exp();
+        let aa = 1.36e-20 * tf.t9i76 * flexmesa_math::exp(-3.380 * tf.t9i13);
         let bb = 1.0 - 0.729 * tf.t913 + 9.82 * tf.t923;
         aa * bb
     } else {
@@ -560,7 +576,7 @@ fn rate_png_fxt(tf: &TFactors) -> (f64, f64) {
         + 8.471e-3 * tf.t92
         - 2.80e-4 * tf.t952;
     let term = 4.742e4 * aa;
-    let rev = 4.71e9 * tf.t932 * (-25.82 * tf.t9i).exp();
+    let rev = 4.71e9 * tf.t932 * flexmesa_math::exp(-25.82 * tf.t9i);
     (term, rev * term)
 }
 

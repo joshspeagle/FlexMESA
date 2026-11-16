@@ -312,7 +312,7 @@ fn test_banded_lu_matches_dense_lu() {
             a[i * n + j] = if i == j {
                 5.0 + 0.3 * (i as f64)
             } else {
-                -0.4 * ((i + j + 1) as f64).sin()
+                -0.4 * flexmesa_math::sin((i + j + 1) as f64)
             };
         }
     }

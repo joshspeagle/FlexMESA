@@ -405,7 +405,7 @@ fn test_mlt_marginal_superadiabaticity_series_eliminates_cardano_cancellation()
     let lam_env = p_env / (rho_env * grav_env);
     let gradl = 0.4;
     for exp_idx in [16_i32, 15, 14, 13, 12, 10, 8] {
-        let dgrad = 10.0_f64.powi(-exp_idx);
+        let dgrad = flexmesa_math::powi(10.0_f64, -exp_idx);
         let gradr = gradl + dgrad;
         let out = set_mlt(
             &params,

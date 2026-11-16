@@ -50,8 +50,8 @@ fn test_section1_screening_modes_match_golden_oracle() {
     let cat = NuclideCatalog::builtin_ref();
     let log_t = 7.7110722845770692_f64;
     let log_rho = 4.5306372623742392_f64;
-    let temp = 10.0_f64.powf(log_t);
-    let den = 10.0_f64.powf(log_rho);
+    let temp = flexmesa_math::exp10(log_t);
+    let den = flexmesa_math::exp10(log_rho);
     let zbar = 2.0156203413143605_f64;
     let abar = 4.0312406826287210_f64;
     let z2bar = 4.1624054993206103_f64;
@@ -145,9 +145,9 @@ fn test_section2_weak_tables_282_rows_match_golden_oracle() {
         })
         .unwrap()
         + 1;
-    let t9 = (10.0_f64.powf(9.0e8_f64.log10())) * 1.0e-9;
-    let ye_rho = 0.5 * (10.0_f64.powf(4.5e5_f64.log10()));
-    let l_ye_rho = ye_rho.log10();
+    let t9 = (flexmesa_math::exp10(flexmesa_math::log10(9.0e8_f64))) * 1.0e-9;
+    let ye_rho = 0.5 * (flexmesa_math::exp10(flexmesa_math::log10(4.5e5_f64)));
+    let l_ye_rho = flexmesa_math::log10(ye_rho);
     let eta = 10.0;
 
     let mut rows = Vec::new();
@@ -201,8 +201,8 @@ fn test_section3_ecapture_coulomb_special_and_suzuki_match_golden_oracle() {
     let ye = zbar / abar;
 
     // Part A: do_test_coulomb at logT = 8.5, logRho = 9.5
-    let t_coul = 10.0_f64.powf(8.5);
-    let rho_coul = 10.0_f64.powf(9.5);
+    let t_coul = flexmesa_math::exp10(8.5);
+    let rho_coul = flexmesa_math::exp10(9.5);
     let mu1 = eval_mui_coulomb(
         CoulombMuiOption::Pcr2009,
         t_coul,
@@ -236,8 +236,8 @@ fn test_section3_ecapture_coulomb_special_and_suzuki_match_golden_oracle() {
     // Part B: do_test_special_weak and do_test_suzuki at logT = 8.3, logRho = 9.8
     let log_t = 8.3_f64;
     let log_rho = 9.8_f64;
-    let temp = 10.0_f64.powf(log_t);
-    let rho = 10.0_f64.powf(log_rho);
+    let temp = flexmesa_math::exp10(log_t);
+    let rho = flexmesa_math::exp10(log_rho);
     let t9 = temp * 1.0e-9;
     let ye_rho = ye * rho;
 
@@ -310,7 +310,7 @@ fn test_section4_all_307_raw_rates_across_9_temperatures_match_golden_oracle() {
         let toks: Vec<&str> = lines[i].split_whitespace().collect();
         if toks.len() == 2 && toks[0] == "logT" {
             let log_t = parse_f64_fortran(toks[1]);
-            let temp = 10.0_f64.powf(log_t);
+            let temp = flexmesa_math::exp10(log_t);
             let tf = TFactors::from_log_t(log_t, temp);
             let vals = set_raw_rates(&irs, temp, &tf).unwrap();
             temp_blocks += 1;
@@ -353,7 +353,7 @@ fn test_sections_5_6_7_pycno_rate_table_and_reaclib_reverse_match_golden() {
 
     // Section 6: Tabulated rate `r3` (ir = 310) at T = 9e8 K
     let rcat = RatesCatalog::builtin();
-    let temp_r3 = 10.0_f64.powf(9.0e8_f64.log10());
+    let temp_r3 = flexmesa_math::exp10(flexmesa_math::log10(9.0e8_f64));
     let (r3_val, _) = rcat.eval_rate_table(310, temp_r3).unwrap();
     assert!(rel_err(r3_val, 1.0e-8) < 1e-14);
 

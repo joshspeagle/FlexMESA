@@ -137,14 +137,14 @@ pub fn ocp_solid_screening_free_energy_correction(
     let z4 = z3 * zi;
     let z5 = z4 * zi;
     let z6 = z5 * zi;
-    let logz = zi.ln();
-    let logz_3_2 = logz.powf(1.5);
-    let zm0p267 = zi.powf(-0.267);
-    let zm1_3 = zi.powf(-1.0 / 3.0);
-    let zm3_2 = zi.powf(-1.5);
-    let z5_3 = zi.powf(5.0 / 3.0);
-    let z7_6 = zi.powf(7.0 / 6.0);
-    let z2_3 = zi.powf(2.0 / 3.0);
+    let logz = flexmesa_math::log(zi);
+    let logz_3_2 = flexmesa_math::pow(logz, 1.5);
+    let zm0p267 = flexmesa_math::pow(zi, -0.267);
+    let zm1_3 = flexmesa_math::pow(zi, -1.0 / 3.0);
+    let zm3_2 = flexmesa_math::pow(zi, -1.5);
+    let z5_3 = flexmesa_math::pow(zi, 5.0 / 3.0);
+    let z7_6 = flexmesa_math::pow(zi, 7.0 / 6.0);
+    let z2_3 = flexmesa_math::pow(zi, 2.0 / 3.0);
 
     let s = 1.0 / (1.0 + 1.0e-2 * logz_3_2 + 0.097 / z2);
     let b1 = 1.0 - 1.1866 * zm0p267 + 0.27 / z_in;
@@ -162,14 +162,16 @@ pub fn ocp_solid_screening_free_energy_correction(
         / (EULERNUM - (EULERNUM - 2.0) * supp).log())
     .sqrt();
 
-    let xr = ((9.0 * PI / 4.0).powf(1.0 / 3.0) * FINE) / rs;
+    let xr = (flexmesa_math::pow(9.0 * PI / 4.0, 1.0 / 3.0) * FINE) / rs;
     let xr2 = xr.pow2();
     let a = (b3 + 17.9 * xr2) / (1.0 + b4 * xr2);
     let f_inf = (ATF * z2_3 * b1) * (1.0 + b2 / xr2).sqrt();
     let f_sol = -f_inf * g * (1.0 + a * (q / g).powf(s));
 
     let gr = (1.0 + xr2).sqrt();
-    let alpha = (3.0 * (4.0 / (9.0 * PI)).powf(2.0 / 3.0)) * (rs / ge) * gr;
+    let alpha = (3.0 * flexmesa_math::pow(4.0 / (9.0 * PI), 2.0 / 3.0))
+        * (rs / ge)
+        * gr;
     let f_liq = ocp_liquid_screening_free_energy_correction(z_in, mi, ge, rs);
     let switch = safe_tanh(2.0 * alpha).pow3();
     switch * f_liq + (1.0 - switch) * f_sol
@@ -192,11 +194,11 @@ pub fn delta_g_ogata93(x2: f64, rz: f64) -> f64 {
 /// `\Delta G(x_2, R_Z)` (`skye_coulomb_solid.f90` lines 248-259).
 #[must_use]
 pub fn delta_g_pc13(x2: f64, rz: f64) -> f64 {
-    let x = x2 / rz + (1.0 - 1.0 / rz) * x2.powf(rz);
+    let x = x2 / rz + (1.0 - 1.0 / rz) * flexmesa_math::pow(x2, rz);
     0.012
         * ((x * (1.0 - x)) / (x2 * (1.0 - x2)))
         * (1.0 - 1.0 / (rz * rz))
-        * (1.0 - x2 + x2 * rz.powf(5.0 / 3.0))
+        * (1.0 - x2 + x2 * flexmesa_math::pow(rz, 5.0 / 3.0))
 }
 
 /// Multi-component Coulomb solid linear-mixing-rule correction
@@ -260,7 +262,7 @@ pub fn solid_mixing_rule_correction(
                 SkyeSolidMixingRule::Ogata => delta_g_ogata93(aj, rz),
                 SkyeSolidMixingRule::Pc => delta_g_pc13(aj, rz),
             };
-            let gami = game * zi.powf(5.0 / 3.0);
+            let gami = game * flexmesa_math::pow(zi, 5.0 / 3.0);
             f = f + gami * (charge_abundances[i] * charge_abundances[j] * dg);
         }
     }

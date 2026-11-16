@@ -36,8 +36,8 @@ pub fn relax_env(
     let fsub = model.controls.rsp.dq_1_factor;
     let mstar = grid.m[nzn];
     let psurf = if model.controls.rsp.use_prad_for_psurf {
-        let t_0 = 0.5_f64.powf(0.25) * te;
-        CRAD * t_0.powi(4) / 3.0
+        let t_0 = flexmesa_math::pow(0.5_f64, 0.25) * te;
+        CRAD * flexmesa_math::pow4(t_0) / 3.0
     } else {
         0.0
     };
@@ -175,8 +175,9 @@ pub fn relax_env(
                     let mut converged_h = false;
                     for _ in 1..=100 {
                         let arg = 1.0 - (summ / aone) * (1.0 - haha);
-                        let next_h =
-                            10.0_f64.powf(arg.log10() / (n_anchor as f64));
+                        let next_h = flexmesa_math::exp10(
+                            flexmesa_math::log10(arg) / (n_anchor as f64),
+                        );
                         if (haha - next_h).abs() < 1.0e-10 {
                             haha = next_h;
                             converged_h = true;
@@ -198,8 +199,11 @@ pub fn relax_env(
                             if i >= n_anchor {
                                 grid.dm[i] = dmn;
                             } else {
-                                grid.dm[i] =
-                                    aone * haha.powi((n_anchor - i) as i32);
+                                grid.dm[i] = aone
+                                    * flexmesa_math::powi_f90(
+                                        haha,
+                                        (n_anchor - i) as i32,
+                                    );
                             }
                             grid.dm_bar[i] =
                                 0.5 * (grid.dm[i] + grid.dm[i + 1]);
@@ -214,13 +218,20 @@ pub fn relax_env(
         for iter_ii in 1..=8000 {
             for i in 2..=nzn {
                 let t1 = dc.p43 / grid.dm[i];
-                grid.vol[i] = t1 * (grid.r[i].powi(3) - grid.r[i - 1].powi(3));
-                mc.dvrm[i] = -3.0 * t1 * grid.r[i - 1].powi(2);
-                mc.dvr[i] = 3.0 * t1 * grid.r[i].powi(2);
+                grid.vol[i] = t1
+                    * (flexmesa_math::pow3(grid.r[i])
+                        - flexmesa_math::pow3(grid.r[i - 1]));
+                mc.dvrm[i] = -3.0 * t1 * flexmesa_math::pow2(grid.r[i - 1]);
+                mc.dvr[i] = 3.0 * t1 * flexmesa_math::pow2(grid.r[i]);
                 if i == nzn {
-                    grid.t[nzn] = (0.5 * l0
-                        / (4.0 * PI * dc.sig * grid.r[nzn].powi(2)))
-                    .powf(0.25);
+                    grid.t[nzn] = flexmesa_math::pow(
+                        0.5 * l0
+                            / (4.0
+                                * PI
+                                * dc.sig
+                                * flexmesa_math::pow2(grid.r[nzn])),
+                        0.25,
+                    );
                 }
                 let out =
                     mesa_eos_kap(model, chem, 0, nzn, grid.t[i], grid.vol[i])?;
@@ -230,15 +241,17 @@ pub fn relax_env(
 
             mc.p[1] = mc.p[2]
                 + dc.g * grid.m[1] * grid.dm_bar[1]
-                    / (dc.p4 * grid.r[1].powi(4));
+                    / (dc.p4 * flexmesa_math::pow4(grid.r[1]));
             let (vol1, _) = eop(model, chem, nzn, grid.t[1], mc.p[1])?;
             grid.vol[1] = vol1;
-            model.r_center = (grid.r[1].powi(3)
-                - 3.0 * grid.vol[1] * grid.dm[1] / dc.p4)
-                .cbrt();
+            model.r_center = flexmesa_math::pow(
+                flexmesa_math::pow3(grid.r[1])
+                    - 3.0 * grid.vol[1] * grid.dm[1] / dc.p4,
+                1.0 / 3.0,
+            );
             let t1_1 = dc.p43 / grid.dm[1];
-            mc.dvrm[1] = -3.0 * t1_1 * model.r_center.powi(2);
-            mc.dvr[1] = 3.0 * t1_1 * grid.r[1].powi(2);
+            mc.dvrm[1] = -3.0 * t1_1 * flexmesa_math::pow2(model.r_center);
+            mc.dvr[1] = 3.0 * t1_1 * flexmesa_math::pow2(grid.r[1]);
             let out1 =
                 mesa_eos_kap(model, chem, 0, nzn, grid.t[1], grid.vol[1])?;
             store_micro_cell(&mut mc, 1, &out1);
@@ -265,11 +278,12 @@ pub fn relax_env(
                 let ic = 2 + 3 * (i - 1);
                 let ir = 3 + 3 * (i - 1);
                 let (lr_i, dlt, dltp, dlrm, dlr, dlrp) = if i < nzn {
-                    let w_00 = grid.t[i].powi(4);
-                    let w_out = grid.t[i + 1].powi(4);
-                    let bw = (w_out / w_00).ln();
-                    let bk = (mc.k[i + 1] / mc.k[i]).ln();
-                    let t1 = -dc.cl * grid.r[i].powi(4) / grid.dm_bar[i];
+                    let w_00 = flexmesa_math::pow4(grid.t[i]);
+                    let w_out = flexmesa_math::pow4(grid.t[i + 1]);
+                    let bw = flexmesa_math::log(w_out / w_00);
+                    let bk = flexmesa_math::log(mc.k[i + 1] / mc.k[i]);
+                    let t1 = -dc.cl * flexmesa_math::pow4(grid.r[i])
+                        / grid.dm_bar[i];
                     let t2 = (w_out / mc.k[i + 1] - w_00 / mc.k[i])
                         / (1.0 - bk / bw);
                     let lr_val = t1 * t2;
@@ -310,15 +324,16 @@ pub fn relax_env(
                 hd[iw][7] = (tb.dlcz0[i] + tb.dltz0[i]) / l0;
                 hd[iw][10] = (tb.dlczp[i] + tb.dltzp[i]) / l0;
 
-                let t1_m = -dc.p4 * grid.r[i].powi(2) / grid.dm_bar[i];
+                let t1_m =
+                    -dc.p4 * flexmesa_math::pow2(grid.r[i]) / grid.dm_bar[i];
                 hr[ir] = if i == nzn {
                     -t1_m * (psurf - mc.p[i] - tb.pturb[i])
-                        + dc.g * grid.m[i] / grid.r[i].powi(2)
+                        + dc.g * grid.m[i] / flexmesa_math::pow2(grid.r[i])
                 } else {
                     -t1_m
                         * (mc.p[i + 1] - mc.p[i] + tb.pturb[i + 1]
                             - tb.pturb[i])
-                        + dc.g * grid.m[i] / grid.r[i].powi(2)
+                        + dc.g * grid.m[i] / flexmesa_math::pow2(grid.r[i])
                 };
                 hd[ir][3] = t1_m * (-mc.dp_dr_in[i] - tb.dptrb_dr_in[i]);
                 hd[ir][4] = t1_m * (-mc.dp_dt_00[i]);
@@ -329,13 +344,15 @@ pub fn relax_env(
                         * (mc.dp_dr_in[i + 1] - mc.dp_dr_00[i]
                             + tb.dptrb_dr_in[i + 1]
                             - tb.dptrb_dr_00[i])
-                        + 4.0 * dc.g * grid.m[i] / grid.r[i].powi(3);
+                        + 4.0 * dc.g * grid.m[i]
+                            / flexmesa_math::pow3(grid.r[i]);
                     hd[ir][7] = t1_m * mc.dp_dt_00[i + 1];
                     hd[ir][9] =
                         t1_m * (mc.dp_dr_00[i + 1] + tb.dptrb_dr_00[i + 1]);
                 } else {
                     hd[ir][6] = t1_m * (-mc.dp_dr_00[i])
-                        + 4.0 * dc.g * grid.m[i] / grid.r[i].powi(3);
+                        + 4.0 * dc.g * grid.m[i]
+                            / flexmesa_math::pow3(grid.r[i]);
                 }
 
                 if i <= dc.ibotom || i == nzn || alfa == 0.0 {

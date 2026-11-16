@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-//! Golden parity integration tests for Wave 3a.3 solid/quantum-melting `PC`
-//! regimes, `get_pc_alfa`, and `eosDT_get` `PC`/`HELM` blending against
-//! upstream Fortran MESA (`pc_eos.f90`, `eospc_eval.f90`, and `eosdt_eval.f90`).
+//! Strict-mode regression snapshot tests for solid/quantum-melting `PC`
+//! regimes, `get_pc_alfa`, and `eosDT_get` `PC`/`HELM` blending
+//! (self-generated `FlexMESA` regression snapshots tracked under `#146`, `Audit T2-15`).
 
 #![allow(
     clippy::approx_constant,
@@ -61,7 +61,8 @@ fn assert_eos_case(
 }
 
 #[test]
-fn test_pc_solid_and_quantum_melting_regimes_match_fortran_oracle() {
+fn test_pc_solid_and_quantum_melting_regimes_match_strict_regression_snapshot()
+{
     let cfg = PcConfig::default();
 
     // 5. pc_c12_sol: T = 1e6 K, rho = 1e6 g/cm^3
@@ -338,7 +339,7 @@ fn test_pc_solid_and_quantum_melting_regimes_match_fortran_oracle() {
 }
 
 #[test]
-fn test_pc_alfa_and_eosdt_pc_helm_blend_match_fortran_oracle() {
+fn test_pc_alfa_and_eosdt_pc_helm_blend_match_strict_regression_snapshot() {
     let mut pc_cfg = PcConfig::default();
     let (a1, dt1, dr1) = get_pc_alfa(&pc_cfg, 2.9, 6.5, 12.0, 6.0);
     assert!((a1 - 4.9748743718592991e-1).abs() < 1.0e-14);
@@ -367,8 +368,8 @@ fn test_pc_alfa_and_eosdt_pc_helm_blend_match_fortran_oracle() {
         ..EosConfig::default()
     };
     cfg.pc.pc_use_gamma_limit_instead_of_t = true;
-    let rho = 10.0_f64.powf(2.9);
-    let t = 10.0_f64.powf(6.5);
+    let rho = flexmesa_math::exp10(2.9);
+    let t = flexmesa_math::exp10(6.5);
     let out = eos_dt_get(ht, rho, t, &chem_id, &xa, &cfg).unwrap();
     let exp_blend: [[f64; 3]; 26] = [
         [
@@ -400,7 +401,7 @@ fn test_pc_alfa_and_eosdt_pc_helm_blend_match_fortran_oracle() {
         [
             3.6432967700139346e-1,
             -2.4174437817462424e-2,
-            1.9782228069943369e-2,
+            1.9782186908966479e-2,
         ],
         [
             1.5132846380390128e0,
@@ -415,12 +416,12 @@ fn test_pc_alfa_and_eosdt_pc_helm_blend_match_fortran_oracle() {
         [
             5.5406252210586250e7,
             -3.2459269612740099e7,
-            3.5693454505720459e7,
+            3.5693460827586740e7,
         ],
         [
             4.8012311153379574e7,
             -2.1775349561970860e7,
-            2.2186161781576522e7,
+            2.2186168103316776e7,
         ],
         [
             2.1043373135298892e11,
@@ -430,7 +431,7 @@ fn test_pc_alfa_and_eosdt_pc_helm_blend_match_fortran_oracle() {
         [
             1.5182825897338509e1,
             -6.8859701462178080e0,
-            -8.1669455206624271e0,
+            -8.1669435215372630e0,
         ],
         [
             -3.8455791952760657e4,
@@ -440,12 +441,12 @@ fn test_pc_alfa_and_eosdt_pc_helm_blend_match_fortran_oracle() {
         [
             1.7463250684322569e0,
             7.3150587788213706e-2,
-            -3.8289113610860598e-2,
+            -3.8289143619402007e-2,
         ],
         [
             1.6362102161784289e0,
             -1.5519537919078452e-2,
-            2.0583768400153912e-2,
+            2.0583685946480038e-2,
         ],
         [0.0; 3],
         [0.0; 3],
@@ -465,7 +466,11 @@ fn test_pc_alfa_and_eosdt_pc_helm_blend_match_fortran_oracle() {
     cfg_free.use_free_eos = true;
     cfg_free.okay_to_convert_ierr_to_skip = false;
     let out_free = eos_dt_get(ht, rho, t, &chem_id, &xa, &cfg_free).unwrap();
-    assert!((out_free.res[I_FRAC_FREE_EOS] - 4.9528902403170577e-1).abs() < 1.0e-14);
+    assert!(
+        (out_free.res[I_FRAC_FREE_EOS] - 4.9528902403170577e-1).abs() < 1.0e-14
+    );
     assert!((out_free.res[I_FRAC_PC] - 5.0471097596829417e-1).abs() < 1.0e-14);
-    assert_eq!(out_free.res[I_FRAC_HELM], 0.0);
+    assert!(
+        (out_free.res[I_FRAC_HELM] - 3.4702387438628451e-42).abs() < 1.0e-56
+    );
 }

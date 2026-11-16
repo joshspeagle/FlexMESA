@@ -168,12 +168,9 @@ pub fn setup_sources_and_others(
     model: &StarModel,
     k: usize,
 ) -> (StarAdOrder1, bool) {
-    let t_start_k = model
-        .ln_t_start
-        .get(k)
-        .copied()
-        .unwrap_or(model.ln_t[k])
-        .exp();
+    let t_start_k = flexmesa_math::exp(
+        model.ln_t_start.get(k).copied().unwrap_or(model.ln_t[k]),
+    );
     let doing_op_split_burn = model.controls.op_split_burn
         && t_start_k >= model.controls.op_split_burn_min_t;
 
@@ -348,7 +345,7 @@ pub fn eval_face_area_time_centered_ad(
 ) -> StarAdOrder1 {
     let r = lnr_ad.exp();
     if time_center {
-        let rs = lnr_start.exp();
+        let rs = flexmesa_math::exp(lnr_start);
         (r * r + r * rs + rs * rs) * (FOUR_PI / 3.0)
     } else {
         r * r * FOUR_PI

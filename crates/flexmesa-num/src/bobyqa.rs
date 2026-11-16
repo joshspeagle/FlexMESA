@@ -178,13 +178,15 @@ where
         if dnorm < 0.5 * rho {
             let mut kfar = kopt;
             let mut max_dist_sq = 0.0_f64;
-            let dist_thresh = (2.0 * delta).powi(2).max((10.0 * rho).powi(2));
+            let dist_thresh = flexmesa_math::pow2(2.0 * delta)
+                .max(flexmesa_math::pow2(10.0 * rho));
             for k in 0..npt {
                 if k == kopt {
                     continue;
                 }
-                let dsq: f64 =
-                    (0..n).map(|j| (xpt[k][j] - xpt[kopt][j]).powi(2)).sum();
+                let dsq: f64 = (0..n)
+                    .map(|j| flexmesa_math::pow2(xpt[k][j] - xpt[kopt][j]))
+                    .sum();
                 if dsq > max_dist_sq {
                     max_dist_sq = dsq;
                     kfar = k;
@@ -271,20 +273,25 @@ where
                 continue;
             }
             let dsq: f64 = if k_ref == usize::MAX {
-                (0..n).map(|j| (xpt[k][j] - xnew[j]).powi(2)).sum()
+                (0..n)
+                    .map(|j| flexmesa_math::pow2(xpt[k][j] - xnew[j]))
+                    .sum()
             } else {
-                (0..n).map(|j| (xpt[k][j] - xpt[kopt][j]).powi(2)).sum()
+                (0..n)
+                    .map(|j| flexmesa_math::pow2(xpt[k][j] - xpt[kopt][j]))
+                    .sum()
             };
-            let score = dsq.powi(2).max(1e-30);
+            let score = flexmesa_math::pow2(dsq).max(1e-30);
             if score > best_score {
                 best_score = score;
                 knew = k;
             }
         }
-        let dsq_knew: f64 =
-            (0..n).map(|j| (xpt[knew][j] - xpt[kopt][j]).powi(2)).sum();
+        let dsq_knew: f64 = (0..n)
+            .map(|j| flexmesa_math::pow2(xpt[knew][j] - xpt[kopt][j]))
+            .sum();
         if fnew < fopt
-            || dsq_knew > (2.0 * delta).powi(2)
+            || dsq_knew > flexmesa_math::pow2(2.0 * delta)
             || dnorm * dnorm < dsq_knew
         {
             xpt[knew] = xnew;

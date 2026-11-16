@@ -72,8 +72,16 @@ impl RocheTable2D {
         }
         let x = lq.clamp(self.xs[0], self.xs[nx - 1] - 1.0e-12);
         let y = ar_in.clamp(self.ys[0], self.ys[ny - 1] - 2.0 * ROCHE_NUDGE);
-        let ix = self.xs.partition_point(|&xv| xv <= x).saturating_sub(1).min(nx - 2);
-        let iy = self.ys.partition_point(|&yv| yv <= y).saturating_sub(1).min(ny - 2);
+        let ix = self
+            .xs
+            .partition_point(|&xv| xv <= x)
+            .saturating_sub(1)
+            .min(nx - 2);
+        let iy = self
+            .ys
+            .partition_point(|&yv| yv <= y)
+            .saturating_sub(1)
+            .min(ny - 2);
         let (ix0, ix1) = (ix.saturating_sub(1), (ix + 2).min(nx - 1));
         let (iy0, iy1) = (iy.saturating_sub(1), (iy + 2).min(ny - 1));
         let (x_sub, y_sub) = (&self.xs[ix0..=ix1], &self.ys[iy0..=iy1]);
@@ -87,14 +95,16 @@ impl RocheTable2D {
                 }
                 row_vals[kx] = v;
             }
-            col_vals[ky] = steffen_1d_local(x_sub, &row_vals[..x_sub.len()], ix - ix0, x);
+            col_vals[ky] =
+                steffen_1d_local(x_sub, &row_vals[..x_sub.len()], ix - ix0, x);
         }
         steffen_1d_local(y_sub, &col_vals[..y_sub.len()], iy - iy0, y)
     }
 }
 
 fn parse_float_token(tok: &str) -> Option<f64> {
-    if tok.eq_ignore_ascii_case("-inf") || tok.eq_ignore_ascii_case("-infinity") {
+    if tok.eq_ignore_ascii_case("-inf") || tok.eq_ignore_ascii_case("-infinity")
+    {
         return Some(f64::NEG_INFINITY);
     }
     if tok.eq_ignore_ascii_case("inf")
@@ -120,7 +130,10 @@ fn steffen_slope_at(xs: &[f64], ys: &[f64], k: usize) -> f64 {
     if k + 1 >= n {
         return (ys[n - 1] - ys[n - 2]) / (xs[n - 1] - xs[n - 2]).max(1.0e-30);
     }
-    let (h0, h1) = ((xs[k] - xs[k - 1]).max(1.0e-30), (xs[k + 1] - xs[k]).max(1.0e-30));
+    let (h0, h1) = (
+        (xs[k] - xs[k - 1]).max(1.0e-30),
+        (xs[k + 1] - xs[k]).max(1.0e-30),
+    );
     let (d0, d1) = ((ys[k] - ys[k - 1]) / h0, (ys[k + 1] - ys[k]) / h1);
     if d0 * d1 <= 0.0 {
         return 0.0;
@@ -132,7 +145,11 @@ fn steffen_slope_at(xs: &[f64], ys: &[f64], k: usize) -> f64 {
 fn steffen_1d_local(xs: &[f64], ys: &[f64], k: usize, x: f64) -> f64 {
     let h = (xs[k + 1] - xs[k]).max(1.0e-30);
     let t = ((x - xs[k]) / h).clamp(0.0, 1.0);
-    let (s0, s1, omt) = (steffen_slope_at(xs, ys, k), steffen_slope_at(xs, ys, k + 1), 1.0 - t);
+    let (s0, s1, omt) = (
+        steffen_slope_at(xs, ys, k),
+        steffen_slope_at(xs, ys, k + 1),
+        1.0 - t,
+    );
     (1.0 + 2.0 * t) * omt * omt * ys[k]
         + t * omt * omt * h * s0
         + t * t * (3.0 - 2.0 * t) * ys[k + 1]
@@ -234,7 +251,11 @@ impl RocheDeformationTables {
     #[must_use]
     pub fn eval_psi(&self, lq: f64, ar: f64) -> f64 {
         let v = self.psi.eval(lq, ar);
-        if v.is_finite() { v } else { -9.0e99 }
+        if v.is_finite() {
+            v
+        } else {
+            -9.0e99
+        }
     }
 
     /// Evaluates $(f_P, \partial f_P/\partial\ln r, f_T, \partial f_T/\partial\ln r)$
@@ -292,9 +313,9 @@ pub fn eval_synchronicity_switch(
     };
     let mut f_switch = 1.0
         / (1.0
-            + (-f_sync_switch_width
-                * (f_sync - f_sync_switch_from_rot_defor))
-                .exp());
+            + flexmesa_math::exp(
+                -f_sync_switch_width * (f_sync - f_sync_switch_from_rot_defor),
+            ));
     if f_switch < f_sync_switch_lim {
         f_switch = 0.0;
     } else if 1.0 - f_switch < f_sync_switch_lim {
@@ -342,7 +363,7 @@ impl BinaryTidalDeformationHook {
         } else {
             eval_rlobe(m1, m2, separation_cm.max(1.0e5))
         };
-        let lq = (m2 / m1).log10();
+        let lq = flexmesa_math::log10(m2 / m1);
         Some(TidalDeformationHandle(Arc::new(Self {
             lq,
             r_roche_cm: r_roche_cm.max(1.0e5),

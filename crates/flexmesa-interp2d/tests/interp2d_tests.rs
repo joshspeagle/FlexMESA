@@ -42,7 +42,7 @@ const NUM_YPTS: usize = 35;
 fn test_fcn_db(x: f64, y: f64) -> f64 {
     let r = (x * x + y * y).sqrt();
     let r0 = 0.5 * PI;
-    (-r / r0).exp() * x.sin() * y.cos()
+    flexmesa_math::exp(-r / r0) * flexmesa_math::sin(x) * flexmesa_math::cos(y)
 }
 
 /// Constructs the $31 \times 35$ uniform rectangular test grid
@@ -335,9 +335,10 @@ fn test_renka790_cshep2_cubic_reproduction_and_scattered_2d_db() {
 
     // Part 1: Exact cubic polynomial reproduction from test_renka790_db.f
     // FQ(x, y) = ((x + 2y)/3)^3 on 4 x 5 grid (N = 20), NC = 10, NW = 16, NR = 3
-    let fq = |xx: f64, yy: f64| ((xx + 2.0 * yy) / 3.0).powi(3);
-    let fx = |xx: f64, yy: f64| ((xx + 2.0 * yy) / 3.0).powi(2);
-    let fy = |xx: f64, yy: f64| 2.0 * ((xx + 2.0 * yy) / 3.0).powi(2);
+    let fq = |xx: f64, yy: f64| flexmesa_math::pow3((xx + 2.0 * yy) / 3.0);
+    let fx = |xx: f64, yy: f64| flexmesa_math::pow2((xx + 2.0 * yy) / 3.0);
+    let fy =
+        |xx: f64, yy: f64| 2.0 * flexmesa_math::pow2((xx + 2.0 * yy) / 3.0);
     let fxx = |xx: f64, yy: f64| 2.0 * (xx + 2.0 * yy) / 9.0;
     let fxy = |xx: f64, yy: f64| 4.0 * (xx + 2.0 * yy) / 9.0;
     let fyy = |xx: f64, yy: f64| 8.0 * (xx + 2.0 * yy) / 9.0;
@@ -400,15 +401,26 @@ fn test_renka790_cshep2_cubic_reproduction_and_scattered_2d_db() {
         0.40, 0.65, 0.25, 0.35, 0.80, 0.90, 0.00, 0.50, 1.00,
     ];
     let tstfn1_exp = |xx: f64, yy: f64| {
-        0.75 * (-((9.0 * xx - 2.0).powi(2) + (9.0 * yy - 2.0).powi(2)) / 4.0)
-            .exp()
-            + 0.75
-                * (-(9.0 * xx + 1.0).powi(2) / 49.0 - (9.0 * yy + 1.0) / 10.0)
-                    .exp()
+        0.75 * flexmesa_math::exp(
+            -(flexmesa_math::pow2(9.0 * xx - 2.0)
+                + flexmesa_math::pow2(9.0 * yy - 2.0))
+                / 4.0,
+        ) + 0.75
+            * flexmesa_math::exp(
+                -flexmesa_math::pow2(9.0 * xx + 1.0) / 49.0
+                    - (9.0 * yy + 1.0) / 10.0,
+            )
             + 0.5
-                * (-((9.0 * xx - 7.0).powi(2) + (9.0 * yy - 3.0).powi(2)) / 4.0)
-                    .exp()
-            - 0.2 * (-(9.0 * xx - 4.0).powi(2) - (9.0 * yy - 7.0).powi(2)).exp()
+                * flexmesa_math::exp(
+                    -(flexmesa_math::pow2(9.0 * xx - 7.0)
+                        + flexmesa_math::pow2(9.0 * yy - 3.0))
+                        / 4.0,
+                )
+            - 0.2
+                * flexmesa_math::exp(
+                    -flexmesa_math::pow2(9.0 * xx - 4.0)
+                        - flexmesa_math::pow2(9.0 * yy - 7.0),
+                )
     };
     let w2: Vec<f64> = x2
         .iter()

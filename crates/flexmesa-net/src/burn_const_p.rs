@@ -110,7 +110,7 @@ pub fn burn_1_zone_const_p(
     let nvar = num_isos + 1;
     let mut y = vec![0.0_f64; nvar];
     y[0..num_isos].copy_from_slice(input.starting_x);
-    y[num_isos] = input.starting_temp.ln();
+    y[num_isos] = flexmesa_math::log(input.starting_temp);
 
     let nuclides = NuclideCatalog::builtin_ref();
     let aion = collect_aion(nuclides, &g.chem_id)?;
@@ -150,14 +150,14 @@ pub fn burn_1_zone_const_p(
 
         let log_t = v[num_isos] / LN10;
         let temp = exp10(log_t);
-        let prad = CRAD * temp.powi(4) / 3.0;
+        let prad = CRAD * flexmesa_math::pow4(temp) / 3.0;
         let pgas = input.pressure - prad;
         if pgas <= 0.0 || is_bad(pgas) {
             return Err(NetError::IntegrationError(format!(
                 "Pgas <= 0 in burn_1_zone_const_p: Pgas={pgas}"
             )));
         }
-        let lg_pgas = pgas.log10();
+        let lg_pgas = flexmesa_math::log10(pgas);
 
         let pt = eos_pt_get(ht, &g.chem_id, &x_buf, lg_pgas, log_t, eos_cfg)
             .map_err(|e| NetError::IntegrationError(e.to_string()))?;
@@ -218,11 +218,16 @@ pub fn burn_1_zone_const_p(
             if let Some(dfdv) = dfdv_opt {
                 let dlnrho_dlnt_const_p =
                     -pt.eos.res[I_CHI_T] / pt.eos.res[I_CHI_RHO];
-                let d_epsnuc_dlnt_const_p =
-                    (d_eps_nuc_drho * rho * dlnrho_dlnt_const_p)
-                        .mul_add(1.0, d_eps_nuc_dt * temp);
-                let d_cp_dlnt = pt.eos.d_dlnd[I_CP]
-                    .mul_add(dlnrho_dlnt_const_p, pt.eos.d_dln_t[I_CP]);
+                let d_epsnuc_dlnt_const_p = flexmesa_math::fma(
+                    d_eps_nuc_drho * rho * dlnrho_dlnt_const_p,
+                    1.0,
+                    d_eps_nuc_dt * temp,
+                );
+                let d_cp_dlnt = flexmesa_math::fma(
+                    pt.eos.d_dlnd[I_CP],
+                    dlnrho_dlnt_const_p,
+                    pt.eos.d_dln_t[I_CP],
+                );
 
                 for i in 0..num_isos {
                     let ai = aion[i];
@@ -232,9 +237,11 @@ pub fn burn_1_zone_const_p(
                     }
                     let d_dxdt_drho_i = ai * dydt_buf[i][2].to_f64();
                     let d_dxdt_dt_i = ai * dydt_buf[i][1].to_f64();
-                    dfdv[i * nvar + num_isos] =
-                        (d_dxdt_drho_i * rho * dlnrho_dlnt_const_p)
-                            .mul_add(1.0, d_dxdt_dt_i * temp);
+                    dfdv[i * nvar + num_isos] = flexmesa_math::fma(
+                        d_dxdt_drho_i * rho * dlnrho_dlnt_const_p,
+                        1.0,
+                        d_dxdt_dt_i * temp,
+                    );
                 }
                 for j in 0..num_isos {
                     let d_eps_dx_j = QCONV * w.d_eps_nuc_dy[j] / aion[j];
@@ -367,7 +374,11 @@ pub fn burn_1_zone_const_p(
                         for j in 0..nvar {
                             let mut s = y[j];
                             for k in 0..is {
-                                s = tab.ra[is][k].mul_add(ak[k][j], s);
+                                s = flexmesa_math::fma(
+                                    tab.ra[is][k],
+                                    ak[k][j],
+                                    s,
+                                );
                             }
                             ynew[j] = s;
                             if ynew[j] < y_min || ynew[j] > y_max {
@@ -387,8 +398,11 @@ pub fn burn_1_zone_const_p(
                     for j in 0..nvar {
                         let mut c_sum = 0.0_f64;
                         for k in 0..is {
-                            c_sum =
-                                (tab.rc[is][k] / h).mul_add(ak[k][j], c_sum);
+                            c_sum = flexmesa_math::fma(
+                                tab.rc[is][k] / h,
+                                ak[k][j],
+                                c_sum,
+                            );
                         }
                         ak[is][j] = dy[j] + c_sum;
                     }
@@ -410,7 +424,7 @@ pub fn burn_1_zone_const_p(
             for j in 0..nvar {
                 let mut s = y[j];
                 for k in 0..ns {
-                    s = tab.ros_m[k].mul_add(ak[k][j], s);
+                    s = flexmesa_math::fma(tab.ros_m[k], ak[k][j], s);
                 }
                 ynew[j] = s;
                 if ynew[j] < y_min || ynew[j] > y_max {
@@ -431,7 +445,7 @@ pub fn burn_1_zone_const_p(
             for i in 0..nvar {
                 let mut e_i = 0.0_f64;
                 for k in 0..ns {
-                    e_i = tab.ros_e[k].mul_add(ak[k][i], e_i);
+                    e_i = flexmesa_math::fma(tab.ros_e[k], ak[k][i], e_i);
                 }
                 dy[i] = e_i;
             }
@@ -451,7 +465,8 @@ pub fn burn_1_zone_const_p(
                 continue 'retry_loop;
             }
 
-            let mut fac = (err.powf(eloi) / safe).clamp(fac2, fac1);
+            let mut fac =
+                (flexmesa_math::pow(err, eloi) / safe).clamp(fac2, fac1);
             if ynew.iter().any(|&v| v < y_min || v > y_max) {
                 fac = 100.0;
                 err = 100.0;
@@ -467,7 +482,8 @@ pub fn burn_1_zone_const_p(
             if err <= 1.0 {
                 naccpt += 1;
                 if naccpt > 1 {
-                    let facgus = ((hacc / h) * (err * err / erracc).powf(eloi)
+                    let facgus = ((hacc / h)
+                        * flexmesa_math::pow(err * err / erracc, eloi)
                         / safe)
                         .clamp(fac2, fac1);
                     fac = fac.max(facgus);
@@ -499,7 +515,7 @@ pub fn burn_1_zone_const_p(
 
     Ok(BurnConstPOutput {
         ending_x: y[0..num_isos].to_vec(),
-        ending_temp: y[num_isos].exp(),
+        ending_temp: flexmesa_math::exp(y[num_isos]),
         ending_rho,
         ending_lns,
         initial_rho,

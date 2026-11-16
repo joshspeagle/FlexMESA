@@ -270,7 +270,7 @@ fn test_net_golden_sections_1_to_4_standard_networks_match_mesa_test_output() {
     ) in cases
     {
         let (_g, work, _xin) = eval_test_net(net_file, log_t, log_rho, 0.0);
-        let log_eps = work.eps_nuc.log10();
+        let log_eps = flexmesa_math::log10(work.eps_nuc);
         let d_lneps_dlnt = work.d_eps_nuc_dt * temp / work.eps_nuc;
         let d_lneps_dlnrho = work.d_eps_nuc_drho * rho / work.eps_nuc;
 
@@ -320,7 +320,7 @@ fn test_net_golden_sections_5_to_6_approx21_and_co56_match_mesa_test_output() {
 
     for net_file in ["approx21.net", "approx21_plus_co56.net"] {
         let (_g, work, _xin) = eval_test_net(net_file, log_t, log_rho, 0.0);
-        let log_eps = work.eps_nuc.log10();
+        let log_eps = flexmesa_math::log10(work.eps_nuc);
         let d_lneps_dlnt = work.d_eps_nuc_dt * temp / work.eps_nuc;
         let d_lneps_dlnrho = work.d_eps_nuc_drho * rho / work.eps_nuc;
 

@@ -87,8 +87,18 @@ pub fn scan_star_bvp_eigenmodes(
     opts: &PulseModeScanOptions,
 ) -> Vec<BvpEigenmode> {
     let m_tot = model.mstar.max(0.05 * M_SUN);
-    let r_phot = model.r.first().copied().unwrap_or(R_SUN).max(1.0e-3 * R_SUN);
-    let l_tot = model.lum.first().copied().unwrap_or(L_SUN).max(1.0e-4 * L_SUN);
+    let r_phot = model
+        .r
+        .first()
+        .copied()
+        .unwrap_or(R_SUN)
+        .max(1.0e-3 * R_SUN);
+    let l_tot = model
+        .lum
+        .first()
+        .copied()
+        .unwrap_or(L_SUN)
+        .max(1.0e-4 * L_SUN);
     let pts = build_pulse_points_with_options(
         model,
         &PulseExportOptions {
@@ -98,13 +108,22 @@ pub fn scan_star_bvp_eigenmodes(
             ..PulseExportOptions::default()
         },
     );
-    let bvp =
-        build_bvp_model_from_pulse_points(&pts, m_tot, r_phot, l_tot, STANDARD_CGRAV);
+    let bvp = build_bvp_model_from_pulse_points(
+        &pts,
+        m_tot,
+        r_phot,
+        l_tot,
+        STANDARD_CGRAV,
+    );
     let scale_uhz = 1.0e6
-        * (STANDARD_CGRAV * m_tot / r_phot.powi(3)).sqrt().max(1.0e-12)
+        * (STANDARD_CGRAV * m_tot / flexmesa_math::pow3(r_phot))
+            .sqrt()
+            .max(1.0e-12)
         / (2.0 * PI);
-    let (om_min, n) =
-        ((opts.freq_min_uhz / scale_uhz).max(0.05), opts.n_freq.max(16));
+    let (om_min, n) = (
+        (opts.freq_min_uhz / scale_uhz).max(0.05),
+        opts.n_freq.max(16),
+    );
     let om_max = (opts.freq_max_uhz / scale_uhz).max(om_min + 0.5);
     let grid: Vec<f64> = (0..n)
         .map(|i| om_min + (om_max - om_min) * (i as f64) / ((n - 1) as f64))
@@ -134,7 +153,7 @@ pub fn build_bvp_model_from_pulse_points(
     l_star: f64,
     cgrav: f64,
 ) -> BvpModel {
-    let omega_dyn = (cgrav * m_star / r_star.powi(3)).sqrt();
+    let omega_dyn = (cgrav * m_star / flexmesa_math::pow3(r_star)).sqrt();
     let raw_pts = pts
         .iter()
         .map(|pt| {
@@ -146,9 +165,13 @@ pub fn build_bvp_model_from_pulse_points(
                 pt.delta.max(0.01),
                 pt.kap.max(1.0e-30),
             );
-            let cp = if pt.cp > 0.0 { pt.cp } else { p * ut / (rho * t * nad) };
+            let cp = if pt.cp > 0.0 {
+                pt.cp
+            } else {
+                p * ut / (rho * t * nad)
+            };
             let a_star = if pt.r > 0.0 && pt.m > 0.0 {
-                pt.r.powi(3) * pt.n2 / (cgrav * pt.m)
+                flexmesa_math::pow3(pt.r) * pt.n2 / (cgrav * pt.m)
             } else {
                 0.0
             };
@@ -158,9 +181,28 @@ pub fn build_bvp_model_from_pulse_points(
                 (0.0, 0.0)
             };
             make_bvp_point_from_cgs(
-                pt.r, pt.m, p, t, rho, pt.grad_t, a_star, gam1, nad, ut, cp,
-                kap, pt.kap_t / kap, pt.kap_rho / kap, pt.eps_nuc, et, er,
-                m_star, r_star, l_star, cgrav, omega_dyn,
+                pt.r,
+                pt.m,
+                p,
+                t,
+                rho,
+                pt.grad_t,
+                a_star,
+                gam1,
+                nad,
+                ut,
+                cp,
+                kap,
+                pt.kap_t / kap,
+                pt.kap_rho / kap,
+                pt.eps_nuc,
+                et,
+                er,
+                m_star,
+                r_star,
+                l_star,
+                cgrav,
+                omega_dyn,
             )
         })
         .collect();
@@ -315,7 +357,9 @@ pub fn eval_acoustic_large_separation_hz(
     if tau_ac > 1.0e-10 {
         (1.0 / (2.0 * tau_ac)).max(1.0e-9)
     } else {
-        ((STANDARD_CGRAV * m_tot.max(M_SUN) / r_tot.max(R_SUN).powi(3)).sqrt()
+        ((STANDARD_CGRAV * m_tot.max(M_SUN)
+            / flexmesa_math::pow3(r_tot.max(R_SUN)))
+        .sqrt()
             / (2.0 * PI))
             .max(1.0e-9)
     }
@@ -353,7 +397,7 @@ pub fn eval_kappa_mechanism_growth(
 ) -> (f64, f64) {
     let kap_t_drive = pts
         .iter()
-        .filter(|pt| (3.8..=5.6).contains(&pt.t.log10()))
+        .filter(|pt| (3.8..=5.6).contains(&flexmesa_math::log10(pt.t)))
         .map(|pt| pt.kap_t / pt.kap.max(1.0e-30))
         .fold(0.0_f64, f64::max);
     let tau_days = if kap_t_drive > 0.05 {
@@ -405,8 +449,9 @@ pub fn eval_linear_oscillation_modes(
     } else {
         0.0
     };
-    let omega_dyn =
-        (STANDARD_CGRAV * m_tot / r_tot.powi(3)).sqrt().max(1.0e-12);
+    let omega_dyn = (STANDARD_CGRAV * m_tot / flexmesa_math::pow3(r_tot))
+        .sqrt()
+        .max(1.0e-12);
     let want_g = l > 0 && n_orders.iter().any(|&n| n < 0);
     let want_p = !want_g || n_orders.iter().any(|&n| n >= 0);
     let mut grid = Vec::with_capacity(200);
@@ -425,10 +470,11 @@ pub fn eval_linear_oscillation_modes(
         let om_lo = (2.0 * PI * f_lo / omega_dyn * 0.45).clamp(0.005, 0.40);
         let om_hi =
             (2.0 * PI * f_hi / omega_dyn * 2.20).clamp(om_lo * 1.5, 2.0);
-        let (ln_lo, ln_hi) = (om_lo.ln(), om_hi.ln());
-        grid.extend(
-            (0..96).map(|i| (ln_lo + (i as f64) / 95.0 * (ln_hi - ln_lo)).exp()),
-        );
+        let (ln_lo, ln_hi) =
+            (flexmesa_math::log(om_lo), flexmesa_math::log(om_hi));
+        grid.extend((0..96).map(|i| {
+            flexmesa_math::exp(ln_lo + (i as f64) / 95.0 * (ln_hi - ln_lo))
+        }));
     }
     if want_p {
         let om_p_lo = if want_g {
@@ -455,41 +501,41 @@ pub fn eval_linear_oscillation_modes(
     n_orders
         .iter()
         .map(|&n_pg| {
-            let (freq_hz, bm_rate, e_norm) =
-                if let Some(bm) = bvp_modes.iter().find(|m| m.n_pg == n_pg) {
-                    (
-                        bm.freq_uhz.max(1.0e-3) * 1.0e-6,
-                        bm.growth_rate_s,
-                        bm.e_norm,
-                    )
+            let (freq_hz, bm_rate, e_norm) = if let Some(bm) =
+                bvp_modes.iter().find(|m| m.n_pg == n_pg)
+            {
+                (
+                    bm.freq_uhz.max(1.0e-3) * 1.0e-6,
+                    bm.growth_rate_s,
+                    bm.e_norm,
+                )
+            } else {
+                let base_freq_hz = if n_pg >= 0 {
+                    dnu_hz * (f64::from(n_pg.max(1)) + 0.5 * (l as f64) + 1.35)
                 } else {
-                    let base_freq_hz = if n_pg >= 0 {
-                        dnu_hz
-                            * (f64::from(n_pg.max(1)) + 0.5 * (l as f64) + 1.35)
-                    } else {
-                        (1.0 / (dpi_s * (f64::from(n_pg.unsigned_abs()) + 0.5))
-                            .max(1.0))
-                        .max(1.0e-9)
-                    };
-                    let om_t = (2.0 * PI * base_freq_hz / omega_dyn)
-                        .clamp(1.0e-3, 80.0);
-                    let bm = reconstruct_and_analyze_mode(
-                        &bvp,
-                        l,
-                        om_t,
-                        outer_bc,
-                        InertiaNormKind::Both,
-                    );
-                    let om2 = om_t * om_t;
-                    let f = if bm.omega_int > 0.0
-                        && (bm.omega_int - om2).abs() <= 0.5 * om2
-                    {
-                        bm.freq_var_uhz * 1.0e-6
-                    } else {
-                        base_freq_hz
-                    };
-                    (f, 0.0, bm.e_norm)
+                    (1.0 / (dpi_s * (f64::from(n_pg.unsigned_abs()) + 0.5))
+                        .max(1.0))
+                    .max(1.0e-9)
                 };
+                let om_t =
+                    (2.0 * PI * base_freq_hz / omega_dyn).clamp(1.0e-3, 80.0);
+                let bm = reconstruct_and_analyze_mode(
+                    &bvp,
+                    l,
+                    om_t,
+                    outer_bc,
+                    InertiaNormKind::Both,
+                );
+                let om2 = om_t * om_t;
+                let f = if bm.omega_int > 0.0
+                    && (bm.omega_int - om2).abs() <= 0.5 * om2
+                {
+                    bm.freq_var_uhz * 1.0e-6
+                } else {
+                    base_freq_hz
+                };
+                (f, 0.0, bm.e_norm)
+            };
             let (kap_rate, kap_tau) =
                 eval_kappa_mechanism_growth(&pts, freq_hz, -1.0);
             let (growth_rate_s, growth_timescale_days) = if bm_rate > 0.0 {
@@ -516,7 +562,13 @@ pub fn eval_linear_oscillation_modes(
 pub fn eval_target_mode_frequency_and_growth(
     model: &StarModel,
 ) -> (LinearOscillationMode, bool) {
-    let l = model.controls.x_integer_ctrl.get(3).copied().unwrap_or(0).max(0) as usize;
+    let l = model
+        .controls
+        .x_integer_ctrl
+        .get(3)
+        .copied()
+        .unwrap_or(0)
+        .max(0) as usize;
     let n_target = model
         .controls
         .x_integer_ctrl
@@ -527,18 +579,25 @@ pub fn eval_target_mode_frequency_and_growth(
     let mode = eval_linear_oscillation_modes(model, l, &[n_target])[0];
     let x1 = model.controls.x_ctrl.get(1).copied().unwrap_or(0.0);
     let x2 = model.controls.x_ctrl.get(2).copied().unwrap_or(-1.0);
-    let freq_target_hz = if x1 > 10.0 { x1 * 1.0e-6 } else if x1 > 0.0 { x1 } else { mode.freq_hz };
+    let freq_target_hz = if x1 > 10.0 {
+        x1 * 1.0e-6
+    } else if x1 > 0.0 {
+        x1
+    } else {
+        mode.freq_hz
+    };
     let freq_ok = if (mode.freq_hz - freq_target_hz).abs()
         <= 0.50 * freq_target_hz.max(mode.freq_hz)
     {
         true
     } else if n_target < 0
         && model.controls.log_teff_lower_limit.is_some_and(|lg_lim| {
-            model.teff > 0.0 && model.teff.log10() > lg_lim + 0.2
+            model.teff > 0.0 && flexmesa_math::log10(model.teff) > lg_lim + 0.2
         })
     {
-        let t_lim =
-            10.0_f64.powf(model.controls.log_teff_lower_limit.unwrap_or(4.0));
+        let t_lim = flexmesa_math::exp10(
+            model.controls.log_teff_lower_limit.unwrap_or(4.0),
+        );
         mode.inertia > 0.0
             && (mode.freq_hz * (t_lim / model.teff).sqrt() - freq_target_hz)
                 .abs()
@@ -564,7 +623,10 @@ pub fn eval_target_mode_frequency_and_growth(
                 .contains(&ratio)
         }
     };
-    (mode, freq_ok && (x2 <= 0.0 || mode.growth_timescale_days < x2.max(1.0e7)))
+    (
+        mode,
+        freq_ok && (x2 <= 0.0 || mode.growth_timescale_days < x2.max(1.0e7)),
+    )
 }
 
 /// Evaluates the global asteroseismic scaling parameters $(\Delta\nu, \nu_{\max})$ in $\mu\mathrm{Hz}$.
@@ -577,10 +639,11 @@ pub fn eval_astero_scaling_dnu_numax_uhz(model: &StarModel) -> (f64, f64) {
     let teff = if model.teff > 100.0 {
         model.teff
     } else {
-        5777.0 * (l_solar / (r_solar * r_solar)).powf(0.25)
+        5777.0 * flexmesa_math::pow(l_solar / (r_solar * r_solar), 0.25)
     };
     (
-        135.1 * m_solar.sqrt() * r_solar.powf(-1.5),
-        3090.0 * m_solar / (r_solar * r_solar) * (teff / 5777.0).powf(-0.5),
+        135.1 * m_solar.sqrt() * flexmesa_math::pow(r_solar, -1.5),
+        3090.0 * m_solar / (r_solar * r_solar)
+            * flexmesa_math::pow(teff / 5777.0, -0.5),
     )
 }

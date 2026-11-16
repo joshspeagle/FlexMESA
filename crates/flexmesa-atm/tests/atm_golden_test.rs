@@ -65,11 +65,11 @@ fn make_eos_proc(
     let ht = HelmTable::builtin();
     let cfg = EosConfig::default();
     move |ln_p: f64, ln_t: f64| {
-        let t = ln_t.exp();
-        let p = ln_p.exp();
+        let t = flexmesa_math::exp(ln_t);
+        let p = flexmesa_math::exp(ln_p);
         let prad = radiation_pressure(t);
         let pgas = (p - prad).max(1.0e-99);
-        let log_pgas = pgas.log10();
+        let log_pgas = flexmesa_math::log10(pgas);
         let log_t = ln_t / LN10;
         let pt = eos_pt_get(ht, &chem_id, &xa, log_pgas, log_t, &cfg).map_err(
             |e| AtmError::CallbackError {
@@ -149,13 +149,13 @@ fn test_section1_atm_tables_match_golden_oracle() {
         let l = LSUN;
         let teff = atm_teff(l, r);
         let out = eval_table(l, r, m, cgrav, table_id, z, true, teff).unwrap();
-        let t = out.ln_t.exp();
-        let p = out.ln_p.exp();
+        let t = flexmesa_math::exp(out.ln_t);
+        let p = flexmesa_math::exp(out.ln_p);
         let prad = radiation_pressure(t);
         let t_int = (0.5 + t).floor() as i64;
         let log_t = out.ln_t / LN10;
-        let log_p = p.log10();
-        let log_pgas = (p - prad).log10();
+        let log_p = flexmesa_math::log10(p);
+        let log_pgas = flexmesa_math::log10(p - prad);
 
         assert_eq!(t_int, exp_t_int, "table {table_id} integer T");
         assert!(
@@ -182,13 +182,13 @@ fn test_section1_atm_tables_match_golden_oracle() {
         let out =
             eval_table(l, r, m, cgrav, ATM_TABLE_WD_TAU_25, z, true, teff)
                 .unwrap();
-        let t = out.ln_t.exp();
-        let p = out.ln_p.exp();
+        let t = flexmesa_math::exp(out.ln_t);
+        let p = flexmesa_math::exp(out.ln_p);
         let prad = radiation_pressure(t);
         assert_eq!((0.5 + t).floor() as i64, 6066);
         assert!((out.ln_t / LN10 - 3.782_918_44).abs() < 1.0e-8);
-        assert!((p.log10() - 7.894_946_62).abs() < 1.0e-8);
-        assert!(((p - prad).log10() - 7.894_946_61).abs() < 1.0e-8);
+        assert!((flexmesa_math::log10(p) - 7.894_946_62).abs() < 1.0e-8);
+        assert!((flexmesa_math::log10(p - prad) - 7.894_946_61).abs() < 1.0e-8);
     }
 
     // DB WD tau=25
@@ -201,22 +201,22 @@ fn test_section1_atm_tables_match_golden_oracle() {
         let out =
             eval_table(l, r, m, cgrav, ATM_TABLE_DB_WD_TAU_25, z, true, teff)
                 .unwrap();
-        let t = out.ln_t.exp();
-        let p = out.ln_p.exp();
+        let t = flexmesa_math::exp(out.ln_t);
+        let p = flexmesa_math::exp(out.ln_p);
         let prad = radiation_pressure(t);
         assert_eq!((0.5 + t).floor() as i64, 51950);
         assert!((out.ln_t / LN10 - 4.715_587_22).abs() < 1.0e-8);
-        assert!((p.log10() - 7.384_729_07).abs() < 1.0e-8);
-        assert!(((p - prad).log10() - 7.384_400_00).abs() < 1.0e-8);
+        assert!((flexmesa_math::log10(p) - 7.384_729_07).abs() < 1.0e-8);
+        assert!((flexmesa_math::log10(p - prad) - 7.384_400_00).abs() < 1.0e-8);
     }
 }
 
 #[test]
 fn test_section2_t_tau_varying_matches_golden_oracle() {
     let cgrav = STANDARD_CGRAV;
-    let log_teff = 5776.0_f64.log10();
-    let log_rsurf = RSUN.log10();
-    let log_m = MSUN.log10();
+    let log_teff = flexmesa_math::log10(5776.0_f64);
+    let log_rsurf = flexmesa_math::log10(RSUN);
+    let log_m = flexmesa_math::log10(MSUN);
     let r = exp10(log_rsurf);
     let m = exp10(log_m);
     let teff = exp10(log_teff);
@@ -252,18 +252,18 @@ fn test_section2_t_tau_varying_matches_golden_oracle() {
             500, true, teff,
         )
         .unwrap();
-        let t = out.ln_t.exp();
-        let p = out.ln_p.exp();
+        let t = flexmesa_math::exp(out.ln_t);
+        let p = flexmesa_math::exp(out.ln_p);
         assert_eq!((0.5 + t).floor() as i64, exp_t_int);
         assert!(
-            (t.log10() - exp_log_t).abs() < 1.0e-8,
+            (flexmesa_math::log10(t) - exp_log_t).abs() < 1.0e-8,
             "varying id={t_tau_id} logT got {:.10} expected {exp_log_t:.8}",
-            t.log10()
+            flexmesa_math::log10(t)
         );
         assert!(
-            (p.log10() - exp_log_p).abs() < 2.0e-7,
+            (flexmesa_math::log10(p) - exp_log_p).abs() < 2.0e-7,
             "varying id={t_tau_id} logP got {:.10} expected {exp_log_p:.8}",
-            p.log10()
+            flexmesa_math::log10(p)
         );
     }
 }
@@ -312,9 +312,9 @@ fn test_section3_t_tau_uniform_and_irradiated_match_golden_oracle() {
 
     // 2. Uniform iterated (tau = 150, max_iters = 30)
     {
-        let log_teff = 5776.0_f64.log10();
-        let r = exp10(RSUN.log10());
-        let m = exp10(MSUN.log10());
+        let log_teff = flexmesa_math::log10(5776.0_f64);
+        let r = exp10(flexmesa_math::log10(RSUN));
+        let m = exp10(flexmesa_math::log10(MSUN));
         let teff = exp10(log_teff);
         let l = atm_l(teff, r);
         let eos_proc = make_eos_proc(chem_id.clone(), xa.clone());
@@ -397,9 +397,10 @@ fn test_section3_t_tau_uniform_and_irradiated_match_golden_oracle() {
             out.tau
         );
         assert!(
-            (out.ln_t.exp() - 1.312_422_280_827_965_6e3).abs() < 1.0e-10,
+            (flexmesa_math::exp(out.ln_t) - 1.312_422_280_827_965_6e3).abs()
+                < 1.0e-10,
             "irradiated T got {:.16e}",
-            out.ln_t.exp()
+            flexmesa_math::exp(out.ln_t)
         );
         assert!(
             (out.ln_t / LN10 - 3.118_073_594_739_383_4).abs() < 1.0e-13,
@@ -433,7 +434,8 @@ fn test_section4_partials_e2_and_build_structure() {
         let lnt_p = eval_t_tau(id, tau + eps, teff).unwrap();
         let lnt_m = eval_t_tau(id, tau - eps, teff).unwrap();
         let q_of = |lnt: f64, t_val: f64| -> f64 {
-            (4.0 / 3.0) * (lnt.exp() / teff).powi(4) - t_val
+            (4.0 / 3.0) * flexmesa_math::pow4(flexmesa_math::exp(lnt) / teff)
+                - t_val
         };
         let dq_fd =
             (q_of(lnt_p, tau + eps) - q_of(lnt_m, tau - eps)) / (2.0 * eps);
@@ -481,8 +483,10 @@ fn test_section4_partials_e2_and_build_structure() {
         atm_teff(l, r_m),
     )
     .unwrap();
-    let fd_lnp_dlnr = (out_rp.ln_p - out_rm.ln_p) / (r_p.ln() - r_m.ln());
-    let fd_lnt_dlnr = (out_rp.ln_t - out_rm.ln_t) / (r_p.ln() - r_m.ln());
+    let fd_lnp_dlnr = (out_rp.ln_p - out_rm.ln_p)
+        / (flexmesa_math::log(r_p) - flexmesa_math::log(r_m));
+    let fd_lnt_dlnr = (out_rp.ln_t - out_rm.ln_t)
+        / (flexmesa_math::log(r_p) - flexmesa_math::log(r_m));
     assert!(((out.dln_p_dln_r - fd_lnp_dlnr) / fd_lnp_dlnr).abs() < 1.0e-6);
     assert!(((out.dln_t_dln_r - fd_lnt_dlnr) / fd_lnt_dlnr).abs() < 1.0e-6);
 

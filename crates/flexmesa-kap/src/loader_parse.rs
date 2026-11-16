@@ -273,7 +273,8 @@ pub(crate) fn parse_kap_tables(bytes: &[u8]) -> KapTables {
     let log_rs = cur.f64_vec(num_lr);
     let log_ts = cur.f64_vec(num_lt);
     let zs = cur.f64_vec(num_zs);
-    let log_zs: Vec<f64> = zs.iter().map(|&z| z.log10()).collect();
+    let log_zs: Vec<f64> =
+        zs.iter().map(|&z| flexmesa_math::log10(z)).collect();
     let mut ts = Vec::with_capacity(num_zs);
     for _ in 0..num_zs {
         let n_x = cur.u32();

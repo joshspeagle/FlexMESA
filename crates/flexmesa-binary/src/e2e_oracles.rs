@@ -49,7 +49,7 @@ pub fn eval_gr_expected_separation_rsun(
     let g3 = STANDARD_CGRAV * STANDARD_CGRAV * STANDARD_CGRAV;
     let c5 = CLIGHT * CLIGHT * CLIGHT * CLIGHT * CLIGHT;
     let beta = (64.0 * g3 / (5.0 * c5)) * m1 * m2 * (m1 + m2);
-    let a4 = (a0_cm.powi(4) - 4.0 * beta * age_sec).max(0.0);
+    let a4 = (flexmesa_math::pow4(a0_cm) - 4.0 * beta * age_sec).max(0.0);
     pow(a4, 0.25) / RSUN
 }
 
@@ -77,12 +77,14 @@ pub fn eval_tauris_vdh_expected_separation_rsun(
     let term3 = if eps.abs() > 1.0e-12 {
         let exp3 = 3.0
             + 2.0
-                * (alpha * eps * eps + beta + gamma * delta * one_m_eps.powi(2))
+                * (alpha * eps * eps
+                    + beta
+                    + gamma * delta * flexmesa_math::pow2(one_m_eps))
                 / (eps * one_m_eps);
         pow((eps * q + 1.0) / (eps * q0 + 1.0), exp3)
     } else {
         let coeff = 2.0 * (beta + gamma * delta);
-        (coeff * (q - q0)).exp()
+        flexmesa_math::exp(coeff * (q - q0))
     };
     a0_rsun * term1 * term2 * term3
 }
@@ -115,8 +117,7 @@ pub fn eval_brott_wind_msun_yr(
     }
 
     let log_z_ratio = log10(z_div_z_solar);
-    let teff_jump =
-        1.0e3 * (61.2 + 2.59 * (-13.636 + 0.889 * log_z_ratio));
+    let teff_jump = 1.0e3 * (61.2 + 2.59 * (-13.636 + 0.889 * log_z_ratio));
 
     let vink_wind = eval_brott_vink_wind(
         l_surf_lsun,
@@ -174,8 +175,7 @@ fn eval_brott_vink_wind(
     let w1 = if alfa > 0.0 {
         let vinf_div_vesc = 2.6 * pow(z_div_z_solar, 0.13);
         let log_t_40k = log10(t_k / 4.0e4);
-        let log_mdot = -6.697
-            + 2.194 * log10(l_lsun / 1.0e5)
+        let log_mdot = -6.697 + 2.194 * log10(l_lsun / 1.0e5)
             - 1.313 * log10(m_msun / 30.0)
             - 1.226 * log10(vinf_div_vesc / 2.0)
             + 0.933 * log_t_40k
@@ -188,8 +188,7 @@ fn eval_brott_vink_wind(
 
     let w2 = if alfa < 1.0 {
         let vinf_div_vesc = 1.3 * pow(z_div_z_solar, 0.13);
-        let log_mdot = -6.688
-            + 2.210 * log10(l_lsun / 1.0e5)
+        let log_mdot = -6.688 + 2.210 * log10(l_lsun / 1.0e5)
             - 1.339 * log10(m_msun / 30.0)
             - 1.601 * log10(vinf_div_vesc / 2.0)
             + 1.07 * log10(t_k / 2.0e4)
@@ -217,6 +216,7 @@ fn eval_brott_nieuwenhuijzen_wind(
 }
 
 fn eval_brott_hamann_wind(l_lsun: f64, x_surf: f64, log_z_ratio: f64) -> f64 {
-    let log10w = -11.95 + 1.5 * log10(l_lsun) - 2.85 * x_surf + 0.85 * log_z_ratio;
+    let log10w =
+        -11.95 + 1.5 * log10(l_lsun) - 2.85 * x_surf + 0.85 * log_z_ratio;
     exp10(log10w) / 10.0
 }

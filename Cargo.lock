@@ -286,6 +286,7 @@ dependencies = [
 name = "flexmesa-data"
 version = "0.1.0"
 dependencies = [
+ "flexmesa-math",
  "flexmesa-testing",
  "proptest",
  "tempfile",
@@ -310,6 +311,7 @@ name = "flexmesa-interp1d"
 version = "0.1.0"
 dependencies = [
  "flexmesa-autodiff",
+ "flexmesa-math",
  "flexmesa-testing",
  "flexmesa-utils",
  "proptest",
@@ -320,6 +322,7 @@ name = "flexmesa-interp2d"
 version = "0.1.0"
 dependencies = [
  "flexmesa-interp1d",
+ "flexmesa-math",
  "flexmesa-testing",
  "flexmesa-utils",
  "proptest",
@@ -368,6 +371,7 @@ name = "flexmesa-mtx"
 version = "0.1.0"
 dependencies = [
  "flexmesa-autodiff",
+ "flexmesa-math",
  "flexmesa-utils",
  "proptest",
  "rayon",

@@ -74,11 +74,11 @@ fn eval_eos_callback(
     ln_p: f64,
     ln_t: f64,
 ) -> Result<AtmEosCallbackResult, AtmError> {
-    let t = ln_t.exp();
-    let p = ln_p.exp();
+    let t = flexmesa_math::exp(ln_t);
+    let p = flexmesa_math::exp(ln_p);
     let prad = radiation_pressure(t);
     let pgas = (p - prad).max(1.0e-99);
-    let log_pgas = pgas.log10();
+    let log_pgas = flexmesa_math::log10(pgas);
     let log_t = ln_t / LN10;
     let pt =
         eos_pt_get(ht, chem_id, xa, log_pgas, log_t, eos_cfg).map_err(|e| {

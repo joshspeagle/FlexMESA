@@ -14,8 +14,7 @@ use flexmesa_astero::{
     eval_combined_corr, eval_cubic_corr, eval_kjeldsen_corr,
     eval_model_astero_sample, eval_power_law_corr, eval_sonoi_corr,
     interpolate_l0_inertia, parse_astero_search_controls, run_astero_suite,
-    run_astero_test_suite_case, TempCaseStaging,
-    TIER4_ASTERO_CASES,
+    run_astero_test_suite_case, TempCaseStaging, TIER4_ASTERO_CASES,
 };
 use flexmesa_math::pow;
 use flexmesa_star::inlist::InlistBundle;
@@ -39,10 +38,8 @@ fn astero_suite_dir() -> PathBuf {
 
 #[test]
 fn test_offline_synthetic_mock_case_runs_two_steps_with_restart_parity() {
-    let tmp_root = std::env::temp_dir().join(format!(
-        "flexmesa_astero_mock_{}",
-        std::process::id()
-    ));
+    let tmp_root = std::env::temp_dir()
+        .join(format!("flexmesa_astero_mock_{}", std::process::id()));
     let tmp = tmp_root.join("example_astero");
     let _ = fs::remove_dir_all(&tmp_root);
     fs::create_dir_all(&tmp).expect("create temp mock dir");
@@ -96,13 +93,8 @@ fn test_surface_effects_case_recovers_synthetic_targets_and_bison_solar_fits() {
     let model = init_or_update_model_from_bundle(&bundle, None, &mut extras)
         .expect("load s1.mod");
 
-    let sample = eval_model_astero_sample(
-        &model,
-        &ctrl,
-        ctrl.first_params(),
-        1,
-        staged,
-    );
+    let sample =
+        eval_model_astero_sample(&model, &ctrl, ctrl.first_params(), 1, staged);
     let (mut obs_f, mut obs_sig, mut mod_f, mut mod_in) =
         (Vec::new(), Vec::new(), Vec::new(), Vec::new());
     for l in 0..4 {
@@ -191,7 +183,10 @@ fn test_surface_effects_case_recovers_synthetic_targets_and_bison_solar_fits() {
         ctrl.correction_b,
         1.0,
     );
-    assert!(r_k > 0.95 && r_k < 1.05, "unexpected homology factor r={r_k}");
+    assert!(
+        r_k > 0.95 && r_k < 1.05,
+        "unexpected homology factor r={r_k}"
+    );
     assert!(
         ((a_div_r / target_a_div_r) - 1.0).abs() < 10.0,
         "a_div_r={a_div_r} vs target={target_a_div_r}"

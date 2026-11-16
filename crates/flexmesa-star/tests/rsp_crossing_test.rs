@@ -172,8 +172,8 @@ fn test_rsp_lina_and_steffen_edges_match_golden_5m_list() {
             hist,
             "{modnum} {:.6e} 5.0 {:.16e} {:.16e}",
             5.1e7 + idx_f64 * 1.0e4,
-            teff.log10(),
-            lum.log10()
+            flexmesa_math::log10(teff),
+            flexmesa_math::log10(lum)
         );
     }
     fs::write(tmp_dir.join("history_5M.data"), &hist).expect("write history");

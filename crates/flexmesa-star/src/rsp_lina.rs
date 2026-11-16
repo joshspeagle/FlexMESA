@@ -75,11 +75,11 @@ pub fn do_lina(
         mc.dk_dt_00[i] = out.opt;
 
         let t1 = dc.p43 / grid.dm[i];
-        mc.dvr[i] = 3.0 * t1 * grid.r[i].powi(2);
+        mc.dvr[i] = 3.0 * t1 * flexmesa_math::pow2(grid.r[i]);
         mc.dvrm[i] = if i == 1 {
-            -3.0 * t1 * model.r_center.powi(2)
+            -3.0 * t1 * flexmesa_math::pow2(model.r_center)
         } else {
-            -3.0 * t1 * grid.r[i - 1].powi(2)
+            -3.0 * t1 * flexmesa_math::pow2(grid.r[i - 1])
         };
         mc.update_radial_chain(i);
     }
@@ -131,11 +131,11 @@ pub fn do_lina(
             (dfcx0, dfcxm, dfcxp, dfcy0, dfcyp, dfcz0, dfczp);
 
         if i < nzn {
-            let w_00 = grid.t[i].powi(4);
-            let w_out = grid.t[i + 1].powi(4);
-            let bw = (w_out / w_00).ln();
-            let bk = (mc.k[i + 1] / mc.k[i]).ln();
-            let t1 = -dc.cl * grid.r[i].powi(4) / grid.dm_bar[i];
+            let w_00 = flexmesa_math::pow4(grid.t[i]);
+            let w_out = flexmesa_math::pow4(grid.t[i + 1]);
+            let bw = flexmesa_math::log(w_out / w_00);
+            let bk = flexmesa_math::log(mc.k[i + 1] / mc.k[i]);
+            let t1 = -dc.cl * flexmesa_math::pow4(grid.r[i]) / grid.dm_bar[i];
             let t2 = (w_out / mc.k[i + 1] - w_00 / mc.k[i]) / (1.0 - bk / bw);
             let t3 = t1 / (bw - bk);
             let dlk = (t3 / mc.k[i]) * (w_00 * bw / mc.k[i] - t2);
@@ -191,12 +191,12 @@ pub fn do_lina(
         let ez00 = -tb.dc_dw_00[i] - t4_e * (dfcz0 - dfcmzp);
         let ez01 = -t4_e * dfczp;
         let r_in2 = if i == 1 {
-            model.r_center.powi(2)
+            flexmesa_math::pow2(model.r_center)
         } else {
-            grid.r[i - 1].powi(2)
+            flexmesa_math::pow2(grid.r[i - 1])
         };
         let eu10 = t3_e * r_in2;
-        let eu00 = -t3_e * grid.r[i].powi(2);
+        let eu00 = -t3_e * flexmesa_math::pow2(grid.r[i]);
 
         let t3_c = (dc.p4 / grid.dm[i]) * tb.pturb[i];
         let (cx20, cx10, cx00, cy10, cy00, cz10, cz00) = if i == 1 {
@@ -224,9 +224,9 @@ pub fn do_lina(
         let cx01 = tb.dc_dr_out[i] - t4_e * tb.dltxp[i];
         let cz01 = -t4_e * tb.dltzp[i];
         let cu10 = t3_c * r_in2;
-        let cu00 = -t3_c * grid.r[i].powi(2);
+        let cu00 = -t3_c * flexmesa_math::pow2(grid.r[i]);
 
-        let t1_m = dc.p4 * grid.r[i].powi(2) / grid.dm_bar[i];
+        let t1_m = dc.p4 * flexmesa_math::pow2(grid.r[i]) / grid.dm_bar[i];
         let t4_m = if dc.alfam >= 0.0 {
             dc.p4 / (grid.dm_bar[i] * grid.r[i])
         } else {
@@ -238,7 +238,7 @@ pub fn do_lina(
         let my00 = -t1_m * (-mc.dp_dt_00[i]);
         let (mx00, mx01, my01, mu00, mu01, mz01) = if i < nzn {
             (
-                4.0 * dc.g * grid.m[i] / grid.r[i].powi(3)
+                4.0 * dc.g * grid.m[i] / flexmesa_math::pow3(grid.r[i])
                     - t1_m
                         * (mc.dp_dr_in[i + 1] - mc.dp_dr_00[i]
                             + tb.dptrb_dr_in[i + 1]
@@ -251,7 +251,7 @@ pub fn do_lina(
             )
         } else {
             (
-                4.0 * dc.g * grid.m[i] / grid.r[i].powi(3)
+                4.0 * dc.g * grid.m[i] / flexmesa_math::pow3(grid.r[i])
                     - t1_m * (-mc.dp_dr_00[i]),
                 0.0,
                 0.0,
@@ -359,8 +359,9 @@ pub fn do_lina(
         let pers = 2.0 * PI / omeg;
         let eto = dc.p4 * eig.wr[col] / omeg;
         let q_val = pers
-            * ((grid.m[nzn] / dc.sunm) * (dc.sunr / grid.r[nzn]).powi(3))
-                .sqrt()
+            * ((grid.m[nzn] / dc.sunm)
+                * flexmesa_math::pow3(dc.sunr / grid.r[nzn]))
+            .sqrt()
             / 86_400.0;
 
         let vtts = get_cpx(4 * nzn - 3, col);
@@ -387,8 +388,9 @@ pub fn do_lina(
 
             let dvrr = vrr[i].mul(scale).scale(1.0 / grid.r[i]);
             let phr = dvrr.arg();
-            ek +=
-                0.5 * grid.dm_bar[i] * (omeg * vrr[i].mul(scale).abs()).powi(2);
+            ek += 0.5
+                * grid.dm_bar[i]
+                * flexmesa_math::pow2(omeg * vrr[i].mul(scale).abs());
 
             let dv_0 = if i == 1 {
                 vrr[i].scale(mc.dvr[i]).mul(scale)
@@ -420,11 +422,11 @@ pub fn do_lina(
             if dc.alfam < 0.0 {
                 qwkev[i] = -PI * grid.dm[i] * dpev.conj_mul_imag(dv_0);
             } else if dc.alfam > 0.0 {
-                let strain = dv_0.scale(1.0 / grid.r[i].powi(3)).add(
-                    vrr[i]
-                        .mul(scale)
-                        .scale(-3.0 * grid.vol[i] / grid.r[i].powi(4)),
-                );
+                let strain = dv_0
+                    .scale(1.0 / flexmesa_math::pow3(grid.r[i]))
+                    .add(vrr[i].mul(scale).scale(
+                        -3.0 * grid.vol[i] / flexmesa_math::pow4(grid.r[i]),
+                    ));
                 qwkev[i] = PI * grid.dm[i] * dpev.conj_mul_imag(strain);
             }
 

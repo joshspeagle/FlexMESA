@@ -98,7 +98,8 @@ impl ImplicitRlofSolver {
         let q = q_accretor_over_donor.max(1.0e-12);
         let slope_contact = pow(q, -0.52);
         if rl_relative_gap_accretor < 0.0
-            && (rl_relative_gap_donor * slope_contact - rl_relative_gap_accretor
+            && (rl_relative_gap_donor * slope_contact
+                - rl_relative_gap_accretor
                 > self.tolerance
                 || rl_relative_gap_donor < -self.tolerance)
         {
@@ -240,7 +241,10 @@ pub struct ImplicitMdotSolver {
 impl ImplicitMdotSolver {
     /// Constructs a new per-step implicit solver from [`BinaryInlistControls`].
     #[must_use]
-    pub fn from_controls(ctrl: &BinaryInlistControls, change_factor: f64) -> Self {
+    pub fn from_controls(
+        ctrl: &BinaryInlistControls,
+        change_factor: f64,
+    ) -> Self {
         let use_quad = !ctrl.solver_type.eq_ignore_ascii_case("bisect");
         let is_contact = ctrl.mdot_scheme.eq_ignore_ascii_case("contact");
         Self::new(
@@ -279,7 +283,9 @@ impl ImplicitMdotSolver {
             starting_mdot_cgs: starting_msun_yr * u,
             use_quadratic,
             use_sum,
-            fixed_delta_mdot: starting_msun_yr * u * (change_factor.max(1.01) - 1.0),
+            fixed_delta_mdot: starting_msun_yr
+                * u
+                * (change_factor.max(1.01) - 1.0),
             have_lo: false,
             have_hi: false,
             have_prev: false,
@@ -344,23 +350,42 @@ impl ImplicitMdotSolver {
                     ImplicitStepAction::TryNextMdot(seed)
                 };
             }
-            return self.record_and_propose(num_tries, max_tries, mdot_current, f, false, false);
+            return self.record_and_propose(
+                num_tries,
+                max_tries,
+                mdot_current,
+                f,
+                false,
+                false,
+            );
         }
 
         let (f, trial_use_sum, detach_allowed) = if is_contact {
             let q = q_accretor_over_donor.max(1.0e-12);
             let sc = pow(q, -0.52);
             let companion_detached = gap_accretor < 0.0
-                && (gap_donor * sc - gap_accretor > self.tolerance || gap_donor < -self.tolerance);
+                && (gap_donor * sc - gap_accretor > self.tolerance
+                    || gap_donor < -self.tolerance);
             if companion_detached {
                 (helper.roche_lobe_objective(gap_donor), false, true)
             } else {
-                (helper.contact_objective(gap_donor, gap_accretor, q), true, false)
+                (
+                    helper.contact_objective(gap_donor, gap_accretor, q),
+                    true,
+                    false,
+                )
             }
         } else {
             (helper.roche_lobe_objective(gap_donor), false, true)
         };
-        self.record_and_propose(num_tries, max_tries, mdot_current, f, trial_use_sum, detach_allowed)
+        self.record_and_propose(
+            num_tries,
+            max_tries,
+            mdot_current,
+            f,
+            trial_use_sum,
+            detach_allowed,
+        )
     }
 
     /// Flip sign of bracket endpoints after a mid-step `"contact"` donor switch
@@ -470,7 +495,9 @@ impl ImplicitMdotSolver {
             } else {
                 self.mdot_lo = mdot;
                 self.f_lo = f;
-                if self.mdot_lo >= 0.0 || self.mdot_lo.abs() < self.starting_mdot_cgs {
+                if self.mdot_lo >= 0.0
+                    || self.mdot_lo.abs() < self.starting_mdot_cgs
+                {
                     -self.starting_mdot_cgs
                 } else {
                     self.mdot_lo * self.change_factor
@@ -557,7 +584,8 @@ pub fn update_change_factor_after_step(
     let lam = ctrl.implicit_lambda;
     let frac = ctrl.change_factor_fraction;
     let next = if num_tries <= 1 {
-        (1.0 - lam) * old_change_factor + lam * (1.0 + (old_change_factor - 1.0) / frac)
+        (1.0 - lam) * old_change_factor
+            + lam * (1.0 + (old_change_factor - 1.0) / frac)
     } else {
         let ratio = if mtransfer_rate_new.abs() > mtransfer_rate_old.abs() {
             mtransfer_rate_new / mtransfer_rate_old

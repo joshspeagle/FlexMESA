@@ -116,9 +116,11 @@ fn eval_binary_i32_named(name: &str, a: f64, exp_i32: i32) -> f64 {
 
 #[test]
 fn test_mesa_26_4_1_hex_reference_vectors_match_bit_for_bit_in_strict_mode() {
-    let vec_path = repo_root()
-        .join("benchmarks/fortran_mesa/math_hex_vectors/mesa_26_4_1_math_vectors.txt");
-    let raw = fs::read_to_string(&vec_path).expect("read mesa_26_4_1_math_vectors.txt");
+    let vec_path = repo_root().join(
+        "benchmarks/fortran_mesa/math_hex_vectors/mesa_26_4_1_math_vectors.txt",
+    );
+    let raw = fs::read_to_string(&vec_path)
+        .expect("read mesa_26_4_1_math_vectors.txt");
 
     // Verify required provenance headers (#165 Item 14).
     assert!(raw.contains("# mesa_version: r26.4.1"));
@@ -164,8 +166,8 @@ fn test_mesa_26_4_1_hex_reference_vectors_match_bit_for_bit_in_strict_mode() {
                         line.split_once(' ').expect("unary hex pair");
                     let in_bits =
                         u64::from_str_radix(in_hex, 16).expect("parse in_hex");
-                    let exp_bits =
-                        u64::from_str_radix(exp_hex, 16).expect("parse exp_hex");
+                    let exp_bits = u64::from_str_radix(exp_hex, 16)
+                        .expect("parse exp_hex");
                     let out = eval_unary_named(
                         &current_name,
                         f64::from_bits(in_bits),
@@ -185,8 +187,10 @@ fn test_mesa_26_4_1_hex_reference_vectors_match_bit_for_bit_in_strict_mode() {
                     let a_hex = parts.next().expect("arg1");
                     let b_hex = parts.next().expect("arg2");
                     let exp_hex = parts.next().expect("out");
-                    let a_bits = u64::from_str_radix(a_hex, 16).expect("a_bits");
-                    let b_bits = u64::from_str_radix(b_hex, 16).expect("b_bits");
+                    let a_bits =
+                        u64::from_str_radix(a_hex, 16).expect("a_bits");
+                    let b_bits =
+                        u64::from_str_radix(b_hex, 16).expect("b_bits");
                     let exp_bits =
                         u64::from_str_radix(exp_hex, 16).expect("exp_bits");
                     let out = eval_binary_f64_named(
@@ -209,7 +213,8 @@ fn test_mesa_26_4_1_hex_reference_vectors_match_bit_for_bit_in_strict_mode() {
                     let a_hex = parts.next().expect("arg1");
                     let n_hex = parts.next().expect("exp_i32");
                     let exp_hex = parts.next().expect("out");
-                    let a_bits = u64::from_str_radix(a_hex, 16).expect("a_bits");
+                    let a_bits =
+                        u64::from_str_radix(a_hex, 16).expect("a_bits");
                     let n_u32 = u32::from_str_radix(n_hex, 16).expect("n_u32");
                     let exp_bits =
                         u64::from_str_radix(exp_hex, 16).expect("exp_bits");
@@ -251,10 +256,11 @@ fn test_mesa_26_4_1_hex_reference_vectors_match_bit_for_bit_in_strict_mode() {
 #[test]
 fn test_function_mapping_toml_covers_all_math_lib_crmath_public_symbols() {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let mapping = fs::read_to_string(manifest_dir.join("function_mapping.toml"))
-        .expect("function_mapping.toml");
-    let lib_rs =
-        fs::read_to_string(manifest_dir.join("src/lib.rs")).expect("src/lib.rs");
+    let mapping =
+        fs::read_to_string(manifest_dir.join("function_mapping.toml"))
+            .expect("function_mapping.toml");
+    let lib_rs = fs::read_to_string(manifest_dir.join("src/lib.rs"))
+        .expect("src/lib.rs");
     let trig_rs = fs::read_to_string(manifest_dir.join("src/trig.rs"))
         .expect("src/trig.rs");
     let sys_rs = fs::read_to_string(

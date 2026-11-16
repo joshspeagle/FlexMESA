@@ -27,7 +27,7 @@ fn check_courant_collapse_and_energy(
 
     let r_mass = if model.mstar > 0.0 && model.mstar_old > 0.0 {
         check_change(
-            (model.mstar / model.mstar_old).log10().abs(),
+            flexmesa_math::log10(model.mstar / model.mstar_old).abs(),
             ts.delta_lg_star_mass_limit,
             ts.delta_lg_star_mass_hard_limit,
             coeff,
@@ -366,7 +366,7 @@ pub fn timestep_controller(
         }
         if ts.max_timestep_hi_t_limit > 0.0
             && ts.hi_t_max_years_for_timestep > 0.0
-            && 10.0_f64.powf(log_max_t) >= ts.max_timestep_hi_t_limit
+            && flexmesa_math::exp10(log_max_t) >= ts.max_timestep_hi_t_limit
         {
             max_dt = max_dt.min(ts.hi_t_max_years_for_timestep * SECYER);
         }

@@ -26,7 +26,7 @@ fn eval_face_inv_r2_ad(
     let r_k = lnr_k.exp();
     if using_v_tc {
         let lnr_s = model.ln_r_start.get(k).copied().unwrap_or(model.ln_r[k]);
-        let r_s = lnr_s.exp().max(1.0);
+        let r_s = flexmesa_math::exp(lnr_s).max(1.0);
         StarAdOrder1::ONE / (r_k * r_s).max(StarAdOrder1::ONE)
     } else {
         StarAdOrder1::ONE / (r_k * r_k).max(StarAdOrder1::ONE)

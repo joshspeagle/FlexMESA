@@ -44,8 +44,8 @@ pub(crate) fn resolve_mesa_data_dir() -> Option<PathBuf> {
 /// # Errors
 /// Returns an actionable error when neither `helm_table_full.bin` in the
 /// FlexMESA data directory nor upstream `MESA_DIR/data/eosDT_data` is present.
-pub(crate) fn load_or_build_full_helm_vertices() -> Result<Vec<HelmVertex>, String>
-{
+pub(crate) fn load_or_build_full_helm_vertices(
+) -> Result<Vec<HelmVertex>, String> {
     let data_root = resolve_flexmesa_data_dir();
     let full_bin = data_root.join("helm_table_full.bin");
     if full_bin.is_file() {

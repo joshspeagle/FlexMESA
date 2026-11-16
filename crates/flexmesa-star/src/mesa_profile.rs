@@ -8,7 +8,9 @@ use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use flexmesa_chem::{category_id, category_name, NuclideCatalog, NUM_CATEGORIES};
+use flexmesa_chem::{
+    category_id, category_name, NuclideCatalog, NUM_CATEGORIES,
+};
 use flexmesa_const::{
     MixingType, BOLTZ_SIGMA, FOUR_PI, LN10, L_SUN, M_SUN, R_SUN, SECYER,
 };
@@ -19,12 +21,12 @@ use crate::eps_mdot::eval_cell_specific_total_energy;
 use crate::mesa_history::{IncrementalHistoryWriter, MesaCellValue};
 use crate::model::StarModel;
 use crate::report_utils::{
-    center_avg_x_by_name, center_value, csound_face_at, equatorial_and_polar_r_cm,
-    eval_upstream_omega_crit, format_mesa_dbl, format_mesa_header_str,
-    format_mesa_int, get_ledd, get_lrad_div_ledd, iso_slot_for_chem_id,
-    parse_quoted_include_arg, push_mesa_6line_header, resolve_iso_slot,
-    safe_log10, write_mesa_dbl_width, write_mesa_int_width, StepReportContext,
-    MESA_REF_VERSION_NUMBER, STAR_LOG_COL_WIDTH,
+    center_avg_x_by_name, center_value, csound_face_at,
+    equatorial_and_polar_r_cm, eval_upstream_omega_crit, format_mesa_dbl,
+    format_mesa_header_str, format_mesa_int, get_ledd, get_lrad_div_ledd,
+    iso_slot_for_chem_id, parse_quoted_include_arg, push_mesa_6line_header,
+    resolve_iso_slot, safe_log10, write_mesa_dbl_width, write_mesa_int_width,
+    StepReportContext, MESA_REF_VERSION_NUMBER, STAR_LOG_COL_WIDTH,
 };
 
 /// Active column declarations from upstream MESA `26.4.1`
@@ -330,12 +332,13 @@ fn parse_profile_columns_inner(
                         Some(d) => d.join(inc_target.trim()),
                         None => PathBuf::from(inc_target.trim()),
                     };
-                    let inc_text = fs::read_to_string(&inc_path).map_err(|e| {
-                        StarError::IoError(format!(
+                    let inc_text =
+                        fs::read_to_string(&inc_path).map_err(|e| {
+                            StarError::IoError(format!(
                             "failed to read included profile columns {}: {e}",
                             inc_path.display()
                         ))
-                    })?;
+                        })?;
                     parse_profile_columns_inner(
                         &inc_text,
                         inc_path.parent().or(base_dir),
@@ -357,12 +360,18 @@ fn parse_profile_columns_inner(
                     continue;
                 }
                 "add_log_abundances" => {
-                    push_unique_prof(specs, ProfileColumnSpec::AddLogAbundances);
+                    push_unique_prof(
+                        specs,
+                        ProfileColumnSpec::AddLogAbundances,
+                    );
                     continue;
                 }
                 "add_reaction_categories" => {
                     for cid in 1..=NUM_CATEGORIES {
-                        push_unique_prof(specs, ProfileColumnSpec::CategoryEps(cid));
+                        push_unique_prof(
+                            specs,
+                            ProfileColumnSpec::CategoryEps(cid),
+                        );
                     }
                     continue;
                 }
@@ -396,9 +405,10 @@ fn parse_profile_columns_inner(
                     "profile_columns.list line {line_no}: unknown nuclide {iso_str:?} after 'log'"
                 )));
             };
-            let canon = cat
-                .get_by_id(cid)
-                .map_or_else(|| iso_str.to_ascii_lowercase(), |n| n.name.clone());
+            let canon = cat.get_by_id(cid).map_or_else(
+                || iso_str.to_ascii_lowercase(),
+                |n| n.name.clone(),
+            );
             push_unique_prof(specs, ProfileColumnSpec::LogNuclide(cid, canon));
             continue;
         }
@@ -457,7 +467,7 @@ pub fn default_star_profile_specs() -> Vec<ProfileColumnSpec> {
 #[inline]
 fn signed_log(val: f64) -> f64 {
     let sgn = if val.is_sign_negative() { -1.0 } else { 1.0 };
-    sgn * val.abs().max(1.0).log10()
+    sgn * flexmesa_math::log10(val.abs().max(1.0))
 }
 
 struct ProfilePrefixCache {
@@ -577,10 +587,13 @@ fn eval_profile_scalar(
         }
 
         "mass" => MesaCellValue::Float(model.m[k] / M_SUN),
-        "log_mass" | "logM" => MesaCellValue::Float(safe_log10(model.m[k] / M_SUN)),
+        "log_mass" | "logM" => {
+            MesaCellValue::Float(safe_log10(model.m[k] / M_SUN))
+        }
         "mass_grams" => MesaCellValue::Float(model.m[k]),
         "mmid" => MesaCellValue::Float(
-            (model.m_center + model.xmstar * (model.q[k] - 0.5 * model.dq[k])) / M_SUN,
+            (model.m_center + model.xmstar * (model.q[k] - 0.5 * model.dq[k]))
+                / M_SUN,
         ),
         "dm" => MesaCellValue::Float(model.dm[k]),
         "dm_bar" => MesaCellValue::Float(model.dm_bar[k]),
@@ -588,7 +601,9 @@ fn eval_profile_scalar(
         "m_grav_div_m_baryonic" => {
             MesaCellValue::Float(model.m_grav[k] / model.m[k].max(1.0e-99))
         }
-        "mass_correction_factor" => MesaCellValue::Float(model.aux.mass_correction[k]),
+        "mass_correction_factor" => {
+            MesaCellValue::Float(model.aux.mass_correction[k])
+        }
 
         "q" => MesaCellValue::Float(model.q[k]),
         "log_q" => MesaCellValue::Float(safe_log10(model.q[k])),
@@ -600,7 +615,9 @@ fn eval_profile_scalar(
             model.dq[k - 1] / model.dq[k].max(1.0e-99)
         }),
         "xm" => MesaCellValue::Float(prefixes.dm_prefix[k] / M_SUN),
-        "logxm" => MesaCellValue::Float(safe_log10(prefixes.dm_prefix[k] / M_SUN)),
+        "logxm" => {
+            MesaCellValue::Float(safe_log10(prefixes.dm_prefix[k] / M_SUN))
+        }
         "xq" => MesaCellValue::Float(prefixes.dq_prefix[k]),
         "logxq" => MesaCellValue::Float(safe_log10(prefixes.dq_prefix[k])),
 
@@ -615,7 +632,7 @@ fn eval_profile_scalar(
         "log_dr" => MesaCellValue::Float(safe_log10(dr)),
         "dlogR" => MesaCellValue::Float(
             (if k + 1 == nz {
-                model.ln_r[k] - model.r_center.max(1.0).ln()
+                model.ln_r[k] - flexmesa_math::log(model.r_center.max(1.0))
             } else {
                 model.ln_r[k] - model.ln_r[k + 1]
             }) / LN10,
@@ -627,17 +644,18 @@ fn eval_profile_scalar(
         "temperature" => MesaCellValue::Float(model.t[k]),
         "logT" => MesaCellValue::Float(model.ln_t[k] / LN10),
         "logT_face" => MesaCellValue::Float(if k == 0 {
-            safe_log10(model.ln_t_surf_ad.val.exp())
+            safe_log10(flexmesa_math::exp(model.ln_t_surf_ad.val))
         } else {
             (model.dq[k - 1] * model.ln_t[k] + model.dq[k] * model.ln_t[k - 1])
                 / (model.dq[k - 1] + model.dq[k]).max(1.0e-99)
                 / LN10
         }),
-        "logT_bb" => MesaCellValue::Float(safe_log10(
-            (model.lum[k].max(0.0)
-                / (FOUR_PI * model.r[k] * model.r[k] * BOLTZ_SIGMA).max(1.0e-99))
-            .powf(0.25),
-        )),
+        "logT_bb" => MesaCellValue::Float(safe_log10(flexmesa_math::pow(
+            model.lum[k].max(0.0)
+                / (FOUR_PI * model.r[k] * model.r[k] * BOLTZ_SIGMA)
+                    .max(1.0e-99),
+            0.25,
+        ))),
         "density" | "rho" => MesaCellValue::Float(model.rho[k]),
         "logRho" => MesaCellValue::Float(model.lnd[k] / LN10),
         "pgas" => MesaCellValue::Float(model.pgas[k]),
@@ -648,7 +666,9 @@ fn eval_profile_scalar(
         "pgas_div_ptotal" | "pgas_div_p" => {
             MesaCellValue::Float(model.pgas[k] / model.peos[k].max(1.0e-99))
         }
-        "prad_div_pgas" => MesaCellValue::Float(model.prad[k] / model.pgas[k].max(1.0e-99)),
+        "prad_div_pgas" => {
+            MesaCellValue::Float(model.prad[k] / model.pgas[k].max(1.0e-99))
+        }
 
         "energy" => MesaCellValue::Float(model.energy[k]),
         "logE" => MesaCellValue::Float(model.ln_e[k] / LN10),
@@ -668,7 +688,7 @@ fn eval_profile_scalar(
         "zbar" => MesaCellValue::Float(model.zbar[k]),
         "z2bar" => MesaCellValue::Float(model.z2bar[k]),
         "ye" => MesaCellValue::Float(model.ye[k]),
-        "free_e" => MesaCellValue::Float(model.lnfree_e[k].exp()),
+        "free_e" => MesaCellValue::Float(flexmesa_math::exp(model.lnfree_e[k])),
         "logfree_e" => MesaCellValue::Float(model.lnfree_e[k] / LN10),
         "csound" => MesaCellValue::Float(model.csound[k]),
         "csound_face" | "cs_at_cell_bdy" => MesaCellValue::Float(cs_f),
@@ -677,10 +697,12 @@ fn eval_profile_scalar(
         "log_dr_div_cs" => {
             MesaCellValue::Float(safe_log10(dr / model.csound[k].max(1.0e-99)))
         }
-        "dt_cs_div_dr" => MesaCellValue::Float(model.dt * model.csound[k] / dr.max(1.0e-99)),
-        "log_dt_cs_div_dr" => {
-            MesaCellValue::Float(safe_log10(model.dt * model.csound[k] / dr.max(1.0e-99)))
+        "dt_cs_div_dr" => {
+            MesaCellValue::Float(model.dt * model.csound[k] / dr.max(1.0e-99))
         }
+        "log_dt_cs_div_dr" => MesaCellValue::Float(safe_log10(
+            model.dt * model.csound[k] / dr.max(1.0e-99),
+        )),
 
         "x" | "x_mass_fraction_H" => MesaCellValue::Float(model.xh_mass[k]),
         "log_x" => MesaCellValue::Float(safe_log10(model.xh_mass[k])),
@@ -691,15 +713,23 @@ fn eval_profile_scalar(
 
         "luminosity" => MesaCellValue::Float(model.lum[k] / L_SUN),
         // `p_logL` in `star/private/profile_getval.f90:485-486`: `safe_log10(max(1d-12, s% L(k)/Lsun))`.
-        "logL" => MesaCellValue::Float(safe_log10((model.lum[k] / L_SUN).max(1.0e-12))),
+        "logL" => MesaCellValue::Float(safe_log10(
+            (model.lum[k] / L_SUN).max(1.0e-12),
+        )),
         "lum_erg_s" => MesaCellValue::Float(model.lum[k]),
-        "log_abs_lum_erg_s" => MesaCellValue::Float(safe_log10(model.lum[k].abs())),
+        "log_abs_lum_erg_s" => {
+            MesaCellValue::Float(safe_log10(model.lum[k].abs()))
+        }
         "eps_nuc" => MesaCellValue::Float(model.eps_nuc[k]),
-        "log_abs_eps_nuc" => MesaCellValue::Float(safe_log10(model.eps_nuc[k].abs())),
+        "log_abs_eps_nuc" => {
+            MesaCellValue::Float(safe_log10(model.eps_nuc[k].abs()))
+        }
         "eps_nuc_neu_total" => MesaCellValue::Float(model.eps_nuc_neu_total[k]),
         "non_nuc_neu" => MesaCellValue::Float(model.non_nuc_neu[k]),
         "eps_grav" => MesaCellValue::Float(model.eps_grav_ad[k].val),
-        "signed_log_eps_grav" => MesaCellValue::Float(signed_log(model.eps_grav_ad[k].val)),
+        "signed_log_eps_grav" => {
+            MesaCellValue::Float(signed_log(model.eps_grav_ad[k].val))
+        }
         "eps_mdot" => MesaCellValue::Float(model.eps_mdot[k]),
         "eps_grav_plus_eps_mdot" => {
             MesaCellValue::Float(model.eps_grav_ad[k].val + model.eps_mdot[k])
@@ -711,29 +741,35 @@ fn eval_profile_scalar(
         }
         // `p_net_energy` in `star/private/profile_getval.f90:479-481`.
         "net_energy" => {
-            let en = model.eps_nuc[k] - model.non_nuc_neu[k] + model.eps_grav_ad[k].val;
+            let en = model.eps_nuc[k] - model.non_nuc_neu[k]
+                + model.eps_grav_ad[k].val;
             MesaCellValue::Float(signed_log(en))
         }
         // `p_signed_log_power` in `star/private/profile_getval.f90:482-484`.
         "signed_log_power" => MesaCellValue::Float(signed_log(model.lum[k])),
 
         "opacity" => MesaCellValue::Float(model.opacity[k]),
-        "log_opacity" | "log_kap" => MesaCellValue::Float(safe_log10(model.opacity[k])),
+        "log_opacity" | "log_kap" => {
+            MesaCellValue::Float(safe_log10(model.opacity[k]))
+        }
         "tau" => MesaCellValue::Float(model.tau[k]),
         "logtau" => MesaCellValue::Float(safe_log10(model.tau[k])),
         "xtau" => MesaCellValue::Float(model.tau[nz - 1] - model.tau[k]),
-        "xlogtau" => MesaCellValue::Float(safe_log10(model.tau[nz - 1] - model.tau[k])),
+        "xlogtau" => {
+            MesaCellValue::Float(safe_log10(model.tau[nz - 1] - model.tau[k]))
+        }
         "logtau_sub_xlogtau" => MesaCellValue::Float(
-            safe_log10(model.tau[k]) - safe_log10(model.tau[nz - 1] - model.tau[k]),
+            safe_log10(model.tau[k])
+                - safe_log10(model.tau[nz - 1] - model.tau[k]),
         ),
 
         "gradT" => MesaCellValue::Float(model.gradt[k]),
         "gradr" => MesaCellValue::Float(model.gradr[k]),
         "gradL" => MesaCellValue::Float(model.gradl[k]),
         "diff_grads" => MesaCellValue::Float(model.gradr[k] - model.gradl[k]),
-        "log_diff_grads" => {
-            MesaCellValue::Float(safe_log10((model.gradr[k] - model.gradl[k]).abs()))
-        }
+        "log_diff_grads" => MesaCellValue::Float(safe_log10(
+            (model.gradr[k] - model.gradl[k]).abs(),
+        )),
         "gradT_sub_grada" => {
             let ga = if k == 0 {
                 model.grada[0]
@@ -785,9 +821,9 @@ fn eval_profile_scalar(
                 model.peos[k] / denom
             })
         }
-        "mlt_mixing_length" => {
-            MesaCellValue::Float(model.controls.mixing_length_alpha * model.scale_height[k])
-        }
+        "mlt_mixing_length" => MesaCellValue::Float(
+            model.controls.mixing_length_alpha * model.scale_height[k],
+        ),
         "conv_vel" => MesaCellValue::Float(model.conv_vel[k]),
         "log_conv_vel" => MesaCellValue::Float(safe_log10(model.conv_vel[k])),
         "conv_vel_div_csound" => {
@@ -835,16 +871,20 @@ fn eval_profile_scalar(
         ),
 
         // `p_brunt_*` gated on `calculate_Brunt_N2` (`profile_getval.f90:2077-2156`).
-        "brunt_B" => MesaCellValue::Float(if model.controls.calculate_brunt_n2 {
-            model.brunt_b[k]
-        } else {
-            0.0
-        }),
-        "brunt_N2" => MesaCellValue::Float(if model.controls.calculate_brunt_n2 {
-            model.brunt_n2[k]
-        } else {
-            0.0
-        }),
+        "brunt_B" => {
+            MesaCellValue::Float(if model.controls.calculate_brunt_n2 {
+                model.brunt_b[k]
+            } else {
+                0.0
+            })
+        }
+        "brunt_N2" => {
+            MesaCellValue::Float(if model.controls.calculate_brunt_n2 {
+                model.brunt_n2[k]
+            } else {
+                0.0
+            })
+        }
         "brunt_N2_composition_term" => {
             MesaCellValue::Float(if model.controls.calculate_brunt_n2 {
                 model.aux.brunt_n2_composition_term[k]
@@ -859,19 +899,25 @@ fn eval_profile_scalar(
                 0.0
             })
         }
-        "brunt_N" => MesaCellValue::Float(if model.controls.calculate_brunt_n2 {
-            model.brunt_n2[k].max(0.0).sqrt()
-        } else {
-            0.0
-        }),
-        "sign_brunt_N2" => MesaCellValue::Float(if !model.controls.calculate_brunt_n2 {
-            0.0
-        } else if model.brunt_n2[k] < 0.0 {
-            -1.0
-        } else {
-            1.0
-        }),
-        "lamb_S" => MesaCellValue::Float(2.0_f64.sqrt() * cs_f / model.r[k].max(1.0e-99)),
+        "brunt_N" => {
+            MesaCellValue::Float(if model.controls.calculate_brunt_n2 {
+                model.brunt_n2[k].max(0.0).sqrt()
+            } else {
+                0.0
+            })
+        }
+        "sign_brunt_N2" => {
+            MesaCellValue::Float(if !model.controls.calculate_brunt_n2 {
+                0.0
+            } else if model.brunt_n2[k] < 0.0 {
+                -1.0
+            } else {
+                1.0
+            })
+        }
+        "lamb_S" => MesaCellValue::Float(
+            2.0_f64.sqrt() * cs_f / model.r[k].max(1.0e-99),
+        ),
         "lamb_S2" => {
             let s = 2.0_f64.sqrt() * cs_f / model.r[k].max(1.0e-99);
             MesaCellValue::Float(s * s)
@@ -881,13 +927,19 @@ fn eval_profile_scalar(
 
         "v" | "velocity" => MesaCellValue::Float(v_k),
         "v_kms" | "vel_km_per_s" => MesaCellValue::Float(v_k * 1.0e-5),
-        "u" => MesaCellValue::Float(if model.controls.u_flag { model.u[k] } else { 0.0 }),
+        "u" => MesaCellValue::Float(if model.controls.u_flag {
+            model.u[k]
+        } else {
+            0.0
+        }),
         "u_face" => MesaCellValue::Float(if model.controls.u_flag {
             model.aux.u_face_ad[k].val
         } else {
             0.0
         }),
-        "v_div_csound" | "v_div_cs" => MesaCellValue::Float(v_k / cs_f.max(1.0e-99)),
+        "v_div_csound" | "v_div_cs" => {
+            MesaCellValue::Float(v_k / cs_f.max(1.0e-99))
+        }
         "v_div_r" => {
             let vf = if model.controls.u_flag {
                 model.aux.u_face_ad[k].val
@@ -900,9 +952,10 @@ fn eval_profile_scalar(
         }
         // `p_v_div_vesc` (`u(k)`) vs `p_v_div_v_escape` (`u_face_ad(k)%val`) (`profile_getval.f90:967-980`).
         "v_div_vesc" => {
-            let vesc = (2.0 * model.cgrav[k] * model.m[k] / model.r[k].max(1.0e-99))
-                .max(0.0)
-                .sqrt();
+            let vesc = (2.0 * model.cgrav[k] * model.m[k]
+                / model.r[k].max(1.0e-99))
+            .max(0.0)
+            .sqrt();
             MesaCellValue::Float(if vesc > 0.0 { v_k / vesc } else { 0.0 })
         }
         "v_div_v_escape" => {
@@ -913,9 +966,10 @@ fn eval_profile_scalar(
             } else {
                 0.0
             };
-            let vesc = (2.0 * model.cgrav[k] * model.m[k] / model.r[k].max(1.0e-99))
-                .max(0.0)
-                .sqrt();
+            let vesc = (2.0 * model.cgrav[k] * model.m[k]
+                / model.r[k].max(1.0e-99))
+            .max(0.0)
+            .sqrt();
             MesaCellValue::Float(if vesc > 0.0 { vf / vesc } else { 0.0 })
         }
 
@@ -924,29 +978,41 @@ fn eval_profile_scalar(
         } else {
             0.0
         }),
-        "log_omega" => MesaCellValue::Float(safe_log10(if model.controls.rotation_flag {
-            model.omega[k]
-        } else {
-            0.0
-        })),
+        "log_omega" => {
+            MesaCellValue::Float(safe_log10(if model.controls.rotation_flag {
+                model.omega[k]
+            } else {
+                0.0
+            }))
+        }
         // `p_omega_crit` & `p_omega_div_omega_crit` (`profile_getval.f90:1515-1525`).
-        "omega_crit" => MesaCellValue::Float(eval_upstream_omega_crit(model, k)),
-        "omega_div_omega_crit" => MesaCellValue::Float(if model.controls.rotation_flag {
-            let wc = eval_upstream_omega_crit(model, k);
-            if wc > 0.0 { model.omega[k] / wc } else { 0.0 }
-        } else {
-            0.0
-        }),
+        "omega_crit" => {
+            MesaCellValue::Float(eval_upstream_omega_crit(model, k))
+        }
+        "omega_div_omega_crit" => {
+            MesaCellValue::Float(if model.controls.rotation_flag {
+                let wc = eval_upstream_omega_crit(model, k);
+                if wc > 0.0 {
+                    model.omega[k] / wc
+                } else {
+                    0.0
+                }
+            } else {
+                0.0
+            })
+        }
         "j_rot" => MesaCellValue::Float(if model.controls.rotation_flag {
             model.j_rot[k]
         } else {
             0.0
         }),
-        "log_j_rot" => MesaCellValue::Float(safe_log10(if model.controls.rotation_flag {
-            model.j_rot[k].abs()
-        } else {
-            0.0
-        })),
+        "log_j_rot" => {
+            MesaCellValue::Float(safe_log10(if model.controls.rotation_flag {
+                model.j_rot[k].abs()
+            } else {
+                0.0
+            }))
+        }
         "i_rot" => MesaCellValue::Float(if model.controls.rotation_flag {
             model.aux.i_rot[k]
         } else {
@@ -960,18 +1026,22 @@ fn eval_profile_scalar(
         }),
         "fp_rot" => MesaCellValue::Float(model.aux.fp_rot[k]),
         "ft_rot" => MesaCellValue::Float(model.aux.ft_rot[k]),
-        "r_equatorial" => MesaCellValue::Float(equatorial_and_polar_r_cm(model, k).0 / R_SUN),
-        "r_polar" => MesaCellValue::Float(equatorial_and_polar_r_cm(model, k).1 / R_SUN),
+        "r_equatorial" => {
+            MesaCellValue::Float(equatorial_and_polar_r_cm(model, k).0 / R_SUN)
+        }
+        "r_polar" => {
+            MesaCellValue::Float(equatorial_and_polar_r_cm(model, k).1 / R_SUN)
+        }
         "r_e_div_r_p" => {
             let (re, rp) = equatorial_and_polar_r_cm(model, k);
             MesaCellValue::Float(re / rp.max(1.0e-99))
         }
-        "log_r_equatorial" => {
-            MesaCellValue::Float(safe_log10(equatorial_and_polar_r_cm(model, k).0 / R_SUN))
-        }
-        "log_r_polar" => {
-            MesaCellValue::Float(safe_log10(equatorial_and_polar_r_cm(model, k).1 / R_SUN))
-        }
+        "log_r_equatorial" => MesaCellValue::Float(safe_log10(
+            equatorial_and_polar_r_cm(model, k).0 / R_SUN,
+        )),
+        "log_r_polar" => MesaCellValue::Float(safe_log10(
+            equatorial_and_polar_r_cm(model, k).1 / R_SUN,
+        )),
 
         // `p_*_RTI` (`profile_getval.f90:1321-1356`).
         "alpha_RTI" => MesaCellValue::Float(if model.controls.rti_flag {
@@ -999,21 +1069,27 @@ fn eval_profile_scalar(
         } else {
             0.0
         }),
-        "dPdr_dRhodr_info" => MesaCellValue::Float(if model.controls.rti_flag {
-            model.aux.dpdr_drhodr_info[k]
-        } else {
-            0.0
-        }),
-        "log_source_plus_alpha_RTI" => MesaCellValue::Float(if model.controls.rti_flag {
-            safe_log10(model.aux.source_plus_alpha_rti[k])
-        } else {
-            0.0
-        }),
-        "log_source_minus_alpha_RTI" => MesaCellValue::Float(if model.controls.rti_flag {
-            safe_log10(model.aux.source_minus_alpha_rti[k].abs())
-        } else {
-            0.0
-        }),
+        "dPdr_dRhodr_info" => {
+            MesaCellValue::Float(if model.controls.rti_flag {
+                model.aux.dpdr_drhodr_info[k]
+            } else {
+                0.0
+            })
+        }
+        "log_source_plus_alpha_RTI" => {
+            MesaCellValue::Float(if model.controls.rti_flag {
+                safe_log10(model.aux.source_plus_alpha_rti[k])
+            } else {
+                0.0
+            })
+        }
+        "log_source_minus_alpha_RTI" => {
+            MesaCellValue::Float(if model.controls.rti_flag {
+                safe_log10(model.aux.source_minus_alpha_rti[k].abs())
+            } else {
+                0.0
+            })
+        }
 
         // `p_log_L_div_Ledd` vs `p_log_Lrad_div_Ledd` (`profile_getval.f90:456-457, 491-492`).
         "log_L_div_Ledd" => {
@@ -1021,21 +1097,25 @@ fn eval_profile_scalar(
             let ratio = if ledd > 0.0 { model.lum[k] / ledd } else { 0.0 };
             MesaCellValue::Float(safe_log10(ratio.max(1.0e-12)))
         }
-        "log_Lrad_div_Ledd" => MesaCellValue::Float(safe_log10(get_lrad_div_ledd(model, k))),
+        "log_Lrad_div_Ledd" => {
+            MesaCellValue::Float(safe_log10(get_lrad_div_ledd(model, k)))
+        }
 
         "eps_nuc_plus_nuc_neu" => {
             MesaCellValue::Float(model.eps_nuc[k] + model.eps_nuc_neu_total[k])
         }
-        "logS_per_baryon" => {
-            MesaCellValue::Float(model.ln_s[k] / LN10 + flexmesa_const::AMU.log10())
+        "logS_per_baryon" => MesaCellValue::Float(
+            model.ln_s[k] / LN10 + flexmesa_math::log10(flexmesa_const::AMU),
+        ),
+        "cgrav_factor" => MesaCellValue::Float(
+            model.cgrav[k] / flexmesa_const::STANDARD_CGRAV,
+        ),
+        "logQ" => MesaCellValue::Float(
+            model.lnd[k] / LN10 - 2.0 * model.ln_t[k] / LN10 + 12.0,
+        ),
+        "total_energy" => {
+            MesaCellValue::Float(eval_cell_specific_total_energy(model, k))
         }
-        "cgrav_factor" => {
-            MesaCellValue::Float(model.cgrav[k] / flexmesa_const::STANDARD_CGRAV)
-        }
-        "logQ" => {
-            MesaCellValue::Float(model.lnd[k] / LN10 - 2.0 * model.ln_t[k] / LN10 + 12.0)
-        }
-        "total_energy" => MesaCellValue::Float(eval_cell_specific_total_energy(model, k)),
         "acoustic_radius" => MesaCellValue::Float(prefixes.acoustic_radius[k]),
         "log_acoustic_radius" => {
             MesaCellValue::Float(safe_log10(prefixes.acoustic_radius[k]))
@@ -1044,12 +1124,15 @@ fn eval_profile_scalar(
         "log_acoustic_depth" => {
             MesaCellValue::Float(safe_log10(prefixes.acoustic_depth[k]))
         }
-        other => unreachable!("validated profile scalar column {other:?} missing evaluator arm"),
+        other => unreachable!(
+            "validated profile scalar column {other:?} missing evaluator arm"
+        ),
     }
 }
 
 fn species_mass_msun(model: &StarModel, iso_name: &str) -> f64 {
-    let Some(j) = resolve_iso_slot(model, iso_name).ok().and_then(|(_, s)| s) else {
+    let Some(j) = resolve_iso_slot(model, iso_name).ok().and_then(|(_, s)| s)
+    else {
         return 0.0;
     };
     let mut sum = 0.0;
@@ -1112,7 +1195,10 @@ fn format_star_profile_parts_with_ctx(
     hdr.push(("Teff", format_mesa_dbl(model.teff)));
     hdr.push(("photosphere_L", format_mesa_dbl(ctx.phot.l_lsun)));
     hdr.push(("photosphere_r", format_mesa_dbl(ctx.phot.r_rsun)));
-    hdr.push(("center_eta", format_mesa_dbl(center_value(model, &model.eta))));
+    hdr.push((
+        "center_eta",
+        format_mesa_dbl(center_value(model, &model.eta)),
+    ));
     for (label, iso) in [
         ("center_h1", "h1"),
         ("center_he3", "he3"),
@@ -1154,7 +1240,10 @@ fn format_star_profile_parts_with_ctx(
     hdr.push(("burn_min1", format_mesa_dbl(o.burn_min1)));
     hdr.push(("burn_min2", format_mesa_dbl(o.burn_min2)));
     hdr.push(("time_seconds", format_mesa_dbl(star_age * SECYER)));
-    hdr.push(("version_number", format_mesa_header_str(MESA_REF_VERSION_NUMBER)));
+    hdr.push((
+        "version_number",
+        format_mesa_header_str(MESA_REF_VERSION_NUMBER),
+    ));
     if o.profile_header_include_sys_details {
         hdr.push(("compiler", format_mesa_header_str("rustc")));
         hdr.push(("build", format_mesa_header_str("flexmesa")));
@@ -1196,13 +1285,16 @@ fn format_star_profile_parts_with_ctx(
                 spec_slots.push(iso_slot_for_chem_id(model, *cid));
             }
             ProfileColumnSpec::CategoryEps(cid) => {
-                col_names_owned.push(category_name(*cid).unwrap_or("unknown").to_owned());
+                col_names_owned
+                    .push(category_name(*cid).unwrap_or("unknown").to_owned());
                 spec_slots.push(None);
             }
         }
     }
-    let col_refs: Vec<&str> = col_names_owned.iter().map(String::as_str).collect();
-    let mut hdr_text = String::with_capacity(hdr.len() * 128 + col_refs.len() * 84);
+    let col_refs: Vec<&str> =
+        col_names_owned.iter().map(String::as_str).collect();
+    let mut hdr_text =
+        String::with_capacity(hdr.len() * 128 + col_refs.len() * 84);
     push_mesa_6line_header(&mut hdr_text, &hdr, &col_refs, STAR_LOG_COL_WIDTH);
 
     let n_rows = if o.max_num_profile_zones > 1 {
@@ -1215,7 +1307,8 @@ fn format_star_profile_parts_with_ctx(
 
     for row_idx in 0..n_rows {
         let kk = if n_rows > 1 && n_rows < nz {
-            ((0.5 + ((nz - 1) as f64) * (row_idx as f64) / ((n_rows - 1) as f64))
+            ((0.5
+                + ((nz - 1) as f64) * (row_idx as f64) / ((n_rows - 1) as f64))
                 .floor() as usize)
                 .min(nz - 1)
         } else {
@@ -1226,10 +1319,18 @@ fn format_star_profile_parts_with_ctx(
                 ProfileColumnSpec::Scalar(name) => {
                     match eval_profile_scalar(name, model, ctx, &prefixes, kk) {
                         MesaCellValue::Int(v) => {
-                            write_mesa_int_width(&mut body, v, STAR_LOG_COL_WIDTH);
+                            write_mesa_int_width(
+                                &mut body,
+                                v,
+                                STAR_LOG_COL_WIDTH,
+                            );
                         }
                         MesaCellValue::Float(v) => {
-                            write_mesa_dbl_width(&mut body, v, STAR_LOG_COL_WIDTH);
+                            write_mesa_dbl_width(
+                                &mut body,
+                                v,
+                                STAR_LOG_COL_WIDTH,
+                            );
                         }
                     }
                 }
@@ -1240,7 +1341,11 @@ fn format_star_profile_parts_with_ctx(
                 }
                 ProfileColumnSpec::AddLogAbundances => {
                     for &x in model.cell_xa(kk) {
-                        write_mesa_dbl_width(&mut body, safe_log10(x), STAR_LOG_COL_WIDTH);
+                        write_mesa_dbl_width(
+                            &mut body,
+                            safe_log10(x),
+                            STAR_LOG_COL_WIDTH,
+                        );
                     }
                 }
                 ProfileColumnSpec::Nuclide(_, _) => {
@@ -1248,7 +1353,8 @@ fn format_star_profile_parts_with_ctx(
                     write_mesa_dbl_width(&mut body, v, STAR_LOG_COL_WIDTH);
                 }
                 ProfileColumnSpec::LogNuclide(_, _) => {
-                    let v = slot.map_or(-99.0, |j| safe_log10(model.cell_xa(kk)[j]));
+                    let v = slot
+                        .map_or(-99.0, |j| safe_log10(model.cell_xa(kk)[j]));
                     write_mesa_dbl_width(&mut body, v, STAR_LOG_COL_WIDTH);
                 }
                 ProfileColumnSpec::CategoryEps(cid) => {
@@ -1383,7 +1489,8 @@ impl ProfilesIndex {
             format_star_profile_parts_with_ctx(model, specs, ctx);
         let hdr_suffix = o.profile_data_header_suffix.trim();
         if hdr_suffix.is_empty() {
-            let mut full = String::with_capacity(hdr_text.len() + body_text.len());
+            let mut full =
+                String::with_capacity(hdr_text.len() + body_text.len());
             full.push_str(&hdr_text);
             full.push_str(&body_text);
             fs::write(&prof_path, full).map_err(|e| {
@@ -1481,9 +1588,10 @@ impl StarLogsWriter {
             model,
             Some(case_dir),
         )?;
-        let write_profs = write_profiles_override.unwrap_or(o.write_profiles_flag);
-        let allow_term_prof =
-            write_profiles_override != Some(false) && model.job.write_profile_when_terminate;
+        let write_profs =
+            write_profiles_override.unwrap_or(o.write_profiles_flag);
+        let allow_term_prof = write_profiles_override != Some(false)
+            && model.job.write_profile_when_terminate;
         let profile_specs = if write_profs || allow_term_prof {
             resolve_star_profile_columns(model, Some(case_dir))?
         } else {
@@ -1491,7 +1599,8 @@ impl StarLogsWriter {
         };
         let history_writer = if o.do_history_file {
             let hdr_name = o.star_history_header_name.trim();
-            let hdr_path = (!hdr_name.is_empty()).then(|| log_dir.join(hdr_name));
+            let hdr_path =
+                (!hdr_name.is_empty()).then(|| log_dir.join(hdr_name));
             let hw = IncrementalHistoryWriter::with_header_path(
                 log_dir.join(o.star_history_name.trim()),
                 hdr_path,
@@ -1513,7 +1622,9 @@ impl StarLogsWriter {
                 })?;
                 ProfilesIndex::default()
             } else {
-                crate::mesa_log_reader::read_profiles_index_file(&existing_index_path)?
+                crate::mesa_log_reader::read_profiles_index_file(
+                    &existing_index_path,
+                )?
             }
         } else {
             ProfilesIndex::default()
@@ -1589,9 +1700,11 @@ impl StarLogsWriter {
         is_terminating: bool,
     ) -> (bool, bool, bool) {
         let o = &model.controls.output;
-        let hist_int = self.history_interval_override.unwrap_or(o.history_interval);
-        let write_profs =
-            self.write_profiles_override.unwrap_or(o.write_profiles_flag);
+        let hist_int =
+            self.history_interval_override.unwrap_or(o.history_interval);
+        let write_profs = self
+            .write_profiles_override
+            .unwrap_or(o.write_profiles_flag);
         let mnum = model.model_number;
         let match_prof_model =
             o.profile_model >= 0 && (mnum as isize) == o.profile_model;
@@ -1679,7 +1792,11 @@ impl StarLogsWriter {
 
         if hist_due {
             if let Some(ref mut hw) = self.history_writer {
-                hw.write_step_with_ctx_and_extra(model, &ctx, extra_history_cols)?;
+                hw.write_step_with_ctx_and_extra(
+                    model,
+                    &ctx,
+                    extra_history_cols,
+                )?;
             }
         }
 
@@ -1691,7 +1808,9 @@ impl StarLogsWriter {
                 )));
             }
             let out_path = self.output_root.join(fname);
-            if let Some(parent) = out_path.parent().filter(|p| !p.as_os_str().is_empty()) {
+            if let Some(parent) =
+                out_path.parent().filter(|p| !p.as_os_str().is_empty())
+            {
                 fs::create_dir_all(parent).map_err(|e| {
                     StarError::IoError(format!(
                         "failed to create {}: {e}",
@@ -1699,8 +1818,11 @@ impl StarLogsWriter {
                     ))
                 })?;
             }
-            let (hdr_t, body_t) =
-                format_star_profile_parts_with_ctx(model, &self.profile_specs, &ctx);
+            let (hdr_t, body_t) = format_star_profile_parts_with_ctx(
+                model,
+                &self.profile_specs,
+                &ctx,
+            );
             let mut full = String::with_capacity(hdr_t.len() + body_t.len());
             full.push_str(&hdr_t);
             full.push_str(&body_t);

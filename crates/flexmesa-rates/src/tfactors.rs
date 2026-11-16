@@ -169,7 +169,7 @@ impl TFactors {
         let t9i52 = 1.0 / t952;
         let t9i72 = 1.0 / t972;
 
-        let t913 = t9.cbrt();
+        let t913 = flexmesa_math::pow(t9, 1.0 / 3.0);
         let t923 = t913 * t913;
         let t943 = t9 * t913;
         let t953 = t9 * t923;
@@ -180,7 +180,7 @@ impl TFactors {
         let t9i43 = t9i * t9i13;
         let t9i53 = t9i * t9i23;
 
-        let t914 = t9.powf(0.25);
+        let t914 = flexmesa_math::pow(t9, 0.25);
         let t934 = t914 * t914 * t914;
         let t954 = t9 * t914;
         let t974 = t9 * t934;
@@ -189,7 +189,7 @@ impl TFactors {
         let t9i54 = t9i * t9i14;
         let t9i74 = t9i * t9i34;
 
-        let t915 = t9.powf(0.2);
+        let t915 = flexmesa_math::pow(t9, 0.2);
         let t9i15 = 1.0 / t915;
         let t935 = t915 * t915 * t915;
         let t945 = t935 * t915;
@@ -197,12 +197,12 @@ impl TFactors {
         let t965 = t9 * t915;
         let t9i65 = 1.0 / t965;
 
-        let t916 = t9.powf(1.0 / 6.0);
+        let t916 = flexmesa_math::pow(t9, 1.0 / 6.0);
         let t9i16 = 1.0 / t916;
         let t976 = t9 * t916;
         let t9i76 = 1.0 / t976;
 
-        let t917 = t9.powf(1.0 / 7.0);
+        let t917 = flexmesa_math::pow(t9, 1.0 / 7.0);
         let t9i17 = 1.0 / t917;
         let t927 = t917 * t917;
         let t947 = t927 * t927;
@@ -285,7 +285,7 @@ impl TFactors {
     #[must_use]
     pub fn from_temp(temp_in: f64) -> Self {
         let temp = temp_in.max(1.0);
-        Self::from_log_t(temp.log10(), temp)
+        Self::from_log_t(flexmesa_math::log10(temp), temp)
     }
 }
 
@@ -310,14 +310,14 @@ pub fn eval_reaclib_terms(
         return (0.0, 0.0, 0.0, 0.0);
     }
 
-    let ln_t9 = t9.ln();
+    let ln_t9 = flexmesa_math::log(t9);
     let f = [
         1.0,
-        t9.powi(-1),
-        t9.powf(-1.0 / 3.0),
-        t9.powf(1.0 / 3.0),
+        flexmesa_math::powm1(t9),
+        flexmesa_math::pow(t9, -1.0 / 3.0),
+        flexmesa_math::pow(t9, 1.0 / 3.0),
         t9,
-        t9.powf(5.0 / 3.0),
+        flexmesa_math::pow(t9, 5.0 / 3.0),
         ln_t9,
     ];
     let df_dln_t = [
@@ -344,7 +344,7 @@ pub fn eval_reaclib_terms(
             dln_l += term.coeffs[k] * df_dln_t[k];
         }
         ln_l = ln_l.min(MAX_LN_LAMBDA);
-        let lam = ln_l.exp();
+        let lam = flexmesa_math::exp(ln_l);
         lam_sum += lam;
         dlam_sum += lam * dln_l;
 
@@ -356,7 +356,7 @@ pub fn eval_reaclib_terms(
             (ln_l + term.inv_c1 + term.inv_c2 / t9 + 1.5 * inv_exp * ln_t9)
                 .min(MAX_LN_LAMBDA);
         let dinv_ln = dln_l - term.inv_c2 / t9 + 1.5 * inv_exp;
-        let inv_l0 = inv_ln.exp();
+        let inv_l0 = flexmesa_math::exp(inv_ln);
 
         let (qratio, dqratio_dln_t) = if indx < 1 {
             (term.inv_part[0], 0.0)
@@ -367,8 +367,8 @@ pub fn eval_reaclib_terms(
             let dt = TPART[m + 1] - TPART[m];
             let tfac = (t9 - TPART[m]) / dt;
             let ratio = term.inv_part[m + 1] / term.inv_part[m];
-            let qr = term.inv_part[m] * ratio.powf(tfac);
-            let dqr = qr * ratio.ln() * (t9 / dt);
+            let qr = term.inv_part[m] * flexmesa_math::pow(ratio, tfac);
+            let dqr = qr * flexmesa_math::log(ratio) * (t9 / dt);
             (qr, dqr)
         };
         let rl = qratio * inv_l0;
@@ -389,17 +389,19 @@ pub fn compute_rev_ratio_coeff1(
     w_out: &[f64],
     spin_out: &[f64],
 ) -> f64 {
-    let fac =
-        ((1.0e9 * BOLTZM / (2.0 * PI * HBAR * HBAR * AVO)).powf(1.5)) / AVO;
+    let fac = (flexmesa_math::pow(
+        1.0e9 * BOLTZM / (2.0 * PI * HBAR * HBAR * AVO),
+        1.5,
+    )) / AVO;
     let g_in: f64 = spin_in.iter().map(|&s| 2.0 * s + 1.0).product();
     let g_out: f64 = spin_out.iter().map(|&s| 2.0 * s + 1.0).product();
     let m_in: f64 = w_in.iter().copied().product();
     let m_out: f64 = w_out.iter().copied().product();
     let tmp = m_in / m_out;
-    let mut c1 = tmp.powf(1.5) * (g_in / g_out);
+    let mut c1 = flexmesa_math::pow(tmp, 1.5) * (g_in / g_out);
     let inv_exp = (w_in.len() as i32) - (w_out.len() as i32);
     if inv_exp != 0 {
-        c1 *= fac.powi(inv_exp);
+        c1 *= flexmesa_math::powi(fac, inv_exp);
     }
-    c1.ln()
+    flexmesa_math::log(c1)
 }

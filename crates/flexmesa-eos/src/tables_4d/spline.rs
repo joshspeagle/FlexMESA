@@ -7,9 +7,7 @@
 //! `Locate_logQ`, `Locate_logT`, and `Get1_eosdt_XTable_Results` from
 //! `eos/private/eosdt_eval.f90`.
 
-use crate::types::{
-    EosError, EosEvalOutput, I_LN_S, NUM_EOS_BASIC_RESULTS,
-};
+use crate::types::{EosError, EosEvalOutput, I_LN_S, NUM_EOS_BASIC_RESULTS};
 use flexmesa_const::{LN10, ONE_SIXTH};
 use flexmesa_utils::is_bad;
 

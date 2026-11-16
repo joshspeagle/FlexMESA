@@ -185,7 +185,11 @@ fn eval_face_mlt(
     }
 
     let b_term = if model.controls.use_ledoux_criterion {
-        if use_sm_b { model.aux.smoothed_brunt_b[k] } else { model.brunt_b[k] }
+        if use_sm_b {
+            model.aux.smoothed_brunt_b[k]
+        } else {
+            model.brunt_b[k]
+        }
     } else {
         0.0
     };
@@ -201,7 +205,12 @@ fn eval_face_mlt(
     let lambda_f = hp_f * alpha_mlt;
 
     let sticky_no_conv = model.aux.doing_struct_burn_mix
-        && model.aux.fixed_gradr_sticky.get(k).copied().unwrap_or(false);
+        && model
+            .aux
+            .fixed_gradr_sticky
+            .get(k)
+            .copied()
+            .unwrap_or(false);
     let (mut grad_t_f, mut conv_vel_f, mut d_f, mut gamma_val, mut mix_type) =
         if alpha_mlt <= 0.0 || sticky_no_conv {
             (
@@ -212,8 +221,12 @@ fn eval_face_mlt(
                 MixingType::NoMixing,
             )
         } else {
-            let mlt_opt = if !model.aux.doing_relax && model.controls.steps_before_use_tdc > 0 {
-                if (model.model_number as isize) >= model.controls.steps_before_use_tdc {
+            let mlt_opt = if !model.aux.doing_relax
+                && model.controls.steps_before_use_tdc > 0
+            {
+                if (model.model_number as isize)
+                    >= model.controls.steps_before_use_tdc
+                {
                     MltOption::Tdc
                 } else {
                     MltOption::Cox
@@ -230,8 +243,8 @@ fn eval_face_mlt(
                 let e_f =
                     model.interp_eos_ad_to_face(&model.ln_e, I_LN_E, k).exp();
                 let dv_f = if model.lnd_old.len() == model.nz {
-                    let rho_old_00 = model.lnd_old[k].exp();
-                    let rho_old_m1 = model.lnd_old[k - 1].exp();
+                    let rho_old_00 = flexmesa_math::exp(model.lnd_old[k]);
+                    let rho_old_m1 = flexmesa_math::exp(model.lnd_old[k - 1]);
                     let rho_old_f =
                         (rho_old_00 * alfa + rho_old_m1 * beta).max(1.0e-30);
                     (StarAdOrder1::constant(1.0) / rho_f)

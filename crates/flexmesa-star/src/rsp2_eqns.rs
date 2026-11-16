@@ -121,13 +121,13 @@ pub fn eval_rsp2_profile_equations(
                 .max(1.0);
             *slot = w / cs_s;
         } else {
-            let d_et = w * w - model.aux.rsp.w_start[k].powi(2);
+            let d_et = w * w - flexmesa_math::pow2(model.aux.rsp.w_start[k]);
             let ptrb = eval_rsp2_ptrb_cell_ad(model, k, false).val;
             let rho_s = model
                 .lnd_start
                 .get(k)
                 .copied()
-                .map_or(model.rho[k], f64::exp)
+                .map_or(model.rho[k], flexmesa_math::exp)
                 .max(1.0e-99);
             let ptrb_dv = ptrb * (1.0 / model.rho[k] - 1.0 / rho_s);
             let logt = model.ln_t[k] / LN10;
@@ -215,9 +215,11 @@ pub fn rsp2_adjust_vars_before_call_solver(model: &mut StarModel) {
             * (model.aux.rsp.hp_face[k].max(1.0)
                 + model.aux.rsp.hp_face[k + 1].max(1.0));
         let damp = (rsp2.alfad * X_CEDE / alpha) / hp_cell;
-        let pom = 4.0 * BOLTZ_SIGMA * (rsp2.alfar * X_GAMMAR / alpha).powi(2);
-        let pom2 = model.t[k].powi(3)
-            / (model.rho[k].powi(2)
+        let pom = 4.0
+            * BOLTZ_SIGMA
+            * flexmesa_math::pow2(rsp2.alfar * X_GAMMAR / alpha);
+        let pom2 = flexmesa_math::pow3(model.t[k])
+            / (flexmesa_math::pow2(model.rho[k])
                 * model.cp[k].max(1.0e-30)
                 * model.opacity[k].max(1.0e-30));
         let dampr = pom * pom2 / (hp_cell * hp_cell);

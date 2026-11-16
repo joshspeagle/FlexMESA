@@ -84,12 +84,21 @@ impl AsteroTrackExtras<'_> {
         None
     }
 
-    fn check_limits(&self, model: &StarModel, dnu_uhz: f64) -> Option<&'static str> {
-        if self.ctrl.eval_chi2_at_target_age_only && model.star_age >= self.ctrl.age_target {
+    fn check_limits(
+        &self,
+        model: &StarModel,
+        dnu_uhz: f64,
+    ) -> Option<&'static str> {
+        if self.ctrl.eval_chi2_at_target_age_only
+            && model.star_age >= self.ctrl.age_target
+        {
             return Some("age_target");
         }
         if self.ctrl.include_age_in_chi2_spectro
-            && self.ctrl.max_age_for_chi2.is_some_and(|m| model.star_age >= m)
+            && self
+                .ctrl
+                .max_age_for_chi2
+                .is_some_and(|m| model.star_age >= m)
         {
             return Some("max_age_for_chi2");
         }
@@ -114,7 +123,9 @@ impl AsteroTrackExtras<'_> {
         let x = model.xh_mass.first().copied().unwrap_or(0.70).max(1.0e-10);
         let y = model.yhe_mass.first().copied().unwrap_or(0.28);
         let z_div_x = (1.0 - x - y).clamp(1.0e-99, 1.0) / x;
-        let feh = (z_div_x / self.ctrl.z_div_x_solar.max(1.0e-30)).log10();
+        let feh = flexmesa_math::log10(
+            z_div_x / self.ctrl.z_div_x_solar.max(1.0e-30),
+        );
         let r_rsun = model.surface_r_rsun().max(1.0e-30);
         let rcz = eval_convective_envelope_base_rsun(model);
         let checks: [(SpectroConstraint, f64, &'static str); 10] = [
@@ -159,8 +170,11 @@ impl StarExtras for AsteroTrackExtras<'_> {
             {
                 let n_steps = self.ctrl.num_smaller_steps_before_age_target;
                 if ((rem / cur_max + 1.0e-6).floor() as usize) <= n_steps {
-                    let dt_sm = self.ctrl.dt_for_smaller_steps_before_age_target;
-                    let i = (rem / dt_sm + 1.0e-6).floor().clamp(1.0, n_steps as f64);
+                    let dt_sm =
+                        self.ctrl.dt_for_smaller_steps_before_age_target;
+                    let i = (rem / dt_sm + 1.0e-6)
+                        .floor()
+                        .clamp(1.0, n_steps as f64);
                     Self::set_max_years_dt(model, rem / i);
                 }
             }
@@ -171,7 +185,9 @@ impl StarExtras for AsteroTrackExtras<'_> {
     fn extras_check_model(&mut self, model: &mut StarModel) -> ExtrasDirective {
         let checking_age = self.ctrl.eval_chi2_at_target_age_only
             || self.ctrl.include_age_in_chi2_spectro;
-        if self.ctrl.eval_chi2_at_target_age_only && model.star_age < self.ctrl.age_target {
+        if self.ctrl.eval_chi2_at_target_age_only
+            && model.star_age < self.ctrl.age_target
+        {
             return ExtrasDirective::KeepGoing;
         }
         let (chi2_sp, chi2_dnu, dnu_uhz) =
@@ -187,13 +203,17 @@ impl StarExtras for AsteroTrackExtras<'_> {
             Self::set_max_years_dt(model, next_dt);
         }
         let hr = extract_history_row(model);
-        let l_nuc_div_l = 10.0_f64.powf(hr.log_lh - hr.log_l);
+        let l_nuc_div_l = flexmesa_math::exp10(hr.log_lh - hr.log_l);
         if l_nuc_div_l >= self.ctrl.lnuc_div_l_limit {
             self.passed_lnuc_limit = true;
         }
         if model.star_age < self.ctrl.min_age_limit
-            || (!self.passed_lnuc_limit && l_nuc_div_l < self.ctrl.lnuc_div_l_limit)
-            || self.ctrl.min_age_for_chi2.is_some_and(|m| model.star_age < m)
+            || (!self.passed_lnuc_limit
+                && l_nuc_div_l < self.ctrl.lnuc_div_l_limit)
+            || self
+                .ctrl
+                .min_age_for_chi2
+                .is_some_and(|m| model.star_age < m)
         {
             return ExtrasDirective::KeepGoing;
         }
@@ -233,10 +253,18 @@ impl StarExtras for AsteroTrackExtras<'_> {
             Self::set_max_years_dt(model, self.ctrl.max_yrs_dt_when_warm);
         }
         let sample = eval_model_astero_sample(
-            model, self.ctrl, self.params, self.sample_number, self.case_dir,
+            model,
+            self.ctrl,
+            self.params,
+            self.sample_number,
+            self.case_dir,
         );
-        if self.ctrl.nl[0] > 0 && sample.chi2_radial > self.ctrl.chi2_radial_limit {
-            if !checking_age && sample.chi2_radial <= 5.0 * self.ctrl.chi2_radial_limit {
+        if self.ctrl.nl[0] > 0
+            && sample.chi2_radial > self.ctrl.chi2_radial_limit
+        {
+            if !checking_age
+                && sample.chi2_radial <= 5.0 * self.ctrl.chi2_radial_limit
+            {
                 self.entered_hot = true;
                 Self::set_max_years_dt(model, self.ctrl.max_yrs_dt_when_hot);
             }
@@ -266,16 +294,23 @@ impl StarExtras for AsteroTrackExtras<'_> {
             };
             Self::set_max_years_dt(model, dt_hot);
         }
-        if self.best_sample.as_ref().is_none_or(|b| sample.chi2 < b.chi2) {
+        if self
+            .best_sample
+            .as_ref()
+            .is_none_or(|b| sample.chi2 < b.chi2)
+        {
             self.best_sample = Some(sample.clone());
             self.bad_count = 0;
         } else if let Some(best) = &self.best_sample {
             if best.chi2 <= self.ctrl.chi2_search_limit1
                 && sample.chi2 >= self.ctrl.chi2_search_limit2
             {
-                return ExtrasDirective::Terminate(String::from("chi2_search_limit2"));
+                return ExtrasDirective::Terminate(String::from(
+                    "chi2_search_limit2",
+                ));
             }
-            if sample.chi2 >= self.ctrl.chi2_relative_increase_limit * best.chi2 {
+            if sample.chi2 >= self.ctrl.chi2_relative_increase_limit * best.chi2
+            {
                 if let Some(reason) = self.check_too_many_bad() {
                     return ExtrasDirective::Terminate(String::from(reason));
                 }
@@ -296,10 +331,13 @@ fn apply_params_to_bundle(
     params: &AsteroParamSet,
 ) {
     bundle.controls.initial_mass = params.initial_mass;
-    let z_div_x = ctrl.z_div_x_solar * 10.0_f64.powf(params.initial_feh);
+    let z_div_x = ctrl.z_div_x_solar * flexmesa_math::exp10(params.initial_feh);
     let (x, y) = if ctrl.y_depends_on_z {
         let c = 1.0 + z_div_x * (1.0 + ctrl.dydz);
-        ((1.0 - ctrl.y0) / c, (ctrl.y0 + z_div_x * (ctrl.dydz + ctrl.y0)) / c)
+        (
+            (1.0 - ctrl.y0) / c,
+            (ctrl.y0 + z_div_x * (ctrl.dydz + ctrl.y0)) / c,
+        )
     } else {
         ((1.0 - params.initial_y) / (1.0 + z_div_x), params.initial_y)
     };
@@ -333,7 +371,8 @@ fn apply_params_to_bundle(
         bundle.controls.do_element_diffusion = params.my_param3 > 0.0;
     }
     if !ctrl.eval_chi2_at_target_age_only && !ctrl.include_age_in_chi2_spectro {
-        bundle.controls.max_years_for_timestep = Some(ctrl.max_yrs_dt_when_cold.max(1.0));
+        bundle.controls.max_years_for_timestep =
+            Some(ctrl.max_yrs_dt_when_cold.max(1.0));
     }
 }
 
@@ -374,11 +413,20 @@ pub fn run_single_astero_track_with_logs(
             Some(bundle.controls.max_model_number.map_or(cap, |m| m.min(cap)));
     }
     let mut extras = AsteroTrackExtras {
-        ctrl, params, sample_number, case_dir,
-        best_sample: None, fallback_model: None, prev_model: None,
-        entered_warm: false, entered_hot: false, passed_lnuc_limit: false, bad_count: 0,
+        ctrl,
+        params,
+        sample_number,
+        case_dir,
+        best_sample: None,
+        fallback_model: None,
+        prev_model: None,
+        entered_warm: false,
+        entered_hot: false,
+        passed_lnuc_limit: false,
+        bad_count: 0,
     };
-    let mut model = init_or_update_model_from_bundle(&bundle, None, &mut extras)?;
+    let mut model =
+        init_or_update_model_from_bundle(&bundle, None, &mut extras)?;
     let mut logs_writer = logs_opts.build_writer(&model, case_dir, None)?;
     let stage = run_inlist_stage_with_logs(
         &mut model,
@@ -419,7 +467,8 @@ pub fn run_star_astero_with_logs(
     ctrl: &AsteroSearchControls,
     logs_opts: StarLogsOptions<'_>,
 ) -> Result<AsteroSearchReport, StarError> {
-    let base_bundle = InlistBundle::from_file_in_case_dir(case_dir, entry_inlist)?;
+    let base_bundle =
+        InlistBundle::from_file_in_case_dir(case_dir, entry_inlist)?;
     let results_base = logs_opts.output_root.unwrap_or(case_dir);
     let out_dir: PathBuf = results_base.join(&ctrl.astero_results_directory);
     let _ = fs::create_dir_all(&out_dir);
@@ -428,14 +477,21 @@ pub fn run_star_astero_with_logs(
     let active_ctrl = if max_steps_per_stage.is_some() {
         smoke_ctrl = ctrl.clone();
         (smoke_ctrl.simplex_itermax, smoke_ctrl.simplex_fcn_calls_max) = (1, 2);
-        (smoke_ctrl.newuoa_max_fcn_calls, smoke_ctrl.bobyqa_max_fcn_calls) = (2, 2);
+        (
+            smoke_ctrl.newuoa_max_fcn_calls,
+            smoke_ctrl.bobyqa_max_fcn_calls,
+        ) = (2, 2);
         &smoke_ctrl
     } else {
         ctrl
     };
-    let track_cap = if max_steps_per_stage.is_some() { 1 } else { usize::MAX };
-    let want_logs =
-        logs_opts.output_root.is_some() || logs_opts.explicit_history_file.is_some();
+    let track_cap = if max_steps_per_stage.is_some() {
+        1
+    } else {
+        usize::MAX
+    };
+    let want_logs = logs_opts.output_root.is_some()
+        || logs_opts.explicit_history_file.is_some();
     let mut best_chi2_seen = f64::INFINITY;
     let (mut samples, mut total_steps) = (Vec::new(), 0usize);
     let (mut last_termination, mut last_model) = (String::new(), None);
@@ -444,7 +500,8 @@ pub fn run_star_astero_with_logs(
             return 1.0e99;
         }
         let s_num = samples.len() + 1;
-        let sample_hist_path = out_dir.join(format!("sample_{s_num:04}_history.data"));
+        let sample_hist_path =
+            out_dir.join(format!("sample_{s_num:04}_history.data"));
         let trial_logs = if want_logs {
             StarLogsOptions {
                 output_root: None,
@@ -456,14 +513,23 @@ pub fn run_star_astero_with_logs(
             StarLogsOptions::default()
         };
         let Ok((sample, stage, m)) = run_single_astero_track_with_logs(
-            &base_bundle, active_ctrl, p, s_num, max_steps_per_stage, case_dir, trial_logs,
+            &base_bundle,
+            active_ctrl,
+            p,
+            s_num,
+            max_steps_per_stage,
+            case_dir,
+            trial_logs,
         ) else {
             return 1.0e99;
         };
         total_steps += stage.steps_taken;
         last_termination = stage.termination_code;
         let c2 = sample.chi2;
-        if want_logs && (c2 < best_chi2_seen || samples.is_empty()) && sample_hist_path.is_file() {
+        if want_logs
+            && (c2 < best_chi2_seen || samples.is_empty())
+            && sample_hist_path.is_file()
+        {
             best_chi2_seen = best_chi2_seen.min(c2);
             if let Some(exp_dst) = logs_opts.explicit_history_file {
                 if let Some(parent) = exp_dst.parent() {
@@ -488,13 +554,20 @@ pub fn run_star_astero_with_logs(
     let st = active_ctrl.search_type.to_ascii_lowercase();
     let results_fname = match st.as_str() {
         "from_file" => {
-            for p in active_ctrl.read_parameters_from_file(case_dir).into_iter().take(track_cap) {
+            for p in active_ctrl
+                .read_parameters_from_file(case_dir)
+                .into_iter()
+                .take(track_cap)
+            {
                 let _ = eval_param_set(p);
             }
             &active_ctrl.from_file_output_filename
         }
         "scan_grid" => {
-            for p in build_scan_grid_params(active_ctrl).into_iter().take(track_cap) {
+            for p in build_scan_grid_params(active_ctrl)
+                .into_iter()
+                .take(track_cap)
+            {
                 let _ = eval_param_set(p);
             }
             &active_ctrl.scan_grid_output_filename
@@ -505,7 +578,11 @@ pub fn run_star_astero_with_logs(
         }
         "newuoa" | "bobyqa" => {
             run_powell_driver(active_ctrl, st == "bobyqa", &mut eval_param_set);
-            if st == "bobyqa" { &active_ctrl.bobyqa_output_filename } else { &active_ctrl.newuoa_output_filename }
+            if st == "bobyqa" {
+                &active_ctrl.bobyqa_output_filename
+            } else {
+                &active_ctrl.newuoa_output_filename
+            }
         }
         _ => {
             let _ = eval_param_set(active_ctrl.first_params());
@@ -521,6 +598,11 @@ pub fn run_star_astero_with_logs(
     let best_chi2 = best_sample_idx.map_or(f64::INFINITY, |i| samples[i].chi2);
     Ok(AsteroSearchReport {
         search_type: ctrl.search_type.clone(),
-        samples, best_sample_idx, best_chi2, total_steps, last_termination, last_model,
+        samples,
+        best_sample_idx,
+        best_chi2,
+        total_steps,
+        last_termination,
+        last_model,
     })
 }

@@ -142,8 +142,9 @@ pub fn atan(x: f64) -> f64 {
 /// [`crate::NumericsMode::Fast`].
 ///
 /// When both `y == 0.0` and `x == 0.0` or either input is `NaN` (where
-/// `crmath_r_dp.f90:301-310` omits an `else` branch), `Strict` mode returns a
-/// deterministic IEEE-754 signed quadrant angle or `NaN` respectively.
+/// `crmath_r_dp.f90:301-310` omits an `else` branch; `#196`), `Strict` mode
+/// returns a deterministic IEEE-754 signed quadrant angle or `NaN`
+/// respectively.
 #[must_use]
 #[inline]
 pub fn atan2(y: f64, x: f64) -> f64 {
@@ -240,7 +241,7 @@ pub fn sinh(x: f64) -> f64 {
 /// Note: `CRMATH 1.2` evaluates `tanh(x) = sinh_rz(x) / cosh_rz(x)`. Because
 /// `sinh_rz` and `cosh_rz` clamp finite overflow to `±f64::MAX`, finite
 /// `|x| > 710.48` yields `±1.0`, whereas `x = ±Inf` evaluates `±Inf / +Inf = NaN`.
-/// `Strict` mode reproduces this upstream behaviour verbatim (`#169`).
+/// `Strict` mode reproduces this upstream behaviour verbatim (`#197`).
 #[must_use]
 #[inline]
 pub fn tanh(x: f64) -> f64 {

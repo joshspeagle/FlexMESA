@@ -5,7 +5,7 @@
 
 use flexmesa_const::{MSUN, RSUN, SECDAY, SECYER};
 use flexmesa_star::{
-    StarError, StarModel, set_hydro_vars, sync_post_henyey_rotation,
+    set_hydro_vars, sync_post_henyey_rotation, StarError, StarModel,
 };
 
 use crate::edd_wind::bh_initial_equatorial_mass;
@@ -16,7 +16,9 @@ use crate::orbit::{
 };
 use crate::roche_deformation::BinaryTidalDeformationHook;
 use crate::system_init::prep_and_settle_binary_star;
-use crate::system_jdot::{EdotBreakdown, JdotBreakdown, apply_initial_orbit_sync, eval_star_spin_j};
+use crate::system_jdot::{
+    apply_initial_orbit_sync, eval_star_spin_j, EdotBreakdown, JdotBreakdown,
+};
 use crate::system_rlof::{BinaryStepSnapshot, CoupledMdotAccounting};
 
 #[inline]
@@ -151,7 +153,8 @@ impl BinarySystem {
             terminate_if_initial_overflow: false,
             ..BinaryInlistControls::default()
         };
-        Self::from_controls_point_mass(donor, ctrl).expect("valid BinarySystem::new_point_mass")
+        Self::from_controls_point_mass(donor, ctrl)
+            .expect("valid BinarySystem::new_point_mass")
     }
 
     /// Constructs a new `BinarySystem` with two evolved `StarModel` instances.
@@ -198,7 +201,13 @@ impl BinarySystem {
         accretor: StarModel,
         controls: BinaryInlistControls,
     ) -> Result<Self, StarError> {
-        Self::from_controls_inner(donor, BinaryCompanion::Star(Box::new(accretor)), 0, 1, controls)
+        Self::from_controls_inner(
+            donor,
+            BinaryCompanion::Star(Box::new(accretor)),
+            0,
+            1,
+            controls,
+        )
     }
 
     fn from_controls_inner(
@@ -237,30 +246,37 @@ impl BinarySystem {
             BinaryCompanion::Star(s2) => s2.r[0],
         };
         let (rl_init, _) = compute_rl_and_gaps(
-            m_d, m_a, donor.r[0], r_a_init, separation, eccentricity,
+            m_d,
+            m_a,
+            donor.r[0],
+            r_a_init,
+            separation,
+            eccentricity,
         );
         if controls.use_tidal_deformation {
-            donor.aux.tidal_deformation = BinaryTidalDeformationHook::new_handle(
-                m_d,
-                m_a,
-                separation,
-                rl_init[0],
-                period,
-                controls.f_sync_switch_from_rot_defor,
-                controls.f_sync_switch_width,
-                controls.f_sync_switch_lim,
-            );
-            if let BinaryCompanion::Star(ref mut s2) = companion {
-                s2.aux.tidal_deformation = BinaryTidalDeformationHook::new_handle(
-                    m_a,
+            donor.aux.tidal_deformation =
+                BinaryTidalDeformationHook::new_handle(
                     m_d,
+                    m_a,
                     separation,
-                    rl_init[1],
+                    rl_init[0],
                     period,
                     controls.f_sync_switch_from_rot_defor,
                     controls.f_sync_switch_width,
                     controls.f_sync_switch_lim,
                 );
+            if let BinaryCompanion::Star(ref mut s2) = companion {
+                s2.aux.tidal_deformation =
+                    BinaryTidalDeformationHook::new_handle(
+                        m_a,
+                        m_d,
+                        separation,
+                        rl_init[1],
+                        period,
+                        controls.f_sync_switch_from_rot_defor,
+                        controls.f_sync_switch_width,
+                        controls.f_sync_switch_lim,
+                    );
             }
         }
         prep_and_settle_binary_star(&mut donor)?;
@@ -273,8 +289,14 @@ impl BinarySystem {
             BinaryCompanion::PointMass { .. } => 0.0,
             BinaryCompanion::Star(s2) => s2.r[0],
         };
-        let (rl, rl_relative_gap) =
-            compute_rl_and_gaps(m_d, m_a, donor.r[0], r_a, separation, eccentricity);
+        let (rl, rl_relative_gap) = compute_rl_and_gaps(
+            m_d,
+            m_a,
+            donor.r[0],
+            r_a,
+            separation,
+            eccentricity,
+        );
         let ignore_rlof = if controls.change_initial_ignore_rlof_flag
             || controls.change_ignore_rlof_flag
         {
@@ -453,15 +475,27 @@ impl BinarySystem {
     }
 
     /// Updates orbital period `period_sec` (s) and `eccentricity`, recomputing $a$, $J_{\mathrm{orb}}$, and $R_L$.
-    pub fn set_period_eccentricity(&mut self, period_sec: f64, eccentricity: f64) {
+    pub fn set_period_eccentricity(
+        &mut self,
+        period_sec: f64,
+        eccentricity: f64,
+    ) {
         let (m_d, m_a) = (self.donor.mstar, self.accretor_mass_g());
         self.period = period_sec;
-        self.eccentricity = eccentricity
-            .clamp(self.controls.min_eccentricity, self.controls.max_eccentricity);
+        self.eccentricity = eccentricity.clamp(
+            self.controls.min_eccentricity,
+            self.controls.max_eccentricity,
+        );
         self.separation = separation_from_period(m_d, m_a, self.period);
-        self.angular_momentum_j = eval_j_orb(m_d, m_a, self.separation, self.eccentricity);
+        self.angular_momentum_j =
+            eval_j_orb(m_d, m_a, self.separation, self.eccentricity);
         let (rl, gaps) = compute_rl_and_gaps(
-            m_d, m_a, self.donor.r[0], self.accretor_radius_cm(), self.separation, self.eccentricity,
+            m_d,
+            m_a,
+            self.donor.r[0],
+            self.accretor_radius_cm(),
+            self.separation,
+            self.eccentricity,
         );
         self.rl = rl;
         self.rl_relative_gap = gaps;
@@ -471,11 +505,15 @@ impl BinarySystem {
     /// Dynamically converts star `new_point_mass_i` (`1` or `2`) into a compact
     /// point mass (`binary_set_point_mass_i` in `binary_evolve.f90:140-200`).
     pub fn set_point_mass_i(&mut self, new_point_mass_i: usize) {
-        if new_point_mass_i == self.point_mass_i || new_point_mass_i == 0 || new_point_mass_i > 2 {
+        if new_point_mass_i == self.point_mass_i
+            || new_point_mass_i == 0
+            || new_point_mass_i > 2
+        {
             return;
         }
         let pm_mass = self.star_masses_g()[new_point_mass_i - 1];
-        let m_bh_eq = bh_initial_equatorial_mass(pm_mass, self.controls.initial_bh_spin);
+        let m_bh_eq =
+            bh_initial_equatorial_mass(pm_mass, self.controls.initial_bh_spin);
         let is_bh = self.controls.use_radiation_corrected_transfer_rate;
         let pm = BinaryCompanion::PointMass {
             mass_g: pm_mass,
@@ -483,7 +521,9 @@ impl BinarySystem {
             is_black_hole: is_bh,
         };
         if self.donor_i == new_point_mass_i {
-            if let BinaryCompanion::Star(other_star) = std::mem::replace(&mut self.companion, pm) {
+            if let BinaryCompanion::Star(other_star) =
+                std::mem::replace(&mut self.companion, pm)
+            {
                 self.donor = *other_star;
             }
         } else {
@@ -499,8 +539,12 @@ impl BinarySystem {
         self.last_edot = EdotBreakdown::default();
         self.last_termination_reason = None;
         let (rl, gaps) = compute_rl_and_gaps(
-            self.donor.mstar, self.accretor_mass_g(), self.donor.r[0], 0.0,
-            self.separation, self.eccentricity,
+            self.donor.mstar,
+            self.accretor_mass_g(),
+            self.donor.r[0],
+            0.0,
+            self.separation,
+            self.eccentricity,
         );
         self.rl = rl;
         self.rl_relative_gap = gaps;
@@ -536,11 +580,14 @@ impl BinarySystem {
         if self.point_mass_i != 0 || self.ignore_rlof_flag {
             return;
         }
-        let is_contact = self.controls.mdot_scheme.eq_ignore_ascii_case("contact");
+        let is_contact =
+            self.controls.mdot_scheme.eq_ignore_ascii_case("contact");
         if self.controls.keep_donor_fixed && !is_contact {
             return;
         }
-        if self.mtransfer_rate.abs() * SECYER / MSUN >= self.controls.mdot_limit_donor_switch {
+        if self.mtransfer_rate.abs() * SECYER / MSUN
+            >= self.controls.mdot_limit_donor_switch
+        {
             return;
         }
         let tol = self.controls.implicit_scheme_tolerance;
@@ -557,24 +604,50 @@ impl BinarySystem {
 
     pub(crate) fn capture_snapshot(&self) -> BinaryStepSnapshot {
         let (comp_star, pm_state) = match &self.companion {
-            BinaryCompanion::PointMass { mass_g, m_bh_zero_eq_g, is_black_hole } => {
-                (None, Some((*mass_g, *m_bh_zero_eq_g, *is_black_hole)))
-            }
+            BinaryCompanion::PointMass {
+                mass_g,
+                m_bh_zero_eq_g,
+                is_black_hole,
+            } => (None, Some((*mass_g, *m_bh_zero_eq_g, *is_black_hole))),
             BinaryCompanion::Star(s2) => (Some(&**s2), None),
         };
         BinaryStepSnapshot::capture(
-            &self.donor, comp_star, pm_state, self.point_mass_i, self.donor_i,
-            self.separation, self.period, self.eccentricity, self.angular_momentum_j,
-            self.rl, self.rl_relative_gap, self.mtransfer_rate, self.step_mtransfer_rate,
-            self.jdot, self.binary_age_yr, self.model_number, self.max_timestep_sec,
-            self.change_factor, self.using_jdot_mb, self.cumulative_j_ext,
-            self.last_mdot, self.last_jdot, self.last_edot,
+            &self.donor,
+            comp_star,
+            pm_state,
+            self.point_mass_i,
+            self.donor_i,
+            self.separation,
+            self.period,
+            self.eccentricity,
+            self.angular_momentum_j,
+            self.rl,
+            self.rl_relative_gap,
+            self.mtransfer_rate,
+            self.step_mtransfer_rate,
+            self.jdot,
+            self.binary_age_yr,
+            self.model_number,
+            self.max_timestep_sec,
+            self.change_factor,
+            self.using_jdot_mb,
+            self.cumulative_j_ext,
+            self.last_mdot,
+            self.last_jdot,
+            self.last_edot,
         )
     }
 
-    pub(crate) fn restore_snapshot(&mut self, snap: &BinaryStepSnapshot) -> Result<(), StarError> {
+    pub(crate) fn restore_snapshot(
+        &mut self,
+        snap: &BinaryStepSnapshot,
+    ) -> Result<(), StarError> {
         let comp_mut = match &mut self.companion {
-            BinaryCompanion::PointMass { mass_g, m_bh_zero_eq_g, is_black_hole } => {
+            BinaryCompanion::PointMass {
+                mass_g,
+                m_bh_zero_eq_g,
+                is_black_hole,
+            } => {
                 if let Some((m, meq, bh)) = snap.point_mass_state {
                     *mass_g = m;
                     *m_bh_zero_eq_g = meq;

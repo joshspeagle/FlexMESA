@@ -121,7 +121,8 @@ fn test_do_set_mdot_bjorklund_dutch_and_rotational_boost_match_analytic_laws() {
     let t_surf = 4.5e4;
     let z_surf = 0.014;
     let gamma_e = 0.34 * l_surf / (FOUR_PI * CLIGHT * STANDARD_CGRAV * m_surf);
-    let expected_bjork = 10.0_f64.powf(-5.52) * (1.0 - gamma_e).powf(-1.48);
+    let expected_bjork =
+        flexmesa_math::exp10(-5.52) * flexmesa_math::pow(1.0 - gamma_e, -1.48);
     let got_bjork = eval_bjorklund_wind(
         l_surf,
         m_surf,
@@ -198,7 +199,7 @@ fn test_do_set_mdot_bjorklund_dutch_and_rotational_boost_match_analytic_laws() {
     model.controls.mix_wind.mdot_omega_power = 0.43;
     model.omega[0] = 0.5 * omega_crit;
     let mdot_rot = do_set_mdot(&mut model).expect("rotational mdot");
-    let expected_boost = 0.5_f64.powf(-0.43);
+    let expected_boost = flexmesa_math::pow(0.5_f64, -0.43);
     assert!(mdot_rot < mdot_no_rot);
     assert!(rel_err(mdot_rot / mdot_no_rot, expected_boost) < 1.0e-12);
     assert!(
@@ -283,6 +284,7 @@ fn test_do_adjust_mass_step_and_eps_mdot_conserve_accreted_species_and_angular_m
 }
 
 #[test]
+#[allow(clippy::too_many_lines)]
 fn test_overshoot_16_param_sets_and_peclet_damping_follow_mesa_rules() {
     let ctrl = StarControls {
         initial_mass: 4.0,
@@ -366,11 +368,13 @@ fn test_overshoot_16_param_sets_and_peclet_damping_follow_mesa_rules() {
         k_ob += 1;
     }
     let k_next = (k_ob + 1).min(base.nz - 1);
-    let w_ob = ((base.r[k_ob].powi(3) - r_ob.powi(3)).abs()
-        / (base.r[k_ob].powi(3) - base.r[k_next].powi(3))
+    let w_ob =
+        ((flexmesa_math::pow3(base.r[k_ob]) - flexmesa_math::pow3(r_ob)).abs()
+            / (flexmesa_math::pow3(base.r[k_ob])
+                - flexmesa_math::pow3(base.r[k_next]))
             .abs()
             .max(1.0e-99))
-    .clamp(0.0, 1.0);
+        .clamp(0.0, 1.0);
     let vc_ob = ((1.0 - w_ob) * base.mlt_vc[k_ob] + w_ob * base.mlt_vc[k_next])
         .max(0.0);
     let hp_anchor = (1.0 - w_ob) * base.scale_height[k_ob]
@@ -383,7 +387,8 @@ fn test_overshoot_16_param_sets_and_peclet_damping_follow_mesa_rules() {
         .position(|&mt| mt == MixingType::OvershootMixing)
         .expect("first overshoot face");
     let dr_ov = (m_exp.r[ov_face_idx] - r_ob).max(0.0);
-    let expected_d_ov = d_ob * (-2.0 * dr_ov / (0.02 * hp_cb)).exp();
+    let expected_d_ov =
+        d_ob * flexmesa_math::exp(-2.0 * dr_ov / (0.02 * hp_cb));
     assert!(rel_err(m_exp.d_mix[ov_face_idx], expected_d_ov) < 1.0e-11);
     assert_eq!(n_ov_short, 0, "'none' in set 0 must short-circuit set 1");
     assert_eq!(

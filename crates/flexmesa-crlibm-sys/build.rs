@@ -32,8 +32,9 @@ const C_SOURCES: &[&str] = &[
 ];
 
 fn main() {
-    let manifest_dir =
-        PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR"));
+    let manifest_dir = PathBuf::from(
+        env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR"),
+    );
     let target_arch =
         env::var("CARGO_CFG_TARGET_ARCH").expect("CARGO_CFG_TARGET_ARCH");
     let target_endian =
@@ -114,7 +115,10 @@ fn main() {
         "csrc/scs_lib/scs.h",
         "csrc/scs_lib/scs_private.h",
     ] {
-        println!("cargo:rerun-if-changed={}", manifest_dir.join(hdr).display());
+        println!(
+            "cargo:rerun-if-changed={}",
+            manifest_dir.join(hdr).display()
+        );
     }
 
     // Statically archive into `libflexmesa_crlibm.a` so a system `libcrlibm` is

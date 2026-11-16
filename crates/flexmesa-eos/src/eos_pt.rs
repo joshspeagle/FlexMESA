@@ -69,7 +69,7 @@ pub fn eos_pt_get(
     let t = exp10(log_t);
 
     let rho_guess = pgas * comp.abar * MP / (KERG * t * (1.0 + comp.zbar));
-    let log_rho_guess = rho_guess.log10();
+    let log_rho_guess = flexmesa_math::log10(rho_guess);
     let target_ln_pgas = log_pgas * LN10;
 
     let inv = eos_dt_get_rho(

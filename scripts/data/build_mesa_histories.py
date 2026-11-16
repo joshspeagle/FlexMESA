@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: LGPL-3.0-or-later
-"""Build MESA 26.4.1 history and module-hex release bundles and SHA-256 manifests.
+"""Build MESA 26.4.1 history and module-hex bundles and SHA-256 manifests.
 
 Produces:
 1. 6-line-header thinned MESA ``26.4.1`` histories for all finished cases (each
@@ -194,7 +194,7 @@ def _add_member(
         for needle in FORBIDDEN_SUBSTRINGS:
             if needle in payload:
                 raise ValueError(
-                    f"Forbidden substring {needle!r} in archive member {relpath}"
+                    f"Forbidden substring {needle!r} in member {relpath}"
                 )
     sha = hashlib.sha256(payload).hexdigest()
     info = tarfile.TarInfo(name=relpath)
@@ -346,7 +346,8 @@ def build_histories_and_repo_refs(
     arc_sz = out_arc.stat().st_size
     print(f"Built {out_arc.name}:")
     print(
-        f"  thinned total:       {len(thinned_map)} (committed={committed_count}, release_only={release_only_count})"
+        f"  thinned total:       {len(thinned_map)} "
+        f"(committed={committed_count}, release_only={release_only_count})"
     )
     print(f"  archive files:       {len(rows) + 1}")
     print(f"  archive_size_bytes:  {arc_sz}")

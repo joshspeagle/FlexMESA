@@ -3,7 +3,7 @@
 //! luminosity, pre-solver equilibrium initialization, and coupled Henyey
 //! equation residuals (`do1_rsp2_L_eqn`, `do1_rsp2_Hp_eqn`,
 //! `do1_turbulent_energy_eqn`, and `RSP2_adjust_vars_before_call_solver` in
-//! `star/private/hydro_rsp2.f90:1-1255`).
+//! `star/private/hydro_rsp2.f90:1-1243`).
 
 use flexmesa_const::{BOLTZ_SIGMA, LN10, PI4};
 
@@ -182,7 +182,7 @@ pub fn eval_rsp2_profile_equations(
 }
 
 /// Pre-solver turbulent velocity adjustment (`RSP2_adjust_vars_before_call_solver`
-/// in `star/private/hydro_rsp2.f90:1195-1253`).
+/// in `star/private/hydro_rsp2.f90:1183-1243`).
 pub fn rsp2_adjust_vars_before_call_solver(model: &mut StarModel) {
     let nz = model.nz;
     let alpha = model.controls.mixing_length_alpha;

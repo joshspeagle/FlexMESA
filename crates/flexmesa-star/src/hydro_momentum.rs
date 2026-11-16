@@ -23,7 +23,7 @@
 //!     (`setup_RTI_terms`, `hydro_momentum.f90:250-284`).
 //! - **Time-centered pressure $\theta_P$ and composition partials
 //!   `dln_peos_dxa_for_partials` (`hydro_momentum.f90:312-343`)**.
-//! - **Radius equation (`do1_radius_eqn`, `hydro_momentum.f90:552-608`)** with
+//! - **Radius equation (`do1_radius_eqn`, `star/private/hydro_momentum.f90:545-601`)** with
 //!   `force_zero_v` bounds (`velocity_q_upper_bound`, `velocity_tau_lower_bound`,
 //!   `velocity_logt_lower_bound`) and optional velocity time-centering.
 
@@ -426,7 +426,7 @@ pub fn do1_momentum_eqn(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
 }
 
 /// Optional kinematic radius-velocity equation for face `k` (`do1_radius_eqn`
-/// in `star/private/hydro_momentum.f90:552-608`).
+/// in `star/private/hydro_momentum.f90:545-601`).
 pub fn do1_radius_eqn(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
     let Some(i_dlnr_dt) = model.layout.i_dlnr_dt else {
         return;

@@ -136,7 +136,7 @@ def convert_dt_ascii_to_raw(src: pathlib.Path, dst: pathlib.Path) -> None:
 
 
 def convert_cms_ascii_to_raw(src: pathlib.Path, dst: pathlib.Path) -> None:
-    """Convert one `mesa-CMS_*.data` file to 76-byte header `FMCMSR01` `.raw`."""
+    """Convert one `mesa-CMS_*.data` file to 76-byte `FMCMSR01` `.raw`."""
     lines = src.read_text(encoding="utf-8").splitlines()
     names, vals = _parse_header_tokens(lines)
     hdr = dict(zip(names, vals, strict=True))
@@ -191,7 +191,9 @@ def compress_zst(src: pathlib.Path, dst: pathlib.Path, level: int = 19) -> str:
     """Compress `src` to `dst` with Zstandard and return SHA-256 of `dst`."""
     dst.parent.mkdir(parents=True, exist_ok=True)
     try:
-        from compression import zstd as std_zstd  # type: ignore[import-not-found]
+        from compression import (
+            zstd as std_zstd,  # type: ignore[import-not-found]
+        )
 
         with (
             src.open("rb") as fin,
@@ -221,7 +223,9 @@ def decompress_zst(src: pathlib.Path, dst: pathlib.Path) -> None:
     """Decompress `src` `.zst` archive to `dst`."""
     dst.parent.mkdir(parents=True, exist_ok=True)
     try:
-        from compression import zstd as std_zstd  # type: ignore[import-not-found]
+        from compression import (
+            zstd as std_zstd,  # type: ignore[import-not-found]
+        )
 
         with std_zstd.open(src, "rb") as fin, dst.open("wb") as fout:
             shutil.copyfileobj(fin, fout, length=8 * 1024 * 1024)
@@ -242,7 +246,7 @@ def pack_deterministic_tar_zst(
     manifest_out: pathlib.Path,
     level: int = 19,
 ) -> str:
-    """Write a deterministic `.tar.zst` containing `rel_files` + `SHA256SUMS.tsv`."""
+    """Write a deterministic `.tar.zst` with `rel_files` + `SHA256SUMS.tsv`."""
     rel_sorted = sorted(rel_files)
     manifest_lines = ["# sha256\tsize_bytes\trelpath"]
     for rel in rel_sorted:
@@ -287,7 +291,7 @@ def build_kap_full_bundle(
     out_dir: pathlib.Path,
     level: int = 19,
 ) -> tuple[str, str, int]:
-    """Build `kap_tables_full_v2.bin.zst` via `flexmesa._rust` opacity loader."""
+    """Build `kap_tables_full_v2.bin.zst` via `flexmesa._rust` loader."""
     with tempfile.TemporaryDirectory(prefix="flexmesa_kap_build_") as tmp:
         tmp_data = pathlib.Path(tmp)
         env = dict(os.environ)

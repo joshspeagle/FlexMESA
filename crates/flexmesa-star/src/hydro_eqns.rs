@@ -116,7 +116,7 @@ impl HenyeySystem {
 
     /// Stores `equ[k, i_equ] = resid.val` and unpacks the 3-cell stencil
     /// [`StarAdOrder1`] partials into `lblk`, `dblk`, and `ublk`
-    /// (`save_eqn_residual_info` in `star/private/hydro_eqns.f90:1032-1190`).
+    /// (`save_eqn_residual_info` in `star/private/star_utils.f90:1603-1614`).
     pub fn save_eqn_residual(
         &mut self,
         layout: &VarLayout,

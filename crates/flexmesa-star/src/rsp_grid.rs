@@ -381,7 +381,7 @@ pub fn cleanup_for_lina(
 }
 
 /// Applies exact `lnR`/`lnT`/`lnd` round-trip rounding and updates `Vol`, `L`,
-/// `mixing_type`, `R_center`, and `M_center` (`copy_results` in `rsp_def.f90:785-868`).
+/// `mixing_type`, `R_center`, and `M_center` (`copy_results` in `star/private/rsp_def.f90:778-861`).
 pub fn copy_results(model: &mut StarModel, dc: &RspDerivedConsts) {
     let nzn = model.nz;
     for i in 1..=nzn {

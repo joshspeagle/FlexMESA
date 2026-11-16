@@ -8,10 +8,14 @@ from __future__ import annotations
 import importlib
 import pathlib
 import re
+import subprocess
+import sys
 import textwrap
 
 import matplotlib
 import matplotlib.pyplot as plt
+
+from flexmesa.data import fetch
 
 matplotlib.use("Agg")
 
@@ -151,16 +155,27 @@ def test_public_docs_prose_and_path_hygiene() -> None:
     agents_claude_md = REPO_ROOT / ".agents" / "rules" / "CLAUDE.md"
     claude_upkeep = REPO_ROOT / ".claude" / "rules" / "docs-upkeep.md"
     agents_upkeep = REPO_ROOT / ".agents" / "rules" / "docs-upkeep.md"
+    claude_gov = (
+        REPO_ROOT / ".claude" / "rules" / "verification-and-governance.md"
+    )
+    agents_gov = (
+        REPO_ROOT / ".agents" / "rules" / "verification-and-governance.md"
+    )
     rule_files: tuple[pathlib.Path, ...] = (
         claude_md,
         agents_claude_md,
         claude_upkeep,
         agents_upkeep,
+        claude_gov,
+        agents_gov,
     )
     assert claude_md.read_text(encoding="utf-8") == agents_claude_md.read_text(
         encoding="utf-8"
     )
     assert claude_upkeep.read_text(encoding="utf-8") == agents_upkeep.read_text(
+        encoding="utf-8"
+    )
+    assert claude_gov.read_text(encoding="utf-8") == agents_gov.read_text(
         encoding="utf-8"
     )
 
@@ -201,3 +216,82 @@ def test_executable_python_snippets_in_docs() -> None:
             executed_count += 1
 
     assert executed_count >= 60
+
+
+def test_upstream_mesa_26_4_1_citations_and_defaults_diff_resolve() -> None:
+    """Every upstream file:line citation and defaults diff must match 26.4.1."""
+    mesa_root = fetch.resolve_mesa_test_inputs_dir()
+    assert (mesa_root / "star" / "private").is_dir()
+
+    by_basename: dict[str, list[pathlib.Path]] = {}
+    for up_path in mesa_root.rglob("*"):
+        if (
+            up_path.is_file()
+            and up_path.suffix in {".f90", ".f", ".inc", ".dek", ".defaults"}
+            and "test_suite" not in up_path.parts
+        ):
+            by_basename.setdefault(up_path.name, []).append(up_path)
+
+    line_count_cache: dict[pathlib.Path, int] = {}
+
+    def _num_lines(target: pathlib.Path) -> int:
+        if target not in line_count_cache:
+            line_count_cache[target] = len(
+                target.read_text(
+                    encoding="utf-8", errors="replace"
+                ).splitlines()
+            )
+        return line_count_cache[target]
+
+    cite_re = re.compile(
+        r"\b([A-Za-z0-9_./-]+\.(?:f90|f|inc|dek|defaults)):(\d+)(?:[-\u2013](\d+))?"
+    )
+    scan_paths: list[pathlib.Path] = [
+        REPO_ROOT / "CLAUDE.md",
+        REPO_ROOT / "notes" / "DECISIONS.md",
+        REPO_ROOT / "notes" / "SCOPE.md",
+        *sorted((REPO_ROOT / ".claude" / "rules").glob("*.md")),
+        *sorted(DOCS_DIR.rglob("*.md")),
+        *sorted((REPO_ROOT / "crates").rglob("*.rs")),
+    ]
+
+    checked = 0
+    for src_path in scan_paths:
+        rel_src = src_path.relative_to(REPO_ROOT)
+        for lno, line in enumerate(
+            src_path.read_text(encoding="utf-8").splitlines(), start=1
+        ):
+            for match in cite_re.finditer(line):
+                raw_fp = match.group(1)
+                lo = int(match.group(2))
+                hi = int(match.group(3)) if match.group(3) else lo
+                if "/" in raw_fp:
+                    cands = (
+                        [mesa_root / raw_fp]
+                        if (mesa_root / raw_fp).is_file()
+                        else []
+                    )
+                else:
+                    cands = by_basename.get(raw_fp, [])
+                assert cands, (
+                    f"{rel_src}:{lno}: upstream MESA 26.4.1 file not found "
+                    f"for citation {match.group(0)!r}"
+                )
+                n_max = _num_lines(cands[0])
+                assert 1 <= lo <= hi <= n_max, (
+                    f"{rel_src}:{lno}: citation {match.group(0)!r} out of "
+                    f"bounds (1..={n_max}) in {cands[0].relative_to(mesa_root)}"
+                )
+                checked += 1
+
+    assert checked >= 850
+
+    # Verify generated notes/audit/defaults_diff_26_4_1.md is up to date.
+    rc = subprocess.call(
+        [
+            sys.executable,
+            str(REPO_ROOT / "scripts" / "audit" / "diff_mesa_defaults.py"),
+            "--check",
+        ]
+    )
+    assert rc == 0

@@ -342,7 +342,7 @@ pub fn do_eos(model: &mut StarModel) -> Result<(), StarError> {
 }
 
 /// Evaluates thermal neutrino loss rates `non_nuc_neu` and partial derivatives
-/// across all `nz` zones (`do_neu` in `star/private/micro.f90:1278-1370`).
+/// across all `nz` zones (`do_neu_for_cell` in `star/private/neu.f90:49-127`).
 ///
 /// # Errors
 /// Returns [`StarError::MicrophysicsError`] if `neu_get` fails.
@@ -401,8 +401,8 @@ pub fn do_neu(model: &mut StarModel) -> Result<(), StarError> {
 
 /// Evaluates Rosseland mean opacity `opacity` (radiative + Compton + electron
 /// conduction) in parallel across all `nz` zones and integrates optical depth
-/// `tau` inward from the surface (`do_kap` and `get_tau` in
-/// `star/private/micro.f90:739-1052`).
+/// `tau` inward from the surface (`do_kap_for_cell` in `star/private/micro.f90:548-754`
+/// and `get_tau` in `star/private/star_utils.f90:871-902`).
 ///
 /// # Errors
 /// Returns [`StarError::MicrophysicsError`] if `get_kap_results` fails.
@@ -480,7 +480,7 @@ pub fn do_kap(model: &mut StarModel) -> Result<(), StarError> {
 }
 
 /// Integrates optical depth $\tau_k$ inward from $\tau_0 = \tau_{\mathrm{factor}} \tau_{\mathrm{base}}$
-/// (`get_tau` in `star/private/micro.f90:994-1052`).
+/// (`get_tau` in `star/private/star_utils.f90:871-902`).
 pub fn get_tau(model: &mut StarModel) {
     let nz = model.nz;
     if nz == 0 {

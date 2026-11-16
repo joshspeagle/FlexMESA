@@ -1,6 +1,6 @@
 # Bibliography & Primary Literature
 
-`FlexMESA` translates the physical equations, tabulated microphysics, and numerical algorithms of **Modules for Experiments in Stellar Astrophysics (`MESA`, development branch `main` at commit `0b2e6bb`, 2026-11-04)** into Safe Rust and Python/JAX. When publishing scientific results obtained with `FlexMESA`, please cite `FlexMESA` alongside the **MESA Instrument Papers** and the primary physics references for the active equations of state, opacities, nuclear reaction rates, and mixing prescriptions listed below.
+`FlexMESA` translates the physical equations, tabulated microphysics, and numerical algorithms of **Modules for Experiments in Stellar Astrophysics (`MESA`, release `26.4.1`, git tag `26.4.1`, Zenodo record `19722306`)** into Safe Rust and Python/JAX. When publishing scientific results obtained with `FlexMESA`, please cite `FlexMESA` alongside the **MESA Instrument Papers** and the primary physics references for the active equations of state, opacities, nuclear reaction rates, and mixing prescriptions listed below.
 
 ---
 

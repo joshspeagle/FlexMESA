@@ -2,9 +2,9 @@
 //! Analytical physics oracles and Brott et al. (2011) massive-star wind law
 //! for the 8 upstream MESA `binary/test_suite` verification cases.
 //!
-//! Corresponds to `jdot_gr_check/src/run_binary_extras.f90:99-131`,
-//! `jdot_ml_check/src/run_binary_extras.f90:99-132`, and
-//! `double_bh/src/run_star_extras.f90:55-206`.
+//! Corresponds to `binary/test_suite/jdot_gr_check/src/run_binary_extras.f90:99-120`,
+//! `binary/test_suite/jdot_ml_check/src/run_binary_extras.f90:99-132`, and
+//! `binary/test_suite/double_bh/src/run_star_extras.f90:55-206`.
 
 use flexmesa_const::{CLIGHT, MSUN, RSUN, STANDARD_CGRAV};
 use flexmesa_math::{exp10, log10, pow};
@@ -35,7 +35,7 @@ pub fn is_tier5_binary_case(case_name: &str) -> bool {
 /// $$a(t) = \left(a_0^4 - 4\beta t\right)^{1/4}, \qquad
 ///   \beta = \frac{64 G^3}{5 c^5} M_1 M_2 (M_1 + M_2)$$
 ///
-/// Corresponds to `jdot_gr_check/src/run_binary_extras.f90:115-128`.
+/// Corresponds to `binary/test_suite/jdot_gr_check/src/run_binary_extras.f90:109-119`.
 #[must_use]
 pub fn eval_gr_expected_separation_rsun(
     a0_rsun: f64,
@@ -58,7 +58,7 @@ pub fn eval_gr_expected_separation_rsun(
 /// mass transfer $(\alpha, \beta, \delta, \gamma)$ with retained fraction
 /// $\epsilon = 1 - \alpha - \beta - \delta$.
 ///
-/// Corresponds to `jdot_ml_check/src/run_binary_extras.f90:116-130`.
+/// Corresponds to `binary/test_suite/jdot_ml_check/src/run_binary_extras.f90:116-130`.
 #[must_use]
 pub fn eval_tauris_vdh_expected_separation_rsun(
     a0_rsun: f64,
@@ -93,7 +93,7 @@ pub fn eval_tauris_vdh_expected_separation_rsun(
 /// and `0.1 *` Hamann, Koesterke & Wessolowski (1995) across the bi-stability
 /// jump $T_{\mathrm{eff,jump}}(Z / Z_\odot)$ ($Z_\odot = 0.017$).
 ///
-/// Corresponds line-for-line to `double_bh/src/run_star_extras.f90:55-206`.
+/// Corresponds line-for-line to `binary/test_suite/double_bh/src/run_star_extras.f90:55-206`.
 #[must_use]
 pub fn eval_brott_wind_msun_yr(
     l_surf_lsun: f64,

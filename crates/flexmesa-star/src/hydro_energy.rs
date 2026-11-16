@@ -389,7 +389,7 @@ pub fn set_energy_eqn_scal(model: &StarModel, k: usize) -> f64 {
 }
 
 /// Energy conservation equation for cell `k` (`do1_energy_eqn` in
-/// `star/private/hydro_energy.f90:36-905`).
+/// `star/private/hydro_energy.f90:36-879`).
 pub fn do1_energy_eqn(
     model: &StarModel,
     k: usize,

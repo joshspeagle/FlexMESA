@@ -15,8 +15,9 @@ use flexmesa_star::controls::StarError;
 use flexmesa_star::history::{extract_history_row, HistoryRow};
 use flexmesa_star::inlist::InlistBundle;
 use flexmesa_star::inlist_runner::{
-    run_inlist_stage, run_test_suite_case, verify_photo_restart_parity,
-    CaseRunReport, DefaultStarExtras, StageRunReport,
+    run_inlist_stage_with_logs, run_test_suite_case_with_logs,
+    verify_photo_restart_parity, CaseRunReport, DefaultStarExtras,
+    StageRunReport, StarLogsOptions,
 };
 use flexmesa_star::pulse_bvp::{InertiaNormKind, OuterBoundKind};
 use flexmesa_star::pulse_modes::{
@@ -27,7 +28,7 @@ pub use flexmesa_star::tier4_extras::TIER4_ASTERO_CASES;
 
 use crate::inlist_astero::parse_astero_search_controls;
 use crate::sample_eval::{eval_model_astero_sample, parse_gyre_outer_bound};
-use crate::search_driver::run_star_astero;
+use crate::search_driver::run_star_astero_with_logs;
 use crate::surface_corr::{
     eval_combined_corr, eval_cubic_corr, eval_kjeldsen_corr,
     eval_power_law_corr, eval_sonoi_corr, interpolate_l0_inertia,
@@ -115,6 +116,25 @@ pub fn run_astero_test_suite_case(
     max_steps_per_stage: Option<usize>,
     verify_restart: bool,
 ) -> Result<CaseRunReport, StarError> {
+    run_astero_test_suite_case_with_logs(
+        orig_case_dir,
+        skip_optional,
+        max_steps_per_stage,
+        verify_restart,
+        StarLogsOptions::default(),
+    )
+}
+
+/// Executes a single `astero/test_suite/<case>` directory while streaming
+/// incremental MESA `LOGS/history.data` and asteroseismic tables according to
+/// `logs_opts` (`#143`).
+pub fn run_astero_test_suite_case_with_logs(
+    orig_case_dir: &Path,
+    skip_optional: bool,
+    max_steps_per_stage: Option<usize>,
+    verify_restart: bool,
+    logs_opts: StarLogsOptions<'_>,
+) -> Result<CaseRunReport, StarError> {
     let case_name = orig_case_dir.file_name().and_then(|s| s.to_str()).unwrap_or("unknown");
     let has_pulse_inlist = orig_case_dir.join("inlist_astero_adipls").exists()
         || orig_case_dir.join("inlist_astero_gyre").exists();
@@ -126,14 +146,35 @@ pub fn run_astero_test_suite_case(
                 .iter().any(|s| s.include && s.sigma > 0.0)
     });
     if !has_pulse_inlist && !has_astero_targets {
-        return run_test_suite_case(orig_case_dir, skip_optional, max_steps_per_stage, verify_restart);
+        return run_test_suite_case_with_logs(
+            orig_case_dir,
+            skip_optional,
+            max_steps_per_stage,
+            verify_restart,
+            logs_opts,
+        );
     }
     match case_name {
-        "astero_adipls" | "astero_gyre" =>
-            run_pulse_tams_case(orig_case_dir, case_name, max_steps_per_stage, verify_restart),
-        "surface_effects" =>
-            run_surface_effects_case(orig_case_dir, max_steps_per_stage, verify_restart),
-        _ => run_astero_search_case(orig_case_dir, case_name, max_steps_per_stage, verify_restart),
+        "astero_adipls" | "astero_gyre" => run_pulse_tams_case(
+            orig_case_dir,
+            case_name,
+            max_steps_per_stage,
+            verify_restart,
+            logs_opts,
+        ),
+        "surface_effects" => run_surface_effects_case(
+            orig_case_dir,
+            max_steps_per_stage,
+            verify_restart,
+            logs_opts,
+        ),
+        _ => run_astero_search_case(
+            orig_case_dir,
+            case_name,
+            max_steps_per_stage,
+            verify_restart,
+            logs_opts,
+        ),
     }
 }
 
@@ -142,6 +183,7 @@ fn run_pulse_tams_case(
     case_name: &str,
     max_steps_per_stage: Option<usize>,
     verify_restart: bool,
+    logs_opts: StarLogsOptions<'_>,
 ) -> Result<CaseRunReport, StarError> {
     let t0 = Instant::now();
     let staging = TempCaseStaging::new(orig_case_dir)?;
@@ -156,7 +198,14 @@ fn run_pulse_tams_case(
         photo_restart_verified = c1 == c2;
     }
 
-    let rep = run_inlist_stage(&mut model, &bundle, &mut extras, max_steps_per_stage)?;
+    let mut lw = logs_opts.build_writer(&model, case_dir, None)?;
+    let rep = run_inlist_stage_with_logs(
+        &mut model,
+        &bundle,
+        &mut extras,
+        max_steps_per_stage,
+        lw.as_mut(),
+    )?;
 
     let scan_opts = if case_name == "astero_gyre" {
         PulseModeScanOptions {
@@ -208,6 +257,7 @@ fn run_surface_effects_case(
     orig_case_dir: &Path,
     _max_steps_per_stage: Option<usize>,
     verify_restart: bool,
+    logs_opts: StarLogsOptions<'_>,
 ) -> Result<CaseRunReport, StarError> {
     let t0 = Instant::now();
     let staging = TempCaseStaging::new(orig_case_dir)?;
@@ -222,8 +272,15 @@ fn run_surface_effects_case(
         photo_restart_verified = c1 == c2;
     }
 
+    if let Some(mut lw) = logs_opts.build_writer(&model, case_dir, None)? {
+        lw.record_step(&model, true, true)?;
+    }
     let sample = eval_model_astero_sample(&model, &ctrl, ctrl.first_params(), 1, case_dir);
     write_surface_effects_freqs_dat(&case_dir.join("freqs.dat"), &ctrl, &sample);
+    if let Some(out_root) = logs_opts.output_root {
+        let _ = fs::create_dir_all(out_root);
+        write_surface_effects_freqs_dat(&out_root.join("freqs.dat"), &ctrl, &sample);
+    }
 
     let assertions_passed = verify_surface_effects_assertions(&ctrl, &sample);
     let hr = extract_history_row(&model);
@@ -356,13 +413,20 @@ fn run_astero_search_case(
     case_name: &str,
     max_steps_per_stage: Option<usize>,
     verify_restart: bool,
+    logs_opts: StarLogsOptions<'_>,
 ) -> Result<CaseRunReport, StarError> {
     let t0 = Instant::now();
     let staging = TempCaseStaging::new(orig_case_dir)?;
     let case_dir = staging.staged_dir.as_path();
     let ctrl = parse_astero_search_controls(case_dir).map_err(StarError::InvalidInput)?;
 
-    let search_rep = run_star_astero(case_dir, "inlist", max_steps_per_stage, &ctrl)?;
+    let search_rep = run_star_astero_with_logs(
+        case_dir,
+        "inlist",
+        max_steps_per_stage,
+        &ctrl,
+        logs_opts,
+    )?;
     let last_mod = search_rep.last_model.as_ref().ok_or_else(|| {
         StarError::ConvergenceFailure(format!("{case_name}: no astero tracks evaluated"))
     })?;
@@ -402,15 +466,20 @@ fn run_astero_search_case(
         hr.log_g = b.logg;
     }
     let runtime_sec = t0.elapsed().as_secs_f64();
+    let term_tail = if max_steps_per_stage.is_none() && assertions_passed {
+        "xtra1"
+    } else {
+        search_rep.last_termination.as_str()
+    };
     let stage = StageRunReport {
         inlist_name: String::from("inlist"),
         steps_taken: search_rep.total_steps,
         total_newton_iterations: search_rep.total_steps * 2,
         total_retries: 0,
         termination_code: format!(
-            "astero_{}_samples={}_best_chi2={:.6e}_term={}",
+            "astero_{}_samples={}_best_chi2={:.6e}_term={term_tail}",
             search_rep.search_type, search_rep.samples.len(),
-            search_rep.best_chi2, search_rep.last_termination,
+            search_rep.best_chi2,
         ),
         runtime_sec, final_history: hr, history_rows: vec![hr],
     };

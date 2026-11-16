@@ -1,0 +1,835 @@
+# Canonical MESA 26.4.1 end-to-end trajectory manifest and reference-availability table (#143).
+# Generated from MESA release 26.4.1 test_suite/do1_test_source and final-stage ./rn inlists.
+
+[metadata]
+mesa_release = "26.4.1"
+zenodo_record = "19722306"
+
+[defaults.star]
+independent_var = "star_age"
+
+[defaults.star.final_tolerances]
+rel_star_age = 0.02
+log_L = 0.02
+log_Teff = 0.01
+log_R = 0.02
+log_center_T = 0.02
+log_center_Rho = 0.05
+
+[defaults.star.track_tolerances]
+log_L = 0.15
+log_Teff = 0.05
+log_R = 0.10
+log_center_T = 0.05
+log_center_Rho = 0.15
+
+[defaults.binary]
+independent_var = "age"
+
+[defaults.binary.final_tolerances]
+rel_age = 0.02
+star_1_mass = 0.02
+star_2_mass = 0.02
+period_days = 0.05
+
+[defaults.binary.track_tolerances]
+star_1_mass = 0.05
+star_2_mass = 0.05
+
+[defaults.astero]
+independent_var = "star_age"
+
+[defaults.astero.final_tolerances]
+rel_star_age = 0.02
+log_L = 0.02
+log_Teff = 0.01
+log_g = 0.02
+
+[defaults.astero.track_tolerances]
+log_L = 0.15
+log_Teff = 0.05
+log_g = 0.05
+
+[[cases]]
+suite = "star"
+case = "1.3M_ms_high_Z"
+reference_status = "interim_0b2e6bb"
+reference_path = "notes/audit/upstream_histories/1.3M_ms_high_Z.tsv"
+required_termination = "log_L_upper_limit"
+pr_ci = true
+
+[[cases]]
+suite = "star"
+case = "1.4M_ms_op_mono"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "max_model_number"
+
+[[cases]]
+suite = "star"
+case = "1.5M_with_diffusion"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "xa_central_lower_limit"
+
+[[cases]]
+suite = "star"
+case = "12M_pre_ms_to_core_collapse"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "fe_core_infall_limit"
+
+[[cases]]
+suite = "star"
+case = "15M_dynamo"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "xa_central_lower_limit"
+
+[[cases]]
+suite = "star"
+case = "16M_conv_premix"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "xa_central_lower_limit"
+
+[[cases]]
+suite = "star"
+case = "16M_predictive_mix"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "xa_central_lower_limit"
+
+[[cases]]
+suite = "star"
+case = "1M_pre_ms_to_wd"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "log_L_lower_limit"
+
+[[cases]]
+suite = "star"
+case = "1M_thermohaline"
+reference_status = "interim_0b2e6bb"
+reference_path = "notes/audit/upstream_histories/1M_thermohaline.tsv"
+required_termination = "he_core_mass_limit"
+
+[[cases]]
+suite = "star"
+case = "20M_pre_ms_to_core_collapse"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "fe_core_infall_limit"
+
+[[cases]]
+suite = "star"
+case = "20M_z2m2_high_rotation"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "xa_central_lower_limit"
+
+[[cases]]
+suite = "star"
+case = "5M_cepheid_blue_loop"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "star_species_mass_min_limit"
+
+[[cases]]
+suite = "star"
+case = "7M_prems_to_AGB"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "log_L_upper_limit"
+
+[[cases]]
+suite = "star"
+case = "R_CrB_star"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "Teff_lower_limit"
+
+[[cases]]
+suite = "star"
+case = "T_tau_gradr"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "max_model_number"
+
+[[cases]]
+suite = "star"
+case = "accreted_material_j"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "star_mass_max_limit"
+
+[[cases]]
+suite = "star"
+case = "adjust_net"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "max_age"
+
+[[cases]]
+suite = "star"
+case = "c13_pocket"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "one thermal pulse cycle complete"
+
+[[cases]]
+suite = "star"
+case = "carbon_kh"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "log_center_density_upper_limit"
+
+[[cases]]
+suite = "star"
+case = "cburn_inward"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "extras_finish_step"
+
+[[cases]]
+suite = "star"
+case = "ccsn_IIp"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "extras_finish_step"
+
+[[cases]]
+suite = "star"
+case = "check_pulse_atm"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "max_model_number"
+
+[[cases]]
+suite = "star"
+case = "check_redo"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "xa_central_lower_limit"
+
+[[cases]]
+suite = "star"
+case = "conductive_flame"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "flame reached halfway point"
+
+[[cases]]
+suite = "star"
+case = "conserve_angular_momentum"
+reference_status = "interim_0b2e6bb"
+reference_path = "notes/audit/upstream_histories/conserve_angular_momentum.tsv"
+required_termination = "he_core_mass_limit"
+
+[[cases]]
+suite = "star"
+case = "conv_core_cpm"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "xa_central_lower_limit"
+
+[[cases]]
+suite = "star"
+case = "custom_colors"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "my termination condition"
+inherit_default_tolerances = false
+
+[cases.final_tolerances]
+rel_star_age = 0.02
+log_L = 0.02
+log_Teff = 0.01
+log_R = 0.02
+
+[cases.track_tolerances]
+log_L = 0.15
+log_Teff = 0.05
+log_R = 0.10
+
+[[cases]]
+suite = "star"
+case = "custom_rates"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "log_center_temp_upper_limit"
+
+[[cases]]
+suite = "star"
+case = "diffusion_smoothness"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "max_age"
+
+[[cases]]
+suite = "star"
+case = "extended_convective_penetration"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "xa_central_lower_limit"
+
+[[cases]]
+suite = "star"
+case = "gyre_in_mesa_bcep"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "xa_central_lower_limit"
+uses_pulsation_scaffolding = true
+scaffolding_issue = "#170"
+
+[[cases]]
+suite = "star"
+case = "gyre_in_mesa_envelope"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "steps_to_take_before_terminate|extras_finish_step"
+uses_pulsation_scaffolding = true
+scaffolding_issue = "#170"
+
+[[cases]]
+suite = "star"
+case = "gyre_in_mesa_ms"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "xa_central_lower_limit"
+uses_pulsation_scaffolding = true
+scaffolding_issue = "#170"
+
+[[cases]]
+suite = "star"
+case = "gyre_in_mesa_rsg"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "max_model_number|extras_finish_step"
+uses_pulsation_scaffolding = true
+scaffolding_issue = "#170"
+
+[[cases]]
+suite = "star"
+case = "gyre_in_mesa_spb"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "xa_central_lower_limit"
+uses_pulsation_scaffolding = true
+scaffolding_issue = "#170"
+
+[[cases]]
+suite = "star"
+case = "gyre_in_mesa_wd"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "log_Teff_lower_limit"
+uses_pulsation_scaffolding = true
+scaffolding_issue = "#170"
+
+[[cases]]
+suite = "star"
+case = "hb_2M"
+reference_status = "interim_0b2e6bb"
+reference_path = "notes/audit/upstream_histories/hb_2M.tsv"
+required_termination = "xa_central_lower_limit"
+
+[[cases]]
+suite = "star"
+case = "high_mass"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "xa_central_lower_limit"
+
+[[cases]]
+suite = "star"
+case = "high_rot_darkening"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "xa_central_lower_limit"
+
+[[cases]]
+suite = "star"
+case = "high_z"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "xa_central_lower_limit"
+
+[[cases]]
+suite = "star"
+case = "hot_cool_wind"
+reference_status = "interim_0b2e6bb"
+reference_path = "notes/audit/upstream_histories/hot_cool_wind.tsv"
+required_termination = "log_L_upper_limit"
+
+[[cases]]
+suite = "star"
+case = "hse_riemann"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "max_age"
+
+[[cases]]
+suite = "star"
+case = "irradiated_planet"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "max_age"
+
+[[cases]]
+suite = "star"
+case = "low_z"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "xa_central_lower_limit"
+
+[[cases]]
+suite = "star"
+case = "magnetic_braking"
+reference_status = "interim_0b2e6bb"
+reference_path = "notes/audit/upstream_histories/magnetic_braking.tsv"
+required_termination = "xa_central_lower_limit"
+
+[[cases]]
+suite = "star"
+case = "make_brown_dwarf"
+reference_status = "interim_0b2e6bb"
+reference_path = "notes/audit/upstream_histories/make_brown_dwarf.tsv"
+required_termination = "max_age"
+
+[[cases]]
+suite = "star"
+case = "make_co_wd"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "log_L_lower_limit"
+
+[[cases]]
+suite = "star"
+case = "make_env"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "max_age"
+
+[[cases]]
+suite = "star"
+case = "make_he_wd"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "max_age"
+
+[[cases]]
+suite = "star"
+case = "make_metals"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "xa_central_lower_limit"
+
+[[cases]]
+suite = "star"
+case = "make_o_ne_wd"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "log_L_lower_limit"
+
+[[cases]]
+suite = "star"
+case = "make_planets"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "max_age"
+
+[[cases]]
+suite = "star"
+case = "make_pre_ccsn_13bvn"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "fe_core_infall_limit"
+
+[[cases]]
+suite = "star"
+case = "make_sdb"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "xa_central_upper_limit"
+
+[[cases]]
+suite = "star"
+case = "make_zams"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "Lnuc_div_L_zams_limit"
+
+[[cases]]
+suite = "star"
+case = "make_zams_low_mass"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "Lnuc_div_L_zams_limit"
+
+[[cases]]
+suite = "star"
+case = "make_zams_ultra_high_mass"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "Lnuc_div_L_zams_limit"
+
+[[cases]]
+suite = "star"
+case = "ns_c"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "power_nuc_burn_upper_limit"
+
+[[cases]]
+suite = "star"
+case = "ns_h"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "max_age"
+
+[[cases]]
+suite = "star"
+case = "ns_he"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "power_nuc_burn_upper_limit"
+
+[[cases]]
+suite = "star"
+case = "other_physics_hooks"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "xa_central_lower_limit"
+
+[[cases]]
+suite = "star"
+case = "pisn"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "fe_core_infall_limit|log_Rsurf_upper_limit|remnant_mass_min_limit|Star is unbound"
+
+[[cases]]
+suite = "star"
+case = "ppisn"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "Successful test: evolved 100 days past first relax"
+
+[[cases]]
+suite = "star"
+case = "radiative_levitation"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "max_age"
+
+[[cases]]
+suite = "star"
+case = "relax_composition_j_entropy"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "xa_central_lower_limit"
+
+[[cases]]
+suite = "star"
+case = "rsp_BEP"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "RSP_max_num_periods|max_model_number"
+
+[[cases]]
+suite = "star"
+case = "rsp_BLAP"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "max_model_number|extras_finish_step"
+
+[[cases]]
+suite = "star"
+case = "rsp_Cepheid"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "extras_finish_step"
+
+[[cases]]
+suite = "star"
+case = "rsp_Delta_Scuti"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "extras_finish_step"
+
+[[cases]]
+suite = "star"
+case = "rsp_RR_Lyrae"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "extras_finish_step"
+
+[[cases]]
+suite = "star"
+case = "rsp_Type_II_Cepheid"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "RSP_max_num_periods|max_model_number"
+
+[[cases]]
+suite = "star"
+case = "rsp_check_2nd_crossing"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "extras_finish_step"
+
+[[cases]]
+suite = "star"
+case = "rsp_gyre"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "extras_finish_step"
+uses_pulsation_scaffolding = true
+scaffolding_issue = "#170"
+
+[[cases]]
+suite = "star"
+case = "rsp_save_and_load_file"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "extras_finish_step|max_model_number"
+
+[[cases]]
+suite = "star"
+case = "semiconvection"
+reference_status = "interim_0b2e6bb"
+reference_path = "notes/audit/upstream_histories/semiconvection.tsv"
+required_termination = "xa_central_lower_limit"
+pr_ci = true
+
+[[cases]]
+suite = "star"
+case = "simplex_solar_calibration"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "max_model_number|extras_finish_step"
+
+[[cases]]
+suite = "star"
+case = "split_burn_big_net"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "xa_central_lower_limit"
+
+[[cases]]
+suite = "star"
+case = "starspots"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "max_age"
+
+[[cases]]
+suite = "star"
+case = "timing"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "xa_central_lower_limit"
+
+[[cases]]
+suite = "star"
+case = "twin_studies"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "xa_central_lower_limit"
+
+[[cases]]
+suite = "star"
+case = "tzo"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "PASS: Have reached requested NS mass"
+
+[[cases]]
+suite = "star"
+case = "wd_acc_small_dm"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "max_age"
+
+[[cases]]
+suite = "star"
+case = "wd_aic"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "PASS: A=20 electron captures have started a thermal runaway in the core"
+
+[[cases]]
+suite = "star"
+case = "wd_c_core_ignition"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "power_nuc_burn_upper_limit"
+
+[[cases]]
+suite = "star"
+case = "wd_cool_0.6M"
+reference_status = "interim_0b2e6bb"
+reference_path = "notes/audit/upstream_histories/wd_cool_0.6M.tsv"
+required_termination = "log_center_temp_lower_limit"
+
+[[cases]]
+suite = "star"
+case = "wd_diffusion"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "Teff_lower_limit"
+
+[[cases]]
+suite = "star"
+case = "wd_he_shell_ignition"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "power_he_burn_upper_limit"
+
+[[cases]]
+suite = "star"
+case = "wd_nova_burst"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "extras_check_model"
+
+[[cases]]
+suite = "star"
+case = "wd_stable_h_burn"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "star_mass_max_limit"
+
+[[cases]]
+suite = "star"
+case = "zams_to_cc_80"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "fe_core_infall_limit"
+
+[[cases]]
+suite = "binary"
+case = "double_bh"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "extras_binary_finish_step"
+
+[[cases]]
+suite = "binary"
+case = "evolve_both_stars"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "accretor_overflow_terminate"
+
+[[cases]]
+suite = "binary"
+case = "jdot_gr_check"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "max_age|extras_binary_finish_step"
+
+[[cases]]
+suite = "binary"
+case = "jdot_ls_check"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "max_age|max_model_number"
+
+[[cases]]
+suite = "binary"
+case = "jdot_ml_check"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "max_age|extras_binary_finish_step"
+
+[[cases]]
+suite = "binary"
+case = "star_plus_point_mass"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "xa_central_lower_limit"
+
+[[cases]]
+suite = "binary"
+case = "star_plus_point_mass_explicit_mdot"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "xa_central_lower_limit"
+
+[[cases]]
+suite = "binary"
+case = "wind_fed_bhhmxb"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "xa_central_lower_limit"
+
+[[cases]]
+suite = "astero"
+case = "astero_adipls"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "xa_central_lower_limit"
+uses_pulsation_scaffolding = true
+scaffolding_issue = "#171"
+
+[[cases]]
+suite = "astero"
+case = "astero_gyre"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "xa_central_lower_limit"
+uses_pulsation_scaffolding = true
+scaffolding_issue = "#170"
+
+[[cases]]
+suite = "astero"
+case = "example_astero"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "xtra1"
+uses_pulsation_scaffolding = true
+scaffolding_issue = "#171"
+
+[[cases]]
+suite = "astero"
+case = "fast_from_file"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "xtra1"
+uses_pulsation_scaffolding = true
+scaffolding_issue = "#170"
+
+[[cases]]
+suite = "astero"
+case = "fast_newuoa"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "xtra1"
+
+[[cases]]
+suite = "astero"
+case = "fast_scan_grid"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "xtra1"
+uses_pulsation_scaffolding = true
+scaffolding_issue = "#171"
+
+[[cases]]
+suite = "astero"
+case = "fast_simplex"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "xtra1"
+uses_pulsation_scaffolding = true
+scaffolding_issue = "#171"
+
+[[cases]]
+suite = "astero"
+case = "surface_effects"
+reference_status = "no_reference_yet"
+reference_path = ""
+required_termination = "max_model_number"
+uses_pulsation_scaffolding = true
+scaffolding_issue = "#171"

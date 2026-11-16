@@ -40,21 +40,12 @@ fn main() {
         || out_arg.ends_with(std::path::MAIN_SEPARATOR)
         || out_path.is_dir();
 
-    let logs_opts = if is_logs_dir {
-        StarLogsOptions {
-            output_root: Some(out_path),
-            explicit_history_file: None,
-            history_interval_override: (!respect_intervals).then_some(1),
-            write_profiles_override: Some(write_profiles),
-        }
-    } else {
-        StarLogsOptions {
-            output_root: None,
-            explicit_history_file: Some(out_path),
-            history_interval_override: (!respect_intervals).then_some(1),
-            write_profiles_override: Some(false),
-        }
-    };
+    let logs_opts = StarLogsOptions::from_target(
+        out_path,
+        is_logs_dir,
+        respect_intervals,
+        write_profiles,
+    );
 
     let rep = match run_test_suite_case_with_logs(
         Path::new(&args[1]),

@@ -284,7 +284,7 @@ pub fn star_evolve_step(
                 }
             }
         };
-        if let Ok(rep) = attempt {
+        if let Ok(ref rep) = attempt {
             if rep.converged && !force_outer_retry {
                 model.model_number += 1;
                 model.star_age += dt_try / SECYER;
@@ -295,10 +295,19 @@ pub fn star_evolve_step(
                     model, dt_try, prev_dt_old, prev_dt_limit_ratio_old,
                     retries, &mut ts_action, &mut ts_rep,
                 );
+                if crate::step_trace::enabled(model.model_number) {
+                    eprintln!(
+                        "[trace] step model={} dt={:.4e} retries={} action={:?} \
+                         dt_next={:.4e} reason={:?} varcontrol={:.3e} mdot={:.3e}",
+                        model.model_number, dt_try, retries, ts_action,
+                        ts_rep.dt_next, ts_rep.reason, ts_rep.varcontrol,
+                        model.mstar_dot,
+                    );
+                }
                 match ts_action {
                     TimestepAction::KeepGoing => {
                         return Ok(finalize_accepted_step(
-                            model, &rep, ts_rep.varcontrol, ts_rep.dt_next,
+                            model, rep, ts_rep.varcontrol, ts_rep.dt_next,
                             dt_try, rsp2_e_old, retries, num_splits, num_merges,
                         ));
                     }
@@ -316,6 +325,25 @@ pub fn star_evolve_step(
                     }
                 }
             }
+        }
+        if crate::step_trace::enabled(model.model_number + 1) {
+            let why = match &attempt {
+                Ok(rep) if rep.converged && force_outer_retry => {
+                    String::from("implicit wind redo requested outer retry")
+                }
+                Ok(rep) if rep.converged => {
+                    String::from("timestep controller requested retry")
+                }
+                Ok(rep) => format!(
+                    "solver did not converge (iters={}, rmax={:.3e}, cmax={:.3e})",
+                    rep.iterations, rep.max_residual, rep.max_correction
+                ),
+                Err(e) => format!("error: {e}"),
+            };
+            eprintln!(
+                "[trace] retry model={} dt={:.4e} retries={} why={}",
+                model.model_number + 1, dt_try, retries, why,
+            );
         }
         model.dt_limit_ratio_old = prev_dt_limit_ratio_old;
         model.aux.step_hist.rotational_mdot_boost_old = prev_rot_boost_old;

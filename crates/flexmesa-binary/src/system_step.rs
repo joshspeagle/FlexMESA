@@ -89,11 +89,23 @@ impl BinarySystem {
         let implicit_mode = !self.ignore_rlof_flag && self.controls.max_tries_to_achieve > 0;
         let max_tries = self.controls.max_tries_to_achieve.max(1) as usize;
 
+        let tracing = flexmesa_star::step_trace::enabled(self.model_number + 1);
         for outer_retry in 0..16_usize {
             if outer_retry > 0 {
                 self.record_retry_holds(&mut retry_holds);
                 self.restore_snapshot(&pre_step_snap)?;
                 self.apply_retry_holds(&retry_holds);
+            }
+            if tracing {
+                eprintln!(
+                    "[trace] binary model={} outer_retry={outer_retry} dt_try={dt_try:.4e} \
+                     implicit={implicit_mode} donor_i={} mtransfer={:.3e} gaps=[{:+.4e},{:+.4e}]",
+                    self.model_number + 1,
+                    self.donor_i,
+                    self.mtransfer_rate,
+                    self.rl_relative_gap[0],
+                    self.rl_relative_gap[1],
+                );
             }
             if !implicit_mode {
                 let pre_mdot = if self.ignore_rlof_flag { 0.0 } else { self.mtransfer_rate };

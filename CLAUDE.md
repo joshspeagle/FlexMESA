@@ -4,8 +4,8 @@
 
 ## Start here
 
-1. **[Issue #140](https://github.com/joshspeagle/FlexMESA/issues/140)**: the **only** active work tracker (decisions, phases, parallel sets, collision groups, and open work packages). Take work solely from unclaimed sub-issues of `#140`.
-2. [`notes/SCOPE.md`](notes/SCOPE.md): what is in scope and the exact `v0.1.0` definition.
+1. **[Issue #140](https://github.com/joshspeagle/FlexMESA/issues/140)**: the **only** active work tracker (decisions, phases, parallel sets, collision groups, and open work packages). Take work solely from unclaimed sub-issues of `#140`; the earlier epics and tier issues (`#89`, `#91`–`#96`, `#109`, `#110`, `#114`–`#121`, `#137`, `#139`) were closed on 2026-11-16 as superseded by `#140`.
+2. [`notes/SCOPE.md`](notes/SCOPE.md): written scope and the `v0.1.0` definition (`90 star`, `8 binary`, and `8 astero` cases in MESA `26.4.1` running unmodified inlists to upstream's termination and meeting strict-mode history-harness tolerances; exact module goldens; cross-machine bit-identical strict mode; zero undeclared gaps; zero departures from upstream).
 3. [`notes/audit/README.md`](notes/audit/README.md), [`notes/audit/TRACKER.md`](notes/audit/TRACKER.md), [`notes/audit/measurements.md`](notes/audit/measurements.md), and [`notes/audit/coverage-map.md`](notes/audit/coverage-map.md): whole-repository audit findings (`T1-*`, `T2-*`, `C1-*`, `F1-*` to `F4-*`, `N1-*`, `G1-*`) and baseline measurements against real Fortran MESA.
 4. [`notes/DECISIONS.md`](notes/DECISIONS.md): settled architectural, numerical, and governance decisions.
 5. Standing path-scoped rules in [`.claude/rules/verification-and-governance.md`](.claude/rules/verification-and-governance.md) and [`.claude/rules/docs-upkeep.md`](.claude/rules/docs-upkeep.md) (mirrored byte-for-byte in `.agents/rules/`).
@@ -28,18 +28,25 @@
 
 1. **Upstream Reference (`#141`)**:
    - MESA release `26.4.1` is the single reference. Until `#141` lands, bundled test inputs come from MESA `main` at commit `0b2e6bb`; any comparison against `0b2e6bb` histories in `notes/audit/upstream_histories/` must be labelled `"interim reference"` and is never used for package acceptance.
-2. **Parity First, Zero Option Flags (`#145`, `#169`)**:
-   - Until `v0.1.0`, `FlexMESA` reproduces MESA `26.4.1` including its bugs, with no option flags for alternative physics or integrators. The only run-level switch is the numerics mode (`#165`).
-   - When an upstream bug or clear improvement is identified, open a `[Deferred]` issue under `#169` citing the upstream `file:line` and mathematical mechanism, and reproduce upstream's behaviour. If upstream cannot be reproduced exactly, stop and ask the project lead.
-3. **One Rust Source, Two Numerics Modes (`#165`)**:
-   - **Strict mode (default)**: correctly rounded elementary functions via `flexmesa-math`, no fused multiply-add (`mul_add`), and upstream's exact order of operations. Strict mode must be bit-identical across hardware architectures and thread counts, and is the **only** mode judged against MESA.
+2. **Parity First, Zero Option Flags & Removal of Existing Departures (`#145`, `#169`)**:
+   - Until `v0.1.0`, `FlexMESA` reproduces MESA `26.4.1` including its bugs, with no algorithm option flags for alternatives. The only run-level switch is the numerics mode (`strict` or `fast`, `#165`), which changes arithmetic and nothing else.
+   - When an upstream bug or clear improvement is identified, open a `[Deferred]` issue labelled `deferred` under `#169` citing the upstream `file:line`, mechanism, and proposed change; do not implement it before `v0.1.0`.
+   - **Existing departures are removed, not kept**: code already in the repository that improves on or "fixes" upstream (`#175`–`#178`) must be reverted back to upstream behaviour, with a `#169` backlog issue recording what was removed.
+   - If an upstream behaviour cannot be reproduced exactly (for example, dependence on uninitialized memory or compiler-specific evaluation), stop and ask the project lead rather than choosing a substitute behaviour.
+3. **One Rust Source, Two Numerics Modes & Three Fidelity Levels (`#165`)**:
+   - **Strict mode (default)**: correctly rounded elementary functions via `flexmesa-math`, no fused multiply-add (`mul_add`), and upstream's exact order of operations (no algebraic rearrangement of formulas on the strict path). Strict mode is the **only** mode judged against MESA.
    - **Fast mode**: platform math, FMA, and vectorization permitted, built from the same Rust physics source and validated against strict mode within stated tolerances.
-   - Once `#165` lands, physics crates must never call platform transcendental methods (`f64::exp`, `ln`, `log10`, `powf`, `powi`, ...) or `mul_add` directly.
-4. **Canonical Rust, Python Front End, Derived JAX (`#166`)**:
-   - Rust (`crates/`) is canonical. JAX (`src/flexmesa/`) is a derived layer for automatic differentiation and batching, validated against Rust strict mode and **never** treated as a physics oracle.
-   - The JAX `star`, `binary`, and `astero` engine code is **frozen** until the Rust engine passes the upstream-history harness (`#166`); do not edit frozen JAX engine files.
-5. **Bundled Codes & Plotting (`#170`–`#173`)**:
-   - Everything MESA ships is in scope: `GYRE` (`#170`) and `ADIPLS` (`#171`) are required for `v0.1.0` (the existing in-house pulsation solver is scaffolding and no case depending on it counts as passing). `STELLA` (`#172`) and the 32 `star/dev_cases_*` development cases are confirmed for after `v0.1.0`. Python plotting replacing `pgstar` and `pgbinary` is built incrementally alongside the port (`#173`).
+   - **Three numerical fidelity levels**:
+     1. *Level 1*: Strict mode is bit-identical across machines and thread counts (hard requirement, tested in CI on two runner types).
+     2. *Level 2*: Strict-mode kernels are bit-identical to MESA wherever operations can be made the same in the same order (hard requirement per kernel, tested against exact hexadecimal MESA outputs).
+     3. *Level 3*: Whole trajectories match MESA within the history-harness tolerances (`#143`), tracking the first step at which histories differ toward zero.
+   - Physics crates must never call platform transcendental methods (`f64::exp`, `ln`, `log10`, `powf`, `powi`, ...) or `mul_add` directly once `#165` lands.
+4. **Canonical Rust, Python Front End, Derived JAX (`#166`, superseding `DECISIONS #6` & `#7`)**:
+   - Rust (`crates/`) is canonical. JAX (`src/flexmesa/`) is a derived layer for automatic differentiation and batching, validated against Rust strict mode and **never** treated as an upstream parity oracle (`DECISIONS #9` updated).
+   - The JAX `star`, `binary`, and `astero` engine code is **frozen** until the Rust engine passes the upstream-history harness (`#143`, `#166`); do not edit frozen JAX engine files.
+5. **Scope, Test-Driven Port Order, Bundled Codes & Plotting (`notes/SCOPE.md`, `#147`, `#170`–`#173`)**:
+   - Port order is derived from what the next test cases need using the per-case unsupported-feature report (`#147`), never from what is easiest to port.
+   - Everything MESA ships is in scope: `GYRE` (`#170`) and `ADIPLS` (`#171`) are ported when test cases need them and are required for `v0.1.0` (the existing in-house pulsation solver is scaffolding and no case depending on it counts as passing). `STELLA` (`#172`) and the 32 `star/dev_cases_*` development cases are confirmed for after `v0.1.0`. Python plotting replacing `pgstar` and `pgbinary` is built incrementally alongside the port (`#173`).
 
 ## Commands
 

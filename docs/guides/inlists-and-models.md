@@ -131,10 +131,11 @@ with tempfile.TemporaryDirectory() as tmpdir:
 
 ---
 
-## 3. ASCII `.mod` Files and Bit-Identical Binary `photos/` Checkpoints
+## 3. ASCII `.mod` Files, `LOGS/` History & Profile Output, and Binary `photos/` Checkpoints
 
-`StarModel` supports two complementary serialization formats:
+`StarModel` and the `inlist` stage runners support upstream MESA model, log, and checkpoint formats:
 
+- **Incremental `LOGS/` History, Radial Profiles & Binary History (`history.data`, `profileN.data`, `profiles.index`, `binary_history.data`)**: In Rust (`run_inlist_stage_with_logs`, `run_test_suite_case_with_logs`, `StarLogsWriter`, `run_binary_test_suite_case_with_logs`, `BinaryLogsWriter`) and the `star_case_trace` / `binary_case_trace` drivers (plus `StarModel.to_profile_str()` in Python, which formats the 6-line-header MESA `profileN.data` snapshot), log emission honors `&star_job` (`history_columns_file`, `profile_columns_file`, `write_profile_when_terminate`, `filename_for_profile_when_terminate`, `profile_starting_model`), `&controls` (`log_directory`, `star_history_name`, `star_history_header_name`, `history_interval`, `write_profiles_flag`, `profile_interval`, `priority_profile_interval`, `profile_data_header_suffix`, `max_num_profile_models`, `max_num_profile_zones`, `burn_min1`, `burn_min2`, `center_avg_value_dq`, `surface_avg_abundance_dq`), `&binary_job` (`binary_history_columns_file`), and `&binary_controls` (`log_directory`, `history_name`, `history_interval`, `append_to_star_history`), flushing each recorded history row immediately and writing `profileN.data` before updating `profiles.index`. (The default Python `run_test_suite_case` helper runs in-memory without writing `LOGS/` unless invoked via the log-emitting Rust drivers.)
 - **ASCII `.mod` Files (`to_mod_str`, `from_mod_str`, `write_mod_file`, `from_mod_file`)**: Human-readable MESA model files storing header scalars (`M/Msun`, `model_number`, `star_age`, `net_name`, `species`, `n_shells`), per-zone structural variables (`lnd`, `lnT`, `lnR`, `L`, `dq`), and isotope mass fractions $X_{i,k}$ formatted in scientific notation.
 - **Binary `photos/` Snapshots (`to_photo_bytes`, `from_photo_bytes`, `verify_photo_restart`)**: Exact IEEE-754 little-endian binary dumps of every primary, old, and start-of-step solver state array plus mass-change heating history (`eps_mdot_old`), rotation angular momentum, and timestep controller state (`dt`, `dt_old`, `varcontrol`, step-history scalars). Restoring from a binary photo guarantees **zero-ULP bit-identical evolution** compared to an uninterrupted run (`verify_photo_restart`).
 

@@ -87,7 +87,9 @@ pub struct StarControls {
     pub dxdt_nuc_factor: f64,
     /// Plasma screening prescription (`ScreeningMode::Extended` default).
     pub screening_mode: ScreeningMode,
-    /// Whether to compute the Brunt-Väisälä composition term $B$ and $N^2$.
+    /// Whether to compute the Brunt-Väisälä composition term $B$ (`calculate_Brunt_B`, `true` default, `controls.defaults:7915`).
+    pub calculate_brunt_b: bool,
+    /// Whether to compute the Brunt-Väisälä frequency $N^2$ (`calculate_Brunt_N2`, `true` default).
     pub calculate_brunt_n2: bool,
     /// Whether to use the $\nabla \ln \mu_X$ form for Brunt $B$.
     pub use_brunt_gradmux_form: bool,
@@ -533,6 +535,8 @@ pub struct StarControls {
     pub mix_wind: crate::controls_mix_wind::MixWindControls,
     /// Core-boundary thresholds, extended stopping criteria, and timestep limits.
     pub ts_stop: crate::controls_timestep_stop::TimestepStopControls,
+    /// History, radial profile, and report-averaging output controls (`controls.defaults:216-857`).
+    pub output: crate::controls_output::OutputControls,
 }
 
 impl StarControls {

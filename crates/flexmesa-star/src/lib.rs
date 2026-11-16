@@ -65,6 +65,7 @@ pub mod case_staging;
 pub mod controls;
 mod controls_defaults;
 pub mod controls_mix_wind;
+pub mod controls_output;
 pub mod controls_timestep_stop;
 pub mod core_boundaries;
 pub mod diffusion;
@@ -89,6 +90,9 @@ mod inlist_populate_phase5b;
 pub mod inlist_runner;
 pub mod job_controls;
 pub mod mdot_redo;
+pub mod mesa_history;
+pub mod mesa_log_reader;
+pub mod mesa_profile;
 pub mod mesh;
 pub mod mesh_adjust;
 pub(crate) mod mesh_remap;
@@ -110,6 +114,7 @@ pub mod pulse_modes;
 pub mod pulse_utils;
 pub mod relax;
 pub mod relax_comp;
+pub mod report_utils;
 pub mod riemann;
 pub mod riemann_ad;
 pub mod riemann_eqns;
@@ -187,10 +192,12 @@ pub use controls_mix_wind::{
     MixWindControls, OvershootParamSet, PredictiveParamSet,
     NUM_OVERSHOOT_PARAM_SETS, NUM_PREDICTIVE_PARAM_SETS,
 };
+pub use controls_output::OutputControls;
 pub use controls_timestep_stop::{TimestepStopControls, MAX_DX_LIMIT_CTRLS};
 pub use core_boundaries::{
-    compute_core_masses, compute_power_categories, snapshot_step_history_old,
-    CoreMasses, PowerCategories,
+    compute_core_masses, compute_power_categories, get_info_at_q,
+    k_for_q_1based, snapshot_step_history_old, CoreBoundaryInfo, CoreMasses,
+    PowerCategories,
 };
 pub use diffusion::{
     do_element_diffusion, eval_burgers_velocities, eval_caplan_ocp_dstar,
@@ -202,7 +209,8 @@ pub use eps_grav::{
 };
 pub use eps_mdot::{
     calculate_eps_mdot, calculate_eps_mdot_with_change,
-    eval_specific_total_energy_profile, find_mass_flux, PrevMassState,
+    eval_cell_specific_total_energy, eval_specific_total_energy_profile,
+    find_mass_flux, PrevMassState,
 };
 pub use evolve::{
     restore_from_old, star_evolve, star_evolve_step, EvolveStepReport,
@@ -247,9 +255,29 @@ pub use hydro_vars::{
 };
 pub use inlist::{parse_rn_stages, InlistBundle, RnStage, SectionControls};
 pub use inlist_runner::{
-    run_case_list, run_inlist_stage, run_test_suite_case,
+    run_case_list, run_inlist_stage, run_inlist_stage_with_logs,
+    run_test_suite_case, run_test_suite_case_with_logs,
     verify_photo_restart_parity, CaseRunReport, DefaultStarExtras,
-    ExtrasDirective, StageRunReport, StarExtras, TovGrStarExtras,
+    ExtrasDirective, StageRunReport, StarExtras, StarLogsOptions,
+    TovGrStarExtras,
+};
+pub use mesa_history::{
+    default_star_history_specs, evaluate_star_history_row,
+    format_star_history_data_line, format_star_history_data_line_with_extra,
+    format_star_history_file_header,
+    format_star_history_file_header_with_extra, parse_star_history_columns,
+    resolve_star_history_columns, HistoryColumnSpec, HistoryIsoQuery,
+    IncrementalHistoryWriter, MesaCellValue, DEFAULT_STAR_HISTORY_COLUMNS_TEXT,
+};
+pub use mesa_log_reader::{
+    read_mesa_log_file, read_mesa_log_str, read_profiles_index_file,
+    read_profiles_index_str, MesaHeaderValue, MesaLogTable,
+};
+pub use mesa_profile::{
+    default_star_profile_specs, format_star_profile_text,
+    parse_star_profile_columns, resolve_star_profile_columns,
+    ProfileColumnSpec, ProfilesIndex, ProfilesIndexEntry, StarLogsWriter,
+    DEFAULT_STAR_PROFILE_COLUMNS_TEXT,
 };
 pub use mesh_adjust::{
     do_adjust_mesh, eval_mesh_gval, plan_mesh, remap_onto_dq,
@@ -311,6 +339,19 @@ pub use relax::{
     relax_mass_to_target, relax_tau_factor_to_target, relax_to_remove_h_env,
 };
 pub use relax_comp::relax_composition_with_henyey;
+pub use report_utils::{
+    center_avg_x_by_name, center_value, center_value_by,
+    eval_conv_and_mx_summary, eval_conv_time_scale_zone, eval_conv_time_scales,
+    eval_photosphere_info, eval_surf_avg_rotation_info,
+    eval_upstream_omega_crit, format_mesa_dbl, format_mesa_dbl_width,
+    format_mesa_header_str, format_mesa_header_str_width, format_mesa_int,
+    format_mesa_int_width, format_mesa_txt, format_mesa_txt_width,
+    parse_quoted_include_arg, push_mesa_6line_header, safe_log10,
+    surface_avg_x_by_name, write_mesa_dbl_width, write_mesa_int_width,
+    write_mesa_txt_width, ConvAndMixSummary, PhotosphereInfo,
+    StepReportContext, SurfAvgRotationInfo, MESA_REF_VERSION_NUMBER,
+    STAR_LOG_COL_WIDTH,
+};
 pub use riemann::{
     eval_hllc_face, eval_hllc_surface_face, eval_riemann_momentum_residual,
     eval_riemann_profile, HllcFaceState,

@@ -11,6 +11,7 @@ description = "Binary star orbital mechanics, Roche-lobe overflow, angular momen
 flexmesa-autodiff = { path = "../flexmesa-autodiff" }
 flexmesa-const = { path = "../flexmesa-const" }
 flexmesa-math = { path = "../flexmesa-math" }
+flexmesa-schema = { path = "../flexmesa-schema" }
 flexmesa-star = { path = "../flexmesa-star" }
 
 [lints]

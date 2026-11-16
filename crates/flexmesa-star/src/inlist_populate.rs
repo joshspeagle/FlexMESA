@@ -85,6 +85,7 @@ impl InlistBundle {
         self.populate_star_job();
         self.populate_eos_kap();
         self.populate_controls_physics();
+        self.populate_controls_output();
         self.populate_controls_solver();
         self.populate_controls_limits();
         self.populate_controls_phase5b();
@@ -127,6 +128,7 @@ impl InlistBundle {
             set_initial_cumulative_energy_error, set_uniform_initial_composition,
             relax_initial_to_xaccrete, set_initial_v_center, set_initial_l_center,
             new_rti_flag, pgstar_flag,
+            write_profile_when_terminate, profile_starting_model,
         ]);
         map_f64s!(sj, j, [
             pre_ms_t_c, pre_ms_guess_rho_c, pre_ms_d_log10_p,
@@ -140,6 +142,7 @@ impl InlistBundle {
             save_model_filename, save_photo_filename, save_pulse_data_filename,
             pulse_data_format, save_stella_data_filename, h_he_net, co_net, adv_net,
             required_termination_code_string,
+            history_columns_file, profile_columns_file, filename_for_profile_when_terminate,
         ]);
         if let Some(s) = sj.get_str("saved_model_name").or_else(|| sj.get_str("load_model_filename")) {
             j.saved_model_name = s.to_string();
@@ -337,7 +340,7 @@ impl InlistBundle {
             zams_filename, cool_wind_rgb_scheme, cool_wind_agb_scheme, phase_separation_option,
         ]);
         map_bools!(ctrl, c, [
-            use_ledoux_criterion, calculate_brunt_n2, use_brunt_gradmux_form,
+            use_ledoux_criterion, calculate_brunt_b, calculate_brunt_n2, use_brunt_gradmux_form,
             op_split_burn, accrete_same_as_surface,
             accrete_given_mass_fractions, do_element_diffusion, do_conv_premix,
             do_phase_separation, do_phase_separation_heating, use_other_cgrav,
@@ -438,6 +441,79 @@ impl InlistBundle {
         if let Some(v) = ctrl.get_i64("rsp_target_steps_per_cycle").filter(|&v| v > 0) {
             c.rsp_target_steps_per_cycle = v as usize;
         }
+    }
+
+    fn populate_controls_output(&mut self) {
+        let Some(ctrl) = self.sections.get("controls") else {
+            return;
+        };
+        let o = &mut self.controls.output;
+        map_strs!(
+            ctrl,
+            o,
+            [
+                log_directory,
+                star_history_name,
+                star_history_header_name,
+                profiles_index_name,
+                profile_data_prefix,
+                profile_data_suffix,
+                profile_data_header_suffix,
+            ]
+        );
+        map_bools!(
+            ctrl,
+            o,
+            [
+                do_history_file,
+                write_profiles_flag,
+                profile_header_include_sys_details,
+                get_delta_nu_from_scaled_solar,
+                report_max_infall_inside_fe_core,
+            ]
+        );
+        map_f64s!(
+            ctrl,
+            o,
+            [
+                mixing_d_limit_for_log,
+                burn_min1,
+                burn_min2,
+                center_avg_value_dq,
+                surface_avg_abundance_dq,
+                surf_avg_tau_min,
+                surf_avg_tau,
+                nu_max_sun,
+                delta_nu_sun,
+                astero_teff_sun,
+                max_conv_vel_div_csound_maxq,
+                gamma1_limit_max_q,
+                gamma1_limit_max_v_div_vesc,
+                max_x_for_conv_timescale,
+                min_x_for_conv_timescale,
+                max_q_for_conv_timescale,
+                min_q_for_conv_timescale,
+                min_q_for_dt_div_min_dr_div_cs_limit,
+                max_q_for_dt_div_min_dr_div_cs_limit,
+                min_abs_u_div_cs_for_dt_div_min_dr_div_cs_limit,
+                min_abs_du_div_cs_for_dt_div_min_dr_div_cs_limit,
+            ]
+        );
+        if let Some(v) = ctrl.get_i64("min_k_for_dt_div_min_dr_div_cs_limit") {
+            o.min_k_for_dt_div_min_dr_div_cs_limit = v.max(1) as usize;
+        }
+        if let Some(v) = ctrl.get_i64("history_interval") {
+            o.history_interval = v.max(0) as usize;
+        }
+        if let Some(v) = ctrl.get_i64("profile_interval") {
+            o.profile_interval = v.max(0) as usize;
+        }
+        if let Some(v) = ctrl.get_i64("priority_profile_interval") {
+            o.priority_profile_interval = v.max(0) as usize;
+        }
+        ctrl.isize_into(&mut o.max_num_profile_zones, "max_num_profile_zones");
+        ctrl.isize_into(&mut o.max_num_profile_models, "max_num_profile_models");
+        ctrl.isize_into(&mut o.profile_model, "profile_model");
     }
 }
 

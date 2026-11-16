@@ -536,18 +536,33 @@ fn test_compute_core_masses_matches_subcell_find0_oracles() {
     set_hydro_vars(&mut m, false, false).expect("set_hydro_vars");
     let nc = m.species;
     let j_he4 = m.iso_names.iter().position(|n| n == "he4").unwrap();
+    let j_c12 = m.iso_names.iter().position(|n| n == "c12").unwrap();
     m.controls.ts_stop.he_core_boundary_h1_fraction = 0.01;
+    m.controls.ts_stop.co_core_boundary_he4_fraction = 0.10;
     m.controls.ts_stop.neutron_rich_core_boundary_ye_max = 0.49;
-    let (k_he, k_nr) = (m.nz / 2, (3 * m.nz) / 4);
+    let (k_he, k_co, k_nr) = (m.nz / 3, m.nz / 2, (3 * m.nz) / 4);
     for k in 0..m.nz {
         m.xa[k * nc..(k + 1) * nc].fill(0.0);
-        let xh = match (k + 1).cmp(&k_he) {
-            std::cmp::Ordering::Less => 0.70,
-            std::cmp::Ordering::Equal => 0.03,
-            std::cmp::Ordering::Greater => 0.005,
-        };
-        m.xa[k * nc] = xh;
-        m.xa[k * nc + j_he4] = 1.0 - xh;
+        if k + 1 < k_he {
+            m.xa[k * nc] = 0.70;
+            m.xa[k * nc + j_he4] = 0.30;
+        } else if k + 1 == k_he {
+            // `jm1 == j00 == j_he4` between `k_he - 1` and `k_he` -> midpoint `0.5*(qm1 + q00)`
+            // per `set_core_info` (`star/private/report.f90:1232-1243`).
+            m.xa[k * nc] = 0.03;
+            m.xa[k * nc + j_he4] = 0.97;
+        } else if k < k_co - 1 {
+            m.xa[k * nc] = 0.005;
+            m.xa[k * nc + j_he4] = 0.995;
+        } else if k == k_co - 1 {
+            // `jm1 = j_he4 (0.60 > 0.40)` at `k_co - 1`, `j00 = j_c12 (0.95 > 0.05)` at `k_co`
+            // -> `find0(qm1, dm1, q00, d00)` crossover (`report.f90:1232-1250`).
+            m.xa[k * nc + j_he4] = 0.60;
+            m.xa[k * nc + j_c12] = 0.40;
+        } else {
+            m.xa[k * nc + j_he4] = 0.05;
+            m.xa[k * nc + j_c12] = 0.95;
+        }
         m.ye[k] = match (k + 1).cmp(&k_nr) {
             std::cmp::Ordering::Less => 0.50,
             std::cmp::Ordering::Equal => 0.496,
@@ -555,16 +570,31 @@ fn test_compute_core_masses_matches_subcell_find0_oracles() {
         };
     }
     let cores = compute_core_masses(&m);
-    assert_eq!(cores.he_core_k, Some(k_he));
-    assert_eq!(cores.neutron_rich_core_k, Some(k_nr));
     let q_mid = |k: usize| m.q[k] - 0.5 * m.dq[k];
-    let q_he = q_mid(k_he - 1)
-        + ((0.03 - 0.01) / (0.03 - 0.005)) * (q_mid(k_he) - q_mid(k_he - 1));
-    let q_nr = q_mid(k_nr - 1)
-        + ((0.496 - 0.49) / (0.496 - 0.486)) * (q_mid(k_nr) - q_mid(k_nr - 1));
+    let q_he = f64::midpoint(q_mid(k_he - 1), q_mid(k_he));
+    let delta_outer_co = 0.40 - 0.60;
+    let delta_inner_co = 0.95 - 0.05;
+    let q_co = q_mid(k_co - 1)
+        + (-delta_outer_co / (delta_inner_co - delta_outer_co))
+            * (q_mid(k_co) - q_mid(k_co - 1));
+    let q_nr = f64::midpoint(q_mid(k_nr - 1), q_mid(k_nr));
+    assert_eq!(
+        cores.he_bdy.kbdy_1based,
+        flexmesa_star::core_boundaries::k_for_q_1based(&m, q_he) + 1
+    );
+    assert_eq!(
+        cores.co_bdy.kbdy_1based,
+        flexmesa_star::core_boundaries::k_for_q_1based(&m, q_co) + 1
+    );
+    assert_eq!(
+        cores.neutron_rich_bdy.kbdy_1based,
+        flexmesa_star::core_boundaries::k_for_q_1based(&m, q_nr) + 1
+    );
     let m_he = (m.m_center + m.xmstar * q_he) / M_SUN;
+    let m_co = (m.m_center + m.xmstar * q_co) / M_SUN;
     let m_nr = (m.m_center + m.xmstar * q_nr) / M_SUN;
     assert!((cores.he_core_mass - m_he).abs() < 1.0e-12);
+    assert!((cores.co_core_mass - m_co).abs() < 1.0e-12);
     assert!((cores.neutron_rich_core_mass - m_nr).abs() < 1.0e-12);
 }
 

@@ -37,6 +37,7 @@
     clippy::unreadable_literal
 )]
 
+pub mod binary_history;
 pub mod disk;
 pub mod e2e;
 pub mod e2e_extras;
@@ -56,12 +57,22 @@ pub mod system_rlof;
 pub mod system_step;
 pub mod timestep;
 
+pub use binary_history::{
+    BINARY_LOG_COL_WIDTH, BinaryHistoryColumnSpec, BinaryLogsWriter,
+    DEFAULT_BINARY_HISTORY_COLUMNS_TEXT, IncrementalBinaryHistoryWriter,
+    binary_history_row_as_f64_pairs, default_binary_history_specs,
+    evaluate_binary_history_row, format_binary_history_data_line,
+    format_binary_history_file_header, parse_binary_history_columns,
+    resolve_binary_history_columns,
+};
 pub use disk::eval_l2_mass_loss_fraction;
 pub use e2e::{
-    BinaryCaseRunReport, BinaryInlistControls, TIER5_BINARY_CASES,
-    eval_brott_wind_msun_yr, eval_gr_expected_separation_rsun,
+    BinaryCaseRunReport, BinaryInlistControls, BinaryLogsOptions,
+    TIER5_BINARY_CASES, eval_brott_wind_msun_yr,
+    eval_gr_expected_separation_rsun,
     eval_tauris_vdh_expected_separation_rsun, is_tier5_binary_case,
     run_binary_suite, run_binary_test_suite_case,
+    run_binary_test_suite_case_with_logs,
 };
 pub use edd_wind::{
     PointMassEddRetention, bh_initial_equatorial_mass,

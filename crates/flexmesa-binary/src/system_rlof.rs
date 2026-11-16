@@ -84,6 +84,8 @@ pub struct BinaryStepSnapshot {
     pub rl_relative_gap: [f64; 2],
     /// Mass-transfer rate $\dot{M}_{\mathrm{tr}}$ ($\mathrm{g\,s^{-1}}$).
     pub mtransfer_rate: f64,
+    /// Applied step mass-transfer rate `step_mtransfer_rate` ($\mathrm{g\,s^{-1}}$).
+    pub step_mtransfer_rate: f64,
     /// Orbital torque $\dot{J}_{\mathrm{orb}}$ ($\mathrm{g\,cm^2\,s^{-2}}$).
     pub jdot: f64,
     /// Binary age (yr).
@@ -121,6 +123,7 @@ impl BinaryStepSnapshot {
         rl: [f64; 2],
         rl_relative_gap: [f64; 2],
         mtransfer_rate: f64,
+        step_mtransfer_rate: f64,
         jdot: f64,
         binary_age_yr: f64,
         model_number: usize,
@@ -144,6 +147,7 @@ impl BinaryStepSnapshot {
             rl,
             rl_relative_gap,
             mtransfer_rate,
+            step_mtransfer_rate,
             jdot,
             binary_age_yr,
             model_number,

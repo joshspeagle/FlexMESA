@@ -13,6 +13,7 @@ use crate::evolve::star_evolve_step;
 use crate::history::{extract_history_row, HistoryRow};
 use crate::hydro_vars::set_hydro_vars;
 use crate::inlist::{parse_rn_stages, InlistBundle, RnStage};
+use crate::mesa_profile::StarLogsWriter;
 use crate::model::StarModel;
 use crate::model_io::{
     compute_photo_checksum, read_photo_bytes, write_mod_string,
@@ -205,6 +206,20 @@ pub struct CaseRunReport {
     pub assertions_passed: bool,
 }
 
+/// Configuration for incremental MESA `LOGS/` file emission (`history.data`,
+/// `profileN.data`, `profiles.index`) during stage and `test_suite` execution (`#163`).
+#[derive(Debug, Clone, Copy, Default)]
+pub struct StarLogsOptions<'a> {
+    /// Optional root directory under which `<log_directory>/` files are written.
+    pub output_root: Option<&'a Path>,
+    /// Optional explicit output file path for `history.data` (used by `star_case_trace`).
+    pub explicit_history_file: Option<&'a Path>,
+    /// Optional override for `&controls` `history_interval` (`Some(1)` writes every step).
+    pub history_interval_override: Option<usize>,
+    /// Optional override for `&controls` `write_profiles_flag`.
+    pub write_profiles_override: Option<bool>,
+}
+
 /// Executes a single `inlist` stage on `model`, stepping until either a
 /// built-in `&controls` termination limit, an [`ExtrasDirective::Terminate`],
 /// or `max_steps_cap` is reached.
@@ -217,6 +232,22 @@ pub fn run_inlist_stage(
     bundle: &InlistBundle,
     extras: &mut dyn StarExtras,
     max_steps_cap: Option<usize>,
+) -> Result<StageRunReport, StarError> {
+    run_inlist_stage_with_logs(model, bundle, extras, max_steps_cap, None)
+}
+
+/// Executes a single `inlist` stage on `model`, optionally streaming incremental
+/// MESA-format `LOGS/history.data`, `LOGS/profileN.data`, and `LOGS/profiles.index`
+/// through `logs_writer` (`#163`).
+///
+/// # Errors
+/// Returns [`StarError`] if step evolution, log emission, or final `.mod` saving fails.
+pub fn run_inlist_stage_with_logs(
+    model: &mut StarModel,
+    bundle: &InlistBundle,
+    extras: &mut dyn StarExtras,
+    max_steps_cap: Option<usize>,
+    mut logs_writer: Option<&mut StarLogsWriter>,
 ) -> Result<StageRunReport, StarError> {
     let t0 = Instant::now();
     let (mut steps_taken, mut total_newton_iterations, mut total_retries) =
@@ -245,6 +276,9 @@ pub fn run_inlist_stage(
             {
                 termination_code = code;
             }
+        }
+        if let Some(lw) = logs_writer.as_deref_mut() {
+            lw.record_step(model, true, true)?;
         }
     } else {
         for _ in 0..cap {
@@ -295,21 +329,28 @@ pub fn run_inlist_stage(
             let hr = extract_history_row(model);
             history_rows.push(hr);
 
+            let mut will_terminate = false;
             for dir in [check_dir, finish_dir] {
                 if let ExtrasDirective::Terminate(reason) = dir {
                     termination_code = reason;
+                    will_terminate = true;
                     break;
                 }
             }
-            if termination_code != "max_steps_cap"
-                && termination_code != "steps_to_take_before_terminate"
-            {
-                break;
+            if !will_terminate {
+                if let Some(code) =
+                    check_termination_limits_with_history(model, Some(&hr))
+                {
+                    termination_code = code;
+                    will_terminate = true;
+                }
             }
-            if let Some(code) =
-                check_termination_limits_with_history(model, Some(&hr))
-            {
-                termination_code = code;
+            let is_last_cap_step = steps_taken == cap;
+            let is_terminating = will_terminate || is_last_cap_step;
+            if let Some(lw) = logs_writer.as_deref_mut() {
+                lw.record_step(model, steps_taken == 1, is_terminating)?;
+            }
+            if will_terminate {
                 break;
             }
         }
@@ -403,6 +444,28 @@ pub fn run_test_suite_case(
     max_steps_per_stage: Option<usize>,
     verify_restart: bool,
 ) -> Result<CaseRunReport, StarError> {
+    run_test_suite_case_with_logs(
+        orig_case_dir,
+        skip_optional,
+        max_steps_per_stage,
+        verify_restart,
+        StarLogsOptions::default(),
+    )
+}
+
+/// Executes all stages of an upstream MESA `test_suite` case directory while
+/// optionally streaming incremental MESA-format `LOGS/history.data`,
+/// `LOGS/profileN.data`, and `LOGS/profiles.index` files according to `logs_opts` (`#163`).
+///
+/// # Errors
+/// Returns [`StarError`] if `inlist` parsing, stage execution, or log output fails.
+pub fn run_test_suite_case_with_logs(
+    orig_case_dir: &Path,
+    skip_optional: bool,
+    max_steps_per_stage: Option<usize>,
+    verify_restart: bool,
+    logs_opts: StarLogsOptions<'_>,
+) -> Result<CaseRunReport, StarError> {
     let t0 = Instant::now();
     let staging = TempCaseStaging::new(orig_case_dir)?;
     let case_dir = staging.staged_dir.as_path();
@@ -451,7 +514,9 @@ pub fn run_test_suite_case(
                 }
             }
             RnStage::DoOne {
-                inlist, output_mod, ..
+                inlist,
+                output_mod,
+                logs_dir,
             } => {
                 if is_multi_star {
                     if let Some(m1) = current_model.take() {
@@ -487,11 +552,34 @@ pub fn run_test_suite_case(
                     extras.as_mut(),
                 )?;
 
-                let rep = run_inlist_stage(
+                let mut stage_logs = if let Some(exp_hist) =
+                    logs_opts.explicit_history_file
+                {
+                    Some(StarLogsWriter::for_explicit_history_file(
+                        &model,
+                        case_dir,
+                        exp_hist.to_path_buf(),
+                        logs_opts.history_interval_override,
+                    )?)
+                } else if let Some(out_root) = logs_opts.output_root {
+                    Some(StarLogsWriter::for_stage_with_logs_dir(
+                        &model,
+                        case_dir,
+                        out_root,
+                        logs_dir.as_deref(),
+                        logs_opts.history_interval_override,
+                        logs_opts.write_profiles_override,
+                    )?)
+                } else {
+                    None
+                };
+
+                let rep = run_inlist_stage_with_logs(
                     &mut model,
                     &bundle,
                     extras.as_mut(),
                     max_steps_per_stage,
+                    stage_logs.as_mut(),
                 )?;
 
                 if verify_restart && !photo_restart_verified {

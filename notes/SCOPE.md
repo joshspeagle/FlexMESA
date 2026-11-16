@@ -99,7 +99,7 @@ pull request once #143 and #163 exist.
 | Item | Status |
 | :-- | :-- |
 | STELLA port | In scope, after v0.1.0 unless a test case proves to need it (#172) |
-| The 32 upstream development cases (`star/dev_cases_*`) | Proposed for after v0.1.0; not yet confirmed by the project lead |
+| The 32 upstream development cases (`star/dev_cases_*`) | Confirmed for after v0.1.0 (#145) |
 | Upstream bugs and enhancements | Deferred, recorded under #169 |
 | JAX twins of the `star`, `binary` and `astero` engines | Frozen until the Rust engine passes the harness (#166) |
 | Native JAX kernels beyond the existing microphysics | Decided on profiling data (#168) |

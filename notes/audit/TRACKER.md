@@ -96,10 +96,21 @@ case by case).
 
 ## Post-parity backlog
 
-Parent issue #169. Sub-issues so far: #175 (higher-order orbit integrator
-and gravitational-wave eccentricity term), #176 (upstream bug in the
-HELM-edge blend derivatives), #177 (upstream bugs in `check_dX` and
-`sizequ`), #178 (RSP2 "intentional fixes" to verify and remove).
+Parent issue #169, which holds the live register (one row per deferred
+issue, grouped by kind). Every deferred issue carries the `deferred` label
+and exactly one kind label:
+
+| Kind | Label | Title prefix | Issues so far |
+| :-- | :-- | :-- | :-- |
+| Upstream bug, reproduced until v0.1.0 | `upstream-bug` | `[Deferred bug]` | #176, #177, #178, #181, #182, #183 |
+| Enhancement over upstream | `enhancement` | `[Deferred enhancement]` | #175 |
+| In-scope port work scheduled after v0.1.0 (stays under #140) | `deferred-scope` | the package title | #172 |
+
+Status labels: `parity-pending` while FlexMESA code still departs from
+upstream at that point (#175 under #160, #176 under #161, #177 under #152,
+#178 under #162); `needs-confirmation` until the upstream lines have been read
+at tag `26.4.1` (#178). `tracking` marks parent issues that hold no work
+(#140, #169). New deferred issues use the "Deferred" issue template.
 
 ## Data and release assets to plan
 

@@ -1,6 +1,6 @@
 # Verification & Benchmarks Overview
 
-Every numerical kernel, microphysics table evaluator, linear solver, and stellar evolution driver in `FlexMESA` is verified head-to-head against compiled upstream Fortran MESA (`r24.08.1`, `gfortran -O2 -fopenmp` static archives `lib*.a`) across four execution engines:
+Every numerical kernel, microphysics table evaluator, linear solver, and stellar evolution driver in `FlexMESA` is verified head-to-head against compiled upstream Fortran MESA (`main` at commit `0b2e6bb`, `gfortran -O2 -fopenmp` static archives `lib*.a`) across four execution engines:
 
 1. **Upstream Fortran MESA (`gfortran -O2 -fopenmp`)**: Native Fortran 2008 static archives (`libconst.a` through `libstar.a`, `libbinary.a`, and `libastero.a`) linked directly into the `benchmarks/fortran_mesa/` harness.
 2. **Safe Rust (`crates/flexmesa-*`)**: `#![forbid(unsafe_code)]` Cargo workspace crates compiled with `--release`, using monomorphized `DualOrder1<N>` automatic differentiation, Implicit Function Theorem root derivatives, Hirshman et al. (2010) `bcyclic` odd-even block cyclic reduction, and a persistent 4-thread `rayon` worker pool.

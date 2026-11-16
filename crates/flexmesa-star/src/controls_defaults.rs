@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-//! Upstream Fortran MESA (`r24.08.1`) default values for [`StarControls`]
+//! Upstream Fortran MESA (`main` at commit `0b2e6bb`) default values for [`StarControls`]
 //! (`star/defaults/controls.defaults` and `controls_dev.defaults`).
 
 use flexmesa_rates::ScreeningMode;

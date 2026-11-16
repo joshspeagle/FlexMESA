@@ -89,7 +89,7 @@ pub fn filter_limit(x: f64) -> f64 {
 /// Evaluates the upstream 5-point boxcar variation sum for a single structural
 /// variable (`eval_varcontrol` in `star/private/timestep.f90:2337-2353`).
 ///
-/// Note on upstream Fortran MESA (`r24.08.1`) parity (`DECISIONS #9`):
+/// Note on upstream Fortran MESA (`main` at commit `0b2e6bb`) parity (`DECISIONS #9`):
 /// `timestep.f90:2347-2349` computes the 3-point sum at `k = nz - 1`
 /// (`0`-based `nz - 2`) into `sumj` without accumulating `sumterm(j) = sumterm(j) + sumj`
 /// (an upstream dead-store), whereas `k = 2` (`0`-based `1`) IS accumulated at

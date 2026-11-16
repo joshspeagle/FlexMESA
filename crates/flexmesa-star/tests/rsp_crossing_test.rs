@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-//! Upstream Fortran MESA (`r24.08.1`, commit `0b2e6bb`) Cepheid 2nd-crossing
+//! Upstream Fortran MESA (`main` at commit `0b2e6bb`) Cepheid 2nd-crossing
 //! instability-strip boundary interpolation tests (`rsp_check_2nd_crossing`,
 //! Issue `#5`).
 
@@ -35,8 +35,8 @@ fn base_rsp_job() -> StarJobControls {
 #[allow(clippy::too_many_lines)]
 fn test_rsp_lina_and_steffen_edges_match_golden_5m_list() {
     // 13 sampled 2nd-crossing points up to `num_beyond_blue_edge == 2`
-    // (`run_star_extras.f90:223` in MESA `r24.08.1`), storing both exact
-    // 17-digit MESA `r24.08.1` (`FreeEOS`) `LINA` reference values and
+    // (`run_star_extras.f90:223` in MESA `main` at commit `0b2e6bb`), storing both exact
+    // 17-digit MESA `main` at commit `0b2e6bb` (`FreeEOS`) `LINA` reference values and
     // historical MESA `v11461` (`OPAL` EOS) `list` values.
     let golden_pts: [(i64, f64, f64, f64, f64, f64, f64); 13] = [
         (

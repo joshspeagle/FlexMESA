@@ -1,6 +1,6 @@
 # Coming from Fortran MESA
 
-If you have an existing workflow built around upstream Fortran MESA (`r24.08.1` or earlier), `FlexMESA` preserves MESA's physical formulations, control names, `.mod` file formats, and pulsation exports (`GYRE`, `FGONG`, `OSC`) while replacing Fortran namelist executables, 1-based global module state, `run_star_extras.f90` hooks, and X11 `PGSTAR` windows with a modular Safe Rust and Python/JAX library. This guide provides a side-by-side translation reference.
+If you have an existing workflow built around upstream Fortran MESA (`main` at commit `0b2e6bb`, or releases close to it), `FlexMESA` preserves MESA's physical formulations, control names, `.mod` file formats, and pulsation exports (`GYRE`, `FGONG`, `OSC`) while replacing Fortran namelist executables, 1-based global module state, `run_star_extras.f90` hooks, and X11 `PGSTAR` windows with a modular Safe Rust and Python/JAX library. This guide provides a side-by-side translation reference.
 
 ---
 

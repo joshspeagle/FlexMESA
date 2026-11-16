@@ -83,4 +83,4 @@ archive_size_bytes = 40528397
 unpacked_sha256 = ""
 unpacked_size_bytes = 224269900
 test_only = true
-description = "3,142 upstream MESA r24.08.1 golden test_output and test_suite input files for CI parity verification."
+description = "3,142 upstream MESA (main at commit 0b2e6bb) golden test_output and test_suite input files for CI parity verification."

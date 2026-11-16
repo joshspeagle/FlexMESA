@@ -1,6 +1,6 @@
 # Developer & Specifications Archive
 
-This archive preserves the engineering scoping census, dependency DAG analysis, stage-by-stage technical specifications, and historical per-stage benchmark reports generated during the migration of upstream Fortran MESA (`r24.08.1`) into `FlexMESA`'s Three-Tier Hybrid Architecture (`Safe Rust` + `Python/PyO3` + `JAX`).
+This archive preserves the engineering scoping census, dependency DAG analysis, stage-by-stage technical specifications, and historical per-stage benchmark reports generated during the migration of upstream Fortran MESA (`main` at commit `0b2e6bb`) into `FlexMESA`'s Three-Tier Hybrid Architecture (`Safe Rust` + `Python/PyO3` + `JAX`).
 
 For user-facing domain physics, governing equations, and usage examples, see the **[Background & Physics](../concepts/architecture.md)** section. For the unified synthesis of four-way numerical parity and runtime performance comparisons against compiled upstream Fortran MESA static archives (`lib*.a`), see the **[Verification & Benchmarks Overview](../benchmarks/overview.md)**, **[Kernel Performance Scorecards](../benchmarks/kernel-scorecards.md)**, and **[Tolerance & Discrepancy Ledger](../benchmarks/tolerance-and-discrepancy-ledger.md)**.
 

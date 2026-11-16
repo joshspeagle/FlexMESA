@@ -119,7 +119,8 @@ pub(crate) fn write_lina_mode_logs(
             w_buf,
             "{:3} {:15.8E} {:15.8E} {:15.8E} {:15.8E} {:15.8E} {:15.8E} {:15.8E} {:15.8E}",
             nzn + 1 - i,
-            flexmesa_math::log10(grid.t[i]),
+            // `star/private/rsp_lina.f90:1098` calls `dlog10` (#198).
+            flexmesa_math::intrinsic_log10(grid.t[i]),
             grid.r[i] / grid.r[nzn],
             qwk[i] / ek,
             qwkev[i] / ek,

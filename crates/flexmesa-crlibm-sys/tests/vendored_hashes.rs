@@ -192,8 +192,8 @@ fn test_vendored_manifest_hashes_match_all_csrc_and_config_files() {
     }
     assert_eq!(
         recorded.len(),
-        52,
-        "expected 52 tracked vendored/config files"
+        54,
+        "expected 54 tracked vendored/config files"
     );
 
     for required_license in
@@ -253,8 +253,8 @@ fn test_lib_rs_enforces_unsafe_invariants_and_safety_comments() {
         }
     }
     assert_eq!(
-        unsafe_blocks, 21,
-        "expected 21 documented extern call sites"
+        unsafe_blocks, 26,
+        "expected 26 documented extern call sites"
     );
 }
 
@@ -288,6 +288,11 @@ fn test_crlibm_init_is_noop_and_entries_are_thread_reentrant() {
                 flexmesa_crlibm_sys::atanpi_rz(arg),
                 flexmesa_crlibm_sys::cosh_rz(arg),
                 flexmesa_crlibm_sys::sinh_rz(arg),
+                flexmesa_crlibm_sys::log_rn(arg),
+                flexmesa_crlibm_sys::log10_rn(arg),
+                flexmesa_crlibm_sys::exp_rn(arg),
+                flexmesa_crlibm_sys::atan_rn(arg),
+                flexmesa_crlibm_sys::pow_rn(arg, half),
             ] {
                 acc ^= val.to_bits();
                 acc = acc.wrapping_mul(0x0100_0000_01b3);

@@ -70,6 +70,8 @@ pub mod ionization_py;
 pub mod kap_py;
 /// Tier A/B/C bindings for `auto_diff`, `math`, and `mtx`.
 pub mod math_solvers;
+/// Reference-vector `Strict` digest, `Fast`-vs-`Strict` audit, and dispatch timing.
+pub mod math_vec_audit;
 /// Tier B/C bindings for `net` (nuclear networks, analytical Jacobians, burners).
 pub mod net_py;
 /// Tier B bindings for `neu` (Itoh et al. 1996 thermal neutrino losses).
@@ -267,6 +269,7 @@ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     tier_a_parse::register(m)?;
     tier_a_data::register(m)?;
     math_solvers::register(m)?;
+    math_vec_audit::register(m)?;
     interp_1d::register(m)?;
     interp_2d::register(m)?;
     neu_py::register(m)?;

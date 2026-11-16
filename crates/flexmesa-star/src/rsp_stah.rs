@@ -47,6 +47,7 @@ pub fn znvar(
         }
         let d_res_dlnv =
             out.dpv * v + g_m_dtau_div_r2 * (out.opv * v) / (kap * kap);
+        // `rsp_build.f90:906,910` binds `log`/`exp` to `math_lib` via `use rsp_def`.
         v = flexmesa_math::exp(flexmesa_math::log(v) - residual / d_res_dlnv);
     }
     Ok((h, 4.0 * PI * r * r * dtau / kap))
@@ -93,12 +94,13 @@ impl StahStepVars {
             * (self.p_0 * self.v_0 + self.p_1 * self.v_1);
         let pom = dc.p4 * self.r_1 * self.r_1 * self.hp_0 * 2.0
             / (self.dm_bar_0 * (self.v_0 + self.v_1));
+        // `star/private/rsp_build.f90:941` calls `dlog` (#198).
         self.igr_0 = pom
             * (0.5
                 * (self.qq_0 / self.cp_0 + self.qq_1 / self.cp_1)
                 * (self.p_1 - self.p_0)
-                - (flexmesa_math::log(self.t_1)
-                    - flexmesa_math::log(self.t_0)));
+                - (flexmesa_math::intrinsic_log(self.t_1)
+                    - flexmesa_math::intrinsic_log(self.t_0)));
         let ff = (2.0_f64 / 3.0).sqrt()
             * 0.5
             * ((self.e_0 + self.p_0 * self.v_0) / self.t_0
@@ -146,12 +148,15 @@ impl StahStepVars {
         let tt = 4.0 * dc.sig * dc.p4 * dc.p4 * flexmesa_math::pow4(self.r_1)
             / (3.0 * self.dm_bar_0 * l);
         self.t4_0 = flexmesa_math::pow4(self.t_0);
-        let dlnt4 = flexmesa_math::log(self.t4_0 / self.t4_1);
+        // `star/private/rsp_build.f90:639` calls `dlog` (#198).
+        let dlnt4 = flexmesa_math::intrinsic_log(self.t4_0 / self.t4_1);
         self.lr_0 = if dlnt4 == 0.0 {
             0.0
         } else {
             tt * (self.t4_0 / self.op_0 - self.t4_1 / self.op_1)
-                / (1.0 - flexmesa_math::log(self.op_0 / self.op_1) / dlnt4)
+                / (1.0
+                    - flexmesa_math::intrinsic_log(self.op_0 / self.op_1)
+                        / dlnt4)
                 * l
         };
         Ok((self.lr_0 + self.lc_0) / l - 1.0)
@@ -432,7 +437,9 @@ fn solve_stah_zone_t(
     n: usize,
     l: f64,
 ) -> Result<bool, StarError> {
-    let tmax = 0.99 * flexmesa_math::pow(3.0 * s.p_0 / CRAD, 0.25);
+    // `rsp_build.f90:668` evaluates `**0.25d0` via `libm` (#198), whereas
+    // `log`/`exp` at `:655,669-670,691` bind to `math_lib` via `use rsp_def`.
+    let tmax = 0.99 * flexmesa_math::intrinsic_pow(3.0 * s.p_0 / CRAD, 0.25);
     let lnt_min = flexmesa_math::log(s.t_1);
     let lnt_max = flexmesa_math::log(tmax);
     let mut got_est = false;
@@ -495,8 +502,8 @@ fn solve_stah_zone_t(
         / (3.0 * s.dm_bar_0 * l);
     s.lr_0 = tt * (s.t4_0 / s.op_0 - s.t4_1 / s.op_1)
         / (1.0
-            - flexmesa_math::log(s.op_0 / s.op_1)
-                / flexmesa_math::log(s.t4_0 / s.t4_1))
+            - flexmesa_math::intrinsic_log(s.op_0 / s.op_1)
+                / flexmesa_math::intrinsic_log(s.t4_0 / s.t4_1))
         * l;
     let mut f1 = (s.lr_0 + s.lc_0) / l - 1.0;
     let mut d = s.t4_0 / 1.0e3;
@@ -524,8 +531,8 @@ fn solve_stah_zone_t(
         }
         s.lr_0 = tt * (s.t4_0 / s.op_0 - s.t4_1 / s.op_1)
             / (1.0
-                - flexmesa_math::log(s.op_0 / s.op_1)
-                    / flexmesa_math::log(s.t4_0 / s.t4_1))
+                - flexmesa_math::intrinsic_log(s.op_0 / s.op_1)
+                    / flexmesa_math::intrinsic_log(s.t4_0 / s.t4_1))
             * l;
         let f2 = (s.lr_0 + s.lc_0) / l - 1.0;
         if f2.abs() < 1.0e-10 || f2 == f1 {

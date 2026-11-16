@@ -306,9 +306,33 @@ flexmesa_math = "flexmesa_math::double_to_str"
 
 [[ruling_extensions]]
 name = "atan2"
-upstream_context = "crmath_r_dp.f90:296-311 (used by gyre; bypassed via datan2 in star/private/rsp_lina.f90:1011,1020,1030,1036,1119)"
-crlibm_symbol = "atan_rz + PI_DP/HALFPI_DP (composite)"
+upstream_context = "MESA 26.4.1 never re-exports crmath::atan2 (`math_lib_crmath.f90:65-100`); upstream `atan2`/`datan2` bind to Fortran intrinsic (`#196`, `#198`)"
+crlibm_symbol = "atan_rn + 106-bit PI/HALFPI octant reduction (93.42%/93.60% bit match, max_ulp = 1)"
 flexmesa_math = "flexmesa_math::atan2"
+
+[[ruling_extensions]]
+name = "intrinsic_log"
+upstream_context = "Fortran `dlog`/`log` bypasses in colors/private/linear_interp.f90 and star/private/rsp_{lina,relax_env,build}.f90 (`#198`)"
+crlibm_symbol = "log_rn (100.00% bit match on 10,067 vectors)"
+flexmesa_math = "flexmesa_math::intrinsic_log"
+
+[[ruling_extensions]]
+name = "intrinsic_log10"
+upstream_context = "Fortran `dlog10`/`log10` bypasses in colors/private/{bolometric,synthetic}.f90, kap/private/op_eval_mombarg.f90, and star/private/rsp_{lina,relax_env,build}.f90 (`#198`)"
+crlibm_symbol = "log10_rn (99.84%/99.76% bit match, max_ulp = 1)"
+flexmesa_math = "flexmesa_math::intrinsic_log10"
+
+[[ruling_extensions]]
+name = "intrinsic_exp"
+upstream_context = "Fortran `exp` bypasses in colors/private/linear_interp.f90:249,331 (`#198`)"
+crlibm_symbol = "exp_rn (100.00% bit match on 10,067 vectors)"
+flexmesa_math = "flexmesa_math::intrinsic_exp"
+
+[[ruling_extensions]]
+name = "intrinsic_pow"
+upstream_context = "Fortran `real(dp) ** real(dp)` bypasses in star/private/rsp_{lina,relax_env,build}.f90 (`#198`)"
+crlibm_symbol = "pow_rn (99.95% bit match, max_ulp = 1 vs 41.27% for pow_r_)"
+flexmesa_math = "flexmesa_math::intrinsic_pow"
 
 [[ruling_extensions]]
 name = "hypot"

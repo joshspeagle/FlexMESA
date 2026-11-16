@@ -590,3 +590,76 @@ pub fn pow7(x: f64) -> f64 {
 pub fn pow8(x: f64) -> f64 {
     x * x * x * x * x * x * x * x
 }
+
+/// Compute $\ln(x)$ via `crlibm::log_rn` (round-to-nearest) in
+/// [`NumericsMode::Strict`] for upstream MESA `26.4.1` call sites that bypass
+/// `math_lib` into Fortran's `dlog`/`log` intrinsic (`#198`; `100.00%` bit
+/// match on `10,067` vectors vs `61.92%` for `log_rz`).
+///
+/// Use [`log`] everywhere upstream imports `math_lib`; call `intrinsic_log`
+/// only when reproducing one of the documented `#198` bypass sites with an
+/// explicit `file:line` citation.
+#[must_use]
+#[inline]
+pub fn intrinsic_log(x: f64) -> f64 {
+    if is_strict() {
+        flexmesa_crlibm_sys::log_rn(x)
+    } else {
+        x.ln()
+    }
+}
+
+/// Compute $\log_{10}(x)$ via `crlibm::log10_rn` (round-to-nearest) in
+/// [`NumericsMode::Strict`] for upstream MESA `26.4.1` call sites that bypass
+/// `math_lib` into Fortran's `dlog10`/`log10` intrinsic (`#198`; `99.84%` /
+/// `99.76%` bit match with `max_ulp = 1` vs `62.84%` / `61.45%` for `log10_rz`).
+///
+/// Use [`log10`] everywhere upstream imports `math_lib`; call
+/// `intrinsic_log10` only when reproducing one of the documented `#198` bypass
+/// sites with an explicit `file:line` citation.
+#[must_use]
+#[inline]
+pub fn intrinsic_log10(x: f64) -> f64 {
+    if is_strict() {
+        flexmesa_crlibm_sys::log10_rn(x)
+    } else {
+        x.log10()
+    }
+}
+
+/// Compute $\exp(x)$ via `crlibm::exp_rn` (round-to-nearest) in
+/// [`NumericsMode::Strict`] for upstream MESA `26.4.1` call sites that bypass
+/// `math_lib` into Fortran's `exp` intrinsic (`#198`; `100.00%` bit match on
+/// `10,067` vectors vs `50.57%` for `exp_rd`).
+///
+/// Use [`exp`] everywhere upstream imports `math_lib`; call `intrinsic_exp`
+/// only when reproducing one of the documented `#198` bypass sites with an
+/// explicit `file:line` citation.
+#[must_use]
+#[inline]
+pub fn intrinsic_exp(x: f64) -> f64 {
+    if is_strict() {
+        flexmesa_crlibm_sys::exp_rn(x)
+    } else {
+        x.exp()
+    }
+}
+
+/// Compute $x^{y}$ via `crlibm::pow_rn` (round-to-nearest) in
+/// [`NumericsMode::Strict`] for upstream MESA `26.4.1` call sites that bypass
+/// `math_lib` into Fortran's `real(dp) ** real(dp)` operator (`#198`; `99.95%`
+/// bit match with `max_ulp = 1` on `10,294` vectors vs `34.56%` and
+/// `max_ulp = 1,493` for `pow_r_`).
+///
+/// Use [`pow`] everywhere upstream calls `math_lib::pow`; call `intrinsic_pow`
+/// only when reproducing one of the documented `#198` bypass sites with an
+/// explicit `file:line` citation.
+#[must_use]
+#[inline]
+pub fn intrinsic_pow(x: f64, y: f64) -> f64 {
+    if is_strict() {
+        flexmesa_crlibm_sys::pow_rn(x, y)
+    } else {
+        x.powf(y)
+    }
+}

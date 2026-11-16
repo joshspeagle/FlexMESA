@@ -133,8 +133,9 @@ pub fn do_lina(
         if i < nzn {
             let w_00 = flexmesa_math::pow4(grid.t[i]);
             let w_out = flexmesa_math::pow4(grid.t[i + 1]);
-            let bw = flexmesa_math::log(w_out / w_00);
-            let bk = flexmesa_math::log(mc.k[i + 1] / mc.k[i]);
+            // `star/private/rsp_lina.f90:712-713` calls `dlog` (#198).
+            let bw = flexmesa_math::intrinsic_log(w_out / w_00);
+            let bk = flexmesa_math::intrinsic_log(mc.k[i + 1] / mc.k[i]);
             let t1 = -dc.cl * flexmesa_math::pow4(grid.r[i]) / grid.dm_bar[i];
             let t2 = (w_out / mc.k[i + 1] - w_00 / mc.k[i]) / (1.0 - bk / bw);
             let t3 = t1 / (bw - bk);

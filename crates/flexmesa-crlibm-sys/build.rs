@@ -22,6 +22,7 @@ const C_SOURCES: &[&str] = &[
     "csrc/atan_fast.c",
     "csrc/atan_accurate.c",
     "csrc/csh_fast.c",
+    "csrc/pow.c",
     "csrc/scs_lib/scs_private.c",
     "csrc/scs_lib/double2scs.c",
     "csrc/scs_lib/division_scs.c",
@@ -112,6 +113,7 @@ fn main() {
         "csrc/atan_fast.h",
         "csrc/atan_accurate.h",
         "csrc/csh_fast.h",
+        "csrc/pow.h",
         "csrc/scs_lib/scs.h",
         "csrc/scs_lib/scs_private.h",
     ] {

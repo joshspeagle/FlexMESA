@@ -12,11 +12,12 @@ use std::path::PathBuf;
 
 use flexmesa_math::{
     acos, acosh, acospi, asin, asinh, asinpi, atan, atan2, atanh, atanpi, cos,
-    cosh, cospi, double_to_str, exp, exp10, expm1, fma, hypot, log, log10,
-    log1p, log2, math_init, numerics_mode, pow, pow2, pow3, pow4, pow5, pow6,
-    pow7, pow8, powi, powi_f90, powm1, pre_z, safe_log, safe_log10, safe_sqrt,
-    sin, sinh, sinpi, tan, tanh, tanpi, with_numerics_mode, NumericsMode,
-    MATH_BACKEND, MAX_PRECOMP_INTS,
+    cosh, cospi, double_to_str, exp, exp10, expm1, fma, hypot, intrinsic_exp,
+    intrinsic_log, intrinsic_log10, intrinsic_pow, log, log10, log1p, log2,
+    math_init, numerics_mode, pow, pow2, pow3, pow4, pow5, pow6, pow7, pow8,
+    powi, powi_f90, powm1, pre_z, safe_log, safe_log10, safe_sqrt, sin, sinh,
+    sinpi, tan, tanh, tanpi, with_numerics_mode, NumericsMode, MATH_BACKEND,
+    MAX_PRECOMP_INTS,
 };
 
 fn repo_root() -> PathBuf {
@@ -93,6 +94,9 @@ fn eval_unary_named(name: &str, x: f64) -> f64 {
         "acosh" => acosh(x),
         "asinh" => asinh(x),
         "atanh" => atanh(x),
+        "dlog" => intrinsic_log(x),
+        "dlog10" | "intrinsic_log10" => intrinsic_log10(x),
+        "intrinsic_exp" => intrinsic_exp(x),
         other => panic!("unknown unary function section: {other}"),
     }
 }
@@ -100,10 +104,82 @@ fn eval_unary_named(name: &str, x: f64) -> f64 {
 fn eval_binary_f64_named(name: &str, a: f64, b: f64) -> f64 {
     match name {
         "pow" => pow(a, b),
-        "atan2" => atan2(a, b),
+        "intrinsic_pow" => intrinsic_pow(a, b),
+        "atan2" | "datan2" => atan2(a, b),
         "hypot" => hypot(a, b),
         other => panic!("unknown binary_f64 function section: {other}"),
     }
+}
+
+fn is_platform_intrinsic_section(name: &str) -> bool {
+    matches!(
+        name,
+        "dlog"
+            | "dlog10"
+            | "intrinsic_log10"
+            | "intrinsic_exp"
+            | "atan2"
+            | "datan2"
+            | "intrinsic_pow"
+    )
+}
+
+fn eval_rz_counterpart(name: &str, a: f64, b: f64) -> f64 {
+    match name {
+        "dlog" => log(a),
+        "dlog10" | "intrinsic_log10" => log10(a),
+        "intrinsic_exp" => exp(a),
+        "intrinsic_pow" => pow(a, b),
+        "atan2" | "datan2" => {
+            const PI_RZ: f64 = f64::from_bits(0x4009_21fb_5444_2d18);
+            const HALFPI_RZ: f64 = f64::from_bits(0x3ff9_21fb_5444_2d18);
+            const Q1_RZ: f64 = f64::from_bits(0x3fe9_21fb_5444_2d18);
+            const Q3_RZ: f64 = f64::from_bits(0x4002_d97c_7f33_21d2);
+            if a.is_nan() || b.is_nan() {
+                f64::NAN
+            } else if a == 0.0 && b == 0.0 {
+                if !b.is_sign_negative() {
+                    if a.is_sign_negative() {
+                        -0.0
+                    } else {
+                        0.0
+                    }
+                } else if a.is_sign_negative() {
+                    -PI_RZ
+                } else {
+                    PI_RZ
+                }
+            } else if a.is_infinite() && b.is_infinite() {
+                let m = if b > 0.0 { Q1_RZ } else { Q3_RZ };
+                if a < 0.0 {
+                    -m
+                } else {
+                    m
+                }
+            } else if b > 0.0 {
+                atan(a / b)
+            } else if a > 0.0 {
+                HALFPI_RZ - atan(b / a)
+            } else if a < 0.0 {
+                -HALFPI_RZ - atan(b / a)
+            } else if a.is_sign_negative() {
+                atan(a / b) - PI_RZ
+            } else {
+                atan(a / b) + PI_RZ
+            }
+        }
+        other => panic!("not a platform intrinsic section: {other}"),
+    }
+}
+
+#[inline]
+fn ulp_distance(act_bits: u64, exp_bits: u64) -> u64 {
+    let act_val = f64::from_bits(act_bits);
+    let exp_val = f64::from_bits(exp_bits);
+    if !act_val.is_finite() || !exp_val.is_finite() {
+        return 0;
+    }
+    act_bits.abs_diff(exp_bits)
 }
 
 fn eval_binary_i32_named(name: &str, a: f64, exp_i32: i32) -> f64 {
@@ -135,6 +211,8 @@ fn test_mesa_26_4_1_hex_reference_vectors_match_bit_for_bit_in_strict_mode() {
         assert_eq!(log(10.0_f64).to_bits(), 0x4002_6bb1_bbb5_5515_u64);
 
         let mut counts: BTreeMap<String, usize> = BTreeMap::new();
+        let mut nearest_matches: BTreeMap<String, usize> = BTreeMap::new();
+        let mut trunc_matches: BTreeMap<String, usize> = BTreeMap::new();
         let mut current_kind = "";
         let mut current_name = String::new();
         let mut fnv_digest: u64 = 0xcbf2_9ce4_8422_2325;
@@ -168,18 +246,43 @@ fn test_mesa_26_4_1_hex_reference_vectors_match_bit_for_bit_in_strict_mode() {
                         u64::from_str_radix(in_hex, 16).expect("parse in_hex");
                     let exp_bits = u64::from_str_radix(exp_hex, 16)
                         .expect("parse exp_hex");
-                    let out = eval_unary_named(
-                        &current_name,
-                        f64::from_bits(in_bits),
-                    );
+                    let x = f64::from_bits(in_bits);
+                    let out = eval_unary_named(&current_name, x);
                     let act_bits = out.to_bits();
-                    assert!(
-                        bits_match_with_nan_rule(act_bits, exp_bits),
-                        "bit mismatch in unary `{current_name}` at line {}: \
-                         in={in_bits:016X} expected={exp_bits:016X} \
-                         actual={act_bits:016X}",
-                        line_idx + 1
-                    );
+                    if is_platform_intrinsic_section(&current_name) {
+                        if bits_match_with_nan_rule(act_bits, exp_bits) {
+                            *nearest_matches
+                                .entry(current_name.clone())
+                                .or_insert(0) += 1;
+                        } else {
+                            let u = ulp_distance(act_bits, exp_bits);
+                            assert!(
+                                u <= 1,
+                                "RN >1 ULP in `{current_name}` at line {}: \
+                                 in={in_bits:016X} expected={exp_bits:016X} \
+                                 actual={act_bits:016X} ulp={u}",
+                                line_idx + 1
+                            );
+                        }
+                        let trunc_out =
+                            eval_rz_counterpart(&current_name, x, 0.0);
+                        if bits_match_with_nan_rule(
+                            trunc_out.to_bits(),
+                            exp_bits,
+                        ) {
+                            *trunc_matches
+                                .entry(current_name.clone())
+                                .or_insert(0) += 1;
+                        }
+                    } else {
+                        assert!(
+                            bits_match_with_nan_rule(act_bits, exp_bits),
+                            "bit mismatch in unary `{current_name}` at line {}: \
+                             in={in_bits:016X} expected={exp_bits:016X} \
+                             actual={act_bits:016X}",
+                            line_idx + 1
+                        );
+                    }
                     out
                 }
                 "binary_f64" => {
@@ -193,19 +296,44 @@ fn test_mesa_26_4_1_hex_reference_vectors_match_bit_for_bit_in_strict_mode() {
                         u64::from_str_radix(b_hex, 16).expect("b_bits");
                     let exp_bits =
                         u64::from_str_radix(exp_hex, 16).expect("exp_bits");
-                    let out = eval_binary_f64_named(
-                        &current_name,
-                        f64::from_bits(a_bits),
-                        f64::from_bits(b_bits),
-                    );
+                    let (a, b) =
+                        (f64::from_bits(a_bits), f64::from_bits(b_bits));
+                    let out = eval_binary_f64_named(&current_name, a, b);
                     let act_bits = out.to_bits();
-                    assert!(
-                        bits_match_with_nan_rule(act_bits, exp_bits),
-                        "bit mismatch in binary_f64 `{current_name}` at line {}: \
-                         a={a_bits:016X} b={b_bits:016X} \
-                         expected={exp_bits:016X} actual={act_bits:016X}",
-                        line_idx + 1
-                    );
+                    if is_platform_intrinsic_section(&current_name) {
+                        if bits_match_with_nan_rule(act_bits, exp_bits) {
+                            *nearest_matches
+                                .entry(current_name.clone())
+                                .or_insert(0) += 1;
+                        } else {
+                            let u = ulp_distance(act_bits, exp_bits);
+                            assert!(
+                                u <= 1,
+                                "RN >1 ULP in `{current_name}` at line {}: \
+                                 a={a_bits:016X} b={b_bits:016X} \
+                                 expected={exp_bits:016X} actual={act_bits:016X} ulp={u}",
+                                line_idx + 1
+                            );
+                        }
+                        let trunc_out =
+                            eval_rz_counterpart(&current_name, a, b);
+                        if bits_match_with_nan_rule(
+                            trunc_out.to_bits(),
+                            exp_bits,
+                        ) {
+                            *trunc_matches
+                                .entry(current_name.clone())
+                                .or_insert(0) += 1;
+                        }
+                    } else {
+                        assert!(
+                            bits_match_with_nan_rule(act_bits, exp_bits),
+                            "bit mismatch in binary_f64 `{current_name}` at line {}: \
+                             a={a_bits:016X} b={b_bits:016X} \
+                             expected={exp_bits:016X} actual={act_bits:016X}",
+                            line_idx + 1
+                        );
+                    }
                     out
                 }
                 "binary_i32" => {
@@ -242,12 +370,34 @@ fn test_mesa_26_4_1_hex_reference_vectors_match_bit_for_bit_in_strict_mode() {
             fnv_digest = fnv_digest.wrapping_mul(0x0100_0000_01b3);
         }
 
-        assert_eq!(counts.len(), 41, "expected 41 tested functions");
+        assert_eq!(counts.len(), 47, "expected 47 tested sections");
         for (fname, count) in &counts {
             assert!(
                 *count >= 10_050,
                 "function `{fname}` has only {count} vectors (expected >= 10,050)"
             );
+        }
+        // Pin the measured RN vs RZ bit-match counts on all 7 platform-intrinsic
+        // sections (`#196`, `#198`).
+        for (sec, exp_total, expected_trunc, expected_nearest) in [
+            ("dlog", 10_067_usize, 6_233_usize, 10_067_usize),
+            ("dlog10", 10_067, 6_326, 10_051),
+            ("intrinsic_log10", 10_067, 6_186, 10_043),
+            ("intrinsic_exp", 10_067, 5_091, 10_067),
+            ("atan2", 10_121, 7_011, 9_455),
+            ("datan2", 10_121, 6_985, 9_473),
+            ("intrinsic_pow", 10_294, 4_248, 10_289),
+        ] {
+            assert_eq!(counts[sec], exp_total, "{sec} total count");
+            assert_eq!(
+                trunc_matches[sec], expected_trunc,
+                "{sec} RZ bit-match count"
+            );
+            assert_eq!(
+                nearest_matches[sec], expected_nearest,
+                "{sec} RN bit-match count"
+            );
+            assert!(nearest_matches[sec] > trunc_matches[sec]);
         }
         assert_ne!(fnv_digest, 0);
     });
@@ -345,6 +495,11 @@ fn test_function_mapping_toml_covers_all_math_lib_crmath_public_symbols() {
         "atanpi_rz",
         "cosh_rz",
         "sinh_rz",
+        "log_rn",
+        "log10_rn",
+        "exp_rn",
+        "atan_rn",
+        "pow_rn",
     ] {
         assert!(
             mapping.contains(crlibm_sym),
@@ -358,7 +513,16 @@ fn test_function_mapping_toml_covers_all_math_lib_crmath_public_symbols() {
 
     // Verify ruling extensions are present in both mapping and Rust source.
     let combined_src = format!("{lib_rs}\n{trig_rs}");
-    for ext in ["atan2", "hypot", "powi_f90", "fma"] {
+    for ext in [
+        "atan2",
+        "intrinsic_log",
+        "intrinsic_log10",
+        "intrinsic_exp",
+        "intrinsic_pow",
+        "hypot",
+        "powi_f90",
+        "fma",
+    ] {
         assert!(mapping.contains(&format!("name = \"{ext}\"")));
         assert!(combined_src.contains(&format!("pub fn {ext}")));
     }

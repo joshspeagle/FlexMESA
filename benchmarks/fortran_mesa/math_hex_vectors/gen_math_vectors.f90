@@ -1,6 +1,7 @@
 ! SPDX-License-Identifier: LGPL-3.0-or-later
 ! Generate exact 16-digit IEEE-754 hexadecimal input/output reference vectors
-! from real MESA 26.4.1 (`math_lib` + `crmath`) for `#165`.
+! from real MESA 26.4.1 (`math_lib` + `crmath` + Fortran platform intrinsics)
+! for `#165`, `#196`, and `#198`.
 !
 ! Every mapped function is evaluated on >= 10,000 deterministic SplitMix64
 ! inputs spanning the full IEEE-754 binary64 exponent range plus function-domain
@@ -8,6 +9,54 @@
 ! +-HUGE, +-TINY, exp/cosh/sinh overflow & underflow boundaries, large trig
 ! arguments, integer and non-integer exp10 arguments, and negative/zero/unit
 ! bases with integer and non-integer exponents for pow, powi, and x**n).
+
+module mesa_platform_intrinsics
+   use const_def, only: dp
+   implicit none
+   private
+   public :: f90_dlog, f90_dlog10, f90_log10, f90_exp, f90_atan2, f90_datan2, f90_pow_r
+contains
+   pure real(dp) function f90_dlog(x) result(y)
+      intrinsic :: dlog
+      real(dp), intent(in) :: x
+      y = dlog(x)
+   end function f90_dlog
+
+   pure real(dp) function f90_dlog10(x) result(y)
+      intrinsic :: dlog10
+      real(dp), intent(in) :: x
+      y = dlog10(x)
+   end function f90_dlog10
+
+   pure real(dp) function f90_log10(x) result(y)
+      intrinsic :: log10
+      real(dp), intent(in) :: x
+      y = log10(x)
+   end function f90_log10
+
+   pure real(dp) function f90_exp(x) result(y)
+      intrinsic :: exp
+      real(dp), intent(in) :: x
+      y = exp(x)
+   end function f90_exp
+
+   pure real(dp) function f90_atan2(y, x) result(z)
+      intrinsic :: atan2
+      real(dp), intent(in) :: y, x
+      z = atan2(y, x)
+   end function f90_atan2
+
+   pure real(dp) function f90_datan2(y, x) result(z)
+      intrinsic :: datan2
+      real(dp), intent(in) :: y, x
+      z = datan2(y, x)
+   end function f90_datan2
+
+   pure real(dp) function f90_pow_r(x, y) result(z)
+      real(dp), intent(in) :: x, y
+      z = x ** y
+   end function f90_pow_r
+end module mesa_platform_intrinsics
 
 program gen_math_vectors
    use, intrinsic :: iso_fortran_env, only: int32, int64, real64, compiler_version
@@ -20,7 +69,9 @@ program gen_math_vectors
       cos, sin, tan, cospi, sinpi, tanpi, &
       acos, asin, atan, acospi, asinpi, atanpi, &
       cosh, sinh, tanh, acosh, asinh, atanh
-   use crmath, only: crmath_atan2 => atan2, crmath_hypot => hypot
+   use crmath, only: crmath_hypot => hypot
+   use mesa_platform_intrinsics, only: &
+      f90_dlog, f90_dlog10, f90_log10, f90_exp, f90_atan2, f90_datan2, f90_pow_r
    implicit none
 
    integer, parameter :: N_FULL_EXP = 5000
@@ -99,9 +150,15 @@ program gen_math_vectors
    call emit_unary(unit_out, 'asinh',     35, u_edges, n_u_edges)
    call emit_unary(unit_out, 'atanh',     36, u_edges, n_u_edges)
 
-   ! 5 binary functions
+   ! 4 Fortran platform-intrinsic unary sections (#198)
+   call emit_unary(unit_out, 'dlog',            37, u_edges, n_u_edges)
+   call emit_unary(unit_out, 'dlog10',          38, u_edges, n_u_edges)
+   call emit_unary(unit_out, 'intrinsic_log10', 39, u_edges, n_u_edges)
+   call emit_unary(unit_out, 'intrinsic_exp',   40, u_edges, n_u_edges)
+
+   ! Binary functions: math_lib + Fortran platform intrinsics (#165, #196, #198)
    rng_state = int(Z'2604010000000201', int64)
-   call emit_pow_r(unit_out, rng_state)
+   call emit_pow_r(unit_out, 'pow', .true., rng_state)
 
    rng_state = int(Z'2604010000000202', int64)
    call emit_pow_i(unit_out, 'powi', .true., rng_state)
@@ -110,10 +167,16 @@ program gen_math_vectors
    call emit_pow_i(unit_out, 'powi_f90', .false., rng_state)
 
    rng_state = int(Z'2604010000000204', int64)
-   call emit_atan2(unit_out, rng_state)
+   call emit_atan2(unit_out, 'atan2', .false., rng_state)
 
    rng_state = int(Z'2604010000000205', int64)
    call emit_hypot(unit_out, rng_state)
+
+   rng_state = int(Z'2604010000000206', int64)
+   call emit_atan2(unit_out, 'datan2', .true., rng_state)
+
+   rng_state = int(Z'2604010000000207', int64)
+   call emit_pow_r(unit_out, 'intrinsic_pow', .false., rng_state)
 
    close(unit_out)
 
@@ -312,6 +375,10 @@ contains
       case (34); y = acosh(x)
       case (35); y = asinh(x)
       case (36); y = atanh(x)
+      case (37); y = f90_dlog(x)
+      case (38); y = f90_dlog10(x)
+      case (39); y = f90_log10(x)
+      case (40); y = f90_exp(x)
       case default
          stop 'Unknown unary function id'
       end select
@@ -326,7 +393,7 @@ contains
       u = uniform_01(state)
       v = uniform_01(state)
       select case (fid)
-      case (1, 2, 3, 4, 5, 7) ! positive reals across all exponents [0, 2046]
+      case (1, 2, 3, 4, 5, 7, 37, 38, 39) ! positive reals across all exponents [0, 2046]
          r = next_u64(state)
          bexp = modulo(ishft(r, -52), 2047_int64)
          if (bexp < 0_int64) bexp = bexp + 2047_int64
@@ -344,7 +411,7 @@ contains
             x = -0.999999999999_dp + u * 20.0_dp
             bits = dp_to_bits(x)
          end if
-      case (8, 10, 31, 32, 33) ! exp, expm1, cosh, sinh, tanh: [-750, 715] + tiny around 0
+      case (8, 10, 31, 32, 33, 40) ! exp, expm1, cosh, sinh, tanh: [-750, 715] + tiny around 0
          if (mod(idx, 2) == 0) then
             x = -750.0_dp + u * 1465.0_dp
             bits = dp_to_bits(x)
@@ -433,14 +500,16 @@ contains
       end do
    end subroutine emit_unary
 
-   subroutine emit_pow_r(unit_no, state)
+   subroutine emit_pow_r(unit_no, label, use_math_lib, state)
       integer, intent(in) :: unit_no
+      character(len=*), intent(in) :: label
+      logical, intent(in) :: use_math_lib
       integer(int64), intent(inout) :: state
       integer(int64) :: bases(14), exps(21), xb, yb, zb
       real(dp) :: x, y, z, u, v
       integer :: i, j
 
-      write(unit_no, '(A)') '[binary_f64:pow]'
+      write(unit_no, '(A)') '[binary_f64:' // trim(label) // ']'
 
       bases(1)  = int(Z'0000000000000000', int64) ! +0.0
       bases(2)  = int(Z'8000000000000000', int64) ! -0.0
@@ -484,7 +553,11 @@ contains
          do j = 1, size(exps)
             xb = bases(i)
             yb = exps(j)
-            z = pow(bits_to_dp(xb), bits_to_dp(yb))
+            if (use_math_lib) then
+               z = pow(bits_to_dp(xb), bits_to_dp(yb))
+            else
+               z = f90_pow_r(bits_to_dp(xb), bits_to_dp(yb))
+            end if
             zb = dp_to_bits(z)
             write(unit_no, '(Z16.16,1X,Z16.16,1X,Z16.16)') xb, yb, zb
          end do
@@ -500,7 +573,11 @@ contains
          else
             yb = sample_full_exponent(state, .true.)
          end if
-         z = pow(bits_to_dp(xb), bits_to_dp(yb))
+         if (use_math_lib) then
+            z = pow(bits_to_dp(xb), bits_to_dp(yb))
+         else
+            z = f90_pow_r(bits_to_dp(xb), bits_to_dp(yb))
+         end if
          zb = dp_to_bits(z)
          write(unit_no, '(Z16.16,1X,Z16.16,1X,Z16.16)') xb, yb, zb
       end do
@@ -518,7 +595,11 @@ contains
          end if
          xb = dp_to_bits(x)
          yb = dp_to_bits(y)
-         z = pow(x, y)
+         if (use_math_lib) then
+            z = pow(x, y)
+         else
+            z = f90_pow_r(x, y)
+         end if
          zb = dp_to_bits(z)
          write(unit_no, '(Z16.16,1X,Z16.16,1X,Z16.16)') xb, yb, zb
       end do
@@ -588,19 +669,20 @@ contains
       end do
    end subroutine emit_pow_i
 
-   subroutine emit_atan2(unit_no, state)
+   subroutine emit_atan2(unit_no, label, use_datan2, state)
       integer, intent(in) :: unit_no
+      character(len=*), intent(in) :: label
+      logical, intent(in) :: use_datan2
       integer(int64), intent(inout) :: state
-      integer(int64) :: vals(10), yb, xb, zb
+      integer(int64) :: vals(11), yb, xb, zb
       real(dp) :: y, x, z, u, v
       integer :: i, j
 
-      write(unit_no, '(A)') '[binary_f64:atan2]'
+      write(unit_no, '(A)') '[binary_f64:' // trim(label) // ']'
 
-      ! Note: CRMATH 1.2 `atan2_r_r_dp_` (`crmath_r_dp.f90:296-311`) has no
-      ! `else` branch when both `y == 0` and `x == 0` or either input is `NaN`
-      ! (leaving the Fortran return value uninitialized; deferred bug under #169).
-      ! All non-(0,0), non-NaN quadrant/axis/Inf/subnormal pairs are emitted here.
+      ! MESA 26.4.1 never exports CRMATH's `atan2` (`math_lib_crmath.f90:65-100`),
+      ! so MESA's own `atan2` / `datan2` calls bind to Fortran's intrinsic
+      ! (`libm` `atan2`), including signed-zero `(+-0, +-0)` and `NaN` pairs.
       vals(1)  = int(Z'0000000000000000', int64) ! +0.0
       vals(2)  = int(Z'8000000000000000', int64) ! -0.0
       vals(3)  = dp_to_bits(1.0_dp)
@@ -611,15 +693,17 @@ contains
       vals(8)  = int(Z'FFEFFFFFFFFFFFFF', int64) ! -max finite
       vals(9)  = int(Z'7FF0000000000000', int64) ! +Inf
       vals(10) = int(Z'FFF0000000000000', int64) ! -Inf
+      vals(11) = int(Z'7FF8000000000000', int64) ! qNaN
 
       do i = 1, size(vals)
          do j = 1, size(vals)
             yb = vals(i)
             xb = vals(j)
-            y = bits_to_dp(yb)
-            x = bits_to_dp(xb)
-            if (x == 0.0_dp .and. y == 0.0_dp) cycle
-            z = crmath_atan2(y, x)
+            if (use_datan2) then
+               z = f90_datan2(bits_to_dp(yb), bits_to_dp(xb))
+            else
+               z = f90_atan2(bits_to_dp(yb), bits_to_dp(xb))
+            end if
             zb = dp_to_bits(z)
             write(unit_no, '(Z16.16,1X,Z16.16,1X,Z16.16)') yb, xb, zb
          end do
@@ -628,10 +712,11 @@ contains
       do i = 1, N_FULL_EXP
          yb = sample_full_exponent(state, .false.)
          xb = sample_full_exponent(state, .false.)
-         y = bits_to_dp(yb)
-         x = bits_to_dp(xb)
-         if (x == 0.0_dp .and. y == 0.0_dp) xb = dp_to_bits(1.0_dp)
-         z = crmath_atan2(bits_to_dp(yb), bits_to_dp(xb))
+         if (use_datan2) then
+            z = f90_datan2(bits_to_dp(yb), bits_to_dp(xb))
+         else
+            z = f90_atan2(bits_to_dp(yb), bits_to_dp(xb))
+         end if
          zb = dp_to_bits(z)
          write(unit_no, '(Z16.16,1X,Z16.16,1X,Z16.16)') yb, xb, zb
       end do
@@ -641,10 +726,13 @@ contains
          v = uniform_01(state)
          y = -10.0_dp + 20.0_dp * u
          x = -10.0_dp + 20.0_dp * v
-         if (x == 0.0_dp .and. y == 0.0_dp) x = 1.0_dp
          yb = dp_to_bits(y)
          xb = dp_to_bits(x)
-         z = crmath_atan2(y, x)
+         if (use_datan2) then
+            z = f90_datan2(y, x)
+         else
+            z = f90_atan2(y, x)
+         end if
          zb = dp_to_bits(z)
          write(unit_no, '(Z16.16,1X,Z16.16,1X,Z16.16)') yb, xb, zb
       end do

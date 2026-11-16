@@ -67,6 +67,12 @@ mod ffi {
 
         pub(super) fn cosh_rz(x: f64) -> f64;
         pub(super) fn sinh_rz(x: f64) -> f64;
+
+        pub(super) fn log_rn(x: f64) -> f64;
+        pub(super) fn log10_rn(x: f64) -> f64;
+        pub(super) fn exp_rn(x: f64) -> f64;
+        pub(super) fn atan_rn(x: f64) -> f64;
+        pub(super) fn pow_rn(x: f64, y: f64) -> f64;
     }
 }
 
@@ -303,4 +309,59 @@ pub fn sinh_rz(x: f64) -> f64 {
     // tables, mutates no global or FPU state, and is pure and reentrant for all
     // `f64` inputs.
     unsafe { ffi::sinh_rz(x) }
+}
+
+/// Correctly rounded natural logarithm to nearest-even (`crlibm::log_rn`,
+/// used for upstream MESA Fortran `dlog`/`log` intrinsic bypasses; `#198`).
+#[must_use]
+#[inline]
+pub fn log_rn(x: f64) -> f64 {
+    // SAFETY: `ffi::log_rn` takes `f64` by value, reads only `static const`
+    // tables, mutates no global or FPU state, and is pure and reentrant for all
+    // `f64` inputs.
+    unsafe { ffi::log_rn(x) }
+}
+
+/// Correctly rounded base-10 logarithm to nearest-even (`crlibm::log10_rn`,
+/// used for upstream MESA Fortran `dlog10`/`log10` intrinsic bypasses; `#198`).
+#[must_use]
+#[inline]
+pub fn log10_rn(x: f64) -> f64 {
+    // SAFETY: `ffi::log10_rn` takes `f64` by value, reads only `static const`
+    // tables, mutates no global or FPU state, and is pure and reentrant for all
+    // `f64` inputs.
+    unsafe { ffi::log10_rn(x) }
+}
+
+/// Correctly rounded natural exponential to nearest-even (`crlibm::exp_rn`,
+/// used for upstream MESA Fortran `exp` intrinsic bypasses; `#198`).
+#[must_use]
+#[inline]
+pub fn exp_rn(x: f64) -> f64 {
+    // SAFETY: `ffi::exp_rn` takes `f64` by value, reads only `static const`
+    // tables, mutates no global or FPU state (`EVAL_PERF = 0`), and is pure and
+    // reentrant for all `f64` inputs.
+    unsafe { ffi::exp_rn(x) }
+}
+
+/// Correctly rounded `arctan(x)` to nearest-even (`crlibm::atan_rn`, used by
+/// octant-reduced `atan2` for upstream MESA `atan2`/`datan2`; `#196`, `#198`).
+#[must_use]
+#[inline]
+pub fn atan_rn(x: f64) -> f64 {
+    // SAFETY: `ffi::atan_rn` takes `f64` by value, uses stack-local `scs`
+    // buffers and `static const` tables, mutates no global or FPU state, and is
+    // pure and reentrant for all `f64` inputs.
+    unsafe { ffi::atan_rn(x) }
+}
+
+/// Triple-double round-to-nearest `pow(x, y)` (`crlibm::pow_rn`, used for
+/// upstream MESA Fortran `real(dp) ** real(dp)` intrinsic bypasses; `#198`).
+#[must_use]
+#[inline]
+pub fn pow_rn(x: f64, y: f64) -> f64 {
+    // SAFETY: `ffi::pow_rn` takes two `f64` values, reads only `static const`
+    // tables in `pow.h`, mutates no global or FPU state (`USE_BUILTINS = 0`),
+    // and is pure and reentrant for all `f64` input pairs.
+    unsafe { ffi::pow_rn(x, y) }
 }

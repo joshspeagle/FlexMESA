@@ -59,7 +59,8 @@ impl RealScalar for f64 {
     }
     #[inline]
     fn log10(self) -> Self {
-        flexmesa_math::log10(self)
+        // `colors/private/{bolometric.f90:106, synthetic.f90:111}` omit `use math_lib` (#198).
+        flexmesa_math::intrinsic_log10(self)
     }
 }
 

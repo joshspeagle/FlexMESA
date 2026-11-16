@@ -175,8 +175,11 @@ pub fn relax_env(
                     let mut converged_h = false;
                     for _ in 1..=100 {
                         let arg = 1.0 - (summ / aone) * (1.0 - haha);
-                        let next_h = flexmesa_math::exp10(
-                            flexmesa_math::log10(arg) / (n_anchor as f64),
+                        // `star/private/rsp_relax_env.f90:471-478` calls `dlog10` and `10.d0**POM` (#198).
+                        let next_h = flexmesa_math::intrinsic_pow(
+                            10.0,
+                            flexmesa_math::intrinsic_log10(arg)
+                                / (n_anchor as f64),
                         );
                         if (haha - next_h).abs() < 1.0e-10 {
                             haha = next_h;
@@ -224,7 +227,8 @@ pub fn relax_env(
                 mc.dvrm[i] = -3.0 * t1 * flexmesa_math::pow2(grid.r[i - 1]);
                 mc.dvr[i] = 3.0 * t1 * flexmesa_math::pow2(grid.r[i]);
                 if i == nzn {
-                    grid.t[nzn] = flexmesa_math::pow(
+                    // `star/private/rsp_relax_env.f90:516` calls `**0.25d0` (#198).
+                    grid.t[nzn] = flexmesa_math::intrinsic_pow(
                         0.5 * l0
                             / (4.0
                                 * PI
@@ -280,8 +284,10 @@ pub fn relax_env(
                 let (lr_i, dlt, dltp, dlrm, dlr, dlrp) = if i < nzn {
                     let w_00 = flexmesa_math::pow4(grid.t[i]);
                     let w_out = flexmesa_math::pow4(grid.t[i + 1]);
-                    let bw = flexmesa_math::log(w_out / w_00);
-                    let bk = flexmesa_math::log(mc.k[i + 1] / mc.k[i]);
+                    // `star/private/rsp_relax_env.f90:1019-1020` calls `dlog` (#198).
+                    let bw = flexmesa_math::intrinsic_log(w_out / w_00);
+                    let bk =
+                        flexmesa_math::intrinsic_log(mc.k[i + 1] / mc.k[i]);
                     let t1 = -dc.cl * flexmesa_math::pow4(grid.r[i])
                         / grid.dm_bar[i];
                     let t2 = (w_out / mc.k[i + 1] - w_00 / mc.k[i])

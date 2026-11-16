@@ -138,6 +138,36 @@ source = "csrc/csh_fast.c + csrc/exp-td-standalone.c"
 accurate_phase = "triple-double"
 notes = "double-double quick phase (`csh_fast.c`) -> triple-double accurate phase (`do_sinh_accurate` via `exp13` / `expm1_13`), identical to CRMATH"
 
+[[code_paths]]
+symbol = "log_rn"
+source = "csrc/log.c"
+accurate_phase = "triple-double"
+notes = "round-to-nearest entry point for MESA 26.4.1 Fortran intrinsic `dlog`/`log` bypasses (`#198`); 100.00% bit-exact match (`10,067/10,067`) against MESA 26.4.1 reference build"
+
+[[code_paths]]
+symbol = "log10_rn"
+source = "csrc/log.c"
+accurate_phase = "triple-double"
+notes = "round-to-nearest entry point for MESA 26.4.1 Fortran intrinsic `dlog10`/`log10` bypasses (`#198`); 99.84%/99.76% bit-exact match (`max_ulp = 1`) against MESA 26.4.1 reference build"
+
+[[code_paths]]
+symbol = "exp_rn"
+source = "csrc/exp-td.c"
+accurate_phase = "triple-double"
+notes = "round-to-nearest entry point for MESA 26.4.1 Fortran intrinsic `exp` bypasses (`#198`); 100.00% bit-exact match (`10,067/10,067`) against MESA 26.4.1 reference build"
+
+[[code_paths]]
+symbol = "atan_rn"
+source = "csrc/atan_fast.c + csrc/atan_accurate.c"
+accurate_phase = "SCS"
+notes = "round-to-nearest entry point backing octant-reduced `atan2` (`#196`, `#198`); 93.42%/93.60% bit-exact match (`max_ulp = 1`) vs 69.27%/69.01% (`max_ulp = 2`) for `atan_rz`"
+
+[[code_paths]]
+symbol = "pow_rn"
+source = "csrc/pow.c"
+accurate_phase = "triple-double"
+notes = "round-to-nearest entry point (`log2_130` + `exp2_120` + `pow_exact_rn`) for MESA 26.4.1 Fortran intrinsic `real(dp) ** real(dp)` bypasses (`#198`); 99.95% bit-exact match (`10,289/10,294`, `max_ulp = 1`) vs 34.56% (`max_ulp = 1,493`) for `pow_r_`"
+
 [[files]]
 path = "csrc/AUTHORS"
 sha256 = "e9c305c65dd2591c37911e15a5ab8474537566ea470763efbdacb7e9d5ebf1f7"
@@ -297,6 +327,14 @@ sha256 = "0917e43ed1c539176c3a8e09e55980320ee3a705ee0f9221970ae873417f3de0"
 [[files]]
 path = "csrc/csh_fast.c"
 sha256 = "e0a51b6b9b273990a18ba8150c1504a71fb3374414ebbe30ec150a41c17915cd"
+
+[[files]]
+path = "csrc/pow.h"
+sha256 = "4269d36a5515545844c50d7673cc9024496fde6f7cabcf748b1cf88edaf2690f"
+
+[[files]]
+path = "csrc/pow.c"
+sha256 = "d48b111cab2e0919a7b86d9a25db4d001dd182d3c844c042f9146dae257be7ff"
 
 [[files]]
 path = "csrc/scs_lib/scs.h"

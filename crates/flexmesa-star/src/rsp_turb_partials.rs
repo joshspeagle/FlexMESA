@@ -201,9 +201,10 @@ impl RspTurbPartials {
             let qc_ip1 = mc.qqs[i + 1] / mc.cps[i + 1];
             let pom = 0.5 * (qc_i + qc_ip1);
             let pom2 = 0.5 * (mc.p[i + 1] - mc.p[i]);
+            // `star/private/{rsp_lina.f90:289, rsp_relax_env.f90:599}` call `dlog` (#198).
             let igr1 = pom * (mc.p[i + 1] - mc.p[i])
-                - (flexmesa_math::log(grid.t[i + 1])
-                    - flexmesa_math::log(grid.t[i]));
+                - (flexmesa_math::intrinsic_log(grid.t[i + 1])
+                    - flexmesa_math::intrinsic_log(grid.t[i]));
             let igr1x0 = pom2
                 * ((mc.dqq_dr_00[i] - qc_i * mc.dcp_dr_00[i]) / mc.cps[i]
                     + (mc.dqq_dr_in[i + 1] - qc_ip1 * mc.dcp_dr_in[i + 1])
@@ -336,9 +337,10 @@ impl RspTurbPartials {
                                     - mc.qqs[i] * mc.dcp_dt_00[i]
                                         / (mc.cps[i] * mc.cps[i]))));
 
+            // `star/private/{rsp_lina.f90:419, rsp_relax_env.f90:737}` evaluate `**1.5d0` (#198).
             let pom_d = (dc.cede / alfa)
-                * (flexmesa_math::pow(grid.et[i], 1.5)
-                    - flexmesa_math::pow(efl02, 1.5));
+                * (flexmesa_math::intrinsic_pow(grid.et[i], 1.5)
+                    - flexmesa_math::intrinsic_pow(efl02, 1.5));
             let pom2_d = 0.5 * (grid.hp_face[i] + grid.hp_face[i - 1]);
             self.damp[i] = pom_d / pom2_d;
             let tem3 = -0.5 * pom_d / (pom2_d * pom2_d);
@@ -517,8 +519,9 @@ impl RspTurbPartials {
                     * 0.5
                     * (1.0 / flexmesa_math::pow2(grid.vol[i])
                         + 1.0 / flexmesa_math::pow2(grid.vol[i + 1]));
-                let pt3 = (flexmesa_math::pow(grid.et[i + 1], 1.5)
-                    - flexmesa_math::pow(grid.et[i], 1.5))
+                // `star/private/{rsp_lina.f90:554, rsp_relax_env.f90:877}` evaluate `**1.5d0` (#198).
+                let pt3 = (flexmesa_math::intrinsic_pow(grid.et[i + 1], 1.5)
+                    - flexmesa_math::intrinsic_pow(grid.et[i], 1.5))
                     / grid.dm_bar[i];
                 self.lt[i] = pt * pt2 * pt3;
                 self.dltx0[i] = 4.0 * self.lt[i] / grid.r[i]

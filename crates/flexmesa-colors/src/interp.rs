@@ -292,9 +292,10 @@ impl SedCube {
             };
             let mut val = blend(corners);
             if val > TINY {
-                let log_v = blend(corners.map(flexmesa_math::log));
+                // `colors/private/linear_interp.f90:237-240,249` omits `use math_lib` (#198).
+                let log_v = blend(corners.map(flexmesa_math::intrinsic_log));
                 if log_v.is_finite() {
-                    val = flexmesa_math::exp(log_v);
+                    val = flexmesa_math::intrinsic_exp(log_v);
                 }
             }
             if !val.is_finite() || val <= 0.0 {

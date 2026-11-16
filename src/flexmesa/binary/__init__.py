@@ -3,7 +3,9 @@
 angular momentum loss, tidal evolution, and coupled binary star evolution
 (`flexmesa.binary`).
 
-Corresponds to the upstream Fortran MESA `binary/` module.
+Corresponds to the upstream Fortran MESA `binary/` module. The coupled
+`BinarySystem` evolution driver and `binary/test_suite` runner are unverified
+against real MESA output (pending #143, #154, and #160).
 """
 
 from __future__ import annotations

@@ -7,6 +7,11 @@
 //! `binary_lib`, `binary_utils`, `binary_mdot`, `binary_disk`, `binary_wind`,
 //! `binary_jdot`, `binary_tides`, `binary_edot`, `binary_timestep`, and
 //! `binary_evolve`).
+//!
+//! **Status**: Closed-form Roche-lobe, torque, and mass-transfer kernels are
+//! unit-tested; the coupled `BinarySystem` evolution driver, orbital step
+//! sequence, implicit mass-transfer search, and `binary/test_suite` runner are
+//! **unverified** against real MESA output (pending #143, #154, and #160).
 
 #![forbid(unsafe_code)]
 #![allow(

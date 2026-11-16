@@ -274,31 +274,31 @@ fn test_all_eight_astero_cases_bounded_eight_steps_pass() {
 }
 
 #[test]
-#[ignore = "slow uncapped campaign (~70s) verified locally via --ignored"]
+#[ignore = "unverified uncapped astero campaign; tracked in #143 and #162"]
 fn test_example_astero_uncapped() {
     assert_uncapped_case_passes("example_astero");
 }
 
 #[test]
-#[ignore = "slow uncapped campaign (~185s) verified locally via --ignored"]
+#[ignore = "unverified uncapped astero campaign; tracked in #143 and #162"]
 fn test_fast_from_file_uncapped() {
     assert_uncapped_case_passes("fast_from_file");
 }
 
 #[test]
-#[ignore = "slow uncapped campaign (~250s) verified locally via --ignored"]
+#[ignore = "unverified uncapped astero campaign; tracked in #143 and #162"]
 fn test_fast_scan_grid_uncapped() {
     assert_uncapped_case_passes("fast_scan_grid");
 }
 
 #[test]
-#[ignore = "slow uncapped campaign (~310s) verified locally via --ignored"]
+#[ignore = "unverified uncapped astero campaign; tracked in #143 and #162"]
 fn test_fast_simplex_uncapped() {
     assert_uncapped_case_passes("fast_simplex");
 }
 
 #[test]
-#[ignore = "slow uncapped campaign (~780s) verified locally via --ignored"]
+#[ignore = "unverified uncapped astero campaign; tracked in #143 and #162"]
 fn test_fast_newuoa_uncapped() {
     assert_uncapped_case_passes("fast_newuoa");
 }

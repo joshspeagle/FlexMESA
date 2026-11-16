@@ -11,7 +11,12 @@ from flexmesa.star import model as star_model
 
 
 class BinarySystem:
-    """Coupled binary system (`Donor + PointMass` or `Donor + Accretor`)."""
+    """Coupled binary system (`Donor + PointMass` or `Donor + Accretor`).
+
+    Note:
+        The coupled step sequence, orbital integrator, and implicit RLOF search
+        are unverified against real MESA output (pending #143 and #160).
+    """
 
     def __init__(self, rust_sys: _rust.RustBinarySystem) -> None:
         """Initialize from a compiled `RustBinarySystem` handle."""

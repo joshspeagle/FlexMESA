@@ -1,17 +1,17 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
-"""Tests for the Wave 4 (`star_data` & `star`) benchmark suite and ZAMS parity.
+"""Tests for the Wave 4 (`star_data` & `star`) benchmark suite.
 
-Verifies that:
+Checks that:
 1. All 5 Wave 4 benchmark kernels (`bench_star_micro_vars`,
    `bench_star_hydro_eqns`, `bench_star_newton_step`, `bench_star_remesh`, and
-   `bench_star_evolve_step`) and `run_all_wave4_benchmarks` execute cleanly
-   across `rust` and `jax` pathways and return positive latencies and finite
-   numerical parity digests.
-2. `StarModel.from_zams(m, 0.02)` initializes cleanly across all built-in ZAMS
-   catalog masses (`0.51, 1.0, 2.0, 3.0, 4.0, 5.0, 10.0, 15.0 Msun`).
+   `bench_star_evolve_step`) and `run_all_wave4_benchmarks` execute across
+   `rust` and `jax` pathways and match self-generated FlexMESA regression
+   snapshots (internal regression checks, not upstream MESA outputs; tracked in
+   #146).
+2. `StarModel.from_zams(m, 0.02)` initializes across all built-in ZAMS catalog
+   masses (`0.51, 1.0, 2.0, 3.0, 4.0, 5.0, 10.0, 15.0 Msun`).
 3. Evolving a `4.0 Msun, Z = 0.02` ZAMS model to `star_age = 1.0e5 yr` matches
-   upstream Fortran MESA `star/test/LOGS/history.data` (`lg_Tcntr`, `lg_Dcntr`,
-   `lg_L`, `lg_R`, `lg_Teff`, `H_cntr`) to within `<= 1.0e-3` dex.
+   saved regression scalars (`#141`, `#146`).
 """
 
 from __future__ import annotations
@@ -20,7 +20,11 @@ import numpy as np
 
 from flexmesa import bench, star
 
-_EXPECTED_WAVE4_CHECKSUMS_N8: dict[str, float] = {
+# Self-generated FlexMESA regression snapshots at N=8 (not upstream MESA
+# outputs; `star_newton_step` shifted from 1.33327716396219e2 to
+# 1.454270997871555e2 and `star_evolve_step` from 9.987143125142524e1 to
+# 1.005913169168671e2 in 642da54; tracked in #146).
+_WAVE4_REGRESSION_SNAPSHOTS_N8: dict[str, float] = {
     "star_micro_vars": 2.497297961588147e2,
     "star_hydro_eqns": 4.253224624211422e6,
     "star_newton_step": 1.454270997871555e2,
@@ -30,13 +34,13 @@ _EXPECTED_WAVE4_CHECKSUMS_N8: dict[str, float] = {
 
 
 def test_wave4_bench_kernels_return_positive_throughput() -> None:
-    """All 5 Wave 4 benchmark kernels return valid timing and parity records."""
+    """All 5 Wave 4 benchmark kernels match FlexMESA regression snapshots."""
     records = bench.run_all_wave4_benchmarks(
         zone_counts=(8,), n_warmup=1, n_repeats=3
     )
     assert len(records) == 5
     workloads = {r.workload for r in records}
-    assert workloads == set(_EXPECTED_WAVE4_CHECKSUMS_N8)
+    assert workloads == set(_WAVE4_REGRESSION_SNAPSHOTS_N8)
     for rec in records:
         assert rec.n_zones == 8
         assert rec.stage0.median_us > 0.0
@@ -45,11 +49,11 @@ def test_wave4_bench_kernels_return_positive_throughput() -> None:
         assert rec.stage3.median_us > 0.0
         assert rec.max_rel_err < 1.0e-10
         assert np.isfinite(rec.checksum)
-        exp_sum = _EXPECTED_WAVE4_CHECKSUMS_N8[rec.workload]
-        rel_err = abs(rec.checksum - exp_sum) / abs(exp_sum)
+        snap = _WAVE4_REGRESSION_SNAPSHOTS_N8[rec.workload]
+        rel_err = abs(rec.checksum - snap) / abs(snap)
         assert rel_err <= 1.0e-12, (
-            f"{rec.workload} (N=8) checksum {rec.checksum:.15e} "
-            f"!= {exp_sum:.15e} (rel {rel_err:.3e})"
+            f"{rec.workload} (N=8) regression snapshot {rec.checksum:.15e} "
+            f"!= {snap:.15e} (rel {rel_err:.3e})"
         )
 
 

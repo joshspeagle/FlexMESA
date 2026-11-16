@@ -250,7 +250,7 @@ fn assert_slow_uncapped_case(
 }
 
 #[test]
-#[ignore = "slow uncapped campaign (~121s) verified locally via --ignored"]
+#[ignore = "unverified uncapped binary campaign; tracked in #143 and #160"]
 fn test_uncapped_jdot_gr_check_campaign() {
     let rep = assert_slow_uncapped_case("jdot_gr_check");
     assert_eq!(rep.termination_code, "GrCheckPass");
@@ -258,7 +258,7 @@ fn test_uncapped_jdot_gr_check_campaign() {
 }
 
 #[test]
-#[ignore = "slow uncapped campaign (~147s) verified locally via --ignored"]
+#[ignore = "unverified uncapped binary campaign; tracked in #143 and #160"]
 fn test_uncapped_star_plus_point_mass_explicit_mdot_campaign() {
     let rep = assert_slow_uncapped_case("star_plus_point_mass_explicit_mdot");
     assert_eq!(rep.termination_code, "xa_central_lower_limit(h1)");
@@ -266,7 +266,7 @@ fn test_uncapped_star_plus_point_mass_explicit_mdot_campaign() {
 }
 
 #[test]
-#[ignore = "slow uncapped campaign (~415s) verified locally via --ignored"]
+#[ignore = "unverified uncapped binary campaign; tracked in #143 and #160"]
 fn test_uncapped_star_plus_point_mass_campaign() {
     let rep = assert_slow_uncapped_case("star_plus_point_mass");
     assert_eq!(rep.termination_code, "xa_central_lower_limit(h1)");
@@ -274,7 +274,7 @@ fn test_uncapped_star_plus_point_mass_campaign() {
 }
 
 #[test]
-#[ignore = "slow uncapped campaign (~621s) verified locally via --ignored"]
+#[ignore = "unverified uncapped binary campaign; tracked in #143 and #160"]
 fn test_uncapped_jdot_ml_check_campaign() {
     let rep = assert_slow_uncapped_case("jdot_ml_check");
     assert_eq!(rep.termination_code, "max_age");
@@ -282,14 +282,14 @@ fn test_uncapped_jdot_ml_check_campaign() {
 }
 
 #[test]
-#[ignore = "slow uncapped campaign (~928s) verified locally via --ignored"]
+#[ignore = "unverified uncapped binary campaign; tracked in #143 and #160"]
 fn test_uncapped_evolve_both_stars_campaign() {
     let rep = assert_slow_uncapped_case("evolve_both_stars");
     assert_eq!(rep.termination_code, "accretor_overflow_terminate");
 }
 
 #[test]
-#[ignore = "slow uncapped campaign (~1376s) verified locally via --ignored"]
+#[ignore = "unverified uncapped binary campaign; tracked in #143 and #160"]
 fn test_uncapped_wind_fed_bhhmxb_campaign() {
     let rep = assert_slow_uncapped_case("wind_fed_bhhmxb");
     assert_eq!(rep.termination_code, "xa_central_lower_limit(h1)");
@@ -297,7 +297,7 @@ fn test_uncapped_wind_fed_bhhmxb_campaign() {
 }
 
 #[test]
-#[ignore = "tracked in #139: core-He implicit rotational-wind outer retry parity"]
+#[ignore = "unverified uncapped binary campaign; tracked in #143 and #160"]
 fn test_uncapped_double_bh_campaign() {
     let rep = assert_slow_uncapped_case("double_bh");
     assert_eq!(rep.termination_code, "DoubleBhPass");

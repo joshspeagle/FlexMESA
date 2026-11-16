@@ -6,6 +6,11 @@
 //! Corresponds to the upstream Fortran MESA `astero/` module (`astero_def`,
 //! `astero_lib`, `astero_support`, `astero_run_support`, `extras_support`, and
 //! `pgstar_astero_plots`) and `star/private/report.f90` / `star_utils.f90`.
+//!
+//! **Status**: Closed-form surface corrections, separation ratios, and $\chi^2$
+//! kernels are unit-tested; the coupled asteroseismic search driver, in-house
+//! pulsation scaffolding, and `astero/test_suite` runner are **unverified**
+//! against real MESA output (pending #143, #162, #170, and #171).
 
 #![forbid(unsafe_code)]
 #![allow(

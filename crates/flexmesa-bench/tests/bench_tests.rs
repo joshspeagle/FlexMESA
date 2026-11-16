@@ -1,12 +1,10 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 //! Integration tests for the four-stage benchmark harness (`flexmesa-bench`).
 //!
-//! Verifies that all Wave 1 (`auto_diff`, `interp_2d`, `neu`, `mtx_tridiag`,
-//! `turb_mlt`, `turb_tdc`), Wave 2 (`chem_comp`, `ion_fe56`, `ion_4d`,
-//! `colors_sed`), Wave 3a (`eos_ideal`, `eos_helm`, `eos_pc`, `eos_skye`), and
-//! Wave 3b (`eos_4d`, `kap_fixed`, `rates_screen`, `net_eval`, `atm_table`)
-//! workloads maintain machine-precision parity ($\le 10^{-12}$ relative error)
-//! across Stages 0..3 and against pinned cross-language checksums.
+//! Checks internal Stage 0..3 consistency ($\le 10^{-12}$ relative difference,
+//! $\le 10^{-10}$ on Wave 4) and compares Stage 0 against self-generated
+//! `FlexMESA` regression snapshots at $N_{\mathrm{zones}} = 8$. These snapshots
+//! are internal regression values, not upstream MESA outputs (tracked in #146).
 
 use flexmesa_bench::{
     run_all_wave1_benchmarks, run_all_wave2_benchmarks,
@@ -14,9 +12,9 @@ use flexmesa_bench::{
     run_all_wave4_benchmarks, run_all_wave5_benchmarks, BenchRecord,
 };
 
-/// Pinned cross-language reference checksums for $N_{\mathrm{zones}} = 8$
-/// across all six Wave 1 workloads (shared with `tests/test_bench.py`).
-const EXPECTED_CHECKSUMS_N8: [(&str, f64); 6] = [
+/// `FlexMESA` regression snapshots for $N_{\mathrm{zones}} = 8$ across all six
+/// Wave 1 workloads (internal self-consistency check, tracked in #146).
+const WAVE1_REGRESSION_SNAPSHOTS_N8: [(&str, f64); 6] = [
     ("auto_diff", 1.089_274_155_553_244e4),
     ("interp_2d", 3.622_775_349_153_983e2),
     ("neu", 9.868_900_412_911_318e12),
@@ -25,28 +23,28 @@ const EXPECTED_CHECKSUMS_N8: [(&str, f64); 6] = [
     ("turb_tdc", 3.318_734_224_165_011_5),
 ];
 
-/// Pinned cross-language reference checksums for $N_{\mathrm{zones}} = 8$
-/// across all four Wave 2 workloads.
-const EXPECTED_WAVE2_CHECKSUMS_N8: [(&str, f64); 4] = [
+/// `FlexMESA` regression snapshots for $N_{\mathrm{zones}} = 8$ across all four
+/// Wave 2 workloads (internal self-consistency check, tracked in #146).
+const WAVE2_REGRESSION_SNAPSHOTS_N8: [(&str, f64); 4] = [
     ("chem_comp", 1.687_001_493_521_061e1),
     ("ion_fe56", 1.683_709_392_958_418e2),
     ("ion_4d", 6.118_846_146_172_181e1),
     ("colors_sed", 3.608_691_732_539_108e1),
 ];
 
-/// Pinned cross-language reference checksums for $N_{\mathrm{zones}} = 8$
-/// across all four Wave 3a EOS workloads.
-const EXPECTED_WAVE3A_CHECKSUMS_N8: [(&str, f64); 4] = [
+/// `FlexMESA` regression snapshots for $N_{\mathrm{zones}} = 8$ across all four
+/// Wave 3a EOS workloads (internal self-consistency check, tracked in #146).
+const WAVE3A_REGRESSION_SNAPSHOTS_N8: [(&str, f64); 4] = [
     ("eos_ideal", 1.438_224_257_481_198e2),
     ("eos_helm", 3.561_688_957_866_044e2),
     ("eos_pc", 4.117_886_894_420_108e2),
     ("eos_skye", 3.561_331_836_722_772e2),
 ];
 
-/// Pinned cross-language reference checksums for $N_{\mathrm{zones}} = 8$
-/// across all five Wave 3b microphysics workloads (shared with
-/// `tests/test_bench.py` and `benchmarks/fortran_mesa/run_wave3b_bench.f90`).
-const EXPECTED_WAVE3B_CHECKSUMS_N8: [(&str, f64); 5] = [
+/// `FlexMESA` regression snapshots for $N_{\mathrm{zones}} = 8$ across all five
+/// Wave 3b microphysics workloads (internal self-consistency check, tracked in
+/// #146).
+const WAVE3B_REGRESSION_SNAPSHOTS_N8: [(&str, f64); 5] = [
     ("eos_4d", 2.037_364_564_689_326e2),
     ("kap_fixed", 2.909_195_757_111_935),
     ("rates_screen", -1.139_188_914_724_813e2),
@@ -54,10 +52,12 @@ const EXPECTED_WAVE3B_CHECKSUMS_N8: [(&str, f64); 5] = [
     ("atm_table", 8.985_411_175_716_764e1),
 ];
 
-/// Pinned cross-language reference checksums for $N_{\mathrm{zones}} = 8$
-/// across all five Wave 4 1D stellar engine workloads (shared with
-/// `tests/test_wave4_bench.py` and `benchmarks/fortran_mesa/run_wave4_bench.f90`).
-const EXPECTED_WAVE4_CHECKSUMS_N8: [(&str, f64); 5] = [
+/// `FlexMESA` regression snapshots for $N_{\mathrm{zones}} = 8$ across all five
+/// Wave 4 1D stellar engine workloads (internal self-consistency check, not an
+/// upstream MESA output; `star_newton_step` shifted from `1.33327716396219e2`
+/// to `1.454270997871555e2` and `star_evolve_step` from `9.987143125142524e1`
+/// to `1.005913169168671e2` in `642da54`; tracked in #146).
+const WAVE4_REGRESSION_SNAPSHOTS_N8: [(&str, f64); 5] = [
     ("star_micro_vars", 2.497_297_961_588_147e2),
     ("star_hydro_eqns", 4.253_224_624_211_422e6),
     ("star_newton_step", 1.454_270_997_871_555e2),
@@ -65,10 +65,11 @@ const EXPECTED_WAVE4_CHECKSUMS_N8: [(&str, f64); 5] = [
     ("star_evolve_step", 1.005_913_169_168_671e2),
 ];
 
-/// Pinned cross-language reference checksums for $N_{\mathrm{zones}} = 8$
-/// across all four Wave 5 workloads (shared with `tests/test_wave5_bench.py`
-/// and `benchmarks/fortran_mesa/run_wave5_bench.f90`).
-const EXPECTED_WAVE5_CHECKSUMS_N8: [(&str, f64); 4] = [
+/// `FlexMESA` regression snapshots for $N_{\mathrm{zones}} = 8$ across all four
+/// Wave 5 workloads (internal self-consistency check, not an upstream MESA
+/// output; `w5_diff_rot` shifted from `3.082380424983001e5` to
+/// `2.551374595308515e3` in `642da54`; tracked in #146).
+const WAVE5_REGRESSION_SNAPSHOTS_N8: [(&str, f64); 4] = [
     ("w5_diff_rot", 2.551_374_595_308_515e3),
     ("w5_riemann_rsp2", -2.543_418_211_346_364e5),
     ("w5_binary_rlof", 6.234_702_123_446_103),
@@ -142,82 +143,82 @@ fn print_bench_table(records: &[BenchRecord]) {
     }
 }
 
-/// Verifies that all six Wave 1 benchmark workloads execute across Stages 0..3
-/// and maintain machine-precision parity ($\le 10^{-12}$).
+/// Checks that all six Wave 1 benchmark workloads execute across Stages 0..3
+/// and match their `FlexMESA` regression snapshots ($\le 10^{-12}$).
 #[test]
 fn test_wave1_four_stage_benchmarks_parity() {
     let records = run_all_wave1_benchmarks(&[8, 32], 1, 3);
-    assert_records_parity(&records, &EXPECTED_CHECKSUMS_N8);
+    assert_records_parity(&records, &WAVE1_REGRESSION_SNAPSHOTS_N8);
 }
 
 /// Prints the full Wave 1 four-stage benchmark table across
 /// $N_{\mathrm{zones}} \in \{128, 1024, 4096\}$.
 #[test]
-#[ignore = "benchmark table generator for --release runs"]
+#[ignore = "benchmark table generator for --release runs; tracked in #146"]
 fn print_full_wave1_rust_benchmarks() {
     let records = run_all_wave1_benchmarks(&[128, 1024, 4096], 3, 9);
     print_bench_table(&records);
 }
 
-/// Verifies that all four Wave 2 benchmark workloads execute across Stages 0..3
-/// and maintain machine-precision parity ($\le 10^{-12}$).
+/// Checks that all four Wave 2 benchmark workloads execute across Stages 0..3
+/// and match their `FlexMESA` regression snapshots ($\le 10^{-12}$).
 #[test]
 fn test_wave2_four_stage_benchmarks_parity() {
     let records = run_all_wave2_benchmarks(&[8, 32], 1, 3);
-    assert_records_parity(&records, &EXPECTED_WAVE2_CHECKSUMS_N8);
+    assert_records_parity(&records, &WAVE2_REGRESSION_SNAPSHOTS_N8);
 }
 
 /// Prints the full Wave 2 four-stage benchmark table across
 /// $N_{\mathrm{zones}} \in \{128, 1024, 4096\}$.
 #[test]
-#[ignore = "benchmark table generator for --release runs"]
+#[ignore = "benchmark table generator for --release runs; tracked in #146"]
 fn print_full_wave2_rust_benchmarks() {
     let records = run_all_wave2_benchmarks(&[128, 1024, 4096], 3, 9);
     print_bench_table(&records);
 }
 
-/// Verifies that all four Wave 3a EOS benchmark workloads execute across Stages
-/// 0..3 and maintain machine-precision parity ($\le 10^{-12}$).
+/// Checks that all four Wave 3a EOS benchmark workloads execute across Stages
+/// 0..3 and match their `FlexMESA` regression snapshots ($\le 10^{-12}$).
 #[test]
 fn test_wave3a_four_stage_benchmarks_parity() {
     let records = run_all_wave3a_benchmarks(&[8, 32], 1, 3);
-    assert_records_parity(&records, &EXPECTED_WAVE3A_CHECKSUMS_N8);
+    assert_records_parity(&records, &WAVE3A_REGRESSION_SNAPSHOTS_N8);
 }
 
 /// Prints the full Wave 3a four-stage benchmark table across
 /// $N_{\mathrm{zones}} \in \{128, 1024, 4096\}$.
 #[test]
-#[ignore = "benchmark table generator for --release runs"]
+#[ignore = "benchmark table generator for --release runs; tracked in #146"]
 fn print_full_wave3a_rust_benchmarks() {
     let records = run_all_wave3a_benchmarks(&[128, 1024, 4096], 3, 9);
     print_bench_table(&records);
 }
 
-/// Verifies that all five Wave 3b microphysics benchmark workloads execute
-/// across Stages 0..3 and maintain machine-precision parity ($\le 10^{-12}$).
+/// Checks that all five Wave 3b microphysics benchmark workloads execute
+/// across Stages 0..3 and match their `FlexMESA` regression snapshots ($\le 10^{-12}$).
 #[test]
 fn test_wave3b_four_stage_benchmarks_parity() {
     let records = run_all_wave3b_benchmarks(&[8, 32], 1, 3);
-    assert_records_parity(&records, &EXPECTED_WAVE3B_CHECKSUMS_N8);
+    assert_records_parity(&records, &WAVE3B_REGRESSION_SNAPSHOTS_N8);
 }
 
 /// Prints the full Wave 3b four-stage benchmark table across
 /// $N_{\mathrm{zones}} \in \{128, 1024, 4096\}$.
 #[test]
-#[ignore = "benchmark table generator for --release runs"]
+#[ignore = "benchmark table generator for --release runs; tracked in #146"]
 fn print_full_wave3b_rust_benchmarks() {
     let records = run_all_wave3b_benchmarks(&[128, 1024, 4096], 3, 9);
     print_bench_table(&records);
 }
 
-/// Verifies that all five Wave 4 1D stellar engine benchmark workloads execute
-/// across Stages 0..3 and maintain machine-precision parity ($\le 10^{-10}$).
+/// Checks that all five Wave 4 1D stellar engine benchmark workloads execute
+/// across Stages 0..3 and match their `FlexMESA` regression snapshots ($\le 10^{-10}$).
 #[test]
 fn test_wave4_four_stage_benchmarks_parity() {
     let records = run_all_wave4_benchmarks(&[8, 32], 1, 3);
     assert_records_parity_with_tol(
         &records,
-        &EXPECTED_WAVE4_CHECKSUMS_N8,
+        &WAVE4_REGRESSION_SNAPSHOTS_N8,
         1.0e-10,
     );
 }
@@ -225,24 +226,24 @@ fn test_wave4_four_stage_benchmarks_parity() {
 /// Prints the full Wave 4 four-stage benchmark table across
 /// $N_{\mathrm{zones}} \in \{128, 512, 1024\}$.
 #[test]
-#[ignore = "benchmark table generator for --release runs"]
+#[ignore = "benchmark table generator for --release runs; tracked in #146"]
 fn print_full_wave4_rust_benchmarks() {
     let records = run_all_wave4_benchmarks(&[128, 512, 1024], 2, 7);
     print_bench_table(&records);
 }
 
-/// Verifies that all four Wave 5 benchmark workloads execute across Stages 0..3
-/// and maintain machine-precision parity ($\le 10^{-12}$).
+/// Checks that all four Wave 5 benchmark workloads execute across Stages 0..3
+/// and match their `FlexMESA` regression snapshots ($\le 10^{-12}$).
 #[test]
 fn test_wave5_four_stage_benchmarks_parity() {
     let records = run_all_wave5_benchmarks(&[8, 32], 1, 3);
-    assert_records_parity(&records, &EXPECTED_WAVE5_CHECKSUMS_N8);
+    assert_records_parity(&records, &WAVE5_REGRESSION_SNAPSHOTS_N8);
 }
 
 /// Prints the full Wave 5 four-stage benchmark table across
 /// $N_{\mathrm{zones}} \in \{128, 512, 1024\}$.
 #[test]
-#[ignore = "benchmark table generator for --release runs"]
+#[ignore = "benchmark table generator for --release runs; tracked in #146"]
 fn print_full_wave5_rust_benchmarks() {
     let records = run_all_wave5_benchmarks(&[128, 512, 1024], 3, 11);
     print_bench_table(&records);

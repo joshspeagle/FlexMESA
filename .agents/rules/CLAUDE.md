@@ -7,7 +7,7 @@
 - Read [`notes/PLAN.md`](notes/PLAN.md) (current position and roadmap), the latest entries in [`notes/LOG.md`](notes/LOG.md), and any open architectural questions in [`notes/QUESTIONS.md`](notes/QUESTIONS.md).
 - Every settled architectural, numerical, or governance choice is recorded in [`notes/DECISIONS.md`](notes/DECISIONS.md).
 - The MESA codebase census, 12-tier dependency graph, and migration blueprint live in [`docs/design/scoping-and-architecture.md`](docs/design/scoping-and-architecture.md) and specifications in [`docs/design/`](docs/design/).
-- Whenever modifying public Rust crates (`crates/`), Python/JAX modules (`src/flexmesa/`), tests (`tests/`), or documentation (`docs/`, `mkdocs.yml`), follow the standing repository rules in [`.claude/rules/docs-upkeep.md`](.claude/rules/docs-upkeep.md) and [`.claude/rules/e2e-debugging-and-parity.md`](.claude/rules/e2e-debugging-and-parity.md) (mirrored in `.agents/rules/`).
+- Whenever modifying public Rust crates (`crates/`), Python/JAX modules (`src/flexmesa/`), or documentation (`docs/`, `mkdocs.yml`), follow the standing documentation upkeep rule in [`.claude/rules/docs-upkeep.md`](.claude/rules/docs-upkeep.md) (mirrored in [`.agents/rules/docs-upkeep.md`](.agents/rules/docs-upkeep.md)).
 
 ## Layout
 
@@ -85,15 +85,6 @@
     2. Performs a holistic cross-module code and performance review across the entire wave, implementing algorithmic and FFI optimizations to eliminate regressions and maximize speedups.
     3. Re-runs the full `FlexMESA` test suite and the compare-to-original-Fortran-MESA benchmark suite after every batch of `X.5` changes, advancing to the next wave **only** when all Fortran MESA parity and performance gates pass.
     4. Updates the public-facing MkDocs Material documentation website (`docs/`) with module explainers, governing equations, diagnostic plots, updated 4-way benchmark scorecards, and synced API references.
-
-## End-to-End (`test_suite`) Porting, Checkpointing & Debugging Protocol (`DECISIONS #17`)
-
-Full operational checklist in [`.claude/rules/e2e-debugging-and-parity.md`](.claude/rules/e2e-debugging-and-parity.md):
-
-1. **Checkpoint-First Isolation for Long Campaigns (`> 60 s`)**: Never re-run a multi-minute evolutionary test from step 1 more than once to debug a mid-run failure or timestep stall. After the first failure, serialize a `.photo` / `.mod` (or `BinarySystem` snapshot) checkpoint `2` to `5` steps before the failing transition and reproduce the exact step window in a `< 2 s` single-step harness with per-zone Newton residual, `why_Tlim` retry-reason, mixing, and timestep telemetry.
-2. **Upstream Step-Lifecycle Audit Before Local Solver Edits**: Never add ad-hoc residual-scale floors, damping clamps, or `dt`-dependent heuristics inside `hydro_eqns`, `solver`, or `bcyclic` to mask a severe timestep collapse (such as falling below the `f64` convective-core quantization ceiling $\Delta t_{\mathrm{crit}} \approx (\sigma/\Delta m)\,\Delta X_{\mathrm{ULP}}/\mathrm{tol}$). Audit the full upstream Fortran MESA step call graph (`evolve.f90` $\to$ `do_adjust_mass` / `do_conv_premix` / `premix_omega` $\to$ `struct_burn_mix.f90` `op_split_burn` & `get_convection_sigmas` $\to$ `save_start_values` $\to$ `star_solver.f90` / `solver_support.f90` $\to$ post-step $\Omega$ transport & outer binary retries) to fix the upstream physical or bookkeeping cause of the first retry.
-3. **Three-Fix Stop & Diagnostic Issue Checkpoint**: If three targeted fixes on the `< 2 s` checkpoint harness do not resolve a failure or expose cross-module coupling, stop iterating, push the last working baseline to the active branch / draft PR, and record a structured root-cause and dependency breakdown in a GitHub issue before attempting further changes.
-4. **Multi-Step Henyey Relaxation & `Extras` Trait Separation**: Implement `relax_initial_*` (`relax_initial_Z`, `relax_initial_Y`, `relax_initial_mass`, `relax_M_center`, `relax_tau_factor`) via genuine multi-step Henyey equilibration (`doing_relax = true`, frozen nuclear composition, `Cox` MLT) rather than single-pass algebraic array overwrites, and isolate `src/run_star_extras.f90` and `src/run_binary_extras.f90` case logic behind `StarExtras` and `BinaryExtras` traits rather than case-name branches inside library physics or step drivers.
 
 ## Scientific Code, Verification & Prose Standards
 

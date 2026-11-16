@@ -7,6 +7,10 @@ period spacings, glitch acoustic depths, surface-effect frequency corrections
 ratios ($r_{01}, r_{10}, r_{02}$), mode matching, composite $\\chi^2$
 evaluation, and Nelder-Mead / Powell quadratic / Cartesian grid optimization
 drivers across Safe Rust and JAX.
+
+Note:
+    The coupled `astero/test_suite` search and evolution drivers are unverified
+    against real MESA output (pending #143, #162, #170, and #171).
 """
 
 from __future__ import annotations

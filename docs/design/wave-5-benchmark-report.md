@@ -23,9 +23,9 @@ All four Wave 5 workloads evaluate identical radial profiles $s_k = (k - 0.5) / 
 
 ## 2. Regression Snapshots & Rust-vs-JAX Consistency
 
-Safe Rust and Python/JAX agree internally to $\le 5.6 \times 10^{-15}$ across $N_{\mathrm{zones}} \in \{128, 512, 1024\}$. The Fortran column below comes from `benchmarks/fortran_mesa/bench_kernels_wave5.f90`, a hand-written Fortran comparator that calls selected MESA helper functions rather than full MESA step routines; these numbers are not upstream MESA reference outputs ([#146](https://github.com/joshspeagle/FlexMESA/issues/146)). On `w5_diff_rot`, `bench_kernels_wave5.f90` (`3.1246e5`) and the current Rust/JAX regression snapshots (`2.6006e3`, changed from `3.1246e5` in `642da54`) evaluate different Spruit-Tayler expressions and have not been checked against upstream `am_mixing.f90` ([#146](https://github.com/joshspeagle/FlexMESA/issues/146), [#158](https://github.com/joshspeagle/FlexMESA/issues/158)):
+Safe Rust and Python/JAX agree internally to $\le 5.6 \times 10^{-15}$ across $N_{\mathrm{zones}} \in \{128, 512, 1024\}$. The Fortran column below comes from `benchmarks/fortran_mesa/bench_kernels_wave5.f90`, a hand-written Fortran comparator that calls selected MESA helper functions rather than full MESA step routines; these numbers are not upstream MESA outputs ([#146](https://github.com/joshspeagle/FlexMESA/issues/146)). On `w5_diff_rot`, `bench_kernels_wave5.f90` (`3.1246e5`) and the current Rust/JAX regression snapshots (`2.6006e3`, changed from `3.1246e5` in `642da54`) evaluate different Spruit-Tayler expressions and have not been checked against upstream `star/private/rotation_mix_info.f90` (`set_ST`; [#146](https://github.com/joshspeagle/FlexMESA/issues/146), [#158](https://github.com/joshspeagle/FlexMESA/issues/158)):
 
-| Workload | $N_{\mathrm{zones}}$ | Reference Fortran Harness | Safe Rust Regression Snapshot | Python/JAX Regression Snapshot | Max Rust vs. JAX Rel. Diff |
+| Workload | $N_{\mathrm{zones}}$ | Standalone Fortran Harness | Safe Rust Regression Snapshot | Python/JAX Regression Snapshot | Max Rust vs. JAX Rel. Diff |
 | :--- | :---: | :---: | :---: | :---: | :---: |
 | `w5_diff_rot` | `128` | `3.12459668E+05` | `2.60059307e3` | `2.60059307e+03` | `2.292e-15` |
 | `w5_diff_rot` | `512` | `3.12476430E+05` | `2.60090094e3` | `2.60090094e+03` | `3.634e-15` |

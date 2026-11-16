@@ -79,7 +79,7 @@ Full per-size tables ($N_{\mathrm{zones}} \in \{128, 512, 1024\}$) and the `star
 
 Full per-size tables ($N_{\mathrm{zones}} \in \{128, 512, 1024\}$) are archived in the [Advanced Star, Binaries & Asteroseismology Benchmark Report](../design/wave-5-benchmark-report.md).
 
-| Workload ($N_{\mathrm{zones}} = 1024$) | Reference Fortran 1t Stage 2 ($\mu\mathrm{s}$) | Reference Fortran 4t Stage 3 ($\mu\mathrm{s}$) | Safe Rust 1t Stage 2 ($\mu\mathrm{s}$) | Safe Rust 4t Stage 3 ($\mu\mathrm{s}$) | PyO3 4t Stage 1 ($\mu\mathrm{s}$) | JAX `@jit` Stage 2 ($\mu\mathrm{s}$) | JAX `vmap` Stage 3 ($\mu\mathrm{s}$) | Rust/JAX Regression Snapshot |
+| Workload ($N_{\mathrm{zones}} = 1024$) | Standalone Fortran 1t Stage 2 ($\mu\mathrm{s}$) | Standalone Fortran 4t Stage 3 ($\mu\mathrm{s}$) | Safe Rust 1t Stage 2 ($\mu\mathrm{s}$) | Safe Rust 4t Stage 3 ($\mu\mathrm{s}$) | PyO3 4t Stage 1 ($\mu\mathrm{s}$) | JAX `@jit` Stage 2 ($\mu\mathrm{s}$) | JAX `vmap` Stage 3 ($\mu\mathrm{s}$) | Rust/JAX Regression Snapshot |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | `w5_diff_rot` | `182.87` | `91.83` | `190.48` | `70.41` | `49.62` | `248.95` | `120.91` | `2.60091642e3` |
 | `w5_riemann_rsp2` | `63.94` | `46.46` | `28.15` | `7.94` | `33.29` | `204.14` | `89.90` | `-2.72283698e5` |

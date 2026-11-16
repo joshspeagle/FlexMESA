@@ -64,8 +64,11 @@ as findings.
    against real MESA, simple main-sequence cases end within about 1% in age
    and about 1e-3 dex in L, Teff and R. A core helium burning case with
    predictive mixing (`hb_2M`) ends with a helium burning lifetime of 71 Myr
-   against 136 Myr in MESA, from the same starting model, while still being
-   reported as passed. See [`measurements.md`](measurements.md).
+   against 136 Myr in MESA, from the same starting model. A brown dwarf case
+   that starts from a fabricated model (`make_brown_dwarf`) ends as a
+   different object, with a radius 17 times smaller than MESA's. A rotating
+   case (`magnetic_braking`) fails to converge. All of these are reported as
+   passed. See [`measurements.md`](measurements.md).
 
 4. **About one sixth of upstream `star`, `binary` and `astero` is
    substantially ported.** By upstream line count, excluding plotting: 16%
@@ -158,6 +161,8 @@ maintainability.
 | C1-3, C1-4 | WP | `relax.f90` (4215 lines) is not ported; relaxations are algebraic rescalings | reading both sides |
 | C1-16 | WP | Convective premixing, predictive mixing, phase separation and element diffusion are placeholder algorithms | reading both sides (phase diagram), FlexMESA only (rest) |
 | M-2, F4-2 | WP | `hb_2M` core helium burning lifetime 71 Myr against 136 Myr in MESA | verified by running; cause inferred |
+| M-6 | WP | `make_brown_dwarf` reaches the upstream stop condition as a different object (log g 8.2 against 4.4) and is reported as passed | verified by running |
+| M-8 | WN | `magnetic_braking` fails to converge when run uncapped; three other tier 3 cases did not finish in 20 minutes | verified by running |
 | F4-1 | WP | Composition-gradient smoothing uses a different kernel with no threshold, on the default path | reading both sides |
 | F1-12 to F1-17, C1-17 | WN | Newton solver damping, iteration budget, norms and acceptance rule differ from `star_solver.f90` | reading both sides |
 | F1-33, F1-34, C1-18 | WN | Mesh planner is a different algorithm from `mesh_plan.f90` | reading both sides |
@@ -205,6 +210,7 @@ Registers:
 | [`docs-governance.md`](docs-governance.md) | Claims register, benchmarks, citations, rules, CI | G1-1 to G1-11 |
 | [`measurements.md`](measurements.md) | Side-by-side runs against real MESA | M-1 onwards |
 | [`remediation-plan.md`](remediation-plan.md) | Ordered work packages | |
+| [`TRACKER.md`](TRACKER.md) | Mapping from packages to GitHub issues (#140 and its sub-issues), order, decisions needed | |
 
 ## The claims in issues #137 and #139
 
@@ -290,9 +296,11 @@ posted to GitHub during this audit.
 
 ## What this audit did not get to
 
-- Runtime comparison covers the cases listed in
-  [`measurements.md`](measurements.md) only, not all 107. No astero case was
-  compared against real MESA.
+- Runtime comparison covers the ten star cases listed in
+  [`measurements.md`](measurements.md) only, not all 107; four of those did
+  not finish in FlexMESA within the time limit and so have no trajectory
+  comparison. No binary or astero case was compared against real MESA in this
+  audit.
 - The Wave 2, 3a, 3b and 4 Fortran harnesses were built against real MESA but
   their checksums were not compared with the documented values (the run was
   interrupted); Wave 5 does not link without further library additions.

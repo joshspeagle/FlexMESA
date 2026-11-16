@@ -16,6 +16,14 @@ onwards) produce verifiable progress.
 
 Sizes: S is under a day, M is a few days, L is a week or more.
 
+The packages are tracked as GitHub issues under #140. [`TRACKER.md`](TRACKER.md)
+maps each package to its issue and lists dependencies and the decisions that
+need the project lead. The issue list refines this plan in three ways: it adds
+a package that moves the upstream reference to MESA release 26.4.1 (#141), it
+splits benchmark provenance out of package 1 (#146), and it splits the Phase C
+items into 15 packages (#152 to #166). Where the two differ, the issues are
+current.
+
 ## Phase A. Make the truth visible
 
 ### 1. Correct the upstream label and the public claims (S)

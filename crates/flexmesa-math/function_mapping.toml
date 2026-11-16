@@ -1,0 +1,329 @@
+# Complete function mapping table for `math/public/math_lib_crmath.f90` at MESA tag `26.4.1` (#165).
+# Verified against `crates/flexmesa-math` and `crates/flexmesa-crlibm-sys` by `tests/mesa_26_4_1_vectors.rs`.
+
+[[entries]]
+mesa_public = "MATH_BACKEND"
+mesa_source = "math/public/math_lib_crmath.f90:34,61"
+crmath_procedure = "parameter 'CRMATH'"
+crlibm_symbol = "none (constant)"
+flexmesa_math = "flexmesa_math::MATH_BACKEND"
+
+[[entries]]
+mesa_public = "math_init"
+mesa_source = "math/public/math_lib_crmath.f90:63,107-115"
+crmath_procedure = "crmath::crmath_init (crmath.f90:36) + log(10._dp) + precompute_some_zs()"
+crlibm_symbol = "crlibm_init + log_rz(10.0)"
+flexmesa_math = "flexmesa_math::math_init"
+
+[[entries]]
+mesa_public = "safe_sqrt"
+mesa_source = "math/public/math_lib_crmath.f90:64,118-125"
+crmath_procedure = "math_lib::safe_sqrt_ (composite: SQRT(MAX(x, 0._dp)))"
+crlibm_symbol = "IEEE-754 hardware sqrt (composite)"
+flexmesa_math = "flexmesa_math::safe_sqrt"
+
+[[entries]]
+mesa_public = "log"
+mesa_source = "math/public/math_lib_crmath.f90:65"
+crmath_procedure = "crmath_r_dp::log_r_dp_ (crmath_r_dp.f90:127-133)"
+crlibm_symbol = "log_rz"
+flexmesa_math = "flexmesa_math::log"
+
+[[entries]]
+mesa_public = "safe_log"
+mesa_source = "math/public/math_lib_crmath.f90:66,128-143"
+crmath_procedure = "math_lib::safe_log_ (composite over log_r_dp_)"
+crlibm_symbol = "log_rz (composite: -99._dp if non-finite else log_rz(max(1e-99, x)))"
+flexmesa_math = "flexmesa_math::safe_log"
+
+[[entries]]
+mesa_public = "log10"
+mesa_source = "math/public/math_lib_crmath.f90:67"
+crmath_procedure = "crmath_r_dp::log10_r_dp_ (crmath_r_dp.f90:157-163)"
+crlibm_symbol = "log10_rz"
+flexmesa_math = "flexmesa_math::log10"
+
+[[entries]]
+mesa_public = "safe_log10"
+mesa_source = "math/public/math_lib_crmath.f90:68,146-161"
+crmath_procedure = "math_lib::safe_log10_ (composite over log10_r_dp_)"
+crlibm_symbol = "log10_rz (composite: -99._dp if non-finite else log10_rz(max(1e-99, x)))"
+flexmesa_math = "flexmesa_math::safe_log10"
+
+[[entries]]
+mesa_public = "log1p"
+mesa_source = "math/public/math_lib_crmath.f90:69"
+crmath_procedure = "crmath_r_dp::log1p_r_dp_ (crmath_r_dp.f90:137-143)"
+crlibm_symbol = "log1p_rz"
+flexmesa_math = "flexmesa_math::log1p"
+
+[[entries]]
+mesa_public = "log2"
+mesa_source = "math/public/math_lib_crmath.f90:70"
+crmath_procedure = "crmath_r_dp::log2_r_dp_ (crmath_r_dp.f90:147-153)"
+crlibm_symbol = "log2_rz"
+flexmesa_math = "flexmesa_math::log2"
+
+[[entries]]
+mesa_public = "exp"
+mesa_source = "math/public/math_lib_crmath.f90:71"
+crmath_procedure = "crmath_r_dp::exp_r_dp_ (crmath_r_dp.f90:167-173)"
+crlibm_symbol = "exp_rd"
+flexmesa_math = "flexmesa_math::exp"
+
+[[entries]]
+mesa_public = "exp10"
+mesa_source = "math/public/math_lib_crmath.f90:72,164-190"
+crmath_procedure = "math_lib::exp10_ (composite: sequential *10._dp on integer x, else exp(x*ln10_m))"
+crlibm_symbol = "exp_rd + log_rz(10.0) (composite)"
+flexmesa_math = "flexmesa_math::exp10"
+
+[[entries]]
+mesa_public = "expm1"
+mesa_source = "math/public/math_lib_crmath.f90:73"
+crmath_procedure = "crmath_r_dp::expm1_r_dp_ (crmath_r_dp.f90:177-183)"
+crlibm_symbol = "expm1_rz"
+flexmesa_math = "flexmesa_math::expm1"
+
+[[entries]]
+mesa_public = "powm1"
+mesa_source = "math/public/math_lib_crmath.f90:74; math/private/math_pown.f90:64-71"
+crmath_procedure = "math_pown::powm1_ (1.0_dp / x)"
+crlibm_symbol = "IEEE-754 division (composite)"
+flexmesa_math = "flexmesa_math::powm1"
+
+[[entries]]
+mesa_public = "pow (pow_i_)"
+mesa_source = "math/public/math_lib_crmath.f90:55,75,193-217"
+crmath_procedure = "math_lib::pow_i_ (0._dp if x==0 else sequential *x and 1._dp/pow_x)"
+crlibm_symbol = "IEEE-754 sequential multiplication (composite)"
+flexmesa_math = "flexmesa_math::powi"
+
+[[entries]]
+mesa_public = "pow (pow_r_)"
+mesa_source = "math/public/math_lib_crmath.f90:56,75,220-255"
+crmath_procedure = "math_lib::pow_r_ (0._dp if x==0; sequential *x if integer |y|<100; else exp(log(x)*y))"
+crlibm_symbol = "exp_rd + log_rz (composite)"
+flexmesa_math = "flexmesa_math::pow"
+
+[[entries]]
+mesa_public = "pow2"
+mesa_source = "math/public/math_lib_crmath.f90:76; math/private/math_pown.f90:74-81"
+crmath_procedure = "math_pown::pow2_ (x*x)"
+crlibm_symbol = "IEEE-754 multiplication chain"
+flexmesa_math = "flexmesa_math::pow2"
+
+[[entries]]
+mesa_public = "pow3"
+mesa_source = "math/public/math_lib_crmath.f90:77; math/private/math_pown.f90:84-91"
+crmath_procedure = "math_pown::pow3_ (x*x*x)"
+crlibm_symbol = "IEEE-754 multiplication chain"
+flexmesa_math = "flexmesa_math::pow3"
+
+[[entries]]
+mesa_public = "pow4"
+mesa_source = "math/public/math_lib_crmath.f90:78; math/private/math_pown.f90:94-101"
+crmath_procedure = "math_pown::pow4_ (x*x*x*x)"
+crlibm_symbol = "IEEE-754 multiplication chain"
+flexmesa_math = "flexmesa_math::pow4"
+
+[[entries]]
+mesa_public = "pow5"
+mesa_source = "math/public/math_lib_crmath.f90:79; math/private/math_pown.f90:104-111"
+crmath_procedure = "math_pown::pow5_ (x*x*x*x*x)"
+crlibm_symbol = "IEEE-754 multiplication chain"
+flexmesa_math = "flexmesa_math::pow5"
+
+[[entries]]
+mesa_public = "pow6"
+mesa_source = "math/public/math_lib_crmath.f90:80; math/private/math_pown.f90:114-121"
+crmath_procedure = "math_pown::pow6_ (x*x*x*x*x*x)"
+crlibm_symbol = "IEEE-754 multiplication chain"
+flexmesa_math = "flexmesa_math::pow6"
+
+[[entries]]
+mesa_public = "pow7"
+mesa_source = "math/public/math_lib_crmath.f90:81; math/private/math_pown.f90:124-131"
+crmath_procedure = "math_pown::pow7_ (x*x*x*x*x*x*x)"
+crlibm_symbol = "IEEE-754 multiplication chain"
+flexmesa_math = "flexmesa_math::pow7"
+
+[[entries]]
+mesa_public = "pow8"
+mesa_source = "math/public/math_lib_crmath.f90:82; math/private/math_pown.f90:134-141"
+crmath_procedure = "math_pown::pow8_ (x*x*x*x*x*x*x*x)"
+crlibm_symbol = "IEEE-754 multiplication chain"
+flexmesa_math = "flexmesa_math::pow8"
+
+[[entries]]
+mesa_public = "cos"
+mesa_source = "math/public/math_lib_crmath.f90:83"
+crmath_procedure = "crmath_r_dp::cos_r_dp_ (crmath_r_dp.f90:206-212)"
+crlibm_symbol = "cos_rz"
+flexmesa_math = "flexmesa_math::cos"
+
+[[entries]]
+mesa_public = "sin"
+mesa_source = "math/public/math_lib_crmath.f90:84"
+crmath_procedure = "crmath_r_dp::sin_r_dp_ (crmath_r_dp.f90:216-222)"
+crlibm_symbol = "sin_rz"
+flexmesa_math = "flexmesa_math::sin"
+
+[[entries]]
+mesa_public = "tan"
+mesa_source = "math/public/math_lib_crmath.f90:85"
+crmath_procedure = "crmath_r_dp::tan_r_dp_ (crmath_r_dp.f90:226-232)"
+crlibm_symbol = "tan_rz"
+flexmesa_math = "flexmesa_math::tan"
+
+[[entries]]
+mesa_public = "cospi"
+mesa_source = "math/public/math_lib_crmath.f90:86"
+crmath_procedure = "crmath_r_dp::cospi_r_dp_ (crmath_r_dp.f90:236-242)"
+crlibm_symbol = "cospi_rz"
+flexmesa_math = "flexmesa_math::cospi"
+
+[[entries]]
+mesa_public = "sinpi"
+mesa_source = "math/public/math_lib_crmath.f90:87"
+crmath_procedure = "crmath_r_dp::sinpi_r_dp_ (crmath_r_dp.f90:246-252)"
+crlibm_symbol = "sinpi_rz"
+flexmesa_math = "flexmesa_math::sinpi"
+
+[[entries]]
+mesa_public = "tanpi"
+mesa_source = "math/public/math_lib_crmath.f90:88"
+crmath_procedure = "crmath_r_dp::tanpi_r_dp_ (crmath_r_dp.f90:256-262)"
+crlibm_symbol = "tanpi_rz"
+flexmesa_math = "flexmesa_math::tanpi"
+
+[[entries]]
+mesa_public = "acos"
+mesa_source = "math/public/math_lib_crmath.f90:89"
+crmath_procedure = "crmath_r_dp::acos_r_dp_ (crmath_r_dp.f90:266-272)"
+crlibm_symbol = "acos_rd"
+flexmesa_math = "flexmesa_math::acos"
+
+[[entries]]
+mesa_public = "asin"
+mesa_source = "math/public/math_lib_crmath.f90:90"
+crmath_procedure = "crmath_r_dp::asin_r_dp_ (crmath_r_dp.f90:276-282)"
+crlibm_symbol = "asin_rz"
+flexmesa_math = "flexmesa_math::asin"
+
+[[entries]]
+mesa_public = "atan"
+mesa_source = "math/public/math_lib_crmath.f90:91"
+crmath_procedure = "crmath_r_dp::atan_r_dp_ (crmath_r_dp.f90:286-292)"
+crlibm_symbol = "atan_rz"
+flexmesa_math = "flexmesa_math::atan"
+
+[[entries]]
+mesa_public = "acospi"
+mesa_source = "math/public/math_lib_crmath.f90:92"
+crmath_procedure = "crmath_r_dp::acospi_r_dp_ (crmath_r_dp.f90:315-321)"
+crlibm_symbol = "acospi_rd"
+flexmesa_math = "flexmesa_math::acospi"
+
+[[entries]]
+mesa_public = "asinpi"
+mesa_source = "math/public/math_lib_crmath.f90:93"
+crmath_procedure = "crmath_r_dp::asinpi_r_dp_ (crmath_r_dp.f90:325-331)"
+crlibm_symbol = "asinpi_rz"
+flexmesa_math = "flexmesa_math::asinpi"
+
+[[entries]]
+mesa_public = "atanpi"
+mesa_source = "math/public/math_lib_crmath.f90:94"
+crmath_procedure = "crmath_r_dp::atanpi_r_dp_ (crmath_r_dp.f90:335-341)"
+crlibm_symbol = "atanpi_rz"
+flexmesa_math = "flexmesa_math::atanpi"
+
+[[entries]]
+mesa_public = "cosh"
+mesa_source = "math/public/math_lib_crmath.f90:95"
+crmath_procedure = "crmath_r_dp::cosh_r_dp_ (crmath_r_dp.f90:345-351)"
+crlibm_symbol = "cosh_rz"
+flexmesa_math = "flexmesa_math::cosh"
+
+[[entries]]
+mesa_public = "sinh"
+mesa_source = "math/public/math_lib_crmath.f90:96"
+crmath_procedure = "crmath_r_dp::sinh_r_dp_ (crmath_r_dp.f90:355-361)"
+crlibm_symbol = "sinh_rz"
+flexmesa_math = "flexmesa_math::sinh"
+
+[[entries]]
+mesa_public = "tanh"
+mesa_source = "math/public/math_lib_crmath.f90:97"
+crmath_procedure = "crmath_r_dp::tanh_r_dp_ (crmath_r_dp.f90:365-371: sinh(x)/cosh(x))"
+crlibm_symbol = "sinh_rz / cosh_rz (composite)"
+flexmesa_math = "flexmesa_math::tanh"
+
+[[entries]]
+mesa_public = "acosh"
+mesa_source = "math/public/math_lib_crmath.f90:98"
+crmath_procedure = "crmath_r_dp::acosh_r_dp_ (crmath_r_dp.f90:375-381: log(x + sqrt(x-1)*sqrt(x+1)))"
+crlibm_symbol = "log_rz + IEEE-754 sqrt (composite)"
+flexmesa_math = "flexmesa_math::acosh"
+
+[[entries]]
+mesa_public = "asinh"
+mesa_source = "math/public/math_lib_crmath.f90:99"
+crmath_procedure = "crmath_r_dp::asinh_r_dp_ (crmath_r_dp.f90:385-391: log(x + sqrt(1 + x**2)))"
+crlibm_symbol = "log_rz + IEEE-754 sqrt (composite)"
+flexmesa_math = "flexmesa_math::asinh"
+
+[[entries]]
+mesa_public = "atanh"
+mesa_source = "math/public/math_lib_crmath.f90:100"
+crmath_procedure = "crmath_r_dp::atanh_r_dp_ (crmath_r_dp.f90:395-401: log((1+x)/(1-x))/2)"
+crlibm_symbol = "log_rz (composite)"
+flexmesa_math = "flexmesa_math::atanh"
+
+[[entries]]
+mesa_public = "str_to_vector"
+mesa_source = "math/public/math_lib_crmath.f90:101; math/private/math_io.f90:34-81"
+crmath_procedure = "math_io::str_to_vector"
+crlibm_symbol = "none (string parser)"
+flexmesa_math = "flexmesa_math::str_to_vector"
+
+[[entries]]
+mesa_public = "str_to_double"
+mesa_source = "math/public/math_lib_crmath.f90:102; math/private/math_io.f90:84-92"
+crmath_procedure = "math_io::str_to_double"
+crlibm_symbol = "none (string parser)"
+flexmesa_math = "flexmesa_math::str_to_double"
+
+[[entries]]
+mesa_public = "double_to_str"
+mesa_source = "math/public/math_lib_crmath.f90:103; math/private/math_io.f90:95-105"
+crmath_procedure = "math_io::double_to_str"
+crlibm_symbol = "none (1PD26.16 formatter)"
+flexmesa_math = "flexmesa_math::double_to_str"
+
+# Project-lead rulings under #165 Items 10 & 11 (beyond math_lib_crmath.f90's public list)
+
+[[ruling_extensions]]
+name = "atan2"
+upstream_context = "crmath_r_dp.f90:296-311 (used by gyre; bypassed via datan2 in star/private/rsp_lina.f90:1011,1020,1030,1036,1119)"
+crlibm_symbol = "atan_rz + PI_DP/HALFPI_DP (composite)"
+flexmesa_math = "flexmesa_math::atan2"
+
+[[ruling_extensions]]
+name = "hypot"
+upstream_context = "crmath_r_dp.f90:187-202 (used by crmath::abs(complex); bypassed via cabs in star/private/rsp_lina.f90)"
+crlibm_symbol = "IEEE-754 scaled sqrt (composite)"
+flexmesa_math = "flexmesa_math::hypot"
+
+[[ruling_extensions]]
+name = "powi_f90"
+upstream_context = "Fortran intrinsic x**n (__powidf2) in kap/private/cubic_interpolator.f90:67,121,163,171 and star/private/tdc_hydro_support.f90:220-242"
+crlibm_symbol = "IEEE-754 binary squaring (0.0**0 = 1.0)"
+flexmesa_math = "flexmesa_math::powi_f90"
+
+[[ruling_extensions]]
+name = "fma"
+upstream_context = "Strict a*b+c (-ffp-contract=off, utils/makefile_header:50) vs Fast f64::mul_add (#165 Item 11)"
+crlibm_symbol = "a * b + c (strict) / f64::mul_add (fast)"
+flexmesa_math = "flexmesa_math::fma"

@@ -1,0 +1,21 @@
+[package]
+name = "flexmesa-crlibm-sys"
+version.workspace = true
+edition.workspace = true
+license = "LGPL-2.1-or-later"
+authors.workspace = true
+repository.workspace = true
+description = "Safe Rust FFI bindings to vendored INRIA crlibm 1.0beta4 entry points used by MESA 26.4.1 CRMATH."
+links = "flexmesa_crlibm"
+
+[build-dependencies]
+cc = "1.2"
+
+[lints.rust]
+unsafe_code = "allow"
+unsafe_op_in_unsafe_fn = "deny"
+missing_docs = "warn"
+
+[lints.clippy]
+all = "deny"
+pedantic = "warn"

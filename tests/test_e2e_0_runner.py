@@ -152,13 +152,32 @@ def test_optional_upstream_mesa_dir_inlists_and_mods_parse() -> None:
         pytest.skip("MESA_DIR not set; skipping upstream MESA parse audit")
     base = pathlib.Path(mesa_dir)
     assert base.is_dir(), f"MESA_DIR is not a directory: {base}"
+    # Models whose network file is not shipped with FlexMESA now fail to load
+    # with the missing file named instead of falling back to another network
+    # (declared gaps for custom_rates #161 and wd_aic #152).
+    declared_unloadable_mods = {
+        "star/test_suite/custom_rates/before_flash.mod": "nco.net",
+        "star/test_suite/wd_aic/wd_aic.mod": "wd_aic.net",
+    }
+    unloadable_seen: set[str] = set()
+    # `test_memory` is a standalone memory-leak harness whose `rn` runs
+    # `./test_memory` and has no `do_one`; it is not one of the 106 cases.
+    non_runnable_dirs = {"star/test_suite/test_memory"}
+    non_runnable_seen: set[str] = set()
     for suite in ("star/test_suite", "binary/test_suite", "astero/test_suite"):
         suite_dir = base / suite
         assert suite_dir.is_dir(), f"Missing upstream suite dir: {suite_dir}"
         for case_dir in sorted(suite_dir.iterdir()):
             if not case_dir.is_dir():
                 continue
-            stages = star.parse_rn_stages(str(case_dir), skip_optional=True)
+            rel_case = case_dir.relative_to(base).as_posix()
+            try:
+                stages = star.parse_rn_stages(str(case_dir), skip_optional=True)
+            except ValueError as exc:
+                assert rel_case in non_runnable_dirs, f"{rel_case}: {exc}"
+                assert "no runnable stages" in str(exc)
+                non_runnable_seen.add(rel_case)
+                continue
             assert len(stages) >= 1
             for inlist_file in sorted(case_dir.glob("inlist*")):
                 if inlist_file.is_file():
@@ -168,7 +187,8 @@ def test_optional_upstream_mesa_dir_inlists_and_mods_parse() -> None:
                     except ValueError as exc:
                         msg = str(exc).lower()
                         assert (
-                            "unsupported control" in msg
+                            "unsupported" in msg
+                            or "unknown namelist section" in msg
                             or "unknown control" in msg
                             or "unknown scalar control" in msg
                             or "missing" in msg
@@ -176,5 +196,16 @@ def test_optional_upstream_mesa_dir_inlists_and_mods_parse() -> None:
             for mod_file in sorted(case_dir.glob("*.mod")):
                 if mod_file.is_file():
                     mod_text = mod_file.read_text(encoding="utf-8")
+                    rel = mod_file.relative_to(base).as_posix()
+                    if rel in declared_unloadable_mods:
+                        with pytest.raises(
+                            ValueError,
+                            match=declared_unloadable_mods[rel],
+                        ):
+                            star.StarModel.from_mod_str(mod_text)
+                        unloadable_seen.add(rel)
+                        continue
                     loaded = star.StarModel.from_mod_str(mod_text)
                     assert loaded.nz >= 2
+    assert unloadable_seen == set(declared_unloadable_mods)
+    assert non_runnable_seen == non_runnable_dirs

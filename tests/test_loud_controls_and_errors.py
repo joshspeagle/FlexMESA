@@ -140,11 +140,22 @@ def test_python_inlist_and_runner_loud_failures_and_opt_out() -> None:
 
         pg_bad = root / "inlist_pgstar_bad"
         pg_bad.write_text(
+            "&star_job\n  pgstar_flag = .true.\n/\n"
             "&pgstar\n  not_a_real_pgstar_key = 1\n/\n",
             encoding="utf-8",
         )
         with pytest.raises(ValueError, match="not_a_real_pgstar_key"):
             star.parse_inlist_bundle(pg_bad)
+
+        # MESA reads &pgstar only when pgstar_flag is true, so a stale key in
+        # an inactive block does not stop the run.
+        pg_inactive = root / "inlist_pgstar_inactive"
+        pg_inactive.write_text(
+            "&pgstar\n  not_a_real_pgstar_key = 1\n/\n"
+            "&controls\n  initial_mass = 1.0\n/\n",
+            encoding="utf-8",
+        )
+        assert star.parse_inlist_bundle(pg_inactive)["initial_mass"] == 1.0
 
         bin_case = root / "bin_case"
         bin_case.mkdir()

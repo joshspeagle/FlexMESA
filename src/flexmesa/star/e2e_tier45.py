@@ -375,8 +375,8 @@ def eval_grafener_kudritzki_wind_msun_yr(
 
 
 def verify_step_redo_bit_parity(model: star_model.StarModel) -> bool:
-    """Verify bit-identical state restoration and step redo parity
-    (`star/test_suite/check_redo`, Stage `E2E-5`).
+    """Check FlexMESA's internal state restoration and step-redo rollback
+    (`star/test_suite/check_redo`).
     """
     return bool(_rust.star_verify_step_redo_bit_parity(model._rust_model))
 

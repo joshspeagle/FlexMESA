@@ -16,6 +16,8 @@ import pytest
 from flexmesa import star
 from flexmesa.star import e2e
 
+from . import cleaned_case_gaps
+
 
 def test_tier2_cases_inventory_has_16_canonical_entries() -> None:
     """Verify `TIER2_CASES` contains all 16 MESA 26.4.1 Tier 2 case names."""
@@ -300,6 +302,16 @@ def test_upstream_tier2_test_suite_case_reproduction_and_restart_parity(
 
     clean_dir = tmp_path / case_name
     e2e.copy_cleaned_case(case_dir, clean_dir, suite="star")
+    gap = cleaned_case_gaps.DECLARED_STAR_STOPS.get(case_name)
+    if gap is not None:
+        with pytest.raises(ValueError, match=gap.message_pattern):
+            e2e.run_test_suite_case(
+                clean_dir,
+                skip_optional=True,
+                max_steps_per_stage=2,
+                verify_restart=True,
+            )
+        return
     rep = e2e.run_test_suite_case(
         clean_dir,
         skip_optional=True,

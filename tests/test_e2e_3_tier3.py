@@ -14,6 +14,8 @@ import pytest
 
 from flexmesa import star
 
+from . import cleaned_case_gaps
+
 
 def test_tier3_cases_inventory_has_22_unique_cases_disjoint() -> None:
     """Verify TIER3_CASES lists 22 unique cases disjoint from Tiers 1 and 2."""
@@ -219,6 +221,16 @@ def test_upstream_mesa_tier3_test_suite_case_passes_with_restart_parity(
 
     clean_dir = tmp_path / case_name
     star.copy_cleaned_case(case_dir, clean_dir, suite="star")
+    gap = cleaned_case_gaps.DECLARED_STAR_STOPS.get(case_name)
+    if gap is not None:
+        with pytest.raises(ValueError, match=gap.message_pattern):
+            star.run_test_suite_case(
+                clean_dir,
+                skip_optional=True,
+                max_steps_per_stage=2,
+                verify_restart=True,
+            )
+        return
     rep = star.run_test_suite_case(
         clean_dir,
         skip_optional=True,

@@ -304,7 +304,7 @@ def test_upstream_mesa_tier4_and_dev_cases_suites_pass(
         )
         assert rep["passed"] and rep["assertions_passed"], case_name
 
-    with pytest.raises(FileNotFoundError | OSError | ValueError):
+    with pytest.raises((FileNotFoundError, OSError, ValueError)):
         star.run_dev_cases_suite(
             root, max_steps_per_stage=2, verify_restart=True, skip_optional=True
         )

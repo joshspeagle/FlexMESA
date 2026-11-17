@@ -750,8 +750,8 @@
     "rust": {
       "tool": "cargo llvm-cov",
       "overall": {
-        "lines": 93065,
-        "covered": 66219,
+        "lines": 93004,
+        "covered": 66220,
         "percent": 71.2
       },
       "by_crate": [
@@ -781,15 +781,15 @@
         },
         {
           "crate": "flexmesa-binary",
-          "lines": 6742,
+          "lines": 6734,
           "covered": 3980,
-          "percent": 59.0
+          "percent": 59.1
         },
         {
           "crate": "flexmesa-chem",
-          "lines": 937,
-          "covered": 647,
-          "percent": 69.1
+          "lines": 908,
+          "covered": 632,
+          "percent": 69.6
         },
         {
           "crate": "flexmesa-colors",
@@ -889,9 +889,9 @@
         },
         {
           "crate": "flexmesa-star",
-          "lines": 38584,
-          "covered": 26153,
-          "percent": 67.8
+          "lines": 38538,
+          "covered": 26150,
+          "percent": 67.9
         },
         {
           "crate": "flexmesa-testing",
@@ -907,17 +907,17 @@
         },
         {
           "crate": "flexmesa-utils",
-          "lines": 301,
-          "covered": 197,
-          "percent": 65.4
+          "lines": 323,
+          "covered": 216,
+          "percent": 66.9
         }
       ]
     },
     "python": {
       "tool": "pytest --cov",
       "overall": {
-        "statements": 19999,
-        "covered": 17572,
+        "statements": 20841,
+        "covered": 18319,
         "percent": 87.9
       },
       "by_subpackage": [
@@ -1067,9 +1067,9 @@
         },
         {
           "subpackage": "flexmesa.testing",
-          "statements": 2430,
-          "covered": 1498,
-          "percent": 61.6
+          "statements": 3272,
+          "covered": 2245,
+          "percent": 68.6
         },
         {
           "subpackage": "flexmesa.turb",
@@ -1239,8 +1239,8 @@
       },
       {
         "phase": "Phase A",
-        "open": 3,
-        "closed": 1,
+        "open": 2,
+        "closed": 2,
         "issues": [
           {
             "number": 142,
@@ -1250,7 +1250,7 @@
           {
             "number": 144,
             "title": "[Audit A3] CI that runs real campaigns, and a declared-known-gaps mechanism",
-            "state": "open"
+            "state": "closed"
           },
           {
             "number": 146,
@@ -1414,13 +1414,7 @@
         "issues": []
       }
     ],
-    "open_pull_requests": [
-      {
-        "number": 206,
-        "title": "ci: scheduled verification campaign, declared known-gaps gate, module hex probes, and MESA spread (#144)",
-        "draft": false
-      }
-    ],
+    "open_pull_requests": [],
     "deferred_169": [
       {
         "number": 175,
@@ -1662,6 +1656,19 @@
       "rust_cov_pct": "71.2",
       "python_cov_pct": "87.9",
       "closed_140": "7",
+      "total_140": "32",
+      "deferred_169": "17"
+    },
+    {
+      "date_utc": "2026-11-17",
+      "commit": "0b78ce7",
+      "event": "main merge",
+      "engine_ported_pct": "13.9",
+      "all_verified_pct": "0.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "71.2",
+      "python_cov_pct": "87.9",
+      "closed_140": "8",
       "total_140": "32",
       "deferred_169": "17"
     }

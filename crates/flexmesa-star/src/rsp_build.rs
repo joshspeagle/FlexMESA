@@ -285,34 +285,33 @@ pub fn eval_model_rsp_lina_modes(
     let mut job = model.job.clone();
     job.create_rsp_model = true;
 
-    if let Ok((_built, Some(lina))) = do_rsp_build_model(
+    // No modes are reported when the build fails or returns no linear
+    // analysis. Earlier code substituted modes of an envelope built from
+    // floored parameters, which reported periods the model does not have.
+    match do_rsp_build_model(
         ctrl,
         job,
         model.eos_config,
         model.kap_config.clone(),
         None,
     ) {
-        let mut out = Vec::with_capacity(count);
-        for idx in 0..count {
-            out.push(RspLinaMode {
-                mode_index: idx,
-                period_days: lina.periods_sec[idx] / 86_400.0,
-                growth_rate: lina.growth_rates[idx],
-            });
+        Ok((_built, Some(lina))) => {
+            let mut out = Vec::with_capacity(count);
+            for idx in 0..count {
+                out.push(RspLinaMode {
+                    mode_index: idx,
+                    period_days: lina.periods_sec[idx] / 86_400.0,
+                    growth_rate: lina.growth_rates[idx],
+                });
+            }
+            (out, target_p)
         }
-        return (out, target_p);
+        Ok((_built, None)) => (Vec::new(), target_p),
+        Err(e) => {
+            eprintln!("warning: RSP model build for LINA modes failed: {e}");
+            (Vec::new(), target_p)
+        }
     }
-
-    let fallback = eval_rsp_lina_modes(
-        model.controls.rsp_mass.max(model.controls.initial_mass),
-        model.controls.rsp_l.max(10.0),
-        model.controls.rsp_teff.max(model.teff).max(3000.0),
-        model.controls.rsp_x.max(0.70),
-        model.controls.rsp_z.max(0.0001),
-        count,
-    )
-    .unwrap_or_default();
-    (fallback, target_p)
 }
 
 /// Builds a static `RSP` envelope [`StarModel`] from `controls` and `job`

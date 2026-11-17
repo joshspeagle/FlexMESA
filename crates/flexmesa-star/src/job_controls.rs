@@ -421,8 +421,11 @@ pub struct StarJobControls {
     pub change_initial_rti_flag: bool,
     /// Target RTI flag (`new_RTI_flag`).
     pub new_rti_flag: bool,
-    /// Expected termination code string for `test_suite` verification (`required_termination_code_string`).
-    pub required_termination_code_string: String,
+    /// Termination codes accepted by `test_suite` verification, in subscript
+    /// order (`required_termination_code_string(1:9)`,
+    /// `star_data/public/star_data_def.inc:369`). An unsubscripted
+    /// assignment sets element 1, as a Fortran namelist does.
+    pub required_termination_code_string: Vec<String>,
     /// Optional exact number of evolutionary steps to take before terminating (`steps_to_take_before_terminate`).
     pub steps_to_take_before_terminate: Option<usize>,
     /// Optional inner temperature cut in K (`remove_initial_center_by_temperature`).
@@ -526,7 +529,7 @@ impl Default for StarJobControls {
             set_initial_l_center: false,
             change_initial_rti_flag: false,
             new_rti_flag: false,
-            required_termination_code_string: String::new(),
+            required_termination_code_string: Vec::new(),
             steps_to_take_before_terminate: None,
             remove_initial_center_by_temperature: None,
             pgstar_flag: false,

@@ -301,11 +301,10 @@ pub fn star_evolve_step(
                     }
                 }
                 other => {
-                    let tol = model
-                        .controls
-                        .mix_wind
-                        .surf_omega_div_omega_crit_tol
-                        .max(1.0e-6);
+                    // Used as given, with no floor
+                    // (`star/private/evolve.f90:943,1004`).
+                    let tol =
+                        model.controls.mix_wind.surf_omega_div_omega_crit_tol;
                     if let Some(next_mdot) =
                         mdot_redo.note_solver_failure(model.mstar_dot, tol)
                     {
@@ -377,20 +376,23 @@ pub fn star_evolve_step(
                 }
             }
         }
+        // Why this attempt is being retried. Kept so that the final failure
+        // names the cause of the last attempt (for example a missing table
+        // or a rejected option) instead of only counting retries.
+        let why = match &attempt {
+            Ok(rep) if rep.converged && force_outer_retry => {
+                String::from("implicit wind redo requested outer retry")
+            }
+            Ok(rep) if rep.converged => {
+                String::from("timestep controller requested retry")
+            }
+            Ok(rep) => format!(
+                "solver did not converge (iters={}, rmax={:.3e}, cmax={:.3e})",
+                rep.iterations, rep.max_residual, rep.max_correction
+            ),
+            Err(e) => format!("error: {e}"),
+        };
         if crate::step_trace::enabled(model.model_number + 1) {
-            let why = match &attempt {
-                Ok(rep) if rep.converged && force_outer_retry => {
-                    String::from("implicit wind redo requested outer retry")
-                }
-                Ok(rep) if rep.converged => {
-                    String::from("timestep controller requested retry")
-                }
-                Ok(rep) => format!(
-                    "solver did not converge (iters={}, rmax={:.3e}, cmax={:.3e})",
-                    rep.iterations, rep.max_residual, rep.max_correction
-                ),
-                Err(e) => format!("error: {e}"),
-            };
             eprintln!(
                 "[trace] retry model={} dt={:.4e} retries={} why={}",
                 model.model_number + 1,
@@ -414,7 +416,7 @@ pub fn star_evolve_step(
             return Err(StarError::ConvergenceFailure(format!(
                 "star_evolve_step failed after {retries}/{} retries \
                  (dt={next_dt:.3e} s, dt_floor={dt_floor:.3e} s; \
-                 `star/private/evolve.f90:2213-2248`)",
+                 `star/private/evolve.f90:2213-2248`); last attempt: {why}",
                 if max_retries == 0 {
                     String::from("unlimited")
                 } else {

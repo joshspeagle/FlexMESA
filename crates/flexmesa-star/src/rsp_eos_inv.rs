@@ -46,6 +46,8 @@ pub fn eval1_mesa_rho_given_pt(
     );
     let ht = crate::micro::builtin_helm_table()?;
     let (mut rho_tol, mut p_tol) = (5.0e-10, 5.0e-13);
+    // A failed solve is retried with tolerances relaxed by 3, up to 9 times,
+    // as upstream does (`star/private/rsp_eval_eos_and_kap.f90:753-762`).
     for _ in 0..9 {
         if let Ok(inv) = eos_dt_get_rho(
             ht,

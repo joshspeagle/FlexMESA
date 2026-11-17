@@ -251,17 +251,22 @@ pub fn get_info_at_q(model: &StarModel, bdy_q: f64) -> CoreBoundaryInfo {
         }
         // Verbatim reproduction of `report.f90:1375-1378` (`#187` under `#169`).
         let raw = (f1 * (x - x0) * (x - x2) * (x0 - x2)
-            - (x - x1) * (f0 * (x - x2) * (x1 - x2) + (x - x0) * (x0 - x1) * x2))
+            - (x - x1)
+                * (f0 * (x - x2) * (x1 - x2) + (x - x0) * (x0 - x1) * x2))
             / denom;
         raw.max(fmin).min(fmax)
     };
     let interp2 = |f0: f64, f1: f64| -> f64 { alfa * f0 + (1.0 - alfa) * f1 };
 
-    let lg_t = interp3(model.ln_t[k0 - 1], model.ln_t[k0], model.ln_t[k0 + 1]) / LN10;
-    let lg_rho = interp3(model.lnd[k0 - 1], model.lnd[k0], model.lnd[k0 + 1]) / LN10;
+    let lg_t =
+        interp3(model.ln_t[k0 - 1], model.ln_t[k0], model.ln_t[k0 + 1]) / LN10;
+    let lg_rho =
+        interp3(model.lnd[k0 - 1], model.lnd[k0], model.lnd[k0 + 1]) / LN10;
     let r0 = model.r[k0];
     let r1 = model.r[k0 + 1];
-    let radius_rsun = interp2(r0 * r0 * r0, r1 * r1 * r1).powf(1.0 / 3.0) / R_SUN;
+    let radius_rsun =
+        flexmesa_math::pow(interp2(r0 * r0 * r0, r1 * r1 * r1), 1.0 / 3.0)
+            / R_SUN;
     let lum_lsun = interp2(model.lum[k0], model.lum[k0 + 1]) / L_SUN;
     let vel_cms = if model.controls.u_flag {
         interp2(model.u[k0], model.u[k0 + 1])
@@ -339,7 +344,8 @@ pub fn compute_core_masses(model: &StarModel) -> CoreMasses {
             let bdy = eval_set_core_info(model, k);
             out.neutron_rich_bdy = bdy;
             out.neutron_rich_core_mass = bdy.mass_msun;
-            out.neutron_rich_core_k = (bdy.kbdy_1based > 0).then(|| bdy.kbdy_1based - 1);
+            out.neutron_rich_core_k =
+                (bdy.kbdy_1based > 0).then(|| bdy.kbdy_1based - 1);
             break;
         }
     }
@@ -392,7 +398,8 @@ pub fn compute_core_masses(model: &StarModel) -> CoreMasses {
                 let bdy = eval_set_core_info(model, k);
                 out.one_bdy = bdy;
                 out.one_core_mass = bdy.mass_msun;
-                out.one_core_k = (bdy.kbdy_1based > 0).then(|| bdy.kbdy_1based - 1);
+                out.one_core_k =
+                    (bdy.kbdy_1based > 0).then(|| bdy.kbdy_1based - 1);
                 if have_co && have_he {
                     break;
                 }
@@ -413,7 +420,8 @@ pub fn compute_core_masses(model: &StarModel) -> CoreMasses {
                 let bdy = eval_set_core_info(model, k);
                 out.co_bdy = bdy;
                 out.co_core_mass = bdy.mass_msun;
-                out.co_core_k = (bdy.kbdy_1based > 0).then(|| bdy.kbdy_1based - 1);
+                out.co_core_k =
+                    (bdy.kbdy_1based > 0).then(|| bdy.kbdy_1based - 1);
                 if have_he {
                     break;
                 }
@@ -434,7 +442,8 @@ pub fn compute_core_masses(model: &StarModel) -> CoreMasses {
                 let bdy = eval_set_core_info(model, k);
                 out.he_bdy = bdy;
                 out.he_core_mass = bdy.mass_msun;
-                out.he_core_k = (bdy.kbdy_1based > 0).then(|| bdy.kbdy_1based - 1);
+                out.he_core_k =
+                    (bdy.kbdy_1based > 0).then(|| bdy.kbdy_1based - 1);
             }
         }
     }
@@ -460,12 +469,9 @@ pub fn compute_power_categories(model: &StarModel) -> PowerCategories {
 
     for k in 0..nz {
         let dm_k = model.dm[k];
-        let t_start = model
-            .ln_t_start
-            .get(k)
-            .copied()
-            .unwrap_or(model.ln_t[k])
-            .exp();
+        let t_start = flexmesa_math::exp(
+            model.ln_t_start.get(k).copied().unwrap_or(model.ln_t[k]),
+        );
         let eps_k = if op_split
             && t_start >= op_min_t
             && k < model.aux.burn_avg_epsnuc.len()

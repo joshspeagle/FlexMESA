@@ -87,3 +87,12 @@ Every module in `FlexMESA` adheres to a single, explicit indexing and memory-lay
    - Extensive and flux quantities ($m_k, q_k, r_k, L_k, \nabla_{\mathrm{rad},k}, \nabla_{T,k}, v_{\mathrm{conv},k}, N^2_k, \Omega_k$) live on outer face `k`.
 3. **2D Array Memory Order (`C`-Contiguous Row-Major)**:
    - Multi-zone species and block-tridiagonal arrays have leading radial dimension `nz`: `xa` has shape `(nz, n_species)` (`xa[k, i]` is mass fraction of species `i` in zone `k`), and Henyey block-tridiagonal Jacobians $(L, D, U)$ have shape `(nz, n_var, n_var)`.
+
+---
+
+## 4. Three-Level Numerics Contract (`strict` vs. `fast`)
+
+All Rust physics crates route elementary functions and `fma` through `flexmesa-math` (`#165`) with two run-level modes (`NumericsMode`):
+
+- **`"strict"` (default)**: Vendored `crlibm 1.0beta4` (`CRMATH 1.2`) with no fused multiply-add contraction and upstream operation order. `"strict"` is the sole mode compared against MESA `26.4.1` across **Level 1** (bit-identical across `x86_64`/`aarch64` machines and `1`/`4` threads), **Level 2** (bit-identical kernel outputs against exact hexadecimal MESA `26.4.1` vectors where operation order matches), and **Level 3** (full evolutionary trajectories within `#143` history tolerances).
+- **`"fast"`**: Platform `std` `f64` intrinsics and `mul_add` from the same Rust physics source, validated exclusively against `"strict"`.

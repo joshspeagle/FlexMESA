@@ -4,9 +4,7 @@
 //! scaling, and Brunt-composition stabilization (`overshoot.f90`,
 //! `overshoot_exp.f90`, `overshoot_step.f90`, and `overshoot_utils.f90`).
 
-use std::f64::consts::PI;
-
-use flexmesa_const::MixingType;
+use flexmesa_const::{MixingType, LN10, PI};
 
 use crate::controls_mix_wind::OvershootParamSet;
 use crate::mix_info::{cdc_factor, ConvBoundary};
@@ -71,12 +69,16 @@ impl OvershootConfig {
         }
         let dr_step = self.f * hp_cb;
         match self.scheme {
-            OvershootScheme::Exponential => (-2.0 * dr / dr_step).exp(),
+            OvershootScheme::Exponential => {
+                flexmesa_math::exp(-2.0 * dr / dr_step)
+            }
             OvershootScheme::Step => {
                 if dr < dr_step {
                     1.0
                 } else if self.f2 > 0.0 {
-                    (-2.0 * (dr - dr_step) / (self.f2 * hp_cb)).exp()
+                    flexmesa_math::exp(
+                        -2.0 * (dr - dr_step) / (self.f2 * hp_cb),
+                    )
                 } else {
                     0.0
                 }
@@ -122,7 +124,7 @@ fn classify_cz_burning(
     let mut max_y = 0.0_f64;
     let k_hi = k_bot.min(model.nz.saturating_sub(1));
     for k in k_top..=k_hi {
-        max_log_t = max_log_t.max(model.ln_t[k] / std::f64::consts::LN_10);
+        max_log_t = max_log_t.max(model.ln_t[k] / LN10);
         max_x = max_x.max(model.xh_mass[k]);
         max_y = max_y.max(model.yhe_mass[k]);
     }
@@ -191,7 +193,7 @@ fn config_from_param_set(
         if m_msun > set.mass_full_off {
             let w = (m_msun - set.mass_full_off)
                 / (set.mass_full_on - set.mass_full_off);
-            let fac = 0.5 * (1.0 - (PI * w).cos());
+            let fac = 0.5 * (1.0 - flexmesa_math::cos(PI * w));
             f *= fac;
             f0 *= fac;
             f2 *= fac;
@@ -338,10 +340,11 @@ fn apply_single_boundary_overshoot(
         }
     }
     let k_ob_next = (k_ob + 1).min(nz - 1);
-    let r0_3 = model.r[k_ob].powi(3);
-    let r1_3 = model.r[k_ob_next].powi(3);
+    let r0_3 = flexmesa_math::pow3(model.r[k_ob]);
+    let r1_3 = flexmesa_math::pow3(model.r[k_ob_next]);
     let denom_3 = (r0_3 - r1_3).abs().max(1.0e-99);
-    let w = ((r0_3 - r_ob.powi(3)).abs() / denom_3).clamp(0.0, 1.0);
+    let w =
+        ((r0_3 - flexmesa_math::pow3(r_ob)).abs() / denom_3).clamp(0.0, 1.0);
 
     let vc_ob =
         ((1.0 - w) * model.mlt_vc[k_ob] + w * model.mlt_vc[k_ob_next]).max(0.0);
@@ -426,10 +429,10 @@ fn update_overshoot_face(
         let k_rad = (16.0
             * flexmesa_const::CRAD
             * flexmesa_const::CLIGHT
-            * model.t[k].powi(3))
+            * flexmesa_math::pow3(model.t[k]))
             / (9.0
                 * model.opacity[k].max(1.0e-10)
-                * model.rho[k].powi(2).max(1.0e-30)
+                * flexmesa_math::pow2(model.rho[k]).max(1.0e-30)
                 * model.cp[k].max(1.0));
         let d_trial = (cfg.d0 + cfg.delta0 * d_ob) * factor;
         let peclet = d_trial / k_rad.max(1.0e-30);

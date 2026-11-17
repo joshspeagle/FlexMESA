@@ -189,12 +189,13 @@ pub(crate) fn rsp2_rate_coeffs(
         0.0
     };
     let pom = if cfg.alfa > 0.0 && cfg.gammar != 0.0 {
-        4.0 * BOLTZ_SIGMA * (X_GAMMAR * cfg.gammar / cfg.alfa).powi(2)
+        4.0 * BOLTZ_SIGMA
+            * flexmesa_math::pow2(X_GAMMAR * cfg.gammar / cfg.alfa)
     } else {
         0.0
     };
-    let pom2 =
-        t.powi(3) / (rho_s * rho_s * cp.max(1.0e-30) * kappa.max(1.0e-30));
+    let pom2 = flexmesa_math::pow3(t)
+        / (rho_s * rho_s * cp.max(1.0e-30) * kappa.max(1.0e-30));
     let c_dr = pom * pom2 / (hp_s * hp_s);
     (c_s, c_d, c_dr)
 }
@@ -248,7 +249,8 @@ pub fn eval_rsp2_zone(
         0.0
     };
     let du_over_r = u_over_r_out - u_over_r_in;
-    let r6_cell = 0.5 * (r_outer.powi(6) + r_inner.powi(6));
+    let r6_cell =
+        0.5 * (flexmesa_math::pow6(r_outer) + flexmesa_math::pow6(r_inner));
     let f_chi = f_eddy * (16.0 / 3.0) * PI * (cfg.alfam * cfg.alfa) / dm_s;
     let chi_turb = f_chi * rho_s * rho_s * r6_cell * du_over_r * hp_s * w_pos;
     let eq_visc = PI4 * chi_turb * du_over_r / dm_s;
@@ -257,7 +259,8 @@ pub fn eval_rsp2_zone(
         t, rho_s, p, cp, grad_ad, delta, kappa, hp_s, grad_t, cfg,
     );
     let source_s = c_s * w_pos;
-    let sink_d = c_d * (w2 * w_pos - cfg.w_min_for_damping.powi(3));
+    let sink_d =
+        c_d * (w2 * w_pos - flexmesa_math::pow3(cfg.w_min_for_damping));
     let sink_dr = c_dr * w2;
 
     let pdv_turb = p_turb * dlnd_dt / rho_s;
@@ -311,7 +314,7 @@ pub fn eval_rsp2_face(
     let dm_s = dm_bar.max(1.0e-99);
     let dlnp_dm = (lnp_outer - lnp_inner) / dm_s;
     let dt4_dm = (t4_outer - t4_inner) / dm_s;
-    let t4_face = t_face.powi(4).max(1.0e-30);
+    let t4_face = flexmesa_math::pow4(t_face).max(1.0e-30);
     let grad_face = if dlnp_dm.abs() > 1.0e-99 {
         0.25 * (dt4_dm / t4_face) / dlnp_dm
     } else {

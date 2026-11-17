@@ -15,17 +15,16 @@ use flexmesa_const::{
 };
 use flexmesa_schema::strip_fortran_comment;
 use flexmesa_star::{
-    MESA_REF_VERSION_NUMBER, MesaCellValue, StarError, StarLogsWriter,
-    StarModel, eval_photosphere_info, eval_surf_avg_rotation_info,
-    format_mesa_dbl_width, format_mesa_header_str_width, parse_quoted_include_arg,
+    eval_photosphere_info, eval_surf_avg_rotation_info, format_mesa_dbl_width,
+    format_mesa_header_str_width, parse_quoted_include_arg,
     push_mesa_6line_header, safe_log10, write_mesa_dbl_width,
-    write_mesa_int_width,
+    write_mesa_int_width, MesaCellValue, StarError, StarLogsWriter, StarModel,
+    MESA_REF_VERSION_NUMBER,
 };
 
 use crate::edd_wind::eval_accreted_material_j;
 use crate::jdot_tides::{
-    eval_k_div_t_convective, eval_k_div_t_radiative,
-    eval_tsync,
+    eval_k_div_t_convective, eval_k_div_t_radiative, eval_tsync,
 };
 use crate::system::{BinaryCompanion, BinarySystem};
 use crate::system_jdot::eval_star_spin_j;
@@ -273,7 +272,10 @@ fn parse_binary_history_columns_rec(
             continue;
         }
         if let Some(rest) = stripped.strip_prefix("include") {
-            if rest.is_empty() || rest.starts_with(char::is_whitespace) || rest.starts_with(['\'', '"']) {
+            if rest.is_empty()
+                || rest.starts_with(char::is_whitespace)
+                || rest.starts_with(['\'', '"'])
+            {
                 let inc = parse_quoted_arg(rest).ok_or_else(|| {
                     StarError::InvalidInput(format!(
                         "binary_history_columns.list line {}: expected quoted string after include",
@@ -281,20 +283,25 @@ fn parse_binary_history_columns_rec(
                     ))
                 })?;
                 let inc_trim = inc.trim();
-                if inc_trim.is_empty() || inc_trim == "binary_history_columns.list" {
+                if inc_trim.is_empty()
+                    || inc_trim == "binary_history_columns.list"
+                {
                     parse_binary_history_columns_rec(
                         DEFAULT_BINARY_HISTORY_COLUMNS_TEXT,
                         base_dir,
                         level + 1,
                         out,
                     )?;
-                } else if let Some(inc_path) = resolve_binary_col_file_path(inc_trim, base_dir) {
-                    let inc_text = fs::read_to_string(&inc_path).map_err(|e| {
-                        StarError::IoError(format!(
-                            "failed to read included {}: {e}",
-                            inc_path.display()
-                        ))
-                    })?;
+                } else if let Some(inc_path) =
+                    resolve_binary_col_file_path(inc_trim, base_dir)
+                {
+                    let inc_text =
+                        fs::read_to_string(&inc_path).map_err(|e| {
+                            StarError::IoError(format!(
+                                "failed to read included {}: {e}",
+                                inc_path.display()
+                            ))
+                        })?;
                     parse_binary_history_columns_rec(
                         &inc_text,
                         inc_path.parent().or(base_dir),
@@ -468,7 +475,11 @@ fn eval_star_tsync_sec(
         sys.separation,
         f_tid,
     );
-    if ts.is_finite() && ts > 0.0 { ts } else { 0.0 }
+    if ts.is_finite() && ts > 0.0 {
+        ts
+    } else {
+        0.0
+    }
 }
 
 /// Evaluates all requested [`BinaryHistoryColumnSpec`] columns on `sys`
@@ -528,8 +539,12 @@ pub fn evaluate_binary_history_row(
         && r_a_cm > 0.0
     {
         let m_acc = sys.accretor_mass_g();
-        let (j_acc, mode) =
-            eval_accreted_material_j(sys.donor.mstar, m_acc, r_a_cm, sys.separation);
+        let (j_acc, mode) = eval_accreted_material_j(
+            sys.donor.mstar,
+            m_acc,
+            r_a_cm,
+            sys.separation,
+        );
         let j_kep = (STANDARD_CGRAV * m_acc * r_a_cm).max(0.0).sqrt();
         let ratio = if j_kep > 0.0 { j_acc / j_kep } else { 0.0 };
         (i64::from(mode), ratio)
@@ -764,7 +779,7 @@ pub fn format_binary_history_file_header(
     specs: &[BinaryHistoryColumnSpec],
 ) -> String {
     let w = BINARY_LOG_COL_WIDTH;
-    let hdr_items: [(&str, String); 8] = [
+    let hdr_items: [(&str, String); 9] = [
         (
             "version_number",
             format_mesa_header_str_width(MESA_REF_VERSION_NUMBER, w),
@@ -787,9 +802,17 @@ pub fn format_binary_history_file_header(
             "MESA_SDK_version",
             format_mesa_header_str_width("flexmesa-0.1", w),
         ),
+        (
+            "math_backend",
+            format_mesa_header_str_width(
+                flexmesa_math::numerics_mode().as_str(),
+                w,
+            ),
+        ),
         ("date", format_mesa_header_str_width("20260401", w)),
     ];
-    let col_names: Vec<&str> = specs.iter().map(|sp| sp.column_name()).collect();
+    let col_names: Vec<&str> =
+        specs.iter().map(|sp| sp.column_name()).collect();
     let mut out = String::with_capacity(512 + col_names.len() * 68);
     push_mesa_6line_header(&mut out, &hdr_items, &col_names, w);
     out

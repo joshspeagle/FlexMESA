@@ -46,22 +46,20 @@ pub fn eval_cell_dpe_dt_ad(
     };
     let pe_ad = (grav00 + gravp1) * (0.5 * mc);
 
-    let rs_00 = model
-        .ln_r_start
-        .get(k)
-        .copied()
-        .unwrap_or(model.ln_r[k])
-        .exp()
-        .max(1.0);
+    let rs_00 = flexmesa_math::exp(
+        model.ln_r_start.get(k).copied().unwrap_or(model.ln_r[k]),
+    )
+    .max(1.0);
     let grav00_s = -model.cgrav[k] * model.m_grav[k] / rs_00;
     let gravp1_s = if k + 1 < model.nz {
-        let rs_p1 = model
-            .ln_r_start
-            .get(k + 1)
-            .copied()
-            .unwrap_or(model.ln_r[k + 1])
-            .exp()
-            .max(1.0);
+        let rs_p1 = flexmesa_math::exp(
+            model
+                .ln_r_start
+                .get(k + 1)
+                .copied()
+                .unwrap_or(model.ln_r[k + 1]),
+        )
+        .max(1.0);
         -model.cgrav[k + 1] * model.m_grav[k + 1] / rs_p1
     } else if model.r_center > 0.0 {
         -model.cgrav[model.nz - 1] * model.m_center / model.r_center
@@ -127,7 +125,8 @@ pub fn eval1_a_times_v_face_v_flag_ad(
     let vc_f = if model.controls.v_flag {
         let v_f = StarAdOrder1::variable(model.v[f_idx], I_V_00);
         if vel_tc {
-            let vs_f = model.v_start.get(f_idx).copied().unwrap_or(model.v[f_idx]);
+            let vs_f =
+                model.v_start.get(f_idx).copied().unwrap_or(model.v[f_idx]);
             (v_f + vs_f) * 0.5
         } else {
             v_f
@@ -135,7 +134,7 @@ pub fn eval1_a_times_v_face_v_flag_ad(
     } else {
         let dt = model.dt.max(1.0e-30);
         let r_f = lnr_f.exp();
-        let rs_f = lnr_s_f.exp();
+        let rs_f = flexmesa_math::exp(lnr_s_f);
         let scale = if vel_tc { 0.5 / dt } else { 1.0 / dt };
         (r_f - rs_f) * scale
     };

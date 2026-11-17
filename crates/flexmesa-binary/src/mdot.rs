@@ -107,8 +107,8 @@ pub fn eval_ritter_mdot_eccentric(
     let mut mdot_prev = 0.0_f64;
     let mut dm = 0.0_f64;
     for i in 0..n {
-        let rl_i =
-            rl_donor * one_m_e2 / (1.0 + eccentricity * theta_co[i].cos());
+        let rl_i = rl_donor * one_m_e2
+            / (1.0 + eccentricity * flexmesa_math::cos(theta_co[i]));
         let mdot_i = eval_ritter_mdot_thin(
             m_donor,
             m_accretor,
@@ -231,8 +231,8 @@ pub fn eval_kolb_mdot_eccentric(
     let mut mdot_prev = 0.0_f64;
     let mut dm = 0.0_f64;
     for i in 0..n {
-        let rl_i =
-            rl_donor * one_m_e2 / (1.0 + eccentricity * theta_co[i].cos());
+        let rl_i = rl_donor * one_m_e2
+            / (1.0 + eccentricity * flexmesa_math::cos(theta_co[i]));
         let mdot_i = eval_kolb_mdot_thick(
             m_donor,
             m_accretor,
@@ -323,7 +323,7 @@ pub fn eval_edot_enhancement_isotropic(
     let mut edot_prev = 0.0_f64;
     let mut de = 0.0_f64;
     for i in 0..n {
-        let cos_th = theta_co[i].cos();
+        let cos_th = flexmesa_math::cos(theta_co[i]);
         let rl_i = rl_donor * one_m_e2 / (1.0 + eccentricity * cos_th);
         let mut mdot_i = eval_ritter_mdot_thin(
             m_donor,

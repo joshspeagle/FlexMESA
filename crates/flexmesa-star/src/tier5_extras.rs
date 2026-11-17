@@ -72,11 +72,11 @@ pub fn eval_overshoot_dbl_exp(
     let r1 = f1 * hp_bdy;
     let r2 = f2 * hp_bdy;
     let d2 = d0 * FACTOR;
-    let r_tr = -0.5 * r1 * FACTOR.ln();
+    let r_tr = -0.5 * r1 * flexmesa_math::log(FACTOR);
     let d_ov = if dr < r_tr {
-        d0 * (-2.0 * dr / r1).exp()
+        d0 * flexmesa_math::exp(-2.0 * dr / r1)
     } else {
-        d2 * (-2.0 * (dr - r_tr) / r2).exp()
+        d2 * flexmesa_math::exp(-2.0 * (dr - r_tr) / r2)
     };
     if d_ov <= d_min {
         (0.0, 0.0)
@@ -249,7 +249,8 @@ pub fn write_relax_profile_files(
     let mut comp = format!("{nz} {species}\n");
     for k in 0..nz {
         let q_rel = 1.0 - model.q[k].clamp(0.0, 1.0);
-        let s_cgs = model.entropy[k].exp() * (KERG * 6.022_140_76e23);
+        let s_cgs =
+            flexmesa_math::exp(model.entropy[k]) * (KERG * 6.022_140_76e23);
         let _ = writeln!(ent, "{q_rel:.16e} {s_cgs:.16e}");
         let j_k = model.j_rot.get(k).copied().unwrap_or(0.0);
         let _ = writeln!(ang, "{q_rel:.16e} {j_k:.16e}");

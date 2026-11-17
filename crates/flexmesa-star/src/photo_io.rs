@@ -89,6 +89,7 @@ pub fn write_photo_bytes(model: &StarModel) -> Vec<u8> {
         u8::from(model.controls.rsp_flag),
         u8::from(model.controls.rsp2_flag),
         u8::from(model.controls.rti_flag),
+        flexmesa_math::numerics_mode().to_wire_tag(),
     ]);
 
     write_i32(&mut buf, 2);
@@ -106,22 +107,35 @@ pub fn write_photo_bytes(model: &StarModel) -> Vec<u8> {
     write_i32(&mut buf, 3);
     write_u64(&mut buf, model.lnd_old.len() as u64);
     for s in [
-        &model.lnd_old, &model.ln_t_old, &model.ln_r_old, &model.lum_old,
-        &model.v_old, &model.u_old, &model.dq_old, &model.aux.alpha_rti_old,
+        &model.lnd_old,
+        &model.ln_t_old,
+        &model.ln_r_old,
+        &model.lum_old,
+        &model.v_old,
+        &model.u_old,
+        &model.dq_old,
+        &model.aux.alpha_rti_old,
         &model.xa_old,
     ] {
         write_f64_slice(&mut buf, s);
     }
     write_u64(&mut buf, model.lnd_start.len() as u64);
     for s in [
-        &model.lnd_start, &model.ln_t_start, &model.ln_r_start,
-        &model.lum_start, &model.v_start, &model.u_start,
+        &model.lnd_start,
+        &model.ln_t_start,
+        &model.ln_r_start,
+        &model.lum_start,
+        &model.v_start,
+        &model.u_start,
     ] {
         write_f64_slice(&mut buf, s);
     }
     for s in [
-        &model.aux.alpha_rti_start, &model.aux.p_face_start,
-        &model.aux.u_face_start, &model.aux.omega_old, &model.aux.j_rot_old,
+        &model.aux.alpha_rti_start,
+        &model.aux.p_face_start,
+        &model.aux.u_face_start,
+        &model.aux.omega_old,
+        &model.aux.j_rot_old,
         &model.aux.eps_mdot_old,
     ] {
         write_u64(&mut buf, s.len() as u64);
@@ -134,16 +148,36 @@ pub fn write_photo_bytes(model: &StarModel) -> Vec<u8> {
     write_f64_slice(
         &mut buf,
         &[
-            model.star_age, model.star_age_old, model.dt, model.dt_next,
-            model.dt_old, model.dt_limit_ratio_old, model.mstar,
-            model.mstar_old, model.mstar_dot, model.m_center, model.r_center,
-            model.l_center, model.v_center, model.teff, model.tau_base,
-            model.mstar_start, model.aux.total_energy,
-            model.aux.cumulative_energy_error, sh.rotational_mdot_boost_old,
-            sh.total_energy_old, sh.cumulative_energy_error_old, sh.teff_old,
-            sh.l_surf_old, sh.mstar_dot_old, sh.power_h_burn_old,
-            sh.power_he_burn_old, sh.power_z_burn_old, sh.power_photo_old,
-            sh.power_nuc_burn_old, sh.error_in_energy_conservation,
+            model.star_age,
+            model.star_age_old,
+            model.dt,
+            model.dt_next,
+            model.dt_old,
+            model.dt_limit_ratio_old,
+            model.mstar,
+            model.mstar_old,
+            model.mstar_dot,
+            model.m_center,
+            model.r_center,
+            model.l_center,
+            model.v_center,
+            model.teff,
+            model.tau_base,
+            model.mstar_start,
+            model.aux.total_energy,
+            model.aux.cumulative_energy_error,
+            sh.rotational_mdot_boost_old,
+            sh.total_energy_old,
+            sh.cumulative_energy_error_old,
+            sh.teff_old,
+            sh.l_surf_old,
+            sh.mstar_dot_old,
+            sh.power_h_burn_old,
+            sh.power_he_burn_old,
+            sh.power_z_burn_old,
+            sh.power_photo_old,
+            sh.power_nuc_burn_old,
+            sh.error_in_energy_conservation,
             sh.total_energy_end,
         ],
     );
@@ -155,7 +189,8 @@ pub fn write_photo_bytes(model: &StarModel) -> Vec<u8> {
         sh.burn_max_num_substeps as u64,
         sh.num_diffusion_solver_steps as u64,
         sh.num_diffusion_solver_iters as u64,
-        sh.model_number_for_last_retry.map_or(u64::MAX, |n| n as u64),
+        sh.model_number_for_last_retry
+            .map_or(u64::MAX, |n| n as u64),
     ] {
         write_u64(&mut buf, v);
     }
@@ -163,9 +198,15 @@ pub fn write_photo_bytes(model: &StarModel) -> Vec<u8> {
 
     write_i32(&mut buf, 5);
     for s in [
-        &model.eps_mdot, &model.cgrav, &model.aux.irradiation_heat,
-        &model.aux.etrb, &model.aux.alpha_rti, &model.aux.w_div_wc,
-        &model.mlt_vc, &model.aux.mlt_vc_old, &model.aux.burn_avg_epsnuc,
+        &model.eps_mdot,
+        &model.cgrav,
+        &model.aux.irradiation_heat,
+        &model.aux.etrb,
+        &model.aux.alpha_rti,
+        &model.aux.w_div_wc,
+        &model.mlt_vc,
+        &model.aux.mlt_vc_old,
+        &model.aux.burn_avg_epsnuc,
         &model.sig,
     ] {
         write_f64_slice(&mut buf, s);
@@ -252,7 +293,6 @@ pub fn read_photo_bytes(
     controls: StarControls,
     job: StarJobControls,
 ) -> Result<StarModel, StarError> {
-    let mut pos = 0_usize;
     let eof = |msg: &str| StarError::IoError(msg.to_string());
     let read_i32 = |pos: &mut usize| -> Result<i32, StarError> {
         let s = bytes.get(*pos..*pos + 4).ok_or_else(|| eof("EOF i32"))?;
@@ -287,38 +327,20 @@ pub fn read_photo_bytes(
             })
         };
 
-    let version = read_i32(&mut pos)?;
-    if version != STAR_DEF_VERSION {
+    let (hdr, mut pos) = decode_photo_part1_header(bytes)?;
+    let saved_mode = hdr.saved_mode;
+    let active_mode = flexmesa_math::numerics_mode();
+    if saved_mode != active_mode {
         return Err(StarError::IoError(format!(
-            "unsupported photo version {version} (expected {STAR_DEF_VERSION})"
+            "photo numerics_mode mismatch: checkpoint saved in \"{saved_mode}\" mode cannot be loaded while active mode is \"{active_mode}\""
         )));
     }
-
-    expect_part(&mut pos, 1)?;
-    let (nz, species) =
-        (read_u64(&mut pos)? as usize, read_u64(&mut pos)? as usize);
-    let nvar_hydro = read_u64(&mut pos)? as usize;
-    let mut chem_id = Vec::with_capacity(species);
-    for _ in 0..species {
-        chem_id.push(read_u64(&mut pos)? as usize);
-    }
-    let net_len = read_u64(&mut pos)? as usize;
-    let net_slice = bytes
-        .get(pos..pos + net_len)
-        .ok_or_else(|| eof("EOF net_name"))?;
-    pos += net_len;
-    let saved_net_name = std::str::from_utf8(net_slice)
-        .map_err(|e| {
-            StarError::IoError(format!("invalid UTF-8 net_name: {e}"))
-        })?
-        .to_owned();
-    let job_tags = bytes
-        .get(pos..pos + 7)
-        .ok_or_else(|| eof("EOF job/controls flags"))?;
-    pos += 7;
+    let (nz, species, nvar_hydro, chem_id) =
+        (hdr.nz, hdr.species, hdr.nvar_hydro, hdr.chem_id);
+    let job_tags = hdr.job_tags;
     let mut job = job;
     let mut controls = controls;
-    job.net_name = saved_net_name;
+    job.net_name = hdr.saved_net_name;
     controls.v_flag = job_tags[0] != 0;
     controls.u_flag = job_tags[1] != 0;
     controls.rotation_flag = job_tags[2] != 0;
@@ -390,7 +412,8 @@ pub fn read_photo_bytes(
     model.model_number = read_u64(&mut pos)? as usize;
     let s = read_f64_vec(&mut pos, 31)?;
     (model.star_age, model.star_age_old, model.dt) = (s[0], s[1], s[2]);
-    (model.dt_next, model.dt_old, model.dt_limit_ratio_old) = (s[3], s[4], s[5]);
+    (model.dt_next, model.dt_old, model.dt_limit_ratio_old) =
+        (s[3], s[4], s[5]);
     (model.mstar, model.mstar_old, model.mstar_dot) = (s[6], s[7], s[8]);
     (model.m_center, model.r_center, model.l_center) = (s[9], s[10], s[11]);
     (model.v_center, model.teff, model.tau_base) = (s[12], s[13], s[14]);
@@ -398,10 +421,17 @@ pub fn read_photo_bytes(
     model.aux.total_energy = s[16];
     model.aux.cumulative_energy_error = s[17];
     let sh = &mut model.aux.step_hist;
-    (sh.rotational_mdot_boost_old, sh.total_energy_old, sh.cumulative_energy_error_old) =
-        (s[18], s[19], s[20]);
+    (
+        sh.rotational_mdot_boost_old,
+        sh.total_energy_old,
+        sh.cumulative_energy_error_old,
+    ) = (s[18], s[19], s[20]);
     (sh.teff_old, sh.l_surf_old, sh.mstar_dot_old) = (s[21], s[22], s[23]);
-    (sh.power_h_burn_old, sh.power_he_burn_old, sh.power_z_burn_old) = (s[24], s[25], s[26]);
+    (
+        sh.power_h_burn_old,
+        sh.power_he_burn_old,
+        sh.power_z_burn_old,
+    ) = (s[24], s[25], s[26]);
     (sh.power_photo_old, sh.power_nuc_burn_old) = (s[27], s[28]);
     (sh.error_in_energy_conservation, sh.total_energy_end) = (s[29], s[30]);
     model.total_num_solver_iterations = read_u64(&mut pos)? as usize;
@@ -409,13 +439,17 @@ pub fn read_photo_bytes(
     model.aux.step_hist.timestep_hold = read_u64(&mut pos)? as usize;
     model.aux.step_hist.last_solver_iterations = read_u64(&mut pos)? as usize;
     model.aux.step_hist.burn_max_num_substeps = read_u64(&mut pos)? as usize;
-    model.aux.step_hist.num_diffusion_solver_steps = read_u64(&mut pos)? as usize;
-    model.aux.step_hist.num_diffusion_solver_iters = read_u64(&mut pos)? as usize;
+    model.aux.step_hist.num_diffusion_solver_steps =
+        read_u64(&mut pos)? as usize;
+    model.aux.step_hist.num_diffusion_solver_iters =
+        read_u64(&mut pos)? as usize;
     let last_retry_raw = read_u64(&mut pos)?;
     model.aux.step_hist.model_number_for_last_retry =
         (last_retry_raw != u64::MAX).then_some(last_retry_raw as usize);
-    model.aux.step_hist.was_in_implicit_wind_limit =
-        *bytes.get(pos).ok_or_else(|| eof("EOF was_in_implicit_wind_limit"))? != 0;
+    model.aux.step_hist.was_in_implicit_wind_limit = *bytes
+        .get(pos)
+        .ok_or_else(|| eof("EOF was_in_implicit_wind_limit"))?
+        != 0;
     pos += 1;
 
     expect_part(&mut pos, 5)?;
@@ -538,7 +572,7 @@ pub fn read_photo_bytes(
             model.set_m_grav_and_grav();
             model.pack_xh();
             for k in 0..nz {
-                model.rho[k] = model.lnd[k].exp();
+                model.rho[k] = flexmesa_math::exp(model.lnd[k]);
                 model.peos[k] = model.pgas[k] + model.prad[k];
                 let r_in = if k + 1 < nz {
                     model.r[k + 1]
@@ -592,4 +626,118 @@ pub fn read_photo_bytes(
     }
 
     Ok(model)
+}
+
+struct PhotoPart1Header {
+    nz: usize,
+    species: usize,
+    nvar_hydro: usize,
+    chem_id: Vec<usize>,
+    saved_net_name: String,
+    job_tags: [u8; 8],
+    saved_mode: flexmesa_math::NumericsMode,
+}
+
+fn decode_photo_part1_header(
+    bytes: &[u8],
+) -> Result<(PhotoPart1Header, usize), StarError> {
+    let eof = |ctx: &str| StarError::IoError(format!("photo {ctx}"));
+    let mut pos = 0_usize;
+    let read_i32 = |pos: &mut usize| -> Result<i32, StarError> {
+        let s: [u8; 4] = bytes
+            .get(*pos..*pos + 4)
+            .ok_or_else(|| eof("EOF i32"))?
+            .try_into()
+            .map_err(|_| eof("EOF i32"))?;
+        *pos += 4;
+        Ok(i32::from_le_bytes(s))
+    };
+    let read_u64 = |pos: &mut usize| -> Result<u64, StarError> {
+        let s: [u8; 8] = bytes
+            .get(*pos..*pos + 8)
+            .ok_or_else(|| eof("EOF u64"))?
+            .try_into()
+            .map_err(|_| eof("EOF u64"))?;
+        *pos += 8;
+        Ok(u64::from_le_bytes(s))
+    };
+
+    let version = read_i32(&mut pos)?;
+    if version != STAR_DEF_VERSION {
+        return Err(StarError::IoError(format!(
+            "unsupported photo version {version} (expected {STAR_DEF_VERSION})"
+        )));
+    }
+    let part = read_i32(&mut pos)?;
+    if part != 1 {
+        return Err(StarError::IoError(format!(
+            "photo sentinel mismatch: expected part 1, got {part}"
+        )));
+    }
+    let nz = read_u64(&mut pos)? as usize;
+    let species = read_u64(&mut pos)? as usize;
+    let nvar_hydro = read_u64(&mut pos)? as usize;
+    let species_bytes = species
+        .checked_mul(8)
+        .ok_or_else(|| eof("species overflow"))?;
+    let chem_end = pos
+        .checked_add(species_bytes)
+        .ok_or_else(|| eof("species overflow"))?;
+    let chem_slice =
+        bytes.get(pos..chem_end).ok_or_else(|| eof("EOF chem_id"))?;
+    pos = chem_end;
+    let chem_id: Vec<usize> = chem_slice
+        .as_chunks::<8>()
+        .0
+        .iter()
+        .map(|&c| u64::from_le_bytes(c) as usize)
+        .collect();
+
+    let net_len = read_u64(&mut pos)? as usize;
+    let net_end = pos
+        .checked_add(net_len)
+        .ok_or_else(|| eof("net_name overflow"))?;
+    let net_slice =
+        bytes.get(pos..net_end).ok_or_else(|| eof("EOF net_name"))?;
+    pos = net_end;
+    let saved_net_name = std::str::from_utf8(net_slice)
+        .map_err(|e| {
+            StarError::IoError(format!("invalid UTF-8 net_name: {e}"))
+        })?
+        .to_owned();
+
+    let job_tags: [u8; 8] = bytes
+        .get(pos..pos + 8)
+        .ok_or_else(|| eof("EOF job/controls flags"))?
+        .try_into()
+        .map_err(|_| eof("EOF job/controls flags"))?;
+    pos += 8;
+    let saved_mode = flexmesa_math::NumericsMode::from_wire_tag(job_tags[7])
+        .ok_or_else(|| {
+            StarError::IoError(format!(
+                "invalid photo numerics_mode tag {}",
+                job_tags[7]
+            ))
+        })?;
+
+    Ok((
+        PhotoPart1Header {
+            nz,
+            species,
+            nvar_hydro,
+            chem_id,
+            saved_net_name,
+            job_tags,
+            saved_mode,
+        },
+        pos,
+    ))
+}
+
+/// Extracts the [`flexmesa_math::NumericsMode`] recorded in the Part 1 header
+/// of serialized `.photo` checkpoint `bytes` (`#165`).
+pub fn photo_numerics_mode(
+    bytes: &[u8],
+) -> Result<flexmesa_math::NumericsMode, StarError> {
+    decode_photo_part1_header(bytes).map(|(hdr, _)| hdr.saved_mode)
 }

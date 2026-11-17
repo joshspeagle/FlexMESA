@@ -129,8 +129,8 @@ pub fn set_lnt_for_energy(
 
     for _iter in 0..20 {
         for k in 0..nz {
-            model.rho[k] = model.lnd[k].exp();
-            model.t[k] = model.ln_t[k].exp();
+            model.rho[k] = flexmesa_math::exp(model.lnd[k]);
+            model.t[k] = flexmesa_math::exp(model.ln_t[k]);
         }
         let outs = eos_dt_get_zones(
             ht,
@@ -148,13 +148,13 @@ pub fn set_lnt_for_energy(
 
         let mut max_rel = 0.0_f64;
         for (k, out) in outs.iter().enumerate() {
-            let e_cur = out.res[I_LN_E].exp();
+            let e_cur = flexmesa_math::exp(out.res[I_LN_E]);
             model.energy[k] = e_cur;
             if unchanged.get(k).copied().unwrap_or(false) || e_target[k] <= 0.0
             {
                 continue;
             }
-            let ln_e_tar = e_target[k].ln();
+            let ln_e_tar = flexmesa_math::log(e_target[k]);
             let resid = out.res[I_LN_E] - ln_e_tar;
             let rel = ((e_cur - e_target[k]) / e_target[k]).abs();
             max_rel = max_rel.max(rel);
@@ -170,8 +170,8 @@ pub fn set_lnt_for_energy(
     }
 
     for k in 0..nz {
-        model.rho[k] = model.lnd[k].exp();
-        model.t[k] = model.ln_t[k].exp();
+        model.rho[k] = flexmesa_math::exp(model.lnd[k]);
+        model.t[k] = flexmesa_math::exp(model.ln_t[k]);
     }
     let outs = eos_dt_get_zones(
         ht,
@@ -187,7 +187,7 @@ pub fn set_lnt_for_energy(
         ))
     })?;
     for (k, out) in outs.iter().enumerate() {
-        model.energy[k] = out.res[I_LN_E].exp();
+        model.energy[k] = flexmesa_math::exp(out.res[I_LN_E]);
     }
 
     let e_before: f64 = model
@@ -345,7 +345,7 @@ pub fn remap_onto_dq(
                         ov * (xa_c0[base + j] + xa_c1[base + j] * dx_cen);
                 }
                 e_acc += ov * e_old[kk];
-                inv_rho_acc += ov * (-lnd_old[kk]).exp();
+                inv_rho_acc += ov * flexmesa_math::exp(-lnd_old[kk]);
                 lnt_acc += ov * lnt_old[kk];
                 lum_acc += ov * lum_old[kk];
                 v_acc += ov * v_old[kk];
@@ -368,7 +368,7 @@ pub fn remap_onto_dq(
         e_target[k] = e_acc / dx;
         model.energy[k] = e_target[k];
         let inv_rho = (inv_rho_acc / dx).max(1.0e-99);
-        model.lnd[k] = -(inv_rho.ln());
+        model.lnd[k] = -(flexmesa_math::log(inv_rho));
         model.ln_t[k] = lnt_acc / dx;
         model.lum[k] = lum_acc / dx;
         let v_mean = v_acc / dx;
@@ -427,7 +427,7 @@ pub fn remap_onto_dq(
                 if ov > 0.0 {
                     let jr = j_rot_old.get(kk).copied().unwrap_or_else(|| {
                         (2.0 / 3.0)
-                            * model.r[k.min(nz_new - 1)].powi(2)
+                            * flexmesa_math::pow2(model.r[k.min(nz_new - 1)])
                             * omega_old[kk]
                     });
                     j_acc += ov * jr;

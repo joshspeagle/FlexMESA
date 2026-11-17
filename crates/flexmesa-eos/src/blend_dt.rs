@@ -499,8 +499,8 @@ pub fn eos_dt_get(
         })?;
     let (z_int, azion, acmi, a_baryon) =
         extract_species_weights(catalog, chem_id, "eos_dt_get")?;
-    let log_rho = rho.log10();
-    let log_t = t.log10();
+    let log_rho = flexmesa_math::log10(rho);
+    let log_t = flexmesa_math::log10(t);
     eos_dt_get_from_weights_with_tables(
         ht,
         EosDtTableSet::builtin(),
@@ -557,7 +557,7 @@ pub fn eos_dt_get_zones(
                 })?;
             let rho = rho_zones[iz];
             let t = t_zones[iz];
-            let (lr, lt) = (rho.log10(), t.log10());
+            let (lr, lt) = (flexmesa_math::log10(rho), flexmesa_math::log10(t));
             eos_dt_get_from_weights_with_tables(
                 ht, dt_tables, cms_tables, comp.xh, comp.xz, rho, lr, t, lt,
                 comp.abar, comp.zbar, xa, &z_int, &azion, &acmi, &a_baryon,

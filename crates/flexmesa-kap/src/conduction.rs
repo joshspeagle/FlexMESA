@@ -58,7 +58,7 @@ fn init_potekhin() -> PotekhinTable {
         *log_z_slot = if (z_val - 1.0).abs() == 0.0 {
             0.0
         } else {
-            z_val.log10()
+            flexmesa_math::log10(z_val)
         };
         for log_t_slot in &mut log_ts {
             *log_t_slot = z_toks
@@ -192,9 +192,7 @@ pub fn do_electron_conduction_potekhin(
         (log_t_in, false)
     };
 
-    let zlog = zbar
-        .max(1.0e-30)
-        .log10()
+    let zlog = flexmesa_math::log10(zbar.max(1.0e-30))
         .clamp(tbl.log_zs[0], tbl.log_zs[NUM_LOG_ZS - 1]);
 
     let (log_k, mut dlog_k_dlog_rho, mut dlog_k_dlog_t) = if zlog
@@ -234,7 +232,7 @@ pub fn do_electron_conduction_potekhin(
     }
 
     let logkap = 3.0 * log_t_in - log_rho_in - log_k
-        + (16.0 * BOLTZ_SIGMA / 3.0).log10();
+        + flexmesa_math::log10(16.0 * BOLTZ_SIGMA / 3.0);
     let kap = exp10(logkap);
     let dlnkap_dln_rho = -1.0 - dlog_k_dlog_rho;
     let dlnkap_dln_t = 3.0 - dlog_k_dlog_t;
@@ -272,11 +270,12 @@ pub fn do_electron_conduction_blouin(
     let (frac_h, frac_he) = if zbar <= 1.0 {
         (1.0, 0.0)
     } else if zbar <= 2.0 {
-        let alfa = zbar.log10() / 2.0_f64.log10();
+        let alfa = flexmesa_math::log10(zbar) / flexmesa_math::log10(2.0_f64);
         (1.0 - alfa, alfa)
     } else if zbar <= 3.0 {
-        let log2 = 2.0_f64.log10();
-        let alfa = (zbar.log10() - log2) / (3.0_f64.log10() - log2);
+        let log2 = flexmesa_math::log10(2.0_f64);
+        let alfa = (flexmesa_math::log10(zbar) - log2)
+            / (flexmesa_math::log10(3.0_f64) - log2);
         (0.0, 1.0 - alfa)
     } else {
         return Ok((kap, dlnkap_dln_rho, dlnkap_dln_t));
@@ -303,7 +302,7 @@ pub fn do_electron_conduction_blouin(
         if frac > 0.0 {
             let rhostar = log_rho_ad - log_rho0;
             let tstar = log_t_ad - log_t0;
-            let (sin_a, cos_a) = alpha.sin_cos();
+            let (sin_a, cos_a) = flexmesa_math::sin_cos(alpha);
             let u1 = (tstar * cos_a + rhostar * sin_a) / sig_t;
             let u2 = (tstar * sin_a - rhostar * cos_a) / sig_rho;
             let g = (-(u1 * u1) - (u2 * u2)).exp() * a;
@@ -329,7 +328,7 @@ pub fn do_electron_conduction_blouin(
     );
 
     let log_correction = log_corr_h * frac_h + log_corr_he * frac_he;
-    kap = (kap.ln() + log_correction.val).exp();
+    kap = flexmesa_math::exp(flexmesa_math::log(kap) + log_correction.val);
     dlnkap_dln_rho += log_correction.d1[0];
     dlnkap_dln_t += log_correction.d1[1];
     Ok((kap, dlnkap_dln_rho, dlnkap_dln_t))

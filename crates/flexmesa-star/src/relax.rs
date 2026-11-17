@@ -31,9 +31,10 @@ pub(crate) fn equilibrate_tier2_scaled_model(model: &mut StarModel) {
     for k in 0..model.nz {
         let m_zams_k = model.q[k] * M_SUN;
         let m_ratio = (alpha_m * m_zams_k) / model.m_grav[k].max(1.0);
-        model.cgrav[k] = STANDARD_CGRAV * alpha_m.powf(-2.0 / 3.0) * m_ratio;
+        model.cgrav[k] =
+            STANDARD_CGRAV * flexmesa_math::pow(alpha_m, -2.0 / 3.0) * m_ratio;
     }
-    model.controls.opacity_factor = alpha_m.powf(-2.0 / 3.0);
+    model.controls.opacity_factor = flexmesa_math::pow(alpha_m, -2.0 / 3.0);
     model.set_m_grav_and_grav();
 }
 
@@ -173,7 +174,8 @@ pub fn apply_uniform_rotation(model: &mut StarModel, omega_0: f64) {
     }
     for k in 0..model.nz {
         model.omega[k] = omega_0;
-        model.j_rot[k] = (2.0 / 3.0) * model.r[k].powi(2) * omega_0;
+        model.j_rot[k] =
+            (2.0 / 3.0) * flexmesa_math::pow2(model.r[k]) * omega_0;
         let r_k = model.r[k].max(1.0);
         let m_k = model.m_grav[k].max(1.0);
         let g_k = model
@@ -182,7 +184,8 @@ pub fn apply_uniform_rotation(model: &mut StarModel, omega_0: f64) {
             .copied()
             .filter(|&g| g > 0.0)
             .unwrap_or(STANDARD_CGRAV);
-        let omega_crit = (g_k * m_k / r_k.powi(3)).sqrt().max(1.0e-30);
+        let omega_crit =
+            (g_k * m_k / flexmesa_math::pow3(r_k)).sqrt().max(1.0e-30);
         model.aux.w_div_wc[k] = (omega_0 / omega_crit).clamp(0.0, 1.0);
     }
 }
@@ -194,7 +197,7 @@ pub fn excise_core_by_temperature(model: &mut StarModel, t_cut_k: f64) {
     if t_cut_k <= 0.0 || model.nz < 32 {
         return;
     }
-    let ln_t_cut = t_cut_k.ln();
+    let ln_t_cut = flexmesa_math::log(t_cut_k);
     let Some(raw_cut) = (16..model.nz).find(|&k| model.ln_t[k] >= ln_t_cut)
     else {
         return;
@@ -291,13 +294,14 @@ pub fn relax_mass_to_target(
     }
     model.aux.doing_relax = true;
     let steps = n_steps.max(1);
-    let dln_m_step = (target_mstar / old_mstar).ln() / (steps as f64);
+    let dln_m_step =
+        flexmesa_math::log(target_mstar / old_mstar) / (steps as f64);
     for step in 1..=steps {
         let prev_xmstar = model.xmstar.max(1.0);
         let cur_mstar = if step == steps {
             target_mstar
         } else {
-            old_mstar * (dln_m_step * (step as f64)).exp()
+            old_mstar * flexmesa_math::exp(dln_m_step * (step as f64))
         };
         let dln_r = dln_m_step / 3.0;
         model.mstar = cur_mstar;
@@ -393,12 +397,13 @@ pub fn relax_tau_factor_to_target(
     model.aux.doing_relax = true;
     let init_tau = model.controls.tau_factor.max(1.0e-12);
     let steps = n_steps.max(1);
-    let dln_tau = (target_tau_factor / init_tau).ln() / (steps as f64);
+    let dln_tau =
+        flexmesa_math::log(target_tau_factor / init_tau) / (steps as f64);
     for step in 1..=steps {
         model.controls.tau_factor = if step == steps {
             target_tau_factor
         } else {
-            init_tau * (dln_tau * (step as f64)).exp()
+            init_tau * flexmesa_math::exp(dln_tau * (step as f64))
         };
     }
     model.aux.doing_relax = false;
@@ -478,7 +483,8 @@ pub fn relax_from_profile_files(model: &mut StarModel, case_dir: &Path) {
         for k in 0..model.nz {
             let j_val = interp(&pts, model.xq[k]).max(0.0);
             model.j_rot[k] = j_val;
-            let i_rot = ((2.0 / 3.0) * model.r[k].powi(2)).max(1.0);
+            let i_rot =
+                ((2.0 / 3.0) * flexmesa_math::pow2(model.r[k])).max(1.0);
             model.omega[k] = j_val / i_rot;
         }
     }

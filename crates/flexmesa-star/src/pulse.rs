@@ -47,14 +47,19 @@ pub fn build_pulse_atmosphere_points(
     let mut atm = Vec::with_capacity(n_atm - 1);
     for i in (1..n_atm).rev() {
         let frac = (i as f64) / (n_atm as f64);
-        let tau = (tau_top.ln() + frac * (tau_base.ln() - tau_top.ln())).exp();
-        let t_tau = teff * (0.75 * (tau + 2.0 / 3.0)).powf(0.25);
+        let tau = flexmesa_math::exp(
+            flexmesa_math::log(tau_top)
+                + frac
+                    * (flexmesa_math::log(tau_base)
+                        - flexmesa_math::log(tau_top)),
+        );
+        let t_tau = teff * flexmesa_math::pow(0.75 * (tau + 2.0 / 3.0), 0.25);
         let p_ratio = (tau / tau_base).max(1.0e-8);
         let (p_tau, rho_tau) = (
             surf.p * p_ratio,
             surf.rho * p_ratio * (surf.t / t_tau.max(1.0)),
         );
-        let r = (r_tot - hp_surf * p_ratio.ln()).max(r_tot);
+        let r = (r_tot - hp_surf * flexmesa_math::log(p_ratio)).max(r_tot);
         let g = (model.cgrav[0] * m_tot / (r * r)).max(1.0e-30);
         let grad_t = 0.1875 * tau / (tau + 2.0 / 3.0);
         let n2 =
@@ -77,8 +82,8 @@ pub fn build_pulse_atmosphere_points(
         pt.v_dziem = g * r * rho_tau / p_tau;
         pt.v_g = pt.v_dziem / pt.gamma1;
         pt.a_star = r * n2 / g;
-        pt.u_dziem = PI4 * r.powi(3) * rho_tau / m_tot;
-        pt.c_1 = (r / r_tot).powi(3);
+        pt.u_dziem = PI4 * flexmesa_math::pow3(r) * rho_tau / m_tot;
+        pt.c_1 = flexmesa_math::pow3(r / r_tot);
         atm.push(pt);
     }
     atm
@@ -290,12 +295,12 @@ pub fn export_fgong_with_version(
         write_5e26(&mut out, &glob);
     }
 
-    let ln_tiny = f64::MIN_POSITIVE.ln();
+    let ln_tiny = flexmesa_math::log(f64::MIN_POSITIVE);
     for pt in pts.iter().rev() {
         let ln_q = if pt.m <= 0.0 {
             ln_tiny
         } else {
-            (pt.m / m_tot).max(f64::MIN_POSITIVE).ln()
+            flexmesa_math::log((pt.m / m_tot).max(f64::MIN_POSITIVE))
         };
         let mut var = [0.0_f64; 40];
         var[0] = pt.r;
@@ -409,12 +414,12 @@ pub fn export_osc(model: &StarModel, add_center_point: bool) -> String {
     ];
     write_5e19(&mut out, &glob);
 
-    let ln_tiny = f64::MIN_POSITIVE.ln();
+    let ln_tiny = flexmesa_math::log(f64::MIN_POSITIVE);
     for pt in pts.iter().rev() {
         let ln_q = if pt.m <= 0.0 {
             ln_tiny
         } else {
-            (pt.m / m_tot).max(f64::MIN_POSITIVE).ln()
+            flexmesa_math::log((pt.m / m_tot).max(f64::MIN_POSITIVE))
         };
         let kap_safe = pt.kap.max(1.0e-30);
         let p_tot_gas = pt.p / pt.pgas.max(1.0e-30);

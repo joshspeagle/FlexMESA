@@ -2,8 +2,8 @@
 
 `FlexMESA` compares its numerical kernels, microphysics table evaluators, linear solvers, and stellar evolution drivers against upstream Fortran MESA (release `26.4.1`, Zenodo record `19722306`; historical comparator tables on this page are scheduled for audit regeneration under [#142](https://github.com/joshspeagle/FlexMESA/issues/142) and [#146](https://github.com/joshspeagle/FlexMESA/issues/146)) across four execution engines:
 
-1. **Upstream Fortran MESA (`gfortran -O2 -fopenmp`)**: Native Fortran 2008 static archives (`libconst.a` through `libstar.a`, `libbinary.a`, and `libastero.a`) linked directly into the `benchmarks/fortran_mesa/` harness.
-2. **Safe Rust (`crates/flexmesa-*`)**: `#![forbid(unsafe_code)]` Cargo workspace crates compiled with `--release`, using monomorphized `DualOrder1<N>` automatic differentiation, Implicit Function Theorem root derivatives, Hirshman et al. (2010) `bcyclic` odd-even block cyclic reduction, and a persistent 4-thread `rayon` worker pool.
+1. **Upstream Fortran MESA (`gfortran -O2 -fopenmp`)**: Native Fortran 2008 static archives (`libconst.a` through `libstar.a`, `libbinary.a`, and `libastero.a`) linked into the `benchmarks/fortran_mesa/` harness (currently recording pre-audit `0b2e6bb` diagnostic timings and checksums; re-baselining to MESA `26.4.1` and audit remediation are tracked in [#141](https://github.com/joshspeagle/FlexMESA/issues/141), [#142](https://github.com/joshspeagle/FlexMESA/issues/142), and [#146](https://github.com/joshspeagle/FlexMESA/issues/146)).
+2. **Safe Rust (`crates/flexmesa-*`)**: Cargo workspace crates (`#![forbid(unsafe_code)]` across all crates except the sole vendored `crlibm` FFI wrapper `flexmesa-crlibm-sys`) compiled with `--release`, using monomorphized `DualOrder1<N>` automatic differentiation, Implicit Function Theorem root derivatives, Hirshman et al. (2010) `bcyclic` odd-even block cyclic reduction, and a persistent 4-thread `rayon` worker pool (`strict` mode by default; `#165`).
 3. **Python / PyO3 (`flexmesa._rust`)**: Zero-copy C-contiguous `numpy.float64` bindings releasing the Python GIL (`py.allow_threads`) and dispatching across a lock-free 4-thread adaptive spin-then-park worker team.
 4. **Python / JAX (`@jax.jit` & `jax.vmap` in `float64`)**: XLA-compiled flat-array kernels in strict IEEE-754 double precision (`jax_enable_x64=True`), combining recursive `@jax.custom_jvp` spline basis rules, $\lceil \log_2 N_{\mathrm{zones}} \rceil$ vectorized Parallel Cyclic Reduction (`solve_block_tridiag_pcr`), and `@jax.custom_vjp` adjoint linear solvers.
 
@@ -11,7 +11,7 @@
 
 ## Executive Summary of Cross-Engine Speedups & Parity
 
-Across all 28 benchmarked workloads spanning $N_{\mathrm{zones}} \in \{128, 512, 1024, 4096\}$, Safe Rust, Python (`PyO3`), and JAX (`float64`) match upstream Fortran MESA's 9-digit reduction checksums to $\le 10^{-12}$ (and match one another in IEEE-754 `f64` to $\le 10^{-14}$), while delivering substantial throughput gains across both CPU and GPU execution:
+In the pre-audit `0b2e6bb` standalone harnesses below ([#142](https://github.com/joshspeagle/FlexMESA/issues/142), [#146](https://github.com/joshspeagle/FlexMESA/issues/146)), Safe Rust, Python (`PyO3`), and JAX (`float64`) record multi-core CPU and batched GPU latencies across $N_{\mathrm{zones}} \in \{128, 512, 1024, 4096\}$ (for `fast` vs. `strict` Rust differences on MESA `26.4.1` math vectors and short evolutions, see `notes/audit/fast_vs_strict.md` under [#165](https://github.com/joshspeagle/FlexMESA/issues/165)):
 
 | Physics Domain | Representative Workload ($N_{\mathrm{zones}}$) | Fortran MESA 4t OpenMP ($\mu\mathrm{s}$) | Safe Rust 4t `rayon` ($\mu\mathrm{s}$) | JAX `@jit(vmap)` Batch/4 ($\mu\mathrm{s}$) | Primary Algorithmic & Systems Speedup Driver |
 | :--- | :--- | ---: | ---: | ---: | :--- |

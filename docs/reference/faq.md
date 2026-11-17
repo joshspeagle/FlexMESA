@@ -4,7 +4,14 @@ This page answers common questions regarding floating-point precision, backend r
 
 ---
 
-## 1. Precision & Backend Dispatch
+## 1. Precision, Numerics Modes & Backend Dispatch
+
+### What is the difference between `"strict"` and `"fast"` numerics modes?
+
+All Rust physics crates call `flexmesa-math` (`#165`) and support two run-level arithmetic modes built from the same Rust physics source (`flexmesa.get_numerics_mode()`, `flexmesa.set_numerics_mode("fast")`, `flexmesa.numerics_mode_context("fast")`, or `--numerics-mode {strict,fast}`):
+
+- **`"strict"` (Default)**: Calls vendored `crlibm 1.0beta4` (`CRMATH 1.2`) through `flexmesa-crlibm-sys` without fused multiply-add contraction (`a * b + c`) and preserves upstream operation order. `"strict"` is hardware- and thread-count-independent (`x86_64` and `aarch64`) and is the **only** mode judged against MESA `26.4.1`.
+- **`"fast"`**: Uses platform `std` `f64` intrinsics and hardware `mul_add`. `"fast"` is hardware-dependent, is validated exclusively against `"strict"` (`notes/audit/fast_vs_strict.md`), and is never compared against MESA.
 
 ### Why does importing `flexmesa` enable 64-bit precision in JAX (`jax_enable_x64`)?
 

@@ -197,7 +197,7 @@ fn test_ideal_eos_satisfies_exact_laws_and_maxwell_relations() {
 
     // 1. Ideal ion gas pressure: P_gas = rho * k_B * T / (amu * abar)
     let pgas_exact = rho * KERG * temp / (AMU * abar);
-    let pgas_eval = out.res[I_LN_PGAS].exp();
+    let pgas_eval = flexmesa_math::exp(out.res[I_LN_PGAS]);
     assert!(
         ((pgas_eval - pgas_exact) / pgas_exact).abs() < 1.0e-14,
         "Pgas mismatch: {pgas_eval:e} vs {pgas_exact:e}"
@@ -207,9 +207,9 @@ fn test_ideal_eos_satisfies_exact_laws_and_maxwell_relations() {
 
     // 2. Specific internal energy: E = 1.5 * k_B * T / (amu * abar) + a T^4/rho
     let egas_exact = 1.5 * KERG * temp / (AMU * abar);
-    let erad_exact = CRAD * temp.powi(4) / rho;
+    let erad_exact = CRAD * flexmesa_math::pow4(temp) / rho;
     let etot_exact = egas_exact + erad_exact;
-    let etot_eval = out.res[I_LN_E].exp();
+    let etot_eval = flexmesa_math::exp(out.res[I_LN_E]);
     assert!(
         ((etot_eval - etot_exact) / etot_exact).abs() < 1.0e-14,
         "Etot mismatch: {etot_eval:e} vs {etot_exact:e}"
@@ -223,7 +223,7 @@ fn test_ideal_eos_satisfies_exact_laws_and_maxwell_relations() {
     //    dse = T * (dS/dT)_rho / (dE/dT)_rho - 1 = 0
     //    dpe = (rho^2 * (dE/drho)_T + T * (dP/dT)_rho) / P - 1 = 0
     //    dsp = -(dS/drho)_T * rho^2 / (dP/dT)_rho - 1 = 0
-    let prad = CRAD * temp.powi(4) / 3.0;
+    let prad = CRAD * flexmesa_math::pow4(temp) / 3.0;
     let ptot = pgas_eval + prad;
     let dpgas_dt = pgas_eval * out.d_dln_t[I_LN_PGAS] / temp;
     let dprad_dt = 4.0 * prad / temp;
@@ -245,7 +245,7 @@ fn test_ideal_eos_satisfies_exact_laws_and_maxwell_relations() {
     //    differences in (ln T, ln rho)
     let eps = 1.0e-5_f64;
     let out_tp = eval_ideal_eos_from_weights(
-        temp * eps.exp(),
+        temp * flexmesa_math::exp(eps),
         rho,
         abar,
         zbar,
@@ -255,7 +255,7 @@ fn test_ideal_eos_satisfies_exact_laws_and_maxwell_relations() {
     )
     .unwrap();
     let out_tm = eval_ideal_eos_from_weights(
-        temp * (-eps).exp(),
+        temp * flexmesa_math::exp(-eps),
         rho,
         abar,
         zbar,
@@ -266,7 +266,7 @@ fn test_ideal_eos_satisfies_exact_laws_and_maxwell_relations() {
     .unwrap();
     let out_rp = eval_ideal_eos_from_weights(
         temp,
-        rho * eps.exp(),
+        rho * flexmesa_math::exp(eps),
         abar,
         zbar,
         &xa,
@@ -276,7 +276,7 @@ fn test_ideal_eos_satisfies_exact_laws_and_maxwell_relations() {
     .unwrap();
     let out_rm = eval_ideal_eos_from_weights(
         temp,
-        rho * (-eps).exp(),
+        rho * flexmesa_math::exp(-eps),
         abar,
         zbar,
         &xa,
@@ -314,7 +314,8 @@ fn test_ideal_eos_satisfies_exact_laws_and_maxwell_relations() {
 
     // Exact 50-digit analytical oracles for dCp/dlnT and d(dE/drho)/dlnRho
     let exact_dcp_dlnt = 15_131.562_343_485_932_f64;
-    let exact_dde_drho_dlnd = 2.0 * CRAD * temp.powi(4) / (rho * rho);
+    let exact_dde_drho_dlnd =
+        2.0 * CRAD * flexmesa_math::pow4(temp) / (rho * rho);
     assert!(
         ((out.d_dln_t[I_CP] - exact_dcp_dlnt) / exact_dcp_dlnt).abs() < 1.0e-10
     );

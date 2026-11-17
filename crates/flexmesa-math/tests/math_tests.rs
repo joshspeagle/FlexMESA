@@ -8,6 +8,7 @@
 
 #![allow(
     clippy::approx_constant,
+    clippy::disallowed_methods,
     clippy::excessive_precision,
     clippy::float_cmp,
     clippy::too_many_lines,
@@ -318,7 +319,11 @@ fn test_safe_guards_and_io_helpers_handle_edge_cases() {
     assert_eq!(safe_log(f64::NAN), SAFE_LOG_BAD_RETURN);
     assert_eq!(safe_log(f64::INFINITY), SAFE_LOG_BAD_RETURN);
     assert_eq!(safe_log10(f64::NAN), SAFE_LOG_BAD_RETURN);
-    assert_eq!(safe_log10(0.0), SAFE_LOG_BAD_RETURN);
+    // In CRMATH (`log10_rz(1.0e-99_dp)`), the binary64 value of `1.0e-99`
+    // (`0x2b61_7f7d_4edb_d3a7 > 10^-99`) has log10 slightly above `-99.0`,
+    // which rounds toward zero to `0xc058_bfff_ffff_ffff` (real MESA 26.4.1
+    // `[unary:safe_log10]` vector for `+0.0`).
+    assert_eq!(safe_log10(0.0).to_bits(), 0xc058_bfff_ffff_ffff_u64);
 
     // Three-valued signum and symmetric Heaviside step functions.
     assert_eq!(sgn(-4.2), -1.0);

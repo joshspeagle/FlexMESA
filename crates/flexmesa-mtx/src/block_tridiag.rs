@@ -46,36 +46,176 @@ pub(crate) fn check_blocks(
     Ok(blk_sz)
 }
 
-/// Accumulates $y \leftarrow y + \alpha B x$ for an $n_{\mathrm{var}} \times
-/// n_{\mathrm{var}}$ block `blk`.
+/// Accumulates $y \leftarrow y + B x$ in upstream column-major `my_gemv_p1`
+/// order (`mtx/public/mtx_solve_routines.inc:499-520`).
 #[inline]
-pub(crate) fn accum_block_mv(
-    blk: &[f64],
+pub(crate) fn add_block_mv(blk: &[f64], x: &[f64], y: &mut [f64]) {
+    let nvar = y.len();
+    for (j, &tmp) in x.iter().enumerate().take(nvar) {
+        if tmp != 0.0 {
+            for (i, y_i) in y.iter_mut().enumerate() {
+                *y_i += tmp * blk[i * nvar + j];
+            }
+        }
+    }
+}
+
+/// Subtracts $y \leftarrow y - B x$ in upstream column-major `my_gemv` order
+/// (`mtx/public/mtx_solve_routines.inc:443-464`).
+#[inline]
+pub(crate) fn sub_block_mv(blk: &[f64], x: &[f64], y: &mut [f64]) {
+    let nvar = y.len();
+    for (j, &tmp) in x.iter().enumerate().take(nvar) {
+        if tmp != 0.0 {
+            for (i, y_i) in y.iter_mut().enumerate() {
+                *y_i -= tmp * blk[i * nvar + j];
+            }
+        }
+    }
+}
+
+/// Subtracts $y \leftarrow y - A x - B z$ in upstream `my_gemv_mv` interleaved
+/// column order (`mtx/public/mtx_solve_routines.inc:411-440`).
+#[inline]
+pub(crate) fn sub_two_block_mv(
+    a: &[f64],
     x: &[f64],
-    scale: f64,
+    b: &[f64],
+    z: &[f64],
     y: &mut [f64],
 ) {
     let nvar = y.len();
-    for i in 0..nvar {
-        let mut s = 0.0;
-        for j in 0..nvar {
-            s += blk[i * nvar + j] * x[j];
+    for j in 0..nvar {
+        let tmp_x = x[j];
+        let tmp_z = z[j];
+        match (tmp_x != 0.0, tmp_z != 0.0) {
+            (true, true) => {
+                for (i, y_i) in y.iter_mut().enumerate() {
+                    *y_i = *y_i
+                        - tmp_x * a[i * nvar + j]
+                        - tmp_z * b[i * nvar + j];
+                }
+            }
+            (true, false) => {
+                for (i, y_i) in y.iter_mut().enumerate() {
+                    *y_i -= tmp_x * a[i * nvar + j];
+                }
+            }
+            (false, true) => {
+                for (i, y_i) in y.iter_mut().enumerate() {
+                    *y_i -= tmp_z * b[i * nvar + j];
+                }
+            }
+            (false, false) => {}
         }
-        y[i] += scale * s;
+    }
+}
+
+/// Accumulates $y \leftarrow y + A x + B z$ in upstream `my_gemv_p_mv`
+/// interleaved column order (`mtx/public/mtx_solve_routines.inc:467-496`).
+#[inline]
+pub(crate) fn add_two_block_mv(
+    a: &[f64],
+    x: &[f64],
+    b: &[f64],
+    z: &[f64],
+    y: &mut [f64],
+) {
+    let nvar = y.len();
+    for j in 0..nvar {
+        let tmp_x = x[j];
+        let tmp_z = z[j];
+        match (tmp_x != 0.0, tmp_z != 0.0) {
+            (true, true) => {
+                for (i, y_i) in y.iter_mut().enumerate() {
+                    *y_i = *y_i
+                        + tmp_x * a[i * nvar + j]
+                        + tmp_z * b[i * nvar + j];
+                }
+            }
+            (true, false) => {
+                for (i, y_i) in y.iter_mut().enumerate() {
+                    *y_i += tmp_x * a[i * nvar + j];
+                }
+            }
+            (false, true) => {
+                for (i, y_i) in y.iter_mut().enumerate() {
+                    *y_i += tmp_z * b[i * nvar + j];
+                }
+            }
+            (false, false) => {}
+        }
     }
 }
 
 /// Subtracts a block matrix-matrix product $C \leftarrow C - A B$ for
-/// $n \times n$ row-major blocks.
+/// $n \times n$ row-major blocks in upstream `my_gemm` order
+/// (`mtx/public/mtx_solve_routines.inc:361-383`).
 #[inline]
 pub(crate) fn sub_block_mm(n: usize, a: &[f64], b: &[f64], c: &mut [f64]) {
-    for i in 0..n {
-        for m in 0..n {
-            let a_im = a[i * n + m];
-            if a_im != 0.0 {
-                for j in 0..n {
-                    c[i * n + j] -= a_im * b[m * n + j];
+    for j in 0..n {
+        for l in 0..n {
+            let tmp = b[l * n + j];
+            if tmp != 0.0 {
+                for i in 0..n {
+                    c[i * n + j] -= tmp * a[i * n + l];
                 }
+            }
+        }
+    }
+}
+
+/// Accumulates a block matrix-matrix product $C \leftarrow C + A B$ for
+/// $n \times n$ row-major blocks in upstream `my_gemm_p1` order
+/// (`mtx/public/mtx_solve_routines.inc:386-408`).
+#[inline]
+pub(crate) fn add_block_mm(n: usize, a: &[f64], b: &[f64], c: &mut [f64]) {
+    for j in 0..n {
+        for l in 0..n {
+            let tmp = b[l * n + j];
+            if tmp != 0.0 {
+                for i in 0..n {
+                    c[i * n + j] += tmp * a[i * n + l];
+                }
+            }
+        }
+    }
+}
+
+/// Accumulates $C \leftarrow C + A B + D E$ in upstream `my_gemm_plus_mm`
+/// interleaved order (`mtx/public/mtx_solve_routines.inc:328-358`).
+#[inline]
+pub(crate) fn add_two_block_mm(
+    n: usize,
+    a: &[f64],
+    b: &[f64],
+    d: &[f64],
+    e: &[f64],
+    c: &mut [f64],
+) {
+    for j in 0..n {
+        for l in 0..n {
+            let tmp_b = b[l * n + j];
+            let tmp_e = e[l * n + j];
+            match (tmp_b != 0.0, tmp_e != 0.0) {
+                (true, true) => {
+                    for i in 0..n {
+                        c[i * n + j] = c[i * n + j]
+                            + tmp_b * a[i * n + l]
+                            + tmp_e * d[i * n + l];
+                    }
+                }
+                (true, false) => {
+                    for i in 0..n {
+                        c[i * n + j] += tmp_b * a[i * n + l];
+                    }
+                }
+                (false, true) => {
+                    for i in 0..n {
+                        c[i * n + j] += tmp_e * d[i * n + l];
+                    }
+                }
+                (false, false) => {}
             }
         }
     }
@@ -107,19 +247,18 @@ pub fn block_dble_mv(
     for k in 0..nz {
         let out_k = &mut prod[k * nvar..(k + 1) * nvar];
         let b_s = k * blk_sz..(k + 1) * blk_sz;
-        accum_block_mv(
+        add_block_mv(
             &dblk[b_s.clone()],
             &vec_b[k * nvar..(k + 1) * nvar],
-            1.0,
             out_k,
         );
         if k > 0 {
             let b_km1 = &vec_b[(k - 1) * nvar..k * nvar];
-            accum_block_mv(&lblk[b_s.clone()], b_km1, 1.0, out_k);
+            add_block_mv(&lblk[b_s.clone()], b_km1, out_k);
         }
         if k + 1 < nz {
             let b_kp1 = &vec_b[(k + 1) * nvar..(k + 2) * nvar];
-            accum_block_mv(&ublk[b_s], b_kp1, 1.0, out_k);
+            add_block_mv(&ublk[b_s], b_kp1, out_k);
         }
     }
     Ok(())
@@ -203,11 +342,11 @@ pub fn lu_factored_block_dble_mv(
         lu_factored_square_mv(nvar, &dblk[b_s.clone()], ipiv_k, b_k, p_k)?;
         if k > 0 {
             let b_km1 = &vec_b[(k - 1) * nvar..k * nvar];
-            accum_block_mv(&lblk[b_s.clone()], b_km1, 1.0, p_k);
+            add_block_mv(&lblk[b_s.clone()], b_km1, p_k);
         }
         if k + 1 < nz {
             let b_kp1 = &vec_b[(k + 1) * nvar..(k + 2) * nvar];
-            accum_block_mv(&ublk[b_s], b_kp1, 1.0, p_k);
+            add_block_mv(&ublk[b_s], b_kp1, p_k);
         }
     }
     Ok(())
@@ -294,7 +433,7 @@ pub fn block_thomas_solve(
             let (prev, curr) = rhs.split_at_mut(k * nvar);
             let l_k = &lblk[k * blk_sz..(k + 1) * blk_sz];
             let p_km1 = &prev[(k - 1) * nvar..k * nvar];
-            accum_block_mv(l_k, p_km1, -1.0, &mut curr[..nvar]);
+            sub_block_mv(l_k, p_km1, &mut curr[..nvar]);
         }
         let d_k = &dblk[k * blk_sz..(k + 1) * blk_sz];
         let ipiv_k = &ipiv[k * nvar..(k + 1) * nvar];
@@ -305,7 +444,7 @@ pub fn block_thomas_solve(
         let (curr, next) = rhs.split_at_mut((k + 1) * nvar);
         let u_k = &ublk[k * blk_sz..(k + 1) * blk_sz];
         let c_k = &mut curr[k * nvar..(k + 1) * nvar];
-        accum_block_mv(u_k, &next[..nvar], -1.0, c_k);
+        sub_block_mv(u_k, &next[..nvar], c_k);
     }
     Ok(())
 }

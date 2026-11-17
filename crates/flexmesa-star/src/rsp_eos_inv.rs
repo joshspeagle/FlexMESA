@@ -39,8 +39,11 @@ pub fn eval1_mesa_rho_given_pt(
     t: f64,
     rho_guess: f64,
 ) -> Result<f64, StarError> {
-    let (log_t, log_p, log_rho_guess) =
-        (t.log10(), p.log10(), rho_guess.log10());
+    let (log_t, log_p, log_rho_guess) = (
+        flexmesa_math::log10(t),
+        flexmesa_math::log10(p),
+        flexmesa_math::log10(rho_guess),
+    );
     let (mut rho_tol, mut p_tol) = (5.0e-10, 5.0e-13);
     for _ in 0..9 {
         if let Ok(inv) = eos_dt_get_rho(
@@ -79,10 +82,10 @@ pub fn eval1_mesa_t_given_dp(
         HelmTable::builtin(),
         &chem.chem_id,
         &chem.xa,
-        (1.0 / vol).log10(),
+        flexmesa_math::log10(1.0 / vol),
         WHICH_OTHER_LOG_PTOT,
-        p.log10(),
-        t_guess.log10(),
+        flexmesa_math::log10(p),
+        flexmesa_math::log10(t_guess),
         1.0e-11,
         1.0e-11,
         100,
@@ -109,10 +112,10 @@ pub fn eval1_mesa_eos_degas_and_kap(
         HelmTable::builtin(),
         &chem.chem_id,
         &chem.xa,
-        (1.0 / vol).log10(),
+        flexmesa_math::log10(1.0 / vol),
         WHICH_OTHER_EGAS,
         egas,
-        t_guess.log10(),
+        flexmesa_math::log10(t_guess),
         1.0e-11,
         egas.abs() * 1.0e-11,
         100,
@@ -142,10 +145,10 @@ pub fn eval1_mesa_eos_de_and_kap(
         HelmTable::builtin(),
         &chem.chem_id,
         &chem.xa,
-        (1.0 / vol).log10(),
+        flexmesa_math::log10(1.0 / vol),
         I_LN_E as isize,
-        energy.ln(),
-        t_guess.log10(),
+        flexmesa_math::log(energy),
+        flexmesa_math::log10(t_guess),
         1.0e-11,
         1.0e-11 * LN10,
         100,
@@ -173,8 +176,8 @@ pub fn set_rho_for_new_pgas(
         &chem.xa,
         model.ln_t[k] / LN10,
         I_LN_PGAS as isize,
-        model.pgas[k].ln(),
-        model.rho[k].log10(),
+        flexmesa_math::log(model.pgas[k]),
+        flexmesa_math::log10(model.rho[k]),
         1.0e-11,
         1.0e-11,
         100,
@@ -184,7 +187,7 @@ pub fn set_rho_for_new_pgas(
         StarError::MicrophysicsError(format!("set_rho_for_new_pgas({k}): {e}"))
     })?;
     model.lnd[k] = inv.log10_result * LN10;
-    model.rho[k] = model.lnd[k].exp();
+    model.rho[k] = flexmesa_math::exp(model.lnd[k]);
     Ok(())
 }
 
@@ -203,7 +206,7 @@ pub fn set_t_for_new_egas(
         model.lnd[k] / LN10,
         WHICH_OTHER_EGAS,
         egas_want,
-        model.t[k].log10(),
+        flexmesa_math::log10(model.t[k]),
         1.0e-11,
         egas_want.abs() * 1.0e-12,
         100,
@@ -213,7 +216,7 @@ pub fn set_t_for_new_egas(
         StarError::MicrophysicsError(format!("set_t_for_new_egas({k}): {e}"))
     })?;
     model.ln_t[k] = inv.log10_result * LN10;
-    model.t[k] = model.ln_t[k].exp();
+    model.t[k] = flexmesa_math::exp(model.ln_t[k]);
     Ok(())
 }
 
@@ -230,8 +233,8 @@ pub fn set_t_for_new_pgas(
         &chem.xa,
         model.lnd[k] / LN10,
         I_LN_PGAS as isize,
-        model.pgas[k].ln(),
-        model.t[k].log10(),
+        flexmesa_math::log(model.pgas[k]),
+        flexmesa_math::log10(model.t[k]),
         1.0e-11,
         1.0e-11,
         100,
@@ -241,7 +244,7 @@ pub fn set_t_for_new_pgas(
         StarError::MicrophysicsError(format!("set_t_for_new_pgas({k}): {e}"))
     })?;
     model.ln_t[k] = inv.log10_result * LN10;
-    model.t[k] = model.ln_t[k].exp();
+    model.t[k] = flexmesa_math::exp(model.ln_t[k]);
     Ok(())
 }
 
@@ -260,8 +263,8 @@ pub fn set_t_for_new_energy(
         &chem.xa,
         model.lnd[k] / LN10,
         I_LN_E as isize,
-        model.energy[k].ln(),
-        model.t[k].log10(),
+        flexmesa_math::log(model.energy[k]),
+        flexmesa_math::log10(model.t[k]),
         log_t_tol,
         other_tol,
         100,
@@ -271,7 +274,7 @@ pub fn set_t_for_new_energy(
         StarError::MicrophysicsError(format!("set_t_for_new_energy({k}): {e}"))
     })?;
     model.ln_t[k] = inv.log10_result * LN10;
-    model.t[k] = model.ln_t[k].exp();
+    model.t[k] = flexmesa_math::exp(model.ln_t[k]);
     Ok(())
 }
 
@@ -297,19 +300,19 @@ pub fn get_surf_p_t_kap(
         .unwrap_or(if kap_guess > 0.0 { kap_guess } else { 1.0e-2 });
     let eos_cb =
         |ln_p: f64, ln_t: f64| -> Result<AtmEosCallbackResult, AtmError> {
-            let t = ln_t.exp();
-            let p = ln_p.exp();
-            let prad = CRAD * t.powi(4) / 3.0;
+            let t = flexmesa_math::exp(ln_t);
+            let p = flexmesa_math::exp(ln_p);
+            let prad = CRAD * flexmesa_math::pow4(t) / 3.0;
             let pgas = (p - prad).max(1.0e-99);
             let rho_guess = eval1_gamma_pt_get_rho(chem, p, t).max(1.0e-40);
             let inv = eos_dt_get_rho(
                 HelmTable::builtin(),
                 &chem.chem_id,
                 &chem.xa,
-                t.log10(),
+                flexmesa_math::log10(t),
                 I_LN_PGAS as isize,
-                pgas.ln(),
-                rho_guess.log10(),
+                flexmesa_math::log(pgas),
+                flexmesa_math::log10(rho_guess),
                 1.0e-11,
                 1.0e-11 * LN10,
                 100,
@@ -320,7 +323,7 @@ pub fn get_surf_p_t_kap(
                 detail: e.to_string(),
             })?;
             Ok(AtmEosCallbackResult {
-                ln_rho: inv.linear_result.ln(),
+                ln_rho: flexmesa_math::log(inv.linear_result),
                 res: inv.eos.res,
                 dres_dln_rho: inv.eos.d_dlnd,
                 dres_dln_t: inv.eos.d_dln_t,
@@ -380,5 +383,10 @@ pub fn get_surf_p_t_kap(
     .map_err(|e| {
         StarError::MicrophysicsError(format!("get_surf_p_t_kap: {e}"))
     })?;
-    Ok((atm.ln_t.exp(), atm.ln_p.exp(), atm.kap, teff))
+    Ok((
+        flexmesa_math::exp(atm.ln_t),
+        flexmesa_math::exp(atm.ln_p),
+        atm.kap,
+        teff,
+    ))
 }

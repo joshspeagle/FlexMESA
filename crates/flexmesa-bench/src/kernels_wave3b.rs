@@ -102,8 +102,8 @@ pub fn bench_eos_4d(
         let t_val = exp10(5.0 + 0.01 * s);
         rho.push(r_val);
         t.push(t_val);
-        log_rho.push(r_val.log10());
-        log_t.push(t_val.log10());
+        log_rho.push(flexmesa_math::log10(r_val));
+        log_t.push(flexmesa_math::log10(t_val));
     }
 
     let eval_fast = |k: usize| -> EosEvalOutput {
@@ -400,7 +400,7 @@ pub fn bench_atm_table(
         let s = (k as f64) / denom;
         let r = RSUN * (0.8 + 0.6 * s);
         let teff = 5200.0 + 1200.0 * s;
-        let l = PI * CRAD * CLIGHT * r * r * teff.powi(4);
+        let l = PI * CRAD * CLIGHT * r * r * flexmesa_math::pow4(teff);
         l_vec.push(l);
         r_vec.push(r);
         m_vec.push(MSUN);

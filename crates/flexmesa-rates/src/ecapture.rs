@@ -28,59 +28,70 @@ pub fn eval_mui_coulomb(
         return 0.0;
     }
     let ye = zbar / abar;
-    let game = 2.275e5 * (den * ye).powf(ONE_THIRD) / temp;
-    let rs = 1.388 * (den * ye).powf(-ONE_THIRD);
+    let game = 2.275e5 * flexmesa_math::pow(den * ye, ONE_THIRD) / temp;
+    let rs = 1.388 * flexmesa_math::pow(den * ye, -ONE_THIRD);
 
     match which_mui {
         CoulombMuiOption::None => 0.0,
         CoulombMuiOption::Dcw1973 => {
-            let gam = z.powf(2.0 / 3.0) * zbar * game;
+            let gam = flexmesa_math::pow(z, 2.0 / 3.0) * zbar * game;
             let zr = z / zbar;
             -zr * (gam
-                * (0.9 + 0.2843 * zr.powf(-ONE_THIRD)
-                    - 0.054 * zr.powf(-2.0 / 3.0))
+                * (0.9 + 0.2843 * flexmesa_math::pow(zr, -ONE_THIRD)
+                    - 0.054 * flexmesa_math::pow(zr, -2.0 / 3.0))
                 - (9.0 / 16.0)
-                + 0.460 * zr.powf(-ONE_THIRD))
+                + 0.460 * flexmesa_math::pow(zr, -ONE_THIRD))
         }
         CoulombMuiOption::Slr1982 => {
-            let gam = z.powf(5.0 / 3.0) * game;
-            -0.898004 * gam + 4.0 * 0.96786 * gam.powf(0.25)
-                - 4.0 * 0.220703 * gam.powf(-0.25)
-                - 0.86097 * gam.ln()
+            let gam = flexmesa_math::pow(z, 5.0 / 3.0) * game;
+            -0.898004 * gam + 4.0 * 0.96786 * flexmesa_math::pow(gam, 0.25)
+                - 4.0 * 0.220703 * flexmesa_math::pow(gam, -0.25)
+                - 0.86097 * flexmesa_math::log(gam)
                 - 2.52692
         }
         CoulombMuiOption::Pcr2009 => {
-            let gam = z.powf(5.0 / 3.0) * game;
+            let gam = flexmesa_math::pow(z, 5.0 / 3.0) * game;
             let a1 = -0.907347_f64;
             let a2 = 0.62849_f64;
             let a3 = -3.0_f64.sqrt() / 2.0 - a1 / a2.sqrt();
             let fii = a1
                 * ((gam * (a2 + gam)).sqrt()
-                    - a2 * ((gam / a2).sqrt() + (1.0 + gam / a2).sqrt()).ln())
-                + 2.0 * a3 * (gam.sqrt() - gam.sqrt().atan());
-            let a = 1.11 * z.powf(0.475);
-            let b = 0.2 + 0.078 * z.ln().powi(2);
-            let nu = 1.16 + 0.08 * z.ln();
+                    - a2 * flexmesa_math::log(
+                        (gam / a2).sqrt() + (1.0 + gam / a2).sqrt(),
+                    ))
+                + 2.0 * a3 * (gam.sqrt() - flexmesa_math::atan(gam.sqrt()));
+            let a = 1.11 * flexmesa_math::pow(z, 0.475);
+            let b = 0.2 + 0.078 * flexmesa_math::pow2(flexmesa_math::log(z));
+            let nu = 1.16 + 0.08 * flexmesa_math::log(z);
             let cdh = (z / 3.0_f64.sqrt())
-                * ((1.0 + z).powf(1.5) - 1.0 - z.powf(1.5));
+                * (flexmesa_math::pow(1.0 + z, 1.5)
+                    - 1.0
+                    - flexmesa_math::pow(z, 1.5));
             let ctf = 0.2513
-                * z.powf(7.0 / 3.0)
-                * (1.0 - z.powf(-ONE_THIRD) + 0.2 * z.powf(-0.5));
+                * flexmesa_math::pow(z, 7.0 / 3.0)
+                * (1.0 - flexmesa_math::pow(z, -ONE_THIRD)
+                    + 0.2 * flexmesa_math::pow(z, -0.5));
             let g1 = 1.0
-                + (0.78 / (21.0 + game * (z / rs).powi(3))) * (game / z).sqrt();
+                + (0.78 / (21.0 + game * flexmesa_math::pow3(z / rs)))
+                    * (game / z).sqrt();
             let g2 = 1.0
                 + ((z - 1.0) / 9.0)
                     * (1.0 + 1.0 / (0.001 * z * z + 2.0 * game))
-                    * rs.powi(3)
+                    * flexmesa_math::pow3(rs)
                     / (1.0 + 6.0 * rs * rs);
             let x = 0.014005 / rs;
             let h1 = 1.0
                 / (1.0
-                    + (x / (1.0 + x * x).sqrt()).powi(6) * z.powf(-ONE_THIRD));
+                    + flexmesa_math::pow6(x / (1.0 + x * x).sqrt())
+                        * flexmesa_math::pow(z, -ONE_THIRD));
             let h2 = 1.0 / (1.0 + x * x).sqrt();
             let fie = -game
-                * (cdh * game.sqrt() + ctf * a * game.powf(nu) * g1 * h1)
-                / (1.0 + (b * game.sqrt() + a * g2 * game.powf(nu) / rs) * h2);
+                * (cdh * game.sqrt()
+                    + ctf * a * flexmesa_math::pow(game, nu) * g1 * h1)
+                / (1.0
+                    + (b * game.sqrt()
+                        + a * g2 * flexmesa_math::pow(game, nu) / rs)
+                        * h2);
             fii + fie
         }
     }
@@ -101,12 +112,12 @@ pub fn eval_vs_coulomb(
         return 0.0;
     }
     let ye = zbar / abar;
-    let rs = 1.388 * (den * ye).powf(-ONE_THIRD);
+    let rs = 1.388 * flexmesa_math::pow(den * ye, -ONE_THIRD);
     match which_vs {
         CoulombVsOption::None => 0.0,
         CoulombVsOption::Throwe1983 => 2.0 * z * FINE * (FINE / PI).sqrt(),
         CoulombVsOption::Itoh2002 => {
-            let s = 0.5 * (rs.max(1.0e-5).log10() + 3.0);
+            let s = 0.5 * (flexmesa_math::log10(rs.max(1.0e-5)) + 3.0);
             let coeffs = [
                 0.0450861,
                 0.00113078,
@@ -120,11 +131,15 @@ pub fn eval_vs_coulomb(
                 0.0204907,
                 0.0366713,
             ];
-            let fj: f64 = coeffs
-                .iter()
-                .enumerate()
-                .map(|(i, &c)| c * s.powi(i as i32))
-                .sum();
+            let fj = if s == 0.0 {
+                coeffs[0]
+            } else {
+                let mut acc = 0.0_f64;
+                for (i, &c) in coeffs.iter().enumerate() {
+                    acc += c * flexmesa_math::pow(s, i as f64);
+                }
+                acc
+            };
             1.46e-2 * z * fj
         }
     }
@@ -187,14 +202,14 @@ pub fn eval_ecapture_pair(
 
     let zpart: f64 = states_i
         .iter()
-        .map(|&(e, j)| (2.0 * j + 1.0) * (-e / kbt).exp())
+        .map(|&(e, j)| (2.0 * j + 1.0) * flexmesa_math::exp(-e / kbt))
         .sum();
 
     let is_ec = (z_lhs - z_rhs) > 0.0;
     let (qx, ggm) = if is_ec {
-        (q_tot - mec2, (PI * FINE * z_lhs).exp())
+        (q_tot - mec2, flexmesa_math::exp(PI * FINE * z_lhs))
     } else {
-        (q_tot + mec2, (PI * FINE * z_rhs).exp())
+        (q_tot + mec2, flexmesa_math::exp(PI * FINE * z_rhs))
     };
 
     let mut lam = 0.0;
@@ -215,10 +230,10 @@ pub fn eval_ecapture_pair(
                     fd_complete(4, y),
                     fd_complete(5, y),
                 );
-                let ie_v =
-                    (f4 - 2.0 * zeta * f3 + zeta * zeta * f2) / beta.powi(5);
-                let je_v =
-                    (f5 - 2.0 * zeta * f4 + zeta * zeta * f3) / beta.powi(6);
+                let ie_v = (f4 - 2.0 * zeta * f3 + zeta * zeta * f2)
+                    / flexmesa_math::pow5(beta);
+                let je_v = (f5 - 2.0 * zeta * f4 + zeta * zeta * f3)
+                    / flexmesa_math::pow6(beta);
                 (ie_v, je_v)
             }
         } else if zeta < beta {
@@ -245,19 +260,21 @@ pub fn eval_ecapture_pair(
             let c1 = -2.0
                 * beta
                 * (2.0 * beta * beta - 3.0 * beta * zeta + zeta * zeta);
-            let c0 = beta * beta * (beta - zeta).powi(2);
+            let c0 = beta * beta * flexmesa_math::pow2(beta - zeta);
             let ie_v = ((f4_1 - 2.0 * zeta * f3_1 + zeta * zeta * f2_1)
                 - (f4_2 + c3 * f3_2 + c2 * f2_2 + c1 * f1_2 + c0 * f0_2))
-                / beta.powi(5);
+                / flexmesa_math::pow5(beta);
 
             let d4 = 3.0 * zeta - 5.0 * beta;
             let d3 =
                 10.0 * beta * beta - 12.0 * beta * zeta + 3.0 * zeta * zeta;
-            let d2 = zeta.powi(3) - 9.0 * beta * zeta * zeta
+            let d2 = flexmesa_math::pow3(zeta) - 9.0 * beta * zeta * zeta
                 + 18.0 * beta * beta * zeta
-                - 10.0 * beta.powi(3);
-            let d1 = beta * (5.0 * beta - 2.0 * zeta) * (beta - zeta).powi(2);
-            let d0 = -beta * beta * (beta - zeta).powi(3);
+                - 10.0 * flexmesa_math::pow3(beta);
+            let d1 = beta
+                * (5.0 * beta - 2.0 * zeta)
+                * flexmesa_math::pow2(beta - zeta);
+            let d0 = -beta * beta * flexmesa_math::pow3(beta - zeta);
             let je_v = ((f5_1 - 2.0 * zeta * f4_1 + zeta * zeta * f3_1)
                 - (f5_2
                     + d4 * f4_2
@@ -265,13 +282,14 @@ pub fn eval_ecapture_pair(
                     + d2 * f2_2
                     + d1 * f1_2
                     + d0 * f0_2))
-                / beta.powi(6);
+                / flexmesa_math::pow6(beta);
             (ie_v, je_v)
         };
 
         if ie > 0.0 && je > 0.0 {
-            let prob_i = (2.0 * ji + 1.0) * (-ei / kbt).exp() / zpart;
-            let w = ggm * LN2 * 10.0_f64.powf(-logft) * prob_i;
+            let prob_i =
+                (2.0 * ji + 1.0) * flexmesa_math::exp(-ei / kbt) / zpart;
+            let w = ggm * LN2 * flexmesa_math::exp10(-logft) * prob_i;
             lam += ie * w;
             eps_nu += mec2 * je * w;
         }
@@ -317,13 +335,21 @@ pub fn eval_ecapnuc_rate(
         let t5 = temp * temp * temp * temp * temp;
         let zetan = qn / KERG / temp;
         let eta = etaef - etael;
-        let exeta = if eta <= 6.8e2 { eta.exp() } else { 0.0 };
+        let exeta = if eta <= 6.8e2 {
+            flexmesa_math::exp(eta)
+        } else {
+            0.0
+        };
         let etael2 = etael * etael;
         let etael3 = etael2 * etael;
         let etael4 = etael3 * etael;
         let etael5 = etael4 * etael;
         let zetan2 = zetan * zetan;
-        let f0 = if eta <= 6.8e2 { exeta.ln_1p() } else { eta };
+        let f0 = if eta <= 6.8e2 {
+            flexmesa_math::log1p(exeta)
+        } else {
+            eta
+        };
 
         let f1l = exeta;
         let f2l = 2.0 * f1l;
@@ -332,7 +358,7 @@ pub fn eval_ecapnuc_rate(
         let f5l = 120.0 * f1l;
 
         let (f1g, f2g, f3g, f4g, f5g) = if eta > 0.0 {
-            let exmeta = (-eta).exp();
+            let exmeta = flexmesa_math::exp(-eta);
             let eta2 = eta * eta;
             let eta3 = eta2 * eta;
             let eta4 = eta3 * eta;

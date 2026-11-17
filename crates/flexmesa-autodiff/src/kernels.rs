@@ -9,9 +9,10 @@
 
 use flexmesa_const::{ILN10, LN10, LN2, PI, PI2};
 use flexmesa_math::{
-    acos, acosh, asin, asinh, atan, atanh, cos, cosh, cospi, exp, exp10, log,
-    log10, log1p, log2, pow, pow2, pow3, pow4, pow5, pow6, powm1, safe_log,
-    safe_log10, sgn, sin, sinh, sinpi, tan, tanh, tanpi, SAFE_LOG_FLOOR,
+    acos, acosh, asin, asinh, atan, atanh, cos, cosh, cospi, exp, exp10, expm1,
+    log, log10, log1p, log2, pow, pow2, pow3, pow4, pow5, pow6, powm1,
+    safe_log, safe_log10, sgn, sin, sinh, sinpi, tan, tanh, tanpi,
+    SAFE_LOG_FLOOR,
 };
 
 /// Return `(f(x), f'(x), f''(x))` for $\operatorname{sign}(x)$ with zero
@@ -70,7 +71,7 @@ pub fn unary_exp(x: f64) -> (f64, f64, f64) {
 #[inline]
 pub fn unary_expm1(x: f64) -> (f64, f64, f64) {
     let q0 = exp(x);
-    (q0 - 1.0, q0, q0)
+    (expm1(x), q0, q0)
 }
 
 /// Return `(f(x), f'(x), f''(x))` for $\operatorname{exp10}(x) = 10^{x}$ with

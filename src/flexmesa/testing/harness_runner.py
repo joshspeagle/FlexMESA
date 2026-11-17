@@ -19,7 +19,7 @@ import tempfile
 import time
 from typing import Any
 
-from flexmesa import _rust
+from flexmesa import _dispatch, _rust
 from flexmesa.data import fetch
 from flexmesa.testing import history_compare
 from flexmesa.testing._case_verdict import (
@@ -38,11 +38,41 @@ __all__ = [
     "locate_written_history",
     "proc_rss_gb",
     "resolve_case_dir",
+    "resolve_effective_numerics_mode",
     "resolve_mesa_test_root",
     "resolve_reference_history_path",
     "run_trace_inprocess",
     "run_traced_case",
 ]
+
+
+def resolve_effective_numerics_mode(
+    numerics_mode: str | None = None,
+) -> str:
+    """Resolve effective ``"strict"``/``"fast"`` mode from arg, env, or process.
+
+    Args:
+        numerics_mode: Optional explicit mode override (``"strict"`` or
+            ``"fast"``). When ``None``, inspects ``FLEXMESA_NUMERICS_MODE``
+            and falls back to :func:`flexmesa.get_numerics_mode`.
+
+    Returns:
+        Canonical lowercase mode string (``"strict"`` or ``"fast"``).
+
+    Raises:
+        ValueError: If ``numerics_mode`` or ``FLEXMESA_NUMERICS_MODE`` is not
+            ``"strict"`` or ``"fast"``.
+    """
+    if numerics_mode is not None:
+        return _dispatch.validate_numerics_mode(numerics_mode)
+    env_raw = os.environ.get("FLEXMESA_NUMERICS_MODE", "").strip()
+    if env_raw:
+        return _dispatch.validate_numerics_mode(
+            env_raw, label="FLEXMESA_NUMERICS_MODE"
+        )
+    return _dispatch.validate_numerics_mode(
+        str(_dispatch.get_numerics_mode()), label="active numerics_mode"
+    )
 
 
 def resolve_mesa_test_root(
@@ -221,6 +251,7 @@ def run_trace_inprocess(
     respect_intervals: bool = False,
     write_profiles: bool = False,
     is_logs_dir: bool = True,
+    numerics_mode: str | None = None,
 ) -> dict[str, Any]:
     """Invoke the compiled Safe Rust tracer directly in the current process.
 
@@ -233,15 +264,19 @@ def run_trace_inprocess(
         respect_intervals: Honor ``history_interval`` instead of every step.
         write_profiles: Enable writing radial ``profileN.data`` files.
         is_logs_dir: Treat ``out_target`` as a root directory when True.
+        numerics_mode: Arithmetic mode (``"strict"`` or ``"fast"``; defaults
+            to active ``FLEXMESA_NUMERICS_MODE`` / process mode).
 
     Returns:
         Raw telemetry dictionary returned by ``flexmesa._rust``.
 
     Raises:
-        ValueError: If ``max_steps < 0`` or ``suite`` is unknown.
+        ValueError: If ``max_steps < 0``, ``numerics_mode`` is invalid, or
+            ``suite`` is unknown.
     """
     if max_steps is not None and max_steps < 0:
         raise ValueError(f"max_steps must be non-negative, got {max_steps}")
+    eff_mode = resolve_effective_numerics_mode(numerics_mode)
     if is_logs_dir:
         out_target.mkdir(parents=True, exist_ok=True)
     else:
@@ -259,6 +294,7 @@ def run_trace_inprocess(
                 respect_intervals=respect_intervals,
                 write_profiles=write_profiles,
                 is_logs_dir=is_logs_dir,
+                numerics_mode=eff_mode,
             )
         )
     if suite == "binary":
@@ -269,6 +305,7 @@ def run_trace_inprocess(
                 max_steps=max_steps,
                 respect_intervals=respect_intervals,
                 is_logs_dir=is_logs_dir,
+                numerics_mode=eff_mode,
             )
         )
     if suite == "astero":
@@ -281,12 +318,16 @@ def run_trace_inprocess(
                 respect_intervals=respect_intervals,
                 write_profiles=write_profiles,
                 is_logs_dir=is_logs_dir,
+                numerics_mode=eff_mode,
             )
         )
     raise ValueError(f"unsupported suite {suite!r}")
 
 
-def _build_worker_env(worker_tmp: pathlib.Path) -> dict[str, str]:
+def _build_worker_env(
+    worker_tmp: pathlib.Path,
+    numerics_mode: str,
+) -> dict[str, str]:
     env = os.environ.copy()
     src_root = str(pathlib.Path(__file__).resolve().parents[2])
     existing_py = env.get("PYTHONPATH", "")
@@ -295,6 +336,7 @@ def _build_worker_env(worker_tmp: pathlib.Path) -> dict[str, str]:
     )
     env.setdefault("JAX_PLATFORMS", "cpu")
     env.setdefault("PYTHONWARNINGS", "ignore::RuntimeWarning:runpy")
+    env["FLEXMESA_NUMERICS_MODE"] = numerics_mode
     tmp_str = str(worker_tmp)
     env["TMPDIR"] = tmp_str
     env["TEMP"] = tmp_str
@@ -324,6 +366,7 @@ def _run_traced_worker(
     respect_intervals: bool,
     write_profiles: bool,
     is_logs_dir: bool,
+    numerics_mode: str,
     timeout_sec: float | None,
     max_rss_gb: float | None,
     t0: float,
@@ -346,6 +389,8 @@ def _run_traced_worker(
             str(out_target),
             str(meta_json),
             "--is-logs-dir" if is_logs_dir else "--explicit-file",
+            "--numerics-mode",
+            numerics_mode,
         ]
         if max_steps is not None:
             cmd.extend(["--max-steps", str(max_steps)])
@@ -359,7 +404,7 @@ def _run_traced_worker(
         cap_kb = int(max_rss_gb * 1.0e6) if max_rss_gb is not None else None
         peak_kb = 0
         kill_status = ""
-        worker_env = _build_worker_env(worker_tmp)
+        worker_env = _build_worker_env(worker_tmp, numerics_mode)
 
         with (
             stderr_path.open("w", encoding="utf-8") as err_fh,
@@ -450,6 +495,7 @@ def run_traced_case(
     respect_intervals: bool = False,
     write_profiles: bool = False,
     is_logs_dir: bool = True,
+    numerics_mode: str | None = None,
     timeout_sec: float | None = None,
     max_rss_gb: float | None = None,
 ) -> TraceRunOutcome:
@@ -464,6 +510,8 @@ def run_traced_case(
         respect_intervals: Honor ``history_interval`` instead of every step.
         write_profiles: Enable writing radial ``profileN.data`` files.
         is_logs_dir: Treat ``out_target`` as a root directory when True.
+        numerics_mode: Arithmetic mode (``"strict"`` or ``"fast"``; defaults
+            to active ``FLEXMESA_NUMERICS_MODE`` / process mode).
         timeout_sec: Optional wall-clock timeout in seconds (``s``).
         max_rss_gb: Optional resident-memory ceiling in gigabytes (``GB``).
 
@@ -472,10 +520,11 @@ def run_traced_case(
         usage, and emitted history path.
 
     Raises:
-        ValueError: If ``max_steps < 0``.
+        ValueError: If ``max_steps < 0`` or ``numerics_mode`` is invalid.
     """
     if max_steps is not None and max_steps < 0:
         raise ValueError(f"max_steps must be non-negative, got {max_steps}")
+    eff_mode = resolve_effective_numerics_mode(numerics_mode)
     _clear_stale_history_outputs(out_target, is_logs_dir)
     case_name = case_dir.name
     t0 = time.monotonic()
@@ -490,6 +539,7 @@ def run_traced_case(
             respect_intervals=respect_intervals,
             write_profiles=write_profiles,
             is_logs_dir=is_logs_dir,
+            numerics_mode=eff_mode,
             timeout_sec=timeout_sec,
             max_rss_gb=max_rss_gb,
             t0=t0,
@@ -505,6 +555,7 @@ def run_traced_case(
             respect_intervals=respect_intervals,
             write_profiles=write_profiles,
             is_logs_dir=is_logs_dir,
+            numerics_mode=eff_mode,
         )
         wall = time.monotonic() - t0
         hist = locate_written_history(suite, out_target, is_logs_dir)

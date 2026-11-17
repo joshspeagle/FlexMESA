@@ -57,7 +57,7 @@ use flexmesa_num::{
 fn test_rk2_and_rk4_exhibit_expected_convergence_orders() {
     let rhs =
         |_t: f64, y: &[f64]| -> Result<Vec<f64>, NumError> { Ok(vec![-y[0]]) };
-    let y_exact = (-0.1_f64).exp();
+    let y_exact = flexmesa_math::exp(-0.1_f64);
     let y_rk2_h = rk2(0.0, &[1.0], 0.1, rhs).unwrap()[0];
     let y_rk2_half = {
         let m = rk2(0.0, &[1.0], 0.05, rhs).unwrap();
@@ -141,7 +141,7 @@ fn test_rosenbrock_dense_and_banded_solve_stiff_system_across_variants() {
             -1.0, 0.0, 0.0, 999.0, -1_000.0, 0.0, 0.0, 499.0, -500.0,
         ])
     };
-    let y_exact = (-1.0_f64).exp();
+    let y_exact = flexmesa_math::exp(-1.0_f64);
 
     for variant in [
         RosenbrockVariant::Ros2,
@@ -200,7 +200,9 @@ fn test_newton_solve_dense_and_banded_converge_quadratically() {
         for i in 0..n {
             let left = if i > 0 { y[i - 1] } else { 0.0 };
             let right = if i + 1 < n { y[i + 1] } else { 0.0 };
-            r[i] = y[i] + 0.2 * y[i].powi(3) - 0.1 * (left + right) - b[i];
+            r[i] = y[i] + 0.2 * flexmesa_math::pow3(y[i])
+                - 0.1 * (left + right)
+                - b[i];
         }
         Ok(r)
     };

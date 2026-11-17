@@ -40,7 +40,9 @@ pub fn calc_chi(
         let pom = (16.0 / 3.0) * PI * dc.alfa * dc.alfam / model.dm[k0];
         let vol = model.aux.rsp.vol_rsp[k0];
         let pom1 = wk.w[k0] / (vol * vol);
-        let pom2 = 0.5 * (model.r[k0].powi(6) + model.r[ki].powi(6));
+        let pom2 = 0.5
+            * (flexmesa_math::pow6(model.r[k0])
+                + flexmesa_math::pow6(model.r[ki]));
         let pom4 =
             0.5 * (model.aux.rsp.hp_face[k0] + model.aux.rsp.hp_face[ki]);
         let pom3 = model.v[k0] / model.r[k0] - model.v[ki] / model.r[ki];
@@ -68,16 +70,16 @@ pub fn calc_chi(
         wk.dchi_dw_00[i] = pomt1 / (vol * vol);
         wk.dchi_dr_out[i] = pomt4 * 0.5 * wk.dhp_dr_out[i];
         wk.dchi_dr_00[i] = -2.0 * chi / vol * wk.dvol_dr_00[i]
-            + pomt2 * 3.0 * model.r[k0].powi(5)
+            + pomt2 * 3.0 * flexmesa_math::pow5(model.r[k0])
             + pomt3
                 * (2.0 / model.dt / model.r[k0]
-                    - model.v[k0] / model.r[k0].powi(2))
+                    - model.v[k0] / flexmesa_math::pow2(model.r[k0]))
             + pomt4 * 0.5 * (wk.dhp_dr_00[i] + wk.dhp_dr_out[i - 1]);
         wk.dchi_dr_in[i] = -2.0 * chi / vol * wk.dvol_dr_in[i]
-            + pomt2 * 3.0 * model.r[ki].powi(5)
+            + pomt2 * 3.0 * flexmesa_math::pow5(model.r[ki])
             - pomt3
                 * (2.0 / model.dt / model.r[ki]
-                    - model.v[ki] / model.r[ki].powi(2))
+                    - model.v[ki] / flexmesa_math::pow2(model.r[ki]))
             + pomt4 * 0.5 * (wk.dhp_dr_in[i] + wk.dhp_dr_00[i - 1]);
         wk.dchi_dr_in2[i] = pomt4 * 0.5 * wk.dhp_dr_in[i - 1];
     }
@@ -240,7 +242,8 @@ pub fn calc_source_sink(
             + p_k * wk.dqq_dr_in[i]
             - p_k * qq_k / cp_k * wk.dcp_dr_in[i]);
 
-    let pom_d = (dc.cede / dc.alfa) * (w_k.powi(3) - dc.efl0.powi(3));
+    let pom_d = (dc.cede / dc.alfa)
+        * (flexmesa_math::pow3(w_k) - flexmesa_math::pow3(dc.efl0));
     let pom2_d = 0.5 * (hp0 + hpi);
     model.aux.rsp.damp_rsp[k0] = pom_d / pom2_d;
     let tem_d = -0.5 * pom_d / (pom2_d * pom2_d);
@@ -265,7 +268,7 @@ pub fn calc_source_sink(
     } else {
         let pom_r =
             (dc.gammar * dc.gammar) / (dc.alfa * dc.alfa) * 4.0 * dc.sig;
-        let pom2a = t_k.powi(3) * vol_k * vol_k;
+        let pom2a = flexmesa_math::pow3(t_k) * vol_k * vol_k;
         let pom2b = 1.0 / (cp_k * op_k);
         let pom2_r = pom2a * pom2b;
         let pom3_r = w_k * w_k;
@@ -274,7 +277,7 @@ pub fn calc_source_sink(
         model.aux.rsp.dampr_rsp[k0] = dampr;
         let tem_r = -dampr / pom4_r;
 
-        let d_pom2a_dvol = 2.0 * t_k.powi(3) * vol_k;
+        let d_pom2a_dvol = 2.0 * flexmesa_math::pow3(t_k) * vol_k;
         let d_pom2b_dvol =
             -pom2b * (wk.dcp_dvol[i] / cp_k + wk.dk_dvol[i] / op_k);
         let d_pom2_dvol = d_pom2a_dvol * pom2b + pom2a * d_pom2b_dvol;
@@ -286,7 +289,7 @@ pub fn calc_source_sink(
         dampr_p[1] = tem_r
             * (hp0 * wk.dhp_dr_00[i] + hpi * wk.dhp_dr_out[i - 1])
             + tem_r2
-                * t_k.powi(3)
+                * flexmesa_math::pow3(t_k)
                 * (2.0 * vol_k * wk.dvol_dr_00[i]
                     - vol_k
                         * vol_k
@@ -295,7 +298,7 @@ pub fn calc_source_sink(
         dampr_p[2] = tem_r
             * (hp0 * wk.dhp_dr_in[i] + hpi * wk.dhp_dr_00[i - 1])
             + tem_r2
-                * t_k.powi(3)
+                * flexmesa_math::pow3(t_k)
                 * (2.0 * vol_k * wk.dvol_dr_in[i]
                     - vol_k
                         * vol_k
@@ -314,7 +317,8 @@ pub fn calc_source_sink(
                 * vol_k
                 * vol_k
                 * (3.0 * t_k * t_k
-                    - t_k.powi(3) * (wk.dcp_dt[i] / cp_k + wk.dk_dt[i] / op_k))
+                    - flexmesa_math::pow3(t_k)
+                        * (wk.dcp_dt[i] / cp_k + wk.dk_dt[i] / op_k))
                 / (cp_k * op_k);
         dampr_p[9] = tem_r * hpi * wk.dhp_dt_00[i - 1];
         dampr_p[10] = tem_r * hp0 * wk.dhp_der_out[i];

@@ -9,6 +9,7 @@ description = "Dense, banded, sparse, and block-tridiagonal linear algebra"
 
 [dependencies]
 flexmesa-autodiff = { path = "../flexmesa-autodiff" }
+flexmesa-math = { path = "../flexmesa-math" }
 flexmesa-utils = { path = "../flexmesa-utils" }
 rayon.workspace = true
 

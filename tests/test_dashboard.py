@@ -277,16 +277,22 @@ def test_dashboard_freshness_gate_detects_hand_edited_readme_number(
 ) -> None:
     """Perturbing a single number in README.md must fail freshness check."""
     mesa_dir = fetch.resolve_mesa_test_inputs_dir()
+    expected = dashboard.render_expected_files(REPO_ROOT, mesa_dir)
     fake_root = tmp_path / "repo"
     fake_root.mkdir()
     for child in REPO_ROOT.iterdir():
-        if child.name in {".git", "README.md"}:
+        if child.name in {".git", "README.md", "docs", "benchmarks"}:
             continue
         (fake_root / child.name).symlink_to(child)
 
-    readme_orig = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
-    tampered = readme_orig.replace("0 / 106", "1 / 106", 1)
-    assert tampered != readme_orig
+    for sub in ("docs", "benchmarks"):
+        (fake_root / sub).mkdir()
+        for child in (REPO_ROOT / sub).iterdir():
+            (fake_root / sub / child.name).symlink_to(child)
+
+    readme_fresh = expected[REPO_ROOT / "README.md"]
+    tampered = readme_fresh.replace("0 / 106", "1 / 106", 1)
+    assert tampered != readme_fresh
     (fake_root / "README.md").write_text(tampered, encoding="utf-8")
 
     errs = dashboard.verify_all_dashboard_invariants(
@@ -369,25 +375,31 @@ def test_fortran_and_rust_parsers_handle_interfaces_fixed_form_and_macros(
     assert py_skips[0]["issues"] == "#153"
 
 
-def test_dashboard_numerics_rows_report_not_yet_measured_before_165() -> None:
-    """Numerics rows must read 'not yet measured' until #165 CI jobs merge."""
+def test_dashboard_numerics_rows_reflect_165_ci_presence(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Numerics rows report #165 data when CI jobs exist, else unmeasured."""
     mesa_dir = fetch.resolve_mesa_test_inputs_dir()
     data = dashboard.build_dashboard_data(REPO_ROOT, mesa_dir)
-    ci_text = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(
-        encoding="utf-8"
+    assert (
+        "verified in CI" in data["numerics"]["strict_cross_machine_identical"]
     )
-    strict_json = (
-        REPO_ROOT / "benchmarks" / "numerics" / "strict_verification.json"
+    assert (
+        "403,258/403,258 CRMATH"
+        in (data["numerics"]["strict_kernels_bit_identical"])
     )
-    if "strict-cross-machine-gate:" not in ci_text or not strict_json.is_file():
-        assert (
-            data["numerics"]["strict_cross_machine_identical"]
-            == "not yet measured"
-        )
-        assert (
-            data["numerics"]["strict_kernels_bit_identical"]
-            == "not yet measured"
-        )
+
+    fake_root = tmp_path / "pre165"
+    (fake_root / ".github" / "workflows").mkdir(parents=True)
+    (fake_root / ".github" / "workflows" / "ci.yml").write_text(
+        "jobs:\n  rust:\n    runs-on: ubuntu-latest\n", encoding="utf-8"
+    )
+    (fake_root / "tests").symlink_to(REPO_ROOT / "tests")
+    pre_165 = _dashboard_collect.collect_numerics_and_module_verification(
+        fake_root
+    )
+    assert pre_165["strict_cross_machine_identical"] == "not yet measured"
+    assert pre_165["strict_kernels_bit_identical"] == "not yet measured"
 
 
 def test_coverage_parsers_aggregate_crate_and_subpackage_totals() -> None:

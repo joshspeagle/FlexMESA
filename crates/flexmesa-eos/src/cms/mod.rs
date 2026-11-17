@@ -122,11 +122,11 @@ pub fn eval_cms_fixed_x(
         dres_dln_rho[k] = df_dy[k] * iln10;
     }
 
-    res[I_CP] = fval[I_CP].exp();
+    res[I_CP] = flexmesa_math::exp(fval[I_CP]);
     dres_dln_t[I_CP] *= res[I_CP];
     dres_dln_rho[I_CP] *= res[I_CP];
 
-    res[I_CV] = fval[I_CV].exp();
+    res[I_CV] = flexmesa_math::exp(fval[I_CV]);
     dres_dln_t[I_CV] *= res[I_CV];
     dres_dln_rho[I_CV] *= res[I_CV];
 
@@ -363,9 +363,9 @@ pub fn eval_cms_eos(
         cfg,
         comp.xh,
         rho,
-        rho.log10(),
+        flexmesa_math::log10(rho),
         t,
-        t.log10(),
+        flexmesa_math::log10(t),
         &z_int,
     )
 }

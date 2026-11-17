@@ -85,7 +85,13 @@ pub fn eval_mdot_edd(
     m_bh_zero_eq: f64,
     kappa_surf: f64,
 ) -> (f64, f64) {
-    eval_mdot_edd_with_overrides(m_accretor, m_bh_zero_eq, kappa_surf, -1.0, -1.0)
+    eval_mdot_edd_with_overrides(
+        m_accretor,
+        m_bh_zero_eq,
+        kappa_surf,
+        -1.0,
+        -1.0,
+    )
 }
 
 /// Evaluates `eval_mdot_edd` (`binary_mdot.f90:428-493`) honoring optional
@@ -107,8 +113,8 @@ pub fn eval_mdot_edd_with_overrides(
     let eta = if use_this_for_mdot_edd_eta > 0.0 {
         use_this_for_mdot_edd_eta
     } else {
-        let m_ratio =
-            m_accretor.min(6.0_f64.sqrt() * eq_mass) / (3.0 * eq_mass.max(1.0e-99));
+        let m_ratio = m_accretor.min(6.0_f64.sqrt() * eq_mass)
+            / (3.0 * eq_mass.max(1.0e-99));
         (1.0 - (1.0 - m_ratio * m_ratio).max(0.0).sqrt()).max(1.0e-12)
     };
 
@@ -180,17 +186,20 @@ pub fn eval_point_mass_edd_and_retention(
         mdot_acc_raw
     };
 
-    let (mdot_system_transfer_donor, mdot_system_transfer_accretor, mdot_system_cct) =
-        if mtransfer_rate + mdot_wind_transfer_donor >= 0.0 {
-            (0.0, 0.0, 0.0)
-        } else {
-            (
-                mtransfer_rate * alpha,
-                (actual_mtransfer_rate + component_mdot_accretor)
-                    + mtransfer_rate * beta,
-                mtransfer_rate * delta,
-            )
-        };
+    let (
+        mdot_system_transfer_donor,
+        mdot_system_transfer_accretor,
+        mdot_system_cct,
+    ) = if mtransfer_rate + mdot_wind_transfer_donor >= 0.0 {
+        (0.0, 0.0, 0.0)
+    } else {
+        (
+            mtransfer_rate * alpha,
+            (actual_mtransfer_rate + component_mdot_accretor)
+                + mtransfer_rate * beta,
+            mtransfer_rate * delta,
+        )
+    };
 
     PointMassEddRetention {
         mdot_edd,
@@ -268,8 +277,14 @@ pub fn eval_accreted_material_j(
     let q = (m_accretor / m_donor.max(1.0e-99)).clamp(0.0667, 15.0);
     let r_min = 0.0425 * separation * pow(q + q * q, 0.25);
     if r_accretor < r_min {
-        ((STANDARD_CGRAV * m_accretor * r_accretor.max(0.0)).sqrt(), 2)
+        (
+            (STANDARD_CGRAV * m_accretor * r_accretor.max(0.0)).sqrt(),
+            2,
+        )
     } else {
-        ((1.7 * STANDARD_CGRAV * m_accretor * r_min.max(0.0)).sqrt(), 1)
+        (
+            (1.7 * STANDARD_CGRAV * m_accretor * r_min.max(0.0)).sqrt(),
+            1,
+        )
     }
 }

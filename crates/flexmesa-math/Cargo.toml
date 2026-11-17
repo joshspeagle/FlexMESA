@@ -9,7 +9,7 @@ description = "IEEE-754 float64 elementary and domain-safe mathematical intrinsi
 
 [dependencies]
 flexmesa-const = { path = "../flexmesa-const" }
-flexmesa-utils = { path = "../flexmesa-utils" }
+flexmesa-crlibm-sys = { path = "../flexmesa-crlibm-sys" }
 
 [dev-dependencies]
 flexmesa-testing = { path = "../flexmesa-testing" }

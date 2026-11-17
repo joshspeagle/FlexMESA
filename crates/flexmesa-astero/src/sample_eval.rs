@@ -108,19 +108,38 @@ pub fn eval_convective_envelope_base_rsun(model: &StarModel) -> f64 {
 fn eval_spectro_obs(
     model: &StarModel,
     ctrl: &AsteroSearchControls,
-) -> (Vec<f64>, Vec<f64>, Vec<f64>, f64, f64, f64, f64, f64, f64, f64, f64) {
+) -> (
+    Vec<f64>,
+    Vec<f64>,
+    Vec<f64>,
+    f64,
+    f64,
+    f64,
+    f64,
+    f64,
+    f64,
+    f64,
+    f64,
+) {
     let hr = extract_history_row(model);
-    let (teff, r_rsun) = (model.teff.max(1.0), model.surface_r_rsun().max(1.0e-30));
+    let (teff, r_rsun) =
+        (model.teff.max(1.0), model.surface_r_rsun().max(1.0e-30));
     let x = model.xh_mass.first().copied().unwrap_or(0.70).max(1.0e-10);
     let y = model.yhe_mass.first().copied().unwrap_or(0.28);
     let z_div_x = (1.0 - x - y).clamp(1.0e-99, 1.0) / x;
-    let feh = (z_div_x / ctrl.z_div_x_solar.max(1.0e-30)).log10();
+    let feh = flexmesa_math::log10(z_div_x / ctrl.z_div_x_solar.max(1.0e-30));
     let rcz = eval_convective_envelope_base_rsun(model);
     let pairs: [(SpectroConstraint, f64); 10] = [
-        (ctrl.teff, teff), (ctrl.logg, hr.log_g), (ctrl.log_l, hr.log_l),
-        (ctrl.feh, feh), (ctrl.m_h, feh), (ctrl.log_r, hr.log_r),
-        (ctrl.radius, r_rsun), (ctrl.surface_z_div_x, z_div_x),
-        (ctrl.surface_he, y), (ctrl.rcz, rcz),
+        (ctrl.teff, teff),
+        (ctrl.logg, hr.log_g),
+        (ctrl.log_l, hr.log_l),
+        (ctrl.feh, feh),
+        (ctrl.m_h, feh),
+        (ctrl.log_r, hr.log_r),
+        (ctrl.radius, r_rsun),
+        (ctrl.surface_z_div_x, z_div_x),
+        (ctrl.surface_he, y),
+        (ctrl.rcz, rcz),
     ];
     let (mut obs, mut sig, mut mval) = (Vec::new(), Vec::new(), Vec::new());
     if ctrl.include_age_in_chi2_spectro && ctrl.age_sigma > 0.0 {
@@ -135,7 +154,10 @@ fn eval_spectro_obs(
             mval.push(v);
         }
     }
-    (obs, sig, mval, teff, hr.log_g, hr.log_l, hr.log_r, feh, r_rsun, z_div_x, rcz)
+    (
+        obs, sig, mval, teff, hr.log_g, hr.log_l, hr.log_r, feh, r_rsun,
+        z_div_x, rcz,
+    )
 }
 
 /// Fast pre-screen returning `(chi2_spectro, chi2_delta_nu, delta_nu_uhz)` without mode solving.
@@ -144,7 +166,8 @@ pub fn eval_spectro_and_delta_nu_chi2(
     model: &StarModel,
     ctrl: &AsteroSearchControls,
 ) -> (f64, f64, f64) {
-    let (sp_obs, sp_sig, sp_mod, _, _, _, _, _, _, _, _) = eval_spectro_obs(model, ctrl);
+    let (sp_obs, sp_sig, sp_mod, _, _, _, _, _, _, _, _) =
+        eval_spectro_obs(model, ctrl);
     let mut sum_sp = 0.0_f64;
     let mut n_sp = 0usize;
     for i in 0..sp_obs.len() {
@@ -160,8 +183,12 @@ pub fn eval_spectro_and_delta_nu_chi2(
         sum_sp
     };
     let r_phot_cm = model.surface_r_rsun().max(1.0e-30) * RSUN;
-    let (_, _, tau_0) =
-        eval_acoustic_profile(&model.r, &model.csound, model.r_center, r_phot_cm);
+    let (_, _, tau_0) = eval_acoustic_profile(
+        &model.r,
+        &model.csound,
+        model.r_center,
+        r_phot_cm,
+    );
     let delta_nu_uhz = if tau_0 > 0.0 {
         eval_delta_nu_asymptotic(tau_0)
     } else {
@@ -178,16 +205,23 @@ pub fn eval_spectro_and_delta_nu_chi2(
 
 /// Parses `outer_bound` from a `GYRE` input file, stripping `!` comments first.
 #[must_use]
-pub fn parse_gyre_outer_bound(case_dir: &Path, gyre_file: &str) -> OuterBoundKind {
+pub fn parse_gyre_outer_bound(
+    case_dir: &Path,
+    gyre_file: &str,
+) -> OuterBoundKind {
     let Ok(text) = fs::read_to_string(case_dir.join(gyre_file)) else {
         return OuterBoundKind::AdiplsIsothermal;
     };
     for raw_line in text.lines() {
         let line = raw_line.split('!').next().unwrap_or("").trim();
-        let Some((lhs, rhs)) = line.split_once('=') else { continue };
+        let Some((lhs, rhs)) = line.split_once('=') else {
+            continue;
+        };
         if lhs.trim().eq_ignore_ascii_case("outer_bound") {
             let val = rhs.trim().trim_matches(|c| c == '\'' || c == '"');
-            if val.eq_ignore_ascii_case("VACUUM") || val.eq_ignore_ascii_case("ZERO_R") {
+            if val.eq_ignore_ascii_case("VACUUM")
+                || val.eq_ignore_ascii_case("ZERO_R")
+            {
                 return OuterBoundKind::Vacuum;
             }
             return OuterBoundKind::AdiplsIsothermal;
@@ -208,16 +242,28 @@ pub fn eval_model_astero_sample(
     let (sp_obs, sp_sig, sp_mod, teff, logg, log_l, log_r, feh, _, _, _) =
         eval_spectro_obs(model, ctrl);
     let r_phot_cm = model.surface_r_rsun().max(1.0e-30) * RSUN;
-    let (_, _, tau_0) =
-        eval_acoustic_profile(&model.r, &model.csound, model.r_center, r_phot_cm);
+    let (_, _, tau_0) = eval_acoustic_profile(
+        &model.r,
+        &model.csound,
+        model.r_center,
+        r_phot_cm,
+    );
     let mut delta_nu_uhz = if tau_0 > 0.0 {
         eval_delta_nu_asymptotic(tau_0)
     } else {
         eval_delta_nu_radius_scaling(model.mstar, r_phot_cm)
     };
     let nu_max_uhz = eval_nu_max(model.mstar, r_phot_cm, teff);
-    let dnu_obs = if ctrl.delta_nu > 0.0 { ctrl.delta_nu } else { delta_nu_uhz };
-    let numax_obs = if ctrl.nu_max > 0.0 { ctrl.nu_max } else { nu_max_uhz };
+    let dnu_obs = if ctrl.delta_nu > 0.0 {
+        ctrl.delta_nu
+    } else {
+        delta_nu_uhz
+    };
+    let numax_obs = if ctrl.nu_max > 0.0 {
+        ctrl.nu_max
+    } else {
+        nu_max_uhz
+    };
 
     let mut model_freqs: [Vec<f64>; 4] = Default::default();
     let mut model_freqs_corr: [Vec<f64>; 4] = Default::default();
@@ -238,24 +284,43 @@ pub fn eval_model_astero_sample(
         };
         let scan_deg = |l: usize| -> Option<(Vec<f64>, Vec<f64>, Vec<isize>)> {
             let (nu_lo, nu_hi) = scan_bounds_from_targets(
-                &ctrl.freq_target[l], ctrl.nu_lower_factor, ctrl.nu_upper_factor, dnu_obs,
+                &ctrl.freq_target[l],
+                ctrl.nu_lower_factor,
+                ctrl.nu_upper_factor,
+                dnu_obs,
             );
-            let n_scan = ((2.0 * (ctrl.nl[l] as f64) * ctrl.iscan_factor[l].max(1.0)) as usize)
-                .clamp(240, 600);
+            let n_scan =
+                ((2.0 * (ctrl.nl[l] as f64) * ctrl.iscan_factor[l].max(1.0))
+                    as usize)
+                    .clamp(240, 600);
             let opts = PulseModeScanOptions {
-                l, freq_min_uhz: nu_lo, freq_max_uhz: nu_hi, n_freq: n_scan,
-                add_center_point: ctrl.add_center_point, keep_surface_point: ctrl.keep_surface_point,
-                add_atmosphere: ctrl.add_atmosphere, outer_bc, inertia_norm: InertiaNormKind::Both,
+                l,
+                freq_min_uhz: nu_lo,
+                freq_max_uhz: nu_hi,
+                n_freq: n_scan,
+                add_center_point: ctrl.add_center_point,
+                keep_surface_point: ctrl.keep_surface_point,
+                add_atmosphere: ctrl.add_atmosphere,
+                outer_bc,
+                inertia_norm: InertiaNormKind::Both,
             };
             let raw_modes = scan_star_bvp_eigenmodes(model, &opts);
             match_degree_modes(&ctrl.freq_target[l], &raw_modes)
         };
         if ctrl.nl[0] > 0 {
             if let Some((mf, mi, mo)) = scan_deg(0) {
-                (model_freqs[0], model_inertias[0], model_orders[0]) = (mf, mi, mo);
+                (model_freqs[0], model_inertias[0], model_orders[0]) =
+                    (mf, mi, mo);
                 let (c0, adr, cr) = apply_surface_corr(
-                    ctrl, &model_freqs[0], &model_inertias[0], &ctrl.freq_target[0],
-                    &ctrl.freq_sigma[0], &model_freqs[0], &model_inertias[0], dnu_obs, numax_obs,
+                    ctrl,
+                    &model_freqs[0],
+                    &model_inertias[0],
+                    &ctrl.freq_target[0],
+                    &ctrl.freq_sigma[0],
+                    &model_freqs[0],
+                    &model_inertias[0],
+                    dnu_obs,
+                    numax_obs,
                     &mut delta_nu_uhz,
                 );
                 (a_div_r, correction_r) = (adr, cr);
@@ -276,7 +341,8 @@ pub fn eval_model_astero_sample(
                     continue;
                 }
                 if let Some((mf, mi, mo)) = scan_deg(l) {
-                    (model_freqs[l], model_inertias[l], model_orders[l]) = (mf, mi, mo);
+                    (model_freqs[l], model_inertias[l], model_orders[l]) =
+                        (mf, mi, mo);
                 } else {
                     mode_match_failed = true;
                     break;
@@ -293,8 +359,16 @@ pub fn eval_model_astero_sample(
                 all_in.extend_from_slice(&model_inertias[l]);
             }
             let (corr_all, adr, cr) = apply_surface_corr(
-                ctrl, &model_freqs[0], &model_inertias[0], &all_obs, &all_sig,
-                &all_mod, &all_in, dnu_obs, numax_obs, &mut delta_nu_uhz,
+                ctrl,
+                &model_freqs[0],
+                &model_inertias[0],
+                &all_obs,
+                &all_sig,
+                &all_mod,
+                &all_in,
+                dnu_obs,
+                numax_obs,
+                &mut delta_nu_uhz,
             );
             (a_div_r, correction_r) = (adr, cr);
             let mut offset = 0usize;
@@ -307,50 +381,110 @@ pub fn eval_model_astero_sample(
     }
 
     if mode_match_failed {
-        let cr_fail = if pre_chi2_radial > 0.0 { pre_chi2_radial } else { 1.0e99 };
+        let cr_fail = if pre_chi2_radial > 0.0 {
+            pre_chi2_radial
+        } else {
+            1.0e99
+        };
         return AsteroSampleResult {
-            sample_number, params, model_number: model.model_number,
-            age_yr: model.star_age, teff, logg, log_l, log_r, feh,
-            delta_nu_uhz, nu_max_uhz, a_div_r, correction_r,
-            chi2: 1.0e99, chi2_seismo: 1.0e99, chi2_spectro: 1.0e99,
-            chi2_radial: cr_fail, chi2_r010: 1.0e99, chi2_r02: 1.0e99,
-            model_freqs, model_freqs_corr, model_inertias, model_orders,
+            sample_number,
+            params,
+            model_number: model.model_number,
+            age_yr: model.star_age,
+            teff,
+            logg,
+            log_l,
+            log_r,
+            feh,
+            delta_nu_uhz,
+            nu_max_uhz,
+            a_div_r,
+            correction_r,
+            chi2: 1.0e99,
+            chi2_seismo: 1.0e99,
+            chi2_spectro: 1.0e99,
+            chi2_radial: cr_fail,
+            chi2_r010: 1.0e99,
+            chi2_r02: 1.0e99,
+            model_freqs,
+            model_freqs_corr,
+            model_inertias,
+            model_orders,
         };
     }
 
-    let (mut all_obs, mut all_sig, mut all_corr) = (Vec::new(), Vec::new(), Vec::new());
+    let (mut all_obs, mut all_sig, mut all_corr) =
+        (Vec::new(), Vec::new(), Vec::new());
     for l in 0..4 {
         all_obs.extend_from_slice(&ctrl.freq_target[l]);
         all_sig.extend_from_slice(&ctrl.freq_sigma[l]);
         all_corr.extend_from_slice(&model_freqs_corr[l]);
     }
-    let (mut r010_obs, mut r010_sig, mut r010_mod) = (Vec::new(), Vec::new(), Vec::new());
-    if ctrl.weights.chi2_seismo_r_010_fraction > 0.0 && ctrl.nl[0] > 0 && ctrl.nl[1] > 0 {
+    let (mut r010_obs, mut r010_sig, mut r010_mod) =
+        (Vec::new(), Vec::new(), Vec::new());
+    if ctrl.weights.chi2_seismo_r_010_fraction > 0.0
+        && ctrl.nl[0] > 0
+        && ctrl.nl[1] > 0
+    {
         let obs_r = eval_frequency_ratios_with_trimming(
-            &ctrl.freq_target[0], &ctrl.freq_sigma[0], &ctrl.freq_target[1], &ctrl.freq_sigma[1],
-            dnu_obs, true, 0, 0, 0,
+            &ctrl.freq_target[0],
+            &ctrl.freq_sigma[0],
+            &ctrl.freq_target[1],
+            &ctrl.freq_sigma[1],
+            dnu_obs,
+            true,
+            0,
+            0,
+            0,
         );
         let mod_r = eval_frequency_ratios_with_trimming(
-            &model_freqs_corr[0], &ctrl.freq_sigma[0], &model_freqs_corr[1], &ctrl.freq_sigma[1],
-            dnu_obs, false, obs_r.n, obs_r.l0_first, obs_r.l1_first,
+            &model_freqs_corr[0],
+            &ctrl.freq_sigma[0],
+            &model_freqs_corr[1],
+            &ctrl.freq_sigma[1],
+            dnu_obs,
+            false,
+            obs_r.n,
+            obs_r.l0_first,
+            obs_r.l1_first,
         );
         r010_obs.extend_from_slice(&obs_r.ratios_r010);
         r010_sig.extend_from_slice(&obs_r.sigmas_r010);
         for &f_obs in &obs_r.r010_freqs {
             r010_mod.push(interpolate_ratio_r010(
-                f_obs, &mod_r.r010_freqs, &mod_r.ratios_r010,
+                f_obs,
+                &mod_r.r010_freqs,
+                &mod_r.ratios_r010,
             ));
         }
     }
-    let (mut r02_obs, mut r02_sig, mut r02_mod) = (Vec::new(), Vec::new(), Vec::new());
-    if ctrl.weights.chi2_seismo_r_02_fraction > 0.0 && ctrl.nl[0] > 0 && ctrl.nl[2] > 0 {
+    let (mut r02_obs, mut r02_sig, mut r02_mod) =
+        (Vec::new(), Vec::new(), Vec::new());
+    if ctrl.weights.chi2_seismo_r_02_fraction > 0.0
+        && ctrl.nl[0] > 0
+        && ctrl.nl[2] > 0
+    {
         let (ro, so, fo) = eval_frequency_ratios_r02_with_dnu(
-            &ctrl.freq_target[0], &ctrl.freq_sigma[0], &ctrl.freq_target[1], &ctrl.freq_sigma[1],
-            &ctrl.freq_target[2], &ctrl.freq_sigma[2], 0, 0, dnu_obs,
+            &ctrl.freq_target[0],
+            &ctrl.freq_sigma[0],
+            &ctrl.freq_target[1],
+            &ctrl.freq_sigma[1],
+            &ctrl.freq_target[2],
+            &ctrl.freq_sigma[2],
+            0,
+            0,
+            dnu_obs,
         );
         let (rm, _, fm) = eval_frequency_ratios_r02_with_dnu(
-            &model_freqs_corr[0], &ctrl.freq_sigma[0], &model_freqs_corr[1], &ctrl.freq_sigma[1],
-            &model_freqs_corr[2], &ctrl.freq_sigma[2], 0, 0, dnu_obs,
+            &model_freqs_corr[0],
+            &ctrl.freq_sigma[0],
+            &model_freqs_corr[1],
+            &ctrl.freq_sigma[1],
+            &model_freqs_corr[2],
+            &ctrl.freq_sigma[2],
+            0,
+            0,
+            dnu_obs,
         );
         if !rm.is_empty() {
             for i in 0..ro.len() {
@@ -365,20 +499,53 @@ pub fn eval_model_astero_sample(
 
     let (chi2, chi2_seismo, chi2_spectro, mut chi2_radial, chi2_r010, chi2_r02) =
         eval_astero_chi2(
-            &ctrl.weights, &all_obs, &all_sig, &all_corr, &r010_obs, &r010_sig,
-            &r010_mod, &r02_obs, &r02_sig, &r02_mod, ctrl.delta_nu,
-            ctrl.delta_nu_sigma, delta_nu_uhz, ctrl.nu_max, ctrl.nu_max_sigma,
-            nu_max_uhz, &sp_obs, &sp_sig, &sp_mod,
+            &ctrl.weights,
+            &all_obs,
+            &all_sig,
+            &all_corr,
+            &r010_obs,
+            &r010_sig,
+            &r010_mod,
+            &r02_obs,
+            &r02_sig,
+            &r02_mod,
+            ctrl.delta_nu,
+            ctrl.delta_nu_sigma,
+            delta_nu_uhz,
+            ctrl.nu_max,
+            ctrl.nu_max_sigma,
+            nu_max_uhz,
+            &sp_obs,
+            &sp_sig,
+            &sp_mod,
         );
     if !model_freqs_corr[0].is_empty() {
         chi2_radial = eval_radial_chi2(ctrl, &model_freqs_corr[0]);
     }
 
     AsteroSampleResult {
-        sample_number, params, model_number: model.model_number,
-        age_yr: model.star_age, teff, logg, log_l, log_r, feh,
-        delta_nu_uhz, nu_max_uhz, a_div_r, correction_r,
-        chi2, chi2_seismo, chi2_spectro, chi2_radial, chi2_r010, chi2_r02,
-        model_freqs, model_freqs_corr, model_inertias, model_orders,
+        sample_number,
+        params,
+        model_number: model.model_number,
+        age_yr: model.star_age,
+        teff,
+        logg,
+        log_l,
+        log_r,
+        feh,
+        delta_nu_uhz,
+        nu_max_uhz,
+        a_div_r,
+        correction_r,
+        chi2,
+        chi2_seismo,
+        chi2_spectro,
+        chi2_radial,
+        chi2_r010,
+        chi2_r02,
+        model_freqs,
+        model_freqs_corr,
+        model_inertias,
+        model_orders,
     }
 }

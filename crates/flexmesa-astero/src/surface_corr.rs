@@ -105,7 +105,8 @@ pub fn eval_kjeldsen_corr(
         .iter()
         .enumerate()
         .map(|(idx, &f_mod)| {
-            let is_l0 = idx < n0 && (f_mod - l0_model_freqs[idx]).abs() <= 1e-12;
+            let is_l0 =
+                idx < n0 && (f_mod - l0_model_freqs[idx]).abs() <= 1e-12;
             let q_nl = if is_l0 {
                 1.0
             } else if idx < all_inertias.len() && !l0_model_freqs.is_empty() {
@@ -352,8 +353,17 @@ pub fn eval_power_law_corr(
     correction_factor: f64,
 ) -> (Vec<f64>, f64, f64) {
     fit_two_param_surface_corr(
-        obs_freqs, obs_sigmas, model_freqs, model_inertias, l0_freqs,
-        l0_inertias, nu_max, correction_factor, -5.25, 5.37, false,
+        obs_freqs,
+        obs_sigmas,
+        model_freqs,
+        model_inertias,
+        l0_freqs,
+        l0_inertias,
+        nu_max,
+        correction_factor,
+        -5.25,
+        5.37,
+        false,
         power_law_term,
     )
 }
@@ -372,12 +382,25 @@ pub fn eval_power_law_corr_radial_only(
     correction_factor: f64,
 ) -> (Vec<f64>, f64, f64) {
     let (_, a, b) = eval_power_law_corr(
-        l0_obs_freqs, l0_obs_sigmas, l0_freqs, l0_inertias, l0_freqs,
-        l0_inertias, nu_max, correction_factor,
+        l0_obs_freqs,
+        l0_obs_sigmas,
+        l0_freqs,
+        l0_inertias,
+        l0_freqs,
+        l0_inertias,
+        nu_max,
+        correction_factor,
     );
     let corr = apply_two_param_surface_corr(
-        model_freqs, model_inertias, l0_freqs, l0_inertias, nu_max,
-        correction_factor, a, b, power_law_term,
+        model_freqs,
+        model_inertias,
+        l0_freqs,
+        l0_inertias,
+        nu_max,
+        correction_factor,
+        a,
+        b,
+        power_law_term,
     );
     (corr, a, b)
 }
@@ -396,8 +419,17 @@ pub fn eval_sonoi_corr(
     correction_factor: f64,
 ) -> (Vec<f64>, f64, f64) {
     fit_two_param_surface_corr(
-        obs_freqs, obs_sigmas, model_freqs, model_inertias, l0_freqs,
-        l0_inertias, nu_max, correction_factor, -3.59e-3, 11.26, true,
+        obs_freqs,
+        obs_sigmas,
+        model_freqs,
+        model_inertias,
+        l0_freqs,
+        l0_inertias,
+        nu_max,
+        correction_factor,
+        -3.59e-3,
+        11.26,
+        true,
         sonoi_term,
     )
 }
@@ -416,12 +448,25 @@ pub fn eval_sonoi_corr_radial_only(
     correction_factor: f64,
 ) -> (Vec<f64>, f64, f64) {
     let (_, a, b) = eval_sonoi_corr(
-        l0_obs_freqs, l0_obs_sigmas, l0_freqs, l0_inertias, l0_freqs,
-        l0_inertias, nu_max, correction_factor,
+        l0_obs_freqs,
+        l0_obs_sigmas,
+        l0_freqs,
+        l0_inertias,
+        l0_freqs,
+        l0_inertias,
+        nu_max,
+        correction_factor,
     );
     let corr = apply_two_param_surface_corr(
-        model_freqs, model_inertias, l0_freqs, l0_inertias, nu_max,
-        correction_factor, a, b, sonoi_term,
+        model_freqs,
+        model_inertias,
+        l0_freqs,
+        l0_inertias,
+        nu_max,
+        correction_factor,
+        a,
+        b,
+        sonoi_term,
     );
     (corr, a, b)
 }

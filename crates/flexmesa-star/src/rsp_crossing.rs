@@ -130,11 +130,11 @@ pub fn eval_rsp_2nd_crossing_with_controls(
             continue;
         };
         let mod_num = m_f as i64;
-        let teff = 10.0_f64.powf(lt);
-        let lum = 10.0_f64.powf(ll);
+        let teff = flexmesa_math::exp10(lt);
+        let lum = flexmesa_math::exp10(ll);
 
         if !finished_1st {
-            let min_t = 10.0_f64.powf(get_red_log_t(ll));
+            let min_t = flexmesa_math::exp10(get_red_log_t(ll));
             finished_1st = teff < min_t;
             prev_teff = teff;
             continue;
@@ -143,7 +143,7 @@ pub fn eval_rsp_2nd_crossing_with_controls(
             prev_teff = teff;
             continue;
         }
-        let min_t = 10.0_f64.powf(get_red_log_t(ll));
+        let min_t = flexmesa_math::exp10(get_red_log_t(ll));
         if teff < min_t - 4.0 * delta_teff {
             prev_teff = teff;
             continue;

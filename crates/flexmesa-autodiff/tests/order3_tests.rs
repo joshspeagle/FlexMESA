@@ -23,16 +23,22 @@ fn test_order3_polynomial_and_differentiate_operators_match_exact_partials() {
     let y = AutoDiffReal2VarOrder3::var2(y0);
     let f = x.pow3() * y.pow2() + 2.0 * x.pow2() * y.pow3();
 
-    let val = x0.powi(3) * y0.powi(2) + 2.0 * x0.powi(2) * y0.powi(3);
-    let fx = 3.0 * x0.powi(2) * y0.powi(2) + 4.0 * x0 * y0.powi(3);
-    let fy = 2.0 * x0.powi(3) * y0 + 6.0 * x0.powi(2) * y0.powi(2);
-    let fxx = 6.0 * x0 * y0.powi(2) + 4.0 * y0.powi(3);
-    let fxy = 6.0 * x0.powi(2) * y0 + 12.0 * x0 * y0.powi(2);
-    let fyy = 2.0 * x0.powi(3) + 12.0 * x0.powi(2) * y0;
-    let fxxx = 6.0 * y0.powi(2);
-    let fxxy = 12.0 * x0 * y0 + 12.0 * y0.powi(2);
-    let fxyy = 6.0 * x0.powi(2) + 24.0 * x0 * y0;
-    let fyyy = 12.0 * x0.powi(2);
+    let val = flexmesa_math::pow3(x0) * flexmesa_math::pow2(y0)
+        + 2.0 * flexmesa_math::pow2(x0) * flexmesa_math::pow3(y0);
+    let fx = 3.0 * flexmesa_math::pow2(x0) * flexmesa_math::pow2(y0)
+        + 4.0 * x0 * flexmesa_math::pow3(y0);
+    let fy = 2.0 * flexmesa_math::pow3(x0) * y0
+        + 6.0 * flexmesa_math::pow2(x0) * flexmesa_math::pow2(y0);
+    let fxx =
+        6.0 * x0 * flexmesa_math::pow2(y0) + 4.0 * flexmesa_math::pow3(y0);
+    let fxy = 6.0 * flexmesa_math::pow2(x0) * y0
+        + 12.0 * x0 * flexmesa_math::pow2(y0);
+    let fyy =
+        2.0 * flexmesa_math::pow3(x0) + 12.0 * flexmesa_math::pow2(x0) * y0;
+    let fxxx = 6.0 * flexmesa_math::pow2(y0);
+    let fxxy = 12.0 * x0 * y0 + 12.0 * flexmesa_math::pow2(y0);
+    let fxyy = 6.0 * flexmesa_math::pow2(x0) + 24.0 * x0 * y0;
+    let fyyy = 12.0 * flexmesa_math::pow2(x0);
 
     assert_close(f.val, val, 1e-15);
     assert_close(f.d1val1, fx, 1e-15);
@@ -121,4 +127,18 @@ fn test_order3_compose_binary_variable_substitution() {
     assert_close(composed.d1val2, direct.d1val2, 1e-15);
     assert_close(composed.d2val2, direct.d2val2, 1e-15);
     assert_close(composed.d3val2, direct.d3val2, 1e-15);
+}
+
+#[test]
+fn test_order3_expm1_avoids_catastrophic_cancellation_near_zero() {
+    let x0 = 1.0e-17_f64;
+    let d3 = AutoDiffReal2VarOrder3::var1(x0).expm1();
+    let expected_val = flexmesa_math::expm1(x0);
+    let expected_deriv = flexmesa_math::exp(x0);
+
+    assert_ne!(d3.val, 0.0);
+    assert_eq!(d3.val.to_bits(), expected_val.to_bits());
+    assert_eq!(d3.d1val1.to_bits(), expected_deriv.to_bits());
+    assert_eq!(d3.d2val1.to_bits(), expected_deriv.to_bits());
+    assert_eq!(d3.d3val1.to_bits(), expected_deriv.to_bits());
 }

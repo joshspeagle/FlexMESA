@@ -39,7 +39,7 @@ fn eval_uniform_data(
         pextra_factor * (kap / tau) * (l / m) / (6.0 * PI * CLIGHT * cgrav);
     let pfactor = 1.0 + pextra;
     let p = p0 * pfactor;
-    let ln_p = p.ln();
+    let ln_p = flexmesa_math::log(p);
     if is_bad(ln_p) {
         return Err(AtmError::CallbackError {
             context: "eval_uniform_data",
@@ -306,8 +306,8 @@ where
         return Ok(AtmStructure { points: Vec::new() });
     }
     let g = cgrav * m / (r * r);
-    let lntau_outer = tau_outer.ln();
-    let lntau_surf = tau_surf.ln();
+    let lntau_outer = flexmesa_math::log(tau_outer);
+    let lntau_surf = flexmesa_math::log(tau_surf);
     let dlntau_max = dlogtau * LN10;
     let dlntau = -0.5 * dlntau_max;
 
@@ -315,7 +315,7 @@ where
         |lntau: f64,
          delta_r: f64|
          -> Result<[f64; NUM_RESULTS_FOR_BUILD_ATM], AtmError> {
-            let tau = lntau.exp();
+            let tau = flexmesa_math::exp(lntau);
             let ev = eval_uniform_data(
                 tau,
                 teff,
@@ -330,9 +330,9 @@ where
             )?;
             let eos_res = eos_proc(ev.ln_p, ev.ln_t)?;
             let gradr = eval_paczynski_gradr(
-                ev.ln_t.exp(),
-                ev.ln_p.exp(),
-                eos_res.ln_rho.exp(),
+                flexmesa_math::exp(ev.ln_t),
+                flexmesa_math::exp(ev.ln_p),
+                flexmesa_math::exp(eos_res.ln_rho),
                 tau,
                 kap,
                 l,
@@ -378,8 +378,8 @@ where
                     "callback failed in build_t_tau_uniform",
                 )
             })?;
-            let tau = x.exp();
-            let rho = sgl[ATM_LND].exp();
+            let tau = flexmesa_math::exp(x);
+            let rho = flexmesa_math::exp(sgl[ATM_LND]);
             Ok(vec![-tau / (kap * rho)])
         },
     )

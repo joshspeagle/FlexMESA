@@ -26,7 +26,10 @@ fn standard_chem_ids() -> [usize; 7] {
 #[test]
 fn test_helm_full_table_loaded_and_dense_across_full_grid() {
     let tbl = HelmTable::builtin();
-    assert!(tbl.is_full_table(), "HelmTable::builtin() must load full dense grid");
+    assert!(
+        tbl.is_full_table(),
+        "HelmTable::builtin() must load full dense grid"
+    );
     let dense = tbl.dense_vertices();
     assert_eq!(dense.len(), HELM_IMAX * HELM_JMAX);
     for &(i, j) in &[
@@ -45,9 +48,9 @@ fn test_helm_full_table_loaded_and_dense_across_full_grid() {
     }
 
     for it in 0..5 {
-        let t = 10.0_f64.powf(5.5 + 0.9 * (it as f64));
+        let t = flexmesa_math::exp10(5.5 + 0.9 * (it as f64));
         for ir in 0..5 {
-            let rho = 10.0_f64.powf(-4.5 + 1.8 * (ir as f64));
+            let rho = flexmesa_math::exp10(-4.5 + 1.8 * (ir as f64));
             let (out, d_da, d_dz) =
                 eval_helm_eos(t, rho, 1.35, 1.12).expect("helm eval");
             assert!(out.res[I_LN_PGAS].is_finite());
@@ -84,7 +87,8 @@ fn test_4d_tables_and_eos_dt_get_across_four_stellar_profiles() {
         let s = (k as f64) / ((n_zones - 1) as f64);
         let log_t = 3.76 + s * (7.18 - 3.76);
         let log_rho = -6.8 + s * (2.18 - (-6.8));
-        let (rho, t) = (10.0_f64.powf(log_rho), 10.0_f64.powf(log_t));
+        let (rho, t) =
+            (flexmesa_math::exp10(log_rho), flexmesa_math::exp10(log_t));
 
         let out_opal = eval_opal_scvh_eos(
             dt_tables, rho, t, &chem_id, &xa_solar, &opal_cfg,
@@ -109,7 +113,8 @@ fn test_4d_tables_and_eos_dt_get_across_four_stellar_profiles() {
         let s = (k as f64) / ((n_zones - 1) as f64);
         let log_t = 3.15 + s * (6.45 - 3.15);
         let log_rho = -4.5 + s * (2.75 - (-4.5));
-        let (rho, t) = (10.0_f64.powf(log_rho), 10.0_f64.powf(log_t));
+        let (rho, t) =
+            (flexmesa_math::exp10(log_rho), flexmesa_math::exp10(log_t));
 
         let out_cms =
             eval_cms_eos(cms_tables, &cms_cfg, rho, t, &chem_id, &xa_bd)
@@ -132,7 +137,8 @@ fn test_4d_tables_and_eos_dt_get_across_four_stellar_profiles() {
         let s = (k as f64) / ((n_zones - 1) as f64);
         let log_t = 5.5 + s * (7.6 - 5.5);
         let log_rho = -1.0 + s * (6.5 - (-1.0));
-        let (rho, t) = (10.0_f64.powf(log_rho), 10.0_f64.powf(log_t));
+        let (rho, t) =
+            (flexmesa_math::exp10(log_rho), flexmesa_math::exp10(log_t));
 
         let out_dt =
             eos_dt_get(helm_tbl, rho, t, &chem_id, &xa_wd_core, &dt_cfg)
@@ -147,7 +153,8 @@ fn test_4d_tables_and_eos_dt_get_across_four_stellar_profiles() {
         let s = (k as f64) / ((n_zones - 1) as f64);
         let log_t = 4.3 + s * (8.3 - 4.3);
         let log_rho = -8.0 + s * (2.5 - (-8.0));
-        let (rho, t) = (10.0_f64.powf(log_rho), 10.0_f64.powf(log_t));
+        let (rho, t) =
+            (flexmesa_math::exp10(log_rho), flexmesa_math::exp10(log_t));
 
         let out_dt =
             eos_dt_get(helm_tbl, rho, t, &chem_id, &xa_massive, &dt_cfg)

@@ -78,8 +78,8 @@ pub fn eval_weaklib_one(
         l_ye_rho,
     );
 
-    let decay = (ldec * LN10).exp();
-    let capture = (lcap * LN10).exp();
+    let decay = flexmesa_math::exp(ldec * LN10);
+    let capture = flexmesa_math::exp(lcap * LN10);
     let lambda = decay + capture;
     let dlambda_dln_t = t9 * LN10 * (decay * dldec_dt9 + capture * dlcap_dt9);
     let dlambda_dln_rho = decay * dldec_dly + capture * dlcap_dly;
@@ -87,7 +87,7 @@ pub fn eval_weaklib_one(
     let (qneu, dqneu_dln_t, dqneu_dln_rho) = if lambda < 1.0e-30 {
         (0.0, 0.0, 0.0)
     } else {
-        let nu = (lneu * LN10).exp();
+        let nu = flexmesa_math::exp(lneu * LN10);
         let qn = nu / lambda;
         let dqn_dt = qn * (t9 * LN10 * dlneu_dt9 - dlambda_dln_t / lambda);
         let dqn_dr = qn * (dlneu_dly - dlambda_dln_rho / lambda);
@@ -124,10 +124,10 @@ fn eval_suzuki_channel(
     let (ln, dln_dt, dln_dr) =
         bilinear_interp_2d(logts, lyerhos, nu_grid, log_t, l_ye_rho);
     (
-        (lr * LN10).exp(),
+        flexmesa_math::exp(lr * LN10),
         dlr_dt,
         dlr_dr,
-        (ln * LN10).exp(),
+        flexmesa_math::exp(ln * LN10),
         dln_dt,
         dln_dr,
     )
@@ -141,7 +141,7 @@ pub fn eval_suzuki_one(
     t9: f64,
     l_ye_rho: f64,
 ) -> WeakRateEval {
-    let log_t = t9.log10() + 9.0;
+    let log_t = flexmesa_math::log10(t9) + 9.0;
     let (decay, dldec_dlogt, dldec_dly, decay_nu, dldec_nu_dlogt, dldec_nu_dly) =
         eval_suzuki_channel(
             tab.has_decay,
@@ -227,7 +227,7 @@ pub fn eval_weak_reaction_pair(
     use_suzuki: bool,
 ) -> Result<WeakRateEval, RatesError> {
     let cat = RatesCatalog::builtin();
-    let l_ye_rho = ye_rho.max(1.0e-99).log10();
+    let l_ye_rho = flexmesa_math::log10(ye_rho.max(1.0e-99));
     if use_suzuki {
         if let Some(stab) = cat.suzuki_by_pair(lhs_name, rhs_name) {
             return Ok(eval_suzuki_one(stab, t9, l_ye_rho));

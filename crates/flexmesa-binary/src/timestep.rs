@@ -219,13 +219,12 @@ pub fn binary_pick_next_timestep(ctrl: &BinaryTimestepControls) -> (f64, i32) {
         return (1.0e99, B_TLIM_COMP);
     }
 
-    let prev_max = if ctrl.max_timestep_sec <= 0.0
-        || ctrl.max_timestep_sec >= 1.0e90
-    {
-        (dt_yr * SECYER).max(1.0e-7 * SECYER)
-    } else {
-        ctrl.max_timestep_sec
-    };
+    let prev_max =
+        if ctrl.max_timestep_sec <= 0.0 || ctrl.max_timestep_sec >= 1.0e90 {
+            (dt_yr * SECYER).max(1.0e-7 * SECYER)
+        } else {
+            ctrl.max_timestep_sec
+        };
     let f_soft = ctrl.dt_softening_factor;
     let max_timestep_new = exp10(
         f_soft * log10(prev_max) + (1.0 - f_soft) * log10(dt_set_yr * SECYER),
@@ -266,15 +265,16 @@ pub fn violates_binary_hard_limits(
         }
     }
     if fr_hard > 0.0 && ctrl.rl_relative_gap_old[0] != 0.0 {
-        let rr_d = (ctrl.rl_relative_gap_old[0] - ctrl.rl_relative_gap[0]).abs()
+        let rr_d = (ctrl.rl_relative_gap_old[0] - ctrl.rl_relative_gap[0])
+            .abs()
             / ctrl.rl_relative_gap[0].abs().max(ctrl.fr_limit);
         if rr_d > fr_hard * c_dt {
             return true;
         }
         if !ctrl.is_point_mass_companion && ctrl.rl_relative_gap_old[1] != 0.0 {
-            let rr_a =
-                (ctrl.rl_relative_gap_old[1] - ctrl.rl_relative_gap[1]).abs()
-                    / ctrl.rl_relative_gap[1].abs().max(ctrl.fr_limit);
+            let rr_a = (ctrl.rl_relative_gap_old[1] - ctrl.rl_relative_gap[1])
+                .abs()
+                / ctrl.rl_relative_gap[1].abs().max(ctrl.fr_limit);
             if rr_a > fr_hard * c_dt {
                 return true;
             }

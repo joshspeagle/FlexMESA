@@ -21,7 +21,7 @@ use flexmesa_math::pow;
 pub fn eval_rlobe(m1: f64, m2: f64, a: f64) -> f64 {
     let q = pow(m1 / m2, ONE_THIRD);
     let q2 = q * q;
-    a * 0.49 * q2 / (0.6 * q2 + q.ln_1p())
+    a * 0.49 * q2 / (0.6 * q2 + flexmesa_math::log1p(q))
 }
 
 /// Forward-mode dual-number variant of [`eval_rlobe`] over `(m1, m2, a)`.
@@ -120,7 +120,8 @@ pub fn separation_from_j_orb(
 #[must_use]
 pub fn eval_l2_overflow_limit(m1: f64, m2: f64) -> f64 {
     let q = m1.min(m2) / m1.max(m2).max(1.0e-99);
-    0.2985_8997 * (1.8353_0121 * q.powf(0.3966_1426)).atan()
+    0.2985_8997
+        * flexmesa_math::atan(1.8353_0121 * flexmesa_math::pow(q, 0.3966_1426))
 }
 
 /// Constructs the true anomaly grid $\theta_i \in [0, 2\pi)$ and normalized
@@ -143,9 +144,12 @@ pub fn build_anomaly_grid(
     for i in 0..n {
         let theta = 2.0 * PI * (i as f64) / (n as f64);
         theta_co.push(theta);
-        let mut t_norm = (2.0 * (sqrt_factor * (0.5 * theta).tan()).atan()
-            - e_sqrt_1me2 * theta.sin() / (1.0 + e * theta.cos()))
-            / (2.0 * PI);
+        let mut t_norm =
+            (2.0 * flexmesa_math::atan(
+                sqrt_factor * flexmesa_math::tan(0.5 * theta),
+            ) - e_sqrt_1me2 * flexmesa_math::sin(theta)
+                / (1.0 + e * flexmesa_math::cos(theta)))
+                / (2.0 * PI);
         // For theta in (pi, 2*pi), atan(sqrt_factor * tan(theta/2)) < 0
         // (and at theta = pi, tan(pi/2) -> -inf in IEEE-754 float64), so
         // adding 1.0 whenever `t_norm < 0.0` (or `i > n / 2` in 1-based even-n

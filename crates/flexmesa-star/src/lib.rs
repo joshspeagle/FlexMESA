@@ -246,9 +246,6 @@ pub use hydro_state::{
     HydroAuxState, TidalDeformationHandle, TidalDeformationHook,
     TidalShellDeformation,
 };
-pub use mdot_redo::{
-    eval_surf_avg_w_div_w_crit, MdotRedoState, SelectMdotAction,
-};
 pub use hydro_temperature::{interp_p_point_ad, set_rsp_lsurf_bc};
 pub use hydro_vars::{
     check_for_redo_mlt, do_brunt_b, do_brunt_n2, eval_surf_bc, set_hydro_vars,
@@ -261,6 +258,9 @@ pub use inlist_runner::{
     verify_photo_restart_parity, CaseRunReport, DefaultStarExtras,
     ExtrasDirective, StageRunReport, StarExtras, StarLogsOptions,
     TovGrStarExtras,
+};
+pub use mdot_redo::{
+    eval_surf_avg_w_div_w_crit, MdotRedoState, SelectMdotAction,
 };
 pub use mesa_history::{
     default_star_history_specs, evaluate_star_history_row,
@@ -294,8 +294,8 @@ pub use mix_info::{
 };
 pub use model::StarModel;
 pub use model_io::{
-    compute_photo_checksum, read_mod_str, read_photo_bytes, write_mod_string,
-    write_photo_bytes, STAR_DEF_VERSION,
+    compute_photo_checksum, photo_numerics_mode, read_mod_str,
+    read_photo_bytes, write_mod_string, write_photo_bytes, STAR_DEF_VERSION,
 };
 pub use overshoot::{apply_overshooting, OvershootConfig, OvershootScheme};
 pub use pre_ms::{

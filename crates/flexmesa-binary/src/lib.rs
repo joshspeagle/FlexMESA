@@ -58,27 +58,26 @@ pub mod system_step;
 pub mod timestep;
 
 pub use binary_history::{
-    BINARY_LOG_COL_WIDTH, BinaryHistoryColumnSpec, BinaryLogsWriter,
-    DEFAULT_BINARY_HISTORY_COLUMNS_TEXT, IncrementalBinaryHistoryWriter,
     binary_history_row_as_f64_pairs, default_binary_history_specs,
     evaluate_binary_history_row, format_binary_history_data_line,
     format_binary_history_file_header, parse_binary_history_columns,
-    resolve_binary_history_columns,
+    resolve_binary_history_columns, BinaryHistoryColumnSpec, BinaryLogsWriter,
+    IncrementalBinaryHistoryWriter, BINARY_LOG_COL_WIDTH,
+    DEFAULT_BINARY_HISTORY_COLUMNS_TEXT,
 };
 pub use disk::eval_l2_mass_loss_fraction;
 pub use e2e::{
-    BinaryCaseRunReport, BinaryInlistControls, BinaryLogsOptions,
-    TIER5_BINARY_CASES, eval_brott_wind_msun_yr,
-    eval_gr_expected_separation_rsun,
+    eval_brott_wind_msun_yr, eval_gr_expected_separation_rsun,
     eval_tauris_vdh_expected_separation_rsun, is_tier5_binary_case,
     run_binary_suite, run_binary_test_suite_case,
-    run_binary_test_suite_case_with_logs,
+    run_binary_test_suite_case_with_logs, BinaryCaseRunReport,
+    BinaryInlistControls, BinaryLogsOptions, TIER5_BINARY_CASES,
 };
 pub use edd_wind::{
-    PointMassEddRetention, bh_initial_equatorial_mass,
-    eval_accreted_material_j, eval_bh_spin, eval_bondi_hoyle_wind_fraction,
-    eval_mdot_edd, eval_mdot_edd_with_overrides,
-    eval_point_mass_edd_and_retention, eval_tout_wind_enhancement,
+    bh_initial_equatorial_mass, eval_accreted_material_j, eval_bh_spin,
+    eval_bondi_hoyle_wind_fraction, eval_mdot_edd,
+    eval_mdot_edd_with_overrides, eval_point_mass_edd_and_retention,
+    eval_tout_wind_enhancement, PointMassEddRetention,
 };
 pub use extras::{BinaryExtras, BinaryExtrasAction, DefaultBinaryExtras};
 pub use jdot_tides::{
@@ -89,10 +88,10 @@ pub use jdot_tides::{
     hut_f3, hut_f4, hut_f5,
 };
 pub use mdot::{
-    ImplicitMdotSolver, ImplicitRlofSolver, ImplicitStepAction,
     eval_arras_mdot_thin, eval_edot_enhancement_isotropic,
     eval_kolb_mdot_eccentric, eval_kolb_mdot_thick, eval_ritter_mdot_eccentric,
     eval_ritter_mdot_thin, kolb_f3, update_change_factor_after_step,
+    ImplicitMdotSolver, ImplicitRlofSolver, ImplicitStepAction,
 };
 pub use orbit::{
     build_anomaly_grid, eval_j_orb, eval_l2_overflow_limit,
@@ -100,23 +99,24 @@ pub use orbit::{
     separation_from_j_orb, separation_from_period,
 };
 pub use roche_deformation::{
-    BinaryTidalDeformationHook, ROCHE_NUDGE, RocheDeformationTables,
-    RocheTable2D, eval_synchronicity_switch,
+    eval_synchronicity_switch, BinaryTidalDeformationHook,
+    RocheDeformationTables, RocheTable2D, ROCHE_NUDGE,
 };
 pub use system::{BinaryCompanion, BinarySystem};
 pub use system_jdot::{
-    EdotBreakdown, JdotBreakdown, eval_coupled_edot, eval_coupled_edot_breakdown,
-    eval_gated_jdot,
+    eval_coupled_edot, eval_coupled_edot_breakdown, eval_gated_jdot,
+    EdotBreakdown, JdotBreakdown,
 };
 pub use system_rlof::{
-    BinaryStepSnapshot, CoupledMdotAccounting, blend_explicit_mdot,
-    eval_scheme_explicit_mdot, eval_star_intrinsic_wind_cgs_with_extras,
-    prepare_coupled_mdots, prepare_coupled_mdots_with_extras,
+    blend_explicit_mdot, eval_scheme_explicit_mdot,
+    eval_star_intrinsic_wind_cgs_with_extras, prepare_coupled_mdots,
+    prepare_coupled_mdots_with_extras, BinaryStepSnapshot,
+    CoupledMdotAccounting,
 };
 pub use timestep::{
-    B_TLIM_COMP, B_TLIM_DM, B_TLIM_ECC, B_TLIM_ENV, B_TLIM_JORB, B_TLIM_ROCHE,
-    B_TLIM_SEP, BinaryTimestepControls, binary_pick_next_timestep,
-    violates_binary_hard_limits,
+    binary_pick_next_timestep, violates_binary_hard_limits,
+    BinaryTimestepControls, B_TLIM_COMP, B_TLIM_DM, B_TLIM_ECC, B_TLIM_ENV,
+    B_TLIM_JORB, B_TLIM_ROCHE, B_TLIM_SEP,
 };
 
 #[cfg(test)]
@@ -190,8 +190,8 @@ mod tests {
         let val = eval_rlobe(m1, m2, a);
         assert!((ad.val - val).abs() / val < 1.0e-15);
 
-        let q = (m1 / m2).powf(1.0 / 3.0);
-        let denom = 0.6 * q * q + q.ln_1p();
+        let q = flexmesa_math::pow(m1 / m2, 1.0 / 3.0);
+        let denom = 0.6 * q * q + flexmesa_math::log1p(q);
         let drl_dq = a
             * (0.98 * q * denom - 0.49 * q * q * (1.2 * q + 1.0 / (1.0 + q)))
             / (denom * denom);
@@ -309,7 +309,7 @@ mod tests {
         let solver = ImplicitRlofSolver::default();
         let target_mdot = -2.0e-7 * MSUN / SECYER;
         let q = 0.8_f64;
-        let slope_c = q.powf(-0.52);
+        let slope_c = flexmesa_math::pow(q, -0.52);
         let (mdot_c, iters_c, obj_c) =
             solver.solve_contact_mdot(-5.0e-8 * MSUN / SECYER, q, 30, |mdot| {
                 let gap_d = 0.02 * (1.0 - 0.5 * mdot / target_mdot);

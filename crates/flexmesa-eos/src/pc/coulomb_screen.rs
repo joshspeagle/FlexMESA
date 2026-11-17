@@ -43,11 +43,11 @@ pub fn fscr_liq8(
     let sqz = zion.sqrt();
     let cdh0 = zion / 1.73205;
     let cdh = cdh0 * (sqz1 * sqz1 * sqz1 - sqz * sqz * sqz - 1.0);
-    let zln = zion.ln();
-    let z13 = (zln / 3.0).exp();
+    let zln = flexmesa_math::log(zion);
+    let z13 = flexmesa_math::exp(zln / 3.0);
     let x = rs.recip() * XRS;
     let ctf = zion * zion * 0.2513 * (z13 - 1.0 + 0.2 / z13.sqrt());
-    let p01 = 1.11 * (0.475 * zln).exp();
+    let p01 = 1.11 * flexmesa_math::exp(0.475 * zln);
     let p03 = 0.2 + 0.078 * zln * zln;
     let ptx = 1.16 + 0.08 * zln;
     let tx = game.powf(ptx);
@@ -216,13 +216,14 @@ pub fn fscr_sol8(
         });
     }
     let xsr = rs.recip() * 0.0140047;
-    let z13 = zion.powf(1.0 / 3.0);
-    let p1 = 0.00352 * (1.0 - AP[0] / zion.powf(0.267) + 0.27 / zion);
-    let z5 = zion.powi(5);
+    let z13 = flexmesa_math::pow(zion, 1.0 / 3.0);
+    let p1 =
+        0.00352 * (1.0 - AP[0] / flexmesa_math::pow(zion, 0.267) + 0.27 / zion);
+    let z5 = flexmesa_math::pow5(zion);
     let z6 = z5 * zion;
     let p2 =
         1.0 + 2.25 / z13 * (1.0 + AP[1] * z5 + 0.222 * z6) / (1.0 + 0.222 * z6);
-    let zln = zion.ln();
+    let zln = flexmesa_math::log(zion);
     let xsr2 = xsr * xsr;
     let finf = (xsr2.recip() * p2 + 1.0).sqrt() * (z13 * z13 * p1);
     let finfx = -((xsr2 + p2) * xsr).recip() * p2;
@@ -392,7 +393,7 @@ pub fn cormix(
     };
     let dif_r = dif0 / z52;
     let dif_fdh = game * (game / 3.0).sqrt() * dif0;
-    let p3 = d.powf(-0.2);
+    let p3 = flexmesa_math::pow(d, -0.2);
     let d0 = (2.6 * dif_r + 14.0 * dif_r * dif_r * dif_r) / (1.0 - p3);
     let gp = gami_mean.powf(p3) * d0;
     let fmix0 = dif_fdh / (gp + 1.0);

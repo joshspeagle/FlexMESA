@@ -103,11 +103,11 @@ pub fn melange9(
         let y = ay[ix];
         zmean += y * z;
         z2mean += y * z * z;
-        let z13 = z.powf(1.0 / 3.0);
-        z53 += y * z13.powi(5);
-        z73 += y * z13.powi(7);
-        z52 += y * z.sqrt().powi(5);
-        z321 += y * z * (z + 1.0).sqrt().powi(3);
+        let z13 = flexmesa_math::pow(z, 1.0 / 3.0);
+        z53 += y * flexmesa_math::pow5(z13);
+        z73 += y * flexmesa_math::pow7(z13);
+        z52 += y * flexmesa_math::pow5(z.sqrt());
+        z321 += y * z * flexmesa_math::pow3((z + 1.0).sqrt());
         cmi_mean += y * acmi[ix];
     }
 
@@ -165,7 +165,7 @@ pub fn melange9(
             continue;
         }
         let cmi = acmi[ix];
-        let gami = game * zion.powf(5.0 / 3.0);
+        let gami = game * flexmesa_math::pow(zion, 5.0 / 3.0);
         let dni = densi * ay[ix];
         let pri = dni * temp;
         let c2 = if liqsol == 0 || liqsol == 1 {
@@ -184,7 +184,7 @@ pub fn melange9(
             }
         };
         uint = uint + c2.u * pri;
-        s_tot = s_tot + dni * (c2.s - ay[ix].ln());
+        s_tot = s_tot + dni * (c2.s - flexmesa_math::log(ay[ix]));
         press = press + c2.p * pri;
         cv_tot = cv_tot + dni * c2.cv;
         pdlt = pdlt + pri * c2.pdt;
@@ -222,11 +222,11 @@ pub fn melange9(
                 if x2 < TINY {
                     continue;
                 }
-                let x = x2 / rz + (1.0 - 1.0 / rz) * x2.powf(rz);
-                let gami = game * azion[i].powf(5.0 / 3.0);
+                let x = x2 / rz + (1.0 - 1.0 / rz) * flexmesa_math::pow(x2, rz);
+                let gami = game * flexmesa_math::pow(azion[i], 5.0 / 3.0);
                 let mut delta_g = 0.012
                     * (1.0 - 1.0 / (rz * rz))
-                    * (x1 + x2 * rz.powf(5.0 / 3.0));
+                    * (x1 + x2 * flexmesa_math::pow(rz, 5.0 / 3.0));
                 delta_g *= x / x2 * (1.0 - x).max(0.0) / x1;
                 fmix = fmix + gami * (ay[i] * ay[j] * delta_g);
             }

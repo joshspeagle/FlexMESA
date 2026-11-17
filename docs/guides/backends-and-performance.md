@@ -30,10 +30,19 @@ print("Resolved backend for jax.Array:", flexmesa.resolve_backend("auto", t_jax,
 out_jax, _, _ = eos.eval_helm_eos(t_jax, jnp.float64(1.0e2), 1.3, 1.1, backend="auto")
 
 print(
-    f"Rust vs JAX ln(P_gas) parity: "
+    f"Rust strict vs JAX ln(P_gas) agreement: "
     f"|diff| = {abs(float(out_rust.res[0]) - float(out_jax.res[0])):.2e}"
 )
 ```
+
+### Rust Numerics Modes: `"strict"` (Default) vs. `"fast"` (`#165`)
+
+Within the canonical Rust engine, all physics crates call `flexmesa-math` and support two run-level arithmetic modes built from the same Rust physics source:
+
+- **`"strict"` (Default)**: Calls vendored `crlibm 1.0beta4` (`CRMATH 1.2`) without fused multiply-add contraction (`a * b + c`) and preserves upstream operation order. `"strict"` produces bit-identical results across `x86_64` and `aarch64` hardware and across `1` and `4` `rayon` threads (Level 1), and is the **only** mode judged against MESA `26.4.1` (Levels 2 and 3).
+- **`"fast"`**: Uses platform `std` `f64` intrinsics and hardware `mul_add`. `"fast"` is hardware-dependent, is validated exclusively against `"strict"` (`notes/audit/fast_vs_strict.md`), and is never compared against MESA. Similarly, `backend="jax"` is a derived layer for automatic differentiation and GPU batching validated against Rust `"strict"` (`#166`).
+
+You can inspect or switch the Rust numerics mode in Python (`flexmesa.get_numerics_mode()`, `flexmesa.set_numerics_mode("fast")`, `with flexmesa.numerics_mode_context("fast"): ...`) or on the CLI (`flexmesa trace ... --numerics-mode fast`), and the active mode is recorded in every emitted `LOGS/history.data`, `LOGS/profileN.data`, `binary_history.data`, `.mod`, and `.photo` file.
 
 ---
 

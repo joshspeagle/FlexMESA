@@ -56,14 +56,26 @@ pub struct StepHistoryScalars {
 impl Default for StepHistoryScalars {
     fn default() -> Self {
         Self {
-            teff_old: 0.0, l_surf_old: -1.0, mstar_dot_old: 0.0,
-            power_h_burn_old: -1.0, power_he_burn_old: -1.0, power_z_burn_old: -1.0,
-            power_photo_old: -1.0, power_nuc_burn_old: -1.0, rotational_mdot_boost_old: 1.0,
-            was_in_implicit_wind_limit: false, last_solver_iterations: 0,
-            burn_max_num_substeps: 0, num_diffusion_solver_steps: 0,
-            num_diffusion_solver_iters: 0, timestep_hold: 0,
-            model_number_for_last_retry: None, error_in_energy_conservation: 0.0,
-            total_energy_end: 0.0, total_energy_old: 0.0, cumulative_energy_error_old: 0.0,
+            teff_old: 0.0,
+            l_surf_old: -1.0,
+            mstar_dot_old: 0.0,
+            power_h_burn_old: -1.0,
+            power_he_burn_old: -1.0,
+            power_z_burn_old: -1.0,
+            power_photo_old: -1.0,
+            power_nuc_burn_old: -1.0,
+            rotational_mdot_boost_old: 1.0,
+            was_in_implicit_wind_limit: false,
+            last_solver_iterations: 0,
+            burn_max_num_substeps: 0,
+            num_diffusion_solver_steps: 0,
+            num_diffusion_solver_iters: 0,
+            timestep_hold: 0,
+            model_number_for_last_retry: None,
+            error_in_energy_conservation: 0.0,
+            total_energy_end: 0.0,
+            total_energy_old: 0.0,
+            cumulative_energy_error_old: 0.0,
         }
     }
 }
@@ -95,7 +107,12 @@ pub trait TidalDeformationHook: Send + Sync {
     /// Evaluates the Roche tidal distortion and synchronicity blending factor
     /// at shell index `k` with volume-equivalent radius `r_cm` ($\mathrm{cm}$)
     /// and angular velocity `omega` ($\mathrm{rad\,s^{-1}}$).
-    fn eval_shell(&self, k: usize, r_cm: f64, omega: f64) -> TidalShellDeformation;
+    fn eval_shell(
+        &self,
+        k: usize,
+        r_cm: f64,
+        omega: f64,
+    ) -> TidalShellDeformation;
 }
 
 /// Cloneable reference-counted handle wrapping a [`TidalDeformationHook`].
@@ -427,7 +444,13 @@ impl HydroAuxState {
 
     /// Snapshots start-of-step thermodynamic and turbulent velocity arrays.
     pub fn save_start(
-        &mut self, cp: &[f64], grada: &[f64], chi_t: &[f64], chi_rho: &[f64], csound: &[f64], mlt_vc: &[f64],
+        &mut self,
+        cp: &[f64],
+        grada: &[f64],
+        chi_t: &[f64],
+        chi_rho: &[f64],
+        csound: &[f64],
+        mlt_vc: &[f64],
     ) {
         self.cp_start.clone_from_slice(cp);
         self.grada_start.clone_from_slice(grada);
@@ -450,7 +473,10 @@ pub(crate) fn hash_brunt_b(b: &[f64]) -> u64 {
     h
 }
 
-pub(crate) fn smooth_triangular_signed(src: &[f64], half_width: usize) -> Vec<f64> {
+pub(crate) fn smooth_triangular_signed(
+    src: &[f64],
+    half_width: usize,
+) -> Vec<f64> {
     let nz = src.len();
     if half_width == 0 || nz < 3 {
         return src.to_vec();
@@ -476,10 +502,13 @@ pub(crate) fn smooth_triangular_signed(src: &[f64], half_width: usize) -> Vec<f6
 pub(crate) fn refresh_smoothed_brunt_b(model: &mut crate::model::StarModel) {
     let mw = &model.controls.mix_wind;
     let raw_b = model.brunt_b.clone();
-    model.aux.smoothed_brunt_b =
-        smooth_triangular_signed(&raw_b, mw.num_cells_for_smooth_gradl_composition_term);
+    model.aux.smoothed_brunt_b = smooth_triangular_signed(
+        &raw_b,
+        mw.num_cells_for_smooth_gradl_composition_term,
+    );
     if mw.num_cells_for_smooth_brunt_b > 0 {
-        model.brunt_b = smooth_triangular_signed(&raw_b, mw.num_cells_for_smooth_brunt_b);
+        model.brunt_b =
+            smooth_triangular_signed(&raw_b, mw.num_cells_for_smooth_brunt_b);
     }
     model.aux.smoothed_brunt_b_hash = hash_brunt_b(&model.brunt_b);
 }
@@ -491,28 +520,43 @@ pub(crate) fn use_smoothed_brunt_b(model: &crate::model::StarModel) -> bool {
         && hash_brunt_b(&model.brunt_b) == model.aux.smoothed_brunt_b_hash
 }
 
-fn interp_hermite_p1(x_p1: &[f64], y_p1: &[f64], dy_p1: &[f64], kk: usize, x: f64) -> f64 {
+fn interp_hermite_p1(
+    x_p1: &[f64],
+    y_p1: &[f64],
+    dy_p1: &[f64],
+    kk: usize,
+    x: f64,
+) -> f64 {
     let (x0, x1) = (x_p1[kk], x_p1[kk + 1]);
-    if (x - x0).abs() <= 1.0e-15 { return y_p1[kk]; }
-    if (x - x1).abs() <= 1.0e-15 { return y_p1[kk + 1]; }
+    if (x - x0).abs() <= 1.0e-15 {
+        return y_p1[kk];
+    }
+    if (x - x1).abs() <= 1.0e-15 {
+        return y_p1[kk + 1];
+    }
     let h = (x1 - x0).max(1.0e-30);
     let t = ((x - x0) / h).clamp(0.0, 1.0);
     let (t2, t3) = (t * t, t * t * t);
-    (2.0 * t3 - 3.0 * t2 + 1.0) * y_p1[kk] + (t3 - 2.0 * t2 + t) * h * dy_p1[kk]
-        + (-2.0 * t3 + 3.0 * t2) * y_p1[kk + 1] + (t3 - t2) * h * dy_p1[kk + 1]
+    (2.0 * t3 - 3.0 * t2 + 1.0) * y_p1[kk]
+        + (t3 - 2.0 * t2 + t) * h * dy_p1[kk]
+        + (-2.0 * t3 + 3.0 * t2) * y_p1[kk + 1]
+        + (t3 - t2) * h * dy_p1[kk + 1]
 }
 
 pub(crate) fn smooth_post_remesh_hydro_and_rotation(
-    model: &mut crate::model::StarModel, pre: &crate::model::StarModel,
+    model: &mut crate::model::StarModel,
+    pre: &crate::model::StarModel,
 ) {
     let (nz_new, nz_old) = (model.nz, pre.nz);
-    if nz_new < 2 || nz_old < 2 { return; }
+    if nz_new < 2 || nz_old < 2 {
+        return;
+    }
     let mut xq_p1 = Vec::with_capacity(nz_old + 1);
     xq_p1.extend_from_slice(&pre.xq[..nz_old]);
     xq_p1.push(1.0);
     let mut v_p1 = vec![0.0; nz_old + 1];
     for kk in (0..nz_old).rev() {
-        v_p1[kk] = v_p1[kk + 1] + pre.dq[kk] * (-pre.lnd[kk]).exp();
+        v_p1[kk] = v_p1[kk + 1] + pre.dq[kk] * flexmesa_math::exp(-pre.lnd[kk]);
     }
     let mut dv_p1 = crate::pulse_bvp::steffen_slopes(&xq_p1, &v_p1);
     dv_p1[0] = (v_p1[1] - v_p1[0]) / (xq_p1[1] - xq_p1[0]).max(1.0e-30);
@@ -521,24 +565,37 @@ pub(crate) fn smooth_post_remesh_hydro_and_rotation(
     for kk in 1..(nz_old - 1) {
         let dm_lo = 0.5 * (pre.dq[kk - 1] + pre.dq[kk]).max(1.0e-99);
         let dm_hi = 0.5 * (pre.dq[kk] + pre.dq[kk + 1]).max(1.0e-99);
-        let (se_lo, se_hi) = ((pre.energy[kk] - pre.energy[kk - 1]) / dm_lo, (pre.energy[kk + 1] - pre.energy[kk]) / dm_hi);
+        let (se_lo, se_hi) = (
+            (pre.energy[kk] - pre.energy[kk - 1]) / dm_lo,
+            (pre.energy[kk + 1] - pre.energy[kk]) / dm_hi,
+        );
         if se_lo * se_hi > 0.0 {
             let cap = 1.6 * pre.energy[kk].abs() / pre.dq[kk].max(1.0e-99);
             e_c1[kk] = (2.0 * se_lo * se_hi / (se_lo + se_hi)).clamp(-cap, cap);
         }
-        let (st_lo, st_hi) = ((pre.ln_t[kk] - pre.ln_t[kk - 1]) / dm_lo, (pre.ln_t[kk + 1] - pre.ln_t[kk]) / dm_hi);
-        if st_lo * st_hi > 0.0 { lnt_c1[kk] = 2.0 * st_lo * st_hi / (st_lo + st_hi); }
+        let (st_lo, st_hi) = (
+            (pre.ln_t[kk] - pre.ln_t[kk - 1]) / dm_lo,
+            (pre.ln_t[kk + 1] - pre.ln_t[kk]) / dm_hi,
+        );
+        if st_lo * st_hi > 0.0 {
+            lnt_c1[kk] = 2.0 * st_lo * st_hi / (st_lo + st_hi);
+        }
     }
 
-    let (mut exact_flags, mut e_target, mut kk_hint) = (vec![false; nz_new], vec![0.0; nz_new], 0_usize);
+    let (mut exact_flags, mut e_target, mut kk_hint) =
+        (vec![false; nz_new], vec![0.0; nz_new], 0_usize);
     for k in 0..nz_new {
         let (a0, dx) = (model.xq[k], model.dq[k]);
         let a1 = if k + 1 < nz_new { model.xq[k + 1] } else { 1.0 };
-        while kk_hint + 1 < nz_old && xq_p1[kk_hint + 1] <= a0 { kk_hint += 1; }
-        let exact_kk = (kk_hint.saturating_sub(1)..(kk_hint + 3).min(nz_old)).find(|&kk| {
-            (dx - pre.dq[kk]).abs() <= 1.0e-11 * dx
-                && (a0 - pre.xq[kk]).abs() <= 1.0e-11 * a0.max(dx).max(1.0e-15)
-        });
+        while kk_hint + 1 < nz_old && xq_p1[kk_hint + 1] <= a0 {
+            kk_hint += 1;
+        }
+        let exact_kk = (kk_hint.saturating_sub(1)..(kk_hint + 3).min(nz_old))
+            .find(|&kk| {
+                (dx - pre.dq[kk]).abs() <= 1.0e-11 * dx
+                    && (a0 - pre.xq[kk]).abs()
+                        <= 1.0e-11 * a0.max(dx).max(1.0e-15)
+            });
         if let Some(kk) = exact_kk {
             exact_flags[k] = true;
             model.lnd[k] = pre.lnd[kk];
@@ -552,40 +609,67 @@ pub(crate) fn smooth_post_remesh_hydro_and_rotation(
             continue;
         }
         let (xq_lo, xq_hi) = (xq_p1[kk_hint], xq_p1[kk_hint + 1]);
-        let tf = if (a0 - xq_lo).abs() <= 1.0e-14 * dx { 0.0 } else { ((a0 - xq_lo) / (xq_hi - xq_lo).max(1.0e-30)).clamp(0.0, 1.0) };
-        let l_hi = if kk_hint + 1 < nz_old { pre.lum[kk_hint + 1] } else { pre.l_center };
+        let tf = if (a0 - xq_lo).abs() <= 1.0e-14 * dx {
+            0.0
+        } else {
+            ((a0 - xq_lo) / (xq_hi - xq_lo).max(1.0e-30)).clamp(0.0, 1.0)
+        };
+        let l_hi = if kk_hint + 1 < nz_old {
+            pre.lum[kk_hint + 1]
+        } else {
+            pre.l_center
+        };
         model.lum[k] = pre.lum[kk_hint] + tf * (l_hi - pre.lum[kk_hint]);
         if model.controls.rotation_flag {
-            model.omega[k] = pre.omega[kk_hint] + tf * (pre.omega[(kk_hint + 1).min(nz_old - 1)] - pre.omega[kk_hint]);
+            model.omega[k] = pre.omega[kk_hint]
+                + tf * (pre.omega[(kk_hint + 1).min(nz_old - 1)]
+                    - pre.omega[kk_hint]);
         }
         let mut kk1 = kk_hint;
-        while kk1 + 1 < nz_old && xq_p1[kk1 + 1] < a1 { kk1 += 1; }
+        while kk1 + 1 < nz_old && xq_p1[kk1 + 1] < a1 {
+            kk1 += 1;
+        }
         let v0 = interp_hermite_p1(&xq_p1, &v_p1, &dv_p1, kk_hint, a0);
         let v1 = interp_hermite_p1(&xq_p1, &v_p1, &dv_p1, kk1, a1);
-        model.lnd[k] = (dx / (v0 - v1).max(1.0e-99)).max(1.0e-30).ln();
+        model.lnd[k] =
+            flexmesa_math::log((dx / (v0 - v1).max(1.0e-99)).max(1.0e-30));
         let (mut e_acc, mut lnt_acc, mut w_sum) = (0.0, 0.0, 0.0);
         for kk in kk_hint..=kk1 {
             let (lo, hi) = (a0.max(xq_p1[kk]), a1.min(xq_p1[kk + 1]));
             if hi > lo {
-                let (ov, d_xc) = (hi - lo, 0.5 * (lo + hi) - (xq_p1[kk] + 0.5 * pre.dq[kk]));
+                let (ov, d_xc) =
+                    (hi - lo, 0.5 * (lo + hi) - (xq_p1[kk] + 0.5 * pre.dq[kk]));
                 e_acc += ov * (pre.energy[kk] + e_c1[kk] * d_xc);
                 lnt_acc += ov * (pre.ln_t[kk] + lnt_c1[kk] * d_xc);
                 w_sum += ov;
             }
         }
-        e_target[k] = if w_sum > 0.0 { model.ln_t[k] = (lnt_acc / w_sum).clamp(3.0, 26.0); (e_acc / w_sum).max(1.0) } else { model.energy[k] };
+        e_target[k] = if w_sum > 0.0 {
+            model.ln_t[k] = (lnt_acc / w_sum).clamp(3.0, 26.0);
+            (e_acc / w_sum).max(1.0)
+        } else {
+            model.energy[k]
+        };
     }
     model.reconstruct_ln_r_from_lnd_and_dm();
     model.set_m_grav_and_grav();
     model.pack_xh();
-    let _ = crate::mesh_remap::set_lnt_for_energy(model, &e_target, &exact_flags);
+    let _ =
+        crate::mesh_remap::set_lnt_for_energy(model, &e_target, &exact_flags);
     model.pack_xh();
     crate::rotation::update_rotation_distortion_factors(model);
     if model.controls.rotation_flag && pre.j_rot.len() == nz_old {
-        let j_old: f64 = pre.dm_bar.iter().zip(&pre.j_rot).map(|(m, j)| m * j).sum();
+        let j_old: f64 =
+            pre.dm_bar.iter().zip(&pre.j_rot).map(|(m, j)| m * j).sum();
         for _ in 0..2 {
-            let j_new: f64 = model.dm_bar.iter().zip(&model.j_rot).map(|(m, j)| m * j).sum();
-            if j_old.abs() > 0.0 && j_new.abs() > 1.0e-30 && j_old * j_new > 0.0 {
+            let j_new: f64 = model
+                .dm_bar
+                .iter()
+                .zip(&model.j_rot)
+                .map(|(m, j)| m * j)
+                .sum();
+            if j_old.abs() > 0.0 && j_new.abs() > 1.0e-30 && j_old * j_new > 0.0
+            {
                 let sc = j_old / j_new;
                 model.omega[..nz_new].iter_mut().for_each(|w| *w *= sc);
                 crate::rotation::update_rotation_distortion_factors(model);
@@ -593,4 +677,3 @@ pub(crate) fn smooth_post_remesh_hydro_and_rotation(
         }
     }
 }
-

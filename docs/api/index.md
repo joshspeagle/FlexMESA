@@ -1,6 +1,6 @@
 # Python, PyO3 & JAX API Reference
 
-`FlexMESA` exposes a unified Python and JAX (`float64`) public interface backed by compiled `#![forbid(unsafe_code)]` Safe Rust workspace crates (`flexmesa._rust`) and XLA-compiled `@jax.jit` array kernels. Importing `flexmesa` automatically enables 64-bit IEEE-754 double precision in JAX (`jax_enable_x64=True`) so that spline interpolations, thermodynamic partials, nuclear networks, and block-tridiagonal Henyey solves maintain full floating-point precision by default.
+`FlexMESA` exposes a unified Python and JAX (`float64`) public interface backed by compiled Safe Rust workspace crates (`flexmesa._rust`, enforcing `#![forbid(unsafe_code)]` across all crates except the sole vendored `crlibm` FFI wrapper `flexmesa-crlibm-sys`) and XLA-compiled `@jax.jit` array kernels. Importing `flexmesa` automatically enables 64-bit IEEE-754 double precision in JAX (`jax_enable_x64=True`) so that spline interpolations, thermodynamic partials, nuclear networks, and block-tridiagonal Henyey solves maintain full floating-point precision by default.
 
 Safe Rust crate documentation (`crates/flexmesa-*`) is built via `cargo doc --workspace --no-deps` and published at `/rustdoc/` in the documentation deployment.
 
@@ -29,13 +29,16 @@ To keep each reference page fast to load and easy to navigate, the Python and JA
     options:
       members:
         - enable_float64
+        - get_numerics_mode
+        - set_numerics_mode
+        - numerics_mode_context
         - __version__
 
 ---
 
-## Hybrid Backend Dispatch (`flexmesa._dispatch`)
+## Hybrid Backend Dispatch & Numerics Modes (`flexmesa._dispatch`)
 
-Every Tier B and Tier C physics function accepts `backend="auto" | "rust" | "jax"`. Under `backend="auto"` (the default), calls passing `numpy.ndarray` or Python float arguments route zero-copy to `flexmesa._rust`, whereas calls passing `jax.Array` or JAX tracer arguments (`jax.grad`, `jax.vmap`, `jax.jit`) route to native `@jax.jit` kernels.
+Every Tier B and Tier C physics function accepts `backend="auto" | "rust" | "jax"`, while Rust arithmetic defaults to hardware-independent `"strict"` mode (`get_numerics_mode`, `set_numerics_mode`, `numerics_mode_context`). Under `backend="auto"` (the default), calls passing `numpy.ndarray` or Python float arguments route zero-copy to `flexmesa._rust`, whereas calls passing `jax.Array` or JAX tracer arguments (`jax.grad`, `jax.vmap`, `jax.jit`) route to native `@jax.jit` kernels.
 
 ```python
 import jax.numpy as jnp
@@ -55,6 +58,6 @@ print("JAX dispatch:  ", flexmesa.resolve_backend("auto", jnp.array([1.0, 2.0]))
 
 ## Command-Line Interface (`flexmesa.cli`)
 
-The installed `flexmesa` console script dispatches subcommands such as `flexmesa data fetch`, `flexmesa data status`, and `flexmesa --version`.
+The installed `flexmesa` console script dispatches subcommands such as `flexmesa data fetch`, `flexmesa data status`, `flexmesa trace`, `flexmesa harness` (`--numerics-mode {strict,fast}`), and `flexmesa --version`.
 
 ::: flexmesa.cli

@@ -25,7 +25,10 @@ fn start_or(slice: &[f64], k: usize, fallback: f64) -> f64 {
 
 #[inline]
 fn start_exp(slice: &[f64], k: usize, fallback_exp: f64) -> f64 {
-    slice.get(k).copied().map_or(fallback_exp, f64::exp)
+    slice
+        .get(k)
+        .copied()
+        .map_or(fallback_exp, flexmesa_math::exp)
 }
 
 #[inline]
@@ -292,7 +295,7 @@ pub(crate) fn build_rsp2_ad_work(model: &mut StarModel) -> Rsp2AdWork {
         let w_00 = wrap_w(model, k, I_W_00);
         let d_00 = StarAdOrder1::variable(model.lnd[k], I_LND_00).exp();
         model.aux.rsp.ptrb_rsp[k] =
-            X_ALFAP * rsp2.alfap * d_00.val * w_00.val.powi(2);
+            X_ALFAP * rsp2.alfap * d_00.val * flexmesa_math::pow2(w_00.val);
         if is_nonturbulent_cell(model, k) {
             model.aux.rsp.chi_rsp[k] = 0.0;
             model.aux.rsp.eq_rsp[k] = 0.0;
@@ -382,7 +385,8 @@ pub(crate) fn build_rsp2_ad_work(model: &mut StarModel) -> Rsp2AdWork {
             * pii_div_hp
             * t_00
             * (peos_00 * qq_00 / cp_00);
-        let dw3 = w_00 * w_00 * w_00 - rsp2.w_min_for_damping.powi(3);
+        let dw3 =
+            w_00 * w_00 * w_00 - flexmesa_math::pow3(rsp2.w_min_for_damping);
         let damp = dw3 / hp_cell * (rsp2.alfad * X_CEDE / alpha);
         let dampr = if rsp2.alfar == 0.0 {
             StarAdOrder1::ZERO
@@ -392,8 +396,9 @@ pub(crate) fn build_rsp2_ad_work(model: &mut StarModel) -> Rsp2AdWork {
                 model.d_opacity_dlnd[k],
                 model.d_opacity_dlnt[k],
             );
-            let pom =
-                4.0 * BOLTZ_SIGMA * (rsp2.alfar * X_GAMMAR / alpha).powi(2);
+            let pom = 4.0
+                * BOLTZ_SIGMA
+                * flexmesa_math::pow2(rsp2.alfar * X_GAMMAR / alpha);
             let pom2 = (t_00 * t_00 * t_00) / (d_00 * d_00 * cp_00 * kap_00);
             (w_00 * w_00 * pom) * pom2 / (hp_cell * hp_cell)
         };
@@ -552,12 +557,16 @@ pub fn eval_and_save_rsp2_eqns(model: &mut StarModel, sys: &mut HenyeySystem) {
                     (if cs_s > 0.0 { cs_s } else { model.csound[k] }).max(1.0);
                 w_00 * (1.0 / cs)
             } else {
-                let d_et = w_00 * w_00 - model.aux.rsp.w_start[k].powi(2);
+                let d_et =
+                    w_00 * w_00 - flexmesa_math::pow2(model.aux.rsp.w_start[k]);
                 let ptrb_ad = eval_rsp2_ptrb_cell_ad(model, k, false);
                 let d_00 = StarAdOrder1::variable(model.lnd[k], I_LND_00).exp();
-                let rho_s = start_or(&model.lnd_start, k, model.lnd[k])
-                    .exp()
-                    .max(1.0e-99);
+                let rho_s = flexmesa_math::exp(start_or(
+                    &model.lnd_start,
+                    k,
+                    model.lnd[k],
+                ))
+                .max(1.0e-99);
                 let ptrb_dv =
                     ptrb_ad * (StarAdOrder1::ONE / d_00 - 1.0 / rho_s);
 

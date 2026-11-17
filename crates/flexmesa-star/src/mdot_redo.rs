@@ -3,7 +3,9 @@
 //! and `select_mdot_action` in `star/private/evolve.f90:747-1057`, paired with
 //! `set_surf_avg_rotation_info` in `star/private/hydro_rotation.f90:593-744`).
 
-use flexmesa_const::{CLIGHT, CRAD, FOUR_PI, M_SUN, PI, SECYER, STANDARD_CGRAV};
+use flexmesa_const::{
+    CLIGHT, CRAD, FOUR_PI, M_SUN, PI, SECYER, STANDARD_CGRAV,
+};
 
 use crate::model::StarModel;
 use crate::rotation::conserve_shell_j_rot_and_distortion;
@@ -47,7 +49,8 @@ pub fn eval_surf_avg_w_div_w_crit(model: &mut StarModel) -> f64 {
             return 0.0;
         }
         let del_m = m.dm_bar.get(j).copied().unwrap_or(m.dm[j]).max(1.0e-30);
-        let del_t4 = m.t[j - 1].powi(4) - m.t[j].powi(4);
+        let del_t4 =
+            flexmesa_math::pow4(m.t[j - 1]) - flexmesa_math::pow4(m.t[j]);
         let area = FOUR_PI * m.r[j] * m.r[j];
         let denom = (FOUR_PI * cgrav_j * m.m_grav[j].max(1.0)).max(1.0);
         (-(area * area * CRAD * (del_t4 / del_m) / 3.0) / denom).max(0.0)
@@ -97,9 +100,10 @@ pub fn eval_surf_avg_w_div_w_crit(model: &mut StarModel) -> f64 {
         if has_tidal_def {
             return r_i;
         }
-        let om_c = (m.cgrav[idx].max(0.0) * m.m_grav[idx].max(1.0) / r_i.powi(3))
-            .sqrt()
-            .max(1.0e-30);
+        let om_c = (m.cgrav[idx].max(0.0) * m.m_grav[idx].max(1.0)
+            / flexmesa_math::pow3(r_i))
+        .sqrt()
+        .max(1.0e-30);
         let w = (m.omega[idx].abs() / om_c).min(max_w);
         let w2 = w * w;
         let w4 = w2 * w2;
@@ -111,7 +115,8 @@ pub fn eval_surf_avg_w_div_w_crit(model: &mut StarModel) -> f64 {
     let mut w_div_wc_sum = 0.0_f64;
     for k in 0..(nz - 1) {
         let kap = model.opacity[k].max(1.0e-6);
-        let rmid = (0.5 * (eval_r_eq(model, k) + eval_r_eq(model, k + 1))).max(1.0);
+        let rmid =
+            (0.5 * (eval_r_eq(model, k) + eval_r_eq(model, k + 1))).max(1.0);
         let mut dm = model.dm[k].max(0.0);
         let dtau = (dm * kap / (FOUR_PI * rmid * rmid)).max(1.0e-30);
         if tau + dtau <= tau_min {
@@ -144,7 +149,8 @@ pub fn eval_surf_avg_w_div_w_crit(model: &mut StarModel) -> f64 {
     } else {
         let r0 = eval_r_eq(model, 0);
         let cgrav = model.cgrav.first().copied().unwrap_or(STANDARD_CGRAV);
-        let om_crit = (gamma_factor * cgrav * model.m_grav[0].max(1.0) / (r0 * r0 * r0))
+        let om_crit = (gamma_factor * cgrav * model.m_grav[0].max(1.0)
+            / (r0 * r0 * r0))
             .sqrt()
             .max(1.0e-30);
         (model.omega[0] / om_crit).abs()
@@ -228,16 +234,24 @@ impl MdotRedoState {
 
     /// Records a Henyey failure on a boosted wind trial (`failed_mdot < 0`) as an
     /// upper wind bound and returns a bisected `mstar_dot` trial when possible.
-    pub fn note_solver_failure(&mut self, failed_mdot: f64, tol: f64) -> Option<f64> {
+    pub fn note_solver_failure(
+        &mut self,
+        failed_mdot: f64,
+        tol: f64,
+    ) -> Option<f64> {
         let w_fail = -failed_mdot;
-        if self.ignored_first_step && !self.have_too_small_wind_mdot && w_fail > -self.explicit_mdot {
+        if self.ignored_first_step
+            && !self.have_too_small_wind_mdot
+            && w_fail > -self.explicit_mdot
+        {
             self.ignored_first_step = false;
             self.mdot_redo_cnt = 0;
             self.have_too_large_wind_mdot = true;
             self.too_large_wind_mdot = w_fail;
             return Some(self.explicit_mdot);
         }
-        if !self.have_too_small_wind_mdot || w_fail <= self.too_small_wind_mdot {
+        if !self.have_too_small_wind_mdot || w_fail <= self.too_small_wind_mdot
+        {
             return None;
         }
         self.too_large_wind_mdot = if self.have_too_large_wind_mdot {
@@ -261,7 +275,11 @@ impl MdotRedoState {
 
     /// Evaluates `select_mdot_action` (`evolve.f90:788-1057`) on a converged
     /// post-Henyey trial at `dt` (s).
-    pub fn select_action(&mut self, model: &mut StarModel, dt: f64) -> SelectMdotAction {
+    pub fn select_action(
+        &mut self,
+        model: &mut StarModel,
+        dt: f64,
+    ) -> SelectMdotAction {
         if model.mstar_dot == 0.0
             || self.max_mdot_redo_cnt == 0
             || !model.controls.rotation_flag
@@ -279,19 +297,33 @@ impl MdotRedoState {
         let mstar_dot = model.mstar_dot;
         let wind_mdot = -mstar_dot;
 
-        if self.mdot_redo_cnt == 0 || (self.mdot_redo_cnt == 1 && self.ignored_first_step) {
+        if self.mdot_redo_cnt == 0
+            || (self.mdot_redo_cnt == 1 && self.ignored_first_step)
+        {
             let l1 = model.lum[0].max(1.0);
             let teff = if model.teff > 0.0 {
                 model.teff
             } else {
-                (l1 / (PI * model.r[0].max(1.0).powi(2) * CRAD * CLIGHT)).powf(0.25)
+                flexmesa_math::pow(
+                    l1 / (PI
+                        * flexmesa_math::pow2(model.r[0].max(1.0))
+                        * CRAD
+                        * CLIGHT),
+                    0.25,
+                )
             };
-            let r_phot = (l1 / (PI * CRAD * CLIGHT * teff.powi(4))).sqrt().max(1.0);
+            let r_phot = (l1
+                / (PI * CRAD * CLIGHT * flexmesa_math::pow4(teff)))
+            .sqrt()
+            .max(1.0);
             let cgrav = model.cgrav.first().copied().unwrap_or(STANDARD_CGRAV);
-            let kh_timescale =
-                (0.75 * cgrav * model.mstar * model.mstar / (r_phot * l1)).max(1.0);
-            let dmskhf = model.controls.mix_wind.rotational_mdot_kh_fac.max(0.0);
-            let dmsfac = model.controls.mix_wind.rotational_mdot_boost_fac.max(1.0);
+            let kh_timescale = (0.75 * cgrav * model.mstar * model.mstar
+                / (r_phot * l1))
+                .max(1.0);
+            let dmskhf =
+                model.controls.mix_wind.rotational_mdot_kh_fac.max(0.0);
+            let dmsfac =
+                model.controls.mix_wind.rotational_mdot_boost_fac.max(1.0);
             self.max_wind_mdot = dmskhf * model.mstar.max(1.0) / kh_timescale;
             if wind_mdot > 0.0 {
                 self.max_wind_mdot = self.max_wind_mdot.min(wind_mdot * dmsfac);
@@ -301,13 +333,20 @@ impl MdotRedoState {
         let w_prev = self.w_div_w_crit;
         self.w_div_w_crit = eval_surf_avg_w_div_w_crit(model);
         let w = self.w_div_w_crit;
-        let tol = model.controls.mix_wind.surf_omega_div_omega_crit_tol.max(1.0e-6);
+        let tol = model
+            .controls
+            .mix_wind
+            .surf_omega_div_omega_crit_tol
+            .max(1.0e-6);
 
         if wind_mdot >= self.max_wind_mdot {
-            if (self.mdot_redo_cnt > 0 || w > self.surf_limit) && dt >= 0.1 * SECYER {
+            if (self.mdot_redo_cnt > 0 || w > self.surf_limit)
+                && dt >= 0.1 * SECYER
+            {
                 return SelectMdotAction::ForceRetry;
             }
-            model.aux.step_hist.was_in_implicit_wind_limit = w > self.surf_limit;
+            model.aux.step_hist.was_in_implicit_wind_limit =
+                w > self.surf_limit;
             return SelectMdotAction::Accept;
         }
 
@@ -315,7 +354,9 @@ impl MdotRedoState {
             model.aux.step_hist.was_in_implicit_wind_limit = false;
             return SelectMdotAction::Accept;
         }
-        if w <= self.surf_limit && (model.mstar_dot - self.explicit_mdot).abs() == 0.0 {
+        if w <= self.surf_limit
+            && (model.mstar_dot - self.explicit_mdot).abs() == 0.0
+        {
             model.aux.step_hist.was_in_implicit_wind_limit = false;
             return SelectMdotAction::Accept;
         }
@@ -357,7 +398,9 @@ impl MdotRedoState {
         }
 
         if self.mdot_redo_cnt >= self.max_mdot_redo_cnt
-            || (w > self.surf_limit && w_prev >= self.surf_limit && -mstar_dot >= self.max_wind_mdot)
+            || (w > self.surf_limit
+                && w_prev >= self.surf_limit
+                && -mstar_dot >= self.max_wind_mdot)
         {
             if dt < 0.1 * SECYER {
                 return SelectMdotAction::Accept;
@@ -366,52 +409,56 @@ impl MdotRedoState {
         }
 
         if w >= self.surf_limit {
-            if !self.have_too_small_wind_mdot || wind_mdot > self.too_small_wind_mdot {
+            if !self.have_too_small_wind_mdot
+                || wind_mdot > self.too_small_wind_mdot
+            {
                 self.too_small_wind_mdot = wind_mdot;
                 self.have_too_small_wind_mdot = true;
             }
-        } else if !self.have_too_large_wind_mdot || wind_mdot < self.too_large_wind_mdot {
+        } else if !self.have_too_large_wind_mdot
+            || wind_mdot < self.too_large_wind_mdot
+        {
             self.too_large_wind_mdot = wind_mdot;
             self.have_too_large_wind_mdot = true;
         }
 
-        let next = if self.have_too_large_wind_mdot && self.have_too_small_wind_mdot {
-            if self.too_large_wind_mdot.abs() > 0.0
-                && ((self.too_large_wind_mdot - self.too_small_wind_mdot)
-                    / self.too_large_wind_mdot)
-                    .abs()
-                    < tol
-            {
-                -self.too_large_wind_mdot
-            } else {
-                -0.5 * (self.too_large_wind_mdot + self.too_small_wind_mdot)
-            }
-        } else {
-            let boost = model.controls.mix_wind.implicit_mdot_boost;
-            let mut nxt = if self.have_too_small_wind_mdot {
-                if self.mdot_redo_cnt % 2 == 1 {
-                    mstar_dot - boost * self.abs_mstar_delta
-                } else if mstar_dot < 0.0 {
-                    mstar_dot * rev_fac
+        let next =
+            if self.have_too_large_wind_mdot && self.have_too_small_wind_mdot {
+                if self.too_large_wind_mdot.abs() > 0.0
+                    && ((self.too_large_wind_mdot - self.too_small_wind_mdot)
+                        / self.too_large_wind_mdot)
+                        .abs()
+                        < tol
+                {
+                    -self.too_large_wind_mdot
                 } else {
-                    mstar_dot / rev_fac
+                    -0.5 * (self.too_large_wind_mdot + self.too_small_wind_mdot)
                 }
-            } else if self.mdot_redo_cnt % 2 == 1 {
-                mstar_dot + boost * self.abs_mstar_delta
-            } else if mstar_dot < 0.0 {
-                mstar_dot / rev_fac
             } else {
-                mstar_dot * rev_fac
+                let boost = model.controls.mix_wind.implicit_mdot_boost;
+                let mut nxt = if self.have_too_small_wind_mdot {
+                    if self.mdot_redo_cnt % 2 == 1 {
+                        mstar_dot - boost * self.abs_mstar_delta
+                    } else if mstar_dot < 0.0 {
+                        mstar_dot * rev_fac
+                    } else {
+                        mstar_dot / rev_fac
+                    }
+                } else if self.mdot_redo_cnt % 2 == 1 {
+                    mstar_dot + boost * self.abs_mstar_delta
+                } else if mstar_dot < 0.0 {
+                    mstar_dot / rev_fac
+                } else {
+                    mstar_dot * rev_fac
+                };
+                if (mstar_dot_prev - self.explicit_mdot).abs() > 0.0 {
+                    nxt = nxt.min(self.explicit_mdot);
+                }
+                if -nxt > self.max_wind_mdot {
+                    nxt = -self.max_wind_mdot;
+                }
+                nxt
             };
-            if (mstar_dot_prev - self.explicit_mdot).abs() > 0.0 {
-                nxt = nxt.min(self.explicit_mdot);
-            }
-            if -nxt > self.max_wind_mdot {
-                nxt = -self.max_wind_mdot;
-            }
-            nxt
-        };
         SelectMdotAction::RedoWithMdot(next)
     }
 }
-

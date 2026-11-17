@@ -30,9 +30,9 @@ pub fn eosfi8(
             detail: "invalid input".to_string(),
         });
     }
-    let game = gami / zion.powf(5.0 / 3.0);
+    let game = gami / flexmesa_math::pow(zion, 5.0 / 3.0);
     let xc = excor7(rs, game);
-    let cotpt = (3.0 / AUM / cmi).sqrt() / zion.powf(7.0 / 6.0);
+    let cotpt = (3.0 / AUM / cmi).sqrt() / flexmesa_math::pow(zion, 7.0 / 6.0);
     let tpt = gami / rs.sqrt() * cotpt;
     let fid_ion = (tpt * tpt / gami).ln() * 1.5 - 1.323515;
 

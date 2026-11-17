@@ -68,7 +68,8 @@ pub fn eval_roche_gravity_darkening(
     let r_eq_div_r_pol = 1.0 + 0.5 * w * w;
     let (fp, ft, _) = eval_rotation_fp_ft(w, 0.5, 0.5);
     let teff_eq_div_teff_pol =
-        (1.0 - w * w).max(1.0e-8).powf(0.25) / r_eq_div_r_pol.sqrt();
+        flexmesa_math::pow((1.0 - w * w).max(1.0e-8), 0.25)
+            / r_eq_div_r_pol.sqrt();
     (r_eq_div_r_pol, fp, ft, teff_eq_div_teff_pol)
 }
 
@@ -116,10 +117,11 @@ pub fn eval_spruit_tayler_dynamo_diagnostics(model: &StarModel) -> [f64; 13] {
             .unwrap_or((2.0 / 3.0) * r_k * r_k * omega_k)
             .abs();
         total_j += dm_k * j_k;
-        sum_dm_log_t += dm_k * model.t[k].max(1.0).log10();
-        sum_dm_log_rho += dm_k * model.rho[k].max(1.0e-10).log10();
+        sum_dm_log_t += dm_k * flexmesa_math::log10(model.t[k].max(1.0));
+        sum_dm_log_rho +=
+            dm_k * flexmesa_math::log10(model.rho[k].max(1.0e-10));
 
-        let eps_rot = (omega_k * omega_k * r_k.powi(3)
+        let eps_rot = (omega_k * omega_k * flexmesa_math::pow3(r_k)
             / (STANDARD_CGRAV * m_k))
             .clamp(1.0e-6, 1.0);
         let d_es_k = (model.lum[k].max(L_SUN) * r_k * r_k
@@ -128,13 +130,13 @@ pub fn eval_spruit_tayler_dynamo_diagnostics(model: &StarModel) -> [f64; 13] {
             .clamp(1.0e1, 1.0e8);
         let d_st_k =
             (r_k * r_k * omega_k * eps_rot.sqrt()).clamp(1.0e3, 1.0e10);
-        let nu_st_k =
-            (d_st_k / eps_rot.powf(0.25).max(1.0e-3)).clamp(1.0e6, 1.0e14);
+        let nu_st_k = (d_st_k / flexmesa_math::pow(eps_rot, 0.25).max(1.0e-3))
+            .clamp(1.0e6, 1.0e14);
         sum_dm_d_es += dm_k * d_es_k;
         sum_dm_d_st += dm_k * d_st_k;
         sum_dm_nu_st += dm_k * nu_st_k;
     }
-    let log10_total_j = total_j.max(1.0e45).log10();
+    let log10_total_j = flexmesa_math::log10(total_j.max(1.0e45));
     let omega_c = model
         .omega
         .last()
@@ -142,8 +144,8 @@ pub fn eval_spruit_tayler_dynamo_diagnostics(model: &StarModel) -> [f64; 13] {
         .filter(|&w| w.abs() > 0.0)
         .unwrap_or(1.0e-4)
         .abs();
-    let log10_center_omega = omega_c.log10();
-    let log10_he_core_omega = (omega_c * 0.7).log10();
+    let log10_center_omega = flexmesa_math::log10(omega_c);
+    let log10_he_core_omega = flexmesa_math::log10(omega_c * 0.7);
     let he_core_mass = 0.25 * star_mass;
 
     let r_surf = model.r[0].max(R_SUN);
@@ -161,15 +163,15 @@ pub fn eval_spruit_tayler_dynamo_diagnostics(model: &StarModel) -> [f64; 13] {
         .filter(|&j| j.abs() > 0.0)
         .unwrap_or((2.0 / 3.0) * r_surf * r_surf * omega_surf)
         .abs();
-    let log10_surf_j_rot = j_surf.log10();
+    let log10_surf_j_rot = flexmesa_math::log10(j_surf);
     let surf_v_rot_kms = (omega_surf * r_surf * 1.0e-5).clamp(0.01, 500.0);
 
     let avg_log_t = sum_dm_log_t / m_tot;
     let avg_log_rho = sum_dm_log_rho / m_tot;
-    let log10_avg_j_rot = (total_j / m_tot).max(1.0e10).log10();
-    let log10_avg_d_es = (sum_dm_d_es / m_tot).max(1.0).log10();
-    let log10_avg_d_st = (sum_dm_d_st / m_tot).max(1.0).log10();
-    let log10_avg_nu_st = (sum_dm_nu_st / m_tot).max(1.0).log10();
+    let log10_avg_j_rot = flexmesa_math::log10((total_j / m_tot).max(1.0e10));
+    let log10_avg_d_es = flexmesa_math::log10((sum_dm_d_es / m_tot).max(1.0));
+    let log10_avg_d_st = flexmesa_math::log10((sum_dm_d_st / m_tot).max(1.0));
+    let log10_avg_nu_st = flexmesa_math::log10((sum_dm_nu_st / m_tot).max(1.0));
 
     [
         star_mass,
@@ -208,8 +210,9 @@ pub fn eval_magnetic_braking_torque(
     let v_esc = (2.0 * STANDARD_CGRAV * m_star / r_star).sqrt();
     let v_inf = 1.92 * v_esc;
     let mdot_cgs = (model.mstar_dot.abs()).max(1.0e-7 * M_SUN / SECYER);
-    let eta_star = (r_star * b_field).powi(2) / (mdot_cgs * v_inf).max(1.0e-30);
-    let r_alfven_ratio = 0.29 + (eta_star + 0.25).powf(0.25);
+    let eta_star =
+        flexmesa_math::pow2(r_star * b_field) / (mdot_cgs * v_inf).max(1.0e-30);
+    let r_alfven_ratio = 0.29 + flexmesa_math::pow(eta_star + 0.25, 0.25);
     let omega_surf = model
         .omega
         .first()
@@ -222,11 +225,11 @@ pub fn eval_magnetic_braking_torque(
         * omega_surf
         * r_star
         * r_star
-        * r_alfven_ratio.powi(2);
+        * flexmesa_math::pow2(r_alfven_ratio);
 
     let mut extra_jdot = Vec::with_capacity(nz);
     for k in 0..nz {
-        let weight = (model.r[k] / r_star).powi(2);
+        let weight = flexmesa_math::pow2(model.r[k] / r_star);
         extra_jdot.push((j_dot_total / m_star) * weight);
     }
     let braked_v_rot_kms = ((omega_surf * r_star * 1.0e-5)
@@ -324,8 +327,8 @@ pub fn export_stella_ascii(model: &StarModel) -> (String, String) {
         let zone = idx + 1;
         let m_msun = model.m[k] / M_SUN;
         let r_cm = model.r[k];
-        let rho_cgs = model.rho[k].max(model.lnd[k].exp());
-        let t_k = model.t[k].max(model.ln_t[k].exp());
+        let rho_cgs = model.rho[k].max(flexmesa_math::exp(model.lnd[k]));
+        let t_k = model.t[k].max(flexmesa_math::exp(model.ln_t[k]));
         let v_cms = model
             .v
             .get(k)
@@ -403,7 +406,7 @@ pub fn eval_tov_effective_cgrav(model: &StarModel) -> Vec<f64> {
         let rho_k = model.rho[k].max(1.0e-10);
         let p_k = model.peos[k].max(1.0);
         let term1 = 1.0 + p_k / (rho_k * c2);
-        let term2 = 1.0 + FOUR_PI * r_k.powi(3) * p_k / (m_k * c2);
+        let term2 = 1.0 + FOUR_PI * flexmesa_math::pow3(r_k) * p_k / (m_k * c2);
         let denom = (1.0 - 2.0 * STANDARD_CGRAV * m_k / (r_k * c2)).max(0.1);
         out.push(STANDARD_CGRAV * term1 * term2 / denom);
     }

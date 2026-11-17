@@ -30,14 +30,67 @@ fn quick_two_sum(a: f64, b: f64) -> (f64, f64) {
     (s, e)
 }
 
-/// Error-free Dekker (1971) `two_prod` using hardware fused multiply-add
-/// (`f64::mul_add`), returning `(p, e)` with $p + e = a \cdot b$ exactly.
+/// Veltkamp (1968) splitting factor $2^{27} + 1$.
+const VELTKAMP_SPLITTER: f64 = 134_217_729.0;
+/// Threshold $2^{996}$ above which `VELTKAMP_SPLITTER * x` could overflow.
+const SPLIT_HI_THRESH: f64 = f64::from_bits(0x7e30_0000_0000_0000);
+/// Exact power-of-two rescaling factors $2^{-28}$ and $2^{28}$.
+const SPLIT_SCALE_DOWN: f64 = f64::from_bits(0x3e30_0000_0000_0000);
+const SPLIT_SCALE_UP: f64 = 268_435_456.0;
+
+#[inline]
+#[must_use]
+fn veltkamp_split(x: f64) -> (f64, f64) {
+    if x.abs() > SPLIT_HI_THRESH {
+        let xs = x * SPLIT_SCALE_DOWN;
+        let c = VELTKAMP_SPLITTER * xs;
+        let hi = c - (c - xs);
+        let lo = xs - hi;
+        (hi * SPLIT_SCALE_UP, lo * SPLIT_SCALE_UP)
+    } else {
+        let c = VELTKAMP_SPLITTER * x;
+        let hi = c - (c - x);
+        let lo = x - hi;
+        (hi, lo)
+    }
+}
+
+/// Threshold $2^{1022}$ above which Dekker's `ah * bh` could overflow even when
+/// $a \cdot b$ is finite.
+const PROD_OVERFLOW_THRESH: f64 = f64::from_bits(0x7fd0_0000_0000_0000);
+/// Exact power-of-two product rescaling factors $2^{-54}$ and $2^{54}$.
+const PROD_SCALE_DOWN: f64 = f64::from_bits(0x3c90_0000_0000_0000);
+const PROD_SCALE_UP: f64 = f64::from_bits(0x4350_0000_0000_0000);
+
+/// Error-free Dekker (1971) `two_prod` returning `(p, e)` with $p + e = a \cdot b$.
+///
+/// Uses hardware-independent IEEE-754 Veltkamp splitting in `Strict` mode (with
+/// exact power-of-two pre/post-scaling near `f64::MAX` so `ah * bh` never
+/// overflows to `Inf`) and single-instruction `fma(a, b, -p)` in `Fast` mode.
 #[inline]
 #[must_use]
 fn two_prod(a: f64, b: f64) -> (f64, f64) {
     let p = a * b;
-    let e = a.mul_add(b, -p);
-    (p, e)
+    if !p.is_finite() || p == 0.0 {
+        return (p, 0.0);
+    }
+    if flexmesa_math::numerics_mode() != flexmesa_math::NumericsMode::Strict {
+        return (p, flexmesa_math::fma(a, b, -p));
+    }
+    let (u, v) = if a.abs() >= b.abs() { (a, b) } else { (b, a) };
+    if u.abs() > SPLIT_HI_THRESH || p.abs() >= PROD_OVERFLOW_THRESH {
+        let us = u * PROD_SCALE_DOWN;
+        let ps = p * PROD_SCALE_DOWN;
+        let (uh, ul) = veltkamp_split(us);
+        let (vh, vl) = veltkamp_split(v);
+        let es = ((uh * vh - ps) + uh * vl + ul * vh) + ul * vl;
+        (p, es * PROD_SCALE_UP)
+    } else {
+        let (uh, ul) = veltkamp_split(u);
+        let (vh, vl) = veltkamp_split(v);
+        let e = ((uh * vh - p) + uh * vl + ul * vh) + ul * vl;
+        (p, e)
+    }
 }
 
 /// Unevaluated sum of two IEEE-754 `f64` numbers `hi + lo` with
@@ -214,7 +267,11 @@ impl Mul for F64x2 {
     #[inline]
     fn mul(self, rhs: Self) -> Self::Output {
         let (p1, p2) = two_prod(self.hi, rhs.hi);
-        let p2 = self.lo.mul_add(rhs.hi, self.hi.mul_add(rhs.lo, p2));
+        let p2 = flexmesa_math::fma(
+            self.lo,
+            rhs.hi,
+            flexmesa_math::fma(self.hi, rhs.lo, p2),
+        );
         let (hi, lo) = quick_two_sum(p1, p2);
         Self { hi, lo }
     }
@@ -226,7 +283,7 @@ impl Mul<f64> for F64x2 {
     #[inline]
     fn mul(self, rhs: f64) -> Self::Output {
         let (p1, p2) = two_prod(self.hi, rhs);
-        let (hi, lo) = quick_two_sum(p1, self.lo.mul_add(rhs, p2));
+        let (hi, lo) = quick_two_sum(p1, flexmesa_math::fma(self.lo, rhs, p2));
         Self { hi, lo }
     }
 }
@@ -267,5 +324,45 @@ impl Div<f64> for F64x2 {
     #[inline]
     fn div(self, rhs: f64) -> Self::Output {
         self / Self::new(rhs)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use flexmesa_math::{with_numerics_mode, NumericsMode};
+
+    #[test]
+    fn test_two_prod_near_f64_max_avoids_veltkamp_intermediate_overflow() {
+        for mode in [NumericsMode::Strict, NumericsMode::Fast] {
+            with_numerics_mode(mode, || {
+                // Case 1: `f64::MAX * 0.5` is exact and finite (`hi == f64::MAX * 0.5, lo == 0.0`).
+                let half_max = F64x2::from_f64(f64::MAX) * 0.5;
+                assert_eq!(half_max.hi, f64::MAX * 0.5);
+                assert_eq!(half_max.lo, 0.0);
+
+                // Case 2: Both operands below `SPLIT_HI_THRESH = 2^996`, yet `ah * bh`
+                // overflows `2^1024` unless `two_prod` rescales near `f64::MAX`.
+                let u = f64::from_bits(0x5fef_ffff_e000_0000);
+                let v = f64::from_bits(0x5fe0_0000_0000_0000);
+                let prod = F64x2::from_f64(u) * v;
+                assert!(prod.hi.is_finite(), "mode={mode:?} hi={}", prod.hi);
+                assert!(prod.lo.is_finite(), "mode={mode:?} lo={}", prod.lo);
+                assert_eq!(prod.hi, u * v);
+                assert_eq!(prod.lo, 0.0);
+
+                // Case 3: Non-zero low compensation near `2^1022` matches scaled product.
+                let a = (1.0 + f64::EPSILON)
+                    * f64::from_bits(0x5fd0_0000_0000_0000);
+                let b = (1.0 + 2.0 * f64::EPSILON)
+                    * f64::from_bits(0x5ff0_0000_0000_0000);
+                let ab = F64x2::from_f64(a) * b;
+                let scale_down = f64::from_bits(0x3cb0_0000_0000_0000); // 2^-52
+                let scale_up = f64::from_bits(0x4330_0000_0000_0000); // 2^52
+                let ref_ab = F64x2::from_f64(a * scale_down) * b;
+                assert_eq!(ab.hi, ref_ab.hi * scale_up);
+                assert_eq!(ab.lo, ref_ab.lo * scale_up);
+            });
+        }
     }
 }

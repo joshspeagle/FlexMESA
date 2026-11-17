@@ -13,10 +13,15 @@ pub fn match_modes_by_degree(
     cand_inertias: &[f64],
     cand_orders: &[i32],
 ) -> (Vec<f64>, Vec<f64>, Vec<i32>) {
-    let m_cand = cand_freqs.len().min(cand_inertias.len()).min(cand_orders.len());
+    let m_cand = cand_freqs
+        .len()
+        .min(cand_inertias.len())
+        .min(cand_orders.len());
     let mut indices: Vec<usize> = (0..m_cand).collect();
     indices.sort_by(|&a, &b| {
-        cand_freqs[a].partial_cmp(&cand_freqs[b]).unwrap_or(std::cmp::Ordering::Equal)
+        cand_freqs[a]
+            .partial_cmp(&cand_freqs[b])
+            .unwrap_or(std::cmp::Ordering::Equal)
     });
 
     let mut matched_f = Vec::with_capacity(obs_freqs.len());
@@ -202,7 +207,11 @@ pub fn eval_frequency_ratios_r01_r10(
     l1_freqs: &[f64],
     l1_sigmas: &[f64],
 ) -> (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>) {
-    let len = l0_freqs.len().min(l0_sigmas.len()).min(l1_freqs.len()).min(l1_sigmas.len());
+    let len = l0_freqs
+        .len()
+        .min(l0_sigmas.len())
+        .min(l1_freqs.len())
+        .min(l1_sigmas.len());
     if len < 3 {
         return (Vec::new(), Vec::new(), Vec::new(), Vec::new());
     }
@@ -219,14 +228,19 @@ pub fn eval_frequency_ratios_r01_r10(
             / 8.0;
         let dnu1 = (l1_freqs[i] - l1_freqs[i - 1]).max(1.0e-30);
         r01.push(d01 / dnu1);
-        let s_d01_sq = (l0_sigmas[i - 1].powi(2)
-            + 16.0 * l1_sigmas[i - 1].powi(2)
-            + 36.0 * l0_sigmas[i].powi(2)
-            + 16.0 * l1_sigmas[i].powi(2)
-            + l0_sigmas[i + 1].powi(2))
+        let s_d01_sq = (flexmesa_math::pow2(l0_sigmas[i - 1])
+            + 16.0 * flexmesa_math::pow2(l1_sigmas[i - 1])
+            + 36.0 * flexmesa_math::pow2(l0_sigmas[i])
+            + 16.0 * flexmesa_math::pow2(l1_sigmas[i])
+            + flexmesa_math::pow2(l0_sigmas[i + 1]))
             / 64.0;
-        let s_dnu1_sq = l1_sigmas[i].powi(2) + l1_sigmas[i - 1].powi(2);
-        sig_r01.push((s_d01_sq / (dnu1 * dnu1) + s_dnu1_sq * (d01 * d01) / dnu1.powi(4)).sqrt());
+        let s_dnu1_sq = flexmesa_math::pow2(l1_sigmas[i])
+            + flexmesa_math::pow2(l1_sigmas[i - 1]);
+        sig_r01.push(
+            (s_d01_sq / (dnu1 * dnu1)
+                + s_dnu1_sq * (d01 * d01) / flexmesa_math::pow4(dnu1))
+            .sqrt(),
+        );
 
         let d10 = -(l1_freqs[i - 1] - 4.0 * l0_freqs[i] + 6.0 * l1_freqs[i]
             - 4.0 * l0_freqs[i + 1]
@@ -234,14 +248,19 @@ pub fn eval_frequency_ratios_r01_r10(
             / 8.0;
         let dnu0 = (l0_freqs[i + 1] - l0_freqs[i]).max(1.0e-30);
         r10.push(d10 / dnu0);
-        let s_d10_sq = (l1_sigmas[i - 1].powi(2)
-            + 16.0 * l0_sigmas[i].powi(2)
-            + 36.0 * l1_sigmas[i].powi(2)
-            + 16.0 * l0_sigmas[i + 1].powi(2)
-            + l1_sigmas[i + 1].powi(2))
+        let s_d10_sq = (flexmesa_math::pow2(l1_sigmas[i - 1])
+            + 16.0 * flexmesa_math::pow2(l0_sigmas[i])
+            + 36.0 * flexmesa_math::pow2(l1_sigmas[i])
+            + 16.0 * flexmesa_math::pow2(l0_sigmas[i + 1])
+            + flexmesa_math::pow2(l1_sigmas[i + 1]))
             / 64.0;
-        let s_dnu0_sq = l0_sigmas[i + 1].powi(2) + l0_sigmas[i].powi(2);
-        sig_r10.push((s_d10_sq / (dnu0 * dnu0) + s_dnu0_sq * (d10 * d10) / dnu0.powi(4)).sqrt());
+        let s_dnu0_sq = flexmesa_math::pow2(l0_sigmas[i + 1])
+            + flexmesa_math::pow2(l0_sigmas[i]);
+        sig_r10.push(
+            (s_d10_sq / (dnu0 * dnu0)
+                + s_dnu0_sq * (d10 * d10) / flexmesa_math::pow4(dnu0))
+            .sqrt(),
+        );
     }
     (r01, sig_r01, r10, sig_r10)
 }
@@ -278,7 +297,10 @@ pub fn eval_frequency_ratios_r02_with_dnu(
             (0..nl2).find(|&j| (l2_freqs[j] - l0_freqs[i0]).abs() < 0.25 * dnu)
         } else {
             (0..nl2)
-                .find(|&j| l2_freqs[j] >= l1_freqs[i1 - 1] && l2_freqs[j] <= l0_freqs[i0])
+                .find(|&j| {
+                    l2_freqs[j] >= l1_freqs[i1 - 1]
+                        && l2_freqs[j] <= l0_freqs[i0]
+                })
                 .or((i < nl2).then_some(i))
         };
         let Some(j) = j_match else {
@@ -289,9 +311,15 @@ pub fn eval_frequency_ratios_r02_with_dnu(
         let d02 = l0_freqs[i0] - l2_freqs[j];
         let dnu1 = (l1_freqs[i1] - l1_freqs[i1 - 1]).max(1.0e-30);
         r02.push(d02 / dnu1);
-        let s_num = l0_sigmas[i0].powi(2) + l2_sigmas[j].powi(2);
-        let s_den = l1_sigmas[i1].powi(2) + l1_sigmas[i1 - 1].powi(2);
-        sig_r02.push((s_num / (dnu1 * dnu1) + s_den * (d02 * d02) / dnu1.powi(4)).sqrt());
+        let s_num = flexmesa_math::pow2(l0_sigmas[i0])
+            + flexmesa_math::pow2(l2_sigmas[j]);
+        let s_den = flexmesa_math::pow2(l1_sigmas[i1])
+            + flexmesa_math::pow2(l1_sigmas[i1 - 1]);
+        sig_r02.push(
+            (s_num / (dnu1 * dnu1)
+                + s_den * (d02 * d02) / flexmesa_math::pow4(dnu1))
+            .sqrt(),
+        );
     }
     (r02, sig_r02, r02_freqs)
 }
@@ -308,7 +336,8 @@ pub fn eval_frequency_ratios_r02(
     l2_sigmas: &[f64],
 ) -> (Vec<f64>, Vec<f64>) {
     let (r02, sig_r02, _) = eval_frequency_ratios_r02_with_dnu(
-        l0_freqs, l0_sigmas, l1_freqs, l1_sigmas, l2_freqs, l2_sigmas, 0, 0, 0.0,
+        l0_freqs, l0_sigmas, l1_freqs, l1_sigmas, l2_freqs, l2_sigmas, 0, 0,
+        0.0,
     );
     (r02, sig_r02)
 }
@@ -316,7 +345,11 @@ pub fn eval_frequency_ratios_r02(
 /// Linearly interpolates a model $r_{010}$ frequency separation ratio at target
 /// frequency `freq` (`interpolate_ratio_r010` in `astero_support.f90:489-520`).
 #[must_use]
-pub fn interpolate_ratio_r010(freq: f64, r010_freqs: &[f64], r010_vals: &[f64]) -> f64 {
+pub fn interpolate_ratio_r010(
+    freq: f64,
+    r010_freqs: &[f64],
+    r010_vals: &[f64],
+) -> f64 {
     let n = r010_freqs.len().min(r010_vals.len());
     if n == 0 {
         return 0.0;
@@ -341,7 +374,11 @@ pub fn interpolate_ratio_r010(freq: f64, r010_freqs: &[f64], r010_vals: &[f64]) 
 /// frequency `freq` using radial frequencies `l0_freqs` corresponding to
 /// `r02_vals` (`interpolate_ratio_r02` in `astero_support.f90:523-550`).
 #[must_use]
-pub fn interpolate_ratio_r02(freq: f64, l0_freqs: &[f64], r02_vals: &[f64]) -> f64 {
+pub fn interpolate_ratio_r02(
+    freq: f64,
+    l0_freqs: &[f64],
+    r02_vals: &[f64],
+) -> f64 {
     if l0_freqs.is_empty() || r02_vals.is_empty() {
         return 0.0;
     }
@@ -384,16 +421,26 @@ pub struct AsteroChi2Weights {
 impl Default for AsteroChi2Weights {
     fn default() -> Self {
         Self {
-            chi2_seismo_fraction: 2.0 / 3.0, chi2_seismo_freq_fraction: None,
-            chi2_seismo_delta_nu_fraction: 0.0, chi2_seismo_nu_max_fraction: 0.0,
-            chi2_seismo_r_010_fraction: 0.0, chi2_seismo_r_02_fraction: 0.0,
-            normalize_chi2_seismo_frequencies: true, normalize_chi2_seismo_r_010: true,
-            normalize_chi2_seismo_r_02: true, normalize_chi2_spectro: true,
+            chi2_seismo_fraction: 2.0 / 3.0,
+            chi2_seismo_freq_fraction: None,
+            chi2_seismo_delta_nu_fraction: 0.0,
+            chi2_seismo_nu_max_fraction: 0.0,
+            chi2_seismo_r_010_fraction: 0.0,
+            chi2_seismo_r_02_fraction: 0.0,
+            normalize_chi2_seismo_frequencies: true,
+            normalize_chi2_seismo_r_010: true,
+            normalize_chi2_seismo_r_02: true,
+            normalize_chi2_spectro: true,
         }
     }
 }
 
-fn eval_component_chi2(obs: &[f64], sigmas: &[f64], model: &[f64], normalize: bool) -> f64 {
+fn eval_component_chi2(
+    obs: &[f64],
+    sigmas: &[f64],
+    model: &[f64],
+    normalize: bool,
+) -> f64 {
     let (mut sum, mut count) = (0.0_f64, 0usize);
     let n = obs.len().min(sigmas.len()).min(model.len());
     for i in 0..n {
@@ -403,7 +450,13 @@ fn eval_component_chi2(obs: &[f64], sigmas: &[f64], model: &[f64], normalize: bo
             count += 1;
         }
     }
-    if count == 0 { 0.0 } else if normalize { sum / (count as f64) } else { sum }
+    if count == 0 {
+        0.0
+    } else if normalize {
+        sum / (count as f64)
+    } else {
+        sum
+    }
 }
 
 /// Evaluates the composite asteroseismic and spectroscopic $\chi^2$ hierarchy
@@ -412,18 +465,53 @@ fn eval_component_chi2(obs: &[f64], sigmas: &[f64], model: &[f64], normalize: bo
 #[must_use]
 pub fn eval_astero_chi2(
     weights: &AsteroChi2Weights,
-    obs_freqs: &[f64], obs_sigmas: &[f64], corr_model_freqs: &[f64],
-    r010_obs: &[f64], r010_sigmas: &[f64], r010_model: &[f64],
-    r02_obs: &[f64], r02_sigmas: &[f64], r02_model: &[f64],
-    delta_nu_obs: f64, delta_nu_sigma: f64, delta_nu_model: f64,
-    nu_max_obs: f64, nu_max_sigma: f64, nu_max_model: f64,
-    spectro_obs: &[f64], spectro_sigmas: &[f64], spectro_model: &[f64],
+    obs_freqs: &[f64],
+    obs_sigmas: &[f64],
+    corr_model_freqs: &[f64],
+    r010_obs: &[f64],
+    r010_sigmas: &[f64],
+    r010_model: &[f64],
+    r02_obs: &[f64],
+    r02_sigmas: &[f64],
+    r02_model: &[f64],
+    delta_nu_obs: f64,
+    delta_nu_sigma: f64,
+    delta_nu_model: f64,
+    nu_max_obs: f64,
+    nu_max_sigma: f64,
+    nu_max_model: f64,
+    spectro_obs: &[f64],
+    spectro_sigmas: &[f64],
+    spectro_model: &[f64],
 ) -> (f64, f64, f64, f64, f64, f64) {
-    let chi2_freq = eval_component_chi2(obs_freqs, obs_sigmas, corr_model_freqs, weights.normalize_chi2_seismo_frequencies);
-    let chi2_r010 = eval_component_chi2(r010_obs, r010_sigmas, r010_model, weights.normalize_chi2_seismo_r_010);
-    let chi2_r02 = eval_component_chi2(r02_obs, r02_sigmas, r02_model, weights.normalize_chi2_seismo_r_02);
-    let chi2_dnu = if delta_nu_sigma > 0.0 { ((delta_nu_obs - delta_nu_model) / delta_nu_sigma).powi(2) } else { 0.0 };
-    let chi2_numax = if nu_max_sigma > 0.0 { ((nu_max_obs - nu_max_model) / nu_max_sigma).powi(2) } else { 0.0 };
+    let chi2_freq = eval_component_chi2(
+        obs_freqs,
+        obs_sigmas,
+        corr_model_freqs,
+        weights.normalize_chi2_seismo_frequencies,
+    );
+    let chi2_r010 = eval_component_chi2(
+        r010_obs,
+        r010_sigmas,
+        r010_model,
+        weights.normalize_chi2_seismo_r_010,
+    );
+    let chi2_r02 = eval_component_chi2(
+        r02_obs,
+        r02_sigmas,
+        r02_model,
+        weights.normalize_chi2_seismo_r_02,
+    );
+    let chi2_dnu = if delta_nu_sigma > 0.0 {
+        flexmesa_math::pow2((delta_nu_obs - delta_nu_model) / delta_nu_sigma)
+    } else {
+        0.0
+    };
+    let chi2_numax = if nu_max_sigma > 0.0 {
+        flexmesa_math::pow2((nu_max_obs - nu_max_model) / nu_max_sigma)
+    } else {
+        0.0
+    };
     let f_freq = weights.chi2_seismo_freq_fraction.unwrap_or_else(|| {
         (1.0 - (weights.chi2_seismo_r_010_fraction
             + weights.chi2_seismo_r_02_fraction
@@ -437,9 +525,19 @@ pub fn eval_astero_chi2(
         + weights.chi2_seismo_delta_nu_fraction * chi2_dnu
         + weights.chi2_seismo_nu_max_fraction * chi2_numax;
     let chi2_spectro = eval_component_chi2(
-        spectro_obs, spectro_sigmas, spectro_model, weights.normalize_chi2_spectro,
+        spectro_obs,
+        spectro_sigmas,
+        spectro_model,
+        weights.normalize_chi2_spectro,
     );
     let f_seis = weights.chi2_seismo_fraction.clamp(0.0, 1.0);
     let chi2_total = f_seis * chi2_seismo + (1.0 - f_seis) * chi2_spectro;
-    (chi2_total, chi2_seismo, chi2_spectro, chi2_freq, chi2_r010, chi2_r02)
+    (
+        chi2_total,
+        chi2_seismo,
+        chi2_spectro,
+        chi2_freq,
+        chi2_r010,
+        chi2_r02,
+    )
 }

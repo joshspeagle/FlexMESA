@@ -75,7 +75,9 @@ fn parse_mesa_float_token(tok: &str) -> Result<f64, std::num::ParseFloatError> {
     normalized.parse::<f64>()
 }
 
-fn tokenize_header_values(line: &str) -> Result<Vec<MesaHeaderValue>, StarError> {
+fn tokenize_header_values(
+    line: &str,
+) -> Result<Vec<MesaHeaderValue>, StarError> {
     let mut out = Vec::new();
     let bytes = line.as_bytes();
     let mut i = 0_usize;
@@ -143,10 +145,8 @@ pub fn read_mesa_log_str(text: &str) -> Result<MesaLogTable, StarError> {
             })
         })
         .collect::<Result<_, _>>()?;
-    let hdr_names: Vec<String> = lines[1]
-        .split_whitespace()
-        .map(str::to_owned)
-        .collect();
+    let hdr_names: Vec<String> =
+        lines[1].split_whitespace().map(str::to_owned).collect();
     let hdr_vals = tokenize_header_values(lines[2])?;
     if hdr_idx.len() != hdr_names.len() || hdr_names.len() != hdr_vals.len() {
         return Err(StarError::IoError(format!(
@@ -167,10 +167,8 @@ pub fn read_mesa_log_str(text: &str) -> Result<MesaLogTable, StarError> {
             })
         })
         .collect::<Result<_, _>>()?;
-    let column_names: Vec<String> = lines[5]
-        .split_whitespace()
-        .map(str::to_owned)
-        .collect();
+    let column_names: Vec<String> =
+        lines[5].split_whitespace().map(str::to_owned).collect();
     if col_idx.len() != column_names.len() || column_names.is_empty() {
         return Err(StarError::IoError(format!(
             "MESA log column header mismatch: idx={}, names={}",
@@ -286,7 +284,9 @@ pub fn read_profiles_index_str(text: &str) -> Result<ProfilesIndex, StarError> {
 }
 
 /// Reads and parses a MESA `LOGS/profiles.index` file from `path`.
-pub fn read_profiles_index_file(path: &Path) -> Result<ProfilesIndex, StarError> {
+pub fn read_profiles_index_file(
+    path: &Path,
+) -> Result<ProfilesIndex, StarError> {
     let text = fs::read_to_string(path).map_err(|e| {
         StarError::IoError(format!("failed to read {}: {e}", path.display()))
     })?;

@@ -47,7 +47,7 @@ fn eval_autodiff_kernel(x: f64, y: f64) -> [f64; 6] {
 #[inline]
 fn eval_autodiff_fused(x: f64, y: f64) -> [f64; 6] {
     let u = 0.1 * x * y;
-    let e = u.exp();
+    let e = flexmesa_math::exp(u);
     let yp2 = y + 2.0;
     let inv_yp2 = 1.0 / yp2;
     let inv_yp2_2 = inv_yp2 * inv_yp2;

@@ -95,7 +95,7 @@ pub fn eval_time_centered_hse_geom_ad(
             && !model.ln_r_start.is_empty();
     let lnr_start_k = model.ln_r_start.get(k).copied().unwrap_or(model.ln_r[k]);
     let r2 = if using_v_tc {
-        let r_start = lnr_start_k.exp().max(1.0);
+        let r_start = flexmesa_math::exp(lnr_start_k).max(1.0);
         (r_k * r_start).max(StarAdOrder1::ONE)
     } else {
         (r_k * r_k).max(StarAdOrder1::ONE)
@@ -122,13 +122,15 @@ pub const fn has_surf_momentum_bc(c: &crate::controls::StarControls) -> bool {
 #[must_use]
 pub fn eval_surf_momentum_bc_pressure_ad(model: &StarModel) -> StarAdOrder1 {
     if model.controls.use_zero_pgas_outer_bc {
-        let t_s0 = model
-            .ln_t_start
-            .first()
-            .copied()
-            .unwrap_or_else(|| model.ln_t.first().copied().unwrap_or(0.0))
-            .exp();
-        StarAdOrder1::constant((flexmesa_const::CRAD / 3.0) * t_s0.powi(4))
+        let t_s0 =
+            flexmesa_math::exp(
+                model.ln_t_start.first().copied().unwrap_or_else(|| {
+                    model.ln_t.first().copied().unwrap_or(0.0)
+                }),
+            );
+        StarAdOrder1::constant(
+            (flexmesa_const::CRAD / 3.0) * flexmesa_math::pow4(t_s0),
+        )
     } else if model.controls.use_fixed_psurf_outer_bc {
         StarAdOrder1::constant(model.controls.fixed_psurf)
     } else {
@@ -470,7 +472,7 @@ pub fn do1_radius_eqn(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
             v_var
         };
         let lnr_ad = StarAdOrder1::variable(model.ln_r[k], I_LNR_00);
-        let r_start = model.ln_r_start[k].exp().max(1.0);
+        let r_start = flexmesa_math::exp(model.ln_r_start[k]).max(1.0);
         v_ad * (model.dt / r_start)
             - ((lnr_ad - model.ln_r_start[k]).exp() - 1.0)
     };

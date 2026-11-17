@@ -111,7 +111,7 @@ pub fn helmeos2(
                 temp = temphi;
                 off_table = true;
             }
-            let log_din = log_den_in + ye.log10();
+            let log_din = log_den_in + flexmesa_math::log10(ye);
             if log_din <= HELM_LOGDLO {
                 din = denlo;
                 den = din / ye;

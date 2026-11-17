@@ -211,8 +211,17 @@ impl CmsXTable {
         }
 
         Self::build_from_raw_vars(
-            version, x, num_log_ts, log_t_min, log_t_max, delta_log_t,
-            num_log_rhos, log_rho_min, log_rho_max, delta_log_rho, &raw_vars,
+            version,
+            x,
+            num_log_ts,
+            log_t_min,
+            log_t_max,
+            delta_log_t,
+            num_log_rhos,
+            log_rho_min,
+            log_rho_max,
+            delta_log_rho,
+            &raw_vars,
         )
     }
 
@@ -305,8 +314,17 @@ impl CmsXTable {
         }
 
         Self::build_from_raw_vars(
-            version, x, num_log_ts, log_t_min, log_t_max, delta_log_t,
-            num_log_rhos, log_rho_min, log_rho_max, delta_log_rho, &raw_vars,
+            version,
+            x,
+            num_log_ts,
+            log_t_min,
+            log_t_max,
+            delta_log_t,
+            num_log_rhos,
+            log_rho_min,
+            log_rho_max,
+            delta_log_rho,
+            &raw_vars,
         )
     }
 
@@ -369,10 +387,8 @@ impl CmsTableSet {
             return Ok(Arc::clone(tbl));
         }
         let stem = format!("mesa-CMS_{}x", CMS_XSTR[ix_1based - 1]);
-        let loaded = Arc::new(load_or_build_cms_slice(
-            self.data_dir.as_deref(),
-            &stem,
-        )?);
+        let loaded =
+            Arc::new(load_or_build_cms_slice(self.data_dir.as_deref(), &stem)?);
         let _ = slot.set(Arc::clone(&loaded));
         Ok(slot.get().map_or(loaded, Arc::clone))
     }

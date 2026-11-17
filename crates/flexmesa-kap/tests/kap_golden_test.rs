@@ -196,7 +196,8 @@ fn test_kap_conduction_and_compton_derivatives_match_finite_differences() {
         let (kr_m, _, _) =
             do_electron_conduction(&cfg, zbar, log_rho - eps, log_t)
                 .expect("fd -rho");
-        let fd_rho = (kr_p.log10() - kr_m.log10()) / (2.0 * eps);
+        let fd_rho = (flexmesa_math::log10(kr_p) - flexmesa_math::log10(kr_m))
+            / (2.0 * eps);
         assert_rel_close(dln_dr, fd_rho, 1.0e-6, "conduction dlnkap_dlnRho");
 
         let (kt_p, _, _) =
@@ -205,7 +206,8 @@ fn test_kap_conduction_and_compton_derivatives_match_finite_differences() {
         let (kt_m, _, _) =
             do_electron_conduction(&cfg, zbar, log_rho, log_t - eps)
                 .expect("fd -t");
-        let fd_t = (kt_p.log10() - kt_m.log10()) / (2.0 * eps);
+        let fd_t = (flexmesa_math::log10(kt_p) - flexmesa_math::log10(kt_m))
+            / (2.0 * eps);
         assert_rel_close(dln_dt, fd_t, 1.0e-6, "conduction dlnkap_dlnT");
 
         let (kp, _, _) = do_electron_conduction_potekhin(zbar, log_rho, log_t)
@@ -253,7 +255,8 @@ fn test_kap_conduction_and_compton_derivatives_match_finite_differences() {
         d_eta_dr,
         d_eta_dt,
     );
-    let fd_dr = (kc_rp.ln() - kc_rm.ln()) / (2.0 * eps);
+    let fd_dr =
+        (flexmesa_math::log(kc_rp) - flexmesa_math::log(kc_rm)) / (2.0 * eps);
     assert_rel_close(dlnkc_dr, fd_dr, 1.0e-6, "compton dlnkap_dlnRho");
 
     let (kc_tp, _, _) = compton_opacity(
@@ -276,7 +279,8 @@ fn test_kap_conduction_and_compton_derivatives_match_finite_differences() {
         d_eta_dr,
         d_eta_dt,
     );
-    let fd_dt = (kc_tp.ln() - kc_tm.ln()) / (2.0 * eps);
+    let fd_dt =
+        (flexmesa_math::log(kc_tp) - flexmesa_math::log(kc_tm)) / (2.0 * eps);
     assert_rel_close(dlnkc_dt, fd_dt, 1.0e-6, "compton dlnkap_dlnT");
     assert!(kc > 0.0);
 }
@@ -287,7 +291,7 @@ fn test_kapcn_and_multi_zone_batch_evaluation() {
         .expect("kapCN evaluation failed");
     assert_rel_close(
         kap_cn,
-        10.0_f64.powf(-3.361),
+        flexmesa_math::exp10(-3.361),
         1.0e-12,
         "kapCN exact knot",
     );

@@ -222,8 +222,8 @@ fn test_rsp_eos_kap_jacobians_and_surf_bc() {
     assert!((derived.alfa - 1.5).abs() <= 1.0e-15);
 
     for &k in &[5_usize, 45, 110] {
-        let t0 = model.ln_t[k].exp();
-        let v0 = 1.0 / model.lnd[k].exp();
+        let t0 = flexmesa_math::exp(model.ln_t[k]);
+        let v0 = 1.0 / flexmesa_math::exp(model.lnd[k]);
         let base = eval_mesa_eos_and_kap(&mut model, &chem, Some(k), t0, v0)
             .expect("base eos_kap");
 
@@ -263,7 +263,7 @@ fn test_rsp_eos_kap_jacobians_and_surf_bc() {
         );
     }
 
-    let r0 = model.ln_r[0].exp();
+    let r0 = flexmesa_math::exp(model.ln_r[0]);
     let (t_surf, p_surf, kap_surf, teff) = get_surf_p_t_kap(
         &model,
         &chem,
@@ -274,9 +274,15 @@ fn test_rsp_eos_kap_jacobians_and_surf_bc() {
         1.0e-2,
     )
     .expect("get_surf_p_t_kap");
-    let teff_surf_exact = (model.lum[0]
-        / (4.0 * std::f64::consts::PI * r0 * r0 * flexmesa_const::BOLTZ_SIGMA))
-        .powf(0.25);
+    let teff_surf_exact = flexmesa_math::pow(
+        model.lum[0]
+            / (4.0
+                * std::f64::consts::PI
+                * r0
+                * r0
+                * flexmesa_const::BOLTZ_SIGMA),
+        0.25,
+    );
     assert!(
         t_surf > 4000.0 && t_surf < 7000.0 && p_surf > 0.0 && kap_surf > 0.0
     );
@@ -297,8 +303,8 @@ fn test_rsp_inverse_eos_root_finders_converge() {
     let chem = RspChemCache::from_model_zone0(&model).expect("chem cache");
 
     for &k in &[5_usize, 45, 110] {
-        let t0 = model.ln_t[k].exp();
-        let v0 = 1.0 / model.lnd[k].exp();
+        let t0 = flexmesa_math::exp(model.ln_t[k]);
+        let v0 = 1.0 / flexmesa_math::exp(model.lnd[k]);
         let base = eval_mesa_eos_and_kap(&mut model, &chem, Some(k), t0, v0)
             .expect("base eos_kap");
         let ptot = base.pgas + base.prad;
@@ -335,11 +341,11 @@ fn test_rsp_inverse_eos_root_finders_converge() {
 
         model.pgas[k] = base.pgas;
         model.rho[k] = (1.0 / v0) * 1.03;
-        model.ln_t[k] = t0.ln();
+        model.ln_t[k] = flexmesa_math::log(t0);
         set_rho_for_new_pgas(&mut model, &chem, k).expect("rho_for_pgas");
         assert!((model.rho[k] - 1.0 / v0).abs() <= 1.0e-10 / v0);
 
-        model.lnd[k] = (1.0 / v0).ln();
+        model.lnd[k] = flexmesa_math::log(1.0 / v0);
         model.rho[k] = 1.0 / v0;
         model.aux.rsp.egas_rsp[k] = base.egas;
         model.t[k] = t0 * 1.02;

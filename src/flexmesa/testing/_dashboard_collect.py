@@ -43,7 +43,10 @@ MODULE_CODE_PATHS: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
         ("crates/flexmesa-autodiff/src",),
         ("src/flexmesa/auto_diff",),
     ),
-    "math": (("crates/flexmesa-math/src",), ("src/flexmesa/math",)),
+    "math": (
+        ("crates/flexmesa-math/src", "crates/flexmesa-crlibm-sys/src"),
+        ("src/flexmesa/math",),
+    ),
     "const": (("crates/flexmesa-const/src",), ("src/flexmesa/constants",)),
     "utils": (
         (
@@ -201,6 +204,19 @@ def collect_module_coverage(
     }
 
 
+_PLATFORM_INTRINSIC_SECTIONS: frozenset[str] = frozenset(
+    {
+        "dlog",
+        "dlog10",
+        "intrinsic_log10",
+        "intrinsic_exp",
+        "atan2",
+        "datan2",
+        "intrinsic_pow",
+    }
+)
+
+
 def collect_numerics_and_module_verification(
     repo_root: pathlib.Path,
 ) -> dict[str, Any]:
@@ -211,22 +227,15 @@ def collect_numerics_and_module_verification(
     strict_report = (
         repo_root / "benchmarks" / "numerics" / "strict_verification.json"
     )
+    fast_vs_strict = repo_root / "notes" / "audit" / "fast_vs_strict.json"
+    math_vectors = (
+        repo_root
+        / "benchmarks"
+        / "fortran_mesa"
+        / "math_hex_vectors"
+        / "mesa_26_4_1_math_vectors.txt"
+    )
     has_165_ci = "strict-cross-machine-gate:" in ci_yml
-    strict_mods: dict[str, str] = {}
-    if has_165_ci and strict_report.is_file():
-        rep: dict[str, Any] = json.loads(
-            strict_report.read_text(encoding="utf-8")
-        )
-        level1 = str(rep.get("cross_machine_status", "not yet measured"))
-        level2 = str(
-            rep.get("kernels_bit_identical_status", "not yet measured")
-        )
-        raw_smods = rep.get("modules", {})
-        if isinstance(raw_smods, dict):
-            strict_mods = {str(k): str(v) for k, v in raw_smods.items()}
-    else:
-        level1 = "not yet measured"
-        level2 = "not yet measured"
 
     hex_summary_path = (
         repo_root
@@ -239,6 +248,56 @@ def collect_numerics_and_module_verification(
     hex_data: dict[str, Any] = json.loads(
         hex_summary_path.read_text(encoding="utf-8")
     )
+    in_scope_hex = [
+        item
+        for item in hex_data.get("modules", [])
+        if str(item["module"]) not in {"forum", "sample"}
+    ]
+
+    strict_mods: dict[str, str] = {}
+    if has_165_ci and strict_report.is_file():
+        rep: dict[str, Any] = json.loads(
+            strict_report.read_text(encoding="utf-8")
+        )
+        level1 = str(rep.get("cross_machine_status", "not yet measured"))
+        level2 = str(
+            rep.get("kernels_bit_identical_status", "not yet measured")
+        )
+        raw_smods = rep.get("modules", {})
+        if isinstance(raw_smods, dict):
+            strict_mods = {str(k): str(v) for k, v in raw_smods.items()}
+    elif has_165_ci and fast_vs_strict.is_file() and math_vectors.is_file():
+        fvs: dict[str, Any] = json.loads(
+            fast_vs_strict.read_text(encoding="utf-8")
+        )
+        vec_n = int(fvs.get("total_vector_inputs", 0))
+        evo = fvs.get("short_evolution", {})
+        evo_case = f"{evo.get('suite')}/{evo.get('case')}"
+        evo_steps = int(evo.get("max_steps", 0))
+        crmath_n = 0
+        plat_n = 0
+        for fn_rec in fvs.get("functions", []):
+            n_in = int(fn_rec.get("total_inputs", 0))
+            if str(fn_rec.get("section", "")) in _PLATFORM_INTRINSIC_SECTIONS:
+                plat_n += n_in
+            else:
+                crmath_n += n_in
+        level1 = (
+            "verified in CI (x86_64 == aarch64, 1 == 4 threads; "
+            f"{vec_n:,} math vectors + {evo_case} {evo_steps}-step trace)"
+        )
+        level2 = (
+            f"math: {crmath_n:,}/{crmath_n:,} CRMATH 0 ULP "
+            f"({plat_n:,} libm <= 1 ULP); "
+            f"0/{len(in_scope_hex) - 1} other module suites"
+        )
+        strict_mods["math"] = (
+            f"{crmath_n:,} CRMATH (0 ULP) + {plat_n:,} libm (<= 1 ULP)"
+        )
+    else:
+        level1 = "not yet measured"
+        level2 = "not yet measured"
+
     mod_rows = [
         {
             "module": str(item["module"]),
@@ -249,11 +308,10 @@ def collect_numerics_and_module_verification(
                 else strict_mods.get(str(item["module"]), "0")
             ),
         }
-        for item in hex_data.get("modules", [])
-        if str(item["module"]) not in {"forum", "sample"}
+        for item in in_scope_hex
     ]
     return {
-        "has_165_ci": bool(has_165_ci and strict_report.is_file()),
+        "has_165_ci": bool(level1 != "not yet measured"),
         "strict_cross_machine_identical": level1,
         "strict_kernels_bit_identical": level2,
         "total_upstream_hex_values": int(

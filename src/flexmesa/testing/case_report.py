@@ -24,6 +24,8 @@ def summarize_records(
     manifest: case_manifest.HarnessManifest,
     records: list[harness_runner.CaseHarnessRecord],
     known_gaps: dict[tuple[str, str], case_manifest.KnownGapSpec] | None = None,
+    *,
+    numerics_mode: str = "strict",
 ) -> dict[str, Any]:
     """Compute manifest-wide and run-level headline counts across ``records``.
 
@@ -31,6 +33,8 @@ def summarize_records(
         manifest: Loaded ``HarnessManifest``.
         records: Evaluated ``CaseHarnessRecord`` sequence.
         known_gaps: Optional ``known_gaps.toml`` mapping for total gap count.
+        numerics_mode: Arithmetic mode used for the run (``"strict"`` or
+            ``"fast"``).
 
     Returns:
         Dictionary of headline counts and gate violation lists.
@@ -72,6 +76,7 @@ def summarize_records(
     return {
         "mesa_release": manifest.mesa_release,
         "zenodo_record": manifest.zenodo_record,
+        "numerics_mode": numerics_mode,
         "total_cases": len(all_cases),
         "selected_cases": len(records),
         "cases_by_suite": by_suite,
@@ -129,6 +134,8 @@ def build_report_payload(
     manifest: case_manifest.HarnessManifest,
     records: list[harness_runner.CaseHarnessRecord],
     known_gaps: dict[tuple[str, str], case_manifest.KnownGapSpec] | None = None,
+    *,
+    numerics_mode: str = "strict",
 ) -> dict[str, Any]:
     """Assemble the complete JSON report dictionary.
 
@@ -136,12 +143,16 @@ def build_report_payload(
         manifest: ``HarnessManifest`` instance.
         records: Sequence of ``CaseHarnessRecord`` entries.
         known_gaps: Optional ``known_gaps.toml`` mapping.
+        numerics_mode: Arithmetic mode used for the run (``"strict"`` or
+            ``"fast"``).
 
     Returns:
         Structured dictionary with ``summary`` and ``cases`` keys.
     """
     return {
-        "summary": summarize_records(manifest, records, known_gaps),
+        "summary": summarize_records(
+            manifest, records, known_gaps, numerics_mode=numerics_mode
+        ),
         "cases": [record_to_dict(r) for r in records],
     }
 
@@ -160,6 +171,8 @@ def build_deterministic_baseline_payload(
     manifest: case_manifest.HarnessManifest,
     records: list[harness_runner.CaseHarnessRecord],
     known_gaps: dict[tuple[str, str], case_manifest.KnownGapSpec] | None = None,
+    *,
+    numerics_mode: str = "strict",
 ) -> dict[str, Any]:
     """Build a deterministic baseline JSON payload omitting volatile timings.
 
@@ -167,6 +180,8 @@ def build_deterministic_baseline_payload(
         manifest: ``HarnessManifest`` instance.
         records: Evaluated ``CaseHarnessRecord`` entries.
         known_gaps: Optional ``known_gaps.toml`` mapping.
+        numerics_mode: Arithmetic mode used for the run (``"strict"`` or
+            ``"fast"``).
 
     Returns:
         JSON-serializable dictionary with ``wall_time_sec`` and ``peak_rss_gb``
@@ -176,7 +191,9 @@ def build_deterministic_baseline_payload(
         dataclasses.replace(r, wall_time_sec=0.0, peak_rss_gb=0.0)
         for r in records
     ]
-    return build_report_payload(manifest, normalized, known_gaps)
+    return build_report_payload(
+        manifest, normalized, known_gaps, numerics_mode=numerics_mode
+    )
 
 
 def _fmt_max_dev(rec: harness_runner.CaseHarnessRecord) -> str:

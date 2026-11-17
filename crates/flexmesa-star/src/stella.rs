@@ -6,9 +6,9 @@
 
 #![allow(missing_docs, clippy::format_push_string, clippy::needless_for_each)]
 
-use std::f64::consts::PI;
-
-use flexmesa_const::{AVO, BOLTZM, BOLTZ_SIGMA, CLIGHT, ME, M_SUN, QE, SECDAY};
+use flexmesa_const::{
+    AVO, BOLTZM, BOLTZ_SIGMA, CLIGHT, ME, M_SUN, PI, QE, SECDAY,
+};
 
 use crate::model::StarModel;
 use crate::pulse_bvp_recon::parse_fortran_float;
@@ -125,11 +125,13 @@ impl FeII5169EtaTable {
                 if let Some(line) = lines.next() {
                     let toks: Vec<&str> = line.split_whitespace().collect();
                     if toks.len() >= 3 {
-                        log_rhos[j] =
-                            parse_fortran_float(toks[0]).max(1.0e-99).log10();
+                        log_rhos[j] = flexmesa_math::log10(
+                            parse_fortran_float(toks[0]).max(1.0e-99),
+                        );
                         if j == 0 {
-                            log_ts[i] =
-                                parse_fortran_float(toks[1]).max(1.0).log10();
+                            log_ts[i] = flexmesa_math::log10(
+                                parse_fortran_float(toks[1]).max(1.0),
+                            );
                         }
                         eta_grid[j * num_ts + i] = parse_fortran_float(toks[2]);
                     }
@@ -230,12 +232,9 @@ pub fn eval_sobolev_feii_5169_snapshot(
     for k in (1..(nz - 1)).rev() {
         let density = smooth[k].max(1.0e-99);
         let n_fe = density * AVO * fe_xa[k] / 56.0;
-        let log_rho = density
-            .log10()
+        let log_rho = flexmesa_math::log10(density)
             .clamp(eta_table.log_rhos[0], *eta_table.log_rhos.last().unwrap());
-        let log_t = temp_k[k]
-            .max(1.0)
-            .log10()
+        let log_t = flexmesa_math::log10(temp_k[k].max(1.0))
             .clamp(eta_table.log_ts[0], *eta_table.log_ts.last().unwrap());
         let eta = eta_table.eval(log_rho, log_t);
         let tau_sob = pref * n_fe * eta;
@@ -262,8 +261,8 @@ pub fn eval_sobolev_feii_5169_snapshot(
                 v_tau_lo_km_s: v_lo * 1.0e3,
                 v_tau_med_km_s: v_med * 1.0e3,
                 v_tau_hi_km_s: v_hi * 1.0e3,
-                rho: 10.0_f64.powf(log_rho),
-                t_k: 10.0_f64.powf(log_t),
+                rho: flexmesa_math::exp10(log_rho),
+                t_k: flexmesa_math::exp10(log_t),
                 eta,
                 m_tau_lo_msun: m_lo,
                 r_tau_lo_cm: r_lo,
@@ -290,7 +289,8 @@ pub fn export_stella_pair(
     let n_ej = n_tot - nz_extra;
     let (m_center, r_center) =
         (model.m_center.max(0.0), model.r_center.max(1.0e6));
-    let rho_center = model.lnd.last().map_or(1.0e-8, |&d| d.exp());
+    let rho_center =
+        model.lnd.last().map_or(1.0e-8, |&d| flexmesa_math::exp(d));
     let m_surf = model.mstar.max(m_center + 0.1 * M_SUN);
     let r_surf = model
         .r
@@ -334,7 +334,10 @@ pub fn export_stella_pair(
         } else {
             r_center + frac * (r_surf - r_center)
         };
-        let (rho, t) = (model.lnd[k].exp(), model.ln_t[k].exp());
+        let (rho, t) = (
+            flexmesa_math::exp(model.lnd[k]),
+            flexmesa_math::exp(model.ln_t[k]),
+        );
         let v = model
             .v
             .get(k)
@@ -392,13 +395,22 @@ pub fn export_stella_pair(
 
     let r_out = opts.csm_r_out_cm.max(r_surf * 1.2);
     let mdot_g_s = opts.csm_mdot_msun_yr * M_SUN / (365.25 * SECDAY);
-    let (v_w, t_surf) = (opts.csm_v_wind_cm_s.max(1.0e5), model.ln_t[0].exp());
+    let (v_w, t_surf) = (
+        opts.csm_v_wind_cm_s.max(1.0e5),
+        flexmesa_math::exp(model.ln_t[0]),
+    );
     for j in 1..=nz_extra {
         let i = n_ej + j;
-        let r_i =
-            r_surf * (r_out / r_surf).powf((j as f64) / (nz_extra as f64));
+        let r_i = r_surf
+            * flexmesa_math::pow(
+                r_out / r_surf,
+                (j as f64) / (nz_extra as f64),
+            );
         let r_prev = r_surf
-            * (r_out / r_surf).powf((j as f64 - 1.0) / (nz_extra as f64));
+            * flexmesa_math::pow(
+                r_out / r_surf,
+                (j as f64 - 1.0) / (nz_extra as f64),
+            );
         let rho = mdot_g_s / (4.0 * PI * v_w * r_i * r_i);
         let dm_msun = (mdot_g_s * (r_i - r_prev) / (v_w * M_SUN)).max(1.0e-12);
         let m_msun = prev_m_msun + dm_msun;
@@ -548,11 +560,12 @@ pub fn run_stella_from_hyd_abn(
         let t_s = t_d.max(0.01) * SECDAY;
         let l_ni = m_ni56_msun
             * M_SUN
-            * (6.45e9 * (-t_d / 8.8).exp() + 1.45e9 * (-t_d / 111.3).exp());
+            * (6.45e9 * flexmesa_math::exp(-t_d / 8.8)
+                + 1.45e9 * flexmesa_math::exp(-t_d / 111.3));
         let l_diff = (e_th0 / (t_diff_days * SECDAY))
             * (r0 / (r0 + v_sc * t_s))
-            * (-0.5 * (t_d / t_diff_days).powi(2)).exp();
-        let log_l = (l_diff + l_ni).max(1.0e38).log10();
+            * flexmesa_math::exp(-0.5 * flexmesa_math::pow2(t_d / t_diff_days));
+        let log_l = flexmesa_math::log10((l_diff + l_ni).max(1.0e38));
         if log_l > log_lmax {
             log_lmax = log_l;
             t0_max = t_d;
@@ -565,7 +578,8 @@ pub fn run_stella_from_hyd_abn(
         if t_d < t0_max {
             continue;
         }
-        let (t_s, l_bol) = (t_d.max(0.01) * SECDAY, 10.0_f64.powf(log_l));
+        let (t_s, l_bol) =
+            (t_d.max(0.01) * SECDAY, flexmesa_math::exp10(log_l));
         let (mut r_cm, mut v_1e8, mut xm_ext, mut temp_k, mut den) = (
             vec![0.0; nz],
             vec![0.0; nz],
@@ -580,13 +594,16 @@ pub fn run_stella_from_hyd_abn(
             r_cm[k] = hyd.zones[k].r_cm + v_k * t_s;
             v_1e8[k] = v_k * 1.0e-8;
             xm_ext[k] = (star_mass - abn[k].m_msun).max(1.0e-6);
-            let vol_scale = (hyd.zones[k].r_cm / r_cm[k]).powi(3);
+            let vol_scale = flexmesa_math::pow3(hyd.zones[k].r_cm / r_cm[k]);
             den[k] = (hyd.zones[k].rho * vol_scale).max(1.0e-18);
-            let t_eff = (l_bol / (4.0 * PI * BOLTZ_SIGMA * r_cm[k] * r_cm[k]))
-                .powf(0.25);
-            temp_k[k] = (hyd.zones[k].t_k * vol_scale.powf(1.0 / 3.0))
-                .max(t_eff)
-                .clamp(2500.0, 5.0e4);
+            let t_eff = flexmesa_math::pow(
+                l_bol / (4.0 * PI * BOLTZ_SIGMA * r_cm[k] * r_cm[k]),
+                0.25,
+            );
+            temp_k[k] = (hyd.zones[k].t_k
+                * flexmesa_math::pow(vol_scale, 1.0 / 3.0))
+            .max(t_eff)
+            .clamp(2500.0, 5.0e4);
         }
         if let Some(row) = eval_sobolev_feii_5169_snapshot(
             t_d, t0_max, &r_cm, &v_1e8, &xm_ext, &temp_k, &den, &fe_xa,

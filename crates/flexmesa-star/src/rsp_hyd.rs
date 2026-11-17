@@ -52,7 +52,10 @@ pub fn hyd(
 
     save_start_vars(model, wk);
     for k0 in 0..nz {
-        let l_k = model.aux.rsp.fr_rsp[k0] * 4.0 * PI * model.r[k0].powi(2)
+        let l_k = model.aux.rsp.fr_rsp[k0]
+            * 4.0
+            * PI
+            * flexmesa_math::pow2(model.r[k0])
             + model.aux.rsp.lc_rsp[k0]
             + model.aux.rsp.lt_rsp[k0];
         model.lum[k0] = l_k;
@@ -139,7 +142,7 @@ pub fn get_psurf(
         )?;
         Ok(p_s)
     } else if model.controls.rsp.use_prad_for_psurf {
-        Ok(CRAD * model.t[0].powi(4) / 3.0)
+        Ok(CRAD * flexmesa_math::pow4(model.t[0]) / 3.0)
     } else if model.controls.rsp.psurf >= 0.0 {
         Ok(model.controls.rsp.psurf)
     } else {
@@ -169,14 +172,15 @@ pub fn calculate_energies(
             model.aux.rsp.egas_rsp[k0] + model.aux.rsp.erad_rsp[k0]
         };
         ethe += e_therm * dm;
-        econ += wk.w[k0].powi(2) * dm;
+        econ += flexmesa_math::pow2(wk.w[k0]) * dm;
 
         let v1 = if k0 + 1 < nzn {
             model.v[k0 + 1]
         } else {
             model.v_center
         };
-        let ke_spec = 0.25 * (model.v[k0].powi(2) + v1.powi(2));
+        let ke_spec =
+            0.25 * (flexmesa_math::pow2(model.v[k0]) + flexmesa_math::pow2(v1));
         ekin += ke_spec * dm;
 
         let (rp1, mp1, gp1) = if k0 + 1 == nzn {
@@ -250,10 +254,10 @@ fn get_phot_l_and_r(model: &StarModel) -> (f64, f64) {
         let dtau = model.dm[k0] * model.opacity[k0] / (pi4 * rmid * rmid);
         let taup1 = tau00 + dtau;
         if taup1 >= tau_phot && dtau > 0.0 {
-            let r003 = model.r[k0].powi(3);
-            let rp13 = model.r[k0 + 1].powi(3);
+            let r003 = flexmesa_math::pow3(model.r[k0]);
+            let rp13 = flexmesa_math::pow3(model.r[k0 + 1]);
             let r3 = r003 + (rp13 - r003) * (tau_phot - tau00) / dtau;
-            return (l_surf, r3.cbrt());
+            return (l_surf, flexmesa_math::pow(r3, 1.0 / 3.0));
         }
         tau00 = taup1;
     }
@@ -339,7 +343,7 @@ fn restore_start_vars(model: &mut StarModel, wk: &mut RspHydWork) {
         let k0 = wk.nzn - i;
         let rsp = &mut model.aux.rsp;
         model.t[k0] = rsp.t_start_rsp[k0];
-        model.ln_t[k0] = model.t[k0].ln();
+        model.ln_t[k0] = flexmesa_math::log(model.t[k0]);
         model.r[k0] = rsp.r_start_rsp[k0];
         model.pgas[k0] = rsp.pgas_start[k0];
         model.prad[k0] = rsp.prad_start[k0];
@@ -395,7 +399,7 @@ fn apply_corrections(
         let k0 = wk.nzn - i;
         let (it, iw, ie, il, ir) = RspHydBand::row_indices(i);
         model.t[k0] += ezh * dx[it];
-        model.ln_t[k0] = model.t[k0].ln();
+        model.ln_t[k0] = flexmesa_math::log(model.t[k0]);
         model.aux.rsp.erad_rsp[k0] += ezh * dx[ie];
         if i > dc.ibotom && i < wk.nzn {
             if wk.w[k0] + ezh * dx[iw] <= 0.0 {

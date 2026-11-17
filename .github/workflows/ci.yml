@@ -318,58 +318,14 @@ jobs:
           if-no-files-found: ignore
           path: ${{ runner.temp }}/flexmesa-pr-harness/
 
-  coverage-rust:
-    name: Rust Line Coverage (cargo llvm-cov)
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install Rust toolchain with llvm-tools-preview
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: llvm-tools-preview
-
-      - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-llvm-cov
-
-      - name: Cache Rust cargo target and registry
-        uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: llvm-cov
-
-      - name: Cache FlexMESA data-v1 and MESA test bundles
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/flexmesa
-          key: flexmesa-data-v1-${{ hashFiles('src/flexmesa/data/bundles.toml') }}
-
-      - name: Fetch verified data-v1 physics and MESA test bundles
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          command -v zstd >/dev/null || (sudo apt-get update && sudo apt-get install -y zstd)
-          python3 src/flexmesa/data/fetch.py fetch --include-test-inputs
-          echo "FLEXMESA_DATA_DIR=$HOME/.cache/flexmesa/data" >> "$GITHUB_ENV"
-          echo "MESA_DIR=$HOME/.cache/flexmesa/mesa_test_inputs" >> "$GITHUB_ENV"
-
-      - name: Run cargo llvm-cov across Safe Rust workspace
-        run: |
-          bash scripts/dashboard/run_coverage.sh rust "${{ runner.temp }}/rust_cov.json"
-
-      - name: Upload Rust coverage JSON summary
-        uses: actions/upload-artifact@v4
-        with:
-          name: rust-llvm-cov-summary
-          path: ${{ runner.temp }}/rust_cov.json
-
-  coverage-python:
-    name: Python Line Coverage (pytest --cov)
-    runs-on: ubuntu-latest
-    timeout-minutes: 40
+  strict-determinism:
+    name: Strict Cross-Machine & Thread Determinism (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -392,36 +348,66 @@ jobs:
           path: ~/.cache/flexmesa
           key: flexmesa-data-v1-${{ hashFiles('src/flexmesa/data/bundles.toml') }}
 
-      - name: Cache persistent JAX XLA compilation artifacts
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/flexmesa-jax
-          key: flexmesa-jax-${{ runner.os }}-py312-${{ hashFiles('pyproject.toml', 'src/flexmesa/**/*.py') }}
-          restore-keys: |
-            flexmesa-jax-${{ runner.os }}-py312-
-
       - name: Fetch verified data-v1 physics and MESA test bundles
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          command -v zstd >/dev/null || (sudo apt-get update && sudo apt-get install -y zstd)
-          python3 src/flexmesa/data/fetch.py fetch --include-test-inputs
+          if ! command -v zstd >/dev/null; then
+            if [ "$RUNNER_OS" = "macOS" ]; then
+              brew install zstd
+            else
+              sudo apt-get update && sudo apt-get install -y zstd
+            fi
+          fi
+          python src/flexmesa/data/fetch.py fetch --include-test-inputs
           echo "FLEXMESA_DATA_DIR=$HOME/.cache/flexmesa/data" >> "$GITHUB_ENV"
           echo "MESA_DIR=$HOME/.cache/flexmesa/mesa_test_inputs" >> "$GITHUB_ENV"
-          echo "JAX_COMPILATION_CACHE_DIR=$HOME/.cache/flexmesa-jax" >> "$GITHUB_ENV"
 
-      - name: Install FlexMESA and test dependencies
+      - name: Run crlibm FFI and MESA 26.4.1 reference-vector tests
+        run: |
+          cargo test -p flexmesa-crlibm-sys -p flexmesa-math --release
+
+      - name: Install FlexMESA in release mode
+        env:
+          MATURIN_PEP517_ARGS: "--profile=release"
         run: |
           python -m pip install --upgrade pip
           python -m pip install maturin
-          python -m pip install --no-build-isolation -e ".[test]"
+          python -m pip install --no-build-isolation -e .
 
-      - name: Run Python and JAX suite under pytest --cov
+      - name: Compute strict vector and 1-vs-4-thread evolution SHA-256 digests
         run: |
-          bash scripts/dashboard/run_coverage.sh python "${{ runner.temp }}/python_cov.json"
+          OUT_JSON="${{ runner.temp }}/strict_${{ runner.os }}_${{ runner.arch }}.json"
+          python scripts/check_strict_determinism.py --json-out "$OUT_JSON"
 
-      - name: Upload Python coverage JSON summary
+      - name: Upload strict determinism digest
         uses: actions/upload-artifact@v4
         with:
-          name: python-pytest-cov-summary
-          path: ${{ runner.temp }}/python_cov.json
+          name: strict-determinism-${{ runner.os }}-${{ runner.arch }}
+          if-no-files-found: error
+          path: ${{ runner.temp }}/strict_${{ runner.os }}_${{ runner.arch }}.json
+
+  strict-cross-machine-gate:
+    name: Strict x86_64 vs aarch64 Bit-Identity Gate
+    needs: strict-determinism
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Download strict determinism digests
+        uses: actions/download-artifact@v4
+        with:
+          pattern: strict-determinism-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/strict-digests
+
+      - name: Verify identical strict SHA-256 across x86_64 and aarch64
+        run: |
+          python scripts/check_strict_determinism.py --compare "${{ runner.temp }}"/strict-digests/strict_*.json

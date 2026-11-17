@@ -55,9 +55,9 @@ pub struct BurgersZoneResult {
 #[must_use]
 #[inline]
 pub fn eval_effective_kt(n_e: f64, kt: f64) -> f64 {
-    let kf = (3.0 * PI * PI * n_e.max(1.0e-10)).cbrt();
-    let ef = (HBAR * kf).powi(2) / (2.0 * ME);
-    kt.hypot((2.0 / 3.0) * ef)
+    let kf = flexmesa_math::pow(3.0 * PI * PI * n_e.max(1.0e-10), 1.0 / 3.0);
+    let ef = flexmesa_math::pow2(HBAR * kf) / (2.0 * ME);
+    flexmesa_math::hypot(kt, (2.0 / 3.0) * ef)
 }
 
 /// Evaluates the Coulomb logarithm $\ln\Lambda_{ij}$ and heat-flow collision
@@ -81,20 +81,25 @@ pub fn eval_coulomb_collision_factors(
     let inv_lam_e2 = 4.0 * PI * e2 * n_e.max(1.0e-10) / kt_eff_e;
     let inv_lam_i2 = 4.0 * PI * e2 * sum_n_z2.max(1.0e-10) / kt;
     let lam_d = 1.0 / (inv_lam_e2 + inv_lam_i2).sqrt();
-    let a_ion = (3.0 / (4.0 * PI * n_ions.max(1.0e-10))).cbrt();
+    let a_ion =
+        flexmesa_math::pow(3.0 / (4.0 * PI * n_ions.max(1.0e-10)), 1.0 / 3.0);
     let lam_eff = lam_d.max(a_ion);
 
     let x_ij = (4.0 * lam_eff * kt / (z_prod * e2)).max(1.0e-12);
     match scheme {
         DiffusionScheme::IbenMacDonald => {
-            let ln_lam = (1.0 + 0.18769 * x_ij.powf(1.2)).ln() / 1.23084;
+            let ln_lam = flexmesa_math::log(
+                1.0 + 0.18769 * flexmesa_math::pow(x_ij, 1.2),
+            ) / 1.23084;
             (ln_lam.max(0.05), 0.6, 1.3, 2.0)
         }
         DiffusionScheme::Paquette => {
             let gamma2 = x_ij * x_ij;
-            let psi = (1.0 + gamma2).ln().max(1.0e-10).ln();
-            let ln_lam = 0.5 * (1.0 + 0.75 * gamma2).ln();
-            let w = 0.5 * (1.0 + (0.7 * (psi - 0.5)).tanh());
+            let psi = flexmesa_math::log(
+                flexmesa_math::log(1.0 + gamma2).max(1.0e-10),
+            );
+            let ln_lam = 0.5 * flexmesa_math::log(1.0 + 0.75 * gamma2);
+            let w = 0.5 * (1.0 + flexmesa_math::tanh(0.7 * (psi - 0.5)));
             let z_ij = 0.35 + 0.25 * w;
             let zp_ij = 0.85 + 0.45 * w;
             let zpp_ij = 1.35 + 0.65 * w;
@@ -103,12 +108,12 @@ pub fn eval_coulomb_collision_factors(
         DiffusionScheme::StantonMurillo | DiffusionScheme::CaplanOcp => {
             let g = (z_prod * e2 / (lam_eff * kt)).clamp(1.0e-12, 1.0e4);
             let k11 = if g < 1.0 {
-                let ln_g = g.ln();
+                let ln_g = flexmesa_math::log(g);
                 -0.25 * (1.4660 + ln_g) * (1.0 - 0.0462 * g)
             } else {
-                0.3804 / g.powf(1.75) + 0.1656 / g
+                0.3804 / flexmesa_math::pow(g, 1.75) + 0.1656 / g
             };
-            let w = 1.0 / (1.0 + 0.85 * g.powf(0.65));
+            let w = 1.0 / (1.0 + 0.85 * flexmesa_math::pow(g, 0.65));
             let z_ij = 0.32 + 0.28 * w;
             let zp_ij = 0.80 + 0.50 * w;
             let zpp_ij = 1.30 + 0.70 * w;
@@ -125,11 +130,13 @@ pub fn eval_caplan_ocp_dstar(gamma_i: f64, kappa: f64) -> f64 {
     let gam = gamma_i.max(0.1);
     let kap = kappa.max(0.0);
     let pref = (PI / 3.0).sqrt();
-    let a_k = pref * (1.22 + 0.405 * kap.powf(1.77));
-    let b_k = 0.562 * (-0.185 * kap.powf(1.31)).exp();
-    let c_k = 1.11 + 0.112 * kap.powf(1.32);
-    let term1 = pref * a_k * gam.powf(-2.5);
-    let term2 = (b_k / gam) * (-c_k * gam.cbrt()).exp();
+    let a_k = pref * (1.22 + 0.405 * flexmesa_math::pow(kap, 1.77));
+    let b_k =
+        0.562 * flexmesa_math::exp(-0.185 * flexmesa_math::pow(kap, 1.31));
+    let c_k = 1.11 + 0.112 * flexmesa_math::pow(kap, 1.32);
+    let term1 = pref * a_k * flexmesa_math::pow(gam, -2.5);
+    let term2 = (b_k / gam)
+        * flexmesa_math::exp(-c_k * flexmesa_math::pow(gam, 1.0 / 3.0));
     (term1 + term2).max(1.0e-12)
 }
 
@@ -148,7 +155,8 @@ fn assemble_burgers_resistance(
     let e2 = QE * QE;
     let pref_k = (16.0 / 3.0) * (PI / (2.0 * kt)).sqrt() * e2 * e2 / kt;
 
-    let a_ws = (3.0 / (4.0 * PI * n_ions.max(1.0e-10))).cbrt();
+    let a_ws =
+        flexmesa_math::pow(3.0 / (4.0 * PI * n_ions.max(1.0e-10)), 1.0 / 3.0);
     let kt_eff = eval_effective_kt(n_s[nc], kt);
     let k_tf = (4.0 * PI * e2 * n_s[nc] / kt_eff).sqrt();
     let kappa = a_ws * k_tf;
@@ -168,7 +176,7 @@ fn assemble_burgers_resistance(
                 * mu_ij.sqrt()
                 * n_s[i]
                 * n_s[j]
-                * (z_s[i] * z_s[j]).powi(2)
+                * flexmesa_math::pow2(z_s[i] * z_s[j])
                 * ln_lam;
 
             if scheme == DiffusionScheme::CaplanOcp && i < nc && j < nc {
@@ -304,7 +312,7 @@ pub fn eval_burgers_velocities(
             * m_s[i].sqrt()
             * n_s[i]
             * n_s[i]
-            * z_s[i].powi(4)
+            * flexmesa_math::pow4(z_s[i])
             * 1.5;
         let mut diag_w = 0.0;
         for j in 0..m {
@@ -382,7 +390,7 @@ pub fn eval_radiative_levitation_accel(
     lum_face: f64,
     r_face: f64,
 ) -> f64 {
-    let area = 4.0 * PI * r_face.max(1.0e5).powi(2);
+    let area = 4.0 * PI * flexmesa_math::pow2(r_face.max(1.0e5));
     (kappa_species.max(0.0) * lum_face.max(0.0)) / (area * CLIGHT)
 }
 
@@ -444,12 +452,12 @@ pub fn do_element_diffusion(
     let mut z_typ = vec![1.0; nc];
     for k in 0..nz {
         let t_k = model.t[k].max(1.0e3);
-        let log10_t = t_k.log10();
+        let log10_t = flexmesa_math::log10(t_k);
         let rho_k = model.rho[k].max(1.0e-12);
-        let log10_rho = rho_k.log10();
+        let log10_rho = flexmesa_math::log10(rho_k);
         let abar_k = model.abar[k].max(1.0);
         let zbar_k = model.zbar[k].max(1.0);
-        let free_e = model.lnfree_e[k].exp().max(0.1);
+        let free_e = flexmesa_math::exp(model.lnfree_e[k]).max(0.1);
 
         z_typ.fill(1.0);
         for (j, &cid) in model.chem_id.iter().enumerate() {
@@ -492,7 +500,7 @@ pub fn do_element_diffusion(
         let mut dm_trans = vec![0.0; nc];
 
         for k in 1..nz {
-            let area = 4.0 * PI * model.r[k].powi(2);
+            let area = 4.0 * PI * flexmesa_math::pow2(model.r[k]);
             let rho_f = 0.5 * (model.rho[k - 1] + model.rho[k]);
             let dr = (model.rmid[k - 1] - model.rmid[k]).abs().max(1.0e3);
             let dm_up = model.dm[k - 1].max(1.0e10);

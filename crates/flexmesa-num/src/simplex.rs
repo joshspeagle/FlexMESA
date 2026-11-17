@@ -264,7 +264,7 @@ where
                 if (config.centroid_weight_power - 1.0).abs() <= 1e-15 {
                     w
                 } else {
-                    w.powf(config.centroid_weight_power)
+                    flexmesa_math::pow(w, config.centroid_weight_power)
                 }
             };
             for i in 0..n {

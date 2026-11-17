@@ -7,18 +7,19 @@
 //! `binary/private/binary_tides.f90:120-456`, and
 //! `binary/private/binary_edot.f90:33-182`.
 
-use flexmesa_const::{LSUN, MSUN, MixingType, PI, RSUN};
+use flexmesa_const::{MixingType, LSUN, MSUN, PI, RSUN};
 use flexmesa_math::{exp, pow};
 use flexmesa_star::{
-    StarError, StarModel, apply_uniform_rotation, update_rotation_distortion_factors,
+    apply_uniform_rotation, update_rotation_distortion_factors, StarError,
+    StarModel,
 };
 
 use crate::inlist::BinaryInlistControls;
 use crate::jdot_tides::{
     check_jdot_mb_conditions, eval_edot_gr, eval_edot_tidal_hut, eval_jdot_gr,
-    eval_jdot_ls_with_winds, eval_jdot_mb_with_scale_mass, eval_jdot_missing_wind,
-    eval_jdot_ml, eval_k_div_t_convective, eval_k_div_t_radiative, eval_tsync,
-    hut_f2, hut_f5,
+    eval_jdot_ls_with_winds, eval_jdot_mb_with_scale_mass,
+    eval_jdot_missing_wind, eval_jdot_ml, eval_k_div_t_convective,
+    eval_k_div_t_radiative, eval_tsync, hut_f2, hut_f5,
 };
 use crate::mdot::eval_edot_enhancement_isotropic;
 use crate::orbit::eval_rlobe;
@@ -149,9 +150,8 @@ pub fn restore_smooth_omega_after_remesh(
         } else if qm <= q_mid_old[n_old - 1] {
             om_old[n_old - 1]
         } else {
-            let idx = q_mid_old
-                .partition_point(|&qv| qv > qm)
-                .clamp(1, n_old - 1);
+            let idx =
+                q_mid_old.partition_point(|&qv| qv > qm).clamp(1, n_old - 1);
             let (q_hi, q_lo) = (q_mid_old[idx - 1], q_mid_old[idx]);
             let t = ((q_hi - qm) / (q_hi - q_lo).max(1.0e-30)).clamp(0.0, 1.0);
             om_old[idx - 1] + t * (om_old[idx] - om_old[idx - 1])
@@ -162,7 +162,11 @@ pub fn restore_smooth_omega_after_remesh(
 
 /// Restores exact total stellar spin angular momentum $S_{\mathrm{target}} = \max(S_{\mathrm{pre}} + \Delta S_{\dot{M}}, 0)$
 /// after Henyey radius changes and remeshing (`set_hydro_vars` updates `i_rot` at old `omega`).
-pub fn conserve_spin_after_henyey(star: &mut StarModel, s_pre: f64, delta_s_mdot: f64) {
+pub fn conserve_spin_after_henyey(
+    star: &mut StarModel,
+    s_pre: f64,
+    delta_s_mdot: f64,
+) {
     if !star.controls.rotation_flag || star.nz == 0 {
         return;
     }
@@ -233,11 +237,21 @@ pub fn apply_tidal_spin_sync(
         period / f_tid
     } else {
         let k_div_t = eval_star_k_div_t(
-            star, sync_type, tidal_reduction, m_companion, separation, period,
+            star,
+            sync_type,
+            tidal_reduction,
+            m_companion,
+            separation,
+            period,
         );
         let r_gyr_sq = eval_star_r_gyr_sq(star);
         eval_tsync(
-            k_div_t, m_companion / star.mstar.max(1.0), r_gyr_sq, star.r[0], separation, f_tid,
+            k_div_t,
+            m_companion / star.mstar.max(1.0),
+            r_gyr_sq,
+            star.r[0],
+            separation,
+            f_tid,
         )
     };
     if !t_sync.is_finite() || t_sync <= 0.0 {
@@ -251,7 +265,8 @@ pub fn apply_tidal_spin_sync(
         return;
     }
     let a1 = hut_f2(eccentricity);
-    let a2 = pow((1.0 - eccentricity * eccentricity).max(1.0e-12), 1.5) * hut_f5(eccentricity);
+    let a2 = pow((1.0 - eccentricity * eccentricity).max(1.0e-12), 1.5)
+        * hut_f5(eccentricity);
     let relax_frac = 1.0 - exp(-(a2 * dt / t_sync).min(100.0));
     let sync_ratio = a1 / a2.max(1.0e-12);
     for k in 0..star.nz {
@@ -271,7 +286,12 @@ fn interp_val_to_face(vals: &[f64], dq: &[f64], k: usize) -> f64 {
     (dq_00 * vals[k - 1] + dq_m1 * vals[k]) / sum
 }
 
-fn apply_tdyn_div_tkh_sync(star: &mut StarModel, omega_orb: f64, t_sync: f64, dt: f64) {
+fn apply_tdyn_div_tkh_sync(
+    star: &mut StarModel,
+    omega_orb: f64,
+    t_sync: f64,
+    dt: f64,
+) {
     let nz = star.nz;
     let mut tdyn_div_tkh = vec![0.0_f64; nz];
     let mut j_sync = vec![0.0_f64; nz];
@@ -281,7 +301,8 @@ fn apply_tdyn_div_tkh_sync(star: &mut StarModel, omega_orb: f64, t_sync: f64, dt
         let cv_f = interp_val_to_face(&star.cv, &star.dq, k);
         let t_f = interp_val_to_face(&star.t, &star.dq, k);
         let cs_f = interp_val_to_face(&star.csound, &star.dq, k).max(1.0e-30);
-        let tkh = 4.0 * PI * star.r[k] * star.r[k] * rho_f * cv_f * t_f / star.lum[k].abs().max(1.0e-30);
+        let tkh = 4.0 * PI * star.r[k] * star.r[k] * rho_f * cv_f * t_f
+            / star.lum[k].abs().max(1.0e-30);
         let tdyn = 1.0 / cs_f;
         tdyn_div_tkh[k] = if tkh > 0.0 { tdyn / tkh } else { 0.0 };
         j_sync[k] = omega_orb * star.aux.i_rot[k];
@@ -301,7 +322,8 @@ fn apply_tdyn_div_tkh_sync(star: &mut StarModel, omega_orb: f64, t_sync: f64, dt
             if layers_in_sync[k] {
                 sum_j_sync += dm_k * dj.abs();
             } else {
-                sum_j_non_sync += dm_k * dj.abs() * tdyn_div_tkh[k] * tdyn_div_tkh[k];
+                sum_j_non_sync +=
+                    dm_k * dj.abs() * tdyn_div_tkh[k] * tdyn_div_tkh[k];
             }
         }
         if sum_j_non_sync <= 0.0 || delta_total_j <= sum_j_sync {
@@ -319,7 +341,9 @@ fn apply_tdyn_div_tkh_sync(star: &mut StarModel, omega_orb: f64, t_sync: f64, dt
             }
             let dj_full = star.j_rot[k] - j_sync[k];
             let scaled = dj_full * tdyn_div_tkh[k] * tdyn_div_tkh[k] * ff;
-            if (dj_full >= 0.0 && scaled >= dj_full) || (dj_full < 0.0 && scaled <= dj_full) {
+            if (dj_full >= 0.0 && scaled >= dj_full)
+                || (dj_full < 0.0 && scaled <= dj_full)
+            {
                 delta_j[k] = dj_full;
                 layers_in_sync[k] = true;
             } else {
@@ -349,7 +373,8 @@ fn eval_star_k_div_t(
     if prescription.eq_ignore_ascii_case("Hut_rad") {
         eval_k_div_t_radiative(star.mstar, m_companion, star.r[0], separation)
     } else if prescription.eq_ignore_ascii_case("Hut_conv") {
-        let (m_env_msun, r_env_rsun) = eval_convective_envelope_mass_and_size(star);
+        let (m_env_msun, r_env_rsun) =
+            eval_convective_envelope_mass_and_size(star);
         if m_env_msun > 0.0 && r_env_rsun > 0.0 {
             eval_k_div_t_convective(
                 star.mstar / MSUN,
@@ -404,24 +429,38 @@ pub fn eval_gated_jdot(
     let d_slot = (donor_i.saturating_sub(1)).min(1);
     let a_slot = 1 - d_slot;
     let jdot_mb = if ctrl.do_jdot_mb {
-        let (use_d, qconv_d) = check_jdot_mb_conditions(donor, ctrl, using_jdot_mb[d_slot]);
+        let (use_d, qconv_d) =
+            check_jdot_mb_conditions(donor, ctrl, using_jdot_mb[d_slot]);
         using_jdot_mb[d_slot] = use_d;
         let mut mb = if use_d {
             eval_jdot_mb_with_scale_mass(
-                m_donor, donor.r[0], rl_donor, period, ctrl.magnetic_braking_gamma,
-                qconv_d, ctrl.jdot_mb_scale_for_low_qconv_env, ctrl.jdot_mb_mass_frac_for_scale,
+                m_donor,
+                donor.r[0],
+                rl_donor,
+                period,
+                ctrl.magnetic_braking_gamma,
+                qconv_d,
+                ctrl.jdot_mb_scale_for_low_qconv_env,
+                ctrl.jdot_mb_mass_frac_for_scale,
             )
         } else {
             0.0
         };
         if ctrl.include_accretor_mb {
             if let Some(acc) = accretor_star {
-                let (use_a, qconv_a) = check_jdot_mb_conditions(acc, ctrl, using_jdot_mb[a_slot]);
+                let (use_a, qconv_a) =
+                    check_jdot_mb_conditions(acc, ctrl, using_jdot_mb[a_slot]);
                 using_jdot_mb[a_slot] = use_a;
                 if use_a {
                     mb += eval_jdot_mb_with_scale_mass(
-                        m_accretor, acc.r[0], rl_accretor, period, ctrl.magnetic_braking_gamma,
-                        qconv_a, ctrl.jdot_mb_scale_for_low_qconv_env, ctrl.jdot_mb_mass_frac_for_scale,
+                        m_accretor,
+                        acc.r[0],
+                        rl_accretor,
+                        period,
+                        ctrl.magnetic_braking_gamma,
+                        qconv_a,
+                        ctrl.jdot_mb_scale_for_low_qconv_env,
+                        ctrl.jdot_mb_mass_frac_for_scale,
                     );
                 }
             }
@@ -438,40 +477,77 @@ pub fn eval_gated_jdot(
     };
     let jdot_ml = if ctrl.do_jdot_ml {
         eval_jdot_ml(
-            m_donor, m_accretor, separation, period, eccentricity,
-            mdot_sys_tr_donor, mdot_sys_wind_donor, mdot_sys_tr_accretor,
-            mdot_sys_wind_accretor, mdot_sys_cct, ctrl.mass_transfer_gamma,
+            m_donor,
+            m_accretor,
+            separation,
+            period,
+            eccentricity,
+            mdot_sys_tr_donor,
+            mdot_sys_wind_donor,
+            mdot_sys_tr_accretor,
+            mdot_sys_wind_accretor,
+            mdot_sys_cct,
+            ctrl.mass_transfer_gamma,
         )
     } else {
         0.0
     };
-    let fixed_xfer = (1.0 - ctrl.mass_transfer_alpha - ctrl.mass_transfer_beta - ctrl.mass_transfer_delta)
+    let fixed_xfer = (1.0
+        - ctrl.mass_transfer_alpha
+        - ctrl.mass_transfer_beta
+        - ctrl.mass_transfer_delta)
         .clamp(0.0, 1.0);
     let jdot_missing_wind = if ctrl.do_jdot_missing_wind {
         accretor_star.map_or(0.0, |acc| {
             eval_jdot_missing_wind(
-                false, acc.mstar_dot, mtransfer_rate, fixed_xfer,
-                mdot_sys_wind_accretor, j_surf_pre_accretor,
+                false,
+                acc.mstar_dot,
+                mtransfer_rate,
+                fixed_xfer,
+                mdot_sys_wind_accretor,
+                j_surf_pre_accretor,
             )
         })
     } else {
         0.0
     };
     let jdot_ls = if ctrl.do_jdot_ls {
-        let mw_d = if donor.mstar_dot < 0.0 { mdot_sys_wind_donor } else { 0.0 };
-        let mw_a = if accretor_star.is_some() { mdot_sys_wind_accretor.min(0.0) } else { 0.0 };
+        let mw_d = if donor.mstar_dot < 0.0 {
+            mdot_sys_wind_donor
+        } else {
+            0.0
+        };
+        let mw_a = if accretor_star.is_some() {
+            mdot_sys_wind_accretor.min(0.0)
+        } else {
+            0.0
+        };
         eval_jdot_ls_with_winds(
-            s_pre_donor, s_post_donor, mw_d, j_surf_pre_donor,
-            s_pre_accretor, s_post_accretor, mw_a, j_surf_pre_accretor, dt,
+            s_pre_donor,
+            s_post_donor,
+            mw_d,
+            j_surf_pre_donor,
+            s_pre_accretor,
+            s_post_accretor,
+            mw_a,
+            j_surf_pre_accretor,
+            dt,
         )
     } else {
         0.0
     };
-    let jdot_total = (jdot_mb + jdot_gr + jdot_ml + jdot_missing_wind + jdot_extra)
-        * ctrl.jdot_multiplier
-        + jdot_ls;
+    let jdot_total =
+        (jdot_mb + jdot_gr + jdot_ml + jdot_missing_wind + jdot_extra)
+            * ctrl.jdot_multiplier
+            + jdot_ls;
     JdotBreakdown {
-        jdot_mb, jdot_gr, jdot_ml, jdot_missing_wind, jdot_extra, jdot_ls, jdot_total,
+        jdot_mb,
+        jdot_gr,
+        jdot_ml,
+        jdot_missing_wind,
+        jdot_extra,
+        jdot_ls,
+        jdot_total,
     }
 }
 
@@ -509,7 +585,14 @@ pub fn eval_coupled_edot(
     eccentricity: f64,
 ) -> f64 {
     eval_coupled_edot_breakdown(
-        ctrl, donor, accretor_star, donor_i, m_donor, m_accretor, separation, period,
+        ctrl,
+        donor,
+        accretor_star,
+        donor_i,
+        m_donor,
+        m_accretor,
+        separation,
+        period,
         eccentricity,
     )
     .edot_total
@@ -545,20 +628,58 @@ pub fn eval_coupled_edot_breakdown(
     };
     let edot_tidal = if ctrl.do_tidal_circ {
         let (circ_d, ftid_d, circ_a, ftid_a) = if donor_i == 1 {
-            (ctrl.circ_type_1.as_str(), ctrl.ftid_1, ctrl.circ_type_2.as_str(), ctrl.ftid_2)
+            (
+                ctrl.circ_type_1.as_str(),
+                ctrl.ftid_1,
+                ctrl.circ_type_2.as_str(),
+                ctrl.ftid_2,
+            )
         } else {
-            (ctrl.circ_type_2.as_str(), ctrl.ftid_2, ctrl.circ_type_1.as_str(), ctrl.ftid_1)
+            (
+                ctrl.circ_type_2.as_str(),
+                ctrl.ftid_2,
+                ctrl.circ_type_1.as_str(),
+                ctrl.ftid_1,
+            )
         };
-        let kt_d = eval_star_k_div_t(donor, circ_d, ctrl.tidal_reduction, m_accretor, separation, period);
+        let kt_d = eval_star_k_div_t(
+            donor,
+            circ_d,
+            ctrl.tidal_reduction,
+            m_accretor,
+            separation,
+            period,
+        );
         let mut et = eval_edot_tidal_hut(
-            kt_d, m_donor, m_accretor, donor.r[0], separation, eccentricity,
-            donor.omega.first().copied().unwrap_or(0.0), period, ftid_d,
+            kt_d,
+            m_donor,
+            m_accretor,
+            donor.r[0],
+            separation,
+            eccentricity,
+            donor.omega.first().copied().unwrap_or(0.0),
+            period,
+            ftid_d,
         );
         if let Some(acc) = accretor_star {
-            let kt_a = eval_star_k_div_t(acc, circ_a, ctrl.tidal_reduction, m_donor, separation, period);
+            let kt_a = eval_star_k_div_t(
+                acc,
+                circ_a,
+                ctrl.tidal_reduction,
+                m_donor,
+                separation,
+                period,
+            );
             et += eval_edot_tidal_hut(
-                kt_a, m_accretor, m_donor, acc.r[0], separation, eccentricity,
-                acc.omega.first().copied().unwrap_or(0.0), period, ftid_a,
+                kt_a,
+                m_accretor,
+                m_donor,
+                acc.r[0],
+                separation,
+                eccentricity,
+                acc.omega.first().copied().unwrap_or(0.0),
+                period,
+                ftid_a,
             );
         }
         if ctrl.max_abs_edot_tidal > 0.0 && et < -ctrl.max_abs_edot_tidal {
@@ -573,11 +694,22 @@ pub fn eval_coupled_edot_breakdown(
         let rl_d = eval_rlobe(m_donor, m_accretor, separation);
         let is_kolb = ctrl.mdot_scheme.eq_ignore_ascii_case("Kolb");
         let mut enh = eval_edot_enhancement_isotropic(
-            m_donor, m_accretor, donor.r[0], rl_d, eccentricity,
-            donor.rho[0].max(1.0e-30), donor.peos[0].max(1.0),
-            donor.t[0].max(10.0), donor.mu[0].max(0.5),
-            &donor.r, &donor.peos, &donor.t, &donor.mu, &donor.gamma1,
-            is_kolb, ctrl.anomaly_steps,
+            m_donor,
+            m_accretor,
+            donor.r[0],
+            rl_d,
+            eccentricity,
+            donor.rho[0].max(1.0e-30),
+            donor.peos[0].max(1.0),
+            donor.t[0].max(10.0),
+            donor.mu[0].max(0.5),
+            &donor.r,
+            &donor.peos,
+            &donor.t,
+            &donor.mu,
+            &donor.gamma1,
+            is_kolb,
+            ctrl.anomaly_steps,
         );
         if ctrl.max_abs_edot_enhance > 0.0 && enh > ctrl.max_abs_edot_enhance {
             enh = ctrl.max_abs_edot_enhance;

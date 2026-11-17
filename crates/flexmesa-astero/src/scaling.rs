@@ -204,7 +204,7 @@ pub fn eval_delta_pg_bildsten2012(
     if nz < 2 || mode_freq_uhz <= 0.0 {
         return 0.0;
     }
-    let omega2 = (2.0 * PI * mode_freq_uhz * 1.0e-6).powi(2);
+    let omega2 = flexmesa_math::pow2(2.0 * PI * mode_freq_uhz * 1.0e-6);
     let mut entered_g_cavity = false;
     let mut integral_g = 0.0_f64;
     let mut integral_decay = 0.0_f64;

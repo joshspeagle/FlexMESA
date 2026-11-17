@@ -239,10 +239,11 @@ impl EosDtXzTable {
 
         for iq in 0..num_log_qs {
             for label in ["logQ label", "logQ value", "column names"] {
-                let _ = lines.next().ok_or_else(|| EosError::InvalidState {
-                    context: "EosDtXzTable::from_ascii_reader",
-                    detail: format!("missing {label} at iq={iq}"),
-                })??;
+                let _ =
+                    lines.next().ok_or_else(|| EosError::InvalidState {
+                        context: "EosDtXzTable::from_ascii_reader",
+                        detail: format!("missing {label} at iq={iq}"),
+                    })??;
             }
 
             for jt in 0..num_log_ts {

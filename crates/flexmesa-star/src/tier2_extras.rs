@@ -84,7 +84,7 @@ pub fn eval_planetary_irradiation_heating(
         sigma_k += model.dm[k] / (FOUR_PI * r_k * r_k);
         let ratio = sigma_k / sigma_star;
         let eps_k = if ratio < 700.0 {
-            prefac * (-ratio).exp()
+            prefac * flexmesa_math::exp(-ratio)
         } else {
             0.0
         };
@@ -113,7 +113,8 @@ pub fn apply_planetary_core(
     let rho_core = core_avg_rho.max(1.0e-10);
     model.m_center = m_core;
     model.xmstar = (model.mstar - m_core).max(1.0);
-    model.r_center = ((3.0 * m_core) / (FOUR_PI * rho_core)).cbrt();
+    model.r_center =
+        flexmesa_math::pow((3.0 * m_core) / (FOUR_PI * rho_core), 1.0 / 3.0);
     model.l_center = (m_core * core_avg_eps.max(0.0)).max(1.0);
     model.set_m_and_dm();
     model.reconstruct_ln_r_from_lnd_and_dm();
@@ -150,20 +151,21 @@ pub fn eval_wd_phase_separation(
         let rho_k = if model.lnd[k] == 0.0 {
             model.rho[k]
         } else {
-            model.lnd[k].exp()
+            flexmesa_math::exp(model.lnd[k])
         }
         .max(1.0e-10);
         let t_k = if model.ln_t[k] == 0.0 {
             model.t[k]
         } else {
-            model.ln_t[k].exp()
+            flexmesa_math::exp(model.ln_t[k])
         }
         .max(1.0e3);
         let ye_k = model.ye[k].max(0.4);
         let abar_k = model.abar[k].max(12.0);
-        let z53_k = model.z53bar[k].max(model.zbar[k].max(6.0).powf(5.0 / 3.0));
+        let z53_k = model.z53bar[k]
+            .max(flexmesa_math::pow(model.zbar[k].max(6.0), 5.0 / 3.0));
         let n_e = (rho_k * ye_k / AMU).max(1.0);
-        let a_e = (3.0 / (FOUR_PI * n_e)).cbrt();
+        let a_e = flexmesa_math::pow(3.0 / (FOUR_PI * n_e), 1.0 / 3.0);
         let gamma_k = z53_k * E_CHARGE_SQ_CGS / (a_e * KERG * t_k).max(1.0e-30);
         model.gam[k] = gamma_k;
 
@@ -347,13 +349,17 @@ pub fn eval_conductive_flame_state(model: &StarModel) -> (f64, f64) {
         }
     }
 
-    let t_burn = model.t[k_burn].max(model.ln_t[k_burn].exp()).max(1.0e8);
-    let rho_burn = model.rho[k_burn].max(model.lnd[k_burn].exp()).max(1.0e4);
+    let t_burn = model.t[k_burn]
+        .max(flexmesa_math::exp(model.ln_t[k_burn]))
+        .max(1.0e8);
+    let rho_burn = model.rho[k_burn]
+        .max(flexmesa_math::exp(model.lnd[k_burn]))
+        .max(1.0e4);
     let kap_cond = model.opacity[k_burn].max(1.0e-3);
     let cp_burn = model.cp[k_burn].max(1.0e7);
     let eps_burn = model.eps_nuc[k_burn].max(1.0e14);
 
-    let numer = 4.0 * CRAD * CLIGHT * t_burn.powi(4) * eps_burn;
+    let numer = 4.0 * CRAD * CLIGHT * flexmesa_math::pow4(t_burn) * eps_burn;
     let denom = 3.0 * kap_cond * rho_burn * rho_burn * cp_burn * t_burn;
     let v_flame = (numer / denom.max(1.0e-30)).max(0.0).sqrt();
     let q_flame = model.q[k_burn].clamp(1.0e-6, 1.0);

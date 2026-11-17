@@ -2,6 +2,9 @@
 
 This historical archive preserves the initial pre-audit scoping census, dependency DAG analysis, stage-by-stage technical specifications, and pre-audit benchmark reports written before `FlexMESA` re-baselined its single active reference to **MESA release `26.4.1`** (`DECISIONS #22`, [#141](https://github.com/joshspeagle/FlexMESA/issues/141)).
 
+!!! warning "Pre-Audit Historical Archive (`#140`, `#142`, `#145`, `#165`, `#166`)"
+    The `Wave 0` through `Wave 5` documents linked below are historical pre-audit records written against MESA `0b2e6bb`. Statements inside them regarding verification, parity, `0 ULP` end-to-end checks, or unconditional `#![forbid(unsafe_code)]` across every crate are superseded by the post-audit MESA `26.4.1` governance in [`notes/SCOPE.md`](https://github.com/joshspeagle/FlexMESA/blob/main/notes/SCOPE.md) and [`notes/DECISIONS.md`](https://github.com/joshspeagle/FlexMESA/blob/main/notes/DECISIONS.md) (including `flexmesa-crlibm-sys` as the sole `unsafe` FFI wrapper crate under `#165`, and canonical Rust vs. derived JAX roles under `#166`).
+
 For user-facing domain physics, governing equations, and usage examples, see the **[Background & Physics](../concepts/architecture.md)** section. For the unified synthesis of four-way numerical parity and runtime performance comparisons against compiled upstream Fortran MESA static archives (`lib*.a`), see the **[Verification & Benchmarks Overview](../benchmarks/overview.md)**, **[Kernel Performance Scorecards](../benchmarks/kernel-scorecards.md)**, and **[Tolerance & Discrepancy Ledger](../benchmarks/tolerance-and-discrepancy-ledger.md)**.
 
 ---

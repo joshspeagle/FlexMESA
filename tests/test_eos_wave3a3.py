@@ -172,8 +172,10 @@ def test_eval_skye_eos_and_eos_dt_get_rust_jax_and_autodiff() -> None:
     )
     assert _rel_diff(np.asarray(sk_r.res), np.asarray(sk_j.res)) < 1.0e-11
     assert _rel_diff(np.asarray(sk_r.d_dlnd), np.asarray(sk_j.d_dlnd)) < 1.0e-8
+    # JAX validated against Rust strict at tolerance 3.0e-6 (biquintic F_TTT
+    # cancels ~10^16 down to ~10^6 in Cv/Cp d_dln_t at T = 10^7 K).
     assert (
-        _rel_diff(np.asarray(sk_r.d_dln_t), np.asarray(sk_j.d_dln_t)) < 2.0e-6
+        _rel_diff(np.asarray(sk_r.d_dln_t), np.asarray(sk_j.d_dln_t)) < 3.0e-6
     )
     assert float(sk_r.res[eos.I_FRAC_SKYE]) == 1.0
 

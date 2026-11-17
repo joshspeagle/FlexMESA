@@ -9,7 +9,7 @@
 
 use flexmesa_const::{CLIGHT, CRAD, MSUN, PI, SECYER};
 use flexmesa_star::{
-    EvolveStepReport, StarError, StarModel, do_set_mdot, star_evolve_step,
+    do_set_mdot, star_evolve_step, EvolveStepReport, StarError, StarModel,
 };
 
 use crate::edd_wind::{
@@ -195,10 +195,18 @@ pub(crate) fn surface_h1_and_he4(star: &StarModel) -> (f64, f64) {
     let mut y = star.yhe_mass.first().copied().unwrap_or(0.28);
     if star.nz > 0 && star.species > 0 {
         let xa0 = star.cell_xa(0);
-        if let Some(j) = star.iso_names.iter().position(|n| n.eq_ignore_ascii_case("h1")) {
+        if let Some(j) = star
+            .iso_names
+            .iter()
+            .position(|n| n.eq_ignore_ascii_case("h1"))
+        {
             x = xa0[j];
         }
-        if let Some(j) = star.iso_names.iter().position(|n| n.eq_ignore_ascii_case("he4")) {
+        if let Some(j) = star
+            .iso_names
+            .iter()
+            .position(|n| n.eq_ignore_ascii_case("he4"))
+        {
             y = xa0[j];
         }
     }
@@ -250,15 +258,20 @@ pub fn eval_star_intrinsic_wind_cgs_with_extras(
             star.teff
         } else {
             let r0 = star.r.first().copied().unwrap_or(1.0).max(1.0);
-            (l1 / (PI * r0 * r0 * CRAD * CLIGHT)).powf(0.25)
+            flexmesa_math::pow(l1 / (PI * r0 * r0 * CRAD * CLIGHT), 0.25)
         }
         .max(100.0);
-        let r1 = (l1 / (PI * CRAD * CLIGHT * t1.powi(4))).sqrt().max(1.0);
+        let r1 = (l1 / (PI * CRAD * CLIGHT * flexmesa_math::pow4(t1)))
+            .sqrt()
+            .max(1.0);
         let mw = star.controls.mix_wind.clone();
         if mw.max_wind > 0.0 {
             wind_mdot = wind_mdot.min(mw.max_wind * (MSUN / SECYER));
         }
-        if star.controls.rotation_flag && mw.mdot_omega_power > 0.0 && wind_mdot > 0.0 {
+        if star.controls.rotation_flag
+            && mw.mdot_omega_power > 0.0
+            && wind_mdot > 0.0
+        {
             let m1 = star.mstar;
             let cgrav = star
                 .cgrav
@@ -269,20 +282,28 @@ pub fn eval_star_intrinsic_wind_cgs_with_extras(
             let w_lim = (mw.rotational_mdot_kh_fac.max(0.0) * m1 / t_kh)
                 .min(wind_mdot * mw.rotational_mdot_boost_fac.max(1.0));
             let w_div_wc = flexmesa_star::eval_surf_avg_w_div_w_crit(star);
-            let mut enh = (1.0 - w_div_wc).max(1.0e-22).powf(-mw.mdot_omega_power);
+            let mut enh = flexmesa_math::pow(
+                (1.0 - w_div_wc).max(1.0e-22),
+                -mw.mdot_omega_power,
+            );
             if mw.max_rotational_mdot_boost > 0.0 {
                 enh = enh.min(mw.max_rotational_mdot_boost);
             }
             wind_mdot = (wind_mdot * enh).min(w_lim);
             let prev_w = -star.aux.step_hist.mstar_dot_old;
             if prev_w > 0.0 && mw.max_mdot_jump_for_rotation > 0.0 {
-                wind_mdot = wind_mdot.min(mw.max_mdot_jump_for_rotation * prev_w);
+                wind_mdot =
+                    wind_mdot.min(mw.max_mdot_jump_for_rotation * prev_w);
             }
             if mw.max_wind > 0.0 {
                 wind_mdot = wind_mdot.min(mw.max_wind * (MSUN / SECYER));
             }
         }
-        if wind_mdot > 0.0 { -wind_mdot } else { 0.0 }
+        if wind_mdot > 0.0 {
+            -wind_mdot
+        } else {
+            0.0
+        }
     } else {
         let saved_mc = star.controls.mass_change;
         let saved_other = star.controls.use_other_adjust_mdot;
@@ -354,23 +375,55 @@ pub fn prepare_coupled_mdots_with_extras(
     ignore_rlof: bool,
     extras: &mut dyn BinaryExtras,
 ) -> Result<CoupledMdotAccounting, StarError> {
-    let mtransfer_rate = if ignore_rlof { 0.0 } else { trial_mtransfer_rate.min(0.0) };
-    let (enh_d, b_d, do_wt_d, abh_d, bbh_d, maxf_d, enh_a, b_a, do_wt_a, abh_a, bbh_a, maxf_a) =
-        if donor_i == 1 {
-            (
-                ctrl.do_enhance_wind_1, ctrl.tout_b_wind_1, ctrl.do_wind_mass_transfer_1,
-                ctrl.wind_bh_alpha_1, ctrl.wind_bh_beta_1, ctrl.max_wind_transfer_fraction_1,
-                ctrl.do_enhance_wind_2, ctrl.tout_b_wind_2, ctrl.do_wind_mass_transfer_2,
-                ctrl.wind_bh_alpha_2, ctrl.wind_bh_beta_2, ctrl.max_wind_transfer_fraction_2,
-            )
-        } else {
-            (
-                ctrl.do_enhance_wind_2, ctrl.tout_b_wind_2, ctrl.do_wind_mass_transfer_2,
-                ctrl.wind_bh_alpha_2, ctrl.wind_bh_beta_2, ctrl.max_wind_transfer_fraction_2,
-                ctrl.do_enhance_wind_1, ctrl.tout_b_wind_1, ctrl.do_wind_mass_transfer_1,
-                ctrl.wind_bh_alpha_1, ctrl.wind_bh_beta_1, ctrl.max_wind_transfer_fraction_1,
-            )
-        };
+    let mtransfer_rate = if ignore_rlof {
+        0.0
+    } else {
+        trial_mtransfer_rate.min(0.0)
+    };
+    let (
+        enh_d,
+        b_d,
+        do_wt_d,
+        abh_d,
+        bbh_d,
+        maxf_d,
+        enh_a,
+        b_a,
+        do_wt_a,
+        abh_a,
+        bbh_a,
+        maxf_a,
+    ) = if donor_i == 1 {
+        (
+            ctrl.do_enhance_wind_1,
+            ctrl.tout_b_wind_1,
+            ctrl.do_wind_mass_transfer_1,
+            ctrl.wind_bh_alpha_1,
+            ctrl.wind_bh_beta_1,
+            ctrl.max_wind_transfer_fraction_1,
+            ctrl.do_enhance_wind_2,
+            ctrl.tout_b_wind_2,
+            ctrl.do_wind_mass_transfer_2,
+            ctrl.wind_bh_alpha_2,
+            ctrl.wind_bh_beta_2,
+            ctrl.max_wind_transfer_fraction_2,
+        )
+    } else {
+        (
+            ctrl.do_enhance_wind_2,
+            ctrl.tout_b_wind_2,
+            ctrl.do_wind_mass_transfer_2,
+            ctrl.wind_bh_alpha_2,
+            ctrl.wind_bh_beta_2,
+            ctrl.max_wind_transfer_fraction_2,
+            ctrl.do_enhance_wind_1,
+            ctrl.tout_b_wind_1,
+            ctrl.do_wind_mass_transfer_1,
+            ctrl.wind_bh_alpha_1,
+            ctrl.wind_bh_beta_1,
+            ctrl.max_wind_transfer_fraction_1,
+        )
+    };
 
     let m_d = donor.mstar;
     let m_a = point_mass_state
@@ -380,24 +433,52 @@ pub fn prepare_coupled_mdots_with_extras(
 
     let acc_i = 3 - donor_i;
     let w_d = eval_star_intrinsic_wind_cgs_with_extras(
-        donor, donor_i, rl[0], enh_d, b_d, ignore_rlof, extras,
+        donor,
+        donor_i,
+        rl[0],
+        enh_d,
+        b_d,
+        ignore_rlof,
+        extras,
     )?;
     let w_a = match accretor_star.as_deref_mut() {
         Some(acc) => eval_star_intrinsic_wind_cgs_with_extras(
-            acc, acc_i, rl[1], enh_a, b_a, ignore_rlof, extras,
+            acc,
+            acc_i,
+            rl[1],
+            enh_a,
+            b_a,
+            ignore_rlof,
+            extras,
         )?,
         None => 0.0,
     };
 
     let f_wt_d = if do_wt_d {
-        eval_bondi_hoyle_wind_fraction(m_d, m_a, donor.r[0], separation, eccentricity, abh_d, bbh_d, maxf_d)
+        eval_bondi_hoyle_wind_fraction(
+            m_d,
+            m_a,
+            donor.r[0],
+            separation,
+            eccentricity,
+            abh_d,
+            bbh_d,
+            maxf_d,
+        )
     } else {
         0.0
     };
     let f_wt_a = match accretor_star.as_deref() {
-        Some(acc) if do_wt_a => {
-            eval_bondi_hoyle_wind_fraction(m_a, m_d, acc.r[0], separation, eccentricity, abh_a, bbh_a, maxf_a)
-        }
+        Some(acc) if do_wt_a => eval_bondi_hoyle_wind_fraction(
+            m_a,
+            m_d,
+            acc.r[0],
+            separation,
+            eccentricity,
+            abh_a,
+            bbh_a,
+            maxf_a,
+        ),
         _ => 0.0,
     };
 
@@ -423,11 +504,20 @@ pub fn prepare_coupled_mdots_with_extras(
         let (x_surf, _) = surface_h1_and_he4(donor);
         let kap_surf = donor.opacity.first().copied().unwrap_or(0.34);
         let pm = eval_point_mass_edd_and_retention(
-            m_pm, m_bh_eq, x_surf, kap_surf, ctrl.use_es_opacity_for_mdot_edd,
-            ctrl.use_this_for_mdot_edd_eta, ctrl.use_this_for_mdot_edd,
-            ctrl.limit_retention_by_mdot_edd, ctrl.use_radiation_corrected_transfer_rate,
-            mtransfer_rate, w_tr_d, ctrl.mass_transfer_alpha,
-            ctrl.mass_transfer_beta, ctrl.mass_transfer_delta,
+            m_pm,
+            m_bh_eq,
+            x_surf,
+            kap_surf,
+            ctrl.use_es_opacity_for_mdot_edd,
+            ctrl.use_this_for_mdot_edd_eta,
+            ctrl.use_this_for_mdot_edd,
+            ctrl.limit_retention_by_mdot_edd,
+            ctrl.use_radiation_corrected_transfer_rate,
+            mtransfer_rate,
+            w_tr_d,
+            ctrl.mass_transfer_alpha,
+            ctrl.mass_transfer_beta,
+            ctrl.mass_transfer_delta,
         );
         out.mdot_edd = pm.mdot_edd;
         out.mdot_edd_eta = pm.mdot_edd_eta;
@@ -435,10 +525,16 @@ pub fn prepare_coupled_mdots_with_extras(
         out.actual_mtransfer_rate = pm.actual_mtransfer_rate;
         out.retained_accretion_rate = pm.component_mdot_accretor;
         out.component_mdot = [donor_net_mdot, pm.component_mdot_accretor];
-        out.mdot_system_transfer = [pm.mdot_system_transfer_donor, pm.mdot_system_transfer_accretor];
+        out.mdot_system_transfer = [
+            pm.mdot_system_transfer_donor,
+            pm.mdot_system_transfer_accretor,
+        ];
         out.mdot_system_cct = pm.mdot_system_cct;
     } else if let Some(acc) = accretor_star {
-        let fixed_xfer = (1.0 - ctrl.mass_transfer_alpha - ctrl.mass_transfer_beta - ctrl.mass_transfer_delta)
+        let fixed_xfer = (1.0
+            - ctrl.mass_transfer_alpha
+            - ctrl.mass_transfer_beta
+            - ctrl.mass_transfer_delta)
             .clamp(0.0, 1.0);
         let actual_tr = mtransfer_rate * fixed_xfer + w_tr_d;
         let retained = (-actual_tr).max(0.0);
@@ -452,7 +548,9 @@ pub fn prepare_coupled_mdots_with_extras(
         if retained > 0.0 && donor.nz > 0 && donor.species == acc.species {
             acc.controls.accrete_same_as_surface = false;
             acc.controls.accrete_given_mass_fractions = true;
-            acc.controls.accretion_species_id.clone_from(&donor.iso_names);
+            acc.controls
+                .accretion_species_id
+                .clone_from(&donor.iso_names);
             acc.controls.accretion_species_xa = donor.cell_xa(0).to_vec();
         }
         out.actual_mtransfer_rate = actual_tr;
@@ -497,23 +595,57 @@ pub fn eval_scheme_explicit_mdot(
         eval_arras_mdot_thin(m_d, m_accretor, separation, r_d, rho0, t0, mu0)
     } else if scheme.eq_ignore_ascii_case("Kolb") {
         let thin = eval_ritter_mdot_eccentric(
-            m_d, m_accretor, r_d, rl_donor, eccentricity, rho0, p0, t0, mu0, true, 32,
+            m_d,
+            m_accretor,
+            r_d,
+            rl_donor,
+            eccentricity,
+            rho0,
+            p0,
+            t0,
+            mu0,
+            true,
+            32,
         );
         let thick = if eccentricity > 0.0 {
             eval_kolb_mdot_eccentric(
-                m_d, m_accretor, rl_donor, eccentricity,
-                &donor.r, &donor.peos, &donor.t, &donor.mu, &donor.gamma1, 32,
+                m_d,
+                m_accretor,
+                rl_donor,
+                eccentricity,
+                &donor.r,
+                &donor.peos,
+                &donor.t,
+                &donor.mu,
+                &donor.gamma1,
+                32,
             )
         } else {
             eval_kolb_mdot_thick(
-                m_d, m_accretor, rl_donor,
-                &donor.r, &donor.peos, &donor.t, &donor.mu, &donor.gamma1,
+                m_d,
+                m_accretor,
+                rl_donor,
+                &donor.r,
+                &donor.peos,
+                &donor.t,
+                &donor.mu,
+                &donor.gamma1,
             )
         };
         thin + thick
     } else {
         eval_ritter_mdot_eccentric(
-            m_d, m_accretor, r_d, rl_donor, eccentricity, rho0, p0, t0, mu0, false, 32,
+            m_d,
+            m_accretor,
+            r_d,
+            rl_donor,
+            eccentricity,
+            rho0,
+            p0,
+            t0,
+            mu0,
+            false,
+            32,
         )
     }
 }
@@ -539,7 +671,8 @@ pub fn blend_explicit_mdot(
 #[must_use]
 pub fn star_exceeds_delta_mdot_hard_limit(star: &StarModel) -> bool {
     let mw = &star.controls.mix_wind;
-    let hard_lim = mw.delta_mdot_hard_limit * star.controls.ts_stop.time_delta_coeff.max(1.0e-6);
+    let hard_lim = mw.delta_mdot_hard_limit
+        * star.controls.ts_stop.time_delta_coeff.max(1.0e-6);
     if hard_lim <= 0.0 || star.model_number <= 1 {
         return false;
     }
@@ -568,7 +701,10 @@ pub fn evolve_single_star_without_term_rewind(
         std::mem::take(&mut star.controls.xa_central_lower_limit),
         std::mem::take(&mut star.controls.xa_central_upper_limit),
         std::mem::replace(&mut star.controls.stop_near_zams, false),
-        std::mem::replace(&mut star.controls.mix_wind.delta_mdot_hard_limit, -1.0),
+        std::mem::replace(
+            &mut star.controls.mix_wind.delta_mdot_hard_limit,
+            -1.0,
+        ),
     );
 
     star.dt = dt_try;

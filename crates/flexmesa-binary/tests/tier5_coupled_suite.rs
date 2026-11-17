@@ -10,17 +10,17 @@
 use std::path::{Path, PathBuf};
 
 use flexmesa_binary::{
-    BinaryCompanion, BinaryInlistControls, BinarySystem, ImplicitMdotSolver,
-    ImplicitStepAction, RocheDeformationTables, TIER5_BINARY_CASES,
     bh_initial_equatorial_mass, eval_brott_wind_msun_yr,
     eval_edot_enhancement_isotropic, eval_point_mass_edd_and_retention,
     eval_synchronicity_switch, run_binary_suite, run_binary_test_suite_case,
+    BinaryCompanion, BinaryInlistControls, BinarySystem, ImplicitMdotSolver,
+    ImplicitStepAction, RocheDeformationTables, TIER5_BINARY_CASES,
 };
 use flexmesa_const::{CLIGHT, MSUN, RSUN, SECYER};
 use flexmesa_star::{
-    DefaultStarExtras, InlistBundle, MdotRedoState, SelectMdotAction,
-    StarControls, StarJobControls, check_termination_limits,
-    init_or_update_model_from_bundle, load_zams_model,
+    check_termination_limits, init_or_update_model_from_bundle,
+    load_zams_model, DefaultStarExtras, InlistBundle, MdotRedoState,
+    SelectMdotAction, StarControls, StarJobControls,
 };
 
 fn resolve_suite_dir() -> Option<(PathBuf, PathBuf)> {
@@ -197,27 +197,23 @@ fn test_coupled_double_bh_35_steps_preserves_star_controls() {
     b_probe.controls.initial_mass = 10.0;
     b_probe.job.relax_z = false;
     b_probe.job.relax_y = false;
-    let seed =
-        load_zams_model(b_probe.controls.clone(), b_probe.job.clone())
-            .expect("probe ZAMS");
+    let seed = load_zams_model(b_probe.controls.clone(), b_probe.job.clone())
+        .expect("probe ZAMS");
     let mut extras = DefaultStarExtras;
     let s_probe =
         init_or_update_model_from_bundle(&b_probe, Some(seed), &mut extras)
             .expect("init probe");
     let bctrl = BinaryInlistControls::from_case_dir(&cdir).expect("bctrl");
-    let bin_probe = BinarySystem::from_controls_two_stars(
-        s_probe.clone(),
-        s_probe,
-        bctrl,
-    )
-    .expect("two-star probe");
+    let bin_probe =
+        BinarySystem::from_controls_two_stars(s_probe.clone(), s_probe, bctrl)
+            .expect("two-star probe");
     assert!(bin_probe.donor.controls.use_gravity_rotation_correction);
     assert!(bin_probe.donor.controls.use_gold2_tolerances);
     assert!(bin_probe.donor.controls.use_ledoux_criterion);
     assert!(bin_probe.donor.controls.use_other_wind);
 
-    let rep =
-        run_binary_test_suite_case(&cdir, Some(35)).expect("double_bh 35 steps");
+    let rep = run_binary_test_suite_case(&cdir, Some(35))
+        .expect("double_bh 35 steps");
     assert!(rep.passed, "double_bh 35-step run failed: {rep:?}");
     assert_eq!(rep.total_steps, 35);
     assert!(rep.final_m1_msun > 69.0 && rep.final_m2_msun > 64.0);
@@ -242,9 +238,11 @@ fn assert_slow_uncapped_case(
 ) -> flexmesa_binary::BinaryCaseRunReport {
     let (_, suite_dir) =
         resolve_suite_dir().expect("MESA_DIR binary/test_suite must exist");
-    let rep =
-        run_binary_test_suite_case(&Path::new(&suite_dir).join(case_name), None)
-            .unwrap_or_else(|e| panic!("uncapped {case_name} failed: {e}"));
+    let rep = run_binary_test_suite_case(
+        &Path::new(&suite_dir).join(case_name),
+        None,
+    )
+    .unwrap_or_else(|e| panic!("uncapped {case_name} failed: {e}"));
     assert!(rep.passed, "uncapped {case_name} report failed: {rep:?}");
     rep
 }
@@ -347,7 +345,9 @@ fn test_contact_solver_fixed_delta_mdot_crosses_zero_for_donor_switch() {
     let mut m_cur = m1;
     let mut crossed_zero = false;
     for try_idx in 2..=10 {
-        let prop = solver.evaluate_trial("contact", try_idx, 20, m_cur, m_cur, 0.02, 0.08, 0.9);
+        let prop = solver.evaluate_trial(
+            "contact", try_idx, 20, m_cur, m_cur, 0.02, 0.08, 0.9,
+        );
         if let ImplicitStepAction::TryNextMdot(m_next) = prop {
             m_cur = m_next;
             if m_cur > 0.0 {
@@ -356,12 +356,16 @@ fn test_contact_solver_fixed_delta_mdot_crosses_zero_for_donor_switch() {
             }
         }
     }
-    assert!(crossed_zero, "contact solver must cross zero when f < 0 persists");
+    assert!(
+        crossed_zero,
+        "contact solver must cross zero when f < 0 persists"
+    );
     solver.flip_for_contact_donor_switch();
     let q_new = 1.0_f64 / 0.9;
-    let gap_a_eq = 0.05 * q_new.powf(-0.52);
-    let p_conv =
-        solver.evaluate_trial("contact", 5, 20, -m_cur, -m_cur, 0.05, gap_a_eq, q_new);
+    let gap_a_eq = 0.05 * flexmesa_math::pow(q_new, -0.52);
+    let p_conv = solver.evaluate_trial(
+        "contact", 5, 20, -m_cur, -m_cur, 0.05, gap_a_eq, q_new,
+    );
     assert_eq!(p_conv, ImplicitStepAction::Converged(-m_cur));
 }
 
@@ -441,8 +445,8 @@ fn test_double_bh_che_diffusivity_stiffness_and_bh_collapse_invariants() {
     probe.controls.initial_mass = 20.0;
     probe.job.relax_z = false;
     probe.job.relax_y = false;
-    let seed =
-        load_zams_model(probe.controls.clone(), probe.job.clone()).expect("zams");
+    let seed = load_zams_model(probe.controls.clone(), probe.job.clone())
+        .expect("zams");
     let mut extras = DefaultStarExtras;
     let mut star =
         init_or_update_model_from_bundle(&probe, Some(seed), &mut extras)
@@ -477,16 +481,24 @@ fn test_double_bh_che_diffusivity_stiffness_and_bh_collapse_invariants() {
             *mlt_k = 1.0e22;
         }
     }
-    let j_before: f64 =
-        star.dm_bar.iter().zip(&star.j_rot).map(|(m, j)| m * j).sum();
+    let j_before: f64 = star
+        .dm_bar
+        .iter()
+        .zip(&star.j_rot)
+        .map(|(m, j)| m * j)
+        .sum();
     let zones = flexmesa_star::set_rotation_mixing_info(&mut star);
     assert!(zones.iter().all(|z| z.nu_st == 0.0));
     let dt_star = star.dt;
     flexmesa_star::sync_post_henyey_rotation(&mut star, dt_star);
     assert!(star.omega.iter().all(|w| w.is_finite() && *w > 0.0));
     assert!(star.j_rot.iter().all(|j| j.is_finite() && *j > 0.0));
-    let j_after: f64 =
-        star.dm_bar.iter().zip(&star.j_rot).map(|(m, j)| m * j).sum();
+    let j_after: f64 = star
+        .dm_bar
+        .iter()
+        .zip(&star.j_rot)
+        .map(|(m, j)| m * j)
+        .sum();
     assert!(
         (j_after - j_before).abs() / j_before.abs().max(1.0) < 1.0e-12,
         "solve_omega_transport must conserve J_tot: before={j_before}, after={j_after}"
@@ -501,7 +513,9 @@ fn test_double_bh_che_diffusivity_stiffness_and_bh_collapse_invariants() {
     bin.change_factor = 3.2;
     bin.set_point_mass_i(1);
     assert!(bin.last_termination_reason.is_none());
-    assert!((bin.change_factor - bin.controls.max_change_factor).abs() < 1.0e-12);
+    assert!(
+        (bin.change_factor - bin.controls.max_change_factor).abs() < 1.0e-12
+    );
     let [m1_g, m2_g] = bin.star_masses_g();
     assert!((m1_g / MSUN - 35.0).abs() < 1.0e-12);
     assert!((m2_g / MSUN - 32.0).abs() < 1.0e-12);

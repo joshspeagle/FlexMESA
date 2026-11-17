@@ -197,16 +197,24 @@ pub fn calculate_eps_mdot(
 /// cancellation-free `prev` state snapshots (`adjust_mass.f90:98-132` and
 /// `eps_mdot.f90:620-634`).
 pub fn calculate_eps_mdot_with_change(
-    model: &mut StarModel, prev: &PrevMassState<'_>, change_in_dm: &[f64], dt: f64,
+    model: &mut StarModel,
+    prev: &PrevMassState<'_>,
+    change_in_dm: &[f64],
+    dt: f64,
 ) {
     let nz = model.nz;
     if model.eps_mdot.len() != nz {
         model.eps_mdot.resize(nz, 0.0);
     }
     let eps_fac = model.controls.mix_wind.eps_mdot_factor;
-    if nz == 0 || dt <= 0.0 || eps_fac == 0.0
-        || prev.dm.len() != nz || prev.peos.len() != nz
-        || prev.rho.len() != nz || prev.te.len() != nz || change_in_dm.len() != nz
+    if nz == 0
+        || dt <= 0.0
+        || eps_fac == 0.0
+        || prev.dm.len() != nz
+        || prev.peos.len() != nz
+        || prev.rho.len() != nz
+        || prev.te.len() != nz
+        || change_in_dm.len() != nz
     {
         model.eps_mdot.fill(0.0);
         return;
@@ -220,16 +228,25 @@ pub fn calculate_eps_mdot_with_change(
 
     let mut rho_w_flux = vec![0.0; nz + 1];
     for k in (0..nz).rev() {
-        rho_w_flux[k] = rho_w_flux[k + 1] + change_in_dm[k] / model.rho[k].max(1.0e-99);
+        rho_w_flux[k] =
+            rho_w_flux[k + 1] + change_in_dm[k] / model.rho[k].max(1.0e-99);
     }
 
-    let p_bar: Vec<f64> = (0..=nz).map(|k| interpolate_onto_faces(&model.peos, prev.dm, k)).collect();
-    let rho_bar: Vec<f64> = (0..=nz).map(|k| interpolate_onto_faces(&model.rho, prev.dm, k).max(1.0e-99)).collect();
-    let te_bar: Vec<f64> = (0..=nz).map(|k| interpolate_onto_faces(prev.te, prev.dm, k)).collect();
+    let p_bar: Vec<f64> = (0..=nz)
+        .map(|k| interpolate_onto_faces(&model.peos, prev.dm, k))
+        .collect();
+    let rho_bar: Vec<f64> = (0..=nz)
+        .map(|k| interpolate_onto_faces(&model.rho, prev.dm, k).max(1.0e-99))
+        .collect();
+    let te_bar: Vec<f64> = (0..=nz)
+        .map(|k| interpolate_onto_faces(prev.te, prev.dm, k))
+        .collect();
 
     let use_mc = model.controls.use_mass_corrections;
-    let cancellation_free = prev.r.len() == nz && prev.m_grav.len() == nz
-        && prev.energy.len() == nz && prev.ke.len() == nz;
+    let cancellation_free = prev.r.len() == nz
+        && prev.m_grav.len() == nz
+        && prev.energy.len() == nz
+        && prev.ke.len() == nz;
 
     let d_r: Vec<f64> = if cancellation_free {
         (0..nz)
@@ -237,8 +254,9 @@ pub fn calculate_eps_mdot_with_change(
                 if rho_w_flux[k] == 0.0 {
                     0.0
                 } else {
-                    let (r_old, r_new) = (prev.r[k].max(1.0), model.r[k].max(1.0));
-                    (3.0 / (4.0 * std::f64::consts::PI)) * rho_w_flux[k]
+                    let (r_old, r_new) =
+                        (prev.r[k].max(1.0), model.r[k].max(1.0));
+                    (3.0 / (4.0 * flexmesa_const::PI)) * rho_w_flux[k]
                         / (r_new * r_new + r_new * r_old + r_old * r_old)
                 }
             })
@@ -304,10 +322,19 @@ pub fn calculate_eps_mdot_with_change(
     }
 
     let leak_frac = compute_leak_frac(
-        model, &mass_flux, dt, model.controls.mix_wind.eps_mdot_leak_frac_factor,
+        model,
+        &mass_flux,
+        dt,
+        model.controls.mix_wind.eps_mdot_leak_frac_factor,
     );
     let eps_out = leak_control_parcel(
-        nz, &mass_flux, &model.dm, prev.dm, &total_mass_through_cell, &power_cells, &leak_frac,
+        nz,
+        &mass_flux,
+        &model.dm,
+        prev.dm,
+        &total_mass_through_cell,
+        &power_cells,
+        &leak_frac,
     );
     for k in 0..nz {
         model.eps_mdot[k] = eps_fac * eps_out[k];
@@ -411,9 +438,19 @@ fn compute_pass_fraction(
 
 #[allow(clippy::too_many_arguments)]
 fn leak_segment(
-    nz: usize, i_start: i32, i_end: i32, i_min: &[i32], i_max: &[i32],
-    j_min: &[i32], j_max: &[i32], pf: &[Vec<f64>], dm: &[f64], delta_m: f64,
-    eps_per_tot: &[f64], leak_frac: &[f64], accumulated: &mut [f64],
+    nz: usize,
+    i_start: i32,
+    i_end: i32,
+    i_min: &[i32],
+    i_max: &[i32],
+    j_min: &[i32],
+    j_max: &[i32],
+    pf: &[Vec<f64>],
+    dm: &[f64],
+    delta_m: f64,
+    eps_per_tot: &[f64],
+    leak_frac: &[f64],
+    accumulated: &mut [f64],
 ) {
     if i_start == i_end {
         return;
@@ -448,8 +485,13 @@ fn leak_segment(
                     excess[0] = 0.0;
                 } else {
                     let pf_ij = compute_pass_fraction(i, ju, i_min, i_max, pf);
-                    let pass_mass = if j > 0 { pf_ij * dm[ju] } else { -pf_ij * delta_m };
-                    let next = excess[ju] + dm[iu] * eps_per_tot[iu] * pass_mass;
+                    let pass_mass = if j > 0 {
+                        pf_ij * dm[ju]
+                    } else {
+                        -pf_ij * delta_m
+                    };
+                    let next =
+                        excess[ju] + dm[iu] * eps_per_tot[iu] * pass_mass;
                     accumulated[iu] += leak_frac[iu] * next;
                     excess[ju] = (1.0 - leak_frac[iu]) * next;
                 }
@@ -461,8 +503,13 @@ fn leak_segment(
 
 #[allow(clippy::too_many_arguments)]
 fn leak_control_parcel(
-    nz: usize, mass_flux_0: &[f64], dm_0: &[f64], prev_dm_0: &[f64],
-    tot_mass_0: &[f64], power_0: &[f64], leak_0: &[f64],
+    nz: usize,
+    mass_flux_0: &[f64],
+    dm_0: &[f64],
+    prev_dm_0: &[f64],
+    tot_mass_0: &[f64],
+    power_0: &[f64],
+    leak_0: &[f64],
 ) -> Vec<f64> {
     let mut dm = vec![0.0_f64; nz + 1];
     let mut prev_dm = vec![0.0_f64; nz + 1];
@@ -547,7 +594,13 @@ fn leak_control_parcel(
 
     let mut accumulated = vec![0.0_f64; nz + 1];
     let (mut i_start, mut i_end) = (1_i32, 1_i32);
-    let mut sgn = if mf[1] > 0.0 { 1 } else if mf[1] < 0.0 { -1 } else { 0 };
+    let mut sgn = if mf[1] > 0.0 {
+        1
+    } else if mf[1] < 0.0 {
+        -1
+    } else {
+        0
+    };
     let nzi = nz as i32;
     while i_start <= nzi && i_end <= nzi {
         match sgn.cmp(&0) {
@@ -556,7 +609,21 @@ fn leak_control_parcel(
                 if next_mf > 0.0 {
                     i_end += 1;
                 } else {
-                    leak_segment(nz, i_start, i_end, &i_min, &i_max, &j_min, &j_max, &pf, &dm, delta_m, &eps_per_tot, &leak_frac, &mut accumulated);
+                    leak_segment(
+                        nz,
+                        i_start,
+                        i_end,
+                        &i_min,
+                        &i_max,
+                        &j_min,
+                        &j_max,
+                        &pf,
+                        &dm,
+                        delta_m,
+                        &eps_per_tot,
+                        &leak_frac,
+                        &mut accumulated,
+                    );
                     i_start = i_end;
                     sgn = if next_mf < 0.0 { -1 } else { 0 };
                 }
@@ -566,7 +633,21 @@ fn leak_control_parcel(
                 if next_mf < 0.0 {
                     i_start += 1;
                 } else {
-                    leak_segment(nz, i_start, i_end, &i_min, &i_max, &j_min, &j_max, &pf, &dm, delta_m, &eps_per_tot, &leak_frac, &mut accumulated);
+                    leak_segment(
+                        nz,
+                        i_start,
+                        i_end,
+                        &i_min,
+                        &i_max,
+                        &j_min,
+                        &j_max,
+                        &pf,
+                        &dm,
+                        delta_m,
+                        &eps_per_tot,
+                        &leak_frac,
+                        &mut accumulated,
+                    );
                     i_end = i_start;
                     sgn = i32::from(next_mf > 0.0);
                 }
@@ -578,7 +659,21 @@ fn leak_control_parcel(
                 } else if next_mf < 0.0 {
                     sgn = -1;
                 } else {
-                    leak_segment(nz, i_start, i_end, &i_min, &i_max, &j_min, &j_max, &pf, &dm, delta_m, &eps_per_tot, &leak_frac, &mut accumulated);
+                    leak_segment(
+                        nz,
+                        i_start,
+                        i_end,
+                        &i_min,
+                        &i_max,
+                        &j_min,
+                        &j_max,
+                        &pf,
+                        &dm,
+                        delta_m,
+                        &eps_per_tot,
+                        &leak_frac,
+                        &mut accumulated,
+                    );
                 }
                 i_start += 1;
                 i_end += 1;

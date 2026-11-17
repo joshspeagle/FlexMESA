@@ -12,15 +12,16 @@ use flexmesa_binary::{
 };
 use flexmesa_const::{LSUN, MSUN, SECYER};
 use flexmesa_star::{
-    StarControls, StarError, StarJobControls, StarModel, apply_step_pre_physics,
-    compute_power_categories, do_struct_burn_mix, load_zams_model,
-    relax_composition_with_henyey, set_hydro_vars, solve_henyey_step,
-    star_evolve_step, sync_post_henyey_rotation,
-    update_rotation_distortion_factors,
+    apply_step_pre_physics, compute_power_categories, do_struct_burn_mix,
+    load_zams_model, relax_composition_with_henyey, set_hydro_vars,
+    solve_henyey_step, star_evolve_step, sync_post_henyey_rotation,
+    update_rotation_distortion_factors, StarControls, StarError,
+    StarJobControls, StarModel,
 };
 
 #[test]
-fn test_default_am_d_mix_zero_omega_transport_and_gold2_chem_increment_convergence() {
+fn test_default_am_d_mix_zero_omega_transport_and_gold2_chem_increment_convergence(
+) {
     let mut ctrl = StarControls {
         initial_mass: 4.0,
         rotation_flag: true,
@@ -33,7 +34,8 @@ fn test_default_am_d_mix_zero_omega_transport_and_gold2_chem_increment_convergen
     let mut star =
         load_zams_model(ctrl, StarJobControls::default()).expect("4 Msun ZAMS");
     let nz = star.nz;
-    let denom = f64::from(u32::try_from(nz.saturating_sub(1).max(1)).unwrap_or(1));
+    let denom =
+        f64::from(u32::try_from(nz.saturating_sub(1).max(1)).unwrap_or(1));
     for (k, om) in star.omega.iter_mut().enumerate().take(nz) {
         let frac = f64::from(u32::try_from(k).unwrap_or(0)) / denom;
         *om = 1.0e-5 * (1.0 + 0.5 * frac);
@@ -41,7 +43,8 @@ fn test_default_am_d_mix_zero_omega_transport_and_gold2_chem_increment_convergen
     update_rotation_distortion_factors(&mut star);
     set_hydro_vars(&mut star, false, false).expect("set_hydro_vars");
     star.d_mix.fill(1.0e16);
-    star.mixing_type.fill(flexmesa_const::MixingType::ConvectiveMixing);
+    star.mixing_type
+        .fill(flexmesa_const::MixingType::ConvectiveMixing);
     let shear_before = (star.omega[0] - star.omega[nz - 1]).abs();
     sync_post_henyey_rotation(&mut star, 1.0e4 * SECYER);
     let shear_after = (star.omega[0] - star.omega[nz - 1]).abs();
@@ -67,7 +70,10 @@ fn test_default_am_d_mix_zero_omega_transport_and_gold2_chem_increment_convergen
     }
     let rep = solve_henyey_step(&mut star, true, true)
         .expect("gold2 stiff chem step");
-    assert!(rep.converged, "gold2 stiff chem failed to converge: {rep:?}");
+    assert!(
+        rep.converged,
+        "gold2 stiff chem failed to converge: {rep:?}"
+    );
     assert!(
         rep.max_residual <= star.controls.gold2_tol_max_residual1,
         "expected gold2 stage-1 residual convergence, got {rep:?}"
@@ -94,7 +100,8 @@ fn test_premix_omega_symmetric_strang_split_pre_and_post_henyey() {
         load_zams_model(base_ctrl.clone(), StarJobControls::default())
             .expect("3 Msun ZAMS");
     let nz = star_premix.nz;
-    let denom = f64::from(u32::try_from(nz.saturating_sub(1).max(1)).unwrap_or(1));
+    let denom =
+        f64::from(u32::try_from(nz.saturating_sub(1).max(1)).unwrap_or(1));
     for (k, om) in star_premix.omega.iter_mut().enumerate().take(nz) {
         let frac = f64::from(u32::try_from(k).unwrap_or(0)) / denom;
         *om = 2.0e-5 * (1.0 + 0.8 * frac);
@@ -121,10 +128,10 @@ fn test_premix_omega_symmetric_strang_split_pre_and_post_henyey() {
 
     star_premix.dt = dt;
     star_full.dt = dt;
-    let rep_premix =
-        star_evolve_step(&mut star_premix, false, false, true).expect("premix step");
-    let rep_full =
-        star_evolve_step(&mut star_full, false, false, true).expect("full step");
+    let rep_premix = star_evolve_step(&mut star_premix, false, false, true)
+        .expect("premix step");
+    let rep_full = star_evolve_step(&mut star_full, false, false, true)
+        .expect("full step");
     assert_eq!(rep_premix.dt, rep_full.dt);
     let shear_premix = (star_premix.omega[0] - star_premix.omega[nz - 1]).abs();
     let shear_full = (star_full.omega[0] - star_full.omega[nz - 1]).abs();
@@ -136,15 +143,16 @@ fn test_premix_omega_symmetric_strang_split_pre_and_post_henyey() {
 }
 
 #[test]
-fn test_op_split_burn_runs_before_save_start_values_preserving_pre_burn_t_start() {
+fn test_op_split_burn_runs_before_save_start_values_preserving_pre_burn_t_start(
+) {
     let ctrl = StarControls {
         initial_mass: 15.0,
         op_split_burn: true,
         op_split_burn_min_t: 1.0e7,
         ..StarControls::default()
     };
-    let mut star =
-        load_zams_model(ctrl, StarJobControls::default()).expect("15 Msun ZAMS");
+    let mut star = load_zams_model(ctrl, StarJobControls::default())
+        .expect("15 Msun ZAMS");
     set_hydro_vars(&mut star, false, false).expect("set_hydro_vars");
     star.save_start_values();
     star.save_old_values();
@@ -211,18 +219,31 @@ fn test_relax_composition_with_henyey_low_metallicity_equilibration() {
     assert!((star.controls.initial_z - 0.00034).abs() < 1.0e-12);
     assert!((star.controls.initial_y - 0.248_246).abs() < 1.0e-12);
 
-    let h1_j = star.iso_names.iter().position(|n| n.eq_ignore_ascii_case("h1")).unwrap();
-    let he3_j = star.iso_names.iter().position(|n| n.eq_ignore_ascii_case("he3"));
-    let he4_j = star.iso_names.iter().position(|n| n.eq_ignore_ascii_case("he4")).unwrap();
+    let h1_j = star
+        .iso_names
+        .iter()
+        .position(|n| n.eq_ignore_ascii_case("h1"))
+        .unwrap();
+    let he3_j = star
+        .iso_names
+        .iter()
+        .position(|n| n.eq_ignore_ascii_case("he3"));
+    let he4_j = star
+        .iso_names
+        .iter()
+        .position(|n| n.eq_ignore_ascii_case("he4"))
+        .unwrap();
     let xa0 = star.cell_xa(0);
     let y_surf = xa0[he4_j] + he3_j.map_or(0.0, |j| xa0[j]);
     let z_surf = 1.0 - xa0[h1_j] - y_surf;
     assert!((z_surf - 0.00034).abs() < 1.0e-5, "z_surf={z_surf}");
     assert!((y_surf - 0.248_246).abs() < 1.0e-5, "y_surf={y_surf}");
 
-    let lnuc = (compute_power_categories(&star).power_nuc_burn * LSUN).abs().max(1.0);
+    let lnuc = (compute_power_categories(&star).power_nuc_burn * LSUN)
+        .abs()
+        .max(1.0);
     let lsurf = star.lum[0].abs().max(1.0);
-    let log_ratio = (lnuc / lsurf).log10().abs();
+    let log_ratio = flexmesa_math::log10(lnuc / lsurf).abs();
     assert!(
         log_ratio < 0.02,
         "relaxed model must be near thermal equilibrium: |log10(Lnuc/L)| = {log_ratio}"
@@ -265,7 +286,8 @@ fn test_binary_extras_custom_other_wind_and_finish_step_termination() {
         use_other_wind: true,
         ..StarControls::default()
     };
-    let s1 = load_zams_model(c1, StarJobControls::default()).expect("2 Msun ZAMS");
+    let s1 =
+        load_zams_model(c1, StarJobControls::default()).expect("2 Msun ZAMS");
     let bctrl = BinaryInlistControls {
         evolve_both_stars: false,
         m1_msun: 2.0,
@@ -287,7 +309,10 @@ fn test_binary_extras_custom_other_wind_and_finish_step_termination() {
         .try_step_with_extras(100.0 * SECYER, &mut extras)
         .expect("step 1");
     assert!(extras.wind_calls >= 1);
-    assert!(bin.donor.mstar < m1_before, "custom other_wind must remove mass");
+    assert!(
+        bin.donor.mstar < m1_before,
+        "custom other_wind must remove mass"
+    );
     assert!(bin.last_termination_reason.is_none());
     // Verify finalize_star_post_binary_torques did NOT overwrite solved ln_t_start with ln_t.
     let diff_ln_t: f64 = bin
@@ -302,9 +327,7 @@ fn test_binary_extras_custom_other_wind_and_finish_step_termination() {
         "post-trial finalize must preserve start-of-step ln_t_start rather than overwriting with ln_t"
     );
 
-    let _ = bin
-        .try_step_with_extras(dt1, &mut extras)
-        .expect("step 2");
+    let _ = bin.try_step_with_extras(dt1, &mut extras).expect("step 2");
     assert_eq!(
         bin.last_termination_reason.as_deref(),
         Some("CustomExtrasStop")

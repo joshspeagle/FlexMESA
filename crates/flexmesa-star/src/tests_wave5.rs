@@ -64,8 +64,8 @@ fn test_wave5_2_riemann_rsp2_and_pulse_exporters_preserve_invariants() {
     let m_grav = 1.0e33_f64;
     let cgrav = 6.67430e-8_f64;
     let dm = 1.0e30_f64;
-    let g_over_a =
-        cgrav * m_grav / (4.0 * std::f64::consts::PI * r_face.powi(4));
+    let g_over_a = cgrav * m_grav
+        / (4.0 * flexmesa_const::PI * flexmesa_math::pow4(r_face));
     let p_star = 1.0e15_f64;
     let p_l = p_star + 0.5 * dm * g_over_a;
     let p_r = p_star - 0.5 * dm * g_over_a;
@@ -302,11 +302,11 @@ fn test_e2e_2_tier2_physics_helpers_and_suite() {
 
     for k in 0..model.nz {
         model.rho[k] = 1.0e7;
-        model.lnd[k] = (1.0e7_f64).ln();
+        model.lnd[k] = flexmesa_math::log(1.0e7_f64);
         model.t[k] = 3.0e6;
-        model.ln_t[k] = (3.0e6_f64).ln();
+        model.ln_t[k] = flexmesa_math::log(3.0e6_f64);
         model.zbar[k] = 8.0;
-        model.z53bar[k] = 8.0_f64.powf(5.0 / 3.0);
+        model.z53bar[k] = flexmesa_math::pow(8.0_f64, 5.0 / 3.0);
         model.abar[k] = 16.0;
         model.ye[k] = 0.5;
     }

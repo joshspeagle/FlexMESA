@@ -61,11 +61,12 @@ fn build_compact_zams(nz_target: usize, controls: StarControls) -> StarModel {
         let cell_dq_total: f64 = full.dq[k0..k1].iter().sum();
         let cell_mass_total: f64 = full.dm[k0..k1].iter().sum();
         let vol_sum: f64 = (k0..k1)
-            .map(|s| full.dm[s] / full.lnd[s].exp().max(1.0e-30))
+            .map(|s| full.dm[s] / flexmesa_math::exp(full.lnd[s]).max(1.0e-30))
             .sum();
         let lnt_sum: f64 = (k0..k1).map(|s| full.dm[s] * full.ln_t[s]).sum();
         m.dq[dst_k] = cell_dq_total;
-        m.lnd[dst_k] = (cell_mass_total / vol_sum.max(1.0e-30)).ln();
+        m.lnd[dst_k] =
+            flexmesa_math::log(cell_mass_total / vol_sum.max(1.0e-30));
         m.ln_t[dst_k] = lnt_sum / cell_mass_total.max(1.0e-30);
         m.ln_r[dst_k] = full.ln_r[k0];
         m.lum[dst_k] = full.lum[k0];
@@ -177,7 +178,7 @@ fn test_multi_isotope_approx21_coupled_and_variable_t_const_density_op_split_bur
     m_var_t.controls.op_split_burn = true;
     m_var_t.controls.op_split_burn_min_t = 1.0e7;
     m_var_t.controls.op_split_burn_min_t_for_variable_t_solver = 1.2e7;
-    assert!(m_var_t.ln_t[m_var_t.nz - 1].exp() > 1.2e7);
+    assert!(flexmesa_math::exp(m_var_t.ln_t[m_var_t.nz - 1]) > 1.2e7);
     let rep_var_t = do_struct_burn_mix(&mut m_var_t, dt, true, true, &[])
         .expect("variable-T op_split_burn approx21 step should succeed");
     assert!(rep_var_t.converged, "var-T op_split = {rep_var_t:?}");

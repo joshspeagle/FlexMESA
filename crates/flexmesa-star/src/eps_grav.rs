@@ -97,7 +97,7 @@ pub fn eval_eps_grav_std_cell(model: &StarModel, k: usize) -> StarAdOrder1 {
             .copied()
             .filter(|&v| v != 0.0)
             .unwrap_or(model.chi_rho[k]);
-        let t_s = model.ln_t_start[k].exp();
+        let t_s = flexmesa_math::exp(model.ln_t_start[k]);
         let one_m_s = 1.0 - grada_s * chi_t_s;
         let gc_s = grada_s * chi_rho_s;
         let eps_grav_start =
@@ -156,7 +156,7 @@ pub fn eval_eps_grav_lns_cell(model: &StarModel, k: usize) -> StarAdOrder1 {
 
     let t_ad = StarAdOrder1::variable(model.ln_t[k], I_LNT_00).exp();
     let s_ad = model.ln_s_ad[k].exp();
-    let s_start = model.ln_s_start[k].exp();
+    let s_start = flexmesa_math::exp(model.ln_s_start[k]);
     (-t_ad * (s_ad - s_start) / dt) * model.controls.eps_grav_factor
 }
 

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-//! Regression snapshot tests for Wave 3a.3 (`PC` equation of state; `#146`).
-//! Real compiled MESA `26.4.1` component oracle comparisons are in
+//! Strict-mode regression snapshot tests for Wave 3a.3 (`PC` equation of state;
+//! `#146`). Real compiled MESA `26.4.1` component oracle comparisons are in
 //! `mesa_26_4_1_component_oracles_test.rs` (`T2-15`).
 
 #![allow(
@@ -64,7 +64,7 @@ fn assert_eos_case(
 }
 
 #[test]
-fn test_pc_liquid_and_transition_regimes_match_regression_snapshot() {
+fn test_pc_liquid_and_transition_regimes_match_strict_regression_snapshot() {
     let cfg = PcConfig::default();
 
     // 1. pc_c12_liq: pure C12 at T = 1e8 K, rho = 1e6 g/cm^3

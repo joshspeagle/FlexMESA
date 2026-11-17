@@ -219,7 +219,11 @@ pub fn star_evolve_step(
     let prev_rot_boost_old = model.aux.step_hist.rotational_mdot_boost_old;
     let prev_was_in_limit = model.aux.step_hist.was_in_implicit_wind_limit;
     let max_retries = model.controls.ts_stop.retry_limit.clamp(1, 100);
-    let retry_fac = model.controls.ts_stop.timestep_factor_for_retries.clamp(0.05, 0.95);
+    let retry_fac = model
+        .controls
+        .ts_stop
+        .timestep_factor_for_retries
+        .clamp(0.05, 0.95);
     let mut retries = 0_usize;
 
     loop {
@@ -232,15 +236,16 @@ pub fn star_evolve_step(
         let mut mdot_redo = crate::mdot_redo::MdotRedoState::setup(model);
         let mut last_conv_mdot: Option<f64> = None;
         let mut force_outer_retry = false;
-        let reset_for_redo = |m: &mut StarModel, next_mdot: f64| -> Result<(), StarError> {
-            restore_from_old(m)?;
-            m.dt = dt_try;
-            m.dt_old = prev_dt_old;
-            m.dt_limit_ratio_old = prev_dt_limit_ratio_old;
-            m.aux.step_hist.rotational_mdot_boost_old = prev_rot_boost_old;
-            m.mstar_dot = next_mdot;
-            Ok(())
-        };
+        let reset_for_redo =
+            |m: &mut StarModel, next_mdot: f64| -> Result<(), StarError> {
+                restore_from_old(m)?;
+                m.dt = dt_try;
+                m.dt_old = prev_dt_old;
+                m.dt_limit_ratio_old = prev_dt_limit_ratio_old;
+                m.aux.step_hist.rotational_mdot_boost_old = prev_rot_boost_old;
+                m.mstar_dot = next_mdot;
+                Ok(())
+            };
         let attempt = loop {
             let step_try = do_adjust_mass_step(model, dt_try)
                 .and_then(|()| {
@@ -249,15 +254,30 @@ pub fn star_evolve_step(
                     }
                     apply_step_pre_physics(model, dt_try)
                 })
-                .and_then(|()| do_struct_burn_mix(model, dt_try, op_split_burn, use_bcyclic, &[]));
+                .and_then(|()| {
+                    do_struct_burn_mix(
+                        model,
+                        dt_try,
+                        op_split_burn,
+                        use_bcyclic,
+                        &[],
+                    )
+                });
             match step_try {
                 Ok(rep) if rep.converged => {
                     crate::rotation::sync_post_henyey_rotation(model, dt_try);
                     match mdot_redo.select_action(model, dt_try) {
-                        crate::mdot_redo::SelectMdotAction::Accept => break Ok(rep),
-                        crate::mdot_redo::SelectMdotAction::RedoWithMdot(new_mdot) => {
+                        crate::mdot_redo::SelectMdotAction::Accept => {
+                            break Ok(rep)
+                        }
+                        crate::mdot_redo::SelectMdotAction::RedoWithMdot(
+                            new_mdot,
+                        ) => {
                             if mdot_redo.last_w_div_w_crit()
-                                > model.controls.surf_omega_div_omega_crit_limit.unwrap_or(0.99)
+                                > model
+                                    .controls
+                                    .surf_omega_div_omega_crit_limit
+                                    .unwrap_or(0.99)
                             {
                                 last_conv_mdot = Some(model.mstar_dot);
                             }
@@ -270,8 +290,14 @@ pub fn star_evolve_step(
                     }
                 }
                 other => {
-                    let tol = model.controls.mix_wind.surf_omega_div_omega_crit_tol.max(1.0e-6);
-                    if let Some(next_mdot) = mdot_redo.note_solver_failure(model.mstar_dot, tol) {
+                    let tol = model
+                        .controls
+                        .mix_wind
+                        .surf_omega_div_omega_crit_tol
+                        .max(1.0e-6);
+                    if let Some(next_mdot) =
+                        mdot_redo.note_solver_failure(model.mstar_dot, tol)
+                    {
                         reset_for_redo(model, next_mdot)?;
                         continue;
                     }
@@ -292,8 +318,13 @@ pub fn star_evolve_step(
                 update_step_energy_conservation(model, dt_try);
                 let (mut ts_action, mut ts_rep) = timestep_controller(model);
                 apply_delta_mdot_limits(
-                    model, dt_try, prev_dt_old, prev_dt_limit_ratio_old,
-                    retries, &mut ts_action, &mut ts_rep,
+                    model,
+                    dt_try,
+                    prev_dt_old,
+                    prev_dt_limit_ratio_old,
+                    retries,
+                    &mut ts_action,
+                    &mut ts_rep,
                 );
                 if crate::step_trace::enabled(model.model_number) {
                     eprintln!(
@@ -307,8 +338,15 @@ pub fn star_evolve_step(
                 match ts_action {
                     TimestepAction::KeepGoing => {
                         return Ok(finalize_accepted_step(
-                            model, rep, ts_rep.varcontrol, ts_rep.dt_next,
-                            dt_try, rsp2_e_old, retries, num_splits, num_merges,
+                            model,
+                            rep,
+                            ts_rep.varcontrol,
+                            ts_rep.dt_next,
+                            dt_try,
+                            rsp2_e_old,
+                            retries,
+                            num_splits,
+                            num_merges,
                         ));
                     }
                     TimestepAction::Retry(_) => {
@@ -319,8 +357,10 @@ pub fn star_evolve_step(
                         let _ = restore_from_old(model);
                         model.dt_old = prev_dt_old;
                         model.dt_limit_ratio_old = prev_dt_limit_ratio_old;
-                        model.aux.step_hist.rotational_mdot_boost_old = prev_rot_boost_old;
-                        model.aux.step_hist.was_in_implicit_wind_limit = prev_was_in_limit;
+                        model.aux.step_hist.rotational_mdot_boost_old =
+                            prev_rot_boost_old;
+                        model.aux.step_hist.was_in_implicit_wind_limit =
+                            prev_was_in_limit;
                         return Err(StarError::InvalidInput(reason));
                     }
                 }
@@ -342,7 +382,10 @@ pub fn star_evolve_step(
             };
             eprintln!(
                 "[trace] retry model={} dt={:.4e} retries={} why={}",
-                model.model_number + 1, dt_try, retries, why,
+                model.model_number + 1,
+                dt_try,
+                retries,
+                why,
             );
         }
         model.dt_limit_ratio_old = prev_dt_limit_ratio_old;
@@ -372,7 +415,11 @@ pub fn star_evolve_step(
             model.aux.step_hist.mstar_dot_old = prev_mstar_dot_old;
             model.dt_old = prev_dt_old;
         } else {
-            let fac = if retries >= 4 { retry_fac.min(0.2) } else { retry_fac };
+            let fac = if retries >= 4 {
+                retry_fac.min(0.2)
+            } else {
+                retry_fac
+            };
             dt_try = (dt_try * fac).max(dt_floor);
             restore_from_old(model)?;
             model.dt_old = prev_dt_old;
@@ -425,12 +472,9 @@ fn apply_delta_mdot_limits(
     if lim > 0.0 && delta_mdot > lim {
         let r_dmdot = delta_mdot / lim;
         if r_dmdot > ts_rep.dt_limit_ratio {
-            let log_max_t = model
-                .ln_t
-                .iter()
-                .copied()
-                .fold(f64::NEG_INFINITY, f64::max)
-                / LN10;
+            let log_max_t =
+                model.ln_t.iter().copied().fold(f64::NEG_INFINITY, f64::max)
+                    / LN10;
             let max_tf =
                 if log_max_t > ts.min_logt_for_max_timestep_factor_at_high_t {
                     ts.max_timestep_factor_at_high_t

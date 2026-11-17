@@ -443,7 +443,8 @@ where
         // Accept step if RMS error <= 1.0 and propose next step size h
         // using safety factor 0.9 and clamping h_new / h to [0.2, 3.0]
         // (matching MESA mod_rosenbrock.f:413-419 fac1=5, fac2=1/3)
-        let fac = (0.9 * err.max(1e-10).powf(-1.0 / rc.order)).clamp(0.2, 3.0);
+        let fac = (0.9 * flexmesa_math::pow(err.max(1e-10), -1.0 / rc.order))
+            .clamp(0.2, 3.0);
         if err <= 1.0 {
             t += h;
             y = y_new;

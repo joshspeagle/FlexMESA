@@ -15,7 +15,10 @@ fn surface_teff(model: &StarModel, l_surf: f64, r_surf: f64) -> f64 {
     if model.teff > 0.0 {
         model.teff
     } else {
-        (l_surf / (PI * r_surf * r_surf * CRAD * CLIGHT)).powf(0.25)
+        flexmesa_math::pow(
+            l_surf / (PI * r_surf * r_surf * CRAD * CLIGHT),
+            0.25,
+        )
     }
 }
 
@@ -96,7 +99,9 @@ pub fn do_set_mdot(model: &mut StarModel) -> Result<f64, StarError> {
     let l1 = model.lum[0].max(1.0);
     let m1 = model.m_grav[0].max(1.0);
     let t1 = surface_teff(model, l1, model.r[0].max(1.0));
-    let r1 = (l1 / (PI * CRAD * CLIGHT * t1.powi(4))).sqrt().max(1.0);
+    let r1 = (l1 / (PI * CRAD * CLIGHT * flexmesa_math::pow4(t1)))
+        .sqrt()
+        .max(1.0);
     let cgrav = model.cgrav.first().copied().unwrap_or(STANDARD_CGRAV);
     let kap_surf = model.opacity.first().copied().unwrap_or(0.34).max(1.0e-4);
     let l_edd = FOUR_PI * CLIGHT * cgrav * m1 / kap_surf;
@@ -285,8 +290,10 @@ pub fn do_set_mdot(model: &mut StarModel) -> Result<f64, StarError> {
             0.0
         };
         if mw.min_wind > 0.0 || using_wind_scheme || w_div_wc > 0.8 {
-            let mut enh =
-                (1.0 - w_div_wc).max(1.0e-22).powf(-mw.mdot_omega_power);
+            let mut enh = flexmesa_math::pow(
+                (1.0 - w_div_wc).max(1.0e-22),
+                -mw.mdot_omega_power,
+            );
             if mw.max_rotational_mdot_boost > 0.0 {
                 enh = enh.min(mw.max_rotational_mdot_boost);
             }

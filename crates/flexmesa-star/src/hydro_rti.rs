@@ -254,19 +254,17 @@ pub fn eval_alpha_rti_sources(
     // Sink term (`hydro_alpha_rti_eqns.f90:112-123`):
     // `RTI_D = s% RTI_D * max(1, a_00 / RTI_max_alpha)`
     // `source_minus = RTI_D * a_00 * cs / rmid`
-    let r_s_00 = model
-        .ln_r_start
-        .get(k)
-        .copied()
-        .unwrap_or(model.ln_r[k])
-        .exp();
+    let r_s_00 = flexmesa_math::exp(
+        model.ln_r_start.get(k).copied().unwrap_or(model.ln_r[k]),
+    );
     let r_s_in = if k + 1 < model.nz {
-        model
-            .ln_r_start
-            .get(k + 1)
-            .copied()
-            .unwrap_or(model.ln_r[k + 1])
-            .exp()
+        flexmesa_math::exp(
+            model
+                .ln_r_start
+                .get(k + 1)
+                .copied()
+                .unwrap_or(model.ln_r[k + 1]),
+        )
     } else {
         model.r_center
     };
@@ -299,13 +297,10 @@ pub fn eval_alpha_rti_sources(
         && model.q[k] <= model.controls.alpha_rti_src_max_q
         && a_start < model.controls.rti_max_alpha
     {
-        let rho_s = model
-            .lnd_start
-            .get(k)
-            .copied()
-            .unwrap_or(model.lnd[k])
-            .exp()
-            .max(1.0e-30);
+        let rho_s = flexmesa_math::exp(
+            model.lnd_start.get(k).copied().unwrap_or(model.lnd[k]),
+        )
+        .max(1.0e-30);
         let root = instab2.sqrt() / rho_s;
         (
             (model.controls.rti_a + model.controls.rti_b * a_00) * root,

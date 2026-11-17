@@ -30,14 +30,15 @@ fn eval_irradiated_data(
 
     let (e2, de2_dx) = eval_e2(x)?;
 
-    let f_1 = 2.0 * (1.0 + (x / 2.0 - 1.0) * (-x).exp()) * tau / (3.0 * x);
+    let f_1 = 2.0 * (1.0 + (x / 2.0 - 1.0) * flexmesa_math::exp(-x)) * tau
+        / (3.0 * x);
     let f_2 = 2.0 * x * (1.0 - tau * tau / 2.0) * e2 / (3.0 * tau);
 
     let t4_int = t_int * t_int * t_int * t_int;
     let t4_eq = t_eq * t_eq * t_eq * t_eq;
     let t4 =
         0.75 * (t4_int * (tau + 2.0 / 3.0) + t4_eq * (f_1 + f_2 + 2.0 / 3.0));
-    let ln_t = 0.25 * t4.ln();
+    let ln_t = 0.25 * flexmesa_math::log(t4);
 
     if skip_partials {
         return Ok(AtmIrradiatedOutput {
@@ -51,11 +52,11 @@ fn eval_irradiated_data(
         });
     }
 
-    let df_1_dtau = (2.0 + (x - 2.0) * (-x).exp()) / (3.0 * x);
+    let df_1_dtau = (2.0 + (x - 2.0) * flexmesa_math::exp(-x)) / (3.0 * x);
     let df_2_dtau = -x * (2.0 + tau * tau) * e2 / (3.0 * tau * tau);
 
-    let df_1_dx =
-        -(2.0 - (2.0 + (2.0 - x) * x) * (-x).exp()) * tau / (3.0 * x * x);
+    let df_1_dx = -(2.0 - (2.0 + (2.0 - x) * x) * flexmesa_math::exp(-x)) * tau
+        / (3.0 * x * x);
     let df_2_dx = -(tau * tau - 2.0) * (e2 + x * de2_dx) / (3.0 * tau);
 
     let dln_t_dln_t_int = 0.75 * (tau + 2.0 / 3.0) * t4_int / t4;
@@ -157,7 +158,7 @@ where
         return Ok(out);
     }
 
-    let ln_p = p_surf.ln();
+    let ln_p = flexmesa_math::log(p_surf);
     let mut converged = false;
     let mut last_eos = None;
     let mut last_kap = None;

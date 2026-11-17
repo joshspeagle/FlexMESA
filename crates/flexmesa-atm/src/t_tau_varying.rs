@@ -47,13 +47,13 @@ where
     const DLNTAU_MAX: f64 = 0.0;
 
     let ln_t_outer = eval_t_tau(t_tau_id, tau_outer, teff)?;
-    let t_outer = ln_t_outer.exp();
+    let t_outer = flexmesa_math::exp(ln_t_outer);
     let pgas_outer = CGAS * RHO_OUTER * t_outer;
     let p_outer = pgas_outer + radiation_pressure(t_outer);
-    let ln_p_outer = p_outer.ln();
+    let ln_p_outer = flexmesa_math::log(p_outer);
 
-    let lntau_outer = tau_outer.ln();
-    let lntau_surf = tau_surf.ln();
+    let lntau_outer = flexmesa_math::log(tau_outer);
+    let lntau_surf = flexmesa_math::log(tau_surf);
 
     let res = dopri5(
         lntau_outer,
@@ -65,7 +65,7 @@ where
         errtol,
         max_steps,
         |x, y| {
-            let tau = x.exp();
+            let tau = flexmesa_math::exp(x);
             let ln_p = y[0];
             let ln_t = eval_t_tau(t_tau_id, tau, teff).map_err(|_| {
                 NumError::NonFiniteValue("eval_t_tau failed in dopri5")
@@ -77,7 +77,7 @@ where
                 kap_proc(eos_res.ln_rho, ln_t, &eos_res).map_err(|_| {
                     NumError::NonFiniteValue("kap_proc failed in dopri5")
                 })?;
-            Ok(vec![tau * g / (kap_res.kap * ln_p.exp())])
+            Ok(vec![tau * g / (kap_res.kap * flexmesa_math::exp(ln_p))])
         },
     )
     .map_err(|e| AtmError::ConvergenceFailed {
@@ -204,13 +204,13 @@ where
     }
 
     const DLNTEFF: f64 = 1.0e-4;
-    let ln_teff = teff.ln();
+    let ln_teff = flexmesa_math::log(teff);
     let ln_teff_p = ln_teff + DLNTEFF;
     let ln_teff_m = ln_teff - DLNTEFF;
 
     let (ln_t, ln_p) = eval_varying_data(
         tau_surf,
-        ln_teff.exp(),
+        flexmesa_math::exp(ln_teff),
         g,
         t_tau_id,
         &mut eos_proc,
@@ -220,7 +220,7 @@ where
     )?;
     let (ln_t_p, ln_p_p) = eval_varying_data(
         tau_surf,
-        ln_teff_p.exp(),
+        flexmesa_math::exp(ln_teff_p),
         g,
         t_tau_id,
         &mut eos_proc,
@@ -230,7 +230,7 @@ where
     )?;
     let (ln_t_m, ln_p_m) = eval_varying_data(
         tau_surf,
-        ln_teff_m.exp(),
+        flexmesa_math::exp(ln_teff_m),
         g,
         t_tau_id,
         &mut eos_proc,
@@ -304,8 +304,8 @@ where
         return Ok(AtmStructure { points: Vec::new() });
     }
     let g = cgrav * m / (r * r);
-    let lntau_outer = tau_outer.ln();
-    let lntau_surf = tau_surf.ln();
+    let lntau_outer = flexmesa_math::log(tau_outer);
+    let lntau_surf = flexmesa_math::log(tau_surf);
     let dlntau_max = dlogtau * LN10;
     let dlntau = -0.5 * dlntau_max;
 
@@ -314,14 +314,14 @@ where
          delta_r: f64,
          ln_p: f64|
          -> Result<[f64; NUM_RESULTS_FOR_BUILD_ATM], AtmError> {
-            let tau = lntau.exp();
+            let tau = flexmesa_math::exp(lntau);
             let ln_t = eval_t_tau(t_tau_id, tau, teff)?;
             let eos_res = eos_proc(ln_p, ln_t)?;
             let kap_res = kap_proc(eos_res.ln_rho, ln_t, &eos_res)?;
             let gradr = eval_paczynski_gradr(
-                ln_t.exp(),
-                ln_p.exp(),
-                eos_res.ln_rho.exp(),
+                flexmesa_math::exp(ln_t),
+                flexmesa_math::exp(ln_p),
+                flexmesa_math::exp(eos_res.ln_rho),
                 tau,
                 kap_res.kap,
                 l,
@@ -367,9 +367,9 @@ where
                     "callback failed in build_t_tau_varying",
                 )
             })?;
-            let tau = x.exp();
-            let p = y[1].exp();
-            let rho = sgl[ATM_LND].exp();
+            let tau = flexmesa_math::exp(x);
+            let p = flexmesa_math::exp(y[1]);
+            let rho = flexmesa_math::exp(sgl[ATM_LND]);
             let kap = sgl[ATM_KAP];
             Ok(vec![-tau / (kap * rho), tau * g / (kap * p)])
         },

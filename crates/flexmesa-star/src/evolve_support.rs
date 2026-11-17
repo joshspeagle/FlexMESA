@@ -15,11 +15,11 @@ use crate::hydro_energy::{
     setup_d_turbulent_energy_dt, setup_dl_dm, setup_sources_and_others,
 };
 use crate::hydro_vars::set_hydro_vars;
-use crate::mesh_adjust::{do_adjust_mesh, MeshFunctionConfig};
 use crate::hydro_work::{
     eval_cell_dpe_dt_ad, eval_v_flag_dke_dt_ad, eval_v_flag_dwork_dm_ad,
     eval_v_flag_simple_pdv_dm_ad,
 };
+use crate::mesh_adjust::{do_adjust_mesh, MeshFunctionConfig};
 use crate::model::StarModel;
 use crate::premix::{do_conv_premix, do_phase_separation};
 use crate::riemann_ad::eval_u_flag_total_energy_rates_ad;
@@ -315,7 +315,9 @@ pub fn remesh_star_before_step(
         let snap = model.clone();
         let (ns, nm) = do_adjust_mesh(model, &mesh_cfg)?;
         if ns + nm > 0 {
-            crate::hydro_state::smooth_post_remesh_hydro_and_rotation(model, &snap);
+            crate::hydro_state::smooth_post_remesh_hydro_and_rotation(
+                model, &snap,
+            );
             set_hydro_vars(model, false, false)?;
             model.save_start_values();
             return Ok((ns, nm, Some(snap)));
@@ -348,7 +350,7 @@ pub(crate) fn update_mlt_sticky_and_sig_after_hydro(model: &mut StarModel) {
                     .iter()
                     .copied()
                     .fold(f64::NEG_INFINITY, f64::max)
-                    / std::f64::consts::LN_10
+                    / flexmesa_const::LN10
                     >= mw.min_logt_for_make_gradr_sticky_in_solver_iters);
         let eval_cnt = model.aux.solver_mlt_eval_count;
         for k in 0..nz {

@@ -117,7 +117,7 @@ pub fn eval_radiation(
     let tempinv = 1.0 / temp;
     let deninv = 1.0 / den;
 
-    let prad_val = CRAD * third * temp.powi(4);
+    let prad_val = CRAD * third * flexmesa_math::pow4(temp);
     let dpraddt = 4.0 * prad_val * tempinv;
     let dpraddtt = 4.0 * CRAD * temp * temp;
     let prad = HelmThermoVar {
@@ -238,7 +238,7 @@ pub fn eval_ideal_ions(
     let y_s = ktinv * ytot1;
     let yy_s = y_s * y_s.sqrt();
     let z_s = xni_val * HELM_SIFAC * yy_s;
-    let etaion_val = z_s.ln();
+    let etaion_val = flexmesa_math::log(z_s);
     let xx = 1.0 / xni_val;
     let detaidd = dxnidd * xx;
     let detaidt = -1.5 * tempinv;

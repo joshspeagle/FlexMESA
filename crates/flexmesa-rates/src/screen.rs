@@ -60,7 +60,7 @@ pub fn screen_salpeter(
 ) -> ScreenEval {
     let zeta = (z2bar + zbar) / abar;
     let lnf = 1.88e8 * z1 * z2 * (den * zeta / (temp * temp * temp)).sqrt();
-    let scor = lnf.exp();
+    let scor = flexmesa_math::exp(lnf);
     let dscor_dt = -1.5 * lnf / temp * scor;
     let dscor_dd = 0.5 * lnf / den * scor;
     ScreenEval {
@@ -97,28 +97,32 @@ pub fn screen_extended(
     let qlam0z = 1.88e8 * tempi * pp;
     let qlam0zdt = 1.88e8 * (dtempidt * pp + tempi * dppdt);
     let qlam0zdd = 1.88e8 * tempi * dppdd;
-    let taufac = 4.248719e3 / 3.0 * tempi.powf(ONE_THIRD);
+    let taufac = 4.248719e3 / 3.0 * flexmesa_math::pow(tempi, ONE_THIRD);
     let taufacdt = -ONE_THIRD * taufac * tempi;
-    let xni = (rr * zbar).powf(ONE_THIRD);
+    let xni = flexmesa_math::pow(rr * zbar, ONE_THIRD);
     let dxnidd = ONE_THIRD * xni * deni;
     let aa = 2.27493e5 * tempi * xni;
     let daadt = 2.27493e5 * dtempidt * xni;
     let daadd = 2.27493e5 * tempi * dxnidd;
 
     let z12 = z1 + z2;
-    let zs13 = z12.powf(ONE_THIRD);
+    let zs13 = flexmesa_math::pow(z12, ONE_THIRD);
     let zs13inv = 1.0 / zs13;
-    let zhat = z12.powf(5.0 / 3.0) - z1.powf(5.0 / 3.0) - z2.powf(5.0 / 3.0);
-    let zhat2 =
-        z12.powf(5.0 / 12.0) - z1.powf(5.0 / 12.0) - z2.powf(5.0 / 12.0);
-    let lzav = (5.0 / 3.0) * (z1 * z2 / z12).max(1.0e-99).ln();
-    let aznut = (z1 * z1 * z2 * z2 * a1 * a2 / (a1 + a2)).powf(ONE_THIRD);
+    let zhat = flexmesa_math::pow(z12, 5.0 / 3.0)
+        - flexmesa_math::pow(z1, 5.0 / 3.0)
+        - flexmesa_math::pow(z2, 5.0 / 3.0);
+    let zhat2 = flexmesa_math::pow(z12, 5.0 / 12.0)
+        - flexmesa_math::pow(z1, 5.0 / 12.0)
+        - flexmesa_math::pow(z2, 5.0 / 12.0);
+    let lzav = (5.0 / 3.0) * flexmesa_math::log((z1 * z2 / z12).max(1.0e-99));
+    let aznut =
+        flexmesa_math::pow(z1 * z1 * z2 * z2 * a1 * a2 / (a1 + a2), ONE_THIRD);
 
     let bb = z1 * z2;
     let mut gamp = aa;
     let mut gampdt = daadt;
     let mut gampdd = daadd;
-    let qq = 2.0_f64.powf(ONE_THIRD) * bb * zs13inv;
+    let qq = flexmesa_math::pow(2.0_f64, ONE_THIRD) * bb * zs13inv;
     let mut gamef = qq * gamp;
     let mut gamefdt = qq * gampdt;
     let mut gamefdd = qq * gampdd;
@@ -135,7 +139,7 @@ pub fn screen_extended(
         gamef = 1.6 * tau12;
         gamefdt = 1.6 * tau12dt;
         gamefdd = 0.0;
-        let qq_inv = zs13 / (2.0_f64.powf(ONE_THIRD) * bb);
+        let qq_inv = zs13 / (flexmesa_math::pow(2.0_f64, ONE_THIRD) * bb);
         gamp = gamef * qq_inv;
         gampdt = gamefdt * qq_inv;
         gampdd = 0.0;
@@ -147,10 +151,10 @@ pub fn screen_extended(
     let (mut h12, mut dh12dt, mut dh12dd) = (h12w, dh12wdt, dh12wdd);
 
     if gamef > 0.3 {
-        let gamp14 = gamp.powf(0.25);
+        let gamp14 = flexmesa_math::pow(gamp, 0.25);
         let cc = 0.896434 * gamp * zhat
             - 3.44740 * gamp14 * zhat2
-            - 0.5551 * (gamp.ln() + lzav)
+            - 0.5551 * (flexmesa_math::log(gamp) + lzav)
             - 2.996;
         let dccdgamp = 0.896434 * zhat
             - 0.25 * 3.44740 * gamp14 * zhat2 / gamp
@@ -193,7 +197,7 @@ pub fn screen_extended(
             (0.0, 0.0)
         };
 
-        h12 = cc - xx + xlgfac.ln();
+        h12 = cc - xx + flexmesa_math::log(xlgfac);
         dh12dt = dccdt - dxxdt + dxlgfacdt;
         dh12dd = dccdd - dxxdd + dxlgfacdd;
 
@@ -215,7 +219,7 @@ pub fn screen_extended(
     }
 
     h12 = h12.clamp(0.0, 300.0);
-    let scor = h12.exp();
+    let scor = flexmesa_math::exp(h12);
     let (dscor_dt, dscor_dd) = if h12 == 300.0 {
         (0.0, 0.0)
     } else {

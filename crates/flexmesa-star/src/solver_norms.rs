@@ -258,7 +258,7 @@ pub(crate) fn active_gold_level(model: &StarModel) -> u8 {
     let max_t = model
         .ln_t
         .iter()
-        .fold(0.0_f64, |acc, &lnt| acc.max(lnt.exp()));
+        .fold(0.0_f64, |acc, &lnt| acc.max(flexmesa_math::exp(lnt)));
     u8::from(max_t <= c.max_t_for_gold_tolerances)
 }
 

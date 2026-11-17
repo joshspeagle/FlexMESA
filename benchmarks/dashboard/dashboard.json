@@ -21,7 +21,7 @@
         "verified_total": 0,
         "pct_ported": 14.9,
         "pct_verified": 0.0,
-        "rust_lines": 57804,
+        "rust_lines": 57749,
         "python_jax_lines": 4723
       },
       {
@@ -55,7 +55,7 @@
         "verified_total": 0,
         "pct_ported": 18.2,
         "pct_verified": 0.0,
-        "rust_lines": 9945,
+        "rust_lines": 9935,
         "python_jax_lines": 1242
       },
       {
@@ -208,7 +208,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 2364,
+        "rust_lines": 2338,
         "python_jax_lines": 898
       },
       {
@@ -378,7 +378,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 3490,
+        "rust_lines": 3533,
         "python_jax_lines": 2353
       },
       {
@@ -455,20 +455,20 @@
       "upstream_panel_modules": 46
     },
     "infrastructure_lines": {
-      "rust_bridge_testing_bench": 15403,
-      "python_testing_bench": 10846
+      "rust_bridge_testing_bench": 15444,
+      "python_testing_bench": 13123
     }
   },
   "numerics": {
     "has_165_ci": true,
-    "strict_cross_machine_identical": "verified in CI (x86_64 == aarch64, 1 == 4 threads; 474,062 math vectors + star/1.3M_ms_high_Z 5-step trace run with unsupported controls ignored)",
-    "strict_kernels_bit_identical": "math: 403,258/403,258 CRMATH 0 ULP (70,804 libm <= 1 ULP); 0/23 other module suites",
+    "strict_cross_machine_identical": "verified in CI (x86_64 == aarch64, 1 == 4 threads; 474,062 math vectors + uncapped star/1.3M_ms_high_Z + binary/jdot_gr_check run with unsupported controls ignored)",
+    "strict_kernels_bit_identical": "math: 403,258/403,258 CRMATH 0 ULP (70,804 libm <= 1 ULP); 3,388/3,504 probed module hex 0 ULP (2 complete, 12 non-math probed)",
     "total_upstream_hex_values": 348321,
     "modules": [
       {
         "module": "const",
         "upstream_exact_values": 23,
-        "exact_strict_compared": "0"
+        "exact_strict_compared": "23/23 (0 ULP)"
       },
       {
         "module": "utils",
@@ -483,7 +483,7 @@
       {
         "module": "mtx",
         "upstream_exact_values": 22,
-        "exact_strict_compared": "0"
+        "exact_strict_compared": "7/22 (0 ULP partial)"
       },
       {
         "module": "auto_diff",
@@ -498,22 +498,22 @@
       {
         "module": "interp_1d",
         "upstream_exact_values": 234,
-        "exact_strict_compared": "0"
+        "exact_strict_compared": "22/234 (0 ULP partial)"
       },
       {
         "module": "interp_2d",
         "upstream_exact_values": 104,
-        "exact_strict_compared": "0"
+        "exact_strict_compared": "4/104 (0 ULP partial)"
       },
       {
         "module": "chem",
         "upstream_exact_values": 1102,
-        "exact_strict_compared": "0"
+        "exact_strict_compared": "286/1,102 (0 ULP partial)"
       },
       {
         "module": "colors",
         "upstream_exact_values": 234,
-        "exact_strict_compared": "0"
+        "exact_strict_compared": "4/10 0 ULP (max 13 ULP, 234 total)"
       },
       {
         "module": "eos",
@@ -523,17 +523,17 @@
       {
         "module": "kap",
         "upstream_exact_values": 54,
-        "exact_strict_compared": "0"
+        "exact_strict_compared": "13/21 0 ULP (max 1,459,407,697 ULP, 21 total)"
       },
       {
         "module": "rates",
         "upstream_exact_values": 3685,
-        "exact_strict_compared": "0"
+        "exact_strict_compared": "5/9 0 ULP (max 6 ULP, 3,685 total)"
       },
       {
         "module": "neu",
         "upstream_exact_values": 340000,
-        "exact_strict_compared": "0"
+        "exact_strict_compared": "2,935/3,000 0 ULP (max 68 ULP, 300,000 total)"
       },
       {
         "module": "net",
@@ -543,7 +543,7 @@
       {
         "module": "ionization",
         "upstream_exact_values": 41,
-        "exact_strict_compared": "0"
+        "exact_strict_compared": "28/31 0 ULP (max 10,652,452 ULP, 31 total)"
       },
       {
         "module": "atm",
@@ -553,7 +553,7 @@
       {
         "module": "turb",
         "upstream_exact_values": 136,
-        "exact_strict_compared": "0"
+        "exact_strict_compared": "32/62 0 ULP (max 7 ULP, 71 total)"
       },
       {
         "module": "star_data",
@@ -578,7 +578,7 @@
       {
         "module": "binary",
         "upstream_exact_values": 5,
-        "exact_strict_compared": "0"
+        "exact_strict_compared": "5/5 (0 ULP)"
       },
       {
         "module": "astero",
@@ -1145,37 +1145,37 @@
         "issues": "#146"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:327",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:332",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:335",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:340",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:343",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:348",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:351",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:356",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:359",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:364",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:366",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:371",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:374",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:379",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },

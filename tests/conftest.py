@@ -15,6 +15,10 @@ import jax
 import pytest
 
 from flexmesa.data import fetch
+from flexmesa.testing import known_gaps_gate
+
+# Enforce strict zero-skip verification by default unless explicitly opted out.
+os.environ.setdefault("FLEXMESA_REQUIRE_ZERO_SKIPS", "1")
 
 # Disable per-example timing deadlines so first-call JAX JIT compilation or
 # parallel pytest-xdist worker initialization never triggers FlakyFailure.
@@ -93,10 +97,7 @@ def pytest_sessionfinish(
 ) -> None:
     """Fail the session when zero-skip CI enforcement is active."""
     del exitstatus
-    if (
-        os.environ.get("FLEXMESA_REQUIRE_ZERO_SKIPS", "").strip() == "1"
-        and _SKIPPED_NODEIDS
-    ):
+    if known_gaps_gate.require_zero_skips_enabled() and _SKIPPED_NODEIDS:
         session.exitstatus = pytest.ExitCode.TESTS_FAILED
 
 
@@ -104,10 +105,7 @@ def pytest_terminal_summary(
     terminalreporter: pytest.TerminalReporter,
 ) -> None:
     """Report unexpected skips when zero-skip CI enforcement is active."""
-    if (
-        os.environ.get("FLEXMESA_REQUIRE_ZERO_SKIPS", "").strip() == "1"
-        and _SKIPPED_NODEIDS
-    ):
+    if known_gaps_gate.require_zero_skips_enabled() and _SKIPPED_NODEIDS:
         terminalreporter.write_sep(
             "!",
             f"FLEXMESA_REQUIRE_ZERO_SKIPS=1 violated by "

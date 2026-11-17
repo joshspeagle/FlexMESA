@@ -63,9 +63,15 @@
 - **Python Unit Suite, Linting, Formatting & Strict Type Checking**:
   ```bash
   pytest
-  ruff check src tests
-  ruff format --check --line-length 80 src tests
-  mypy --strict src tests
+  ruff check src tests scripts/docs scripts/check_strict_determinism.py scripts/mesa_reference/measure_mesa_spread.py
+  ruff format --check --line-length 80 src tests scripts/docs scripts/check_strict_determinism.py scripts/mesa_reference/measure_mesa_spread.py
+  mypy --strict src tests scripts/docs scripts/check_strict_determinism.py scripts/mesa_reference/measure_mesa_spread.py
+  ```
+- **Known-Gaps, Module-Hex & Strict-Determinism Gates (`#144`, `#165`)**:
+  ```bash
+  python -m flexmesa.testing.known_gaps_gate --fail-on-imperative-skips
+  python -m flexmesa.testing.module_hex_gate --check-summary
+  python scripts/check_strict_determinism.py
   ```
 - **Rust Workspace Tests, Docs & Clippy Gate**:
   ```bash
@@ -84,11 +90,13 @@
   flexmesa trace binary <case> --out <out_dir> [--numerics-mode strict|fast --timeout-sec 600 --max-rss-gb 6.0]
   flexmesa trace astero <case> --out <out_dir> [--numerics-mode strict|fast --timeout-sec 600 --max-rss-gb 6.0]
   flexmesa harness table --check
-  flexmesa harness run --preset pr-ci --markdown-out case_table.md --json-out case_table.json --gate [--numerics-mode strict]
+  flexmesa harness run --preset pr-ci --timeout-sec 480 --max-rss-gb 6.0 --markdown-out case_table.md --json-out case_table.json --gate [--numerics-mode strict]
+  flexmesa harness run --preset all --numerics-mode strict --jobs 2 --timeout-sec 300 --max-rss-gb 5.5 --markdown-out case_table.md --json-out case_table.json --gate
   flexmesa dashboard verify-manifest
   flexmesa dashboard render
   flexmesa dashboard check
   ```
+  Run at most one full FlexMESA or MESA campaign at a time with `--jobs 2 --max-rss-gb 5.5 --timeout-sec 300` (scheduled campaign budget); running FlexMESA and MESA campaigns concurrently exhausts 15 GiB hosts.
 
 ## How to Pick Up an Audit Package (`#140`)
 
@@ -119,9 +127,9 @@
 - **Forbidden Pass-Manufacturing Practices**:
   - Never make a test or case pass by loosening a tolerance (`DECISIONS #9`), changing an expected value, capping step counts, adding `#[ignore]` or `xfail`, clamping physical state, adding convergence fallbacks, or branching on a test-case name or mass range.
   - Library crates (`crates/flexmesa-*`) must contain **zero** test-case names (`"double_bh"`, `"hb_2M"`, ...) or case-specific parameter overrides, with no exception for files named as harnesses or extras: the existing `tier1_extras.rs` to `tier5_extras.rs` and the case-name branches in `star_job_init.rs` are removed under `#148`. Per-case hooks live in test-side code and port only what upstream's own `run_star_extras.f90` or `run_binary_extras.f90` does.
-- **No Undeclared Failures (Replacing `"All Green Before Merge"`, `#144`)**:
+- **Declared Known-Gaps Merge Gate (Replacing `"All Green Before Merge"`, `#144`)**:
   - Removing fabricated behaviour or placeholder physics is expected to make unfinished cases fail; a failing case due to unported physics is an accurate measurement.
-  - Record known failures in the declared known-gaps manifest with an open issue link (`#144`). CI gates on **zero undeclared failures** (and flags declared gaps that begin passing). Every `#[ignore]` or `xfail(strict=True)` in the repository must carry an open `#<issue>` link.
+  - Record all unfinished history cases (`[[gaps]]`) and code-level test suppressors (`[[test_gaps]]`) in the single declared ledger `benchmarks/history_harness/known_gaps.toml` with an open `#<issue>` link (`#144`). CI gates on **zero undeclared failures**, **zero stale gaps** (declared gaps that start passing fail the gate), **zero vacuous skips** (`FLEXMESA_REQUIRE_ZERO_SKIPS=1` defaults active in every environment so missing inputs fail tests rather than passing), and Level-2 `module_hex` non-regression (`benchmarks/module_hex/known_module_gaps.toml`). Every `#[ignore]` or `xfail(strict=True)` in the repository must carry an open `#<issue>` link and appear bijectively in `benchmarks/history_harness/known_gaps.toml`.
 - **Expected Values & Regression Snapshots (`#146`)**:
   - Any commit that modifies a pinned numeric literal in a test, fixture, or manifest must state in the commit body: (a) the old value, (b) the new value, and (c) the independent source of the new value.
   - Self-generated `FlexMESA` outputs used for internal regression or cross-backend consistency checks must be named `"regression snapshots"`, stored separately from upstream MESA references, and never labelled `"golden"`, `"reference"`, `"parity"`, or `"Fortran"`.
@@ -137,7 +145,7 @@
   2. Write descriptive multi-line commit bodies stating (a) what changed module by module, (b) the upstream MESA `file:line` reference (plus old/new values and source for any literal change), and (c) the verification commands executed.
   3. Keep all committed files, commits, issues, pull requests, and comments strictly public-facing with zero machine-specific paths, local file URIs, local hostnames, or private environment names.
   4. Preserve native `git config` author/committer settings, include a `Co-Authored-By:` trailer for the active agent, and end agent-authored GitHub issue bodies, PR descriptions, and comments with `---` and an italicized attribution footer naming the agent that performed the work (`_Generated by [Claude Code](https://claude.ai/code)_`, `_Generated by [Antigravity](https://antigravity.google)_`, or `_Generated by [OpenAI Codex](https://openai.com/codex)_`).
-  5. Tracking-only pull requests (`notes/`, rule files, issue trackers) may merge immediately to `main` without waiting for code CI once local hygiene checks pass; code pull requests must pass local checks, independent review, and GitHub Actions CI (`gh api .../runs`) on the PR branch and `main`.
+  5. Tracking-only pull requests (`notes/`, rule files, issue trackers) may merge immediately to `main` without waiting for code CI once local hygiene checks pass; code pull requests must pass local checks, independent review, and GitHub Actions CI (`gh api .../runs`) on the PR branch and `main` under the **declared-known-gaps merge gate** (`benchmarks/history_harness/known_gaps.toml`, zero undeclared failures, zero stale gaps, and zero vacuous skips).
 
 ## Code Structure, Precision & Documentation Standards
 

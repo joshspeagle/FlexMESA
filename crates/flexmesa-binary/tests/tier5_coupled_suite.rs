@@ -49,9 +49,14 @@ impl Drop for TempDirGuard {
 }
 
 fn resolve_suite_dir() -> Option<(PathBuf, PathBuf)> {
-    let mesa_dir = PathBuf::from(std::env::var("MESA_DIR").ok()?);
-    let suite_dir = mesa_dir.join("binary").join("test_suite");
-    suite_dir.is_dir().then_some((mesa_dir, suite_dir))
+    let suite_dir =
+        flexmesa_utils::require_mesa_test_input_path("binary/test_suite")?;
+    let mesa_dir = suite_dir
+        .parent()
+        .and_then(|p| p.parent())
+        .expect("upstream MESA root")
+        .to_path_buf();
+    Some((mesa_dir, suite_dir))
 }
 
 #[test]

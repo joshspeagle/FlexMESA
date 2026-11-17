@@ -1,0 +1,176 @@
+# Declared Level-2 module-hex gaps against upstream MESA 26.4.1 (#144).
+# Clean 0-ULP modules (const: 23/23, binary: 5/5) are omitted here and fail if
+# any regression occurs. Remaining packages must declare open issues and ULP
+# ceilings; improving a nonzero_ulp module to 0 ULP fails as a stale gap.
+
+[[gaps]]
+module = "utils"
+status = "zero_values_in_mesa_reference"
+reason = "Upstream utils/test emits zero floating-point values in exact_tested_values.tsv."
+
+[[gaps]]
+module = "forum"
+status = "zero_values_in_mesa_reference"
+reason = "Upstream forum/test emits zero floating-point values in exact_tested_values.tsv."
+
+[[gaps]]
+module = "sample"
+status = "zero_values_in_mesa_reference"
+reason = "Upstream sample package has no test/ directory in MESA 26.4.1."
+
+[[gaps]]
+module = "star_data"
+status = "zero_values_in_mesa_reference"
+reason = "Upstream star_data/test emits zero floating-point values in exact_tested_values.tsv."
+
+[[gaps]]
+module = "astero"
+status = "zero_values_in_mesa_reference"
+reason = "Upstream astero/test emits zero floating-point values in exact_tested_values.tsv."
+
+[[gaps]]
+module = "math"
+status = "partial_0_ulp"
+issue = "#166"
+max_declared_ulp = 0
+min_zero_ulp_count = 24
+expect_nonzero_ulp = false
+reason = "24 tested crmath Rust strict intrinsics agree at 0 ULP; remaining 75 upstream CRMATH evaluations await probe wiring."
+
+[[gaps]]
+module = "interp_1d"
+status = "partial_0_ulp"
+issue = "#153"
+max_declared_ulp = 0
+min_zero_ulp_count = 22
+expect_nonzero_ulp = false
+reason = "22 tested test1 (m3q asc/desc) and test3 (pm asc/desc) values match at 0 ULP; remaining 212 entries await test2/remesh probe wiring."
+
+[[gaps]]
+module = "chem"
+status = "partial_0_ulp"
+issue = "#161"
+max_declared_ulp = 0
+min_zero_ulp_count = 286
+expect_nonzero_ulp = false
+reason = "All 286 Lodders (2003) atom percents match at 0 ULP; remaining 816 composition/mass rows await driver wiring."
+
+[[gaps]]
+module = "ionization"
+status = "nonzero_ulp"
+issue = "#161"
+max_declared_ulp = 15000000
+min_zero_ulp_count = 28
+expect_nonzero_ulp = true
+reason = "28/28 eval_ionization channels match at 0 ULP; 3 Fe56-in-He4 table interpolations differ by up to ~1.07e7 ULPs (~1e-8 rel)."
+
+[[gaps]]
+module = "kap"
+status = "nonzero_ulp"
+issue = "#161"
+max_declared_ulp = 1600000000
+min_zero_ulp_count = 12
+expect_nonzero_ulp = true
+reason = "12/14 gs98 and CO-enhanced channels match at 0 ULP (log10kap = 1 ULP); Test 3 AESOPUS differs due to table compression/rounding."
+
+[[gaps]]
+module = "mtx"
+status = "partial_0_ulp"
+issue = "#152"
+max_declared_ulp = 0
+min_zero_ulp_count = 7
+expect_nonzero_ulp = false
+reason = "All 7 tested test_square1 and test_square2 dense LU entries match at 0 ULP; remaining 15 banded/sparse outputs await probe wiring."
+
+[[gaps]]
+module = "interp_2d"
+status = "partial_0_ulp"
+issue = "#153"
+max_declared_ulp = 0
+min_zero_ulp_count = 4
+expect_nonzero_ulp = false
+reason = "All 4 interior midpoint bicubic spline coefficients match at 0 ULP; remaining 100 evaluated grid/derivative rows await probe wiring."
+
+[[gaps]]
+module = "colors"
+status = "nonzero_ulp"
+issue = "#161"
+max_declared_ulp = 20
+min_zero_ulp_count = 4
+expect_nonzero_ulp = true
+reason = "Group 1 solar Mag_bol/B/U/V match at 0 ULP; remaining 6 bolometric/band channels differ by 1-13 ULPs."
+
+[[gaps]]
+module = "turb"
+status = "nonzero_ulp"
+issue = "#157"
+max_declared_ulp = 10
+min_zero_ulp_count = 32
+expect_nonzero_ulp = true
+reason = "32/62 TDC gradT and conv_vel outputs agree at 0 ULP; remaining TDC iterations differ by 1-7 ULPs."
+
+[[gaps]]
+module = "neu"
+status = "nonzero_ulp"
+issue = "#161"
+max_declared_ulp = 100
+min_zero_ulp_count = 2900
+expect_nonzero_ulp = true
+reason = "2,935/3,000 sampled records match at 0 ULP; 65 boundary/cutoff evaluations differ by up to 68 ULPs."
+
+[[gaps]]
+module = "rates"
+status = "nonzero_ulp"
+issue = "#161"
+max_declared_ulp = 10
+min_zero_ulp_count = 5
+expect_nonzero_ulp = true
+reason = "5/9 Salpeter, extended, and Chugunov screening outputs match at 0 ULP; remaining 4 channels differ by up to 6 ULPs."
+
+[[gaps]]
+module = "auto_diff"
+status = "unported_hex_harness"
+issue = "#166"
+reason = "774 upstream auto_diff operator-overload printouts await direct TSV harness mapping."
+
+[[gaps]]
+module = "num"
+status = "unported_hex_harness"
+issue = "#152"
+reason = "570 upstream num Brent/Newton/ODE test printouts await direct TSV harness mapping."
+
+[[gaps]]
+module = "eos"
+status = "unported_hex_harness"
+issue = "#161"
+reason = "391 upstream EOS diagnostic table/blend printouts await direct TSV harness mapping."
+
+[[gaps]]
+module = "net"
+status = "unported_hex_harness"
+issue = "#161"
+reason = "140 upstream nuclear reaction network burn printouts await direct TSV harness mapping."
+
+[[gaps]]
+module = "atm"
+status = "unported_hex_harness"
+issue = "#161"
+reason = "90 upstream model atmosphere table printouts await direct TSV harness mapping."
+
+[[gaps]]
+module = "gyre"
+status = "unported_hex_harness"
+issue = "#170"
+reason = "136 upstream bundled GYRE pulsation eigenfrequency outputs tracked under #170."
+
+[[gaps]]
+module = "adipls"
+status = "unported_hex_harness"
+issue = "#171"
+reason = "92 upstream bundled ADIPLS pulsation eigenfrequency outputs tracked under #171."
+
+[[gaps]]
+module = "star"
+status = "unported_hex_harness"
+issue = "#152"
+reason = "386 upstream star/test console values (plus 240 history_exact_hex cells) tracked under stellar parity issues."

@@ -10,6 +10,7 @@ Builds `docs/benchmarks/known-gaps.md` deterministically from
 from __future__ import annotations
 
 import collections
+import json
 import pathlib
 import re
 import sys
@@ -20,6 +21,7 @@ from flexmesa.testing import (
     case_manifest,
     case_report,
     harness_runner,
+    known_gaps_gate,
 )
 
 try:
@@ -256,6 +258,72 @@ def render_known_gaps_markdown(repo_root: pathlib.Path) -> str:
             f"{_format_observed(rec)} | "
             f"{_md_cell(rec.known_gap_reason)} |"
         )
+
+    test_gaps, _ = known_gaps_gate.load_declared_test_gaps(
+        harness_dir / "known_gaps.toml"
+    )
+    if test_gaps:
+        lines.extend(
+            [
+                "",
+                f"## Declared Test-Suite Gaps (`[[test_gaps]]`, "
+                f"{len(test_gaps)} Markers)",
+                "",
+                "Every Rust `#[ignore]` and Python `xfail`/`skip` marker in "
+                "the repository is tracked bijectively in "
+                "`benchmarks/history_harness/known_gaps.toml` (`#144`):",
+                "",
+                "| Kind | File | Test | Role | Issue | Reason |",
+                "| :--- | :--- | :--- | :--- | :--- | :--- |",
+            ]
+        )
+        for tg in test_gaps:
+            lines.append(
+                f"| `{tg.kind}` | `{tg.file}` | `{tg.test_name}` | "
+                f"`{tg.role}` | {_common.issue_link(tg.issue)} | "
+                f"{_md_cell(tg.reason)} |"
+            )
+
+    hex_summary_path = (
+        repo_root / "benchmarks" / "module_hex" / "module_hex_summary.json"
+    )
+    if hex_summary_path.is_file():
+        hex_summary = json.loads(hex_summary_path.read_text(encoding="utf-8"))
+        pass_cnt = int(hex_summary.get("modules_passing_0_ulp", 0))
+        probe_cnt = int(hex_summary.get("modules_with_executable_probes", 0))
+        lines.extend(
+            [
+                "",
+                "## Level-2 Module Hex Reference Gaps "
+                "(`benchmarks/module_hex/`)",
+                "",
+                f"- **Checked vs MESA `26.4.1` `raw_bits_hex`**: "
+                f"`{hex_summary.get('total_values_0_ulp', 0):,}` / "
+                f"`{hex_summary.get('total_values_checked', 0):,}` outputs at "
+                f"`0 ULP` across `{probe_cnt}` probed modules "
+                f"(`{pass_cnt}` modules complete at `0 ULP`; "
+                f"`{hex_summary.get('total_exact_values_captured', 0):,}` "
+                "total captured upstream values).",
+                "",
+                "| Module | Status | Checked / Expected | 0 ULP | Max ULP | "
+                "Issue | Notes |",
+                "| :--- | :--- | ---: | ---: | ---: | :--- | :--- |",
+            ]
+        )
+        for mod_row in hex_summary.get("modules", []):
+            issue_str = mod_row.get("issue")
+            issue_cell = (
+                _common.issue_link(str(issue_str)) if issue_str else "none"
+            )
+            checked_n = int(mod_row.get("checked_values", 0))
+            exp_n = int(mod_row.get("expected_outputs", 0))
+            zero_n = int(mod_row.get("zero_ulp_values", 0))
+            lines.append(
+                f"| `{mod_row['module']}` | `{mod_row['status']}` | "
+                f"{checked_n:,} / {exp_n:,} | {zero_n:,} | "
+                f"{int(mod_row.get('max_ulp', 0)):,} | {issue_cell} | "
+                f"{_md_cell(str(mod_row.get('notes', '')))} |"
+            )
 
     lines.extend(
         [

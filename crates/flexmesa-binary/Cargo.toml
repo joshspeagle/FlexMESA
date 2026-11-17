@@ -13,6 +13,7 @@ flexmesa-const = { path = "../flexmesa-const" }
 flexmesa-math = { path = "../flexmesa-math" }
 flexmesa-schema = { path = "../flexmesa-schema" }
 flexmesa-star = { path = "../flexmesa-star" }
+flexmesa-utils = { path = "../flexmesa-utils" }
 
 [lints]
 workspace = true

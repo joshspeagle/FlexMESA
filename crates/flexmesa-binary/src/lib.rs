@@ -225,8 +225,6 @@ mod tests {
 
     #[test]
     fn test_e2e_5_binary_test_suite_and_oracles() {
-        use std::path::Path;
-
         assert_eq!(TIER5_BINARY_CASES.len(), 8);
         assert!(is_tier5_binary_case("jdot_gr_check"));
         assert!(is_tier5_binary_case("wind_fed_bhhmxb"));
@@ -246,22 +244,14 @@ mod tests {
         );
         assert!(w_brott > 0.0 && w_brott.is_finite());
 
-        let require_zero_skips =
-            std::env::var("FLEXMESA_REQUIRE_ZERO_SKIPS").as_deref() == Ok("1");
-        if require_zero_skips {
-            let mesa_dir = std::env::var("MESA_DIR")
-                .expect("MESA_DIR required when FLEXMESA_REQUIRE_ZERO_SKIPS=1");
-            assert!(
-                Path::new(&mesa_dir)
-                    .join("binary")
-                    .join("test_suite")
-                    .is_dir(),
-                "missing binary/test_suite under {mesa_dir}"
-            );
-        }
-        if let Ok(mesa_dir) = std::env::var("MESA_DIR") {
-            let base = Path::new(&mesa_dir);
-            if base.join("binary").join("test_suite").is_dir() {
+        if let Some(bin_suite) =
+            flexmesa_utils::require_mesa_test_input_path("binary/test_suite")
+        {
+            let base = bin_suite
+                .parent()
+                .and_then(|p| p.parent())
+                .expect("upstream MESA root");
+            {
                 let err = run_binary_suite(base, Some(4)).expect_err(
                     "raw $MESA_DIR binary suite must reject unsupported controls",
                 );

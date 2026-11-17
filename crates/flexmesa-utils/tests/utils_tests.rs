@@ -11,54 +11,23 @@
 //!   and property-based fuzzing with `proptest`.
 
 use flexmesa_utils::{
-    is_bad, is_bad_slice, remove_underbars, replace_bad_nums, split_line,
-    tokenize, IntegerDict, IntegerIdict, Token, Tokenizer,
+    is_bad, is_bad_slice, is_zero_skips_opt_out, remove_underbars,
+    replace_bad_nums, require_mesa_test_input_path, split_line, tokenize,
+    IntegerDict, IntegerIdict, Token, Tokenizer,
 };
 use proptest::prelude::*;
 
 fn verify_upstream_utils_files(expected: &[Token]) {
-    let mesa_env = std::env::var_os("MESA_DIR");
-    let mesa_root = mesa_env
-        .as_ref()
-        .filter(|v| !v.is_empty())
-        .map(std::path::PathBuf::from)
-        .or_else(|| {
-            std::env::var_os("XDG_CACHE_HOME")
-                .filter(|v| !v.is_empty())
-                .map(|p| {
-                    std::path::PathBuf::from(p)
-                        .join("flexmesa/mesa_test_inputs")
-                })
-        })
-        .or_else(|| {
-            std::env::var_os("HOME").filter(|v| !v.is_empty()).map(|p| {
-                std::path::PathBuf::from(p)
-                    .join(".cache/flexmesa/mesa_test_inputs")
-            })
-        });
-    let Some(root) = mesa_root else {
-        return;
-    };
-    let upstream_token_path = root.join("utils/test/token.txt");
-    let upstream_output_path = root.join("utils/test/test_output");
-    if mesa_env.as_ref().is_some_and(|v| !v.is_empty()) {
-        assert!(
-            upstream_token_path.is_file(),
-            "missing {}",
-            upstream_token_path.display()
-        );
-        assert!(
-            upstream_output_path.is_file(),
-            "missing {}",
-            upstream_output_path.display()
-        );
-    }
-    if upstream_token_path.is_file() {
+    if let Some(upstream_token_path) =
+        require_mesa_test_input_path("utils/test/token.txt")
+    {
         let upstream_txt = std::fs::read_to_string(&upstream_token_path)
             .expect("read utils/test/token.txt");
         assert_eq!(tokenize(&upstream_txt), expected);
     }
-    if upstream_output_path.is_file() {
+    if let Some(upstream_output_path) =
+        require_mesa_test_input_path("utils/test/test_output")
+    {
         let out_txt = std::fs::read_to_string(&upstream_output_path)
             .expect("read utils/test/test_output");
         let token_lines: Vec<String> = out_txt
@@ -266,5 +235,15 @@ proptest! {
         prop_assert_eq!(dict.lookup(&key), Some(val1));
         prop_assert!(dict.define_and_report_duplicates(&key, val2));
         prop_assert_eq!(dict.lookup(&padded), Some(val2));
+    }
+}
+
+#[test]
+fn test_is_zero_skips_opt_out_values() {
+    assert!(!is_zero_skips_opt_out(None));
+    assert!(!is_zero_skips_opt_out(Some("1")));
+    assert!(!is_zero_skips_opt_out(Some("true")));
+    for token in ["0", "false", "FALSE", "no", "off", " OFF "] {
+        assert!(is_zero_skips_opt_out(Some(token)), "expected opt-out for {token}");
     }
 }

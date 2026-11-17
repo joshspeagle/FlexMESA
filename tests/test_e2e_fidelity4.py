@@ -8,12 +8,12 @@ relaxation loops (`relax.rs`), and 107-case active MESA `test_suite` + 32-case
 
 from __future__ import annotations
 
-import os
 import pathlib
 
 import pytest
 
 from flexmesa import binary, star
+from flexmesa.testing import known_gaps_gate
 
 
 def test_fidelity4_mod_and_photo_roundtrip_and_step_redo_parity() -> None:
@@ -48,10 +48,9 @@ def test_fidelity4_representative_multi_tier_physical_e2e_execution(
     assert len(binary.TIER5_BINARY_CASES) == 8
     assert len(star.TIER4_DEV_CASES) == 1
 
-    mesa_dir = os.environ.get("MESA_DIR", "")
-    if not mesa_dir:
-        pytest.skip("MESA_DIR not set; skipping upstream MESA E2E execution")
-    base = pathlib.Path(mesa_dir)
+    base = known_gaps_gate.require_mesa_test_inputs_dir()
+    if base is None:
+        return
     star_ts = base / "star" / "test_suite"
     assert star_ts.is_dir(), f"Missing upstream star/test_suite: {star_ts}"
     for cname in (

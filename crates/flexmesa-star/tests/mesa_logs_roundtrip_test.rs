@@ -487,27 +487,6 @@ fn test_multistage_rn_logs_dir_routing() {
     let _ = fs::remove_file(ms_case.path().join("s2.mod"));
 }
 
-fn resolve_test_mesa_root() -> Option<PathBuf> {
-    std::env::var("MESA_DIR")
-        .ok()
-        .map(PathBuf::from)
-        .filter(|p| p.join("star/test_suite").is_dir())
-        .or_else(|| {
-            std::env::var("XDG_CACHE_HOME")
-                .ok()
-                .map(|p| PathBuf::from(p).join("flexmesa/mesa_test_inputs"))
-                .filter(|p| p.join("star/test_suite").is_dir())
-        })
-        .or_else(|| {
-            std::env::var("HOME")
-                .ok()
-                .map(|p| {
-                    PathBuf::from(p).join(".cache/flexmesa/mesa_test_inputs")
-                })
-                .filter(|p| p.join("star/test_suite").is_dir())
-        })
-}
-
 fn collect_history_columns_files_in_namelist(
     case_dir: &std::path::Path,
     rel_file: &str,
@@ -601,15 +580,16 @@ fn test_upstream_test_suite_history_column_lists_parse_or_fail_loudly() {
     let model =
         load_zams_model(StarControls::default(), StarJobControls::default())
             .expect("zams");
-    let mesa_root = resolve_test_mesa_root();
-    assert!(
-        mesa_root.is_some()
-            || std::env::var("FLEXMESA_REQUIRE_ZERO_SKIPS").as_deref() != Ok("1"),
-        "FLEXMESA_REQUIRE_ZERO_SKIPS=1 set, but neither MESA_DIR nor cached mesa_test_inputs was found"
-    );
-    let Some(base) = mesa_root else {
+    let Some(star_suite_dir) =
+        flexmesa_utils::require_mesa_test_input_path("star/test_suite")
+    else {
         return;
     };
+    let base = star_suite_dir
+        .parent()
+        .and_then(|p| p.parent())
+        .expect("upstream MESA root")
+        .to_path_buf();
 
     // Unported columns (#157 MLT++, #158 darkening/spots, #159 mass-add, #161 hydro/colors):
     let expected_unported = [

@@ -1,0 +1,356 @@
+name: Scheduled Verification Campaign
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+    inputs:
+      harness_jobs:
+        description: "Concurrent workers for the full 106-case harness"
+        required: false
+        default: "2"
+      max_rss_gb:
+        description: "Per-worker RSS memory budget in GiB"
+        required: false
+        default: "5.5"
+      case_timeout_sec:
+        description: "Per-case timeout in seconds"
+        required: false
+        default: "300"
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: campaign-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  OMP_NUM_THREADS: "4"
+  OPENBLAS_NUM_THREADS: "4"
+  MKL_NUM_THREADS: "4"
+  RAYON_NUM_THREADS: "4"
+  JAX_PLATFORMS: "cpu"
+  FLEXMESA_REQUIRE_ZERO_SKIPS: "1"
+
+jobs:
+  known-gaps-and-hex-gates:
+    name: Bijective Known-Gaps & Level-2 Module Hex Gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up FlexMESA (release)
+        uses: ./.github/actions/setup-flexmesa
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          pip-spec: '-e ".[test]"'
+          release: "true"
+
+      - name: Run bijective known-gaps gate (live issue check)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          OUT_DIR="${{ runner.temp }}/campaign-gates"
+          mkdir -p "$OUT_DIR"
+          python -m flexmesa.testing.known_gaps_gate \
+            --live-github \
+            --fail-on-imperative-skips \
+            --markdown-out "$OUT_DIR/known_gaps_gate.md" \
+            --json-out "$OUT_DIR/known_gaps_gate.json"
+
+      - name: Run Level-2 module hex 0-ULP gate (live issue check)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          OUT_DIR="${{ runner.temp }}/campaign-gates"
+          python -m flexmesa.testing.module_hex_gate \
+            --live-github \
+            --check-summary \
+            --markdown-out "$OUT_DIR/module_hex_gate.md"
+
+      - name: Run gate unit suites (zero skips)
+        run: |
+          pytest \
+            tests/test_known_gaps_gate.py \
+            tests/test_module_hex_gate.py \
+            tests/test_strict_determinism_script.py \
+            tests/test_measure_mesa_spread.py -v
+
+      - name: Upload gate reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: campaign-gate-reports
+          retention-days: 30
+          if-no-files-found: ignore
+          path: ${{ runner.temp }}/campaign-gates/
+
+  full-history-harness:
+    name: Full 106-Case Strict History Harness Campaign
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up FlexMESA (release)
+        uses: ./.github/actions/setup-flexmesa
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          pip-spec: '-e ".[test]"'
+          release: "true"
+
+      - name: Execute full 106-case strict harness with RSS and time budgets
+        run: |
+          OUT_DIR="${{ runner.temp }}/campaign-harness"
+          mkdir -p "$OUT_DIR"
+          JOBS="${{ inputs.harness_jobs || '2' }}"
+          MAX_RSS="${{ inputs.max_rss_gb || '5.5' }}"
+          TIMEOUT="${{ inputs.case_timeout_sec || '300' }}"
+          flexmesa harness run \
+            --preset all \
+            --numerics-mode strict \
+            --jobs "$JOBS" \
+            --timeout-sec "$TIMEOUT" \
+            --max-rss-gb "$MAX_RSS" \
+            --work-dir "$OUT_DIR/logs" \
+            --markdown-out "$OUT_DIR/case_table.md" \
+            --json-out "$OUT_DIR/case_table.json" \
+            --gate
+
+      - name: Upload full campaign harness artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: campaign-history-harness-artifacts
+          retention-days: 30
+          if-no-files-found: ignore
+          path: ${{ runner.temp }}/campaign-harness/
+
+  rust-ignored-campaign:
+    name: Rust --ignored Suite & Anti-Stale-Gap Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up FlexMESA (release)
+        uses: ./.github/actions/setup-flexmesa
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          pip-spec: "-e ."
+          release: "true"
+
+      - name: Build Rust test binaries cleanly before running --ignored
+        run: cargo test --workspace --exclude flexmesa-py --release --no-run
+
+      - name: Run Rust --ignored tests and gate outcomes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          LOG_DIR="${{ runner.temp }}/rust-ignored-logs"
+          mkdir -p "$LOG_DIR"
+          set -o pipefail
+          set +e
+          cargo test -p flexmesa-eos --release -- --ignored --nocapture \
+            2>&1 | tee "$LOG_DIR/eos_ignored.log"
+          cargo test -p flexmesa-bench --release -- --ignored --nocapture \
+            2>&1 | tee "$LOG_DIR/bench_ignored.log"
+          cargo test -p flexmesa-binary -p flexmesa-astero --release \
+            -- --ignored --test-threads=2 --nocapture \
+            2>&1 | tee "$LOG_DIR/campaign_ignored.log"
+          set -e
+          python -m flexmesa.testing.known_gaps_gate \
+            --live-github \
+            --require-all-rust-ignores-executed \
+            --cargo-ignored-log "$LOG_DIR/eos_ignored.log" \
+            --cargo-ignored-log "$LOG_DIR/bench_ignored.log" \
+            --cargo-ignored-log "$LOG_DIR/campaign_ignored.log" \
+            --markdown-out "$LOG_DIR/ignored_gate.md" \
+            --json-out "$LOG_DIR/ignored_gate.json"
+
+      - name: Upload Rust --ignored logs and gate report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: campaign-rust-ignored-artifacts
+          retention-days: 30
+          if-no-files-found: ignore
+          path: ${{ runner.temp }}/rust-ignored-logs/
+
+  strict-determinism-uncapped:
+    name: Uncapped Strict Determinism (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up FlexMESA (release)
+        uses: ./.github/actions/setup-flexmesa
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          pip-spec: "-e ."
+          release: "true"
+
+      - name: Compute uncapped strict vector and multi-case digests
+        run: |
+          OUT_JSON="${{ runner.temp }}/campaign_strict_${{ runner.os }}_${{ runner.arch }}.json"
+          python scripts/check_strict_determinism.py --json-out "$OUT_JSON"
+
+      - name: Upload uncapped strict digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: campaign-strict-${{ runner.os }}-${{ runner.arch }}
+          retention-days: 30
+          if-no-files-found: error
+          path: ${{ runner.temp }}/campaign_strict_${{ runner.os }}_${{ runner.arch }}.json
+
+  strict-determinism-cross-arch:
+    name: Uncapped Cross-Arch Bit-Identity Gate
+    needs: strict-determinism-uncapped
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Download uncapped strict digests
+        uses: actions/download-artifact@v4
+        with:
+          pattern: campaign-strict-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/campaign-strict-digests
+
+      - name: Verify identical uncapped strict SHA-256 across architectures
+        run: |
+          python scripts/check_strict_determinism.py \
+            --compare "${{ runner.temp }}"/campaign-strict-digests/campaign_strict_*.json
+
+  fortran-harness-check:
+    name: Fortran Benchmark & Tap Harness Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install GNU Fortran toolchain for syntax and harness verification
+        run: |
+          sudo apt-get update && sudo apt-get install -y gfortran gcc make
+          python -m pip install --upgrade pip numpy
+
+      - name: Verify Fortran harness compilation units and hex/pulse taps
+        run: |
+          OUT_DIR="${{ runner.temp }}/fortran-check"
+          mkdir -p "$OUT_DIR"
+          gfortran -O2 -fopenmp -c benchmarks/fortran_mesa/bench_harness.f90 \
+            -J "$OUT_DIR" -o "$OUT_DIR/bench_harness.o"
+          make -C benchmarks/fortran_mesa -n run run_wave2 run_wave3a run_wave3b run_wave4 run_wave5 \
+            > "$OUT_DIR/make_plan.txt"
+          gcc -shared -fPIC -O2 -ldl scripts/mesa_reference/gfortran_hex_tap.c \
+            -o "$OUT_DIR/libgfortran_hex_tap.so"
+          gcc -O2 -c scripts/mesa_reference/pulse_tap_wrap.c \
+            -o "$OUT_DIR/pulse_tap_wrap.o"
+          python scripts/mesa_reference/measure_mesa_spread.py \
+            --dry-run \
+            --json-out "$OUT_DIR/mesa_spread_dry_run.json" \
+            --markdown-out "$OUT_DIR/mesa_spread_dry_run.md"
+
+      - name: Upload Fortran harness and spread dry-run artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: campaign-fortran-check
+          retention-days: 30
+          if-no-files-found: ignore
+          path: ${{ runner.temp }}/fortran-check/
+
+  campaign-report:
+    name: Campaign Summary & Regression Alerting
+    needs:
+      - known-gaps-and-hex-gates
+      - full-history-harness
+      - rust-ignored-campaign
+      - strict-determinism-cross-arch
+      - fortran-harness-check
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Download campaign artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ${{ runner.temp }}/campaign-artifacts
+
+      - name: Write workflow job summary
+        run: |
+          {
+            echo "# FlexMESA Verification Campaign Summary"
+            echo ""
+            echo "| Job | Outcome |"
+            echo "| :--- | :--- |"
+            echo "| \`known-gaps-and-hex-gates\` | \`${{ needs.known-gaps-and-hex-gates.result }}\` |"
+            echo "| \`full-history-harness\` | \`${{ needs.full-history-harness.result }}\` |"
+            echo "| \`rust-ignored-campaign\` | \`${{ needs.rust-ignored-campaign.result }}\` |"
+            echo "| \`strict-determinism-cross-arch\` | \`${{ needs.strict-determinism-cross-arch.result }}\` |"
+            echo "| \`fortran-harness-check\` | \`${{ needs.fortran-harness-check.result }}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Open or comment regression alert on scheduled failure
+        if: >-
+          always() && github.event_name == 'schedule' && (
+            needs.known-gaps-and-hex-gates.result == 'failure' ||
+            needs.full-history-harness.result == 'failure' ||
+            needs.rust-ignored-campaign.result == 'failure' ||
+            needs.strict-determinism-cross-arch.result == 'failure' ||
+            needs.fortran-harness-check.result == 'failure'
+          )
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          TITLE_PREFIX="[Campaign] Scheduled verification failure"
+          BODY=$(cat <<EOF
+          Scheduled verification campaign detected a failure on \`${{ github.ref_name }}\` (${{ github.sha }}).
+
+          - Run: ${RUN_URL}
+          - \`known-gaps-and-hex-gates\`: \`${{ needs.known-gaps-and-hex-gates.result }}\`
+          - \`full-history-harness\`: \`${{ needs.full-history-harness.result }}\`
+          - \`rust-ignored-campaign\`: \`${{ needs.rust-ignored-campaign.result }}\`
+          - \`strict-determinism-cross-arch\`: \`${{ needs.strict-determinism-cross-arch.result }}\`
+          - \`fortran-harness-check\`: \`${{ needs.fortran-harness-check.result }}\`
+
+          ---
+          _Automated report from Scheduled Verification Campaign._
+          EOF
+          )
+          OPEN_ISSUE=$(gh issue list --repo "${{ github.repository }}" \
+            --state open --search "${TITLE_PREFIX} in:title" \
+            --json number --jq '.[0].number // empty')
+          if [ -n "$OPEN_ISSUE" ]; then
+            gh issue comment "$OPEN_ISSUE" --repo "${{ github.repository }}" --body "$BODY"
+          else
+            gh issue create --repo "${{ github.repository }}" \
+              --title "${TITLE_PREFIX} ($(date -u +%Y-%m-%d))" \
+              --body "$BODY"
+          fi

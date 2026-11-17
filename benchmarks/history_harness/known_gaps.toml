@@ -617,3 +617,206 @@ suite = "astero"
 case = "surface_effects"
 issue = "#162"
 reason = "Asteroseismic surface-effects starting model and ADIPLS scaffolding (#162, #171)."
+
+# Declared test-level known gaps in this same single ledger (#144).
+# Every Rust #[ignore] attribute and Python @pytest.mark.{xfail,skip,skipif}
+# decorator must appear bijectively here and cite an open GitHub issue.
+
+[[test_gaps]]
+kind = "rust_ignore"
+crate = "flexmesa-eos"
+file = "crates/flexmesa-eos/tests/mesa_26_4_1_component_oracles_test.rs"
+test_name = "test_skye_and_blend_third_order_hermite_derivatives_match_mesa_26_4_1"
+issue = "#161"
+role = "physics_gap"
+expect_fail_when_run = true
+reason = "Skye/HELM operation order causes 10 d_dlnT channels to exceed 5.0e-11 (max rel_err 1.101e-6); gate fails if it passes while ignored."
+
+[[test_gaps]]
+kind = "rust_ignore"
+crate = "flexmesa-binary"
+file = "crates/flexmesa-binary/tests/tier5_coupled_suite.rs"
+test_name = "test_uncapped_jdot_gr_check_campaign"
+issue = "#160"
+role = "campaign"
+expect_fail_when_run = false
+reason = "Long-running uncapped binary campaign; full MESA 26.4.1 trajectory comparison tracked under #160 and scheduled campaign CI."
+
+[[test_gaps]]
+kind = "rust_ignore"
+crate = "flexmesa-binary"
+file = "crates/flexmesa-binary/tests/tier5_coupled_suite.rs"
+test_name = "test_uncapped_star_plus_point_mass_explicit_mdot_campaign"
+issue = "#160"
+role = "campaign"
+expect_fail_when_run = false
+reason = "Long-running uncapped explicit-RLOF binary campaign tracked under #160 and scheduled campaign CI."
+
+[[test_gaps]]
+kind = "rust_ignore"
+crate = "flexmesa-binary"
+file = "crates/flexmesa-binary/tests/tier5_coupled_suite.rs"
+test_name = "test_uncapped_star_plus_point_mass_campaign"
+issue = "#160"
+role = "campaign"
+expect_fail_when_run = false
+reason = "Long-running uncapped implicit-RLOF binary campaign tracked under #160 and scheduled campaign CI."
+
+[[test_gaps]]
+kind = "rust_ignore"
+crate = "flexmesa-binary"
+file = "crates/flexmesa-binary/tests/tier5_coupled_suite.rs"
+test_name = "test_uncapped_jdot_ml_check_campaign"
+issue = "#160"
+role = "campaign"
+expect_fail_when_run = false
+reason = "Long-running uncapped mass-loss binary campaign tracked under #160 and scheduled campaign CI."
+
+[[test_gaps]]
+kind = "rust_ignore"
+crate = "flexmesa-binary"
+file = "crates/flexmesa-binary/tests/tier5_coupled_suite.rs"
+test_name = "test_uncapped_evolve_both_stars_campaign"
+issue = "#160"
+role = "campaign"
+expect_fail_when_run = false
+reason = "Long-running uncapped two-star coupled binary campaign tracked under #160 and scheduled campaign CI."
+
+[[test_gaps]]
+kind = "rust_ignore"
+crate = "flexmesa-binary"
+file = "crates/flexmesa-binary/tests/tier5_coupled_suite.rs"
+test_name = "test_uncapped_wind_fed_bhhmxb_campaign"
+issue = "#160"
+role = "campaign"
+expect_fail_when_run = false
+reason = "Long-running uncapped wind-fed BH-HMXB binary campaign tracked under #160 and scheduled campaign CI."
+
+[[test_gaps]]
+kind = "rust_ignore"
+crate = "flexmesa-binary"
+file = "crates/flexmesa-binary/tests/tier5_coupled_suite.rs"
+test_name = "test_uncapped_double_bh_campaign"
+issue = "#160"
+role = "campaign"
+expect_fail_when_run = true
+reason = "Uncapped double-BH core-He implicit rotational-wind campaign currently fails under #160 (T2-9); gate fails if it passes while ignored."
+
+[[test_gaps]]
+kind = "rust_ignore"
+crate = "flexmesa-astero"
+file = "crates/flexmesa-astero/tests/astero_suite.rs"
+test_name = "test_example_astero_uncapped"
+issue = "#162"
+role = "campaign"
+expect_fail_when_run = false
+reason = "Long-running uncapped astero campaign tracked under #162 and scheduled campaign CI."
+
+[[test_gaps]]
+kind = "rust_ignore"
+crate = "flexmesa-astero"
+file = "crates/flexmesa-astero/tests/astero_suite.rs"
+test_name = "test_fast_from_file_uncapped"
+issue = "#162"
+role = "campaign"
+expect_fail_when_run = false
+reason = "Long-running uncapped astero from_file campaign tracked under #162 and scheduled campaign CI."
+
+[[test_gaps]]
+kind = "rust_ignore"
+crate = "flexmesa-astero"
+file = "crates/flexmesa-astero/tests/astero_suite.rs"
+test_name = "test_fast_scan_grid_uncapped"
+issue = "#162"
+role = "campaign"
+expect_fail_when_run = false
+reason = "Long-running uncapped astero scan_grid campaign tracked under #162 and scheduled campaign CI."
+
+[[test_gaps]]
+kind = "rust_ignore"
+crate = "flexmesa-astero"
+file = "crates/flexmesa-astero/tests/astero_suite.rs"
+test_name = "test_fast_simplex_uncapped"
+issue = "#162"
+role = "campaign"
+expect_fail_when_run = false
+reason = "Long-running uncapped astero simplex campaign tracked under #162 and scheduled campaign CI."
+
+[[test_gaps]]
+kind = "rust_ignore"
+crate = "flexmesa-astero"
+file = "crates/flexmesa-astero/tests/astero_suite.rs"
+test_name = "test_fast_newuoa_uncapped"
+issue = "#162"
+role = "campaign"
+expect_fail_when_run = false
+reason = "Long-running uncapped astero NEWUOA campaign tracked under #162 and scheduled campaign CI."
+
+[[test_gaps]]
+kind = "rust_ignore"
+crate = "flexmesa-bench"
+file = "crates/flexmesa-bench/tests/bench_tests.rs"
+test_name = "print_full_wave1_rust_benchmarks"
+issue = "#146"
+role = "benchmark"
+expect_fail_when_run = false
+reason = "Release benchmark stdout printer retained pending benchmark separation under #146."
+
+[[test_gaps]]
+kind = "rust_ignore"
+crate = "flexmesa-bench"
+file = "crates/flexmesa-bench/tests/bench_tests.rs"
+test_name = "print_full_wave2_rust_benchmarks"
+issue = "#146"
+role = "benchmark"
+expect_fail_when_run = false
+reason = "Release benchmark stdout printer retained pending benchmark separation under #146."
+
+[[test_gaps]]
+kind = "rust_ignore"
+crate = "flexmesa-bench"
+file = "crates/flexmesa-bench/tests/bench_tests.rs"
+test_name = "print_full_wave3a_rust_benchmarks"
+issue = "#146"
+role = "benchmark"
+expect_fail_when_run = false
+reason = "Release benchmark stdout printer retained pending benchmark separation under #146."
+
+[[test_gaps]]
+kind = "rust_ignore"
+crate = "flexmesa-bench"
+file = "crates/flexmesa-bench/tests/bench_tests.rs"
+test_name = "print_full_wave3b_rust_benchmarks"
+issue = "#146"
+role = "benchmark"
+expect_fail_when_run = false
+reason = "Release benchmark stdout printer retained pending benchmark separation under #146."
+
+[[test_gaps]]
+kind = "rust_ignore"
+crate = "flexmesa-bench"
+file = "crates/flexmesa-bench/tests/bench_tests.rs"
+test_name = "print_full_wave4_rust_benchmarks"
+issue = "#146"
+role = "benchmark"
+expect_fail_when_run = false
+reason = "Release benchmark stdout printer retained pending benchmark separation under #146."
+
+[[test_gaps]]
+kind = "rust_ignore"
+crate = "flexmesa-bench"
+file = "crates/flexmesa-bench/tests/bench_tests.rs"
+test_name = "print_full_wave5_rust_benchmarks"
+issue = "#146"
+role = "benchmark"
+expect_fail_when_run = false
+reason = "Release benchmark stdout printer retained pending benchmark separation under #146."
+
+[[test_gaps]]
+kind = "python_xfail"
+file = "tests/test_wave4_bench.py"
+test_name = "test_four_msun_zams_evolve_log_cntr_rho_matches_mesa_26_4_1"
+issue = "#153"
+role = "physics_gap"
+expect_fail_when_run = true
+reason = "MESA 26.4.1 star/test remeshes 2464 -> 992 zones at step 2; log_cntr_Rho differs by 1.11e-3 > 1.0e-3 at step 11."

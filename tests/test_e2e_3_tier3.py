@@ -7,12 +7,12 @@ pair-instability, neutron-star-envelope, Thorne-Zytkow, and twin-star
 
 from __future__ import annotations
 
-import os
 import pathlib
 
 import pytest
 
 from flexmesa import star
+from flexmesa.testing import known_gaps_gate
 
 from . import cleaned_case_gaps
 
@@ -202,10 +202,10 @@ def test_upstream_mesa_tier3_test_suite_case_passes_with_restart_parity(
     tmp_path: pathlib.Path,
 ) -> None:
     """Reject raw Tier 3 cases on unsupported controls; run cleaned copies."""
-    mesa_dir = os.environ.get("MESA_DIR", "")
-    if not mesa_dir:
-        pytest.skip("MESA_DIR not set; skipping upstream MESA Tier 3 case")
-    case_dir = pathlib.Path(mesa_dir) / "star" / "test_suite" / case_name
+    base = known_gaps_gate.require_mesa_test_inputs_dir()
+    if base is None:
+        return
+    case_dir = base / "star" / "test_suite" / case_name
     assert case_dir.is_dir(), f"Upstream case directory not found: {case_dir}"
 
     with pytest.raises(

@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import os
 import pathlib
 import subprocess
 import sys
@@ -12,7 +11,7 @@ import tempfile
 import pytest
 
 from flexmesa import binary, star
-from flexmesa.testing import harness_runner, trace_cli
+from flexmesa.testing import harness_runner, known_gaps_gate, trace_cli
 
 
 def test_cli_allow_unsupported_controls_defaults_false_and_forwards(
@@ -89,13 +88,19 @@ def test_cli_allow_unsupported_controls_defaults_false_and_forwards(
 
 def test_unsupported_controls_audit_report_matches_checked_in_files() -> None:
     """Verify `report_unsupported_controls.py --check` passes when enabled."""
-    mesa_dir = os.environ.get("MESA_DIR", "")
-    if not mesa_dir:
-        pytest.skip("MESA_DIR not set; skipping unsupported controls check")
+    mesa_base = known_gaps_gate.require_mesa_test_inputs_dir()
+    if mesa_base is None:
+        return
     repo_root = pathlib.Path(__file__).resolve().parents[1]
     script = repo_root / "scripts" / "audit" / "report_unsupported_controls.py"
     res = subprocess.run(
-        [sys.executable, str(script), "--check", "--mesa-dir", mesa_dir],
+        [
+            sys.executable,
+            str(script),
+            "--check",
+            "--mesa-dir",
+            str(mesa_base),
+        ],
         cwd=repo_root,
         check=False,
         capture_output=True,

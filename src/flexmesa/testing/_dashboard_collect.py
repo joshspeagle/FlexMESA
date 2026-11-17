@@ -3,13 +3,17 @@
 
 from __future__ import annotations
 
-import ast
 import json
 import pathlib
 import re
 from typing import Any
 
-from flexmesa.testing import case_manifest, case_report, port_manifest
+from flexmesa.testing import (
+    case_manifest,
+    case_report,
+    known_gaps_gate,
+    port_manifest,
+)
 
 MODULE_CODE_PATHS: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
     "star": (("crates/flexmesa-star/src",), ("src/flexmesa/star",)),
@@ -65,13 +69,6 @@ MODULE_CODE_PATHS: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
     "stella": ((), ()),
     "plotting": ((), ("src/flexmesa/plotting",)),
 }
-
-_RUST_COMMENT_RE = re.compile(r"//[^\n]*|/\*[\s\S]*?\*/")
-_IGNORE_ATTR_RE = re.compile(
-    r"#\s*\[\s*(?:cfg_attr\s*\([^]]*,\s*)?ignore"
-    r'(?:\s*=\s*"([^"]*)")?\s*\)?\s*\]'
-)
-_ISSUE_RE = re.compile(r"#(\d+)")
 
 
 def _count_dir_lines(
@@ -282,16 +279,65 @@ def collect_numerics_and_module_verification(
                 plat_n += n_in
             else:
                 crmath_n += n_in
+        det_script = repo_root / "scripts" / "check_strict_determinism.py"
+        det_txt = (
+            det_script.read_text(encoding="utf-8")
+            if det_script.is_file()
+            else ""
+        )
+        if (
+            "_DEFAULT_STEPS: int | None = None" in det_txt
+            and "jdot_gr_check" in det_txt
+        ):
+            evo_summary = "uncapped star/1.3M_ms_high_Z + binary/jdot_gr_check"
+        else:
+            evo_summary = f"{evo_case} {evo_steps}-step trace"
         level1 = (
             "verified in CI (x86_64 == aarch64, 1 == 4 threads; "
-            f"{vec_n:,} math vectors + {evo_case} {evo_steps}-step trace "
+            f"{vec_n:,} math vectors + {evo_summary} "
             "run with unsupported controls ignored)"
         )
-        level2 = (
-            f"math: {crmath_n:,}/{crmath_n:,} CRMATH 0 ULP "
-            f"({plat_n:,} libm <= 1 ULP); "
-            f"0/{len(in_scope_hex) - 1} other module suites"
+        mhex_path = (
+            repo_root / "benchmarks" / "module_hex" / "module_hex_summary.json"
         )
+        if mhex_path.is_file():
+            mhex: dict[str, Any] = json.loads(
+                mhex_path.read_text(encoding="utf-8")
+            )
+            probed_non_math = 0
+            for item in mhex.get("modules", []):
+                mname = str(item.get("module", ""))
+                if not mname or mname in {"forum", "sample", "math"}:
+                    continue
+                chk = int(item.get("checked_values", 0))
+                exp = int(item.get("expected_outputs", 0))
+                z_n = int(item.get("zero_ulp_values", 0))
+                m_ulp = int(item.get("max_ulp", 0))
+                if chk > 0:
+                    probed_non_math += 1
+                    if m_ulp == 0:
+                        suffix = "(0 ULP)" if chk == exp else "(0 ULP partial)"
+                        strict_mods[mname] = f"{z_n:,}/{exp:,} {suffix}"
+                    else:
+                        strict_mods[mname] = (
+                            f"{z_n:,}/{chk:,} 0 ULP "
+                            f"(max {m_ulp:,} ULP, {exp:,} total)"
+                        )
+            chk_tot = int(mhex.get("total_values_checked", 0))
+            zero_tot = int(mhex.get("total_values_0_ulp", 0))
+            pass_mods = int(mhex.get("modules_passing_0_ulp", 0))
+            level2 = (
+                f"math: {crmath_n:,}/{crmath_n:,} CRMATH 0 ULP "
+                f"({plat_n:,} libm <= 1 ULP); "
+                f"{zero_tot:,}/{chk_tot:,} probed module hex 0 ULP "
+                f"({pass_mods} complete, {probed_non_math} non-math probed)"
+            )
+        else:
+            level2 = (
+                f"math: {crmath_n:,}/{crmath_n:,} CRMATH 0 ULP "
+                f"({plat_n:,} libm <= 1 ULP); "
+                f"0/{len(in_scope_hex) - 1} other module suites"
+            )
         strict_mods["math"] = (
             f"{crmath_n:,} CRMATH (0 ULP) + {plat_n:,} libm (<= 1 ULP)"
         )
@@ -467,52 +513,28 @@ def extract_rust_ignores_from_text(
     raw_text: str, rel: str
 ) -> list[dict[str, str]]:
     """Extract ``#[ignore]`` and ``#[cfg_attr(..., ignore)]`` annotations."""
-    if "ignore" not in raw_text:
-        return []
-    cleaned = _RUST_COMMENT_RE.sub(
-        lambda m: "\n" * m.group(0).count("\n"), raw_text
-    )
-    found: list[dict[str, str]] = []
-    for m in _IGNORE_ATTR_RE.finditer(cleaned):
-        lno = cleaned.count("\n", 0, m.start()) + 1
-        reason = m.group(1) or ""
-        issues = sorted({f"#{x}" for x in _ISSUE_RE.findall(reason)})
-        found.append(
-            {
-                "location": f"{rel}:{lno}",
-                "reason": reason,
-                "issues": ", ".join(issues),
-            }
-        )
-    return found
+    return [
+        {
+            "location": f"{marker.file}:{marker.line}",
+            "reason": marker.reason,
+            "issues": ", ".join(marker.issues),
+        }
+        for marker in known_gaps_gate.extract_rust_test_ignores(raw_text, rel)
+    ]
 
 
 def extract_py_decorator_skips_from_text(
     source: str, rel: str
 ) -> list[dict[str, str]]:
     """Extract ``@pytest.mark.{xfail,skip,skipif}`` decorators using ``ast``."""
-    if "xfail" not in source and "skip" not in source:
-        return []
-    tree = ast.parse(source, filename=rel)
-    found: list[dict[str, str]] = []
-    for node in ast.walk(tree):
-        if not isinstance(
-            node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
-        ):
-            continue
-        for dec in node.decorator_list:
-            seg = ast.get_source_segment(source, dec) or ""
-            if not re.search(r"\bmark\.(?:xfail|skip|skipif)\b", seg):
-                continue
-            issues = sorted({f"#{x}" for x in _ISSUE_RE.findall(seg)})
-            found.append(
-                {
-                    "location": f"{rel}:{dec.lineno}",
-                    "reason": " ".join(seg.split()),
-                    "issues": ", ".join(issues),
-                }
-            )
-    return found
+    return [
+        {
+            "location": f"{marker.file}:{marker.line}",
+            "reason": marker.reason,
+            "issues": ", ".join(marker.issues),
+        }
+        for marker in known_gaps_gate.extract_python_test_markers(source, rel)
+    ]
 
 
 def collect_ignored_and_skipped_tests(

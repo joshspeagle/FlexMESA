@@ -12,7 +12,7 @@ Progress is tracked by **upstream MESA `26.4.1` lines promoted to verified statu
 | Core engines (`star` + `star_data` + `binary` + `astero`) | 144,952 | 20,107 (13.9%) | 0 (0.0%) | Excludes stub (`18,172`) and partial (`82,171`) lines |
 | All `26` MESA `26.4.1` modules (incl. `gyre`, `adipls`, `stella`, `plotting`) | 497,703 | 23,667 (4.8%) | 0 (0.0%) | Full `v0.1.0` target denominator (`notes/SCOPE.md`) |
 | Pre-rebaseline non-plotting `star`+`binary`+`astero` audit (`0b2e6bb`) | 134,940 | 21,493 `PORTED` (16%) / 66,685 `PARTIAL` (49%) | unverified pre-audit | `17%` `STUB` (23,259 LOC), `17%` `ABSENT` (23,503 LOC) |
-| `math` strict-mode scalar vectors (`#165`) | 474,062 vectors | math: 403,258/403,258 CRMATH 0 ULP (70,804 libm <= 1 ULP); 0/23 other module suites | verified in CI (x86_64 == aarch64, 1 == 4 threads; 474,062 math vectors + star/1.3M_ms_high_Z 5-step trace run with unsupported controls ignored) | 0 / 23 remaining module suites marked verified in manifest |
+| `math` strict-mode scalar vectors (`#165`) | 474,062 vectors | math: 403,258/403,258 CRMATH 0 ULP (70,804 libm <= 1 ULP); 3,388/3,504 probed module hex 0 ULP (2 complete, 12 non-math probed) | verified in CI (x86_64 == aarch64, 1 == 4 threads; 474,062 math vectors + uncapped star/1.3M_ms_high_Z + binary/jdot_gr_check run with unsupported controls ignored) | 12 / 23 remaining module suites marked verified in manifest |
 | End-to-end `test_suite` cases | 106 cases | 106 in manifest | **0 / 106** passing | 102 declared gaps, 4 `no_reference_yet` |
 
 ## Per-Module Port Status (`26` MESA `26.4.1` Modules)

@@ -15,6 +15,8 @@ from flexmesa.testing import (
     golden,
     harness_runner,
     history_compare,
+    known_gaps_gate,
+    module_hex_gate,
     port_manifest,
     trace_cli,
 )
@@ -26,6 +28,8 @@ __all__: list[str] = [
     "golden",
     "harness_runner",
     "history_compare",
+    "known_gaps_gate",
+    "module_hex_gate",
     "port_manifest",
     "trace_cli",
 ]

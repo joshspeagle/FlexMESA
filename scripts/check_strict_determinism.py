@@ -2,16 +2,17 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
 """Verify `NumericsMode::Strict` cross-machine and thread-count bit-identity.
 
-Implements Items 15 and 16 of `#165`:
+Implements Items 15 and 16 of `#165` and the uncapped campaign extension (#144):
 1. Evaluates all `474,062` MESA `26.4.1` reference inputs in
    `benchmarks/fortran_mesa/math_hex_vectors/mesa_26_4_1_math_vectors.txt`
    under `NumericsMode::Strict` and records the canonicalized `SHA-256` digest.
-2. Runs a short `strict` stellar evolution (`star/1.3M_ms_high_Z`, 5 steps) in
-   two isolated subprocesses with `1` thread and `4` threads
+2. Runs uncapped `strict` evolutions for `star/1.3M_ms_high_Z` and
+   `binary/jdot_gr_check` in isolated `1`-thread and `4`-thread subprocesses
    (`RAYON_NUM_THREADS`, `OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS`,
-   `MKL_NUM_THREADS`), verifying that `LOGS/history.data` records
-   `math_backend = "strict"` and is byte-for-byte identical between `1` and
-   `4` threads (`SHA-256`).
+   `MKL_NUM_THREADS`, `VECLIB_MAXIMUM_THREADS`), verifying `math_backend =
+   "strict"` in component history headers and byte-for-byte identity across all
+   emitted history logs (`SHA-256`). Diagnostic overrides (`--max-steps`,
+   `--cases`, `--suite`/`--case`) remain supported.
 3. Supports `--json-out <path>` to emit a machine-portable summary JSON and
    `--compare <json_a> <json_b>` to gate cross-architecture (`x86_64` vs
    `aarch64`) bit-identity in CI.
@@ -28,6 +29,7 @@ import platform
 import subprocess
 import sys
 import tempfile
+from collections.abc import Sequence
 from typing import Any
 
 _REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -40,26 +42,107 @@ _DEFAULT_VECTORS = (
 )
 _DEFAULT_SUITE = "star"
 _DEFAULT_CASE = "1.3M_ms_high_Z"
-_DEFAULT_STEPS = 5
+_DEFAULT_CASES: tuple[tuple[str, str], ...] = (
+    ("star", "1.3M_ms_high_Z"),
+    ("binary", "jdot_gr_check"),
+)
+_DEFAULT_STEPS: int | None = None
 
 
-def _sha256_file(path: pathlib.Path) -> str:
-    """Return lowercase 64-char SHA-256 hex digest of ``path``."""
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(65536), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+def _collect_history_digests(
+    out_dir: pathlib.Path, suite: str
+) -> dict[str, dict[str, Any]]:
+    """Verify ``strict`` header and hash all history logs in ``out_dir``."""
+    candidates: list[pathlib.Path] = []
+    if suite == "binary":
+        bh = out_dir / "binary_history.data"
+        if not bh.is_file():
+            raise RuntimeError(f"missing binary history output: {bh}")
+        candidates.append(bh)
+        for logs_name in ("LOGS1", "LOGS2"):
+            lh = out_dir / logs_name / "history.data"
+            if lh.is_file():
+                candidates.append(lh)
+        if not any(p.name == "history.data" for p in candidates):
+            raise RuntimeError(
+                f"missing component history.data under {out_dir}"
+            )
+    else:
+        lh = out_dir / "LOGS" / "history.data"
+        if not lh.is_file():
+            raise RuntimeError(f"missing history output: {lh}")
+        candidates.append(lh)
+
+    files: dict[str, dict[str, Any]] = {}
+    for path in sorted(
+        candidates, key=lambda p: p.relative_to(out_dir).as_posix()
+    ):
+        rel = path.relative_to(out_dir).as_posix()
+        if path.name == "history.data":
+            lines = path.read_text(encoding="utf-8").splitlines()
+            if len(lines) < 3 or '"strict"' not in lines[2]:
+                raise RuntimeError(
+                    f'{rel} header missing math_backend="strict": {lines[:4]!r}'
+                )
+        raw_bytes = path.read_bytes()
+        files[rel] = {
+            "bytes": len(raw_bytes),
+            "sha256": hashlib.sha256(raw_bytes).hexdigest(),
+        }
+    return files
+
+
+def _combined_files_digest(
+    files: dict[str, dict[str, Any]],
+) -> tuple[str, int]:
+    """Compute canonical combined SHA-256 and total byte size across files."""
+    h = hashlib.sha256()
+    total_bytes = 0
+    for rel in sorted(files):
+        entry = files[rel]
+        sha = str(entry["sha256"])
+        size = int(entry["bytes"])
+        total_bytes += size
+        h.update(f"{rel}:{size}:{sha}\n".encode("ascii"))
+    return h.hexdigest(), total_bytes
+
+
+def _build_trace_command(
+    suite: str, case: str, out_dir: pathlib.Path, max_steps: int | None
+) -> list[str]:
+    """Construct the ``flexmesa trace`` subprocess command line."""
+    cmd = [
+        sys.executable,
+        "-m",
+        "flexmesa.cli",
+        "trace",
+        suite,
+        case,
+        "--out",
+        str(out_dir),
+        "--numerics-mode",
+        "strict",
+        # This gate compares bit-identity across thread counts and
+        # architectures, not agreement with MESA. The upstream case sets
+        # controls that are not ported yet (declared gap), so the
+        # documented exploratory opt-out is used here.
+        "--allow-unsupported-controls",
+    ]
+    if max_steps is not None:
+        cmd.extend(["--max-steps", str(max_steps)])
+    return cmd
 
 
 def _run_strict_evolution(
     suite: str,
     case: str,
-    max_steps: int,
+    max_steps: int | None,
     threads: int,
-) -> tuple[str, int]:
+) -> tuple[str, int, dict[str, dict[str, Any]]]:
     """Run ``flexmesa trace`` in an isolated subprocess with ``threads``."""
-    with tempfile.TemporaryDirectory(prefix=f"flexmesa_det_{threads}t_") as tmp:
+    with tempfile.TemporaryDirectory(
+        prefix=f"flexmesa_det_{suite}_{threads}t_"
+    ) as tmp:
         out_dir = pathlib.Path(tmp) / "run"
         env = dict(os.environ)
         t_str = str(threads)
@@ -69,25 +152,7 @@ def _run_strict_evolution(
         env["MKL_NUM_THREADS"] = t_str
         env["VECLIB_MAXIMUM_THREADS"] = t_str
         env["FLEXMESA_NUMERICS_MODE"] = "strict"
-        cmd = [
-            sys.executable,
-            "-m",
-            "flexmesa.cli",
-            "trace",
-            suite,
-            case,
-            "--out",
-            str(out_dir),
-            "--max-steps",
-            str(max_steps),
-            "--numerics-mode",
-            "strict",
-            # This gate compares bit-identity across thread counts and
-            # architectures, not agreement with MESA. The upstream case sets
-            # controls that are not ported yet (declared gap), so the
-            # documented exploratory opt-out is used here.
-            "--allow-unsupported-controls",
-        ]
+        cmd = _build_trace_command(suite, case, out_dir, max_steps)
         proc = subprocess.run(
             cmd,
             env=env,
@@ -98,52 +163,76 @@ def _run_strict_evolution(
         if proc.returncode != 0:
             code = proc.returncode
             raise RuntimeError(
-                f"strict trace ({threads}t) failed ({code}):\n"
+                f"strict trace ({suite}/{case}, {threads}t) failed ({code}):\n"
                 f"{proc.stdout}\n{proc.stderr}"
             )
-        hist_path = out_dir / "LOGS" / "history.data"
-        if not hist_path.is_file():
-            raise RuntimeError(f"missing history output: {hist_path}")
-        text = hist_path.read_text(encoding="utf-8")
-        if '"strict"' not in text.splitlines()[2]:
-            raise RuntimeError(
-                f'history.data header missing math_backend="strict": '
-                f"{text.splitlines()[:4]!r}"
-            )
-        return _sha256_file(hist_path), len(hist_path.read_bytes())
+        files = _collect_history_digests(out_dir, suite)
+        combined_sha, total_bytes = _combined_files_digest(files)
+        return combined_sha, total_bytes, files
+
+
+def _measure_case(
+    suite: str, case: str, max_steps: int | None
+) -> dict[str, Any]:
+    """Run 1t vs 4t strict trace for one case and assert byte-identity."""
+    sha_1t, bytes_1t, files_1t = _run_strict_evolution(
+        suite, case, max_steps, threads=1
+    )
+    sha_4t, bytes_4t, files_4t = _run_strict_evolution(
+        suite, case, max_steps, threads=4
+    )
+    identical = (
+        sha_1t == sha_4t and bytes_1t == bytes_4t and files_1t == files_4t
+    )
+    if not identical:
+        raise RuntimeError(
+            f"1-thread vs 4-thread history mismatch on {suite}/{case}: "
+            f"1t={sha_1t} ({bytes_1t} B) vs 4t={sha_4t} ({bytes_4t} B)"
+        )
+    return {
+        "suite": suite,
+        "case": case,
+        "max_steps": max_steps,
+        "history_bytes": bytes_1t,
+        "history_1t_sha256": sha_1t,
+        "history_4t_sha256": sha_4t,
+        "history_files": files_1t,
+        "thread_1_vs_4_byte_identical": identical,
+    }
 
 
 def _measure(
     vectors_path: pathlib.Path,
-    suite: str,
-    case: str,
-    max_steps: int,
+    cases: Sequence[tuple[str, str]],
+    max_steps: int | None,
 ) -> dict[str, Any]:
     """Compute strict reference-vector and 1-vs-4-thread evolution digests."""
+    if not cases:
+        raise ValueError("at least one (suite, case) pair is required")
     from flexmesa import _rust
 
     vec_count, vec_sha = _rust.strict_math_vectors_sha256(str(vectors_path))
-    sha_1t, bytes_1t = _run_strict_evolution(suite, case, max_steps, threads=1)
-    sha_4t, bytes_4t = _run_strict_evolution(suite, case, max_steps, threads=4)
-    identical = sha_1t == sha_4t and bytes_1t == bytes_4t
-    if not identical:
-        raise RuntimeError(
-            f"1-thread vs 4-thread history.data mismatch on {suite}/{case}: "
-            f"1t={sha_1t} ({bytes_1t} B) vs 4t={sha_4t} ({bytes_4t} B)"
-        )
+    case_records = [
+        _measure_case(suite, case, max_steps) for suite, case in cases
+    ]
+    primary = case_records[0]
+    all_identical = all(
+        bool(rec["thread_1_vs_4_byte_identical"]) for rec in case_records
+    )
     return {
         "os": platform.system(),
         "arch": platform.machine(),
         "numerics_mode": "strict",
         "math_vector_count": vec_count,
         "math_vectors_sha256": vec_sha,
-        "evolution_suite": suite,
-        "evolution_case": case,
-        "evolution_max_steps": max_steps,
-        "history_bytes": bytes_1t,
-        "history_1t_sha256": sha_1t,
-        "history_4t_sha256": sha_4t,
-        "thread_1_vs_4_byte_identical": identical,
+        "evolution_suite": primary["suite"],
+        "evolution_case": primary["case"],
+        "evolution_max_steps": primary["max_steps"],
+        "history_bytes": primary["history_bytes"],
+        "history_1t_sha256": primary["history_1t_sha256"],
+        "history_4t_sha256": primary["history_4t_sha256"],
+        "thread_1_vs_4_byte_identical": all_identical,
+        "cases": case_records,
     }
 
 
@@ -167,17 +256,30 @@ def _is_sha256_hex(val: object) -> bool:
     )
 
 
+def _validate_digest_pair(rec: dict[str, Any], label: str) -> list[str]:
+    """Validate byte size and 1t/4t SHA-256 identity on a record."""
+    errors: list[str] = []
+    hb = rec.get("history_bytes")
+    if not isinstance(hb, int) or isinstance(hb, bool) or hb <= 0:
+        errors.append(f"{label}: history_bytes must be > 0, got {hb!r}")
+    h1 = rec.get("history_1t_sha256")
+    h4 = rec.get("history_4t_sha256")
+    if not _is_sha256_hex(h1) or h1 != h4:
+        errors.append(
+            f"{label}: history_1t_sha256 ({h1!r}) != history_4t_sha256 ({h4!r})"
+        )
+    if rec.get("thread_1_vs_4_byte_identical") is not True:
+        errors.append(f"{label}: thread_1_vs_4_byte_identical != True")
+    return errors
+
+
 def _validate_record(rec: dict[str, Any], label: str) -> list[str]:
+    """Validate schema, strict mode, vector count, and digests on one JSON."""
     errors: list[str] = []
     if rec.get("numerics_mode") != "strict":
         errors.append(
             f"{label}: numerics_mode must be 'strict', got "
             f"{rec.get('numerics_mode')!r}"
-        )
-    if rec.get("thread_1_vs_4_byte_identical") is not True:
-        errors.append(
-            f"{label}: thread_1_vs_4_byte_identical must be True, got "
-            f"{rec.get('thread_1_vs_4_byte_identical')!r}"
         )
     vec_cnt = rec.get("math_vector_count")
     if (
@@ -188,22 +290,57 @@ def _validate_record(rec: dict[str, Any], label: str) -> list[str]:
         errors.append(
             f"{label}: math_vector_count must be >= 470000, got {vec_cnt!r}"
         )
-    hist_bytes = rec.get("history_bytes")
-    if (
-        not isinstance(hist_bytes, int)
-        or isinstance(hist_bytes, bool)
-        or hist_bytes <= 0
-    ):
-        errors.append(f"{label}: history_bytes must be > 0, got {hist_bytes!r}")
     if not _is_sha256_hex(rec.get("math_vectors_sha256")):
         errors.append(f"{label}: invalid math_vectors_sha256")
-    h1 = rec.get("history_1t_sha256")
-    h4 = rec.get("history_4t_sha256")
-    if not _is_sha256_hex(h1) or h1 != h4:
-        errors.append(
-            f"{label}: history_1t_sha256 ({h1!r}) != history_4t_sha256 ({h4!r})"
-        )
+
+    raw_cases = rec.get("cases")
+    if isinstance(raw_cases, list):
+        if not raw_cases:
+            errors.append(f"{label}: 'cases' must not be empty")
+        if rec.get("thread_1_vs_4_byte_identical") is not True:
+            errors.append(f"{label}: thread_1_vs_4_byte_identical != True")
+        for idx, item in enumerate(raw_cases):
+            c_lbl = f"{label}:cases[{idx}]"
+            if not isinstance(item, dict):
+                errors.append(f"{c_lbl}: must be an object")
+            else:
+                errors.extend(_validate_digest_pair(item, c_lbl))
+    else:
+        errors.extend(_validate_digest_pair(rec, label))
     return errors
+
+
+def _check_cross_record_equality(
+    paths: Sequence[pathlib.Path], records: Sequence[dict[str, Any]]
+) -> bool:
+    """Compare all determinism digest fields across validated JSON records."""
+    base = records[0]
+    keys = [
+        "numerics_mode",
+        "math_vector_count",
+        "math_vectors_sha256",
+        "evolution_suite",
+        "evolution_case",
+        "evolution_max_steps",
+        "history_bytes",
+        "history_1t_sha256",
+        "history_4t_sha256",
+        "thread_1_vs_4_byte_identical",
+    ]
+    if "cases" in base or any("cases" in rec for rec in records[1:]):
+        keys.append("cases")
+    ok = True
+    for idx, rec in enumerate(records[1:], start=1):
+        for key in keys:
+            if rec.get(key) != base.get(key):
+                sys.stderr.write(
+                    f"MISMATCH on `{key}` between {paths[0].name} "
+                    f"({base.get('os')}/{base.get('arch')}: {base.get(key)!r}) "
+                    f"and {paths[idx].name} "
+                    f"({rec.get('os')}/{rec.get('arch')}: {rec.get(key)!r})\n"
+                )
+                ok = False
+    return ok
 
 
 def _compare_jsons(
@@ -235,45 +372,49 @@ def _compare_jsons(
         )
         ok = False
 
-    base = records[0]
-    keys = (
-        "numerics_mode",
-        "math_vector_count",
-        "math_vectors_sha256",
-        "evolution_suite",
-        "evolution_case",
-        "evolution_max_steps",
-        "history_bytes",
-        "history_1t_sha256",
-        "history_4t_sha256",
-        "thread_1_vs_4_byte_identical",
-    )
-    for idx, rec in enumerate(records[1:], start=1):
-        for key in keys:
-            if rec.get(key) != base.get(key):
-                sys.stderr.write(
-                    f"MISMATCH on `{key}` between {paths[0].name} "
-                    f"({base.get('os')}/{base.get('arch')}: {base.get(key)!r}) "
-                    f"and {paths[idx].name} "
-                    f"({rec.get('os')}/{rec.get('arch')}: {rec.get(key)!r})\n"
-                )
-                ok = False
-    if not ok:
+    if not _check_cross_record_equality(paths, records) or not ok:
         return 1
+    base = records[0]
     runners = ", ".join(f"{r.get('os')}/{r.get('arch')}" for r in records)
+    case_desc = (
+        f"{len(base['cases'])} case(s)"
+        if isinstance(base.get("cases"), list)
+        else f"{base['evolution_suite']}/{base['evolution_case']}"
+    )
     sys.stdout.write(
         f"Strict cross-machine bit-identity confirmed across [{runners}]:\n"
         f"  math_vectors ({base['math_vector_count']}): "
         f"{base['math_vectors_sha256']}\n"
-        f"  {base['evolution_suite']}/{base['evolution_case']} "
-        f"({base['evolution_max_steps']} steps, 1t==4t): "
+        f"  {case_desc} ({base['evolution_max_steps'] or 'uncapped'}, 1t==4t): "
         f"{base['history_1t_sha256']}\n"
     )
     return 0
 
 
-def main(argv: list[str] | None = None) -> int:
-    """CLI entry point for cross-machine and thread determinism checks."""
+def _parse_cases_arg(raw_cases: Sequence[str]) -> list[tuple[str, str]]:
+    parsed: list[tuple[str, str]] = []
+    for item in raw_cases:
+        if "/" not in item:
+            raise ValueError(
+                f"Expected '<suite>/<case>' format for --cases, got {item!r}"
+            )
+        suite, case = item.split("/", maxsplit=1)
+        parsed.append((suite.strip(), case.strip()))
+    return parsed
+
+
+def _resolve_cases(args: argparse.Namespace) -> list[tuple[str, str]]:
+    if args.cases is not None:
+        return _parse_cases_arg(args.cases)
+    if args.suite is not None or args.case is not None:
+        return [
+            (args.suite or _DEFAULT_SUITE, args.case or _DEFAULT_CASE),
+        ]
+    return list(_DEFAULT_CASES)
+
+
+def _build_arg_parser() -> argparse.ArgumentParser:
+    """Create CLI argument parser for strict determinism verification."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--vectors",
@@ -281,9 +422,28 @@ def main(argv: list[str] | None = None) -> int:
         default=_DEFAULT_VECTORS,
         help="Path to MESA 26.4.1 hexadecimal math reference vectors.",
     )
-    parser.add_argument("--suite", default=_DEFAULT_SUITE)
-    parser.add_argument("--case", default=_DEFAULT_CASE)
-    parser.add_argument("--max-steps", type=int, default=_DEFAULT_STEPS)
+    parser.add_argument(
+        "--suite",
+        default=None,
+        help="Single-case override suite (defaults to star + binary pair).",
+    )
+    parser.add_argument(
+        "--case",
+        default=None,
+        help="Single-case override name.",
+    )
+    parser.add_argument(
+        "--cases",
+        nargs="+",
+        default=None,
+        help="Explicit '<suite>/<case>' pairs (defaults to star + binary).",
+    )
+    parser.add_argument(
+        "--max-steps",
+        type=int,
+        default=_DEFAULT_STEPS,
+        help="Optional diagnostic step cap (<= 0 or omitted runs uncapped).",
+    )
     parser.add_argument(
         "--json-out",
         type=pathlib.Path,
@@ -302,8 +462,13 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Allow --compare on two JSON records from the same architecture.",
     )
-    args = parser.parse_args(argv)
+    return parser
 
+
+def main(argv: list[str] | None = None) -> int:
+    """CLI entry point for cross-machine and thread determinism checks."""
+    parser = _build_arg_parser()
+    args = parser.parse_args(argv)
     if args.compare is not None:
         if len(args.compare) < 2:
             parser.error("--compare requires at least two JSON files")
@@ -312,7 +477,12 @@ def main(argv: list[str] | None = None) -> int:
             allow_same_arch=bool(args.allow_same_arch),
         )
 
-    summary = _measure(args.vectors, args.suite, args.case, args.max_steps)
+    max_steps = (
+        None
+        if (args.max_steps is None or int(args.max_steps) <= 0)
+        else int(args.max_steps)
+    )
+    summary = _measure(args.vectors, _resolve_cases(args), max_steps)
     payload = (
         json.dumps(summary, indent=2, sort_keys=True, allow_nan=False) + "\n"
     )

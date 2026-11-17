@@ -6,13 +6,13 @@ stage resolver, `.mod` / `.photo` bit-identical restart parity, and multi-stage
 
 from __future__ import annotations
 
-import os
 import pathlib
 import tempfile
 
 import pytest
 
 from flexmesa import star
+from flexmesa.testing import known_gaps_gate
 
 
 def test_parse_inlist_bundle_recursively_resolves_extra_inlists() -> None:
@@ -143,15 +143,13 @@ def test_run_test_suite_case_executes_two_stage_pipeline() -> None:
 
 
 def test_optional_upstream_mesa_dir_inlists_and_mods_parse() -> None:
-    """When `MESA_DIR` is set in the environment, verify all upstream `rn`
-    scripts and `.mod` files parse cleanly and unmodified upstream `inlist*`
-    files reject unsupported controls loudly under default strict validation.
+    """Verify all upstream `rn` scripts and `.mod` files parse cleanly and
+    unmodified upstream `inlist*` files reject unsupported controls loudly under
+    default strict validation.
     """
-    mesa_dir = os.environ.get("MESA_DIR", "")
-    if not mesa_dir:
-        pytest.skip("MESA_DIR not set; skipping upstream MESA parse audit")
-    base = pathlib.Path(mesa_dir)
-    assert base.is_dir(), f"MESA_DIR is not a directory: {base}"
+    base = known_gaps_gate.require_mesa_test_inputs_dir()
+    if base is None:
+        return
     # Models whose network file is not shipped with FlexMESA now fail to load
     # with the missing file named instead of falling back to another network
     # (declared gaps for custom_rates #161 and wd_aic #152).

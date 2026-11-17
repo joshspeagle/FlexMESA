@@ -1,0 +1,109 @@
+name: Setup FlexMESA Toolchain and Data Bundles
+description: >-
+  Set up Python, pinned Rust toolchain, cargo cache, verified FlexMESA physics
+  and test-input bundles, and optionally build/install FlexMESA in-place.
+inputs:
+  github-token:
+    description: GitHub token used for release bundle downloads.
+    required: true
+  python-version:
+    description: Python version to configure when installing Python packages.
+    required: false
+    default: "3.12"
+  install-python-pkg:
+    description: Whether to set up Python and pip-install FlexMESA.
+    required: false
+    default: "true"
+  pip-spec:
+    description: Editable pip install target argument.
+    required: false
+    default: '-e ".[test]"'
+  extra-pip-packages:
+    description: Space-separated additional packages to install with pip.
+    required: false
+    default: ""
+  release:
+    description: Whether to build the PyO3 extension with --profile=release.
+    required: false
+    default: "true"
+  cache-jax:
+    description: Whether to cache persistent JAX XLA compilation artifacts.
+    required: false
+    default: "false"
+  fetch-args:
+    description: Arguments passed to src/flexmesa/data/fetch.py.
+    required: false
+    default: "fetch --include-test-inputs"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Python
+      if: inputs.install-python-pkg == 'true'
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+        cache: "pip"
+
+    - name: Install pinned Rust toolchain from rust-toolchain.toml
+      shell: bash
+      run: |
+        if ! command -v rustup >/dev/null 2>&1; then
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain none
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          export PATH="$HOME/.cargo/bin:$PATH"
+        fi
+        rustup toolchain install --no-self-update
+        rustc --version --verbose
+
+    - name: Cache Rust cargo target and registry
+      uses: Swatinem/rust-cache@v2
+
+    - name: Cache FlexMESA data-v1, test inputs, and module hex bundles
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/flexmesa
+        key: flexmesa-data-v1-${{ hashFiles('src/flexmesa/data/bundles.toml') }}
+
+    - name: Cache persistent JAX XLA compilation artifacts
+      if: inputs.cache-jax == 'true'
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/flexmesa-jax
+        key: >-
+          flexmesa-jax-${{ runner.os }}-py${{ inputs.python-version }}-${{ hashFiles('pyproject.toml', 'src/flexmesa/**/*.py') }}
+        restore-keys: |
+          flexmesa-jax-${{ runner.os }}-py${{ inputs.python-version }}-
+
+    - name: Fetch verified physics and test bundles
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+      run: |
+        if ! command -v zstd >/dev/null; then
+          if [ "$(uname -s)" = "Darwin" ]; then
+            brew install zstd
+          else
+            sudo apt-get update && sudo apt-get install -y zstd
+          fi
+        fi
+        python3 src/flexmesa/data/fetch.py ${{ inputs.fetch-args }}
+        echo "FLEXMESA_DATA_DIR=$HOME/.cache/flexmesa/data" >> "$GITHUB_ENV"
+        echo "MESA_DIR=$HOME/.cache/flexmesa/mesa_test_inputs" >> "$GITHUB_ENV"
+        if [ -d "$HOME/.cache/flexmesa/mesa_module_hex" ]; then
+          echo "FLEXMESA_MODULE_HEX_DIR=$HOME/.cache/flexmesa/mesa_module_hex" >> "$GITHUB_ENV"
+        fi
+        if [ "${{ inputs.cache-jax }}" = "true" ]; then
+          echo "JAX_COMPILATION_CACHE_DIR=$HOME/.cache/flexmesa-jax" >> "$GITHUB_ENV"
+        fi
+
+    - name: Install FlexMESA and dependencies
+      if: inputs.install-python-pkg == 'true'
+      shell: bash
+      run: |
+        if [ "${{ inputs.release }}" = "true" ]; then
+          export MATURIN_PEP517_ARGS="--profile=release"
+        fi
+        python -m pip install --upgrade pip
+        python -m pip install "maturin==1.16.0" ${{ inputs.extra-pip-packages }}
+        python -m pip install --no-build-isolation ${{ inputs.pip-spec }}

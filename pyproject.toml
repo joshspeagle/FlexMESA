@@ -29,8 +29,8 @@ test = [
   "pytest>=8.0",
   "pytest-cov>=5.0",
   "hypothesis>=6.100",
-  "ruff>=0.6",
-  "mypy>=1.11",
+  "ruff==0.16.2",
+  "mypy==2.3.0",
 ]
 docs = [
   "matplotlib>=3.9",
@@ -47,10 +47,7 @@ manifest-path = "crates/flexmesa-py/Cargo.toml"
 pythonpath = ["src"]
 testpaths = ["src", "tests"]
 xfail_strict = true
-addopts = "--doctest-modules --strict-markers -m 'not slow'"
-markers = [
-  "slow: marks full-grid or multi-step stellar evolution tests (> 5 s)",
-]
+addopts = "--doctest-modules --strict-markers"
 
 [tool.ruff]
 line-length = 80

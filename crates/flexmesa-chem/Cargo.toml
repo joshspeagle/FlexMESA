@@ -13,5 +13,8 @@ flexmesa-const = { path = "../flexmesa-const" }
 flexmesa-math = { path = "../flexmesa-math" }
 rayon.workspace = true
 
+[dev-dependencies]
+flexmesa-utils = { path = "../flexmesa-utils" }
+
 [lints]
 workspace = true

@@ -69,10 +69,27 @@ cargo test --manifest-path "$REPO_ROOT/Cargo.toml" --workspace --exclude flexmes
 cargo test --manifest-path "$REPO_ROOT/Cargo.toml" --workspace --exclude flexmesa-py --doc
 PYO3_PYTHON="$PYTHON_BIN" "$MATURIN_BIN" develop --release --manifest-path "$REPO_ROOT/crates/flexmesa-py/Cargo.toml"
 
-echo "[verify_ci] 3/5 Running Ruff, Mypy (--strict), figures, MkDocs (--strict) & snippet checks..."
-"$RUFF_BIN" format --check --line-length 80 "$REPO_ROOT/src" "$REPO_ROOT/tests"
-"$RUFF_BIN" check "$REPO_ROOT/src" "$REPO_ROOT/tests"
-"$MYPY_BIN" --python-executable "$PYTHON_BIN" --config-file "$REPO_ROOT/pyproject.toml" --strict "$REPO_ROOT/src" "$REPO_ROOT/tests"
+echo "[verify_ci] 3/5 Running Ruff, Mypy (--strict), figures, gates, MkDocs (--strict) & snippet checks..."
+test -f "$REPO_ROOT/rust-toolchain.toml"
+"$RUFF_BIN" format --check --line-length 80 "$REPO_ROOT/src" "$REPO_ROOT/tests" \
+  "$REPO_ROOT/scripts/docs" \
+  "$REPO_ROOT/scripts/check_strict_determinism.py" \
+  "$REPO_ROOT/scripts/mesa_reference/measure_mesa_spread.py"
+"$RUFF_BIN" check "$REPO_ROOT/src" "$REPO_ROOT/tests" \
+  "$REPO_ROOT/scripts/docs" \
+  "$REPO_ROOT/scripts/check_strict_determinism.py" \
+  "$REPO_ROOT/scripts/mesa_reference/measure_mesa_spread.py"
+"$MYPY_BIN" --python-executable "$PYTHON_BIN" --config-file "$REPO_ROOT/pyproject.toml" --strict \
+  "$REPO_ROOT/src" "$REPO_ROOT/tests" \
+  "$REPO_ROOT/scripts/docs" \
+  "$REPO_ROOT/scripts/check_strict_determinism.py" \
+  "$REPO_ROOT/scripts/mesa_reference/measure_mesa_spread.py"
+PYTHONPATH="$REPO_ROOT/src" "$PYTHON_BIN" -m flexmesa.testing.known_gaps_gate \
+  --repo-root "$REPO_ROOT" --fail-on-imperative-skips
+PYTHONPATH="$REPO_ROOT/src" "$PYTHON_BIN" -m flexmesa.testing.module_hex_gate \
+  --repo-root "$REPO_ROOT" --check-summary
+"$PYTHON_BIN" "$REPO_ROOT/scripts/docs/render_known_gaps_page.py" --repo-root "$REPO_ROOT" --check
+"$PYTHON_BIN" "$REPO_ROOT/scripts/docs/render_coverage_map_page.py" --repo-root "$REPO_ROOT" --check
 "$PYTHON_BIN" "$REPO_ROOT/scripts/build_docs_figures.py"
 if git -C "$REPO_ROOT" rev-parse --verify origin/main >/dev/null 2>&1; then
   "$PYTHON_BIN" -m flexmesa.cli dashboard check --repo-root "$REPO_ROOT" --base-ref origin/main

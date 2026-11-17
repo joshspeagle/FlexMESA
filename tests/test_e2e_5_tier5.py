@@ -15,12 +15,12 @@
 
 from __future__ import annotations
 
-import os
 import pathlib
 
 import pytest
 
 from flexmesa import binary, star
+from flexmesa.testing import known_gaps_gate
 
 
 def test_e2e_5_complete_106_active_test_suite_and_dev_cases_inventory() -> None:
@@ -102,10 +102,9 @@ def test_e2e_5_tier5_star_and_binary_suites_execution(
     """Verify raw Tier 5/6 `star` and `binary` upstream suites reject
     unsupported controls under `#147` and cleaned copies pass E2E checks.
     """
-    mesa_dir = os.environ.get("MESA_DIR", "")
-    if not mesa_dir:
-        pytest.skip("MESA_DIR not set; skipping upstream MESA Tier 5 suites")
-    base = pathlib.Path(mesa_dir)
+    base = known_gaps_gate.require_mesa_test_inputs_dir()
+    if base is None:
+        return
     clean_root = tmp_path / "mesa"
     assert (base / "star" / "test_suite").is_dir()
     for case_name in star.TIER5_STAR_CASES:

@@ -230,8 +230,6 @@ do_one inlist_stage2 final.mod
 
 #[test]
 fn test_e2e_1_tier1_physics_helpers_and_suite() {
-    use std::path::Path;
-
     assert_eq!(TIER1_CASES.len(), 33);
     assert!(is_tier1_case("make_zams"));
     assert!(is_tier1_case("simplex_solar_calibration"));
@@ -273,26 +271,14 @@ fn test_e2e_1_tier1_physics_helpers_and_suite() {
             <= 1.0e-15
     );
 
-    let require_zero_skips =
-        std::env::var("FLEXMESA_REQUIRE_ZERO_SKIPS").as_deref() == Ok("1");
-    if require_zero_skips {
-        let mesa_dir = std::env::var("MESA_DIR")
-            .expect("MESA_DIR required when FLEXMESA_REQUIRE_ZERO_SKIPS=1");
-        for sub in [
-            "star/test_suite",
-            "astero/test_suite",
-            "star/dev_cases_TDC_Pulsation",
-        ] {
-            assert!(
-                Path::new(&mesa_dir).join(sub).is_dir(),
-                "missing {sub} under {mesa_dir}"
-            );
-        }
-    }
-    if let Ok(mesa_dir) = std::env::var("MESA_DIR") {
-        let base = Path::new(&mesa_dir);
-        let case_dir = base.join("star").join("test_suite").join("make_zams");
-        if case_dir.is_dir() {
+    let _ = flexmesa_utils::require_mesa_test_input_path("astero/test_suite");
+    let _ = flexmesa_utils::require_mesa_test_input_path(
+        "star/dev_cases_TDC_Pulsation",
+    );
+    if let Some(case_dir) = flexmesa_utils::require_mesa_test_input_path(
+        "star/test_suite/make_zams",
+    ) {
+        {
             let err = run_test_suite_case(&case_dir, true, Some(2), true)
                 .expect_err(
                     "raw $MESA_DIR make_zams must reject unsupported controls",
@@ -366,9 +352,9 @@ fn test_e2e_2_tier2_physics_helpers_and_suite() {
     assert!(v_flame > 0.0 && v_flame.is_finite());
     assert!(q_flame > 0.0 && q_flame <= 1.0);
 
-    let mesa_dir = flexmesa_utils::resolve_mesa_test_inputs_dir();
-    let case_dir = mesa_dir.join("star/test_suite/cburn_inward");
-    if case_dir.is_dir() {
+    if let Some(case_dir) = flexmesa_utils::require_mesa_test_input_path(
+        "star/test_suite/cburn_inward",
+    ) {
         let err = run_test_suite_case(&case_dir, true, Some(2), true)
             .expect_err(
                 "raw $MESA_DIR cburn_inward must reject unsupported controls",
@@ -392,8 +378,6 @@ fn test_e2e_2_tier2_physics_helpers_and_suite() {
 
 #[test]
 fn test_e2e_4_tier4_pulsation_astero_and_dev_cases() {
-    use std::path::Path;
-
     assert_eq!(TIER4_STAR_CASES.len(), 16);
     assert_eq!(TIER4_ACTIVE_STAR_CASES.len(), 15);
     assert_eq!(TIER4_ASTERO_CASES.len(), 8);
@@ -421,26 +405,15 @@ fn test_e2e_4_tier4_pulsation_astero_and_dev_cases() {
     assert!(lina[2].period_days < lina[1].period_days);
     assert!(lina[0].growth_rate > 0.0);
 
-    let require_zero_skips =
-        std::env::var("FLEXMESA_REQUIRE_ZERO_SKIPS").as_deref() == Ok("1");
-    if require_zero_skips {
-        let mesa_dir = std::env::var("MESA_DIR")
-            .expect("MESA_DIR required when FLEXMESA_REQUIRE_ZERO_SKIPS=1");
-        for sub in [
-            "star/test_suite",
-            "astero/test_suite",
-            "star/dev_cases_TDC_Pulsation",
-        ] {
-            assert!(
-                Path::new(&mesa_dir).join(sub).is_dir(),
-                "missing {sub} under {mesa_dir}"
-            );
-        }
-    }
-    if let Ok(mesa_dir) = std::env::var("MESA_DIR") {
-        let base = Path::new(&mesa_dir);
-        let star_suite = base.join("star").join("test_suite");
-        if star_suite.is_dir() {
+    let _ = flexmesa_utils::require_mesa_test_input_path("astero/test_suite");
+    if let Some(star_suite) =
+        flexmesa_utils::require_mesa_test_input_path("star/test_suite")
+    {
+        let base = star_suite
+            .parent()
+            .and_then(|p| p.parent())
+            .expect("upstream MESA root");
+        {
             let tmp = TempWave5DirGuard::new("tier4_star");
             let cleaned_suite = tmp.root.join("star").join("test_suite");
             for &case_name in &TIER4_STAR_CASES {
@@ -555,8 +528,6 @@ fn test_e2e_4_tier4_pulsation_astero_and_dev_cases() {
 
 #[test]
 fn test_e2e_5_tier5_star_hooks_and_90_active_star_inventory() {
-    use std::path::Path;
-
     assert_eq!(TIER5_STAR_CASES.len(), 4);
     assert_eq!(all_active_star_case_names().len(), 90);
     assert!(is_tier5_star_case("check_redo"));
@@ -591,26 +562,14 @@ fn test_e2e_5_tier5_star_hooks_and_90_active_star_inventory() {
     let (c1, c2) = verify_step_redo_bit_parity(&model).expect("redo parity");
     assert_eq!(c1, c2);
 
-    let require_zero_skips =
-        std::env::var("FLEXMESA_REQUIRE_ZERO_SKIPS").as_deref() == Ok("1");
-    if require_zero_skips {
-        let mesa_dir = std::env::var("MESA_DIR")
-            .expect("MESA_DIR required when FLEXMESA_REQUIRE_ZERO_SKIPS=1");
-        for sub in [
-            "star/test_suite",
-            "astero/test_suite",
-            "star/dev_cases_TDC_Pulsation",
-        ] {
-            assert!(
-                Path::new(&mesa_dir).join(sub).is_dir(),
-                "missing {sub} under {mesa_dir}"
-            );
-        }
-    }
-    if let Ok(mesa_dir) = std::env::var("MESA_DIR") {
-        let base = Path::new(&mesa_dir);
-        let star_suite = base.join("star").join("test_suite");
-        if star_suite.is_dir() {
+    let _ = flexmesa_utils::require_mesa_test_input_path("astero/test_suite");
+    let _ = flexmesa_utils::require_mesa_test_input_path(
+        "star/dev_cases_TDC_Pulsation",
+    );
+    if let Some(star_suite) =
+        flexmesa_utils::require_mesa_test_input_path("star/test_suite")
+    {
+        {
             let tmp = TempWave5DirGuard::new("tier5_star");
             let cleaned_suite = tmp.root.join("star").join("test_suite");
             for &case_name in &TIER5_STAR_CASES {

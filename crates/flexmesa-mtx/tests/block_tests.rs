@@ -366,8 +366,6 @@ fn test_bcyclic_matches_block_thomas_across_grid_sizes() {
 #[test]
 #[allow(clippy::too_many_lines)]
 fn test_upstream_mesa_block_tri_data_and_test_case_data_parity() {
-    use std::path::PathBuf;
-
     // Unconditional golden check from upstream mtx/test/test_output (test_square1)
     let a1 = [
         1.80, 2.88, 2.05, 0.00, 5.25, -2.95, -0.95, -3.80, 0.00, 0.00, -2.90,
@@ -385,33 +383,9 @@ fn test_upstream_mesa_block_tri_data_and_test_case_data_parity() {
         assert!((act - exp).abs() < 1.0e-13);
     }
 
-    let mesa_env = std::env::var_os("MESA_DIR");
-    let root = mesa_env
-        .as_ref()
-        .filter(|v| !v.is_empty())
-        .map(PathBuf::from)
-        .or_else(|| {
-            std::env::var_os("XDG_CACHE_HOME")
-                .filter(|v| !v.is_empty())
-                .map(|p| PathBuf::from(p).join("flexmesa/mesa_test_inputs"))
-        })
-        .or_else(|| {
-            std::env::var_os("HOME").filter(|v| !v.is_empty()).map(|p| {
-                PathBuf::from(p).join(".cache/flexmesa/mesa_test_inputs")
-            })
-        })
-        .unwrap_or_else(|| PathBuf::from(".flexmesa_test_inputs"))
-        .join("mtx/test");
-    let out_path = root.join("test_output");
-    if mesa_env.as_ref().is_some_and(|v| !v.is_empty()) {
-        assert!(out_path.is_file(), "missing {}", out_path.display());
-        assert!(
-            root.join("test_case.data").is_file(),
-            "missing {}",
-            root.join("test_case.data").display()
-        );
-    }
-    if out_path.exists() {
+    if let Some(out_path) =
+        flexmesa_utils::require_mesa_test_input_path("mtx/test/test_output")
+    {
         let out_text = std::fs::read_to_string(&out_path)
             .expect("read mtx/test/test_output");
         let out_lines: Vec<&str> = out_text.lines().collect();
@@ -424,9 +398,10 @@ fn test_upstream_mesa_block_tri_data_and_test_case_data_parity() {
         assert_eq!(out_lines[17].trim(), "done bcyclic_dble");
     }
 
-    // 1. Verify test_case.data (nvar = 12, nz = 9) when present
-    let tc_path = root.join("test_case.data");
-    if tc_path.exists() {
+    // 1. Verify test_case.data (nvar = 12, nz = 9)
+    if let Some(tc_path) =
+        flexmesa_utils::require_mesa_test_input_path("mtx/test/test_case.data")
+    {
         let tc_text = std::fs::read_to_string(&tc_path)
             .expect("read mtx/test/test_case.data");
         let mut tc_lines = tc_text.lines();
@@ -495,9 +470,10 @@ fn test_upstream_mesa_block_tri_data_and_test_case_data_parity() {
         }
     }
 
-    // 2. Verify block_tri.data (nvar = 25, first nz = 20 shells of 979) when present
-    let bt_path = root.join("block_tri.data");
-    if bt_path.exists() {
+    // 2. Verify block_tri.data (nvar = 25, first nz = 20 shells of 979)
+    if let Some(bt_path) =
+        flexmesa_utils::require_mesa_test_input_path("mtx/test/block_tri.data")
+    {
         let bt_text = std::fs::read_to_string(&bt_path)
             .expect("read mtx/test/block_tri.data");
         let (nvar_bt, nz_full, lblk_full, dblk_full, ublk_full) =

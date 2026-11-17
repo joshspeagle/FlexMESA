@@ -22,7 +22,6 @@ Verifies:
 from __future__ import annotations
 
 import math
-import os
 import pathlib
 
 import jax
@@ -33,6 +32,7 @@ import pytest
 from flexmesa import _rust, neu
 from flexmesa import constants as _const
 from flexmesa.data import fetch
+from flexmesa.testing import known_gaps_gate
 
 
 def _exp10(x: float) -> float:
@@ -323,9 +323,9 @@ def test_golden_rows_parity_against_upstream_mesa() -> None:
 def test_all_10000_golden_rows_and_jax_parity() -> None:
     """Verifies all 10,000 rows of `neu/test/test_output` in Python and JAX."""
     path = _mesa_neu_test_dir() / "test_output"
-    if os.environ.get("MESA_DIR", "").strip():
-        assert path.is_file(), f"Missing {path}"
-    if path.exists():
+    if known_gaps_gate.require_upstream_file(
+        path, label="neu/test/test_output"
+    ):
         raw_lines = [
             line.strip()
             for line in path.read_text(encoding="utf-8").splitlines()
@@ -438,7 +438,9 @@ def test_solar_profile_test_1_0_data_all_194_zones() -> None:
             assert res_in.total.val == 0.0
 
     path = _mesa_neu_test_dir() / "test_1.0.data"
-    if not path.exists():
+    if not known_gaps_gate.require_upstream_file(
+        path, label="neu/test/test_1.0.data"
+    ):
         return
     raw_lines = [
         line.strip()

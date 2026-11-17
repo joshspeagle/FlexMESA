@@ -6,12 +6,12 @@ Tier 4 `star/test_suite` pulsation cases (`15` active + `rsp_Cepheid_6M`), all
 
 from __future__ import annotations
 
-import os
 import pathlib
 
 import pytest
 
 from flexmesa import star
+from flexmesa.testing import known_gaps_gate
 
 
 def test_tier4_cases_inventory_and_cumulative_counts() -> None:
@@ -223,10 +223,9 @@ def test_upstream_mesa_tier4_and_dev_cases_suites_pass(
     tmp_path: pathlib.Path,
 ) -> None:
     """Reject raw Tier 4 / dev suites under `#147` and run cleaned copies."""
-    mesa_dir = os.environ.get("MESA_DIR", "")
-    if not mesa_dir:
-        pytest.skip("MESA_DIR not set; skipping upstream MESA Tier 4 suites")
-    root = pathlib.Path(mesa_dir)
+    root = known_gaps_gate.require_mesa_test_inputs_dir()
+    if root is None:
+        return
     assert (root / "star" / "test_suite").is_dir(), (
         f"Upstream star/test_suite not found under {root}"
     )

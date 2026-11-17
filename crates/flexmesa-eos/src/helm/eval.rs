@@ -8,9 +8,7 @@ use flexmesa_const::CLIGHT;
 use crate::helm::components::{eval_ideal_ions, eval_radiation, HelmThermoVar};
 use crate::helm::coulomb::eval_helm_coulomb;
 use crate::helm::elec_pos::eval_electron_positron;
-use crate::helm::table::{
-    HelmTable, HELM_LOGDHI, HELM_LOGDLO, HELM_LOGTHI, HELM_LOGTLO,
-};
+use crate::helm::table::HelmTable;
 use crate::helm::{
     H_CHID, H_CHIT, H_CP, H_CS, H_CV, H_DCHIDDA, H_DCHIDDD, H_DCHIDDT,
     H_DCHIDDZ, H_DCHITDA, H_DCHITDD, H_DCHITDT, H_DCHITDZ, H_DCPDA, H_DCPDD,
@@ -92,41 +90,23 @@ pub fn helmeos2(
     let ytot1 = 1.0 / abar;
     let ye = ytot1 * zbar;
 
-    let mut temp = temp_in;
-    let mut log_temp = log_temp_in;
-    let mut den = den_in;
-    let mut din = ye * den;
-    let mut off_table = false;
+    let temp = temp_in;
+    let log_temp = log_temp_in;
+    let den = den_in;
+    let din = ye * den;
+    // Mirrors upstream's argument list and return value; neither changes
+    // the result (`eos/private/helm.f90:159`).
+    let _ = log_den_in;
+    let off_table = false;
 
     if config.include_elec_pos {
         let templo = 1.0e3;
         let temphi = 1.0e13;
         let denlo = 1.0e-12;
         let denhi = 1.0e15;
-        if config.clip_to_table_boundaries {
-            if log_temp < HELM_LOGTLO {
-                log_temp = HELM_LOGTLO;
-                temp = templo;
-                off_table = true;
-            } else if log_temp > HELM_LOGTHI {
-                log_temp = HELM_LOGTHI;
-                temp = temphi;
-                off_table = true;
-            }
-            let log_din = log_den_in + flexmesa_math::log10(ye);
-            if log_din < HELM_LOGDLO {
-                din = denlo;
-                den = din / ye;
-                off_table = true;
-            } else if log_din > HELM_LOGDHI {
-                din = denhi;
-                den = din / ye;
-                off_table = true;
-            }
-            if off_table {
-                return Ok(([0.0; NUM_HELM_RESULTS], true));
-            }
-        }
+        // Upstream never clips and never sets `off_table`: the
+        // `clip_to_table_boundaries` argument is unused, and an out-of-range
+        // point returns `ierr = 1` (`eos/private/helm.f90:192-212`).
         if temp < templo || din < denlo || temp > temphi || din > denhi {
             return Err(1);
         }

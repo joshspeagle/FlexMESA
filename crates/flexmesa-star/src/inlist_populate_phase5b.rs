@@ -322,15 +322,16 @@ impl InlistBundle {
         }
         ctrl.try_usize_into("controls", &mut ts.retry_hold, "retry_hold", 0)?;
         ctrl.try_usize_into("controls", &mut ts.neg_mass_fraction_hold, "neg_mass_fraction_hold", 0)?;
+        // Upstream applies these limits only when positive and accepts any
+        // integer (`star/private/evolve.f90:2161,2214`), so a non-positive
+        // value is stored as 0, meaning no limit. Upstream's own
+        // `binary/test_suite/double_bh/inlist1:47` sets `redo_limit = -1`.
         if let Some(v) = ctrl.try_get_i64("controls", "retry_limit")? {
-            if v < -1 {
-                return Err(StarError::InvalidInput(format!(
-                    "'&controls::retry_limit' must be >= -1, got {v}"
-                )));
-            }
             ts.retry_limit = if v <= 0 { 0 } else { v as usize };
         }
-        ctrl.try_usize_into("controls", &mut ts.redo_limit, "redo_limit", 0)?;
+        if let Some(v) = ctrl.try_get_i64("controls", "redo_limit")? {
+            ts.redo_limit = if v <= 0 { 0 } else { v as usize };
+        }
         ctrl.try_isize_into("controls", &mut ts.solver_iters_timestep_limit, "solver_iters_timestep_limit")?;
         ctrl.try_isize_into("controls", &mut ts.gold_solver_iters_timestep_limit, "gold_solver_iters_timestep_limit")?;
         ctrl.try_isize_into("controls", &mut ts.gold2_solver_iters_timestep_limit, "gold2_solver_iters_timestep_limit")?;

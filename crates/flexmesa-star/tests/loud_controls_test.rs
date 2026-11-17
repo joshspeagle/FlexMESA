@@ -380,10 +380,30 @@ fn test_missing_files_stages_and_removed_clamps_behave_strictly() {
     let b0 = InlistBundle::from_file(&zero_retry).expect("retry_limit=0");
     assert_eq!(b0.controls.ts_stop.retry_limit, 0);
 
-    let bad_retry_neg = tmp.root.join("inlist_bad_retry_neg");
-    fs::write(&bad_retry_neg, "&controls\n  retry_limit = -2\n/\n")
-        .expect("write bad retry");
-    assert!(InlistBundle::from_file(&bad_retry_neg).is_err());
+    // Upstream applies `retry_limit` and `redo_limit` only when positive
+    // and accepts any integer (`star/private/evolve.f90:2161,2214`).
+    let neg_retry = tmp.root.join("inlist_neg_retry");
+    fs::write(&neg_retry, "&controls\n  retry_limit = -2\n/\n")
+        .expect("write negative retry limit");
+    let bneg = InlistBundle::from_file(&neg_retry)
+        .expect("a non-positive retry_limit means no limit");
+    assert_eq!(bneg.controls.ts_stop.retry_limit, 0);
+
+    // `redo_limit` is not used by the engine yet, so it is rejected as
+    // unsupported by default; with the opt-out its value must still parse
+    // (`binary/test_suite/double_bh/inlist1:47` sets `redo_limit = -1`).
+    let neg_redo = tmp.root.join("inlist_neg_redo");
+    fs::write(&neg_redo, "&controls\n  redo_limit = -1\n/\n")
+        .expect("write negative redo limit");
+    assert!(InlistBundle::from_file(&neg_redo).is_err());
+    let bredo = InlistBundle::from_file_with_options(
+        &neg_redo,
+        InlistLoadOptions {
+            allow_unsupported_controls: true,
+        },
+    )
+    .expect("a non-positive redo_limit means no limit");
+    assert_eq!(bredo.controls.ts_stop.redo_limit, 0);
 
     let bad_retry_fac = tmp.root.join("inlist_bad_retry_fac");
     fs::write(

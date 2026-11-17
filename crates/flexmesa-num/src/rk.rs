@@ -262,8 +262,8 @@ where
             ));
         }
         // Lund PI step-size controller (beta = 0.04, expo1 = 0.2 - 0.75 * beta)
-        let fac11 = err.powf(0.17);
-        let fac = fac11 / facold.powf(0.04);
+        let fac11 = flexmesa_math::pow(err, 0.17);
+        let fac = fac11 / flexmesa_math::pow(facold, 0.04);
         let fac_clamped = (fac / 0.9).clamp(0.1, 5.0);
         let mut h_new = h / fac_clamped;
 

@@ -201,8 +201,10 @@ impl RspTurbPartials {
             let qc_ip1 = mc.qqs[i + 1] / mc.cps[i + 1];
             let pom = 0.5 * (qc_i + qc_ip1);
             let pom2 = 0.5 * (mc.p[i + 1] - mc.p[i]);
+            // `star/private/{rsp_lina.f90:289, rsp_relax_env.f90:599}` call `dlog` (#198).
             let igr1 = pom * (mc.p[i + 1] - mc.p[i])
-                - (grid.t[i + 1].ln() - grid.t[i].ln());
+                - (flexmesa_math::intrinsic_log(grid.t[i + 1])
+                    - flexmesa_math::intrinsic_log(grid.t[i]));
             let igr1x0 = pom2
                 * ((mc.dqq_dr_00[i] - qc_i * mc.dcp_dr_00[i]) / mc.cps[i]
                     + (mc.dqq_dr_in[i + 1] - qc_ip1 * mc.dcp_dr_in[i + 1])
@@ -335,8 +337,10 @@ impl RspTurbPartials {
                                     - mc.qqs[i] * mc.dcp_dt_00[i]
                                         / (mc.cps[i] * mc.cps[i]))));
 
-            let pom_d =
-                (dc.cede / alfa) * (grid.et[i].powf(1.5) - efl02.powf(1.5));
+            // `star/private/{rsp_lina.f90:419, rsp_relax_env.f90:737}` evaluate `**1.5d0` (#198).
+            let pom_d = (dc.cede / alfa)
+                * (flexmesa_math::intrinsic_pow(grid.et[i], 1.5)
+                    - flexmesa_math::intrinsic_pow(efl02, 1.5));
             let pom2_d = 0.5 * (grid.hp_face[i] + grid.hp_face[i - 1]);
             self.damp[i] = pom_d / pom2_d;
             let tem3 = -0.5 * pom_d / (pom2_d * pom2_d);
@@ -361,10 +365,12 @@ impl RspTurbPartials {
             ) = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
             if dc.gammar != 0.0 {
                 let pr = 4.0 * dc.sig * dc.gammar * dc.gammar / (alfa * alfa);
-                let pr2 = grid.t[i].powi(3) * grid.vol[i].powi(2)
+                let pr2 = flexmesa_math::pow3(grid.t[i])
+                    * flexmesa_math::pow2(grid.vol[i])
                     / (mc.cps[i] * mc.k[i]);
                 let pr4 = 0.5
-                    * (grid.hp_face[i].powi(2) + grid.hp_face[i - 1].powi(2));
+                    * (flexmesa_math::pow2(grid.hp_face[i])
+                        + flexmesa_math::pow2(grid.hp_face[i - 1]));
                 self.dampr[i] = pr * pr2 * grid.et[i] / pr4;
                 let tr1 = -self.dampr[i] / pr4;
                 ddr_dr_out = tr1 * (grid.hp_face[i] * hp.dr_out[i]);
@@ -385,7 +391,7 @@ impl RspTurbPartials {
                 let tr2 = pr * grid.et[i] / pr4;
                 let cpk = mc.cps[i] * mc.k[i];
                 ddr_dr_00 += tr2
-                    * grid.t[i].powi(3)
+                    * flexmesa_math::pow3(grid.t[i])
                     * (2.0 * grid.vol[i] * mc.dvr[i]
                         - grid.vol[i]
                             * grid.vol[i]
@@ -393,7 +399,7 @@ impl RspTurbPartials {
                                 + mc.dk_dv_00[i] * mc.dvr[i] / mc.k[i]))
                     / cpk;
                 ddr_dr_in += tr2
-                    * grid.t[i].powi(3)
+                    * flexmesa_math::pow3(grid.t[i])
                     * (2.0 * grid.vol[i] * mc.dvrm[i]
                         - grid.vol[i]
                             * grid.vol[i]
@@ -404,7 +410,7 @@ impl RspTurbPartials {
                     * grid.vol[i]
                     * grid.vol[i]
                     * (3.0 * grid.t[i] * grid.t[i]
-                        - grid.t[i].powi(3)
+                        - flexmesa_math::pow3(grid.t[i])
                             * (mc.dcp_dt_00[i] / mc.cps[i]
                                 + mc.dk_dt_00[i] / mc.k[i]))
                     / cpk;
@@ -506,27 +512,32 @@ impl RspTurbPartials {
                 let pt = -(2.0 / 3.0)
                     * alfa
                     * alfat
-                    * (4.0 * PI * grid.r[i].powi(2)).powi(2);
+                    * flexmesa_math::pow2(
+                        4.0 * PI * flexmesa_math::pow2(grid.r[i]),
+                    );
                 let pt2 = grid.hp_face[i]
                     * 0.5
-                    * (1.0 / grid.vol[i].powi(2)
-                        + 1.0 / grid.vol[i + 1].powi(2));
-                let pt3 = (grid.et[i + 1].powf(1.5) - grid.et[i].powf(1.5))
+                    * (1.0 / flexmesa_math::pow2(grid.vol[i])
+                        + 1.0 / flexmesa_math::pow2(grid.vol[i + 1]));
+                // `star/private/{rsp_lina.f90:554, rsp_relax_env.f90:877}` evaluate `**1.5d0` (#198).
+                let pt3 = (flexmesa_math::intrinsic_pow(grid.et[i + 1], 1.5)
+                    - flexmesa_math::intrinsic_pow(grid.et[i], 1.5))
                     / grid.dm_bar[i];
                 self.lt[i] = pt * pt2 * pt3;
                 self.dltx0[i] = 4.0 * self.lt[i] / grid.r[i]
                     + self.lt[i] / pt2
                         * grid.hp_face[i]
-                        * (-mc.dvr[i] / grid.vol[i].powi(3)
-                            - mc.dvrm[i + 1] / grid.vol[i + 1].powi(3))
+                        * (-mc.dvr[i] / flexmesa_math::pow3(grid.vol[i])
+                            - mc.dvrm[i + 1]
+                                / flexmesa_math::pow3(grid.vol[i + 1]))
                     + self.lt[i] / grid.hp_face[i] * hp.dr_00[i];
                 self.dltxm[i] = self.lt[i] / pt2
                     * grid.hp_face[i]
-                    * (-mc.dvrm[i] / grid.vol[i].powi(3))
+                    * (-mc.dvrm[i] / flexmesa_math::pow3(grid.vol[i]))
                     + self.lt[i] / grid.hp_face[i] * hp.dr_in[i];
                 self.dltxp[i] = self.lt[i] / pt2
                     * grid.hp_face[i]
-                    * (-mc.dvr[i + 1] / grid.vol[i + 1].powi(3))
+                    * (-mc.dvr[i + 1] / flexmesa_math::pow3(grid.vol[i + 1]))
                     + self.lt[i] / grid.hp_face[i] * hp.dr_out[i];
                 self.dlty0[i] = self.lt[i] / grid.hp_face[i] * hp.dt_00[i];
                 self.dltyp[i] = self.lt[i] / grid.hp_face[i] * hp.dt_out[i];
@@ -557,7 +568,8 @@ impl RspTurbPartials {
                 let pom =
                     (16.0 / 3.0) * PI * alfa * dc.alfam * grid.et[i].sqrt();
                 let pom1 = 1.0 / (grid.vol[i] * grid.vol[i] * grid.dm[i]);
-                let pom2 = (grid.r[i].powi(6) + grid.r[i - 1].powi(6))
+                let pom2 = (flexmesa_math::pow6(grid.r[i])
+                    + flexmesa_math::pow6(grid.r[i - 1]))
                     * (grid.hp_face[i] + grid.hp_face[i - 1])
                     * 0.25;
                 self.evuu0[i] = pom * pom1 * pom2 / grid.r[i];
@@ -569,7 +581,8 @@ impl RspTurbPartials {
                     * dc.alfam.abs()
                     * grid.et[i].sqrt();
                 let pom1 = 1.0 / (grid.vol[i] * grid.vol[i] * grid.dm[i]);
-                let pom2 = (grid.r[i].powi(3) + grid.r[i - 1].powi(3))
+                let pom2 = (flexmesa_math::pow3(grid.r[i])
+                    + flexmesa_math::pow3(grid.r[i - 1]))
                     * (grid.hp_face[i] + grid.hp_face[i - 1])
                     * 0.25;
                 self.evuu0[i] = pom * pom1 * pom2 / grid.r[i];

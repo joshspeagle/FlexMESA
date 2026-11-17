@@ -274,16 +274,25 @@ def test_upstream_mesa_26_4_1_citations_and_defaults_diff_resolve() -> None:
         *sorted((REPO_ROOT / "tests").rglob("*.py")),
     ]
 
-    def _resolve_target(
+    # Bundled MESA SDK 26.6.1 CRMATH 1.2 Fortran source line counts (#165).
+    sdk_crmath_lines: dict[str, int] = {
+        "crmath.f90": 861,
+        "crmath_r_dp.f90": 424,
+        "crmath_c_dp.f90": 254,
+    }
+
+    def _resolve_target_lines(
         raw_fp: str, rel_src: pathlib.Path, lno: int, cite_tok: str
-    ) -> pathlib.Path:
+    ) -> tuple[str, int]:
+        if raw_fp in sdk_crmath_lines:
+            return f"mesasdk/crmath-1.2/{raw_fp}", sdk_crmath_lines[raw_fp]
         if "/" in raw_fp:
             cand = mesa_root / raw_fp
             assert cand.is_file(), (
                 f"{rel_src}:{lno}: upstream MESA 26.4.1 file not found "
                 f"for citation {cite_tok!r}"
             )
-            return cand
+            return str(cand.relative_to(mesa_root)), _num_lines(cand)
         cands = by_basename.get(raw_fp, [])
         assert cands, (
             f"{rel_src}:{lno}: upstream MESA 26.4.1 file not found "
@@ -294,7 +303,7 @@ def test_upstream_mesa_26_4_1_citations_and_defaults_diff_resolve() -> None:
             f"{cite_tok!r}; matches "
             f"{[str(p.relative_to(mesa_root)) for p in cands]}"
         )
-        return cands[0]
+        return str(cands[0].relative_to(mesa_root)), _num_lines(cands[0])
 
     checked = 0
     for src_path in scan_paths:
@@ -304,8 +313,9 @@ def test_upstream_mesa_26_4_1_citations_and_defaults_diff_resolve() -> None:
         ):
             for match in colon_re.finditer(line):
                 raw_fp = match.group(1)
-                target = _resolve_target(raw_fp, rel_src, lno, match.group(0))
-                n_max = _num_lines(target)
+                target_label, n_max = _resolve_target_lines(
+                    raw_fp, rel_src, lno, match.group(0)
+                )
                 for part in match.group(2).split(","):
                     rm = range_item_re.match(part.strip())
                     assert rm is not None
@@ -313,19 +323,19 @@ def test_upstream_mesa_26_4_1_citations_and_defaults_diff_resolve() -> None:
                     hi = int(rm.group(2)) if rm.group(2) else lo
                     assert 1 <= lo <= hi <= n_max, (
                         f"{rel_src}:{lno}: citation {match.group(0)!r} out of "
-                        f"bounds (1..={n_max}) in "
-                        f"{target.relative_to(mesa_root)}"
+                        f"bounds (1..={n_max}) in {target_label}"
                     )
                     checked += 1
             for match in prose_re.finditer(line):
                 raw_fp = match.group(1)
-                target = _resolve_target(raw_fp, rel_src, lno, match.group(0))
-                n_max = _num_lines(target)
+                target_label, n_max = _resolve_target_lines(
+                    raw_fp, rel_src, lno, match.group(0)
+                )
                 lo = int(match.group(2))
                 hi = int(match.group(3)) if match.group(3) else lo
                 assert 1 <= lo <= hi <= n_max, (
                     f"{rel_src}:{lno}: citation {match.group(0)!r} out of "
-                    f"bounds (1..={n_max}) in {target.relative_to(mesa_root)}"
+                    f"bounds (1..={n_max}) in {target_label}"
                 )
                 checked += 1
 

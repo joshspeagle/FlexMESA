@@ -47,11 +47,12 @@ pub fn eos_gamma_de_get(
     let avo_k_div_abar = AVO * KERG / abar;
     let p = (gamma - 1.0) * energy * rho;
     let t = (gamma - 1.0) * energy / avo_k_div_abar;
-    let log10_t = t.log10();
+    let log10_t = flexmesa_math::log10(t);
 
     let cv = avo_k_div_abar / (gamma - 1.0);
 
-    let raw_s = cv * (p / rho.powf(gamma)).ln() + 1.0e9;
+    let raw_s =
+        cv * flexmesa_math::log(p / flexmesa_math::pow(rho, gamma)) + 1.0e9;
     let entropy = if raw_s.is_nan() || raw_s <= 0.0 {
         1.0e-99
     } else {
@@ -62,11 +63,11 @@ pub fn eos_gamma_de_get(
     let mut d_dlnd = [0.0; NUM_EOS_BASIC_RESULTS];
     let mut d_dln_t = [0.0; NUM_EOS_BASIC_RESULTS];
 
-    res[I_LN_PGAS] = p.ln();
+    res[I_LN_PGAS] = flexmesa_math::log(p);
     d_dlnd[I_LN_PGAS] = 1.0;
     d_dln_t[I_LN_PGAS] = 1.0;
 
-    res[I_LN_E] = energy.ln();
+    res[I_LN_E] = flexmesa_math::log(energy);
     d_dlnd[I_LN_E] = 0.0;
     d_dln_t[I_LN_E] = 1.0;
 
@@ -74,7 +75,7 @@ pub fn eos_gamma_de_get(
     // sets `d_dlnRho_const_T(i_lnS) = 0`, `d_dlnT_const_Rho(i_lnS) = 0`,
     // `res(i_dS_dT) = 0`, `res(i_dS_dRho) = 0`, `res(i_mu) = 1 / abar`,
     // `res(i_lnfree_e) = -1e99`, and `res(i_eta) = 0`.
-    res[I_LN_S] = entropy.ln();
+    res[I_LN_S] = flexmesa_math::log(entropy);
     d_dlnd[I_LN_S] = 0.0;
     d_dln_t[I_LN_S] = 0.0;
 

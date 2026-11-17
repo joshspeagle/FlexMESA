@@ -80,13 +80,17 @@ fn init_az_info(a1: f64, z1: f64, a2: f64, z2: f64) -> ScreenPairParams {
         return ScreenPairParams::default();
     }
     let z12 = z1 + z2;
-    let zs13 = z12.powf(ONE_THIRD);
+    let zs13 = flexmesa_math::pow(z12, ONE_THIRD);
     let zs13inv = 1.0 / zs13;
-    let zhat = z12.powf(5.0 / 3.0) - z1.powf(5.0 / 3.0) - z2.powf(5.0 / 3.0);
-    let zhat2 =
-        z12.powf(5.0 / 12.0) - z1.powf(5.0 / 12.0) - z2.powf(5.0 / 12.0);
-    let lzav = (5.0 / 3.0) * (z1 * z2 / z12).max(1.0e-99).ln();
-    let aznut = (z1 * z1 * z2 * z2 * a1 * a2 / (a1 + a2)).powf(ONE_THIRD);
+    let zhat = flexmesa_math::pow(z12, 5.0 / 3.0)
+        - flexmesa_math::pow(z1, 5.0 / 3.0)
+        - flexmesa_math::pow(z2, 5.0 / 3.0);
+    let zhat2 = flexmesa_math::pow(z12, 5.0 / 12.0)
+        - flexmesa_math::pow(z1, 5.0 / 12.0)
+        - flexmesa_math::pow(z2, 5.0 / 12.0);
+    let lzav = (5.0 / 3.0) * flexmesa_math::log((z1 * z2 / z12).max(1.0e-99));
+    let aznut =
+        flexmesa_math::pow(z1 * z1 * z2 * z2 * a1 * a2 / (a1 + a2), ONE_THIRD);
     ScreenPairParams {
         zs13,
         zhat,
@@ -417,9 +421,9 @@ fn fxt_screen5_with_params(
     let qlam0z = 1.88e8 * tempi * pp;
     let qlam0zdt = 1.88e8 * (dtempidt * pp + tempi * dppdt);
     let qlam0zdd = 1.88e8 * tempi * dppdd;
-    let taufac = (4.248719e3 / 3.0) * tempi.powf(ONE_THIRD);
+    let taufac = (4.248719e3 / 3.0) * flexmesa_math::pow(tempi, ONE_THIRD);
     let taufacdt = -ONE_THIRD * taufac * tempi;
-    let xni = (rr_ctx * zbar).powf(ONE_THIRD);
+    let xni = flexmesa_math::pow(rr_ctx * zbar, ONE_THIRD);
     let dxnidd = ONE_THIRD * xni * deni;
     let aa = 2.27493e5 * tempi * xni;
     let daadt = 2.27493e5 * dtempidt * xni;
@@ -465,7 +469,7 @@ fn fxt_screen5_with_params(
     let mut dh12dd = dh12wdd;
 
     if gamef > 0.3 {
-        let gamp14 = gamp.powf(0.25);
+        let gamp14 = flexmesa_math::pow(gamp, 0.25);
         let inv_gamp = 1.0 / gamp;
         let q_g14 = 0.25 * gamp14 * inv_gamp;
         let gamp14dt = q_g14 * gampdt;
@@ -473,7 +477,7 @@ fn fxt_screen5_with_params(
 
         let cc = 0.896434 * gamp * p.zhat
             - 3.44740 * gamp14 * p.zhat2
-            - 0.5551 * (gamp.ln() + p.lzav)
+            - 0.5551 * (flexmesa_math::log(gamp) + p.lzav)
             - 2.996;
         let dccdt = 0.896434 * gampdt * p.zhat
             - 3.44740 * gamp14dt * p.zhat2
@@ -525,7 +529,7 @@ fn fxt_screen5_with_params(
         } else {
             (0.77, 0.0, 0.0)
         };
-        h12 += xlgfac.ln();
+        h12 += flexmesa_math::log(xlgfac);
         let inv_xlg = 1.0 / xlgfac;
         dh12dt += inv_xlg * dxlgfacdt;
         dh12dd += inv_xlg * dxlgfacdd;
@@ -552,7 +556,7 @@ fn fxt_screen5_with_params(
     }
 
     h12 = h12.clamp(0.0, 300.0);
-    let scor = h12.exp();
+    let scor = flexmesa_math::exp(h12);
     let (dscor_dt, dscor_dd) = if h12 == 300.0 {
         (0.0, 0.0)
     } else {

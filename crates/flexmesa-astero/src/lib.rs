@@ -60,11 +60,10 @@ pub use optimize::{
     simplex_minimize_with_options, unmap_bobyqa_param,
 };
 pub use ratios_chi2::{
-    eval_astero_chi2, eval_frequency_ratios_r01_r10,
-    eval_frequency_ratios_r02, eval_frequency_ratios_r02_with_dnu,
-    eval_frequency_ratios_with_trimming, get_max_sequence,
-    interpolate_ratio_r010, interpolate_ratio_r02, match_modes_by_degree,
-    AsteroChi2Weights, FrequencyRatiosR010,
+    eval_astero_chi2, eval_frequency_ratios_r01_r10, eval_frequency_ratios_r02,
+    eval_frequency_ratios_r02_with_dnu, eval_frequency_ratios_with_trimming,
+    get_max_sequence, interpolate_ratio_r010, interpolate_ratio_r02,
+    match_modes_by_degree, AsteroChi2Weights, FrequencyRatiosR010,
 };
 pub use sample_eval::{eval_model_astero_sample, AsteroSampleResult};
 pub use scaling::{
@@ -107,7 +106,7 @@ mod tests {
             (14..=25).map(|n| 135.0 * (f64::from(n) + 1.45)).collect();
         let l0_inertias: Vec<f64> = l0_freqs
             .iter()
-            .map(|&f| 1.0e-7 * ((3100.0 - f) / 1000.0).exp())
+            .map(|&f| 1.0e-7 * flexmesa_math::exp((3100.0 - f) / 1000.0))
             .collect();
         let sigmas = vec![0.15_f64; l0_freqs.len()];
 
@@ -117,13 +116,8 @@ mod tests {
             .zip(&l0_inertias)
             .map(|(&f, &e)| f + target_a3 * (f * f * f) / e)
             .collect();
-        let (corr_cubic, a3_fit) = eval_cubic_corr(
-            &obs_cubic,
-            &sigmas,
-            &l0_freqs,
-            &l0_inertias,
-            1.0,
-        );
+        let (corr_cubic, a3_fit) =
+            eval_cubic_corr(&obs_cubic, &sigmas, &l0_freqs, &l0_inertias, 1.0);
         assert!((a3_fit / target_a3 - 1.0).abs() < 1.0e-12);
         for (c, o) in corr_cubic.iter().zip(&obs_cubic) {
             assert!((c - o).abs() < 1.0e-11);
@@ -201,7 +195,10 @@ mod tests {
             1.0e-7,
             1.0e-12,
             0.0,
-            |x| (x[0] - target[0]).powi(2) + 10.0 * (x[1] - target[1]).powi(2),
+            |x| {
+                flexmesa_math::pow2(x[0] - target[0])
+                    + 10.0 * flexmesa_math::pow2(x[1] - target[1])
+            },
         );
         assert!(f_nm < 1.0e-10);
         assert!((x_nm[0] - target[0]).abs() < 1.0e-5);
@@ -214,7 +211,10 @@ mod tests {
             200,
             0.45,
             1.0e-6,
-            |x| (x[0] - target[0]).powi(2) + 10.0 * (x[1] - target[1]).powi(2),
+            |x| {
+                flexmesa_math::pow2(x[0] - target[0])
+                    + 10.0 * flexmesa_math::pow2(x[1] - target[1])
+            },
         );
         assert!(f_pq < 1.0e-10);
         assert!((x_pq[0] - target[0]).abs() < 1.0e-5);

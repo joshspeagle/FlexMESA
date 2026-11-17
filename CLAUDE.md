@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-`FlexMESA` ports [MESA (Modules for Experiments in Stellar Astrophysics)](https://github.com/MESAHub/mesa) into a canonical Safe Rust engine (`crates/`, exposed to Python via `PyO3` as `flexmesa._rust`) with a Python front end and a derived `float64` JAX layer (`src/flexmesa/`). The target for `v0.1.0` is a complete, verified port of **MESA release `26.4.1`** (git tag `26.4.1`, Zenodo record `19722306`), including the bundled codes required by its test suites.
+`FlexMESA` ports [MESA (Modules for Experiments in Stellar Astrophysics)](https://github.com/MESAHub/mesa) into a canonical Safe Rust engine (`crates/`, with `#![forbid(unsafe_code)]` across all crates except the sole `crlibm` FFI wrapper crate `flexmesa-crlibm-sys`, exposed to Python via `PyO3` as `flexmesa._rust`) with a Python front end and a derived `float64` JAX layer (`src/flexmesa/`). The target for `v0.1.0` is a complete, verified port of **MESA release `26.4.1`** (git tag `26.4.1`, Zenodo record `19722306`), including the bundled codes required by its test suites.
 
 ## Start here
 
@@ -16,7 +16,7 @@
 
 | Path | Role |
 | :--- | :--- |
-| `crates/` | Canonical Safe Rust (`#![forbid(unsafe_code)]`) Cargo workspace crates and `flexmesa-py` (`PyO3` extension bridge) |
+| `crates/` | Canonical Safe Rust Cargo workspace crates (`#![forbid(unsafe_code)]` across all crates except `flexmesa-crlibm-sys`, the sole `crlibm` FFI wrapper crate; `#165`) and `flexmesa-py` (`PyO3` extension bridge) |
 | `src/flexmesa/` | Python front end and derived `float64` JAX layer (`star`, `binary`, and `astero` JAX engine twins are frozen under `#166`) |
 | `tests/` | Python `pytest` and `hypothesis` suite (`test_docs_snippets.py` checks documentation links, API directives, snippets, and rule mirrors) |
 | `benchmarks/` | Benchmark harnesses, including Fortran MESA comparators in `benchmarks/fortran_mesa/` (`#146`) |
@@ -33,14 +33,14 @@
    - When an upstream bug or clear improvement is identified, open an issue under `#169` using the "Deferred" issue template, citing the upstream `file:line` at tag `26.4.1`, mechanism, effect, and proposed change; do not implement it before `v0.1.0`. Label it `deferred` plus exactly one kind label and use the matching title prefix: `upstream-bug` with `[Deferred bug]` (upstream contradicts its own documentation, comments, units, or evident intent) or `enhancement` with `[Deferred enhancement]` (upstream is self-consistent and a different choice would be better). Add `parity-pending` while `FlexMESA` code still departs from upstream at that point, naming the package that restores upstream behaviour, and `needs-confirmation` until the upstream lines have been read at the tag. Add the issue's row to the register in `#169` in the same session, and cite the deferred issue number in a comment at the reproduced line. In-scope port work scheduled after `v0.1.0` (`#172`) is labelled `deferred-scope` and stays under `#140`.
    - **Existing departures are removed, not kept**: code already in the repository that improves on or "fixes" upstream (`#175`–`#178`) must be reverted back to upstream behaviour, with a `#169` backlog issue recording what was removed.
    - If an upstream behaviour cannot be reproduced exactly (for example, dependence on uninitialized memory or compiler-specific evaluation), stop and ask the project lead rather than choosing a substitute behaviour.
-3. **One Rust Source, Two Numerics Modes & Three Fidelity Levels (`#165`)**:
-   - **Strict mode (default)**: correctly rounded elementary functions via `flexmesa-math`, no fused multiply-add (`mul_add`), and upstream's exact order of operations (no algebraic rearrangement of formulas on the strict path). Strict mode is the **only** mode judged against MESA.
-   - **Fast mode**: platform math, FMA, and vectorization permitted, built from the same Rust physics source and validated against strict mode within stated tolerances.
+3. **One Rust Source, Two Numerics Modes & Three Fidelity Levels (`#165`, `DECISIONS #23`)**:
+   - **Strict mode (default)**: correctly rounded elementary functions via `flexmesa-math` backed by vendored `crlibm 1.0beta4` (`CRMATH 1.2`) in `flexmesa-crlibm-sys` (the **sole** crate containing `unsafe`, compiled with `#![deny(unsafe_op_in_unsafe_fn)]` and `// SAFETY:` comments on every `extern` call, while every other crate enforces `#![forbid(unsafe_code)]`), no fused multiply-add (`mul_add`), and upstream's exact order of operations (no algebraic rearrangement of formulas on the strict path). Strict mode is the **only** mode judged against MESA.
+   - **Fast mode**: platform math, FMA, and vectorization permitted, built from the same Rust physics source (`AtomicU8` run-level mode selector) and validated against strict mode within stated tolerances.
    - **Three numerical fidelity levels**:
-     1. *Level 1*: Strict mode is bit-identical across machines and thread counts (hard requirement, tested in CI on two runner types).
+     1. *Level 1*: Strict mode is bit-identical across machines and thread counts (hard requirement, tested in CI on `ubuntu-latest` `x86_64` and `macos-latest` `aarch64` runners).
      2. *Level 2*: Strict-mode kernels are bit-identical to MESA wherever operations can be made the same in the same order (hard requirement per kernel, tested against exact hexadecimal MESA outputs).
      3. *Level 3*: Whole trajectories match MESA within the history-harness tolerances (`#143`), tracking the first step at which histories differ toward zero.
-   - Physics crates must never call platform transcendental methods (`f64::exp`, `ln`, `log10`, `powf`, `powi`, ...) or `mul_add` directly once `#165` lands.
+   - Physics crates must never call platform transcendental methods (`f64::exp`, `ln`, `log10`, `powf`, `powi`, ...) or `mul_add` directly (enforced via workspace `clippy.toml` `disallowed-methods` and `crates/flexmesa-math/tests/routing_governance.rs`).
 4. **Canonical Rust, Python Front End, Derived JAX (`#166`, superseding `DECISIONS #6` & `#7`)**:
    - Rust (`crates/`) is canonical. JAX (`src/flexmesa/`) is a derived layer for automatic differentiation and batching, validated against Rust strict mode and **never** treated as an upstream parity oracle (`DECISIONS #9` updated).
    - The JAX `star`, `binary`, and `astero` engine code is **frozen** until the Rust engine passes the upstream-history harness (`#143`, `#166`); do not edit frozen JAX engine files.
@@ -78,13 +78,13 @@
   pytest tests/test_docs_snippets.py -v
   mkdocs build --strict
   ```
-- **Incremental Case Tracer & Upstream-History Harness (`#143`, `#163`)**:
+- **Incremental Case Tracer & Upstream-History Harness (`#143`, `#163`, `#165`)**:
   ```bash
-  flexmesa trace star <case> --out <out_dir> [--timeout-sec 600 --max-rss-gb 6.0]
-  flexmesa trace binary <case> --out <out_dir> [--timeout-sec 600 --max-rss-gb 6.0]
-  flexmesa trace astero <case> --out <out_dir> [--timeout-sec 600 --max-rss-gb 6.0]
+  flexmesa trace star <case> --out <out_dir> [--numerics-mode strict|fast --timeout-sec 600 --max-rss-gb 6.0]
+  flexmesa trace binary <case> --out <out_dir> [--numerics-mode strict|fast --timeout-sec 600 --max-rss-gb 6.0]
+  flexmesa trace astero <case> --out <out_dir> [--numerics-mode strict|fast --timeout-sec 600 --max-rss-gb 6.0]
   flexmesa harness table --check
-  flexmesa harness run --preset pr-ci --markdown-out case_table.md --json-out case_table.json --gate
+  flexmesa harness run --preset pr-ci --markdown-out case_table.md --json-out case_table.json --gate [--numerics-mode strict]
   ```
 
 ## How to Pick Up an Audit Package (`#140`)

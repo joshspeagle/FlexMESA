@@ -7,23 +7,11 @@ use std::io::{BufRead, BufReader};
 use std::path::Path;
 use std::sync::OnceLock;
 
+use flexmesa_math::exp10 as helm_exp10;
+
 use crate::helm::table_io::{
     load_or_build_full_helm_vertices, parse_helm_ascii_reader,
 };
-
-#[allow(clippy::float_cmp, clippy::cast_possible_truncation)]
-fn helm_exp10(x: f64) -> f64 {
-    if x.is_finite() && x == x.floor() && (-308.0..=308.0).contains(&x) {
-        let ix = x as i32;
-        if ix < 0 {
-            1.0_f64 / 10.0_f64.powi(-ix)
-        } else {
-            10.0_f64.powi(ix)
-        }
-    } else {
-        (x * std::f64::consts::LN_10).exp()
-    }
-}
 
 /// Number of electron density grid points (`log10(rho * Y_e)` from `-12` to `15`).
 pub const HELM_IMAX: usize = 2701;
@@ -308,7 +296,7 @@ impl HelmTable {
     /// (`eos/private/helm_electron_positron.dek:20-62`).
     #[must_use]
     pub fn cell(&self, log_temp: f64, din: f64) -> HelmCell {
-        let ldin = din.log10();
+        let ldin = flexmesa_math::log10(din);
         let iat_raw = ((ldin - self.logdlo) * self.logdstpi) as isize + 1;
         let iat = iat_raw.clamp(1, (self.imax - 1) as isize) as usize;
         let jat_raw = ((log_temp - self.logtlo) * self.logtstpi) as isize + 1;

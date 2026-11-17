@@ -37,6 +37,7 @@ Scope and the `v0.1.0` definition are in [`SCOPE.md`](SCOPE.md). Work is tracked
 | 20 | History-Harness Tolerances for Strict Mode | In force | below |
 | 21 | Packages Are Closed on Evidence by the Authoring Agent | In force; replaces the "ready for verification" hand-off in decision 17 | below |
 | 22 | Upstream Reference Pinned to MESA Release 26.4.1 and Release-Upgrade Policy | In force; supersedes the pre-rebaseline test-input bundle in decision 13 | below |
+| 23 | Single-Source Strict/Fast Numerics Layer, Vendored `crlibm` FFI Exception, and Platform-Intrinsic `RN` Routing (`#165`, `#196`, `#198`) | In force | below |
 
 ## Pre-audit decisions still in force
 
@@ -212,3 +213,30 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
 - **Alternatives Rejected**:
   - *Tracking upstream `MESAHub/mesa` `main`*: Development commits move continuously, require Git LFS quota to hydrate data, and mix unreleased upstream changes (`RSP2`, `GYRE 9`) with parity work.
   - *Upgrading reference artifacts piecemeal across feature PRs*: Mixes upstream reference changes with `FlexMESA` code changes, obscuring whether a diff comes from the port or the reference.
+
+---
+
+## DECISIONS #23: Single-Source Strict/Fast Numerics Layer, Vendored `crlibm` FFI Exception, and Platform-Intrinsic `RN` Routing (`Issue #165`, `#196`, `#198`)
+
+- **Date**: 2026-11-16
+- **Decision**:
+  1. **Single-Source `NumericsMode` Dispatch (`flexmesa-math`)**: Build `Strict` (default; vendored `crlibm 1.0beta4` from MESA SDK `26.6.1` / `CRMATH 1.2`, contract `"correctly rounded toward zero as CRMATH does it"` with `*_rd` for `exp`/`acos`/`acospi`, explicit `a * b + c` `fma`, and exact `pow_r_`/`pow_i_`/`exp10_`/`pow2..pow8` operation order) and `Fast` (`std` `f64` intrinsics and `mul_add`) into one binary selected at run start via a process-wide `AtomicU8` (`Ordering::Relaxed`; measured `strict_fma = 2.90 ns/call` vs `fast_fma = 2.54 ns/call`, `~0.35 ns/call` branch overhead vs `strict_exp = 11.72 ns/call` and `fast_exp = 3.12 ns/call`). Enforce `flexmesa-math` routing across workspace physics crates via `clippy::disallowed_methods` and `routing_governance.rs`, invoke `math_init()` in `StarModel::new`, `BinarySystem`, and `_rust` startup, and record `numerics_mode` in `LOGS/history.data`, `profileN.data`, `binary_history.data`, `.mod`, and `.photo`.
+  2. **Sole `unsafe` FFI Amendment (`flexmesa-crlibm-sys`)**: Amend the workspace `"Safe Rust"` rule so `flexmesa-crlibm-sys` is the **only** crate permitted to contain `unsafe` (`#![deny(unsafe_op_in_unsafe_fn)]`, a `// SAFETY:` comment on every `extern "C"` call, safe public wrappers only, fixed per-target `crlibm_config.h` headers compiled via `cc` with `-std=c99 -ffp-contract=off -fno-fast-math -fwrapv -fno-strict-aliasing`, and `-msse2 -mfpmath=sse` on `x86_64`), while every other crate retains `#![forbid(unsafe_code)]`.
+  3. **Measured `crlibm` `RZ` vs `RN` Routing for Non-`CRMATH` Platform Intrinsics (`#196`, `#198`)**: Against exact hexadecimal vectors emitted by the MESA `26.4.1` reference build (`MESA SDK x86_64-linux-26.6.1`, `gfortran 15.2.0`), `crlibm` round-to-nearest (`RN`) matches the reference build at higher bit-exact rates than round-toward-zero (`RZ`) across all seven non-`CRMATH` intrinsic sections, so `atan2` (octant-reduced `atan_rn`) and `intrinsic_{log,log10,exp,pow}` use `crlibm` `RN` in `Strict` mode:
+
+     | Section (`26.4.1` reference) | Inputs | `(a)` `crlibm` `RZ` bit-exact (max ULP) | `(b)` `crlibm` `RN` bit-exact (max ULP) |
+     | :-- | --: | --: | --: |
+     | `dlog` (`#198`) | 10,067 | 6,233 / 10,067 (`61.92%`, 1 ULP) | **10,067 / 10,067 (`100.00%`, 0 ULP)** |
+     | `dlog10` (`#198`) | 10,067 | 6,326 / 10,067 (`62.84%`, 1 ULP) | **10,051 / 10,067 (`99.84%`, 1 ULP)** |
+     | `intrinsic_log10` (`#198`) | 10,067 | 6,186 / 10,067 (`61.45%`, 1 ULP) | **10,043 / 10,067 (`99.76%`, 1 ULP)** |
+     | `intrinsic_exp` (`#198`) | 10,067 | 5,091 / 10,067 (`50.57%`, 1 ULP) | **10,067 / 10,067 (`100.00%`, 0 ULP)** |
+     | `atan2` (`#196`) | 10,121 | 7,011 / 10,121 (`69.27%`, 2 ULP) | **9,455 / 10,121 (`93.42%`, 1 ULP)** |
+     | `datan2` (`#198`) | 10,121 | 6,985 / 10,121 (`69.01%`, 2 ULP) | **9,473 / 10,121 (`93.60%`, 1 ULP)** |
+     | `intrinsic_pow` (`real **`, `#198`) | 10,294 | 4,248 / 10,294 (`41.27%`, 1,493 ULP) | **10,291 / 10,294 (`99.97%`, 1 ULP)** |
+
+  4. **Solver Operation Order & JAX-vs-Rust-Strict Validation Bounds (`N1-8`, `#166`)**: Align dense LU, block-Thomas, and `bcyclic` loops with `mtx/private/{my_lapack95,mtx_support,bcyclic}.f90`, and restate derived-JAX validation bounds against Rust `Strict` in `tests/test_eos_wave3a3.py` (`2.0e-6 -> 3.0e-6` on 3rd-order `Skye` `d_dln_t`, measured `2.47e-6` from `crlibm` `RZ` vs XLA `RN`/FMA) and `tests/test_wave5_bench.py` (`1.0e-14 -> 2.0e-14` on `w5_binary_rlof`, measured `1.40e-14`).
+- **Why**: Provides hardware-independent (`x86_64` == `aarch64`) and thread-count-independent `Strict` arithmetic from one Rust source while reproducing both `CRMATH`'s directed-rounding calls and `libm`'s nearest-rounded intrinsics.
+- **Alternatives Rejected**:
+  - *Generic `<M: MathBackend>` type parameter across physics crates*: Duplicates monomorphized code across 25 crates and `DualOrder1<N>` types for a run-start mode switch.
+  - *`&dyn MathBackend` trait-object dispatch*: Blocks inlining of `fma` and integer-power chains and threads context pointers through scalar helpers.
+  - *Pure-Rust `core-math` (`RN`) for `CRMATH` functions*: Mismatches `CRMATH`'s `*_rz` and `*_rd` rounding on ~50% of inputs.

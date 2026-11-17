@@ -78,12 +78,12 @@ pub(crate) fn total_energy_eqn(
         model.aux.rsp.lc_start[k0 + 1]
     };
 
-    let area_00 = 4.0 * PI * model.r[k0].powi(2);
+    let area_00 = 4.0 * PI * flexmesa_math::pow2(model.r[k0]);
     let lr_00 = model.aux.rsp.fr_rsp[k0] * area_00;
     let d_lr_00_dfr_00 = area_00;
     let d_lr_00_dr_00 = 2.0 * lr_00 / model.r[k0];
     let lr_00_start = model.aux.rsp.fr_start[k0]
-        * (4.0 * PI * model.aux.rsp.r_start_rsp[k0].powi(2));
+        * (4.0 * PI * flexmesa_math::pow2(model.aux.rsp.r_start_rsp[k0]));
 
     let (lr_in, lr_in_start, d_lr_in_dfr_in, d_lr_in_dr_in) = if i == 1 {
         let l_c = if model.controls.rsp.hydro_only {
@@ -94,10 +94,10 @@ pub(crate) fn total_energy_eqn(
         (l_c, l_c, 0.0, 0.0)
     } else {
         let ki = k0 + 1;
-        let area_in = 4.0 * PI * model.r[ki].powi(2);
+        let area_in = 4.0 * PI * flexmesa_math::pow2(model.r[ki]);
         let lr_i = model.aux.rsp.fr_rsp[ki] * area_in;
         let lr_i_st = model.aux.rsp.fr_start[ki]
-            * (4.0 * PI * model.aux.rsp.r_start_rsp[ki].powi(2));
+            * (4.0 * PI * flexmesa_math::pow2(model.aux.rsp.r_start_rsp[ki]));
         (lr_i, lr_i_st, area_in, 2.0 * lr_i / model.r[ki])
     };
 
@@ -138,8 +138,8 @@ pub(crate) fn total_energy_eqn(
     let residual = model.aux.rsp.egas_rsp[k0] - model.aux.rsp.egas_start[k0]
         + erad
         - model.aux.rsp.erad_start[k0]
-        + wk.w[k0].powi(2)
-        - model.aux.rsp.w_start[k0].powi(2)
+        + flexmesa_math::pow2(wk.w[k0])
+        - flexmesa_math::pow2(model.aux.rsp.w_start[k0])
         + dt_div_dm * (l_00 - l_in)
         + xp_00.xp * dv
         + erad_tw * u_factor * u_div_r
@@ -250,7 +250,8 @@ pub(crate) fn turbulent_energy_eqn(
     let ptrb_tw = dc.thetat * model.aux.rsp.ptrb_rsp[k0]
         + dc.thetat1 * model.aux.rsp.ptrb_start[k0];
 
-    let residual = (wk.w[k0].powi(2) - model.aux.rsp.w_start[k0].powi(2))
+    let residual = (flexmesa_math::pow2(wk.w[k0])
+        - flexmesa_math::pow2(model.aux.rsp.w_start[k0]))
         + dt_div_dm * (l_00 - l_in)
         + dv * ptrb_tw
         - dt * (dc.gam * model.aux.rsp.coupl_rsp[k0]
@@ -327,12 +328,12 @@ pub(crate) fn t_form_of_erad_eqn(
     band.hd[ie] = [0.0; LD_HD + 1];
     let t = model.t[k0];
     let v = model.aux.rsp.vol_rsp[k0];
-    let erad_expected = CRAD * t.powi(4) * v;
+    let erad_expected = CRAD * flexmesa_math::pow4(t) * v;
     let residual = erad_expected - model.aux.rsp.erad_rsp[k0];
     band.hr[ie] = -residual;
     let h = &mut band.hd[ie];
     h[I_ER_DER_00] = -1.0;
-    h[I_ER_DT_00] = 4.0 * CRAD * t.powi(3) * v;
-    h[I_ER_DR_00] = CRAD * t.powi(4) * wk.dvol_dr_00[i];
-    h[I_ER_DR_IN] = CRAD * t.powi(4) * wk.dvol_dr_in[i];
+    h[I_ER_DT_00] = 4.0 * CRAD * flexmesa_math::pow3(t) * v;
+    h[I_ER_DR_00] = CRAD * flexmesa_math::pow4(t) * wk.dvol_dr_00[i];
+    h[I_ER_DR_IN] = CRAD * flexmesa_math::pow4(t) * wk.dvol_dr_in[i];
 }

@@ -22,11 +22,11 @@ impl Cpx {
     }
 
     pub fn abs(self) -> f64 {
-        self.re.hypot(self.im)
+        flexmesa_math::hypot(self.re, self.im)
     }
 
     pub fn arg(self) -> f64 {
-        self.im.atan2(self.re)
+        flexmesa_math::atan2(self.im, self.re)
     }
 
     pub fn add(self, rhs: Self) -> Self {
@@ -119,7 +119,8 @@ pub(crate) fn write_lina_mode_logs(
             w_buf,
             "{:3} {:15.8E} {:15.8E} {:15.8E} {:15.8E} {:15.8E} {:15.8E} {:15.8E} {:15.8E}",
             nzn + 1 - i,
-            grid.t[i].log10(),
+            // `star/private/rsp_lina.f90:1098` calls `dlog10` (#198).
+            flexmesa_math::intrinsic_log10(grid.t[i]),
             grid.r[i] / grid.r[nzn],
             qwk[i] / ek,
             qwkev[i] / ek,

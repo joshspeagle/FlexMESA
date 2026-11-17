@@ -131,8 +131,9 @@ pub fn eval_center_rho(model: &StarModel, k_b: usize) -> f64 {
         .max(1.0e-10);
     let rho1 = model.rho[k_b].max(1.0e-99);
     let m1 = (model.m[k_b] - 0.5 * model.dm[k_b]).max(0.0);
-    let fit =
-        0.375 * ((5.0 * m1) / (std::f64::consts::PI * r1.powi(3)) - 4.0 * rho1);
+    let fit = 0.375
+        * ((5.0 * m1) / (flexmesa_const::PI * flexmesa_math::pow3(r1))
+            - 4.0 * rho1);
     if fit > 0.1 * rho1 && fit < 10.0 * rho1 {
         fit
     } else if k_b >= 1 {
@@ -164,10 +165,12 @@ pub fn set_segment_indices(
     let k_end = if include_last_face { nz } else { nz - 1 };
     let mut cands: Vec<(usize, f64)> = Vec::new();
     for k in 1..k_end {
-        let dlnp =
-            (model.peos[k].max(1.0e-30) / model.peos[k - 1].max(1.0e-30)).ln();
-        let dlnmu =
-            (model.mu[k].max(1.0e-10) / model.mu[k - 1].max(1.0e-10)).ln();
+        let dlnp = flexmesa_math::log(
+            model.peos[k].max(1.0e-30) / model.peos[k - 1].max(1.0e-30),
+        );
+        let dlnmu = flexmesa_math::log(
+            model.mu[k].max(1.0e-10) / model.mu[k - 1].max(1.0e-10),
+        );
         let gmu = if dlnp.abs() > 1.0e-14 {
             dlnmu / dlnp
         } else {
@@ -401,7 +404,7 @@ pub(crate) fn make_pulse_point_on_segment(
     let (cv, cp, rec_mu_e, entropy) = (
         f_seg(&model.cv, Some(1.0e-30)),
         f_seg(&model.cp, Some(1.0e-30)),
-        f_seg(&model.lnfree_e, None).exp(),
+        flexmesa_math::exp(f_seg(&model.lnfree_e, None)),
         f_seg(&model.entropy, Some(0.0)),
     );
     let (kap, kap_t, kap_rho) = (
@@ -430,17 +433,49 @@ pub(crate) fn make_pulse_point_on_segment(
     let (n2, v_dziem) = (a_star * g / r, g * r * rho / p);
 
     PulsePoint {
-        r, m, lum, p, pgas, t, rho,
-        grad_t: model.gradt[gk], grad_r: model.gradr[gk],
-        n2, gamma1, grad_ad, delta, cv, cp, chi_rho, chi_t,
-        rec_mu_e, entropy, kap, kap_t, kap_rho, eps_nuc, eps,
-        eps_t, eps_rho, eps_grav, omega: model.omega[gk],
-        tau: model.tau[gk], scale_height: model.scale_height[gk],
-        x_h1, x_he4, z_metal, r_x_h1,
-        dln_gamma1_dlnrho, dln_gamma1_dlnp, dln_gamma1_dy, x_iso,
-        v_dziem, v_g: v_dziem / gamma1, a_star,
-        u_dziem: PI4 * r.powi(3) * rho / m,
-        c_1: (r / r_tot).powi(3) / (m / m_tot),
+        r,
+        m,
+        lum,
+        p,
+        pgas,
+        t,
+        rho,
+        grad_t: model.gradt[gk],
+        grad_r: model.gradr[gk],
+        n2,
+        gamma1,
+        grad_ad,
+        delta,
+        cv,
+        cp,
+        chi_rho,
+        chi_t,
+        rec_mu_e,
+        entropy,
+        kap,
+        kap_t,
+        kap_rho,
+        eps_nuc,
+        eps,
+        eps_t,
+        eps_rho,
+        eps_grav,
+        omega: model.omega[gk],
+        tau: model.tau[gk],
+        scale_height: model.scale_height[gk],
+        x_h1,
+        x_he4,
+        z_metal,
+        r_x_h1,
+        dln_gamma1_dlnrho,
+        dln_gamma1_dlnp,
+        dln_gamma1_dy,
+        x_iso,
+        v_dziem,
+        v_g: v_dziem / gamma1,
+        a_star,
+        u_dziem: PI4 * flexmesa_math::pow3(r) * rho / m,
+        c_1: flexmesa_math::pow3(r / r_tot) / (m / m_tot),
     }
 }
 
@@ -463,7 +498,7 @@ pub fn build_pulse_points_with_options(
         .unwrap_or(model.mstar)
         .max(1.0e-30);
     let r_tot = model.r[0].max(1.0e-30);
-    let rho_mean = m_tot / (FOUR_THIRDS_PI * r_tot.powi(3));
+    let rho_mean = m_tot / (FOUR_THIRDS_PI * flexmesa_math::pow3(r_tot));
     let segs = set_segment_indices(
         model,
         opts.add_double_points,

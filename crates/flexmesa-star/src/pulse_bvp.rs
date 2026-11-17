@@ -224,13 +224,13 @@ pub(crate) fn expm2(m: [[f64; 2]; 2]) -> [[f64; 2]; 2] {
     let tr = 0.5 * (m[0][0] + m[1][1]);
     let (a00, a01, a10, a11) = (m[0][0] - tr, m[0][1], m[1][0], m[1][1] - tr);
     let d2 = a00 * a00 + a01 * a10;
-    let et = tr.exp();
+    let et = flexmesa_math::exp(tr);
     let (c, s) = if d2 > 1.0e-16 {
         let d = d2.sqrt();
-        (d.cosh(), d.sinh() / d)
+        (flexmesa_math::cosh(d), flexmesa_math::sinh(d) / d)
     } else if d2 < -1.0e-16 {
         let d = (-d2).sqrt();
-        (d.cos(), d.sin() / d)
+        (flexmesa_math::cos(d), flexmesa_math::sin(d) / d)
     } else {
         (1.0 + 0.5 * d2, 1.0 + d2 / 6.0)
     };
@@ -250,11 +250,11 @@ fn expm_taylor<const N: usize>(
         .map(|r| r.iter().map(|x| x.abs()).sum::<f64>())
         .fold(0.0_f64, f64::max);
     let k_scale = if norm > 0.25 {
-        ((norm * 4.0).log2().ceil() as u32).min(max_scale)
+        (flexmesa_math::log2(norm * 4.0).ceil() as u32).min(max_scale)
     } else {
         0
     };
-    let scale = 0.5_f64.powi(k_scale as i32);
+    let scale = flexmesa_math::powi_f90(0.5_f64, k_scale as i32);
     let mut m = [[0.0; N]; N];
     for i in 0..N {
         for j in 0..N {
@@ -382,8 +382,8 @@ pub(crate) fn outer_bound_rows_l(
             let a_iso = vg * (surf.gamma_1 - 1.0);
             let sig_x = surf.c_1 * om2;
             let eta = lam / sig_x.max(1.0e-30);
-            let gam =
-                (a_iso - vg + 4.0).powi(2) + 4.0 * (eta - vg) * (sig_x - a_iso);
+            let gam = flexmesa_math::pow2(a_iso - vg + 4.0)
+                + 4.0 * (eta - vg) * (sig_x - a_iso);
             let c21 =
                 (0.5 * (vg - a_iso + gam.max(0.0).sqrt()) - 2.0) / (vg - eta);
             let b3 = (lf + 1.0 - eta) / (vg + a_iso).max(1.0e-30);
@@ -430,8 +430,8 @@ pub fn shoot_determinant(
                 let vg = surf.v_2 * surf.x * surf.x / surf.gamma_1;
                 let a_iso = vg * (surf.gamma_1 - 1.0);
                 let sig_x = surf.c_1 * om2;
-                let gam =
-                    (a_iso - vg + 4.0).powi(2) - 4.0 * vg * (sig_x - a_iso);
+                let gam = flexmesa_math::pow2(a_iso - vg + 4.0)
+                    - 4.0 * vg * (sig_x - a_iso);
                 let c21 = (0.5 * (vg - a_iso + gam.max(0.0).sqrt()) - 2.0)
                     / vg.max(1.0e-30);
                 c21 * y[0] - y[1]
@@ -443,7 +443,7 @@ pub fn shoot_determinant(
         let mut w = [
             -lf * lf,
             lf * lf,
-            lf.powi(3),
+            flexmesa_math::pow3(lf),
             c1_0 * om2 * lf,
             c1_0 * om2 * lf * lf,
             0.0,

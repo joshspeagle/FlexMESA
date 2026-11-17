@@ -23,10 +23,11 @@ fn main() {
         );
         std::process::exit(2);
     }
-    let cap = args
-        .iter()
-        .skip(3)
-        .find_map(|s| (!s.starts_with("--")).then(|| s.parse::<usize>().ok()).flatten());
+    let cap = args.iter().skip(3).find_map(|s| {
+        (!s.starts_with("--"))
+            .then(|| s.parse::<usize>().ok())
+            .flatten()
+    });
     let skip_optional = !args.iter().any(|a| a == "--full-stages");
     let respect_intervals = args.iter().any(|a| a == "--respect-intervals");
     let write_profiles = args.iter().any(|a| a == "--write-profiles");

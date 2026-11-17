@@ -313,7 +313,11 @@ pub fn star_avg_x_slot(model: &StarModel, slot: Option<usize>) -> f64 {
         sum_dq_x += model.dq[k] * model.cell_xa(k)[j];
         sum_dq += model.dq[k];
     }
-    if sum_dq > 0.0 { sum_dq_x / sum_dq } else { 0.0 }
+    if sum_dq > 0.0 {
+        sum_dq_x / sum_dq
+    } else {
+        0.0
+    }
 }
 
 /// Central `dq`-weighted mass fraction by nuclide name (`"h1"`, `"he4"`, `"c12"`, ...).
@@ -392,7 +396,8 @@ pub fn get_lrad_div_ledd(model: &StarModel, k: usize) -> f64 {
     if del_m <= 0.0 || denom <= 0.0 {
         return 0.0;
     }
-    let del_t4 = model.t[j - 1].powi(4) - model.t[j].powi(4);
+    let del_t4 =
+        flexmesa_math::pow4(model.t[j - 1]) - flexmesa_math::pow4(model.t[j]);
     let area = FOUR_PI * model.r[j] * model.r[j];
     -(area * area * CRAD * (del_t4 / del_m) / 3.0) / denom
 }
@@ -414,7 +419,7 @@ pub fn eval_upstream_omega_crit(model: &StarModel, k: usize) -> f64 {
         } else {
             model.r_center * model.r_center * model.r_center
         };
-        (0.5 * (r003 + rp13)).powf(1.0 / 3.0)
+        flexmesa_math::pow(0.5 * (r003 + rp13), 1.0 / 3.0)
     } else {
         model.rmid[k]
     };
@@ -454,11 +459,17 @@ pub fn eval_conv_time_scale_zone(model: &StarModel, k_in: usize) -> f64 {
     if peos_face <= 0.0 || chirho_face == 0.0 {
         return 0.0;
     }
-    let f = (model.grav[k] * model.grav[k]) * (rho_face / peos_face) * (chit_face / chirho_face);
+    let f = (model.grav[k] * model.grav[k])
+        * (rho_face / peos_face)
+        * (chit_face / chirho_face);
     let dlnp = model.ln_peos[k - 1] - model.ln_peos[k];
     let dlnt = model.ln_t[k - 1] - model.ln_t[k];
     let grada_face = alfa * model.grada[k] + beta * model.grada[k - 1];
-    let gradt_actual = if dlnp.abs() < 1.0e-20 { 0.0 } else { dlnt / dlnp };
+    let gradt_actual = if dlnp.abs() < 1.0e-20 {
+        0.0
+    } else {
+        dlnt / dlnp
+    };
     let brunt_n2 = f * (brunt_b - (gradt_actual - grada_face));
     if brunt_n2 == 0.0 {
         0.0
@@ -477,7 +488,9 @@ pub fn eval_conv_time_scales(model: &StarModel) -> (f64, f64) {
     let mut max_tau = 0.0_f64;
     for k in 0..nz {
         let x_k = model.xh_mass.get(k).copied().unwrap_or(0.0);
-        if x_k > ts.max_x_for_conv_timescale || x_k < ts.min_x_for_conv_timescale {
+        if x_k > ts.max_x_for_conv_timescale
+            || x_k < ts.min_x_for_conv_timescale
+        {
             continue;
         }
         if model.q[k] > ts.max_q_for_conv_timescale {
@@ -530,7 +543,11 @@ pub fn eval_ledd_erg_s(model: &StarModel) -> f64 {
             ledd_sum += model.dq[k] * num0 / model.opacity[k];
         }
     }
-    if dqsum > 0.0 { ledd_sum / dqsum } else { 0.0 }
+    if dqsum > 0.0 {
+        ledd_sum / dqsum
+    } else {
+        0.0
+    }
 }
 
 /// Photosphere summary matching `get_phot_info` + `set_phot_info`
@@ -611,15 +628,18 @@ pub fn eval_photosphere_info(model: &StarModel) -> PhotosphereInfo {
             if taup1 >= tau_phot && dtau > 0.0 {
                 let frac = (tau_phot - tau00) / dtau;
                 let tface_0 = if k == 0 {
-                    model.ln_t_surf_ad.val.exp()
+                    flexmesa_math::exp(model.ln_t_surf_ad.val)
                 } else {
                     0.5 * (model.t[k] + model.t[k - 1])
                 };
                 let tface_1 = 0.5 * (model.t[k] + model.t[k + 1]);
                 t_phot = tface_0 + (tface_1 - tface_0) * frac;
-                let r003 = model.r[k].powi(3);
-                let rp13 = model.r[k + 1].powi(3);
-                r = (r003 + (rp13 - r003) * frac).max(0.0).cbrt();
+                let r003 = flexmesa_math::pow3(model.r[k]);
+                let rp13 = flexmesa_math::pow3(model.r[k + 1]);
+                r = flexmesa_math::pow(
+                    (r003 + (rp13 - r003) * frac).max(0.0),
+                    1.0 / 3.0,
+                );
                 m = model.m[k] - model.dm[k] * frac;
                 if model.controls.u_flag {
                     v = model.v_center;
@@ -652,7 +672,7 @@ pub fn eval_photosphere_info(model: &StarModel) -> PhotosphereInfo {
     }
 
     let bb_t = if r > 0.0 && l_erg > 0.0 {
-        (l_erg / (FOUR_PI * r * r * BOLTZ_SIGMA)).powf(0.25)
+        flexmesa_math::pow(l_erg / (FOUR_PI * r * r * BOLTZ_SIGMA), 0.25)
     } else {
         model.teff
     };
@@ -786,10 +806,10 @@ pub fn eval_surf_avg_rotation_info(model: &StarModel) -> SurfAvgRotationInfo {
         kap_sum += dm * kap;
         j_rot_sum += dm * j_rot;
 
-        let omega_crit =
-            (gamma_factor * cgrav * mmid / rmid.powi(3).max(1.0e-99))
-                .max(0.0)
-                .sqrt();
+        let omega_crit = (gamma_factor * cgrav * mmid
+            / flexmesa_math::pow3(rmid).max(1.0e-99))
+        .max(0.0)
+        .sqrt();
         let w_ratio = if omega_crit > 0.0 {
             (omega / omega_crit).abs()
         } else {
@@ -1365,9 +1385,9 @@ pub fn eval_history_mixing_regions(
                 let bdy_dq = cz_bdy_dq.get(k - 1).copied().unwrap_or(0.0);
                 let qtop = model.q[k - 1] - bdy_dq;
                 let frac = bdy_dq / model.dq[k - 1].max(1.0e-99);
-                let r3 = (1.0 - frac) * model.r[k - 1].powi(3)
-                    + frac * model.r[k].powi(3);
-                let relr = r3.max(0.0).cbrt() / r_surf;
+                let r3 = (1.0 - frac) * flexmesa_math::pow3(model.r[k - 1])
+                    + frac * flexmesa_math::pow3(model.r[k]);
+                let relr = flexmesa_math::pow(r3.max(0.0), 1.0 / 3.0) / r_surf;
                 out.push((i64::from(mx_type[k]), qtop, relr));
             }
         }
@@ -1414,13 +1434,13 @@ pub fn eval_history_burning_regions(
         }
         let eps1 = model.eps_nuc[k] - model.non_nuc_neu[k];
         let eps0 = model.eps_nuc[k - 1] - model.non_nuc_neu[k - 1];
-        let bv1 =
-            (if eps1 < 0.0 { -1.0 } else { 1.0 } * eps1.abs().max(1.0).log10())
-                as i32;
-        let bv0 =
-            (if eps0 < 0.0 { -1.0 } else { 1.0 } * eps0.abs().max(1.0).log10())
-                as i32;
-        let eps = 10.0_f64.powi(bv0.max(bv1));
+        let bv1 = (if eps1 < 0.0 { -1.0 } else { 1.0 }
+            * flexmesa_math::log10(eps1.abs().max(1.0)))
+            as i32;
+        let bv0 = (if eps0 < 0.0 { -1.0 } else { 1.0 }
+            * flexmesa_math::log10(eps0.abs().max(1.0)))
+            as i32;
+        let eps = flexmesa_math::powi(10.0_f64, bv0.max(bv1));
         let d0 = eps0 - eps;
         let d1 = eps1 - eps;
         if d0 * d1 >= 0.0 {
@@ -1428,11 +1448,12 @@ pub fn eval_history_burning_regions(
         } else {
             let q1 = model.q[k] - 0.5 * model.dq[k];
             let q0 = model.q[k - 1] - 0.5 * model.dq[k - 1];
-            let bq = flexmesa_num::find0(q1, d1, q0, d0)
-                .unwrap_or(0.5 * (q0 + q1));
-            let br = flexmesa_num::find0(model.rmid[k], d1, model.rmid[k - 1], d0)
-                .unwrap_or(0.5 * (model.rmid[k] + model.rmid[k - 1]))
-                / r_surf;
+            let bq =
+                flexmesa_num::find0(q1, d1, q0, d0).unwrap_or(0.5 * (q0 + q1));
+            let br =
+                flexmesa_num::find0(model.rmid[k], d1, model.rmid[k - 1], d0)
+                    .unwrap_or(0.5 * (model.rmid[k] + model.rmid[k - 1]))
+                    / r_surf;
             out.push((bt, bq, br));
         }
     }
@@ -1486,22 +1507,25 @@ pub fn eval_astero_report_scalars(
     } else if phot.l_lsun > 0.0 && o.astero_teff_sun > 0.0 {
         o.delta_nu_sun
             * star_mass.max(0.0).sqrt()
-            * (model.teff / o.astero_teff_sun).powi(3)
-            / phot.l_lsun.powf(0.75)
+            * flexmesa_math::pow3(model.teff / o.astero_teff_sun)
+            / flexmesa_math::pow(phot.l_lsun, 0.75)
     } else {
         0.0
     };
     let nu_max = if phot.r_rsun > 0.0 && o.astero_teff_sun > 0.0 {
         o.nu_max_sun * star_mass
-            / (phot.r_rsun * phot.r_rsun
-                * (model.teff.max(0.0) / o.astero_teff_sun).sqrt().max(1.0e-99))
+            / (phot.r_rsun
+                * phot.r_rsun
+                * (model.teff.max(0.0) / o.astero_teff_sun)
+                    .sqrt()
+                    .max(1.0e-99))
     } else {
         0.0
     };
 
     let mut delta_pg = 0.0;
     if model.controls.calculate_brunt_n2 && nu_max > 0.0 && nz >= 2 {
-        let omega2 = (2.0 * PI * nu_max / 1.0e6).powi(2);
+        let omega2 = flexmesa_math::pow2(2.0 * PI * nu_max / 1.0e6);
         let l2 = 2.0_f64;
         let mut integral = 0.0;
         let mut i_integral = 0.0;
@@ -1518,9 +1542,8 @@ pub fn eval_astero_report_scalars(
             if n2 > omega2 {
                 integral += n2.sqrt() * dr / r.max(1.0e-99);
             } else if integral > 0.0 {
-                let kr2 =
-                    (1.0 - n2 / omega2) * (1.0 - sl2 / omega2) * omega2
-                        / cs2.max(1.0e-99);
+                let kr2 = (1.0 - n2 / omega2) * (1.0 - sl2 / omega2) * omega2
+                    / cs2.max(1.0e-99);
                 if kr2 < 0.0 {
                     i_integral += (-kr2).sqrt() * dr;
                 }
@@ -1585,11 +1608,7 @@ impl StepReportContext {
         let mut center_eps_burn = [0.0; NUM_CATEGORIES];
         for (c, dst) in center_eps_burn.iter_mut().enumerate() {
             *dst = center_value_by(model, nz, |k| {
-                model
-                    .aux
-                    .eps_nuc_categories
-                    .get(k)
-                    .map_or(0.0, |v| v[c])
+                model.aux.eps_nuc_categories.get(k).map_or(0.0, |v| v[c])
             });
         }
 
@@ -1633,7 +1652,10 @@ impl StepReportContext {
         let dynamic_timescale_s = if cgrav0 <= 0.0 || model.mstar <= 0.0 {
             1.0e99
         } else {
-            2.0 * PI * (r_surf.powi(3) / (cgrav0 * model.mstar)).max(0.0).sqrt()
+            2.0 * PI
+                * (flexmesa_math::pow3(r_surf) / (cgrav0 * model.mstar))
+                    .max(0.0)
+                    .sqrt()
         };
         let d_mix_non_rotation = eval_d_mix_non_rotation_vec(model);
 
@@ -1662,7 +1684,7 @@ impl StepReportContext {
         if model.nz == 0 {
             0.0
         } else {
-            center_value(model, &model.ln_s).exp() * AMU / KERG
+            flexmesa_math::exp(center_value(model, &model.ln_s)) * AMU / KERG
         }
     }
 }

@@ -1,0 +1,391 @@
+# Vendored provenance manifest for `flexmesa-crlibm-sys` (#165).
+# Verified automatically by `crates/flexmesa-crlibm-sys/tests/vendored_hashes.rs`.
+
+[upstream]
+mesa_release = "26.4.1"
+mesa_zenodo_record = "19722306"
+mesasdk_release = "26.6.1"
+mesasdk_zenodo_record = "20598423"
+crmath_version = "1.2"
+crmath_git_url = "https://github.com/rhdtownsend/crmath"
+crmath_git_tag = "v1.2"
+crmath_git_commit = "3820ff0532fa88137086d56c383cb23a5cef14b2"
+crmath_sdk_tarball_url = "http://user.astro.wisc.edu/~townsend/resource/download/sdk2/src/crmath-1.2.tar.gz"
+crmath_sdk_tarball_sha256 = "e170a8cebad3578ca67dddcdfd3f29e4ada76435fbdced3524577c1f4b5b8857"
+crlibm_version = "1.0beta4"
+crlibm_canonical_url = "https://ens-lyon.hal.science/ensl-01529804"
+crlibm_sdk_tarball_url = "http://user.astro.wisc.edu/~townsend/resource/download/sdk2/src/crlibm-1.0beta4.tar.gz"
+crlibm_sdk_tarball_sha256 = "d7040d8dd414a0a322388789fd7741f7652b28288cefe3918c1e423b32395433"
+license = "LGPL-2.1-or-later"
+
+[[code_paths]]
+symbol = "log_rz"
+source = "csrc/log.c"
+accurate_phase = "triple-double"
+notes = "double-double quick phase -> triple-double accurate phase (`p_accu`); matches MESA SDK `USE_HARDWARE_DE=false` (`aarch64`/`macos`) verbatim and verified 0-bit identical to `x86_64-linux` `log-de.c` across 200,027 random/edge inputs and 1,226 TMD vectors without x87 `fldcw` mutation"
+
+[[code_paths]]
+symbol = "log1p_rz"
+source = "csrc/log1p.c"
+accurate_phase = "triple-double"
+notes = "double-double quick phase -> triple-double accurate phase (`log1p_td_accurate`), identical to CRMATH"
+
+[[code_paths]]
+symbol = "log2_rz"
+source = "csrc/log.c"
+accurate_phase = "triple-double"
+notes = "double-double quick phase -> triple-double accurate phase (`p_accu`), matches MESA SDK `USE_HARDWARE_DE=false` verbatim and verified 0-bit identical to `log2-td.c`"
+
+[[code_paths]]
+symbol = "log10_rz"
+source = "csrc/log.c"
+accurate_phase = "triple-double"
+notes = "double-double quick phase -> triple-double accurate phase (`p_accu`), matches MESA SDK `USE_HARDWARE_DE=false` verbatim and verified 0-bit identical to `log10-td.c`"
+
+[[code_paths]]
+symbol = "exp_rd"
+source = "csrc/exp-td.c"
+accurate_phase = "triple-double"
+notes = "double-double quick phase -> triple-double accurate phase (`exp_td_accurate`), identical to CRMATH"
+
+[[code_paths]]
+symbol = "expm1_rz"
+source = "csrc/expm1.c"
+accurate_phase = "triple-double"
+notes = "double-double quick phase -> triple-double accurate phase (`expm1_common_td` / `expm1_direct_td`), identical to CRMATH"
+
+[[code_paths]]
+symbol = "cos_rz"
+source = "csrc/trigo_fast.c + csrc/trigo_accurate.c"
+accurate_phase = "SCS"
+notes = "double-double quick phase (`trigo_fast.c`) -> SCS accurate phase (`scs_cos_rz` + `rem_pio2_scs`), identical to CRMATH"
+
+[[code_paths]]
+symbol = "sin_rz"
+source = "csrc/trigo_fast.c + csrc/trigo_accurate.c"
+accurate_phase = "SCS"
+notes = "double-double quick phase (`trigo_fast.c`) -> SCS accurate phase (`scs_sin_rz` + `rem_pio2_scs`), identical to CRMATH"
+
+[[code_paths]]
+symbol = "tan_rz"
+source = "csrc/trigo_fast.c + csrc/trigo_accurate.c"
+accurate_phase = "SCS"
+notes = "double-double quick phase (`trigo_fast.c`) -> SCS accurate phase (`scs_tan_rz` + `rem_pio2_scs`), identical to CRMATH"
+
+[[code_paths]]
+symbol = "cospi_rz"
+source = "csrc/trigpi.c"
+accurate_phase = "SCS"
+notes = "reduced double-double quick phase -> SCS accurate phase (`scs_mul` / `scs_get_d`), identical to CRMATH"
+
+[[code_paths]]
+symbol = "sinpi_rz"
+source = "csrc/trigpi.c"
+accurate_phase = "SCS"
+notes = "reduced double-double quick phase (`sinpiquick`) -> SCS accurate phase, identical to CRMATH"
+
+[[code_paths]]
+symbol = "tanpi_rz"
+source = "csrc/trigpi.c"
+accurate_phase = "SCS"
+notes = "reduced double-double quick phase -> SCS accurate phase, identical to CRMATH"
+
+[[code_paths]]
+symbol = "acos_rd"
+source = "csrc/asincos.c"
+accurate_phase = "triple-double"
+notes = "double-double quick phase -> triple-double accurate phase (`asincos.c`), identical to CRMATH"
+
+[[code_paths]]
+symbol = "asin_rz"
+source = "csrc/asincos.c"
+accurate_phase = "triple-double"
+notes = "double-double quick phase -> triple-double accurate phase (`asincos.c`), identical to CRMATH"
+
+[[code_paths]]
+symbol = "atan_rz"
+source = "csrc/atan_fast.c + csrc/atan_accurate.c"
+accurate_phase = "SCS"
+notes = "double-double quick phase (`atan_fast.c`) -> SCS accurate phase (`scs_atan_rd` / `scs_atan_ru`), identical to CRMATH"
+
+[[code_paths]]
+symbol = "acospi_rd"
+source = "csrc/asincos.c"
+accurate_phase = "triple-double"
+notes = "double-double quick phase -> triple-double accurate phase (`asincos.c`), identical to CRMATH"
+
+[[code_paths]]
+symbol = "asinpi_rz"
+source = "csrc/asincos.c"
+accurate_phase = "triple-double"
+notes = "double-double quick phase -> triple-double accurate phase (`asincos.c`), identical to CRMATH"
+
+[[code_paths]]
+symbol = "atanpi_rz"
+source = "csrc/atan_fast.c + csrc/atan_accurate.c"
+accurate_phase = "SCS"
+notes = "double-double quick phase (`atan_fast.c`) -> SCS accurate phase (`scs_atanpi_rd` / `scs_atanpi_ru`), identical to CRMATH"
+
+[[code_paths]]
+symbol = "cosh_rz"
+source = "csrc/csh_fast.c + csrc/exp-td-standalone.c"
+accurate_phase = "triple-double"
+notes = "double-double quick phase (`csh_fast.c`) -> triple-double accurate phase (`do_cosh_accurate` via `exp13` / `expm1_13`), identical to CRMATH"
+
+[[code_paths]]
+symbol = "sinh_rz"
+source = "csrc/csh_fast.c + csrc/exp-td-standalone.c"
+accurate_phase = "triple-double"
+notes = "double-double quick phase (`csh_fast.c`) -> triple-double accurate phase (`do_sinh_accurate` via `exp13` / `expm1_13`), identical to CRMATH"
+
+[[code_paths]]
+symbol = "log_rn"
+source = "csrc/log.c"
+accurate_phase = "triple-double"
+notes = "round-to-nearest entry point for MESA 26.4.1 Fortran intrinsic `dlog`/`log` bypasses (`#198`); 100.00% bit-exact match (`10,067/10,067`) against MESA 26.4.1 reference build"
+
+[[code_paths]]
+symbol = "log10_rn"
+source = "csrc/log.c"
+accurate_phase = "triple-double"
+notes = "round-to-nearest entry point for MESA 26.4.1 Fortran intrinsic `dlog10`/`log10` bypasses (`#198`); 99.84%/99.76% bit-exact match (`max_ulp = 1`) against MESA 26.4.1 reference build"
+
+[[code_paths]]
+symbol = "exp_rn"
+source = "csrc/exp-td.c"
+accurate_phase = "triple-double"
+notes = "round-to-nearest entry point for MESA 26.4.1 Fortran intrinsic `exp` bypasses (`#198`); 100.00% bit-exact match (`10,067/10,067`) against MESA 26.4.1 reference build"
+
+[[code_paths]]
+symbol = "atan_rn"
+source = "csrc/atan_fast.c + csrc/atan_accurate.c"
+accurate_phase = "SCS"
+notes = "round-to-nearest entry point backing octant-reduced `atan2` (`#196`, `#198`); 93.42%/93.60% bit-exact match (`max_ulp = 1`) vs 69.27%/69.01% (`max_ulp = 2`) for `atan_rz`"
+
+[[code_paths]]
+symbol = "pow_rn"
+source = "csrc/pow.c"
+accurate_phase = "triple-double"
+notes = "round-to-nearest entry point (`log2_130` + `exp2_120` + `pow_exact_rn`) for MESA 26.4.1 Fortran intrinsic `real(dp) ** real(dp)` bypasses (`#198`); 99.97% bit-exact match (`10,291/10,294`, `max_ulp = 1`) vs 41.27% (`4,248/10,294`, `max_ulp = 1,493`) for `pow_r_`"
+
+[[files]]
+path = "csrc/AUTHORS"
+sha256 = "e9c305c65dd2591c37911e15a5ab8474537566ea470763efbdacb7e9d5ebf1f7"
+
+[[files]]
+path = "csrc/COPYING"
+sha256 = "dcc100d4161cc0b7177545ab6e47216f84857cda3843847c792a25289852dcaa"
+
+[[files]]
+path = "csrc/COPYING.LIB"
+sha256 = "6f679d0555a9a5aad08a4e88cdba552cf62bb46585084572f3cfd1b0c7e6ec4f"
+
+[[files]]
+path = "csrc/README"
+sha256 = "84420238316ca9b577cf83a3d805ac77c16620493fa5988ec83a4ff5aa0aece8"
+
+[[files]]
+path = "csrc/VERSION"
+sha256 = "354b84328bf893cfa8a4c02be6c5850fc0010582cc19d6b112958b33333578fd"
+
+[[files]]
+path = "csrc/scs_lib/AUTHORS"
+sha256 = "79fef2495ac41334ac0ec093880d5680b1165c1dcbe568d2e9f7ebf40cb9d064"
+
+[[files]]
+path = "csrc/scs_lib/COPYING"
+sha256 = "6f679d0555a9a5aad08a4e88cdba552cf62bb46585084572f3cfd1b0c7e6ec4f"
+
+[[files]]
+path = "csrc/scs_lib/README"
+sha256 = "f51191a3bf35d222b78aa04379646ca3cdf777aaa57781670049ab3782ba6136"
+
+[[files]]
+path = "csrc/crlibm.h"
+sha256 = "a02964732c0c16141bee52ade0af198fa272fd6faca55ea3a9a18e9ef68a39f5"
+
+[[files]]
+path = "csrc/crlibm_private.h"
+sha256 = "9893dd6bc873213e477ff4e8fe973e3c9f1676db8b09e9f9592e9d35a20622f6"
+upstream_sha256 = "67fc242b8efd166f1072174a98c7832121860b38def03003b81383e5b6b10fe3"
+modification = "Changed `#define EVAL_PERF  1` to `#define EVAL_PERF  0` (line 95) to eliminate unsynchronized `crlibm_second_step_taken++` writes across threads."
+
+[[files]]
+path = "csrc/crlibm_private.c"
+sha256 = "ff2941a57bba01f64fbd9e3912dfe63ec8db7684cc736192dbc5bbbecbc4de3b"
+
+[[files]]
+path = "csrc/triple-double.h"
+sha256 = "8635ff00f002988748c6e6f619aeafc5638bed798ceedec19290ddb5fabd179b"
+
+[[files]]
+path = "csrc/triple-double.c"
+sha256 = "4239dbde733bd1e1edc6c9b219b24e93a21938f738cf0fd546444d71ad51aff4"
+
+[[files]]
+path = "csrc/exp-td.h"
+sha256 = "93d772ba61d6021311025699b4678573aa9312e0c61947bad0da7c3e612b5a46"
+
+[[files]]
+path = "csrc/exp-td.c"
+sha256 = "97bf5ad602cce5216714def304edf58cc4c912face6a830fa345d84fcf7d821a"
+upstream_sha256 = "4fbe3a4d22f9b9dacd6e0e49b42952b1bbac0ff2891dd70030b115df4b3d1c7f"
+modification = "Changed `#define EVAL_PERF 1` to `#define EVAL_PERF 0` (line 30) to eliminate unsynchronized `crlibm_second_step_taken++` writes across threads."
+
+[[files]]
+path = "csrc/exp-td-standalone.c"
+sha256 = "d1187376ba0b6ddc6df38e90218d20795463af27a9bc51790254d056c53ea9fa"
+
+[[files]]
+path = "csrc/expm1.h"
+sha256 = "f28953bd90ce01d138c78d4270a6aea958085e955aa64ba50553816e575fbf93"
+
+[[files]]
+path = "csrc/expm1.c"
+sha256 = "4abb653d20ced671fecbe0f2e5ee6ae33508165940a08d2a63c8c533a8da44ac"
+
+[[files]]
+path = "csrc/expm1-standalone.c"
+sha256 = "bdaeb8f22ca65119ead210164dc46fa5f5e4aff4175bf0b5ea57e30d18fc2eee"
+
+[[files]]
+path = "csrc/log.h"
+sha256 = "f9f2d1aa17adf5686383ba933d8a50b2104d88831e557bcb8ef199feacb537f2"
+
+[[files]]
+path = "csrc/log.c"
+sha256 = "b14d993b9e8e79d892b9d3dd3781b5d8c956e5eef74a80d8d4d4b6f10fb94aa7"
+
+[[files]]
+path = "csrc/log-td.h"
+sha256 = "c8063f5de7b6500a362f68faee8a0287366bf43322ca8dbc58aae2cbb18f5226"
+
+[[files]]
+path = "csrc/log1p.c"
+sha256 = "69f09aefe7439489bcc672eb63ddd3e1cd1eda84a86b369c98d8e9dd32f3854d"
+
+[[files]]
+path = "csrc/rem_pio2_accurate.h"
+sha256 = "64c179d8296cfec7999c338637556b251e661b0a132aca5bd9aea8cdcd3f903a"
+
+[[files]]
+path = "csrc/rem_pio2_accurate.c"
+sha256 = "83f99646e4002913d716bcede5cb1bfdbc88c015b6c33c3aa91f4f5d9a747954"
+
+[[files]]
+path = "csrc/trigo_fast.h"
+sha256 = "244c0300ece44dd319a41832ae0476188a947fd672c063d8a5b32e4dfc15d802"
+
+[[files]]
+path = "csrc/trigo_fast.c"
+sha256 = "15bef96a73da3118912ae6e8f6ff03c4b73f58843ed6663244e823b576a97af5"
+
+[[files]]
+path = "csrc/trigo_accurate.h"
+sha256 = "61fad921dd2044c1af79dede66df9217af4401aedc057bfe7c3fac4109626ae6"
+
+[[files]]
+path = "csrc/trigo_accurate.c"
+sha256 = "3e3e0a3f2329d0ebbea6c0bfdbc4ebe7abe1981a6a98e2620020dbb0d01e896d"
+
+[[files]]
+path = "csrc/trigpi.h"
+sha256 = "2f089c168ca4a13b87ceff3beb3be773b17f58827497e2281364a16d24526deb"
+
+[[files]]
+path = "csrc/trigpi.c"
+sha256 = "27893f602b23366c8b0adfd7ba983d5f752de8b9728b781639c20b99a1b76539"
+
+[[files]]
+path = "csrc/asincos.h"
+sha256 = "719997fbe716dc95034f1b70800ef3a183a8fd1ce8f0049fca7e28a576f79b61"
+
+[[files]]
+path = "csrc/asincos.c"
+sha256 = "520d839febda9d727f2f0b9606ad08723d527fc1ba77b3144380ead90849eade"
+
+[[files]]
+path = "csrc/atan_fast.h"
+sha256 = "4a07c9d672ddf26068055a23b06f51801d190b35eace97a5fd1ddac27a13f80a"
+
+[[files]]
+path = "csrc/atan_fast.c"
+sha256 = "d42e459d508db0865e0704926f2a0810787c77aa1a3e2a98ff042bb27cb97ea8"
+
+[[files]]
+path = "csrc/atan_accurate.h"
+sha256 = "dbcd02697c74f62dda7aefbc153ebfa10d43bee81bd395ea76b3570d4bbb0304"
+
+[[files]]
+path = "csrc/atan_accurate.c"
+sha256 = "9b97b175ffc73ee66f4d3e040916d2902518c6988b02a249ee42e0f18c0a0857"
+
+[[files]]
+path = "csrc/csh_fast.h"
+sha256 = "0917e43ed1c539176c3a8e09e55980320ee3a705ee0f9221970ae873417f3de0"
+
+[[files]]
+path = "csrc/csh_fast.c"
+sha256 = "e0a51b6b9b273990a18ba8150c1504a71fb3374414ebbe30ec150a41c17915cd"
+
+[[files]]
+path = "csrc/pow.h"
+sha256 = "4269d36a5515545844c50d7673cc9024496fde6f7cabcf748b1cf88edaf2690f"
+
+[[files]]
+path = "csrc/pow.c"
+sha256 = "02f6bbc02393ec527426bda01bfdf54cfba4c0c8cec78718a3b77cbbec03b4aa"
+upstream_sha256 = "d48b111cab2e0919a7b86d9a25db4d001dd182d3c844c042f9146dae257be7ff"
+modification = "Fixed `pow_exact_case` negative-tail tie-to-even adjustment (`tempdb.l--` at line 736), replaced the unimplemented `return -5.0;` sentinel in `pow_exact_rn` (line 763) with deterministic 2-step IEEE-754 scaling `sign * (s2.d * (s1.d * (kh + kl)))`, and checked `x`/`y` `NaN` ahead of `y == ±Inf` in `pow_rn` (line 850) so `pow_rn(NaN, ±Inf)` returns quiet `NaN` per IEEE-754."
+
+[[files]]
+path = "csrc/scs_lib/scs.h"
+sha256 = "9f2fbc1fe3251e34e2bca820c3c908993e2e947e0b07c4fdaab709717ad67368"
+
+[[files]]
+path = "csrc/scs_lib/scs_private.h"
+sha256 = "1c2c48a695caf44fa24fdf55d0b8a4db389c3c072541b640803add0ac6cbd964"
+
+[[files]]
+path = "csrc/scs_lib/scs_private.c"
+sha256 = "c945fa514611941d4b84278bf5756927135b443f5568601deab92668953a770f"
+
+[[files]]
+path = "csrc/scs_lib/double2scs.c"
+sha256 = "3a1d242cd253986092f847f822d952b045875d06448eb573810ca1229d07353a"
+
+[[files]]
+path = "csrc/scs_lib/division_scs.c"
+sha256 = "9d47109fdfae65a5ca3d6610ae303e7ab559368ad77cb28c85d2a2ca5d9aac04"
+
+[[files]]
+path = "csrc/scs_lib/addition_scs.c"
+sha256 = "6f9d6c7dd63eeebd7363e99af7789449750873c72aa71362df71a8562e942d79"
+
+[[files]]
+path = "csrc/scs_lib/multiplication_scs.c"
+sha256 = "85f44f8267ef3f05d11a708a1ad4ddf4729c7c86b09110e8cc0c0a24a368f511"
+
+[[files]]
+path = "csrc/scs_lib/scs2double.c"
+sha256 = "a21de805ec58769042e6ba0cf4bb25cd6f1f65ae5ba38c9437cf1b068d4f98fd"
+
+[[files]]
+path = "csrc/scs_lib/zero_scs.c"
+sha256 = "3240ee31552dd80342edcad45d3ba0ee2caa081775b7237f8f683b7284a8f709"
+
+[[files]]
+path = "config/x86_64/crlibm_config.h"
+sha256 = "fcf593fd85d6f51a14698cb6f3b9984b0d014d5293b8520c82d32249b4c4eb69"
+
+[[files]]
+path = "config/aarch64/crlibm_config.h"
+sha256 = "848ebcdd525b0bd00870134252ed45d7b2cbb45f164d448b59d2be675eeed6de"
+
+[[files]]
+path = "config/generic_le64/crlibm_config.h"
+sha256 = "9a03ad1126a5b6978651f8a6f41b57a6242f8ceb785df01196968ca9217ca6ad"
+
+[[files]]
+path = "config/generic_be64/crlibm_config.h"
+sha256 = "7e25fd48c8bb4ae82743aee66fa6a633f2bf22f7d35a040715ccc3f52e6a1930"

@@ -85,10 +85,10 @@ pub fn make_wave4_zams_model(nz: usize) -> StarModel {
     let mut r3_running = 0.0_f64;
     for k in (0..nz_clamped).rev() {
         let dm_k = model.mstar * model.dq[k];
-        let rho_k = model.lnd[k].exp();
+        let rho_k = flexmesa_math::exp(model.lnd[k]);
         r3_running +=
-            (3.0 * dm_k) / (4.0 * std::f64::consts::PI * rho_k.max(1.0e-30));
-        model.ln_r[k] = r3_running.ln() / 3.0;
+            (3.0 * dm_k) / (4.0 * flexmesa_const::PI * rho_k.max(1.0e-30));
+        model.ln_r[k] = flexmesa_math::log(r3_running) / 3.0;
     }
 
     let spec = base.species;
@@ -154,7 +154,9 @@ pub fn bench_star_micro_vars(
 
     let pack = |m: &StarModel| -> Vec<f64> {
         (0..m.nz)
-            .map(|k| m.ln_peos[k] + m.gradt[k] + m.opacity[k].ln())
+            .map(|k| {
+                m.ln_peos[k] + m.gradt[k] + flexmesa_math::log(m.opacity[k])
+            })
             .collect()
     };
     let v0 = pack(&m0);

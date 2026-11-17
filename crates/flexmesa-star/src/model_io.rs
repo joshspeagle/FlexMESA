@@ -64,8 +64,12 @@ pub fn write_mod_string(model: &StarModel) -> Result<String, StarError> {
     }
 
     let mut out = String::with_capacity(nz * 260 + 1200);
-    writeln!(out, "! note: initial lines of file can contain comments\n!")
-        .unwrap();
+    writeln!(
+        out,
+        "! note: initial lines of file can contain comments\n! flexmesa math_backend: {}\n!",
+        flexmesa_math::numerics_mode().as_str()
+    )
+    .unwrap();
     writeln!(out, "{file_type:14} -- model for mesa/star, cgs units.\n")
         .unwrap();
 
@@ -525,5 +529,6 @@ pub fn read_mod_str(
 }
 
 pub use crate::photo_io::{
-    compute_photo_checksum, read_photo_bytes, write_photo_bytes,
+    compute_photo_checksum, photo_numerics_mode, read_photo_bytes,
+    write_photo_bytes,
 };

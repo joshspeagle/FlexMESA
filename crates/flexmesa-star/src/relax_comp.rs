@@ -7,7 +7,9 @@ use flexmesa_const::{LSUN, R_SUN, SECYER, STANDARD_CGRAV};
 use flexmesa_turb::MltOption;
 
 use crate::controls::{EnergyEqnOption, StarError, StarJobControls};
-use crate::core_boundaries::{compute_power_categories, snapshot_step_history_old};
+use crate::core_boundaries::{
+    compute_power_categories, snapshot_step_history_old,
+};
 use crate::evolve_support::eval_total_energy_integrals;
 use crate::hydro_vars::set_hydro_vars;
 use crate::micro::set_basic_vars;
@@ -36,10 +38,18 @@ fn mass_weighted_mean_yz(model: &StarModel) -> (f64, f64) {
             }
         }
     }
-    if dm_tot > 0.0 { (y_sum / dm_tot, z_sum / dm_tot) } else { (0.28, 0.02) }
+    if dm_tot > 0.0 {
+        (y_sum / dm_tot, z_sum / dm_tot)
+    } else {
+        (0.28, 0.02)
+    }
 }
 
-fn set_profile_yz(model: &mut StarModel, target_y: Option<f64>, target_z: Option<f64>) {
+fn set_profile_yz(
+    model: &mut StarModel,
+    target_y: Option<f64>,
+    target_z: Option<f64>,
+) {
     let cat = NuclideCatalog::builtin_ref();
     let h1 = cat.get_nuclide_index("h1").unwrap_or(1);
     let h2 = cat.get_nuclide_index("h2").unwrap_or(2);
@@ -62,14 +72,31 @@ fn set_profile_yz(model: &mut StarModel, target_y: Option<f64>, target_z: Option
         let zn = target_z.unwrap_or(zc).clamp(0.0, 1.0);
         let yn = target_y.unwrap_or(yc).clamp(0.0, (1.0 - zn).max(0.0));
         let xn = (1.0 - yn - zn).max(0.0);
-        let n_met = model.chem_id.iter().filter(|&&c| c != h1 && c != h2 && c != he3 && c != he4).count().max(1);
+        let n_met = model
+            .chem_id
+            .iter()
+            .filter(|&&c| c != h1 && c != h2 && c != he3 && c != he4)
+            .count()
+            .max(1);
         for j in 0..sp {
             let cid = model.chem_id[j];
             let v = model.xa[k * sp + j];
             model.xa[k * sp + j] = if cid == h1 || cid == h2 {
-                if xc > 1.0e-15 { v * (xn / xc) } else if cid == h1 { xn } else { 0.0 }
+                if xc > 1.0e-15 {
+                    v * (xn / xc)
+                } else if cid == h1 {
+                    xn
+                } else {
+                    0.0
+                }
             } else if cid == he3 || cid == he4 {
-                if yc > 1.0e-15 { v * (yn / yc) } else if cid == he4 { yn } else { 0.0 }
+                if yc > 1.0e-15 {
+                    v * (yn / yc)
+                } else if cid == he4 {
+                    yn
+                } else {
+                    0.0
+                }
             } else if zc > 1.0e-15 {
                 v * (zn / zc)
             } else {
@@ -86,7 +113,10 @@ fn set_profile_yz(model: &mut StarModel, target_y: Option<f64>, target_z: Option
     }
 }
 
-fn step_relax_henyey(model: &mut StarModel, dt_s: f64) -> Result<bool, StarError> {
+fn step_relax_henyey(
+    model: &mut StarModel,
+    dt_s: f64,
+) -> Result<bool, StarError> {
     let backup = model.clone();
     set_basic_vars(model)?;
     set_hydro_vars(model, false, false)?;
@@ -113,8 +143,14 @@ pub fn relax_composition_with_henyey(
         return Ok(());
     }
     let (y0, z0) = mass_weighted_mean_yz(model);
-    let tz = job.relax_z.then_some(job.new_z).filter(|&z| (0.0..=1.0).contains(&z));
-    let ty = job.relax_y.then_some(job.new_y).filter(|&y| (0.0..=1.0).contains(&y));
+    let tz = job
+        .relax_z
+        .then_some(job.new_z)
+        .filter(|&z| (0.0..=1.0).contains(&z));
+    let ty = job
+        .relax_y
+        .then_some(job.new_y)
+        .filter(|&y| (0.0..=1.0).contains(&y));
 
     let saved_controls = model.controls.clone();
     let omega_0 = if saved_controls.rotation_flag {
@@ -157,12 +193,16 @@ pub fn relax_composition_with_henyey(
     if let Some(z_end) = tz {
         let z_lo = z0.max(1.0e-8);
         let z_hi = z_end.max(1.0e-8);
-        let n_z = (((z_hi / z_lo).ln().abs() / 0.25).ceil() as usize).max(1);
+        let n_z = ((flexmesa_math::log(z_hi / z_lo).abs() / 0.25).ceil()
+            as usize)
+            .max(1);
         for s in 1..=n_z {
             let z_s = if s == n_z {
                 z_end
             } else {
-                z_lo * ((z_hi / z_lo).ln() * (s as f64) / (n_z as f64)).exp()
+                z_lo * flexmesa_math::exp(
+                    flexmesa_math::log(z_hi / z_lo) * (s as f64) / (n_z as f64),
+                )
             };
             set_profile_yz(model, None, Some(z_s));
             let _ = step_relax_henyey(model, SECYER)?;
@@ -184,9 +224,11 @@ pub fn relax_composition_with_henyey(
     let mut dt_yr = 50.0_f64;
     for step in 0..30_usize {
         set_hydro_vars(model, false, false)?;
-        let lnuc = (compute_power_categories(model).power_nuc_burn * LSUN).abs().max(1.0);
+        let lnuc = (compute_power_categories(model).power_nuc_burn * LSUN)
+            .abs()
+            .max(1.0);
         let lsurf = model.lum.first().copied().unwrap_or(1.0).abs().max(1.0);
-        if step >= 2 && (lnuc / lsurf).log10().abs() < 0.003 {
+        if step >= 2 && flexmesa_math::log10(lnuc / lsurf).abs() < 0.003 {
             break;
         }
         if step_relax_henyey(model, dt_yr * SECYER)? {
@@ -197,19 +239,34 @@ pub fn relax_composition_with_henyey(
     }
 
     model.controls = saved_controls;
-    if let Some(z_end) = tz { model.controls.initial_z = z_end; }
-    if let Some(y_end) = ty { model.controls.initial_y = y_end; }
+    if let Some(z_end) = tz {
+        model.controls.initial_z = z_end;
+    }
+    if let Some(y_end) = ty {
+        model.controls.initial_y = y_end;
+    }
     if model.controls.rotation_flag {
         let r_s = model.r.first().copied().unwrap_or(R_SUN).max(1.0);
-        let om_t = if let Some(v_s) = job.new_surface_rotation_v.filter(|&v| v > 0.0) {
+        let om_t = if let Some(v_s) =
+            job.new_surface_rotation_v.filter(|&v| v > 0.0)
+        {
             (v_s * 1.0e5) / r_s
-        } else if let Some(w_wc) = job.new_omega_div_omega_crit.filter(|&w| w > 0.0) {
-            let g_s = model.cgrav.first().copied().filter(|&g| g > 0.0).unwrap_or(STANDARD_CGRAV);
-            w_wc * (g_s * model.mstar / r_s.powi(3)).sqrt()
+        } else if let Some(w_wc) =
+            job.new_omega_div_omega_crit.filter(|&w| w > 0.0)
+        {
+            let g_s = model
+                .cgrav
+                .first()
+                .copied()
+                .filter(|&g| g > 0.0)
+                .unwrap_or(STANDARD_CGRAV);
+            w_wc * (g_s * model.mstar / flexmesa_math::pow3(r_s)).sqrt()
         } else {
             omega_0
         };
-        if om_t > 0.0 { apply_uniform_rotation(model, om_t); }
+        if om_t > 0.0 {
+            apply_uniform_rotation(model, om_t);
+        }
     }
     update_rotation_distortion_factors(model);
 

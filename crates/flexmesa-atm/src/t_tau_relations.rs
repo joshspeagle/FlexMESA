@@ -48,8 +48,8 @@ pub fn eval_t_tau(id: i32, tau: f64, teff: f64) -> Result<f64, AtmError> {
             const Q3: f64 = 2.447_999_95;
             const Q4: f64 = -0.295_899_99;
             const Q5: f64 = 30.0;
-            let e1 = (-Q3 * tau).exp();
-            let e2 = (-Q5 * tau).exp();
+            let e1 = flexmesa_math::exp(-Q3 * tau);
+            let e2 = flexmesa_math::exp(-Q5 * tau);
             0.75 * teff4 * (tau + Q1 + Q2 * e1 + Q4 * e2)
         }
         ATM_T_TAU_KRISHNA_SWAMY => {
@@ -58,8 +58,8 @@ pub fn eval_t_tau(id: i32, tau: f64, teff: f64) -> Result<f64, AtmError> {
             const Q3: f64 = 2.54;
             const Q4: f64 = -0.025;
             const Q5: f64 = 30.0;
-            let e1 = (-Q3 * tau).exp();
-            let e2 = (-Q5 * tau).exp();
+            let e1 = flexmesa_math::exp(-Q3 * tau);
+            let e2 = flexmesa_math::exp(-Q5 * tau);
             0.75 * teff4 * (tau + Q1 + Q2 * e1 + Q4 * e2)
         }
         ATM_T_TAU_TRAMPEDACH_SOLAR => {
@@ -68,8 +68,12 @@ pub fn eval_t_tau(id: i32, tau: f64, teff: f64) -> Result<f64, AtmError> {
             const A: f64 = 0.926_212_649_769_125;
             const V: f64 = 0.765_785_689_340_246_6;
             const B: f64 = 0.114_874_290_276_943_3;
-            let x = tau.log10();
-            0.75 * teff4 * (tau + C0 + C1 * (x - B) + V * ((x - A) / V).exp())
+            let x = flexmesa_math::log10(tau);
+            0.75 * teff4
+                * (tau
+                    + C0
+                    + C1 * (x - B)
+                    + V * flexmesa_math::exp((x - A) / V))
         }
         _ => {
             return Err(AtmError::UnknownId {
@@ -78,7 +82,7 @@ pub fn eval_t_tau(id: i32, tau: f64, teff: f64) -> Result<f64, AtmError> {
             });
         }
     };
-    Ok(t4.ln() * 0.25)
+    Ok(flexmesa_math::log(t4) * 0.25)
 }
 
 /// Evaluates the Hopf function derivative $q'(\tau) = dq/d\tau$ at optical depth $\tau$ (`eval_T_tau_dq_dtau`).
@@ -93,8 +97,8 @@ pub fn eval_t_tau_dq_dtau(id: i32, tau: f64) -> Result<f64, AtmError> {
             const Q3: f64 = 2.447_999_95;
             const Q4: f64 = -0.295_899_99;
             const Q5: f64 = 30.0;
-            let e1 = (-Q3 * tau).exp();
-            let e2 = (-Q5 * tau).exp();
+            let e1 = flexmesa_math::exp(-Q3 * tau);
+            let e2 = flexmesa_math::exp(-Q5 * tau);
             Ok(-Q2 * Q3 * e1 - Q4 * Q5 * e2)
         }
         ATM_T_TAU_KRISHNA_SWAMY => {
@@ -102,8 +106,8 @@ pub fn eval_t_tau_dq_dtau(id: i32, tau: f64) -> Result<f64, AtmError> {
             const Q3: f64 = 2.54;
             const Q4: f64 = -0.025;
             const Q5: f64 = 30.0;
-            let e1 = (-Q3 * tau).exp();
-            let e2 = (-Q5 * tau).exp();
+            let e1 = flexmesa_math::exp(-Q3 * tau);
+            let e2 = flexmesa_math::exp(-Q5 * tau);
             Ok(-Q2 * Q3 * e1 - Q4 * Q5 * e2)
         }
         ATM_T_TAU_TRAMPEDACH_SOLAR => {
@@ -112,11 +116,11 @@ pub fn eval_t_tau_dq_dtau(id: i32, tau: f64) -> Result<f64, AtmError> {
             const V: f64 = 0.765_785_689_340_246_6;
             const B: f64 = 0.114_874_290_276_943_3;
             const W: f64 = 0.051_499_904_716_986_9;
-            let x = tau.log10();
-            Ok(
-                (C1 + ((x - A) / V).exp()) / (1.0 + ((x - B) / W).exp()) / tau
-                    * ILN10,
-            )
+            let x = flexmesa_math::log10(tau);
+            Ok((C1 + flexmesa_math::exp((x - A) / V))
+                / (1.0 + flexmesa_math::exp((x - B) / W))
+                / tau
+                * ILN10)
         }
         _ => Err(AtmError::UnknownId {
             context: "eval_t_tau_dq_dtau",

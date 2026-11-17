@@ -145,7 +145,9 @@ pub fn read_dt_slice_bin(path: &Path) -> Result<EosDtXzTable, EosError> {
     };
     let bytes = std::fs::read(path).map_err(|e| err(e.to_string()))?;
     if bytes.len() < 84 || &bytes[0..8] != DT_SLICE_BIN_MAGIC {
-        return Err(err("invalid FMDT4D01 magic or truncated header".to_string()));
+        return Err(err(
+            "invalid FMDT4D01 magic or truncated header".to_string()
+        ));
     }
     let f64_at = |off: usize| -> f64 {
         f64::from_le_bytes(bytes[off..off + 8].try_into().unwrap_or([0; 8]))
@@ -320,7 +322,9 @@ pub fn read_cms_slice_bin(path: &Path) -> Result<CmsXTable, EosError> {
     };
     let bytes = std::fs::read(path).map_err(|e| err(e.to_string()))?;
     if bytes.len() < 76 || &bytes[0..8] != CMS_SLICE_BIN_MAGIC {
-        return Err(err("invalid FMCMS001 magic or truncated header".to_string()));
+        return Err(err(
+            "invalid FMCMS001 magic or truncated header".to_string()
+        ));
     }
     let f64_at = |off: usize| -> f64 {
         f64::from_le_bytes(bytes[off..off + 8].try_into().unwrap_or([0; 8]))

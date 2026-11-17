@@ -127,7 +127,8 @@ fn test_upstream_mesa_test2_sin_and_integral_match_golden_output() {
         let sign = if increasing { 1.0 } else { -1.0 };
         let init_xs: Vec<f64> =
             (0..n).map(|i| sign * 4.0 * dx * (i as f64)).collect();
-        let u: Vec<f64> = init_xs.iter().map(|&x| x.sin()).collect();
+        let u: Vec<f64> =
+            init_xs.iter().map(|&x| flexmesa_math::sin(x)).collect();
         let coeffs = interp_m3q(&init_xs, &u).unwrap();
 
         let xs = [
@@ -210,7 +211,7 @@ fn test_upstream_mesa_4pt_and_3_to_2_match_golden_output() {
         3.0 * PI / 4.0,
         19.0 * PI / 20.0,
     ];
-    let y_full = x_full.map(f64::sin);
+    let y_full = x_full.map(flexmesa_math::sin);
     let x4 = [x_full[1], x_full[2], x_full[3], x_full[4]];
     let y4 = [y_full[1], y_full[2], y_full[3], y_full[4]];
     let a = interp_4pt_pm(&x4, &y4).unwrap();

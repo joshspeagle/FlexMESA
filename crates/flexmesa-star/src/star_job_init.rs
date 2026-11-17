@@ -97,9 +97,11 @@ fn build_initial_planet_or_wd_model(
     let old_mstar = model.mstar.max(1.0);
     let new_mstar = m_target.max(1.0e-5) * M_SUN;
     let dln_r = if r_init_cm > 0.0 {
-        (r_init_cm / model.ln_r[0].exp().max(1.0)).ln()
+        flexmesa_math::log(
+            r_init_cm / flexmesa_math::exp(model.ln_r[0]).max(1.0),
+        )
     } else {
-        (new_mstar / old_mstar).ln() / 3.0
+        flexmesa_math::log(new_mstar / old_mstar) / 3.0
     };
     for k in 0..model.nz {
         model.ln_r[k] += dln_r;
@@ -519,7 +521,8 @@ pub fn init_or_update_model_from_bundle(
             .copied()
             .filter(|&g| g > 0.0)
             .unwrap_or(STANDARD_CGRAV);
-        let omega_crit = (g_surf * model.mstar / r_surf.powi(3)).sqrt();
+        let omega_crit =
+            (g_surf * model.mstar / flexmesa_math::pow3(r_surf)).sqrt();
         apply_uniform_rotation(&mut model, w_div_wc * omega_crit);
     } else if let Some(omega_0) = job.new_omega.filter(|&w| w > 0.0) {
         apply_uniform_rotation(&mut model, omega_0);

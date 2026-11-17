@@ -178,7 +178,11 @@ impl StarAdExt for StarAdOrder1 {
 
     #[inline]
     fn cbrt(self) -> Self {
-        let c = self.val.cbrt();
+        let c = if self.val < 0.0 {
+            -flexmesa_math::pow(-self.val, 1.0 / 3.0)
+        } else {
+            flexmesa_math::pow(self.val, 1.0 / 3.0)
+        };
         let dc = if c == 0.0 { 0.0 } else { 1.0 / (3.0 * c * c) };
         self.make_unary_operator(c, dc)
     }

@@ -4,10 +4,8 @@
 //! `delta_lg*`, nuclear `check_lgL`, HR-diagram, Courant, and energy-error
 //! checks in `star/private/timestep.f90:384-2246`).
 
-use std::f64::consts::LN_10;
-
 use flexmesa_chem::NuclideCatalog;
-use flexmesa_const::{MixingType, L_SUN, M_SUN, SECYER};
+use flexmesa_const::{MixingType, LN10 as LN_10, L_SUN, M_SUN, SECYER};
 
 use crate::controls_timestep_stop::MAX_DX_LIMIT_CTRLS;
 use crate::core_boundaries::compute_power_categories;
@@ -160,7 +158,8 @@ pub(crate) fn check_dx_limits(
         }
     }
     if !model.aux.doing_relax {
-        best_ratio = best_ratio.max(check_lg_x_cntr_limits(model, skip_hard_limit)?);
+        best_ratio =
+            best_ratio.max(check_lg_x_cntr_limits(model, skip_hard_limit)?);
     }
     Ok(best_ratio)
 }
@@ -173,23 +172,35 @@ fn check_lg_x_cntr_limits(
     let (nz, sp, coeff) = (model.nz, model.species, ts.time_delta_coeff);
     let base = (nz - 1) * sp;
     let find_iso = |name: &str| {
-        model.iso_names.iter().position(|n| n.eq_ignore_ascii_case(name))
+        model
+            .iso_names
+            .iter()
+            .position(|n| n.eq_ignore_ascii_case(name))
     };
     let h1 = find_iso("h1");
     let he4 = find_iso("he4");
     let c12 = find_iso("c12");
     let mut ratio = 0.0_f64;
 
-    let eval_one = |iso: usize, min_x: f64, lg_min: f64, lg_max: f64, lim: f64, hard: f64, drop_only: bool, msg: &str| -> Result<f64, String> {
+    let eval_one = |iso: usize,
+                    min_x: f64,
+                    lg_min: f64,
+                    lg_max: f64,
+                    lim: f64,
+                    hard: f64,
+                    drop_only: bool,
+                    msg: &str|
+     -> Result<f64, String> {
         let x = model.xa[base + iso];
         if x < min_x {
             return Ok(0.0);
         }
-        let lg_x = x.log10();
+        let lg_x = flexmesa_math::log10(x);
         if lg_x < lg_min || lg_x > lg_max {
             return Ok(0.0);
         }
-        let lg_old = model.xa_old[base + iso].max(1.0e-99).log10();
+        let lg_old =
+            flexmesa_math::log10(model.xa_old[base + iso].max(1.0e-99));
         if drop_only && lg_x >= lg_old {
             return Ok(0.0);
         }
@@ -198,23 +209,38 @@ fn check_lg_x_cntr_limits(
 
     if let Some(ih1) = h1 {
         ratio = ratio.max(eval_one(
-            ih1, 1.0e-10, ts.delta_lg_xh_cntr_min, ts.delta_lg_xh_cntr_max,
-            ts.delta_lg_xh_cntr_limit, ts.delta_lg_xh_cntr_hard_limit,
-            ts.delta_lg_xh_drop_only, "delta_lg_XH_cntr",
+            ih1,
+            1.0e-10,
+            ts.delta_lg_xh_cntr_min,
+            ts.delta_lg_xh_cntr_max,
+            ts.delta_lg_xh_cntr_limit,
+            ts.delta_lg_xh_cntr_hard_limit,
+            ts.delta_lg_xh_drop_only,
+            "delta_lg_XH_cntr",
         )?);
         if let Some(ihe4) = he4 {
             let xh1 = model.xa[base + ih1];
             ratio = ratio.max(eval_one(
-                ihe4, xh1.max(1.0e-10), ts.delta_lg_xhe_cntr_min, ts.delta_lg_xhe_cntr_max,
-                ts.delta_lg_xhe_cntr_limit, ts.delta_lg_xhe_cntr_hard_limit,
-                ts.delta_lg_xhe_drop_only, "delta_lg_XHe_cntr",
+                ihe4,
+                xh1.max(1.0e-10),
+                ts.delta_lg_xhe_cntr_min,
+                ts.delta_lg_xhe_cntr_max,
+                ts.delta_lg_xhe_cntr_limit,
+                ts.delta_lg_xhe_cntr_hard_limit,
+                ts.delta_lg_xhe_drop_only,
+                "delta_lg_XHe_cntr",
             )?);
             if let Some(ic12) = c12 {
                 let xhe4 = model.xa[base + ihe4];
                 ratio = ratio.max(eval_one(
-                    ic12, xh1.max(xhe4).max(1.0e-10), ts.delta_lg_xc_cntr_min, ts.delta_lg_xc_cntr_max,
-                    ts.delta_lg_xc_cntr_limit, ts.delta_lg_xc_cntr_hard_limit,
-                    ts.delta_lg_xc_drop_only, "delta_lg_XC_cntr",
+                    ic12,
+                    xh1.max(xhe4).max(1.0e-10),
+                    ts.delta_lg_xc_cntr_min,
+                    ts.delta_lg_xc_cntr_max,
+                    ts.delta_lg_xc_cntr_limit,
+                    ts.delta_lg_xc_cntr_hard_limit,
+                    ts.delta_lg_xc_drop_only,
+                    "delta_lg_XC_cntr",
                 )?);
             }
         }
@@ -338,12 +364,55 @@ pub(crate) fn check_structural_limits(
     };
 
     for (val, lim, hard, msg) in [
-        (max_zone_diff(&model.ln_peos, &model.ln_peos_start, ts.delta_lgp_limit_min_lgp), ts.delta_lgp_limit, ts.delta_lgp_hard_limit, "delta_lgP"),
-        (max_zone_diff(&model.lnd, &model.lnd_start, ts.delta_lgrho_limit_min_lgrho), ts.delta_lgrho_limit, ts.delta_lgrho_hard_limit, "delta_lgRho"),
-        (max_zone_diff(&model.ln_t, &model.ln_t_start, ts.delta_lgt_limit_min_lgt), ts.delta_lgt_limit, ts.delta_lgt_hard_limit, "delta_lgT"),
-        (max_zone_diff(&model.ln_r, &model.ln_r_start, ts.delta_lgr_limit_min_lgr), ts.delta_lgr_limit, ts.delta_lgr_hard_limit, "delta_lgR"),
+        (
+            max_zone_diff(
+                &model.ln_peos,
+                &model.ln_peos_start,
+                ts.delta_lgp_limit_min_lgp,
+            ),
+            ts.delta_lgp_limit,
+            ts.delta_lgp_hard_limit,
+            "delta_lgP",
+        ),
+        (
+            max_zone_diff(
+                &model.lnd,
+                &model.lnd_start,
+                ts.delta_lgrho_limit_min_lgrho,
+            ),
+            ts.delta_lgrho_limit,
+            ts.delta_lgrho_hard_limit,
+            "delta_lgRho",
+        ),
+        (
+            max_zone_diff(
+                &model.ln_t,
+                &model.ln_t_start,
+                ts.delta_lgt_limit_min_lgt,
+            ),
+            ts.delta_lgt_limit,
+            ts.delta_lgt_hard_limit,
+            "delta_lgT",
+        ),
+        (
+            max_zone_diff(
+                &model.ln_r,
+                &model.ln_r_start,
+                ts.delta_lgr_limit_min_lgr,
+            ),
+            ts.delta_lgr_limit,
+            ts.delta_lgr_hard_limit,
+            "delta_lgR",
+        ),
     ] {
-        ratio = ratio.max(check_change(val, lim, hard, coeff, msg, skip_hard_limit)?);
+        ratio = ratio.max(check_change(
+            val,
+            lim,
+            hard,
+            coeff,
+            msg,
+            skip_hard_limit,
+        )?);
     }
 
     if model.energy_start.len() == nz {
@@ -447,18 +516,19 @@ fn check_one_lgl_burn(
         lim *= drop_factor;
         hard_lim *= drop_factor;
     }
-    let lgl = new_l.log10();
+    let lgl = flexmesa_math::log10(new_l);
     if lgl < lgl_min {
         return Ok(0.0);
     }
-    let abs_change = (lgl - old_l.log10()).abs();
+    let abs_change = (lgl - flexmesa_math::log10(old_l)).abs();
     if hard_lim > 0.0 && abs_change > hard_lim && !skip_hard {
         return Err(format!("{msg} hard limit"));
     }
     if lim <= 0.0 {
         return Ok(0.0);
     }
-    let r = 1.0 / dtf.clamp(0.1, 0.999).powf((abs_change - lim) / lim);
+    let r = 1.0
+        / flexmesa_math::pow(dtf.clamp(0.1, 0.999), (abs_change - lim) / lim);
     Ok(if r <= 1.0 { 0.0 } else { r })
 }
 
@@ -541,7 +611,7 @@ pub(crate) fn check_luminosity_and_hr_limits(
 
     if !model.aux.doing_relax {
         let dlgteff = if model.teff > 0.0 && sh.teff_old > 0.0 {
-            Some((model.teff / sh.teff_old).log10())
+            Some(flexmesa_math::log10(model.teff / sh.teff_old))
         } else {
             None
         };
@@ -560,7 +630,7 @@ pub(crate) fn check_luminosity_and_hr_limits(
             && l_surf > 0.0
             && sh.l_surf_old > 0.0
         {
-            let dlgl = (l_surf / sh.l_surf_old).log10();
+            let dlgl = flexmesa_math::log10(l_surf / sh.l_surf_old);
             ratio = ratio.max(check_change(
                 dlgl,
                 ts.delta_lgl_limit,
@@ -570,8 +640,8 @@ pub(crate) fn check_luminosity_and_hr_limits(
                 skip_hard_limit,
             )?);
             if let Some(dt_eff) = dlgteff {
-                let dhr = ((ts.delta_hr_ds_l * dlgl).powi(2)
-                    + (ts.delta_hr_ds_teff * dt_eff).powi(2))
+                let dhr = (flexmesa_math::pow2(ts.delta_hr_ds_l * dlgl)
+                    + flexmesa_math::pow2(ts.delta_hr_ds_teff * dt_eff))
                 .sqrt();
                 ratio = ratio.max(check_change(
                     dhr,

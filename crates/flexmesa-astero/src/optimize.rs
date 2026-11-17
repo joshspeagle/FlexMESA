@@ -201,11 +201,13 @@ where
             }
             let out_pen: f64 = u_try[..n]
                 .iter()
-                .map(|&ui| (ui.abs() - 1.0).max(0.0).powi(2))
+                .map(|&ui| flexmesa_math::pow2((ui.abs() - 1.0).max(0.0)))
                 .sum();
             let phys: Vec<f64> = (0..n)
                 .map(|i| {
-                    map_bobyqa_param(u_try[i], x_first[i], x_lower[i], x_upper[i])
+                    map_bobyqa_param(
+                        u_try[i], x_first[i], x_lower[i], x_upper[i],
+                    )
                 })
                 .collect();
             let f = eval_fn(&phys);
@@ -216,7 +218,7 @@ where
             }
             let f_pen = f + 1.0e4 * out_pen;
             Ok(if n_eff > n {
-                f_pen + 1.0e-6 * u_try[n].powi(2)
+                f_pen + 1.0e-6 * flexmesa_math::pow2(u_try[n])
             } else {
                 f_pen
             })
@@ -277,7 +279,9 @@ where
             }
             let phys: Vec<f64> = (0..n)
                 .map(|i| {
-                    map_bobyqa_param(u_try[i], x_first[i], x_lower[i], x_upper[i])
+                    map_bobyqa_param(
+                        u_try[i], x_first[i], x_lower[i], x_upper[i],
+                    )
                 })
                 .collect();
             let f = eval_fn(&phys);
@@ -287,7 +291,7 @@ where
                 best_x = phys;
             }
             Ok(if n_eff > n {
-                f + 1.0e-6 * u_try[n].powi(2)
+                f + 1.0e-6 * flexmesa_math::pow2(u_try[n])
             } else {
                 f
             })

@@ -101,9 +101,9 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 
 | Control | Upstream `26.4.1` Source | Upstream Default | `FlexMESA` Source | `FlexMESA` Default | Classification |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| `f0_ov_div_f_ov` | `astero/defaults/astero_search.defaults:743` | `-1` | `crates/flexmesa-astero/src/inlist_astero.rs:323` | `1.0` | numeric mismatch |
-| `filename_for_parameters` | `astero/defaults/astero_search.defaults:591` | `'undefined'` | `crates/flexmesa-astero/src/inlist_astero.rs:336` | `String::from("parameters.txt")` | string/option mismatch |
-| `simplex_fcn_calls_max` | `astero/defaults/astero_search.defaults:417` | `10000` | `crates/flexmesa-astero/src/inlist_astero.rs:324` | `1000` | numeric mismatch |
+| `f0_ov_div_f_ov` | `astero/defaults/astero_search.defaults:743` | `-1` | `crates/flexmesa-astero/src/inlist_astero.rs:358` | `1.0` | numeric mismatch |
+| `filename_for_parameters` | `astero/defaults/astero_search.defaults:591` | `'undefined'` | `crates/flexmesa-astero/src/inlist_astero.rs:380` | `String::from("parameters.txt")` | string/option mismatch |
+| `simplex_fcn_calls_max` | `astero/defaults/astero_search.defaults:417` | `10000` | `crates/flexmesa-astero/src/inlist_astero.rs:361` | `1000` | numeric mismatch |
 
 ## eos &eos
 

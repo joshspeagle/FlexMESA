@@ -11,7 +11,6 @@ description = "Safe Rust chemical elements, nuclide catalogs, solar abundance sc
 flexmesa-autodiff = { path = "../flexmesa-autodiff" }
 flexmesa-const = { path = "../flexmesa-const" }
 flexmesa-math = { path = "../flexmesa-math" }
-flexmesa-utils = { path = "../flexmesa-utils" }
 rayon.workspace = true
 
 [lints]

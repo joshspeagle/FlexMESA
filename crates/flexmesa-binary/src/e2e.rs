@@ -12,17 +12,17 @@ use std::time::Instant;
 
 use flexmesa_const::{MSUN, RSUN, SECDAY, SECYER};
 use flexmesa_star::{
-    DefaultStarExtras, InlistBundle, StarError, StarModel, ZamsCatalog,
     init_or_update_model_from_bundle, load_zams_model,
     load_zams_model_from_catalog, relax_composition_with_henyey,
+    DefaultStarExtras, InlistBundle, StarError, StarModel, ZamsCatalog,
 };
 
 use crate::binary_history::BinaryLogsWriter;
 use crate::e2e_extras::build_test_suite_extras;
 pub use crate::e2e_oracles::{
-    BinaryInlistControls, TIER5_BINARY_CASES, eval_brott_wind_msun_yr,
-    eval_gr_expected_separation_rsun, eval_tauris_vdh_expected_separation_rsun,
-    is_tier5_binary_case,
+    eval_brott_wind_msun_yr, eval_gr_expected_separation_rsun,
+    eval_tauris_vdh_expected_separation_rsun, is_tier5_binary_case,
+    BinaryInlistControls, TIER5_BINARY_CASES,
 };
 use crate::system::{BinaryCompanion, BinarySystem};
 
@@ -50,7 +50,8 @@ fn init_binary_star_component(
     inlist_name: &str,
     mass_msun: f64,
 ) -> Result<StarModel, StarError> {
-    let mut bundle = InlistBundle::from_file_in_case_dir(case_dir, inlist_name)?;
+    let mut bundle =
+        InlistBundle::from_file_in_case_dir(case_dir, inlist_name)?;
     bundle.controls.initial_mass = mass_msun;
     let needs_henyey_yz_relax = bundle.job.relax_z || bundle.job.relax_y;
     let mut init_bundle = bundle.clone();
@@ -162,8 +163,11 @@ pub fn run_binary_test_suite_case_with_logs(
         .to_string();
     let bctrl = BinaryInlistControls::from_case_dir(case_dir)?;
 
-    let donor =
-        init_binary_star_component(case_dir, &bctrl.inlist_names[0], bctrl.m1_msun)?;
+    let donor = init_binary_star_component(
+        case_dir,
+        &bctrl.inlist_names[0],
+        bctrl.m1_msun,
+    )?;
     let mut bin = if bctrl.evolve_both_stars {
         let inlist2 = if case_dir.join(&bctrl.inlist_names[1]).is_file() {
             bctrl.inlist_names[1].as_str()

@@ -310,7 +310,8 @@ fn test_bcyclic_matches_block_thomas_across_grid_sizes() {
             let kf = k as f64;
             let s = (k + 1) as f64 / (nz as f64);
             for i in 0..nvar {
-                rhs[k * nvar + i] = (0.3 * kf + 0.7 * (i as f64)).sin();
+                rhs[k * nvar + i] =
+                    flexmesa_math::sin(0.3 * kf + 0.7 * (i as f64));
                 for j in 0..nvar {
                     let idx = k * blk_sz + i * nvar + j;
                     let d_off =
@@ -334,18 +335,26 @@ fn test_bcyclic_matches_block_thomas_across_grid_sizes() {
         let x_ref =
             solve_block_tridiagonal(nvar, nz, &lblk, &dblk, &ublk, &rhs)
                 .unwrap();
-        for &par in &[false, true] {
-            let x_bc = solve_block_tridiag_bcyclic(
-                nvar, nz, &lblk, &dblk, &ublk, &rhs, par,
-            )
-            .unwrap();
-            for (a, b) in x_ref.iter().zip(x_bc.iter()) {
-                let rel = (a - b).abs() / a.abs().max(1.0);
-                assert!(
-                    rel < 1.0e-13,
-                    "nz={nz} par={par} rel={rel:e} a={a} b={b}"
-                );
-            }
+        let x_serial = solve_block_tridiag_bcyclic(
+            nvar, nz, &lblk, &dblk, &ublk, &rhs, false,
+        )
+        .unwrap();
+        let x_parallel = solve_block_tridiag_bcyclic(
+            nvar, nz, &lblk, &dblk, &ublk, &rhs, true,
+        )
+        .unwrap();
+        for (idx, (&s_val, &p_val)) in
+            x_serial.iter().zip(x_parallel.iter()).enumerate()
+        {
+            assert_eq!(
+                s_val.to_bits(),
+                p_val.to_bits(),
+                "bcyclic serial vs parallel bit mismatch at nz={nz} idx={idx}: {s_val:e} vs {p_val:e}"
+            );
+        }
+        for (a, b) in x_ref.iter().zip(x_serial.iter()) {
+            let rel = (a - b).abs() / a.abs().max(1.0);
+            assert!(rel < 1.0e-13, "nz={nz} rel={rel:e} a={a} b={b}");
         }
     }
 }
@@ -387,9 +396,9 @@ fn test_upstream_mesa_block_tri_data_and_test_case_data_parity() {
                 .map(|p| PathBuf::from(p).join("flexmesa/mesa_test_inputs"))
         })
         .or_else(|| {
-            std::env::var_os("HOME")
-                .filter(|v| !v.is_empty())
-                .map(|p| PathBuf::from(p).join(".cache/flexmesa/mesa_test_inputs"))
+            std::env::var_os("HOME").filter(|v| !v.is_empty()).map(|p| {
+                PathBuf::from(p).join(".cache/flexmesa/mesa_test_inputs")
+            })
         })
         .unwrap_or_else(|| PathBuf::from(".flexmesa_test_inputs"))
         .join("mtx/test");

@@ -157,8 +157,8 @@ pub fn export_saio(
         "{:6}{:16.9E}{:16.9E}{:16.9E}{:16.9E}",
         pts.len(),
         m_outer,
-        (l_outer / L_SUN).log10(),
-        (r_outer / R_SUN).log10(),
+        flexmesa_math::log10(l_outer / L_SUN),
+        flexmesa_math::log10(r_outer / R_SUN),
         model.star_age
     );
     let c_rad_factor = 16.0 * PI * CLIGHT * CRAD / 3.0;
@@ -166,7 +166,7 @@ pub fn export_saio(
     for pt in &pts {
         let kap_safe = pt.kap.max(1.0e-30);
         let l_rad = if pt.tau >= 2.0 / 3.0 {
-            c_rad_factor * g_cgs * pt.m * pt.t.powi(4) * pt.grad_t
+            c_rad_factor * g_cgs * pt.m * flexmesa_math::pow4(pt.t) * pt.grad_t
                 / (pt.p.max(1.0e-30) * kap_safe)
         } else {
             pt.lum
@@ -284,13 +284,13 @@ pub fn export_cafein(
     let g1 = model.cgrav.first().copied().unwrap_or(STANDARD_CGRAV);
     let r_gas = 8.314_462_618e7_f64;
 
-    let s_units = (r_star.powi(3) / (g1 * m_star)).sqrt();
+    let s_units = (flexmesa_math::pow3(r_star) / (g1 * m_star)).sqrt();
     let g_units = m_star;
     let cm_units = r_star;
     let erg_units = g1 * m_star * m_star / r_star;
     let k_units = erg_units / (m_star * r_gas);
-    let rho_units = g_units / cm_units.powi(3);
-    let p_units = erg_units / cm_units.powi(3);
+    let rho_units = g_units / flexmesa_math::pow3(cm_units);
+    let p_units = erg_units / flexmesa_math::pow3(cm_units);
     let cp_units = erg_units / (k_units * g_units);
 
     let p_c = pts.first().map_or(0.0, |p| p.p);
@@ -365,7 +365,7 @@ pub fn export_cafein(
         let l_rad = if is_center {
             1.0
         } else {
-            (c_rad_factor * g1 * pt.m * pt.t.powi(4) * pt.grad_t
+            (c_rad_factor * g1 * pt.m * flexmesa_math::pow4(pt.t) * pt.grad_t
                 / (pt.p * kap_safe))
                 .max(1.0e-30)
         };
@@ -375,11 +375,11 @@ pub fn export_cafein(
                     * PI
                     * CRAD
                     * CLIGHT
-                    * pt.t.powi(4)
+                    * flexmesa_math::pow4(pt.t)
                     * pt.grad_t.max(1.0e-10)
                     * g1)
         } else {
-            PI4 * pt.r.powi(3) * pt.rho * pt.eps_nuc / l_rad
+            PI4 * flexmesa_math::pow3(pt.r) * pt.rho * pt.eps_nuc / l_rad
         };
         let c_4 = if is_center {
             (9.0 * pt.t * pt.cp * kap_safe * pt.p
@@ -387,26 +387,27 @@ pub fn export_cafein(
                     * PI
                     * CRAD
                     * CLIGHT
-                    * pt.t.powi(4)
+                    * flexmesa_math::pow4(pt.t)
                     * pt.grad_t.max(1.0e-10)
                     * g1))
                 / s_units
         } else {
-            (PI4 * pt.r.powi(3) * pt.rho * pt.t * pt.cp / l_rad) / s_units
+            (PI4 * flexmesa_math::pow3(pt.r) * pt.rho * pt.t * pt.cp / l_rad)
+                / s_units
         };
         let c_2 = (kap_ad - 4.0 * pt.grad_ad) * pt.v_dziem * pt.grad_t
             + pt.grad_ad * pt.v_dziem;
         let c_1_val = if is_center {
-            m_star / (FOUR_THIRDS_PI * r_star.powi(3) * rho_c)
+            m_star / (FOUR_THIRDS_PI * flexmesa_math::pow3(r_star) * rho_c)
         } else {
             pt.c_1
         };
 
         let row = [
             pt.m / g_units,
-            (pt.rho / rho_units).max(1.0e-99).log10(),
-            (pt.p / p_units).max(1.0e-99).log10(),
-            (pt.t / k_units).max(1.0e-99).log10(),
+            flexmesa_math::log10((pt.rho / rho_units).max(1.0e-99)),
+            flexmesa_math::log10((pt.p / p_units).max(1.0e-99)),
+            flexmesa_math::log10((pt.t / k_units).max(1.0e-99)),
             pt.r / cm_units,
             pt.v_g,
             pt.a_star,

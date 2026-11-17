@@ -344,22 +344,23 @@ mod tests {
         let x_mid: Vec<f64> = (0..species)
             .map(|i| 0.5 * (x0[i] + out.ending_x[i]))
             .collect();
-        let e0 =
+        let e0 = flexmesa_math::exp(
             eos_dt_get(ht, rho, exp10(lg_t0), &g.chem_id, &x_mid, &eos_cfg)
                 .unwrap()
-                .res[I_LN_E]
-                .exp();
-        let e1 = eos_dt_get(
-            ht,
-            rho,
-            exp10(out.ending_log10_t),
-            &g.chem_id,
-            &x_mid,
-            &eos_cfg,
-        )
-        .unwrap()
-        .res[I_LN_E]
-            .exp();
+                .res[I_LN_E],
+        );
+        let e1 = flexmesa_math::exp(
+            eos_dt_get(
+                ht,
+                rho,
+                exp10(out.ending_log10_t),
+                &g.chem_id,
+                &x_mid,
+                &eos_cfg,
+            )
+            .unwrap()
+            .res[I_LN_E],
+        );
         let de_eos = e1 - e0;
         let de_nuc = dt * out.avg_eps_nuc;
         let rel_err = (de_eos - de_nuc).abs() / de_nuc.abs();

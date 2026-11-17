@@ -95,7 +95,10 @@ fn do1_gradt_eqn(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
 /// (`do1_alt_dlnT_dm_eqn` in `star/private/hydro_temperature.f90:77-160`).
 fn do1_alt_dlnt_dm_eqn(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
     let e_start = model.energy_start.get(k).copied().unwrap_or(1.0);
-    let rho_start = model.lnd_start.get(k).map_or(1.0, |&v| v.exp());
+    let rho_start = model
+        .lnd_start
+        .get(k)
+        .map_or(1.0, |&v| flexmesa_math::exp(v));
     let scale = (e_start * rho_start).abs().max(1.0e-30);
     let dm_bar = model.dm_bar[k].max(1.0e-30);
 

@@ -83,7 +83,7 @@ pub struct TimestepReport {
 #[inline]
 pub fn filter_limit(x: f64) -> f64 {
     const KAPPA: f64 = 10.0;
-    1.0 + KAPPA * ((x - 1.0) / KAPPA).atan()
+    1.0 + KAPPA * flexmesa_math::atan((x - 1.0) / KAPPA)
 }
 
 /// Evaluates the upstream 5-point boxcar variation sum for a single structural
@@ -200,7 +200,7 @@ pub fn eval_h211_factor(
         let dt_ratio = (dt / dt_old).max(1.0e-10);
         let r_n = filter_limit(1.0 / ratio_curr).max(1.0e-4);
         let r_nm1 = filter_limit(1.0 / ratio_prev).max(1.0e-4);
-        filter_limit((r_n * r_nm1 / dt_ratio).powf(0.25))
+        filter_limit(flexmesa_math::pow(r_n * r_nm1 / dt_ratio, 0.25))
     } else {
         1.0 / ratio_curr
     };

@@ -33,8 +33,9 @@ def _lookup_helm_cell_np(
     t_a = np.asarray(temp_np, dtype=np.float64)
     d_a = np.asarray(din_np, dtype=np.float64)
     batch_shape = t_a.shape
+    t_flat = np.ascontiguousarray(t_a.reshape(-1), dtype=np.float64)
     lt_flat = np.ascontiguousarray(
-        np.log10(np.maximum(t_a, 1.0e-99)).reshape(-1), dtype=np.float64
+        _rust.safe_log10_array(t_flat), dtype=np.float64
     )
     d_flat = np.ascontiguousarray(
         np.maximum(d_a, 1.0e-99).reshape(-1), dtype=np.float64

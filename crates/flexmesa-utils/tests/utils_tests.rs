@@ -25,12 +25,16 @@ fn verify_upstream_utils_files(expected: &[Token]) {
         .or_else(|| {
             std::env::var_os("XDG_CACHE_HOME")
                 .filter(|v| !v.is_empty())
-                .map(|p| std::path::PathBuf::from(p).join("flexmesa/mesa_test_inputs"))
+                .map(|p| {
+                    std::path::PathBuf::from(p)
+                        .join("flexmesa/mesa_test_inputs")
+                })
         })
         .or_else(|| {
-            std::env::var_os("HOME")
-                .filter(|v| !v.is_empty())
-                .map(|p| std::path::PathBuf::from(p).join(".cache/flexmesa/mesa_test_inputs"))
+            std::env::var_os("HOME").filter(|v| !v.is_empty()).map(|p| {
+                std::path::PathBuf::from(p)
+                    .join(".cache/flexmesa/mesa_test_inputs")
+            })
         });
     let Some(root) = mesa_root else {
         return;
@@ -38,8 +42,16 @@ fn verify_upstream_utils_files(expected: &[Token]) {
     let upstream_token_path = root.join("utils/test/token.txt");
     let upstream_output_path = root.join("utils/test/test_output");
     if mesa_env.as_ref().is_some_and(|v| !v.is_empty()) {
-        assert!(upstream_token_path.is_file(), "missing {}", upstream_token_path.display());
-        assert!(upstream_output_path.is_file(), "missing {}", upstream_output_path.display());
+        assert!(
+            upstream_token_path.is_file(),
+            "missing {}",
+            upstream_token_path.display()
+        );
+        assert!(
+            upstream_output_path.is_file(),
+            "missing {}",
+            upstream_output_path.display()
+        );
     }
     if upstream_token_path.is_file() {
         let upstream_txt = std::fs::read_to_string(&upstream_token_path)
@@ -59,7 +71,9 @@ fn verify_upstream_utils_files(expected: &[Token]) {
             .iter()
             .map(|t| match t {
                 Token::Name(s) => format!("name_token {:11} {}", s.len(), s),
-                Token::String(s) => format!("string_token {:11} {}", s.len(), s),
+                Token::String(s) => {
+                    format!("string_token {:11} {}", s.len(), s)
+                }
                 Token::LeftParen => "left_paren_token".to_owned(),
                 Token::RightParen => "right_paren_token".to_owned(),
                 Token::Comma => "comma_token".to_owned(),

@@ -12,7 +12,7 @@
 use std::path::Path;
 
 use flexmesa_binary::{
-    BinaryLogsOptions, run_binary_test_suite_case_with_logs,
+    run_binary_test_suite_case_with_logs, BinaryLogsOptions,
 };
 
 fn main() {
@@ -25,10 +25,11 @@ fn main() {
         );
         std::process::exit(2);
     }
-    let cap = args
-        .iter()
-        .skip(3)
-        .find_map(|s| (!s.starts_with("--")).then(|| s.parse::<usize>().ok()).flatten());
+    let cap = args.iter().skip(3).find_map(|s| {
+        (!s.starts_with("--"))
+            .then(|| s.parse::<usize>().ok())
+            .flatten()
+    });
     let respect_intervals = args.iter().any(|a| a == "--respect-intervals");
     let out_arg = &args[2];
     let out_path = Path::new(out_arg);

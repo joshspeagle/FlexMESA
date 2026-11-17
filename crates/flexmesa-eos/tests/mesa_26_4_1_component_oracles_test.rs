@@ -10,7 +10,7 @@ use flexmesa_eos::{
     EosEvalOutput, HelmTable, PcConfig, SkyeConfig, SkyeSolidMixingRule,
     EOS_BASIC_RESULT_NAMES, NUM_EOS_BASIC_RESULTS,
 };
-use flexmesa_math::exp10;
+use flexmesa_math::{exp10, intrinsic_pow};
 
 const ORACLE_TSV: &str = include_str!(
     "../../../tests/fixtures/golden/eos/component_oracles_26_4_1.tsv"
@@ -21,16 +21,12 @@ const ORACLE_TSV: &str = include_str!(
 /// biquintic `HELM` electron-positron table (`grad_ad`, `chiRho`, `Cp`, `Cv`,
 /// `dE_dRho`, `dS_dT`, `dS_dRho`, `gamma1`, `gamma3`).
 ///
-/// Prior to `#165` (`CRMATH` `exp10`) and `#161`, `HelmTable` grid coordinates
-/// `t[j]` / `d[i]` in `crates/flexmesa-eos/src/helm/table.rs:24` use
-/// `(x * std::f64::consts::LN_10).exp()` rather than `const_def::ln10` + `CRMATH`
-/// `exp`, shifting `dd3i_sav` / `dt3i_sav` on cancelled 3rd-order Hermite
-/// stencils by `7.88e-12` to `6.69e-6` (`2.054e-10` on `skye_c12_liq` `grad_ad`
-/// `d_dlnd`, `1.589e-8` on `skye_c12_liq` `grad_ad` `d_dlnT`, `6.685e-6` on
-/// `skye_c12_phase` `Cp` `d_dlnT`). All primal (`col 0`) channels and all 17
-/// remaining partial-derivative channels match at the unwidened `5.0e-12`..`1.0e-7`
-/// tolerances in active CI, while the unwidened 3rd-order Hermite derivative
-/// assertions are tracked in the dedicated `#161`/`#165` `#[ignore]` test below.
+/// With `#165` (`CRMATH` `exp10` on `HelmTable` grid coordinates), `skye_c12_liq`
+/// and `skye_c12_liq_ion` pass at `5.0e-12`, while `skye_co_liq` `grad_ad`
+/// `d_dlnT` (`col 2`) differs by `2.510e-8` (`5.0e-11` bound) pending `#161`
+/// (`Skye`/`HELM` operation-order audit). All primal (`col 0`) channels and all
+/// 17 remaining partial-derivative channels match at the unwidened
+/// `5.0e-12`..`1.0e-7` tolerances in active CI.
 const HELM_THIRD_DERIV_CHANNELS: [usize; 9] =
     [6, 7, 9, 10, 11, 12, 13, 14, 15];
 
@@ -323,8 +319,8 @@ fn test_all_fifteen_pc_skye_and_blend_cases_against_compiled_mesa_26_4_1() {
     cfg_pc_bl.pc.pc_use_gamma_limit_instead_of_t = true;
     let out = eos_dt_get(
         ht,
-        10.0_f64.powf(2.9),
-        10.0_f64.powf(6.5),
+        intrinsic_pow(10.0, 2.9),
+        intrinsic_pow(10.0, 6.5),
         &cid_c,
         &xa_c,
         &cfg_pc_bl,
@@ -339,7 +335,7 @@ fn test_all_fifteen_pc_skye_and_blend_cases_against_compiled_mesa_26_4_1() {
 }
 
 #[test]
-#[ignore = "declared gap (#161, #165): HelmTable exp10 (std::f64::consts::LN_10 + libm::exp vs const_def::ln10 + CRMATH) shifts cancelled 3rd-order Hermite derivatives in Skye/HELM; skye_c12_liq grad_ad d_dlnd got -2.9257929440306991e-3 vs -2.9257927386492229e-3 (2.054e-10 >= 5.0e-12), grad_ad d_dlnT 1.589e-8, max rel_err 6.685e-6 on skye_c12_phase Cp d_dlnT"]
+#[ignore = "declared gap (#161): Skye/HELM multi-component operation order on skye_co_liq grad_ad d_dlnT (got 1.9061412541928294e-2 vs 1.9061437640973952e-2, rel_err 2.510e-8 >= 5.0e-11)"]
 fn test_skye_and_blend_third_order_hermite_derivatives_match_mesa_26_4_1() {
     run_skye_and_blend_suite(false);
 }

@@ -11,7 +11,9 @@ description = "Physics table SHA-256 manifest, SafeTensors F64/I64 reader/writer
 workspace = true
 
 [dependencies]
+flexmesa-math = { path = "../flexmesa-math" }
 flexmesa-testing = { path = "../flexmesa-testing" }
+flexmesa-utils = { path = "../flexmesa-utils" }
 
 [dev-dependencies]
 proptest = "1.4"

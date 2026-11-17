@@ -251,7 +251,7 @@ fn test_chemakzo_dae_matches_golden_reference() {
 
     let fcn = |_t: f64, y: &[f64]| -> Result<Vec<f64>, NumError> {
         let sqy2 = y[1].max(0.0).sqrt();
-        let r1 = k1 * y[0].powi(4) * sqy2;
+        let r1 = k1 * flexmesa_math::pow4(y[0]) * sqy2;
         let r2 = k2 * y[2] * y[3];
         let r3 = (k2 / kbig) * y[0] * y[4];
         let r4 = k3 * y[0] * y[3] * y[3];
@@ -312,24 +312,29 @@ fn beam_feval(t: f64, th: &[f64]) -> Result<Vec<f64>, NumError> {
     let mut cth = vec![0.0_f64; n + 1];
     for i in 2..=n {
         let d = th[i - 1] - th[i - 2];
-        sth[i] = d.sin();
-        cth[i] = d.cos();
+        sth[i] = flexmesa_math::sin(d);
+        cth[i] = flexmesa_math::cos(d);
     }
     let mut v = vec![0.0_f64; n + 1];
     let (fx, fy) = if t > std::f64::consts::PI {
         (0.0, 0.0)
     } else {
-        let fabs = 1.5 * t.sin().powi(2);
+        let fabs = 1.5 * flexmesa_math::pow2(flexmesa_math::sin(t));
         (-fabs, fabs)
     };
     v[1] = (-3.0 * th[0] + th[1]) * nquatr
-        + nsq * (fy * th[0].cos() - fx * th[0].sin());
+        + nsq
+            * (fy * flexmesa_math::cos(th[0]) - fx * flexmesa_math::sin(th[0]));
     for i in 2..n {
         v[i] = (th[i - 2] - 2.0 * th[i - 1] + th[i]) * nquatr
-            + nsq * (fy * th[i - 1].cos() - fx * th[i - 1].sin());
+            + nsq
+                * (fy * flexmesa_math::cos(th[i - 1])
+                    - fx * flexmesa_math::sin(th[i - 1]));
     }
     v[n] = (th[n - 2] - th[n - 1]) * nquatr
-        + nsq * (fy * th[n - 1].cos() - fx * th[n - 1].sin());
+        + nsq
+            * (fy * flexmesa_math::cos(th[n - 1])
+                - fx * flexmesa_math::sin(th[n - 1]));
 
     let mut w = vec![0.0_f64; n + 1];
     w[1] = sth[2] * v[2];
@@ -338,7 +343,7 @@ fn beam_feval(t: f64, th: &[f64]) -> Result<Vec<f64>, NumError> {
     }
     w[n] = -sth[n] * v[n - 1];
     for i in 1..=n {
-        w[i] += th[n + i - 1].powi(2);
+        w[i] += flexmesa_math::pow2(th[n + i - 1]);
     }
 
     let mut alpha = vec![2.0_f64; n + 1];

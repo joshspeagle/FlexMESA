@@ -55,11 +55,11 @@ pub fn do_convert_helm_results(
     let mu = abar / (1.0 + zbar);
     let free_e = helm_res[H_XNE - 1].max(1.0e-99) / (AVO * rho);
 
-    out.res[I_LN_PGAS] = pgas.ln();
-    out.res[I_LN_E] = energy.ln();
-    out.res[I_LN_S] = entropy.ln();
+    out.res[I_LN_PGAS] = flexmesa_math::log(pgas);
+    out.res[I_LN_E] = flexmesa_math::log(energy);
+    out.res[I_LN_S] = flexmesa_math::log(entropy);
     out.res[I_MU] = mu;
-    out.res[I_LN_FREE_E] = free_e.ln();
+    out.res[I_LN_FREE_E] = flexmesa_math::log(free_e);
     out.res[I_ETA] = helm_res[H_ETAELE - 1];
     out.res[I_GRAD_AD] = helm_res[H_NABAD - 1];
     out.res[I_CHI_RHO] = helm_res[H_CHID - 1];
@@ -165,9 +165,9 @@ pub fn eval_helm_eos(
     let (helm_res, _off_table) = helmeos2(
         table,
         temp,
-        temp.log10(),
+        flexmesa_math::log10(temp),
         den,
-        den.log10(),
+        flexmesa_math::log10(den),
         abar,
         zbar,
         &config,

@@ -33,8 +33,8 @@ fn build_solar_test_model(v_flag: bool) -> StarModel {
         .expect("valid 1 Msun ZAMS test model");
     model.dt = 1.0e10;
     for k in 0..model.nz {
-        model.lnd[k] += 1.0e-3 * ((k as f64) * 0.1).sin();
-        model.ln_t[k] += 0.8e-3 * ((k as f64) * 0.1).cos();
+        model.lnd[k] += 1.0e-3 * flexmesa_math::sin((k as f64) * 0.1);
+        model.ln_t[k] += 0.8e-3 * flexmesa_math::cos((k as f64) * 0.1);
         if v_flag {
             model.v[k] = -1.0e4 * (1.0 - model.q[k] * 0.5);
             model.v_start[k] = -0.8e4 * (1.0 - model.q[k] * 0.5);
@@ -62,7 +62,7 @@ fn test_eps_grav_time_centering_pc_blending_and_latent_heat_match_fortran() {
 
     let dlnd_dt = (model.lnd[k] - model.lnd_start[k]) / model.dt;
     let dlnt_dt = (model.ln_t[k] - model.ln_t_start[k]) / model.dt;
-    let t_s = model.ln_t_start[k].exp();
+    let t_s = flexmesa_math::exp(model.ln_t_start[k]);
     let eg_start_expected = -t_s
         * model.aux.cp_start[k]
         * ((1.0 - model.aux.grada_start[k] * model.aux.chi_t_start[k])
@@ -77,15 +77,15 @@ fn test_eps_grav_time_centering_pc_blending_and_latent_heat_match_fortran() {
     let eps = 1.0e-6;
     let orig_lnd = model.lnd[k];
     model.lnd[k] = orig_lnd + eps;
-    model.rho[k] = model.lnd[k].exp();
+    model.rho[k] = flexmesa_math::exp(model.lnd[k]);
     crate::micro::do_eos(&mut model).expect("do_eos +eps");
     let tc_p = eval_eps_grav_std_cell(&model, k).val;
     model.lnd[k] = orig_lnd - eps;
-    model.rho[k] = model.lnd[k].exp();
+    model.rho[k] = flexmesa_math::exp(model.lnd[k]);
     crate::micro::do_eos(&mut model).expect("do_eos -eps");
     let tc_m = eval_eps_grav_std_cell(&model, k).val;
     model.lnd[k] = orig_lnd;
-    model.rho[k] = orig_lnd.exp();
+    model.rho[k] = flexmesa_math::exp(orig_lnd);
     crate::micro::do_eos(&mut model).expect("do_eos restore");
     let fd_dlnd = (tc_p - tc_m) / (2.0 * eps);
     assert!(
@@ -227,8 +227,8 @@ fn test_hydro_energy_pressure_time_centering_pvsc_pturb_and_chem_partials() {
         StarAdOrder1::variable(model.ln_r[k], crate::star_ad::I_LNR_00);
     let area_tc =
         eval_face_area_time_centered_ad(lnr_ad, model.ln_r_start[k], true);
-    let r = model.ln_r[k].exp();
-    let rs = model.ln_r_start[k].exp();
+    let r = flexmesa_math::exp(model.ln_r[k]);
+    let rs = flexmesa_math::exp(model.ln_r_start[k]);
     let expected_area = (FOUR_PI / 3.0) * (r * r + r * rs + rs * rs);
     assert!((area_tc.val - expected_area).abs() / expected_area < 1.0e-12);
 
@@ -347,10 +347,10 @@ fn test_hydro_temperature_gradt_dprad_lp_limiter_and_rsp_lsurf_bc() {
     model.controls.use_rsp_l_eqn_outer_bc = true;
     let mut sys_rsp = HenyeySystem::new(model.nz, nvar, x_scale.clone());
     do1_temperature_eqn(&model, 0, &mut sys_rsp);
-    let r_0 = model.ln_r[0].exp();
-    let t_0 = model.ln_t[0].exp();
+    let r_0 = flexmesa_math::exp(model.ln_r[0]);
+    let t_0 = flexmesa_math::exp(model.ln_t[0]);
     let sigma_sb = 0.25 * CLIGHT * CRAD;
-    let l_rad = 0.5 * FOUR_PI * sigma_sb * r_0 * r_0 * t_0.powi(4);
+    let l_rad = 0.5 * FOUR_PI * sigma_sb * r_0 * r_0 * flexmesa_math::pow4(t_0);
     let l_scale = model.lum_start[0].abs().max(flexmesa_const::L_SUN);
     let expected_rsp = (model.lum[0] - l_rad) / l_scale;
     assert!((sys_rsp.equ[model.layout.i_equ_l] - expected_rsp).abs() < 1.0e-12);

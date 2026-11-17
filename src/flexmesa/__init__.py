@@ -62,11 +62,16 @@ from flexmesa import (  # noqa: E402
 )
 
 Backend = _dispatch.Backend
+NumericsMode = _dispatch.NumericsMode
+get_numerics_mode = _dispatch.get_numerics_mode
+numerics_mode_context = _dispatch.numerics_mode_context
 resolve_backend = _dispatch.resolve_backend
+set_numerics_mode = _dispatch.set_numerics_mode
 
 __version__: str = "0.1.0"
 __all__: list[str] = [
     "Backend",
+    "NumericsMode",
     "__version__",
     "_rust",
     "astero",
@@ -80,6 +85,7 @@ __all__: list[str] = [
     "data",
     "enable_float64",
     "eos",
+    "get_numerics_mode",
     "interp_1d",
     "interp_2d",
     "ionization",
@@ -89,10 +95,12 @@ __all__: list[str] = [
     "net",
     "neu",
     "num",
+    "numerics_mode_context",
     "plotting",
     "rates",
     "resolve_backend",
     "schema",
+    "set_numerics_mode",
     "star",
     "testing",
     "turb",

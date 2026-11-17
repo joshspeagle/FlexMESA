@@ -130,10 +130,10 @@ where
         let dnm = 4.0 * ss - s * s;
         let b00 = (ss * sz - s * szd) / dnm;
         let b1 = (4.0 * szd - s * sz) / dnm;
-        let volf = (z00 - b00).powi(2)
-            + (z1 - (b00 + b1 * d1)).powi(2)
-            + (z2 - (b00 + b1 * d2)).powi(2)
-            + (z3 - (b00 + b1 * d3)).powi(2);
+        let volf = flexmesa_math::pow2(z00 - b00)
+            + flexmesa_math::pow2(z1 - (b00 + b1 * d1))
+            + flexmesa_math::pow2(z2 - (b00 + b1 * d2))
+            + flexmesa_math::pow2(z3 - (b00 + b1 * d3));
         let epsln = (z00 * z00 + z1 * z1 + z2 * z2 + z3 * z3) * eps_scale;
         if volf > epsln {
             let wt = 1.0 / (volf * ss);
@@ -296,20 +296,24 @@ pub fn rgpd3p_db(
                         - b01 * sx * syy)
                         / sxxyy;
 
-                    let mut volf = (z00 - b00).powi(2);
+                    let mut volf = flexmesa_math::pow2(z00 - b00);
                     let mut z_sq_sum = z00 * z00;
                     for c in 0..3 {
-                        volf += (zs_y[c] - (b00 + b01 * ys_loc[c])).powi(2);
+                        volf += flexmesa_math::pow2(
+                            zs_y[c] - (b00 + b01 * ys_loc[c]),
+                        );
                         z_sq_sum += zs_y[c] * zs_y[c];
                     }
                     for r in 0..3 {
-                        volf += (zs_x[r] - (b00 + b10 * xs_loc[r])).powi(2);
+                        volf += flexmesa_math::pow2(
+                            zs_x[r] - (b00 + b10 * xs_loc[r]),
+                        );
                         z_sq_sum += zs_x[r] * zs_x[r];
                         for c in 0..3 {
                             let pred = b00
                                 + b01 * ys_loc[c]
                                 + xs_loc[r] * (b10 + b11 * ys_loc[c]);
-                            volf += (z_grid[r][c] - pred).powi(2);
+                            volf += flexmesa_math::pow2(z_grid[r][c] - pred);
                             z_sq_sum += z_grid[r][c] * z_grid[r][c];
                         }
                     }

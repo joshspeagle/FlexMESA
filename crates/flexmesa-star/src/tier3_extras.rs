@@ -216,7 +216,7 @@ fn set_scaled_tier3_mass(model: &mut StarModel, target_msun: f64) {
     let old_xmstar = model.xmstar.max(1.0);
     let new_mstar = target_msun * M_SUN;
     if (new_mstar - old_xmstar).abs() > 1.0e-9 * old_xmstar {
-        let dln_r = (new_mstar / old_xmstar).ln() / 3.0;
+        let dln_r = flexmesa_math::log(new_mstar / old_xmstar) / 3.0;
         let l_ratio = new_mstar / old_xmstar;
         for k in 0..model.nz {
             model.ln_r[k] += dln_r;
@@ -333,8 +333,9 @@ impl StarExtras for Tier3CaseExtras {
                 .copied()
                 .filter(|&g| g > 0.0)
                 .unwrap_or(STANDARD_CGRAV);
-            let omega_crit =
-                (g_surf * model.mstar.max(M_SUN) / r_surf.powi(3)).sqrt();
+            let omega_crit = (g_surf * model.mstar.max(M_SUN)
+                / flexmesa_math::pow3(r_surf))
+            .sqrt();
             let omega_0 = match cname {
                 "high_rot_darkening" => 0.98 * omega_crit,
                 "20M_z2m2_high_rotation" => 0.65 * omega_crit,
@@ -348,8 +349,9 @@ impl StarExtras for Tier3CaseExtras {
                     model.omega[k] = omega_0;
                 }
                 if model.j_rot[k] == 0.0 {
-                    model.j_rot[k] =
-                        (2.0 / 3.0) * model.r[k].powi(2) * model.omega[k];
+                    model.j_rot[k] = (2.0 / 3.0)
+                        * flexmesa_math::pow2(model.r[k])
+                        * model.omega[k];
                 }
             }
             self.initial_j_tot = compute_total_angular_momentum(model);
@@ -479,7 +481,7 @@ impl StarExtras for Tier3CaseExtras {
 
     fn other_adjust_mdot(&self, model: &StarModel, current_mdot: f64) -> f64 {
         let log_mdot = model.controls.x_ctrl.get(2).copied().unwrap_or(-4.0);
-        current_mdot + 10.0_f64.powf(log_mdot) * M_SUN / SECYER
+        current_mdot + flexmesa_math::exp10(log_mdot) * M_SUN / SECYER
     }
 
     fn other_torque(&self, model: &StarModel) -> Option<Vec<f64>> {

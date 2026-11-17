@@ -409,15 +409,15 @@ pub fn eval_table(
         });
     }
     let g = cgrav * m / (r * r);
-    let logg = g.log10();
+    let logg = flexmesa_math::log10(g);
 
     let (pgas, dpgas_dteff, dpgas_dlogg, t, dt_dteff, dt_dlogg) =
         get_table_values(id, z, logg, teff)?;
 
-    let ln_t = t.ln();
+    let ln_t = flexmesa_math::log(t);
     let prad = radiation_pressure(t);
     let p = pgas + prad;
-    let ln_p = p.ln();
+    let ln_p = flexmesa_math::log(p);
 
     if is_bad(ln_p) || is_bad(ln_t) {
         return Err(AtmError::CallbackError {
@@ -503,8 +503,8 @@ pub fn get_table_alfa_beta(
     }
     let ai = AtmTables::builtin().get_info(id)?;
     let g = cgrav * m / (r * r);
-    let log_teff = teff.log10();
-    let logg = g.log10();
+    let log_teff = flexmesa_math::log10(teff);
+    let logg = flexmesa_math::log10(g);
 
     let ng = ai.ng;
     let logg_max = ai.logg_array[ng - 1];
@@ -526,8 +526,8 @@ pub fn get_table_alfa_beta(
 
     let teff_max = ai.teff_bound[logg_index - 1];
     let teff_min = ai.teff_array[0];
-    let log_teff_max = teff_max.log10();
-    let log_teff_min = teff_min.log10();
+    let log_teff_max = flexmesa_math::log10(teff_max);
+    let log_teff_min = flexmesa_math::log10(teff_min);
 
     let logg1 = logg_max;
     let logg2 = logg_max - 0.01;

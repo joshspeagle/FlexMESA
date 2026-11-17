@@ -55,7 +55,7 @@ pub fn compton_opacity(
         val: eta,
         d1: [d_eta_dln_rho / rho, d_eta_dln_t / t],
     };
-    let free_e_val = lnfree_e.exp();
+    let free_e_val = flexmesa_math::exp(lnfree_e);
     let free_e_ad = AutoDiffReal2VarOrder1 {
         val: free_e_val,
         d1: [

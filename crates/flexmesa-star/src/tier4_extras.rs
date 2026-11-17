@@ -90,13 +90,18 @@ pub fn is_tier4_case(case_name: &str) -> bool {
 }
 
 fn astero_n4_mode_ok(model: &StarModel, enforce_tams_tol: bool) -> bool {
-    let mode = crate::pulse_modes::eval_linear_oscillation_modes(model, 0, &[4])[0];
-    if !mode.freq_uhz.is_finite() || mode.freq_uhz <= 0.0 || mode.inertia <= 0.0 {
+    let mode =
+        crate::pulse_modes::eval_linear_oscillation_modes(model, 0, &[4])[0];
+    if !mode.freq_uhz.is_finite() || mode.freq_uhz <= 0.0 || mode.inertia <= 0.0
+    {
         return false;
     }
     let expected = model.controls.x_ctrl.get(1).copied().unwrap_or(0.0);
     let h1_c = model.xh_mass.last().copied().unwrap_or(0.0);
-    !enforce_tams_tol || h1_c > 0.005 || expected <= 0.0 || (mode.freq_uhz - expected).abs() < 0.03 * expected
+    !enforce_tams_tol
+        || h1_c > 0.005
+        || expected <= 0.0
+        || (mode.freq_uhz - expected).abs() < 0.03 * expected
 }
 
 /// Dispatcher implementing `run_star_extras.f90` hooks for all Tier 4 cases.
@@ -166,8 +171,8 @@ impl StarExtras for Tier4CaseExtras {
         if TIER4_ASTERO_CASES.contains(&self.case_name.as_str()) {
             return;
         }
-        let is_pulse_mod_case =
-            self.case_name.starts_with("gyre_in_mesa_") && model.model_number >= 10;
+        let is_pulse_mod_case = self.case_name.starts_with("gyre_in_mesa_")
+            && model.model_number >= 10;
         let c = &mut model.controls;
         c.op_split_burn = true;
         c.min_logt_for_net = 8.5;
@@ -273,13 +278,17 @@ impl StarExtras for Tier4CaseExtras {
     }
 
     fn extras_check_model(&mut self, model: &mut StarModel) -> ExtrasDirective {
-        if self.case_name == "astero_gyre" || self.case_name == "astero_adipls" {
-            if (model.model_number.is_multiple_of(50) || model.model_number <= 3)
+        if self.case_name == "astero_gyre" || self.case_name == "astero_adipls"
+        {
+            if (model.model_number.is_multiple_of(50)
+                || model.model_number <= 3)
                 && astero_n4_mode_ok(model, false)
             {
                 self.matched_target_frequency = true;
             }
-        } else if self.case_name.starts_with("gyre_in_mesa_") || self.case_name.starts_with("dev_") {
+        } else if self.case_name.starts_with("gyre_in_mesa_")
+            || self.case_name.starts_with("dev_")
+        {
             let (_mode, matched) = eval_target_mode_frequency_and_growth(model);
             if matched {
                 self.matched_target_frequency = true;

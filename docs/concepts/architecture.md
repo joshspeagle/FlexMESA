@@ -6,7 +6,7 @@ Evaluating stellar structure and evolution models requires coupling shell-local 
 2. **Host-Accelerator Dispatch Overhead**: Calling compiled subroutines zone-by-zone from Python or executing sequential Thomas factorizations across thousands of radial shells on a GPU introduces severe host-device synchronization latency.
 3. **Global State and Non-Portable Table Caches**: Mutable Fortran module variables, untyped namelists, and compiler-specific unformatted binary caches complicate parallel ensemble execution and static verification.
 
-`FlexMESA` resolves these bottlenecks by partitioning its codebase into an **Integrated Three-Tier Hybrid Architecture** combining **Safe Rust (`#![forbid(unsafe_code)]`)**, zero-copy **Python (`PyO3`)**, and **JAX (`float64` `@jax.jit` + `jax.vmap`)**, paired with analytical **Implicit Function Theorem** differentiation.
+`FlexMESA` addresses these bottlenecks by combining a canonical **Safe Rust** engine (`crates/`, enforcing `#![forbid(unsafe_code)]` across all crates except the sole vendored `crlibm` FFI wrapper `flexmesa-crlibm-sys`), zero-copy **Python (`PyO3`)** bindings, and a derived **JAX (`float64` `@jax.jit` + `jax.vmap`)** layer, paired with analytical **Implicit Function Theorem** differentiation.
 
 ---
 
@@ -50,7 +50,7 @@ flowchart TD
 ```
 
 ### Tier A: Canonical Safe Rust Infrastructure (`schema`, `data`, `testing`, `utils`, `auto_diff`)
-Modules that manage configuration schemas (`flexmesa.schema`), binary table caching and cryptographic verification (`flexmesa.data`), golden test output parsing (`flexmesa.testing`), string tokenizers and bounded worker pools (`flexmesa.utils`), and explicit forward-mode hyperdual numbers (`flexmesa.auto_diff`) have a single canonical implementation in Safe Rust (`#![forbid(unsafe_code)]`). Python accesses Tier A directly through the compiled `flexmesa._rust` (`PyO3`) extension, eliminating duplicated parser and loader code.
+Modules that manage configuration schemas (`flexmesa.schema`), binary table caching and cryptographic verification (`flexmesa.data`), test output parsing (`flexmesa.testing`), string tokenizers and bounded worker pools (`flexmesa.utils`), and explicit forward-mode hyperdual numbers (`flexmesa.auto_diff`) have a single canonical implementation in Safe Rust (`#![forbid(unsafe_code)]` across all workspace crates except `flexmesa-crlibm-sys`). Python accesses Tier A directly through the compiled `flexmesa._rust` (`PyO3`) extension, eliminating duplicated parser and loader code.
 
 ### Tier B: Differentiable Shell-Local Microphysics (`const`, `math`, `interp_1d`, `interp_2d`, `neu`, `turb`, `chem`, `ionization`, `colors`, `eos`, `kap`, `rates`, `atm`)
 Shell-local microphysics and spline interpolation modules provide two synchronized kernels behind a single public dispatcher with `backend="auto" | "rust" | "jax"`:
@@ -143,9 +143,9 @@ $$L_k x_{k-1} + D_k x_k + U_k x_{k+1} = b_k, \qquad k \in \{0, \dots, N_{\mathrm
 
 ## 6. Physical Constants, Schemas & Zero-Copy `.safetensors` Tables
 
-- **CODATA / IAU Physical Constants (`flexmesa.constants` & `crates/flexmesa-const`)**: Exports bit-exact IEEE-754 double-precision (`f64`) CGS constants matching `const/public/const_def.f90` (`STANDARD_CGRAV`, `PLANCK_H`, `CLIGHT`, `KERG`, `BOLTZ_SIGMA`, `CRAD`, `AMU`, `ME`, `MP`, `QE`, `MSUN`, `RSUN`, `LSUN`, `SECYER`), precomputed roots and logarithms (`LN10`, `ONE_THIRD`, `SQRT_2_DIV_3`), and the `MixingType` enumeration.
-- **IEEE-754 Math Intrinsics (`flexmesa.math` & `crates/flexmesa-math`)**: Implements 33 elementary and domain-safe intrinsics (`pow`, `powi`, `powm1`, `pow2` to `pow8`, `exp10`, `expm1`, `log1p`, `log2`, `safe_log`, `safe_log10`, `safe_sqrt`, `sinpi`, `cospi`, `tanpi`, `asinpi`, `acospi`, `atanpi`, `sgn`, `heaviside`) polymorphic over scalar `f64`, forward-mode `DualOrder1`, and JAX `jnp.float64` arrays.
-- **Typed Schemas & Zero-Copy `.safetensors` Data (`flexmesa.schema`, `flexmesa.data`, `flexmesa.testing`)**: `flexmesa.schema` validates `.defaults` and Fortran namelists; `flexmesa.data` verifies 64-character `SHA-256` digests (`manifest.toml`) and memory-maps C-contiguous `float64` and `int64` `.safetensors` tables directly into Safe Rust and Python; `flexmesa.testing.golden` parses upstream `<pkg>/test/test_output` reference files and verifies $\le 10^{-14}$ relative parity.
+- **CODATA / IAU Physical Constants (`flexmesa.constants` & `crates/flexmesa-const`)**: Exports IEEE-754 double-precision (`f64`) CGS constants matching `const/public/const_def.f90` (`STANDARD_CGRAV`, `PLANCK_H`, `CLIGHT`, `KERG`, `BOLTZ_SIGMA`, `CRAD`, `AMU`, `ME`, `MP`, `QE`, `MSUN`, `RSUN`, `LSUN`, `SECYER`), precomputed roots and logarithms (`LN10`, `ONE_THIRD`, `SQRT_2_DIV_3`), and the `MixingType` enumeration.
+- **Single-Source Strict/Fast Numerics (`flexmesa.math`, `crates/flexmesa-math`, `crates/flexmesa-crlibm-sys`)**: All Rust physics crates route elementary functions and `fma` exclusively through `flexmesa-math` (enforced by workspace `clippy.toml` `disallowed-methods`). In `"strict"` mode (default), `flexmesa-math` calls vendored `crlibm 1.0beta4` (`CRMATH 1.2`) without fused multiply-add contraction (`a * b + c`) and in upstream's operation order (`pow2` through `pow8`, `pow_i_`, `pow_r_`, `exp10_`); `"strict"` is the sole mode judged against MESA `26.4.1` across Level 1 (`x86_64`/`aarch64` and `1`/`4`-thread bit-identity), Level 2 (hexadecimal kernel vectors), and Level 3 (`#143` trajectory tolerances). In `"fast"` mode, the same physics source dispatches to `std` `f64` intrinsics and `mul_add`, validated against `"strict"`.
+- **Typed Schemas & Zero-Copy `.safetensors` Data (`flexmesa.schema`, `flexmesa.data`, `flexmesa.testing`)**: `flexmesa.schema` validates `.defaults` and Fortran namelists; `flexmesa.data` verifies 64-character `SHA-256` digests (`manifest.toml`) and memory-maps C-contiguous `float64` and `int64` `.safetensors` tables directly into Safe Rust and Python; `flexmesa.testing.golden` parses upstream `<pkg>/test/test_output` reference files.
 
 === "Python & JAX (`flexmesa.mtx`, `flexmesa.interp_1d`)"
 

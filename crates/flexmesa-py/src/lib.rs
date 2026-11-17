@@ -70,6 +70,8 @@ pub mod ionization_py;
 pub mod kap_py;
 /// Tier A/B/C bindings for `auto_diff`, `math`, and `mtx`.
 pub mod math_solvers;
+/// Reference-vector `Strict` digest, `Fast`-vs-`Strict` audit, and dispatch timing.
+pub mod math_vec_audit;
 /// Tier B/C bindings for `net` (nuclear networks, analytical Jacobians, burners).
 pub mod net_py;
 /// Tier B bindings for `neu` (Itoh et al. 1996 thermal neutrino losses).
@@ -263,9 +265,20 @@ where
 #[allow(clippy::used_underscore_items)]
 #[pymodule]
 fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    if let Ok(raw) = std::env::var("FLEXMESA_NUMERICS_MODE") {
+        if !raw.trim().is_empty() {
+            let mode =
+                raw.parse::<flexmesa_math::NumericsMode>().map_err(|err| {
+                    pyo3::exceptions::PyValueError::new_err(err.to_string())
+                })?;
+            flexmesa_math::set_numerics_mode(mode);
+        }
+    }
+    flexmesa_math::math_init();
     tier_a_parse::register(m)?;
     tier_a_data::register(m)?;
     math_solvers::register(m)?;
+    math_vec_audit::register(m)?;
     interp_1d::register(m)?;
     interp_2d::register(m)?;
     neu_py::register(m)?;

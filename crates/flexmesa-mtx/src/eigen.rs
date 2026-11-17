@@ -55,7 +55,7 @@ fn standardize_2x2(
         let disc = p * p + bc;
         if disc >= 0.0 {
             let z = p + disc.sqrt().copysign(if p >= 0.0 { 1.0 } else { -1.0 });
-            let tau = z.hypot(c);
+            let tau = flexmesa_math::hypot(z, c);
             if tau == 0.0 {
                 (1.0, 0.0)
             } else {
@@ -64,10 +64,10 @@ fn standardize_2x2(
         } else {
             let s = f64::midpoint(b, c);
             if s == 0.0 {
-                let h = std::f64::consts::FRAC_1_SQRT_2;
+                let h = 0.5_f64.sqrt();
                 (h, h)
             } else {
-                let r = p.hypot(s);
+                let r = flexmesa_math::hypot(p, s);
                 let cs_v = f64::midpoint(1.0, s.abs() / r).sqrt();
                 let sn_v = -(p / (2.0 * r * cs_v))
                     * (if s < 0.0 { -1.0 } else { 1.0 });
@@ -108,21 +108,25 @@ fn standardize_2x2(
     }
 }
 
-/// Constructs a 2- or 3-element Householder reflector `(tau, u1, u2)` mapping
-/// `(x0, x1, x2)` to `(beta, 0, 0)`.
+/// Constructs a 2- or 3-element Householder reflector `(tau, u1, u2, beta)`
+/// mapping `(x0, x1, x2)` to `(beta, 0, 0)`.
 #[inline]
-fn reflector_3(x0: f64, x1: f64, x2: f64, len: usize) -> (f64, f64, f64) {
-    let norm_tail = if len == 3 { x1.hypot(x2) } else { x1.abs() };
+fn reflector_3(x0: f64, x1: f64, x2: f64, len: usize) -> (f64, f64, f64, f64) {
+    let norm_tail = if len == 3 {
+        flexmesa_math::hypot(x1, x2)
+    } else {
+        x1.abs()
+    };
     if norm_tail == 0.0 {
-        return (0.0, 0.0, 0.0);
+        return (0.0, 0.0, 0.0, x0);
     }
-    let norm = x0.hypot(norm_tail);
+    let norm = flexmesa_math::hypot(x0, norm_tail);
     let beta = if x0 >= 0.0 { -norm } else { norm };
     let tau = (beta - x0) / beta;
     let denom = x0 - beta;
     let u1 = x1 / denom;
     let u2 = if len == 3 { x2 / denom } else { 0.0 };
-    (tau, u1, u2)
+    (tau, u1, u2, beta)
 }
 
 /// Francis implicit double-shift QR iteration (`dhseqr`) reducing upper
@@ -154,7 +158,7 @@ fn schur_qr(
     let mut h_norm = 0.0_f64;
     for i in ilo..=ihi {
         for j in i.saturating_sub(1)..=ihi {
-            h_norm = h_norm.hypot(h[i * n + j]);
+            h_norm = flexmesa_math::hypot(h_norm, h[i * n + j]);
         }
     }
 
@@ -315,17 +319,12 @@ fn schur_qr(
                     0.0
                 };
             }
-            let (tau, u1, u2) = reflector_3(v0, v1, v2, nr);
+            let (tau, u1, u2, beta) = reflector_3(v0, v1, v2, nr);
             if tau == 0.0 {
                 continue;
             }
             if k > m_start {
-                let norm = if nr == 3 {
-                    v0.hypot(v1.hypot(v2))
-                } else {
-                    v0.hypot(v1)
-                };
-                h[k * n + (k - 1)] = if v0 >= 0.0 { -norm } else { norm };
+                h[k * n + (k - 1)] = beta;
                 h[(k + 1) * n + (k - 1)] = 0.0;
                 if nr == 3 {
                     h[(k + 2) * n + (k - 1)] = 0.0;

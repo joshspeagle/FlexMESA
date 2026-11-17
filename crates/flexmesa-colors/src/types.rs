@@ -59,7 +59,8 @@ impl RealScalar for f64 {
     }
     #[inline]
     fn log10(self) -> Self {
-        flexmesa_math::log10(self)
+        // `colors/private/{bolometric.f90:106, synthetic.f90:111}` omit `use math_lib` (#198).
+        flexmesa_math::intrinsic_log10(self)
     }
 }
 
@@ -82,7 +83,10 @@ impl<const N: usize> RealScalar for DualOrder1<N> {
     }
     #[inline]
     fn log10(self) -> Self {
-        Self::log10(self)
+        // `colors/private/{bolometric.f90:106, synthetic.f90:111}` omit `use math_lib` (#198).
+        let z_val = flexmesa_math::intrinsic_log10(self.val);
+        let z_d1x = flexmesa_const::ILN10 * flexmesa_math::powm1(self.val);
+        self.make_unary_operator(z_val, z_d1x)
     }
 }
 

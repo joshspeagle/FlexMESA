@@ -199,7 +199,9 @@ fn test_adipls_bvp_solver_reproduces_all_46_modes_of_gemma_fgong_obs_test() {
             .abs()
             .min((bm.freq_uhz - freq_ref).abs())
             / freq_ref;
-        let rel_e = (bm.e_adipls.log10() - e_ref.log10()).abs();
+        let rel_e = (flexmesa_math::log10(bm.e_adipls)
+            - flexmesa_math::log10(e_ref))
+        .abs();
         let tol_freq = if l == 0 { 1.6e-3 } else { 1.25e-2 };
         assert!(
             rel_freq <= tol_freq,
@@ -242,7 +244,8 @@ fn test_stella_export_and_feii_5169_sobolev_golden_fixture_parity() {
         let rho = parse_fortran_float(t[5]);
         let temp = parse_fortran_float(t[6]);
         let eta_ref = parse_fortran_float(t[7]);
-        let eta_eval = eta_tab.eval(rho.log10(), temp.log10());
+        let eta_eval =
+            eta_tab.eval(flexmesa_math::log10(rho), flexmesa_math::log10(temp));
         let rel = (eta_eval - eta_ref).abs() / eta_ref.max(1.0e-5);
         assert!(
             rel <= 5.0e-2,

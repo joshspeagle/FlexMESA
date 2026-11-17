@@ -90,7 +90,7 @@ pub fn eval_starspot_effective_luminosity(
 ) -> (f64, f64) {
     let f = f_spot.clamp(0.0, 1.0);
     let x = x_spot.max(0.0);
-    let alpha = (f * x.powi(4) + (1.0 - f)).max(1.0e-6);
+    let alpha = (f * flexmesa_math::pow4(x) + (1.0 - f)).max(1.0e-6);
     (l_surf / alpha, alpha)
 }
 
@@ -109,15 +109,15 @@ pub fn eval_t_tau_gradr_factor(
     match relation {
         AtmTTauRelation::Eddington => (2.0 / 3.0, 1.0),
         AtmTTauRelation::KrishnaSwamy => {
-            let e1 = (-2.54 * t).exp();
-            let e2 = (-30.0 * t).exp();
+            let e1 = flexmesa_math::exp(-2.54 * t);
+            let e2 = flexmesa_math::exp(-30.0 * t);
             let q = 1.39 - 0.815 * e1 - 0.025 * e2;
             let dq_dtau = 2.54 * 0.815 * e1 + 30.0 * 0.025 * e2;
             (q, 1.0 + t * dq_dtau)
         }
         AtmTTauRelation::SolarHopf | AtmTTauRelation::TrampedachSolar => {
-            let e1 = (-2.448 * t).exp();
-            let e2 = (-30.0 * t).exp();
+            let e1 = flexmesa_math::exp(-2.448 * t);
+            let e2 = flexmesa_math::exp(-30.0 * t);
             let q = 1.036 - 0.3134 * e1 - 0.2959 * e2;
             let dq_dtau = 2.448 * 0.3134 * e1 + 30.0 * 0.2959 * e2;
             (q, 1.0 + t * dq_dtau)
@@ -135,9 +135,9 @@ pub fn eval_model_colors(model: &StarModel) -> Result<[f64; 10], StarError> {
     let teff = model.teff.clamp(2500.0, 45000.0);
     let r_surf = model.r.first().copied().unwrap_or(R_SUN).max(1.0);
     let g_surf = STANDARD_CGRAV * model.mstar.max(1.0) / (r_surf * r_surf);
-    let log_g = g_surf.max(1.0e-5).log10().clamp(0.0, 5.0);
+    let log_g = flexmesa_math::log10(g_surf.max(1.0e-5)).clamp(0.0, 5.0);
     let z_surf = model.controls.initial_z.clamp(1.0e-5, 0.1);
-    let feh = (z_surf / 0.02).log10().clamp(-2.5, 0.5);
+    let feh = flexmesa_math::log10(z_surf / 0.02).clamp(-2.5, 0.5);
 
     builtin_sed_cube()
         .eval_colors(

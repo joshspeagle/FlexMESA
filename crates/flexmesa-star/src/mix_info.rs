@@ -326,9 +326,12 @@ fn build_conv_boundary(
     } else {
         model.r_center
     };
-    let r_cb = (w * r_bot.powi(3) + (1.0 - w) * r_top.powi(3))
-        .max(0.0)
-        .cbrt();
+    let r_cb = flexmesa_math::pow(
+        (w * flexmesa_math::pow3(r_bot)
+            + (1.0 - w) * flexmesa_math::pow3(r_top))
+        .max(0.0),
+        1.0 / 3.0,
+    );
     let conv_bdy_q = (model.q[cell_index] - cz_bdy_dq).clamp(0.0, 1.0);
 
     // Sub-cell pressure scale height `hp_cb` (`eval_conv_bdy_Hp`).

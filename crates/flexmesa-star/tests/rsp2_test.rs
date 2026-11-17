@@ -72,7 +72,8 @@ fn test_rsp2_zone_chi_dr_eq_and_uq_match_upstream_hydro_rsp2_equations() {
 
     // Exact oracle for compute_Chi_cell (`hydro_rsp2.f90:717-757`)
     let du_over_r = (u_out / r_out) - (u_in / r_in);
-    let r6 = f64::midpoint(r_out.powi(6), r_in.powi(6));
+    let r6 =
+        f64::midpoint(flexmesa_math::pow6(r_out), flexmesa_math::pow6(r_in));
     let chi_oracle = (16.0 / 3.0)
         * PI
         * (cfg.alfam * cfg.alfa / dm)
@@ -95,8 +96,8 @@ fn test_rsp2_zone_chi_dr_eq_and_uq_match_upstream_hydro_rsp2_equations() {
         * w
         * 4.0
         * BOLTZ_SIGMA
-        * (X_GAMMAR * cfg.gammar / cfg.alfa).powi(2)
-        * t.powi(3)
+        * flexmesa_math::pow2(X_GAMMAR * cfg.gammar / cfg.alfa)
+        * flexmesa_math::pow3(t)
         / (rho * rho * cp * kappa * hp_cell * hp_cell);
     assert!((zone_out.sink_dr - dr_oracle).abs() / dr_oracle <= 1.0e-15);
 
@@ -113,8 +114,8 @@ fn test_rsp2_zone_chi_dr_eq_and_uq_match_upstream_hydro_rsp2_equations() {
         kappa,
         w,
         0.9 * w,
-        (1.02 * t).powi(4),
-        (0.98 * t).powi(4),
+        flexmesa_math::pow4(1.02 * t),
+        flexmesa_math::pow4(0.98 * t),
         16.3,
         16.1,
         zone_out.chi_turb,
@@ -233,8 +234,8 @@ fn build_rsp2_jacobian_test_model() -> StarModel {
     let nz_f = f64::from(u32::try_from(nz).expect("nz fits u32"));
     for k in 0..nz {
         let phase = f64::from(u32::try_from(k).expect("k fits u32")) / nz_f;
-        model.v[k] = 4.0e5 * (1.0 - phase) * (2.5 * phase).cos();
-        let w_k = 1.8e5 * (PI * phase).sin().max(0.05);
+        model.v[k] = 4.0e5 * (1.0 - phase) * flexmesa_math::cos(2.5 * phase);
+        let w_k = 1.8e5 * flexmesa_math::sin(PI * phase).max(0.05);
         model.aux.rsp.et_rsp[k] = w_k * w_k;
     }
     model.ln_t[15] = model.ln_t[14] + 0.35;

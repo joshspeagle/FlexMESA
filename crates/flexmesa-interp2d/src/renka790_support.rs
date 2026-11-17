@@ -116,8 +116,8 @@ pub(crate) fn getnp2(
                 loop {
                     let ln = lnext[l - 1];
                     if ln >= 0 {
-                        let rsq =
-                            (x[l - 1] - px).powi(2) + (y[l - 1] - py).powi(2);
+                        let rsq = flexmesa_math::pow2(x[l - 1] - px)
+                            + flexmesa_math::pow2(y[l - 1] - py);
                         if first {
                             lmin = l;
                             rsmin = rsq;

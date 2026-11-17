@@ -233,7 +233,7 @@ pub fn rsp_setup_model(
                 )?;
                 ps
             } else if model.controls.rsp.use_prad_for_psurf {
-                CRAD * model.t[0].powi(4) / 3.0
+                CRAD * flexmesa_math::pow4(model.t[0]) / 3.0
             } else {
                 0.0
             };
@@ -463,7 +463,10 @@ fn get_lina_info(
         grid.vol[i] = model.aux.rsp.vol_rsp[k0];
         grid.t[i] = model.t[k0];
         grid.et[i] = model.aux.rsp.et_rsp[k0];
-        grid.lr[i] = 4.0 * PI * model.r[k0].powi(2) * model.aux.rsp.fr_rsp[k0];
+        grid.lr[i] = 4.0
+            * PI
+            * flexmesa_math::pow2(model.r[k0])
+            * model.aux.rsp.fr_rsp[k0];
     }
     let nmodes = model.controls.rsp.nmodes.max(1);
     let l_surf = model.controls.rsp_l * dc.sunl;

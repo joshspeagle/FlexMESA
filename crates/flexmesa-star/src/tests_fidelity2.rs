@@ -49,8 +49,8 @@ fn test_brunt_b_brassard_eos_finite_difference_and_gradmux_forms() {
     model.xa[k_test * nc + 2] = 0.32;
     set_basic_vars(&mut model).expect("set_basic_vars");
     crate::micro::do_eos(&mut model).expect("do_eos");
-    let dln_rho_hse =
-        (p_orig / model.peos[k_test]).ln() / model.chi_rho[k_test].max(0.5);
+    let dln_rho_hse = flexmesa_math::log(p_orig / model.peos[k_test])
+        / model.chi_rho[k_test].max(0.5);
     model.lnd[k_test] += dln_rho_hse;
     set_basic_vars(&mut model).expect("set_basic_vars HSE");
     crate::micro::do_eos(&mut model).expect("do_eos HSE");
@@ -243,10 +243,10 @@ fn test_eval_surf_bc_simple_photosphere_pextra_and_ad_partials() {
     let lnp_ad = model.ln_peos_surf_ad;
     let lnt_ad = model.ln_t_surf_ad;
 
-    let expected_extra = (1.0
-        + 1.6e-4 * model.opacity[0] * (model.lum[0] / L_SUN)
-            / (model.m_grav[0] / M_SUN))
-        .ln();
+    let expected_extra = flexmesa_math::log(
+        1.0 + 1.6e-4 * model.opacity[0] * (model.lum[0] / L_SUN)
+            / (model.m_grav[0] / M_SUN),
+    );
     assert!(
         ((lnp_ad.val - lnp_no_extra) - expected_extra).abs() < 1.0e-12,
         "SimplePhotosphere pextra shift mismatch"
@@ -256,17 +256,17 @@ fn test_eval_surf_bc_simple_photosphere_pextra_and_ad_partials() {
     let eps = 1.0e-6;
     let lnr0 = model.ln_r[0];
     model.ln_r[0] = lnr0 + eps;
-    model.r[0] = model.ln_r[0].exp();
+    model.r[0] = flexmesa_math::exp(model.ln_r[0]);
     eval_surf_bc(&mut model).expect("eval_surf_bc +lnr");
     let lnp_p = model.ln_peos_surf_ad.val;
     let lnt_p = model.ln_t_surf_ad.val;
     model.ln_r[0] = lnr0 - eps;
-    model.r[0] = model.ln_r[0].exp();
+    model.r[0] = flexmesa_math::exp(model.ln_r[0]);
     eval_surf_bc(&mut model).expect("eval_surf_bc -lnr");
     let lnp_m = model.ln_peos_surf_ad.val;
     let lnt_m = model.ln_t_surf_ad.val;
     model.ln_r[0] = lnr0;
-    model.r[0] = lnr0.exp();
+    model.r[0] = flexmesa_math::exp(lnr0);
 
     let fd_lnp_lnr = (lnp_p - lnp_m) / (2.0 * eps);
     let fd_lnt_lnr = (lnt_p - lnt_m) / (2.0 * eps);

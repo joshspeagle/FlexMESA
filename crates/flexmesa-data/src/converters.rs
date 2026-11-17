@@ -364,8 +364,10 @@ pub fn parse_helm_table_text(
     let log_t: Vec<f64> = (0..jmax)
         .map(|j| log_temp_min + (j as f64) * t_step)
         .collect();
-    let d_grid: Vec<f64> = log_d.iter().map(|&x| 10.0_f64.powf(x)).collect();
-    let t_grid: Vec<f64> = log_t.iter().map(|&x| 10.0_f64.powf(x)).collect();
+    let d_grid: Vec<f64> =
+        log_d.iter().map(|&x| flexmesa_math::exp10(x)).collect();
+    let t_grid: Vec<f64> =
+        log_t.iter().map(|&x| flexmesa_math::exp10(x)).collect();
 
     let mut tensors = tensor_map([
         ("log_d_grid", TensorData::f64(vec![imax], log_d)),

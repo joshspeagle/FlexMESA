@@ -16,7 +16,7 @@ pub const KAP_CO_DXS: [f64; 8] =
 /// Compute $\log_{10}(Z + 10^{-3} + \delta X)$ (`get_dX_lookup` in `load_co_kap.f90`).
 #[must_use]
 pub fn get_dx_lookup(dx: f64, z: f64) -> f64 {
-    (z + 1.0e-3 + dx).log10()
+    flexmesa_math::log10(z + 1.0e-3 + dx)
 }
 
 /// Single 2D $(\log_{10} R, \log_{10} T)$ fixed-metal or low-$T$ opacity table.

@@ -182,7 +182,10 @@ impl HistoryColumnSpec {
                 category_name(*cid).unwrap_or("unknown").to_owned()
             }
             Self::CenterLogEpsBurn(cid) => {
-                format!("c_log_eps_burn_{}", category_name(*cid).unwrap_or("unknown"))
+                format!(
+                    "c_log_eps_burn_{}",
+                    category_name(*cid).unwrap_or("unknown")
+                )
             }
             Self::Nuclide(q, _, iso) => match q {
                 HistoryIsoQuery::Center => format!("center_{iso}"),
@@ -192,8 +195,12 @@ impl HistoryColumnSpec {
                 HistoryIsoQuery::LogCenter => format!("log_center_{iso}"),
                 HistoryIsoQuery::LogSurface => format!("log_surface_{iso}"),
                 HistoryIsoQuery::LogAverage => format!("log_average_{iso}"),
-                HistoryIsoQuery::LogTotalMass => format!("log_total_mass_{iso}"),
-                HistoryIsoQuery::MaxEpsNucLog => format!("max_eps_nuc_log_{iso}"),
+                HistoryIsoQuery::LogTotalMass => {
+                    format!("log_total_mass_{iso}")
+                }
+                HistoryIsoQuery::MaxEpsNucLog => {
+                    format!("max_eps_nuc_log_{iso}")
+                }
                 HistoryIsoQuery::CzTopLog => format!("cz_top_log_{iso}"),
                 HistoryIsoQuery::CzLog => format!("cz_log_{iso}"),
             },
@@ -595,7 +602,10 @@ fn match_scalar_column(tok: &str) -> Option<&'static str> {
         .find(|c| c.eq_ignore_ascii_case(tok))
 }
 
-fn push_unique_spec(specs: &mut Vec<HistoryColumnSpec>, spec: HistoryColumnSpec) {
+fn push_unique_spec(
+    specs: &mut Vec<HistoryColumnSpec>,
+    spec: HistoryColumnSpec,
+) {
     if !specs.contains(&spec) {
         specs.push(spec);
     }
@@ -698,7 +708,10 @@ fn parse_history_columns_inner(
             continue;
         }
         if let Some(rest) = code.strip_prefix("include") {
-            if rest.is_empty() || rest.starts_with(char::is_whitespace) || rest.starts_with(['\'', '"']) {
+            if rest.is_empty()
+                || rest.starts_with(char::is_whitespace)
+                || rest.starts_with(['\'', '"'])
+            {
                 let Some(inc_target) = parse_quoted_token(rest) else {
                     return Err(StarError::InvalidInput(format!(
                         "history_columns.list line {line_no}: malformed include directive {code:?}"
@@ -717,12 +730,13 @@ fn parse_history_columns_inner(
                         Some(d) => d.join(inc_target.trim()),
                         None => PathBuf::from(inc_target.trim()),
                     };
-                    let inc_text = fs::read_to_string(&inc_path).map_err(|e| {
-                        StarError::IoError(format!(
+                    let inc_text =
+                        fs::read_to_string(&inc_path).map_err(|e| {
+                            StarError::IoError(format!(
                             "failed to read included history columns {}: {e}",
                             inc_path.display()
                         ))
-                    })?;
+                        })?;
                     parse_history_columns_inner(
                         &inc_text,
                         inc_path.parent().or(base_dir),
@@ -741,35 +755,67 @@ fn parse_history_columns_inner(
             let low = tok.to_ascii_lowercase();
             match low.as_str() {
                 "add_center_abundances" => {
-                    insert_all_active_abundances(specs, HistoryIsoQuery::Center, model);
+                    insert_all_active_abundances(
+                        specs,
+                        HistoryIsoQuery::Center,
+                        model,
+                    );
                     continue;
                 }
                 "add_surface_abundances" => {
-                    insert_all_active_abundances(specs, HistoryIsoQuery::Surface, model);
+                    insert_all_active_abundances(
+                        specs,
+                        HistoryIsoQuery::Surface,
+                        model,
+                    );
                     continue;
                 }
                 "add_average_abundances" => {
-                    insert_all_active_abundances(specs, HistoryIsoQuery::Average, model);
+                    insert_all_active_abundances(
+                        specs,
+                        HistoryIsoQuery::Average,
+                        model,
+                    );
                     continue;
                 }
                 "add_total_mass" => {
-                    insert_all_active_abundances(specs, HistoryIsoQuery::TotalMass, model);
+                    insert_all_active_abundances(
+                        specs,
+                        HistoryIsoQuery::TotalMass,
+                        model,
+                    );
                     continue;
                 }
                 "add_log_center_abundances" => {
-                    insert_all_active_abundances(specs, HistoryIsoQuery::LogCenter, model);
+                    insert_all_active_abundances(
+                        specs,
+                        HistoryIsoQuery::LogCenter,
+                        model,
+                    );
                     continue;
                 }
                 "add_log_surface_abundances" => {
-                    insert_all_active_abundances(specs, HistoryIsoQuery::LogSurface, model);
+                    insert_all_active_abundances(
+                        specs,
+                        HistoryIsoQuery::LogSurface,
+                        model,
+                    );
                     continue;
                 }
                 "add_log_average_abundances" => {
-                    insert_all_active_abundances(specs, HistoryIsoQuery::LogAverage, model);
+                    insert_all_active_abundances(
+                        specs,
+                        HistoryIsoQuery::LogAverage,
+                        model,
+                    );
                     continue;
                 }
                 "add_log_total_mass" => {
-                    insert_all_active_abundances(specs, HistoryIsoQuery::LogTotalMass, model);
+                    insert_all_active_abundances(
+                        specs,
+                        HistoryIsoQuery::LogTotalMass,
+                        model,
+                    );
                     continue;
                 }
                 _ => {}
@@ -778,13 +824,19 @@ fn parse_history_columns_inner(
             // 1. Exact scalar column match MUST precede `<prefix>_<iso>` check
             // (`history_specs.f90:526-538`).
             if let Some(canon_scalar) = match_scalar_column(tok) {
-                push_unique_spec(specs, HistoryColumnSpec::Scalar(canon_scalar));
+                push_unique_spec(
+                    specs,
+                    HistoryColumnSpec::Scalar(canon_scalar),
+                );
                 continue;
             }
             // 2. Reaction category match (`history_specs.f90:539-543`).
             let cid = category_id(&low);
             if cid > 0 {
-                push_unique_spec(specs, HistoryColumnSpec::CategoryLuminosity(cid));
+                push_unique_spec(
+                    specs,
+                    HistoryColumnSpec::CategoryLuminosity(cid),
+                );
                 continue;
             }
             // 3. Underscore-joined `<prefix>_<iso>` or `c_log_eps_burn_<cat>`
@@ -792,7 +844,10 @@ fn parse_history_columns_inner(
             if let Some(cat_str) = low.strip_prefix("c_log_eps_burn_") {
                 let c_id = category_id(cat_str);
                 if c_id > 0 {
-                    push_unique_spec(specs, HistoryColumnSpec::CenterLogEpsBurn(c_id));
+                    push_unique_spec(
+                        specs,
+                        HistoryColumnSpec::CenterLogEpsBurn(c_id),
+                    );
                     continue;
                 }
             }
@@ -811,7 +866,8 @@ fn parse_history_columns_inner(
             let head = parts[0].to_ascii_lowercase();
             let arg = parts[1];
             match head.as_str() {
-                "mixing_regions" | "mix_relr_regions" | "burning_regions" | "burn_relr_regions" => {
+                "mixing_regions" | "mix_relr_regions" | "burning_regions"
+                | "burn_relr_regions" => {
                     let cnt: usize = arg
                         .parse()
                         .ok()
@@ -824,20 +880,44 @@ fn parse_history_columns_inner(
                     for ii in 1..=cnt {
                         match head.as_str() {
                             "mixing_regions" => {
-                                push_unique_spec(specs, HistoryColumnSpec::MixType(ii));
-                                push_unique_spec(specs, HistoryColumnSpec::MixQtop(ii));
+                                push_unique_spec(
+                                    specs,
+                                    HistoryColumnSpec::MixType(ii),
+                                );
+                                push_unique_spec(
+                                    specs,
+                                    HistoryColumnSpec::MixQtop(ii),
+                                );
                             }
                             "mix_relr_regions" => {
-                                push_unique_spec(specs, HistoryColumnSpec::MixRelrType(ii));
-                                push_unique_spec(specs, HistoryColumnSpec::MixRelrTop(ii));
+                                push_unique_spec(
+                                    specs,
+                                    HistoryColumnSpec::MixRelrType(ii),
+                                );
+                                push_unique_spec(
+                                    specs,
+                                    HistoryColumnSpec::MixRelrTop(ii),
+                                );
                             }
                             "burning_regions" => {
-                                push_unique_spec(specs, HistoryColumnSpec::BurnType(ii));
-                                push_unique_spec(specs, HistoryColumnSpec::BurnQtop(ii));
+                                push_unique_spec(
+                                    specs,
+                                    HistoryColumnSpec::BurnType(ii),
+                                );
+                                push_unique_spec(
+                                    specs,
+                                    HistoryColumnSpec::BurnQtop(ii),
+                                );
                             }
                             _ => {
-                                push_unique_spec(specs, HistoryColumnSpec::BurnRelrType(ii));
-                                push_unique_spec(specs, HistoryColumnSpec::BurnRelrTop(ii));
+                                push_unique_spec(
+                                    specs,
+                                    HistoryColumnSpec::BurnRelrType(ii),
+                                );
+                                push_unique_spec(
+                                    specs,
+                                    HistoryColumnSpec::BurnRelrTop(ii),
+                                );
                             }
                         }
                     }
@@ -850,7 +930,10 @@ fn parse_history_columns_inner(
                             "history_columns.list line {line_no}: unknown category {arg:?}"
                         )));
                     }
-                    push_unique_spec(specs, HistoryColumnSpec::CenterLogEpsBurn(cid));
+                    push_unique_spec(
+                        specs,
+                        HistoryColumnSpec::CenterLogEpsBurn(cid),
+                    );
                     continue;
                 }
                 _ => {
@@ -887,7 +970,11 @@ pub fn resolve_star_history_columns(
                 path.display()
             ))
         })?;
-        return parse_star_history_columns(&text, path.parent().or(case_dir), model);
+        return parse_star_history_columns(
+            &text,
+            path.parent().or(case_dir),
+            model,
+        );
     }
     if let Some(d) = case_dir {
         let local = d.join("history_columns.list");
@@ -901,7 +988,11 @@ pub fn resolve_star_history_columns(
             return parse_star_history_columns(&text, Some(d), model);
         }
     }
-    parse_star_history_columns(DEFAULT_STAR_HISTORY_COLUMNS_TEXT, case_dir, model)
+    parse_star_history_columns(
+        DEFAULT_STAR_HISTORY_COLUMNS_TEXT,
+        case_dir,
+        model,
+    )
 }
 
 /// Returns the default 60 [`HistoryColumnSpec`] items of MESA `26.4.1`.
@@ -983,7 +1074,8 @@ fn eval_min_dr_div_cs(model: &StarModel) -> (f64, i64) {
             &model.csound[..nz]
         };
         for k in 1..(nz - 1) {
-            let abs_du = (us[k] - us[k + 1]).abs().max((us[k] - us[k - 1]).abs());
+            let abs_du =
+                (us[k] - us[k + 1]).abs().max((us[k] - us[k - 1]).abs());
             let lo = k.saturating_sub(5);
             let hi = (k + 5).min(nz - 1);
             let cs = model.csound[lo..=hi]
@@ -1007,8 +1099,10 @@ fn eval_min_dr_div_cs(model: &StarModel) -> (f64, i64) {
     }
     for _ in 0..3 {
         for k in 1..(nz - 1) {
-            abs_du_div_cs[k] =
-                (abs_du_div_cs[k - 1] + abs_du_div_cs[k] + abs_du_div_cs[k + 1]) / 3.0;
+            abs_du_div_cs[k] = (abs_du_div_cs[k - 1]
+                + abs_du_div_cs[k]
+                + abs_du_div_cs[k + 1])
+                / 3.0;
         }
     }
 
@@ -1028,10 +1122,14 @@ fn eval_min_dr_div_cs(model: &StarModel) -> (f64, i64) {
                 break;
             }
             let cs = model.csound[k].max(1.0e-99);
-            if vs[k].abs() / cs < o.min_abs_u_div_cs_for_dt_div_min_dr_div_cs_limit {
+            if vs[k].abs() / cs
+                < o.min_abs_u_div_cs_for_dt_div_min_dr_div_cs_limit
+            {
                 continue;
             }
-            if abs_du_div_cs[k] < o.min_abs_du_div_cs_for_dt_div_min_dr_div_cs_limit {
+            if abs_du_div_cs[k]
+                < o.min_abs_du_div_cs_for_dt_div_min_dr_div_cs_limit
+            {
                 continue;
             }
             let dt_cs = (model.r[k] - model.r[k + 1]) / cs;
@@ -1054,13 +1152,18 @@ fn eval_min_dr_div_cs(model: &StarModel) -> (f64, i64) {
                 break;
             }
             let cs = model.csound[k].max(1.0e-99);
-            if us[k].abs() / cs < o.min_abs_u_div_cs_for_dt_div_min_dr_div_cs_limit {
+            if us[k].abs() / cs
+                < o.min_abs_u_div_cs_for_dt_div_min_dr_div_cs_limit
+            {
                 continue;
             }
-            if abs_du_div_cs[k] < o.min_abs_du_div_cs_for_dt_div_min_dr_div_cs_limit {
+            if abs_du_div_cs[k]
+                < o.min_abs_du_div_cs_for_dt_div_min_dr_div_cs_limit
+            {
                 continue;
             }
-            let dt_cs = (model.r[k] - model.r[k + 1]) / abs_du_plus_cs[k].max(1.0e-99);
+            let dt_cs =
+                (model.r[k] - model.r[k + 1]) / abs_du_plus_cs[k].max(1.0e-99);
             if dt_cs < best {
                 best = dt_cs;
                 min_k_1based = (k + 1) as i64;
@@ -1127,47 +1230,65 @@ fn eval_scalar_column(
         "model_number" => MesaCellValue::Int(model.model_number as i64),
         "num_zones" | "zones" => MesaCellValue::Int(nz as i64),
         "species" => MesaCellValue::Int(model.species as i64),
-        "num_retries" | "retries" => MesaCellValue::Int(model.num_retries as i64),
+        "num_retries" | "retries" => {
+            MesaCellValue::Int(model.num_retries as i64)
+        }
         "total_num_solver_iterations" => {
             MesaCellValue::Int(model.total_num_solver_iterations as i64)
         }
         "num_solver_iterations" | "num_iters" => {
             MesaCellValue::Int(sh.last_solver_iterations as i64)
         }
-        "burn_solver_maxsteps" => MesaCellValue::Int(if model.controls.op_split_burn {
-            sh.burn_max_num_substeps as i64
-        } else {
-            0
-        }),
+        "burn_solver_maxsteps" => {
+            MesaCellValue::Int(if model.controls.op_split_burn {
+                sh.burn_max_num_substeps as i64
+            } else {
+                0
+            })
+        }
         "diffusion_solver_steps" => {
             MesaCellValue::Int(sh.num_diffusion_solver_steps as i64)
         }
         "diffusion_solver_iters" => {
             MesaCellValue::Int(sh.num_diffusion_solver_iters as i64)
         }
-        "photosphere_cell_k" => MesaCellValue::Int(ctx.phot.cell_k_1based as i64),
+        "photosphere_cell_k" => {
+            MesaCellValue::Int(ctx.phot.cell_k_1based as i64)
+        }
 
         "star_age" | "star_age_yr" => MesaCellValue::Float(model.star_age),
         "log_star_age" => MesaCellValue::Float(safe_log10(model.star_age)),
         "star_age_sec" => MesaCellValue::Float(model.star_age * SECYER),
-        "log_star_age_sec" => MesaCellValue::Float(safe_log10(model.star_age * SECYER)),
+        "log_star_age_sec" => {
+            MesaCellValue::Float(safe_log10(model.star_age * SECYER))
+        }
         "star_age_min" => MesaCellValue::Float(model.star_age * SECYER / 60.0),
         "star_age_hr" => MesaCellValue::Float(model.star_age * SECYER / 3600.0),
-        "star_age_day" | "day" => MesaCellValue::Float(model.star_age * SECYER / SECDAY),
+        "star_age_day" | "day" => {
+            MesaCellValue::Float(model.star_age * SECYER / SECDAY)
+        }
 
         "time_step" => MesaCellValue::Float(time_step_yr),
         "log_dt" => MesaCellValue::Float(safe_log10(time_step_yr)),
         "time_step_sec" => MesaCellValue::Float(model.dt),
         "log_dt_sec" => MesaCellValue::Float(safe_log10(time_step_yr * SECYER)),
-        "time_step_days" => MesaCellValue::Float(time_step_yr * SECYER / SECDAY),
-        "log_dt_days" => MesaCellValue::Float(safe_log10(time_step_yr * SECYER / SECDAY)),
+        "time_step_days" => {
+            MesaCellValue::Float(time_step_yr * SECYER / SECDAY)
+        }
+        "log_dt_days" => {
+            MesaCellValue::Float(safe_log10(time_step_yr * SECYER / SECDAY))
+        }
 
         "star_mass" | "Mass" => MesaCellValue::Float(star_mass),
         "log_star_mass" => MesaCellValue::Float(safe_log10(star_mass)),
         "log_xmstar" => MesaCellValue::Float(safe_log10(model.xmstar)),
-        "delta_mass" => MesaCellValue::Float(star_mass - model.controls.initial_mass),
+        "delta_mass" => {
+            MesaCellValue::Float(star_mass - model.controls.initial_mass)
+        }
         "star_mdot" => MesaCellValue::Float(star_mdot),
-        "log_abs_mdot" | "lg_Mdot" => MesaCellValue::Float(safe_log10(star_mdot.abs())),
+        "log_abs_mdot" | "lg_Mdot" => {
+            MesaCellValue::Float(safe_log10(star_mdot.abs()))
+        }
 
         "m_center" => MesaCellValue::Float(model.m_center / M_SUN),
         "m_center_gm" => MesaCellValue::Float(model.m_center),
@@ -1175,32 +1296,46 @@ fn eval_scalar_column(
         "r_center_cm" => MesaCellValue::Float(model.r_center),
         "r_center_km" => MesaCellValue::Float(model.r_center * 1.0e-5),
         "L_center" => MesaCellValue::Float(model.l_center / L_SUN),
-        "log_L_center_ergs_s" => MesaCellValue::Float(safe_log10(model.l_center)),
-        "log_L_center" => MesaCellValue::Float(safe_log10(model.l_center / L_SUN)),
+        "log_L_center_ergs_s" => {
+            MesaCellValue::Float(safe_log10(model.l_center))
+        }
+        "log_L_center" => {
+            MesaCellValue::Float(safe_log10(model.l_center / L_SUN))
+        }
         "v_center" => MesaCellValue::Float(model.v_center),
         "v_center_kms" => MesaCellValue::Float(model.v_center * 1.0e-5),
-        "infall_div_cs" => MesaCellValue::Float(if model.v_center < 0.0 && nz > 0 {
-            -model.v_center / model.csound[nz - 1].max(1.0e-99)
-        } else {
-            0.0
-        }),
+        "infall_div_cs" => {
+            MesaCellValue::Float(if model.v_center < 0.0 && nz > 0 {
+                -model.v_center / model.csound[nz - 1].max(1.0e-99)
+            } else {
+                0.0
+            })
+        }
 
-        "mdot_timescale" => MesaCellValue::Float(star_mass / star_mdot.abs().max(1.0e-99)),
+        "mdot_timescale" => {
+            MesaCellValue::Float(star_mass / star_mdot.abs().max(1.0e-99))
+        }
         "kh_div_mdot_timescales" => MesaCellValue::Float(
             ctx.kh_timescale_yr / (star_mass / star_mdot.abs().max(1.0e-99)),
         ),
-        "star_gravitational_mass" => {
-            MesaCellValue::Float(model.m_grav.first().copied().unwrap_or(0.0) / M_SUN)
-        }
-        "star_mass_grav_div_mass" => MesaCellValue::Float(if nz > 0 && model.m[0] > 0.0 {
-            model.m_grav[0] / model.m[0]
-        } else {
-            1.0
-        }),
-        "e_thermal" => MesaCellValue::Float(
-            (0..nz).map(|k| model.dm[k] * model.t[k] * model.cp[k]).sum(),
+        "star_gravitational_mass" => MesaCellValue::Float(
+            model.m_grav.first().copied().unwrap_or(0.0) / M_SUN,
         ),
-        "total_angular_momentum" => MesaCellValue::Float(ctx.total_angular_momentum),
+        "star_mass_grav_div_mass" => {
+            MesaCellValue::Float(if nz > 0 && model.m[0] > 0.0 {
+                model.m_grav[0] / model.m[0]
+            } else {
+                1.0
+            })
+        }
+        "e_thermal" => MesaCellValue::Float(
+            (0..nz)
+                .map(|k| model.dm[k] * model.t[k] * model.cp[k])
+                .sum(),
+        ),
+        "total_angular_momentum" => {
+            MesaCellValue::Float(ctx.total_angular_momentum)
+        }
         "log_total_angular_momentum" => {
             MesaCellValue::Float(safe_log10(ctx.total_angular_momentum))
         }
@@ -1208,9 +1343,9 @@ fn eval_scalar_column(
         "tau_surface" | "surface_optical_depth" => {
             MesaCellValue::Float(model.controls.tau_factor * model.tau_base)
         }
-        "log_surf_optical_depth" => {
-            MesaCellValue::Float(safe_log10(model.controls.tau_factor * model.tau_base))
-        }
+        "log_surf_optical_depth" => MesaCellValue::Float(safe_log10(
+            model.controls.tau_factor * model.tau_base,
+        )),
         "log_tau_center" => MesaCellValue::Float(if nz > 0 {
             safe_log10(model.tau[nz - 1])
         } else {
@@ -1226,7 +1361,7 @@ fn eval_scalar_column(
             0.0
         }),
         "max_T" => MesaCellValue::Float(if nz > 0 {
-            10.0_f64.powf(
+            flexmesa_math::exp10(
                 model.ln_t[..nz]
                     .iter()
                     .copied()
@@ -1268,21 +1403,26 @@ fn eval_scalar_column(
         }
         "logQ_max" => MesaCellValue::Float(if nz > 0 {
             (0..nz)
-                .map(|k| model.lnd[k] / LN10 - 2.0 * model.ln_t[k] / LN10 + 12.0)
+                .map(|k| {
+                    model.lnd[k] / LN10 - 2.0 * model.ln_t[k] / LN10 + 12.0
+                })
                 .fold(f64::NEG_INFINITY, f64::max)
         } else {
             0.0
         }),
         "logQ_min" => MesaCellValue::Float(if nz > 0 {
             (0..nz)
-                .map(|k| model.lnd[k] / LN10 - 2.0 * model.ln_t[k] / LN10 + 12.0)
+                .map(|k| {
+                    model.lnd[k] / LN10 - 2.0 * model.ln_t[k] / LN10 + 12.0
+                })
                 .fold(f64::INFINITY, f64::min)
         } else {
             0.0
         }),
 
         "surf_c12_minus_o16" => MesaCellValue::Float(
-            surface_avg_x_by_name(model, "c12") - surface_avg_x_by_name(model, "o16"),
+            surface_avg_x_by_name(model, "c12")
+                - surface_avg_x_by_name(model, "o16"),
         ),
         "surf_num_c12_div_num_o16" => MesaCellValue::Float(
             (16.0 / 12.0) * surface_avg_x_by_name(model, "c12")
@@ -1305,7 +1445,9 @@ fn eval_scalar_column(
         "mx2_top_r" => MesaCellValue::Float(ctx.mix.mx_r[2]),
         "mx2_bot_r" => MesaCellValue::Float(ctx.mix.mx_r[3]),
         "mass_conv_core" => MesaCellValue::Float(ctx.mix.mass_conv_core),
-        "mass_semiconv_core" => MesaCellValue::Float(ctx.mix.mass_semiconv_core),
+        "mass_semiconv_core" => {
+            MesaCellValue::Float(ctx.mix.mass_semiconv_core)
+        }
 
         "epsnuc_M_1" => MesaCellValue::Float(ctx.epsnuc_out[0]),
         "epsnuc_M_2" => MesaCellValue::Float(ctx.epsnuc_out[1]),
@@ -1326,17 +1468,25 @@ fn eval_scalar_column(
         }
         "power_z_burn" => MesaCellValue::Float(ctx.powers.power_z_burn),
         "log_LZ" => MesaCellValue::Float(safe_log10(ctx.powers.power_z_burn)),
-        "log_Lneu" => MesaCellValue::Float(safe_log10(ctx.powers.power_neutrinos)),
-        "lg_Lneu" => MesaCellValue::Float(safe_log10(ctx.powers.power_neutrinos.abs())),
-        "log_Lneu_nuc" => MesaCellValue::Float(safe_log10(ctx.powers.power_nuc_neutrinos)),
-        "log_Lneu_nonnuc" => MesaCellValue::Float(safe_log10(ctx.powers.power_non_nuc_neu)),
+        "log_Lneu" => {
+            MesaCellValue::Float(safe_log10(ctx.powers.power_neutrinos))
+        }
+        "lg_Lneu" => {
+            MesaCellValue::Float(safe_log10(ctx.powers.power_neutrinos.abs()))
+        }
+        "log_Lneu_nuc" => {
+            MesaCellValue::Float(safe_log10(ctx.powers.power_nuc_neutrinos))
+        }
+        "log_Lneu_nonnuc" => {
+            MesaCellValue::Float(safe_log10(ctx.powers.power_non_nuc_neu))
+        }
         "power_nuc_burn" => MesaCellValue::Float(ctx.powers.power_nuc_burn),
         "log_power_nuc_burn" | "lg_Lnuc_tot" => {
             MesaCellValue::Float(safe_log10(ctx.powers.power_nuc_burn))
         }
-        "Lnuc" => {
-            MesaCellValue::Float(ctx.powers.power_nuc_burn - ctx.powers.power_photo)
-        }
+        "Lnuc" => MesaCellValue::Float(
+            ctx.powers.power_nuc_burn - ctx.powers.power_photo,
+        ),
         "log_Lnuc" => MesaCellValue::Float(safe_log10(
             ctx.powers.power_nuc_burn - ctx.powers.power_photo,
         )),
@@ -1348,7 +1498,9 @@ fn eval_scalar_column(
                 - safe_log10(l_surf_lsun),
         ),
 
-        "Lsurf_m" => MesaCellValue::Float(model.m.first().copied().unwrap_or(0.0) / M_SUN),
+        "Lsurf_m" => MesaCellValue::Float(
+            model.m.first().copied().unwrap_or(0.0) / M_SUN,
+        ),
         "luminosity" => MesaCellValue::Float(l_surf_lsun),
         "log_L" => MesaCellValue::Float(safe_log10(l_surf_lsun)),
         "luminosity_ergs_s" => MesaCellValue::Float(l_surf_lsun * L_SUN),
@@ -1363,49 +1515,99 @@ fn eval_scalar_column(
         "log_g" => MesaCellValue::Float(safe_log10(g_surf)),
 
         "photosphere_cell_log_density" => {
-            let k = ctx.phot.cell_k_1based.saturating_sub(1).min(nz.saturating_sub(1));
-            MesaCellValue::Float(model.lnd.get(k).copied().unwrap_or(0.0) / LN10)
+            let k = ctx
+                .phot
+                .cell_k_1based
+                .saturating_sub(1)
+                .min(nz.saturating_sub(1));
+            MesaCellValue::Float(
+                model.lnd.get(k).copied().unwrap_or(0.0) / LN10,
+            )
         }
         "photosphere_cell_density" => {
-            let k = ctx.phot.cell_k_1based.saturating_sub(1).min(nz.saturating_sub(1));
+            let k = ctx
+                .phot
+                .cell_k_1based
+                .saturating_sub(1)
+                .min(nz.saturating_sub(1));
             MesaCellValue::Float(model.rho.get(k).copied().unwrap_or(0.0))
         }
         "photosphere_cell_log_opacity" => {
-            let k = ctx.phot.cell_k_1based.saturating_sub(1).min(nz.saturating_sub(1));
-            MesaCellValue::Float(safe_log10(model.opacity.get(k).copied().unwrap_or(0.0)))
+            let k = ctx
+                .phot
+                .cell_k_1based
+                .saturating_sub(1)
+                .min(nz.saturating_sub(1));
+            MesaCellValue::Float(safe_log10(
+                model.opacity.get(k).copied().unwrap_or(0.0),
+            ))
         }
         "photosphere_cell_opacity" => {
-            let k = ctx.phot.cell_k_1based.saturating_sub(1).min(nz.saturating_sub(1));
+            let k = ctx
+                .phot
+                .cell_k_1based
+                .saturating_sub(1)
+                .min(nz.saturating_sub(1));
             MesaCellValue::Float(model.opacity.get(k).copied().unwrap_or(0.0))
         }
         "photosphere_cell_log_free_e" => {
-            let k = ctx.phot.cell_k_1based.saturating_sub(1).min(nz.saturating_sub(1));
-            MesaCellValue::Float(model.lnfree_e.get(k).copied().unwrap_or(0.0) / LN10)
+            let k = ctx
+                .phot
+                .cell_k_1based
+                .saturating_sub(1)
+                .min(nz.saturating_sub(1));
+            MesaCellValue::Float(
+                model.lnfree_e.get(k).copied().unwrap_or(0.0) / LN10,
+            )
         }
         "photosphere_cell_free_e" => {
-            let k = ctx.phot.cell_k_1based.saturating_sub(1).min(nz.saturating_sub(1));
-            MesaCellValue::Float(model.lnfree_e.get(k).copied().unwrap_or(0.0).exp())
+            let k = ctx
+                .phot
+                .cell_k_1based
+                .saturating_sub(1)
+                .min(nz.saturating_sub(1));
+            MesaCellValue::Float(flexmesa_math::exp(
+                model.lnfree_e.get(k).copied().unwrap_or(0.0),
+            ))
         }
         "photosphere_cell_log_T" => {
-            let k = ctx.phot.cell_k_1based.saturating_sub(1).min(nz.saturating_sub(1));
-            MesaCellValue::Float(model.ln_t.get(k).copied().unwrap_or(0.0) / LN10)
+            let k = ctx
+                .phot
+                .cell_k_1based
+                .saturating_sub(1)
+                .min(nz.saturating_sub(1));
+            MesaCellValue::Float(
+                model.ln_t.get(k).copied().unwrap_or(0.0) / LN10,
+            )
         }
         "photosphere_cell_T" => {
-            let k = ctx.phot.cell_k_1based.saturating_sub(1).min(nz.saturating_sub(1));
+            let k = ctx
+                .phot
+                .cell_k_1based
+                .saturating_sub(1)
+                .min(nz.saturating_sub(1));
             MesaCellValue::Float(model.t.get(k).copied().unwrap_or(0.0))
         }
         "photosphere_T" => MesaCellValue::Float(ctx.phot.t_phot),
-        "photosphere_black_body_T" => MesaCellValue::Float(ctx.phot.black_body_t),
+        "photosphere_black_body_T" => {
+            MesaCellValue::Float(ctx.phot.black_body_t)
+        }
         "photosphere_logg" => MesaCellValue::Float(ctx.phot.logg),
         "photosphere_m" => MesaCellValue::Float(ctx.phot.m_msun),
         "photosphere_xm" => MesaCellValue::Float(star_mass - ctx.phot.m_msun),
         "photosphere_L" => MesaCellValue::Float(ctx.phot.l_lsun),
         "photosphere_r" => MesaCellValue::Float(ctx.phot.r_rsun),
-        "photosphere_log_L" => MesaCellValue::Float(safe_log10(ctx.phot.l_lsun)),
-        "photosphere_log_r" => MesaCellValue::Float(safe_log10(ctx.phot.r_rsun)),
+        "photosphere_log_L" => {
+            MesaCellValue::Float(safe_log10(ctx.phot.l_lsun))
+        }
+        "photosphere_log_r" => {
+            MesaCellValue::Float(safe_log10(ctx.phot.r_rsun))
+        }
         "photosphere_csound" => MesaCellValue::Float(ctx.phot.csound),
         "photosphere_opacity" => MesaCellValue::Float(ctx.phot.opacity),
-        "photosphere_column_density" => MesaCellValue::Float(ctx.phot.column_density),
+        "photosphere_column_density" => {
+            MesaCellValue::Float(ctx.phot.column_density)
+        }
         "photosphere_log_column_density" => {
             MesaCellValue::Float(safe_log10(ctx.phot.column_density))
         }
@@ -1448,24 +1650,34 @@ fn eval_scalar_column(
         "log_cntr_P" | "log_center_P" => {
             MesaCellValue::Float(center_value(model, &model.ln_peos) / LN10)
         }
-        "center_T" => {
-            MesaCellValue::Float(10.0_f64.powf(center_value(model, &model.ln_t) / LN10))
-        }
-        "center_Rho" => {
-            MesaCellValue::Float(10.0_f64.powf(center_value(model, &model.lnd) / LN10))
-        }
-        "center_P" => {
-            MesaCellValue::Float(10.0_f64.powf(center_value(model, &model.ln_peos) / LN10))
-        }
+        "center_T" => MesaCellValue::Float(flexmesa_math::exp10(
+            center_value(model, &model.ln_t) / LN10,
+        )),
+        "center_Rho" => MesaCellValue::Float(flexmesa_math::exp10(
+            center_value(model, &model.lnd) / LN10,
+        )),
+        "center_P" => MesaCellValue::Float(flexmesa_math::exp10(
+            center_value(model, &model.ln_peos) / LN10,
+        )),
 
         "total_entropy" => MesaCellValue::Float(
             (0..nz).map(|k| model.dm[k] * model.entropy[k]).sum(),
         ),
-        "total_internal_energy" | "tot_IE" => MesaCellValue::Float(ctx.energies_erg.0),
-        "total_gravitational_energy" | "tot_PE" => MesaCellValue::Float(ctx.energies_erg.1),
-        "total_radial_kinetic_energy" | "tot_KE" => MesaCellValue::Float(ctx.energies_erg.2),
-        "total_rotational_kinetic_energy" => MesaCellValue::Float(ctx.energies_erg.3),
-        "total_turbulent_energy" | "tot_Et" => MesaCellValue::Float(ctx.energies_erg.4),
+        "total_internal_energy" | "tot_IE" => {
+            MesaCellValue::Float(ctx.energies_erg.0)
+        }
+        "total_gravitational_energy" | "tot_PE" => {
+            MesaCellValue::Float(ctx.energies_erg.1)
+        }
+        "total_radial_kinetic_energy" | "tot_KE" => {
+            MesaCellValue::Float(ctx.energies_erg.2)
+        }
+        "total_rotational_kinetic_energy" => {
+            MesaCellValue::Float(ctx.energies_erg.3)
+        }
+        "total_turbulent_energy" | "tot_Et" => {
+            MesaCellValue::Float(ctx.energies_erg.4)
+        }
         "total_energy" | "tot_E" => MesaCellValue::Float(e_end),
         "total_energy_foe" => MesaCellValue::Float(e_end * 1.0e-51),
         "log_total_internal_energy" | "log_tot_IE" => {
@@ -1483,35 +1695,46 @@ fn eval_scalar_column(
         "log_total_turbulent_energy" | "log_tot_Et" => {
             MesaCellValue::Float(safe_log10(ctx.energies_erg.4))
         }
-        "log_total_energy" | "log_tot_E" => MesaCellValue::Float(safe_log10(e_end.abs())),
+        "log_total_energy" | "log_tot_E" => {
+            MesaCellValue::Float(safe_log10(e_end.abs()))
+        }
 
         "error_in_energy_conservation" | "tot_E_err" => {
             MesaCellValue::Float(sh.error_in_energy_conservation)
         }
-        "rel_error_in_energy_conservation" | "rel_E_err" => MesaCellValue::Float(if e_end == 0.0 {
-            0.0
-        } else {
-            sh.error_in_energy_conservation / e_end.abs()
-        }),
+        "rel_error_in_energy_conservation" | "rel_E_err" => {
+            MesaCellValue::Float(if e_end == 0.0 {
+                0.0
+            } else {
+                sh.error_in_energy_conservation / e_end.abs()
+            })
+        }
         "abs_rel_E_err" => MesaCellValue::Float(if e_end == 0.0 {
             0.0
         } else {
             (sh.error_in_energy_conservation / e_end).abs()
         }),
-        "log_rel_error_in_energy_conservation" => MesaCellValue::Float(safe_log10(
-            (sh.error_in_energy_conservation / e_end.abs().max(1.0e-99)).abs(),
-        )),
+        "log_rel_error_in_energy_conservation" => {
+            MesaCellValue::Float(safe_log10(
+                (sh.error_in_energy_conservation / e_end.abs().max(1.0e-99))
+                    .abs(),
+            ))
+        }
         "log_rel_E_err" => MesaCellValue::Float(if e_end == 0.0 {
             0.0
         } else {
             safe_log10((sh.error_in_energy_conservation / e_end).abs())
         }),
-        "cumulative_energy_error" => MesaCellValue::Float(model.aux.cumulative_energy_error),
-        "rel_cumulative_energy_error" => MesaCellValue::Float(if e_end == 0.0 {
-            0.0
-        } else {
-            model.aux.cumulative_energy_error / e_end.abs()
-        }),
+        "cumulative_energy_error" => {
+            MesaCellValue::Float(model.aux.cumulative_energy_error)
+        }
+        "rel_cumulative_energy_error" => {
+            MesaCellValue::Float(if e_end == 0.0 {
+                0.0
+            } else {
+                model.aux.cumulative_energy_error / e_end.abs()
+            })
+        }
         "log_rel_cumulative_energy_error" | "log_rel_run_E_err" => {
             MesaCellValue::Float(if e_end == 0.0 {
                 0.0
@@ -1565,7 +1788,10 @@ fn eval_scalar_column(
             0.0
         }),
         "log_avg_abs_v" => MesaCellValue::Float(if has_vel && nz > 0 {
-            safe_log10(vel_slice[..nz].iter().map(|v| v.abs()).sum::<f64>() / (nz as f64))
+            safe_log10(
+                vel_slice[..nz].iter().map(|v| v.abs()).sum::<f64>()
+                    / (nz as f64),
+            )
         } else {
             0.0
         }),
@@ -1575,41 +1801,53 @@ fn eval_scalar_column(
             0.0
         }),
         "log_max_abs_v" => MesaCellValue::Float(if has_vel && nz > 0 {
-            safe_log10(vel_slice[..nz].iter().map(|v| v.abs()).fold(0.0, f64::max))
+            safe_log10(
+                vel_slice[..nz].iter().map(|v| v.abs()).fold(0.0, f64::max),
+            )
         } else {
             0.0
         }),
 
-        "u_surf_km_s" => MesaCellValue::Float(if model.controls.u_flag && nz > 0 {
-            model.aux.u_face_ad[0].val * 1.0e-5
-        } else {
-            0.0
-        }),
+        "u_surf_km_s" => {
+            MesaCellValue::Float(if model.controls.u_flag && nz > 0 {
+                model.aux.u_face_ad[0].val * 1.0e-5
+            } else {
+                0.0
+            })
+        }
         "u_surf" => MesaCellValue::Float(if model.controls.u_flag && nz > 0 {
             model.aux.u_face_ad[0].val
         } else {
             0.0
         }),
-        "u_div_csound_max" => MesaCellValue::Float(if model.controls.u_flag && nz > 0 {
-            (0..nz)
-                .map(|k| model.u[k].abs() / model.csound[k].max(1.0e-99))
-                .fold(0.0, f64::max)
-        } else {
-            0.0
-        }),
-        "u_div_csound_surf" => MesaCellValue::Float(if model.controls.u_flag && nz > 0 {
-            model.aux.u_face_ad[0].val / csound_surf.max(1.0e-99)
-        } else {
-            0.0
-        }),
+        "u_div_csound_max" => {
+            MesaCellValue::Float(if model.controls.u_flag && nz > 0 {
+                (0..nz)
+                    .map(|k| model.u[k].abs() / model.csound[k].max(1.0e-99))
+                    .fold(0.0, f64::max)
+            } else {
+                0.0
+            })
+        }
+        "u_div_csound_surf" => {
+            MesaCellValue::Float(if model.controls.u_flag && nz > 0 {
+                model.aux.u_face_ad[0].val / csound_surf.max(1.0e-99)
+            } else {
+                0.0
+            })
+        }
         "surf_escape_v" => MesaCellValue::Float(if nz > 0 && r_surf_cm > 0.0 {
-            (2.0 * model.cgrav[0] * model.m[0] / r_surf_cm).max(0.0).sqrt()
+            (2.0 * model.cgrav[0] * model.m[0] / r_surf_cm)
+                .max(0.0)
+                .sqrt()
         } else {
             0.0
         }),
         "v_surf_div_escape_v" | "v_div_vesc" => {
             let vesc = if nz > 0 && r_surf_cm > 0.0 {
-                (2.0 * model.cgrav[0] * model.m[0] / r_surf_cm).max(0.0).sqrt()
+                (2.0 * model.cgrav[0] * model.m[0] / r_surf_cm)
+                    .max(0.0)
+                    .sqrt()
             } else {
                 0.0
             };
@@ -1624,7 +1862,9 @@ fn eval_scalar_column(
         }),
         "v_div_csound_max" => MesaCellValue::Float(if has_vel && nz > 0 {
             (0..nz)
-                .map(|k| vel_slice[k].abs() / csound_face_at(model, k).max(1.0e-99))
+                .map(|k| {
+                    vel_slice[k].abs() / csound_face_at(model, k).max(1.0e-99)
+                })
                 .fold(0.0, f64::max)
         } else {
             0.0
@@ -1634,15 +1874,21 @@ fn eval_scalar_column(
         } else {
             0.0
         }),
-        "v_div_cs" => MesaCellValue::Float(if nz > 0 && model.csound[0] > 0.0 {
-            v_surf / model.csound[0]
-        } else {
-            0.0
-        }),
+        "v_div_cs" => {
+            MesaCellValue::Float(if nz > 0 && model.csound[0] > 0.0 {
+                v_surf / model.csound[0]
+            } else {
+                0.0
+            })
+        }
 
         "log_Ledd" => {
             let ledd = eval_ledd_erg_s(model);
-            MesaCellValue::Float(if ledd > 0.0 { safe_log10(ledd / L_SUN) } else { 0.0 })
+            MesaCellValue::Float(if ledd > 0.0 {
+                safe_log10(ledd / L_SUN)
+            } else {
+                0.0
+            })
         }
         "log_L_div_Ledd" => {
             let ledd = eval_ledd_erg_s(model);
@@ -1661,55 +1907,77 @@ fn eval_scalar_column(
             })
         }
         "max_L_rad_div_Ledd" => MesaCellValue::Float(
-            (0..nz).map(|k| get_lrad_div_ledd(model, k)).fold(0.0, f64::max),
+            (0..nz)
+                .map(|k| get_lrad_div_ledd(model, k))
+                .fold(0.0, f64::max),
         ),
 
-        "i_rot_total" => MesaCellValue::Float(if model.controls.rotation_flag {
-            (0..nz).map(|k| model.dm_bar[k] * model.aux.i_rot[k]).sum()
-        } else {
-            0.0
-        }),
+        "i_rot_total" => {
+            MesaCellValue::Float(if model.controls.rotation_flag {
+                (0..nz).map(|k| model.dm_bar[k] * model.aux.i_rot[k]).sum()
+            } else {
+                0.0
+            })
+        }
         "surf_avg_j_rot" => MesaCellValue::Float(ctx.surf_rot.j_rot),
         "surf_avg_omega" => MesaCellValue::Float(ctx.surf_rot.omega),
         "surf_avg_omega_crit" => MesaCellValue::Float(ctx.surf_rot.omega_crit),
-        "surf_avg_omega_div_omega_crit" => MesaCellValue::Float(ctx.surf_rot.w_div_w_crit),
-        "surf_avg_v_rot" => MesaCellValue::Float(ctx.surf_rot.v_rot_cm_s * 1.0e-5),
-        "surf_avg_v_crit" => MesaCellValue::Float(ctx.surf_rot.v_crit_cm_s * 1.0e-5),
-        "surf_avg_v_div_v_crit" => MesaCellValue::Float(ctx.surf_rot.v_div_v_crit),
-        "surf_avg_Lrad_div_Ledd" => MesaCellValue::Float(ctx.surf_rot.lrad_div_ledd),
+        "surf_avg_omega_div_omega_crit" => {
+            MesaCellValue::Float(ctx.surf_rot.w_div_w_crit)
+        }
+        "surf_avg_v_rot" => {
+            MesaCellValue::Float(ctx.surf_rot.v_rot_cm_s * 1.0e-5)
+        }
+        "surf_avg_v_crit" => {
+            MesaCellValue::Float(ctx.surf_rot.v_crit_cm_s * 1.0e-5)
+        }
+        "surf_avg_v_div_v_crit" => {
+            MesaCellValue::Float(ctx.surf_rot.v_div_v_crit)
+        }
+        "surf_avg_Lrad_div_Ledd" => {
+            MesaCellValue::Float(ctx.surf_rot.lrad_div_ledd)
+        }
         "surf_avg_opacity" => MesaCellValue::Float(ctx.surf_rot.opacity),
         "surf_avg_logT" => MesaCellValue::Float(ctx.surf_rot.log_t),
         "surf_avg_logRho" => MesaCellValue::Float(ctx.surf_rot.log_rho),
-        "rotational_mdot_boost" => MesaCellValue::Float(if model.controls.rotation_flag {
-            sh.rotational_mdot_boost_old
-        } else {
-            0.0
-        }),
-        "log_rotational_mdot_boost" => MesaCellValue::Float(safe_log10(
-            if model.controls.rotation_flag {
+        "rotational_mdot_boost" => {
+            MesaCellValue::Float(if model.controls.rotation_flag {
                 sh.rotational_mdot_boost_old
             } else {
                 0.0
-            },
-        )),
-        "surf_r_equatorial_div_r_polar" => MesaCellValue::Float(if model.controls.rotation_flag && nz > 0 {
-            let (re, rp) = equatorial_and_polar_r_cm(model, 0);
-            re / rp.max(1.0e-99)
-        } else {
-            1.0
-        }),
-        "surf_r_equatorial_div_r" => MesaCellValue::Float(if model.controls.rotation_flag && nz > 0 {
-            let (re, _) = equatorial_and_polar_r_cm(model, 0);
-            re / r_surf_cm.max(1.0e-99)
-        } else {
-            1.0
-        }),
-        "surf_r_polar_div_r" => MesaCellValue::Float(if model.controls.rotation_flag && nz > 0 {
-            let (_, rp) = equatorial_and_polar_r_cm(model, 0);
-            rp / r_surf_cm.max(1.0e-99)
-        } else {
-            1.0
-        }),
+            })
+        }
+        "log_rotational_mdot_boost" => {
+            MesaCellValue::Float(safe_log10(if model.controls.rotation_flag {
+                sh.rotational_mdot_boost_old
+            } else {
+                0.0
+            }))
+        }
+        "surf_r_equatorial_div_r_polar" => {
+            MesaCellValue::Float(if model.controls.rotation_flag && nz > 0 {
+                let (re, rp) = equatorial_and_polar_r_cm(model, 0);
+                re / rp.max(1.0e-99)
+            } else {
+                1.0
+            })
+        }
+        "surf_r_equatorial_div_r" => {
+            MesaCellValue::Float(if model.controls.rotation_flag && nz > 0 {
+                let (re, _) = equatorial_and_polar_r_cm(model, 0);
+                re / r_surf_cm.max(1.0e-99)
+            } else {
+                1.0
+            })
+        }
+        "surf_r_polar_div_r" => {
+            MesaCellValue::Float(if model.controls.rotation_flag && nz > 0 {
+                let (_, rp) = equatorial_and_polar_r_cm(model, 0);
+                rp / r_surf_cm.max(1.0e-99)
+            } else {
+                1.0
+            })
+        }
 
         "min_Pgas_div_P" => MesaCellValue::Float(if nz > 0 {
             (0..nz)
@@ -1718,11 +1986,16 @@ fn eval_scalar_column(
         } else {
             1.0
         }),
-        "center_degeneracy" => MesaCellValue::Float(center_value(model, &model.eta)),
-        "center_eps_nuc" => MesaCellValue::Float(center_value(model, &model.eps_nuc)),
-        "log_center_eps_nuc" => {
-            MesaCellValue::Float(safe_log10(center_value(model, &model.eps_nuc)))
+        "center_degeneracy" => {
+            MesaCellValue::Float(center_value(model, &model.eta))
         }
+        "center_eps_nuc" => {
+            MesaCellValue::Float(center_value(model, &model.eps_nuc))
+        }
+        "log_center_eps_nuc" => MesaCellValue::Float(safe_log10(center_value(
+            model,
+            &model.eps_nuc,
+        ))),
         "d_center_eps_nuc_dlnT" => {
             MesaCellValue::Float(center_value(model, &model.d_epsnuc_dlnt))
         }
@@ -1734,7 +2007,9 @@ fn eval_scalar_column(
             model.eps_grav_ad.len(),
             |k| model.eps_grav_ad[k].val,
         )),
-        "center_non_nuc_neu" => MesaCellValue::Float(center_value(model, &model.non_nuc_neu)),
+        "center_non_nuc_neu" => {
+            MesaCellValue::Float(center_value(model, &model.non_nuc_neu))
+        }
         "center_gamma" => MesaCellValue::Float(center_value(model, &model.gam)),
         "center_zbar" => MesaCellValue::Float(center_value(model, &model.zbar)),
         "center_abar" => MesaCellValue::Float(center_value(model, &model.abar)),
@@ -1742,26 +2017,32 @@ fn eval_scalar_column(
         "center_ye" => MesaCellValue::Float(center_value(model, &model.ye)),
         "center_entropy" => MesaCellValue::Float(ctx.center_entropy(model)),
         "max_entropy" => MesaCellValue::Float(if nz > 0 {
-            model.ln_s[..nz]
-                .iter()
-                .copied()
-                .fold(f64::NEG_INFINITY, f64::max)
-                .exp()
-                * flexmesa_const::AMU
+            flexmesa_math::exp(
+                model.ln_s[..nz]
+                    .iter()
+                    .copied()
+                    .fold(f64::NEG_INFINITY, f64::max),
+            ) * flexmesa_const::AMU
                 / flexmesa_const::KERG
         } else {
             0.0
         }),
-        "center_omega" => MesaCellValue::Float(if model.controls.rotation_flag {
-            center_value(model, &model.omega)
-        } else {
-            0.0
-        }),
+        "center_omega" => {
+            MesaCellValue::Float(if model.controls.rotation_flag {
+                center_value(model, &model.omega)
+            } else {
+                0.0
+            })
+        }
         "center_omega_div_omega_crit" => {
             MesaCellValue::Float(if model.controls.rotation_flag && nz > 0 {
                 center_value_by(model, nz, |k| {
                     let wc = eval_upstream_omega_crit(model, k);
-                    if wc > 0.0 { model.omega[k] / wc } else { 0.0 }
+                    if wc > 0.0 {
+                        model.omega[k] / wc
+                    } else {
+                        0.0
+                    }
                 })
                 .min(1.0)
             } else {
@@ -1780,7 +2061,8 @@ fn eval_scalar_column(
                     }
                 }
                 let r = model.r[k0 + 1]
-                    + (model.r[k0] - model.r[k0 + 1]) * (target_m - model.m[k0 + 1])
+                    + (model.r[k0] - model.r[k0 + 1])
+                        * (target_m - model.m[k0 + 1])
                         / model.dm[k0].max(1.0e-99);
                 MesaCellValue::Float(2.5 / (r / 1.0e8).max(1.0e-99))
             } else {
@@ -1837,12 +2119,12 @@ fn eval_scalar_column(
         "h_rich_layer_mass" | "envelope_mass" => {
             MesaCellValue::Float(star_mass - ctx.cores.he_core_mass)
         }
-        "he_rich_layer_mass" => {
-            MesaCellValue::Float((ctx.cores.he_core_mass - ctx.cores.co_core_mass).max(0.0))
-        }
-        "co_rich_layer_mass" => {
-            MesaCellValue::Float((ctx.cores.co_core_mass - ctx.cores.he_core_mass).max(0.0))
-        }
+        "he_rich_layer_mass" => MesaCellValue::Float(
+            (ctx.cores.he_core_mass - ctx.cores.co_core_mass).max(0.0),
+        ),
+        "co_rich_layer_mass" => MesaCellValue::Float(
+            (ctx.cores.co_core_mass - ctx.cores.he_core_mass).max(0.0),
+        ),
         "envelope_fraction_left" => MesaCellValue::Float(
             if model.controls.initial_mass > ctx.cores.he_core_mass {
                 (star_mass - ctx.cores.he_core_mass)
@@ -1851,11 +2133,19 @@ fn eval_scalar_column(
                 1.0
             },
         ),
-        "he_core_mass" | "He_core" => MesaCellValue::Float(ctx.cores.he_core_mass),
-        "co_core_mass" | "CO_core" => MesaCellValue::Float(ctx.cores.co_core_mass),
+        "he_core_mass" | "He_core" => {
+            MesaCellValue::Float(ctx.cores.he_core_mass)
+        }
+        "co_core_mass" | "CO_core" => {
+            MesaCellValue::Float(ctx.cores.co_core_mass)
+        }
         "one_core_mass" => MesaCellValue::Float(ctx.cores.one_core_mass),
-        "fe_core_mass" | "Fe_core" => MesaCellValue::Float(ctx.cores.fe_core_mass),
-        "neutron_rich_core_mass" => MesaCellValue::Float(ctx.cores.neutron_rich_core_mass),
+        "fe_core_mass" | "Fe_core" => {
+            MesaCellValue::Float(ctx.cores.fe_core_mass)
+        }
+        "neutron_rich_core_mass" => {
+            MesaCellValue::Float(ctx.cores.neutron_rich_core_mass)
+        }
         "he_core_radius"
         | "he_core_lgT"
         | "he_core_lgRho"
@@ -1886,17 +2176,21 @@ fn eval_scalar_column(
         | "neutron_rich_core_L"
         | "neutron_rich_core_v"
         | "neutron_rich_core_k" => {
-            let (bdy, suffix) = if let Some(s) = name.strip_prefix("neutron_rich_core_") {
-                (&ctx.cores.neutron_rich_bdy, s)
-            } else if let Some(s) = name.strip_prefix("he_core_") {
-                (&ctx.cores.he_bdy, s)
-            } else if let Some(s) = name.strip_prefix("co_core_") {
-                (&ctx.cores.co_bdy, s)
-            } else if let Some(s) = name.strip_prefix("one_core_") {
-                (&ctx.cores.one_bdy, s)
-            } else {
-                (&ctx.cores.fe_bdy, name.strip_prefix("fe_core_").unwrap_or("k"))
-            };
+            let (bdy, suffix) =
+                if let Some(s) = name.strip_prefix("neutron_rich_core_") {
+                    (&ctx.cores.neutron_rich_bdy, s)
+                } else if let Some(s) = name.strip_prefix("he_core_") {
+                    (&ctx.cores.he_bdy, s)
+                } else if let Some(s) = name.strip_prefix("co_core_") {
+                    (&ctx.cores.co_bdy, s)
+                } else if let Some(s) = name.strip_prefix("one_core_") {
+                    (&ctx.cores.one_bdy, s)
+                } else {
+                    (
+                        &ctx.cores.fe_bdy,
+                        name.strip_prefix("fe_core_").unwrap_or("k"),
+                    )
+                };
             eval_core_bdy_prop(bdy, suffix)
         }
 
@@ -1904,24 +2198,38 @@ fn eval_scalar_column(
         "kh_timescale" => MesaCellValue::Float(ctx.kh_timescale_yr),
         "nuc_timescale" => MesaCellValue::Float(ctx.nuc_timescale_yr),
         "eps_grav_integral" => MesaCellValue::Float(
-            (0..nz).map(|k| model.dm[k] * model.eps_grav_ad[k].val).sum::<f64>() / L_SUN,
+            (0..nz)
+                .map(|k| model.dm[k] * model.eps_grav_ad[k].val)
+                .sum::<f64>()
+                / L_SUN,
         ),
         "log_abs_Lgrav" => MesaCellValue::Float(safe_log10(
-            ((0..nz).map(|k| model.dm[k] * model.eps_grav_ad[k].val).sum::<f64>() / L_SUN)
+            ((0..nz)
+                .map(|k| model.dm[k] * model.eps_grav_ad[k].val)
+                .sum::<f64>()
+                / L_SUN)
                 .abs(),
         )),
         "extra_L" => MesaCellValue::Float(
-            (0..nz).map(|k| model.dm[k] * model.aux.extra_heat[k]).sum::<f64>() / L_SUN,
+            (0..nz)
+                .map(|k| model.dm[k] * model.aux.extra_heat[k])
+                .sum::<f64>()
+                / L_SUN,
         ),
         "log_extra_L" => MesaCellValue::Float(safe_log10(
-            (0..nz).map(|k| model.dm[k] * model.aux.extra_heat[k]).sum::<f64>() / L_SUN,
+            (0..nz)
+                .map(|k| model.dm[k] * model.aux.extra_heat[k])
+                .sum::<f64>()
+                / L_SUN,
         )),
         "mass_loc_of_max_eps_nuc" => {
             if nz == 0 {
                 MesaCellValue::Float(0.0)
             } else {
                 let k = (0..nz)
-                    .max_by(|&a, &b| model.eps_nuc[a].total_cmp(&model.eps_nuc[b]))
+                    .max_by(|&a, &b| {
+                        model.eps_nuc[a].total_cmp(&model.eps_nuc[b])
+                    })
                     .unwrap_or(0);
                 MesaCellValue::Float((model.m[k] - 0.5 * model.dm[k]) / M_SUN)
             }
@@ -1931,10 +2239,13 @@ fn eval_scalar_column(
                 MesaCellValue::Float(0.0)
             } else {
                 let k = (0..nz)
-                    .max_by(|&a, &b| model.eps_nuc[a].total_cmp(&model.eps_nuc[b]))
+                    .max_by(|&a, &b| {
+                        model.eps_nuc[a].total_cmp(&model.eps_nuc[b])
+                    })
                     .unwrap_or(0);
                 MesaCellValue::Float(
-                    (1.0 - model.q[k] + 0.5 * model.dq[k]) * model.xmstar / M_SUN,
+                    (1.0 - model.q[k] + 0.5 * model.dq[k]) * model.xmstar
+                        / M_SUN,
                 )
             }
         }
@@ -1943,7 +2254,10 @@ fn eval_scalar_column(
             let ni = resolve_iso_slot(model, "ni56").ok().and_then(|(_, s)| s);
             if let (Some(jc), Some(jn)) = (co, ni) {
                 let tot: f64 = (0..nz)
-                    .map(|k| model.dm[k] * (model.cell_xa(k)[jc] + model.cell_xa(k)[jn]))
+                    .map(|k| {
+                        model.dm[k]
+                            * (model.cell_xa(k)[jc] + model.cell_xa(k)[jn])
+                    })
                     .sum();
                 MesaCellValue::Float(tot / M_SUN)
             } else {
@@ -1951,24 +2265,24 @@ fn eval_scalar_column(
             }
         }
 
-        "log_surf_cell_opacity" => {
-            MesaCellValue::Float(safe_log10(model.opacity.first().copied().unwrap_or(0.0)))
-        }
-        "log_surf_cell_density" | "lg_Dsurf" => {
-            MesaCellValue::Float(model.lnd.first().copied().unwrap_or(0.0) / LN10)
-        }
+        "log_surf_cell_opacity" => MesaCellValue::Float(safe_log10(
+            model.opacity.first().copied().unwrap_or(0.0),
+        )),
+        "log_surf_cell_density" | "lg_Dsurf" => MesaCellValue::Float(
+            model.lnd.first().copied().unwrap_or(0.0) / LN10,
+        ),
         "surface_cell_temperature" => {
             MesaCellValue::Float(model.t.first().copied().unwrap_or(0.0))
         }
-        "log_surf_cell_temperature" => {
-            MesaCellValue::Float(model.ln_t.first().copied().unwrap_or(0.0) / LN10)
-        }
+        "log_surf_cell_temperature" => MesaCellValue::Float(
+            model.ln_t.first().copied().unwrap_or(0.0) / LN10,
+        ),
         "surface_cell_entropy" => {
             MesaCellValue::Float(model.entropy.first().copied().unwrap_or(0.0))
         }
-        "log_surf_cell_P" | "log_surf_cell_pressure" => {
-            MesaCellValue::Float(model.ln_peos.first().copied().unwrap_or(0.0) / LN10)
-        }
+        "log_surf_cell_P" | "log_surf_cell_pressure" => MesaCellValue::Float(
+            model.ln_peos.first().copied().unwrap_or(0.0) / LN10,
+        ),
         "log_surf_cell_z" => {
             if nz == 0 {
                 MesaCellValue::Float(-99.0)
@@ -1984,7 +2298,9 @@ fn eval_scalar_column(
         }
 
         "min_dr_div_cs" => MesaCellValue::Float(eval_min_dr_div_cs(model).0),
-        "log_min_dr_div_cs" => MesaCellValue::Float(safe_log10(eval_min_dr_div_cs(model).0)),
+        "log_min_dr_div_cs" => {
+            MesaCellValue::Float(safe_log10(eval_min_dr_div_cs(model).0))
+        }
         "dt_div_min_dr_div_cs" => {
             let (mdr, mk) = eval_min_dr_div_cs(model);
             MesaCellValue::Float(if mk <= 0 { 1.0e99 } else { model.dt / mdr })
@@ -1997,24 +2313,30 @@ fn eval_scalar_column(
                 safe_log10(model.dt / mdr)
             })
         }
-        "dt_cell_collapse" => MesaCellValue::Float(eval_min_cell_collapse_time(model)),
+        "dt_cell_collapse" => {
+            MesaCellValue::Float(eval_min_cell_collapse_time(model))
+        }
         "dt_div_dt_cell_collapse" => {
             MesaCellValue::Float(model.dt / eval_min_cell_collapse_time(model))
         }
 
-        "cz_bot_mass" => MesaCellValue::Float(match ctx.mix.largest_conv_top_bot {
-            Some((_, bot)) if bot + 1 == nz => model.m_center / M_SUN,
-            Some((_, bot)) => model.m[bot] / M_SUN,
-            None => 0.0,
-        }),
+        "cz_bot_mass" => {
+            MesaCellValue::Float(match ctx.mix.largest_conv_top_bot {
+                Some((_, bot)) if bot + 1 == nz => model.m_center / M_SUN,
+                Some((_, bot)) => model.m[bot] / M_SUN,
+                None => 0.0,
+            })
+        }
         "cz_mass" => MesaCellValue::Float(match ctx.mix.largest_conv_top_bot {
             Some((_, bot)) => model.m[bot] / M_SUN,
             None => 0.0,
         }),
-        "cz_top_mass" => MesaCellValue::Float(match ctx.mix.largest_conv_top_bot {
-            Some((top, _)) => model.m[top] / M_SUN,
-            None => 0.0,
-        }),
+        "cz_top_mass" => {
+            MesaCellValue::Float(match ctx.mix.largest_conv_top_bot {
+                Some((top, _)) => model.m[top] / M_SUN,
+                None => 0.0,
+            })
+        }
         "cz_zone" => MesaCellValue::Int(
             ctx.mix
                 .largest_conv_top_bot
@@ -2064,7 +2386,8 @@ fn eval_scalar_column(
                     continue;
                 }
                 if model.conv_vel[k] / model.csound[k] > v {
-                    v = model.conv_vel[k] / csound_face_at(model, k).max(1.0e-99);
+                    v = model.conv_vel[k]
+                        / csound_face_at(model, k).max(1.0e-99);
                 }
             }
             MesaCellValue::Float(v)
@@ -2082,22 +2405,26 @@ fn eval_scalar_column(
             MesaCellValue::Float(v)
         }
 
-        "delta_nu" | "delta_Pg" | "log_delta_Pg" | "nu_max" | "acoustic_radius"
-        | "acoustic_cutoff" => {
+        "delta_nu" | "delta_Pg" | "log_delta_Pg" | "nu_max"
+        | "acoustic_radius" | "acoustic_cutoff" => {
             let (ac_r, dnu, nmax, dpg) =
-                *astero_cache.get_or_insert_with(|| eval_astero_report_scalars(model, &ctx.phot));
+                *astero_cache.get_or_insert_with(|| {
+                    eval_astero_report_scalars(model, &ctx.phot)
+                });
             match name {
                 "acoustic_radius" => MesaCellValue::Float(ac_r),
                 "delta_nu" => MesaCellValue::Float(dnu),
                 "nu_max" => MesaCellValue::Float(nmax),
                 "delta_Pg" => MesaCellValue::Float(dpg),
-                "log_delta_Pg" => MesaCellValue::Float(if model.controls.calculate_brunt_n2 {
-                    safe_log10(dpg)
-                } else {
-                    0.0
-                }),
+                "log_delta_Pg" => {
+                    MesaCellValue::Float(if model.controls.calculate_brunt_n2 {
+                        safe_log10(dpg)
+                    } else {
+                        0.0
+                    })
+                }
                 _ => MesaCellValue::Float(if nz > 0 && model.peos[0] > 0.0 {
-                    (0.25e6 / std::f64::consts::PI)
+                    (0.25e6 / flexmesa_const::PI)
                         * g_surf
                         * (model.gamma1[0] * model.rho[0] / model.peos[0])
                             .max(0.0)
@@ -2125,16 +2452,19 @@ fn eval_scalar_column(
         }),
         "rsp_phase" => MesaCellValue::Float(
             if model.controls.rsp_flag && model.aux.rsp.period > 0.0 {
-                (model.star_age * SECYER - model.aux.rsp.tt1) / model.aux.rsp.period
+                (model.star_age * SECYER - model.aux.rsp.tt1)
+                    / model.aux.rsp.period
             } else {
                 0.0
             },
         ),
-        "rsp_period_in_days" => MesaCellValue::Float(if model.controls.rsp_flag {
-            model.aux.rsp.period / SECDAY
-        } else {
-            0.0
-        }),
+        "rsp_period_in_days" => {
+            MesaCellValue::Float(if model.controls.rsp_flag {
+                model.aux.rsp.period / SECDAY
+            } else {
+                0.0
+            })
+        }
         "rsp_num_periods" => MesaCellValue::Int(if model.controls.rsp_flag {
             model.aux.rsp.num_periods as i64
         } else {
@@ -2146,7 +2476,8 @@ fn eval_scalar_column(
         ),
         "H_cntr" => MesaCellValue::Float(center_avg_x_by_name(model, "h1")),
         "He_cntr" => MesaCellValue::Float(
-            center_avg_x_by_name(model, "he3") + center_avg_x_by_name(model, "he4"),
+            center_avg_x_by_name(model, "he3")
+                + center_avg_x_by_name(model, "he4"),
         ),
         "C_cntr" => MesaCellValue::Float(center_avg_x_by_name(model, "c12")),
         "N_cntr" => MesaCellValue::Float(center_avg_x_by_name(model, "n14")),
@@ -2162,13 +2493,19 @@ fn eval_scalar_column(
         // `star/private/evolve.f90:1173-1174` & `history.f90:1875-1880`.
         "virial_thm_P_avg" => {
             let virial: f64 = (0..nz)
-                .map(|k| 3.0 * model.dm[k] * model.peos[k] / model.rho[k].max(1.0e-99))
+                .map(|k| {
+                    3.0 * model.dm[k] * model.peos[k]
+                        / model.rho[k].max(1.0e-99)
+                })
                 .sum();
             MesaCellValue::Float(virial)
         }
         "virial_thm_rel_err" => {
             let virial: f64 = (0..nz)
-                .map(|k| 3.0 * model.dm[k] * model.peos[k] / model.rho[k].max(1.0e-99))
+                .map(|k| {
+                    3.0 * model.dm[k] * model.peos[k]
+                        / model.rho[k].max(1.0e-99)
+                })
                 .sum();
             MesaCellValue::Float(if virial == 0.0 {
                 0.0
@@ -2190,11 +2527,13 @@ fn eval_scalar_column(
                 "min_tau_conv" => MesaCellValue::Float(min_tc),
                 "log_max_tau_conv" => MesaCellValue::Float(safe_log10(max_tc)),
                 "log_min_tau_conv" => MesaCellValue::Float(safe_log10(min_tc)),
-                "dt_div_max_tau_conv" => MesaCellValue::Float(if max_tc > 0.0 {
-                    model.dt / max_tc
-                } else {
-                    0.0
-                }),
+                "dt_div_max_tau_conv" => {
+                    MesaCellValue::Float(if max_tc > 0.0 {
+                        model.dt / max_tc
+                    } else {
+                        0.0
+                    })
+                }
                 _ => MesaCellValue::Float(if min_tc > 0.0 {
                     model.dt / min_tc
                 } else {
@@ -2215,7 +2554,9 @@ fn eval_scalar_column(
         // `star/private/init.f90:704` and `history.f90:1593-1594`: initialized to `0.0`
         // and never reassigned anywhere in `star/private/`.
         "h1_czb_mass" => MesaCellValue::Float(0.0),
-        other => unreachable!("validated history scalar column {other:?} missing evaluator arm"),
+        other => unreachable!(
+            "validated history scalar column {other:?} missing evaluator arm"
+        ),
     }
 }
 
@@ -2314,19 +2655,23 @@ pub fn evaluate_star_history_row_with_ctx(
             HistoryColumnSpec::MixType(ii) | HistoryColumnSpec::MixQtop(ii) => {
                 max_mix = max_mix.max(ii);
             }
-            HistoryColumnSpec::MixRelrType(ii) | HistoryColumnSpec::MixRelrTop(ii) => {
+            HistoryColumnSpec::MixRelrType(ii)
+            | HistoryColumnSpec::MixRelrTop(ii) => {
                 max_mix_relr = max_mix_relr.max(ii);
             }
-            HistoryColumnSpec::BurnType(ii) | HistoryColumnSpec::BurnQtop(ii) => {
+            HistoryColumnSpec::BurnType(ii)
+            | HistoryColumnSpec::BurnQtop(ii) => {
                 max_burn = max_burn.max(ii);
             }
-            HistoryColumnSpec::BurnRelrType(ii) | HistoryColumnSpec::BurnRelrTop(ii) => {
+            HistoryColumnSpec::BurnRelrType(ii)
+            | HistoryColumnSpec::BurnRelrTop(ii) => {
                 max_burn_relr = max_burn_relr.max(ii);
             }
             _ => {}
         }
     }
-    let mix_regs = eval_history_mixing_regions(model, &ctx.mix.cz_bdy_dq, max_mix);
+    let mix_regs =
+        eval_history_mixing_regions(model, &ctx.mix.cz_bdy_dq, max_mix);
     let mix_relr_regs = if max_mix_relr == max_mix {
         mix_regs.clone()
     } else {
@@ -2348,14 +2693,22 @@ pub fn evaluate_star_history_row_with_ctx(
                     MesaCellValue::Float(safe_log10(ctx.cat_lum_lsun[cid - 1]))
                 }
                 HistoryColumnSpec::CenterLogEpsBurn(cid) => {
-                    MesaCellValue::Float(safe_log10(ctx.center_eps_burn[cid - 1].abs()))
+                    MesaCellValue::Float(safe_log10(
+                        ctx.center_eps_burn[cid - 1].abs(),
+                    ))
                 }
                 HistoryColumnSpec::Nuclide(q, cid, _) => {
                     let slot = iso_slot_for_chem_id(model, *cid);
                     let v = match q {
-                        HistoryIsoQuery::Center => center_avg_x_slot(model, slot),
-                        HistoryIsoQuery::Surface => surface_avg_x_slot(model, slot),
-                        HistoryIsoQuery::Average => star_avg_x_slot(model, slot),
+                        HistoryIsoQuery::Center => {
+                            center_avg_x_slot(model, slot)
+                        }
+                        HistoryIsoQuery::Surface => {
+                            surface_avg_x_slot(model, slot)
+                        }
+                        HistoryIsoQuery::Average => {
+                            star_avg_x_slot(model, slot)
+                        }
                         HistoryIsoQuery::TotalMass => {
                             star_avg_x_slot(model, slot) * model.xmstar / M_SUN
                         }
@@ -2368,20 +2721,19 @@ pub fn evaluate_star_history_row_with_ctx(
                         HistoryIsoQuery::LogAverage => {
                             safe_log10(star_avg_x_slot(model, slot))
                         }
-                        HistoryIsoQuery::LogTotalMass => {
-                            safe_log10(star_avg_x_slot(model, slot) * model.xmstar / M_SUN)
-                        }
+                        HistoryIsoQuery::LogTotalMass => safe_log10(
+                            star_avg_x_slot(model, slot) * model.xmstar / M_SUN,
+                        ),
                         HistoryIsoQuery::MaxEpsNucLog => {
-                            let x = slot
-                                .filter(|_| nz > 0)
-                                .map_or(0.0, |j| {
-                                    let k = (0..nz)
-                                        .max_by(|&a, &b| {
-                                            model.eps_nuc[a].total_cmp(&model.eps_nuc[b])
-                                        })
-                                        .unwrap_or(0);
-                                    model.cell_xa(k)[j]
-                                });
+                            let x = slot.filter(|_| nz > 0).map_or(0.0, |j| {
+                                let k = (0..nz)
+                                    .max_by(|&a, &b| {
+                                        model.eps_nuc[a]
+                                            .total_cmp(&model.eps_nuc[b])
+                                    })
+                                    .unwrap_or(0);
+                                model.cell_xa(k)[j]
+                            });
                             safe_log10(x)
                         }
                         HistoryIsoQuery::CzTopLog => {
@@ -2405,18 +2757,24 @@ pub fn evaluate_star_history_row_with_ctx(
                     };
                     MesaCellValue::Float(v)
                 }
-                HistoryColumnSpec::MixType(ii) => MesaCellValue::Int(mix_regs[ii - 1].0),
-                HistoryColumnSpec::MixQtop(ii) => MesaCellValue::Float(mix_regs[ii - 1].1),
+                HistoryColumnSpec::MixType(ii) => {
+                    MesaCellValue::Int(mix_regs[ii - 1].0)
+                }
+                HistoryColumnSpec::MixQtop(ii) => {
+                    MesaCellValue::Float(mix_regs[ii - 1].1)
+                }
                 HistoryColumnSpec::MixRelrType(ii) => {
                     MesaCellValue::Int(mix_relr_regs[ii - 1].0)
                 }
                 HistoryColumnSpec::MixRelrTop(ii) => {
                     MesaCellValue::Float(mix_relr_regs[ii - 1].2)
                 }
-                HistoryColumnSpec::BurnType(ii) => MesaCellValue::Int(burn_regs[ii - 1].0),
-                HistoryColumnSpec::BurnQtop(ii) => MesaCellValue::Float(burn_regs[ii - 1].1),
-                HistoryColumnSpec::BurnRelrType(ii) => {
+                HistoryColumnSpec::BurnType(ii)
+                | HistoryColumnSpec::BurnRelrType(ii) => {
                     MesaCellValue::Int(burn_regs[ii - 1].0)
+                }
+                HistoryColumnSpec::BurnQtop(ii) => {
+                    MesaCellValue::Float(burn_regs[ii - 1].1)
                 }
                 HistoryColumnSpec::BurnRelrTop(ii) => {
                     MesaCellValue::Float(burn_regs[ii - 1].2)
@@ -2447,11 +2805,17 @@ pub fn format_star_history_file_header_with_extra(
 ) -> String {
     let o = &model.controls.output;
     let hdr_items: [(&str, String); 11] = [
-        ("version_number", format_mesa_header_str(MESA_REF_VERSION_NUMBER)),
+        (
+            "version_number",
+            format_mesa_header_str(MESA_REF_VERSION_NUMBER),
+        ),
         ("compiler", format_mesa_header_str("rustc")),
         ("build", format_mesa_header_str("flexmesa")),
         ("MESA_SDK_version", format_mesa_header_str("flexmesa-0.1")),
-        ("math_backend", format_mesa_header_str("strict")),
+        (
+            "math_backend",
+            format_mesa_header_str(flexmesa_math::numerics_mode().as_str()),
+        ),
         ("date", format_mesa_header_str("20260401")),
         ("burn_min1", format_mesa_dbl(o.burn_min1)),
         ("burn_min2", format_mesa_dbl(o.burn_min2)),
@@ -2459,21 +2823,30 @@ pub fn format_star_history_file_header_with_extra(
         ("rsun", format_mesa_dbl(R_SUN)),
         ("lsun", format_mesa_dbl(L_SUN)),
     ];
-    let spec_names: Vec<String> = specs.iter().map(HistoryColumnSpec::column_name).collect();
-    let mut col_names: Vec<&str> = Vec::with_capacity(spec_names.len() + extra_col_names.len());
+    let spec_names: Vec<String> =
+        specs.iter().map(HistoryColumnSpec::column_name).collect();
+    let mut col_names: Vec<&str> =
+        Vec::with_capacity(spec_names.len() + extra_col_names.len());
     for n in &spec_names {
         col_names.push(n.as_str());
     }
     col_names.extend_from_slice(extra_col_names);
 
     let mut out = String::with_capacity(512 + col_names.len() * 84);
-    push_mesa_6line_header(&mut out, &hdr_items, &col_names, STAR_LOG_COL_WIDTH);
+    push_mesa_6line_header(
+        &mut out,
+        &hdr_items,
+        &col_names,
+        STAR_LOG_COL_WIDTH,
+    );
     out
 }
 
 /// Formats one evaluated `history.data` row line (`do_col_pass3` in `history.f90:1073-1155`).
 #[must_use]
-pub fn format_star_history_data_line(row: &[(String, MesaCellValue)]) -> String {
+pub fn format_star_history_data_line(
+    row: &[(String, MesaCellValue)],
+) -> String {
     format_star_history_data_line_with_extra(row, &[])
 }
 
@@ -2484,11 +2857,16 @@ pub fn format_star_history_data_line_with_extra(
     row: &[(String, MesaCellValue)],
     extra_cols: &[(String, f64)],
 ) -> String {
-    let mut line = String::with_capacity((row.len() + extra_cols.len()) * 41 + 1);
+    let mut line =
+        String::with_capacity((row.len() + extra_cols.len()) * 41 + 1);
     for (_, val) in row {
         match *val {
-            MesaCellValue::Int(i) => write_mesa_int_width(&mut line, i, STAR_LOG_COL_WIDTH),
-            MesaCellValue::Float(x) => write_mesa_dbl_width(&mut line, x, STAR_LOG_COL_WIDTH),
+            MesaCellValue::Int(i) => {
+                write_mesa_int_width(&mut line, i, STAR_LOG_COL_WIDTH);
+            }
+            MesaCellValue::Float(x) => {
+                write_mesa_dbl_width(&mut line, x, STAR_LOG_COL_WIDTH);
+            }
         }
     }
     for (_, x) in extra_cols {
@@ -2602,7 +2980,9 @@ impl IncrementalHistoryWriter {
             return Ok(());
         }
         if self.writer.is_none() {
-            if let Some(parent) = self.path.parent().filter(|p| !p.as_os_str().is_empty()) {
+            if let Some(parent) =
+                self.path.parent().filter(|p| !p.as_os_str().is_empty())
+            {
                 fs::create_dir_all(parent).map_err(|e| {
                     StarError::IoError(format!(
                         "failed to create log directory {}: {e}",
@@ -2618,7 +2998,9 @@ impl IncrementalHistoryWriter {
                 &extra_names,
             );
             if let Some(ref hp) = self.header_path {
-                if let Some(hparent) = hp.parent().filter(|p| !p.as_os_str().is_empty()) {
+                if let Some(hparent) =
+                    hp.parent().filter(|p| !p.as_os_str().is_empty())
+                {
                     fs::create_dir_all(hparent).map_err(|e| {
                         StarError::IoError(format!(
                             "failed to create header directory {}: {e}",

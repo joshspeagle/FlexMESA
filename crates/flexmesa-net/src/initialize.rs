@@ -30,7 +30,7 @@ static RATTAB_CACHE: OnceLock<Mutex<HashMap<String, Arc<Vec<CubicCoeffs>>>>> =
 pub fn global_logttab() -> &'static [f64] {
     LOGTTAB.get_or_init(|| {
         (0..NRATTAB)
-            .map(|i| (i as f64).mul_add(RATTAB_TSTP, RATTAB_TLO))
+            .map(|i| flexmesa_math::fma(i as f64, RATTAB_TSTP, RATTAB_TLO))
             .collect()
     })
 }
@@ -442,8 +442,8 @@ impl NetGeneralInfo {
         for &cid in &chem_id {
             let e = nuclides.get_by_id(cid).unwrap();
             let zf = e.z as f64;
-            z158.push(zf.powf(1.58));
-            z52.push(zf.powf(2.50));
+            z158.push(flexmesa_math::pow(zf, 1.58));
+            z52.push(flexmesa_math::pow(zf, 2.50));
             mion.push(nuclides.get_mass_excess(cid).unwrap() * MEV2GR);
         }
 
@@ -546,9 +546,20 @@ impl NetGeneralInfo {
             let ddtab = f64::from(irho) * dtab / bden;
             let c = &self.rattab_splines[i][k];
             let fac = rate_factors.get(i).copied().unwrap_or(1.0);
-            let poly =
-                c[3].mul_add(dt, c[2]).mul_add(dt, c[1]).mul_add(dt, c[0]);
-            let dpoly = (1.5 * c[3]).mul_add(dt, c[2]).mul_add(2.0 * dt, c[1]);
+            let poly = flexmesa_math::fma(
+                flexmesa_math::fma(
+                    flexmesa_math::fma(c[3], dt, c[2]),
+                    dt,
+                    c[1],
+                ),
+                dt,
+                c[0],
+            );
+            let dpoly = flexmesa_math::fma(
+                flexmesa_math::fma(1.5 * c[3], dt, c[2]),
+                2.0 * dt,
+                c[1],
+            );
             let r = poly * dtab * fac;
             rate_raw[i] = r;
             rate_raw_drho[i] = poly * ddtab * fac;

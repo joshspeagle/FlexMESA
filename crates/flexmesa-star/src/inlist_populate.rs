@@ -512,7 +512,10 @@ impl InlistBundle {
             o.priority_profile_interval = v.max(0) as usize;
         }
         ctrl.isize_into(&mut o.max_num_profile_zones, "max_num_profile_zones");
-        ctrl.isize_into(&mut o.max_num_profile_models, "max_num_profile_models");
+        ctrl.isize_into(
+            &mut o.max_num_profile_models,
+            "max_num_profile_models",
+        );
         ctrl.isize_into(&mut o.profile_model, "profile_model");
     }
 }

@@ -12,6 +12,7 @@ import pathlib
 import sys
 import tempfile
 
+from flexmesa import _dispatch
 from flexmesa.data import fetch
 from flexmesa.testing import case_manifest, case_report, harness_runner
 
@@ -37,6 +38,11 @@ def _run_worker(argv: list[str]) -> int:
     parser.add_argument("--full-stages", action="store_true")
     parser.add_argument("--respect-intervals", action="store_true")
     parser.add_argument("--write-profiles", action="store_true")
+    parser.add_argument(
+        "--numerics-mode",
+        choices=_dispatch.VALID_NUMERICS_MODES,
+        default="strict",
+    )
     ns = parser.parse_args(argv)
 
     rep = harness_runner.run_trace_inprocess(
@@ -48,6 +54,7 @@ def _run_worker(argv: list[str]) -> int:
         respect_intervals=ns.respect_intervals,
         write_profiles=ns.write_profiles,
         is_logs_dir=bool(ns.is_logs_dir),
+        numerics_mode=ns.numerics_mode,
     )
     payload = {
         "termination_code": rep.get("termination_code", ""),
@@ -119,6 +126,12 @@ def _build_trace_parser() -> argparse.ArgumentParser:
         help="Enable radial profileN.data output when targeting a directory.",
     )
     parser.add_argument(
+        "--numerics-mode",
+        choices=_dispatch.VALID_NUMERICS_MODES,
+        default=None,
+        help="Arithmetic mode ('strict' default, or 'fast'; #165).",
+    )
+    parser.add_argument(
         "--timeout-sec",
         type=float,
         default=None,
@@ -147,6 +160,7 @@ def trace_main(argv: list[str] | None = None) -> int:
         return _run_worker(cli_args[1:])
 
     ns = _build_trace_parser().parse_args(cli_args)
+    eff_mode = harness_runner.resolve_effective_numerics_mode(ns.numerics_mode)
     case_dir = harness_runner.resolve_case_dir(
         ns.suite, ns.case, mesa_dir=ns.mesa_dir
     )
@@ -159,6 +173,7 @@ def trace_main(argv: list[str] | None = None) -> int:
         respect_intervals=ns.respect_intervals,
         write_profiles=ns.write_profiles,
         is_logs_dir=not ns.explicit_file,
+        numerics_mode=eff_mode,
         timeout_sec=ns.timeout_sec,
         max_rss_gb=ns.max_rss_gb,
     )
@@ -256,6 +271,12 @@ def _build_harness_parser() -> argparse.ArgumentParser:
         help="Number of concurrent case workers to launch.",
     )
     p_run.add_argument("--max-steps", type=_non_negative_int, default=None)
+    p_run.add_argument(
+        "--numerics-mode",
+        choices=_dispatch.VALID_NUMERICS_MODES,
+        default=None,
+        help="Arithmetic mode ('strict' default, or 'fast'; #165).",
+    )
     p_run.add_argument("--timeout-sec", type=float, default=600.0)
     p_run.add_argument("--max-rss-gb", type=float, default=6.0)
     p_run.add_argument("--markdown-out", default=None)
@@ -320,6 +341,7 @@ def _execute_one_entry(
     work_root: pathlib.Path,
     mesa_dir: str | None,
     max_steps: int | None,
+    numerics_mode: str,
     timeout_sec: float | None,
     max_rss_gb: float | None,
     base_dir: pathlib.Path | None,
@@ -333,6 +355,7 @@ def _execute_one_entry(
         case_dir,
         out_dir,
         max_steps=max_steps,
+        numerics_mode=numerics_mode,
         timeout_sec=timeout_sec,
         max_rss_gb=max_rss_gb,
     )
@@ -362,6 +385,7 @@ def _run_selected_entries(
                 work_root,
                 ns.mesa_dir,
                 ns.max_steps,
+                ns.numerics_mode,
                 ns.timeout_sec,
                 ns.max_rss_gb,
                 base_dir,
@@ -386,6 +410,7 @@ def _run_selected_entries(
                 work_root,
                 ns.mesa_dir,
                 ns.max_steps,
+                ns.numerics_mode,
                 ns.timeout_sec,
                 ns.max_rss_gb,
                 base_dir,
@@ -419,6 +444,15 @@ def harness_main(argv: list[str] | None = None) -> int:
     ns = _build_harness_parser().parse_args(cli_args)
     if ns.subcommand == "table":
         return _handle_table_subcommand(ns)
+    eff_mode = harness_runner.resolve_effective_numerics_mode(ns.numerics_mode)
+    ns.numerics_mode = eff_mode
+    if ns.gate and eff_mode != "strict":
+        print(
+            "--gate requires strict numerics mode "
+            "(#165: only strict mode is judged against MESA)",
+            file=sys.stderr,
+        )
+        return 1
 
     print(
         f"[harness] upstream reference: "
@@ -441,7 +475,12 @@ def harness_main(argv: list[str] | None = None) -> int:
             work_root.mkdir(parents=True, exist_ok=True)
         records = _run_selected_entries(selected, gaps, work_root, ns, base_dir)
 
-    payload = case_report.build_report_payload(manifest, records, gaps)
+    payload = case_report.build_report_payload(
+        manifest,
+        records,
+        gaps,
+        numerics_mode=ns.numerics_mode,
+    )
     if ns.markdown_out:
         md_text = case_report.render_case_table_markdown(
             manifest,
@@ -456,7 +495,10 @@ def harness_main(argv: list[str] | None = None) -> int:
         _write_json_file(ns.json_out, payload)
     if ns.save_baseline:
         b_payload = case_report.build_deterministic_baseline_payload(
-            manifest, records, gaps
+            manifest,
+            records,
+            gaps,
+            numerics_mode=ns.numerics_mode,
         )
         _write_json_file(ns.save_baseline, b_payload)
 

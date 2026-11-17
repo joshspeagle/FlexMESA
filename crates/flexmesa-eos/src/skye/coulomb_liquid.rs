@@ -63,26 +63,26 @@ pub fn ocp_liquid_screening_free_energy_correction(
 ) -> AutoDiffReal2VarOrder3 {
     let zi = (z_in as i64) as f64;
     let z2 = zi * zi;
-    let logz = zi.ln();
+    let logz = flexmesa_math::log(zi);
     let sqlogz = logz * logz;
-    let z0p475 = zi.powf(0.475);
-    let zp1_3_2 = (1.0 + zi).powf(1.5);
-    let z3_2 = zi.powf(1.5);
-    let z7_3 = zi.powf(7.0 / 3.0);
-    let zm1_3 = zi.powf(-1.0 / 3.0);
-    let zm1_2 = zi.powf(-0.5);
-    let zm1_4 = zi.powf(-0.25);
+    let z0p475 = flexmesa_math::pow(zi, 0.475);
+    let zp1_3_2 = flexmesa_math::pow(1.0 + zi, 1.5);
+    let z3_2 = flexmesa_math::pow(zi, 1.5);
+    let z7_3 = flexmesa_math::pow(zi, 7.0 / 3.0);
+    let zm1_3 = flexmesa_math::pow(zi, -1.0 / 3.0);
+    let zm1_2 = flexmesa_math::pow(zi, -0.5);
+    let zm1_4 = flexmesa_math::pow(zi, -0.25);
 
     let a = 1.11 * z0p475;
     let b = 0.2 + 0.078 * sqlogz;
     let nu = 1.16 + 0.08 * logz;
     let cdh = (z_in / 3.0_f64.sqrt()) * (zp1_3_2 - 1.0 - z3_2);
     let ctf = (18.0 / 175.0)
-        * (12.0 / PI).powf(2.0 / 3.0)
+        * flexmesa_math::pow(12.0 / PI, 2.0 / 3.0)
         * z7_3
         * (1.0 - zm1_3 + 0.2 * zm1_2);
 
-    let xr = ((9.0 * PI / 4.0).powf(1.0 / 3.0) * FINE) / rs;
+    let xr = (flexmesa_math::pow(9.0 * PI / 4.0, 1.0 / 3.0) * FINE) / rs;
     let xr2 = xr.pow2();
     let gr = (1.0 + xr2).sqrt();
     let g1 = 1.0 + 0.78 * (ge / z_in).sqrt() / (21.0 + ge * (z_in / rs).pow3());
@@ -127,7 +127,7 @@ pub fn liquid_mixing_rule_correction(
     };
     let dif_r = dif0 / z52;
     let dif_fdh = dif0 * game * (game / 3.0).sqrt();
-    let p3 = d.powf(-0.2);
+    let p3 = flexmesa_math::pow(d, -0.2);
     let d0 = (2.6 * dif_r + 14.0 * dif_r * dif_r * dif_r) / (1.0 - p3);
     let gp = d0 * gami_mean.powf(p3);
     let fmix0 = dif_fdh / (1.0 + gp);

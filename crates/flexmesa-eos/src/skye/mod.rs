@@ -84,11 +84,13 @@ pub fn get_skye_alfa(
     zbar: f64,
 ) -> (f64, f64, f64) {
     let skye_blend_width = 0.1_f64;
-    let t_ion = 7.3_f64.max((1.0e5 * zbar * zbar).log10()) + skye_blend_width;
-    let rho_ion =
-        2.3_f64.max((abar * zbar * zbar * zbar).log10()) + skye_blend_width;
+    let t_ion = 7.3_f64.max(flexmesa_math::log10(1.0e5 * zbar * zbar))
+        + skye_blend_width;
+    let rho_ion = 2.3_f64.max(flexmesa_math::log10(abar * zbar * zbar * zbar))
+        + skye_blend_width;
     let rad_offset =
-        (abar * MP * CRAD / (3.0 * KERG * (zbar + 1.0))).log10() - 6.0;
+        flexmesa_math::log10(abar * MP * CRAD / (3.0 * KERG * (zbar + 1.0)))
+            - 6.0;
 
     let bounds: [[f64; 2]; 8] = [
         [HELM_LOGDLO, 8.3],

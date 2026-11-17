@@ -224,8 +224,8 @@ impl Cshep2Interpolant {
                     }
                     if neq < lnp {
                         let np = npts[neq];
-                        rs =
-                            (x[np - 1] - xk).powi(2) + (y[np - 1] - yk).powi(2);
+                        rs = flexmesa_math::pow2(x[np - 1] - xk)
+                            + flexmesa_math::pow2(y[np - 1] - yk);
                         if (rs - rsold) / rs < RTOL {
                             continue;
                         }
@@ -364,7 +364,8 @@ impl Cshep2Interpolant {
                         let t2 = -3.0 * t1 * t1 / (d * d * d);
                         let wx = delx * t2;
                         let wy = dely * t2;
-                        let t3 = 3.0 * t1 * (2.0 + 3.0 * d * t1) / d.powi(6);
+                        let t3 = 3.0 * t1 * (2.0 + 3.0 * d * t1)
+                            / flexmesa_math::pow6(d);
                         let wxx = t3 * dxsq + t2;
                         let wxy = t3 * delx * dely;
                         let wyy = t3 * dysq + t2;

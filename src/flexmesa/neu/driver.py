@@ -213,17 +213,64 @@ def neu_get(
     if rho is None and log10_rho is None:
         raise ValueError("Neither rho nor log10_rho was provided to neu_get.")
 
-    temp = t if t is not None else math.exp((log10_t or 0.0) * _const.LN10)
+    use_rust_math = (
+        _dispatch.resolve_backend(
+            backend,
+            *(
+                v
+                for v in (t, log10_t, rho, log10_rho, abar, zbar)
+                if v is not None
+            ),
+        )
+        == "rust"
+    )
+    if t is None:
+        lt_in = float(log10_t)  # type: ignore[arg-type]
+        if not math.isfinite(lt_in) or lt_in > 20.0:
+            raise ValueError(f"log10_t must be finite and <= 20: {lt_in}")
+        temp = (
+            _rust.exp10(lt_in)
+            if use_rust_math
+            else math.exp(lt_in * _const.LN10)
+        )
+    else:
+        temp = t
     if not math.isfinite(temp) or temp <= 0.0:
         raise ValueError(f"Temperature t must be positive and finite: {temp}")
-    logtemp = log10_t if log10_t is not None else math.log10(temp)
+    if log10_t is None:
+        t_in = float(temp)
+        logtemp = (
+            _rust.safe_log10(t_in)
+            if (use_rust_math and t_in > 1.0e-99)
+            else math.log10(t_in)
+        )
+    else:
+        logtemp = log10_t
     if not math.isfinite(logtemp) or logtemp > 20.0:
         raise ValueError(f"log10_t must be finite and <= 20: {logtemp}")
 
-    den = rho if rho is not None else math.exp((log10_rho or 0.0) * _const.LN10)
+    if rho is None:
+        ld_in = float(log10_rho)  # type: ignore[arg-type]
+        if not math.isfinite(ld_in) or ld_in > 20.0:
+            raise ValueError(f"log10_rho must be finite and <= 20: {ld_in}")
+        den = (
+            _rust.exp10(ld_in)
+            if use_rust_math
+            else math.exp(ld_in * _const.LN10)
+        )
+    else:
+        den = rho
     if not math.isfinite(den) or den <= 0.0:
         raise ValueError(f"Density rho must be positive and finite: {den}")
-    logden = log10_rho if log10_rho is not None else math.log10(den)
+    if log10_rho is None:
+        d_in = float(den)
+        logden = (
+            _rust.safe_log10(d_in)
+            if (use_rust_math and d_in > 1.0e-99)
+            else math.log10(d_in)
+        )
+    else:
+        logden = log10_rho
     if not math.isfinite(logden) or logden > 20.0:
         raise ValueError(f"log10_rho must be finite and <= 20: {logden}")
 
@@ -241,12 +288,7 @@ def neu_get(
     if temp <= _inputs.TMIN_NEU or logtemp <= _inputs.LOG10_TMIN_NEU:
         return _zero_result()
 
-    if (
-        _dispatch.resolve_backend(
-            backend, temp, logtemp, den, logden, abar, zbar
-        )
-        == "rust"
-    ):
+    if use_rust_math:
         flag_tup = (
             active.pair,
             active.plas,

@@ -214,9 +214,11 @@ pub fn dgbtrf(
             }
         }
         if km > 0 {
-            let pivot = ab[diag * n + j];
+            // Match LAPACK `dgbtf2`: `CALL DSCAL(KM, ONE / AB(KV+1, J), ...)`
+            // and `CALL DGER(KM, JU-J, -ONE, ...)` (#165 Item 11, N1-8).
+            let inv_pivot = 1.0 / ab[diag * n + j];
             for l in 1..=km {
-                ab[(diag + l) * n + j] /= pivot;
+                ab[(diag + l) * n + j] *= inv_pivot;
             }
             for col in (j + 1)..=ju {
                 let r_top = (diag + j) - col;
@@ -226,7 +228,8 @@ pub fn dgbtrf(
                         let r_sub = r_top + l;
                         if r_sub <= diag + kl && r_sub <= ku_eff + kl {
                             let mult = ab[(diag + l) * n + j];
-                            ab[r_sub * n + col] -= mult * temp;
+                            let idx = r_sub * n + col;
+                            ab[idx] = flexmesa_math::fma(-mult, temp, ab[idx]);
                         }
                     }
                 }
@@ -279,7 +282,8 @@ pub fn dgbtrs(
         }
         let bj = b[j];
         for i in 1..=lm {
-            b[j + i] -= ab[(diag + i) * n + j] * bj;
+            let idx = j + i;
+            b[idx] = flexmesa_math::fma(-ab[(diag + i) * n + j], bj, b[idx]);
         }
     }
 
@@ -293,7 +297,8 @@ pub fn dgbtrs(
         let lm = j.min(kl + ku);
         for k in 1..=lm {
             let row = diag - k;
-            b[j - k] -= ab[row * n + j] * bj;
+            let idx = j - k;
+            b[idx] = flexmesa_math::fma(-ab[row * n + j], bj, b[idx]);
         }
     }
     Ok(())

@@ -82,12 +82,12 @@ pub fn remesh_for_rsp2(model: &mut StarModel) -> Result<(), StarError> {
     }
 
     // 2. Locate `xm_anchor` where `ln_t == ln(RSP2_T_anchor)` (`164-188`).
-    let lnt_anchor = model.controls.rsp2.t_anchor.ln();
+    let lnt_anchor = flexmesa_math::log(model.controls.rsp2.t_anchor);
     if lnt_anchor <= model.ln_t[0] {
         return Err(StarError::InvalidInput(format!(
             "remesh_for_rsp2: T_anchor ({}) <= T_surf ({})",
             model.controls.rsp2.t_anchor,
-            model.ln_t[0].exp()
+            flexmesa_math::exp(model.ln_t[0])
         )));
     }
     let mut xm_anchor = xm_old[nz_old - 1];
@@ -118,11 +118,12 @@ pub fn remesh_for_rsp2(model: &mut StarModel) -> Result<(), StarError> {
         xm[k] = xm[k - 1] + dxm_outer;
         dm_new[k - 1] = dxm_outer;
     }
-    let mut lnx = xm[nz_outer].ln();
-    let dlnx = (model.xmstar.ln() - lnx) / ((nz - nz_outer) as f64);
+    let mut lnx = flexmesa_math::log(xm[nz_outer]);
+    let dlnx =
+        (flexmesa_math::log(model.xmstar) - lnx) / ((nz - nz_outer) as f64);
     for k in (nz_outer + 1)..nz {
         lnx += dlnx;
-        xm[k] = lnx.exp();
+        xm[k] = flexmesa_math::exp(lnx);
         dm_new[k - 1] = xm[k] - xm[k - 1];
     }
     xm[nz] = model.xmstar;
@@ -138,7 +139,7 @@ pub fn remesh_for_rsp2(model: &mut StarModel) -> Result<(), StarError> {
         StarError::ConvergenceFailure(format!("remesh_for_rsp2 interp_pm: {e}"))
     };
     let mut lnr_old = model.ln_r.clone();
-    lnr_old.push(model.r_center.max(1.0).ln());
+    lnr_old.push(flexmesa_math::log(model.r_center.max(1.0)));
     let lnr_new =
         interpolate_vector_pm(&xm_old, &lnr_old, &xm).map_err(pm_err)?;
 
@@ -202,11 +203,11 @@ pub fn remesh_for_rsp2(model: &mut StarModel) -> Result<(), StarError> {
         next.dm[k] = dm_new[k];
         next.dq[k] = dm_new[k] / next.xmstar;
         next.ln_r[k] = lnr_new[k];
-        next.r[k] = lnr_new[k].exp();
+        next.r[k] = flexmesa_math::exp(lnr_new[k]);
         next.lum[k] = lum_new[k];
         next.v[k] = v_new[k];
         next.ln_t[k] = lnt_new[k];
-        next.t[k] = lnt_new[k].exp();
+        next.t[k] = flexmesa_math::exp(lnt_new[k]);
         let wk = w_new[k].max(0.0);
         next.aux.rsp.et_rsp[k] = wk * wk;
         next.aux.rsp.w_start[k] = wk;
@@ -219,11 +220,11 @@ pub fn remesh_for_rsp2(model: &mut StarModel) -> Result<(), StarError> {
     next.set_m_grav_and_grav();
 
     for k in 0..nz {
-        let r3_00 = next.r[k].powi(3);
+        let r3_00 = flexmesa_math::pow3(next.r[k]);
         let r3_p1 = if k + 1 < nz {
-            next.r[k + 1].powi(3)
+            flexmesa_math::pow3(next.r[k + 1])
         } else {
-            next.r_center.powi(3)
+            flexmesa_math::pow3(next.r_center)
         };
         if r3_00 <= r3_p1 {
             return Err(StarError::ConvergenceFailure(format!(
@@ -232,7 +233,7 @@ pub fn remesh_for_rsp2(model: &mut StarModel) -> Result<(), StarError> {
         }
         let vol = FOUR_THIRDS_PI * (r3_00 - r3_p1);
         next.rho[k] = next.dm[k] / vol;
-        next.lnd[k] = next.rho[k].ln();
+        next.lnd[k] = flexmesa_math::log(next.rho[k]);
     }
 
     // 6. Revise `ln_t` for quasi-hydrostatic equilibrium (`327-418`).
@@ -240,7 +241,7 @@ pub fn remesh_for_rsp2(model: &mut StarModel) -> Result<(), StarError> {
     crate::micro::do_eos(&mut next)?;
     crate::micro::do_kap(&mut next)?;
     crate::hydro_brunt_surf::eval_surf_bc(&mut next)?;
-    let mut p_m1 = next.ln_peos_surf_ad.val.exp();
+    let mut p_m1 = flexmesa_math::exp(next.ln_peos_surf_ad.val);
     for k in 0..nz {
         let dm_face = if k + 1 < nz {
             next.dm_bar[k]
@@ -248,11 +249,12 @@ pub fn remesh_for_rsp2(model: &mut StarModel) -> Result<(), StarError> {
             0.5 * (next.dm[k - 1] + next.dm[k])
         };
         let p_00 = p_m1
-            + next.cgrav[k] * next.m[k] * dm_face / (PI4 * next.r[k].powi(4));
+            + next.cgrav[k] * next.m[k] * dm_face
+                / (PI4 * flexmesa_math::pow4(next.r[k]));
         next.peos[k] = p_00;
-        next.ln_peos[k] = p_00.ln();
+        next.ln_peos[k] = flexmesa_math::log(p_00);
         let log_rho = next.lnd[k] / LN10;
-        let log_p = p_00.log10();
+        let log_p = flexmesa_math::log10(p_00);
         let log_t_guess = next.ln_t[k] / LN10;
         let inv = eos_dt_get_t(
             HelmTable::builtin(),
@@ -272,7 +274,7 @@ pub fn remesh_for_rsp2(model: &mut StarModel) -> Result<(), StarError> {
                 "remesh_for_rsp2 eos_dt_get_t at zone {k}: {e}"
             ))
         })?;
-        next.ln_t[k] = inv.linear_result.ln();
+        next.ln_t[k] = flexmesa_math::log(inv.linear_result);
         next.t[k] = inv.linear_result;
         p_m1 = p_00;
     }

@@ -6,6 +6,7 @@ members = [
   "crates/flexmesa-data",
   "crates/flexmesa-const",
   "crates/flexmesa-utils",
+  "crates/flexmesa-crlibm-sys",
   "crates/flexmesa-math",
   "crates/flexmesa-autodiff",
   "crates/flexmesa-interp1d",

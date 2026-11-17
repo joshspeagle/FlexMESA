@@ -7,7 +7,7 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 
 | Namelist | Upstream `26.4.1` Scalars | Matched in `FlexMESA` | Agree | Value Mismatch | Active Limit Disabled (`None`) | Unimplemented in `FlexMESA` |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| star &controls | 1396 | 582 | 534 | 32 | 16 | 814 |
+| star &controls | 1396 | 582 | 535 | 31 | 16 | 814 |
 | star &star_job | 431 | 80 | 63 | 11 | 6 | 351 |
 | binary &binary_controls + &binary_job | 209 | 120 | 117 | 3 | 0 | 89 |
 | astero &astero_search_controls | 150 | 73 | 70 | 3 | 0 | 77 |
@@ -20,7 +20,6 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | `accretion_h1` | `star/defaults/controls.defaults:5669` | `0` | `crates/flexmesa-star/src/controls_defaults.rs:84` | `-1.0` | numeric mismatch |
 | `accretion_he4` | `star/defaults/controls.defaults:5672` | `0` | `crates/flexmesa-star/src/controls_defaults.rs:85` | `-1.0` | numeric mismatch |
-| `atm_table` | `star/defaults/controls.defaults:4521` | `'tau_100'` | `crates/flexmesa-star/src/controls_defaults.rs:37` | `String::new()` | string/option mismatch |
 | `column_depth_for_irradiation` | `star/defaults/controls.defaults:4713` | `-1` | `crates/flexmesa-star/src/controls_defaults.rs:73` | `0.0` | numeric mismatch |
 | `conv_core_gap_dq_limit` | `star/defaults/controls.defaults:857` | `0d0` | `crates/flexmesa-star/src/controls_defaults.rs:139` | `None` | active upstream limit disabled as None |
 | `conv_premix_avoid_increase` | `star/defaults/controls.defaults:3042` | `.false.` | `crates/flexmesa-star/src/controls_mix_wind.rs:358` | `true` | boolean mismatch |
@@ -93,9 +92,9 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 
 | Control | Upstream `26.4.1` Source | Upstream Default | `FlexMESA` Source | `FlexMESA` Default | Classification |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| `implicit_scheme_tolerance` | `binary/defaults/binary_controls.defaults:627` | `1d-2` | `crates/flexmesa-binary/src/inlist.rs:437` | `1.0e-3` | numeric mismatch |
-| `initial_change_factor` | `binary/defaults/binary_controls.defaults:677` | `1.5d0` | `crates/flexmesa-binary/src/inlist.rs:439` | `1.2` | numeric mismatch |
-| `roche_min_mdot` | `binary/defaults/binary_controls.defaults:734` | `1d-16` | `crates/flexmesa-binary/src/inlist.rs:444` | `1.0e-12` | numeric mismatch |
+| `implicit_scheme_tolerance` | `binary/defaults/binary_controls.defaults:627` | `1d-2` | `crates/flexmesa-binary/src/inlist.rs:311` | `1.0e-3` | numeric mismatch |
+| `initial_change_factor` | `binary/defaults/binary_controls.defaults:677` | `1.5d0` | `crates/flexmesa-binary/src/inlist.rs:313` | `1.2` | numeric mismatch |
+| `roche_min_mdot` | `binary/defaults/binary_controls.defaults:734` | `1d-16` | `crates/flexmesa-binary/src/inlist.rs:318` | `1.0e-12` | numeric mismatch |
 
 ## astero &astero_search_controls
 

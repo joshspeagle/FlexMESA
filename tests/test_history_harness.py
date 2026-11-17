@@ -75,7 +75,7 @@ def test_generated_baseline_case_table_matches_committed_file() -> None:
     assert cli.main(["harness", "table", "--check"]) == 0
     manifest, gaps, records = case_report.build_manifest_inventory_records()
     summary = case_report.summarize_records(manifest, records, gaps)
-    assert summary["executed_cases"] == 102
+    assert summary["executed_cases"] == summary["total_cases"]
     assert summary["undeclared_failures"] == []
     assert summary["stale_known_gaps"] == []
 
@@ -335,6 +335,10 @@ def test_guarded_subprocess_worker_and_timeout_partial_history_recovery(
         max_steps=2,
         timeout_sec=60.0,
         max_rss_gb=6.0,
+        # Exercises process guards and log streaming only; the real case sets
+        # controls that are not ported yet (declared gap), so the documented
+        # exploratory opt-out is used and no parity is claimed.
+        allow_unsupported_controls=True,
     )
     assert out_ok.status == "ok"
     assert out_ok.steps == 2
@@ -387,6 +391,7 @@ def test_flexmesa_trace_and_harness_run_cli_smoke(
                 str(star_out),
                 "--max-steps",
                 "2",
+                "--allow-unsupported-controls",
             ]
         )
         == 0
@@ -405,6 +410,7 @@ def test_flexmesa_trace_and_harness_run_cli_smoke(
                 str(bin_out),
                 "--max-steps",
                 "2",
+                "--allow-unsupported-controls",
             ]
         )
         == 0
@@ -422,6 +428,7 @@ def test_flexmesa_trace_and_harness_run_cli_smoke(
                 str(ast_out),
                 "--max-steps",
                 "1",
+                "--allow-unsupported-controls",
             ]
         )
         == 0
@@ -446,6 +453,7 @@ def test_flexmesa_trace_and_harness_run_cli_smoke(
             str(md_out),
             "--json-out",
             str(js_out),
+            "--allow-unsupported-controls",
             "--gate",
         ]
     )

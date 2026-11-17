@@ -40,7 +40,6 @@ with tempfile.TemporaryDirectory() as tmpdir:
         "  initial_mass = 2.5d0\n"
         "  initial_z = 0.014d0\n"
         "  max_model_number = 50\n"
-        "  rotation_flag = .true.\n"
         "/\n"
     )
     bundle = star.parse_inlist_bundle(str(root / "inlist"))

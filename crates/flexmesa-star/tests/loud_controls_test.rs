@@ -45,6 +45,45 @@ impl Drop for TempCaseGuard {
     }
 }
 
+/// Keys that only gate or format terminal text upstream are accepted and
+/// recorded, not rejected (`DECISIONS #26`).
+#[test]
+fn test_terminal_output_keys_pass_strict_validation_and_are_recorded() {
+    let tmp = TempCaseGuard::new("terminal_output");
+    let term = tmp.root.join("inlist_terminal_output");
+    fs::write(
+        &term,
+        "&star_job\n  show_log_description_at_start = .false.\n/\n\
+         &controls\n  initial_mass = 1.0d0\n  terminal_interval = 10\n  \
+         write_header_frequency = 10\n  num_trace_history_values = 1\n  \
+         trace_history_value_name(1) = 'rel_E_err'\n/\n",
+    )
+    .expect("write");
+    let term_bundle = InlistBundle::from_file(&term)
+        .expect("terminal-output keys must pass strict validation");
+    let term_report = &term_bundle.validation_report;
+    assert_eq!(
+        term_report.unsupported_controls.len(),
+        0,
+        "unexpected unsupported controls: {:?}",
+        term_report.unsupported_controls
+    );
+    let recorded: Vec<&str> = term_report
+        .terminal_output_keys
+        .iter()
+        .map(|(_, k)| k.as_str())
+        .collect();
+    for key in [
+        "show_log_description_at_start",
+        "terminal_interval",
+        "write_header_frequency",
+        "num_trace_history_values",
+        "trace_history_value_name",
+    ] {
+        assert!(recorded.contains(&key), "{key} not recorded: {recorded:?}");
+    }
+}
+
 #[test]
 fn test_unknown_section_key_unused_and_removed_aliases_fail_loudly() {
     let tmp = TempCaseGuard::new("strict");
@@ -76,12 +115,13 @@ fn test_unknown_section_key_unused_and_removed_aliases_fail_loudly() {
     let unimpl = tmp.root.join("inlist_unimpl");
     fs::write(
         &unimpl,
-        "&controls\n  initial_mass = 1.0d0\n  terminal_interval = 10\n/\n",
+        "&controls\n  initial_mass = 1.0d0\n  photo_interval = 10\n/\n",
     )
     .expect("write");
     let unimpl_err = InlistBundle::from_file(&unimpl)
         .expect_err("unimplemented upstream key must fail by default");
-    assert!(unimpl_err.to_string().contains("terminal_interval"));
+    assert!(unimpl_err.to_string().contains("photo_interval"));
+
     assert!(InlistBundle::from_file_with_options(
         &unimpl,
         InlistLoadOptions {

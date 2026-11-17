@@ -292,8 +292,11 @@ def _build_harness_parser() -> argparse.ArgumentParser:
         "--allow-unsupported-controls",
         action="store_true",
         help=(
-            "Opt out of strict inlist rejection for unread, unused, or "
-            "unimplemented upstream controls (#147)."
+            "Skip the strict run and report every case from a diagnostic "
+            "run that ignores unsupported upstream controls (#147). By "
+            "default each case is run strictly first and rerun this way "
+            "only if strict validation rejects it. A diagnostic run never "
+            "counts as a pass."
         ),
     )
     p_run.add_argument("--timeout-sec", type=float, default=600.0)
@@ -370,7 +373,7 @@ def _execute_one_entry(
         entry.suite, entry.case, mesa_dir=mesa_dir
     )
     out_dir = work_root / entry.suite / entry.case
-    outcome = harness_runner.run_traced_case(
+    outcome = harness_runner.run_case_with_diagnostic(
         entry.suite,
         case_dir,
         out_dir,
@@ -415,7 +418,7 @@ def _run_selected_entries(
             records.append(rec)
             print(
                 f"[harness] [{idx}/{len(selected)}] {rec.suite}/{rec.case}: "
-                f"verdict={rec.verdict} "
+                f"verdict={rec.verdict} mode={rec.run_mode} "
                 f"term={rec.observed_termination or 'none'} "
                 f"steps={rec.steps} wall={rec.wall_time_sec:.1f}s",
                 flush=True,
@@ -447,6 +450,7 @@ def _run_selected_entries(
             print(
                 f"[harness] [{len(indexed_records)}/{len(selected)}] "
                 f"{rec.suite}/{rec.case}: verdict={rec.verdict} "
+                f"mode={rec.run_mode} "
                 f"term={rec.observed_termination or 'none'} "
                 f"steps={rec.steps} wall={rec.wall_time_sec:.1f}s",
                 flush=True,

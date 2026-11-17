@@ -68,6 +68,8 @@ def _summarize_harness(hh_suites: dict[str, Any]) -> dict[str, int]:
         "total",
         "mesa_26_4_1_ref",
         "no_reference_yet",
+        "strict_validated",
+        "diagnostic_runs",
         "reached_termination",
         "within_numeric_tol",
         "passing",
@@ -304,23 +306,28 @@ def _render_numerics_and_harness(
             "### 3. End-to-End Cases (`benchmarks/history_harness`)",
             "",
             "| Suite | `26.4.1` Cases | Stored `26.4.1` Refs | No Ref Yet | "
-            "Reach Upstream Term | Within Numeric Tol | Verified Pass | "
-            "Declared Gaps | Undeclared Failures |",
-            "| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+            "Strict-Validated | Diagnostic Runs | Reach Upstream Term | "
+            "Within Numeric Tol | Verified Pass | Declared Gaps | "
+            "Undeclared Failures |",
+            "| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: "
+            "| ---: | ---: |",
         ]
     )
     for s in case_manifest.VALID_SUITES:
         sr = hh_suites[s]
         lines.append(
             f"| `{s}` | {sr['total']} | {sr['mesa_26_4_1_ref']} | "
-            f"{sr['no_reference_yet']} | {sr['reached_termination']} | "
+            f"{sr['no_reference_yet']} | {sr['strict_validated']} | "
+            f"{sr['diagnostic_runs']} | {sr['reached_termination']} | "
             f"{sr['within_numeric_tol']} | {sr['passing']} | "
             f"{sr['declared_gaps']} | {sr['undeclared_failures']} |"
         )
     lines.append(
         f"| **Total** | **{hh_tot['total']}** | "
         f"**{hh_tot['mesa_26_4_1_ref']}** | **{hh_tot['no_reference_yet']}** "
-        f"| **{hh_tot['reached_termination']}** | "
+        f"| **{hh_tot['strict_validated']}** | "
+        f"**{hh_tot['diagnostic_runs']}** | "
+        f"**{hh_tot['reached_termination']}** | "
         f"**{hh_tot['within_numeric_tol']}** | **{hh_tot['passing']}** | "
         f"**{hh_tot['declared_gaps']}** | "
         f"**{hh_tot['undeclared_failures']}** |"

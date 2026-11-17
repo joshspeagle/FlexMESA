@@ -128,6 +128,10 @@ pub struct ControlValidationReport {
     pub unknown_controls: Vec<(String, String)>,
     /// Valid plotting `(section, key)` pairs recorded for headless `#173` audit.
     pub pgstar_plotting_keys: Vec<(String, String)>,
+    /// `(section, key)` pairs whose only upstream effect is text written to
+    /// the terminal (`DECISIONS #26`). Accepted and recorded; they never
+    /// change the model, `LOGS/` output or termination.
+    pub terminal_output_keys: Vec<(String, String)>,
 }
 
 impl ControlValidationReport {
@@ -138,6 +142,7 @@ impl ControlValidationReport {
         self.unsupported_controls.extend(other.unsupported_controls);
         self.unknown_controls.extend(other.unknown_controls);
         self.pgstar_plotting_keys.extend(other.pgstar_plotting_keys);
+        self.terminal_output_keys.extend(other.terminal_output_keys);
     }
 
     /// Validates a headless plotting section (`&pgstar`, `&pgbinary`, or
@@ -204,6 +209,31 @@ impl ControlValidationReport {
         unused_fields: &HashSet<&str>,
         headless_gui_flags: &HashSet<&str>,
     ) {
+        self.validate_implemented_section_with_terminal_output(
+            section,
+            keys,
+            supported,
+            unused_fields,
+            headless_gui_flags,
+            &HashSet::new(),
+        );
+    }
+
+    /// Same as [`Self::validate_implemented_section`], with a set of
+    /// `terminal_output` keys that are accepted and recorded in
+    /// `terminal_output_keys` instead of being rejected (`DECISIONS #26`).
+    ///
+    /// A key belongs in `terminal_output` only if every upstream use of it at
+    /// MESA `26.4.1` gates or formats a `write` to the terminal.
+    pub fn validate_implemented_section_with_terminal_output<S: AsRef<str>>(
+        &mut self,
+        section: &str,
+        keys: &[S],
+        supported: &HashSet<&str>,
+        unused_fields: &HashSet<&str>,
+        headless_gui_flags: &HashSet<&str>,
+        terminal_output: &HashSet<&str>,
+    ) {
         let sec = section.to_ascii_lowercase();
         let upstream = upstream_section_keys(&sec);
         for raw_key in keys {
@@ -213,6 +243,10 @@ impl ControlValidationReport {
             }
             if headless_gui_flags.contains(k.as_str()) {
                 self.pgstar_plotting_keys.push((sec.clone(), k));
+                continue;
+            }
+            if terminal_output.contains(k.as_str()) {
+                self.terminal_output_keys.push((sec.clone(), k));
                 continue;
             }
             if unused_fields.contains(k.as_str()) {

@@ -158,7 +158,7 @@ plt.close(fig)
 
 ![Asteroseismic echelle diagram and surface-effect corrections](../assets/figures/wave5_astero_echelle_surface_corr.png)
 
-*Figure 1: Echelle diagram ($\nu \bmod \Delta\nu$ versus $\nu$) and frequency residuals illustrating how the Ball & Gizon (2014) two-term surface correction (`combined`) removes the systematic high-frequency offset between adiabatic 1D model eigenfrequencies and observations.*
+*Figure 1: This schematic compares surface corrections and separation ratios on synthetic $l = 0$ radial modes ($n = 14\ldots 25$, $\Delta\nu = 135.1\,\mu\mathrm{Hz}$) with a synthetic two-term surface offset (`Observed`). The left panel presents an echelle diagram ($\nu \bmod \Delta\nu$ versus $\nu$) comparing the Ball & Gizon (2014) cubic, combined, and Sonoi et al. (2015) correction formulas (`astero.eval_surface_correction`), while the right panel plots synthetic frequency separation ratios $r_{01}$, $r_{10}$, and $r_{02}$ in Safe Rust and JAX.*
 
 ---
 
@@ -224,7 +224,7 @@ print(
     f"FGONG={len(fgong_text.splitlines())} lines, OSC={len(osc_text.splitlines())} lines"
 )
 
-# 3. Evaluate linear oscillation eigenmodes (GYRE/ADIPLS parity) and RSP LINA periods
+# 3. Evaluate internal adiabatic BVP stub (GYRE/ADIPLS integration tracked in #170/#171) and RSP LINA periods
 p_modes = star.eval_linear_oscillation_modes(model, 0, [1, 2, 3])
 lina_modes = star.eval_rsp_lina_modes(4.165, 1438.8, 6050.0, 0.73, 0.007, 3)
 rsp_env = star.build_rsp_envelope_model(m_msun=0.65, l_lsun=45.0, teff_k=6700.0)

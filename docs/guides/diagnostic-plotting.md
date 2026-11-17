@@ -147,4 +147,4 @@ print(
 
 ![Synthetic Kurucz SED and Johnson filter curves](../assets/figures/colors_kurucz_sed_johnson.png)
 
-*Figure 1: Kurucz (2003) synthetic spectral energy distributions across effective temperatures $T_{\mathrm{eff}} \in [3500, 10000]\,\mathrm{K}$ overlaid with the normalized Johnson-Cousins $UBVRI$ filter transmission curves in `flexmesa.colors`.*
+*Figure 1: Kurucz (2003) synthetic spectral energy distributions at $T_{\mathrm{eff}} = 5920\,\mathrm{K}$ ($[\mathrm{M/H}] = 0.0$) and $T_{\mathrm{eff}} = 5770\,\mathrm{K}$ ($[\mathrm{M/H}] = -0.4$) with Johnson $B$, $V$, $R$ filter passbands (left), paired with synthetic $(B - V)$ color indices across $T_{\mathrm{eff}} \in [5760, 5990]\,\mathrm{K}$ at $\log g = 4.25$ comparing Safe Rust and JAX (right).*

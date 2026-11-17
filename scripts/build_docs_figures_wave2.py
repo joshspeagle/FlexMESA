@@ -8,10 +8,11 @@ four sides, frameless legends, and journal-derived widths):
    surface flux spectra overlaid with Johnson $UBVRI$ filter curves (left) and
    synthetic color indices across $T_{\\mathrm{eff}}$ and $[\\mathrm{M/H}]$
    (right).
-2. `wave2_benchmark_staircase.png`: Four-way Wave 2.5 runtime comparison at
-   $N_{\\mathrm{zones}} = 1024$ across Upstream Fortran MESA, Safe Rust,
-   Python/PyO3 (`flexmesa._rust`), and Python/JAX (`@jax.jit(vmap)`) (left),
-   paired with $\\mathrm{Fe}^{56}$ in $\\mathrm{He}^4$ effective charge
+2. `wave2_benchmark_staircase.png`: Pre-audit Wave 2.5 runtime comparison at
+   $N_{\\mathrm{zones}} = 1024$ across Pre-Audit Fortran (`chem_comp` uses a
+   hand-written loop at Stage 3), Safe Rust, Python/PyO3 (`flexmesa._rust`),
+   and Python/JAX (`@jax.jit(vmap)`) (left), paired with $\\mathrm{Fe}^{56}$ in
+   $\\mathrm{He}^4$ effective charge
    $Z_{\\mathrm{eff}}(\\log_{10} n_e, \\log_{10} T)$ profiles (right).
 """
 
@@ -183,7 +184,7 @@ def plot_wave2_benchmark_staircase(out_dir: pathlib.Path) -> None:
 
     fig, ax = _two_panel_fig()
     bars = (
-        (-1.5, fortran_4t, "C2", 0.85, "Fortran MESA (4t)"),
+        (-1.5, fortran_4t, "C2", 0.85, "Pre-Audit Fortran (4t)"),
         (-0.5, rust_4t, "C0", 0.95, "Safe Rust (4t)"),
         (0.5, pyo3_4t, "C1", 0.90, "PyO3 (4t)"),
         (1.5, jax_vmap, "C3", 0.85, "JAX (vmap)"),

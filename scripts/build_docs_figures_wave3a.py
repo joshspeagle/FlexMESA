@@ -9,8 +9,8 @@ four sides, frameless legends, and journal-derived widths):
    [170, 180]$ for a $\\mathrm{C}^{12}/\\mathrm{O}^{16}$ white dwarf mixture
    (left), paired with interior $\\Gamma_1$ and crystallization phase profiles
    comparing `HELM` and `Skye` across Safe Rust and JAX (right).
-2. `wave3a_benchmark_staircase.png`: Four-way Wave 3a.5 runtime comparison at
-   $N_{\\mathrm{zones}} = 1024$ across Upstream Fortran MESA, Safe Rust,
+2. `wave3a_benchmark_staircase.png`: Pre-audit Wave 3a.5 runtime comparison at
+   $N_{\\mathrm{zones}} = 1024$ across Pre-Audit Fortran, Safe Rust,
    Python/PyO3 (`flexmesa._rust`), and Python/JAX (`@jax.jit(vmap)`) (left),
    paired with `Skye` vs. `PC` vs. `HELM` non-ideal Coulomb pressure profiles
    across density (right).
@@ -214,7 +214,7 @@ def plot_wave3a_benchmark_staircase(out_dir: pathlib.Path) -> None:
 
     fig, ax = _two_panel_fig(wspace=0.42)
     bars = (
-        (-1.5, fortran_4t, "C2", 0.85, "Fortran MESA (4t)"),
+        (-1.5, fortran_4t, "C2", 0.85, "Pre-Audit Fortran (4t)"),
         (-0.5, rust_4t, "C0", 0.95, "Safe Rust (4t)"),
         (0.5, pyo3_4t, "C1", 0.90, "PyO3 (4t)"),
         (1.5, jax_vmap, "C3", 0.85, "JAX (vmap)"),

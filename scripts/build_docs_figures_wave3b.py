@@ -10,8 +10,8 @@ four sides, frameless legends, and journal-derived widths):
    nuclear energy generation $\\log_{10}\\epsilon_{\\mathrm{nuc}}$ and
    ${}^{12}\\mathrm{C}(\\alpha,\\gamma){}^{16}\\mathrm{O}$ screened rate across
    temperature comparing Safe Rust and JAX (right).
-2. `wave3b_benchmark_staircase.png`: Four-way Wave 3b.5 runtime comparison at
-   $N_{\\mathrm{zones}} = 4096$ across Upstream Fortran MESA, Safe Rust,
+2. `wave3b_benchmark_staircase.png`: Pre-audit Wave 3b.5 runtime comparison at
+   $N_{\\mathrm{zones}} = 4096$ across Pre-Audit Fortran, Safe Rust,
    Python/PyO3 (`flexmesa._rust`), and Python/JAX (`@jax.jit(vmap)`) (left),
    paired with `ATM_TABLE_PHOTOSPHERE` vs. Eddington grey $T(\\tau)$ surface
    pressure boundary conditions across $T_{\\mathrm{eff}}$ (right).
@@ -236,7 +236,7 @@ def plot_wave3b_benchmark_staircase(out_dir: pathlib.Path) -> None:
 
     fig, ax = _two_panel_fig(wspace=0.40)
     bars = (
-        (-1.5, fortran_4t, "C2", 0.85, "Fortran MESA (4t)"),
+        (-1.5, fortran_4t, "C2", 0.85, "Pre-Audit Fortran (4t)"),
         (-0.5, rust_4t, "C0", 0.95, "Safe Rust (4t)"),
         (0.5, pyo3_4t, "C1", 0.90, "PyO3 (4t)"),
         (1.5, jax_vmap, "C3", 0.85, "JAX (vmap)"),

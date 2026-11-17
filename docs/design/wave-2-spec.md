@@ -1,5 +1,8 @@
 # Wave 2 Technical Specification: Atomic, Ionization & Photometric Microphysics (`chem`, `ionization`, `colors`)
 
+!!! note "Historical Pre-Audit Specification (`0b2e6bb`)"
+    Retained for design context; `DECISIONS #6`-`#8` and golden wave gates are superseded by `DECISIONS #17` and `#23`.
+
 ## 1. Scope and Architectural Placement
 
 Wave 2 ports MESA's three atomic and photometric microphysics packages (`chem`, `ionization`, and `colors`) under the **Integrated Three-Tier Hybrid Architecture** (`DECISIONS #6`–`#8`):
@@ -76,14 +79,14 @@ Constructs a not-a-knot (`ibc = 0`) 2D bicubic spline via `interp_mkbicub_db` ov
 
 ### 4.2 Three-Stage 4D $(Z, X, \log Q, \log T)$ Table Interpolation (`eval_ionization`)
 Given $(Z, X, \rho, \log_{10}\rho, T, \log_{10}T)$:
-1. **Stage 1 — Clamped 2D $(\log Q, \log T)$ Bicubic Evaluation at Fixed $(Z_k, X_m)$**:
+1. **Stage 1: Clamped 2D $(\log Q, \log T)$ Bicubic Evaluation at Fixed $(Z_k, X_m)$**:
    With $\log Q = \log_{10}\rho - 2\log_{10}T + 12$ on the uniform $175 \times 102$ grid ($\log Q \in [-10.00, 5.66], \Delta\log Q = 0.09$; $\log T \in [2.10, 8.16], \Delta\log T = 0.06$), out-of-range coordinates are clamped to grid bounds, cell indices are computed via $\operatorname{int}((\log Q - \log Q_{\min})/\Delta\log Q + 10^{-4})$, and all 28 quantities are evaluated via the 2D cubic Hermite/spline polynomial using NaN-sanitized bicubic coefficients.
-2. **Stage 2 — 1D $X$-Interpolation at Fixed $Z_k$ ($\Delta X = 0.2$)**:
+2. **Stage 2: 1D $X$-Interpolation at Fixed $Z_k$ ($\Delta X = 0.2$)**:
    - If $X < 10^{-6}$ or $N_X = 1$: returns the $X = 0$ table result.
    - If $X \le 0.2$ or $X \ge X_{N_X - 1}$: 3-point Lagrange quadratic interpolation over $[0, 0.2, 0.4]$ or $[X_{N_X-3}, X_{N_X-2}, X_{N_X-1}]$.
    - If $0.2 < X < X_{N_X - 1}$: 4-point Catmull-Rom / blended-quadratic cubic interpolation with $\alpha = (X - X_{i_{\mathrm{lo}}+1}) / \Delta X \in [0, 1]$:
      $$c_1 = -\frac{\alpha(\alpha - 1)^2}{2}, \quad c_2 = \frac{2 + \alpha^2(-5 + 3\alpha)}{2}, \quad c_3 = \frac{\alpha + \alpha^2(4 - 3\alpha)}{2}, \quad c_4 = \frac{\alpha^2(\alpha - 1)}{2}.$$
-3. **Stage 3 — 1D $Z$-Interpolation across $Z \in \{0.00, 0.02, 0.04, 0.20, 1.00\}$**:
+3. **Stage 3: 1D $Z$-Interpolation across $Z \in \{0.00, 0.02, 0.04, 0.20, 1.00\}$**:
    - $Z < 10^{-6}$: returns $Z = 0.00$.
    - $10^{-6} \le Z \le 0.04$: 3-point Lagrange quadratic interpolation across $\{0.00, 0.02, 0.04\}$ ($\Delta Z = 0.02$).
    - $0.04 < Z \le 0.20$ or $0.20 < Z \le 1 - 10^{-6}$: cosine-smoothed 2-point interpolation:

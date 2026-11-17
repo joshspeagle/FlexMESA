@@ -141,7 +141,7 @@ def test_api_reference_covers_all_public_submodules() -> None:
 
 
 def test_public_docs_prose_and_path_hygiene() -> None:
-    """Docs and rule files must contain zero machine paths or em-dashes."""
+    """Docs, notes, and rules contain zero bad paths, GFM alerts, or em-dash."""
     forbidden_paths: tuple[str, ...] = (
         "/" + "home/",
         "/" + "mnt/d/",
@@ -178,9 +178,18 @@ def test_public_docs_prose_and_path_hygiene() -> None:
         encoding="utf-8"
     )
 
-    user_facing_set = frozenset((*_iter_user_facing_doc_files(), *rule_files))
+    root_prose_files: tuple[pathlib.Path, ...] = (
+        REPO_ROOT / "README.md",
+        REPO_ROOT / "CHANGELOG.md",
+        REPO_ROOT / "notes" / "DECISIONS.md",
+    )
+    doc_files = sorted(DOCS_DIR.rglob("*.md"))
+    gfm_alert_re = re.compile(
+        r"^\s*>\s*\[!(?:NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]",
+        flags=re.MULTILINE,
+    )
     em_dash = "\u2014"
-    all_checked_files = [*sorted(DOCS_DIR.rglob("*.md")), *rule_files]
+    all_checked_files = [*doc_files, *rule_files, *root_prose_files]
     for path in all_checked_files:
         assert path.is_file(), f"Expected file missing: {path}"
         text = path.read_text(encoding="utf-8")
@@ -189,8 +198,13 @@ def test_public_docs_prose_and_path_hygiene() -> None:
             assert token not in text, (
                 f"Forbidden machine-specific token {token!r} found in {rel}"
             )
-        if path in user_facing_set:
-            assert em_dash not in text, f"Prose em-dash found in {rel}"
+        assert em_dash not in text, f"Prose em-dash found in {rel}"
+    for doc_path in doc_files:
+        doc_rel = doc_path.relative_to(REPO_ROOT)
+        doc_text = doc_path.read_text(encoding="utf-8")
+        assert not gfm_alert_re.search(doc_text), (
+            f"Raw GFM alert callout found in {doc_rel}; use MkDocs `!!!` syntax"
+        )
 
 
 def test_executable_python_snippets_in_docs() -> None:

@@ -1,9 +1,12 @@
 # Wave 3a.5 Four-Way Performance Benchmark and Consolidation Report
 
-This report documents the empirical results of the Wave 3a.5 (`#51`) four-stage
-performance staircase and cross-language parity verification across all four
-implementations of the Wave 3a analytical and single-table equation of state
-(`eos`) engines (`ideal`, `helm`, `pc`, and `skye`):
+!!! warning "Pre-Audit Benchmark Record (`0b2e6bb`, `#146`)"
+    These pre-audit measurements reflect unrecorded local runs before the MESA `26.4.1` re-baseline (no raw output JSON or compiler/date metadata committed, `#146`). Reproducible MESA `26.4.1` vector verification and harness updates are tracked in [#146](https://github.com/joshspeagle/FlexMESA/issues/146) and [#161](https://github.com/joshspeagle/FlexMESA/issues/161).
+
+This report documents the pre-audit results of the Wave 3a.5 (`#51`) four-stage
+performance staircase across four implementations of the Wave 3a analytical and
+single-table equation of state (`eos`) engines (`ideal`, `helm`, `pc`, and
+`skye`):
 
 1. **Upstream Fortran MESA (`gfortran -O2 -fopenmp`)**: Native Fortran 2008
    modules (`libeos.a`, `libchem.a`, `libinterp_2d.a`, `libauto_diff.a`)
@@ -20,7 +23,7 @@ implementations of the Wave 3a analytical and single-table equation of state
 
 ---
 
-## 1. Cross-Language Numerical Parity Gate
+## 1. Pre-Audit Cross-Engine Checksum Snapshots (`#146`)
 
 Across all four Wave 3a workloads (`eos_ideal`, `eos_helm`, `eos_pc`, and
 `eos_skye`) and all radial grid sizes $N_{\mathrm{zones}} \in \{8, 128, 1024,

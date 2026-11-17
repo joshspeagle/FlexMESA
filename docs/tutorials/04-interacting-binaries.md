@@ -70,7 +70,7 @@ print(
 
 ![Binary Roche-lobe overflow and orbital evolution](../assets/figures/wave5_binary_rlof_evolution.png)
 
-*Figure 1: Coupled donor and compact-accretor binary evolution across the onset of Roche-lobe overflow (`RLOF`), showing the exponential transition from detached evolution ($\Delta_{\mathrm{RL}} < 0$) into self-regulated mass transfer ($\Delta_{\mathrm{RL}} \approx 0$) and the corresponding orbital period evolution.*
+*Figure 1: These curves show pointwise microphysical sweeps rather than coupled time evolution. The left panel compares the Ritter (1988) optically thin Roche-lobe overflow mass-transfer rate (`eval_ritter_mdot_thin` in Safe Rust and `@jax.jit`) against fractional donor radius excess $100 \times (R_1 - R_{\mathrm{RL},1}) / R_{\mathrm{RL},1}$ at fixed donor parameters ($M_1 = 2.0\,M_\odot$, $M_2 = 1.4\,M_\odot$, $T_{\mathrm{eff}} = 6500\,\mathrm{K}$). The right panel plots the Thorne (1974) Kerr black-hole dimensionless spin $a_*$ and ISCO radiative efficiency $\eta_{\mathrm{ISCO}}$ (`eval_bh_spin_and_edd`) versus accreted mass ratio $M_{\mathrm{BH}} / M_{\mathrm{BH},0}$ starting from $a_0 = 0.15$.*
 
 ---
 
@@ -227,13 +227,13 @@ print(
 
 ---
 
-## 4. Analytical Orbital Oracles, Massive-Star Winds & Custom `other_*` Hooks
+## 4. Pointwise Physics Helpers & Legacy Multi-Stage Runners
 
-Stage `E2E-5` provides analytical physics oracles and multi-stage runners for all 8 upstream `binary/test_suite` cases (`double_bh`, `evolve_both_stars`, `jdot_gr_check`, `jdot_ls_check`, `jdot_ml_check`, `star_plus_point_mass`, `star_plus_point_mass_explicit_mdot`, `wind_fed_bhhmxb`) and the 4 Tier 5/6 `star/test_suite` hook cases (`check_redo`, `other_physics_hooks`, `relax_composition_j_entropy`, `timing`):
+For the 8 upstream `binary/test_suite` cases (`double_bh`, `evolve_both_stars`, `jdot_gr_check`, `jdot_ls_check`, `jdot_ml_check`, `star_plus_point_mass`, `star_plus_point_mass_explicit_mdot`, `wind_fed_bhhmxb`) and hook-oriented `star/test_suite` cases (`check_redo`, `other_physics_hooks`, `relax_composition_j_entropy`, `timing`), `flexmesa.star` and `flexmesa.binary` expose standalone helpers alongside legacy pre-audit wrapper scaffolding (binary trajectory parity against MESA `26.4.1` currently stands at `0 / 8` under `#160`, and synthetic `Tier1CaseExtras` wrappers are slated for removal under `#148`; see [Declared Known Gaps](../benchmarks/known-gaps.md)):
 
-- **Peters (1964) GW Inspiral & Tauris & van den Heuvel (2003) Non-Conservative Oracles (`binary.eval_gr_expected_separation_rsun`, `binary.eval_tauris_vdh_expected_separation_rsun`)**: Closed-form orbital separation trajectories $a(t)$ (`jdot_gr_check`) and $a(q; \alpha, \beta, \delta, \gamma)$ (`jdot_ml_check`).
-- **Brott et al. (2011) Bi-Stability Massive-Star Winds (`binary.eval_brott_wind_msun_yr`, `binary/test_suite/double_bh`)**: Combines Vink et al. (2001), Nieuwenhuijzen & de Jager (1990), and Hamann et al. (1995) Wolf-Rayet winds across the bi-stability jump for $70\,M_\odot + 65\,M_\odot$ binary black-hole progenitors (`double_bh`).
-- **Custom `other_*` Physics Hooks & Step-Redo Rollback (`star.eval_overshoot_dbl_exp`, `star.eval_grafener_kudritzki_wind_msun_yr`, `star.verify_step_redo_bit_parity`)**: Evaluates double-exponential convective overshooting $D_{\mathrm{ov}}(r)$, Gräfener & Kudritzki (2008) Wolf-Rayet optically thick wind mass-loss rates, and `.photo` step-redo rollback consistency (`check_redo`).
+- **Peters (1964) GW Inspiral & Tauris & van den Heuvel (2003) Non-Conservative Formulas (`binary.eval_gr_expected_separation_rsun`, `binary.eval_tauris_vdh_expected_separation_rsun`)**: Closed-form orbital separation formulas $a(t)$ and $a(q; \alpha, \beta, \delta, \gamma)$ used as analytical checks alongside `jdot_gr_check` and `jdot_ml_check` (`0 / 8` binary test-suite trajectory parity under `#160`).
+- **Brott et al. (2011) Bi-Stability Massive-Star Winds (`binary.eval_brott_wind_msun_yr`)**: Standalone wind formula combining Vink et al. (2001), Nieuwenhuijzen & de Jager (1990), and Hamann et al. (1995) Wolf-Rayet winds across the bi-stability jump (`double_bh` binary trajectory parity remains open under `#160`).
+- **Custom Physics Hooks & Internal Step-Redo Check (`star.eval_overshoot_dbl_exp`, `star.eval_grafener_kudritzki_wind_msun_yr`, `star.verify_step_redo_bit_parity`)**: Evaluates double-exponential convective overshooting $D_{\mathrm{ov}}(r)$, Gräfener & Kudritzki (2008) Wolf-Rayet optically thick wind mass-loss rates, and an internal `.photo` step-redo rollback check (`check_redo` and full `other_*` MESA `26.4.1` trajectory parity remain open under `#150` and `#152`).
 
 ```python
 from flexmesa import binary, constants, star
@@ -259,7 +259,7 @@ print(
     f"Mdot_Brott = {w_brott:.3e} Msun/yr"
 )
 
-# 2. Double-exponential overshoot, Grafener-Kudritzki WR wind, and step-redo bit parity
+# 2. Double-exponential overshoot, Grafener-Kudritzki WR wind, and internal step-redo check
 d_ov = star.eval_overshoot_dbl_exp(
     d0=1.0e14,
     delta_r=1.0e9,
@@ -281,6 +281,6 @@ zams_1m = star.StarModel.from_zams(initial_mass=1.0, initial_z=0.02)
 redo_ok = star.verify_step_redo_bit_parity(zams_1m)
 print(
     f"Other hooks: D_ov = {d_ov:.3e} cm^2/s, Mdot_GK = {mdot_gk:.3e} Msun/yr, "
-    f"redo parity = {redo_ok}"
+    f"internal redo check = {redo_ok}"
 )
 ```

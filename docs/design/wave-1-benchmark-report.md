@@ -1,7 +1,10 @@
 # Wave 1 Four-Way Performance Benchmark and Architecture Synthesis
 
-This report presents the empirical results of the Wave 1 four-stage performance
-staircase across all four implementations of the Wave 1 foundation and
+!!! warning "Pre-Audit Benchmark Record (`0b2e6bb`, `#146`)"
+    These pre-audit measurements were collected locally prior to the MESA `26.4.1` re-baseline with no committed raw output JSON, date, CPU model, or compiler version (`#146`). Notice also that Stage 2 and Stage 3 Fortran numbers for `auto_diff` (`eval_autodiff_fused`) and `mtx_tridiag` (`fast_block_thomas_solve` / `lu5_factor`, batched `221.38 us`) come from hand-written Fortran loops in `bench_kernels_micro.f90` / `bench_kernels_solver.f90` rather than MESA library routines (MESA's single-matrix `bcyclic_dble_decsolblk` 4t OpenMP time at `4096` zones is `791.43 us`). Reproducible MESA `26.4.1` benchmarking is tracked in [#146](https://github.com/joshspeagle/FlexMESA/issues/146).
+
+This report presents the pre-audit results of the Wave 1 four-stage
+performance staircase across four implementations of the Wave 1 foundation and
 microphysics modules:
 
 1. **Upstream Fortran MESA (`gfortran -O2 -fopenmp`)**: Native Fortran 2008
@@ -51,8 +54,9 @@ optimization stages:
 
 ### 1.2 Hardware Environment and Reproduction Commands
 
-Measurements were collected on a 16-core x86\_64 Linux workstation with 30 GiB
-system RAM and an NVIDIA GeForce RTX 5080 GPU (16 GiB GDDR7 VRAM), with CPU
+Measurements below were reported for a local 16-core x86\_64 Linux workstation
+profile (30 GiB RAM, NVIDIA GeForce RTX 5080 GPU with 16 GiB GDDR7 VRAM; exact
+CPU model, compiler build, date, and raw JSON logs not archived, `#146`), with CPU
 thread pools capped at 4 threads (`OMP_NUM_THREADS=4`,
 `OPENBLAS_NUM_THREADS=4`, `MKL_NUM_THREADS=4`) and JAX configured in strict
 IEEE-754 double precision (`jax_enable_x64=True`,
@@ -77,7 +81,7 @@ for r in bench.run_all_wave1_benchmarks((128, 1024, 4096), 2, 7):
 
 ---
 
-## 2. Four-Way Numerical Parity Verification
+## 2. Pre-Audit Four-Way Checksum Comparison (`#146`)
 
 Across all 18 `(workload, N_zones)` combinations, the Stage 2 primal checksums
 agree across all 9 printed significant digits across Upstream Fortran MESA, Safe
@@ -104,14 +108,8 @@ Rust, Python/NumPy, and Python/JAX `float64`:
 | `turb_mlt` | 4096 | `1.75167983e3` | `1.75167983e3` | `1.75167983e3` | `0.00e0` | `0.00e0` | `1.88e-14` |
 | `turb_tdc` | 4096 | `1.69966039e3` | `1.69966039e3` | `1.69966039e3` | `0.00e0` | `0.00e0` | `4.44e-15` |
 
-> [!NOTE]
-> In `interp_2d`, Safe Rust and Python/JAX agree to $4.0 \times 10^{-16}$, while
-> upstream Fortran MESA's `fvbicub_db` differs by $7.20 \times 10^{-9}$ in the
-> 9th digit because `interp_2d/private/bicub_db.f` omits `implicit none` inside
-> `fvbicub_db`, leaving its local Hermite basis variables (`xp`, `yp`, `cx`,
-> `cy`, `hx2`, `hy2`, `z36th`) implicitly typed as 32-bit `REAL` (`f32`). All
-> five other workloads agree to $\le 10^{-12}$ in full `f64` precision across
-> all four implementations.
+!!! note "32-bit `fvbicub_db` Locals vs. `f64` Precision"
+    In `interp_2d`, Safe Rust and Python/JAX agree to $4.0 \times 10^{-16}$, while upstream Fortran MESA's `fvbicub_db` differs by $7.20 \times 10^{-9}$ in the 9th digit because `interp_2d/private/bicub_db.f` omits `implicit none` inside `fvbicub_db`, leaving its local Hermite basis variables (`xp`, `yp`, `cx`, `cy`, `hx2`, `hy2`, `z36th`) implicitly typed as 32-bit `REAL` (`f32`). All five other workloads agree to $\le 10^{-12}$ in full `f64` precision across all four implementations.
 
 ---
 

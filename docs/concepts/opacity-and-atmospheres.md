@@ -27,7 +27,7 @@ $$\nabla_{\mathrm{rad}} = \frac{3}{16\pi a c G}\,\frac{\kappa\,L\,P}{m\,T^4}, \q
 
 ![Rosseland mean opacity regimes and basic.net nuclear energy generation across Safe Rust and JAX](../assets/figures/wave3b_microphysics_diagnostics.png)
 
-*Figure 1: The left panel displays the total Rosseland mean opacity $\log_{10}(\kappa / \mathrm{cm^2\,g^{-1}})$ as a function of temperature $\log_{10}(T/\mathrm{K})$ at fixed $\log_{10} R \in \{-3, -1, +1\}$ for solar composition ($X = 0.70, Z = 0.02$), illustrating the H-ionization peak near $\log_{10} T \approx 4.1$, the iron-group Z-bump near $\log_{10} T \approx 5.2$, high-temperature Poutanen (2017) Compton scattering, and degenerate Potekhin electron conduction. The right panel shows the nuclear energy generation rate $\epsilon_{\mathrm{nuc}}$ and its analytical temperature derivative from `basic.net` across the pp-chain, CNO cycle, and triple-alpha burning regimes.*
+*Figure 1: The left panel displays total Rosseland mean opacity $\log_{10}(\kappa / \mathrm{cm^2\,g^{-1}})$ as a function of $\log_{10}(T/\mathrm{K})$ at fixed $\log_{10} R = -3.0$ for solar composition ($X = 0.70, Z = 0.02$), comparing Safe Rust and JAX `custom_jvp` across the shaded low/high-$T$ transition band ($\log_{10} T \in [3.80, 3.88]$). The right panel shows `basic.net` nuclear energy generation $\log_{10}\epsilon_{\mathrm{nuc}}$ at $\rho = 100\,\mathrm{g\,cm^{-3}}$ (Safe Rust curve and JAX samples) alongside the shifted forward ${}^{12}\mathrm{C}(\alpha,\gamma){}^{16}\mathrm{O}$ REACLIB rate $\log_{10}\lambda + 22$.*
 
 ---
 
@@ -57,18 +57,18 @@ Upstream Fortran MESA evaluates each stellar SED by performing a 64-point (`4 x 
 
 $$w_{\mathrm{corner}}(k_x, k_y, k_z) = h_{00}(t_x)\text{ or }h_{01}(t_x)\;\cdots\; + w_{dx} + w_{dy} + w_{dz}.$$
 
-Factoring the shared interior stencil nodes reduces memory gathers per stellar model from 56 to **32 distinct grid spectra** (a 43% reduction in memory bandwidth) while preserving 16-digit bit-level accuracy ($3.57 \times 10^{-16}$ relative error).
+Factoring the shared interior stencil nodes reduces memory gathers per stellar model from 56 to **32 distinct grid spectra** (a 43% reduction in memory bandwidth) while remaining internally consistent with 64-point cubic evaluation to $3.57 \times 10^{-16}$ (MESA `26.4.1` hex vector promotion pending `#161`).
 
 ### 3.2 Precomputed Non-Uniform Simpson Panel Weights
 For each filter transmission curve $S_k(\lambda)$ resampled onto the 1199-point Kurucz wavelength grid, the photon-counting filter flux integral and energy-counting bolometric integral are integrated via non-uniform quadratic Simpson panels over $(x_{2p}, x_{2p+1}, x_{2p+2})$ with step widths $h_0 = x_{2p+1} - x_{2p}$ and $h_1 = x_{2p+2} - x_{2p+1}$:
 
 $$I = \sum_{p=0}^{598} \left(c_{0,p} y_{2p} + c_{1,p} y_{2p+1} + c_{2,p} y_{2p+2}\right), \qquad \begin{cases} c_{0,p} = \dfrac{h_0 + h_1}{6 h_0}(2 h_0 - h_1), \\[6pt] c_{1,p} = \dfrac{(h_0 + h_1)^3}{6 h_0 h_1}, \\[6pt] c_{2,p} = \dfrac{h_0 + h_1}{6 h_1}(2 h_1 - h_0). \end{cases}$$
 
-By precomputing $(c_{0,p}, c_{1,p}, c_{2,p})$ and the wavelength-weighted filter vectors $\lambda_m S_k(\lambda_m)$ once at table initialization and fusing the bolometric and 7 Johnson filter integrals over a stack-allocated `[T; 1199]` buffer, `FlexMESA` accelerates 1024-model SED and 10-column photometry synthesis by **$68.9\times$ in 4-thread Safe Rust** and **$151.6\times$ in GPU JAX** relative to upstream Fortran MESA.
+Precomputing $(c_{0,p}, c_{1,p}, c_{2,p})$ and the wavelength-weighted filter vectors $\lambda_m S_k(\lambda_m)$ once at table initialization avoids per-zone filter weight reconstruction over the `[T; 1199]` buffer (see [Verification & Benchmarks Overview](../benchmarks/overview.md) and `#146` for pre-audit timing notes and upcoming MESA `26.4.1` benchmarks).
 
-![Kurucz emergent SEDs with Johnson filter passbands and synthetic B-V color indices](../assets/figures/colors_kurucz_sed_johnson.png)
+![Kurucz emergent SEDs with Johnson B, V, R passbands and synthetic B-V colors](../assets/figures/colors_kurucz_sed_johnson.png)
 
-*Figure 2: The left panel shows synthetic emergent Kurucz (2003) stellar spectral energy distributions across effective temperatures $T_{\mathrm{eff}} \in \{4000, 6000, 10000\}\,\mathrm{K}$ ($\log g = 4.5$, $[\mathrm{M/H}] = 0.0$) overlaid with the normalized Johnson $U, B, V, R, I$ filter transmission curves. The right panel displays the resulting synthetic $(B - V)$ color index and bolometric correction $\mathrm{BC}_V$ as a function of $\log_{10}(T_{\mathrm{eff}}/\mathrm{K})$ across surface gravities $\log g \in \{2.0, 4.5\}$.*
+*Figure 2: The left panel shows emergent Kurucz (2003) stellar spectral energy distributions at $T_{\mathrm{eff}} = 5920\,\mathrm{K}$ ($\log g = 4.30$, $[\mathrm{M/H}] = 0.0$) and $T_{\mathrm{eff}} = 5770\,\mathrm{K}$ ($\log g = 4.10$, $[\mathrm{M/H}] = -0.4$) overlaid with scaled Johnson $B, V, R$ filter transmission curves. The right panel displays the resulting synthetic $(B - V)$ color index across $T_{\mathrm{eff}} \in [5760, 5990]\,\mathrm{K}$ at fixed $\log g = 4.25$ and $[\mathrm{M/H}] \in \{0.0, -0.4\}$ comparing Safe Rust and JAX `@jit`.*
 
 === "Python & JAX (`flexmesa.kap`, `flexmesa.atm`, `flexmesa.colors`)"
 

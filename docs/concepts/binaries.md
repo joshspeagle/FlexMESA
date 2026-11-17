@@ -4,7 +4,7 @@ Most massive and intermediate-mass stars exchange mass or angular momentum with 
 
 ![Ritter (1988) RLOF mass-transfer curve and Kerr black-hole ISCO spin evolution](../assets/figures/wave5_binary_rlof_evolution.png)
 
-*Figure 1: The left panel displays the Roche-lobe overflow mass-transfer rate $\log_{10}(|\dot{M}_{\mathrm{RLOF}}| / M_\odot\,\mathrm{yr^{-1}})$ as a function of the relative Roche-lobe overfill factor $\delta_{\mathrm{RL},1} = (R_1 - R_{\mathrm{RL},1}) / R_{\mathrm{RL},1}$ for a $2.0\,M_\odot$ donor orbiting a $1.4\,M_\odot$ compact companion, showing the exponential Ritter (1988) optically thin atmospheric regime ($\delta_{\mathrm{RL},1} < 0$) transitioning continuously into the Kolb & Ritter (1990) optically thick adiabatic regime ($\delta_{\mathrm{RL},1} > 0$). The right panel shows the Bardeen (1972) dimensionless Kerr black-hole spin $a_* \in [0, 0.998]$ and innermost stable circular orbit (`ISCO`) radiative efficiency $\eta_{\mathrm{ISCO}}$ as a function of accreted rest mass $M_{\mathrm{acc}} / M_{\mathrm{BH},0}$.*
+*Figure 1: The left panel plots pointwise optically thin mass-transfer rates $\log_{10}(|\dot{M}_{\mathrm{RLOF}}| / M_\odot\,\mathrm{yr^{-1}})$ (`eval_ritter_mdot_thin`, Safe Rust curve and JAX `@jit` samples) as a function of relative Roche-lobe gap $100\times(R_1 - R_{\mathrm{RL},1}) / R_{\mathrm{RL},1}$ for a $2.0\,M_\odot + 1.4\,M_\odot$ binary. The right panel shows the Bardeen (1972) dimensionless Kerr black-hole spin $a_*$ and `ISCO` radiative efficiency $\eta_{\mathrm{ISCO}}$ as a function of accreted mass ratio $M_{\mathrm{BH}} / M_{\mathrm{BH},0}$.*
 
 ---
 
@@ -51,7 +51,7 @@ When the companion is an accreting black hole (`is_black_hole=True` in `BinarySy
   $$\eta_{\mathrm{ISCO}}(a_*) = 1 - \sqrt{1 - \frac{2}{3\,r_{\mathrm{ISCO}}(a_*)}}, \qquad \dot{M}_{\mathrm{Edd}} = \frac{4\pi G M_{\mathrm{BH}}}{c\,\kappa_{\mathrm{es}}\,\eta_{\mathrm{ISCO}}(a_*)}.$$
 
 - **Rest-Mass vs. Gravitational-Mass Growth & System Mass-Loss Bookkeeping**:
-  A rest-mass accretion step $\Delta M_0 = \min(|\dot{M}_{\mathrm{tr}}|, \dot{M}_{\mathrm{Edd}})\,\Delta t$ increases the black-hole gravitational mass by $\Delta M_{\mathrm{BH}} = (1 - \eta_{\mathrm{ISCO}})\,\Delta M_0$ (`binary/private/binary_mdot.f90:588-591`, `binary/private/binary_evolve.f90:159`), while the radiated accretion energy $\eta_{\mathrm{ISCO}}\,\Delta M_0$ is accounted for in the system mass-loss rate $\dot{M}_{\mathrm{system\_transfer}}(\text{accretor})$ so total gravitating mass-momentum bookkeeping remains exact (`BinarySystem::accretor_mass_and_sys_loss`).
+  A rest-mass accretion step $\Delta M_0 = \min(|\dot{M}_{\mathrm{tr}}|, \dot{M}_{\mathrm{Edd}})\,\Delta t$ increases the black-hole gravitational mass by $\Delta M_{\mathrm{BH}} = (1 - \eta_{\mathrm{ISCO}})\,\Delta M_0$ (`binary/private/binary_mdot.f90:587-592`, stepped in `binary/private/binary_evolve.f90:279-283`, following initial zero-spin equivalent mass setup in `binary/private/binary_evolve.f90:151-159`), while the radiated accretion energy $\eta_{\mathrm{ISCO}}\,\Delta M_0$ is accounted for in the system mass-loss rate $\dot{M}_{\mathrm{system\_transfer}}(\text{accretor})$ (`BinarySystem::accretor_mass_and_sys_loss`).
 
 ---
 
@@ -60,14 +60,14 @@ When the companion is an accreting black hole (`is_black_hole=True` in `BinarySy
 `flexmesa.binary` evolves orbital angular momentum $J_{\mathrm{orb}}$, eccentricity $e$, and component spin rates $\Omega_{1,2}$ under four secular torque mechanisms:
 
 1. **Peters (1964) Gravitational-Wave Radiation & Eccentricity Decay (`eval_jdot_gr_jax`, `eval_edot_gr`)**:
-   Quadrupole gravitational-wave emission extracts orbital angular momentum (`eval_jdot_gr`) and evaluates Peters (1964) eccentricity decay (`eval_edot_gr`; alignment with upstream `binary_edot.f90`, which omits a gravitational-wave eccentricity term, is tracked in [#160](https://github.com/joshspeagle/FlexMESA/issues/160) and [#175](https://github.com/joshspeagle/FlexMESA/issues/175)):
+   Quadrupole gravitational-wave emission extracts orbital angular momentum (`eval_jdot_gr`) and evaluates Peters (1964) eccentricity decay (`eval_edot_gr`; upstream `get_edot` at `binary/private/binary_edot.f90:93` omits `edot_gr`, so alignment back to MESA `26.4.1` is tracked in [#160](https://github.com/joshspeagle/FlexMESA/issues/160) and [#175](https://github.com/joshspeagle/FlexMESA/issues/175)):
 
    $$\frac{\dot{J}_{\mathrm{gr}}}{J_{\mathrm{orb}}} = -\frac{32}{5}\,\frac{G^3}{c^5}\,\frac{M_1 M_2 (M_1 + M_2)}{a^4\,(1 - e^2)^{5/2}}\left(1 + \frac{7}{8}e^2\right), \qquad \dot{e}_{\mathrm{gr}} = -\frac{304}{15}\,\frac{G^3 M_1 M_2 (M_1 + M_2)}{c^5\,a^4\,(1 - e^2)^{5/2}}\,e\left(1 + \frac{121}{304}e^2\right).$$
 
 2. **Rappaport, Verbunt & Joss (1983) Magnetic Braking (`eval_jdot_mb_jax`)**:
    Magnetized stellar winds coupled to a donor with a convective envelope and radiative core extract spin and orbital angular momentum at rate $\dot{J}_{\mathrm{mb}} = -3.8 \times 10^{-30}\,M_1 R_\odot^4\,(R_1 / R_\odot)^{\gamma_{\mathrm{mb}}}\,\Omega_{\mathrm{orb}}^3\,\mathrm{dyn\,cm}$ (default $\gamma_{\mathrm{mb}} = 3.0$).
 3. **Spin-Orbit Tidal Coupling & Missing Stellar Wind Torque (`eval_jdot_ls_with_winds`, `eval_jdot_missing_wind`)**:
-   Evaluates spin-orbit angular momentum exchange $\dot{J}_{\mathrm{ls}} = -\sum_{i=1}^2 (\Delta S_i - \dot{M}_{\mathrm{wind},i} j_{\mathrm{surf},i}\Delta t) / \Delta t$ after subtracting stellar wind spin loss (`binary/private/binary_jdot.f90:136-174`) alongside the companion's missing stellar wind angular momentum torque (`default_jdot_missing_wind`).
+   Evaluates spin-orbit angular momentum exchange $\dot{J}_{\mathrm{ls}} = -\sum_{i=1}^2 (\Delta S_i - \dot{M}_{\mathrm{wind},i} j_{\mathrm{surf},i}\Delta t) / \Delta t$ after subtracting stellar wind spin loss (`binary/private/binary_jdot.f90:136-174`) alongside the companion's missing stellar wind angular momentum torque (`default_jdot_missing_wind`, `binary/private/binary_jdot.f90:176-199`).
 4. **Hut (1981) Weak-Friction Tidal Circularization & Synchronization (`eval_edot_tidal_hut_jax`)**:
    Evaluates the Hut (1981, A&A, 99, 126) fifth-order eccentricity polynomials $f_1(e^2)$ through $f_5(e^2)$ to compute the tidal circularization rate $\dot{e}_{\mathrm{tidal}}$ and spin-orbit synchronization timescales for convective and radiative envelopes, paired with monotonically wrapped $[0, 1)$ true-anomaly phase grids (`build_anomaly_grid`) for eccentric phase-dependent RLOF integration.
 5. **Custom Binary Winds, Post-Step Hooks & Composition Relaxation (`BinaryExtras`, `relax_composition_with_henyey`)**:

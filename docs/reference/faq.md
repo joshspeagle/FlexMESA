@@ -56,11 +56,11 @@ print("PCR solution norm:", float(jnp.linalg.norm(sol)))
 
 ### How does `FlexMESA` differentiate iterative solvers (`set_mlt`, `set_tdc`, `eos_pt_get`) without differentiating through the iteration loop?
 
-Propagating 33-variable or 70-variable dual numbers through every bracket-search and Newton-Raphson iteration is the primary CPU bottleneck in upstream Fortran MESA's `turb_tdc` (`223 ms` per 4096-zone call). `FlexMESA` instead converges the scalar root $y^*$ in plain `f64` and applies the **Implicit Function Theorem** once at the converged root $Q(y^*, \theta) = 0$:
+Propagating 33-variable or 70-variable dual numbers through every bracket-search and Newton-Raphson iteration was measured in pre-audit Wave 1 benchmarks (`223 ms` per 4096-zone call for a dual-number Fortran `turb_tdc` comparator; post-audit MESA `26.4.1` provenance re-runs are tracked under `#146`). `FlexMESA` instead converges the scalar root $y^*$ in plain `f64` and applies the **Implicit Function Theorem** once at the converged root $Q(y^*, \theta) = 0$:
 
 $$\frac{\partial y^*}{\partial \theta} = -\left(\frac{\partial Q}{\partial y}\right)^{-1} \frac{\partial Q}{\partial \theta}$$
 
-This yields the exact analytical tangent (matching infinite-precision unrolled AD to $\le 10^{-15}$) while accelerating `turb_tdc` by $54\times$ on CPU and $146\times$ on GPU.
+This yields the exact analytical tangent (matching infinite-precision unrolled AD to $\le 10^{-15}$) while achieving pre-audit speedups of $54\times$ on CPU and $146\times$ on GPU against that pre-audit Fortran comparator (`#146`).
 
 ---
 
@@ -68,7 +68,7 @@ This yields the exact analytical tangent (matching infinite-precision unrolled A
 
 ### Can I load existing Fortran MESA `.mod` files and `inlist` directories directly?
 
-Yes. `StarModel.from_mod_file("path/to/model.mod")` parses upstream ASCII `.mod` files (converting 1-based Fortran zone indexing and `D` exponents into 0-based C-contiguous `FlexMESA` arrays), and `star.parse_inlist_bundle("path/to/inlist")` recursively resolves `read_extra_star_job_inlist*`, `read_extra_controls_inlist*`, and `&pgstar` namelist chains. See [Inlists, Models & Data Caches](../guides/inlists-and-models.md) for complete examples.
+Yes, though `&controls` and `&star_job` coverage is currently partial (`#147`). `StarModel.from_mod_file("path/to/model.mod")` parses upstream ASCII `.mod` files (converting 1-based Fortran zone indexing and `D` exponents into 0-based C-contiguous `FlexMESA` arrays), and `star.parse_inlist_bundle("path/to/inlist")` recursively resolves `read_extra_star_job_inlist*`, `read_extra_controls_inlist*`, and `&pgstar` namelist chains (unrecognized or unported keys are stored in `extra_fields` or ignored by the step driver until wired under `#147`). See [Inlists, Models & Data Caches](../guides/inlists-and-models.md) for worked examples.
 
 ### Why does zone index `0` correspond to the stellar surface instead of the center?
 

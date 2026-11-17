@@ -20,7 +20,6 @@ import build_docs_figures_wave4 as _w4_figs
 import build_docs_figures_wave5 as _w5_figs
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-import mesa_paper_figures as _paper_figs
 import numpy as np
 from matplotlib import figure, font_manager
 
@@ -86,7 +85,6 @@ def main() -> None:
     _w5_figs.plot_wave5_benchmark_speedup(out_dir)
     _w5_figs.plot_wave5_astero_echelle_surface_corr(out_dir)
     _w5_figs.plot_wave5_binary_rlof_evolution(out_dir)
-    _paper_figs.generate_all_mesa_paper_figures(root)
 
 
 def _register_latin_modern() -> None:
@@ -359,7 +357,11 @@ def plot_turb_mlt_tdc(out_dir: pathlib.Path) -> None:
 
 
 def plot_wave1_benchmark_staircase(out_dir: pathlib.Path) -> None:
-    """Plots the 4-way Wave 1.5 runtime comparison at $N_z = 4096$.
+    """Plots the pre-audit Wave 1.5 runtime comparison at $N_z = 4096$.
+
+    Matches `kernel-scorecards.md` (batched Stage 3 values; `auto_diff` and
+    `mtx_tridiag` Stage 3 Fortran loops are hand-written comparators rather
+    than MESA library calls, with raw provenance tracked in `#146`).
 
     Args:
         out_dir: Target directory for `wave1_benchmark_staircase.png`.
@@ -374,14 +376,14 @@ def plot_wave1_benchmark_staircase(out_dir: pathlib.Path) -> None:
     ]
     x_pos = np.arange(len(workloads), dtype=np.float64)
     w_bar = 0.20
-    fortran_4t = np.array([5.65, 41.15, 152.32, 791.43, 1784.93, 58176.83])
-    rust_4t = np.array([5.89, 36.95, 161.32, 1018.85, 142.14, 1075.24])
+    fortran_4t = np.array([5.65, 41.15, 152.32, 221.38, 1784.93, 58176.83])
+    rust_4t = np.array([5.89, 36.95, 161.32, 405.79, 142.14, 1075.24])
     pyo3_best = np.array([100.22, 142.37, 312.58, 1652.80, 290.02, 1205.71])
     jax_batch = np.array([321.12, 322.45, 319.25, 5356.85, 317.73, 398.61])
 
     fig, ax = plt.subplots(1, 1, figsize=(TEXT_WIDTH, 0.44 * TEXT_WIDTH))
     bars = (
-        (-1.5, fortran_4t, "C2", 0.85, "Fortran MESA (4t OpenMP)"),
+        (-1.5, fortran_4t, "C2", 0.85, "Pre-Audit Fortran (4t)"),
         (-0.5, rust_4t, "C0", 0.95, "Safe Rust (4t rayon)"),
         (0.5, pyo3_best, "C1", 0.90, "Python PyO3 (flexmesa._rust)"),
         (1.5, jax_batch, "C3", 0.85, "Python JAX (jit + vmap / 4)"),

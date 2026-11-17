@@ -1,5 +1,8 @@
 # Wave 1 Specification: Dual-Track Foundation Modules
 
+!!! note "Historical Pre-Audit Specification (`0b2e6bb`)"
+    Dual-track parity and `100%` wave-gate criteria here are superseded by `DECISIONS #17` and `#23` (`crlibm` `"strict"` mode vs. derived JAX); see [Port Coverage Map](../benchmarks/coverage-map.md) for current MESA `26.4.1` status.
+
 This document specifies the mathematical formulas, array shape and physical
 unit contracts, and numerical verification tolerances for Wave 1 of FlexMESA.
 Wave 1 implements the ten foundational numerical and microphysical modules of

@@ -1,7 +1,10 @@
 # MESA Codebase Architecture & Migration Strategy (`Rust` / `Python` / `JAX`)
 
-> [!IMPORTANT]
-> **Scope at a Glance:** A full checkout of [`MESAHub/mesa`](https://github.com/MESAHub/mesa) comprises **2,357 tracked source and documentation files** totaling **546,959 lines (404,831 non-blank, non-comment LOC)**, accompanied by **2.18 GiB of Git LFS physics data tables** and two bundled Fortran tarballs (`gyre-9.1.1.tar.gz` at 54,760 lines of `.fypp` and `forum-1.2.3.tar.gz` at 4,219 lines of `.fypp`). Excluding documentation (`.rst`), bundled external codes (`stella`, `adipls`, `gyre`), legacy X11 plotting (`pgstar`, `pgbinary`), and legacy `RSP1`, the core MESA 1D stellar and binary evolution engine and its 20 supporting numerical and microphysics packages represent **~250,000 LOC** organized in a strict **12-tier Directed Acyclic Graph (DAG)** with **21 standalone module unit-test suites** and **107 end-to-end integration test cases**.
+!!! warning "Historical Pre-Audit Document (`0b2e6bb`)"
+    Preserved for early architectural context. Line counts, scope exclusions (`gyre`/`adipls`/`stella`/`plotting`), and architecture rules (`DECISIONS #1`-`#8`) have been superseded by MESA `26.4.1` tracking in [`notes/SCOPE.md`](https://github.com/joshspeagle/FlexMESA/blob/main/notes/SCOPE.md), [`notes/DECISIONS.md`](https://github.com/joshspeagle/FlexMESA/blob/main/notes/DECISIONS.md), and the [Port Coverage Map](../benchmarks/coverage-map.md).
+
+!!! note "Scope at a Glance"
+    A full checkout of [`MESAHub/mesa`](https://github.com/MESAHub/mesa) comprises **2,357 tracked source and documentation files** totaling **546,959 lines (404,831 non-blank, non-comment LOC)**, accompanied by **2.18 GiB of Git LFS physics data tables** and two bundled Fortran tarballs (`gyre-9.1.1.tar.gz` at 54,760 lines of `.fypp` and `forum-1.2.3.tar.gz` at 4,219 lines of `.fypp`). Excluding documentation (`.rst`), bundled external codes (`stella`, `adipls`, `gyre`), legacy X11 plotting (`pgstar`, `pgbinary`), and legacy `RSP1`, the core MESA 1D stellar and binary evolution engine and its 20 supporting numerical and microphysics packages represent **~250,000 LOC** organized in a strict **12-tier Directed Acyclic Graph (DAG)** with **21 standalone module unit-test suites** and **107 end-to-end integration test cases**.
 
 ---
 
@@ -23,8 +26,8 @@ The census below classifies every regular (non-symlink) file in [`MESAHub/mesa`]
 | **Documentation (`.rst`, excl. 129 symlinks)** | 313 | 27,711 | 19,596 | 8,109 | 6 | Sphinx user/developer documentation (`docs/source/`) and 107 test-suite `README.rst` files |
 | **Grand Total (Unpacked Working Tree)** | **2,357** | **546,959** | **404,831** | **77,496** | **64,632** | Complete git checkout (excluding `.defaults` text files and compressed tarballs) |
 
-> [!NOTE]
-> **Default Configuration Files (`.defaults` & `.list`):** In addition to the source files above, MESA stores **32,406 lines** of declarative control documentation and default values in `<module>/defaults/*.defaults` and `*.list` files (such as `star/defaults/controls.defaults` at 11,810 lines, `star/defaults/pgstar.defaults` at 7,969 lines, and `star/defaults/star_job.defaults` at 2,958 lines). These files serve simultaneously as human-readable reference documentation (via Sphinx symlinks) and as the canonical specification enforced against Fortran namelists by `linters/check_defaults.py`.
+!!! note "Default Configuration Files (`.defaults` & `.list`)"
+    In addition to the source files above, MESA stores **32,406 lines** of declarative control documentation and default values in `<module>/defaults/*.defaults` and `*.list` files (such as `star/defaults/controls.defaults` at 11,810 lines, `star/defaults/pgstar.defaults` at 7,969 lines, and `star/defaults/star_job.defaults` at 2,958 lines). These files serve simultaneously as human-readable reference documentation (via Sphinx symlinks) and as the canonical specification enforced against Fortran namelists by `linters/check_defaults.py`.
 
 ---
 
@@ -242,8 +245,8 @@ The 144 files in `star/private/` decompose into 8 distinct functional subsystems
 | **7. Adaptive Mesh Refinement (AMR)** | 6 | 7,036 | 5.3% | `adjust_mesh.f90`, `mesh_plan.f90`, `adjust_mesh_split_merge.f90`, `mesh_adjust.f90` |
 | **8. Per-Cell Microphysics Wrappers** | 6 | 3,909 | 2.9% | `micro.f90`, `eos_support.f90`, `kap_support.f90`, `net.f90`, `atm_support.f90`, `neu.f90` |
 
-> [!TIP]
-> **Key Scope Reduction Insight inside `star/private/`:** Nearly **40% of `star/private/` (`53,500+` lines)** is outside the core stellar evolution solver. Specifically, `pgstar` (`23,132` lines of PGPLOT X11 wrappers), namelist/column I/O boilerplate (`18,849` lines across `ctrls_io.f90`, `star_job_ctrls_io.f90`, `history.f90`, `profile_getval.f90`, `star_history_def.f90`, `star_profile_def.f90`), and the legacy Smolec `rsp_*` subsystem (`10,371` lines, superseded by `TDC` + `hydro_rsp2.f90`) account for **52,352 lines**. The actual mathematical core of `star` (hydro/structure equations, damped Newton-Raphson solver, block-tridiagonal cyclic reduction, mixing, diffusion, AMR, and timestep control) is **~65,000 lines**.
+!!! tip "Key Scope Reduction Insight inside `star/private/`"
+    Nearly **40% of `star/private/` (`53,500+` lines)** is outside the core stellar evolution solver. Specifically, `pgstar` (`23,132` lines of PGPLOT X11 wrappers), namelist/column I/O boilerplate (`18,849` lines across `ctrls_io.f90`, `star_job_ctrls_io.f90`, `history.f90`, `profile_getval.f90`, `star_history_def.f90`, `star_profile_def.f90`), and the legacy Smolec `rsp_*` subsystem (`10,371` lines, superseded by `TDC` + `hydro_rsp2.f90`) account for **52,352 lines**. The actual mathematical core of `star` (hydro/structure equations, damped Newton-Raphson solver, block-tridiagonal cyclic reduction, mixing, diffusion, AMR, and timestep control) is **~65,000 lines**.
 
 ---
 
@@ -256,7 +259,7 @@ MESA provides a built-in two-tier verification hierarchy for validating every po
 - **Golden Baselines**: Each module compares `checker` stdout against `<pkg>/test/test_output` (**18,885 lines / 9.36 MB** of 16-digit `1pe24.16` golden reference values) using exact `diff -b` (or `ndiff -relerr 1e-6` for `gyre`).
 - **Strategic Value for Migration**: Every Tier 0 through Tier 8 module (`const`, `utils`, `math`, `mtx`, `auto_diff`, `num`, `interp_1d`, `interp_2d`, `chem`, `colors`, `neu`, `turb`, `eos`, `ionization`, `rates`, `kap`, `net`, `atm`) can be migrated, unit-tested, property-tested, and verified to $\le 10^{-12}$ relative error against its own `<pkg>/test/test_output` golden file in complete isolation.
 
-### 4.2 Tier 2: End-to-End Integration Test Suites (`107` Active Cases + `32` Dev Cases)
+### 4.2 Tier 2: End-to-End Integration Test Suites (`107` Pre-Audit Cases -> `106` Active Cases under MESA `26.4.1`)
 - **Inventory**:
   - `star/test_suite/`: **91 active test cases** covering low/intermediate-mass evolution (21), massive stars & core-collapse/pair-instability SNe (13), white dwarfs & neutron stars (15), convection/mixing/rotation/diffusion/Riemann hydro (14), radial stellar pulsations & GYRE-in-MESA (15), and microphysics/network/hook tests (13), plus **32 developer test cases** (`dev_cases_*`).
   - `binary/test_suite/`: **8 active test cases** (`double_bh`, `wind_fed_bhhmxb`, `star_plus_point_mass`, `star_plus_point_mass_explicit_mdot`, `evolve_both_stars`, `jdot_ml_check`, `jdot_gr_check`, `jdot_ls_check`).

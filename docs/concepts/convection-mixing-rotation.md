@@ -28,11 +28,11 @@ To guarantee convergence across 80 orders of magnitude in $Y$, `set_tdc` searche
 
    $$\frac{\partial Y^*}{\partial \theta} = -\left(\frac{\partial Q}{\partial Y}\bigg|_{Y^*}\right)^{-1} \frac{\partial Q}{\partial \theta}\bigg|_{Y^*}.$$
 
-Because `FlexMESA` applies the Implicit Function Theorem at the converged scalar root rather than propagating a 70-component dual number through every intermediate Newton iteration, 4096-zone `turb_tdc` evaluation runs **$54.1\times$ faster in 4-thread Safe Rust** and **$146.0\times$ faster in batched GPU JAX** than 4-thread OpenMP Fortran MESA.
+Applying the Implicit Function Theorem at the converged scalar root rather than propagating a 70-component dual number through every intermediate Newton iteration avoids redundant derivative arithmetic inside the root loop; pre-audit 4096-zone local benchmarks recorded $54.1\times$ faster Safe Rust (4t) and $146.0\times$ faster batched GPU JAX runtimes relative to per-zone MESA `set_TDC` calls (no raw JSON committed; reproducible MESA `26.4.1` timing tracked in `#146`).
 
 ![Steady-state Cox MLT vs. transient Kuhfuss TDC temperature gradient and Implicit Function Theorem sensitivity](../assets/figures/turb_mlt_tdc_comparison.png)
 
-*Figure 1: The left panel compares the steady-state Cox & Giuli (1968) Mixing-Length Theory temperature gradient $\nabla_T$ against transient Kuhfuss (1986) Time-Dependent Convection (`set_tdc`) across short, intermediate, and asymptotic timestep ratios $\Delta t / \tau_{\mathrm{conv}}$ as a function of radiative gradient $\nabla_r$. The right panel shows the exact analytical Implicit Function Theorem sensitivity $\partial \nabla_T / \partial \nabla_r$ overlaid with centered finite-difference evaluations.*
+*Figure 1: The left panel compares the steady-state Cox & Giuli (1968) Mixing-Length Theory temperature gradient $\nabla_T$ against transient Kuhfuss (1986) Time-Dependent Convection (`set_tdc`) at fixed $\Delta t = 15\,\mathrm{s}$ as a function of radiative gradient $\nabla_r$. The right panel shows the analytical Implicit Function Theorem sensitivity $\partial \nabla_T / \partial \nabla_r$ for steady Cox MLT and transient TDC ($\Delta t = 15\,\mathrm{s}$).*
 
 ---
 
@@ -44,7 +44,7 @@ Because `FlexMESA` applies the Implicit Function Theorem at the converged scalar
   $$B_k = \frac{\ln\!\left[P_{\mathrm{rad},f} + P_{\mathrm{gas}}(\rho_f, T_f, \mathbf{X}_k)\right] - \ln\!\left[P_{\mathrm{rad},f} + P_{\mathrm{gas}}(\rho_f, T_f, \mathbf{X}_{k-1})\right]}{(\ln P_{\mathrm{eos},k-1} - \ln P_{\mathrm{eos},k})\,\chi_{T,f}},$$
 
   capturing partial-ionization and Coulomb/degeneracy shifts across chemical boundaries in both gas- and radiation-dominated interiors, while `use_brunt_gradmux_form = true` evaluates $B_k = (\chi_{\rho,f}/\chi_{T,f})\,(\Delta \ln \mu / \Delta \ln P_{\mathrm{eos}})$.
-- **Langer, El Eid, & Fricke (1985) Semiconvection (`set_semiconvection` in `set_mlt_vars`)**: In Ledoux-stable, Schwarzschild-unstable faces ($\nabla_{\mathrm{ad}} < \nabla_r < \nabla_L$, $B_k > 0$) with `use_ledoux_criterion = true` and `alpha_semiconvection > 0`, `set_mlt_vars` dispatches to `set_semiconvection` (`Langer85GradTIsGradr` or `Langer85`) to evaluate compositional diffusion $D_{\mathrm{sc}}$ and $\nabla_T$ while zeroing `mlt_vc` (`star/private/turb_support.f90:410`):
+- **Langer, El Eid, & Fricke (1985) Semiconvection (`set_semiconvection` in `set_mlt_vars`)**: In Ledoux-stable, Schwarzschild-unstable faces ($\nabla_{\mathrm{ad}} < \nabla_r < \nabla_L$, $B_k > 0$) with `use_ledoux_criterion = true` and `alpha_semiconvection > 0`, `set_mlt_vars` dispatches to `set_semiconvection` (`Langer85GradTIsGradr` or `Langer85`) to evaluate compositional diffusion $D_{\mathrm{sc}}$ and $\nabla_T$ while zeroing `mlt_vc` (`star/private/turb_support.f90:408-430`):
 
   $$D_{\mathrm{sc}} = \alpha_{\mathrm{sc}}\,\frac{K_{\mathrm{rad}}}{6 c_P \rho}\,\frac{\nabla_r - \nabla_{\mathrm{ad}}}{\nabla_L - \nabla_r}, \qquad K_{\mathrm{rad}} = \frac{4 a c T^3}{3 \kappa \rho}.$$
 
@@ -55,14 +55,14 @@ Because `FlexMESA` applies the Implicit Function Theorem at the converged scalar
 
   $$D_{\mathrm{ov}}(r) = D_0 \exp\!\left(-\frac{2\,|r - r_0|}{f\,H_P}\right).$$
 
-- **Convective Premixing (`do_conv_premix`)**: Following Paxton et al. (2019, §5), iteratively tests whether mixing an adjacent radiative shell into a convective core or shell causes that radiative shell to become convectively unstable ($\nabla_r > \nabla_{\mathrm{ad}}$), advancing the convective boundary to self-consistent neutrality before the coupled Henyey step.
-- **Multi-Set Predictive Mixing (`add_predictive_mixing`, `apply_predictive_mixing_from_controls`)**: Following Paxton et al. (2018, §2), evaluates enabled `predictive_sets` across $q$ intervals to regulate convective boundary growth during core hydrogen and helium burning by limiting single-step mass ingestion (`ingestion_factor`) and enforcing a minimum superadiabaticity threshold ($\nabla_r / \nabla_{\mathrm{ad}} - 1 > \delta_{\mathrm{superad}}$) on the convective side of the boundary.
+- **Convective Premixing (`do_conv_premix`)** *(partial/unverified; `#155`)*: Inspired by Paxton et al. (2019, §5), iteratively tests whether mixing an adjacent radiative shell into a convective core or shell causes that shell to exceed $\nabla_r > \nabla_{\mathrm{ad}}$; upstream `26.4.1` `conv_premix` parity remains unverified and is tracked under `#155`.
+- **Multi-Set Predictive Mixing (`add_predictive_mixing`, `apply_predictive_mixing_from_controls`)** *(partial/unverified; `#155`)*: Evaluates enabled `predictive_sets` across $q$ intervals to regulate convective boundary growth (`ingestion_factor`, $\delta_{\mathrm{superad}}$); full upstream alignment is tracked in `#155`.
 
 ---
 
 ## 3. Burgers Multi-Fluid Atomic Diffusion & Crystallization Phase Separation
 
-In radiative stellar envelopes, solar interiors, subdwarfs, and white dwarfs, microscopic gravitational settling, thermal diffusion, and concentration gradients stratify chemical elements over evolutionary timescales:
+In radiative stellar envelopes, solar interiors, subdwarfs, and white dwarfs, microscopic gravitational settling, thermal diffusion, and concentration gradients stratify chemical elements over evolutionary timescales *(current evolutionary diffusion and phase separation implementations remain simplified relative to MESA `26.4.1` and monochromatic radiative levitation `op_radacc` is absent; tracked in `#156`)*:
 
 1. **Burgers (1969) Multi-Fluid Resistance Equations (`do_element_diffusion`, `eval_burgers_velocities_jax`)**:
    Solves the coupled Burgers (1969) momentum and heat-flow equations across all ions and electrons simultaneously via a tridiagonal Thomas solve, enforcing zero net charge density ($n_e = \sum_i Z_i n_i$) and zero electric current ($J_e = 0$) with Stanton & Murillo (2016) or Paquette et al. (1986) screened Coulomb collision integrals and radiative levitation accelerations. After both `do_element_diffusion` and `do_phase_separation`, species mass fractions are clamped to $[0, 1]$ and renormalized per zone with Neumaier-compensated summation so near-pure hydrogen white-dwarf envelopes ($X_{\mathrm{H}} \approx 1 - 10^{-15}$) remain strictly inside $[0, 1]$ during subsequent `kap` and `eos` table lookups (`clamp_unit_roundoff` in `set_basic_vars`).
@@ -74,6 +74,8 @@ In radiative stellar envelopes, solar interiors, subdwarfs, and white dwarfs, mi
 ---
 
 ## 4. Roche Shellular Rotation, Angular Momentum Mixing, Five Instabilities & Spruit-Tayler Dynamo
+
+*(Note: Integrated stellar evolution with rotation as coupled solver variables and Spruit-Tayler transport remains unverified against MESA `26.4.1` tracks, with related cases failing or timing out under `#158`.)*
 
 ### 4.1 Rotational Distortion Factors $(f_P, f_T)$, `solve_omega_mix` & Wind Boost
 In the Endal & Sofia (1976) and Paxton et al. (2019) shellular rotation formalism, angular velocity $\Omega(m)$ is constant on isobars of volume-equivalent radius $r_P$. Centrifugal forces distort isobaric surfaces relative to the Eddington-reduced critical break-up rate $\Omega_{\mathrm{crit}} = \sqrt{G m (1 - \Gamma_{\mathrm{Edd}}) / r_P^3}$ (`eval_omega_crit`), enhance mass-loss rates near critical rotation in `do_set_mdot` alongside Björklund, Nugis-Lamers, and Dutch wind prescriptions (with differentiable JAX `z_surf = 0` Wolf-Rayet guards in `eval_winds_jax`), diffuse internal angular momentum implicitly via `solve_omega_mix`, and modify the hydrostatic pressure gradient and radiative temperature gradient via the dimensionless correction factors $(f_P, f_T)$ (`eval_rotation_fp_ft_jax`, `set_rotation_mixing_info`):

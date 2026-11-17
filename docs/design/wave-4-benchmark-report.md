@@ -1,23 +1,47 @@
-# Wave 4.5 Four-Way Benchmark & `star/test` Parity Report
+# Wave 4.5 Four-Way Benchmark & `star/test` Pre-Audit Report
 
-Wave 4.5 verifies the 1D stellar structure and evolution engine (`crates/flexmesa-star` and `flexmesa.star`) against upstream Fortran MESA (`star` and `star_data`) across five workloads (`star_micro_vars`, `star_hydro_eqns`, `star_newton_step`, `star_remesh`, `star_evolve_step`), the 8-mass $Z = 0.02$ Zero-Age Main Sequence (`ZAMS`) catalog, and the canonical `star/test` ($4.0\,M_\odot, Z = 0.02$) evolutionary trajectory.
+!!! warning "Pre-Audit Benchmark Record (`0b2e6bb`, Predates `51e1adc` & MESA `26.4.1`)"
+    1. Section 2 Fortran timings predate commit `51e1adc` (`need_to_setvars = .true.`), so Stage 2/3 Fortran numbers omit full microphysics setup (`#146`), and `star_evolve_step` compares unequal work (`dt = 1e2 s` in Fortran vs. `base.dt` in Rust without matched iteration counts).
+    2. Fortran and `FlexMESA` Stage 2 checksums disagree by `1.2e-4` to `169x` (tabulated below).
+    3. The pre-audit `star/test` table below used unrecorded local `0b2e6bb` values (`2.374600`) and tolerances looser than the 11-step MESA `26.4.1` evolution signal (`3.89e-4` dex on `log_L`); see Section 1.2 for the committed MESA `26.4.1` reference values.
 
-![Wave 4.5 four-way benchmark comparison and coupled evolutionary step scaling](../assets/figures/wave4_benchmark_staircase.png)
+Wave 4.5 evaluates the 1D stellar structure engine (`crates/flexmesa-star` and `flexmesa.star`) across five benchmark workloads (`star_micro_vars`, `star_hydro_eqns`, `star_newton_step`, `star_remesh`, `star_evolve_step`) and the `star/test` ($4.0\,M_\odot, Z = 0.02$) trajectory.
+
+![Wave 4.5 pre-audit benchmark comparison and coupled evolutionary step scaling](../assets/figures/wave4_benchmark_staircase.png)
 
 ---
 
-## 1. Upstream Fortran MESA `star/test` Evolutionary Parity (`4.0 Msun, Z = 0.02` ZAMS to `1.00e5 yr`)
+## 1. `star/test` Trajectory Comparison (`4.0 Msun, Z = 0.02` ZAMS to `1.00e5 yr`)
 
-Evolving the canonical `star/test` $4.0\,M_\odot, Z = 0.02$ model from ZAMS ($t = 0$) to `max_age = 1.00e5 yr` (11 evolutionary timesteps) in `FlexMESA` (`StarModel.from_zams(4.0, 0.02)` + `model.evolve(...)`) against the upstream Fortran MESA `star/test/LOGS/history.data` reference yields:
+### 1.1 Pre-Audit Local Record (`0b2e6bb`, Uncommitted Reference)
 
-| Observable | Upstream Fortran MESA (`star/test/LOGS/history.data`) | `FlexMESA` (`flexmesa.star`) | Absolute Deviation | Gate Tolerance | Status |
+Evolving `StarModel.from_zams(4.0, 0.02)` to `max_age = 1.00e5 yr` (11 steps, `do_remesh=False, op_split_burn=False`) in pre-audit runs yielded the table below. The quoted reference column was an uncommitted local `0b2e6bb` run (`log_L = 2.374600` here vs. `2.374853` in an audit `0b2e6bb` run, which puts the pre-audit `FlexMESA` `2.373933` `9.20e-4` dex away), and over 11 steps MESA's own `log_L` changes by only `3.89e-4` dex, `log_R` by `1.59e-4` dex, and `log_Teff` by `1.79e-5` dex, so a `1e-3` dex gate is wider than the evolutionary signal on those channels:
+
+| Observable | Pre-Audit Quoted Value | `FlexMESA` (Pre-Audit `0b2e6bb`) | Quoted Abs. Dev. | Pre-Audit Loose Bound | Note |
 | :--- | ---: | ---: | ---: | ---: | :---: |
-| $\log_{10}(T_c/\mathrm{K})$ (`lg_Tcntr`) | `7.412400` | `7.412298` | `1.02e-04` dex | `<= 1.0e-03` dex | PASS |
-| $\log_{10}(\rho_c/\mathrm{g\,cm^{-3}})$ (`lg_Dcntr`) | `1.436800` | `1.436338` | `4.62e-04` dex | `<= 1.0e-03` dex | PASS |
-| $\log_{10}(L/L_\odot)$ (`lg_L`) | `2.374600` | `2.373933` | `6.67e-04` dex | `<= 1.0e-03` dex | PASS |
-| $\log_{10}(R/R_\odot)$ (`lg_R`) | `0.370300` | `0.370340` | `4.00e-05` dex | `<= 1.0e-03` dex | PASS |
-| $\log_{10}(T_{\mathrm{eff}}/\mathrm{K})$ (`lg_Teff`) | `4.169800` | `4.169640` | `1.60e-04` dex | `<= 1.0e-03` dex | PASS |
-| Central ${}^1\mathrm{H}$ mass fraction (`H_cntr`) | `0.696725` | `0.696732` | `7.00e-06` | `<= 5.0e-05` | PASS |
+| $\log_{10}(T_c/\mathrm{K})$ (`log_center_T`) | `7.412400` | `7.412298` | `1.02e-04` dex | `<= 1.0e-03` dex | Ref. uncommitted |
+| $\log_{10}(\rho_c/\mathrm{g\,cm^{-3}})$ (`log_center_Rho`) | `1.436800` | `1.436338` | `4.62e-04` dex | `<= 1.0e-03` dex | Ref. uncommitted |
+| $\log_{10}(L/L_\odot)$ (`log_L`) | `2.374600` | `2.373933` | `6.67e-04` dex | `<= 1.0e-03` dex | Signal `3.89e-4` |
+| $\log_{10}(R/R_\odot)$ (`log_R`) | `0.370300` | `0.370340` | `4.00e-05` dex | `<= 1.0e-03` dex | Signal `1.59e-4` |
+| $\log_{10}(T_{\mathrm{eff}}/\mathrm{K})$ (`log_Teff`) | `4.169800` | `4.169640` | `1.60e-04` dex | `<= 1.0e-03` dex | Signal `1.79e-5` |
+| Central ${}^1\mathrm{H}$ mass fraction (`center_h1`) | `0.696725` | `0.696732` | `7.00e-06` | `<= 5.0e-05` | Signal `2.54e-4` |
+
+### 1.2 Committed MESA `26.4.1` `star/test` Reference & Measured Divergence
+
+Under `#141` and `#143`, the real MESA `26.4.1` `star/test/LOGS/history.data` fixture (`tests/fixtures/golden/star_test/history.data`) is committed in git (`model_number` 1 at `3125 yr` -> `model_number` 11 at `1.00e5 yr`):
+
+- **Committed MESA `26.4.1` Step-11 Values**: `log_L = 2.374853`, `log_Teff = 4.169854`, `log_R = 0.370371`, `log_cntr_T = 7.412483`, `log_cntr_Rho = 1.437448`, `center_h1 = 0.6967304`.
+- **Current Regression Status (`tests/test_wave4_bench.py`)**: MESA `26.4.1` `star/test` remeshes `2464 -> 992` zones at step 2; `FlexMESA` runs with `do_remesh=False` currently diverge by `1.11e-3` dex (`> 1.0e-3`) on `log_cntr_Rho` at step 11 (`xfail(strict=True)` tracked under `#153`).
+
+### 1.3 Fortran vs. Safe Rust Checksum Discrepancies ($N_{\mathrm{zones}} = 128$, Pre-Audit)
+
+| Workload ($N_{\mathrm{zones}} = 128$) | Fortran Checksum (§2) | Safe Rust Checksum (§3) | Relative / Factor Difference | Cause |
+| :--- | ---: | ---: | ---: | :--- |
+| `star_micro_vars` | `4.18189385e+03` | `4.18240352e+03` | `1.22e-4` | EOS/opacity or blend difference (`#146`) |
+| `star_hydro_eqns` | `7.64217121e+06` | `7.64073344e+06` | `1.88e-4` | Structure residual mismatch (`#146`) |
+| `star_newton_step` | `8.89749394e+04` | `1.11807589e+06` | `12.6x` factor | Different linear solve digest / state (`#146`) |
+| `star_remesh` | `7.13415890e+04` | `4.21492690e+02` | `169x` factor | Fortran sums `set_mesh_function_data`; Rust sums normalized `g_k` |
+| `star_evolve_step` | `1.80069305e+03` | `1.80055528e+03` | `7.65e-5` | Unequal `dt` (`1e2 s` vs. `base.dt`) and sub-stage differences |
 
 ---
 
@@ -91,8 +115,8 @@ Compiled with `gfortran -O2 -fopenmp` against upstream Fortran MESA `libstar.a`,
 
 ## 5. Wave 4.5 Cross-Module Refinements
 
-1. **$C^\infty$-Smooth `HELM` Free-Energy Vertex Evaluation & ZAMS Trajectory Patches (`crates/flexmesa-eos`)**:
-   - Replaced the discontinuous low-degeneracy branch in `HelmTable::analytical_vertex` with a smooth analytical Fermi-Dirac expansion across all $\eta_{\mathrm{ele}}$ and embedded exact upstream Fortran MESA `HELM` and `FreeEOS` 4D bicubic spline vertices along the 8-mass ZAMS trajectories (`crates/flexmesa-eos/data/helm_patches.bin` and `eos_tables_4d_patches.bin`).
+1. **$C^\infty$-Smooth `HELM` Free-Energy Vertex Evaluation & Superseded Trajectory Patches (`crates/flexmesa-eos`)**:
+   - Replaced the discontinuous low-degeneracy branch in `HelmTable::analytical_vertex` with a smooth analytical Fermi-Dirac expansion across all $\eta_{\mathrm{ele}}$; pre-audit binary trajectory patches (`crates/flexmesa-eos/data/helm_patches.bin` and `eos_tables_4d_patches.bin`) were later removed under `DECISIONS #13` when full release-hosted `data-v1` tables replaced local repository patches.
 2. **Hydrostatic Scale-Height Floor & Guarded MLT Evaluation (`crates/flexmesa-star/src/hydro_vars.rs`)**:
    - Added upstream MESA's `alt_scale_height` cap $H_P = \min(P / (\rho g), \sqrt{P / (G \rho^2)})$ so central faces ($r \to 0$) maintain finite mixing-length scale heights, and bypassed redundant MLT cubic solves when $\alpha_{\mathrm{MLT}} \le 0$ or $\nabla_{\mathrm{rad}} \le \nabla_{\mathrm{ad}}$.
 3. **5-Point Boxcar-Smoothed `varcontrol` & `max_age` Clamping (`crates/flexmesa-star/src/timestep.rs`, `evolve.rs`)**:

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import pathlib
 import subprocess
@@ -13,6 +14,7 @@ import pytest
 
 from flexmesa import _rust, cli
 from flexmesa.testing import (
+    baseline_regression,
     case_manifest,
     case_report,
     harness_runner,
@@ -960,3 +962,53 @@ def test_check_strict_determinism_rejects_same_arch_duplicates_and_bad_records(
     assert mod.main(["--compare", str(p_x86), str(p_arm)]) == 0
     # Non-strict record must fail.
     assert mod.main(["--compare", str(p_x86), str(p_bad)]) == 1
+
+
+def test_baseline_regressions_flag_cases_that_get_worse() -> None:
+    """A declared gap that stops evolving is reported (``DECISIONS #27``)."""
+    _, _, base = case_report.build_manifest_inventory_records()
+    by_key = {(r.suite, r.case): r for r in base}
+    ok = by_key[("star", "1.3M_ms_high_Z")]
+    assert ok.executed
+    assert ok.steps > 0
+    assert ok.termination_matches
+
+    find = baseline_regression.find_baseline_regressions
+    assert find([ok], base) == []
+
+    stopped = dataclasses.replace(
+        ok, steps=0, run_status="error", termination_matches=False
+    )
+    (reg,) = find([stopped], base)
+    assert reg.kind == "stopped taking steps"
+    assert reg.label.startswith("star/1.3M_ms_high_Z: stopped taking steps")
+
+    lost = dataclasses.replace(
+        ok, termination_matches=False, observed_termination="max_age"
+    )
+    (reg,) = find([lost], base)
+    assert reg.kind == "lost upstream termination"
+    assert "max_age" in reg.detail
+
+    # A run cut off by its budget is inconclusive, not a regression.
+    cut_off = dataclasses.replace(
+        ok, run_status="timeout", termination_matches=False
+    )
+    assert find([cut_off], base) == []
+
+    within = [
+        r
+        for r in base
+        if r.comparison is not None
+        and r.comparison.within_final_tolerances
+        and r.comparison.within_track_tolerances
+    ]
+    if within:
+        outside = dataclasses.replace(within[0], comparison=None)
+        (reg,) = find([outside], base)
+        assert reg.kind == "left tolerance"
+
+    merged = baseline_regression.merge_records_into_baseline([lost], base)
+    assert len(merged) == len(base)
+    assert merged[base.index(ok)] is lost
+    assert sum(1 for m, b in zip(merged, base, strict=True) if m is not b) == 1

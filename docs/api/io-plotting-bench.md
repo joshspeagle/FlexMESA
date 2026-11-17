@@ -72,6 +72,8 @@ print(
 
 ::: flexmesa.testing.case_report
 
+::: flexmesa.testing.baseline_regression
+
 ::: flexmesa.testing.port_manifest
 
 ::: flexmesa.testing.dashboard

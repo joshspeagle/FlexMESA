@@ -14,7 +14,12 @@ import tempfile
 
 from flexmesa import _dispatch
 from flexmesa.data import fetch
-from flexmesa.testing import case_manifest, case_report, harness_runner
+from flexmesa.testing import (
+    baseline_regression,
+    case_manifest,
+    case_report,
+    harness_runner,
+)
 
 
 def _non_negative_int(raw: str) -> int:
@@ -309,14 +314,57 @@ def _build_harness_parser() -> argparse.ArgumentParser:
         help="Write timing-normalized baseline JSON for 'harness table'.",
     )
     p_run.add_argument(
+        "--update-baseline",
+        default=None,
+        help=(
+            "Rewrite this baseline JSON with the executed cases replaced by "
+            "this run and every other case kept, so a subset run can update "
+            "the committed baseline."
+        ),
+    )
+    p_run.add_argument(
+        "--baseline-json",
+        default=None,
+        help=(
+            "Baseline run to compare against for regressions (default: the "
+            "committed baseline when the default manifest is used)."
+        ),
+    )
+    p_run.add_argument(
         "--gate",
         action="store_true",
         help=(
-            "Return exit code 1 on undeclared failures or declared gaps that "
-            "pass."
+            "Return exit code 1 on undeclared failures, declared gaps that "
+            "pass, or cases that regressed against the baseline run."
         ),
     )
     return parser
+
+
+def _baseline_regressions(
+    ns: argparse.Namespace,
+    records: list[harness_runner.CaseHarnessRecord],
+) -> list[baseline_regression.BaselineRegression]:
+    """Compare a run with the baseline run (``DECISIONS #27``).
+
+    Step-capped runs, runs in fast mode and runs that skip the strict
+    attempt are not comparable with the baseline and return no regressions.
+    """
+    if (
+        ns.max_steps is not None
+        or (ns.numerics_mode or "strict") != "strict"
+        or ns.allow_unsupported_controls
+    ):
+        return []
+    try:
+        _, _, base_records = case_report.build_manifest_inventory_records(
+            ns.manifest, ns.known_gaps, ns.baseline_json
+        )
+    except FileNotFoundError:
+        if ns.baseline_json is not None:
+            raise
+        return []
+    return baseline_regression.find_baseline_regressions(records, base_records)
 
 
 def _write_json_file(path_str: str, payload: dict[str, object]) -> None:
@@ -518,8 +566,25 @@ def harness_main(argv: list[str] | None = None) -> int:
         mpath = pathlib.Path(ns.markdown_out)
         mpath.parent.mkdir(parents=True, exist_ok=True)
         mpath.write_text(md_text, encoding="utf-8")
+    regressions = _baseline_regressions(ns, records)
+    payload["summary"]["regressions_vs_baseline"] = [
+        r.label for r in regressions
+    ]
     if ns.json_out:
         _write_json_file(ns.json_out, payload)
+    if ns.update_baseline:
+        _, _, base_records = case_report.build_manifest_inventory_records(
+            ns.manifest, ns.known_gaps, ns.update_baseline
+        )
+        merged = baseline_regression.merge_records_into_baseline(
+            records, base_records
+        )
+        _write_json_file(
+            ns.update_baseline,
+            case_report.build_deterministic_baseline_payload(
+                manifest, merged, gaps, numerics_mode=ns.numerics_mode
+            ),
+        )
     if ns.save_baseline:
         b_payload = case_report.build_deterministic_baseline_payload(
             manifest,
@@ -530,8 +595,16 @@ def harness_main(argv: list[str] | None = None) -> int:
         _write_json_file(ns.save_baseline, b_payload)
 
     summary = payload["summary"]
+    if regressions:
+        print(
+            "regressed against the baseline run: "
+            + "; ".join(r.label for r in regressions),
+            file=sys.stderr,
+        )
     if ns.gate and (
-        summary["undeclared_failures"] or summary["stale_known_gaps"]
+        summary["undeclared_failures"]
+        or summary["stale_known_gaps"]
+        or regressions
     ):
         if summary["undeclared_failures"]:
             print(

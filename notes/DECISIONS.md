@@ -41,6 +41,7 @@ Scope and the `v0.1.0` definition are in [`SCOPE.md`](SCOPE.md). Work is tracked
 | 24 | Evidence-Gated Port Manifest and Script-Generated Progress Dashboard (`#174`) | In force | below |
 | 25 | Headless Validation and No-Op Behavior for `&pgstar`, `&pgbinary` and `&astero_pgstar_controls` (`#147`, `#173`) | In force | below |
 | 26 | Diagnostic Harness Runs and Terminal-Output Controls (`#147`) | In force | below |
+| 27 | Baseline Regression Check in the History Harness (`#143`, `#144`) | In force | below |
 
 ## Pre-audit decisions still in force
 
@@ -289,3 +290,19 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
   - *Give the harness the opt-out by default with ordinary verdicts*: a run with dropped controls could then be reported as a pass.
   - *Accept output-file controls (`photo_interval`, `photo_digits`, `extra_terminal_output_file`) or `required_termination_code_string` the same way*: these change files on disk or which model is saved (`star/private/evolve.f90:2342-2343`, `star/job/run_star_support.f90:789-791`), so they stay unsupported until implemented (`#150`).
   - *Port MESA's terminal log now*: real work with no effect on any compared quantity; left to the output package.
+
+---
+
+## DECISIONS #27: Baseline Regression Check in the History Harness (`Issue #143`, `Issue #144`)
+
+- **Date**: 2026-11-17
+- **Decision**:
+  1. **Every uncapped strict harness run is compared with the committed baseline run.** `flexmesa harness run` rebuilds the records of `benchmarks/history_harness/baseline_run_26_4_1.json` and reports a case as regressed when the baseline took steps and the run takes none, when the baseline reached upstream's termination condition and the run does not, or when the baseline history was within the manifest tolerances and the run is not. The list is written to `summary.regressions_vs_baseline`, and `--gate` fails on it.
+  2. **Resource-limited and non-comparable runs are not judged.** A run that ended in a timeout or memory kill is inconclusive. Step-capped runs, fast-mode runs and runs given `--allow-unsupported-controls` directly are not compared.
+  3. **The baseline is a regression snapshot, not a reference.** It records what `FlexMESA` did, right or wrong. Agreement with it is never evidence of agreement with MESA.
+  4. **A change that makes a case worse on purpose updates the baseline in the same pull request.** `flexmesa harness run --cases <case> --update-baseline <file>` replaces only the executed cases; the pull request states which cases moved and why, with the before-and-after case table the rules already require.
+- **Why**: While a case is a declared known gap its verdict cannot get worse, so with all 102 referenced cases declared the known-gaps gate could not see a case that used to evolve to upstream's termination and then stopped at step 0. Removing fabricated behaviour is expected to make cases worse; this check does not forbid that, it makes it visible and deliberate.
+- **Alternatives Rejected**:
+  - *Gate on any change in step count or deviation*: every legitimate trajectory change would fail the gate, which pushes authors toward not changing trajectories.
+  - *Treat timeouts as regressions*: runner speed differs between machines, so the gate would fail for reasons unrelated to the code.
+  - *Per-case expected outcomes in `known_gaps.toml`*: duplicates measured numbers in a hand-edited file, against `DECISIONS #26` item 4.

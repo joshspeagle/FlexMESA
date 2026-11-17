@@ -38,7 +38,7 @@ In dense, partially ionized stellar interiors and white-dwarf envelopes, pressur
 
 ## 3. Five-Channel Thermal Neutrino Energy Loss (`flexmesa.neu`)
 
-In evolved stellar cores at $T \gtrsim 10^{7.5}\,\mathrm{K}$, thermal neutrino emission ($\epsilon_\nu$ in $\mathrm{erg\,g^{-1}\,s^{-1}}$) escapes freely from the star and dominates energy loss over surface photon radiation. `flexmesa.neu` (`crates/flexmesa-neu`) ports the complete Itoh et al. (1996, ApJS, 102, 411) fitting formulae across all five physical channels:
+In evolved stellar cores at $T \gtrsim 10^{7.5}\,\mathrm{K}$, thermal neutrino emission ($\epsilon_\nu$ in $\mathrm{erg\,g^{-1}\,s^{-1}}$) escapes freely from the star and dominates energy loss over surface photon radiation. `flexmesa.neu` (`crates/flexmesa-neu`) implements the Itoh et al. (1996, ApJS, 102, 411) fitting formulae across five thermal neutrino emission channels (`pair`, `plas`, `phot`, `brem`, `reco`):
 
 1. **Electron-Positron Pair Annihilation ($e^- + e^+ \to \nu + \bar{\nu}$, `pair`)**: Dominant at high temperature ($T \gtrsim 10^9\,\mathrm{K}$) and moderate density where thermal $e^\pm$ pairs are abundant.
 2. **Plasmon Decay ($\gamma_{\mathrm{plas}} \to \nu + \bar{\nu}$, `plas`)**: Collective transverse and longitudinal plasma excitations decaying in degenerate electron gases ($\rho \gtrsim 10^5\,\mathrm{g\,cm^{-3}}$).
@@ -54,7 +54,7 @@ $$\mathbf{J}_{\nu} = \left(\epsilon_\nu,\, \frac{\partial \epsilon_\nu}{\partial
 
 ![Itoh et al. (1996) thermal neutrino energy-loss channels and logarithmic temperature sensitivity](../assets/figures/neu_regimes.png)
 
-*Figure 1: The left panel shows the total thermal neutrino energy loss rate $\log_{10}(\epsilon_\nu / \mathrm{erg\,g^{-1}\,s^{-1}})$ and individual channel contributions (`Pair`, `Plasmon`, `Photo`, and `Bremsstrahlung`) from Itoh et al. (1996) across $\log_{10}(T/\mathrm{K}) \in [7.55, 9.60]$ at fixed $\rho = 10^6\,\mathrm{g\,cm^{-3}}$, $\bar{A} = 12$, and $\bar{Z} = 6$. The right panel verifies that the exact analytical logarithmic temperature sensitivity $\partial \ln \epsilon_\nu / \partial \ln T$ propagated via `DualOrder1` matches centered finite differences across the photoneutrino-to-pair transition.*
+*Figure 1: The left panel shows the total thermal neutrino energy loss rate $\log_{10}(\epsilon_\nu / \mathrm{erg\,g^{-1}\,s^{-1}})$ and individual channel contributions (`Pair`, `Plasmon`, `Photo`, and `Bremsstrahlung`) from Itoh et al. (1996) across $\log_{10}(T/\mathrm{K}) \in [7.55, 9.60]$ at fixed $\rho = 10^6\,\mathrm{g\,cm^{-3}}$, $\bar{A} = 12$, and $\bar{Z} = 6$. The right panel compares the analytical logarithmic temperature sensitivity $\partial \ln \epsilon_\nu / \partial \ln T$ propagated via `DualOrder1` against centered finite differences across the photoneutrino-to-pair transition.*
 
 ---
 

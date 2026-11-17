@@ -4,7 +4,7 @@ Asteroseismology probes the interior sound speed $c_s(r)$ and buoyancy frequency
 
 ![Asteroseismic echelle diagram with surface-effect corrections and 5-point separation ratios](../assets/figures/wave5_astero_echelle_surface_corr.png)
 
-*Figure 1: The left panel shows an asteroseismic echelle diagram ($\nu \bmod \Delta\nu$ vs. $\nu$) for radial ($l = 0$) and dipole ($l = 1$) acoustic modes of a solar-like oscillator ($\Delta\nu = 135.0\,\mu\mathrm{Hz}$, $\nu_{\max} = 3090.0\,\mu\mathrm{Hz}$), comparing uncorrected adiabatic model frequencies (open squares) against Ball & Gizon (2014) 2-term surface-corrected frequencies (filled triangles) and observed frequencies (circles with error bars). The right panel displays the Roxburgh & Vorontsov (2003) 5-point frequency separation ratios $r_{010}(\nu)$ and quadrupole-radial ratios $r_{02}(\nu)$, which cancel near-surface structure errors.*
+*Figure 1: This schematic illustrates asteroseismic surface-effect fits and separation ratios (`wave5_astero_echelle_surface_corr.png`). The left panel shows an echelle diagram ($\nu \bmod \Delta\nu$ vs. $\nu$) for synthetic radial ($l = 0$, $n = 14\dots 25$) modes ($\Delta\nu = 135.0\,\mu\mathrm{Hz}$, $\nu_{\max} = 3090.0\,\mu\mathrm{Hz}$), comparing uncorrected model frequencies, synthetic observed frequencies, and Ball & Gizon (2014) cubic/combined and Sonoi (2015) fits. The right panel plots Roxburgh & Vorontsov (2003) separation ratios $r_{01}$, $r_{10}$, and $r_{02}$ across Safe Rust and JAX (`#162`, `#170`, `#171`).*
 
 ---
 
@@ -61,7 +61,7 @@ To compute full non-radial adiabatic or non-adiabatic oscillation eigenfrequenci
 
 $$V = \frac{G m \rho}{P r}, \qquad V_g = \frac{V}{\Gamma_1}, \qquad A^* = \frac{r N^2}{g}, \qquad U = \frac{4\pi r^3 \rho}{m}, \qquad c_1 = \frac{(r/R_\star)^3}{m/M_\star},$$
 
-and exports complete stellar structure profiles (with optional central boundary point insertion and double-point splitting across sharp composition discontinuities) via:
+and exports stellar structure profiles (with optional central boundary point insertion and double-point splitting across sharp composition discontinuities; bundled `GYRE` and `ADIPLS` integration is tracked in `#170` and `#171`, while `eval_linear_oscillation_modes` currently uses an in-house adiabatic BVP stub):
 
 - `model.to_gyre_str(add_center_point=True)`: Standard `GYRE` ASCII format (`version 101` / `120`).
 - `model.to_fgong_str(add_center_point=True)`: Standard `FGONG` format (`ivers = 1300`).

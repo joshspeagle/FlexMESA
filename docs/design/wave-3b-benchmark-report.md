@@ -1,9 +1,12 @@
 # Wave 3b.5 Four-Way Performance Benchmark and Consolidation Report
 
-This report documents the empirical results of the Wave 3b.5 (`#61`) four-stage
-performance staircase and cross-language parity verification across all four
-implementations of the Wave 3b stellar microphysics modules (`eos_4d`,
-`kap_fixed`, `rates_screen`, `net_eval`, and `atm_table`):
+!!! warning "Pre-Audit Benchmark Record (`0b2e6bb`, `#146`)"
+    These pre-audit measurements reflect unrecorded local runs before the MESA `26.4.1` re-baseline (no raw output JSON or compiler/date metadata committed, `#146`). Reproducible MESA `26.4.1` benchmarking is tracked in [#146](https://github.com/joshspeagle/FlexMESA/issues/146) and [#161](https://github.com/joshspeagle/FlexMESA/issues/161).
+
+This report documents the pre-audit results of the Wave 3b.5 (`#61`) four-stage
+performance staircase across four implementations of the Wave 3b stellar
+microphysics modules (`eos_4d`, `kap_fixed`, `rates_screen`, `net_eval`, and
+`atm_table`):
 
 1. **Upstream Fortran MESA (`gfortran -O2 -fopenmp`)**: Native Fortran 2008
    modules (`libeos.a`, `libkap.a`, `librates.a`, `libnet.a`, `libatm.a`,
@@ -22,7 +25,7 @@ implementations of the Wave 3b stellar microphysics modules (`eos_4d`,
 
 ---
 
-## 1. Cross-Language Numerical Parity Gate
+## 1. Pre-Audit Cross-Engine Checksum Snapshots (`#146`)
 
 Across all five Wave 3b workloads (`eos_4d`, `kap_fixed`, `rates_screen`,
 `net_eval`, and `atm_table`) and all radial grid sizes $N_{\mathrm{zones}} \in

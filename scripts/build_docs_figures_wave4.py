@@ -9,12 +9,13 @@ four sides, frameless legends, and journal-derived widths):
    across enclosed mass fraction $q = m/M_\\star$ in the
    $4.0\\,M_\\odot, Z = 0.02$ ZAMS model comparing Safe Rust and JAX (left),
    paired with the 8-mass $Z = 0.02$ ZAMS Hertzsprung-Russell diagram ($0.51$
-   to $15.0\\,M_\\odot$) and `star/test` reference parity (right).
-2. `wave4_benchmark_staircase.png`: Four-way Wave 4.5 runtime comparison at
-   $N_{\\mathrm{zones}} = 1024$ across Upstream Fortran MESA, Safe Rust,
-   Python/PyO3 (`flexmesa._rust`), and Python/JAX (left), paired with scaling
-   of a full 12-variable coupled evolutionary step (`star_evolve_step`) across
-   $N_{\\mathrm{zones}} \\in \\{128, 512, 1024\\}$ (right).
+   to $15.0\\,M_\\odot$) computed by `FlexMESA` (right).
+2. `wave4_benchmark_staircase.png`: Pre-audit Wave 4.5 runtime comparison at
+   $N_{\\mathrm{zones}} = 1024$ across Pre-Audit Fortran (predates `51e1adc`
+   `need_to_setvars` fix; `star_evolve_step` compares unlike `dt`), Safe
+   Rust, Python/PyO3 (`flexmesa._rust`), and Python/JAX (left), paired with
+   `star_evolve_step` scaling across $N_{\\mathrm{zones}} \\in \\{128, 512,
+   1024\\}$ (right).
 """
 
 from __future__ import annotations
@@ -164,17 +165,7 @@ def plot_wave4_star_structure_evolution(out_dir: pathlib.Path) -> None:
         lw=1.8,
         marker="o",
         ms=4.5,
-        label="FlexMESA ZAMS",
-    )
-    # Upstream Fortran MESA star/test (4.0 Msun, Z = 0.02) reference point
-    ax[1].scatter(
-        [4.162889],
-        [2.375573],
-        color="C3",
-        marker="*",
-        s=85,
-        zorder=6,
-        label=r"Fortran MESA $\mathtt{star/test}$",
+        label="FlexMESA ZAMS (Z = 0.02)",
     )
     for m_lbl, xt, yt, dx, dy in (
         ("0.51", lg_teff[0], lg_lum[0], 0.14, 0.55),
@@ -199,7 +190,7 @@ def plot_wave4_star_structure_evolution(out_dir: pathlib.Path) -> None:
 
 
 def plot_wave4_benchmark_staircase(out_dir: pathlib.Path) -> None:
-    """Plot the 4-way Wave 4.5 runtime comparison and evolve-step scaling."""
+    """Plot pre-audit Wave 4.5 runtime comparison and step scaling (`#146`)."""
     _configure_plot_style()
     workloads = [
         "micro_vars",
@@ -217,7 +208,7 @@ def plot_wave4_benchmark_staircase(out_dir: pathlib.Path) -> None:
 
     fig, ax = _two_panel_fig(wspace=0.40)
     bars = (
-        (-1.5, fortran_4t, "C2", 0.85, "Fortran MESA (4t)"),
+        (-1.5, fortran_4t, "C2", 0.85, "Pre-Audit Fortran (4t)"),
         (-0.5, rust_4t, "C0", 0.95, "Safe Rust (4t)"),
         (0.5, pyo3_best, "C1", 0.90, "PyO3 (flexmesa._rust)"),
         (1.5, jax_best, "C3", 0.85, "JAX (jit / vmap)"),
@@ -251,7 +242,7 @@ def plot_wave4_benchmark_staircase(out_dir: pathlib.Path) -> None:
         lw=1.5,
         ls="--",
         marker="s",
-        label="Fortran MESA (1t)",
+        label="Pre-Audit Fortran (1t)",
     )
     ax[1].plot(
         nz_arr,
@@ -259,7 +250,7 @@ def plot_wave4_benchmark_staircase(out_dir: pathlib.Path) -> None:
         color="C2",
         lw=1.9,
         marker="o",
-        label="Fortran MESA (4t OpenMP)",
+        label="Pre-Audit Fortran (4t OpenMP)",
     )
     ax[1].plot(
         nz_arr,

@@ -1,5 +1,8 @@
 # Wave 3a Technical Specification: Analytical & Single-Table EOS Core (`Ideal`, `HELM`, `PC`, `Skye` & Quintic Blending)
 
+!!! note "Historical Pre-Audit Specification (`0b2e6bb`)"
+    Retained for design context; `DECISIONS #6`-`#8` and golden wave gates are superseded by `DECISIONS #17` and `#23`.
+
 ## 1. Scope and Architectural Placement
 
 Wave 3a ports the analytical and single-table equation-of-state (`eos`) foundation of MESA into `FlexMESA` under the **Integrated Three-Tier Hybrid Architecture** (`DECISIONS #6` through `#8`):

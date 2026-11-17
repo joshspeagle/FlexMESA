@@ -1,5 +1,8 @@
 # Wave 5 Advanced Stellar Physics, Interacting Binaries & Asteroseismology Specification
 
+!!! note "Historical Pre-Audit Specification (`0b2e6bb`)"
+    Claims of completing the MESA dependency DAG (`25` vs. `26` modules including `gyre`, `adipls`, `stella`) and module parity are superseded by `notes/SCOPE.md`, `DECISIONS #17`, and the [Port Coverage Map](../benchmarks/coverage-map.md).
+
 Wave 5 completes the **25-module MESA dependency DAG** in `FlexMESA` by porting advanced 1D stellar transport, non-linear hydrodynamics and radial pulsation equations, interacting binary star evolution (`binary`), and asteroseismic diagnostics and model fitting (`astero`) across the **Three-Tier Hybrid Architecture** (`Safe Rust + Python/PyO3 + JAX`).
 
 ---

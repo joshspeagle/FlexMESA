@@ -1,6 +1,6 @@
 # Tutorial 3: White Dwarf Cooling, Crystallization & Atomic Diffusion
 
-As a carbon-oxygen (`C/O`) or oxygen-neon (`O/Ne`) white dwarf cools over gigayear timescales, its degenerate interior transitions from a strongly coupled Coulomb liquid into a body-centered cubic (`bcc`) solid lattice while trace heavy isotopes sink gravitationally toward the core. These two processes release gravitational and latent energy that delays white dwarf cooling by up to $1\text{ to }2\,\mathrm{Gyr}$. This tutorial demonstrates how to evaluate the `Skye` and Potekhin-Chabrier (`PC`) degenerate equations of state in `flexmesa.eos`, model first-order crystallization and Blouin et al. (2020) / Medin & Cumming (2010) phase separation in `flexmesa.star`, and solve the Burgers (1969) multi-fluid atomic diffusion, Caplan et al. (2022) one-component plasma (`OCP`) self-diffusion, and radiative levitation equations.
+As a carbon-oxygen (`C/O`) or oxygen-neon (`O/Ne`) white dwarf cools over gigayear timescales, its degenerate interior transitions from a strongly coupled Coulomb liquid into a body-centered cubic (`bcc`) solid lattice while trace heavy isotopes sink gravitationally toward the core. These two processes release gravitational and latent energy that delays white dwarf cooling by up to $1\text{ to }2\,\mathrm{Gyr}$. This tutorial demonstrates the `Skye` and Potekhin-Chabrier (`PC`) degenerate equations of state in `flexmesa.eos`, together with standalone crystallization, Blouin et al. (2020) / Medin & Cumming (2010) phase-separation, Burgers (1969) atomic-diffusion, Caplan et al. (2022) one-component plasma (`OCP`), and monochromatic radiative-acceleration helpers in `flexmesa.star`. Note that EOS module verification and end-to-end white-dwarf / diffusion evolutionary parity against MESA `26.4.1` currently remain open (`0 / 106` passing cases; `#156`, `#161`, `#165`), and full-star `op_radacc` radiative levitation is absent (`#156`).
 
 ---
 
@@ -74,7 +74,7 @@ print(f"Skye JAX sensitivity d(ln E)/dT at T=5e6 K = {float(d_lne_dt):.4e} K^-1"
 
 ![EOS phase diagram and Skye Coulomb crystallization transition](../assets/figures/eos_helm_skye_phase_diagram.png)
 
-*Figure 1: Left: The 7-component equation-of-state partition across the $(\log_{10} \rho, \log_{10} T)$ plane, showing the `Skye`/`PC` high-density degenerate plasma domain at $\log_{10} \rho \gtrsim 3$. Right: Variation of the adiabatic exponent $\Gamma_1$ across the `Skye` Coulomb crystallization boundary ($\Gamma_{\mathrm{crit}} \approx 175$) for a carbon-oxygen mixture.*
+*Figure 1: Left: `HELM`-to-`PC` Coulomb blend weight ($1 - \alpha_{\mathrm{HELM}}$) across the $(\log_{10} \rho, \log_{10} T)$ plane with analytic ion coupling contours $\Gamma_i = 170$ and $\Gamma_i = 180$ overlaid. Right: Adiabatic exponent $\Gamma_1$ from `PC` (Safe Rust, dashed green) and `Skye` (Safe Rust solid blue, `@jax.jit` red scatter points) along a 50/50 `C12`/`O16` density slice at $T = 10^{7.12}\,\mathrm{K}$ crossing the Coulomb crystallization transition.*
 
 ---
 
@@ -113,7 +113,7 @@ print(f"Evaluated phase separation profile across {len(eps_phase)} zones.")
 
 ## 3. Burgers Multi-Fluid Atomic Diffusion, Caplan OCP & Radiative Levitation
 
-In white dwarf envelopes and radiative stellar interiors, gravitational settling, thermal diffusion, electric fields, and selective radiative acceleration separate chemical species over diffusion timescales. `FlexMESA` solves the Burgers (1969) multi-fluid resistance equations in both Safe Rust (`_rust.star_eval_burgers_velocities`) and JAX (`star.eval_burgers_velocities_jax`), coupled with Stanton & Murillo (2016) screened collision integrals, Caplan et al. (2022) strongly coupled one-component plasma (`OCP`) self-diffusion (`star.eval_caplan_ocp_dstar_jax`), and monochromatic radiative levitation accelerations (`_rust.star_eval_radiative_levitation_accel`).
+In white dwarf envelopes and radiative stellar interiors, gravitational settling, thermal diffusion, electric fields, and selective radiative acceleration separate chemical species over diffusion timescales. As standalone building blocks (full `diffusion` and `op_radacc` MESA `26.4.1` trajectory parity remain unverified or absent under `#156`), `FlexMESA` exposes Burgers (1969) multi-fluid resistance kernels in Safe Rust (`_rust.star_eval_burgers_velocities`) and JAX (`star.eval_burgers_velocities_jax`), Stanton & Murillo (2016) screened collision integrals, Caplan et al. (2022) strongly coupled one-component plasma (`OCP`) self-diffusion (`star.eval_caplan_ocp_dstar_jax`), and a standalone monochromatic radiative-acceleration helper (`_rust.star_eval_radiative_levitation_accel`).
 
 ```python
 import jax

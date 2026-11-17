@@ -119,6 +119,6 @@ print(
 )
 ```
 
-![Benchmark speedup across the four-stage optimization staircase](../assets/figures/wave5_benchmark_speedup.png)
+![Pre-audit Wave 5 runtime comparison against standalone hand-written Fortran loops](../assets/figures/wave5_benchmark_speedup.png)
 
-*Figure 1: Throughput scaling across the four-stage optimization staircase (Sequential Baseline $\to$ Memory-Layout/SIMD $\to$ Multi-Threaded Rust `rayon` $\to$ Batched `@jax.jit` GPU/CPU) for coupled stellar structure, binary mass transfer, and asteroseismic workloads.*
+*Figure 1: Pre-audit Wave 5 kernel runtime comparison at $N_{\mathrm{zones}} = 1024$ (left) and zone scaling (right) across Safe Rust, PyO3, JAX, and the standalone hand-written `bench_kernels_wave5.f90` Fortran comparator (not upstream MESA routines; unrecorded local run with no raw output committed, and `w5_diff_rot` evaluates a different Spruit-Tayler branch than Fortran; `#146`).*

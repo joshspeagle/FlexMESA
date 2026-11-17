@@ -1,9 +1,12 @@
 # Wave 2.5 Four-Way Performance Benchmark and Consolidation Report
 
-This report documents the empirical results of the Wave 2.5 (`#41`) four-stage
-performance staircase and cross-language parity verification across all four
-implementations of the Wave 2 atomic, ionization, and photometric microphysics
-modules (`chem`, `ionization`, and `colors`):
+!!! warning "Pre-Audit Benchmark Record (`0b2e6bb`, `#146`)"
+    These pre-audit measurements reflect unrecorded local runs before the MESA `26.4.1` re-baseline (no raw output JSON or compiler/date metadata committed, `#146`). Notice also that Stage 2/3 Fortran numbers for `chem_comp` (`eval_comp_hoisted` in `benchmarks/fortran_mesa/bench_kernels_wave2.f90`, lines 114-126) come from a hand-written Fortran loop rather than MESA library calls, and JAX-versus-Rust checks test derived JAX consistency rather than MESA `26.4.1` (`DECISIONS #17`, `#23`).
+
+This report documents the pre-audit results of the Wave 2.5 (`#41`) four-stage
+performance staircase across four implementations of the Wave 2 atomic,
+ionization, and photometric microphysics modules (`chem`, `ionization`, and
+`colors`):
 
 1. **Upstream Fortran MESA (`gfortran -O2 -fopenmp`)**: Native Fortran 2008
    modules (`libchem.a`, `libionization.a`, and `libcolors.a`) benchmarked via
@@ -20,7 +23,7 @@ modules (`chem`, `ionization`, and `colors`):
 
 ---
 
-## 1. Cross-Language Numerical Parity Gate
+## 1. Pre-Audit Cross-Engine Checksum Snapshots (`#146`)
 
 Across all four Wave 2 workloads (`chem_comp`, `ion_fe56`, `ion_4d`, and
 `colors_sed`) and all radial grid sizes $N_{\mathrm{zones}} \in \{8, 128, 1024,
@@ -34,14 +37,8 @@ Python (`flexmesa._rust`), and JAX (`float64`):
 | `ion_4d` | $\sum_k \log_{10} P_{\mathrm{gas}, k}$ | `6.11884615e+01` | `9.79041962e+02` | `7.83234656e+03` | `3.13293908e+04` | `< 1.00e-12` |
 | `colors_sed` | $\sum_k M_{V, k}$ | `3.60869173e+01` | `5.76955755e+02` | `4.61546861e+03` | `1.84617990e+04` | `< 1.00e-12` |
 
-> [!NOTE]
-> In `ion_fe56`, Safe Rust, Python, and JAX agree to $3.70 \times 10^{-14}$ in
-> IEEE-754 `f64`, while upstream Fortran MESA's `eval_charge_of_Fe56_in_He4`
-> calls `fvbicub_db` (`interp_2d/private/bicub_db.f`), where omitted `implicit
-> none` leaves local Hermite basis variables (`xp`, `yp`, `cx`, `cy`, `hx2`,
-> `hy2`, `z36th`) implicitly typed as 32-bit `REAL` (`f32`), producing a
-> $4.83 \times 10^{-9}$ single-precision floor. All other Wave 2 workloads agree
-> to $\le 10^{-12}$ across all four engines.
+!!! note "32-bit `fvbicub_db` Locals vs. `f64` Precision"
+    In `ion_fe56`, Safe Rust, Python, and JAX agree to $3.70 \times 10^{-14}$ in IEEE-754 `f64`, while upstream Fortran MESA's `eval_charge_of_Fe56_in_He4` calls `fvbicub_db` (`interp_2d/private/bicub_db.f`), where omitted `implicit none` leaves local Hermite basis variables (`xp`, `yp`, `cx`, `cy`, `hx2`, `hy2`, `z36th`) implicitly typed as 32-bit `REAL` (`f32`), producing a $4.83 \times 10^{-9}$ single-precision floor. All other Wave 2 workloads agree to $\le 10^{-12}$ across all four engines.
 
 ![Four-way Wave 2.5 runtime comparison and Fe56 in He4 effective charge profiles](../assets/figures/wave2_benchmark_staircase.png)
 
@@ -131,15 +128,13 @@ Python (`flexmesa._rust`), and JAX (`float64`):
      stack `[T; 1199]` buffer eliminated all per-zone heap allocations and
      filter curve resamplings, accelerating 1024-zone Safe Rust `colors_sed` to
      $6566.28\,\mu\mathrm{s}$ on 1 thread (**$17.2\times$ faster** than 1-thread
-     Fortran MESA) and $1638.59\,\mu\mathrm{s}$ on 4 threads (**$17.4\times$
-     faster** than 4-thread OpenMP Fortran MESA and **$68.9\times$ faster** than
-     Fortran Stage 0).
+     Fortran MESA in this pre-audit run) and $1638.59\,\mu\mathrm{s}$ on 4 threads (**$17.4\times$
+     faster** than 4-thread OpenMP Fortran MESA; re-measurement with committed logs tracked in `#146`).
 4. **32-Gather Interior Corner Deduplication in 3D Cubic Hermite SED Synthesis**:
    - Factoring the 8 interior cell corners out of the three finite-difference
      tangent axes into a single combined weight `w_corner = w_val + w_dx + w_dy
      + w_dz` in both Safe Rust and JAX reduced 1199-wavelength memory gathers per
      model from 56 to 32 (**43% bandwidth reduction**), enabling JAX
      `@jax.jit(jax.vmap)` to synthesize 1024 Kurucz SEDs and 7-band Johnson
-     plus bolometric photometry in $744.64\,\mu\mathrm{s}$ (**$151.6\times$
-     faster** than Fortran Stage 0 and **$38.4\times$ faster** than 4-thread
-     Fortran OpenMP).
+     plus bolometric photometry in $744.64\,\mu\mathrm{s}$ (**$38.4\times$
+     faster** than 4-thread Fortran OpenMP in the same unrecorded pre-audit run; `#146`).

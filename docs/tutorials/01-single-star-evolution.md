@@ -112,7 +112,7 @@ for label, mdl in [("1 Msun", zams_1m), ("4 Msun", zams_4m)]:
 
 ![Internal convective structure of a 4 Msun ZAMS star and 8-mass ZAMS Hertzsprung-Russell diagram](../assets/figures/wave4_star_structure_evolution.png)
 
-*Figure 1: Left: Logarithmic temperature gradients ($\nabla_{\mathrm{rad}}$ in solid blue, $\nabla_{\mathrm{ad}}$ in dashed orange, and actual Mixing-Length Theory $\nabla_T$ in dash-dotted green) as a function of enclosed mass fraction $m/M_\star$ for a $4\,M_\odot$, $Z = 0.02$ Zero-Age Main Sequence star, showing the convective core boundary at $m/M_\star \approx 0.24$. Right: The Zero-Age Main Sequence locus across the 8-mass anchor catalog ($0.51$ to $15.0\,M_\odot$) in the Hertzsprung-Russell diagram alongside a $4\,M_\odot$ core hydrogen-burning track.*
+*Figure 1: Left: Logarithmic temperature gradients ($\nabla_{\mathrm{rad}}$ in dashed green, $\nabla_{\mathrm{ad}}$ in dotted orange, and Mixing-Length Theory $\nabla_T$ in solid blue for Safe Rust and red scatter markers for `@jax.jit`) as a function of enclosed mass fraction $q = m/M_\star$ for a $4\,M_\odot$, $Z = 0.02$ Zero-Age Main Sequence star, with the convective core shaded. Right: The Zero-Age Main Sequence locus across the 8-mass anchor catalog ($0.51$ to $15.0\,M_\odot$ at $Z = 0.02$) in the Hertzsprung-Russell diagram (single ZAMS snapshot locus rather than a multi-step evolutionary track).*
 
 ---
 

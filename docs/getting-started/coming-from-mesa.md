@@ -1,6 +1,6 @@
 # Coming from Fortran MESA
 
-If you have an existing workflow built around upstream Fortran MESA (release `26.4.1`, or releases close to it), `FlexMESA` preserves MESA's physical formulations, control names, `.mod` file formats, and pulsation exports (`GYRE`, `FGONG`, `OSC`) while replacing Fortran namelist executables, 1-based global module state, `run_star_extras.f90` hooks, and X11 `PGSTAR` windows with a modular Safe Rust and Python/JAX library. This guide provides a side-by-side translation reference.
+If you have an existing workflow built around upstream Fortran MESA (release `26.4.1`), `FlexMESA` aims for `v0.1.0` compatibility with MESA's physical equations, control names, ASCII `.mod` files, and pulsation structure exports (`GYRE`, `FGONG`, `OSC`), replacing Fortran namelist executables and X11 `PGSTAR` windows with a Safe Rust and Python/JAX library. At baseline (`13.9%` of core `star`/`binary`/`astero` lines ported unverified and `0 / 106` test-suite cases passing against MESA `26.4.1`; see [Port Coverage Map](../benchmarks/coverage-map.md) and [Declared Known Gaps](../benchmarks/known-gaps.md)), full trajectory parity and control completeness remain under active development (`#140`). This guide maps upstream concepts onto the current library surface.
 
 ---
 
@@ -23,7 +23,7 @@ If you have an existing workflow built around upstream Fortran MESA (release `26
 In Fortran MESA, run configuration is split across four namelist blocks (`&star_job`, `&controls`, `&binary_controls`, and `&astero_search_controls`). In `FlexMESA`, you can either parse and validate existing Fortran `inlist` files directly using `flexmesa.schema` or configure models programmatically in Python and Rust.
 
 ### Parsing Existing Fortran `inlist` Files (`flexmesa.schema`)
-If you have existing MESA `inlist` files, `flexmesa.schema.namelist` parses Fortran `&section ... /` syntax (including `!` comments, `.true.`/`.false.` booleans, `1.0d-4` double-precision literals, and 1-based array assignments such as `xa_central_lower_limit_species(1) = 'h1'`) and validates every key against `.defaults` schemas:
+If you have existing MESA `inlist` files, `flexmesa.schema.namelist` parses Fortran `&section ... /` syntax (including `!` comments, `.true.`/`.false.` booleans, `1.0d-4` double-precision literals, and 1-based array assignments such as `xa_central_lower_limit_species(1) = 'h1'`) and validates keys against explicitly loaded `.defaults` schemas. Note that the runtime `StarModel` inlist loader currently honors only the subset of implemented keys (`41.7%` of `&controls` and `18.6%` of `&star_job`) and silently ignores unimplemented controls or unknown option strings pending loud-rejection enforcement in `#147`:
 
 ```python
 from flexmesa.schema import defaults, namelist
@@ -63,10 +63,10 @@ print(validated)
 | `mesh_delta_coeff`, `varcontrol_target` | `model.set_evolve_controls(mesh_delta_coeff=1.0, varcontrol_target=1.0e-4)` |
 | `overshoot_scheme`, `overshoot_f`, `overshoot_f0` | `model.update_mixing(dt, overshoot_f=..., overshoot_f0=..., scheme="exponential")` |
 | `cool_wind_RGB_scheme`, `hot_wind_scheme`, `Dutch_scaling_factor` | `model.apply_wind_and_adjust_mass(scheme="Dutch", eta=1.0, dt=dt)` |
-| `do_element_diffusion = .true.` | `model.do_element_diffusion(dt, scheme="stanton_murillo")` |
-| `do_conv_premix = .true.` | `model.do_conv_premix(max_iters=10, avoid_fuel_increase=True)` |
-| `predictive_mix = .true.` | `model.add_predictive_mixing(ingested_mass_limit_coeff=0.1, superad_thresh=0.005)` |
-| `do_phase_separation = .true.` | `model.do_phase_separation(dt, gamma_crystallization=175.0)` |
+| `do_element_diffusion = .true.` | `model.do_element_diffusion(dt, scheme="stanton_murillo")` *(partial/unverified; `#156`)* |
+| `do_conv_premix = .true.` | `model.do_conv_premix(max_iters=10, avoid_fuel_increase=True)` *(partial/unverified; `#155`)* |
+| `predictive_mix = .true.` | `model.add_predictive_mixing(ingested_mass_limit_coeff=0.1, superad_thresh=0.005)` *(partial/unverified; `#155`)* |
+| `do_phase_separation = .true.` | `model.do_phase_separation(dt, gamma_crystallization=175.0)` *(partial/unverified; `#156`)* |
 | **`&binary_controls`** | |
 | `m1`, `m2`, `initial_period_in_days`, `initial_eccentricity` | `BinarySystem.from_point_mass(donor, companion_mass_msun=..., initial_period_days=..., eccentricity=...)` or `BinarySystem.from_two_stars(donor, accretor, initial_period_days=...)` |
 | `mdot_scheme = 'Ritter'` / `'Kolb'` | `binary.eval_ritter_mdot_thin`, `binary.eval_kolb_mdot_thick`, `binary.solve_roche_lobe_mdot_jax` |
@@ -90,7 +90,7 @@ mod_text = model.to_mod_str()
 reloaded = star.StarModel.from_mod_str(mod_text, eval_hydro=True)
 assert reloaded.nz == model.nz
 
-# Save and restore an exact binary restart checkpoint (.photo)
+# Save and restore an internal FlexMESA binary snapshot (.photo; not Fortran MESA binary compatible)
 photo_bytes = model.to_photo_bytes()
 restored = star.StarModel.from_photo_bytes(photo_bytes, eval_hydro=True)
 ```

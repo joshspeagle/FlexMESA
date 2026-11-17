@@ -125,7 +125,7 @@ flexmesa data verify
 flexmesa data status
 ```
 
-  To also download the verified MESA release `26.4.1` golden `test_output`, Fortran source, `test_suite` inputs (`mesa-test-inputs-v2`), exact IEEE-754 hexadecimal module test outputs (`mesa-module-hex-v1`), and stored reference trajectories (`mesa-histories-v1`) into `~/.cache/flexmesa/`, pass `--include-test-inputs`:
+  To also download the `SHA-256`-verified MESA release `26.4.1` `test_output` fixtures, Fortran source, `test_suite` inputs (`mesa-test-inputs-v2`), exact IEEE-754 hexadecimal module test outputs (`mesa-module-hex-v1`), and stored reference trajectories (`mesa-histories-v1`) into `~/.cache/flexmesa/`, pass `--include-test-inputs`:
 
 ```bash
 flexmesa data fetch --include-test-inputs

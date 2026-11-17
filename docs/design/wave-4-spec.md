@@ -1,5 +1,8 @@
 # Wave 4 1D Stellar Structure & Evolution Specification (`star_data` & `star`)
 
+!!! note "Historical Pre-Audit Specification (`0b2e6bb`)"
+    Retained for design context; current MESA `26.4.1` trajectory parity stands at `0 / 106` (`#142`, [Declared Known Gaps](../benchmarks/known-gaps.md)).
+
 Wave 4 ports the 1D Lagrangian hydrostatic and hydrodynamic stellar evolution engine (`star_data` and `star`, corresponding to `crates/flexmesa-star`, `crates/flexmesa-py/src/star_py.rs`, and `src/flexmesa/star/`) within the **Integrated Three-Tier Hybrid Architecture**.
 
 ---

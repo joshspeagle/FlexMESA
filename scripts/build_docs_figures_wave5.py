@@ -5,10 +5,10 @@ Produces three 300 dpi PNG figures in `docs/assets/figures/` following the
 AASTeX publication plot style (Computer Modern typography, inward ticks on all
 four sides, frameless legends, and journal-derived widths):
 1. `wave5_benchmark_speedup.png`: Four-way Wave 5.5 runtime comparison at
-   $N_{\\mathrm{zones}} = 1024$ across Upstream Fortran MESA, Safe Rust,
-   Python/PyO3 (`flexmesa._rust`), and Python/JAX (left), paired with scaling
-   across $N_{\\mathrm{zones}} \\in \\{128, 512, 1024\\}$ for `w5_diff_rot` and
-   `w5_riemann_rsp2` (right).
+   $N_{\\mathrm{zones}} = 1024$ across Standalone Ref. Fortran (non-MESA),
+   Safe Rust, Python/PyO3 (`flexmesa._rust`), and Python/JAX (left), paired
+   with scaling across $N_{\\mathrm{zones}} \\in \\{128, 512, 1024\\}$ for
+   `w5_diff_rot` and `w5_riemann_rsp2` (right).
 2. `wave5_astero_echelle_surface_corr.png`: Asteroseismic echelle diagram
    ($\\nu \\bmod \\Delta\\nu$ vs. $\\nu$) illustrating Ball & Gizon (2014)
    1-term cubic, 2-term combined, and Sonoi (2015) surface-effect frequency
@@ -88,7 +88,7 @@ def plot_wave5_benchmark_speedup(out_dir: pathlib.Path) -> None:
 
     fig, ax = _two_panel_fig(wspace=0.40)
     bars = (
-        (-1.5, fortran_best, "C2", 0.85, "Fortran MESA"),
+        (-1.5, fortran_best, "C2", 0.85, "Ref. Fortran (non-MESA)"),
         (-0.5, rust_best, "C0", 0.95, "Safe Rust"),
         (0.5, pyo3_best, "C1", 0.90, "PyO3 (flexmesa._rust)"),
         (1.5, jax_best, "C3", 0.85, "JAX (jit / vmap)"),
@@ -117,7 +117,7 @@ def plot_wave5_benchmark_speedup(out_dir: pathlib.Path) -> None:
             1.5,
             "--",
             "s",
-            r"Fortran $\mathtt{riemann\_rsp2}$ (4t)",
+            r"Ref. Fortran $\mathtt{riemann\_rsp2}$ (4t)",
         ),
         (
             [3.53, 14.05, 28.15],
@@ -141,7 +141,7 @@ def plot_wave5_benchmark_speedup(out_dir: pathlib.Path) -> None:
             1.5,
             "--",
             "d",
-            r"Fortran $\mathtt{diff\_rot}$ (4t)",
+            r"Ref. Fortran $\mathtt{diff\_rot}$ (4t)",
         ),
         (
             [6.12, 24.09, 70.41],

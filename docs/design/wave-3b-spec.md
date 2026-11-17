@@ -1,5 +1,8 @@
 # Wave 3b Technical Specification: 4D Tabulated EOS, Opacity, Nuclear Rates, Reaction Networks & Model Atmospheres (`eos_4d`, `kap`, `rates`, `net`, `atm`)
 
+!!! note "Historical Pre-Audit Specification (`0b2e6bb`)"
+    Retained for design context; `DECISIONS #6`-`#8` and golden wave gates are superseded by `DECISIONS #17` and `#23`.
+
 ## 1. Scope and Architectural Placement
 
 Wave 3b completes the stellar microphysics layer of `FlexMESA` under the **Integrated Three-Tier Hybrid Architecture** (`DECISIONS #6` through `#8`):

@@ -1,5 +1,8 @@
 # Wave 1.5 Specification: Three-Tier Hybrid Integration, Solver Scaling & Public Documentation Website
 
+!!! note "Historical Pre-Audit Specification (`0b2e6bb`)"
+    Three-tier hybrid governance and `Wave X.5` merge gates described here are superseded by `DECISIONS #17` and `#23` (`Rust` canonical, `JAX` derived).
+
 This specification defines the engineering contract for **Wave 1.5** ([Issue #28](https://github.com/joshspeagle/FlexMESA/issues/28)), which serves as the inaugural **Phase `X.5`** holistic consolidation, optimization, upstream Fortran MESA verification, and public documentation milestone (`DECISIONS #6`–`#8`).
 
 ---

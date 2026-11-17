@@ -1,6 +1,6 @@
 # I/O, Schemas, Plotting & Benchmarks (`schema`, `data`, `testing`, `plotting`, `bench`)
 
-This reference page documents the configuration schema and Fortran `&namelist` parser (`flexmesa.schema`), the `.safetensors` memory-mapped data loader and `SHA-256` manifest verifier (`flexmesa.data`), the golden `test_output` oracle comparator (`flexmesa.testing`), the publication-styled diagnostic plotting suite (`flexmesa.plotting`), and the 4-stage benchmark harness (`flexmesa.bench`).
+This reference page documents the configuration schema and Fortran `&namelist` parser (`flexmesa.schema`), the `.safetensors` memory-mapped data loader and `SHA-256` manifest verifier (`flexmesa.data`), the upstream `test_output` reference and MESA `26.4.1` trajectory comparators (`flexmesa.testing`), the publication-styled diagnostic plotting suite (`flexmesa.plotting`), and the 4-stage benchmark harness (`flexmesa.bench`).
 
 For hands-on guides, see [Inlists, Models & Data Caches](../guides/inlists-and-models.md), [Diagnostic Plotting](../guides/diagnostic-plotting.md), and [Backends & CPU/GPU Performance](../guides/backends-and-performance.md).
 
@@ -58,7 +58,7 @@ print(
 
 ---
 
-## Golden `test_output` Oracle & Trajectory Harness (`flexmesa.testing`)
+## Upstream `test_output` Reference & Trajectory Harness (`flexmesa.testing`)
 
 `flexmesa.testing` parses upstream MESA `<pkg>/test/test_output` reference files (including Fortran `1pe24.16` and missing-`E` three-digit exponents like `1.2345-102`), validates the 106-case MESA `26.4.1` trajectory manifest and declared known-gaps registry (`case_manifest.toml`, `known_gaps.toml`), compares `LOGS/history.data` and `binary_history.data` tracks on a shared `float64` coordinate grid, and drives `flexmesa trace` and `flexmesa harness` (supporting `--numerics-mode {strict,fast}`, with `--gate` restricted to `strict`).
 
@@ -94,7 +94,7 @@ print(
 
 ## Four-Stage Performance Benchmark Harness (`flexmesa.bench`)
 
-`flexmesa.bench` executes the 4-stage optimization staircase (`Stage 0 Sequential Baseline`, `Stage 1 Multi-Core FFI / SoA`, `Stage 2 @jax.jit`, `Stage 3 @jax.jit(vmap)`) and golden checksum verification across all `FlexMESA` domains.
+`flexmesa.bench` executes the 4-stage optimization staircase (`Stage 0 Sequential Baseline`, `Stage 1 Multi-Core FFI / SoA`, `Stage 2 @jax.jit`, `Stage 3 @jax.jit(vmap)`) and reports regression summary checksums across standalone kernels (post-audit MESA `26.4.1` comparator re-runs and timing provenance are tracked under `#146`).
 
 ::: flexmesa.bench.harness
 

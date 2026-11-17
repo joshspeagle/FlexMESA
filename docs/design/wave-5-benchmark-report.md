@@ -1,5 +1,8 @@
 # Wave 5.5 Four-Way Benchmark Report
 
+!!! warning "Pre-Audit Benchmark Record (`0b2e6bb`, Non-MESA Fortran Comparator, `#146`)"
+    These pre-audit measurements reflect unrecorded local runs before the MESA `26.4.1` re-baseline (no raw JSON output committed, `#146`). All Fortran timings below come from the standalone loop in `benchmarks/fortran_mesa/bench_kernels_wave5.f90` rather than upstream MESA library calls, and `w5_diff_rot` evaluates a different Spruit-Tayler branch (~`120x` difference in checksum; `#158`).
+
 This report records the Wave 5.5 benchmark runs across the standalone Fortran comparator (`benchmarks/fortran_mesa/bench_kernels_wave5.f90`, `gfortran -O2 -fopenmp`), Safe Rust (`cargo --release` + persistent 4-thread worker team), Python (`PyO3` / `flexmesa._rust`), and Python (`JAX float64` `@jax.jit` + `jax.vmap`) across $N_{\mathrm{zones}} \in \{128, 512, 1024\}$. Benchmark provenance and replacement of hand-written Fortran comparators with upstream MESA calls are tracked in [#146](https://github.com/joshspeagle/FlexMESA/issues/146).
 
 ![Four-way Wave 5.5 runtime comparison and zone-count scaling](../assets/figures/wave5_benchmark_speedup.png)
@@ -44,9 +47,9 @@ Safe Rust and Python/JAX agree internally to $\le 5.6 \times 10^{-15}$ across $N
 
 ---
 
-## 3. Four-Way Runtime Scorecard ($\mu\mathrm{s}$, Median $\pm$ IQR)
+## 3. Four-Way Runtime Scorecard ($\mu\mathrm{s}$, Median $\pm$ IQR; Standalone Non-MESA Fortran)
 
-| Workload | $N_{\mathrm{zones}}$ | Fortran MESA 1t ($\mu\mathrm{s}$) | Fortran MESA 4t ($\mu\mathrm{s}$) | Safe Rust 1t ($\mu\mathrm{s}$) | Safe Rust 4t ($\mu\mathrm{s}$) | PyO3 1t ($\mu\mathrm{s}$) | PyO3 4t ($\mu\mathrm{s}$) | JAX `@jax.jit` ($\mu\mathrm{s}$) | JAX `vmap` ($B=4$, $\mu\mathrm{s}$) | Speedup (Rust 1t vs. F90 1t) | Speedup (Best vs. F90 Best) |
+| Workload | $N_{\mathrm{zones}}$ | Ref. Fortran 1t ($\mu\mathrm{s}$) | Ref. Fortran 4t ($\mu\mathrm{s}$) | Safe Rust 1t ($\mu\mathrm{s}$) | Safe Rust 4t ($\mu\mathrm{s}$) | PyO3 1t ($\mu\mathrm{s}$) | PyO3 4t ($\mu\mathrm{s}$) | JAX `@jax.jit` ($\mu\mathrm{s}$) | JAX `vmap` ($B=4$, $\mu\mathrm{s}$) | Ratio (F90 1t / Rust 1t) | Ratio (F90 Best / FlexMESA Best) |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
 | `w5_diff_rot` | `128` | `22.91 ± 0.05` | `6.07 ± 0.10` | `23.91 ± 0.16` | `6.12 ± 0.11` | `24.45 ± 0.11` | `8.85 ± 0.22` | `99.78 ± 35.91` | `48.89 ± 2.61` | `0.96x` | `0.99x` |
 | `w5_diff_rot` | `512` | `91.07 ± 0.65` | `34.91 ± 0.75` | `95.21 ± 0.09` | `24.09 ± 0.09` | `96.32 ± 0.57` | `49.30 ± 0.19` | `189.28 ± 19.61` | `82.44 ± 4.68` | `0.96x` | `1.45x` |
@@ -66,7 +69,7 @@ Safe Rust and Python/JAX agree internally to $\le 5.6 \times 10^{-15}$ across $N
 ## 4. Key Architectural Takeaways
 
 1. **Pre-Allocated Stencil & Persistent Spin-Barrier Team in `w5_riemann_rsp2`**:
-   - In Fortran MESA, two consecutive `!\$omp parallel do` barriers across the face HLLC loop and zone `RSP2` loop limit 4-thread OpenMP scaling to `1.38x` at $N_{\mathrm{zones}} = 1024$ (`46.46 us` vs. `63.94 us` 1-thread).
-   - By evaluating the stencil-local HLLC faces and closed-form quadratic `RSP2` stationary root inside `FlexMESA`'s lock-free persistent 4-thread worker team (`measure_stage3_chunks_us`), Safe Rust achieves `28.15 us` single-threaded (`2.27x` faster than Fortran 1t) and `7.94 us` 4-threaded (`5.85x` faster than Fortran 4t) at $N_{\mathrm{zones}} = 1024$.
-2. **Exact Single-Thread Parity on Compute-Bound Transcendental Kernels (`w5_diff_rot` & `w5_binary_rlof`)**:
-   - Safe Rust matches single-threaded Fortran MESA within `3%` to `4%` on both `w5_diff_rot` (`190.48 us` vs. `182.87 us` at $N_{\mathrm{zones}} = 1024$) and `w5_binary_rlof` (`115.63 us` vs. `111.57 us` at $N_{\mathrm{zones}} = 1024$, and `1.31x` faster at $N_{\mathrm{zones}} = 512$), while JAX (`@jax.jit` + `jax.vmap`) provides end-to-end exact automatic differentiation across all four Wave 5 modules with `< 6e-15` checksum parity.
+   - In the standalone `bench_kernels_wave5.f90` comparator (not upstream MESA), two consecutive `!\$omp parallel do` barriers across the face HLLC loop and zone `RSP2` loop limited 4-thread OpenMP scaling to `1.38x` at $N_{\mathrm{zones}} = 1024$ (`46.46 us` vs. `63.94 us` 1-thread).
+   - By evaluating the stencil-local HLLC faces and closed-form quadratic `RSP2` stationary root inside `FlexMESA`'s lock-free persistent 4-thread worker team (`measure_stage3_chunks_us`), Safe Rust reached `28.15 us` single-threaded and `7.94 us` 4-threaded at $N_{\mathrm{zones}} = 1024$.
+2. **Single-Thread Comparison on Standalone Kernels (`w5_diff_rot` & `w5_binary_rlof`)**:
+   - Safe Rust ran within `3%` to `4%` of the standalone `bench_kernels_wave5.f90` loop on both `w5_diff_rot` (`190.48 us` vs. `182.87 us` at $N_{\mathrm{zones}} = 1024$; note that Rust and `bench_kernels_wave5.f90` evaluate different Spruit-Tayler branches as documented in Section 2) and `w5_binary_rlof` (`115.63 us` vs. `111.57 us` at $N_{\mathrm{zones}} = 1024$), while JAX (`@jax.jit` + `jax.vmap`) provides automatic differentiation with `< 6e-15` internal Rust-vs-JAX checksum agreement.

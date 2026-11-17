@@ -1,5 +1,8 @@
 # Wave 0 Technical Specification & Index/Memory-Order Contract
 
+!!! note "Historical Pre-Audit Specification (`0b2e6bb`)"
+    Superseded as an acceptance standard by `notes/SCOPE.md` and `DECISIONS #17`-`#24`; preserved for design context (the Index & Memory-Order Contract below remains active).
+
 ## 1. Overview & Sub-Issue Decomposition (`Issue #6`)
 
 Wave 0 establishes the shared verification, schema-generation, and binary data-loading infrastructure required by both tracks (`crates/` in Safe Rust and `src/flexmesa/` in Python/JAX `float64`) before Wave 1 numerical and microphysics kernels are implemented.

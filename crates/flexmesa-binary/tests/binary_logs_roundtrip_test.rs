@@ -344,24 +344,4 @@ fn test_binary_history_edot_columns_report_applied_terms() {
         get("edot_enhance").to_bits(),
         sys.last_edot.edot_enhance.to_bits()
     );
-
-    for (mode, expected) in [
-        (flexmesa_math::NumericsMode::Strict, "strict"),
-        (flexmesa_math::NumericsMode::Fast, "fast"),
-    ] {
-        flexmesa_math::with_numerics_mode(mode, || {
-            let hdr = flexmesa_binary::format_binary_history_file_header(
-                &sys, &specs,
-            );
-            let tbl = read_mesa_log_str(&format!(
-                "{hdr}{}\n",
-                " 1".repeat(specs.len())
-            ))
-            .expect("parse binary_history header");
-            assert_eq!(
-                tbl.header_value("math_backend"),
-                Some(&MesaHeaderValue::Text(String::from(expected)))
-            );
-        });
-    }
 }

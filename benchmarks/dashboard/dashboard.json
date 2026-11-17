@@ -21,7 +21,7 @@
         "verified_total": 0,
         "pct_ported": 14.9,
         "pct_verified": 0.0,
-        "rust_lines": 57709,
+        "rust_lines": 57799,
         "python_jax_lines": 4723
       },
       {
@@ -378,7 +378,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 3456,
+        "rust_lines": 3490,
         "python_jax_lines": 2353
       },
       {
@@ -456,12 +456,12 @@
     },
     "infrastructure_lines": {
       "rust_bridge_testing_bench": 15403,
-      "python_testing_bench": 10561
+      "python_testing_bench": 10818
     }
   },
   "numerics": {
     "has_165_ci": true,
-    "strict_cross_machine_identical": "verified in CI (x86_64 == aarch64, 1 == 4 threads; 474,062 math vectors + star/1.3M_ms_high_Z 5-step trace)",
+    "strict_cross_machine_identical": "verified in CI (x86_64 == aarch64, 1 == 4 threads; 474,062 math vectors + star/1.3M_ms_high_Z 5-step trace run with unsupported controls ignored)",
     "strict_kernels_bit_identical": "math: 403,258/403,258 CRMATH 0 ULP (70,804 libm <= 1 ULP); 0/23 other module suites",
     "total_upstream_hex_values": 348321,
     "modules": [
@@ -593,8 +593,10 @@
         "total": 90,
         "mesa_26_4_1_ref": 86,
         "no_reference_yet": 4,
-        "reached_termination": 0,
-        "within_numeric_tol": 0,
+        "strict_validated": 0,
+        "diagnostic_runs": 90,
+        "reached_termination": 35,
+        "within_numeric_tol": 5,
         "passing": 0,
         "declared_gaps": 86,
         "undeclared_failures": 0
@@ -603,7 +605,9 @@
         "total": 8,
         "mesa_26_4_1_ref": 8,
         "no_reference_yet": 0,
-        "reached_termination": 0,
+        "strict_validated": 0,
+        "diagnostic_runs": 8,
+        "reached_termination": 2,
         "within_numeric_tol": 0,
         "passing": 0,
         "declared_gaps": 8,
@@ -613,14 +617,42 @@
         "total": 8,
         "mesa_26_4_1_ref": 8,
         "no_reference_yet": 0,
-        "reached_termination": 0,
+        "strict_validated": 0,
+        "diagnostic_runs": 8,
+        "reached_termination": 4,
         "within_numeric_tol": 0,
         "passing": 0,
         "declared_gaps": 8,
         "undeclared_failures": 0
       }
     },
-    "within_tol_non_pass": [],
+    "within_tol_non_pass": [
+      {
+        "suite": "star",
+        "case": "rsp_BEP",
+        "issue": "#148"
+      },
+      {
+        "suite": "star",
+        "case": "rsp_BLAP",
+        "issue": "#148"
+      },
+      {
+        "suite": "star",
+        "case": "rsp_Cepheid",
+        "issue": "#148"
+      },
+      {
+        "suite": "star",
+        "case": "rsp_RR_Lyrae",
+        "issue": "#148"
+      },
+      {
+        "suite": "star",
+        "case": "rsp_save_and_load_file",
+        "issue": "#148"
+      }
+    ],
     "gaps_by_issue": {
       "#152": 18,
       "#148": 17,

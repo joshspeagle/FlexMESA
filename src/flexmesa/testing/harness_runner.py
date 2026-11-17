@@ -496,7 +496,11 @@ def _run_traced_worker(
             wall_time_sec=wall,
             peak_rss_gb=peak_kb / 1.0e6,
             history_path=hist,
-            error_message=err_text[-500:] if err_text else f"exit={retcode}",
+            error_message=(
+                _summarize_worker_error(err_text)
+                if err_text
+                else f"exit={retcode}"
+            ),
             n_controls_ignored=(
                 count_unsupported_controls(err_text)
                 if is_unsupported_controls_rejection(err_text)
@@ -617,6 +621,30 @@ def run_traced_case(
                 else 0
             ),
         )
+
+
+def _summarize_worker_error(err_text: str, limit: int = 500) -> str:
+    """Return the final error line of a worker's stderr, cut to ``limit``.
+
+    The last non-empty line of a Python traceback is the exception itself,
+    which is the part worth keeping. A long line (for example a list of
+    unsupported controls) is cut at the end so that its start, which says
+    what kind of error it is, survives.
+
+    Args:
+        err_text: Full captured stderr of the worker process.
+        limit: Maximum number of characters to keep.
+
+    Returns:
+        The summarized message, at most ``limit`` characters long.
+    """
+    lines = [ln for ln in err_text.splitlines() if ln.strip()]
+    if not lines:
+        return ""
+    last = lines[-1].strip()
+    if len(last) > limit:
+        return last[: limit - 3] + "..."
+    return last
 
 
 def run_case_with_diagnostic(

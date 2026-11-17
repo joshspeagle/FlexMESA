@@ -475,19 +475,28 @@ fn test_pc_alfa_and_eosdt_pc_helm_blend_match_strict_regression_snapshot() {
         (out_free.res[I_FRAC_HELM] - 3.4702387438628451e-42).abs() < 1.0e-56
     );
 
-    // Off-table boundary queries must skip HELM unconditionally into ideal gas
-    // (`eos/private/eos_helm_eval.f90:116-135`), even when
-    // `okay_to_convert_ierr_to_skip == false`.
+    // An out-of-range HELM point returns `ierr = 1`
+    // (`eos/private/helm.f90:192-212`). The blend converts it to a skip into
+    // the ideal EOS only when `okay_to_convert_ierr_to_skip` is set
+    // (`eos/private/eosdt_eval.f90:1511-1514`), which is the default.
     let cfg_helm_only = EosConfig {
         use_pc: false,
         use_skye: false,
         use_free_eos: false,
         use_opal_scvh: false,
         use_cms: false,
-        okay_to_convert_ierr_to_skip: false,
+        okay_to_convert_ierr_to_skip: true,
         ..EosConfig::default()
     };
     let out_bnd = eos_dt_get(ht, 1.0e-5, 900.0, &chem_id, &xa, &cfg_helm_only)
-        .expect("boundary hit must fall back cleanly to ideal EOS");
+        .expect("off-table HELM error is converted to a skip by default");
     assert!((out_bnd.res[I_FRAC_IDEAL] - 1.0).abs() < 1.0e-14);
+    let cfg_no_skip = EosConfig {
+        okay_to_convert_ierr_to_skip: false,
+        ..cfg_helm_only
+    };
+    assert!(
+        eos_dt_get(ht, 1.0e-5, 900.0, &chem_id, &xa, &cfg_no_skip).is_err(),
+        "without the conversion the HELM error is returned"
+    );
 }

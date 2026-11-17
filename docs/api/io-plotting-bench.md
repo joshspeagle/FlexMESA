@@ -72,6 +72,10 @@ print(
 
 ::: flexmesa.testing.case_report
 
+::: flexmesa.testing.port_manifest
+
+::: flexmesa.testing.dashboard
+
 ::: flexmesa.testing.trace_cli
 
 ---

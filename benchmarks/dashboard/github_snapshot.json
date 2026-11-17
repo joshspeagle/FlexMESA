@@ -1,0 +1,365 @@
+{
+  "repo": "joshspeagle/FlexMESA",
+  "tracker_issue": 140,
+  "backlog_issue": 169,
+  "phases_140": [
+    {
+      "phase": "Phase 0",
+      "open": 1,
+      "closed": 5,
+      "issues": [
+        {
+          "number": 141,
+          "title": "[Audit A0] Re-baseline the upstream reference to MESA release 26.4.1",
+          "state": "closed"
+        },
+        {
+          "number": 143,
+          "title": "[Audit A2] Upstream-history end-to-end harness and stored reference histories",
+          "state": "closed"
+        },
+        {
+          "number": 145,
+          "title": "[Audit A4] Governance: rules for expected values, pass criteria and the meaning of \"green\"",
+          "state": "closed"
+        },
+        {
+          "number": 163,
+          "title": "[Audit C12] History and profile output with upstream column definitions",
+          "state": "closed"
+        },
+        {
+          "number": 165,
+          "title": "[Audit C14] Numerics policy: strict (hardware-independent) and fast modes from one Rust source",
+          "state": "closed"
+        },
+        {
+          "number": 174,
+          "title": "[Audit E2] Generated progress dashboard in README and docs: port coverage by module, verification status, test coverage, issues and PRs",
+          "state": "open"
+        }
+      ]
+    },
+    {
+      "phase": "Phase A",
+      "open": 4,
+      "closed": 0,
+      "issues": [
+        {
+          "number": 142,
+          "title": "[Audit A1] Correct public claims, scorecards and synthetic figures",
+          "state": "open"
+        },
+        {
+          "number": 144,
+          "title": "[Audit A3] CI that runs real campaigns, and a declared-known-gaps mechanism",
+          "state": "open"
+        },
+        {
+          "number": 146,
+          "title": "[Audit A5] Benchmark honesty and provenance",
+          "state": "open"
+        },
+        {
+          "number": 168,
+          "title": "[Audit A6] Profile a real evolution and measure what fast math, batching and waste removal each buy",
+          "state": "open"
+        }
+      ]
+    },
+    {
+      "phase": "Phase B",
+      "open": 5,
+      "closed": 0,
+      "issues": [
+        {
+          "number": 147,
+          "title": "[Audit B1] Fail loudly on unsupported controls, missing data and discarded errors",
+          "state": "open"
+        },
+        {
+          "number": 148,
+          "title": "[Audit B2] Move test-case code out of the library and delete fabricated behaviour",
+          "state": "open"
+        },
+        {
+          "number": 149,
+          "title": "[Audit B3] Defaults parity with upstream `*.defaults`",
+          "state": "open"
+        },
+        {
+          "number": 150,
+          "title": "[Audit B4] Error type, telemetry, retry-proof counters, checkpoints, and removal of whole-model clones",
+          "state": "open"
+        },
+        {
+          "number": 151,
+          "title": "[Audit B5] Energy accounting as upstream does it",
+          "state": "open"
+        }
+      ]
+    },
+    {
+      "phase": "Phase C",
+      "open": 13,
+      "closed": 0,
+      "issues": [
+        {
+          "number": 152,
+          "title": "[Audit C1] Newton iteration control and retry semantics (`star_solver.f90`, `evolve.f90`)",
+          "state": "open"
+        },
+        {
+          "number": 153,
+          "title": "[Audit C2] Mesh planner (`mesh_plan.f90`, `mesh_functions.f90`, `adjust_mesh*.f90`)",
+          "state": "open"
+        },
+        {
+          "number": 154,
+          "title": "[Audit C3] Relaxation machinery and initial-model construction (`relax.f90`, `create_initial_model.f90`, `init_model.f90`)",
+          "state": "open"
+        },
+        {
+          "number": 155,
+          "title": "[Audit C4] Convective boundaries and mixing: predictive mixing, premixing, overshoot, composition-gradient smoothing",
+          "state": "open"
+        },
+        {
+          "number": 156,
+          "title": "[Audit C5] Element diffusion and phase separation",
+          "state": "open"
+        },
+        {
+          "number": 157,
+          "title": "[Audit C6] Time-dependent convection state handling and turbulence wiring",
+          "state": "open"
+        },
+        {
+          "number": 158,
+          "title": "[Audit C7] Rotation, angular momentum transport and rotational mixing",
+          "state": "open"
+        },
+        {
+          "number": 159,
+          "title": "[Audit C8] Winds, mass change and stop conditions",
+          "state": "open"
+        },
+        {
+          "number": 160,
+          "title": "[Audit C9] Binary step structure, orbital integrator and implicit mass transfer",
+          "state": "open"
+        },
+        {
+          "number": 161,
+          "title": "[Audit C10] Microphysics control coverage and gaps (EOS, opacity, nets and rates, atmospheres, neutrinos)",
+          "state": "open"
+        },
+        {
+          "number": 162,
+          "title": "[Audit C11] Pulsation, asteroseismology and optimizers",
+          "state": "open"
+        },
+        {
+          "number": 164,
+          "title": "[Audit C13] Data pipeline provenance and runtime caches",
+          "state": "open"
+        },
+        {
+          "number": 166,
+          "title": "[Audit C15] JAX contract: derived, differentiable and batched; validated against Rust strict mode",
+          "state": "open"
+        }
+      ]
+    },
+    {
+      "phase": "Phase D",
+      "open": 3,
+      "closed": 0,
+      "issues": [
+        {
+          "number": 170,
+          "title": "[Audit D1] Port GYRE (pulsation code bundled with MESA)",
+          "state": "open"
+        },
+        {
+          "number": 171,
+          "title": "[Audit D2] Port ADIPLS (adiabatic pulsation code bundled with MESA)",
+          "state": "open"
+        },
+        {
+          "number": 172,
+          "title": "[Audit D3] Port STELLA (radiative-transfer code bundled with MESA), after all test-suite cases pass",
+          "state": "open"
+        }
+      ]
+    },
+    {
+      "phase": "Phase E",
+      "open": 2,
+      "closed": 0,
+      "issues": [
+        {
+          "number": 173,
+          "title": "[Audit E1] Plotting as we go: a pgstar and pgbinary replacement built on history and profile output",
+          "state": "open"
+        },
+        {
+          "number": 174,
+          "title": "[Audit E2] Generated progress dashboard in README and docs: port coverage by module, verification status, test coverage, issues and PRs",
+          "state": "open"
+        }
+      ]
+    },
+    {
+      "phase": "Deferred scope",
+      "open": 0,
+      "closed": 0,
+      "issues": []
+    }
+  ],
+  "open_pull_requests": [
+    {
+      "number": 200,
+      "title": "[Audit E2] Add MESA 26.4.1 port manifest and generated progress dashboard (#174)",
+      "draft": true
+    }
+  ],
+  "deferred_169": [
+    {
+      "number": 175,
+      "title": "[Deferred enhancement] Higher-order binary orbit integrator and gravitational-wave eccentricity term",
+      "state": "open",
+      "kind": "enhancement",
+      "parity_pending": true,
+      "needs_confirmation": false
+    },
+    {
+      "number": 176,
+      "title": "[Deferred bug] HELM-edge EOS blend derivative arguments are swapped",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": true,
+      "needs_confirmation": false
+    },
+    {
+      "number": 177,
+      "title": "[Deferred bug] Step control: `check_dX` species test always true; `sizequ` double-counts chemistry residuals",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": true,
+      "needs_confirmation": false
+    },
+    {
+      "number": 178,
+      "title": "[Deferred bug] RSP2 \"intentional fixes\" to upstream: verify each against 26.4.1, restore upstream behaviour, keep the fixes for later",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": true,
+      "needs_confirmation": true
+    },
+    {
+      "number": 181,
+      "title": "[Deferred bug] Double kap_sum accumulation in set_surf_avg_rotation_info doubles surf_avg_opacity",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 182,
+      "title": "[Deferred bug] get_phot_info overwrites interpolated L and uses surface cgrav when tau_factor < 1",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 183,
+      "title": "[Deferred bug] Unit mismatches in binary_history_getval for lg_separation and delta_star_{1,2}_mass",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 184,
+      "title": "[Deferred bug] Unreachable semiconvective loop in set_mass_semiconv_core leaves mass_semiconv_core equal to mass_conv_core",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 185,
+      "title": "[Deferred bug] Offset constants passed as region cap in set_burn_types prevent burning-region merging",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 186,
+      "title": "[Deferred bug] edot_tidal_Hut multiplies both binary components by Ftid_1 instead of Ftid_2 on star 2",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": true,
+      "needs_confirmation": false
+    },
+    {
+      "number": 187,
+      "title": "[Deferred bug] Typo in get_info_at_q interp3 uses node coordinate x2 where the value f2 belongs",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 192,
+      "title": "[Deferred bug] compute_ion_offset normalizes by sum(X_k/A_k), multiplying specific ionization offset by abar",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 193,
+      "title": "[Deferred bug] plas_neu hardcodes Weinberg prefactor 0.93153 instead of computing cv^2 + (n_nu - 1) cv'^2",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 194,
+      "title": "[Deferred bug] eval_brent_safe_zero uses initial endpoint a instead of q = fa/fc in inverse quadratic step",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 196,
+      "title": "[Deferred bug] CRMATH 1.2 atan2_r_r_dp_ leaves return variable uninitialized on (0, 0) or NaN",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 197,
+      "title": "[Deferred bug] CRMATH 1.2 tanh evaluates NaN at +-Infinity instead of +-1",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 198,
+      "title": "[Deferred bug] Seven core MESA 26.4.1 files bypass math_lib (CRMATH) into platform libm",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": false,
+      "needs_confirmation": false
+    }
+  ]
+}

@@ -185,6 +185,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -234,11 +236,19 @@ jobs:
           ruff check src tests
           mypy --strict src tests
 
+      - name: Verify port manifest, status-promotion rules, and generated dashboard
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            flexmesa dashboard check --base-ref "origin/${{ github.base_ref }}"
+          else
+            flexmesa dashboard check
+          fi
+
       - name: Build diagnostic figures, MkDocs site, and verify snippets
         run: |
           python scripts/build_docs_figures.py
           mkdocs build --strict --site-dir site
-          pytest tests/test_docs_snippets.py tests/test_mesa_paper_figures.py -v
+          pytest tests/test_docs_snippets.py tests/test_mesa_paper_figures.py tests/test_dashboard.py -v
 
   history-harness:
     name: Upstream History Harness (PR Subset)

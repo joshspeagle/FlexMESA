@@ -38,6 +38,7 @@ Scope and the `v0.1.0` definition are in [`SCOPE.md`](SCOPE.md). Work is tracked
 | 21 | Packages Are Closed on Evidence by the Authoring Agent | In force; replaces the "ready for verification" hand-off in decision 17 | below |
 | 22 | Upstream Reference Pinned to MESA Release 26.4.1 and Release-Upgrade Policy | In force; supersedes the pre-rebaseline test-input bundle in decision 13 | below |
 | 23 | Single-Source Strict/Fast Numerics Layer, Vendored `crlibm` FFI Exception, and Platform-Intrinsic `RN` Routing (`#165`, `#196`, `#198`) | In force | below |
+| 24 | Evidence-Gated Port Manifest and Script-Generated Progress Dashboard (`#174`) | In force | below |
 
 ## Pre-audit decisions still in force
 
@@ -240,3 +241,17 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
   - *Generic `<M: MathBackend>` type parameter across physics crates*: Duplicates monomorphized code across 25 crates and `DualOrder1<N>` types for a run-start mode switch.
   - *`&dyn MathBackend` trait-object dispatch*: Blocks inlining of `fma` and integer-power chains and threads context pointers through scalar helpers.
   - *Pure-Rust `core-math` (`RN`) for `CRMATH` functions*: Mismatches `CRMATH`'s `*_rz` and `*_rd` rounding on ~50% of inputs.
+
+---
+
+## DECISIONS #24: Evidence-Gated Port Manifest and Script-Generated Progress Dashboard (`Issue #174`)
+
+- **Date**: 2026-11-16
+- **Decision**:
+  1. **Per-File Port Manifest & Six Ordered Status Tiers (`benchmarks/dashboard/port_manifest.toml`, `scripts/dashboard/build_port_manifest.py`, `src/flexmesa/testing/port_manifest.py`)**: Track all `1,100` in-scope MESA `26.4.1` source files across all `26` dashboard modules (`22` core MESA modules, `GYRE 8.1`, `ADIPLS`, `STELLA`, and `pgstar`/`pgbinary` plotting) with exact line counts and `SHA-256` digests computed mechanically from `mesa-26.04.1.zip` (`994fd28f38da92efc80e38ca11d8317b`). Enforce six ordered status tiers: `absent`, `stub`, `partial`, `ported_unverified`, `kernel_reference_vectors`, and `case_level_evidence`. Zero entries start in verified tiers. `ported_unverified` requires mapping every public Fortran procedure and generic interface parsed from `$MESA_DIR` to an existing Rust/Python symbol in `routine_map`; `kernel_reference_vectors` and `case_level_evidence` require committed MESA `26.4.1` generated artifacts and tests (plus passing `baseline_run_26_4_1.json` cases for `case_level_evidence`); and CI rejects raising any status rank in a PR unless the PR diff adds or updates the supporting implementation or evidence files.
+  2. **Deterministic Artifact Snapshots, Fast PR Freshness Gate & Merge-Triggered Parallel Refresh (`flexmesa dashboard`, `.github/workflows/{ci,dashboard}.yml`)**: Render `README.md`, `docs/benchmarks/progress-dashboard.md`, `docs/index.md`, and `benchmarks/dashboard/dashboard.json` mechanically from `port_manifest.toml`, `benchmarks/history_harness/`, `notes/audit/defaults_diff_26_4_1.md`, `notes/audit/fast_vs_strict.json`, `coverage_summary.json` (`cargo llvm-cov` + `pytest --cov`), `github_snapshot.json` (`#140`, `#169`, open PRs), and `history.tsv`. Gate every PR in `ci.yml` on fast byte-exact `flexmesa dashboard check` (~6 min inside `docs`), while running `coverage-rust` and `coverage-python` in parallel inside `dashboard.yml` on `main` merges (`push`), manual `workflow_dispatch`, and PRs touching dashboard/coverage files (with multi-case E2E and multi-model evolutionary sweeps skipped under LLVM instrumentation because they already run uninstrumented on every PR in `rust`, `e2e`, and `history-harness`, and with no daily cron job).
+- **Why**: Prevents line-count inflation, author-asserted verification claims, and hand-typed scorecard drift (`G1-7`, `G1-9`), keeps PR CI deterministic when GitHub issues or PRs change concurrently, and avoids burning 40+ runner-minutes of instrumented E2E coverage on unrelated PR pushes or idle days without `main` merges.
+- **Alternatives Rejected**:
+  - *Running `cargo llvm-cov` and `pytest --cov` on every PR in `ci.yml` or on a daily cron schedule*: Adds ~25-45 minutes of instrumented test execution to every PR push without gating anything beyond `dashboard.yml`'s post-merge refresh, and runs needlessly on days without merges.
+  - *Querying the live GitHub API directly inside PR `flexmesa dashboard check`*: Opening or closing any issue or PR on GitHub would immediately fail unrelated open PRs; snapshotting `github_snapshot.json` via `dashboard.yml` keeps PR checks deterministic while refreshing `main` automatically.
+  - *Measuring progress by Rust or Python lines written*: Inflates or undercounts ports where idiomatic Rust differs in verbosity from Fortran (`#174`).

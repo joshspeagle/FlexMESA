@@ -1,0 +1,240 @@
+name: Regenerate Progress Dashboard
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "benchmarks/dashboard/**"
+      - "scripts/dashboard/**"
+      - "src/flexmesa/testing/*dashboard*"
+      - "src/flexmesa/testing/*port*"
+      - ".github/workflows/dashboard.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: read
+  pull-requests: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: dashboard-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  OMP_NUM_THREADS: "4"
+  OPENBLAS_NUM_THREADS: "4"
+  MKL_NUM_THREADS: "4"
+  RAYON_NUM_THREADS: "4"
+  JAX_PLATFORMS: "cpu"
+  FLEXMESA_REQUIRE_ZERO_SKIPS: "1"
+
+jobs:
+  coverage-rust:
+    name: Rust Line Coverage (cargo llvm-cov)
+    if: >-
+      github.actor != 'github-actions[bot]' &&
+      (github.event_name != 'push' ||
+       !startsWith(github.event.head_commit.message, 'chore(dashboard): auto-refresh'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout triggering commit
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain with llvm-tools-preview
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+
+      - name: Cache Rust cargo target and registry
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: llvm-cov
+
+      - name: Cache FlexMESA data-v1 and MESA test bundles
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/flexmesa
+          key: flexmesa-data-v1-${{ hashFiles('src/flexmesa/data/bundles.toml') }}
+
+      - name: Fetch verified data-v1 physics and MESA test bundles
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          command -v zstd >/dev/null || (sudo apt-get update && sudo apt-get install -y zstd)
+          python3 src/flexmesa/data/fetch.py fetch --include-test-inputs
+          echo "FLEXMESA_DATA_DIR=$HOME/.cache/flexmesa/data" >> "$GITHUB_ENV"
+          echo "MESA_DIR=$HOME/.cache/flexmesa/mesa_test_inputs" >> "$GITHUB_ENV"
+
+      - name: Run cargo llvm-cov across Safe Rust workspace
+        run: |
+          bash scripts/dashboard/run_coverage.sh rust "${{ runner.temp }}/rust_cov.json"
+
+      - name: Upload Rust coverage JSON summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-llvm-cov-summary
+          if-no-files-found: error
+          path: ${{ runner.temp }}/rust_cov.json
+
+  coverage-python:
+    name: Python Line Coverage (pytest --cov)
+    if: >-
+      github.actor != 'github-actions[bot]' &&
+      (github.event_name != 'push' ||
+       !startsWith(github.event.head_commit.message, 'chore(dashboard): auto-refresh'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout triggering commit
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust cargo target and registry
+        uses: Swatinem/rust-cache@v2
+
+      - name: Cache FlexMESA data-v1 and MESA test bundles
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/flexmesa
+          key: flexmesa-data-v1-${{ hashFiles('src/flexmesa/data/bundles.toml') }}
+
+      - name: Cache persistent JAX XLA compilation artifacts
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/flexmesa-jax
+          key: flexmesa-jax-${{ runner.os }}-py312-${{ hashFiles('pyproject.toml', 'src/flexmesa/**/*.py') }}
+          restore-keys: |
+            flexmesa-jax-${{ runner.os }}-py312-
+
+      - name: Fetch verified data-v1 physics and MESA test bundles
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          command -v zstd >/dev/null || (sudo apt-get update && sudo apt-get install -y zstd)
+          python3 src/flexmesa/data/fetch.py fetch --include-test-inputs
+          echo "FLEXMESA_DATA_DIR=$HOME/.cache/flexmesa/data" >> "$GITHUB_ENV"
+          echo "MESA_DIR=$HOME/.cache/flexmesa/mesa_test_inputs" >> "$GITHUB_ENV"
+          echo "JAX_COMPILATION_CACHE_DIR=$HOME/.cache/flexmesa-jax" >> "$GITHUB_ENV"
+
+      - name: Install FlexMESA and test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install maturin
+          python -m pip install --no-build-isolation -e ".[test]"
+
+      - name: Run Python and JAX suite under pytest --cov
+        run: |
+          bash scripts/dashboard/run_coverage.sh python "${{ runner.temp }}/python_cov.json"
+
+      - name: Upload Python coverage JSON summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-pytest-cov-summary
+          if-no-files-found: error
+          path: ${{ runner.temp }}/python_cov.json
+
+  refresh-dashboard:
+    name: Refresh GitHub Snapshot & Progress Dashboard on main
+    needs:
+      - coverage-rust
+      - coverage-python
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      pushed: ${{ steps.push_dash.outputs.pushed }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Cache FlexMESA data-v1 and MESA test bundles
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/flexmesa
+          key: flexmesa-data-v1-${{ hashFiles('src/flexmesa/data/bundles.toml') }}
+
+      - name: Fetch MESA 26.4.1 test-inputs bundle
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          command -v zstd >/dev/null || (sudo apt-get update && sudo apt-get install -y zstd)
+          python3 src/flexmesa/data/fetch.py fetch --include-test-inputs
+          echo "FLEXMESA_DATA_DIR=$HOME/.cache/flexmesa/data" >> "$GITHUB_ENV"
+          echo "MESA_DIR=$HOME/.cache/flexmesa/mesa_test_inputs" >> "$GITHUB_ENV"
+
+      - name: Download Rust and Python coverage JSON artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: "*-cov-summary"
+          merge-multiple: true
+          path: ${{ runner.temp }}/cov
+
+      - name: Refresh dashboard onto latest main and push if changed
+        id: push_dash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TRIGGER_SHA="$(git rev-parse --short "${{ github.sha }}")"
+          DATE_UTC="$(date -u +%Y-%m-%d)"
+          RUST_JSON="${{ runner.temp }}/cov/rust_cov.json"
+          PY_JSON="${{ runner.temp }}/cov/python_cov.json"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          PUSHED="false"
+          for attempt in 1 2 3; do
+            git fetch origin main
+            git checkout -f -B main origin/main
+            PYTHONPATH=src python3 -m flexmesa.cli dashboard collect-coverage --rust-json "$RUST_JSON" --python-json "$PY_JSON"
+            PYTHONPATH=src python3 -m flexmesa.cli dashboard sync-github --repo "${{ github.repository }}"
+            if [ "${{ github.event_name }}" = "push" ]; then
+              PYTHONPATH=src python3 -m flexmesa.cli dashboard record-history --date-utc "$DATE_UTC" --commit "$TRIGGER_SHA" --event "main merge"
+            fi
+            PYTHONPATH=src python3 -m flexmesa.cli dashboard render
+            PYTHONPATH=src python3 -m flexmesa.cli dashboard check
+            if [ -z "$(git status --porcelain)" ]; then
+              echo "Dashboard already matches latest main."
+              break
+            fi
+            git add README.md docs/index.md docs/benchmarks/progress-dashboard.md benchmarks/dashboard/
+            git commit -m "chore(dashboard): auto-refresh generated progress dashboard (#174)"
+            if git push origin HEAD:main; then
+              PUSHED="true"
+              break
+            fi
+            echo "Non-fast-forward push on attempt $attempt; retrying on updated origin/main..."
+          done
+          echo "pushed=$PUSHED" >> "$GITHUB_OUTPUT"
+
+  redeploy-pages:
+    if: needs.refresh-dashboard.outputs.pushed == 'true'
+    needs: refresh-dashboard
+    uses: ./.github/workflows/docs.yml

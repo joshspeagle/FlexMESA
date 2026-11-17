@@ -78,13 +78,16 @@
   pytest tests/test_docs_snippets.py -v
   mkdocs build --strict
   ```
-- **Incremental Case Tracer & Upstream-History Harness (`#143`, `#163`, `#165`)**:
+- **Incremental Case Tracer, Upstream-History Harness & Progress Dashboard (`#143`, `#163`, `#165`, `#174`)**:
   ```bash
   flexmesa trace star <case> --out <out_dir> [--numerics-mode strict|fast --timeout-sec 600 --max-rss-gb 6.0]
   flexmesa trace binary <case> --out <out_dir> [--numerics-mode strict|fast --timeout-sec 600 --max-rss-gb 6.0]
   flexmesa trace astero <case> --out <out_dir> [--numerics-mode strict|fast --timeout-sec 600 --max-rss-gb 6.0]
   flexmesa harness table --check
   flexmesa harness run --preset pr-ci --markdown-out case_table.md --json-out case_table.json --gate [--numerics-mode strict]
+  flexmesa dashboard verify-manifest
+  flexmesa dashboard render
+  flexmesa dashboard check
   ```
 
 ## How to Pick Up an Audit Package (`#140`)

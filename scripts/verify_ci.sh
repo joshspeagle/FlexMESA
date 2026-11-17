@@ -74,12 +74,18 @@ echo "[verify_ci] 3/5 Running Ruff, Mypy (--strict), figures, MkDocs (--strict) 
 "$RUFF_BIN" check "$REPO_ROOT/src" "$REPO_ROOT/tests"
 "$MYPY_BIN" --python-executable "$PYTHON_BIN" --config-file "$REPO_ROOT/pyproject.toml" --strict "$REPO_ROOT/src" "$REPO_ROOT/tests"
 "$PYTHON_BIN" "$REPO_ROOT/scripts/build_docs_figures.py"
+if git -C "$REPO_ROOT" rev-parse --verify origin/main >/dev/null 2>&1; then
+  "$PYTHON_BIN" -m flexmesa.cli dashboard check --repo-root "$REPO_ROOT" --base-ref origin/main
+else
+  "$PYTHON_BIN" -m flexmesa.cli dashboard check --repo-root "$REPO_ROOT"
+fi
 SITE_OUT="$(mktemp -d)"
 "$MKDOCS_BIN" build --config-file "$REPO_ROOT/mkdocs.yml" --strict --site-dir "$SITE_OUT"
 "$PYTHON_BIN" -c 'import shutil, sys; shutil.rmtree(sys.argv[1], ignore_errors=True)' "$SITE_OUT"
 "$PYTEST_BIN" -c "$REPO_ROOT/pyproject.toml" \
   "$REPO_ROOT/tests/test_docs_snippets.py" \
-  "$REPO_ROOT/tests/test_mesa_paper_figures.py" -v
+  "$REPO_ROOT/tests/test_mesa_paper_figures.py" \
+  "$REPO_ROOT/tests/test_dashboard.py" -v
 
 echo "[verify_ci] 4/5 Running Python, PyO3 & JAX parity suite (zero skips)..."
 "$PYTEST_BIN" -c "$REPO_ROOT/pyproject.toml" \

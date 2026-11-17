@@ -11,17 +11,21 @@ from __future__ import annotations
 from flexmesa.testing import (
     case_manifest,
     case_report,
+    dashboard,
     golden,
     harness_runner,
     history_compare,
+    port_manifest,
     trace_cli,
 )
 
 __all__: list[str] = [
     "case_manifest",
     "case_report",
+    "dashboard",
     "golden",
     "harness_runner",
     "history_compare",
+    "port_manifest",
     "trace_cli",
 ]

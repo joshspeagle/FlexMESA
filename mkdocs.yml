@@ -107,6 +107,7 @@ nav:
       - Backends & CPU/GPU Performance: guides/backends-and-performance.md
       - Diagnostic Plotting: guides/diagnostic-plotting.md
   - Verification & Benchmarks:
+      - Live Progress Dashboard: benchmarks/progress-dashboard.md
       - Overview & Speedup Synthesis: benchmarks/overview.md
       - MESA I-VI Paper Figures: benchmarks/mesa_paper_figures.md
       - Kernel Performance Scorecards: benchmarks/kernel-scorecards.md

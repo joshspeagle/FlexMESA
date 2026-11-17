@@ -7,7 +7,7 @@ import argparse
 import sys
 
 from flexmesa.data import fetch
-from flexmesa.testing import trace_cli
+from flexmesa.testing import dashboard, trace_cli
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -26,6 +26,8 @@ def main(argv: list[str] | None = None) -> int:
         return trace_cli.trace_main(args_list[1:])
     if args_list and args_list[0] == "harness":
         return trace_cli.harness_main(args_list[1:])
+    if args_list and args_list[0] == "dashboard":
+        return dashboard.dashboard_main(args_list[1:])
 
     parser = argparse.ArgumentParser(
         prog="flexmesa",
@@ -48,6 +50,10 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser(
         "harness",
         help="Generate the 106-case reference table or run trajectory gates.",
+    )
+    sub.add_parser(
+        "dashboard",
+        help="Generate or validate the MESA 26.4.1 progress dashboard.",
     )
     parsed = parser.parse_args(args_list)
     if parsed.version:

@@ -319,13 +319,13 @@
         "upstream_lines": 14353,
         "absent": 1715,
         "stub": 0,
-        "partial": 135,
-        "ported_unverified": 12503,
+        "partial": 12638,
+        "ported_unverified": 0,
         "kernel_reference_vectors": 0,
         "case_level_evidence": 0,
-        "ported_total": 12503,
+        "ported_total": 0,
         "verified_total": 0,
-        "pct_ported": 87.1,
+        "pct_ported": 0.0,
         "pct_verified": 0.0,
         "rust_lines": 2746,
         "python_jax_lines": 1234
@@ -456,10 +456,11 @@
     },
     "infrastructure_lines": {
       "rust_bridge_testing_bench": 14916,
-      "python_testing_bench": 9993
+      "python_testing_bench": 10371
     }
   },
   "numerics": {
+    "has_165_ci": false,
     "strict_cross_machine_identical": "not yet measured",
     "strict_kernels_bit_identical": "not yet measured",
     "total_upstream_hex_values": 348321,
@@ -619,6 +620,33 @@
         "undeclared_failures": 0
       }
     },
+    "within_tol_non_pass": [
+      {
+        "suite": "star",
+        "case": "rsp_BEP",
+        "issue": "#148"
+      },
+      {
+        "suite": "star",
+        "case": "rsp_BLAP",
+        "issue": "#148"
+      },
+      {
+        "suite": "star",
+        "case": "rsp_Cepheid",
+        "issue": "#148"
+      },
+      {
+        "suite": "star",
+        "case": "rsp_RR_Lyrae",
+        "issue": "#148"
+      },
+      {
+        "suite": "star",
+        "case": "rsp_save_and_load_file",
+        "issue": "#148"
+      }
+    ],
     "gaps_by_issue": {
       "#152": 18,
       "#148": 17,
@@ -1379,33 +1407,14 @@
         "number": 195,
         "title": "feat(math): strict CRMATH (crlibm) and fast numerics modes from one Rust source (#165)",
         "draft": true
+      },
+      {
+        "number": 200,
+        "title": "[Audit E2] Add MESA 26.4.1 port manifest and generated progress dashboard (#174)",
+        "draft": true
       }
     ],
     "deferred_169": [
-      {
-        "number": 3,
-        "title": "Deferred: Replace PGSTAR and PGBINARY X11 plotting with Python/Matplotlib diagnostics",
-        "state": "closed",
-        "kind": "upstream-bug",
-        "parity_pending": false,
-        "needs_confirmation": false
-      },
-      {
-        "number": 4,
-        "title": "Deferred: External radiation-hydrodynamics (STELLA) and oscillation solvers (ADIPLS, GYRE)",
-        "state": "closed",
-        "kind": "upstream-bug",
-        "parity_pending": false,
-        "needs_confirmation": false
-      },
-      {
-        "number": 5,
-        "title": "Implement full RSP static builder, LINA complex non-adiabatic solver, nonlinear RSP1, and coupled RSP2",
-        "state": "closed",
-        "kind": "upstream-bug",
-        "parity_pending": false,
-        "needs_confirmation": false
-      },
       {
         "number": 175,
         "title": "[Deferred enhancement] Higher-order binary orbit integrator and gravitational-wave eccentricity term",
@@ -1524,7 +1533,7 @@
         "state": "open",
         "kind": "upstream-bug",
         "parity_pending": false,
-        "needs_confirmation": true
+        "needs_confirmation": false
       },
       {
         "number": 197,
@@ -1548,7 +1557,7 @@
     {
       "date_utc": "2026-11-16",
       "commit": "f707f99",
-      "event": "Audit baseline (#141, #174)",
+      "event": "PR #199 (#141, #143, #145, #163)",
       "engine_ported_pct": "13.9",
       "all_verified_pct": "0.0",
       "cases_passing": "0",
@@ -1556,7 +1565,7 @@
       "python_cov_pct": "87.1",
       "closed_140": "4",
       "total_140": "32",
-      "deferred_169": "20"
+      "deferred_169": "17"
     }
   ]
 }

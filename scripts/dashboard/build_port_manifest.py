@@ -592,13 +592,12 @@ def _classify_non_coverage_map_file(
             "crates/flexmesa-autodiff/src/order1.rs"
         ],
         "auto_diff/private/auto_diff_real_2var_order2_module.f90": [
-            "crates/flexmesa-autodiff/src/order2.rs"
+            "crates/flexmesa-autodiff/src/order2.rs",
+            "crates/flexmesa-autodiff/src/order2_ops.rs",
         ],
         "auto_diff/private/auto_diff_real_2var_order3_module.f90": [
-            "crates/flexmesa-autodiff/src/order3.rs"
-        ],
-        "auto_diff/public/auto_diff.f90": [
-            "crates/flexmesa-autodiff/src/lib.rs"
+            "crates/flexmesa-autodiff/src/order3.rs",
+            "crates/flexmesa-autodiff/src/order3_ops.rs",
         ],
     }
     if relpath in exact_ported:
@@ -664,15 +663,49 @@ def _classify_non_coverage_map_file(
     )
 
 
+def _make_archive_include_resolver(
+    upstream_path: str,
+    sources: dict[str, tuple[str, int, str, str]],
+):
+    """Resolve ``include`` directives against ``sources`` from ``mesa_zip``."""
+    up_posix = pathlib.PurePosixPath(upstream_path)
+    parent = up_posix.parent.as_posix()
+    mod_root = up_posix.parts[0]
+
+    def _resolve(inc_name: str) -> tuple[str, str] | None:
+        candidates = [
+            f"{parent}/{inc_name}",
+            f"{mod_root}/private/{inc_name}",
+            f"{mod_root}/public/{inc_name}",
+        ]
+        for mod in _port_parsers.CORE_UPSTREAM_MODULES:
+            candidates.append(f"{mod}/public/{inc_name}")
+            candidates.append(f"{mod}/private/{inc_name}")
+        for cand in candidates:
+            if cand in sources:
+                return (
+                    sources[cand][3],
+                    pathlib.PurePosixPath(cand).suffix,
+                )
+        return None
+
+    return _resolve
+
+
 def _build_routine_map(
     upstream_path: str,
     source_text: str,
     flexmesa_files: list[str],
     sym_cache: dict[str, set[str]],
+    sources: dict[str, tuple[str, int, str, str]],
 ) -> tuple[dict[str, str], list[str]]:
     """Match public Fortran procedures to symbols in ``flexmesa_files``."""
     suffix = pathlib.PurePosixPath(upstream_path).suffix
-    pubs = _port_parsers.extract_fortran_public_routines(source_text, suffix)
+    pubs = _port_parsers.extract_fortran_public_routines(
+        source_text,
+        suffix,
+        include_resolver=_make_archive_include_resolver(upstream_path, sources),
+    )
     hints = ROUTINE_COUNTERPART_HINTS.get(upstream_path, {})
 
     for rel_fm in flexmesa_files:
@@ -785,7 +818,7 @@ def build_manifest(mesa_zip: pathlib.Path, out_path: pathlib.Path) -> None:
             }
             merged_fm = sorted(set(fm_files) | hinted_files)
             rmap, missing = _build_routine_map(
-                relpath, text, merged_fm, sym_cache
+                relpath, text, merged_fm, sym_cache, sources
             )
             if missing:
                 status = port_manifest.PortStatus.PARTIAL

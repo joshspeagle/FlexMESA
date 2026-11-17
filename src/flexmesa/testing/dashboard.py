@@ -12,7 +12,6 @@ marked blocks in ``README.md``, ``docs/benchmarks/progress-dashboard.md``,
 from __future__ import annotations
 
 import argparse
-import io
 import json
 import pathlib
 import subprocess
@@ -66,19 +65,26 @@ def load_history_tsv(history_path: pathlib.Path) -> list[dict[str, str]]:
 
 
 def build_dashboard_data(
-    repo_root: pathlib.Path, mesa_dir: pathlib.Path | None = None
+    repo_root: pathlib.Path,
+    mesa_dir: pathlib.Path | None = None,
+    manifest: port_manifest.PortManifest | None = None,
 ) -> dict[str, Any]:
     """Assemble the complete dashboard data dictionary from repository files.
 
     Args:
         repo_root: Root directory of the ``FlexMESA`` repository checkout.
         mesa_dir: Optional MESA 26.4.1 ``mesa_test_inputs`` directory.
+        manifest: Optional pre-loaded ``PortManifest`` instance.
 
     Returns:
         JSON-serializable dictionary backing all Markdown and JSON outputs.
     """
     dash_dir = repo_root / "benchmarks" / "dashboard"
-    manifest = port_manifest.load_port_manifest(dash_dir / "port_manifest.toml")
+    loaded_manifest = (
+        manifest
+        if manifest is not None
+        else port_manifest.load_port_manifest(dash_dir / "port_manifest.toml")
+    )
     cov_data: dict[str, Any] = json.loads(
         (dash_dir / "coverage_summary.json").read_text(encoding="utf-8")
     )
@@ -90,12 +96,12 @@ def build_dashboard_data(
     return {
         "schema_version": 1,
         "upstream_reference": {
-            "version": manifest.upstream_version,
-            "commit": manifest.upstream_commit,
-            "archive_md5": manifest.archive_md5,
+            "version": loaded_manifest.upstream_version,
+            "commit": loaded_manifest.upstream_commit,
+            "archive_md5": loaded_manifest.archive_md5,
         },
         "module_coverage": _dashboard_collect.collect_module_coverage(
-            manifest, repo_root
+            loaded_manifest, repo_root
         ),
         "numerics": _dashboard_collect.collect_numerics_and_module_verification(
             repo_root
@@ -114,18 +120,23 @@ def build_dashboard_data(
 
 
 def render_expected_files(
-    repo_root: pathlib.Path, mesa_dir: pathlib.Path | None = None
+    repo_root: pathlib.Path,
+    mesa_dir: pathlib.Path | None = None,
+    data: dict[str, Any] | None = None,
 ) -> dict[pathlib.Path, str]:
     """Compute the expected UTF-8 contents of all four dashboard target files.
 
     Args:
         repo_root: Repository checkout root directory.
         mesa_dir: Optional MESA 26.4.1 ``mesa_test_inputs`` directory.
+        data: Optional pre-computed ``build_dashboard_data`` dictionary.
 
     Returns:
         Mapping from target ``pathlib.Path`` to expected file contents.
     """
-    data = build_dashboard_data(repo_root, mesa_dir)
+    dash_data = (
+        data if data is not None else build_dashboard_data(repo_root, mesa_dir)
+    )
     dash_json_path = repo_root / "benchmarks" / "dashboard" / "dashboard.json"
     readme_path = repo_root / "README.md"
     docs_page_path = repo_root / "docs" / "benchmarks" / "progress-dashboard.md"
@@ -133,20 +144,20 @@ def render_expected_files(
 
     readme_updated = _dashboard_render.replace_marked_block(
         readme_path.read_text(encoding="utf-8"),
-        _dashboard_render.render_readme_block(data),
+        _dashboard_render.render_readme_block(dash_data),
         _dashboard_render.BEGIN_MARKER,
         _dashboard_render.END_MARKER,
     )
     docs_index_updated = _dashboard_render.replace_marked_block(
         docs_index_path.read_text(encoding="utf-8"),
-        _dashboard_render.render_docs_index_summary(data),
+        _dashboard_render.render_docs_index_summary(dash_data),
         _dashboard_render.BEGIN_SUMMARY_MARKER,
         _dashboard_render.END_SUMMARY_MARKER,
     )
     return {
-        dash_json_path: json.dumps(data, indent=2) + "\n",
+        dash_json_path: json.dumps(dash_data, indent=2) + "\n",
         readme_path: readme_updated,
-        docs_page_path: _dashboard_render.render_docs_page(data),
+        docs_page_path: _dashboard_render.render_docs_page(dash_data),
         docs_index_path: docs_index_updated,
     }
 
@@ -154,16 +165,16 @@ def render_expected_files(
 def _load_git_base_manifest(
     repo_root: pathlib.Path, base_ref: str
 ) -> tuple[port_manifest.PortManifest | None, frozenset[str]]:
-    """Load ``port_manifest.toml`` and changed file list from ``base_ref``."""
+    """Load ``port_manifest.toml`` and changed file list vs ``base_ref``."""
+    mb_proc = subprocess.run(
+        ["git", "-C", str(repo_root), "merge-base", base_ref, "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    merge_base = mb_proc.stdout.strip()
     diff_proc = subprocess.run(
-        [
-            "git",
-            "-C",
-            str(repo_root),
-            "diff",
-            "--name-only",
-            f"{base_ref}...HEAD",
-        ],
+        ["git", "-C", str(repo_root), "diff", "--name-only", merge_base],
         check=True,
         capture_output=True,
         text=True,
@@ -177,7 +188,7 @@ def _load_git_base_manifest(
             "-C",
             str(repo_root),
             "show",
-            f"{base_ref}:benchmarks/dashboard/port_manifest.toml",
+            f"{merge_base}:benchmarks/dashboard/port_manifest.toml",
         ],
         check=False,
         capture_output=True,
@@ -185,16 +196,9 @@ def _load_git_base_manifest(
     )
     if show_proc.returncode != 0:
         return None, changed
-    tmp_buf = io.StringIO(show_proc.stdout)
-    # Parse via temporary in-memory roundtrip through tomllib using Path shim
-    import tempfile
-
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".toml", encoding="utf-8", delete=True
-    ) as tf:
-        tf.write(tmp_buf.getvalue())
-        tf.flush()
-        base_m = port_manifest.load_port_manifest(pathlib.Path(tf.name))
+    base_m = port_manifest.parse_port_manifest_text(
+        show_proc.stdout, f"{base_ref}:benchmarks/dashboard/port_manifest.toml"
+    )
     return base_m, changed
 
 
@@ -235,7 +239,8 @@ def verify_all_dashboard_invariants(
         changed_paths=changed,
     )
 
-    expected = render_expected_files(repo_root, mesa_dir)
+    data = build_dashboard_data(repo_root, mesa_dir, manifest=manifest)
+    expected = render_expected_files(repo_root, mesa_dir, data=data)
     for path, exp_text in expected.items():
         rel = path.relative_to(repo_root).as_posix()
         if not path.is_file():
@@ -248,8 +253,7 @@ def verify_all_dashboard_invariants(
                 "`flexmesa dashboard render`"
             )
 
-    skips = _dashboard_collect.collect_ignored_and_skipped_tests(repo_root)
-    for loc in skips["unlinked_locations"]:
+    for loc in data["skips"]["unlinked_locations"]:
         errors.append(f"{loc}: #[ignore]/xfail/skip lacks an #<issue> link")
 
     return errors
@@ -332,13 +336,22 @@ def record_history_entry(
     hist_path.write_text("\n".join(out_lines) + "\n", encoding="utf-8")
 
 
-def _resolve_optional_mesa_dir(override: str | None) -> pathlib.Path | None:
+def _resolve_mesa_dir(
+    override: str | None, allow_missing: bool = False
+) -> pathlib.Path | None:
     if override:
-        return pathlib.Path(override).resolve()
+        resolved = pathlib.Path(override).resolve()
+        if not resolved.is_dir():
+            raise FileNotFoundError(
+                f"--mesa-dir does not exist or is not a directory: {resolved}"
+            )
+        return resolved
     try:
         return fetch.resolve_mesa_test_inputs_dir()
     except FileNotFoundError:
-        return None
+        if allow_missing:
+            return None
+        raise
 
 
 def dashboard_main(argv: list[str] | None = None) -> int:
@@ -364,6 +377,11 @@ def dashboard_main(argv: list[str] | None = None) -> int:
         p = sub.add_parser(cmd_name, help=help_txt)
         p.add_argument("--repo-root", type=pathlib.Path, default=None)
         p.add_argument("--mesa-dir", type=str, default=None)
+        p.add_argument(
+            "--allow-missing-mesa-dir",
+            action="store_true",
+            help="Skip MESA 26.4.1 test-inputs file checks when unavailable.",
+        )
         if cmd_name in {"check", "verify-manifest"}:
             p.add_argument("--base-ref", type=str, default=None)
 
@@ -388,6 +406,7 @@ def dashboard_main(argv: list[str] | None = None) -> int:
     )
     p_hist.add_argument("--repo-root", type=pathlib.Path, default=None)
     p_hist.add_argument("--mesa-dir", type=str, default=None)
+    p_hist.add_argument("--allow-missing-mesa-dir", action="store_true")
     p_hist.add_argument("--date-utc", type=str, required=True)
     p_hist.add_argument("--commit", type=str, required=True)
     p_hist.add_argument("--event", type=str, required=True)
@@ -413,7 +432,14 @@ def dashboard_main(argv: list[str] | None = None) -> int:
         print(f"Updated {out.relative_to(repo_root)}")
         return 0
 
-    mesa_dir = _resolve_optional_mesa_dir(getattr(ns, "mesa_dir", None))
+    try:
+        mesa_dir = _resolve_mesa_dir(
+            getattr(ns, "mesa_dir", None),
+            allow_missing=bool(getattr(ns, "allow_missing_mesa_dir", False)),
+        )
+    except FileNotFoundError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
 
     if ns.subcommand == "record-history":
         record_history_entry(

@@ -10,11 +10,13 @@ evidence links.
 
 from __future__ import annotations
 
+import collections.abc
 import dataclasses
 import enum
 import hashlib
 import json
 import pathlib
+import subprocess
 import tomllib
 from typing import Any
 
@@ -167,11 +169,14 @@ class PortManifest:
         return {entry.upstream_path: entry for entry in self.entries}
 
 
-def load_port_manifest(path: pathlib.Path) -> PortManifest:
-    """Load and parse ``port_manifest.toml`` from ``path``.
+def parse_port_manifest_text(
+    text: str, source_name: str = "<memory>"
+) -> PortManifest:
+    """Parse ``port_manifest.toml`` TOML text into a ``PortManifest``.
 
     Args:
-        path: Path to a TOML port manifest file.
+        text: UTF-8 TOML text of a port manifest.
+        source_name: Label included in validation error messages.
 
     Returns:
         Parsed ``PortManifest`` instance.
@@ -179,11 +184,11 @@ def load_port_manifest(path: pathlib.Path) -> PortManifest:
     Raises:
         ValueError: If required schema fields or status values are invalid.
     """
-    raw = tomllib.loads(path.read_text(encoding="utf-8"))
+    raw = tomllib.loads(text)
     meta = raw.get("metadata", {})
     files_raw = raw.get("files", [])
     if not isinstance(files_raw, list) or not files_raw:
-        raise ValueError(f"{path}: expected non-empty [[files]] array")
+        raise ValueError(f"{source_name}: expected non-empty [[files]] array")
 
     entries: list[PortManifestEntry] = []
     for item in files_raw:
@@ -224,6 +229,18 @@ def load_port_manifest(path: pathlib.Path) -> PortManifest:
         archive_md5=str(meta.get("archive_md5", "")),
         entries=tuple(entries),
     )
+
+
+def load_port_manifest(path: pathlib.Path) -> PortManifest:
+    """Load and parse ``port_manifest.toml`` from ``path``.
+
+    Args:
+        path: Path to a TOML port manifest file.
+
+    Returns:
+        Parsed ``PortManifest`` instance.
+    """
+    return parse_port_manifest_text(path.read_text(encoding="utf-8"), str(path))
 
 
 def _toml_str(val: str) -> str:
@@ -296,6 +313,59 @@ def _artifact_has_provenance(path: pathlib.Path) -> bool:
     return any(tok in head for tok in markers)
 
 
+def _is_safe_relpath(rel: str) -> bool:
+    """Return ``True`` when ``rel`` is a normalized relative POSIX path."""
+    if not rel or rel.startswith("/") or "\\" in rel or ":" in rel:
+        return False
+    parts = rel.split("/")
+    return all(part not in {"", ".", ".."} for part in parts)
+
+
+def _git_tracked_files(repo_root: pathlib.Path) -> frozenset[str] | None:
+    """Return Git-tracked relative paths when ``repo_root`` is a Git repo."""
+    if not (repo_root / ".git").exists():
+        return None
+    proc = subprocess.run(
+        ["git", "-C", str(repo_root), "ls-files", "-z"],
+        check=False,
+        capture_output=True,
+    )
+    if proc.returncode != 0:
+        return None
+    return frozenset(
+        tok.decode("utf-8", errors="replace")
+        for tok in proc.stdout.split(b"\x00")
+        if tok
+    )
+
+
+def _make_disk_include_resolver(
+    up_file: pathlib.Path, mesa_dir: pathlib.Path
+) -> collections.abc.Callable[[str], tuple[str, str] | None]:
+    """Resolve ``include`` directives against ``mesa_dir``."""
+
+    def _resolve(inc_name: str) -> tuple[str, str] | None:
+        if not _is_safe_relpath(inc_name):
+            return None
+        candidates = [
+            up_file.parent / inc_name,
+            up_file.parent.parent / "private" / inc_name,
+            up_file.parent.parent / "public" / inc_name,
+        ]
+        for mod in _port_parsers.CORE_UPSTREAM_MODULES:
+            candidates.append(mesa_dir / mod / "public" / inc_name)
+            candidates.append(mesa_dir / mod / "private" / inc_name)
+        for cand in candidates:
+            if cand.is_file():
+                return (
+                    cand.read_text(encoding="utf-8", errors="replace"),
+                    cand.suffix,
+                )
+        return None
+
+    return _resolve
+
+
 def verify_port_manifest(
     manifest: PortManifest,
     repo_root: pathlib.Path,
@@ -314,7 +384,7 @@ def verify_port_manifest(
         baseline_harness_json: Optional path to ``baseline_run_26_4_1.json``
             used to verify ``case_level_evidence`` passing cases.
         base_manifest: Optional base-branch ``PortManifest`` for PR promotion
-            checks.
+            and upstream-digest immutability checks.
         changed_paths: Repository-relative paths changed in ``base...HEAD``.
 
     Returns:
@@ -339,6 +409,7 @@ def verify_port_manifest(
     valid_modules = frozenset(MODULE_ORDER)
     seen_paths: set[str] = set()
     sym_cache: dict[str, set[str]] = {}
+    tracked = _git_tracked_files(repo_root)
 
     passing_cases: set[str] = set()
     if baseline_harness_json is not None and baseline_harness_json.is_file():
@@ -358,6 +429,8 @@ def verify_port_manifest(
 
     for entry in manifest.entries:
         up = entry.upstream_path
+        if not _is_safe_relpath(up):
+            errors.append(f"{up!r}: unsafe or non-normalized upstream_path")
         if up in seen_paths:
             errors.append(f"{up}: duplicate upstream_path")
         seen_paths.add(up)
@@ -383,14 +456,21 @@ def verify_port_manifest(
                     f"{up}: status={entry.status.value} requires flexmesa_files"
                 )
             for rel_fm in entry.flexmesa_files:
-                if not rel_fm.startswith(("crates/", "src/flexmesa/")):
+                if not _is_safe_relpath(rel_fm) or not rel_fm.startswith(
+                    ("crates/", "src/flexmesa/")
+                ):
                     errors.append(
-                        f"{up}: flexmesa_file {rel_fm!r} must be in "
-                        "crates/ or src/flexmesa/"
+                        f"{up}: flexmesa_file {rel_fm!r} must be a safe path "
+                        "in crates/ or src/flexmesa/"
                     )
+                    continue
                 fm_path = repo_root / rel_fm
                 if not fm_path.is_file():
                     errors.append(f"{up}: missing flexmesa_file {rel_fm!r}")
+                elif tracked is not None and rel_fm not in tracked:
+                    errors.append(
+                        f"{up}: flexmesa_file {rel_fm!r} is not tracked in git"
+                    )
 
         if mesa_dir is not None:
             up_file = mesa_dir / up
@@ -411,6 +491,9 @@ def verify_port_manifest(
                     pubs = _port_parsers.extract_fortran_public_routines(
                         raw_bytes.decode("utf-8", errors="replace"),
                         suffix=up_file.suffix,
+                        include_resolver=_make_disk_include_resolver(
+                            up_file, mesa_dir
+                        ),
                     )
                     rmap = entry.routine_dict()
                     for proc in pubs:
@@ -419,6 +502,12 @@ def verify_port_manifest(
                                 f"{up}: status={entry.status.value} missing "
                                 f"public routine {proc!r} in routine_map"
                             )
+            elif entry.module not in BUNDLED_MODULES and not up.endswith(
+                (".c", ".h")
+            ):
+                errors.append(
+                    f"{up}: missing upstream source file in {mesa_dir.name}"
+                )
 
         if entry.status.is_ported:
             fm_set = frozenset(entry.flexmesa_files)
@@ -452,10 +541,15 @@ def verify_port_manifest(
                             )
 
         if not entry.status.is_verified:
-            if entry.evidence_artifacts or entry.harness_cases:
+            if (
+                entry.evidence_artifacts
+                or entry.evidence_tests
+                or entry.harness_cases
+            ):
                 errors.append(
                     f"{up}: unverified status={entry.status.value} must not "
-                    "populate evidence_artifacts or harness_cases"
+                    "populate evidence_artifacts, evidence_tests, or "
+                    "harness_cases"
                 )
         else:
             if not entry.evidence_artifacts:
@@ -464,28 +558,63 @@ def verify_port_manifest(
                     "non-empty evidence_artifacts"
                 )
             for art_rel in entry.evidence_artifacts:
-                if not (
+                if not _is_safe_relpath(art_rel) or not (
                     art_rel.startswith(("benchmarks/", "tests/fixtures/"))
                     or art_rel == "notes/audit/case_table.md"
                 ):
                     errors.append(
-                        f"{up}: evidence_artifact {art_rel!r} must reside in "
-                        "benchmarks/, tests/fixtures/, or "
+                        f"{up}: evidence_artifact {art_rel!r} must be a safe "
+                        "path in benchmarks/, tests/fixtures/, or "
                         "notes/audit/case_table.md"
                     )
+                    continue
                 art_path = repo_root / art_rel
                 if not art_path.is_file():
                     errors.append(
                         f"{up}: missing evidence_artifact {art_rel!r}"
+                    )
+                elif tracked is not None and art_rel not in tracked:
+                    errors.append(
+                        f"{up}: evidence_artifact {art_rel!r} is not tracked "
+                        "in git"
                     )
                 elif not _artifact_has_provenance(art_path):
                     errors.append(
                         f"{up}: evidence_artifact {art_rel!r} lacks MESA "
                         "26.4.1 / GENERATED provenance header"
                     )
+
+            if (
+                entry.status == PortStatus.KERNEL_REFERENCE_VECTORS
+                and not entry.evidence_tests
+            ):
+                errors.append(
+                    f"{up}: kernel_reference_vectors requires non-empty "
+                    "evidence_tests"
+                )
+            if (
+                entry.status == PortStatus.KERNEL_REFERENCE_VECTORS
+                and entry.harness_cases
+            ):
+                errors.append(
+                    f"{up}: kernel_reference_vectors must not set harness_cases"
+                )
             for test_rel in entry.evidence_tests:
+                if not _is_safe_relpath(test_rel) or not test_rel.startswith(
+                    ("crates/", "tests/")
+                ):
+                    errors.append(
+                        f"{up}: evidence_test {test_rel!r} must be a safe "
+                        "path in crates/ or tests/"
+                    )
+                    continue
                 if not (repo_root / test_rel).is_file():
                     errors.append(f"{up}: missing evidence_test {test_rel!r}")
+                elif tracked is not None and test_rel not in tracked:
+                    errors.append(
+                        f"{up}: evidence_test {test_rel!r} is not tracked in "
+                        "git"
+                    )
 
             if entry.status == PortStatus.CASE_LEVEL_EVIDENCE:
                 if not entry.harness_cases:
@@ -511,33 +640,65 @@ def verify_port_manifest(
                         "port_manifest.toml"
                     )
 
-    if base_manifest is not None and changed_paths is not None:
+    if base_manifest is not None:
         base_by_path = base_manifest.by_upstream_path()
+        same_commit = manifest.upstream_commit == base_manifest.upstream_commit
+        if same_commit and set(base_by_path) != seen_paths:
+            errors.append(
+                "upstream_path inventory differs from base_manifest while "
+                "upstream_commit is unchanged"
+            )
         for entry in manifest.entries:
             prev = base_by_path.get(entry.upstream_path)
             if prev is None:
                 continue
-            if entry.status.rank <= prev.status.rank:
-                continue
-            if entry.status.is_verified:
-                evidence_gate = (
-                    set(entry.evidence_artifacts)
-                    | set(entry.evidence_tests)
-                    | {"benchmarks/history_harness/baseline_run_26_4_1.json"}
+            if same_commit and (
+                entry.module != prev.module
+                or entry.upstream_lines != prev.upstream_lines
+                or entry.upstream_sha256 != prev.upstream_sha256
+            ):
+                errors.append(
+                    f"{entry.upstream_path}: upstream metadata "
+                    "(module/upstream_lines/upstream_sha256) modified "
+                    "relative to base_manifest"
                 )
-                if not (changed_paths & evidence_gate):
-                    errors.append(
-                        f"{entry.upstream_path}: status raised from "
-                        f"{prev.status.value} to {entry.status.value} without "
-                        "adding or updating evidence artifacts/tests in PR"
+            if (
+                changed_paths is not None
+                and entry.status.rank > prev.status.rank
+            ):
+                if entry.status == PortStatus.KERNEL_REFERENCE_VECTORS:
+                    evidence_gate = set(entry.evidence_artifacts) | set(
+                        entry.evidence_tests
                     )
-            else:
-                impl_gate = set(entry.flexmesa_files)
-                if not (changed_paths & impl_gate):
-                    errors.append(
-                        f"{entry.upstream_path}: status raised from "
-                        f"{prev.status.value} to {entry.status.value} without "
-                        "modifying implementing flexmesa_files in PR"
+                    if not (changed_paths & evidence_gate):
+                        errors.append(
+                            f"{entry.upstream_path}: status raised from "
+                            f"{prev.status.value} to {entry.status.value} "
+                            "without adding or updating evidence "
+                            "artifacts/tests in PR"
+                        )
+                elif entry.status == PortStatus.CASE_LEVEL_EVIDENCE:
+                    case_gate = (
+                        set(entry.evidence_artifacts)
+                        | set(entry.evidence_tests)
+                        | {
+                            "benchmarks/history_harness/baseline_run_26_4_1.json"
+                        }
                     )
+                    if not (changed_paths & case_gate):
+                        errors.append(
+                            f"{entry.upstream_path}: status raised from "
+                            f"{prev.status.value} to {entry.status.value} "
+                            "without adding or updating case evidence in PR"
+                        )
+                else:
+                    impl_gate = set(entry.flexmesa_files)
+                    if not (changed_paths & impl_gate):
+                        errors.append(
+                            f"{entry.upstream_path}: status raised from "
+                            f"{prev.status.value} to {entry.status.value} "
+                            "without modifying implementing flexmesa_files in "
+                            "PR"
+                        )
 
     return errors

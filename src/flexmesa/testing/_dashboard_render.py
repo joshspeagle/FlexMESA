@@ -77,6 +77,18 @@ def _unique_140_counts(gh: dict[str, Any]) -> tuple[int, int]:
     return closed_n, open_n
 
 
+def _collect_issue_links(items: list[dict[str, str]]) -> str:
+    nums: set[int] = set()
+    for x in items:
+        for tok in str(x.get("issues", "")).split(","):
+            clean = tok.strip().lstrip("#")
+            if clean.isdigit():
+                nums.add(int(clean))
+    if not nums:
+        return "none"
+    return ", ".join(f"[#{n}]({REPO_URL}/issues/{n})" for n in sorted(nums))
+
+
 def _render_headline_and_modules(data: dict[str, Any]) -> list[str]:
     mod_cov = data["module_coverage"]
     rows: list[dict[str, Any]] = mod_cov["rows"]
@@ -87,11 +99,13 @@ def _render_headline_and_modules(data: dict[str, Any]) -> list[str]:
         [r for r in rows if r["module"] in {"star", "binary", "astero"}]
     )
     all_tot = _sum_rows(rows)
-    hh_tot = _summarize_harness(data["harness"]["by_suite"])
+    hh_suites = data["harness"]["by_suite"]
+    hh_tot = _summarize_harness(hh_suites)
     rs_ov = data["coverage"]["rust"]["overall"]
     py_ov = data["coverage"]["python"]["overall"]
     num = data["numerics"]
     gh = data["github"]
+    up_ref = data["upstream_reference"]
 
     closed_140, open_140 = _unique_140_counts(gh)
     def_items = gh["deferred_169"]
@@ -100,6 +114,11 @@ def _render_headline_and_modules(data: dict[str, Any]) -> list[str]:
     enh_lbl = "enhancement" if def_enh == 1 else "enhancements"
     def_owed = sum(1 for x in def_items if x["parity_pending"])
     open_prs = gh["open_pull_requests"]
+    suite_split = (
+        f"`{hh_suites['star']['total']}`/"
+        f"`{hh_suites['binary']['total']}`/"
+        f"`{hh_suites['astero']['total']}`"
+    )
 
     pm_link = (
         f"[`port_manifest.toml`]"
@@ -125,8 +144,8 @@ def _render_headline_and_modules(data: dict[str, Any]) -> list[str]:
         "Generated mechanically by `flexmesa dashboard render` from "
         f"{pm_link}, {hh_link}, `cargo llvm-cov`, `pytest --cov`, and the "
         f"GitHub API ([#174]({REPO_URL}/issues/174)). Reference: "
-        "**MESA release `26.4.1`** (git tag `26.4.1`, commit `c8c2026`, "
-        "Zenodo `19722306`).",
+        f"**MESA release `{up_ref['version'].lstrip('r')}`** "
+        f"(commit `{up_ref['commit'][:7]}`, Zenodo `19722306`).",
         "",
         "### Headline Status",
         "",
@@ -140,12 +159,12 @@ def _render_headline_and_modules(data: dict[str, Any]) -> list[str]:
             f"%) | {pm_link} |"
         ),
         (
-            "| Upstream lines verified (all 26 modules) | "
+            f"| Upstream lines verified (all {len(rows)} modules) | "
             f"{all_tot['verified_total']:,} / {all_tot['upstream_lines']:,} "
             f"({all_tot['pct_verified']:.1f}%) | {pm_link} |"
         ),
         (
-            "| End-to-end MESA `26.4.1` cases passing (`90`/`8`/`8`) | "
+            f"| End-to-end MESA `26.4.1` cases passing ({suite_split}) | "
             f"{hh_tot['passing']} / {hh_tot['total']} "
             f"({hh_tot['declared_gaps']} declared gaps, "
             f"{hh_tot['no_reference_yet']} no reference yet, "
@@ -175,7 +194,7 @@ def _render_headline_and_modules(data: dict[str, Any]) -> list[str]:
         ),
         (
             f"| Post-parity deferred backlog ([#169]({REPO_URL}/issues/169)) | "
-            f"{len(def_items)} total ({def_bugs} upstream bugs, {def_enh} "
+            f"{len(def_items)} open ({def_bugs} upstream bugs, {def_enh} "
             f"{enh_lbl}, {def_owed} `parity-pending`) | {gh_link} |"
         ),
         "",
@@ -206,7 +225,9 @@ def _render_headline_and_modules(data: dict[str, Any]) -> list[str]:
             bold=True,
         )
     )
-    lines.append(_fmt_mod_row("Total (all 26 modules)", all_tot, bold=True))
+    lines.append(
+        _fmt_mod_row(f"Total (all {len(rows)} modules)", all_tot, bold=True)
+    )
 
     panels = mod_cov["plotting_panels"]
     infra = mod_cov["infrastructure_lines"]
@@ -236,6 +257,21 @@ def _render_numerics_and_harness(
     hh = data["harness"]
     hh_suites = hh["by_suite"]
     hh_tot = _summarize_harness(hh_suites)
+    n_hex_mods = len(num["modules"])
+    has_165 = bool(num.get("has_165_ci"))
+
+    l1_note = (
+        f"Verified by [#165]({REPO_URL}/issues/165) CI jobs "
+        "(`x86_64` vs `aarch64`)"
+        if has_165
+        else f"Awaiting [#165]({REPO_URL}/issues/165) CI jobs "
+        "(`x86_64` vs `aarch64`)"
+    )
+    l2_tail = (
+        f"measured in [#165]({REPO_URL}/issues/165)"
+        if has_165
+        else f"strict comparison lands in [#165]({REPO_URL}/issues/165)"
+    )
 
     lines = [
         "",
@@ -246,16 +282,14 @@ def _render_numerics_and_harness(
         (
             "| Strict mode bit-identical across machines & thread counts "
             f"(Level 1) | `{num['strict_cross_machine_identical']}` | "
-            f"Awaiting [#165]({REPO_URL}/issues/165) CI jobs "
-            "(`x86_64` vs `aarch64`) |"
+            f"{l1_note} |"
         ),
         (
             "| Strict-mode kernels bit-identical to MESA `26.4.1` hex outputs "
             f"(Level 2) | `{num['strict_kernels_bit_identical']}` | "
             f"`{num['total_upstream_hex_values']:,}` exact IEEE-754 values "
-            "captured across 23 in-scope module test suites "
-            "(`mesa-module-hex-v1`); strict comparison lands in "
-            f"[#165]({REPO_URL}/issues/165) |"
+            f"captured across {n_hex_mods} in-scope module test suites "
+            f"(`mesa-module-hex-v1`); {l2_tail} |"
         ),
     ]
     if detailed:
@@ -313,17 +347,33 @@ def _render_numerics_and_harness(
         f"[{iss}]({REPO_URL}/issues/{iss[1:]}) ({cnt})"
         for iss, cnt in hh["gaps_by_issue"].items()
     ]
+    non_pass_within = hh.get("within_tol_non_pass", [])
+    case_table_bullet = (
+        "- **Full per-case table**: "
+        f"[`notes/audit/case_table.md`]"
+        f"({REPO_URL}/blob/main/notes/audit/case_table.md)."
+    )
+    if non_pass_within:
+        case_names = ", ".join(f"`{x['case']}`" for x in non_pass_within)
+        issue_nums = sorted(
+            {
+                int(x["issue"].lstrip("#"))
+                for x in non_pass_within
+                if x.get("issue", "").lstrip("#").isdigit()
+            }
+        )
+        iss_links = ", ".join(
+            f"[#{n}]({REPO_URL}/issues/{n})" for n in issue_nums
+        )
+        case_table_bullet += (
+            f" `{len(non_pass_within)}` case(s) within numeric tolerance "
+            f"({case_names}) remain governed as declared gaps under "
+            f"{iss_links}."
+        )
     lines.extend(
         [
             "",
-            "- **Full per-case table**: "
-            f"[`notes/audit/case_table.md`]"
-            f"({REPO_URL}/blob/main/notes/audit/case_table.md). "
-            f"The `{hh_tot['within_numeric_tol']}` cases currently within "
-            "numeric tolerance (`rsp_BEP`, `rsp_BLAP`, `rsp_Cepheid`, "
-            "`rsp_RR_Lyrae`, `rsp_save_and_load_file`) still invoke "
-            "library-side `Tier4CaseExtras` and are governed as declared "
-            f"gaps under [#148]({REPO_URL}/issues/148).",
+            case_table_bullet,
             f"- **Declared gaps by owning package**: {', '.join(gap_parts)}.",
             "- **Trajectory comparison figures "
             f"([#173]({REPO_URL}/issues/173))**: "
@@ -341,6 +391,7 @@ def _render_controls_health_and_work(
     py_ov = cov["python"]["overall"]
     skips = data["skips"]
     gh = data["github"]
+    hh_tot = _summarize_harness(data["harness"]["by_suite"])
 
     lines = [
         "",
@@ -361,15 +412,8 @@ def _render_controls_health_and_work(
             f"{crow['unimplemented']:,} |"
         )
     diff_url = f"{REPO_URL}/blob/main/notes/audit/defaults_diff_26_4_1.md"
-    uniq_ignore_nums: set[int] = set()
-    for x in skips["rust_ignores"]:
-        for tok in str(x["issues"]).split(","):
-            clean = tok.strip().lstrip("#")
-            if clean.isdigit():
-                uniq_ignore_nums.add(int(clean))
-    ignore_issues = (
-        ", ".join(f"#{n}" for n in sorted(uniq_ignore_nums)) or "none"
-    )
+    rs_ignore_issues = _collect_issue_links(skips["rust_ignores"])
+    py_skip_issues = _collect_issue_links(skips["python_skips"])
     lines.extend(
         [
             "",
@@ -389,9 +433,10 @@ def _render_controls_health_and_work(
             f"`{py_ov['statements']:,}` statements across "
             f"`{len(cov['python']['by_subpackage'])}` subpackages).",
             f"- **Ignored / skipped tests**: `{skips['rust_ignore_count']}` "
-            f"Rust `#[ignore]` ({ignore_issues}) and "
+            f"Rust `#[ignore]` ({rs_ignore_issues}) and "
             f"`{skips['python_xfail_or_skip_count']}` Python "
-            f"`xfail`/`skip` (`{len(skips['unlinked_locations'])}` unlinked).",
+            f"`xfail`/`skip` ({py_skip_issues}; "
+            f"`{len(skips['unlinked_locations'])}` unlinked).",
             "- **Static & documentation gates**: "
             "`cargo clippy --all-targets -- -D warnings`, "
             "`RUSTDOCFLAGS='-D warnings' cargo doc`, `ruff check`, "
@@ -466,8 +511,8 @@ def _render_controls_health_and_work(
             f"- **Open pull requests ({len(open_prs)})**: "
             f"{', '.join(pr_links) if pr_links else 'none'}.",
             f"- **Post-parity deferred backlog "
-            f"([#169]({REPO_URL}/issues/169))**: `{len(def_items)}` issues "
-            f"(`{def_bugs}` `upstream-bug`, `{def_enh}` `enhancement`; "
+            f"([#169]({REPO_URL}/issues/169))**: `{len(def_items)}` open "
+            f"issues (`{def_bugs}` `upstream-bug`, `{def_enh}` `enhancement`; "
             f"`{def_owed}` marked `parity-pending` for upstream restoration "
             "before `v0.1.0`).",
             "",
@@ -490,7 +535,8 @@ def _render_controls_health_and_work(
         lines.append(
             f"| `{hr['date_utc']}` | `{hr['commit']}` | {hr['event']} | "
             f"{hr['engine_ported_pct']}% | {hr['all_verified_pct']}% | "
-            f"{hr['cases_passing']}/106 | {hr['rust_cov_pct']}% | "
+            f"{hr['cases_passing']}/{hh_tot['total']} | "
+            f"{hr['rust_cov_pct']}% | "
             f"{hr['python_cov_pct']}% | {hr['closed_140']}/{hr['total_140']} | "
             f"{hr['deferred_169']} |"
         )
@@ -542,11 +588,12 @@ def render_docs_index_summary(data: dict[str, Any]) -> str:
         f"script-generated status: **{eng['pct_ported']:.1f}%** of "
         "`star`/`star_data`/`binary`/`astero` upstream lines ported "
         f"(`{all_tot['pct_verified']:.1f}%` verified), "
-        f"**{hh_tot['passing']} / 106** end-to-end test-suite cases verified "
-        f"passing (`{hh_tot['declared_gaps']}` declared gaps, `0` undeclared "
-        f"failures), **{rs_pct:.1f}%** Rust / **{py_pct:.1f}%** Python line "
-        f"coverage, and **{closed_140} / {tot_140}** `#140` packages closed. "
-        "See the [Live Progress & Verification Dashboard]"
+        f"**{hh_tot['passing']} / {hh_tot['total']}** end-to-end test-suite "
+        f"cases verified passing (`{hh_tot['declared_gaps']}` declared gaps, "
+        f"`{hh_tot['undeclared_failures']}` undeclared failures), "
+        f"**{rs_pct:.1f}%** Rust / **{py_pct:.1f}%** Python line coverage, "
+        f"and **{closed_140} / {tot_140}** `#140` packages closed. See the "
+        "[Live Progress & Verification Dashboard]"
         "(benchmarks/progress-dashboard.md) for per-module, per-crate, and "
         "per-phase tables.\n"
         f"{END_SUMMARY_MARKER}"

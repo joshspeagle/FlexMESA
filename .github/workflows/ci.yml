@@ -358,11 +358,7 @@ jobs:
 
       - name: Run cargo llvm-cov across Safe Rust workspace
         run: |
-          OUT_JSON="${{ runner.temp }}/rust_cov.json"
-          cargo llvm-cov --workspace --exclude flexmesa-py --release \
-            --json --summary-only --output-path "$OUT_JSON" \
-            -- --skip test_astero_adipls_and_gyre_uncapped_pass \
-               --skip test_all_eight_astero_cases_bounded_eight_steps_pass
+          bash scripts/dashboard/run_coverage.sh rust "${{ runner.temp }}/rust_cov.json"
 
       - name: Upload Rust coverage JSON summary
         uses: actions/upload-artifact@v4
@@ -422,15 +418,7 @@ jobs:
 
       - name: Run Python and JAX suite under pytest --cov
         run: |
-          OUT_JSON="${{ runner.temp }}/python_cov.json"
-          pytest src tests \
-            --ignore=tests/test_docs_snippets.py \
-            --ignore=tests/test_mesa_paper_figures.py \
-            --ignore=tests/test_history_harness.py \
-            --ignore-glob="tests/test_e2e_*.py" \
-            --cov=src/flexmesa \
-            --cov-report="json:$OUT_JSON" \
-            -q
+          bash scripts/dashboard/run_coverage.sh python "${{ runner.temp }}/python_cov.json"
 
       - name: Upload Python coverage JSON summary
         uses: actions/upload-artifact@v4

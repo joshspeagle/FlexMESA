@@ -67,9 +67,10 @@ MODULE_CODE_PATHS: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
     "plotting": ((), ("src/flexmesa/plotting",)),
 }
 
+_RUST_COMMENT_RE = re.compile(r"//[^\n]*|/\*[\s\S]*?\*/")
 _IGNORE_ATTR_RE = re.compile(
-    r'^\s*#\s*\[\s*ignore(?:\s*=\s*"([^"]*)")?\s*\]',
-    flags=re.MULTILINE,
+    r"#\s*\[\s*(?:cfg_attr\s*\([^]]*,\s*)?ignore"
+    r'(?:\s*=\s*"([^"]*)")?\s*\)?\s*\]'
 )
 _ISSUE_RE = re.compile(r"#(\d+)")
 
@@ -144,7 +145,6 @@ def collect_module_coverage(
             }
         )
 
-    # Plotting panel specification count (#173)
     plot_fns: list[str] = []
     plot_dir = repo_root / "src" / "flexmesa" / "plotting"
     if plot_dir.is_dir():
@@ -213,12 +213,18 @@ def collect_numerics_and_module_verification(
         repo_root / "benchmarks" / "numerics" / "strict_verification.json"
     )
     has_165_ci = "strict-cross-machine-gate:" in ci_yml
+    strict_mods: dict[str, str] = {}
     if has_165_ci and strict_report.is_file():
-        rep = json.loads(strict_report.read_text(encoding="utf-8"))
+        rep: dict[str, Any] = json.loads(
+            strict_report.read_text(encoding="utf-8")
+        )
         level1 = str(rep.get("cross_machine_status", "not yet measured"))
         level2 = str(
             rep.get("kernels_bit_identical_status", "not yet measured")
         )
+        raw_smods = rep.get("modules", {})
+        if isinstance(raw_smods, dict):
+            strict_mods = {str(k): str(v) for k, v in raw_smods.items()}
     else:
         level1 = "not yet measured"
         level2 = "not yet measured"
@@ -246,11 +252,14 @@ def collect_numerics_and_module_verification(
                     item.get("exact_values_captured", 0)
                 ),
                 "exact_strict_compared": (
-                    "not yet measured" if level2 == "not yet measured" else "0"
+                    "not yet measured"
+                    if level2 == "not yet measured"
+                    else strict_mods.get(mname, "0")
                 ),
             }
         )
     return {
+        "has_165_ci": bool(has_165_ci and strict_report.is_file()),
         "strict_cross_machine_identical": level1,
         "strict_kernels_bit_identical": level2,
         "total_upstream_hex_values": int(
@@ -295,10 +304,12 @@ def collect_harness_summary(repo_root: pathlib.Path) -> dict[str, Any]:
         elif ref_st == "no_reference_yet":
             by_suite[suite]["no_reference_yet"] += 1
 
+    within_tol_non_pass: list[dict[str, str]] = []
     for rec in run_raw.get("cases", []):
         suite = str(rec["suite"])
         verdict = str(rec.get("verdict", ""))
         comp = rec.get("comparison")
+        within_tol = False
         if (
             rec.get("executed") is True
             and rec.get("termination_matches") is True
@@ -310,10 +321,19 @@ def collect_harness_summary(repo_root: pathlib.Path) -> dict[str, Any]:
                 and comp.get("within_track_tolerances") is True
             ):
                 by_suite[suite]["within_numeric_tol"] += 1
+                within_tol = True
         if verdict == "pass":
             by_suite[suite]["passing"] += 1
         elif verdict.startswith("declared gap"):
             by_suite[suite]["declared_gaps"] += 1
+            if within_tol:
+                within_tol_non_pass.append(
+                    {
+                        "suite": suite,
+                        "case": str(rec["case"]),
+                        "issue": str(rec.get("known_gap_issue", "")),
+                    }
+                )
         elif rec.get("is_undeclared_failure") is True:
             by_suite[suite]["undeclared_failures"] += 1
 
@@ -327,6 +347,7 @@ def collect_harness_summary(repo_root: pathlib.Path) -> dict[str, Any]:
     fig_count = len(list(fig_dir.glob("*.png"))) if fig_dir.is_dir() else 0
     return {
         "by_suite": by_suite,
+        "within_tol_non_pass": within_tol_non_pass,
         "gaps_by_issue": dict(
             sorted(
                 gaps_by_issue.items(), key=lambda kv: (-kv[1], int(kv[0][1:]))
@@ -397,11 +418,36 @@ def collect_controls_summary(
     return rows
 
 
-def _extract_py_decorator_skips(
-    py_path: pathlib.Path, rel: str
+def extract_rust_ignores_from_text(
+    raw_text: str, rel: str
 ) -> list[dict[str, str]]:
-    """Extract ``@pytest.mark.{xfail,skip}`` decorators using ``ast``."""
-    source = py_path.read_text(encoding="utf-8")
+    """Extract ``#[ignore]`` and ``#[cfg_attr(..., ignore)]`` annotations."""
+    if "ignore" not in raw_text:
+        return []
+    cleaned = _RUST_COMMENT_RE.sub(
+        lambda m: "\n" * m.group(0).count("\n"), raw_text
+    )
+    found: list[dict[str, str]] = []
+    for m in _IGNORE_ATTR_RE.finditer(cleaned):
+        lno = cleaned.count("\n", 0, m.start()) + 1
+        reason = m.group(1) or ""
+        issues = sorted({f"#{x}" for x in _ISSUE_RE.findall(reason)})
+        found.append(
+            {
+                "location": f"{rel}:{lno}",
+                "reason": reason,
+                "issues": ", ".join(issues),
+            }
+        )
+    return found
+
+
+def extract_py_decorator_skips_from_text(
+    source: str, rel: str
+) -> list[dict[str, str]]:
+    """Extract ``@pytest.mark.{xfail,skip,skipif}`` decorators using ``ast``."""
+    if "xfail" not in source and "skip" not in source:
+        return []
     tree = ast.parse(source, filename=rel)
     found: list[dict[str, str]] = []
     for node in ast.walk(tree):
@@ -411,7 +457,7 @@ def _extract_py_decorator_skips(
             continue
         for dec in node.decorator_list:
             seg = ast.get_source_segment(source, dec) or ""
-            if not re.search(r"\bmark\.(?:xfail|skip)\b", seg):
+            if not re.search(r"\bmark\.(?:xfail|skip|skipif)\b", seg):
                 continue
             issues = sorted({f"#{x}" for x in _ISSUE_RE.findall(seg)})
             found.append(
@@ -431,22 +477,11 @@ def collect_ignored_and_skipped_tests(
     rust_ignores: list[dict[str, str]] = []
     for rs_path in sorted((repo_root / "crates").rglob("*.rs")):
         rel = rs_path.relative_to(repo_root).as_posix()
-        raw = rs_path.read_text(encoding="utf-8")
-        cleaned = "\n".join(
-            "" if ln.lstrip().startswith("//") else ln
-            for ln in raw.splitlines()
-        )
-        for m in _IGNORE_ATTR_RE.finditer(cleaned):
-            lno = cleaned.count("\n", 0, m.start()) + 1
-            reason = m.group(1) or ""
-            issues = sorted({f"#{x}" for x in _ISSUE_RE.findall(reason)})
-            rust_ignores.append(
-                {
-                    "location": f"{rel}:{lno}",
-                    "reason": reason,
-                    "issues": ", ".join(issues),
-                }
+        rust_ignores.extend(
+            extract_rust_ignores_from_text(
+                rs_path.read_text(encoding="utf-8"), rel
             )
+        )
 
     py_skips: list[dict[str, str]] = []
     for root_sub in ("tests", "src/flexmesa"):
@@ -454,7 +489,11 @@ def collect_ignored_and_skipped_tests(
             if py_path.name == "conftest.py":
                 continue
             rel = py_path.relative_to(repo_root).as_posix()
-            py_skips.extend(_extract_py_decorator_skips(py_path, rel))
+            py_skips.extend(
+                extract_py_decorator_skips_from_text(
+                    py_path.read_text(encoding="utf-8"), rel
+                )
+            )
 
     unlinked = [
         x["location"] for x in [*rust_ignores, *py_skips] if not x["issues"]
@@ -500,7 +539,6 @@ def sync_github_snapshot(
     issue_140 = _gh_api_json(f"repos/{repo}/issues/140")
     issue_169 = _gh_api_json(f"repos/{repo}/issues/169")
 
-    # Fetch all issues (open + closed, paginated)
     all_issues: list[dict[str, Any]] = []
     page = 1
     while True:
@@ -530,7 +568,6 @@ def sync_github_snapshot(
         else:
             issues_by_num[num] = item
 
-    # Extract #140 sub-issues by phase from #140 body
     body_140 = str(issue_140.get("body", ""))
     phase_order = [
         "Phase 0",
@@ -568,7 +605,6 @@ def sync_github_snapshot(
                 if inum not in phase_issues[current_phase]:
                     phase_issues[current_phase].append(inum)
 
-    # Deferred scope issues (#172 or label deferred-scope)
     seen_140: set[int] = set()
     for nums in phase_issues.values():
         seen_140.update(nums)
@@ -601,7 +637,6 @@ def sync_github_snapshot(
             }
         )
 
-    # Extract #169 deferred backlog issues (label 'deferred' or listed in #169)
     body_169 = str(issue_169.get("body", ""))
     nums_in_169 = {
         int(m.group(1))
@@ -610,10 +645,15 @@ def sync_github_snapshot(
     }
     deferred_items: list[dict[str, Any]] = []
     for num, item in sorted(issues_by_num.items()):
-        if num in {140, 169, 172}:
+        if str(item.get("state")) != "open":
             continue
         label_set = {str(lb["name"]) for lb in item.get("labels", [])}
-        if "deferred" in label_set or num in nums_in_169:
+        if label_set & {"tracking", "deferred-scope"}:
+            continue
+        is_backlog_label = "deferred" in label_set and bool(
+            label_set & {"upstream-bug", "enhancement"}
+        )
+        if is_backlog_label or num in nums_in_169:
             kind = (
                 "enhancement" if "enhancement" in label_set else "upstream-bug"
             )

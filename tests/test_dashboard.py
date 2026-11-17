@@ -8,7 +8,9 @@ import pathlib
 
 from flexmesa.data import fetch
 from flexmesa.testing import (
+    _dashboard_collect,
     _dashboard_coverage,
+    _port_parsers,
     dashboard,
     port_manifest,
 )
@@ -63,8 +65,8 @@ def test_port_manifest_rejects_ported_without_routine_counterpart() -> None:
     assert any("eval_eps_grav_and_partials" in err for err in errs)
 
 
-def test_port_manifest_rejects_verified_without_generated_artifact() -> None:
-    """Verified status tiers must fail when evidence_artifacts are missing."""
+def test_port_manifest_rejects_verified_without_artifact_or_test() -> None:
+    """Verified status tiers must fail when artifacts or tests are missing."""
     manifest = port_manifest.load_port_manifest(
         REPO_ROOT / "benchmarks" / "dashboard" / "port_manifest.toml"
     )
@@ -85,6 +87,42 @@ def test_port_manifest_rejects_verified_without_generated_artifact() -> None:
     )
     errs_1 = port_manifest.verify_port_manifest(mutated_1, repo_root=REPO_ROOT)
     assert any("requires non-empty evidence_artifacts" in e for e in errs_1)
+
+    no_test = dataclasses.replace(
+        target,
+        status=port_manifest.PortStatus.KERNEL_REFERENCE_VECTORS,
+        evidence_artifacts=("tests/fixtures/golden/module_hex/summary.json",),
+        evidence_tests=(),
+    )
+    mutated_1b = dataclasses.replace(
+        manifest,
+        entries=tuple(
+            no_test if e.upstream_path == target.upstream_path else e
+            for e in manifest.entries
+        ),
+    )
+    errs_1b = port_manifest.verify_port_manifest(
+        mutated_1b, repo_root=REPO_ROOT
+    )
+    assert any("requires non-empty evidence_tests" in e for e in errs_1b)
+
+    traversal_art = dataclasses.replace(
+        target,
+        status=port_manifest.PortStatus.KERNEL_REFERENCE_VECTORS,
+        evidence_artifacts=("benchmarks/../README.md",),
+        evidence_tests=("crates/flexmesa-const/tests/const_tests.rs",),
+    )
+    mutated_1c = dataclasses.replace(
+        manifest,
+        entries=tuple(
+            traversal_art if e.upstream_path == target.upstream_path else e
+            for e in manifest.entries
+        ),
+    )
+    errs_1c = port_manifest.verify_port_manifest(
+        mutated_1c, repo_root=REPO_ROOT
+    )
+    assert any("must be a safe path" in e for e in errs_1c)
 
     bad_case = dataclasses.replace(
         target,
@@ -112,8 +150,8 @@ def test_port_manifest_rejects_verified_without_generated_artifact() -> None:
     assert any("is not passing against mesa_26_4_1" in e for e in errs_2)
 
 
-def test_port_manifest_promotion_requires_diff_and_allows_lowering() -> None:
-    """Raising status requires diffing evidence; lowering does not."""
+def test_port_manifest_promotion_and_base_metadata_immutability() -> None:
+    """Raising status requires diffing evidence; upstream metadata is fixed."""
     base = port_manifest.load_port_manifest(
         REPO_ROOT / "benchmarks" / "dashboard" / "port_manifest.toml"
     )
@@ -140,11 +178,54 @@ def test_port_manifest_promotion_requires_diff_and_allows_lowering() -> None:
     )
     assert not errs_low
 
-    # Raising status without touching evidence fails.
+    absent_entry = by_path["math/private/math_io.f90"]
+    unver_promoted = dataclasses.replace(
+        absent_entry,
+        status=port_manifest.PortStatus.PARTIAL,
+        flexmesa_files=("crates/flexmesa-math/src/lib.rs",),
+    )
+    unver_manifest = dataclasses.replace(
+        base,
+        entries=tuple(
+            unver_promoted
+            if e.upstream_path == absent_entry.upstream_path
+            else e
+            for e in base.entries
+        ),
+    )
+    errs_unver_blocked = port_manifest.verify_port_manifest(
+        unver_manifest,
+        repo_root=REPO_ROOT,
+        base_manifest=base,
+        changed_paths=frozenset({"benchmarks/dashboard/port_manifest.toml"}),
+    )
+    assert any("implementing flexmesa_files" in e for e in errs_unver_blocked)
+
+    tampered_lines = dataclasses.replace(
+        ported_entry, upstream_lines=ported_entry.upstream_lines + 10
+    )
+    tampered_manifest = dataclasses.replace(
+        base,
+        entries=tuple(
+            tampered_lines
+            if e.upstream_path == ported_entry.upstream_path
+            else e
+            for e in base.entries
+        ),
+    )
+    errs_tamper = port_manifest.verify_port_manifest(
+        tampered_manifest,
+        repo_root=REPO_ROOT,
+        base_manifest=base,
+        changed_paths=frozenset({"benchmarks/dashboard/port_manifest.toml"}),
+    )
+    assert any("upstream metadata" in e for e in errs_tamper)
+
     promoted = dataclasses.replace(
         ported_entry,
         status=port_manifest.PortStatus.KERNEL_REFERENCE_VECTORS,
         evidence_artifacts=("tests/fixtures/golden/module_hex/summary.json",),
+        evidence_tests=("crates/flexmesa-const/tests/const_tests.rs",),
     )
     promoted_manifest = dataclasses.replace(
         base,
@@ -157,7 +238,12 @@ def test_port_manifest_promotion_requires_diff_and_allows_lowering() -> None:
         promoted_manifest,
         repo_root=REPO_ROOT,
         base_manifest=base,
-        changed_paths=frozenset({"benchmarks/dashboard/port_manifest.toml"}),
+        changed_paths=frozenset(
+            {
+                "benchmarks/dashboard/port_manifest.toml",
+                "benchmarks/history_harness/baseline_run_26_4_1.json",
+            }
+        ),
     )
     assert any(
         "without adding or updating evidence" in e for e in errs_raise_blocked
@@ -189,13 +275,98 @@ def test_dashboard_freshness_gate_matches_committed_outputs() -> None:
 def test_dashboard_freshness_gate_detects_hand_edited_readme_number(
     tmp_path: pathlib.Path,
 ) -> None:
-    """Perturbing a single character in README.md must fail freshness check."""
-    del tmp_path  # Unused.
+    """Perturbing a single number in README.md must fail freshness check."""
     mesa_dir = fetch.resolve_mesa_test_inputs_dir()
-    expected = dashboard.render_expected_files(REPO_ROOT, mesa_dir)
-    readme_text = expected[REPO_ROOT / "README.md"]
-    tampered = readme_text.replace("0 / 106", "1 / 106", 1)
-    assert tampered != readme_text
+    fake_root = tmp_path / "repo"
+    fake_root.mkdir()
+    for child in REPO_ROOT.iterdir():
+        if child.name in {".git", "README.md"}:
+            continue
+        (fake_root / child.name).symlink_to(child)
+
+    readme_orig = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+    tampered = readme_orig.replace("0 / 106", "1 / 106", 1)
+    assert tampered != readme_orig
+    (fake_root / "README.md").write_text(tampered, encoding="utf-8")
+
+    errs = dashboard.verify_all_dashboard_invariants(
+        repo_root=fake_root, mesa_dir=mesa_dir
+    )
+    assert any("README.md: committed content differs" in e for e in errs)
+
+
+def test_fortran_and_rust_parsers_handle_interfaces_fixed_form_and_macros(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Parsers must extract generic interfaces, fixed-form .f, and const fn."""
+    f90_src = """
+    module demo_mod
+      implicit none
+      private
+      public :: generic_op, direct_sub
+      interface generic_op
+        module procedure impl_op_a
+      end interface generic_op
+    contains
+      subroutine direct_sub(x)
+        real :: x
+      end subroutine direct_sub
+      subroutine impl_op_a(x)
+        real :: x
+      end subroutine impl_op_a
+    end module demo_mod
+    """
+    assert _port_parsers.extract_fortran_public_routines(f90_src, ".f90") == [
+        "generic_op",
+        "direct_sub",
+    ]
+
+    f77_src = (
+        "      character*(*) function f77_fn(\n"
+        "     &  arg1)\n"
+        "      integer arg1\n"
+        "      f77_fn = 'x'\n"
+        "      end\n"
+        "      subroutine f77_sub(y)\n"
+        "      real y\n"
+        "      end\n"
+    )
+    assert _port_parsers.extract_fortran_public_routines(f77_src, ".f") == [
+        "f77_fn",
+        "f77_sub",
+    ]
+
+    rs_file = tmp_path / "sample.rs"
+    rs_file.write_text(
+        "// pub fn fake_comment() {}\n"
+        'const DOC: &str = "pub fn fake_string() {}";\n'
+        "pub const fn real_const_fn() {}\n"
+        'unary_method!(exp, kernels::u_exp, "doc");\n',
+        encoding="utf-8",
+    )
+    syms = _port_parsers.extract_flexmesa_symbols(rs_file)
+    assert "real_const_fn" in syms
+    assert "exp" in syms
+    assert "fake_comment" not in syms
+    assert "fake_string" not in syms
+
+    rs_skips = _dashboard_collect.extract_rust_ignores_from_text(
+        '/// #[ignore]\n#[test] #[ignore = "tracked in #152"]\n'
+        '#[cfg_attr(unix, ignore = "tracked in #155")]\nfn t() {}\n',
+        "crates/x/tests/t.rs",
+    )
+    assert len(rs_skips) == 2
+    assert rs_skips[0]["issues"] == "#152"
+    assert rs_skips[1]["issues"] == "#155"
+
+    py_skips = _dashboard_collect.extract_py_decorator_skips_from_text(
+        "import pytest\n"
+        '@pytest.mark.skipif(True, reason="pending #153")\n'
+        "def test_x(): pass\n",
+        "tests/test_x.py",
+    )
+    assert len(py_skips) == 1
+    assert py_skips[0]["issues"] == "#153"
 
 
 def test_dashboard_numerics_rows_report_not_yet_measured_before_165() -> None:

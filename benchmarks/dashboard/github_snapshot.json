@@ -222,33 +222,14 @@
       "number": 195,
       "title": "feat(math): strict CRMATH (crlibm) and fast numerics modes from one Rust source (#165)",
       "draft": true
+    },
+    {
+      "number": 200,
+      "title": "[Audit E2] Add MESA 26.4.1 port manifest and generated progress dashboard (#174)",
+      "draft": true
     }
   ],
   "deferred_169": [
-    {
-      "number": 3,
-      "title": "Deferred: Replace PGSTAR and PGBINARY X11 plotting with Python/Matplotlib diagnostics",
-      "state": "closed",
-      "kind": "upstream-bug",
-      "parity_pending": false,
-      "needs_confirmation": false
-    },
-    {
-      "number": 4,
-      "title": "Deferred: External radiation-hydrodynamics (STELLA) and oscillation solvers (ADIPLS, GYRE)",
-      "state": "closed",
-      "kind": "upstream-bug",
-      "parity_pending": false,
-      "needs_confirmation": false
-    },
-    {
-      "number": 5,
-      "title": "Implement full RSP static builder, LINA complex non-adiabatic solver, nonlinear RSP1, and coupled RSP2",
-      "state": "closed",
-      "kind": "upstream-bug",
-      "parity_pending": false,
-      "needs_confirmation": false
-    },
     {
       "number": 175,
       "title": "[Deferred enhancement] Higher-order binary orbit integrator and gravitational-wave eccentricity term",
@@ -367,7 +348,7 @@
       "state": "open",
       "kind": "upstream-bug",
       "parity_pending": false,
-      "needs_confirmation": true
+      "needs_confirmation": false
     },
     {
       "number": 197,

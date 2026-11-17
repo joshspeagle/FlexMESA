@@ -12,6 +12,8 @@ permissions:
   contents: write
   issues: read
   pull-requests: read
+  pages: write
+  id-token: write
 
 concurrency:
   group: dashboard-refresh-main
@@ -33,12 +35,14 @@ jobs:
       (github.event_name != 'push' ||
        !startsWith(github.event.head_commit.message, 'chore(dashboard): auto-refresh'))
     runs-on: ubuntu-latest
-    timeout-minutes: 75
+    timeout-minutes: 60
+    outputs:
+      pushed: ${{ steps.push_dash.outputs.pushed }}
     steps:
-      - name: Checkout main
+      - name: Checkout triggering commit
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ github.sha }}
           fetch-depth: 0
 
       - name: Set up Python
@@ -60,7 +64,7 @@ jobs:
       - name: Cache Rust cargo target and registry
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: dashboard-llvm-cov
+          shared-key: llvm-cov
 
       - name: Cache FlexMESA data-v1 and MESA test bundles
         uses: actions/cache@v4
@@ -92,48 +96,49 @@ jobs:
           python -m pip install maturin
           python -m pip install --no-build-isolation -e ".[test]"
 
-      - name: Collect Rust and Python coverage
+      - name: Collect Rust and Python coverage into runner temp
         run: |
-          RUST_JSON="${{ runner.temp }}/rust_cov.json"
-          PY_JSON="${{ runner.temp }}/python_cov.json"
-          cargo llvm-cov --workspace --exclude flexmesa-py --release \
-            --json --summary-only --output-path "$RUST_JSON" \
-            -- --skip test_astero_adipls_and_gyre_uncapped_pass \
-               --skip test_all_eight_astero_cases_bounded_eight_steps_pass
-          pytest src tests \
-            --ignore=tests/test_docs_snippets.py \
-            --ignore=tests/test_mesa_paper_figures.py \
-            --ignore=tests/test_history_harness.py \
-            --ignore-glob="tests/test_e2e_*.py" \
-            --cov=src/flexmesa \
-            --cov-report="json:$PY_JSON" \
-            -q
-          flexmesa dashboard collect-coverage --rust-json "$RUST_JSON" --python-json "$PY_JSON"
+          bash scripts/dashboard/run_coverage.sh rust "${{ runner.temp }}/rust_cov.json"
+          bash scripts/dashboard/run_coverage.sh python "${{ runner.temp }}/python_cov.json"
 
-      - name: Sync GitHub issues/PRs, record merge history, and render dashboard
+      - name: Refresh dashboard onto latest main and push if changed
+        id: push_dash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          flexmesa dashboard sync-github --repo "${{ github.repository }}"
-          if [ "${{ github.event_name }}" = "push" ]; then
-            SHORT_SHA="$(git rev-parse --short HEAD)"
-            DATE_UTC="$(date -u +%Y-%m-%d)"
-            flexmesa dashboard record-history --date-utc "$DATE_UTC" --commit "$SHORT_SHA" --event "main merge"
-          fi
-          flexmesa dashboard render
-          flexmesa dashboard check
+          TRIGGER_SHA="$(git rev-parse --short "${{ github.sha }}")"
+          DATE_UTC="$(date -u +%Y-%m-%d)"
+          RUST_JSON="${{ runner.temp }}/rust_cov.json"
+          PY_JSON="${{ runner.temp }}/python_cov.json"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Commit and push updated dashboard if changed
-        run: |
-          if [ -n "$(git status --porcelain)" ]; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add README.md docs/index.md docs/benchmarks/progress-dashboard.md benchmarks/dashboard/
-            git commit -m "chore(dashboard): auto-refresh generated progress dashboard (#174)"
-            git pull --rebase origin main
+          PUSHED="false"
+          for attempt in 1 2 3; do
+            git fetch origin main
+            git checkout -f -B main origin/main
+            flexmesa dashboard collect-coverage --rust-json "$RUST_JSON" --python-json "$PY_JSON"
+            flexmesa dashboard sync-github --repo "${{ github.repository }}"
+            if [ "${{ github.event_name }}" = "push" ]; then
+              flexmesa dashboard record-history --date-utc "$DATE_UTC" --commit "$TRIGGER_SHA" --event "main merge"
+            fi
             flexmesa dashboard render
             flexmesa dashboard check
+            if [ -z "$(git status --porcelain)" ]; then
+              echo "Dashboard already matches latest main."
+              break
+            fi
             git add README.md docs/index.md docs/benchmarks/progress-dashboard.md benchmarks/dashboard/
-            git diff --cached --quiet || git commit --amend --no-edit
-            git push origin HEAD:main
-          fi
+            git commit -m "chore(dashboard): auto-refresh generated progress dashboard (#174)"
+            if git push origin HEAD:main; then
+              PUSHED="true"
+              break
+            fi
+            echo "Non-fast-forward push on attempt $attempt; retrying on updated origin/main..."
+          done
+          echo "pushed=$PUSHED" >> "$GITHUB_OUTPUT"
+
+  redeploy-pages:
+    if: needs.refresh-dashboard.outputs.pushed == 'true'
+    needs: refresh-dashboard
+    uses: ./.github/workflows/docs.yml

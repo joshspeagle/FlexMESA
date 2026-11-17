@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
-# GENERATED / MAINTAINED VIA scripts/dashboard/build_port_manifest.py (#174).
-# Line counts and SHA-256 digests are computed mechanically from MESA 26.4.1.
+# GENERATED VIA scripts/dashboard/build_port_manifest.py (#174).
+# Line counts and SHA-256 digests are computed from MESA 26.4.1.
 
 [metadata]
 schema_version = 1
@@ -1372,63 +1372,63 @@ upstream_path = "auto_diff/private/auto_diff_real_15var_order1_module.f90"
 module = "auto_diff"
 upstream_lines = 1132
 upstream_sha256 = "6a5ebf6c343d7dd25c590e43a0463fabac9908579b8c1ef7543b8fe073af568e"
-status = "ported_unverified"
+status = "partial"
 flexmesa_files = ["crates/flexmesa-autodiff/src/order1.rs"]
-notes = "seeded from coverage-map.md section 7 (unverified)"
+notes = "seeded from coverage-map.md section 7 (unverified); downgraded to partial (unmapped public routines: make_unop, make_binop)"
 
 [[files]]
 upstream_path = "auto_diff/private/auto_diff_real_1var_order1_module.f90"
 module = "auto_diff"
 upstream_lines = 1319
 upstream_sha256 = "5eadf2ba3e1a2a0089ad72bfe5da21d3af04371fff043c163d9847d74b35dc46"
-status = "ported_unverified"
+status = "partial"
 flexmesa_files = ["crates/flexmesa-autodiff/src/order1.rs"]
-notes = "seeded from coverage-map.md section 7 (unverified)"
+notes = "seeded from coverage-map.md section 7 (unverified); downgraded to partial (unmapped public routines: make_unop, make_binop, differentiate_1)"
 
 [[files]]
 upstream_path = "auto_diff/private/auto_diff_real_2var_order1_module.f90"
 module = "auto_diff"
 upstream_lines = 1545
 upstream_sha256 = "4c317d22d853a7a6416a4f430427be70b96d202b9d8d3037b0db8ce0bc637445"
-status = "ported_unverified"
+status = "partial"
 flexmesa_files = ["crates/flexmesa-autodiff/src/order1.rs"]
-notes = "seeded from coverage-map.md section 7 (unverified)"
+notes = "seeded from coverage-map.md section 7 (unverified); downgraded to partial (unmapped public routines: make_unop, make_binop, differentiate_1, differentiate_2)"
 
 [[files]]
 upstream_path = "auto_diff/private/auto_diff_real_2var_order2_module.f90"
 module = "auto_diff"
 upstream_lines = 2009
 upstream_sha256 = "270e493b9e9063ea33f3825268343e3495ae3f3030eaad1296fa678aea30e8f0"
-status = "ported_unverified"
-flexmesa_files = ["crates/flexmesa-autodiff/src/order2.rs"]
-notes = "seeded from coverage-map.md section 7 (unverified)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-autodiff/src/order2.rs", "crates/flexmesa-autodiff/src/order2_ops.rs"]
+notes = "seeded from coverage-map.md section 7 (unverified); downgraded to partial (unmapped public routines: make_unop, make_binop)"
 
 [[files]]
 upstream_path = "auto_diff/private/auto_diff_real_2var_order3_module.f90"
 module = "auto_diff"
 upstream_lines = 3410
 upstream_sha256 = "8539fab154b0124b3128ed26db4f0e844617ae0074df5f86d42ec00c84af3887"
-status = "ported_unverified"
-flexmesa_files = ["crates/flexmesa-autodiff/src/order3.rs"]
-notes = "seeded from coverage-map.md section 7 (unverified)"
+status = "partial"
+flexmesa_files = ["crates/flexmesa-autodiff/src/order3.rs", "crates/flexmesa-autodiff/src/order3_ops.rs"]
+notes = "seeded from coverage-map.md section 7 (unverified); downgraded to partial (unmapped public routines: make_unop, make_binop)"
 
 [[files]]
 upstream_path = "auto_diff/private/auto_diff_real_4var_order1_module.f90"
 module = "auto_diff"
 upstream_lines = 1751
 upstream_sha256 = "4e7eaec7e712674b654598d58ceaa69dd4e78aec2e3d27003b7934562dfcde9a"
-status = "ported_unverified"
+status = "partial"
 flexmesa_files = ["crates/flexmesa-autodiff/src/order1.rs"]
-notes = "seeded from coverage-map.md section 7 (unverified)"
+notes = "seeded from coverage-map.md section 7 (unverified); downgraded to partial (unmapped public routines: make_unop, make_binop, differentiate_1, differentiate_2, differentiate_3)"
 
 [[files]]
 upstream_path = "auto_diff/private/auto_diff_real_star_order1_module.f90"
 module = "auto_diff"
 upstream_lines = 1307
 upstream_sha256 = "ed4e3478673e942dd86739086308473b24a5baba355a3efcbc2281e18d1cb95d"
-status = "ported_unverified"
+status = "partial"
 flexmesa_files = ["crates/flexmesa-autodiff/src/order1.rs"]
-notes = "seeded from coverage-map.md section 7 (unverified)"
+notes = "seeded from coverage-map.md section 7 (unverified); downgraded to partial (unmapped public routines: make_unop, make_binop)"
 
 [[files]]
 upstream_path = "auto_diff/private/auto_diff_real_tdc_module.f90"
@@ -1452,9 +1452,9 @@ upstream_path = "auto_diff/public/auto_diff.f90"
 module = "auto_diff"
 upstream_lines = 30
 upstream_sha256 = "4d178319ad3864995b67a4db6144e31b20484e380c98a90ad85e5e21066171ac"
-status = "ported_unverified"
+status = "partial"
 flexmesa_files = ["crates/flexmesa-autodiff/src/lib.rs"]
-notes = "seeded from coverage-map.md section 7 (unverified)"
+notes = "seeded from coverage-map.md section 7: partial / uncompared"
 
 [[files]]
 upstream_path = "binary/job/binary_test_suite_extras.inc"

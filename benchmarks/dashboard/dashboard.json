@@ -916,9 +916,9 @@
     "python": {
       "tool": "pytest --cov",
       "overall": {
-        "statements": 20841,
-        "covered": 18319,
-        "percent": 87.9
+        "statements": 20904,
+        "covered": 18338,
+        "percent": 87.7
       },
       "by_subpackage": [
         {
@@ -1067,9 +1067,9 @@
         },
         {
           "subpackage": "flexmesa.testing",
-          "statements": 3272,
-          "covered": 2245,
-          "percent": 68.6
+          "statements": 3335,
+          "covered": 2264,
+          "percent": 67.9
         },
         {
           "subpackage": "flexmesa.turb",
@@ -1668,6 +1668,19 @@
       "cases_passing": "0",
       "rust_cov_pct": "71.2",
       "python_cov_pct": "87.9",
+      "closed_140": "8",
+      "total_140": "32",
+      "deferred_169": "17"
+    },
+    {
+      "date_utc": "2026-11-17",
+      "commit": "6df1dcf",
+      "event": "main merge",
+      "engine_ported_pct": "13.9",
+      "all_verified_pct": "0.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "71.2",
+      "python_cov_pct": "87.7",
       "closed_140": "8",
       "total_140": "32",
       "deferred_169": "17"

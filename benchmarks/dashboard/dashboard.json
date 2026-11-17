@@ -21,7 +21,7 @@
         "verified_total": 0,
         "pct_ported": 14.9,
         "pct_verified": 0.0,
-        "rust_lines": 53356,
+        "rust_lines": 55374,
         "python_jax_lines": 4649
       },
       {
@@ -55,7 +55,7 @@
         "verified_total": 0,
         "pct_ported": 18.2,
         "pct_verified": 0.0,
-        "rust_lines": 8426,
+        "rust_lines": 9298,
         "python_jax_lines": 1234
       },
       {
@@ -72,7 +72,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 4479,
+        "rust_lines": 5197,
         "python_jax_lines": 1206
       },
       {
@@ -89,8 +89,8 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 13180,
-        "python_jax_lines": 9725
+        "rust_lines": 13206,
+        "python_jax_lines": 9726
       },
       {
         "module": "kap",
@@ -106,7 +106,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 4193,
+        "rust_lines": 4197,
         "python_jax_lines": 3078
       },
       {
@@ -123,7 +123,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 10057,
+        "rust_lines": 10190,
         "python_jax_lines": 728
       },
       {
@@ -140,7 +140,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 3102,
+        "rust_lines": 3161,
         "python_jax_lines": 1474
       },
       {
@@ -158,7 +158,7 @@
         "pct_ported": 83.9,
         "pct_verified": 0.0,
         "rust_lines": 1916,
-        "python_jax_lines": 2558
+        "python_jax_lines": 2600
       },
       {
         "module": "atm",
@@ -174,7 +174,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 2091,
+        "rust_lines": 2096,
         "python_jax_lines": 791
       },
       {
@@ -242,7 +242,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 2406,
+        "rust_lines": 2455,
         "python_jax_lines": 1499
       },
       {
@@ -259,7 +259,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 4260,
+        "rust_lines": 4279,
         "python_jax_lines": 3587
       },
       {
@@ -276,7 +276,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 3943,
+        "rust_lines": 4173,
         "python_jax_lines": 1768
       },
       {
@@ -310,7 +310,7 @@
         "verified_total": 0,
         "pct_ported": 0.9,
         "pct_verified": 0.0,
-        "rust_lines": 2682,
+        "rust_lines": 2687,
         "python_jax_lines": 2274
       },
       {
@@ -327,7 +327,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 2746,
+        "rust_lines": 2747,
         "python_jax_lines": 1234
       },
       {
@@ -344,8 +344,8 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 468,
-        "python_jax_lines": 567
+        "rust_lines": 1992,
+        "python_jax_lines": 577
       },
       {
         "module": "const",
@@ -378,7 +378,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 2931,
+        "rust_lines": 2984,
         "python_jax_lines": 2353
       },
       {
@@ -455,135 +455,135 @@
       "upstream_panel_modules": 46
     },
     "infrastructure_lines": {
-      "rust_bridge_testing_bench": 14916,
-      "python_testing_bench": 10356
+      "rust_bridge_testing_bench": 15247,
+      "python_testing_bench": 10524
     }
   },
   "numerics": {
-    "has_165_ci": false,
-    "strict_cross_machine_identical": "not yet measured",
-    "strict_kernels_bit_identical": "not yet measured",
+    "has_165_ci": true,
+    "strict_cross_machine_identical": "verified in CI (x86_64 == aarch64, 1 == 4 threads; 474,062 math vectors + star/1.3M_ms_high_Z 5-step trace)",
+    "strict_kernels_bit_identical": "math: 403,258/403,258 CRMATH 0 ULP (70,804 libm <= 1 ULP); 0/23 other module suites",
     "total_upstream_hex_values": 348321,
     "modules": [
       {
         "module": "const",
         "upstream_exact_values": 23,
-        "exact_strict_compared": "not yet measured"
+        "exact_strict_compared": "0"
       },
       {
         "module": "utils",
         "upstream_exact_values": 0,
-        "exact_strict_compared": "not yet measured"
+        "exact_strict_compared": "0"
       },
       {
         "module": "math",
         "upstream_exact_values": 102,
-        "exact_strict_compared": "not yet measured"
+        "exact_strict_compared": "403,258 CRMATH (0 ULP) + 70,804 libm (<= 1 ULP)"
       },
       {
         "module": "mtx",
         "upstream_exact_values": 22,
-        "exact_strict_compared": "not yet measured"
+        "exact_strict_compared": "0"
       },
       {
         "module": "auto_diff",
         "upstream_exact_values": 774,
-        "exact_strict_compared": "not yet measured"
+        "exact_strict_compared": "0"
       },
       {
         "module": "num",
         "upstream_exact_values": 570,
-        "exact_strict_compared": "not yet measured"
+        "exact_strict_compared": "0"
       },
       {
         "module": "interp_1d",
         "upstream_exact_values": 234,
-        "exact_strict_compared": "not yet measured"
+        "exact_strict_compared": "0"
       },
       {
         "module": "interp_2d",
         "upstream_exact_values": 104,
-        "exact_strict_compared": "not yet measured"
+        "exact_strict_compared": "0"
       },
       {
         "module": "chem",
         "upstream_exact_values": 1102,
-        "exact_strict_compared": "not yet measured"
+        "exact_strict_compared": "0"
       },
       {
         "module": "colors",
         "upstream_exact_values": 234,
-        "exact_strict_compared": "not yet measured"
+        "exact_strict_compared": "0"
       },
       {
         "module": "eos",
         "upstream_exact_values": 391,
-        "exact_strict_compared": "not yet measured"
+        "exact_strict_compared": "0"
       },
       {
         "module": "kap",
         "upstream_exact_values": 54,
-        "exact_strict_compared": "not yet measured"
+        "exact_strict_compared": "0"
       },
       {
         "module": "rates",
         "upstream_exact_values": 3685,
-        "exact_strict_compared": "not yet measured"
+        "exact_strict_compared": "0"
       },
       {
         "module": "neu",
         "upstream_exact_values": 340000,
-        "exact_strict_compared": "not yet measured"
+        "exact_strict_compared": "0"
       },
       {
         "module": "net",
         "upstream_exact_values": 140,
-        "exact_strict_compared": "not yet measured"
+        "exact_strict_compared": "0"
       },
       {
         "module": "ionization",
         "upstream_exact_values": 41,
-        "exact_strict_compared": "not yet measured"
+        "exact_strict_compared": "0"
       },
       {
         "module": "atm",
         "upstream_exact_values": 90,
-        "exact_strict_compared": "not yet measured"
+        "exact_strict_compared": "0"
       },
       {
         "module": "turb",
         "upstream_exact_values": 136,
-        "exact_strict_compared": "not yet measured"
+        "exact_strict_compared": "0"
       },
       {
         "module": "star_data",
         "upstream_exact_values": 0,
-        "exact_strict_compared": "not yet measured"
+        "exact_strict_compared": "0"
       },
       {
         "module": "gyre",
         "upstream_exact_values": 136,
-        "exact_strict_compared": "not yet measured"
+        "exact_strict_compared": "0"
       },
       {
         "module": "adipls",
         "upstream_exact_values": 92,
-        "exact_strict_compared": "not yet measured"
+        "exact_strict_compared": "0"
       },
       {
         "module": "star",
         "upstream_exact_values": 386,
-        "exact_strict_compared": "not yet measured"
+        "exact_strict_compared": "0"
       },
       {
         "module": "binary",
         "upstream_exact_values": 5,
-        "exact_strict_compared": "not yet measured"
+        "exact_strict_compared": "0"
       },
       {
         "module": "astero",
         "upstream_exact_values": 0,
-        "exact_strict_compared": "not yet measured"
+        "exact_strict_compared": "0"
       }
     ]
   },
@@ -744,40 +744,40 @@
     "rust": {
       "tool": "cargo llvm-cov",
       "overall": {
-        "lines": 85967,
+        "lines": 89909,
         "covered": 64360,
-        "percent": 74.9
+        "percent": 71.6
       },
       "by_crate": [
         {
           "crate": "flexmesa-astero",
-          "lines": 3130,
-          "covered": 1424,
-          "percent": 45.5
+          "lines": 3695,
+          "covered": 1100,
+          "percent": 29.8
         },
         {
           "crate": "flexmesa-atm",
-          "lines": 1326,
-          "covered": 958,
-          "percent": 72.2
+          "lines": 1332,
+          "covered": 996,
+          "percent": 74.8
         },
         {
           "crate": "flexmesa-autodiff",
           "lines": 1283,
-          "covered": 476,
-          "percent": 37.1
+          "covered": 575,
+          "percent": 44.8
         },
         {
           "crate": "flexmesa-bench",
-          "lines": 2342,
-          "covered": 2328,
+          "lines": 2346,
+          "covered": 2332,
           "percent": 99.4
         },
         {
           "crate": "flexmesa-binary",
-          "lines": 5570,
-          "covered": 4119,
-          "percent": 73.9
+          "lines": 6335,
+          "covered": 3652,
+          "percent": 57.6
         },
         {
           "crate": "flexmesa-chem",
@@ -787,9 +787,9 @@
         },
         {
           "crate": "flexmesa-colors",
-          "lines": 1263,
-          "covered": 852,
-          "percent": 67.5
+          "lines": 1299,
+          "covered": 888,
+          "percent": 68.4
         },
         {
           "crate": "flexmesa-const",
@@ -798,16 +798,22 @@
           "percent": 0.0
         },
         {
+          "crate": "flexmesa-crlibm-sys",
+          "lines": 78,
+          "covered": 30,
+          "percent": 38.5
+        },
+        {
           "crate": "flexmesa-data",
-          "lines": 1091,
-          "covered": 762,
-          "percent": 69.8
+          "lines": 986,
+          "covered": 675,
+          "percent": 68.5
         },
         {
           "crate": "flexmesa-eos",
-          "lines": 8851,
-          "covered": 6771,
-          "percent": 76.5
+          "lines": 8875,
+          "covered": 6744,
+          "percent": 76.0
         },
         {
           "crate": "flexmesa-interp1d",
@@ -817,9 +823,9 @@
         },
         {
           "crate": "flexmesa-interp2d",
-          "lines": 1705,
-          "covered": 1315,
-          "percent": 77.1
+          "lines": 1711,
+          "covered": 1318,
+          "percent": 77.0
         },
         {
           "crate": "flexmesa-ionization",
@@ -829,45 +835,45 @@
         },
         {
           "crate": "flexmesa-kap",
-          "lines": 2868,
-          "covered": 1923,
-          "percent": 67.1
+          "lines": 2865,
+          "covered": 1919,
+          "percent": 67.0
         },
         {
           "crate": "flexmesa-math",
-          "lines": 159,
-          "covered": 99,
-          "percent": 62.3
+          "lines": 775,
+          "covered": 598,
+          "percent": 77.2
         },
         {
           "crate": "flexmesa-mtx",
-          "lines": 2651,
-          "covered": 2337,
-          "percent": 88.2
+          "lines": 2783,
+          "covered": 2451,
+          "percent": 88.1
         },
         {
           "crate": "flexmesa-net",
-          "lines": 7412,
-          "covered": 6478,
-          "percent": 87.4
+          "lines": 7508,
+          "covered": 6568,
+          "percent": 87.5
         },
         {
           "crate": "flexmesa-neu",
           "lines": 994,
-          "covered": 962,
-          "percent": 96.8
+          "covered": 953,
+          "percent": 95.9
         },
         {
           "crate": "flexmesa-num",
-          "lines": 2856,
-          "covered": 2425,
-          "percent": 84.9
+          "lines": 2860,
+          "covered": 2455,
+          "percent": 85.8
         },
         {
           "crate": "flexmesa-rates",
-          "lines": 2051,
-          "covered": 1809,
-          "percent": 88.2
+          "lines": 2102,
+          "covered": 1850,
+          "percent": 88.0
         },
         {
           "crate": "flexmesa-schema",
@@ -877,9 +883,9 @@
         },
         {
           "crate": "flexmesa-star",
-          "lines": 35778,
-          "covered": 25869,
-          "percent": 72.3
+          "lines": 37333,
+          "covered": 25725,
+          "percent": 68.9
         },
         {
           "crate": "flexmesa-testing",
@@ -890,30 +896,30 @@
         {
           "crate": "flexmesa-turb",
           "lines": 1093,
-          "covered": 906,
-          "percent": 82.9
+          "covered": 903,
+          "percent": 82.6
         },
         {
           "crate": "flexmesa-utils",
-          "lines": 189,
-          "covered": 124,
-          "percent": 65.6
+          "lines": 301,
+          "covered": 205,
+          "percent": 68.1
         }
       ]
     },
     "python": {
       "tool": "pytest --cov",
       "overall": {
-        "statements": 19841,
-        "covered": 17425,
-        "percent": 87.8
+        "statements": 19930,
+        "covered": 17488,
+        "percent": 87.7
       },
       "by_subpackage": [
         {
           "subpackage": "flexmesa",
-          "statements": 71,
-          "covered": 62,
-          "percent": 87.3
+          "statements": 97,
+          "covered": 82,
+          "percent": 84.5
         },
         {
           "subpackage": "flexmesa.astero",
@@ -971,8 +977,8 @@
         },
         {
           "subpackage": "flexmesa.eos",
-          "statements": 3477,
-          "covered": 3277,
+          "statements": 3478,
+          "covered": 3278,
           "percent": 94.2
         },
         {
@@ -1001,8 +1007,8 @@
         },
         {
           "subpackage": "flexmesa.math",
-          "statements": 173,
-          "covered": 173,
+          "statements": 178,
+          "covered": 178,
           "percent": 100.0
         },
         {
@@ -1019,8 +1025,8 @@
         },
         {
           "subpackage": "flexmesa.neu",
-          "statements": 1049,
-          "covered": 932,
+          "statements": 1066,
+          "covered": 947,
           "percent": 88.8
         },
         {
@@ -1055,9 +1061,9 @@
         },
         {
           "subpackage": "flexmesa.testing",
-          "statements": 2324,
-          "covered": 1409,
-          "percent": 60.6
+          "statements": 2364,
+          "covered": 1431,
+          "percent": 60.5
         },
         {
           "subpackage": "flexmesa.turb",
@@ -1078,27 +1084,27 @@
     "rust_ignore_count": 19,
     "rust_ignores": [
       {
-        "location": "crates/flexmesa-astero/tests/astero_suite.rs:277",
+        "location": "crates/flexmesa-astero/tests/astero_suite.rs:272",
         "reason": "unverified uncapped astero campaign; tracked in #143 and #162",
         "issues": "#143, #162"
       },
       {
-        "location": "crates/flexmesa-astero/tests/astero_suite.rs:283",
+        "location": "crates/flexmesa-astero/tests/astero_suite.rs:278",
         "reason": "unverified uncapped astero campaign; tracked in #143 and #162",
         "issues": "#143, #162"
       },
       {
-        "location": "crates/flexmesa-astero/tests/astero_suite.rs:289",
+        "location": "crates/flexmesa-astero/tests/astero_suite.rs:284",
         "reason": "unverified uncapped astero campaign; tracked in #143 and #162",
         "issues": "#143, #162"
       },
       {
-        "location": "crates/flexmesa-astero/tests/astero_suite.rs:295",
+        "location": "crates/flexmesa-astero/tests/astero_suite.rs:290",
         "reason": "unverified uncapped astero campaign; tracked in #143 and #162",
         "issues": "#143, #162"
       },
       {
-        "location": "crates/flexmesa-astero/tests/astero_suite.rs:301",
+        "location": "crates/flexmesa-astero/tests/astero_suite.rs:296",
         "reason": "unverified uncapped astero campaign; tracked in #143 and #162",
         "issues": "#143, #162"
       },
@@ -1133,44 +1139,44 @@
         "issues": "#146"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:253",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:251",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:261",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:259",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:269",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:267",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:277",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:275",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:285",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:283",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:292",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:290",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:300",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:298",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-eos/tests/mesa_26_4_1_component_oracles_test.rs:342",
-        "reason": "declared gap (#161, #165): HelmTable exp10 (std::f64::consts::LN_10 + libm::exp vs const_def::ln10 + CRMATH) shifts cancelled 3rd-order Hermite derivatives in Skye/HELM; skye_c12_liq grad_ad d_dlnd got -2.9257929440306991e-3 vs -2.9257927386492229e-3 (2.054e-10 >= 5.0e-12), grad_ad d_dlnT 1.589e-8, max rel_err 6.685e-6 on skye_c12_phase Cp d_dlnT",
-        "issues": "#161, #165"
+        "location": "crates/flexmesa-eos/tests/mesa_26_4_1_component_oracles_test.rs:343",
+        "reason": "declared gap (#161): Skye/HELM operation order; 10 d_dlnT channels on skye_co_liq and eosdt_skye_helm_blend miss the original tolerance, largest skye_co_liq Cp rel_err 1.101e-6 >= 5.0e-11 (see DECLARED_DLNT_RESIDUALS)",
+        "issues": "#161"
       }
     ],
     "python_xfail_or_skip_count": 1,
@@ -1190,8 +1196,8 @@
     "phases_140": [
       {
         "phase": "Phase 0",
-        "open": 2,
-        "closed": 4,
+        "open": 1,
+        "closed": 5,
         "issues": [
           {
             "number": 141,
@@ -1216,7 +1222,7 @@
           {
             "number": 165,
             "title": "[Audit C14] Numerics policy: strict (hardware-independent) and fast modes from one Rust source",
-            "state": "open"
+            "state": "closed"
           },
           {
             "number": 174,
@@ -1404,11 +1410,6 @@
     ],
     "open_pull_requests": [
       {
-        "number": 195,
-        "title": "feat(math): strict CRMATH (crlibm) and fast numerics modes from one Rust source (#165)",
-        "draft": false
-      },
-      {
         "number": 200,
         "title": "[Audit E2] Add MESA 26.4.1 port manifest and generated progress dashboard (#174)",
         "draft": true
@@ -1564,6 +1565,32 @@
       "rust_cov_pct": "74.9",
       "python_cov_pct": "87.8",
       "closed_140": "4",
+      "total_140": "32",
+      "deferred_169": "17"
+    },
+    {
+      "date_utc": "2026-11-16",
+      "commit": "9c77162",
+      "event": "PR #195 (#165)",
+      "engine_ported_pct": "13.9",
+      "all_verified_pct": "0.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "71.6",
+      "python_cov_pct": "87.7",
+      "closed_140": "5",
+      "total_140": "32",
+      "deferred_169": "17"
+    },
+    {
+      "date_utc": "2026-11-16",
+      "commit": "8e1b8b4",
+      "event": "PR #201 (#161)",
+      "engine_ported_pct": "13.9",
+      "all_verified_pct": "0.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "71.6",
+      "python_cov_pct": "87.7",
+      "closed_140": "5",
       "total_140": "32",
       "deferred_169": "17"
     }

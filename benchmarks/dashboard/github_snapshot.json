@@ -5,8 +5,8 @@
   "phases_140": [
     {
       "phase": "Phase 0",
-      "open": 2,
-      "closed": 4,
+      "open": 1,
+      "closed": 5,
       "issues": [
         {
           "number": 141,
@@ -31,7 +31,7 @@
         {
           "number": 165,
           "title": "[Audit C14] Numerics policy: strict (hardware-independent) and fast modes from one Rust source",
-          "state": "open"
+          "state": "closed"
         },
         {
           "number": 174,
@@ -218,11 +218,6 @@
     }
   ],
   "open_pull_requests": [
-    {
-      "number": 195,
-      "title": "feat(math): strict CRMATH (crlibm) and fast numerics modes from one Rust source (#165)",
-      "draft": false
-    },
     {
       "number": 200,
       "title": "[Audit E2] Add MESA 26.4.1 port manifest and generated progress dashboard (#174)",

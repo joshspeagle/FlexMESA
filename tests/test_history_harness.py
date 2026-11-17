@@ -677,3 +677,97 @@ def test_library_extras_flag_prevents_pass_verdict_until_148_lands(
         case_report.build_manifest_inventory_records(
             baseline_json_path=tmp_path / "nonexistent_baseline.json"
         )
+
+
+def test_harness_gate_rejects_fast_mode_from_flag_env_and_process_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`flexmesa harness run --gate` rejects fast mode via CLI, env, or API."""
+    from flexmesa import _dispatch
+
+    assert (
+        cli.main(["harness", "run", "--gate", "--numerics-mode", "fast"]) == 1
+    )
+
+    monkeypatch.setenv("FLEXMESA_NUMERICS_MODE", "fast")
+    assert cli.main(["harness", "run", "--gate"]) == 1
+    monkeypatch.delenv("FLEXMESA_NUMERICS_MODE", raising=False)
+
+    with _dispatch.numerics_mode_context("fast"):
+        assert cli.main(["harness", "run", "--gate"]) == 1
+
+
+def test_check_strict_determinism_rejects_same_arch_duplicates_and_bad_records(
+    tmp_path: pathlib.Path,
+) -> None:
+    """`check_strict_determinism.py` enforces distinct x86_64+aarch64 JSONs."""
+    import importlib.util
+    import os
+    import sys
+
+    # Verify invalid FLEXMESA_NUMERICS_MODE raises ValueError cleanly on import.
+    env = dict(os.environ, FLEXMESA_NUMERICS_MODE="bogus_mode")
+    proc = subprocess.run(
+        [sys.executable, "-c", "import flexmesa"],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode != 0
+    assert "ValueError" in proc.stderr
+    assert "bogus_mode" in proc.stderr
+
+    script_path = (
+        case_manifest.repo_root() / "scripts" / "check_strict_determinism.py"
+    )
+    spec = importlib.util.spec_from_file_location(
+        "check_strict_determinism", script_path
+    )
+    assert spec is not None and spec.loader is not None
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    valid_sha = "a" * 64
+    base_rec = {
+        "os": "Linux",
+        "arch": "x86_64",
+        "numerics_mode": "strict",
+        "math_vector_count": 474_062,
+        "math_vectors_sha256": valid_sha,
+        "evolution_suite": "star",
+        "evolution_case": "1.3M_ms_high_Z",
+        "evolution_max_steps": 5,
+        "history_bytes": 4096,
+        "history_1t_sha256": valid_sha,
+        "history_4t_sha256": valid_sha,
+        "thread_1_vs_4_byte_identical": True,
+    }
+    p_x86 = tmp_path / "x86_64.json"
+    p_x86_dup = tmp_path / "x86_64_b.json"
+    p_arm = tmp_path / "aarch64.json"
+    p_bad = tmp_path / "bad.json"
+
+    p_x86.write_text(json.dumps(base_rec), encoding="utf-8")
+    p_x86_dup.write_text(json.dumps(base_rec), encoding="utf-8")
+    arm_rec = dict(base_rec, os="Darwin", arch="arm64")
+    p_arm.write_text(json.dumps(arm_rec), encoding="utf-8")
+    bad_rec = dict(arm_rec, numerics_mode="fast")
+    p_bad.write_text(json.dumps(bad_rec), encoding="utf-8")
+
+    # Duplicate path must fail even with --allow-same-arch.
+    assert (
+        mod.main(["--compare", str(p_x86), str(p_x86), "--allow-same-arch"])
+        == 1
+    )
+    # Two x86_64 files without --allow-same-arch must fail.
+    assert mod.main(["--compare", str(p_x86), str(p_x86_dup)]) == 1
+    # With --allow-same-arch, two distinct identical x86_64 records pass.
+    assert (
+        mod.main(["--compare", str(p_x86), str(p_x86_dup), "--allow-same-arch"])
+        == 0
+    )
+    # Distinct x86_64 + arm64 records pass without --allow-same-arch.
+    assert mod.main(["--compare", str(p_x86), str(p_arm)]) == 0
+    # Non-strict record must fail.
+    assert mod.main(["--compare", str(p_x86), str(p_bad)]) == 1

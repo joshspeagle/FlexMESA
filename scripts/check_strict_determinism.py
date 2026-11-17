@@ -142,9 +142,94 @@ def _measure(
     }
 
 
-def _compare_jsons(paths: list[pathlib.Path]) -> int:
+def _normalize_arch(raw: object) -> str:
+    """Normalize OS/Python machine architecture strings."""
+    if not isinstance(raw, str):
+        return ""
+    low = raw.strip().lower()
+    if low in ("x86_64", "amd64"):
+        return "x86_64"
+    if low in ("aarch64", "arm64"):
+        return "aarch64"
+    return low
+
+
+def _is_sha256_hex(val: object) -> bool:
+    return (
+        isinstance(val, str)
+        and len(val) == 64
+        and all(ch in "0123456789abcdef" for ch in val)
+    )
+
+
+def _validate_record(rec: dict[str, Any], label: str) -> list[str]:
+    errors: list[str] = []
+    if rec.get("numerics_mode") != "strict":
+        errors.append(
+            f"{label}: numerics_mode must be 'strict', got "
+            f"{rec.get('numerics_mode')!r}"
+        )
+    if rec.get("thread_1_vs_4_byte_identical") is not True:
+        errors.append(
+            f"{label}: thread_1_vs_4_byte_identical must be True, got "
+            f"{rec.get('thread_1_vs_4_byte_identical')!r}"
+        )
+    vec_cnt = rec.get("math_vector_count")
+    if (
+        not isinstance(vec_cnt, int)
+        or isinstance(vec_cnt, bool)
+        or vec_cnt < 470_000
+    ):
+        errors.append(
+            f"{label}: math_vector_count must be >= 470000, got {vec_cnt!r}"
+        )
+    hist_bytes = rec.get("history_bytes")
+    if (
+        not isinstance(hist_bytes, int)
+        or isinstance(hist_bytes, bool)
+        or hist_bytes <= 0
+    ):
+        errors.append(f"{label}: history_bytes must be > 0, got {hist_bytes!r}")
+    if not _is_sha256_hex(rec.get("math_vectors_sha256")):
+        errors.append(f"{label}: invalid math_vectors_sha256")
+    h1 = rec.get("history_1t_sha256")
+    h4 = rec.get("history_4t_sha256")
+    if not _is_sha256_hex(h1) or h1 != h4:
+        errors.append(
+            f"{label}: history_1t_sha256 ({h1!r}) != history_4t_sha256 ({h4!r})"
+        )
+    return errors
+
+
+def _compare_jsons(
+    paths: list[pathlib.Path],
+    *,
+    allow_same_arch: bool = False,
+) -> int:
     """Compare two or more runner JSON digests and fail on any bit mismatch."""
+    resolved = [p.resolve() for p in paths]
+    if len(set(resolved)) != len(resolved):
+        sys.stderr.write(
+            "ERROR: duplicate JSON paths passed to --compare: "
+            f"{[str(p) for p in paths]}\n"
+        )
+        return 1
+
     records = [json.loads(p.read_text(encoding="utf-8")) for p in paths]
+    ok = True
+    for p, rec in zip(paths, records, strict=True):
+        for err in _validate_record(rec, p.name):
+            sys.stderr.write(f"INVALID RECORD: {err}\n")
+            ok = False
+
+    norm_arches = {_normalize_arch(r.get("arch")) for r in records}
+    if not allow_same_arch and not {"x86_64", "aarch64"}.issubset(norm_arches):
+        sys.stderr.write(
+            "ERROR: cross-architecture check requires both x86_64 and "
+            f"aarch64 runner records, got {sorted(norm_arches)!r}\n"
+        )
+        ok = False
+
     base = records[0]
     keys = (
         "numerics_mode",
@@ -158,7 +243,6 @@ def _compare_jsons(paths: list[pathlib.Path]) -> int:
         "history_4t_sha256",
         "thread_1_vs_4_byte_identical",
     )
-    ok = True
     for idx, rec in enumerate(records[1:], start=1):
         for key in keys:
             if rec.get(key) != base.get(key):
@@ -208,15 +292,25 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Compare two or more JSON determinism summaries and exit.",
     )
+    parser.add_argument(
+        "--allow-same-arch",
+        action="store_true",
+        help="Allow --compare on two JSON records from the same architecture.",
+    )
     args = parser.parse_args(argv)
 
     if args.compare is not None:
         if len(args.compare) < 2:
             parser.error("--compare requires at least two JSON files")
-        return _compare_jsons(list(args.compare))
+        return _compare_jsons(
+            list(args.compare),
+            allow_same_arch=bool(args.allow_same_arch),
+        )
 
     summary = _measure(args.vectors, args.suite, args.case, args.max_steps)
-    payload = json.dumps(summary, indent=2, sort_keys=True) + "\n"
+    payload = (
+        json.dumps(summary, indent=2, sort_keys=True, allow_nan=False) + "\n"
+    )
     if args.json_out is not None:
         args.json_out.parent.mkdir(parents=True, exist_ok=True)
         args.json_out.write_text(payload, encoding="utf-8")

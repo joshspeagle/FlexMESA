@@ -230,13 +230,45 @@ fn test_vendored_manifest_hashes_match_all_csrc_and_config_files() {
 #[test]
 fn test_lib_rs_enforces_unsafe_invariants_and_safety_comments() {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let mut src_files = Vec::new();
+    collect_files(&manifest_dir, &manifest_dir.join("src"), &mut src_files);
+    assert_eq!(
+        src_files,
+        vec![String::from("src/lib.rs")],
+        "flexmesa-crlibm-sys/src/ must contain only src/lib.rs"
+    );
+
     let src = fs::read_to_string(manifest_dir.join("src/lib.rs"))
         .expect("src/lib.rs");
     assert!(src.contains("#![deny(unsafe_op_in_unsafe_fn)]"));
     assert!(
-        !src.contains("pub unsafe fn"),
-        "flexmesa-crlibm-sys must expose only safe public functions"
+        !src.contains("unsafe fn")
+            && !src.contains("unsafe extern")
+            && !src.contains("unsafe impl"),
+        "flexmesa-crlibm-sys must expose only safe Rust functions/traits"
     );
+
+    // Cross-check `build.rs` C_SOURCES against `VENDORED.toml` `.c` files.
+    let build_rs =
+        fs::read_to_string(manifest_dir.join("build.rs")).expect("build.rs");
+    let vendored_toml = fs::read_to_string(manifest_dir.join("VENDORED.toml"))
+        .expect("VENDORED.toml");
+    for line in vendored_toml.lines() {
+        if let Some(rest) = line.trim().strip_prefix("path = \"") {
+            let rel = rest.trim_end_matches('"');
+            let is_standalone = rel.ends_with("-standalone.c");
+            if std::path::Path::new(rel)
+                .extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("c"))
+                && !is_standalone
+            {
+                assert!(
+                    build_rs.contains(&format!("\"{rel}\"")),
+                    "build.rs C_SOURCES is missing tracked C file {rel}"
+                );
+            }
+        }
+    }
 
     let lines: Vec<&str> = src.lines().collect();
     let mut unsafe_blocks = 0usize;

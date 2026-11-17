@@ -847,13 +847,17 @@ double pow_rn(double x, double y) {
     Note: the cases (x,y) = (1,NaN) and (x,y) = (NaN,0) have already been handled.
     
     */
+    if (((xdb.i[HI] & 0x7ff00000) == 0x7ff00000) &&
+        (((xdb.i[HI] & 0x000fffff) | xdb.i[LO]) != 0)) {
+      return x + x;
+    }
+    if (((ydb.i[HI] & 0x7ff00000) == 0x7ff00000) &&
+        (((ydb.i[HI] & 0x000fffff) | ydb.i[LO]) != 0)) {
+      return y + y;
+    }
+
     if ((ydb.i[HI] & 0x7ff00000) == 0x7ff00000) {
-      /* Here y is NaN or Inf */
-      if (((ydb.i[HI] & 0x000fffff) | ydb.i[LO]) != 0) {
-	/* Here y is NaN, we return NaN */
-	return y;
-      } 
-      /* Here y is +/- Inf 
+      /* Here y is +/- Inf (NaN already handled above)
 	 
       There are three main cases:
       (i)   x = -1: return 1

@@ -174,10 +174,16 @@ fn eval_rz_counterpart(name: &str, a: f64, b: f64) -> f64 {
 
 #[inline]
 fn ulp_distance(act_bits: u64, exp_bits: u64) -> u64 {
+    if act_bits == exp_bits {
+        return 0;
+    }
     let act_val = f64::from_bits(act_bits);
     let exp_val = f64::from_bits(exp_bits);
-    if !act_val.is_finite() || !exp_val.is_finite() {
-        return 0;
+    if !act_val.is_finite()
+        || !exp_val.is_finite()
+        || act_val.is_sign_negative() != exp_val.is_sign_negative()
+    {
+        return u64::MAX;
     }
     act_bits.abs_diff(exp_bits)
 }
@@ -371,6 +377,11 @@ fn test_mesa_26_4_1_hex_reference_vectors_match_bit_for_bit_in_strict_mode() {
         }
 
         assert_eq!(counts.len(), 47, "expected 47 tested sections");
+        let total_vectors: usize = counts.values().sum();
+        assert_eq!(
+            total_vectors, 474_062,
+            "expected 474,062 total reference vectors"
+        );
         for (fname, count) in &counts {
             assert!(
                 *count >= 10_050,
@@ -386,7 +397,7 @@ fn test_mesa_26_4_1_hex_reference_vectors_match_bit_for_bit_in_strict_mode() {
             ("intrinsic_exp", 10_067, 5_091, 10_067),
             ("atan2", 10_121, 7_011, 9_455),
             ("datan2", 10_121, 6_985, 9_473),
-            ("intrinsic_pow", 10_294, 4_248, 10_289),
+            ("intrinsic_pow", 10_294, 4_248, 10_291),
         ] {
             assert_eq!(counts[sec], exp_total, "{sec} total count");
             assert_eq!(
@@ -525,6 +536,37 @@ fn test_function_mapping_toml_covers_all_math_lib_crmath_public_symbols() {
     ] {
         assert!(mapping.contains(&format!("name = \"{ext}\"")));
         assert!(combined_src.contains(&format!("pub fn {ext}")));
+    }
+
+    // Bidirectional check: every `pub fn` in `flexmesa-math/src/` (excluding
+    // mode-control and `auto_diff` sign/step helpers) must be documented in
+    // `function_mapping.toml`.
+    let mode_and_support_fns = [
+        "numerics_mode",
+        "set_numerics_mode",
+        "with_numerics_mode",
+        "sgn",
+        "heaviside",
+    ];
+    for src_file in ["src/lib.rs", "src/trig.rs", "src/pre_z.rs"] {
+        let src_txt =
+            fs::read_to_string(manifest_dir.join(src_file)).expect(src_file);
+        for line in src_txt.lines() {
+            let trimmed = line.trim_start();
+            if let Some(rest) = trimmed.strip_prefix("pub fn ") {
+                let fn_name: String = rest
+                    .chars()
+                    .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+                    .collect();
+                if mode_and_support_fns.contains(&fn_name.as_str()) {
+                    continue;
+                }
+                assert!(
+                    mapping.contains(&format!("flexmesa_math::{fn_name}\"")),
+                    "public function `flexmesa_math::{fn_name}` in `{src_file}` is missing from `function_mapping.toml`"
+                );
+            }
+        }
     }
 }
 

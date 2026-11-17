@@ -359,10 +359,19 @@ pub fn read_photo_bytes(
         .get(pos..pos + 8)
         .ok_or_else(|| eof("EOF job/controls flags"))?;
     pos += 8;
-    if job_tags[7] > 1 {
+    let saved_mode = match job_tags[7] {
+        0 => flexmesa_math::NumericsMode::Strict,
+        1 => flexmesa_math::NumericsMode::Fast,
+        other => {
+            return Err(StarError::IoError(format!(
+                "invalid photo numerics_mode tag {other}"
+            )));
+        }
+    };
+    let active_mode = flexmesa_math::numerics_mode();
+    if saved_mode != active_mode {
         return Err(StarError::IoError(format!(
-            "invalid photo numerics_mode tag {}",
-            job_tags[7]
+            "photo numerics_mode mismatch: checkpoint saved in \"{saved_mode}\" mode cannot be loaded while active mode is \"{active_mode}\""
         )));
     }
     let mut job = job;
@@ -695,8 +704,11 @@ pub fn photo_numerics_mode(
     let _nz = read_u64(&mut pos)?;
     let species = read_u64(&mut pos)? as usize;
     let _nvar_hydro = read_u64(&mut pos)?;
+    let species_bytes = species
+        .checked_mul(8)
+        .ok_or_else(|| eof("species overflow"))?;
     pos = pos
-        .checked_add(8 * species)
+        .checked_add(species_bytes)
         .ok_or_else(|| eof("species overflow"))?;
     let net_len = read_u64(&mut pos)? as usize;
     pos = pos

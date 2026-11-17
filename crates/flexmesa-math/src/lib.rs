@@ -16,9 +16,14 @@
 //!   `powi`, `exp10`, `safe_log`, `safe_log10`, `safe_sqrt`, `powm1`, `pow2`
 //!   through `pow8`, `tanh`, `acosh`, `asinh`, `atanh`, `atan2`, and `hypot`) in
 //!   upstream's exact IEEE-754 operation order with no fused multiply-add
-//!   contraction (`fma(a, b, c) = a * b + c`). This contract is specified at the
-//!   bit level so a future pure-Rust correctly rounded backend can replace
-//!   `flexmesa-crlibm-sys` and be verified bit for bit against it.
+//!   contraction (`fma(a, b, c) = a * b + c`). For the 7 upstream MESA `26.4.1`
+//!   Fortran files that omit `use math_lib` and invoke compiler intrinsics
+//!   directly (`#196`, `#198`, `DECISIONS #23`), [`atan2`] and
+//!   [`intrinsic_log`], [`intrinsic_log10`], [`intrinsic_exp`], and
+//!   [`intrinsic_pow`] route through `crlibm`'s round-to-nearest (`*_rn`) entry
+//!   points. This contract is specified at the bit level so a future pure-Rust
+//!   correctly rounded backend can replace `flexmesa-crlibm-sys` and be
+//!   verified bit for bit against it.
 //! - **[`NumericsMode::Fast`]**: Evaluates Rust `std` `f64` intrinsics and
 //!   permits hardware fused multiply-add via [`fma`] (`a.mul_add(b, c)`). `Fast`
 //!   mode is hardware-dependent and is validated against `Strict` mode, never
@@ -647,8 +652,8 @@ pub fn intrinsic_exp(x: f64) -> f64 {
 
 /// Compute $x^{y}$ via `crlibm::pow_rn` (round-to-nearest) in
 /// [`NumericsMode::Strict`] for upstream MESA `26.4.1` call sites that bypass
-/// `math_lib` into Fortran's `real(dp) ** real(dp)` operator (`#198`; `99.95%`
-/// bit match with `max_ulp = 1` on `10,294` vectors vs `34.56%` and
+/// `math_lib` into Fortran's `real(dp) ** real(dp)` operator (`#198`; `99.97%`
+/// bit match with `max_ulp = 1` on `10,294` vectors vs `41.27%` and
 /// `max_ulp = 1,493` for `pow_r_`).
 ///
 /// Use [`pow`] everywhere upstream calls `math_lib::pow`; call `intrinsic_pow`

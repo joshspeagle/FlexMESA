@@ -127,7 +127,7 @@ def _build_trace_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--numerics-mode",
         choices=("strict", "fast"),
-        default="strict",
+        default=None,
         help="Arithmetic mode ('strict' default, or 'fast'; #165).",
     )
     parser.add_argument(
@@ -159,6 +159,7 @@ def trace_main(argv: list[str] | None = None) -> int:
         return _run_worker(cli_args[1:])
 
     ns = _build_trace_parser().parse_args(cli_args)
+    eff_mode = harness_runner.resolve_effective_numerics_mode(ns.numerics_mode)
     case_dir = harness_runner.resolve_case_dir(
         ns.suite, ns.case, mesa_dir=ns.mesa_dir
     )
@@ -171,7 +172,7 @@ def trace_main(argv: list[str] | None = None) -> int:
         respect_intervals=ns.respect_intervals,
         write_profiles=ns.write_profiles,
         is_logs_dir=not ns.explicit_file,
-        numerics_mode=ns.numerics_mode,
+        numerics_mode=eff_mode,
         timeout_sec=ns.timeout_sec,
         max_rss_gb=ns.max_rss_gb,
     )
@@ -272,7 +273,7 @@ def _build_harness_parser() -> argparse.ArgumentParser:
     p_run.add_argument(
         "--numerics-mode",
         choices=("strict", "fast"),
-        default="strict",
+        default=None,
         help="Arithmetic mode ('strict' default, or 'fast'; #165).",
     )
     p_run.add_argument("--timeout-sec", type=float, default=600.0)
@@ -442,9 +443,11 @@ def harness_main(argv: list[str] | None = None) -> int:
     ns = _build_harness_parser().parse_args(cli_args)
     if ns.subcommand == "table":
         return _handle_table_subcommand(ns)
-    if ns.gate and ns.numerics_mode != "strict":
+    eff_mode = harness_runner.resolve_effective_numerics_mode(ns.numerics_mode)
+    ns.numerics_mode = eff_mode
+    if ns.gate and eff_mode != "strict":
         print(
-            "--gate requires --numerics-mode strict "
+            "--gate requires strict numerics mode "
             "(#165: only strict mode is judged against MESA)",
             file=sys.stderr,
         )

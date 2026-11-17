@@ -166,7 +166,7 @@ notes = "round-to-nearest entry point backing octant-reduced `atan2` (`#196`, `#
 symbol = "pow_rn"
 source = "csrc/pow.c"
 accurate_phase = "triple-double"
-notes = "round-to-nearest entry point (`log2_130` + `exp2_120` + `pow_exact_rn`) for MESA 26.4.1 Fortran intrinsic `real(dp) ** real(dp)` bypasses (`#198`); 99.95% bit-exact match (`10,289/10,294`, `max_ulp = 1`) vs 41.27% (`4,248/10,294`, `max_ulp = 1,493`) for `pow_r_`"
+notes = "round-to-nearest entry point (`log2_130` + `exp2_120` + `pow_exact_rn`) for MESA 26.4.1 Fortran intrinsic `real(dp) ** real(dp)` bypasses (`#198`); 99.97% bit-exact match (`10,291/10,294`, `max_ulp = 1`) vs 41.27% (`4,248/10,294`, `max_ulp = 1,493`) for `pow_r_`"
 
 [[files]]
 path = "csrc/AUTHORS"
@@ -334,9 +334,9 @@ sha256 = "4269d36a5515545844c50d7673cc9024496fde6f7cabcf748b1cf88edaf2690f"
 
 [[files]]
 path = "csrc/pow.c"
-sha256 = "05d6ac1890533a3a6be225949ad5636fe3c00b0f6ee6896b61eadfcead247135"
+sha256 = "02f6bbc02393ec527426bda01bfdf54cfba4c0c8cec78718a3b77cbbec03b4aa"
 upstream_sha256 = "d48b111cab2e0919a7b86d9a25db4d001dd182d3c844c042f9146dae257be7ff"
-modification = "Fixed `pow_exact_case` negative-tail tie-to-even adjustment (`tempdb.l--` at line 736) and replaced the unimplemented `return -5.0;` sentinel in `pow_exact_rn` (line 763) with deterministic 2-step IEEE-754 scaling `sign * (s2.d * (s1.d * (kh + kl)))`."
+modification = "Fixed `pow_exact_case` negative-tail tie-to-even adjustment (`tempdb.l--` at line 736), replaced the unimplemented `return -5.0;` sentinel in `pow_exact_rn` (line 763) with deterministic 2-step IEEE-754 scaling `sign * (s2.d * (s1.d * (kh + kl)))`, and checked `x`/`y` `NaN` ahead of `y == ±Inf` in `pow_rn` (line 850) so `pow_rn(NaN, ±Inf)` returns quiet `NaN` per IEEE-754."
 
 [[files]]
 path = "csrc/scs_lib/scs.h"

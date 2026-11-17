@@ -265,6 +265,15 @@ where
 #[allow(clippy::used_underscore_items)]
 #[pymodule]
 fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    if let Ok(raw) = std::env::var("FLEXMESA_NUMERICS_MODE") {
+        if !raw.trim().is_empty() {
+            let mode =
+                raw.parse::<flexmesa_math::NumericsMode>().map_err(|err| {
+                    pyo3::exceptions::PyValueError::new_err(err.to_string())
+                })?;
+            flexmesa_math::set_numerics_mode(mode);
+        }
+    }
     flexmesa_math::math_init();
     tier_a_parse::register(m)?;
     tier_a_data::register(m)?;

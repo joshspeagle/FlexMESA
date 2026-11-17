@@ -119,10 +119,36 @@ fn test_no_disallowed_methods_suppression_outside_math_crates() {
         for file in rs_files {
             let src = fs::read_to_string(&file).expect("read .rs source");
             assert!(
-                !src.contains("disallowed_methods"),
-                "{} must not suppress clippy::disallowed_methods (#165 Item 12)",
+                !src.contains("disallowed_methods")
+                    && !src.contains("allow(clippy::all")
+                    && !src.contains("allow(clippy::style")
+                    && !src.contains("allow(warnings"),
+                "{} must not suppress clippy::disallowed_methods or group lints (#165 Item 12)",
                 file.display()
             );
+            // Physics library `src/` files must source mathematical constants from
+            // `flexmesa_const` rather than `std::f64::consts` / `core::f64::consts`.
+            let is_src_file = file
+                .strip_prefix(&pkg_dir)
+                .is_ok_and(|rel| rel.starts_with("src"));
+            let exempt_consts = matches!(
+                crate_name,
+                "flexmesa-testing" | "flexmesa-const" | "flexmesa-utils"
+            );
+            if is_src_file && !exempt_consts {
+                for (lineno, line) in src.lines().enumerate() {
+                    let trimmed = line.trim_start();
+                    if trimmed.starts_with("//") {
+                        continue;
+                    }
+                    assert!(
+                        !line.contains("f64::consts::"),
+                        "{}:{} must use `flexmesa_const` constants instead of `f64::consts::`",
+                        file.display(),
+                        lineno + 1
+                    );
+                }
+            }
         }
     }
 }
@@ -139,6 +165,7 @@ fn test_flexmesa_crlibm_sys_is_sole_unsafe_crate_in_workspace() {
 
     let crates_root = root.join("crates");
     let mut seen_crlibm = false;
+    let mut on_disk_members = Vec::new();
 
     for entry in fs::read_dir(&crates_root).expect("crates directory") {
         let pkg_dir = entry.expect("crate entry").path();
@@ -153,6 +180,7 @@ fn test_flexmesa_crlibm_sys_is_sole_unsafe_crate_in_workspace() {
         if !manifest_path.exists() {
             continue;
         }
+        on_disk_members.push(format!("crates/{crate_name}"));
         let manifest =
             fs::read_to_string(&manifest_path).expect("read crate Cargo.toml");
 
@@ -196,5 +224,11 @@ fn test_flexmesa_crlibm_sys_is_sole_unsafe_crate_in_workspace() {
         }
     }
 
+    for member in &on_disk_members {
+        assert!(
+            root_manifest.contains(&format!("\"{member}\"")),
+            "workspace Cargo.toml `[workspace] members` is missing `{member}`"
+        );
+    }
     assert!(seen_crlibm, "flexmesa-crlibm-sys crate must exist");
 }

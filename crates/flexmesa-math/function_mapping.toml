@@ -331,7 +331,7 @@ flexmesa_math = "flexmesa_math::intrinsic_exp"
 [[ruling_extensions]]
 name = "intrinsic_pow"
 upstream_context = "Fortran `real(dp) ** real(dp)` bypasses in star/private/rsp_{lina,relax_env,build}.f90 (`#198`)"
-crlibm_symbol = "pow_rn (99.95% bit match, max_ulp = 1 vs 41.27% for pow_r_)"
+crlibm_symbol = "pow_rn (99.97% bit match, max_ulp = 1 vs 41.27% for pow_r_)"
 flexmesa_math = "flexmesa_math::intrinsic_pow"
 
 [[ruling_extensions]]
@@ -351,3 +351,15 @@ name = "fma"
 upstream_context = "Strict a*b+c (-ffp-contract=off, utils/makefile_header:50) vs Fast f64::mul_add (#165 Item 11)"
 crlibm_symbol = "a * b + c (strict) / f64::mul_add (fast)"
 flexmesa_math = "flexmesa_math::fma"
+
+[[ruling_extensions]]
+name = "sin_cos"
+upstream_context = "Paired (sin(x), cos(x)) convenience wrapper routing through crlibm::{sin_rz,cos_rz} in Strict mode and f64::sin_cos in Fast mode (#165 Item 12)"
+crlibm_symbol = "sin_rz + cos_rz"
+flexmesa_math = "flexmesa_math::sin_cos"
+
+[[ruling_extensions]]
+name = "pre_z"
+upstream_context = "Precomputed integer and fractional powers pre_z(1:1000) in math/public/math_def.f90:26-48 and math/public/precompute_zs.inc"
+crlibm_symbol = "log_rz + pow_r_ (populated by math_init)"
+flexmesa_math = "flexmesa_math::pre_z"

@@ -19,7 +19,7 @@ use flexmesa_math::{
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
-type FastVsStrictRow = (String, usize, usize, u64, f64, f64);
+type FastVsStrictRow = (String, usize, usize, usize, u64, f64, f64);
 
 #[inline]
 fn canonical_strict_bits(val: f64) -> u64 {
@@ -210,8 +210,8 @@ pub fn strict_math_vectors_sha256(vec_path: &str) -> PyResult<(usize, String)> {
 
 /// Evaluates all inputs in `vec_path` under `NumericsMode::Fast` and compares
 /// them exclusively against `NumericsMode::Strict` (`#165` Item 17; never
-/// against MESA), returning `(section, total, finite_pairs, max_ulp, max_abs,
-/// max_rel)` in section order.
+/// against MESA), returning `(section, total, finite_pairs,
+/// nonfinite_mismatch_count, max_ulp, max_abs, max_rel)` in section order.
 #[pyfunction]
 #[allow(clippy::too_many_lines)]
 pub fn compare_fast_vs_strict_vectors(
@@ -223,7 +223,7 @@ pub fn compare_fast_vs_strict_vectors(
     math_init();
 
     let mut order: Vec<String> = Vec::new();
-    let mut stats: BTreeMap<String, (usize, usize, u64, f64, f64)> =
+    let mut stats: BTreeMap<String, (usize, usize, usize, u64, f64, f64)> =
         BTreeMap::new();
     let mut kind = "";
     let mut sec_name = String::new();
@@ -243,7 +243,7 @@ pub fn compare_fast_vs_strict_vectors(
             sec_name = name.to_string();
             if !stats.contains_key(&sec_name) {
                 order.push(sec_name.clone());
-                stats.insert(sec_name.clone(), (0, 0, 0, 0.0, 0.0));
+                stats.insert(sec_name.clone(), (0, 0, 0, 0, 0.0, 0.0));
             }
             continue;
         }
@@ -321,14 +321,23 @@ pub fn compare_fast_vs_strict_vectors(
             let abs_d = (fast_val - strict_val).abs();
             let scale = strict_val.abs().max(fast_val.abs());
             let rel_d = if scale > 0.0 { abs_d / scale } else { 0.0 };
-            if ulp > entry.2 {
-                entry.2 = ulp;
+            if ulp > entry.3 {
+                entry.3 = ulp;
             }
-            if abs_d > entry.3 {
-                entry.3 = abs_d;
+            if abs_d > entry.4 {
+                entry.4 = abs_d;
             }
-            if rel_d > entry.4 {
-                entry.4 = rel_d;
+            if rel_d > entry.5 {
+                entry.5 = rel_d;
+            }
+        } else {
+            let same_nonfinite = (strict_val.is_nan() && fast_val.is_nan())
+                || (strict_val.is_infinite()
+                    && fast_val.is_infinite()
+                    && strict_val.is_sign_negative()
+                        == fast_val.is_sign_negative());
+            if !same_nonfinite {
+                entry.2 += 1;
             }
         }
     }
@@ -336,8 +345,8 @@ pub fn compare_fast_vs_strict_vectors(
     Ok(order
         .into_iter()
         .map(|name| {
-            let (tot, fin, mulp, mabs, mrel) = stats[&name];
-            (name, tot, fin, mulp, mabs, mrel)
+            let (tot, fin, nf_mis, mulp, mabs, mrel) = stats[&name];
+            (name, tot, fin, nf_mis, mulp, mabs, mrel)
         })
         .collect())
 }

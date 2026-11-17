@@ -634,8 +634,8 @@ fn test_numerics_mode_recorded_in_history_profile_mod_and_photo() {
     use flexmesa_math::{with_numerics_mode, NumericsMode};
     use flexmesa_star::{
         default_star_profile_specs, format_star_history_file_header,
-        format_star_profile_text, photo_numerics_mode, write_mod_string,
-        write_photo_bytes,
+        format_star_profile_text, photo_numerics_mode, read_photo_bytes,
+        write_mod_string, write_photo_bytes,
     };
 
     let mut model = load_zams_model(
@@ -687,6 +687,23 @@ fn test_numerics_mode_recorded_in_history_profile_mod_and_photo() {
                 photo_numerics_mode(&photo_bytes).expect("photo mode"),
                 mode
             );
+            let other_mode = if mode == NumericsMode::Strict {
+                NumericsMode::Fast
+            } else {
+                NumericsMode::Strict
+            };
+            with_numerics_mode(other_mode, || {
+                let err = read_photo_bytes(
+                    &photo_bytes,
+                    model.controls.clone(),
+                    model.job.clone(),
+                )
+                .expect_err("cross-mode .photo load must be rejected");
+                assert!(
+                    err.to_string().contains("photo numerics_mode mismatch"),
+                    "unexpected error: {err}"
+                );
+            });
         });
     }
 }

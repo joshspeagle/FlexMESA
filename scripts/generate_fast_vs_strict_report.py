@@ -4,10 +4,10 @@
 
 Compares `NumericsMode::Fast` exclusively against `NumericsMode::Strict` (never
 against MESA):
-1. Across all `474,068` reference inputs (`47` sections) in
+1. Across all `474,062` reference inputs (`47` sections) in
    `benchmarks/fortran_mesa/math_hex_vectors/mesa_26_4_1_math_vectors.txt`,
-   recording per-section finite input count, maximum ULP distance, maximum
-   absolute difference, and maximum relative difference.
+   recording per-section finite input count, non-finite mismatch count, maximum
+   ULP distance, maximum absolute difference, and maximum relative difference.
 2. Across a short stellar evolution (`star/1.3M_ms_high_Z`, 5 steps) run in
    isolated subprocesses under `--numerics-mode strict` and `--numerics-mode
    fast`, recording per-column maximum absolute and relative differences on
@@ -118,13 +118,14 @@ def _build_report_data(
             "section": name,
             "total_inputs": int(tot),
             "finite_pairs": int(fin),
+            "nonfinite_mismatch_count": int(nf_mis),
             "max_ulp_diff": int(mulp),
             "max_abs_diff": float(mabs),
             "max_rel_diff": float(mrel),
         }
-        for (name, tot, fin, mulp, mabs, mrel) in rows
+        for (name, tot, fin, nf_mis, mulp, mabs, mrel) in rows
     ]
-    total_vec_inputs = sum(int(tot) for (_, tot, _, _, _, _) in rows)
+    total_vec_inputs = sum(int(tot) for (_, tot, _, _, _, _, _) in rows)
 
     cols_s, arr_s = _run_mode_history(suite, case, max_steps, "strict")
     cols_f, arr_f = _run_mode_history(suite, case, max_steps, "fast")
@@ -139,6 +140,10 @@ def _build_report_data(
     for idx, cname in enumerate(cols_s):
         vs = arr_s[:, idx]
         vf = arr_f[:, idx]
+        if not (np.all(np.isfinite(vs)) and np.all(np.isfinite(vf))):
+            raise RuntimeError(
+                f"non-finite values in trajectory column `{cname}`"
+            )
         abs_d = np.abs(vf - vs)
         denom = np.maximum(np.abs(vs), np.abs(vf))
         safe_denom = np.where(denom > 0.0, denom, 1.0)
@@ -178,7 +183,7 @@ def _render_markdown(data: dict[str, Any]) -> str:
     evo = data["short_evolution"]
     host = f"{data['host_os']} / {data['host_arch']}"
     hdr = (
-        "| Section | Inputs | Finite Pairs "
+        "| Section | Inputs | Finite Pairs | Non-Finite Mismatches "
         "| Max ULP | Max Abs Diff | Max Rel Diff |"
     )
     lines = [
@@ -200,12 +205,13 @@ def _render_markdown(data: dict[str, Any]) -> str:
         "## 1. Per-Function `Fast` vs. `Strict` Differences",
         "",
         hdr,
-        "| :--- | ---: | ---: | ---: | ---: | ---: |",
+        "| :--- | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for fn in data["functions"]:
         lines.append(
             f"| `{fn['section']}` | {fn['total_inputs']:,} | "
-            f"{fn['finite_pairs']:,} | {fn['max_ulp_diff']:,} | "
+            f"{fn['finite_pairs']:,} | {fn['nonfinite_mismatch_count']:,} | "
+            f"{fn['max_ulp_diff']:,} | "
             f"`{fn['max_abs_diff']:.3e}` | `{fn['max_rel_diff']:.3e}` |"
         )
 
@@ -261,7 +267,7 @@ def main(argv: list[str] | None = None) -> int:
     args.json_out.parent.mkdir(parents=True, exist_ok=True)
     args.md_out.parent.mkdir(parents=True, exist_ok=True)
     args.json_out.write_text(
-        json.dumps(data, indent=2, sort_keys=True) + "\n",
+        json.dumps(data, indent=2, sort_keys=True, allow_nan=False) + "\n",
         encoding="utf-8",
     )
     args.md_out.write_text(_render_markdown(data), encoding="utf-8")

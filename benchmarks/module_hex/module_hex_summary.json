@@ -6,7 +6,7 @@
   "modules_with_executable_probes": 13,
   "modules_passing_0_ulp": 2,
   "total_values_checked": 3504,
-  "total_values_0_ulp": 3384,
+  "total_values_0_ulp": 3388,
   "modules": [
     {
       "module": "const",
@@ -43,14 +43,14 @@
     },
     {
       "module": "mtx",
-      "status": "nonzero_ulp",
+      "status": "partial_0_ulp",
       "upstream_exact_values": 22,
       "expected_outputs": 22,
       "checked_values": 7,
-      "zero_ulp_values": 6,
-      "max_ulp": 6,
+      "zero_ulp_values": 7,
+      "max_ulp": 0,
       "issue": "#152",
-      "notes": "6/7 test_square1+2 entries at 0 ULP; test_square1[0] 6 ULP."
+      "notes": "All 7 tested test_square1+2 entries at 0 ULP."
     },
     {
       "module": "auto_diff",
@@ -98,14 +98,14 @@
     },
     {
       "module": "interp_2d",
-      "status": "nonzero_ulp",
+      "status": "partial_0_ulp",
       "upstream_exact_values": 104,
       "expected_outputs": 104,
       "checked_values": 4,
-      "zero_ulp_values": 1,
-      "max_ulp": 9257,
+      "zero_ulp_values": 4,
+      "max_ulp": 0,
       "issue": "#153",
-      "notes": "Interior bicubic spline coefficients."
+      "notes": "All 4 midpoint bicubic spline coefficients at 0 ULP."
     },
     {
       "module": "chem",

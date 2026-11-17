@@ -21,7 +21,6 @@ from flexmesa import (
     interp_2d,
     ionization,
     kap,
-    mtx,
     neu,
     rates,
     turb,
@@ -491,13 +490,19 @@ def _probe_mtx(hex_root: pathlib.Path) -> ProbeOutcome:
         dtype=np.float64,
     )
     b1 = np.array([4.35, 5.05, 3.04, -2.05], dtype=np.float64)
-    x1 = np.asarray(mtx.solve_dense(a1, b1), dtype=np.float64)
+    x1 = np.asarray(
+        _rust.mtx_solve_dense(4, np.ascontiguousarray(a1.ravel()), b1),
+        dtype=np.float64,
+    )
     a2 = np.array(
         [[3.14, 7.50, 0.00], [4.10, 3.20, 0.30], [0.00, 1.00, 4.10]],
         dtype=np.float64,
     )
     b2 = np.array([1.0, 2.0, 3.0], dtype=np.float64)
-    x2 = np.asarray(mtx.solve_dense(a2, b2), dtype=np.float64)
+    x2 = np.asarray(
+        _rust.mtx_solve_dense(3, np.ascontiguousarray(a2.ravel()), b2),
+        dtype=np.float64,
+    )
     actual = [*[float(v) for v in x1], *[float(v) for v in x2]]
     ulps = [
         ulp_distance(a, rows[j]["raw_bits_hex"]) for j, a in enumerate(actual)
@@ -508,18 +513,30 @@ def _probe_mtx(hex_root: pathlib.Path) -> ProbeOutcome:
         checked,
         zeros,
         max_u,
-        "6/7 test_square1+2 entries at 0 ULP; test_square1[0] 6 ULP.",
+        "All 7 tested test_square1+2 entries at 0 ULP.",
     )
 
 
 def _probe_interp_2d(hex_root: pathlib.Path) -> ProbeOutcome:
     rows = load_tsv_rows(hex_root, "interp_2d")
-    x = np.linspace(-math.pi, math.pi, 31, dtype=np.float64)
-    y = np.linspace(-math.pi, math.pi, 35, dtype=np.float64)
-    xx, yy = np.meshgrid(x, y, indexing="ij")
-    r_grid = np.sqrt(xx**2 + yy**2)
-    z_grid = np.exp(-r_grid / (0.5 * math.pi)) * np.sin(xx) * np.cos(yy)
-    coeffs, _, _ = interp_2d.interp_mkbicub_db(x, y, z_grid)
+    dx = (constants.PI - (-constants.PI)) / 30.0
+    dy = (constants.PI - (-constants.PI)) / 34.0
+    x = np.array([-constants.PI + i * dx for i in range(31)], dtype=np.float64)
+    y = np.array([-constants.PI + j * dy for j in range(35)], dtype=np.float64)
+    r0 = constants.PI / 2.0
+    z_grid = np.zeros((31, 35), dtype=np.float64)
+    for i in range(31):
+        xi = float(x[i])
+        sx = float(_rust.crmath_sin(xi))
+        for j in range(35):
+            yj = float(y[j])
+            r = math.sqrt(xi * xi + yj * yj)
+            z_grid[i, j] = (
+                float(_rust.crmath_exp(-r / r0))
+                * sx
+                * float(_rust.crmath_cos(yj))
+            )
+    coeffs, _, _ = interp_2d.interp_mkbicub_db(x, y, z_grid, backend="rust")
     c_mid = np.asarray(coeffs[14, 16], dtype=np.float64)
     ulps = [
         ulp_distance(float(v), rows[j]["raw_bits_hex"])
@@ -531,7 +548,7 @@ def _probe_interp_2d(hex_root: pathlib.Path) -> ProbeOutcome:
         checked,
         zeros,
         max_u,
-        "Interior bicubic spline coefficients.",
+        "All 4 midpoint bicubic spline coefficients at 0 ULP.",
     )
 
 

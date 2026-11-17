@@ -75,21 +75,21 @@ reason = "12/14 gs98 and CO-enhanced channels match at 0 ULP (log10kap = 1 ULP);
 
 [[gaps]]
 module = "mtx"
-status = "nonzero_ulp"
+status = "partial_0_ulp"
 issue = "#152"
-max_declared_ulp = 10
-min_zero_ulp_count = 6
-expect_nonzero_ulp = true
-reason = "test_square2 (3/3) and test_square1[1..3] match at 0 ULP; test_square1[0] differs by 6 ULPs vs upstream LAPACK pivoting/FMA."
+max_declared_ulp = 0
+min_zero_ulp_count = 7
+expect_nonzero_ulp = false
+reason = "All 7 tested test_square1 and test_square2 dense LU entries match at 0 ULP; remaining 15 banded/sparse outputs await probe wiring."
 
 [[gaps]]
 module = "interp_2d"
-status = "nonzero_ulp"
+status = "partial_0_ulp"
 issue = "#153"
-max_declared_ulp = 10000
-min_zero_ulp_count = 1
-expect_nonzero_ulp = true
-reason = "Interior bicubic c_mid[0] matches at 0 ULP; mixed/second derivatives differ by up to 9,257 ULPs."
+max_declared_ulp = 0
+min_zero_ulp_count = 4
+expect_nonzero_ulp = false
+reason = "All 4 interior midpoint bicubic spline coefficients match at 0 ULP; remaining 100 evaluated grid/derivative rows await probe wiring."
 
 [[gaps]]
 module = "colors"

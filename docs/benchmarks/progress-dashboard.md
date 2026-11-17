@@ -11,7 +11,7 @@ Generated mechanically by `flexmesa dashboard render` from [`port_manifest.toml`
 | Upstream lines verified (all 26 modules) | 0 / 497,703 (0.0%) | [`port_manifest.toml`](https://github.com/joshspeagle/FlexMESA/blob/main/benchmarks/dashboard/port_manifest.toml) |
 | End-to-end MESA `26.4.1` cases passing (`90`/`8`/`8`) | 0 / 106 (102 declared gaps, 4 no reference yet, 0 undeclared failures) | [`case_table.md`](https://github.com/joshspeagle/FlexMESA/blob/main/notes/audit/case_table.md) |
 | Strict mode bit-identical across machines (`#165`) | verified in CI (x86_64 == aarch64, 1 == 4 threads; 474,062 math vectors + uncapped star/1.3M_ms_high_Z + binary/jdot_gr_check run with unsupported controls ignored) | [#165](https://github.com/joshspeagle/FlexMESA/issues/165) |
-| Strict-mode kernels bit-identical to MESA `26.4.1` (`#165`) | math: 403,258/403,258 CRMATH 0 ULP (70,804 libm <= 1 ULP); 3,384/3,504 probed module hex 0 ULP (2 complete, 12 non-math probed) | [#165](https://github.com/joshspeagle/FlexMESA/issues/165) |
+| Strict-mode kernels bit-identical to MESA `26.4.1` (`#165`) | math: 403,258/403,258 CRMATH 0 ULP (70,804 libm <= 1 ULP); 3,388/3,504 probed module hex 0 ULP (2 complete, 12 non-math probed) | [#165](https://github.com/joshspeagle/FlexMESA/issues/165) |
 | Test line coverage (Rust `llvm-cov` / Python `pytest --cov`) | 71.2% (66,219/93,065) / 87.9% (17,572/19,999) | [`coverage_summary.json`](https://github.com/joshspeagle/FlexMESA/blob/main/benchmarks/dashboard/coverage_summary.json) |
 | Road-to-`v0.1.0` packages ([#140](https://github.com/joshspeagle/FlexMESA/issues/140)) & open PRs | 7 closed, 25 open; 1 open PR(s) | [`github_snapshot.json`](https://github.com/joshspeagle/FlexMESA/blob/main/benchmarks/dashboard/github_snapshot.json) |
 | Post-parity deferred backlog ([#169](https://github.com/joshspeagle/FlexMESA/issues/169)) | 17 open (16 upstream bugs, 1 enhancement, 5 `parity-pending`) | [`github_snapshot.json`](https://github.com/joshspeagle/FlexMESA/blob/main/benchmarks/dashboard/github_snapshot.json) |
@@ -51,25 +51,25 @@ Progress is measured by **upstream MESA `26.4.1` source lines by status**, never
 | **Subtotal: star + star_data + binary + astero** | 144,952 | 24,502 | 18,172 | 82,171 | 20,107 | 0 | 0 | 73,903 | 7,171 | 13.9% | 0.0% |
 | **Total (all 26 modules)** | 497,703 | 249,527 | 18,172 | 206,337 | 23,667 | 0 | 0 | 139,941 | 45,493 | 4.8% | 0.0% |
 
-*Notes*: `star_data` state structs reside in `crates/flexmesa-star`. Bridge, testing, and benchmark infrastructure account for an additional `15,403` Rust lines (`flexmesa-py`, `flexmesa-testing`, `flexmesa-bench`) and `13,106` Python lines (`flexmesa.testing`, `flexmesa.bench`). For plotting ([#173](https://github.com/joshspeagle/FlexMESA/issues/173)), `flexmesa.plotting` currently provides `7` `plot_*` builders against `46` upstream `pgstar`/`pgbinary` panel modules.
+*Notes*: `star_data` state structs reside in `crates/flexmesa-star`. Bridge, testing, and benchmark infrastructure account for an additional `15,444` Rust lines (`flexmesa-py`, `flexmesa-testing`, `flexmesa-bench`) and `13,123` Python lines (`flexmesa.testing`, `flexmesa.bench`). For plotting ([#173](https://github.com/joshspeagle/FlexMESA/issues/173)), `flexmesa.plotting` currently provides `7` `plot_*` builders against `46` upstream `pgstar`/`pgbinary` panel modules.
 
 ### 2. Verification & Numerics Status
 
 | Check | Status | Notes |
 | :--- | :--- | :--- |
 | Strict mode bit-identical across machines & thread counts (Level 1) | `verified in CI (x86_64 == aarch64, 1 == 4 threads; 474,062 math vectors + uncapped star/1.3M_ms_high_Z + binary/jdot_gr_check run with unsupported controls ignored)` | Verified by [#165](https://github.com/joshspeagle/FlexMESA/issues/165) CI jobs (`x86_64` vs `aarch64`) |
-| Strict-mode kernels bit-identical to MESA `26.4.1` hex outputs (Level 2) | `math: 403,258/403,258 CRMATH 0 ULP (70,804 libm <= 1 ULP); 3,384/3,504 probed module hex 0 ULP (2 complete, 12 non-math probed)` | `348,321` exact IEEE-754 values captured across 24 in-scope module test suites (`mesa-module-hex-v1`); measured in [#165](https://github.com/joshspeagle/FlexMESA/issues/165) |
+| Strict-mode kernels bit-identical to MESA `26.4.1` hex outputs (Level 2) | `math: 403,258/403,258 CRMATH 0 ULP (70,804 libm <= 1 ULP); 3,388/3,504 probed module hex 0 ULP (2 complete, 12 non-math probed)` | `348,321` exact IEEE-754 values captured across 24 in-scope module test suites (`mesa-module-hex-v1`); measured in [#165](https://github.com/joshspeagle/FlexMESA/issues/165) |
 
 | Module | Upstream `26.4.1` Exact Values (`test_output` / hex) | Strict Bit-Identical Compared (`#165`) |
 | :--- | ---: | :--- |
 | `const` | 23 | `23/23 (0 ULP)` |
 | `utils` | 0 | `0` |
 | `math` | 102 | `403,258 CRMATH (0 ULP) + 70,804 libm (<= 1 ULP)` |
-| `mtx` | 22 | `6/7 0 ULP (max 6 ULP, 22 total)` |
+| `mtx` | 22 | `7/22 (0 ULP partial)` |
 | `auto_diff` | 774 | `0` |
 | `num` | 570 | `0` |
 | `interp_1d` | 234 | `22/234 (0 ULP partial)` |
-| `interp_2d` | 104 | `1/4 0 ULP (max 9,257 ULP, 104 total)` |
+| `interp_2d` | 104 | `4/104 (0 ULP partial)` |
 | `chem` | 1,102 | `286/1,102 (0 ULP partial)` |
 | `colors` | 234 | `4/10 0 ULP (max 13 ULP, 234 total)` |
 | `eos` | 391 | `0` |

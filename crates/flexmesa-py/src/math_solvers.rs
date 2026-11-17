@@ -6,12 +6,12 @@
 //!   `eval_autodiff_order2_batch` (2nd-order bivariate forward-mode dual
 //!   numbers with persistent `rayon` multi-core execution).
 //! - `flexmesa_math`: `safe_sqrt`, `safe_log`, `safe_log10`, `exp10`, `pow`,
-//!   `sinpi`, `cospi`, `tanpi`, `sgn`, `heaviside`, `str_to_vector`, plus
-//!   vectorized 1D array variants (`safe_log_array`, `safe_log10_array`,
-//!   `safe_sqrt_array`, `exp10_array`).
-//! - `flexmesa_mtx`: `solve_block_tridiagonal`, `solve_block_tridiag_bcyclic`
-//!   (Hirshman et al. 2010 odd-even block cyclic reduction), and
-//!   `block_multiply_xa`.
+//!   `sinpi`, `cospi`, `tanpi`, `crmath_exp`, `crmath_sin`, `crmath_cos`,
+//!   `sgn`, `heaviside`, `str_to_vector`, plus vectorized 1D array variants
+//!   (`safe_log_array`, `safe_log10_array`, `safe_sqrt_array`, `exp10_array`).
+//! - `flexmesa_mtx`: `mtx_solve_dense`, `solve_block_tridiagonal`,
+//!   `solve_block_tridiag_bcyclic` (Hirshman et al. 2010 odd-even block cyclic
+//!   reduction), and `block_multiply_xa`.
 
 use flexmesa_autodiff::AutoDiffReal2VarOrder2;
 use flexmesa_bench::stage3_pool;
@@ -132,6 +132,24 @@ fn cospi(x: f64) -> f64 {
 #[pyfunction]
 fn tanpi(x: f64) -> f64 {
     flexmesa_math::tanpi(x)
+}
+
+/// Evaluates $\exp(x)$ using `flexmesa_math::exp` (`crmath` in `strict` mode).
+#[pyfunction]
+fn crmath_exp(x: f64) -> f64 {
+    flexmesa_math::exp(x)
+}
+
+/// Evaluates $\sin(x)$ using `flexmesa_math::sin` (`crmath` in `strict` mode).
+#[pyfunction]
+fn crmath_sin(x: f64) -> f64 {
+    flexmesa_math::sin(x)
+}
+
+/// Evaluates $\cos(x)$ using `flexmesa_math::cos` (`crmath` in `strict` mode).
+#[pyfunction]
+fn crmath_cos(x: f64) -> f64 {
+    flexmesa_math::cos(x)
 }
 
 /// Evaluates the three-valued signum function $\operatorname{sgn}(x)$ on `f64`.
@@ -309,6 +327,25 @@ fn block_multiply_xa<'py>(
     PyArray1::from_vec(py, out).reshape([nz, nvar])
 }
 
+/// Solves a dense $n \times n$ linear system $A x = b$ via pure Rust LU.
+#[pyfunction]
+fn mtx_solve_dense<'py>(
+    py: Python<'py>,
+    n: usize,
+    a_flat: PyReadonlyArray1<'py, f64>,
+    b: PyReadonlyArray1<'py, f64>,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let a_s = a_flat
+        .as_slice()
+        .map_err(|_| PyValueError::new_err("a_flat must be C-contiguous"))?;
+    let b_s = b
+        .as_slice()
+        .map_err(|_| PyValueError::new_err("b must be C-contiguous"))?;
+    let sol = flexmesa_mtx::solve_dense(n, a_s, b_s)
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    Ok(PyArray1::from_vec(py, sol))
+}
+
 /// Returns the active process-wide numerics mode (`"strict"` or `"fast"`).
 #[pyfunction]
 fn get_numerics_mode() -> &'static str {
@@ -339,6 +376,9 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(sinpi, m)?)?;
     m.add_function(wrap_pyfunction!(cospi, m)?)?;
     m.add_function(wrap_pyfunction!(tanpi, m)?)?;
+    m.add_function(wrap_pyfunction!(crmath_exp, m)?)?;
+    m.add_function(wrap_pyfunction!(crmath_sin, m)?)?;
+    m.add_function(wrap_pyfunction!(crmath_cos, m)?)?;
     m.add_function(wrap_pyfunction!(sgn, m)?)?;
     m.add_function(wrap_pyfunction!(heaviside, m)?)?;
     m.add_function(wrap_pyfunction!(str_to_vector, m)?)?;
@@ -346,6 +386,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(safe_log10_array, m)?)?;
     m.add_function(wrap_pyfunction!(safe_sqrt_array, m)?)?;
     m.add_function(wrap_pyfunction!(exp10_array, m)?)?;
+    m.add_function(wrap_pyfunction!(mtx_solve_dense, m)?)?;
     m.add_function(wrap_pyfunction!(solve_block_tridiagonal, m)?)?;
     m.add_function(wrap_pyfunction!(solve_block_tridiag_bcyclic, m)?)?;
     m.add_function(wrap_pyfunction!(block_multiply_xa, m)?)?;

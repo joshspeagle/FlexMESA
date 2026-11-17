@@ -455,14 +455,14 @@
       "upstream_panel_modules": 46
     },
     "infrastructure_lines": {
-      "rust_bridge_testing_bench": 15403,
-      "python_testing_bench": 13106
+      "rust_bridge_testing_bench": 15444,
+      "python_testing_bench": 13123
     }
   },
   "numerics": {
     "has_165_ci": true,
     "strict_cross_machine_identical": "verified in CI (x86_64 == aarch64, 1 == 4 threads; 474,062 math vectors + uncapped star/1.3M_ms_high_Z + binary/jdot_gr_check run with unsupported controls ignored)",
-    "strict_kernels_bit_identical": "math: 403,258/403,258 CRMATH 0 ULP (70,804 libm <= 1 ULP); 3,384/3,504 probed module hex 0 ULP (2 complete, 12 non-math probed)",
+    "strict_kernels_bit_identical": "math: 403,258/403,258 CRMATH 0 ULP (70,804 libm <= 1 ULP); 3,388/3,504 probed module hex 0 ULP (2 complete, 12 non-math probed)",
     "total_upstream_hex_values": 348321,
     "modules": [
       {
@@ -483,7 +483,7 @@
       {
         "module": "mtx",
         "upstream_exact_values": 22,
-        "exact_strict_compared": "6/7 0 ULP (max 6 ULP, 22 total)"
+        "exact_strict_compared": "7/22 (0 ULP partial)"
       },
       {
         "module": "auto_diff",
@@ -503,7 +503,7 @@
       {
         "module": "interp_2d",
         "upstream_exact_values": 104,
-        "exact_strict_compared": "1/4 0 ULP (max 9,257 ULP, 104 total)"
+        "exact_strict_compared": "4/104 (0 ULP partial)"
       },
       {
         "module": "chem",

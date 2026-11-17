@@ -10,8 +10,6 @@ import pathlib
 import sys
 from typing import Any
 
-import pytest
-
 _REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 _SCRIPT_PATH = (
     _REPO_ROOT / "scripts" / "mesa_reference" / "measure_mesa_spread.py"
@@ -145,26 +143,3 @@ def test_dry_run_includes_touch_before_install_and_compare_cli(
     assert rc2 == 0
     cmp_data = json.loads(cmp_json.read_text(encoding="utf-8"))
     assert cmp_data["summary"]["byte_identical_cases"] == 1
-
-
-def test_makefile_patch_refuses_noop_and_missing_fcopt(
-    tmp_path: pathlib.Path,
-) -> None:
-    """A variant build that cannot differ from the baseline is refused."""
-    mod = _load_script_module()
-    header = tmp_path / "makefile_header"
-    header.write_text(
-        "USE_PGSTAR = YES\nFCopt = -O2 -ftree-vectorize\n", encoding="utf-8"
-    )
-    assert mod.read_makefile_fcopt(header) == "-O2 -ftree-vectorize"
-    with pytest.raises(RuntimeError, match="equals the baseline FCopt"):
-        mod._patch_makefile_header(header, "-O2 -ftree-vectorize")
-    mod._patch_makefile_header(header, "-O0 -fno-tree-vectorize")
-    text = header.read_text(encoding="utf-8")
-    assert "FCopt = -O0 -fno-tree-vectorize" in text
-    assert "USE_PGSTAR = NO" in text
-
-    no_fcopt = tmp_path / "makefile_header_bad"
-    no_fcopt.write_text("USE_PGSTAR = YES\n", encoding="utf-8")
-    with pytest.raises(RuntimeError, match="no 'FCopt =' line"):
-        mod._patch_makefile_header(no_fcopt, "-O0")

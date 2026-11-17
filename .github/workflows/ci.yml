@@ -185,6 +185,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -234,11 +236,19 @@ jobs:
           ruff check src tests
           mypy --strict src tests
 
+      - name: Verify port manifest, status-promotion rules, and generated dashboard
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            flexmesa dashboard check --base-ref "origin/${{ github.base_ref }}"
+          else
+            flexmesa dashboard check
+          fi
+
       - name: Build diagnostic figures, MkDocs site, and verify snippets
         run: |
           python scripts/build_docs_figures.py
           mkdocs build --strict --site-dir site
-          pytest tests/test_docs_snippets.py tests/test_mesa_paper_figures.py -v
+          pytest tests/test_docs_snippets.py tests/test_mesa_paper_figures.py tests/test_dashboard.py -v
 
   history-harness:
     name: Upstream History Harness (PR Subset)
@@ -307,3 +317,123 @@ jobs:
           name: pr-history-harness-artifacts
           if-no-files-found: ignore
           path: ${{ runner.temp }}/flexmesa-pr-harness/
+
+  coverage-rust:
+    name: Rust Line Coverage (cargo llvm-cov)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain with llvm-tools-preview
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+
+      - name: Cache Rust cargo target and registry
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: llvm-cov
+
+      - name: Cache FlexMESA data-v1 and MESA test bundles
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/flexmesa
+          key: flexmesa-data-v1-${{ hashFiles('src/flexmesa/data/bundles.toml') }}
+
+      - name: Fetch verified data-v1 physics and MESA test bundles
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          command -v zstd >/dev/null || (sudo apt-get update && sudo apt-get install -y zstd)
+          python3 src/flexmesa/data/fetch.py fetch --include-test-inputs
+          echo "FLEXMESA_DATA_DIR=$HOME/.cache/flexmesa/data" >> "$GITHUB_ENV"
+          echo "MESA_DIR=$HOME/.cache/flexmesa/mesa_test_inputs" >> "$GITHUB_ENV"
+
+      - name: Run cargo llvm-cov across Safe Rust workspace
+        run: |
+          OUT_JSON="${{ runner.temp }}/rust_cov.json"
+          cargo llvm-cov --workspace --exclude flexmesa-py --release \
+            --json --summary-only --output-path "$OUT_JSON" \
+            -- --skip test_astero_adipls_and_gyre_uncapped_pass \
+               --skip test_all_eight_astero_cases_bounded_eight_steps_pass
+
+      - name: Upload Rust coverage JSON summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-llvm-cov-summary
+          path: ${{ runner.temp }}/rust_cov.json
+
+  coverage-python:
+    name: Python Line Coverage (pytest --cov)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust cargo target and registry
+        uses: Swatinem/rust-cache@v2
+
+      - name: Cache FlexMESA data-v1 and MESA test bundles
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/flexmesa
+          key: flexmesa-data-v1-${{ hashFiles('src/flexmesa/data/bundles.toml') }}
+
+      - name: Cache persistent JAX XLA compilation artifacts
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/flexmesa-jax
+          key: flexmesa-jax-${{ runner.os }}-py312-${{ hashFiles('pyproject.toml', 'src/flexmesa/**/*.py') }}
+          restore-keys: |
+            flexmesa-jax-${{ runner.os }}-py312-
+
+      - name: Fetch verified data-v1 physics and MESA test bundles
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          command -v zstd >/dev/null || (sudo apt-get update && sudo apt-get install -y zstd)
+          python3 src/flexmesa/data/fetch.py fetch --include-test-inputs
+          echo "FLEXMESA_DATA_DIR=$HOME/.cache/flexmesa/data" >> "$GITHUB_ENV"
+          echo "MESA_DIR=$HOME/.cache/flexmesa/mesa_test_inputs" >> "$GITHUB_ENV"
+          echo "JAX_COMPILATION_CACHE_DIR=$HOME/.cache/flexmesa-jax" >> "$GITHUB_ENV"
+
+      - name: Install FlexMESA and test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install maturin
+          python -m pip install --no-build-isolation -e ".[test]"
+
+      - name: Run Python and JAX suite under pytest --cov
+        run: |
+          OUT_JSON="${{ runner.temp }}/python_cov.json"
+          pytest src tests \
+            --ignore=tests/test_docs_snippets.py \
+            --ignore=tests/test_mesa_paper_figures.py \
+            --ignore=tests/test_history_harness.py \
+            --ignore-glob="tests/test_e2e_*.py" \
+            --cov=src/flexmesa \
+            --cov-report="json:$OUT_JSON" \
+            -q
+
+      - name: Upload Python coverage JSON summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-pytest-cov-summary
+          path: ${{ runner.temp }}/python_cov.json

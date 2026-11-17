@@ -74,6 +74,7 @@ echo "[verify_ci] 3/5 Running Ruff, Mypy (--strict), figures, MkDocs (--strict) 
 "$RUFF_BIN" check "$REPO_ROOT/src" "$REPO_ROOT/tests"
 "$MYPY_BIN" --python-executable "$PYTHON_BIN" --config-file "$REPO_ROOT/pyproject.toml" --strict "$REPO_ROOT/src" "$REPO_ROOT/tests"
 "$PYTHON_BIN" "$REPO_ROOT/scripts/build_docs_figures.py"
+"$PYTHON_BIN" -m flexmesa.cli dashboard check --repo-root "$REPO_ROOT"
 SITE_OUT="$(mktemp -d)"
 "$MKDOCS_BIN" build --config-file "$REPO_ROOT/mkdocs.yml" --strict --site-dir "$SITE_OUT"
 "$PYTHON_BIN" -c 'import shutil, sys; shutil.rmtree(sys.argv[1], ignore_errors=True)' "$SITE_OUT"

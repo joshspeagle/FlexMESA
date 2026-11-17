@@ -37,6 +37,8 @@ Scope and the `v0.1.0` definition are in [`SCOPE.md`](SCOPE.md). Work is tracked
 | 20 | History-Harness Tolerances for Strict Mode | In force | below |
 | 21 | Packages Are Closed on Evidence by the Authoring Agent | In force; replaces the "ready for verification" hand-off in decision 17 | below |
 | 22 | Upstream Reference Pinned to MESA Release 26.4.1 and Release-Upgrade Policy | In force; supersedes the pre-rebaseline test-input bundle in decision 13 | below |
+| 23 | Numerics Policy: Strict and Fast Modes from One Rust Source | Reserved for `#165` (in flight) | `#165` |
+| 24 | Evidence-Gated Port Manifest and Script-Generated Progress Dashboard | In force | below |
 
 ## Pre-audit decisions still in force
 
@@ -212,3 +214,16 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
 - **Alternatives Rejected**:
   - *Tracking upstream `MESAHub/mesa` `main`*: Development commits move continuously, require Git LFS quota to hydrate data, and mix unreleased upstream changes (`RSP2`, `GYRE 9`) with parity work.
   - *Upgrading reference artifacts piecemeal across feature PRs*: Mixes upstream reference changes with `FlexMESA` code changes, obscuring whether a diff comes from the port or the reference.
+
+---
+
+## DECISIONS #24: Evidence-Gated Port Manifest and Script-Generated Progress Dashboard (`Issue #174`)
+
+- **Date**: 2026-11-16
+- **Decision**:
+  1. **Per-File Port Manifest & Six Ordered Status Tiers (`benchmarks/dashboard/port_manifest.toml`, `scripts/dashboard/build_port_manifest.py`, `src/flexmesa/testing/port_manifest.py`)**: Track all `1,100` in-scope MESA `26.4.1` source files across all `26` dashboard modules (`22` core MESA modules, `GYRE 8.1`, `ADIPLS`, `STELLA`, and `pgstar`/`pgbinary` plotting) with exact line counts and `SHA-256` digests computed mechanically from `mesa-26.04.1.zip` (`994fd28f38da92efc80e38ca11d8317b`). Enforce six ordered status tiers: `absent`, `stub`, `partial`, `ported_unverified`, `kernel_reference_vectors`, and `case_level_evidence`. Zero entries start in verified tiers. `ported_unverified` requires mapping every public Fortran procedure parsed from `$MESA_DIR` to an existing Rust/Python symbol in `routine_map`; `kernel_reference_vectors` and `case_level_evidence` require committed MESA `26.4.1` generated artifacts (`and` passing `baseline_run_26_4_1.json` cases for `case_level_evidence`); and CI rejects raising any status rank in a PR unless the PR diff adds or updates the supporting implementation or evidence files.
+  2. **Deterministic Artifact Snapshots, Live CI Freshness Gate & Post-Merge Auto-Refresh (`flexmesa dashboard`, `.github/workflows/{ci,dashboard}.yml`)**: Render `README.md`, `docs/benchmarks/progress-dashboard.md`, `docs/index.md`, and `benchmarks/dashboard/dashboard.json` mechanically from `port_manifest.toml`, `benchmarks/history_harness/`, `notes/audit/defaults_diff_26_4_1.md`, `coverage_summary.json` (`cargo llvm-cov` + `pytest --cov`), `github_snapshot.json` (`#140`, `#169`, open PRs), and `history.tsv` (keeping numerics rows at `"not yet measured"` until `#165` lands). Gate PR CI on byte-exact `flexmesa dashboard check` plus dedicated Rust and Python coverage jobs, and refresh GitHub/coverage/history snapshots on `main` pushes and daily cron via `dashboard.yml`.
+- **Why**: Prevents line-count inflation, author-asserted verification claims, and hand-typed scorecard drift (`G1-7`, `G1-9`) while keeping PR CI deterministic when GitHub issues or pull requests change concurrently.
+- **Alternatives Rejected**:
+  - *Querying the live GitHub API directly inside PR `flexmesa dashboard check`*: Opening or closing any issue or PR on GitHub would immediately fail unrelated open PRs; snapshotting `github_snapshot.json` via `dashboard.yml` keeps PR checks deterministic while refreshing `main` automatically.
+  - *Measuring progress by Rust or Python lines written*: Inflates or undercounts ports where idiomatic Rust differs in verbosity from Fortran (`#174`).

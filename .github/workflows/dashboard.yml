@@ -1,0 +1,139 @@
+name: Regenerate Progress Dashboard
+
+on:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: read
+  pull-requests: read
+
+concurrency:
+  group: dashboard-refresh-main
+  cancel-in-progress: false
+
+env:
+  OMP_NUM_THREADS: "4"
+  OPENBLAS_NUM_THREADS: "4"
+  MKL_NUM_THREADS: "4"
+  RAYON_NUM_THREADS: "4"
+  JAX_PLATFORMS: "cpu"
+  FLEXMESA_REQUIRE_ZERO_SKIPS: "1"
+
+jobs:
+  refresh-dashboard:
+    name: Refresh Coverage, GitHub Snapshot & Progress Dashboard
+    if: >-
+      github.actor != 'github-actions[bot]' &&
+      (github.event_name != 'push' ||
+       !startsWith(github.event.head_commit.message, 'chore(dashboard): auto-refresh'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install Rust toolchain with llvm-tools-preview
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+
+      - name: Cache Rust cargo target and registry
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: dashboard-llvm-cov
+
+      - name: Cache FlexMESA data-v1 and MESA test bundles
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/flexmesa
+          key: flexmesa-data-v1-${{ hashFiles('src/flexmesa/data/bundles.toml') }}
+
+      - name: Cache persistent JAX XLA compilation artifacts
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/flexmesa-jax
+          key: flexmesa-jax-${{ runner.os }}-py312-${{ hashFiles('pyproject.toml', 'src/flexmesa/**/*.py') }}
+          restore-keys: |
+            flexmesa-jax-${{ runner.os }}-py312-
+
+      - name: Fetch verified data-v1 physics and MESA test bundles
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          command -v zstd >/dev/null || (sudo apt-get update && sudo apt-get install -y zstd)
+          python3 src/flexmesa/data/fetch.py fetch --include-test-inputs
+          echo "FLEXMESA_DATA_DIR=$HOME/.cache/flexmesa/data" >> "$GITHUB_ENV"
+          echo "MESA_DIR=$HOME/.cache/flexmesa/mesa_test_inputs" >> "$GITHUB_ENV"
+          echo "JAX_COMPILATION_CACHE_DIR=$HOME/.cache/flexmesa-jax" >> "$GITHUB_ENV"
+
+      - name: Install FlexMESA and test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install maturin
+          python -m pip install --no-build-isolation -e ".[test]"
+
+      - name: Collect Rust and Python coverage
+        run: |
+          RUST_JSON="${{ runner.temp }}/rust_cov.json"
+          PY_JSON="${{ runner.temp }}/python_cov.json"
+          cargo llvm-cov --workspace --exclude flexmesa-py --release \
+            --json --summary-only --output-path "$RUST_JSON" \
+            -- --skip test_astero_adipls_and_gyre_uncapped_pass \
+               --skip test_all_eight_astero_cases_bounded_eight_steps_pass
+          pytest src tests \
+            --ignore=tests/test_docs_snippets.py \
+            --ignore=tests/test_mesa_paper_figures.py \
+            --ignore=tests/test_history_harness.py \
+            --ignore-glob="tests/test_e2e_*.py" \
+            --cov=src/flexmesa \
+            --cov-report="json:$PY_JSON" \
+            -q
+          flexmesa dashboard collect-coverage --rust-json "$RUST_JSON" --python-json "$PY_JSON"
+
+      - name: Sync GitHub issues/PRs, record merge history, and render dashboard
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          flexmesa dashboard sync-github --repo "${{ github.repository }}"
+          if [ "${{ github.event_name }}" = "push" ]; then
+            SHORT_SHA="$(git rev-parse --short HEAD)"
+            DATE_UTC="$(date -u +%Y-%m-%d)"
+            flexmesa dashboard record-history --date-utc "$DATE_UTC" --commit "$SHORT_SHA" --event "main merge"
+          fi
+          flexmesa dashboard render
+          flexmesa dashboard check
+
+      - name: Commit and push updated dashboard if changed
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add README.md docs/index.md docs/benchmarks/progress-dashboard.md benchmarks/dashboard/
+            git commit -m "chore(dashboard): auto-refresh generated progress dashboard (#174)"
+            git pull --rebase origin main
+            flexmesa dashboard render
+            flexmesa dashboard check
+            git add README.md docs/index.md docs/benchmarks/progress-dashboard.md benchmarks/dashboard/
+            git diff --cached --quiet || git commit --amend --no-edit
+            git push origin HEAD:main
+          fi

@@ -7,13 +7,15 @@ use std::path::Path;
 
 use flexmesa_binary::{
     eval_brott_wind_msun_yr, eval_gr_expected_separation_rsun,
-    eval_tauris_vdh_expected_separation_rsun, run_binary_suite,
-    run_binary_test_suite_case, BinaryCaseRunReport, TIER5_BINARY_CASES,
+    eval_tauris_vdh_expected_separation_rsun, run_binary_suite_with_options,
+    run_binary_test_suite_case_with_options, BinaryCaseRunReport,
+    BinaryLogsOptions, TIER5_BINARY_CASES,
 };
 use flexmesa_star::{
     all_active_star_case_names, eval_grafener_kudritzki_wind_msun_yr,
-    eval_overshoot_dbl_exp, run_all_active_star_suite, run_tier5_star_suite,
-    verify_step_redo_bit_parity, TIER5_STAR_CASES,
+    eval_overshoot_dbl_exp, run_all_active_star_suite_with_options,
+    run_tier5_star_suite_with_options, verify_step_redo_bit_parity,
+    InlistLoadOptions, TIER5_STAR_CASES,
 };
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
@@ -112,31 +114,49 @@ pub fn star_verify_step_redo_bit_parity(model: &PyStarModel) -> PyResult<bool> {
 
 /// Runs all 4 Tier 5/6 `star/test_suite` cases under `mesa_dir`.
 #[pyfunction]
-#[pyo3(signature = (mesa_dir, skip_optional=true, max_steps_per_stage=None, verify_restart=true))]
+#[pyo3(signature = (mesa_dir, skip_optional=true, max_steps_per_stage=None, verify_restart=true, allow_unsupported_controls=false))]
 pub fn star_run_tier5_star_suite<'py>(
     py: Python<'py>,
     mesa_dir: &str,
     skip_optional: bool,
     max_steps_per_stage: Option<usize>,
     verify_restart: bool,
+    allow_unsupported_controls: bool,
 ) -> PyResult<Bound<'py, PyList>> {
     let _ = skip_optional;
+    let load_opts = InlistLoadOptions {
+        allow_unsupported_controls,
+    };
     run_star_suite_detached(py, mesa_dir, |root| {
-        run_tier5_star_suite(root, max_steps_per_stage, verify_restart)
+        run_tier5_star_suite_with_options(
+            root,
+            max_steps_per_stage,
+            verify_restart,
+            load_opts,
+        )
     })
 }
 
 /// Runs all 91 active `star/test_suite` cases across Tiers 1-5 under `mesa_dir`.
 #[pyfunction]
-#[pyo3(signature = (mesa_dir, max_steps_per_stage=None, verify_restart=true))]
+#[pyo3(signature = (mesa_dir, max_steps_per_stage=None, verify_restart=true, allow_unsupported_controls=false))]
 pub fn star_run_all_active_star_suite<'py>(
     py: Python<'py>,
     mesa_dir: &str,
     max_steps_per_stage: Option<usize>,
     verify_restart: bool,
+    allow_unsupported_controls: bool,
 ) -> PyResult<Bound<'py, PyList>> {
+    let load_opts = InlistLoadOptions {
+        allow_unsupported_controls,
+    };
     run_star_suite_detached(py, mesa_dir, |root| {
-        run_all_active_star_suite(root, max_steps_per_stage, verify_restart)
+        run_all_active_star_suite_with_options(
+            root,
+            max_steps_per_stage,
+            verify_restart,
+            load_opts,
+        )
     })
 }
 
@@ -204,30 +224,53 @@ pub fn binary_eval_brott_wind_msun_yr(
 
 /// Runs a single `binary/test_suite/<case>` directory.
 #[pyfunction]
-#[pyo3(signature = (case_dir, max_steps_cap=None))]
+#[pyo3(signature = (case_dir, max_steps_cap=None, allow_unsupported_controls=false))]
 pub fn binary_run_test_suite_case<'py>(
     py: Python<'py>,
     case_dir: &str,
     max_steps_cap: Option<usize>,
+    allow_unsupported_controls: bool,
 ) -> PyResult<Bound<'py, PyDict>> {
     let dir = Path::new(case_dir).to_path_buf();
+    let load_opts = InlistLoadOptions {
+        allow_unsupported_controls,
+    };
+    let logs_opts = BinaryLogsOptions {
+        output_root: None,
+        explicit_binary_history_file: None,
+        history_interval_override: None,
+        write_star_logs: false,
+    };
     let rep = py
-        .detach(|| run_binary_test_suite_case(&dir, max_steps_cap))
+        .detach(|| {
+            run_binary_test_suite_case_with_options(
+                &dir,
+                max_steps_cap,
+                logs_opts,
+                load_opts,
+            )
+        })
         .map_err(to_py_err)?;
     binary_report_to_pydict(py, &rep)
 }
 
 /// Runs all 8 `binary/test_suite` cases under `mesa_dir`.
 #[pyfunction]
-#[pyo3(signature = (mesa_dir, max_steps_cap=None))]
+#[pyo3(signature = (mesa_dir, max_steps_cap=None, allow_unsupported_controls=false))]
 pub fn binary_run_suite<'py>(
     py: Python<'py>,
     mesa_dir: &str,
     max_steps_cap: Option<usize>,
+    allow_unsupported_controls: bool,
 ) -> PyResult<Bound<'py, PyList>> {
     let root = Path::new(mesa_dir).to_path_buf();
+    let load_opts = InlistLoadOptions {
+        allow_unsupported_controls,
+    };
     let reports = py
-        .detach(|| run_binary_suite(&root, max_steps_cap))
+        .detach(|| {
+            run_binary_suite_with_options(&root, max_steps_cap, load_opts)
+        })
         .map_err(to_py_err)?;
     let out = PyList::empty(py);
     for rep in &reports {

@@ -160,7 +160,7 @@ pub fn eval_helm_eos(
     ),
     i32,
 > {
-    let table = HelmTable::builtin();
+    let table = HelmTable::builtin().map_err(|_| -1_i32)?;
     let config = HelmConfig::default();
     let (helm_res, _off_table) = helmeos2(
         table,

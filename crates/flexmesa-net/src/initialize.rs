@@ -123,11 +123,17 @@ fn build_reverse_id_map(
 fn classify_reaclib_kinds(
     reactions: &[ReactionInfo],
     rev_map: &HashMap<usize, usize>,
-) -> (Vec<ReaclibKind>, Vec<usize>) {
+) -> Result<(Vec<ReaclibKind>, Vec<usize>), NetError> {
     let nuclides = NuclideCatalog::builtin_ref();
-    let ineut = nuclides.get_nuclide_index("neut").unwrap_or(1) as u16;
-    let ih1 = nuclides.get_nuclide_index("h1").unwrap_or(2) as u16;
-    let ihe4 = nuclides.get_nuclide_index("he4").unwrap_or(7) as u16;
+    let req_u16 = |name: &str| {
+        nuclides
+            .get_nuclide_index(name)
+            .map(|id| id as u16)
+            .ok_or_else(|| NetError::InvalidReactionOrIso(name.to_string()))
+    };
+    let ineut = req_u16("neut")?;
+    let ih1 = req_u16("h1")?;
+    let ihe4 = req_u16("he4")?;
 
     let n = reactions.len();
     let mut kinds = vec![ReaclibKind::Other; n];
@@ -233,7 +239,7 @@ fn classify_reaclib_kinds(
             }
         }
     }
-    (kinds, rev_ids)
+    Ok((kinds, rev_ids))
 }
 
 impl NetGeneralInfo {
@@ -285,7 +291,7 @@ impl NetGeneralInfo {
         let num_reactions = reactions.len();
         let rev_map = build_reverse_id_map(&reactions, &parsed.reverse_pairs);
         let (mut reaction_reaclib_kind, mut reverse_id_for_kind_ne_other) =
-            classify_reaclib_kinds(&reactions, &rev_map);
+            classify_reaclib_kinds(&reactions, &rev_map)?;
         let mut reaction_id: Vec<usize> =
             reactions.iter().map(|r| r.id).collect();
         let mut rtab: HashMap<usize, usize> = reaction_id
@@ -444,7 +450,11 @@ impl NetGeneralInfo {
             let zf = e.z as f64;
             z158.push(flexmesa_math::pow(zf, 1.58));
             z52.push(flexmesa_math::pow(zf, 2.50));
-            mion.push(nuclides.get_mass_excess(cid).unwrap() * MEV2GR);
+            mion.push(
+                nuclides.get_mass_excess(cid).map_err(|e| {
+                    NetError::InvalidReactionOrIso(e.to_string())
+                })? * MEV2GR,
+            );
         }
 
         let net_reaction_by_name = ordered_reactions
@@ -458,7 +468,7 @@ impl NetGeneralInfo {
             .map(|(i, r)| (r.id, i + 1))
             .collect();
 
-        let rattab_splines = build_rate_tables(&ordered_reactions);
+        let rattab_splines = build_rate_tables(&ordered_reactions)?;
 
         let mut info = Self {
             net_filename: parsed.net_filename,
@@ -573,11 +583,17 @@ impl NetGeneralInfo {
     }
 }
 
-fn build_rate_tables(reactions: &[ReactionInfo]) -> Vec<Arc<Vec<CubicCoeffs>>> {
+fn build_rate_tables(
+    reactions: &[ReactionInfo],
+) -> Result<Vec<Arc<Vec<CubicCoeffs>>>, NetError> {
     let cache_mutex = RATTAB_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
     let mut uncached = Vec::new();
     {
-        let guard = cache_mutex.lock().unwrap();
+        let guard = cache_mutex.lock().map_err(|e| {
+            NetError::IntegrationError(format!(
+                "rate table cache mutex poisoned: {e}"
+            ))
+        })?;
         for rxn in reactions {
             if !guard.contains_key(&rxn.name) {
                 uncached.push(rxn.clone());
@@ -594,20 +610,45 @@ fn build_rate_tables(reactions: &[ReactionInfo]) -> Vec<Arc<Vec<CubicCoeffs>>> {
                 let mut y = Vec::with_capacity(NRATTAB);
                 for idx in 0..NRATTAB {
                     let tf = TFactors::from_log_t(logttab[idx], ttab[idx]);
-                    y.push(eval_reaction_raw(cat, rxn, ttab[idx], &tf));
+                    let rate = eval_reaction_raw(cat, rxn, ttab[idx], &tf)
+                        .map_err(|e| {
+                            NetError::IntegrationError(format!(
+                                "failed to evaluate reaction '{}': {e}",
+                                rxn.name
+                            ))
+                        })?;
+                    y.push(rate);
                 }
-                let coeffs = interp_m3q(logttab, &y).unwrap();
-                (rxn.name.clone(), Arc::new(coeffs))
+                let coeffs = interp_m3q(logttab, &y).map_err(|e| {
+                    NetError::IntegrationError(format!(
+                        "failed to spline reaction '{}': {e}",
+                        rxn.name
+                    ))
+                })?;
+                Ok((rxn.name.clone(), Arc::new(coeffs)))
             })
-            .collect();
-        let mut guard = cache_mutex.lock().unwrap();
+            .collect::<Result<Vec<_>, NetError>>()?;
+        let mut guard = cache_mutex.lock().map_err(|e| {
+            NetError::IntegrationError(format!(
+                "rate table cache mutex poisoned: {e}"
+            ))
+        })?;
         for (name, arc_c) in built {
             guard.insert(name, arc_c);
         }
     }
-    let guard = cache_mutex.lock().unwrap();
+    let guard = cache_mutex.lock().map_err(|e| {
+        NetError::IntegrationError(format!(
+            "rate table cache mutex poisoned: {e}"
+        ))
+    })?;
     reactions
         .iter()
-        .map(|rxn| Arc::clone(guard.get(&rxn.name).unwrap()))
+        .map(|rxn| {
+            guard
+                .get(&rxn.name)
+                .map(Arc::clone)
+                .ok_or_else(|| NetError::MissingReaction(rxn.name.clone()))
+        })
         .collect()
 }

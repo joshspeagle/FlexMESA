@@ -49,15 +49,20 @@ impl KapOption {
     }
 
     /// Parse a MESA `kap_file_prefix` string into a [`KapOption`].
-    #[must_use]
-    pub fn from_prefix(s: &str) -> Option<Self> {
-        match s.trim() {
-            "gn93" => Some(Self::Gn93),
-            "gs98" => Some(Self::Gs98),
-            "a09" => Some(Self::A09),
-            "OP_gs98" => Some(Self::OpGs98),
-            "OP_a09" | "OP_a09_nans_removed_by_hand" => Some(Self::OpA09),
-            _ => None,
+    ///
+    /// # Errors
+    /// Returns [`KapError::InvalidOption`] if `s` is not a supported prefix.
+    pub fn from_prefix(s: &str) -> Result<Self, KapError> {
+        let trimmed = s.trim();
+        match trimmed {
+            "gn93" => Ok(Self::Gn93),
+            "gs98" => Ok(Self::Gs98),
+            "a09" => Ok(Self::A09),
+            "OP_gs98" => Ok(Self::OpGs98),
+            "OP_a09" | "OP_a09_nans_removed_by_hand" => Ok(Self::OpA09),
+            _ => Err(KapError::InvalidOption(format!(
+                "unsupported kap_file_prefix '{trimmed}'"
+            ))),
         }
     }
 }
@@ -95,13 +100,18 @@ impl KapCoOption {
     }
 
     /// Parse a MESA `kap_CO_prefix` string into a [`KapCoOption`].
-    #[must_use]
-    pub fn from_prefix(s: &str) -> Option<Self> {
-        match s.trim() {
-            "gn93_co" => Some(Self::Gn93Co),
-            "gs98_co" => Some(Self::Gs98Co),
-            "a09_co" => Some(Self::A09Co),
-            _ => None,
+    ///
+    /// # Errors
+    /// Returns [`KapError::InvalidOption`] if `s` is not a supported prefix.
+    pub fn from_prefix(s: &str) -> Result<Self, KapError> {
+        let trimmed = s.trim();
+        match trimmed {
+            "gn93_co" => Ok(Self::Gn93Co),
+            "gs98_co" => Ok(Self::Gs98Co),
+            "a09_co" => Ok(Self::A09Co),
+            _ => Err(KapError::InvalidOption(format!(
+                "unsupported kap_CO_prefix '{trimmed}'"
+            ))),
         }
     }
 }
@@ -138,16 +148,21 @@ impl KapLowTOption {
     }
 
     /// Parse a MESA `kap_lowT_prefix` string into a [`KapLowTOption`].
-    #[must_use]
-    pub fn from_prefix(s: &str) -> Option<Self> {
-        match s.trim() {
-            "lowT_fa05_gs98" => Some(Self::LowTFa05Gs98),
-            "lowT_fa05_gn93" => Some(Self::LowTFa05Gn93),
-            "lowT_fa05_a09p" | "lowT_fa05_a09" => Some(Self::LowTFa05A09p),
-            "lowT_Freedman11" => Some(Self::LowTFreedman11),
-            "kapCN" | "kapcn" => Some(Self::KapCn),
-            "AESOPUS" | "aesopus" => Some(Self::Aesopus),
-            _ => None,
+    ///
+    /// # Errors
+    /// Returns [`KapError::InvalidOption`] if `s` is not a supported prefix.
+    pub fn from_prefix(s: &str) -> Result<Self, KapError> {
+        let trimmed = s.trim();
+        match trimmed {
+            "lowT_fa05_gs98" => Ok(Self::LowTFa05Gs98),
+            "lowT_fa05_gn93" => Ok(Self::LowTFa05Gn93),
+            "lowT_fa05_a09p" | "lowT_fa05_a09" => Ok(Self::LowTFa05A09p),
+            "lowT_Freedman11" => Ok(Self::LowTFreedman11),
+            "kapCN" | "kapcn" => Ok(Self::KapCn),
+            "AESOPUS" | "aesopus" => Ok(Self::Aesopus),
+            _ => Err(KapError::InvalidOption(format!(
+                "unsupported kap_lowT_prefix '{trimmed}'"
+            ))),
         }
     }
 }
@@ -244,6 +259,10 @@ pub enum KapError {
     MissingTable(&'static str),
     /// Numerical failure (NaN/Inf or singular interpolation).
     NumericalFailure(&'static str),
+    /// Unrecognized or unsupported opacity table prefix option.
+    InvalidOption(String),
+    /// Opacity table file is missing, unreadable, or corrupt.
+    TableIo(String),
 }
 
 impl fmt::Display for KapError {
@@ -259,6 +278,10 @@ impl fmt::Display for KapError {
             Self::NumericalFailure(msg) => {
                 write!(f, "KapError::NumericalFailure({msg})")
             }
+            Self::InvalidOption(msg) => {
+                write!(f, "KapError::InvalidOption({msg})")
+            }
+            Self::TableIo(msg) => write!(f, "KapError::TableIo({msg})"),
         }
     }
 }

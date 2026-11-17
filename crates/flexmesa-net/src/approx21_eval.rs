@@ -224,8 +224,15 @@ pub fn eval_net_approx21_procs(
     res.eps_nuc = eps_total - eps_neu_total;
 
     let nuclides = NuclideCatalog::builtin_ref();
-    for i in 0..species {
-        let ai = nuclides.get_by_id(g.chem_id[i]).unwrap().z_plus_n as f64;
+    let mut aion = Vec::with_capacity(species);
+    for &cid in &g.chem_id[..species] {
+        let ai = nuclides
+            .get_by_id(cid)
+            .ok_or_else(|| NetError::InvalidReactionOrIso(format!("id={cid}")))?
+            .z_plus_n as f64;
+        aion.push(ai);
+    }
+    for (i, &ai) in aion.iter().enumerate() {
         res.dxdt[i] = dydt1[i] * ai;
     }
     if just_dxdt {
@@ -298,13 +305,11 @@ pub fn eval_net_approx21_procs(
     let mut d_epsneu_dy = vec![0.0_f64; species];
     approx21_d_epsneu_dy(&idx, &w.y, &w.rate_screened, &mut d_epsneu_dy);
 
-    for i in 0..species {
-        let ai = nuclides.get_by_id(g.chem_id[i]).unwrap().z_plus_n as f64;
+    for (i, &ai) in aion.iter().enumerate() {
         res.d_eps_nuc_dx[i] = (d_epstotal_dy[i] - d_epsneu_dy[i]) / ai;
         res.d_dxdt_drho[i] = dfdrho[i] * ai;
         res.d_dxdt_dt[i] = dfdt[i] * ai;
-        for j in 0..species {
-            let aj = nuclides.get_by_id(g.chem_id[j]).unwrap().z_plus_n as f64;
+        for (j, &aj) in aion.iter().enumerate() {
             res.d_dxdt_dx[i * species + j] = dfdy[i * species + j] * ai / aj;
         }
     }

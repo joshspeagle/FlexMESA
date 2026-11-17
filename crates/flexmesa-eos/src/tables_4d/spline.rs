@@ -95,7 +95,7 @@ fn locate_uniform_axis(
     let i_raw = ((val_in - v_min) / del_v + 1.0e-4) as isize + 1;
     if i_raw < 1 || (i_raw as usize) >= n_pts {
         if return_err_beyond_bounds {
-            return Err(EosError::InvalidState {
+            return Err(EosError::OffTable {
                 context: ctx,
                 detail: format!("{name}={val_in} outside [{v_min}, {v_max}]"),
             });

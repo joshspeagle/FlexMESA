@@ -3,7 +3,7 @@
 //! for `RSP2` (`remesh_for_RSP2` in `star/private/hydro_rsp2_support.f90:36-442`).
 
 use flexmesa_const::{FOUR_THIRDS_PI, LN10, PI4, SQRT_2_DIV_3};
-use flexmesa_eos::{eos_dt_get_t, HelmTable, WHICH_OTHER_LOG_PTOT};
+use flexmesa_eos::{eos_dt_get_t, WHICH_OTHER_LOG_PTOT};
 use flexmesa_interp1d::interpolate_vector_pm;
 
 use crate::controls::StarError;
@@ -13,23 +13,26 @@ use crate::rsp2_eqns::eval_rsp2_hp_face_zone;
 
 /// Seeds `RSP2` turbulent energy $e_t = w^2$ from face `mlt_vc` when enabling
 /// `RSP2_flag` on a model without existing turbulent energy (`set_flags.f90:361-370`).
-pub fn seed_rsp2_w_from_mlt_vc_if_needed(model: &mut StarModel) {
+///
+/// # Errors
+/// Returns [`StarError`] if microphysics or convection evaluation fails.
+pub fn seed_rsp2_w_from_mlt_vc_if_needed(
+    model: &mut StarModel,
+) -> Result<(), StarError> {
     let nz = model.nz;
     model.aux.rsp.resize(nz);
     if model.aux.rsp.et_rsp.iter().any(|&et| et > 0.0) {
-        return;
+        return Ok(());
     }
     if model.mlt_vc.len() < nz || model.mlt_vc.iter().all(|&v| v <= 0.0) {
-        let _ = crate::micro::set_basic_vars(model)
-            .and_then(|()| crate::micro::do_eos(model))
-            .and_then(|()| crate::micro::do_kap(model))
-            .and_then(|()| {
-                crate::hydro_brunt_surf::do_brunt_b(model);
-                crate::hydro_vars::set_mlt_vars(model)
-            });
+        crate::micro::set_basic_vars(model)?;
+        crate::micro::do_eos(model)?;
+        crate::micro::do_kap(model)?;
+        crate::hydro_brunt_surf::do_brunt_b(model)?;
+        crate::hydro_vars::set_mlt_vars(model)?;
     }
     if model.mlt_vc.len() < nz {
-        return;
+        return Ok(());
     }
     for k in 0..nz {
         let vc0 = model.mlt_vc[k].max(0.0);
@@ -38,6 +41,7 @@ pub fn seed_rsp2_w_from_mlt_vc_if_needed(model: &mut StarModel) {
         model.aux.rsp.et_rsp[k] = wk * wk;
         model.aux.rsp.w_start[k] = wk;
     }
+    Ok(())
 }
 
 /// Remeshes `model` onto the `RSP2` two-region anchor-temperature Lagrangian
@@ -68,7 +72,7 @@ pub fn remesh_for_rsp2(model: &mut StarModel) -> Result<(), StarError> {
     }
 
     set_hydro_vars(model, true, true)?;
-    seed_rsp2_w_from_mlt_vc_if_needed(model);
+    seed_rsp2_w_from_mlt_vc_if_needed(model)?;
 
     // 1. Old exterior mass coordinates `xm_old` (`0..=nz_old`) and `xm_mid_old`.
     let mut xm_old = vec![0.0_f64; nz_old + 1];
@@ -257,7 +261,7 @@ pub fn remesh_for_rsp2(model: &mut StarModel) -> Result<(), StarError> {
         let log_p = flexmesa_math::log10(p_00);
         let log_t_guess = next.ln_t[k] / LN10;
         let inv = eos_dt_get_t(
-            HelmTable::builtin(),
+            crate::micro::builtin_helm_table()?,
             &next.chem_id,
             next.cell_xa(k),
             log_rho,
@@ -285,7 +289,7 @@ pub fn remesh_for_rsp2(model: &mut StarModel) -> Result<(), StarError> {
         next.aux.rsp.hp_face[k] = hp;
     }
     next.pack_xh();
-    next.save_start_values();
+    next.save_start_values()?;
     next.save_old_values();
     *model = next;
     Ok(())

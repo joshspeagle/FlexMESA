@@ -26,7 +26,7 @@ pub fn aesopus_get(
     log_rho: f64,
     log_t: f64,
 ) -> Result<(f64, f64, f64), KapError> {
-    let ka = &kap_tables().aesopus;
+    let ka = &kap_tables()?.aesopus;
     let log_r = log_rho - 3.0 * log_t + 18.0;
     let res = aesopus_interp(ka, zref, x, xc, xn, xo, log_r, log_t)?;
     let kap = exp10(res[0]);
@@ -211,7 +211,7 @@ pub fn kapcn_get(
     log_rho: f64,
     log_t: f64,
 ) -> Result<(f64, f64, f64), KapError> {
-    let kcn = &kap_tables().kap_cn;
+    let kcn = &kap_tables()?.kap_cn;
     let log_r = log_rho - 3.0 * log_t + 18.0;
     let res = kapcn_interp(kcn, z, x, fc, fn_val, log_r, log_t)?;
     let kap = exp10(res[0]);
@@ -310,7 +310,7 @@ fn kapcn_interp_fixed_z(
                 // 0-based tbl index corresponding to Fortran 1-based: 21*(i-1) + 7*(j-1) + (ifC+n-2)
                 let tbl_idx = 21 * i + 7 * j + (ifc + n - 1);
                 let (kap1, ilinx, iliny) =
-                    zset.spline_data(tbl_idx, &kcn.log_rs, &kcn.log_ts);
+                    zset.spline_data(tbl_idx, &kcn.log_rs, &kcn.log_ts)?;
                 let res = interp_evbicub_prevalidated_db(
                     log_r,
                     log_t,

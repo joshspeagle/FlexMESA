@@ -25,7 +25,7 @@ fn standard_chem_ids() -> [usize; 7] {
 
 #[test]
 fn test_helm_full_table_loaded_and_dense_across_full_grid() {
-    let tbl = HelmTable::builtin();
+    let tbl = HelmTable::builtin().expect("builtin HELM table");
     assert!(
         tbl.is_full_table(),
         "HelmTable::builtin() must load full dense grid"
@@ -65,7 +65,7 @@ fn test_helm_full_table_loaded_and_dense_across_full_grid() {
 
 #[test]
 fn test_4d_tables_and_eos_dt_get_across_four_stellar_profiles() {
-    let helm_tbl = HelmTable::builtin();
+    let helm_tbl = HelmTable::builtin().expect("builtin HELM table");
     let dt_tables = EosDtTableSet::builtin();
     let cms_tables = CmsTableSet::builtin();
 

@@ -92,9 +92,7 @@ impl SedCube {
     /// truncated or malformed.
     pub fn from_builtin() -> Result<Self, ColorsError> {
         if let Some(flux_path) = resolve_mesa_flux_cube_path() {
-            if let Ok(cube) = Self::from_mesa_flux_cube(&flux_path) {
-                return Ok(cube);
-            }
+            return Self::from_mesa_flux_cube(&flux_path);
         }
         let mut combined = Vec::with_capacity(
             BUILTIN_KURUCZ_BYTES_A.len() + BUILTIN_KURUCZ_BYTES_B.len(),

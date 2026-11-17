@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use flexmesa_const::SECYER;
 use flexmesa_star::controls::StarError;
 use flexmesa_star::history::extract_history_row;
-use flexmesa_star::inlist::InlistBundle;
+use flexmesa_star::inlist::{InlistBundle, InlistLoadOptions};
 use flexmesa_star::inlist_runner::{
     run_inlist_stage_with_logs, ExtrasDirective, StageRunReport, StarExtras,
     StarLogsOptions,
@@ -60,6 +60,7 @@ struct AsteroTrackExtras<'a> {
     entered_hot: bool,
     passed_lnuc_limit: bool,
     bad_count: usize,
+    eval_error: Option<StarError>,
 }
 
 impl AsteroTrackExtras<'_> {
@@ -252,13 +253,21 @@ impl StarExtras for AsteroTrackExtras<'_> {
             self.entered_warm = true;
             Self::set_max_years_dt(model, self.ctrl.max_yrs_dt_when_warm);
         }
-        let sample = eval_model_astero_sample(
+        let sample = match eval_model_astero_sample(
             model,
             self.ctrl,
             self.params,
             self.sample_number,
             self.case_dir,
-        );
+        ) {
+            Ok(s) => s,
+            Err(e) => {
+                self.eval_error = Some(e);
+                return ExtrasDirective::Terminate(String::from(
+                    "AsteroSampleEvalError",
+                ));
+            }
+        };
         if self.ctrl.nl[0] > 0
             && sample.chi2_radial > self.ctrl.chi2_radial_limit
         {
@@ -424,6 +433,7 @@ pub fn run_single_astero_track_with_logs(
         entered_hot: false,
         passed_lnuc_limit: false,
         bad_count: 0,
+        eval_error: None,
     };
     let mut model =
         init_or_update_model_from_bundle(&bundle, None, &mut extras)?;
@@ -435,10 +445,15 @@ pub fn run_single_astero_track_with_logs(
         max_steps_cap,
         logs_writer.as_mut(),
     )?;
-    let best = extras.best_sample.unwrap_or_else(|| {
+    if let Some(err) = extras.eval_error.take() {
+        return Err(err);
+    }
+    let best = if let Some(s) = extras.best_sample {
+        s
+    } else {
         let fb_mod = extras.fallback_model.as_ref().map_or(&model, |(_, m)| m);
-        eval_model_astero_sample(fb_mod, ctrl, params, sample_number, case_dir)
-    });
+        eval_model_astero_sample(fb_mod, ctrl, params, sample_number, case_dir)?
+    };
     Ok((best, stage, model))
 }
 
@@ -467,11 +482,38 @@ pub fn run_star_astero_with_logs(
     ctrl: &AsteroSearchControls,
     logs_opts: StarLogsOptions<'_>,
 ) -> Result<AsteroSearchReport, StarError> {
-    let base_bundle =
-        InlistBundle::from_file_in_case_dir(case_dir, entry_inlist)?;
+    run_star_astero_with_options(
+        case_dir,
+        entry_inlist,
+        max_steps_per_stage,
+        ctrl,
+        logs_opts,
+        InlistLoadOptions::default(),
+    )
+}
+
+/// Runs the multi-track asteroseismic search driver with explicit [`InlistLoadOptions`].
+pub fn run_star_astero_with_options(
+    case_dir: &Path,
+    entry_inlist: &str,
+    max_steps_per_stage: Option<usize>,
+    ctrl: &AsteroSearchControls,
+    logs_opts: StarLogsOptions<'_>,
+    inlist_opts: InlistLoadOptions,
+) -> Result<AsteroSearchReport, StarError> {
+    let base_bundle = InlistBundle::from_file_in_case_dir_with_options(
+        case_dir,
+        entry_inlist,
+        inlist_opts,
+    )?;
     let results_base = logs_opts.output_root.unwrap_or(case_dir);
     let out_dir: PathBuf = results_base.join(&ctrl.astero_results_directory);
-    let _ = fs::create_dir_all(&out_dir);
+    fs::create_dir_all(&out_dir).map_err(|e| {
+        StarError::IoError(format!(
+            "failed to create astero results directory '{}': {e}",
+            out_dir.display()
+        ))
+    })?;
 
     let mut smoke_ctrl;
     let active_ctrl = if max_steps_per_stage.is_some() {
@@ -495,9 +537,9 @@ pub fn run_star_astero_with_logs(
     let mut best_chi2_seen = f64::INFINITY;
     let (mut samples, mut total_steps) = (Vec::new(), 0usize);
     let (mut last_termination, mut last_model) = (String::new(), None);
-    let mut eval_param_set = |p: AsteroParamSet| -> f64 {
+    let mut eval_param_set = |p: AsteroParamSet| -> Result<f64, StarError> {
         if samples.len() >= track_cap {
-            return 1.0e99;
+            return Ok(1.0e99);
         }
         let s_num = samples.len() + 1;
         let sample_hist_path =
@@ -512,7 +554,7 @@ pub fn run_star_astero_with_logs(
         } else {
             StarLogsOptions::default()
         };
-        let Ok((sample, stage, m)) = run_single_astero_track_with_logs(
+        let (sample, stage, m) = run_single_astero_track_with_logs(
             &base_bundle,
             active_ctrl,
             p,
@@ -520,9 +562,7 @@ pub fn run_star_astero_with_logs(
             max_steps_per_stage,
             case_dir,
             trial_logs,
-        ) else {
-            return 1.0e99;
-        };
+        )?;
         total_steps += stage.steps_taken;
         last_termination = stage.termination_code;
         let c2 = sample.chi2;
@@ -533,33 +573,52 @@ pub fn run_star_astero_with_logs(
             best_chi2_seen = best_chi2_seen.min(c2);
             if let Some(exp_dst) = logs_opts.explicit_history_file {
                 if let Some(parent) = exp_dst.parent() {
-                    let _ = fs::create_dir_all(parent);
+                    fs::create_dir_all(parent).map_err(|e| {
+                        StarError::IoError(format!(
+                            "failed to create history dir '{}': {e}",
+                            parent.display()
+                        ))
+                    })?;
                 }
-                let _ = fs::copy(&sample_hist_path, exp_dst);
+                fs::copy(&sample_hist_path, exp_dst).map_err(|e| {
+                    StarError::IoError(format!(
+                        "failed copying history to '{}': {e}",
+                        exp_dst.display()
+                    ))
+                })?;
             } else if let Some(out_root) = logs_opts.output_root {
                 let dst_dir = out_root.join(&m.controls.output.log_directory);
-                let _ = fs::create_dir_all(&dst_dir);
-                let _ = fs::copy(
-                    &sample_hist_path,
-                    dst_dir.join(&m.controls.output.star_history_name),
-                );
+                fs::create_dir_all(&dst_dir).map_err(|e| {
+                    StarError::IoError(format!(
+                        "failed creating log dir '{}': {e}",
+                        dst_dir.display()
+                    ))
+                })?;
+                let dst_hist =
+                    dst_dir.join(&m.controls.output.star_history_name);
+                fs::copy(&sample_hist_path, &dst_hist).map_err(|e| {
+                    StarError::IoError(format!(
+                        "failed copying history to '{}': {e}",
+                        dst_hist.display()
+                    ))
+                })?;
             }
         }
         last_model = Some(m);
-        write_sample_file(&out_dir, &sample);
+        write_sample_file(&out_dir, &sample)?;
         samples.push(sample);
-        c2
+        Ok(c2)
     };
 
-    let st = active_ctrl.search_type.to_ascii_lowercase();
+    let st = active_ctrl.search_type.trim().to_ascii_lowercase();
     let results_fname = match st.as_str() {
         "from_file" => {
             for p in active_ctrl
-                .read_parameters_from_file(case_dir)
+                .read_parameters_from_file(case_dir)?
                 .into_iter()
                 .take(track_cap)
             {
-                let _ = eval_param_set(p);
+                let _ = eval_param_set(p)?;
             }
             &active_ctrl.from_file_output_filename
         }
@@ -568,28 +627,37 @@ pub fn run_star_astero_with_logs(
                 .into_iter()
                 .take(track_cap)
             {
-                let _ = eval_param_set(p);
+                let _ = eval_param_set(p)?;
             }
             &active_ctrl.scan_grid_output_filename
         }
         "simplex" => {
-            run_simplex_driver(active_ctrl, &mut eval_param_set);
+            run_simplex_driver(active_ctrl, &mut eval_param_set)?;
             &active_ctrl.simplex_output_filename
         }
         "newuoa" | "bobyqa" => {
-            run_powell_driver(active_ctrl, st == "bobyqa", &mut eval_param_set);
+            run_powell_driver(
+                active_ctrl,
+                st == "bobyqa",
+                &mut eval_param_set,
+            )?;
             if st == "bobyqa" {
                 &active_ctrl.bobyqa_output_filename
             } else {
                 &active_ctrl.newuoa_output_filename
             }
         }
-        _ => {
-            let _ = eval_param_set(active_ctrl.first_params());
+        "use_first_values" => {
+            let _ = eval_param_set(active_ctrl.first_params())?;
             &active_ctrl.scan_grid_output_filename
         }
+        other => {
+            return Err(StarError::InvalidInput(format!(
+                "unrecognized astero search_type '{other}'"
+            )));
+        }
     };
-    write_search_results_table(&out_dir.join(results_fname), &samples);
+    write_search_results_table(&out_dir.join(results_fname), &samples)?;
     let best_sample_idx = samples
         .iter()
         .enumerate()

@@ -5,6 +5,7 @@
 //! (`astero/private/astero_run_support.f90:366-982`).
 
 use flexmesa_num::{bobyqa, newuoa, nm_simplex, NumError, SimplexConfig};
+use flexmesa_star::StarError;
 
 /// Minimizes a scalar objective `eval_fn(x)` over bounded parameter space
 /// `x_lower <= x <= x_upper` using `flexmesa_num::nm_simplex`
@@ -62,9 +63,45 @@ pub fn simplex_minimize_with_options<F>(
 where
     F: FnMut(&[f64]) -> f64,
 {
+    try_simplex_minimize_with_options(
+        x_first,
+        x_lower,
+        x_upper,
+        max_evals,
+        x_atol,
+        x_rtol,
+        chi2_tol,
+        centroid_weight_power,
+        enforce_bounds,
+        adaptive_random_search,
+        seed,
+        |x| Ok(eval_fn(x)),
+    )
+    .unwrap_or_else(|e| panic!("simplex_minimize_with_options failed: {e}"))
+}
+
+/// Fallible Nelder-Mead minimization propagating objective or optimizer errors.
+#[allow(clippy::too_many_arguments)]
+pub fn try_simplex_minimize_with_options<F>(
+    x_first: &[f64],
+    x_lower: &[f64],
+    x_upper: &[f64],
+    max_evals: usize,
+    x_atol: f64,
+    x_rtol: f64,
+    chi2_tol: f64,
+    centroid_weight_power: f64,
+    enforce_bounds: bool,
+    adaptive_random_search: bool,
+    seed: i32,
+    mut eval_fn: F,
+) -> Result<(Vec<f64>, f64, usize), StarError>
+where
+    F: FnMut(&[f64]) -> Result<f64, StarError>,
+{
     let n = x_first.len().min(x_lower.len()).min(x_upper.len());
     if n == 0 || max_evals == 0 {
-        return (Vec::new(), 0.0, 0);
+        return Ok((Vec::new(), 0.0, 0));
     }
     let cfg = SimplexConfig {
         max_evals,
@@ -85,6 +122,7 @@ where
     let mut best_x = x_init.clone();
     let mut best_f = f64::INFINITY;
     let mut evals = 0usize;
+    let mut cb_err: Option<StarError> = None;
     let res =
         nm_simplex(n, &x_lower[..n], &x_upper[..n], &x_init, &cfg, |x_try| {
             if evals >= max_evals {
@@ -97,7 +135,15 @@ where
             } else {
                 x_try[..n].to_vec()
             };
-            let f = eval_fn(&x_clamped);
+            let f = match eval_fn(&x_clamped) {
+                Ok(v) => v,
+                Err(e) => {
+                    cb_err = Some(e);
+                    return Err(NumError::ConvergenceFailed(
+                        "simplex callback error",
+                    ));
+                }
+            };
             evals += 1;
             if f < best_f {
                 best_f = f;
@@ -105,13 +151,24 @@ where
             }
             Ok(f)
         });
-    if let Ok(r) = res {
-        if r.f_min < best_f {
-            best_f = r.f_min;
-            best_x = r.x_min;
+    if let Some(err) = cb_err {
+        return Err(err);
+    }
+    match res {
+        Ok(r) => {
+            if r.f_min < best_f {
+                best_f = r.f_min;
+                best_x = r.x_min;
+            }
+        }
+        Err(NumError::ConvergenceFailed(_)) => {}
+        Err(other) => {
+            return Err(StarError::ConvergenceFailure(format!(
+                "nm_simplex failed: {other}"
+            )));
         }
     }
-    (best_x, best_f, evals)
+    Ok((best_x, best_f, evals))
 }
 
 /// Maps normalized trust-region coordinate $u_i \in [-1, 1]$ to physical
@@ -167,9 +224,34 @@ pub fn newuoa_minimize<F>(
 where
     F: FnMut(&[f64]) -> f64,
 {
+    try_newuoa_minimize(
+        x_first,
+        x_lower,
+        x_upper,
+        max_evals,
+        rhobeg,
+        rhoend,
+        |x| Ok(eval_fn(x)),
+    )
+    .unwrap_or_else(|e| panic!("newuoa_minimize failed: {e}"))
+}
+
+/// Fallible `NEWUOA` minimization propagating objective or optimizer errors.
+pub fn try_newuoa_minimize<F>(
+    x_first: &[f64],
+    x_lower: &[f64],
+    x_upper: &[f64],
+    max_evals: usize,
+    rhobeg: f64,
+    rhoend: f64,
+    mut eval_fn: F,
+) -> Result<(Vec<f64>, f64, usize), StarError>
+where
+    F: FnMut(&[f64]) -> Result<f64, StarError>,
+{
     let n = x_first.len().min(x_lower.len()).min(x_upper.len());
     if n == 0 || max_evals == 0 {
-        return (Vec::new(), 0.0, 0);
+        return Ok((Vec::new(), 0.0, 0));
     }
     let n_eff = n.max(2);
     let npt = 2 * n_eff + 1;
@@ -186,8 +268,9 @@ where
         .collect();
     let mut best_f = f64::INFINITY;
     let mut evals = 0usize;
+    let mut cb_err: Option<StarError> = None;
 
-    let _ = newuoa(
+    let res = newuoa(
         n_eff,
         npt,
         &mut u,
@@ -210,7 +293,15 @@ where
                     )
                 })
                 .collect();
-            let f = eval_fn(&phys);
+            let f = match eval_fn(&phys) {
+                Ok(v) => v,
+                Err(e) => {
+                    cb_err = Some(e);
+                    return Err(NumError::ConvergenceFailed(
+                        "newuoa callback error",
+                    ));
+                }
+            };
             evals += 1;
             if f < best_f {
                 best_f = f;
@@ -224,7 +315,18 @@ where
             })
         },
     );
-    (best_x, best_f, evals)
+    if let Some(err) = cb_err {
+        return Err(err);
+    }
+    match res {
+        Ok(_) | Err(NumError::ConvergenceFailed(_)) => {}
+        Err(other) => {
+            return Err(StarError::ConvergenceFailure(format!(
+                "newuoa failed: {other}"
+            )));
+        }
+    }
+    Ok((best_x, best_f, evals))
 }
 
 /// Minimizes `eval_fn(x)` using `flexmesa_num::bobyqa` on $[-1, 1]^n$ normalized
@@ -241,9 +343,34 @@ pub fn bobyqa_minimize<F>(
 where
     F: FnMut(&[f64]) -> f64,
 {
+    try_bobyqa_minimize(
+        x_first,
+        x_lower,
+        x_upper,
+        max_evals,
+        rhobeg,
+        rhoend,
+        |x| Ok(eval_fn(x)),
+    )
+    .unwrap_or_else(|e| panic!("bobyqa_minimize failed: {e}"))
+}
+
+/// Fallible `BOBYQA` minimization propagating objective or optimizer errors.
+pub fn try_bobyqa_minimize<F>(
+    x_first: &[f64],
+    x_lower: &[f64],
+    x_upper: &[f64],
+    max_evals: usize,
+    rhobeg: f64,
+    rhoend: f64,
+    mut eval_fn: F,
+) -> Result<(Vec<f64>, f64, usize), StarError>
+where
+    F: FnMut(&[f64]) -> Result<f64, StarError>,
+{
     let n = x_first.len().min(x_lower.len()).min(x_upper.len());
     if n == 0 || max_evals == 0 {
-        return (Vec::new(), 0.0, 0);
+        return Ok((Vec::new(), 0.0, 0));
     }
     let n_eff = n.max(2);
     let npt = 2 * n_eff + 1;
@@ -262,8 +389,9 @@ where
         .collect();
     let mut best_f = f64::INFINITY;
     let mut evals = 0usize;
+    let mut cb_err: Option<StarError> = None;
 
-    let _ = bobyqa(
+    let res = bobyqa(
         n_eff,
         npt,
         &mut u,
@@ -284,7 +412,15 @@ where
                     )
                 })
                 .collect();
-            let f = eval_fn(&phys);
+            let f = match eval_fn(&phys) {
+                Ok(v) => v,
+                Err(e) => {
+                    cb_err = Some(e);
+                    return Err(NumError::ConvergenceFailed(
+                        "bobyqa callback error",
+                    ));
+                }
+            };
             evals += 1;
             if f < best_f {
                 best_f = f;
@@ -297,7 +433,18 @@ where
             })
         },
     );
-    (best_x, best_f, evals)
+    if let Some(err) = cb_err {
+        return Err(err);
+    }
+    match res {
+        Ok(_) | Err(NumError::ConvergenceFailed(_)) => {}
+        Err(other) => {
+            return Err(StarError::ConvergenceFailure(format!(
+                "bobyqa failed: {other}"
+            )));
+        }
+    }
+    Ok((best_x, best_f, evals))
 }
 
 /// Minimizes `eval_fn(x)` using Powell's `BOBYQA` trust-region quadratic

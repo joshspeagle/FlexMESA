@@ -592,7 +592,7 @@ pub fn read_photo_bytes(
         }
         let dt_photo = model.dt;
         crate::struct_burn_mix::refresh_mixing_state(&mut model, dt_photo, &[]);
-        model.save_start_values();
+        model.save_start_values()?;
     }
     model.mstar_start = saved_mstar_start;
     if saved_lnd_start.len() == nz {

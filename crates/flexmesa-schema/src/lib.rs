@@ -8,6 +8,7 @@
 //! schemas in 100% Safe Rust.
 
 pub mod namelist;
+pub mod validation;
 
 use std::collections::{HashMap, HashSet};
 use std::fmt;
@@ -21,6 +22,11 @@ use flexmesa_testing::{
 pub use namelist::{
     parse_namelist_file, parse_namelist_text, validate_namelist_block,
     NamelistAssignment, NamelistBlock,
+};
+pub use validation::{
+    copy_cleaned_case_dir, format_fortran_value, is_headless_plotting_section,
+    is_include_key, is_known_upstream_only_section, section_include_prefix,
+    upstream_section_keys, ControlValidationReport,
 };
 
 /// Fortran scalar control type in a MESA `.defaults` or `inlist` file.

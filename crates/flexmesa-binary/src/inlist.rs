@@ -9,7 +9,15 @@
 
 use std::path::Path;
 
-use flexmesa_star::{InlistBundle, SectionControls, StarError};
+use flexmesa_star::{
+    InlistBundle, InlistLoadOptions, SectionControls, StarError,
+};
+
+pub use crate::inlist_inventory::{
+    copy_cleaned_binary_case, supported_binary_control_inventory,
+    validate_binary_sections, BinaryControlInventory,
+    BINARY_CONTROLS_SUPPORTED, BINARY_JOB_HEADLESS_GUI, BINARY_JOB_SUPPORTED,
+};
 
 /// Parsed `&binary_job` and `&binary_controls` settings corresponding to
 /// `binary/defaults/binary_job.defaults` and `binary_controls.defaults`.
@@ -404,41 +412,151 @@ impl Default for BinaryInlistControls {
 impl BinaryInlistControls {
     /// Loads `&binary_job` and `&binary_controls` from `case_dir`, starting at
     /// `inlist` when present (recursively resolving `read_extra_binary_*` chains)
-    /// and falling back to `inlist_project` only if `inlist` is absent.
+    /// and falling back to `inlist_project` only if `inlist` is absent, with strict
+    /// default validation (`allow_unsupported_controls = false`).
     pub fn from_case_dir(case_dir: &Path) -> Result<Self, StarError> {
+        Self::from_case_dir_with_options(case_dir, InlistLoadOptions::default())
+    }
+
+    /// Loads `&binary_job` and `&binary_controls` from `case_dir` with explicit
+    /// [`InlistLoadOptions`].
+    pub fn from_case_dir_with_options(
+        case_dir: &Path,
+        options: InlistLoadOptions,
+    ) -> Result<Self, StarError> {
         let entry = if case_dir.join("inlist").is_file() {
             "inlist"
         } else {
             "inlist_project"
         };
-        Self::from_inlist_file(case_dir, entry)
+        Self::from_inlist_file_with_options(case_dir, entry, options)
     }
 
-    /// Loads `&binary_job` and `&binary_controls` from `entry_file` relative to `case_dir`.
+    /// Loads `&binary_job` and `&binary_controls` from `entry_file` relative to
+    /// `case_dir` with strict default validation (`allow_unsupported_controls = false`).
     pub fn from_inlist_file(
         case_dir: &Path,
         entry_file: &str,
     ) -> Result<Self, StarError> {
-        let bundle = InlistBundle::from_file_in_case_dir(case_dir, entry_file)?;
+        Self::from_inlist_file_with_options(
+            case_dir,
+            entry_file,
+            InlistLoadOptions::default(),
+        )
+    }
+
+    /// Loads `&binary_job` and `&binary_controls` from `entry_file` relative to
+    /// `case_dir` with explicit [`InlistLoadOptions`].
+    pub fn from_inlist_file_with_options(
+        case_dir: &Path,
+        entry_file: &str,
+        options: InlistLoadOptions,
+    ) -> Result<Self, StarError> {
+        let sections =
+            InlistBundle::load_sections_in_case_dir(case_dir, entry_file)?;
+        let report = validate_binary_sections(&sections);
+        report
+            .into_result(options.allow_unsupported_controls)
+            .map_err(|e| StarError::InvalidInput(e.to_string()))?;
+
         let mut out = Self::default();
-        if let Some(bjob) = bundle.sections.get("binary_job") {
-            out.apply_binary_job(bjob);
+        if let Some(bjob) = sections.get("binary_job") {
+            out.apply_binary_job(bjob)?;
         }
-        if let Some(bctrl) = bundle.sections.get("binary_controls") {
-            out.apply_binary_controls(bctrl);
+        if let Some(bctrl) = sections.get("binary_controls") {
+            out.apply_binary_controls(bctrl)?;
         }
-        out.initial_bh_spin = out.initial_bh_spin.clamp(0.0, 1.0);
+        out.validate_values()?;
         Ok(out)
     }
 
-    fn apply_binary_job(&mut self, bjob: &SectionControls) {
-        let names = bjob.get_indexed_strings("inlist_names");
+    fn validate_values(&mut self) -> Result<(), StarError> {
+        if !self.initial_bh_spin.is_finite() {
+            return Err(StarError::InvalidInput(format!(
+                "invalid '&binary_controls::initial_bh_spin' = {} (must be finite)",
+                self.initial_bh_spin
+            )));
+        }
+        // Upstream `binary/private/binary_evolve.f90:144-150` warns and clamps
+        // `initial_bh_spin` to `[0, 1]` (exercised by `wind_fed_bhhmxb`).
+        self.initial_bh_spin = self.initial_bh_spin.clamp(0.0, 1.0);
+        if !self.m1_msun.is_finite() || self.m1_msun <= 0.0 {
+            return Err(StarError::InvalidInput(format!(
+                "invalid '&binary_controls::m1' = {} (must be > 0)",
+                self.m1_msun
+            )));
+        }
+        if !self.m2_msun.is_finite() || self.m2_msun <= 0.0 {
+            return Err(StarError::InvalidInput(format!(
+                "invalid '&binary_controls::m2' = {} (must be > 0)",
+                self.m2_msun
+            )));
+        }
+        if !self.initial_eccentricity.is_finite()
+            || self.initial_eccentricity < 0.0
+            || self.initial_eccentricity >= 1.0
+        {
+            return Err(StarError::InvalidInput(format!(
+                "invalid '&binary_controls::initial_eccentricity' = {} (must lie in [0, 1))",
+                self.initial_eccentricity
+            )));
+        }
+        if !self.dt_reduction_factor_for_j.is_finite()
+            || self.dt_reduction_factor_for_j <= 0.0
+            || self.dt_reduction_factor_for_j >= 1.0
+        {
+            return Err(StarError::InvalidInput(format!(
+                "invalid '&binary_controls::dt_reduction_factor_for_j' = {} (must lie in (0, 1))",
+                self.dt_reduction_factor_for_j
+            )));
+        }
+        if !self.time_delta_coeff.is_finite() || self.time_delta_coeff <= 0.0 {
+            return Err(StarError::InvalidInput(format!(
+                "invalid '&binary_controls::time_delta_coeff' = {} (must be > 0)",
+                self.time_delta_coeff
+            )));
+        }
+        if !matches!(
+            self.mdot_scheme.trim().to_ascii_lowercase().as_str(),
+            "ritter" | "kolb" | "roche_lobe" | "contact" | "arras"
+        ) {
+            return Err(StarError::InvalidInput(format!(
+                "unrecognized '&binary_controls::mdot_scheme' option '{}'",
+                self.mdot_scheme
+            )));
+        }
+        if !matches!(
+            self.solver_type.trim().to_ascii_lowercase().as_str(),
+            "cubic" | "bisect" | "both"
+        ) {
+            return Err(StarError::InvalidInput(format!(
+                "unrecognized '&binary_controls::solver_type' option '{}'",
+                self.solver_type
+            )));
+        }
+        crate::system_jdot::validate_sync_type(&self.sync_type_1)?;
+        crate::system_jdot::validate_sync_type(&self.sync_type_2)?;
+        crate::system_jdot::validate_sync_mode(&self.sync_mode_1)?;
+        crate::system_jdot::validate_sync_mode(&self.sync_mode_2)?;
+        crate::system_jdot::validate_circ_type(&self.circ_type_1)?;
+        crate::system_jdot::validate_circ_type(&self.circ_type_2)?;
+        Ok(())
+    }
+
+    fn apply_binary_job(
+        &mut self,
+        bjob: &SectionControls,
+    ) -> Result<(), StarError> {
+        let names =
+            bjob.try_get_indexed_strings("binary_job", "inlist_names")?;
         for (idx, dst) in self.inlist_names.iter_mut().enumerate() {
             if let Some(n) = names.get(idx).filter(|s| !s.trim().is_empty()) {
                 *dst = n.trim().to_string();
             }
         }
-        if let Some(v) = bjob.get_str("binary_history_columns_file") {
+        if let Some(v) =
+            bjob.try_get_str("binary_job", "binary_history_columns_file")?
+        {
             self.binary_history_columns_file = v.trim().to_string();
         }
         for (dst, key) in [
@@ -450,22 +568,34 @@ impl BinaryInlistControls {
             (&mut self.change_ignore_rlof_flag, "change_ignore_rlof_flag"),
             (&mut self.new_ignore_rlof_flag, "new_ignore_rlof_flag"),
         ] {
-            if let Some(v) = bjob.get_bool(key) {
-                *dst = v;
-            }
+            bjob.try_bool_into("binary_job", dst, key)?;
         }
+        Ok(())
     }
 
-    fn apply_binary_controls(&mut self, s: &SectionControls) {
-        if let Some(v) = s.get_i64("max_tries_to_achieve") {
+    fn apply_binary_controls(
+        &mut self,
+        s: &SectionControls,
+    ) -> Result<(), StarError> {
+        if let Some(v) =
+            s.try_get_i64("binary_controls", "max_tries_to_achieve")?
+        {
             self.max_tries_to_achieve = v;
         }
-        if let Some(v) = s.get_i64("anomaly_steps") {
-            self.anomaly_steps = v.max(2) as usize;
+        if let Some(v) = s.try_get_i64("binary_controls", "anomaly_steps")? {
+            if v < 2 {
+                return Err(StarError::InvalidInput(format!(
+                    "invalid '&binary_controls::anomaly_steps' = {v} (must be >= 2)"
+                )));
+            }
+            self.anomaly_steps = v as usize;
         }
-        if let Some(v) = s.get_i64("history_interval") {
-            self.history_interval = v.max(0) as usize;
-        }
+        s.try_usize_into(
+            "binary_controls",
+            &mut self.history_interval,
+            "history_interval",
+            0,
+        )?;
         for (dst, key) in [
             (&mut self.log_directory, "log_directory"),
             (&mut self.history_name, "history_name"),
@@ -478,7 +608,7 @@ impl BinaryInlistControls {
             (&mut self.circ_type_1, "circ_type_1"),
             (&mut self.circ_type_2, "circ_type_2"),
         ] {
-            if let Some(v) = s.get_str(key) {
+            if let Some(v) = s.try_get_str("binary_controls", key)? {
                 *dst = v.trim().to_string();
             }
         }
@@ -531,9 +661,7 @@ impl BinaryInlistControls {
             ),
             (&mut self.use_tidal_deformation, "use_tidal_deformation"),
         ] {
-            if let Some(v) = s.get_bool(key) {
-                *dst = v;
-            }
+            s.try_bool_into("binary_controls", dst, key)?;
         }
         for (dst, key) in [
             (&mut self.m1_msun, "m1"),
@@ -649,9 +777,8 @@ impl BinaryInlistControls {
             (&mut self.varcontrol_ms, "varcontrol_ms"),
             (&mut self.varcontrol_post_ms, "varcontrol_post_ms"),
         ] {
-            if let Some(v) = s.get_f64(key) {
-                *dst = v;
-            }
+            s.try_f64_into("binary_controls", dst, key)?;
         }
+        Ok(())
     }
 }

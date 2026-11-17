@@ -12,6 +12,7 @@ use flexmesa_math::exp10 as helm_exp10;
 use crate::helm::table_io::{
     load_or_build_full_helm_vertices, parse_helm_ascii_reader,
 };
+use crate::types::EosError;
 
 /// Number of electron density grid points (`log10(rho * Y_e)` from `-12` to `15`).
 pub const HELM_IMAX: usize = 2701;
@@ -153,13 +154,19 @@ pub struct HelmTable {
     dense: Vec<HelmVertex>,
 }
 
-static BUILTIN_TABLE: OnceLock<HelmTable> = OnceLock::new();
+static BUILTIN_TABLE: OnceLock<Result<HelmTable, EosError>> = OnceLock::new();
 
 impl HelmTable {
     /// Returns a reference to the lazily initialized full `2701 x 1001` [`HelmTable`].
-    #[must_use]
-    pub fn builtin() -> &'static Self {
-        BUILTIN_TABLE.get_or_init(Self::load_builtin)
+    ///
+    /// # Errors
+    /// Returns [`EosError::TableIo`] if the table data directory or cache is
+    /// missing, unreadable, or corrupt.
+    pub fn builtin() -> Result<&'static Self, EosError> {
+        BUILTIN_TABLE
+            .get_or_init(Self::load_builtin)
+            .as_ref()
+            .map_err(Clone::clone)
     }
 
     /// Returns `true` when all `2701 x 1001` vertices are populated in dense storage.
@@ -264,10 +271,13 @@ impl HelmTable {
         }
     }
 
-    fn load_builtin() -> Self {
-        let dense = load_or_build_full_helm_vertices()
-            .unwrap_or_else(|err| panic!("{err}"));
-        Self::with_dense_vertices(dense)
+    fn load_builtin() -> Result<Self, EosError> {
+        load_or_build_full_helm_vertices()
+            .map(Self::with_dense_vertices)
+            .map_err(|detail| EosError::TableIo {
+                context: "HelmTable::builtin",
+                detail,
+            })
     }
 
     /// Loads a full `helm_table.dat` ASCII file from disk.

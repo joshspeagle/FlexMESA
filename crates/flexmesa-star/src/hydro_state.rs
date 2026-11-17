@@ -546,10 +546,10 @@ fn interp_hermite_p1(
 pub(crate) fn smooth_post_remesh_hydro_and_rotation(
     model: &mut crate::model::StarModel,
     pre: &crate::model::StarModel,
-) {
+) -> Result<(), crate::controls::StarError> {
     let (nz_new, nz_old) = (model.nz, pre.nz);
     if nz_new < 2 || nz_old < 2 {
-        return;
+        return Ok(());
     }
     let mut xq_p1 = Vec::with_capacity(nz_old + 1);
     xq_p1.extend_from_slice(&pre.xq[..nz_old]);
@@ -654,8 +654,7 @@ pub(crate) fn smooth_post_remesh_hydro_and_rotation(
     model.reconstruct_ln_r_from_lnd_and_dm();
     model.set_m_grav_and_grav();
     model.pack_xh();
-    let _ =
-        crate::mesh_remap::set_lnt_for_energy(model, &e_target, &exact_flags);
+    crate::mesh_remap::set_lnt_for_energy(model, &e_target, &exact_flags)?;
     model.pack_xh();
     crate::rotation::update_rotation_distortion_factors(model);
     if model.controls.rotation_flag && pre.j_rot.len() == nz_old {
@@ -676,4 +675,5 @@ pub(crate) fn smooth_post_remesh_hydro_and_rotation(
             }
         }
     }
+    Ok(())
 }

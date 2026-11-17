@@ -73,7 +73,8 @@ pub fn star_eval_burgers_velocities<'py>(
     let sch = parse_diffusion_scheme(scheme)?;
     let res = eval_burgers_velocities(
         a_s, z_s, x_s, rho, t, dlnt_dr, g_grav, grad_slice, sch,
-    );
+    )
+    .map_err(|e| PyValueError::new_err(e.to_string()))?;
     Ok((
         PyArray1::from_vec(py, res.v_gt),
         PyArray1::from_vec(py, res.d_self),
@@ -141,7 +142,8 @@ pub fn star_do_element_diffusion<'py>(
     let sch = parse_diffusion_scheme(scheme)?;
     let nz = model.inner.nz;
     let nc = model.inner.species;
-    let (v_gt, eps_wd) = do_element_diffusion(&mut model.inner, dt, sch);
+    let (v_gt, eps_wd) = do_element_diffusion(&mut model.inner, dt, sch)
+        .map_err(crate::star_helpers_py::to_py_err)?;
     let v_arr = PyArray1::from_vec(py, v_gt).reshape([nz, nc])?;
     Ok((v_arr, PyArray1::from_vec(py, eps_wd)))
 }
@@ -284,8 +286,9 @@ pub fn star_do_conv_premix(
     model: &mut PyStarModel,
     max_iters: usize,
     avoid_fuel_increase: bool,
-) -> usize {
+) -> PyResult<usize> {
     do_conv_premix(&mut model.inner, max_iters, avoid_fuel_increase)
+        .map_err(crate::star_helpers_py::to_py_err)
 }
 
 /// Applies predictive mixing at convective boundaries on `model`.
@@ -317,14 +320,15 @@ pub fn star_do_phase_separation<'py>(
     dt: f64,
     gamma_crystallization: f64,
     is_one_mixture: bool,
-) -> Bound<'py, PyArray1<f64>> {
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
     let eps = do_phase_separation(
         &mut model.inner,
         dt,
         gamma_crystallization,
         is_one_mixture,
-    );
-    PyArray1::from_vec(py, eps)
+    )
+    .map_err(crate::star_helpers_py::to_py_err)?;
+    Ok(PyArray1::from_vec(py, eps))
 }
 
 /// Registers Wave 5.1 `flexmesa-star` bindings on `flexmesa._rust`.

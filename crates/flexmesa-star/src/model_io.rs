@@ -276,7 +276,13 @@ pub fn read_mod_str(
                 m_msun = parse_fortran_f64(v)?;
                 controls.initial_mass = m_msun;
             }
-            "model_number" => model_number = v.parse::<usize>().unwrap_or(1),
+            "model_number" => {
+                model_number = v.parse::<usize>().map_err(|e| {
+                    StarError::IoError(format!(
+                        "invalid .mod model_number '{v}': {e}"
+                    ))
+                })?;
+            }
             "star_age" => star_age = parse_fortran_f64(v)?,
             "initial_z" | "initial_Z" => {
                 controls.initial_z = parse_fortran_f64(v)?;
@@ -284,11 +290,29 @@ pub fn read_mod_str(
             "initial_y" | "initial_Y" => {
                 controls.initial_y = parse_fortran_f64(v)?;
             }
-            "n_shells" => nz = v.parse().unwrap_or(0),
+            "n_shells" => {
+                nz = v.parse::<usize>().map_err(|e| {
+                    StarError::IoError(format!(
+                        "invalid .mod n_shells '{v}': {e}"
+                    ))
+                })?;
+            }
             "net_name" => {
                 job.net_name = v.trim_matches(['\'', '"']).to_string();
             }
-            "species" => header_species = v.parse::<usize>().ok(),
+            "species" => {
+                let sp = v.parse::<usize>().map_err(|e| {
+                    StarError::IoError(format!(
+                        "invalid .mod species '{v}': {e}"
+                    ))
+                })?;
+                if sp == 0 {
+                    return Err(StarError::IoError(String::from(
+                        "invalid .mod species 0",
+                    )));
+                }
+                header_species = Some(sp);
+            }
             "Teff" => teff = parse_fortran_f64(v)?,
             "year_for_time_step" => dt_yrs = Some(parse_fortran_f64(v)?),
             "xmstar" => xmstar_opt = Some(parse_fortran_f64(v)?),
@@ -302,7 +326,13 @@ pub fn read_mod_str(
                 controls.tau_factor = parse_fortran_f64(v)?;
             }
             "opacity_factor" => controls.opacity_factor = parse_fortran_f64(v)?,
-            "num_retries" => num_retries = v.parse::<usize>().unwrap_or(0),
+            "num_retries" => {
+                num_retries = v.parse::<usize>().map_err(|e| {
+                    StarError::IoError(format!(
+                        "invalid .mod num_retries '{v}': {e}"
+                    ))
+                })?;
+            }
             _ => {}
         }
     }
@@ -365,8 +395,14 @@ pub fn read_mod_str(
     let species = iso_names.len();
     let chem_id: Vec<usize> = iso_names
         .iter()
-        .map(|n| catalog.get_nuclide_index(n).unwrap_or(1))
-        .collect();
+        .map(|n| {
+            catalog.get_nuclide_index(n).ok_or_else(|| {
+                StarError::IoError(format!(
+                    "unknown isotope '{n}' in .mod header (`star/private/read_model.f90:414-420`)"
+                ))
+            })
+        })
+        .collect::<Result<Vec<usize>, StarError>>()?;
 
     let mut model = StarModel::new(nz, chem_id, job.clone(), controls);
     model.mstar = m_msun * M_SUN;
@@ -481,7 +517,8 @@ pub fn read_mod_str(
     } else {
         model.job.net_name.clone()
     };
-    if let Ok(net) = crate::micro::get_or_load_net(&target_net, None) {
+    if !target_net.trim().is_empty() {
+        let net = crate::micro::get_or_load_net(&target_net, None)?;
         if net.chem_id != model.chem_id {
             crate::micro::change_model_network(&mut model, &target_net, None)?;
         }
@@ -501,7 +538,7 @@ pub fn read_mod_str(
         model.set_m_grav_and_grav();
         model.pack_xh();
         crate::micro::set_basic_vars(&mut model)?;
-        model.save_start_values();
+        model.save_start_values()?;
         model.save_old_values();
     } else {
         model.finish_init_model()?;

@@ -423,7 +423,7 @@ fn test_net_golden_section_7_approx21_cr60_plus_co56_weak_rates_match_mesa() {
 fn test_net_golden_section_8a_one_zone_burn_small_net_matches_mesa() {
     let _ = RatesCatalog::builtin();
     let g = NetGeneralInfo::from_name("approx21.net").unwrap();
-    let ht = HelmTable::builtin();
+    let ht = HelmTable::builtin().expect("builtin HELM table");
     let eos_cfg = EosConfig::default();
 
     let cat = NuclideCatalog::builtin_ref();
@@ -480,7 +480,7 @@ fn test_net_golden_section_8a_one_zone_burn_small_net_matches_mesa() {
 #[test]
 fn test_net_golden_section_8b_one_zone_burn_const_p_matches_mesa() {
     let g = NetGeneralInfo::from_name("approx21.net").unwrap();
-    let ht = HelmTable::builtin();
+    let ht = HelmTable::builtin().expect("builtin HELM table");
     let eos_cfg = EosConfig::default();
 
     let cat = NuclideCatalog::builtin_ref();

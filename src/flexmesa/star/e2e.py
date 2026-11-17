@@ -35,16 +35,36 @@ run_tier4_star_suite = e2e_tier45.run_tier4_star_suite
 run_tier4_suite = e2e_tier45.run_tier4_suite
 
 
-def parse_inlist_bundle(inlist_path: str | pathlib.Path) -> dict[str, Any]:
+def copy_cleaned_case(
+    src_dir: str | pathlib.Path,
+    dst_dir: str | pathlib.Path,
+    suite: str = "star",
+) -> None:
+    """Copy an upstream MESA test case directory while stripping unsupported
+    and unused namelist keys for strict cleaned-copy verification.
+    """
+    _rust.star_copy_cleaned_case(str(src_dir), str(dst_dir), str(suite))
+
+
+def parse_inlist_bundle(
+    inlist_path: str | pathlib.Path,
+    allow_unsupported_controls: bool = False,
+) -> dict[str, Any]:
     """Parse a MESA `inlist` file and recursively resolve `read_extra_*_inlist`.
 
     Args:
         inlist_path: Path to the entry `inlist` file.
+        allow_unsupported_controls: When ``True``, bypass strict failure on
+            unread, unused, or unimplemented upstream MESA controls.
 
     Returns:
         Dictionary of resolved `&star_job` and `&controls` settings.
     """
-    return dict(_rust.star_parse_inlist_bundle(str(inlist_path)))
+    return dict(
+        _rust.star_parse_inlist_bundle(
+            str(inlist_path), bool(allow_unsupported_controls)
+        )
+    )
 
 
 def parse_rn_stages(
@@ -68,6 +88,7 @@ def run_test_suite_case(
     skip_optional: bool = True,
     max_steps_per_stage: int | None = None,
     verify_restart: bool = False,
+    allow_unsupported_controls: bool = False,
 ) -> dict[str, Any]:
     """Execute a multi-stage upstream MESA `test_suite` case directory.
 
@@ -75,7 +96,10 @@ def run_test_suite_case(
         case_dir: Path to the `test_suite` case directory.
         skip_optional: Whether `MESA_SKIP_OPTIONAL` branches are active.
         max_steps_per_stage: Optional cap on evolutionary steps per stage.
-        verify_restart: Whether to verify bit-identical `.photo` restart parity.
+        verify_restart: Whether to verify internal `.photo` round-trip
+            consistency.
+        allow_unsupported_controls: When ``True``, bypass strict failure on
+            unread, unused, or unimplemented upstream MESA controls.
 
     Returns:
         Structured dictionary containing per-stage reports, step counts,
@@ -87,6 +111,7 @@ def run_test_suite_case(
             bool(skip_optional),
             None if max_steps_per_stage is None else int(max_steps_per_stage),
             bool(verify_restart),
+            bool(allow_unsupported_controls),
         )
     )
 
@@ -95,6 +120,7 @@ def run_tier1_suite(
     mesa_dir: str | pathlib.Path,
     max_steps_per_stage: int | None = 15,
     verify_restart: bool = True,
+    allow_unsupported_controls: bool = False,
 ) -> list[dict[str, Any]]:
     """Execute all 33 Tier 1 `star/test_suite` cases under `mesa_dir`.
 
@@ -103,8 +129,10 @@ def run_tier1_suite(
             `star/test_suite/<case>`.
         max_steps_per_stage: Optional maximum evolutionary steps per `./rn`
             stage (`None` runs until physical termination).
-        verify_restart: Whether to verify bit-identical `.photo` restart parity
-            (`0 ULP`) on every case.
+        verify_restart: Whether to verify internal `.photo` round-trip
+            consistency on every case.
+        allow_unsupported_controls: When ``True``, bypass strict failure on
+            unread, unused, or unimplemented upstream MESA controls.
 
     Returns:
         List of 33 `CaseRunReport` dictionaries in canonical `TIER1_CASES`
@@ -114,6 +142,7 @@ def run_tier1_suite(
         str(mesa_dir),
         None if max_steps_per_stage is None else int(max_steps_per_stage),
         bool(verify_restart),
+        bool(allow_unsupported_controls),
     )
     return [dict(item) for item in raw]
 
@@ -225,6 +254,7 @@ def run_tier2_suite(
     mesa_dir: str | pathlib.Path,
     max_steps_per_stage: int | None = 15,
     verify_restart: bool = True,
+    allow_unsupported_controls: bool = False,
 ) -> list[dict[str, Any]]:
     """Execute all 17 Tier 2 `star/test_suite` cases under `mesa_dir`.
 
@@ -233,8 +263,10 @@ def run_tier2_suite(
             `star/test_suite/<case>`.
         max_steps_per_stage: Optional maximum evolutionary steps per `./rn`
             stage (`None` runs until physical termination).
-        verify_restart: Whether to verify bit-identical `.photo` restart parity
-            (`0 ULP`) on every case.
+        verify_restart: Whether to verify internal `.photo` round-trip
+            consistency on every case.
+        allow_unsupported_controls: When ``True``, bypass strict failure on
+            unread, unused, or unimplemented upstream MESA controls.
 
     Returns:
         List of 17 `CaseRunReport` dictionaries in canonical `TIER2_CASES`
@@ -244,6 +276,7 @@ def run_tier2_suite(
         str(mesa_dir),
         None if max_steps_per_stage is None else int(max_steps_per_stage),
         bool(verify_restart),
+        bool(allow_unsupported_controls),
     )
     return [dict(item) for item in raw]
 
@@ -313,6 +346,7 @@ def run_tier3_suite(
     mesa_dir: str | pathlib.Path,
     max_steps_per_stage: int | None = 15,
     verify_restart: bool = True,
+    allow_unsupported_controls: bool = False,
 ) -> list[dict[str, Any]]:
     """Execute all 22 Tier 3 `star/test_suite` cases under `mesa_dir`.
 
@@ -321,8 +355,10 @@ def run_tier3_suite(
             `star/test_suite/<case>`.
         max_steps_per_stage: Optional maximum evolutionary steps per `./rn`
             stage (`None` runs until physical termination).
-        verify_restart: Whether to verify bit-identical `.photo` restart parity
-            (`0 ULP`) on every case.
+        verify_restart: Whether to verify internal `.photo` round-trip
+            consistency on every case.
+        allow_unsupported_controls: When ``True``, bypass strict failure on
+            unread, unused, or unimplemented upstream MESA controls.
 
     Returns:
         List of 22 `CaseRunReport` dictionaries in canonical `TIER3_CASES`
@@ -332,6 +368,7 @@ def run_tier3_suite(
         str(mesa_dir),
         None if max_steps_per_stage is None else int(max_steps_per_stage),
         bool(verify_restart),
+        bool(allow_unsupported_controls),
     )
     return [dict(item) for item in raw]
 

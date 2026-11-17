@@ -15,11 +15,35 @@ use flexmesa_star::{
     eval_starspot_effective_luminosity, eval_t_tau_gradr_factor,
     eval_tov_effective_cgrav, eval_tzo_core_accretion_step,
     eval_wd_phase_separation, export_stella_ascii,
-    nelder_mead_solar_calibration_step, parse_rn_stages, run_case_list,
-    run_test_suite_case, verify_photo_restart_parity, AtmTTauRelation,
-    CaseRunReport, InlistBundle, RnStage, StarError, TIER1_CASES, TIER2_CASES,
-    TIER3_CASES,
+    nelder_mead_solar_calibration_step, parse_rn_stages,
+    run_case_list_with_options, run_test_suite_case_with_options,
+    verify_photo_restart_parity, AtmTTauRelation, CaseRunReport, InlistBundle,
+    InlistLoadOptions, RnStage, StarError, StarLogsOptions, TIER1_CASES,
+    TIER2_CASES, TIER3_CASES,
 };
+
+/// Copies a `star`, `binary`, or `astero` case directory from `src_dir` to
+/// `dst_dir` while stripping unsupported or unused namelist keys.
+#[pyfunction]
+#[pyo3(signature = (src_dir, dst_dir, suite="star"))]
+pub fn star_copy_cleaned_case(
+    src_dir: &str,
+    dst_dir: &str,
+    suite: &str,
+) -> PyResult<()> {
+    let (src, dst) = (Path::new(src_dir), Path::new(dst_dir));
+    match suite.trim().to_ascii_lowercase().as_str() {
+        "star" => flexmesa_star::copy_cleaned_star_case(src, dst)
+            .map_err(to_py_err),
+        "binary" => flexmesa_binary::copy_cleaned_binary_case(src, dst)
+            .map_err(to_py_err),
+        "astero" => flexmesa_astero::copy_cleaned_astero_case(src, dst)
+            .map_err(to_py_err),
+        other => Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "unsupported suite '{other}' (expected 'star', 'binary', or 'astero')"
+        ))),
+    }
+}
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
 
@@ -29,19 +53,26 @@ use crate::star_py::PyStarModel;
 /// Parses a MESA `inlist` file (recursively resolving all `read_extra_*_inlist`
 /// includes) and returns a summary dictionary of parsed controls.
 #[pyfunction]
+#[pyo3(signature = (inlist_path, allow_unsupported_controls=false))]
 pub fn star_parse_inlist_bundle<'py>(
     py: Python<'py>,
     inlist_path: &str,
+    allow_unsupported_controls: bool,
 ) -> PyResult<Bound<'py, PyDict>> {
-    let bundle =
-        InlistBundle::from_file(Path::new(inlist_path)).map_err(to_py_err)?;
+    let bundle = InlistBundle::from_file_with_options(
+        Path::new(inlist_path),
+        InlistLoadOptions {
+            allow_unsupported_controls,
+        },
+    )
+    .map_err(to_py_err)?;
     let dict = PyDict::new(py);
     dict.set_item("entry_inlist", &bundle.entry_inlist)?;
     dict.set_item("create_pre_ms_model", bundle.job.create_pre_ms_model)?;
     dict.set_item("create_initial_model", bundle.job.create_initial_model)?;
     dict.set_item("create_rsp_model", bundle.job.create_rsp_model)?;
     dict.set_item("load_saved_model", bundle.job.load_saved_model)?;
-    dict.set_item("saved_model_name", &bundle.job.saved_model_name)?;
+    dict.set_item("load_model_filename", &bundle.job.saved_model_name)?;
     dict.set_item(
         "save_model_when_terminate",
         bundle.job.save_model_when_terminate,
@@ -65,14 +96,8 @@ pub fn star_parse_inlist_bundle<'py>(
     dict.set_item("rotation_flag", bundle.controls.rotation_flag)?;
     dict.set_item("rsp_flag", bundle.controls.rsp_flag)?;
     dict.set_item("rsp2_flag", bundle.controls.rsp2_flag)?;
-    dict.set_item(
-        "load_saved_model_for_rsp2",
-        bundle
-            .sections
-            .get("star_job")
-            .and_then(|sj| sj.get_bool("load_saved_model_for_rsp2"))
-            .unwrap_or(false),
-    )?;
+    dict.set_item("change_rsp2_flag", bundle.controls.rsp2.change_rsp2_flag)?;
+    dict.set_item("new_rsp2_flag", bundle.controls.rsp2.new_rsp2_flag)?;
     dict.set_item("okay_to_remesh", bundle.controls.okay_to_remesh)?;
     dict.set_item("use_gold_tolerances", bundle.controls.use_gold_tolerances)?;
     dict.set_item(
@@ -187,7 +212,8 @@ pub(crate) fn case_report_to_pydict<'py>(
     case_dir,
     skip_optional=true,
     max_steps_per_stage=None,
-    verify_restart=false
+    verify_restart=false,
+    allow_unsupported_controls=false
 ))]
 pub fn star_run_test_suite_case<'py>(
     py: Python<'py>,
@@ -195,14 +221,20 @@ pub fn star_run_test_suite_case<'py>(
     skip_optional: bool,
     max_steps_per_stage: Option<usize>,
     verify_restart: bool,
+    allow_unsupported_controls: bool,
 ) -> PyResult<Bound<'py, PyDict>> {
+    let load_opts = InlistLoadOptions {
+        allow_unsupported_controls,
+    };
     let rep = py
         .detach(|| {
-            run_test_suite_case(
+            run_test_suite_case_with_options(
                 Path::new(case_dir),
                 skip_optional,
                 max_steps_per_stage,
                 verify_restart,
+                StarLogsOptions::default(),
+                load_opts,
             )
         })
         .map_err(to_py_err)?;
@@ -215,14 +247,19 @@ fn run_suite_to_pylist<'py>(
     cases: &'static [&'static str],
     max_steps_per_stage: Option<usize>,
     verify_restart: bool,
+    allow_unsupported_controls: bool,
 ) -> PyResult<Bound<'py, PyList>> {
+    let load_opts = InlistLoadOptions {
+        allow_unsupported_controls,
+    };
     let reports = py
         .detach(|| {
-            run_case_list(
+            run_case_list_with_options(
                 Path::new(mesa_dir),
                 cases,
                 max_steps_per_stage,
                 verify_restart,
+                load_opts,
             )
         })
         .map_err(to_py_err)?;
@@ -241,12 +278,13 @@ pub fn star_tier1_cases() -> Vec<String> {
 
 /// Runs all 33 Tier 1 `star/test_suite` cases under `mesa_dir/star/test_suite`.
 #[pyfunction]
-#[pyo3(signature = (mesa_dir, max_steps_per_stage=Some(15), verify_restart=true))]
+#[pyo3(signature = (mesa_dir, max_steps_per_stage=Some(15), verify_restart=true, allow_unsupported_controls=false))]
 pub fn star_run_tier1_suite<'py>(
     py: Python<'py>,
     mesa_dir: &str,
     max_steps_per_stage: Option<usize>,
     verify_restart: bool,
+    allow_unsupported_controls: bool,
 ) -> PyResult<Bound<'py, PyList>> {
     run_suite_to_pylist(
         py,
@@ -254,6 +292,7 @@ pub fn star_run_tier1_suite<'py>(
         &TIER1_CASES,
         max_steps_per_stage,
         verify_restart,
+        allow_unsupported_controls,
     )
 }
 
@@ -328,12 +367,13 @@ pub fn star_tier2_cases() -> Vec<String> {
 
 /// Runs all 17 Tier 2 `star/test_suite` cases under `mesa_dir/star/test_suite`.
 #[pyfunction]
-#[pyo3(signature = (mesa_dir, max_steps_per_stage=Some(15), verify_restart=true))]
+#[pyo3(signature = (mesa_dir, max_steps_per_stage=Some(15), verify_restart=true, allow_unsupported_controls=false))]
 pub fn star_run_tier2_suite<'py>(
     py: Python<'py>,
     mesa_dir: &str,
     max_steps_per_stage: Option<usize>,
     verify_restart: bool,
+    allow_unsupported_controls: bool,
 ) -> PyResult<Bound<'py, PyList>> {
     run_suite_to_pylist(
         py,
@@ -341,6 +381,7 @@ pub fn star_run_tier2_suite<'py>(
         &TIER2_CASES,
         max_steps_per_stage,
         verify_restart,
+        allow_unsupported_controls,
     )
 }
 
@@ -361,8 +402,8 @@ pub fn star_eval_planetary_irradiation_heating(
 pub fn star_eval_wd_phase_separation(
     model: &mut PyStarModel,
     option: &str,
-) -> (f64, f64) {
-    eval_wd_phase_separation(&mut model.inner, option)
+) -> PyResult<(f64, f64)> {
+    eval_wd_phase_separation(&mut model.inner, option).map_err(to_py_err)
 }
 
 /// Evaluates the conductive carbon/oxygen flame speed $v_{\mathrm{flame}}$
@@ -380,12 +421,13 @@ pub fn star_tier3_cases() -> Vec<String> {
 
 /// Runs all 22 Tier 3 `star/test_suite` cases under `mesa_dir/star/test_suite`.
 #[pyfunction]
-#[pyo3(signature = (mesa_dir, max_steps_per_stage=Some(15), verify_restart=true))]
+#[pyo3(signature = (mesa_dir, max_steps_per_stage=Some(15), verify_restart=true, allow_unsupported_controls=false))]
 pub fn star_run_tier3_suite<'py>(
     py: Python<'py>,
     mesa_dir: &str,
     max_steps_per_stage: Option<usize>,
     verify_restart: bool,
+    allow_unsupported_controls: bool,
 ) -> PyResult<Bound<'py, PyList>> {
     run_suite_to_pylist(
         py,
@@ -393,6 +435,7 @@ pub fn star_run_tier3_suite<'py>(
         &TIER3_CASES,
         max_steps_per_stage,
         verify_restart,
+        allow_unsupported_controls,
     )
 }
 
@@ -494,6 +537,7 @@ pub fn star_eval_tzo_core_accretion_step(
 /// Registers `E2E-0`, `E2E-1`, `E2E-2`, and `E2E-3` runner functions on `flexmesa._rust`.
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(star_parse_inlist_bundle, m)?)?;
+    m.add_function(wrap_pyfunction!(star_copy_cleaned_case, m)?)?;
     m.add_function(wrap_pyfunction!(star_parse_rn_stages, m)?)?;
     m.add_function(wrap_pyfunction!(star_verify_photo_restart, m)?)?;
     m.add_function(wrap_pyfunction!(star_run_test_suite_case, m)?)?;

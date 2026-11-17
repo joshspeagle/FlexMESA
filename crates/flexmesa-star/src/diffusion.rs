@@ -224,7 +224,9 @@ fn assemble_burgers_resistance(
 /// * `g_rad` - Optional radiative levitation acceleration $g_{\mathrm{rad},i}$
 ///   ($\mathrm{cm\,s^{-2}}$).
 /// * `scheme` - Collision-integral scheme ([`DiffusionScheme`]).
-#[must_use]
+/// # Errors
+/// Returns [`crate::controls::StarError::ConvergenceFailure`] if the Burgers
+/// matrix solve fails.
 pub fn eval_burgers_velocities(
     a: &[f64],
     z: &[f64],
@@ -235,7 +237,7 @@ pub fn eval_burgers_velocities(
     g_grav: f64,
     g_rad: Option<&[f64]>,
     scheme: DiffusionScheme,
-) -> BurgersZoneResult {
+) -> Result<BurgersZoneResult, crate::controls::StarError> {
     let nc = a.len();
     let m = nc + 1;
     let kt = KERG * t.max(100.0);
@@ -349,8 +351,11 @@ pub fn eval_burgers_velocities(
         lhs[mass_row * n_sys + j] = n_s[j] * m_s[j];
     }
 
-    let sol =
-        solve_dense(n_sys, &lhs, &rhs).unwrap_or_else(|_| vec![0.0; n_sys]);
+    let sol = solve_dense(n_sys, &lhs, &rhs).map_err(|e| {
+        crate::controls::StarError::ConvergenceFailure(format!(
+            "Burgers diffusion linear solve failed: {e}"
+        ))
+    })?;
 
     let mut mom_sum = 0.0;
     let mut rho_sum = 0.0;
@@ -373,12 +378,12 @@ pub fn eval_burgers_velocities(
         d_self[i] = (n_s[i] * kt / k_tot.max(1.0e-30)).clamp(1.0e-10, 1.0e12);
     }
 
-    BurgersZoneResult {
+    Ok(BurgersZoneResult {
         v_gt,
         d_self,
         ee_force: sol[2 * m],
         z_charge: z.to_vec(),
-    }
+    })
 }
 
 /// Computes the radiative levitation acceleration $g_{\mathrm{rad},i} =
@@ -426,11 +431,14 @@ pub fn eval_wd_sedimentation_heating(
 ///
 /// Returns `(v_gt_all, eps_wd_sed)` where `v_gt_all` has layout `(nz, species)`
 /// and `eps_wd_sed` has length `nz`.
+///
+/// # Errors
+/// Returns [`crate::controls::StarError`] if a zone Burgers linear solve fails.
 pub fn do_element_diffusion(
     model: &mut StarModel,
     dt: f64,
     scheme: DiffusionScheme,
-) -> (Vec<f64>, Vec<f64>) {
+) -> Result<(Vec<f64>, Vec<f64>), crate::controls::StarError> {
     let nz = model.nz;
     let nc = model.species;
     let catalog = NuclideCatalog::builtin_ref();
@@ -475,7 +483,7 @@ pub fn do_element_diffusion(
 
         let res = eval_burgers_velocities(
             &a_iso, &z_typ, x_slice, rho_k, t_k, dlnt_dr, g_k, None, scheme,
-        );
+        )?;
         for j in 0..nc {
             v_gt_all[k * nc + j] = res.v_gt[j];
             d_self_all[k * nc + j] = res.d_self[j];
@@ -571,5 +579,5 @@ pub fn do_element_diffusion(
         model.aux.step_hist.num_diffusion_solver_iters = nc;
     }
 
-    (v_gt_all, eps_wd_sed)
+    Ok((v_gt_all, eps_wd_sed))
 }

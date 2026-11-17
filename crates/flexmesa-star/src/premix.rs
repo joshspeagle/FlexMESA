@@ -81,7 +81,7 @@ fn refresh_convective_state_const_p(
         do_eos(model)?;
     }
     do_kap(model)?;
-    do_brunt_b(model);
+    do_brunt_b(model)?;
     set_mlt_vars(model)
 }
 
@@ -92,11 +92,15 @@ fn refresh_convective_state_const_p(
 /// and populates `model.aux.eps_pre_mix` when `do_premix_heating` is enabled.
 ///
 /// Returns the total number of cells absorbed across all convective boundaries.
+///
+/// # Errors
+/// Returns [`StarError`] if refreshing hydrodynamic/EOS state fails during
+/// rollback of a trial mixed state.
 pub fn do_conv_premix(
     model: &mut StarModel,
     max_iters: usize,
     avoid_fuel_increase: bool,
-) -> usize {
+) -> Result<usize, StarError> {
     let nz = model.nz;
     let nc = model.species;
     if model.aux.eps_pre_mix.len() != nz {
@@ -104,7 +108,7 @@ pub fn do_conv_premix(
     }
     model.aux.eps_pre_mix.fill(0.0);
     if nz < 4 || nc == 0 {
-        return 0;
+        return Ok(0);
     }
 
     let e_before = model.energy.clone();
@@ -169,7 +173,7 @@ pub fn do_conv_premix(
             } else {
                 model.xa[k_lo * nc..(k_hi + 1) * nc].copy_from_slice(&saved_xa);
                 model.lnd[k_lo..=k_hi].copy_from_slice(&saved_lnd);
-                let _ = refresh_convective_state_const_p(model, &p_fixed);
+                refresh_convective_state_const_p(model, &p_fixed)?;
                 break;
             }
         }
@@ -182,7 +186,7 @@ pub fn do_conv_premix(
                 -(model.energy[k] - e_before[k]) / model.dt;
         }
     }
-    total_advanced
+    Ok(total_advanced)
 }
 
 fn add_predictive_mixing_in_q_range(
@@ -299,17 +303,21 @@ pub fn apply_predictive_mixing_from_controls(model: &mut StarModel) -> usize {
 /// Executes white-dwarf crystallization phase separation
 /// (`phase_separation.f90:do_phase_separation`) across zones reaching plasma
 /// coupling $\Gamma_k \ge \Gamma_{\mathrm{cryst}}$ (`~175`).
+///
+/// # Errors
+/// Returns [`StarError`] if refreshing basic/EOS variables fails after
+/// redistributing phase-separated abundances.
 pub fn do_phase_separation(
     model: &mut StarModel,
     dt: f64,
     gamma_crystallization: f64,
     is_one_mixture: bool,
-) -> Vec<f64> {
+) -> Result<Vec<f64>, StarError> {
     let nz = model.nz;
     let nc = model.species;
     let mut eps_phase_sep = vec![0.0; nz];
     if nz < 3 || nc < 2 || dt <= 0.0 {
-        return eps_phase_sep;
+        return Ok(eps_phase_sep);
     }
 
     let (j_light, j_heavy) = if is_one_mixture {
@@ -330,7 +338,7 @@ pub fn do_phase_separation(
         (jc, jo)
     };
     if j_light == j_heavy {
-        return eps_phase_sep;
+        return Ok(eps_phase_sep);
     }
 
     let gam_crit = gamma_crystallization.max(100.0);
@@ -388,11 +396,11 @@ pub fn do_phase_separation(
     }
 
     if let Some(e_old) = e_before {
-        let _ = set_basic_vars(model);
-        let _ = do_eos(model);
+        set_basic_vars(model)?;
+        do_eos(model)?;
         for k in 0..nz {
             eps_phase_sep[k] = (e_old[k] - model.energy[k]) / dt;
         }
     }
-    eps_phase_sep
+    Ok(eps_phase_sep)
 }

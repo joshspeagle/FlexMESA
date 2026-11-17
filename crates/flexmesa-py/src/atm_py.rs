@@ -46,7 +46,7 @@ fn unpack_atm_eval(out: AtmEvalOutput) -> AtmEvalTuple {
 }
 
 fn parse_low_t_option(name: &str) -> PyResult<KapLowTOption> {
-    if let Some(opt) = KapLowTOption::from_prefix(name) {
+    if let Ok(opt) = KapLowTOption::from_prefix(name) {
         return Ok(opt);
     }
     match name.to_ascii_lowercase().as_str() {
@@ -250,7 +250,8 @@ pub fn atm_eval_t_tau_uniform(
     low_t_option: &str,
 ) -> PyResult<AtmEvalTuple> {
     let (cid_vec, xa_vec) = unpack_opt_comp(chem_id, xa)?;
-    let ht = HelmTable::builtin();
+    let ht = HelmTable::builtin()
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
     let eos_cfg = EosConfig::default();
     let kap_cfg = make_kap_cfg(zbase, low_t_option)?;
     let out = eval_t_tau_uniform(
@@ -300,7 +301,8 @@ pub fn atm_eval_t_tau_varying(
     low_t_option: &str,
 ) -> PyResult<AtmEvalTuple> {
     let xa_slice = xa.as_slice()?;
-    let ht = HelmTable::builtin();
+    let ht = HelmTable::builtin()
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
     let eos_cfg = EosConfig::default();
     let kap_cfg = make_kap_cfg(zbase, low_t_option)?;
     let out = eval_t_tau_varying(
@@ -351,7 +353,8 @@ pub fn atm_eval_irradiated(
     low_t_option: &str,
 ) -> PyResult<(f64, f64, f64, f64, f64, f64, f64)> {
     let (cid_vec, xa_vec) = unpack_opt_comp(chem_id, xa)?;
-    let ht = HelmTable::builtin();
+    let ht = HelmTable::builtin()
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
     let eos_cfg = EosConfig::default();
     let kap_cfg = make_kap_cfg(zbase, low_t_option)?;
     let out = eval_irradiated(

@@ -1,0 +1,176 @@
+# SPDX-License-Identifier: LGPL-3.0-or-later
+"""Issue #147 fail-loudly CLI, report, and Python binding tests."""
+
+from __future__ import annotations
+
+import os
+import pathlib
+import subprocess
+import sys
+import tempfile
+
+import pytest
+
+from flexmesa import binary, star
+from flexmesa.testing import harness_runner, trace_cli
+
+
+def test_cli_allow_unsupported_controls_defaults_false_and_forwards(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verify `--allow-unsupported-controls` defaults to False and forwards."""
+    trace_ns = trace_cli._build_trace_parser().parse_args(
+        ["star", "make_zams", "--out", "/unused_out"]
+    )
+    assert trace_ns.allow_unsupported_controls is False
+    trace_opt = trace_cli._build_trace_parser().parse_args(
+        [
+            "star",
+            "make_zams",
+            "--out",
+            "/unused_out",
+            "--allow-unsupported-controls",
+        ]
+    )
+    assert trace_opt.allow_unsupported_controls is True
+
+    h_ns = trace_cli._build_harness_parser().parse_args(["run"])
+    assert h_ns.allow_unsupported_controls is False
+    h_opt = trace_cli._build_harness_parser().parse_args(
+        ["run", "--allow-unsupported-controls"]
+    )
+    assert h_opt.allow_unsupported_controls is True
+
+    seen_flags: list[bool] = []
+    with tempfile.TemporaryDirectory() as tmp:
+        fake_case = pathlib.Path(tmp) / "fake_case"
+        fake_case.mkdir()
+        monkeypatch.setattr(
+            harness_runner,
+            "resolve_case_dir",
+            lambda _s, _c, mesa_dir=None: fake_case,
+        )
+
+        def _fake_run(
+            suite: str,
+            case_dir: pathlib.Path,
+            out_target: pathlib.Path,
+            **kwargs: object,
+        ) -> harness_runner.TraceRunOutcome:
+            seen_flags.append(bool(kwargs.get("allow_unsupported_controls")))
+            return harness_runner.TraceRunOutcome(
+                suite=suite,
+                case=case_dir.name,
+                status="ok",
+                termination_code="max_model_number",
+                steps=1,
+                retries=0,
+                wall_time_sec=0.01,
+                peak_rss_gb=0.1,
+                history_path=None,
+            )
+
+        monkeypatch.setattr(harness_runner, "run_traced_case", _fake_run)
+        rc0 = trace_cli.trace_main(
+            ["star", str(fake_case), "--out", str(pathlib.Path(tmp) / "o0")]
+        )
+        rc1 = trace_cli.trace_main(
+            [
+                "star",
+                str(fake_case),
+                "--out",
+                str(pathlib.Path(tmp) / "o1"),
+                "--allow-unsupported-controls",
+            ]
+        )
+        assert rc0 == 0 and rc1 == 0
+    assert seen_flags == [False, True]
+
+
+def test_unsupported_controls_audit_report_matches_checked_in_files() -> None:
+    """Verify `report_unsupported_controls.py --check` passes when enabled."""
+    mesa_dir = os.environ.get("MESA_DIR", "")
+    if not mesa_dir:
+        pytest.skip("MESA_DIR not set; skipping unsupported controls check")
+    repo_root = pathlib.Path(__file__).resolve().parents[1]
+    script = repo_root / "scripts" / "audit" / "report_unsupported_controls.py"
+    res = subprocess.run(
+        [sys.executable, str(script), "--check", "--mesa-dir", mesa_dir],
+        cwd=repo_root,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert res.returncode == 0, res.stderr + res.stdout
+
+
+def test_python_inlist_and_runner_loud_failures_and_opt_out() -> None:
+    """Verify strict inlist/option rejection and explicit Python opt-out."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = pathlib.Path(tmp)
+
+        bad_opt = root / "inlist_simple_phot"
+        bad_opt.write_text(
+            "&controls\n  atm_option = 'simple_photosphere'\n/\n",
+            encoding="utf-8",
+        )
+        with pytest.raises(ValueError, match="simple_photosphere"):
+            star.parse_inlist_bundle(bad_opt)
+
+        unimpl = root / "inlist_unimpl"
+        unimpl.write_text(
+            "&controls\n  initial_mass = 1.0\n  terminal_interval = 5\n/\n",
+            encoding="utf-8",
+        )
+        with pytest.raises(ValueError, match="unsupported control"):
+            star.parse_inlist_bundle(unimpl)
+        bundle = star.parse_inlist_bundle(
+            unimpl, allow_unsupported_controls=True
+        )
+        assert bundle["initial_mass"] == 1.0
+
+        pg_ok = root / "inlist_pgstar_ok"
+        pg_ok.write_text(
+            "&star_job\n  pgstar_flag = .true.\n/\n"
+            "&pgstar\n  pgstar_interval = 1\n/\n"
+            "&controls\n  initial_mass = 1.0\n/\n",
+            encoding="utf-8",
+        )
+        assert star.parse_inlist_bundle(pg_ok)["initial_mass"] == 1.0
+
+        pg_bad = root / "inlist_pgstar_bad"
+        pg_bad.write_text(
+            "&pgstar\n  not_a_real_pgstar_key = 1\n/\n",
+            encoding="utf-8",
+        )
+        with pytest.raises(ValueError, match="not_a_real_pgstar_key"):
+            star.parse_inlist_bundle(pg_bad)
+
+        bin_case = root / "bin_case"
+        bin_case.mkdir()
+        (bin_case / "inlist").write_text(
+            "&binary_controls\n"
+            "  m1 = 10.0\n"
+            "  m2 = 8.0\n"
+            "  terminal_interval = 10\n"
+            "/\n",
+            encoding="utf-8",
+        )
+        with pytest.raises(ValueError, match="terminal_interval"):
+            binary.run_binary_test_suite_case(bin_case, max_steps_cap=1)
+        ast_case = root / "ast_case"
+        ast_case.mkdir()
+        (ast_case / "rn").write_text(
+            "#!/bin/sh\ndo_one inlist final.mod\n",
+            encoding="utf-8",
+        )
+        (ast_case / "inlist").write_text(
+            "&controls\n  initial_mass = 1.0\n  max_model_number = 1\n/\n",
+            encoding="utf-8",
+        )
+        (ast_case / "inlist_astero_search_controls").write_text(
+            "&astero_search_controls\n  correction_scheme = 'bg14_1'\n/\n",
+            encoding="utf-8",
+        )
+        with pytest.raises(ValueError, match="correction_scheme"):
+            star.run_astero_test_suite_case(ast_case, max_steps_per_stage=1)

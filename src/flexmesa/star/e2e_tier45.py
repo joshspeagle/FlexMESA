@@ -178,13 +178,17 @@ def run_tier4_star_suite(
     mesa_dir: str | pathlib.Path,
     max_steps_per_stage: int | None = 15,
     verify_restart: bool = True,
+    allow_unsupported_controls: bool = False,
 ) -> list[dict[str, Any]]:
     """Execute all 16 Tier 4 `star/test_suite` cases under `mesa_dir`.
 
     Args:
         mesa_dir: Root path of the MESA installation.
         max_steps_per_stage: Optional cap on evolutionary steps per stage.
-        verify_restart: Whether to verify bit-identical `.photo` restart parity.
+        verify_restart: Whether to verify internal `.photo` round-trip
+            consistency.
+        allow_unsupported_controls: When ``True``, bypass strict failure on
+            unread, unused, or unimplemented upstream MESA controls.
 
     Returns:
         List of 16 `CaseRunReport` dictionaries.
@@ -194,6 +198,7 @@ def run_tier4_star_suite(
         True,
         None if max_steps_per_stage is None else int(max_steps_per_stage),
         bool(verify_restart),
+        bool(allow_unsupported_controls),
     )
     return [dict(item) for item in raw]
 
@@ -203,6 +208,7 @@ def run_astero_test_suite_case(
     skip_optional: bool = True,
     max_steps_per_stage: int | None = 15,
     verify_restart: bool = True,
+    allow_unsupported_controls: bool = False,
 ) -> dict[str, Any]:
     """Execute a single `astero/test_suite` case directory.
 
@@ -210,7 +216,10 @@ def run_astero_test_suite_case(
         case_dir: Path to the `astero/test_suite/<case>` directory.
         skip_optional: Whether `MESA_SKIP_OPTIONAL` branches are active.
         max_steps_per_stage: Optional cap on evolutionary steps per stage.
-        verify_restart: Whether to verify bit-identical `.photo` restart parity.
+        verify_restart: Whether to verify internal `.photo` round-trip
+            consistency.
+        allow_unsupported_controls: When ``True``, bypass strict failure on
+            unread, unused, or unimplemented upstream MESA controls.
 
     Returns:
         `CaseRunReport` dictionary.
@@ -221,6 +230,7 @@ def run_astero_test_suite_case(
             bool(skip_optional),
             None if max_steps_per_stage is None else int(max_steps_per_stage),
             bool(verify_restart),
+            bool(allow_unsupported_controls),
         )
     )
 
@@ -229,13 +239,17 @@ def run_astero_suite(
     mesa_dir: str | pathlib.Path,
     max_steps_per_stage: int | None = 15,
     verify_restart: bool = True,
+    allow_unsupported_controls: bool = False,
 ) -> list[dict[str, Any]]:
     """Execute all 8 `astero/test_suite` cases under `mesa_dir`.
 
     Args:
         mesa_dir: Root path of the MESA installation.
         max_steps_per_stage: Optional cap on evolutionary steps per stage.
-        verify_restart: Whether to verify bit-identical `.photo` restart parity.
+        verify_restart: Whether to verify internal `.photo` round-trip
+            consistency.
+        allow_unsupported_controls: When ``True``, bypass strict failure on
+            unread, unused, or unimplemented upstream MESA controls.
 
     Returns:
         List of 8 `CaseRunReport` dictionaries.
@@ -245,6 +259,7 @@ def run_astero_suite(
         True,
         None if max_steps_per_stage is None else int(max_steps_per_stage),
         bool(verify_restart),
+        bool(allow_unsupported_controls),
     )
     return [dict(item) for item in raw]
 
@@ -253,6 +268,7 @@ def run_tier4_suite(
     mesa_dir: str | pathlib.Path,
     max_steps_per_stage: int | None = 15,
     verify_restart: bool = True,
+    allow_unsupported_controls: bool = False,
 ) -> list[dict[str, Any]]:
     """Execute all 24 Tier 4 `test_suite` cases (`16` `star` + `8` `astero`)
     under `mesa_dir`.
@@ -260,7 +276,10 @@ def run_tier4_suite(
     Args:
         mesa_dir: Root path of the MESA installation.
         max_steps_per_stage: Optional cap on evolutionary steps per stage.
-        verify_restart: Whether to verify bit-identical `.photo` restart parity.
+        verify_restart: Whether to verify internal `.photo` round-trip
+            consistency.
+        allow_unsupported_controls: When ``True``, bypass strict failure on
+            unread, unused, or unimplemented upstream MESA controls.
 
     Returns:
         List of 24 `CaseRunReport` dictionaries.
@@ -270,6 +289,7 @@ def run_tier4_suite(
         True,
         None if max_steps_per_stage is None else int(max_steps_per_stage),
         bool(verify_restart),
+        bool(allow_unsupported_controls),
     )
     return [dict(item) for item in raw]
 
@@ -278,22 +298,29 @@ def run_dev_cases_suite(
     mesa_dir: str | pathlib.Path,
     max_steps_per_stage: int | None = 10,
     verify_restart: bool = True,
+    allow_unsupported_controls: bool = False,
+    skip_optional: bool = True,
 ) -> list[dict[str, Any]]:
-    """Execute all 32 `star/dev_cases_*` pulsation cases under `mesa_dir`.
+    """Execute all active `star/dev_cases_*` pulsation cases under `mesa_dir`.
 
     Args:
         mesa_dir: Root path of the MESA installation.
         max_steps_per_stage: Optional cap on evolutionary steps per stage.
-        verify_restart: Whether to verify bit-identical `.photo` restart parity.
+        verify_restart: Whether to verify internal `.photo` round-trip
+            consistency.
+        allow_unsupported_controls: When ``True``, bypass strict failure on
+            unread, unused, or unimplemented upstream MESA controls.
+        skip_optional: Whether `MESA_SKIP_OPTIONAL` branches are active.
 
     Returns:
-        List of 32 `CaseRunReport` dictionaries.
+        List of `CaseRunReport` dictionaries.
     """
     raw = _rust.star_run_dev_cases_suite(
         str(mesa_dir),
-        True,
+        bool(skip_optional),
         None if max_steps_per_stage is None else int(max_steps_per_stage),
         bool(verify_restart),
+        bool(allow_unsupported_controls),
     )
     return [dict(item) for item in raw]
 
@@ -358,6 +385,7 @@ def run_tier5_star_suite(
     mesa_dir: str | pathlib.Path,
     max_steps_per_stage: int | None = 15,
     verify_restart: bool = True,
+    allow_unsupported_controls: bool = False,
 ) -> list[dict[str, Any]]:
     """Execute all 4 Tier 5/6 `star/test_suite` cases under `mesa_dir`."""
     raw = _rust.star_run_tier5_star_suite(
@@ -365,6 +393,7 @@ def run_tier5_star_suite(
         True,
         None if max_steps_per_stage is None else int(max_steps_per_stage),
         bool(verify_restart),
+        bool(allow_unsupported_controls),
     )
     return [dict(item) for item in raw]
 
@@ -373,12 +402,14 @@ def run_all_active_star_suite(
     mesa_dir: str | pathlib.Path,
     max_steps_per_stage: int | None = 15,
     verify_restart: bool = True,
+    allow_unsupported_controls: bool = False,
 ) -> list[dict[str, Any]]:
     """Execute all 91 active `star/test_suite` cases across Tiers 1-5."""
     raw = _rust.star_run_all_active_star_suite(
         str(mesa_dir),
         None if max_steps_per_stage is None else int(max_steps_per_stage),
         bool(verify_restart),
+        bool(allow_unsupported_controls),
     )
     return [dict(item) for item in raw]
 
@@ -455,12 +486,14 @@ def eval_brott_wind_msun_yr(
 def run_binary_test_suite_case(
     case_dir: str | pathlib.Path,
     max_steps_cap: int | None = 15,
+    allow_unsupported_controls: bool = False,
 ) -> dict[str, Any]:
     """Execute a single `binary/test_suite/<case>` directory."""
     return dict(
         _rust.binary_run_test_suite_case(
             str(case_dir),
             None if max_steps_cap is None else int(max_steps_cap),
+            bool(allow_unsupported_controls),
         )
     )
 
@@ -468,10 +501,12 @@ def run_binary_test_suite_case(
 def run_binary_suite(
     mesa_dir: str | pathlib.Path,
     max_steps_cap: int | None = 15,
+    allow_unsupported_controls: bool = False,
 ) -> list[dict[str, Any]]:
     """Execute all 8 `binary/test_suite` cases under `mesa_dir`."""
     raw = _rust.binary_run_suite(
         str(mesa_dir),
         None if max_steps_cap is None else int(max_steps_cap),
+        bool(allow_unsupported_controls),
     )
     return [dict(item) for item in raw]

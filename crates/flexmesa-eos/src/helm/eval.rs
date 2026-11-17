@@ -49,7 +49,9 @@ impl Default for HelmConfig {
             coulomb_den_cut: -1.0e99,
             include_radiation: true,
             include_elec_pos: true,
-            clip_to_table_boundaries: true,
+            // Match upstream MESA eos/private/helm.f90:191-212: do not silently
+            // clip out-of-bounds (rho*Ye, T) queries unless explicitly enabled.
+            clip_to_table_boundaries: false,
         }
     }
 }
@@ -102,24 +104,27 @@ pub fn helmeos2(
         let denlo = 1.0e-12;
         let denhi = 1.0e15;
         if config.clip_to_table_boundaries {
-            if log_temp <= HELM_LOGTLO {
+            if log_temp < HELM_LOGTLO {
                 log_temp = HELM_LOGTLO;
                 temp = templo;
                 off_table = true;
-            } else if log_temp >= HELM_LOGTHI {
+            } else if log_temp > HELM_LOGTHI {
                 log_temp = HELM_LOGTHI;
                 temp = temphi;
                 off_table = true;
             }
             let log_din = log_den_in + flexmesa_math::log10(ye);
-            if log_din <= HELM_LOGDLO {
+            if log_din < HELM_LOGDLO {
                 din = denlo;
                 den = din / ye;
                 off_table = true;
-            } else if log_din >= HELM_LOGDHI {
+            } else if log_din > HELM_LOGDHI {
                 din = denhi;
                 den = din / ye;
                 off_table = true;
+            }
+            if off_table {
+                return Ok(([0.0; NUM_HELM_RESULTS], true));
             }
         }
         if temp < templo || din < denlo || temp > temphi || din > denhi {

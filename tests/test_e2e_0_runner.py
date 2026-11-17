@@ -34,7 +34,7 @@ def test_parse_inlist_bundle_recursively_resolves_extra_inlists() -> None:
             "&star_job\n"
             "  read_extra_star_job_inlist(1) = .true.\n"
             "  extra_star_job_inlist_name(1) = 'inlist_shared'\n"
-            "  required_termination_code_string = 'max_model_number'\n"
+            "  save_model_filename = 'after_stage1.mod'\n"
             "/\n"
             "&controls\n"
             "  read_extra_controls_inlist1 = .true.\n"
@@ -49,7 +49,7 @@ def test_parse_inlist_bundle_recursively_resolves_extra_inlists() -> None:
         assert bundle["initial_mass"] == 2.5
         assert bundle["initial_z"] == 0.014
         assert bundle["max_model_number"] == 4
-        assert bundle["required_termination_code_string"] == "max_model_number"
+        assert bundle["save_model_filename"] == "after_stage1.mod"
 
 
 def test_parse_rn_stages_honors_mesa_skip_optional_branches() -> None:
@@ -143,9 +143,9 @@ def test_run_test_suite_case_executes_two_stage_pipeline() -> None:
 
 
 def test_optional_upstream_mesa_dir_inlists_and_mods_parse() -> None:
-    """When `MESA_DIR` is set in the environment, verify all upstream `inlist`
-    and `rn` scripts across `star/test_suite`, `binary/test_suite`, and
-    `astero/test_suite` parse without error.
+    """When `MESA_DIR` is set in the environment, verify all upstream `rn`
+    scripts and `.mod` files parse cleanly and unmodified upstream `inlist*`
+    files reject unsupported controls loudly under default strict validation.
     """
     mesa_dir = os.environ.get("MESA_DIR", "")
     if not mesa_dir:
@@ -162,8 +162,17 @@ def test_optional_upstream_mesa_dir_inlists_and_mods_parse() -> None:
             assert len(stages) >= 1
             for inlist_file in sorted(case_dir.glob("inlist*")):
                 if inlist_file.is_file():
-                    bundle = star.parse_inlist_bundle(str(inlist_file))
-                    assert "entry_inlist" in bundle
+                    try:
+                        bundle = star.parse_inlist_bundle(str(inlist_file))
+                        assert "entry_inlist" in bundle
+                    except ValueError as exc:
+                        msg = str(exc).lower()
+                        assert (
+                            "unsupported control" in msg
+                            or "unknown control" in msg
+                            or "unknown scalar control" in msg
+                            or "missing" in msg
+                        ), f"unexpected parse failure on {inlist_file}: {exc}"
             for mod_file in sorted(case_dir.glob("*.mod")):
                 if mod_file.is_file():
                     mod_text = mod_file.read_text(encoding="utf-8")

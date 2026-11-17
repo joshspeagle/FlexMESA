@@ -412,7 +412,7 @@ fn test_burn_const_p_rosenbrock_variants_ros3p_and_ros3pl_converge() {
     xin[io16] = 0.63;
 
     let rate_factors = vec![1.0; g.num_reactions];
-    let ht = HelmTable::builtin();
+    let ht = HelmTable::builtin().expect("builtin HELM table");
     let eos_cfg = EosConfig::default();
 
     for solver in [

@@ -174,7 +174,7 @@ fn test_binary_history_donor_switch_mapping_and_width_32() {
     // Force donor switch (`donor_i = 2`): star 1 must remain 2.0 Msun and star 2
     // must remain 1.2 Msun, while `donor_slot = 0` now maps to `star_2`!
     sys.rl_relative_gap = [-0.2, 0.05];
-    assert!(sys.check_donor_switch(false));
+    assert!(sys.check_donor_switch(false).expect("check_donor_switch"));
     assert_eq!(sys.donor_i, 2);
     sys.last_mdot.component_mdot = [
         -3.0e-6 * MSUN / SECYER, // donor = star 2
@@ -233,7 +233,7 @@ fn test_binary_logs_writer_coupled_stepping_intervals() {
     donor_pm.dt = 1.0e2 * SECYER;
     donor_pm.dt_next = donor_pm.dt;
     set_hydro_vars(&mut donor_pm, false, false).expect("hydro");
-    donor_pm.save_start_values();
+    donor_pm.save_start_values().expect("save_start_values");
 
     let mut sys_pm =
         BinarySystem::new_point_mass(donor_pm, 1.4, 0.35, 0.0, false, 0.0);

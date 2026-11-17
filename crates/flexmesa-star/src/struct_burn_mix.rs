@@ -24,7 +24,6 @@
 
 use flexmesa_chem::NUM_CATEGORIES;
 use flexmesa_const::LN10;
-use flexmesa_eos::HelmTable;
 use flexmesa_net::{
     burn_1_zone, burn_1_zone_const_density, Burn1ZoneInput,
     BurnConstDensityInput,
@@ -74,9 +73,7 @@ pub fn op_split_burn_zones(
     }
     let nz = model.nz;
     let species = model.species;
-    let Some(net_info) = resolve_model_net(model) else {
-        return Ok(());
-    };
+    let net_info = resolve_model_net(model)?;
     if model.aux.burn_avg_epsnuc.len() != nz {
         model.aux.burn_avg_epsnuc.resize(nz, 0.0);
     }
@@ -117,7 +114,7 @@ pub fn op_split_burn_zones(
         return Ok(());
     }
 
-    let ht = HelmTable::builtin();
+    let ht = crate::micro::builtin_helm_table()?;
     let rate_factors = vec![1.0_f64; net_info.num_reactions];
     let eos_cfg = &model.eos_config;
 
@@ -474,7 +471,7 @@ fn run_struct_burn_mix_core(
         model.sig.fill(0.0);
     }
 
-    model.save_start_values();
+    model.save_start_values()?;
     (
         model.lnd_start,
         model.ln_t_start,

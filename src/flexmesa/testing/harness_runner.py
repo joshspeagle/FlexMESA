@@ -252,6 +252,7 @@ def run_trace_inprocess(
     write_profiles: bool = False,
     is_logs_dir: bool = True,
     numerics_mode: str | None = None,
+    allow_unsupported_controls: bool = False,
 ) -> dict[str, Any]:
     """Invoke the compiled Safe Rust tracer directly in the current process.
 
@@ -266,6 +267,8 @@ def run_trace_inprocess(
         is_logs_dir: Treat ``out_target`` as a root directory when True.
         numerics_mode: Arithmetic mode (``"strict"`` or ``"fast"``; defaults
             to active ``FLEXMESA_NUMERICS_MODE`` / process mode).
+        allow_unsupported_controls: Bypass strict namelist rejection of
+            unread, unused, or unimplemented MESA controls when True.
 
     Returns:
         Raw telemetry dictionary returned by ``flexmesa._rust``.
@@ -295,6 +298,7 @@ def run_trace_inprocess(
                 write_profiles=write_profiles,
                 is_logs_dir=is_logs_dir,
                 numerics_mode=eff_mode,
+                allow_unsupported_controls=allow_unsupported_controls,
             )
         )
     if suite == "binary":
@@ -306,6 +310,7 @@ def run_trace_inprocess(
                 respect_intervals=respect_intervals,
                 is_logs_dir=is_logs_dir,
                 numerics_mode=eff_mode,
+                allow_unsupported_controls=allow_unsupported_controls,
             )
         )
     if suite == "astero":
@@ -319,6 +324,7 @@ def run_trace_inprocess(
                 write_profiles=write_profiles,
                 is_logs_dir=is_logs_dir,
                 numerics_mode=eff_mode,
+                allow_unsupported_controls=allow_unsupported_controls,
             )
         )
     raise ValueError(f"unsupported suite {suite!r}")
@@ -367,6 +373,7 @@ def _run_traced_worker(
     write_profiles: bool,
     is_logs_dir: bool,
     numerics_mode: str,
+    allow_unsupported_controls: bool,
     timeout_sec: float | None,
     max_rss_gb: float | None,
     t0: float,
@@ -400,6 +407,8 @@ def _run_traced_worker(
             cmd.append("--respect-intervals")
         if write_profiles:
             cmd.append("--write-profiles")
+        if allow_unsupported_controls:
+            cmd.append("--allow-unsupported-controls")
 
         cap_kb = int(max_rss_gb * 1.0e6) if max_rss_gb is not None else None
         peak_kb = 0
@@ -496,6 +505,7 @@ def run_traced_case(
     write_profiles: bool = False,
     is_logs_dir: bool = True,
     numerics_mode: str | None = None,
+    allow_unsupported_controls: bool = False,
     timeout_sec: float | None = None,
     max_rss_gb: float | None = None,
 ) -> TraceRunOutcome:
@@ -512,6 +522,8 @@ def run_traced_case(
         is_logs_dir: Treat ``out_target`` as a root directory when True.
         numerics_mode: Arithmetic mode (``"strict"`` or ``"fast"``; defaults
             to active ``FLEXMESA_NUMERICS_MODE`` / process mode).
+        allow_unsupported_controls: Bypass strict namelist rejection of
+            unread, unused, or unimplemented MESA controls when True.
         timeout_sec: Optional wall-clock timeout in seconds (``s``).
         max_rss_gb: Optional resident-memory ceiling in gigabytes (``GB``).
 
@@ -540,6 +552,7 @@ def run_traced_case(
             write_profiles=write_profiles,
             is_logs_dir=is_logs_dir,
             numerics_mode=eff_mode,
+            allow_unsupported_controls=allow_unsupported_controls,
             timeout_sec=timeout_sec,
             max_rss_gb=max_rss_gb,
             t0=t0,
@@ -556,6 +569,7 @@ def run_traced_case(
             write_profiles=write_profiles,
             is_logs_dir=is_logs_dir,
             numerics_mode=eff_mode,
+            allow_unsupported_controls=allow_unsupported_controls,
         )
         wall = time.monotonic() - t0
         hist = locate_written_history(suite, out_target, is_logs_dir)

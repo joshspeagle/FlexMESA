@@ -70,13 +70,14 @@ pub enum DutchLowTScheme {
 }
 
 impl DutchLowTScheme {
-    /// Parses `Dutch_wind_lowT_scheme`.
+    /// Parses `Dutch_wind_lowT_scheme` (case-insensitive).
     #[must_use]
-    pub fn parse_name(name: &str) -> Self {
+    pub fn parse_name(name: &str) -> Option<Self> {
         match name.trim().to_ascii_lowercase().as_str() {
-            "van loon" | "van_loon" | "vanloon" => Self::VanLoon,
-            "nieuwenhuijzen" => Self::Nieuwenhuijzen,
-            _ => Self::DeJager,
+            "de jager" | "de_jager" | "dejager" => Some(Self::DeJager),
+            "van loon" | "van_loon" | "vanloon" => Some(Self::VanLoon),
+            "nieuwenhuijzen" => Some(Self::Nieuwenhuijzen),
+            _ => None,
         }
     }
 }

@@ -6,6 +6,7 @@ use crate::loader::{
     KapCnZSet, KapCoSet, KapCoSubTable, KapCoXTable, KapCoZTable, KapFixedSet,
     KapTables, KapXTable, KapZTable, KAP_CO_DXS,
 };
+use crate::types::KapError;
 use std::sync::OnceLock;
 
 struct Cursor<'a> {
@@ -17,85 +18,112 @@ impl<'a> Cursor<'a> {
     fn new(bytes: &'a [u8]) -> Self {
         Self { bytes, pos: 0 }
     }
-    fn u8(&mut self) -> u8 {
-        let v = self.bytes[self.pos];
-        self.pos += 1;
-        v
+    fn take(&mut self, n: usize) -> Result<&'a [u8], KapError> {
+        let end = self.pos.checked_add(n).ok_or_else(|| {
+            KapError::TableIo("kap_tables.bin offset overflow".to_string())
+        })?;
+        let slice = self.bytes.get(self.pos..end).ok_or_else(|| {
+            KapError::TableIo("unexpected EOF in kap_tables.bin".to_string())
+        })?;
+        self.pos = end;
+        Ok(slice)
     }
-    fn u32(&mut self) -> usize {
+    fn u8(&mut self) -> Result<u8, KapError> {
+        Ok(self.take(1)?[0])
+    }
+    fn u32(&mut self) -> Result<usize, KapError> {
+        let s = self.take(4)?;
         let mut buf = [0_u8; 4];
-        buf.copy_from_slice(&self.bytes[self.pos..self.pos + 4]);
-        self.pos += 4;
-        u32::from_le_bytes(buf) as usize
+        buf.copy_from_slice(s);
+        Ok(u32::from_le_bytes(buf) as usize)
     }
-    fn f64(&mut self) -> f64 {
+    fn f64(&mut self) -> Result<f64, KapError> {
+        let s = self.take(8)?;
         let mut buf = [0_u8; 8];
-        buf.copy_from_slice(&self.bytes[self.pos..self.pos + 8]);
-        self.pos += 8;
-        f64::from_le_bytes(buf)
+        buf.copy_from_slice(s);
+        Ok(f64::from_le_bytes(buf))
     }
-    fn f64_vec(&mut self, n: usize) -> Vec<f64> {
-        (0..n).map(|_| self.f64()).collect()
+    fn f64_vec(&mut self, n: usize) -> Result<Vec<f64>, KapError> {
+        let total_bytes = n.checked_mul(8).ok_or_else(|| {
+            KapError::TableIo(
+                "kap_tables.bin vector length overflow".to_string(),
+            )
+        })?;
+        let raw = self.take(total_bytes)?;
+        let (chunks, _) = raw.as_chunks::<8>();
+        Ok(chunks.iter().copied().map(f64::from_le_bytes).collect())
     }
-    fn i16_vec(&mut self, n: usize) -> Vec<i16> {
-        let mut out = Vec::with_capacity(n);
-        for _ in 0..n {
-            let mut buf = [0_u8; 2];
-            buf.copy_from_slice(&self.bytes[self.pos..self.pos + 2]);
-            self.pos += 2;
-            out.push(i16::from_le_bytes(buf));
-        }
-        out
+    fn i16_vec(&mut self, n: usize) -> Result<Vec<i16>, KapError> {
+        let total_bytes = n.checked_mul(2).ok_or_else(|| {
+            KapError::TableIo(
+                "kap_tables.bin vector length overflow".to_string(),
+            )
+        })?;
+        let raw = self.take(total_bytes)?;
+        let (chunks, _) = raw.as_chunks::<2>();
+        Ok(chunks.iter().copied().map(i16::from_le_bytes).collect())
     }
-    fn f32_vec(&mut self, n: usize) -> Vec<f32> {
-        let mut out = Vec::with_capacity(n);
-        for _ in 0..n {
-            let mut buf = [0_u8; 4];
-            buf.copy_from_slice(&self.bytes[self.pos..self.pos + 4]);
-            self.pos += 4;
-            out.push(f32::from_le_bytes(buf));
-        }
-        out
+    fn f32_vec(&mut self, n: usize) -> Result<Vec<f32>, KapError> {
+        let total_bytes = n.checked_mul(4).ok_or_else(|| {
+            KapError::TableIo(
+                "kap_tables.bin vector length overflow".to_string(),
+            )
+        })?;
+        let raw = self.take(total_bytes)?;
+        let (chunks, _) = raw.as_chunks::<4>();
+        Ok(chunks.iter().copied().map(f32::from_le_bytes).collect())
     }
-    fn string(&mut self) -> String {
-        let len = self.u32();
-        let s = std::str::from_utf8(&self.bytes[self.pos..self.pos + len])
-            .expect("invalid utf8 in kap_tables.bin")
-            .to_string();
-        self.pos += len;
-        s
+    fn string(&mut self) -> Result<String, KapError> {
+        let len = self.u32()?;
+        let s = std::str::from_utf8(self.take(len)?).map_err(|e| {
+            KapError::TableIo(format!("invalid UTF-8 in kap_tables.bin: {e}"))
+        })?;
+        Ok(s.to_string())
     }
 }
 
 /// Unpack the embedded `kap_tables.bin` payload into [`KapTables`].
-pub(crate) fn parse_kap_tables(bytes: &[u8]) -> KapTables {
-    assert_eq!(&bytes[..8], b"FMKAP001", "invalid kap_tables.bin header");
+///
+/// # Errors
+/// Returns [`KapError::TableIo`] if the binary header or payload is malformed.
+pub(crate) fn parse_kap_tables(bytes: &[u8]) -> Result<KapTables, KapError> {
+    if bytes.get(..8) != Some(b"FMKAP001".as_slice()) {
+        return Err(KapError::TableIo(
+            "invalid kap_tables.bin header magic".to_string(),
+        ));
+    }
     let mut cur = Cursor::new(&bytes[8..]);
 
-    let num_fixed = cur.u32();
+    let num_fixed = cur.u32()?;
     let mut fixed_sets = Vec::with_capacity(num_fixed);
     for _ in 0..num_fixed {
-        let prefix = cur.string();
-        let num_zs = cur.u32();
+        let prefix = cur.string()?;
+        let num_zs = cur.u32()?;
         let mut z_tables = Vec::with_capacity(num_zs);
         for _ in 0..num_zs {
-            let z = cur.f64();
-            let num_xs = cur.u32();
+            let z = cur.f64()?;
+            let num_xs = cur.u32()?;
             let mut x_tables = Vec::with_capacity(num_xs);
             for _ in 0..num_xs {
-                let present = cur.u8() != 0;
-                let x = cur.f64();
-                let z_val = cur.f64();
+                let present = cur.u8()? != 0;
+                let x = cur.f64()?;
+                let z_val = cur.f64()?;
                 if present {
-                    let log_r_min = cur.f64();
-                    let log_r_max = cur.f64();
-                    let log_t_min = cur.f64();
-                    let log_t_max = cur.f64();
-                    let num_lr = cur.u32();
-                    let num_lt = cur.u32();
-                    let log_rs = cur.f64_vec(num_lr);
-                    let log_ts = cur.f64_vec(num_lt);
-                    let raw_i16 = Some(cur.i16_vec(num_lr * num_lt));
+                    let log_r_min = cur.f64()?;
+                    let log_r_max = cur.f64()?;
+                    let log_t_min = cur.f64()?;
+                    let log_t_max = cur.f64()?;
+                    let num_lr = cur.u32()?;
+                    let num_lt = cur.u32()?;
+                    let log_rs = cur.f64_vec(num_lr)?;
+                    let log_ts = cur.f64_vec(num_lt)?;
+                    let grid_len =
+                        num_lr.checked_mul(num_lt).ok_or_else(|| {
+                            KapError::TableIo(
+                                "fixed grid size overflow".to_string(),
+                            )
+                        })?;
+                    let raw_i16 = Some(cur.i16_vec(grid_len)?);
                     x_tables.push(KapXTable {
                         x,
                         z: z_val,
@@ -128,43 +156,49 @@ pub(crate) fn parse_kap_tables(bytes: &[u8]) -> KapTables {
         fixed_sets.push(KapFixedSet { prefix, z_tables });
     }
 
-    let num_co = cur.u32();
+    let num_co = cur.u32()?;
     let mut co_sets = Vec::with_capacity(num_co);
     for _ in 0..num_co {
-        let prefix = cur.string();
-        let num_zs = cur.u32();
+        let prefix = cur.string()?;
+        let num_zs = cur.u32()?;
         let mut z_tables = Vec::with_capacity(num_zs);
         for _ in 0..num_zs {
-            let zbase = cur.f64();
-            let zfrac_c = cur.f64();
-            let zfrac_n = cur.f64();
-            let zfrac_o = cur.f64();
-            let zfrac_ne = cur.f64();
-            let num_xs = cur.u32();
+            let zbase = cur.f64()?;
+            let zfrac_c = cur.f64()?;
+            let zfrac_n = cur.f64()?;
+            let zfrac_o = cur.f64()?;
+            let zfrac_ne = cur.f64()?;
+            let num_xs = cur.u32()?;
             let mut x_tables = Vec::with_capacity(num_xs);
             for _ in 0..num_xs {
-                let present = cur.u8() != 0;
-                let x = cur.f64();
-                let z = cur.f64();
+                let present = cur.u8()? != 0;
+                let x = cur.f64()?;
+                let z = cur.f64()?;
                 if present {
-                    let num_co_tables = cur.u32();
-                    let num_dxc_gt_dxo = cur.u32();
-                    let log_r_min = cur.f64();
-                    let log_r_max = cur.f64();
-                    let log_t_min = cur.f64();
-                    let log_t_max = cur.f64();
-                    let num_lr = cur.u32();
-                    let num_lt = cur.u32();
-                    let log_rs = cur.f64_vec(num_lr);
-                    let log_ts = cur.f64_vec(num_lt);
+                    let num_co_tables = cur.u32()?;
+                    let num_dxc_gt_dxo = cur.u32()?;
+                    let log_r_min = cur.f64()?;
+                    let log_r_max = cur.f64()?;
+                    let log_t_min = cur.f64()?;
+                    let log_t_max = cur.f64()?;
+                    let num_lr = cur.u32()?;
+                    let num_lt = cur.u32()?;
+                    let log_rs = cur.f64_vec(num_lr)?;
+                    let log_ts = cur.f64_vec(num_lt)?;
+                    let grid_len =
+                        num_lr.checked_mul(num_lt).ok_or_else(|| {
+                            KapError::TableIo(
+                                "CO grid size overflow".to_string(),
+                            )
+                        })?;
                     let mut co_table_numbers = [[-1_i32; 8]; 8];
                     let mut co_tables = Vec::with_capacity(num_co_tables);
                     for n in 0..num_co_tables {
-                        let dxc = cur.f64();
-                        let dxo = cur.f64();
-                        let keep_sub = cur.u8() != 0;
+                        let dxc = cur.f64()?;
+                        let dxo = cur.f64()?;
+                        let keep_sub = cur.u8()? != 0;
                         let raw_i16 = if keep_sub {
-                            Some(cur.i16_vec(num_lr * num_lt))
+                            Some(cur.i16_vec(grid_len)?)
                         } else {
                             None
                         };
@@ -263,37 +297,46 @@ pub(crate) fn parse_kap_tables(bytes: &[u8]) -> KapTables {
         co_sets.push(KapCoSet { prefix, z_tables });
     }
 
-    let zsun = cur.f64();
-    let fco_ref = cur.f64();
-    let fc_ref = cur.f64();
-    let fn_ref = cur.f64();
-    let num_lr = cur.u32();
-    let num_lt = cur.u32();
-    let num_zs = cur.u32();
-    let log_rs = cur.f64_vec(num_lr);
-    let log_ts = cur.f64_vec(num_lt);
-    let zs = cur.f64_vec(num_zs);
+    let zsun = cur.f64()?;
+    let fco_ref = cur.f64()?;
+    let fc_ref = cur.f64()?;
+    let fn_ref = cur.f64()?;
+    let num_lr = cur.u32()?;
+    let num_lt = cur.u32()?;
+    let num_zs = cur.u32()?;
+    let log_rs = cur.f64_vec(num_lr)?;
+    let log_ts = cur.f64_vec(num_lt)?;
+    let zs = cur.f64_vec(num_zs)?;
     let log_zs: Vec<f64> =
         zs.iter().map(|&z| flexmesa_math::log10(z)).collect();
+    let aes_grid_len = num_lr.checked_mul(num_lt).ok_or_else(|| {
+        KapError::TableIo("AESOPUS grid size overflow".to_string())
+    })?;
     let mut ts = Vec::with_capacity(num_zs);
     for _ in 0..num_zs {
-        let n_x = cur.u32();
-        let n_fco = cur.u32();
-        let n_fc = cur.u32();
-        let n_fn = cur.u32();
-        let xs = cur.f64_vec(n_x);
-        let fcos = cur.f64_vec(n_fco);
-        let fcs = cur.f64_vec(n_fc);
-        let fns = cur.f64_vec(n_fn);
-        let z_present = cur.u8() != 0;
-        let total_slices = n_x * n_fco * n_fc * n_fn;
+        let n_x = cur.u32()?;
+        let n_fco = cur.u32()?;
+        let n_fc = cur.u32()?;
+        let n_fn = cur.u32()?;
+        let xs = cur.f64_vec(n_x)?;
+        let fcos = cur.f64_vec(n_fco)?;
+        let fcs = cur.f64_vec(n_fc)?;
+        let fns = cur.f64_vec(n_fn)?;
+        let z_present = cur.u8()? != 0;
+        let total_slices = n_x
+            .checked_mul(n_fco)
+            .and_then(|v| v.checked_mul(n_fc))
+            .and_then(|v| v.checked_mul(n_fn))
+            .ok_or_else(|| {
+                KapError::TableIo("AESOPUS slice count overflow".to_string())
+            })?;
         let mut slices =
             Vec::with_capacity(if z_present { total_slices } else { 0 });
         if z_present {
             for _ in 0..total_slices {
-                let sp = cur.u8() != 0;
+                let sp = cur.u8()? != 0;
                 let raw_f32 = if sp {
-                    Some(cur.f32_vec(num_lr * num_lt))
+                    Some(cur.f32_vec(aes_grid_len)?)
                 } else {
                     None
                 };
@@ -323,27 +366,30 @@ pub(crate) fn parse_kap_tables(bytes: &[u8]) -> KapTables {
         ts,
     };
 
-    let num_cn_zs = cur.u32();
-    let cn_num_lr = cur.u32();
-    let cn_num_lt = cur.u32();
-    let cn_log_rs = cur.f64_vec(cn_num_lr);
-    let cn_log_ts = cur.f64_vec(cn_num_lt);
+    let num_cn_zs = cur.u32()?;
+    let cn_num_lr = cur.u32()?;
+    let cn_num_lt = cur.u32()?;
+    let cn_log_rs = cur.f64_vec(cn_num_lr)?;
+    let cn_log_ts = cur.f64_vec(cn_num_lt)?;
+    let cn_grid_len = cn_num_lr.checked_mul(cn_num_lt).ok_or_else(|| {
+        KapError::TableIo("kapCN grid size overflow".to_string())
+    })?;
     let mut cn_zs = Vec::with_capacity(num_cn_zs);
     let mut cn_z_sets = Vec::with_capacity(num_cn_zs);
     for _ in 0..num_cn_zs {
-        let z_val = cur.f64();
+        let z_val = cur.f64()?;
         let mut fcs = [0.0_f64; 7];
         for v in &mut fcs {
-            *v = cur.f64();
+            *v = cur.f64()?;
         }
         let mut fns = [0.0_f64; 3];
         for v in &mut fns {
-            *v = cur.f64();
+            *v = cur.f64()?;
         }
         let mut raw_i16 = Vec::with_capacity(63);
         let mut splines = Vec::with_capacity(63);
         for _ in 0..63 {
-            raw_i16.push(cur.i16_vec(cn_num_lr * cn_num_lt));
+            raw_i16.push(cur.i16_vec(cn_grid_len)?);
             splines.push(OnceLock::new());
         }
         cn_zs.push(z_val);
@@ -363,10 +409,10 @@ pub(crate) fn parse_kap_tables(bytes: &[u8]) -> KapTables {
         z_sets: cn_z_sets,
     };
 
-    KapTables {
+    Ok(KapTables {
         fixed_sets,
         co_sets,
         aesopus,
         kap_cn,
-    }
+    })
 }

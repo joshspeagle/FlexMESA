@@ -125,7 +125,8 @@ pub fn compute_ion_offset(
             if (1..=28).contains(&entry.z) {
                 let ya_k = xk / (entry.z_plus_n as f64);
                 // Reproduces eos/private/ion_offset.f90:67-77 (see #192).
-                offset_ev += NIST_IONIZATION_TABLE_EV[entry.z - 1] * (ya_k / norm);
+                offset_ev +=
+                    NIST_IONIZATION_TABLE_EV[entry.z - 1] * (ya_k / norm);
             }
         }
     }

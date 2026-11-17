@@ -12,13 +12,14 @@ use crate::controls::StarError;
 use crate::evolve::star_evolve_step;
 use crate::history::{extract_history_row, HistoryRow};
 use crate::hydro_vars::set_hydro_vars;
-use crate::inlist::{parse_rn_stages, InlistBundle, RnStage};
+use crate::inlist::{InlistBundle, InlistLoadOptions};
 use crate::mesa_profile::StarLogsWriter;
 use crate::model::StarModel;
 use crate::model_io::{
     compute_photo_checksum, read_photo_bytes, write_mod_string,
     write_photo_bytes,
 };
+use crate::rn_parser::{parse_rn_stages, RnStage};
 use crate::star_job_init::init_or_update_model_from_bundle;
 use crate::termination::check_termination_limits_with_history;
 use crate::tier1_extras::{
@@ -47,6 +48,8 @@ pub enum ExtrasDirective {
     Retry,
     /// Terminate the evolutionary stage with the given reason string (`terminate`).
     Terminate(String),
+    /// Abort the stage immediately with a fatal error message (`#147`).
+    Error(String),
 }
 
 /// Rust trait equivalent of upstream MESA's `run_star_extras.f90` hooks and
@@ -79,7 +82,15 @@ pub trait StarExtras {
         ExtrasDirective::KeepGoing
     }
     /// Invoked once after the evolutionary loop terminates.
-    fn extras_after_evolve(&mut self, _m: &mut StarModel) {}
+    ///
+    /// # Errors
+    /// Returns [`StarError`] if post-run export or verification fails.
+    fn extras_after_evolve(
+        &mut self,
+        _m: &mut StarModel,
+    ) -> Result<(), StarError> {
+        Ok(())
+    }
     /// Custom effective gravitational constant profile $G_{\mathrm{eff}}(k)$.
     fn other_cgrav(&self, _m: &mut StarModel) {}
     /// Custom mixing-length parameter profile $\alpha_{\mathrm{MLT}}(k)$.
@@ -342,11 +353,15 @@ pub fn run_inlist_stage_with_logs(
         }
     } else {
         for _ in 0..cap {
-            if let ExtrasDirective::Terminate(reason) =
-                extras.extras_start_step(model)
-            {
-                termination_code = reason;
-                break;
+            match extras.extras_start_step(model) {
+                ExtrasDirective::Terminate(reason) => {
+                    termination_code = reason;
+                    break;
+                }
+                ExtrasDirective::Error(msg) => {
+                    return Err(StarError::ConvergenceFailure(msg));
+                }
+                ExtrasDirective::KeepGoing | ExtrasDirective::Retry => {}
             }
             if model.controls.use_other_cgrav {
                 extras.other_cgrav(model);
@@ -384,17 +399,23 @@ pub fn run_inlist_stage_with_logs(
                     model.dt,
                     &[],
                 );
-                model.save_start_values();
+                model.save_start_values()?;
             }
             let hr = extract_history_row(model);
             history_rows.push(hr);
 
             let mut will_terminate = false;
             for dir in [check_dir, finish_dir] {
-                if let ExtrasDirective::Terminate(reason) = dir {
-                    termination_code = reason;
-                    will_terminate = true;
-                    break;
+                match dir {
+                    ExtrasDirective::Error(msg) => {
+                        return Err(StarError::ConvergenceFailure(msg));
+                    }
+                    ExtrasDirective::Terminate(reason) => {
+                        termination_code = reason;
+                        will_terminate = true;
+                        break;
+                    }
+                    ExtrasDirective::KeepGoing | ExtrasDirective::Retry => {}
                 }
             }
             if !will_terminate {
@@ -416,7 +437,7 @@ pub fn run_inlist_stage_with_logs(
         }
     }
 
-    extras.extras_after_evolve(model);
+    extras.extras_after_evolve(model)?;
 
     if model.job.save_model_when_terminate
         && !model.job.save_model_filename.is_empty()
@@ -517,6 +538,8 @@ pub fn run_test_suite_case(
 /// optionally streaming incremental MESA-format `LOGS/history.data`,
 /// `LOGS/profileN.data`, and `LOGS/profiles.index` files according to `logs_opts` (`#163`).
 ///
+/// Uses default strict inlist validation (`allow_unsupported_controls = false`).
+///
 /// # Errors
 /// Returns [`StarError`] if `inlist` parsing, stage execution, or log output fails.
 pub fn run_test_suite_case_with_logs(
@@ -525,6 +548,29 @@ pub fn run_test_suite_case_with_logs(
     max_steps_per_stage: Option<usize>,
     verify_restart: bool,
     logs_opts: StarLogsOptions<'_>,
+) -> Result<CaseRunReport, StarError> {
+    run_test_suite_case_with_options(
+        orig_case_dir,
+        skip_optional,
+        max_steps_per_stage,
+        verify_restart,
+        logs_opts,
+        InlistLoadOptions::default(),
+    )
+}
+
+/// Executes all stages of an upstream MESA `test_suite` case directory with
+/// explicit `logs_opts` and `load_opts` (`#147`).
+///
+/// # Errors
+/// Returns [`StarError`] if `inlist` parsing, stage execution, or log output fails.
+pub fn run_test_suite_case_with_options(
+    orig_case_dir: &Path,
+    skip_optional: bool,
+    max_steps_per_stage: Option<usize>,
+    verify_restart: bool,
+    logs_opts: StarLogsOptions<'_>,
+    load_opts: InlistLoadOptions,
 ) -> Result<CaseRunReport, StarError> {
     let t0 = Instant::now();
     let staging = TempCaseStaging::new(orig_case_dir)?;
@@ -563,15 +609,20 @@ pub fn run_test_suite_case_with_logs(
                 current_model = None;
                 let (src, dst) =
                     (case_dir.join(src_mod), case_dir.join(dst_mod));
-                if src.exists() {
-                    fs::copy(&src, &dst).map_err(|e| {
-                        StarError::IoError(format!(
-                            "failed to copy checkpoint {} -> {}: {e}",
-                            src.display(),
-                            dst.display()
-                        ))
-                    })?;
+                if !src.exists() {
+                    return Err(StarError::IoError(format!(
+                        "missing checkpoint '{}' for copy to '{}'",
+                        src.display(),
+                        dst.display()
+                    )));
                 }
+                fs::copy(&src, &dst).map_err(|e| {
+                    StarError::IoError(format!(
+                        "failed to copy checkpoint {} -> {}: {e}",
+                        src.display(),
+                        dst.display()
+                    ))
+                })?;
             }
             RnStage::DoOne {
                 inlist,
@@ -585,12 +636,9 @@ pub fn run_test_suite_case_with_logs(
                         }
                     }
                 }
-                if InlistBundle::resolve_inlist_path(case_dir, inlist).is_none()
-                {
-                    continue;
-                }
-                let bundle =
-                    InlistBundle::from_file_in_case_dir(case_dir, inlist)?;
+                let bundle = InlistBundle::from_file_in_case_dir_with_options(
+                    case_dir, inlist, load_opts,
+                )?;
                 let use_tov = bundle.controls.use_other_cgrav;
                 let mut extras: Box<dyn StarExtras> = match tier {
                     1 => Box::new(Tier1CaseExtras::new(&case_name)),
@@ -697,6 +745,8 @@ pub fn run_test_suite_case_with_logs(
 /// Runs a slice of `star/test_suite/<case>` directories under `mesa_dir` in
 /// order and returns their [`CaseRunReport`] records.
 ///
+/// Uses default strict inlist validation (`allow_unsupported_controls = false`).
+///
 /// # Errors
 /// Returns [`StarError`] if any case in `cases` fails to execute.
 pub fn run_case_list(
@@ -705,15 +755,38 @@ pub fn run_case_list(
     max_steps_per_stage: Option<usize>,
     verify_restart: bool,
 ) -> Result<Vec<CaseRunReport>, StarError> {
+    run_case_list_with_options(
+        mesa_dir,
+        cases,
+        max_steps_per_stage,
+        verify_restart,
+        InlistLoadOptions::default(),
+    )
+}
+
+/// Runs a slice of `star/test_suite/<case>` directories under `mesa_dir` in
+/// order with explicit `load_opts` (`#147`).
+///
+/// # Errors
+/// Returns [`StarError`] if any case in `cases` fails to execute.
+pub fn run_case_list_with_options(
+    mesa_dir: &Path,
+    cases: &[&str],
+    max_steps_per_stage: Option<usize>,
+    verify_restart: bool,
+    load_opts: InlistLoadOptions,
+) -> Result<Vec<CaseRunReport>, StarError> {
     let suite_dir = mesa_dir.join("star").join("test_suite");
     let mut reports = Vec::with_capacity(cases.len());
     for &case_name in cases {
         let case_dir = suite_dir.join(case_name);
-        reports.push(run_test_suite_case(
+        reports.push(run_test_suite_case_with_options(
             &case_dir,
             true,
             max_steps_per_stage,
             verify_restart,
+            StarLogsOptions::default(),
+            load_opts,
         )?);
     }
     Ok(reports)

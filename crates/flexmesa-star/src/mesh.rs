@@ -184,7 +184,7 @@ impl StarModel {
         crate::micro::set_basic_vars(self)?;
         crate::micro::do_eos(self)?;
         crate::micro::do_neu(self)?;
-        self.save_start_values();
+        self.save_start_values()?;
         self.save_old_values();
         Ok(())
     }
@@ -349,7 +349,11 @@ impl StarModel {
     }
 
     /// Snapshots current state into `*_start` arrays at the beginning of a step.
-    pub fn save_start_values(&mut self) {
+    ///
+    /// Propagates errors from Riemann face velocity reconstruction (`u_flag`)
+    /// matching `save_start_values(s, ierr)` in
+    /// `star/private/struct_burn_mix.f90:268-356`.
+    pub fn save_start_values(&mut self) -> Result<(), StarError> {
         if self.controls.rsp2_flag {
             let alfap = crate::rsp2::X_ALFAP * self.controls.rsp2.alfap;
             for k in 0..self.nz {
@@ -400,11 +404,12 @@ impl StarModel {
             self.aux.p_face_start.resize(self.nz, -1.0);
             self.aux.p_face_start.fill(-1.0);
             self.aux.u_face_start.resize(self.nz, 0.0);
-            let _ = crate::riemann_ad::do_uface_and_pface(self);
+            crate::riemann_ad::do_uface_and_pface(self)?;
         }
         if self.controls.rti_flag {
             crate::hydro_rti::set_dpdr_drhodr_info(self);
         }
+        Ok(())
     }
 
     /// Snapshots current state into `*_old` arrays after a successful step.

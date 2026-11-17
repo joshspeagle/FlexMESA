@@ -84,6 +84,7 @@ pub mod hydro_temperature;
 pub mod hydro_vars;
 pub mod hydro_work;
 pub mod inlist;
+pub mod inlist_inventory;
 pub mod inlist_populate;
 mod inlist_populate_limits;
 mod inlist_populate_phase5b;
@@ -118,6 +119,7 @@ pub mod report_utils;
 pub mod riemann;
 pub mod riemann_ad;
 pub mod riemann_eqns;
+pub mod rn_parser;
 pub mod rotation;
 pub(crate) mod rotation_mix;
 pub mod rsp2;
@@ -251,10 +253,15 @@ pub use hydro_vars::{
     check_for_redo_mlt, do_brunt_b, do_brunt_n2, eval_surf_bc, set_hydro_vars,
     set_mlt_vars, update_sig_from_d_mix,
 };
-pub use inlist::{parse_rn_stages, InlistBundle, RnStage, SectionControls};
+pub use inlist::{InlistBundle, InlistLoadOptions, SectionControls};
+pub use inlist_inventory::{
+    copy_cleaned_star_case, supported_star_control_inventory,
+    StarControlInventory,
+};
 pub use inlist_runner::{
-    run_case_list, run_inlist_stage, run_inlist_stage_with_logs,
-    run_test_suite_case, run_test_suite_case_with_logs,
+    run_case_list, run_case_list_with_options, run_inlist_stage,
+    run_inlist_stage_with_logs, run_test_suite_case,
+    run_test_suite_case_with_logs, run_test_suite_case_with_options,
     verify_photo_restart_parity, CaseRunReport, DefaultStarExtras,
     ExtrasDirective, StageRunReport, StarExtras, StarLogsOptions,
     TovGrStarExtras,
@@ -360,6 +367,7 @@ pub use riemann::{
 pub use riemann_ad::{
     calc_ptot_cell_ad, do1_riemann_momentum_eqn, do_uface_and_pface,
 };
+pub use rn_parser::{parse_rn_stages, RnStage};
 pub use rotation::{
     eval_magnetic_diffusivity, eval_omega_crit, eval_rotation_fp_ft,
     eval_rotational_mixing_zone, eval_thermal_diffusivity,
@@ -437,17 +445,20 @@ pub use tier1_extras::{
     eval_model_colors, eval_solar_calibration_objective,
     eval_starspot_effective_luminosity, eval_t_tau_gradr_factor, is_tier1_case,
     nelder_mead_solar_calibration_step, run_tier1_suite,
-    verify_tier1_case_assertions, Tier1CaseExtras, TIER1_CASES,
+    run_tier1_suite_with_options, verify_tier1_case_assertions,
+    Tier1CaseExtras, TIER1_CASES,
 };
 pub use tier2_extras::{
     apply_accretion_composition_and_nova_wind, apply_planetary_core,
     eval_conductive_flame_state, eval_planetary_irradiation_heating,
     eval_wd_phase_separation, is_tier2_case, run_tier2_suite,
-    verify_tier2_case_assertions, Tier2CaseExtras, TIER2_CASES,
+    run_tier2_suite_with_options, verify_tier2_case_assertions,
+    Tier2CaseExtras, TIER2_CASES,
 };
 pub use tier3_extras::{
     compute_total_angular_momentum, is_tier3_case, run_tier3_suite,
-    verify_tier3_case_assertions, Tier3CaseExtras, TIER3_CASES,
+    run_tier3_suite_with_options, verify_tier3_case_assertions,
+    Tier3CaseExtras, TIER3_CASES,
 };
 pub use tier3_physics::{
     eval_duffell_rti_shock_state, eval_fe_core_infall_state,
@@ -457,14 +468,16 @@ pub use tier3_physics::{
     eval_tzo_core_accretion_step, export_stella_ascii,
 };
 pub use tier4_extras::{
-    is_tier4_case, run_dev_cases_suite, run_tier4_star_suite,
+    is_tier4_case, run_dev_cases_suite, run_dev_cases_suite_with_options,
+    run_tier4_star_suite, run_tier4_star_suite_with_options,
     verify_tier4_case_assertions, Tier4CaseExtras, TIER4_ACTIVE_STAR_CASES,
     TIER4_ASTERO_CASES, TIER4_DEV_CASES, TIER4_STAR_CASES,
 };
 pub use tier5_extras::{
     all_active_star_case_names, eval_grafener_kudritzki_wind_msun_yr,
     eval_overshoot_dbl_exp, eval_xtrans_mesh_factor, is_tier5_star_case,
-    run_all_active_star_suite, run_tier5_star_suite,
+    run_all_active_star_suite, run_all_active_star_suite_with_options,
+    run_tier5_star_suite, run_tier5_star_suite_with_options,
     verify_step_redo_bit_parity, verify_tier5_star_case_assertions,
     write_relax_profile_files, Tier5StarCaseExtras, TIER5_STAR_CASES,
 };

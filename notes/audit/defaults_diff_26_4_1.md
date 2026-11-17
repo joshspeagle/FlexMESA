@@ -93,17 +93,17 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 
 | Control | Upstream `26.4.1` Source | Upstream Default | `FlexMESA` Source | `FlexMESA` Default | Classification |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| `implicit_scheme_tolerance` | `binary/defaults/binary_controls.defaults:627` | `1d-2` | `crates/flexmesa-binary/src/inlist.rs:303` | `1.0e-3` | numeric mismatch |
-| `initial_change_factor` | `binary/defaults/binary_controls.defaults:677` | `1.5d0` | `crates/flexmesa-binary/src/inlist.rs:305` | `1.2` | numeric mismatch |
-| `roche_min_mdot` | `binary/defaults/binary_controls.defaults:734` | `1d-16` | `crates/flexmesa-binary/src/inlist.rs:310` | `1.0e-12` | numeric mismatch |
+| `implicit_scheme_tolerance` | `binary/defaults/binary_controls.defaults:627` | `1d-2` | `crates/flexmesa-binary/src/inlist.rs:437` | `1.0e-3` | numeric mismatch |
+| `initial_change_factor` | `binary/defaults/binary_controls.defaults:677` | `1.5d0` | `crates/flexmesa-binary/src/inlist.rs:439` | `1.2` | numeric mismatch |
+| `roche_min_mdot` | `binary/defaults/binary_controls.defaults:734` | `1d-16` | `crates/flexmesa-binary/src/inlist.rs:444` | `1.0e-12` | numeric mismatch |
 
 ## astero &astero_search_controls
 
 | Control | Upstream `26.4.1` Source | Upstream Default | `FlexMESA` Source | `FlexMESA` Default | Classification |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| `f0_ov_div_f_ov` | `astero/defaults/astero_search.defaults:743` | `-1` | `crates/flexmesa-astero/src/inlist_astero.rs:358` | `1.0` | numeric mismatch |
-| `filename_for_parameters` | `astero/defaults/astero_search.defaults:591` | `'undefined'` | `crates/flexmesa-astero/src/inlist_astero.rs:380` | `String::from("parameters.txt")` | string/option mismatch |
-| `simplex_fcn_calls_max` | `astero/defaults/astero_search.defaults:417` | `10000` | `crates/flexmesa-astero/src/inlist_astero.rs:361` | `1000` | numeric mismatch |
+| `f0_ov_div_f_ov` | `astero/defaults/astero_search.defaults:743` | `-1` | `crates/flexmesa-astero/src/inlist_astero.rs:365` | `1.0` | numeric mismatch |
+| `filename_for_parameters` | `astero/defaults/astero_search.defaults:591` | `'undefined'` | `crates/flexmesa-astero/src/inlist_astero.rs:387` | `String::from("parameters.txt")` | string/option mismatch |
+| `simplex_fcn_calls_max` | `astero/defaults/astero_search.defaults:417` | `10000` | `crates/flexmesa-astero/src/inlist_astero.rs:368` | `1000` | numeric mismatch |
 
 ## eos &eos
 
@@ -126,5 +126,5 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 
 | Control | Upstream `26.4.1` Source | Upstream Default | `FlexMESA` Source | `FlexMESA` Default | Classification |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| `use_Type2_opacities` | `kap/defaults/kap.defaults:189` | `.true.` | `crates/flexmesa-kap/src/types.rs:210` | `false` | boolean mismatch |
-| `use_Zbase_for_Type1` | `kap/defaults/kap.defaults:176` | `.true.` | `crates/flexmesa-kap/src/types.rs:209` | `false` | boolean mismatch |
+| `use_Type2_opacities` | `kap/defaults/kap.defaults:189` | `.true.` | `crates/flexmesa-kap/src/types.rs:225` | `false` | boolean mismatch |
+| `use_Zbase_for_Type1` | `kap/defaults/kap.defaults:176` | `.true.` | `crates/flexmesa-kap/src/types.rs:224` | `false` | boolean mismatch |

@@ -58,6 +58,6 @@ print("JAX dispatch:  ", flexmesa.resolve_backend("auto", jnp.array([1.0, 2.0]))
 
 ## Command-Line Interface (`flexmesa.cli`)
 
-The installed `flexmesa` console script dispatches subcommands such as `flexmesa data fetch`, `flexmesa data status`, `flexmesa trace`, `flexmesa harness` (`--numerics-mode {strict,fast}`), and `flexmesa --version`.
+The installed `flexmesa` console script dispatches subcommands such as `flexmesa data fetch`, `flexmesa data status`, `flexmesa trace`, `flexmesa harness` (`--numerics-mode {strict,fast}`, `--allow-unsupported-controls`), and `flexmesa --version`.
 
 ::: flexmesa.cli

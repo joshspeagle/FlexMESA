@@ -175,6 +175,13 @@ pub enum EosError {
         /// Diagnostic message.
         detail: String,
     },
+    /// Required EOS table file is missing, unreadable, or corrupt.
+    TableIo {
+        /// Table loader routine where the failure occurred.
+        context: &'static str,
+        /// Diagnostic message.
+        detail: String,
+    },
 }
 
 impl Display for EosError {
@@ -182,7 +189,8 @@ impl Display for EosError {
         match self {
             Self::InvalidState { context, detail }
             | Self::OffTable { context, detail }
-            | Self::ConvergenceFailure { context, detail } => {
+            | Self::ConvergenceFailure { context, detail }
+            | Self::TableIo { context, detail } => {
                 write!(f, "{context}: {detail}")
             }
         }

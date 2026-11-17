@@ -56,7 +56,7 @@ fn test_default_am_d_mix_zero_omega_transport_and_gold2_chem_increment_convergen
     // Stiff gold2 convective core (dt * sig / dm = 1e13 at dt = 50 s) with
     // 1-ULP start-of-step normalization jitter across core cells.
     star.pack_xh();
-    star.save_start_values();
+    star.save_start_values().expect("save_start_values");
     star.dt = 50.0;
     let k_core = nz.saturating_sub(4);
     assert!(k_core >= 2 && star.species > 0);
@@ -108,7 +108,7 @@ fn test_premix_omega_symmetric_strang_split_pre_and_post_henyey() {
     }
     update_rotation_distortion_factors(&mut star_premix);
     set_hydro_vars(&mut star_premix, false, false).expect("set_hydro_vars");
-    star_premix.save_start_values();
+    star_premix.save_start_values().expect("save_start_values");
     star_premix.save_old_values();
 
     let mut star_full = star_premix.clone();
@@ -154,7 +154,7 @@ fn test_op_split_burn_runs_before_save_start_values_preserving_pre_burn_t_start(
     let mut star = load_zams_model(ctrl, StarJobControls::default())
         .expect("15 Msun ZAMS");
     set_hydro_vars(&mut star, false, false).expect("set_hydro_vars");
-    star.save_start_values();
+    star.save_start_values().expect("save_start_values");
     star.save_old_values();
 
     let c_idx = star.nz - 1;

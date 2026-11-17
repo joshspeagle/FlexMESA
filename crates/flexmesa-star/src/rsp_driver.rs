@@ -72,7 +72,7 @@ pub(crate) fn init_rsp_model_from_bundle(
         let mut model = if controls.rsp.use_other_rsp_build_model {
             let hist_name = controls
                 .x_character_ctrl
-                .get(1)
+                .first()
                 .map_or("history_7M.data", String::as_str);
             let rep = eval_rsp_2nd_crossing_with_controls(
                 &bundle.case_dir,
@@ -149,27 +149,37 @@ pub(crate) fn init_rsp_model_from_bundle(
         }
     }
 
-    if job.load_saved_model && !job.saved_model_name.is_empty() {
-        if let Some(mod_path) =
-            resolve_model_path(&bundle.case_dir, &job.saved_model_name)
-        {
-            if let Ok(text) = fs::read_to_string(&mod_path) {
-                if let Ok(mut m) =
-                    read_mod_str(&text, controls.clone(), job.clone())
-                {
-                    if m.controls.rsp_flag {
-                        m.controls.v_flag = true;
-                        m.eos_config = bundle.eos_config;
-                        m.kap_config = bundle.kap_config.clone();
-                        apply_rsp_job_overrides(&mut m, job);
-                        rsp_setup_model(&mut m, false, false)?;
-                        m.save_old_values();
-                        extras.extras_controls(&mut m);
-                        extras.extras_startup(&mut m, false)?;
-                        return Ok(Some(m));
-                    }
-                }
-            }
+    if job.load_saved_model {
+        let trimmed = job.saved_model_name.trim();
+        if trimmed.is_empty() {
+            return Err(StarError::InvalidInput(String::from(
+                "load_saved_model = true requires a non-empty load_model_filename",
+            )));
+        }
+        let mod_path = resolve_model_path(&bundle.case_dir, trimmed)
+            .ok_or_else(|| {
+                StarError::IoError(format!(
+                    "missing saved model '{trimmed}' in '{}'",
+                    bundle.case_dir.display()
+                ))
+            })?;
+        let text = fs::read_to_string(&mod_path).map_err(|e| {
+            StarError::IoError(format!(
+                "failed to read saved model {}: {e}",
+                mod_path.display()
+            ))
+        })?;
+        let mut m = read_mod_str(&text, controls.clone(), job.clone())?;
+        if m.controls.rsp_flag {
+            m.controls.v_flag = true;
+            m.eos_config = bundle.eos_config;
+            m.kap_config = bundle.kap_config.clone();
+            apply_rsp_job_overrides(&mut m, job);
+            rsp_setup_model(&mut m, false, false)?;
+            m.save_old_values();
+            extras.extras_controls(&mut m);
+            extras.extras_startup(&mut m, false)?;
+            return Ok(Some(m));
         }
     }
 
@@ -265,13 +275,13 @@ pub fn rsp_setup_model(
         rsp.e0 = 0.0;
         rsp.num_periods = 0;
     }
-    set_star_vars_rsp(model, &dc);
+    set_star_vars_rsp(model, &dc)?;
     let mut wk = RspHydWork::from_model(model);
     let mut band = RspHydBand::new(nz);
     init_hyd(model, &chem, &dc, &mut wk, &mut band)?;
     let _rad = calculate_energies(model, &dc, &wk);
     model.aux.rsp.e0 = model.aux.rsp.ede_start;
-    calculate_work_integrals(model, &dc, None);
+    calculate_work_integrals(model, &dc, None)?;
     model.controls.tau_factor = model.aux.rsp.rsp_tau_factor;
 
     finish_after_build_model(model);
@@ -430,7 +440,7 @@ fn do1_step(
         model.aux.rsp.min_rad_diff_time = min_dt;
     }
 
-    calculate_work_integrals(model, dc, log_dir);
+    calculate_work_integrals(model, dc, log_dir)?;
     let _rad = calculate_energies(model, dc, &wk);
     gather_pulse_statistics(model, dc);
     if model.controls.rsp_max_num_periods.is_some_and(|lim| {

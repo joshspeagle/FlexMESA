@@ -47,17 +47,26 @@ mod search_methods;
 pub mod surface_corr;
 
 pub use e2e::{
-    run_astero_suite, run_astero_test_suite_case,
-    run_astero_test_suite_case_with_logs, TempCaseStaging, TIER4_ASTERO_CASES,
+    run_astero_suite, run_astero_suite_with_options,
+    run_astero_test_suite_case, run_astero_test_suite_case_with_logs,
+    run_astero_test_suite_case_with_options, TempCaseStaging,
+    TIER4_ASTERO_CASES,
 };
 pub use inlist_astero::{
-    parse_astero_search_controls, AsteroParamSet, AsteroSearchControls,
-    AsteroSearchParam, SpectroConstraint,
+    parse_astero_search_controls, parse_astero_search_controls_with_options,
+    supported_astero_control_inventory, validate_astero_sections,
+    AsteroControlInventory, AsteroParamSet, AsteroSearchControls,
+    AsteroSearchParam, SpectroConstraint, ASTERO_SEARCH_CONTROLS_SUPPORTED,
+    ASTERO_SEARCH_CONTROLS_UNUSED,
+};
+pub use inlist_parser::{
+    copy_cleaned_astero_case, validate_astero_sections_with_pgstar,
 };
 pub use optimize::{
     bobyqa_minimize, map_bobyqa_param, nelder_mead_minimize, newuoa_minimize,
     powell_quadratic_minimize, scan_cartesian_grid,
-    simplex_minimize_with_options, unmap_bobyqa_param,
+    simplex_minimize_with_options, try_bobyqa_minimize, try_newuoa_minimize,
+    try_simplex_minimize_with_options, unmap_bobyqa_param,
 };
 pub use ratios_chi2::{
     eval_astero_chi2, eval_frequency_ratios_r01_r10, eval_frequency_ratios_r02,
@@ -75,7 +84,8 @@ pub use scaling::{
 };
 pub use search_driver::{
     run_single_astero_track, run_single_astero_track_with_logs,
-    run_star_astero, run_star_astero_with_logs, AsteroSearchReport,
+    run_star_astero, run_star_astero_with_logs, run_star_astero_with_options,
+    AsteroSearchReport,
 };
 pub use surface_corr::{
     estimate_l0_n_obs, eval_combined_corr, eval_cubic_corr, eval_kjeldsen_corr,

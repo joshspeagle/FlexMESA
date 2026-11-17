@@ -163,7 +163,8 @@ pub fn bench_eos_helm(
 ) -> BenchRecord {
     let (_, _, abar, zbar, _, _, _, _) = c12_o16_props();
     let cfg = HelmConfig::default();
-    let ht = HelmTable::builtin();
+    let ht =
+        HelmTable::builtin().expect("builtin HELM table required to benchmark");
     let denom = (nz.saturating_sub(1)).max(1) as f64;
     let mut log_rho = Vec::with_capacity(nz);
     let mut rho = Vec::with_capacity(nz);
@@ -270,7 +271,8 @@ pub fn bench_eos_skye(
 ) -> BenchRecord {
     let (chem_ids, xa, abar, zbar, z_int, _, acmi, a_baryon) = c12_o16_props();
     let cfg = SkyeConfig::default();
-    let ht = HelmTable::builtin();
+    let ht =
+        HelmTable::builtin().expect("builtin HELM table required to benchmark");
     let denom = (nz.saturating_sub(1)).max(1) as f64;
     let mut rho = Vec::with_capacity(nz);
     let mut t = Vec::with_capacity(nz);

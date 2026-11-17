@@ -6,7 +6,14 @@
 use std::fs;
 use std::path::Path;
 
-pub use crate::inlist_parser::parse_astero_search_controls;
+use flexmesa_star::StarError;
+
+pub use crate::inlist_parser::{
+    parse_astero_search_controls, parse_astero_search_controls_with_options,
+    supported_astero_control_inventory, validate_astero_sections,
+    AsteroControlInventory, ASTERO_SEARCH_CONTROLS_SUPPORTED,
+    ASTERO_SEARCH_CONTROLS_UNUSED,
+};
 use crate::ratios_chi2::AsteroChi2Weights;
 
 /// Searchable stellar model parameter specification (`first_*`, `min_*`, `max_*`, `delta_*`).
@@ -420,53 +427,141 @@ impl AsteroSearchControls {
     }
 
     /// Reads candidate parameter rows from `filename_for_parameters` (`from_file`).
-    #[must_use]
     pub fn read_parameters_from_file(
         &self,
         case_dir: &Path,
-    ) -> Vec<AsteroParamSet> {
-        let Ok(text) =
-            fs::read_to_string(case_dir.join(&self.filename_for_parameters))
-        else {
-            return vec![self.first_params()];
-        };
+    ) -> Result<Vec<AsteroParamSet>, StarError> {
+        let fname = self.filename_for_parameters.trim();
+        if fname.is_empty() || fname.eq_ignore_ascii_case("undefined") {
+            return Err(StarError::InvalidInput(String::from(
+                "search_type = 'from_file' requires a non-empty filename_for_parameters",
+            )));
+        }
+        let path = case_dir.join(fname);
+        let text = fs::read_to_string(&path).map_err(|e| {
+            StarError::IoError(format!(
+                "failed to open filename_for_parameters '{}': {e}",
+                path.display()
+            ))
+        })?;
         let mut out = Vec::new();
-        for line in text.lines() {
+        let mut skipped_header = false;
+        for (line_idx, line) in text.lines().enumerate() {
             let trimmed = line.split('!').next().unwrap_or("").trim();
             if trimmed.is_empty() {
                 continue;
             }
             let tokens: Vec<&str> = trimmed.split_whitespace().collect();
-            let cols: Vec<f64> = tokens
-                .iter()
-                .filter_map(|t| t.replace(['d', 'D'], "e").parse::<f64>().ok())
-                .collect();
-            if cols.len() != tokens.len() || cols.is_empty() {
-                continue;
-            }
-            if cols.len() >= 3
-                && (cols[0] - 1.0).abs() < 1e-12
-                && (cols[1] - 2.0).abs() < 1e-12
-                && (cols[2] - 3.0).abs() < 1e-12
-            {
-                continue;
-            }
-            let mut p = self.first_params();
-            let get = |c: isize, fb: f64| {
-                if c > 0 && (c as usize) <= cols.len() {
-                    cols[(c as usize) - 1]
-                } else {
-                    fb
+            let is_col_numbers = tokens.len() >= 3
+                && tokens[0].trim() == "1"
+                && tokens[1].trim() == "2"
+                && tokens[2].trim() == "3";
+            if !skipped_header {
+                skipped_header = true;
+                // Skip non-numeric column header row or `"1 2 3 ..."` index line.
+                let first_is_header = tokens
+                    .first()
+                    .and_then(|t| {
+                        t.replace(['d', 'D'], "e").parse::<f64>().ok()
+                    })
+                    .is_none();
+                if first_is_header || is_col_numbers {
+                    continue;
                 }
+            } else if is_col_numbers {
+                continue;
+            }
+            let parse_col = |col_idx: isize,
+                             fallback: f64,
+                             name: &str,
+                             required: bool|
+             -> Result<f64, StarError> {
+                if col_idx <= 0 {
+                    return Ok(fallback);
+                }
+                let idx = (col_idx as usize) - 1;
+                let Some(tok) = tokens.get(idx) else {
+                    if required {
+                        return Err(StarError::IoError(format!(
+                            "missing column {col_idx} ({name}) at {}:{}: row has {} column(s)",
+                            path.display(),
+                            line_idx + 1,
+                            tokens.len()
+                        )));
+                    }
+                    return Ok(fallback);
+                };
+                let v = tok
+                    .replace(['d', 'D'], "e")
+                    .parse::<f64>()
+                    .map_err(|e| {
+                        StarError::IoError(format!(
+                            "invalid float '{tok}' in column {col_idx} ({name}) at {}:{}: {e}",
+                            path.display(),
+                            line_idx + 1
+                        ))
+                    })?;
+                if !v.is_finite() {
+                    if required {
+                        return Err(StarError::IoError(format!(
+                            "non-finite value '{tok}' in column {col_idx} ({name}) at {}:{}",
+                            path.display(),
+                            line_idx + 1
+                        )));
+                    }
+                    return Ok(fallback);
+                }
+                Ok(v)
             };
-            p.initial_mass = get(self.file_column_for_mass, p.initial_mass);
-            p.initial_y = get(self.file_column_for_y, p.initial_y);
-            p.initial_feh = get(self.file_column_for_feh, p.initial_feh);
-            p.alpha = get(self.file_column_for_alpha, p.alpha);
-            p.f_ov = get(self.file_column_for_f_ov, p.f_ov);
-            p.my_param1 = get(self.file_column_for_my_param[0], p.my_param1);
-            p.my_param2 = get(self.file_column_for_my_param[1], p.my_param2);
-            p.my_param3 = get(self.file_column_for_my_param[2], p.my_param3);
+            let mut p = self.first_params();
+            p.initial_mass = parse_col(
+                self.file_column_for_mass,
+                p.initial_mass,
+                "initial_mass",
+                self.mass.vary,
+            )?;
+            p.initial_y = parse_col(
+                self.file_column_for_y,
+                p.initial_y,
+                "initial_y",
+                self.y.vary,
+            )?;
+            p.initial_feh = parse_col(
+                self.file_column_for_feh,
+                p.initial_feh,
+                "initial_feh",
+                self.feh_param.vary,
+            )?;
+            p.alpha = parse_col(
+                self.file_column_for_alpha,
+                p.alpha,
+                "alpha",
+                self.alpha.vary,
+            )?;
+            p.f_ov = parse_col(
+                self.file_column_for_f_ov,
+                p.f_ov,
+                "f_ov",
+                self.f_ov.vary,
+            )?;
+            p.my_param1 = parse_col(
+                self.file_column_for_my_param[0],
+                p.my_param1,
+                "my_param1",
+                self.my_param[0].vary,
+            )?;
+            p.my_param2 = parse_col(
+                self.file_column_for_my_param[1],
+                p.my_param2,
+                "my_param2",
+                self.my_param[1].vary,
+            )?;
+            p.my_param3 = parse_col(
+                self.file_column_for_my_param[2],
+                p.my_param3,
+                "my_param3",
+                self.my_param[2].vary,
+            )?;
             out.push(p);
             if self.max_num_from_file > 0
                 && out.len() >= (self.max_num_from_file as usize)
@@ -475,8 +570,11 @@ impl AsteroSearchControls {
             }
         }
         if out.is_empty() {
-            out.push(self.first_params());
+            return Err(StarError::IoError(format!(
+                "no candidate parameter rows found in '{}'",
+                path.display()
+            )));
         }
-        out
+        Ok(out)
     }
 }

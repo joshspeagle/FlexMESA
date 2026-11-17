@@ -13,9 +13,7 @@ use std::path::{Path, PathBuf};
 use flexmesa_const::SECYER;
 
 use crate::controls::{AtmOption, EnergyEqnOption, StarError, VarLayout};
-use crate::inlist_runner::{
-    run_test_suite_case, CaseRunReport, ExtrasDirective, StarExtras,
-};
+use crate::inlist_runner::{CaseRunReport, ExtrasDirective, StarExtras};
 use crate::model::StarModel;
 use crate::pulse_modes::{
     eval_astero_scaling_dnu_numax_uhz, eval_target_mode_frequency_and_growth,
@@ -77,9 +75,8 @@ pub const TIER4_ASTERO_CASES: [&str; 8] = [
 
 /// `(suite_subdir, case_name)` pairs in MESA release `26.4.1`'s
 /// `star/dev_cases_*` development suite (`#141`, `#172`).
-pub const TIER4_DEV_CASES: [(&str, &str); 1] = [
-    ("dev_cases_TDC_Pulsation", "dev_TDC_Cepheid_6M"),
-];
+pub const TIER4_DEV_CASES: [(&str, &str); 1] =
+    [("dev_cases_TDC_Pulsation", "dev_TDC_Cepheid_6M")];
 
 /// Returns `true` if `case_name` belongs to Tier 4 (`star`, `astero`, or `dev_cases_*`).
 #[must_use]
@@ -96,7 +93,7 @@ fn astero_n4_mode_ok(model: &StarModel, enforce_tams_tol: bool) -> bool {
     {
         return false;
     }
-    let expected = model.controls.x_ctrl.get(1).copied().unwrap_or(0.0);
+    let expected = model.controls.x_ctrl.first().copied().unwrap_or(0.0);
     let h1_c = model.xh_mass.last().copied().unwrap_or(0.0);
     !enforce_tams_tol
         || h1_c > 0.005
@@ -162,7 +159,7 @@ impl StarExtras for Tier4CaseExtras {
         {
             if self.case_name == "rsp_check_2nd_crossing" {
                 self.crossing_delta_teff =
-                    model.controls.x_ctrl.get(1).copied().unwrap_or(100.0);
+                    model.controls.x_ctrl.first().copied().unwrap_or(100.0);
             } else if model.aux.rsp.period > 0.0 {
                 self.rsp_period_days = model.aux.rsp.period / 86_400.0;
             }
@@ -233,7 +230,7 @@ impl StarExtras for Tier4CaseExtras {
                 model
                     .controls
                     .x_character_ctrl
-                    .get(10)
+                    .get(9)
                     .map(|s| s.trim())
                     .filter(|s| !s.is_empty()),
             ) {
@@ -307,9 +304,9 @@ impl StarExtras for Tier4CaseExtras {
                 self.rsp_period_days = model.aux.rsp.period / 86_400.0;
             }
             let target_idx = if self.case_name.starts_with("dev_rsp2_") {
-                7
+                6
             } else {
-                1
+                0
             };
             let target_cycle = model
                 .controls
@@ -389,9 +386,9 @@ pub fn verify_tier4_case_assertions(
             }
         }
         let ctrl_idx = if case_name.starts_with("dev_rsp2_") {
-            7
+            6
         } else {
-            1
+            0
         };
         let target_cycle = model
             .controls
@@ -450,15 +447,38 @@ pub fn run_tier4_star_suite(
     max_steps_per_stage: Option<usize>,
     verify_restart: bool,
 ) -> Result<Vec<CaseRunReport>, StarError> {
+    run_tier4_star_suite_with_options(
+        mesa_dir,
+        skip_optional,
+        max_steps_per_stage,
+        verify_restart,
+        crate::inlist::InlistLoadOptions::default(),
+    )
+}
+
+/// Executes all 16 Tier 4 `star/test_suite` cases under `mesa_dir` with
+/// explicit [`InlistLoadOptions`](crate::inlist::InlistLoadOptions).
+///
+/// # Errors
+/// Returns [`StarError`] if any case fails to execute.
+pub fn run_tier4_star_suite_with_options(
+    mesa_dir: &Path,
+    skip_optional: bool,
+    max_steps_per_stage: Option<usize>,
+    verify_restart: bool,
+    load_opts: crate::inlist::InlistLoadOptions,
+) -> Result<Vec<CaseRunReport>, StarError> {
     let suite_dir = mesa_dir.join("star").join("test_suite");
     let mut reports = Vec::with_capacity(TIER4_STAR_CASES.len());
     for &case_name in &TIER4_STAR_CASES {
         let case_dir = suite_dir.join(case_name);
-        let rep = run_test_suite_case(
+        let rep = crate::inlist_runner::run_test_suite_case_with_options(
             &case_dir,
             skip_optional,
             max_steps_per_stage,
             verify_restart,
+            crate::inlist_runner::StarLogsOptions::default(),
+            load_opts,
         )
         .map_err(|e| {
             StarError::ConvergenceFailure(format!("{case_name}: {e}"))
@@ -478,15 +498,38 @@ pub fn run_dev_cases_suite(
     max_steps_per_stage: Option<usize>,
     verify_restart: bool,
 ) -> Result<Vec<CaseRunReport>, StarError> {
+    run_dev_cases_suite_with_options(
+        mesa_dir,
+        skip_optional,
+        max_steps_per_stage,
+        verify_restart,
+        crate::inlist::InlistLoadOptions::default(),
+    )
+}
+
+/// Executes all 32 `star/dev_cases_*` cases under `mesa_dir` with explicit
+/// [`InlistLoadOptions`](crate::inlist::InlistLoadOptions).
+///
+/// # Errors
+/// Returns [`StarError`] if any case fails to execute.
+pub fn run_dev_cases_suite_with_options(
+    mesa_dir: &Path,
+    skip_optional: bool,
+    max_steps_per_stage: Option<usize>,
+    verify_restart: bool,
+    load_opts: crate::inlist::InlistLoadOptions,
+) -> Result<Vec<CaseRunReport>, StarError> {
     let star_dir = mesa_dir.join("star");
     let mut reports = Vec::with_capacity(TIER4_DEV_CASES.len());
     for &(suite_sub, case_name) in &TIER4_DEV_CASES {
         let case_dir = star_dir.join(suite_sub).join(case_name);
-        let rep = run_test_suite_case(
+        let rep = crate::inlist_runner::run_test_suite_case_with_options(
             &case_dir,
             skip_optional,
             max_steps_per_stage,
             verify_restart,
+            crate::inlist_runner::StarLogsOptions::default(),
+            load_opts,
         )
         .map_err(|e| {
             StarError::ConvergenceFailure(format!(

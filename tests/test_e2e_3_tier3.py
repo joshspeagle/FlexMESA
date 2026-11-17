@@ -197,16 +197,30 @@ def test_synthetic_tier3_case_execution_and_photo_restart(
 @pytest.mark.parametrize("case_name", star.TIER3_CASES)
 def test_upstream_mesa_tier3_test_suite_case_passes_with_restart_parity(
     case_name: str,
+    tmp_path: pathlib.Path,
 ) -> None:
-    """Run each upstream MESA Tier 3 case when MESA_DIR is available."""
+    """Reject raw Tier 3 cases on unsupported controls; run cleaned copies."""
     mesa_dir = os.environ.get("MESA_DIR", "")
     if not mesa_dir:
         pytest.skip("MESA_DIR not set; skipping upstream MESA Tier 3 case")
     case_dir = pathlib.Path(mesa_dir) / "star" / "test_suite" / case_name
     assert case_dir.is_dir(), f"Upstream case directory not found: {case_dir}"
 
+    with pytest.raises(
+        ValueError,
+        match=r"(unsupported|unknown|unrecognized).*control",
+    ):
+        star.run_test_suite_case(
+            case_dir,
+            skip_optional=True,
+            max_steps_per_stage=2,
+            verify_restart=True,
+        )
+
+    clean_dir = tmp_path / case_name
+    star.copy_cleaned_case(case_dir, clean_dir, suite="star")
     rep = star.run_test_suite_case(
-        case_dir,
+        clean_dir,
         skip_optional=True,
         max_steps_per_stage=2,
         verify_restart=True,

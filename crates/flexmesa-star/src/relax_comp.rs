@@ -121,7 +121,7 @@ fn step_relax_henyey(
     set_basic_vars(model)?;
     set_hydro_vars(model, false, false)?;
     model.save_old_values();
-    model.save_start_values();
+    model.save_start_values()?;
     match do_struct_burn_mix(model, dt_s, false, true, &[]) {
         Ok(rep) if rep.converged => Ok(true),
         _ => {
@@ -297,7 +297,7 @@ pub fn relax_composition_with_henyey(
     model.aux.step_hist.total_energy_end = etot;
     model.aux.step_hist.error_in_energy_conservation = 0.0;
     model.aux.step_hist.cumulative_energy_error_old = 0.0;
-    model.save_start_values();
+    model.save_start_values()?;
     model.save_old_values();
     Ok(())
 }

@@ -62,7 +62,7 @@ fn make_eos_proc(
     chem_id: Vec<usize>,
     xa: Vec<f64>,
 ) -> impl FnMut(f64, f64) -> Result<AtmEosCallbackResult, AtmError> {
-    let ht = HelmTable::builtin();
+    let ht = HelmTable::builtin().expect("builtin HELM table");
     let cfg = EosConfig::default();
     move |ln_p: f64, ln_t: f64| {
         let t = flexmesa_math::exp(ln_t);

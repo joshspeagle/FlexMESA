@@ -87,7 +87,7 @@ pub fn load_or_build_dt_slice(
         return Ok(tbl);
     }
 
-    Err(EosError::InvalidState {
+    Err(EosError::TableIo {
         context: "load_or_build_dt_slice",
         detail: format!(
             "FlexMESA 4D EOS slice '{stem}' not found in {}. \
@@ -126,7 +126,7 @@ pub fn load_or_build_cms_slice(
         return Ok(tbl);
     }
 
-    Err(EosError::InvalidState {
+    Err(EosError::TableIo {
         context: "load_or_build_cms_slice",
         detail: format!(
             "FlexMESA CMS EOS slice '{stem}' not found in {}. \
@@ -139,7 +139,7 @@ pub fn load_or_build_cms_slice(
 
 /// Reads a cached `FMDT4D01` binary slice into an [`EosDtXzTable`].
 pub fn read_dt_slice_bin(path: &Path) -> Result<EosDtXzTable, EosError> {
-    let err = |msg: String| EosError::InvalidState {
+    let err = |msg: String| EosError::TableIo {
         context: "read_dt_slice_bin",
         detail: msg,
     };
@@ -234,7 +234,7 @@ pub fn write_dt_slice_bin_atomic(
 pub fn read_mesa_eosdt_cache_bin(
     path: &Path,
 ) -> Result<EosDtXzTable, EosError> {
-    let err = |msg: String| EosError::InvalidState {
+    let err = |msg: String| EosError::TableIo {
         context: "read_mesa_eosdt_cache_bin",
         detail: msg,
     };
@@ -316,7 +316,7 @@ pub fn read_mesa_eosdt_cache_bin(
 
 /// Reads a cached `FMCMS001` binary slice into a [`CmsXTable`].
 pub fn read_cms_slice_bin(path: &Path) -> Result<CmsXTable, EosError> {
-    let err = |msg: String| EosError::InvalidState {
+    let err = |msg: String| EosError::TableIo {
         context: "read_cms_slice_bin",
         detail: msg,
     };

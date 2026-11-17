@@ -3,7 +3,7 @@
 //! energy remapping (`do_mesh_adjust`, `get1_lpp`, `adjust_omega`, and
 //! `set_lnT_for_energy` in `star/private/mesh_adjust.f90`).
 
-use flexmesa_eos::{eos_dt_get_zones, HelmTable, I_LN_E};
+use flexmesa_eos::{eos_dt_get_zones, I_LN_E};
 
 use crate::controls::StarError;
 use crate::hydro_vars::set_hydro_vars;
@@ -125,7 +125,7 @@ pub fn set_lnt_for_energy(
     if nz == 0 || e_target.len() != nz {
         return Ok(0.0);
     }
-    let ht = HelmTable::builtin();
+    let ht = crate::micro::builtin_helm_table()?;
 
     for _iter in 0..20 {
         for k in 0..nz {
@@ -448,7 +448,7 @@ pub fn remap_onto_dq(
         (model.star_age_old, model.dt_old, model.mstar_old);
     model.pack_xh();
     set_hydro_vars(model, false, false)?;
-    model.save_start_values();
+    model.save_start_values()?;
     model.save_old_values();
     model.star_age_old = age_old;
     model.dt_old = dt_old;

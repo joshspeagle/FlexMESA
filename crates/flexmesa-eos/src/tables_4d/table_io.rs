@@ -124,7 +124,7 @@ impl EosDtXzTable {
 
     /// Reads a compact `FMDTRW01` raw binary slice (`eos_4d_raw/*.raw`) and fits its 16 bicubic splines.
     pub fn from_raw_bin(path: &Path) -> Result<Self, EosError> {
-        let err = |msg: String| EosError::InvalidState {
+        let err = |msg: String| EosError::TableIo {
             context: "EosDtXzTable::from_raw_bin",
             detail: msg,
         };
@@ -289,7 +289,7 @@ impl EosDtXzTable {
     /// Loads an `(X, Z)` `.data` file from disk and builds its bicubic spline table.
     pub fn from_data_file(path: &Path) -> Result<Self, EosError> {
         let file =
-            std::fs::File::open(path).map_err(|e| EosError::InvalidState {
+            std::fs::File::open(path).map_err(|e| EosError::TableIo {
                 context: "EosDtXzTable::from_data_file",
                 detail: format!("{}: {e}", path.display()),
             })?;

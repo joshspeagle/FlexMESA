@@ -153,7 +153,7 @@ fn test_wave3b1_golden_doit_16_points_match_fortran_mesa() {
         (0.70, 0.02),
     ];
 
-    let ht = HelmTable::builtin();
+    let ht = HelmTable::builtin().expect("builtin HELM table");
     let cfg = EosConfig::default();
 
     for (c_idx, &(x, zinit)) in compositions.iter().enumerate() {
@@ -196,7 +196,7 @@ fn test_wave3b1_golden_doit_16_points_match_fortran_mesa() {
 
 #[test]
 fn test_wave3b1_golden_get_rho_t_inversions_match_fortran_mesa() {
-    let ht = HelmTable::builtin();
+    let ht = HelmTable::builtin().expect("builtin HELM table");
     let cfg = EosConfig::default();
     let (chem_id, xa) = init_composition(0.70, 0.02, 0.0, 0.0);
 
@@ -305,7 +305,7 @@ fn test_wave3b1_golden_get_rho_t_inversions_match_fortran_mesa() {
 
 #[test]
 fn test_wave3b1_golden_eospt_for_ck_matches_fortran_mesa() {
-    let ht = HelmTable::builtin();
+    let ht = HelmTable::builtin().expect("builtin HELM table");
     let cfg = EosConfig::default();
     let (chem_id, xa) = init_composition(0.70, 0.02, 0.0, 0.0);
 
@@ -420,7 +420,7 @@ fn test_wave3b1_golden_eospt_for_ck_matches_fortran_mesa() {
 
 #[test]
 fn test_wave3b1_components_cms_and_eospt_inversions() {
-    let ht = HelmTable::builtin();
+    let ht = HelmTable::builtin().expect("builtin HELM table");
     let dt_tables = EosDtTableSet::builtin();
     let cms_tables = CmsTableSet::builtin();
     let (chem_id, xa) = init_composition(0.70, 0.02, 0.0, 0.0);

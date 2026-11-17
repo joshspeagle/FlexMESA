@@ -303,7 +303,7 @@ fn test_helm_basis_hermite_endpoint_conditions_and_zones() {
     assert!((c0.w0[0] - 1.0).abs() < 1.0e-15);
     assert!((c1.w0[2] - 1.0).abs() < 1.0e-15);
 
-    let table = HelmTable::builtin();
+    let table = HelmTable::builtin().expect("builtin HELM table");
     let (f_ele, eta_ele, xne_fer) = table.eval_electron_positron_order3(
         2.0e8,
         flexmesa_math::log10(2.0e8_f64),

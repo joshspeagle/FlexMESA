@@ -153,8 +153,8 @@ macro_rules! impl_py_star_model {
             }
 
             /// Snapshots current state arrays as start-of-step `*_start` values.
-            pub fn save_start_values(&mut self) {
-                self.inner.save_start_values();
+            pub fn save_start_values(&mut self) -> PyResult<()> {
+                self.inner.save_start_values().map_err(to_py_err)
             }
 
             /// Snapshots current state arrays as previous-step `*_old` values.

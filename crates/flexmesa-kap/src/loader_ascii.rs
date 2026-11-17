@@ -8,6 +8,7 @@
 use crate::loader::KapTables;
 use crate::loader_parse::parse_kap_tables;
 use crate::spline::get_output_string;
+use crate::types::KapError;
 use rayon::prelude::*;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -72,38 +73,42 @@ pub fn find_kap_cache_dir() -> PathBuf {
 
 /// Load [`KapTables`] from `$FLEXMESA_DATA_DIR/kap_full/kap_tables_full.bin`, or
 /// build and cache it from upstream `MESA_DIR/data/kap_data`.
-#[must_use]
-pub(crate) fn load_or_build_kap_tables() -> KapTables {
+///
+/// # Errors
+/// Returns [`KapError::TableIo`] if neither the cached bundle nor upstream
+/// `kap_data` tables can be found, read, or parsed.
+pub(crate) fn load_or_build_kap_tables() -> Result<KapTables, KapError> {
     let cache_dir = find_kap_cache_dir();
     let full_bin_path = cache_dir.join("kap_tables_full.bin");
-    if let Ok(bytes) = fs::read(&full_bin_path) {
-        if bytes.len() > 50_000_000 && bytes.starts_with(b"FMKAP001") {
-            return parse_kap_tables(&bytes);
-        }
+    if full_bin_path.is_file() {
+        let bytes = fs::read(&full_bin_path).map_err(|e| {
+            KapError::TableIo(format!(
+                "failed to read {}: {e}",
+                full_bin_path.display()
+            ))
+        })?;
+        return parse_kap_tables(&bytes);
     }
     if let Some(kap_dir) = find_kap_data_dir() {
-        if let Some(bytes) =
-            build_full_kap_tables_bytes(&kap_dir, Some(&cache_dir))
-        {
-            let _ = fs::create_dir_all(&cache_dir);
-            let tmp_path = cache_dir
-                .join(format!("kap_tables_full.{}.tmp", std::process::id()));
-            let dst_path = cache_dir.join("kap_tables_full.bin");
-            if fs::write(&tmp_path, &bytes).is_ok() {
-                let _ = fs::rename(&tmp_path, &dst_path);
-            }
-            return parse_kap_tables(&bytes);
+        let bytes = build_full_kap_tables_bytes(&kap_dir, Some(&cache_dir))?;
+        let _ = fs::create_dir_all(&cache_dir);
+        let tmp_path = cache_dir
+            .join(format!("kap_tables_full.{}.tmp", std::process::id()));
+        let dst_path = cache_dir.join("kap_tables_full.bin");
+        if fs::write(&tmp_path, &bytes).is_ok() {
+            let _ = fs::rename(&tmp_path, &dst_path);
         }
+        return parse_kap_tables(&bytes);
     }
     let expected = resolve_flexmesa_data_dir()
         .join("kap_full")
         .join("kap_tables_full.bin");
-    panic!(
+    Err(KapError::TableIo(format!(
         "FlexMESA opacity tables not found at {}. \
          Run 'flexmesa data fetch' (or set FLEXMESA_DATA_DIR) to download \
          the verified data-v1 physics table bundle.",
         expected.display()
-    );
+    )))
 }
 
 fn push_u8(buf: &mut Vec<u8>, v: u8) {
@@ -120,35 +125,89 @@ fn push_str(buf: &mut Vec<u8>, s: &str) {
     buf.extend_from_slice(s.as_bytes());
 }
 
-fn parse_fixed_file_bytes(path: &Path, x: f64, z: f64) -> Option<Vec<u8>> {
-    let text = fs::read_to_string(path).ok()?;
+fn parse_f64_tok<'a>(
+    toks: &mut impl Iterator<Item = &'a str>,
+    path: &Path,
+    label: &str,
+) -> Result<f64, KapError> {
+    let raw = toks.next().ok_or_else(|| {
+        KapError::TableIo(format!(
+            "unexpected EOF reading {label} in {}",
+            path.display()
+        ))
+    })?;
+    raw.parse::<f64>().map_err(|e| {
+        KapError::TableIo(format!(
+            "invalid float '{raw}' for {label} in {}: {e}",
+            path.display()
+        ))
+    })
+}
+
+fn parse_usize_str(
+    raw: &str,
+    path: &Path,
+    label: &str,
+) -> Result<usize, KapError> {
+    raw.parse::<usize>().map_err(|e| {
+        KapError::TableIo(format!(
+            "invalid integer '{raw}' for {label} in {}: {e}",
+            path.display()
+        ))
+    })
+}
+
+fn parse_f64_str(raw: &str, path: &Path, label: &str) -> Result<f64, KapError> {
+    raw.parse::<f64>().map_err(|e| {
+        KapError::TableIo(format!(
+            "invalid float '{raw}' for {label} in {}: {e}",
+            path.display()
+        ))
+    })
+}
+
+fn parse_fixed_file_bytes(
+    path: &Path,
+    x: f64,
+    z: f64,
+) -> Result<Vec<u8>, KapError> {
+    let text = fs::read_to_string(path).map_err(|e| {
+        KapError::TableIo(format!("failed to read {}: {e}", path.display()))
+    })?;
     let mut lines = text.lines();
-    lines.next()?;
-    lines.next()?;
-    let hdr: Vec<&str> = lines.next()?.split_whitespace().collect();
+    let eof_err =
+        || KapError::TableIo(format!("unexpected EOF in {}", path.display()));
+    lines.next().ok_or_else(eof_err)?;
+    lines.next().ok_or_else(eof_err)?;
+    let hdr_line = lines.next().ok_or_else(eof_err)?;
+    let hdr: Vec<&str> = hdr_line.split_whitespace().collect();
     if hdr.len() < 10 {
-        return None;
+        return Err(KapError::TableIo(format!(
+            "short header ({} cols < 10) in {}",
+            hdr.len(),
+            path.display()
+        )));
     }
-    let num_lr: usize = hdr[4].parse().ok()?;
-    let log_r_min: f64 = hdr[5].parse().ok()?;
-    let log_r_max: f64 = hdr[6].parse().ok()?;
-    let num_lt: usize = hdr[7].parse().ok()?;
-    let log_t_min: f64 = hdr[8].parse().ok()?;
-    let log_t_max: f64 = hdr[9].parse().ok()?;
-    lines.next()?;
-    lines.next()?;
+    let num_lr = parse_usize_str(hdr[4], path, "num_lr")?;
+    let log_r_min = parse_f64_str(hdr[5], path, "log_r_min")?;
+    let log_r_max = parse_f64_str(hdr[6], path, "log_r_max")?;
+    let num_lt = parse_usize_str(hdr[7], path, "num_lt")?;
+    let log_t_min = parse_f64_str(hdr[8], path, "log_t_min")?;
+    let log_t_max = parse_f64_str(hdr[9], path, "log_t_max")?;
+    lines.next().ok_or_else(eof_err)?;
+    lines.next().ok_or_else(eof_err)?;
 
     let mut toks = lines.flat_map(str::split_whitespace);
     let mut log_rs = Vec::with_capacity(num_lr);
     for _ in 0..num_lr {
-        log_rs.push(toks.next()?.parse::<f64>().ok()?);
+        log_rs.push(parse_f64_tok(&mut toks, path, "logR")?);
     }
     let mut log_ts = Vec::with_capacity(num_lt);
     let mut raw_i16 = Vec::with_capacity(num_lr * num_lt);
     for _ in 0..num_lt {
-        log_ts.push(toks.next()?.parse::<f64>().ok()?);
+        log_ts.push(parse_f64_tok(&mut toks, path, "logT")?);
         for _ in 0..num_lr {
-            let v: f64 = toks.next()?.parse().ok()?;
+            let v = parse_f64_tok(&mut toks, path, "log_kap")?;
             raw_i16.push((v * 1000.0).round() as i16);
         }
     }
@@ -173,46 +232,61 @@ fn parse_fixed_file_bytes(path: &Path, x: f64, z: f64) -> Option<Vec<u8>> {
     for v in raw_i16 {
         out.extend_from_slice(&v.to_le_bytes());
     }
-    Some(out)
+    Ok(out)
 }
 
 fn parse_co_file_bytes(
     path: &Path,
     x: f64,
     z: f64,
-) -> Option<([f64; 4], Vec<u8>)> {
-    let text = fs::read_to_string(path).ok()?;
+) -> Result<([f64; 4], Vec<u8>), KapError> {
+    let text = fs::read_to_string(path).map_err(|e| {
+        KapError::TableIo(format!("failed to read {}: {e}", path.display()))
+    })?;
     let lines: Vec<&str> = text.lines().collect();
     if lines.len() < 10 {
-        return None;
+        return Err(KapError::TableIo(format!(
+            "short CO kap file {}",
+            path.display()
+        )));
     }
     let hdr: Vec<&str> = lines[2].split_whitespace().collect();
     if hdr.len() < 15 {
-        return None;
+        return Err(KapError::TableIo(format!(
+            "short CO header ({} cols < 15) in {}",
+            hdr.len(),
+            path.display()
+        )));
     }
-    let num_co_tables: usize = hdr[2].parse().ok()?;
+    let num_co_tables = parse_usize_str(hdr[2], path, "num_co_tables")?;
     let zfracs = [
-        hdr[5].parse::<f64>().ok()?,
-        hdr[6].parse::<f64>().ok()?,
-        hdr[7].parse::<f64>().ok()?,
-        hdr[8].parse::<f64>().ok()?,
+        parse_f64_str(hdr[5], path, "zfrac_C")?,
+        parse_f64_str(hdr[6], path, "zfrac_N")?,
+        parse_f64_str(hdr[7], path, "zfrac_O")?,
+        parse_f64_str(hdr[8], path, "zfrac_Ne")?,
     ];
-    let num_lr: usize = hdr[9].parse().ok()?;
-    let log_r_min: f64 = hdr[10].parse().ok()?;
-    let log_r_max: f64 = hdr[11].parse().ok()?;
-    let num_lt: usize = hdr[12].parse().ok()?;
-    let log_t_min: f64 = hdr[13].parse().ok()?;
-    let log_t_max: f64 = hdr[14].parse().ok()?;
+    let num_lr = parse_usize_str(hdr[9], path, "num_lr")?;
+    let log_r_min = parse_f64_str(hdr[10], path, "log_r_min")?;
+    let log_r_max = parse_f64_str(hdr[11], path, "log_r_max")?;
+    let num_lt = parse_usize_str(hdr[12], path, "num_lt")?;
+    let log_t_min = parse_f64_str(hdr[13], path, "log_t_min")?;
+    let log_t_max = parse_f64_str(hdr[14], path, "log_t_max")?;
 
-    let num_dxc_gt_dxo: usize =
-        lines[4].split_whitespace().next()?.parse().ok()?;
+    let num_dxc_gt_dxo_str =
+        lines[4].split_whitespace().next().ok_or_else(|| {
+            KapError::TableIo(format!(
+                "missing num_dXC_gt_dXO in {}",
+                path.display()
+            ))
+        })?;
+    let num_dxc_gt_dxo = parse_usize_str(num_dxc_gt_dxo_str, path, "num_dxc")?;
     let mut dxc_dxo = Vec::with_capacity(num_co_tables);
     let mut line_idx = 6;
     while line_idx < lines.len() && dxc_dxo.len() < num_co_tables {
         let row: Vec<&str> = lines[line_idx].split_whitespace().collect();
         if row.len() == 4 && row[0].parse::<usize>().is_ok() {
-            let dxc: f64 = row[2].parse().ok()?;
-            let dxo: f64 = row[3].parse().ok()?;
+            let dxc = parse_f64_str(row[2], path, "dxc")?;
+            let dxo = parse_f64_str(row[3], path, "dxo")?;
             dxc_dxo.push((dxc, dxo));
         }
         line_idx += 1;
@@ -228,14 +302,14 @@ fn parse_co_file_bytes(
                 .flat_map(|l| l.split_whitespace());
             let mut lrs = Vec::with_capacity(num_lr);
             for _ in 0..num_lr {
-                lrs.push(toks.next()?.parse::<f64>().ok()?);
+                lrs.push(parse_f64_tok(&mut toks, path, "CO logR")?);
             }
             let mut lts = Vec::with_capacity(num_lt);
             let mut grid = Vec::with_capacity(num_lr * num_lt);
             for _ in 0..num_lt {
-                lts.push(toks.next()?.parse::<f64>().ok()?);
+                lts.push(parse_f64_tok(&mut toks, path, "CO logT")?);
                 for _ in 0..num_lr {
-                    let v: f64 = toks.next()?.parse().ok()?;
+                    let v = parse_f64_tok(&mut toks, path, "CO log_kap")?;
                     grid.push((v * 1000.0).round() as i16);
                 }
             }
@@ -250,7 +324,11 @@ fn parse_co_file_bytes(
         }
     }
     if sub_grids.len() != num_co_tables {
-        return None;
+        return Err(KapError::TableIo(format!(
+            "expected {num_co_tables} CO subtables, found {} in {}",
+            sub_grids.len(),
+            path.display()
+        )));
     }
 
     let mut out = Vec::new();
@@ -279,24 +357,27 @@ fn parse_co_file_bytes(
             out.extend_from_slice(&v.to_le_bytes());
         }
     }
-    Some((zfracs, out))
+    Ok((zfracs, out))
 }
 
 fn build_aesopus_section_bytes(
     kap_dir: &Path,
     cache_dir: Option<&Path>,
-) -> Option<Vec<u8>> {
+) -> Result<Vec<u8>, KapError> {
     if let Some(cdir) = cache_dir {
         let p = cdir.join("aesopus_section.bin");
         if let Ok(b) = fs::read(&p) {
             if b.len() > 46_000_000 {
-                return Some(b);
+                return Ok(b);
             }
         }
     }
     let h5_path = kap_dir.join("AESOPUS_AGSS09.h5");
     if !h5_path.is_file() {
-        return None;
+        return Err(KapError::TableIo(format!(
+            "missing {}",
+            h5_path.display()
+        )));
     }
     let py_script = r#"
 import sys, struct, h5py, numpy as np
@@ -352,10 +433,23 @@ with h5py.File(h5_path, "r") as f, open(out_path, "wb") as out:
             .is_ok_and(|s| s.success())
     });
     if !ok {
-        return None;
+        return Err(KapError::TableIo(format!(
+            "python HDF5 converter failed for {}",
+            h5_path.display()
+        )));
     }
-    let _ = fs::rename(&tmp_file, &dst_file);
-    fs::read(&dst_file).ok()
+    fs::rename(&tmp_file, &dst_file).map_err(|e| {
+        KapError::TableIo(format!(
+            "failed to move converted {} into place: {e}",
+            dst_file.display()
+        ))
+    })?;
+    fs::read(&dst_file).map_err(|e| {
+        KapError::TableIo(format!(
+            "failed to read converted {}: {e}",
+            dst_file.display()
+        ))
+    })
 }
 
 fn kapcn_filename(z: f64) -> &'static str {
@@ -378,22 +472,25 @@ fn kapcn_filename(z: f64) -> &'static str {
     }
 }
 
-fn build_kapcn_section_bytes(kap_dir: &Path) -> Option<Vec<u8>> {
-    let fcn_text = fs::read_to_string(kap_dir.join("kR_Z_fCN.data")).ok()?;
+fn build_kapcn_section_bytes(kap_dir: &Path) -> Result<Vec<u8>, KapError> {
+    let fcn_path = kap_dir.join("kR_Z_fCN.data");
+    let fcn_text = fs::read_to_string(&fcn_path).map_err(|e| {
+        KapError::TableIo(format!("failed to read {}: {e}", fcn_path.display()))
+    })?;
     let mut rows: Vec<(f64, [f64; 7], [f64; 3])> = Vec::new();
     for line in fcn_text.lines().skip(1) {
         let toks: Vec<&str> = line.split_whitespace().collect();
         if toks.len() < 11 {
             continue;
         }
-        let z: f64 = toks[0].parse().ok()?;
+        let z = parse_f64_str(toks[0], &fcn_path, "kapCN Z")?;
         let mut fcs = [0.0; 7];
         for i in 0..7 {
-            fcs[i] = toks[1 + i].parse().ok()?;
+            fcs[i] = parse_f64_str(toks[1 + i], &fcn_path, "kapCN fC")?;
         }
         let mut fns = [0.0; 3];
         for i in 0..3 {
-            fns[i] = toks[8 + i].parse().ok()?;
+            fns[i] = parse_f64_str(toks[8 + i], &fcn_path, "kapCN fN")?;
         }
         rows.push((z, fcs, fns));
     }
@@ -403,7 +500,19 @@ fn build_kapcn_section_bytes(kap_dir: &Path) -> Option<Vec<u8>> {
     let mut log_ts = Vec::new();
     let mut z_payloads = Vec::with_capacity(rows.len());
     for &(z, fcs, fns) in &rows {
-        let text = fs::read_to_string(kap_dir.join(kapcn_filename(z))).ok()?;
+        let fname = kapcn_filename(z);
+        if fname.is_empty() {
+            return Err(KapError::TableIo(format!(
+                "unsupported kapCN metallicity Z={z}"
+            )));
+        }
+        let cn_path = kap_dir.join(fname);
+        let text = fs::read_to_string(&cn_path).map_err(|e| {
+            KapError::TableIo(format!(
+                "failed to read {}: {e}",
+                cn_path.display()
+            ))
+        })?;
         let lines: Vec<&str> = text.lines().collect();
         let mut sub_grids = Vec::with_capacity(63);
         let mut idx = 0;
@@ -412,17 +521,31 @@ fn build_kapcn_section_bytes(kap_dir: &Path) -> Option<Vec<u8>> {
             if trimmed.starts_with("log T") {
                 if log_rs.is_empty() {
                     for tok in trimmed.split_whitespace().skip(2) {
-                        log_rs.push(tok.parse::<f64>().ok()?);
+                        log_rs.push(parse_f64_str(
+                            tok,
+                            &cn_path,
+                            "kapCN logR",
+                        )?);
                     }
                 }
                 let num_lr = log_rs.len();
+                if idx + 18 >= lines.len() {
+                    return Err(KapError::TableIo(format!(
+                        "truncated kapCN block in {}",
+                        cn_path.display()
+                    )));
+                }
                 let mut grid = Vec::with_capacity(num_lr * 18);
                 let mut lts = Vec::with_capacity(18);
                 for j in 0..18 {
                     let mut toks = lines[idx + 1 + j].split_whitespace();
-                    lts.push(toks.next()?.parse::<f64>().ok()?);
+                    lts.push(parse_f64_tok(&mut toks, &cn_path, "kapCN logT")?);
                     for _ in 0..num_lr {
-                        let v: f64 = toks.next()?.parse().ok()?;
+                        let v = parse_f64_tok(
+                            &mut toks,
+                            &cn_path,
+                            "kapCN log_kap",
+                        )?;
                         grid.push((v * 1000.0).round() as i16);
                     }
                 }
@@ -436,7 +559,11 @@ fn build_kapcn_section_bytes(kap_dir: &Path) -> Option<Vec<u8>> {
             }
         }
         if sub_grids.len() != 63 {
-            return None;
+            return Err(KapError::TableIo(format!(
+                "expected 63 kapCN subgrids, found {} in {}",
+                sub_grids.len(),
+                cn_path.display()
+            )));
         }
         z_payloads.push((z, fcs, fns, sub_grids));
     }
@@ -465,13 +592,13 @@ fn build_kapcn_section_bytes(kap_dir: &Path) -> Option<Vec<u8>> {
             }
         }
     }
-    Some(out)
+    Ok(out)
 }
 
 fn build_full_kap_tables_bytes(
     kap_dir: &Path,
     cache_dir: Option<&Path>,
-) -> Option<Vec<u8>> {
+) -> Result<Vec<u8>, KapError> {
     let mut out = Vec::with_capacity(120_000_000);
     out.extend_from_slice(b"FMKAP001");
 
@@ -486,16 +613,16 @@ fn build_full_kap_tables_bytes(
                 let x = if x_raw + z > 1.0 { 1.0 - z } else { x_raw };
                 let fname = format!(
                     "{prefix}_z{}_x{}.data",
-                    get_output_string(z).ok()?,
-                    get_output_string(x).ok()?
+                    get_output_string(z)?,
+                    get_output_string(x)?
                 );
                 tasks.push((iz, x, z, kap_dir.join(fname)));
             }
         }
         let parsed: Vec<(usize, Vec<u8>)> = tasks
             .into_par_iter()
-            .map(|(iz, x, z, p)| Some((iz, parse_fixed_file_bytes(&p, x, z)?)))
-            .collect::<Option<Vec<_>>>()?;
+            .map(|(iz, x, z, p)| Ok((iz, parse_fixed_file_bytes(&p, x, z)?)))
+            .collect::<Result<Vec<_>, KapError>>()?;
         let mut pos = 0;
         for (iz, &z) in FIXED_ZS.iter().enumerate() {
             let n_x = FIXED_NUM_XS[iz];
@@ -511,8 +638,7 @@ fn build_full_kap_tables_bytes(
     push_str(&mut out, "lowT_Freedman11");
     push_u32(&mut out, FREEDMAN_ZS.len());
     for &z in &FREEDMAN_ZS {
-        let fname =
-            format!("lowT_Freedman11_z{}.data", get_output_string(z).ok()?);
+        let fname = format!("lowT_Freedman11_z{}.data", get_output_string(z)?);
         let x_bytes = parse_fixed_file_bytes(&kap_dir.join(fname), 0.0, z)?;
         push_f64(&mut out, z);
         push_u32(&mut out, 1);
@@ -529,8 +655,8 @@ fn build_full_kap_tables_bytes(
             for &x in &CO_XS {
                 let fname = format!(
                     "{prefix}_z{}_x{}.data",
-                    get_output_string(z).ok()?,
-                    get_output_string(x).ok()?
+                    get_output_string(z)?,
+                    get_output_string(x)?
                 );
                 tasks.push((iz, x, z, kap_dir.join(fname)));
             }
@@ -539,9 +665,9 @@ fn build_full_kap_tables_bytes(
             .into_par_iter()
             .map(|(iz, x, z, p)| {
                 let (zf, b) = parse_co_file_bytes(&p, x, z)?;
-                Some((iz, zf, b))
+                Ok((iz, zf, b))
             })
-            .collect::<Option<Vec<_>>>()?;
+            .collect::<Result<Vec<_>, KapError>>()?;
         let mut pos = 0;
         for &z in &CO_ZS {
             let zf = parsed[pos].1;
@@ -565,5 +691,5 @@ fn build_full_kap_tables_bytes(
     let cn_bytes = build_kapcn_section_bytes(kap_dir)?;
     out.extend_from_slice(&cn_bytes);
 
-    Some(out)
+    Ok(out)
 }

@@ -10,8 +10,8 @@ use flexmesa_atm::{
 };
 use flexmesa_const::{AVO, CRAD, KERG, LN10, STANDARD_CGRAV};
 use flexmesa_eos::{
-    eos_dt_get_rho, eos_dt_get_t, HelmTable, I_ETA, I_LN_E, I_LN_FREE_E,
-    I_LN_PGAS, WHICH_OTHER_EGAS, WHICH_OTHER_LOG_PTOT,
+    eos_dt_get_rho, eos_dt_get_t, I_ETA, I_LN_E, I_LN_FREE_E, I_LN_PGAS,
+    WHICH_OTHER_EGAS, WHICH_OTHER_LOG_PTOT,
 };
 use flexmesa_kap::get_kap_results;
 
@@ -44,10 +44,11 @@ pub fn eval1_mesa_rho_given_pt(
         flexmesa_math::log10(p),
         flexmesa_math::log10(rho_guess),
     );
+    let ht = crate::micro::builtin_helm_table()?;
     let (mut rho_tol, mut p_tol) = (5.0e-10, 5.0e-13);
     for _ in 0..9 {
         if let Ok(inv) = eos_dt_get_rho(
-            HelmTable::builtin(),
+            ht,
             &chem.chem_id,
             &chem.xa,
             log_t,
@@ -79,7 +80,7 @@ pub fn eval1_mesa_t_given_dp(
     t_guess: f64,
 ) -> Result<f64, StarError> {
     eos_dt_get_t(
-        HelmTable::builtin(),
+        crate::micro::builtin_helm_table()?,
         &chem.chem_id,
         &chem.xa,
         flexmesa_math::log10(1.0 / vol),
@@ -109,7 +110,7 @@ pub fn eval1_mesa_eos_degas_and_kap(
 ) -> Result<(f64, RspEosKapOut), StarError> {
     let t_guess = model.t.get(cell_k).copied().unwrap_or(1.0e4).max(100.0);
     let inv = eos_dt_get_t(
-        HelmTable::builtin(),
+        crate::micro::builtin_helm_table()?,
         &chem.chem_id,
         &chem.xa,
         flexmesa_math::log10(1.0 / vol),
@@ -142,7 +143,7 @@ pub fn eval1_mesa_eos_de_and_kap(
 ) -> Result<(f64, RspEosKapOut), StarError> {
     let t_guess = model.t.get(cell_k).copied().unwrap_or(1.0e4).max(100.0);
     let inv = eos_dt_get_t(
-        HelmTable::builtin(),
+        crate::micro::builtin_helm_table()?,
         &chem.chem_id,
         &chem.xa,
         flexmesa_math::log10(1.0 / vol),
@@ -171,7 +172,7 @@ pub fn set_rho_for_new_pgas(
     k: usize,
 ) -> Result<(), StarError> {
     let inv = eos_dt_get_rho(
-        HelmTable::builtin(),
+        crate::micro::builtin_helm_table()?,
         &chem.chem_id,
         &chem.xa,
         model.ln_t[k] / LN10,
@@ -200,7 +201,7 @@ pub fn set_t_for_new_egas(
 ) -> Result<(), StarError> {
     let egas_want = model.aux.rsp.egas_rsp[k];
     let inv = eos_dt_get_t(
-        HelmTable::builtin(),
+        crate::micro::builtin_helm_table()?,
         &chem.chem_id,
         &chem.xa,
         model.lnd[k] / LN10,
@@ -228,7 +229,7 @@ pub fn set_t_for_new_pgas(
     k: usize,
 ) -> Result<(), StarError> {
     let inv = eos_dt_get_t(
-        HelmTable::builtin(),
+        crate::micro::builtin_helm_table()?,
         &chem.chem_id,
         &chem.xa,
         model.lnd[k] / LN10,
@@ -258,7 +259,7 @@ pub fn set_t_for_new_energy(
     other_tol: f64,
 ) -> Result<(), StarError> {
     let inv = eos_dt_get_t(
-        HelmTable::builtin(),
+        crate::micro::builtin_helm_table()?,
         &chem.chem_id,
         &chem.xa,
         model.lnd[k] / LN10,
@@ -298,6 +299,7 @@ pub fn get_surf_p_t_kap(
         .copied()
         .filter(|&k| k > 0.0)
         .unwrap_or(if kap_guess > 0.0 { kap_guess } else { 1.0e-2 });
+    let ht = crate::micro::builtin_helm_table()?;
     let eos_cb =
         |ln_p: f64, ln_t: f64| -> Result<AtmEosCallbackResult, AtmError> {
             let t = flexmesa_math::exp(ln_t);
@@ -306,7 +308,7 @@ pub fn get_surf_p_t_kap(
             let pgas = (p - prad).max(1.0e-99);
             let rho_guess = eval1_gamma_pt_get_rho(chem, p, t).max(1.0e-40);
             let inv = eos_dt_get_rho(
-                HelmTable::builtin(),
+                ht,
                 &chem.chem_id,
                 &chem.xa,
                 flexmesa_math::log10(t),

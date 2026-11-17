@@ -15,8 +15,8 @@
 use flexmesa_chem::{get_composition_info, NuclideCatalog};
 use flexmesa_eos::{
     eos_dt_get, eval_pc_eos, get_pc_alfa, EosConfig, EosEvalOutput, HelmTable,
-    PcConfig, EOS_BASIC_RESULT_NAMES, I_FRAC_FREE_EOS, I_FRAC_HELM, I_FRAC_PC,
-    NUM_EOS_BASIC_RESULTS,
+    PcConfig, EOS_BASIC_RESULT_NAMES, I_FRAC_FREE_EOS, I_FRAC_HELM,
+    I_FRAC_IDEAL, I_FRAC_PC, NUM_EOS_BASIC_RESULTS,
 };
 
 fn make_comp(
@@ -359,7 +359,7 @@ fn test_pc_alfa_and_eosdt_pc_helm_blend_match_strict_regression_snapshot() {
     assert!((dr3 - 0.0).abs() < 1.0e-14);
 
     // eosdt_pc_helm_blend (explicitly testing PC + HELM with 4D tables disabled)
-    let ht = HelmTable::builtin();
+    let ht = HelmTable::builtin().expect("builtin HELM table");
     let (chem_id, xa, _, _) = make_comp(0.0, 1.0, 0.0);
     let mut cfg = EosConfig {
         use_skye: false,
@@ -474,4 +474,20 @@ fn test_pc_alfa_and_eosdt_pc_helm_blend_match_strict_regression_snapshot() {
     assert!(
         (out_free.res[I_FRAC_HELM] - 3.4702387438628451e-42).abs() < 1.0e-56
     );
+
+    // Off-table boundary queries must skip HELM unconditionally into ideal gas
+    // (`eos/private/eos_helm_eval.f90:116-135`), even when
+    // `okay_to_convert_ierr_to_skip == false`.
+    let cfg_helm_only = EosConfig {
+        use_pc: false,
+        use_skye: false,
+        use_free_eos: false,
+        use_opal_scvh: false,
+        use_cms: false,
+        okay_to_convert_ierr_to_skip: false,
+        ..EosConfig::default()
+    };
+    let out_bnd = eos_dt_get(ht, 1.0e-5, 900.0, &chem_id, &xa, &cfg_helm_only)
+        .expect("boundary hit must fall back cleanly to ideal EOS");
+    assert!((out_bnd.res[I_FRAC_IDEAL] - 1.0).abs() < 1.0e-14);
 }

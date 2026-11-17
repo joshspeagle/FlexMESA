@@ -256,7 +256,7 @@ impl BinarySystem {
         );
         if controls.use_tidal_deformation {
             donor.aux.tidal_deformation =
-                BinaryTidalDeformationHook::new_handle(
+                Some(BinaryTidalDeformationHook::new_handle(
                     m_d,
                     m_a,
                     separation,
@@ -265,10 +265,10 @@ impl BinarySystem {
                     controls.f_sync_switch_from_rot_defor,
                     controls.f_sync_switch_width,
                     controls.f_sync_switch_lim,
-                );
+                )?);
             if let BinaryCompanion::Star(ref mut s2) = companion {
                 s2.aux.tidal_deformation =
-                    BinaryTidalDeformationHook::new_handle(
+                    Some(BinaryTidalDeformationHook::new_handle(
                         m_a,
                         m_d,
                         separation,
@@ -277,7 +277,7 @@ impl BinarySystem {
                         controls.f_sync_switch_from_rot_defor,
                         controls.f_sync_switch_width,
                         controls.f_sync_switch_lim,
-                    );
+                    )?);
             }
         }
         prep_and_settle_binary_star(&mut donor)?;
@@ -366,7 +366,7 @@ impl BinarySystem {
         let m_d = self.donor.mstar;
         let m_a = self.accretor_mass_g();
         self.donor.aux.tidal_deformation =
-            BinaryTidalDeformationHook::new_handle(
+            Some(BinaryTidalDeformationHook::new_handle(
                 m_d,
                 m_a,
                 self.separation,
@@ -375,28 +375,29 @@ impl BinarySystem {
                 self.controls.f_sync_switch_from_rot_defor,
                 self.controls.f_sync_switch_width,
                 self.controls.f_sync_switch_lim,
-            );
+            )?);
         sync_post_henyey_rotation(&mut self.donor, 0.0);
         if recompute_hydro {
             set_hydro_vars(&mut self.donor, false, false)?;
-            self.donor.save_start_values();
+            self.donor.save_start_values()?;
             self.donor.save_old_values();
         }
         if let BinaryCompanion::Star(ref mut s2) = self.companion {
-            s2.aux.tidal_deformation = BinaryTidalDeformationHook::new_handle(
-                m_a,
-                m_d,
-                self.separation,
-                self.rl[1],
-                self.period,
-                self.controls.f_sync_switch_from_rot_defor,
-                self.controls.f_sync_switch_width,
-                self.controls.f_sync_switch_lim,
-            );
+            s2.aux.tidal_deformation =
+                Some(BinaryTidalDeformationHook::new_handle(
+                    m_a,
+                    m_d,
+                    self.separation,
+                    self.rl[1],
+                    self.period,
+                    self.controls.f_sync_switch_from_rot_defor,
+                    self.controls.f_sync_switch_width,
+                    self.controls.f_sync_switch_lim,
+                )?);
             sync_post_henyey_rotation(s2, 0.0);
             if recompute_hydro {
                 set_hydro_vars(s2, false, false)?;
-                s2.save_start_values();
+                s2.save_start_values()?;
                 s2.save_old_values();
             }
         }
@@ -480,7 +481,7 @@ impl BinarySystem {
         &mut self,
         period_sec: f64,
         eccentricity: f64,
-    ) {
+    ) -> Result<(), StarError> {
         let (m_d, m_a) = (self.donor.mstar, self.accretor_mass_g());
         self.period = period_sec;
         self.eccentricity = eccentricity.clamp(
@@ -500,17 +501,20 @@ impl BinarySystem {
         );
         self.rl = rl;
         self.rl_relative_gap = gaps;
-        let _ = self.refresh_tidal_deformation_hooks(false);
+        self.refresh_tidal_deformation_hooks(false)
     }
 
     /// Dynamically converts star `new_point_mass_i` (`1` or `2`) into a compact
     /// point mass (`binary_set_point_mass_i` in `binary_evolve.f90:140-200`).
-    pub fn set_point_mass_i(&mut self, new_point_mass_i: usize) {
+    pub fn set_point_mass_i(
+        &mut self,
+        new_point_mass_i: usize,
+    ) -> Result<(), StarError> {
         if new_point_mass_i == self.point_mass_i
             || new_point_mass_i == 0
             || new_point_mass_i > 2
         {
-            return;
+            return Ok(());
         }
         let pm_mass = self.star_masses_g()[new_point_mass_i - 1];
         let m_bh_eq =
@@ -549,47 +553,55 @@ impl BinarySystem {
         );
         self.rl = rl;
         self.rl_relative_gap = gaps;
-        let _ = self.refresh_tidal_deformation_hooks(false);
+        self.refresh_tidal_deformation_hooks(false)?;
         self.update_stage_varcontrol();
+        Ok(())
     }
 
     /// Checks whether the companion star overfills its Roche lobe more deeply
     /// than the current donor and swaps donor/accretor roles (`binary_evolve.f90:210-255`).
-    pub fn check_donor_switch(&mut self, keep_donor_fixed: bool) -> bool {
+    pub fn check_donor_switch(
+        &mut self,
+        keep_donor_fixed: bool,
+    ) -> Result<bool, StarError> {
         if keep_donor_fixed
             || self.point_mass_i != 0
             || self.rl_relative_gap[1] <= self.rl_relative_gap[0]
         {
-            return false;
+            return Ok(false);
         }
         self.swap_donor_and_accretor()
     }
 
-    pub(crate) fn swap_donor_and_accretor(&mut self) -> bool {
+    pub(crate) fn swap_donor_and_accretor(
+        &mut self,
+    ) -> Result<bool, StarError> {
         if let BinaryCompanion::Star(ref mut s2) = self.companion {
             std::mem::swap(&mut self.donor, s2);
             self.donor_i = 3 - self.donor_i;
             self.rl.swap(0, 1);
             self.rl_relative_gap.swap(0, 1);
-            let _ = self.refresh_tidal_deformation_hooks(false);
-            return true;
+            self.refresh_tidal_deformation_hooks(false)?;
+            return Ok(true);
         }
-        false
+        Ok(false)
     }
 
-    pub(crate) fn maybe_switch_donor_at_step_start(&mut self) {
+    pub(crate) fn maybe_switch_donor_at_step_start(
+        &mut self,
+    ) -> Result<(), StarError> {
         if self.point_mass_i != 0 || self.ignore_rlof_flag {
-            return;
+            return Ok(());
         }
         let is_contact =
             self.controls.mdot_scheme.eq_ignore_ascii_case("contact");
         if self.controls.keep_donor_fixed && !is_contact {
-            return;
+            return Ok(());
         }
         if self.mtransfer_rate.abs() * SECYER / MSUN
             >= self.controls.mdot_limit_donor_switch
         {
-            return;
+            return Ok(());
         }
         let tol = self.controls.implicit_scheme_tolerance;
         if (self.controls.mdot_scheme.eq_ignore_ascii_case("roche_lobe")
@@ -599,8 +611,9 @@ impl BinarySystem {
                 && self.rl_relative_gap[1] < -tol
                 && self.rl_relative_gap[0] < -tol)
         {
-            let _ = self.swap_donor_and_accretor();
+            let _ = self.swap_donor_and_accretor()?;
         }
+        Ok(())
     }
 
     pub(crate) fn capture_snapshot(&self) -> BinaryStepSnapshot {
@@ -679,7 +692,7 @@ impl BinarySystem {
         self.last_mdot = snap.last_mdot;
         self.last_jdot = snap.last_jdot;
         self.last_edot = snap.last_edot;
-        let _ = self.refresh_tidal_deformation_hooks(false);
+        self.refresh_tidal_deformation_hooks(false)?;
         Ok(())
     }
 }

@@ -111,8 +111,12 @@ impl ZamsCatalog {
             ["h1", "he3", "he4", "c12", "n14", "o16", "ne20", "mg24"];
         let chem_id: Vec<usize> = iso_names
             .iter()
-            .map(|name| catalog.get_nuclide_index(name).unwrap_or(1))
-            .collect();
+            .map(|name| {
+                catalog.get_nuclide_index(name).ok_or_else(|| {
+                    StarError::IoError(format!("unknown ZAMS nuclide '{name}'"))
+                })
+            })
+            .collect::<Result<Vec<usize>, StarError>>()?;
 
         let mut models = Vec::with_capacity(n_models);
         for _ in 0..n_models {
@@ -220,16 +224,33 @@ impl ZamsCatalog {
                     } else if h.starts_with("lnd ") || h.contains("lnT") {
                         let cols: Vec<&str> = h.split_whitespace().collect();
                         // Columns: [k?, lnd, lnT, lnR, L, dq, iso1, iso2, ...]
-                        let lnd_pos =
-                            cols.iter().position(|&c| c == "lnd").unwrap_or(0);
+                        let lnd_pos = cols
+                            .iter()
+                            .position(|&c| c == "lnd")
+                            .ok_or_else(|| {
+                                StarError::IoError(format!(
+                                    "missing 'lnd' column in ZAMS header: {h}"
+                                ))
+                            })?;
+                        if lnd_pos + 5 > cols.len() {
+                            return Err(StarError::IoError(format!(
+                                "truncated ZAMS column header: {h}"
+                            )));
+                        }
                         let iso_cols = &cols[lnd_pos + 5..];
                         let species = iso_cols.len();
                         let chem_id: Vec<usize> = iso_cols
                             .iter()
                             .map(|name| {
-                                catalog.get_nuclide_index(name).unwrap_or(1)
+                                catalog.get_nuclide_index(name).ok_or_else(
+                                    || {
+                                        StarError::IoError(format!(
+                                            "unknown ZAMS nuclide '{name}'"
+                                        ))
+                                    },
+                                )
                             })
-                            .collect();
+                            .collect::<Result<Vec<usize>, StarError>>()?;
                         let mut lnd = Vec::with_capacity(nz);
                         let mut ln_t = Vec::with_capacity(nz);
                         let mut ln_r = Vec::with_capacity(nz);

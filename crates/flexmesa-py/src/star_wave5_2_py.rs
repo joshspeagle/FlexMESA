@@ -437,10 +437,10 @@ pub fn star_export_pulse_by_format(
     model: &PyStarModel,
     format: &str,
     add_center_point: bool,
-) -> String {
+) -> PyResult<String> {
     py.detach(|| {
         export_pulse_by_format(&model.inner, format, add_center_point)
-            .unwrap_or_default()
+            .map_err(crate::star_helpers_py::to_py_err)
     })
 }
 

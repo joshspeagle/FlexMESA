@@ -80,7 +80,7 @@ impl BinarySystem {
             self.controls.max_tries_to_achieve = 0;
         }
         self.last_termination_reason = None;
-        self.maybe_switch_donor_at_step_start();
+        self.maybe_switch_donor_at_step_start()?;
 
         let pre_step_snap = self.capture_snapshot();
         let mut retry_holds = [(None, 0_usize); 2];
@@ -88,23 +88,33 @@ impl BinarySystem {
             BinaryCompanion::PointMass { .. } => 0.0,
             BinaryCompanion::Star(s2) => s2.controls.min_timestep_limit,
         };
-        let dt_floor = self
-            .donor
-            .controls
-            .min_timestep_limit
-            .max(s2_min)
-            .clamp(1.0e-12, 1.0e-2);
-        let check_cut_dt =
-            |dt_cut: f64, cur_dt: f64| -> Result<f64, StarError> {
-                let next_dt = dt_cut.max(dt_floor);
-                if next_dt >= 0.999_999 * cur_dt {
-                    return Err(StarError::ConvergenceFailure(format!(
-                        "CutDt hit dt_floor ({dt_cut:.3e} s)"
-                    )));
-                }
-                Ok(next_dt)
-            };
-        let mut dt_try = dt.min(self.max_timestep_sec).max(dt_floor);
+        let dt_floor = self.donor.controls.min_timestep_limit.max(s2_min);
+        let check_cut_dt = |dt_cut: f64,
+                            cur_dt: f64|
+         -> Result<f64, StarError> {
+            if !dt_cut.is_finite() || dt_cut <= 0.0 {
+                return Err(StarError::ConvergenceFailure(format!(
+                    "CutDt produced non-positive dt ({dt_cut:.3e} s)"
+                )));
+            }
+            if dt_floor > 0.0 && dt_cut < dt_floor {
+                return Err(StarError::ConvergenceFailure(format!(
+                    "CutDt hit dt_floor ({dt_cut:.3e} s < {dt_floor:.3e} s)"
+                )));
+            }
+            let next_dt = dt_cut.max(dt_floor);
+            if next_dt >= 0.999_999 * cur_dt {
+                return Err(StarError::ConvergenceFailure(format!(
+                    "CutDt stalled at dt ({next_dt:.3e} s >= {cur_dt:.3e} s)"
+                )));
+            }
+            Ok(next_dt)
+        };
+        let mut dt_try = if dt_floor > 0.0 {
+            dt.min(self.max_timestep_sec).max(dt_floor)
+        } else {
+            dt.min(self.max_timestep_sec)
+        };
         let implicit_mode =
             !self.ignore_rlof_flag && self.controls.max_tries_to_achieve > 0;
         let max_tries = self.controls.max_tries_to_achieve.max(1) as usize;
@@ -157,7 +167,7 @@ impl BinarySystem {
                                 self.rl[0],
                                 self.separation,
                                 self.eccentricity,
-                            );
+                            )?;
                             blend_explicit_mdot(
                                 pre_mdot,
                                 m_exp,
@@ -183,7 +193,7 @@ impl BinarySystem {
 
             let mut remeshed_outer0 = false;
             if outer_retry == 0 {
-                let _ = self.refresh_tidal_deformation_hooks(false);
+                self.refresh_tidal_deformation_hooks(false)?;
                 if self.donor.controls.mesh_delta_coeff > 0.0 {
                     let (ns, nm, _) =
                         remesh_star_before_step(&mut self.donor, dt_try)?;
@@ -195,13 +205,13 @@ impl BinarySystem {
                         remeshed_outer0 |= ns + nm > 0;
                     }
                 }
-                let _ = self.refresh_tidal_deformation_hooks(false);
+                self.refresh_tidal_deformation_hooks(false)?;
             }
             let mut trial_snap = self.capture_snapshot();
             let mut solver = ImplicitMdotSolver::from_controls(
                 &self.controls,
                 self.change_factor,
-            );
+            )?;
             let mut trial_mdot = if self.mtransfer_rate < 0.0 {
                 self.mtransfer_rate.max(-solver.max_abs_mdot_cgs)
             } else {
@@ -238,14 +248,23 @@ impl BinarySystem {
                 }
 
                 let (m_d, m_a) = (self.donor.mstar, self.accretor_mass_g());
-                let m_exp = eval_scheme_explicit_mdot(
-                    &self.controls.mdot_scheme,
-                    &self.donor,
-                    m_a,
-                    self.rl[0],
-                    self.separation,
-                    self.eccentricity,
-                );
+                let m_exp = if self
+                    .controls
+                    .mdot_scheme
+                    .eq_ignore_ascii_case("roche_lobe")
+                    || self.controls.mdot_scheme.eq_ignore_ascii_case("contact")
+                {
+                    0.0
+                } else {
+                    eval_scheme_explicit_mdot(
+                        &self.controls.mdot_scheme,
+                        &self.donor,
+                        m_a,
+                        self.rl[0],
+                        self.separation,
+                        self.eccentricity,
+                    )?
+                };
                 let act = solver.evaluate_trial(
                     &self.controls.mdot_scheme,
                     try_idx,
@@ -255,7 +274,7 @@ impl BinarySystem {
                     self.rl_relative_gap[0],
                     self.rl_relative_gap[1],
                     m_a / m_d.max(1.0),
-                );
+                )?;
                 match act {
                     ImplicitStepAction::Converged(m_conv) => {
                         let m_acc = m_conv.min(0.0);
@@ -293,7 +312,7 @@ impl BinarySystem {
                     ImplicitStepAction::TryNextMdot(next_m) => {
                         if next_m > 0.0 && self.point_mass_i == 0 {
                             self.restore_snapshot(&trial_snap)?;
-                            let _ = self.swap_donor_and_accretor();
+                            let _ = self.swap_donor_and_accretor()?;
                             trial_snap = self.capture_snapshot();
                             solver.flip_for_contact_donor_switch();
                             trial_mdot = -next_m;
@@ -349,7 +368,7 @@ impl BinarySystem {
         allow_remesh: bool,
         extras: &mut dyn BinaryExtras,
     ) -> Result<SingleTrialOutcome, StarError> {
-        let _ = self.refresh_tidal_deformation_hooks(false);
+        self.refresh_tidal_deformation_hooks(false)?;
         let (m_d_old, m_a_old) = (self.donor.mstar, self.accretor_mass_g());
         let (j_old, a_old, e_old, gap_old) = (
             self.angular_momentum_j,
@@ -485,7 +504,7 @@ impl BinarySystem {
                 self.period,
                 e_old,
                 dt_used,
-            );
+            )?;
             if let BinaryCompanion::Star(ref mut s2) = self.companion {
                 apply_tidal_spin_sync(
                     s2,
@@ -498,7 +517,7 @@ impl BinarySystem {
                     self.period,
                     e_old,
                     dt_used,
-                );
+                )?;
             }
         }
 
@@ -581,7 +600,7 @@ impl BinarySystem {
                 a0_s,
                 p0_s,
                 e_cur,
-            );
+            )?;
 
             let (md_m, ma_m) = (
                 m_d_old + (m_d_new - m_d_old) * f_mid,
@@ -589,8 +608,7 @@ impl BinarySystem {
             );
             let j_m = j_cur + 0.5 * jb0.jdot_total * h;
             if j_m <= 0.0 {
-                let f_j =
-                    self.controls.dt_reduction_factor_for_j.clamp(0.05, 0.5);
+                let f_j = self.controls.dt_reduction_factor_for_j;
                 return Ok(SingleTrialOutcome::CutDt(dt_used * f_j));
             }
             let e_m = (e_cur + 0.5 * ed0 * h).clamp(
@@ -639,15 +657,14 @@ impl BinarySystem {
                 a_m,
                 p_m,
                 e_m,
-            );
+            )?;
             let ed_m = eb_m.edot_total;
             if sub + 1 == n_sub {
                 self.using_jdot_mb = mb_mid;
             }
             j_cur += jb_m.jdot_total * h;
             if j_cur <= 0.0 {
-                let f_j =
-                    self.controls.dt_reduction_factor_for_j.clamp(0.05, 0.5);
+                let f_j = self.controls.dt_reduction_factor_for_j;
                 return Ok(SingleTrialOutcome::CutDt(dt_used * f_j));
             }
             e_cur = (e_cur + ed_m * h).clamp(
@@ -678,7 +695,7 @@ impl BinarySystem {
         self.last_mdot = acct;
         self.last_jdot = last_jb;
         self.last_edot = last_eb;
-        let _ = self.refresh_tidal_deformation_hooks(false);
+        self.refresh_tidal_deformation_hooks(false)?;
         finalize_star_post_binary_torques(&mut self.donor)?;
         if let BinaryCompanion::Star(ref mut s2) = self.companion {
             finalize_star_post_binary_torques(s2)?;

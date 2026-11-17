@@ -70,12 +70,16 @@ pub(crate) fn load_or_build_full_helm_vertices(
                 std::fs::File::open(&ascii_dat).map_err(|e| e.to_string())?;
             parse_helm_ascii_reader(BufReader::with_capacity(1024 * 1024, file))
         } else {
-            Err("eosDT_data missing helm_table.dat".to_string())
+            Err(format!("missing {}", ascii_dat.display()))
         };
-        if let Ok(vertices) = parsed {
-            let _ = write_helm_full_bin_atomic(&full_bin, &vertices);
-            return Ok(vertices);
-        }
+        let vertices = parsed.map_err(|e| {
+            format!(
+                "failed to load HELM data from {}: {e}",
+                eosdt_dir.display()
+            )
+        })?;
+        let _ = write_helm_full_bin_atomic(&full_bin, &vertices);
+        return Ok(vertices);
     }
 
     Err(format!(

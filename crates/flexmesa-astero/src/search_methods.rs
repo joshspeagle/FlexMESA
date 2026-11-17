@@ -8,12 +8,13 @@ use std::fs;
 use std::path::Path;
 
 use flexmesa_star::pulse_bvp::BvpEigenmode;
+use flexmesa_star::StarError;
 
 use crate::inlist_astero::{
     AsteroParamSet, AsteroSearchControls, AsteroSearchParam,
 };
 use crate::optimize::{
-    bobyqa_minimize, newuoa_minimize, simplex_minimize_with_options,
+    try_bobyqa_minimize, try_newuoa_minimize, try_simplex_minimize_with_options,
 };
 use crate::sample_eval::AsteroSampleResult;
 use crate::scaling::eval_radial_delta_nu_ols;
@@ -114,18 +115,18 @@ fn apply_varied_slice(
 
 pub(crate) fn run_simplex_driver(
     ctrl: &AsteroSearchControls,
-    eval_fn: &mut impl FnMut(AsteroParamSet) -> f64,
-) {
+    eval_fn: &mut impl FnMut(AsteroParamSet) -> Result<f64, StarError>,
+) -> Result<(), StarError> {
     let active = active_search_params(ctrl);
     if active.is_empty() {
-        let _ = eval_fn(ctrl.first_params());
-        return;
+        let _ = eval_fn(ctrl.first_params())?;
+        return Ok(());
     }
     let x_first: Vec<f64> = active.iter().map(|(_, p)| p.first).collect();
     let x_lower: Vec<f64> = active.iter().map(|(_, p)| p.min).collect();
     let x_upper: Vec<f64> = active.iter().map(|(_, p)| p.max).collect();
     let max_evals = ctrl.simplex_fcn_calls_max.max(1);
-    let _ = simplex_minimize_with_options(
+    let _ = try_simplex_minimize_with_options(
         &x_first,
         &x_lower,
         &x_upper,
@@ -138,25 +139,26 @@ pub(crate) fn run_simplex_driver(
         ctrl.simplex_adaptive_random_search,
         ctrl.simplex_seed,
         |x| eval_fn(apply_varied_slice(ctrl, &active, x)),
-    );
+    )?;
+    Ok(())
 }
 
 pub(crate) fn run_powell_driver(
     ctrl: &AsteroSearchControls,
     bounded: bool,
-    eval_fn: &mut impl FnMut(AsteroParamSet) -> f64,
-) {
+    eval_fn: &mut impl FnMut(AsteroParamSet) -> Result<f64, StarError>,
+) -> Result<(), StarError> {
     let active = active_search_params(ctrl);
     if active.is_empty() {
-        let _ = eval_fn(ctrl.first_params());
-        return;
+        let _ = eval_fn(ctrl.first_params())?;
+        return Ok(());
     }
     let x_first: Vec<f64> = active.iter().map(|(_, p)| p.first).collect();
     let x_lower: Vec<f64> = active.iter().map(|(_, p)| p.min).collect();
     let x_upper: Vec<f64> = active.iter().map(|(_, p)| p.max).collect();
     if bounded {
         let max_calls = ctrl.bobyqa_max_fcn_calls.max(1);
-        let _ = bobyqa_minimize(
+        let _ = try_bobyqa_minimize(
             &x_first,
             &x_lower,
             &x_upper,
@@ -164,10 +166,10 @@ pub(crate) fn run_powell_driver(
             ctrl.bobyqa_rho_beg,
             ctrl.bobyqa_rho_end,
             |x| eval_fn(apply_varied_slice(ctrl, &active, x)),
-        );
+        )?;
     } else {
         let max_calls = ctrl.newuoa_max_fcn_calls.max(1);
-        let _ = newuoa_minimize(
+        let _ = try_newuoa_minimize(
             &x_first,
             &x_lower,
             &x_upper,
@@ -175,11 +177,15 @@ pub(crate) fn run_powell_driver(
             ctrl.newuoa_rho_beg,
             ctrl.newuoa_rho_end,
             |x| eval_fn(apply_varied_slice(ctrl, &active, x)),
-        );
+        )?;
     }
+    Ok(())
 }
 
-pub(crate) fn write_sample_file(out_dir: &Path, s: &AsteroSampleResult) {
+pub(crate) fn write_sample_file(
+    out_dir: &Path,
+    s: &AsteroSampleResult,
+) -> Result<(), StarError> {
     let fname = out_dir.join(format!("sample_{:04}.data", s.sample_number));
     let mut buf = String::new();
     let _ = writeln!(
@@ -197,13 +203,18 @@ pub(crate) fn write_sample_file(out_dir: &Path, s: &AsteroSampleResult) {
         "alpha {:26.16e}\ndelta_nu {:26.16e}\nnu_max {:26.16e}",
         s.params.alpha, s.delta_nu_uhz, s.nu_max_uhz
     );
-    let _ = fs::write(fname, buf);
+    fs::write(&fname, buf).map_err(|e| {
+        StarError::IoError(format!(
+            "failed writing sample file '{}': {e}",
+            fname.display()
+        ))
+    })
 }
 
 pub(crate) fn write_search_results_table(
     out_path: &Path,
     samples: &[AsteroSampleResult],
-) {
+) -> Result<(), StarError> {
     let mut buf = String::new();
     let _ = writeln!(
         buf,
@@ -233,7 +244,12 @@ pub(crate) fn write_search_results_table(
             s.nu_max_uhz
         );
     }
-    let _ = fs::write(out_path, buf);
+    fs::write(out_path, buf).map_err(|e| {
+        StarError::IoError(format!(
+            "failed writing search results '{}': {e}",
+            out_path.display()
+        ))
+    })
 }
 
 pub(crate) fn eval_radial_chi2(
@@ -272,12 +288,16 @@ pub(crate) fn apply_surface_corr(
     dnu_obs: f64,
     numax_obs: f64,
     delta_nu_uhz: &mut f64,
-) -> (Vec<f64>, f64, f64) {
+) -> Result<(Vec<f64>, f64, f64), StarError> {
     if ctrl.correction_factor <= 0.0 {
-        return (all_mod.to_vec(), 0.0, 1.0);
+        return Ok((all_mod.to_vec(), 0.0, 1.0));
     }
-    match ctrl.correction_scheme.to_ascii_lowercase().as_str() {
-        "kjeldsen" if !mod_l0.is_empty() => {
+    match ctrl.correction_scheme.trim().to_ascii_lowercase().as_str() {
+        "" | "none" => Ok((all_mod.to_vec(), 0.0, 1.0)),
+        "kjeldsen" => {
+            if mod_l0.is_empty() {
+                return Ok((all_mod.to_vec(), 0.0, 1.0));
+            }
             let n_obs = if !ctrl.l0_n_obs.is_empty() && ctrl.l0_n_obs[0] > 0.0 {
                 ctrl.l0_n_obs.clone()
             } else {
@@ -299,7 +319,7 @@ pub(crate) fn apply_surface_corr(
             if dnu_m > 0.0 {
                 *delta_nu_uhz = dnu_m;
             }
-            (c, adr, cr)
+            Ok((c, adr, cr))
         }
         "cubic" => {
             let (c, a3) = eval_cubic_corr(
@@ -309,26 +329,16 @@ pub(crate) fn apply_surface_corr(
                 all_in,
                 ctrl.correction_factor,
             );
-            (c, a3, 1.0)
+            Ok((c, a3, 1.0))
         }
-        "combined" => eval_combined_corr(
+        "combined" => Ok(eval_combined_corr(
             all_obs,
             all_sig,
             all_mod,
             all_in,
             ctrl.correction_factor,
-        ),
-        "power_law" => eval_power_law_corr(
-            all_obs,
-            all_sig,
-            all_mod,
-            all_in,
-            mod_l0,
-            in_l0,
-            numax_obs,
-            ctrl.correction_factor,
-        ),
-        "sonoi" => eval_sonoi_corr(
+        )),
+        "power_law" => Ok(eval_power_law_corr(
             all_obs,
             all_sig,
             all_mod,
@@ -337,8 +347,20 @@ pub(crate) fn apply_surface_corr(
             in_l0,
             numax_obs,
             ctrl.correction_factor,
-        ),
-        _ => (all_mod.to_vec(), 0.0, 1.0),
+        )),
+        "sonoi" => Ok(eval_sonoi_corr(
+            all_obs,
+            all_sig,
+            all_mod,
+            all_in,
+            mod_l0,
+            in_l0,
+            numax_obs,
+            ctrl.correction_factor,
+        )),
+        other => Err(StarError::InvalidInput(format!(
+            "unrecognized astero correction_scheme '{other}'"
+        ))),
     }
 }
 

@@ -67,7 +67,7 @@ fn assert_eos_case(
 #[test]
 #[rustfmt::skip]
 fn test_skye_liquid_and_ion_offset_regimes_match_strict_regression_snapshot() {
-    let ht = HelmTable::builtin();
+    let ht = HelmTable::builtin().expect("builtin HELM table");
     let (chem_id, xa, abar, zbar) = make_comp(0.0, 1.0, 0.0);
 
     // 1. skye_c12_liq (use_ion_offsets = false)
@@ -164,7 +164,7 @@ fn test_skye_liquid_and_ion_offset_regimes_match_strict_regression_snapshot() {
 #[test]
 #[rustfmt::skip]
 fn test_skye_solid_and_phase_transition_regimes_match_strict_regression_snapshot() {
-    let ht = HelmTable::builtin();
+    let ht = HelmTable::builtin().expect("builtin HELM table");
     let (chem_id_co, xa_co, abar_co, zbar_co) = make_comp(0.0, 0.5, 0.5);
     let mut cfg = SkyeConfig {
         skye_use_ion_offsets: false,
@@ -298,7 +298,7 @@ fn test_skye_solid_and_phase_transition_regimes_match_strict_regression_snapshot
 #[test]
 #[rustfmt::skip]
 fn test_skye_alfa_blend_and_inverse_solvers_match_strict_regression_snapshot() {
-    let ht = HelmTable::builtin();
+    let ht = HelmTable::builtin().expect("builtin HELM table");
     let skye_cfg = SkyeConfig::default();
 
     let (a_in, dt_in, dr_in) = get_skye_alfa(ht, 4.0, 7.5, 12.0, 6.0);

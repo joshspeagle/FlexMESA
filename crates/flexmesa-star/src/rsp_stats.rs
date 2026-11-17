@@ -36,12 +36,17 @@ pub(crate) fn rsp_set_gyre_linear_analysis(
         model.gradt[0] = model.gradt[1];
     }
     model.controls.calculate_brunt_n2 = true;
-    do_brunt_b(model);
+    do_brunt_b(model)?;
     do_brunt_n2(model);
 
     let gyre_txt = export_gyre_with_schema(model, false, 120);
     if let Some(dir) = log_dir {
-        let _ = std::fs::write(dir.join("gyre.data"), &gyre_txt);
+        std::fs::write(dir.join("gyre.data"), &gyre_txt).map_err(|e| {
+            StarError::IoError(format!(
+                "failed writing {}: {e}",
+                dir.join("gyre.data").display()
+            ))
+        })?;
     }
     let modes = solve_gyre_mesa_modes(&gyre_txt, 0, 0.5, 25.0, 400);
     if modes.is_empty() {
@@ -58,10 +63,13 @@ pub(crate) fn rsp_set_gyre_linear_analysis(
             for (j, yj) in mode.y.iter().enumerate() {
                 let _ = writeln!(ef, "{:6} {:24.16e}", j + 1, yj[0]);
             }
-            let _ = std::fs::write(
-                dir.join(format!("eigfunc.{}.dat", m_idx + 1)),
-                ef,
-            );
+            let ef_path = dir.join(format!("eigfunc.{}.dat", m_idx + 1));
+            std::fs::write(&ef_path, ef).map_err(|e| {
+                StarError::IoError(format!(
+                    "failed writing {}: {e}",
+                    ef_path.display()
+                ))
+            })?;
         }
     }
 
@@ -73,12 +81,12 @@ pub(crate) fn rsp_set_gyre_linear_analysis(
     model.aux.rsp.period =
         1.0 / (modes[mode_idx].freq_uhz * 1.0e-6).max(1.0e-30);
 
-    let amix1 = model.controls.x_ctrl.get(4).copied().unwrap_or(0.0);
-    let amix2 = model.controls.x_ctrl.get(5).copied().unwrap_or(0.0);
+    let amix1 = model.controls.x_ctrl.get(3).copied().unwrap_or(0.0);
+    let amix2 = model.controls.x_ctrl.get(4).copied().unwrap_or(0.0);
     let velkm = model
         .controls
         .x_ctrl
-        .get(6)
+        .get(5)
         .copied()
         .filter(|&v| v != 0.0)
         .unwrap_or(model.controls.rsp.kick_vsurf_km_per_sec);
@@ -239,7 +247,7 @@ pub(crate) fn calculate_work_integrals(
     model: &mut StarModel,
     dc: &RspDerivedConsts,
     log_dir: Option<&Path>,
-) {
+) -> Result<(), StarError> {
     let nzn = model.nz;
     let dt = model.dt;
     if model.aux.rsp.inside == 1 && model.aux.rsp.iwork == 1 {
@@ -286,10 +294,13 @@ pub(crate) fn calculate_work_integrals(
                         rsp.workc[idx] / ekd
                     );
                 }
-                let _ = std::fs::write(
-                    dir.join(&model.controls.rsp.work_filename),
-                    buf,
-                );
+                let work_path = dir.join(&model.controls.rsp.work_filename);
+                std::fs::write(&work_path, buf).map_err(|e| {
+                    StarError::IoError(format!(
+                        "failed to write RSP work file '{}': {e}",
+                        work_path.display()
+                    ))
+                })?;
             }
         }
         let mut pdvwork = 0.0_f64;
@@ -341,4 +352,5 @@ pub(crate) fn calculate_work_integrals(
             rsp.workc[idx] -= dt * dm * rsp.eq_rsp[k0];
         }
     }
+    Ok(())
 }

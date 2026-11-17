@@ -160,6 +160,7 @@ class BinarySystem:
 def run_binary_test_suite_case(
     case_dir: str | pathlib.Path,
     max_steps_cap: int | None = None,
+    allow_unsupported_controls: bool = False,
 ) -> dict[str, Any]:
     """Execute a single `binary/test_suite/<case>` directory through coupled
     `BinarySystem` + `StarModel` evolution.
@@ -168,6 +169,8 @@ def run_binary_test_suite_case(
         case_dir: Path to the `binary/test_suite/<case>` directory.
         max_steps_cap: Optional maximum coupled binary steps (`None` evolves
             uncapped to physical termination).
+        allow_unsupported_controls: When ``True``, bypass strict failure on
+            unread, unused, or unimplemented upstream MESA controls.
 
     Returns:
         `BinaryCaseRunReport` dictionary.
@@ -176,6 +179,7 @@ def run_binary_test_suite_case(
         _rust.binary_run_test_suite_case(
             str(case_dir),
             None if max_steps_cap is None else int(max_steps_cap),
+            bool(allow_unsupported_controls),
         )
     )
 
@@ -183,6 +187,7 @@ def run_binary_test_suite_case(
 def run_binary_suite(
     mesa_dir: str | pathlib.Path,
     max_steps_cap: int | None = None,
+    allow_unsupported_controls: bool = False,
 ) -> list[dict[str, Any]]:
     """Execute all 8 `binary/test_suite` cases under `mesa_dir` through coupled
     `BinarySystem` + `StarModel` evolution.
@@ -192,6 +197,8 @@ def run_binary_suite(
             `binary/test_suite`.
         max_steps_cap: Optional maximum coupled binary steps (`None` evolves
             uncapped to physical termination).
+        allow_unsupported_controls: When ``True``, bypass strict failure on
+            unread, unused, or unimplemented upstream MESA controls.
 
     Returns:
         List of 8 `BinaryCaseRunReport` dictionaries.
@@ -199,5 +206,6 @@ def run_binary_suite(
     raw = _rust.binary_run_suite(
         str(mesa_dir),
         None if max_steps_cap is None else int(max_steps_cap),
+        bool(allow_unsupported_controls),
     )
     return [dict(item) for item in raw]

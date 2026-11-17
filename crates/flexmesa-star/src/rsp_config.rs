@@ -415,38 +415,46 @@ impl Default for Rsp2Controls {
 pub(crate) fn populate_rsp_inlist(
     sj: Option<&SectionControls>,
     ctrl: Option<&SectionControls>,
-    job: &mut StarJobControls,
+    _job: &mut StarJobControls,
     c: &mut StarControls,
-) {
+) -> Result<(), crate::controls::StarError> {
     if let Some(sj) = sj {
-        if sj.get_bool("load_saved_model_for_rsp2") == Some(true) {
-            job.load_saved_model = true;
-            c.rsp2.change_rsp2_flag = true;
-            c.rsp2.new_rsp2_flag = true;
-            c.rsp2_flag = true;
-        }
-        if let Some(b) = sj.get_bool("change_rsp_flag").or_else(|| sj.get_bool("change_initial_rsp_flag")) {
+        let chg_rsp = match sj.try_get_bool("star_job", "change_rsp_flag")? {
+            Some(b) => Some(b),
+            None => sj.try_get_bool("star_job", "change_initial_rsp_flag")?,
+        };
+        if let Some(b) = chg_rsp {
             c.rsp2.change_rsp_flag = b;
         }
-        if let Some(b) = sj.get_bool("new_rsp_flag") {
+        if let Some(b) = sj.try_get_bool("star_job", "new_rsp_flag")? {
             c.rsp2.new_rsp_flag = b;
-            if c.rsp2.change_rsp_flag { c.rsp_flag = b; }
+            if c.rsp2.change_rsp_flag {
+                c.rsp_flag = b;
+            }
         }
-        if let Some(b) = sj.get_bool("change_rsp2_flag").or_else(|| sj.get_bool("change_initial_rsp2_flag")) {
+        let chg_rsp2 = match sj.try_get_bool("star_job", "change_rsp2_flag")? {
+            Some(b) => Some(b),
+            None => sj.try_get_bool("star_job", "change_initial_rsp2_flag")?,
+        };
+        if let Some(b) = chg_rsp2 {
             c.rsp2.change_rsp2_flag = b;
         }
-        if let Some(v) = sj.get_i64("change_rsp2_flag_at_model_number") {
+        if let Some(v) = sj.try_get_i64("star_job", "change_rsp2_flag_at_model_number")? {
             c.rsp2.change_rsp2_flag_at_model_number = v as isize;
         }
-        if let Some(b) = sj.get_bool("new_rsp2_flag") {
+        if let Some(b) = sj.try_get_bool("star_job", "new_rsp2_flag")? {
             c.rsp2.new_rsp2_flag = b;
-            if c.rsp2.change_rsp2_flag { c.rsp2_flag = b; }
+            if c.rsp2.change_rsp2_flag {
+                c.rsp2_flag = b;
+            }
         }
-        if let Some(b) = sj.get_bool("create_rsp2_model") {
+        if let Some(b) = sj.try_get_bool("star_job", "create_rsp2_model")? {
             c.rsp2.create_rsp2_model = b;
         }
     }
-    let Some(ctrl) = ctrl else { return; };
+    let Some(ctrl) = ctrl else {
+        return Ok(());
+    };
     let r = &mut c.rsp;
     for (k, dst) in [
         ("rsp_alfa", &mut r.alfa), ("rsp_alfac", &mut r.alfac), ("rsp_alfas", &mut r.alfas),
@@ -492,7 +500,7 @@ pub(crate) fn populate_rsp_inlist(
         ("force_timestep", &mut r.force_timestep),
         ("force_timestep_min", &mut r.force_timestep_min),
     ] {
-        if let Some(v) = ctrl.get_f64(k) { *dst = v; }
+        ctrl.try_f64_into("controls", dst, k)?;
     }
     for (k, dst) in [
         ("rsp_relax_initial_model", &mut r.relax_initial_model),
@@ -505,9 +513,8 @@ pub(crate) fn populate_rsp_inlist(
         ("use_other_rsp_build_model", &mut r.use_other_rsp_build_model),
         ("use_rsp_new_start_scheme", &mut r.use_rsp_new_start_scheme),
         ("rsp_do_check_omega", &mut r.do_check_omega), ("rsp_hydro_only", &mut r.hydro_only),
-        ("initial_dump_missing_heaviest", &mut r.initial_dump_missing_heaviest),
     ] {
-        if let Some(v) = ctrl.get_bool(k) { *dst = v; }
+        ctrl.try_bool_into("controls", dst, k)?;
     }
     for (k, dst) in [
         ("rsp_nz", &mut r.nz), ("rsp_nz_outer", &mut r.nz_outer),
@@ -520,14 +527,14 @@ pub(crate) fn populate_rsp_inlist(
         ("rsp_map_zone_interval", &mut r.map_zone_interval),
         ("atm_t_tau_max_iters", &mut r.atm_t_tau_max_iters),
     ] {
-        if let Some(v) = ctrl.get_i64(k).filter(|&v| v >= 0) { *dst = v as usize; }
+        ctrl.try_usize_into("controls", dst, k, 0)?;
     }
     for (k, dst) in [
         ("rsp_work_period", &mut r.work_period),
         ("rsp_map_first_period", &mut r.map_first_period),
         ("rsp_map_last_period", &mut r.map_last_period),
     ] {
-        if let Some(v) = ctrl.get_i64(k) { *dst = v as isize; }
+        ctrl.try_isize_into("controls", dst, k)?;
     }
     for (k, dst) in [
         ("rsp_work_filename", &mut r.work_filename),
@@ -535,7 +542,7 @@ pub(crate) fn populate_rsp_inlist(
         ("rsp_map_filename", &mut r.map_filename),
         ("rsp_map_history_filename", &mut r.map_history_filename),
     ] {
-        if let Some(s) = ctrl.get_str(k) { *dst = s.to_string(); }
+        ctrl.try_str_into("controls", dst, k)?;
     }
 
     let r2 = &mut c.rsp2;
@@ -548,7 +555,7 @@ pub(crate) fn populate_rsp_inlist(
         ("rsp2_source_seed", &mut r2.source_seed), ("rsp2_t_anchor", &mut r2.t_anchor),
         ("rsp2_dq_1_factor", &mut r2.dq_1_factor), ("rsp2_nz_div_ibotom", &mut r2.nz_div_ibotom),
     ] {
-        if let Some(v) = ctrl.get_f64(k) { *dst = v; }
+        ctrl.try_f64_into("controls", dst, k)?;
     }
     for (k, dst) in [
         ("rsp2_use_l_eqn_at_surface", &mut r2.use_l_eqn_at_surface),
@@ -559,7 +566,7 @@ pub(crate) fn populate_rsp_inlist(
         ("rsp2_remesh_when_load", &mut r2.remesh_when_load),
         ("use_tdc_enthalpy_flux_limiter", &mut r2.use_tdc_enthalpy_flux_limiter),
     ] {
-        if let Some(v) = ctrl.get_bool(k) { *dst = v; }
+        ctrl.try_bool_into("controls", dst, k)?;
     }
     for (k, dst) in [
         ("rsp2_num_outermost_cells_forced_nonturbulent", &mut r2.num_outermost_cells_forced_nonturbulent),
@@ -567,15 +574,14 @@ pub(crate) fn populate_rsp_inlist(
         ("rsp2_nz", &mut r2.nz), ("rsp2_nz_outer", &mut r2.nz_outer),
         ("rsp2_target_steps_per_cycle", &mut r2.target_steps_per_cycle),
     ] {
-        if let Some(v) = ctrl.get_i64(k).filter(|&v| v >= 0) { *dst = v as usize; }
+        ctrl.try_usize_into("controls", dst, k, 0)?;
     }
     for (k, dst) in [
         ("rsp2_max_num_periods", &mut r2.max_num_periods),
         ("rsp2_work_period", &mut r2.work_period),
     ] {
-        if let Some(v) = ctrl.get_i64(k) { *dst = v as isize; }
+        ctrl.try_isize_into("controls", dst, k)?;
     }
-    if let Some(s) = ctrl.get_str("rsp2_work_filename") {
-        r2.work_filename = s.to_string();
-    }
+    ctrl.try_str_into("controls", &mut r2.work_filename, "rsp2_work_filename")?;
+    Ok(())
 }

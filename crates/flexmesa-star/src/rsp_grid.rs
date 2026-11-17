@@ -341,7 +341,7 @@ pub fn cleanup_for_lina(
     model: &mut StarModel,
     dc: &RspDerivedConsts,
     grid: &mut RspEnvGrid,
-) {
+) -> Result<(), StarError> {
     let nzn = grid.nzn;
     if model.nz != nzn {
         model.resize_zones(nzn);
@@ -360,7 +360,7 @@ pub fn cleanup_for_lina(
         model.pgas[k] = model.peos[k] - model.prad[k];
     }
     model.dq[nzn - 1] = (model.m[nzn - 1] - model.m_center) / model.xmstar;
-    let _ = model.normalize_dqs();
+    model.normalize_dqs()?;
     model.set_qs();
     model.set_xqs();
     model.set_m_and_dm();
@@ -379,6 +379,7 @@ pub fn cleanup_for_lina(
         grid.t[i] = model.t[k];
         grid.et[i] = model.aux.rsp.et_rsp[k];
     }
+    Ok(())
 }
 
 /// Applies exact `lnR`/`lnT`/`lnd` round-trip rounding and updates `Vol`, `L`,
@@ -447,7 +448,7 @@ pub fn finish_build_rsp_model(
     _dc: &RspDerivedConsts,
     grid: &RspEnvGrid,
     l_surf: f64,
-) {
+) -> Result<(), StarError> {
     let nzn = grid.nzn;
     for i in 1..=nzn {
         let k = nzn - i;
@@ -480,7 +481,7 @@ pub fn finish_build_rsp_model(
     }
     model.l_center = l_surf;
     model.dq[nzn - 1] = (model.m[nzn - 1] - model.m_center) / model.xmstar;
-    let _ = model.normalize_dqs();
+    model.normalize_dqs()?;
     model.set_qs();
     model.set_xqs();
     model.set_m_and_dm();
@@ -490,6 +491,7 @@ pub fn finish_build_rsp_model(
     model.aux.rsp.f_edd_rsp.resize(nzn, F_EDD_ISOTROPIC);
     model.aux.rsp.f_edd_rsp.fill(F_EDD_ISOTROPIC);
     model.pack_xh();
+    Ok(())
 }
 
 /// Unpacks `(lnR, lnT, lnd)` from a loaded `.mod` into `(r, t, rho, vol_rsp)`
@@ -517,7 +519,10 @@ pub fn copy_from_xh_to_rsp(model: &mut StarModel, dc: &RspDerivedConsts) {
 
 /// Synchronizes mass coordinates, `lnR`/`lnT`/`lnd` rounding, `vol_rsp`, and
 /// `prad` prior to `init_hyd` (`set_star_vars` in `rsp_def.f90:520-586`).
-pub fn set_star_vars_rsp(model: &mut StarModel, dc: &RspDerivedConsts) {
+pub fn set_star_vars_rsp(
+    model: &mut StarModel,
+    dc: &RspDerivedConsts,
+) -> Result<(), StarError> {
     let nzn = model.nz;
     if model.aux.rsp.vol_rsp.len() != nzn {
         model.aux.rsp.resize(nzn);
@@ -529,7 +534,7 @@ pub fn set_star_vars_rsp(model: &mut StarModel, dc: &RspDerivedConsts) {
         }
         model.xmstar = sum_dm;
     }
-    let _ = model.normalize_dqs();
+    model.normalize_dqs()?;
     model.set_qs();
     model.set_xqs();
     model.m[0] = model.mstar;
@@ -570,6 +575,7 @@ pub fn set_star_vars_rsp(model: &mut StarModel, dc: &RspDerivedConsts) {
         model.prad[k] = f_edd * model.aux.rsp.erad_rsp[k] / vol_hyd;
     }
     model.pack_xh();
+    Ok(())
 }
 
 /// Syncs `lnR`/`lnT`/`lnd` from `(r, t, vol_rsp)` after `init_hyd`

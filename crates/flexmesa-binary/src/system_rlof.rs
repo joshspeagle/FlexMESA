@@ -572,7 +572,6 @@ pub fn prepare_coupled_mdots_with_extras(
 
 /// Evaluates the explicit mass-transfer prescription (`"Ritter"`, `"Kolb"`, or `"Arras"`)
 /// on the post-step donor profile (`get_info_for_explicit_mdot` in `binary_mdot.f90:662-683`).
-#[must_use]
 pub fn eval_scheme_explicit_mdot(
     scheme: &str,
     donor: &StarModel,
@@ -580,9 +579,9 @@ pub fn eval_scheme_explicit_mdot(
     rl_donor: f64,
     separation: f64,
     eccentricity: f64,
-) -> f64 {
+) -> Result<f64, StarError> {
     if donor.nz == 0 {
-        return 0.0;
+        return Ok(0.0);
     }
     let (m_d, r_d) = (donor.mstar, donor.r[0]);
     let (rho0, p0, t0, mu0) = (
@@ -591,7 +590,7 @@ pub fn eval_scheme_explicit_mdot(
         donor.t[0].max(10.0),
         donor.mu[0].max(0.5),
     );
-    if scheme.eq_ignore_ascii_case("Arras") {
+    let mdot = if scheme.eq_ignore_ascii_case("Arras") {
         eval_arras_mdot_thin(m_d, m_accretor, separation, r_d, rho0, t0, mu0)
     } else if scheme.eq_ignore_ascii_case("Kolb") {
         let thin = eval_ritter_mdot_eccentric(
@@ -633,7 +632,7 @@ pub fn eval_scheme_explicit_mdot(
             )
         };
         thin + thick
-    } else {
+    } else if scheme.eq_ignore_ascii_case("Ritter") {
         eval_ritter_mdot_eccentric(
             m_d,
             m_accretor,
@@ -647,7 +646,12 @@ pub fn eval_scheme_explicit_mdot(
             false,
             32,
         )
-    }
+    } else {
+        return Err(StarError::InvalidInput(format!(
+            "unsupported explicit mdot_scheme '{scheme}' (expected 'Ritter', 'Kolb', or 'Arras')"
+        )));
+    };
+    Ok(mdot)
 }
 
 /// Blends explicit mass-transfer rate with the previous step's rate (`cur_mdot_frac`)

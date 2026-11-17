@@ -24,13 +24,14 @@ pub fn set_raw_rate(
 ) -> Result<f64, RatesError> {
     let cat = RatesCatalog::builtin();
     let info = cat.reaction_by_id(ir)?;
-    Ok(eval_reaction_raw(cat, info, temp, tf))
+    eval_reaction_raw(cat, info, temp, tf)
 }
 
 /// Evaluates `set_raw_rate` across a slice of 1-based reaction IDs `irs`.
 ///
 /// # Errors
-/// Returns [`RatesError::UnknownReaction`] if any reaction ID is out of bounds.
+/// Returns [`RatesError::UnknownReaction`] if any reaction ID is out of bounds,
+/// or [`RatesError::InvalidTableData`] if rate evaluation fails.
 pub fn set_raw_rates(
     irs: &[usize],
     temp: f64,
@@ -40,7 +41,7 @@ pub fn set_raw_rates(
     let mut out = Vec::with_capacity(irs.len());
     for &ir in irs {
         let info = cat.reaction_by_id(ir)?;
-        out.push(eval_reaction_raw(cat, info, temp, tf));
+        out.push(eval_reaction_raw(cat, info, temp, tf)?);
     }
     Ok(out)
 }
@@ -77,36 +78,42 @@ pub fn eval_reaclib_handle(
 
 /// Evaluates `set_raw_rate` for a [`ReactionInfo`] entry given [`RatesCatalog`]
 /// and [`TFactors`] at temperature `temp` ($\mathrm{K}$).
-#[must_use]
+///
+/// # Errors
+/// Returns [`RatesError::UnknownReaction`] if a required REACLIB handle, rate
+/// table, or `op_code` is missing/unsupported, or [`RatesError::InvalidTableData`]
+/// if rate-table interpolation fails.
 pub fn eval_reaction_raw(
     cat: &RatesCatalog,
     info: &ReactionInfo,
     temp: f64,
     tf: &TFactors,
-) -> f64 {
+) -> Result<f64, RatesError> {
     match info.op_code {
-        0 => eval_reaclib_with_cat(cat, &info.target_handle, tf.t9, false)
-            .map_or(0.0, |(f, _, _, _)| f),
-        1 => cat.eval_rate_table(info.id, temp).map_or(0.0, |(v, _)| v),
-        2 => -1.0,
+        0 => {
+            let (f, _, _, _) =
+                eval_reaclib_with_cat(cat, &info.target_handle, tf.t9, false)?;
+            Ok(f)
+        }
+        1 => Ok(cat.eval_rate_table(info.id, temp)?.0),
+        2 => Ok(-1.0),
         3..=28 => {
             let (fr, rr) = eval_analytic_rate(info.op_code, tf);
-            if info.is_reverse {
-                rr
-            } else {
-                fr
-            }
+            Ok(if info.is_reverse { rr } else { fr })
         }
-        29 => eval_reaclib_with_cat(cat, &info.target_handle, tf.t9, true)
-            .map_or(0.0, |(f, _, r, _)| if info.is_reverse { r } else { f }),
+        29 => {
+            let (f, _, r, _) =
+                eval_reaclib_with_cat(cat, &info.target_handle, tf.t9, true)?;
+            Ok(if info.is_reverse { r } else { f })
+        }
         30 => {
-            let fr1 = eval_reaclib_with_cat(cat, "r_fe54_ag_ni58", tf.t9, true)
-                .map_or(0.0, |(f, _, _, _)| f);
-            let fr2 = eval_reaclib_with_cat(cat, "r_ni57_na_fe54", tf.t9, true)
-                .map_or(0.0, |(_, _, r, _)| r);
-            let fr3 = eval_reaclib_with_cat(cat, "r_fe54_ap_co57", tf.t9, true)
-                .map_or(0.0, |(f, _, _, _)| f);
-            fr1 + fr2 + fr3
+            let (fr1, _, _, _) =
+                eval_reaclib_with_cat(cat, "r_fe54_ag_ni58", tf.t9, true)?;
+            let (_, _, fr2, _) =
+                eval_reaclib_with_cat(cat, "r_ni57_na_fe54", tf.t9, true)?;
+            let (fr3, _, _, _) =
+                eval_reaclib_with_cat(cat, "r_fe54_ap_co57", tf.t9, true)?;
+            Ok(fr1 + fr2 + fr3)
         }
         31 => {
             let (f1, _, r1, _) = eval_reaclib_with_cat(
@@ -114,38 +121,41 @@ pub fn eval_reaction_raw(
                 "r_o16_o16_to_he4_si28",
                 tf.t9,
                 true,
-            )
-            .unwrap_or((0.0, 0.0, 0.0, 0.0));
+            )?;
             let (f2, _, r2, _) =
-                eval_reaclib_with_cat(cat, "r_o16_o16_to_h1_p31", tf.t9, true)
-                    .unwrap_or((0.0, 0.0, 0.0, 0.0));
-            if info.is_reverse {
-                r1 + r2
-            } else {
-                f1 + f2
-            }
+                eval_reaclib_with_cat(cat, "r_o16_o16_to_h1_p31", tf.t9, true)?;
+            Ok(if info.is_reverse { r1 + r2 } else { f1 + f2 })
         }
-        _ => 0.0,
+        other => Err(RatesError::UnknownReaction(format!(
+            "{} (unsupported raw rate op_code {other})",
+            info.name
+        ))),
     }
 }
 
 /// Evaluates an `interp_pm` 1D cubic spline rate table `(t8s, f1)` at
 /// temperature `temp` ($\mathrm{K}$), returning `(rate, drate_dt)`.
-#[must_use]
+///
+/// # Errors
+/// Returns [`RatesError::InvalidTableData`] if the table is empty or
+/// interpolation fails.
 pub fn eval_interp_rate_table(
     t8s: &[f64],
     f1: &[CubicCoeffs],
     temp: f64,
-) -> (f64, f64) {
+) -> Result<(f64, f64), RatesError> {
     if t8s.is_empty() {
-        return (0.0, 0.0);
+        return Err(RatesError::InvalidTableData(
+            "empty interpolated rate table".to_string(),
+        ));
     }
     let t8 = (temp * 1.0e-8).clamp(t8s[0], t8s[t8s.len() - 1]);
-    if let Ok((val, slope)) = interp_value_and_slope(t8s, f1, t8) {
-        (val, slope * 1.0e-8)
-    } else {
-        (0.0, 0.0)
-    }
+    let (val, slope) = interp_value_and_slope(t8s, f1, t8).map_err(|e| {
+        RatesError::InvalidTableData(format!(
+            "rate table interpolation failed at T={temp:e}: {e}"
+        ))
+    })?;
+    Ok((val, slope * 1.0e-8))
 }
 
 /// Evaluates the Fushiki & Lamb (1987, ApJ 317, 368) pycnonuclear + thermally

@@ -45,6 +45,7 @@ pub mod e2e_oracles;
 pub mod edd_wind;
 pub mod extras;
 pub mod inlist;
+pub mod inlist_inventory;
 pub mod jdot_tides;
 pub mod mdot;
 pub mod mdot_implicit;
@@ -69,8 +70,9 @@ pub use disk::eval_l2_mass_loss_fraction;
 pub use e2e::{
     eval_brott_wind_msun_yr, eval_gr_expected_separation_rsun,
     eval_tauris_vdh_expected_separation_rsun, is_tier5_binary_case,
-    run_binary_suite, run_binary_test_suite_case,
-    run_binary_test_suite_case_with_logs, BinaryCaseRunReport,
+    run_binary_suite, run_binary_suite_with_options,
+    run_binary_test_suite_case, run_binary_test_suite_case_with_logs,
+    run_binary_test_suite_case_with_options, BinaryCaseRunReport,
     BinaryInlistControls, BinaryLogsOptions, TIER5_BINARY_CASES,
 };
 pub use edd_wind::{
@@ -80,6 +82,11 @@ pub use edd_wind::{
     eval_tout_wind_enhancement, PointMassEddRetention,
 };
 pub use extras::{BinaryExtras, BinaryExtrasAction, DefaultBinaryExtras};
+pub use inlist_inventory::{
+    copy_cleaned_binary_case, supported_binary_control_inventory,
+    validate_binary_sections, BinaryControlInventory,
+    BINARY_CONTROLS_SUPPORTED, BINARY_JOB_HEADLESS_GUI, BINARY_JOB_SUPPORTED,
+};
 pub use jdot_tides::{
     check_jdot_mb_conditions, eval_edot_gr, eval_edot_tidal_hut, eval_jdot_gr,
     eval_jdot_ls, eval_jdot_ls_with_winds, eval_jdot_mb,
@@ -255,21 +262,15 @@ mod tests {
         if let Ok(mesa_dir) = std::env::var("MESA_DIR") {
             let base = Path::new(&mesa_dir);
             if base.join("binary").join("test_suite").is_dir() {
-                let reps =
-                    run_binary_suite(base, Some(4)).expect("binary suite");
-                assert_eq!(reps.len(), 8);
-                for r in &reps {
-                    assert!(
-                        r.passed,
-                        "binary case {} failed: m1={} m2={} a={} P={} rel_err={}",
-                        r.case_name,
-                        r.final_m1_msun,
-                        r.final_m2_msun,
-                        r.final_separation_rsun,
-                        r.final_period_days,
-                        r.max_relative_oracle_error
-                    );
-                }
+                let err = run_binary_suite(base, Some(4)).expect_err(
+                    "raw $MESA_DIR binary suite must reject unsupported controls",
+                );
+                let msg = err.to_string();
+                assert!(
+                    matches!(err, flexmesa_star::StarError::InvalidInput(_))
+                        && msg.contains("unsupported control"),
+                    "unexpected binary suite error: {msg}"
+                );
             }
         }
     }

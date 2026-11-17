@@ -16,9 +16,7 @@ use crate::diffusion::{
     do_element_diffusion, eval_radiative_levitation_accel, DiffusionScheme,
 };
 use crate::history::extract_history_row;
-use crate::inlist_runner::{
-    run_case_list, CaseRunReport, ExtrasDirective, StarExtras,
-};
+use crate::inlist_runner::{CaseRunReport, ExtrasDirective, StarExtras};
 use crate::micro::change_model_network;
 use crate::mix_info::compute_convection_sigmas;
 use crate::model::StarModel;
@@ -438,7 +436,11 @@ impl StarExtras for Tier1CaseExtras {
                 "conv_core_cpm" | "16M_conv_premix"
             )
         {
-            let _ = do_conv_premix(model, 3, false);
+            if let Err(e) = do_conv_premix(model, 3, false) {
+                return ExtrasDirective::Terminate(format!(
+                    "tier1 extras_finish_step do_conv_premix failed: {e}"
+                ));
+            }
         }
         if self.case_name == "16M_predictive_mix"
             && add_predictive_mixing(model, 1.0e-2, 1.0e-4) > 0
@@ -469,11 +471,15 @@ impl StarExtras for Tier1CaseExtras {
                     | "radiative_levitation"
             )
         {
-            let _ = do_element_diffusion(
+            if let Err(e) = do_element_diffusion(
                 model,
                 model.dt.min(1.0e11),
                 DiffusionScheme::Paquette,
-            );
+            ) {
+                return ExtrasDirective::Terminate(format!(
+                    "tier1 extras_finish_step do_element_diffusion failed: {e}"
+                ));
+            }
         }
         if self.case_name == "make_metals" && model.controls.initial_z < 0.02 {
             let catalog = NuclideCatalog::builtin_ref();
@@ -488,7 +494,11 @@ impl StarExtras for Tier1CaseExtras {
                         row[last] += dz;
                     }
                 }
-                let _ = crate::micro::set_basic_vars(model);
+                if let Err(e) = crate::micro::set_basic_vars(model) {
+                    return ExtrasDirective::Terminate(format!(
+                        "tier1 extras_finish_step set_basic_vars failed: {e}"
+                    ));
+                }
             }
         }
         ExtrasDirective::KeepGoing
@@ -505,5 +515,30 @@ pub fn run_tier1_suite(
     max_steps_per_stage: Option<usize>,
     verify_restart: bool,
 ) -> Result<Vec<CaseRunReport>, StarError> {
-    run_case_list(mesa_dir, &TIER1_CASES, max_steps_per_stage, verify_restart)
+    run_tier1_suite_with_options(
+        mesa_dir,
+        max_steps_per_stage,
+        verify_restart,
+        crate::inlist::InlistLoadOptions::default(),
+    )
+}
+
+/// Runs all 33 Tier 1 cases under `mesa_dir/star/test_suite/<case>` with
+/// explicit [`InlistLoadOptions`](crate::inlist::InlistLoadOptions).
+///
+/// # Errors
+/// Returns [`StarError`] if any Tier 1 case fails to execute.
+pub fn run_tier1_suite_with_options(
+    mesa_dir: &Path,
+    max_steps_per_stage: Option<usize>,
+    verify_restart: bool,
+    load_opts: crate::inlist::InlistLoadOptions,
+) -> Result<Vec<CaseRunReport>, StarError> {
+    crate::inlist_runner::run_case_list_with_options(
+        mesa_dir,
+        &TIER1_CASES,
+        max_steps_per_stage,
+        verify_restart,
+        load_opts,
+    )
 }

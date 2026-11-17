@@ -113,7 +113,7 @@ pub fn restore_from_old(model: &mut StarModel) -> Result<(), StarError> {
     crate::rotation::conserve_shell_j_rot_and_distortion(model);
     set_hydro_vars(model, false, false)?;
     model.aux.burn_avg_epsnuc.fill(0.0);
-    model.save_start_values();
+    model.save_start_values()?;
     Ok(())
 }
 
@@ -207,8 +207,14 @@ pub fn star_evolve_step(
         0.0
     };
 
-    let dt_floor = model.controls.min_timestep_limit.clamp(1.0e-20, 1.0);
-    let mut dt_try = model.dt.max(dt_floor);
+    let dt_floor = model.controls.min_timestep_limit.max(0.0);
+    let mut dt_try = model.dt;
+    if dt_try <= 0.0 || dt_try <= dt_floor {
+        return Err(StarError::ConvergenceFailure(format!(
+            "dt ({dt_try:.3e} s) <= min_timestep_limit ({dt_floor:.3e} s) \
+             (`star/private/evolve.f90:1836,2240-2248`)"
+        )));
+    }
     if let Some(max_yr) = model.controls.max_years_for_timestep {
         dt_try = dt_try.min(max_yr * SECYER);
     }
@@ -218,12 +224,13 @@ pub fn star_evolve_step(
     let prev_dt_limit_ratio_old = model.dt_limit_ratio_old;
     let prev_rot_boost_old = model.aux.step_hist.rotational_mdot_boost_old;
     let prev_was_in_limit = model.aux.step_hist.was_in_implicit_wind_limit;
-    let max_retries = model.controls.ts_stop.retry_limit.clamp(1, 100);
-    let retry_fac = model
-        .controls
-        .ts_stop
-        .timestep_factor_for_retries
-        .clamp(0.05, 0.95);
+    let max_retries = model.controls.ts_stop.retry_limit;
+    let retry_fac = model.controls.ts_stop.timestep_factor_for_retries;
+    if !(retry_fac.is_finite() && retry_fac > 0.0 && retry_fac < 1.0) {
+        return Err(StarError::InvalidInput(format!(
+            "timestep_factor_for_retries must be in (0, 1), got {retry_fac}"
+        )));
+    }
     let mut retries = 0_usize;
 
     loop {
@@ -354,7 +361,7 @@ pub fn star_evolve_step(
                     }
                     TimestepAction::Terminate(reason) => {
                         model.model_number -= 1;
-                        let _ = restore_from_old(model);
+                        restore_from_old(model)?;
                         model.dt_old = prev_dt_old;
                         model.dt_limit_ratio_old = prev_dt_limit_ratio_old;
                         model.aux.step_hist.rotational_mdot_boost_old =
@@ -391,18 +398,29 @@ pub fn star_evolve_step(
         model.dt_limit_ratio_old = prev_dt_limit_ratio_old;
         model.aux.step_hist.rotational_mdot_boost_old = prev_rot_boost_old;
         model.aux.step_hist.was_in_implicit_wind_limit = prev_was_in_limit;
-        if retries >= max_retries || dt_try <= dt_floor {
+        retries += 1;
+        let next_dt = dt_try * retry_fac;
+        if (max_retries > 0 && retries > max_retries)
+            || next_dt <= dt_floor
+            || !next_dt.is_finite()
+            || next_dt <= 0.0
+        {
             restore_from_old(model)?;
             model.dt_old = prev_dt_old;
             return Err(StarError::ConvergenceFailure(format!(
-                "star_evolve_step failed after {retries}/{max_retries} retries \
-                 (dt={dt_try:.3e} s, dt_floor={dt_floor:.3e} s)"
+                "star_evolve_step failed after {retries}/{} retries \
+                 (dt={next_dt:.3e} s, dt_floor={dt_floor:.3e} s; \
+                 `star/private/evolve.f90:2213-2248`)",
+                if max_retries == 0 {
+                    String::from("unlimited")
+                } else {
+                    max_retries.to_string()
+                }
             )));
         }
-        retries += 1;
         model.num_retries += 1;
+        dt_try = next_dt;
         if let Some(snap) = pre_remesh_model.take() {
-            dt_try = (dt_try * retry_fac).max(dt_floor);
             let cur_num_retries = model.num_retries;
             *model = snap;
             model.num_retries = cur_num_retries;
@@ -415,12 +433,6 @@ pub fn star_evolve_step(
             model.aux.step_hist.mstar_dot_old = prev_mstar_dot_old;
             model.dt_old = prev_dt_old;
         } else {
-            let fac = if retries >= 4 {
-                retry_fac.min(0.2)
-            } else {
-                retry_fac
-            };
-            dt_try = (dt_try * fac).max(dt_floor);
             restore_from_old(model)?;
             model.dt_old = prev_dt_old;
         }
@@ -448,7 +460,7 @@ fn apply_delta_mdot_limits(
     }
     let mw = &model.controls.mix_wind;
     let ts = &model.controls.ts_stop;
-    let tdc = ts.time_delta_coeff.max(1.0e-6);
+    let tdc = ts.time_delta_coeff;
     let lim = mw.delta_mdot_limit * tdc;
     let hard_lim = mw.delta_mdot_hard_limit * tdc;
     if lim <= 0.0 && hard_lim <= 0.0 {
@@ -641,7 +653,7 @@ pub fn star_evolve(
             };
             let rem_sec = (max_age - model.star_age) * SECYER;
             if rem_sec > 0.0 && dt_base > rem_sec {
-                model.dt_next = rem_sec.max(1.0);
+                model.dt_next = rem_sec;
                 model.dt = model.dt_next;
             }
         }

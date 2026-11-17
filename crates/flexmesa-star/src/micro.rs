@@ -68,12 +68,22 @@ pub fn get_or_load_net(
 }
 
 /// Returns a cached [`Arc<NetGeneralInfo>`] matching `model.job.net_name` and
-/// `model.species`, or `None` if the network cannot be resolved or its species
-/// count does not match `model.species`.
-#[must_use]
-pub fn resolve_model_net(model: &StarModel) -> Option<Arc<NetGeneralInfo>> {
-    let net_info = get_or_load_net(&model.job.net_name, None).ok()?;
-    (net_info.num_isos == model.species).then_some(net_info)
+/// `model.species`.
+///
+/// # Errors
+/// Returns [`StarError::MicrophysicsError`] if `model.job.net_name` cannot be
+/// loaded or if `net_info.num_isos != model.species`.
+pub fn resolve_model_net(
+    model: &StarModel,
+) -> Result<Arc<NetGeneralInfo>, StarError> {
+    let net_info = get_or_load_net(&model.job.net_name, None)?;
+    if net_info.num_isos != model.species {
+        return Err(StarError::MicrophysicsError(format!(
+            "network '{}' has {} species, expected model.species={}",
+            model.job.net_name, net_info.num_isos, model.species
+        )));
+    }
+    Ok(net_info)
 }
 
 /// Projects `model` from its current isotope set onto `new_net_name`
@@ -217,6 +227,13 @@ fn clamp_unit_roundoff(val: f64) -> f64 {
     }
 }
 
+/// Returns the shared [`HelmTable`] or maps table I/O errors into [`StarError`].
+#[inline]
+pub(crate) fn builtin_helm_table() -> Result<&'static HelmTable, StarError> {
+    HelmTable::builtin()
+        .map_err(|e| StarError::MicrophysicsError(e.to_string()))
+}
+
 /// Evaluates `eos_dt_get_zones` across all `nz` zones in parallel and populates
 /// all cell-centered thermodynamic quantities, composition partial derivatives
 /// (`dln_e_dxa_for_partials`, `dln_peos_dxa_for_partials`), and `StarAdOrder1`
@@ -225,7 +242,7 @@ fn clamp_unit_roundoff(val: f64) -> f64 {
 /// # Errors
 /// Returns [`StarError::MicrophysicsError`] if EOS evaluation fails in any zone.
 pub fn do_eos(model: &mut StarModel) -> Result<(), StarError> {
-    let ht = HelmTable::builtin();
+    let ht = builtin_helm_table()?;
     let eos_outputs = eos_dt_get_zones(
         ht,
         &model.rho,

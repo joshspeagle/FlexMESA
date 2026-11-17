@@ -96,23 +96,73 @@ def test_e2e_5_binary_analytical_physics_oracles() -> None:
     assert w_brott > 0.0
 
 
-def test_e2e_5_tier5_star_and_binary_suites_execution() -> None:
-    """Execute all 4 Tier 5/6 `star/test_suite` cases and all 8
-    `binary/test_suite` cases when `MESA_DIR` is present (`#96`).
+def test_e2e_5_tier5_star_and_binary_suites_execution(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Verify raw Tier 5/6 `star` and `binary` upstream suites reject
+    unsupported controls under `#147` and cleaned copies pass E2E checks.
     """
     mesa_dir = os.environ.get("MESA_DIR", "")
     if not mesa_dir:
         pytest.skip("MESA_DIR not set; skipping upstream MESA Tier 5 suites")
     base = pathlib.Path(mesa_dir)
+    clean_root = tmp_path / "mesa"
     assert (base / "star" / "test_suite").is_dir()
-    star_reps = star.run_tier5_star_suite(
-        base, max_steps_per_stage=2, verify_restart=True
-    )
-    assert len(star_reps) == 4
+    for case_name in star.TIER5_STAR_CASES:
+        raw_case = base / "star" / "test_suite" / case_name
+        with pytest.raises(
+            ValueError,
+            match=r"(unsupported|unknown|unrecognized).*control",
+        ):
+            star.run_test_suite_case(
+                raw_case,
+                skip_optional=True,
+                max_steps_per_stage=2,
+                verify_restart=True,
+            )
+        star.copy_cleaned_case(
+            raw_case,
+            clean_root / "star" / "test_suite" / case_name,
+            suite="star",
+        )
+    star_root = clean_root / "star" / "test_suite"
+    # The cleaned other_physics_hooks inlist still selects
+    # overshoot_scheme(1) = 'other', which the engine now rejects instead of
+    # silently disabling overshoot (declared gap under #148).
+    with pytest.raises(ValueError, match="overshoot_scheme"):
+        star.run_test_suite_case(
+            star_root / "other_physics_hooks",
+            skip_optional=True,
+            max_steps_per_stage=2,
+            verify_restart=True,
+        )
+    star_reps = [
+        star.run_test_suite_case(
+            star_root / case_name,
+            skip_optional=True,
+            max_steps_per_stage=2,
+            verify_restart=True,
+        )
+        for case_name in star.TIER5_STAR_CASES
+        if case_name != "other_physics_hooks"
+    ]
+    assert len(star_reps) == 3
     assert all(r["passed"] and r["photo_restart_verified"] for r in star_reps)
 
     assert (base / "binary" / "test_suite").is_dir()
-    bin_reps = binary.run_binary_suite(base, max_steps_cap=4)
+    for case_name in binary.TIER5_BINARY_CASES:
+        raw_case = base / "binary" / "test_suite" / case_name
+        with pytest.raises(
+            ValueError,
+            match=r"(unsupported|unknown|unrecognized).*control",
+        ):
+            binary.run_binary_test_suite_case(raw_case, max_steps_cap=4)
+        star.copy_cleaned_case(
+            raw_case,
+            clean_root / "binary" / "test_suite" / case_name,
+            suite="binary",
+        )
+    bin_reps = binary.run_binary_suite(clean_root, max_steps_cap=4)
     assert len(bin_reps) == 8
     assert all(r["passed"] for r in bin_reps)
     by_name = {r["case_name"]: r for r in bin_reps}

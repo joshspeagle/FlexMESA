@@ -155,7 +155,8 @@ fn test_relax_from_profile_files_interpolates_j_and_entropy() {
     crate::tier5_extras::write_relax_profile_files(&model, &tmp_dir)
         .expect("write_relax_profile_files");
 
-    relax_from_profile_files(&mut model, &tmp_dir);
+    relax_from_profile_files(&mut model, &tmp_dir)
+        .expect("relax_from_profile_files");
     assert!(model.controls.rotation_flag);
     assert_eq!(model.j_rot.len(), model.nz);
     let _ = std::fs::remove_dir_all(&tmp_dir);

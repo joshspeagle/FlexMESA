@@ -393,7 +393,7 @@ pub fn build_pre_ms_model(
     controls: StarControls,
     job: StarJobControls,
 ) -> Result<StarModel, StarError> {
-    let ht = HelmTable::builtin();
+    let ht = crate::micro::builtin_helm_table()?;
     let eos_cfg = EosConfig::default();
     let kap_cfg = KapConfig {
         zbase: controls.zbase,

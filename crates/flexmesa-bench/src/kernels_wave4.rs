@@ -114,7 +114,9 @@ pub fn make_wave4_zams_model(nz: usize) -> StarModel {
         .expect("finish_init_model on resampled ZAMS");
     set_hydro_vars(&mut model, false, false)
         .expect("set_hydro_vars on resampled ZAMS");
-    model.save_start_values();
+    model
+        .save_start_values()
+        .expect("save_start_values on resampled ZAMS");
     model.save_old_values();
     model.dt_old = 0.0;
     model

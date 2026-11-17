@@ -141,9 +141,49 @@ fn parse_helm_table_text<'py>(
     bundle_to_py(py, bundle)
 }
 
+/// Returns the 23 CGS constants of `flexmesa-const` that upstream's
+/// `const/test` prints, in the order of `const/exact_tested_values.tsv`:
+/// `pi`, `ln10`, `boltz_sigma`, `boltz_sigma*4`, `boltz_sigma*4/clight`,
+/// `boltz_sigma/clight`, `crad`, `secyer`, `Msun`, `Rsun`, `Lsun`, `ly`,
+/// `m_earth`, `au`, `amu`, `mn`, `mp`, `me`, `planck_h`, `qe`, `avo`,
+/// `clight`, `kerg`.
+#[pyfunction]
+fn const_probe_values() -> Vec<f64> {
+    use flexmesa_const::{
+        AMU, AU, AVO, BOLTZ_SIGMA, CLIGHT, CRAD, KERG, LN10, LSUN, LY, ME, MN,
+        MP, MSUN, M_EARTH, PI, PLANCK_H, QE, RSUN, SECYER,
+    };
+    vec![
+        PI,
+        LN10,
+        BOLTZ_SIGMA,
+        BOLTZ_SIGMA * 4.0,
+        BOLTZ_SIGMA * 4.0 / CLIGHT,
+        BOLTZ_SIGMA / CLIGHT,
+        CRAD,
+        SECYER,
+        MSUN,
+        RSUN,
+        LSUN,
+        LY,
+        M_EARTH,
+        AU,
+        AMU,
+        MN,
+        MP,
+        ME,
+        PLANCK_H,
+        QE,
+        AVO,
+        CLIGHT,
+        KERG,
+    ]
+}
+
 /// Registers Tier A `data` functions on `m`.
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(is_valid_sha256_hex, m)?)?;
+    m.add_function(wrap_pyfunction!(const_probe_values, m)?)?;
     m.add_function(wrap_pyfunction!(compute_sha256_bytes, m)?)?;
     m.add_function(wrap_pyfunction!(compute_sha256_file, m)?)?;
     m.add_function(wrap_pyfunction!(parse_lodders03_text, m)?)?;

@@ -313,6 +313,9 @@ fn get_tdc_solution<T: TurbScalar>(
                     let (q1, _) = compute_q(&info_p, set_y(false, z1));
                     if q1 < 0.0 {
                         rad_y
+                    // A failed first search is not an error here: upstream
+                    // checks `ierr /= 0` and then searches `[Z1, Z0]`
+                    // (`turb/private/tdc.f90:185-189`).
                     } else if let Ok((y_star, iters)) =
                         bracket_plus_newton_search(
                             &info_p, &info_z, scale, false, zlb, z1, 0.0,

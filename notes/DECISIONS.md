@@ -42,6 +42,7 @@ Scope and the `v0.1.0` definition are in [`SCOPE.md`](SCOPE.md). Work is tracked
 | 25 | Headless Validation and No-Op Behavior for `&pgstar`, `&pgbinary` and `&astero_pgstar_controls` (`#147`, `#173`) | In force | below |
 | 26 | Diagnostic Harness Runs and Terminal-Output Controls (`#147`) | In force | below |
 | 27 | Baseline Regression Check in the History Harness (`#143`, `#144`) | In force | below |
+| 28 | Storage of Subscripted Namelist Controls (`#147`) | In force | below |
 
 ## Pre-audit decisions still in force
 
@@ -306,3 +307,17 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
   - *Gate on any change in step count or deviation*: every legitimate trajectory change would fail the gate, which pushes authors toward not changing trajectories.
   - *Treat timeouts as regressions*: runner speed differs between machines, so the gate would fail for reasons unrelated to the code.
   - *Per-case expected outcomes in `known_gaps.toml`*: duplicates measured numbers in a hand-edited file, against `DECISIONS #26` item 4.
+
+---
+
+## DECISIONS #28: Storage of Subscripted Namelist Controls (`Issue #147`)
+
+- **Date**: 2026-11-17
+- **Decision**:
+  1. **A Fortran subscript `i` is stored at Rust index `i - 1`.** `x_ctrl(i)`, `x_integer_ctrl(i)`, `x_logical_ctrl(i)` and `x_character_ctrl(i)` are read into `Vec` position `i - 1` (`crates/flexmesa-star/src/inlist_populate_limits.rs`). Code that ports upstream's `s% x_ctrl(n)` reads `x_ctrl[n - 1]`.
+  2. **An unsubscripted assignment to an array control sets element 1.** This is what a Fortran namelist read does, so `required_termination_code_string = 'a'` and `required_termination_code_string(1) = 'a'` are the same.
+  3. **`required_termination_code_string` is an array.** It is stored as the list of codes in subscript order, as upstream declares it (`star_data/public/star_data_def.inc:369`, 9 elements), not as one string.
+- **Why**: PR #203 changed `x_ctrl` storage from index `i` to `i - 1` without recording it, and one reader kept the old offset. `star/pisn` failed in the parser because its inlist subscripts `required_termination_code_string` (`star/test_suite/pisn/inlist_finish:9`) while the reader treated it as a scalar.
+- **Alternatives Rejected**:
+  - *Keep index `i` with an unused element 0*: every array would carry a slot with no upstream meaning, and lengths would differ from upstream's by one.
+  - *Reject unsubscripted assignment to arrays*: upstream's own inlists use it (`star/test_suite/pisn/inlist_convert:10`).

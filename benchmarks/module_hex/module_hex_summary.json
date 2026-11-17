@@ -6,7 +6,7 @@
   "modules_with_executable_probes": 13,
   "modules_passing_0_ulp": 2,
   "total_values_checked": 3504,
-  "total_values_0_ulp": 3388,
+  "total_values_0_ulp": 3394,
   "modules": [
     {
       "module": "const",
@@ -17,7 +17,7 @@
       "zero_ulp_values": 23,
       "max_ulp": 0,
       "issue": null,
-      "notes": "All 23 CGS physical/astronomical constants."
+      "notes": "All 23 CGS constants of the Rust `flexmesa-const` crate."
     },
     {
       "module": "utils",
@@ -212,8 +212,8 @@
       "upstream_exact_values": 136,
       "expected_outputs": 71,
       "checked_values": 62,
-      "zero_ulp_values": 32,
-      "max_ulp": 7,
+      "zero_ulp_values": 38,
+      "max_ulp": 6,
       "issue": "#157",
       "notes": "31-step check_TDC gradT and conv_vel outputs."
     },

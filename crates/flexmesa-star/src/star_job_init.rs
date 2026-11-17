@@ -226,7 +226,7 @@ pub fn init_or_update_model_from_bundle(
             env_controls.initial_mass = m_env.clamp(0.55, 15.0);
         }
         let mut m = load_zams_model(env_controls, job.clone())?;
-        excise_core_by_temperature(&mut m, 4.0e6);
+        excise_core_by_temperature(&mut m, 4.0e6)?;
         m
     } else if crate::tier3_extras::is_tier3_case(case_name)
         || (crate::tier4_extras::is_tier4_case(case_name) && !is_astero_case)
@@ -486,7 +486,7 @@ pub fn init_or_update_model_from_bundle(
         equilibrate_tier2_scaled_model(&mut model);
     }
     if let Some(t_cut) = job.remove_initial_center_by_temperature {
-        excise_core_by_temperature(&mut model, t_cut);
+        excise_core_by_temperature(&mut model, t_cut)?;
     }
     if model.controls.rsp2_flag {
         crate::rsp2_remesh::seed_rsp2_w_from_mlt_vc_if_needed(&mut model)?;

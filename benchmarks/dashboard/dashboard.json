@@ -21,7 +21,7 @@
         "verified_total": 0,
         "pct_ported": 14.9,
         "pct_verified": 0.0,
-        "rust_lines": 57749,
+        "rust_lines": 57764,
         "python_jax_lines": 4723
       },
       {
@@ -191,7 +191,7 @@
         "verified_total": 0,
         "pct_ported": 66.5,
         "pct_verified": 0.0,
-        "rust_lines": 2238,
+        "rust_lines": 2241,
         "python_jax_lines": 2368
       },
       {
@@ -225,7 +225,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 2837,
+        "rust_lines": 2846,
         "python_jax_lines": 982
       },
       {
@@ -378,7 +378,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 3533,
+        "rust_lines": 3540,
         "python_jax_lines": 2353
       },
       {
@@ -455,14 +455,14 @@
       "upstream_panel_modules": 46
     },
     "infrastructure_lines": {
-      "rust_bridge_testing_bench": 15444,
-      "python_testing_bench": 13319
+      "rust_bridge_testing_bench": 15544,
+      "python_testing_bench": 13333
     }
   },
   "numerics": {
     "has_165_ci": true,
-    "strict_cross_machine_identical": "verified in CI (x86_64 == aarch64, 1 == 4 threads; 474,062 math vectors + uncapped star/1.3M_ms_high_Z + binary/jdot_gr_check run with unsupported controls ignored)",
-    "strict_kernels_bit_identical": "math: 403,258/403,258 CRMATH 0 ULP (70,804 libm <= 1 ULP); 3,388/3,504 probed module hex 0 ULP (2 complete, 12 non-math probed)",
+    "strict_cross_machine_identical": "gated in CI by scripts/check_strict_determinism.py (x86_64 vs aarch64, 1 vs 4 threads; 474,062 math vectors + uncapped star/1.3M_ms_high_Z + binary/jdot_gr_check run with unsupported controls ignored; a bit-identity check, not a comparison with MESA)",
+    "strict_kernels_bit_identical": "math: 403,258/403,258 CRMATH 0 ULP (70,804 libm <= 1 ULP); 3,394/3,504 probed module hex 0 ULP (2 complete, 12 non-math probed)",
     "total_upstream_hex_values": 348321,
     "modules": [
       {
@@ -553,7 +553,7 @@
       {
         "module": "turb",
         "upstream_exact_values": 136,
-        "exact_strict_compared": "32/62 0 ULP (max 7 ULP, 71 total)"
+        "exact_strict_compared": "38/62 0 ULP (max 6 ULP, 71 total)"
       },
       {
         "module": "star_data",
@@ -685,11 +685,11 @@
     {
       "namelist": "star &star_job",
       "upstream_scalars": 431,
-      "matched_in_flexmesa": 80,
-      "defaults_agree": 63,
+      "matched_in_flexmesa": 79,
+      "defaults_agree": 62,
       "value_mismatch": 11,
       "disabled_limit_none": 6,
-      "unimplemented": 351
+      "unimplemented": 352
     },
     {
       "namelist": "binary &binary_controls + &binary_job",

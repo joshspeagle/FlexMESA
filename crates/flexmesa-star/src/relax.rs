@@ -193,25 +193,30 @@ pub fn apply_uniform_rotation(model: &mut StarModel, omega_0: f64) {
 /// Excises all interior zones hotter than `t_cut_k` (`K`) and replaces the
 /// interior with a rigid radiative/hydrostatic inner boundary `(M_center, R_center, L_center)`
 /// (`remove_initial_center_by_temperature` in `star/private/relax.f90`).
-pub fn excise_core_by_temperature(model: &mut StarModel, t_cut_k: f64) {
+///
+/// # Errors
+/// Returns [`StarError`] if the mesh cannot be normalized and repacked before
+/// or after the excision.
+pub fn excise_core_by_temperature(
+    model: &mut StarModel,
+    t_cut_k: f64,
+) -> Result<(), StarError> {
     if t_cut_k <= 0.0 || model.nz < 32 {
-        return;
+        return Ok(());
     }
     let ln_t_cut = flexmesa_math::log(t_cut_k);
     let Some(raw_cut) = (16..model.nz).find(|&k| model.ln_t[k] >= ln_t_cut)
     else {
-        return;
+        return Ok(());
     };
     let k_cut = raw_cut.min(model.nz - 4);
-    if model.sync_mesh_and_pack().is_err() {
-        return;
-    }
+    model.sync_mesh_and_pack()?;
 
     let m_c = model.m[k_cut];
     let r_c = model.r[k_cut];
     let l_c = model.lum[k_cut].max(1.0);
     if m_c <= 0.0 || m_c >= 0.999999 * model.mstar || r_c <= 0.0 {
-        return;
+        return Ok(());
     }
 
     let species = model.species;
@@ -273,9 +278,9 @@ pub fn excise_core_by_temperature(model: &mut StarModel, t_cut_k: f64) {
             *dq_k /= dq_sum;
         }
     }
-    if trimmed.sync_mesh_and_pack().is_ok() {
-        *model = trimmed;
-    }
+    trimmed.sync_mesh_and_pack()?;
+    *model = trimmed;
+    Ok(())
 }
 
 /// Multi-step logarithmic mass relaxation (`do_relax_mass` / `do_relax_mass_scale`

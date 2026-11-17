@@ -293,9 +293,11 @@ def collect_numerics_and_module_verification(
         else:
             evo_summary = f"{evo_case} {evo_steps}-step trace"
         level1 = (
-            "verified in CI (x86_64 == aarch64, 1 == 4 threads; "
+            "gated in CI by scripts/check_strict_determinism.py "
+            "(x86_64 vs aarch64, 1 vs 4 threads; "
             f"{vec_n:,} math vectors + {evo_summary} "
-            "run with unsupported controls ignored)"
+            "run with unsupported controls ignored; "
+            "a bit-identity check, not a comparison with MESA)"
         )
         mhex_path = (
             repo_root / "benchmarks" / "module_hex" / "module_hex_summary.json"

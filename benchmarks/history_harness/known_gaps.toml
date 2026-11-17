@@ -709,8 +709,8 @@ file = "crates/flexmesa-astero/tests/astero_suite.rs"
 test_name = "test_example_astero_uncapped"
 issue = "#162"
 role = "campaign"
-expect_fail_when_run = false
-reason = "Long-running uncapped astero campaign tracked under #162 and scheduled campaign CI."
+expect_fail_when_run = true
+reason = "Uncapped astero campaign on a cleaned inlist; its own assertions fail (termination limit_num_chi2_too_big after 910 steps), measured in the scheduled campaign and locally, the same before and after the #205 engine fixes. Tracked under #162."
 
 [[test_gaps]]
 kind = "rust_ignore"

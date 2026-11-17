@@ -8,7 +8,7 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 | Namelist | Upstream `26.4.1` Scalars | Matched in `FlexMESA` | Agree | Value Mismatch | Active Limit Disabled (`None`) | Unimplemented in `FlexMESA` |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
 | star &controls | 1396 | 582 | 535 | 31 | 16 | 814 |
-| star &star_job | 431 | 80 | 63 | 11 | 6 | 351 |
+| star &star_job | 431 | 79 | 62 | 11 | 6 | 352 |
 | binary &binary_controls + &binary_job | 209 | 120 | 117 | 3 | 0 | 89 |
 | astero &astero_search_controls | 150 | 73 | 70 | 3 | 0 | 77 |
 | eos &eos | 102 | 54 | 42 | 12 | 0 | 48 |
@@ -70,23 +70,23 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 
 | Control | Upstream `26.4.1` Source | Upstream Default | `FlexMESA` Source | `FlexMESA` Default | Classification |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| `auto_extend_net` | `star/defaults/star_job.defaults:2491` | `.true.` | `crates/flexmesa-star/src/job_controls.rs:475` | `false` | boolean mismatch |
-| `core_avg_eps` | `star/defaults/star_job.defaults:1871` | `1d-6` | `crates/flexmesa-star/src/job_controls.rs:515` | `0.0` | numeric mismatch |
-| `new_omega` | `star/defaults/star_job.defaults:1602` | `0` | `crates/flexmesa-star/src/job_controls.rs:485` | `None` | active upstream limit disabled as None |
-| `new_omega_div_omega_crit` | `star/defaults/star_job.defaults:1624` | `0` | `crates/flexmesa-star/src/job_controls.rs:486` | `None` | active upstream limit disabled as None |
-| `new_surface_rotation_v` | `star/defaults/star_job.defaults:1640` | `0` | `crates/flexmesa-star/src/job_controls.rs:487` | `None` | active upstream limit disabled as None |
-| `pre_ms_d_log10_P` | `star/defaults/star_job.defaults:416` | `0` | `crates/flexmesa-star/src/job_controls.rs:450` | `0.004` | numeric mismatch |
-| `pre_ms_relax_num_steps` | `star/defaults/star_job.defaults:441` | `300` | `crates/flexmesa-star/src/job_controls.rs:454` | `20` | numeric mismatch |
-| `pre_ms_T_c` | `star/defaults/star_job.defaults:396` | `3d5` | `crates/flexmesa-star/src/job_controls.rs:448` | `9.0e5` | numeric mismatch |
-| `remove_initial_center_by_temperature` | `star/defaults/star_job.defaults:2046` | `0` | `crates/flexmesa-star/src/job_controls.rs:531` | `None` | active upstream limit disabled as None |
-| `save_model_filename` | `star/defaults/star_job.defaults:260` | `'undefined'` | `crates/flexmesa-star/src/job_controls.rs:463` | `String::new()` | string/option mismatch |
-| `save_model_number` | `star/defaults/star_job.defaults:234` | `-111` | `crates/flexmesa-star/src/job_controls.rs:464` | `None` | active upstream limit disabled as None |
-| `save_photo_when_terminate` | `star/defaults/star_job.defaults:270` | `.true.` | `crates/flexmesa-star/src/job_controls.rs:465` | `false` | boolean mismatch |
-| `save_pulse_data_filename` | `star/defaults/star_job.defaults:323` | `'undefined'` | `crates/flexmesa-star/src/job_controls.rs:468` | `String::new()` | string/option mismatch |
-| `seconds_for_initial_dt` | `star/defaults/star_job.defaults:650` | `-1` | `crates/flexmesa-star/src/job_controls.rs:494` | `0.0` | numeric mismatch |
-| `set_to_this_tau_factor` | `star/defaults/star_job.defaults:1314` | `-1` | `crates/flexmesa-star/src/job_controls.rs:511` | `1.0` | numeric mismatch |
-| `steps_to_take_before_terminate` | `star/defaults/star_job.defaults:574` | `-1` | `crates/flexmesa-star/src/job_controls.rs:530` | `None` | active upstream limit disabled as None |
-| `years_for_initial_dt` | `star/defaults/star_job.defaults:649` | `-1` | `crates/flexmesa-star/src/job_controls.rs:493` | `0.0` | numeric mismatch |
+| `auto_extend_net` | `star/defaults/star_job.defaults:2491` | `.true.` | `crates/flexmesa-star/src/job_controls.rs:478` | `false` | boolean mismatch |
+| `core_avg_eps` | `star/defaults/star_job.defaults:1871` | `1d-6` | `crates/flexmesa-star/src/job_controls.rs:518` | `0.0` | numeric mismatch |
+| `new_omega` | `star/defaults/star_job.defaults:1602` | `0` | `crates/flexmesa-star/src/job_controls.rs:488` | `None` | active upstream limit disabled as None |
+| `new_omega_div_omega_crit` | `star/defaults/star_job.defaults:1624` | `0` | `crates/flexmesa-star/src/job_controls.rs:489` | `None` | active upstream limit disabled as None |
+| `new_surface_rotation_v` | `star/defaults/star_job.defaults:1640` | `0` | `crates/flexmesa-star/src/job_controls.rs:490` | `None` | active upstream limit disabled as None |
+| `pre_ms_d_log10_P` | `star/defaults/star_job.defaults:416` | `0` | `crates/flexmesa-star/src/job_controls.rs:453` | `0.004` | numeric mismatch |
+| `pre_ms_relax_num_steps` | `star/defaults/star_job.defaults:441` | `300` | `crates/flexmesa-star/src/job_controls.rs:457` | `20` | numeric mismatch |
+| `pre_ms_T_c` | `star/defaults/star_job.defaults:396` | `3d5` | `crates/flexmesa-star/src/job_controls.rs:451` | `9.0e5` | numeric mismatch |
+| `remove_initial_center_by_temperature` | `star/defaults/star_job.defaults:2046` | `0` | `crates/flexmesa-star/src/job_controls.rs:534` | `None` | active upstream limit disabled as None |
+| `save_model_filename` | `star/defaults/star_job.defaults:260` | `'undefined'` | `crates/flexmesa-star/src/job_controls.rs:466` | `String::new()` | string/option mismatch |
+| `save_model_number` | `star/defaults/star_job.defaults:234` | `-111` | `crates/flexmesa-star/src/job_controls.rs:467` | `None` | active upstream limit disabled as None |
+| `save_photo_when_terminate` | `star/defaults/star_job.defaults:270` | `.true.` | `crates/flexmesa-star/src/job_controls.rs:468` | `false` | boolean mismatch |
+| `save_pulse_data_filename` | `star/defaults/star_job.defaults:323` | `'undefined'` | `crates/flexmesa-star/src/job_controls.rs:471` | `String::new()` | string/option mismatch |
+| `seconds_for_initial_dt` | `star/defaults/star_job.defaults:650` | `-1` | `crates/flexmesa-star/src/job_controls.rs:497` | `0.0` | numeric mismatch |
+| `set_to_this_tau_factor` | `star/defaults/star_job.defaults:1314` | `-1` | `crates/flexmesa-star/src/job_controls.rs:514` | `1.0` | numeric mismatch |
+| `steps_to_take_before_terminate` | `star/defaults/star_job.defaults:574` | `-1` | `crates/flexmesa-star/src/job_controls.rs:533` | `None` | active upstream limit disabled as None |
+| `years_for_initial_dt` | `star/defaults/star_job.defaults:649` | `-1` | `crates/flexmesa-star/src/job_controls.rs:496` | `0.0` | numeric mismatch |
 
 ## binary &binary_controls + &binary_job
 

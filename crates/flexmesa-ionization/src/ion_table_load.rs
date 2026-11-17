@@ -68,8 +68,17 @@ impl IonTableGrid {
             }
         }
         let grid = if let Some(dir) = resolve_ion_data_dir() {
-            Self::from_data_dir(&dir, "ion", "")
-                .unwrap_or_else(|_| Self::from_embedded_full())
+            // The embedded table holds the same MESA `ionization_data`, so
+            // falling back to it does not change results; the failure to
+            // read the directory is reported instead of being dropped.
+            Self::from_data_dir(&dir, "ion", "").unwrap_or_else(|e| {
+                eprintln!(
+                    "warning: could not read ionization tables in {}: {e}; \
+                     using the embedded copy",
+                    dir.display()
+                );
+                Self::from_embedded_full()
+            })
         } else {
             Self::from_embedded_full()
         };

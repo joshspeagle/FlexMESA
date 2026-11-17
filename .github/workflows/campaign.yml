@@ -92,7 +92,11 @@ jobs:
   full-history-harness:
     name: Full 106-Case Strict History Harness Campaign
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    # 106 cases at up to 300 s each, twice when a strict run is rejected and
+    # rerun as diagnostic, on 2 workers. Per-case results are appended to
+    # logs/progress.jsonl as they finish, so a cancelled job still uploads
+    # what it measured.
+    timeout-minutes: 300
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -134,7 +138,7 @@ jobs:
   rust-ignored-campaign:
     name: Rust --ignored Suite & Anti-Stale-Gap Gate
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 180
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -157,12 +161,16 @@ jobs:
           mkdir -p "$LOG_DIR"
           set -o pipefail
           set +e
-          cargo test -p flexmesa-eos --release -- --ignored --nocapture \
+          cargo test -p flexmesa-eos --release --no-fail-fast \
+            -- --ignored --nocapture \
             2>&1 | tee "$LOG_DIR/eos_ignored.log"
-          cargo test -p flexmesa-bench --release -- --ignored --nocapture \
+          cargo test -p flexmesa-bench --release --no-fail-fast \
+            -- --ignored --nocapture \
             2>&1 | tee "$LOG_DIR/bench_ignored.log"
+          # --no-fail-fast: without it cargo stops at the first test binary
+          # with a failure and the remaining campaigns are never run.
           cargo test -p flexmesa-binary -p flexmesa-astero --release \
-            -- --ignored --test-threads=2 --nocapture \
+            --no-fail-fast -- --ignored --test-threads=2 --nocapture \
             2>&1 | tee "$LOG_DIR/campaign_ignored.log"
           set -e
           python -m flexmesa.testing.known_gaps_gate \
@@ -241,8 +249,13 @@ jobs:
           python scripts/check_strict_determinism.py \
             --compare "${{ runner.temp }}"/campaign-strict-digests/campaign_strict_*.json
 
+  # No MESA build exists on the runner, so this job cannot compile or run
+  # benchmarks/fortran_mesa/bench_harness.f90, which uses MESA modules. It
+  # checks only what needs no MESA: the make plan, the two C taps and the
+  # spread script's dry run. Running the Fortran comparators against MESA
+  # 26.4.1 is tracked in #146.
   fortran-harness-check:
-    name: Fortran Benchmark & Tap Harness Check
+    name: Tap Build & Fortran Make-Plan Check (no MESA build)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -254,17 +267,15 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install GNU Fortran toolchain for syntax and harness verification
+      - name: Install GNU toolchain for the make plan and C taps
         run: |
           sudo apt-get update && sudo apt-get install -y gfortran gcc make
           python -m pip install --upgrade pip numpy
 
-      - name: Verify Fortran harness compilation units and hex/pulse taps
+      - name: Check the make plan, build the hex and pulse taps, dry-run spread
         run: |
           OUT_DIR="${{ runner.temp }}/fortran-check"
           mkdir -p "$OUT_DIR"
-          gfortran -O2 -fopenmp -c benchmarks/fortran_mesa/bench_harness.f90 \
-            -J "$OUT_DIR" -o "$OUT_DIR/bench_harness.o"
           make -C benchmarks/fortran_mesa -n run run_wave2 run_wave3a run_wave3b run_wave4 run_wave5 \
             > "$OUT_DIR/make_plan.txt"
           gcc -shared -fPIC -O2 -ldl scripts/mesa_reference/gfortran_hex_tap.c \
@@ -291,6 +302,7 @@ jobs:
       - known-gaps-and-hex-gates
       - full-history-harness
       - rust-ignored-campaign
+      - strict-determinism-uncapped
       - strict-determinism-cross-arch
       - fortran-harness-check
     if: always()
@@ -312,18 +324,22 @@ jobs:
             echo "| \`known-gaps-and-hex-gates\` | \`${{ needs.known-gaps-and-hex-gates.result }}\` |"
             echo "| \`full-history-harness\` | \`${{ needs.full-history-harness.result }}\` |"
             echo "| \`rust-ignored-campaign\` | \`${{ needs.rust-ignored-campaign.result }}\` |"
+            echo "| \`strict-determinism-uncapped\` | \`${{ needs.strict-determinism-uncapped.result }}\` |"
             echo "| \`strict-determinism-cross-arch\` | \`${{ needs.strict-determinism-cross-arch.result }}\` |"
             echo "| \`fortran-harness-check\` | \`${{ needs.fortran-harness-check.result }}\` |"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Open or comment regression alert on scheduled failure
+        # Any result other than success raises the alert: a cancelled
+        # (timed-out) or skipped job measured nothing.
         if: >-
           always() && github.event_name == 'schedule' && (
-            needs.known-gaps-and-hex-gates.result == 'failure' ||
-            needs.full-history-harness.result == 'failure' ||
-            needs.rust-ignored-campaign.result == 'failure' ||
-            needs.strict-determinism-cross-arch.result == 'failure' ||
-            needs.fortran-harness-check.result == 'failure'
+            needs.known-gaps-and-hex-gates.result != 'success' ||
+            needs.full-history-harness.result != 'success' ||
+            needs.rust-ignored-campaign.result != 'success' ||
+            needs.strict-determinism-uncapped.result != 'success' ||
+            needs.strict-determinism-cross-arch.result != 'success' ||
+            needs.fortran-harness-check.result != 'success'
           )
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -337,6 +353,7 @@ jobs:
           - \`known-gaps-and-hex-gates\`: \`${{ needs.known-gaps-and-hex-gates.result }}\`
           - \`full-history-harness\`: \`${{ needs.full-history-harness.result }}\`
           - \`rust-ignored-campaign\`: \`${{ needs.rust-ignored-campaign.result }}\`
+          - \`strict-determinism-uncapped\`: \`${{ needs.strict-determinism-uncapped.result }}\`
           - \`strict-determinism-cross-arch\`: \`${{ needs.strict-determinism-cross-arch.result }}\`
           - \`fortran-harness-check\`: \`${{ needs.fortran-harness-check.result }}\`
 

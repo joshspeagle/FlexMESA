@@ -750,9 +750,9 @@
     "rust": {
       "tool": "cargo llvm-cov",
       "overall": {
-        "lines": 93036,
-        "covered": 66188,
-        "percent": 71.1
+        "lines": 93091,
+        "covered": 66235,
+        "percent": 71.2
       },
       "by_crate": [
         {
@@ -848,8 +848,8 @@
         {
           "crate": "flexmesa-math",
           "lines": 775,
-          "covered": 605,
-          "percent": 78.1
+          "covered": 598,
+          "percent": 77.2
         },
         {
           "crate": "flexmesa-mtx",
@@ -883,14 +883,14 @@
         },
         {
           "crate": "flexmesa-schema",
-          "lines": 785,
-          "covered": 644,
-          "percent": 82.0
+          "lines": 808,
+          "covered": 666,
+          "percent": 82.4
         },
         {
           "crate": "flexmesa-star",
-          "lines": 38555,
-          "covered": 26126,
+          "lines": 38587,
+          "covered": 26158,
           "percent": 67.8
         },
         {
@@ -916,9 +916,9 @@
     "python": {
       "tool": "pytest --cov",
       "overall": {
-        "statements": 19938,
-        "covered": 17474,
-        "percent": 87.6
+        "statements": 19999,
+        "covered": 17572,
+        "percent": 87.9
       },
       "by_subpackage": [
         {
@@ -1067,9 +1067,9 @@
         },
         {
           "subpackage": "flexmesa.testing",
-          "statements": 2369,
-          "covered": 1400,
-          "percent": 59.1
+          "statements": 2430,
+          "covered": 1498,
+          "percent": 61.6
         },
         {
           "subpackage": "flexmesa.turb",
@@ -1266,13 +1266,13 @@
       },
       {
         "phase": "Phase B",
-        "open": 4,
-        "closed": 1,
+        "open": 5,
+        "closed": 0,
         "issues": [
           {
             "number": 147,
             "title": "[Audit B1] Fail loudly on unsupported controls, missing data and discarded errors",
-            "state": "closed"
+            "state": "open"
           },
           {
             "number": 148,
@@ -1414,7 +1414,13 @@
         "issues": []
       }
     ],
-    "open_pull_requests": [],
+    "open_pull_requests": [
+      {
+        "number": 205,
+        "title": "fix(eos,star): restore upstream behaviour at four points found auditing #147",
+        "draft": false
+      }
+    ],
     "deferred_169": [
       {
         "number": 175,
@@ -1630,6 +1636,19 @@
       "rust_cov_pct": "71.1",
       "python_cov_pct": "87.6",
       "closed_140": "8",
+      "total_140": "32",
+      "deferred_169": "17"
+    },
+    {
+      "date_utc": "2026-11-17",
+      "commit": "69e6f68",
+      "event": "main merge",
+      "engine_ported_pct": "13.9",
+      "all_verified_pct": "0.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "71.2",
+      "python_cov_pct": "87.9",
+      "closed_140": "7",
       "total_140": "32",
       "deferred_169": "17"
     }

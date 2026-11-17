@@ -69,13 +69,13 @@
     },
     {
       "phase": "Phase B",
-      "open": 4,
-      "closed": 1,
+      "open": 5,
+      "closed": 0,
       "issues": [
         {
           "number": 147,
           "title": "[Audit B1] Fail loudly on unsupported controls, missing data and discarded errors",
-          "state": "closed"
+          "state": "open"
         },
         {
           "number": 148,
@@ -217,7 +217,13 @@
       "issues": []
     }
   ],
-  "open_pull_requests": [],
+  "open_pull_requests": [
+    {
+      "number": 205,
+      "title": "fix(eos,star): restore upstream behaviour at four points found auditing #147",
+      "draft": false
+    }
+  ],
   "deferred_169": [
     {
       "number": 175,

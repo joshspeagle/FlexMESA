@@ -105,9 +105,9 @@ module = "turb"
 status = "nonzero_ulp"
 issue = "#157"
 max_declared_ulp = 10
-min_zero_ulp_count = 32
+min_zero_ulp_count = 38
 expect_nonzero_ulp = true
-reason = "32/62 TDC gradT and conv_vel outputs agree at 0 ULP; remaining TDC iterations differ by 1-7 ULPs."
+reason = "38/62 TDC gradT and conv_vel outputs of the Rust kernel agree at 0 ULP; the remaining TDC iterations differ by up to 6 ULPs."
 
 [[gaps]]
 module = "neu"

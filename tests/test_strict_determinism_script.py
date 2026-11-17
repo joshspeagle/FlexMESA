@@ -159,3 +159,27 @@ def test_compare_jsons_detects_cross_arch_case_mismatch(
 
     assert mod._compare_jsons([p1, p2]) == 0
     assert mod._compare_jsons([p1, p3]) == 1
+
+
+def test_trace_summary_parsing_and_step_validation() -> None:
+    """Steps and termination are read from the trace summary line."""
+    mod = _load_script_module()
+    out = (
+        "warning: something\n"
+        "suite=star case=demo status=ok term=log_L_upper_limit steps=346 "
+        "retries=0 wall_s=1.0 peak_rss_gb=1.0 history=/x/history.data\n"
+    )
+    assert mod._parse_trace_summary(out) == ("log_L_upper_limit", 346)
+    with pytest.raises(RuntimeError, match="no trace summary line"):
+        mod._parse_trace_summary("nothing useful\n")
+
+    good = {
+        "history_bytes": 10,
+        "history_1t_sha256": "a" * 64,
+        "history_4t_sha256": "a" * 64,
+        "thread_1_vs_4_byte_identical": True,
+        "steps": 5,
+    }
+    assert mod._validate_digest_pair(good, "x") == []
+    errs = mod._validate_digest_pair({**good, "steps": 0}, "x")
+    assert any("steps must be > 0" in e for e in errs)

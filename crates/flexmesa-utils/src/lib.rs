@@ -120,6 +120,13 @@ pub fn require_mesa_test_input_path(rel_path: &str) -> Option<PathBuf> {
          FLEXMESA_REQUIRE_ZERO_SKIPS=0 to opt out locally)",
         path.display()
     );
+    // Reachable only with the opt-out set. The calling test then checks
+    // nothing and is still reported as passed, so say so.
+    eprintln!(
+        "NOT RUN (FLEXMESA_REQUIRE_ZERO_SKIPS opted out): missing {}; the \
+         calling test checks nothing",
+        path.display()
+    );
     None
 }
 

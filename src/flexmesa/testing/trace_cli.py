@@ -440,6 +440,20 @@ def _execute_one_entry(
     )
 
 
+def _append_progress(
+    work_root: pathlib.Path, rec: harness_runner.CaseHarnessRecord
+) -> None:
+    """Append one finished case to ``<work_root>/progress.jsonl``.
+
+    The case table is written only when every case has finished. This file
+    keeps each result as it arrives, so a run that is cancelled part way
+    (for example by a CI time limit) still leaves what it measured.
+    """
+    line = json.dumps(case_report.record_to_dict(rec), allow_nan=False)
+    with (work_root / "progress.jsonl").open("a", encoding="utf-8") as fh:
+        fh.write(line + "\n")
+
+
 def _run_selected_entries(
     selected: list[case_manifest.CaseManifestEntry],
     gaps: dict[tuple[str, str], case_manifest.KnownGapSpec],
@@ -464,6 +478,7 @@ def _run_selected_entries(
                 base_dir,
             )
             records.append(rec)
+            _append_progress(work_root, rec)
             print(
                 f"[harness] [{idx}/{len(selected)}] {rec.suite}/{rec.case}: "
                 f"verdict={rec.verdict} mode={rec.run_mode} "
@@ -495,6 +510,7 @@ def _run_selected_entries(
             idx = fut_to_idx[fut]
             rec = fut.result()
             indexed_records[idx] = rec
+            _append_progress(work_root, rec)
             print(
                 f"[harness] [{len(indexed_records)}/{len(selected)}] "
                 f"{rec.suite}/{rec.case}: verdict={rec.verdict} "

@@ -381,9 +381,7 @@ def test_dashboard_numerics_rows_reflect_165_ci_presence(
     """Numerics rows report #165 data when CI jobs exist, else unmeasured."""
     mesa_dir = fetch.resolve_mesa_test_inputs_dir()
     data = dashboard.build_dashboard_data(REPO_ROOT, mesa_dir)
-    assert (
-        "verified in CI" in data["numerics"]["strict_cross_machine_identical"]
-    )
+    assert "gated in CI" in data["numerics"]["strict_cross_machine_identical"]
     assert (
         "403,258/403,258 CRMATH"
         in (data["numerics"]["strict_kernels_bit_identical"])

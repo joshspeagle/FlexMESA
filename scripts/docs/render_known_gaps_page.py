@@ -68,7 +68,7 @@ def _format_observed(rec: harness_runner.CaseHarnessRecord) -> str:
     if not rec.executed:
         return "not executed in baseline"
     obs = rec.observed_termination or "error"
-    return f"`{obs}` ({rec.steps} steps)"
+    return f"`{obs}` ({rec.steps} steps; {rec.run_mode})"
 
 
 def _format_within_tol_line(
@@ -156,15 +156,17 @@ def render_known_gaps_markdown(repo_root: pathlib.Path) -> str:
         "## Suite Summary",
         "",
         "| Suite | Target Cases | Stored `26.4.1` Refs | `no_reference_yet` | "
-        "Reach Upstream Term | Declared Gaps | Verified Pass |",
-        "| :--- | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "Strict-Validated | Diagnostic Runs | Reach Upstream Term | "
+        "Declared Gaps | Verified Pass |",
+        "| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
 
     for suite in case_manifest.VALID_SUITES:
         st = hh_by_suite[suite]
         lines.append(
             f"| `{suite}` | {st['total']} | {st['mesa_26_4_1_ref']} | "
-            f"{st['no_reference_yet']} | {st['reached_termination']} | "
+            f"{st['no_reference_yet']} | {st['strict_validated']} | "
+            f"{st['diagnostic_runs']} | {st['reached_termination']} | "
             f"{st['declared_gaps']} | {st['passing']} |"
         )
 
@@ -173,9 +175,18 @@ def render_known_gaps_markdown(repo_root: pathlib.Path) -> str:
             f"| **Total** | **{hh_tot['total']}** | "
             f"**{hh_tot['mesa_26_4_1_ref']}** | "
             f"**{hh_tot['no_reference_yet']}** | "
+            f"**{hh_tot['strict_validated']}** | "
+            f"**{hh_tot['diagnostic_runs']}** | "
             f"**{hh_tot['reached_termination']}** | "
             f"**{hh_tot['declared_gaps']}** | "
             f"**{hh_tot['passing']}** |",
+            "",
+            "`Strict-Validated` counts cases whose unmodified inlists pass "
+            "strict control validation (`#147`). `Diagnostic Runs` counts "
+            "cases that strict validation rejects and that were rerun with "
+            "the unsupported controls ignored; their numbers show where the "
+            "engine stands and can never count as a pass (`DECISIONS #26`). "
+            "`Reach Upstream Term` counts runs of either kind.",
             "",
             f"- **Undeclared Failures**: `{hh_tot['undeclared_failures']}`",
             _format_within_tol_line(within_tol_non_pass),
@@ -230,7 +241,7 @@ def render_known_gaps_markdown(repo_root: pathlib.Path) -> str:
             f"## Complete Known-Gaps Registry ({len(gap_records)} Cases)",
             "",
             "| Suite | Case | Issue | Expected Term | Baseline Outcome | "
-            "Measured Reason |",
+            "Mechanism |",
             "| :--- | :--- | :--- | :--- | :--- | :--- |",
         ]
     )

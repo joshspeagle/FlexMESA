@@ -4,8 +4,7 @@
 
 use flexmesa_chem::{get_composition_info, NuclideCatalog};
 use flexmesa_const::{
-    CLIGHT, CRAD, FOUR_PI, KERG, LN10, L_SUN, MP, M_SUN, R_SUN, SECYER,
-    STANDARD_CGRAV,
+    CLIGHT, CRAD, FOUR_PI, LN10, L_SUN, M_SUN, R_SUN, SECYER, STANDARD_CGRAV,
 };
 use flexmesa_eos::{
     eos_dt_get, eos_pt_get, EosConfig, HelmTable, I_CHI_RHO, I_CHI_T, I_CP,
@@ -298,19 +297,20 @@ pub fn build1_pre_ms_model(
             for _ii in 1..=2 {
                 t_mid = (t_prev * (1.0 + dlnp_half * gradt_mid)).max(100.0);
                 let log_t_mid = flexmesa_math::log10(t_mid);
-                if let Ok(pt_out) = eos_pt_get(
+                // Upstream returns the EOS error
+                // (`star/private/pre_ms_model.f90:582-588`).
+                rho_mid = eos_pt_get(
                     ht,
                     chem_id,
                     xa,
                     log_pgas_mid,
                     log_t_mid,
                     eos_cfg,
-                ) {
-                    rho_mid = pt_out.rho;
-                } else {
-                    rho_mid = pgas_mid * comp.abar * MP
-                        / (KERG * t_mid * (1.0 + comp.zbar));
-                }
+                )
+                .map_err(|e| {
+                    StarError::MicrophysicsError(format!("eos_pt: {e}"))
+                })?
+                .rho;
                 p_mid = pgas_mid + CRAD * flexmesa_math::pow4(t_mid) / 3.0;
             }
 
@@ -344,11 +344,11 @@ pub fn build1_pre_ms_model(
             );
             let m_mid = 0.5 * (m_prev + m_curr);
             let lum_mid = (m_mid / mstar) * l_star;
-            if let Ok((_, _, gt)) =
-                eval_pre_ms_gradt(&ctx, rho_mid, t_mid, r_mid, m_mid, lum_mid)
-            {
-                gradt_mid = gt;
-            }
+            // Upstream returns the `eval_gradT` error
+            // (`star/private/pre_ms_model.f90:570-576`).
+            let (_, _, gt) =
+                eval_pre_ms_gradt(&ctx, rho_mid, t_mid, r_mid, m_mid, lum_mid)?;
+            gradt_mid = gt;
         }
 
         let lum_curr = (m_curr / mstar) * l_star;

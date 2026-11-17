@@ -56,6 +56,7 @@ class InventorySets:
     supported: dict[str, frozenset[str]]
     unused: dict[str, frozenset[str]]
     headless_gui: dict[str, frozenset[str]]
+    terminal_output: dict[str, frozenset[str]]
 
 
 @dataclasses.dataclass(frozen=True)
@@ -321,6 +322,10 @@ def load_inventories() -> InventorySets:
         supported=supported,
         unused=unused,
         headless_gui=headless_gui,
+        terminal_output={
+            "star_job": star_inv["STAR_JOB_TERMINAL_OUTPUT"],
+            "controls": star_inv["CONTROLS_TERMINAL_OUTPUT"],
+        },
     )
 
 
@@ -592,6 +597,7 @@ def scan_cases(
         collections.defaultdict(list)
     )
     plotting_freq: collections.Counter[tuple[str, str]] = collections.Counter()
+    terminal_freq: collections.Counter[tuple[str, str]] = collections.Counter()
     plotting_unknown: dict[tuple[str, str], list[str]] = (
         collections.defaultdict(list)
     )
@@ -605,6 +611,7 @@ def scan_cases(
         unsupported_seen: set[tuple[str, str, str]] = set()
         unknown_seen: set[tuple[str, str]] = set()
         plotting_seen: set[tuple[str, str]] = set()
+        terminal_seen: set[tuple[str, str]] = set()
 
         for ef in entry_files:
             assigns, flags = _resolve_section_assignments(case_dir, ef)
@@ -641,6 +648,11 @@ def scan_cases(
 
                 if key in inventories.supported[sec]:
                     continue
+                # Keys whose only upstream effect is terminal text are
+                # accepted and recorded (DECISIONS #26).
+                if key in inventories.terminal_output.get(sec, frozenset()):
+                    terminal_seen.add((sec, key))
+                    continue
                 if key in inventories.unused.get(sec, frozenset()):
                     unsupported_seen.add((sec, key, "unused"))
                 elif key in inventories.upstream.get(sec, frozenset()):
@@ -653,6 +665,8 @@ def scan_cases(
             plotting_cases_count += 1
         for sec, key in plotting_seen:
             plotting_freq[(sec, key)] += 1
+        for sec, key in terminal_seen:
+            terminal_freq[(sec, key)] += 1
 
         for sec, key, kind in unsupported_seen:
             unsupported_freq[(sec, key, kind)] += 1
@@ -672,6 +686,9 @@ def scan_cases(
                     f"{s}::{k}" for s, k in sorted(unknown_seen)
                 ],
                 "headless_plotting_keys_count": len(plotting_seen),
+                "terminal_output_keys": [
+                    f"{s}::{k}" for s, k in sorted(terminal_seen)
+                ],
             }
         )
 
@@ -715,6 +732,7 @@ def scan_cases(
         sup_n = len(inventories.supported[sec])
         unused_n = len(inventories.unused[sec])
         gui_n = len(inventories.headless_gui.get(sec, frozenset()))
+        term_n = len(inventories.terminal_output.get(sec, frozenset()))
         up_n = len(inventories.upstream.get(sec, frozenset()))
         section_coverage.append(
             {
@@ -723,8 +741,9 @@ def scan_cases(
                 "supported_keys": sup_n,
                 "unused_keys": unused_n,
                 "headless_gui_keys": gui_n,
+                "terminal_output_keys": term_n,
                 "unimplemented_upstream_keys": max(
-                    0, up_n - sup_n - unused_n - gui_n
+                    0, up_n - sup_n - unused_n - gui_n - term_n
                 ),
             }
         )
@@ -743,6 +762,16 @@ def scan_cases(
         },
         "section_coverage": section_coverage,
         "unsupported_controls": top_unsupported,
+        "terminal_output_controls": {
+            "decision": "DECISIONS #26",
+            "keys": [
+                {"section": sec, "key": key, "case_count": count}
+                for (sec, key), count in sorted(
+                    terminal_freq.items(),
+                    key=lambda kv: (-kv[1], kv[0][0], kv[0][1]),
+                )
+            ],
+        },
         "headless_plotting_issue_173": {
             "issue": "#173",
             "decision": "DECISIONS #25",
@@ -807,15 +836,17 @@ def render_markdown(payload: dict[str, Any]) -> str:
         "",
         (
             "| Section | Upstream `26.4.1` | Supported | Unused (`#147`) "
-            "| Headless GUI (`#173`) | Unimplemented |"
+            "| Headless GUI (`#173`) | Terminal output (`DECISIONS #26`) "
+            "| Unimplemented |"
         ),
-        "| :--- | ---: | ---: | ---: | ---: | ---: |",
+        "| :--- | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for cov in payload["section_coverage"]:
         lines.append(
             f"| `&{cov['section']}` | {cov['upstream_keys']} "
             f"| {cov['supported_keys']} | {cov['unused_keys']} "
             f"| {cov['headless_gui_keys']} "
+            f"| {cov['terminal_output_keys']} "
             f"| {cov['unimplemented_upstream_keys']} |"
         )
 
@@ -835,6 +866,27 @@ def render_markdown(payload: dict[str, Any]) -> str:
         lines.append(
             f"| `&{item['section']}::{item['key']}` "
             f"| `{item['category']}` | {item['case_count']} | {sample} |"
+        )
+
+    lines.extend(
+        [
+            "",
+            "## Terminal-Output Controls (`DECISIONS #26`)",
+            "",
+            (
+                "These keys only gate or format text that MESA writes to the "
+                "terminal. Strict validation accepts and records them. "
+                "`FlexMESA` does not print MESA's terminal log, so they have "
+                "no effect on a run."
+            ),
+            "",
+            "| Control | Cases |",
+            "| :--- | ---: |",
+        ]
+    )
+    for item in payload["terminal_output_controls"]["keys"]:
+        lines.append(
+            f"| `&{item['section']}::{item['key']}` | {item['case_count']} |"
         )
 
     lines.extend(

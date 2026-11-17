@@ -491,12 +491,13 @@ impl InlistBundle {
                     );
                 }
                 "star_job" => {
-                    report.validate_implemented_section(
+                    report.validate_implemented_section_with_terminal_output(
                         sec,
                         &keys,
                         &inv.star_job_supported,
                         &inv.star_job_unused,
                         &inv.star_job_headless_gui_flags,
+                        &inv.star_job_terminal_output,
                     );
                 }
                 "eos" => {
@@ -518,12 +519,13 @@ impl InlistBundle {
                     );
                 }
                 "controls" => {
-                    report.validate_implemented_section(
+                    report.validate_implemented_section_with_terminal_output(
                         sec,
                         &keys,
                         &inv.controls_supported,
                         &inv.controls_unused,
                         &empty,
+                        &inv.controls_terminal_output,
                     );
                 }
                 other => {

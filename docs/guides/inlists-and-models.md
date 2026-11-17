@@ -225,7 +225,7 @@ flexmesa trace astero surface_effects --out ./astero_out --allow-unsupported-con
 
 Unmodified upstream inlists set controls that are not yet ported. Without `--allow-unsupported-controls` each command stops and prints the full list of unsupported controls. With the flag the same list is printed as a warning and the run continues past them, so the resulting trajectory is exploratory and is never counted as parity evidence.
 
-To regenerate the 106-case MESA `26.4.1` reference-availability table (`notes/audit/case_table.md`) or run guarded trajectory comparisons against `benchmarks/history_harness/case_manifest.toml` and `benchmarks/history_harness/known_gaps.toml`, invoke `flexmesa harness` (passing `--allow-unsupported-controls` on `harness run` when auditing unported upstream cases that set unimplemented controls):
+To regenerate the 106-case MESA `26.4.1` reference-availability table (`notes/audit/case_table.md`) or run guarded trajectory comparisons against `benchmarks/history_harness/case_manifest.toml` and `benchmarks/history_harness/known_gaps.toml`, invoke `flexmesa harness`. `harness run` runs each case under strict control validation first. When that run stops on unsupported controls, the harness runs the case again with those controls ignored and reports the second run in the `Run Mode` column as `diagnostic (N controls ignored)`. A diagnostic run shows where the engine stands and can never give a `pass` verdict (`DECISIONS #26`). Keys that only gate or format MESA's terminal text, such as `terminal_interval` and `trace_history_value_name`, pass strict validation and have no effect, because `FlexMESA` does not print MESA's terminal log:
 
 ```bash
 flexmesa harness table --check

@@ -124,7 +124,7 @@ def test_python_inlist_and_runner_loud_failures_and_opt_out() -> None:
 
         unimpl = root / "inlist_unimpl"
         unimpl.write_text(
-            "&controls\n  initial_mass = 1.0\n  terminal_interval = 5\n/\n",
+            "&controls\n  initial_mass = 1.0\n  photo_interval = 5\n/\n",
             encoding="utf-8",
         )
         with pytest.raises(ValueError, match="unsupported control"):

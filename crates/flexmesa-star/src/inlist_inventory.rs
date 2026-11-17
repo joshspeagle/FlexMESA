@@ -30,6 +30,10 @@ pub struct StarControlInventory {
     pub controls_supported: HashSet<&'static str>,
     /// Parsed-but-unused `&controls` fields flagged by default (`#147`).
     pub controls_unused: HashSet<&'static str>,
+    /// `&star_job` keys that only write to the terminal (`DECISIONS #26`).
+    pub star_job_terminal_output: HashSet<&'static str>,
+    /// `&controls` keys that only write to the terminal (`DECISIONS #26`).
+    pub controls_terminal_output: HashSet<&'static str>,
 }
 
 static INVENTORY: OnceLock<StarControlInventory> = OnceLock::new();
@@ -48,6 +52,14 @@ pub fn supported_star_control_inventory() -> &'static StarControlInventory {
         kap_supported: KAP_SUPPORTED.iter().copied().collect(),
         controls_supported: CONTROLS_SUPPORTED.iter().copied().collect(),
         controls_unused: CONTROLS_UNUSED.iter().copied().collect(),
+        star_job_terminal_output: STAR_JOB_TERMINAL_OUTPUT
+            .iter()
+            .copied()
+            .collect(),
+        controls_terminal_output: CONTROLS_TERMINAL_OUTPUT
+            .iter()
+            .copied()
+            .collect(),
     })
 }
 
@@ -179,6 +191,51 @@ pub const STAR_JOB_HEADLESS_GUI: &[&str] = &[
     "disable_pgstar_during_relax_flag",
     "pgstar_flag",
     "save_pgstar_files_when_terminate",
+];
+
+/// `&star_job` keys whose only upstream use is to gate text written to the
+/// terminal (`DECISIONS #26`). Accepted and recorded; `FlexMESA` does not
+/// print MESA's terminal log.
+///
+/// Upstream uses at MESA `26.4.1`, all in `star/job/run_star_support.f90`:
+/// `show_log_description_at_start` (`:444`),
+/// `show_retry_counts_when_terminate` (`:807`),
+/// `show_timestep_limit_counts_when_terminate` (`:815`),
+/// `show_net_reactions_info` (`:2750`), `show_net_species_info` (`:2769`).
+pub const STAR_JOB_TERMINAL_OUTPUT: &[&str] = &[
+    "show_log_description_at_start",
+    "show_net_reactions_info",
+    "show_net_species_info",
+    "show_retry_counts_when_terminate",
+    "show_timestep_limit_counts_when_terminate",
+];
+
+/// `&controls` keys whose only upstream use is to gate or format text written
+/// to the terminal (`DECISIONS #26`). Accepted and recorded; `FlexMESA` does
+/// not print MESA's terminal log.
+///
+/// Upstream uses at MESA `26.4.1`:
+/// - `terminal_interval`: `star/private/do_one_utils.f90:519-520`, and the
+///   `mod(model_number, terminal_interval) == 0` guards on `write` in
+///   `star/private/evolve.f90:63`, `star/private/relax.f90`,
+///   `star/private/winds.f90:654` and `star/job/run_star_support.f90:637`.
+/// - `write_header_frequency`: `star/private/do_one_utils.f90:526-527`.
+/// - `num_trace_history_values`, `trace_history_value_name`:
+///   `star/private/do_one_utils.f90:448-495` (saved and restored around
+///   relaxation in `star/private/init.f90:915-916,1121` and
+///   `star/private/remove_shells.f90:1195-1388`).
+/// - `terminal_show_age_units`, `terminal_show_timestep_units`,
+///   `terminal_show_log_age`, `terminal_show_log_dt`:
+///   `star/private/do_one_utils.f90:153-209,268-284`.
+pub const CONTROLS_TERMINAL_OUTPUT: &[&str] = &[
+    "num_trace_history_values",
+    "terminal_interval",
+    "terminal_show_age_units",
+    "terminal_show_log_age",
+    "terminal_show_log_dt",
+    "terminal_show_timestep_units",
+    "trace_history_value_name",
+    "write_header_frequency",
 ];
 
 /// Supported `&eos` keys.
@@ -937,5 +994,36 @@ mod tests {
             .star_job_unused
             .is_disjoint(&inv.star_job_headless_gui_flags));
         assert!(inv.controls_supported.is_disjoint(&inv.controls_unused));
+        for (terminal, others) in [
+            (
+                &inv.star_job_terminal_output,
+                [&inv.star_job_supported, &inv.star_job_unused],
+            ),
+            (
+                &inv.controls_terminal_output,
+                [&inv.controls_supported, &inv.controls_unused],
+            ),
+        ] {
+            for key in terminal {
+                assert_eq!(*key, key.to_ascii_lowercase());
+            }
+            for other in others {
+                assert!(terminal.is_disjoint(other));
+            }
+        }
+        for key in &inv.star_job_terminal_output {
+            assert!(
+                upstream_section_keys("star_job")
+                    .is_some_and(|set| set.contains(key)),
+                "{key} is not an upstream &star_job key"
+            );
+        }
+        for key in &inv.controls_terminal_output {
+            assert!(
+                upstream_section_keys("controls")
+                    .is_some_and(|set| set.contains(key)),
+                "{key} is not an upstream &controls key"
+            );
+        }
     }
 }

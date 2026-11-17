@@ -209,10 +209,14 @@ pub fn star_evolve_step(
 
     let dt_floor = model.controls.min_timestep_limit.max(0.0);
     let mut dt_try = model.dt;
-    if dt_try <= 0.0 || dt_try <= dt_floor {
+    // Upstream stops on `dt_next <= 0` (`star/private/evolve.f90:1829-1843`)
+    // and on `dt_next < min_timestep_limit` with a strict comparison
+    // (`star/private/evolve.f90:1845-1849`).
+    if dt_try <= 0.0 || dt_try < model.controls.min_timestep_limit {
         return Err(StarError::ConvergenceFailure(format!(
-            "dt ({dt_try:.3e} s) <= min_timestep_limit ({dt_floor:.3e} s) \
-             (`star/private/evolve.f90:1836,2240-2248`)"
+            "dt ({dt_try:.3e} s) is zero or below min_timestep_limit \
+             ({:.3e} s) (`star/private/evolve.f90:1829-1849`)",
+            model.controls.min_timestep_limit
         )));
     }
     if let Some(max_yr) = model.controls.max_years_for_timestep {

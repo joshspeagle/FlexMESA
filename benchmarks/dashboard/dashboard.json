@@ -456,7 +456,7 @@
     },
     "infrastructure_lines": {
       "rust_bridge_testing_bench": 15403,
-      "python_testing_bench": 10818
+      "python_testing_bench": 10846
     }
   },
   "numerics": {

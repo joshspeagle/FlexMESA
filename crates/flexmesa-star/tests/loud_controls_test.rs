@@ -62,7 +62,12 @@ fn test_terminal_output_keys_pass_strict_validation_and_are_recorded() {
     let term_bundle = InlistBundle::from_file(&term)
         .expect("terminal-output keys must pass strict validation");
     let term_report = &term_bundle.validation_report;
-    assert!(term_report.unsupported_controls.is_empty());
+    assert_eq!(
+        term_report.unsupported_controls.len(),
+        0,
+        "unexpected unsupported controls: {:?}",
+        term_report.unsupported_controls
+    );
     let recorded: Vec<&str> = term_report
         .terminal_output_keys
         .iter()

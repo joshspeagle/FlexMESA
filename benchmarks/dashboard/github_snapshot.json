@@ -42,8 +42,8 @@
     },
     {
       "phase": "Phase A",
-      "open": 3,
-      "closed": 1,
+      "open": 2,
+      "closed": 2,
       "issues": [
         {
           "number": 142,
@@ -53,7 +53,7 @@
         {
           "number": 144,
           "title": "[Audit A3] CI that runs real campaigns, and a declared-known-gaps mechanism",
-          "state": "open"
+          "state": "closed"
         },
         {
           "number": 146,
@@ -217,13 +217,7 @@
       "issues": []
     }
   ],
-  "open_pull_requests": [
-    {
-      "number": 206,
-      "title": "ci: scheduled verification campaign, declared known-gaps gate, module hex probes, and MESA spread (#144)",
-      "draft": false
-    }
-  ],
+  "open_pull_requests": [],
   "deferred_169": [
     {
       "number": 175,

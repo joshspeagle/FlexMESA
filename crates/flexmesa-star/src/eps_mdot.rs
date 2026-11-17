@@ -256,7 +256,7 @@ pub fn calculate_eps_mdot_with_change(
                 } else {
                     let (r_old, r_new) =
                         (prev.r[k].max(1.0), model.r[k].max(1.0));
-                    (3.0 / (4.0 * std::f64::consts::PI)) * rho_w_flux[k]
+                    (3.0 / (4.0 * flexmesa_const::PI)) * rho_w_flux[k]
                         / (r_new * r_new + r_new * r_old + r_old * r_old)
                 }
             })

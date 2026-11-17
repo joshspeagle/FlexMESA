@@ -338,3 +338,23 @@ proptest! {
         prop_assert!((z.d2val2 - fd_dyy).abs() < 1.0e-5);
     }
 }
+
+/// Regression test (`#165` R2): `expm1` near zero must evaluate `flexmesa_math::expm1(x)`
+/// rather than `exp(x) - 1.0` so small inputs do not suffer catastrophic cancellation.
+#[test]
+fn test_expm1_avoids_catastrophic_cancellation_near_zero() {
+    let x0 = 1.0e-17_f64;
+    let d1 = AutoDiffReal1VarOrder1::independent(x0, 0).expm1();
+    let d2 = AutoDiffReal2VarOrder2::var1(x0).expm1();
+    let expected_val = flexmesa_math::expm1(x0);
+    let expected_deriv = flexmesa_math::exp(x0);
+
+    assert_ne!(d1.val, 0.0);
+    assert_eq!(d1.val.to_bits(), expected_val.to_bits());
+    assert_eq!(d1.d1[0].to_bits(), expected_deriv.to_bits());
+
+    assert_ne!(d2.val, 0.0);
+    assert_eq!(d2.val.to_bits(), expected_val.to_bits());
+    assert_eq!(d2.d1val1.to_bits(), expected_deriv.to_bits());
+    assert_eq!(d2.d2val1.to_bits(), expected_deriv.to_bits());
+}

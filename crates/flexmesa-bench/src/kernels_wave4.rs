@@ -87,7 +87,7 @@ pub fn make_wave4_zams_model(nz: usize) -> StarModel {
         let dm_k = model.mstar * model.dq[k];
         let rho_k = flexmesa_math::exp(model.lnd[k]);
         r3_running +=
-            (3.0 * dm_k) / (4.0 * std::f64::consts::PI * rho_k.max(1.0e-30));
+            (3.0 * dm_k) / (4.0 * flexmesa_const::PI * rho_k.max(1.0e-30));
         model.ln_r[k] = flexmesa_math::log(r3_running) / 3.0;
     }
 

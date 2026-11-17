@@ -64,7 +64,7 @@ fn standardize_2x2(
         } else {
             let s = f64::midpoint(b, c);
             if s == 0.0 {
-                let h = std::f64::consts::FRAC_1_SQRT_2;
+                let h = 0.5_f64.sqrt();
                 (h, h)
             } else {
                 let r = flexmesa_math::hypot(p, s);

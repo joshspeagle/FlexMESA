@@ -7,9 +7,7 @@
 
 #![allow(missing_docs)]
 
-use std::f64::consts::PI;
-
-use flexmesa_const::{L_SUN, M_SUN, R_SUN, STANDARD_CGRAV};
+use flexmesa_const::{L_SUN, M_SUN, PI, R_SUN, STANDARD_CGRAV};
 
 use crate::model::StarModel;
 use crate::pulse::{

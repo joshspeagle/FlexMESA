@@ -2,9 +2,7 @@
 //! Top-level adaptive timestep controller (`timestep_controller` and
 //! `do_timestep_limits` in `star/private/timestep.f90:39-381`).
 
-use std::f64::consts::LN_10;
-
-use flexmesa_const::SECYER;
+use flexmesa_const::{LN10 as LN_10, SECYER};
 
 use crate::model::StarModel;
 use crate::timestep::{

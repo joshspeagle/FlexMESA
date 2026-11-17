@@ -272,7 +272,7 @@ pub fn blin9b(
         for i in 0..5 {
             let ax = AX[i];
             let axi = AXI[i];
-            let ah_axk = AH[i] * flexmesa_math::powi_f90(ax, k as i32);
+            let ah_axk = AH[i] * flexmesa_math::powi(ax, k as i32);
             let av = AV[i];
 
             let ce = ax - 1.0;

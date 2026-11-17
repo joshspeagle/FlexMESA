@@ -4,10 +4,8 @@
 //! `delta_lg*`, nuclear `check_lgL`, HR-diagram, Courant, and energy-error
 //! checks in `star/private/timestep.f90:384-2246`).
 
-use std::f64::consts::LN_10;
-
 use flexmesa_chem::NuclideCatalog;
-use flexmesa_const::{MixingType, L_SUN, M_SUN, SECYER};
+use flexmesa_const::{MixingType, LN10 as LN_10, L_SUN, M_SUN, SECYER};
 
 use crate::controls_timestep_stop::MAX_DX_LIMIT_CTRLS;
 use crate::core_boundaries::compute_power_categories;

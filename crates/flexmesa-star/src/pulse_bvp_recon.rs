@@ -7,9 +7,7 @@
 
 #![allow(missing_docs)]
 
-use std::f64::consts::PI;
-
-use flexmesa_const::{CLIGHT, CRAD, L_SUN, M_SUN, R_SUN, STANDARD_CGRAV};
+use flexmesa_const::{CLIGHT, CRAD, L_SUN, M_SUN, PI, R_SUN, STANDARD_CGRAV};
 
 use crate::pulse_bvp::{
     ad_matrix4, expm2, expm4, outer_bound_rows_l, BvpEigenmode, BvpModel,

@@ -131,11 +131,15 @@ pub fn eval_vs_coulomb(
                 0.0204907,
                 0.0366713,
             ];
-            let fj: f64 = coeffs
-                .iter()
-                .enumerate()
-                .map(|(i, &c)| c * flexmesa_math::powi_f90(s, i as i32))
-                .sum();
+            let fj = if s == 0.0 {
+                coeffs[0]
+            } else {
+                let mut acc = 0.0_f64;
+                for (i, &c) in coeffs.iter().enumerate() {
+                    acc += c * flexmesa_math::pow(s, i as f64);
+                }
+                acc
+            };
             1.46e-2 * z * fj
         }
     }

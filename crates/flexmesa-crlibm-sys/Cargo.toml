@@ -19,3 +19,5 @@ missing_docs = "warn"
 [lints.clippy]
 all = "deny"
 pedantic = "warn"
+undocumented_unsafe_blocks = "forbid"
+missing_safety_doc = "forbid"

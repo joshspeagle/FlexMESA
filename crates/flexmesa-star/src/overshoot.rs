@@ -4,9 +4,7 @@
 //! scaling, and Brunt-composition stabilization (`overshoot.f90`,
 //! `overshoot_exp.f90`, `overshoot_step.f90`, and `overshoot_utils.f90`).
 
-use std::f64::consts::PI;
-
-use flexmesa_const::MixingType;
+use flexmesa_const::{MixingType, LN10, PI};
 
 use crate::controls_mix_wind::OvershootParamSet;
 use crate::mix_info::{cdc_factor, ConvBoundary};
@@ -126,7 +124,7 @@ fn classify_cz_burning(
     let mut max_y = 0.0_f64;
     let k_hi = k_bot.min(model.nz.saturating_sub(1));
     for k in k_top..=k_hi {
-        max_log_t = max_log_t.max(model.ln_t[k] / std::f64::consts::LN_10);
+        max_log_t = max_log_t.max(model.ln_t[k] / LN10);
         max_x = max_x.max(model.xh_mass[k]);
         max_y = max_y.max(model.yhe_mass[k]);
     }

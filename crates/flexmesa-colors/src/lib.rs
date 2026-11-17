@@ -390,4 +390,47 @@ mod tests {
             assert!(sed.iter().any(|&f| f > 0.0));
         }
     }
+
+    #[test]
+    fn test_eval_colors_and_eval_colors_generic_dual_primal_bit_identical_in_strict_mode(
+    ) {
+        use flexmesa_autodiff::AutoDiffReal4VarOrder1;
+        use flexmesa_math::{with_numerics_mode, NumericsMode};
+
+        let cube = builtin_sed_cube();
+        with_numerics_mode(NumericsMode::Strict, || {
+            let primal = cube
+                .eval_colors(
+                    5778.0,
+                    4.44,
+                    0.0,
+                    RSUN,
+                    D_10PC_CM,
+                    MagSystem::Vega,
+                    SedInterpMethod::Hermite,
+                )
+                .expect("primal eval_colors");
+            let dual = cube
+                .eval_colors_generic(
+                    AutoDiffReal4VarOrder1::independent(5778.0, 0),
+                    AutoDiffReal4VarOrder1::independent(4.44, 1),
+                    AutoDiffReal4VarOrder1::independent(0.0, 2),
+                    AutoDiffReal4VarOrder1::independent(RSUN, 3),
+                    AutoDiffReal4VarOrder1::constant(D_10PC_CM),
+                    MagSystem::Vega,
+                )
+                .expect("dual eval_colors_generic");
+            for col in 0..NUM_COLORS_OUT {
+                assert_eq!(
+                    dual[col].val.to_bits(),
+                    primal[col].to_bits(),
+                    "column {} ({}) primal mismatch: dual={:#018x}, primal={:#018x}",
+                    col,
+                    COLOR_COLUMN_NAMES[col],
+                    dual[col].val.to_bits(),
+                    primal[col].to_bits()
+                );
+            }
+        });
+    }
 }

@@ -230,7 +230,7 @@ pub fn build1_pre_ms_model(
     // step size `d_log10_p`).
     let d_log10_p = job.pre_ms_d_log10_p.max(1.0e-4);
     let dp_target_c = p_c * (1.0 - exp10(-0.5 * d_log10_p));
-    let kw_factor = (3.0 * STANDARD_CGRAV / (8.0 * std::f64::consts::PI))
+    let kw_factor = (3.0 * STANDARD_CGRAV / (8.0 * flexmesa_const::PI))
         * flexmesa_math::pow(FOUR_PI * rho_c / 3.0, 4.0 / 3.0);
     let m_kw = flexmesa_math::pow(dp_target_c / kw_factor, 1.5);
     let q_c = (m_kw / mstar).clamp(1.0e-5, 0.05);

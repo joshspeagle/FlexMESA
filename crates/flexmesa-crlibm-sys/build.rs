@@ -84,7 +84,9 @@ fn main() {
         .include(&scs_src_dir)
         .flag("-std=c99")
         .flag("-ffp-contract=off")
-        .flag("-fno-fast-math");
+        .flag("-fno-fast-math")
+        .flag("-fwrapv")
+        .flag("-fno-strict-aliasing");
 
     if target_arch == "x86_64" {
         build.flag("-msse2").flag("-mfpmath=sse");

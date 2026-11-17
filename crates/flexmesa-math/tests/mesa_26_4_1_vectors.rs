@@ -15,9 +15,9 @@ use flexmesa_math::{
     cosh, cospi, double_to_str, exp, exp10, expm1, fma, hypot, intrinsic_exp,
     intrinsic_log, intrinsic_log10, intrinsic_pow, log, log10, log1p, log2,
     math_init, numerics_mode, pow, pow2, pow3, pow4, pow5, pow6, pow7, pow8,
-    powi, powi_f90, powm1, pre_z, safe_log, safe_log10, safe_sqrt, sin, sinh,
-    sinpi, tan, tanh, tanpi, with_numerics_mode, NumericsMode, MATH_BACKEND,
-    MAX_PRECOMP_INTS,
+    powi, powi_f90, powm1, pre_z, safe_log, safe_log10, safe_sqrt, sin,
+    sin_cos, sinh, sinpi, str_to_double, str_to_vector, tan, tanh, tanpi,
+    with_numerics_mode, NumericsMode, MATH_BACKEND, MAX_PRECOMP_INTS,
 };
 
 fn repo_root() -> PathBuf {
@@ -583,5 +583,112 @@ fn test_strict_vs_fast_mode_dispatch_fma_pow_edge_cases_and_pre_z() {
 
     let formatted = double_to_str(0.1);
     assert_eq!(formatted.len(), 26);
-    assert!(formatted.contains("D-01"));
+    assert_eq!(formatted, "    1.0000000000000001D-01");
+}
+
+#[test]
+fn test_intrinsic_pow_exact_rn_undecided_midpoint_pairs_never_return_sentinel()
+{
+    // Regression test (`#165` R1): upstream `crlibm 1.0beta4` `pow.c:763` returned
+    // `-5.0` when both `pow_round_and_check_rn` and `pow_exact_case` remained
+    // undecided near `x^y ~ 1 + 2^-59`. MESA SDK 26.6.1 `x ** y` evaluates to `1.0`.
+    let pairs: [(u64, u64); 4] = [
+        (0x3ff0_0000_0c00_0000, 0x3e25_5555_5d55_5554),
+        (0x3ff0_0000_1800_0000, 0x3e15_5555_6555_5551),
+        (0x3ff0_0000_2400_0000, 0x3e0c_71c7_3c71_c710),
+        (0x3ff0_0000_3000_0000, 0x3e05_5555_7555_5545),
+    ];
+    with_numerics_mode(NumericsMode::Strict, || {
+        for (xb, yb) in pairs {
+            let x = f64::from_bits(xb);
+            let y = f64::from_bits(yb);
+            let got = intrinsic_pow(x, y);
+            assert!(
+                got > 0.0,
+                "intrinsic_pow({xb:#018x}, {yb:#018x}) returned negative sentinel {got}"
+            );
+            assert_eq!(
+                got.to_bits(),
+                1.0_f64.to_bits(),
+                "expected 1.0 (0x3ff0000000000000), got {got} ({:#018x})",
+                got.to_bits()
+            );
+        }
+    });
+}
+
+#[test]
+fn test_math_io_double_to_str_str_to_double_and_sin_cos() {
+    // Exact MESA SDK 26.6.1 `1PD26.16` formatting and bit-exact round-trip (`#165` R4).
+    assert_eq!(double_to_str(0.0), "    0.0000000000000000D+00");
+    assert_eq!(double_to_str(-0.0), "   -0.0000000000000000D+00");
+    assert_eq!(double_to_str(0.1), "    1.0000000000000001D-01");
+    assert_eq!(double_to_str(0.73), "    7.2999999999999998D-01");
+    assert_eq!(double_to_str(1.0e-105), "    9.9999999999999997-106");
+    assert_eq!(
+        double_to_str(-1.234_567_890_123_456_7e120),
+        "   -1.2345678901234567+120"
+    );
+    assert_eq!(double_to_str(f64::MAX), "    1.7976931348623157+308");
+    assert_eq!(
+        double_to_str(f64::from_bits(1)),
+        "    4.9406564584124654-324"
+    );
+    assert_eq!(double_to_str(f64::INFINITY), "                  Infinity");
+    assert_eq!(
+        double_to_str(f64::NEG_INFINITY),
+        "                 -Infinity"
+    );
+    assert_eq!(double_to_str(f64::NAN), "                       NaN");
+
+    for x in [
+        0.0_f64,
+        -0.0_f64,
+        0.1,
+        0.73,
+        std::f64::consts::PI,
+        1.0e-105,
+        -1.234_567_890_123_456_7e120,
+        f64::MAX,
+        f64::MIN_POSITIVE,
+        f64::from_bits(1),
+        f64::INFINITY,
+        f64::NEG_INFINITY,
+    ] {
+        let s = double_to_str(x);
+        assert_eq!(s.len(), 26, "len != 26 for {x:?}: {s:?}");
+        let parsed = str_to_double(&s)
+            .unwrap_or_else(|e| panic!("parse failed for {s:?}: {e}"));
+        assert_eq!(
+            parsed.to_bits(),
+            x.to_bits(),
+            "round-trip bit mismatch on {x:?} via {s:?}"
+        );
+    }
+    assert!(str_to_double(&double_to_str(f64::NAN)).unwrap().is_nan());
+
+    let vec_in = format!(
+        "{} {} {}",
+        double_to_str(0.73),
+        double_to_str(1.0e-105),
+        double_to_str(-1.234_567_890_123_456_7e120)
+    );
+    let vec_out =
+        str_to_vector(&vec_in).expect("str_to_vector 3-digit exponents");
+    assert_eq!(vec_out.len(), 3);
+    assert_eq!(vec_out[0].to_bits(), 0.73_f64.to_bits());
+    assert_eq!(vec_out[1].to_bits(), 1.0e-105_f64.to_bits());
+    assert_eq!(
+        vec_out[2].to_bits(),
+        (-1.234_567_890_123_456_7e120_f64).to_bits()
+    );
+
+    // Verify `sin_cos` matches `(sin(x), cos(x))` bit-for-bit in `Strict` mode.
+    with_numerics_mode(NumericsMode::Strict, || {
+        for x in [-3.7_f64, -0.5, 0.0, 0.73, 1.234_567_89, 100.0] {
+            let (s, c) = sin_cos(x);
+            assert_eq!(s.to_bits(), sin(x).to_bits());
+            assert_eq!(c.to_bits(), cos(x).to_bits());
+        }
+    });
 }

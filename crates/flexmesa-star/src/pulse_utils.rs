@@ -132,7 +132,7 @@ pub fn eval_center_rho(model: &StarModel, k_b: usize) -> f64 {
     let rho1 = model.rho[k_b].max(1.0e-99);
     let m1 = (model.m[k_b] - 0.5 * model.dm[k_b]).max(0.0);
     let fit = 0.375
-        * ((5.0 * m1) / (std::f64::consts::PI * flexmesa_math::pow3(r1))
+        * ((5.0 * m1) / (flexmesa_const::PI * flexmesa_math::pow3(r1))
             - 4.0 * rho1);
     if fit > 0.1 * rho1 && fit < 10.0 * rho1 {
         fit

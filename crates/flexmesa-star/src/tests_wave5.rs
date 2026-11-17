@@ -65,7 +65,7 @@ fn test_wave5_2_riemann_rsp2_and_pulse_exporters_preserve_invariants() {
     let cgrav = 6.67430e-8_f64;
     let dm = 1.0e30_f64;
     let g_over_a = cgrav * m_grav
-        / (4.0 * std::f64::consts::PI * flexmesa_math::pow4(r_face));
+        / (4.0 * flexmesa_const::PI * flexmesa_math::pow4(r_face));
     let p_star = 1.0e15_f64;
     let p_l = p_star + 0.5 * dm * g_over_a;
     let p_r = p_star - 0.5 * dm * g_over_a;

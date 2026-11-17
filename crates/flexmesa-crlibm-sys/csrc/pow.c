@@ -733,7 +733,7 @@ int pow_exact_case(double *pow,
     if (kl > 0.0) {
       tempdb.l++;
     } else {
-      tempdb.l++;
+      tempdb.l--;
     }
   }
   *pow = tempdb.d;
@@ -758,9 +758,16 @@ double pow_exact_rn(double x, double y, double sign,
   if (pow_exact_case(&pow,x,y,G,kh,kl,log2xh)) 
     return sign * pow;
 
-  //  printf("Could not decide the rounding to nearest of power.\n");
-
-  return -5.0;
+  {
+    int G1 = G >> 1;
+    int G2 = G - G1;
+    db_number s1, s2;
+    s1.i[HI] = (G1 + 1023) << 20;
+    s1.i[LO] = 0;
+    s2.i[HI] = (G2 + 1023) << 20;
+    s2.i[LO] = 0;
+    return sign * (s2.d * (s1.d * (kh + kl)));
+  }
 }
 
 

@@ -264,7 +264,7 @@ pub fn check_termination_limits_with_history(
     if let Some(lim) = c.log_max_temp_upper_limit {
         let max_ln_t =
             model.ln_t.iter().copied().fold(f64::NEG_INFINITY, f64::max);
-        if max_ln_t / std::f64::consts::LN_10 >= lim {
+        if max_ln_t / flexmesa_const::LN10 >= lim {
             return Some(String::from("log_max_temp_upper_limit"));
         }
     }

@@ -350,7 +350,7 @@ pub(crate) fn update_mlt_sticky_and_sig_after_hydro(model: &mut StarModel) {
                     .iter()
                     .copied()
                     .fold(f64::NEG_INFINITY, f64::max)
-                    / std::f64::consts::LN_10
+                    / flexmesa_const::LN10
                     >= mw.min_logt_for_make_gradr_sticky_in_solver_iters);
         let eval_cnt = model.aux.solver_mlt_eval_count;
         for k in 0..nz {

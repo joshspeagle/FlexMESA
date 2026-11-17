@@ -2424,7 +2424,7 @@ fn eval_scalar_column(
                     })
                 }
                 _ => MesaCellValue::Float(if nz > 0 && model.peos[0] > 0.0 {
-                    (0.25e6 / std::f64::consts::PI)
+                    (0.25e6 / flexmesa_const::PI)
                         * g_surf
                         * (model.gamma1[0] * model.rho[0] / model.peos[0])
                             .max(0.0)

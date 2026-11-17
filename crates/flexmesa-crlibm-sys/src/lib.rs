@@ -6,25 +6,31 @@
 //!
 //! This crate is the **sole** crate in the `FlexMESA` Cargo workspace permitted
 //! to contain `unsafe` blocks, strictly confined to the private `ffi` module
-//! below (`DECISIONS #21`). Every public function exposed by this crate is safe:
+//! below (`DECISIONS #23`). Every public function exposed by this crate is safe:
 //!
 //! 1. **32-bit `x86` compile-time guard**: 32-bit `x86` (`x87` 80-bit register
 //!    double rounding) is rejected via [`compile_error!`]; `x86_64` builds
 //!    enforce `-msse2 -mfpmath=sse`, and all targets enforce `-std=c99
-//!    -ffp-contract=off -fno-fast-math` with no `-march=native`.
+//!    -ffp-contract=off -fno-fast-math -fwrapv -fno-strict-aliasing` with no
+//!    `-march=native`.
 //! 2. **Default IEEE-754 floating-point environment**: `CRLIBM_HAS_FPU_CONTROL`
-//!    is unset in every committed target header under `config/`, so all 20
-//!    routines execute pure IEEE-754 `double` (triple-double and SCS) arithmetic
-//!    under the default round-to-nearest-even hardware environment and never
-//!    read or modify FPU control registers (`crlibm_init` returns `0`).
+//!    is unset in every committed target header under `config/`, so all 25
+//!    mathematical routines (`26` `extern "C"` symbols including `crlibm_init`)
+//!    execute pure IEEE-754 `double` (triple-double and SCS) arithmetic under
+//!    the default round-to-nearest-even hardware environment and never read or
+//!    modify FPU control registers (`crlibm_init` returns `0`).
 //! 3. **Stateless multi-thread reentrancy**: `EVAL_PERF` is set to `0` in
 //!    `csrc/crlibm_private.h` and `csrc/exp-td.c`, removing the non-atomic
 //!    `crlibm_second_step_taken` counter. All remaining static tables in `csrc/`
 //!    are `const`.
-//! 4. **Rounding modes matching `CRMATH 1.2` (`crmath_r_dp.f90`)**: 17 entry
-//!    points use directed round-toward-zero (`*_rz`), and 3 (`exp_rd`,
-//!    `acos_rd`, `acospi_rd`) use directed round-toward-minus-infinity (`*_rd`),
-//!    matching `CRMATH 1.2` symbol for symbol.
+//! 4. **Rounding modes matching `CRMATH 1.2` (`crmath_r_dp.f90`) and `#198`
+//!    Fortran intrinsic bypasses**: 17 entry points use directed
+//!    round-toward-zero (`*_rz`), 3 (`exp_rd`, `acos_rd`, `acospi_rd`) use
+//!    directed round-toward-minus-infinity (`*_rd`) matching `CRMATH 1.2`
+//!    symbol for symbol, and 5 (`log_rn`, `log10_rn`, `exp_rn`, `atan_rn`,
+//!    `pow_rn`) provide deterministic round-to-nearest entry points for the 7
+//!    upstream MESA `26.4.1` Fortran files that call platform intrinsics
+//!    directly (`#196`, `#198`, `DECISIONS #23`).
 
 #![deny(unsafe_op_in_unsafe_fn)]
 

@@ -128,3 +128,17 @@ fn test_order3_compose_binary_variable_substitution() {
     assert_close(composed.d2val2, direct.d2val2, 1e-15);
     assert_close(composed.d3val2, direct.d3val2, 1e-15);
 }
+
+#[test]
+fn test_order3_expm1_avoids_catastrophic_cancellation_near_zero() {
+    let x0 = 1.0e-17_f64;
+    let d3 = AutoDiffReal2VarOrder3::var1(x0).expm1();
+    let expected_val = flexmesa_math::expm1(x0);
+    let expected_deriv = flexmesa_math::exp(x0);
+
+    assert_ne!(d3.val, 0.0);
+    assert_eq!(d3.val.to_bits(), expected_val.to_bits());
+    assert_eq!(d3.d1val1.to_bits(), expected_deriv.to_bits());
+    assert_eq!(d3.d2val1.to_bits(), expected_deriv.to_bits());
+    assert_eq!(d3.d3val1.to_bits(), expected_deriv.to_bits());
+}

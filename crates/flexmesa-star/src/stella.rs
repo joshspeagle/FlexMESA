@@ -6,9 +6,9 @@
 
 #![allow(missing_docs, clippy::format_push_string, clippy::needless_for_each)]
 
-use std::f64::consts::PI;
-
-use flexmesa_const::{AVO, BOLTZM, BOLTZ_SIGMA, CLIGHT, ME, M_SUN, QE, SECDAY};
+use flexmesa_const::{
+    AVO, BOLTZM, BOLTZ_SIGMA, CLIGHT, ME, M_SUN, PI, QE, SECDAY,
+};
 
 use crate::model::StarModel;
 use crate::pulse_bvp_recon::parse_fortran_float;

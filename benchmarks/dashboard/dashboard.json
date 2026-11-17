@@ -750,8 +750,8 @@
     "rust": {
       "tool": "cargo llvm-cov",
       "overall": {
-        "lines": 93091,
-        "covered": 66235,
+        "lines": 93065,
+        "covered": 66219,
         "percent": 71.2
       },
       "by_crate": [
@@ -817,9 +817,9 @@
         },
         {
           "crate": "flexmesa-eos",
-          "lines": 8916,
-          "covered": 7184,
-          "percent": 80.6
+          "lines": 8893,
+          "covered": 7178,
+          "percent": 80.7
         },
         {
           "crate": "flexmesa-interp1d",
@@ -848,8 +848,8 @@
         {
           "crate": "flexmesa-math",
           "lines": 775,
-          "covered": 598,
-          "percent": 77.2
+          "covered": 593,
+          "percent": 76.5
         },
         {
           "crate": "flexmesa-mtx",
@@ -889,8 +889,8 @@
         },
         {
           "crate": "flexmesa-star",
-          "lines": 38587,
-          "covered": 26158,
+          "lines": 38584,
+          "covered": 26153,
           "percent": 67.8
         },
         {
@@ -1416,8 +1416,8 @@
     ],
     "open_pull_requests": [
       {
-        "number": 205,
-        "title": "fix(eos,star): restore upstream behaviour at four points found auditing #147",
+        "number": 206,
+        "title": "ci: scheduled verification campaign, declared known-gaps gate, module hex probes, and MESA spread (#144)",
         "draft": false
       }
     ],
@@ -1642,6 +1642,19 @@
     {
       "date_utc": "2026-11-17",
       "commit": "69e6f68",
+      "event": "main merge",
+      "engine_ported_pct": "13.9",
+      "all_verified_pct": "0.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "71.2",
+      "python_cov_pct": "87.9",
+      "closed_140": "7",
+      "total_140": "32",
+      "deferred_169": "17"
+    },
+    {
+      "date_utc": "2026-11-17",
+      "commit": "c34f5e7",
       "event": "main merge",
       "engine_ported_pct": "13.9",
       "all_verified_pct": "0.0",

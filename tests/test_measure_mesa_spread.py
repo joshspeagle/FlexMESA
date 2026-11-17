@@ -7,8 +7,11 @@ import importlib.util
 import json
 import math
 import pathlib
+import stat
 import sys
 from typing import Any
+
+import pytest
 
 _REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 _SCRIPT_PATH = (
@@ -143,3 +146,123 @@ def test_dry_run_includes_touch_before_install_and_compare_cli(
     assert rc2 == 0
     cmp_data = json.loads(cmp_json.read_text(encoding="utf-8"))
     assert cmp_data["summary"]["byte_identical_cases"] == 1
+    assert cmp_data["mesa_version"] == "26.4.1"
+    assert cmp_data["mesa_version_raw"] == "r26.4.1"
+    assert (
+        cmp_data["cases"][0]["baseline_header"]["version_number"] == "r26.4.1"
+    )
+    assert cmp_data["cases"][0]["baseline_header"]["compiler"] == "gfortran"
+
+
+def test_patch_makefile_header_updates_top_level_fcopt_and_fails_loudly(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Verify _patch_makefile_header ignores FPE block and fails on no-op."""
+    mod = _load_script_module()
+    header = tmp_path / "makefile_header"
+    sample = (
+        "USE_PGSTAR = YES\n"
+        "FCopt = -O${OPT_LEVEL} -ftree-vectorize\n"
+        "ifeq ($(MESA_FPE_CHECKS_ON),1)\n"
+        "   FCopt = -O0 -ftree-vectorize\n"
+        "endif\n"
+    )
+    header.write_text(sample, encoding="utf-8")
+
+    prev = mod._patch_makefile_header(
+        header, "-O0 -fno-tree-vectorize -ffp-contract=off"
+    )
+    assert prev == "-O${OPT_LEVEL} -ftree-vectorize"
+    patched = header.read_text(encoding="utf-8")
+    assert "USE_PGSTAR = NO\n" in patched
+    assert "FCopt = -O0 -fno-tree-vectorize -ffp-contract=off\n" in patched
+    assert "   FCopt = -O0 -ftree-vectorize\n" in patched
+
+    with pytest.raises(ValueError, match="unchanged"):
+        mod._patch_makefile_header(
+            header, "-O0 -fno-tree-vectorize -ffp-contract=off"
+        )
+
+    no_fcopt = tmp_path / "no_fcopt"
+    no_fcopt.write_text("USE_PGSTAR = YES\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="FCopt ="):
+        mod._patch_makefile_header(no_fcopt, "-O0")
+
+    no_pgstar = tmp_path / "no_pgstar"
+    no_pgstar.write_text("FCopt = -O2\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="USE_PGSTAR ="):
+        mod._patch_makefile_header(no_pgstar, "-O0")
+
+
+def test_probe_mesa_version_and_toolchain_provenance_rendering(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Verify MESA version and SDK/gfortran probes serialize cleanly."""
+    mod = _load_script_module()
+    mesa_dir = tmp_path / "mesa"
+    with pytest.raises(FileNotFoundError):
+        mod.probe_mesa_version(mesa_dir)
+
+    ver_file = mesa_dir / "data" / "version_number"
+    ver_file.parent.mkdir(parents=True)
+    ver_file.write_text("", encoding="utf-8")
+    with pytest.raises(ValueError, match="Empty MESA version"):
+        mod.probe_mesa_version(mesa_dir)
+
+    ver_file.write_text("r26.4.1\n", encoding="utf-8")
+    assert mod.probe_mesa_version(mesa_dir) == ("26.4.1", "r26.4.1")
+
+    sdk_bin = tmp_path / "sdk" / "bin"
+    sdk_bin.mkdir(parents=True)
+    sdk_ver = sdk_bin / "mesasdk_version"
+    sdk_ver.write_text(
+        "#!/bin/sh\necho x86_64-linux-26.6.1\n", encoding="utf-8"
+    )
+    sdk_ver.chmod(sdk_ver.stat().st_mode | stat.S_IXUSR)
+
+    gf = sdk_bin / "gfortran"
+    gf.write_text(
+        "#!/bin/sh\n"
+        'if [ "$1" = "-dumpmachine" ]; then\n'
+        "  echo x86_64-pc-linux-gnu\n"
+        "else\n"
+        '  echo "GNU Fortran (GCC) 15.2.0"\n'
+        '  echo "Copyright (C) 2025 Free Software Foundation"\n'
+        "fi\n",
+        encoding="utf-8",
+    )
+    gf.chmod(gf.stat().st_mode | stat.S_IXUSR)
+
+    tc = mod.probe_toolchain(tmp_path / "sdk", mesa_dir, "crmath")
+    assert tc.mesasdk_version == "x86_64-linux-26.6.1"
+    assert tc.gfortran_version == "GNU Fortran (GCC) 15.2.0"
+    assert tc.target_triple == "x86_64-pc-linux-gnu"
+    assert tc.math_slot == "crmath"
+
+    report = mod.build_spread_report(
+        mod.CompilerConfigSpec(
+            "baseline_o2",
+            "-O2 -ftree-vectorize",
+            makefile_header_fcopt="-O${OPT_LEVEL} -ftree-vectorize",
+        ),
+        mod.CompilerConfigSpec(
+            "variant_alt",
+            "-O0 -fno-tree-vectorize -ffp-contract=off",
+            makefile_header_fcopt="-O0 -fno-tree-vectorize -ffp-contract=off",
+        ),
+        [],
+        dry_run=False,
+        mesa_version="26.4.1",
+        mesa_version_raw="r26.4.1",
+        toolchain=tc,
+    )
+    assert report["mesa_version"] == "26.4.1"
+    assert report["toolchain"]["gfortran_version"] == "GNU Fortran (GCC) 15.2.0"
+    assert (
+        report["baseline_config"]["makefile_header_fcopt"]
+        == "-O${OPT_LEVEL} -ftree-vectorize"
+    )
+    md = mod.render_spread_markdown(report)
+    assert "# MESA 26.4.1 Compiler-Variant Numerical Spread" in md
+    assert "x86_64-linux-26.6.1" in md
+    assert "GNU Fortran (GCC) 15.2.0" in md

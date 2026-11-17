@@ -42,13 +42,13 @@
     },
     {
       "phase": "Phase A",
-      "open": 4,
-      "closed": 0,
+      "open": 3,
+      "closed": 1,
       "issues": [
         {
           "number": 142,
           "title": "[Audit A1] Correct public claims, scorecards and synthetic figures",
-          "state": "open"
+          "state": "closed"
         },
         {
           "number": 144,

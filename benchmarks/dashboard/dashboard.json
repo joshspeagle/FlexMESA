@@ -745,7 +745,7 @@
       "tool": "cargo llvm-cov",
       "overall": {
         "lines": 89909,
-        "covered": 64738,
+        "covered": 64723,
         "percent": 72.0
       },
       "by_crate": [
@@ -842,8 +842,8 @@
         {
           "crate": "flexmesa-math",
           "lines": 775,
-          "covered": 608,
-          "percent": 78.5
+          "covered": 593,
+          "percent": 76.5
         },
         {
           "crate": "flexmesa-mtx",
@@ -1233,13 +1233,13 @@
       },
       {
         "phase": "Phase A",
-        "open": 4,
-        "closed": 0,
+        "open": 3,
+        "closed": 1,
         "issues": [
           {
             "number": 142,
             "title": "[Audit A1] Correct public claims, scorecards and synthetic figures",
-            "state": "open"
+            "state": "closed"
           },
           {
             "number": 144,
@@ -1598,6 +1598,19 @@
       "rust_cov_pct": "72.0",
       "python_cov_pct": "87.8",
       "closed_140": "6",
+      "total_140": "32",
+      "deferred_169": "17"
+    },
+    {
+      "date_utc": "2026-11-17",
+      "commit": "39e6407",
+      "event": "main merge",
+      "engine_ported_pct": "13.9",
+      "all_verified_pct": "0.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "72.0",
+      "python_cov_pct": "87.8",
+      "closed_140": "7",
       "total_140": "32",
       "deferred_169": "17"
     }

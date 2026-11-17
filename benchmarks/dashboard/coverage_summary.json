@@ -3,7 +3,7 @@
     "tool": "cargo llvm-cov",
     "overall": {
       "lines": 89909,
-      "covered": 64738,
+      "covered": 64723,
       "percent": 72.0
     },
     "by_crate": [
@@ -100,8 +100,8 @@
       {
         "crate": "flexmesa-math",
         "lines": 775,
-        "covered": 608,
-        "percent": 78.5
+        "covered": 593,
+        "percent": 76.5
       },
       {
         "crate": "flexmesa-mtx",

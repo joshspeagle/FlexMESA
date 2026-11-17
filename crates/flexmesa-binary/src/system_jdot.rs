@@ -199,6 +199,45 @@ pub fn conserve_spin_after_henyey(
     }
 }
 
+pub(crate) fn validate_sync_type(s: &str) -> Result<(), StarError> {
+    if matches!(
+        s.trim().to_ascii_lowercase().as_str(),
+        "instantaneous" | "orb_period" | "hut_conv" | "hut_rad" | "none"
+    ) {
+        Ok(())
+    } else {
+        Err(StarError::InvalidInput(format!(
+            "unrecognized tidal sync_type '{s}'"
+        )))
+    }
+}
+
+pub(crate) fn validate_sync_mode(s: &str) -> Result<(), StarError> {
+    if matches!(
+        s.trim().to_ascii_lowercase().as_str(),
+        "uniform" | "tdyn_div_tkh"
+    ) {
+        Ok(())
+    } else {
+        Err(StarError::InvalidInput(format!(
+            "unrecognized tidal sync_mode '{s}'"
+        )))
+    }
+}
+
+pub(crate) fn validate_circ_type(s: &str) -> Result<(), StarError> {
+    if matches!(
+        s.trim().to_ascii_lowercase().as_str(),
+        "hut_conv" | "hut_rad" | "none"
+    ) {
+        Ok(())
+    } else {
+        Err(StarError::InvalidInput(format!(
+            "unrecognized tidal circ_type '{s}'"
+        )))
+    }
+}
+
 /// Relaxes shellular spin $\Omega_k$ toward orbital synchronization over `dt` (s)
 /// following `sync_spin_orbit_torque` (`binary/private/binary_tides.f90:120-210`).
 #[allow(clippy::too_many_arguments)]
@@ -213,7 +252,9 @@ pub fn apply_tidal_spin_sync(
     period: f64,
     eccentricity: f64,
     dt: f64,
-) {
+) -> Result<(), StarError> {
+    validate_sync_type(sync_type)?;
+    validate_sync_mode(sync_mode)?;
     if !star.controls.rotation_flag
         || star.nz == 0
         || separation <= 0.0
@@ -222,7 +263,7 @@ pub fn apply_tidal_spin_sync(
         || f_tid <= 0.0
         || sync_type.eq_ignore_ascii_case("None")
     {
-        return;
+        return Ok(());
     }
     update_rotation_distortion_factors(star);
     let omega_orb = 2.0 * PI / period;
@@ -231,7 +272,7 @@ pub fn apply_tidal_spin_sync(
             star.omega[k] = omega_orb;
             star.j_rot[k] = star.aux.i_rot[k] * omega_orb;
         }
-        return;
+        return Ok(());
     }
     let t_sync = if sync_type.eq_ignore_ascii_case("Orb_period") {
         period / f_tid
@@ -243,7 +284,7 @@ pub fn apply_tidal_spin_sync(
             m_companion,
             separation,
             period,
-        );
+        )?;
         let r_gyr_sq = eval_star_r_gyr_sq(star);
         eval_tsync(
             k_div_t,
@@ -255,14 +296,11 @@ pub fn apply_tidal_spin_sync(
         )
     };
     if !t_sync.is_finite() || t_sync <= 0.0 {
-        return;
+        return Ok(());
     }
     if sync_mode.eq_ignore_ascii_case("tdyn_div_tkh") {
         apply_tdyn_div_tkh_sync(star, omega_orb, t_sync, dt);
-        return;
-    }
-    if !sync_mode.eq_ignore_ascii_case("Uniform") {
-        return;
+        return Ok(());
     }
     let a1 = hut_f2(eccentricity);
     let a2 = pow((1.0 - eccentricity * eccentricity).max(1.0e-12), 1.5)
@@ -274,6 +312,7 @@ pub fn apply_tidal_spin_sync(
         star.j_rot[k] -= relax_frac * (star.j_rot[k] - sync_ratio * j_sync);
         star.omega[k] = star.j_rot[k] / star.aux.i_rot[k].max(1.0e-30);
     }
+    Ok(())
 }
 
 fn interp_val_to_face(vals: &[f64], dq: &[f64], k: usize) -> f64 {
@@ -369,14 +408,19 @@ fn eval_star_k_div_t(
     m_companion: f64,
     separation: f64,
     period: f64,
-) -> f64 {
+) -> Result<f64, StarError> {
     if prescription.eq_ignore_ascii_case("Hut_rad") {
-        eval_k_div_t_radiative(star.mstar, m_companion, star.r[0], separation)
+        Ok(eval_k_div_t_radiative(
+            star.mstar,
+            m_companion,
+            star.r[0],
+            separation,
+        ))
     } else if prescription.eq_ignore_ascii_case("Hut_conv") {
         let (m_env_msun, r_env_rsun) =
             eval_convective_envelope_mass_and_size(star);
         if m_env_msun > 0.0 && r_env_rsun > 0.0 {
-            eval_k_div_t_convective(
+            Ok(eval_k_div_t_convective(
                 star.mstar / MSUN,
                 m_env_msun,
                 star.r[0] / RSUN,
@@ -385,12 +429,16 @@ fn eval_star_k_div_t(
                 period,
                 star.omega.first().copied().unwrap_or(0.0),
                 tidal_reduction,
-            )
+            ))
         } else {
-            0.0
+            Ok(0.0)
         }
+    } else if prescription.eq_ignore_ascii_case("None") {
+        Ok(0.0)
     } else {
-        0.0
+        Err(StarError::InvalidInput(format!(
+            "unrecognized tidal prescription '{prescription}'"
+        )))
     }
 }
 
@@ -572,7 +620,6 @@ pub struct EdotBreakdown {
 /// Evaluates gated orbital eccentricity derivative $\dot{e}$ ($\mathrm{s}^{-1}$)
 /// (`get_edot` in `binary/private/binary_edot.f90:33-182`).
 #[allow(clippy::too_many_arguments)]
-#[must_use]
 pub fn eval_coupled_edot(
     ctrl: &BinaryInlistControls,
     donor: &StarModel,
@@ -583,8 +630,8 @@ pub fn eval_coupled_edot(
     separation: f64,
     period: f64,
     eccentricity: f64,
-) -> f64 {
-    eval_coupled_edot_breakdown(
+) -> Result<f64, StarError> {
+    Ok(eval_coupled_edot_breakdown(
         ctrl,
         donor,
         accretor_star,
@@ -594,8 +641,8 @@ pub fn eval_coupled_edot(
         separation,
         period,
         eccentricity,
-    )
-    .edot_total
+    )?
+    .edot_total)
 }
 
 /// Evaluates the terms of the gated orbital eccentricity derivative
@@ -606,7 +653,6 @@ pub fn eval_coupled_edot(
 /// own `Ftid` where upstream uses `Ftid_1` for both (`binary_edot.f90:172`,
 /// `#186`).
 #[allow(clippy::too_many_arguments)]
-#[must_use]
 pub fn eval_coupled_edot_breakdown(
     ctrl: &BinaryInlistControls,
     donor: &StarModel,
@@ -617,9 +663,11 @@ pub fn eval_coupled_edot_breakdown(
     separation: f64,
     period: f64,
     eccentricity: f64,
-) -> EdotBreakdown {
+) -> Result<EdotBreakdown, StarError> {
+    validate_circ_type(&ctrl.circ_type_1)?;
+    validate_circ_type(&ctrl.circ_type_2)?;
     if eccentricity <= 0.0 {
-        return EdotBreakdown::default();
+        return Ok(EdotBreakdown::default());
     }
     let edot_gr = if ctrl.do_jdot_gr {
         eval_edot_gr(m_donor, m_accretor, separation, eccentricity)
@@ -649,7 +697,7 @@ pub fn eval_coupled_edot_breakdown(
             m_accretor,
             separation,
             period,
-        );
+        )?;
         let mut et = eval_edot_tidal_hut(
             kt_d,
             m_donor,
@@ -669,7 +717,7 @@ pub fn eval_coupled_edot_breakdown(
                 m_donor,
                 separation,
                 period,
-            );
+            )?;
             et += eval_edot_tidal_hut(
                 kt_a,
                 m_accretor,
@@ -718,10 +766,10 @@ pub fn eval_coupled_edot_breakdown(
     } else {
         0.0
     };
-    EdotBreakdown {
+    Ok(EdotBreakdown {
         edot_gr,
         edot_tidal,
         edot_enhance,
         edot_total: edot_gr + edot_tidal + edot_enhance,
-    }
+    })
 }

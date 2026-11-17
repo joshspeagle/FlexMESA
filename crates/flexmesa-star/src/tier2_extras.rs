@@ -16,9 +16,7 @@ use crate::diffusion::{
     do_element_diffusion, eval_wd_sedimentation_heating, DiffusionScheme,
 };
 use crate::history::extract_history_row;
-use crate::inlist_runner::{
-    run_case_list, CaseRunReport, ExtrasDirective, StarExtras,
-};
+use crate::inlist_runner::{CaseRunReport, ExtrasDirective, StarExtras};
 use crate::model::StarModel;
 use crate::premix::do_phase_separation;
 
@@ -134,13 +132,20 @@ pub fn apply_planetary_core(
 pub fn eval_wd_phase_separation(
     model: &mut StarModel,
     option: &str,
-) -> (f64, f64) {
+) -> Result<(f64, f64), StarError> {
+    let is_one = match option.trim().to_ascii_lowercase().as_str() {
+        "co" => false,
+        "one" => true,
+        other => {
+            return Err(StarError::InvalidInput(format!(
+                "unrecognized '&controls::phase_separation_option' = '{other}' (expected 'CO' or 'ONe')"
+            )));
+        }
+    };
     let nz = model.nz;
     if nz == 0 {
-        return (0.0, 0.0);
+        return Ok((0.0, 0.0));
     }
-    let opt_lower = option.to_ascii_lowercase();
-    let is_one = opt_lower.contains("one") || opt_lower.contains("3c");
     let gamma_crit = if is_one { 185.0_f64 } else { 175.0_f64 };
     let dt_eff = model.dt.max(1.0e6);
     let tau_cryst = model.dt.max(1.0e9 * SECYER);
@@ -176,7 +181,7 @@ pub fn eval_wd_phase_separation(
         }
     }
 
-    let _ = do_phase_separation(model, dt_eff, gamma_crit, is_one);
+    do_phase_separation(model, dt_eff, gamma_crit, is_one)?;
     if is_one {
         let catalog = NuclideCatalog::builtin_ref();
         let o16_id = catalog.get_nuclide_index("o16").unwrap_or(6);
@@ -203,7 +208,7 @@ pub fn eval_wd_phase_separation(
     }
 
     let cryst_frac = (m_cryst / model.mstar.max(1.0)).clamp(0.0, 1.0);
-    (cryst_frac, l_latent)
+    Ok((cryst_frac, l_latent))
 }
 
 /// Applies composition-specific surface accretion (`accretion_h1`,
@@ -519,7 +524,14 @@ impl StarExtras for Tier2CaseExtras {
             )
         {
             let opt = model.controls.phase_separation_option.clone();
-            let (_, l_lat) = eval_wd_phase_separation(model, &opt);
+            let (_, l_lat) = match eval_wd_phase_separation(model, &opt) {
+                Ok(pair) => pair,
+                Err(e) => {
+                    return ExtrasDirective::Terminate(format!(
+                        "tier2 extras_finish_step phase separation failed: {e}"
+                    ));
+                }
+            };
             let eps_lat = l_lat / model.mstar.max(1.0);
             for k in 0..model.nz {
                 model.eps_mdot[k] += eps_lat;
@@ -528,11 +540,15 @@ impl StarExtras for Tier2CaseExtras {
         if model.controls.do_element_diffusion
             || self.case_name == "wd_diffusion"
         {
-            let _ = do_element_diffusion(
+            if let Err(e) = do_element_diffusion(
                 model,
                 model.dt.min(1.0e11),
                 DiffusionScheme::CaplanOcp,
-            );
+            ) {
+                return ExtrasDirective::Terminate(format!(
+                    "tier2 extras_finish_step do_element_diffusion failed: {e}"
+                ));
+            }
         }
         if self.case_name == "conductive_flame" {
             let (v_flame, q_flame) = eval_conductive_flame_state(model);
@@ -563,5 +579,30 @@ pub fn run_tier2_suite(
     max_steps_per_stage: Option<usize>,
     verify_restart: bool,
 ) -> Result<Vec<CaseRunReport>, StarError> {
-    run_case_list(mesa_dir, &TIER2_CASES, max_steps_per_stage, verify_restart)
+    run_tier2_suite_with_options(
+        mesa_dir,
+        max_steps_per_stage,
+        verify_restart,
+        crate::inlist::InlistLoadOptions::default(),
+    )
+}
+
+/// Runs all 17 Tier 2 cases under `mesa_dir/star/test_suite/<case>` with
+/// explicit [`InlistLoadOptions`](crate::inlist::InlistLoadOptions).
+///
+/// # Errors
+/// Returns [`StarError`] if any Tier 2 case fails to execute.
+pub fn run_tier2_suite_with_options(
+    mesa_dir: &Path,
+    max_steps_per_stage: Option<usize>,
+    verify_restart: bool,
+    load_opts: crate::inlist::InlistLoadOptions,
+) -> Result<Vec<CaseRunReport>, StarError> {
+    crate::inlist_runner::run_case_list_with_options(
+        mesa_dir,
+        &TIER2_CASES,
+        max_steps_per_stage,
+        verify_restart,
+        load_opts,
+    )
 }

@@ -19,6 +19,20 @@ pub fn get_dx_lookup(dx: f64, z: f64) -> f64 {
     flexmesa_math::log10(z + 1.0e-3 + dx)
 }
 
+/// Lazily fitted 2D bicubic spline cache cell.
+pub(crate) type SplineCell =
+    OnceLock<Result<(Vec<[f64; 4]>, bool, bool), KapError>>;
+
+fn fit_kap_spline(
+    log_rs: &[f64],
+    log_ts: &[f64],
+    vals: &[f64],
+    context: &'static str,
+) -> Result<(Vec<[f64; 4]>, bool, bool), KapError> {
+    fit_bicubic_not_a_knot(log_rs, log_ts, vals)
+        .map_err(|_| KapError::NumericalFailure(context))
+}
+
 /// Single 2D $(\log_{10} R, \log_{10} T)$ fixed-metal or low-$T$ opacity table.
 pub struct KapXTable {
     /// Hydrogen mass fraction $X$.
@@ -40,26 +54,34 @@ pub struct KapXTable {
     /// Raw $1000 \times \log_{10} \kappa$ integer values (`None` if not embedded).
     pub raw_i16: Option<Vec<i16>>,
     /// Lazily fitted `(coeffs, ili_log_rs, ili_log_ts)` spline coefficients.
-    pub(crate) spline: OnceLock<(Vec<[f64; 4]>, bool, bool)>,
+    pub(crate) spline: SplineCell,
 }
 
 impl KapXTable {
     /// Return the fitted bicubic spline `(coeffs, ili_log_rs, ili_log_ts)` for this table.
     ///
     /// # Errors
-    /// Returns [`KapError::MissingTable`] if this slice is not embedded.
+    /// Returns [`KapError::MissingTable`] if this slice is not embedded, or
+    /// [`KapError::NumericalFailure`] if bicubic spline fitting fails.
     pub fn spline_data(
         &self,
     ) -> Result<&(Vec<[f64; 4]>, bool, bool), KapError> {
         let raw = self.raw_i16.as_ref().ok_or(KapError::MissingTable(
             "fixed X table slice not embedded",
         ))?;
-        Ok(self.spline.get_or_init(|| {
-            let vals: Vec<f64> =
-                raw.iter().map(|&v| f64::from(v) / 1000.0).collect();
-            fit_bicubic_not_a_knot(&self.log_rs, &self.log_ts, &vals)
-                .expect("bicubic spline fit failed on fixed kap table")
-        }))
+        self.spline
+            .get_or_init(|| {
+                let vals: Vec<f64> =
+                    raw.iter().map(|&v| f64::from(v) / 1000.0).collect();
+                fit_kap_spline(
+                    &self.log_rs,
+                    &self.log_ts,
+                    &vals,
+                    "bicubic spline fit failed on fixed kap table",
+                )
+            })
+            .as_ref()
+            .map_err(Clone::clone)
     }
 }
 
@@ -92,14 +114,15 @@ pub struct KapCoSubTable {
     /// Raw $1000 \times \log_{10} \kappa$ values (`None` if not embedded).
     pub raw_i16: Option<Vec<i16>>,
     /// Lazily fitted bicubic spline `(coeffs, ili_log_rs, ili_log_ts)`.
-    pub(crate) spline: OnceLock<(Vec<[f64; 4]>, bool, bool)>,
+    pub(crate) spline: SplineCell,
 }
 
 impl KapCoSubTable {
     /// Return the fitted bicubic spline for this $(\delta X_{\mathrm{C}}, \delta X_{\mathrm{O}})$ slice.
     ///
     /// # Errors
-    /// Returns [`KapError::MissingTable`] if this sub-table is not embedded.
+    /// Returns [`KapError::MissingTable`] if this sub-table is not embedded, or
+    /// [`KapError::NumericalFailure`] if bicubic spline fitting fails.
     pub fn spline_data(
         &self,
         log_rs: &[f64],
@@ -109,12 +132,19 @@ impl KapCoSubTable {
             .raw_i16
             .as_ref()
             .ok_or(KapError::MissingTable("CO subtable not embedded"))?;
-        Ok(self.spline.get_or_init(|| {
-            let vals: Vec<f64> =
-                raw.iter().map(|&v| f64::from(v) / 1000.0).collect();
-            fit_bicubic_not_a_knot(log_rs, log_ts, &vals)
-                .expect("bicubic spline fit failed on CO kap table")
-        }))
+        self.spline
+            .get_or_init(|| {
+                let vals: Vec<f64> =
+                    raw.iter().map(|&v| f64::from(v) / 1000.0).collect();
+                fit_kap_spline(
+                    log_rs,
+                    log_ts,
+                    &vals,
+                    "bicubic spline fit failed on CO kap table",
+                )
+            })
+            .as_ref()
+            .map_err(Clone::clone)
     }
 }
 
@@ -181,14 +211,15 @@ pub struct AesopusSlice {
     /// Raw `f32` values (`num_log_rs * num_log_ts`).
     pub raw_f32: Option<Vec<f32>>,
     /// Lazily fitted bicubic spline `(coeffs, ili_log_rs, ili_log_ts)`.
-    pub(crate) spline: OnceLock<(Vec<[f64; 4]>, bool, bool)>,
+    pub(crate) spline: SplineCell,
 }
 
 impl AesopusSlice {
     /// Return the fitted bicubic spline for this AESOPUS slice.
     ///
     /// # Errors
-    /// Returns [`KapError::MissingTable`] if this slice is not embedded.
+    /// Returns [`KapError::MissingTable`] if this slice is not embedded, or
+    /// [`KapError::NumericalFailure`] if bicubic spline fitting fails.
     pub fn spline_data(
         &self,
         log_rs: &[f64],
@@ -198,11 +229,19 @@ impl AesopusSlice {
             .raw_f32
             .as_ref()
             .ok_or(KapError::MissingTable("AESOPUS slice not embedded"))?;
-        Ok(self.spline.get_or_init(|| {
-            let vals: Vec<f64> = raw.iter().map(|&v| f64::from(v)).collect();
-            fit_bicubic_not_a_knot(log_rs, log_ts, &vals)
-                .expect("bicubic spline fit failed on AESOPUS slice")
-        }))
+        self.spline
+            .get_or_init(|| {
+                let vals: Vec<f64> =
+                    raw.iter().map(|&v| f64::from(v)).collect();
+                fit_kap_spline(
+                    log_rs,
+                    log_ts,
+                    &vals,
+                    "bicubic spline fit failed on AESOPUS slice",
+                )
+            })
+            .as_ref()
+            .map_err(Clone::clone)
     }
 }
 
@@ -253,26 +292,40 @@ pub struct KapCnZSet {
     /// Raw $1000 \times \log_{10} \kappa$ grids for each of the `63` sub-tables.
     pub raw_i16: Vec<Vec<i16>>,
     /// Lazily fitted bicubic splines for each of the `63` sub-tables.
-    pub(crate) splines: Vec<OnceLock<(Vec<[f64; 4]>, bool, bool)>>,
+    pub(crate) splines: Vec<SplineCell>,
 }
 
 impl KapCnZSet {
     /// Return the fitted bicubic spline for 0-based `tbl_idx` (`0..63`).
-    #[must_use]
+    ///
+    /// # Errors
+    /// Returns [`KapError::MissingTable`] if `tbl_idx` is out of range, or
+    /// [`KapError::NumericalFailure`] if bicubic spline fitting fails.
     pub fn spline_data(
         &self,
         tbl_idx: usize,
         log_rs: &[f64],
         log_ts: &[f64],
-    ) -> &(Vec<[f64; 4]>, bool, bool) {
-        self.splines[tbl_idx].get_or_init(|| {
-            let vals: Vec<f64> = self.raw_i16[tbl_idx]
-                .iter()
-                .map(|&v| f64::from(v) / 1000.0)
-                .collect();
-            fit_bicubic_not_a_knot(log_rs, log_ts, &vals)
-                .expect("bicubic spline fit failed on kapCN table")
+    ) -> Result<&(Vec<[f64; 4]>, bool, bool), KapError> {
+        let cell = self.splines.get(tbl_idx).ok_or(KapError::MissingTable(
+            "kapCN subtable index out of range",
+        ))?;
+        let raw = self
+            .raw_i16
+            .get(tbl_idx)
+            .ok_or(KapError::MissingTable("kapCN subtable data missing"))?;
+        cell.get_or_init(|| {
+            let vals: Vec<f64> =
+                raw.iter().map(|&v| f64::from(v) / 1000.0).collect();
+            fit_kap_spline(
+                log_rs,
+                log_ts,
+                &vals,
+                "bicubic spline fit failed on kapCN table",
+            )
         })
+        .as_ref()
+        .map_err(Clone::clone)
     }
 }
 
@@ -302,10 +355,16 @@ pub struct KapTables {
     pub kap_cn: KapCnData,
 }
 
-static KAP_TABLES: OnceLock<KapTables> = OnceLock::new();
+static KAP_TABLES: OnceLock<Result<KapTables, KapError>> = OnceLock::new();
 
 /// Return a reference to the lazily parsed master [`KapTables`].
-#[must_use]
-pub fn kap_tables() -> &'static KapTables {
-    KAP_TABLES.get_or_init(load_or_build_kap_tables)
+///
+/// # Errors
+/// Returns [`KapError::TableIo`] if the opacity table bundle is missing,
+/// unreadable, or malformed.
+pub fn kap_tables() -> Result<&'static KapTables, KapError> {
+    KAP_TABLES
+        .get_or_init(load_or_build_kap_tables)
+        .as_ref()
+        .map_err(Clone::clone)
 }

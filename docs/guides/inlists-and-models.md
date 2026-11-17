@@ -8,8 +8,8 @@ Upstream Fortran MESA workflows organize stellar evolution runs around hierarchi
 
 In Fortran MESA, a top-level `inlist` file often delegates shared settings to `inlist_project`, `inlist_common`, or stage-specific namelists via `read_extra_star_job_inlist1 = .true.` and `extra_star_job_inlist1_name = '...'`. `FlexMESA` provides two levels of namelist tooling:
 
-1. **Recursive Bundle Resolution (`star.parse_inlist_bundle`)**: Traverses the entry `inlist` and all nested `read_extra_*_inlist(1..5)` files in upstream precedence order, returning a normalized Python dictionary of `&star_job` and `&controls` parameters (`initial_mass`, `initial_z`, `initial_y`, `create_pre_ms_model`, `load_saved_model`, `saved_model_name`, `save_model_when_terminate`, `save_model_filename`, `change_net`, `new_net_name`, `max_model_number`, `max_age`, `v_flag`, `u_flag`, `rti_flag`, `rotation_flag`, `rsp2_flag`, `okay_to_remesh`, `use_gold_tolerances`, `use_gold2_tolerances`, `op_split_burn`, `op_split_burn_min_t`), together with 1-based array controls on `MixWindControls` and `TimestepStopControls` (`overshoot_scheme(1..16)`, `overshoot_zone_type(1..16)`, `overshoot_f(1..16)`, `overshoot_f0(1..16)`, `predictive_mix(1..16)`, `predictive_superad_thresh(1..16)`, `hard_limit_for_rel_error_in_energy_conservation`, and `min_allowed_varcontrol_target`).
-2. **Typed Schema Validation (`schema.defaults`, `schema.namelist`)**: Parses arbitrary `.defaults` specification files and validates raw `&namelist` blocks (`&star_job`, `&controls`, `&binary_controls`, `&astero_search_controls`), catching misspelled parameter names or invalid Fortran literal types (`1.0d-4`, `.true.`, array subscripts `xa_central_lower_limit(1)`) before a run starts.
+1. **Recursive Bundle Resolution (`star.parse_inlist_bundle`)**: Traverses the entry `inlist` and all nested `read_extra_*_inlist(1..5)` files in upstream precedence order, failing loudly by default on unknown, unread, or unsupported controls unless `allow_unsupported_controls=True` is passed, and returning a normalized Python dictionary of `&star_job` and `&controls` parameters (`initial_mass`, `initial_z`, `initial_y`, `create_pre_ms_model`, `load_saved_model`, `load_model_filename`, `save_model_when_terminate`, `save_model_filename`, `change_net`, `new_net_name`, `max_model_number`, `max_age`, `v_flag`, `u_flag`, `rti_flag`, `rotation_flag`, `rsp2_flag`, `okay_to_remesh`, `use_gold_tolerances`, `use_gold2_tolerances`, `op_split_burn`, `op_split_burn_min_t`), together with 1-based array controls on `MixWindControls` and `TimestepStopControls` (`overshoot_scheme(1..16)`, `overshoot_zone_type(1..16)`, `overshoot_f(1..16)`, `overshoot_f0(1..16)`, `predictive_mix(1..16)`, `predictive_superad_thresh(1..16)`, `hard_limit_for_rel_error_in_energy_conservation`, and `min_allowed_varcontrol_target`). Keys inside `&pgstar`, `&pgbinary`, and `&astero_pgstar_controls` (plus `pgstar_flag` / `pgbinary_flag`) are validated against upstream `.defaults` schemas so misspelled plotting keys still fail loudly while valid plotting keys execute as headless no-ops (matching upstream `USE_PGSTAR = NO`).
+2. **Typed Schema Validation (`schema.defaults`, `schema.namelist`)**: Parses arbitrary `.defaults` specification files and validates raw `&namelist` blocks (`&star_job`, `&controls`, `&eos`, `&kap`, `&binary_job`, `&binary_controls`, `&astero_search_controls`), catching misspelled parameter names or invalid Fortran literal types (`1.0d-4`, `.true.`, array subscripts `xa_central_lower_limit(1)`) before a run starts.
 
 ```python
 import pathlib
@@ -40,7 +40,6 @@ with tempfile.TemporaryDirectory() as tmpdir:
         "  initial_mass = 2.5d0\n"
         "  initial_z = 0.014d0\n"
         "  max_model_number = 50\n"
-        "  rotation_flag = .true.\n"
         "/\n"
     )
     bundle = star.parse_inlist_bundle(str(root / "inlist"))
@@ -100,7 +99,7 @@ with tempfile.TemporaryDirectory() as tmpdir:
     (case_dir / "inlist_stage2").write_text(
         "&star_job\n"
         "  load_saved_model = .true.\n"
-        "  saved_model_name = 'stage1.mod'\n"
+        "  load_model_filename = 'stage1.mod'\n"
         "  save_model_when_terminate = .true.\n"
         "  save_model_filename = 'final.mod'\n"
         "/\n"
@@ -216,15 +215,17 @@ with tempfile.TemporaryDirectory() as tmpdir:
 
 ## 5. Incremental Trajectory Tracing and Harness Comparisons (`flexmesa trace`, `flexmesa harness`)
 
-To run any upstream `star`, `binary`, or `astero` test-suite case and stream MESA-formatted `LOGS/history.data` or `binary_history.data` rows on every accepted step (preserving partial trajectories if a wall-clock or memory guard stops the run), invoke `flexmesa trace`:
+To run any upstream `star`, `binary`, or `astero` test-suite case and stream MESA-formatted `LOGS/history.data` or `binary_history.data` rows on every accepted step (preserving partial trajectories if a wall-clock or memory guard stops the run), invoke `flexmesa trace` (strict inlist validation fails loudly on unsupported controls unless `--allow-unsupported-controls` is passed):
 
 ```bash
-flexmesa trace star 1.3M_ms_high_Z --out ./run_out --timeout-sec 600 --max-rss-gb 6.0
-flexmesa trace binary jdot_gr_check --out ./bin_out --timeout-sec 600 --max-rss-gb 6.0
-flexmesa trace astero surface_effects --out ./astero_out
+flexmesa trace star 1.3M_ms_high_Z --out ./run_out --timeout-sec 600 --max-rss-gb 6.0 --allow-unsupported-controls
+flexmesa trace binary jdot_gr_check --out ./bin_out --timeout-sec 600 --max-rss-gb 6.0 --allow-unsupported-controls
+flexmesa trace astero surface_effects --out ./astero_out --allow-unsupported-controls
 ```
 
-To regenerate the 106-case MESA `26.4.1` reference-availability table (`notes/audit/case_table.md`) or run guarded trajectory comparisons against `benchmarks/history_harness/case_manifest.toml` and `benchmarks/history_harness/known_gaps.toml`, invoke `flexmesa harness`:
+Unmodified upstream inlists set controls that are not yet ported. Without `--allow-unsupported-controls` each command stops and prints the full list of unsupported controls. With the flag the same list is printed as a warning and the run continues past them, so the resulting trajectory is exploratory and is never counted as parity evidence.
+
+To regenerate the 106-case MESA `26.4.1` reference-availability table (`notes/audit/case_table.md`) or run guarded trajectory comparisons against `benchmarks/history_harness/case_manifest.toml` and `benchmarks/history_harness/known_gaps.toml`, invoke `flexmesa harness` (passing `--allow-unsupported-controls` on `harness run` when auditing unported upstream cases that set unimplemented controls):
 
 ```bash
 flexmesa harness table --check

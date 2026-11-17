@@ -15,21 +15,18 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
 fn parse_kap_option(opt: &str) -> PyResult<KapOption> {
-    KapOption::from_prefix(opt).ok_or_else(|| {
-        PyValueError::new_err(format!("unknown kap_option: {opt}"))
-    })
+    KapOption::from_prefix(opt)
+        .map_err(|e| PyValueError::new_err(e.to_string()))
 }
 
 fn parse_kap_co_option(opt: &str) -> PyResult<KapCoOption> {
-    KapCoOption::from_prefix(opt).ok_or_else(|| {
-        PyValueError::new_err(format!("unknown kap_co_option: {opt}"))
-    })
+    KapCoOption::from_prefix(opt)
+        .map_err(|e| PyValueError::new_err(e.to_string()))
 }
 
 fn parse_kap_low_t_option(opt: &str) -> PyResult<KapLowTOption> {
-    KapLowTOption::from_prefix(opt).ok_or_else(|| {
-        PyValueError::new_err(format!("unknown kap_low_t_option: {opt}"))
-    })
+    KapLowTOption::from_prefix(opt)
+        .map_err(|e| PyValueError::new_err(e.to_string()))
 }
 
 #[allow(clippy::fn_params_excessive_bools)]

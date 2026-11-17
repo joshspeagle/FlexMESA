@@ -188,6 +188,52 @@ pub fn combine_two_eos_components(
     )
 }
 
+/// Returns `true` when an EOS component error represents a domain/off-table
+/// evaluation failure that upstream skips under `okay_to_convert_ierr_to_skip`.
+///
+/// Missing or corrupt table I/O errors (`EosError::TableIo`) are never skipped.
+fn should_convert_to_skip(err: &EosError, cfg: &EosConfig) -> bool {
+    cfg.okay_to_convert_ierr_to_skip && !matches!(err, EosError::TableIo { .. })
+}
+
+/// Executes `combine_for_eosdt` for a single level (`skip = true` unconditionally
+/// when `eval_1st` returns `Ok(None)`, or on `Err` when
+/// `okay_to_convert_ierr_to_skip` is enabled).
+fn combine_level_skippable<F1, F2>(
+    alfa: f64,
+    d_alfa_dlog_t: f64,
+    d_alfa_dlog_rho: f64,
+    cfg: &EosConfig,
+    eval_1st: F1,
+    eval_2nd: F2,
+) -> Result<EosEvalOutput, EosError>
+where
+    F1: FnOnce() -> Result<Option<EosEvalOutput>, EosError>,
+    F2: FnOnce() -> Result<EosEvalOutput, EosError>,
+{
+    if alfa >= 1.0 {
+        return eval_2nd();
+    }
+    let out_1st = match eval_1st() {
+        Ok(Some(out1)) => out1,
+        Ok(None) => return eval_2nd(),
+        Err(ref e) if should_convert_to_skip(e, cfg) => return eval_2nd(),
+        Err(e) => return Err(e),
+    };
+    if alfa <= 0.0 {
+        return Ok(out_1st);
+    }
+    let out_2nd = eval_2nd()?;
+    Ok(combine_two_eos_components(
+        alfa,
+        d_alfa_dlog_t,
+        d_alfa_dlog_rho,
+        cfg.linear_blend,
+        &out_1st,
+        &out_2nd,
+    ))
+}
+
 /// Executes `combine_for_eosdt` for a single level with `okay_to_convert_ierr_to_skip`.
 fn combine_level<F1, F2>(
     alfa: f64,
@@ -201,40 +247,21 @@ where
     F1: FnOnce() -> Result<EosEvalOutput, EosError>,
     F2: FnOnce() -> Result<EosEvalOutput, EosError>,
 {
-    if alfa <= 0.0 {
-        return match eval_1st() {
-            Ok(out1) => Ok(out1),
-            Err(e) if cfg.okay_to_convert_ierr_to_skip => {
-                let _ = e;
-                eval_2nd()
-            }
-            Err(e) => Err(e),
-        };
-    }
-    if alfa >= 1.0 {
-        return eval_2nd();
-    }
-
-    let out_1st = match eval_1st() {
-        Ok(out1) => out1,
-        Err(e) if cfg.okay_to_convert_ierr_to_skip => {
-            let _ = e;
-            return eval_2nd();
-        }
-        Err(e) => return Err(e),
-    };
-    let out_2nd = eval_2nd()?;
-    Ok(combine_two_eos_components(
+    combine_level_skippable(
         alfa,
         d_alfa_dlog_t,
         d_alfa_dlog_rho,
-        cfg.linear_blend,
-        &out_1st,
-        &out_2nd,
-    ))
+        cfg,
+        || eval_1st().map(Some),
+        eval_2nd,
+    )
 }
 
-/// Evaluates `HELM` for `eosDT_get` with the given [`HelmTable`] and [`HelmConfig`].
+/// Evaluates `HELM` for `eosDT_get` with the given [`HelmTable`] and [`HelmConfig`]
+/// (`Get_HELMEOS_Results` in `eos/private/eos_helm_eval.f90:116-154`).
+///
+/// Returns `Ok(None)` when `helmeos2` sets `off_table` (`skip = .true.`)
+/// without invoking `do_convert_helm_results`.
 #[allow(clippy::too_many_arguments)]
 fn eval_helm_component(
     ht: &HelmTable,
@@ -248,14 +275,22 @@ fn eval_helm_component(
     z_int: &[usize],
     a_baryon: &[f64],
     cfg: &HelmConfig,
-) -> Result<EosEvalOutput, EosError> {
-    let (helm_res, _off_table) = helmeos2(
-        ht, t, log_t, rho, log_rho, abar, zbar, cfg,
-    )
-    .map_err(|_| EosError::InvalidState {
-        context: "eval_helm_component",
-        detail: format!("helmeos2 failed at rho={rho:e}, T={t:e}"),
-    })?;
+) -> Result<Option<EosEvalOutput>, EosError> {
+    let clipped_cfg = HelmConfig {
+        clip_to_table_boundaries: true,
+        ..*cfg
+    };
+    let (helm_res, off_table) =
+        helmeos2(ht, t, log_t, rho, log_rho, abar, zbar, &clipped_cfg)
+            .map_err(|code| EosError::OffTable {
+                context: "eval_helm_component",
+                detail: format!(
+                    "helmeos2 returned ierr={code} at rho={rho:e}, T={t:e}"
+                ),
+            })?;
+    if off_table {
+        return Ok(None);
+    }
     let (mut out, d_dabar, d_dzbar) =
         do_convert_helm_results(abar, zbar, rho, t, &helm_res);
     let sumx = xa.iter().copied().sum::<f64>().max(1.0e-30);
@@ -271,7 +306,7 @@ fn eval_helm_component(
             ]
         })
         .collect();
-    Ok(out)
+    Ok(Some(out))
 }
 
 /// Evaluates the full 7-level `eosDT_get` cascade with explicit table sets.
@@ -298,7 +333,7 @@ pub fn eos_dt_get_from_weights_with_tables(
     let eval_lvl6 = || {
         let (a, dt, dr) =
             get_helm_alfa(ht, log_rho, log_t, cfg.helm_blend_width);
-        combine_level(
+        combine_level_skippable(
             a,
             dt,
             dr,

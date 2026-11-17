@@ -4,6 +4,29 @@
 
 use super::*;
 
+struct TempWave5DirGuard {
+    root: std::path::PathBuf,
+}
+
+impl TempWave5DirGuard {
+    fn new(tag: &str) -> Self {
+        static SEQ: std::sync::atomic::AtomicU64 =
+            std::sync::atomic::AtomicU64::new(0);
+        let id = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let root = std::env::temp_dir()
+            .join(format!("flexmesa_w5_{tag}_{}_{id}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).expect("create temp wave5 root");
+        Self { root }
+    }
+}
+
+impl Drop for TempWave5DirGuard {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.root);
+    }
+}
+
 #[test]
 fn test_wave5_1_diffusion_rotation_and_premix_preserve_physical_invariants() {
     // 1. Burgers diffusion settles He4 downward and floats H1 upward
@@ -20,7 +43,8 @@ fn test_wave5_1_diffusion_rotation_and_premix_preserve_physical_invariants() {
         2.74e4,
         None,
         DiffusionScheme::StantonMurillo,
-    );
+    )
+    .expect("Burgers diffusion solve");
     assert_eq!(res.v_gt.len(), 3);
     // Hydrogen floats upward (v_gt[0] > 0), heavier ions sink (< 0)
     assert!(res.v_gt[0] > 0.0);
@@ -269,8 +293,24 @@ fn test_e2e_1_tier1_physics_helpers_and_suite() {
         let base = Path::new(&mesa_dir);
         let case_dir = base.join("star").join("test_suite").join("make_zams");
         if case_dir.is_dir() {
-            let rep = run_test_suite_case(&case_dir, true, Some(2), true)
-                .expect("make_zams tier 1 run");
+            let err = run_test_suite_case(&case_dir, true, Some(2), true)
+                .expect_err(
+                    "raw $MESA_DIR make_zams must reject unsupported controls",
+                );
+            let msg = err.to_string();
+            assert!(
+                matches!(err, StarError::InvalidInput(_))
+                    && msg.contains("unsupported control"),
+                "unexpected make_zams error: {msg}"
+            );
+            let tmp = TempWave5DirGuard::new("make_zams");
+            let cleaned = tmp.root.join("make_zams");
+            crate::inlist_inventory::copy_cleaned_star_case(
+                &case_dir, &cleaned,
+            )
+            .expect("copy cleaned make_zams");
+            let rep = run_test_suite_case(&cleaned, true, Some(2), true)
+                .expect("cleaned make_zams tier 1 run");
             assert!(rep.passed);
             assert!(rep.assertions_passed);
             assert!(rep.photo_restart_verified);
@@ -310,7 +350,8 @@ fn test_e2e_2_tier2_physics_helpers_and_suite() {
         model.abar[k] = 16.0;
         model.ye[k] = 0.5;
     }
-    let (cryst_frac, l_lat) = eval_wd_phase_separation(&mut model, "ONe");
+    let (cryst_frac, l_lat) = eval_wd_phase_separation(&mut model, "ONe")
+        .expect("eval_wd_phase_separation");
     assert!(cryst_frac > 0.0 && cryst_frac <= 1.0);
     assert!(l_lat > 0.0);
 
@@ -328,9 +369,24 @@ fn test_e2e_2_tier2_physics_helpers_and_suite() {
     let mesa_dir = flexmesa_utils::resolve_mesa_test_inputs_dir();
     let case_dir = mesa_dir.join("star/test_suite/cburn_inward");
     if case_dir.is_dir() {
-        let rep = run_test_suite_case(&case_dir, true, Some(2), true)
-            .expect("cburn_inward tier 2 run");
+        let err = run_test_suite_case(&case_dir, true, Some(2), true)
+            .expect_err(
+                "raw $MESA_DIR cburn_inward must reject unsupported controls",
+            );
+        let msg = err.to_string();
+        assert!(
+            matches!(err, StarError::InvalidInput(_))
+                && msg.contains("unsupported control"),
+            "unexpected cburn_inward error: {msg}"
+        );
+        let tmp = TempWave5DirGuard::new("cburn_inward");
+        let cleaned = tmp.root.join("cburn_inward");
+        crate::inlist_inventory::copy_cleaned_star_case(&case_dir, &cleaned)
+            .expect("copy cleaned cburn_inward");
+        let rep = run_test_suite_case(&cleaned, true, Some(2), true)
+            .expect("cleaned cburn_inward tier 2 run");
         assert!(rep.passed);
+        assert!(rep.photo_restart_verified);
     }
 }
 
@@ -383,15 +439,71 @@ fn test_e2e_4_tier4_pulsation_astero_and_dev_cases() {
     }
     if let Ok(mesa_dir) = std::env::var("MESA_DIR") {
         let base = Path::new(&mesa_dir);
-        if base.join("star").join("test_suite").is_dir() {
-            let star_reps = run_tier4_star_suite(base, true, Some(2), true)
-                .expect("tier4 star");
-            assert_eq!(star_reps.len(), 16);
+        let star_suite = base.join("star").join("test_suite");
+        if star_suite.is_dir() {
+            let tmp = TempWave5DirGuard::new("tier4_star");
+            let cleaned_suite = tmp.root.join("star").join("test_suite");
+            for &case_name in &TIER4_STAR_CASES {
+                let raw_case = star_suite.join(case_name);
+                let err = run_test_suite_case(&raw_case, true, Some(2), true)
+                    .expect_err(
+                        "raw tier4 case must reject unsupported controls",
+                    );
+                assert!(
+                    matches!(err, StarError::InvalidInput(_))
+                        && err.to_string().contains("unsupported control"),
+                    "unexpected raw tier4 error for {case_name}: {err}"
+                );
+                crate::inlist_inventory::copy_cleaned_star_case(
+                    &raw_case,
+                    &cleaned_suite.join(case_name),
+                )
+                .expect("copy cleaned tier4 star case");
+            }
+            let passing_t4: Vec<&str> = TIER4_STAR_CASES
+                .iter()
+                .copied()
+                .filter(|&c| c != "gyre_in_mesa_wd" && c != "gyre_in_mesa_rsg")
+                .collect();
+            let star_reps = crate::inlist_runner::run_case_list_with_options(
+                &tmp.root,
+                &passing_t4,
+                Some(2),
+                true,
+                crate::inlist::InlistLoadOptions::default(),
+            )
+            .expect("cleaned tier4 star suite");
+            assert_eq!(star_reps.len(), 14);
+            // gyre_in_mesa_rsg completes but its target-mode check fails with
+            // the in-house pulsation scaffold once the table-atmosphere proxy
+            // is removed (declared gap #170); the photo round trip still holds.
+            let rsg_rep = run_test_suite_case(
+                &cleaned_suite.join("gyre_in_mesa_rsg"),
+                true,
+                Some(2),
+                true,
+            )
+            .expect("cleaned gyre_in_mesa_rsg runs to termination");
+            assert!(
+                !rsg_rep.passed && rsg_rep.photo_restart_verified,
+                "gyre_in_mesa_rsg verdict changed; update the #170 gap: {rsg_rep:?}"
+            );
+            let wd_err = run_test_suite_case(
+                &cleaned_suite.join("gyre_in_mesa_wd"),
+                true,
+                Some(2),
+                true,
+            )
+            .expect_err("gyre_in_mesa_wd fails convergence cleanly (#157)");
+            assert!(
+                matches!(wd_err, StarError::ConvergenceFailure(_)),
+                "unexpected cleaned gyre_in_mesa_wd error: {wd_err}"
+            );
             assert!(
                 star_reps
                     .iter()
                     .all(|r| r.passed && r.photo_restart_verified),
-                "tier4 star failures: {:?}",
+                "cleaned tier4 star failures: {:?}",
                 star_reps
                     .iter()
                     .filter(|r| !r.passed || !r.photo_restart_verified)
@@ -405,24 +517,37 @@ fn test_e2e_4_tier4_pulsation_astero_and_dev_cases() {
             );
         }
         if base.join("star").join("dev_cases_TDC_Pulsation").is_dir() {
-            let dev_reps = run_dev_cases_suite(base, true, Some(2), true)
-                .expect("tier4 dev");
+            let err_skip = run_dev_cases_suite(base, true, Some(2), true)
+                .expect_err(
+                    "raw $MESA_DIR dev suite must reject missing checkpoint copy when skip_optional=true",
+                );
+            assert!(
+                err_skip.to_string().contains("missing checkpoint"),
+                "unexpected dev suite skip_optional error: {err_skip}"
+            );
+            let err = run_dev_cases_suite(base, false, Some(2), true)
+                .expect_err(
+                    "raw $MESA_DIR tier4 dev suite must reject unsupported controls",
+                );
+            assert!(
+                err.to_string().contains("unsupported control"),
+                "unexpected dev suite strict error: {err}"
+            );
+            let tmp = TempWave5DirGuard::new("tier4_dev");
+            for &(suite_sub, case_name) in &TIER4_DEV_CASES {
+                crate::inlist_inventory::copy_cleaned_star_case(
+                    &base.join("star").join(suite_sub).join(case_name),
+                    &tmp.root.join("star").join(suite_sub).join(case_name),
+                )
+                .expect("copy cleaned dev case");
+            }
+            let dev_reps = run_dev_cases_suite(&tmp.root, false, Some(2), true)
+                .expect("cleaned tier4 dev suite with skip_optional=false");
             assert_eq!(dev_reps.len(), 1);
             assert!(
-                dev_reps
-                    .iter()
-                    .all(|r| r.passed && r.photo_restart_verified),
-                "tier4 dev failures: {:?}",
-                dev_reps
-                    .iter()
-                    .filter(|r| !r.passed || !r.photo_restart_verified)
-                    .map(|r| (
-                        &r.case_name,
-                        r.passed,
-                        r.photo_restart_verified,
-                        &r.termination_code
-                    ))
-                    .collect::<Vec<_>>()
+                dev_reps[0].passed && dev_reps[0].photo_restart_verified,
+                "cleaned dev case failed: {:?}",
+                dev_reps[0]
             );
         }
     }
@@ -484,18 +609,61 @@ fn test_e2e_5_tier5_star_hooks_and_90_active_star_inventory() {
     }
     if let Ok(mesa_dir) = std::env::var("MESA_DIR") {
         let base = Path::new(&mesa_dir);
-        if base.join("star").join("test_suite").is_dir() {
-            let tier5_reps =
-                run_tier5_star_suite(base, Some(2), true).expect("tier5 star");
-            assert_eq!(tier5_reps.len(), 4);
-            for r in &tier5_reps {
+        let star_suite = base.join("star").join("test_suite");
+        if star_suite.is_dir() {
+            let tmp = TempWave5DirGuard::new("tier5_star");
+            let cleaned_suite = tmp.root.join("star").join("test_suite");
+            for &case_name in &TIER5_STAR_CASES {
+                let raw_case = star_suite.join(case_name);
+                let err = run_test_suite_case(&raw_case, true, Some(2), true)
+                    .expect_err(
+                        "raw tier5 case must reject unsupported controls",
+                    );
+                assert!(
+                    matches!(err, StarError::InvalidInput(_))
+                        && err.to_string().contains("unsupported control"),
+                    "unexpected raw tier5 rejection for {case_name}: {err}"
+                );
+                crate::inlist_inventory::copy_cleaned_star_case(
+                    &raw_case,
+                    &cleaned_suite.join(case_name),
+                )
+                .expect("copy cleaned tier5 star case");
+            }
+            let hook_err = run_test_suite_case(
+                &cleaned_suite.join("other_physics_hooks"),
+                true,
+                Some(2),
+                true,
+            )
+            .expect_err("cleaned other_physics_hooks must reject overshoot_scheme = 'other'");
+            assert!(
+                matches!(hook_err, StarError::InvalidInput(_))
+                    && hook_err.to_string().contains("overshoot_scheme"),
+                "unexpected cleaned other_physics_hooks error: {hook_err}"
+            );
+            let passing_t5: Vec<&str> = TIER5_STAR_CASES
+                .iter()
+                .copied()
+                .filter(|&c| c != "other_physics_hooks")
+                .collect();
+            let reps = crate::inlist_runner::run_case_list_with_options(
+                &tmp.root,
+                &passing_t5,
+                Some(2),
+                true,
+                crate::inlist::InlistLoadOptions::default(),
+            )
+            .expect("cleaned tier5 star suite");
+            assert_eq!(reps.len(), 3);
+            for r in &reps {
                 assert!(
                     r.passed && r.photo_restart_verified,
-                    "tier5 case {} failed: passed={}, assertions={}, restart={}",
+                    "cleaned tier5 star failure: {} passed={} restart={} term={}",
                     r.case_name,
                     r.passed,
-                    r.assertions_passed,
-                    r.photo_restart_verified
+                    r.photo_restart_verified,
+                    r.termination_code
                 );
             }
         }

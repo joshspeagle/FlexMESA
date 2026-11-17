@@ -76,22 +76,22 @@ pub fn eval_rsp_2nd_crossing_with_controls(
 ) -> Result<Rsp2ndCrossingReport, StarError> {
     let xc = &base_controls.x_ctrl;
     let xic = &base_controls.x_integer_ctrl;
-    let delta_teff = xc.get(1).copied().filter(|&v| v > 0.0).unwrap_or(100.0);
-    let log_t1 = xc.get(2).copied().filter(|&v| v > 0.0).unwrap_or(3.76);
-    let log_l1 = xc.get(3).copied().filter(|&v| v > 0.0).unwrap_or(4.5);
-    let log_t2 = xc.get(4).copied().filter(|&v| v > 0.0).unwrap_or(3.83);
-    let log_l2 = xc.get(5).copied().filter(|&v| v > 0.0).unwrap_or(2.4);
-    let log_t3 = xc.get(6).copied().filter(|&v| v > 0.0).unwrap_or(3.65);
-    let log_l3 = xc.get(7).copied().filter(|&v| v > 0.0).unwrap_or(4.5);
-    let log_t4 = xc.get(8).copied().filter(|&v| v > 0.0).unwrap_or(3.77);
-    let log_l4 = xc.get(9).copied().filter(|&v| v > 0.0).unwrap_or(2.4);
+    let delta_teff = xc.first().copied().filter(|&v| v > 0.0).unwrap_or(100.0);
+    let log_t1 = xc.get(1).copied().filter(|&v| v > 0.0).unwrap_or(3.76);
+    let log_l1 = xc.get(2).copied().filter(|&v| v > 0.0).unwrap_or(4.5);
+    let log_t2 = xc.get(3).copied().filter(|&v| v > 0.0).unwrap_or(3.83);
+    let log_l2 = xc.get(4).copied().filter(|&v| v > 0.0).unwrap_or(2.4);
+    let log_t3 = xc.get(5).copied().filter(|&v| v > 0.0).unwrap_or(3.65);
+    let log_l3 = xc.get(6).copied().filter(|&v| v > 0.0).unwrap_or(4.5);
+    let log_t4 = xc.get(7).copied().filter(|&v| v > 0.0).unwrap_or(3.77);
+    let log_l4 = xc.get(8).copied().filter(|&v| v > 0.0).unwrap_or(2.4);
     let _ = (log_t1, log_l1, log_t2, log_l2);
 
-    let skip_cols = xic.get(1).copied().unwrap_or(6).max(0) as usize;
-    let col_mod = xic.get(2).copied().unwrap_or(1).max(1) as usize - 1;
-    let col_age = xic.get(3).copied().unwrap_or(2).max(1) as usize - 1;
-    let col_log_t = xic.get(4).copied().unwrap_or(4).max(1) as usize - 1;
-    let col_log_l = xic.get(5).copied().unwrap_or(5).max(1) as usize - 1;
+    let skip_cols = xic.first().copied().unwrap_or(6).max(0) as usize;
+    let col_mod = xic.get(1).copied().unwrap_or(1).max(1) as usize - 1;
+    let col_age = xic.get(2).copied().unwrap_or(2).max(1) as usize - 1;
+    let col_log_t = xic.get(3).copied().unwrap_or(4).max(1) as usize - 1;
+    let col_log_l = xic.get(4).copied().unwrap_or(5).max(1) as usize - 1;
     let max_col = col_mod.max(col_age).max(col_log_t).max(col_log_l);
 
     let fname = if history_filename.trim().is_empty() {
@@ -243,7 +243,7 @@ pub fn eval_rsp_2nd_crossing_with_controls(
 
     if let Some(out_name) = base_controls
         .x_character_ctrl
-        .get(2)
+        .get(1)
         .map(|s| s.trim())
         .filter(|s| !s.is_empty())
     {

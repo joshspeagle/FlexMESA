@@ -23,7 +23,6 @@ use crate::relax::{
     relax_irradiation_to_target, relax_mass_to_target,
     relax_tau_factor_to_target, relax_to_remove_h_env,
 };
-use crate::tier2_extras::apply_planetary_core;
 use crate::zams::load_zams_model;
 
 /// Resolves a `.mod` model file path against `case_dir`.
@@ -40,32 +39,40 @@ pub(crate) fn resolve_model_path(
         if local_fname.exists() {
             return Some(local_fname);
         }
-        let rsp_golden = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../tests/fixtures/golden/rsp")
-            .join(fname);
-        if rsp_golden.exists() {
-            return Some(rsp_golden);
-        }
     }
     None
 }
 
 /// Peeks the `M/Msun` header entry from a saved `.mod` file.
-fn peek_mod_header_mass(mod_path: &Path) -> Option<f64> {
-    let text = fs::read_to_string(mod_path).ok()?;
+fn peek_mod_header_mass(mod_path: &Path) -> Result<Option<f64>, StarError> {
+    let text = fs::read_to_string(mod_path).map_err(|e| {
+        StarError::IoError(format!(
+            "failed to read saved model {}: {e}",
+            mod_path.display()
+        ))
+    })?;
     for line in text.lines().take(35) {
         let clean = line.split('!').next().unwrap_or(line).trim();
         let tokens: Vec<&str> = clean.split_whitespace().collect();
         if tokens.len() >= 2 && tokens[0] == "M/Msun" {
             let num_s = tokens[1].replace(['D', 'd'], "e");
-            if let Ok(m) = num_s.parse::<f64>() {
-                if m > 0.0 {
-                    return Some(m);
-                }
+            let m = num_s.parse::<f64>().map_err(|e| {
+                StarError::IoError(format!(
+                    "invalid M/Msun '{}' in {}: {e}",
+                    tokens[1],
+                    mod_path.display()
+                ))
+            })?;
+            if m > 0.0 && m.is_finite() {
+                return Ok(Some(m));
             }
+            return Err(StarError::IoError(format!(
+                "non-positive/non-finite M/Msun {m} in {}",
+                mod_path.display()
+            )));
         }
     }
-    None
+    Ok(None)
 }
 
 /// Builds an initial planet, brown dwarf, or conductive-flame model when
@@ -114,28 +121,36 @@ fn build_initial_planet_or_wd_model(
     Ok(model)
 }
 
-/// Loads `model_name` from `case_dir` if readable and parseable, or falls back
-/// to `build_initial_planet_or_wd_model`.
-fn load_mod_or_fallback(
+/// Loads `model_name` from `case_dir`, failing loudly if missing, unreadable,
+/// or malformed.
+fn load_saved_mod(
     case_dir: &Path,
     model_name: &str,
     controls: StarControls,
     job: StarJobControls,
     loaded_from_mod: &mut bool,
 ) -> Result<StarModel, StarError> {
-    if let Some(mod_path) = resolve_model_path(case_dir, model_name) {
-        let text = fs::read_to_string(&mod_path).map_err(|e| {
-            StarError::IoError(format!(
-                "failed to read saved model {}: {e}",
-                mod_path.display()
-            ))
-        })?;
-        if let Ok(m) = read_mod_str(&text, controls.clone(), job.clone()) {
-            *loaded_from_mod = true;
-            return Ok(m);
-        }
+    let trimmed = model_name.trim();
+    if trimmed.is_empty() {
+        return Err(StarError::InvalidInput(String::from(
+            "load_saved_model = true requires a non-empty load_model_filename",
+        )));
     }
-    build_initial_planet_or_wd_model(controls, job)
+    let mod_path = resolve_model_path(case_dir, trimmed).ok_or_else(|| {
+        StarError::IoError(format!(
+            "missing saved model '{trimmed}' in '{}'",
+            case_dir.display()
+        ))
+    })?;
+    let text = fs::read_to_string(&mod_path).map_err(|e| {
+        StarError::IoError(format!(
+            "failed to read saved model {}: {e}",
+            mod_path.display()
+        ))
+    })?;
+    let model = read_mod_str(&text, controls, job)?;
+    *loaded_from_mod = true;
+    Ok(model)
 }
 
 /// Initializes a [`StarModel`] from `bundle` (or updates `existing_model` for
@@ -194,8 +209,8 @@ pub fn init_or_update_model_from_bundle(
         if let Some(prev) = existing_model {
             loaded_from_mod = true;
             prev
-        } else if job.load_saved_model && !job.saved_model_name.is_empty() {
-            load_mod_or_fallback(
+        } else if job.load_saved_model {
+            load_saved_mod(
                 &bundle.case_dir,
                 &job.saved_model_name,
                 controls.clone(),
@@ -234,7 +249,7 @@ pub fn init_or_update_model_from_bundle(
                 if let Some(mod_path) =
                     resolve_model_path(&bundle.case_dir, mname)
                 {
-                    if let Some(m_hdr) = peek_mod_header_mass(&mod_path) {
+                    if let Some(m_hdr) = peek_mod_header_mass(&mod_path)? {
                         init_controls.initial_mass = m_hdr;
                     }
                 }
@@ -253,11 +268,11 @@ pub fn init_or_update_model_from_bundle(
         || (job.relax_irradiation && controls.initial_mass <= 0.02)
     {
         build_initial_planet_or_wd_model(controls.clone(), job.clone())?
-    } else if job.load_saved_model && !job.saved_model_name.is_empty() {
+    } else if job.load_saved_model {
         if let Some(prev) = existing_model {
             prev
         } else {
-            load_mod_or_fallback(
+            load_saved_mod(
                 &bundle.case_dir,
                 &job.saved_model_name,
                 controls.clone(),
@@ -286,11 +301,6 @@ pub fn init_or_update_model_from_bundle(
         model.controls.rotation_flag,
         model.controls.rti_flag,
     );
-    let explicit_rti_in_controls = bundle
-        .sections
-        .get("controls")
-        .and_then(|c| c.get_bool("rti_flag"))
-        .is_some();
     let (preserved_tau, preserved_m, preserved_z, preserved_y, preserved_opac) = (
         model.controls.tau_factor,
         model.controls.initial_mass,
@@ -307,7 +317,7 @@ pub fn init_or_update_model_from_bundle(
         model.controls.u_flag,
         model.controls.rotation_flag,
     ) = (preserved_v, preserved_u, preserved_rot);
-    if !explicit_rti_in_controls {
+    if !job.change_initial_rti_flag {
         model.controls.rti_flag = preserved_rti;
     }
     (
@@ -339,7 +349,7 @@ pub fn init_or_update_model_from_bundle(
     if case_name != "tzo" {
         apply_composition_relaxation(&mut model, &job);
     }
-    relax_from_profile_files(&mut model, &bundle.case_dir);
+    relax_from_profile_files(&mut model, &bundle.case_dir)?;
 
     // 3. Mass and H-envelope stripping relaxation
     if job.relax_mass && job.new_mass > 0.0 {
@@ -479,7 +489,7 @@ pub fn init_or_update_model_from_bundle(
         excise_core_by_temperature(&mut model, t_cut);
     }
     if model.controls.rsp2_flag {
-        crate::rsp2_remesh::seed_rsp2_w_from_mlt_vc_if_needed(&mut model);
+        crate::rsp2_remesh::seed_rsp2_w_from_mlt_vc_if_needed(&mut model)?;
         if model.controls.rsp2.remesh_when_load
             && model.controls.rsp2.nz >= 2
             && model.nz != model.controls.rsp2.nz
@@ -536,61 +546,21 @@ pub fn init_or_update_model_from_bundle(
         model.aux.rsp.time_sec = model.star_age * SECYER;
         model.aux.rsp.time_old_sec = model.aux.rsp.time_sec;
     }
-    model.save_start_values();
+    model.save_start_values()?;
     model.save_old_values();
-    let mut fell_back = false;
-    if loaded_from_mod && crate::tier2_extras::is_tier2_case(case_name) {
-        let needs_fallback = matches!(
-            case_name,
-            "irradiated_planet" | "wd_acc_small_dm" | "wd_c_core_ignition"
-        ) || match crate::hydro_eqns::eval_henyey_equations(
-            &mut model, false,
-        ) {
-            Ok(sys) => crate::solver::compute_vector_norms(&sys.equ).1 > 0.25,
-            Err(_) => true,
-        };
-        if needs_fallback {
-            let mut fallback = build_initial_planet_or_wd_model(
-                bundle.controls.clone(),
-                bundle.job.clone(),
-            )?;
-            fallback.job = model.job.clone();
-            fallback.controls = model.controls.clone();
-            fallback.eos_config = model.eos_config;
-            fallback.kap_config = model.kap_config.clone();
-            if job.relax_m_center && job.new_core_mass > 0.0 {
-                let old_xmstar = fallback.xmstar.max(1.0);
-                apply_planetary_core(
-                    &mut fallback,
-                    job.new_core_mass,
-                    job.core_avg_rho,
-                    job.core_avg_eps,
-                );
-                for k in 0..fallback.nz {
-                    fallback.lum[k] *= fallback.xmstar / old_xmstar;
-                }
-            }
-            extras.extras_controls(&mut fallback);
-            equilibrate_tier2_scaled_model(&mut fallback);
-            fallback.sync_mesh_and_pack()?;
-            set_hydro_vars(&mut fallback, false, false)?;
-            fallback.save_start_values();
-            fallback.save_old_values();
-            model = fallback;
-            fell_back = true;
-        }
-    }
-    if loaded_from_mod && !fell_back {
+    if loaded_from_mod {
         crate::relax::settle_relaxed_loaded_model(&mut model)?;
     }
-    if did_create_pre_ms
-        && model.mstar / M_SUN >= 0.3
-        && bundle
-            .sections
-            .get("star_job")
-            .and_then(|sj| sj.get_bool("pre_ms_relax_to_start_radiative_core"))
-            .unwrap_or(true)
-    {
+    let relax_rad_core = bundle
+        .sections
+        .get("star_job")
+        .map(|sj| {
+            sj.try_get_bool("star_job", "pre_ms_relax_to_start_radiative_core")
+        })
+        .transpose()?
+        .flatten()
+        .unwrap_or(true);
+    if did_create_pre_ms && model.mstar / M_SUN >= 0.3 && relax_rad_core {
         crate::evolve_support::relax_pre_ms_to_radiative_core(&mut model)?;
     }
     extras.extras_startup(&mut model, false)?;

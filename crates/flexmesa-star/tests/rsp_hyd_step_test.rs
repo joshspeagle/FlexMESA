@@ -321,7 +321,7 @@ fn test_rsp_gyre_bvp_linear_kick_and_nonlinear_hyd_steps() {
         ..StarControls::default()
     };
     ctrl.rsp.use_other_rsp_linear_analysis = true;
-    ctrl.x_ctrl[6] = 0.1;
+    ctrl.x_ctrl[5] = 0.1;
 
     let kap = a09_kap_config(ctrl.rsp_z);
     let (mut model, lina_opt) = do_rsp_build_model(

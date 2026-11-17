@@ -14,7 +14,8 @@ use flexmesa_const::{MSUN, RSUN, SECDAY, SECYER};
 use flexmesa_star::{
     init_or_update_model_from_bundle, load_zams_model,
     load_zams_model_from_catalog, relax_composition_with_henyey,
-    DefaultStarExtras, InlistBundle, StarError, StarModel, ZamsCatalog,
+    DefaultStarExtras, InlistBundle, InlistLoadOptions, StarError, StarModel,
+    ZamsCatalog,
 };
 
 use crate::binary_history::BinaryLogsWriter;
@@ -26,32 +27,54 @@ pub use crate::e2e_oracles::{
 };
 use crate::system::{BinaryCompanion, BinarySystem};
 
-static FULL_ZAMS_CATALOG: OnceLock<Option<ZamsCatalog>> = OnceLock::new();
+static FULL_ZAMS_CATALOG: OnceLock<Result<Option<ZamsCatalog>, String>> =
+    OnceLock::new();
 
-fn resolve_full_zams_catalog(case_dir: &Path) -> Option<&'static ZamsCatalog> {
-    FULL_ZAMS_CATALOG
-        .get_or_init(|| {
-            let zams_path = case_dir.ancestors().find_map(|anc| {
-                let p = anc
-                    .join("data")
-                    .join("star_data")
-                    .join("zams_models")
-                    .join("zams_z2m2_y28.data");
-                p.is_file().then_some(p)
-            })?;
-            let text = fs::read_to_string(zams_path).ok()?;
-            ZamsCatalog::parse_ascii(&text).ok()
-        })
-        .as_ref()
+fn resolve_full_zams_catalog(
+    case_dir: &Path,
+) -> Result<Option<&'static ZamsCatalog>, StarError> {
+    let res = FULL_ZAMS_CATALOG.get_or_init(|| {
+        let Some(zams_path) = case_dir.ancestors().find_map(|anc| {
+            let p = anc
+                .join("data")
+                .join("star_data")
+                .join("zams_models")
+                .join("zams_z2m2_y28.data");
+            p.is_file().then_some(p)
+        }) else {
+            return Ok(None);
+        };
+        let text = fs::read_to_string(&zams_path).map_err(|e| {
+            format!(
+                "failed reading ZAMS catalog '{}': {e}",
+                zams_path.display()
+            )
+        })?;
+        let cat = ZamsCatalog::parse_ascii(&text).map_err(|e| {
+            format!(
+                "failed parsing ZAMS catalog '{}': {e}",
+                zams_path.display()
+            )
+        })?;
+        Ok(Some(cat))
+    });
+    match res {
+        Ok(opt) => Ok(opt.as_ref()),
+        Err(msg) => Err(StarError::IoError(msg.clone())),
+    }
 }
 
 fn init_binary_star_component(
     case_dir: &Path,
     inlist_name: &str,
     mass_msun: f64,
+    options: InlistLoadOptions,
 ) -> Result<StarModel, StarError> {
-    let mut bundle =
-        InlistBundle::from_file_in_case_dir(case_dir, inlist_name)?;
+    let mut bundle = InlistBundle::from_file_in_case_dir_with_options(
+        case_dir,
+        inlist_name,
+        options,
+    )?;
     bundle.controls.initial_mass = mass_msun;
     let needs_henyey_yz_relax = bundle.job.relax_z || bundle.job.relax_y;
     let mut init_bundle = bundle.clone();
@@ -59,7 +82,7 @@ fn init_binary_star_component(
         init_bundle.job.relax_z = false;
         init_bundle.job.relax_y = false;
     }
-    let seed_zams = if let Some(cat) = resolve_full_zams_catalog(case_dir) {
+    let seed_zams = if let Some(cat) = resolve_full_zams_catalog(case_dir)? {
         Some(load_zams_model_from_catalog(
             cat,
             init_bundle.controls.clone(),
@@ -155,27 +178,46 @@ pub fn run_binary_test_suite_case_with_logs(
     max_steps_cap: Option<usize>,
     logs_opts: BinaryLogsOptions<'_>,
 ) -> Result<BinaryCaseRunReport, StarError> {
+    run_binary_test_suite_case_with_options(
+        case_dir,
+        max_steps_cap,
+        logs_opts,
+        InlistLoadOptions::default(),
+    )
+}
+
+/// Executes a single `binary/test_suite/<case>` directory with explicit
+/// [`InlistLoadOptions`].
+pub fn run_binary_test_suite_case_with_options(
+    case_dir: &Path,
+    max_steps_cap: Option<usize>,
+    logs_opts: BinaryLogsOptions<'_>,
+    inlist_opts: InlistLoadOptions,
+) -> Result<BinaryCaseRunReport, StarError> {
     let t0 = Instant::now();
     let case_name = case_dir
         .file_name()
         .and_then(|s| s.to_str())
         .unwrap_or("unknown")
         .to_string();
-    let bctrl = BinaryInlistControls::from_case_dir(case_dir)?;
+    let bctrl = BinaryInlistControls::from_case_dir_with_options(
+        case_dir,
+        inlist_opts,
+    )?;
 
     let donor = init_binary_star_component(
         case_dir,
         &bctrl.inlist_names[0],
         bctrl.m1_msun,
+        inlist_opts,
     )?;
     let mut bin = if bctrl.evolve_both_stars {
-        let inlist2 = if case_dir.join(&bctrl.inlist_names[1]).is_file() {
-            bctrl.inlist_names[1].as_str()
-        } else {
-            bctrl.inlist_names[0].as_str()
-        };
-        let accretor =
-            init_binary_star_component(case_dir, inlist2, bctrl.m2_msun)?;
+        let accretor = init_binary_star_component(
+            case_dir,
+            &bctrl.inlist_names[1],
+            bctrl.m2_msun,
+            inlist_opts,
+        )?;
         BinarySystem::from_controls_two_stars(donor, accretor, bctrl.clone())?
     } else {
         BinarySystem::from_controls_point_mass(donor, bctrl.clone())?
@@ -212,8 +254,12 @@ pub fn run_binary_test_suite_case_with_logs(
     let mut dt_next = match &bin.companion {
         BinaryCompanion::PointMass { .. } => bin.donor.dt_next,
         BinaryCompanion::Star(s2) => bin.donor.dt_next.min(s2.dt_next),
+    };
+    if !dt_next.is_finite() || dt_next <= 0.0 {
+        return Err(StarError::InvalidInput(format!(
+            "[{case_name}] non-positive initial binary dt_next ({dt_next})"
+        )));
     }
-    .max(1.0);
 
     let mut term_code = String::from("MaxStepsCap");
     while bin.model_number < step_limit {
@@ -270,11 +316,30 @@ pub fn run_binary_suite(
     mesa_dir: &Path,
     max_steps_cap: Option<usize>,
 ) -> Result<Vec<BinaryCaseRunReport>, StarError> {
+    run_binary_suite_with_options(
+        mesa_dir,
+        max_steps_cap,
+        InlistLoadOptions::default(),
+    )
+}
+
+/// Executes all 8 `TIER5_BINARY_CASES` under `<mesa_dir>/binary/test_suite`
+/// with explicit [`InlistLoadOptions`].
+pub fn run_binary_suite_with_options(
+    mesa_dir: &Path,
+    max_steps_cap: Option<usize>,
+    inlist_opts: InlistLoadOptions,
+) -> Result<Vec<BinaryCaseRunReport>, StarError> {
     let suite_dir = mesa_dir.join("binary").join("test_suite");
     let mut reports = Vec::with_capacity(TIER5_BINARY_CASES.len());
     for &case_name in &TIER5_BINARY_CASES {
         let case_dir = suite_dir.join(case_name);
-        reports.push(run_binary_test_suite_case(&case_dir, max_steps_cap)?);
+        reports.push(run_binary_test_suite_case_with_options(
+            &case_dir,
+            max_steps_cap,
+            BinaryLogsOptions::default(),
+            inlist_opts,
+        )?);
     }
     Ok(reports)
 }

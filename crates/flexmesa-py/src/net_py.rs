@@ -16,7 +16,7 @@ use flexmesa_net::{
 use flexmesa_num::RosenbrockVariant;
 use flexmesa_rates::ScreeningMode;
 use numpy::{PyArray1, PyArray2, PyArrayMethods, PyReadonlyArray1};
-use pyo3::exceptions::PyValueError;
+use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 
 fn to_py_err(e: NetError) -> PyErr {
@@ -27,7 +27,9 @@ fn cached_net(name: &str) -> PyResult<Arc<NetGeneralInfo>> {
     static CACHE: OnceLock<Mutex<HashMap<String, Arc<NetGeneralInfo>>>> =
         OnceLock::new();
     let map_mutex = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
-    let mut map = map_mutex.lock().unwrap();
+    let mut map = map_mutex.lock().map_err(|e| {
+        PyRuntimeError::new_err(format!("net cache mutex poisoned: {e}"))
+    })?;
     if let Some(g) = map.get(name) {
         return Ok(Arc::clone(g));
     }
@@ -247,7 +249,8 @@ pub fn net_burn_1_zone<'py>(
         eps,
         odescal,
     };
-    let ht = HelmTable::builtin();
+    let ht = HelmTable::builtin()
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
     let eos_cfg = EosConfig::default();
     let out = burn_1_zone(&g, ht, &eos_cfg, &input).map_err(to_py_err)?;
     Ok((
@@ -318,7 +321,8 @@ pub fn net_burn_1_zone_const_density<'py>(
         eps,
         odescal,
     };
-    let ht = HelmTable::builtin();
+    let ht = HelmTable::builtin()
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
     let eos_cfg = EosConfig::default();
     let out = burn_1_zone_const_density(&g, ht, &eos_cfg, &input)
         .map_err(to_py_err)?;
@@ -401,7 +405,8 @@ pub fn net_burn_1_zone_const_p<'py>(
         atol,
         x_min,
     };
-    let ht = HelmTable::builtin();
+    let ht = HelmTable::builtin()
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
     let eos_cfg = EosConfig::default();
     let out =
         burn_1_zone_const_p(&g, ht, &eos_cfg, &input).map_err(to_py_err)?;

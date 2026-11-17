@@ -439,11 +439,14 @@ impl BinaryExtras for DoubleBhExtras {
                     }
                     bin.set_ignore_rlof_flag(false);
                     bin.controls.terminate_if_l2_overflow = true;
-                } else {
-                    bin.set_period_eccentricity(
-                        self.initial_period_in_days * SECDAY,
-                        0.0,
-                    );
+                } else if let Err(e) = bin.set_period_eccentricity(
+                    self.initial_period_in_days * SECDAY,
+                    0.0,
+                ) {
+                    self.failed_mid_run = true;
+                    return BinaryExtrasAction::Terminate(format!(
+                        "set_period_eccentricity failed: {e}"
+                    ));
                 }
             }
         }
@@ -465,9 +468,19 @@ impl BinaryExtras for DoubleBhExtras {
             let s1_he = bin.star_ref(1).map_or(1.0, center_he4);
             let s2_he = bin.star_ref(2).map_or(1.0, center_he4);
             if s1_he < 1.0e-5 {
-                bin.set_point_mass_i(1);
+                if let Err(e) = bin.set_point_mass_i(1) {
+                    self.failed_mid_run = true;
+                    return BinaryExtrasAction::Terminate(format!(
+                        "set_point_mass_i(1) failed: {e}"
+                    ));
+                }
             } else if s2_he < 1.0e-5 {
-                bin.set_point_mass_i(2);
+                if let Err(e) = bin.set_point_mass_i(2) {
+                    self.failed_mid_run = true;
+                    return BinaryExtrasAction::Terminate(format!(
+                        "set_point_mass_i(2) failed: {e}"
+                    ));
+                }
             }
         }
         if bin.point_mass_i != 0 {

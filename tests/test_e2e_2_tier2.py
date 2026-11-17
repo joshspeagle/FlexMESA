@@ -16,6 +16,8 @@ import pytest
 from flexmesa import star
 from flexmesa.star import e2e
 
+from . import cleaned_case_gaps
+
 
 def test_tier2_cases_inventory_has_16_canonical_entries() -> None:
     """Verify `TIER2_CASES` contains all 16 MESA 26.4.1 Tier 2 case names."""
@@ -275,10 +277,11 @@ def test_synthetic_tier2_case_runners_pass_assertions_and_restart(
 @pytest.mark.parametrize("case_name", star.TIER2_CASES)
 def test_upstream_tier2_test_suite_case_reproduction_and_restart_parity(
     case_name: str,
+    tmp_path: pathlib.Path,
 ) -> None:
-    """When `MESA_DIR` is present, verify each of the 17 upstream Tier 2
-    `star/test_suite/<case>` directories executes cleanly, passes physical
-    target assertions, and achieves 0 ULP `.photo` restart parity.
+    """When `MESA_DIR` is present, verify unmodified upstream Tier 2
+    `star/test_suite/<case>` directories fail loudly under strict `#147`, and
+    cleaned copies execute cleanly with internal `.photo` round-trip checks.
     """
     mesa_dir = os.environ.get("MESA_DIR", "")
     if not mesa_dir:
@@ -286,8 +289,31 @@ def test_upstream_tier2_test_suite_case_reproduction_and_restart_parity(
     case_dir = pathlib.Path(mesa_dir) / "star" / "test_suite" / case_name
     assert case_dir.is_dir(), f"Upstream case directory not found: {case_dir}"
 
+    with pytest.raises(
+        ValueError,
+        match=r"(unsupported|unknown|unrecognized).*control",
+    ):
+        e2e.run_test_suite_case(
+            case_dir,
+            skip_optional=True,
+            max_steps_per_stage=2,
+            verify_restart=True,
+        )
+
+    clean_dir = tmp_path / case_name
+    e2e.copy_cleaned_case(case_dir, clean_dir, suite="star")
+    gap = cleaned_case_gaps.DECLARED_STAR_STOPS.get(case_name)
+    if gap is not None:
+        with pytest.raises(ValueError, match=gap.message_pattern):
+            e2e.run_test_suite_case(
+                clean_dir,
+                skip_optional=True,
+                max_steps_per_stage=2,
+                verify_restart=True,
+            )
+        return
     rep = e2e.run_test_suite_case(
-        case_dir,
+        clean_dir,
         skip_optional=True,
         max_steps_per_stage=2,
         verify_restart=True,

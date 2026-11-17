@@ -137,10 +137,15 @@ pub fn do_set_mdot(model: &mut StarModel) -> Result<f64, StarError> {
         wind_mdot = -c.mass_change * M_SUN / SECYER;
     }
 
-    // 3. Hot + cool RGB/AGB wind schemes (with legacy fallback when scheme names
-    // are blank but a positive scaling factor was set directly on `controls`).
-    let dutch_low = DutchLowTScheme::parse_name(&mw.dutch_wind_lowt_scheme);
-    let mut hot_s =
+    // 3. Hot + cool RGB/AGB wind schemes (`winds.f90:320-321,402-406`).
+    let dutch_low = DutchLowTScheme::parse_name(&mw.dutch_wind_lowt_scheme)
+        .ok_or_else(|| {
+            StarError::InvalidInput(format!(
+                "unknown Dutch_wind_lowT_scheme '{}'",
+                mw.dutch_wind_lowt_scheme
+            ))
+        })?;
+    let hot_s =
         WindScheme::parse_name(&mw.hot_wind_scheme).ok_or_else(|| {
             StarError::InvalidInput(format!(
                 "unknown hot_wind_scheme '{}'",
@@ -152,29 +157,11 @@ pub fn do_set_mdot(model: &mut StarModel) -> Result<f64, StarError> {
     } else {
         &c.cool_wind_rgb_scheme
     };
-    let mut cool_s = WindScheme::parse_name(cool_name).ok_or_else(|| {
+    let cool_s = WindScheme::parse_name(cool_name).ok_or_else(|| {
         StarError::InvalidInput(format!(
             "unknown cool_wind_scheme '{cool_name}'"
         ))
     })?;
-
-    if hot_s == WindScheme::None && cool_s == WindScheme::None {
-        let fallback = if c.dutch_scaling_factor > 0.0 {
-            WindScheme::Dutch
-        } else if c.vink_scaling_factor > 0.0 {
-            WindScheme::Vink
-        } else if mw.bjorklund_scaling_factor > 0.0 {
-            WindScheme::Bjorklund
-        } else if c.reimers_scaling_factor > 0.0 {
-            WindScheme::Reimers
-        } else if c.blocker_scaling_factor > 0.0 {
-            WindScheme::Blocker
-        } else {
-            WindScheme::None
-        };
-        hot_s = fallback;
-        cool_s = fallback;
-    }
 
     let hot_w = if t1 >= c.cool_wind_full_on_t {
         eval_scheme_rate(

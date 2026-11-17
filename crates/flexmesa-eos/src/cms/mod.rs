@@ -277,18 +277,22 @@ pub fn eval_cms_eos_from_weights(
                 CMS_XVALS[ix + 1],
             ];
             let dx = x - CMS_XVALS[ix - 1];
+            let map_pm_err = |e| EosError::InvalidState {
+                context: "eval_cms_eos_from_weights",
+                detail: format!("CMS 4-pt PM interpolation failed: {e}"),
+            };
             for i in 0..NUM_EOS_TABLE_VALS {
                 let y = [r1[i], r2[i], r3[i], r4[i]];
-                let a = interp_4pt_pm(&xx, &y).unwrap_or([0.0; 3]);
+                let a = interp_4pt_pm(&xx, &y).map_err(map_pm_err)?;
                 res[i] = y[1] + dx * (a[0] + dx * (a[1] + dx * a[2]));
                 d_dx[i] = a[0] + dx * (2.0 * a[1] + 3.0 * dx * a[2]);
 
                 let yt = [dt1[i], dt2[i], dt3[i], dt4[i]];
-                let at = interp_4pt_pm(&xx, &yt).unwrap_or([0.0; 3]);
+                let at = interp_4pt_pm(&xx, &yt).map_err(map_pm_err)?;
                 d_dln_t[i] = yt[1] + dx * (at[0] + dx * (at[1] + dx * at[2]));
 
                 let yr = [dr1[i], dr2[i], dr3[i], dr4[i]];
-                let ar = interp_4pt_pm(&xx, &yr).unwrap_or([0.0; 3]);
+                let ar = interp_4pt_pm(&xx, &yr).map_err(map_pm_err)?;
                 d_dlnd[i] = yr[1] + dx * (ar[0] + dx * (ar[1] + dx * ar[2]));
             }
         } else {

@@ -150,7 +150,7 @@ for step_idx in range(1, 51):
 
 ## 6. Replacing `PGSTAR` Windows with `flexmesa.plotting`
 
-Upstream MESA's `PGSTAR` module (`~26,000` lines of Fortran wrapping PGPLOT and X11) renders live diagnostic dashboards during a terminal run. `FlexMESA` replaces `PGSTAR` with [`flexmesa.plotting`](../api/index.md) (`from flexmesa import plotting as plot`), which produces publication-styled `matplotlib` figures (`300 dpi`, Computer Modern math typography, inward ticks on all four sides, and colorblind-safe Okabe-Ito palettes) directly from NumPy or JAX arrays:
+Upstream MESA's `PGSTAR` module (`~26,000` lines of Fortran wrapping PGPLOT and X11) renders live diagnostic dashboards during a terminal run. `FlexMESA` validates `&pgstar`, `&pgbinary`, and `&astero_pgstar_controls` keys against upstream `.defaults` schemas (failing loudly on unknown or misspelled keys while treating valid plotting keys and `pgstar_flag` / `pgbinary_flag` as headless no-ops, matching upstream `USE_PGSTAR = NO`), and replaces live X11 windows with [`flexmesa.plotting`](../api/index.md) (`from flexmesa import plotting as plot`), which produces publication-styled `matplotlib` figures (`300 dpi`, Computer Modern math typography, inward ticks on all four sides, and colorblind-safe Okabe-Ito palettes) directly from NumPy or JAX arrays:
 
 | `PGSTAR` Window | `flexmesa.plotting` Function |
 | :--- | :--- |

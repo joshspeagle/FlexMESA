@@ -104,8 +104,9 @@ fn test_all_seven_pulsation_exporters_and_double_point_atmosphere_options() {
 
     // Unified dispatcher (`export_pulse_by_format`)
     for fmt_name in ["gyre", "fgong", "osc", "gsm", "saio", "cafein", "gr1d"] {
-        assert!(export_pulse_by_format(&model, fmt_name, true).is_some());
+        assert!(export_pulse_by_format(&model, fmt_name, true).is_ok());
     }
+    assert!(export_pulse_by_format(&model, "invalid_fmt", true).is_err());
 }
 
 #[test]

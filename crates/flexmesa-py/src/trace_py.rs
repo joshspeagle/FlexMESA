@@ -5,14 +5,15 @@
 use std::collections::HashSet;
 use std::path::Path;
 
-use flexmesa_astero::run_astero_test_suite_case_with_logs;
+use flexmesa_astero::run_astero_test_suite_case_with_options;
 use flexmesa_binary::{
-    run_binary_test_suite_case_with_logs, BinaryLogsOptions,
+    run_binary_test_suite_case_with_options, BinaryLogsOptions,
 };
 use flexmesa_star::inlist_runner::{
-    run_test_suite_case_with_logs, StarLogsOptions,
+    run_test_suite_case_with_options, StarLogsOptions,
 };
 use flexmesa_star::mesa_log_reader::{read_mesa_log_file, MesaHeaderValue};
+use flexmesa_star::InlistLoadOptions;
 use numpy::PyArray1;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -54,7 +55,8 @@ where
     respect_intervals=false,
     write_profiles=false,
     is_logs_dir=true,
-    numerics_mode=None
+    numerics_mode=None,
+    allow_unsupported_controls=false
 ))]
 #[allow(clippy::too_many_arguments)]
 pub fn trace_star_case<'py>(
@@ -67,8 +69,12 @@ pub fn trace_star_case<'py>(
     write_profiles: bool,
     is_logs_dir: bool,
     numerics_mode: Option<&str>,
+    allow_unsupported_controls: bool,
 ) -> PyResult<Bound<'py, PyDict>> {
     let mode = parse_opt_mode(numerics_mode)?;
+    let load_opts = InlistLoadOptions {
+        allow_unsupported_controls,
+    };
     let rep = py
         .detach(|| {
             run_in_opt_mode(mode, || {
@@ -78,12 +84,13 @@ pub fn trace_star_case<'py>(
                     respect_intervals,
                     write_profiles,
                 );
-                run_test_suite_case_with_logs(
+                run_test_suite_case_with_options(
                     Path::new(case_dir),
                     skip_optional,
                     max_steps_per_stage,
                     false,
                     opts,
+                    load_opts,
                 )
             })
         })
@@ -100,7 +107,8 @@ pub fn trace_star_case<'py>(
     max_steps=None,
     respect_intervals=false,
     is_logs_dir=true,
-    numerics_mode=None
+    numerics_mode=None,
+    allow_unsupported_controls=false
 ))]
 pub fn trace_binary_case<'py>(
     py: Python<'py>,
@@ -110,8 +118,12 @@ pub fn trace_binary_case<'py>(
     respect_intervals: bool,
     is_logs_dir: bool,
     numerics_mode: Option<&str>,
+    allow_unsupported_controls: bool,
 ) -> PyResult<Bound<'py, PyDict>> {
     let mode = parse_opt_mode(numerics_mode)?;
+    let load_opts = InlistLoadOptions {
+        allow_unsupported_controls,
+    };
     let rep = py
         .detach(|| {
             run_in_opt_mode(mode, || {
@@ -132,10 +144,11 @@ pub fn trace_binary_case<'py>(
                         write_star_logs: false,
                     }
                 };
-                run_binary_test_suite_case_with_logs(
+                run_binary_test_suite_case_with_options(
                     Path::new(case_dir),
                     max_steps,
                     opts,
+                    load_opts,
                 )
             })
         })
@@ -154,7 +167,8 @@ pub fn trace_binary_case<'py>(
     respect_intervals=false,
     write_profiles=false,
     is_logs_dir=true,
-    numerics_mode=None
+    numerics_mode=None,
+    allow_unsupported_controls=false
 ))]
 #[allow(clippy::too_many_arguments)]
 pub fn trace_astero_case<'py>(
@@ -167,8 +181,12 @@ pub fn trace_astero_case<'py>(
     write_profiles: bool,
     is_logs_dir: bool,
     numerics_mode: Option<&str>,
+    allow_unsupported_controls: bool,
 ) -> PyResult<Bound<'py, PyDict>> {
     let mode = parse_opt_mode(numerics_mode)?;
+    let load_opts = InlistLoadOptions {
+        allow_unsupported_controls,
+    };
     let rep = py
         .detach(|| {
             run_in_opt_mode(mode, || {
@@ -178,12 +196,13 @@ pub fn trace_astero_case<'py>(
                     respect_intervals,
                     write_profiles,
                 );
-                run_astero_test_suite_case_with_logs(
+                run_astero_test_suite_case_with_options(
                     Path::new(case_dir),
                     skip_optional,
                     max_steps_per_stage,
                     false,
                     opts,
+                    load_opts,
                 )
             })
         })

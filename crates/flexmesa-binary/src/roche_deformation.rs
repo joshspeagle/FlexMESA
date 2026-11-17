@@ -14,7 +14,8 @@ use std::sync::{Arc, OnceLock};
 
 use flexmesa_const::PI;
 use flexmesa_star::{
-    TidalDeformationHandle, TidalDeformationHook, TidalShellDeformation,
+    StarError, TidalDeformationHandle, TidalDeformationHook,
+    TidalShellDeformation,
 };
 
 use crate::orbit::eval_rlobe;
@@ -37,29 +38,62 @@ pub struct RocheTable2D {
 impl RocheTable2D {
     /// Parses a single MESA `roche_data/*_data.txt` file (`setup_interpolator`
     /// in `binary_roche_deformation.f90:89-129`).
-    pub fn parse_ascii(text: &str) -> Option<Self> {
+    pub fn parse_ascii(text: &str) -> Result<Self, StarError> {
         let mut tokens = text.split_whitespace();
-        let nx: usize = tokens.next()?.parse().ok()?;
+        let nx_tok = tokens.next().ok_or_else(|| {
+            StarError::IoError(String::from("empty Roche deformation table"))
+        })?;
+        let nx: usize = nx_tok.parse().map_err(|e| {
+            StarError::IoError(format!(
+                "invalid nx '{nx_tok}' in Roche table: {e}"
+            ))
+        })?;
         if nx < 2 {
-            return None;
+            return Err(StarError::IoError(format!(
+                "invalid nx={nx} in Roche table (must be >= 2)"
+            )));
         }
         let mut xs = Vec::with_capacity(nx);
         for _ in 0..nx {
-            xs.push(parse_float_token(tokens.next()?)?);
+            let tok = tokens.next().ok_or_else(|| {
+                StarError::IoError(String::from(
+                    "truncated x-grid in Roche table",
+                ))
+            })?;
+            xs.push(parse_float_token(tok)?);
         }
-        let ny: usize = tokens.next()?.parse().ok()?;
+        let ny_tok = tokens.next().ok_or_else(|| {
+            StarError::IoError(String::from("missing ny in Roche table"))
+        })?;
+        let ny: usize = ny_tok.parse().map_err(|e| {
+            StarError::IoError(format!(
+                "invalid ny '{ny_tok}' in Roche table: {e}"
+            ))
+        })?;
         if ny < 2 {
-            return None;
+            return Err(StarError::IoError(format!(
+                "invalid ny={ny} in Roche table (must be >= 2)"
+            )));
         }
         let mut ys = Vec::with_capacity(ny);
         for _ in 0..ny {
-            ys.push(parse_float_token(tokens.next()?)?);
+            let tok = tokens.next().ok_or_else(|| {
+                StarError::IoError(String::from(
+                    "truncated y-grid in Roche table",
+                ))
+            })?;
+            ys.push(parse_float_token(tok)?);
         }
         let mut values = Vec::with_capacity(nx * ny);
         for _ in 0..(nx * ny) {
-            values.push(parse_float_token(tokens.next()?)?);
+            let tok = tokens.next().ok_or_else(|| {
+                StarError::IoError(String::from(
+                    "truncated values grid in Roche table",
+                ))
+            })?;
+            values.push(parse_float_token(tok)?);
         }
-        Some(Self { xs, ys, values })
+        Ok(Self { xs, ys, values })
     }
 
     /// Evaluates the 2D Steffen piecewise-monotonic cubic interpolant at
@@ -102,21 +136,23 @@ impl RocheTable2D {
     }
 }
 
-fn parse_float_token(tok: &str) -> Option<f64> {
+fn parse_float_token(tok: &str) -> Result<f64, StarError> {
     if tok.eq_ignore_ascii_case("-inf") || tok.eq_ignore_ascii_case("-infinity")
     {
-        return Some(f64::NEG_INFINITY);
+        return Ok(f64::NEG_INFINITY);
     }
     if tok.eq_ignore_ascii_case("inf")
         || tok.eq_ignore_ascii_case("+inf")
         || tok.eq_ignore_ascii_case("infinity")
     {
-        return Some(f64::INFINITY);
+        return Ok(f64::INFINITY);
     }
     if tok.eq_ignore_ascii_case("nan") {
-        return Some(f64::NAN);
+        return Ok(f64::NAN);
     }
-    tok.parse::<f64>().ok()
+    tok.parse::<f64>().map_err(|e| {
+        StarError::IoError(format!("invalid float '{tok}' in Roche table: {e}"))
+    })
 }
 
 fn steffen_slope_at(xs: &[f64], ys: &[f64], k: usize) -> f64 {
@@ -169,14 +205,14 @@ pub struct RocheDeformationTables {
     pub psi: RocheTable2D,
 }
 
-static GLOBAL_ROCHE_TABLES: OnceLock<Option<RocheDeformationTables>> =
+static GLOBAL_ROCHE_TABLES: OnceLock<Result<RocheDeformationTables, String>> =
     OnceLock::new();
 
-fn resolve_roche_data_dir() -> Option<PathBuf> {
+fn resolve_roche_data_dir() -> Result<PathBuf, StarError> {
     if let Some(mesa_dir) = std::env::var_os("MESA_DIR") {
         let p = PathBuf::from(mesa_dir).join("data").join("roche_data");
         if p.is_dir() {
-            return Some(p);
+            return Ok(p);
         }
     }
     if let Some(xdg) = std::env::var_os("XDG_CACHE_HOME") {
@@ -186,7 +222,7 @@ fn resolve_roche_data_dir() -> Option<PathBuf> {
             .join("data")
             .join("roche_data");
         if p.is_dir() {
-            return Some(p);
+            return Ok(p);
         }
     }
     if let Some(home) = std::env::var_os("HOME") {
@@ -197,20 +233,33 @@ fn resolve_roche_data_dir() -> Option<PathBuf> {
             .join("data")
             .join("roche_data");
         if p.is_dir() {
-            return Some(p);
+            return Ok(p);
         }
     }
-    None
+    Err(StarError::IoError(String::from(
+        "roche_data directory not found under $MESA_DIR/data/roche_data or $HOME/.cache/flexmesa/mesa_test_inputs/data/roche_data",
+    )))
 }
 
 impl RocheDeformationTables {
     /// Loads the four Roche distortion tables from `roche_data_dir`.
-    pub fn from_dir(roche_data_dir: &Path) -> Option<Self> {
-        let load = |name: &str| -> Option<RocheTable2D> {
-            let text = fs::read_to_string(roche_data_dir.join(name)).ok()?;
-            RocheTable2D::parse_ascii(&text)
+    pub fn from_dir(roche_data_dir: &Path) -> Result<Self, StarError> {
+        let load = |name: &str| -> Result<RocheTable2D, StarError> {
+            let path = roche_data_dir.join(name);
+            let text = fs::read_to_string(&path).map_err(|e| {
+                StarError::IoError(format!(
+                    "failed to read Roche table '{}': {e}",
+                    path.display()
+                ))
+            })?;
+            RocheTable2D::parse_ascii(&text).map_err(|e| {
+                StarError::IoError(format!(
+                    "failed to parse Roche table '{}': {e}",
+                    path.display()
+                ))
+            })
         };
-        Some(Self {
+        Ok(Self {
             fp: load("fp_data.txt")?,
             ft: load("ft_data.txt")?,
             irot: load("irot_data.txt")?,
@@ -219,13 +268,12 @@ impl RocheDeformationTables {
     }
 
     /// Returns the lazily initialized global [`RocheDeformationTables`].
-    pub fn global() -> Option<&'static Self> {
-        GLOBAL_ROCHE_TABLES
-            .get_or_init(|| {
-                let dir = resolve_roche_data_dir()?;
-                Self::from_dir(&dir)
-            })
-            .as_ref()
+    pub fn global() -> Result<&'static Self, StarError> {
+        let res = GLOBAL_ROCHE_TABLES.get_or_init(|| {
+            let dir = resolve_roche_data_dir().map_err(|e| e.to_string())?;
+            Self::from_dir(&dir).map_err(|e| e.to_string())
+        });
+        res.as_ref().map_err(|msg| StarError::IoError(msg.clone()))
     }
 
     /// Evaluates $f_P(\log_{10} q, a_r)$ (`eval_fp` in `binary_roche_deformation.f90:133-146`).
@@ -327,6 +375,7 @@ pub fn eval_synchronicity_switch(
 /// Binary orbital parameters bound to a stellar component for [`TidalDeformationHook`].
 #[derive(Debug, Clone)]
 pub struct BinaryTidalDeformationHook {
+    tables: &'static RocheDeformationTables,
     /// Log mass ratio $\log_{10}(M_{\mathrm{other}} / M_{\mathrm{this}})$.
     pub lq: f64,
     /// Roche-lobe radius $R_L$ of this star in $\mathrm{cm}$.
@@ -344,7 +393,6 @@ pub struct BinaryTidalDeformationHook {
 impl BinaryTidalDeformationHook {
     /// Constructs a [`TidalDeformationHandle`] for a binary component when
     /// `$MESA_DIR/data/roche_data` tables are available.
-    #[must_use]
     pub fn new_handle(
         m_this_g: f64,
         m_other_g: f64,
@@ -354,8 +402,8 @@ impl BinaryTidalDeformationHook {
         f_sync_switch_from_rot_defor: f64,
         f_sync_switch_width: f64,
         f_sync_switch_lim: f64,
-    ) -> Option<TidalDeformationHandle> {
-        let _ = RocheDeformationTables::global()?;
+    ) -> Result<TidalDeformationHandle, StarError> {
+        let tables = RocheDeformationTables::global()?;
         let m1 = m_this_g.max(1.0e20);
         let m2 = m_other_g.max(1.0e20);
         let r_roche_cm = if rl_this_cm > 0.0 {
@@ -364,7 +412,8 @@ impl BinaryTidalDeformationHook {
             eval_rlobe(m1, m2, separation_cm.max(1.0e5))
         };
         let lq = flexmesa_math::log10(m2 / m1);
-        Some(TidalDeformationHandle(Arc::new(Self {
+        Ok(TidalDeformationHandle(Arc::new(Self {
+            tables,
             lq,
             r_roche_cm: r_roche_cm.max(1.0e5),
             period_sec,
@@ -382,17 +431,7 @@ impl TidalDeformationHook for BinaryTidalDeformationHook {
         r_cm: f64,
         omega: f64,
     ) -> TidalShellDeformation {
-        let Some(tables) = RocheDeformationTables::global() else {
-            return TidalShellDeformation {
-                fp: 1.0,
-                d_fp_dlnr: 0.0,
-                ft: 1.0,
-                d_ft_dlnr: 0.0,
-                i_rot: (2.0 / 3.0) * r_cm * r_cm,
-                d_irot_dlnr: (4.0 / 3.0) * r_cm * r_cm,
-                f_switch: 0.0,
-            };
-        };
+        let tables = self.tables;
         let ar = (r_cm / self.r_roche_cm).max(0.0);
         let (fp, d_fp_dlnr, ft, d_ft_dlnr) = tables.roche_fp_ft(self.lq, ar);
         let (i_rot, d_irot_dlnr) = tables.roche_irot(self.lq, ar, r_cm);

@@ -148,21 +148,21 @@ fn test_rsp_lina_and_steffen_edges_match_mesa_26_4_1_5m_reference() {
     };
     ctrl.rsp.t_anchor_tolerance = 1.0e-6;
     ctrl.rsp.t_inner_tolerance = 1.0e-5;
-    ctrl.x_ctrl[1] = 100.0;
-    ctrl.x_ctrl[2] = 3.76;
-    ctrl.x_ctrl[3] = 4.5;
-    ctrl.x_ctrl[4] = 3.83;
-    ctrl.x_ctrl[5] = 2.4;
-    ctrl.x_ctrl[6] = 3.65;
-    ctrl.x_ctrl[7] = 4.5;
-    ctrl.x_ctrl[8] = 3.77;
-    ctrl.x_ctrl[9] = 2.4;
-    ctrl.x_integer_ctrl[1] = 6;
-    ctrl.x_integer_ctrl[2] = 1;
-    ctrl.x_integer_ctrl[3] = 2;
-    ctrl.x_integer_ctrl[4] = 4;
-    ctrl.x_integer_ctrl[5] = 5;
-    ctrl.x_character_ctrl[2] = String::from("blue_edge_5M_A.data");
+    ctrl.x_ctrl[0] = 100.0;
+    ctrl.x_ctrl[1] = 3.76;
+    ctrl.x_ctrl[2] = 4.5;
+    ctrl.x_ctrl[3] = 3.83;
+    ctrl.x_ctrl[4] = 2.4;
+    ctrl.x_ctrl[5] = 3.65;
+    ctrl.x_ctrl[6] = 4.5;
+    ctrl.x_ctrl[7] = 3.77;
+    ctrl.x_ctrl[8] = 2.4;
+    ctrl.x_integer_ctrl[0] = 6;
+    ctrl.x_integer_ctrl[1] = 1;
+    ctrl.x_integer_ctrl[2] = 2;
+    ctrl.x_integer_ctrl[3] = 4;
+    ctrl.x_integer_ctrl[4] = 5;
+    ctrl.x_character_ctrl[1] = String::from("blue_edge_5M_A.data");
 
     let rep = eval_rsp_2nd_crossing_with_controls(
         &tmp_dir,
@@ -261,20 +261,20 @@ fn test_rsp_check_2nd_crossing_on_7m_mesa_test_suite() {
     ctrl.rsp.gammar = 1.0;
     ctrl.rsp.t_anchor_tolerance = 1.0e-6;
     ctrl.rsp.t_inner_tolerance = 1.0e-5;
-    ctrl.x_ctrl[1] = 100.0;
-    ctrl.x_ctrl[2] = 3.76;
-    ctrl.x_ctrl[3] = 4.5;
-    ctrl.x_ctrl[4] = 3.83;
-    ctrl.x_ctrl[5] = 2.4;
-    ctrl.x_ctrl[6] = 3.65;
-    ctrl.x_ctrl[7] = 4.5;
-    ctrl.x_ctrl[8] = 3.77;
-    ctrl.x_ctrl[9] = 2.4;
-    ctrl.x_integer_ctrl[1] = 6;
-    ctrl.x_integer_ctrl[2] = 1;
-    ctrl.x_integer_ctrl[3] = 2;
-    ctrl.x_integer_ctrl[4] = 4;
-    ctrl.x_integer_ctrl[5] = 5;
+    ctrl.x_ctrl[0] = 100.0;
+    ctrl.x_ctrl[1] = 3.76;
+    ctrl.x_ctrl[2] = 4.5;
+    ctrl.x_ctrl[3] = 3.83;
+    ctrl.x_ctrl[4] = 2.4;
+    ctrl.x_ctrl[5] = 3.65;
+    ctrl.x_ctrl[6] = 4.5;
+    ctrl.x_ctrl[7] = 3.77;
+    ctrl.x_ctrl[8] = 2.4;
+    ctrl.x_integer_ctrl[0] = 6;
+    ctrl.x_integer_ctrl[1] = 1;
+    ctrl.x_integer_ctrl[2] = 2;
+    ctrl.x_integer_ctrl[3] = 4;
+    ctrl.x_integer_ctrl[4] = 5;
 
     let rep = eval_rsp_2nd_crossing_with_controls(
         &case_dir,

@@ -10,8 +10,8 @@ use flexmesa_chem::{
 use flexmesa_const::CRAD;
 use flexmesa_eos::{
     eos_dt_get_from_weights_with_tables, CmsTableSet, EosDtTableSet,
-    EosEvalOutput, HelmTable, I_CHI_RHO, I_CHI_T, I_CP, I_ETA, I_GAMMA1,
-    I_GRAD_AD, I_LN_E, I_LN_FREE_E, I_LN_PGAS,
+    EosEvalOutput, I_CHI_RHO, I_CHI_T, I_CP, I_ETA, I_GAMMA1, I_GRAD_AD,
+    I_LN_E, I_LN_FREE_E, I_LN_PGAS,
 };
 use flexmesa_kap::get_kap_results;
 
@@ -196,7 +196,7 @@ impl RspChemCache {
         log_t: f64,
     ) -> Result<EosEvalOutput, StarError> {
         eos_dt_get_from_weights_with_tables(
-            HelmTable::builtin(),
+            crate::micro::builtin_helm_table()?,
             EosDtTableSet::builtin(),
             CmsTableSet::builtin(),
             self.x,
@@ -264,7 +264,8 @@ pub fn compute_standard_metals_xa(
         isos.push(iso);
     }
 
-    let scale = SolarScale::from_id(initial_zfracs).unwrap_or(SolarScale::Gs98);
+    let scale = SolarScale::from_id(initial_zfracs)
+        .map_err(|e| StarError::InvalidInput(e.to_string()))?;
     let zfrac = solar_element_zfrac(scale, catalog);
     let jskip = dump_missing_into_heaviest.then(|| {
         let (mut wmax, mut best) = (-1.0_f64, 0_usize);

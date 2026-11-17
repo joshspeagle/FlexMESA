@@ -10,9 +10,14 @@
 //!    rejection of unknown controls, scalar indexing, and type mismatches.
 //! 4. Property-based round-trip invariants via `proptest`.
 
+use std::collections::HashSet;
+
 use flexmesa_schema::{
-    parse_columns_text, parse_control_value, parse_defaults_text,
-    parse_namelist_text, validate_namelist_block, ControlType, ControlValue,
+    is_headless_plotting_section, is_include_key,
+    is_known_upstream_only_section, parse_columns_text, parse_control_value,
+    parse_defaults_text, parse_namelist_text, upstream_section_keys,
+    validate_namelist_block, ControlType, ControlValidationReport,
+    ControlValue, SchemaError,
 };
 use proptest::prelude::*;
 
@@ -139,4 +144,107 @@ proptest! {
         let parsed_bool = parse_control_value(bool_str, 1).unwrap();
         prop_assert_eq!(parsed_bool, ControlValue::Logical(bool_val));
     }
+}
+
+#[test]
+fn test_headless_plotting_validation_rejects_typos_and_records_keys() {
+    let mut rep = ControlValidationReport::default();
+    rep.validate_headless_plotting_section(
+        "pgstar",
+        &["pgstar_interval", "hr_logt_min"],
+    );
+    rep.validate_headless_plotting_section("pgbinary", &["pgbinary_interval"]);
+    rep.validate_headless_plotting_section(
+        "astero_pgstar_controls",
+        &["echelle_delta_nu"],
+    );
+    assert!(rep.into_result(false).is_ok());
+    assert_eq!(rep.pgstar_plotting_keys.len(), 4);
+
+    let mut bad_rep = ControlValidationReport::default();
+    bad_rep.validate_headless_plotting_section("pgstar", &["grid7_file_cnt"]);
+    let err = bad_rep
+        .into_result(false)
+        .expect_err("misspelled &pgstar key must fail loudly");
+    assert!(matches!(err, SchemaError::ValidationError { .. }));
+    assert!(err.to_string().contains("grid7_file_cnt"));
+
+    let mut bad_pgbin = ControlValidationReport::default();
+    bad_pgbin.validate_headless_plotting_section(
+        "pgbinary",
+        &["not_a_real_pgbinary_key"],
+    );
+    assert!(bad_pgbin.into_result(true).is_err());
+
+    let mut inactive_pg = ControlValidationReport::default();
+    inactive_pg.validate_headless_plotting_section_with_active(
+        "pgstar",
+        &["pgstar_interval", "grid7_file_cnt"],
+        false,
+    );
+    assert!(inactive_pg.into_result(false).is_ok());
+    assert_eq!(inactive_pg.pgstar_plotting_keys.len(), 1);
+}
+
+#[test]
+fn test_validation_report_enforces_strict_controls_and_opt_out() {
+    let sup: HashSet<&str> = ["initial_mass"].into_iter().collect();
+    let unused: HashSet<&str> = ["x_logical_ctrl"].into_iter().collect();
+    let gui: HashSet<&str> = ["pgstar_flag"].into_iter().collect();
+
+    let mut rep_unimpl = ControlValidationReport::default();
+    rep_unimpl.validate_implemented_section(
+        "controls",
+        &["initial_mass", "terminal_interval"],
+        &sup,
+        &unused,
+        &gui,
+    );
+    let err_default = rep_unimpl
+        .into_result(false)
+        .expect_err("unimplemented control must fail by default");
+    assert!(err_default.to_string().contains("terminal_interval"));
+    assert!(rep_unimpl.into_result(true).is_ok());
+
+    let mut rep_unused = ControlValidationReport::default();
+    rep_unused.validate_implemented_section(
+        "controls",
+        &["x_logical_ctrl"],
+        &sup,
+        &unused,
+        &gui,
+    );
+    assert!(rep_unused.into_result(false).is_err());
+    assert!(rep_unused.into_result(true).is_ok());
+
+    let mut rep_unknown = ControlValidationReport::default();
+    rep_unknown.validate_implemented_section(
+        "controls",
+        &["not_in_mesa_26_4_1"],
+        &sup,
+        &unused,
+        &gui,
+    );
+    assert!(rep_unknown.into_result(false).is_err());
+    assert!(rep_unknown.into_result(true).is_err());
+
+    let mut rep_sec = ControlValidationReport::default();
+    rep_sec.unknown_sections.push(String::from("bogus_section"));
+    assert!(rep_sec.into_result(true).is_err());
+}
+
+#[test]
+fn test_include_keys_headless_sections_and_kap_user_keys_recognized() {
+    assert!(is_include_key("controls", "read_extra_controls_inlist1"));
+    assert!(is_include_key(
+        "astero_search_controls",
+        "extra_astero_search_inlist_name"
+    ));
+    assert!(is_headless_plotting_section("pgstar"));
+    assert!(is_headless_plotting_section("pgbinary"));
+    assert!(is_headless_plotting_section("astero_pgstar_controls"));
+    assert!(is_known_upstream_only_section("colors"));
+    assert!(upstream_section_keys("kap")
+        .expect("kap upstream keys")
+        .contains("user_kap_xs"));
 }

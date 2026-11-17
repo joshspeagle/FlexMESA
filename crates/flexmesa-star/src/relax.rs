@@ -13,7 +13,7 @@ use std::path::Path;
 use flexmesa_chem::NuclideCatalog;
 use flexmesa_const::{M_SUN, PI4, STANDARD_CGRAV};
 
-use crate::controls::StarJobControls;
+use crate::controls::{StarError, StarJobControls};
 use crate::model::StarModel;
 use crate::tier2_extras::apply_planetary_core;
 use crate::zams::parse_fortran_f64;
@@ -447,22 +447,83 @@ pub fn relax_irradiation_to_target(
 
 /// Applies external profile relaxation files (`angular_momentum.dat`, `entropy.dat`)
 /// when present in `case_dir` (`relax_composition_j_entropy` in `relax.f90`).
-pub fn relax_from_profile_files(model: &mut StarModel, case_dir: &Path) {
-    let parse_two_col = |path: &Path| -> Option<Vec<(f64, f64)>> {
-        let text = fs::read_to_string(path).ok()?;
-        let mut pts = Vec::new();
-        for line in text.lines() {
-            let toks: Vec<&str> = line.split_whitespace().collect();
-            if toks.len() == 2 {
-                if let (Ok(xq), Ok(v)) =
-                    (parse_fortran_f64(toks[0]), parse_fortran_f64(toks[1]))
-                {
-                    pts.push((xq, v));
+///
+/// # Errors
+/// Returns [`StarError::IoError`] if an existing relaxation file cannot be read
+/// or contains malformed rows.
+pub fn relax_from_profile_files(
+    model: &mut StarModel,
+    case_dir: &Path,
+) -> Result<(), StarError> {
+    let parse_two_col =
+        |path: &Path| -> Result<Option<Vec<(f64, f64)>>, StarError> {
+            if !path.exists() {
+                return Ok(None);
+            }
+            let text = fs::read_to_string(path).map_err(|e| {
+                StarError::IoError(format!(
+                    "failed to read profile relaxation file {}: {e}",
+                    path.display()
+                ))
+            })?;
+            let mut expected_pts: Option<usize> = None;
+            let mut saw_row = false;
+            let mut pts = Vec::new();
+            for (line_idx, raw_line) in text.lines().enumerate() {
+                let line = raw_line.trim();
+                if line.is_empty() || line.starts_with('#') {
+                    continue;
+                }
+                let toks: Vec<&str> = line.split_whitespace().collect();
+                if !saw_row && expected_pts.is_none() && toks.len() == 1 {
+                    let n = toks[0].parse::<usize>().map_err(|e| {
+                        StarError::IoError(format!(
+                            "invalid point count '{}' at {}:{}: {e}",
+                            toks[0],
+                            path.display(),
+                            line_idx + 1,
+                        ))
+                    })?;
+                    if n == 0 {
+                        return Err(StarError::IoError(format!(
+                            "zero point count at {}:{}",
+                            path.display(),
+                            line_idx + 1,
+                        )));
+                    }
+                    expected_pts = Some(n);
+                    continue;
+                }
+                if toks.len() != 2 {
+                    return Err(StarError::IoError(format!(
+                        "expected 2 columns at {}:{} (got {})",
+                        path.display(),
+                        line_idx + 1,
+                        toks.len()
+                    )));
+                }
+                saw_row = true;
+                let xq = parse_fortran_f64(toks[0])?;
+                let v = parse_fortran_f64(toks[1])?;
+                pts.push((xq, v));
+            }
+            if pts.is_empty() {
+                return Err(StarError::IoError(format!(
+                    "empty profile relaxation file {}",
+                    path.display()
+                )));
+            }
+            if let Some(n) = expected_pts {
+                if pts.len() != n {
+                    return Err(StarError::IoError(format!(
+                        "expected {n} rows in {} (got {})",
+                        path.display(),
+                        pts.len()
+                    )));
                 }
             }
-        }
-        (!pts.is_empty()).then_some(pts)
-    };
+            Ok(Some(pts))
+        };
     let interp = |pts: &[(f64, f64)], xq: f64| -> f64 {
         if xq <= pts[0].0 {
             return pts[0].1;
@@ -476,7 +537,7 @@ pub fn relax_from_profile_files(model: &mut StarModel, case_dir: &Path) {
         pts.last().map_or(0.0, |p| p.1)
     };
 
-    if let Some(pts) = parse_two_col(&case_dir.join("angular_momentum.dat")) {
+    if let Some(pts) = parse_two_col(&case_dir.join("angular_momentum.dat"))? {
         model.controls.rotation_flag = true;
         model.j_rot.resize(model.nz, 0.0);
         model.omega.resize(model.nz, 0.0);
@@ -488,7 +549,7 @@ pub fn relax_from_profile_files(model: &mut StarModel, case_dir: &Path) {
             model.omega[k] = j_val / i_rot;
         }
     }
-    if let Some(pts) = parse_two_col(&case_dir.join("entropy.dat")) {
+    if let Some(pts) = parse_two_col(&case_dir.join("entropy.dat"))? {
         for k in 0..model.nz {
             let s_val = interp(&pts, model.xq[k]);
             if s_val > 0.0 && s_val.is_finite() {
@@ -497,6 +558,7 @@ pub fn relax_from_profile_files(model: &mut StarModel, case_dir: &Path) {
             }
         }
     }
+    Ok(())
 }
 
 /// Settles a loaded `.mod` file after initial mass or `tau_factor` relaxation
@@ -540,12 +602,12 @@ pub(crate) fn settle_relaxed_loaded_model(
     for dt_yr in [100.0, 10.0, 1.0, 0.1, 1.0e-2, 1.0e-3, 1.0e-4] {
         model.dt = dt_yr * flexmesa_const::SECYER;
         model.dt_next = model.dt;
-        let _ = crate::evolve::star_evolve_step(
+        crate::evolve::star_evolve_step(
             model,
             false,
             model.controls.op_split_burn,
             true,
-        );
+        )?;
     }
 
     (
@@ -573,7 +635,7 @@ pub(crate) fn settle_relaxed_loaded_model(
     model.aux.total_energy = etot;
     crate::core_boundaries::snapshot_step_history_old(model);
     model.aux.step_hist.total_energy_old = etot;
-    model.save_start_values();
+    model.save_start_values()?;
     model.save_old_values();
     Ok(())
 }

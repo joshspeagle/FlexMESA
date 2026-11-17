@@ -538,23 +538,24 @@ def w5_eval_binary_rlof_batch(nz: int, parallel: bool = False) -> _ArrF64: ...
 def w5_eval_astero_seism(nz: int) -> float: ...
 
 def star_verify_photo_restart(model: Any, n_steps: int) -> tuple[int, int]: ...
-def star_parse_inlist_bundle(inlist_path: str) -> dict[str, Any]: ...
+def star_copy_cleaned_case(src_dir: str, dst_dir: str, suite: str = "star") -> None: ...  # noqa: E501
+def star_parse_inlist_bundle(inlist_path: str, allow_unsupported_controls: bool = False) -> dict[str, Any]: ...  # noqa: E501
 def star_parse_rn_stages(case_dir: str, skip_optional: bool = True) -> list[tuple[str, str, str]]: ...  # noqa: E501
-def star_run_test_suite_case(case_dir: str, skip_optional: bool = True, max_steps_per_stage: int | None = None, verify_restart: bool = False) -> dict[str, Any]: ...  # noqa: E501
+def star_run_test_suite_case(case_dir: str, skip_optional: bool = True, max_steps_per_stage: int | None = None, verify_restart: bool = False, allow_unsupported_controls: bool = False) -> dict[str, Any]: ...  # noqa: E501
 def star_tier1_cases() -> list[str]: ...
-def star_run_tier1_suite(mesa_dir: str, max_steps_per_stage: int | None = 15, verify_restart: bool = True) -> list[dict[str, Any]]: ...  # noqa: E501
+def star_run_tier1_suite(mesa_dir: str, max_steps_per_stage: int | None = 15, verify_restart: bool = True, allow_unsupported_controls: bool = False) -> list[dict[str, Any]]: ...  # noqa: E501
 def star_eval_starspot_luminosity(l_surf: float, f_spot: float, x_spot: float) -> tuple[float, float]: ...  # noqa: E501
 def star_eval_t_tau_gradr_factor(tau: float, scheme: str) -> tuple[float, float]: ...  # noqa: E501
 def star_eval_model_colors(model: Any) -> tuple[float, float, float, float, float, float, float, float, float, float]: ...  # noqa: E501
 def star_eval_solar_calibration_objective(log_l: float, log_r: float, zx_surf: float, target_zx: float) -> float: ...  # noqa: E501
 def star_nelder_mead_solar_step(simplex: list[tuple[list[float], float]]) -> tuple[float, float, float]: ...  # noqa: E501
 def star_tier2_cases() -> list[str]: ...
-def star_run_tier2_suite(mesa_dir: str, max_steps_per_stage: int | None = 15, verify_restart: bool = True) -> list[dict[str, Any]]: ...  # noqa: E501
+def star_run_tier2_suite(mesa_dir: str, max_steps_per_stage: int | None = 15, verify_restart: bool = True, allow_unsupported_controls: bool = False) -> list[dict[str, Any]]: ...  # noqa: E501
 def star_eval_planetary_irradiation_heating(model: Any, f_irr: float, col_depth_irr: float) -> tuple[list[float], float]: ...  # noqa: E501
 def star_eval_wd_phase_separation(model: Any, option: str = "CO") -> tuple[float, float]: ...  # noqa: E501
 def star_eval_conductive_flame_state(model: Any) -> tuple[float, float]: ...
 def star_tier3_cases() -> list[str]: ...
-def star_run_tier3_suite(mesa_dir: str, max_steps_per_stage: int | None = 15, verify_restart: bool = True) -> list[dict[str, Any]]: ...  # noqa: E501
+def star_run_tier3_suite(mesa_dir: str, max_steps_per_stage: int | None = 15, verify_restart: bool = True, allow_unsupported_controls: bool = False) -> list[dict[str, Any]]: ...  # noqa: E501
 def star_eval_hot_cool_blended_wind_mdot(model: Any) -> float: ...
 def star_eval_roche_gravity_darkening(omega_div_omega_crit: float) -> tuple[float, float, float, float]: ...  # noqa: E501
 def star_eval_spruit_tayler_dynamo_diagnostics(model: Any) -> list[float]: ...
@@ -575,27 +576,27 @@ def star_eval_astero_scaling_dnu_numax_uhz(model: Any) -> tuple[float, float]: .
 def star_eval_rsp_lina_modes(m_msun: float, l_lsun: float, teff_k: float, x_h: float = 0.73, z_metal: float = 0.007, n_modes: int = 3) -> list[dict[str, Any]]: ...  # noqa: E501
 def star_eval_rsp_2nd_crossing_edges(case_dir: str, delta_teff: float = 100.0, history_filename: str = "history_7M.data") -> tuple[float, float, float]: ...  # noqa: E501
 def star_build_rsp_envelope_model(m_msun: float = 4.165, l_lsun: float = 1438.8, teff_k: float = 6050.0, x_h: float = 0.73, z_metal: float = 0.007) -> Any: ...  # noqa: E501
-def star_run_tier4_star_suite(mesa_dir: str, skip_optional: bool = True, max_steps_per_stage: int | None = None, verify_restart: bool = True) -> list[dict[str, Any]]: ...  # noqa: E501
-def star_run_astero_test_suite_case(case_dir: str, skip_optional: bool = True, max_steps_per_stage: int | None = None, verify_restart: bool = True) -> dict[str, Any]: ...  # noqa: E501
-def star_run_astero_suite(mesa_dir: str, skip_optional: bool = True, max_steps_per_stage: int | None = None, verify_restart: bool = True) -> list[dict[str, Any]]: ...  # noqa: E501
-def star_run_tier4_suite(mesa_dir: str, skip_optional: bool = True, max_steps_per_stage: int | None = None, verify_restart: bool = True) -> list[dict[str, Any]]: ...  # noqa: E501
-def star_run_dev_cases_suite(mesa_dir: str, skip_optional: bool = True, max_steps_per_stage: int | None = None, verify_restart: bool = True) -> list[dict[str, Any]]: ...  # noqa: E501
+def star_run_tier4_star_suite(mesa_dir: str, skip_optional: bool = True, max_steps_per_stage: int | None = None, verify_restart: bool = True, allow_unsupported_controls: bool = False) -> list[dict[str, Any]]: ...  # noqa: E501
+def star_run_astero_test_suite_case(case_dir: str, skip_optional: bool = True, max_steps_per_stage: int | None = None, verify_restart: bool = True, allow_unsupported_controls: bool = False) -> dict[str, Any]: ...  # noqa: E501
+def star_run_astero_suite(mesa_dir: str, skip_optional: bool = True, max_steps_per_stage: int | None = None, verify_restart: bool = True, allow_unsupported_controls: bool = False) -> list[dict[str, Any]]: ...  # noqa: E501
+def star_run_tier4_suite(mesa_dir: str, skip_optional: bool = True, max_steps_per_stage: int | None = None, verify_restart: bool = True, allow_unsupported_controls: bool = False) -> list[dict[str, Any]]: ...  # noqa: E501
+def star_run_dev_cases_suite(mesa_dir: str, skip_optional: bool = True, max_steps_per_stage: int | None = None, verify_restart: bool = True, allow_unsupported_controls: bool = False) -> list[dict[str, Any]]: ...  # noqa: E501
 def star_tier5_star_case_names() -> list[str]: ...
 def star_all_active_star_case_names() -> list[str]: ...
 def star_eval_overshoot_dbl_exp(d0: float, delta_r: float, hp_bdy: float, f_ov1: float, f_ov2: float, d_ov_trans: float) -> float: ...  # noqa: E501
 def star_eval_grafener_kudritzki_wind_msun_yr(m_surf_g: float, l_surf_erg_s: float, r_surf_cm: float, t_surf_k: float, x_surf: float, z_surf: float, w_scale: float) -> float: ...  # noqa: E501
 def star_verify_step_redo_bit_parity(model: Any) -> bool: ...
-def star_run_tier5_star_suite(mesa_dir: str, skip_optional: bool = True, max_steps_per_stage: int | None = None, verify_restart: bool = True) -> list[dict[str, Any]]: ...  # noqa: E501
-def star_run_all_active_star_suite(mesa_dir: str, max_steps_per_stage: int | None = None, verify_restart: bool = True) -> list[dict[str, Any]]: ...  # noqa: E501
+def star_run_tier5_star_suite(mesa_dir: str, skip_optional: bool = True, max_steps_per_stage: int | None = None, verify_restart: bool = True, allow_unsupported_controls: bool = False) -> list[dict[str, Any]]: ...  # noqa: E501
+def star_run_all_active_star_suite(mesa_dir: str, max_steps_per_stage: int | None = None, verify_restart: bool = True, allow_unsupported_controls: bool = False) -> list[dict[str, Any]]: ...  # noqa: E501
 def binary_tier5_case_names() -> list[str]: ...
 def binary_eval_gr_expected_separation_rsun(a0_rsun: float, m1_msun: float, m2_msun: float, time_sec: float) -> float: ...  # noqa: E501
 def binary_eval_tauris_vdh_expected_separation_rsun(a0_rsun: float, q0: float, q: float, alpha: float, beta: float, delta: float, gamma: float) -> float: ...  # noqa: E501
 def binary_eval_brott_wind_msun_yr(l_surf_lsun: float, m_surf_msun: float, r_surf_rsun: float, t_surf_k: float, x_surf: float, y_surf: float, z_div_z_solar: float) -> float: ...  # noqa: E501
-def binary_run_test_suite_case(case_dir: str, max_steps_cap: int | None = None) -> dict[str, Any]: ...  # noqa: E501
-def binary_run_suite(mesa_dir: str, max_steps_cap: int | None = None) -> list[dict[str, Any]]: ...  # noqa: E501
-def trace_star_case(case_dir: str, out_target: str, max_steps_per_stage: int | None = None, skip_optional: bool = True, respect_intervals: bool = False, write_profiles: bool = False, is_logs_dir: bool = True, numerics_mode: str | None = None) -> dict[str, Any]: ...  # noqa: E501
-def trace_binary_case(case_dir: str, out_target: str, max_steps: int | None = None, respect_intervals: bool = False, is_logs_dir: bool = True, numerics_mode: str | None = None) -> dict[str, Any]: ...  # noqa: E501
-def trace_astero_case(case_dir: str, out_target: str, max_steps_per_stage: int | None = None, skip_optional: bool = True, respect_intervals: bool = False, write_profiles: bool = False, is_logs_dir: bool = True, numerics_mode: str | None = None) -> dict[str, Any]: ...  # noqa: E501
+def binary_run_test_suite_case(case_dir: str, max_steps_cap: int | None = None, allow_unsupported_controls: bool = False) -> dict[str, Any]: ...  # noqa: E501
+def binary_run_suite(mesa_dir: str, max_steps_cap: int | None = None, allow_unsupported_controls: bool = False) -> list[dict[str, Any]]: ...  # noqa: E501
+def trace_star_case(case_dir: str, out_target: str, max_steps_per_stage: int | None = None, skip_optional: bool = True, respect_intervals: bool = False, write_profiles: bool = False, is_logs_dir: bool = True, numerics_mode: str | None = None, allow_unsupported_controls: bool = False) -> dict[str, Any]: ...  # noqa: E501
+def trace_binary_case(case_dir: str, out_target: str, max_steps: int | None = None, respect_intervals: bool = False, is_logs_dir: bool = True, numerics_mode: str | None = None, allow_unsupported_controls: bool = False) -> dict[str, Any]: ...  # noqa: E501
+def trace_astero_case(case_dir: str, out_target: str, max_steps_per_stage: int | None = None, skip_optional: bool = True, respect_intervals: bool = False, write_profiles: bool = False, is_logs_dir: bool = True, numerics_mode: str | None = None, allow_unsupported_controls: bool = False) -> dict[str, Any]: ...  # noqa: E501
 def mesa_read_log_file(path: str) -> dict[str, Any]: ...
 
 # fmt: on

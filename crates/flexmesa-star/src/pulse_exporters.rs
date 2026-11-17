@@ -506,20 +506,25 @@ pub fn export_gr1d(model: &StarModel) -> String {
 /// Dispatches pulsation data export by format name (`"gyre"`, `"fgong"`,
 /// `"osc"`, `"gsm"`, `"saio"`, `"cafein"`, `"gr1d"`, case-insensitive;
 /// `star/private/pulse.f90`).
-#[must_use]
+///
+/// # Errors
+/// Returns [`crate::StarError::InvalidInput`] for an unrecognized format name.
 pub fn export_pulse_by_format(
     model: &StarModel,
     format: &str,
     add_center_point: bool,
-) -> Option<String> {
+) -> Result<String, crate::StarError> {
     match format.trim().to_ascii_lowercase().as_str() {
-        "gyre" => Some(export_gyre(model, add_center_point)),
-        "fgong" => Some(export_fgong(model, add_center_point)),
-        "osc" => Some(export_osc(model, add_center_point)),
-        "gsm" => Some(export_gsm(model, add_center_point)),
-        "saio" => Some(export_saio(model, true, false)),
-        "cafein" => Some(export_cafein(model, add_center_point, true, false)),
-        "gr1d" => Some(export_gr1d(model)),
-        _ => None,
+        "gyre" => Ok(export_gyre(model, add_center_point)),
+        "fgong" => Ok(export_fgong(model, add_center_point)),
+        "osc" => Ok(export_osc(model, add_center_point)),
+        "gsm" => Ok(export_gsm(model, add_center_point)),
+        "saio" => Ok(export_saio(model, true, false)),
+        "cafein" => Ok(export_cafein(model, add_center_point, true, false)),
+        "gr1d" => Ok(export_gr1d(model)),
+        other => Err(crate::StarError::InvalidInput(format!(
+            "unrecognized pulse_data_format '{other}' \
+             (expected one of gyre, fgong, osc, gsm, saio, cafein, gr1d)"
+        ))),
     }
 }

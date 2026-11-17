@@ -178,6 +178,7 @@ dependencies = [
  "flexmesa-const",
  "flexmesa-math",
  "flexmesa-num",
+ "flexmesa-schema",
  "flexmesa-star",
 ]
 

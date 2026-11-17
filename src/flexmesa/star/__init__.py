@@ -37,6 +37,7 @@ TIER5_STAR_CASES = e2e_tier45.TIER5_STAR_CASES
 build_rsp_envelope_model = e2e_tier45.build_rsp_envelope_model
 compute_rsp2_uq_face_jax = jax_rsp.compute_rsp2_uq_face_jax
 compute_staggered_grid_jax = jax_kernels.compute_staggered_grid_jax
+copy_cleaned_case = e2e.copy_cleaned_case
 eval_astero_scaling_dnu_numax_uhz = e2e_tier45.eval_astero_scaling_dnu_numax_uhz
 eval_burgers_velocities_jax = jax_diffusion_rot.eval_burgers_velocities_jax
 eval_caplan_ocp_dstar_jax = jax_diffusion_rot.eval_caplan_ocp_dstar_jax
@@ -123,6 +124,7 @@ __all__ = [
     "build_rsp_envelope_model",
     "compute_rsp2_uq_face_jax",
     "compute_staggered_grid_jax",
+    "copy_cleaned_case",
     "e2e",
     "e2e_tier45",
     "eval_astero_scaling_dnu_numax_uhz",

@@ -327,6 +327,7 @@ fn test_kapcn_and_multi_zone_batch_evaluation() {
 
 fn count_fixed_slices(prefix: &str) -> usize {
     kap_tables()
+        .expect("kap_tables failed")
         .fixed_sets
         .iter()
         .find(|s| s.prefix == prefix)
@@ -339,7 +340,7 @@ fn count_fixed_slices(prefix: &str) -> usize {
 
 #[test]
 fn test_kap_full_tables_all_slices_loaded_and_distinct() {
-    let tables = kap_tables();
+    let tables = kap_tables().expect("kap_tables failed");
     if tables.fixed_sets.len() < 8 {
         for (expected, min_slices) in
             [("gs98", 48), ("lowT_fa05_gs98", 28), ("a09", 16)]

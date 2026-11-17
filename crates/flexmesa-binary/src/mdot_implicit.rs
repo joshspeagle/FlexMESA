@@ -6,6 +6,7 @@
 
 use flexmesa_const::{MSUN, SECYER};
 use flexmesa_math::pow;
+use flexmesa_star::StarError;
 
 use crate::inlist::BinaryInlistControls;
 
@@ -240,14 +241,23 @@ pub struct ImplicitMdotSolver {
 
 impl ImplicitMdotSolver {
     /// Constructs a new per-step implicit solver from [`BinaryInlistControls`].
-    #[must_use]
     pub fn from_controls(
         ctrl: &BinaryInlistControls,
         change_factor: f64,
-    ) -> Self {
-        let use_quad = !ctrl.solver_type.eq_ignore_ascii_case("bisect");
+    ) -> Result<Self, StarError> {
+        let solver_low = ctrl.solver_type.trim().to_ascii_lowercase();
+        let use_quad = match solver_low.as_str() {
+            "cubic" | "both" => true,
+            "bisect" => false,
+            _ => {
+                return Err(StarError::InvalidInput(format!(
+                    "unrecognized binary solver_type '{}' (expected 'cubic', 'bisect', or 'both')",
+                    ctrl.solver_type
+                )));
+            }
+        };
         let is_contact = ctrl.mdot_scheme.eq_ignore_ascii_case("contact");
-        Self::new(
+        Ok(Self::new(
             ctrl.implicit_scheme_tolerance,
             ctrl.implicit_scheme_tiny_factor,
             change_factor,
@@ -257,7 +267,7 @@ impl ImplicitMdotSolver {
             ctrl.starting_mdot,
             use_quad,
             is_contact,
-        )
+        ))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -312,22 +322,28 @@ impl ImplicitMdotSolver {
         gap_donor: f64,
         gap_accretor: f64,
         q_accretor_over_donor: f64,
-    ) -> ImplicitStepAction {
+    ) -> Result<ImplicitStepAction, StarError> {
         let helper = ImplicitRlofSolver {
             tolerance: self.tolerance,
             ..ImplicitRlofSolver::default()
         };
-        let is_roche = scheme.eq_ignore_ascii_case("roche_lobe");
-        let is_contact = scheme.eq_ignore_ascii_case("contact");
-
+        let scheme_low = scheme.trim().to_ascii_lowercase();
+        let is_roche = scheme_low == "roche_lobe";
+        let is_contact = scheme_low == "contact";
         if !is_roche && !is_contact {
+            if scheme_low != "ritter" && scheme_low != "kolb" {
+                return Err(StarError::InvalidInput(format!(
+                    "unsupported implicit mdot_scheme '{scheme}' \
+                     (expected 'roche_lobe', 'contact', 'Ritter', or 'Kolb')"
+                )));
+            }
             if explicit_mdot > 0.0 {
-                return ImplicitStepAction::Converged(0.0);
+                return Ok(ImplicitStepAction::Converged(0.0));
             }
             if explicit_mdot.abs() <= self.min_mdot_for_implicit_cgs
                 && mdot_current.abs() <= self.min_mdot_for_implicit_cgs
             {
-                return ImplicitStepAction::Converged(mdot_current);
+                return Ok(ImplicitStepAction::Converged(mdot_current));
             }
             let f = if explicit_mdot != 0.0 {
                 (explicit_mdot - mdot_current) / explicit_mdot
@@ -344,20 +360,20 @@ impl ImplicitMdotSolver {
                 self.have_lo = true;
                 self.mdot_lo = 0.0;
                 self.f_lo = f;
-                return if max_tries <= 1 {
+                return Ok(if max_tries <= 1 {
                     ImplicitStepAction::ExceededMaxTries
                 } else {
                     ImplicitStepAction::TryNextMdot(seed)
-                };
+                });
             }
-            return self.record_and_propose(
+            return Ok(self.record_and_propose(
                 num_tries,
                 max_tries,
                 mdot_current,
                 f,
                 false,
                 false,
-            );
+            ));
         }
 
         let (f, trial_use_sum, detach_allowed) = if is_contact {
@@ -378,14 +394,14 @@ impl ImplicitMdotSolver {
         } else {
             (helper.roche_lobe_objective(gap_donor), false, true)
         };
-        self.record_and_propose(
+        Ok(self.record_and_propose(
             num_tries,
             max_tries,
             mdot_current,
             f,
             trial_use_sum,
             detach_allowed,
-        )
+        ))
     }
 
     /// Flip sign of bracket endpoints after a mid-step `"contact"` donor switch

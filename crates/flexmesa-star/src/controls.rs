@@ -317,17 +317,17 @@ pub struct StarControls {
     pub use_other_kap: bool,
     /// Enable custom `other_surface_PT` hook (`use_other_surface_PT`).
     pub use_other_surface_pt: bool,
-    /// Enable custom `other_overshooting_scheme` hook (`use_other_overshooting_scheme`).
+    /// Enable custom `other_overshooting` hook (`use_other_overshooting`).
     pub use_other_overshooting_scheme: bool,
     /// Enable custom `other_momentum_implicit` hook (`use_other_momentum_implicit`).
     pub use_other_momentum_implicit: bool,
-    /// User floating-point control vector `x_ctrl(1..99)` (0-based `0..100`).
+    /// User floating-point control vector `x_ctrl(1..=100)` (0-based `0..100`).
     pub x_ctrl: Vec<f64>,
-    /// User integer control vector `x_integer_ctrl(1..99)` (0-based `0..100`).
+    /// User integer control vector `x_integer_ctrl(1..=100)` (0-based `0..100`).
     pub x_integer_ctrl: Vec<i64>,
-    /// User logical control vector `x_logical_ctrl(1..99)` (0-based `0..100`).
+    /// User logical control vector `x_logical_ctrl(1..=100)` (0-based `0..100`).
     pub x_logical_ctrl: Vec<bool>,
-    /// User string control vector `x_character_ctrl(1..99)` (0-based `0..100`).
+    /// User string control vector `x_character_ctrl(1..=100)` (0-based `0..100`).
     pub x_character_ctrl: Vec<String>,
 
     // --- Fidelity-1 Hydrodynamic, Energy & `eps_grav` Controls (`hydro_*.f90`, `eps_grav.f90`) ---

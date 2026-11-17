@@ -7,21 +7,46 @@
 
 #![forbid(unsafe_code)]
 
-use std::path::{Path, PathBuf};
+use std::fs;
+use std::path::PathBuf;
 
 use flexmesa_binary::{
-    bh_initial_equatorial_mass, eval_brott_wind_msun_yr,
-    eval_edot_enhancement_isotropic, eval_point_mass_edd_and_retention,
-    eval_synchronicity_switch, run_binary_suite, run_binary_test_suite_case,
-    BinaryCompanion, BinaryInlistControls, BinarySystem, ImplicitMdotSolver,
-    ImplicitStepAction, RocheDeformationTables, TIER5_BINARY_CASES,
+    bh_initial_equatorial_mass, copy_cleaned_binary_case,
+    eval_brott_wind_msun_yr, eval_edot_enhancement_isotropic,
+    eval_point_mass_edd_and_retention, eval_synchronicity_switch,
+    run_binary_suite, run_binary_test_suite_case, BinaryCompanion,
+    BinaryInlistControls, BinarySystem, ImplicitMdotSolver, ImplicitStepAction,
+    RocheDeformationTables, TIER5_BINARY_CASES,
 };
 use flexmesa_const::{CLIGHT, MSUN, RSUN, SECYER};
 use flexmesa_star::{
     check_termination_limits, init_or_update_model_from_bundle,
     load_zams_model, DefaultStarExtras, InlistBundle, MdotRedoState,
-    SelectMdotAction, StarControls, StarJobControls,
+    SelectMdotAction, StarControls, StarError, StarJobControls,
 };
+
+struct TempDirGuard {
+    root: PathBuf,
+}
+
+impl TempDirGuard {
+    fn new(tag: &str) -> Self {
+        static SEQ: std::sync::atomic::AtomicU64 =
+            std::sync::atomic::AtomicU64::new(0);
+        let id = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let root = std::env::temp_dir()
+            .join(format!("flexmesa_bin_t5_{tag}_{}_{id}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).expect("create cleaned binary temp root");
+        Self { root }
+    }
+}
+
+impl Drop for TempDirGuard {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.root);
+    }
+}
 
 fn resolve_suite_dir() -> Option<(PathBuf, PathBuf)> {
     let mesa_dir = PathBuf::from(std::env::var("MESA_DIR").ok()?);
@@ -114,7 +139,7 @@ fn test_initial_separation_and_dynamic_point_mass_conversion() {
     assert!(bin.period > 0.0);
     assert_eq!(bin.point_mass_i, 0);
 
-    bin.set_point_mass_i(1);
+    bin.set_point_mass_i(1).expect("set_point_mass_i");
     assert_eq!(bin.point_mass_i, 1);
     assert_eq!(bin.donor_i, 2);
     assert!((bin.donor.mstar / MSUN - 0.8).abs() < 1.0e-6);
@@ -144,9 +169,38 @@ fn test_recursive_binary_inlists_and_all_8_cases_capped_4_steps() {
         return;
     };
 
-    let dbh_ctrl =
+    let raw_err =
         BinaryInlistControls::from_case_dir(&suite_dir.join("double_bh"))
-            .expect("double_bh recursive inlists");
+            .expect_err(
+                "raw $MESA_DIR double_bh must fail on unsupported controls",
+            );
+    assert!(
+        matches!(raw_err, StarError::InvalidInput(_))
+            && raw_err.to_string().contains("unsupported control"),
+        "unexpected raw double_bh error: {raw_err}"
+    );
+    let suite_err = run_binary_suite(&mesa_dir, Some(4)).expect_err(
+        "raw $MESA_DIR binary suite must reject unsupported controls",
+    );
+    assert!(
+        matches!(suite_err, StarError::InvalidInput(_))
+            && suite_err.to_string().contains("unsupported control"),
+        "unexpected raw suite error: {suite_err}"
+    );
+
+    let tmp = TempDirGuard::new("all8");
+    let cleaned_suite = tmp.root.join("binary").join("test_suite");
+    for &case_name in &TIER5_BINARY_CASES {
+        copy_cleaned_binary_case(
+            &suite_dir.join(case_name),
+            &cleaned_suite.join(case_name),
+        )
+        .expect("copy cleaned binary suite case");
+    }
+
+    let dbh_ctrl =
+        BinaryInlistControls::from_case_dir(&cleaned_suite.join("double_bh"))
+            .expect("cleaned double_bh recursive inlists");
     assert!(dbh_ctrl.evolve_both_stars);
     assert!(dbh_ctrl.new_ignore_rlof_flag);
     assert_eq!(dbh_ctrl.mdot_scheme, "contact");
@@ -154,15 +208,16 @@ fn test_recursive_binary_inlists_and_all_8_cases_capped_4_steps() {
     assert!((dbh_ctrl.m2_msun - 65.0).abs() < 1.0e-12);
     assert!((dbh_ctrl.initial_period_in_days - 1.20).abs() < 1.0e-12);
 
-    let gr_ctrl =
-        BinaryInlistControls::from_case_dir(&suite_dir.join("jdot_gr_check"))
-            .expect("jdot_gr_check inlists");
+    let gr_ctrl = BinaryInlistControls::from_case_dir(
+        &cleaned_suite.join("jdot_gr_check"),
+    )
+    .expect("cleaned jdot_gr_check inlists");
     assert!(gr_ctrl.initial_period_in_days <= 0.0);
     assert!((gr_ctrl.initial_separation_in_rsuns - 2.0).abs() < 1.0e-12);
     assert!(gr_ctrl.do_jdot_gr && !gr_ctrl.do_jdot_mb && gr_ctrl.do_jdot_ml);
 
     let reports =
-        run_binary_suite(&mesa_dir, Some(4)).expect("capped 4-step suite");
+        run_binary_suite(&tmp.root, Some(4)).expect("capped 4-step suite");
     assert_eq!(reports.len(), TIER5_BINARY_CASES.len());
     for rep in &reports {
         assert!(rep.passed, "capped case {} failed: {rep:?}", rep.case_name);
@@ -184,7 +239,17 @@ fn test_coupled_double_bh_35_steps_preserves_star_controls() {
     let Some((_, suite_dir)) = resolve_suite_dir() else {
         return;
     };
-    let cdir = suite_dir.join("double_bh");
+    let raw_cdir = suite_dir.join("double_bh");
+    let raw_err = InlistBundle::from_file_in_case_dir(&raw_cdir, "inlist1")
+        .expect_err("raw double_bh inlist1 must reject unsupported controls");
+    assert!(
+        matches!(raw_err, StarError::InvalidInput(_))
+            && raw_err.to_string().contains("unsupported control"),
+        "unexpected raw inlist1 error: {raw_err}"
+    );
+    let tmp = TempDirGuard::new("dbh35");
+    let cdir = tmp.root.join("double_bh");
+    copy_cleaned_binary_case(&raw_cdir, &cdir).expect("clean double_bh");
     let b1 =
         InlistBundle::from_file_in_case_dir(&cdir, "inlist1").expect("inlist1");
     assert!(b1.controls.rotation_flag);
@@ -224,9 +289,19 @@ fn test_uncapped_jdot_ls_check_campaign() {
     let Some((_, suite_dir)) = resolve_suite_dir() else {
         return;
     };
-    let rep =
-        run_binary_test_suite_case(&suite_dir.join("jdot_ls_check"), None)
-            .expect("uncapped jdot_ls_check");
+    let raw_cdir = suite_dir.join("jdot_ls_check");
+    let raw_err = run_binary_test_suite_case(&raw_cdir, None)
+        .expect_err("raw jdot_ls_check must fail on unsupported controls");
+    assert!(
+        matches!(raw_err, StarError::InvalidInput(_))
+            && raw_err.to_string().contains("unsupported control"),
+        "unexpected raw jdot_ls_check error: {raw_err}"
+    );
+    let tmp = TempDirGuard::new("jdot_ls");
+    let cdir = tmp.root.join("jdot_ls_check");
+    copy_cleaned_binary_case(&raw_cdir, &cdir).expect("clean double_bh");
+    let rep = run_binary_test_suite_case(&cdir, None)
+        .expect("uncapped jdot_ls_check");
     assert!(rep.passed, "uncapped jdot_ls_check failed: {rep:?}");
     assert_eq!(rep.termination_code, "max_age");
     assert!(rep.total_steps >= 100);
@@ -238,11 +313,12 @@ fn assert_slow_uncapped_case(
 ) -> flexmesa_binary::BinaryCaseRunReport {
     let (_, suite_dir) =
         resolve_suite_dir().expect("MESA_DIR binary/test_suite must exist");
-    let rep = run_binary_test_suite_case(
-        &Path::new(&suite_dir).join(case_name),
-        None,
-    )
-    .unwrap_or_else(|e| panic!("uncapped {case_name} failed: {e}"));
+    let tmp = TempDirGuard::new(case_name);
+    let cleaned = tmp.root.join(case_name);
+    copy_cleaned_binary_case(&suite_dir.join(case_name), &cleaned)
+        .expect("clean uncapped binary case");
+    let rep = run_binary_test_suite_case(&cleaned, None)
+        .unwrap_or_else(|e| panic!("uncapped {case_name} failed: {e}"));
     assert!(rep.passed, "uncapped {case_name} report failed: {rep:?}");
     rep
 }
@@ -334,10 +410,13 @@ fn test_contact_solver_fixed_delta_mdot_crosses_zero_for_donor_switch() {
         initial_change_factor: 1.5,
         ..BinaryInlistControls::default()
     };
-    let mut solver = ImplicitMdotSolver::from_controls(&ctrl, 1.5);
+    let mut solver =
+        ImplicitMdotSolver::from_controls(&ctrl, 1.5).expect("solver");
     let m0 = -1.0e-5 * MSUN / SECYER;
     // Try 1: accretor overflows more than donor (f < 0) -> steps toward 0 using fixed_delta_mdot.
-    let p1 = solver.evaluate_trial("contact", 1, 20, m0, m0, 0.02, 0.08, 0.9);
+    let p1 = solver
+        .evaluate_trial("contact", 1, 20, m0, m0, 0.02, 0.08, 0.9)
+        .expect("p1");
     let ImplicitStepAction::TryNextMdot(m1) = p1 else {
         panic!("expected TryNextMdot on try 1, got {p1:?}");
     };
@@ -345,9 +424,11 @@ fn test_contact_solver_fixed_delta_mdot_crosses_zero_for_donor_switch() {
     let mut m_cur = m1;
     let mut crossed_zero = false;
     for try_idx in 2..=10 {
-        let prop = solver.evaluate_trial(
-            "contact", try_idx, 20, m_cur, m_cur, 0.02, 0.08, 0.9,
-        );
+        let prop = solver
+            .evaluate_trial(
+                "contact", try_idx, 20, m_cur, m_cur, 0.02, 0.08, 0.9,
+            )
+            .expect("prop");
         if let ImplicitStepAction::TryNextMdot(m_next) = prop {
             m_cur = m_next;
             if m_cur > 0.0 {
@@ -363,9 +444,9 @@ fn test_contact_solver_fixed_delta_mdot_crosses_zero_for_donor_switch() {
     solver.flip_for_contact_donor_switch();
     let q_new = 1.0_f64 / 0.9;
     let gap_a_eq = 0.05 * flexmesa_math::pow(q_new, -0.52);
-    let p_conv = solver.evaluate_trial(
-        "contact", 5, 20, -m_cur, -m_cur, 0.05, gap_a_eq, q_new,
-    );
+    let p_conv = solver
+        .evaluate_trial("contact", 5, 20, -m_cur, -m_cur, 0.05, gap_a_eq, q_new)
+        .expect("p_conv");
     assert_eq!(p_conv, ImplicitStepAction::Converged(-m_cur));
 }
 
@@ -431,7 +512,10 @@ fn test_double_bh_che_diffusivity_stiffness_and_bh_collapse_invariants() {
     let Some((_, suite_dir)) = resolve_suite_dir() else {
         return;
     };
-    let cdir = suite_dir.join("double_bh");
+    let raw_cdir = suite_dir.join("double_bh");
+    let tmp = TempDirGuard::new("dbh_che");
+    let cdir = tmp.root.join("double_bh");
+    copy_cleaned_binary_case(&raw_cdir, &cdir).expect("clean double_bh");
     let b1 =
         InlistBundle::from_file_in_case_dir(&cdir, "inlist1").expect("inlist1");
     let mw = &b1.controls.mix_wind;
@@ -511,7 +595,7 @@ fn test_double_bh_che_diffusivity_stiffness_and_bh_collapse_invariants() {
     }
     bin.last_termination_reason = Some(String::from("max_model_number"));
     bin.change_factor = 3.2;
-    bin.set_point_mass_i(1);
+    bin.set_point_mass_i(1).expect("set_point_mass_i");
     assert!(bin.last_termination_reason.is_none());
     assert!(
         (bin.change_factor - bin.controls.max_change_factor).abs() < 1.0e-12

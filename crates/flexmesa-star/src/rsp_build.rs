@@ -98,7 +98,7 @@ pub fn do_rsp_build_model(
         )?;
     }
 
-    cleanup_for_lina(&mut model, &dc, &mut grid);
+    cleanup_for_lina(&mut model, &dc, &mut grid)?;
 
     let nmodes = model.controls.rsp.nmodes;
     let lina_opt = if nmodes > 0
@@ -175,11 +175,11 @@ pub fn do_rsp_build_model(
     model.dt_next = model.aux.rsp.rsp_dt;
 
     model.aux.rsp.rng = rng;
-    finish_build_rsp_model(&mut model, &chem, &dc, &grid, l_surf);
+    finish_build_rsp_model(&mut model, &chem, &dc, &grid, l_surf)?;
     crate::rsp_driver::rsp_setup_model(&mut model, true, false)?;
     model.mstar_start = model.mstar;
     model.mstar_old = model.mstar;
-    model.save_start_values();
+    model.save_start_values()?;
     model.lum_start.fill(0.0);
 
     Ok((model, lina_opt))
@@ -248,7 +248,7 @@ pub fn eval_model_rsp_lina_modes(
     model: &StarModel,
     n_modes: usize,
 ) -> (Vec<RspLinaMode>, Option<f64>) {
-    let target_p = model.controls.x_ctrl.get(1).copied().filter(|&p| p > 0.0);
+    let target_p = model.controls.x_ctrl.first().copied().filter(|&p| p > 0.0);
     let count = n_modes.clamp(1, 10);
     if count <= model.aux.rsp.lina_periods.len()
         && model.aux.rsp.lina_periods[0] > 0.0

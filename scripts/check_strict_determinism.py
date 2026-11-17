@@ -82,6 +82,11 @@ def _run_strict_evolution(
             str(max_steps),
             "--numerics-mode",
             "strict",
+            # This gate compares bit-identity across thread counts and
+            # architectures, not agreement with MESA. The upstream case sets
+            # controls that are not ported yet (declared gap), so the
+            # documented exploratory opt-out is used here.
+            "--allow-unsupported-controls",
         ]
         proc = subprocess.run(
             cmd,

@@ -30,15 +30,21 @@ pub struct PotekhinTable {
     pub f_ary: Vec<Vec<[f64; 4]>>,
 }
 
-static POTEKHIN: OnceLock<PotekhinTable> = OnceLock::new();
+static POTEKHIN: OnceLock<Result<PotekhinTable, KapError>> = OnceLock::new();
 
 /// Return a reference to the lazily initialized Potekhin electron conduction table.
-#[must_use]
-pub fn potekhin_table() -> &'static PotekhinTable {
-    POTEKHIN.get_or_init(init_potekhin)
+///
+/// # Errors
+/// Returns [`KapError::TableIo`] or [`KapError::NumericalFailure`] if the
+/// embedded `condtabl.data` payload cannot be parsed or spline-fitted.
+pub fn potekhin_table() -> Result<&'static PotekhinTable, KapError> {
+    POTEKHIN
+        .get_or_init(init_potekhin)
+        .as_ref()
+        .map_err(Clone::clone)
 }
 
-fn init_potekhin() -> PotekhinTable {
+fn init_potekhin() -> Result<PotekhinTable, KapError> {
     let mut lines = CONDTABL_STR.lines();
     let _header = lines.next();
 
@@ -47,43 +53,43 @@ fn init_potekhin() -> PotekhinTable {
     let mut log_zs = [0.0_f64; NUM_LOG_ZS];
     let mut f_ary = Vec::with_capacity(NUM_LOG_ZS);
 
+    let parse_tok = |tok: Option<&str>, label: &str| -> Result<f64, KapError> {
+        tok.ok_or_else(|| {
+            KapError::TableIo(format!("missing {label} in condtabl.data"))
+        })?
+        .parse()
+        .map_err(|e| {
+            KapError::TableIo(format!("invalid {label} in condtabl.data: {e}"))
+        })
+    };
+
     for log_z_slot in &mut log_zs {
-        let z_line = lines.next().expect("missing Z line in condtabl.data");
+        let z_line = lines.next().ok_or_else(|| {
+            KapError::TableIo("missing Z line in condtabl.data".to_string())
+        })?;
         let mut z_toks = z_line.split_whitespace();
-        let z_val: f64 = z_toks
-            .next()
-            .expect("empty Z line")
-            .parse()
-            .expect("invalid Z float");
+        let z_val = parse_tok(z_toks.next(), "Z")?;
         *log_z_slot = if (z_val - 1.0).abs() == 0.0 {
             0.0
         } else {
             flexmesa_math::log10(z_val)
         };
         for log_t_slot in &mut log_ts {
-            *log_t_slot = z_toks
-                .next()
-                .expect("missing logT in condtabl.data")
-                .parse()
-                .expect("invalid logT float");
+            *log_t_slot = parse_tok(z_toks.next(), "logT")?;
         }
 
         let mut z_slice = vec![0.0_f64; NUM_LOG_RHOS * NUM_LOG_TS];
         for i_r in 0..NUM_LOG_RHOS {
-            let r_line =
-                lines.next().expect("missing logRho row in condtabl.data");
+            let r_line = lines.next().ok_or_else(|| {
+                KapError::TableIo(
+                    "missing logRho row in condtabl.data".to_string(),
+                )
+            })?;
             let mut r_toks = r_line.split_whitespace();
-            log_rhos[i_r] = r_toks
-                .next()
-                .expect("missing logRho in condtabl.data")
-                .parse()
-                .expect("invalid logRho float");
+            log_rhos[i_r] = parse_tok(r_toks.next(), "logRho")?;
             for j_t in 0..NUM_LOG_TS {
-                z_slice[i_r * NUM_LOG_TS + j_t] = r_toks
-                    .next()
-                    .expect("missing cond value in condtabl.data")
-                    .parse()
-                    .expect("invalid cond float");
+                z_slice[i_r * NUM_LOG_TS + j_t] =
+                    parse_tok(r_toks.next(), "cond value")?;
             }
         }
 
@@ -100,16 +106,20 @@ fn init_potekhin() -> PotekhinTable {
             BicubicBc::ZeroFirstDeriv,
             &[],
         )
-        .expect("interp_mkbicub_db failed on condtabl.data");
+        .map_err(|_| {
+            KapError::NumericalFailure(
+                "interp_mkbicub_db failed on condtabl.data",
+            )
+        })?;
         f_ary.push(coeffs);
     }
 
-    PotekhinTable {
+    Ok(PotekhinTable {
         log_rhos,
         log_ts,
         log_zs,
         f_ary,
-    }
+    })
 }
 
 fn eval_potekhin_z_slice(
@@ -174,7 +184,7 @@ pub fn do_electron_conduction_potekhin(
     log_rho_in: f64,
     log_t_in: f64,
 ) -> Result<(f64, f64, f64), KapError> {
-    let tbl = potekhin_table();
+    let tbl = potekhin_table()?;
 
     let (log_rho, clipped_log_rho) = if log_rho_in < tbl.log_rhos[0] {
         (tbl.log_rhos[0], true)

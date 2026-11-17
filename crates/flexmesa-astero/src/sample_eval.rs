@@ -7,6 +7,7 @@ use std::fs;
 use std::path::Path;
 
 use flexmesa_const::RSUN;
+use flexmesa_star::controls::StarError;
 use flexmesa_star::history::extract_history_row;
 use flexmesa_star::model::StarModel;
 use flexmesa_star::pulse_bvp::{InertiaNormKind, OuterBoundKind};
@@ -204,14 +205,23 @@ pub fn eval_spectro_and_delta_nu_chi2(
 }
 
 /// Parses `outer_bound` from a `GYRE` input file, stripping `!` comments first.
-#[must_use]
 pub fn parse_gyre_outer_bound(
     case_dir: &Path,
     gyre_file: &str,
-) -> OuterBoundKind {
-    let Ok(text) = fs::read_to_string(case_dir.join(gyre_file)) else {
-        return OuterBoundKind::AdiplsIsothermal;
-    };
+) -> Result<OuterBoundKind, StarError> {
+    let fname = gyre_file.trim();
+    if fname.is_empty() {
+        return Err(StarError::InvalidInput(String::from(
+            "oscillation_code = 'gyre' requires a non-empty gyre_input_file",
+        )));
+    }
+    let path = case_dir.join(fname);
+    let text = fs::read_to_string(&path).map_err(|e| {
+        StarError::IoError(format!(
+            "failed to read GYRE input file '{}': {e}",
+            path.display()
+        ))
+    })?;
     for raw_line in text.lines() {
         let line = raw_line.split('!').next().unwrap_or("").trim();
         let Some((lhs, rhs)) = line.split_once('=') else {
@@ -219,26 +229,29 @@ pub fn parse_gyre_outer_bound(
         };
         if lhs.trim().eq_ignore_ascii_case("outer_bound") {
             let val = rhs.trim().trim_matches(|c| c == '\'' || c == '"');
-            if val.eq_ignore_ascii_case("VACUUM")
-                || val.eq_ignore_ascii_case("ZERO_R")
-            {
-                return OuterBoundKind::Vacuum;
-            }
-            return OuterBoundKind::AdiplsIsothermal;
+            return match val.to_ascii_uppercase().as_str() {
+                "VACUUM" | "ZERO_R" => Ok(OuterBoundKind::Vacuum),
+                "JCD" | "DZIEM" | "UNNO" | "ISOTHERMAL" => {
+                    Ok(OuterBoundKind::AdiplsIsothermal)
+                }
+                _ => Err(StarError::InvalidInput(format!(
+                    "unrecognized GYRE outer_bound '{val}' in '{}'",
+                    path.display()
+                ))),
+            };
         }
     }
-    OuterBoundKind::AdiplsIsothermal
+    Ok(OuterBoundKind::AdiplsIsothermal)
 }
 
 /// Evaluates spectroscopic and asteroseismic $\chi^2$ on `model` (`extras_support.f90:155-485`).
-#[must_use]
 pub fn eval_model_astero_sample(
     model: &StarModel,
     ctrl: &AsteroSearchControls,
     params: AsteroParamSet,
     sample_number: usize,
     case_dir: &Path,
-) -> AsteroSampleResult {
+) -> Result<AsteroSampleResult, StarError> {
     let (sp_obs, sp_sig, sp_mod, teff, logg, log_l, log_r, feh, _, _, _) =
         eval_spectro_obs(model, ctrl);
     let r_phot_cm = model.surface_r_rsun().max(1.0e-30) * RSUN;
@@ -276,11 +289,16 @@ pub fn eval_model_astero_sample(
         && (ctrl.weights.chi2_seismo_fraction > 0.0 || sp_obs.is_empty());
     let mut pre_chi2_radial = 0.0_f64;
     if need_modes {
-        let is_gyre = ctrl.oscillation_code.eq_ignore_ascii_case("gyre");
-        let outer_bc = if is_gyre {
-            parse_gyre_outer_bound(case_dir, &ctrl.gyre_input_file)
-        } else {
-            OuterBoundKind::AdiplsIsothermal
+        let osc_low = ctrl.oscillation_code.trim().to_ascii_lowercase();
+        let outer_bc = match osc_low.as_str() {
+            "gyre" => parse_gyre_outer_bound(case_dir, &ctrl.gyre_input_file)?,
+            "adipls" => OuterBoundKind::AdiplsIsothermal,
+            _ => {
+                return Err(StarError::InvalidInput(format!(
+                    "unrecognized oscillation_code '{}'",
+                    ctrl.oscillation_code
+                )));
+            }
         };
         let scan_deg = |l: usize| -> Option<(Vec<f64>, Vec<f64>, Vec<isize>)> {
             let (nu_lo, nu_hi) = scan_bounds_from_targets(
@@ -322,7 +340,7 @@ pub fn eval_model_astero_sample(
                     dnu_obs,
                     numax_obs,
                     &mut delta_nu_uhz,
-                );
+                )?;
                 (a_div_r, correction_r) = (adr, cr);
                 pre_chi2_radial = eval_radial_chi2(ctrl, &c0);
                 model_freqs_corr[0] = c0;
@@ -369,7 +387,7 @@ pub fn eval_model_astero_sample(
                 dnu_obs,
                 numax_obs,
                 &mut delta_nu_uhz,
-            );
+            )?;
             (a_div_r, correction_r) = (adr, cr);
             let mut offset = 0usize;
             for l in 0..4 {
@@ -386,7 +404,7 @@ pub fn eval_model_astero_sample(
         } else {
             1.0e99
         };
-        return AsteroSampleResult {
+        return Ok(AsteroSampleResult {
             sample_number,
             params,
             model_number: model.model_number,
@@ -410,7 +428,7 @@ pub fn eval_model_astero_sample(
             model_freqs_corr,
             model_inertias,
             model_orders,
-        };
+        });
     }
 
     let (mut all_obs, mut all_sig, mut all_corr) =
@@ -523,7 +541,7 @@ pub fn eval_model_astero_sample(
         chi2_radial = eval_radial_chi2(ctrl, &model_freqs_corr[0]);
     }
 
-    AsteroSampleResult {
+    Ok(AsteroSampleResult {
         sample_number,
         params,
         model_number: model.model_number,
@@ -547,5 +565,5 @@ pub fn eval_model_astero_sample(
         model_freqs_corr,
         model_inertias,
         model_orders,
-    }
+    })
 }

@@ -410,7 +410,7 @@ fn test_conv_premix_predictive_mixing_and_extra_heat_in_evolve_step() {
     set_hydro_vars(&mut m_pm, false, false).expect("set_hydro_vars");
     let mut m_pred = m_pm.clone();
 
-    let _absorbed = do_conv_premix(&mut m_pm, 5, true);
+    let _absorbed = do_conv_premix(&mut m_pm, 5, true).expect("do_conv_premix");
     assert!(m_pm.aux.eps_pre_mix.iter().all(|v| v.is_finite()));
     for k in 0..m_pm.nz {
         let sum_x: f64 = m_pm.cell_xa(k).iter().sum();
@@ -523,7 +523,8 @@ fn test_element_diffusion_pure_h_envelope_preserves_unit_composition_and_do_kap(
         m.xa[k * nc + 1] = 5.0e-15;
     }
     let _ =
-        do_element_diffusion(&mut m, 1.0e8, DiffusionScheme::StantonMurillo);
+        do_element_diffusion(&mut m, 1.0e8, DiffusionScheme::StantonMurillo)
+            .expect("do_element_diffusion");
     assert!(m.xa.iter().all(|&x| (0.0..=1.0).contains(&x)));
     for k in 0..m.nz {
         assert!((m.cell_xa(k).iter().sum::<f64>() - 1.0).abs() < 1.0e-12);

@@ -60,7 +60,7 @@ fn test_brunt_b_brassard_eos_finite_difference_and_gradmux_forms() {
 
     // 1. Default Brassard et al. (1991) finite-difference EOS form (`!use_brunt_gradmux_form`)
     model.controls.use_brunt_gradmux_form = false;
-    do_brunt_b(&mut model);
+    do_brunt_b(&mut model).expect("do_brunt_b Brassard");
     let b_brassard = model.brunt_b[k_test];
     assert!(
         b_brassard > 0.0,
@@ -69,7 +69,7 @@ fn test_brunt_b_brassard_eos_finite_difference_and_gradmux_forms() {
 
     // 2. Explicit grad_mu form (`use_brunt_gradmux_form = true`)
     model.controls.use_brunt_gradmux_form = true;
-    do_brunt_b(&mut model);
+    do_brunt_b(&mut model).expect("do_brunt_b gradmux");
     let b_gradmux = model.brunt_b[k_test];
     assert!(
         b_gradmux > 0.0,
@@ -96,10 +96,10 @@ fn test_brunt_b_brassard_eos_finite_difference_and_gradmux_forms() {
     set_basic_vars(&mut model).expect("set_basic_vars high-T");
     crate::micro::do_eos(&mut model).expect("do_eos high-T");
     model.controls.use_brunt_gradmux_form = false;
-    do_brunt_b(&mut model);
+    do_brunt_b(&mut model).expect("do_brunt_b Brassard high-T");
     let b_mhm_rad = model.brunt_b[k_test];
     model.controls.use_brunt_gradmux_form = true;
-    do_brunt_b(&mut model);
+    do_brunt_b(&mut model).expect("do_brunt_b gradmux high-T");
     let b_gradmu_rad = model.brunt_b[k_test];
     let rel_diff_rad =
         (b_mhm_rad - b_gradmu_rad).abs() / b_gradmu_rad.abs().max(1.0e-12);
@@ -401,6 +401,7 @@ fn test_do_kap_multi_isotope_cno_and_nugis_lamers_and_omega_mix() {
     for k in 0..model.nz {
         model.gam[k] = if k >= k_cryst { 185.0 } else { 140.0 };
     }
-    let eps_ps = do_phase_separation(&mut model, 1.0e9, 175.0, false);
+    let eps_ps = do_phase_separation(&mut model, 1.0e9, 175.0, false)
+        .expect("do_phase_separation");
     assert_eq!(eps_ps.len(), model.nz);
 }

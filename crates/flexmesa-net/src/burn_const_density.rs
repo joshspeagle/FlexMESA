@@ -288,7 +288,7 @@ mod tests {
     #[test]
     fn test_burn_1_zone_const_density_first_law_energy_and_jacobian_parity() {
         let g = NetGeneralInfo::from_name("basic.net").expect("basic.net");
-        let ht = HelmTable::builtin();
+        let ht = HelmTable::builtin().expect("builtin HELM table");
         let eos_cfg = EosConfig::default();
         let nuclides = NuclideCatalog::builtin_ref();
         let species = g.num_isos;

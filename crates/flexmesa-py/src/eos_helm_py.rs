@@ -125,9 +125,11 @@ pub fn eos_helm_cell_data<'py>(
     py: Python<'py>,
     log_temp: f64,
     din: f64,
-) -> PyHelmCellTuple<'py> {
-    let c = HelmTable::builtin().cell(log_temp, din);
-    (
+) -> PyResult<PyHelmCellTuple<'py>> {
+    let table = HelmTable::builtin()
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    let c = table.cell(log_temp, din);
+    Ok((
         c.t_lo,
         c.dth,
         c.d_lo,
@@ -136,7 +138,7 @@ pub fn eos_helm_cell_data<'py>(
         PyArray1::from_slice(py, &c.fi_dpdf),
         PyArray1::from_slice(py, &c.fi_ef),
         PyArray1::from_slice(py, &c.fi_xf),
-    )
+    ))
 }
 
 /// Returns batched `HelmCell` arrays `(t_lo, dth, d_lo, dd, fi_f, fi_dpdf,
@@ -159,7 +161,8 @@ pub fn eos_helm_cells_batch<'py>(
             "log_temp and din must have equal length",
         ));
     }
-    let table = HelmTable::builtin();
+    let table = HelmTable::builtin()
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
     let mut t_lo = Vec::with_capacity(nz);
     let mut dth = Vec::with_capacity(nz);
     let mut d_lo = Vec::with_capacity(nz);

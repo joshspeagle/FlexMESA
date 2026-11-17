@@ -246,12 +246,19 @@ impl ParsedNetDef {
         }
         *idx += 1;
         let nuclides = NuclideCatalog::builtin_ref();
-        let ye_id = nuclides
-            .get_nuclide_index(iso_name)
-            .ok_or_else(|| NetError::InvalidReactionOrIso(iso_name.clone()))?;
-        let ife56 = nuclides.get_nuclide_index("fe56").unwrap_or(0);
-        let e_ye = nuclides.get_by_id(ye_id).unwrap();
-        let e_fe = nuclides.get_by_id(ife56).unwrap();
+        let lookup_nuclide = |name: &str| {
+            nuclides
+                .get_nuclide_index(name)
+                .ok_or_else(|| NetError::InvalidReactionOrIso(name.to_string()))
+        };
+        let ye_id = lookup_nuclide(iso_name)?;
+        let ife56 = lookup_nuclide("fe56")?;
+        let e_ye = nuclides.get_by_id(ye_id).ok_or_else(|| {
+            NetError::InvalidReactionOrIso(format!("id={ye_id}"))
+        })?;
+        let e_fe = nuclides.get_by_id(ife56).ok_or_else(|| {
+            NetError::InvalidReactionOrIso("fe56".to_string())
+        })?;
         self.approx21_ye_iso = ye_id;
         self.fe56ec_n_neut =
             (e_ye.n as i32 - e_fe.n as i32) - (e_fe.z as i32 - e_ye.z as i32);
@@ -290,7 +297,7 @@ impl ParsedNetDef {
             if let Some(cid) = nuclides.get_nuclide_index(name) {
                 self.apply_iso(cid, add_flag);
                 if add_rxns {
-                    self.do_basic_reactions_for_iso(cid);
+                    self.do_basic_reactions_for_iso(cid)?;
                 }
             } else {
                 let z = chem_get_element_id(name)
@@ -326,7 +333,7 @@ impl ParsedNetDef {
                         })?;
                     self.apply_iso(cid, add_flag);
                     if add_rxns {
-                        self.do_basic_reactions_for_iso(cid);
+                        self.do_basic_reactions_for_iso(cid)?;
                     }
                 }
             }
@@ -334,10 +341,26 @@ impl ParsedNetDef {
         Err(NetError::ParseError("unclosed '(' in do_isos".to_string()))
     }
 
-    fn try_pair(&mut self, in_id: usize, out_id: usize, op1: &str, op2: &str) {
+    fn try_pair(
+        &mut self,
+        in_id: usize,
+        out_id: usize,
+        op1: &str,
+        op2: &str,
+    ) -> Result<(), NetError> {
         let nuclides = NuclideCatalog::builtin_ref();
-        let n1 = &nuclides.get_by_id(in_id).unwrap().name;
-        let n2 = &nuclides.get_by_id(out_id).unwrap().name;
+        let n1 = &nuclides
+            .get_by_id(in_id)
+            .ok_or_else(|| {
+                NetError::InvalidReactionOrIso(format!("id={in_id}"))
+            })?
+            .name;
+        let n2 = &nuclides
+            .get_by_id(out_id)
+            .ok_or_else(|| {
+                NetError::InvalidReactionOrIso(format!("id={out_id}"))
+            })?
+            .name;
         let r1 = format!("r_{n1}_{op1}_{n2}");
         let ok1 = self.add_reaction_by_name(&r1).is_ok();
         if !op2.is_empty() {
@@ -347,20 +370,29 @@ impl ParsedNetDef {
                 self.reverse_pairs.push((r1, r2));
             }
         }
+        Ok(())
     }
 
-    fn do_basic_reactions_for_iso(&mut self, id: usize) {
+    fn do_basic_reactions_for_iso(
+        &mut self,
+        id: usize,
+    ) -> Result<(), NetError> {
         let nuclides = NuclideCatalog::builtin_ref();
-        let Some(e) = nuclides.get_by_id(id) else {
-            return;
-        };
+        let e = nuclides.get_by_id(id).ok_or_else(|| {
+            NetError::InvalidReactionOrIso(format!("id={id}"))
+        })?;
         let z = e.z as isize;
         let n = e.n as isize;
-        let ineut = nuclides.get_nuclide_index("neut").unwrap_or(1);
-        let ih1 = nuclides.get_nuclide_index("h1").unwrap_or(2);
-        let ih2 = nuclides.get_nuclide_index("h2").unwrap_or(4);
-        let ihe4 = nuclides.get_nuclide_index("he4").unwrap_or(7);
-        let ib8 = nuclides.get_nuclide_index("b8").unwrap_or(27);
+        let req_iso = |name: &str| {
+            nuclides
+                .get_nuclide_index(name)
+                .ok_or_else(|| NetError::InvalidReactionOrIso(name.to_string()))
+        };
+        let ineut = req_iso("neut")?;
+        let ih1 = req_iso("h1")?;
+        let ih2 = req_iso("h2")?;
+        let ihe4 = req_iso("he4")?;
+        let ib8 = req_iso("b8")?;
 
         let get_active = |z2: isize, n2: isize, active: &HashSet<usize>| {
             if z2 < 0 || n2 < 0 {
@@ -376,21 +408,22 @@ impl ParsedNetDef {
 
         if self.active_isos.contains(&ih1) {
             if let Some(other) = get_active(z - 1, n, &self.active_isos) {
-                self.try_pair(other, id, "pg", "gp");
+                self.try_pair(other, id, "pg", "gp")?;
             }
             if let Some(other) = get_active(z + 1, n, &self.active_isos) {
-                self.try_pair(id, other, "pg", "gp");
+                self.try_pair(id, other, "pg", "gp")?;
             }
         }
         if self.active_isos.contains(&ihe4) {
             if id == ib8 {
-                let _ = self.add_reaction_by_name("r_b8_wk_he4_he4");
+                // Upstream net_initialize.f90:821-825 treats failure as fatal.
+                self.add_reaction_by_name("r_b8_wk_he4_he4")?;
             }
             if let Some(other) = get_active(z - 2, n - 2, &self.active_isos) {
-                self.try_pair(other, id, "ag", "ga");
+                self.try_pair(other, id, "ag", "ga")?;
             }
             if let Some(other) = get_active(z + 2, n + 2, &self.active_isos) {
-                self.try_pair(id, other, "ag", "ga");
+                self.try_pair(id, other, "ag", "ga")?;
             }
         }
         if self.active_isos.contains(&ih1)
@@ -398,10 +431,10 @@ impl ParsedNetDef {
             && id != ihe4
         {
             if let Some(other) = get_active(z - 1, n - 2, &self.active_isos) {
-                self.try_pair(other, id, "ap", "pa");
+                self.try_pair(other, id, "ap", "pa")?;
             }
             if let Some(other) = get_active(z + 1, n + 2, &self.active_isos) {
-                self.try_pair(id, other, "ap", "pa");
+                self.try_pair(id, other, "ap", "pa")?;
             }
         }
         if id != ih1
@@ -409,12 +442,12 @@ impl ParsedNetDef {
             && self.active_isos.contains(&ineut)
         {
             if let Some(other) = get_active(z - 1, n + 1, &self.active_isos) {
-                self.try_pair(id, other, "np", "pn");
+                self.try_pair(id, other, "np", "pn")?;
             }
             if id != ineut {
                 if let Some(other) = get_active(z + 1, n - 1, &self.active_isos)
                 {
-                    self.try_pair(other, id, "np", "pn");
+                    self.try_pair(other, id, "np", "pn")?;
                 }
             }
         }
@@ -424,26 +457,27 @@ impl ParsedNetDef {
         {
             if let Some(other) = get_active(z - 2, n - 1, &self.active_isos) {
                 if other != ihe4 {
-                    self.try_pair(id, other, "na", "an");
+                    self.try_pair(id, other, "na", "an")?;
                 }
             }
             if let Some(other) = get_active(z + 2, n + 1, &self.active_isos) {
                 if other != ihe4 {
-                    self.try_pair(other, id, "na", "an");
+                    self.try_pair(other, id, "na", "an")?;
                 }
             }
         }
         if self.active_isos.contains(&ineut) && id != ih2 {
             if let Some(other) = get_active(z, n - 1, &self.active_isos) {
-                self.try_pair(other, id, "ng", "gn");
+                self.try_pair(other, id, "ng", "gn")?;
             }
         }
         if let Some(other) = get_active(z - 1, n + 1, &self.active_isos) {
-            self.try_pair(id, other, "wk", "wk-minus");
+            self.try_pair(id, other, "wk", "wk-minus")?;
         }
         if let Some(other) = get_active(z + 1, n - 1, &self.active_isos) {
-            self.try_pair(other, id, "wk", "wk-minus");
+            self.try_pair(other, id, "wk", "wk-minus")?;
         }
+        Ok(())
     }
 
     fn apply_iso(&mut self, cid: usize, add_flag: bool) {
@@ -515,7 +549,15 @@ impl ParsedNetDef {
 
     fn mark_approx21(&mut self) -> Result<(), NetError> {
         let nuclides = NuclideCatalog::builtin_ref();
-        let ye_name = &nuclides.get_by_id(self.approx21_ye_iso).unwrap().name;
+        let ye_name = &nuclides
+            .get_by_id(self.approx21_ye_iso)
+            .ok_or_else(|| {
+                NetError::InvalidReactionOrIso(format!(
+                    "approx21 ye iso id={}",
+                    self.approx21_ye_iso
+                ))
+            })?
+            .name;
         #[rustfmt::skip]
         let mut isos = vec![
             "neut", "h1", "prot", "he3", "he4", "c12", "n14", "o16", "ne20",

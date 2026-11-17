@@ -104,7 +104,9 @@ pub fn eos_eval_dt_get<'py>(
         use_free_eos,
         use_opal_scvh,
     )?;
-    let out = eos_dt_get(HelmTable::builtin(), rho, temp, &chem_id, xa_s, &cfg)
+    let ht = HelmTable::builtin()
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    let out = eos_dt_get(ht, rho, temp, &chem_id, xa_s, &cfg)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
     Ok(into_py_eos_tuple(py, &out))
 }
@@ -151,8 +153,10 @@ pub fn eos_eval_pt_get<'py>(
         use_free_eos,
         use_opal_scvh,
     )?;
+    let ht = HelmTable::builtin()
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
     let pt = eos_pt_get(
-        HelmTable::builtin(),
+        ht,
         &chem_id,
         xa_s,
         flexmesa_math::log10(pgas),
@@ -287,8 +291,10 @@ pub fn eos_eval_dt_get_t<'py>(
         use_free_eos,
         use_opal_scvh,
     )?;
+    let ht = HelmTable::builtin()
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
     let inv = eos_dt_get_t(
-        HelmTable::builtin(),
+        ht,
         &chem_id,
         xa_s,
         flexmesa_math::log10(rho),
@@ -348,8 +354,10 @@ pub fn eos_eval_dt_get_rho<'py>(
         use_free_eos,
         use_opal_scvh,
     )?;
+    let ht = HelmTable::builtin()
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
     let inv = eos_dt_get_rho(
-        HelmTable::builtin(),
+        ht,
         &chem_id,
         xa_s,
         flexmesa_math::log10(temp),
@@ -409,8 +417,10 @@ pub fn eos_eval_pt_get_t<'py>(
         use_free_eos,
         use_opal_scvh,
     )?;
+    let ht = HelmTable::builtin()
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
     let inv = eos_pt_get_t(
-        HelmTable::builtin(),
+        ht,
         &chem_id,
         xa_s,
         flexmesa_math::log10(pgas),
@@ -470,8 +480,10 @@ pub fn eos_eval_pt_get_pgas<'py>(
         use_free_eos,
         use_opal_scvh,
     )?;
+    let ht = HelmTable::builtin()
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
     let inv = eos_pt_get_pgas(
-        HelmTable::builtin(),
+        ht,
         &chem_id,
         xa_s,
         flexmesa_math::log10(temp),

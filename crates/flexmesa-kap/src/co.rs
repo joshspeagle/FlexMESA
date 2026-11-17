@@ -29,7 +29,7 @@ pub fn get1_kap_co_results(
     log_rho: f64,
     log_t: f64,
 ) -> Result<(f64, f64, f64), KapError> {
-    let tables = kap_tables();
+    let tables = kap_tables()?;
     let prefix = cfg.kap_co_option.prefix();
     let set = tables
         .co_sets

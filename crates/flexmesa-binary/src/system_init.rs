@@ -78,7 +78,7 @@ fn settle_constant_xa_kh_loop(
         }
         let backup = star.clone();
         star.save_old_values();
-        star.save_start_values();
+        star.save_start_values()?;
         match do_struct_burn_mix(star, dt_yr * SECYER, false, true, &[]) {
             Ok(rep) if rep.converged => {
                 dt_yr = (dt_yr * 1.8).min(5.0e4);
@@ -130,7 +130,7 @@ fn settle_cno_gold_equilibrium(
         update_rotation_distortion_factors(star);
         set_hydro_vars(star, false, false)?;
         star.save_old_values();
-        star.save_start_values();
+        star.save_start_values()?;
         apply_step_pre_physics(star, dt_s)?;
         match do_struct_burn_mix(star, dt_s, false, true, &[]) {
             Ok(rep) if rep.converged => {
@@ -217,7 +217,7 @@ pub(crate) fn prep_and_settle_binary_star(
     star.aux.step_hist.total_energy_end = etot;
     star.aux.step_hist.error_in_energy_conservation = 0.0;
     star.aux.step_hist.cumulative_energy_error_old = 0.0;
-    star.save_start_values();
+    star.save_start_values()?;
     star.save_old_values();
     Ok(())
 }

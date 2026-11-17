@@ -13,9 +13,9 @@ use std::time::Instant;
 use flexmesa_math::pow;
 use flexmesa_star::controls::StarError;
 use flexmesa_star::history::{extract_history_row, HistoryRow};
-use flexmesa_star::inlist::InlistBundle;
+use flexmesa_star::inlist::{InlistBundle, InlistLoadOptions};
 use flexmesa_star::inlist_runner::{
-    run_inlist_stage_with_logs, run_test_suite_case_with_logs,
+    run_inlist_stage_with_logs, run_test_suite_case_with_options,
     verify_photo_restart_parity, CaseRunReport, DefaultStarExtras,
     StageRunReport, StarLogsOptions,
 };
@@ -26,9 +26,9 @@ use flexmesa_star::pulse_modes::{
 use flexmesa_star::star_job_init::init_or_update_model_from_bundle;
 pub use flexmesa_star::tier4_extras::TIER4_ASTERO_CASES;
 
-use crate::inlist_astero::parse_astero_search_controls;
+use crate::inlist_astero::parse_astero_search_controls_with_options;
 use crate::sample_eval::{eval_model_astero_sample, parse_gyre_outer_bound};
-use crate::search_driver::run_star_astero_with_logs;
+use crate::search_driver::run_star_astero_with_options;
 use crate::surface_corr::{
     eval_combined_corr, eval_cubic_corr, eval_kjeldsen_corr,
     eval_power_law_corr, eval_sonoi_corr, interpolate_l0_inertia,
@@ -62,9 +62,21 @@ impl TempCaseStaging {
             let hdr = staged_dir.join(format!("inlist_{case_name}_header"));
             let body = staged_dir.join(format!("inlist_{case_name}"));
             if hdr.exists() {
-                let _ = fs::copy(&hdr, &inlist_dst);
+                fs::copy(&hdr, &inlist_dst).map_err(|e| {
+                    StarError::IoError(format!(
+                        "failed copying '{}' to '{}': {e}",
+                        hdr.display(),
+                        inlist_dst.display()
+                    ))
+                })?;
             } else if body.exists() {
-                let _ = fs::copy(&body, &inlist_dst);
+                fs::copy(&body, &inlist_dst).map_err(|e| {
+                    StarError::IoError(format!(
+                        "failed copying '{}' to '{}': {e}",
+                        body.display(),
+                        inlist_dst.display()
+                    ))
+                })?;
             }
         }
         Ok(Self {
@@ -119,6 +131,24 @@ pub fn run_astero_suite(
     max_steps_per_stage: Option<usize>,
     verify_restart: bool,
 ) -> Result<Vec<CaseRunReport>, StarError> {
+    run_astero_suite_with_options(
+        suite_or_mesa_dir,
+        skip_optional,
+        max_steps_per_stage,
+        verify_restart,
+        InlistLoadOptions::default(),
+    )
+}
+
+/// Executes all 8 `astero/test_suite` cases under `suite_dir` with explicit
+/// [`InlistLoadOptions`].
+pub fn run_astero_suite_with_options(
+    suite_or_mesa_dir: &Path,
+    skip_optional: bool,
+    max_steps_per_stage: Option<usize>,
+    verify_restart: bool,
+    inlist_opts: InlistLoadOptions,
+) -> Result<Vec<CaseRunReport>, StarError> {
     let nested = suite_or_mesa_dir.join("astero").join("test_suite");
     let suite_dir = if nested.exists() {
         nested.as_path()
@@ -134,11 +164,13 @@ pub fn run_astero_suite(
                 case_dir.display()
             )));
         }
-        reports.push(run_astero_test_suite_case(
+        reports.push(run_astero_test_suite_case_with_options(
             &case_dir,
             skip_optional,
             max_steps_per_stage,
             verify_restart,
+            StarLogsOptions::default(),
+            inlist_opts,
         )?);
     }
     Ok(reports)
@@ -151,12 +183,13 @@ pub fn run_astero_test_suite_case(
     max_steps_per_stage: Option<usize>,
     verify_restart: bool,
 ) -> Result<CaseRunReport, StarError> {
-    run_astero_test_suite_case_with_logs(
+    run_astero_test_suite_case_with_options(
         orig_case_dir,
         skip_optional,
         max_steps_per_stage,
         verify_restart,
         StarLogsOptions::default(),
+        InlistLoadOptions::default(),
     )
 }
 
@@ -170,38 +203,67 @@ pub fn run_astero_test_suite_case_with_logs(
     verify_restart: bool,
     logs_opts: StarLogsOptions<'_>,
 ) -> Result<CaseRunReport, StarError> {
+    run_astero_test_suite_case_with_options(
+        orig_case_dir,
+        skip_optional,
+        max_steps_per_stage,
+        verify_restart,
+        logs_opts,
+        InlistLoadOptions::default(),
+    )
+}
+
+/// Executes a single `astero/test_suite/<case>` directory with explicit
+/// [`StarLogsOptions`] and [`InlistLoadOptions`].
+pub fn run_astero_test_suite_case_with_options(
+    orig_case_dir: &Path,
+    skip_optional: bool,
+    max_steps_per_stage: Option<usize>,
+    verify_restart: bool,
+    logs_opts: StarLogsOptions<'_>,
+    inlist_opts: InlistLoadOptions,
+) -> Result<CaseRunReport, StarError> {
     let case_name = orig_case_dir
         .file_name()
         .and_then(|s| s.to_str())
         .unwrap_or("unknown");
     let has_pulse_inlist = orig_case_dir.join("inlist_astero_adipls").exists()
         || orig_case_dir.join("inlist_astero_gyre").exists();
-    let has_astero_targets = parse_astero_search_controls(orig_case_dir)
-        .is_ok_and(|c| {
-            c.nl.iter().sum::<usize>() > 0
-                || c.include_age_in_chi2_spectro
-                || [
-                    c.teff,
-                    c.logg,
-                    c.log_l,
-                    c.feh,
-                    c.log_r,
-                    c.radius,
-                    c.m_h,
-                    c.surface_z_div_x,
-                    c.surface_he,
-                    c.rcz,
-                ]
-                .iter()
-                .any(|s| s.include && s.sigma > 0.0)
-        });
+    let has_search_inlist = orig_case_dir
+        .join("inlist_astero_search_controls")
+        .is_file();
+    let has_astero_targets = if has_search_inlist {
+        let c = parse_astero_search_controls_with_options(
+            orig_case_dir,
+            inlist_opts,
+        )?;
+        c.nl.iter().sum::<usize>() > 0
+            || c.include_age_in_chi2_spectro
+            || [
+                c.teff,
+                c.logg,
+                c.log_l,
+                c.feh,
+                c.log_r,
+                c.radius,
+                c.m_h,
+                c.surface_z_div_x,
+                c.surface_he,
+                c.rcz,
+            ]
+            .iter()
+            .any(|s| s.include && s.sigma > 0.0)
+    } else {
+        false
+    };
     if !has_pulse_inlist && !has_astero_targets {
-        return run_test_suite_case_with_logs(
+        return run_test_suite_case_with_options(
             orig_case_dir,
             skip_optional,
             max_steps_per_stage,
             verify_restart,
             logs_opts,
+            inlist_opts,
         );
     }
     match case_name {
@@ -211,12 +273,14 @@ pub fn run_astero_test_suite_case_with_logs(
             max_steps_per_stage,
             verify_restart,
             logs_opts,
+            inlist_opts,
         ),
         "surface_effects" => run_surface_effects_case(
             orig_case_dir,
             max_steps_per_stage,
             verify_restart,
             logs_opts,
+            inlist_opts,
         ),
         _ => run_astero_search_case(
             orig_case_dir,
@@ -224,6 +288,7 @@ pub fn run_astero_test_suite_case_with_logs(
             max_steps_per_stage,
             verify_restart,
             logs_opts,
+            inlist_opts,
         ),
     }
 }
@@ -234,11 +299,16 @@ fn run_pulse_tams_case(
     max_steps_per_stage: Option<usize>,
     verify_restart: bool,
     logs_opts: StarLogsOptions<'_>,
+    inlist_opts: InlistLoadOptions,
 ) -> Result<CaseRunReport, StarError> {
     let t0 = Instant::now();
     let staging = TempCaseStaging::new(orig_case_dir)?;
     let case_dir = staging.staged_dir.as_path();
-    let bundle = InlistBundle::from_file_in_case_dir(case_dir, "inlist")?;
+    let bundle = InlistBundle::from_file_in_case_dir_with_options(
+        case_dir,
+        "inlist",
+        inlist_opts,
+    )?;
 
     let mut extras = DefaultStarExtras;
     let mut model =
@@ -267,7 +337,7 @@ fn run_pulse_tams_case(
             add_center_point: true,
             keep_surface_point: false,
             add_atmosphere: false,
-            outer_bc: parse_gyre_outer_bound(case_dir, "gyre.in"),
+            outer_bc: parse_gyre_outer_bound(case_dir, "gyre.in")?,
             inertia_norm: InertiaNormKind::Both,
         }
     } else {
@@ -288,7 +358,7 @@ fn run_pulse_tams_case(
     let target_uhz = model
         .controls
         .x_ctrl
-        .get(1)
+        .first()
         .copied()
         .filter(|&f| f > 0.0)
         .unwrap_or(375.0);
@@ -326,13 +396,18 @@ fn run_surface_effects_case(
     _max_steps_per_stage: Option<usize>,
     verify_restart: bool,
     logs_opts: StarLogsOptions<'_>,
+    inlist_opts: InlistLoadOptions,
 ) -> Result<CaseRunReport, StarError> {
     let t0 = Instant::now();
     let staging = TempCaseStaging::new(orig_case_dir)?;
     let case_dir = staging.staged_dir.as_path();
-    let ctrl = parse_astero_search_controls(case_dir)
-        .map_err(StarError::InvalidInput)?;
-    let bundle = InlistBundle::from_file_in_case_dir(case_dir, "inlist")?;
+    let ctrl =
+        parse_astero_search_controls_with_options(case_dir, inlist_opts)?;
+    let bundle = InlistBundle::from_file_in_case_dir_with_options(
+        case_dir,
+        "inlist",
+        inlist_opts,
+    )?;
     let mut extras = DefaultStarExtras;
     let model = init_or_update_model_from_bundle(&bundle, None, &mut extras)?;
     let mut photo_restart_verified = false;
@@ -350,19 +425,24 @@ fn run_surface_effects_case(
         ctrl.first_params(),
         1,
         case_dir,
-    );
+    )?;
     write_surface_effects_freqs_dat(
         &case_dir.join("freqs.dat"),
         &ctrl,
         &sample,
-    );
+    )?;
     if let Some(out_root) = logs_opts.output_root {
-        let _ = fs::create_dir_all(out_root);
+        fs::create_dir_all(out_root).map_err(|e| {
+            StarError::IoError(format!(
+                "failed creating output root '{}': {e}",
+                out_root.display()
+            ))
+        })?;
         write_surface_effects_freqs_dat(
             &out_root.join("freqs.dat"),
             &ctrl,
             &sample,
-        );
+        )?;
     }
 
     let assertions_passed = verify_surface_effects_assertions(&ctrl, &sample);
@@ -529,7 +609,7 @@ fn write_surface_effects_freqs_dat(
     path: &Path,
     ctrl: &crate::inlist_astero::AsteroSearchControls,
     sample: &crate::sample_eval::AsteroSampleResult,
-) {
+) -> Result<(), StarError> {
     let mut buf = String::new();
     for l in 0..4 {
         for i in 0..sample.model_freqs[l].len() {
@@ -545,7 +625,9 @@ fn write_surface_effects_freqs_dat(
             );
         }
     }
-    let _ = fs::write(path, buf);
+    fs::write(path, buf).map_err(|e| {
+        StarError::IoError(format!("failed writing '{}': {e}", path.display()))
+    })
 }
 
 fn run_astero_search_case(
@@ -554,19 +636,21 @@ fn run_astero_search_case(
     max_steps_per_stage: Option<usize>,
     verify_restart: bool,
     logs_opts: StarLogsOptions<'_>,
+    inlist_opts: InlistLoadOptions,
 ) -> Result<CaseRunReport, StarError> {
     let t0 = Instant::now();
     let staging = TempCaseStaging::new(orig_case_dir)?;
     let case_dir = staging.staged_dir.as_path();
-    let ctrl = parse_astero_search_controls(case_dir)
-        .map_err(StarError::InvalidInput)?;
+    let ctrl =
+        parse_astero_search_controls_with_options(case_dir, inlist_opts)?;
 
-    let search_rep = run_star_astero_with_logs(
+    let search_rep = run_star_astero_with_options(
         case_dir,
         "inlist",
         max_steps_per_stage,
         &ctrl,
         logs_opts,
+        inlist_opts,
     )?;
     let last_mod = search_rep.last_model.as_ref().ok_or_else(|| {
         StarError::ConvergenceFailure(format!(

@@ -11,15 +11,41 @@ use std::fs;
 use std::path::PathBuf;
 
 use flexmesa_astero::{
-    eval_combined_corr, eval_cubic_corr, eval_kjeldsen_corr,
-    eval_model_astero_sample, eval_power_law_corr, eval_sonoi_corr,
-    interpolate_l0_inertia, parse_astero_search_controls, run_astero_suite,
-    run_astero_test_suite_case, TempCaseStaging, TIER4_ASTERO_CASES,
+    copy_cleaned_astero_case, eval_combined_corr, eval_cubic_corr,
+    eval_kjeldsen_corr, eval_model_astero_sample, eval_power_law_corr,
+    eval_sonoi_corr, interpolate_l0_inertia, parse_astero_search_controls,
+    run_astero_suite, run_astero_test_suite_case, TIER4_ASTERO_CASES,
 };
 use flexmesa_math::pow;
 use flexmesa_star::inlist::InlistBundle;
 use flexmesa_star::inlist_runner::DefaultStarExtras;
 use flexmesa_star::star_job_init::init_or_update_model_from_bundle;
+use flexmesa_star::StarError;
+
+struct TempAsteroDirGuard {
+    root: PathBuf,
+}
+
+impl TempAsteroDirGuard {
+    fn new(tag: &str) -> Self {
+        static SEQ: std::sync::atomic::AtomicU64 =
+            std::sync::atomic::AtomicU64::new(0);
+        let id = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let root = std::env::temp_dir().join(format!(
+            "flexmesa_astero_t4_{tag}_{}_{id}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).expect("create cleaned astero temp root");
+        Self { root }
+    }
+}
+
+impl Drop for TempAsteroDirGuard {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.root);
+    }
+}
 
 fn astero_suite_dir() -> PathBuf {
     let base = std::env::var("MESA_DIR").map_or_else(
@@ -75,26 +101,39 @@ fn test_surface_effects_case_recovers_synthetic_targets_and_bison_solar_fits() {
         "missing surface_effects directory: {}",
         case_dir.display()
     );
-    let staging =
-        TempCaseStaging::new(&case_dir).expect("stage surface_effects");
-    let staged = staging.staged_dir.as_path();
+    let raw_err = parse_astero_search_controls(&case_dir)
+        .expect_err("raw surface_effects must reject unsupported controls");
+    assert!(
+        matches!(raw_err, StarError::InvalidInput(_))
+            && raw_err.to_string().contains("unsupported control"),
+        "unexpected raw surface_effects error: {raw_err}"
+    );
+    let tmp = TempAsteroDirGuard::new("surface_effects");
+    let cleaned = tmp.root.join("surface_effects");
+    copy_cleaned_astero_case(&case_dir, &cleaned)
+        .expect("clean surface_effects case");
+    let staged = cleaned.as_path();
 
     let ctrl = parse_astero_search_controls(staged)
-        .expect("parse surface_effects controls");
+        .expect("parse cleaned surface_effects controls");
     assert_eq!(ctrl.nl, [23, 21, 20, 17]);
     assert_eq!(ctrl.l0_n_obs.len(), 23);
     assert!(!ctrl.add_atmosphere);
     assert!(!ctrl.keep_surface_point);
     assert!(ctrl.add_center_point);
 
-    let bundle = InlistBundle::from_file_in_case_dir(staged, "inlist")
-        .expect("parse surface_effects inlist");
+    let bundle = InlistBundle::from_file_in_case_dir(
+        staged,
+        "inlist_surface_effects_header",
+    )
+    .expect("parse surface_effects inlist");
     let mut extras = DefaultStarExtras;
     let model = init_or_update_model_from_bundle(&bundle, None, &mut extras)
         .expect("load s1.mod");
 
     let sample =
-        eval_model_astero_sample(&model, &ctrl, ctrl.first_params(), 1, staged);
+        eval_model_astero_sample(&model, &ctrl, ctrl.first_params(), 1, staged)
+            .expect("eval surface_effects sample");
     let (mut obs_f, mut obs_sig, mut mod_f, mut mod_in) =
         (Vec::new(), Vec::new(), Vec::new(), Vec::new());
     for l in 0..4 {
@@ -200,13 +239,19 @@ fn assert_uncapped_case_passes(case_name: &str) {
         "missing astero test_suite directory: {}",
         suite_dir.display()
     );
-    let rep = run_astero_test_suite_case(
-        &suite_dir.join(case_name),
-        true,
-        None,
-        true,
-    )
-    .unwrap_or_else(|e| panic!("astero case {case_name} errored: {e}"));
+    let raw_case = suite_dir.join(case_name);
+    let raw_err = run_astero_test_suite_case(&raw_case, true, Some(2), true)
+        .expect_err("raw astero case must fail on unsupported controls");
+    assert!(
+        matches!(raw_err, StarError::InvalidInput(_))
+            && raw_err.to_string().contains("unsupported control"),
+        "unexpected raw astero error for {case_name}: {raw_err}"
+    );
+    let tmp = TempAsteroDirGuard::new(case_name);
+    let cleaned = tmp.root.join(case_name);
+    copy_cleaned_astero_case(&raw_case, &cleaned).expect("clean astero case");
+    let rep = run_astero_test_suite_case(&cleaned, true, None, true)
+        .unwrap_or_else(|e| panic!("astero case {case_name} errored: {e}"));
     assert_eq!(rep.case_name, case_name);
     assert!(
         rep.passed,
@@ -250,8 +295,25 @@ fn test_all_eight_astero_cases_bounded_eight_steps_pass() {
         "missing astero test_suite directory: {}",
         suite_dir.display()
     );
-    let reports = run_astero_suite(&suite_dir, true, Some(8), true)
-        .expect("run all 8 astero cases bounded to 8 steps");
+    let raw_err = run_astero_suite(&suite_dir, true, Some(2), true).expect_err(
+        "raw $MESA_DIR astero suite must reject unsupported controls",
+    );
+    assert!(
+        matches!(raw_err, StarError::InvalidInput(_))
+            && raw_err.to_string().contains("unsupported control"),
+        "unexpected raw astero suite error: {raw_err}"
+    );
+    let tmp = TempAsteroDirGuard::new("all8");
+    let cleaned_suite = tmp.root.join("astero").join("test_suite");
+    for &case_name in &TIER4_ASTERO_CASES {
+        copy_cleaned_astero_case(
+            &suite_dir.join(case_name),
+            &cleaned_suite.join(case_name),
+        )
+        .expect("clean astero suite case");
+    }
+    let reports = run_astero_suite(&cleaned_suite, true, Some(8), true)
+        .expect("run all 8 cleaned astero cases bounded to 8 steps");
     assert_eq!(reports.len(), TIER4_ASTERO_CASES.len());
     for (rep, &expected_name) in reports.iter().zip(&TIER4_ASTERO_CASES) {
         assert_eq!(rep.case_name, expected_name);

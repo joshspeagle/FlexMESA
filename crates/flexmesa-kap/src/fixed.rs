@@ -6,7 +6,7 @@
 
 use crate::loader::{kap_tables, KapXTable, KapZTable};
 use crate::spline::{do_kap_interpolations, locate_log};
-use crate::types::{KapConfig, KapError, KapLowTOption};
+use crate::types::{KapConfig, KapError, KapLowTOption, KapOption};
 use flexmesa_autodiff::AutoDiffReal2VarOrder1;
 use flexmesa_interp1d::interpolate_vector_pm_autodiff;
 
@@ -25,9 +25,13 @@ pub fn get1_kap_fixed_metal_results(
     log_rho: f64,
     log_t: f64,
 ) -> Result<(f64, f64, f64), KapError> {
-    let tables = kap_tables();
-    let canonical =
-        KapLowTOption::from_prefix(prefix).map_or(prefix, |o| o.prefix());
+    let tables = kap_tables()?;
+    let canonical = KapOption::from_prefix(prefix)
+        .map(KapOption::prefix)
+        .or_else(|_| {
+            KapLowTOption::from_prefix(prefix).map(KapLowTOption::prefix)
+        })
+        .unwrap_or(prefix);
     let set = tables
         .fixed_sets
         .iter()
@@ -227,19 +231,25 @@ fn get_kap_for_log_rho_log_t(
     log_t_in: f64,
 ) -> Result<(f64, f64, f64), KapError> {
     let log_r_in = log_rho - 3.0 * log_t_in + 18.0;
+    // Match upstream kap/private/kap_eval_fixed.f90:677-702: reject out-of-bounds
+    // logT < logT_min, logT > logT_max, and logR < logR_min; clip only high logR.
     if log_t_in > xt.log_t_max {
         return Err(KapError::OutOfBounds(
             "logT > logT_max in fixed kap table",
         ));
     }
-    let (mut log_t, clipped_log_t) = if log_t_in < xt.log_t_min {
-        (xt.log_t_min, true)
-    } else {
-        (log_t_in, false)
-    };
-    let (mut log_r, clipped_log_r) = if log_r_in < xt.log_r_min {
-        (xt.log_r_min, true)
-    } else if log_r_in > xt.log_r_max {
+    if log_t_in < xt.log_t_min {
+        return Err(KapError::OutOfBounds(
+            "logT < logT_min in fixed kap table",
+        ));
+    }
+    if log_r_in < xt.log_r_min {
+        return Err(KapError::OutOfBounds(
+            "logR < logR_min in fixed kap table",
+        ));
+    }
+    let mut log_t = log_t_in;
+    let (mut log_r, clipped_log_r) = if log_r_in > xt.log_r_max {
         (xt.log_r_max, true)
     } else {
         (log_r_in, false)
@@ -265,7 +275,7 @@ fn get_kap_for_log_rho_log_t(
     )?;
     log_t = log_t_loc;
 
-    let (log_k, mut df_dx, mut df_dy) = do_kap_interpolations(
+    let (log_k, mut df_dx, df_dy) = do_kap_interpolations(
         kap1,
         xt.log_rs.len(),
         xt.log_ts.len(),
@@ -280,9 +290,6 @@ fn get_kap_for_log_rho_log_t(
     );
     if clipped_log_r {
         df_dx = 0.0;
-    }
-    if clipped_log_t {
-        df_dy = 0.0;
     }
     let dlog_k_dlog_rho = df_dx;
     let dlog_k_dlog_t = df_dy - 3.0 * df_dx;

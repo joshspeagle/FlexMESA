@@ -213,8 +213,10 @@ pub fn eos_get_skye_alfa(
     log_t: f64,
     abar: f64,
     zbar: f64,
-) -> (f64, f64, f64) {
-    get_skye_alfa(HelmTable::builtin(), log_rho, log_t, abar, zbar)
+) -> PyResult<(f64, f64, f64)> {
+    let ht = HelmTable::builtin()
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    Ok(get_skye_alfa(ht, log_rho, log_t, abar, zbar))
 }
 
 /// Evaluates `get_Skye_alfa_simple` (`skye.f90` lines 139-227), returning
@@ -259,17 +261,10 @@ pub fn eos_eval_skye<'py>(
         mass_fraction_limit_for_skye: mass_fraction_limit,
         ..SkyeConfig::default()
     };
-    let out = eval_skye_eos(
-        &cfg,
-        HelmTable::builtin(),
-        rho,
-        temp,
-        abar,
-        zbar,
-        &chem_id,
-        xa_s,
-    )
-    .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    let ht = HelmTable::builtin()
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    let out = eval_skye_eos(&cfg, ht, rho, temp, abar, zbar, &chem_id, xa_s)
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
     Ok(into_py_eos_tuple(py, &out))
 }
 
@@ -354,7 +349,8 @@ pub fn eos_eval_skye_zones<'py>(
         mass_fraction_limit_for_skye: mass_fraction_limit,
         ..SkyeConfig::default()
     };
-    let ht = HelmTable::builtin();
+    let ht = HelmTable::builtin()
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
     eval_batch_2d::<78, _>(py, nz, parallel, 32, move |k| {
         let mut row = [f64::NAN; 78];
         let xa_k = &xa_s[k * sp..(k + 1) * sp];

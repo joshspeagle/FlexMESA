@@ -246,7 +246,7 @@ fn build_rsp2_jacobian_test_model() -> StarModel {
         model.aux.rsp.hp_face[k] =
             1.03 * eval_rsp2_hp_face_zone(&model, k).max(1.0);
     }
-    model.save_start_values();
+    model.save_start_values().expect("save_start_values");
     for k in 0..nz {
         model.v[k] *= 1.04;
         model.ln_r[k] += 1.0e-4;
@@ -376,7 +376,7 @@ fn test_rsp2_coupled_henyey_evolution_on_blap_conserves_energy() {
     model.aux.total_energy = e0;
     model.aux.rsp.total_energy_old = e0;
     model.aux.cumulative_energy_error = 0.0;
-    model.save_start_values();
+    model.save_start_values().expect("save_start_values");
     model.save_old_values();
 
     for _ in 0..5 {

@@ -18,9 +18,7 @@ use flexmesa_math::{exp10, log10, pow};
 use crate::controls::{AtmOption, EnergyEqnOption, StarError, VarLayout};
 use crate::evolve::{restore_from_old, star_evolve_step};
 use crate::history::extract_history_row;
-use crate::inlist_runner::{
-    run_case_list, CaseRunReport, ExtrasDirective, StarExtras,
-};
+use crate::inlist_runner::{CaseRunReport, ExtrasDirective, StarExtras};
 use crate::model::StarModel;
 use crate::model_io::{compute_photo_checksum, write_photo_bytes};
 use crate::tier1_extras::TIER1_CASES;
@@ -218,7 +216,7 @@ pub fn verify_step_redo_bit_parity(
     redone.dt = dt_step;
     redone.dt_next = dt_step;
     crate::struct_burn_mix::refresh_mixing_state(&mut redone, dt_step, &[]);
-    redone.save_start_values();
+    redone.save_start_values()?;
     star_evolve_step(&mut redone, false, op_split, true)?;
 
     let c_direct = compute_photo_checksum(&write_photo_bytes(&direct));
@@ -348,22 +346,31 @@ impl StarExtras for Tier5StarCaseExtras {
     fn extras_finish_step(&mut self, model: &mut StarModel) -> ExtrasDirective {
         match self.case_name.as_str() {
             "check_redo" if !self.done_redo && model.model_number >= 1 => {
-                if verify_step_redo_bit_parity(model).is_ok() {
-                    self.done_redo = true;
+                if let Err(err) = verify_step_redo_bit_parity(model) {
+                    return ExtrasDirective::Error(format!(
+                        "check_redo step-redo parity failed: {err}"
+                    ));
                 }
+                self.done_redo = true;
             }
-            "other_physics_hooks" => {
-                debug_assert!(check_other_physics_hooks(model));
+            "other_physics_hooks" if !check_other_physics_hooks(model) => {
+                return ExtrasDirective::Error(String::from(
+                    "other_physics_hooks post-step invariant failed",
+                ));
             }
             _ => {}
         }
         ExtrasDirective::KeepGoing
     }
 
-    fn extras_after_evolve(&mut self, model: &mut StarModel) {
+    fn extras_after_evolve(
+        &mut self,
+        model: &mut StarModel,
+    ) -> Result<(), StarError> {
         if self.case_name == "relax_composition_j_entropy" {
-            let _ = write_relax_profile_files(model, &self.case_dir);
+            write_relax_profile_files(model, &self.case_dir)?;
         }
+        Ok(())
     }
 }
 
@@ -390,8 +397,10 @@ pub fn verify_tier5_star_case_assertions(
         "other_physics_hooks" => check_other_physics_hooks(model),
         "relax_composition_j_entropy" => {
             let tv_path = case_dir.join("target_vals.dat");
-            if !tv_path.exists() {
-                let _ = write_relax_profile_files(model, case_dir);
+            if !tv_path.exists()
+                && write_relax_profile_files(model, case_dir).is_err()
+            {
+                return false;
             }
             if let Ok(text) = fs::read_to_string(&tv_path) {
                 let vals: Vec<f64> = text
@@ -418,11 +427,31 @@ pub fn run_tier5_star_suite(
     max_steps_per_stage: Option<usize>,
     verify_restart: bool,
 ) -> Result<Vec<CaseRunReport>, StarError> {
-    run_case_list(
+    run_tier5_star_suite_with_options(
+        mesa_dir,
+        max_steps_per_stage,
+        verify_restart,
+        crate::inlist::InlistLoadOptions::default(),
+    )
+}
+
+/// Executes all 4 Tier 5/6 `star/test_suite` cases under `mesa_dir` with
+/// explicit [`InlistLoadOptions`](crate::inlist::InlistLoadOptions).
+///
+/// # Errors
+/// Returns [`StarError`] if any case fails to execute.
+pub fn run_tier5_star_suite_with_options(
+    mesa_dir: &Path,
+    max_steps_per_stage: Option<usize>,
+    verify_restart: bool,
+    load_opts: crate::inlist::InlistLoadOptions,
+) -> Result<Vec<CaseRunReport>, StarError> {
+    crate::inlist_runner::run_case_list_with_options(
         mesa_dir,
         &TIER5_STAR_CASES,
         max_steps_per_stage,
         verify_restart,
+        load_opts,
     )
 }
 
@@ -448,6 +477,31 @@ pub fn run_all_active_star_suite(
     max_steps_per_stage: Option<usize>,
     verify_restart: bool,
 ) -> Result<Vec<CaseRunReport>, StarError> {
+    run_all_active_star_suite_with_options(
+        mesa_dir,
+        max_steps_per_stage,
+        verify_restart,
+        crate::inlist::InlistLoadOptions::default(),
+    )
+}
+
+/// Executes all 91 active `star/test_suite` cases under `mesa_dir` with
+/// explicit [`InlistLoadOptions`](crate::inlist::InlistLoadOptions).
+///
+/// # Errors
+/// Returns [`StarError`] if any active `star/test_suite` case fails.
+pub fn run_all_active_star_suite_with_options(
+    mesa_dir: &Path,
+    max_steps_per_stage: Option<usize>,
+    verify_restart: bool,
+    load_opts: crate::inlist::InlistLoadOptions,
+) -> Result<Vec<CaseRunReport>, StarError> {
     let names = all_active_star_case_names();
-    run_case_list(mesa_dir, &names, max_steps_per_stage, verify_restart)
+    crate::inlist_runner::run_case_list_with_options(
+        mesa_dir,
+        &names,
+        max_steps_per_stage,
+        verify_restart,
+        load_opts,
+    )
 }

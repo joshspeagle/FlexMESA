@@ -265,7 +265,7 @@ fn test_incremental_flush_survives_mid_run_drop_and_profiles_evict_by_priority()
         load_zams_model(controls, StarJobControls::default()).expect("zams");
     model.dt = 1.0e3 * SECYER;
     set_hydro_vars(&mut model, false, false).expect("hydro");
-    model.save_start_values();
+    model.save_start_values().expect("save_start_values");
 
     let abort_hist_path = tmp.path().join("aborted_history.data");
     {
@@ -365,7 +365,7 @@ fn test_two_step_evolve_writes_mesa_logs_and_split_headers() {
     model.dt = 1.0e4 * SECYER;
     model.dt_next = model.dt;
     set_hydro_vars(&mut model, false, false).expect("hydro");
-    model.save_start_values();
+    model.save_start_values().expect("save_start_values");
 
     let mut logs =
         StarLogsWriter::for_stage(&model, tmp.path(), tmp.path(), None, None)
@@ -375,7 +375,7 @@ fn test_two_step_evolve_writes_mesa_logs_and_split_headers() {
         model.mstar_start = model.mstar;
         model.sync_mesh_and_pack().expect("sync");
         set_hydro_vars(&mut model, false, false).expect("hydro");
-        model.save_start_values();
+        model.save_start_values().expect("save_start_values");
         logs.record_step(&model, step == 1, step == 2)
             .expect("record");
     }
@@ -457,7 +457,7 @@ fn test_multistage_rn_logs_dir_routing() {
     .expect("write inlist_s1");
     fs::write(
         ms_case.path().join("inlist_s2"),
-        "&star_job\n  load_saved_model = .true.\n  saved_model_name = 's1.mod'\n  steps_to_take_before_terminate = 1\n/\n&controls\n  initial_mass = 1.0\n  initial_z = 0.02\n  history_interval = 1\n  write_profiles_flag = .false.\n/\n",
+        "&star_job\n  load_saved_model = .true.\n  load_model_filename = 's1.mod'\n  steps_to_take_before_terminate = 1\n/\n&controls\n  initial_mass = 1.0\n  initial_z = 0.02\n  history_interval = 1\n  write_profiles_flag = .false.\n/\n",
     )
     .expect("write inlist_s2");
     let rep = flexmesa_star::run_test_suite_case_with_logs(
@@ -508,27 +508,88 @@ fn resolve_test_mesa_root() -> Option<PathBuf> {
         })
 }
 
+fn collect_history_columns_files_in_namelist(
+    case_dir: &std::path::Path,
+    rel_file: &str,
+    visited: &mut std::collections::HashSet<PathBuf>,
+    out: &mut Vec<String>,
+) {
+    let path = case_dir.join(rel_file);
+    if !visited.insert(path.clone()) {
+        return;
+    }
+    let Ok(blocks) = flexmesa_schema::parse_namelist_file(&path) else {
+        return;
+    };
+    let mut read_extra = [false; 6];
+    let mut extra_name: [Option<String>; 6] = std::array::from_fn(|_| None);
+    for blk in &blocks {
+        if !blk.name.eq_ignore_ascii_case("star_job") {
+            continue;
+        }
+        for a in &blk.assignments {
+            let k = a.name.to_ascii_lowercase();
+            if k == "history_columns_file" {
+                if let flexmesa_schema::ControlValue::String(s) = &a.value {
+                    let hcf = s.trim();
+                    if !hcf.is_empty() && !out.iter().any(|f| f == hcf) {
+                        out.push(hcf.to_owned());
+                    }
+                }
+            } else if k == "read_extra_star_job_inlist" {
+                if let Some(sub) =
+                    a.subscript.as_deref().and_then(|s| s.parse::<usize>().ok())
+                {
+                    if (1..=5).contains(&sub) {
+                        if let flexmesa_schema::ControlValue::Logical(b) =
+                            a.value
+                        {
+                            read_extra[sub] = b;
+                        }
+                    }
+                }
+            } else if k == "extra_star_job_inlist_name" {
+                if let Some(sub) =
+                    a.subscript.as_deref().and_then(|s| s.parse::<usize>().ok())
+                {
+                    if (1..=5).contains(&sub) {
+                        if let flexmesa_schema::ControlValue::String(s) =
+                            &a.value
+                        {
+                            extra_name[sub] = Some(s.trim().to_owned());
+                        }
+                    }
+                }
+            }
+        }
+    }
+    for i in 1..=5 {
+        if read_extra[i] {
+            if let Some(ref f) = extra_name[i] {
+                collect_history_columns_files_in_namelist(
+                    case_dir, f, visited, out,
+                );
+            }
+        }
+    }
+}
+
 fn case_history_column_files(case_dir: &std::path::Path) -> Vec<String> {
     let mut candidate_files = vec![
         String::from("history_columns.list"),
         String::from("history_columns_rsp.list"),
         String::from("astero_history_columns.list"),
     ];
+    let mut visited = std::collections::HashSet::new();
     if let Ok(stages) = flexmesa_star::parse_rn_stages(case_dir, false) {
         for st in stages {
             if let flexmesa_star::RnStage::DoOne { inlist, .. } = st {
-                if let Ok(b) =
-                    flexmesa_star::InlistBundle::from_file_in_case_dir(
-                        case_dir, &inlist,
-                    )
-                {
-                    let hcf = b.job.history_columns_file.trim();
-                    if !hcf.is_empty()
-                        && !candidate_files.iter().any(|f| f == hcf)
-                    {
-                        candidate_files.push(hcf.to_owned());
-                    }
-                }
+                collect_history_columns_files_in_namelist(
+                    case_dir,
+                    &inlist,
+                    &mut visited,
+                    &mut candidate_files,
+                );
             }
         }
     }

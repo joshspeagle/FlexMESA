@@ -128,11 +128,19 @@ impl RatesCatalog {
     }
 
     /// Evaluates a 1D `interp_pm` rate table for 1-based reaction ID `ir` at `temp` ($\mathrm{K}$).
-    #[must_use]
-    pub fn eval_rate_table(&self, ir: usize, temp: f64) -> Option<(f64, f64)> {
-        self.rate_tables
-            .get(&ir)
-            .map(|(t8s, f1)| eval_interp_rate_table(t8s, f1, temp))
+    ///
+    /// # Errors
+    /// Returns [`RatesError::UnknownReaction`] if `ir` has no tabulated rate
+    /// table or [`RatesError::InvalidTableData`] if interpolation fails.
+    pub fn eval_rate_table(
+        &self,
+        ir: usize,
+        temp: f64,
+    ) -> Result<(f64, f64), RatesError> {
+        let (t8s, f1) = self.rate_tables.get(&ir).ok_or_else(|| {
+            RatesError::UnknownReaction(format!("rate_table id={ir}"))
+        })?;
+        eval_interp_rate_table(t8s, f1, temp)
     }
 
     /// Looks up `(halflife, qneu)` from `weak_info.list` by `(lhs_id, rhs_id)`.

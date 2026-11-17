@@ -7,7 +7,7 @@ Verifies:
    temperature self-heating `(Y_i, ln T)` during exothermic triple-alpha
    helium burning.
 2. `flexmesa.star.parse_inlist_bundle` exposes all documented Phase 5a
-   `&star_job` and `&controls` keys (`rti_flag`, `load_saved_model_for_rsp2`,
+   `&star_job` and `&controls` keys (`rti_flag`, `rsp2_flag`,
    `okay_to_remesh`, `use_gold_tolerances`, `use_gold2_tolerances`,
    `op_split_burn_min_t`).
 3. `flexmesa.star.eval_hydro_residuals_jax` respects trapezoidal thermal
@@ -23,6 +23,7 @@ import pathlib
 import jax
 import jax.numpy as jnp
 import numpy as np
+import pytest
 
 from flexmesa import constants, net, star
 
@@ -69,7 +70,8 @@ def test_parse_inlist_bundle_exposes_all_phase5a_star_controls(
         "  new_u_flag = .true.\n"
         "  change_rti_flag = .true.\n"
         "  new_rti_flag = .true.\n"
-        "  load_saved_model_for_rsp2 = .true.\n"
+        "  change_rsp2_flag = .true.\n"
+        "  new_rsp2_flag = .true.\n"
         "  change_net = .true.\n"
         "  new_net_name = 'approx21.net'\n"
         "/\n"
@@ -84,7 +86,7 @@ def test_parse_inlist_bundle_exposes_all_phase5a_star_controls(
     )
     parsed = star.parse_inlist_bundle(inlist_file)
     assert parsed["rti_flag"] is True
-    assert parsed["load_saved_model_for_rsp2"] is True
+    assert parsed["rsp2_flag"] is True
     assert parsed["change_net"] is True
     assert parsed["new_net_name"] == "approx21.net"
     assert parsed["okay_to_remesh"] is False
@@ -99,7 +101,12 @@ def test_parse_inlist_bundle_exposes_all_phase5a_star_controls(
         "&controls\n  rti_flag = .true.\n/\n",
         encoding="utf-8",
     )
-    assert star.parse_inlist_bundle(inlist_ctrl_rti)["rti_flag"] is True
+    with pytest.raises(ValueError, match="rti_flag"):
+        star.parse_inlist_bundle(inlist_ctrl_rti)
+    with pytest.raises(ValueError, match="rti_flag"):
+        star.parse_inlist_bundle(
+            inlist_ctrl_rti, allow_unsupported_controls=True
+        )
 
 
 def test_eval_hydro_residuals_jax_jacobian_matches_analytical_partials() -> (

@@ -69,7 +69,9 @@ pub(crate) fn write_lina_summary(
     periods_sec: &[f64],
     growth_rates: &[f64],
 ) -> Result<(), StarError> {
-    let _ = fs::create_dir_all(dir);
+    fs::create_dir_all(dir).map_err(|e| {
+        StarError::IoError(format!("create_dir_all {}: {e}", dir.display()))
+    })?;
     let mut s = String::new();
     for (idx, (&p_s, &g)) in
         periods_sec.iter().zip(growth_rates.iter()).enumerate()
@@ -106,7 +108,9 @@ pub(crate) fn write_lina_mode_logs(
     qwkev: &[f64],
     qwkpt: &[f64],
 ) -> Result<(), StarError> {
-    let _ = fs::create_dir_all(dir);
+    fs::create_dir_all(dir).map_err(|e| {
+        StarError::IoError(format!("create_dir_all {}: {e}", dir.display()))
+    })?;
     let mut w_buf = String::from(
         "#ZONE  log(T)         X              WORK(P)         WORK(P_NU)      WORK(P_T)        CWORK(P)        CWORK(P_NU)        CWORK(P_T)\n",
     );

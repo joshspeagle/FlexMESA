@@ -7,15 +7,17 @@
 use std::path::Path;
 
 use flexmesa_astero::{
-    run_astero_suite, run_astero_test_suite_case, TIER4_ASTERO_CASES,
+    run_astero_suite_with_options, run_astero_test_suite_case_with_options,
+    TIER4_ASTERO_CASES,
 };
 use flexmesa_star::{
     build_rsp_envelope_model, eval_astero_scaling_dnu_numax_uhz,
     eval_linear_oscillation_modes, eval_rsp_2nd_crossing_edges,
     eval_rsp_lina_modes, eval_target_mode_frequency_and_growth,
-    run_dev_cases_suite, run_tier4_star_suite, CaseRunReport,
-    LinearOscillationMode, StarControls, StarJobControls,
-    TIER4_ACTIVE_STAR_CASES, TIER4_DEV_CASES, TIER4_STAR_CASES,
+    run_dev_cases_suite_with_options, run_tier4_star_suite_with_options,
+    CaseRunReport, InlistLoadOptions, LinearOscillationMode, StarControls,
+    StarJobControls, StarLogsOptions, TIER4_ACTIVE_STAR_CASES, TIER4_DEV_CASES,
+    TIER4_STAR_CASES,
 };
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
@@ -175,9 +177,8 @@ pub fn star_eval_rsp_2nd_crossing_edges(
     delta_teff: f64,
     history_filename: &str,
 ) -> PyResult<(f64, f64, f64)> {
-    let x_ctrl =
-        vec![0.0, delta_teff, 3.76, 4.5, 3.83, 2.4, 3.65, 4.5, 3.77, 2.4];
-    let x_int = vec![0_i64, 6, 1, 2, 4, 5];
+    let x_ctrl = vec![delta_teff, 3.76, 4.5, 3.83, 2.4, 3.65, 4.5, 3.77, 2.4];
+    let x_int = vec![6_i64, 1, 2, 4, 5];
     eval_rsp_2nd_crossing_edges(
         Path::new(case_dir),
         &x_ctrl,
@@ -216,42 +217,53 @@ pub fn star_build_rsp_envelope_model(
 
 /// Runs all 16 Tier 4 `star/test_suite` cases under `mesa_dir`.
 #[pyfunction]
-#[pyo3(signature = (mesa_dir, skip_optional=true, max_steps_per_stage=None, verify_restart=true))]
+#[pyo3(signature = (mesa_dir, skip_optional=true, max_steps_per_stage=None, verify_restart=true, allow_unsupported_controls=false))]
 pub fn star_run_tier4_star_suite<'py>(
     py: Python<'py>,
     mesa_dir: &str,
     skip_optional: bool,
     max_steps_per_stage: Option<usize>,
     verify_restart: bool,
+    allow_unsupported_controls: bool,
 ) -> PyResult<Bound<'py, PyList>> {
+    let load_opts = InlistLoadOptions {
+        allow_unsupported_controls,
+    };
     run_star_suite_detached(py, mesa_dir, |root| {
-        run_tier4_star_suite(
+        run_tier4_star_suite_with_options(
             root,
             skip_optional,
             max_steps_per_stage,
             verify_restart,
+            load_opts,
         )
     })
 }
 
 /// Runs a single `astero/test_suite` case directory via `flexmesa_astero`.
 #[pyfunction]
-#[pyo3(signature = (case_dir, skip_optional=true, max_steps_per_stage=None, verify_restart=true))]
+#[pyo3(signature = (case_dir, skip_optional=true, max_steps_per_stage=None, verify_restart=true, allow_unsupported_controls=false))]
 pub fn star_run_astero_test_suite_case<'py>(
     py: Python<'py>,
     case_dir: &str,
     skip_optional: bool,
     max_steps_per_stage: Option<usize>,
     verify_restart: bool,
+    allow_unsupported_controls: bool,
 ) -> PyResult<Bound<'py, PyDict>> {
     let dir = Path::new(case_dir).to_path_buf();
+    let load_opts = InlistLoadOptions {
+        allow_unsupported_controls,
+    };
     let rep = py
         .detach(|| {
-            run_astero_test_suite_case(
+            run_astero_test_suite_case_with_options(
                 &dir,
                 skip_optional,
                 max_steps_per_stage,
                 verify_restart,
+                StarLogsOptions::default(),
+                load_opts,
             )
         })
         .map_err(to_py_err)?;
@@ -260,46 +272,57 @@ pub fn star_run_astero_test_suite_case<'py>(
 
 /// Runs all 8 `astero/test_suite` cases under `mesa_dir` via `flexmesa_astero`.
 #[pyfunction]
-#[pyo3(signature = (mesa_dir, skip_optional=true, max_steps_per_stage=None, verify_restart=true))]
+#[pyo3(signature = (mesa_dir, skip_optional=true, max_steps_per_stage=None, verify_restart=true, allow_unsupported_controls=false))]
 pub fn star_run_astero_suite<'py>(
     py: Python<'py>,
     mesa_dir: &str,
     skip_optional: bool,
     max_steps_per_stage: Option<usize>,
     verify_restart: bool,
+    allow_unsupported_controls: bool,
 ) -> PyResult<Bound<'py, PyList>> {
+    let load_opts = InlistLoadOptions {
+        allow_unsupported_controls,
+    };
     run_star_suite_detached(py, mesa_dir, |root| {
-        run_astero_suite(
+        run_astero_suite_with_options(
             root,
             skip_optional,
             max_steps_per_stage,
             verify_restart,
+            load_opts,
         )
     })
 }
 
 /// Runs all 24 Tier 4 `test_suite` cases (`16` `star` + `8` `astero`) under `mesa_dir`.
 #[pyfunction]
-#[pyo3(signature = (mesa_dir, skip_optional=true, max_steps_per_stage=None, verify_restart=true))]
+#[pyo3(signature = (mesa_dir, skip_optional=true, max_steps_per_stage=None, verify_restart=true, allow_unsupported_controls=false))]
 pub fn star_run_tier4_suite<'py>(
     py: Python<'py>,
     mesa_dir: &str,
     skip_optional: bool,
     max_steps_per_stage: Option<usize>,
     verify_restart: bool,
+    allow_unsupported_controls: bool,
 ) -> PyResult<Bound<'py, PyList>> {
+    let load_opts = InlistLoadOptions {
+        allow_unsupported_controls,
+    };
     run_star_suite_detached(py, mesa_dir, |root| {
-        let mut reports = run_tier4_star_suite(
+        let mut reports = run_tier4_star_suite_with_options(
             root,
             skip_optional,
             max_steps_per_stage,
             verify_restart,
+            load_opts,
         )?;
-        reports.extend(run_astero_suite(
+        reports.extend(run_astero_suite_with_options(
             root,
             skip_optional,
             max_steps_per_stage,
             verify_restart,
+            load_opts,
         )?);
         Ok(reports)
     })
@@ -307,20 +330,25 @@ pub fn star_run_tier4_suite<'py>(
 
 /// Runs all 32 `star/dev_cases_*` cases under `mesa_dir`.
 #[pyfunction]
-#[pyo3(signature = (mesa_dir, skip_optional=true, max_steps_per_stage=None, verify_restart=true))]
+#[pyo3(signature = (mesa_dir, skip_optional=true, max_steps_per_stage=None, verify_restart=true, allow_unsupported_controls=false))]
 pub fn star_run_dev_cases_suite<'py>(
     py: Python<'py>,
     mesa_dir: &str,
     skip_optional: bool,
     max_steps_per_stage: Option<usize>,
     verify_restart: bool,
+    allow_unsupported_controls: bool,
 ) -> PyResult<Bound<'py, PyList>> {
+    let load_opts = InlistLoadOptions {
+        allow_unsupported_controls,
+    };
     run_star_suite_detached(py, mesa_dir, |root| {
-        run_dev_cases_suite(
+        run_dev_cases_suite_with_options(
             root,
             skip_optional,
             max_steps_per_stage,
             verify_restart,
+            load_opts,
         )
     })
 }

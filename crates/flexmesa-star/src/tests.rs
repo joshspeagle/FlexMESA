@@ -152,7 +152,7 @@ fn test_henyey_jacobian_blocks_match_central_finite_differences() {
     let mut model = load_zams_model(controls, job).expect("load 4 Msun");
     model.dt = 1.0;
     set_hydro_vars(&mut model, false, false).expect("init hydro vars");
-    model.save_start_values();
+    model.save_start_values().expect("save_start_values");
 
     let eps = 1.0e-7;
     for include_chem in [false, true] {
@@ -254,7 +254,7 @@ fn test_solve_henyey_step_converges_on_perturbed_model() {
     let mut model = build_pre_ms_model(controls, job).expect("build pre-MS");
     model.dt = 10.0 * SECYER;
     set_hydro_vars(&mut model, false, false).expect("init hydro");
-    model.save_start_values();
+    model.save_start_values().expect("save_start_values");
 
     let mut model_thomas = model.clone();
     let report_bcyclic =
@@ -284,7 +284,7 @@ fn test_solve_henyey_step_converges_on_perturbed_model() {
         );
     }
 
-    model.save_start_values();
+    model.save_start_values().expect("save_start_values");
     let report_chem =
         solve_henyey_step(&mut model, true, true).expect("solve coupled");
     assert!(
@@ -398,7 +398,7 @@ fn test_do1_energy_eqn_time_centers_non_nuc_neu() {
         load_zams_model(controls, StarJobControls::default()).expect("zams");
     model.dt = 100.0;
     set_hydro_vars(&mut model, false, false).expect("init hydro");
-    model.save_start_values();
+    model.save_start_values().expect("save_start_values");
 
     let k = model.nz - 1;
     let x_scale = compute_x_scale(&model, false);

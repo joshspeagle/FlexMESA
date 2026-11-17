@@ -37,9 +37,11 @@ def test_fidelity4_mod_and_photo_roundtrip_and_step_redo_parity() -> None:
     assert m_photo.to_photo_bytes() == photo_bytes
 
 
-def test_fidelity4_representative_multi_tier_physical_e2e_execution() -> None:
-    """Verify representative physical E2E runs across Tiers 1-5 when `MESA_DIR`
-    is available (`#115`, closing `#109`).
+def test_fidelity4_representative_multi_tier_physical_e2e_execution(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Verify representative physical E2E runs across Tiers 1-5 on cleaned
+    copies while raw `$MESA_DIR` directories fail strictly under `#147`.
     """
     assert len(star.ALL_ACTIVE_STAR_CASES) == 90
     assert len(star.TIER4_ASTERO_CASES) == 8
@@ -61,8 +63,17 @@ def test_fidelity4_representative_multi_tier_physical_e2e_execution() -> None:
     ):
         cdir = star_ts / cname
         assert cdir.is_dir(), f"Missing upstream case directory: {cdir}"
+        with pytest.raises(
+            ValueError,
+            match=r"(unsupported|unknown|unrecognized).*control",
+        ):
+            star.run_test_suite_case(
+                cdir, max_steps_per_stage=2, verify_restart=True
+            )
+        clean_dir = tmp_path / cname
+        star.copy_cleaned_case(cdir, clean_dir, suite="star")
         rep = star.run_test_suite_case(
-            cdir, max_steps_per_stage=2, verify_restart=True
+            clean_dir, max_steps_per_stage=2, verify_restart=True
         )
         assert rep["passed"]
         assert rep["photo_restart_verified"]

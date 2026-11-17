@@ -297,7 +297,11 @@ fn eval_face_mlt(
                     grav: grav_f,
                     energy: e_f,
                 };
-                set_tdc(&tdc_params, &tdc_in).ok().map(|r| r.output)
+                Some(set_tdc(&tdc_params, &tdc_in).map_err(|e| {
+                    StarError::MicrophysicsError(format!(
+                        "TDC evaluation failed at face {k} (`star/private/turb_support.f90:337-340`): {e}"
+                    ))
+                })?.output)
             } else {
                 None
             };
@@ -364,14 +368,17 @@ fn eval_face_mlt(
                 rho: rho_f,
                 cp: cp_f,
             };
-            if let Ok(th_out) = set_thermohaline(&th_params, &th_in) {
-                if th_out.d.val > 0.0 {
-                    grad_t_f = th_out.grad_t;
-                    conv_vel_f = th_out.conv_vel;
-                    d_f = th_out.d;
-                    gamma_val = th_out.gamma.val;
-                    mix_type = th_out.mixing_type;
-                }
+            let th_out = set_thermohaline(&th_params, &th_in).map_err(|e| {
+                StarError::MicrophysicsError(format!(
+                    "thermohaline mixing failed at face {k} (`star/private/turb_support.f90:404-407`): {e}"
+                ))
+            })?;
+            if th_out.d.val > 0.0 {
+                grad_t_f = th_out.grad_t;
+                conv_vel_f = th_out.conv_vel;
+                d_f = th_out.d;
+                gamma_val = th_out.gamma.val;
+                mix_type = th_out.mixing_type;
             }
         } else if b_term > 0.0
             && model.controls.alpha_semiconvection > 0.0
@@ -398,14 +405,17 @@ fn eval_face_mlt(
                 grada: grada_f,
                 gradl: gradl_f,
             };
-            if let Ok(sc_out) = set_semiconvection(&sc_params, &sc_in) {
-                if sc_out.mixing_type == MixingType::SemiconvectiveMixing {
-                    grad_t_f = sc_out.grad_t;
-                    conv_vel_f = sc_out.conv_vel;
-                    d_f = sc_out.d;
-                    gamma_val = sc_out.gamma.val;
-                    mix_type = sc_out.mixing_type;
-                }
+            let sc_out = set_semiconvection(&sc_params, &sc_in).map_err(|e| {
+                StarError::MicrophysicsError(format!(
+                    "semiconvection failed at face {k} (`star/private/turb_support.f90:414-417`): {e}"
+                ))
+            })?;
+            if sc_out.mixing_type == MixingType::SemiconvectiveMixing {
+                grad_t_f = sc_out.grad_t;
+                conv_vel_f = sc_out.conv_vel;
+                d_f = sc_out.d;
+                gamma_val = sc_out.gamma.val;
+                mix_type = sc_out.mixing_type;
             }
         }
     }
@@ -501,13 +511,12 @@ pub fn set_hydro_vars(
     do_kap(model)?;
     do_neu(model)?;
     if !skip_net {
-        if let Some(net_info) = resolve_model_net(model) {
-            do_net(model, &net_info, skip_net_jacobian)?;
-        }
+        let net_info = resolve_model_net(model)?;
+        do_net(model, &net_info, skip_net_jacobian)?;
     }
     let sig_was_zero = model.sig.iter().all(|&s| s == 0.0);
     if !model.aux.doing_struct_burn_mix {
-        do_brunt_b(model);
+        do_brunt_b(model)?;
         crate::hydro_state::refresh_smoothed_brunt_b(model);
     }
     set_mlt_vars(model)?;

@@ -60,7 +60,7 @@ print(
 
 ## Upstream `test_output` Reference & Trajectory Harness (`flexmesa.testing`)
 
-`flexmesa.testing` parses upstream MESA `<pkg>/test/test_output` reference files (including Fortran `1pe24.16` and missing-`E` three-digit exponents like `1.2345-102`), validates the 106-case MESA `26.4.1` trajectory manifest and declared known-gaps registry (`case_manifest.toml`, `known_gaps.toml`), compares `LOGS/history.data` and `binary_history.data` tracks on a shared `float64` coordinate grid, and drives `flexmesa trace` and `flexmesa harness` (supporting `--numerics-mode {strict,fast}`, with `--gate` restricted to `strict`).
+`flexmesa.testing` parses upstream MESA `<pkg>/test/test_output` reference files (including Fortran `1pe24.16` and missing-`E` three-digit exponents like `1.2345-102`), validates the 106-case MESA `26.4.1` trajectory manifest and declared known-gaps registry (`case_manifest.toml`, `known_gaps.toml`), compares `LOGS/history.data` and `binary_history.data` tracks on a shared `float64` coordinate grid, and drives `flexmesa trace` and `flexmesa harness` (supporting `--numerics-mode {strict,fast}`, with `--gate` restricted to `strict`, and defaulting to strict rejection of unsupported controls unless `--allow-unsupported-controls` is explicitly given).
 
 ::: flexmesa.testing.golden
 

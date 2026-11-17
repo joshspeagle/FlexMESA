@@ -211,9 +211,7 @@ pub fn rates_eval_fl_epsnuc_3alf(t: f64, rho: f64, y: f64, ue: f64) -> f64 {
 pub fn rates_eval_rate_table(ir: usize, temp: f64) -> PyResult<(f64, f64)> {
     RatesCatalog::builtin()
         .eval_rate_table(ir, temp)
-        .ok_or_else(|| {
-            PyValueError::new_err(format!("no rate table for reaction ID {ir}"))
-        })
+        .map_err(|e| PyValueError::new_err(e.to_string()))
 }
 
 /// Evaluate plasma electrostatic screening `(scor, dscor_dt, dscor_dd)` for a reacting pair.

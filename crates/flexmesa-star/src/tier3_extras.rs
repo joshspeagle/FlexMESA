@@ -12,9 +12,7 @@ use flexmesa_const::{M_SUN, R_SUN, SECYER, STANDARD_CGRAV};
 
 use crate::controls::{AtmOption, EnergyEqnOption, StarError, VarLayout};
 use crate::history::extract_history_row;
-use crate::inlist_runner::{
-    run_case_list, CaseRunReport, ExtrasDirective, StarExtras,
-};
+use crate::inlist_runner::{CaseRunReport, ExtrasDirective, StarExtras};
 use crate::micro::change_model_network;
 use crate::model::StarModel;
 use crate::tier3_physics::{
@@ -368,7 +366,7 @@ impl StarExtras for Tier3CaseExtras {
         }
         if !restart {
             crate::hydro_vars::set_hydro_vars(model, false, false)?;
-            model.save_start_values();
+            model.save_start_values()?;
             model.save_old_values();
         }
         Ok(())
@@ -439,11 +437,19 @@ impl StarExtras for Tier3CaseExtras {
         ExtrasDirective::KeepGoing
     }
 
-    fn extras_after_evolve(&mut self, model: &mut StarModel) {
+    fn extras_after_evolve(
+        &mut self,
+        model: &mut StarModel,
+    ) -> Result<(), StarError> {
         if model.job.save_stella_data_when_terminate {
             let (hyd, abn) = export_stella_ascii(model);
-            debug_assert!(!hyd.is_empty() && !abn.is_empty());
+            if hyd.is_empty() || abn.is_empty() {
+                return Err(StarError::IoError(String::from(
+                    "STELLA export produced empty .hyd or .abn payload",
+                )));
+            }
         }
+        Ok(())
     }
 
     fn other_alpha_mlt(&self, model: &mut StarModel) {
@@ -480,7 +486,7 @@ impl StarExtras for Tier3CaseExtras {
     }
 
     fn other_adjust_mdot(&self, model: &StarModel, current_mdot: f64) -> f64 {
-        let log_mdot = model.controls.x_ctrl.get(2).copied().unwrap_or(-4.0);
+        let log_mdot = model.controls.x_ctrl.get(1).copied().unwrap_or(-4.0);
         current_mdot + flexmesa_math::exp10(log_mdot) * M_SUN / SECYER
     }
 
@@ -507,7 +513,32 @@ pub fn run_tier3_suite(
     max_steps_per_stage: Option<usize>,
     verify_restart: bool,
 ) -> Result<Vec<CaseRunReport>, StarError> {
-    run_case_list(mesa_dir, &TIER3_CASES, max_steps_per_stage, verify_restart)
+    run_tier3_suite_with_options(
+        mesa_dir,
+        max_steps_per_stage,
+        verify_restart,
+        crate::inlist::InlistLoadOptions::default(),
+    )
+}
+
+/// Runs all 22 Tier 3 cases under `mesa_dir/star/test_suite/<case>` with
+/// explicit [`InlistLoadOptions`](crate::inlist::InlistLoadOptions).
+///
+/// # Errors
+/// Returns [`StarError`] if any Tier 3 case fails to execute.
+pub fn run_tier3_suite_with_options(
+    mesa_dir: &Path,
+    max_steps_per_stage: Option<usize>,
+    verify_restart: bool,
+    load_opts: crate::inlist::InlistLoadOptions,
+) -> Result<Vec<CaseRunReport>, StarError> {
+    crate::inlist_runner::run_case_list_with_options(
+        mesa_dir,
+        &TIER3_CASES,
+        max_steps_per_stage,
+        verify_restart,
+        load_opts,
+    )
 }
 
 #[cfg(test)]
@@ -555,9 +586,71 @@ mod tests {
         }
         if let Ok(mesa_dir) = std::env::var("MESA_DIR") {
             let p = Path::new(&mesa_dir);
-            if p.join("star/test_suite").exists() {
-                let reports =
-                    run_tier3_suite(p, Some(2), true).expect("tier3 suite");
+            let star_suite = p.join("star/test_suite");
+            if star_suite.exists() {
+                let tmp_root = std::env::temp_dir().join(format!(
+                    "flexmesa_t3_cleaned_{}",
+                    std::process::id()
+                ));
+                let _ = std::fs::remove_dir_all(&tmp_root);
+                let cleaned_suite = tmp_root.join("star/test_suite");
+                for &case_name in &TIER3_CASES {
+                    let raw_case = star_suite.join(case_name);
+                    let err = crate::inlist_runner::run_test_suite_case(
+                        &raw_case,
+                        true,
+                        Some(2),
+                        true,
+                    )
+                    .expect_err(
+                        "raw tier3 case must reject unsupported controls",
+                    );
+                    let msg = err.to_string();
+                    assert!(
+                        matches!(err, StarError::InvalidInput(_))
+                            && (msg.contains("unsupported control")
+                                || msg.contains("unknown control")),
+                        "unexpected raw tier3 rejection for {case_name}: {msg}"
+                    );
+                    crate::inlist_inventory::copy_cleaned_star_case(
+                        &raw_case,
+                        &cleaned_suite.join(case_name),
+                    )
+                    .expect("copy cleaned tier3 case");
+                }
+                let tzo_clean = cleaned_suite.join("tzo");
+                let tzo_err = crate::inlist_runner::run_test_suite_case(
+                    &tzo_clean,
+                    true,
+                    Some(2),
+                    true,
+                )
+                .expect_err(
+                    "cleaned tzo must reject Dutch_wind_lowT_scheme = 'other'",
+                );
+                assert!(
+                    matches!(tzo_err, StarError::InvalidInput(_))
+                        && tzo_err
+                            .to_string()
+                            .contains("dutch_wind_lowt_scheme"),
+                    "unexpected cleaned tzo error: {tzo_err}"
+                );
+                let tzo_common = tzo_clean.join("inlist_common");
+                let tzo_text = std::fs::read_to_string(&tzo_common)
+                    .expect("read cleaned tzo inlist_common");
+                std::fs::write(
+                    &tzo_common,
+                    tzo_text.replace(
+                        "Dutch_wind_lowT_scheme = 'other'",
+                        "Dutch_wind_lowT_scheme = 'de Jager'",
+                    ),
+                )
+                .expect(
+                    "normalize unused Dutch_wind_lowT_scheme in tzo temp copy",
+                );
+                let reports = run_tier3_suite(&tmp_root, Some(2), true)
+                    .expect("cleaned tier3 suite");
+                let _ = std::fs::remove_dir_all(&tmp_root);
                 assert_eq!(reports.len(), 22);
                 for rep in &reports {
                     assert!(

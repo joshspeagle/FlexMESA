@@ -118,35 +118,42 @@ pub fn apply_step_pre_physics(
     let mut need_hydro_refresh = false;
 
     if model.controls.do_conv_premix {
-        let _ = do_conv_premix(
+        do_conv_premix(
             model,
             5,
             model.controls.mix_wind.conv_premix_avoid_increase,
-        );
+        )?;
         need_hydro_refresh = true;
     } else {
         model.aux.eps_pre_mix.fill(0.0);
     }
 
     if model.controls.do_phase_separation {
-        let is_one = model
+        let is_one = match model
             .controls
             .phase_separation_option
             .trim()
-            .eq_ignore_ascii_case("ONe");
+            .to_ascii_lowercase()
+            .as_str()
+        {
+            "co" => false,
+            "one" => true,
+            other => {
+                return Err(StarError::InvalidInput(format!(
+                    "unrecognized '&controls::phase_separation_option' = '{other}' (expected 'CO' or 'ONe')"
+                )));
+            }
+        };
         model.aux.eps_phase_separation =
-            do_phase_separation(model, dt.max(1.0), 175.0, is_one);
+            do_phase_separation(model, dt, 175.0, is_one)?;
         need_hydro_refresh = true;
     } else {
         model.aux.eps_phase_separation.fill(0.0);
     }
 
     if model.controls.do_element_diffusion {
-        let (_, eps_wd) = do_element_diffusion(
-            model,
-            dt.clamp(1.0, 1.0e13),
-            DiffusionScheme::Paquette,
-        );
+        let (_, eps_wd) =
+            do_element_diffusion(model, dt, DiffusionScheme::Paquette)?;
         model.aux.eps_wd_sedimentation = eps_wd;
         need_hydro_refresh = true;
     } else {
@@ -317,9 +324,9 @@ pub fn remesh_star_before_step(
         if ns + nm > 0 {
             crate::hydro_state::smooth_post_remesh_hydro_and_rotation(
                 model, &snap,
-            );
+            )?;
             set_hydro_vars(model, false, false)?;
-            model.save_start_values();
+            model.save_start_values()?;
             return Ok((ns, nm, Some(snap)));
         }
         Ok((ns, nm, None))
@@ -447,16 +454,12 @@ pub(crate) fn relax_pre_ms_to_radiative_core(
     ) = (0.0, 0.0, 0.0, 0.0);
     let mut min_conv_mx1_bot = 1.0e99_f64;
     for step in 0..600usize {
-        if crate::evolve::star_evolve_step(
+        crate::evolve::star_evolve_step(
             model,
             false,
             model.controls.op_split_burn,
             true,
-        )
-        .is_err()
-        {
-            break;
-        }
+        )?;
         let conv_bot = eval_conv_mx1_bot(model);
         min_conv_mx1_bot = min_conv_mx1_bot.min(conv_bot);
         let l_nuc: f64 =
@@ -478,7 +481,7 @@ pub(crate) fn relax_pre_ms_to_radiative_core(
     ) = (0.0, 0.0, 1, 0);
     model.aux.cumulative_energy_error = 0.0;
     set_hydro_vars(model, false, false)?;
-    model.save_start_values();
+    model.save_start_values()?;
     model.save_old_values();
     Ok(())
 }

@@ -25,6 +25,16 @@ use crate::types::{
 
 const MIN_Z_FOR_SWITCH_TO_PROT: i32 = 12;
 
+fn nuclide_aion(
+    nuclides: &NuclideCatalog,
+    cid: usize,
+) -> Result<f64, NetError> {
+    nuclides
+        .get_by_id(cid)
+        .map(|n| n.z_plus_n as f64)
+        .ok_or_else(|| NetError::InvalidReactionOrIso(format!("id={cid}")))
+}
+
 #[rustfmt::skip]
 #[allow(clippy::too_many_arguments)]
 fn eval_net_setup(
@@ -47,7 +57,7 @@ fn eval_net_setup(
     }
     let nuclides = NuclideCatalog::builtin_ref();
     for (i, &cid) in g.chem_id.iter().enumerate() {
-        let a = nuclides.get_by_id(cid).unwrap().z_plus_n as f64;
+        let a = nuclide_aion(nuclides, cid)?;
         w.y[i] = x[i].clamp(0.0, 1.0) / a;
     }
     if g.num_wk_reactions > 0 {
@@ -150,7 +160,7 @@ pub fn eval_net(
         &mut heap_aion[..]
     };
     for (i, a_slot) in aion.iter_mut().enumerate() {
-        *a_slot = nuclides.get_by_id(g.chem_id[i]).unwrap().z_plus_n as f64;
+        *a_slot = nuclide_aion(nuclides, g.chem_id[i])?;
     }
     for k in 0..NUM_CATEGORIES {
         res.eps_nuc_categories[k] = QCONV * w.eps_nuc_categories[k];
@@ -199,7 +209,8 @@ pub fn with_thread_local_work<R>(
         if needs_init {
             *borrow = Some(NetWorkState::new(g));
         }
-        f(borrow.as_mut().unwrap())
+        let state = borrow.get_or_insert_with(|| NetWorkState::new(g));
+        f(state)
     })
 }
 
@@ -234,9 +245,16 @@ pub fn eval_net_with_work(
             z2bar, ye, eta, weak_rate_factor, screening_mode, use_3a_fl87,
         )?;
         let nuclides = NuclideCatalog::builtin_ref();
-        let mut aion = [1.0_f64; 32];
-        for (i, a_slot) in aion[..ni].iter_mut().enumerate() {
-            *a_slot = nuclides.get_by_id(g.chem_id[i]).unwrap().z_plus_n as f64;
+        let mut stack_aion = [1.0_f64; 128];
+        let mut heap_aion = Vec::new();
+        let aion: &mut [f64] = if ni <= 128 {
+            &mut stack_aion[..ni]
+        } else {
+            heap_aion.resize(ni, 1.0);
+            &mut heap_aion[..]
+        };
+        for (i, a_slot) in aion.iter_mut().enumerate() {
+            *a_slot = nuclide_aion(nuclides, g.chem_id[i])?;
         }
         for k in 0..NUM_CATEGORIES {
             w.eps_nuc_categories[k] = res.eps_nuc_categories[k] / QCONV;

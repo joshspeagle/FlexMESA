@@ -43,6 +43,7 @@ def _run_worker(argv: list[str]) -> int:
         choices=_dispatch.VALID_NUMERICS_MODES,
         default="strict",
     )
+    parser.add_argument("--allow-unsupported-controls", action="store_true")
     ns = parser.parse_args(argv)
 
     rep = harness_runner.run_trace_inprocess(
@@ -55,6 +56,7 @@ def _run_worker(argv: list[str]) -> int:
         write_profiles=ns.write_profiles,
         is_logs_dir=bool(ns.is_logs_dir),
         numerics_mode=ns.numerics_mode,
+        allow_unsupported_controls=bool(ns.allow_unsupported_controls),
     )
     payload = {
         "termination_code": rep.get("termination_code", ""),
@@ -132,6 +134,14 @@ def _build_trace_parser() -> argparse.ArgumentParser:
         help="Arithmetic mode ('strict' default, or 'fast'; #165).",
     )
     parser.add_argument(
+        "--allow-unsupported-controls",
+        action="store_true",
+        help=(
+            "Opt out of strict inlist validation for unread, unused, or "
+            "unimplemented upstream controls (#147)."
+        ),
+    )
+    parser.add_argument(
         "--timeout-sec",
         type=float,
         default=None,
@@ -174,6 +184,7 @@ def trace_main(argv: list[str] | None = None) -> int:
         write_profiles=ns.write_profiles,
         is_logs_dir=not ns.explicit_file,
         numerics_mode=eff_mode,
+        allow_unsupported_controls=bool(ns.allow_unsupported_controls),
         timeout_sec=ns.timeout_sec,
         max_rss_gb=ns.max_rss_gb,
     )
@@ -277,6 +288,14 @@ def _build_harness_parser() -> argparse.ArgumentParser:
         default=None,
         help="Arithmetic mode ('strict' default, or 'fast'; #165).",
     )
+    p_run.add_argument(
+        "--allow-unsupported-controls",
+        action="store_true",
+        help=(
+            "Opt out of strict inlist rejection for unread, unused, or "
+            "unimplemented upstream controls (#147)."
+        ),
+    )
     p_run.add_argument("--timeout-sec", type=float, default=600.0)
     p_run.add_argument("--max-rss-gb", type=float, default=6.0)
     p_run.add_argument("--markdown-out", default=None)
@@ -342,6 +361,7 @@ def _execute_one_entry(
     mesa_dir: str | None,
     max_steps: int | None,
     numerics_mode: str,
+    allow_unsupported_controls: bool,
     timeout_sec: float | None,
     max_rss_gb: float | None,
     base_dir: pathlib.Path | None,
@@ -356,6 +376,7 @@ def _execute_one_entry(
         out_dir,
         max_steps=max_steps,
         numerics_mode=numerics_mode,
+        allow_unsupported_controls=allow_unsupported_controls,
         timeout_sec=timeout_sec,
         max_rss_gb=max_rss_gb,
     )
@@ -386,6 +407,7 @@ def _run_selected_entries(
                 ns.mesa_dir,
                 ns.max_steps,
                 ns.numerics_mode,
+                bool(ns.allow_unsupported_controls),
                 ns.timeout_sec,
                 ns.max_rss_gb,
                 base_dir,
@@ -411,6 +433,7 @@ def _run_selected_entries(
                 ns.mesa_dir,
                 ns.max_steps,
                 ns.numerics_mode,
+                bool(ns.allow_unsupported_controls),
                 ns.timeout_sec,
                 ns.max_rss_gb,
                 base_dir,

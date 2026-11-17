@@ -42,7 +42,7 @@ fn assert_dxa_close(label: &str, analytic: f64, fd: f64, rtol: f64) {
 
 #[test]
 fn test_helm_single_species_and_compensated_d_dxa_match_central_fd() {
-    let ht = HelmTable::builtin();
+    let ht = HelmTable::builtin().expect("builtin HELM table");
     let cat = NuclideCatalog::builtin_ref();
     let (chem_id, xa) = solar_chem();
     let a_vec: Vec<f64> = chem_id
@@ -140,7 +140,7 @@ fn test_helm_single_species_and_compensated_d_dxa_match_central_fd() {
 
 #[test]
 fn test_freeeos_opal_cms_and_blended_d_dxa_match_central_fd() {
-    let ht = HelmTable::builtin();
+    let ht = HelmTable::builtin().expect("builtin HELM table");
     let dt_tables = EosDtTableSet::builtin();
     let cms_tables = CmsTableSet::builtin();
     let (chem_id, xa) = solar_chem();

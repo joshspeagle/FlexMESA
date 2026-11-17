@@ -563,20 +563,20 @@ pub fn eval_target_mode_frequency_and_growth(
     let l = model
         .controls
         .x_integer_ctrl
-        .get(3)
+        .get(2)
         .copied()
         .unwrap_or(0)
         .max(0) as usize;
     let n_target = model
         .controls
         .x_integer_ctrl
-        .get(4)
+        .get(3)
         .copied()
         .filter(|&n| n != 0)
         .unwrap_or(1) as i32;
     let mode = eval_linear_oscillation_modes(model, l, &[n_target])[0];
-    let x1 = model.controls.x_ctrl.get(1).copied().unwrap_or(0.0);
-    let x2 = model.controls.x_ctrl.get(2).copied().unwrap_or(-1.0);
+    let x1 = model.controls.x_ctrl.first().copied().unwrap_or(0.0);
+    let x2 = model.controls.x_ctrl.get(1).copied().unwrap_or(-1.0);
     let freq_target_hz = if x1 > 10.0 {
         x1 * 1.0e-6
     } else if x1 > 0.0 {

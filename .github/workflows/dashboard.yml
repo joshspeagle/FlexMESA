@@ -47,10 +47,10 @@ jobs:
       - name: Checkout triggering commit
         uses: actions/checkout@v4
 
-      - name: Install Rust toolchain with llvm-tools-preview
-        uses: dtolnay/rust-toolchain@master
-        with:
-          components: llvm-tools-preview
+      - name: Install Rust toolchain from rust-toolchain.toml with llvm-tools-preview
+        run: |
+          rustup toolchain install --no-self-update --component llvm-tools-preview
+          rustc --version --verbose
 
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@v2
@@ -106,8 +106,10 @@ jobs:
           python-version: "3.12"
           cache: "pip"
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
+      - name: Install Rust toolchain from rust-toolchain.toml
+        run: |
+          rustup toolchain install --no-self-update
+          rustc --version --verbose
 
       - name: Cache Rust cargo target and registry
         uses: Swatinem/rust-cache@v2
@@ -175,8 +177,10 @@ jobs:
           python-version: "3.12"
           cache: "pip"
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
+      - name: Install Rust toolchain from rust-toolchain.toml
+        run: |
+          rustup toolchain install --no-self-update
+          rustc --version --verbose
 
       - name: Cache Rust cargo target and registry
         uses: Swatinem/rust-cache@v2

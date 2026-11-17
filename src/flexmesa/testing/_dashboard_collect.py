@@ -284,7 +284,8 @@ def collect_numerics_and_module_verification(
                 crmath_n += n_in
         level1 = (
             "verified in CI (x86_64 == aarch64, 1 == 4 threads; "
-            f"{vec_n:,} math vectors + {evo_case} {evo_steps}-step trace)"
+            f"{vec_n:,} math vectors + {evo_case} {evo_steps}-step trace "
+            "run with unsupported controls ignored)"
         )
         level2 = (
             f"math: {crmath_n:,}/{crmath_n:,} CRMATH 0 ULP "
@@ -335,6 +336,8 @@ def collect_harness_summary(repo_root: pathlib.Path) -> dict[str, Any]:
             "total": 0,
             "mesa_26_4_1_ref": 0,
             "no_reference_yet": 0,
+            "strict_validated": 0,
+            "diagnostic_runs": 0,
             "reached_termination": 0,
             "within_numeric_tol": 0,
             "passing": 0,
@@ -352,6 +355,11 @@ def collect_harness_summary(repo_root: pathlib.Path) -> dict[str, Any]:
         elif rec.reference_status == "no_reference_yet":
             sr["no_reference_yet"] += 1
         within_tol = False
+        if rec.executed:
+            if rec.controls_ignored:
+                sr["diagnostic_runs"] += 1
+            else:
+                sr["strict_validated"] += 1
         if rec.executed and rec.termination_matches:
             sr["reached_termination"] += 1
             if (

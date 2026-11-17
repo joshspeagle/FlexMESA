@@ -58,7 +58,26 @@ def summarize_records(
     )
 
     n_executed = sum(1 for r in records if r.executed)
-    n_term_ok = sum(1 for r in records if r.executed and r.termination_matches)
+    n_strict = sum(1 for r in records if r.executed and not r.controls_ignored)
+    n_diag = sum(1 for r in records if r.executed and r.controls_ignored)
+    n_term_ok = sum(
+        1
+        for r in records
+        if r.executed and r.termination_matches and not r.controls_ignored
+    )
+    n_diag_term_ok = sum(
+        1
+        for r in records
+        if r.executed and r.termination_matches and r.controls_ignored
+    )
+    n_strict_steps = sum(
+        1
+        for r in records
+        if r.executed and not r.controls_ignored and r.steps > 0
+    )
+    n_diag_steps = sum(
+        1 for r in records if r.executed and r.controls_ignored and r.steps > 0
+    )
     n_pass_26 = sum(1 for r in records if r.verdict == "pass")
     n_interim_within = sum(
         1 for r in records if r.verdict == "interim reference (within tol)"
@@ -84,7 +103,12 @@ def summarize_records(
         "reference_interim_0b2e6bb": n_ref_interim,
         "reference_none_yet": n_ref_none,
         "executed_cases": n_executed,
+        "strict_validated_cases": n_strict,
+        "diagnostic_cases": n_diag,
+        "strict_cases_taking_steps": n_strict_steps,
+        "diagnostic_cases_taking_steps": n_diag_steps,
         "reaching_upstream_termination": n_term_ok,
+        "diagnostic_reaching_upstream_termination": n_diag_term_ok,
         "passing_mesa_26_4_1": n_pass_26,
         "interim_within_tolerance": n_interim_within,
         "declared_known_gaps": n_declared_gaps_total,
@@ -121,6 +145,9 @@ def record_to_dict(rec: harness_runner.CaseHarnessRecord) -> dict[str, Any]:
         "known_gap_reason": rec.known_gap_reason,
         "is_undeclared_failure": rec.is_undeclared_failure,
         "is_stale_known_gap": rec.is_stale_known_gap,
+        "controls_ignored": rec.controls_ignored,
+        "n_controls_ignored": rec.n_controls_ignored,
+        "strict_rejection": rec.strict_rejection,
         "comparison": (
             history_compare.comparison_to_dict(rec.comparison)
             if rec.comparison is not None
@@ -292,8 +319,24 @@ def render_case_table_markdown(
         f"| Cases selected in this table | {head['selected_cases']} |",
         f"| Cases executed in this run | {head['executed_cases']} |",
         (
-            "| Executed cases reaching upstream termination | "
+            "| Cases accepted by strict control validation (`#147`) | "
+            f"{head['strict_validated_cases']} "
+            f"({head['strict_cases_taking_steps']} took at least one step) |"
+        ),
+        (
+            "| Cases rejected by strict validation and rerun as diagnostic "
+            "(unsupported controls ignored; never a pass) | "
+            f"{head['diagnostic_cases']} "
+            f"({head['diagnostic_cases_taking_steps']} took at least one "
+            "step) |"
+        ),
+        (
+            "| Strict runs reaching upstream termination | "
             f"{head['reaching_upstream_termination']} |"
+        ),
+        (
+            "| Diagnostic runs reaching upstream termination | "
+            f"{head['diagnostic_reaching_upstream_termination']} |"
         ),
         (
             "| Acceptance passes against MESA `26.4.1` (`pass`) | "
@@ -311,10 +354,18 @@ def render_case_table_markdown(
         "",
         "## Per-Case Status and Reference Availability",
         "",
+        "`Run Mode` says which run the measured columns come from. `strict` "
+        "is a run that passed strict control validation (`#147`). "
+        "`diagnostic (N controls ignored)` means strict validation stopped "
+        "the case on `N` unsupported controls in the first stage inlist "
+        "that sets any, and the case was rerun with unsupported controls "
+        "ignored. A diagnostic run did not do what the inlist asks, so its "
+        "numbers show where the engine stands and can never give a `pass`.",
+        "",
         "| Suite | Case | Reference Status | Required Termination | "
-        "Observed Term | Steps | Final Coord Diff | Max Track Diff | "
-        "First Div Step | Declared Gap | Verdict |",
-        "| :--- | :--- | :--- | :--- | :--- | ---: | ---: | :--- | "
+        "Run Mode | Observed Term | Steps | Final Coord Diff | "
+        "Max Track Diff | First Div Step | Declared Gap | Verdict |",
+        "| :--- | :--- | :--- | :--- | :--- | :--- | ---: | ---: | :--- | "
         "---: | :--- | :--- |",
     ]
 
@@ -332,7 +383,8 @@ def render_case_table_markdown(
         gap_str = rec.known_gap_issue if rec.known_gap_issue else "-"
         lines.append(
             f"| `{rec.suite}` | `{rec.case}` | `{rec.reference_status}` | "
-            f"`{rec.required_termination}` | {obs_term} | {steps_str} | "
+            f"`{rec.required_termination}` | {rec.run_mode} | {obs_term} | "
+            f"{steps_str} | "
             f"{_fmt_final_age_diff(rec)} | {_fmt_max_dev(rec)} | "
             f"{first_div} | {gap_str} | {rec.verdict} |"
         )
@@ -409,6 +461,9 @@ def build_manifest_inventory_records(
             peak_rss_gb=float(stored.get("peak_rss_gb", 0.0)),
             history_path=None,
             error_message=str(stored.get("error_message", "")),
+            controls_ignored=bool(stored.get("controls_ignored", False)),
+            n_controls_ignored=int(stored.get("n_controls_ignored", 0)),
+            strict_rejection=str(stored.get("strict_rejection", "")),
         )
         raw_comp = stored.get("comparison")
         comp = (

@@ -9,6 +9,7 @@ verdicts against ``case_manifest.toml`` and ``known_gaps.toml``.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import os
 import pathlib
@@ -26,7 +27,9 @@ from flexmesa.testing._case_verdict import (
     CaseHarnessRecord,
     TraceRunOutcome,
     _sanitize_error_message,
+    count_unsupported_controls,
     evaluate_case_record,
+    is_unsupported_controls_rejection,
     resolve_reference_history_path,
 )
 
@@ -34,13 +37,16 @@ __all__ = [
     "CaseHarnessRecord",
     "TraceRunOutcome",
     "_sanitize_error_message",
+    "count_unsupported_controls",
     "evaluate_case_record",
+    "is_unsupported_controls_rejection",
     "locate_written_history",
     "proc_rss_gb",
     "resolve_case_dir",
     "resolve_effective_numerics_mode",
     "resolve_mesa_test_root",
     "resolve_reference_history_path",
+    "run_case_with_diagnostic",
     "run_trace_inprocess",
     "run_traced_case",
 ]
@@ -491,6 +497,11 @@ def _run_traced_worker(
             peak_rss_gb=peak_kb / 1.0e6,
             history_path=hist,
             error_message=err_text[-500:] if err_text else f"exit={retcode}",
+            n_controls_ignored=(
+                count_unsupported_controls(err_text)
+                if is_unsupported_controls_rejection(err_text)
+                else 0
+            ),
         )
 
 
@@ -600,4 +611,87 @@ def run_traced_case(
             peak_rss_gb=proc_rss_gb(os.getpid()),
             history_path=hist,
             error_message=str(err),
+            n_controls_ignored=(
+                count_unsupported_controls(str(err))
+                if is_unsupported_controls_rejection(str(err))
+                else 0
+            ),
         )
+
+
+def run_case_with_diagnostic(
+    suite: str,
+    case_dir: pathlib.Path,
+    out_target: pathlib.Path,
+    *,
+    max_steps: int | None = None,
+    numerics_mode: str | None = None,
+    allow_unsupported_controls: bool = False,
+    timeout_sec: float | None = None,
+    max_rss_gb: float | None = None,
+) -> TraceRunOutcome:
+    """Run one case strictly, then diagnostically if strict rejects it.
+
+    The case is first run under strict ``#147`` control validation. If that
+    run stops because the inlists set upstream controls ``FlexMESA`` does not
+    support, the case is run a second time with those controls ignored, so
+    the table still reports steps, termination and deviations. The returned
+    outcome of such a rerun has ``controls_ignored`` set, which bars it from
+    a ``pass`` verdict in ``evaluate_case_record``.
+
+    Args:
+        suite: Suite name (``"star"``, ``"binary"``, or ``"astero"``).
+        case_dir: Path to the upstream case directory.
+        out_target: Output root directory for the run.
+        max_steps: Optional non-negative per-stage step cap.
+        numerics_mode: Arithmetic mode (``"strict"`` or ``"fast"``).
+        allow_unsupported_controls: Skip the strict run and go straight to
+            the diagnostic run when True.
+        timeout_sec: Optional wall-clock timeout in seconds (``s``), applied
+            to each of the two runs separately.
+        max_rss_gb: Optional resident-memory ceiling in gigabytes (``GB``).
+
+    Returns:
+        The strict ``TraceRunOutcome`` when strict validation accepted the
+        inlists (whatever happened afterwards), otherwise the outcome of the
+        diagnostic rerun.
+    """
+    strict_message = ""
+    n_ignored = 0
+    if not allow_unsupported_controls:
+        strict = run_traced_case(
+            suite,
+            case_dir,
+            out_target,
+            max_steps=max_steps,
+            numerics_mode=numerics_mode,
+            allow_unsupported_controls=False,
+            timeout_sec=timeout_sec,
+            max_rss_gb=max_rss_gb,
+        )
+        rejected = strict.status == "error" and (
+            strict.n_controls_ignored > 0
+            or is_unsupported_controls_rejection(strict.error_message)
+        )
+        if not rejected:
+            return strict
+        strict_message = strict.error_message
+        n_ignored = strict.n_controls_ignored or count_unsupported_controls(
+            strict.error_message
+        )
+    diag = run_traced_case(
+        suite,
+        case_dir,
+        out_target,
+        max_steps=max_steps,
+        numerics_mode=numerics_mode,
+        allow_unsupported_controls=True,
+        timeout_sec=timeout_sec,
+        max_rss_gb=max_rss_gb,
+    )
+    return dataclasses.replace(
+        diag,
+        controls_ignored=True,
+        n_controls_ignored=n_ignored,
+        strict_rejection=strict_message,
+    )

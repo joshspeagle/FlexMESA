@@ -33,6 +33,13 @@ class TraceRunOutcome:
         history_path: Path to the emitted ``history.data`` or
             ``binary_history.data`` file if present on disk, else ``None``.
         error_message: Diagnostic error string when ``status != "ok"``.
+        controls_ignored: True when the run used the ``#147`` opt-out and
+            continued past unsupported controls. Such a run is diagnostic
+            only and can never produce a ``pass`` verdict.
+        n_controls_ignored: Number of unsupported controls and sections the
+            strict run named before stopping (``0`` when unknown).
+        strict_rejection: Message of the strict run that stopped on
+            unsupported controls, when this outcome is its diagnostic rerun.
     """
 
     suite: str
@@ -45,6 +52,58 @@ class TraceRunOutcome:
     peak_rss_gb: float
     history_path: pathlib.Path | None
     error_message: str = ""
+    controls_ignored: bool = False
+    n_controls_ignored: int = 0
+    strict_rejection: str = ""
+
+
+_UNSUPPORTED_COUNT_RE = re.compile(
+    r"unsupported control\(s\) \((\d+)(?: total)?"
+)
+_UNSUPPORTED_SECTIONS_RE = re.compile(
+    r"unsupported upstream namelist section\(s\): ([^;()]+)"
+)
+
+
+def is_unsupported_controls_rejection(message: str) -> bool:
+    """Return whether ``message`` is a strict ``#147`` control rejection.
+
+    Only rejections that the opt-out can continue past qualify. Unknown or
+    misspelled controls and sections fail with or without the opt-out.
+
+    Args:
+        message: Error text of a failed run.
+
+    Returns:
+        True when the run stopped only on unsupported upstream controls or
+        namelist sections.
+    """
+    if "unknown" in message:
+        return False
+    return bool(
+        _UNSUPPORTED_COUNT_RE.search(message)
+        or _UNSUPPORTED_SECTIONS_RE.search(message)
+    )
+
+
+def count_unsupported_controls(message: str) -> int:
+    """Count the unsupported controls and sections named in ``message``.
+
+    Args:
+        message: Error text of a strict ``#147`` control rejection.
+
+    Returns:
+        Number of unsupported controls plus unsupported namelist sections in
+        the stage inlist that stopped the run (later stages are not scanned).
+    """
+    total = 0
+    m_ctrl = _UNSUPPORTED_COUNT_RE.search(message)
+    if m_ctrl is not None:
+        total += int(m_ctrl.group(1))
+    m_sec = _UNSUPPORTED_SECTIONS_RE.search(message)
+    if m_sec is not None:
+        total += sum(1 for tok in m_sec.group(1).split(",") if tok.strip())
+    return total
 
 
 @dataclasses.dataclass(frozen=True)
@@ -71,6 +130,26 @@ class CaseHarnessRecord:
     error_message: str = ""
     is_undeclared_failure: bool = False
     is_stale_known_gap: bool = False
+    controls_ignored: bool = False
+    n_controls_ignored: int = 0
+    strict_rejection: str = ""
+
+    @property
+    def run_mode(self) -> str:
+        """Label of how the reported run was made.
+
+        Returns:
+            ``"-"`` when the case was not run, ``"strict"`` for a run that
+            passed strict control validation, and ``"diagnostic (N controls
+            ignored)"`` for a rerun that continued past unsupported controls.
+        """
+        if not self.executed:
+            return "-"
+        if not self.controls_ignored:
+            return "strict"
+        if self.n_controls_ignored > 0:
+            return f"diagnostic ({self.n_controls_ignored} controls ignored)"
+        return "diagnostic (controls ignored)"
 
 
 def resolve_reference_history_path(
@@ -198,19 +277,26 @@ def evaluate_case_record(
                 err_s = _sanitize_error_message(str(err))
                 comp_err = f"{comp_err}; compare error: {err_s}".strip("; ")
 
+    # A run that continued past unsupported controls (#147 opt-out) did not
+    # do what the inlist asks. Its numbers are diagnostic and it can never
+    # satisfy the tolerance condition of any verdict.
     tol_ok = (
         comp is not None
         and comp.within_final_tolerances
         and comp.within_track_tolerances
+        and not outcome.controls_ignored
     )
+    smoke_note = " (controls ignored)" if outcome.controls_ignored else ""
     is_undeclared = False
     is_stale_gap = False
 
     if max_steps is not None:
         if outcome.status == "ok":
-            verdict = f"smoke: {outcome.steps} steps"
+            verdict = f"smoke: {outcome.steps} steps{smoke_note}"
         else:
-            verdict = f"smoke: {outcome.status} ({outcome.steps} steps)"
+            verdict = (
+                f"smoke: {outcome.status} ({outcome.steps} steps){smoke_note}"
+            )
     elif spec.reference_status == "no_reference_yet":
         verdict = "no reference yet"
     elif spec.reference_status == "interim_0b2e6bb":
@@ -268,4 +354,7 @@ def evaluate_case_record(
         error_message=comp_err,
         is_undeclared_failure=is_undeclared,
         is_stale_known_gap=is_stale_gap,
+        controls_ignored=outcome.controls_ignored,
+        n_controls_ignored=outcome.n_controls_ignored,
+        strict_rejection=_sanitize_error_message(outcome.strict_rejection),
     )

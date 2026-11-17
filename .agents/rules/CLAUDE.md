@@ -114,6 +114,7 @@
     2. Evolution reaches upstream's own physical or extras termination condition uncapped.
     3. Named history quantities match a stored real-MESA `26.4.1` history within the tolerances declared in the case manifest.
   - Any run with a step cap or without a real-MESA `26.4.1` history comparison must be reported strictly as `"smoke: N steps"`. A case whose `26.4.1` reference history is not yet available is reported as `"no reference yet"`, never as passing or failing.
+  - A run that continued past unsupported controls (`--allow-unsupported-controls`, `#147`) did not do what the inlist asks. The harness reports it as `"diagnostic (N controls ignored)"` and it never counts as passing (`DECISIONS #26`).
   - Every trajectory-changing pull request must include the script-generated before-and-after case table and trajectory comparison figure (`#143`, `#173`).
 - **Forbidden Pass-Manufacturing Practices**:
   - Never make a test or case pass by loosening a tolerance (`DECISIONS #9`), changing an expected value, capping step counts, adding `#[ignore]` or `xfail`, clamping physical state, adding convergence fallbacks, or branching on a test-case name or mass range.

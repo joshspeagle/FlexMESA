@@ -321,6 +321,179 @@ def test_governance_verdict_semantics_and_negative_gate_paths(
         )
 
 
+def test_diagnostic_run_never_passes_and_is_labelled(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A run that ignored unsupported controls can never be a pass (#147)."""
+    ref_file = tmp_path / "ref.tsv"
+    text = (
+        "# test\n"
+        "model_number\tstar_age\tlog_L\tlog_Teff\n"
+        "1\t1.0e6\t0.0\t3.76\n"
+        "2\t2.0e6\t0.1\t3.77\n"
+    )
+    ref_file.write_text(text, encoding="utf-8")
+    run_file = tmp_path / "run.tsv"
+    run_file.write_text(text, encoding="utf-8")
+    spec = case_manifest.CaseManifestEntry(
+        suite="star",
+        case="demo",
+        required_termination="xa_central_lower_limit",
+        independent_var="star_age",
+        final_tolerances={"log_L": 0.02},
+        track_tolerances={"log_L": 0.10},
+        reference_status="mesa_26_4_1",
+        reference_path="ref.tsv",
+    )
+    rejection = (
+        'invalid star input: control "<inlist>" at line 1: unsupported '
+        "control(s) (3): &controls::a, &controls::b, &star_job::c (pass "
+        "--allow-unsupported-controls / allow_unsupported_controls=true to "
+        "opt out)"
+    )
+    assert harness_runner.is_unsupported_controls_rejection(rejection)
+    assert harness_runner.count_unsupported_controls(rejection) == 3
+    with_section = (
+        "unsupported upstream namelist section(s): &colors, &stella; "
+        "unsupported control(s) (25 total, showing first 20): ..."
+    )
+    assert harness_runner.count_unsupported_controls(with_section) == 27
+    # Unknown or misspelled keys fail with or without the opt-out, so a
+    # diagnostic rerun must not be attempted for them.
+    assert not harness_runner.is_unsupported_controls_rejection(
+        "unknown/misspelled control(s) (1): &controls::typo; "
+        "unsupported control(s) (2): &controls::a, &controls::b"
+    )
+    assert not harness_runner.is_unsupported_controls_rejection("solver died")
+
+    identical = harness_runner.TraceRunOutcome(
+        suite="star",
+        case="demo",
+        status="ok",
+        termination_code="xa_central_lower_limit(h1)",
+        steps=2,
+        retries=0,
+        wall_time_sec=0.1,
+        peak_rss_gb=0.2,
+        history_path=run_file,
+    )
+    # The same history from a strict run passes.
+    assert (
+        harness_runner.evaluate_case_record(
+            spec, {}, identical, root_dir=tmp_path
+        ).verdict
+        == "pass"
+    )
+    diag = harness_runner.TraceRunOutcome(
+        suite="star",
+        case="demo",
+        status="ok",
+        termination_code="xa_central_lower_limit(h1)",
+        steps=2,
+        retries=0,
+        wall_time_sec=0.1,
+        peak_rss_gb=0.2,
+        history_path=run_file,
+        controls_ignored=True,
+        n_controls_ignored=3,
+        strict_rejection=rejection,
+    )
+    rec_undeclared = harness_runner.evaluate_case_record(
+        spec, {}, diag, root_dir=tmp_path
+    )
+    assert rec_undeclared.verdict == "fail (undeclared)"
+    assert rec_undeclared.is_undeclared_failure
+    assert rec_undeclared.run_mode == "diagnostic (3 controls ignored)"
+    gaps = {
+        ("star", "demo"): case_manifest.KnownGapSpec(
+            suite="star", case="demo", issue="#152", reason="demo gap"
+        )
+    }
+    rec_gap = harness_runner.evaluate_case_record(
+        spec, gaps, diag, root_dir=tmp_path
+    )
+    assert rec_gap.verdict == "declared gap (#152)"
+    assert not rec_gap.is_stale_known_gap
+    assert rec_gap.comparison is not None
+    assert rec_gap.comparison.within_track_tolerances
+    assert (
+        harness_runner.evaluate_case_record(
+            spec, gaps, diag, max_steps=2, root_dir=tmp_path
+        ).verdict
+        == "smoke: 2 steps (controls ignored)"
+    )
+
+    # The stored record round-trips through the baseline JSON form.
+    as_dict = case_report.record_to_dict(rec_gap)
+    assert as_dict["controls_ignored"] is True
+    assert as_dict["n_controls_ignored"] == 3
+    assert as_dict["strict_rejection"] == rejection
+
+    # run_case_with_diagnostic reruns only on a strict control rejection.
+    calls: list[bool] = []
+
+    def fake_run(
+        suite: str,
+        case_dir: pathlib.Path,
+        out_target: pathlib.Path,
+        **kwargs: Any,
+    ) -> harness_runner.TraceRunOutcome:
+        allow = bool(kwargs["allow_unsupported_controls"])
+        calls.append(allow)
+        if allow:
+            return identical
+        return harness_runner.TraceRunOutcome(
+            suite=suite,
+            case=case_dir.name,
+            status="error",
+            termination_code="",
+            steps=0,
+            retries=0,
+            wall_time_sec=0.0,
+            peak_rss_gb=0.0,
+            history_path=None,
+            error_message=rejection,
+        )
+
+    monkeypatch.setattr(harness_runner, "run_traced_case", fake_run)
+    out = harness_runner.run_case_with_diagnostic(
+        "star", tmp_path / "demo", tmp_path / "out"
+    )
+    assert calls == [False, True]
+    assert out.controls_ignored
+    assert out.n_controls_ignored == 3
+    assert out.strict_rejection == rejection
+
+    calls.clear()
+
+    def fake_other_error(
+        suite: str,
+        case_dir: pathlib.Path,
+        out_target: pathlib.Path,
+        **kwargs: Any,
+    ) -> harness_runner.TraceRunOutcome:
+        calls.append(bool(kwargs["allow_unsupported_controls"]))
+        return harness_runner.TraceRunOutcome(
+            suite=suite,
+            case=case_dir.name,
+            status="error",
+            termination_code="",
+            steps=4,
+            retries=0,
+            wall_time_sec=0.0,
+            peak_rss_gb=0.0,
+            history_path=None,
+            error_message="solver failed to converge",
+        )
+
+    monkeypatch.setattr(harness_runner, "run_traced_case", fake_other_error)
+    out_err = harness_runner.run_case_with_diagnostic(
+        "star", tmp_path / "demo", tmp_path / "out"
+    )
+    assert calls == [False]
+    assert not out_err.controls_ignored
+
+
 def test_guarded_subprocess_worker_and_timeout_partial_history_recovery(
     tmp_path: pathlib.Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -453,7 +626,6 @@ def test_flexmesa_trace_and_harness_run_cli_smoke(
             str(md_out),
             "--json-out",
             str(js_out),
-            "--allow-unsupported-controls",
             "--gate",
         ]
     )
@@ -461,7 +633,16 @@ def test_flexmesa_trace_and_harness_run_cli_smoke(
     payload = json.loads(js_out.read_text(encoding="utf-8"))
     assert payload["summary"]["total_cases"] == 106
     assert payload["summary"]["selected_cases"] == 1
-    assert payload["cases"][0]["verdict"] == "smoke: 2 steps"
+    # Strict validation rejects the unmodified upstream inlists (#147), so
+    # the harness reruns the case as a diagnostic and labels it as such.
+    smoke_case = payload["cases"][0]
+    assert smoke_case["verdict"] == "smoke: 2 steps (controls ignored)"
+    assert smoke_case["controls_ignored"] is True
+    assert smoke_case["n_controls_ignored"] > 0
+    assert "unsupported control" in smoke_case["strict_rejection"]
+    assert payload["summary"]["diagnostic_cases"] == 1
+    assert payload["summary"]["strict_validated_cases"] == 0
+    assert "diagnostic (" in md_out.read_text(encoding="utf-8")
 
     # Undeclared failure under --gate must return exit code 1.
     custom_manifest = tmp_path / "custom_manifest.toml"

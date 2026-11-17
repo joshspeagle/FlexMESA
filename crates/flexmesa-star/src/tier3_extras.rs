@@ -576,18 +576,10 @@ mod tests {
             eval_tzo_core_accretion_step(&mut model, 1.0, 1.0, 1.4);
         assert!(m_core > 0.0 && l_edd > 0.0);
 
-        if std::env::var("FLEXMESA_REQUIRE_ZERO_SKIPS").as_deref() == Ok("1") {
-            let mesa_dir = std::env::var("MESA_DIR")
-                .expect("MESA_DIR required when FLEXMESA_REQUIRE_ZERO_SKIPS=1");
-            assert!(
-                Path::new(&mesa_dir).join("star/test_suite").is_dir(),
-                "missing star/test_suite under {mesa_dir}"
-            );
-        }
-        if let Ok(mesa_dir) = std::env::var("MESA_DIR") {
-            let p = Path::new(&mesa_dir);
-            let star_suite = p.join("star/test_suite");
-            if star_suite.exists() {
+        if let Some(star_suite) =
+            flexmesa_utils::require_mesa_test_input_path("star/test_suite")
+        {
+            {
                 let tmp_root = std::env::temp_dir().join(format!(
                     "flexmesa_t3_cleaned_{}",
                     std::process::id()

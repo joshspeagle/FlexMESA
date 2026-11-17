@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-import os
 import pathlib
 import tempfile
 
@@ -14,6 +13,7 @@ import pytest
 
 from flexmesa import star
 from flexmesa.star import e2e
+from flexmesa.testing import known_gaps_gate
 
 from . import cleaned_case_gaps
 
@@ -309,10 +309,10 @@ def test_upstream_tier1_test_suite_case_reproduction_and_restart_parity(
     `star/test_suite/<case>` directories fail loudly under strict `#147`, and
     cleaned copies execute cleanly with internal `.photo` round-trip checks.
     """
-    mesa_dir = os.environ.get("MESA_DIR", "")
-    if not mesa_dir:
-        pytest.skip("MESA_DIR environment variable is not set")
-    case_dir = pathlib.Path(mesa_dir) / "star" / "test_suite" / case_name
+    base = known_gaps_gate.require_mesa_test_inputs_dir()
+    if base is None:
+        return
+    case_dir = base / "star" / "test_suite" / case_name
     assert case_dir.is_dir(), f"Upstream case directory not found: {case_dir}"
 
     with pytest.raises(

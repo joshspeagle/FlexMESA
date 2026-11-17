@@ -15,8 +15,6 @@ This test module verifies:
 
 from __future__ import annotations
 
-import os
-
 import hypothesis
 import jax
 import jax.numpy as jnp
@@ -25,7 +23,7 @@ from hypothesis import strategies as st
 
 from flexmesa import constants, utils
 from flexmesa.data import fetch
-from flexmesa.testing import golden
+from flexmesa.testing import golden, known_gaps_gate
 
 _EXPECTED_CONST_VALUES: tuple[float, ...] = (
     3.1415926535897931,
@@ -282,13 +280,14 @@ def test_tokenize_matches_upstream_mesa_token_txt() -> None:
     mesa_root = fetch.resolve_mesa_test_inputs_dir()
     upstream_token = mesa_root / "utils" / "test" / "token.txt"
     upstream_output = mesa_root / "utils" / "test" / "test_output"
-    if os.environ.get("MESA_DIR", "").strip():
-        assert upstream_token.is_file(), f"Missing {upstream_token}"
-        assert upstream_output.is_file(), f"Missing {upstream_output}"
-    if upstream_token.exists():
+    if known_gaps_gate.require_upstream_file(
+        upstream_token, label="utils/test/token.txt"
+    ):
         assert utils.tokenize(upstream_token.read_text()) == expected
 
-    if upstream_output.exists():
+    if known_gaps_gate.require_upstream_file(
+        upstream_output, label="utils/test/test_output"
+    ):
         raw_lines = [
             line.strip()
             for line in upstream_output.read_text().splitlines()

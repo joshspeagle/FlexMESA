@@ -78,6 +78,10 @@ print(
 
 ::: flexmesa.testing.trace_cli
 
+::: flexmesa.testing.known_gaps_gate
+
+::: flexmesa.testing.module_hex_gate
+
 ---
 
 ## Publication-Styled Diagnostic Plotting (`flexmesa.plotting`)

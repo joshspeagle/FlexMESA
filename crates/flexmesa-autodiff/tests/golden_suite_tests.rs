@@ -429,14 +429,9 @@ fn test_auto_diff_full_golden_test_output_parity() {
         .unwrap();
     }
 
-    let output_path = flexmesa_utils::resolve_mesa_test_inputs_dir()
-        .join("auto_diff/test/test_output");
-    if std::env::var_os("MESA_DIR").is_some_and(|v| !v.is_empty())
-        || std::env::var("FLEXMESA_REQUIRE_ZERO_SKIPS").as_deref() == Ok("1")
+    if let Some(output_path) =
+        flexmesa_utils::require_mesa_test_input_path("auto_diff/test/test_output")
     {
-        assert!(output_path.is_file(), "missing {}", output_path.display());
-    }
-    if output_path.is_file() {
         let text = std::fs::read_to_string(&output_path)
             .expect("read auto_diff/test/test_output");
         let (golden_nums, golden_bools) =

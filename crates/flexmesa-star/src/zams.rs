@@ -572,15 +572,9 @@ mod zams_catalog_tests {
                 <= 1.0e-10
         );
 
-        let ascii_path = flexmesa_utils::resolve_mesa_test_inputs_dir()
-            .join("data/star_data/zams_models/zams_z2m2_y28.data");
-        if std::env::var_os("MESA_DIR").is_some_and(|v| !v.is_empty())
-            || std::env::var("FLEXMESA_REQUIRE_ZERO_SKIPS").as_deref()
-                == Ok("1")
-        {
-            assert!(ascii_path.is_file(), "missing {}", ascii_path.display());
-        }
-        if ascii_path.is_file() {
+        if let Some(ascii_path) = flexmesa_utils::require_mesa_test_input_path(
+            "data/star_data/zams_models/zams_z2m2_y28.data",
+        ) {
             let text = std::fs::read_to_string(&ascii_path)
                 .expect("read zams_z2m2_y28.data");
             let parsed =

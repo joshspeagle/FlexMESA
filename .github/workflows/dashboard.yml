@@ -48,7 +48,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Rust toolchain with llvm-tools-preview
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@master
         with:
           components: llvm-tools-preview
 
@@ -107,7 +107,7 @@ jobs:
           cache: "pip"
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@master
 
       - name: Cache Rust cargo target and registry
         uses: Swatinem/rust-cache@v2
@@ -139,7 +139,7 @@ jobs:
       - name: Install FlexMESA and test dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install maturin
+          python -m pip install "maturin==1.16.0"
           python -m pip install --no-build-isolation -e ".[test]"
 
       - name: Run Python and JAX suite under pytest --cov
@@ -176,14 +176,14 @@ jobs:
           cache: "pip"
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@master
 
       - name: Cache Rust cargo target and registry
         uses: Swatinem/rust-cache@v2
 
       - name: Install FlexMESA
         run: |
-          python -m pip install --upgrade pip maturin
+          python -m pip install --upgrade pip "maturin==1.16.0"
           python -m pip install --no-build-isolation -e .
 
       - name: Cache FlexMESA data-v1 and MESA test bundles

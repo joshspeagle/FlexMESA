@@ -80,6 +80,49 @@ pub fn resolve_mesa_test_inputs_dir() -> PathBuf {
     PathBuf::from(".flexmesa_test_inputs")
 }
 
+/// Return `true` when an environment override explicitly disables zero-skip
+/// enforcement (`"0"`, `"false"`, `"no"`, or `"off"`).
+#[must_use]
+pub fn is_zero_skips_opt_out(raw: Option<&str>) -> bool {
+    raw.is_some_and(|val| {
+        matches!(
+            val.trim().to_ascii_lowercase().as_str(),
+            "0" | "false" | "no" | "off"
+        )
+    })
+}
+
+/// Return `true` unless `FLEXMESA_REQUIRE_ZERO_SKIPS` is explicitly opted out.
+#[must_use]
+pub fn require_zero_skips_enabled() -> bool {
+    let val = std::env::var("FLEXMESA_REQUIRE_ZERO_SKIPS").ok();
+    !is_zero_skips_opt_out(val.as_deref())
+}
+
+/// Resolve an upstream MESA test input (`rel_path`) under
+/// [`resolve_mesa_test_inputs_dir`].
+///
+/// # Panics
+/// Panics if the target file or directory is absent while `MESA_DIR` is set or
+/// zero-skip enforcement is active (default).
+#[must_use]
+pub fn require_mesa_test_input_path(rel_path: &str) -> Option<PathBuf> {
+    let path = resolve_mesa_test_inputs_dir().join(rel_path);
+    if path.exists() {
+        return Some(path);
+    }
+    let has_mesa_dir =
+        std::env::var_os("MESA_DIR").is_some_and(|v| !v.is_empty());
+    assert!(
+        !has_mesa_dir && !require_zero_skips_enabled(),
+        "missing required upstream MESA test input `{}` (set MESA_DIR, run \
+         `flexmesa data fetch --include-test-inputs`, or set \
+         FLEXMESA_REQUIRE_ZERO_SKIPS=0 to opt out locally)",
+        path.display()
+    );
+    None
+}
+
 /// Return `true` when `x` is `NaN` or $\pm\infty$ (`!x.is_finite()`).
 ///
 /// Matches upstream MESA `utils_lib::is_bad`.

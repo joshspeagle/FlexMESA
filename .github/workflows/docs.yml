@@ -41,7 +41,7 @@ jobs:
           cache: "pip"
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@master
 
       - name: Cache Rust cargo target and registry
         uses: Swatinem/rust-cache@v2
@@ -64,7 +64,7 @@ jobs:
       - name: Install documentation and build dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install maturin ruff matplotlib mkdocs-material "mkdocstrings[python]"
+          python -m pip install "maturin==1.16.0" "ruff==0.16.2" matplotlib mkdocs-material "mkdocstrings[python]"
           python -m pip install --no-build-isolation -e ".[docs]"
 
       - name: Generate publication-styled diagnostic figures

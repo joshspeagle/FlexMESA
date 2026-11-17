@@ -9,7 +9,6 @@ to `<= 1e-15`, `test_auto_diff.f90` cases across `DualOrder1` and
 
 from __future__ import annotations
 
-import os
 from collections.abc import Sequence
 from typing import Any
 
@@ -25,7 +24,7 @@ from flexmesa import auto_diff as ad
 from flexmesa import constants
 from flexmesa import math as fmath
 from flexmesa.data import fetch
-from flexmesa.testing import golden
+from flexmesa.testing import golden, known_gaps_gate
 
 # Standard evaluation grid used in upstream MESA's math/test.
 XS: jax.Array = jnp.asarray([0.1, 0.2, 0.4], dtype=jnp.float64)
@@ -544,9 +543,9 @@ def test_auto_diff_complete_golden_test_output_and_order2_sweep() -> None:
         / "test"
         / "test_output"
     )
-    if os.environ.get("MESA_DIR", "").strip():
-        assert out_path.is_file(), f"Missing {out_path}"
-    if out_path.exists():
+    if known_gaps_gate.require_upstream_file(
+        out_path, label="auto_diff/test/test_output"
+    ):
         golden_nums, golden_bools = _parse_upstream_auto_diff_output(
             out_path.read_text()
         )

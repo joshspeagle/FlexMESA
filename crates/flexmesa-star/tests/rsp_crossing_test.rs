@@ -13,7 +13,6 @@ use flexmesa_kap::{KapCoOption, KapConfig, KapLowTOption, KapOption};
 use flexmesa_star::{
     eval_rsp_2nd_crossing_with_controls, StarControls, StarJobControls,
 };
-use flexmesa_utils::resolve_mesa_test_inputs_dir;
 
 fn golden_rsp_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -218,20 +217,16 @@ fn test_rsp_lina_and_steffen_edges_match_mesa_26_4_1_5m_reference() {
 
 #[test]
 fn test_rsp_check_2nd_crossing_on_7m_mesa_test_suite() {
-    let inputs_dir = resolve_mesa_test_inputs_dir();
-    let case_dir = inputs_dir
-        .join("star")
-        .join("test_suite")
-        .join("rsp_check_2nd_crossing");
-    let hist_rel = "history_logs/history_7M.data";
-    if !case_dir.join(hist_rel).is_file() {
-        assert!(
-            std::env::var("FLEXMESA_REQUIRE_ZERO_SKIPS").as_deref() != Ok("1"),
-            "missing {} with FLEXMESA_REQUIRE_ZERO_SKIPS=1",
-            case_dir.join(hist_rel).display()
-        );
+    let rel = "star/test_suite/rsp_check_2nd_crossing/history_logs/history_7M.data";
+    let Some(hist_path) = flexmesa_utils::require_mesa_test_input_path(rel) else {
         return;
-    }
+    };
+    let case_dir = hist_path
+        .parent()
+        .and_then(|p| p.parent())
+        .expect("rsp_check_2nd_crossing case directory")
+        .to_path_buf();
+    let hist_rel = "history_logs/history_7M.data";
 
     let ref_7b = fs::read_to_string(
         golden_rsp_dir().join("7B_2nd_crossing_26_4_1.data"),

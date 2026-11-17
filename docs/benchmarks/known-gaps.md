@@ -155,6 +155,66 @@ Cases lacking a committed MESA `26.4.1` baseline report `no reference yet` and c
 | `astero` | `fast_simplex` | [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | `xtra1` | `error` (0 steps) | Asteroseismic simplex optimizer and in-house pulsation scaffolding (#162, #171). Under strict #147 validation the run stops before step 1: 59 unsupported control(s) across its stage inlists (&astero_search_controls::avg_age_sigma_limit, &astero_search_controls::avg_model_number_sigma_limit, &astero_search_controls::best_model_fgong_filename, ...); the full per-case list is in notes/audit/unsupported_controls_26_4_1.md. Last measurement before #147 (main 247e233): Terminates with 'astero_simplex_samples=5_best_chi2=1.127609e4_term=xtra1' (expected 'xtra1') in 2619 steps (final rel_star_age=+112.09%, final d_log_L=+0.5806, final d_log_Teff=+0.04953, max \|d_log_L\|=0.7878, first_div_step=2). |
 | `astero` | `surface_effects` | [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | `max_model_number` | `error` (0 steps) | Asteroseismic surface-effects starting model and ADIPLS scaffolding (#162, #171). Under strict #147 validation the run stops before step 1: 37 unsupported control(s) across its stage inlists (&astero_search_controls::best_model_fgong_filename, &astero_search_controls::best_model_profile_filename, &astero_search_controls::best_model_save_model_filename, ...); the full per-case list is in notes/audit/unsupported_controls_26_4_1.md. Last measurement before #147 (main 247e233): Terminates with 'max_model_number' (expected 'max_model_number') in 0 steps (final rel_star_age=-0.00%, final d_log_L=-0.005853, final d_log_Teff=-0.001466). |
 
+## Declared Test-Suite Gaps (`[[test_gaps]]`, 20 Markers)
+
+Every Rust `#[ignore]` and Python `xfail`/`skip` marker in the repository is tracked bijectively in `benchmarks/history_harness/known_gaps.toml` (`#144`):
+
+| Kind | File | Test | Role | Issue | Reason |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `rust_ignore` | `crates/flexmesa-eos/tests/mesa_26_4_1_component_oracles_test.rs` | `test_skye_and_blend_third_order_hermite_derivatives_match_mesa_26_4_1` | `physics_gap` | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | Skye/HELM operation order causes 10 d_dlnT channels to exceed 5.0e-11 (max rel_err 1.101e-6); gate fails if it passes while ignored. |
+| `rust_ignore` | `crates/flexmesa-binary/tests/tier5_coupled_suite.rs` | `test_uncapped_jdot_gr_check_campaign` | `campaign` | [#160](https://github.com/joshspeagle/FlexMESA/issues/160) | Long-running uncapped binary campaign; full MESA 26.4.1 trajectory comparison tracked under #160 and scheduled campaign CI. |
+| `rust_ignore` | `crates/flexmesa-binary/tests/tier5_coupled_suite.rs` | `test_uncapped_star_plus_point_mass_explicit_mdot_campaign` | `campaign` | [#160](https://github.com/joshspeagle/FlexMESA/issues/160) | Long-running uncapped explicit-RLOF binary campaign tracked under #160 and scheduled campaign CI. |
+| `rust_ignore` | `crates/flexmesa-binary/tests/tier5_coupled_suite.rs` | `test_uncapped_star_plus_point_mass_campaign` | `campaign` | [#160](https://github.com/joshspeagle/FlexMESA/issues/160) | Long-running uncapped implicit-RLOF binary campaign tracked under #160 and scheduled campaign CI. |
+| `rust_ignore` | `crates/flexmesa-binary/tests/tier5_coupled_suite.rs` | `test_uncapped_jdot_ml_check_campaign` | `campaign` | [#160](https://github.com/joshspeagle/FlexMESA/issues/160) | Long-running uncapped mass-loss binary campaign tracked under #160 and scheduled campaign CI. |
+| `rust_ignore` | `crates/flexmesa-binary/tests/tier5_coupled_suite.rs` | `test_uncapped_evolve_both_stars_campaign` | `campaign` | [#160](https://github.com/joshspeagle/FlexMESA/issues/160) | Long-running uncapped two-star coupled binary campaign tracked under #160 and scheduled campaign CI. |
+| `rust_ignore` | `crates/flexmesa-binary/tests/tier5_coupled_suite.rs` | `test_uncapped_wind_fed_bhhmxb_campaign` | `campaign` | [#160](https://github.com/joshspeagle/FlexMESA/issues/160) | Long-running uncapped wind-fed BH-HMXB binary campaign tracked under #160 and scheduled campaign CI. |
+| `rust_ignore` | `crates/flexmesa-binary/tests/tier5_coupled_suite.rs` | `test_uncapped_double_bh_campaign` | `campaign` | [#160](https://github.com/joshspeagle/FlexMESA/issues/160) | Uncapped double-BH core-He implicit rotational-wind campaign currently fails under #160 (T2-9); gate fails if it passes while ignored. |
+| `rust_ignore` | `crates/flexmesa-astero/tests/astero_suite.rs` | `test_example_astero_uncapped` | `campaign` | [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | Long-running uncapped astero campaign tracked under #162 and scheduled campaign CI. |
+| `rust_ignore` | `crates/flexmesa-astero/tests/astero_suite.rs` | `test_fast_from_file_uncapped` | `campaign` | [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | Long-running uncapped astero from_file campaign tracked under #162 and scheduled campaign CI. |
+| `rust_ignore` | `crates/flexmesa-astero/tests/astero_suite.rs` | `test_fast_scan_grid_uncapped` | `campaign` | [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | Long-running uncapped astero scan_grid campaign tracked under #162 and scheduled campaign CI. |
+| `rust_ignore` | `crates/flexmesa-astero/tests/astero_suite.rs` | `test_fast_simplex_uncapped` | `campaign` | [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | Long-running uncapped astero simplex campaign tracked under #162 and scheduled campaign CI. |
+| `rust_ignore` | `crates/flexmesa-astero/tests/astero_suite.rs` | `test_fast_newuoa_uncapped` | `campaign` | [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | Long-running uncapped astero NEWUOA campaign tracked under #162 and scheduled campaign CI. |
+| `rust_ignore` | `crates/flexmesa-bench/tests/bench_tests.rs` | `print_full_wave1_rust_benchmarks` | `benchmark` | [#146](https://github.com/joshspeagle/FlexMESA/issues/146) | Release benchmark stdout printer retained pending benchmark separation under #146. |
+| `rust_ignore` | `crates/flexmesa-bench/tests/bench_tests.rs` | `print_full_wave2_rust_benchmarks` | `benchmark` | [#146](https://github.com/joshspeagle/FlexMESA/issues/146) | Release benchmark stdout printer retained pending benchmark separation under #146. |
+| `rust_ignore` | `crates/flexmesa-bench/tests/bench_tests.rs` | `print_full_wave3a_rust_benchmarks` | `benchmark` | [#146](https://github.com/joshspeagle/FlexMESA/issues/146) | Release benchmark stdout printer retained pending benchmark separation under #146. |
+| `rust_ignore` | `crates/flexmesa-bench/tests/bench_tests.rs` | `print_full_wave3b_rust_benchmarks` | `benchmark` | [#146](https://github.com/joshspeagle/FlexMESA/issues/146) | Release benchmark stdout printer retained pending benchmark separation under #146. |
+| `rust_ignore` | `crates/flexmesa-bench/tests/bench_tests.rs` | `print_full_wave4_rust_benchmarks` | `benchmark` | [#146](https://github.com/joshspeagle/FlexMESA/issues/146) | Release benchmark stdout printer retained pending benchmark separation under #146. |
+| `rust_ignore` | `crates/flexmesa-bench/tests/bench_tests.rs` | `print_full_wave5_rust_benchmarks` | `benchmark` | [#146](https://github.com/joshspeagle/FlexMESA/issues/146) | Release benchmark stdout printer retained pending benchmark separation under #146. |
+| `python_xfail` | `tests/test_wave4_bench.py` | `test_four_msun_zams_evolve_log_cntr_rho_matches_mesa_26_4_1` | `physics_gap` | [#153](https://github.com/joshspeagle/FlexMESA/issues/153) | MESA 26.4.1 star/test remeshes 2464 -> 992 zones at step 2; log_cntr_Rho differs by 1.11e-3 > 1.0e-3 at step 11. |
+
+## Level-2 Module Hex Reference Gaps (`benchmarks/module_hex/`)
+
+- **Checked vs MESA `26.4.1` `raw_bits_hex`**: `3,384` / `3,504` outputs at `0 ULP` across `13` probed modules (`2` modules complete at `0 ULP`; `348,321` total captured upstream values).
+
+| Module | Status | Checked / Expected | 0 ULP | Max ULP | Issue | Notes |
+| :--- | :--- | ---: | ---: | ---: | :--- | :--- |
+| `const` | `pass_0_ulp` | 23 / 23 | 23 | 0 | none | All 23 CGS physical/astronomical constants. |
+| `utils` | `zero_values_in_mesa_reference` | 0 / 0 | 0 | 0 | none | Upstream utils/test emits zero floating-point values in exact_tested_values.tsv. |
+| `math` | `partial_0_ulp` | 24 / 99 | 24 | 0 | [#166](https://github.com/joshspeagle/FlexMESA/issues/166) | 24 crmath Rust strict-mode intrinsics across x={0.1,0.2,0.4}. |
+| `mtx` | `nonzero_ulp` | 7 / 22 | 6 | 6 | [#152](https://github.com/joshspeagle/FlexMESA/issues/152) | 6/7 test_square1+2 entries at 0 ULP; test_square1[0] 6 ULP. |
+| `auto_diff` | `unported_hex_harness` | 0 / 774 | 0 | 0 | [#166](https://github.com/joshspeagle/FlexMESA/issues/166) | 774 upstream auto_diff operator-overload printouts await direct TSV harness mapping. |
+| `forum` | `zero_values_in_mesa_reference` | 0 / 0 | 0 | 0 | none | Upstream forum/test emits zero floating-point values in exact_tested_values.tsv. |
+| `num` | `unported_hex_harness` | 0 / 570 | 0 | 0 | [#152](https://github.com/joshspeagle/FlexMESA/issues/152) | 570 upstream num Brent/Newton/ODE test printouts await direct TSV harness mapping. |
+| `interp_1d` | `partial_0_ulp` | 22 / 234 | 22 | 0 | [#153](https://github.com/joshspeagle/FlexMESA/issues/153) | test3 (interp_pm asc/desc) & test1 (interp_m3q asc/desc) values. |
+| `interp_2d` | `nonzero_ulp` | 4 / 104 | 1 | 9,257 | [#153](https://github.com/joshspeagle/FlexMESA/issues/153) | Interior bicubic spline coefficients. |
+| `chem` | `partial_0_ulp` | 286 / 1,102 | 286 | 0 | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | 286 Lodders (2003) isotopic atom percents. |
+| `colors` | `nonzero_ulp` | 10 / 234 | 4 | 13 | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | Group 1 solar bolometric and UBVRIJM outputs. |
+| `eos` | `unported_hex_harness` | 0 / 391 | 0 | 0 | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | 391 upstream EOS diagnostic table/blend printouts await direct TSV harness mapping. |
+| `kap` | `nonzero_ulp` | 21 / 21 | 13 | 1,459,407,697 | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | 12/14 gs98+CO channels at 0 ULP; AESOPUS and log10 1-ULP gap. |
+| `rates` | `nonzero_ulp` | 9 / 3,685 | 5 | 6 | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | Salpeter, extended, and Chugunov plasma screening. |
+| `neu` | `nonzero_ulp` | 3,000 / 300,000 | 2,935 | 68 | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | 100 strided records (3,000 outputs) of neu. |
+| `net` | `unported_hex_harness` | 0 / 140 | 0 | 0 | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | 140 upstream nuclear reaction network burn printouts await direct TSV harness mapping. |
+| `ionization` | `nonzero_ulp` | 31 / 31 | 28 | 10,652,452 | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | 28/28 eval_ionization channels at 0 ULP; 3 Fe56-in-He4 table offsets. |
+| `atm` | `unported_hex_harness` | 0 / 90 | 0 | 0 | [#161](https://github.com/joshspeagle/FlexMESA/issues/161) | 90 upstream model atmosphere table printouts await direct TSV harness mapping. |
+| `turb` | `nonzero_ulp` | 62 / 71 | 32 | 7 | [#157](https://github.com/joshspeagle/FlexMESA/issues/157) | 31-step check_TDC gradT and conv_vel outputs. |
+| `sample` | `zero_values_in_mesa_reference` | 0 / 0 | 0 | 0 | none | Upstream sample package has no test/ directory in MESA 26.4.1. |
+| `star_data` | `zero_values_in_mesa_reference` | 0 / 0 | 0 | 0 | none | Upstream star_data/test emits zero floating-point values in exact_tested_values.tsv. |
+| `gyre` | `unported_hex_harness` | 0 / 136 | 0 | 0 | [#170](https://github.com/joshspeagle/FlexMESA/issues/170) | 136 upstream bundled GYRE pulsation eigenfrequency outputs tracked under #170. |
+| `adipls` | `unported_hex_harness` | 0 / 92 | 0 | 0 | [#171](https://github.com/joshspeagle/FlexMESA/issues/171) | 92 upstream bundled ADIPLS pulsation eigenfrequency outputs tracked under #171. |
+| `star` | `unported_hex_harness` | 0 / 386 | 0 | 0 | [#152](https://github.com/joshspeagle/FlexMESA/issues/152) | 386 upstream star/test console values (plus 240 history_exact_hex cells) tracked under stellar parity issues. |
+| `binary` | `pass_0_ulp` | 5 / 5 | 5 | 0 | none | All 5 RL timestep & L2 mass-loss checks. |
+| `astero` | `zero_values_in_mesa_reference` | 0 / 0 | 0 | 0 | none | Upstream astero/test emits zero floating-point values in exact_tested_values.tsv. |
+
 ## Inspecting Known Gaps Programmatically
 
 ```python

@@ -269,22 +269,9 @@ mod tests {
             assert!(pct > 0.0, "non-positive lodders03 percent for {}", row.0);
         }
 
-        let mesa_env = std::env::var_os("MESA_DIR");
-        let test_out_path = mesa_env
-            .as_ref()
-            .filter(|v| !v.is_empty())
-            .map(std::path::PathBuf::from)
-            .or_else(|| {
-                std::env::var_os("HOME")
-                    .filter(|v| !v.is_empty())
-                    .map(|p| std::path::PathBuf::from(p).join(".cache/flexmesa/mesa_test_inputs"))
-            })
-            .unwrap_or_else(|| std::path::PathBuf::from(".flexmesa_test_inputs"))
-            .join("chem/test/test_output");
-        if mesa_env.as_ref().is_some_and(|v| !v.is_empty()) {
-            assert!(test_out_path.is_file(), "missing {}", test_out_path.display());
-        }
-        if test_out_path.is_file() {
+        if let Some(test_out_path) =
+            flexmesa_utils::require_mesa_test_input_path("chem/test/test_output")
+        {
             let text = std::fs::read_to_string(&test_out_path)
                 .expect("read test_output");
             let lines: Vec<&str> = text.lines().collect();
@@ -370,22 +357,9 @@ mod tests {
         assert!((cl55.pfcn[1] - 1.01).abs() < 1e-12);
         assert!((cl55.pfcn[23] - 118.29).abs() < 1e-12);
 
-        let mesa_env = std::env::var_os("MESA_DIR");
-        let iso_path = mesa_env
-            .as_ref()
-            .filter(|v| !v.is_empty())
-            .map(std::path::PathBuf::from)
-            .or_else(|| {
-                std::env::var_os("HOME")
-                    .filter(|v| !v.is_empty())
-                    .map(|p| std::path::PathBuf::from(p).join(".cache/flexmesa/mesa_test_inputs"))
-            })
-            .unwrap_or_else(|| std::path::PathBuf::from(".flexmesa_test_inputs"))
-            .join("data/chem_data/isotopes.data");
-        if mesa_env.as_ref().is_some_and(|v| !v.is_empty()) {
-            assert!(iso_path.is_file(), "missing {}", iso_path.display());
-        }
-        if iso_path.is_file() {
+        if let Some(iso_path) = flexmesa_utils::require_mesa_test_input_path(
+            "data/chem_data/isotopes.data",
+        ) {
             let parsed =
                 NuclideCatalog::from_isotopes_file(&iso_path).expect("parse");
             assert_eq!(parsed.len(), 7856);

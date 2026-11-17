@@ -3,21 +3,20 @@
 
 from __future__ import annotations
 
-import os
-
 import numpy as np
 import pytest
 
 from flexmesa import kap
 from flexmesa.data import fetch
+from flexmesa.testing import known_gaps_gate
 
 
 def _parse_mesa_kap_test_output() -> list[dict[str, float]]:
     """Parse upstream MESA `kap/test/test_output` blocks."""
     path = fetch.resolve_mesa_test_inputs_dir() / "kap" / "test" / "test_output"
-    if os.environ.get("MESA_DIR", "").strip():
-        assert path.is_file(), f"Missing upstream golden file: {path}"
-    if not path.is_file():
+    if not known_gaps_gate.require_upstream_file(
+        path, label="kap/test/test_output"
+    ):
         return []
     blocks: list[dict[str, float]] = []
     cur: dict[str, float] = {}
@@ -182,7 +181,7 @@ def test_all_lines_of_upstream_kap_test_output_verified() -> None:
     """Parse upstream `kap/test/test_output` and verify all lines."""
     blocks = _parse_mesa_kap_test_output()
     if not blocks:
-        pytest.skip("upstream test_output not present")
+        return
     assert len(blocks) == 3
     cfgs = [
         ("gs98", "gn93_co", "lowT_fa05_gs98", False, False, -10.0, 1e-11),

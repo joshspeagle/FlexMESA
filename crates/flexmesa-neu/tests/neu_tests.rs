@@ -21,10 +21,10 @@
 )]
 
 use std::fs;
-use std::path::PathBuf;
 
 use flexmesa_math::{exp10, log10};
 use flexmesa_neu::{neu_get, NeuChannel, NeuError, NeuFlags, NeuRate};
+use flexmesa_utils::require_mesa_test_input_path;
 
 /// Representative golden rows from upstream `neu/test/test_output`.
 #[rustfmt::skip]
@@ -84,28 +84,6 @@ const GOLDEN_ROWS: [[f64; 34]; 6] = [
         -6381787064231.179, 471955795586.6735, -31102773253.80594, 243430875762.274, 0.0,
     ],
 ];
-
-fn mesa_neu_test_dir() -> (PathBuf, bool) {
-    if let Some(dir) = std::env::var_os("MESA_DIR").filter(|v| !v.is_empty()) {
-        return (PathBuf::from(dir).join("neu/test"), true);
-    }
-    if let Some(xdg) =
-        std::env::var_os("XDG_CACHE_HOME").filter(|v| !v.is_empty())
-    {
-        return (
-            PathBuf::from(xdg).join("flexmesa/mesa_test_inputs/neu/test"),
-            false,
-        );
-    }
-    if let Some(home) = std::env::var_os("HOME").filter(|v| !v.is_empty()) {
-        return (
-            PathBuf::from(home)
-                .join(".cache/flexmesa/mesa_test_inputs/neu/test"),
-            false,
-        );
-    }
-    (PathBuf::from(".flexmesa_test_inputs/neu/test"), false)
-}
 
 /// Parses a Fortran floating-point token, handling 3-digit exponents formatted
 /// without `'E'` (e.g., `3.2760346416369289-283`).
@@ -187,12 +165,7 @@ fn test_all_10000_golden_rows_parity_against_upstream_mesa() {
         verify_row(idx, row, 1e-12);
     }
 
-    let (dir, strict) = mesa_neu_test_dir();
-    let path = dir.join("test_output");
-    if strict {
-        assert!(path.is_file(), "missing {}", path.display());
-    }
-    if path.is_file() {
+    if let Some(path) = require_mesa_test_input_path("neu/test/test_output") {
         let content = fs::read_to_string(&path).unwrap_or_else(|e| {
             panic!("failed to read {}: {e}", path.display())
         });
@@ -242,12 +215,7 @@ fn test_solar_profile_test_1_0_data_all_194_zones() {
         }
     }
 
-    let (dir, strict) = mesa_neu_test_dir();
-    let path = dir.join("test_1.0.data");
-    if strict {
-        assert!(path.is_file(), "missing {}", path.display());
-    }
-    if path.is_file() {
+    if let Some(path) = require_mesa_test_input_path("neu/test/test_1.0.data") {
         let content = fs::read_to_string(&path).unwrap_or_else(|e| {
             panic!("failed to read {}: {e}", path.display())
         });

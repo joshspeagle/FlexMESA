@@ -12,8 +12,6 @@ and 0-based conversions, `find_loc_in_sparse`), and block-tridiagonal
 
 from __future__ import annotations
 
-import os
-
 import hypothesis
 import jax
 import jax.numpy as jnp
@@ -24,6 +22,7 @@ from hypothesis import strategies
 
 from flexmesa import mtx
 from flexmesa.data import fetch
+from flexmesa.testing import known_gaps_gate
 
 
 def _blk_loss(
@@ -425,10 +424,9 @@ def test_upstream_mesa_block_tri_data_and_test_case_data_golden() -> None:
 
     root = fetch.resolve_mesa_test_inputs_dir() / "mtx" / "test"
     out_path = root / "test_output"
-    if os.environ.get("MESA_DIR", "").strip():
-        assert out_path.is_file(), f"Missing {out_path}"
-        assert (root / "test_case.data").is_file()
-    if out_path.exists():
+    if known_gaps_gate.require_upstream_file(
+        out_path, label="mtx/test/test_output"
+    ):
         out_lines = out_path.read_text(encoding="utf-8").splitlines()
         assert (
             "testing with nvar,nz" in out_lines[15]
@@ -440,7 +438,9 @@ def test_upstream_mesa_block_tri_data_and_test_case_data_golden() -> None:
 
     # 1. Load and verify test_case.data (nvar = 12, nz = 9) when present
     tc_path = root / "test_case.data"
-    if tc_path.exists():
+    if known_gaps_gate.require_upstream_file(
+        tc_path, label="mtx/test/test_case.data"
+    ):
         tc_lines = tc_path.read_text(encoding="utf-8").splitlines()
         nvar_tc, nz_tc = map(int, tc_lines[0].split())
         assert (nvar_tc, nz_tc) == (12, 9)
@@ -479,7 +479,9 @@ def test_upstream_mesa_block_tri_data_and_test_case_data_golden() -> None:
 
     # 2. Load and verify block_tri.data (nvar = 25, first nz = 20 shells of 979)
     bt_path = root / "block_tri.data"
-    if bt_path.exists():
+    if known_gaps_gate.require_upstream_file(
+        bt_path, label="mtx/test/block_tri.data"
+    ):
         bt_lines = iter(bt_path.read_text(encoding="utf-8").splitlines())
         hdr_bt = next(line for line in bt_lines if line.strip())
         nvar_bt, nz_full = map(int, hdr_bt.split())

@@ -64,26 +64,15 @@ def resolve_effective_numerics_mode(
             ``"strict"`` or ``"fast"``.
     """
     if numerics_mode is not None:
-        norm = numerics_mode.strip().lower()
-        if norm not in ("strict", "fast"):
-            raise ValueError(
-                "numerics_mode must be 'strict' or 'fast', "
-                f"got {numerics_mode!r}"
-            )
-        return norm
+        return _dispatch.validate_numerics_mode(numerics_mode)
     env_raw = os.environ.get("FLEXMESA_NUMERICS_MODE", "").strip()
     if env_raw:
-        env_norm = env_raw.lower()
-        if env_norm not in ("strict", "fast"):
-            raise ValueError(
-                "FLEXMESA_NUMERICS_MODE must be 'strict' or 'fast', "
-                f"got {env_raw!r}"
-            )
-        return env_norm
-    active = str(_dispatch.get_numerics_mode()).strip().lower()
-    if active not in ("strict", "fast"):
-        raise ValueError(f"invalid active numerics_mode {active!r}")
-    return active
+        return _dispatch.validate_numerics_mode(
+            env_raw, label="FLEXMESA_NUMERICS_MODE"
+        )
+    return _dispatch.validate_numerics_mode(
+        str(_dispatch.get_numerics_mode()), label="active numerics_mode"
+    )
 
 
 def resolve_mesa_test_root(

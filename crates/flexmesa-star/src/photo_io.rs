@@ -89,9 +89,7 @@ pub fn write_photo_bytes(model: &StarModel) -> Vec<u8> {
         u8::from(model.controls.rsp_flag),
         u8::from(model.controls.rsp2_flag),
         u8::from(model.controls.rti_flag),
-        u8::from(
-            flexmesa_math::numerics_mode() == flexmesa_math::NumericsMode::Fast,
-        ),
+        flexmesa_math::numerics_mode().to_wire_tag(),
     ]);
 
     write_i32(&mut buf, 2);
@@ -295,7 +293,6 @@ pub fn read_photo_bytes(
     controls: StarControls,
     job: StarJobControls,
 ) -> Result<StarModel, StarError> {
-    let mut pos = 0_usize;
     let eof = |msg: &str| StarError::IoError(msg.to_string());
     let read_i32 = |pos: &mut usize| -> Result<i32, StarError> {
         let s = bytes.get(*pos..*pos + 4).ok_or_else(|| eof("EOF i32"))?;
@@ -330,53 +327,20 @@ pub fn read_photo_bytes(
             })
         };
 
-    let version = read_i32(&mut pos)?;
-    if version != STAR_DEF_VERSION {
-        return Err(StarError::IoError(format!(
-            "unsupported photo version {version} (expected {STAR_DEF_VERSION})"
-        )));
-    }
-
-    expect_part(&mut pos, 1)?;
-    let (nz, species) =
-        (read_u64(&mut pos)? as usize, read_u64(&mut pos)? as usize);
-    let nvar_hydro = read_u64(&mut pos)? as usize;
-    let mut chem_id = Vec::with_capacity(species);
-    for _ in 0..species {
-        chem_id.push(read_u64(&mut pos)? as usize);
-    }
-    let net_len = read_u64(&mut pos)? as usize;
-    let net_slice = bytes
-        .get(pos..pos + net_len)
-        .ok_or_else(|| eof("EOF net_name"))?;
-    pos += net_len;
-    let saved_net_name = std::str::from_utf8(net_slice)
-        .map_err(|e| {
-            StarError::IoError(format!("invalid UTF-8 net_name: {e}"))
-        })?
-        .to_owned();
-    let job_tags = bytes
-        .get(pos..pos + 8)
-        .ok_or_else(|| eof("EOF job/controls flags"))?;
-    pos += 8;
-    let saved_mode = match job_tags[7] {
-        0 => flexmesa_math::NumericsMode::Strict,
-        1 => flexmesa_math::NumericsMode::Fast,
-        other => {
-            return Err(StarError::IoError(format!(
-                "invalid photo numerics_mode tag {other}"
-            )));
-        }
-    };
+    let (hdr, mut pos) = decode_photo_part1_header(bytes)?;
+    let saved_mode = hdr.saved_mode;
     let active_mode = flexmesa_math::numerics_mode();
     if saved_mode != active_mode {
         return Err(StarError::IoError(format!(
             "photo numerics_mode mismatch: checkpoint saved in \"{saved_mode}\" mode cannot be loaded while active mode is \"{active_mode}\""
         )));
     }
+    let (nz, species, nvar_hydro, chem_id) =
+        (hdr.nz, hdr.species, hdr.nvar_hydro, hdr.chem_id);
+    let job_tags = hdr.job_tags;
     let mut job = job;
     let mut controls = controls;
-    job.net_name = saved_net_name;
+    job.net_name = hdr.saved_net_name;
     controls.v_flag = job_tags[0] != 0;
     controls.u_flag = job_tags[1] != 0;
     controls.rotation_flag = job_tags[2] != 0;
@@ -664,13 +628,21 @@ pub fn read_photo_bytes(
     Ok(model)
 }
 
-/// Extracts the [`flexmesa_math::NumericsMode`] recorded in the Part 1 header
-/// of serialized `.photo` checkpoint `bytes` (`#165`).
-pub fn photo_numerics_mode(
+struct PhotoPart1Header {
+    nz: usize,
+    species: usize,
+    nvar_hydro: usize,
+    chem_id: Vec<usize>,
+    saved_net_name: String,
+    job_tags: [u8; 8],
+    saved_mode: flexmesa_math::NumericsMode,
+}
+
+fn decode_photo_part1_header(
     bytes: &[u8],
-) -> Result<flexmesa_math::NumericsMode, StarError> {
+) -> Result<(PhotoPart1Header, usize), StarError> {
     let eof = |ctx: &str| StarError::IoError(format!("photo {ctx}"));
-    let mut pos = 0usize;
+    let mut pos = 0_usize;
     let read_i32 = |pos: &mut usize| -> Result<i32, StarError> {
         let s: [u8; 4] = bytes
             .get(*pos..*pos + 4)
@@ -689,6 +661,7 @@ pub fn photo_numerics_mode(
         *pos += 8;
         Ok(u64::from_le_bytes(s))
     };
+
     let version = read_i32(&mut pos)?;
     if version != STAR_DEF_VERSION {
         return Err(StarError::IoError(format!(
@@ -701,27 +674,70 @@ pub fn photo_numerics_mode(
             "photo sentinel mismatch: expected part 1, got {part}"
         )));
     }
-    let _nz = read_u64(&mut pos)?;
+    let nz = read_u64(&mut pos)? as usize;
     let species = read_u64(&mut pos)? as usize;
-    let _nvar_hydro = read_u64(&mut pos)?;
+    let nvar_hydro = read_u64(&mut pos)? as usize;
     let species_bytes = species
         .checked_mul(8)
         .ok_or_else(|| eof("species overflow"))?;
-    pos = pos
+    let chem_end = pos
         .checked_add(species_bytes)
         .ok_or_else(|| eof("species overflow"))?;
+    let chem_slice =
+        bytes.get(pos..chem_end).ok_or_else(|| eof("EOF chem_id"))?;
+    pos = chem_end;
+    let chem_id: Vec<usize> = chem_slice
+        .as_chunks::<8>()
+        .0
+        .iter()
+        .map(|&c| u64::from_le_bytes(c) as usize)
+        .collect();
+
     let net_len = read_u64(&mut pos)? as usize;
-    pos = pos
+    let net_end = pos
         .checked_add(net_len)
         .ok_or_else(|| eof("net_name overflow"))?;
-    let job_tags = bytes
+    let net_slice =
+        bytes.get(pos..net_end).ok_or_else(|| eof("EOF net_name"))?;
+    pos = net_end;
+    let saved_net_name = std::str::from_utf8(net_slice)
+        .map_err(|e| {
+            StarError::IoError(format!("invalid UTF-8 net_name: {e}"))
+        })?
+        .to_owned();
+
+    let job_tags: [u8; 8] = bytes
         .get(pos..pos + 8)
-        .ok_or_else(|| eof("EOF job/controls flags"))?;
-    match job_tags[7] {
-        0 => Ok(flexmesa_math::NumericsMode::Strict),
-        1 => Ok(flexmesa_math::NumericsMode::Fast),
-        other => Err(StarError::IoError(format!(
-            "invalid photo numerics_mode tag {other}"
-        ))),
-    }
+        .ok_or_else(|| eof("EOF job/controls flags"))?
+        .try_into()
+        .map_err(|_| eof("EOF job/controls flags"))?;
+    pos += 8;
+    let saved_mode = flexmesa_math::NumericsMode::from_wire_tag(job_tags[7])
+        .ok_or_else(|| {
+            StarError::IoError(format!(
+                "invalid photo numerics_mode tag {}",
+                job_tags[7]
+            ))
+        })?;
+
+    Ok((
+        PhotoPart1Header {
+            nz,
+            species,
+            nvar_hydro,
+            chem_id,
+            saved_net_name,
+            job_tags,
+            saved_mode,
+        },
+        pos,
+    ))
+}
+
+/// Extracts the [`flexmesa_math::NumericsMode`] recorded in the Part 1 header
+/// of serialized `.photo` checkpoint `bytes` (`#165`).
+pub fn photo_numerics_mode(
+    bytes: &[u8],
+) -> Result<flexmesa_math::NumericsMode, StarError> {
+    decode_photo_part1_header(bytes).map(|(hdr, _)| hdr.saved_mode)
 }

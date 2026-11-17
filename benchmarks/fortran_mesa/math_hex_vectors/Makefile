@@ -24,9 +24,9 @@ OUT ?= mesa_26_4_1_math_vectors.txt
 
 all: $(BIN)
 
-$(BIN): gen_math_vectors.f90
+$(BIN): vec_gen_support.f90 gen_math_vectors.f90
 	@mkdir -p $(BUILD_DIR)
-	$(FC) $(FFLAGS) $(MESA_INCS) $< $(MESA_LIBS) -o $@
+	$(FC) $(FFLAGS) $(MESA_INCS) -J$(BUILD_DIR) vec_gen_support.f90 gen_math_vectors.f90 $(MESA_LIBS) -o $@
 
 generate: $(BIN)
 	MESA_DIR="$(MESA_DIR)" MESASDK_VERSION_STR="$(SDK_VER)" $(BIN) "$(OUT)"

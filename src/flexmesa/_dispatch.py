@@ -26,7 +26,31 @@ from flexmesa import _rust
 
 Backend = Literal["auto", "rust", "jax"]
 NumericsMode = Literal["strict", "fast"]
+VALID_NUMERICS_MODES: tuple[NumericsMode, ...] = ("strict", "fast")
 _JAX_TYPES: tuple[type[Any], ...] = (jax.Array, jax.core.Tracer)
+
+
+def validate_numerics_mode(
+    mode: str, *, label: str = "numerics_mode"
+) -> NumericsMode:
+    """Validate and normalize a ``"strict"`` / ``"fast"`` mode string.
+
+    Args:
+        mode: Raw mode string to normalize.
+        label: Parameter or environment-variable name used in error messages.
+
+    Returns:
+        Canonical lowercase :data:`NumericsMode`.
+
+    Raises:
+        ValueError: If ``mode`` is not ``"strict"`` or ``"fast"``.
+    """
+    norm = mode.strip().lower()
+    if norm == "strict":
+        return "strict"
+    if norm == "fast":
+        return "fast"
+    raise ValueError(f"{label} must be 'strict' or 'fast', got {mode!r}")
 
 
 def is_jax_input(*values: Any) -> bool:
@@ -134,6 +158,7 @@ def numerics_mode_context(
 
 
 __all__ = [
+    "VALID_NUMERICS_MODES",
     "Backend",
     "NumericsMode",
     "_rust",
@@ -143,4 +168,5 @@ __all__ = [
     "numerics_mode_context",
     "resolve_backend",
     "set_numerics_mode",
+    "validate_numerics_mode",
 ]

@@ -128,50 +128,42 @@ fn update_even_row(
     let has_left = k >= stride;
     let has_right = k + stride < nz;
 
-    if has_left {
-        let jm = k - stride;
-        if jm >= stride {
-            let l_jm = &l_cur[blk_range(jm, blk_sz)];
-            zero_then_add_block_mm(nvar, l_k, l_jm, l_next);
-        } else {
-            l_next.fill(0.0);
-        }
+    if k >= 2 * stride {
+        let l_jm = &l_cur[blk_range(k - stride, blk_sz)];
+        zero_then_add_block_mm(nvar, l_k, l_jm, l_next);
     } else {
         l_next.fill(0.0);
     }
 
-    if has_right {
-        let jp = k + stride;
-        if jp + stride < nz {
-            let u_jp = &u_cur[blk_range(jp, blk_sz)];
-            zero_then_add_block_mm(nvar, u_k, u_jp, u_next);
-        } else {
-            u_next.fill(0.0);
-        }
+    if k + 2 * stride < nz {
+        let u_jp = &u_cur[blk_range(k + stride, blk_sz)];
+        zero_then_add_block_mm(nvar, u_k, u_jp, u_next);
     } else {
         u_next.fill(0.0);
     }
 
-    if has_right {
-        let jp = k + stride;
-        let l_jp = &l_cur[blk_range(jp, blk_sz)];
-        let b_jp = &b_cur[vec_range(jp, nvar)];
-        if has_left {
+    match (has_right, has_left) {
+        (true, true) => {
+            let jp = k + stride;
             let jm = k - stride;
+            let l_jp = &l_cur[blk_range(jp, blk_sz)];
+            let b_jp = &b_cur[vec_range(jp, nvar)];
             let u_jm = &u_cur[blk_range(jm, blk_sz)];
             let b_jm = &b_cur[vec_range(jm, nvar)];
             add_two_block_mm(nvar, u_k, l_jp, l_k, u_jm, d_k);
             sub_two_block_mv(u_k, b_jp, l_k, b_jm, b_next);
-        } else {
-            add_block_mm(nvar, u_k, l_jp, d_k);
-            sub_block_mv(u_k, b_jp, b_next);
         }
-    } else if has_left {
-        let jm = k - stride;
-        let u_jm = &u_cur[blk_range(jm, blk_sz)];
-        let b_jm = &b_cur[vec_range(jm, nvar)];
-        add_block_mm(nvar, l_k, u_jm, d_k);
-        sub_block_mv(l_k, b_jm, b_next);
+        (true, false) => {
+            let jp = k + stride;
+            add_block_mm(nvar, u_k, &l_cur[blk_range(jp, blk_sz)], d_k);
+            sub_block_mv(u_k, &b_cur[vec_range(jp, nvar)], b_next);
+        }
+        (false, true) => {
+            let jm = k - stride;
+            add_block_mm(nvar, l_k, &u_cur[blk_range(jm, blk_sz)], d_k);
+            sub_block_mv(l_k, &b_cur[vec_range(jm, nvar)], b_next);
+        }
+        (false, false) => {}
     }
 }
 
@@ -241,26 +233,31 @@ pub fn solve_block_tridiag_bcyclic(
 
         // Step 1: Normalize odd multiples j = (2m + 1) * stride in-place.
         if parallel && n_odd >= MIN_PARALLEL_ROWS {
+            let blk_step = step * blk_sz;
+            let vec_step = step * nvar;
+            let b_off = stride * blk_sz;
+            let v_off = stride * nvar;
             l_work
-                .par_chunks_mut(blk_sz)
-                .zip(d_work.par_chunks_mut(blk_sz))
-                .zip(u_work.par_chunks_mut(blk_sz))
-                .zip(b_work.par_chunks_mut(nvar))
-                .zip(ipiv_work.par_chunks_mut(nvar))
+                .par_chunks_mut(blk_step)
+                .zip(d_work.par_chunks_mut(blk_step))
+                .zip(u_work.par_chunks_mut(blk_step))
+                .zip(b_work.par_chunks_mut(vec_step))
+                .zip(ipiv_work.par_chunks_mut(vec_step))
                 .enumerate()
-                .try_for_each(|(j, ((((lj, dj), uj), bj), ipiv))| {
-                    if j % step != stride {
+                .try_for_each(|(m, ((((l_c, d_c), u_c), b_c), ipiv_c))| {
+                    let j = (2 * m + 1) * stride;
+                    if j >= nz {
                         return Ok(());
                     }
                     normalize_odd_row(
                         nvar,
                         j,
                         j + stride < nz,
-                        lj,
-                        dj,
-                        uj,
-                        bj,
-                        ipiv,
+                        &mut l_c[b_off..b_off + blk_sz],
+                        &mut d_c[b_off..b_off + blk_sz],
+                        &mut u_c[b_off..b_off + blk_sz],
+                        &mut b_c[v_off..v_off + nvar],
+                        &mut ipiv_c[v_off..v_off + nvar],
                     )
                 })?;
         } else {
@@ -282,19 +279,29 @@ pub fn solve_block_tridiag_bcyclic(
         // Step 2: Schur complement update on even multiples k = 2m * stride.
         let n_even = nz.div_ceil(step);
         if parallel && n_even >= MIN_PARALLEL_ROWS {
+            let blk_step = step * blk_sz;
+            let vec_step = step * nvar;
             d_work
-                .par_chunks_mut(blk_sz)
-                .zip(l_tmp.par_chunks_mut(blk_sz))
-                .zip(u_tmp.par_chunks_mut(blk_sz))
-                .zip(b_tmp.par_chunks_mut(nvar))
+                .par_chunks_mut(blk_step)
+                .zip(l_tmp.par_chunks_mut(blk_step))
+                .zip(u_tmp.par_chunks_mut(blk_step))
+                .zip(b_tmp.par_chunks_mut(vec_step))
                 .enumerate()
-                .for_each(|(k, (((dk, ln), un), bn))| {
-                    if k % step == 0 {
-                        update_even_row(
-                            nvar, k, stride, nz, &l_work, &u_work, &b_work, dk,
-                            ln, un, bn,
-                        );
-                    }
+                .for_each(|(m, (((dk_c, ln_c), un_c), bn_c))| {
+                    let k = 2 * m * stride;
+                    update_even_row(
+                        nvar,
+                        k,
+                        stride,
+                        nz,
+                        &l_work,
+                        &u_work,
+                        &b_work,
+                        &mut dk_c[..blk_sz],
+                        &mut ln_c[..blk_sz],
+                        &mut un_c[..blk_sz],
+                        &mut bn_c[..nvar],
+                    );
                 });
         } else {
             for m in 0..n_even {

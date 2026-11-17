@@ -1,6 +1,6 @@
 # MESA 26.4.1 Hexadecimal Math Reference Vectors (`#165`)
 
-This directory contains the standalone Fortran generator (`gen_math_vectors.f90`) and build recipe (`Makefile`) that link a built MESA release `26.4.1` (`r26.4.1`) `math` module (`libmath.a` + MESA SDK `CRMATH 1.2` / `crlibm 1.0beta4`) and emit 16-digit IEEE-754 big-endian hexadecimal input/output reference vectors (`Z16.16`) for every numeric function in `flexmesa-math`.
+This directory contains the standalone Fortran generator (`vec_gen_support.f90` and `gen_math_vectors.f90`) and build recipe (`Makefile`) that link a built MESA release `26.4.1` (`r26.4.1`) `math` module (`libmath.a` + MESA SDK `CRMATH 1.2` / `crlibm 1.0beta4`) and emit 16-digit IEEE-754 big-endian hexadecimal input/output reference vectors (`Z16.16`) for every numeric function in `flexmesa-math`.
 
 ## Regenerating the Reference Vectors
 

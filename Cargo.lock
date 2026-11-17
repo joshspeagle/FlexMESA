@@ -279,6 +279,7 @@ name = "flexmesa-crlibm-sys"
 version = "0.1.0"
 dependencies = [
  "cc",
+ "flexmesa-utils",
 ]
 
 [[package]]
@@ -287,6 +288,7 @@ version = "0.1.0"
 dependencies = [
  "flexmesa-math",
  "flexmesa-testing",
+ "flexmesa-utils",
  "proptest",
  "tempfile",
 ]

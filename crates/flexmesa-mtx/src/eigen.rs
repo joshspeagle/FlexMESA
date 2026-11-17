@@ -108,17 +108,17 @@ fn standardize_2x2(
     }
 }
 
-/// Constructs a 2- or 3-element Householder reflector `(tau, u1, u2)` mapping
-/// `(x0, x1, x2)` to `(beta, 0, 0)`.
+/// Constructs a 2- or 3-element Householder reflector `(tau, u1, u2, beta)`
+/// mapping `(x0, x1, x2)` to `(beta, 0, 0)`.
 #[inline]
-fn reflector_3(x0: f64, x1: f64, x2: f64, len: usize) -> (f64, f64, f64) {
+fn reflector_3(x0: f64, x1: f64, x2: f64, len: usize) -> (f64, f64, f64, f64) {
     let norm_tail = if len == 3 {
         flexmesa_math::hypot(x1, x2)
     } else {
         x1.abs()
     };
     if norm_tail == 0.0 {
-        return (0.0, 0.0, 0.0);
+        return (0.0, 0.0, 0.0, x0);
     }
     let norm = flexmesa_math::hypot(x0, norm_tail);
     let beta = if x0 >= 0.0 { -norm } else { norm };
@@ -126,7 +126,7 @@ fn reflector_3(x0: f64, x1: f64, x2: f64, len: usize) -> (f64, f64, f64) {
     let denom = x0 - beta;
     let u1 = x1 / denom;
     let u2 = if len == 3 { x2 / denom } else { 0.0 };
-    (tau, u1, u2)
+    (tau, u1, u2, beta)
 }
 
 /// Francis implicit double-shift QR iteration (`dhseqr`) reducing upper
@@ -319,17 +319,12 @@ fn schur_qr(
                     0.0
                 };
             }
-            let (tau, u1, u2) = reflector_3(v0, v1, v2, nr);
+            let (tau, u1, u2, beta) = reflector_3(v0, v1, v2, nr);
             if tau == 0.0 {
                 continue;
             }
             if k > m_start {
-                let norm = if nr == 3 {
-                    flexmesa_math::hypot(v0, flexmesa_math::hypot(v1, v2))
-                } else {
-                    flexmesa_math::hypot(v0, v1)
-                };
-                h[k * n + (k - 1)] = if v0 >= 0.0 { -norm } else { norm };
+                h[k * n + (k - 1)] = beta;
                 h[(k + 1) * n + (k - 1)] = 0.0;
                 if nr == 3 {
                     h[(k + 2) * n + (k - 1)] = 0.0;

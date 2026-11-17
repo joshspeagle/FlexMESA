@@ -97,8 +97,24 @@ fn test_no_disallowed_methods_suppression_outside_math_crates() {
             .and_then(|s| s.to_str())
             .expect("crate dir name");
 
-        if crate_name == "flexmesa-math" || crate_name == "flexmesa-crlibm-sys"
-        {
+        if crate_name == "flexmesa-crlibm-sys" {
+            continue;
+        }
+        if crate_name == "flexmesa-math" {
+            let mut math_files = Vec::new();
+            collect_rs_files(&pkg_dir.join("src"), &mut math_files);
+            let allowed_fast = pkg_dir.join("src/fast_ops.rs");
+            for file in math_files {
+                if file == allowed_fast {
+                    continue;
+                }
+                let src = fs::read_to_string(&file).expect("read math .rs");
+                assert!(
+                    !src.contains("disallowed_methods"),
+                    "{} must not suppress clippy::disallowed_methods (confined to src/fast_ops.rs)",
+                    file.display()
+                );
+            }
             continue;
         }
 

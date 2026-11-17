@@ -30,24 +30,27 @@
 //!   against MESA.
 
 #![forbid(unsafe_code)]
-#![allow(clippy::disallowed_methods)]
 
+mod fast_ops;
+pub mod io;
+pub mod mode;
 pub mod pre_z;
 pub mod trig;
-
-use core::cell::Cell;
-use core::fmt;
-use core::str::FromStr;
-use std::sync::atomic::{AtomicU8, Ordering};
-use std::sync::{Mutex, MutexGuard};
+pub mod vector_eval;
 
 use flexmesa_const::LN10;
 
+use mode::is_strict;
+
+pub use io::{double_to_str, heaviside, sgn, str_to_double, str_to_vector};
+pub use mode::{
+    numerics_mode, set_numerics_mode, with_numerics_mode, NumericsMode,
+    ParseNumericsModeError,
+};
 pub use pre_z::{pre_z, PrecompInt, MAX_PRECOMP_INTS};
 pub use trig::{
     acos, acosh, acospi, asin, asinh, asinpi, atan, atan2, atanh, atanpi, cos,
-    cosh, cospi, double_to_str, heaviside, sgn, sin, sin_cos, sinh, sinpi,
-    str_to_double, str_to_vector, tan, tanh, tanpi,
+    cosh, cospi, sin, sin_cos, sinh, sinpi, tan, tanh, tanpi,
 };
 
 /// Upstream MESA `MATH_BACKEND` constant (`math/public/math_lib_crmath.f90:34`).
@@ -64,176 +67,6 @@ pub const SAFE_LOG_BAD_RETURN: f64 = -99.0;
 /// Exact IEEE-754 bit pattern of `ln10_m = log_rz(10.0_dp)` initialized by
 /// `math_init` (`math/public/math_lib_crmath.f90:111`).
 const LN10_CRMATH: f64 = f64::from_bits(0x4002_6bb1_bbb5_5515);
-
-const MODE_UNINIT: u8 = 0;
-const MODE_STRICT: u8 = 1;
-const MODE_FAST: u8 = 2;
-
-static ACTIVE_MODE: AtomicU8 = AtomicU8::new(MODE_UNINIT);
-static MODE_SCOPE_LOCK: Mutex<()> = Mutex::new(());
-
-thread_local! {
-    static SCOPE_DEPTH: Cell<usize> = const { Cell::new(0) };
-}
-
-/// Run-level floating-point arithmetic mode (`#165`).
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-pub enum NumericsMode {
-    /// Hardware-independent `CRMATH` / `crlibm` arithmetic with no FMA
-    /// contraction (default; sole mode compared against MESA).
-    #[default]
-    Strict = 0,
-    /// Platform `std` `f64` intrinsics with [`fma`] (`mul_add`) enabled.
-    Fast = 1,
-}
-
-impl NumericsMode {
-    /// Canonical lowercase identifier (`"strict"` or `"fast"`).
-    #[must_use]
-    #[inline]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Strict => "strict",
-            Self::Fast => "fast",
-        }
-    }
-
-    #[inline]
-    const fn to_tag(self) -> u8 {
-        match self {
-            Self::Strict => MODE_STRICT,
-            Self::Fast => MODE_FAST,
-        }
-    }
-}
-
-impl fmt::Display for NumericsMode {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.as_str())
-    }
-}
-
-/// Error returned when parsing an invalid [`NumericsMode`] string.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ParseNumericsModeError {
-    invalid: String,
-}
-
-impl fmt::Display for ParseNumericsModeError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "invalid numerics mode {:?}: expected \"strict\" or \"fast\"",
-            self.invalid
-        )
-    }
-}
-
-impl std::error::Error for ParseNumericsModeError {}
-
-impl FromStr for NumericsMode {
-    type Err = ParseNumericsModeError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.trim().to_ascii_lowercase().as_str() {
-            "strict" => Ok(Self::Strict),
-            "fast" => Ok(Self::Fast),
-            _ => Err(ParseNumericsModeError {
-                invalid: s.to_string(),
-            }),
-        }
-    }
-}
-
-#[cold]
-fn init_mode_from_env() -> NumericsMode {
-    let parsed = match std::env::var("FLEXMESA_NUMERICS_MODE") {
-        Ok(raw) if !raw.trim().is_empty() => raw
-            .parse::<NumericsMode>()
-            .unwrap_or_else(|err| panic!("{err}")),
-        _ => NumericsMode::Strict,
-    };
-    let _ = ACTIVE_MODE.compare_exchange(
-        MODE_UNINIT,
-        parsed.to_tag(),
-        Ordering::Relaxed,
-        Ordering::Relaxed,
-    );
-    match ACTIVE_MODE.load(Ordering::Relaxed) {
-        MODE_FAST => NumericsMode::Fast,
-        _ => NumericsMode::Strict,
-    }
-}
-
-/// Return the process-wide active [`NumericsMode`].
-///
-/// Defaults to [`NumericsMode::Strict`] unless overridden via
-/// [`set_numerics_mode`], [`with_numerics_mode`], or `FLEXMESA_NUMERICS_MODE`.
-#[must_use]
-#[inline]
-pub fn numerics_mode() -> NumericsMode {
-    match ACTIVE_MODE.load(Ordering::Relaxed) {
-        MODE_STRICT => NumericsMode::Strict,
-        MODE_FAST => NumericsMode::Fast,
-        _ => init_mode_from_env(),
-    }
-}
-
-/// Return `true` when [`NumericsMode::Strict`] is active.
-#[must_use]
-#[inline]
-pub(crate) fn is_strict() -> bool {
-    numerics_mode() == NumericsMode::Strict
-}
-
-/// Set the process-wide [`NumericsMode`] at run start.
-#[inline]
-pub fn set_numerics_mode(mode: NumericsMode) {
-    ACTIVE_MODE.store(mode.to_tag(), Ordering::Relaxed);
-}
-
-struct ModeResetGuard<'a> {
-    prev: NumericsMode,
-    _lock_guard: Option<MutexGuard<'a, ()>>,
-}
-
-impl Drop for ModeResetGuard<'_> {
-    fn drop(&mut self) {
-        set_numerics_mode(self.prev);
-        SCOPE_DEPTH.with(|depth| depth.set(depth.get().saturating_sub(1)));
-    }
-}
-
-/// Execute `f` with `mode` active, serializing concurrent mode-switching callers
-/// across threads (while allowing nested reentrant calls on the same thread)
-/// and restoring the previous mode when `f` returns or unwinds.
-pub fn with_numerics_mode<T, F>(mode: NumericsMode, f: F) -> T
-where
-    F: FnOnce() -> T,
-{
-    let lock_guard = SCOPE_DEPTH.with(|depth| {
-        let cur = depth.get();
-        let guard = if cur == 0 {
-            Some(
-                MODE_SCOPE_LOCK
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner),
-            )
-        } else {
-            None
-        };
-        depth.set(cur + 1);
-        guard
-    });
-    let reset = ModeResetGuard {
-        prev: numerics_mode(),
-        _lock_guard: lock_guard,
-    };
-    set_numerics_mode(mode);
-    let out = f();
-    drop(reset);
-    out
-}
 
 /// Initialize the math subsystem matching MESA's `math_init`
 /// (`math/public/math_lib_crmath.f90:107-115`).
@@ -254,15 +87,12 @@ pub fn fma(a: f64, b: f64, c: f64) -> f64 {
     if is_strict() {
         a * b + c
     } else {
-        a.mul_add(b, c)
+        fast_ops::mul_add(a, b, c)
     }
 }
 
 /// Compute the domain-safe square root $\sqrt{\max(x, 0)}$ matching
 /// `math/public/math_lib_crmath.f90:118-125`.
-///
-/// Negative finite and `-Inf` inputs clamp to `+0.0`, `-0.0` preserves `-0.0`,
-/// and `NaN` propagates unchanged.
 #[must_use]
 #[inline]
 pub fn safe_sqrt(x: f64) -> f64 {
@@ -316,7 +146,7 @@ pub fn log(x: f64) -> f64 {
     if is_strict() {
         flexmesa_crlibm_sys::log_rz(x)
     } else {
-        x.ln()
+        fast_ops::ln(x)
     }
 }
 
@@ -328,7 +158,7 @@ pub fn log10(x: f64) -> f64 {
     if is_strict() {
         flexmesa_crlibm_sys::log10_rz(x)
     } else {
-        x.log10()
+        fast_ops::log10(x)
     }
 }
 
@@ -340,7 +170,7 @@ pub fn log1p(x: f64) -> f64 {
     if is_strict() {
         flexmesa_crlibm_sys::log1p_rz(x)
     } else {
-        x.ln_1p()
+        fast_ops::ln_1p(x)
     }
 }
 
@@ -352,7 +182,7 @@ pub fn log2(x: f64) -> f64 {
     if is_strict() {
         flexmesa_crlibm_sys::log2_rz(x)
     } else {
-        x.log2()
+        fast_ops::log2(x)
     }
 }
 
@@ -364,7 +194,7 @@ pub fn exp(x: f64) -> f64 {
     if is_strict() {
         flexmesa_crlibm_sys::exp_rd(x)
     } else {
-        x.exp()
+        fast_ops::exp(x)
     }
 }
 
@@ -376,7 +206,7 @@ pub fn expm1(x: f64) -> f64 {
     if is_strict() {
         flexmesa_crlibm_sys::expm1_rz(x)
     } else {
-        x.exp_m1()
+        fast_ops::exp_m1(x)
     }
 }
 
@@ -407,7 +237,7 @@ pub fn exp10(x: f64) -> f64 {
             flexmesa_crlibm_sys::exp_rd(x * LN10_CRMATH)
         }
     } else {
-        (x * LN10).exp()
+        fast_ops::exp(x * LN10)
     }
 }
 
@@ -430,7 +260,7 @@ pub fn hypot(x: f64, y: f64) -> f64 {
             ay * (1.0_f64 + r * r).sqrt()
         }
     } else {
-        x.hypot(y)
+        fast_ops::hypot(x, y)
     }
 }
 
@@ -467,7 +297,7 @@ pub fn pow(x: f64, y: f64) -> f64 {
     if is_strict() {
         pow_strict(x, y)
     } else {
-        x.powf(y)
+        fast_ops::powf(x, y)
     }
 }
 
@@ -493,8 +323,6 @@ pub fn powi(x: f64, iy: i32) -> f64 {
         } else if x == -1.0_f64 {
             pow_x = if (n & 1) == 0 { 1.0_f64 } else { -1.0_f64 };
         } else {
-            // Any |x| != 1 saturates to +-0.0, +-Inf, or NaN within 2,100
-            // IEEE-754 binary64 multiplications; preserve exact parity sign.
             let steps = 2200 + (n & 1);
             for _ in 0..steps {
                 pow_x *= x;
@@ -506,16 +334,12 @@ pub fn powi(x: f64, iy: i32) -> f64 {
             pow_x
         }
     } else {
-        x.powi(iy)
+        fast_ops::powi(x, iy)
     }
 }
 
 /// Raise `x` to a Fortran `**` integer power (`x ** m`, GCC `__powidf2` binary
 /// squaring where `0.0 ** 0 == 1.0`, `#165` Item 10b).
-///
-/// Use this only when translating upstream Fortran expressions that write the
-/// intrinsic `x ** m` operator with an integer exponent `m` rather than
-/// `math_lib::pow(x, m)`.
 #[must_use]
 #[inline]
 pub fn powi_f90(mut x: f64, m: i32) -> f64 {
@@ -536,7 +360,7 @@ pub fn powi_f90(mut x: f64, m: i32) -> f64 {
             y
         }
     } else {
-        x.powi(m)
+        fast_ops::powi(x, m)
     }
 }
 
@@ -600,17 +424,13 @@ pub fn pow8(x: f64) -> f64 {
 /// [`NumericsMode::Strict`] for upstream MESA `26.4.1` call sites that bypass
 /// `math_lib` into Fortran's `dlog`/`log` intrinsic (`#198`; `100.00%` bit
 /// match on `10,067` vectors vs `61.92%` for `log_rz`).
-///
-/// Use [`log`] everywhere upstream imports `math_lib`; call `intrinsic_log`
-/// only when reproducing one of the documented `#198` bypass sites with an
-/// explicit `file:line` citation.
 #[must_use]
 #[inline]
 pub fn intrinsic_log(x: f64) -> f64 {
     if is_strict() {
         flexmesa_crlibm_sys::log_rn(x)
     } else {
-        x.ln()
+        fast_ops::ln(x)
     }
 }
 
@@ -618,17 +438,13 @@ pub fn intrinsic_log(x: f64) -> f64 {
 /// [`NumericsMode::Strict`] for upstream MESA `26.4.1` call sites that bypass
 /// `math_lib` into Fortran's `dlog10`/`log10` intrinsic (`#198`; `99.84%` /
 /// `99.76%` bit match with `max_ulp = 1` vs `62.84%` / `61.45%` for `log10_rz`).
-///
-/// Use [`log10`] everywhere upstream imports `math_lib`; call
-/// `intrinsic_log10` only when reproducing one of the documented `#198` bypass
-/// sites with an explicit `file:line` citation.
 #[must_use]
 #[inline]
 pub fn intrinsic_log10(x: f64) -> f64 {
     if is_strict() {
         flexmesa_crlibm_sys::log10_rn(x)
     } else {
-        x.log10()
+        fast_ops::log10(x)
     }
 }
 
@@ -636,17 +452,13 @@ pub fn intrinsic_log10(x: f64) -> f64 {
 /// [`NumericsMode::Strict`] for upstream MESA `26.4.1` call sites that bypass
 /// `math_lib` into Fortran's `exp` intrinsic (`#198`; `100.00%` bit match on
 /// `10,067` vectors vs `50.57%` for `exp_rd`).
-///
-/// Use [`exp`] everywhere upstream imports `math_lib`; call `intrinsic_exp`
-/// only when reproducing one of the documented `#198` bypass sites with an
-/// explicit `file:line` citation.
 #[must_use]
 #[inline]
 pub fn intrinsic_exp(x: f64) -> f64 {
     if is_strict() {
         flexmesa_crlibm_sys::exp_rn(x)
     } else {
-        x.exp()
+        fast_ops::exp(x)
     }
 }
 
@@ -655,16 +467,12 @@ pub fn intrinsic_exp(x: f64) -> f64 {
 /// `math_lib` into Fortran's `real(dp) ** real(dp)` operator (`#198`; `99.97%`
 /// bit match with `max_ulp = 1` on `10,294` vectors vs `41.27%` and
 /// `max_ulp = 1,493` for `pow_r_`).
-///
-/// Use [`pow`] everywhere upstream calls `math_lib::pow`; call `intrinsic_pow`
-/// only when reproducing one of the documented `#198` bypass sites with an
-/// explicit `file:line` citation.
 #[must_use]
 #[inline]
 pub fn intrinsic_pow(x: f64, y: f64) -> f64 {
     if is_strict() {
         flexmesa_crlibm_sys::pow_rn(x, y)
     } else {
-        x.powf(y)
+        fast_ops::powf(x, y)
     }
 }

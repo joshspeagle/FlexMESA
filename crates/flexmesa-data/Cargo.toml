@@ -13,6 +13,7 @@ workspace = true
 [dependencies]
 flexmesa-math = { path = "../flexmesa-math" }
 flexmesa-testing = { path = "../flexmesa-testing" }
+flexmesa-utils = { path = "../flexmesa-utils" }
 
 [dev-dependencies]
 proptest = "1.4"

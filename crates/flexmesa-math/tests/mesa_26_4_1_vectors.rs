@@ -10,14 +10,15 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
 
+use flexmesa_math::vector_eval::{
+    canonical_strict_bits, eval_binary_f64_section, eval_binary_i32_section,
+    eval_unary_section,
+};
 use flexmesa_math::{
-    acos, acosh, acospi, asin, asinh, asinpi, atan, atan2, atanh, atanpi, cos,
-    cosh, cospi, double_to_str, exp, exp10, expm1, fma, hypot, intrinsic_exp,
-    intrinsic_log, intrinsic_log10, intrinsic_pow, log, log10, log1p, log2,
-    math_init, numerics_mode, pow, pow2, pow3, pow4, pow5, pow6, pow7, pow8,
-    powi, powi_f90, powm1, pre_z, safe_log, safe_log10, safe_sqrt, sin,
-    sin_cos, sinh, sinpi, str_to_double, str_to_vector, tan, tanh, tanpi,
-    with_numerics_mode, NumericsMode, MATH_BACKEND, MAX_PRECOMP_INTS,
+    atan, atan2, cos, double_to_str, exp, expm1, fma, intrinsic_pow, log,
+    log10, log1p, math_init, numerics_mode, pow, powi, powi_f90, pre_z, sin,
+    sin_cos, str_to_double, str_to_vector, tanh, with_numerics_mode,
+    NumericsMode, MATH_BACKEND, MAX_PRECOMP_INTS,
 };
 
 fn repo_root() -> PathBuf {
@@ -45,70 +46,12 @@ fn bits_match_with_nan_rule(actual_bits: u64, expected_bits: u64) -> bool {
     }
 }
 
-/// Canonicalize quiet-NaN bit patterns to `0x7ff8_0000_0000_0000` when hashing
-/// cross-machine strict outputs (`x86_64` vs `aarch64`).
-#[inline]
-fn canonical_strict_bits(val: f64) -> u64 {
-    if val.is_nan() {
-        0x7ff8_0000_0000_0000_u64
-    } else {
-        val.to_bits()
-    }
-}
-
 fn eval_unary_named(name: &str, x: f64) -> f64 {
-    match name {
-        "safe_sqrt" => safe_sqrt(x),
-        "log" => log(x),
-        "safe_log" => safe_log(x),
-        "log10" => log10(x),
-        "safe_log10" => safe_log10(x),
-        "log1p" => log1p(x),
-        "log2" => log2(x),
-        "exp" => exp(x),
-        "exp10" => exp10(x),
-        "expm1" => expm1(x),
-        "powm1" => powm1(x),
-        "pow2" => pow2(x),
-        "pow3" => pow3(x),
-        "pow4" => pow4(x),
-        "pow5" => pow5(x),
-        "pow6" => pow6(x),
-        "pow7" => pow7(x),
-        "pow8" => pow8(x),
-        "cos" => cos(x),
-        "sin" => sin(x),
-        "tan" => tan(x),
-        "cospi" => cospi(x),
-        "sinpi" => sinpi(x),
-        "tanpi" => tanpi(x),
-        "acos" => acos(x),
-        "asin" => asin(x),
-        "atan" => atan(x),
-        "acospi" => acospi(x),
-        "asinpi" => asinpi(x),
-        "atanpi" => atanpi(x),
-        "cosh" => cosh(x),
-        "sinh" => sinh(x),
-        "tanh" => tanh(x),
-        "acosh" => acosh(x),
-        "asinh" => asinh(x),
-        "atanh" => atanh(x),
-        "dlog" => intrinsic_log(x),
-        "dlog10" | "intrinsic_log10" => intrinsic_log10(x),
-        "intrinsic_exp" => intrinsic_exp(x),
-        other => panic!("unknown unary function section: {other}"),
-    }
+    eval_unary_section(name, x).unwrap_or_else(|e| panic!("{e}"))
 }
 
 fn eval_binary_f64_named(name: &str, a: f64, b: f64) -> f64 {
-    match name {
-        "pow" => pow(a, b),
-        "intrinsic_pow" => intrinsic_pow(a, b),
-        "atan2" | "datan2" => atan2(a, b),
-        "hypot" => hypot(a, b),
-        other => panic!("unknown binary_f64 function section: {other}"),
-    }
+    eval_binary_f64_section(name, a, b).unwrap_or_else(|e| panic!("{e}"))
 }
 
 fn is_platform_intrinsic_section(name: &str) -> bool {
@@ -189,11 +132,7 @@ fn ulp_distance(act_bits: u64, exp_bits: u64) -> u64 {
 }
 
 fn eval_binary_i32_named(name: &str, a: f64, exp_i32: i32) -> f64 {
-    match name {
-        "powi" => powi(a, exp_i32),
-        "powi_f90" => powi_f90(a, exp_i32),
-        other => panic!("unknown binary_i32 function section: {other}"),
-    }
+    eval_binary_i32_section(name, a, exp_i32).unwrap_or_else(|e| panic!("{e}"))
 }
 
 #[test]
@@ -548,7 +487,7 @@ fn test_function_mapping_toml_covers_all_math_lib_crmath_public_symbols() {
         "sgn",
         "heaviside",
     ];
-    for src_file in ["src/lib.rs", "src/trig.rs", "src/pre_z.rs"] {
+    for src_file in ["src/lib.rs", "src/trig.rs", "src/io.rs", "src/pre_z.rs"] {
         let src_txt =
             fs::read_to_string(manifest_dir.join(src_file)).expect(src_file);
         for line in src_txt.lines() {

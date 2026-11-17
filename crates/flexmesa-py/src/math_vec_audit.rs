@@ -4,102 +4,105 @@
 
 use std::collections::BTreeMap;
 use std::fs;
-use std::hint::black_box;
-use std::time::Instant;
 
-use flexmesa_data::sha256::compute_sha256_bytes;
-use flexmesa_math::{
-    acos, acosh, acospi, asin, asinh, asinpi, atan, atan2, atanh, atanpi, cos,
-    cosh, cospi, exp, exp10, expm1, fma, hypot, intrinsic_exp, intrinsic_log,
-    intrinsic_log10, intrinsic_pow, log, log10, log1p, log2, math_init, pow,
-    pow2, pow3, pow4, pow5, pow6, pow7, pow8, powi, powi_f90, powm1, safe_log,
-    safe_log10, safe_sqrt, sin, sinh, sinpi, tan, tanh, tanpi,
-    with_numerics_mode, NumericsMode,
+use flexmesa_math::vector_eval::{
+    canonical_strict_bits, eval_binary_f64_section, eval_binary_i32_section,
+    eval_unary_section,
 };
+use flexmesa_math::{math_init, with_numerics_mode, NumericsMode};
+use flexmesa_utils::sha256::compute_sha256_bytes;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
 type FastVsStrictRow = (String, usize, usize, usize, u64, f64, f64);
 
-#[inline]
-fn canonical_strict_bits(val: f64) -> u64 {
-    if val.is_nan() {
-        0x7ff8_0000_0000_0000_u64
-    } else {
-        val.to_bits()
+#[derive(Clone, Copy)]
+enum ParsedVecInput {
+    Unary(f64),
+    BinaryF64(f64, f64),
+    BinaryI32(f64, i32),
+}
+
+fn parse_u64_hex(tok: &str) -> Result<u64, String> {
+    u64::from_str_radix(tok, 16)
+        .map_err(|err| format!("invalid u64 hex `{tok}`: {err}"))
+}
+
+fn parse_vector_sections(
+    raw: &str,
+) -> Result<Vec<(String, Vec<ParsedVecInput>)>, String> {
+    let mut sections: Vec<(String, Vec<ParsedVecInput>)> = Vec::new();
+    let mut kind = "";
+
+    for line in raw.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        if let Some(inner) =
+            trimmed.strip_prefix('[').and_then(|s| s.strip_suffix(']'))
+        {
+            let (k, name) = inner
+                .split_once(':')
+                .ok_or_else(|| format!("bad header `{trimmed}`"))?;
+            kind = k;
+            sections.push((name.to_string(), Vec::with_capacity(10_300)));
+            continue;
+        }
+        let item = match kind {
+            "unary" => {
+                let in_tok = trimmed
+                    .split_whitespace()
+                    .next()
+                    .ok_or_else(|| String::from("missing unary arg"))?;
+                ParsedVecInput::Unary(f64::from_bits(parse_u64_hex(in_tok)?))
+            }
+            "binary_f64" => {
+                let mut parts = trimmed.split_whitespace();
+                let a_tok =
+                    parts.next().ok_or_else(|| String::from("missing arg1"))?;
+                let b_tok =
+                    parts.next().ok_or_else(|| String::from("missing arg2"))?;
+                ParsedVecInput::BinaryF64(
+                    f64::from_bits(parse_u64_hex(a_tok)?),
+                    f64::from_bits(parse_u64_hex(b_tok)?),
+                )
+            }
+            "binary_i32" => {
+                let mut parts = trimmed.split_whitespace();
+                let a_tok =
+                    parts.next().ok_or_else(|| String::from("missing arg1"))?;
+                let n_tok =
+                    parts.next().ok_or_else(|| String::from("missing exp"))?;
+                let n_u32 = u32::from_str_radix(n_tok, 16)
+                    .map_err(|e| format!("bad u32 `{n_tok}`: {e}"))?;
+                ParsedVecInput::BinaryI32(
+                    f64::from_bits(parse_u64_hex(a_tok)?),
+                    n_u32.cast_signed(),
+                )
+            }
+            other => return Err(format!("unknown section kind `{other}`")),
+        };
+        sections
+            .last_mut()
+            .ok_or_else(|| String::from("vector line before section header"))?
+            .1
+            .push(item);
     }
+    Ok(sections)
 }
 
-fn eval_unary_sec(sec: &str, x: f64) -> Result<f64, String> {
-    let val = match sec {
-        "safe_sqrt" => safe_sqrt(x),
-        "log" => log(x),
-        "safe_log" => safe_log(x),
-        "log10" => log10(x),
-        "safe_log10" => safe_log10(x),
-        "log1p" => log1p(x),
-        "log2" => log2(x),
-        "exp" => exp(x),
-        "exp10" => exp10(x),
-        "expm1" => expm1(x),
-        "powm1" => powm1(x),
-        "pow2" => pow2(x),
-        "pow3" => pow3(x),
-        "pow4" => pow4(x),
-        "pow5" => pow5(x),
-        "pow6" => pow6(x),
-        "pow7" => pow7(x),
-        "pow8" => pow8(x),
-        "cos" => cos(x),
-        "sin" => sin(x),
-        "tan" => tan(x),
-        "cospi" => cospi(x),
-        "sinpi" => sinpi(x),
-        "tanpi" => tanpi(x),
-        "acos" => acos(x),
-        "asin" => asin(x),
-        "atan" => atan(x),
-        "acospi" => acospi(x),
-        "asinpi" => asinpi(x),
-        "atanpi" => atanpi(x),
-        "cosh" => cosh(x),
-        "sinh" => sinh(x),
-        "tanh" => tanh(x),
-        "acosh" => acosh(x),
-        "asinh" => asinh(x),
-        "atanh" => atanh(x),
-        "dlog" => intrinsic_log(x),
-        "dlog10" | "intrinsic_log10" => intrinsic_log10(x),
-        "intrinsic_exp" => intrinsic_exp(x),
-        other => return Err(format!("unknown unary section: {other}")),
-    };
-    Ok(val)
-}
-
-fn eval_binary_f64_sec(sec: &str, a: f64, b: f64) -> Result<f64, String> {
-    let val = match sec {
-        "pow" => pow(a, b),
-        "intrinsic_pow" => intrinsic_pow(a, b),
-        "atan2" | "datan2" => atan2(a, b),
-        "hypot" => hypot(a, b),
-        other => return Err(format!("unknown binary_f64 section: {other}")),
-    };
-    Ok(val)
-}
-
-fn eval_binary_i32_sec(sec: &str, a: f64, exp_i: i32) -> Result<f64, String> {
-    let val = match sec {
-        "powi" => powi(a, exp_i),
-        "powi_f90" => powi_f90(a, exp_i),
-        other => return Err(format!("unknown binary_i32 section: {other}")),
-    };
-    Ok(val)
-}
-
-fn parse_u64_hex(tok: &str) -> Result<u64, PyErr> {
-    u64::from_str_radix(tok, 16).map_err(|err| {
-        PyValueError::new_err(format!("invalid u64 hex `{tok}`: {err}"))
-    })
+#[inline]
+fn eval_input(sec_name: &str, inp: ParsedVecInput) -> Result<f64, String> {
+    match inp {
+        ParsedVecInput::Unary(x) => eval_unary_section(sec_name, x),
+        ParsedVecInput::BinaryF64(a, b) => {
+            eval_binary_f64_section(sec_name, a, b)
+        }
+        ParsedVecInput::BinaryI32(a, n) => {
+            eval_binary_i32_section(sec_name, a, n)
+        }
+    }
 }
 
 #[inline]
@@ -124,88 +127,35 @@ fn signed_ulp_diff(strict_val: f64, fast_val: f64) -> u64 {
 /// `(vector_count, sha256_hex)` over canonicalized `(section, output_u64_be)`
 /// records (`#165` Item 15).
 #[pyfunction]
-pub fn strict_math_vectors_sha256(vec_path: &str) -> PyResult<(usize, String)> {
-    let raw = fs::read_to_string(vec_path).map_err(|err| {
-        PyValueError::new_err(format!("failed to read `{vec_path}`: {err}"))
-    })?;
-    with_numerics_mode(NumericsMode::Strict, || {
-        math_init();
-        let mut stream = Vec::with_capacity(raw.lines().count() * 9);
-        let mut count = 0_usize;
-        let mut kind = "";
-        let mut sec_name = String::new();
-
-        for line in raw.lines() {
-            let trimmed = line.trim();
-            if trimmed.is_empty() || trimmed.starts_with('#') {
-                continue;
-            }
-            if let Some(inner) =
-                trimmed.strip_prefix('[').and_then(|s| s.strip_suffix(']'))
-            {
-                let (k, name) = inner.split_once(':').ok_or_else(|| {
-                    PyValueError::new_err(format!("bad header `{trimmed}`"))
-                })?;
-                kind = k;
-                sec_name = name.to_string();
+pub fn strict_math_vectors_sha256(
+    py: Python<'_>,
+    vec_path: &str,
+) -> PyResult<(usize, String)> {
+    let path_owned = vec_path.to_owned();
+    py.detach(move || {
+        let raw = fs::read_to_string(&path_owned)
+            .map_err(|err| format!("failed to read `{path_owned}`: {err}"))?;
+        let sections = parse_vector_sections(&raw)?;
+        with_numerics_mode(NumericsMode::Strict, || {
+            math_init();
+            let total_est: usize = sections.iter().map(|(_, v)| v.len()).sum();
+            let mut stream = Vec::with_capacity(total_est * 9);
+            let mut count = 0_usize;
+            for (sec_name, inputs) in &sections {
                 stream.extend_from_slice(sec_name.as_bytes());
                 stream.push(0);
-                continue;
+                for &inp in inputs {
+                    let out_val = eval_input(sec_name, inp)?;
+                    stream.extend_from_slice(
+                        &canonical_strict_bits(out_val).to_be_bytes(),
+                    );
+                    count += 1;
+                }
             }
-            let out_val = match kind {
-                "unary" => {
-                    let in_tok =
-                        trimmed.split_whitespace().next().ok_or_else(|| {
-                            PyValueError::new_err("missing unary arg")
-                        })?;
-                    let x = f64::from_bits(parse_u64_hex(in_tok)?);
-                    eval_unary_sec(&sec_name, x)
-                        .map_err(PyValueError::new_err)?
-                }
-                "binary_f64" => {
-                    let mut parts = trimmed.split_whitespace();
-                    let a_tok = parts
-                        .next()
-                        .ok_or_else(|| PyValueError::new_err("missing arg1"))?;
-                    let b_tok = parts
-                        .next()
-                        .ok_or_else(|| PyValueError::new_err("missing arg2"))?;
-                    let a = f64::from_bits(parse_u64_hex(a_tok)?);
-                    let b = f64::from_bits(parse_u64_hex(b_tok)?);
-                    eval_binary_f64_sec(&sec_name, a, b)
-                        .map_err(PyValueError::new_err)?
-                }
-                "binary_i32" => {
-                    let mut parts = trimmed.split_whitespace();
-                    let a_tok = parts
-                        .next()
-                        .ok_or_else(|| PyValueError::new_err("missing arg1"))?;
-                    let n_tok = parts
-                        .next()
-                        .ok_or_else(|| PyValueError::new_err("missing exp"))?;
-                    let a = f64::from_bits(parse_u64_hex(a_tok)?);
-                    let n_u32 =
-                        u32::from_str_radix(n_tok, 16).map_err(|e| {
-                            PyValueError::new_err(format!(
-                                "bad u32 `{n_tok}`: {e}"
-                            ))
-                        })?;
-                    eval_binary_i32_sec(&sec_name, a, n_u32.cast_signed())
-                        .map_err(PyValueError::new_err)?
-                }
-                other => {
-                    return Err(PyValueError::new_err(format!(
-                        "unknown section kind `{other}`"
-                    )));
-                }
-            };
-            stream.extend_from_slice(
-                &canonical_strict_bits(out_val).to_be_bytes(),
-            );
-            count += 1;
-        }
-        Ok((count, compute_sha256_bytes(&stream)))
+            Ok::<_, String>((count, compute_sha256_bytes(&stream)))
+        })
     })
+    .map_err(PyValueError::new_err)
 }
 
 /// Evaluates all inputs in `vec_path` under `NumericsMode::Fast` and compares
@@ -213,201 +163,88 @@ pub fn strict_math_vectors_sha256(vec_path: &str) -> PyResult<(usize, String)> {
 /// against MESA), returning `(section, total, finite_pairs,
 /// nonfinite_mismatch_count, max_ulp, max_abs, max_rel)` in section order.
 #[pyfunction]
-#[allow(clippy::too_many_lines)]
 pub fn compare_fast_vs_strict_vectors(
+    py: Python<'_>,
     vec_path: &str,
 ) -> PyResult<Vec<FastVsStrictRow>> {
-    let raw = fs::read_to_string(vec_path).map_err(|err| {
-        PyValueError::new_err(format!("failed to read `{vec_path}`: {err}"))
-    })?;
-    math_init();
+    let path_owned = vec_path.to_owned();
+    py.detach(move || {
+        let raw = fs::read_to_string(&path_owned)
+            .map_err(|err| format!("failed to read `{path_owned}`: {err}"))?;
+        let sections = parse_vector_sections(&raw)?;
+        math_init();
 
-    let mut order: Vec<String> = Vec::new();
-    let mut stats: BTreeMap<String, (usize, usize, usize, u64, f64, f64)> =
-        BTreeMap::new();
-    let mut kind = "";
-    let mut sec_name = String::new();
+        let mut order: Vec<String> = Vec::with_capacity(sections.len());
+        let mut stats: BTreeMap<String, (usize, usize, usize, u64, f64, f64)> =
+            BTreeMap::new();
 
-    for line in raw.lines() {
-        let trimmed = line.trim();
-        if trimmed.is_empty() || trimmed.starts_with('#') {
-            continue;
-        }
-        if let Some(inner) =
-            trimmed.strip_prefix('[').and_then(|s| s.strip_suffix(']'))
-        {
-            let (k, name) = inner.split_once(':').ok_or_else(|| {
-                PyValueError::new_err(format!("bad header `{trimmed}`"))
+        for (sec_name, inputs) in &sections {
+            let strict_vals = with_numerics_mode(NumericsMode::Strict, || {
+                inputs
+                    .iter()
+                    .map(|&inp| eval_input(sec_name, inp))
+                    .collect::<Result<Vec<f64>, String>>()
             })?;
-            kind = k;
-            sec_name = name.to_string();
-            if !stats.contains_key(&sec_name) {
+            let fast_vals = with_numerics_mode(NumericsMode::Fast, || {
+                inputs
+                    .iter()
+                    .map(|&inp| eval_input(sec_name, inp))
+                    .collect::<Result<Vec<f64>, String>>()
+            })?;
+
+            if !stats.contains_key(sec_name) {
                 order.push(sec_name.clone());
                 stats.insert(sec_name.clone(), (0, 0, 0, 0, 0.0, 0.0));
             }
-            continue;
-        }
-        let (strict_val, fast_val) = match kind {
-            "unary" => {
-                let in_tok =
-                    trimmed.split_whitespace().next().ok_or_else(|| {
-                        PyValueError::new_err("missing unary arg")
-                    })?;
-                let x = f64::from_bits(parse_u64_hex(in_tok)?);
-                let sv = with_numerics_mode(NumericsMode::Strict, || {
-                    eval_unary_sec(&sec_name, x)
-                })
-                .map_err(PyValueError::new_err)?;
-                let fv = with_numerics_mode(NumericsMode::Fast, || {
-                    eval_unary_sec(&sec_name, x)
-                })
-                .map_err(PyValueError::new_err)?;
-                (sv, fv)
-            }
-            "binary_f64" => {
-                let mut parts = trimmed.split_whitespace();
-                let a_tok = parts
-                    .next()
-                    .ok_or_else(|| PyValueError::new_err("missing arg1"))?;
-                let b_tok = parts
-                    .next()
-                    .ok_or_else(|| PyValueError::new_err("missing arg2"))?;
-                let a = f64::from_bits(parse_u64_hex(a_tok)?);
-                let b = f64::from_bits(parse_u64_hex(b_tok)?);
-                let sv = with_numerics_mode(NumericsMode::Strict, || {
-                    eval_binary_f64_sec(&sec_name, a, b)
-                })
-                .map_err(PyValueError::new_err)?;
-                let fv = with_numerics_mode(NumericsMode::Fast, || {
-                    eval_binary_f64_sec(&sec_name, a, b)
-                })
-                .map_err(PyValueError::new_err)?;
-                (sv, fv)
-            }
-            "binary_i32" => {
-                let mut parts = trimmed.split_whitespace();
-                let a_tok = parts
-                    .next()
-                    .ok_or_else(|| PyValueError::new_err("missing arg1"))?;
-                let n_tok = parts
-                    .next()
-                    .ok_or_else(|| PyValueError::new_err("missing exp"))?;
-                let a = f64::from_bits(parse_u64_hex(a_tok)?);
-                let n_u32 = u32::from_str_radix(n_tok, 16).map_err(|e| {
-                    PyValueError::new_err(format!("bad u32 `{n_tok}`: {e}"))
-                })?;
-                let exp_i = n_u32.cast_signed();
-                let sv = with_numerics_mode(NumericsMode::Strict, || {
-                    eval_binary_i32_sec(&sec_name, a, exp_i)
-                })
-                .map_err(PyValueError::new_err)?;
-                let fv = with_numerics_mode(NumericsMode::Fast, || {
-                    eval_binary_i32_sec(&sec_name, a, exp_i)
-                })
-                .map_err(PyValueError::new_err)?;
-                (sv, fv)
-            }
-            other => {
-                return Err(PyValueError::new_err(format!(
-                    "unknown section kind `{other}`"
-                )));
-            }
-        };
-        let entry = stats.get_mut(&sec_name).expect("initialized");
-        entry.0 += 1;
-        if strict_val.is_finite() && fast_val.is_finite() {
-            entry.1 += 1;
-            let ulp = signed_ulp_diff(strict_val, fast_val);
-            let abs_d = (fast_val - strict_val).abs();
-            let scale = strict_val.abs().max(fast_val.abs());
-            let rel_d = if scale > 0.0 { abs_d / scale } else { 0.0 };
-            if ulp > entry.3 {
-                entry.3 = ulp;
-            }
-            if abs_d > entry.4 {
-                entry.4 = abs_d;
-            }
-            if rel_d > entry.5 {
-                entry.5 = rel_d;
-            }
-        } else {
-            let same_nonfinite = (strict_val.is_nan() && fast_val.is_nan())
-                || (strict_val.is_infinite()
-                    && fast_val.is_infinite()
-                    && strict_val.is_sign_negative()
-                        == fast_val.is_sign_negative());
-            if !same_nonfinite {
-                entry.2 += 1;
+            let entry = stats.get_mut(sec_name).expect("initialized");
+            for (&strict_val, &fast_val) in strict_vals.iter().zip(&fast_vals) {
+                entry.0 += 1;
+                if strict_val.is_finite() && fast_val.is_finite() {
+                    entry.1 += 1;
+                    let ulp = signed_ulp_diff(strict_val, fast_val);
+                    let abs_d = (fast_val - strict_val).abs();
+                    let scale = strict_val.abs().max(fast_val.abs());
+                    let rel_d = if scale > 0.0 { abs_d / scale } else { 0.0 };
+                    entry.3 = entry.3.max(ulp);
+                    entry.4 = entry.4.max(abs_d);
+                    entry.5 = entry.5.max(rel_d);
+                } else {
+                    let same_nonfinite = (strict_val.is_nan()
+                        && fast_val.is_nan())
+                        || (strict_val.is_infinite()
+                            && fast_val.is_infinite()
+                            && strict_val.is_sign_negative()
+                                == fast_val.is_sign_negative());
+                    if !same_nonfinite {
+                        entry.2 += 1;
+                    }
+                }
             }
         }
-    }
 
-    Ok(order
-        .into_iter()
-        .map(|name| {
-            let (tot, fin, nf_mis, mulp, mabs, mrel) = stats[&name];
-            (name, tot, fin, nf_mis, mulp, mabs, mrel)
-        })
-        .collect())
+        Ok::<_, String>(
+            order
+                .into_iter()
+                .map(|name| {
+                    let (tot, fin, nf_mis, mulp, mabs, mrel) = stats[&name];
+                    (name, tot, fin, nf_mis, mulp, mabs, mrel)
+                })
+                .collect(),
+        )
+    })
+    .map_err(PyValueError::new_err)
 }
 
 /// Measures `(strict_exp_ns, fast_exp_ns, strict_fma_ns, fast_fma_ns)` over
 /// `n_iters` black-boxed calls (`#165` Item 2).
 #[pyfunction]
-#[allow(clippy::cast_precision_loss)]
-pub fn measure_dispatch_overhead_ns(n_iters: usize) -> (f64, f64, f64, f64) {
-    let iters = n_iters.max(1);
-    let denom = iters as f64;
-
-    let t_s_exp = with_numerics_mode(NumericsMode::Strict, || {
-        let mut acc = 0.0_f64;
-        let t0 = Instant::now();
-        for idx in 0..iters {
-            let arg = black_box(0.5 + (idx & 255) as f64 * 0.001_953_125);
-            acc += black_box(exp(arg));
-        }
-        let dt = t0.elapsed().as_nanos() as f64 / denom;
-        black_box(acc);
-        dt
-    });
-
-    let t_f_exp = with_numerics_mode(NumericsMode::Fast, || {
-        let mut acc = 0.0_f64;
-        let t0 = Instant::now();
-        for idx in 0..iters {
-            let arg = black_box(0.5 + (idx & 255) as f64 * 0.001_953_125);
-            acc += black_box(exp(arg));
-        }
-        let dt = t0.elapsed().as_nanos() as f64 / denom;
-        black_box(acc);
-        dt
-    });
-
-    let t_s_fma = with_numerics_mode(NumericsMode::Strict, || {
-        let mut acc = 1.0_f64;
-        let t0 = Instant::now();
-        for idx in 0..iters {
-            let arg = black_box(1.0 + (idx & 255) as f64 * 1.0e-7);
-            acc = black_box(fma(acc, 0.999_999_9, arg * 1.0e-7));
-        }
-        let dt = t0.elapsed().as_nanos() as f64 / denom;
-        black_box(acc);
-        dt
-    });
-
-    let t_f_fma = with_numerics_mode(NumericsMode::Fast, || {
-        let mut acc = 1.0_f64;
-        let t0 = Instant::now();
-        for idx in 0..iters {
-            let arg = black_box(1.0 + (idx & 255) as f64 * 1.0e-7);
-            acc = black_box(fma(acc, 0.999_999_9, arg * 1.0e-7));
-        }
-        let dt = t0.elapsed().as_nanos() as f64 / denom;
-        black_box(acc);
-        dt
-    });
-
-    (t_s_exp, t_f_exp, t_s_fma, t_f_fma)
+pub fn measure_dispatch_overhead_ns(
+    py: Python<'_>,
+    n_iters: usize,
+) -> (f64, f64, f64, f64) {
+    py.detach(move || {
+        flexmesa_math::vector_eval::measure_dispatch_overhead_ns(n_iters)
+    })
 }
 
 /// Registers vector-audit and dispatch-timing helpers on `m`.

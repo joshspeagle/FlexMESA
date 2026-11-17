@@ -2,64 +2,9 @@
 ! Generate exact 16-digit IEEE-754 hexadecimal input/output reference vectors
 ! from real MESA 26.4.1 (`math_lib` + `crmath` + Fortran platform intrinsics)
 ! for `#165`, `#196`, and `#198`.
-!
-! Every mapped function is evaluated on >= 10,000 deterministic SplitMix64
-! inputs spanning the full IEEE-754 binary64 exponent range plus function-domain
-! slices and explicit IEEE-754 edge cases (signed zeros, subnormals, +-Inf, NaN,
-! +-HUGE, +-TINY, exp/cosh/sinh overflow & underflow boundaries, large trig
-! arguments, integer and non-integer exp10 arguments, and negative/zero/unit
-! bases with integer and non-integer exponents for pow, powi, and x**n).
-
-module mesa_platform_intrinsics
-   use const_def, only: dp
-   implicit none
-   private
-   public :: f90_dlog, f90_dlog10, f90_log10, f90_exp, f90_atan2, f90_datan2, f90_pow_r
-contains
-   pure real(dp) function f90_dlog(x) result(y)
-      intrinsic :: dlog
-      real(dp), intent(in) :: x
-      y = dlog(x)
-   end function f90_dlog
-
-   pure real(dp) function f90_dlog10(x) result(y)
-      intrinsic :: dlog10
-      real(dp), intent(in) :: x
-      y = dlog10(x)
-   end function f90_dlog10
-
-   pure real(dp) function f90_log10(x) result(y)
-      intrinsic :: log10
-      real(dp), intent(in) :: x
-      y = log10(x)
-   end function f90_log10
-
-   pure real(dp) function f90_exp(x) result(y)
-      intrinsic :: exp
-      real(dp), intent(in) :: x
-      y = exp(x)
-   end function f90_exp
-
-   pure real(dp) function f90_atan2(y, x) result(z)
-      intrinsic :: atan2
-      real(dp), intent(in) :: y, x
-      z = atan2(y, x)
-   end function f90_atan2
-
-   pure real(dp) function f90_datan2(y, x) result(z)
-      intrinsic :: datan2
-      real(dp), intent(in) :: y, x
-      z = datan2(y, x)
-   end function f90_datan2
-
-   pure real(dp) function f90_pow_r(x, y) result(z)
-      real(dp), intent(in) :: x, y
-      z = x ** y
-   end function f90_pow_r
-end module mesa_platform_intrinsics
 
 program gen_math_vectors
-   use, intrinsic :: iso_fortran_env, only: int32, int64, real64, compiler_version
+   use, intrinsic :: iso_fortran_env, only: int32, int64, compiler_version
    use const_def, only: dp
    use math_lib, only: &
       MATH_BACKEND, math_init, &
@@ -72,6 +17,8 @@ program gen_math_vectors
    use crmath, only: crmath_hypot => hypot
    use mesa_platform_intrinsics, only: &
       f90_dlog, f90_dlog10, f90_log10, f90_exp, f90_atan2, f90_datan2, f90_pow_r
+   use vec_gen_support, only: &
+      read_mesa_version, current_iso_date, build_unary_edges
    implicit none
 
    integer, parameter :: N_FULL_EXP = 5000
@@ -182,26 +129,6 @@ program gen_math_vectors
 
 contains
 
-   subroutine read_mesa_version(mdir, ver)
-      character(len=*), intent(in)  :: mdir
-      character(len=*), intent(out) :: ver
-      integer :: u, io
-      ver = 'unknown'
-      if (len_trim(mdir) == 0) return
-      open(newunit=u, file=trim(mdir)//'/data/version_number', status='old', action='read', iostat=io)
-      if (io == 0) then
-         read(u, '(A)', iostat=io) ver
-         close(u)
-      end if
-   end subroutine read_mesa_version
-
-   subroutine current_iso_date(dstr)
-      character(len=*), intent(out) :: dstr
-      character(len=8) :: d8
-      call date_and_time(date=d8)
-      dstr = d8(1:4) // '-' // d8(5:6) // '-' // d8(7:8)
-   end subroutine current_iso_date
-
    integer(int64) function next_u64(state)
       integer(int64), intent(inout) :: state
       integer(int64) :: z
@@ -222,7 +149,6 @@ contains
       dp_to_bits = transfer(x, 0_int64)
    end function dp_to_bits
 
-   ! Draw a finite or subnormal binary64 across all biased exponents [0, 2046].
    integer(int64) function sample_full_exponent(state, avoid_large_int)
       integer(int64), intent(inout) :: state
       logical, intent(in) :: avoid_large_int
@@ -240,7 +166,6 @@ contains
             if (x == floor(x)) bits = ior(bits, 1_int64)
             x = bits_to_dp(bits)
             if (x == floor(x)) then
-               ! Perturb exponent above 2^32 where FLOOR overflows/mismatches ix
                bits = ior(ior(ishft(sgn, 63), ishft(1060_int64, 52)), mant)
             end if
          end if
@@ -255,85 +180,6 @@ contains
       r = iand(r, int(Z'001FFFFFFFFFFFFF', int64))
       uniform_01 = real(r, dp) / real(int(Z'0020000000000000', int64), dp)
    end function uniform_01
-
-   subroutine build_unary_edges(edges, n)
-      integer(int64), intent(out) :: edges(:)
-      integer, intent(out) :: n
-      integer :: k
-      n = 0
-      ! Signed zeros, subnormals, normals, infinities, NaN
-      call push_edge(edges, n, int(Z'0000000000000000', int64)) ! +0.0
-      call push_edge(edges, n, int(Z'8000000000000000', int64)) ! -0.0
-      call push_edge(edges, n, int(Z'0000000000000001', int64)) ! +min subnormal
-      call push_edge(edges, n, int(Z'8000000000000001', int64)) ! -min subnormal
-      call push_edge(edges, n, int(Z'000FFFFFFFFFFFFF', int64)) ! +max subnormal
-      call push_edge(edges, n, int(Z'800FFFFFFFFFFFFF', int64)) ! -max subnormal
-      call push_edge(edges, n, int(Z'0010000000000000', int64)) ! +min normal
-      call push_edge(edges, n, int(Z'8010000000000000', int64)) ! -min normal
-      call push_edge(edges, n, int(Z'7FEFFFFFFFFFFFFF', int64)) ! +max finite
-      call push_edge(edges, n, int(Z'FFEFFFFFFFFFFFFF', int64)) ! -max finite
-      call push_edge(edges, n, int(Z'7FF0000000000000', int64)) ! +Inf
-      call push_edge(edges, n, int(Z'FFF0000000000000', int64)) ! -Inf
-      call push_edge(edges, n, int(Z'7FF8000000000000', int64)) ! canonical qNaN
-      call push_edge(edges, n, int(Z'FFF8000000000013', int64)) ! negative payload qNaN
-      ! Unit, half, safe_log floor (1e-99), near-unit neighbors
-      call push_edge(edges, n, int(Z'3FF0000000000000', int64)) ! +1.0
-      call push_edge(edges, n, int(Z'BFF0000000000000', int64)) ! -1.0
-      call push_edge(edges, n, int(Z'3FEFFFFFFFFFFFFF', int64)) ! 1 - eps/2
-      call push_edge(edges, n, int(Z'3FF0000000000001', int64)) ! 1 + eps
-      call push_edge(edges, n, int(Z'BFEFFFFFFFFFFFFF', int64)) ! -(1 - eps/2)
-      call push_edge(edges, n, int(Z'BFF0000000000001', int64)) ! -(1 + eps)
-      call push_edge(edges, n, dp_to_bits(0.5_dp))
-      call push_edge(edges, n, dp_to_bits(-0.5_dp))
-      call push_edge(edges, n, dp_to_bits(2.0_dp))
-      call push_edge(edges, n, dp_to_bits(10.0_dp))
-      call push_edge(edges, n, dp_to_bits(1.0e-99_dp))
-      call push_edge(edges, n, dp_to_bits(0.9999999999999999_dp * 1.0e-99_dp))
-      call push_edge(edges, n, dp_to_bits(1.0e-16_dp))
-      call push_edge(edges, n, dp_to_bits(-1.0e-16_dp))
-      ! exp / cosh / sinh / tanh overflow & underflow boundaries
-      call push_edge(edges, n, int(Z'40862E42FEFA39EF', int64)) ! max x with finite exp(x) (~709.782712893384)
-      call push_edge(edges, n, int(Z'40862E42FEFA39F0', int64)) ! min x with exp(x) = +Inf
-      call push_edge(edges, n, int(Z'408633CE8FB9F87D', int64)) ! near cosh/sinh overflow (~710.47586)
-      call push_edge(edges, n, int(Z'408633CE8FB9F87E', int64))
-      call push_edge(edges, n, int(Z'C086232BDD7ABCD2', int64)) ! exp normal/subnormal boundary (~-708.3964)
-      call push_edge(edges, n, int(Z'C0874910D52D3051', int64)) ! min x with exp(x) > 0 (~-745.1332)
-      call push_edge(edges, n, int(Z'C0874910D52D3052', int64)) ! exp(x) underflows to +0.0
-      ! Large sin / cos / tan arguments (Payne-Hanek reduction)
-      call push_edge(edges, n, dp_to_bits(1.0e6_dp))
-      call push_edge(edges, n, dp_to_bits(-1.0e6_dp))
-      call push_edge(edges, n, dp_to_bits(1.0e15_dp))
-      call push_edge(edges, n, dp_to_bits(-1.0e15_dp))
-      call push_edge(edges, n, dp_to_bits(1.0e50_dp))
-      call push_edge(edges, n, dp_to_bits(1.0e100_dp))
-      call push_edge(edges, n, dp_to_bits(1.0e200_dp))
-      call push_edge(edges, n, dp_to_bits(1.0e300_dp))
-      call push_edge(edges, n, dp_to_bits(-1.0e300_dp))
-      ! Integer and non-integer exp10 arguments around overflow/underflow & exact decades
-      do k = -5, 5
-         call push_edge(edges, n, dp_to_bits(real(k, dp)))
-      end do
-      call push_edge(edges, n, dp_to_bits(307.0_dp))
-      call push_edge(edges, n, dp_to_bits(308.0_dp))
-      call push_edge(edges, n, dp_to_bits(309.0_dp))
-      call push_edge(edges, n, dp_to_bits(-307.0_dp))
-      call push_edge(edges, n, dp_to_bits(-308.0_dp))
-      call push_edge(edges, n, dp_to_bits(-309.0_dp))
-      call push_edge(edges, n, dp_to_bits(-323.0_dp))
-      call push_edge(edges, n, dp_to_bits(-324.0_dp))
-      call push_edge(edges, n, dp_to_bits(308.2547155599167_dp))
-      call push_edge(edges, n, dp_to_bits(-323.3062153431158_dp))
-      call push_edge(edges, n, dp_to_bits(0.3010299956639812_dp))
-      call push_edge(edges, n, dp_to_bits(-2.5_dp))
-   end subroutine build_unary_edges
-
-   subroutine push_edge(arr, n, val)
-      integer(int64), intent(inout) :: arr(:)
-      integer, intent(inout) :: n
-      integer(int64), intent(in) :: val
-      n = n + 1
-      arr(n) = val
-   end subroutine push_edge
 
    real(dp) function eval_unary_by_id(fid, x) result(y)
       integer, intent(in) :: fid
@@ -393,13 +239,13 @@ contains
       u = uniform_01(state)
       v = uniform_01(state)
       select case (fid)
-      case (1, 2, 3, 4, 5, 7, 37, 38, 39) ! positive reals across all exponents [0, 2046]
+      case (1, 2, 3, 4, 5, 7, 37, 38, 39)
          r = next_u64(state)
          bexp = modulo(ishft(r, -52), 2047_int64)
          if (bexp < 0_int64) bexp = bexp + 2047_int64
          mant = iand(r, int(Z'000FFFFFFFFFFFFF', int64))
          bits = ior(ishft(bexp, 52), mant)
-      case (6) ! log1p: (-1, +Inf), dense near 0 across tiny exponents
+      case (6)
          if (mod(idx, 2) == 0) then
             r = next_u64(state)
             sgn = iand(ishft(r, -63), 1_int64)
@@ -411,7 +257,7 @@ contains
             x = -0.999999999999_dp + u * 20.0_dp
             bits = dp_to_bits(x)
          end if
-      case (8, 10, 31, 32, 33, 40) ! exp, expm1, cosh, sinh, tanh: [-750, 715] + tiny around 0
+      case (8, 10, 31, 32, 33, 40)
          if (mod(idx, 2) == 0) then
             x = -750.0_dp + u * 1465.0_dp
             bits = dp_to_bits(x)
@@ -423,7 +269,7 @@ contains
             mant = iand(r, int(Z'000FFFFFFFFFFFFF', int64))
             bits = ior(ior(ishft(sgn, 63), ishft(bexp, 52)), mant)
          end if
-      case (9) ! exp10: mix of exact integers in [-350, 350] and non-integers in [-330, 315]
+      case (9)
          if (mod(idx, 4) == 0) then
             x = real(int(-350.0_dp + u * 701.0_dp), dp)
          else
@@ -431,7 +277,7 @@ contains
             if (x == floor(x)) x = x + 0.125_dp
          end if
          bits = dp_to_bits(x)
-      case (25, 26, 28, 29, 36) ! acos, asin, acospi, asinpi, atanh: [-1, 1] across tiny exponents
+      case (25, 26, 28, 29, 36)
          if (mod(idx, 2) == 0) then
             x = -1.0_dp + 2.0_dp * u
             bits = dp_to_bits(x)
@@ -443,7 +289,7 @@ contains
             mant = iand(r, int(Z'000FFFFFFFFFFFFF', int64))
             bits = ior(ior(ishft(sgn, 63), ishft(bexp, 52)), mant)
          end if
-      case (34) ! acosh: [1, +Inf)
+      case (34)
          if (mod(idx, 2) == 0) then
             x = 1.0_dp + u * u * 100.0_dp
             bits = dp_to_bits(x)
@@ -454,7 +300,7 @@ contains
             mant = iand(r, int(Z'000FFFFFFFFFFFFF', int64))
             bits = ior(ishft(bexp, 52), mant)
          end if
-      case default ! powm1, pow2..pow8, trig, atan, asinh: [-100, 100] + large/small scales
+      case default
          if (mod(idx, 2) == 0) then
             x = -100.0_dp + 200.0_dp * u
             bits = dp_to_bits(x)
@@ -511,23 +357,23 @@ contains
 
       write(unit_no, '(A)') '[binary_f64:' // trim(label) // ']'
 
-      bases(1)  = int(Z'0000000000000000', int64) ! +0.0
-      bases(2)  = int(Z'8000000000000000', int64) ! -0.0
-      bases(3)  = dp_to_bits(1.0_dp)              ! +1.0
-      bases(4)  = dp_to_bits(-1.0_dp)             ! -1.0
+      bases(1)  = int(Z'0000000000000000', int64)
+      bases(2)  = int(Z'8000000000000000', int64)
+      bases(3)  = dp_to_bits(1.0_dp)
+      bases(4)  = dp_to_bits(-1.0_dp)
       bases(5)  = dp_to_bits(2.0_dp)
       bases(6)  = dp_to_bits(-2.5_dp)
       bases(7)  = dp_to_bits(0.5_dp)
       bases(8)  = dp_to_bits(-0.5_dp)
-      bases(9)  = int(Z'0000000000000001', int64) ! +min subnormal
-      bases(10) = int(Z'7FEFFFFFFFFFFFFF', int64) ! +max finite
-      bases(11) = int(Z'7FF0000000000000', int64) ! +Inf
-      bases(12) = int(Z'FFF0000000000000', int64) ! -Inf
-      bases(13) = int(Z'7FF8000000000000', int64) ! qNaN
+      bases(9)  = int(Z'0000000000000001', int64)
+      bases(10) = int(Z'7FEFFFFFFFFFFFFF', int64)
+      bases(11) = int(Z'7FF0000000000000', int64)
+      bases(12) = int(Z'FFF0000000000000', int64)
+      bases(13) = int(Z'7FF8000000000000', int64)
       bases(14) = dp_to_bits(10.0_dp)
 
-      exps(1)  = int(Z'0000000000000000', int64) ! +0.0
-      exps(2)  = int(Z'8000000000000000', int64) ! -0.0
+      exps(1)  = int(Z'0000000000000000', int64)
+      exps(2)  = int(Z'8000000000000000', int64)
       exps(3)  = dp_to_bits(1.0_dp)
       exps(4)  = dp_to_bits(-1.0_dp)
       exps(5)  = dp_to_bits(2.0_dp)
@@ -544,11 +390,10 @@ contains
       exps(16) = dp_to_bits(101.0_dp)
       exps(17) = dp_to_bits(-101.0_dp)
       exps(18) = dp_to_bits(2.5_dp)
-      exps(19) = int(Z'7FF0000000000000', int64) ! +Inf
-      exps(20) = int(Z'FFF0000000000000', int64) ! -Inf
-      exps(21) = int(Z'7FF8000000000000', int64) ! qNaN
+      exps(19) = int(Z'7FF0000000000000', int64)
+      exps(20) = int(Z'FFF0000000000000', int64)
+      exps(21) = int(Z'7FF8000000000000', int64)
 
-      ! 14 * 21 = 294 edge pairs covering negative, zero, unit, subnormal, Inf, NaN
       do i = 1, size(bases)
          do j = 1, size(exps)
             xb = bases(i)
@@ -563,7 +408,6 @@ contains
          end do
       end do
 
-      ! 5,000 full-exponent base + integer/fractional exponent pairs
       do i = 1, N_FULL_EXP
          xb = sample_full_exponent(state, .false.)
          if (mod(i, 3) == 0) then
@@ -582,7 +426,6 @@ contains
          write(unit_no, '(Z16.16,1X,Z16.16,1X,Z16.16)') xb, yb, zb
       end do
 
-      ! 5,000 positive interior bases + smooth / integer exponents
       do i = 1, N_DOMAIN
          u = uniform_01(state)
          v = uniform_01(state)
@@ -617,8 +460,8 @@ contains
 
       write(unit_no, '(A)') '[binary_i32:' // trim(label) // ']'
 
-      bases(1)  = int(Z'0000000000000000', int64) ! +0.0
-      bases(2)  = int(Z'8000000000000000', int64) ! -0.0
+      bases(1)  = int(Z'0000000000000000', int64)
+      bases(2)  = int(Z'8000000000000000', int64)
       bases(3)  = dp_to_bits(1.0_dp)
       bases(4)  = dp_to_bits(-1.0_dp)
       bases(5)  = dp_to_bits(2.0_dp)
@@ -680,20 +523,17 @@ contains
 
       write(unit_no, '(A)') '[binary_f64:' // trim(label) // ']'
 
-      ! MESA 26.4.1 never exports CRMATH's `atan2` (`math_lib_crmath.f90:65-100`),
-      ! so MESA's own `atan2` / `datan2` calls bind to Fortran's intrinsic
-      ! (`libm` `atan2`), including signed-zero `(+-0, +-0)` and `NaN` pairs.
-      vals(1)  = int(Z'0000000000000000', int64) ! +0.0
-      vals(2)  = int(Z'8000000000000000', int64) ! -0.0
+      vals(1)  = int(Z'0000000000000000', int64)
+      vals(2)  = int(Z'8000000000000000', int64)
       vals(3)  = dp_to_bits(1.0_dp)
       vals(4)  = dp_to_bits(-1.0_dp)
-      vals(5)  = int(Z'0000000000000001', int64) ! +min subnormal
-      vals(6)  = int(Z'8000000000000001', int64) ! -min subnormal
-      vals(7)  = int(Z'7FEFFFFFFFFFFFFF', int64) ! +max finite
-      vals(8)  = int(Z'FFEFFFFFFFFFFFFF', int64) ! -max finite
-      vals(9)  = int(Z'7FF0000000000000', int64) ! +Inf
-      vals(10) = int(Z'FFF0000000000000', int64) ! -Inf
-      vals(11) = int(Z'7FF8000000000000', int64) ! qNaN
+      vals(5)  = int(Z'0000000000000001', int64)
+      vals(6)  = int(Z'8000000000000001', int64)
+      vals(7)  = int(Z'7FEFFFFFFFFFFFFF', int64)
+      vals(8)  = int(Z'FFEFFFFFFFFFFFFF', int64)
+      vals(9)  = int(Z'7FF0000000000000', int64)
+      vals(10) = int(Z'FFF0000000000000', int64)
+      vals(11) = int(Z'7FF8000000000000', int64)
 
       do i = 1, size(vals)
          do j = 1, size(vals)
@@ -747,17 +587,17 @@ contains
 
       write(unit_no, '(A)') '[binary_f64:hypot]'
 
-      vals(1)  = int(Z'0000000000000000', int64) ! +0.0
-      vals(2)  = int(Z'8000000000000000', int64) ! -0.0
+      vals(1)  = int(Z'0000000000000000', int64)
+      vals(2)  = int(Z'8000000000000000', int64)
       vals(3)  = dp_to_bits(3.0_dp)
       vals(4)  = dp_to_bits(-4.0_dp)
-      vals(5)  = int(Z'0000000000000001', int64) ! +min subnormal
-      vals(6)  = int(Z'8000000000000001', int64) ! -min subnormal
-      vals(7)  = int(Z'7FEFFFFFFFFFFFFF', int64) ! +max finite
-      vals(8)  = int(Z'FFEFFFFFFFFFFFFF', int64) ! -max finite
-      vals(9)  = int(Z'7FF0000000000000', int64) ! +Inf
-      vals(10) = int(Z'FFF0000000000000', int64) ! -Inf
-      vals(11) = int(Z'7FF8000000000000', int64) ! qNaN
+      vals(5)  = int(Z'0000000000000001', int64)
+      vals(6)  = int(Z'8000000000000001', int64)
+      vals(7)  = int(Z'7FEFFFFFFFFFFFFF', int64)
+      vals(8)  = int(Z'FFEFFFFFFFFFFFFF', int64)
+      vals(9)  = int(Z'7FF0000000000000', int64)
+      vals(10) = int(Z'FFF0000000000000', int64)
+      vals(11) = int(Z'7FF8000000000000', int64)
       vals(12) = dp_to_bits(1.0_dp)
 
       do i = 1, size(vals)

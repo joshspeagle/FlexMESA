@@ -11,6 +11,9 @@ links = "flexmesa_crlibm"
 [build-dependencies]
 cc = "1.2"
 
+[dev-dependencies]
+flexmesa-utils = { path = "../flexmesa-utils" }
+
 [lints.rust]
 unsafe_code = "allow"
 unsafe_op_in_unsafe_fn = "deny"

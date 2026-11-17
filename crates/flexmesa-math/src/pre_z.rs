@@ -81,9 +81,10 @@ pub struct PrecompInt {
     pub zm0p267: f64,
 }
 
-static PRE_Z_TABLE: OnceLock<Box<[PrecompInt]>> = OnceLock::new();
+static PRE_Z_TABLE: OnceLock<Box<[PrecompInt; MAX_PRECOMP_INTS]>> =
+    OnceLock::new();
 
-fn build_pre_z_table() -> Box<[PrecompInt]> {
+fn build_pre_z_table() -> Box<[PrecompInt; MAX_PRECOMP_INTS]> {
     let mut vec = Vec::with_capacity(MAX_PRECOMP_INTS);
     for int_i in 1..=MAX_PRECOMP_INTS {
         #[allow(clippy::cast_precision_loss)]
@@ -136,6 +137,8 @@ fn build_pre_z_table() -> Box<[PrecompInt]> {
         });
     }
     vec.into_boxed_slice()
+        .try_into()
+        .unwrap_or_else(|_| unreachable!())
 }
 
 /// Return the precomputed powers for 1-based integer $z \in [1, 1000]$
@@ -144,6 +147,7 @@ fn build_pre_z_table() -> Box<[PrecompInt]> {
 /// # Panics
 /// Panics if `z == 0` or `z > MAX_PRECOMP_INTS`.
 #[must_use]
+#[inline]
 pub fn pre_z(z: usize) -> &'static PrecompInt {
     assert!(
         (1..=MAX_PRECOMP_INTS).contains(&z),

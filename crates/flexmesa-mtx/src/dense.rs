@@ -226,14 +226,47 @@ pub fn dgetrs_multi(
             "rhs_mat must have length n * nrhs for dgetrs_multi",
         ));
     }
-    let mut col = vec![0.0; n];
-    for rhs_idx in 0..nrhs {
-        for i in 0..n {
-            col[i] = rhs_mat[i * nrhs + rhs_idx];
+    if is_bad_slice(lu) || is_bad_slice(rhs_mat) {
+        return Err(MtxError::NonFiniteInput("lu or rhs_mat contains NaN/Inf"));
+    }
+    for &piv in ipiv {
+        if piv >= n {
+            return Err(MtxError::InvalidParameter(
+                "pivot index out of bounds",
+            ));
         }
-        dgetrs(n, lu, ipiv, &mut col)?;
-        for i in 0..n {
-            rhs_mat[i * nrhs + rhs_idx] = col[i];
+    }
+    for i in 0..n {
+        if lu[i * n + i] == 0.0 {
+            return Err(MtxError::SingularMatrix(i));
+        }
+    }
+
+    for (k, &piv) in ipiv.iter().enumerate() {
+        if piv != k {
+            for rhs_idx in 0..nrhs {
+                rhs_mat.swap(k * nrhs + rhs_idx, piv * nrhs + rhs_idx);
+            }
+        }
+    }
+    for rhs_idx in 0..nrhs {
+        for k in 0..n {
+            let b_k = rhs_mat[k * nrhs + rhs_idx];
+            if b_k != 0.0 {
+                for i in (k + 1)..n {
+                    rhs_mat[i * nrhs + rhs_idx] -= b_k * lu[i * n + k];
+                }
+            }
+        }
+        for k in (0..n).rev() {
+            let idx = k * nrhs + rhs_idx;
+            if rhs_mat[idx] != 0.0 {
+                rhs_mat[idx] /= lu[k * n + k];
+                let b_k = rhs_mat[idx];
+                for i in 0..k {
+                    rhs_mat[i * nrhs + rhs_idx] -= b_k * lu[i * n + k];
+                }
+            }
         }
     }
     Ok(())

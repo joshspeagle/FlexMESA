@@ -9,6 +9,8 @@
 //! - The stateful stream tokenizer ([`Token`], [`Tokenizer`], [`tokenize`])
 //!   used to parse nuclear reaction network (`.net`) definition files.
 
+pub mod sha256;
+
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 

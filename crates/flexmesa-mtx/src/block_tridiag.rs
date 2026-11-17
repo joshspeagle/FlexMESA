@@ -88,22 +88,25 @@ pub(crate) fn sub_two_block_mv(
     for j in 0..nvar {
         let tmp_x = x[j];
         let tmp_z = z[j];
-        if tmp_x != 0.0 {
-            if tmp_z != 0.0 {
+        match (tmp_x != 0.0, tmp_z != 0.0) {
+            (true, true) => {
                 for (i, y_i) in y.iter_mut().enumerate() {
                     *y_i = *y_i
                         - tmp_x * a[i * nvar + j]
                         - tmp_z * b[i * nvar + j];
                 }
-            } else {
+            }
+            (true, false) => {
                 for (i, y_i) in y.iter_mut().enumerate() {
                     *y_i -= tmp_x * a[i * nvar + j];
                 }
             }
-        } else if tmp_z != 0.0 {
-            for (i, y_i) in y.iter_mut().enumerate() {
-                *y_i -= tmp_z * b[i * nvar + j];
+            (false, true) => {
+                for (i, y_i) in y.iter_mut().enumerate() {
+                    *y_i -= tmp_z * b[i * nvar + j];
+                }
             }
+            (false, false) => {}
         }
     }
 }
@@ -122,22 +125,25 @@ pub(crate) fn add_two_block_mv(
     for j in 0..nvar {
         let tmp_x = x[j];
         let tmp_z = z[j];
-        if tmp_x != 0.0 {
-            if tmp_z != 0.0 {
+        match (tmp_x != 0.0, tmp_z != 0.0) {
+            (true, true) => {
                 for (i, y_i) in y.iter_mut().enumerate() {
                     *y_i = *y_i
                         + tmp_x * a[i * nvar + j]
                         + tmp_z * b[i * nvar + j];
                 }
-            } else {
+            }
+            (true, false) => {
                 for (i, y_i) in y.iter_mut().enumerate() {
                     *y_i += tmp_x * a[i * nvar + j];
                 }
             }
-        } else if tmp_z != 0.0 {
-            for (i, y_i) in y.iter_mut().enumerate() {
-                *y_i += tmp_z * b[i * nvar + j];
+            (false, true) => {
+                for (i, y_i) in y.iter_mut().enumerate() {
+                    *y_i += tmp_z * b[i * nvar + j];
+                }
             }
+            (false, false) => {}
         }
     }
 }
@@ -191,22 +197,25 @@ pub(crate) fn add_two_block_mm(
         for l in 0..n {
             let tmp_b = b[l * n + j];
             let tmp_e = e[l * n + j];
-            if tmp_b != 0.0 {
-                if tmp_e != 0.0 {
+            match (tmp_b != 0.0, tmp_e != 0.0) {
+                (true, true) => {
                     for i in 0..n {
                         c[i * n + j] = c[i * n + j]
                             + tmp_b * a[i * n + l]
                             + tmp_e * d[i * n + l];
                     }
-                } else {
+                }
+                (true, false) => {
                     for i in 0..n {
                         c[i * n + j] += tmp_b * a[i * n + l];
                     }
                 }
-            } else if tmp_e != 0.0 {
-                for i in 0..n {
-                    c[i * n + j] += tmp_e * d[i * n + l];
+                (false, true) => {
+                    for i in 0..n {
+                        c[i * n + j] += tmp_e * d[i * n + l];
+                    }
                 }
+                (false, false) => {}
             }
         }
     }

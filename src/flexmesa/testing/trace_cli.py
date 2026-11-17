@@ -12,6 +12,7 @@ import pathlib
 import sys
 import tempfile
 
+from flexmesa import _dispatch
 from flexmesa.data import fetch
 from flexmesa.testing import case_manifest, case_report, harness_runner
 
@@ -39,7 +40,7 @@ def _run_worker(argv: list[str]) -> int:
     parser.add_argument("--write-profiles", action="store_true")
     parser.add_argument(
         "--numerics-mode",
-        choices=("strict", "fast"),
+        choices=_dispatch.VALID_NUMERICS_MODES,
         default="strict",
     )
     ns = parser.parse_args(argv)
@@ -126,7 +127,7 @@ def _build_trace_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--numerics-mode",
-        choices=("strict", "fast"),
+        choices=_dispatch.VALID_NUMERICS_MODES,
         default=None,
         help="Arithmetic mode ('strict' default, or 'fast'; #165).",
     )
@@ -272,7 +273,7 @@ def _build_harness_parser() -> argparse.ArgumentParser:
     p_run.add_argument("--max-steps", type=_non_negative_int, default=None)
     p_run.add_argument(
         "--numerics-mode",
-        choices=("strict", "fast"),
+        choices=_dispatch.VALID_NUMERICS_MODES,
         default=None,
         help="Arithmetic mode ('strict' default, or 'fast'; #165).",
     )

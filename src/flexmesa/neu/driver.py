@@ -288,12 +288,7 @@ def neu_get(
     if temp <= _inputs.TMIN_NEU or logtemp <= _inputs.LOG10_TMIN_NEU:
         return _zero_result()
 
-    if (
-        _dispatch.resolve_backend(
-            backend, temp, logtemp, den, logden, abar, zbar
-        )
-        == "rust"
-    ):
+    if use_rust_math:
         flag_tup = (
             active.pair,
             active.plas,

@@ -456,7 +456,7 @@
     },
     "infrastructure_lines": {
       "rust_bridge_testing_bench": 14916,
-      "python_testing_bench": 10371
+      "python_testing_bench": 10356
     }
   },
   "numerics": {
@@ -745,8 +745,8 @@
       "tool": "cargo llvm-cov",
       "overall": {
         "lines": 85967,
-        "covered": 67773,
-        "percent": 78.8
+        "covered": 64360,
+        "percent": 74.9
       },
       "by_crate": [
         {
@@ -776,14 +776,14 @@
         {
           "crate": "flexmesa-binary",
           "lines": 5570,
-          "covered": 4164,
-          "percent": 74.8
+          "covered": 4119,
+          "percent": 73.9
         },
         {
           "crate": "flexmesa-chem",
           "lines": 937,
-          "covered": 661,
-          "percent": 70.5
+          "covered": 647,
+          "percent": 69.1
         },
         {
           "crate": "flexmesa-colors",
@@ -806,8 +806,8 @@
         {
           "crate": "flexmesa-eos",
           "lines": 8851,
-          "covered": 6840,
-          "percent": 77.3
+          "covered": 6771,
+          "percent": 76.5
         },
         {
           "crate": "flexmesa-interp1d",
@@ -830,8 +830,8 @@
         {
           "crate": "flexmesa-kap",
           "lines": 2868,
-          "covered": 2027,
-          "percent": 70.7
+          "covered": 1923,
+          "percent": 67.1
         },
         {
           "crate": "flexmesa-math",
@@ -848,8 +848,8 @@
         {
           "crate": "flexmesa-net",
           "lines": 7412,
-          "covered": 6630,
-          "percent": 89.4
+          "covered": 6478,
+          "percent": 87.4
         },
         {
           "crate": "flexmesa-neu",
@@ -878,8 +878,8 @@
         {
           "crate": "flexmesa-star",
           "lines": 35778,
-          "covered": 28890,
-          "percent": 80.7
+          "covered": 25869,
+          "percent": 72.3
         },
         {
           "crate": "flexmesa-testing",
@@ -890,8 +890,8 @@
         {
           "crate": "flexmesa-turb",
           "lines": 1093,
-          "covered": 914,
-          "percent": 83.6
+          "covered": 906,
+          "percent": 82.9
         },
         {
           "crate": "flexmesa-utils",
@@ -904,16 +904,16 @@
     "python": {
       "tool": "pytest --cov",
       "overall": {
-        "statements": 19680,
-        "covered": 17146,
-        "percent": 87.1
+        "statements": 19841,
+        "covered": 17425,
+        "percent": 87.8
       },
       "by_subpackage": [
         {
           "subpackage": "flexmesa",
-          "statements": 68,
-          "covered": 64,
-          "percent": 94.1
+          "statements": 71,
+          "covered": 62,
+          "percent": 87.3
         },
         {
           "subpackage": "flexmesa.astero",
@@ -1055,9 +1055,9 @@
         },
         {
           "subpackage": "flexmesa.testing",
-          "statements": 2166,
-          "covered": 1128,
-          "percent": 52.1
+          "statements": 2324,
+          "covered": 1409,
+          "percent": 60.6
         },
         {
           "subpackage": "flexmesa.turb",
@@ -1406,7 +1406,7 @@
       {
         "number": 195,
         "title": "feat(math): strict CRMATH (crlibm) and fast numerics modes from one Rust source (#165)",
-        "draft": true
+        "draft": false
       },
       {
         "number": 200,
@@ -1561,8 +1561,8 @@
       "engine_ported_pct": "13.9",
       "all_verified_pct": "0.0",
       "cases_passing": "0",
-      "rust_cov_pct": "78.8",
-      "python_cov_pct": "87.1",
+      "rust_cov_pct": "74.9",
+      "python_cov_pct": "87.8",
       "closed_140": "4",
       "total_140": "32",
       "deferred_169": "17"

@@ -34,18 +34,24 @@ case "$MODE" in
       --skip test_e2e_2_tier2_physics_helpers_and_suite \
       --skip test_e2e_4_tier4_pulsation_astero_and_dev_cases \
       --skip test_e2e_5_tier5_star_hooks_and_90_active_star_inventory \
+      --skip test_tier3_physics_and_upstream_suite \
+      --skip test_e2e_5_binary_test_suite_and_oracles \
+      --skip test_coupled_double_bh_35_steps_preserves_star_controls \
       --skip test_uncapped_ \
-      --skip test_rsp_hyd_multicycle_period_save_load_and_photo_restart_parity
+      --skip test_rsp_hyd_multicycle_period_save_load_and_photo_restart_parity \
+      --skip test_rsp_check_2nd_crossing_on_7m_mesa_test_suite
     ;;
   python)
     PYTEST_BIN="${PYTEST_BIN:-pytest}"
-    "$PYTEST_BIN" -c "$REPO_ROOT/pyproject.toml" \
+    PYTHONPATH="$REPO_ROOT/src${PYTHONPATH:+:$PYTHONPATH}" \
+      "$PYTEST_BIN" -c "$REPO_ROOT/pyproject.toml" \
       "$REPO_ROOT/src" \
       "$REPO_ROOT/tests" \
       --ignore="$REPO_ROOT/tests/test_docs_snippets.py" \
       --ignore="$REPO_ROOT/tests/test_mesa_paper_figures.py" \
       --ignore="$REPO_ROOT/tests/test_history_harness.py" \
       --ignore-glob="$REPO_ROOT/tests/test_e2e_*.py" \
+      -k "not test_dashboard_freshness_gate_matches_committed_outputs" \
       --cov="$REPO_ROOT/src/flexmesa" \
       --cov-report="json:$OUT_JSON" \
       -q

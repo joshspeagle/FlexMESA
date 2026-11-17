@@ -5,7 +5,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from flexmesa.testing import port_manifest
+from flexmesa.data import fetch
+from flexmesa.testing import case_manifest, port_manifest
 
 BEGIN_MARKER = "<!-- BEGIN GENERATED DASHBOARD -->"
 END_MARKER = "<!-- END GENERATED DASHBOARD -->"
@@ -13,30 +14,42 @@ BEGIN_SUMMARY_MARKER = "<!-- BEGIN GENERATED DASHBOARD SUMMARY -->"
 END_SUMMARY_MARKER = "<!-- END GENERATED DASHBOARD SUMMARY -->"
 
 REPO_URL = "https://github.com/joshspeagle/FlexMESA"
+_ZENODO_RECORD = fetch.load_upstream_reference().zenodo_record
+
+
+def _blob(label: str, rel: str) -> str:
+    return f"[{label}]({REPO_URL}/blob/main/{rel})"
+
+
+def _issue_link(num: int | str) -> str:
+    clean = str(num).lstrip("#")
+    return f"[#{clean}]({REPO_URL}/issues/{clean})"
 
 
 def _sum_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
-    up = sum(int(r["upstream_lines"]) for r in rows)
-    ported = sum(int(r["ported_total"]) for r in rows)
-    verified = sum(int(r["verified_total"]) for r in rows)
-    return {
-        "upstream_files": sum(int(r["upstream_files"]) for r in rows),
-        "upstream_lines": up,
-        "absent": sum(int(r["absent"]) for r in rows),
-        "stub": sum(int(r["stub"]) for r in rows),
-        "partial": sum(int(r["partial"]) for r in rows),
-        "ported_unverified": sum(int(r["ported_unverified"]) for r in rows),
-        "kernel_reference_vectors": sum(
-            int(r["kernel_reference_vectors"]) for r in rows
-        ),
-        "case_level_evidence": sum(int(r["case_level_evidence"]) for r in rows),
-        "ported_total": ported,
-        "verified_total": verified,
-        "pct_ported": round(100.0 * ported / up, 1) if up else 0.0,
-        "pct_verified": round(100.0 * verified / up, 1) if up else 0.0,
-        "rust_lines": sum(int(r["rust_lines"]) for r in rows),
-        "python_jax_lines": sum(int(r["python_jax_lines"]) for r in rows),
-    }
+    int_keys = (
+        "upstream_files",
+        "upstream_lines",
+        "absent",
+        "stub",
+        "partial",
+        "ported_unverified",
+        "kernel_reference_vectors",
+        "case_level_evidence",
+        "ported_total",
+        "verified_total",
+        "rust_lines",
+        "python_jax_lines",
+    )
+    out: dict[str, Any] = {k: sum(int(r[k]) for r in rows) for k in int_keys}
+    up = int(out["upstream_lines"])
+    out["pct_ported"] = (
+        round(100.0 * int(out["ported_total"]) / up, 1) if up else 0.0
+    )
+    out["pct_verified"] = (
+        round(100.0 * int(out["verified_total"]) / up, 1) if up else 0.0
+    )
+    return out
 
 
 def _fmt_mod_row(label: str, r: dict[str, Any], bold: bool = False) -> str:
@@ -62,7 +75,7 @@ def _summarize_harness(hh_suites: dict[str, Any]) -> dict[str, int]:
         "undeclared_failures",
     )
     return {
-        k: sum(int(hh_suites[s][k]) for s in ("star", "binary", "astero"))
+        k: sum(int(hh_suites[s][k]) for s in case_manifest.VALID_SUITES)
         for k in keys
     }
 
@@ -77,6 +90,30 @@ def _unique_140_counts(gh: dict[str, Any]) -> tuple[int, int]:
     return closed_n, open_n
 
 
+def summarize_headline(data: dict[str, Any]) -> dict[str, Any]:
+    """Compute canonical headline metrics shared across views and history."""
+    rows: list[dict[str, Any]] = data["module_coverage"]["rows"]
+    engine_tot = _sum_rows(
+        [r for r in rows if r["module"] in port_manifest.CORE_ENGINE_MODULES]
+    )
+    non_plot_engine = _sum_rows(
+        [r for r in rows if r["module"] in {"star", "binary", "astero"}]
+    )
+    all_tot = _sum_rows(rows)
+    hh_tot = _summarize_harness(data["harness"]["by_suite"])
+    closed_140, open_140 = _unique_140_counts(data["github"])
+    return {
+        "engine_tot": engine_tot,
+        "non_plot_engine": non_plot_engine,
+        "all_tot": all_tot,
+        "hh_tot": hh_tot,
+        "closed_140": closed_140,
+        "open_140": open_140,
+        "total_140": closed_140 + open_140,
+        "deferred_169_count": len(data["github"]["deferred_169"]),
+    }
+
+
 def _collect_issue_links(items: list[dict[str, str]]) -> str:
     nums: set[int] = set()
     for x in items:
@@ -86,55 +123,46 @@ def _collect_issue_links(items: list[dict[str, str]]) -> str:
                 nums.add(int(clean))
     if not nums:
         return "none"
-    return ", ".join(f"[#{n}]({REPO_URL}/issues/{n})" for n in sorted(nums))
+    return ", ".join(_issue_link(n) for n in sorted(nums))
 
 
 def _render_headline_and_modules(data: dict[str, Any]) -> list[str]:
     mod_cov = data["module_coverage"]
     rows: list[dict[str, Any]] = mod_cov["rows"]
-    engine_tot = _sum_rows(
-        [r for r in rows if r["module"] in port_manifest.CORE_ENGINE_MODULES]
+    head = summarize_headline(data)
+    eng, non_plot, all_tot, hh_tot = (
+        head["engine_tot"],
+        head["non_plot_engine"],
+        head["all_tot"],
+        head["hh_tot"],
     )
-    non_plot_engine = _sum_rows(
-        [r for r in rows if r["module"] in {"star", "binary", "astero"}]
-    )
-    all_tot = _sum_rows(rows)
     hh_suites = data["harness"]["by_suite"]
-    hh_tot = _summarize_harness(hh_suites)
     rs_ov = data["coverage"]["rust"]["overall"]
     py_ov = data["coverage"]["python"]["overall"]
     num = data["numerics"]
     gh = data["github"]
     up_ref = data["upstream_reference"]
 
-    closed_140, open_140 = _unique_140_counts(gh)
     def_items = gh["deferred_169"]
     def_bugs = sum(1 for x in def_items if x["kind"] == "upstream-bug")
     def_enh = sum(1 for x in def_items if x["kind"] == "enhancement")
     enh_lbl = "enhancement" if def_enh == 1 else "enhancements"
     def_owed = sum(1 for x in def_items if x["parity_pending"])
     open_prs = gh["open_pull_requests"]
-    suite_split = (
-        f"`{hh_suites['star']['total']}`/"
-        f"`{hh_suites['binary']['total']}`/"
-        f"`{hh_suites['astero']['total']}`"
+    suite_split = "/".join(
+        f"`{hh_suites[s]['total']}`" for s in case_manifest.VALID_SUITES
     )
 
-    pm_link = (
-        f"[`port_manifest.toml`]"
-        f"({REPO_URL}/blob/main/benchmarks/dashboard/port_manifest.toml)"
+    pm_link = _blob(
+        "`port_manifest.toml`", "benchmarks/dashboard/port_manifest.toml"
     )
-    gh_link = (
-        f"[`github_snapshot.json`]"
-        f"({REPO_URL}/blob/main/benchmarks/dashboard/github_snapshot.json)"
+    gh_link = _blob(
+        "`github_snapshot.json`", "benchmarks/dashboard/github_snapshot.json"
     )
-    cov_link = (
-        f"[`coverage_summary.json`]"
-        f"({REPO_URL}/blob/main/benchmarks/dashboard/coverage_summary.json)"
+    cov_link = _blob(
+        "`coverage_summary.json`", "benchmarks/dashboard/coverage_summary.json"
     )
-    ct_link = (
-        f"[`case_table.md`]({REPO_URL}/blob/main/notes/audit/case_table.md)"
-    )
+    ct_link = _blob("`case_table.md`", "notes/audit/case_table.md")
     hh_link = (
         f"[`benchmarks/history_harness/`]"
         f"({REPO_URL}/tree/main/benchmarks/history_harness)"
@@ -143,60 +171,39 @@ def _render_headline_and_modules(data: dict[str, Any]) -> list[str]:
     lines = [
         "Generated mechanically by `flexmesa dashboard render` from "
         f"{pm_link}, {hh_link}, `cargo llvm-cov`, `pytest --cov`, and the "
-        f"GitHub API ([#174]({REPO_URL}/issues/174)). Reference: "
+        f"GitHub API ({_issue_link(174)}). Reference: "
         f"**MESA release `{up_ref['version'].lstrip('r')}`** "
-        f"(commit `{up_ref['commit'][:7]}`, Zenodo `19722306`).",
+        f"(commit `{up_ref['commit'][:7]}`, Zenodo `{_ZENODO_RECORD}`).",
         "",
         "### Headline Status",
         "",
         "| Metric | Value | Source |",
         "| :--- | ---: | :--- |",
-        (
-            "| `star` + `star_data` + `binary` + `astero` ported (unverified) "
-            f"| {engine_tot['ported_total']:,} / "
-            f"{engine_tot['upstream_lines']:,} ({engine_tot['pct_ported']:.1f}"
-            f"%; `star`+`binary`+`astero`: {non_plot_engine['pct_ported']:.1f}"
-            f"%) | {pm_link} |"
-        ),
-        (
-            f"| Upstream lines verified (all {len(rows)} modules) | "
-            f"{all_tot['verified_total']:,} / {all_tot['upstream_lines']:,} "
-            f"({all_tot['pct_verified']:.1f}%) | {pm_link} |"
-        ),
-        (
-            f"| End-to-end MESA `26.4.1` cases passing ({suite_split}) | "
-            f"{hh_tot['passing']} / {hh_tot['total']} "
-            f"({hh_tot['declared_gaps']} declared gaps, "
-            f"{hh_tot['no_reference_yet']} no reference yet, "
-            f"{hh_tot['undeclared_failures']} undeclared failures) | "
-            f"{ct_link} |"
-        ),
-        (
-            "| Strict mode bit-identical across machines (`#165`) | "
-            f"{num['strict_cross_machine_identical']} | "
-            f"[#165]({REPO_URL}/issues/165) |"
-        ),
-        (
-            "| Strict-mode kernels bit-identical to MESA `26.4.1` (`#165`) | "
-            f"{num['strict_kernels_bit_identical']} | "
-            f"[#165]({REPO_URL}/issues/165) |"
-        ),
-        (
-            "| Test line coverage (Rust `llvm-cov` / Python `pytest --cov`) | "
-            f"{rs_ov['percent']:.1f}% ({rs_ov['covered']:,}/"
-            f"{rs_ov['lines']:,}) / {py_ov['percent']:.1f}% "
-            f"({py_ov['covered']:,}/{py_ov['statements']:,}) | {cov_link} |"
-        ),
-        (
-            f"| Road-to-`v0.1.0` packages ([#140]({REPO_URL}/issues/140)) & "
-            f"open PRs | {closed_140} closed, {open_140} open; "
-            f"{len(open_prs)} open PR(s) | {gh_link} |"
-        ),
-        (
-            f"| Post-parity deferred backlog ([#169]({REPO_URL}/issues/169)) | "
-            f"{len(def_items)} open ({def_bugs} upstream bugs, {def_enh} "
-            f"{enh_lbl}, {def_owed} `parity-pending`) | {gh_link} |"
-        ),
+        f"| `star` + `star_data` + `binary` + `astero` ported (unverified) | "
+        f"{eng['ported_total']:,} / {eng['upstream_lines']:,} "
+        f"({eng['pct_ported']:.1f}%; `star`+`binary`+`astero`: "
+        f"{non_plot['pct_ported']:.1f}%) | {pm_link} |",
+        f"| Upstream lines verified (all {len(rows)} modules) | "
+        f"{all_tot['verified_total']:,} / {all_tot['upstream_lines']:,} "
+        f"({all_tot['pct_verified']:.1f}%) | {pm_link} |",
+        f"| End-to-end MESA `26.4.1` cases passing ({suite_split}) | "
+        f"{hh_tot['passing']} / {hh_tot['total']} ({hh_tot['declared_gaps']} "
+        f"declared gaps, {hh_tot['no_reference_yet']} no reference yet, "
+        f"{hh_tot['undeclared_failures']} undeclared failures) | {ct_link} |",
+        f"| Strict mode bit-identical across machines (`#165`) | "
+        f"{num['strict_cross_machine_identical']} | {_issue_link(165)} |",
+        f"| Strict-mode kernels bit-identical to MESA `26.4.1` (`#165`) | "
+        f"{num['strict_kernels_bit_identical']} | {_issue_link(165)} |",
+        f"| Test line coverage (Rust `llvm-cov` / Python `pytest --cov`) | "
+        f"{rs_ov['percent']:.1f}% ({rs_ov['covered']:,}/{rs_ov['lines']:,}) / "
+        f"{py_ov['percent']:.1f}% ({py_ov['covered']:,}/"
+        f"{py_ov['statements']:,}) | {cov_link} |",
+        f"| Road-to-`v0.1.0` packages ({_issue_link(140)}) & open PRs | "
+        f"{head['closed_140']} closed, {head['open_140']} open; "
+        f"{len(open_prs)} open PR(s) | {gh_link} |",
+        f"| Post-parity deferred backlog ({_issue_link(169)}) | "
+        f"{len(def_items)} open ({def_bugs} upstream bugs, {def_enh} "
+        f"{enh_lbl}, {def_owed} `parity-pending`) | {gh_link} |",
         "",
         "### 1. Port Coverage by Module (MESA `26.4.1`)",
         "",
@@ -206,28 +213,17 @@ def _render_headline_and_modules(data: dict[str, Any]) -> list[str]:
         "the corresponding routine counterparts or generated MESA `26.4.1` "
         "evidence.",
         "",
-        (
-            "| Module | Upstream LOC | Absent | Stub | Partial | "
-            "Ported (unverified) | Kernel ref. vectors | Case-level evidence "
-            "| Rust LOC | Python/JAX LOC | % Ported | % Verified |"
-        ),
-        (
-            "| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | "
-            "---: | ---: | ---: | ---: |"
-        ),
-    ]
-    for r in rows:
-        lines.append(_fmt_mod_row(str(r["module"]), r))
-    lines.append(
+        "| Module | Upstream LOC | Absent | Stub | Partial | "
+        "Ported (unverified) | Kernel ref. vectors | Case-level evidence | "
+        "Rust LOC | Python/JAX LOC | % Ported | % Verified |",
+        "| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | "
+        "---: | ---: | ---: | ---: |",
+        *(_fmt_mod_row(str(r["module"]), r) for r in rows),
         _fmt_mod_row(
-            "Subtotal: star + star_data + binary + astero",
-            engine_tot,
-            bold=True,
-        )
-    )
-    lines.append(
-        _fmt_mod_row(f"Total (all {len(rows)} modules)", all_tot, bold=True)
-    )
+            "Subtotal: star + star_data + binary + astero", eng, bold=True
+        ),
+        _fmt_mod_row(f"Total (all {len(rows)} modules)", all_tot, bold=True),
+    ]
 
     panels = mod_cov["plotting_panels"]
     infra = mod_cov["infrastructure_lines"]
@@ -240,10 +236,10 @@ def _render_headline_and_modules(data: dict[str, Any]) -> list[str]:
             f"`{infra['rust_bridge_testing_bench']:,}` Rust lines "
             "(`flexmesa-py`, `flexmesa-testing`, `flexmesa-bench`) and "
             f"`{infra['python_testing_bench']:,}` Python lines "
-            "(`flexmesa.testing`, `flexmesa.bench`). For plotting "
-            f"([#173]({REPO_URL}/issues/173)), `flexmesa.plotting` currently "
-            f"provides `{panels['flexmesa_plot_builders']}` `plot_*` builders "
-            f"against `{panels['upstream_panel_modules']}` upstream "
+            f"(`flexmesa.testing`, `flexmesa.bench`). For plotting "
+            f"({_issue_link(173)}), `flexmesa.plotting` currently provides "
+            f"`{panels['flexmesa_plot_builders']}` `plot_*` builders against "
+            f"`{panels['upstream_panel_modules']}` upstream "
             "`pgstar`/`pgbinary` panel modules.",
         ]
     )
@@ -259,18 +255,17 @@ def _render_numerics_and_harness(
     hh_tot = _summarize_harness(hh_suites)
     n_hex_mods = len(num["modules"])
     has_165 = bool(num.get("has_165_ci"))
+    link_165 = _issue_link(165)
 
     l1_note = (
-        f"Verified by [#165]({REPO_URL}/issues/165) CI jobs "
-        "(`x86_64` vs `aarch64`)"
+        f"Verified by {link_165} CI jobs (`x86_64` vs `aarch64`)"
         if has_165
-        else f"Awaiting [#165]({REPO_URL}/issues/165) CI jobs "
-        "(`x86_64` vs `aarch64`)"
+        else f"Awaiting {link_165} CI jobs (`x86_64` vs `aarch64`)"
     )
     l2_tail = (
-        f"measured in [#165]({REPO_URL}/issues/165)"
+        f"measured in {link_165}"
         if has_165
-        else f"strict comparison lands in [#165]({REPO_URL}/issues/165)"
+        else f"strict comparison lands in {link_165}"
     )
 
     lines = [
@@ -279,54 +274,42 @@ def _render_numerics_and_harness(
         "",
         "| Check | Status | Notes |",
         "| :--- | :--- | :--- |",
-        (
-            "| Strict mode bit-identical across machines & thread counts "
-            f"(Level 1) | `{num['strict_cross_machine_identical']}` | "
-            f"{l1_note} |"
-        ),
-        (
-            "| Strict-mode kernels bit-identical to MESA `26.4.1` hex outputs "
-            f"(Level 2) | `{num['strict_kernels_bit_identical']}` | "
-            f"`{num['total_upstream_hex_values']:,}` exact IEEE-754 values "
-            f"captured across {n_hex_mods} in-scope module test suites "
-            f"(`mesa-module-hex-v1`); {l2_tail} |"
-        ),
+        f"| Strict mode bit-identical across machines & thread counts "
+        f"(Level 1) | `{num['strict_cross_machine_identical']}` | {l1_note} |",
+        f"| Strict-mode kernels bit-identical to MESA `26.4.1` hex outputs "
+        f"(Level 2) | `{num['strict_kernels_bit_identical']}` | "
+        f"`{num['total_upstream_hex_values']:,}` exact IEEE-754 values "
+        f"captured across {n_hex_mods} in-scope module test suites "
+        f"(`mesa-module-hex-v1`); {l2_tail} |",
     ]
     if detailed:
         lines.extend(
             [
                 "",
-                (
-                    "| Module | Upstream `26.4.1` Exact Values "
-                    "(`test_output` / hex) | Strict Bit-Identical Compared "
-                    "(`#165`) |"
-                ),
+                "| Module | Upstream `26.4.1` Exact Values "
+                "(`test_output` / hex) | Strict Bit-Identical Compared "
+                "(`#165`) |",
                 "| :--- | ---: | :--- |",
+                *(
+                    f"| `{m['module']}` | {m['upstream_exact_values']:,} | "
+                    f"`{m['exact_strict_compared']}` |"
+                    for m in num["modules"]
+                ),
             ]
         )
-        for m in num["modules"]:
-            lines.append(
-                f"| `{m['module']}` | {m['upstream_exact_values']:,} | "
-                f"`{m['exact_strict_compared']}` |"
-            )
 
     lines.extend(
         [
             "",
             "### 3. End-to-End Cases (`benchmarks/history_harness`)",
             "",
-            (
-                "| Suite | `26.4.1` Cases | Stored `26.4.1` Refs | No Ref Yet "
-                "| Reach Upstream Term | Within Numeric Tol | Verified Pass "
-                "| Declared Gaps | Undeclared Failures |"
-            ),
-            (
-                "| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | "
-                "---: |"
-            ),
+            "| Suite | `26.4.1` Cases | Stored `26.4.1` Refs | No Ref Yet | "
+            "Reach Upstream Term | Within Numeric Tol | Verified Pass | "
+            "Declared Gaps | Undeclared Failures |",
+            "| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
         ]
     )
-    for s in ("star", "binary", "astero"):
+    for s in case_manifest.VALID_SUITES:
         sr = hh_suites[s]
         lines.append(
             f"| `{s}` | {sr['total']} | {sr['mesa_26_4_1_ref']} | "
@@ -336,22 +319,20 @@ def _render_numerics_and_harness(
         )
     lines.append(
         f"| **Total** | **{hh_tot['total']}** | "
-        f"**{hh_tot['mesa_26_4_1_ref']}** | "
-        f"**{hh_tot['no_reference_yet']}** | "
-        f"**{hh_tot['reached_termination']}** | "
+        f"**{hh_tot['mesa_26_4_1_ref']}** | **{hh_tot['no_reference_yet']}** "
+        f"| **{hh_tot['reached_termination']}** | "
         f"**{hh_tot['within_numeric_tol']}** | **{hh_tot['passing']}** | "
         f"**{hh_tot['declared_gaps']}** | "
         f"**{hh_tot['undeclared_failures']}** |"
     )
     gap_parts = [
-        f"[{iss}]({REPO_URL}/issues/{iss[1:]}) ({cnt})"
+        f"{_issue_link(iss)} ({cnt})"
         for iss, cnt in hh["gaps_by_issue"].items()
     ]
     non_pass_within = hh.get("within_tol_non_pass", [])
     case_table_bullet = (
-        "- **Full per-case table**: "
-        f"[`notes/audit/case_table.md`]"
-        f"({REPO_URL}/blob/main/notes/audit/case_table.md)."
+        f"- **Full per-case table**: "
+        f"{_blob('`notes/audit/case_table.md`', 'notes/audit/case_table.md')}."
     )
     if non_pass_within:
         case_names = ", ".join(f"`{x['case']}`" for x in non_pass_within)
@@ -362,9 +343,7 @@ def _render_numerics_and_harness(
                 if x.get("issue", "").lstrip("#").isdigit()
             }
         )
-        iss_links = ", ".join(
-            f"[#{n}]({REPO_URL}/issues/{n})" for n in issue_nums
-        )
+        iss_links = ", ".join(_issue_link(n) for n in issue_nums)
         case_table_bullet += (
             f" `{len(non_pass_within)}` case(s) within numeric tolerance "
             f"({case_names}) remain governed as declared gaps under "
@@ -375,8 +354,7 @@ def _render_numerics_and_harness(
             "",
             case_table_bullet,
             f"- **Declared gaps by owning package**: {', '.join(gap_parts)}.",
-            "- **Trajectory comparison figures "
-            f"([#173]({REPO_URL}/issues/173))**: "
+            f"- **Trajectory comparison figures ({_issue_link(173)})**: "
             f"`{hh['comparison_figures_count']}` committed.",
         ]
     )
@@ -397,30 +375,30 @@ def _render_controls_health_and_work(
         "",
         "### 4. Controls & Defaults Coverage (`#147`, `#149`)",
         "",
-        (
-            "| Namelist | Upstream `26.4.1` Scalars | Matched in `FlexMESA` "
-            "| Defaults Agree | Value Mismatch | Active Limit `None` "
-            "| Unimplemented |"
-        ),
+        "| Namelist | Upstream `26.4.1` Scalars | Matched in `FlexMESA` | "
+        "Defaults Agree | Value Mismatch | Active Limit `None` | "
+        "Unimplemented |",
         "| :--- | ---: | ---: | ---: | ---: | ---: | ---: |",
+        *(
+            f"| `{c['namelist']}` | {c['upstream_scalars']:,} | "
+            f"{c['matched_in_flexmesa']:,} | {c['defaults_agree']:,} | "
+            f"{c['value_mismatch']:,} | {c['disabled_limit_none']:,} | "
+            f"{c['unimplemented']:,} |"
+            for c in data["controls"]
+        ),
     ]
-    for crow in data["controls"]:
-        lines.append(
-            f"| `{crow['namelist']}` | {crow['upstream_scalars']:,} | "
-            f"{crow['matched_in_flexmesa']:,} | {crow['defaults_agree']:,} | "
-            f"{crow['value_mismatch']:,} | {crow['disabled_limit_none']:,} | "
-            f"{crow['unimplemented']:,} |"
-        )
-    diff_url = f"{REPO_URL}/blob/main/notes/audit/defaults_diff_26_4_1.md"
+    diff_link = _blob(
+        "`notes/audit/defaults_diff_26_4_1.md`",
+        "notes/audit/defaults_diff_26_4_1.md",
+    )
     rs_ignore_issues = _collect_issue_links(skips["rust_ignores"])
     py_skip_issues = _collect_issue_links(skips["python_skips"])
     lines.extend(
         [
             "",
-            f"Full scalar diff: [`notes/audit/defaults_diff_26_4_1.md`]"
-            f"({diff_url}) (loud errors on unknown controls tracked in "
-            f"[#147]({REPO_URL}/issues/147); defaults alignment tracked in "
-            f"[#149]({REPO_URL}/issues/149)).",
+            f"Full scalar diff: {diff_link} (loud errors on unknown controls "
+            f"tracked in {_issue_link(147)}; defaults alignment tracked in "
+            f"{_issue_link(149)}).",
             "",
             "### 5. Test & Code Health",
             "",
@@ -434,9 +412,9 @@ def _render_controls_health_and_work(
             f"`{len(cov['python']['by_subpackage'])}` subpackages).",
             f"- **Ignored / skipped tests**: `{skips['rust_ignore_count']}` "
             f"Rust `#[ignore]` ({rs_ignore_issues}) and "
-            f"`{skips['python_xfail_or_skip_count']}` Python "
-            f"`xfail`/`skip` ({py_skip_issues}; "
-            f"`{len(skips['unlinked_locations'])}` unlinked).",
+            f"`{skips['python_xfail_or_skip_count']}` Python `xfail`/`skip` "
+            f"({py_skip_issues}; `{len(skips['unlinked_locations'])}` "
+            "unlinked).",
             "- **Static & documentation gates**: "
             "`cargo clippy --all-targets -- -D warnings`, "
             "`RUSTDOCFLAGS='-D warnings' cargo doc`, `ruff check`, "
@@ -453,27 +431,23 @@ def _render_controls_health_and_work(
                 "",
                 "| Crate | Executable Lines | Covered Lines | Line Coverage |",
                 "| :--- | ---: | ---: | ---: |",
-            ]
-        )
-        for cr in cov["rust"]["by_crate"]:
-            lines.append(
-                f"| `{cr['crate']}` | {cr['lines']:,} | {cr['covered']:,} | "
-                f"{cr['percent']:.1f}% |"
-            )
-        lines.extend(
-            [
+                *(
+                    f"| `{cr['crate']}` | {cr['lines']:,} | "
+                    f"{cr['covered']:,} | {cr['percent']:.1f}% |"
+                    for cr in cov["rust"]["by_crate"]
+                ),
                 "",
                 "#### Python Statement Coverage by Subpackage (`pytest --cov`)",
                 "",
                 "| Subpackage | Statements | Covered | Coverage |",
                 "| :--- | ---: | ---: | ---: |",
+                *(
+                    f"| `{sp['subpackage']}` | {sp['statements']:,} | "
+                    f"{sp['covered']:,} | {sp['percent']:.1f}% |"
+                    for sp in cov["python"]["by_subpackage"]
+                ),
             ]
         )
-        for sp in cov["python"]["by_subpackage"]:
-            lines.append(
-                f"| `{sp['subpackage']}` | {sp['statements']:,} | "
-                f"{sp['covered']:,} | {sp['percent']:.1f}% |"
-            )
 
     lines.extend(
         [
@@ -486,7 +460,7 @@ def _render_controls_health_and_work(
     )
     for ph in gh["phases_140"]:
         open_links = [
-            f"[#{it['number']}]({REPO_URL}/issues/{it['number']})"
+            _issue_link(it["number"])
             for it in ph["issues"]
             if it["state"] == "open"
         ]
@@ -505,41 +479,35 @@ def _render_controls_health_and_work(
         + (" (draft)" if p.get("draft") else "")
         for p in open_prs
     ]
+    shown_hist = data["history"] if detailed else data["history"][-5:]
     lines.extend(
         [
             "",
             f"- **Open pull requests ({len(open_prs)})**: "
             f"{', '.join(pr_links) if pr_links else 'none'}.",
-            f"- **Post-parity deferred backlog "
-            f"([#169]({REPO_URL}/issues/169))**: `{len(def_items)}` open "
-            f"issues (`{def_bugs}` `upstream-bug`, `{def_enh}` `enhancement`; "
-            f"`{def_owed}` marked `parity-pending` for upstream restoration "
-            "before `v0.1.0`).",
+            f"- **Post-parity deferred backlog ({_issue_link(169)})**: "
+            f"`{len(def_items)}` open issues (`{def_bugs}` `upstream-bug`, "
+            f"`{def_enh}` `enhancement`; `{def_owed}` marked `parity-pending` "
+            "for upstream restoration before `v0.1.0`).",
             "",
             "### 7. Headline History Across Merges",
             "",
-            (
-                "| Date (UTC) | Commit | Event | Engine % Ported "
-                "| All % Verified | Passing Cases | Rust Cov | Python Cov "
-                "| `#140` Closed/Total | `#169` Backlog |"
-            ),
-            (
-                "| :--- | :--- | :--- | ---: | ---: | ---: | ---: | ---: | "
-                "---: | ---: |"
+            "| Date (UTC) | Commit | Event | Engine % Ported | "
+            "All % Verified | Passing Cases | Rust Cov | Python Cov | "
+            "`#140` Closed/Total | `#169` Backlog |",
+            "| :--- | :--- | :--- | ---: | ---: | ---: | ---: | ---: | "
+            "---: | ---: |",
+            *(
+                f"| `{hr['date_utc']}` | `{hr['commit']}` | {hr['event']} | "
+                f"{hr['engine_ported_pct']}% | {hr['all_verified_pct']}% | "
+                f"{hr['cases_passing']}/{hh_tot['total']} | "
+                f"{hr['rust_cov_pct']}% | {hr['python_cov_pct']}% | "
+                f"{hr['closed_140']}/{hr['total_140']} | "
+                f"{hr['deferred_169']} |"
+                for hr in shown_hist
             ),
         ]
     )
-    hist_rows: list[dict[str, str]] = data["history"]
-    shown_hist = hist_rows if detailed else hist_rows[-5:]
-    for hr in shown_hist:
-        lines.append(
-            f"| `{hr['date_utc']}` | `{hr['commit']}` | {hr['event']} | "
-            f"{hr['engine_ported_pct']}% | {hr['all_verified_pct']}% | "
-            f"{hr['cases_passing']}/{hh_tot['total']} | "
-            f"{hr['rust_cov_pct']}% | "
-            f"{hr['python_cov_pct']}% | {hr['closed_140']}/{hr['total_140']} | "
-            f"{hr['deferred_169']} |"
-        )
     return lines
 
 
@@ -568,23 +536,19 @@ def render_docs_page(data: dict[str, Any]) -> str:
 
 def render_docs_index_summary(data: dict[str, Any]) -> str:
     """Render the concise live-status admonition on ``docs/index.md``."""
-    mod_cov = data["module_coverage"]["rows"]
-    eng = _sum_rows(
-        [r for r in mod_cov if r["module"] in port_manifest.CORE_ENGINE_MODULES]
-    )
-    all_tot = _sum_rows(mod_cov)
-    hh_tot = _summarize_harness(data["harness"]["by_suite"])
+    head = summarize_headline(data)
+    eng = head["engine_tot"]
+    all_tot = head["all_tot"]
+    hh_tot = head["hh_tot"]
     cov = data["coverage"]
     rs_pct = cov["rust"]["overall"]["percent"]
     py_pct = cov["python"]["overall"]["percent"]
-    closed_140, open_140 = _unique_140_counts(data["github"])
-    tot_140 = closed_140 + open_140
     return (
         f"{BEGIN_SUMMARY_MARKER}\n"
         '!!! info "Development Progress Toward MESA `26.4.1` Parity '
         '(`v0.1.0`)"\n'
         "    `FlexMESA` is in active parity verification against "
-        f"**MESA release `26.4.1`** ([#140]({REPO_URL}/issues/140)). Current "
+        f"**MESA release `26.4.1`** ({_issue_link(140)}). Current "
         f"script-generated status: **{eng['pct_ported']:.1f}%** of "
         "`star`/`star_data`/`binary`/`astero` upstream lines ported "
         f"(`{all_tot['pct_verified']:.1f}%` verified), "
@@ -592,8 +556,8 @@ def render_docs_index_summary(data: dict[str, Any]) -> str:
         f"cases verified passing (`{hh_tot['declared_gaps']}` declared gaps, "
         f"`{hh_tot['undeclared_failures']}` undeclared failures), "
         f"**{rs_pct:.1f}%** Rust / **{py_pct:.1f}%** Python line coverage, "
-        f"and **{closed_140} / {tot_140}** `#140` packages closed. See the "
-        "[Live Progress & Verification Dashboard]"
+        f"and **{head['closed_140']} / {head['total_140']}** `#140` packages "
+        "closed. See the [Live Progress & Verification Dashboard]"
         "(benchmarks/progress-dashboard.md) for per-module, per-crate, and "
         "per-phase tables.\n"
         f"{END_SUMMARY_MARKER}"

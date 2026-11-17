@@ -5,15 +5,11 @@ from __future__ import annotations
 
 import ast
 import json
-import os
 import pathlib
 import re
-import subprocess
-import tomllib
-import urllib.request
 from typing import Any
 
-from flexmesa.testing import port_manifest
+from flexmesa.testing import case_manifest, case_report, port_manifest
 
 MODULE_CODE_PATHS: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
     "star": (("crates/flexmesa-star/src",), ("src/flexmesa/star",)),
@@ -89,62 +85,9 @@ def _count_dir_lines(
     return total
 
 
-def collect_module_coverage(
+def _collect_plotting_panel_counts(
     manifest: port_manifest.PortManifest, repo_root: pathlib.Path
-) -> dict[str, Any]:
-    """Aggregate upstream line counts by status plus Rust and JAX/Python LOC."""
-    st_enum = port_manifest.PortStatus
-    counts: dict[str, dict[str, int]] = {
-        mod: {st.value: 0 for st in st_enum}
-        for mod in port_manifest.MODULE_ORDER
-    }
-    file_counts: dict[str, int] = {mod: 0 for mod in port_manifest.MODULE_ORDER}
-    for entry in manifest.entries:
-        counts[entry.module][entry.status.value] += entry.upstream_lines
-        file_counts[entry.module] += 1
-
-    rows: list[dict[str, Any]] = []
-    for mod in port_manifest.MODULE_ORDER:
-        d = counts[mod]
-        up_loc = sum(d.values())
-        ported_loc = (
-            d[st_enum.PORTED_UNVERIFIED.value]
-            + d[st_enum.KERNEL_REFERENCE_VECTORS.value]
-            + d[st_enum.CASE_LEVEL_EVIDENCE.value]
-        )
-        verified_loc = (
-            d[st_enum.KERNEL_REFERENCE_VECTORS.value]
-            + d[st_enum.CASE_LEVEL_EVIDENCE.value]
-        )
-        rs_dirs, py_dirs = MODULE_CODE_PATHS[mod]
-        rs_loc = _count_dir_lines(repo_root, rs_dirs, ".rs")
-        py_loc = _count_dir_lines(repo_root, py_dirs, ".py")
-        rows.append(
-            {
-                "module": mod,
-                "upstream_files": file_counts[mod],
-                "upstream_lines": up_loc,
-                "absent": d[st_enum.ABSENT.value],
-                "stub": d[st_enum.STUB.value],
-                "partial": d[st_enum.PARTIAL.value],
-                "ported_unverified": d[st_enum.PORTED_UNVERIFIED.value],
-                "kernel_reference_vectors": d[
-                    st_enum.KERNEL_REFERENCE_VECTORS.value
-                ],
-                "case_level_evidence": d[st_enum.CASE_LEVEL_EVIDENCE.value],
-                "ported_total": ported_loc,
-                "verified_total": verified_loc,
-                "pct_ported": (
-                    round(100.0 * ported_loc / up_loc, 1) if up_loc else 0.0
-                ),
-                "pct_verified": (
-                    round(100.0 * verified_loc / up_loc, 1) if up_loc else 0.0
-                ),
-                "rust_lines": rs_loc,
-                "python_jax_lines": py_loc,
-            }
-        )
-
+) -> dict[str, int]:
     plot_fns: list[str] = []
     plot_dir = repo_root / "src" / "flexmesa" / "plotting"
     if plot_dir.is_dir():
@@ -174,6 +117,65 @@ def collect_module_coverage(
             )
         )
     )
+    return {
+        "flexmesa_plot_builders": len(plot_fns),
+        "upstream_panel_modules": pgstar_panels,
+    }
+
+
+def collect_module_coverage(
+    manifest: port_manifest.PortManifest, repo_root: pathlib.Path
+) -> dict[str, Any]:
+    """Aggregate upstream line counts by status plus Rust and JAX/Python LOC."""
+    st_enum = port_manifest.PortStatus
+    counts: dict[str, dict[str, int]] = {
+        mod: {st.value: 0 for st in st_enum}
+        for mod in port_manifest.MODULE_ORDER
+    }
+    file_counts: dict[str, int] = {mod: 0 for mod in port_manifest.MODULE_ORDER}
+    for entry in manifest.entries:
+        counts[entry.module][entry.status.value] += entry.upstream_lines
+        file_counts[entry.module] += 1
+
+    rows: list[dict[str, Any]] = []
+    for mod in port_manifest.MODULE_ORDER:
+        d = counts[mod]
+        up_loc = sum(d.values())
+        ported_loc = (
+            d[st_enum.PORTED_UNVERIFIED.value]
+            + d[st_enum.KERNEL_REFERENCE_VECTORS.value]
+            + d[st_enum.CASE_LEVEL_EVIDENCE.value]
+        )
+        verified_loc = (
+            d[st_enum.KERNEL_REFERENCE_VECTORS.value]
+            + d[st_enum.CASE_LEVEL_EVIDENCE.value]
+        )
+        rs_dirs, py_dirs = MODULE_CODE_PATHS[mod]
+        rows.append(
+            {
+                "module": mod,
+                "upstream_files": file_counts[mod],
+                "upstream_lines": up_loc,
+                "absent": d[st_enum.ABSENT.value],
+                "stub": d[st_enum.STUB.value],
+                "partial": d[st_enum.PARTIAL.value],
+                "ported_unverified": d[st_enum.PORTED_UNVERIFIED.value],
+                "kernel_reference_vectors": d[
+                    st_enum.KERNEL_REFERENCE_VECTORS.value
+                ],
+                "case_level_evidence": d[st_enum.CASE_LEVEL_EVIDENCE.value],
+                "ported_total": ported_loc,
+                "verified_total": verified_loc,
+                "pct_ported": (
+                    round(100.0 * ported_loc / up_loc, 1) if up_loc else 0.0
+                ),
+                "pct_verified": (
+                    round(100.0 * verified_loc / up_loc, 1) if up_loc else 0.0
+                ),
+                "rust_lines": _count_dir_lines(repo_root, rs_dirs, ".rs"),
+                "python_jax_lines": _count_dir_lines(repo_root, py_dirs, ".py"),
+            }
+        )
 
     infra_rs = _count_dir_lines(
         repo_root,
@@ -191,10 +193,7 @@ def collect_module_coverage(
     )
     return {
         "rows": rows,
-        "plotting_panels": {
-            "flexmesa_plot_builders": len(plot_fns),
-            "upstream_panel_modules": pgstar_panels,
-        },
+        "plotting_panels": _collect_plotting_panel_counts(manifest, repo_root),
         "infrastructure_lines": {
             "rust_bridge_testing_bench": infra_rs,
             "python_testing_bench": infra_py,
@@ -240,24 +239,19 @@ def collect_numerics_and_module_verification(
     hex_data: dict[str, Any] = json.loads(
         hex_summary_path.read_text(encoding="utf-8")
     )
-    mod_rows: list[dict[str, Any]] = []
-    for item in hex_data.get("modules", []):
-        mname = str(item["module"])
-        if mname in {"forum", "sample"}:
-            continue
-        mod_rows.append(
-            {
-                "module": mname,
-                "upstream_exact_values": int(
-                    item.get("exact_values_captured", 0)
-                ),
-                "exact_strict_compared": (
-                    "not yet measured"
-                    if level2 == "not yet measured"
-                    else strict_mods.get(mname, "0")
-                ),
-            }
-        )
+    mod_rows = [
+        {
+            "module": str(item["module"]),
+            "upstream_exact_values": int(item.get("exact_values_captured", 0)),
+            "exact_strict_compared": (
+                "not yet measured"
+                if level2 == "not yet measured"
+                else strict_mods.get(str(item["module"]), "0")
+            ),
+        }
+        for item in hex_data.get("modules", [])
+        if str(item["module"]) not in {"forum", "sample"}
+    ]
     return {
         "has_165_ci": bool(has_165_ci and strict_report.is_file()),
         "strict_cross_machine_identical": level1,
@@ -270,16 +264,12 @@ def collect_numerics_and_module_verification(
 
 
 def collect_harness_summary(repo_root: pathlib.Path) -> dict[str, Any]:
-    """Summarize the 106-case history-harness output (`#143`)."""
+    """Summarize the 106-case history-harness output via `case_report`."""
     hh_dir = repo_root / "benchmarks" / "history_harness"
-    manifest_raw = tomllib.loads(
-        (hh_dir / "case_manifest.toml").read_text(encoding="utf-8")
-    )
-    gaps_raw = tomllib.loads(
-        (hh_dir / "known_gaps.toml").read_text(encoding="utf-8")
-    )
-    run_raw: dict[str, Any] = json.loads(
-        (hh_dir / "baseline_run_26_4_1.json").read_text(encoding="utf-8")
+    _, gaps_by_key, records = case_report.build_manifest_inventory_records(
+        manifest_path=hh_dir / "case_manifest.toml",
+        known_gaps_path=hh_dir / "known_gaps.toml",
+        baseline_json_path=hh_dir / "baseline_run_26_4_1.json",
     )
 
     by_suite: dict[str, dict[str, int]] = {
@@ -293,55 +283,44 @@ def collect_harness_summary(repo_root: pathlib.Path) -> dict[str, Any]:
             "declared_gaps": 0,
             "undeclared_failures": 0,
         }
-        for s in ("star", "binary", "astero")
+        for s in case_manifest.VALID_SUITES
     }
-    for c in manifest_raw.get("cases", []):
-        suite = str(c["suite"])
-        by_suite[suite]["total"] += 1
-        ref_st = str(c["reference_status"])
-        if ref_st == "mesa_26_4_1":
-            by_suite[suite]["mesa_26_4_1_ref"] += 1
-        elif ref_st == "no_reference_yet":
-            by_suite[suite]["no_reference_yet"] += 1
-
     within_tol_non_pass: list[dict[str, str]] = []
-    for rec in run_raw.get("cases", []):
-        suite = str(rec["suite"])
-        verdict = str(rec.get("verdict", ""))
-        comp = rec.get("comparison")
+    for rec in records:
+        sr = by_suite[rec.suite]
+        sr["total"] += 1
+        if rec.reference_status == "mesa_26_4_1":
+            sr["mesa_26_4_1_ref"] += 1
+        elif rec.reference_status == "no_reference_yet":
+            sr["no_reference_yet"] += 1
         within_tol = False
-        if (
-            rec.get("executed") is True
-            and rec.get("termination_matches") is True
-        ):
-            by_suite[suite]["reached_termination"] += 1
+        if rec.executed and rec.termination_matches:
+            sr["reached_termination"] += 1
             if (
-                isinstance(comp, dict)
-                and comp.get("within_final_tolerances") is True
-                and comp.get("within_track_tolerances") is True
+                rec.comparison is not None
+                and rec.comparison.within_final_tolerances
+                and rec.comparison.within_track_tolerances
             ):
-                by_suite[suite]["within_numeric_tol"] += 1
+                sr["within_numeric_tol"] += 1
                 within_tol = True
-        if verdict == "pass":
-            by_suite[suite]["passing"] += 1
-        elif verdict.startswith("declared gap"):
-            by_suite[suite]["declared_gaps"] += 1
+        if rec.verdict == "pass":
+            sr["passing"] += 1
+        elif rec.verdict.startswith("declared gap"):
+            sr["declared_gaps"] += 1
             if within_tol:
                 within_tol_non_pass.append(
                     {
-                        "suite": suite,
-                        "case": str(rec["case"]),
-                        "issue": str(rec.get("known_gap_issue", "")),
+                        "suite": rec.suite,
+                        "case": rec.case,
+                        "issue": rec.known_gap_issue or "",
                     }
                 )
-        elif rec.get("is_undeclared_failure") is True:
-            by_suite[suite]["undeclared_failures"] += 1
+        elif rec.is_undeclared_failure:
+            sr["undeclared_failures"] += 1
 
     gaps_by_issue: dict[str, int] = {}
-    for g in gaps_raw.get("gaps", []):
-        raw_iss = str(g["issue"]).strip().lstrip("#")
-        iss = f"#{int(raw_iss)}"
-        gaps_by_issue[iss] = gaps_by_issue.get(iss, 0) + 1
+    for gspec in gaps_by_key.values():
+        gaps_by_issue[gspec.issue] = gaps_by_issue.get(gspec.issue, 0) + 1
 
     fig_dir = hh_dir / "figures"
     fig_count = len(list(fig_dir.glob("*.png"))) if fig_dir.is_dir() else 0
@@ -505,179 +484,3 @@ def collect_ignored_and_skipped_tests(
         "python_skips": py_skips,
         "unlinked_locations": unlinked,
     }
-
-
-def _gh_api_json(endpoint: str) -> Any:
-    """Fetch JSON from GitHub REST API via ``GITHUB_TOKEN`` or ``gh api``."""
-    token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
-    if token:
-        url = f"https://api.github.com/{endpoint.lstrip('/')}"
-        req = urllib.request.Request(
-            url,
-            headers={
-                "Accept": "application/vnd.github+json",
-                "Authorization": f"Bearer {token}",
-                "X-GitHub-Api-Version": "2022-11-28",
-                "User-Agent": "flexmesa-dashboard",
-            },
-        )
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            return json.loads(resp.read().decode("utf-8"))
-    proc = subprocess.run(
-        ["gh", "api", endpoint],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    return json.loads(proc.stdout)
-
-
-def sync_github_snapshot(
-    snapshot_path: pathlib.Path, repo: str = "joshspeagle/FlexMESA"
-) -> dict[str, Any]:
-    """Query GitHub API for `#140`, `#169`, and open PRs into JSON."""
-    issue_140 = _gh_api_json(f"repos/{repo}/issues/140")
-    issue_169 = _gh_api_json(f"repos/{repo}/issues/169")
-
-    all_issues: list[dict[str, Any]] = []
-    page = 1
-    while True:
-        batch = _gh_api_json(
-            f"repos/{repo}/issues?state=all&per_page=100&page={page}"
-        )
-        if not isinstance(batch, list) or not batch:
-            break
-        all_issues.extend(batch)
-        if len(batch) < 100:
-            break
-        page += 1
-
-    issues_by_num: dict[int, dict[str, Any]] = {}
-    open_prs: list[dict[str, Any]] = []
-    for item in all_issues:
-        num = int(item["number"])
-        if "pull_request" in item:
-            if item.get("state") == "open":
-                open_prs.append(
-                    {
-                        "number": num,
-                        "title": str(item["title"]),
-                        "draft": bool(item.get("draft", False)),
-                    }
-                )
-        else:
-            issues_by_num[num] = item
-
-    body_140 = str(issue_140.get("body", ""))
-    phase_order = [
-        "Phase 0",
-        "Phase A",
-        "Phase B",
-        "Phase C",
-        "Phase D",
-        "Phase E",
-        "Deferred scope",
-    ]
-    phase_issues: dict[str, list[int]] = {p: [] for p in phase_order}
-    current_phase: str | None = None
-    in_work_packages = False
-    for line in body_140.splitlines():
-        if line.startswith("## Work packages"):
-            in_work_packages = True
-            continue
-        if in_work_packages and line.startswith("## "):
-            break
-        if not in_work_packages:
-            continue
-        if line.startswith("### "):
-            header = line[4:].strip()
-            for p in phase_order[:6]:
-                if header.startswith(p):
-                    current_phase = p
-                    break
-            else:
-                current_phase = None
-            continue
-        if current_phase is not None and line.lstrip().startswith("- ["):
-            m = re.search(r"#(\d+)\b", line)
-            if m is not None:
-                inum = int(m.group(1))
-                if inum not in phase_issues[current_phase]:
-                    phase_issues[current_phase].append(inum)
-
-    seen_140: set[int] = set()
-    for nums in phase_issues.values():
-        seen_140.update(nums)
-    for num, item in sorted(issues_by_num.items()):
-        labels = {str(lb["name"]) for lb in item.get("labels", [])}
-        if "deferred-scope" in labels and num not in seen_140:
-            phase_issues["Deferred scope"].append(num)
-            seen_140.add(num)
-
-    phases_payload: list[dict[str, Any]] = []
-    for pname in phase_order:
-        items_out: list[dict[str, Any]] = []
-        for inum in sorted(phase_issues[pname]):
-            rec = issues_by_num.get(inum)
-            if rec is None:
-                continue
-            items_out.append(
-                {
-                    "number": inum,
-                    "title": str(rec["title"]),
-                    "state": str(rec["state"]),
-                }
-            )
-        phases_payload.append(
-            {
-                "phase": pname,
-                "open": sum(1 for x in items_out if x["state"] == "open"),
-                "closed": sum(1 for x in items_out if x["state"] == "closed"),
-                "issues": items_out,
-            }
-        )
-
-    body_169 = str(issue_169.get("body", ""))
-    nums_in_169 = {
-        int(m.group(1))
-        for line in body_169.splitlines()
-        if line.startswith("| #") and (m := re.match(r"^\|\s*#(\d+)\b", line))
-    }
-    deferred_items: list[dict[str, Any]] = []
-    for num, item in sorted(issues_by_num.items()):
-        if str(item.get("state")) != "open":
-            continue
-        label_set = {str(lb["name"]) for lb in item.get("labels", [])}
-        if label_set & {"tracking", "deferred-scope"}:
-            continue
-        is_backlog_label = "deferred" in label_set and bool(
-            label_set & {"upstream-bug", "enhancement"}
-        )
-        if is_backlog_label or num in nums_in_169:
-            kind = (
-                "enhancement" if "enhancement" in label_set else "upstream-bug"
-            )
-            deferred_items.append(
-                {
-                    "number": num,
-                    "title": str(item["title"]),
-                    "state": str(item["state"]),
-                    "kind": kind,
-                    "parity_pending": "parity-pending" in label_set,
-                    "needs_confirmation": "needs-confirmation" in label_set,
-                }
-            )
-
-    payload = {
-        "repo": repo,
-        "tracker_issue": 140,
-        "backlog_issue": 169,
-        "phases_140": phases_payload,
-        "open_pull_requests": sorted(open_prs, key=lambda x: int(x["number"])),
-        "deferred_169": deferred_items,
-    }
-    snapshot_path.parent.mkdir(parents=True, exist_ok=True)
-    snapshot_path.write_text(
-        json.dumps(payload, indent=2) + "\n", encoding="utf-8"
-    )
-    return payload

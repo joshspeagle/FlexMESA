@@ -1,4 +1,4 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
 # Headline progress history across merges to main (#174).
 date_utc	commit	event	engine_ported_pct	all_verified_pct	cases_passing	rust_cov_pct	python_cov_pct	closed_140	total_140	deferred_169
-2026-11-16	f707f99	PR #199 (#141, #143, #145, #163)	13.9	0.0	0	78.8	87.1	4	32	17
+2026-11-16	f707f99	PR #199 (#141, #143, #145, #163)	13.9	0.0	0	74.9	87.8	4	32	17

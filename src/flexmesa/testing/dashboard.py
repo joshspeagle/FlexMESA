@@ -22,7 +22,9 @@ from flexmesa.data import fetch
 from flexmesa.testing import (
     _dashboard_collect,
     _dashboard_coverage,
+    _dashboard_github,
     _dashboard_render,
+    case_manifest,
     port_manifest,
 )
 
@@ -31,10 +33,6 @@ HISTORY_HEADER = (
     "cases_passing\trust_cov_pct\tpython_cov_pct\tclosed_140\ttotal_140\t"
     "deferred_169"
 )
-
-
-def _default_repo_root() -> pathlib.Path:
-    return pathlib.Path(__file__).resolve().parents[3]
 
 
 def load_history_tsv(history_path: pathlib.Path) -> list[dict[str, str]]:
@@ -56,12 +54,11 @@ def load_history_tsv(history_path: pathlib.Path) -> list[dict[str, str]]:
     if not lines:
         return []
     cols = lines[0].split("\t")
-    out: list[dict[str, str]] = []
-    for raw in lines[1:]:
-        vals = raw.split("\t")
-        if len(vals) == len(cols):
-            out.append(dict(zip(cols, vals, strict=True)))
-    return out
+    return [
+        dict(zip(cols, vals, strict=True))
+        for raw in lines[1:]
+        if len(vals := raw.split("\t")) == len(cols)
+    ]
 
 
 def build_dashboard_data(
@@ -91,8 +88,6 @@ def build_dashboard_data(
     gh_data: dict[str, Any] = json.loads(
         (dash_dir / "github_snapshot.json").read_text(encoding="utf-8")
     )
-    hist_rows = load_history_tsv(dash_dir / "history.tsv")
-
     return {
         "schema_version": 1,
         "upstream_reference": {
@@ -115,7 +110,7 @@ def build_dashboard_data(
             repo_root
         ),
         "github": gh_data,
-        "history": hist_rows,
+        "history": load_history_tsv(dash_dir / "history.tsv"),
     }
 
 
@@ -245,9 +240,7 @@ def verify_all_dashboard_invariants(
         rel = path.relative_to(repo_root).as_posix()
         if not path.is_file():
             errors.append(f"{rel}: missing generated dashboard file")
-            continue
-        actual_text = path.read_text(encoding="utf-8")
-        if actual_text != exp_text:
+        elif path.read_text(encoding="utf-8") != exp_text:
             errors.append(
                 f"{rel}: committed content differs from "
                 "`flexmesa dashboard render`"
@@ -255,7 +248,6 @@ def verify_all_dashboard_invariants(
 
     for loc in data["skips"]["unlinked_locations"]:
         errors.append(f"{loc}: #[ignore]/xfail/skip lacks an #<issue> link")
-
     return errors
 
 
@@ -276,46 +268,20 @@ def record_history_entry(
         event_label: Short merge event label (e.g. ``PR #200 (#174)``).
     """
     data = build_dashboard_data(repo_root, mesa_dir)
-    rows = data["module_coverage"]["rows"]
-    eng_up = sum(
-        int(r["upstream_lines"])
-        for r in rows
-        if r["module"] in port_manifest.CORE_ENGINE_MODULES
-    )
-    eng_port = sum(
-        int(r["ported_total"])
-        for r in rows
-        if r["module"] in port_manifest.CORE_ENGINE_MODULES
-    )
-    all_up = sum(int(r["upstream_lines"]) for r in rows)
-    all_ver = sum(int(r["verified_total"]) for r in rows)
-
-    hh = data["harness"]["by_suite"]
-    passing = sum(int(hh[s]["passing"]) for s in ("star", "binary", "astero"))
+    head = _dashboard_render.summarize_headline(data)
     cov = data["coverage"]
-    rs_pct = f"{cov['rust']['overall']['percent']:.1f}"
-    py_pct = f"{cov['python']['overall']['percent']:.1f}"
-    gh = data["github"]
-    uniq_140: dict[int, str] = {}
-    for ph in gh["phases_140"]:
-        for it in ph["issues"]:
-            uniq_140[int(it["number"])] = str(it["state"])
-    closed_140 = sum(1 for st in uniq_140.values() if st == "closed")
-    tot_140 = len(uniq_140)
-    def_169 = len(gh["deferred_169"])
-
     new_row = {
         "date_utc": date_utc,
         "commit": commit_short,
         "event": event_label,
-        "engine_ported_pct": f"{100.0 * eng_port / eng_up:.1f}",
-        "all_verified_pct": f"{100.0 * all_ver / all_up:.1f}",
-        "cases_passing": str(passing),
-        "rust_cov_pct": rs_pct,
-        "python_cov_pct": py_pct,
-        "closed_140": str(closed_140),
-        "total_140": str(tot_140),
-        "deferred_169": str(def_169),
+        "engine_ported_pct": f"{head['engine_tot']['pct_ported']:.1f}",
+        "all_verified_pct": f"{head['all_tot']['pct_verified']:.1f}",
+        "cases_passing": str(head["hh_tot"]["passing"]),
+        "rust_cov_pct": f"{cov['rust']['overall']['percent']:.1f}",
+        "python_cov_pct": f"{cov['python']['overall']['percent']:.1f}",
+        "closed_140": str(head["closed_140"]),
+        "total_140": str(head["total_140"]),
+        "deferred_169": str(head["deferred_169_count"]),
     }
 
     hist_path = repo_root / "benchmarks" / "dashboard" / "history.tsv"
@@ -330,9 +296,8 @@ def record_history_entry(
         "# SPDX-License-Identifier: LGPL-3.0-or-later",
         "# Headline progress history across merges to main (#174).",
         HISTORY_HEADER,
+        *("\t".join(r[c] for c in cols) for r in existing),
     ]
-    for r in existing:
-        out_lines.append("\t".join(r[c] for c in cols))
     hist_path.write_text("\n".join(out_lines) + "\n", encoding="utf-8")
 
 
@@ -354,21 +319,12 @@ def _resolve_mesa_dir(
         raise
 
 
-def dashboard_main(argv: list[str] | None = None) -> int:
-    """CLI entry point for ``flexmesa dashboard`` subcommands.
-
-    Args:
-        argv: Optional list of CLI arguments following ``dashboard``.
-
-    Returns:
-        Process exit code (``0`` on success, ``1`` on check failure).
-    """
+def _build_cli_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="flexmesa dashboard",
         description="Generate and validate the progress dashboard (#174).",
     )
     sub = parser.add_subparsers(dest="subcommand", required=True)
-
     for cmd_name, help_txt in (
         ("render", "Write updated dashboard blocks to README, docs, and JSON."),
         ("check", "Fail if port_manifest or committed dashboard is stale."),
@@ -377,17 +333,12 @@ def dashboard_main(argv: list[str] | None = None) -> int:
         p = sub.add_parser(cmd_name, help=help_txt)
         p.add_argument("--repo-root", type=pathlib.Path, default=None)
         p.add_argument("--mesa-dir", type=str, default=None)
-        p.add_argument(
-            "--allow-missing-mesa-dir",
-            action="store_true",
-            help="Skip MESA 26.4.1 test-inputs file checks when unavailable.",
-        )
+        p.add_argument("--allow-missing-mesa-dir", action="store_true")
         if cmd_name in {"check", "verify-manifest"}:
             p.add_argument("--base-ref", type=str, default=None)
 
     p_gh = sub.add_parser(
-        "sync-github",
-        help="Refresh github_snapshot.json from the GitHub API.",
+        "sync-github", help="Refresh github_snapshot.json from the GitHub API."
     )
     p_gh.add_argument("--repo-root", type=pathlib.Path, default=None)
     p_gh.add_argument("--repo", type=str, default="joshspeagle/FlexMESA")
@@ -410,17 +361,28 @@ def dashboard_main(argv: list[str] | None = None) -> int:
     p_hist.add_argument("--date-utc", type=str, required=True)
     p_hist.add_argument("--commit", type=str, required=True)
     p_hist.add_argument("--event", type=str, required=True)
+    return parser
 
-    ns = parser.parse_args(argv)
+
+def dashboard_main(argv: list[str] | None = None) -> int:
+    """CLI entry point for ``flexmesa dashboard`` subcommands.
+
+    Args:
+        argv: Optional list of CLI arguments following ``dashboard``.
+
+    Returns:
+        Process exit code (``0`` on success, ``1`` on check failure).
+    """
+    ns = _build_cli_parser().parse_args(argv)
     repo_root = (
         ns.repo_root.resolve()
         if getattr(ns, "repo_root", None) is not None
-        else _default_repo_root()
+        else case_manifest.repo_root()
     )
 
     if ns.subcommand == "sync-github":
         snap = repo_root / "benchmarks" / "dashboard" / "github_snapshot.json"
-        _dashboard_collect.sync_github_snapshot(snap, repo=str(ns.repo))
+        _dashboard_github.sync_github_snapshot(snap, repo=str(ns.repo))
         print(f"Updated {snap.relative_to(repo_root)}")
         return 0
 
@@ -459,10 +421,11 @@ def dashboard_main(argv: list[str] | None = None) -> int:
         manifest = port_manifest.load_port_manifest(
             repo_root / "benchmarks" / "dashboard" / "port_manifest.toml"
         )
-        base_m = None
-        changed = None
-        if ns.base_ref:
-            base_m, changed = _load_git_base_manifest(repo_root, ns.base_ref)
+        base_m, changed = (
+            _load_git_base_manifest(repo_root, ns.base_ref)
+            if ns.base_ref
+            else (None, None)
+        )
         errs = port_manifest.verify_port_manifest(
             manifest=manifest,
             repo_root=repo_root,

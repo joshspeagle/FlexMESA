@@ -751,7 +751,7 @@
       "tool": "cargo llvm-cov",
       "overall": {
         "lines": 93004,
-        "covered": 66220,
+        "covered": 66228,
         "percent": 71.2
       },
       "by_crate": [
@@ -835,9 +835,9 @@
         },
         {
           "crate": "flexmesa-ionization",
-          "lines": 996,
+          "lines": 1001,
           "covered": 674,
-          "percent": 67.7
+          "percent": 67.3
         },
         {
           "crate": "flexmesa-kap",
@@ -848,8 +848,8 @@
         {
           "crate": "flexmesa-math",
           "lines": 775,
-          "covered": 593,
-          "percent": 76.5
+          "covered": 598,
+          "percent": 77.2
         },
         {
           "crate": "flexmesa-mtx",
@@ -889,8 +889,8 @@
         },
         {
           "crate": "flexmesa-star",
-          "lines": 38538,
-          "covered": 26150,
+          "lines": 38531,
+          "covered": 26156,
           "percent": 67.9
         },
         {
@@ -907,17 +907,17 @@
         },
         {
           "crate": "flexmesa-utils",
-          "lines": 323,
-          "covered": 216,
-          "percent": 66.9
+          "lines": 325,
+          "covered": 213,
+          "percent": 65.5
         }
       ]
     },
     "python": {
       "tool": "pytest --cov",
       "overall": {
-        "statements": 20904,
-        "covered": 18338,
+        "statements": 20911,
+        "covered": 18340,
         "percent": 87.7
       },
       "by_subpackage": [
@@ -1067,9 +1067,9 @@
         },
         {
           "subpackage": "flexmesa.testing",
-          "statements": 3335,
-          "covered": 2264,
-          "percent": 67.9
+          "statements": 3342,
+          "covered": 2266,
+          "percent": 67.8
         },
         {
           "subpackage": "flexmesa.turb",
@@ -1239,8 +1239,8 @@
       },
       {
         "phase": "Phase A",
-        "open": 2,
-        "closed": 2,
+        "open": 3,
+        "closed": 1,
         "issues": [
           {
             "number": 142,
@@ -1250,7 +1250,7 @@
           {
             "number": 144,
             "title": "[Audit A3] CI that runs real campaigns, and a declared-known-gaps mechanism",
-            "state": "closed"
+            "state": "open"
           },
           {
             "number": 146,
@@ -1414,7 +1414,18 @@
         "issues": []
       }
     ],
-    "open_pull_requests": [],
+    "open_pull_requests": [
+      {
+        "number": 208,
+        "title": "fix(testing): record MESA, SDK, and compiler provenance in mesa_spread_26_4_1.json (#144)",
+        "draft": true
+      },
+      {
+        "number": 211,
+        "title": "fix(testing): isolate numerics-mode tests (#210); drop spread-script edits that overlap PR #208 (#144)",
+        "draft": false
+      }
+    ],
     "deferred_169": [
       {
         "number": 175,
@@ -1682,6 +1693,19 @@
       "rust_cov_pct": "71.2",
       "python_cov_pct": "87.7",
       "closed_140": "8",
+      "total_140": "32",
+      "deferred_169": "17"
+    },
+    {
+      "date_utc": "2026-11-17",
+      "commit": "0fec8d2",
+      "event": "main merge",
+      "engine_ported_pct": "13.9",
+      "all_verified_pct": "0.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "71.2",
+      "python_cov_pct": "87.7",
+      "closed_140": "7",
       "total_140": "32",
       "deferred_169": "17"
     }

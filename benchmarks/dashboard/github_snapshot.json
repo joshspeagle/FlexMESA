@@ -5,8 +5,8 @@
   "phases_140": [
     {
       "phase": "Phase 0",
-      "open": 1,
-      "closed": 5,
+      "open": 0,
+      "closed": 6,
       "issues": [
         {
           "number": 141,
@@ -36,7 +36,7 @@
         {
           "number": 174,
           "title": "[Audit E2] Generated progress dashboard in README and docs: port coverage by module, verification status, test coverage, issues and PRs",
-          "state": "open"
+          "state": "closed"
         }
       ]
     },
@@ -195,8 +195,8 @@
     },
     {
       "phase": "Phase E",
-      "open": 2,
-      "closed": 0,
+      "open": 1,
+      "closed": 1,
       "issues": [
         {
           "number": 173,
@@ -206,7 +206,7 @@
         {
           "number": 174,
           "title": "[Audit E2] Generated progress dashboard in README and docs: port coverage by module, verification status, test coverage, issues and PRs",
-          "state": "open"
+          "state": "closed"
         }
       ]
     },
@@ -217,13 +217,7 @@
       "issues": []
     }
   ],
-  "open_pull_requests": [
-    {
-      "number": 200,
-      "title": "[Audit E2] Add MESA 26.4.1 port manifest and generated progress dashboard (#174)",
-      "draft": true
-    }
-  ],
+  "open_pull_requests": [],
   "deferred_169": [
     {
       "number": 175,

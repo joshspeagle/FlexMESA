@@ -76,5 +76,6 @@ Every workload in `provenance.json` belongs to one of four comparator classes:
   `s% dt = 1.0e2_dp` and invokes `do_struct_burn_mix` on an `8`-zone test model
   during pre-flight Stage checks (`hydro_solver_step returned ierr -1`), and
   MESA logs `WARNING: Failed to find colors namelist in file: mesa-26.4.1/star/test/inlist`
-  during ZAMS model initialization. Checksums match upstream execution at
-  `128`, `512`, and `1024` zones without solver errors.
+  during ZAMS model initialization. The Fortran stages ran at `128`, `512`,
+  and `1024` zones. Their checksums differ from the `FlexMESA` checksums on
+  all five Wave 4 workloads; see the Wave 4 report.

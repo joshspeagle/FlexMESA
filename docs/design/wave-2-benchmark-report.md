@@ -14,7 +14,7 @@
 - **Toolchains**: MESA `r26.4.1`, SDK `x86_64-linux-26.6.1`, `GNU Fortran (GCC) 15.2.0` (`-O2 -fopenmp -cpp -ffree-form -ffree-line-length-none`), `rustc 1.100.0 (0ef1bc386 2026-11-09)`, `Python 3.14.0`, JAX `0.11.0` (`gpu`, `jax_enable_x64=True`).
 - **Workload taxonomy (`28` workloads, `84` `(workload, N_zones)` points)**: `21` full MESA `r26.4.1` workloads, `3` mixed MESA `0-1` / Ref. Fortran `2-3` workloads (`auto_diff`, `mtx_tridiag`, `chem_comp`), `3` hybrid Reference Fortran workloads (`w5_diff_rot`, `w5_binary_rlof`, `w5_astero_seism`), and `1` standalone non-MESA Reference Fortran workload (`w5_riemann_rsp2`).
 
-All 12 `(workload, N_zones)` pairs agree across all 9 printed significant digits. In full `f64`, `ion_fe56` exhibits a `4.83e-9` difference against MESA's `fvbicub_db` due to 32-bit implicit locals.
+All 12 `(workload, N_zones)` pairs agree across all 9 printed significant digits. The full `f64` Python checksums differ from the printed Fortran values by at most `1.56e-09`, within the rounding of a 9-digit print.
 
 | Workload | $N_{\mathrm{zones}}$ | Comparator Checksum | Safe Rust Checksum | Python/JAX Checksum | `|Rust - F90|` Rel. | `|JAX - F90|` Rel. | Rust `max_rel_err` | JAX `max_rel_err` |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |

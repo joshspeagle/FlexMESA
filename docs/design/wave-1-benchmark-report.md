@@ -21,7 +21,7 @@ cargo run --release -p flexmesa-bench --bin run_rust_benchmarks -- --quick
 
 ## 2. Checksum Consistency ($N_{\mathrm{zones}} \in \{128, 1024, 4096\}$)
 
-All 18 Wave 1 `(workload, N_zones)` pairs agree across all 9 printed significant digits (`<= 5e-9` relative difference between full `float64` Python JSON and 9-digit printed Fortran/Rust). In full double precision, `interp_2d` shows a `7.20e-9` floor against MESA's `fvbicub_db` due to implicit 32-bit local variables.
+All 18 Wave 1 `(workload, N_zones)` pairs agree across all 9 printed significant digits. The full `float64` Python checksums differ from the 9-digit printed Fortran values by at most `4.84e-09`, within the `5e-09` rounding of a 9-digit print, so these captures cannot show a difference below that.
 
 | Workload | $N_{\mathrm{zones}}$ | Comparator Checksum | Safe Rust Checksum | Python/JAX Checksum | `|Rust - F90|` Rel. | `|JAX - F90|` Rel. | Rust `max_rel_err` | JAX `max_rel_err` |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |

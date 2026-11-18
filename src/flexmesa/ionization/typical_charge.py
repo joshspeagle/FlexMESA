@@ -169,7 +169,10 @@ def chi_info(
         backend, a1, z1, t, log10_t, rho, log10_rho
     )
     if resolved == "jax":
-        c, c0, c1, c2 = chi_info_jax(a1, z1, t, log10_t, rho, log10_rho)
+        res_t: tuple[jax.Array, jax.Array, jax.Array, jax.Array] = chi_info_jax(
+            a1, z1, t, log10_t, rho, log10_rho
+        )
+        c, c0, c1, c2 = res_t
         if has_jax:
             return c, c0, c1, c2
         return float(c), float(c0), float(c1), float(c2)
@@ -211,7 +214,7 @@ def chi_effective(
         backend, chi, c0, c1, c2, z1, z2
     )
     if resolved == "jax":
-        res = chi_effective_jax(chi, c0, c1, c2, z1, z2)
+        res: jax.Array = chi_effective_jax(chi, c0, c1, c2, z1, z2)
         if has_jax:
             return res
         return float(res)

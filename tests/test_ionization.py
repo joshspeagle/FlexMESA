@@ -230,7 +230,12 @@ def test_typical_charge_and_chi_effective_rust_vs_jax() -> None:
                 abar, z1, t, lt, rho, lrho, backend="rust"
             )
             c_j = ionization.chi_info(abar, z1, t, lt, rho, lrho, backend="jax")
-            np.testing.assert_allclose(c_r, c_j, rtol=1e-14, atol=1e-14)
+            np.testing.assert_allclose(
+                np.asarray(c_r, dtype=np.float64),
+                np.asarray(c_j, dtype=np.float64),
+                rtol=1e-14,
+                atol=1e-14,
+            )
 
             ce_r = ionization.chi_effective(*c_r, z1, 6.0, backend="rust")
             ce_j = ionization.chi_effective(*c_j, z1, 6.0, backend="jax")

@@ -226,7 +226,7 @@
         "pct_ported": 0.0,
         "pct_verified": 0.0,
         "rust_lines": 2846,
-        "python_jax_lines": 1027
+        "python_jax_lines": 1033
       },
       {
         "module": "colors",

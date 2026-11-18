@@ -37,7 +37,7 @@ class IonizationResult:
     r"""Structured 28-channel output of `eval_ionization`.
 
     Attributes:
-        values: Raw 1D `float64` NumPy array of shape `(28,)` in
+        values: Raw 1D `float64` NumPy or JAX array of shape `(28,)` in
             `ION_RESULT_NAMES` order.
         log_pgas: Base-10 log gas pressure $\log_{10}(P_{\mathrm{gas}} /
             \mathrm{dyn\,cm^{-2}})$.
@@ -46,7 +46,7 @@ class IonizationResult:
         fneut: 9-element `float64` array of neutral fractions (`H..Fe`).
     """
 
-    values: npt.NDArray[np.float64]
+    values: npt.NDArray[np.float64] | jax.Array
 
     @property
     def log_pgas(self) -> float:
@@ -54,17 +54,17 @@ class IonizationResult:
         return float(self.values[0])
 
     @property
-    def logpp(self) -> npt.NDArray[np.float64]:
+    def logpp(self) -> npt.NDArray[np.float64] | jax.Array:
         r"""Log partial pressures `logpp_H..Fe` of shape `(9,)`."""
         return self.values[1:10]
 
     @property
-    def z_ion(self) -> npt.NDArray[np.float64]:
+    def z_ion(self) -> npt.NDArray[np.float64] | jax.Array:
         r"""Mean ionic charges `Z_H..Fe` of shape `(9,)`."""
         return self.values[10:19]
 
     @property
-    def fneut(self) -> npt.NDArray[np.float64]:
+    def fneut(self) -> npt.NDArray[np.float64] | jax.Array:
         r"""Neutral fractions `fneut_H..Fe` of shape `(9,)`."""
         return self.values[19:28]
 
@@ -276,18 +276,21 @@ def eval_ionization_jax(
 
 
 def _resolve_log10_pair(
-    lin: float | None, log10_val: float | None, name: str
+    lin: float | jax.Array | None,
+    log10_val: float | jax.Array | None,
+    name: str,
 ) -> float:
     r"""Resolve `(linear, log10)` arguments into a finite `log10` value."""
-    if lin is not None and (float(lin) <= 0.0 or not np.isfinite(lin)):
+    lin_f = None if lin is None else float(lin)
+    if lin_f is not None and (lin_f <= 0.0 or not np.isfinite(lin_f)):
         raise ValueError(f"{name} must be positive and finite.")
     if log10_val is not None:
         lv = float(log10_val)
         if not np.isfinite(lv):
             raise ValueError(f"log10_{name} must be finite.")
         return lv
-    if lin is not None:
-        return float(np.log10(float(lin)))
+    if lin_f is not None:
+        return float(np.log10(lin_f))
     raise ValueError(f"Either {name} or log10_{name} must be provided.")
 
 
@@ -341,14 +344,14 @@ def eval_ionization(
         if has_jax:
             lt_j = _resolve_log10_pair_jax(t, log10_t, "t")
             lrho_j = _resolve_log10_pair_jax(rho, log10_rho, "rho")
-            res_j = eval_ionization_jax(z, x, lrho_j, lt_j)
-            return IonizationResult(res_j)
+            res_jax: jax.Array = eval_ionization_jax(z, x, lrho_j, lt_j)
+            return IonizationResult(res_jax)
         zf, xf = float(z), float(x)
         if not (np.isfinite(zf) and np.isfinite(xf)):
             raise ValueError("z and x must be finite.")
         lt_f = _resolve_log10_pair(t, log10_t, "t")
         lrho_f = _resolve_log10_pair(rho, log10_rho, "rho")
-        res_j = eval_ionization_jax(zf, xf, lrho_f, lt_f)
+        res_j: jax.Array = eval_ionization_jax(zf, xf, lrho_f, lt_f)
         return IonizationResult(np.asarray(res_j, dtype=np.float64))
     raw = _rust.py_ion_eval_ionization(
         float(z),

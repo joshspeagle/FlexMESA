@@ -217,7 +217,7 @@ def test_plot_case_comparison_suite_layouts(
         assert out_png.is_file() and out_png.stat().st_size > 10_000
         if check_inverted_x:
             assert axes[0, 0].xaxis_inverted()
-        suptitle = fig._suptitle.get_text() if fig._suptitle else ""
+        suptitle = fig.get_suptitle()
         assert case in suptitle
         assert "within tol" in suptitle
     finally:
@@ -302,7 +302,7 @@ def test_plot_case_comparison_diverging_residuals_and_sentinel_masking(
         div_x = np.asarray(div_line.get_xdata(), dtype=np.float64)
         assert div_x[0] == pytest.approx(2.0)
 
-        suptitle = fig._suptitle.get_text() if fig._suptitle else ""
+        suptitle = fig.get_suptitle()
         assert "outside tol" in suptitle
         assert "1st div step=3" in suptitle
         title_txt = res_ax.get_title()

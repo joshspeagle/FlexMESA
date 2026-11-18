@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import math
 import pathlib
+import typing
 
 import matplotlib.axes as mpl_axes
 import matplotlib.figure as mpl_figure
@@ -71,7 +72,7 @@ def merge_twinx_legend(
     ax_left: mpl_axes.Axes,
     ax_right: mpl_axes.Axes,
     *,
-    loc: str = "best",
+    loc: typing.Literal["best", "upper left"] = "best",
     fontsize: float = 7.0,
     ncol: int = 2,
 ) -> None:

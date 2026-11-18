@@ -242,7 +242,11 @@ def _plot_residual_panel(
         ax.text(
             0.5,
             0.5,
-            "No track tolerances configured",
+            (
+                "No comparison: histories could not be aligned"
+                if comp is None
+                else "No track tolerances configured"
+            ),
             ha="center",
             va="center",
             transform=ax.transAxes,
@@ -418,8 +422,16 @@ def format_provenance_title(
     numerics_mode: str,
     controls_ignored: bool,
     max_steps: int | None,
+    n_controls_ignored: int = 0,
 ) -> str:
-    """Build multi-line provenance header identifying MESA ref and run."""
+    """Build multi-line provenance header identifying MESA ref and run.
+
+    A run that ignored unsupported controls is labelled ``diagnostic`` and a
+    step-capped run ``smoke``; neither is described as a pass even when its
+    history lies inside the tolerances (``DECISIONS #26``). When no
+    comparison was made the header says so instead of reporting a tolerance
+    outcome.
+    """
     ref_ver = (
         f"MESA {ref_tbl.mesa_version_number}"
         if ref_tbl.mesa_version_number
@@ -429,9 +441,13 @@ def format_provenance_title(
     if numerics_mode:
         run_parts.append(f"mode={numerics_mode}")
     if controls_ignored:
-        run_parts.append("controls_ignored")
+        run_parts.append(
+            f"diagnostic ({n_controls_ignored} controls ignored)"
+            if n_controls_ignored > 0
+            else "diagnostic (controls ignored)"
+        )
     if max_steps is not None:
-        run_parts.append(f"cap={max_steps}")
+        run_parts.append(f"smoke: cap={max_steps} steps")
     if termination_code:
         run_parts.append(f"term={termination_code}")
 
@@ -440,15 +456,16 @@ def format_provenance_title(
         if comp is not None and comp.first_diverging_step is not None
         else "no div step"
     )
-    tol_str = (
-        "within tol"
-        if (
-            comp is not None
-            and comp.within_final_tolerances
-            and comp.within_track_tolerances
-        )
-        else "outside tol"
-    )
+    if comp is None:
+        tol_str = "not compared"
+    elif comp.within_final_tolerances and comp.within_track_tolerances:
+        tol_str = "within tol"
+        if controls_ignored:
+            tol_str += " (diagnostic, not a pass)"
+        elif max_steps is not None:
+            tol_str += " (smoke, not a pass)"
+    else:
+        tol_str = "outside tol"
     line1 = f"{spec.suite}/{spec.case} ({spec.reference_path or 'local ref'})"
     line2 = (
         f"Ref: {ref_ver} ({ref_tbl.num_rows} rows) | "

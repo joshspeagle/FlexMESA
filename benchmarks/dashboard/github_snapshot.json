@@ -224,8 +224,8 @@
   ],
   "open_pull_requests": [
     {
-      "number": 224,
-      "title": "fix(star,binary): an oversized mass change is a retriable failure again (#150)",
+      "number": 225,
+      "title": "feat(testing): wire Level-2 exact-hex probes for all math and auto_diff values (#220)",
       "draft": false
     }
   ],

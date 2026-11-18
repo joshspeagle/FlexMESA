@@ -183,11 +183,63 @@ fn test_non_retriable_star_error_fails_immediately_with_zero_retries() {
 
     let err = star_evolve_step(&mut model, true, false, true)
         .expect_err("invalid phase_separation_option must fail loudly");
-    assert!(
-        matches!(err, StarError::InvalidInput(_)),
-        "expected StarError::InvalidInput, got: {err:?}"
-    );
+    assert!(matches!(err, StarError::InvalidInput(_)));
     assert_eq!(model.num_retries, 0, "non-retriable errors must not retry");
     assert_eq!(model.dt.to_bits(), orig_dt.to_bits());
     assert_eq!(model.nz, orig_nz);
+}
+
+#[test]
+fn test_primary_state_buffer_preserves_omega_when_solver_mlt_eval_count_nonzero(
+) {
+    let ctrl = StarControls {
+        initial_mass: 1.5,
+        rotation_flag: true,
+        ..StarControls::default()
+    };
+    let mut model = load_zams_model(ctrl, StarJobControls::default())
+        .expect("1.5 Msun ZAMS");
+    for (k, om) in model.omega.iter_mut().enumerate() {
+        let kf = f64::from(u32::try_from(k).unwrap_or(0));
+        *om = 1.0e-5 * (1.0 + 0.01 * kf);
+    }
+    flexmesa_star::update_rotation_distortion_factors(&mut model);
+    set_hydro_vars(&mut model, false, false).expect("initial set_hydro_vars");
+
+    let snap = PrimaryStateBuffer::from_model(&model);
+    eprintln!(
+        "1.5 Msun ZAMS nz={}: StarModel::heap_bytes={} B, PrimaryStateBuffer::heap_bytes={} B",
+        model.nz,
+        model.heap_bytes(),
+        snap.heap_bytes(),
+    );
+    let want_omega: Vec<u64> =
+        model.omega.iter().map(|v| v.to_bits()).collect();
+    let want_j_rot: Vec<u64> =
+        model.j_rot.iter().map(|v| v.to_bits()).collect();
+    let expected_rot_p: Vec<u64> =
+        model.aux.fp_rot.iter().map(|v| v.to_bits()).collect();
+    let expected_rot_t: Vec<u64> =
+        model.aux.ft_rot.iter().map(|v| v.to_bits()).collect();
+    let want_gradt: Vec<u64> =
+        model.gradt.iter().map(|v| v.to_bits()).collect();
+    let want_p_surf = model.ln_peos_surf_ad.val.to_bits();
+
+    // Simulate a rejected Newton trial that perturbs thermodynamics, omega,
+    // and leaves solver_mlt_eval_count > 0.
+    model.lnd[0] += 0.05;
+    model.ln_t[0] -= 0.03;
+    for om in &mut model.omega {
+        *om *= 1.15;
+    }
+    model.aux.solver_mlt_eval_count = 4;
+    snap.restore_into(&mut model).expect("restore_into");
+
+    assert_bits_eq("omega", &model.omega, &want_omega);
+    assert_bits_eq("j_rot", &model.j_rot, &want_j_rot);
+    assert_bits_eq("fp_rot", &model.aux.fp_rot, &expected_rot_p);
+    assert_bits_eq("ft_rot", &model.aux.ft_rot, &expected_rot_t);
+    assert_bits_eq("gradt", &model.gradt, &want_gradt);
+    assert_eq!(model.ln_peos_surf_ad.val.to_bits(), want_p_surf);
+    assert_eq!(model.aux.solver_mlt_eval_count, 0);
 }

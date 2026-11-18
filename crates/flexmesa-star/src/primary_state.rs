@@ -11,7 +11,7 @@ use flexmesa_eos::EosConfig;
 use flexmesa_kap::KapConfig;
 
 use crate::controls::{StarError, VarLayout};
-use crate::hydro_state::StepHistoryScalars;
+use crate::hydro_state::{StepHistoryScalars, TidalDeformationHandle};
 use crate::model::StarModel;
 use crate::rsp_def::RspState;
 use crate::star_ad::{StarAdExt, StarAdOrder1};
@@ -195,6 +195,7 @@ pub struct PrimaryStateBuffer {
     pub(crate) mlt_flip_count: Vec<u8>,
     pub(crate) step_hist: StepHistoryScalars,
     pub(crate) rsp: RspState,
+    pub(crate) tidal_deformation: Option<TidalDeformationHandle>,
     pub(crate) extra_grav_if_nonzero: Option<Vec<StarAdOrder1>>,
 }
 
@@ -355,6 +356,7 @@ impl PrimaryStateBuffer {
             mlt_flip_count: model.aux.mlt_flip_count.clone(),
             step_hist: model.aux.step_hist.clone(),
             rsp: model.aux.rsp.clone(),
+            tidal_deformation: model.aux.tidal_deformation.clone(),
             extra_grav_if_nonzero: None,
         };
         buf.capture_extra_grav(model);
@@ -539,12 +541,13 @@ impl PrimaryStateBuffer {
         self.mlt_flip_count.clone_from(&a.mlt_flip_count);
         self.step_hist.clone_from(&a.step_hist);
         self.rsp.clone_from(&a.rsp);
+        self.tidal_deformation.clone_from(&a.tidal_deformation);
         self.capture_extra_grav(model);
     }
 
     /// Restores buffered state into `model` in place while preserving `controls`,
-    /// `job`, `aux.tidal_deformation`, `aux.micro_cache`, and all 6 cumulative
-    /// solver/retry/redo/cache counters, then repopulates derived microphysics.
+    /// `job`, `aux.micro_cache`, and all 6 cumulative solver/retry/redo/cache
+    /// counters, then repopulates derived microphysics.
     ///
     /// # Errors
     /// Returns [`StarError`] if microphysics recomputation fails.
@@ -706,6 +709,12 @@ impl PrimaryStateBuffer {
         a.eps_mdot_old.clone_from(&self.eps_mdot_old);
         a.step_hist.clone_from(&self.step_hist);
         a.rsp.clone_from(&self.rsp);
+        a.tidal_deformation.clone_from(&self.tidal_deformation);
+        a.solver_mlt_eval_count = 0;
+        a.solver_had_mlt_flip = false;
+        a.fixed_gradr_sticky.fill(false);
+        a.mlt_prev_conv.fill(0);
+        a.mlt_flip_count.fill(0);
         if let Some(ref eg) = self.extra_grav_if_nonzero {
             a.extra_grav.clone_from(eg);
         } else {
@@ -720,6 +729,8 @@ impl PrimaryStateBuffer {
         // operator-split burn averages, rotation distortion, and solver latches)
         // that `set_hydro_vars` may have recomputed without pre-physics passes.
         model.teff = self.teff;
+        model.omega.clone_from(&self.omega);
+        model.j_rot.clone_from(&self.j_rot);
         model.eps_nuc.clone_from(&self.eps_nuc);
         model.dxdt_nuc.clone_from(&self.dxdt_nuc);
         model.eps_mdot.clone_from(&self.eps_mdot);

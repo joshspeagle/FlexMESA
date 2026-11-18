@@ -718,22 +718,11 @@ impl BinarySystem {
         &mut self,
         snap: &BinaryStepSnapshot,
     ) -> Result<(), StarError> {
-        let comp_mut = match &mut self.companion {
-            BinaryCompanion::PointMass {
-                mass_g,
-                m_bh_zero_eq_g,
-                is_black_hole,
-            } => {
-                if let Some((m, meq, bh)) = snap.point_mass_state {
-                    *mass_g = m;
-                    *m_bh_zero_eq_g = meq;
-                    *is_black_hole = bh;
-                }
-                None
+        if self.donor_i != snap.donor_i {
+            if let BinaryCompanion::Star(ref mut s2) = self.companion {
+                std::mem::swap(&mut self.donor, s2);
             }
-            BinaryCompanion::Star(s2) => Some(&mut **s2),
-        };
-        snap.restore_stars(&mut self.donor, comp_mut)?;
+        }
         self.point_mass_i = snap.point_mass_i;
         self.donor_i = snap.donor_i;
         self.separation = snap.separation;
@@ -754,6 +743,22 @@ impl BinarySystem {
         self.last_mdot = snap.last_mdot;
         self.last_jdot = snap.last_jdot;
         self.last_edot = snap.last_edot;
+        let comp_mut = match &mut self.companion {
+            BinaryCompanion::PointMass {
+                mass_g,
+                m_bh_zero_eq_g,
+                is_black_hole,
+            } => {
+                if let Some((m, meq, bh)) = snap.point_mass_state {
+                    *mass_g = m;
+                    *m_bh_zero_eq_g = meq;
+                    *is_black_hole = bh;
+                }
+                None
+            }
+            BinaryCompanion::Star(s2) => Some(&mut **s2),
+        };
+        snap.restore_stars(&mut self.donor, comp_mut)?;
         self.refresh_tidal_deformation_hooks(false)?;
         Ok(())
     }

@@ -336,3 +336,55 @@ impl DualOrder1<2> {
         self.d1[1]
     }
 }
+
+impl<const N: usize> serde::Serialize for DualOrder1<N> {
+    fn serialize<S: serde::Serializer>(
+        &self,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeTuple;
+        let mut tup = serializer.serialize_tuple(1 + N)?;
+        tup.serialize_element(&self.val)?;
+        for &d in &self.d1 {
+            tup.serialize_element(&d)?;
+        }
+        tup.end()
+    }
+}
+
+impl<'de, const N: usize> serde::Deserialize<'de> for DualOrder1<N> {
+    fn deserialize<D: serde::Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<Self, D::Error> {
+        struct DualVisitor<const M: usize>;
+
+        impl<'de, const M: usize> serde::de::Visitor<'de> for DualVisitor<M> {
+            type Value = DualOrder1<M>;
+
+            fn expecting(
+                &self,
+                formatter: &mut std::fmt::Formatter<'_>,
+            ) -> std::fmt::Result {
+                write!(formatter, "DualOrder1<{M}> tuple of {} f64s", 1 + M)
+            }
+
+            fn visit_seq<A: serde::de::SeqAccess<'de>>(
+                self,
+                mut seq: A,
+            ) -> Result<Self::Value, A::Error> {
+                let val = seq.next_element()?.ok_or_else(|| {
+                    serde::de::Error::invalid_length(0, &self)
+                })?;
+                let mut d1 = [0.0_f64; M];
+                for (i, slot) in d1.iter_mut().enumerate() {
+                    *slot = seq.next_element()?.ok_or_else(|| {
+                        serde::de::Error::invalid_length(1 + i, &self)
+                    })?;
+                }
+                Ok(DualOrder1 { val, d1 })
+            }
+        }
+
+        deserializer.deserialize_tuple(1 + N, DualVisitor::<N>)
+    }
+}

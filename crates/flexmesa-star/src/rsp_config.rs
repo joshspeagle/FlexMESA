@@ -8,7 +8,7 @@ use crate::inlist::SectionControls;
 
 /// Nonlinear Radial Stellar Pulsation (`RSP1`) controls (`&controls` namelist in
 /// `star/defaults/controls.defaults:3063-3333`).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct RspConfig {
     /// Kuhfuss / Smolec & Moskalik (2008) convection multipliers:
     /// $(\alpha, \alpha_c, \alpha_s, \alpha_d, \alpha_p, \alpha_t, \alpha_m, \gamma_r)$.
@@ -300,7 +300,7 @@ impl Default for RspConfig {
 
 /// Coupled Henyey turbulent-energy pulsation (`RSP2`) controls
 /// (`star/defaults/controls_dev.defaults:59-131` and `star_job_dev.defaults:26-30`).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Rsp2Controls {
     /// Dissipation, pressure, flux, eddy-viscosity, and radiative cooling multipliers.
     pub alfad: f64,

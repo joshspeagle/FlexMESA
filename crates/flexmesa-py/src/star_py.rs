@@ -6,8 +6,8 @@
 
 use flexmesa_star::{
     do_adjust_mesh, eval_dxdt_mix, extract_history_row, format_history_row,
-    format_profile_string, interp_q, pick_next_timestep, read_mod_str,
-    read_photo_bytes, set_hydro_vars, solve_composition_diffusion,
+    format_profile_string, interp_q, load_photo_bytes, pick_next_timestep,
+    read_mod_str, set_hydro_vars, solve_composition_diffusion,
     solve_henyey_step, write_mod_string, write_photo_bytes,
     yrs_for_init_timestep, MeshFunctionConfig, StarControls, StarJobControls,
     StarModel,
@@ -83,13 +83,12 @@ macro_rules! impl_py_star_model {
                 })
             }
 
-            /// Restores a [`PyStarModel`] from binary `.photo` bytes.
+            /// Restores a [`PyStarModel`] from binary `.photo` bytes
+            /// (including serialized `controls` and `job`).
             #[staticmethod]
             pub fn from_photo_bytes(bytes: &[u8]) -> PyResult<Self> {
-                let (c, j) =
-                    (StarControls::default(), StarJobControls::default());
                 Ok(Self {
-                    inner: read_photo_bytes(bytes, c, j).map_err(to_py_err)?,
+                    inner: load_photo_bytes(bytes).map_err(to_py_err)?,
                 })
             }
 

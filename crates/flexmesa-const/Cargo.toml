@@ -8,6 +8,7 @@ repository.workspace = true
 description = "Physical, mathematical, and astronomical CGS constants for FlexMESA"
 
 [dependencies]
+serde.workspace = true
 
 [dev-dependencies]
 flexmesa-testing = { path = "../flexmesa-testing" }

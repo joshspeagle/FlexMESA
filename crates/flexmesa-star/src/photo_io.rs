@@ -1,45 +1,18 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-//! Binary `.photo` restart checkpoint serializer, deserializer, and 64-bit
-//! FNV-1a checksum (`photo_in.f90`, `photo_out.f90`, and `./ck`).
+//! Binary `.photo` full-state checkpoint serializer, deserializer, and
+//! 64-bit FNV-1a checksum (`photo_in.f90`, `photo_out.f90`, and `./ck`).
 
-use flexmesa_kap::{KapCoOption, KapLowTOption, KapOption};
+use flexmesa_utils::bin_codec;
 
 use crate::controls::{StarControls, StarError, StarJobControls};
+use crate::job_controls::VarLayout;
 use crate::model::StarModel;
-use crate::model_io::STAR_DEF_VERSION;
 
-const KAP_OPTS: [KapOption; 5] = [
-    KapOption::Gn93,
-    KapOption::Gs98,
-    KapOption::A09,
-    KapOption::OpGs98,
-    KapOption::OpA09,
-];
-const KAP_CO_OPTS: [KapCoOption; 3] =
-    [KapCoOption::Gn93Co, KapCoOption::Gs98Co, KapCoOption::A09Co];
-const KAP_LOW_T_OPTS: [KapLowTOption; 6] = [
-    KapLowTOption::LowTFa05Gs98,
-    KapLowTOption::LowTFa05Gn93,
-    KapLowTOption::LowTFa05A09p,
-    KapLowTOption::LowTFreedman11,
-    KapLowTOption::KapCn,
-    KapLowTOption::Aesopus,
-];
+const PHOTO_MAGIC: &[u8; 8] = b"FMPHOTO2";
+const PHOTO_HEADER_LEN: usize = 8 + 4 + 1;
 
-fn enum_to_u8<T: PartialEq>(table: &[T], val: &T) -> u8 {
-    u8::try_from(table.iter().position(|x| x == val).unwrap_or(0)).unwrap_or(0)
-}
-
-fn enum_from_u8<T: Copy>(
-    table: &[T],
-    v: u8,
-    name: &str,
-) -> Result<T, StarError> {
-    table
-        .get(usize::from(v))
-        .copied()
-        .ok_or_else(|| StarError::IoError(format!("invalid {name} tag {v}")))
-}
+/// Binary `.photo` format version written by the generated `serde` encoder.
+pub const PHOTO_FORMAT_VERSION: u32 = 20;
 
 /// Computes a deterministic 64-bit FNV-1a checksum of `.photo` restart bytes
 /// (`./ck` in upstream MESA `test_suite_helpers`).
@@ -53,691 +26,127 @@ pub fn compute_photo_checksum(bytes: &[u8]) -> u64 {
     hash
 }
 
-/// Serializes a [`StarModel`] into binary `.photo` restart bytes with
-/// `STAR_DEF_VERSION = 19` and `part_number = 1..7` sentinels (`photo_out.f90`).
-#[must_use]
-pub fn write_photo_bytes(model: &StarModel) -> Vec<u8> {
-    let mut buf =
-        Vec::with_capacity(model.nz * (8 * (12 + model.species)) + 384);
-    let write_i32 =
-        |buf: &mut Vec<u8>, v: i32| buf.extend_from_slice(&v.to_le_bytes());
-    let write_u64 =
-        |buf: &mut Vec<u8>, v: u64| buf.extend_from_slice(&v.to_le_bytes());
-    let write_f64_slice = |buf: &mut Vec<u8>, s: &[f64]| {
-        for &v in s {
-            buf.extend_from_slice(&v.to_le_bytes());
-        }
-    };
-
-    write_i32(&mut buf, STAR_DEF_VERSION);
-
-    write_i32(&mut buf, 1);
-    write_u64(&mut buf, model.nz as u64);
-    write_u64(&mut buf, model.species as u64);
-    write_u64(&mut buf, model.layout.nvar_hydro as u64);
-    for &cid in &model.chem_id {
-        write_u64(&mut buf, cid as u64);
-    }
-    let net_bytes = model.job.net_name.as_bytes();
-    write_u64(&mut buf, net_bytes.len() as u64);
-    buf.extend_from_slice(net_bytes);
-    buf.extend_from_slice(&[
-        u8::from(model.controls.v_flag),
-        u8::from(model.controls.u_flag),
-        u8::from(model.controls.rotation_flag),
-        u8::from(model.controls.op_split_burn),
-        u8::from(model.controls.rsp_flag),
-        u8::from(model.controls.rsp2_flag),
-        u8::from(model.controls.rti_flag),
-        flexmesa_math::numerics_mode().to_wire_tag(),
-    ]);
-
-    write_i32(&mut buf, 2);
-    for s in [&model.lnd, &model.ln_t, &model.ln_r, &model.lum] {
-        write_f64_slice(&mut buf, s);
-    }
-    for s in [&model.v, &model.u, &model.dq, &model.xa] {
-        write_f64_slice(&mut buf, s);
-    }
-    for s in [&model.omega, &model.j_rot] {
-        write_u64(&mut buf, s.len() as u64);
-        write_f64_slice(&mut buf, s);
-    }
-
-    write_i32(&mut buf, 3);
-    write_u64(&mut buf, model.lnd_old.len() as u64);
-    for s in [
-        &model.lnd_old,
-        &model.ln_t_old,
-        &model.ln_r_old,
-        &model.lum_old,
-        &model.v_old,
-        &model.u_old,
-        &model.dq_old,
-        &model.aux.alpha_rti_old,
-        &model.xa_old,
-    ] {
-        write_f64_slice(&mut buf, s);
-    }
-    write_u64(&mut buf, model.lnd_start.len() as u64);
-    for s in [
-        &model.lnd_start,
-        &model.ln_t_start,
-        &model.ln_r_start,
-        &model.lum_start,
-        &model.v_start,
-        &model.u_start,
-    ] {
-        write_f64_slice(&mut buf, s);
-    }
-    for s in [
-        &model.aux.alpha_rti_start,
-        &model.aux.p_face_start,
-        &model.aux.u_face_start,
-        &model.aux.omega_old,
-        &model.aux.j_rot_old,
-        &model.aux.eps_mdot_old,
-    ] {
-        write_u64(&mut buf, s.len() as u64);
-        write_f64_slice(&mut buf, s);
-    }
-
-    write_i32(&mut buf, 4);
-    write_u64(&mut buf, model.model_number as u64);
-    let sh = &model.aux.step_hist;
-    write_f64_slice(
-        &mut buf,
-        &[
-            model.star_age,
-            model.star_age_old,
-            model.dt,
-            model.dt_next,
-            model.dt_old,
-            model.dt_limit_ratio_old,
-            model.mstar,
-            model.mstar_old,
-            model.mstar_dot,
-            model.m_center,
-            model.r_center,
-            model.l_center,
-            model.v_center,
-            model.teff,
-            model.tau_base,
-            model.mstar_start,
-            model.aux.total_energy,
-            model.aux.cumulative_energy_error,
-            sh.rotational_mdot_boost_old,
-            sh.total_energy_old,
-            sh.cumulative_energy_error_old,
-            sh.teff_old,
-            sh.l_surf_old,
-            sh.mstar_dot_old,
-            sh.power_h_burn_old,
-            sh.power_he_burn_old,
-            sh.power_z_burn_old,
-            sh.power_photo_old,
-            sh.power_nuc_burn_old,
-            sh.error_in_energy_conservation,
-            sh.total_energy_end,
-        ],
-    );
-    for v in [
-        model.total_num_solver_iterations as u64,
-        model.num_retries as u64,
-        sh.timestep_hold as u64,
-        sh.last_solver_iterations as u64,
-        sh.burn_max_num_substeps as u64,
-        sh.num_diffusion_solver_steps as u64,
-        sh.num_diffusion_solver_iters as u64,
-        sh.model_number_for_last_retry
-            .map_or(u64::MAX, |n| n as u64),
-    ] {
-        write_u64(&mut buf, v);
-    }
-    buf.push(u8::from(sh.was_in_implicit_wind_limit));
-
-    write_i32(&mut buf, 5);
-    for s in [
-        &model.eps_mdot,
-        &model.cgrav,
-        &model.aux.irradiation_heat,
-        &model.aux.etrb,
-        &model.aux.alpha_rti,
-        &model.aux.w_div_wc,
-        &model.mlt_vc,
-        &model.aux.mlt_vc_old,
-        &model.aux.burn_avg_epsnuc,
-        &model.sig,
-    ] {
-        write_f64_slice(&mut buf, s);
-    }
-
-    let ec = &model.eos_config;
-    let kc = &model.kap_config;
-    buf.extend_from_slice(&[
-        u8::from(ec.use_cms),
-        u8::from(ec.use_skye),
-        u8::from(ec.use_pc),
-        u8::from(ec.use_free_eos),
-        u8::from(ec.use_opal_scvh),
-        u8::from(ec.okay_to_convert_ierr_to_skip),
-        u8::from(ec.linear_blend),
-        enum_to_u8(&KAP_OPTS, &kc.kap_option),
-        enum_to_u8(&KAP_CO_OPTS, &kc.kap_co_option),
-        enum_to_u8(&KAP_LOW_T_OPTS, &kc.kap_low_t_option),
-        u8::from(kc.cubic_interpolation_in_x),
-        u8::from(kc.cubic_interpolation_in_z),
-        u8::from(kc.include_electron_conduction),
-        u8::from(kc.use_blouin_conductive_opacities),
-        u8::from(kc.use_zbase_for_type1),
-        u8::from(kc.use_type2_opacities),
-    ]);
-    write_f64_slice(
-        &mut buf,
-        &[
-            ec.helm_blend_width,
-            kc.zbase,
-            kc.kap_blend_log_t_lower_bdy,
-            kc.kap_blend_log_t_upper_bdy,
-            kc.kap_type2_full_on_x,
-            kc.kap_type2_full_off_x,
-            kc.kap_type2_full_off_dz,
-            kc.kap_type2_full_on_dz,
-            kc.log_t_compton_blend_hi,
-            kc.log_r_compton_blend_lo,
-        ],
-    );
-
-    write_i32(&mut buf, 6);
-    let r = &model.aux.rsp;
-    let has_rsp = model.controls.rsp_flag
-        || model.controls.rsp2_flag
-        || r.num_periods > 0
-        || r.have_set_velocities
-        || r.et_rsp.iter().any(|&x| x != 0.0)
-        || r.erad_rsp.iter().any(|&x| x != 0.0)
-        || r.hp_face.iter().any(|&x| x != 0.0);
-    buf.push(u8::from(has_rsp));
-    if has_rsp {
-        for s in r.zone_vecs() {
-            write_f64_slice(&mut buf, s);
-        }
-        write_f64_slice(&mut buf, &r.pack_scalars());
-        if model.controls.rsp_flag {
-            for s in [
-                &model.t,
-                &model.pgas,
-                &model.prad,
-                &model.opacity,
-                &model.csound,
-                &model.cp,
-                &model.r,
-                &model.m,
-                &model.dm,
-                &model.dm_bar,
-            ] {
-                write_f64_slice(&mut buf, s);
-            }
-        }
-    }
-    write_i32(&mut buf, 7);
-    buf
+fn encode_photo_header(mode: flexmesa_math::NumericsMode, out: &mut Vec<u8>) {
+    out.extend_from_slice(PHOTO_MAGIC);
+    out.extend_from_slice(&PHOTO_FORMAT_VERSION.to_le_bytes());
+    out.push(mode.to_wire_tag());
 }
 
-/// Restores a [`StarModel`] from binary `.photo` restart bytes (`photo_in.f90`).
+fn decode_photo_header(
+    bytes: &[u8],
+) -> Result<(flexmesa_math::NumericsMode, usize), StarError> {
+    if bytes.len() < PHOTO_HEADER_LEN {
+        return Err(StarError::IoError(String::from("photo EOF header")));
+    }
+    if &bytes[..8] != PHOTO_MAGIC {
+        return Err(StarError::IoError(String::from(
+            "invalid photo magic bytes",
+        )));
+    }
+    let version =
+        u32::from_le_bytes(bytes[8..12].try_into().map_err(|_| {
+            StarError::IoError(String::from("photo EOF version"))
+        })?);
+    if version != PHOTO_FORMAT_VERSION {
+        return Err(StarError::IoError(format!(
+            "unsupported photo version {version} (expected {PHOTO_FORMAT_VERSION})"
+        )));
+    }
+    let mode = flexmesa_math::NumericsMode::from_wire_tag(bytes[12])
+        .ok_or_else(|| {
+            StarError::IoError(format!(
+                "invalid photo numerics_mode tag {}",
+                bytes[12]
+            ))
+        })?;
+    Ok((mode, PHOTO_HEADER_LEN))
+}
+
+/// Serializes the full [`StarModel`] state (including `controls`, `job`, and
+/// cumulative counters) into deterministic binary `.photo` checkpoint bytes.
 ///
 /// # Errors
-/// Returns [`StarError::IoError`] if version or sentinel checks fail.
+/// Returns [`StarError::IoError`] if `serde` encoding fails.
+pub fn try_write_photo_bytes(model: &StarModel) -> Result<Vec<u8>, StarError> {
+    let payload = bin_codec::to_bytes(model).map_err(|e| {
+        StarError::IoError(format!("photo serialization failed: {e}"))
+    })?;
+    let mut out = Vec::with_capacity(PHOTO_HEADER_LEN + payload.len());
+    encode_photo_header(flexmesa_math::numerics_mode(), &mut out);
+    out.extend_from_slice(&payload);
+    Ok(out)
+}
+
+/// Serializes the full [`StarModel`] state into deterministic binary `.photo`
+/// checkpoint bytes.
+///
+/// # Panics
+/// Panics only if internal `serde` binary encoding reports a serialization error.
+#[must_use]
+pub fn write_photo_bytes(model: &StarModel) -> Vec<u8> {
+    try_write_photo_bytes(model).expect("StarModel photo encoding succeeds")
+}
+
+/// Extracts the [`flexmesa_math::NumericsMode`] recorded in the header of
+/// serialized `.photo` checkpoint `bytes`.
+///
+/// # Errors
+/// Returns [`StarError::IoError`] if `bytes` has an invalid or truncated header.
+pub fn photo_numerics_mode(
+    bytes: &[u8],
+) -> Result<flexmesa_math::NumericsMode, StarError> {
+    decode_photo_header(bytes).map(|(mode, _)| mode)
+}
+
+/// Restores a complete [`StarModel`] (including serialized `controls` and
+/// `job`) from binary `.photo` checkpoint bytes without mutating stored `dq` bits.
+///
+/// # Errors
+/// Returns [`StarError::IoError`] if header validation fails, `numerics_mode`
+/// does not match the active backend mode, or binary decoding detects truncated
+/// or trailing bytes.
+pub fn load_photo_bytes(bytes: &[u8]) -> Result<StarModel, StarError> {
+    let (saved_mode, offset) = decode_photo_header(bytes)?;
+    let active_mode = flexmesa_math::numerics_mode();
+    if saved_mode != active_mode {
+        return Err(StarError::IoError(format!(
+            "photo numerics_mode mismatch: checkpoint saved in \"{saved_mode}\" \
+             mode cannot be loaded while active mode is \"{active_mode}\""
+        )));
+    }
+    let model: StarModel = bin_codec::from_bytes(&bytes[offset..])
+        .map_err(|e| StarError::IoError(format!("photo decode failed: {e}")))?;
+    Ok(model)
+}
+
+/// Restores a [`StarModel`] from binary `.photo` restart bytes and applies the
+/// caller-supplied `controls` and `job` settings (updating [`VarLayout`] when
+/// hydrodynamic variable flags change).
+///
+/// # Errors
+/// Returns [`StarError::IoError`] if header validation, `numerics_mode`, or
+/// binary decoding fails.
 pub fn read_photo_bytes(
     bytes: &[u8],
     controls: StarControls,
     job: StarJobControls,
 ) -> Result<StarModel, StarError> {
-    let eof = |msg: &str| StarError::IoError(msg.to_string());
-    let read_i32 = |pos: &mut usize| -> Result<i32, StarError> {
-        let s = bytes.get(*pos..*pos + 4).ok_or_else(|| eof("EOF i32"))?;
-        *pos += 4;
-        Ok(i32::from_le_bytes(s.try_into().unwrap()))
-    };
-    let read_u64 = |pos: &mut usize| -> Result<u64, StarError> {
-        let s = bytes.get(*pos..*pos + 8).ok_or_else(|| eof("EOF u64"))?;
-        *pos += 8;
-        Ok(u64::from_le_bytes(s.try_into().unwrap()))
-    };
-    let read_f64_vec = |pos: &mut usize,
-                        n: usize|
-     -> Result<Vec<f64>, StarError> {
-        let end = *pos + 8 * n;
-        let slice = bytes.get(*pos..end).ok_or_else(|| eof("EOF f64 slice"))?;
-        *pos = end;
-        Ok(slice
-            .as_chunks::<8>()
-            .0
-            .iter()
-            .map(|&c| f64::from_le_bytes(c))
-            .collect())
-    };
-    let expect_part =
-        |pos: &mut usize, expected: i32| -> Result<(), StarError> {
-            let p = read_i32(pos)?;
-            (p == expected).then_some(()).ok_or_else(|| {
-                StarError::IoError(format!(
-                    "photo sentinel mismatch: expected part {expected}, got {p}"
-                ))
-            })
-        };
-
-    let (hdr, mut pos) = decode_photo_part1_header(bytes)?;
-    let saved_mode = hdr.saved_mode;
-    let active_mode = flexmesa_math::numerics_mode();
-    if saved_mode != active_mode {
-        return Err(StarError::IoError(format!(
-            "photo numerics_mode mismatch: checkpoint saved in \"{saved_mode}\" mode cannot be loaded while active mode is \"{active_mode}\""
-        )));
+    let mut model = load_photo_bytes(bytes)?;
+    let layout_changed = model.controls.v_flag != controls.v_flag
+        || model.controls.u_flag != controls.u_flag
+        || model.controls.rsp2_flag != controls.rsp2_flag
+        || model.controls.rti_flag != controls.rti_flag;
+    model.controls = controls;
+    model.job = job;
+    if layout_changed {
+        model.layout = VarLayout::with_flags(
+            model.species,
+            model.controls.v_flag,
+            model.controls.u_flag,
+            model.controls.rsp2_flag,
+            model.controls.rti_flag,
+        );
+        model.resize_zones(model.nz);
     }
-    let (nz, species, nvar_hydro, chem_id) =
-        (hdr.nz, hdr.species, hdr.nvar_hydro, hdr.chem_id);
-    let job_tags = hdr.job_tags;
-    let mut job = job;
-    let mut controls = controls;
-    job.net_name = hdr.saved_net_name;
-    controls.v_flag = job_tags[0] != 0;
-    controls.u_flag = job_tags[1] != 0;
-    controls.rotation_flag = job_tags[2] != 0;
-    controls.op_split_burn = job_tags[3] != 0;
-    controls.rsp_flag = job_tags[4] != 0;
-    controls.rsp2_flag = job_tags[5] != 0;
-    controls.rti_flag = job_tags[6] != 0;
-
-    let mut model = StarModel::new(nz, chem_id, job, controls);
-    if nvar_hydro != model.layout.nvar_hydro {
-        return Err(StarError::IoError(format!(
-            "photo nvar_hydro mismatch: saved {nvar_hydro}, reconstructed {}",
-            model.layout.nvar_hydro
-        )));
-    }
-
-    expect_part(&mut pos, 2)?;
-    for dst in [
-        &mut model.lnd,
-        &mut model.ln_t,
-        &mut model.ln_r,
-        &mut model.lum,
-        &mut model.v,
-        &mut model.u,
-        &mut model.dq,
-    ] {
-        *dst = read_f64_vec(&mut pos, nz)?;
-    }
-    model.xa = read_f64_vec(&mut pos, nz * species)?;
-    let n_omega = read_u64(&mut pos)? as usize;
-    model.omega = read_f64_vec(&mut pos, n_omega)?;
-    let n_jrot = read_u64(&mut pos)? as usize;
-    model.j_rot = read_f64_vec(&mut pos, n_jrot)?;
-
-    expect_part(&mut pos, 3)?;
-    let nz_old = read_u64(&mut pos)? as usize;
-    for dst in [
-        &mut model.lnd_old,
-        &mut model.ln_t_old,
-        &mut model.ln_r_old,
-        &mut model.lum_old,
-        &mut model.v_old,
-        &mut model.u_old,
-        &mut model.dq_old,
-        &mut model.aux.alpha_rti_old,
-    ] {
-        *dst = read_f64_vec(&mut pos, nz_old)?;
-    }
-    model.xa_old = read_f64_vec(&mut pos, nz_old * species)?;
-    let nz_start = read_u64(&mut pos)? as usize;
-    let saved_lnd_start = read_f64_vec(&mut pos, nz_start)?;
-    let saved_ln_t_start = read_f64_vec(&mut pos, nz_start)?;
-    let saved_ln_r_start = read_f64_vec(&mut pos, nz_start)?;
-    let saved_lum_start = read_f64_vec(&mut pos, nz_start)?;
-    let saved_v_start = read_f64_vec(&mut pos, nz_start)?;
-    let saved_u_start = read_f64_vec(&mut pos, nz_start)?;
-    let read_prefixed_vec = |pos: &mut usize| -> Result<Vec<f64>, StarError> {
-        let n = read_u64(pos)? as usize;
-        read_f64_vec(pos, n)
-    };
-    let saved_alpha_rti_start = read_prefixed_vec(&mut pos)?;
-    let saved_p_face_start = read_prefixed_vec(&mut pos)?;
-    let saved_u_face_start = read_prefixed_vec(&mut pos)?;
-    let saved_omega_old = read_prefixed_vec(&mut pos)?;
-    let saved_j_rot_old = read_prefixed_vec(&mut pos)?;
-    let saved_eps_mdot_old = read_prefixed_vec(&mut pos)?;
-
-    expect_part(&mut pos, 4)?;
-    model.model_number = read_u64(&mut pos)? as usize;
-    let s = read_f64_vec(&mut pos, 31)?;
-    (model.star_age, model.star_age_old, model.dt) = (s[0], s[1], s[2]);
-    (model.dt_next, model.dt_old, model.dt_limit_ratio_old) =
-        (s[3], s[4], s[5]);
-    (model.mstar, model.mstar_old, model.mstar_dot) = (s[6], s[7], s[8]);
-    (model.m_center, model.r_center, model.l_center) = (s[9], s[10], s[11]);
-    (model.v_center, model.teff, model.tau_base) = (s[12], s[13], s[14]);
-    let saved_mstar_start = s[15];
-    model.aux.total_energy = s[16];
-    model.aux.cumulative_energy_error = s[17];
-    let sh = &mut model.aux.step_hist;
-    (
-        sh.rotational_mdot_boost_old,
-        sh.total_energy_old,
-        sh.cumulative_energy_error_old,
-    ) = (s[18], s[19], s[20]);
-    (sh.teff_old, sh.l_surf_old, sh.mstar_dot_old) = (s[21], s[22], s[23]);
-    (
-        sh.power_h_burn_old,
-        sh.power_he_burn_old,
-        sh.power_z_burn_old,
-    ) = (s[24], s[25], s[26]);
-    (sh.power_photo_old, sh.power_nuc_burn_old) = (s[27], s[28]);
-    (sh.error_in_energy_conservation, sh.total_energy_end) = (s[29], s[30]);
-    model.total_num_solver_iterations = read_u64(&mut pos)? as usize;
-    model.num_retries = read_u64(&mut pos)? as usize;
-    model.aux.step_hist.timestep_hold = read_u64(&mut pos)? as usize;
-    model.aux.step_hist.last_solver_iterations = read_u64(&mut pos)? as usize;
-    model.aux.step_hist.burn_max_num_substeps = read_u64(&mut pos)? as usize;
-    model.aux.step_hist.num_diffusion_solver_steps =
-        read_u64(&mut pos)? as usize;
-    model.aux.step_hist.num_diffusion_solver_iters =
-        read_u64(&mut pos)? as usize;
-    let last_retry_raw = read_u64(&mut pos)?;
-    model.aux.step_hist.model_number_for_last_retry =
-        (last_retry_raw != u64::MAX).then_some(last_retry_raw as usize);
-    model.aux.step_hist.was_in_implicit_wind_limit = *bytes
-        .get(pos)
-        .ok_or_else(|| eof("EOF was_in_implicit_wind_limit"))?
-        != 0;
-    pos += 1;
-
-    expect_part(&mut pos, 5)?;
-    for dst in [
-        &mut model.eps_mdot,
-        &mut model.cgrav,
-        &mut model.aux.irradiation_heat,
-        &mut model.aux.etrb,
-        &mut model.aux.alpha_rti,
-        &mut model.aux.w_div_wc,
-    ] {
-        *dst = read_f64_vec(&mut pos, nz)?;
-    }
-    let saved_mlt_vc = read_f64_vec(&mut pos, nz)?;
-    let saved_mlt_vc_old = read_f64_vec(&mut pos, nz)?;
-    model.aux.burn_avg_epsnuc = read_f64_vec(&mut pos, nz)?;
-    let saved_sig = read_f64_vec(&mut pos, nz)?;
-
-    let cfg_tags = bytes
-        .get(pos..pos + 16)
-        .ok_or_else(|| eof("EOF eos/kap tags"))?;
-    pos += 16;
-    model.eos_config.use_cms = cfg_tags[0] != 0;
-    model.eos_config.use_skye = cfg_tags[1] != 0;
-    model.eos_config.use_pc = cfg_tags[2] != 0;
-    model.eos_config.use_free_eos = cfg_tags[3] != 0;
-    model.eos_config.use_opal_scvh = cfg_tags[4] != 0;
-    model.eos_config.okay_to_convert_ierr_to_skip = cfg_tags[5] != 0;
-    model.eos_config.linear_blend = cfg_tags[6] != 0;
-    model.kap_config.kap_option =
-        enum_from_u8(&KAP_OPTS, cfg_tags[7], "KapOption")?;
-    model.kap_config.kap_co_option =
-        enum_from_u8(&KAP_CO_OPTS, cfg_tags[8], "KapCoOption")?;
-    model.kap_config.kap_low_t_option =
-        enum_from_u8(&KAP_LOW_T_OPTS, cfg_tags[9], "KapLowTOption")?;
-    model.kap_config.cubic_interpolation_in_x = cfg_tags[10] != 0;
-    model.kap_config.cubic_interpolation_in_z = cfg_tags[11] != 0;
-    model.kap_config.include_electron_conduction = cfg_tags[12] != 0;
-    model.kap_config.use_blouin_conductive_opacities = cfg_tags[13] != 0;
-    model.kap_config.use_zbase_for_type1 = cfg_tags[14] != 0;
-    model.kap_config.use_type2_opacities = cfg_tags[15] != 0;
-
-    let cfg_f64 = read_f64_vec(&mut pos, 10)?;
-    model.eos_config.helm_blend_width = cfg_f64[0];
-    model.kap_config.zbase = cfg_f64[1];
-    model.kap_config.kap_blend_log_t_lower_bdy = cfg_f64[2];
-    model.kap_config.kap_blend_log_t_upper_bdy = cfg_f64[3];
-    model.kap_config.kap_type2_full_on_x = cfg_f64[4];
-    model.kap_config.kap_type2_full_off_x = cfg_f64[5];
-    model.kap_config.kap_type2_full_off_dz = cfg_f64[6];
-    model.kap_config.kap_type2_full_on_dz = cfg_f64[7];
-    model.kap_config.log_t_compton_blend_hi = cfg_f64[8];
-    model.kap_config.log_r_compton_blend_lo = cfg_f64[9];
-
-    expect_part(&mut pos, 6)?;
-    let has_rsp = *bytes.get(pos).ok_or_else(|| eof("EOF has_rsp"))? != 0;
-    pos += 1;
-    let (saved_rsp, saved_rsp_model_vecs) = if has_rsp {
-        let mut rsp = crate::rsp_def::RspState::new(nz);
-        for dst in rsp.zone_vecs_mut() {
-            *dst = read_f64_vec(&mut pos, nz)?;
-        }
-        let sc = read_f64_vec(&mut pos, 155)?;
-        rsp.unpack_scalars(&sc);
-        let mvecs = if model.controls.rsp_flag {
-            let mut arr: [Vec<f64>; 10] = Default::default();
-            for v in &mut arr {
-                *v = read_f64_vec(&mut pos, nz)?;
-            }
-            Some(arr)
-        } else {
-            None
-        };
-        (Some(rsp), mvecs)
-    } else {
-        (None, None)
-    };
-    expect_part(&mut pos, 7)?;
-    if pos != bytes.len() {
-        return Err(StarError::IoError(format!(
-            "photo trailing bytes: consumed {pos} of {}",
-            bytes.len()
-        )));
-    }
-
-    model.xmstar = (model.mstar - model.m_center).max(0.0);
-    model.mstar_start = saved_mstar_start;
-    if saved_lnd_start.len() == nz {
-        model.lnd_start.clone_from(&saved_lnd_start);
-        model.ln_t_start.clone_from(&saved_ln_t_start);
-        model.ln_r_start.clone_from(&saved_ln_r_start);
-        model.lum_start.clone_from(&saved_lum_start);
-        model.v_start.clone_from(&saved_v_start);
-        model.u_start.clone_from(&saved_u_start);
-    } else {
-        model.lnd_start.clone_from(&model.lnd);
-        model.ln_t_start.clone_from(&model.ln_t);
-        model.ln_r_start.clone_from(&model.ln_r);
-        model.lum_start.clone_from(&model.lum);
-        model.v_start.clone_from(&model.v);
-        model.u_start.clone_from(&model.u);
-    }
-    model.sig.clone_from(&saved_sig);
-    model.mlt_vc.clone_from(&saved_mlt_vc);
-    model.aux.mlt_vc_old.clone_from(&saved_mlt_vc_old);
-    // Preserve exact serialized `dq` bytes (`normalize_dqs` breaks 0 ULP parity).
-    model.set_qs();
-    model.set_xqs();
-    model.set_m_and_dm();
-    model.set_m_grav_and_grav();
-    model.pack_xh();
-    if model.controls.rsp_flag {
-        crate::micro::set_basic_vars(&mut model)?;
-        if let Some([t, pg, pr, kap, cs, cp, r, m, dm, dmb]) =
-            saved_rsp_model_vecs
-        {
-            (model.t, model.pgas, model.prad) = (t, pg, pr);
-            (model.opacity, model.csound, model.cp) = (kap, cs, cp);
-            (model.r, model.m, model.dm, model.dm_bar) = (r, m, dm, dmb);
-            model.set_m_grav_and_grav();
-            model.pack_xh();
-            for k in 0..nz {
-                model.rho[k] = flexmesa_math::exp(model.lnd[k]);
-                model.peos[k] = model.pgas[k] + model.prad[k];
-                let r_in = if k + 1 < nz {
-                    model.r[k + 1]
-                } else {
-                    model.r_center
-                };
-                model.rmid[k] = 0.5 * (model.r[k] + r_in);
-            }
-        } else {
-            crate::micro::do_eos(&mut model)?;
-            crate::micro::do_kap(&mut model)?;
-        }
-    } else {
-        crate::hydro_vars::set_hydro_vars(&mut model, false, false)?;
-        if model.controls.op_split_burn {
-            crate::struct_burn_mix::apply_burn_avg_epsnuc(&mut model);
-        }
-        let dt_photo = model.dt;
-        crate::struct_burn_mix::refresh_mixing_state(&mut model, dt_photo, &[]);
-        model.save_start_values()?;
-    }
-    model.mstar_start = saved_mstar_start;
-    if saved_lnd_start.len() == nz {
-        (model.lnd_start, model.ln_t_start, model.ln_r_start) =
-            (saved_lnd_start, saved_ln_t_start, saved_ln_r_start);
-        (model.lum_start, model.v_start, model.u_start) =
-            (saved_lum_start, saved_v_start, saved_u_start);
-    }
-    model.aux.omega_old = saved_omega_old;
-    model.aux.j_rot_old = saved_j_rot_old;
-    model.aux.eps_mdot_old = saved_eps_mdot_old;
-    model.aux.alpha_rti_start = saved_alpha_rti_start;
-    model.aux.p_face_start = saved_p_face_start;
-    model.aux.u_face_start = saved_u_face_start;
-    model.sig = saved_sig;
-    model.mlt_vc = saved_mlt_vc;
-    model.aux.mlt_vc_old = saved_mlt_vc_old;
-    if let Some(rsp) = saved_rsp {
-        model.aux.rsp = rsp;
-    }
-    if !model.controls.rsp_flag {
-        if model.controls.rti_flag {
-            crate::hydro_rti::set_rti_mixing_info(&mut model);
-        }
-        if model.controls.u_flag {
-            crate::riemann_ad::do_uface_and_pface(&mut model)?;
-        }
-        if model.controls.rti_flag {
-            crate::hydro_rti::set_dpdr_drhodr_info(&mut model);
-        }
-    }
-
     Ok(model)
-}
-
-struct PhotoPart1Header {
-    nz: usize,
-    species: usize,
-    nvar_hydro: usize,
-    chem_id: Vec<usize>,
-    saved_net_name: String,
-    job_tags: [u8; 8],
-    saved_mode: flexmesa_math::NumericsMode,
-}
-
-fn decode_photo_part1_header(
-    bytes: &[u8],
-) -> Result<(PhotoPart1Header, usize), StarError> {
-    let eof = |ctx: &str| StarError::IoError(format!("photo {ctx}"));
-    let mut pos = 0_usize;
-    let read_i32 = |pos: &mut usize| -> Result<i32, StarError> {
-        let s: [u8; 4] = bytes
-            .get(*pos..*pos + 4)
-            .ok_or_else(|| eof("EOF i32"))?
-            .try_into()
-            .map_err(|_| eof("EOF i32"))?;
-        *pos += 4;
-        Ok(i32::from_le_bytes(s))
-    };
-    let read_u64 = |pos: &mut usize| -> Result<u64, StarError> {
-        let s: [u8; 8] = bytes
-            .get(*pos..*pos + 8)
-            .ok_or_else(|| eof("EOF u64"))?
-            .try_into()
-            .map_err(|_| eof("EOF u64"))?;
-        *pos += 8;
-        Ok(u64::from_le_bytes(s))
-    };
-
-    let version = read_i32(&mut pos)?;
-    if version != STAR_DEF_VERSION {
-        return Err(StarError::IoError(format!(
-            "unsupported photo version {version} (expected {STAR_DEF_VERSION})"
-        )));
-    }
-    let part = read_i32(&mut pos)?;
-    if part != 1 {
-        return Err(StarError::IoError(format!(
-            "photo sentinel mismatch: expected part 1, got {part}"
-        )));
-    }
-    let nz = read_u64(&mut pos)? as usize;
-    let species = read_u64(&mut pos)? as usize;
-    let nvar_hydro = read_u64(&mut pos)? as usize;
-    let species_bytes = species
-        .checked_mul(8)
-        .ok_or_else(|| eof("species overflow"))?;
-    let chem_end = pos
-        .checked_add(species_bytes)
-        .ok_or_else(|| eof("species overflow"))?;
-    let chem_slice =
-        bytes.get(pos..chem_end).ok_or_else(|| eof("EOF chem_id"))?;
-    pos = chem_end;
-    let chem_id: Vec<usize> = chem_slice
-        .as_chunks::<8>()
-        .0
-        .iter()
-        .map(|&c| u64::from_le_bytes(c) as usize)
-        .collect();
-
-    let net_len = read_u64(&mut pos)? as usize;
-    let net_end = pos
-        .checked_add(net_len)
-        .ok_or_else(|| eof("net_name overflow"))?;
-    let net_slice =
-        bytes.get(pos..net_end).ok_or_else(|| eof("EOF net_name"))?;
-    pos = net_end;
-    let saved_net_name = std::str::from_utf8(net_slice)
-        .map_err(|e| {
-            StarError::IoError(format!("invalid UTF-8 net_name: {e}"))
-        })?
-        .to_owned();
-
-    let job_tags: [u8; 8] = bytes
-        .get(pos..pos + 8)
-        .ok_or_else(|| eof("EOF job/controls flags"))?
-        .try_into()
-        .map_err(|_| eof("EOF job/controls flags"))?;
-    pos += 8;
-    let saved_mode = flexmesa_math::NumericsMode::from_wire_tag(job_tags[7])
-        .ok_or_else(|| {
-            StarError::IoError(format!(
-                "invalid photo numerics_mode tag {}",
-                job_tags[7]
-            ))
-        })?;
-
-    Ok((
-        PhotoPart1Header {
-            nz,
-            species,
-            nvar_hydro,
-            chem_id,
-            saved_net_name,
-            job_tags,
-            saved_mode,
-        },
-        pos,
-    ))
-}
-
-/// Extracts the [`flexmesa_math::NumericsMode`] recorded in the Part 1 header
-/// of serialized `.photo` checkpoint `bytes` (`#165`).
-pub fn photo_numerics_mode(
-    bytes: &[u8],
-) -> Result<flexmesa_math::NumericsMode, StarError> {
-    decode_photo_part1_header(bytes).map(|(hdr, _)| hdr.saved_mode)
 }

@@ -30,7 +30,9 @@ use crate::ion_offset::compute_ion_offset_from_za;
 use crate::types::{EosError, EosEvalOutput, I_FRAC_SKYE};
 
 /// Configuration controls for the `Skye` equation of state (`eos.defaults`).
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize,
+)]
 pub struct SkyeConfig {
     /// Minimum species mass fraction included in `Skye` (`1e-4`).
     pub mass_fraction_limit_for_skye: f64,

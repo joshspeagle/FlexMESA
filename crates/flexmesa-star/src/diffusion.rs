@@ -17,7 +17,9 @@ use crate::struct_burn_mix::ScalarTridiagFactor;
 /// Collision-integral formulation for multi-species Burgers diffusion
 /// (`diffusion_use_paquette`, `diffusion_use_stanton_murillo`,
 /// `diffusion_use_caplan22`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize,
+)]
 pub enum DiffusionScheme {
     /// Iben & MacDonald (1985) analytic screened Coulomb logarithm.
     IbenMacDonald,

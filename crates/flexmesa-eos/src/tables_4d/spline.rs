@@ -17,7 +17,16 @@ pub use crate::tables_4d::table_io::DT_RAW_BIN_MAGIC;
 pub const NUM_EOS_TABLE_VALS: usize = 16;
 
 /// Identifies which 4D `(X, Z, logQ, logT)` EOS table family is being queried.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 #[repr(u8)]
 pub enum EosDtTableKind {
     /// Combined OPAL and Saumon-Chabrier-Van Horn (`eosDT_data/mesa-eosDT_*.data`).

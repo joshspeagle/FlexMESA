@@ -386,6 +386,25 @@ pub fn star_evolve_step(
                 }
             }
         }
+        // Fail immediately on non-retriable configuration, I/O, or termination
+        // errors without burning retry budget or shrinking `dt`.
+        if let Err(
+            non_retriable @ (StarError::InvalidInput(_)
+            | StarError::IoError(_)
+            | StarError::Terminated { .. }),
+        ) = attempt
+        {
+            let saved = PreAttemptScalars {
+                dt_old: prev_dt_old,
+                mstar_dot_old: prev_mstar_dot_old,
+                dt_limit_ratio_old: prev_dt_limit_ratio_old,
+                rot_boost_old: prev_rot_boost_old,
+                was_in_limit: prev_was_in_limit,
+            };
+            restore_attempt_state(model, pre_remesh_model.take(), saved)?;
+            return Err(non_retriable);
+        }
+
         // Why this attempt is being retried. Kept so that the final failure
         // names the cause of the last attempt (for example a missing table
         // or a rejected option) instead of only counting retries.
@@ -523,19 +542,16 @@ pub fn star_evolve_step(
         }
         model.num_retries += 1;
         dt_try = next_dt;
-        if let Some(snap) = pre_remesh_model.take() {
-            snap.restore_into(model)?;
+        let saved = PreAttemptScalars {
+            dt_old: prev_dt_old,
+            mstar_dot_old: prev_mstar_dot_old,
+            dt_limit_ratio_old: prev_dt_limit_ratio_old,
+            rot_boost_old: prev_rot_boost_old,
+            was_in_limit: prev_was_in_limit,
+        };
+        if restore_attempt_state(model, pre_remesh_model.take(), saved)? {
             num_splits = 0;
             num_merges = 0;
-            if !model.controls.rsp2_flag && model.aux.total_energy == 0.0 {
-                model.aux.total_energy = eval_total_energy_integrals(model).5;
-            }
-            model.save_old_values();
-            model.aux.step_hist.mstar_dot_old = prev_mstar_dot_old;
-            model.dt_old = prev_dt_old;
-        } else {
-            restore_from_old(model)?;
-            model.dt_old = prev_dt_old;
         }
         let target_mod = model.model_number + 1;
         model.aux.step_hist.model_number_for_last_retry = Some(target_mod);
@@ -545,6 +561,39 @@ pub fn star_evolve_step(
             .timestep_hold
             .max(target_mod + model.controls.ts_stop.retry_hold);
     }
+}
+
+#[derive(Clone, Copy)]
+struct PreAttemptScalars {
+    dt_old: f64,
+    mstar_dot_old: f64,
+    dt_limit_ratio_old: f64,
+    rot_boost_old: f64,
+    was_in_limit: bool,
+}
+
+fn restore_attempt_state(
+    model: &mut StarModel,
+    snap: Option<crate::PrimaryStateBuffer>,
+    saved: PreAttemptScalars,
+) -> Result<bool, StarError> {
+    let restored_remesh = if let Some(buf) = snap {
+        buf.restore_into(model)?;
+        if !model.controls.rsp2_flag && model.aux.total_energy == 0.0 {
+            model.aux.total_energy = eval_total_energy_integrals(model).5;
+        }
+        model.save_old_values();
+        model.aux.step_hist.mstar_dot_old = saved.mstar_dot_old;
+        true
+    } else {
+        restore_from_old(model)?;
+        false
+    };
+    model.dt_old = saved.dt_old;
+    model.dt_limit_ratio_old = saved.dt_limit_ratio_old;
+    model.aux.step_hist.rotational_mdot_boost_old = saved.rot_boost_old;
+    model.aux.step_hist.was_in_implicit_wind_limit = saved.was_in_limit;
+    Ok(restored_remesh)
 }
 
 fn apply_delta_mdot_limits(

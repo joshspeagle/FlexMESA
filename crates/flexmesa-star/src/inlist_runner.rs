@@ -16,7 +16,7 @@ use crate::inlist::{InlistBundle, InlistLoadOptions};
 use crate::mesa_profile::StarLogsWriter;
 use crate::model::StarModel;
 use crate::model_io::{
-    compute_photo_checksum, read_photo_bytes, write_mod_string,
+    compute_photo_checksum, load_photo_bytes, write_mod_string,
     write_photo_bytes,
 };
 use crate::rn_parser::{parse_rn_stages, RnStage};
@@ -483,11 +483,7 @@ pub fn verify_photo_restart_parity(
     }
 
     let photo_bytes = write_photo_bytes(&continued);
-    let mut restarted = read_photo_bytes(
-        &photo_bytes,
-        continued.controls.clone(),
-        continued.job.clone(),
-    )?;
+    let mut restarted = load_photo_bytes(&photo_bytes)?;
 
     for _ in 0..n_verify_steps {
         star_evolve_step(&mut continued, do_remesh, op_split, true)?;

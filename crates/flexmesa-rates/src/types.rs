@@ -26,7 +26,9 @@ pub const LOW_T9_PP_CUTOFF: f64 = 1.0e-5;
 pub const MAX_LN_LAMBDA: f64 = 227.955_924_206_411;
 
 /// Plasma electrostatic screening formulation (`rates_def.f90`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize,
+)]
 pub enum ScreeningMode {
     /// Unscreened reaction rates (`no_screening = 0`, $F_{\mathrm{sc}} = 1$).
     NoScreening = 0,

@@ -4,7 +4,7 @@
 
 /// History, radial profile, and report-averaging controls (`&controls` namelist
 /// in `star_data/private/star_controls.inc` and `star/defaults/controls.defaults`).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct OutputControls {
     /// Directory for `history.data`, `profiles.index`, and `profileN.data` (`log_directory`, `'LOGS'` default, `controls.defaults:223`).
     pub log_directory: String,

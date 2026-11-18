@@ -6,7 +6,7 @@
 
 use flexmesa_star::{
     load_zams_model, set_hydro_vars, star_evolve_step, PrimaryStateBuffer,
-    StarControls, StarJobControls,
+    StarControls, StarError, StarJobControls,
 };
 
 fn assert_bits_eq(label: &str, actual: &[f64], expected_bits: &[u64]) {
@@ -164,4 +164,30 @@ fn test_star_evolve_step_populates_solver_calls_and_cache_hits() {
     assert!(model.total_num_solver_calls >= 1);
     assert!(model.total_num_solver_iterations >= rep.iterations);
     assert!(model.micro_cache_hits > 0);
+}
+
+#[test]
+fn test_non_retriable_star_error_fails_immediately_with_zero_retries() {
+    let ctrl = StarControls {
+        initial_mass: 1.0,
+        do_phase_separation: true,
+        phase_separation_option: String::from("bogus_phase_sep"),
+        ..StarControls::default()
+    };
+    let mut model =
+        load_zams_model(ctrl, StarJobControls::default()).expect("1 Msun ZAMS");
+    let orig_dt = 1.0e11;
+    let orig_nz = model.nz;
+    model.dt = orig_dt;
+    model.dt_next = orig_dt;
+
+    let err = star_evolve_step(&mut model, true, false, true)
+        .expect_err("invalid phase_separation_option must fail loudly");
+    assert!(
+        matches!(err, StarError::InvalidInput(_)),
+        "expected StarError::InvalidInput, got: {err:?}"
+    );
+    assert_eq!(model.num_retries, 0, "non-retriable errors must not retry");
+    assert_eq!(model.dt.to_bits(), orig_dt.to_bits());
+    assert_eq!(model.nz, orig_nz);
 }

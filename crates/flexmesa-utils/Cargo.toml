@@ -8,6 +8,7 @@ repository.workspace = true
 description = "IEEE-754 finiteness guards, string/integer dictionaries, and reaction-network token lexer for FlexMESA"
 
 [dependencies]
+serde.workspace = true
 
 [dev-dependencies]
 flexmesa-testing = { path = "../flexmesa-testing" }

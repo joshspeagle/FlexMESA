@@ -42,7 +42,7 @@ pub(crate) fn compute_rl_and_gaps(
 }
 
 /// Companion representation in a coupled [`BinarySystem`].
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum BinaryCompanion {
     /// Point-mass compact object (white dwarf, neutron star, or Kerr black hole).
     PointMass {
@@ -59,7 +59,16 @@ pub enum BinaryCompanion {
 
 /// Cumulative binary retry, implicit trial, timestep cut, and hard-limit
 /// rollback counters preserved across snapshot rollbacks on [`BinarySystem`].
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Default,
+    PartialEq,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 pub struct BinaryStepCounters {
     /// Cumulative outer step retries (`outer_retry > 0`).
     pub num_retries: usize,
@@ -72,7 +81,7 @@ pub struct BinaryStepCounters {
 }
 
 /// Coupled binary star evolution state and step driver (`binary_info`).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct BinarySystem {
     /// Active donor star model (`s_donor`).
     pub donor: StarModel,
@@ -748,4 +757,130 @@ impl BinarySystem {
         self.refresh_tidal_deformation_hooks(false)?;
         Ok(())
     }
+
+    /// Returns the recorded `NumericsMode` from serialized `BinarySystem`
+    /// checkpoint bytes without decoding the payload.
+    ///
+    /// # Errors
+    /// Returns [`StarError::IoError`] if the header is invalid or truncated.
+    pub fn checkpoint_numerics_mode(
+        bytes: &[u8],
+    ) -> Result<flexmesa_math::NumericsMode, StarError> {
+        decode_binary_checkpoint_header(bytes).map(|(mode, _)| mode)
+    }
+
+    /// Serializes the full coupled [`BinarySystem`] (both stars, controls,
+    /// orbit, and retry-proof counters) into deterministic binary checkpoint bytes.
+    ///
+    /// # Errors
+    /// Returns [`StarError::IoError`] if `serde` binary encoding fails.
+    pub fn to_checkpoint_bytes(&self) -> Result<Vec<u8>, StarError> {
+        let payload =
+            flexmesa_utils::bin_codec::to_bytes(self).map_err(|e| {
+                StarError::IoError(format!(
+                    "binary checkpoint serialization failed: {e}"
+                ))
+            })?;
+        let mut out =
+            Vec::with_capacity(BINARY_CHECKPOINT_HEADER_LEN + payload.len());
+        out.extend_from_slice(BINARY_CHECKPOINT_MAGIC);
+        out.extend_from_slice(&BINARY_CHECKPOINT_VERSION.to_le_bytes());
+        out.push(flexmesa_math::numerics_mode().to_wire_tag());
+        out.extend_from_slice(&payload);
+        Ok(out)
+    }
+
+    /// Restores a coupled [`BinarySystem`] from serialized binary checkpoint
+    /// bytes and reattaches `use_tidal_deformation` hooks without re-normalizing
+    /// stored `dq` arrays.
+    ///
+    /// # Errors
+    /// Returns [`StarError::IoError`] if header validation fails,
+    /// `numerics_mode` mismatches, or decoding fails.
+    pub fn from_checkpoint_bytes(bytes: &[u8]) -> Result<Self, StarError> {
+        let (saved_mode, offset) = decode_binary_checkpoint_header(bytes)?;
+        let active_mode = flexmesa_math::numerics_mode();
+        if saved_mode != active_mode {
+            return Err(StarError::IoError(format!(
+                "photo numerics_mode mismatch: checkpoint saved in \"{saved_mode}\" \
+                 mode cannot be loaded while active mode is \"{active_mode}\""
+            )));
+        }
+        let mut sys: Self = flexmesa_utils::bin_codec::from_bytes(
+            &bytes[offset..],
+        )
+        .map_err(|e| {
+            StarError::IoError(format!("binary checkpoint decode failed: {e}"))
+        })?;
+        sys.refresh_tidal_deformation_hooks(false)?;
+        Ok(sys)
+    }
+
+    /// Writes a binary checkpoint file to `path` on disk.
+    ///
+    /// # Errors
+    /// Returns [`StarError::IoError`] if encoding or writing fails.
+    pub fn save_checkpoint(
+        &self,
+        path: &std::path::Path,
+    ) -> Result<(), StarError> {
+        let bytes = self.to_checkpoint_bytes()?;
+        std::fs::write(path, bytes).map_err(|e| {
+            StarError::IoError(format!(
+                "failed to write binary checkpoint '{}': {e}",
+                path.display()
+            ))
+        })
+    }
+
+    /// Reads and restores a [`BinarySystem`] from a checkpoint file on disk.
+    ///
+    /// # Errors
+    /// Returns [`StarError::IoError`] if reading or decoding fails.
+    pub fn load_checkpoint(path: &std::path::Path) -> Result<Self, StarError> {
+        let bytes = std::fs::read(path).map_err(|e| {
+            StarError::IoError(format!(
+                "failed to read binary checkpoint '{}': {e}",
+                path.display()
+            ))
+        })?;
+        Self::from_checkpoint_bytes(&bytes)
+    }
+}
+
+const BINARY_CHECKPOINT_MAGIC: &[u8; 8] = b"FMBINCP1";
+const BINARY_CHECKPOINT_VERSION: u32 = 1;
+const BINARY_CHECKPOINT_HEADER_LEN: usize = 8 + 4 + 1;
+
+fn decode_binary_checkpoint_header(
+    bytes: &[u8],
+) -> Result<(flexmesa_math::NumericsMode, usize), StarError> {
+    if bytes.len() < BINARY_CHECKPOINT_HEADER_LEN {
+        return Err(StarError::IoError(String::from(
+            "binary checkpoint EOF header",
+        )));
+    }
+    if &bytes[..8] != BINARY_CHECKPOINT_MAGIC {
+        return Err(StarError::IoError(String::from(
+            "invalid binary checkpoint magic bytes",
+        )));
+    }
+    let version =
+        u32::from_le_bytes(bytes[8..12].try_into().map_err(|_| {
+            StarError::IoError(String::from("binary checkpoint EOF version"))
+        })?);
+    if version != BINARY_CHECKPOINT_VERSION {
+        return Err(StarError::IoError(format!(
+            "unsupported binary checkpoint version {version} \
+             (expected {BINARY_CHECKPOINT_VERSION})"
+        )));
+    }
+    let mode = flexmesa_math::NumericsMode::from_wire_tag(bytes[12])
+        .ok_or_else(|| {
+            StarError::IoError(format!(
+                "invalid binary checkpoint numerics_mode tag {}",
+                bytes[12]
+            ))
+        })?;
+    Ok((mode, BINARY_CHECKPOINT_HEADER_LEN))
 }

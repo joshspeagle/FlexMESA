@@ -17,7 +17,9 @@ pub const CMS_XSTR: [&str; CMS_NUM_XS] = [
 ];
 
 /// Configuration for the `CMS` equation of state (`eos.defaults`).
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize,
+)]
 pub struct CmsConfig {
     /// Use a fixed composition index (`0..=10`) instead of interpolating in $X$ (default `false`).
     pub use_fixed_composition: bool,

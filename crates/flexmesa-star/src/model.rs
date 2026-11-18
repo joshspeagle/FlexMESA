@@ -28,7 +28,7 @@ use crate::star_ad::{StarAdExt, StarAdOrder1};
 
 /// Canonical 1D stellar structure and evolution state (`Star_Info` in
 /// `star_data/public/star_data_def.f90` and `star_data_step_work.inc`).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct StarModel {
     /// Active number of Lagrangian zones (`nz`).
     pub nz: usize,
@@ -93,8 +93,10 @@ pub struct StarModel {
     /// Cumulative wind/implicit-step redos (`num_redos`).
     pub num_redos: usize,
     /// Cumulative microphysics cache hits in [`crate::hydro_vars::set_hydro_vars`].
+    #[serde(skip)]
     pub micro_cache_hits: usize,
     /// Cumulative microphysics cache misses in [`crate::hydro_vars::set_hydro_vars`].
+    #[serde(skip)]
     pub micro_cache_misses: usize,
 
     // --- Primary State Vectors (len = nz, `xa` len = nz * species) ---

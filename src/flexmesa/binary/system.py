@@ -80,6 +80,15 @@ class BinarySystem:
         """Advance the coupled binary system by `dt` (s)."""
         return self._inner.step(float(dt))
 
+    @classmethod
+    def from_photo_bytes(cls, data: bytes) -> BinarySystem:
+        """Restore a `BinarySystem` from serialized binary checkpoint bytes."""
+        return cls(_rust.RustBinarySystem.from_photo_bytes(data))
+
+    def to_photo_bytes(self) -> bytes:
+        """Serialize the full `BinarySystem` state to binary checkpoint bytes."""
+        return self._inner.to_photo_bytes()
+
     @property
     def donor(self) -> star_model.StarModel:
         """Return a snapshot of the donor `StarModel`."""

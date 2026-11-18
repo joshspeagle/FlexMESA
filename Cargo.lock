@@ -207,6 +207,7 @@ dependencies = [
  "flexmesa-testing",
  "flexmesa-utils",
  "proptest",
+ "serde",
 ]
 
 [[package]]
@@ -247,6 +248,8 @@ dependencies = [
  "flexmesa-schema",
  "flexmesa-star",
  "flexmesa-utils",
+ "rayon",
+ "serde",
 ]
 
 [[package]]
@@ -275,6 +278,7 @@ name = "flexmesa-const"
 version = "0.1.0"
 dependencies = [
  "flexmesa-testing",
+ "serde",
 ]
 
 [[package]]
@@ -308,6 +312,7 @@ dependencies = [
  "flexmesa-math",
  "flexmesa-utils",
  "rayon",
+ "serde",
 ]
 
 [[package]]
@@ -358,6 +363,7 @@ dependencies = [
  "flexmesa-num",
  "flexmesa-utils",
  "rayon",
+ "serde",
 ]
 
 [[package]]
@@ -461,6 +467,7 @@ dependencies = [
  "flexmesa-eos",
  "flexmesa-interp1d",
  "flexmesa-math",
+ "serde",
 ]
 
 [[package]]
@@ -495,6 +502,7 @@ dependencies = [
  "flexmesa-turb",
  "flexmesa-utils",
  "rayon",
+ "serde",
 ]
 
 [[package]]
@@ -513,6 +521,7 @@ dependencies = [
  "flexmesa-math",
  "flexmesa-testing",
  "flexmesa-utils",
+ "serde",
 ]
 
 [[package]]
@@ -521,6 +530,7 @@ version = "0.1.0"
 dependencies = [
  "flexmesa-testing",
  "proptest",
+ "serde",
 ]
 
 [[package]]

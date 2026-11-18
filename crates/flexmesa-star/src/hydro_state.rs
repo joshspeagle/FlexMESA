@@ -9,7 +9,7 @@ use crate::star_ad::{StarAdExt, StarAdOrder1};
 /// Per-step scalar history, solver/substep counters, and retry-hold state
 /// consumed by [`crate::timestep_limits::timestep_controller`] and
 /// [`crate::evolve`] (`star_data_step_work.inc`).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct StepHistoryScalars {
     /// Previous step effective temperature $T_{\mathrm{eff,old}}$ in K (`Teff_old`).
     pub teff_old: f64,
@@ -127,7 +127,7 @@ impl std::fmt::Debug for TidalDeformationHandle {
 
 /// Auxiliary hydrodynamic, thermodynamic, and heating state vectors for
 /// `flexmesa-star` (`star_data_step_work.inc`).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct HydroAuxState {
     /// Whether the model is currently in an initialization relaxation phase
     /// (`doing_relax` in `star_data_def.f90`).
@@ -243,6 +243,7 @@ pub struct HydroAuxState {
     /// Logarithmic radius derivative $\partial i_{\mathrm{rot},k} / \partial \ln r_k$ (`d_i_rot_dlnR`).
     pub d_i_rot_dlnr: Vec<f64>,
     /// Optional binary Roche tidal distortion hook (`use_tidal_deformation`).
+    #[serde(skip)]
     pub tidal_deformation: Option<TidalDeformationHandle>,
     /// Brunt-Väisälä composition buoyancy term $N_{\mu,k}^2$ in $\mathrm{s^{-2}}$ (`brunt_N2_composition_term`).
     pub brunt_n2_composition_term: Vec<f64>,
@@ -283,6 +284,7 @@ pub struct HydroAuxState {
     /// Per-step scalar history, solver/substep counters, and retry-hold state.
     pub step_hist: StepHistoryScalars,
     /// Per-model 2-slot microphysics cache (never duplicated on clone).
+    #[serde(skip)]
     pub micro_cache: crate::micro_cache::MicrophysicsCache,
 }
 

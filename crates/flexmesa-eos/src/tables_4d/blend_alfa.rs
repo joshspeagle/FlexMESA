@@ -17,7 +17,9 @@ use flexmesa_autodiff::AutoDiffReal2VarOrder1;
 ///
 /// Matches the default `FreeEOS` namelist controls in `eos/defaults/eos.defaults`
 /// (lines 84..125).
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize,
+)]
 pub struct FreeEosConfig {
     /// Upper $\log_{10} Q$ outer boundary where `FreeEOS` is 0% (default `5.6`).
     pub log_q_max_hi: f64,
@@ -101,7 +103,9 @@ impl Default for FreeEosConfig {
 ///
 /// Matches the default `OPAL/SCVH` namelist controls in `eos/defaults/eos.defaults`
 /// (lines 127..152).
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize,
+)]
 pub struct OpalScvhConfig {
     /// Lower $\log_{10} T$ boundary where fallback (`HELM`/`ideal`) is 100% (`logT8`, default `2.2`).
     pub log_t_low_all_helm: f64,

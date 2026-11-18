@@ -183,6 +183,8 @@ pub fn eval_single_weak_blended(
     let e_rhs = nuclides.get_by_id(cid_rhs).unwrap();
 
     let mut ev = if has_weaklib {
+        // Optional weaklib pair lookup: fall back to Reaclib / half-life below
+        // when the pair has no tabulated weaklib entry (upstream weaklib table guard).
         eval_weak_reaction_pair(
             &e_lhs.name,
             &e_rhs.name,
@@ -225,9 +227,9 @@ pub fn eval_single_weak_blended(
     }
 
     let _ = (temp, z2bar, d_eta_dln_t, d_eta_dln_rho);
-    if do_ecapture
-        && cat.special_ecapture_data(&e_lhs.name, &e_rhs.name).is_ok()
-    {
+    // Optional special electron-capture override when the catalog has an entry
+    // for `(lhs, rhs)`; pairs without special tables keep the weaklib/reaclib rate.
+    if do_ecapture {
         if let Ok(ec) = eval_ecapture_pair(
             &e_lhs.name,
             &e_rhs.name,
@@ -253,6 +255,8 @@ fn weak_low_t_rate(
     rhs_id: u16,
     has_weaklib: bool,
 ) -> f64 {
+    // Catalog lookup: fall back to tabulated weak half-life when Reaclib terms
+    // are absent for this weak transition.
     if let Ok((is_rev, terms)) = cat.reaclib_terms(rxn_name) {
         if !terms.is_empty() {
             let slice = if has_weaklib {

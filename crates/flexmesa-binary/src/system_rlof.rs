@@ -27,7 +27,7 @@ use crate::system_jdot::{EdotBreakdown, JdotBreakdown};
 
 /// Per-step wind, RLOF, Eddington, and system mass-loss accounting (`adjust_mdots`
 /// in `binary/private/binary_mdot.f90:506-660`, indexed `[donor_slot, accretor_slot]`).
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, serde::Serialize, serde::Deserialize)]
 pub struct CoupledMdotAccounting {
     /// Intrinsic stellar wind rates `[mdot_wind_donor, mdot_wind_accretor]` ($\le 0$, $\mathrm{g\,s^{-1}}$).
     pub mdot_wind_intrinsic: [f64; 2],

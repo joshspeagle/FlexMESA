@@ -11,7 +11,9 @@ use flexmesa_atm::{
 };
 
 /// Atmosphere boundary condition option (`atm_option` in `star_controls.inc`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize,
+)]
 pub enum AtmOption {
     /// Grey $T(\tau)$ relation (`'T_tau'`).
     TTau,
@@ -22,7 +24,9 @@ pub enum AtmOption {
 }
 
 /// Grey $T(\tau)$ relation identifier (`atm_T_tau_relation` in `star_controls.inc`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize,
+)]
 pub enum AtmTTauRelation {
     /// Eddington grey $T^4 = \tfrac{3}{4} T_{\mathrm{eff}}^4 (\tau + 2/3)$ (`'Eddington'`).
     Eddington,
@@ -162,7 +166,9 @@ impl fmt::Display for StarError {
 impl std::error::Error for StarError {}
 
 /// Energy conservation equation formulation (`energy_eqn_option` in MESA).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize,
+)]
 pub enum EnergyEqnOption {
     /// Total energy conservation $de/dt + P\,d(1/\rho)/dt$ (`'dedt'`).
     Dedt,
@@ -175,7 +181,7 @@ pub enum EnergyEqnOption {
 ///
 /// All indices are 0-based into per-zone slices of length `nvar_hydro` or
 /// `nvar_total = nvar_hydro + species`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct VarLayout {
     /// Cell-centered $\ln\rho$ variable slot (`0`, Fortran `1`).
     pub i_lnd: usize,
@@ -423,7 +429,7 @@ impl VarLayout {
 
 /// Job-level initialization and model-building controls (`&star_job` namelist
 /// in `star_data/private/star_job_controls.inc`).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct StarJobControls {
     /// Whether to construct an initial $n = 1.5$ pre-MS polytrope model.

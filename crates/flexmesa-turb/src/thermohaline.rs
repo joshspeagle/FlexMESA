@@ -30,7 +30,16 @@ use crate::{TurbError, TurbOutput, TurbResult, TurbScalar};
 
 /// Thermohaline mixing prescription (`thermohaline_option` in
 /// `thermohaline.f90`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 pub enum ThermohalineOption {
     /// Kippenhahn, Ruschenplatt, & Thomas (1980) linear salt-finger formula.
     Kippenhahn,

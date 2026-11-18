@@ -15,7 +15,16 @@ use crate::skye::coulomb_liquid::{
 
 /// Prescription for multi-component solid linear-mixing-rule corrections in
 /// `Skye` (`Skye_solid_mixing_rule`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Default,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 pub enum SkyeSolidMixingRule {
     /// Potekhin & Chabrier (2013) analytical fit (`"PC"`, MESA default).
     #[default]

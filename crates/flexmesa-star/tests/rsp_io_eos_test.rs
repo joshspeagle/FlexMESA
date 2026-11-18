@@ -9,7 +9,7 @@ use flexmesa_star::{
     compute_photo_checksum, eval1_gamma_pt_get_rho, eval1_mesa_eos_de_and_kap,
     eval1_mesa_eos_degas_and_kap, eval1_mesa_rho_given_pt,
     eval1_mesa_t_given_dp, eval_mesa_eos_and_kap, get_or_load_net,
-    get_surf_p_t_kap, read_mod_str, read_photo_bytes, set_rho_for_new_pgas,
+    get_surf_p_t_kap, load_photo_bytes, read_mod_str, set_rho_for_new_pgas,
     set_t_for_new_egas, set_t_for_new_energy, set_t_for_new_pgas,
     write_mod_string, write_photo_bytes, InlistBundle, RspChemCache,
     RspDerivedConsts, StarControls, StarJobControls,
@@ -129,12 +129,7 @@ fn test_all_seven_rsp_golden_mods_and_photos_roundtrip_losslessly() {
         m1.aux.rsp.have_set_velocities = true;
         m1.aux.rsp.work[10] = 9.876_543_21e35;
         let photo1 = write_photo_bytes(&m1);
-        let restored = read_photo_bytes(
-            &photo1,
-            StarControls::default(),
-            StarJobControls::default(),
-        )
-        .expect("read_photo_bytes");
+        let restored = load_photo_bytes(&photo1).expect("load_photo_bytes");
         let photo2 = write_photo_bytes(&restored);
         assert_eq!(
             compute_photo_checksum(&photo1),

@@ -2,8 +2,8 @@
   "rust": {
     "tool": "cargo llvm-cov",
     "overall": {
-      "lines": 93004,
-      "covered": 66228,
+      "lines": 92978,
+      "covered": 66194,
       "percent": 71.2
     },
     "by_crate": [
@@ -100,8 +100,8 @@
       {
         "crate": "flexmesa-math",
         "lines": 775,
-        "covered": 598,
-        "percent": 77.2
+        "covered": 589,
+        "percent": 76.0
       },
       {
         "crate": "flexmesa-mtx",
@@ -111,8 +111,8 @@
       },
       {
         "crate": "flexmesa-net",
-        "lines": 7627,
-        "covered": 6600,
+        "lines": 7601,
+        "covered": 6575,
         "percent": 86.5
       },
       {

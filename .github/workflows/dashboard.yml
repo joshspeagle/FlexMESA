@@ -240,7 +240,7 @@ jobs:
               break
             fi
             git add README.md docs/index.md docs/benchmarks/progress-dashboard.md benchmarks/dashboard/
-            git commit -m "chore(dashboard): auto-refresh generated progress dashboard (#174)"
+            git commit -m "chore(dashboard): auto-refresh generated progress dashboard"
             if git push origin HEAD:main; then
               PUSHED="true"
               break

@@ -168,8 +168,8 @@
   "python": {
     "tool": "pytest --cov",
     "overall": {
-      "statements": 21565,
-      "covered": 19321,
+      "statements": 21573,
+      "covered": 19329,
       "percent": 89.6
     },
     "by_subpackage": [
@@ -295,9 +295,9 @@
       },
       {
         "subpackage": "flexmesa.plotting",
-        "statements": 797,
-        "covered": 751,
-        "percent": 94.2
+        "statements": 805,
+        "covered": 759,
+        "percent": 94.3
       },
       {
         "subpackage": "flexmesa.rates",

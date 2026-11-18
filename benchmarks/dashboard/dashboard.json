@@ -916,8 +916,8 @@
     "python": {
       "tool": "pytest --cov",
       "overall": {
-        "statements": 21565,
-        "covered": 19321,
+        "statements": 21573,
+        "covered": 19329,
         "percent": 89.6
       },
       "by_subpackage": [
@@ -1043,9 +1043,9 @@
         },
         {
           "subpackage": "flexmesa.plotting",
-          "statements": 797,
-          "covered": 751,
-          "percent": 94.2
+          "statements": 805,
+          "covered": 759,
+          "percent": 94.3
         },
         {
           "subpackage": "flexmesa.rates",
@@ -1742,6 +1742,19 @@
     {
       "date_utc": "2026-11-18",
       "commit": "3153e32",
+      "event": "main merge",
+      "engine_ported_pct": "13.9",
+      "all_verified_pct": "0.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "71.1",
+      "python_cov_pct": "89.6",
+      "closed_140": "9",
+      "total_140": "32",
+      "deferred_169": "17"
+    },
+    {
+      "date_utc": "2026-11-18",
+      "commit": "916f075",
       "event": "main merge",
       "engine_ported_pct": "13.9",
       "all_verified_pct": "0.0",

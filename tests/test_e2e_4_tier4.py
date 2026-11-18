@@ -266,7 +266,7 @@ def test_tier4_and_dev_raw_cases_rejected_and_cleaned_copies_smoke(
         )
 
     star_root = clean_root / "star" / "test_suite"
-    # gyre_in_mesa_wd stops on a convergence failure (#157) and gyre_in_mesa_rsg
+    # gyre_in_mesa_wd stops on a step failure (#157) and gyre_in_mesa_rsg
     # completes but misses its target-mode check with the in-house pulsation
     # scaffold (#170). Both are declared gaps, so they are asserted separately.
     declared_gap_cases = {"gyre_in_mesa_wd", "gyre_in_mesa_rsg"}
@@ -281,7 +281,7 @@ def test_tier4_and_dev_raw_cases_rejected_and_cleaned_copies_smoke(
         )
         assert rep["passed"] and rep["assertions_passed"], case_name
         assert rep["photo_restart_verified"], case_name
-    with pytest.raises(ValueError, match="convergence failure"):
+    with pytest.raises(ValueError, match="star step failed"):
         star.run_test_suite_case(
             star_root / "gyre_in_mesa_wd",
             skip_optional=True,

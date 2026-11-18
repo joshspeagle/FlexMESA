@@ -40,6 +40,11 @@ fn test_binary_implicit_rlof_and_hard_limit_counters_survive_rollbacks() {
         )
         .expect("step 1");
     assert_eq!(sys.model_number, 1);
+    let calls_after_step1 = sys.donor.total_num_solver_calls;
+    assert!(
+        calls_after_step1 >= 2,
+        "expected step 1 trial rollbacks to preserve >= 2 donor solver calls, got {calls_after_step1}"
+    );
 
     // Step 2: tighten `fr_hard` (`exceeds_hard_limits` activates for `model_number > 0`)
     // so an outer rollback retry fires and preserves all counters.
@@ -67,9 +72,10 @@ fn test_binary_implicit_rlof_and_hard_limit_counters_survive_rollbacks() {
         sys.counters.num_retries
     );
     assert!(
-        sys.donor.total_num_solver_calls >= sys.counters.num_implicit_trials,
-        "donor solver calls ({}) must survive trial rollbacks (>= {})",
+        sys.donor.total_num_solver_calls
+            >= calls_after_step1 + 1 + sys.counters.num_hard_limit_retries,
+        "donor solver calls ({}) must survive hard-limit rollbacks (>= {})",
         sys.donor.total_num_solver_calls,
-        sys.counters.num_implicit_trials
+        calls_after_step1 + 1 + sys.counters.num_hard_limit_retries
     );
 }

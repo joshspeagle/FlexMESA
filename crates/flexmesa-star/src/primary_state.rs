@@ -23,7 +23,8 @@ fn f64_vec_heap(v: &[f64]) -> usize {
 
 /// Compact snapshot of a [`StarModel`]'s evolved primary, start, old, grid,
 /// mixing, rotation, RTI, and `RSP` state for remesh smoothing and step/trial
-/// rollback without cloning [`StarControls`], [`StarJobControls`], `net_iso`,
+/// rollback without cloning [`crate::controls::StarControls`],
+/// [`crate::job_controls::StarJobControls`], `net_iso`,
 /// derived EOS/kap/neu/net-Jacobian buffers, `StarAdOrder1` vectors, micro
 /// caches, or cumulative diagnostic counters.
 #[derive(Debug, Clone)]

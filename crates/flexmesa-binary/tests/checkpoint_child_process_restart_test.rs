@@ -13,7 +13,7 @@ use flexmesa_binary::{
     BinaryInlistControls, BinarySystem, DefaultBinaryExtras,
 };
 use flexmesa_const::SECYER;
-use flexmesa_math::{with_numerics_mode, NumericsMode};
+use flexmesa_math::{numerics_mode, NumericsMode};
 use flexmesa_star::{
     load_photo_bytes, load_zams_model, star_evolve_step, write_photo_bytes,
     StarControls, StarJobControls, StarModel,
@@ -127,11 +127,10 @@ fn run_child_binary(in_path: &Path, out_path: &Path) {
 }
 
 fn run_child_mismatch(in_path: &Path) {
+    assert_eq!(numerics_mode(), NumericsMode::Fast);
     let bytes = fs::read(in_path).expect("child read mismatch checkpoint");
-    let err = with_numerics_mode(NumericsMode::Fast, || {
-        BinarySystem::from_checkpoint_bytes(&bytes)
-    })
-    .expect_err("Fast mode must reject Strict BinarySystem checkpoint");
+    let err = BinarySystem::from_checkpoint_bytes(&bytes)
+        .expect_err("Fast mode must reject Strict BinarySystem checkpoint");
     let msg = err.to_string();
     assert!(
         msg.contains("numerics_mode mismatch"),
@@ -171,6 +170,9 @@ fn spawn_restart_child(mode: &str, in_path: &Path, out_path: Option<&Path>) {
     cmd.args(["--exact", "child_process_restart_worker", "--nocapture"])
         .env("FLEXMESA_CHILD_RESTART_MODE", mode)
         .env("FLEXMESA_CHILD_IN", in_path);
+    if mode == "mismatch" {
+        cmd.env("FLEXMESA_NUMERICS_MODE", "fast");
+    }
     if let Some(out) = out_path {
         cmd.env("FLEXMESA_CHILD_OUT", out);
     }

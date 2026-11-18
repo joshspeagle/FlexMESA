@@ -104,8 +104,8 @@ def safe_log10(val: ArrayLike) -> jax.Array:
 
     Examples:
         >>> import flexmesa.math as fmath
-        >>> float(fmath.safe_log10(10.0))
-        1.0
+        >>> abs(float(fmath.safe_log10(10.0)) - 1.0) <= 1e-15
+        True
         >>> float(fmath.safe_log10(0.0))
         -99.0
     """

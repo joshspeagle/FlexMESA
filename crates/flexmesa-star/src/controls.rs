@@ -9,12 +9,12 @@ use flexmesa_turb::{MltOption, SemiconvectionOption, ThermohalineOption};
 
 pub use crate::job_controls::{
     AtmOption, AtmTTauRelation, EnergyEqnOption, StarError, StarJobControls,
-    VarLayout,
+    StepFailureInfo, VarLayout,
 };
 
 /// Evolutionary and physics controls (`&controls` namelist in
 /// `star_data/private/star_controls.inc`).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct StarControls {
     /// Initial stellar mass in solar masses ($M_\odot$).

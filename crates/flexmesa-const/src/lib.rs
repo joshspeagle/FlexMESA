@@ -301,7 +301,16 @@ pub const NUMBER_OF_MIXING_TYPES: usize = 11;
 /// assert_eq!(kind, MixingType::ConvectiveMixing);
 /// assert_eq!(kind.code(), 1);
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 #[repr(i32)]
 pub enum MixingType {
     /// Solidified / crystallized interior zone (`-1`).

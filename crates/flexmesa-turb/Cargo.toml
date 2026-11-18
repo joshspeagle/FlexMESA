@@ -12,6 +12,7 @@ flexmesa-autodiff = { path = "../flexmesa-autodiff" }
 flexmesa-const = { path = "../flexmesa-const" }
 flexmesa-math = { path = "../flexmesa-math" }
 flexmesa-utils = { path = "../flexmesa-utils" }
+serde.workspace = true
 
 [dev-dependencies]
 flexmesa-testing = { path = "../flexmesa-testing" }

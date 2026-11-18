@@ -133,6 +133,18 @@ pub struct BinaryCaseRunReport {
     pub max_relative_oracle_error: f64,
     /// Wall-clock runtime in milliseconds (`ms`).
     pub wall_time_ms: f64,
+    /// Cumulative outer binary retries (`outer_retry > 0`).
+    pub binary_retries: usize,
+    /// Cumulative coupled implicit mass-transfer trials.
+    pub implicit_trials: usize,
+    /// Cumulative solver `CutDt` restarts.
+    pub dt_cuts: usize,
+    /// Cumulative hard-limit / `delta_mdot_hard_limit` retries.
+    pub hard_limit_retries: usize,
+    /// Cumulative outer retries accumulated by the active donor star.
+    pub donor_retries: usize,
+    /// Cumulative outer retries accumulated by the accretor star (`0` for point mass).
+    pub accretor_retries: usize,
 }
 
 /// Configuration for incremental MESA `binary_history.data` and component
@@ -184,6 +196,39 @@ pub fn run_binary_test_suite_case_with_logs(
         logs_opts,
         InlistLoadOptions::default(),
     )
+}
+
+fn contextualize_binary_step_error(
+    case_name: &str,
+    step_num: usize,
+    err: StarError,
+) -> StarError {
+    match err {
+        StarError::InvalidInput(msg) => StarError::InvalidInput(format!(
+            "[{case_name} step {step_num}] {msg}"
+        )),
+        StarError::IoError(msg) => {
+            StarError::IoError(format!("[{case_name} step {step_num}] {msg}"))
+        }
+        StarError::MicrophysicsError(msg) => StarError::MicrophysicsError(
+            format!("[{case_name} step {step_num}] {msg}"),
+        ),
+        StarError::Terminated {
+            model_number,
+            reason,
+        } => StarError::Terminated {
+            model_number,
+            reason: format!("[{case_name} step {step_num}] {reason}"),
+        },
+        StarError::StepFailure(mut info) => {
+            info.detail =
+                format!("[{case_name} step {step_num}] {}", info.detail);
+            StarError::StepFailure(info)
+        }
+        StarError::ConvergenceFailure(msg) => StarError::ConvergenceFailure(
+            format!("[{case_name} step {step_num}] {msg}"),
+        ),
+    }
 }
 
 /// Executes a single `binary/test_suite/<case>` directory with explicit
@@ -263,13 +308,11 @@ pub fn run_binary_test_suite_case_with_options(
 
     let mut term_code = String::from("MaxStepsCap");
     while bin.model_number < step_limit {
+        let step_num = bin.model_number + 1;
         let (suggested_dt, _) = bin
             .try_step_with_extras(dt_next, case_extras.as_mut())
             .map_err(|e| {
-                StarError::ConvergenceFailure(format!(
-                    "[{case_name} step {}] {e}",
-                    bin.model_number + 1
-                ))
+                contextualize_binary_step_error(&case_name, step_num, e)
             })?;
         dt_next = suggested_dt;
         let has_term = bin.last_termination_reason.is_some();
@@ -296,6 +339,10 @@ pub fn run_binary_test_suite_case_with_options(
         );
     }
 
+    let accretor_retries = match &bin.companion {
+        BinaryCompanion::PointMass { .. } => 0,
+        BinaryCompanion::Star(s2) => s2.num_retries,
+    };
     Ok(BinaryCaseRunReport {
         case_name,
         passed,
@@ -308,6 +355,12 @@ pub fn run_binary_test_suite_case_with_options(
         final_abs_mdot_msun_yr: bin.mtransfer_rate.abs() * SECYER / MSUN,
         max_relative_oracle_error: max_rel_err,
         wall_time_ms: wall_ms,
+        binary_retries: bin.counters.num_retries,
+        implicit_trials: bin.counters.num_implicit_trials,
+        dt_cuts: bin.counters.num_dt_cuts,
+        hard_limit_retries: bin.counters.num_hard_limit_retries,
+        donor_retries: bin.donor.num_retries,
+        accretor_retries,
     })
 }
 

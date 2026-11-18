@@ -26,7 +26,7 @@ use crate::orbit::eval_rlobe;
 
 /// Component-by-component breakdown of the orbital torque $\dot{J}_{\mathrm{orb}}$
 /// ($\mathrm{g\,cm^2\,s^{-2}}$) in `get_jdot` (`binary_jdot.f90:33-93`).
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, serde::Serialize, serde::Deserialize)]
 pub struct JdotBreakdown {
     /// Magnetic-braking torque $\dot{J}_{\mathrm{mb}}$.
     pub jdot_mb: f64,
@@ -604,7 +604,9 @@ pub fn eval_gated_jdot(
 /// These are the values the engine used, stored so that `binary_history.data`
 /// reports them (`b% edot`, `b% edot_tidal`, `b% edot_enhance` in
 /// `binary/private/binary_history.f90`) and never a recomputed quantity.
-#[derive(Debug, Clone, Copy, Default, PartialEq)]
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, serde::Serialize, serde::Deserialize,
+)]
 pub struct EdotBreakdown {
     /// Gravitational-wave term. Not present upstream (`binary_edot.f90:93`);
     /// removed under `#160`, tracked as `#175` under `#169`.

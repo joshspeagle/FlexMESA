@@ -352,6 +352,12 @@ class RustStarModel:
     l_center: float
     m_center: float
     v_center: float
+    total_num_solver_iterations: int
+    total_num_solver_calls: int
+    num_retries: int
+    num_redos: int
+    micro_cache_hits: int
+    micro_cache_misses: int
     ln_peos_surf: float
     ln_t_surf: float
     iso_names: list[str]
@@ -499,10 +505,17 @@ class RustBinarySystem:
     binary_age_yr: float
     model_number: int
     max_timestep_sec: float
+    num_retries: int
+    num_implicit_trials: int
+    num_dt_cuts: int
+    num_hard_limit_retries: int
     @staticmethod
     def new_point_mass(donor: RustStarModel, companion_mass_msun: float, initial_period_days: float, eccentricity: float = 0.0, is_black_hole: bool = False, initial_bh_spin: float = 0.0) -> RustBinarySystem: ...  # noqa: E501
     @staticmethod
     def new_two_stars(donor: RustStarModel, accretor: RustStarModel, initial_period_days: float, eccentricity: float = 0.0) -> RustBinarySystem: ...  # noqa: E501
+    @staticmethod
+    def from_photo_bytes(bytes: bytes) -> RustBinarySystem: ...
+    def to_photo_bytes(self) -> bytes: ...
     def step(self, dt: float) -> tuple[float, int]: ...
 
 def binary_eval_rlobe(m1: float, m2: float, a: float) -> float: ...

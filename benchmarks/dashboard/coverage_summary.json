@@ -2,9 +2,9 @@
   "rust": {
     "tool": "cargo llvm-cov",
     "overall": {
-      "lines": 93038,
-      "covered": 66194,
-      "percent": 71.1
+      "lines": 94454,
+      "covered": 66852,
+      "percent": 70.8
     },
     "by_crate": [
       {
@@ -16,14 +16,14 @@
       {
         "crate": "flexmesa-atm",
         "lines": 1332,
-        "covered": 996,
-        "percent": 74.8
+        "covered": 993,
+        "percent": 74.5
       },
       {
         "crate": "flexmesa-autodiff",
-        "lines": 1283,
-        "covered": 461,
-        "percent": 35.9
+        "lines": 1322,
+        "covered": 458,
+        "percent": 34.6
       },
       {
         "crate": "flexmesa-bench",
@@ -33,8 +33,8 @@
       },
       {
         "crate": "flexmesa-binary",
-        "lines": 6734,
-        "covered": 3980,
+        "lines": 7012,
+        "covered": 4146,
         "percent": 59.1
       },
       {
@@ -52,8 +52,8 @@
       {
         "crate": "flexmesa-const",
         "lines": 19,
-        "covered": 16,
-        "percent": 84.2
+        "covered": 0,
+        "percent": 0.0
       },
       {
         "crate": "flexmesa-crlibm-sys",
@@ -70,8 +70,8 @@
       {
         "crate": "flexmesa-eos",
         "lines": 8893,
-        "covered": 7178,
-        "percent": 80.7
+        "covered": 7126,
+        "percent": 80.1
       },
       {
         "crate": "flexmesa-interp1d",
@@ -82,8 +82,8 @@
       {
         "crate": "flexmesa-interp2d",
         "lines": 1711,
-        "covered": 1318,
-        "percent": 77.0
+        "covered": 1321,
+        "percent": 77.2
       },
       {
         "crate": "flexmesa-ionization",
@@ -100,32 +100,32 @@
       {
         "crate": "flexmesa-math",
         "lines": 775,
-        "covered": 589,
-        "percent": 76.0
+        "covered": 617,
+        "percent": 79.6
       },
       {
         "crate": "flexmesa-mtx",
         "lines": 2783,
-        "covered": 2443,
-        "percent": 87.8
+        "covered": 2451,
+        "percent": 88.1
       },
       {
         "crate": "flexmesa-net",
-        "lines": 7601,
-        "covered": 6575,
-        "percent": 86.5
+        "lines": 7667,
+        "covered": 6642,
+        "percent": 86.6
       },
       {
         "crate": "flexmesa-neu",
         "lines": 994,
-        "covered": 962,
-        "percent": 96.8
+        "covered": 953,
+        "percent": 95.9
       },
       {
         "crate": "flexmesa-num",
         "lines": 2860,
-        "covered": 2468,
-        "percent": 86.3
+        "covered": 2452,
+        "percent": 85.7
       },
       {
         "crate": "flexmesa-rates",
@@ -141,9 +141,9 @@
       },
       {
         "crate": "flexmesa-star",
-        "lines": 38531,
-        "covered": 26156,
-        "percent": 67.9
+        "lines": 39050,
+        "covered": 26342,
+        "percent": 67.5
       },
       {
         "crate": "flexmesa-testing",
@@ -154,23 +154,23 @@
       {
         "crate": "flexmesa-turb",
         "lines": 1093,
-        "covered": 899,
-        "percent": 82.3
+        "covered": 896,
+        "percent": 82.0
       },
       {
         "crate": "flexmesa-utils",
-        "lines": 325,
-        "covered": 213,
-        "percent": 65.5
+        "lines": 839,
+        "covered": 515,
+        "percent": 61.4
       }
     ]
   },
   "python": {
     "tool": "pytest --cov",
     "overall": {
-      "statements": 21638,
-      "covered": 18965,
-      "percent": 87.6
+      "statements": 21673,
+      "covered": 19000,
+      "percent": 87.7
     },
     "by_subpackage": [
       {
@@ -205,9 +205,9 @@
       },
       {
         "subpackage": "flexmesa.binary",
-        "statements": 323,
-        "covered": 311,
-        "percent": 96.3
+        "statements": 340,
+        "covered": 329,
+        "percent": 96.8
       },
       {
         "subpackage": "flexmesa.chem",
@@ -313,8 +313,8 @@
       },
       {
         "subpackage": "flexmesa.star",
-        "statements": 1440,
-        "covered": 1336,
+        "statements": 1458,
+        "covered": 1353,
         "percent": 92.8
       },
       {

@@ -9,8 +9,8 @@ use flexmesa_star::solver_norms::compute_residual_norms;
 use flexmesa_star::{
     active_solver_tolerances, change_model_network,
     compute_model_correction_norms, do_struct_burn_mix, load_zams_model,
-    set_hydro_vars, solve_henyey_step, StarControls, StarJobControls,
-    StarModel,
+    set_hydro_vars, solve_henyey_step, star_evolve_step, StarControls,
+    StarError, StarJobControls, StarModel,
 };
 
 fn usize_to_f64(n: usize) -> f64 {
@@ -331,9 +331,40 @@ fn test_sizeb_filter_flags_nan_propagation_and_strict_unconverged_rejection() {
     perturbed.controls.use_gold_tolerances = true;
     perturbed.lnd[2] += 0.15;
     perturbed.pack_xh();
-    let rep = solve_henyey_step(&mut perturbed, false, true).expect("1-iter");
-    assert!(
-        !rep.converged,
-        "unconverged 1-iter solve must fail: {rep:?}"
-    );
+    let err = solve_henyey_step(&mut perturbed, false, true)
+        .expect_err("unconverged 1-iter solve must fail with StepFailure");
+    match err {
+        StarError::StepFailure(info) => {
+            assert!(info.iterations >= 1);
+            assert!(info.zone.is_some());
+            assert!(info.equation.is_some());
+            assert!(info.variable.is_some());
+            assert!(info.value.is_some());
+        }
+        other => panic!("expected StarError::StepFailure, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_star_evolve_step_retry_exhaustion_returns_step_failure() {
+    let mut evolve_fail = build_compact_zams(12, StarControls::default());
+    evolve_fail.controls.max_newton_iters = 1;
+    evolve_fail.controls.ts_stop.retry_limit = 1;
+    evolve_fail.lnd[2] += 0.25;
+    evolve_fail.pack_xh();
+    let ev_err = star_evolve_step(&mut evolve_fail, false, false, true)
+        .expect_err(
+            "star_evolve_step retry exhaustion must return StepFailure",
+        );
+    match ev_err {
+        StarError::StepFailure(info) => {
+            assert_eq!(info.model_number, 1);
+            assert_eq!(info.retries, 2);
+            assert!(info.zone.is_some());
+            assert!(info.equation.is_some());
+            assert!(info.value.is_some());
+            assert_ne!(info.retry_reason, "");
+        }
+        other => panic!("expected StarError::StepFailure, got {other:?}"),
+    }
 }

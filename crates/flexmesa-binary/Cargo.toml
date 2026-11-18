@@ -14,6 +14,10 @@ flexmesa-math = { path = "../flexmesa-math" }
 flexmesa-schema = { path = "../flexmesa-schema" }
 flexmesa-star = { path = "../flexmesa-star" }
 flexmesa-utils = { path = "../flexmesa-utils" }
+serde.workspace = true
+
+[dev-dependencies]
+rayon.workspace = true
 
 [lints]
 workspace = true

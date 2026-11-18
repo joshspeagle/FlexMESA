@@ -19,7 +19,9 @@ use flexmesa_binary::{
 };
 use numpy::{PyArray1, PyReadonlyArray1};
 use pyo3::prelude::*;
+use pyo3::types::PyBytes;
 
+use crate::star_helpers_py::to_py_err;
 use crate::star_py::PyStarModel;
 
 /// Python-exposed wrapper around [`flexmesa_binary::BinarySystem`].
@@ -85,6 +87,24 @@ impl PyBinarySystem {
     /// Advances the coupled binary system by `dt` (s).
     pub fn step(&mut self, dt: f64) -> (f64, i32) {
         self.inner.step(dt)
+    }
+
+    /// Serializes the full `BinarySystem` checkpoint into deterministic binary bytes.
+    pub fn to_photo_bytes<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<Bound<'py, PyBytes>> {
+        let bytes = self.inner.to_checkpoint_bytes().map_err(to_py_err)?;
+        Ok(PyBytes::new(py, &bytes))
+    }
+
+    /// Restores a [`PyBinarySystem`] from serialized checkpoint bytes.
+    #[staticmethod]
+    pub fn from_photo_bytes(bytes: &[u8]) -> PyResult<Self> {
+        Ok(Self {
+            inner: BinarySystem::from_checkpoint_bytes(bytes)
+                .map_err(to_py_err)?,
+        })
     }
 
     /// Returns the donor `RustStarModel`.
@@ -170,6 +190,26 @@ impl PyBinarySystem {
     #[getter]
     pub fn max_timestep_sec(&self) -> f64 {
         self.inner.max_timestep_sec
+    }
+    /// Cumulative outer binary retries preserved across rollbacks.
+    #[getter]
+    pub fn num_retries(&self) -> usize {
+        self.inner.counters.num_retries
+    }
+    /// Cumulative implicit mass-transfer trials preserved across rollbacks.
+    #[getter]
+    pub fn num_implicit_trials(&self) -> usize {
+        self.inner.counters.num_implicit_trials
+    }
+    /// Cumulative solver `CutDt` restarts preserved across rollbacks.
+    #[getter]
+    pub fn num_dt_cuts(&self) -> usize {
+        self.inner.counters.num_dt_cuts
+    }
+    /// Cumulative hard-limit retries preserved across rollbacks.
+    #[getter]
+    pub fn num_hard_limit_retries(&self) -> usize {
+        self.inner.counters.num_hard_limit_retries
     }
 }
 

@@ -18,7 +18,16 @@ use flexmesa_const::{MixingType, CLIGHT, CRAD, PI};
 use crate::{TurbError, TurbOutput, TurbResult, TurbScalar};
 
 /// Semiconvective mixing prescription (`semiconvection_option`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 pub enum SemiconvectionOption {
     /// Langer (1985) diffusivity with $\nabla_T = \nabla_{\mathrm{rad}}$
     /// (`"Langer_85 mixing; gradT = gradr"`).

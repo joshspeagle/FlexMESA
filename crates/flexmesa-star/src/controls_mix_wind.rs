@@ -14,7 +14,7 @@ pub const NUM_PREDICTIVE_PARAM_SETS: usize = 16;
 
 /// One indexed convective overshooting parameter set (`1..=16` in
 /// `controls.defaults:2580-2660`).
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct OvershootParamSet {
     /// Scheme name (`""`, `"exponential"`, `"step"`, `"step+exponential"`, `"other"`).
     pub scheme: String,
@@ -53,7 +53,7 @@ impl OvershootParamSet {
 
 /// One indexed predictive mixing parameter set (`1..=16` in
 /// `controls.defaults:2782-2885`).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct PredictiveParamSet {
     /// Enable this predictive mixing parameter set (`predictive_mix(i)`).
     pub predictive_mix: bool,
@@ -96,7 +96,7 @@ impl Default for PredictiveParamSet {
 
 /// Mixing, wind, accretion, `eps_mdot`, extra-heat, and adaptive mesh controls
 /// grouped onto [`crate::StarControls::mix_wind`].
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct MixWindControls {
     /// Indexed overshooting parameter sets `1..=16`.
     pub overshoot_sets: [OvershootParamSet; NUM_OVERSHOOT_PARAM_SETS],

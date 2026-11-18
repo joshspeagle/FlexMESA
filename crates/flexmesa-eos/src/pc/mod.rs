@@ -26,7 +26,9 @@ use crate::types::{
 };
 
 /// Configuration controls for the `PC` equation of state (`eos.defaults`).
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize,
+)]
 pub struct PcConfig {
     /// Minimum species mass fraction included in `PC` (`1e-4`).
     pub mass_fraction_limit_for_pc: f64,

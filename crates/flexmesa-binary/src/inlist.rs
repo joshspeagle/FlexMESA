@@ -21,7 +21,7 @@ pub use crate::inlist_inventory::{
 
 /// Parsed `&binary_job` and `&binary_controls` settings corresponding to
 /// `binary/defaults/binary_job.defaults` and `binary_controls.defaults`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct BinaryInlistControls {
     // --- `&binary_job` controls ---
     /// Stellar inlist filenames `[inlist1, inlist2]`.

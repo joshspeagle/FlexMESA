@@ -66,9 +66,9 @@ print(f"exp10(1.25): strict={strict_val:.16e}, |fast - strict|={abs(fast_val - s
 
 ---
 
-## Array, Timing & Thread-Pool Utilities (`flexmesa.utils`)
+## Array, Checkpoint Codec, Timing & Thread-Pool Utilities (`flexmesa.utils`)
 
-Floating-point finiteness guards (`is_bad`), array helpers, and Safe Rust persistent worker-pool utilities.
+Floating-point finiteness guards (`is_bad`), array helpers, Safe Rust persistent worker-pool utilities, and the deterministic IEEE-754 little-endian `serde` binary codec (`flexmesa_utils::bin_codec` with shared 13-byte `NumericsMode` wire framing for `StarModel` and `BinarySystem` checkpoints).
 
 ::: flexmesa.utils
 

@@ -117,6 +117,81 @@ impl MesaRanmar {
     }
 }
 
+impl serde::Serialize for MesaRanmar {
+    fn serialize<S: serde::Serializer>(
+        &self,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeTuple;
+        let mut tup = serializer.serialize_tuple(103)?;
+        for &val in &self.u {
+            tup.serialize_element(&val)?;
+        }
+        tup.serialize_element(&self.c)?;
+        tup.serialize_element(&self.cd)?;
+        tup.serialize_element(&self.cm)?;
+        tup.serialize_element(&self.i97)?;
+        tup.serialize_element(&self.j97)?;
+        tup.end()
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for MesaRanmar {
+    fn deserialize<D: serde::Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<Self, D::Error> {
+        struct RanmarVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for RanmarVisitor {
+            type Value = MesaRanmar;
+
+            fn expecting(
+                &self,
+                formatter: &mut std::fmt::Formatter<'_>,
+            ) -> std::fmt::Result {
+                formatter.write_str("MesaRanmar state tuple of 103 fields")
+            }
+
+            fn visit_seq<A: serde::de::SeqAccess<'de>>(
+                self,
+                mut seq: A,
+            ) -> Result<Self::Value, A::Error> {
+                let mut u = [0.0_f64; 98];
+                for (i, slot) in u.iter_mut().enumerate() {
+                    *slot = seq.next_element()?.ok_or_else(|| {
+                        serde::de::Error::invalid_length(i, &self)
+                    })?;
+                }
+                let c = seq.next_element()?.ok_or_else(|| {
+                    serde::de::Error::invalid_length(98, &self)
+                })?;
+                let cd = seq.next_element()?.ok_or_else(|| {
+                    serde::de::Error::invalid_length(99, &self)
+                })?;
+                let cm = seq.next_element()?.ok_or_else(|| {
+                    serde::de::Error::invalid_length(100, &self)
+                })?;
+                let i97 = seq.next_element()?.ok_or_else(|| {
+                    serde::de::Error::invalid_length(101, &self)
+                })?;
+                let j97 = seq.next_element()?.ok_or_else(|| {
+                    serde::de::Error::invalid_length(102, &self)
+                })?;
+                Ok(MesaRanmar {
+                    u,
+                    c,
+                    cd,
+                    cm,
+                    i97,
+                    j97,
+                })
+            }
+        }
+
+        deserializer.deserialize_tuple(103, RanmarVisitor)
+    }
+}
+
 /// Evaluates `t1 * (r_out^3 - r_in^3)` in 106-bit Dekker/Knuth double-double
 /// precision to eliminate thin-shell cancellation (`real(qp)` in
 /// `rsp_def.f90:572-580, 845-851` and `rsp_step.f90:1098-1114`).

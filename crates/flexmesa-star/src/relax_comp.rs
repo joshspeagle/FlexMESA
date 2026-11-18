@@ -117,7 +117,7 @@ fn step_relax_henyey(
     model: &mut StarModel,
     dt_s: f64,
 ) -> Result<bool, StarError> {
-    let backup = model.clone();
+    let backup = crate::primary_state::PrimaryStateBuffer::from_model(model);
     set_basic_vars(model)?;
     set_hydro_vars(model, false, false)?;
     model.save_old_values();
@@ -125,7 +125,7 @@ fn step_relax_henyey(
     match do_struct_burn_mix(model, dt_s, false, true, &[]) {
         Ok(rep) if rep.converged => Ok(true),
         _ => {
-            *model = backup;
+            backup.restore_into(model)?;
             Ok(false)
         }
     }
@@ -275,7 +275,11 @@ pub fn relax_composition_with_henyey(
     model.star_age_old = 0.0;
     model.model_number = 1;
     model.num_retries = 0;
+    model.num_redos = 0;
     model.total_num_solver_iterations = 0;
+    model.total_num_solver_calls = 0;
+    model.micro_cache_hits = 0;
+    model.micro_cache_misses = 0;
     model.mstar_dot = 0.0;
     model.mstar_start = model.mstar;
     model.mstar_old = model.mstar;

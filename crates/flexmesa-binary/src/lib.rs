@@ -109,7 +109,7 @@ pub use roche_deformation::{
     eval_synchronicity_switch, BinaryTidalDeformationHook,
     RocheDeformationTables, RocheTable2D, ROCHE_NUDGE,
 };
-pub use system::{BinaryCompanion, BinarySystem};
+pub use system::{BinaryCompanion, BinaryStepCounters, BinarySystem};
 pub use system_jdot::{
     eval_coupled_edot, eval_coupled_edot_breakdown, eval_gated_jdot,
     EdotBreakdown, JdotBreakdown,

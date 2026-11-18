@@ -98,6 +98,7 @@ pub mod mesh;
 pub mod mesh_adjust;
 pub(crate) mod mesh_remap;
 pub mod micro;
+pub mod micro_cache;
 pub mod micro_net;
 pub mod mix_info;
 pub mod model;
@@ -107,6 +108,7 @@ pub mod overshoot;
 pub mod photo_io;
 pub mod pre_ms;
 pub mod premix;
+pub mod primary_state;
 pub mod pulse;
 pub mod pulse_bvp;
 pub mod pulse_bvp_recon;
@@ -189,7 +191,7 @@ pub use adjust_mass::{
 };
 pub use controls::{
     AtmOption, AtmTTauRelation, EnergyEqnOption, StarControls, StarError,
-    StarJobControls, VarLayout,
+    StarJobControls, StepFailureInfo, VarLayout,
 };
 pub use controls_mix_wind::{
     MixWindControls, OvershootParamSet, PredictiveParamSet,
@@ -295,14 +297,16 @@ pub use micro::{
     change_model_network, do_eos, do_kap, do_net, do_neu, get_or_load_net,
     get_tau, global_basic_net, set_basic_vars,
 };
+pub use micro_cache::MicrophysicsCache;
 pub use mix_info::{
     cdc_factor, clean_mixing_glitches, compute_convection_sigmas,
     eval_dxdt_mix, face_density, locate_convection_boundaries, ConvBoundary,
 };
 pub use model::StarModel;
 pub use model_io::{
-    compute_photo_checksum, photo_numerics_mode, read_mod_str,
-    read_photo_bytes, write_mod_string, write_photo_bytes, STAR_DEF_VERSION,
+    compute_photo_checksum, load_photo_bytes, photo_numerics_mode,
+    read_mod_str, read_photo_bytes, try_write_photo_bytes, write_mod_string,
+    write_photo_bytes, PHOTO_FORMAT_VERSION, STAR_DEF_VERSION,
 };
 pub use overshoot::{apply_overshooting, OvershootConfig, OvershootScheme};
 pub use pre_ms::{
@@ -314,6 +318,7 @@ pub use premix::{
     do_conv_premix, do_phase_separation, eval_castellani_penetration_vel,
     eval_phase_separation_shift,
 };
+pub use primary_state::PrimaryStateBuffer;
 pub use pulse::{
     build_pulse_points, build_pulse_points_with_options, eval_center_d2,
     eval_center_parabolic, eval_center_rho, eval_face, export_fgong,

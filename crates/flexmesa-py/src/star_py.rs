@@ -6,9 +6,9 @@
 
 use flexmesa_star::{
     do_adjust_mesh, eval_dxdt_mix, extract_history_row, format_history_row,
-    format_profile_string, interp_q, pick_next_timestep, read_mod_str,
-    read_photo_bytes, set_hydro_vars, solve_composition_diffusion,
-    solve_henyey_step, write_mod_string, write_photo_bytes,
+    format_profile_string, interp_q, load_photo_bytes, pick_next_timestep,
+    read_mod_str, set_hydro_vars, solve_composition_diffusion,
+    solve_henyey_step, try_write_photo_bytes, write_mod_string,
     yrs_for_init_timestep, MeshFunctionConfig, StarControls, StarJobControls,
     StarModel,
 };
@@ -83,13 +83,12 @@ macro_rules! impl_py_star_model {
                 })
             }
 
-            /// Restores a [`PyStarModel`] from binary `.photo` bytes.
+            /// Restores a [`PyStarModel`] from binary `.photo` bytes
+            /// (including serialized `controls` and `job`).
             #[staticmethod]
             pub fn from_photo_bytes(bytes: &[u8]) -> PyResult<Self> {
-                let (c, j) =
-                    (StarControls::default(), StarJobControls::default());
                 Ok(Self {
-                    inner: read_photo_bytes(bytes, c, j).map_err(to_py_err)?,
+                    inner: load_photo_bytes(bytes).map_err(to_py_err)?,
                 })
             }
 
@@ -102,8 +101,10 @@ macro_rules! impl_py_star_model {
             pub fn to_photo_bytes<'py>(
                 &self,
                 py: Python<'py>,
-            ) -> Bound<'py, PyBytes> {
-                PyBytes::new(py, &write_photo_bytes(&self.inner))
+            ) -> PyResult<Bound<'py, PyBytes>> {
+                let bytes =
+                    try_write_photo_bytes(&self.inner).map_err(to_py_err)?;
+                Ok(PyBytes::new(py, &bytes))
             }
 
             /// Evaluates zone and face microphysics (`set_hydro_vars`).
@@ -437,7 +438,10 @@ impl_py_star_model!(
     scalars: [
         nz: usize, species: usize, model_number: usize, star_age: f64,
         dt: f64, dt_next: f64, dt_old: f64, mstar: f64, teff: f64,
-        r_center: f64, l_center: f64, m_center: f64, v_center: f64
+        r_center: f64, l_center: f64, m_center: f64, v_center: f64,
+        total_num_solver_iterations: usize, total_num_solver_calls: usize,
+        num_retries: usize, num_redos: usize,
+        micro_cache_hits: usize, micro_cache_misses: usize
     ],
     arrays: [
         lnd, lnd_start, ln_t, ln_r, ln_r_start, lum, dq, q, xq, m, dm, dm_bar,

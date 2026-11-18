@@ -10,7 +10,7 @@
 
 use flexmesa_mtx::{solve_block_tridiag_bcyclic, solve_block_tridiagonal};
 
-use crate::controls::StarError;
+use crate::controls::{StarError, StepFailureInfo};
 use crate::hydro_eqns::{eval_henyey_equations_into, HenyeySystem};
 use crate::model::StarModel;
 use crate::solver_norms::{
@@ -215,15 +215,91 @@ fn solve_linear_henyey_system(
 /// * `use_bcyclic` - When `true`, uses Hirshman et al. (2010) odd-even parallel
 ///   cyclic reduction ([`solve_block_tridiag_bcyclic`]); when `false`, uses
 ///   sequential block-Thomas elimination ([`solve_block_tridiagonal`]).
+fn worst_residual_site(
+    model: &StarModel,
+    sys: &HenyeySystem,
+) -> Option<(usize, usize, String, String, f64)> {
+    if sys.equ.is_empty() || sys.nvar == 0 {
+        return None;
+    }
+    let (zone, eq, val) = crate::step_trace::argmax_abs(&sys.equ, sys.nvar);
+    Some((
+        zone,
+        eq,
+        model.layout.equation_name(eq, &model.iso_names),
+        model.layout.paired_variable_name(eq, &model.iso_names),
+        val,
+    ))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn build_step_failure_info(
+    model: &StarModel,
+    sys: &HenyeySystem,
+    iterations: usize,
+    residual_norm: f64,
+    max_residual: f64,
+    correction_norm: f64,
+    max_correction: f64,
+    dx_scaled_if_corr_limited: Option<&[f64]>,
+    detail: String,
+) -> StepFailureInfo {
+    let res_site = worst_residual_site(model, sys);
+    let equation = res_site.as_ref().map(|s| s.2.clone());
+    let (zone, variable, value) = if let Some(dx) =
+        dx_scaled_if_corr_limited.filter(|d| !d.is_empty() && sys.nvar > 0)
+    {
+        let (k, v_idx, v_val) = crate::step_trace::argmax_abs(dx, sys.nvar);
+        (
+            Some(k),
+            Some(model.layout.variable_name(v_idx, &model.iso_names)),
+            Some(v_val),
+        )
+    } else if let Some((k, _, _, var, v_val)) = res_site {
+        (Some(k), Some(var), Some(v_val))
+    } else {
+        (None, None, None)
+    };
+    StepFailureInfo {
+        model_number: model.model_number,
+        zone,
+        equation,
+        variable,
+        value,
+        residual_norm,
+        max_residual,
+        correction_norm,
+        max_correction,
+        dt: model.dt,
+        iterations,
+        retries: 0,
+        retry_reason: String::new(),
+        detail,
+    }
+}
+
+/// Solves a single implicit Newton-Raphson step (`star/private/star_solver.f90`).
+///
+/// # Arguments
+/// * `model` - Mutable [`StarModel`] state with `*_start` arrays already
+///   populated for the current step.
+/// * `include_chem` - When `true`, solves the fully coupled `(nvar_hydro + species)`
+///   system; when `false`, solves the `nvar_hydro` hydrostatic/hydrodynamic
+///   equations at fixed composition `xa`.
+/// * `use_bcyclic` - When `true`, uses Hirshman et al. (2010) odd-even parallel
+///   cyclic reduction ([`solve_block_tridiag_bcyclic`]); when `false`, uses
+///   sequential block-Thomas elimination ([`solve_block_tridiagonal`]).
 ///
 /// # Errors
 /// Returns [`StarError`] if initial microphysics fails or the Jacobian is
-/// singular.
+/// singular, or [`StarError::StepFailure`] if line search fails or Newton
+/// iterations do not converge.
 pub fn solve_henyey_step(
     model: &mut StarModel,
     include_chem: bool,
     use_bcyclic: bool,
 ) -> Result<HenyeySolverReport, StarError> {
+    model.total_num_solver_calls += 1;
     model.pack_xh();
     if include_chem
         && model.species > 0
@@ -254,6 +330,8 @@ pub fn solve_henyey_step(
     };
     let mut converged = false;
     let mut iter_used = 0;
+    let mut last_dx_scaled = Vec::new();
+    let mut last_pass_resid = false;
     let mut xh_prev = Vec::with_capacity(model.xh.len());
     let mut xa_prev = Vec::with_capacity(model.xa.len());
     let mut dx_chem_prev = Vec::with_capacity(model.xa_sub_xa_start.len());
@@ -363,15 +441,36 @@ pub fn solve_henyey_step(
             model.unpack_xh();
             model.set_m_grav_and_grav();
             if crate::step_trace::enabled(model.model_number + 1) {
-                eprintln!(
-                    "[trace] solver model={} dt={:.4e} line search failed at iter {iter} \
-                     rnorm={residual_norm:.3e} rmax={max_residual:.3e}",
-                    model.model_number + 1,
-                    model.dt,
-                );
+                if let Some((k_max, _, eq_name, var_name, v_max)) =
+                    worst_residual_site(model, &sys)
+                {
+                    let mut jl = crate::step_trace::JsonLine::new(
+                        "solver_line_search_failed",
+                    );
+                    jl.field_usize("model", model.model_number + 1);
+                    jl.field_f64("dt", model.dt);
+                    jl.field_usize("iter", iter);
+                    jl.field_f64("rnorm", residual_norm);
+                    jl.field_f64("rmax", max_residual);
+                    jl.field_usize("zone", k_max);
+                    jl.field_str("eq", &eq_name);
+                    jl.field_str("var", &var_name);
+                    jl.field_f64("val", v_max);
+                    jl.emit();
+                }
             }
-            return Err(StarError::ConvergenceFailure(format!(
-                "line search failed at Newton iteration {iter}"
+            return Err(StarError::StepFailure(Box::new(
+                build_step_failure_info(
+                    model,
+                    &sys,
+                    iter,
+                    residual_norm,
+                    max_residual,
+                    correction_norm,
+                    max_correction,
+                    None,
+                    format!("line search failed at Newton iteration {iter}"),
+                ),
             )));
         }
 
@@ -395,6 +494,9 @@ pub fn solve_henyey_step(
             && max_residual <= 1.0e-10
             && pass_corr_without_coeff;
 
+        last_dx_scaled = dx_scaled;
+        last_pass_resid = pass_resid_tests || disabled_resid_tests;
+
         if (pass_resid_tests && pass_corr_with_coeff)
             || (disabled_resid_tests && pass_corr_without_coeff)
             || tight_resid
@@ -405,41 +507,62 @@ pub fn solve_henyey_step(
     }
 
     if crate::step_trace::enabled(model.model_number + 1) {
-        let (k_max, i_max, v_max) =
-            crate::step_trace::argmax_abs(&sys.equ, sys.nvar);
-        let (tol_rn, tol_mr, tol_cn, tol_mc) =
-            active_solver_tolerances_with_gold(
-                &model.controls,
-                active_gold_level(model),
-                iter_used,
-            );
-        eprintln!(
-            "[trace] solver model={} dt={:.4e} nz={} conv={} iters={} \
-             rnorm={:.3e}/{:.1e} rmax={:.3e}/{:.1e} at k={} eq={} (nvar_hydro={}) \
-             cnorm={:.3e}/{:.1e} cmax={:.3e}/{:.1e}",
-            model.model_number + 1,
-            model.dt,
-            sys.nz,
-            converged,
-            iter_used,
-            residual_norm,
-            tol_rn,
-            v_max,
-            tol_mr,
-            k_max,
-            i_max,
-            model.layout.nvar_hydro,
-            correction_norm,
-            tol_cn,
-            max_correction,
-            tol_mc,
-        );
+        if let Some((k_max, i_max, eq_name, var_name, v_max)) =
+            worst_residual_site(model, &sys)
+        {
+            let (tol_rn, tol_mr, tol_cn, tol_mc) =
+                active_solver_tolerances_with_gold(
+                    &model.controls,
+                    active_gold_level(model),
+                    iter_used,
+                );
+            let mut jl = crate::step_trace::JsonLine::new("solver");
+            jl.field_usize("model", model.model_number + 1);
+            jl.field_f64("dt", model.dt);
+            jl.field_usize("nz", sys.nz);
+            jl.field_bool("converged", converged);
+            jl.field_usize("iters", iter_used);
+            jl.field_f64("rnorm", residual_norm);
+            jl.field_f64("tol_rn", tol_rn);
+            jl.field_f64("rmax", v_max);
+            jl.field_f64("tol_mr", tol_mr);
+            jl.field_usize("zone", k_max);
+            jl.field_usize("equ_idx", i_max);
+            jl.field_str("eq", &eq_name);
+            jl.field_str("var", &var_name);
+            jl.field_f64("val", v_max);
+            jl.field_usize("nvar_hydro", model.layout.nvar_hydro);
+            jl.field_f64("cnorm", correction_norm);
+            jl.field_f64("tol_cn", tol_cn);
+            jl.field_f64("cmax", max_correction);
+            jl.field_f64("tol_mc", tol_mc);
+            jl.emit();
+        }
     }
 
     if include_chem {
         normalize_species_fractions(model);
     }
     model.xa_sub_xa_start.clear();
+
+    if !converged {
+        let corr_dx = if last_pass_resid {
+            Some(last_dx_scaled.as_slice())
+        } else {
+            None
+        };
+        return Err(StarError::StepFailure(Box::new(build_step_failure_info(
+            model,
+            &sys,
+            iter_used,
+            residual_norm,
+            max_residual,
+            correction_norm,
+            max_correction,
+            corr_dx,
+            format!("solver did not converge within {iter_used} iterations"),
+        ))));
+    }
 
     Ok(HenyeySolverReport {
         converged,

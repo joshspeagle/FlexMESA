@@ -190,7 +190,11 @@ pub fn verify_step_redo_bit_parity(
     redone.save_old_values();
     let prev_model_number = redone.model_number;
     let prev_total_iters = redone.total_num_solver_iterations;
+    let prev_total_calls = redone.total_num_solver_calls;
     let prev_num_retries = redone.num_retries;
+    let prev_num_redos = redone.num_redos;
+    let prev_cache_hits = redone.micro_cache_hits;
+    let prev_cache_misses = redone.micro_cache_misses;
     let prev_dt_old = redone.dt_old;
     let prev_dt_limit_ratio_old = redone.dt_limit_ratio_old;
     let dt_step = if redone.dt_next > 0.0 {
@@ -210,7 +214,11 @@ pub fn verify_step_redo_bit_parity(
     }
     redone.model_number = prev_model_number;
     redone.total_num_solver_iterations = prev_total_iters;
+    redone.total_num_solver_calls = prev_total_calls;
     redone.num_retries = prev_num_retries;
+    redone.num_redos = prev_num_redos;
+    redone.micro_cache_hits = prev_cache_hits;
+    redone.micro_cache_misses = prev_cache_misses;
     redone.dt_old = prev_dt_old;
     redone.dt_limit_ratio_old = prev_dt_limit_ratio_old;
     redone.dt = dt_step;

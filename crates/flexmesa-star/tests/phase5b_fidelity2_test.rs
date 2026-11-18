@@ -18,7 +18,7 @@ use flexmesa_star::{
     load_zams_model, locate_convection_boundaries, set_basic_vars,
     set_hydro_vars, star_evolve, star_evolve_step, timestep_controller,
     DiffusionScheme, DutchLowTScheme, EnergyEqnOption, MeshFunctionConfig,
-    StarControls, StarJobControls, StarModel, TimestepAction,
+    StarControls, StarError, StarJobControls, StarModel, TimestepAction,
 };
 
 fn rel_err(a: f64, b: f64) -> f64 {
@@ -620,7 +620,16 @@ fn test_star_evolve_step_terminate_rolls_back_state_and_eps_mdot() {
     m.controls.mass_change = 1.0e-6;
     m.controls.varcontrol_target = 1.0e-12;
     m.controls.ts_stop.min_allowed_varcontrol_target = 1.0e-6;
-    assert!(star_evolve_step(&mut m, false, false, true).is_err());
+    let err = star_evolve_step(&mut m, false, false, true)
+        .expect_err("timestep controller terminate must error");
+    assert!(
+        matches!(
+            err,
+            StarError::Terminated { model_number, .. } if model_number == mod0 + 1
+        ),
+        "expected StarError::Terminated at {}, got {err:?}",
+        mod0 + 1
+    );
     assert_eq!(m.model_number, mod0);
     assert_eq!(m.star_age, age0);
     assert_eq!(m.eps_mdot, eps0);

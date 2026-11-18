@@ -10,6 +10,7 @@ description = "Forward-mode first-order dual and second-order hyperdual numbers 
 [dependencies]
 flexmesa-const = { path = "../flexmesa-const" }
 flexmesa-math = { path = "../flexmesa-math" }
+serde.workspace = true
 
 [dev-dependencies]
 flexmesa-testing = { path = "../flexmesa-testing" }

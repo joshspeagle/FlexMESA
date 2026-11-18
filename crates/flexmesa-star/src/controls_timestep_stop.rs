@@ -10,7 +10,7 @@ pub const MAX_DX_LIMIT_CTRLS: usize = 8;
 /// Core-boundary definitions, additional evolutionary stopping limits, and
 /// soft/hard timestep controller settings (`timestep.f90`, `report.f90`,
 /// `do_one_utils.f90`).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct TimestepStopControls {
     // --- Core Boundary Composition Thresholds (`controls.defaults:762-829`) ---
     /// Outermost $^1\mathrm{H}$ threshold for `he_core_mass` (`he_core_boundary_h1_fraction`, `0.1` default).

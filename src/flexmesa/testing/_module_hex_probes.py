@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import csv
+import itertools
 import math
 import pathlib
 import struct
@@ -250,34 +251,21 @@ def _probe_binary(hex_root: pathlib.Path) -> ProbeOutcome:
 
 def _probe_math(hex_root: pathlib.Path) -> ProbeOutcome:
     rows = load_tsv_rows(hex_root, "math")
-    xs = [raw_hex_to_float64(rows[idx]["raw_bits_hex"]) for idx in (0, 34, 68)]
-    fns: dict[str, Callable[[float], float]] = {
-        "exp10": _rust.exp10,
-        "pow(,2)": lambda x: float(_rust.pow(x, 2)),
-        "pow(,2.)": lambda x: float(_rust.pow(x, 2.0)),
-        "cospi": _rust.cospi,
-        "sinpi": _rust.sinpi,
-        "tanpi": _rust.tanpi,
-        "safe_log": _rust.safe_log,
-        "safe_log10": _rust.safe_log10,
-    }
-    ulps = [
-        ulp_distance(
-            float(fns[row["label"]](xs[idx // 34])), row["raw_bits_hex"]
-        )
-        for idx, row in enumerate(rows)
-        if row["label"] in fns
-    ]
-    expected_outputs = sum(
-        1 for row in rows if row["label"] != "Function Value (x="
-    )
+    eval_map: dict[str, float] = {}
+    ulps: list[int] = []
+    for row in rows:
+        if row["label"] == "Function Value (x=":
+            x = raw_hex_to_float64(row["raw_bits_hex"])
+            eval_map = dict(_rust.math_test_suite_eval(x))
+            continue
+        ulps.append(ulp_distance(eval_map[row["label"]], row["raw_bits_hex"]))
     checked, zeros, max_u = _summarize_ulps(ulps)
     return (
-        expected_outputs,
+        checked,
         checked,
         zeros,
         max_u,
-        "24 crmath Rust strict-mode intrinsics across x={0.1,0.2,0.4}.",
+        "All 99 CRMATH evaluations (33 functions at x={0.1,0.2,0.4}) of math.",
     )
 
 
@@ -708,10 +696,36 @@ def _probe_rates(hex_root: pathlib.Path) -> ProbeOutcome:
     )
 
 
+def _probe_auto_diff(hex_root: pathlib.Path) -> ProbeOutcome:
+    rows = load_tsv_rows(hex_root, "auto_diff")
+    rhs_rows: list[dict[str, str]] = []
+    for _, grp_iter in itertools.groupby(rows, key=lambda r: r["record_idx"]):
+        grp = list(grp_iter)
+        assert len(grp) % 2 == 0, f"expected even LHS/RHS pair, got {len(grp)}"
+        rhs_rows.extend(grp[len(grp) // 2 :])
+    actual = _rust.auto_diff_test_suite_values()
+    ulps = [
+        ulp_distance(a, r["raw_bits_hex"])
+        for a, r in zip(actual, rhs_rows, strict=True)
+    ]
+    checked, zeros, max_u = _summarize_ulps(ulps)
+    return (
+        len(rhs_rows),
+        checked,
+        zeros,
+        max_u,
+        (
+            "All 387 auto_diff RHS outputs at 0 ULP "
+            "(paired with 387 analytical LHS values across 774 TSV entries)."
+        ),
+    )
+
+
 MODULE_PROBES: dict[str, ProbeFn] = {
     "const": _probe_const,
     "binary": _probe_binary,
     "math": _probe_math,
+    "auto_diff": _probe_auto_diff,
     "interp_1d": _probe_interp_1d,
     "chem": _probe_chem,
     "ionization": _probe_ionization,

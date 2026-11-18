@@ -455,14 +455,14 @@
       "upstream_panel_modules": 46
     },
     "infrastructure_lines": {
-      "rust_bridge_testing_bench": 15625,
-      "python_testing_bench": 13438
+      "rust_bridge_testing_bench": 15889,
+      "python_testing_bench": 13456
     }
   },
   "numerics": {
     "has_165_ci": true,
     "strict_cross_machine_identical": "gated in CI by scripts/check_strict_determinism.py (x86_64 vs aarch64, 1 vs 4 threads; 474,062 math vectors + uncapped star/1.3M_ms_high_Z + binary/jdot_gr_check run with unsupported controls ignored; a bit-identity check, not a comparison with MESA)",
-    "strict_kernels_bit_identical": "math: 403,258/403,258 CRMATH 0 ULP (70,804 libm <= 1 ULP); 3,394/3,504 probed module hex 0 ULP (2 complete, 12 non-math probed)",
+    "strict_kernels_bit_identical": "math: 403,258/403,258 CRMATH 0 ULP (70,804 libm <= 1 ULP); 3,856/3,966 probed module hex 0 ULP (4 complete, 13 non-math probed)",
     "total_upstream_hex_values": 348321,
     "modules": [
       {
@@ -488,7 +488,7 @@
       {
         "module": "auto_diff",
         "upstream_exact_values": 774,
-        "exact_strict_compared": "0"
+        "exact_strict_compared": "387/387 (0 ULP)"
       },
       {
         "module": "num",

@@ -1,5 +1,6 @@
 # Declared Level-2 module-hex gaps against upstream MESA 26.4.1 (#144).
-# Clean 0-ULP modules (const: 23/23, binary: 5/5) are omitted here and fail if
+# Clean 0-ULP modules (const: 23/23, math: 99/99, auto_diff: 387/387,
+# binary: 5/5) are omitted here and fail if
 # any regression occurs. Remaining packages must declare open issues and ULP
 # ceilings; improving a nonzero_ulp module to 0 ULP fails as a stale gap.
 
@@ -27,15 +28,6 @@ reason = "Upstream star_data/test emits zero floating-point values in exact_test
 module = "astero"
 status = "zero_values_in_mesa_reference"
 reason = "Upstream astero/test emits zero floating-point values in exact_tested_values.tsv."
-
-[[gaps]]
-module = "math"
-status = "partial_0_ulp"
-issue = "#220"
-max_declared_ulp = 0
-min_zero_ulp_count = 24
-expect_nonzero_ulp = false
-reason = "24 tested crmath Rust strict intrinsics agree at 0 ULP; remaining 75 upstream CRMATH evaluations await probe wiring."
 
 [[gaps]]
 module = "interp_1d"
@@ -126,12 +118,6 @@ max_declared_ulp = 10
 min_zero_ulp_count = 5
 expect_nonzero_ulp = true
 reason = "5/9 Salpeter, extended, and Chugunov screening outputs match at 0 ULP; remaining 4 channels differ by up to 6 ULPs."
-
-[[gaps]]
-module = "auto_diff"
-status = "unported_hex_harness"
-issue = "#220"
-reason = "774 upstream auto_diff operator-overload printouts await direct TSV harness mapping."
 
 [[gaps]]
 module = "num"

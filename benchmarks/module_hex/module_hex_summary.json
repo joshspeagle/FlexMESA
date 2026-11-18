@@ -3,10 +3,10 @@
   "total_packages_in_install": 26,
   "packages_with_test_dir": 25,
   "total_exact_values_captured": 348321,
-  "modules_with_executable_probes": 13,
-  "modules_passing_0_ulp": 2,
-  "total_values_checked": 3504,
-  "total_values_0_ulp": 3394,
+  "modules_with_executable_probes": 14,
+  "modules_passing_0_ulp": 4,
+  "total_values_checked": 3966,
+  "total_values_0_ulp": 3856,
   "modules": [
     {
       "module": "const",
@@ -32,14 +32,14 @@
     },
     {
       "module": "math",
-      "status": "partial_0_ulp",
+      "status": "pass_0_ulp",
       "upstream_exact_values": 102,
       "expected_outputs": 99,
-      "checked_values": 24,
-      "zero_ulp_values": 24,
+      "checked_values": 99,
+      "zero_ulp_values": 99,
       "max_ulp": 0,
-      "issue": "#220",
-      "notes": "24 crmath Rust strict-mode intrinsics across x={0.1,0.2,0.4}."
+      "issue": null,
+      "notes": "All 99 CRMATH evaluations (33 functions at x={0.1,0.2,0.4}) of math."
     },
     {
       "module": "mtx",
@@ -54,14 +54,14 @@
     },
     {
       "module": "auto_diff",
-      "status": "unported_hex_harness",
+      "status": "pass_0_ulp",
       "upstream_exact_values": 774,
-      "expected_outputs": 774,
-      "checked_values": 0,
-      "zero_ulp_values": 0,
+      "expected_outputs": 387,
+      "checked_values": 387,
+      "zero_ulp_values": 387,
       "max_ulp": 0,
-      "issue": "#220",
-      "notes": "774 upstream auto_diff operator-overload printouts await direct TSV harness mapping."
+      "issue": null,
+      "notes": "All 387 auto_diff RHS outputs at 0 ULP (paired with 387 analytical LHS values across 774 TSV entries)."
     },
     {
       "module": "forum",

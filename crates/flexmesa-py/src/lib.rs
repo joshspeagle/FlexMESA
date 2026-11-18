@@ -68,6 +68,8 @@ pub mod interp_2d;
 pub mod ionization_py;
 /// Tier B bindings for `kap` (`kap` radiative, conductive, and Compton opacities).
 pub mod kap_py;
+/// Level-2 exact-hex test-suite probes for `math` and `auto_diff`.
+pub mod math_hex_probe;
 /// Tier A/B/C bindings for `auto_diff`, `math`, and `mtx`.
 pub mod math_solvers;
 /// Reference-vector `Strict` digest, `Fast`-vs-`Strict` audit, and dispatch timing.
@@ -277,6 +279,7 @@ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     flexmesa_math::math_init();
     tier_a_parse::register(m)?;
     tier_a_data::register(m)?;
+    math_hex_probe::register(m)?;
     math_solvers::register(m)?;
     math_vec_audit::register(m)?;
     interp_1d::register(m)?;

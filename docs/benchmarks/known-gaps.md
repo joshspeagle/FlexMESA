@@ -179,15 +179,15 @@ Every Rust `#[ignore]` and Python `xfail`/`skip` marker in the repository is tra
 
 ## Level-2 Module Hex Reference Gaps (`benchmarks/module_hex/`)
 
-- **Checked vs MESA `26.4.1` `raw_bits_hex`**: `3,394` / `3,504` outputs at `0 ULP` across `13` probed modules (`2` modules complete at `0 ULP`; `348,321` total captured upstream values).
+- **Checked vs MESA `26.4.1` `raw_bits_hex`**: `3,856` / `3,966` outputs at `0 ULP` across `14` probed modules (`4` modules complete at `0 ULP`; `348,321` total captured upstream values).
 
 | Module | Status | Checked / Expected | 0 ULP | Max ULP | Issue | Notes |
 | :--- | :--- | ---: | ---: | ---: | :--- | :--- |
 | `const` | `pass_0_ulp` | 23 / 23 | 23 | 0 | none | All 23 CGS constants of the Rust `flexmesa-const` crate. |
 | `utils` | `zero_values_in_mesa_reference` | 0 / 0 | 0 | 0 | none | Upstream utils/test emits zero floating-point values in exact_tested_values.tsv. |
-| `math` | `partial_0_ulp` | 24 / 99 | 24 | 0 | [#220](https://github.com/joshspeagle/FlexMESA/issues/220) | 24 crmath Rust strict-mode intrinsics across x={0.1,0.2,0.4}. |
+| `math` | `pass_0_ulp` | 99 / 99 | 99 | 0 | none | All 99 CRMATH evaluations (33 functions at x={0.1,0.2,0.4}) of math. |
 | `mtx` | `partial_0_ulp` | 7 / 22 | 7 | 0 | [#152](https://github.com/joshspeagle/FlexMESA/issues/152) | All 7 tested test_square1+2 entries at 0 ULP. |
-| `auto_diff` | `unported_hex_harness` | 0 / 774 | 0 | 0 | [#220](https://github.com/joshspeagle/FlexMESA/issues/220) | 774 upstream auto_diff operator-overload printouts await direct TSV harness mapping. |
+| `auto_diff` | `pass_0_ulp` | 387 / 387 | 387 | 0 | none | All 387 auto_diff RHS outputs at 0 ULP (paired with 387 analytical LHS values across 774 TSV entries). |
 | `forum` | `zero_values_in_mesa_reference` | 0 / 0 | 0 | 0 | none | Upstream forum/test emits zero floating-point values in exact_tested_values.tsv. |
 | `num` | `unported_hex_harness` | 0 / 570 | 0 | 0 | [#152](https://github.com/joshspeagle/FlexMESA/issues/152) | 570 upstream num Brent/Newton/ODE test printouts await direct TSV harness mapping. |
 | `interp_1d` | `partial_0_ulp` | 22 / 234 | 22 | 0 | [#153](https://github.com/joshspeagle/FlexMESA/issues/153) | test3 (interp_pm asc/desc) & test1 (interp_m3q asc/desc) values. |

@@ -23,15 +23,20 @@ def test_live_module_hex_gate_and_summary_match() -> None:
 
     summary = res.to_summary_dict()
     assert summary["total_packages_in_install"] == 26
-    assert summary["modules_with_executable_probes"] >= 13
-    assert summary["total_values_0_ulp"] >= 3300
+    assert summary["modules_with_executable_probes"] >= 14
+    assert summary["total_values_0_ulp"] >= 3800
 
     by_mod = {r.module: r for r in res.module_results}
     assert by_mod["const"].status == "pass_0_ulp"
     assert by_mod["const"].zero_ulp_values == 23
     assert by_mod["binary"].status == "pass_0_ulp"
     assert by_mod["binary"].zero_ulp_values == 5
-    assert by_mod["math"].checked_values == 24
+    assert by_mod["math"].status == "pass_0_ulp"
+    assert by_mod["math"].checked_values == 99
+    assert by_mod["math"].zero_ulp_values == 99
+    assert by_mod["auto_diff"].status == "pass_0_ulp"
+    assert by_mod["auto_diff"].checked_values == 387
+    assert by_mod["auto_diff"].zero_ulp_values == 387
     assert by_mod["turb"].checked_values == 62
     assert by_mod["ionization"].expected_outputs == 31
     assert by_mod["kap"].expected_outputs == 21

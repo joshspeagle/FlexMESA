@@ -44,6 +44,8 @@ Within the canonical Rust engine, all physics crates call `flexmesa-math` and su
 
 You can inspect or switch the Rust numerics mode in Python (`flexmesa.get_numerics_mode()`, `flexmesa.set_numerics_mode("fast")`, `with flexmesa.numerics_mode_context("fast"): ...`) or on the CLI (`flexmesa trace ... --numerics-mode fast`), and the active mode is recorded in every emitted `LOGS/history.data`, `LOGS/profileN.data`, `binary_history.data`, `.mod`, and `.photo` file.
 
+The numerics mode is one setting for the whole process, so a process runs in one mode at a time. Switching it while another thread is evaluating physics would mix `"strict"` and `"fast"` arithmetic inside that calculation. To compare the two modes, run them one after the other or in separate processes (`DECISIONS #23`).
+
 ---
 
 ## 2. Multi-Zone CPU Parallelism (`parallel=True` & `RAYON_NUM_THREADS`)

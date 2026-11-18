@@ -240,9 +240,11 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
      | `intrinsic_pow` (`real **`, `#198`) | 10,294 | 4,248 / 10,294 (`41.27%`, 1,493 ULP) | **10,291 / 10,294 (`99.97%`, 1 ULP)** |
 
   4. **Solver Operation Order & JAX-vs-Rust-Strict Validation Bounds (`N1-8`, `#166`)**: Align dense LU, block-Thomas, and `bcyclic` loops with `mtx/private/{my_lapack95,mtx_support,bcyclic}.f90`, and restate derived-JAX validation bounds against Rust `Strict` in `tests/test_eos_wave3a3.py` (`2.0e-6 -> 3.0e-6` on 3rd-order `Skye` `d_dln_t`, measured `2.47e-6` from `crlibm` `RZ` vs XLA `RN`/FMA) and `tests/test_wave5_bench.py` (`1.0e-14 -> 2.0e-14` on `w5_binary_rlof`, measured `1.40e-14`).
+  5. **The mode is process-wide: one process runs in one mode at a time (`#210`, 2026-11-18).** `with_numerics_mode` serializes mode switchers against each other, but ordinary code reads the mode without that lock, so switching while another thread is evaluating physics mixes strict and fast arithmetic inside that calculation. A program that needs both modes runs them one after the other or in separate processes. In the test suite, a test that switches the mode lives in its own `*numerics_mode_test.rs` integration-test file, enforced by `crates/flexmesa-math/tests/routing_governance.rs`.
 - **Why**: Provides hardware-independent (`x86_64` == `aarch64`) and thread-count-independent `Strict` arithmetic from one Rust source while reproducing both `CRMATH`'s directed-rounding calls and `libm`'s nearest-rounded intrinsics.
 - **Alternatives Rejected**:
   - *Generic `<M: MathBackend>` type parameter across physics crates*: Duplicates monomorphized code across 25 crates and `DualOrder1<N>` types for a run-start mode switch.
+  - *A per-run mode carried by the model or solver handle (`#210`)*: Removes the one-mode-per-process restriction, but every routine that reaches the math layer would need the mode passed down, across most physics crates, for no effect on any `v0.1.0` acceptance criterion. Strict is the only mode judged against MESA.
   - *`&dyn MathBackend` trait-object dispatch*: Blocks inlining of `fma` and integer-power chains and threads context pointers through scalar helpers.
   - *Pure-Rust `core-math` (`RN`) for `CRMATH` functions*: Mismatches `CRMATH`'s `*_rz` and `*_rd` rounding on ~50% of inputs.
 

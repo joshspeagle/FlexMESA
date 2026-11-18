@@ -38,7 +38,7 @@
       "checked_values": 24,
       "zero_ulp_values": 24,
       "max_ulp": 0,
-      "issue": "#166",
+      "issue": "#220",
       "notes": "24 crmath Rust strict-mode intrinsics across x={0.1,0.2,0.4}."
     },
     {
@@ -60,7 +60,7 @@
       "checked_values": 0,
       "zero_ulp_values": 0,
       "max_ulp": 0,
-      "issue": "#166",
+      "issue": "#220",
       "notes": "774 upstream auto_diff operator-overload printouts await direct TSV harness mapping."
     },
     {

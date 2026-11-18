@@ -185,9 +185,9 @@ Every Rust `#[ignore]` and Python `xfail`/`skip` marker in the repository is tra
 | :--- | :--- | ---: | ---: | ---: | :--- | :--- |
 | `const` | `pass_0_ulp` | 23 / 23 | 23 | 0 | none | All 23 CGS constants of the Rust `flexmesa-const` crate. |
 | `utils` | `zero_values_in_mesa_reference` | 0 / 0 | 0 | 0 | none | Upstream utils/test emits zero floating-point values in exact_tested_values.tsv. |
-| `math` | `partial_0_ulp` | 24 / 99 | 24 | 0 | [#166](https://github.com/joshspeagle/FlexMESA/issues/166) | 24 crmath Rust strict-mode intrinsics across x={0.1,0.2,0.4}. |
+| `math` | `partial_0_ulp` | 24 / 99 | 24 | 0 | [#220](https://github.com/joshspeagle/FlexMESA/issues/220) | 24 crmath Rust strict-mode intrinsics across x={0.1,0.2,0.4}. |
 | `mtx` | `partial_0_ulp` | 7 / 22 | 7 | 0 | [#152](https://github.com/joshspeagle/FlexMESA/issues/152) | All 7 tested test_square1+2 entries at 0 ULP. |
-| `auto_diff` | `unported_hex_harness` | 0 / 774 | 0 | 0 | [#166](https://github.com/joshspeagle/FlexMESA/issues/166) | 774 upstream auto_diff operator-overload printouts await direct TSV harness mapping. |
+| `auto_diff` | `unported_hex_harness` | 0 / 774 | 0 | 0 | [#220](https://github.com/joshspeagle/FlexMESA/issues/220) | 774 upstream auto_diff operator-overload printouts await direct TSV harness mapping. |
 | `forum` | `zero_values_in_mesa_reference` | 0 / 0 | 0 | 0 | none | Upstream forum/test emits zero floating-point values in exact_tested_values.tsv. |
 | `num` | `unported_hex_harness` | 0 / 570 | 0 | 0 | [#152](https://github.com/joshspeagle/FlexMESA/issues/152) | 570 upstream num Brent/Newton/ODE test printouts await direct TSV harness mapping. |
 | `interp_1d` | `partial_0_ulp` | 22 / 234 | 22 | 0 | [#153](https://github.com/joshspeagle/FlexMESA/issues/153) | test3 (interp_pm asc/desc) & test1 (interp_m3q asc/desc) values. |

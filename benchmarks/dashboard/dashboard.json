@@ -915,8 +915,8 @@
     "python": {
       "tool": "pytest --cov",
       "overall": {
-        "statements": 21641,
-        "covered": 18960,
+        "statements": 21638,
+        "covered": 18965,
         "percent": 87.6
       },
       "by_subpackage": [
@@ -988,9 +988,9 @@
         },
         {
           "subpackage": "flexmesa.interp_1d",
-          "statements": 432,
-          "covered": 380,
-          "percent": 88.0
+          "statements": 429,
+          "covered": 385,
+          "percent": 89.7
         },
         {
           "subpackage": "flexmesa.interp_2d",
@@ -1267,7 +1267,7 @@
       },
       {
         "phase": "Phase C",
-        "open": 12,
+        "open": 13,
         "closed": 1,
         "issues": [
           {
@@ -1334,6 +1334,11 @@
             "number": 166,
             "title": "[Audit C15] JAX contract: derived, differentiable and batched; validated against Rust strict mode",
             "state": "closed"
+          },
+          {
+            "number": 220,
+            "title": "[Audit] Level-2 exact-hex probes for the remaining math and auto_diff values",
+            "state": "open"
           }
         ]
       },
@@ -1790,6 +1795,19 @@
       "python_cov_pct": "87.6",
       "closed_140": "10",
       "total_140": "32",
+      "deferred_169": "18"
+    },
+    {
+      "date_utc": "2026-11-18",
+      "commit": "995df81",
+      "event": "main merge",
+      "engine_ported_pct": "13.9",
+      "all_verified_pct": "0.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "71.1",
+      "python_cov_pct": "87.6",
+      "closed_140": "10",
+      "total_140": "33",
       "deferred_169": "18"
     }
   ]

@@ -168,8 +168,8 @@
   "python": {
     "tool": "pytest --cov",
     "overall": {
-      "statements": 21641,
-      "covered": 18960,
+      "statements": 21638,
+      "covered": 18965,
       "percent": 87.6
     },
     "by_subpackage": [
@@ -241,9 +241,9 @@
       },
       {
         "subpackage": "flexmesa.interp_1d",
-        "statements": 432,
-        "covered": 380,
-        "percent": 88.0
+        "statements": 429,
+        "covered": 385,
+        "percent": 89.7
       },
       {
         "subpackage": "flexmesa.interp_2d",

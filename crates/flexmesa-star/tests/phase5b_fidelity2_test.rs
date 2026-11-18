@@ -634,3 +634,19 @@ fn test_star_evolve_step_terminate_rolls_back_state_and_eps_mdot() {
     assert_eq!(m.star_age, age0);
     assert_eq!(m.eps_mdot, eps0);
 }
+
+/// A mass change that would remove more than the envelope is a retriable
+/// failure, as upstream's `ierr = -1` (`adjust_mass.f90:260-263`) leads to a
+/// retry with a smaller timestep (`evolve.f90:591`), not a fatal input error.
+#[test]
+fn test_oversized_mass_loss_is_a_retriable_failure() {
+    let mut model =
+        load_zams_model(StarControls::default(), StarJobControls::default())
+            .expect("load 1 Msun ZAMS");
+    set_hydro_vars(&mut model, false, false).expect("set_hydro_vars");
+    let dt = 1.0e3 * SECYER;
+    model.mstar_dot = -2.0 * model.xmstar / dt;
+    let err = do_adjust_mass_step(&mut model, dt)
+        .expect_err("removing twice the envelope mass must fail");
+    assert!(err.is_retriable(), "expected a retriable error, got {err}");
+}

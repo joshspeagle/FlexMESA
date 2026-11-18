@@ -44,15 +44,7 @@ enum SingleTrialOutcome {
 }
 
 fn is_binary_trial_retriable(err: &StarError) -> bool {
-    match err {
-        StarError::IoError(_) | StarError::Terminated { .. } => false,
-        StarError::InvalidInput(msg) => {
-            // `do_adjust_mass_step` currently reports oversized RLOF trial
-            // `delta_m <= -xmstar` as `InvalidInput` until #152/#160.
-            msg.contains("produced non-positive envelope mass")
-        }
-        _ => true,
-    }
+    err.is_retriable()
 }
 
 fn emit_outer_retry_trace(

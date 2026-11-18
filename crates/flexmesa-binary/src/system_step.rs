@@ -89,27 +89,26 @@ impl BinarySystem {
             BinaryCompanion::Star(s2) => s2.controls.min_timestep_limit,
         };
         let dt_floor = self.donor.controls.min_timestep_limit.max(s2_min);
-        let check_cut_dt = |dt_cut: f64,
-                            cur_dt: f64|
-         -> Result<f64, StarError> {
-            if !dt_cut.is_finite() || dt_cut <= 0.0 {
-                return Err(StarError::ConvergenceFailure(format!(
-                    "CutDt produced non-positive dt ({dt_cut:.3e} s)"
-                )));
-            }
-            if dt_floor > 0.0 && dt_cut < dt_floor {
-                return Err(StarError::ConvergenceFailure(format!(
+        let check_cut_dt =
+            |dt_cut: f64, cur_dt: f64| -> Result<f64, StarError> {
+                if !dt_cut.is_finite() || dt_cut <= 0.0 {
+                    return Err(StarError::ConvergenceFailure(format!(
+                        "CutDt produced non-positive dt ({dt_cut:.3e} s)"
+                    )));
+                }
+                if dt_floor > 0.0 && dt_cut < dt_floor {
+                    return Err(StarError::ConvergenceFailure(format!(
                     "CutDt hit dt_floor ({dt_cut:.3e} s < {dt_floor:.3e} s)"
                 )));
-            }
-            let next_dt = dt_cut.max(dt_floor);
-            if next_dt >= 0.999_999 * cur_dt {
-                return Err(StarError::ConvergenceFailure(format!(
+                }
+                let next_dt = dt_cut.max(dt_floor);
+                if next_dt >= 0.999_999 * cur_dt {
+                    return Err(StarError::ConvergenceFailure(format!(
                     "CutDt stalled at dt ({next_dt:.3e} s >= {cur_dt:.3e} s)"
                 )));
-            }
-            Ok(next_dt)
-        };
+                }
+                Ok(next_dt)
+            };
         let mut dt_try = if dt_floor > 0.0 {
             dt.min(self.max_timestep_sec).max(dt_floor)
         } else {
@@ -127,15 +126,18 @@ impl BinarySystem {
                 self.apply_retry_holds(&retry_holds);
             }
             if tracing {
-                eprintln!(
-                    "[trace] binary model={} outer_retry={outer_retry} dt_try={dt_try:.4e} \
-                     implicit={implicit_mode} donor_i={} mtransfer={:.3e} gaps=[{:+.4e},{:+.4e}]",
-                    self.model_number + 1,
-                    self.donor_i,
-                    self.mtransfer_rate,
-                    self.rl_relative_gap[0],
-                    self.rl_relative_gap[1],
+                let mut jl = flexmesa_star::step_trace::JsonLine::new(
+                    "binary_outer_retry",
                 );
+                jl.field_usize("model", self.model_number + 1);
+                jl.field_usize("outer_retry", outer_retry);
+                jl.field_f64("dt_try", dt_try);
+                jl.field_bool("implicit", implicit_mode);
+                jl.field_usize("donor_i", self.donor_i);
+                jl.field_f64("mtransfer", self.mtransfer_rate);
+                jl.field_f64("gap_d", self.rl_relative_gap[0]);
+                jl.field_f64("gap_a", self.rl_relative_gap[1]);
+                jl.emit();
             }
             if !implicit_mode {
                 let pre_mdot = if self.ignore_rlof_flag {
@@ -230,10 +232,36 @@ impl BinarySystem {
                         (dt_used, ts_ctrl)
                     }
                     Ok(SingleTrialOutcome::CutDt(dt_cut)) => {
-                        dt_try = check_cut_dt(dt_cut, dt_try)?;
+                        let next_dt = check_cut_dt(dt_cut, dt_try)?;
+                        if tracing {
+                            let mut jl =
+                                flexmesa_star::step_trace::JsonLine::new(
+                                    "binary_dt_cut",
+                                );
+                            jl.field_usize("model", self.model_number + 1);
+                            jl.field_usize("outer_retry", outer_retry);
+                            jl.field_usize("try_idx", try_idx);
+                            jl.field_f64("dt_try", dt_try);
+                            jl.field_f64("dt_next", next_dt);
+                            jl.emit();
+                        }
+                        dt_try = next_dt;
                         break;
                     }
                     Err(e) => {
+                        if tracing {
+                            let mut jl =
+                                flexmesa_star::step_trace::JsonLine::new(
+                                    "binary_implicit_trial",
+                                );
+                            jl.field_usize("model", self.model_number + 1);
+                            jl.field_usize("outer_retry", outer_retry);
+                            jl.field_usize("try_idx", try_idx);
+                            jl.field_f64("trial_mdot", trial_mdot);
+                            jl.field_str("outcome", "error");
+                            jl.field_str("detail", &e.to_string());
+                            jl.emit();
+                        }
                         if outer_retry >= 10 || dt_try <= dt_floor {
                             return Err(e);
                         }
@@ -275,6 +303,27 @@ impl BinarySystem {
                     self.rl_relative_gap[1],
                     m_a / m_d.max(1.0),
                 )?;
+                let outcome_name = match &act {
+                    ImplicitStepAction::Converged(_) => "converged",
+                    ImplicitStepAction::Detached => "detached",
+                    ImplicitStepAction::TryNextMdot(_) => "try_next_mdot",
+                    ImplicitStepAction::ExceededMaxTries => {
+                        "exceeded_max_tries"
+                    }
+                };
+                if tracing {
+                    let mut jl = flexmesa_star::step_trace::JsonLine::new(
+                        "binary_implicit_trial",
+                    );
+                    jl.field_usize("model", self.model_number + 1);
+                    jl.field_usize("outer_retry", outer_retry);
+                    jl.field_usize("try_idx", try_idx);
+                    jl.field_f64("trial_mdot", trial_mdot);
+                    jl.field_f64("dt_used", dt_used);
+                    jl.field_f64("m_exp", m_exp);
+                    jl.field_str("outcome", outcome_name);
+                    jl.emit();
+                }
                 match act {
                     ImplicitStepAction::Converged(m_conv) => {
                         let m_acc = m_conv.min(0.0);
@@ -335,7 +384,19 @@ impl BinarySystem {
                     && dt_used > 1.0
                     && (self.exceeds_hard_limits(&ts_ctrl) || dmdot_hard)
                 {
-                    dt_try = (0.5 * dt_used).max(dt_floor);
+                    let next_dt = (0.5 * dt_used).max(dt_floor);
+                    if tracing {
+                        let mut jl = flexmesa_star::step_trace::JsonLine::new(
+                            "binary_hard_limit_retry",
+                        );
+                        jl.field_usize("model", self.model_number + 1);
+                        jl.field_usize("outer_retry", outer_retry);
+                        jl.field_f64("dt_used", dt_used);
+                        jl.field_f64("dt_next", next_dt);
+                        jl.field_bool("dmdot_hard", dmdot_hard);
+                        jl.emit();
+                    }
+                    dt_try = next_dt;
                     continue;
                 }
                 return Ok(self.finish_accepted_step(dt_used, &ts_ctrl, extras));

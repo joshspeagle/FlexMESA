@@ -409,12 +409,27 @@ pub fn solve_henyey_step(
             model.unpack_xh();
             model.set_m_grav_and_grav();
             if crate::step_trace::enabled(model.model_number + 1) {
-                eprintln!(
-                    "[trace] solver model={} dt={:.4e} line search failed at iter {iter} \
-                     rnorm={residual_norm:.3e} rmax={max_residual:.3e}",
-                    model.model_number + 1,
-                    model.dt,
+                let (k_max, i_max, v_max) =
+                    crate::step_trace::argmax_abs(&sys.equ, sys.nvar);
+                let mut jl = crate::step_trace::JsonLine::new(
+                    "solver_line_search_failed",
                 );
+                jl.field_usize("model", model.model_number + 1);
+                jl.field_f64("dt", model.dt);
+                jl.field_usize("iter", iter);
+                jl.field_f64("rnorm", residual_norm);
+                jl.field_f64("rmax", max_residual);
+                jl.field_usize("zone", k_max);
+                jl.field_str(
+                    "eq",
+                    &model.layout.equation_name(i_max, &model.iso_names),
+                );
+                jl.field_str(
+                    "var",
+                    &model.layout.variable_name(i_max, &model.iso_names),
+                );
+                jl.field_f64("val", v_max);
+                jl.emit();
             }
             return Err(StarError::StepFailure(Box::new(
                 build_step_failure_info(
@@ -468,27 +483,33 @@ pub fn solve_henyey_step(
                 active_gold_level(model),
                 iter_used,
             );
-        eprintln!(
-            "[trace] solver model={} dt={:.4e} nz={} conv={} iters={} \
-             rnorm={:.3e}/{:.1e} rmax={:.3e}/{:.1e} at k={} eq={} (nvar_hydro={}) \
-             cnorm={:.3e}/{:.1e} cmax={:.3e}/{:.1e}",
-            model.model_number + 1,
-            model.dt,
-            sys.nz,
-            converged,
-            iter_used,
-            residual_norm,
-            tol_rn,
-            v_max,
-            tol_mr,
-            k_max,
-            i_max,
-            model.layout.nvar_hydro,
-            correction_norm,
-            tol_cn,
-            max_correction,
-            tol_mc,
+        let mut jl = crate::step_trace::JsonLine::new("solver");
+        jl.field_usize("model", model.model_number + 1);
+        jl.field_f64("dt", model.dt);
+        jl.field_usize("nz", sys.nz);
+        jl.field_bool("converged", converged);
+        jl.field_usize("iters", iter_used);
+        jl.field_f64("rnorm", residual_norm);
+        jl.field_f64("tol_rn", tol_rn);
+        jl.field_f64("rmax", v_max);
+        jl.field_f64("tol_mr", tol_mr);
+        jl.field_usize("zone", k_max);
+        jl.field_usize("equ_idx", i_max);
+        jl.field_str(
+            "eq",
+            &model.layout.equation_name(i_max, &model.iso_names),
         );
+        jl.field_str(
+            "var",
+            &model.layout.variable_name(i_max, &model.iso_names),
+        );
+        jl.field_f64("val", v_max);
+        jl.field_usize("nvar_hydro", model.layout.nvar_hydro);
+        jl.field_f64("cnorm", correction_norm);
+        jl.field_f64("tol_cn", tol_cn);
+        jl.field_f64("cmax", max_correction);
+        jl.field_f64("tol_mc", tol_mc);
+        jl.emit();
     }
 
     if include_chem {

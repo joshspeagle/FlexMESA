@@ -338,13 +338,16 @@ pub fn star_evolve_step(
                     &mut ts_rep,
                 );
                 if crate::step_trace::enabled(model.model_number) {
-                    eprintln!(
-                        "[trace] step model={} dt={:.4e} retries={} action={:?} \
-                         dt_next={:.4e} reason={:?} varcontrol={:.3e} mdot={:.3e}",
-                        model.model_number, dt_try, retries, ts_action,
-                        ts_rep.dt_next, ts_rep.reason, ts_rep.varcontrol,
-                        model.mstar_dot,
-                    );
+                    let mut jl = crate::step_trace::JsonLine::new("star_step");
+                    jl.field_usize("model", model.model_number);
+                    jl.field_f64("dt", dt_try);
+                    jl.field_usize("retries", retries);
+                    jl.field_str("action", &format!("{ts_action:?}"));
+                    jl.field_f64("dt_next", ts_rep.dt_next);
+                    jl.field_str("reason", &format!("{:?}", ts_rep.reason));
+                    jl.field_f64("varcontrol", ts_rep.varcontrol);
+                    jl.field_f64("mdot", model.mstar_dot);
+                    jl.emit();
                 }
                 match ts_action {
                     TimestepAction::KeepGoing => {
@@ -483,13 +486,12 @@ pub fn star_evolve_step(
             }
         };
         if crate::step_trace::enabled(model.model_number + 1) {
-            eprintln!(
-                "[trace] retry model={} dt={:.4e} retries={} why={}",
-                model.model_number + 1,
-                dt_try,
-                retries,
-                why,
-            );
+            let mut jl = crate::step_trace::JsonLine::new("star_retry");
+            jl.field_usize("model", model.model_number + 1);
+            jl.field_f64("dt", dt_try);
+            jl.field_usize("retries", retries);
+            jl.field_str("why", &why);
+            jl.emit();
         }
         model.dt_limit_ratio_old = prev_dt_limit_ratio_old;
         model.aux.step_hist.rotational_mdot_boost_old = prev_rot_boost_old;

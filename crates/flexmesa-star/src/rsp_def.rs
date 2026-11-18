@@ -220,7 +220,7 @@ impl RspDerivedConsts {
 /// Dynamic zone arrays (`k = 0..nz-1`, surface-to-center) and cycle-level
 /// energy/work integrators for `RSP` and `RSP2` (`rsp_def.f90:85-116, 365-489`),
 /// persisted across `.mod` (`32812`) and `.photo` checkpoints.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct RspState {
     /// Specific turbulent energy $e_t = w^2$ (`et_RSP`), radiation energy `erad_RSP`, and flux `Fr_RSP`.
     pub et_rsp: Vec<f64>,

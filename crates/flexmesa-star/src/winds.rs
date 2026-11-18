@@ -14,7 +14,9 @@ pub use crate::winds_driver::{do_set_mdot, set_mdot};
 
 /// Stellar wind mass-loss prescription (`cool_wind_RGB_scheme`,
 /// `cool_wind_AGB_scheme`, and `hot_wind_scheme` in `winds.f90`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize,
+)]
 pub enum WindScheme {
     /// Zero wind mass loss (`""`).
     None,
@@ -58,7 +60,16 @@ impl WindScheme {
 
 /// Low-$T_{\mathrm{eff}}$ prescription inside the composite [`WindScheme::Dutch`]
 /// scheme (`Dutch_wind_lowT_scheme` in `winds.f90:576-593`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Default,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 pub enum DutchLowTScheme {
     /// de Jager et al. (1988) cool wind (`'de Jager'`, default).
     #[default]

@@ -43,6 +43,99 @@ enum SingleTrialOutcome {
     CutDt(f64),
 }
 
+fn is_binary_trial_retriable(err: &StarError) -> bool {
+    match err {
+        StarError::IoError(_) | StarError::Terminated { .. } => false,
+        StarError::InvalidInput(msg) => {
+            // `do_adjust_mass_step` currently reports oversized RLOF trial
+            // `delta_m <= -xmstar` as `InvalidInput` until #152/#160.
+            msg.contains("produced non-positive envelope mass")
+        }
+        _ => true,
+    }
+}
+
+fn emit_outer_retry_trace(
+    sys: &BinarySystem,
+    outer_retry: usize,
+    dt_try: f64,
+    implicit_mode: bool,
+) {
+    let mut jl = flexmesa_star::step_trace::JsonLine::new("binary_outer_retry");
+    jl.field_usize("model", sys.model_number + 1);
+    jl.field_usize("outer_retry", outer_retry);
+    jl.field_f64("dt_try", dt_try);
+    jl.field_bool("implicit", implicit_mode);
+    jl.field_usize("donor_i", sys.donor_i);
+    jl.field_f64("mtransfer", sys.mtransfer_rate);
+    jl.field_f64("gap_d", sys.rl_relative_gap[0]);
+    jl.field_f64("gap_a", sys.rl_relative_gap[1]);
+    jl.emit();
+}
+
+fn emit_dt_cut_trace(
+    model: usize,
+    outer_retry: usize,
+    try_idx: usize,
+    dt_try: f64,
+    next_dt: f64,
+) {
+    let mut jl = flexmesa_star::step_trace::JsonLine::new("binary_dt_cut");
+    jl.field_usize("model", model);
+    jl.field_usize("outer_retry", outer_retry);
+    jl.field_usize("try_idx", try_idx);
+    jl.field_f64("dt_try", dt_try);
+    jl.field_f64("dt_next", next_dt);
+    jl.emit();
+}
+
+#[allow(clippy::too_many_arguments)]
+fn emit_implicit_trial_trace(
+    model: usize,
+    outer_retry: usize,
+    try_idx: usize,
+    trial_mdot: f64,
+    dt_used: Option<f64>,
+    m_exp: Option<f64>,
+    outcome: &str,
+    detail: Option<&str>,
+) {
+    let mut jl =
+        flexmesa_star::step_trace::JsonLine::new("binary_implicit_trial");
+    jl.field_usize("model", model);
+    jl.field_usize("outer_retry", outer_retry);
+    jl.field_usize("try_idx", try_idx);
+    jl.field_f64("trial_mdot", trial_mdot);
+    if let Some(dt) = dt_used {
+        jl.field_f64("dt_used", dt);
+    }
+    if let Some(me) = m_exp {
+        jl.field_f64("m_exp", me);
+    }
+    jl.field_str("outcome", outcome);
+    if let Some(det) = detail {
+        jl.field_str("detail", det);
+    }
+    jl.emit();
+}
+
+fn emit_hard_limit_retry_trace(
+    model: usize,
+    outer_retry: usize,
+    dt_used: f64,
+    next_dt: f64,
+    dmdot_hard: bool,
+) {
+    let mut jl =
+        flexmesa_star::step_trace::JsonLine::new("binary_hard_limit_retry");
+    jl.field_usize("model", model);
+    jl.field_usize("outer_retry", outer_retry);
+    jl.field_f64("dt_used", dt_used);
+    jl.field_f64("dt_next", next_dt);
+    jl.field_bool("dmdot_hard", dmdot_hard);
+    jl.emit();
+}
+
 impl BinarySystem {
     /// Advances the coupled binary system by one timestep `dt` (s) using [`DefaultBinaryExtras`].
     pub fn step(&mut self, dt: f64) -> (f64, i32) {
@@ -89,27 +182,26 @@ impl BinarySystem {
             BinaryCompanion::Star(s2) => s2.controls.min_timestep_limit,
         };
         let dt_floor = self.donor.controls.min_timestep_limit.max(s2_min);
-        let check_cut_dt = |dt_cut: f64,
-                            cur_dt: f64|
-         -> Result<f64, StarError> {
-            if !dt_cut.is_finite() || dt_cut <= 0.0 {
-                return Err(StarError::ConvergenceFailure(format!(
-                    "CutDt produced non-positive dt ({dt_cut:.3e} s)"
-                )));
-            }
-            if dt_floor > 0.0 && dt_cut < dt_floor {
-                return Err(StarError::ConvergenceFailure(format!(
+        let check_cut_dt =
+            |dt_cut: f64, cur_dt: f64| -> Result<f64, StarError> {
+                if !dt_cut.is_finite() || dt_cut <= 0.0 {
+                    return Err(StarError::ConvergenceFailure(format!(
+                        "CutDt produced non-positive dt ({dt_cut:.3e} s)"
+                    )));
+                }
+                if dt_floor > 0.0 && dt_cut < dt_floor {
+                    return Err(StarError::ConvergenceFailure(format!(
                     "CutDt hit dt_floor ({dt_cut:.3e} s < {dt_floor:.3e} s)"
                 )));
-            }
-            let next_dt = dt_cut.max(dt_floor);
-            if next_dt >= 0.999_999 * cur_dt {
-                return Err(StarError::ConvergenceFailure(format!(
+                }
+                let next_dt = dt_cut.max(dt_floor);
+                if next_dt >= 0.999_999 * cur_dt {
+                    return Err(StarError::ConvergenceFailure(format!(
                     "CutDt stalled at dt ({next_dt:.3e} s >= {cur_dt:.3e} s)"
                 )));
-            }
-            Ok(next_dt)
-        };
+                }
+                Ok(next_dt)
+            };
         let mut dt_try = if dt_floor > 0.0 {
             dt.min(self.max_timestep_sec).max(dt_floor)
         } else {
@@ -122,20 +214,13 @@ impl BinarySystem {
         let tracing = flexmesa_star::step_trace::enabled(self.model_number + 1);
         for outer_retry in 0..16_usize {
             if outer_retry > 0 {
+                self.counters.num_retries += 1;
                 self.record_retry_holds(&mut retry_holds);
                 self.restore_snapshot(&pre_step_snap)?;
                 self.apply_retry_holds(&retry_holds);
             }
             if tracing {
-                eprintln!(
-                    "[trace] binary model={} outer_retry={outer_retry} dt_try={dt_try:.4e} \
-                     implicit={implicit_mode} donor_i={} mtransfer={:.3e} gaps=[{:+.4e},{:+.4e}]",
-                    self.model_number + 1,
-                    self.donor_i,
-                    self.mtransfer_rate,
-                    self.rl_relative_gap[0],
-                    self.rl_relative_gap[1],
-                );
+                emit_outer_retry_trace(self, outer_retry, dt_try, implicit_mode);
             }
             if !implicit_mode {
                 let pre_mdot = if self.ignore_rlof_flag {
@@ -154,6 +239,7 @@ impl BinarySystem {
                             && dt_used > 1.0
                             && self.exceeds_hard_limits(&ts_ctrl)
                         {
+                            self.counters.num_hard_limit_retries += 1;
                             dt_try = 0.5 * dt_used;
                             continue;
                         }
@@ -179,15 +265,23 @@ impl BinarySystem {
                             .finish_accepted_step(dt_used, &ts_ctrl, extras));
                     }
                     Ok(SingleTrialOutcome::CutDt(dt_cut)) => {
+                        self.counters.num_dt_cuts += 1;
                         dt_try = check_cut_dt(dt_cut, dt_try)?;
                         continue;
                     }
-                    Err(_) if outer_retry < 10 && dt_try > dt_floor => {
+                    Err(e)
+                        if is_binary_trial_retriable(&e)
+                            && outer_retry < 10
+                            && dt_try > dt_floor =>
+                    {
                         let cut = if outer_retry == 0 { 0.5 } else { 0.25 };
                         dt_try = (cut * dt_try).max(dt_floor);
                         continue;
                     }
-                    Err(e) => return Err(e),
+                    Err(e) => {
+                        self.restore_snapshot(&pre_step_snap)?;
+                        return Err(e);
+                    }
                 }
             }
 
@@ -223,6 +317,7 @@ impl BinarySystem {
                 if try_idx > 1 {
                     self.restore_snapshot(&trial_snap)?;
                 }
+                self.counters.num_implicit_trials += 1;
                 let (dt_used, ts_ctrl) = match self
                     .run_single_trial(trial_mdot, dt_try, false, extras)
                 {
@@ -230,11 +325,38 @@ impl BinarySystem {
                         (dt_used, ts_ctrl)
                     }
                     Ok(SingleTrialOutcome::CutDt(dt_cut)) => {
-                        dt_try = check_cut_dt(dt_cut, dt_try)?;
+                        self.counters.num_dt_cuts += 1;
+                        let next_dt = check_cut_dt(dt_cut, dt_try)?;
+                        if tracing {
+                            emit_dt_cut_trace(
+                                self.model_number + 1,
+                                outer_retry,
+                                try_idx,
+                                dt_try,
+                                next_dt,
+                            );
+                        }
+                        dt_try = next_dt;
                         break;
                     }
                     Err(e) => {
-                        if outer_retry >= 10 || dt_try <= dt_floor {
+                        if tracing {
+                            emit_implicit_trial_trace(
+                                self.model_number + 1,
+                                outer_retry,
+                                try_idx,
+                                trial_mdot,
+                                None,
+                                None,
+                                "error",
+                                Some(&e.to_string()),
+                            );
+                        }
+                        if !is_binary_trial_retriable(&e)
+                            || outer_retry >= 10
+                            || dt_try <= dt_floor
+                        {
+                            self.restore_snapshot(&pre_step_snap)?;
                             return Err(e);
                         }
                         dt_try = ((if remeshed_outer0 { 0.5 } else { 0.25 })
@@ -275,6 +397,26 @@ impl BinarySystem {
                     self.rl_relative_gap[1],
                     m_a / m_d.max(1.0),
                 )?;
+                let outcome_name = match &act {
+                    ImplicitStepAction::Converged(_) => "converged",
+                    ImplicitStepAction::Detached => "detached",
+                    ImplicitStepAction::TryNextMdot(_) => "try_next_mdot",
+                    ImplicitStepAction::ExceededMaxTries => {
+                        "exceeded_max_tries"
+                    }
+                };
+                if tracing {
+                    emit_implicit_trial_trace(
+                        self.model_number + 1,
+                        outer_retry,
+                        try_idx,
+                        trial_mdot,
+                        Some(dt_used),
+                        Some(m_exp),
+                        outcome_name,
+                        None,
+                    );
+                }
                 match act {
                     ImplicitStepAction::Converged(m_conv) => {
                         let m_acc = m_conv.min(0.0);
@@ -295,16 +437,31 @@ impl BinarySystem {
                             accepted = Some((dt_used, ts_ctrl));
                         } else {
                             self.restore_snapshot(&trial_snap)?;
-                            if let Ok(SingleTrialOutcome::Completed {
-                                dt_used: dt0,
-                                ts_ctrl: ts0,
-                            }) = self
-                                .run_single_trial(0.0, dt_try, false, extras)
-                            {
-                                self.mtransfer_rate = 0.0;
-                                accepted = Some((dt0, ts0));
-                            } else {
-                                dt_try = (0.5 * dt_try).max(dt_floor);
+                            self.counters.num_implicit_trials += 1;
+                            match self.run_single_trial(
+                                0.0, dt_try, false, extras,
+                            ) {
+                                Ok(SingleTrialOutcome::Completed {
+                                    dt_used: dt0,
+                                    ts_ctrl: ts0,
+                                }) => {
+                                    self.mtransfer_rate = 0.0;
+                                    accepted = Some((dt0, ts0));
+                                }
+                                Ok(SingleTrialOutcome::CutDt(dt_cut)) => {
+                                    self.counters.num_dt_cuts += 1;
+                                    dt_try = check_cut_dt(dt_cut, dt_try)?;
+                                }
+                                Err(e) => {
+                                    if !is_binary_trial_retriable(&e)
+                                        || outer_retry >= 10
+                                        || dt_try <= dt_floor
+                                    {
+                                        self.restore_snapshot(&pre_step_snap)?;
+                                        return Err(e);
+                                    }
+                                    dt_try = (0.5 * dt_try).max(dt_floor);
+                                }
                             }
                         }
                         break;
@@ -313,7 +470,7 @@ impl BinarySystem {
                         if next_m > 0.0 && self.point_mass_i == 0 {
                             self.restore_snapshot(&trial_snap)?;
                             let _ = self.swap_donor_and_accretor()?;
-                            trial_snap = self.capture_snapshot();
+                            self.capture_snapshot_into(&mut trial_snap);
                             solver.flip_for_contact_donor_switch();
                             trial_mdot = -next_m;
                         } else {
@@ -335,7 +492,18 @@ impl BinarySystem {
                     && dt_used > 1.0
                     && (self.exceeds_hard_limits(&ts_ctrl) || dmdot_hard)
                 {
-                    dt_try = (0.5 * dt_used).max(dt_floor);
+                    self.counters.num_hard_limit_retries += 1;
+                    let next_dt = (0.5 * dt_used).max(dt_floor);
+                    if tracing {
+                        emit_hard_limit_retry_trace(
+                            self.model_number + 1,
+                            outer_retry,
+                            dt_used,
+                            next_dt,
+                            dmdot_hard,
+                        );
+                    }
+                    dt_try = next_dt;
                     continue;
                 }
                 return Ok(self.finish_accepted_step(dt_used, &ts_ctrl, extras));

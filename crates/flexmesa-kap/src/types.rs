@@ -21,7 +21,9 @@ pub const I_FRAC_COMPTON: usize = 3;
 pub const NUM_KAP_FRACS: usize = 4;
 
 /// High-temperature fixed-metal (Type 1) opacity table option (`kap_file_prefix`).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize,
+)]
 pub enum KapOption {
     /// Grevesse & Noels (1993) solar mixture (`gn93`).
     Gn93,
@@ -68,7 +70,9 @@ impl KapOption {
 }
 
 /// High-temperature C/O-enhanced (Type 2) opacity table option (`kap_CO_prefix`).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize,
+)]
 pub enum KapCoOption {
     /// Grevesse & Noels (1993) C/O-enhanced mixture (`gn93_co`).
     Gn93Co,
@@ -117,7 +121,9 @@ impl KapCoOption {
 }
 
 /// Low-temperature molecular/dust opacity table option (`kap_lowT_prefix`).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize,
+)]
 pub enum KapLowTOption {
     /// Ferguson et al. (2005) with Grevesse & Sauval (1998) mixture (`lowT_fa05_gs98`, default).
     LowTFa05Gs98,
@@ -168,7 +174,7 @@ impl KapLowTOption {
 }
 
 /// Control configuration for opacity evaluation (`Kap_General_Info` in `kap_def.f90`).
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct KapConfig {
     /// Base metallicity $Z_{\mathrm{base}}$ (`-1.0` if unset).
     pub zbase: f64,

@@ -9,7 +9,8 @@
 
 use flexmesa_const::{CLIGHT, CRAD, MSUN, PI, SECYER};
 use flexmesa_star::{
-    do_set_mdot, star_evolve_step, EvolveStepReport, StarError, StarModel,
+    do_set_mdot, star_evolve_step, EvolveStepReport, PrimaryStateBuffer,
+    StarError, StarModel,
 };
 
 use crate::edd_wind::{
@@ -26,7 +27,7 @@ use crate::system_jdot::{EdotBreakdown, JdotBreakdown};
 
 /// Per-step wind, RLOF, Eddington, and system mass-loss accounting (`adjust_mdots`
 /// in `binary/private/binary_mdot.f90:506-660`, indexed `[donor_slot, accretor_slot]`).
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, serde::Serialize, serde::Deserialize)]
 pub struct CoupledMdotAccounting {
     /// Intrinsic stellar wind rates `[mdot_wind_donor, mdot_wind_accretor]` ($\le 0$, $\mathrm{g\,s^{-1}}$).
     pub mdot_wind_intrinsic: [f64; 2],
@@ -56,14 +57,61 @@ pub struct CoupledMdotAccounting {
     pub actual_mtransfer_rate: f64,
 }
 
-/// Complete binary + in-memory stellar snapshot for implicit RLOF redo
+/// Complete binary + compact in-memory stellar snapshot for implicit RLOF redo
 /// iterations and timestep-cut retries (`binary_evolve.f90`).
 #[derive(Debug, Clone)]
 pub struct BinaryStepSnapshot {
-    /// Cloned in-memory state of `donor`.
-    pub donor_state: StarModel,
-    /// Cloned in-memory state of `Star` companion (`None` when point mass).
-    pub companion_state: Option<StarModel>,
+    /// Compact primary-state snapshot of `donor`.
+    pub donor_state: PrimaryStateBuffer,
+    /// Compact primary-state snapshot of `Star` companion (`None` when point mass).
+    pub companion_state: Option<PrimaryStateBuffer>,
+    /// Point-mass state `(mass_g, m_bh_zero_eq_g, is_black_hole)` when companion is a point mass.
+    pub point_mass_state: Option<(f64, f64, bool)>,
+    /// Point-mass index `point_mass_i` in `{0, 1, 2}`.
+    pub point_mass_i: usize,
+    /// Active donor index `donor_i` in `{1, 2}`.
+    pub donor_i: usize,
+    /// Orbital separation $a$ (cm).
+    pub separation: f64,
+    /// Orbital period $P$ (s).
+    pub period: f64,
+    /// Orbital eccentricity $e$.
+    pub eccentricity: f64,
+    /// Orbital angular momentum $J_{\mathrm{orb}}$ ($\mathrm{g\,cm^2\,s^{-1}}$).
+    pub angular_momentum_j: f64,
+    /// Roche-lobe radii `[rl_donor, rl_accretor]` (cm).
+    pub rl: [f64; 2],
+    /// Periastron relative Roche-lobe gaps `[gap_donor, gap_accretor]`.
+    pub rl_relative_gap: [f64; 2],
+    /// Mass-transfer rate $\dot{M}_{\mathrm{tr}}$ ($\mathrm{g\,s^{-1}}$).
+    pub mtransfer_rate: f64,
+    /// Applied step mass-transfer rate `step_mtransfer_rate` ($\mathrm{g\,s^{-1}}$).
+    pub step_mtransfer_rate: f64,
+    /// Orbital torque $\dot{J}_{\mathrm{orb}}$ ($\mathrm{g\,cm^2\,s^{-2}}$).
+    pub jdot: f64,
+    /// Binary age (yr).
+    pub binary_age_yr: f64,
+    /// Binary model number.
+    pub model_number: usize,
+    /// Maximum binary timestep (s).
+    pub max_timestep_sec: f64,
+    /// Implicit solver adaptive `change_factor`.
+    pub change_factor: f64,
+    /// Magnetic-braking active flags `[mb_1, mb_2]`.
+    pub using_jdot_mb: [bool; 2],
+    /// Cumulative external angular momentum change ($\mathrm{g\,cm^2\,s^{-1}}$).
+    pub cumulative_j_ext: f64,
+    /// Previous mass-transfer accounting.
+    pub last_mdot: CoupledMdotAccounting,
+    /// Previous torque breakdown.
+    pub last_jdot: JdotBreakdown,
+    /// Previous eccentricity-rate breakdown.
+    pub last_edot: EdotBreakdown,
+}
+
+/// Orbital and step-accounting scalar snapshot passed into [`BinaryStepSnapshot`].
+#[derive(Debug, Clone, Copy)]
+pub struct BinaryStepScalars {
     /// Point-mass state `(mass_g, m_bh_zero_eq_g, is_black_hole)` when companion is a point mass.
     pub point_mass_state: Option<(f64, f64, bool)>,
     /// Point-mass index `point_mass_i` in `{0, 1, 2}`.
@@ -110,81 +158,92 @@ pub struct BinaryStepSnapshot {
 
 impl BinaryStepSnapshot {
     /// Captures a full binary + in-memory stellar snapshot before advancing a step.
-    #[allow(clippy::too_many_arguments)]
     #[must_use]
     pub fn capture(
         donor: &StarModel,
         companion_star: Option<&StarModel>,
-        point_mass_state: Option<(f64, f64, bool)>,
-        point_mass_i: usize,
-        donor_i: usize,
-        separation: f64,
-        period: f64,
-        eccentricity: f64,
-        angular_momentum_j: f64,
-        rl: [f64; 2],
-        rl_relative_gap: [f64; 2],
-        mtransfer_rate: f64,
-        step_mtransfer_rate: f64,
-        jdot: f64,
-        binary_age_yr: f64,
-        model_number: usize,
-        max_timestep_sec: f64,
-        change_factor: f64,
-        using_jdot_mb: [bool; 2],
-        cumulative_j_ext: f64,
-        last_mdot: CoupledMdotAccounting,
-        last_jdot: JdotBreakdown,
-        last_edot: EdotBreakdown,
+        s: BinaryStepScalars,
     ) -> Self {
         Self {
-            donor_state: donor.clone(),
-            companion_state: companion_star.cloned(),
-            point_mass_state,
-            point_mass_i,
-            donor_i,
-            separation,
-            period,
-            eccentricity,
-            angular_momentum_j,
-            rl,
-            rl_relative_gap,
-            mtransfer_rate,
-            step_mtransfer_rate,
-            jdot,
-            binary_age_yr,
-            model_number,
-            max_timestep_sec,
-            change_factor,
-            using_jdot_mb,
-            cumulative_j_ext,
-            last_mdot,
-            last_jdot,
-            last_edot,
+            donor_state: PrimaryStateBuffer::from_model(donor),
+            companion_state: companion_star.map(PrimaryStateBuffer::from_model),
+            point_mass_state: s.point_mass_state,
+            point_mass_i: s.point_mass_i,
+            donor_i: s.donor_i,
+            separation: s.separation,
+            period: s.period,
+            eccentricity: s.eccentricity,
+            angular_momentum_j: s.angular_momentum_j,
+            rl: s.rl,
+            rl_relative_gap: s.rl_relative_gap,
+            mtransfer_rate: s.mtransfer_rate,
+            step_mtransfer_rate: s.step_mtransfer_rate,
+            jdot: s.jdot,
+            binary_age_yr: s.binary_age_yr,
+            model_number: s.model_number,
+            max_timestep_sec: s.max_timestep_sec,
+            change_factor: s.change_factor,
+            using_jdot_mb: s.using_jdot_mb,
+            cumulative_j_ext: s.cumulative_j_ext,
+            last_mdot: s.last_mdot,
+            last_jdot: s.last_jdot,
+            last_edot: s.last_edot,
         }
     }
 
-    /// Restores the saved in-memory donor and optional companion star models,
-    /// preserving each model's active `StarControls` and `StarJobControls`.
+    /// Overwrites this snapshot in place from current binary and stellar state,
+    /// reusing existing heap capacities across trials.
+    pub fn capture_into(
+        &mut self,
+        donor: &StarModel,
+        companion_star: Option<&StarModel>,
+        s: BinaryStepScalars,
+    ) {
+        self.donor_state.capture_from(donor);
+        match (self.companion_state.as_mut(), companion_star) {
+            (Some(dst), Some(src)) => dst.capture_from(src),
+            (None, Some(src)) => {
+                self.companion_state =
+                    Some(PrimaryStateBuffer::from_model(src));
+            }
+            (_, None) => self.companion_state = None,
+        }
+        self.point_mass_state = s.point_mass_state;
+        self.point_mass_i = s.point_mass_i;
+        self.donor_i = s.donor_i;
+        self.separation = s.separation;
+        self.period = s.period;
+        self.eccentricity = s.eccentricity;
+        self.angular_momentum_j = s.angular_momentum_j;
+        self.rl = s.rl;
+        self.rl_relative_gap = s.rl_relative_gap;
+        self.mtransfer_rate = s.mtransfer_rate;
+        self.step_mtransfer_rate = s.step_mtransfer_rate;
+        self.jdot = s.jdot;
+        self.binary_age_yr = s.binary_age_yr;
+        self.model_number = s.model_number;
+        self.max_timestep_sec = s.max_timestep_sec;
+        self.change_factor = s.change_factor;
+        self.using_jdot_mb = s.using_jdot_mb;
+        self.cumulative_j_ext = s.cumulative_j_ext;
+        self.last_mdot = s.last_mdot;
+        self.last_jdot = s.last_jdot;
+        self.last_edot = s.last_edot;
+    }
+
+    /// Restores the saved in-memory donor and optional companion star models in
+    /// place while preserving `controls`, `job`, and cumulative counters.
     pub fn restore_stars(
         &self,
         donor: &mut StarModel,
         companion_star: Option<&mut StarModel>,
     ) -> Result<(), StarError> {
-        let d_ctrl = donor.controls.clone();
-        let d_job = donor.job.clone();
-        *donor = self.donor_state.clone();
-        donor.controls = d_ctrl;
-        donor.job = d_job;
+        self.donor_state.restore_into(donor)?;
 
         if let (Some(acc), Some(comp)) =
             (companion_star, self.companion_state.as_ref())
         {
-            let a_ctrl = acc.controls.clone();
-            let a_job = acc.job.clone();
-            *acc = comp.clone();
-            acc.controls = a_ctrl;
-            acc.job = a_job;
+            comp.restore_into(acc)?;
         }
         Ok(())
     }

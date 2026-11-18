@@ -19,7 +19,9 @@ use crate::system_init::prep_and_settle_binary_star;
 use crate::system_jdot::{
     apply_initial_orbit_sync, eval_star_spin_j, EdotBreakdown, JdotBreakdown,
 };
-use crate::system_rlof::{BinaryStepSnapshot, CoupledMdotAccounting};
+use crate::system_rlof::{
+    BinaryStepScalars, BinaryStepSnapshot, CoupledMdotAccounting,
+};
 
 #[inline]
 pub(crate) fn compute_rl_and_gaps(
@@ -42,7 +44,7 @@ pub(crate) fn compute_rl_and_gaps(
 }
 
 /// Companion representation in a coupled [`BinarySystem`].
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum BinaryCompanion {
     /// Point-mass compact object (white dwarf, neutron star, or Kerr black hole).
     PointMass {
@@ -57,8 +59,31 @@ pub enum BinaryCompanion {
     Star(Box<StarModel>),
 }
 
+/// Cumulative binary retry, implicit trial, timestep cut, and hard-limit
+/// rollback counters preserved across snapshot rollbacks on [`BinarySystem`].
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Default,
+    PartialEq,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+)]
+pub struct BinaryStepCounters {
+    /// Cumulative outer step retries (`outer_retry > 0`).
+    pub num_retries: usize,
+    /// Cumulative coupled binary trials executed in implicit mode.
+    pub num_implicit_trials: usize,
+    /// Cumulative solver `CutDt` restarts.
+    pub num_dt_cuts: usize,
+    /// Cumulative retries triggered by binary hard limits or `delta_mdot_hard_limit`.
+    pub num_hard_limit_retries: usize,
+}
+
 /// Coupled binary star evolution state and step driver (`binary_info`).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct BinarySystem {
     /// Active donor star model (`s_donor`).
     pub donor: StarModel,
@@ -128,6 +153,8 @@ pub struct BinarySystem {
     pub last_edot: EdotBreakdown,
     /// Binary or stellar termination reason triggered at the end of the latest step.
     pub last_termination_reason: Option<String>,
+    /// Retry, implicit trial, dt-cut, and hard-limit counters preserved across rollbacks.
+    pub counters: BinaryStepCounters,
 }
 
 impl BinarySystem {
@@ -344,6 +371,7 @@ impl BinarySystem {
             last_jdot: JdotBreakdown::default(),
             last_edot: EdotBreakdown::default(),
             last_termination_reason: None,
+            counters: BinaryStepCounters::default(),
         };
         sys.refresh_tidal_deformation_hooks(false)?;
         sys.update_stage_varcontrol();
@@ -616,8 +644,8 @@ impl BinarySystem {
         Ok(())
     }
 
-    pub(crate) fn capture_snapshot(&self) -> BinaryStepSnapshot {
-        let (comp_star, pm_state) = match &self.companion {
+    fn snapshot_parts(&self) -> (Option<&StarModel>, BinaryStepScalars) {
+        let (comp_star, point_mass_state) = match &self.companion {
             BinaryCompanion::PointMass {
                 mass_g,
                 m_bh_zero_eq_g,
@@ -625,53 +653,51 @@ impl BinarySystem {
             } => (None, Some((*mass_g, *m_bh_zero_eq_g, *is_black_hole))),
             BinaryCompanion::Star(s2) => (Some(&**s2), None),
         };
-        BinaryStepSnapshot::capture(
-            &self.donor,
-            comp_star,
-            pm_state,
-            self.point_mass_i,
-            self.donor_i,
-            self.separation,
-            self.period,
-            self.eccentricity,
-            self.angular_momentum_j,
-            self.rl,
-            self.rl_relative_gap,
-            self.mtransfer_rate,
-            self.step_mtransfer_rate,
-            self.jdot,
-            self.binary_age_yr,
-            self.model_number,
-            self.max_timestep_sec,
-            self.change_factor,
-            self.using_jdot_mb,
-            self.cumulative_j_ext,
-            self.last_mdot,
-            self.last_jdot,
-            self.last_edot,
-        )
+        let scalars = BinaryStepScalars {
+            point_mass_state,
+            point_mass_i: self.point_mass_i,
+            donor_i: self.donor_i,
+            separation: self.separation,
+            period: self.period,
+            eccentricity: self.eccentricity,
+            angular_momentum_j: self.angular_momentum_j,
+            rl: self.rl,
+            rl_relative_gap: self.rl_relative_gap,
+            mtransfer_rate: self.mtransfer_rate,
+            step_mtransfer_rate: self.step_mtransfer_rate,
+            jdot: self.jdot,
+            binary_age_yr: self.binary_age_yr,
+            model_number: self.model_number,
+            max_timestep_sec: self.max_timestep_sec,
+            change_factor: self.change_factor,
+            using_jdot_mb: self.using_jdot_mb,
+            cumulative_j_ext: self.cumulative_j_ext,
+            last_mdot: self.last_mdot,
+            last_jdot: self.last_jdot,
+            last_edot: self.last_edot,
+        };
+        (comp_star, scalars)
+    }
+
+    pub(crate) fn capture_snapshot(&self) -> BinaryStepSnapshot {
+        let (comp_star, scalars) = self.snapshot_parts();
+        BinaryStepSnapshot::capture(&self.donor, comp_star, scalars)
+    }
+
+    pub(crate) fn capture_snapshot_into(&self, snap: &mut BinaryStepSnapshot) {
+        let (comp_star, scalars) = self.snapshot_parts();
+        snap.capture_into(&self.donor, comp_star, scalars);
     }
 
     pub(crate) fn restore_snapshot(
         &mut self,
         snap: &BinaryStepSnapshot,
     ) -> Result<(), StarError> {
-        let comp_mut = match &mut self.companion {
-            BinaryCompanion::PointMass {
-                mass_g,
-                m_bh_zero_eq_g,
-                is_black_hole,
-            } => {
-                if let Some((m, meq, bh)) = snap.point_mass_state {
-                    *mass_g = m;
-                    *m_bh_zero_eq_g = meq;
-                    *is_black_hole = bh;
-                }
-                None
+        if self.donor_i != snap.donor_i {
+            if let BinaryCompanion::Star(ref mut s2) = self.companion {
+                std::mem::swap(&mut self.donor, s2);
             }
-            BinaryCompanion::Star(s2) => Some(&mut **s2),
-        };
-        snap.restore_stars(&mut self.donor, comp_mut)?;
+        }
         self.point_mass_i = snap.point_mass_i;
         self.donor_i = snap.donor_i;
         self.separation = snap.separation;
@@ -692,7 +718,135 @@ impl BinarySystem {
         self.last_mdot = snap.last_mdot;
         self.last_jdot = snap.last_jdot;
         self.last_edot = snap.last_edot;
+        let comp_mut = match &mut self.companion {
+            BinaryCompanion::PointMass {
+                mass_g,
+                m_bh_zero_eq_g,
+                is_black_hole,
+            } => {
+                if let Some((m, meq, bh)) = snap.point_mass_state {
+                    *mass_g = m;
+                    *m_bh_zero_eq_g = meq;
+                    *is_black_hole = bh;
+                }
+                None
+            }
+            BinaryCompanion::Star(s2) => Some(&mut **s2),
+        };
+        snap.restore_stars(&mut self.donor, comp_mut)?;
         self.refresh_tidal_deformation_hooks(false)?;
         Ok(())
     }
+
+    /// Returns the recorded `NumericsMode` from serialized `BinarySystem`
+    /// checkpoint bytes without decoding the payload.
+    ///
+    /// # Errors
+    /// Returns [`StarError::IoError`] if the header is invalid or truncated.
+    pub fn checkpoint_numerics_mode(
+        bytes: &[u8],
+    ) -> Result<flexmesa_math::NumericsMode, StarError> {
+        decode_binary_checkpoint_frame(bytes).map(|(mode, _)| mode)
+    }
+
+    /// Serializes the full coupled [`BinarySystem`] (both stars, controls,
+    /// orbit, and retry-proof counters) into deterministic binary checkpoint bytes.
+    ///
+    /// # Errors
+    /// Returns [`StarError::IoError`] if `serde` binary encoding fails.
+    pub fn to_checkpoint_bytes(&self) -> Result<Vec<u8>, StarError> {
+        let payload =
+            flexmesa_utils::bin_codec::to_bytes(self).map_err(|e| {
+                StarError::IoError(format!(
+                    "binary checkpoint serialization failed: {e}"
+                ))
+            })?;
+        Ok(flexmesa_utils::bin_codec::encode_framed_bytes(
+            BINARY_CHECKPOINT_MAGIC,
+            BINARY_CHECKPOINT_VERSION,
+            flexmesa_math::numerics_mode().to_wire_tag(),
+            &payload,
+        ))
+    }
+
+    /// Restores a coupled [`BinarySystem`] from serialized binary checkpoint
+    /// bytes and reattaches `use_tidal_deformation` hooks without re-normalizing
+    /// stored `dq` arrays.
+    ///
+    /// # Errors
+    /// Returns [`StarError::IoError`] if header validation fails,
+    /// `numerics_mode` mismatches, or decoding fails.
+    pub fn from_checkpoint_bytes(bytes: &[u8]) -> Result<Self, StarError> {
+        let (saved_mode, payload) = decode_binary_checkpoint_frame(bytes)?;
+        let active_mode = flexmesa_math::numerics_mode();
+        if saved_mode != active_mode {
+            return Err(StarError::IoError(format!(
+                "binary checkpoint numerics_mode mismatch: checkpoint saved in \
+                 \"{saved_mode}\" mode cannot be loaded while active mode is \
+                 \"{active_mode}\""
+            )));
+        }
+        let mut sys: Self = flexmesa_utils::bin_codec::from_bytes(payload)
+            .map_err(|e| {
+                StarError::IoError(format!(
+                    "binary checkpoint decode failed: {e}"
+                ))
+            })?;
+        sys.refresh_tidal_deformation_hooks(false)?;
+        Ok(sys)
+    }
+
+    /// Writes a binary checkpoint file to `path` on disk.
+    ///
+    /// # Errors
+    /// Returns [`StarError::IoError`] if encoding or writing fails.
+    pub fn save_checkpoint(
+        &self,
+        path: &std::path::Path,
+    ) -> Result<(), StarError> {
+        let bytes = self.to_checkpoint_bytes()?;
+        std::fs::write(path, bytes).map_err(|e| {
+            StarError::IoError(format!(
+                "failed to write binary checkpoint '{}': {e}",
+                path.display()
+            ))
+        })
+    }
+
+    /// Reads and restores a [`BinarySystem`] from a checkpoint file on disk.
+    ///
+    /// # Errors
+    /// Returns [`StarError::IoError`] if reading or decoding fails.
+    pub fn load_checkpoint(path: &std::path::Path) -> Result<Self, StarError> {
+        let bytes = std::fs::read(path).map_err(|e| {
+            StarError::IoError(format!(
+                "failed to read binary checkpoint '{}': {e}",
+                path.display()
+            ))
+        })?;
+        Self::from_checkpoint_bytes(&bytes)
+    }
+}
+
+const BINARY_CHECKPOINT_MAGIC: &[u8; 8] = b"FMBINCP1";
+const BINARY_CHECKPOINT_VERSION: u32 = 1;
+
+fn decode_binary_checkpoint_frame(
+    bytes: &[u8],
+) -> Result<(flexmesa_math::NumericsMode, &[u8]), StarError> {
+    let (mode_tag, payload) =
+        flexmesa_utils::bin_codec::decode_framed_header(
+            bytes,
+            BINARY_CHECKPOINT_MAGIC,
+            BINARY_CHECKPOINT_VERSION,
+            "binary checkpoint",
+        )
+        .map_err(StarError::IoError)?;
+    let mode = flexmesa_math::NumericsMode::from_wire_tag(mode_tag)
+        .ok_or_else(|| {
+            StarError::IoError(format!(
+                "invalid binary checkpoint numerics_mode tag {mode_tag}"
+            ))
+        })?;
+    Ok((mode, payload))
 }

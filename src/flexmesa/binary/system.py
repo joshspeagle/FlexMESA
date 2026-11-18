@@ -80,6 +80,15 @@ class BinarySystem:
         """Advance the coupled binary system by `dt` (s)."""
         return self._inner.step(float(dt))
 
+    @classmethod
+    def from_photo_bytes(cls, data: bytes) -> BinarySystem:
+        """Restore a `BinarySystem` from serialized binary checkpoint bytes."""
+        return cls(_rust.RustBinarySystem.from_photo_bytes(data))
+
+    def to_photo_bytes(self) -> bytes:
+        """Serialize full `BinarySystem` state to binary checkpoint bytes."""
+        return self._inner.to_photo_bytes()
+
     @property
     def donor(self) -> star_model.StarModel:
         """Return a snapshot of the donor `StarModel`."""
@@ -155,6 +164,26 @@ class BinarySystem:
     def max_timestep_sec(self) -> float:
         """Next maximum binary timestep (s)."""
         return self._inner.max_timestep_sec
+
+    @property
+    def num_retries(self) -> int:
+        """Cumulative outer binary retries preserved across rollbacks."""
+        return self._inner.num_retries
+
+    @property
+    def num_implicit_trials(self) -> int:
+        """Cumulative coupled implicit mass-transfer trials."""
+        return self._inner.num_implicit_trials
+
+    @property
+    def num_dt_cuts(self) -> int:
+        """Cumulative solver `CutDt` restarts preserved across rollbacks."""
+        return self._inner.num_dt_cuts
+
+    @property
+    def num_hard_limit_retries(self) -> int:
+        """Cumulative hard-limit retries preserved across rollbacks."""
+        return self._inner.num_hard_limit_retries
 
 
 def run_binary_test_suite_case(

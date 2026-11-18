@@ -186,31 +186,30 @@ pub fn eval_net(
     Ok(res)
 }
 
-/// Executes `f` with a thread-local [`NetWorkState`] sized for `g`, avoiding
-/// per-zone heap allocations in multi-zone sequential or parallel loops.
+/// Executes `f` with a thread-local [`NetWorkState`] keyed by [`NetGeneralInfo::identity_id`]
+/// and sized for `g`, avoiding per-zone heap allocations and cross-network cache
+/// aliasing in multi-zone sequential or parallel loops.
 pub fn with_thread_local_work<R>(
     g: &NetGeneralInfo,
     f: impl FnOnce(&mut NetWorkState) -> R,
 ) -> R {
     thread_local! {
-        static WORK: std::cell::RefCell<Option<NetWorkState>> =
-            const { std::cell::RefCell::new(None) };
+        static WORK: std::cell::RefCell<
+            std::collections::HashMap<u64, NetWorkState>,
+        > = std::cell::RefCell::new(std::collections::HashMap::new());
     }
     WORK.with(|cell| {
-        let mut borrow = cell.borrow_mut();
-        let needs_init = match borrow.as_ref() {
-            None => true,
-            Some(w) => {
-                w.y.len() != g.num_isos
-                    || w.rate_raw.len() < g.num_reactions.max(120)
-                    || w.wk_lambda.len() != g.num_wk_reactions
-            }
-        };
-        if needs_init {
-            *borrow = Some(NetWorkState::new(g));
+        let mut map = cell.borrow_mut();
+        let entry = map
+            .entry(g.identity_id)
+            .or_insert_with(|| NetWorkState::new(g));
+        if entry.y.len() != g.num_isos
+            || entry.rate_raw.len() < g.num_reactions.max(120)
+            || entry.wk_lambda.len() != g.num_wk_reactions
+        {
+            *entry = NetWorkState::new(g);
         }
-        let state = borrow.get_or_insert_with(|| NetWorkState::new(g));
-        f(state)
+        f(entry)
     })
 }
 
@@ -593,4 +592,38 @@ fn get1_derivs(
         symbolic,
         just_dydt,
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::parser::ParsedNetDef;
+
+    #[test]
+    fn test_thread_local_work_isolates_same_size_distinct_networks() {
+        let p1 = ParsedNetDef::parse_from_name("basic.net").expect("basic.net");
+        let mut p2 = p1.clone();
+        p2.net_filename = String::from("basic_distinct_variant.net");
+        let g1 = NetGeneralInfo::from_parsed(p1).expect("g1");
+        let g2 = NetGeneralInfo::from_parsed(p2).expect("g2");
+
+        assert_eq!(g1.num_isos, g2.num_isos);
+        assert_eq!(g1.num_reactions, g2.num_reactions);
+        assert_eq!(g1.num_wk_reactions, g2.num_wk_reactions);
+        assert_ne!(g1.identity_id, g2.identity_id);
+
+        with_thread_local_work(&g1, |w| {
+            w.y[0] = 42.25;
+        });
+        with_thread_local_work(&g2, |w| {
+            assert_eq!(w.y[0], 0.0);
+            w.y[0] = 99.5;
+        });
+        with_thread_local_work(&g1, |w| {
+            assert_eq!(w.y[0], 42.25);
+        });
+        with_thread_local_work(&g2, |w| {
+            assert_eq!(w.y[0], 99.5);
+        });
+    }
 }

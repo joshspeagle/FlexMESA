@@ -205,6 +205,36 @@ class StarModelArrays:
         return self._rust_model.v_center
 
     @property
+    def total_num_solver_iterations(self) -> int:
+        """Cumulative Henyey Newton iterations across the run."""
+        return self._rust_model.total_num_solver_iterations
+
+    @property
+    def total_num_solver_calls(self) -> int:
+        """Cumulative Henyey solver invocations across the run."""
+        return self._rust_model.total_num_solver_calls
+
+    @property
+    def num_retries(self) -> int:
+        """Cumulative step retries preserved across rollbacks."""
+        return self._rust_model.num_retries
+
+    @property
+    def num_redos(self) -> int:
+        """Cumulative wind/implicit-step redos preserved across rollbacks."""
+        return self._rust_model.num_redos
+
+    @property
+    def micro_cache_hits(self) -> int:
+        """Cumulative microphysics cache hits in `set_hydro_vars`."""
+        return self._rust_model.micro_cache_hits
+
+    @property
+    def micro_cache_misses(self) -> int:
+        """Cumulative microphysics cache misses in `set_hydro_vars`."""
+        return self._rust_model.micro_cache_misses
+
+    @property
     def ln_peos_surf(self) -> float:
         """Surface natural log total pressure from atmosphere BC."""
         return self._rust_model.ln_peos_surf

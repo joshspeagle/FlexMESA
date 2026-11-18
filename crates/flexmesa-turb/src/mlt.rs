@@ -23,7 +23,16 @@ use flexmesa_utils::is_bad;
 use crate::{TurbError, TurbOutput, TurbResult, TurbScalar};
 
 /// Geometric Mixing-Length Theory prescription (`MLT_option` in `mlt.f90`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 pub enum MltOption {
     /// Cox & Giuli (1968) optically thick prescription ($a_0 = 9/4$).
     Cox,

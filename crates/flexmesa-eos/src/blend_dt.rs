@@ -33,7 +33,9 @@ use rayon::prelude::*;
 
 /// Unified configuration for the hierarchical 7-level `eosDT_get` evaluator.
 #[allow(clippy::struct_excessive_bools)]
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize,
+)]
 pub struct EosConfig {
     /// Configuration for the `CMS` EOS component (level 1).
     pub cms: CmsConfig,

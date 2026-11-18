@@ -16,6 +16,7 @@ flexmesa-interp2d = { path = "../flexmesa-interp2d" }
 flexmesa-math = { path = "../flexmesa-math" }
 flexmesa-utils = { path = "../flexmesa-utils" }
 rayon.workspace = true
+serde.workspace = true
 
 [lints]
 workspace = true

@@ -16,9 +16,7 @@ use flexmesa_turb::{
 
 use crate::controls::StarError;
 pub use crate::hydro_brunt_surf::{do_brunt_b, do_brunt_n2, eval_surf_bc};
-use crate::micro::{
-    do_eos, do_kap, do_net, do_neu, resolve_model_net, set_basic_vars,
-};
+use crate::micro_cache::MicrophysicsCache;
 use crate::model::StarModel;
 use crate::rotation::update_rotation_distortion_factors;
 use crate::star_ad::{
@@ -506,14 +504,7 @@ pub fn set_hydro_vars(
     skip_net: bool,
     skip_net_jacobian: bool,
 ) -> Result<(), StarError> {
-    set_basic_vars(model)?;
-    do_eos(model)?;
-    do_kap(model)?;
-    do_neu(model)?;
-    if !skip_net {
-        let net_info = resolve_model_net(model)?;
-        do_net(model, &net_info, skip_net_jacobian)?;
-    }
+    MicrophysicsCache::eval_or_restore(model, skip_net, skip_net_jacobian)?;
     let sig_was_zero = model.sig.iter().all(|&s| s == 0.0);
     if !model.aux.doing_struct_burn_mix {
         do_brunt_b(model)?;

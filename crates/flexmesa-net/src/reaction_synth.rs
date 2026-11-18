@@ -18,6 +18,8 @@ pub fn parse_reaction_handle(
         return Err(NetError::InvalidReactionOrIso(h.to_string()));
     }
     let nuclides = NuclideCatalog::builtin_ref();
+    // Standard light-ion IDs exist in the built-in catalog; fallback IDs match
+    // MESA's fixed iso ordering when testing custom trimmed catalogs.
     let ih1 = nuclides.get_nuclide_index("h1").unwrap_or(2);
     let ihe4 = nuclides.get_nuclide_index("he4").unwrap_or(7);
     let ineut = nuclides.get_nuclide_index("neut").unwrap_or(1);
@@ -161,6 +163,7 @@ pub fn synthesize_reaction_info(
 ) -> Result<ReactionInfo, NetError> {
     let cat = RatesCatalog::builtin();
     if let Some(ir) = cat.reaction_id_by_name(handle) {
+        // Return cached built-in metadata when indexed; otherwise synthesize from Reaclib.
         if let Ok(info) = cat.reaction_by_id(ir) {
             return Ok(info.clone());
         }
@@ -201,6 +204,7 @@ pub fn synthesize_reaction_info(
         if let Some((_, qneu)) = weak_info {
             std_qneu = qneu;
         }
+        // Prefer Reaclib evaluation at 0.01 GK when available; otherwise use LN2 / half-life.
         if let Ok((lam, _, _, _)) = eval_reaclib_handle(handle, 0.01, false) {
             weak_lowt_rate = lam;
         } else if let Some((hl, _)) = weak_info {

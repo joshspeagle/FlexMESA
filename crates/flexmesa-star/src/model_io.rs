@@ -566,6 +566,7 @@ pub fn read_mod_str(
 }
 
 pub use crate::photo_io::{
-    compute_photo_checksum, photo_numerics_mode, read_photo_bytes,
-    write_photo_bytes,
+    compute_photo_checksum, load_photo_bytes, photo_numerics_mode,
+    read_photo_bytes, try_write_photo_bytes, write_photo_bytes,
+    PHOTO_FORMAT_VERSION,
 };

@@ -46,7 +46,10 @@ case "$MODE" in
       --skip test_rsp_build_and_lina_match_all_7_mesa_26_4_1_reference_models \
       --skip test_rsp_check_2nd_crossing_on_7m_mesa_test_suite \
       --skip test_default_am_d_mix_zero_omega_transport_and_gold2_chem_increment_convergence \
-      --skip test_relax_composition_with_henyey_low_metallicity_equilibration
+      --skip test_relax_composition_with_henyey_low_metallicity_equilibration \
+      --skip test_point_mass_rlof_binary_is_bit_identical_across_thread_counts \
+      --skip test_two_star_coupled_binary_is_bit_identical_across_thread_counts \
+      --skip test_binary_checkpoint_restart_in_child_process_is_bit_exact
     ;;
   python)
     PYTEST_BIN="${PYTEST_BIN:-pytest}"

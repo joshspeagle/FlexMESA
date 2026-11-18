@@ -160,6 +160,9 @@ pub struct ScreenPairParams {
 pub struct NetGeneralInfo {
     /// Network filename (e.g., `"basic.net"`, `"approx21.net"`).
     pub net_filename: String,
+    /// Deterministic 64-bit FNV-1a network identity hash for thread-local
+    /// work-buffer cache keying (`#150`).
+    pub identity_id: u64,
     /// Number of active isotopes (`species`).
     pub num_isos: usize,
     /// Number of MESA reactions in the network (`num_reactions`).

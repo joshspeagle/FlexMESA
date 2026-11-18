@@ -469,9 +469,19 @@ impl NetGeneralInfo {
             .collect();
 
         let rattab_splines = build_rate_tables(&ordered_reactions)?;
+        let identity_id = compute_net_identity_id(
+            &parsed.net_filename,
+            &chem_id,
+            &ordered_reactions,
+            parsed.doing_approx21,
+            parsed.add_co56_to_approx21,
+            parsed.approx21_ye_iso,
+            parsed.fe56ec_n_neut,
+        );
 
         let mut info = Self {
             net_filename: parsed.net_filename,
+            identity_id,
             num_isos,
             num_reactions,
             num_wk_reactions: weak_reaction_num.len(),
@@ -581,6 +591,43 @@ impl NetGeneralInfo {
         }
         Ok(())
     }
+}
+
+fn fnv1a_update(hash: &mut u64, bytes: &[u8]) {
+    for &b in bytes {
+        *hash ^= u64::from(b);
+        *hash = hash.wrapping_mul(0x100000001b3);
+    }
+}
+
+fn compute_net_identity_id(
+    net_filename: &str,
+    chem_id: &[usize],
+    reactions: &[ReactionInfo],
+    doing_approx21: bool,
+    add_co56_to_approx21: bool,
+    approx21_ye_iso: usize,
+    fe56ec_n_neut: i32,
+) -> u64 {
+    let mut h = 0xcbf2_9ce4_8422_2325_u64;
+    fnv1a_update(&mut h, &(net_filename.len() as u64).to_le_bytes());
+    fnv1a_update(&mut h, net_filename.as_bytes());
+    fnv1a_update(&mut h, &(chem_id.len() as u64).to_le_bytes());
+    for &cid in chem_id {
+        fnv1a_update(&mut h, &(cid as u64).to_le_bytes());
+    }
+    fnv1a_update(&mut h, &(reactions.len() as u64).to_le_bytes());
+    for r in reactions {
+        fnv1a_update(&mut h, &(r.id as u64).to_le_bytes());
+        fnv1a_update(&mut h, &(r.name.len() as u64).to_le_bytes());
+        fnv1a_update(&mut h, r.name.as_bytes());
+    }
+    let flags =
+        u8::from(doing_approx21) | (u8::from(add_co56_to_approx21) << 1);
+    fnv1a_update(&mut h, &[flags]);
+    fnv1a_update(&mut h, &(approx21_ye_iso as u64).to_le_bytes());
+    fnv1a_update(&mut h, &fe56ec_n_neut.to_le_bytes());
+    h
 }
 
 fn build_rate_tables(

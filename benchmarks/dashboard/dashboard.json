@@ -1384,13 +1384,7 @@
         "issues": []
       }
     ],
-    "open_pull_requests": [
-      {
-        "number": 213,
-        "title": "fix(docs,bench): derive benchmark precision and divergence text from raw data (#146)",
-        "draft": false
-      }
-    ],
+    "open_pull_requests": [],
     "deferred_169": [
       {
         "number": 175,
@@ -1703,6 +1697,19 @@
     {
       "date_utc": "2026-11-18",
       "commit": "5549331",
+      "event": "main merge",
+      "engine_ported_pct": "13.9",
+      "all_verified_pct": "0.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "71.1",
+      "python_cov_pct": "87.7",
+      "closed_140": "9",
+      "total_140": "32",
+      "deferred_169": "17"
+    },
+    {
+      "date_utc": "2026-11-18",
+      "commit": "dd2352d",
       "event": "main merge",
       "engine_ported_pct": "13.9",
       "all_verified_pct": "0.0",

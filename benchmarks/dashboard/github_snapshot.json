@@ -217,13 +217,7 @@
       "issues": []
     }
   ],
-  "open_pull_requests": [
-    {
-      "number": 213,
-      "title": "fix(docs,bench): derive benchmark precision and divergence text from raw data (#146)",
-      "draft": false
-    }
-  ],
+  "open_pull_requests": [],
   "deferred_169": [
     {
       "number": 175,

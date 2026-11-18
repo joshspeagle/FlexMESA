@@ -217,13 +217,7 @@
       "issues": []
     }
   ],
-  "open_pull_requests": [
-    {
-      "number": 219,
-      "title": "fix(interp_1d): reproduce upstream do_integrate_values on decreasing grids (#218)",
-      "draft": false
-    }
-  ],
+  "open_pull_requests": [],
   "deferred_169": [
     {
       "number": 175,
@@ -366,7 +360,7 @@
       "title": "[Deferred bug] do_integrate_values drops the lower sub-interval on decreasing grids",
       "state": "open",
       "kind": "upstream-bug",
-      "parity_pending": true,
+      "parity_pending": false,
       "needs_confirmation": false
     }
   ]

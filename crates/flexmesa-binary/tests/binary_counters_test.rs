@@ -5,39 +5,17 @@
 
 #![forbid(unsafe_code)]
 
-use flexmesa_binary::{BinaryInlistControls, BinarySystem};
+mod common;
+
+use flexmesa_binary::DefaultBinaryExtras;
 use flexmesa_const::SECYER;
-use flexmesa_star::{load_zams_model, StarControls, StarJobControls};
+use flexmesa_star::StarError;
 
 #[test]
 fn test_binary_implicit_rlof_and_hard_limit_counters_survive_rollbacks() {
-    let d_ctrl = StarControls {
-        initial_mass: 1.5,
-        ..StarControls::default()
-    };
-    let mut donor = load_zams_model(d_ctrl, StarJobControls::default())
-        .expect("1.5 Msun ZAMS");
-    // Tiny initial period puts the donor into Roche-lobe overflow with
-    // implicit trials and outer hard-limit retries.
-    let mut bctrl = BinaryInlistControls {
-        m1_msun: 1.5,
-        m2_msun: 1.0,
-        initial_period_in_days: 0.45,
-        mdot_scheme: String::from("Ritter"),
-        max_tries_to_achieve: 20,
-        ..BinaryInlistControls::default()
-    };
-    bctrl.use_radiation_corrected_transfer_rate = false;
-    donor.dt_next = 1.0e3 * SECYER;
-    donor.dt = 1.0e3 * SECYER;
-
-    let mut sys =
-        BinarySystem::from_controls_point_mass(donor, bctrl).expect("binary");
+    let mut sys = common::build_rlof_binary();
     let (dt1, _) = sys
-        .try_step_with_extras(
-            1.0e3 * SECYER,
-            &mut flexmesa_binary::DefaultBinaryExtras,
-        )
+        .try_step_with_extras(1.0e3 * SECYER, &mut DefaultBinaryExtras)
         .expect("step 1");
     assert_eq!(sys.model_number, 1);
     let calls_after_step1 = sys.donor.total_num_solver_calls;
@@ -52,7 +30,7 @@ fn test_binary_implicit_rlof_and_hard_limit_counters_survive_rollbacks() {
     let _ = sys
         .try_step_with_extras(
             dt1.max(1.0e4 * SECYER),
-            &mut flexmesa_binary::DefaultBinaryExtras,
+            &mut DefaultBinaryExtras,
         )
         .expect("binary step 2 succeeds after hard-limit rollback");
 
@@ -78,4 +56,28 @@ fn test_binary_implicit_rlof_and_hard_limit_counters_survive_rollbacks() {
         sys.donor.total_num_solver_calls,
         calls_after_step1 + 1 + sys.counters.num_hard_limit_retries
     );
+}
+
+#[test]
+fn test_binary_non_retriable_invalid_input_fails_immediately_with_zero_retries() {
+    let mut sys = common::build_rlof_binary();
+    let (dt1, _) = sys
+        .try_step_with_extras(1.0e3 * SECYER, &mut DefaultBinaryExtras)
+        .expect("step 1");
+    sys.donor.controls.do_phase_separation = true;
+    sys.donor.controls.phase_separation_option = String::from("bogus_phase_sep");
+    let retries_before = sys.counters.num_retries;
+
+    let err = sys
+        .try_step_with_extras(dt1, &mut DefaultBinaryExtras)
+        .expect_err("non-retriable donor InvalidInput must fail loudly");
+    assert!(
+        matches!(err, StarError::InvalidInput(_)),
+        "expected StarError::InvalidInput, got {err:?}"
+    );
+    assert_eq!(
+        sys.counters.num_retries, retries_before,
+        "non-retriable error must not increment binary outer retries"
+    );
+    assert_eq!(sys.model_number, 1, "failed step must restore snapshot");
 }

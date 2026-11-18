@@ -274,64 +274,26 @@ struct CachedMicroOutputs {
 /// such as `mesa_201.net` so two cache slots do not add ~430 MB RSS).
 const MAX_CACHED_NET_JAC_ELEMS: usize = 8_000_000;
 
+macro_rules! copy_pre_net_fields {
+    ($dst:expr, $src:expr, [ $($field:ident),+ $(,)? ]) => {
+        $( $dst.$field.clone_from(&$src.$field); )+
+    };
+}
+
 impl CachedMicroOutputs {
     fn capture_pre_net(&mut self, model: &StarModel) {
-        self.rho.clone_from(&model.rho);
-        self.t.clone_from(&model.t);
-        self.abar.clone_from(&model.abar);
-        self.zbar.clone_from(&model.zbar);
-        self.z2bar.clone_from(&model.z2bar);
-        self.z53bar.clone_from(&model.z53bar);
-        self.ye.clone_from(&model.ye);
-        self.xh_mass.clone_from(&model.xh_mass);
-        self.yhe_mass.clone_from(&model.yhe_mass);
-        self.z_mass.clone_from(&model.z_mass);
-
-        self.pgas.clone_from(&model.pgas);
-        self.ln_pgas.clone_from(&model.ln_pgas);
-        self.prad.clone_from(&model.prad);
-        self.peos.clone_from(&model.peos);
-        self.ln_peos.clone_from(&model.ln_peos);
-        self.energy.clone_from(&model.energy);
-        self.ln_e.clone_from(&model.ln_e);
-        self.entropy.clone_from(&model.entropy);
-        self.ln_s.clone_from(&model.ln_s);
-        self.grada.clone_from(&model.grada);
-        self.cv.clone_from(&model.cv);
-        self.cp.clone_from(&model.cp);
-        self.chi_rho.clone_from(&model.chi_rho);
-        self.chi_t.clone_from(&model.chi_t);
-        self.gamma1.clone_from(&model.gamma1);
-        self.gamma3.clone_from(&model.gamma3);
-        self.eta.clone_from(&model.eta);
-        self.gam.clone_from(&model.gam);
-        self.mu.clone_from(&model.mu);
-        self.lnfree_e.clone_from(&model.lnfree_e);
-        self.csound.clone_from(&model.csound);
-        self.eos_frac_pc.clone_from(&model.aux.eos_frac_pc);
-        self.latent_ddlnt.clone_from(&model.aux.latent_ddlnt);
-        self.latent_ddlnrho.clone_from(&model.aux.latent_ddlnrho);
-        self.dln_e_dxa_for_partials
-            .clone_from(&model.aux.dln_e_dxa_for_partials);
-        self.dln_peos_dxa_for_partials
-            .clone_from(&model.aux.dln_peos_dxa_for_partials);
-        self.ln_peos_ad.clone_from(&model.ln_peos_ad);
-        self.ln_e_ad.clone_from(&model.ln_e_ad);
-        self.ln_s_ad.clone_from(&model.ln_s_ad);
-        self.eos_res.clone_from(&model.eos_res);
-        self.eos_d_dlnd.clone_from(&model.eos_d_dlnd);
-        self.eos_d_dlnt.clone_from(&model.eos_d_dlnt);
-
-        self.opacity.clone_from(&model.opacity);
-        self.d_opacity_dlnd.clone_from(&model.d_opacity_dlnd);
-        self.d_opacity_dlnt.clone_from(&model.d_opacity_dlnt);
-        self.tau.clone_from(&model.tau);
-
-        self.non_nuc_neu.clone_from(&model.non_nuc_neu);
-        self.d_non_nuc_neu_dlnd
-            .clone_from(&model.d_non_nuc_neu_dlnd);
-        self.d_non_nuc_neu_dlnt
-            .clone_from(&model.d_non_nuc_neu_dlnt);
+        copy_pre_net_fields!(self, model, [
+            rho, t, abar, zbar, z2bar, z53bar, ye, xh_mass, yhe_mass, z_mass,
+            pgas, ln_pgas, prad, peos, ln_peos, energy, ln_e, entropy, ln_s,
+            grada, cv, cp, chi_rho, chi_t, gamma1, gamma3, eta, gam, mu,
+            lnfree_e, csound, ln_peos_ad, ln_e_ad, ln_s_ad, eos_res, eos_d_dlnd,
+            eos_d_dlnt, opacity, d_opacity_dlnd, d_opacity_dlnt, tau,
+            non_nuc_neu, d_non_nuc_neu_dlnd, d_non_nuc_neu_dlnt
+        ]);
+        copy_pre_net_fields!(self, model.aux, [
+            eos_frac_pc, latent_ddlnt, latent_ddlnrho, dln_e_dxa_for_partials,
+            dln_peos_dxa_for_partials
+        ]);
     }
 
     fn capture_net(&mut self, model: &StarModel, has_net_jac: bool) {
@@ -339,18 +301,15 @@ impl CachedMicroOutputs {
             && model.d_dxdt_nuc_dx.len() <= MAX_CACHED_NET_JAC_ELEMS;
         self.has_net = true;
         self.has_net_jac = store_jac;
-        self.eps_nuc.clone_from(&model.eps_nuc);
-        self.d_epsnuc_dlnd.clone_from(&model.d_epsnuc_dlnd);
-        self.d_epsnuc_dlnt.clone_from(&model.d_epsnuc_dlnt);
-        self.eps_nuc_neu_total.clone_from(&model.eps_nuc_neu_total);
+        copy_pre_net_fields!(self, model, [
+            eps_nuc, d_epsnuc_dlnd, d_epsnuc_dlnt, eps_nuc_neu_total, dxdt_nuc
+        ]);
         self.eps_nuc_categories
             .clone_from(&model.aux.eps_nuc_categories);
-        self.dxdt_nuc.clone_from(&model.dxdt_nuc);
         if store_jac {
-            self.d_epsnuc_dx.clone_from(&model.d_epsnuc_dx);
-            self.d_dxdt_nuc_dlnd.clone_from(&model.d_dxdt_nuc_dlnd);
-            self.d_dxdt_nuc_dlnt.clone_from(&model.d_dxdt_nuc_dlnt);
-            self.d_dxdt_nuc_dx.clone_from(&model.d_dxdt_nuc_dx);
+            copy_pre_net_fields!(self, model, [
+                d_epsnuc_dx, d_dxdt_nuc_dlnd, d_dxdt_nuc_dlnt, d_dxdt_nuc_dx
+            ]);
         } else {
             self.d_epsnuc_dx.clear();
             self.d_epsnuc_dx.shrink_to_fit();
@@ -366,69 +325,18 @@ impl CachedMicroOutputs {
     fn restore_pre_net(&self, model: &mut StarModel) {
         model.set_m_and_dm();
         model.set_m_grav_and_grav();
-
-        model.rho.clone_from(&self.rho);
-        model.t.clone_from(&self.t);
-        model.abar.clone_from(&self.abar);
-        model.zbar.clone_from(&self.zbar);
-        model.z2bar.clone_from(&self.z2bar);
-        model.z53bar.clone_from(&self.z53bar);
-        model.ye.clone_from(&self.ye);
-        model.xh_mass.clone_from(&self.xh_mass);
-        model.yhe_mass.clone_from(&self.yhe_mass);
-        model.z_mass.clone_from(&self.z_mass);
-
-        model.pgas.clone_from(&self.pgas);
-        model.ln_pgas.clone_from(&self.ln_pgas);
-        model.prad.clone_from(&self.prad);
-        model.peos.clone_from(&self.peos);
-        model.ln_peos.clone_from(&self.ln_peos);
-        model.energy.clone_from(&self.energy);
-        model.ln_e.clone_from(&self.ln_e);
-        model.entropy.clone_from(&self.entropy);
-        model.ln_s.clone_from(&self.ln_s);
-        model.grada.clone_from(&self.grada);
-        model.cv.clone_from(&self.cv);
-        model.cp.clone_from(&self.cp);
-        model.chi_rho.clone_from(&self.chi_rho);
-        model.chi_t.clone_from(&self.chi_t);
-        model.gamma1.clone_from(&self.gamma1);
-        model.gamma3.clone_from(&self.gamma3);
-        model.eta.clone_from(&self.eta);
-        model.gam.clone_from(&self.gam);
-        model.mu.clone_from(&self.mu);
-        model.lnfree_e.clone_from(&self.lnfree_e);
-        model.csound.clone_from(&self.csound);
-        model.aux.eos_frac_pc.clone_from(&self.eos_frac_pc);
-        model.aux.latent_ddlnt.clone_from(&self.latent_ddlnt);
-        model.aux.latent_ddlnrho.clone_from(&self.latent_ddlnrho);
-        model
-            .aux
-            .dln_e_dxa_for_partials
-            .clone_from(&self.dln_e_dxa_for_partials);
-        model
-            .aux
-            .dln_peos_dxa_for_partials
-            .clone_from(&self.dln_peos_dxa_for_partials);
-        model.ln_peos_ad.clone_from(&self.ln_peos_ad);
-        model.ln_e_ad.clone_from(&self.ln_e_ad);
-        model.ln_s_ad.clone_from(&self.ln_s_ad);
-        model.eos_res.clone_from(&self.eos_res);
-        model.eos_d_dlnd.clone_from(&self.eos_d_dlnd);
-        model.eos_d_dlnt.clone_from(&self.eos_d_dlnt);
-
-        model.opacity.clone_from(&self.opacity);
-        model.d_opacity_dlnd.clone_from(&self.d_opacity_dlnd);
-        model.d_opacity_dlnt.clone_from(&self.d_opacity_dlnt);
-        model.tau.clone_from(&self.tau);
-
-        model.non_nuc_neu.clone_from(&self.non_nuc_neu);
-        model
-            .d_non_nuc_neu_dlnd
-            .clone_from(&self.d_non_nuc_neu_dlnd);
-        model
-            .d_non_nuc_neu_dlnt
-            .clone_from(&self.d_non_nuc_neu_dlnt);
+        copy_pre_net_fields!(model, self, [
+            rho, t, abar, zbar, z2bar, z53bar, ye, xh_mass, yhe_mass, z_mass,
+            pgas, ln_pgas, prad, peos, ln_peos, energy, ln_e, entropy, ln_s,
+            grada, cv, cp, chi_rho, chi_t, gamma1, gamma3, eta, gam, mu,
+            lnfree_e, csound, ln_peos_ad, ln_e_ad, ln_s_ad, eos_res, eos_d_dlnd,
+            eos_d_dlnt, opacity, d_opacity_dlnd, d_opacity_dlnt, tau,
+            non_nuc_neu, d_non_nuc_neu_dlnd, d_non_nuc_neu_dlnt
+        ]);
+        copy_pre_net_fields!(model.aux, self, [
+            eos_frac_pc, latent_ddlnt, latent_ddlnrho, dln_e_dxa_for_partials,
+            dln_peos_dxa_for_partials
+        ]);
     }
 
     fn restore_net(
@@ -537,6 +445,23 @@ impl Clone for MicrophysicsCache {
     }
 }
 
+#[inline]
+fn eval_raw_microphysics(
+    model: &mut StarModel,
+    skip_net: bool,
+    skip_net_jacobian: bool,
+) -> Result<(), StarError> {
+    set_basic_vars(model)?;
+    do_eos(model)?;
+    do_kap(model)?;
+    do_neu(model)?;
+    if !skip_net {
+        let net_info = resolve_model_net(model)?;
+        do_net(model, &net_info, skip_net_jacobian)?;
+    }
+    Ok(())
+}
+
 impl MicrophysicsCache {
     /// Clears both cached slots.
     pub fn clear(&mut self) {
@@ -544,37 +469,20 @@ impl MicrophysicsCache {
         self.mru = 0;
     }
 
-    /// Evaluates or restores `set_basic_vars`, `do_eos`, `do_kap`, `do_neu`, and
-    /// optional `do_net` while updating `micro_cache_hits` / `micro_cache_misses`.
-    pub(crate) fn eval_or_restore(
+    fn eval_or_restore_inner(
+        &mut self,
         model: &mut StarModel,
+        doing_split: bool,
         skip_net: bool,
         skip_net_jacobian: bool,
     ) -> Result<(), StarError> {
-        if model.controls.use_other_kap || model.controls.use_other_neu {
-            model.micro_cache_misses += 1;
-            set_basic_vars(model)?;
-            do_eos(model)?;
-            do_kap(model)?;
-            do_neu(model)?;
-            if !skip_net {
-                let net_info = resolve_model_net(model)?;
-                do_net(model, &net_info, skip_net_jacobian)?;
-            }
-            return Ok(());
-        }
-
-        let doing_split =
-            model.aux.doing_struct_burn_mix && model.controls.op_split_burn;
-        let mut cache = std::mem::take(&mut model.aux.micro_cache);
-
-        let matched_slot = cache.slots.iter().position(|slot| {
+        let matched_slot = self.slots.iter().position(|slot| {
             slot.as_ref()
                 .is_some_and(|e| e.key.matches(model, doing_split))
         });
 
         if let Some(idx) = matched_slot {
-            let entry = cache.slots[idx].as_mut().expect("matched slot exists");
+            let entry = self.slots[idx].as_mut().expect("matched slot exists");
             let net_ready = skip_net
                 || (entry.out.has_net
                     && (skip_net_jacobian || entry.out.has_net_jac));
@@ -587,55 +495,32 @@ impl MicrophysicsCache {
                         skip_net_jacobian,
                     );
                 }
-                cache.mru = idx;
+                self.mru = idx;
                 model.micro_cache_hits += 1;
-                model.aux.micro_cache = cache;
                 return Ok(());
             }
 
-            // State matches pre-net outputs (`eos`/`kap`/`neu`), only `do_net`
-            // is missing or needs its Jacobian populated.
+            // Pre-net outputs match; populate only `do_net` (or its Jacobian).
             entry.out.restore_pre_net(model);
-            let net_res = resolve_model_net(model).and_then(|net_info| {
-                do_net(model, &net_info, skip_net_jacobian)
-            });
             model.micro_cache_misses += 1;
-            if let Err(err) = net_res {
-                model.aux.micro_cache = cache;
-                return Err(err);
-            }
+            let net_info = resolve_model_net(model)?;
+            do_net(model, &net_info, skip_net_jacobian)?;
             entry.out.capture_net(model, !skip_net_jacobian);
-            cache.mru = idx;
-            model.aux.micro_cache = cache;
+            self.mru = idx;
             return Ok(());
         }
 
         model.micro_cache_misses += 1;
-        let eval_res = set_basic_vars(model)
-            .and_then(|()| do_eos(model))
-            .and_then(|()| do_kap(model))
-            .and_then(|()| do_neu(model))
-            .and_then(|()| {
-                if skip_net {
-                    Ok(())
-                } else {
-                    let net_info = resolve_model_net(model)?;
-                    do_net(model, &net_info, skip_net_jacobian)
-                }
-            });
-        if let Err(err) = eval_res {
-            model.aux.micro_cache = cache;
-            return Err(err);
-        }
+        eval_raw_microphysics(model, skip_net, skip_net_jacobian)?;
 
-        let target_slot = if cache.slots[0].is_none() {
+        let target_slot = if self.slots[0].is_none() {
             0
-        } else if cache.slots[1].is_none() {
+        } else if self.slots[1].is_none() {
             1
         } else {
-            1 - cache.mru.min(1)
+            1 - self.mru.min(1)
         };
-        let entry = cache.slots[target_slot]
+        let entry = self.slots[target_slot]
             .get_or_insert_with(|| Box::new(CachedMicroEntry::default()));
         entry.key.capture_from(model, doing_split);
         entry.out.capture_pre_net(model);
@@ -645,8 +530,32 @@ impl MicrophysicsCache {
         } else {
             entry.out.capture_net(model, !skip_net_jacobian);
         }
-        cache.mru = target_slot;
-        model.aux.micro_cache = cache;
+        self.mru = target_slot;
         Ok(())
+    }
+
+    /// Evaluates or restores `set_basic_vars`, `do_eos`, `do_kap`, `do_neu`, and
+    /// optional `do_net` while updating `micro_cache_hits` / `micro_cache_misses`.
+    pub(crate) fn eval_or_restore(
+        model: &mut StarModel,
+        skip_net: bool,
+        skip_net_jacobian: bool,
+    ) -> Result<(), StarError> {
+        if model.controls.use_other_kap || model.controls.use_other_neu {
+            model.micro_cache_misses += 1;
+            return eval_raw_microphysics(model, skip_net, skip_net_jacobian);
+        }
+
+        let doing_split =
+            model.aux.doing_struct_burn_mix && model.controls.op_split_burn;
+        let mut cache = std::mem::take(&mut model.aux.micro_cache);
+        let res = cache.eval_or_restore_inner(
+            model,
+            doing_split,
+            skip_net,
+            skip_net_jacobian,
+        );
+        model.aux.micro_cache = cache;
+        res
     }
 }

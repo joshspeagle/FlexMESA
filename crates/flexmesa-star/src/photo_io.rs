@@ -9,7 +9,6 @@ use crate::job_controls::VarLayout;
 use crate::model::StarModel;
 
 const PHOTO_MAGIC: &[u8; 8] = b"FMPHOTO2";
-const PHOTO_HEADER_LEN: usize = 8 + 4 + 1;
 
 /// Binary `.photo` format version written by the generated `serde` encoder.
 pub const PHOTO_FORMAT_VERSION: u32 = 20;
@@ -26,40 +25,21 @@ pub fn compute_photo_checksum(bytes: &[u8]) -> u64 {
     hash
 }
 
-fn encode_photo_header(mode: flexmesa_math::NumericsMode, out: &mut Vec<u8>) {
-    out.extend_from_slice(PHOTO_MAGIC);
-    out.extend_from_slice(&PHOTO_FORMAT_VERSION.to_le_bytes());
-    out.push(mode.to_wire_tag());
-}
-
-fn decode_photo_header(
+fn decode_photo_frame(
     bytes: &[u8],
-) -> Result<(flexmesa_math::NumericsMode, usize), StarError> {
-    if bytes.len() < PHOTO_HEADER_LEN {
-        return Err(StarError::IoError(String::from("photo EOF header")));
-    }
-    if &bytes[..8] != PHOTO_MAGIC {
-        return Err(StarError::IoError(String::from(
-            "invalid photo magic bytes",
-        )));
-    }
-    let version =
-        u32::from_le_bytes(bytes[8..12].try_into().map_err(|_| {
-            StarError::IoError(String::from("photo EOF version"))
-        })?);
-    if version != PHOTO_FORMAT_VERSION {
-        return Err(StarError::IoError(format!(
-            "unsupported photo version {version} (expected {PHOTO_FORMAT_VERSION})"
-        )));
-    }
-    let mode = flexmesa_math::NumericsMode::from_wire_tag(bytes[12])
+) -> Result<(flexmesa_math::NumericsMode, &[u8]), StarError> {
+    let (mode_tag, payload) = bin_codec::decode_framed_header(
+        bytes,
+        PHOTO_MAGIC,
+        PHOTO_FORMAT_VERSION,
+        "photo",
+    )
+    .map_err(StarError::IoError)?;
+    let mode = flexmesa_math::NumericsMode::from_wire_tag(mode_tag)
         .ok_or_else(|| {
-            StarError::IoError(format!(
-                "invalid photo numerics_mode tag {}",
-                bytes[12]
-            ))
+            StarError::IoError(format!("invalid photo numerics_mode tag {mode_tag}"))
         })?;
-    Ok((mode, PHOTO_HEADER_LEN))
+    Ok((mode, payload))
 }
 
 /// Serializes the full [`StarModel`] state (including `controls`, `job`, and
@@ -71,10 +51,12 @@ pub fn try_write_photo_bytes(model: &StarModel) -> Result<Vec<u8>, StarError> {
     let payload = bin_codec::to_bytes(model).map_err(|e| {
         StarError::IoError(format!("photo serialization failed: {e}"))
     })?;
-    let mut out = Vec::with_capacity(PHOTO_HEADER_LEN + payload.len());
-    encode_photo_header(flexmesa_math::numerics_mode(), &mut out);
-    out.extend_from_slice(&payload);
-    Ok(out)
+    Ok(bin_codec::encode_framed_bytes(
+        PHOTO_MAGIC,
+        PHOTO_FORMAT_VERSION,
+        flexmesa_math::numerics_mode().to_wire_tag(),
+        &payload,
+    ))
 }
 
 /// Serializes the full [`StarModel`] state into deterministic binary `.photo`
@@ -95,7 +77,7 @@ pub fn write_photo_bytes(model: &StarModel) -> Vec<u8> {
 pub fn photo_numerics_mode(
     bytes: &[u8],
 ) -> Result<flexmesa_math::NumericsMode, StarError> {
-    decode_photo_header(bytes).map(|(mode, _)| mode)
+    decode_photo_frame(bytes).map(|(mode, _)| mode)
 }
 
 /// Restores a complete [`StarModel`] (including serialized `controls` and
@@ -106,7 +88,7 @@ pub fn photo_numerics_mode(
 /// does not match the active backend mode, or binary decoding detects truncated
 /// or trailing bytes.
 pub fn load_photo_bytes(bytes: &[u8]) -> Result<StarModel, StarError> {
-    let (saved_mode, offset) = decode_photo_header(bytes)?;
+    let (saved_mode, payload) = decode_photo_frame(bytes)?;
     let active_mode = flexmesa_math::numerics_mode();
     if saved_mode != active_mode {
         return Err(StarError::IoError(format!(
@@ -114,9 +96,8 @@ pub fn load_photo_bytes(bytes: &[u8]) -> Result<StarModel, StarError> {
              mode cannot be loaded while active mode is \"{active_mode}\""
         )));
     }
-    let model: StarModel = bin_codec::from_bytes(&bytes[offset..])
-        .map_err(|e| StarError::IoError(format!("photo decode failed: {e}")))?;
-    Ok(model)
+    bin_codec::from_bytes(payload)
+        .map_err(|e| StarError::IoError(format!("photo decode failed: {e}")))
 }
 
 /// Restores a [`StarModel`] from binary `.photo` restart bytes and applies the

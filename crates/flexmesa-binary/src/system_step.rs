@@ -43,6 +43,99 @@ enum SingleTrialOutcome {
     CutDt(f64),
 }
 
+fn is_binary_trial_retriable(err: &StarError) -> bool {
+    match err {
+        StarError::IoError(_) | StarError::Terminated { .. } => false,
+        StarError::InvalidInput(msg) => {
+            // `do_adjust_mass_step` currently reports oversized RLOF trial
+            // `delta_m <= -xmstar` as `InvalidInput` until #152/#160.
+            msg.contains("produced non-positive envelope mass")
+        }
+        _ => true,
+    }
+}
+
+fn emit_outer_retry_trace(
+    sys: &BinarySystem,
+    outer_retry: usize,
+    dt_try: f64,
+    implicit_mode: bool,
+) {
+    let mut jl = flexmesa_star::step_trace::JsonLine::new("binary_outer_retry");
+    jl.field_usize("model", sys.model_number + 1);
+    jl.field_usize("outer_retry", outer_retry);
+    jl.field_f64("dt_try", dt_try);
+    jl.field_bool("implicit", implicit_mode);
+    jl.field_usize("donor_i", sys.donor_i);
+    jl.field_f64("mtransfer", sys.mtransfer_rate);
+    jl.field_f64("gap_d", sys.rl_relative_gap[0]);
+    jl.field_f64("gap_a", sys.rl_relative_gap[1]);
+    jl.emit();
+}
+
+fn emit_dt_cut_trace(
+    model: usize,
+    outer_retry: usize,
+    try_idx: usize,
+    dt_try: f64,
+    next_dt: f64,
+) {
+    let mut jl = flexmesa_star::step_trace::JsonLine::new("binary_dt_cut");
+    jl.field_usize("model", model);
+    jl.field_usize("outer_retry", outer_retry);
+    jl.field_usize("try_idx", try_idx);
+    jl.field_f64("dt_try", dt_try);
+    jl.field_f64("dt_next", next_dt);
+    jl.emit();
+}
+
+#[allow(clippy::too_many_arguments)]
+fn emit_implicit_trial_trace(
+    model: usize,
+    outer_retry: usize,
+    try_idx: usize,
+    trial_mdot: f64,
+    dt_used: Option<f64>,
+    m_exp: Option<f64>,
+    outcome: &str,
+    detail: Option<&str>,
+) {
+    let mut jl =
+        flexmesa_star::step_trace::JsonLine::new("binary_implicit_trial");
+    jl.field_usize("model", model);
+    jl.field_usize("outer_retry", outer_retry);
+    jl.field_usize("try_idx", try_idx);
+    jl.field_f64("trial_mdot", trial_mdot);
+    if let Some(dt) = dt_used {
+        jl.field_f64("dt_used", dt);
+    }
+    if let Some(me) = m_exp {
+        jl.field_f64("m_exp", me);
+    }
+    jl.field_str("outcome", outcome);
+    if let Some(det) = detail {
+        jl.field_str("detail", det);
+    }
+    jl.emit();
+}
+
+fn emit_hard_limit_retry_trace(
+    model: usize,
+    outer_retry: usize,
+    dt_used: f64,
+    next_dt: f64,
+    dmdot_hard: bool,
+) {
+    let mut jl =
+        flexmesa_star::step_trace::JsonLine::new("binary_hard_limit_retry");
+    jl.field_usize("model", model);
+    jl.field_usize("outer_retry", outer_retry);
+    jl.field_f64("dt_used", dt_used);
+    jl.field_f64("dt_next", next_dt);
+    jl.field_bool("dmdot_hard", dmdot_hard);
+    jl.emit();
+}
+
 impl BinarySystem {
     /// Advances the coupled binary system by one timestep `dt` (s) using [`DefaultBinaryExtras`].
     pub fn step(&mut self, dt: f64) -> (f64, i32) {
@@ -127,18 +220,7 @@ impl BinarySystem {
                 self.apply_retry_holds(&retry_holds);
             }
             if tracing {
-                let mut jl = flexmesa_star::step_trace::JsonLine::new(
-                    "binary_outer_retry",
-                );
-                jl.field_usize("model", self.model_number + 1);
-                jl.field_usize("outer_retry", outer_retry);
-                jl.field_f64("dt_try", dt_try);
-                jl.field_bool("implicit", implicit_mode);
-                jl.field_usize("donor_i", self.donor_i);
-                jl.field_f64("mtransfer", self.mtransfer_rate);
-                jl.field_f64("gap_d", self.rl_relative_gap[0]);
-                jl.field_f64("gap_a", self.rl_relative_gap[1]);
-                jl.emit();
+                emit_outer_retry_trace(self, outer_retry, dt_try, implicit_mode);
             }
             if !implicit_mode {
                 let pre_mdot = if self.ignore_rlof_flag {
@@ -187,12 +269,19 @@ impl BinarySystem {
                         dt_try = check_cut_dt(dt_cut, dt_try)?;
                         continue;
                     }
-                    Err(_) if outer_retry < 10 && dt_try > dt_floor => {
+                    Err(e)
+                        if is_binary_trial_retriable(&e)
+                            && outer_retry < 10
+                            && dt_try > dt_floor =>
+                    {
                         let cut = if outer_retry == 0 { 0.5 } else { 0.25 };
                         dt_try = (cut * dt_try).max(dt_floor);
                         continue;
                     }
-                    Err(e) => return Err(e),
+                    Err(e) => {
+                        self.restore_snapshot(&pre_step_snap)?;
+                        return Err(e);
+                    }
                 }
             }
 
@@ -239,35 +328,35 @@ impl BinarySystem {
                         self.counters.num_dt_cuts += 1;
                         let next_dt = check_cut_dt(dt_cut, dt_try)?;
                         if tracing {
-                            let mut jl =
-                                flexmesa_star::step_trace::JsonLine::new(
-                                    "binary_dt_cut",
-                                );
-                            jl.field_usize("model", self.model_number + 1);
-                            jl.field_usize("outer_retry", outer_retry);
-                            jl.field_usize("try_idx", try_idx);
-                            jl.field_f64("dt_try", dt_try);
-                            jl.field_f64("dt_next", next_dt);
-                            jl.emit();
+                            emit_dt_cut_trace(
+                                self.model_number + 1,
+                                outer_retry,
+                                try_idx,
+                                dt_try,
+                                next_dt,
+                            );
                         }
                         dt_try = next_dt;
                         break;
                     }
                     Err(e) => {
                         if tracing {
-                            let mut jl =
-                                flexmesa_star::step_trace::JsonLine::new(
-                                    "binary_implicit_trial",
-                                );
-                            jl.field_usize("model", self.model_number + 1);
-                            jl.field_usize("outer_retry", outer_retry);
-                            jl.field_usize("try_idx", try_idx);
-                            jl.field_f64("trial_mdot", trial_mdot);
-                            jl.field_str("outcome", "error");
-                            jl.field_str("detail", &e.to_string());
-                            jl.emit();
+                            emit_implicit_trial_trace(
+                                self.model_number + 1,
+                                outer_retry,
+                                try_idx,
+                                trial_mdot,
+                                None,
+                                None,
+                                "error",
+                                Some(&e.to_string()),
+                            );
                         }
-                        if outer_retry >= 10 || dt_try <= dt_floor {
+                        if !is_binary_trial_retriable(&e)
+                            || outer_retry >= 10
+                            || dt_try <= dt_floor
+                        {
+                            self.restore_snapshot(&pre_step_snap)?;
                             return Err(e);
                         }
                         dt_try = ((if remeshed_outer0 { 0.5 } else { 0.25 })
@@ -317,17 +406,16 @@ impl BinarySystem {
                     }
                 };
                 if tracing {
-                    let mut jl = flexmesa_star::step_trace::JsonLine::new(
-                        "binary_implicit_trial",
+                    emit_implicit_trial_trace(
+                        self.model_number + 1,
+                        outer_retry,
+                        try_idx,
+                        trial_mdot,
+                        Some(dt_used),
+                        Some(m_exp),
+                        outcome_name,
+                        None,
                     );
-                    jl.field_usize("model", self.model_number + 1);
-                    jl.field_usize("outer_retry", outer_retry);
-                    jl.field_usize("try_idx", try_idx);
-                    jl.field_f64("trial_mdot", trial_mdot);
-                    jl.field_f64("dt_used", dt_used);
-                    jl.field_f64("m_exp", m_exp);
-                    jl.field_str("outcome", outcome_name);
-                    jl.emit();
                 }
                 match act {
                     ImplicitStepAction::Converged(m_conv) => {
@@ -350,16 +438,30 @@ impl BinarySystem {
                         } else {
                             self.restore_snapshot(&trial_snap)?;
                             self.counters.num_implicit_trials += 1;
-                            if let Ok(SingleTrialOutcome::Completed {
-                                dt_used: dt0,
-                                ts_ctrl: ts0,
-                            }) = self
-                                .run_single_trial(0.0, dt_try, false, extras)
-                            {
-                                self.mtransfer_rate = 0.0;
-                                accepted = Some((dt0, ts0));
-                            } else {
-                                dt_try = (0.5 * dt_try).max(dt_floor);
+                            match self.run_single_trial(
+                                0.0, dt_try, false, extras,
+                            ) {
+                                Ok(SingleTrialOutcome::Completed {
+                                    dt_used: dt0,
+                                    ts_ctrl: ts0,
+                                }) => {
+                                    self.mtransfer_rate = 0.0;
+                                    accepted = Some((dt0, ts0));
+                                }
+                                Ok(SingleTrialOutcome::CutDt(dt_cut)) => {
+                                    self.counters.num_dt_cuts += 1;
+                                    dt_try = check_cut_dt(dt_cut, dt_try)?;
+                                }
+                                Err(e) => {
+                                    if !is_binary_trial_retriable(&e)
+                                        || outer_retry >= 10
+                                        || dt_try <= dt_floor
+                                    {
+                                        self.restore_snapshot(&pre_step_snap)?;
+                                        return Err(e);
+                                    }
+                                    dt_try = (0.5 * dt_try).max(dt_floor);
+                                }
                             }
                         }
                         break;
@@ -393,15 +495,13 @@ impl BinarySystem {
                     self.counters.num_hard_limit_retries += 1;
                     let next_dt = (0.5 * dt_used).max(dt_floor);
                     if tracing {
-                        let mut jl = flexmesa_star::step_trace::JsonLine::new(
-                            "binary_hard_limit_retry",
+                        emit_hard_limit_retry_trace(
+                            self.model_number + 1,
+                            outer_retry,
+                            dt_used,
+                            next_dt,
+                            dmdot_hard,
                         );
-                        jl.field_usize("model", self.model_number + 1);
-                        jl.field_usize("outer_retry", outer_retry);
-                        jl.field_f64("dt_used", dt_used);
-                        jl.field_f64("dt_next", next_dt);
-                        jl.field_bool("dmdot_hard", dmdot_hard);
-                        jl.emit();
                     }
                     dt_try = next_dt;
                     continue;

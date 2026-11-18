@@ -106,26 +106,9 @@ fn test_microphysics_cache_hit_exactness_and_one_ulp_invalidation() {
     set_hydro_vars(&mut model, false, false).expect("cached eval");
     assert_eq!(model.micro_cache_misses, 1);
     assert_eq!(model.micro_cache_hits, 1);
-    assert_eq!(
-        model.peos.iter().map(|v| v.to_bits()).collect::<Vec<_>>(),
-        peos0
-    );
-    assert_eq!(
-        model
-            .opacity
-            .iter()
-            .map(|v| v.to_bits())
-            .collect::<Vec<_>>(),
-        kap0
-    );
-    assert_eq!(
-        model
-            .eps_nuc
-            .iter()
-            .map(|v| v.to_bits())
-            .collect::<Vec<_>>(),
-        eps0
-    );
+    assert_bits_eq("peos", &model.peos, &peos0);
+    assert_bits_eq("opacity", &model.opacity, &kap0);
+    assert_bits_eq("eps_nuc", &model.eps_nuc, &eps0);
 
     // 1-ULP perturbation of lnd invalidates cache.
     let orig_dens0 = model.lnd[0];
@@ -205,6 +188,8 @@ fn test_primary_state_buffer_preserves_omega_when_solver_mlt_eval_count_nonzero(
     }
     flexmesa_star::update_rotation_distortion_factors(&mut model);
     set_hydro_vars(&mut model, false, false).expect("initial set_hydro_vars");
+    // Apply shellular angular-momentum / distortion update so `fp_rot` scales `grav`.
+    flexmesa_star::sync_post_henyey_rotation(&mut model, 1.0);
 
     let snap = PrimaryStateBuffer::from_model(&model);
     eprintln!(
@@ -217,6 +202,7 @@ fn test_primary_state_buffer_preserves_omega_when_solver_mlt_eval_count_nonzero(
         model.omega.iter().map(|v| v.to_bits()).collect();
     let want_j_rot: Vec<u64> =
         model.j_rot.iter().map(|v| v.to_bits()).collect();
+    let want_grav: Vec<u64> = model.grav.iter().map(|v| v.to_bits()).collect();
     let expected_rot_p: Vec<u64> =
         model.aux.fp_rot.iter().map(|v| v.to_bits()).collect();
     let expected_rot_t: Vec<u64> =
@@ -226,20 +212,102 @@ fn test_primary_state_buffer_preserves_omega_when_solver_mlt_eval_count_nonzero(
     let want_p_surf = model.ln_peos_surf_ad.val.to_bits();
 
     // Simulate a rejected Newton trial that perturbs thermodynamics, omega,
-    // and leaves solver_mlt_eval_count > 0.
+    // grav, and leaves solver_mlt_eval_count > 0.
     model.lnd[0] += 0.05;
     model.ln_t[0] -= 0.03;
     for om in &mut model.omega {
         *om *= 1.15;
+    }
+    for g in &mut model.grav {
+        *g *= 1.07;
     }
     model.aux.solver_mlt_eval_count = 4;
     snap.restore_into(&mut model).expect("restore_into");
 
     assert_bits_eq("omega", &model.omega, &want_omega);
     assert_bits_eq("j_rot", &model.j_rot, &want_j_rot);
+    assert_bits_eq("grav", &model.grav, &want_grav);
     assert_bits_eq("fp_rot", &model.aux.fp_rot, &expected_rot_p);
     assert_bits_eq("ft_rot", &model.aux.ft_rot, &expected_rot_t);
     assert_bits_eq("gradt", &model.gradt, &want_gradt);
     assert_eq!(model.ln_peos_surf_ad.val.to_bits(), want_p_surf);
     assert_eq!(model.aux.solver_mlt_eval_count, 0);
+}
+
+#[test]
+fn test_evolve_step_rolls_back_remesh_on_terminate_and_attempt0_exhaustion() {
+    // 1. Remesh + `TimestepAction::Terminate` must restore original pre-remesh mesh.
+    let mut term_model = load_zams_model(
+        StarControls {
+            initial_mass: 1.0,
+            mesh_delta_coeff: 0.25,
+            okay_to_remesh: true,
+            ..StarControls::default()
+        },
+        StarJobControls::default(),
+    )
+    .expect("1 Msun ZAMS");
+    term_model.controls.ts_stop.min_allowed_varcontrol_target = 1.0;
+    let term_nz = term_model.nz;
+    let term_dq: Vec<u64> = term_model.dq.iter().map(|v| v.to_bits()).collect();
+    let dt0 = term_model.dt;
+
+    let term_err = star_evolve_step(&mut term_model, true, false, true)
+        .expect_err("min_allowed_varcontrol_target violation must terminate");
+    assert!(
+        matches!(term_err, StarError::Terminated { .. }),
+        "expected StarError::Terminated, got {term_err:?}"
+    );
+    assert_eq!(term_model.nz, term_nz, "Terminate must undo remesh nz");
+    assert_bits_eq("Terminate dq", &term_model.dq, &term_dq);
+    assert_eq!(term_model.dt.to_bits(), dt0.to_bits());
+
+    // 2. Remesh + attempt-0 retry exhaustion must also restore original mesh.
+    let mut exh_model = load_zams_model(
+        StarControls {
+            initial_mass: 1.0,
+            mesh_delta_coeff: 0.25,
+            okay_to_remesh: true,
+            max_newton_iters: 1,
+            tol_correction_norm: 1.0e-15,
+            tol_max_correction: 1.0e-15,
+            ..StarControls::default()
+        },
+        StarJobControls::default(),
+    )
+    .expect("1 Msun ZAMS");
+    exh_model.controls.min_timestep_limit = 0.6 * exh_model.dt;
+    exh_model.controls.ts_stop.timestep_factor_for_retries = 0.5;
+    let exh_nz = exh_model.nz;
+    let exh_dq: Vec<u64> = exh_model.dq.iter().map(|v| v.to_bits()).collect();
+
+    let exh_err = star_evolve_step(&mut exh_model, true, false, true)
+        .expect_err("attempt-0 exhaustion must return StepFailure");
+    assert!(
+        matches!(exh_err, StarError::StepFailure(_)),
+        "expected StarError::StepFailure, got {exh_err:?}"
+    );
+    assert_eq!(exh_model.nz, exh_nz, "exhaustion must undo attempt-0 remesh");
+    assert_bits_eq("exhaustion dq", &exh_model.dq, &exh_dq);
+}
+
+#[test]
+fn test_var_layout_paired_variable_names_hydrostatic_and_hydro() {
+    let iso = vec![String::from("h1"), String::from("he4")];
+    let hse = flexmesa_star::VarLayout::new(2, false, false);
+    assert_eq!(hse.paired_variable_name(hse.i_equ_l, &iso), "lnT");
+    assert_eq!(hse.paired_variable_name(hse.i_dv_dt, &iso), "lnd");
+    assert_eq!(hse.paired_variable_name(hse.i_dlnd_dt, &iso), "lnR");
+    assert_eq!(hse.paired_variable_name(hse.i_dlne_dt, &iso), "L");
+    assert_eq!(hse.paired_variable_name(hse.chem_var_index(1), &iso), "he4");
+
+    let vel = flexmesa_star::VarLayout::new(2, true, false);
+    assert_eq!(vel.paired_variable_name(vel.i_equ_l, &iso), "L");
+    assert_eq!(vel.paired_variable_name(vel.i_dv_dt, &iso), "v");
+    assert_eq!(vel.paired_variable_name(vel.i_dlnd_dt, &iso), "lnd");
+    assert_eq!(vel.paired_variable_name(vel.i_dlne_dt, &iso), "lnT");
+    assert_eq!(
+        vel.paired_variable_name(vel.i_dlnr_dt.expect("i_dlnr_dt"), &iso),
+        "lnR"
+    );
 }

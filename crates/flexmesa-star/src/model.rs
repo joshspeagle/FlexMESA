@@ -602,9 +602,7 @@ impl StarModel {
     #[must_use]
     pub fn heap_bytes(&self) -> usize {
         use std::mem::size_of_val;
-        let prim_bytes =
-            crate::primary_state::PrimaryStateBuffer::from_model(self)
-                .heap_bytes();
+        let prim_bytes = crate::primary_state::primary_heap_bytes(self);
         let extra_f64: usize = [
             &self.abar,
             &self.zbar,

@@ -8,7 +8,7 @@ use flexmesa_star::{
     do_adjust_mesh, eval_dxdt_mix, extract_history_row, format_history_row,
     format_profile_string, interp_q, load_photo_bytes, pick_next_timestep,
     read_mod_str, set_hydro_vars, solve_composition_diffusion,
-    solve_henyey_step, write_mod_string, write_photo_bytes,
+    solve_henyey_step, try_write_photo_bytes, write_mod_string,
     yrs_for_init_timestep, MeshFunctionConfig, StarControls, StarJobControls,
     StarModel,
 };
@@ -101,8 +101,10 @@ macro_rules! impl_py_star_model {
             pub fn to_photo_bytes<'py>(
                 &self,
                 py: Python<'py>,
-            ) -> Bound<'py, PyBytes> {
-                PyBytes::new(py, &write_photo_bytes(&self.inner))
+            ) -> PyResult<Bound<'py, PyBytes>> {
+                let bytes =
+                    try_write_photo_bytes(&self.inner).map_err(to_py_err)?;
+                Ok(PyBytes::new(py, &bytes))
             }
 
             /// Evaluates zone and face microphysics (`set_hydro_vars`).

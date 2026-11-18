@@ -143,6 +143,19 @@ pub enum StarError {
     },
 }
 
+impl StarError {
+    /// Returns `true` for errors that may recover under a smaller timestep or
+    /// outer retry, and `false` for non-retriable input, I/O, or termination
+    /// errors (`DECISIONS #30`).
+    #[must_use]
+    pub const fn is_retriable(&self) -> bool {
+        !matches!(
+            self,
+            Self::InvalidInput(_) | Self::IoError(_) | Self::Terminated { .. }
+        )
+    }
+}
+
 impl fmt::Display for StarError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -424,6 +437,66 @@ impl VarLayout {
                 .unwrap_or_else(|| format!("chem_{j}"));
         }
         format!("var_{var_idx}")
+    }
+
+    /// Returns the physical solver variable name paired with 0-based equation
+    /// slot `equ_idx` (accounting for hydrostatic bandwidth reordering in
+    /// `alloc.f90:2372-2386`).
+    #[must_use]
+    pub fn paired_variable_name(
+        &self,
+        equ_idx: usize,
+        iso_names: &[String],
+    ) -> String {
+        let has_vel = self.i_v.is_some() || self.i_u.is_some();
+        if has_vel {
+            if equ_idx == self.i_dlnd_dt {
+                return String::from("lnd");
+            }
+            if equ_idx == self.i_dlne_dt {
+                return String::from("lnT");
+            }
+            if self.i_dlnr_dt == Some(equ_idx) {
+                return String::from("lnR");
+            }
+            if equ_idx == self.i_equ_l {
+                return String::from("L");
+            }
+            if equ_idx == self.i_dv_dt {
+                let vel = if self.i_v.is_some() { "v" } else { "u" };
+                return String::from(vel);
+            }
+        } else {
+            if equ_idx == self.i_dv_dt {
+                return String::from("lnd");
+            }
+            if equ_idx == self.i_equ_l {
+                return String::from("lnT");
+            }
+            if equ_idx == self.i_dlnd_dt {
+                return String::from("lnR");
+            }
+            if equ_idx == self.i_dlne_dt {
+                return String::from("L");
+            }
+        }
+        if self.i_turbulent_energy == Some(equ_idx) {
+            return String::from("w");
+        }
+        if self.i_equ_hp == Some(equ_idx) {
+            return String::from("Hp");
+        }
+        if self.i_dalpha_rti_dt == Some(equ_idx) {
+            return String::from("alpha_RTI");
+        }
+        if equ_idx >= self.nvar_hydro {
+            let j = equ_idx - self.nvar_hydro;
+            return iso_names
+                .get(j)
+                .cloned()
+                .unwrap_or_else(|| format!("chem_{j}"));
+        }
+        format!("var_{equ_idx}")
     }
 }
 

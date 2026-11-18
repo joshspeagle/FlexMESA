@@ -4,15 +4,14 @@
 
 #![forbid(unsafe_code)]
 
+mod common;
+
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use flexmesa_binary::{
-    BinaryInlistControls, BinarySystem, DefaultBinaryExtras,
-};
-use flexmesa_const::SECYER;
+use flexmesa_binary::{BinarySystem, DefaultBinaryExtras};
 use flexmesa_math::{numerics_mode, NumericsMode};
 use flexmesa_star::{
     load_photo_bytes, load_zams_model, star_evolve_step, write_photo_bytes,
@@ -37,44 +36,6 @@ fn build_mutated_star() -> StarModel {
         ..StarJobControls::default()
     };
     load_zams_model(controls, job).expect("1 Msun ZAMS")
-}
-
-fn build_rlof_binary() -> BinarySystem {
-    let donor_ctrl = StarControls {
-        initial_mass: 1.5,
-        ..StarControls::default()
-    };
-    let mut donor = load_zams_model(donor_ctrl, StarJobControls::default())
-        .expect("1.5 Msun donor ZAMS");
-    donor.dt = 1.0e3 * SECYER;
-    donor.dt_next = 1.0e3 * SECYER;
-
-    let mut bctrl = BinaryInlistControls {
-        m1_msun: 1.5,
-        m2_msun: 1.0,
-        initial_period_in_days: 0.45,
-        mdot_scheme: String::from("Ritter"),
-        max_tries_to_achieve: 20,
-        ..BinaryInlistControls::default()
-    };
-    bctrl.use_radiation_corrected_transfer_rate = false;
-    BinarySystem::from_controls_point_mass(donor, bctrl)
-        .expect("RLOF point-mass binary")
-}
-
-fn advance_binary_steps_one_to_three(sys: &mut BinarySystem) {
-    let mut extras = DefaultBinaryExtras;
-    let (next_dt1, _) = sys
-        .try_step_with_extras(1.0e3 * SECYER, &mut extras)
-        .expect("binary step 1");
-    sys.controls.fr_hard = 1.0e-5;
-    let (next_dt2, _) = sys
-        .try_step_with_extras(next_dt1.max(1.0e4 * SECYER), &mut extras)
-        .expect("binary step 2");
-    let _ = sys
-        .try_step_with_extras(next_dt2, &mut extras)
-        .expect("binary step 3");
-    assert_eq!(sys.model_number, 3);
 }
 
 fn advance_binary_steps_four_to_six(sys: &mut BinarySystem) {
@@ -133,8 +94,8 @@ fn run_child_mismatch(in_path: &Path) {
         .expect_err("Fast mode must reject Strict BinarySystem checkpoint");
     let msg = err.to_string();
     assert!(
-        msg.contains("numerics_mode mismatch"),
-        "expected numerics_mode mismatch error, got: {msg}"
+        msg.contains("binary checkpoint numerics_mode mismatch"),
+        "expected binary checkpoint numerics_mode mismatch error, got: {msg}"
     );
 }
 
@@ -237,8 +198,8 @@ fn test_binary_checkpoint_restart_in_child_process_is_bit_exact() {
     let in_path = unique_temp_path("bin_in", "chk");
     let out_path = unique_temp_path("bin_out", "chk");
 
-    let mut split_sys = build_rlof_binary();
-    advance_binary_steps_one_to_three(&mut split_sys);
+    let mut split_sys = common::build_rlof_binary();
+    common::advance_binary_steps_one_to_three(&mut split_sys);
     split_sys
         .save_checkpoint(&in_path)
         .expect("save binary checkpoint");
@@ -249,8 +210,8 @@ fn test_binary_checkpoint_restart_in_child_process_is_bit_exact() {
     let _ = fs::remove_file(&in_path);
     let _ = fs::remove_file(&out_path);
 
-    let mut uninterrupted = build_rlof_binary();
-    advance_binary_steps_one_to_three(&mut uninterrupted);
+    let mut uninterrupted = common::build_rlof_binary();
+    common::advance_binary_steps_one_to_three(&mut uninterrupted);
     advance_binary_steps_four_to_six(&mut uninterrupted);
     let continuous_bytes = uninterrupted
         .to_checkpoint_bytes()
@@ -264,8 +225,8 @@ fn test_binary_checkpoint_restart_in_child_process_is_bit_exact() {
 
 #[test]
 fn test_binary_checkpoint_rejects_corruption_and_numerics_mismatch() {
-    let mut sys = build_rlof_binary();
-    advance_binary_steps_one_to_three(&mut sys);
+    let mut sys = common::build_rlof_binary();
+    common::advance_binary_steps_one_to_three(&mut sys);
     let bytes = sys.to_checkpoint_bytes().expect("to_checkpoint_bytes");
 
     let truncated = &bytes[..bytes.len().saturating_sub(1)];

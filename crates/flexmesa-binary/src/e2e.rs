@@ -198,6 +198,39 @@ pub fn run_binary_test_suite_case_with_logs(
     )
 }
 
+fn contextualize_binary_step_error(
+    case_name: &str,
+    step_num: usize,
+    err: StarError,
+) -> StarError {
+    match err {
+        StarError::InvalidInput(msg) => StarError::InvalidInput(format!(
+            "[{case_name} step {step_num}] {msg}"
+        )),
+        StarError::IoError(msg) => {
+            StarError::IoError(format!("[{case_name} step {step_num}] {msg}"))
+        }
+        StarError::MicrophysicsError(msg) => StarError::MicrophysicsError(
+            format!("[{case_name} step {step_num}] {msg}"),
+        ),
+        StarError::Terminated {
+            model_number,
+            reason,
+        } => StarError::Terminated {
+            model_number,
+            reason: format!("[{case_name} step {step_num}] {reason}"),
+        },
+        StarError::StepFailure(mut info) => {
+            info.detail =
+                format!("[{case_name} step {step_num}] {}", info.detail);
+            StarError::StepFailure(info)
+        }
+        StarError::ConvergenceFailure(msg) => StarError::ConvergenceFailure(
+            format!("[{case_name} step {step_num}] {msg}"),
+        ),
+    }
+}
+
 /// Executes a single `binary/test_suite/<case>` directory with explicit
 /// [`InlistLoadOptions`].
 pub fn run_binary_test_suite_case_with_options(
@@ -275,13 +308,11 @@ pub fn run_binary_test_suite_case_with_options(
 
     let mut term_code = String::from("MaxStepsCap");
     while bin.model_number < step_limit {
+        let step_num = bin.model_number + 1;
         let (suggested_dt, _) = bin
             .try_step_with_extras(dt_next, case_extras.as_mut())
             .map_err(|e| {
-                StarError::ConvergenceFailure(format!(
-                    "[{case_name} step {}] {e}",
-                    bin.model_number + 1
-                ))
+                contextualize_binary_step_error(&case_name, step_num, e)
             })?;
         dt_next = suggested_dt;
         let has_term = bin.last_termination_reason.is_some();

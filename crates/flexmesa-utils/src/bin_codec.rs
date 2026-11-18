@@ -103,6 +103,56 @@ pub fn from_bytes<T: DeserializeOwned>(
     Ok(val)
 }
 
+/// Byte length of the shared versioned checkpoint envelope (`magic[8] + version[4] + mode_tag[1]`).
+pub const FRAMED_HEADER_LEN: usize = 8 + 4 + 1;
+
+/// Prepends the 13-byte versioned envelope (`magic + version_le + mode_tag`) to
+/// serialized checkpoint payload bytes.
+#[must_use]
+pub fn encode_framed_bytes(
+    magic: &[u8; 8],
+    version: u32,
+    mode_tag: u8,
+    payload: &[u8],
+) -> Vec<u8> {
+    let mut out = Vec::with_capacity(FRAMED_HEADER_LEN + payload.len());
+    out.extend_from_slice(magic);
+    out.extend_from_slice(&version.to_le_bytes());
+    out.push(mode_tag);
+    out.extend_from_slice(payload);
+    out
+}
+
+/// Validates a 13-byte checkpoint envelope against `expected_magic` and
+/// `expected_version`, returning `(mode_tag, payload_slice)`.
+///
+/// # Errors
+/// Returns a descriptive error naming `label` if the header is truncated,
+/// magic bytes do not match, or the stored format version differs.
+pub fn decode_framed_header<'a>(
+    bytes: &'a [u8],
+    expected_magic: &[u8; 8],
+    expected_version: u32,
+    label: &str,
+) -> Result<(u8, &'a [u8]), String> {
+    if bytes.len() < FRAMED_HEADER_LEN {
+        return Err(format!("{label} EOF header"));
+    }
+    if &bytes[..8] != expected_magic {
+        return Err(format!("invalid {label} magic bytes"));
+    }
+    let ver_bytes: [u8; 4] = bytes[8..12]
+        .try_into()
+        .map_err(|_| format!("{label} EOF version"))?;
+    let version = u32::from_le_bytes(ver_bytes);
+    if version != expected_version {
+        return Err(format!(
+            "unsupported {label} version {version} (expected {expected_version})"
+        ));
+    }
+    Ok((bytes[12], &bytes[FRAMED_HEADER_LEN..]))
+}
+
 struct BinSerializer {
     out: Vec<u8>,
 }
@@ -113,6 +163,59 @@ impl BinSerializer {
         let len_u64 = u64::try_from(len).unwrap_or(u64::MAX);
         self.out.extend_from_slice(&len_u64.to_le_bytes());
     }
+}
+
+macro_rules! impl_serialize_le_nums {
+    ($($method:ident : $ty:ty),* $(,)?) => {
+        $(
+            #[inline]
+            fn $method(self, v: $ty) -> Result<(), Self::Error> {
+                self.out.extend_from_slice(&v.to_le_bytes());
+                Ok(())
+            }
+        )*
+    };
+}
+
+macro_rules! impl_serialize_compound_elem {
+    ($trait_name:ident, $fn_name:ident) => {
+        impl $trait_name for &mut BinSerializer {
+            type Ok = ();
+            type Error = BinCodecError;
+            #[inline]
+            fn $fn_name<T: Serialize + ?Sized>(
+                &mut self,
+                value: &T,
+            ) -> Result<(), Self::Error> {
+                value.serialize(&mut **self)
+            }
+            #[inline]
+            fn end(self) -> Result<(), Self::Error> {
+                Ok(())
+            }
+        }
+    };
+}
+
+macro_rules! impl_serialize_compound_field {
+    ($trait_name:ident) => {
+        impl $trait_name for &mut BinSerializer {
+            type Ok = ();
+            type Error = BinCodecError;
+            #[inline]
+            fn serialize_field<T: Serialize + ?Sized>(
+                &mut self,
+                _key: &'static str,
+                value: &T,
+            ) -> Result<(), Self::Error> {
+                value.serialize(&mut **self)
+            }
+            #[inline]
+            fn end(self) -> Result<(), Self::Error> {
+                Ok(())
+            }
+        }
+    };
 }
 
 impl ser::Serializer for &mut BinSerializer {
@@ -133,76 +236,24 @@ impl ser::Serializer for &mut BinSerializer {
     }
 
     #[inline]
-    fn serialize_i8(self, v: i8) -> Result<(), Self::Error> {
-        self.out.extend_from_slice(&v.to_le_bytes());
-        Ok(())
-    }
-
-    #[inline]
-    fn serialize_i16(self, v: i16) -> Result<(), Self::Error> {
-        self.out.extend_from_slice(&v.to_le_bytes());
-        Ok(())
-    }
-
-    #[inline]
-    fn serialize_i32(self, v: i32) -> Result<(), Self::Error> {
-        self.out.extend_from_slice(&v.to_le_bytes());
-        Ok(())
-    }
-
-    #[inline]
-    fn serialize_i64(self, v: i64) -> Result<(), Self::Error> {
-        self.out.extend_from_slice(&v.to_le_bytes());
-        Ok(())
-    }
-
-    #[inline]
-    fn serialize_i128(self, v: i128) -> Result<(), Self::Error> {
-        self.out.extend_from_slice(&v.to_le_bytes());
-        Ok(())
-    }
-
-    #[inline]
     fn serialize_u8(self, v: u8) -> Result<(), Self::Error> {
         self.out.push(v);
         Ok(())
     }
 
-    #[inline]
-    fn serialize_u16(self, v: u16) -> Result<(), Self::Error> {
-        self.out.extend_from_slice(&v.to_le_bytes());
-        Ok(())
-    }
-
-    #[inline]
-    fn serialize_u32(self, v: u32) -> Result<(), Self::Error> {
-        self.out.extend_from_slice(&v.to_le_bytes());
-        Ok(())
-    }
-
-    #[inline]
-    fn serialize_u64(self, v: u64) -> Result<(), Self::Error> {
-        self.out.extend_from_slice(&v.to_le_bytes());
-        Ok(())
-    }
-
-    #[inline]
-    fn serialize_u128(self, v: u128) -> Result<(), Self::Error> {
-        self.out.extend_from_slice(&v.to_le_bytes());
-        Ok(())
-    }
-
-    #[inline]
-    fn serialize_f32(self, v: f32) -> Result<(), Self::Error> {
-        self.out.extend_from_slice(&v.to_le_bytes());
-        Ok(())
-    }
-
-    #[inline]
-    fn serialize_f64(self, v: f64) -> Result<(), Self::Error> {
-        self.out.extend_from_slice(&v.to_le_bytes());
-        Ok(())
-    }
+    impl_serialize_le_nums!(
+        serialize_i8: i8,
+        serialize_i16: i16,
+        serialize_i32: i32,
+        serialize_i64: i64,
+        serialize_i128: i128,
+        serialize_u16: u16,
+        serialize_u32: u32,
+        serialize_u64: u64,
+        serialize_u128: u128,
+        serialize_f32: f32,
+        serialize_f64: f64,
+    );
 
     #[inline]
     fn serialize_char(self, v: char) -> Result<(), Self::Error> {
@@ -347,69 +398,12 @@ impl ser::Serializer for &mut BinSerializer {
     }
 }
 
-impl SerializeSeq for &mut BinSerializer {
-    type Ok = ();
-    type Error = BinCodecError;
-    #[inline]
-    fn serialize_element<T: Serialize + ?Sized>(
-        &mut self,
-        value: &T,
-    ) -> Result<(), Self::Error> {
-        value.serialize(&mut **self)
-    }
-    #[inline]
-    fn end(self) -> Result<(), Self::Error> {
-        Ok(())
-    }
-}
-
-impl SerializeTuple for &mut BinSerializer {
-    type Ok = ();
-    type Error = BinCodecError;
-    #[inline]
-    fn serialize_element<T: Serialize + ?Sized>(
-        &mut self,
-        value: &T,
-    ) -> Result<(), Self::Error> {
-        value.serialize(&mut **self)
-    }
-    #[inline]
-    fn end(self) -> Result<(), Self::Error> {
-        Ok(())
-    }
-}
-
-impl SerializeTupleStruct for &mut BinSerializer {
-    type Ok = ();
-    type Error = BinCodecError;
-    #[inline]
-    fn serialize_field<T: Serialize + ?Sized>(
-        &mut self,
-        value: &T,
-    ) -> Result<(), Self::Error> {
-        value.serialize(&mut **self)
-    }
-    #[inline]
-    fn end(self) -> Result<(), Self::Error> {
-        Ok(())
-    }
-}
-
-impl SerializeTupleVariant for &mut BinSerializer {
-    type Ok = ();
-    type Error = BinCodecError;
-    #[inline]
-    fn serialize_field<T: Serialize + ?Sized>(
-        &mut self,
-        value: &T,
-    ) -> Result<(), Self::Error> {
-        value.serialize(&mut **self)
-    }
-    #[inline]
-    fn end(self) -> Result<(), Self::Error> {
-        Ok(())
-    }
-}
+impl_serialize_compound_elem!(SerializeSeq, serialize_element);
+impl_serialize_compound_elem!(SerializeTuple, serialize_element);
+impl_serialize_compound_elem!(SerializeTupleStruct, serialize_field);
+impl_serialize_compound_elem!(SerializeTupleVariant, serialize_field);
+impl_serialize_compound_field!(SerializeStruct);
+impl_serialize_compound_field!(SerializeStructVariant);
 
 impl SerializeMap for &mut BinSerializer {
     type Ok = ();
@@ -434,38 +428,18 @@ impl SerializeMap for &mut BinSerializer {
     }
 }
 
-impl SerializeStruct for &mut BinSerializer {
-    type Ok = ();
-    type Error = BinCodecError;
-    #[inline]
-    fn serialize_field<T: Serialize + ?Sized>(
-        &mut self,
-        _key: &'static str,
-        value: &T,
-    ) -> Result<(), Self::Error> {
-        value.serialize(&mut **self)
-    }
-    #[inline]
-    fn end(self) -> Result<(), Self::Error> {
-        Ok(())
-    }
-}
-
-impl SerializeStructVariant for &mut BinSerializer {
-    type Ok = ();
-    type Error = BinCodecError;
-    #[inline]
-    fn serialize_field<T: Serialize + ?Sized>(
-        &mut self,
-        _key: &'static str,
-        value: &T,
-    ) -> Result<(), Self::Error> {
-        value.serialize(&mut **self)
-    }
-    #[inline]
-    fn end(self) -> Result<(), Self::Error> {
-        Ok(())
-    }
+macro_rules! impl_deserialize_le_nums {
+    ($($method:ident : $ty:ty : $visit:ident : $len:literal),* $(,)?) => {
+        $(
+            #[inline]
+            fn $method<V: Visitor<'de>>(
+                self,
+                visitor: V,
+            ) -> Result<V::Value, Self::Error> {
+                visitor.$visit(<$ty>::from_le_bytes(self.read_array::<$len>()?))
+            }
+        )*
+    };
 }
 
 struct BinDeserializer<'de> {
@@ -541,46 +515,6 @@ impl<'de> de::Deserializer<'de> for &mut BinDeserializer<'de> {
     }
 
     #[inline]
-    fn deserialize_i8<V: Visitor<'de>>(
-        self,
-        visitor: V,
-    ) -> Result<V::Value, Self::Error> {
-        visitor.visit_i8(i8::from_le_bytes(self.read_array::<1>()?))
-    }
-
-    #[inline]
-    fn deserialize_i16<V: Visitor<'de>>(
-        self,
-        visitor: V,
-    ) -> Result<V::Value, Self::Error> {
-        visitor.visit_i16(i16::from_le_bytes(self.read_array::<2>()?))
-    }
-
-    #[inline]
-    fn deserialize_i32<V: Visitor<'de>>(
-        self,
-        visitor: V,
-    ) -> Result<V::Value, Self::Error> {
-        visitor.visit_i32(i32::from_le_bytes(self.read_array::<4>()?))
-    }
-
-    #[inline]
-    fn deserialize_i64<V: Visitor<'de>>(
-        self,
-        visitor: V,
-    ) -> Result<V::Value, Self::Error> {
-        visitor.visit_i64(i64::from_le_bytes(self.read_array::<8>()?))
-    }
-
-    #[inline]
-    fn deserialize_i128<V: Visitor<'de>>(
-        self,
-        visitor: V,
-    ) -> Result<V::Value, Self::Error> {
-        visitor.visit_i128(i128::from_le_bytes(self.read_array::<16>()?))
-    }
-
-    #[inline]
     fn deserialize_u8<V: Visitor<'de>>(
         self,
         visitor: V,
@@ -588,53 +522,19 @@ impl<'de> de::Deserializer<'de> for &mut BinDeserializer<'de> {
         visitor.visit_u8(self.read_bytes(1)?[0])
     }
 
-    #[inline]
-    fn deserialize_u16<V: Visitor<'de>>(
-        self,
-        visitor: V,
-    ) -> Result<V::Value, Self::Error> {
-        visitor.visit_u16(u16::from_le_bytes(self.read_array::<2>()?))
-    }
-
-    #[inline]
-    fn deserialize_u32<V: Visitor<'de>>(
-        self,
-        visitor: V,
-    ) -> Result<V::Value, Self::Error> {
-        visitor.visit_u32(u32::from_le_bytes(self.read_array::<4>()?))
-    }
-
-    #[inline]
-    fn deserialize_u64<V: Visitor<'de>>(
-        self,
-        visitor: V,
-    ) -> Result<V::Value, Self::Error> {
-        visitor.visit_u64(u64::from_le_bytes(self.read_array::<8>()?))
-    }
-
-    #[inline]
-    fn deserialize_u128<V: Visitor<'de>>(
-        self,
-        visitor: V,
-    ) -> Result<V::Value, Self::Error> {
-        visitor.visit_u128(u128::from_le_bytes(self.read_array::<16>()?))
-    }
-
-    #[inline]
-    fn deserialize_f32<V: Visitor<'de>>(
-        self,
-        visitor: V,
-    ) -> Result<V::Value, Self::Error> {
-        visitor.visit_f32(f32::from_le_bytes(self.read_array::<4>()?))
-    }
-
-    #[inline]
-    fn deserialize_f64<V: Visitor<'de>>(
-        self,
-        visitor: V,
-    ) -> Result<V::Value, Self::Error> {
-        visitor.visit_f64(f64::from_le_bytes(self.read_array::<8>()?))
-    }
+    impl_deserialize_le_nums!(
+        deserialize_i8: i8: visit_i8: 1,
+        deserialize_i16: i16: visit_i16: 2,
+        deserialize_i32: i32: visit_i32: 4,
+        deserialize_i64: i64: visit_i64: 8,
+        deserialize_i128: i128: visit_i128: 16,
+        deserialize_u16: u16: visit_u16: 2,
+        deserialize_u32: u32: visit_u32: 4,
+        deserialize_u64: u64: visit_u64: 8,
+        deserialize_u128: u128: visit_u128: 16,
+        deserialize_f32: f32: visit_f32: 4,
+        deserialize_f64: f64: visit_f64: 8,
+    );
 
     #[inline]
     fn deserialize_char<V: Visitor<'de>>(

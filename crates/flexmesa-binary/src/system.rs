@@ -19,7 +19,9 @@ use crate::system_init::prep_and_settle_binary_star;
 use crate::system_jdot::{
     apply_initial_orbit_sync, eval_star_spin_j, EdotBreakdown, JdotBreakdown,
 };
-use crate::system_rlof::{BinaryStepSnapshot, CoupledMdotAccounting};
+use crate::system_rlof::{
+    BinaryStepScalars, BinaryStepSnapshot, CoupledMdotAccounting,
+};
 
 #[inline]
 pub(crate) fn compute_rl_and_gaps(
@@ -642,8 +644,8 @@ impl BinarySystem {
         Ok(())
     }
 
-    pub(crate) fn capture_snapshot(&self) -> BinaryStepSnapshot {
-        let (comp_star, pm_state) = match &self.companion {
+    fn snapshot_parts(&self) -> (Option<&StarModel>, BinaryStepScalars) {
+        let (comp_star, point_mass_state) = match &self.companion {
             BinaryCompanion::PointMass {
                 mass_g,
                 m_bh_zero_eq_g,
@@ -651,67 +653,40 @@ impl BinarySystem {
             } => (None, Some((*mass_g, *m_bh_zero_eq_g, *is_black_hole))),
             BinaryCompanion::Star(s2) => (Some(&**s2), None),
         };
-        BinaryStepSnapshot::capture(
-            &self.donor,
-            comp_star,
-            pm_state,
-            self.point_mass_i,
-            self.donor_i,
-            self.separation,
-            self.period,
-            self.eccentricity,
-            self.angular_momentum_j,
-            self.rl,
-            self.rl_relative_gap,
-            self.mtransfer_rate,
-            self.step_mtransfer_rate,
-            self.jdot,
-            self.binary_age_yr,
-            self.model_number,
-            self.max_timestep_sec,
-            self.change_factor,
-            self.using_jdot_mb,
-            self.cumulative_j_ext,
-            self.last_mdot,
-            self.last_jdot,
-            self.last_edot,
-        )
+        let scalars = BinaryStepScalars {
+            point_mass_state,
+            point_mass_i: self.point_mass_i,
+            donor_i: self.donor_i,
+            separation: self.separation,
+            period: self.period,
+            eccentricity: self.eccentricity,
+            angular_momentum_j: self.angular_momentum_j,
+            rl: self.rl,
+            rl_relative_gap: self.rl_relative_gap,
+            mtransfer_rate: self.mtransfer_rate,
+            step_mtransfer_rate: self.step_mtransfer_rate,
+            jdot: self.jdot,
+            binary_age_yr: self.binary_age_yr,
+            model_number: self.model_number,
+            max_timestep_sec: self.max_timestep_sec,
+            change_factor: self.change_factor,
+            using_jdot_mb: self.using_jdot_mb,
+            cumulative_j_ext: self.cumulative_j_ext,
+            last_mdot: self.last_mdot,
+            last_jdot: self.last_jdot,
+            last_edot: self.last_edot,
+        };
+        (comp_star, scalars)
+    }
+
+    pub(crate) fn capture_snapshot(&self) -> BinaryStepSnapshot {
+        let (comp_star, scalars) = self.snapshot_parts();
+        BinaryStepSnapshot::capture(&self.donor, comp_star, scalars)
     }
 
     pub(crate) fn capture_snapshot_into(&self, snap: &mut BinaryStepSnapshot) {
-        let (comp_star, pm_state) = match &self.companion {
-            BinaryCompanion::PointMass {
-                mass_g,
-                m_bh_zero_eq_g,
-                is_black_hole,
-            } => (None, Some((*mass_g, *m_bh_zero_eq_g, *is_black_hole))),
-            BinaryCompanion::Star(s2) => (Some(&**s2), None),
-        };
-        snap.capture_into(
-            &self.donor,
-            comp_star,
-            pm_state,
-            self.point_mass_i,
-            self.donor_i,
-            self.separation,
-            self.period,
-            self.eccentricity,
-            self.angular_momentum_j,
-            self.rl,
-            self.rl_relative_gap,
-            self.mtransfer_rate,
-            self.step_mtransfer_rate,
-            self.jdot,
-            self.binary_age_yr,
-            self.model_number,
-            self.max_timestep_sec,
-            self.change_factor,
-            self.using_jdot_mb,
-            self.cumulative_j_ext,
-            self.last_mdot,
-            self.last_jdot,
-            self.last_edot,
-        );
+        let (comp_star, scalars) = self.snapshot_parts();
+        snap.capture_into(&self.donor, comp_star, scalars);
     }
 
     pub(crate) fn restore_snapshot(
@@ -771,7 +746,7 @@ impl BinarySystem {
     pub fn checkpoint_numerics_mode(
         bytes: &[u8],
     ) -> Result<flexmesa_math::NumericsMode, StarError> {
-        decode_binary_checkpoint_header(bytes).map(|(mode, _)| mode)
+        decode_binary_checkpoint_frame(bytes).map(|(mode, _)| mode)
     }
 
     /// Serializes the full coupled [`BinarySystem`] (both stars, controls,
@@ -786,13 +761,12 @@ impl BinarySystem {
                     "binary checkpoint serialization failed: {e}"
                 ))
             })?;
-        let mut out =
-            Vec::with_capacity(BINARY_CHECKPOINT_HEADER_LEN + payload.len());
-        out.extend_from_slice(BINARY_CHECKPOINT_MAGIC);
-        out.extend_from_slice(&BINARY_CHECKPOINT_VERSION.to_le_bytes());
-        out.push(flexmesa_math::numerics_mode().to_wire_tag());
-        out.extend_from_slice(&payload);
-        Ok(out)
+        Ok(flexmesa_utils::bin_codec::encode_framed_bytes(
+            BINARY_CHECKPOINT_MAGIC,
+            BINARY_CHECKPOINT_VERSION,
+            flexmesa_math::numerics_mode().to_wire_tag(),
+            &payload,
+        ))
     }
 
     /// Restores a coupled [`BinarySystem`] from serialized binary checkpoint
@@ -803,20 +777,21 @@ impl BinarySystem {
     /// Returns [`StarError::IoError`] if header validation fails,
     /// `numerics_mode` mismatches, or decoding fails.
     pub fn from_checkpoint_bytes(bytes: &[u8]) -> Result<Self, StarError> {
-        let (saved_mode, offset) = decode_binary_checkpoint_header(bytes)?;
+        let (saved_mode, payload) = decode_binary_checkpoint_frame(bytes)?;
         let active_mode = flexmesa_math::numerics_mode();
         if saved_mode != active_mode {
             return Err(StarError::IoError(format!(
-                "photo numerics_mode mismatch: checkpoint saved in \"{saved_mode}\" \
-                 mode cannot be loaded while active mode is \"{active_mode}\""
+                "binary checkpoint numerics_mode mismatch: checkpoint saved in \
+                 \"{saved_mode}\" mode cannot be loaded while active mode is \
+                 \"{active_mode}\""
             )));
         }
-        let mut sys: Self = flexmesa_utils::bin_codec::from_bytes(
-            &bytes[offset..],
-        )
-        .map_err(|e| {
-            StarError::IoError(format!("binary checkpoint decode failed: {e}"))
-        })?;
+        let mut sys: Self = flexmesa_utils::bin_codec::from_bytes(payload)
+            .map_err(|e| {
+                StarError::IoError(format!(
+                    "binary checkpoint decode failed: {e}"
+                ))
+            })?;
         sys.refresh_tidal_deformation_hooks(false)?;
         Ok(sys)
     }
@@ -855,37 +830,23 @@ impl BinarySystem {
 
 const BINARY_CHECKPOINT_MAGIC: &[u8; 8] = b"FMBINCP1";
 const BINARY_CHECKPOINT_VERSION: u32 = 1;
-const BINARY_CHECKPOINT_HEADER_LEN: usize = 8 + 4 + 1;
 
-fn decode_binary_checkpoint_header(
+fn decode_binary_checkpoint_frame(
     bytes: &[u8],
-) -> Result<(flexmesa_math::NumericsMode, usize), StarError> {
-    if bytes.len() < BINARY_CHECKPOINT_HEADER_LEN {
-        return Err(StarError::IoError(String::from(
-            "binary checkpoint EOF header",
-        )));
-    }
-    if &bytes[..8] != BINARY_CHECKPOINT_MAGIC {
-        return Err(StarError::IoError(String::from(
-            "invalid binary checkpoint magic bytes",
-        )));
-    }
-    let version =
-        u32::from_le_bytes(bytes[8..12].try_into().map_err(|_| {
-            StarError::IoError(String::from("binary checkpoint EOF version"))
-        })?);
-    if version != BINARY_CHECKPOINT_VERSION {
-        return Err(StarError::IoError(format!(
-            "unsupported binary checkpoint version {version} \
-             (expected {BINARY_CHECKPOINT_VERSION})"
-        )));
-    }
-    let mode = flexmesa_math::NumericsMode::from_wire_tag(bytes[12])
+) -> Result<(flexmesa_math::NumericsMode, &[u8]), StarError> {
+    let (mode_tag, payload) =
+        flexmesa_utils::bin_codec::decode_framed_header(
+            bytes,
+            BINARY_CHECKPOINT_MAGIC,
+            BINARY_CHECKPOINT_VERSION,
+            "binary checkpoint",
+        )
+        .map_err(StarError::IoError)?;
+    let mode = flexmesa_math::NumericsMode::from_wire_tag(mode_tag)
         .ok_or_else(|| {
             StarError::IoError(format!(
-                "invalid binary checkpoint numerics_mode tag {}",
-                bytes[12]
+                "invalid binary checkpoint numerics_mode tag {mode_tag}"
             ))
         })?;
-    Ok((mode, BINARY_CHECKPOINT_HEADER_LEN))
+    Ok((mode, payload))
 }

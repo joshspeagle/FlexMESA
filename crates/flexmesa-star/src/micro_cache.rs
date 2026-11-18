@@ -269,6 +269,11 @@ struct CachedMicroOutputs {
     d_dxdt_nuc_dx: Vec<f64>,
 }
 
+/// Cap per-slot cached network Jacobian storage at ~64 MB (`8_000_000` `f64`
+/// elements, e.g., skipping `d_dxdt_nuc_dx` caching on 200+ isotope networks
+/// such as `mesa_201.net` so two cache slots do not add ~430 MB RSS).
+const MAX_CACHED_NET_JAC_ELEMS: usize = 8_000_000;
+
 impl CachedMicroOutputs {
     fn capture_pre_net(&mut self, model: &StarModel) {
         self.rho.clone_from(&model.rho);
@@ -330,8 +335,10 @@ impl CachedMicroOutputs {
     }
 
     fn capture_net(&mut self, model: &StarModel, has_net_jac: bool) {
+        let store_jac = has_net_jac
+            && model.d_dxdt_nuc_dx.len() <= MAX_CACHED_NET_JAC_ELEMS;
         self.has_net = true;
-        self.has_net_jac = has_net_jac;
+        self.has_net_jac = store_jac;
         self.eps_nuc.clone_from(&model.eps_nuc);
         self.d_epsnuc_dlnd.clone_from(&model.d_epsnuc_dlnd);
         self.d_epsnuc_dlnt.clone_from(&model.d_epsnuc_dlnt);
@@ -339,11 +346,20 @@ impl CachedMicroOutputs {
         self.eps_nuc_categories
             .clone_from(&model.aux.eps_nuc_categories);
         self.dxdt_nuc.clone_from(&model.dxdt_nuc);
-        if has_net_jac {
+        if store_jac {
             self.d_epsnuc_dx.clone_from(&model.d_epsnuc_dx);
             self.d_dxdt_nuc_dlnd.clone_from(&model.d_dxdt_nuc_dlnd);
             self.d_dxdt_nuc_dlnt.clone_from(&model.d_dxdt_nuc_dlnt);
             self.d_dxdt_nuc_dx.clone_from(&model.d_dxdt_nuc_dx);
+        } else {
+            self.d_epsnuc_dx.clear();
+            self.d_epsnuc_dx.shrink_to_fit();
+            self.d_dxdt_nuc_dlnd.clear();
+            self.d_dxdt_nuc_dlnd.shrink_to_fit();
+            self.d_dxdt_nuc_dlnt.clear();
+            self.d_dxdt_nuc_dlnt.shrink_to_fit();
+            self.d_dxdt_nuc_dx.clear();
+            self.d_dxdt_nuc_dx.shrink_to_fit();
         }
     }
 

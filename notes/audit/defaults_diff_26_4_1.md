@@ -70,23 +70,23 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 
 | Control | Upstream `26.4.1` Source | Upstream Default | `FlexMESA` Source | `FlexMESA` Default | Classification |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| `auto_extend_net` | `star/defaults/star_job.defaults:2491` | `.true.` | `crates/flexmesa-star/src/job_controls.rs:478` | `false` | boolean mismatch |
-| `core_avg_eps` | `star/defaults/star_job.defaults:1871` | `1d-6` | `crates/flexmesa-star/src/job_controls.rs:518` | `0.0` | numeric mismatch |
-| `new_omega` | `star/defaults/star_job.defaults:1602` | `0` | `crates/flexmesa-star/src/job_controls.rs:488` | `None` | active upstream limit disabled as None |
-| `new_omega_div_omega_crit` | `star/defaults/star_job.defaults:1624` | `0` | `crates/flexmesa-star/src/job_controls.rs:489` | `None` | active upstream limit disabled as None |
-| `new_surface_rotation_v` | `star/defaults/star_job.defaults:1640` | `0` | `crates/flexmesa-star/src/job_controls.rs:490` | `None` | active upstream limit disabled as None |
-| `pre_ms_d_log10_P` | `star/defaults/star_job.defaults:416` | `0` | `crates/flexmesa-star/src/job_controls.rs:453` | `0.004` | numeric mismatch |
-| `pre_ms_relax_num_steps` | `star/defaults/star_job.defaults:441` | `300` | `crates/flexmesa-star/src/job_controls.rs:457` | `20` | numeric mismatch |
-| `pre_ms_T_c` | `star/defaults/star_job.defaults:396` | `3d5` | `crates/flexmesa-star/src/job_controls.rs:451` | `9.0e5` | numeric mismatch |
-| `remove_initial_center_by_temperature` | `star/defaults/star_job.defaults:2046` | `0` | `crates/flexmesa-star/src/job_controls.rs:534` | `None` | active upstream limit disabled as None |
-| `save_model_filename` | `star/defaults/star_job.defaults:260` | `'undefined'` | `crates/flexmesa-star/src/job_controls.rs:466` | `String::new()` | string/option mismatch |
-| `save_model_number` | `star/defaults/star_job.defaults:234` | `-111` | `crates/flexmesa-star/src/job_controls.rs:467` | `None` | active upstream limit disabled as None |
-| `save_photo_when_terminate` | `star/defaults/star_job.defaults:270` | `.true.` | `crates/flexmesa-star/src/job_controls.rs:468` | `false` | boolean mismatch |
-| `save_pulse_data_filename` | `star/defaults/star_job.defaults:323` | `'undefined'` | `crates/flexmesa-star/src/job_controls.rs:471` | `String::new()` | string/option mismatch |
-| `seconds_for_initial_dt` | `star/defaults/star_job.defaults:650` | `-1` | `crates/flexmesa-star/src/job_controls.rs:497` | `0.0` | numeric mismatch |
-| `set_to_this_tau_factor` | `star/defaults/star_job.defaults:1314` | `-1` | `crates/flexmesa-star/src/job_controls.rs:514` | `1.0` | numeric mismatch |
-| `steps_to_take_before_terminate` | `star/defaults/star_job.defaults:574` | `-1` | `crates/flexmesa-star/src/job_controls.rs:533` | `None` | active upstream limit disabled as None |
-| `years_for_initial_dt` | `star/defaults/star_job.defaults:649` | `-1` | `crates/flexmesa-star/src/job_controls.rs:496` | `0.0` | numeric mismatch |
+| `auto_extend_net` | `star/defaults/star_job.defaults:2491` | `.true.` | `crates/flexmesa-star/src/job_controls.rs:653` | `false` | boolean mismatch |
+| `core_avg_eps` | `star/defaults/star_job.defaults:1871` | `1d-6` | `crates/flexmesa-star/src/job_controls.rs:693` | `0.0` | numeric mismatch |
+| `new_omega` | `star/defaults/star_job.defaults:1602` | `0` | `crates/flexmesa-star/src/job_controls.rs:663` | `None` | active upstream limit disabled as None |
+| `new_omega_div_omega_crit` | `star/defaults/star_job.defaults:1624` | `0` | `crates/flexmesa-star/src/job_controls.rs:664` | `None` | active upstream limit disabled as None |
+| `new_surface_rotation_v` | `star/defaults/star_job.defaults:1640` | `0` | `crates/flexmesa-star/src/job_controls.rs:665` | `None` | active upstream limit disabled as None |
+| `pre_ms_d_log10_P` | `star/defaults/star_job.defaults:416` | `0` | `crates/flexmesa-star/src/job_controls.rs:628` | `0.004` | numeric mismatch |
+| `pre_ms_relax_num_steps` | `star/defaults/star_job.defaults:441` | `300` | `crates/flexmesa-star/src/job_controls.rs:632` | `20` | numeric mismatch |
+| `pre_ms_T_c` | `star/defaults/star_job.defaults:396` | `3d5` | `crates/flexmesa-star/src/job_controls.rs:626` | `9.0e5` | numeric mismatch |
+| `remove_initial_center_by_temperature` | `star/defaults/star_job.defaults:2046` | `0` | `crates/flexmesa-star/src/job_controls.rs:709` | `None` | active upstream limit disabled as None |
+| `save_model_filename` | `star/defaults/star_job.defaults:260` | `'undefined'` | `crates/flexmesa-star/src/job_controls.rs:641` | `String::new()` | string/option mismatch |
+| `save_model_number` | `star/defaults/star_job.defaults:234` | `-111` | `crates/flexmesa-star/src/job_controls.rs:642` | `None` | active upstream limit disabled as None |
+| `save_photo_when_terminate` | `star/defaults/star_job.defaults:270` | `.true.` | `crates/flexmesa-star/src/job_controls.rs:643` | `false` | boolean mismatch |
+| `save_pulse_data_filename` | `star/defaults/star_job.defaults:323` | `'undefined'` | `crates/flexmesa-star/src/job_controls.rs:646` | `String::new()` | string/option mismatch |
+| `seconds_for_initial_dt` | `star/defaults/star_job.defaults:650` | `-1` | `crates/flexmesa-star/src/job_controls.rs:672` | `0.0` | numeric mismatch |
+| `set_to_this_tau_factor` | `star/defaults/star_job.defaults:1314` | `-1` | `crates/flexmesa-star/src/job_controls.rs:689` | `1.0` | numeric mismatch |
+| `steps_to_take_before_terminate` | `star/defaults/star_job.defaults:574` | `-1` | `crates/flexmesa-star/src/job_controls.rs:708` | `None` | active upstream limit disabled as None |
+| `years_for_initial_dt` | `star/defaults/star_job.defaults:649` | `-1` | `crates/flexmesa-star/src/job_controls.rs:671` | `0.0` | numeric mismatch |
 
 ## binary &binary_controls + &binary_job
 
@@ -108,22 +108,22 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 
 | Control | Upstream `26.4.1` Source | Upstream Default | `FlexMESA` Source | `FlexMESA` Default | Classification |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| `logQ_max_for_all_CMS` | `eos/defaults/eos.defaults:277` | `-1` | `crates/flexmesa-eos/src/cms/config.rs:79` | `100.0` | numeric mismatch |
-| `logQ_max_for_any_CMS` | `eos/defaults/eos.defaults:276` | `-1` | `crates/flexmesa-eos/src/cms/config.rs:80` | `100.0` | numeric mismatch |
-| `logQ_min_for_all_CMS` | `eos/defaults/eos.defaults:279` | `-1` | `crates/flexmesa-eos/src/cms/config.rs:78` | `-100.0` | numeric mismatch |
-| `logQ_min_for_any_CMS` | `eos/defaults/eos.defaults:278` | `-1` | `crates/flexmesa-eos/src/cms/config.rs:77` | `-100.0` | numeric mismatch |
-| `logRho_max_for_all_CMS` | `eos/defaults/eos.defaults:280` | `-1` | `crates/flexmesa-eos/src/cms/config.rs:83` | `5.9` | numeric mismatch |
-| `logRho_max_for_any_CMS` | `eos/defaults/eos.defaults:281` | `-1` | `crates/flexmesa-eos/src/cms/config.rs:84` | `6.0` | numeric mismatch |
-| `logRho_min_for_all_CMS` | `eos/defaults/eos.defaults:282` | `-1` | `crates/flexmesa-eos/src/cms/config.rs:82` | `-7.9` | numeric mismatch |
-| `logRho_min_for_any_CMS` | `eos/defaults/eos.defaults:283` | `-1` | `crates/flexmesa-eos/src/cms/config.rs:81` | `-8.0` | numeric mismatch |
-| `logT_max_for_all_CMS` | `eos/defaults/eos.defaults:284` | `-1` | `crates/flexmesa-eos/src/cms/config.rs:87` | `7.9` | numeric mismatch |
-| `logT_max_for_any_CMS` | `eos/defaults/eos.defaults:285` | `-1` | `crates/flexmesa-eos/src/cms/config.rs:88` | `8.0` | numeric mismatch |
-| `logT_min_for_all_CMS` | `eos/defaults/eos.defaults:286` | `-1` | `crates/flexmesa-eos/src/cms/config.rs:86` | `2.1` | numeric mismatch |
-| `logT_min_for_any_CMS` | `eos/defaults/eos.defaults:287` | `-1` | `crates/flexmesa-eos/src/cms/config.rs:85` | `2.0` | numeric mismatch |
+| `logQ_max_for_all_CMS` | `eos/defaults/eos.defaults:277` | `-1` | `crates/flexmesa-eos/src/cms/config.rs:81` | `100.0` | numeric mismatch |
+| `logQ_max_for_any_CMS` | `eos/defaults/eos.defaults:276` | `-1` | `crates/flexmesa-eos/src/cms/config.rs:82` | `100.0` | numeric mismatch |
+| `logQ_min_for_all_CMS` | `eos/defaults/eos.defaults:279` | `-1` | `crates/flexmesa-eos/src/cms/config.rs:80` | `-100.0` | numeric mismatch |
+| `logQ_min_for_any_CMS` | `eos/defaults/eos.defaults:278` | `-1` | `crates/flexmesa-eos/src/cms/config.rs:79` | `-100.0` | numeric mismatch |
+| `logRho_max_for_all_CMS` | `eos/defaults/eos.defaults:280` | `-1` | `crates/flexmesa-eos/src/cms/config.rs:85` | `5.9` | numeric mismatch |
+| `logRho_max_for_any_CMS` | `eos/defaults/eos.defaults:281` | `-1` | `crates/flexmesa-eos/src/cms/config.rs:86` | `6.0` | numeric mismatch |
+| `logRho_min_for_all_CMS` | `eos/defaults/eos.defaults:282` | `-1` | `crates/flexmesa-eos/src/cms/config.rs:84` | `-7.9` | numeric mismatch |
+| `logRho_min_for_any_CMS` | `eos/defaults/eos.defaults:283` | `-1` | `crates/flexmesa-eos/src/cms/config.rs:83` | `-8.0` | numeric mismatch |
+| `logT_max_for_all_CMS` | `eos/defaults/eos.defaults:284` | `-1` | `crates/flexmesa-eos/src/cms/config.rs:89` | `7.9` | numeric mismatch |
+| `logT_max_for_any_CMS` | `eos/defaults/eos.defaults:285` | `-1` | `crates/flexmesa-eos/src/cms/config.rs:90` | `8.0` | numeric mismatch |
+| `logT_min_for_all_CMS` | `eos/defaults/eos.defaults:286` | `-1` | `crates/flexmesa-eos/src/cms/config.rs:88` | `2.1` | numeric mismatch |
+| `logT_min_for_any_CMS` | `eos/defaults/eos.defaults:287` | `-1` | `crates/flexmesa-eos/src/cms/config.rs:87` | `2.0` | numeric mismatch |
 
 ## kap &kap
 
 | Control | Upstream `26.4.1` Source | Upstream Default | `FlexMESA` Source | `FlexMESA` Default | Classification |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| `use_Type2_opacities` | `kap/defaults/kap.defaults:189` | `.true.` | `crates/flexmesa-kap/src/types.rs:225` | `false` | boolean mismatch |
-| `use_Zbase_for_Type1` | `kap/defaults/kap.defaults:176` | `.true.` | `crates/flexmesa-kap/src/types.rs:224` | `false` | boolean mismatch |
+| `use_Type2_opacities` | `kap/defaults/kap.defaults:189` | `.true.` | `crates/flexmesa-kap/src/types.rs:231` | `false` | boolean mismatch |
+| `use_Zbase_for_Type1` | `kap/defaults/kap.defaults:176` | `.true.` | `crates/flexmesa-kap/src/types.rs:230` | `false` | boolean mismatch |

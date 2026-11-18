@@ -86,7 +86,7 @@ class BinarySystem:
         return cls(_rust.RustBinarySystem.from_photo_bytes(data))
 
     def to_photo_bytes(self) -> bytes:
-        """Serialize the full `BinarySystem` state to binary checkpoint bytes."""
+        """Serialize full `BinarySystem` state to binary checkpoint bytes."""
         return self._inner.to_photo_bytes()
 
     @property

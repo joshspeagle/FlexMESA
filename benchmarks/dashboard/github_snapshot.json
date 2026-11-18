@@ -219,11 +219,6 @@
   ],
   "open_pull_requests": [
     {
-      "number": 208,
-      "title": "fix(testing): record MESA, SDK, and compiler provenance in mesa_spread_26_4_1.json (#144)",
-      "draft": false
-    },
-    {
       "number": 212,
       "title": "docs,bench: record MESA 26.4.1 raw benchmarks and honesty audit (#146)",
       "draft": false

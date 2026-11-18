@@ -162,6 +162,7 @@ def _render_comparison(
     term_code: str,
     eff_mode: str,
     ctrl_ignored: bool,
+    n_ctrl_ignored: int = 0,
 ) -> None:
     fig, _ = compare.plot_case_comparison(
         entry.case,
@@ -174,6 +175,7 @@ def _render_comparison(
         termination_code=term_code,
         numerics_mode=eff_mode,
         controls_ignored=ctrl_ignored,
+        n_controls_ignored=n_ctrl_ignored,
         max_steps=ns.max_steps,
         case_entry=entry,
     )
@@ -229,6 +231,7 @@ def _handle_compare(ns: argparse.Namespace) -> int:
                 term_code=outcome.termination_code,
                 eff_mode=eff_mode,
                 ctrl_ignored=outcome.controls_ignored,
+                n_ctrl_ignored=outcome.n_controls_ignored,
             )
     else:
         _render_comparison(

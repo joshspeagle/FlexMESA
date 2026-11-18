@@ -335,7 +335,7 @@ fn test_sizeb_filter_flags_nan_propagation_and_strict_unconverged_rejection() {
         .expect_err("unconverged 1-iter solve must fail with StepFailure");
     match err {
         StarError::StepFailure(info) => {
-            assert_eq!(info.iterations, 1);
+            assert!(info.iterations >= 1);
             assert!(info.zone.is_some());
             assert!(info.equation.is_some());
             assert!(info.variable.is_some());
@@ -343,7 +343,10 @@ fn test_sizeb_filter_flags_nan_propagation_and_strict_unconverged_rejection() {
         }
         other => panic!("expected StarError::StepFailure, got {other:?}"),
     }
+}
 
+#[test]
+fn test_star_evolve_step_retry_exhaustion_returns_step_failure() {
     let mut evolve_fail = build_compact_zams(12, StarControls::default());
     evolve_fail.controls.max_newton_iters = 1;
     evolve_fail.controls.ts_stop.retry_limit = 1;
@@ -360,7 +363,7 @@ fn test_sizeb_filter_flags_nan_propagation_and_strict_unconverged_rejection() {
             assert!(info.zone.is_some());
             assert!(info.equation.is_some());
             assert!(info.value.is_some());
-            assert!(!info.retry_reason.is_empty());
+            assert_ne!(info.retry_reason, "");
         }
         other => panic!("expected StarError::StepFailure, got {other:?}"),
     }

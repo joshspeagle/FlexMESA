@@ -46,10 +46,10 @@ def test_e2e_5_complete_106_active_test_suite_and_dev_cases_inventory() -> None:
     assert len(star.TIER4_DEV_CASES) == 1
 
 
-def test_e2e_5_tier5_star_hooks_and_step_redo_bit_parity() -> None:
+def test_e2e_5_tier5_star_hooks_and_step_redo_reproducibility() -> None:
     """Verify double-exponential overshooting (`other_overshooting_scheme`),
     Gräfener & Kudritzki (2008) / Vink et al. (2001) high-Eddington wind
-    (`other_wind`), and bit-identical step redo parity (`check_redo`).
+    (`other_wind`), and bit-identical step redo reproducibility (`check_redo`).
     """
     d_ov_near = star.eval_overshoot_dbl_exp(
         1.0e14, 2.0e7, 1.0e9, 0.015, 0.005, 1.0e12

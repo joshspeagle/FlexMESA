@@ -7,6 +7,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+import flexmesa
 from flexmesa import atm, chem, constants, net
 
 
@@ -27,67 +28,73 @@ def _solar_species_and_xa(
 def test_atm_t_tau_relations_and_jax_derivatives_match_analytical_hopf() -> (
     None
 ):
-    """Test `eval_t_tau` and `eval_t_tau_jax` parity and `jax.grad` vs Hopf."""
+    """Verify `eval_t_tau` vs `eval_t_tau_jax` consistency and Hopf grad."""
     tau = 0.42
     teff = 5772.0
-    for rel_id in (
-        atm.ATM_T_TAU_EDDINGTON,
-        atm.ATM_T_TAU_SOLAR_HOPF,
-        atm.ATM_T_TAU_KRISHNA_SWAMY,
-        atm.ATM_T_TAU_TRAMPEDACH_SOLAR,
-    ):
-        lnt_rust = atm.eval_t_tau(rel_id, tau, teff)
-        lnt_jax = float(
-            atm.eval_t_tau_jax(
-                rel_id,
-                jnp.asarray(tau, dtype=jnp.float64),
-                jnp.asarray(teff, dtype=jnp.float64),
+    with flexmesa.numerics_mode_context("strict"):
+        for rel_id in (
+            atm.ATM_T_TAU_EDDINGTON,
+            atm.ATM_T_TAU_SOLAR_HOPF,
+            atm.ATM_T_TAU_KRISHNA_SWAMY,
+            atm.ATM_T_TAU_TRAMPEDACH_SOLAR,
+        ):
+            lnt_rust = atm.eval_t_tau(rel_id, tau, teff)
+            lnt_jax = float(
+                atm.eval_t_tau_jax(
+                    rel_id,
+                    jnp.asarray(tau, dtype=jnp.float64),
+                    jnp.asarray(teff, dtype=jnp.float64),
+                )
             )
-        )
-        np.testing.assert_allclose(lnt_jax, lnt_rust, rtol=1e-14, atol=1e-14)
-
-        dq_dtau = atm.eval_t_tau_dq_dtau(rel_id, tau)
-        dlnt_dtau_jax = float(
-            jax.grad(
-                lambda t_val, r_id=rel_id: atm.eval_t_tau_jax(r_id, t_val, teff)
-            )(jnp.asarray(tau, dtype=jnp.float64))
-        )
-        q_val = (4.0 / 3.0) * (np.exp(lnt_rust) / teff) ** 4 - tau
-        dlnt_dtau_exact = (1.0 + dq_dtau) / (4.0 * (tau + q_val))
-        rtol = 1e-4 if rel_id == atm.ATM_T_TAU_TRAMPEDACH_SOLAR else 1e-11
-        np.testing.assert_allclose(
-            dlnt_dtau_jax, dlnt_dtau_exact, rtol=rtol, atol=1e-12
-        )
-
-
-def test_atm_paczynski_gradr_rust_and_jax_parity() -> None:
-    """Test `eval_paczynski_gradr` and `eval_paczynski_gradr_jax` parity."""
-    for tau in (0.15, 2.0 / 3.0, 5.0):
-        g_rust = atm.eval_paczynski_gradr(
-            5800.0,
-            1.0e5,
-            2.5e-7,
-            tau,
-            0.35,
-            constants.LSUN,
-            constants.MSUN,
-            constants.RSUN,
-            constants.STANDARD_CGRAV,
-        )
-        g_jax = float(
-            atm.eval_paczynski_gradr_jax(
-                jnp.asarray(5800.0),
-                jnp.asarray(1.0e5),
-                jnp.asarray(2.5e-7),
-                jnp.asarray(tau),
-                jnp.asarray(0.35),
-                jnp.asarray(constants.LSUN),
-                jnp.asarray(constants.MSUN),
-                jnp.asarray(constants.RSUN),
-                jnp.asarray(constants.STANDARD_CGRAV),
+            np.testing.assert_allclose(
+                lnt_jax, lnt_rust, rtol=1e-14, atol=1e-14
             )
-        )
-        np.testing.assert_allclose(g_jax, g_rust, rtol=1e-14, atol=1e-14)
+
+            dq_dtau = atm.eval_t_tau_dq_dtau(rel_id, tau)
+            dlnt_dtau_jax = float(
+                jax.grad(
+                    lambda t_val, r_id=rel_id: atm.eval_t_tau_jax(
+                        r_id, t_val, teff
+                    )
+                )(jnp.asarray(tau, dtype=jnp.float64))
+            )
+            q_val = (4.0 / 3.0) * (np.exp(lnt_rust) / teff) ** 4 - tau
+            dlnt_dtau_exact = (1.0 + dq_dtau) / (4.0 * (tau + q_val))
+            rtol = 1e-4 if rel_id == atm.ATM_T_TAU_TRAMPEDACH_SOLAR else 1e-11
+            np.testing.assert_allclose(
+                dlnt_dtau_jax, dlnt_dtau_exact, rtol=rtol, atol=1e-12
+            )
+
+
+def test_atm_paczynski_gradr_rust_and_jax_consistency() -> None:
+    """Verify `eval_paczynski_gradr` and `eval_paczynski_gradr_jax` match."""
+    with flexmesa.numerics_mode_context("strict"):
+        for tau in (0.15, 2.0 / 3.0, 5.0):
+            g_rust = atm.eval_paczynski_gradr(
+                5800.0,
+                1.0e5,
+                2.5e-7,
+                tau,
+                0.35,
+                constants.LSUN,
+                constants.MSUN,
+                constants.RSUN,
+                constants.STANDARD_CGRAV,
+            )
+            g_jax = float(
+                atm.eval_paczynski_gradr_jax(
+                    jnp.asarray(5800.0),
+                    jnp.asarray(1.0e5),
+                    jnp.asarray(2.5e-7),
+                    jnp.asarray(tau),
+                    jnp.asarray(0.35),
+                    jnp.asarray(constants.LSUN),
+                    jnp.asarray(constants.MSUN),
+                    jnp.asarray(constants.RSUN),
+                    jnp.asarray(constants.STANDARD_CGRAV),
+                )
+            )
+            np.testing.assert_allclose(g_jax, g_rust, rtol=1e-14, atol=1e-14)
 
 
 def test_atm_table_and_custom_vjp_match_golden_and_finite_differences() -> None:

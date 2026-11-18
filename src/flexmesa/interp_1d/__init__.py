@@ -1,8 +1,13 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
 """One-dimensional piecewise-monotonic cubic interpolation for FlexMESA.
 
-This subpackage ports upstream MESA ``interp_1d`` into ``float64`` NumPy/JAX
-with differentiable evaluation and ``DualOrder1`` forward-mode support:
+This subpackage exposes canonical Safe Rust (`backend="rust"`) and Python/JAX
+(`backend="jax"`) interfaces for upstream MESA ``interp_1d``:
+Horner spline evaluation (`interp_value`, `interp_value_and_slope`,
+`interp_values`, and `interp_values_and_slopes` in `eval.py`) is JAX-traceable
+and differentiable wrt query points and coefficients, whereas knot-coefficient
+builders (`interp_pm`, `interp_m3*`), `integrate_values`, and `remesh` execute
+host-side NumPy logic on CPU.
 
 - **Steffen (1990) piecewise-monotonic cubic** (`interp_pm`,
   `interp_pm_slopes_only`, `interp_4pt_pm`, `interp_pm_autodiff`): guarantees

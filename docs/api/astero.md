@@ -1,6 +1,12 @@
 # Asteroseismology & Optimization (`flexmesa.astero`)
 
-The `flexmesa.astero` subpackage implements upstream MESA's `astero/` diagnostic, surface-correction, and seismic model-fitting suite across Safe Rust (`crates/flexmesa-astero`) and pure JAX (`float64`). It provides:
+!!! warning "Frozen & Unverified JAX Astero Helpers (`#166`)"
+    `flexmesa.astero.jax_kernels` is **frozen and unverified**
+    (`JAX_ENGINE_STATUS = "frozen-unverified-until-#143"`) until the canonical
+    Safe Rust engine passes the upstream MESA `26.4.1` history harness
+    (`#143`), and must not be modified before `#143` passes.
+
+The `flexmesa.astero` subpackage implements upstream MESA's `astero/` diagnostic, surface-correction, and seismic model-fitting suite in canonical Safe Rust (`crates/flexmesa-astero`) with frozen (`float64`) JAX helper kernels. It provides:
 
 - **Acoustic Profiles & Global Scaling Relations**: Cumulative acoustic radius $\tau(r) = \int_0^r dr'/c_s(r')$, acoustic depth $\tau_0 - \tau(r)$, asymptotic and solar-calibrated $\Delta\nu$, $\nu_{\max}$, and acoustic cutoff frequency $\nu_{\mathrm{ac}}$, traditional asymptotic dipole g-mode period spacing $\Delta\Pi_1$ (with optional rotation modification), and acoustic glitch locations ($\tau_{\mathrm{He\,II}}$, $\tau_{\mathrm{BCZ}}$).
 - **Empirical Surface-Effect Corrections**: Five empirical frequency-shift schemes accounting for near-surface superadiabatic convection and non-adiabatic wave physics (`"none"`, `"kjeldsen"` / `"power_law"`, `"cubic"` / `"bg14_1"`, `"combined"` / `"bg14_2"`, and `"sonoi"`).

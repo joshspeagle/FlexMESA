@@ -51,8 +51,8 @@ def test_star_zams_4msun_star_test_initialization_and_microphysics() -> None:
     np.testing.assert_allclose(model_2p5.xa.sum(axis=1), 1.0, rtol=1.0e-13)
 
 
-def test_star_mod_and_photo_roundtrip_parity() -> None:
-    """Verify ASCII `.mod` and binary `.photo` serialization round-trips."""
+def test_star_mod_and_photo_self_roundtrip() -> None:
+    """Verify ASCII `.mod` and `.photo` self-roundtrip reproducibility."""
     model = star.StarModel.from_zams(
         initial_mass=1.0, initial_z=0.02, eval_hydro=False
     )

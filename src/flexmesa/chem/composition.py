@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
 r"""Differentiable composition moments and multi-zone kernels (`chem`).
 
-Implements the Three-Tier Hybrid (`Tier B`) composition moment evaluators
-(`get_composition_info`, `basic_composition_info`, `composition_info`,
-`get_composition_info_jax`, and `get_composition_info_zones`), routing between
-Safe Rust (`flexmesa._rust` + persistent 4-thread `rayon` worker pool) and
-the branchless `float64` `@jax.jit` kernel `get_composition_info_jax`,
-compatible with `jax.jit`, `jax.vmap`, `jax.grad`, and `jax.jacrev`.
+Implements composition moment evaluators (`get_composition_info`,
+`basic_composition_info`, `composition_info`, `get_composition_info_jax`, and
+`get_composition_info_zones`), routing between canonical Safe Rust
+(`flexmesa._rust` + persistent 4-thread `rayon` worker pool) and the derived
+branchless `float64` `@jax.jit` kernel `get_composition_info_jax`, compatible
+with `jax.jit`, `jax.vmap`, `jax.grad`, and `jax.jacrev`.
 
 Index and Memory-Order Contract:
     - Species lists (`chem_ids`) accept either 1-based MESA integer `chem_id`s
@@ -24,6 +24,7 @@ from __future__ import annotations
 import dataclasses
 import functools
 from collections.abc import Sequence
+from typing import Any, cast
 
 import jax
 import jax.numpy as jnp
@@ -242,7 +243,7 @@ def get_composition_info(
         ValueError: If `chem_ids` is empty, `x.shape != (len(chem_ids),)`, or
             any species or `backend` is invalid.
     """
-    resolved = _dispatch.resolve_backend(backend, x)
+    resolved, has_jax = _dispatch.resolve_backend_with_jax(backend, x)
     cids = _cat._resolve_chem_ids(chem_ids)
     if resolved == "jax":
         x_jax = jnp.asarray(x, dtype=jnp.float64)
@@ -253,6 +254,23 @@ def get_composition_info(
             m_j = _composition_moments_only_jit(
                 x_jax, z_arr, a_arr, w_arr, z53_arr
             )
+            if has_jax:
+                empty_j = jnp.empty(0, dtype=jnp.float64)
+                return CompositionInfo(
+                    xh=cast(Any, m_j[0]),
+                    xhe=cast(Any, m_j[1]),
+                    xz=cast(Any, m_j[2]),
+                    abar=cast(Any, m_j[3]),
+                    zbar=cast(Any, m_j[4]),
+                    z2bar=cast(Any, m_j[5]),
+                    z53bar=cast(Any, m_j[6]),
+                    ye=cast(Any, m_j[7]),
+                    mass_correction=cast(Any, m_j[8]),
+                    sumx=cast(Any, m_j[9]),
+                    dabar_dx=cast(Any, empty_j),
+                    dzbar_dx=cast(Any, empty_j),
+                    dmc_dx=cast(Any, empty_j),
+                )
             m_seq = np.asarray(m_j, dtype=np.float64)
             empty = np.empty(0, dtype=np.float64)
             da_arr, dz_arr, dmc_arr = empty, empty, empty
@@ -260,6 +278,22 @@ def get_composition_info(
             m_j, da_j, dz_j, dmc_j = _composition_moments_jit(
                 x_jax, z_arr, a_arr, w_arr, z53_arr
             )
+            if has_jax:
+                return CompositionInfo(
+                    xh=cast(Any, m_j[0]),
+                    xhe=cast(Any, m_j[1]),
+                    xz=cast(Any, m_j[2]),
+                    abar=cast(Any, m_j[3]),
+                    zbar=cast(Any, m_j[4]),
+                    z2bar=cast(Any, m_j[5]),
+                    z53bar=cast(Any, m_j[6]),
+                    ye=cast(Any, m_j[7]),
+                    mass_correction=cast(Any, m_j[8]),
+                    sumx=cast(Any, m_j[9]),
+                    dabar_dx=cast(Any, da_j),
+                    dzbar_dx=cast(Any, dz_j),
+                    dmc_dx=cast(Any, dmc_j),
+                )
             m_seq = np.asarray(m_j, dtype=np.float64)
             da_arr, dz_arr, dmc_arr = (
                 np.asarray(da_j, dtype=np.float64),

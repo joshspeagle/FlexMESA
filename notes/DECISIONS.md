@@ -43,6 +43,7 @@ Scope and the `v0.1.0` definition are in [`SCOPE.md`](SCOPE.md). Work is tracked
 | 26 | Diagnostic Harness Runs and Terminal-Output Controls (`#147`) | In force | below |
 | 27 | Baseline Regression Check in the History Harness (`#143`, `#144`) | In force | below |
 | 28 | Storage of Subscripted Namelist Controls (`#147`) | In force | below |
+| 29 | Derived JAX Contract, Full-Argument Auto-Dispatch, and Python Utility Disposition (`#166`) | In force | below |
 
 ## Pre-audit decisions still in force
 
@@ -321,3 +322,18 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
 - **Alternatives Rejected**:
   - *Keep index `i` with an unused element 0*: every array would carry a slot with no upstream meaning, and lengths would differ from upstream's by one.
   - *Reject unsubscripted assignment to arrays*: upstream's own inlists use it (`star/test_suite/pisn/inlist_convert:10`).
+
+---
+
+## DECISIONS #29: Derived JAX Contract, Full-Argument Auto-Dispatch, and Python Utility Disposition (`Issue #166`)
+
+- **Date**: 2026-11-17
+- **Decision**:
+  1. **Derived JAX Role & Oracle Boundary**: Safe Rust `"strict"` mode is the canonical port validated against MESA `26.4.1`; JAX (`backend="jax"`) is a derived layer for automatic differentiation and batching validated against Rust `"strict"` mode and is never an upstream parity oracle (`DECISIONS #9`, `#17`). Cross-backend consistency tests execute the Rust side inside `numerics_mode_context("strict")` and are named as consistency checks rather than upstream or Fortran goldens.
+  2. **Frozen Unverified Engine Helpers**: `flexmesa.star`, `flexmesa.binary`, and `flexmesa.astero` export `JAX_ENGINE_STATUS = "frozen-unverified-until-#143"` until the canonical Rust engine passes the `#143` history harness. End-to-end engine gradients will be exposed later via Implicit-Function-Theorem `@jax.custom_jvp` / `@jax.custom_vjp` rules reusing Rust Jacobians and `bcyclic`.
+  3. **Full-Argument `backend="auto"` Dispatch**: `resolve_backend("auto", ...)` inspects all scalar, array, and nested `tuple`/`list`/`dict` numeric inputs so traced secondary arguments (`eta`, `log10_t`, composition fractions, boundary slices) never fall into Rust and raise `float(tracer)` errors.
+  4. **Python Utility & Host-Builder Boundaries (`N1-27`)**: Keep `flexmesa.auto_diff` (JAX PyTree forward dual/hyperdual types for Python composition and `turb`), `flexmesa.num` (Python callable root/ODE helpers and `@jax.custom_vjp` `safe_root_jax`/`newton_solve_jax`), and host NumPy spline builders (`interp_1d.{pm,mp}`, `interp_2d.{bicub,bipm,akima,renka790}` when `backend="jax"`) as documented Python utilities rather than canonical engine implementations (`crates/flexmesa-{autodiff,num,mtx}`). Route traced `neu.neu_get` calls to `_jax.neu_get_jax` rather than the pure-Python `math` path.
+- **Why**: Eliminates broken auto-dispatch on secondary traced arguments, removes false upstream parity claims from cross-backend tests and docs, freezes speculative JAX engine twins before Rust passes `#143`, and documents every package's true differentiation and device scope (`CPU + GPU/TPU` vs `CPU`-only Rust callbacks).
+- **Alternatives Rejected**:
+  - *Deleting `flexmesa.auto_diff` and `flexmesa.num` Python modules outright*: breaks `docs/api/numerics.md` public exports and Python callable-based ODE/root utilities (`jax.custom_vjp` `newton_solve_jax`) where crossing PyO3 on every residual call requires GIL callbacks.
+  - *Re-implementing 1D/2D spline builders or `StarModel` in pure JAX before `#143`*: doubles engine porting work against an unverified Rust baseline.

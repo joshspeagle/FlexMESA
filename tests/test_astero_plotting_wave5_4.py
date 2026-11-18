@@ -2,12 +2,12 @@
 """Verification suite for Wave 5.4 (`flexmesa.astero` and `flexmesa.plotting`).
 
 Validates:
-1. Exact parameter recovery on the upstream Fortran MESA
-   `astero/test_suite/surface_effects` synthetic benchmark (`targets.inc`)
-   for `cubic`, `combined`, `power_law`, `sonoi`, and `kjeldsen`.
-2. Cross-backend Rust-vs-JAX numerical parity (`rtol <= 1e-12`) across all
-   asteroseismic scaling relations, acoustic integrals, glitch acoustic
-   depths, surface corrections, separation ratios, and composite $\\chi^2$.
+1. Synthetic frequency recovery on `eval_surface_correction` for `cubic`,
+   `combined`, `power_law`, `sonoi`, and `kjeldsen`.
+2. Cross-backend Rust (`strict`) vs frozen JAX numerical consistency
+   (`rtol <= 1e-12`) across asteroseismic scaling relations, acoustic integrals,
+   glitch acoustic depths, surface corrections, separation ratios, and
+   composite $\\chi^2$.
 3. Exact `jax.grad` autodiff verification against analytical derivatives.
 4. Nelder-Mead, Powell quadratic trust-region, Cartesian grid optimizers,
    and Python callback exception propagation.
@@ -33,8 +33,8 @@ def _bad_obj(_x: np.ndarray) -> float:
     raise RuntimeError("callback failure")
 
 
-def test_surface_corrections_recover_upstream_mesa_synthetic_targets() -> None:
-    """Verifies `eval_surface_correction` against `targets.inc`."""
+def test_surface_corrections_recover_synthetic_targets() -> None:
+    """Verifies `eval_surface_correction` recovers planted synthetic params."""
     l0_f = np.array(
         [
             1547.5529086814887,
@@ -206,58 +206,64 @@ def test_surface_corrections_recover_upstream_mesa_synthetic_targets() -> None:
     np.testing.assert_allclose(res_sonoi["p1"], target_s1, rtol=1e-6)
 
 
-def test_astero_scaling_ratios_chi2_rust_jax_and_autodiff_parity() -> None:
-    """Verifies Rust-vs-JAX parity (`<= 1e-12`) and `jax.grad` parity."""
+def test_astero_scaling_ratios_chi2_rust_jax_consistency_and_autodiff() -> None:
+    """Verifies Rust (`strict`) vs JAX consistency and `jax.grad`."""
     m_g, r_cm, teff, lum = 1.9884098706980504e33, 6.957e10, 5772.0, 3.828e33
-    dnu_r = astero.eval_delta_nu_scaling(m_g, teff, lum, backend="rust")
-    dnu_j = float(
-        astero.eval_delta_nu_scaling(
-            jnp.float64(m_g), jnp.float64(teff), jnp.float64(lum), backend="jax"
-        )
-    )
-    np.testing.assert_allclose(dnu_r, 134.91, rtol=1e-12)
-    np.testing.assert_allclose(dnu_r, dnu_j, rtol=1e-14)
-    np.testing.assert_allclose(
-        astero.eval_delta_nu_radius_scaling(m_g, r_cm, backend="rust"),
-        float(
-            astero.eval_delta_nu_radius_scaling(
-                jnp.float64(m_g), jnp.float64(r_cm), backend="jax"
-            )
-        ),
-        rtol=1e-14,
-    )
-    np.testing.assert_allclose(
-        astero.eval_delta_nu_asymptotic(3706.0, backend="rust"),
-        float(
-            astero.eval_delta_nu_asymptotic(jnp.float64(3706.0), backend="jax")
-        ),
-        rtol=1e-14,
-    )
-    np.testing.assert_allclose(
-        astero.eval_nu_max(m_g, r_cm, teff, backend="rust"),
-        float(
-            astero.eval_nu_max(
+    with flexmesa.numerics_mode_context("strict"):
+        dnu_r = astero.eval_delta_nu_scaling(m_g, teff, lum, backend="rust")
+        dnu_j = float(
+            astero.eval_delta_nu_scaling(
                 jnp.float64(m_g),
-                jnp.float64(r_cm),
                 jnp.float64(teff),
+                jnp.float64(lum),
                 backend="jax",
             )
-        ),
-        rtol=1e-14,
-    )
-    np.testing.assert_allclose(
-        astero.eval_nu_ac(2.74e4, 1.66, 2.0e-7, 1.0e5, backend="rust"),
-        float(
-            astero.eval_nu_ac(
-                jnp.float64(2.74e4),
-                jnp.float64(1.66),
-                jnp.float64(2.0e-7),
-                jnp.float64(1.0e5),
-                backend="jax",
-            )
-        ),
-        rtol=1e-14,
-    )
+        )
+        np.testing.assert_allclose(dnu_r, 134.91, rtol=1e-12)
+        np.testing.assert_allclose(dnu_r, dnu_j, rtol=1e-14)
+        np.testing.assert_allclose(
+            astero.eval_delta_nu_radius_scaling(m_g, r_cm, backend="rust"),
+            float(
+                astero.eval_delta_nu_radius_scaling(
+                    jnp.float64(m_g), jnp.float64(r_cm), backend="jax"
+                )
+            ),
+            rtol=1e-14,
+        )
+        np.testing.assert_allclose(
+            astero.eval_delta_nu_asymptotic(3706.0, backend="rust"),
+            float(
+                astero.eval_delta_nu_asymptotic(
+                    jnp.float64(3706.0), backend="jax"
+                )
+            ),
+            rtol=1e-14,
+        )
+        np.testing.assert_allclose(
+            astero.eval_nu_max(m_g, r_cm, teff, backend="rust"),
+            float(
+                astero.eval_nu_max(
+                    jnp.float64(m_g),
+                    jnp.float64(r_cm),
+                    jnp.float64(teff),
+                    backend="jax",
+                )
+            ),
+            rtol=1e-14,
+        )
+        np.testing.assert_allclose(
+            astero.eval_nu_ac(2.74e4, 1.66, 2.0e-7, 1.0e5, backend="rust"),
+            float(
+                astero.eval_nu_ac(
+                    jnp.float64(2.74e4),
+                    jnp.float64(1.66),
+                    jnp.float64(2.0e-7),
+                    jnp.float64(1.0e5),
+                    backend="jax",
+                )
+            ),
+            rtol=1e-14,
+        )
 
     r_prof = np.linspace(r_cm, 0.05 * r_cm, 64)
     cs_prof = np.linspace(8.0e5, 5.0e7, 64)

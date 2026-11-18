@@ -11,8 +11,10 @@ kernels.
 from __future__ import annotations
 
 import dataclasses
-from typing import Any
+from typing import Any, cast
 
+import jax
+import jax.numpy as jnp
 import numpy as np
 
 from flexmesa import _dispatch, _rust
@@ -62,6 +64,16 @@ def _pack_kap_output(
 ) -> KapEvalOutput:
     """Convert raw `(kap, dln_dr, dln_dt, fracs)` tuple to [`KapEvalOutput`]."""
     kap, dln_dr, dln_dt, fracs = raw
+    if any(
+        isinstance(v, jax.core.Tracer) for v in (kap, dln_dr, dln_dt, fracs)
+    ):
+        return KapEvalOutput(
+            kap=kap,
+            log10_kap=cast(Any, jnp.log10(kap)),
+            dlnkap_dln_rho=dln_dr,
+            dlnkap_dln_t=dln_dt,
+            kap_fracs=fracs,
+        )
     kap_f = float(kap)
     return KapEvalOutput(
         kap=kap_f,
@@ -152,26 +164,29 @@ def kap_get_results(
         [`KapEvalOutput`] containing `kap`, `log10_kap`, `dlnkap_dln_rho`,
         `dlnkap_dln_t`, and `kap_fracs`.
     """
-    resolved = _dispatch.resolve_backend(backend, z, x, zbase, log_rho, log_t)
+    state_args = (
+        z,
+        x,
+        zbase,
+        xc,
+        xn,
+        xo,
+        xne,
+        log_rho,
+        log_t,
+        lnfree_e,
+        d_lnfree_e_dln_rho,
+        d_lnfree_e_dln_t,
+        eta,
+        d_eta_dln_rho,
+        d_eta_dln_t,
+        zbar,
+    )
+    resolved = _dispatch.resolve_backend(backend, *state_args)
     if resolved == "jax":
         return _pack_kap_output(
             jax_kernels.kap_get_results_jax(
-                z,
-                x,
-                zbase,
-                xc,
-                xn,
-                xo,
-                xne,
-                log_rho,
-                log_t,
-                lnfree_e,
-                d_lnfree_e_dln_rho,
-                d_lnfree_e_dln_t,
-                eta,
-                d_eta_dln_rho,
-                d_eta_dln_t,
-                zbar,
+                *state_args,
                 kap_option=kap_option,
                 kap_co_option=kap_co_option,
                 kap_low_t_option=kap_low_t_option,

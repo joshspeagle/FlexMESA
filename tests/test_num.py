@@ -556,6 +556,8 @@ def test_newton_solvers_and_1001_zone_diffusion_golden_value() -> None:
         assert sol.residual_norm < 1e-12
         y = sol.y
 
+    # Upstream MESA 26.4.1 num/test/test_output
+    # (test_diffusion.f90, c_501 = 2.9347118120566711e-2)
     assert abs(float(y[2 * midpt]) - 2.9347118120566711e-2) < 1e-13
 
 

@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
 r"""Continuum depression and typical diffusion charges (`mod_typical_charge`).
 
-Implements the Three-Tier Hybrid (`Tier B`) continuum-depression and typical
-ionic charge routines from `mod_ionization.f90` and
-`star/private/mod_typical_charge.f90`:
+Implements the continuum-depression and typical ionic charge routines from
+`mod_ionization.f90` and `star/private/mod_typical_charge.f90` in canonical Safe
+Rust and derived `float64` JAX kernels:
 - `chi_info`, `chi_info_jax`, `chi_effective`, `chi_effective_jax`: Paquette et
   al. (1986, Eq. 20) and Dupuis et al. (1992, Eq. 3) continuum-depression
   ionization threshold in $\mathrm{eV}$.
@@ -136,15 +136,20 @@ def chi_effective_jax(
 
 
 def chi_info(
-    a1: float,
-    z1: float,
-    t: float,
-    log10_t: float,
-    rho: float,
-    log10_rho: float,
+    a1: float | jax.Array,
+    z1: float | jax.Array,
+    t: float | jax.Array,
+    log10_t: float | jax.Array,
+    rho: float | jax.Array,
+    log10_rho: float | jax.Array,
     *,
     backend: _dispatch.Backend = "auto",
-) -> tuple[float, float, float, float]:
+) -> tuple[
+    float | jax.Array,
+    float | jax.Array,
+    float | jax.Array,
+    float | jax.Array,
+]:
     r"""Compute $(\chi, c_0, c_1, c_2)$ in $\mathrm{eV}$ (`chi_info`).
 
     Args:
@@ -160,9 +165,13 @@ def chi_info(
     Returns:
         Tuple `(chi, c0, c1, c2)` in $\mathrm{eV}$.
     """
-    resolved = _dispatch.resolve_backend(backend, a1, z1, t, rho)
+    resolved, has_jax = _dispatch.resolve_backend_with_jax(
+        backend, a1, z1, t, log10_t, rho, log10_rho
+    )
     if resolved == "jax":
         c, c0, c1, c2 = chi_info_jax(a1, z1, t, log10_t, rho, log10_rho)
+        if has_jax:
+            return c, c0, c1, c2
         return float(c), float(c0), float(c1), float(c2)
     return _rust.py_ion_chi_info(
         float(a1),
@@ -175,15 +184,15 @@ def chi_info(
 
 
 def chi_effective(
-    chi: float,
-    c0: float,
-    c1: float,
-    c2: float,
-    z1: float,
-    z2: float,
+    chi: float | jax.Array,
+    c0: float | jax.Array,
+    c1: float | jax.Array,
+    c2: float | jax.Array,
+    z1: float | jax.Array,
+    z2: float | jax.Array,
     *,
     backend: _dispatch.Backend = "auto",
-) -> float:
+) -> float | jax.Array:
     r"""Compute $\chi_{\mathrm{eff}}$ in $\mathrm{eV}$ (`chi_effective`).
 
     Args:
@@ -198,9 +207,14 @@ def chi_effective(
     Returns:
         Effective ionization threshold $\chi_{\mathrm{eff}}$ in $\mathrm{eV}$.
     """
-    resolved = _dispatch.resolve_backend(backend, chi, c0, c1, c2, z1, z2)
+    resolved, has_jax = _dispatch.resolve_backend_with_jax(
+        backend, chi, c0, c1, c2, z1, z2
+    )
     if resolved == "jax":
-        return float(chi_effective_jax(chi, c0, c1, c2, z1, z2))
+        res = chi_effective_jax(chi, c0, c1, c2, z1, z2)
+        if has_jax:
+            return res
+        return float(res)
     return float(
         _rust.py_ion_chi_effective(
             float(chi),
@@ -215,15 +229,15 @@ def chi_effective(
 
 def eval_typical_charge(
     cid: int | str,
-    abar: float,
-    free_e: float,
-    t: float,
-    log10_t: float,
-    rho: float,
-    log10_rho: float,
+    abar: float | jax.Array,
+    free_e: float | jax.Array,
+    t: float | jax.Array,
+    log10_t: float | jax.Array,
+    rho: float | jax.Array,
+    log10_rho: float | jax.Array,
     *,
     backend: _dispatch.Backend = "auto",
-) -> float:
+) -> float | jax.Array:
     r"""Compute the whole-number typical ionic charge (`eval_typical_charge`).
 
     Args:
@@ -246,11 +260,14 @@ def eval_typical_charge(
     resolved_cid = (
         _cat.get_nuclide_index(cid) if isinstance(cid, str) else int(cid)
     )
-    resolved = _dispatch.resolve_backend(backend, abar, free_e, t, rho)
+    resolved, has_jax = _dispatch.resolve_backend_with_jax(
+        backend, abar, free_e, t, log10_t, rho, log10_rho
+    )
     if resolved == "jax":
         info = _cat.get_nuclide_info(resolved_cid)
         if info.z <= 1 or info.z > 30:
-            return float(info.z)
+            z_out: jax.Array = jnp.asarray(float(info.z), dtype=jnp.float64)
+            return z_out if has_jax else float(info.z)
         z1 = jnp.asarray(abar, dtype=jnp.float64) * jnp.asarray(
             free_e, dtype=jnp.float64
         )
@@ -262,7 +279,7 @@ def eval_typical_charge(
         z_out = jnp.where(
             jnp.any(mask), stages[jnp.argmax(mask)], float(info.z)
         )
-        return float(z_out)
+        return z_out if has_jax else float(z_out)
     return float(
         _rust.py_ion_eval_typical_charge(
             resolved_cid,

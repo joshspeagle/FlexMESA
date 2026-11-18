@@ -7,6 +7,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+import flexmesa
 from flexmesa import chem, eos
 
 
@@ -27,52 +28,53 @@ def _c12_o16_composition() -> tuple[list[int], np.ndarray, float, float]:
     return chem_id, xa, float(comp.abar), float(comp.zbar)
 
 
-def test_get_pc_and_skye_alfa_rust_and_jax_match_fortran_goldens() -> None:
-    """Verify `get_pc_alfa` and `get_skye_alfa` match Fortran golden values."""
+def test_get_pc_and_skye_alfa_rust_jax_consistency() -> None:
+    """Verify `get_pc_alfa` and `get_skye_alfa` JAX vs Rust `strict`."""
     _, _, abar, zbar = _c12_o16_composition()
-    for log_rho, log_t in [(1.0, 7.0), (2.9, 7.0), (5.0, 6.2), (6.0, 7.65)]:
-        a_r, dt_r, dr_r = eos.get_pc_alfa(
-            log_rho, log_t, abar, zbar, backend="rust"
-        )
-        a_j, dt_j, dr_j = eos.get_pc_alfa(
-            jnp.asarray(log_rho, dtype=jnp.float64),
-            jnp.asarray(log_t, dtype=jnp.float64),
-            jnp.asarray(abar, dtype=jnp.float64),
-            jnp.asarray(zbar, dtype=jnp.float64),
-            backend="jax",
-        )
-        assert abs(float(a_r) - float(a_j)) < 1.0e-12
-        assert abs(float(dt_r) - float(dt_j)) < 1.0e-12
-        assert abs(float(dr_r) - float(dr_j)) < 1.0e-12
+    with flexmesa.numerics_mode_context("strict"):
+        for log_rho, log_t in [(1.0, 7.0), (2.9, 7.0), (5.0, 6.2), (6.0, 7.65)]:
+            a_r, dt_r, dr_r = eos.get_pc_alfa(
+                log_rho, log_t, abar, zbar, backend="rust"
+            )
+            a_j, dt_j, dr_j = eos.get_pc_alfa(
+                jnp.asarray(log_rho, dtype=jnp.float64),
+                jnp.asarray(log_t, dtype=jnp.float64),
+                jnp.asarray(abar, dtype=jnp.float64),
+                jnp.asarray(zbar, dtype=jnp.float64),
+                backend="jax",
+            )
+            assert abs(float(a_r) - float(a_j)) < 1.0e-12
+            assert abs(float(dt_r) - float(dt_j)) < 1.0e-12
+            assert abs(float(dr_r) - float(dr_j)) < 1.0e-12
 
-    for lr_s, lt_s, ab_s, zb_s in [
-        (6.0, 7.0, abar, zbar),
-        (3.45, 7.0, 12.0, 6.0),
-        (-10.0, 4.0, abar, zbar),
-    ]:
-        sa_r, sdt_r, sdr_r = eos.get_skye_alfa(
-            lr_s, lt_s, ab_s, zb_s, backend="rust"
-        )
-        sa_j, sdt_j, sdr_j = eos.get_skye_alfa(
-            jnp.asarray(lr_s, dtype=jnp.float64),
-            jnp.asarray(lt_s, dtype=jnp.float64),
-            jnp.asarray(ab_s, dtype=jnp.float64),
-            jnp.asarray(zb_s, dtype=jnp.float64),
-            backend="jax",
-        )
-        assert abs(float(sa_r) - float(sa_j)) < 1.0e-12
-        assert abs(float(sdt_r) - float(sdt_j)) < 1.0e-12
-        assert abs(float(sdr_r) - float(sdr_j)) < 1.0e-12
+        for lr_s, lt_s, ab_s, zb_s in [
+            (6.0, 7.0, abar, zbar),
+            (3.45, 7.0, 12.0, 6.0),
+            (-10.0, 4.0, abar, zbar),
+        ]:
+            sa_r, sdt_r, sdr_r = eos.get_skye_alfa(
+                lr_s, lt_s, ab_s, zb_s, backend="rust"
+            )
+            sa_j, sdt_j, sdr_j = eos.get_skye_alfa(
+                jnp.asarray(lr_s, dtype=jnp.float64),
+                jnp.asarray(lt_s, dtype=jnp.float64),
+                jnp.asarray(ab_s, dtype=jnp.float64),
+                jnp.asarray(zb_s, dtype=jnp.float64),
+                backend="jax",
+            )
+            assert abs(float(sa_r) - float(sa_j)) < 1.0e-12
+            assert abs(float(sdt_r) - float(sdt_j)) < 1.0e-12
+            assert abs(float(sdr_r) - float(sdr_j)) < 1.0e-12
 
-    for lr_sm, lt_sm in [(2.0, 6.0), (2.35, 7.3), (4.0, 8.0)]:
-        s_r = eos.get_skye_alfa_simple(lr_sm, lt_sm, backend="rust")
-        s_j = eos.get_skye_alfa_simple(
-            jnp.asarray(lr_sm, dtype=jnp.float64),
-            jnp.asarray(lt_sm, dtype=jnp.float64),
-            backend="jax",
-        )
-        for col in range(3):
-            assert abs(float(s_r[col]) - float(s_j[col])) < 1.0e-12
+        for lr_sm, lt_sm in [(2.0, 6.0), (2.35, 7.3), (4.0, 8.0)]:
+            s_r = eos.get_skye_alfa_simple(lr_sm, lt_sm, backend="rust")
+            s_j = eos.get_skye_alfa_simple(
+                jnp.asarray(lr_sm, dtype=jnp.float64),
+                jnp.asarray(lt_sm, dtype=jnp.float64),
+                backend="jax",
+            )
+            for col in range(3):
+                assert abs(float(s_r[col]) - float(s_j[col])) < 1.0e-12
 
 
 def test_eval_pc_eos_and_zones_match_across_rust_and_jax() -> None:
@@ -155,12 +157,15 @@ def test_eval_pc_eos_and_zones_match_across_rust_and_jax() -> None:
 
 
 def test_eval_skye_eos_and_eos_dt_get_rust_jax_and_autodiff() -> None:
-    """Verify `eval_skye_eos` and `eos_dt_get` parity and `jax.grad` rules."""
+    """Verify `eval_skye_eos`/`eos_dt_get` consistency and `jax.grad`."""
     chem_id, xa, abar, zbar = _c12_o16_composition()
     rho = 1.0e6
     temp = 1.0e7
 
-    sk_r = eos.eval_skye_eos(rho, temp, abar, zbar, chem_id, xa, backend="rust")
+    with flexmesa.numerics_mode_context("strict"):
+        sk_r = eos.eval_skye_eos(
+            rho, temp, abar, zbar, chem_id, xa, backend="rust"
+        )
     sk_j = eos.eval_skye_eos(
         jnp.asarray(rho, dtype=jnp.float64),
         jnp.asarray(temp, dtype=jnp.float64),
@@ -354,47 +359,52 @@ def test_inverse_solvers_pt_dt_and_gamma_de_with_jax_ift_grad() -> None:
     )
 
 
-def test_pc_and_skye_off_golden_grid_parity_and_jacfwd() -> None:
-    """Verify `eval_pc_eos` and `eval_skye_eos` across off-golden states."""
+def test_pc_and_skye_grid_rust_jax_consistency_and_jacfwd() -> None:
+    """Verify `eval_pc_eos` and `eval_skye_eos` JAX vs Rust `strict`."""
     chem_id, xa, abar, zbar = _c12_o16_composition()
-    for log_rho, log_t in [(3.8, 7.2), (5.4, 6.8), (6.7, 6.1), (7.5, 6.4)]:
-        rho = 10.0**log_rho
-        temp = 10.0**log_t
-        pc_r = eos.eval_pc_eos(
-            rho, temp, abar, zbar, chem_id, xa, backend="rust"
-        )
-        pc_j = eos.eval_pc_eos(
-            jnp.float64(rho),
-            jnp.float64(temp),
-            jnp.float64(abar),
-            jnp.float64(zbar),
-            chem_id,
-            jnp.asarray(xa),
-            backend="jax",
-        )
-        assert (
-            _rel_diff(np.asarray(pc_r.res[:8]), np.asarray(pc_j.res[:8]))
-            <= 1.0e-12
-        )
-        assert _rel_diff(np.asarray(pc_r.res), np.asarray(pc_j.res)) < 1.0e-11
+    with flexmesa.numerics_mode_context("strict"):
+        for log_rho, log_t in [(3.8, 7.2), (5.4, 6.8), (6.7, 6.1), (7.5, 6.4)]:
+            rho = 10.0**log_rho
+            temp = 10.0**log_t
+            pc_r = eos.eval_pc_eos(
+                rho, temp, abar, zbar, chem_id, xa, backend="rust"
+            )
+            pc_j = eos.eval_pc_eos(
+                jnp.float64(rho),
+                jnp.float64(temp),
+                jnp.float64(abar),
+                jnp.float64(zbar),
+                chem_id,
+                jnp.asarray(xa),
+                backend="jax",
+            )
+            assert (
+                _rel_diff(np.asarray(pc_r.res[:8]), np.asarray(pc_j.res[:8]))
+                <= 1.0e-12
+            )
+            assert (
+                _rel_diff(np.asarray(pc_r.res), np.asarray(pc_j.res)) < 1.0e-11
+            )
 
-        sk_r = eos.eval_skye_eos(
-            rho, temp, abar, zbar, chem_id, xa, backend="rust"
-        )
-        sk_j = eos.eval_skye_eos(
-            jnp.float64(rho),
-            jnp.float64(temp),
-            jnp.float64(abar),
-            jnp.float64(zbar),
-            chem_id,
-            jnp.asarray(xa),
-            backend="jax",
-        )
-        assert (
-            _rel_diff(np.asarray(sk_r.res[:3]), np.asarray(sk_j.res[:3]))
-            < 5.0e-11
-        )
-        assert _rel_diff(np.asarray(sk_r.res), np.asarray(sk_j.res)) < 1.0e-6
+            sk_r = eos.eval_skye_eos(
+                rho, temp, abar, zbar, chem_id, xa, backend="rust"
+            )
+            sk_j = eos.eval_skye_eos(
+                jnp.float64(rho),
+                jnp.float64(temp),
+                jnp.float64(abar),
+                jnp.float64(zbar),
+                chem_id,
+                jnp.asarray(xa),
+                backend="jax",
+            )
+            assert (
+                _rel_diff(np.asarray(sk_r.res[:3]), np.asarray(sk_j.res[:3]))
+                < 5.0e-11
+            )
+            assert (
+                _rel_diff(np.asarray(sk_r.res), np.asarray(sk_j.res)) < 1.0e-6
+            )
 
     # Verify jax.jacfwd on eval_pc_eos and eval_skye_eos matches d_dlnd, d_dln_t
     rho0 = jnp.float64(10.0**5.4)

@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
 r"""Effective charge of $\mathrm{Fe56}$ in $\mathrm{He4}$ (`mod_ionization`).
 
-Implements the Three-Tier Hybrid (`Tier B`) 2D not-a-knot bicubic spline
-interpolator (`eval_charge_of_fe56_in_he4`, `eval_charge_of_fe56_in_he4_jax`,
-and `eval_charge_of_fe56_in_he4_zones`) over the $105 \times 30$
-Thomas-Fermi-Dirac-Hubbard $(\log_{10} n_e, \log_{10} T)$ grid from upstream
-MESA `mod_ionization.f90`.
+Implements the 2D not-a-knot bicubic spline interpolator
+(`eval_charge_of_fe56_in_he4`, `eval_charge_of_fe56_in_he4_jax`, and
+`eval_charge_of_fe56_in_he4_zones`) in canonical Safe Rust and derived
+`float64` JAX over the $105 \times 30$ Thomas-Fermi-Dirac-Hubbard
+$(\log_{10} n_e, \log_{10} T)$ grid from upstream MESA `mod_ionization.f90`.
 """
 
 from __future__ import annotations
@@ -164,11 +164,11 @@ def eval_charge_of_fe56_in_he4_jax(
 
 
 def eval_charge_of_fe56_in_he4(
-    log10_ne: float,
-    log10_t: float,
+    log10_ne: float | jax.Array,
+    log10_t: float | jax.Array,
     *,
     backend: _dispatch.Backend = "auto",
-) -> float:
+) -> float | jax.Array:
     r"""Evaluate the effective charge $Z(\mathrm{Fe56})$ in ${}^4\mathrm{He}$.
 
     Args:
@@ -183,9 +183,14 @@ def eval_charge_of_fe56_in_he4(
     Raises:
         ValueError: If `log10_ne` or `log10_t` is outside the table domain.
     """
-    resolved = _dispatch.resolve_backend(backend, log10_ne, log10_t)
-    lne_f, lt_f = float(log10_ne), float(log10_t)
+    resolved, has_jax = _dispatch.resolve_backend_with_jax(
+        backend, log10_ne, log10_t
+    )
     if resolved == "jax":
+        if has_jax:
+            z_j, _, _ = eval_charge_of_fe56_in_he4_jax(log10_ne, log10_t)
+            return z_j
+        lne_f, lt_f = float(log10_ne), float(log10_t)
         xs, ys, _ = _fe56_he4_grid_jax()
         if not (
             float(xs[0]) <= lne_f <= float(xs[-1])
@@ -196,7 +201,9 @@ def eval_charge_of_fe56_in_he4(
             )
         z_j, _, _ = eval_charge_of_fe56_in_he4_jax(lne_f, lt_f)
         return float(z_j)
-    z_r, _, _ = _rust.py_ion_charge_of_fe56_in_he4(lne_f, lt_f)
+    z_r, _, _ = _rust.py_ion_charge_of_fe56_in_he4(
+        float(log10_ne), float(log10_t)
+    )
     return float(z_r)
 
 

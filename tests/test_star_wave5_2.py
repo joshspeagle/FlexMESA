@@ -13,6 +13,7 @@ import jax.numpy as jnp
 import jax.test_util
 import numpy as np
 
+import flexmesa
 from flexmesa import _rust, star
 
 _GOLDEN_DIR = pathlib.Path(__file__).resolve().parent / "fixtures" / "golden"
@@ -21,8 +22,8 @@ _GOLDEN_DIR = pathlib.Path(__file__).resolve().parent / "fixtures" / "golden"
 def test_hllc_riemann_face_and_surface_match_jax_and_preserve_hydrostatic() -> (
     None
 ):
-    """Verify HLLC Riemann face/surface kernels, Rust-vs-JAX parity, exact
-    hydrostatic equilibrium preservation, and autodiff vs. finite differences.
+    """Verify HLLC Riemann kernels, Rust (`strict`) vs JAX consistency,
+    hydrostatic equilibrium preservation, and autodiff vs finite differences.
     """
     r_face = 5.0e10
     m_grav = 1.0e33
@@ -35,21 +36,22 @@ def test_hllc_riemann_face_and_surface_match_jax_and_preserve_hydrostatic() -> (
     p_r = p_star - 0.5 * dm * g_over_a
 
     # 1. Exact hydrostatic equilibrium: u_L = u_R = 0 and P_L^* == P_R^*
-    f_rust = _rust.star_eval_hllc_face(
-        p_l,
-        10.0,
-        5.0e7,
-        0.0,
-        dm,
-        p_r,
-        8.0,
-        4.5e7,
-        0.0,
-        dm,
-        r_face,
-        m_grav,
-        cgrav,
-    )
+    with flexmesa.numerics_mode_context("strict"):
+        f_rust = _rust.star_eval_hllc_face(
+            p_l,
+            10.0,
+            5.0e7,
+            0.0,
+            dm,
+            p_r,
+            8.0,
+            4.5e7,
+            0.0,
+            dm,
+            r_face,
+            m_grav,
+            cgrav,
+        )
     f_jax = star.eval_hllc_face_jax(
         jnp.asarray(p_l),
         jnp.asarray(10.0),
@@ -243,7 +245,7 @@ def test_rsp2_zone_face_and_stationary_solver_match_jax_and_autodiff() -> None:
         )
     assert abs(z_r[6]) / max(abs(z_r[3]), abs(z_r[4]), 1.0) <= 1.0e-13
 
-    # Face evaluation parity
+    # Face evaluation consistency
     face_args = (5.0e10, 1.0e33, 6.67430e-8, 1.0e8, 1.0e-5, 1.0e5, 3.0e8, 0.40)
     face_args2 = (2.0, w_eq_r, 0.8 * w_eq_r, (1.05e5) ** 4, (0.95e5) ** 4)
     face_args3 = (18.5, 18.3, z_r[1], -1.0e-5, 1.0e28)
@@ -496,9 +498,9 @@ def test_star_model_riemann_profile_and_pulse_exporters() -> None:
         assert len(model.to_pulse_str(fmt)) > 100
 
 
-def test_gyre_adipls_bvp_and_stella_golden_parity() -> None:
-    """Verify 34-mode `GYRE` BVP, 46-mode `ADIPLS` BVP, and `STELLA` Sobolev
-    golden parity from Python and JAX.
+def test_pulse_bvp_and_stella_smoke_counts_and_sobolev_autodiff() -> None:
+    """Verify GYRE (34 modes) and ADIPLS (46 modes) counts, STELLA
+    hydrodynamics/abundance smoke run, and JAX Sobolev optical-depth autodiff.
     """
     gyre_dir = _GOLDEN_DIR / "gyre"
     mesa_str = (gyre_dir / "model.dat").read_text(encoding="utf-8")

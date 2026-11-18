@@ -440,7 +440,9 @@ def eval_pc_eos_zones(
         [`EosEvalOutput`] with `res`, `d_dlnd`, and `d_dln_t` of shape
         `(N_zones, 26)`.
     """
-    resolved = _dispatch.resolve_backend(backend, rho, temp, abar, zbar, xa)
+    resolved = _dispatch.resolve_backend(
+        backend, rho, temp, abar, zbar, xa, azion, acmi
+    )
     if resolved == "jax":
         res, d_dlnd, d_dln_t = eval_pc_eos_jax(
             jnp.asarray(rho, dtype=jnp.float64),

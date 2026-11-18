@@ -99,6 +99,9 @@ def interp_mkbicub_db(
         ValueError: If grid dimensions are ``< 4``, non-ascending, mismatched
             with ``z`` or boundary arrays, or contain non-finite values.
     """
+    resolved = _dispatch.resolve_backend(
+        backend, x, y, z, bcxmin, bcxmax, bcymin, bcymax
+    )
     x_arr = np.asarray(x, dtype=np.float64)
     y_arr = np.asarray(y, dtype=np.float64)
     nx, ny = x_arr.size, y_arr.size
@@ -114,7 +117,7 @@ def interp_mkbicub_db(
     bc_y0 = _validate_bc_slice(bcymin, int(ibcymin), nx, "bcymin")
     bc_y1 = _validate_bc_slice(bcymax, int(ibcymax), nx, "bcymax")
 
-    if _dispatch.resolve_backend(backend, x, y, z) == "rust":
+    if resolved == "rust":
         return _rust.interp_mkbicub_db(
             _dispatch.as_c_f64(x_arr),
             _dispatch.as_c_f64(y_arr),

@@ -336,6 +336,8 @@ def interp_evbicub_mask_db(
     iliny: bool,
     coeffs: np.ndarray | jnp.ndarray,
     ict: Sequence[int | bool],
+    *,
+    backend: _dispatch.Backend = "auto",
 ) -> jnp.ndarray:
     """Packs selected bicubic outputs according to 6-element mask ``ict``.
 
@@ -349,6 +351,7 @@ def interp_evbicub_mask_db(
         coeffs: Bicubic coefficient array of shape ``(nx, ny, 4)``.
         ict: 6-element selector sequence for ``[f, df_dx, df_dy, d2f_dx2,
             d2f_dy2, d2f_dxdy]``.
+        backend: Execution backend (``"auto"``, ``"rust"``, or ``"jax"``).
 
     Returns:
         JAX ``float64`` array of shape ``(6,)`` containing requested values
@@ -359,12 +362,15 @@ def interp_evbicub_mask_db(
     """
     if len(ict) != 6:
         raise ValueError("ict must have length 6.")
-    ev = interp_evbicub_db(xget, yget, x, y, ilinx, iliny, coeffs)
+    ev = interp_evbicub_db(
+        xget, yget, x, y, ilinx, iliny, coeffs, backend=backend
+    )
     items = [ev.f, ev.df_dx, ev.df_dy, ev.d2f_dx2, ev.d2f_dy2, ev.d2f_dxdy]
-    out = [0.0] * 6
-    iadr = 0
-    for k in range(6):
-        if bool(ict[k]):
-            out[iadr] = float(items[k])
-            iadr += 1
-    return jnp.asarray(out, dtype=jnp.float64)
+    selected = [
+        jnp.asarray(items[k], dtype=jnp.float64)
+        for k in range(6)
+        if bool(ict[k])
+    ]
+    zero = jnp.zeros_like(jnp.asarray(ev.f, dtype=jnp.float64))
+    selected.extend([zero] * (6 - len(selected)))
+    return jnp.stack(selected)

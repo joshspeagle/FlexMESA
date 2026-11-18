@@ -1,15 +1,16 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
 r"""Verification suite for `flexmesa.ionization` (`Wave 2b`).
 
-Validates the Three-Tier Hybrid `ionization` implementation against:
+Validates `flexmesa.ionization` against:
 1. 100% of the golden output in upstream MESA `ionization/test/test_output`
    (`test_fe56_in_he4` at 3 $(\log_{10} n_e, \log_{10} T)$ points and
    `do_test_eval_ionization` across all 28 output quantities: `logPgas`,
    `logpp_H..Fe`, `Z_H..Fe`, `fneut_H..Fe`).
-2. Multi-zone Safe Rust (`PyO3` + `rayon`) vs. `@jax.jit` parity (`<= 1e-14`)
-   across 20 deterministic random seeds (`np.random.default_rng(seed)`) on
-   `eval_charge_of_fe56_in_he4_zones`, `eval_ionization_zones`, `chi_info`,
-   `chi_effective`, and `eval_typical_charge`.
+2. Multi-zone Safe Rust (`strict` mode, `PyO3` + `rayon`) vs `@jax.jit`
+   consistency (`<= 1e-14`) across 20 deterministic random seeds
+   (`np.random.default_rng(seed)`) on `eval_charge_of_fe56_in_he4_zones`,
+   `eval_ionization_zones`, `chi_info`, `chi_effective`, and
+   `eval_typical_charge`.
 3. Automatic differentiation (`jax.test_util.check_grads` order 2 and exact
    analytical spline derivative agreement) on `eval_charge_of_fe56_in_he4_jax`,
    `eval_ionization_jax`, and `chi_effective_jax`.
@@ -23,6 +24,7 @@ import numpy as np
 import pytest
 from jax import test_util as jtu
 
+import flexmesa
 from flexmesa import _rust, ionization
 
 _GOLDEN_EVAL_IONIZATION: np.ndarray = np.array(
@@ -81,7 +83,7 @@ def test_fe56_in_he4_matches_mesa_golden_output() -> None:
         z_rust = ionization.eval_charge_of_fe56_in_he4(lne, lt, backend="rust")
         z_jax = ionization.eval_charge_of_fe56_in_he4(lne, lt, backend="jax")
         assert np.isclose(z_rust, expected, rtol=0.0, atol=1e-7)
-        assert np.isclose(z_rust, z_jax, rtol=1e-15, atol=1e-15)
+        assert np.isclose(z_jax, z_rust, rtol=1e-15, atol=1e-15)
 
 
 def test_eval_ionization_matches_mesa_golden_output() -> None:
@@ -125,32 +127,33 @@ def test_fe56_in_he4_zones_rust_vs_jax_across_random_seeds() -> None:
     Rust, parallel `rayon` Rust, and `@jax.jit` to `1e-14`.
     """
     n_zones = 128
-    for seed in range(20):
-        rng = np.random.default_rng(seed)
-        lne = rng.uniform(24.1, 30.9, size=n_zones)
-        lt = rng.uniform(6.05, 7.95, size=n_zones)
+    with flexmesa.numerics_mode_context("strict"):
+        for seed in range(20):
+            rng = np.random.default_rng(seed)
+            lne = rng.uniform(24.1, 30.9, size=n_zones)
+            lt = rng.uniform(6.05, 7.95, size=n_zones)
 
-        out_par = ionization.eval_charge_of_fe56_in_he4_zones(
-            lne, lt, parallel=True, backend="rust"
-        )
-        out_seq = ionization.eval_charge_of_fe56_in_he4_zones(
-            lne, lt, parallel=False, backend="rust"
-        )
-        out_jax = np.asarray(
-            ionization.eval_charge_of_fe56_in_he4_zones(
-                jnp.asarray(lne), jnp.asarray(lt), backend="jax"
-            ),
-            dtype=np.float64,
-        )
-        np.testing.assert_allclose(out_par, out_seq, rtol=1e-15, atol=1e-15)
-        np.testing.assert_allclose(
-            out_par[:, 0], out_jax[:, 0], rtol=1e-14, atol=1e-14
-        )
-        # First derivatives divide spline values (~26) by grid spacing dx=0.05,
-        # giving a 1-ULP CPU FMA vs non-FMA bound of 26 * eps / 0.05 ~ 1.15e-13.
-        np.testing.assert_allclose(
-            out_par[:, 1:], out_jax[:, 1:], rtol=1e-12, atol=2e-13
-        )
+            out_par = ionization.eval_charge_of_fe56_in_he4_zones(
+                lne, lt, parallel=True, backend="rust"
+            )
+            out_seq = ionization.eval_charge_of_fe56_in_he4_zones(
+                lne, lt, parallel=False, backend="rust"
+            )
+            out_jax = np.asarray(
+                ionization.eval_charge_of_fe56_in_he4_zones(
+                    jnp.asarray(lne), jnp.asarray(lt), backend="jax"
+                ),
+                dtype=np.float64,
+            )
+            np.testing.assert_allclose(out_par, out_seq, rtol=1e-15, atol=1e-15)
+            np.testing.assert_allclose(
+                out_par[:, 0], out_jax[:, 0], rtol=1e-14, atol=1e-14
+            )
+            # First derivatives divide spline values (~26) by grid spacing
+            # dx=0.05, giving a 1-ULP CPU FMA vs non-FMA bound ~ 1.15e-13.
+            np.testing.assert_allclose(
+                out_par[:, 1:], out_jax[:, 1:], rtol=1e-12, atol=2e-13
+            )
 
 
 def test_eval_ionization_zones_rust_vs_jax_across_random_seeds() -> None:
@@ -162,39 +165,40 @@ def test_eval_ionization_zones_rust_vs_jax_across_random_seeds() -> None:
     clamping.
     """
     n_zones = 128
-    for seed in range(20):
-        rng = np.random.default_rng(seed)
-        z = rng.uniform(0.0, 1.0, size=n_zones)
-        x = rng.uniform(0.0, 1.0, size=n_zones)
-        lt = rng.uniform(3.2, 8.8, size=n_zones)
-        lq = rng.uniform(-9.0, 5.0, size=n_zones)
-        lrho = lq + 2.0 * lt - 12.0
+    with flexmesa.numerics_mode_context("strict"):
+        for seed in range(20):
+            rng = np.random.default_rng(seed)
+            z = rng.uniform(0.0, 1.0, size=n_zones)
+            x = rng.uniform(0.0, 1.0, size=n_zones)
+            lt = rng.uniform(3.2, 8.8, size=n_zones)
+            lq = rng.uniform(-9.0, 5.0, size=n_zones)
+            lrho = lq + 2.0 * lt - 12.0
 
-        out_par = ionization.eval_ionization_zones(
-            z, x, lrho, lt, parallel=True, backend="rust"
-        )
-        out_seq = ionization.eval_ionization_zones(
-            z, x, lrho, lt, parallel=False, backend="rust"
-        )
-        out_jax = np.asarray(
-            ionization.eval_ionization_zones(
-                jnp.asarray(z),
-                jnp.asarray(x),
-                jnp.asarray(lrho),
-                jnp.asarray(lt),
-                backend="jax",
-            ),
-            dtype=np.float64,
-        )
-        np.testing.assert_allclose(out_par, out_seq, rtol=1e-15, atol=1e-15)
-        np.testing.assert_allclose(
-            out_par[:, 0], out_jax[:, 0], rtol=1e-14, atol=1e-14
-        )
-        # First derivatives divide spline values (~26) by grid spacing dx=0.05,
-        # giving a 1-ULP CPU FMA vs non-FMA bound of 26 * eps / 0.05 ~ 1.15e-13.
-        np.testing.assert_allclose(
-            out_par[:, 1:], out_jax[:, 1:], rtol=1e-12, atol=2e-13
-        )
+            out_par = ionization.eval_ionization_zones(
+                z, x, lrho, lt, parallel=True, backend="rust"
+            )
+            out_seq = ionization.eval_ionization_zones(
+                z, x, lrho, lt, parallel=False, backend="rust"
+            )
+            out_jax = np.asarray(
+                ionization.eval_ionization_zones(
+                    jnp.asarray(z),
+                    jnp.asarray(x),
+                    jnp.asarray(lrho),
+                    jnp.asarray(lt),
+                    backend="jax",
+                ),
+                dtype=np.float64,
+            )
+            np.testing.assert_allclose(out_par, out_seq, rtol=1e-15, atol=1e-15)
+            np.testing.assert_allclose(
+                out_par[:, 0], out_jax[:, 0], rtol=1e-14, atol=1e-14
+            )
+            # First derivatives divide spline values (~26) by grid spacing
+            # dx=0.05, giving a 1-ULP CPU FMA vs non-FMA bound ~ 1.15e-13.
+            np.testing.assert_allclose(
+                out_par[:, 1:], out_jax[:, 1:], rtol=1e-12, atol=2e-13
+            )
 
 
 def test_typical_charge_and_chi_effective_rust_vs_jax() -> None:
@@ -211,33 +215,36 @@ def test_typical_charge_and_chi_effective_rust_vs_jax() -> None:
         ionization.ionization_potential(26, 26), 9278.0, rtol=1e-15, atol=0.0
     )
 
-    for seed in range(20):
-        rng = np.random.default_rng(seed)
-        abar = float(rng.uniform(1.2, 4.0))
-        free_e = float(rng.uniform(0.4, 0.9))
-        lt = float(rng.uniform(4.0, 7.5))
-        t = float(10.0**lt)
-        lrho = float(rng.uniform(-6.0, 4.0))
-        rho = float(10.0**lrho)
-        z1 = abar * free_e
+    with flexmesa.numerics_mode_context("strict"):
+        for seed in range(20):
+            rng = np.random.default_rng(seed)
+            abar = float(rng.uniform(1.2, 4.0))
+            free_e = float(rng.uniform(0.4, 0.9))
+            lt = float(rng.uniform(4.0, 7.5))
+            t = float(10.0**lt)
+            lrho = float(rng.uniform(-6.0, 4.0))
+            rho = float(10.0**lrho)
+            z1 = abar * free_e
 
-        c_r = ionization.chi_info(abar, z1, t, lt, rho, lrho, backend="rust")
-        c_j = ionization.chi_info(abar, z1, t, lt, rho, lrho, backend="jax")
-        np.testing.assert_allclose(c_r, c_j, rtol=1e-14, atol=1e-14)
-
-        ce_r = ionization.chi_effective(*c_r, z1, 6.0, backend="rust")
-        ce_j = ionization.chi_effective(*c_j, z1, 6.0, backend="jax")
-        assert np.isclose(ce_r, ce_j, rtol=1e-14, atol=1e-14)
-
-        for iso in ("h1", "he4", "c12", "o16", "fe56", "zn64"):
-            zt_r = ionization.eval_typical_charge(
-                iso, abar, free_e, t, lt, rho, lrho, backend="rust"
+            c_r = ionization.chi_info(
+                abar, z1, t, lt, rho, lrho, backend="rust"
             )
-            zt_j = ionization.eval_typical_charge(
-                iso, abar, free_e, t, lt, rho, lrho, backend="jax"
-            )
-            assert zt_r == zt_j
-            assert zt_r >= 1.0
+            c_j = ionization.chi_info(abar, z1, t, lt, rho, lrho, backend="jax")
+            np.testing.assert_allclose(c_r, c_j, rtol=1e-14, atol=1e-14)
+
+            ce_r = ionization.chi_effective(*c_r, z1, 6.0, backend="rust")
+            ce_j = ionization.chi_effective(*c_j, z1, 6.0, backend="jax")
+            assert np.isclose(ce_r, ce_j, rtol=1e-14, atol=1e-14)
+
+            for iso in ("h1", "he4", "c12", "o16", "fe56", "zn64"):
+                zt_r = ionization.eval_typical_charge(
+                    iso, abar, free_e, t, lt, rho, lrho, backend="rust"
+                )
+                zt_j = ionization.eval_typical_charge(
+                    iso, abar, free_e, t, lt, rho, lrho, backend="jax"
+                )
+                assert zt_r == zt_j
+                assert zt_r >= 1.0
 
 
 def test_fe56_he4_and_chi_jax_autodiff() -> None:

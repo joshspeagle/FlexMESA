@@ -17,18 +17,13 @@ from flexmesa import _dispatch, _rust
 from flexmesa.astero import jax_kernels
 
 
-def _is_jax(x: Any, backend: Any) -> bool:
-    """Returns `True` when `resolve_backend(backend, x)` selects JAX."""
-    return _dispatch.resolve_backend(backend, x) == "jax"
-
-
 def eval_acoustic_profile(
     radius_cm: Any,
     csound: Any,
-    r_center: float = 0.0,
-    r_phot: float | None = None,
+    r_center: Any = 0.0,
+    r_phot: Any | None = None,
     *,
-    backend: str = "auto",
+    backend: _dispatch.Backend = "auto",
 ) -> dict[str, Any]:
     """Evaluates cumulative acoustic radius, depth, and $\\tau_0$ [`s`].
 
@@ -44,16 +39,23 @@ def eval_acoustic_profile(
         Dictionary with keys `acoustic_radius`, `acoustic_depth`, and
         `photosphere_acoustic_r` [`s`].
     """
-    rp = float(radius_cm[0]) if r_phot is None else float(r_phot)
-    if _is_jax(radius_cm, backend):
+    if (
+        _dispatch.resolve_backend(backend, radius_cm, csound, r_center, r_phot)
+        == "jax"
+    ):
+        r_j = jnp.asarray(radius_cm, dtype=jnp.float64)
+        rp_j = (
+            r_j[0] if r_phot is None else jnp.asarray(r_phot, dtype=jnp.float64)
+        )
         tau_r, tau_d, tau_0 = jax_kernels.eval_acoustic_profile_jax(
-            radius_cm, csound, jnp.float64(r_center), jnp.float64(rp)
+            r_j, csound, jnp.asarray(r_center, dtype=jnp.float64), rp_j
         )
         return {
             "acoustic_radius": tau_r,
             "acoustic_depth": tau_d,
             "photosphere_acoustic_r": tau_0,
         }
+    rp = float(radius_cm[0]) if r_phot is None else float(r_phot)
     return _rust.astero_eval_acoustic_profile(
         _dispatch.as_c_f64(radius_cm),
         _dispatch.as_c_f64(csound),
@@ -65,7 +67,7 @@ def eval_acoustic_profile(
 def eval_delta_nu_asymptotic(
     photosphere_acoustic_r: Any,
     *,
-    backend: str = "auto",
+    backend: _dispatch.Backend = "auto",
 ) -> Any:
     """Evaluates asymptotic $\\Delta\\nu = 10^6 / (2 \\tau_0)$ [`uHz`].
 
@@ -76,7 +78,7 @@ def eval_delta_nu_asymptotic(
     Returns:
         Asymptotic large frequency separation $\\Delta\\nu$ [`uHz`].
     """
-    if _is_jax(photosphere_acoustic_r, backend):
+    if _dispatch.resolve_backend(backend, photosphere_acoustic_r) == "jax":
         return jax_kernels.eval_delta_nu_asymptotic_jax(photosphere_acoustic_r)
     return _rust.astero_eval_delta_nu_asymptotic(float(photosphere_acoustic_r))
 
@@ -86,7 +88,7 @@ def eval_delta_nu_scaling(
     teff_k: Any,
     l_phot_erg_s: Any,
     *,
-    backend: str = "auto",
+    backend: _dispatch.Backend = "auto",
 ) -> Any:
     """Evaluates solar-scaled $\\Delta\\nu(M, T_{\\mathrm{eff}}, L)$ [`uHz`].
 
@@ -99,7 +101,7 @@ def eval_delta_nu_scaling(
     Returns:
         Solar-scaled large frequency separation $\\Delta\\nu$ [`uHz`].
     """
-    if _is_jax(m_g, backend):
+    if _dispatch.resolve_backend(backend, m_g, teff_k, l_phot_erg_s) == "jax":
         return jax_kernels.eval_delta_nu_scaling_jax(m_g, teff_k, l_phot_erg_s)
     return _rust.astero_eval_delta_nu_scaling(
         float(m_g), float(teff_k), float(l_phot_erg_s)
@@ -110,7 +112,7 @@ def eval_delta_nu_radius_scaling(
     m_g: Any,
     r_phot_cm: Any,
     *,
-    backend: str = "auto",
+    backend: _dispatch.Backend = "auto",
 ) -> Any:
     """Evaluates solar-scaled $\\Delta\\nu(M, R_{\\mathrm{phot}})$ [`uHz`].
 
@@ -122,7 +124,7 @@ def eval_delta_nu_radius_scaling(
     Returns:
         Solar-scaled large frequency separation $\\Delta\\nu$ [`uHz`].
     """
-    if _is_jax(m_g, backend):
+    if _dispatch.resolve_backend(backend, m_g, r_phot_cm) == "jax":
         return jax_kernels.eval_delta_nu_radius_scaling_jax(m_g, r_phot_cm)
     return _rust.astero_eval_delta_nu_radius_scaling(
         float(m_g), float(r_phot_cm)
@@ -134,7 +136,7 @@ def eval_nu_max(
     r_phot_cm: Any,
     teff_k: Any,
     *,
-    backend: str = "auto",
+    backend: _dispatch.Backend = "auto",
 ) -> Any:
     """Evaluates solar-scaled $\\nu_{\\max}$ [`uHz`].
 
@@ -147,7 +149,7 @@ def eval_nu_max(
     Returns:
         Frequency of maximum oscillation power $\\nu_{\\max}$ [`uHz`].
     """
-    if _is_jax(m_g, backend):
+    if _dispatch.resolve_backend(backend, m_g, r_phot_cm, teff_k) == "jax":
         return jax_kernels.eval_nu_max_jax(m_g, r_phot_cm, teff_k)
     return _rust.astero_eval_nu_max(float(m_g), float(r_phot_cm), float(teff_k))
 
@@ -158,7 +160,7 @@ def eval_nu_ac(
     rho_surf: Any,
     peos_surf: Any,
     *,
-    backend: str = "auto",
+    backend: _dispatch.Backend = "auto",
 ) -> Any:
     """Evaluates surface acoustic cutoff $\\nu_{\\mathrm{ac}}$ [`uHz`].
 
@@ -172,7 +174,12 @@ def eval_nu_ac(
     Returns:
         Surface acoustic cutoff frequency $\\nu_{\\mathrm{ac}}$ [`uHz`].
     """
-    if _is_jax(g_surf_cgs, backend):
+    if (
+        _dispatch.resolve_backend(
+            backend, g_surf_cgs, gamma1_surf, rho_surf, peos_surf
+        )
+        == "jax"
+    ):
         return jax_kernels.eval_nu_ac_jax(
             g_surf_cgs, gamma1_surf, rho_surf, peos_surf
         )
@@ -192,7 +199,7 @@ def eval_delta_pg(
     mode_freq_uhz: float = 100.0,
     *,
     bildsten2012: bool = False,
-    backend: str = "auto",
+    backend: _dispatch.Backend = "auto",
 ) -> Any:
     """Evaluates asymptotic dipole ($l=1$) g-mode spacing $\\Delta\\Pi_1$ [`s`].
 
@@ -209,7 +216,9 @@ def eval_delta_pg(
     Returns:
         Asymptotic dipole period spacing $\\Delta\\Pi_1$ [`s`].
     """
-    if not bildsten2012 and _is_jax(radius_cm, backend):
+    if not bildsten2012 and (
+        _dispatch.resolve_backend(backend, radius_cm, r_mid, brunt_n2) == "jax"
+    ):
         return jax_kernels.eval_delta_pg_traditional_jax(
             radius_cm, r_mid, brunt_n2
         )
@@ -294,7 +303,7 @@ def eval_surface_correction(
     b_power: float = 4.90,
     correction_factor: float = 1.0,
     *,
-    backend: str = "auto",
+    backend: _dispatch.Backend = "auto",
 ) -> dict[str, Any]:
     """Evaluates asteroseismic surface-effect frequency corrections.
 
@@ -318,7 +327,14 @@ def eval_surface_correction(
     Returns:
         Dictionary with keys `nu_corrected`, `p0`, and `p1`.
     """
-    if _is_jax(model_freqs, backend) and scheme in (
+    if _dispatch.resolve_backend(
+        backend,
+        obs_freqs,
+        obs_sigmas,
+        model_freqs,
+        model_inertias,
+        correction_factor,
+    ) == "jax" and scheme in (
         "cubic",
         "bg14_1",
         "combined",
@@ -379,7 +395,7 @@ def eval_ratios_r01_r10(
     l1_freqs: Any,
     l1_sigs: Any,
     *,
-    backend: str = "auto",
+    backend: _dispatch.Backend = "auto",
 ) -> dict[str, Any]:
     """Evaluates Roxburgh & Vorontsov (2003) 5-point ratios $r_{01}, r_{10}$.
 
@@ -393,7 +409,10 @@ def eval_ratios_r01_r10(
     Returns:
         Dictionary with keys `r01`, `sig_r01`, `r10`, and `sig_r10`.
     """
-    if _is_jax(l0_freqs, backend):
+    if (
+        _dispatch.resolve_backend(backend, l0_freqs, l0_sigs, l1_freqs, l1_sigs)
+        == "jax"
+    ):
         r01, s01, r10, s10 = jax_kernels.eval_ratios_r01_r10_jax(
             l0_freqs, l0_sigs, l1_freqs, l1_sigs
         )

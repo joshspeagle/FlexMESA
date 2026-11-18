@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
 r"""Four-dimensional $(Z, X, \log Q, \log T)$ ionization table evaluators.
 
-Implements the Three-Tier Hybrid (`Tier B`) 3-stage interpolator
-(`eval_ionization`, `eval_ionization_jax`, `eval_ionization_zones`) matching
-upstream MESA `ion_tables_eval.f90`:
+Implements the 3-stage interpolator (`eval_ionization`,
+`eval_ionization_jax`, `eval_ionization_zones`) in canonical Safe Rust and
+derived `float64` JAX kernels matching upstream MESA `ion_tables_eval.f90`:
 1. **Stage 1 ($(\log Q, \log T)$ bicubic spline)**: Evaluates not-a-knot
    bicubic splines with silent boundary clamping (`Locate_logQ`, `Locate_logT`
    with $+10^{-4}$ index bias).
@@ -291,14 +291,27 @@ def _resolve_log10_pair(
     raise ValueError(f"Either {name} or log10_{name} must be provided.")
 
 
+def _resolve_log10_pair_jax(
+    lin: float | jax.Array | None,
+    log10_val: float | jax.Array | None,
+    name: str,
+) -> jax.Array:
+    r"""Resolve `(linear, log10)` arguments into a JAX `log10` array."""
+    if log10_val is not None:
+        return jnp.asarray(log10_val, dtype=jnp.float64)
+    if lin is not None:
+        return jnp.log10(jnp.asarray(lin, dtype=jnp.float64))
+    raise ValueError(f"Either {name} or log10_{name} must be provided.")
+
+
 def eval_ionization(
-    z: float,
-    x: float,
+    z: float | jax.Array,
+    x: float | jax.Array,
     *,
-    rho: float | None = None,
-    log10_rho: float | None = None,
-    t: float | None = None,
-    log10_t: float | None = None,
+    rho: float | jax.Array | None = None,
+    log10_rho: float | jax.Array | None = None,
+    t: float | jax.Array | None = None,
+    log10_t: float | jax.Array | None = None,
     backend: _dispatch.Backend = "auto",
 ) -> IonizationResult:
     r"""Evaluate the 28-channel 4D ionization state (`eval_ionization`).
@@ -321,8 +334,15 @@ def eval_ionization(
         ValueError: If neither linear nor `log10` density/temperature is
             provided, or if inputs are non-positive or non-finite.
     """
-    resolved = _dispatch.resolve_backend(backend, z, x)
+    resolved, has_jax = _dispatch.resolve_backend_with_jax(
+        backend, z, x, rho, log10_rho, t, log10_t
+    )
     if resolved == "jax":
+        if has_jax:
+            lt_j = _resolve_log10_pair_jax(t, log10_t, "t")
+            lrho_j = _resolve_log10_pair_jax(rho, log10_rho, "rho")
+            res_j = eval_ionization_jax(z, x, lrho_j, lt_j)
+            return IonizationResult(res_j)
         zf, xf = float(z), float(x)
         if not (np.isfinite(zf) and np.isfinite(xf)):
             raise ValueError("z and x must be finite.")

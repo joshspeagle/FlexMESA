@@ -21,7 +21,7 @@
         "verified_total": 0,
         "pct_ported": 14.9,
         "pct_verified": 0.0,
-        "rust_lines": 59077,
+        "rust_lines": 59083,
         "python_jax_lines": 4765
       },
       {
@@ -55,7 +55,7 @@
         "verified_total": 0,
         "pct_ported": 18.2,
         "pct_verified": 0.0,
-        "rust_lines": 10377,
+        "rust_lines": 10369,
         "python_jax_lines": 1282
       },
       {
@@ -749,8 +749,8 @@
     "rust": {
       "tool": "cargo llvm-cov",
       "overall": {
-        "lines": 94454,
-        "covered": 66852,
+        "lines": 94451,
+        "covered": 66915,
         "percent": 70.8
       },
       "by_crate": [
@@ -780,8 +780,8 @@
         },
         {
           "crate": "flexmesa-binary",
-          "lines": 7012,
-          "covered": 4146,
+          "lines": 7009,
+          "covered": 4145,
           "percent": 59.1
         },
         {
@@ -817,7 +817,7 @@
         {
           "crate": "flexmesa-eos",
           "lines": 8893,
-          "covered": 7126,
+          "covered": 7127,
           "percent": 80.1
         },
         {
@@ -841,8 +841,8 @@
         {
           "crate": "flexmesa-kap",
           "lines": 3141,
-          "covered": 1978,
-          "percent": 63.0
+          "covered": 1987,
+          "percent": 63.3
         },
         {
           "crate": "flexmesa-math",
@@ -889,8 +889,8 @@
         {
           "crate": "flexmesa-star",
           "lines": 39050,
-          "covered": 26342,
-          "percent": 67.5
+          "covered": 26396,
+          "percent": 67.6
         },
         {
           "crate": "flexmesa-testing",
@@ -1390,8 +1390,8 @@
     ],
     "open_pull_requests": [
       {
-        "number": 224,
-        "title": "fix(star,binary): an oversized mass change is a retriable failure again (#150)",
+        "number": 225,
+        "title": "feat(testing): wire Level-2 exact-hex probes for all math and auto_diff values (#220)",
         "draft": false
       }
     ],
@@ -1832,6 +1832,19 @@
     {
       "date_utc": "2026-11-18",
       "commit": "3f7fa73",
+      "event": "main merge",
+      "engine_ported_pct": "13.9",
+      "all_verified_pct": "0.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "70.8",
+      "python_cov_pct": "87.7",
+      "closed_140": "11",
+      "total_140": "33",
+      "deferred_169": "18"
+    },
+    {
+      "date_utc": "2026-11-18",
+      "commit": "3b76009",
       "event": "main merge",
       "engine_ported_pct": "13.9",
       "all_verified_pct": "0.0",

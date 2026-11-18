@@ -20,6 +20,7 @@ import math
 import os
 import pathlib
 import re
+import shlex
 import shutil
 import struct
 import subprocess
@@ -30,7 +31,7 @@ from typing import Any
 import numpy as np
 
 SCHEMA_VERSION = "1.0"
-DEFAULT_MESA_VERSION = "26.4.1"
+UNPROBED_MESA_VERSION = "unprobed"
 DEFAULT_BASELINE_FLAGS = "-O2 -ftree-vectorize"
 DEFAULT_VARIANT_FLAGS = "-O0 -fno-tree-vectorize -ffp-contract=off"
 DEFAULT_MATH_SLOT = "crmath"
@@ -41,8 +42,41 @@ DEFAULT_CASES: tuple[tuple[str, str], ...] = (
 
 _FORTRAN_D_EXP_RE = re.compile(r"([0-9])[dD]([+-]?[0-9]+)")
 _FORTRAN_SHORT_EXP_RE = re.compile(r"([0-9])([+-][0-9]{3})\b")
+_FCOPT_LINE_RE = re.compile(r"^FCopt\s*=\s*(.*)$")
+_PGSTAR_LINE_RE = re.compile(r"^USE_PGSTAR\s*=")
+_VERSION_PREFIX_RE = re.compile(r"^[rv](?=[0-9])")
+_HEADER_METADATA_KEYS = frozenset(
+    {
+        "version_number",
+        "compiler",
+        "build",
+        "MESA_SDK_version",
+        "math_backend",
+        "date",
+        "build_date",
+    }
+)
 _SIGN_BIT_U64 = np.uint64(1 << 63)
 _MAG_MASK_U64 = np.uint64(0x7FFF_FFFF_FFFF_FFFF)
+
+
+@dataclasses.dataclass(frozen=True)
+class ToolchainProvenance:
+    """Portable compiler and MESA SDK provenance for a spread run."""
+
+    mesasdk_version: str
+    gfortran_version: str
+    target_triple: str
+    math_slot: str
+
+    def to_dict(self) -> dict[str, str]:
+        """Serialize compiler and SDK provenance without host paths."""
+        return {
+            "mesasdk_version": self.mesasdk_version,
+            "gfortran_version": self.gfortran_version,
+            "target_triple": self.target_triple,
+            "math_slot": self.math_slot,
+        }
 
 
 @dataclasses.dataclass(frozen=True)
@@ -53,15 +87,19 @@ class CompilerConfigSpec:
     fc_flags: str
     math_slot: str = DEFAULT_MATH_SLOT
     omp_num_threads: int = 1
+    makefile_header_fcopt: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize configuration metadata."""
-        return {
+        payload: dict[str, Any] = {
             "name": self.name,
             "fc_flags": self.fc_flags,
             "math_slot": self.math_slot,
             "omp_num_threads": self.omp_num_threads,
         }
+        if self.makefile_header_fcopt is not None:
+            payload["makefile_header_fcopt"] = self.makefile_header_fcopt
+        return payload
 
 
 @dataclasses.dataclass(frozen=True)
@@ -107,6 +145,8 @@ class CaseSpreadResult:
     baseline_sha256: str
     variant_sha256: str
     top_columns_by_ulp: tuple[ColumnSpread, ...]
+    baseline_header: dict[str, str] = dataclasses.field(default_factory=dict)
+    variant_header: dict[str, str] = dataclasses.field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize case spread metrics."""
@@ -126,6 +166,8 @@ class CaseSpreadResult:
             "files_byte_identical": self.files_byte_identical,
             "baseline_sha256": self.baseline_sha256,
             "variant_sha256": self.variant_sha256,
+            "baseline_header": dict(self.baseline_header),
+            "variant_header": dict(self.variant_header),
             "top_columns_by_ulp": [
                 c.to_dict() for c in self.top_columns_by_ulp
             ],
@@ -286,6 +328,39 @@ def _compare_column_arrays(
     )
 
 
+def parse_mesa_history_header_metadata(
+    path: pathlib.Path,
+) -> dict[str, str]:
+    """Extract portable string provenance fields from a MESA history header.
+
+    Args:
+        path: Path to ``LOGS/history.data`` or ``binary_history.data``.
+
+    Returns:
+        Mapping of recognized string header keys (such as ``version_number``,
+        ``compiler``, ``build``, ``MESA_SDK_version``, ``math_backend``, and
+        ``date``) that contain non-path scalar values.
+    """
+    lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    if len(lines) < 3:
+        return {}
+    try:
+        keys = shlex.split(lines[1])
+        vals = shlex.split(lines[2])
+    except ValueError:
+        return {}
+    if len(keys) != len(vals):
+        return {}
+    meta: dict[str, str] = {}
+    for key, val in zip(keys, vals, strict=True):
+        if key not in _HEADER_METADATA_KEYS:
+            continue
+        cleaned = val.strip()
+        if cleaned and "/" not in cleaned and "\\" not in cleaned:
+            meta[key] = cleaned
+    return meta
+
+
 def compare_history_tables(
     suite: str,
     case: str,
@@ -297,6 +372,8 @@ def compare_history_tables(
     """Quantify IEEE-754 ULP and relative spread between two MESA runs."""
     base_sha = hashlib.sha256(baseline_path.read_bytes()).hexdigest()
     var_sha = hashlib.sha256(variant_path.read_bytes()).hexdigest()
+    base_header = parse_mesa_history_header_metadata(baseline_path)
+    var_header = parse_mesa_history_header_metadata(variant_path)
 
     base_names, base_cols = parse_mesa_history_table(baseline_path)
     var_names, var_cols = parse_mesa_history_table(variant_path)
@@ -348,6 +425,111 @@ def compare_history_tables(
         baseline_sha256=base_sha,
         variant_sha256=var_sha,
         top_columns_by_ulp=ranked,
+        baseline_header=base_header,
+        variant_header=var_header,
+    )
+
+
+def _normalize_mesa_version(raw: str) -> str:
+    """Normalize a raw MESA ``version_number`` token such as ``r26.4.1``."""
+    return _VERSION_PREFIX_RE.sub("", raw.strip())
+
+
+def _reject_host_paths(label: str, value: str) -> str:
+    """Reject accidental host path leakage in serialized provenance strings."""
+    cleaned = value.strip()
+    if "/" in cleaned or "\\" in cleaned:
+        raise ValueError(
+            f"Portable {label} token must not contain path separators: "
+            f"{cleaned!r}"
+        )
+    return cleaned
+
+
+def probe_mesa_version(mesa_dir: pathlib.Path) -> tuple[str, str]:
+    """Read MESA version strings from ``data/version_number``.
+
+    Args:
+        mesa_dir: Root directory of a MESA source/build tree.
+
+    Returns:
+        Tuple ``(normalized_version, raw_version)`` such as
+        ``("26.4.1", "r26.4.1")``.
+
+    Raises:
+        FileNotFoundError: If ``<mesa_dir>/data/version_number`` is absent.
+        ValueError: If the file is empty or contains path separators.
+    """
+    version_file = mesa_dir / "data" / "version_number"
+    if not version_file.is_file():
+        raise FileNotFoundError(f"MESA version file not found: {version_file}")
+    raw = _reject_host_paths(
+        "version_number", version_file.read_text(encoding="utf-8")
+    )
+    if not raw:
+        raise ValueError(f"Empty MESA version file: {version_file}")
+    return (_normalize_mesa_version(raw), raw)
+
+
+def probe_toolchain(
+    mesasdk_root: pathlib.Path, mesa_dir: pathlib.Path, math_slot: str
+) -> ToolchainProvenance:
+    """Query MESA SDK version, compiler version, and target triple directly.
+
+    Args:
+        mesasdk_root: Root directory of an installed MESA SDK.
+        mesa_dir: Root directory of the baseline MESA tree.
+        math_slot: Configured ``MESASDK_MATH_SLOT`` name.
+
+    Returns:
+        :class:`ToolchainProvenance` with non-path compiler and SDK strings.
+
+    Raises:
+        FileNotFoundError: If ``mesasdk_version`` or ``gfortran`` is absent.
+        RuntimeError: If any toolchain query exits non-zero or returns blank.
+        ValueError: If a queried token contains host path separators.
+    """
+    sdk_ver_bin = mesasdk_root / "bin" / "mesasdk_version"
+    gfortran_bin = mesasdk_root / "bin" / "gfortran"
+    if not sdk_ver_bin.is_file():
+        raise FileNotFoundError(
+            f"MESA SDK version probe not found: {sdk_ver_bin}"
+        )
+    if not gfortran_bin.is_file():
+        raise FileNotFoundError(f"MESA SDK compiler not found: {gfortran_bin}")
+
+    clean_slot = _reject_host_paths("math_slot", math_slot)
+    if not clean_slot:
+        raise ValueError("math_slot must be non-empty")
+
+    env = _mesa_subprocess_env(mesa_dir, mesasdk_root, clean_slot, 1)
+    env["PATH"] = f"{mesasdk_root / 'bin'}:{env.get('PATH', '')}"
+
+    def _run_probe(cmd: list[str], label: str) -> str:
+        proc = subprocess.run(
+            cmd, env=env, capture_output=True, text=True, check=False
+        )
+        if proc.returncode != 0:
+            raise RuntimeError(
+                f"Toolchain probe {label!r} failed with code "
+                f"{proc.returncode}: {proc.stderr.strip()}"
+            )
+        lines = [ln.strip() for ln in proc.stdout.splitlines() if ln.strip()]
+        if not lines:
+            raise RuntimeError(
+                f"Toolchain probe {label!r} returned empty output"
+            )
+        return _reject_host_paths(label, lines[0])
+
+    return ToolchainProvenance(
+        mesasdk_version=_run_probe([str(sdk_ver_bin)], "mesasdk_version"),
+        gfortran_version=_run_probe(
+            [str(gfortran_bin), "--version"], "gfortran_version"
+        ),
+        target_triple=_run_probe(
+            [str(gfortran_bin), "-dumpmachine"], "target_triple"
+        ),
+        math_slot=clean_slot,
     )
 
 
@@ -358,6 +540,9 @@ def build_spread_report(
     *,
     dry_run: bool,
     planned_commands: Sequence[str] = (),
+    mesa_version: str = UNPROBED_MESA_VERSION,
+    mesa_version_raw: str = UNPROBED_MESA_VERSION,
+    toolchain: ToolchainProvenance | None = None,
 ) -> dict[str, Any]:
     """Assemble structured MESA-to-MESA spread report JSON."""
     identical_count = sum(1 for c in cases if c.files_byte_identical)
@@ -366,8 +551,10 @@ def build_spread_report(
     max_rel = max((c.max_rel_diff for c in cases), default=0.0)
     return {
         "schema_version": SCHEMA_VERSION,
-        "mesa_version": DEFAULT_MESA_VERSION,
+        "mesa_version": mesa_version,
+        "mesa_version_raw": mesa_version_raw,
         "dry_run": dry_run,
+        "toolchain": toolchain.to_dict() if toolchain is not None else None,
         "baseline_config": baseline_cfg.to_dict(),
         "variant_config": variant_cfg.to_dict(),
         "planned_commands": list(planned_commands),
@@ -387,20 +574,34 @@ def render_spread_markdown(report: dict[str, Any]) -> str:
     base = report["baseline_config"]
     var = report["variant_config"]
     summ = report["summary"]
+    ver = report.get("mesa_version", UNPROBED_MESA_VERSION)
+    ver_raw = report.get("mesa_version_raw", ver)
     lines = [
-        "# MESA 26.4.1 Compiler-Variant Numerical Spread",
+        f"# MESA {ver} Compiler-Variant Numerical Spread",
         "",
-        f"- **Baseline**: `{base['name']}` (`{base['fc_flags']}`, "
-        f"math_slot=`{base['math_slot']}`)",
-        f"- **Variant**: `{var['name']}` (`{var['fc_flags']}`, "
-        f"math_slot=`{var['math_slot']}`)",
-        f"- **Dry run**: `{report['dry_run']}`",
-        f"- **Cases compared**: `{summ['cases_compared']}` "
-        f"(`{summ['byte_identical_cases']}` byte-identical, "
-        f"`{summ.get('row_count_mismatches', 0)}` row-count mismatch)",
-        f"- **Max ULP / Max rel diff**: `{summ['max_ulp_across_cases']}` / "
-        f"`{summ['max_rel_diff_across_cases']:.3e}`",
+        f"- **MESA version**: `{ver}` (`{ver_raw}`)",
     ]
+    tc = report.get("toolchain")
+    if isinstance(tc, dict):
+        lines.append(
+            f"- **Toolchain**: `{tc['gfortran_version']}` "
+            f"(`{tc['target_triple']}`), SDK `{tc['mesasdk_version']}`, "
+            f"math_slot=`{tc['math_slot']}`"
+        )
+    lines.extend(
+        [
+            f"- **Baseline**: `{base['name']}` (`{base['fc_flags']}`, "
+            f"math_slot=`{base['math_slot']}`)",
+            f"- **Variant**: `{var['name']}` (`{var['fc_flags']}`, "
+            f"math_slot=`{var['math_slot']}`)",
+            f"- **Dry run**: `{report['dry_run']}`",
+            f"- **Cases compared**: `{summ['cases_compared']}` "
+            f"(`{summ['byte_identical_cases']}` byte-identical, "
+            f"`{summ.get('row_count_mismatches', 0)}` row-count mismatch)",
+            f"- **Max ULP / Max rel diff**: `{summ['max_ulp_across_cases']}` "
+            f"/ `{summ['max_rel_diff_across_cases']:.3e}`",
+        ]
+    )
     if report["cases"]:
         lines.extend(
             [
@@ -429,20 +630,93 @@ def render_spread_markdown(report: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def read_makefile_header_fcopt(header_path: pathlib.Path) -> str:
+    """Read the unindented top-level ``FCopt =`` assignment cleanly.
+
+    Args:
+        header_path: Path to ``utils/makefile_header`` inside a MESA tree.
+
+    Returns:
+        Stripped right-hand side of the active top-level ``FCopt =`` line.
+
+    Raises:
+        FileNotFoundError: If ``header_path`` does not exist.
+        ValueError: If zero, multiple, or empty top-level ``FCopt =`` lines are
+            found.
+    """
+    lines = header_path.read_text(encoding="utf-8").splitlines()
+    matches = [
+        m.group(1).strip()
+        for ln in lines
+        if (m := _FCOPT_LINE_RE.match(ln)) is not None
+    ]
+    if len(matches) != 1:
+        raise ValueError(
+            f"Expected exactly 1 top-level 'FCopt =' line in {header_path}, "
+            f"found {len(matches)}"
+        )
+    if not matches[0]:
+        raise ValueError(f"Empty top-level 'FCopt =' value in {header_path}")
+    return matches[0]
+
+
 def _patch_makefile_header(
     header_path: pathlib.Path, variant_fc_flags: str
-) -> None:
-    """Update ``FCopt`` and disable PGSTAR inside a copied MESA worktree."""
+) -> str:
+    """Update top-level ``FCopt`` and disable PGSTAR loudly in header.
+
+    Args:
+        header_path: Path to ``utils/makefile_header`` inside the copied tree.
+        variant_fc_flags: Non-empty compiler flag string for top-level
+            ``FCopt``.
+
+    Returns:
+        Previous top-level ``FCopt`` right-hand side prior to replacement.
+
+    Raises:
+        ValueError: If ``variant_fc_flags`` is empty, expected header lines are
+            missing or duplicated, or the patch would leave ``FCopt`` unchanged.
+    """
+    flags = variant_fc_flags.strip()
+    if not flags:
+        raise ValueError("variant_fc_flags must be non-empty")
+
     lines = header_path.read_text(encoding="utf-8").splitlines()
     out: list[str] = []
+    pgstar_count = 0
+    previous_fcopt: list[str] = []
     for ln in lines:
-        if ln.startswith("USE_PGSTAR ="):
+        if _PGSTAR_LINE_RE.match(ln):
+            pgstar_count += 1
             out.append("USE_PGSTAR = NO")
-        elif ln.startswith("FCopt ="):
-            out.append(f"FCopt = {variant_fc_flags}")
+        elif (m := _FCOPT_LINE_RE.match(ln)) is not None:
+            previous_fcopt.append(m.group(1).strip())
+            out.append(f"FCopt = {flags}")
         else:
             out.append(ln)
+
+    if pgstar_count == 0:
+        raise ValueError(
+            f"No top-level 'USE_PGSTAR =' line found in {header_path}"
+        )
+    if len(previous_fcopt) != 1:
+        raise ValueError(
+            f"Expected exactly 1 top-level 'FCopt =' line in {header_path}, "
+            f"found {len(previous_fcopt)}"
+        )
+    if previous_fcopt[0] == flags:
+        raise ValueError(
+            f"Patching {header_path} would leave 'FCopt' unchanged ({flags!r})"
+        )
+
     header_path.write_text("\n".join(out) + "\n", encoding="utf-8")
+    verified = read_makefile_header_fcopt(header_path)
+    if verified != flags:
+        raise ValueError(
+            f"Verified 'FCopt' after patching {header_path} was {verified!r}, "
+            f"expected {flags!r}"
+        )
+    return previous_fcopt[0]
 
 
 def plan_alt_mesa_commands(
@@ -512,13 +786,31 @@ def _install_variant_mesa(
     alt_dir: pathlib.Path,
     sdk_root: pathlib.Path,
     var_cfg: CompilerConfigSpec,
+    *,
+    build_jobs: int = 4,
 ) -> None:
     """Clone baseline MESA tree, patch flags, and rebuild cleanly."""
     if not mesa_dir.is_dir():
         raise FileNotFoundError(f"MESA_DIR not found: {mesa_dir}")
     if not sdk_root.is_dir():
         raise FileNotFoundError(f"MESASDK_ROOT not found: {sdk_root}")
+    base_ver = probe_mesa_version(mesa_dir)
     if alt_dir.exists():
+        alt_ver = probe_mesa_version(alt_dir)
+        if alt_ver != base_ver:
+            raise ValueError(
+                f"Existing alt MESA version {alt_ver[1]!r} does not match "
+                f"baseline {base_ver[1]!r} at {alt_dir}"
+            )
+        alt_fcopt = read_makefile_header_fcopt(
+            alt_dir / "utils" / "makefile_header"
+        )
+        expected_fcopt = var_cfg.fc_flags.strip()
+        if alt_fcopt != expected_fcopt:
+            raise ValueError(
+                f"Existing alt MESA FCopt {alt_fcopt!r} does not match "
+                f"expected {expected_fcopt!r} at {alt_dir}"
+            )
         return
     shutil.copytree(mesa_dir, alt_dir, symlinks=True)
     _patch_makefile_header(
@@ -532,7 +824,7 @@ def _install_variant_mesa(
     env = _mesa_subprocess_env(
         alt_dir, sdk_root, var_cfg.math_slot, var_cfg.omp_num_threads
     )
-    env["NPROCS"] = "4"
+    env["NPROCS"] = str(max(1, build_jobs))
     subprocess.run(
         ["bash", "-c", install_script], cwd=str(alt_dir), env=env, check=True
     )
@@ -606,6 +898,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--baseline-math-slot", default=DEFAULT_MATH_SLOT)
     parser.add_argument("--variant-math-slot", default=DEFAULT_MATH_SLOT)
     parser.add_argument("--omp-threads", type=int, default=1)
+    parser.add_argument("--build-jobs", type=int, default=4)
     parser.add_argument(
         "--cases",
         nargs="+",
@@ -637,8 +930,12 @@ def _execute_live_spread(
     base_cfg: CompilerConfigSpec,
     var_cfg: CompilerConfigSpec,
     cases: Sequence[tuple[str, str]],
+    *,
+    build_jobs: int = 4,
 ) -> list[CaseSpreadResult]:
-    _install_variant_mesa(mesa_dir, alt_dir, sdk_root, var_cfg)
+    _install_variant_mesa(
+        mesa_dir, alt_dir, sdk_root, var_cfg, build_jobs=build_jobs
+    )
     work_base = alt_dir.parent / "mesa-spread-runs-base"
     work_var = alt_dir.parent / "mesa-spread-runs-alt"
     work_base.mkdir(parents=True, exist_ok=True)
@@ -691,6 +988,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     spreads: list[CaseSpreadResult] = []
     planned: list[str] = []
+    mesa_version = UNPROBED_MESA_VERSION
+    mesa_version_raw = UNPROBED_MESA_VERSION
+    toolchain: ToolchainProvenance | None = None
     if ns.compare_histories:
         for suite_case, b_hist, v_hist in ns.compare_histories:
             suite, case = _parse_suite_case(suite_case)
@@ -702,14 +1002,45 @@ def main(argv: Sequence[str] | None = None) -> int:
                     pathlib.Path(v_hist).resolve(),
                 )
             )
+        if (mesa_dir / "data" / "version_number").is_file():
+            mesa_version, mesa_version_raw = probe_mesa_version(mesa_dir)
+        elif spreads and "version_number" in spreads[0].baseline_header:
+            mesa_version_raw = spreads[0].baseline_header["version_number"]
+            mesa_version = _normalize_mesa_version(mesa_version_raw)
     elif ns.dry_run:
         planned = plan_alt_mesa_commands(
             mesa_dir, sdk_root, alt_dir, var_cfg, cases
         )
+        if (mesa_dir / "data" / "version_number").is_file():
+            mesa_version, mesa_version_raw = probe_mesa_version(mesa_dir)
+        if (sdk_root / "bin" / "mesasdk_version").is_file() and (
+            sdk_root / "bin" / "gfortran"
+        ).is_file():
+            toolchain = probe_toolchain(
+                sdk_root, mesa_dir, ns.baseline_math_slot
+            )
     else:
-        spreads = _execute_live_spread(
-            mesa_dir, sdk_root, alt_dir, base_cfg, var_cfg, cases
+        mesa_version, mesa_version_raw = probe_mesa_version(mesa_dir)
+        toolchain = probe_toolchain(sdk_root, mesa_dir, ns.baseline_math_slot)
+        base_fcopt = read_makefile_header_fcopt(
+            mesa_dir / "utils" / "makefile_header"
         )
+        spreads = _execute_live_spread(
+            mesa_dir,
+            sdk_root,
+            alt_dir,
+            base_cfg,
+            var_cfg,
+            cases,
+            build_jobs=int(ns.build_jobs),
+        )
+        var_fcopt = read_makefile_header_fcopt(
+            alt_dir / "utils" / "makefile_header"
+        )
+        base_cfg = dataclasses.replace(
+            base_cfg, makefile_header_fcopt=base_fcopt
+        )
+        var_cfg = dataclasses.replace(var_cfg, makefile_header_fcopt=var_fcopt)
 
     report = build_spread_report(
         base_cfg,
@@ -717,6 +1048,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         spreads,
         dry_run=bool(ns.dry_run),
         planned_commands=planned,
+        mesa_version=mesa_version,
+        mesa_version_raw=mesa_version_raw,
+        toolchain=toolchain,
     )
     md_text = render_spread_markdown(report)
     if ns.json_out is not None:

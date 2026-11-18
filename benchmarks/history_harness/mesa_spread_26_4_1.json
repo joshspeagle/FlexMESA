@@ -1,18 +1,27 @@
 {
   "schema_version": "1.0",
   "mesa_version": "26.4.1",
+  "mesa_version_raw": "r26.4.1",
   "dry_run": false,
+  "toolchain": {
+    "mesasdk_version": "x86_64-linux-26.6.1",
+    "gfortran_version": "GNU Fortran (GCC) 15.2.0",
+    "target_triple": "x86_64-pc-linux-gnu",
+    "math_slot": "crmath"
+  },
   "baseline_config": {
     "name": "baseline_o2",
     "fc_flags": "-O2 -ftree-vectorize",
     "math_slot": "crmath",
-    "omp_num_threads": 1
+    "omp_num_threads": 1,
+    "makefile_header_fcopt": "-O${OPT_LEVEL} -ftree-vectorize"
   },
   "variant_config": {
     "name": "variant_alt",
     "fc_flags": "-O0 -fno-tree-vectorize -ffp-contract=off",
     "math_slot": "crmath",
-    "omp_num_threads": 1
+    "omp_num_threads": 1,
+    "makefile_header_fcopt": "-O0 -fno-tree-vectorize -ffp-contract=off"
   },
   "planned_commands": [],
   "cases": [
@@ -32,6 +41,22 @@
       "files_byte_identical": true,
       "baseline_sha256": "3b2dfacaaa2018d58a6d73b189e4dda0797c59d63ad586cc5d888c064941117b",
       "variant_sha256": "3b2dfacaaa2018d58a6d73b189e4dda0797c59d63ad586cc5d888c064941117b",
+      "baseline_header": {
+        "version_number": "r26.4.1",
+        "compiler": "gfortran",
+        "build": "15.2.0",
+        "MESA_SDK_version": "x86_64-linux-26.6.1",
+        "math_backend": "CRMATH",
+        "date": "20261117"
+      },
+      "variant_header": {
+        "version_number": "r26.4.1",
+        "compiler": "gfortran",
+        "build": "15.2.0",
+        "MESA_SDK_version": "x86_64-linux-26.6.1",
+        "math_backend": "CRMATH",
+        "date": "20261117"
+      },
       "top_columns_by_ulp": [
         {
           "column": "Lnuc",
@@ -131,6 +156,20 @@
       "files_byte_identical": true,
       "baseline_sha256": "b061591e0304601662bf3c21cb4ed03e795f6a93e73fddb9ac39a0eacf6df0bd",
       "variant_sha256": "b061591e0304601662bf3c21cb4ed03e795f6a93e73fddb9ac39a0eacf6df0bd",
+      "baseline_header": {
+        "version_number": "r26.4.1",
+        "compiler": "gfortran",
+        "build": "15.2.0",
+        "MESA_SDK_version": "x86_64-linux-26.6.1",
+        "date": "20261117"
+      },
+      "variant_header": {
+        "version_number": "r26.4.1",
+        "compiler": "gfortran",
+        "build": "15.2.0",
+        "MESA_SDK_version": "x86_64-linux-26.6.1",
+        "date": "20261117"
+      },
       "top_columns_by_ulp": [
         {
           "column": "J_orb",

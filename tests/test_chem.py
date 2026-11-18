@@ -1,15 +1,15 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
 r"""Verification suite for `flexmesa.chem` (`Wave 2a`).
 
-Validates the Three-Tier Hybrid `chem` implementation against:
+Validates `flexmesa.chem` against:
 1. 100% of the golden output in upstream MESA `chem/test/test_output` (`o16`
    properties, `AG89 zsol/yesol`, `CNO/Z` across solar scales, `Lodders 2003`
    atom percentages, `composition_info` on a 50/50 `c12`-`fe56` mixture, and
    `reaction_Qtotal` on $2\,{}^3\mathrm{He} \to {}^4\mathrm{He} +
    2\,{}^1\mathrm{H}$).
-2. Two-tier parity (`<= 1e-14` relative error) between Safe Rust (`PyO3` +
-   `rayon`) and `@jax.jit` (`get_composition_info_jax`) across 20 deterministic
-   random simplex compositions.
+2. Cross-backend consistency (`<= 1e-14` relative error) between Safe Rust
+   (`strict` mode, `PyO3` + `rayon`) and `@jax.jit` (`get_composition_info_jax`)
+   across 20 deterministic random simplex compositions.
 3. Automatic differentiation (`jax.test_util.check_grads` and `jax.jacrev`) on
    `get_composition_info_jax`.
 """
@@ -22,6 +22,7 @@ import numpy as np
 import pytest
 from jax import test_util as jtu
 
+import flexmesa
 from flexmesa import _rust, chem
 
 
@@ -232,8 +233,8 @@ def test_reaction_qtotal_two_he3_to_he4_plus_two_h1() -> None:
     assert np.isclose(qtotal, 1.2859572850000005e1, rtol=1e-15, atol=0.0)
 
 
-def test_composition_info_zones_rust_vs_jax_across_random_seeds() -> None:
-    r"""Verify multi-zone Rust (`rayon`) vs. `@jax.jit` parity across seeds.
+def test_composition_info_zones_rust_jax_consistency_across_seeds() -> None:
+    r"""Verify multi-zone Rust (`strict`) vs `@jax.jit` consistency.
 
     Evaluates 128 zones of 9-isotope Dirichlet mass-fraction mixtures across 20
     deterministic `np.random.default_rng(seed)` seeds and checks conservation
@@ -241,43 +242,44 @@ def test_composition_info_zones_rust_vs_jax_across_random_seeds() -> None:
     """
     species = ["h1", "he3", "he4", "c12", "n14", "o16", "ne20", "mg24", "fe56"]
     n_zones = 128
-    for seed in range(20):
-        rng = np.random.default_rng(seed)
-        raw = rng.dirichlet(np.ones(len(species)), size=n_zones)
-        x_zones = np.ascontiguousarray(raw, dtype=np.float64)
+    with flexmesa.numerics_mode_context("strict"):
+        for seed in range(20):
+            rng = np.random.default_rng(seed)
+            raw = rng.dirichlet(np.ones(len(species)), size=n_zones)
+            x_zones = np.ascontiguousarray(raw, dtype=np.float64)
 
-        out_rust_par = chem.get_composition_info_zones(
-            species, x_zones, parallel=True, backend="rust"
-        )
-        out_rust_seq = chem.get_composition_info_zones(
-            species, x_zones, parallel=False, backend="rust"
-        )
-        out_jax = np.asarray(
-            chem.get_composition_info_zones(
-                species, jnp.asarray(x_zones), backend="jax"
-            ),
-            dtype=np.float64,
-        )
+            out_rust_par = chem.get_composition_info_zones(
+                species, x_zones, parallel=True, backend="rust"
+            )
+            out_rust_seq = chem.get_composition_info_zones(
+                species, x_zones, parallel=False, backend="rust"
+            )
+            out_jax = np.asarray(
+                chem.get_composition_info_zones(
+                    species, jnp.asarray(x_zones), backend="jax"
+                ),
+                dtype=np.float64,
+            )
 
-        np.testing.assert_allclose(
-            out_rust_par, out_rust_seq, rtol=1e-15, atol=1e-15
-        )
-        np.testing.assert_allclose(
-            out_rust_par, out_jax, rtol=1e-14, atol=1e-14
-        )
-        # Conservation identities: X_H + X_He + Z == 1 and Y_e == Zbar / Abar
-        np.testing.assert_allclose(
-            out_rust_par[:, 0] + out_rust_par[:, 1] + out_rust_par[:, 2],
-            1.0,
-            rtol=1e-14,
-            atol=1e-14,
-        )
-        np.testing.assert_allclose(
-            out_rust_par[:, 7],
-            out_rust_par[:, 4] / out_rust_par[:, 3],
-            rtol=1e-15,
-            atol=1e-15,
-        )
+            np.testing.assert_allclose(
+                out_rust_par, out_rust_seq, rtol=1e-15, atol=1e-15
+            )
+            np.testing.assert_allclose(
+                out_rust_par, out_jax, rtol=1e-14, atol=1e-14
+            )
+            # Conservation identities: X_H + X_He + Z == 1 and Y_e == Zbar/Abar
+            np.testing.assert_allclose(
+                out_rust_par[:, 0] + out_rust_par[:, 1] + out_rust_par[:, 2],
+                1.0,
+                rtol=1e-14,
+                atol=1e-14,
+            )
+            np.testing.assert_allclose(
+                out_rust_par[:, 7],
+                out_rust_par[:, 4] / out_rust_par[:, 3],
+                rtol=1e-15,
+                atol=1e-15,
+            )
 
 
 def test_composition_info_jax_autodiff_and_analytical_partials() -> None:

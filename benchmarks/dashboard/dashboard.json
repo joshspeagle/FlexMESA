@@ -22,7 +22,7 @@
         "pct_ported": 14.9,
         "pct_verified": 0.0,
         "rust_lines": 57764,
-        "python_jax_lines": 4723
+        "python_jax_lines": 4735
       },
       {
         "module": "star_data",
@@ -56,7 +56,7 @@
         "pct_ported": 18.2,
         "pct_verified": 0.0,
         "rust_lines": 9935,
-        "python_jax_lines": 1242
+        "python_jax_lines": 1253
       },
       {
         "module": "astero",
@@ -73,7 +73,7 @@
         "pct_ported": 0.0,
         "pct_verified": 0.0,
         "rust_lines": 6219,
-        "python_jax_lines": 1206
+        "python_jax_lines": 1260
       },
       {
         "module": "eos",
@@ -90,7 +90,7 @@
         "pct_ported": 0.0,
         "pct_verified": 0.0,
         "rust_lines": 13253,
-        "python_jax_lines": 9726
+        "python_jax_lines": 9743
       },
       {
         "module": "kap",
@@ -107,7 +107,7 @@
         "pct_ported": 0.0,
         "pct_verified": 0.0,
         "rust_lines": 4468,
-        "python_jax_lines": 3078
+        "python_jax_lines": 3093
       },
       {
         "module": "net",
@@ -141,7 +141,7 @@
         "pct_ported": 0.0,
         "pct_verified": 0.0,
         "rust_lines": 3179,
-        "python_jax_lines": 1474
+        "python_jax_lines": 1476
       },
       {
         "module": "neu",
@@ -158,7 +158,7 @@
         "pct_ported": 83.9,
         "pct_verified": 0.0,
         "rust_lines": 1916,
-        "python_jax_lines": 2600
+        "python_jax_lines": 2648
       },
       {
         "module": "atm",
@@ -209,7 +209,7 @@
         "pct_ported": 0.0,
         "pct_verified": 0.0,
         "rust_lines": 2338,
-        "python_jax_lines": 898
+        "python_jax_lines": 930
       },
       {
         "module": "ionization",
@@ -226,7 +226,7 @@
         "pct_ported": 0.0,
         "pct_verified": 0.0,
         "rust_lines": 2846,
-        "python_jax_lines": 982
+        "python_jax_lines": 1033
       },
       {
         "module": "colors",
@@ -243,7 +243,7 @@
         "pct_ported": 0.0,
         "pct_verified": 0.0,
         "rust_lines": 2453,
-        "python_jax_lines": 1499
+        "python_jax_lines": 1500
       },
       {
         "module": "num",
@@ -294,7 +294,7 @@
         "pct_ported": 0.0,
         "pct_verified": 0.0,
         "rust_lines": 1194,
-        "python_jax_lines": 1297
+        "python_jax_lines": 1302
       },
       {
         "module": "interp_2d",
@@ -311,7 +311,7 @@
         "pct_ported": 0.9,
         "pct_verified": 0.0,
         "rust_lines": 2687,
-        "python_jax_lines": 2274
+        "python_jax_lines": 2288
       },
       {
         "module": "auto_diff",

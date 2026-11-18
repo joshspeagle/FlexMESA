@@ -6,17 +6,23 @@ period spacings, glitch acoustic depths, surface-effect frequency corrections
 (`kjeldsen`, `cubic`, `combined`, `power_law`, `sonoi`), frequency separation
 ratios ($r_{01}, r_{10}, r_{02}$), mode matching, composite $\\chi^2$
 evaluation, and Nelder-Mead / Powell quadratic / Cartesian grid optimization
-drivers across Safe Rust and JAX.
+drivers in canonical Safe Rust alongside frozen JAX helpers.
 
 Note:
-    The coupled `astero/test_suite` search and evolution drivers are unverified
-    against real MESA output (pending #143, #162, #170, and #171).
+    The JAX `astero` helper kernels (`jax_kernels`;
+    `JAX_ENGINE_STATUS == "frozen-unverified-until-#143"`) are **frozen and
+    unverified** under `#166` (`DECISIONS #17`), and the coupled
+    `astero/test_suite` search and evolution drivers are unverified against
+    real MESA output (pending #143, #162, #170, and #171).
 """
 
 from __future__ import annotations
 
+from flexmesa import _dispatch
 from flexmesa.astero import drivers, jax_kernels, scaling_corr
 from flexmesa.star import e2e_tier45
+
+JAX_ENGINE_STATUS: str = _dispatch.FROZEN_JAX_ENGINE_STATUS
 
 TIER4_ASTERO_CASES = e2e_tier45.TIER4_ASTERO_CASES
 run_astero_suite = e2e_tier45.run_astero_suite
@@ -41,6 +47,7 @@ powell_quadratic_minimize = drivers.powell_quadratic_minimize
 scan_cartesian_grid = drivers.scan_cartesian_grid
 
 __all__ = [
+    "JAX_ENGINE_STATUS",
     "TIER4_ASTERO_CASES",
     "drivers",
     "eval_acoustic_profile",

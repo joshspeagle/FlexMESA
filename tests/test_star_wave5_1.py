@@ -10,29 +10,38 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+import flexmesa
 from flexmesa import _rust, star
 
 
-def test_rotation_fp_ft_and_omega_crit_rust_jax_parity_and_autodiff() -> None:
-    """Verify Fabry et al. (2022) / Paxton et al. (2019) Roche distortion
-    polynomials and critical rotation frequency match between Rust and JAX
-    to 1e-14 and support exact JAX autodiff.
+def test_rotation_fp_ft_and_omega_crit_rust_jax_consistency_and_autodiff() -> (
+    None
+):
+    """Verify Roche distortion polynomials and omega_crit Rust-JAX match.
+
+    Checks Fabry et al. (2022) and Paxton et al. (2019) expressions across
+    Safe Rust (`strict`) and frozen `star` JAX kernels to 1e-14.
     """
-    for w in [0.0, 0.2, 0.5, 0.85, 0.95]:
-        fp_r, ft_r, i_r = _rust.star_eval_rotation_fp_ft(w, 0.5, 0.5)
-        fp_j, ft_j, i_j = star.eval_rotation_fp_ft_jax(jnp.asarray(w), 0.5, 0.5)
-        assert abs(fp_r - float(fp_j)) <= 1.0e-14
-        assert abs(ft_r - float(ft_j)) <= 1.0e-14
-        assert abs(i_r - float(i_j)) <= 1.0e-14
+    with flexmesa.numerics_mode_context("strict"):
+        for w in [0.0, 0.2, 0.5, 0.85, 0.95]:
+            fp_r, ft_r, i_r = _rust.star_eval_rotation_fp_ft(w, 0.5, 0.5)
+            fp_j, ft_j, i_j = star.eval_rotation_fp_ft_jax(
+                jnp.asarray(w), 0.5, 0.5
+            )
+            assert abs(fp_r - float(fp_j)) <= 1.0e-14
+            assert abs(ft_r - float(ft_j)) <= 1.0e-14
+            assert abs(i_r - float(i_j)) <= 1.0e-14
 
-    dfp_dw = float(
-        jax.grad(lambda x: star.eval_rotation_fp_ft_jax(x, 0.5, 0.5)[0])(0.5)
-    )
-    assert dfp_dw < -0.5
+        dfp_dw = float(
+            jax.grad(lambda x: star.eval_rotation_fp_ft_jax(x, 0.5, 0.5)[0])(
+                0.5
+            )
+        )
+        assert dfp_dw < -0.5
 
-    om_r = _rust.star_eval_omega_crit(
-        6.6743e-8, 1.9884e33, 6.957e10, 3.828e33, 0.34, 0.99
-    )
+        om_r = _rust.star_eval_omega_crit(
+            6.6743e-8, 1.9884e33, 6.957e10, 3.828e33, 0.34, 0.99
+        )
     om_j = float(
         star.eval_omega_crit_jax(
             jnp.asarray(6.6743e-8),
@@ -46,11 +55,10 @@ def test_rotation_fp_ft_and_omega_crit_rust_jax_parity_and_autodiff() -> None:
     assert abs(om_r - om_j) / om_r <= 1.0e-14
 
 
-def test_rotational_instabilities_and_spruit_tayler_rust_jax_parity() -> None:
-    """Verify all five rotational instabilities (DSI, SH, SSI, ES, GSF) and
-    the Spruit-Tayler dynamo match between Rust and JAX to 1e-13 with
-    NaN-free reverse-mode autodiff across all outputs and at zero shear.
-    """
+def test_rotational_instabilities_and_spruit_tayler_rust_jax_consistency() -> (
+    None
+):
+    """Verify five rotational instabilities and Spruit-Tayler consistency."""
     args = (
         3.0e10,
         5.0e9,
@@ -70,17 +78,20 @@ def test_rotational_instabilities_and_spruit_tayler_rust_jax_parity() -> None:
         1.3,
         1.1,
     )
-    res_r = _rust.star_eval_rotational_mixing_zone(*args)
-    res_j = star.eval_rotational_mixing_zone_jax(
-        *(jnp.asarray(x) for x in args)
-    )
-    for k, (vr, vj) in enumerate(zip(res_r, res_j, strict=True)):
-        scale = max(abs(vr), 1.0)
-        assert abs(vr - float(vj)) / scale <= 1.0e-13, f"mismatch at slot {k}"
+    with flexmesa.numerics_mode_context("strict"):
+        res_r = _rust.star_eval_rotational_mixing_zone(*args)
+        res_j = star.eval_rotational_mixing_zone_jax(
+            *(jnp.asarray(x) for x in args)
+        )
+        for k, (vr, vj) in enumerate(zip(res_r, res_j, strict=True)):
+            scale = max(abs(vr), 1.0)
+            assert abs(vr - float(vj)) / scale <= 1.0e-13, (
+                f"mismatch at slot {k}"
+            )
 
-    # Verify omega = 0 validity gate matches between Rust and JAX
-    args_zero_om = (*args[:11], -1.0e-5, 0.0, 0.0, 0.5, 1.3, 1.1)
-    res_r0 = _rust.star_eval_rotational_mixing_zone(*args_zero_om)
+        # Verify omega = 0 validity gate matches between Rust and JAX
+        args_zero_om = (*args[:11], -1.0e-5, 0.0, 0.0, 0.5, 1.3, 1.1)
+        res_r0 = _rust.star_eval_rotational_mixing_zone(*args_zero_om)
     res_j0 = star.eval_rotational_mixing_zone_jax(
         *(jnp.asarray(x) for x in args_zero_om)
     )
@@ -112,30 +123,29 @@ def test_rotational_instabilities_and_spruit_tayler_rust_jax_parity() -> None:
         assert np.isfinite(g_q0)
 
 
-def test_burgers_diffusion_and_caplan_ocp_rust_jax_parity_and_mass_flux() -> (
-    None
-):
-    """Verify multi-species Burgers velocities and Caplan et al. (2022) OCP
-    corrections match between Rust and JAX and conserve total mass flux.
-    """
-    for gam, kap in [(5.0, 0.5), (20.0, 1.2), (100.0, 0.8)]:
-        d_r = _rust.star_eval_caplan_ocp_dstar(gam, kap)
-        d_j = float(
-            star.eval_caplan_ocp_dstar_jax(jnp.asarray(gam), jnp.asarray(kap))
+def test_burgers_and_caplan_ocp_consistency_and_flux() -> None:
+    """Verify Burgers velocities and Caplan OCP Rust-JAX consistency."""
+    with flexmesa.numerics_mode_context("strict"):
+        for gam, kap in [(5.0, 0.5), (20.0, 1.2), (100.0, 0.8)]:
+            d_r = _rust.star_eval_caplan_ocp_dstar(gam, kap)
+            d_j = float(
+                star.eval_caplan_ocp_dstar_jax(
+                    jnp.asarray(gam), jnp.asarray(kap)
+                )
+            )
+            assert abs(d_r - d_j) / d_r <= 1.0e-14
+
+        a = np.array([1.0, 4.0, 16.0], dtype=np.float64)
+        z = np.array([1.0, 2.0, 8.0], dtype=np.float64)
+        x = np.array([0.70, 0.28, 0.02], dtype=np.float64)
+        rho = 10.0
+        t = 1.2e7
+        dlnt_dr = -1.5e-10
+        g_grav = 2.74e4
+
+        v_r, diff_r, ee_r = _rust.star_eval_burgers_velocities(
+            a, z, x, rho, t, dlnt_dr, g_grav, None, "stanton_murillo"
         )
-        assert abs(d_r - d_j) / d_r <= 1.0e-14
-
-    a = np.array([1.0, 4.0, 16.0], dtype=np.float64)
-    z = np.array([1.0, 2.0, 8.0], dtype=np.float64)
-    x = np.array([0.70, 0.28, 0.02], dtype=np.float64)
-    rho = 10.0
-    t = 1.2e7
-    dlnt_dr = -1.5e-10
-    g_grav = 2.74e4
-
-    v_r, diff_r, ee_r = _rust.star_eval_burgers_velocities(
-        a, z, x, rho, t, dlnt_dr, g_grav, None, "stanton_murillo"
-    )
     v_j, d_j, ee_j = star.eval_burgers_velocities_jax(
         jnp.asarray(a),
         jnp.asarray(z),

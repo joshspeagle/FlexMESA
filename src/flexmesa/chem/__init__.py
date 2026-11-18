@@ -1,24 +1,22 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
 r"""Public interface for `flexmesa.chem` (`chem` chemical elements & nuclides).
 
-Re-exports the Safe Rust periodic table, Anders & Grevesse (1989) + Lodders
-(2003) 286-isotope catalog, 10 solar elemental abundance scales (`AG89` through
-`AAG21`), reaction $Q$-value evaluators (`reaction_qtotal`), and Three-Tier
-Hybrid composition moment kernels (`get_composition_info`,
-`basic_composition_info`, `composition_info`, `get_composition_info_jax`, and
-`get_composition_info_zones`).
+Re-exports the canonical Safe Rust periodic table, Anders & Grevesse (1989) +
+Lodders (2003) 286-isotope catalog, 10 solar elemental abundance scales (`AG89`
+through `AAG21`), reaction $Q$-value evaluators (`reaction_qtotal`), and
+composition moment kernels (`get_composition_info`, `basic_composition_info`,
+`composition_info`, `get_composition_info_jax`, and
+`get_composition_info_zones`) with Safe Rust as canonical (`strict` mode) and
+derived `float64` JAX kernels for automatic differentiation and batching.
 
 Architecture & Submodules:
-    - `flexmesa.chem.catalog` (Tier A): Periodic table ($Z \in [0, 112]$),
-      347-nuclide nuclear data table (`isotopes.data`), 286-isotope Anders &
-      Grevesse (1989) + Lodders (2003) solar abundances, 10 solar abundance
-      scales (`AG89`, `GN93`, `GS98`, `L03`, `AGS05`, `AGSS09`, `L09`,
-      `A09_Prz`, `MB22`, `AAG21`), and reaction $Q$-values (`reaction_qtotal`).
-    - `flexmesa.chem.composition` (Tier B): Exact double-precision composition
-      moments ($\bar{A}, \bar{Z}, Y_e, z_2\bar{}, z_{5/3}\bar{}, \sum Y_i Q_i$)
-      with analytical partial derivatives $\partial / \partial X_i$, JAX JIT
-      support, and parallel multi-zone evaluation
-      (`get_composition_info_zones`).
+    - `flexmesa.chem.catalog`: Static catalogs and reaction $Q$-values backed
+      by Safe Rust (`Z in [0, 112]`, `isotopes.data`, `AG89`, `GN93`, `GS98`,
+      `L03`, `AGS05`, `AGSS09`, `L09`, `A09_Prz`, `MB22`, `AAG21`).
+    - `flexmesa.chem.composition`: Composition moments ($\bar{A}, \bar{Z},
+      Y_e, z_2\bar{}, z_{5/3}\bar{}, \sum Y_i Q_i$) and analytical partial
+      derivatives $\partial / \partial X_i$ in Safe Rust (canonical) and
+      `@jax.jit` (derived, validated against Rust `strict` mode).
 """
 
 from __future__ import annotations

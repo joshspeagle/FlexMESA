@@ -84,7 +84,9 @@ def screen_pair(
         [`ScreenEval`] on `"rust"` backend, or `(scor, dscor_dt, dscor_dd)` JAX
         `float64` arrays on `"jax"` backend.
     """
-    resolved = _dispatch.resolve_backend(backend, temp, den, zbar, abar, z2bar)
+    resolved = _dispatch.resolve_backend(
+        backend, temp, den, zbar, abar, z2bar, a1, z1, a2, z2
+    )
     m = mode.strip().lower()
     if resolved == "jax":
         t_j = jnp.asarray(temp, dtype=jnp.float64)

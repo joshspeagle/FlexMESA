@@ -6,12 +6,22 @@ angular momentum loss, tidal evolution, and coupled binary star evolution
 Corresponds to the upstream Fortran MESA `binary/` module. The coupled
 `BinarySystem` evolution driver and `binary/test_suite` runner are unverified
 against real MESA output (pending #143, #154, and #160).
+
+Note:
+    The JAX `binary` helper kernels (`jax_kernels`, `jax_orbit_mdot`,
+    `jax_jdot_tides`; `JAX_ENGINE_STATUS == "frozen-unverified-until-#143"`)
+    are **frozen and unverified** under `#166` (`DECISIONS #17`) until the
+    canonical Rust engine passes the `#143` upstream MESA `26.4.1` history
+    harness.
 """
 
 from __future__ import annotations
 
+from flexmesa import _dispatch
 from flexmesa.binary import jax_kernels, orbit_mdot, system
 from flexmesa.star import e2e_tier45
+
+JAX_ENGINE_STATUS: str = _dispatch.FROZEN_JAX_ENGINE_STATUS
 
 BinarySystem = system.BinarySystem
 TIER5_BINARY_CASES = e2e_tier45.TIER5_BINARY_CASES
@@ -49,6 +59,7 @@ eval_jdot_mb_jax = jax_kernels.eval_jdot_mb_jax
 eval_edot_tidal_hut_jax = jax_kernels.eval_edot_tidal_hut_jax
 
 __all__ = [
+    "JAX_ENGINE_STATUS",
     "TIER5_BINARY_CASES",
     "BinarySystem",
     "eval_bh_spin_and_edd_jax",

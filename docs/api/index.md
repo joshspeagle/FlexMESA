@@ -36,9 +36,9 @@ To keep each reference page fast to load and easy to navigate, the Python and JA
 
 ---
 
-## Hybrid Backend Dispatch & Numerics Modes (`flexmesa._dispatch`)
+## Backend Dispatch & Numerics Modes (`flexmesa._dispatch`)
 
-Every Tier B and Tier C physics function accepts `backend="auto" | "rust" | "jax"`, while Rust arithmetic defaults to hardware-independent `"strict"` mode (`get_numerics_mode`, `set_numerics_mode`, `numerics_mode_context`). Under `backend="auto"` (the default), calls passing `numpy.ndarray` or Python float arguments route zero-copy to `flexmesa._rust`, whereas calls passing `jax.Array` or JAX tracer arguments (`jax.grad`, `jax.vmap`, `jax.jit`) route to native `@jax.jit` kernels.
+Functions with both Safe Rust and derived JAX backends accept `backend="auto" | "rust" | "jax"`, while Rust arithmetic defaults to hardware-independent `"strict"` mode (`get_numerics_mode`, `set_numerics_mode`, `numerics_mode_context`). Under `backend="auto"` (the default), `resolve_backend` inspects all scalar, array, and nested tuple/list/dict numeric inputs: calls without JAX leaves route to canonical `flexmesa._rust`, whereas calls carrying any `jax.Array` or JAX tracer (`jax.grad`, `jax.vmap`, `jax.jit`) route to the derived `float64` JAX kernel (validated against Rust `"strict"` mode, `#166`; see the [Backends, JAX Contract & Custom Gradients guide](../guides/backends-and-performance.md) for per-module AD mode and device caveats).
 
 ```python
 import jax.numpy as jnp

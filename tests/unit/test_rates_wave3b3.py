@@ -10,6 +10,7 @@ import jax.numpy as jnp
 import numpy as np
 import numpy.testing as npt
 
+import flexmesa
 from flexmesa import chem, eos, rates
 from flexmesa.testing import golden
 
@@ -67,34 +68,97 @@ def test_section1_screening_modes_and_jax_autodiff_match_golden() -> None:
         "no_screening": (1.0, 0.0, 0.0),
     }
 
-    for mode, (exp_s, exp_dt, exp_dd) in oracles.items():
-        res = rates.screen_pair(
-            mode, temp, den, zbar, abar, z2bar, a1, z1, a2, z2, backend="rust"
-        )
-        assert isinstance(res, rates.ScreenEval)
-        npt.assert_allclose(res.scor, exp_s, rtol=1e-13, atol=1e-15)
-        npt.assert_allclose(res.dscor_dt, exp_dt, rtol=1e-13, atol=1e-15)
-        npt.assert_allclose(res.dscor_dd, exp_dd, rtol=1e-13, atol=1e-15)
+    with flexmesa.numerics_mode_context("strict"):
+        for mode, (exp_s, exp_dt, exp_dd) in oracles.items():
+            res = rates.screen_pair(
+                mode,
+                temp,
+                den,
+                zbar,
+                abar,
+                z2bar,
+                a1,
+                z1,
+                a2,
+                z2,
+                backend="rust",
+            )
+            assert isinstance(res, rates.ScreenEval)
+            npt.assert_allclose(res.scor, exp_s, rtol=1e-13, atol=1e-15)
+            npt.assert_allclose(res.dscor_dt, exp_dt, rtol=1e-13, atol=1e-15)
+            npt.assert_allclose(res.dscor_dd, exp_dd, rtol=1e-13, atol=1e-15)
 
-        s_j, dt_j, dd_j = rates.screen_pair(
-            mode,
-            jnp.asarray(temp),
-            jnp.asarray(den),
-            zbar,
-            abar,
-            z2bar,
-            a1,
-            z1,
-            a2,
-            z2,
-            backend="jax",
-        )
-        npt.assert_allclose(float(s_j), exp_s, rtol=1e-13, atol=1e-15)
-        npt.assert_allclose(float(dt_j), exp_dt, rtol=1e-13, atol=1e-15)
-        npt.assert_allclose(float(dd_j), exp_dd, rtol=1e-13, atol=1e-15)
+            s_j, dt_j, dd_j = rates.screen_pair(
+                mode,
+                jnp.asarray(temp),
+                jnp.asarray(den),
+                zbar,
+                abar,
+                z2bar,
+                a1,
+                z1,
+                a2,
+                z2,
+                backend="jax",
+            )
+            npt.assert_allclose(float(s_j), exp_s, rtol=1e-13, atol=1e-15)
+            npt.assert_allclose(float(dt_j), exp_dt, rtol=1e-13, atol=1e-15)
+            npt.assert_allclose(float(dd_j), exp_dd, rtol=1e-13, atol=1e-15)
 
-        if mode != "no_screening":
-            grad_t = float(
+            if mode != "no_screening":
+                grad_t = float(
+                    jax.grad(
+                        lambda t_in, m=mode: rates.screen_pair(
+                            m,
+                            t_in,
+                            jnp.asarray(den),
+                            zbar,
+                            abar,
+                            z2bar,
+                            a1,
+                            z1,
+                            a2,
+                            z2,
+                            backend="jax",
+                        )[0]
+                    )(jnp.asarray(temp, dtype=jnp.float64))
+                )
+                grad_d = float(
+                    jax.grad(
+                        lambda d_in, m=mode: rates.screen_pair(
+                            m,
+                            jnp.asarray(temp),
+                            d_in,
+                            zbar,
+                            abar,
+                            z2bar,
+                            a1,
+                            z1,
+                            a2,
+                            z2,
+                            backend="jax",
+                        )[0]
+                    )(jnp.asarray(den, dtype=jnp.float64))
+                )
+                npt.assert_allclose(grad_t, exp_dt, rtol=1e-11)
+                npt.assert_allclose(grad_d, exp_dd, rtol=1e-11)
+
+            # Verify neutral reactant (z1 = 0) yields finite (1, 0, 0) & 0 grad
+            s0, dt0, dd0 = rates.screen_pair(
+                mode,
+                jnp.asarray(temp),
+                jnp.asarray(den),
+                zbar,
+                abar,
+                z2bar,
+                1.0,
+                0.0,
+                a2,
+                z2,
+                backend="jax",
+            )
+            assert (float(s0), float(dt0), float(dd0)) == (1.0, 0.0, 0.0)
+            g0 = float(
                 jax.grad(
                     lambda t_in, m=mode: rates.screen_pair(
                         m,
@@ -103,67 +167,15 @@ def test_section1_screening_modes_and_jax_autodiff_match_golden() -> None:
                         zbar,
                         abar,
                         z2bar,
-                        a1,
-                        z1,
+                        1.0,
+                        0.0,
                         a2,
                         z2,
                         backend="jax",
                     )[0]
                 )(jnp.asarray(temp, dtype=jnp.float64))
             )
-            grad_d = float(
-                jax.grad(
-                    lambda d_in, m=mode: rates.screen_pair(
-                        m,
-                        jnp.asarray(temp),
-                        d_in,
-                        zbar,
-                        abar,
-                        z2bar,
-                        a1,
-                        z1,
-                        a2,
-                        z2,
-                        backend="jax",
-                    )[0]
-                )(jnp.asarray(den, dtype=jnp.float64))
-            )
-            npt.assert_allclose(grad_t, exp_dt, rtol=1e-11)
-            npt.assert_allclose(grad_d, exp_dd, rtol=1e-11)
-
-        # Verify neutral reactant (z1 = 0) yields finite (1, 0, 0) and 0 grad.
-        s0, dt0, dd0 = rates.screen_pair(
-            mode,
-            jnp.asarray(temp),
-            jnp.asarray(den),
-            zbar,
-            abar,
-            z2bar,
-            1.0,
-            0.0,
-            a2,
-            z2,
-            backend="jax",
-        )
-        assert (float(s0), float(dt0), float(dd0)) == (1.0, 0.0, 0.0)
-        g0 = float(
-            jax.grad(
-                lambda t_in, m=mode: rates.screen_pair(
-                    m,
-                    t_in,
-                    jnp.asarray(den),
-                    zbar,
-                    abar,
-                    z2bar,
-                    1.0,
-                    0.0,
-                    a2,
-                    z2,
-                    backend="jax",
-                )[0]
-            )(jnp.asarray(temp, dtype=jnp.float64))
-        )
-        assert g0 == 0.0
+            assert g0 == 0.0
 
     zones = rates.screen_pair_zones(
         "extended",
@@ -274,43 +286,44 @@ def test_section4_all_307_raw_rates_across_9_temps_match_golden() -> None:
 
 def test_sections5_6_7_pycno_rate_table_and_reaclib_jax_match_golden() -> None:
     """Verify FL_epsnuc_3alf, eval_rate_table, and eval_reaclib_handle + JAX."""
-    eps_rust = rates.eval_fl_epsnuc_3alf(
-        1.0e7, 1.0e10, 1.0, 2.0, backend="rust"
-    )
-    eps_jax = rates.eval_fl_epsnuc_3alf(
-        jnp.asarray(1.0e7),
-        jnp.asarray(1.0e10),
-        jnp.asarray(1.0),
-        jnp.asarray(2.0),
-        backend="jax",
-    )
-    npt.assert_allclose(float(eps_rust), 1.1675037697640312e21, rtol=1e-13)
-    npt.assert_allclose(float(eps_jax), 1.1675037697640312e21, rtol=1e-13)
-
-    temp_r3 = 10.0 ** np.log10(9.0e8)
-    r_tab, _ = rates.eval_rate_table("r3", temp_r3)
-    npt.assert_allclose(r_tab, 1.0e-8, rtol=1e-14)
-
-    for handle in ("r_c12_ag_o16", "r_ar36_ga_s32"):
-        f_r, df_r, rev_r, drev_r = rates.eval_reaclib_handle(
-            handle, 2.0, backend="rust"
+    with flexmesa.numerics_mode_context("strict"):
+        eps_rust = rates.eval_fl_epsnuc_3alf(
+            1.0e7, 1.0e10, 1.0, 2.0, backend="rust"
         )
-        f_j, df_j, rev_j, drev_j = rates.eval_reaclib_handle(
-            handle, jnp.asarray(2.0), backend="jax"
+        eps_jax = rates.eval_fl_epsnuc_3alf(
+            jnp.asarray(1.0e7),
+            jnp.asarray(1.0e10),
+            jnp.asarray(1.0),
+            jnp.asarray(2.0),
+            backend="jax",
         )
-        npt.assert_allclose(float(f_j), float(f_r), rtol=1e-13)
-        npt.assert_allclose(float(df_j), float(df_r), rtol=1e-13)
-        npt.assert_allclose(float(rev_j), float(rev_r), rtol=1e-13)
-        npt.assert_allclose(float(drev_j), float(drev_r), rtol=1e-13)
+        npt.assert_allclose(float(eps_rust), 1.1675037697640312e21, rtol=1e-13)
+        npt.assert_allclose(float(eps_jax), 1.1675037697640312e21, rtol=1e-13)
 
-        grad_t9 = float(
-            jax.grad(
-                lambda t9_in, h=handle: rates.eval_reaclib_handle(
-                    h, t9_in, backend="jax"
-                )[0]
-            )(jnp.asarray(2.0, dtype=jnp.float64))
-        )
-        npt.assert_allclose(grad_t9 * 2.0, float(df_r), rtol=1e-12)
+        temp_r3 = 10.0 ** np.log10(9.0e8)
+        r_tab, _ = rates.eval_rate_table("r3", temp_r3)
+        npt.assert_allclose(r_tab, 1.0e-8, rtol=1e-14)
+
+        for handle in ("r_c12_ag_o16", "r_ar36_ga_s32"):
+            f_r, df_r, rev_r, drev_r = rates.eval_reaclib_handle(
+                handle, 2.0, backend="rust"
+            )
+            f_j, df_j, rev_j, drev_j = rates.eval_reaclib_handle(
+                handle, jnp.asarray(2.0), backend="jax"
+            )
+            npt.assert_allclose(float(f_j), float(f_r), rtol=1e-13)
+            npt.assert_allclose(float(df_j), float(df_r), rtol=1e-13)
+            npt.assert_allclose(float(rev_j), float(rev_r), rtol=1e-13)
+            npt.assert_allclose(float(drev_j), float(drev_r), rtol=1e-13)
+
+            grad_t9 = float(
+                jax.grad(
+                    lambda t9_in, h=handle: rates.eval_reaclib_handle(
+                        h, t9_in, backend="jax"
+                    )[0]
+                )(jnp.asarray(2.0, dtype=jnp.float64))
+            )
+            npt.assert_allclose(grad_t9 * 2.0, float(df_r), rtol=1e-12)
 
     f_lo, df_lo, _, _ = rates.eval_reaclib_handle(
         "r_c12_ag_o16", jnp.asarray(0.005), backend="jax"

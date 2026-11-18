@@ -2,8 +2,8 @@
 """Stage `Fidelity-4` (`#115`, closing Epic `#109`) end-to-end verification
 tests for `.mod` checkpoint round-trip fidelity (`M_center`,
 `cumulative_energy_error`, `w`, `w_div_wc`, `alpha_RTI`), multi-step physical
-relaxation loops (`relax.rs`), and 107-case active MESA `test_suite` + 32-case
-`dev_cases_*` physical parity.
+relaxation loops (`relax.rs`), and 106-case active MESA `test_suite` plus
+`dev_cases_*` inventory checks.
 """
 
 from __future__ import annotations
@@ -16,9 +16,11 @@ from flexmesa import binary, star
 from flexmesa.testing import known_gaps_gate
 
 
-def test_fidelity4_mod_and_photo_roundtrip_and_step_redo_parity() -> None:
-    """Verify `.mod` and `.photo` round-trip serialization and step-redo bit
-    parity on a solar-calibrated ZAMS model (`#115`).
+def test_fidelity4_mod_and_photo_roundtrip_and_step_redo_reproducibility() -> (
+    None
+):
+    """Verify `.mod` and `.photo` round-trip serialization and step-redo
+    bit-reproducibility on a solar-calibrated ZAMS model (`#115`).
     """
     m = star.StarModel.from_zams(initial_mass=1.0, initial_z=0.02)
     m.eval_hydro_vars()

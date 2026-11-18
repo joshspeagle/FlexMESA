@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
-"""Unit and golden-baseline parity tests for `flexmesa.neu`.
+"""Unit and upstream reference tests for `flexmesa.neu`.
 
 Verifies:
-    1. Golden baseline parity ($\\le 10^{-10}$ relative error) against all
-       10,000 rows of upstream MESA `neu/test/test_output`
+    1. Upstream MESA reference checks ($\\le 10^{-10}$ relative error) on all
+       10,000 rows of `neu/test/test_output`
        spanning low-temperature cosine cutoffs (`log10_t <= 7.5`), degenerate
        cutoffs, all three photoneutrino Fourier bands ($10^7\\text{--}10^8$,
        $10^8\\text{--}10^9$, $\\ge 10^9\\,\\mathrm{K}$), bremsstrahlung
@@ -13,8 +13,8 @@ Verifies:
        upstream MESA `neu/test/test_1.0.data`.
     3. Native JAX `float64` `neu_channels_jax` and `neu_get_jax` (all 5
        Itoh et al. 1996 channels: `pair`, `plas`, `phot`, `brem`, `reco`)
-       and `jax.jacfwd` partial derivatives against `neu_get` and golden
-       outputs across all 10,000 grid rows.
+       and `jax.jacfwd` partial derivatives against `neu_get` (`strict` mode)
+       and golden outputs across all 10,000 grid rows.
     4. Exact zero cutoff below $\\log_{10} T = 6.8$, channel flag isolation,
        centered finite-difference partial derivatives, and input validation.
 """
@@ -29,6 +29,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+import flexmesa
 from flexmesa import _rust, neu
 from flexmesa import constants as _const
 from flexmesa.data import fetch
@@ -320,8 +321,8 @@ def test_golden_rows_parity_against_upstream_mesa() -> None:
                 )
 
 
-def test_all_10000_golden_rows_and_jax_parity() -> None:
-    """Verifies all 10,000 rows of `neu/test/test_output` in Python and JAX."""
+def test_all_10000_golden_rows_and_jax_consistency() -> None:
+    """Verifies all 10,000 rows of `neu/test/test_output` in Rust and JAX."""
     path = _mesa_neu_test_dir() / "test_output"
     if known_gaps_gate.require_upstream_file(
         path, label="neu/test/test_output"
@@ -346,37 +347,38 @@ def test_all_10000_golden_rows_and_jax_parity() -> None:
 
     flags = neu.NeuFlags.all()
     n_rows = data.shape[0]
-    for row_idx in range(n_rows):
-        row = data[row_idx]
-        log10_t, log10_rho, abar, zbar = (
-            float(row[0]),
-            float(row[1]),
-            float(row[2]),
-            float(row[3]),
-        )
-        t = _exp10(log10_t)
-        rho = _exp10(log10_rho)
-        res = neu.neu_get(
-            t=t,
-            log10_t=log10_t,
-            rho=rho,
-            log10_rho=log10_rho,
-            abar=abar,
-            zbar=zbar,
-            log10_tlim=7.5,
-            flags=flags,
-        )
-        for d_idx in range(5):
-            _assert_rel_close(
-                float(res.loss[d_idx]), float(row[4 + d_idx]), 1e-10
+    with flexmesa.numerics_mode_context("strict"):
+        for row_idx in range(n_rows):
+            row = data[row_idx]
+            log10_t, log10_rho, abar, zbar = (
+                float(row[0]),
+                float(row[1]),
+                float(row[2]),
+                float(row[3]),
             )
-        for c_idx in range(5):
+            t = _exp10(log10_t)
+            rho = _exp10(log10_rho)
+            res = neu.neu_get(
+                t=t,
+                log10_t=log10_t,
+                rho=rho,
+                log10_rho=log10_rho,
+                abar=abar,
+                zbar=zbar,
+                log10_tlim=7.5,
+                flags=flags,
+            )
             for d_idx in range(5):
                 _assert_rel_close(
-                    float(res.sources[c_idx, d_idx]),
-                    float(row[9 + d_idx * 5 + c_idx]),
-                    1e-10,
+                    float(res.loss[d_idx]), float(row[4 + d_idx]), 1e-10
                 )
+            for c_idx in range(5):
+                for d_idx in range(5):
+                    _assert_rel_close(
+                        float(res.sources[c_idx, d_idx]),
+                        float(row[9 + d_idx * 5 + c_idx]),
+                        1e-10,
+                    )
 
     # Also verify vectorized JAX kernel and jacfwd across all rows.
     t_arr = jnp.exp(jnp.asarray(data[:, 0], dtype=jnp.float64) * _const.LN10)
@@ -478,49 +480,50 @@ def test_solar_profile_test_1_0_data_all_194_zones() -> None:
     assert n_active > 50
 
 
-def test_jax_all_5_channels_and_jacfwd_derivatives_parity() -> None:
-    """Verifies all 5 JAX channels (`pair..reco`) and `jacfwd` derivatives."""
-    for row in GOLDEN_ROWS:
-        log10_t, log10_rho, abar, zbar = row[0], row[1], row[2], row[3]
-        t_val = _exp10(log10_t)
-        rho_val = _exp10(log10_rho)
-        ref = neu.neu_get(
-            t=t_val,
-            log10_t=log10_t,
-            rho=rho_val,
-            log10_rho=log10_rho,
-            abar=abar,
-            zbar=zbar,
-            log10_tlim=7.5,
-            flags=neu.NeuFlags.all(),
-        )
-
-        t_j = jnp.asarray(t_val, dtype=jnp.float64)
-        rho_j = jnp.asarray(rho_val, dtype=jnp.float64)
-        abar_j = jnp.asarray(abar, dtype=jnp.float64)
-        zbar_j = jnp.asarray(zbar, dtype=jnp.float64)
-
-        ch_vals = np.asarray(
-            neu.neu_channels_jax(t_j, rho_j, abar_j, zbar_j, 7.5)
-        )
-        loss_j, sources_j = neu.neu_get_jax(t_j, rho_j, abar_j, zbar_j, 7.5)
-        loss_np = np.asarray(loss_j)
-        sources_np = np.asarray(sources_j)
-
-        for c_idx in range(5):
-            _assert_rel_close(
-                float(ch_vals[c_idx]), float(ref.sources[c_idx, 0]), 1e-12
+def test_jax_all_5_channels_and_jacfwd_derivatives_consistency() -> None:
+    """Verifies all 5 JAX channels and `jacfwd` derivatives vs Rust."""
+    with flexmesa.numerics_mode_context("strict"):
+        for row in GOLDEN_ROWS:
+            log10_t, log10_rho, abar, zbar = row[0], row[1], row[2], row[3]
+            t_val = _exp10(log10_t)
+            rho_val = _exp10(log10_rho)
+            ref = neu.neu_get(
+                t=t_val,
+                log10_t=log10_t,
+                rho=rho_val,
+                log10_rho=log10_rho,
+                abar=abar,
+                zbar=zbar,
+                log10_tlim=7.5,
+                flags=neu.NeuFlags.all(),
             )
+
+            t_j = jnp.asarray(t_val, dtype=jnp.float64)
+            rho_j = jnp.asarray(rho_val, dtype=jnp.float64)
+            abar_j = jnp.asarray(abar, dtype=jnp.float64)
+            zbar_j = jnp.asarray(zbar, dtype=jnp.float64)
+
+            ch_vals = np.asarray(
+                neu.neu_channels_jax(t_j, rho_j, abar_j, zbar_j, 7.5)
+            )
+            loss_j, sources_j = neu.neu_get_jax(t_j, rho_j, abar_j, zbar_j, 7.5)
+            loss_np = np.asarray(loss_j)
+            sources_np = np.asarray(sources_j)
+
+            for c_idx in range(5):
+                _assert_rel_close(
+                    float(ch_vals[c_idx]), float(ref.sources[c_idx, 0]), 1e-12
+                )
+                for d_idx in range(5):
+                    _assert_rel_close(
+                        float(sources_np[c_idx, d_idx]),
+                        float(ref.sources[c_idx, d_idx]),
+                        1e-11,
+                    )
             for d_idx in range(5):
                 _assert_rel_close(
-                    float(sources_np[c_idx, d_idx]),
-                    float(ref.sources[c_idx, d_idx]),
-                    1e-11,
+                    float(loss_np[d_idx]), float(ref.loss[d_idx]), 1e-11
                 )
-        for d_idx in range(5):
-            _assert_rel_close(
-                float(loss_np[d_idx]), float(ref.loss[d_idx]), 1e-11
-            )
 
 
 def test_low_temperature_cutoff_returns_exact_zero() -> None:
@@ -648,8 +651,8 @@ def test_centered_finite_difference_derivatives() -> None:
         )
 
 
-def test_jax_pair_plas_grad_and_vmap_parity() -> None:
-    """Verifies `neu_pair_plas_jax` value, `jax.grad`, and `jax.vmap` parity."""
+def test_jax_pair_plas_grad_and_vmap_consistency() -> None:
+    """Verifies `neu_pair_plas_jax` value and `jax.grad` vs Rust (`strict`)."""
     t_val = _exp10(9.15)
     rho_val = _exp10(9.15)
     abar_val = 42.3
@@ -658,9 +661,10 @@ def test_jax_pair_plas_grad_and_vmap_parity() -> None:
     flags = neu.NeuFlags(
         pair=True, plas=True, phot=False, brem=False, reco=False
     )
-    ref = neu.neu_get(
-        t=t_val, rho=rho_val, abar=abar_val, zbar=zbar_val, flags=flags
-    )
+    with flexmesa.numerics_mode_context("strict"):
+        ref = neu.neu_get(
+            t=t_val, rho=rho_val, abar=abar_val, zbar=zbar_val, flags=flags
+        )
 
     t_j = jnp.asarray(t_val, dtype=jnp.float64)
     rho_j = jnp.asarray(rho_val, dtype=jnp.float64)

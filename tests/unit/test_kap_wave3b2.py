@@ -6,6 +6,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+import flexmesa
 from flexmesa import kap
 from flexmesa.data import fetch
 from flexmesa.testing import known_gaps_gate
@@ -321,8 +322,8 @@ def test_distinct_fixed_co_aesopus_and_kapcn_tables_no_aliasing() -> None:
     assert abs(float(aes_z040[0]) - k020) / k020 > 1e-2
 
 
-def test_rust_vs_jax_backend_parity_across_all_regimes() -> None:
-    """Verify `backend='rust'` vs `backend='jax'` parity (`rtol <= 1e-11`)."""
+def test_rust_strict_vs_jax_backend_consistency_across_all_regimes() -> None:
+    """Verify `backend='rust'` (`strict`) vs `backend='jax'` (`rtol<=1e-11`)."""
     cases = [
         {
             "z": 0.015,
@@ -414,51 +415,63 @@ def test_rust_vs_jax_backend_parity_across_all_regimes() -> None:
             "d_eta_dln_t": -1.2,
         },
     ]
-    for kw in cases:
-        r_out = kap.kap_get_results(**kw, backend="rust")  # type: ignore[arg-type]
-        j_out = kap.kap_get_results(**kw, backend="jax")  # type: ignore[arg-type]
-        np.testing.assert_allclose(j_out.kap, r_out.kap, rtol=1e-12, atol=0.0)
-        np.testing.assert_allclose(
-            j_out.log10_kap, r_out.log10_kap, rtol=1e-12, atol=0.0
-        )
-        np.testing.assert_allclose(
-            j_out.dlnkap_dln_rho, r_out.dlnkap_dln_rho, rtol=1e-11, atol=0.0
-        )
-        np.testing.assert_allclose(
-            j_out.dlnkap_dln_t, r_out.dlnkap_dln_t, rtol=1e-11, atol=0.0
-        )
-        np.testing.assert_allclose(
-            j_out.kap_fracs, r_out.kap_fracs, rtol=1e-12, atol=1e-15
-        )
+    with flexmesa.numerics_mode_context("strict"):
+        for kw in cases:
+            r_out = kap.kap_get_results(**kw, backend="rust")  # type: ignore[arg-type]
+            j_out = kap.kap_get_results(**kw, backend="jax")  # type: ignore[arg-type]
+            np.testing.assert_allclose(
+                j_out.kap, r_out.kap, rtol=1e-12, atol=0.0
+            )
+            np.testing.assert_allclose(
+                j_out.log10_kap, r_out.log10_kap, rtol=1e-12, atol=0.0
+            )
+            np.testing.assert_allclose(
+                j_out.dlnkap_dln_rho, r_out.dlnkap_dln_rho, rtol=1e-11, atol=0.0
+            )
+            np.testing.assert_allclose(
+                j_out.dlnkap_dln_t, r_out.dlnkap_dln_t, rtol=1e-11, atol=0.0
+            )
+            np.testing.assert_allclose(
+                j_out.kap_fracs, r_out.kap_fracs, rtol=1e-12, atol=1e-15
+            )
 
 
 def test_compton_and_conduction_submodels_rust_vs_jax() -> None:
-    """Verify Compton and Potekhin/Blouin conduction parity and derivatives."""
-    for zbar in (1.0, 1.5, 2.5, 6.0):
-        for use_blouin in (False, True):
-            kr, dr_r, dt_r = kap.kap_get_elect_cond_opacity(
-                zbar, 5.2, 7.9, use_blouin=use_blouin, backend="rust"
-            )
-            kj, dr_j, dt_j = kap.kap_get_elect_cond_opacity(
-                zbar, 5.2, 7.9, use_blouin=use_blouin, backend="jax"
-            )
-            np.testing.assert_allclose(kj, kr, rtol=1e-13, atol=0.0)
-            np.testing.assert_allclose(dr_j, dr_r, rtol=1e-12, atol=0.0)
-            np.testing.assert_allclose(dt_j, dt_r, rtol=1e-12, atol=0.0)
+    """Verify Compton and Potekhin/Blouin conduction consistency & derivs."""
+    with flexmesa.numerics_mode_context("strict"):
+        for zbar in (1.0, 1.5, 2.5, 6.0):
+            for use_blouin in (False, True):
+                kr, dr_r, dt_r = kap.kap_get_elect_cond_opacity(
+                    zbar, 5.2, 7.9, use_blouin=use_blouin, backend="rust"
+                )
+                kj, dr_j, dt_j = kap.kap_get_elect_cond_opacity(
+                    zbar, 5.2, 7.9, use_blouin=use_blouin, backend="jax"
+                )
+                np.testing.assert_allclose(kj, kr, rtol=1e-13, atol=0.0)
+                np.testing.assert_allclose(dr_j, dr_r, rtol=1e-12, atol=0.0)
+                np.testing.assert_allclose(dt_j, dt_r, rtol=1e-12, atol=0.0)
 
-    rho, t, lnfe, dlnf_dr, dlnf_dt, eta, deta_dr, deta_dt = (
-        10.0,
-        3.0e8,
-        -0.15,
-        0.02,
-        0.05,
-        1.2,
-        0.65,
-        -0.95,
-    )
-    k_rust, dr_rust, dt_rust = kap.kap_get_compton_opacity(
-        rho, t, lnfe, dlnf_dr, dlnf_dt, eta, deta_dr, deta_dt, backend="rust"
-    )
+        rho, t, lnfe, dlnf_dr, dlnf_dt, eta, deta_dr, deta_dt = (
+            10.0,
+            3.0e8,
+            -0.15,
+            0.02,
+            0.05,
+            1.2,
+            0.65,
+            -0.95,
+        )
+        k_rust, dr_rust, dt_rust = kap.kap_get_compton_opacity(
+            rho,
+            t,
+            lnfe,
+            dlnf_dr,
+            dlnf_dt,
+            eta,
+            deta_dr,
+            deta_dt,
+            backend="rust",
+        )
     k_jax, dr_jax, dt_jax = kap.kap_get_compton_opacity(
         rho, t, lnfe, dlnf_dr, dlnf_dt, eta, deta_dr, deta_dt, backend="jax"
     )

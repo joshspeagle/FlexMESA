@@ -12,11 +12,6 @@ from flexmesa import _dispatch, _rust
 from flexmesa.astero import jax_kernels
 
 
-def _is_jax(x: Any, backend: Any) -> bool:
-    """Returns `True` when `resolve_backend(backend, x)` selects JAX."""
-    return _dispatch.resolve_backend(backend, x) == "jax"
-
-
 def match_modes_by_degree(
     obs_freqs: Any,
     cand_freqs: Any,
@@ -50,7 +45,7 @@ def eval_ratios_r02(
     l2_freqs: Any,
     l2_sigs: Any,
     *,
-    backend: str = "auto",
+    backend: _dispatch.Backend = "auto",
 ) -> tuple[Any, Any]:
     """Evaluates quadrupole-to-radial frequency separation ratios $r_{02}(n)$.
 
@@ -66,7 +61,12 @@ def eval_ratios_r02(
     Returns:
         Tuple `(r02, sig_r02)` of shape `(L - 1,)`.
     """
-    if _is_jax(l0_freqs, backend):
+    if (
+        _dispatch.resolve_backend(
+            backend, l0_freqs, l0_sigs, l1_freqs, l1_sigs, l2_freqs, l2_sigs
+        )
+        == "jax"
+    ):
         r02, sig_r02 = jax_kernels.eval_ratios_r02_jax(
             l0_freqs, l0_sigs, l1_freqs, l1_sigs, l2_freqs, l2_sigs
         )
@@ -106,7 +106,7 @@ def eval_astero_chi2(
     chi2_seismo_r_010_fraction: float = 0.0,
     chi2_seismo_r_02_fraction: float = 0.0,
     *,
-    backend: str = "auto",
+    backend: _dispatch.Backend = "auto",
 ) -> dict[str, Any]:
     """Evaluates composite asteroseismic + spectroscopic $\\chi^2$ (`get_chi2`).
 
@@ -149,7 +149,35 @@ def eval_astero_chi2(
     r02_s = empty if r02_sigmas is None else r02_sigmas
     r02_m = empty if r02_model is None else r02_model
 
-    if _is_jax(corr_model_freqs, backend):
+    if (
+        _dispatch.resolve_backend(
+            backend,
+            obs_freqs,
+            obs_sigmas,
+            corr_model_freqs,
+            spectro_obs,
+            spectro_sigmas,
+            spectro_model,
+            r010_o,
+            r010_s,
+            r010_m,
+            r02_o,
+            r02_s,
+            r02_m,
+            delta_nu_obs,
+            delta_nu_sigma,
+            delta_nu_model,
+            nu_max_obs,
+            nu_max_sigma,
+            nu_max_model,
+            chi2_seismo_fraction,
+            chi2_seismo_delta_nu_fraction,
+            chi2_seismo_nu_max_fraction,
+            chi2_seismo_r_010_fraction,
+            chi2_seismo_r_02_fraction,
+        )
+        == "jax"
+    ):
         c_freq = jax_kernels._mean_chi2_jax(
             obs_freqs, obs_sigmas, corr_model_freqs
         )

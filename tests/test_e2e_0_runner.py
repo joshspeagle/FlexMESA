@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
 """Integration tests for Stage E2E-0 (`inlist` recursive bundle parser, `./rn`
-stage resolver, `.mod` / `.photo` bit-identical restart parity, and multi-stage
+stage resolver, `.mod`/`.photo` self-roundtrip reproducibility, and multi-stage
 `test_suite` execution driver).
 """
 

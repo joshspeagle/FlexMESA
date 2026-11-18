@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
 """Wave 4.2 verification tests for `flexmesa.star` Henyey equations and solver.
 
-Tests Safe Rust vs. JAX residual parity (`eval_equations` vs.
+Tests Safe Rust (`strict` mode) vs JAX residual consistency (`eval_equations` vs
 `eval_hydro_residuals_jax`), analytical 3-cell stencil block-tridiagonal
 Jacobians (`lblk`, `dblk`, `ublk`), differentiable JAX linear Henyey solves
 (`solver_mode="pcr"` and `"rust_ffi"`), and damped Newton-Raphson convergence.
@@ -13,6 +13,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+import flexmesa
 from flexmesa import constants, star
 
 
@@ -29,30 +30,31 @@ def _make_pre_ms_model() -> star.StarModel:
     return model
 
 
-def test_eval_equations_rust_vs_jax_residual_parity() -> None:
-    """Verify Rust and JAX hydrostatic Henyey residuals match to <= 1e-13."""
-    model = star.StarModel.from_zams(initial_mass=4.0, initial_z=0.02)
-    model.dt = 100.0 * float(constants.SECYER)
-    model.eval_hydro_vars()
-    model.save_start_values()
+def test_eval_equations_rust_jax_residual_consistency() -> None:
+    """Verify Rust (`strict`) and JAX hydrostatic Henyey residuals match."""
+    with flexmesa.numerics_mode_context("strict"):
+        model = star.StarModel.from_zams(initial_mass=4.0, initial_z=0.02)
+        model.dt = 100.0 * float(constants.SECYER)
+        model.eval_hydro_vars()
+        model.save_start_values()
 
-    # Perturb lnd and ln_t after save_start_values() so de_dt and pdv_dt
-    # are non-zero in both Rust and JAX.
-    model._rust_model.set_primary_state(
-        model.lnd + 1.0e-4,
-        model.ln_t + 1.0e-4,
-        model.ln_r,
-        model.lum,
-        model.dq,
-        model.xa,
-    )
+        # Perturb lnd and ln_t after save_start_values() so de_dt and pdv_dt
+        # are non-zero in both Rust and JAX.
+        model._rust_model.set_primary_state(
+            model.lnd + 1.0e-4,
+            model.ln_t + 1.0e-4,
+            model.ln_r,
+            model.lum,
+            model.dq,
+            model.xa,
+        )
 
-    sys = model.eval_equations(include_chem=False)
-    equ_jax = np.asarray(model.eval_hydro_residuals_jax())
+        sys = model.eval_equations(include_chem=False)
+        equ_jax = np.asarray(model.eval_hydro_residuals_jax())
 
-    assert sys.equ.shape == (model.nz, 4)
-    assert equ_jax.shape == (model.nz, 4)
-    np.testing.assert_allclose(sys.equ, equ_jax, rtol=1.0e-13, atol=1.0e-13)
+        assert sys.equ.shape == (model.nz, 4)
+        assert equ_jax.shape == (model.nz, 4)
+        np.testing.assert_allclose(sys.equ, equ_jax, rtol=1.0e-13, atol=1.0e-13)
 
 
 def test_eval_hydro_residuals_jax_is_differentiable_wrt_primary_vars() -> None:

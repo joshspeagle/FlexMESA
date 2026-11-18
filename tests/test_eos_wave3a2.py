@@ -8,9 +8,10 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+import flexmesa
 from flexmesa import eos
 
-GOLDEN_STATES: list[tuple[str, float, float, float, float]] = [
+SAMPLE_STATES: list[tuple[str, float, float, float, float]] = [
     ("pure_he_2e8_100", 2.0e8, 100.0, 4.0, 2.0),
     ("pure_h_2e8_100", 2.0e8, 100.0, 1.0, 1.0),
     ("mixed_z_2e8_100", 2.0e8, 100.0, 1.72, 1.15),
@@ -37,14 +38,17 @@ def _res_of_ln_td_az(
 
 
 @pytest.mark.parametrize(
-    ("label", "temp", "rho", "abar", "zbar"), GOLDEN_STATES
+    ("label", "temp", "rho", "abar", "zbar"), SAMPLE_STATES
 )
-def test_eval_helm_eos_rust_and_jax_match_across_golden_states(
+def test_eval_helm_eos_rust_jax_consistency_across_sample_states(
     label: str, temp: float, rho: float, abar: float, zbar: float
 ) -> None:
-    """Verify `eval_helm_eos` Rust and JAX backends agree on golden states."""
+    """Verify `eval_helm_eos` JAX kernel vs Rust `strict` on sample states."""
     del label
-    out_r, da_r, dz_r = eos.eval_helm_eos(temp, rho, abar, zbar, backend="rust")
+    with flexmesa.numerics_mode_context("strict"):
+        out_r, da_r, dz_r = eos.eval_helm_eos(
+            temp, rho, abar, zbar, backend="rust"
+        )
     out_j, da_j, dz_j = eos.eval_helm_eos(
         jnp.asarray(temp, dtype=jnp.float64),
         jnp.asarray(rho, dtype=jnp.float64),
@@ -66,13 +70,16 @@ def test_eval_helm_eos_rust_and_jax_match_across_golden_states(
 
 
 def test_eval_helm_eos_zones_matches_scalar_across_backends() -> None:
-    """Verify `eval_helm_eos_zones` matches scalar evaluations across zones."""
-    temps = np.array([s[1] for s in GOLDEN_STATES], dtype=np.float64)
-    rhos = np.array([s[2] for s in GOLDEN_STATES], dtype=np.float64)
-    abars = np.array([s[3] for s in GOLDEN_STATES], dtype=np.float64)
-    zbars = np.array([s[4] for s in GOLDEN_STATES], dtype=np.float64)
+    """Verify `eval_helm_eos_zones` JAX vs Rust `strict` consistency."""
+    temps = np.array([s[1] for s in SAMPLE_STATES], dtype=np.float64)
+    rhos = np.array([s[2] for s in SAMPLE_STATES], dtype=np.float64)
+    abars = np.array([s[3] for s in SAMPLE_STATES], dtype=np.float64)
+    zbars = np.array([s[4] for s in SAMPLE_STATES], dtype=np.float64)
 
-    batch_r = eos.eval_helm_eos_zones(temps, rhos, abars, zbars, backend="rust")
+    with flexmesa.numerics_mode_context("strict"):
+        batch_r = eos.eval_helm_eos_zones(
+            temps, rhos, abars, zbars, backend="rust"
+        )
     batch_j = eos.eval_helm_eos_zones(
         jnp.asarray(temps),
         jnp.asarray(rhos),
@@ -80,7 +87,7 @@ def test_eval_helm_eos_zones_matches_scalar_across_backends() -> None:
         jnp.asarray(zbars),
         backend="jax",
     )
-    assert batch_r.res.shape == (len(GOLDEN_STATES), eos.NUM_EOS_BASIC_RESULTS)
+    assert batch_r.res.shape == (len(SAMPLE_STATES), eos.NUM_EOS_BASIC_RESULTS)
     assert _rel_diff(np.asarray(batch_r.res), np.asarray(batch_j.res)) < 1.0e-10
     assert (
         _rel_diff(np.asarray(batch_r.d_dlnd), np.asarray(batch_j.d_dlnd))
@@ -207,9 +214,9 @@ def test_eval_helm_eos_jax_autodiff_matches_analytical_derivatives() -> None:
     )
 
 
-def test_eval_helm_eos_full_table_off_golden_grid_parity_and_autodiff() -> None:
-    """Verify full `2701x1001` `HELM` table outside the 16 patch vertices."""
-    off_golden_states = [
+def test_eval_helm_eos_full_table_rust_jax_consistency_and_autodiff() -> None:
+    """Verify full `2701x1001` `HELM` JAX vs Rust `strict` across domain."""
+    sample_points = [
         # (logRho, logT, abar, zbar) across full HELM table domain
         (-7.35, 4.15, 1.29, 1.10),
         (-3.42, 5.68, 1.29, 1.10),
@@ -220,14 +227,15 @@ def test_eval_helm_eos_full_table_off_golden_grid_parity_and_autodiff() -> None:
         (8.35, 8.95, 16.00, 8.00),
         (9.40, 9.30, 28.00, 14.00),
     ]
-    temps = np.array(
-        [10.0 ** s[1] for s in off_golden_states], dtype=np.float64
-    )
-    rhos = np.array([10.0 ** s[0] for s in off_golden_states], dtype=np.float64)
-    abars = np.array([s[2] for s in off_golden_states], dtype=np.float64)
-    zbars = np.array([s[3] for s in off_golden_states], dtype=np.float64)
+    temps = np.array([10.0 ** s[1] for s in sample_points], dtype=np.float64)
+    rhos = np.array([10.0 ** s[0] for s in sample_points], dtype=np.float64)
+    abars = np.array([s[2] for s in sample_points], dtype=np.float64)
+    zbars = np.array([s[3] for s in sample_points], dtype=np.float64)
 
-    zones_r = eos.eval_helm_eos_zones(temps, rhos, abars, zbars, backend="rust")
+    with flexmesa.numerics_mode_context("strict"):
+        zones_r = eos.eval_helm_eos_zones(
+            temps, rhos, abars, zbars, backend="rust"
+        )
     zones_j = eos.eval_helm_eos_zones(
         jnp.asarray(temps),
         jnp.asarray(rhos),

@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
-"""Verification suite for Wave 2c ``flexmesa.colors`` (`colors`).
+"""Verification suite for ``flexmesa.colors`` (`colors`).
 
 Verifies:
-1. 14-digit parity against all 14 golden cases in upstream MESA
+1. Exact reference checks against all 14 golden cases in upstream MESA
    ``colors/test/test_output`` (Group 1: ``solar``, ``hot_ms``, ``cool_giant``;
    Group 2a: ``[M/H]`` sweep ``-2.0, -1.0, 0.5``; Group 2b: ``log g`` sweep
    ``1.0, 2.5, 4.0, 5.0``; Group 2c: ``Teff`` sweep
@@ -15,12 +15,12 @@ Verifies:
    (including ``|di| >= 2`` neighbor cells and exact grid nodes) 3D SED
    interpolators and ``Vega``, ``AB``, and ``ST`` photometric zero-point
    evaluators.
-4. Multi-zone random seed parity across 10 deterministic seeds (``N = 64``
-   zones in the solar neighborhood) between Safe Rust ``rayon`` and
-   ``@jax.jit`` ``vmap``.
-5. Exact ``(10, 4)`` Jacobian parity between Safe Rust ``DualOrder1<4>`` and
-   ``jax.jacfwd``, plus 5-parameter ``jax.test_util.check_grads`` (``order=1``
-   and ``order=2``) over ``(teff, log_g, metallicity, r, d)``.
+4. Multi-zone random seed consistency across 10 deterministic seeds (``N = 64``
+   zones in the solar neighborhood) between Safe Rust (``strict`` mode,
+   ``rayon``) and ``@jax.jit`` ``vmap``.
+5. Exact ``(10, 4)`` Jacobian consistency between Safe Rust ``DualOrder1<4>``
+   and ``jax.jacfwd``, plus 5-parameter ``jax.test_util.check_grads``
+   (``order=1`` and ``order=2``) over ``(teff, log_g, metallicity, r, d)``.
 """
 
 from __future__ import annotations
@@ -31,6 +31,7 @@ import jax.test_util as jtu
 import numpy as np
 import pytest
 
+import flexmesa
 from flexmesa import _rust, colors, constants
 
 RSUN: float = constants.RSUN
@@ -219,7 +220,7 @@ def test_group3_sed_samples_and_stefan_boltzmann_coverage() -> None:
         assert abs(float(sed_r[idx]) - f_exp) / f_exp < 1.0e-12
 
 
-def test_linear_knn_methods_and_zero_points_parity() -> None:
+def test_linear_knn_methods_and_zero_points_consistency() -> None:
     """Verify Linear/KNN SED methods and Vega/AB/ST magnitude systems.
 
     Probes an interior off-grid point (`5820, 4.35, -0.25`), an exact grid node
@@ -233,30 +234,20 @@ def test_linear_knn_methods_and_zero_points_parity() -> None:
         (5820.0, 4.0, 0.0, RSUN),
         (4800.0, 5.1, 0.1, 0.9 * RSUN),
     )
-    for teff, logg, mh, rad in test_points:
-        for method in ("Hermite", "Linear", "KNN"):
-            _, sed_r = colors.eval_sed(
-                teff, logg, mh, rad, D10, method=method, backend="rust"
-            )
-            _, sed_j = colors.eval_sed(
-                teff, logg, mh, rad, D10, method=method, backend="jax"
-            )
-            np.testing.assert_allclose(
-                sed_r, np.asarray(sed_j), rtol=1.0e-12, atol=1.0e-35
-            )
-            for mag_sys in ("Vega", "AB", "ST"):
-                r_out = colors.eval_colors(
-                    teff,
-                    logg,
-                    mh,
-                    rad,
-                    D10,
-                    mag_system=mag_sys,
-                    method=method,
-                    backend="rust",
+    with flexmesa.numerics_mode_context("strict"):
+        for teff, logg, mh, rad in test_points:
+            for method in ("Hermite", "Linear", "KNN"):
+                _, sed_r = colors.eval_sed(
+                    teff, logg, mh, rad, D10, method=method, backend="rust"
                 )
-                j_out = np.asarray(
-                    colors.eval_colors(
+                _, sed_j = colors.eval_sed(
+                    teff, logg, mh, rad, D10, method=method, backend="jax"
+                )
+                np.testing.assert_allclose(
+                    sed_r, np.asarray(sed_j), rtol=1.0e-12, atol=1.0e-35
+                )
+                for mag_sys in ("Vega", "AB", "ST"):
+                    r_out = colors.eval_colors(
                         teff,
                         logg,
                         mh,
@@ -264,60 +255,78 @@ def test_linear_knn_methods_and_zero_points_parity() -> None:
                         D10,
                         mag_system=mag_sys,
                         method=method,
-                        backend="jax",
+                        backend="rust",
                     )
-                )
-                np.testing.assert_allclose(
-                    r_out, j_out, rtol=1.0e-12, atol=1.0e-15
-                )
+                    j_out = np.asarray(
+                        colors.eval_colors(
+                            teff,
+                            logg,
+                            mh,
+                            rad,
+                            D10,
+                            mag_system=mag_sys,
+                            method=method,
+                            backend="jax",
+                        )
+                    )
+                    np.testing.assert_allclose(
+                        r_out, j_out, rtol=1.0e-12, atol=1.0e-15
+                    )
 
-    for idx in range(7):
-        fw, ft, vega_zp, ab_zp, st_zp = _rust.py_colors_filter_curve(idx)
-        assert vega_zp > 0.0
-        ab_r = colors.compute_ab_zero_point(fw, ft, backend="rust")
-        ab_j = float(colors.compute_ab_zero_point(fw, ft, backend="jax"))
-        st_r = colors.compute_st_zero_point(fw, ft, backend="rust")
-        st_j = float(colors.compute_st_zero_point(fw, ft, backend="jax"))
-        assert abs(float(ab_r) - ab_zp) / ab_zp < 1.0e-14
-        assert abs(ab_j - ab_zp) / ab_zp < 1.0e-14
-        assert abs(float(st_r) - st_zp) / st_zp < 1.0e-14
-        assert abs(st_j - st_zp) / st_zp < 1.0e-14
+        for idx in range(7):
+            fw, ft, vega_zp, ab_zp, st_zp = _rust.py_colors_filter_curve(idx)
+            assert vega_zp > 0.0
+            ab_r = colors.compute_ab_zero_point(fw, ft, backend="rust")
+            ab_j = float(colors.compute_ab_zero_point(fw, ft, backend="jax"))
+            st_r = colors.compute_st_zero_point(fw, ft, backend="rust")
+            st_j = float(colors.compute_st_zero_point(fw, ft, backend="jax"))
+            assert abs(float(ab_r) - ab_zp) / ab_zp < 1.0e-14
+            assert abs(ab_j - ab_zp) / ab_zp < 1.0e-14
+            assert abs(float(st_r) - st_zp) / st_zp < 1.0e-14
+            assert abs(st_j - st_zp) / st_zp < 1.0e-14
 
 
-def test_multi_zone_random_seed_parity_across_10_seeds() -> None:
-    """Verify multi-zone parity across 10 deterministic seeds (N = 64 zones).
+def test_multi_zone_random_seed_consistency_across_10_seeds() -> None:
+    """Verify multi-zone Rust (`strict`) vs JAX consistency across 10 seeds.
 
     Compares `backend="rust"` (`rayon` parallel worker pool) against
     `backend="jax"` (`@jax.jit` + `jax.vmap`) across 10 `np.random.default_rng`
     realizations in the solar neighborhood.
     """
-    for seed in range(10):
-        rng = np.random.default_rng(seed + 2026)
-        teff = rng.uniform(5750.0, 6000.0, size=64)
-        logg = rng.uniform(4.0, 4.5, size=64)
-        mh = rng.uniform(-0.5, 0.0, size=64)
-        rad = rng.uniform(0.8 * RSUN, 1.4 * RSUN, size=64)
+    with flexmesa.numerics_mode_context("strict"):
+        for seed in range(10):
+            rng = np.random.default_rng(seed + 2026)
+            teff = rng.uniform(5750.0, 6000.0, size=64)
+            logg = rng.uniform(4.0, 4.5, size=64)
+            mh = rng.uniform(-0.5, 0.0, size=64)
+            rad = rng.uniform(0.8 * RSUN, 1.4 * RSUN, size=64)
 
-        out_rust = colors.eval_colors_zones(
-            teff, logg, mh, rad, D10, backend="rust", parallel=True
-        )
-        out_jax = np.asarray(
-            colors.eval_colors_zones(teff, logg, mh, rad, D10, backend="jax")
-        )
-        np.testing.assert_allclose(
-            out_rust, out_jax, rtol=1.0e-12, atol=1.0e-15
-        )
+            out_rust = colors.eval_colors_zones(
+                teff, logg, mh, rad, D10, backend="rust", parallel=True
+            )
+            out_jax = np.asarray(
+                colors.eval_colors_zones(
+                    teff, logg, mh, rad, D10, backend="jax"
+                )
+            )
+            np.testing.assert_allclose(
+                out_rust, out_jax, rtol=1.0e-12, atol=1.0e-15
+            )
 
 
 def test_dual_autodiff_jacobian_and_jax_check_grads() -> None:
-    """Verify (10, 4) Jacobian parity and 5-parameter check_grads.
+    """Verify (10, 4) Jacobian consistency and 5-parameter check_grads.
 
-    Checks exact agreement between Safe Rust `DualOrder1<4>` and `jax.jacfwd`,
-    followed by 1st- and 2nd-order finite-difference gradient verification via
-    `jax.test_util.check_grads` over `(teff, log_g, metallicity, r, d)`.
+    Checks agreement between Safe Rust (`strict`) `DualOrder1<4>` and
+    `jax.jacfwd`, followed by 1st- and 2nd-order finite-difference gradient
+    verification via `jax.test_util.check_grads` over
+    `(teff, log_g, metallicity, r, d)`.
     """
     t0, g0, m0, r0 = 5820.0, 4.35, -0.25, 1.1 * RSUN
-    val_r, jac_r = colors.eval_colors_dual(t0, g0, m0, r0, D10, backend="rust")
+    with flexmesa.numerics_mode_context("strict"):
+        val_r, jac_r = colors.eval_colors_dual(
+            t0, g0, m0, r0, D10, backend="rust"
+        )
     val_j, jac_j = colors.eval_colors_dual(t0, g0, m0, r0, D10, backend="jax")
 
     np.testing.assert_allclose(
@@ -343,7 +352,7 @@ def test_full_76x11x8x1199_sed_cube_and_full_domain_sweeps() -> None:
     (`76 * 11 * 8 == 6688` SEDs) with a 1-to-1 `slot_map` (zero nearest-neighbor
     node copying), and evaluates bolometric corrections, filter magnitudes,
     and SEDs across `Teff in [2000, 50000] K`, `log g in [-1.0, 5.5]`, and
-    `[M/H] in [-5.0, +1.0]` with Rust vs. JAX parity.
+    `[M/H] in [-5.0, +1.0]` with Rust (`strict`) vs JAX consistency.
     """
     grid = colors.get_builtin_colors_grid()
     assert grid.teff_grid.shape == (76,)
@@ -367,9 +376,10 @@ def test_full_76x11x8x1199_sed_cube_and_full_domain_sweeps() -> None:
     )
     r_arr = np.full_like(teff_arr, RSUN)
 
-    out_rust = colors.eval_colors_zones(
-        teff_arr, logg_arr, meta_arr, r_arr, D10, backend="rust"
-    )
+    with flexmesa.numerics_mode_context("strict"):
+        out_rust = colors.eval_colors_zones(
+            teff_arr, logg_arr, meta_arr, r_arr, D10, backend="rust"
+        )
     out_jax = np.asarray(
         colors.eval_colors_zones(
             jnp.asarray(teff_arr),

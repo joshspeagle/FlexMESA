@@ -6,7 +6,7 @@ Verifies:
    $L_1 = 10^5\\,L_\\odot$ and $L_2 = 10^8\\,L_\\odot$ and cubic scaling ratio
    $v_2 / v_1$ to $\\le 10^{-12}$ relative error.
 2. `compare_TDC_and_Cox_MLT`: Steady-state convergence of `set_tdc` at
-   $\\Delta t = 10^{40}\\,\\mathrm{s}$ and exact Cox MLT parity.
+   $\\Delta t = 10^{40}\\,\\mathrm{s}$ and exact Cox MLT consistency.
 3. `check_TDC`: All 31 time-step rows $\\Delta t = 500 \\times 1.02^j$ s
    ($j = 0, \\dots, 30$) on the negative-$Y$ decaying-convection branch.
 """

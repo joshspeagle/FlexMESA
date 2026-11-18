@@ -19,18 +19,16 @@ from __future__ import annotations
 import dataclasses
 import enum
 import math
+from typing import Any, cast
 
 import jax
+import jax.numpy as jnp
 import numpy as np
 
 from flexmesa import _dispatch, _rust
 from flexmesa import constants as _const
 from flexmesa.neu import _jax
-from flexmesa.neu import brem as _brem
 from flexmesa.neu import inputs as _inputs
-from flexmesa.neu import pair_plas as _pair_plas
-from flexmesa.neu import phot as _phot
-from flexmesa.neu import reco as _reco
 
 
 class NeuChannel(enum.IntEnum):
@@ -100,6 +98,10 @@ class NeuFlags:
         """
         return cls(pair=True, plas=True, phot=True, brem=True, reco=False)
 
+    def as_tuple(self) -> tuple[bool, bool, bool, bool, bool]:
+        """Return channels as ``(pair, plas, phot, brem, reco)``."""
+        return (self.pair, self.plas, self.phot, self.brem, self.reco)
+
 
 @dataclasses.dataclass(frozen=True)
 class NeuResult:
@@ -148,28 +150,173 @@ def _zero_result() -> NeuResult:
 
 
 def _build_neu_result(
-    loss_arr: np.ndarray, sources_arr: np.ndarray
+    loss_arr: Any, sources_arr: Any, *, is_jax: bool = False
 ) -> NeuResult:
     """Packs `(loss_arr, sources_arr)` into a validated `NeuResult`."""
-    total = _inputs.NeuRate(*(float(v) for v in loss_arr))
+    if is_jax or isinstance(loss_arr, jax.core.Tracer):
+        total = _inputs.NeuRate(*(cast(float, loss_arr[k]) for k in range(5)))
+        ch = [
+            _inputs.NeuRate(*(cast(float, sources_arr[i, k]) for k in range(5)))
+            for i in range(5)
+        ]
+        return NeuResult(
+            total,
+            ch[0],
+            ch[1],
+            ch[2],
+            ch[3],
+            ch[4],
+            cast(np.ndarray, loss_arr),
+            cast(np.ndarray, sources_arr),
+        )
+    loss_np = np.asarray(loss_arr, dtype=np.float64)
+    src_np = np.asarray(sources_arr, dtype=np.float64)
+    total = _inputs.NeuRate(*(float(v) for v in loss_np))
     if not math.isfinite(total.val):
         raise ValueError("Non-finite total neutrino loss encountered.")
-    ch = [
-        _inputs.NeuRate(*(float(v) for v in sources_arr[i])) for i in range(5)
-    ]
-    return NeuResult(
-        total, ch[0], ch[1], ch[2], ch[3], ch[4], loss_arr, sources_arr
+    ch = [_inputs.NeuRate(*(float(v) for v in src_np[i])) for i in range(5)]
+    return NeuResult(total, ch[0], ch[1], ch[2], ch[3], ch[4], loss_np, src_np)
+
+
+def _validate_concrete_neu_inputs(
+    t: float | None,
+    log10_t: float | None,
+    rho: float | None,
+    log10_rho: float | None,
+    abar: float,
+    zbar: float,
+    log10_tlim: float,
+    *,
+    use_rust_math: bool,
+) -> tuple[float, float, float, float, float, float, float]:
+    """Validate and resolve linear/log10 concrete inputs for `neu_get`."""
+    if t is None:
+        lt_in = float(log10_t)  # type: ignore[arg-type]
+        if not math.isfinite(lt_in) or lt_in > 20.0:
+            raise ValueError(f"log10_t must be finite and <= 20: {lt_in}")
+        temp = (
+            _rust.exp10(lt_in)
+            if use_rust_math
+            else math.exp(lt_in * _const.LN10)
+        )
+    else:
+        temp = float(t)
+    if not math.isfinite(temp) or temp <= 0.0:
+        raise ValueError(f"Temperature t must be positive and finite: {temp}")
+    if log10_t is None:
+        logtemp = (
+            _rust.safe_log10(temp)
+            if (use_rust_math and temp > 1.0e-99)
+            else math.log10(temp)
+        )
+    else:
+        logtemp = float(log10_t)
+    if not math.isfinite(logtemp) or logtemp > 20.0:
+        raise ValueError(f"log10_t must be finite and <= 20: {logtemp}")
+
+    if rho is None:
+        ld_in = float(log10_rho)  # type: ignore[arg-type]
+        if not math.isfinite(ld_in) or ld_in > 20.0:
+            raise ValueError(f"log10_rho must be finite and <= 20: {ld_in}")
+        den = (
+            _rust.exp10(ld_in)
+            if use_rust_math
+            else math.exp(ld_in * _const.LN10)
+        )
+    else:
+        den = float(rho)
+    if not math.isfinite(den) or den <= 0.0:
+        raise ValueError(f"Density rho must be positive and finite: {den}")
+    if log10_rho is None:
+        logden = (
+            _rust.safe_log10(den)
+            if (use_rust_math and den > 1.0e-99)
+            else math.log10(den)
+        )
+    else:
+        logden = float(log10_rho)
+    if not math.isfinite(logden) or logden > 20.0:
+        raise ValueError(f"log10_rho must be finite and <= 20: {logden}")
+
+    a_f, z_f, tl_f = float(abar), float(zbar), float(log10_tlim)
+    if (
+        not math.isfinite(a_f)
+        or not math.isfinite(z_f)
+        or not math.isfinite(tl_f)
+        or a_f <= 0.0
+        or z_f <= 0.0
+    ):
+        raise ValueError(
+            f"abar, zbar, and log10_tlim must be valid: {abar}, {zbar}"
+        )
+    return temp, logtemp, den, logden, a_f, z_f, tl_f
+
+
+def _eval_neu_jax(
+    t: float | jax.Array | None,
+    log10_t: float | jax.Array | None,
+    rho: float | jax.Array | None,
+    log10_rho: float | jax.Array | None,
+    abar: float | jax.Array,
+    zbar: float | jax.Array,
+    log10_tlim: float | jax.Array,
+    active: NeuFlags,
+    *,
+    has_jax: bool,
+) -> NeuResult:
+    """Evaluate `neu_get` via `_jax.neu_get_jax`, validating concrete args."""
+    if not has_jax:
+        temp, logtemp, den, _ld, a_f, z_f, tl_f = _validate_concrete_neu_inputs(
+            cast("float | None", t),
+            cast("float | None", log10_t),
+            cast("float | None", rho),
+            cast("float | None", log10_rho),
+            cast(float, abar),
+            cast(float, zbar),
+            cast(float, log10_tlim),
+            use_rust_math=False,
+        )
+        if temp <= _inputs.TMIN_NEU or logtemp <= _inputs.LOG10_TMIN_NEU:
+            return _zero_result()
+        loss_j, src_j = _jax.neu_get_jax(
+            jnp.asarray(temp, dtype=jnp.float64),
+            jnp.asarray(den, dtype=jnp.float64),
+            jnp.asarray(a_f, dtype=jnp.float64),
+            jnp.asarray(z_f, dtype=jnp.float64),
+            cast(float, jnp.asarray(tl_f, dtype=jnp.float64)),
+            flags=active.as_tuple(),
+        )
+        return _build_neu_result(loss_j, src_j, is_jax=False)
+
+    temp_j = (
+        jnp.asarray(t, dtype=jnp.float64)
+        if t is not None
+        else jnp.power(10.0, jnp.asarray(log10_t, dtype=jnp.float64))
     )
+    rho_j = (
+        jnp.asarray(rho, dtype=jnp.float64)
+        if rho is not None
+        else jnp.power(10.0, jnp.asarray(log10_rho, dtype=jnp.float64))
+    )
+    loss_j, src_j = _jax.neu_get_jax(
+        temp_j,
+        rho_j,
+        jnp.asarray(abar, dtype=jnp.float64),
+        jnp.asarray(zbar, dtype=jnp.float64),
+        cast(float, jnp.asarray(log10_tlim, dtype=jnp.float64)),
+        flags=active.as_tuple(),
+    )
+    return _build_neu_result(loss_j, src_j, is_jax=True)
 
 
 def neu_get(
-    t: float | None = None,
-    log10_t: float | None = None,
-    rho: float | None = None,
-    log10_rho: float | None = None,
-    abar: float = 1.0,
-    zbar: float = 1.0,
-    log10_tlim: float = 7.5,
+    t: float | jax.Array | None = None,
+    log10_t: float | jax.Array | None = None,
+    rho: float | jax.Array | None = None,
+    log10_rho: float | jax.Array | None = None,
+    abar: float | jax.Array = 1.0,
+    zbar: float | jax.Array = 1.0,
+    log10_tlim: float | jax.Array = 7.5,
     flags: NeuFlags | None = None,
     *,
     backend: _dispatch.Backend = "auto",
@@ -200,7 +347,7 @@ def neu_get(
 
     Returns:
         `NeuResult` containing total and per-channel `NeuRate` values and
-        row-major `float64` NumPy arrays `loss` `(5,)` and `sources` `(5, 5)`.
+        row-major `float64` arrays `loss` `(5,)` and `sources` `(5, 5)`.
 
     Raises:
         ValueError: If neither `t` nor `log10_t` is provided, neither `rho` nor
@@ -213,138 +360,39 @@ def neu_get(
     if rho is None and log10_rho is None:
         raise ValueError("Neither rho nor log10_rho was provided to neu_get.")
 
-    use_rust_math = (
-        _dispatch.resolve_backend(
-            backend,
-            *(
-                v
-                for v in (t, log10_t, rho, log10_rho, abar, zbar)
-                if v is not None
-            ),
-        )
-        == "rust"
+    resolved, has_jax = _dispatch.resolve_backend_with_jax(
+        backend, t, log10_t, rho, log10_rho, abar, zbar, log10_tlim
     )
-    if t is None:
-        lt_in = float(log10_t)  # type: ignore[arg-type]
-        if not math.isfinite(lt_in) or lt_in > 20.0:
-            raise ValueError(f"log10_t must be finite and <= 20: {lt_in}")
-        temp = (
-            _rust.exp10(lt_in)
-            if use_rust_math
-            else math.exp(lt_in * _const.LN10)
-        )
-    else:
-        temp = t
-    if not math.isfinite(temp) or temp <= 0.0:
-        raise ValueError(f"Temperature t must be positive and finite: {temp}")
-    if log10_t is None:
-        t_in = float(temp)
-        logtemp = (
-            _rust.safe_log10(t_in)
-            if (use_rust_math and t_in > 1.0e-99)
-            else math.log10(t_in)
-        )
-    else:
-        logtemp = log10_t
-    if not math.isfinite(logtemp) or logtemp > 20.0:
-        raise ValueError(f"log10_t must be finite and <= 20: {logtemp}")
-
-    if rho is None:
-        ld_in = float(log10_rho)  # type: ignore[arg-type]
-        if not math.isfinite(ld_in) or ld_in > 20.0:
-            raise ValueError(f"log10_rho must be finite and <= 20: {ld_in}")
-        den = (
-            _rust.exp10(ld_in)
-            if use_rust_math
-            else math.exp(ld_in * _const.LN10)
-        )
-    else:
-        den = rho
-    if not math.isfinite(den) or den <= 0.0:
-        raise ValueError(f"Density rho must be positive and finite: {den}")
-    if log10_rho is None:
-        d_in = float(den)
-        logden = (
-            _rust.safe_log10(d_in)
-            if (use_rust_math and d_in > 1.0e-99)
-            else math.log10(d_in)
-        )
-    else:
-        logden = log10_rho
-    if not math.isfinite(logden) or logden > 20.0:
-        raise ValueError(f"log10_rho must be finite and <= 20: {logden}")
-
-    if (
-        not math.isfinite(abar)
-        or not math.isfinite(zbar)
-        or not math.isfinite(log10_tlim)
-        or abar <= 0.0
-        or zbar <= 0.0
-    ):
-        raise ValueError(
-            f"abar, zbar, and log10_tlim must be valid: {abar}, {zbar}"
+    if resolved == "jax":
+        return _eval_neu_jax(
+            t,
+            log10_t,
+            rho,
+            log10_rho,
+            abar,
+            zbar,
+            log10_tlim,
+            active,
+            has_jax=has_jax,
         )
 
+    temp, logtemp, den, logden, a_f, z_f, tl_f = _validate_concrete_neu_inputs(
+        cast("float | None", t),
+        cast("float | None", log10_t),
+        cast("float | None", rho),
+        cast("float | None", log10_rho),
+        cast(float, abar),
+        cast(float, zbar),
+        cast(float, log10_tlim),
+        use_rust_math=True,
+    )
     if temp <= _inputs.TMIN_NEU or logtemp <= _inputs.LOG10_TMIN_NEU:
         return _zero_result()
 
-    if use_rust_math:
-        flag_tup = (
-            active.pair,
-            active.plas,
-            active.phot,
-            active.brem,
-            active.reco,
-        )
-        t_f, lt_f = float(temp), float(logtemp)
-        d_f, ld_f = float(den), float(logden)
-        a_f, z_f, tl_f = float(abar), float(zbar), float(log10_tlim)
-        loss_r, src_r = _rust.neu_get(
-            t_f, lt_f, d_f, ld_f, a_f, z_f, tl_f, flag_tup
-        )
-        return _build_neu_result(
-            np.asarray(loss_r, dtype=np.float64),
-            np.asarray(src_r, dtype=np.float64),
-        )
-
-    inp = _inputs.NeuInputs.create(temp, logtemp, den, logden, abar, zbar)
-    z_rate = _inputs.NeuRate()
-    pair = (
-        _pair_plas.pair_neu(inp).to_specific(inp.deni)
-        if active.pair
-        else z_rate
+    loss_r, src_r = _rust.neu_get(
+        temp, logtemp, den, logden, a_f, z_f, tl_f, active.as_tuple()
     )
-    plas = (
-        _pair_plas.plas_neu(inp).to_specific(inp.deni)
-        if active.plas
-        else z_rate
-    )
-    phot = _phot.phot_neu(inp).to_specific(inp.deni) if active.phot else z_rate
-    brem = _brem.brem_neu(inp).to_specific(inp.deni) if active.brem else z_rate
-    reco = _reco.reco_neu(inp).to_specific(inp.deni) if active.reco else z_rate
-
-    if inp.logtemp <= log10_tlim and log10_tlim > _inputs.LOG10_TMIN_NEU:
-        dtlim = log10_tlim - _inputs.LOG10_TMIN_NEU
-        phase = (inp.logtemp - _inputs.LOG10_TMIN_NEU) / dtlim
-        f_cut = 0.5 * (1.0 - math.cos(_const.PI * phase))
-        df_dt = (
-            0.5
-            * _const.PI
-            * math.sin(_const.PI * phase)
-            / (dtlim * temp * _const.LN10)
-        )
-        plas = plas.with_cutoff(f_cut, df_dt)
-        pair = pair.with_cutoff(f_cut, df_dt)
-        phot = phot.with_cutoff(f_cut, df_dt)
-        brem = brem.with_cutoff(f_cut, df_dt)
-        reco = reco.with_cutoff(f_cut, df_dt)
-
-    sources_arr = np.array(
-        [r.to_tuple() for r in (pair, plas, phot, brem, reco)],
-        dtype=np.float64,
-    )
-    loss_arr = np.sum(sources_arr, axis=0)
-    return _build_neu_result(loss_arr, sources_arr)
+    return _build_neu_result(loss_r, src_r, is_jax=False)
 
 
 def neu_pair_plas_jax(

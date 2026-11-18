@@ -49,19 +49,17 @@ flowchart TD
     RustCall --> RustMtx
 ```
 
-### Tier A: Canonical Safe Rust Infrastructure (`schema`, `data`, `testing`, `utils`, `auto_diff`)
-Modules that manage configuration schemas (`flexmesa.schema`), binary table caching and cryptographic verification (`flexmesa.data`), test output parsing (`flexmesa.testing`), string tokenizers and bounded worker pools (`flexmesa.utils`), and explicit forward-mode hyperdual numbers (`flexmesa.auto_diff`) have a single canonical implementation in Safe Rust (`#![forbid(unsafe_code)]` across all workspace crates except `flexmesa-crlibm-sys`). Python accesses Tier A directly through the compiled `flexmesa._rust` (`PyO3`) extension, eliminating duplicated parser and loader code.
+### Canonical Safe Rust Infrastructure (`schema`, `data`, `testing`, `utils`, `auto_diff`)
+Modules that manage configuration schemas (`flexmesa.schema`), binary table caching and cryptographic verification (`flexmesa.data`), test output parsing (`flexmesa.testing`), string tokenizers and bounded worker pools (`flexmesa.utils`), and explicit forward-mode hyperdual numbers (`flexmesa.auto_diff`) have their canonical implementation in Safe Rust (`#![forbid(unsafe_code)]` across all workspace crates except `flexmesa-crlibm-sys`), with Python accessing them through the compiled `flexmesa._rust` (`PyO3`) extension.
 
-### Tier B: Differentiable Shell-Local Microphysics (`const`, `math`, `interp_1d`, `interp_2d`, `neu`, `turb`, `chem`, `ionization`, `colors`, `eos`, `kap`, `rates`, `atm`)
-Shell-local microphysics and spline interpolation modules provide two synchronized kernels behind a single public dispatcher with `backend="auto" | "rust" | "jax"`:
+### Dual-Backend Microphysics & Interpolation (`const`, `math`, `interp_1d`, `interp_2d`, `neu`, `turb`, `chem`, `ionization`, `colors`, `eos`, `kap`, `rates`, `atm`)
+Shell-local microphysics and interpolation modules route between canonical Safe Rust (`backend="rust"`) and derived JAX helpers (`backend="jax"`) through `flexmesa.resolve_backend(backend, *args)` (inspecting scalars, arrays, nested containers, dataclasses, and registered PyTrees recursively):
 
-- **Safe Rust CPU Kernel (`backend="rust"`)**: Monomorphized over the `Real` trait (`f64` and const-generic `DualOrder1<N>`), parallelized across radial shells via a persistent `rayon` worker pool, and exposed to Python via zero-copy `rust-numpy` array views (`as_slice()`).
-- **Branchless `@jax.jit` Kernel (`backend="jax"`)**: Pure functional `jnp.float64` array kernel written with `jnp.where` and fixed-step `jax.lax.fori_loop` so that `jax.jit`, `jax.vmap`, `jax.grad`, `jax.jacfwd`, and `jax.hessian` compile into compact XLA HLO kernels without Python loop unrolling or host callbacks.
+- **Canonical Safe Rust CPU Kernel (`backend="rust"`)**: Monomorphized over the `Real` trait (`f64` and const-generic `DualOrder1<N>`), parallelized across radial shells via a persistent `rayon` worker pool, exposed zero-copy via `rust-numpy`, and validated against upstream MESA in `strict` (`CRMATH`) mode.
+- **Derived JAX Layer (`backend="jax"`)**: Provides branchless `jnp.float64` `@jax.jit` kernels alongside `@jax.custom_vjp` / `@jax.custom_jvp` host callbacks (`jax.pure_callback` into `flexmesa._rust`, as in `atm` tables, `net`, `eos` stencils, and eager `num` solvers) and host NumPy builders (`interp_1d`/`interp_2d` builders). See the [Backends & JAX Contract guide](../guides/backends-and-performance.md) for per-package AD and device guarantees.
 
-When `backend="auto"` (the default), `flexmesa._dispatch.resolve_backend` inspects the input arguments in $\mathcal{O}(1)$ time and routes standard Python floats and `numpy.ndarray` inputs zero-copy to `flexmesa._rust`, whereas `jax.Array` and JAX tracers (`jax.core.Tracer`) route to the `@jax.jit` kernel.
-
-### Tier C: Coupled Linear and Stiff Solvers (`mtx`, `num`, `net`, `star`)
-Coupled multi-zone linear solvers and stiff ODE/Newton integrators provide both multi-core CPU cyclic reduction and native GPU parallel cyclic reduction, connected via `@jax.custom_vjp` analytical adjoints.
+### Coupled Linear, Network, and Frozen Engine Layers (`mtx`, `num`, `net`, `star`, `binary`, `astero`)
+Coupled multi-zone linear solvers (`mtx`) offer both multi-core Rust `bcyclic` (with `@jax.custom_vjp` IFT adjoints via `rust_ffi`) and native JAX `pcr`, while stiff reaction networks (`net`) use `@jax.custom_vjp` host callbacks into Rust. The 1D evolution engines (`star`, `binary`, `astero`) run solely in Safe Rust, and their standalone JAX helper modules remain frozen under `JAX_ENGINE_STATUS = "frozen-unverified-until-#143"`.
 
 ---
 

@@ -103,7 +103,7 @@ def test_constants_golden_parity_matches_upstream_mesa() -> None:
     golden.assert_values_match(actual, expected, rtol=1e-15, atol=1e-45)
 
 
-def test_mixing_type_enum_codes_match_upstream_mesa() -> None:
+def test_mixing_type_enum_code_roundtrip_and_range() -> None:
     """Verify `MixingType` integer codes from `-1` through `10`.
 
     Confirms round-trip conversion via `MixingType.from_code` and `.code()` as

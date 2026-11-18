@@ -219,7 +219,7 @@ def test_synthetic_astero_case_execution_and_photo_restart(
     assert rep["photo_restart_verified"] is True
 
 
-def test_upstream_mesa_tier4_and_dev_cases_suites_pass(
+def test_tier4_and_dev_raw_cases_rejected_and_cleaned_copies_smoke(
     tmp_path: pathlib.Path,
 ) -> None:
     """Reject raw Tier 4 / dev suites under `#147` and run cleaned copies."""

@@ -225,10 +225,12 @@ fn poly_antideriv(c: &CubicCoeffs, d: f64) -> f64 {
     d * (c[0] + d * (0.5 * c[1] + d * (c[2] / 3.0 + 0.25 * d * c[3])))
 }
 
-/// Accumulates the definite integral across sub-segment `[x1, x2]` within knot
-/// cell `k` starting at `x0` and updates `*xk_prev` to `x2`.
+/// Accumulates the integral of the cubic of knot cell `k` (left knot `x0`)
+/// from `x1` to `x2` and updates `*xk_prev` to `x2`.
 ///
-/// Returns zero immediately when `x1 == x2`.
+/// Mirrors `add_to_integral` in upstream MESA `26.4.1`
+/// `interp_1d/private/interp_1d_misc.f90:86-105`. Returns zero immediately
+/// when `x1 == x2`, leaving `*xk_prev` unchanged as upstream does.
 #[inline]
 fn accum_segment(
     c: &CubicCoeffs,
@@ -241,20 +243,27 @@ fn accum_segment(
         return 0.0;
     }
     let a2 = poly_antideriv(c, x2 - x0);
-    // Note: checks x1 != x0 (rather than upstream MESA's x1 > x0) so descending
-    // grids subtract the lower sub-interval integral identically to ascending.
-    let a1 = if x1 != x0 {
-        poly_antideriv(c, x1 - x0)
+    // Upstream tests `x1 > x0` (interp_1d_misc.f90:97). On a decreasing grid
+    // this never holds, so the lower sub-interval is not subtracted. This is
+    // reproduced on purpose; see deferred issue #218.
+    let area = if x1 > x0 {
+        a2 - poly_antideriv(c, x1 - x0)
     } else {
-        0.0
+        a2
     };
     *xk_prev = x2;
-    a2 - a1
+    area
 }
 
 /// Evaluates the definite integral of the piecewise cubic spline over
 /// consecutive sub-intervals $[x_{m-1}, x_m]$ for $m = 1, \dots, N_v - 1$, with
 /// `vals[0] = 0.0`.
+///
+/// Reproduces upstream MESA `26.4.1` `do_integrate_values`
+/// (`interp_1d/private/interp_1d_misc.f90:29-109`), including two properties
+/// recorded in deferred issue #218: on a decreasing grid the lower
+/// sub-interval is not subtracted, and the sweep starts at the first cell, so
+/// `x[0]` is expected to lie in it.
 ///
 /// # Errors
 ///
@@ -294,7 +303,9 @@ pub fn integrate_values(
     }
 
     let mut vals = vec![0.0_f64; nv];
-    let (mut k_old, _) = locate_clamped_interval(init_x, x[0], increasing);
+    // Upstream always starts the sweep at the first cell
+    // (interp_1d_misc.f90:56), whatever cell holds x[0] (#218).
+    let mut k_old = 0_usize;
     let mut xkp1_old = init_x[k_old + 1];
     let mut xk_prev = x[0];
 

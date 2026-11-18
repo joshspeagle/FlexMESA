@@ -109,11 +109,12 @@ def test_upstream_mesa_interp1d_test1_m3q_matches_golden_output() -> None:
 def test_upstream_mesa_interp1d_test2_sin_and_integral_match_golden() -> None:
     """Verifies `interp_m3q` and `integrate_values` on `test2(true/false)`.
 
-    Confirms that definite integration over adjacent intervals reproduces the
-    exact symmetry of ``sin(x)`` on both ascending and descending grids. Note
-    that upstream MESA's `do_integrate_values` had a decreasing-grid bug
-    (`if (x1 > x0)` instead of `if (x1 /= x0)`); FlexMESA fixes this so both
-    grid orientations yield identical positive segment integrals.
+    Expected values are the `test2 T` and `test2 F` blocks of upstream MESA
+    `26.4.1` `interp_1d/test/test_output`. On the decreasing grid upstream's
+    `do_integrate_values` does not subtract the lower sub-interval
+    (`interp_1d/private/interp_1d_misc.f90:97` tests `x1 > x0`), so those
+    integrals differ from the increasing-grid ones. FlexMESA reproduces this
+    (deferred issue #218).
     """
     n = 43
     dx = 1.0 / float(n - 1)
@@ -146,19 +147,33 @@ def test_upstream_mesa_interp1d_test2_sin_and_integral_match_golden() -> None:
         )
         np.testing.assert_allclose(vals, expected_vals, rtol=1e-12, atol=1e-14)
 
-        # Definite integral of sin(sign * x) over sign * [xa, xb] is invariant.
         integrals = np.asarray(interp_1d.integrate_values(init_xs, coeffs, xs))
-        expected_integrals = np.array(
-            [
-                0.0,
-                2.9288520516627042e-1,
-                2.0710675623584285e-1,
-                4.9999994192722058e-1,
-                4.9999994167149031e-1,
-                2.0710675639571818e-1,
-                2.8058152844437595e-1,
-            ]
-        )
+        if sign > 0.0:
+            # interp_1d/test/test_output, block `test2 T`.
+            expected_integrals = np.array(
+                [
+                    0.0,
+                    2.9288520516627042e-1,
+                    2.0710675623584285e-1,
+                    4.9999994192722058e-1,
+                    4.9999994167149031e-1,
+                    2.0710675639571818e-1,
+                    2.8058152844437595e-1,
+                ]
+            )
+        else:
+            # interp_1d/test/test_output, block `test2 F`.
+            expected_integrals = np.array(
+                [
+                    0.0,
+                    2.9288520516627042e-1,
+                    2.2352243926395926e-1,
+                    5.7974467155565013e-1,
+                    5.4696945190299473e-1,
+                    2.9095991000708077e-1,
+                    3.3213283703072322e-1,
+                ]
+            )
         np.testing.assert_allclose(
             integrals, expected_integrals, rtol=1e-12, atol=1e-14
         )

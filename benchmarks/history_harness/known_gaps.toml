@@ -267,8 +267,8 @@ reason = "Low-metallicity main-sequence evolution exceeds tolerances (#152, #149
 [[gaps]]
 suite = "star"
 case = "magnetic_braking"
-issue = "#150"
-reason = "Case history_columns.list requests unported MLT++ gradT_excess_alpha column (#157) and rotational retry control (#150, #158)."
+issue = "#157"
+reason = "Case history_columns.list requests unported MLT++ gradT_excess_alpha column (#157) and rotational retry/physics controls (#152, #158)."
 
 [[gaps]]
 suite = "star"

@@ -44,6 +44,7 @@ Scope and the `v0.1.0` definition are in [`SCOPE.md`](SCOPE.md). Work is tracked
 | 27 | Baseline Regression Check in the History Harness (`#143`, `#144`) | In force | below |
 | 28 | Storage of Subscripted Namelist Controls (`#147`) | In force | below |
 | 29 | Derived JAX Contract, Full-Argument Auto-Dispatch, and Python Utility Disposition (`#166`) | In force | below |
+| 30 | Generated `serde` Checkpoints, Rollback State Buffers, and RAM-Local Microphysics Cache (`#150`) | In force | below |
 
 ## Pre-audit decisions still in force
 
@@ -339,3 +340,17 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
 - **Alternatives Rejected**:
   - *Deleting `flexmesa.auto_diff` and `flexmesa.num` Python modules outright*: breaks `docs/api/numerics.md` public exports and Python callable-based ODE/root utilities (`jax.custom_vjp` `newton_solve_jax`) where crossing PyO3 on every residual call requires GIL callbacks.
   - *Re-implementing 1D/2D spline builders or `StarModel` in pure JAX before `#143`*: doubles engine porting work against an unverified Rust baseline.
+
+---
+
+## DECISIONS #30: Generated `serde` Checkpoints, Rollback State Buffers, and RAM-Local Microphysics Cache (`Issue #150`)
+
+- **Date**: 2026-11-18
+- **Decision**:
+  1. **Generated Checkpoints (`FMPHOTO2` v20 & `FMBINCP1` v1)**: Serialize `StarModel` (including `controls`, `job`, `rsp`, and solver/retry/redo counters) and `BinarySystem` (including `BinaryStepCounters`) via a deterministic little-endian `serde` binary codec (`bin_codec`), prefixed with the active `NumericsMode` wire tag so mismatched modes fail loudly on load.
+  2. **`#[serde(skip)]` on Ephemeral Cache Telemetry (`micro_cache`, `micro_cache_hits`, `micro_cache_misses`)**: Skip the 2-slot LRU `MicrophysicsCache` and its process-local hit/miss counters in serialized checkpoints so a fresh-process restart reproduces uninterrupted trajectories and evolutionary/solver counters bit for bit despite starting with a cold cache.
+  3. **Rollback Buffers, Cache & Non-Retriable Errors**: Replace whole-model rollback clones with `PrimaryStateBuffer` (restoring `omega`, `j_rot`, and `tidal_deformation` in place) and cache unchanged `set_hydro_vars` states per `(lnd, ln_t, ln_r, dq, q, cgrav, xa, controls)` bit pattern. Fail immediately with zero retries on `StarError::{InvalidInput, IoError, Terminated}`.
+- **Why**: Hand-enumerated `.photo` omitted `controls`, `job`, and `BinarySystem` (`N1-20`); whole-model rollbacks wiped counters (`F3-7`, `N1-17`); unchanged microphysics ran repeatedly per step (`N1-18`); and unretriable errors burned retry budgets (`F1-9`).
+- **Alternatives Rejected**:
+  - *Serializing `micro_cache_hits` and `micro_cache_misses`*: Makes restarted processes disagree on cache-warmup counts even when physical states match to the last bit.
+  - *Maintaining a manual field list in `photo_io`*: Reintroduces silent field omissions whenever fields are added (`N1-20`).

@@ -21,8 +21,8 @@
         "verified_total": 0,
         "pct_ported": 14.9,
         "pct_verified": 0.0,
-        "rust_lines": 57764,
-        "python_jax_lines": 4735
+        "rust_lines": 59526,
+        "python_jax_lines": 4765
       },
       {
         "module": "star_data",
@@ -55,8 +55,8 @@
         "verified_total": 0,
         "pct_ported": 18.2,
         "pct_verified": 0.0,
-        "rust_lines": 9935,
-        "python_jax_lines": 1253
+        "rust_lines": 10280,
+        "python_jax_lines": 1282
       },
       {
         "module": "astero",
@@ -89,7 +89,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 13253,
+        "rust_lines": 13285,
         "python_jax_lines": 9743
       },
       {
@@ -106,7 +106,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 4468,
+        "rust_lines": 4474,
         "python_jax_lines": 3093
       },
       {
@@ -123,7 +123,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 10256,
+        "rust_lines": 10347,
         "python_jax_lines": 728
       },
       {
@@ -140,7 +140,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 3179,
+        "rust_lines": 3181,
         "python_jax_lines": 1476
       },
       {
@@ -191,7 +191,7 @@
         "verified_total": 0,
         "pct_ported": 66.5,
         "pct_verified": 0.0,
-        "rust_lines": 2241,
+        "rust_lines": 2268,
         "python_jax_lines": 2368
       },
       {
@@ -327,7 +327,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 2747,
+        "rust_lines": 2799,
         "python_jax_lines": 1234
       },
       {
@@ -361,7 +361,7 @@
         "verified_total": 0,
         "pct_ported": 100.0,
         "pct_verified": 0.0,
-        "rust_lines": 359,
+        "rust_lines": 368,
         "python_jax_lines": 329
       },
       {
@@ -378,7 +378,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 3540,
+        "rust_lines": 4464,
         "python_jax_lines": 2353
       },
       {
@@ -455,7 +455,7 @@
       "upstream_panel_modules": 46
     },
     "infrastructure_lines": {
-      "rust_bridge_testing_bench": 15625,
+      "rust_bridge_testing_bench": 15673,
       "python_testing_bench": 13438
     }
   },
@@ -595,7 +595,7 @@
         "no_reference_yet": 4,
         "strict_validated": 0,
         "diagnostic_runs": 90,
-        "reached_termination": 35,
+        "reached_termination": 37,
         "within_numeric_tol": 5,
         "passing": 0,
         "declared_gaps": 86,
@@ -607,7 +607,7 @@
         "no_reference_yet": 0,
         "strict_validated": 0,
         "diagnostic_runs": 8,
-        "reached_termination": 2,
+        "reached_termination": 4,
         "within_numeric_tol": 0,
         "passing": 0,
         "declared_gaps": 8,
@@ -619,7 +619,7 @@
         "no_reference_yet": 0,
         "strict_validated": 0,
         "diagnostic_runs": 8,
-        "reached_termination": 4,
+        "reached_termination": 6,
         "within_numeric_tol": 0,
         "passing": 0,
         "declared_gaps": 8,
@@ -659,14 +659,13 @@
       "#154": 11,
       "#161": 9,
       "#162": 9,
-      "#157": 7,
+      "#157": 8,
       "#160": 7,
       "#170": 7,
       "#155": 6,
       "#158": 4,
       "#156": 2,
       "#159": 2,
-      "#150": 1,
       "#151": 1,
       "#171": 1
     },

@@ -3,10 +3,19 @@
 zone/face microphysics, coupled Henyey solver, convective mixing/overshooting,
 stellar winds, adaptive remeshing, H211 timestep control, and the evolution
 driver (`flexmesa.star`).
+
+Note:
+    The JAX `star` helper kernels (`jax_kernels`, `jax_winds_mix`, `jax_evolve`,
+    `jax_diffusion_rot`, `jax_hydro_pulse`, `jax_rsp`;
+    `JAX_ENGINE_STATUS == "frozen-unverified-until-#143"`) are **frozen and
+    unverified** under `#166` (`DECISIONS #17`) until the canonical Rust engine
+    passes the `#143` upstream MESA `26.4.1` history harness. No JAX stellar
+    evolution step exists (`StarModel` wraps the Rust solver).
 """
 
 from __future__ import annotations
 
+from flexmesa import _dispatch
 from flexmesa.star import (
     e2e,
     e2e_tier45,
@@ -18,6 +27,8 @@ from flexmesa.star import (
     jax_winds_mix,
     model,
 )
+
+JAX_ENGINE_STATUS: str = _dispatch.FROZEN_JAX_ENGINE_STATUS
 
 EvolveStepReport = model.EvolveStepReport
 HenyeySolverReport = model.HenyeySolverReport
@@ -107,6 +118,7 @@ yrs_for_init_timestep = model.yrs_for_init_timestep
 
 __all__ = [
     "ALL_ACTIVE_STAR_CASES",
+    "JAX_ENGINE_STATUS",
     "TIER1_CASES",
     "TIER2_CASES",
     "TIER3_CASES",

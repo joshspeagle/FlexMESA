@@ -21,12 +21,12 @@ If you import `jax.numpy` before `flexmesa` in a custom script, either import `f
 
 ### How does `backend="auto"` decide between Safe Rust and JAX?
 
-Every Tier B and Tier C physics function inspects its positional and keyword arguments via `flexmesa.resolve_backend(backend, *args)`:
+Safe Rust is the canonical implementation across `FlexMESA`, and every dual-backend dispatcher inspects its positional and keyword arguments recursively via `flexmesa.resolve_backend(backend, *args)` (descending through nested containers, dataclasses, object-dtype NumPy arrays, `__jax_array__` objects, and registered JAX PyTrees):
 
-- If **any** argument is a `jax.Array` or an active JAX tracer (`jax.core.Tracer` inside `jax.jit`, `jax.grad`, `jax.jacfwd`, or `jax.vmap`), `backend="auto"` dispatches to the native `@jax.jit` kernel.
-- Otherwise (for Python `float` scalars and `numpy.ndarray` arrays), `backend="auto"` dispatches zero-copy to the compiled `flexmesa._rust` (`PyO3`) Safe Rust extension.
+- If **any** inspected leaf is a `jax.Array` or active JAX tracer (`jax.core.Tracer` inside `jax.jit`, `jax.grad`, `jax.jacfwd`, or `jax.vmap`), `backend="auto"` routes to the derived JAX path (either a pure `@jax.jit` kernel or a `@jax.custom_vjp` / `@jax.custom_jvp` host callback wrapping `flexmesa._rust`; `star`, `binary`, and `astero` JAX helper modules remain frozen under `JAX_ENGINE_STATUS`).
+- Otherwise (for Python scalars and `numpy.ndarray` arrays), `backend="auto"` dispatches zero-copy to the compiled `flexmesa._rust` (`PyO3`) Safe Rust extension.
 
-You can override this behavior at any time by passing `backend="rust"` or `backend="jax"` explicitly.
+You can override this behavior at any time by passing `backend="rust"` or `backend="jax"` explicitly. See the [Backends & JAX Contract guide](../guides/backends-and-performance.md) for per-package AD modes and device support.
 
 ---
 

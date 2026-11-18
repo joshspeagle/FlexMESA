@@ -1,10 +1,11 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
-"""Bolometric and synthetic stellar photometry (`colors`, Wave 2c).
+"""Bolometric and synthetic stellar photometry (`colors`).
 
 Ports upstream MESA ``colors`` (`colors_def.f90`, `colors_lib.f90`,
 `bolometric.f90`, `synthetic.f90`, `hermite_interp.f90`, `linear_interp.f90`,
-`knn_interp.f90`, `colors_utils.f90`, and `colors_history.f90`) into the
-Three-Tier Hybrid Architecture:
+`knn_interp.f90`, `colors_utils.f90`, and `colors_history.f90`) with Safe Rust
+as the canonical evaluator and derived `float64` `@jax.jit` kernels for
+differentiation and batching:
 
 1. **Built-in Atmosphere & Filter Catalogs**:
    - ``Kurucz2003all`` 4D stellar atmosphere SED lookup cube over

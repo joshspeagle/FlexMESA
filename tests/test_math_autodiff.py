@@ -4,7 +4,7 @@
 Verifies all 33 functions in upstream MESA's `math/test/test_output.INTRINSIC`
 to `<= 1e-15`, `test_auto_diff.f90` cases across `DualOrder1` and
 `AutoDiffReal2VarOrder2` to `<= 1e-14`, `jax.test_util.check_grads` and
-`jax.hessian` parity, and `hypothesis` property checks.
+`jax.hessian` consistency, and `hypothesis` property checks.
 """
 
 from __future__ import annotations
@@ -39,7 +39,7 @@ def _assert_close(
     expected: jax.Array | np.ndarray | Sequence[float | jax.Array],
     tol: float = TOL_MATH,
 ) -> None:
-    """Assert elementwise parity within `rtol = tol` and `atol = tol`."""
+    """Assert elementwise consistency within `rtol = tol` and `atol = tol`."""
     golden.assert_values_match(
         np.asarray(actual, dtype=np.float64),
         np.asarray(expected, dtype=np.float64),
@@ -563,7 +563,7 @@ def test_auto_diff_complete_golden_test_output_and_order2_sweep() -> None:
             _assert_close(actual_vec, exp_vec, TOL_AD)
             _assert_close(actual_vec, ref_vec, TOL_AD)
 
-    # Order2Var2 comparison, binary, unary, and chain_rule parity
+    # Order2Var2 comparison, binary, unary, and chain_rule consistency
     c22 = ad.AutoDiffReal2VarOrder2
     x_cmp = c22.constant(3.1)
     y_cmp = c22.constant(2.9)

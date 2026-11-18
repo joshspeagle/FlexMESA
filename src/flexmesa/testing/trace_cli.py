@@ -575,6 +575,7 @@ def _render_harness_figures(
                 termination_code=rec.observed_termination,
                 numerics_mode=numerics_mode,
                 controls_ignored=rec.controls_ignored,
+                n_controls_ignored=rec.n_controls_ignored,
                 max_steps=max_steps,
                 case_entry=entry,
                 comparison=rec.comparison,

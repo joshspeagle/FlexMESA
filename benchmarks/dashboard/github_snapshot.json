@@ -101,8 +101,8 @@
     },
     {
       "phase": "Phase C",
-      "open": 13,
-      "closed": 0,
+      "open": 12,
+      "closed": 1,
       "issues": [
         {
           "number": 152,
@@ -167,7 +167,7 @@
         {
           "number": 166,
           "title": "[Audit C15] JAX contract: derived, differentiable and batched; validated against Rust strict mode",
-          "state": "open"
+          "state": "closed"
         }
       ]
     },
@@ -217,13 +217,7 @@
       "issues": []
     }
   ],
-  "open_pull_requests": [
-    {
-      "number": 214,
-      "title": "feat(plotting): MESA 26.4.1 comparison figures, CLI & PGSTAR map (#173)",
-      "draft": false
-    }
-  ],
+  "open_pull_requests": [],
   "deferred_169": [
     {
       "number": 175,
@@ -356,6 +350,14 @@
     {
       "number": 198,
       "title": "[Deferred bug] Seven core MESA 26.4.1 files bypass math_lib (CRMATH) into platform libm",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 218,
+      "title": "[Deferred bug] do_integrate_values drops the lower sub-interval on decreasing grids",
       "state": "open",
       "kind": "upstream-bug",
       "parity_pending": false,

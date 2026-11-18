@@ -10,55 +10,63 @@ import jax.numpy as jnp
 import jax.test_util as jtu
 import numpy as np
 
+import flexmesa
 from flexmesa import constants as const
 from flexmesa import star
 
 
-def test_convective_boundaries_overshoot_and_jax_mixing_parity() -> None:
-    """Verify boundary detection, overshooting, and `sig`/`dxdt_mix` parity."""
-    zams = star.StarModel.from_zams(initial_mass=4.0, initial_z=0.02)
-    dt = 1.0e8
+def test_convective_boundaries_overshoot_and_jax_mixing_consistency() -> None:
+    """Verify boundary detection, overshooting, and mixing consistency."""
+    with flexmesa.numerics_mode_context("strict"):
+        zams = star.StarModel.from_zams(initial_mass=4.0, initial_z=0.02)
+        dt = 1.0e8
 
-    n_bdy = zams.update_mixing(
-        dt=dt, overshoot_f=0.014, overshoot_f0=0.004, scheme="exponential"
-    )
-    assert n_bdy >= 1
-    assert np.any(zams.mixing_type == 2)  # OvershootMixing == 2
-
-    sig_rust = zams.sig
-    sig_jax = np.asarray(
-        star.eval_convection_sigmas_jax(
-            jnp.asarray(zams.r),
-            jnp.asarray(zams.rho),
-            jnp.asarray(zams.dq),
-            jnp.asarray(zams.d_mix),
-            float(zams.mstar),
-            dt,
+        n_bdy = zams.update_mixing(
+            dt=dt, overshoot_f=0.014, overshoot_f0=0.004, scheme="exponential"
         )
-    )
-    np.testing.assert_allclose(sig_jax, sig_rust, rtol=1.0e-12, atol=1.0e-12)
+        assert n_bdy >= 1
+        assert np.any(zams.mixing_type == 2)  # OvershootMixing == 2
 
-    # Verify save_start_values preserves computed `sig` rather than clobbering.
-    zams.save_start_values()
-    np.testing.assert_allclose(zams.sig, sig_rust, rtol=1.0e-14, atol=1.0e-14)
-
-    # Create a slight composition gradient to test non-zero diffusive fluxes.
-    xa_mod = zams.xa.copy()
-    xa_mod[:, 0] += 1.0e-4 * np.linspace(-1.0, 1.0, zams.nz)
-    xa_mod[:, 2] -= 1.0e-4 * np.linspace(-1.0, 1.0, zams.nz)
-    zams._rust_model.set_primary_state(
-        zams.lnd, zams.ln_t, zams.ln_r, zams.lum, zams.dq, xa_mod
-    )
-
-    dxdt_rust = zams.eval_dxdt_mix()
-    dxdt_jax = np.asarray(
-        star.eval_dxdt_mix_jax(
-            jnp.asarray(zams.xa),
-            jnp.asarray(zams.sig),
-            jnp.asarray(zams.dm),
+        sig_rust = zams.sig
+        sig_jax = np.asarray(
+            star.eval_convection_sigmas_jax(
+                jnp.asarray(zams.r),
+                jnp.asarray(zams.rho),
+                jnp.asarray(zams.dq),
+                jnp.asarray(zams.d_mix),
+                float(zams.mstar),
+                dt,
+            )
         )
-    )
-    np.testing.assert_allclose(dxdt_jax, dxdt_rust, rtol=1.0e-12, atol=1.0e-20)
+        np.testing.assert_allclose(
+            sig_jax, sig_rust, rtol=1.0e-12, atol=1.0e-12
+        )
+
+        # save_start_values preserves computed `sig` rather than clobbering.
+        zams.save_start_values()
+        np.testing.assert_allclose(
+            zams.sig, sig_rust, rtol=1.0e-14, atol=1.0e-14
+        )
+
+        # Create a slight composition gradient for non-zero diffusive fluxes.
+        xa_mod = zams.xa.copy()
+        xa_mod[:, 0] += 1.0e-4 * np.linspace(-1.0, 1.0, zams.nz)
+        xa_mod[:, 2] -= 1.0e-4 * np.linspace(-1.0, 1.0, zams.nz)
+        zams._rust_model.set_primary_state(
+            zams.lnd, zams.ln_t, zams.ln_r, zams.lum, zams.dq, xa_mod
+        )
+
+        dxdt_rust = zams.eval_dxdt_mix()
+        dxdt_jax = np.asarray(
+            star.eval_dxdt_mix_jax(
+                jnp.asarray(zams.xa),
+                jnp.asarray(zams.sig),
+                jnp.asarray(zams.dm),
+            )
+        )
+        np.testing.assert_allclose(
+            dxdt_jax, dxdt_rust, rtol=1.0e-12, atol=1.0e-20
+        )
 
     # Total species mass rate `sum_k dm[k] * dxdt_mix[k, j]` must vanish.
     mass_rates = np.sum(zams.dm[:, None] * dxdt_rust, axis=0)
@@ -168,29 +176,30 @@ def test_step_struct_burn_mix_coupled_and_op_split() -> None:
     np.testing.assert_allclose(np.sum(pre.xa, axis=1), 1.0, atol=1.0e-12)
 
 
-def test_stellar_winds_and_3_region_mass_adjustment_parity() -> None:
-    """Verify Rust and JAX wind schemes, gradients, and `do_adjust_mass`."""
-    zams = star.StarModel.from_zams(initial_mass=4.0, initial_z=0.02)
-    winds_jax = zams.eval_winds_jax(eta=1.0)
-    secyer = float(const.SECYER)
-    m_sun = float(const.M_SUN)
+def test_stellar_winds_rust_jax_consistency_and_mass_adjustment() -> None:
+    """Verify Rust (`strict`) and JAX wind schemes, grads, and adjust mass."""
+    with flexmesa.numerics_mode_context("strict"):
+        zams = star.StarModel.from_zams(initial_mass=4.0, initial_z=0.02)
+        winds_jax = zams.eval_winds_jax(eta=1.0)
+        secyer = float(const.SECYER)
+        m_sun = float(const.M_SUN)
 
-    for scheme, jax_key in [
-        ("Reimers", "w_reimers"),
-        ("Blocker", "w_blocker"),
-        ("Vink", "w_vink"),
-        ("Nieuwenhuijzen", "w_nieuwenhuijzen"),
-        ("de Jager", "w_de_jager"),
-        ("van Loon", "w_van_loon"),
-        ("Dutch", "w_dutch"),
-        ("Bjorklund", "w_bjorklund"),
-    ]:
-        mdot_rust = zams.apply_wind_and_adjust_mass(
-            scheme=scheme, eta=1.0, dt=0.0
-        )
-        w_rust = -mdot_rust * secyer / m_sun
-        w_jax = float(winds_jax[jax_key])
-        np.testing.assert_allclose(w_rust, w_jax, rtol=1.0e-11)
+        for scheme, jax_key in [
+            ("Reimers", "w_reimers"),
+            ("Blocker", "w_blocker"),
+            ("Vink", "w_vink"),
+            ("Nieuwenhuijzen", "w_nieuwenhuijzen"),
+            ("de Jager", "w_de_jager"),
+            ("van Loon", "w_van_loon"),
+            ("Dutch", "w_dutch"),
+            ("Bjorklund", "w_bjorklund"),
+        ]:
+            mdot_rust = zams.apply_wind_and_adjust_mass(
+                scheme=scheme, eta=1.0, dt=0.0
+            )
+            w_rust = -mdot_rust * secyer / m_sun
+            w_jax = float(winds_jax[jax_key])
+            np.testing.assert_allclose(w_rust, w_jax, rtol=1.0e-11)
 
     # Verify autodiff gradients on `eval_winds_jax` via `check_grads`.
     l_s0 = jnp.asarray(float(zams.lum[0]))

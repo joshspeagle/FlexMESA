@@ -7,13 +7,14 @@ import gc
 import os
 import re
 import sys
-from collections.abc import Generator
+from collections.abc import Generator, Iterator
 from typing import Any
 
 import hypothesis
 import jax
 import pytest
 
+import flexmesa
 from flexmesa.data import fetch
 from flexmesa.testing import known_gaps_gate
 
@@ -113,3 +114,10 @@ def pytest_terminal_summary(
         )
         for nodeid in _SKIPPED_NODEIDS:
             terminalreporter.write_line(f"  SKIPPED: {nodeid}")
+
+
+@pytest.fixture(autouse=True)
+def _enforce_strict_numerics_mode_default() -> Iterator[None]:
+    """Ensure every test starts and exits in ``numerics_mode == 'strict'``."""
+    with flexmesa.numerics_mode_context("strict"):
+        yield

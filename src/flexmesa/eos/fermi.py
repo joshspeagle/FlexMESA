@@ -276,7 +276,7 @@ def dfermi(
     Returns:
         Tuple `(fd, fd_deta, fd_dtheta)`.
     """
-    resolved = _dispatch.resolve_backend(backend, eta, theta)
+    resolved = _dispatch.resolve_backend(backend, dk, eta, theta)
     if resolved == "jax":
         return dfermi_jax(
             jnp.asarray(dk, dtype=jnp.float64),

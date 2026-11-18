@@ -307,8 +307,8 @@ def test_prop_interp2d_bicubic_reproduces_biquadratic_and_derivatives(
     np.testing.assert_allclose(float(ev.d2f_dxdy), a11, rtol=1e-11, atol=1e-11)
 
 
-def test_renka790_cshep2_cubic_and_scattered_2d_parity() -> None:
-    """Verify ACM TOMS 790 (`cshep2`/`qshep2`) cubic and scattered 2D parity."""
+def test_renka790_cshep2_cubic_reproduction_and_regression_snapshots() -> None:
+    """Verify ACM TOMS 790 (`cshep2`/`qshep2`) reproduction & snapshots."""
     # Exact cubic reproduction from test_renka790_db.f (N=20, NC=10, NW=16)
 
     def fq(xx: float, yy: float) -> float:
@@ -467,10 +467,11 @@ def test_renka790_cshep2_cubic_and_scattered_2d_parity() -> None:
         for px in p_grid
         for py in p_grid
     ]
+    # Franke's 33-node set: pinned FlexMESA regression error bounds.
     assert abs(max(errs) - 0.1985167087686014) < 1e-12
     assert abs(float(np.mean(errs)) - 0.03217025005461399) < 1e-12
 
-    # Scattered 2D interpolation on MESA's 31x35 test2D_db grid at 6 golden pts
+    # Scattered 2D evaluation on MESA's 31x35 grid at 6 snapshot points.
     xpts, ypts, z_grid = _mesa_2d_test_grid()
     xx, yy = np.meshgrid(xpts, ypts, indexing="ij")
     scat = interp_2d.interp_cshep2_db(
@@ -480,7 +481,7 @@ def test_renka790_cshep2_cubic_and_scattered_2d_parity() -> None:
     y_min, y_max = 0.2, 0.6 * math.pi
     dx = x_max - x_min
     dy = 0.5 * (y_max - y_min)
-    golden_pts = (
+    snapshot_pts = (
         (0, 0, 0.08443031571220527, 0.8426978068643065, -0.05312016510832069),
         (1, 0, 0.11571953715487195, -0.23272372576109734, -0.0292880351263485),
         (0, 1, 0.02583107216746556, 0.25668785540470757, -0.06076899376517829),
@@ -500,7 +501,7 @@ def test_renka790_cshep2_cubic_and_scattered_2d_parity() -> None:
             -0.06629310142916707,
         ),
     )
-    for i, j, exp_z, exp_dzdx, exp_dzdy in golden_pts:
+    for i, j, exp_z, exp_dzdx, exp_dzdy in snapshot_pts:
         qx = x_min + float(i) * dx
         qy = y_min + float(j) * dy
         z_scat, dz_dx, dz_dy = interp_2d.interp_cs2grd_db(scat, qx, qy)

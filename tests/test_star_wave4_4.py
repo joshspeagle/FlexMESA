@@ -12,11 +12,12 @@ import numpy as np
 import pytest
 from jax import test_util
 
+import flexmesa
 from flexmesa import constants as const
 from flexmesa import star
 
 
-def test_adaptive_remeshing_and_mesh_gval_jax_parity() -> None:
+def test_adaptive_remeshing_and_mesh_gval_jax_consistency() -> None:
     """Verify `eval_mesh_gval_jax`, autodiff, and conservative `adjust_mesh`."""
     pre = star.StarModel.from_pre_ms(
         initial_mass=4.0, initial_z=0.02, d_log10_p=0.15
@@ -61,25 +62,26 @@ def test_adaptive_remeshing_and_mesh_gval_jax_parity() -> None:
 
 
 def test_varcontrol_and_h211_timestep_filter_rust_vs_jax() -> None:
-    """Verify `varcontrol` and Söderlind & Wang (2006) H211 filter parity."""
-    pre = star.StarModel.from_pre_ms(
-        initial_mass=4.0, initial_z=0.02, d_log10_p=0.15
-    )
-    pre.set_evolve_controls(mesh_delta_coeff=1.0, varcontrol_target=1.0e-3)
-    pre.dt = 10.0 * float(const.SECYER)
-    pre.save_old_values()
+    """Verify `varcontrol` and Söderlind & Wang (2006) H211 consistency."""
+    with flexmesa.numerics_mode_context("strict"):
+        pre = star.StarModel.from_pre_ms(
+            initial_mass=4.0, initial_z=0.02, d_log10_p=0.15
+        )
+        pre.set_evolve_controls(mesh_delta_coeff=1.0, varcontrol_target=1.0e-3)
+        pre.dt = 10.0 * float(const.SECYER)
+        pre.save_old_values()
 
-    lnd_old = pre.lnd.copy()
-    ln_t_old = pre.ln_t.copy()
-    ln_r_old = pre.ln_r.copy()
-    lum_old = pre.lum.copy()
+        lnd_old = pre.lnd.copy()
+        ln_t_old = pre.ln_t.copy()
+        ln_r_old = pre.ln_r.copy()
+        lum_old = pre.lum.copy()
 
-    rep = pre.step_struct_burn_mix(dt=pre.dt, op_split_burn=False)
-    assert rep.converged
+        rep = pre.step_struct_burn_mix(dt=pre.dt, op_split_burn=False)
+        assert rep.converged
 
-    dt_next_rust, vc_rust, ratio_rust = pre.pick_next_timestep(
-        max_timestep_factor=1.2, min_timestep_factor=0.5
-    )
+        dt_next_rust, vc_rust, ratio_rust = pre.pick_next_timestep(
+            max_timestep_factor=1.2, min_timestep_factor=0.5
+        )
     vc_jax = float(
         star.eval_varcontrol_jax(
             jnp.asarray(pre.lnd),

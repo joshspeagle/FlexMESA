@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
 """Core EOS schema, polygonal blending, and ground-state ionization offsets.
 
-Provides the Tier B dual-track (`backend="auto" | "rust" | "jax"`) Python and
-JAX interfaces for Wave 3a.1 (`eos_def`, `eos_blend`, and `ion_offset`).
+Provides canonical Safe Rust (``backend="rust"``), derived JAX
+(``backend="jax"``), and automatic dispatch (``backend="auto"``) interfaces for
+``eos_def``, ``eos_blend``, and ``ion_offset``.
 """
 
 from __future__ import annotations
@@ -180,7 +181,12 @@ def blend_eos_results(
         Blended [`EosEvalOutput`] with chain-rule partial derivatives.
     """
     resolved = _dispatch.resolve_backend(
-        backend, alpha_in, res_1.res, res_2.res
+        backend,
+        alpha_in,
+        d_alpha_dlog_t_in,
+        d_alpha_dlog_rho_in,
+        res_1,
+        res_2,
     )
     if resolved == "jax":
         a0 = jnp.asarray(alpha_in, dtype=jnp.float64)

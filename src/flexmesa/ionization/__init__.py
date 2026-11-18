@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
 r"""Ionic charge tables, 4D partial pressures, and diffusion (`ionization`).
 
-Provides the Three-Tier Hybrid implementation of MESA's `ionization` module
-(`ionization_def.f90`, `ionization_lib.f90`, `mod_ionization.f90`,
-`ion_tables_load.f90`, `ion_tables_eval.f90`) and `mod_typical_charge.f90`:
+Ports MESA's `ionization` module (`ionization_def.f90`, `ionization_lib.f90`,
+`mod_ionization.f90`, `ion_tables_load.f90`, `ion_tables_eval.f90`) and
+`mod_typical_charge.f90` with canonical Safe Rust routines and derived `float64`
+JAX kernels (validated against Rust `strict` mode):
 - **Fe56 in He4 (`fe56_he4`)**: 2D not-a-knot bicubic spline over the
   $105 \times 30$ Thomas-Fermi-Dirac-Hubbard $(\log_{10} n_e, \log_{10} T)$
   grid (`eval_charge_of_fe56_in_he4`, `eval_charge_of_fe56_in_he4_jax`,

@@ -79,7 +79,9 @@ def eval_ideal_eos_from_weights(
         [`EosEvalOutput`] containing `res`, `d_dlnd`, and `d_dln_t` of shape
         `(26,)`.
     """
-    resolved = _dispatch.resolve_backend(backend, temp, rho, xa)
+    resolved = _dispatch.resolve_backend(
+        backend, temp, rho, abar, zbar, xa, weights, a
+    )
     if resolved == "jax":
         res, d_dlnd, d_dln_t = _eval_ideal_eos_jax(
             jnp.asarray(temp, dtype=jnp.float64),
@@ -135,7 +137,9 @@ def eval_ideal_eos_zones(
         [`EosEvalOutput`] with `res`, `d_dlnd`, and `d_dln_t` of shape
         `(N_zones, 26)`.
     """
-    resolved = _dispatch.resolve_backend(backend, temp, rho, xa)
+    resolved = _dispatch.resolve_backend(
+        backend, temp, rho, abar, zbar, xa, weights, a
+    )
     if resolved == "jax":
         t_j = jnp.asarray(temp, dtype=jnp.float64)
         r_j = jnp.asarray(rho, dtype=jnp.float64)

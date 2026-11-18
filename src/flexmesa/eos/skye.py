@@ -463,7 +463,12 @@ def eval_skye_eos_zones(
         [`EosEvalOutput`] with `res`, `d_dlnd`, and `d_dln_t` of shape
         `(N_zones, 26)`.
     """
-    if _dispatch.resolve_backend(backend, rho, temp, abar, zbar, xa) == "jax":
+    if (
+        _dispatch.resolve_backend(
+            backend, rho, temp, abar, zbar, xa, z, acmi, a
+        )
+        == "jax"
+    ):
         r_j, t_j = jnp.asarray(rho, jnp.float64), jnp.asarray(temp, jnp.float64)
         if r_j.size == 0:
             empty = jnp.zeros(

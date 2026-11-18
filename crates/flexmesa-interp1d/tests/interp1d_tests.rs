@@ -117,8 +117,10 @@ fn test_upstream_mesa_test1_m3q_matches_golden_output() {
     }
 }
 
-/// Verifies `interp_m3q` and `integrate_values` against upstream MESA
-/// `test2(.true.)` and confirms exact reflection symmetry on `test2(.false.)`.
+/// Verifies `interp_m3q` and `integrate_values` against the `test2 T` and
+/// `test2 F` blocks of upstream MESA `26.4.1` `interp_1d/test/test_output`.
+/// On the decreasing grid upstream does not subtract the lower sub-interval
+/// (`interp_1d/private/interp_1d_misc.f90:97`); this is reproduced (#218).
 #[test]
 fn test_upstream_mesa_test2_sin_and_integral_match_golden_output() {
     let n = 43usize;
@@ -152,17 +154,30 @@ fn test_upstream_mesa_test2_sin_and_integral_match_golden_output() {
         ];
         assert_allclose(&vals, &expected_vals, "test2 sin vals");
 
-        // Definite integrals over [xs[k-1], xs[k]] are invariant under x -> -x.
         let integrals = integrate_values(&init_xs, &coeffs, &xs).unwrap();
-        let expected_integrals = [
-            0.0,
-            2.9288520516627042e-1,
-            2.0710675623584285e-1,
-            4.9999994192722058e-1,
-            4.9999994167149031e-1,
-            2.0710675639571818e-1,
-            2.8058152844437595e-1,
-        ];
+        let expected_integrals = if increasing {
+            // interp_1d/test/test_output, block `test2 T`.
+            [
+                0.0,
+                2.9288520516627042e-1,
+                2.0710675623584285e-1,
+                4.9999994192722058e-1,
+                4.9999994167149031e-1,
+                2.0710675639571818e-1,
+                2.8058152844437595e-1,
+            ]
+        } else {
+            // interp_1d/test/test_output, block `test2 F`.
+            [
+                0.0,
+                2.9288520516627042e-1,
+                2.2352243926395926e-1,
+                5.7974467155565013e-1,
+                5.4696945190299473e-1,
+                2.9095991000708077e-1,
+                3.3213283703072322e-1,
+            ]
+        };
         assert_allclose(&integrals, &expected_integrals, "test2 sin integrals");
     }
 }

@@ -22,7 +22,7 @@
         "pct_ported": 14.9,
         "pct_verified": 0.0,
         "rust_lines": 57764,
-        "python_jax_lines": 4723
+        "python_jax_lines": 4735
       },
       {
         "module": "star_data",
@@ -56,7 +56,7 @@
         "pct_ported": 18.2,
         "pct_verified": 0.0,
         "rust_lines": 9935,
-        "python_jax_lines": 1242
+        "python_jax_lines": 1253
       },
       {
         "module": "astero",
@@ -73,7 +73,7 @@
         "pct_ported": 0.0,
         "pct_verified": 0.0,
         "rust_lines": 6219,
-        "python_jax_lines": 1206
+        "python_jax_lines": 1260
       },
       {
         "module": "eos",
@@ -90,7 +90,7 @@
         "pct_ported": 0.0,
         "pct_verified": 0.0,
         "rust_lines": 13253,
-        "python_jax_lines": 9726
+        "python_jax_lines": 9743
       },
       {
         "module": "kap",
@@ -107,7 +107,7 @@
         "pct_ported": 0.0,
         "pct_verified": 0.0,
         "rust_lines": 4468,
-        "python_jax_lines": 3078
+        "python_jax_lines": 3093
       },
       {
         "module": "net",
@@ -141,7 +141,7 @@
         "pct_ported": 0.0,
         "pct_verified": 0.0,
         "rust_lines": 3179,
-        "python_jax_lines": 1474
+        "python_jax_lines": 1476
       },
       {
         "module": "neu",
@@ -158,7 +158,7 @@
         "pct_ported": 83.9,
         "pct_verified": 0.0,
         "rust_lines": 1916,
-        "python_jax_lines": 2600
+        "python_jax_lines": 2648
       },
       {
         "module": "atm",
@@ -209,7 +209,7 @@
         "pct_ported": 0.0,
         "pct_verified": 0.0,
         "rust_lines": 2338,
-        "python_jax_lines": 898
+        "python_jax_lines": 930
       },
       {
         "module": "ionization",
@@ -226,7 +226,7 @@
         "pct_ported": 0.0,
         "pct_verified": 0.0,
         "rust_lines": 2846,
-        "python_jax_lines": 982
+        "python_jax_lines": 1033
       },
       {
         "module": "colors",
@@ -243,7 +243,7 @@
         "pct_ported": 0.0,
         "pct_verified": 0.0,
         "rust_lines": 2453,
-        "python_jax_lines": 1499
+        "python_jax_lines": 1500
       },
       {
         "module": "num",
@@ -293,8 +293,8 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 1194,
-        "python_jax_lines": 1297
+        "rust_lines": 1205,
+        "python_jax_lines": 1311
       },
       {
         "module": "interp_2d",
@@ -311,7 +311,7 @@
         "pct_ported": 0.9,
         "pct_verified": 0.0,
         "rust_lines": 2687,
-        "python_jax_lines": 2274
+        "python_jax_lines": 2288
       },
       {
         "module": "auto_diff",
@@ -447,7 +447,7 @@
         "pct_ported": 0.0,
         "pct_verified": 0.0,
         "rust_lines": 0,
-        "python_jax_lines": 2873
+        "python_jax_lines": 2897
       }
     ],
     "plotting_panels": {
@@ -456,7 +456,7 @@
     },
     "infrastructure_lines": {
       "rust_bridge_testing_bench": 15625,
-      "python_testing_bench": 13437
+      "python_testing_bench": 13438
     }
   },
   "numerics": {
@@ -916,16 +916,16 @@
     "python": {
       "tool": "pytest --cov",
       "overall": {
-        "statements": 20911,
-        "covered": 18340,
-        "percent": 87.7
+        "statements": 21641,
+        "covered": 18960,
+        "percent": 87.6
       },
       "by_subpackage": [
         {
           "subpackage": "flexmesa",
-          "statements": 97,
-          "covered": 85,
-          "percent": 87.6
+          "statements": 138,
+          "covered": 124,
+          "percent": 89.9
         },
         {
           "subpackage": "flexmesa.astero",
@@ -953,15 +953,15 @@
         },
         {
           "subpackage": "flexmesa.binary",
-          "statements": 321,
-          "covered": 309,
+          "statements": 323,
+          "covered": 311,
           "percent": 96.3
         },
         {
           "subpackage": "flexmesa.chem",
-          "statements": 240,
-          "covered": 231,
-          "percent": 96.2
+          "statements": 246,
+          "covered": 234,
+          "percent": 95.1
         },
         {
           "subpackage": "flexmesa.colors",
@@ -995,20 +995,20 @@
         },
         {
           "subpackage": "flexmesa.interp_2d",
-          "statements": 1055,
-          "covered": 865,
+          "statements": 1053,
+          "covered": 863,
           "percent": 82.0
         },
         {
           "subpackage": "flexmesa.ionization",
-          "statements": 312,
-          "covered": 300,
-          "percent": 96.2
+          "statements": 334,
+          "covered": 312,
+          "percent": 93.4
         },
         {
           "subpackage": "flexmesa.kap",
-          "statements": 1308,
-          "covered": 1269,
+          "statements": 1313,
+          "covered": 1274,
           "percent": 97.0
         },
         {
@@ -1031,9 +1031,9 @@
         },
         {
           "subpackage": "flexmesa.neu",
-          "statements": 1066,
-          "covered": 947,
-          "percent": 88.8
+          "statements": 1062,
+          "covered": 525,
+          "percent": 49.4
         },
         {
           "subpackage": "flexmesa.num",
@@ -1043,9 +1043,9 @@
         },
         {
           "subpackage": "flexmesa.plotting",
-          "statements": 182,
-          "covered": 171,
-          "percent": 94.0
+          "statements": 805,
+          "covered": 759,
+          "percent": 94.3
         },
         {
           "subpackage": "flexmesa.rates",
@@ -1061,21 +1061,21 @@
         },
         {
           "subpackage": "flexmesa.star",
-          "statements": 1438,
-          "covered": 1334,
+          "statements": 1440,
+          "covered": 1336,
           "percent": 92.8
         },
         {
           "subpackage": "flexmesa.testing",
-          "statements": 3342,
-          "covered": 2266,
-          "percent": 67.8
+          "statements": 3377,
+          "covered": 2661,
+          "percent": 78.8
         },
         {
           "subpackage": "flexmesa.turb",
           "statements": 912,
-          "covered": 803,
-          "percent": 88.0
+          "covered": 801,
+          "percent": 87.8
         },
         {
           "subpackage": "flexmesa.utils",
@@ -1268,8 +1268,8 @@
       },
       {
         "phase": "Phase C",
-        "open": 13,
-        "closed": 0,
+        "open": 12,
+        "closed": 1,
         "issues": [
           {
             "number": 152,
@@ -1334,7 +1334,7 @@
           {
             "number": 166,
             "title": "[Audit C15] JAX contract: derived, differentiable and batched; validated against Rust strict mode",
-            "state": "open"
+            "state": "closed"
           }
         ]
       },
@@ -1384,13 +1384,7 @@
         "issues": []
       }
     ],
-    "open_pull_requests": [
-      {
-        "number": 214,
-        "title": "feat(plotting): MESA 26.4.1 comparison figures, CLI & PGSTAR map (#173)",
-        "draft": false
-      }
-    ],
+    "open_pull_requests": [],
     "deferred_169": [
       {
         "number": 175,
@@ -1523,6 +1517,14 @@
       {
         "number": 198,
         "title": "[Deferred bug] Seven core MESA 26.4.1 files bypass math_lib (CRMATH) into platform libm",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": false,
+        "needs_confirmation": false
+      },
+      {
+        "number": 218,
+        "title": "[Deferred bug] do_integrate_values drops the lower sub-interval on decreasing grids",
         "state": "open",
         "kind": "upstream-bug",
         "parity_pending": false,
@@ -1738,6 +1740,58 @@
       "closed_140": "9",
       "total_140": "32",
       "deferred_169": "17"
+    },
+    {
+      "date_utc": "2026-11-18",
+      "commit": "3153e32",
+      "event": "main merge",
+      "engine_ported_pct": "13.9",
+      "all_verified_pct": "0.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "71.1",
+      "python_cov_pct": "89.6",
+      "closed_140": "9",
+      "total_140": "32",
+      "deferred_169": "17"
+    },
+    {
+      "date_utc": "2026-11-18",
+      "commit": "916f075",
+      "event": "main merge",
+      "engine_ported_pct": "13.9",
+      "all_verified_pct": "0.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "71.1",
+      "python_cov_pct": "89.6",
+      "closed_140": "9",
+      "total_140": "32",
+      "deferred_169": "17"
+    },
+    {
+      "date_utc": "2026-11-18",
+      "commit": "33dff54",
+      "event": "main merge",
+      "engine_ported_pct": "13.9",
+      "all_verified_pct": "0.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "71.1",
+      "python_cov_pct": "87.6",
+      "closed_140": "10",
+      "total_140": "32",
+      "deferred_169": "18"
+    },
+    {
+      "date_utc": "2026-11-18",
+      "commit": "2c061b7",
+      "event": "main merge",
+      "engine_ported_pct": "13.9",
+      "all_verified_pct": "0.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "71.1",
+      "python_cov_pct": "87.6",
+      "closed_140": "10",
+      "total_140": "32",
+      "deferred_169": "18"
     }
   ]
 }

@@ -155,6 +155,7 @@ def plot_case_comparison(
     numerics_mode: str = "",
     controls_ignored: bool = False,
     max_steps: int | None = None,
+    n_controls_ignored: int = 0,
     case_entry: case_manifest.CaseManifestEntry | None = None,
     comparison: history_compare.HistoryComparison | None = None,
 ) -> tuple[mpl_figure.Figure, np.ndarray]:
@@ -179,6 +180,8 @@ def plot_case_comparison(
         numerics_mode: Optional arithmetic mode label (``"strict"``/``"fast"``).
         controls_ignored: Whether the run skipped unsupported controls.
         max_steps: Optional per-stage step cap used during a smoke trace.
+        n_controls_ignored: Number of unsupported controls the run ignored,
+            shown in the ``diagnostic`` label when positive.
         case_entry: Optional pre-resolved ``CaseManifestEntry`` to avoid
             re-parsing ``case_manifest.toml``.
         comparison: Optional precomputed ``HistoryComparison`` from a harness
@@ -273,6 +276,7 @@ def plot_case_comparison(
             termination_code=termination_code,
             numerics_mode=numerics_mode,
             controls_ignored=controls_ignored,
+            n_controls_ignored=n_controls_ignored,
             max_steps=max_steps,
         ),
         fontsize=9.0,

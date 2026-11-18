@@ -1,6 +1,14 @@
 # Interacting Binaries & Accretors (`flexmesa.binary`)
 
-The `flexmesa.binary` subpackage ports upstream MESA's `binary/` module across Safe Rust (`crates/flexmesa-binary`) and pure JAX (`float64`). It models detached, semi-detached, and compact-object binary evolution by coupling one or two `StarModel` instances (or a donor star and a point-mass Neutron Star or Kerr Black Hole accretor) to orbital angular momentum and eccentricity evolution:
+!!! warning "Frozen & Unverified JAX Binary Helpers (`#166`)"
+    The JAX `binary` modules (`jax_kernels`, `jax_orbit_mdot`,
+    `jax_jdot_tides`) are **frozen and unverified**
+    (`JAX_ENGINE_STATUS = "frozen-unverified-until-#143"`) until the canonical
+    Safe Rust engine passes the upstream MESA `26.4.1` history harness
+    (`#143`). `BinarySystem` wraps the Rust driver, and these JAX helpers must
+    not be modified before `#143` passes.
+
+The `flexmesa.binary` subpackage ports upstream MESA's `binary/` module in canonical Safe Rust (`crates/flexmesa-binary`) alongside frozen (`float64`) JAX helper kernels. It models detached, semi-detached, and compact-object binary evolution by coupling one or two `StarModel` instances (or a donor star and a point-mass Neutron Star or Kerr Black Hole accretor) to orbital angular momentum and eccentricity evolution:
 
 - **Roche-Lobe Geometry & Mass-Transfer Schemes**: Keplerian separation $a(M_1, M_2, P)$, Eggleton (1983) volume-equivalent Roche-lobe radius $R_{\mathrm{RL},1}/a$ (`eval_rlobe`), periastron overflow gap (`eval_rl_relative_gap`), explicit Ritter (1988) optically thin atmospheric mass transfer (`eval_ritter_mdot_thin`), Kolb & Ritter (1990) optically thick adiabatic overflow integration (`eval_kolb_mdot_thick`), and implicit bisection/secant $\dot{M}_{\mathrm{RLOF}}$ solvers.
 - **Compact-Object Accretion & Kerr Spin Evolution**: Eddington-limited mass transfer, radiation pressure wind retention (`alpha`, `beta`, `delta`, `gamma`), and exact Bardeen (1970) / Thorne (1974) Innermost Stable Circular Orbit (ISCO) dimensionless spin $a_* \in [0, 0.998]$ and radiative efficiency $\eta_{\mathrm{ISCO}}$ (`eval_bh_spin_and_edd_jax`).

@@ -246,6 +246,12 @@ def integrate_values(
     Returns an array ``integrals`` of shape ``(M,)`` with ``integrals[0] = 0``
     and ``integrals[k] = \\int_{xs[k-1]}^{xs[k]} f(x)\\,dx`` for ``k >= 1``.
 
+    Reproduces upstream MESA ``26.4.1`` ``do_integrate_values``
+    (``interp_1d/private/interp_1d_misc.f90:29-109``), including two
+    properties recorded in deferred issue ``#218``: on a decreasing grid the
+    lower sub-interval is not subtracted, and the sweep starts at the first
+    cell, so ``xs[0]`` is expected to lie in it.
+
     Args:
         init_x: Strictly monotonic knot coordinates of shape ``(N,)``
             (``N >= 2``) in physical or dimensionless units.
@@ -285,45 +291,48 @@ def integrate_values(
     if float(np.min(x_q)) < lo or float(np.max(x_q)) > hi:
         raise ValueError("xs must lie within the init_x domain.")
 
-    grid_asc = x_grid if increasing else x_grid[::-1]
+    for k in range(1, x_q.size):
+        if (increasing and x_q[k] < x_q[k - 1]) or (
+            not increasing and x_q[k] > x_q[k - 1]
+        ):
+            raise ValueError(
+                "xs must be monotonic in the same direction as init_x."
+            )
+
+    # Transliteration of upstream MESA 26.4.1 `do_integrate_values`
+    # (interp_1d/private/interp_1d_misc.f90:55-105), kept in step with the
+    # Rust kernel. The sweep starts at the first cell, and the lower
+    # sub-interval is subtracted only when `x1 > x0`, which never holds on a
+    # decreasing grid (deferred issue #218).
     out = np.zeros(x_q.size, dtype=np.float64)
+    k_old = 0
+    xkp1_old = float(x_grid[1])
+    xk_prev = float(x_q[0])
+
+    def _segment(cell: int, x2: float, x1: float) -> float:
+        x0 = float(x_grid[cell])
+        a2 = _cubic_antideriv(c_arr[cell], x2 - x0)
+        if x1 > x0:
+            return a2 - _cubic_antideriv(c_arr[cell], x1 - x0)
+        return a2
 
     for k in range(1, x_q.size):
-        xa, xb = float(x_q[k - 1]), float(x_q[k])
-        if increasing:
-            if xb < xa:
-                raise ValueError("xs must be increasing within init_x range.")
-            pos = int(np.searchsorted(grid_asc, xa, side="right")) - 1
-            start_i = max(0, min(pos, nx - 2))
-        else:
-            if xb > xa:
-                raise ValueError("xs must be decreasing within init_x range.")
-            pos = int(np.searchsorted(grid_asc, xa, side="left"))
-            start_i = max(0, min((nx - 2) - pos, nx - 2))
-        if xa == xb:
-            continue
-
+        xk_new = float(x_q[k])
         total = 0.0
-        for i in range(start_i, nx - 1):
-            x0, x1 = float(x_grid[i]), float(x_grid[i + 1])
-            if increasing:
-                if x1 <= xa:
-                    continue
-                if x0 >= xb:
-                    break
-                seg_start, seg_end = max(xa, x0), min(xb, x1)
-            else:
-                if x1 >= xa:
-                    continue
-                if x0 <= xb:
-                    break
-                seg_start, seg_end = min(xa, x0), max(xb, x1)
-            a2 = _cubic_antideriv(c_arr[i], seg_end - x0)
-            a1 = (
-                _cubic_antideriv(c_arr[i], seg_start - x0)
-                if seg_start != x0
-                else 0.0
-            )
-            total += a2 - a1
+        while (increasing and xk_new > xkp1_old) or (
+            not increasing and xk_new < xkp1_old
+        ):
+            k_old += 1
+            if k_old >= nx - 1:
+                k_old = nx - 2
+                xk_new = xkp1_old
+                break
+            if xk_prev != xkp1_old:
+                total += _segment(k_old - 1, xkp1_old, xk_prev)
+                xk_prev = xkp1_old
+            xkp1_old = float(x_grid[k_old + 1])
+        if xk_prev != xk_new:
+            total += _segment(k_old, xk_new, xk_prev)
+            xk_prev = xk_new
         out[k] = total
     return jnp.asarray(out, dtype=jnp.float64)

@@ -1,8 +1,13 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
 """Two-dimensional bicubic, piecewise-monotonic, and Akima (1996) interpolation.
 
-This subpackage ports upstream MESA ``interp_2d`` into ``float64`` NumPy/JAX
-with differentiable bicubic evaluation (`jax.grad`, `jax.hessian`, `jax.vmap`):
+This subpackage exposes canonical Safe Rust (`backend="rust"`) and Python/JAX
+interfaces for upstream MESA ``interp_2d``: bicubic point evaluation
+(`interp_evbicub_db` and `interp_evbicub_mask_db`) is JAX-traceable and
+differentiable (`jax.grad`, `jax.hessian`, `jax.vmap`) wrt query points and
+coefficients on CPU/GPU, whereas coefficient builders (`interp_mkbicub_db`,
+`interp_mkbipm_db`, `rgpd3p_db`, `interp_cshep2_db`) and scattered helpers run
+host-side NumPy logic when given ``backend="jax"``.
 
 - **C^2 Bicubic splines** (`interp_mkbicub_db`, `interp_evbicub_db`,
   `interp_evbicub_mask_db`, `herm2xy_db`, `interp_mkspline_db`, `splinck_db`):

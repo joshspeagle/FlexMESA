@@ -1,6 +1,6 @@
 # Tutorial 6: End-to-End Differentiable JAX Workflows (`float64`)
 
-A central scientific motivation of `FlexMESA` is enabling gradient-based calibration, sensitivity analysis, and Hamiltonian Monte Carlo inference across stellar microphysics, 1D Henyey structure solvers, binary mass transfer, and asteroseismology. In `FlexMESA`'s architecture, Safe Rust (`"strict"` mode) is the canonical physics engine compared against MESA `26.4.1` (`#165`), while JAX (`backend="jax"`) serves as the derived layer for automatic differentiation and vectorized batching validated against Rust `"strict"` mode (`#166`). Importing `flexmesa` automatically enables 64-bit IEEE-754 floating-point precision (`jax_enable_x64 = True`), so every `_jax` kernel and `backend="jax"` dispatch entry point supports forward-mode (`jax.jacfwd`, `jax.jvp`) and reverse-mode (`jax.grad`, `jax.vjp`) automatic differentiation alongside `jax.vmap`.
+A central scientific motivation of `FlexMESA` is enabling gradient-based calibration, sensitivity analysis, and Hamiltonian Monte Carlo inference across stellar microphysics, linear solvers, and diagnostic observables. In `FlexMESA`'s architecture, Safe Rust (`"strict"` mode) is the canonical physics engine compared against MESA `26.4.1` (`#165`), while JAX (`backend="jax"`) serves as the derived layer for automatic differentiation and vectorized batching validated against Rust `"strict"` mode (`#166`). Importing `flexmesa` automatically enables 64-bit IEEE-754 floating-point precision (`jax_enable_x64 = True`), though per-module AD modes and device support depend on whether a kernel is pure JAX (`CPU + GPU/TPU`) or wraps Rust via `jax.pure_callback` / `@jax.custom_vjp` (`CPU`-only and, in `net`, reverse-mode at frozen composition moments; see the [Per-Module JAX Status table](../guides/backends-and-performance.md)).
 
 This tutorial demonstrates end-to-end differentiable workflows across six core modules:
 
@@ -155,9 +155,9 @@ print(
 
 ---
 
-## 3. Differentiable Binary & Asteroseismic Forward Models
+## 3. Frozen & Unverified Binary & Asteroseismic Helper Kernels
 
-Finally, `binary` and `astero.jax_kernels` allow you to differentiate binary Roche-lobe radii, implicit mass-transfer rates, and surface-corrected asteroseismic $\chi^2$ likelihoods directly with respect to physical stellar parameters $(M_1, M_2, R, T_{\mathrm{eff}})$:
+`flexmesa.binary`, `flexmesa.astero`, and `flexmesa.star` include standalone closed-form JAX formula helpers that remain **frozen and unverified** (`JAX_ENGINE_STATUS = "frozen-unverified-until-#143"`) until the canonical Rust engine passes the `#143` upstream MESA `26.4.1` history harness. There is no JAX stellar or binary evolution step yet; end-to-end trajectories run in Rust (`#166`). The example below exercises those frozen diagnostic formula helpers only:
 
 ```python
 import jax

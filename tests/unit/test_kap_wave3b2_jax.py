@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
-"""JAX autodiff, `kapCN`, and multi-zone batch parity tests for `kap`."""
+"""JAX autodiff, `kapCN`, and multi-zone batch consistency tests for `kap`."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+import flexmesa
 from flexmesa import kap
 from flexmesa.kap import jax_co_lowt, jax_interp, jax_kernels
 
@@ -98,21 +99,22 @@ def test_jax_grad_and_jacfwd_derivatives_match_analytical_and_fd() -> None:
     )
 
 
-def test_kapcn_and_multi_zone_batch_evaluation_parity() -> None:
-    """Verify `kap_get_kapcn` knot accuracy and `kap_get_zones` parity."""
-    for backend in ("rust", "jax"):
-        kap_cn, _, _ = kap.kap_get_kapcn(
-            zbase=0.02,
-            x=0.70,
-            fc=1.0,
-            fn_val=1.0,
-            log_rho=-10.2,
-            log_t=3.6,
-            backend=backend,
-        )
-        np.testing.assert_allclose(
-            np.log10(float(kap_cn)), -3.361, rtol=1e-12, atol=0.0
-        )
+def test_kapcn_knot_and_multi_zone_batch_consistency() -> None:
+    """Verify `kap_get_kapcn` knot value and `kap_get_zones` consistency."""
+    with flexmesa.numerics_mode_context("strict"):
+        for backend in ("rust", "jax"):
+            kap_cn, _, _ = kap.kap_get_kapcn(
+                zbase=0.02,
+                x=0.70,
+                fc=1.0,
+                fn_val=1.0,
+                log_rho=-10.2,
+                log_t=3.6,
+                backend=backend,
+            )
+            np.testing.assert_allclose(
+                np.log10(float(kap_cn)), -3.361, rtol=1e-12, atol=0.0
+            )
 
     chem_id = np.array([2, 7, 40, 53, 66], dtype=np.uintp)
     xa_row = np.array([0.70, 0.28, 0.005, 0.002, 0.013], dtype=np.float64)
@@ -191,15 +193,16 @@ def test_kapcn_and_multi_zone_batch_evaluation_parity() -> None:
     lk_aes, (dr_aes, dt_aes) = jax.value_and_grad(fn_aes, argnums=(0, 1))(
         jnp.float64(-8.4), jnp.float64(3.55)
     )
-    ref_aes = kap.kap_get_results(
-        0.035,
-        0.70,
-        0.035,
-        log_rho=-8.4,
-        log_t=3.55,
-        kap_low_t_option="AESOPUS",
-        backend="rust",
-    )
+    with flexmesa.numerics_mode_context("strict"):
+        ref_aes = kap.kap_get_results(
+            0.035,
+            0.70,
+            0.035,
+            log_rho=-8.4,
+            log_t=3.55,
+            kap_low_t_option="AESOPUS",
+            backend="rust",
+        )
     np.testing.assert_allclose(
         [float(10.0**lk_aes), float(dr_aes), float(dt_aes)],
         [ref_aes.kap, ref_aes.dlnkap_dln_rho, ref_aes.dlnkap_dln_t],

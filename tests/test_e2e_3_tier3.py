@@ -197,7 +197,7 @@ def test_synthetic_tier3_case_execution_and_photo_restart(
 
 
 @pytest.mark.parametrize("case_name", star.TIER3_CASES)
-def test_upstream_mesa_tier3_test_suite_case_passes_with_restart_parity(
+def test_upstream_mesa_tier3_test_suite_case_with_restart_reproducibility(
     case_name: str,
     tmp_path: pathlib.Path,
 ) -> None:

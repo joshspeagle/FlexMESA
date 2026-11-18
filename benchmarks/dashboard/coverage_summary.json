@@ -168,16 +168,16 @@
   "python": {
     "tool": "pytest --cov",
     "overall": {
-      "statements": 20911,
-      "covered": 18340,
-      "percent": 87.7
+      "statements": 21641,
+      "covered": 18960,
+      "percent": 87.6
     },
     "by_subpackage": [
       {
         "subpackage": "flexmesa",
-        "statements": 97,
-        "covered": 85,
-        "percent": 87.6
+        "statements": 138,
+        "covered": 124,
+        "percent": 89.9
       },
       {
         "subpackage": "flexmesa.astero",
@@ -205,15 +205,15 @@
       },
       {
         "subpackage": "flexmesa.binary",
-        "statements": 321,
-        "covered": 309,
+        "statements": 323,
+        "covered": 311,
         "percent": 96.3
       },
       {
         "subpackage": "flexmesa.chem",
-        "statements": 240,
-        "covered": 231,
-        "percent": 96.2
+        "statements": 246,
+        "covered": 234,
+        "percent": 95.1
       },
       {
         "subpackage": "flexmesa.colors",
@@ -247,20 +247,20 @@
       },
       {
         "subpackage": "flexmesa.interp_2d",
-        "statements": 1055,
-        "covered": 865,
+        "statements": 1053,
+        "covered": 863,
         "percent": 82.0
       },
       {
         "subpackage": "flexmesa.ionization",
-        "statements": 312,
-        "covered": 300,
-        "percent": 96.2
+        "statements": 334,
+        "covered": 312,
+        "percent": 93.4
       },
       {
         "subpackage": "flexmesa.kap",
-        "statements": 1308,
-        "covered": 1269,
+        "statements": 1313,
+        "covered": 1274,
         "percent": 97.0
       },
       {
@@ -283,9 +283,9 @@
       },
       {
         "subpackage": "flexmesa.neu",
-        "statements": 1066,
-        "covered": 947,
-        "percent": 88.8
+        "statements": 1062,
+        "covered": 525,
+        "percent": 49.4
       },
       {
         "subpackage": "flexmesa.num",
@@ -295,9 +295,9 @@
       },
       {
         "subpackage": "flexmesa.plotting",
-        "statements": 182,
-        "covered": 171,
-        "percent": 94.0
+        "statements": 805,
+        "covered": 759,
+        "percent": 94.3
       },
       {
         "subpackage": "flexmesa.rates",
@@ -313,21 +313,21 @@
       },
       {
         "subpackage": "flexmesa.star",
-        "statements": 1438,
-        "covered": 1334,
+        "statements": 1440,
+        "covered": 1336,
         "percent": 92.8
       },
       {
         "subpackage": "flexmesa.testing",
-        "statements": 3342,
-        "covered": 2266,
-        "percent": 67.8
+        "statements": 3377,
+        "covered": 2661,
+        "percent": 78.8
       },
       {
         "subpackage": "flexmesa.turb",
         "statements": 912,
-        "covered": 803,
-        "percent": 88.0
+        "covered": 801,
+        "percent": 87.8
       },
       {
         "subpackage": "flexmesa.utils",

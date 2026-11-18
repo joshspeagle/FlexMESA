@@ -210,7 +210,7 @@ def test_synthetic_tier1_case_runners_pass_assertions_and_restart(
     inlist_body: str,
 ) -> None:
     """Verify synthetic Tier 1 case directories execute `Tier1CaseExtras`,
-    pass physical assertions, and satisfy bit-identical `.photo` restart parity.
+    pass physical assertions, and reproduce `.photo` restarts bit-identically.
     """
     with tempfile.TemporaryDirectory() as tmp:
         case_dir = pathlib.Path(tmp) / case_name
@@ -301,7 +301,7 @@ def test_full_stages_skip_optional_false_multi_stage_tier1_execution() -> None:
 
 
 @pytest.mark.parametrize("case_name", star.TIER1_CASES)
-def test_upstream_tier1_test_suite_case_reproduction_and_restart_parity(
+def test_upstream_tier1_test_suite_case_and_restart_reproducibility(
     case_name: str,
     tmp_path: pathlib.Path,
 ) -> None:

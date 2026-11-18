@@ -167,7 +167,7 @@ The table below documents what the JAX side of each package actually implements,
 
 ## 5. Design Note: Gradients Through the Canonical Rust Engine (Post-`#143`)
 
-Because JAX is derived from Rust and frozen on the engine side (`#166`), end-to-end differentiation through stellar structure solves and evolutionary steps will wrap the verified Safe Rust engine with custom JAX differentiation rules rather than maintaining a second full evolution engine in JAX. This section records the interface needed once the `#143` history harness passes:
+Because JAX is derived from Rust and frozen on the engine side (`#166`), end-to-end differentiation through stellar structure solves and evolutionary steps will wrap the canonical Safe Rust engine with custom JAX differentiation rules rather than maintaining a second full evolution engine in JAX. This section records the interface needed once the `#143` history harness passes:
 
 1. **Derivatives Rust Already Computes**:
    - Single-zone microphysics evaluators return full partial derivatives wrt thermodynamic and composition inputs: `eos` returns $(P_{\mathrm{gas}}, E, S, \dots)$ and partials wrt $(\ln T, \ln \rho, \bar{A}, \bar{Z})$; `kap`, `rates`, `neu`, and `turb` return analytical state partials; `net` returns $(d\mathbf{X}/dt, \epsilon_{\mathrm{nuc}}, \epsilon_\nu)$ and their analytical Jacobian wrt $(X_i, T, \rho)$; `atm` returns $(\ln T_{\mathrm{surf}}, \ln P_{\mathrm{surf}})$ and surface partials wrt $(L, \ln R, \ln M, \ln \kappa)$.
@@ -178,7 +178,7 @@ Because JAX is derived from Rust and frozen on the engine side (`#166`), end-to-
      $$
      \bar{\mathbf{y}}_n = \left(\frac{\partial\mathbf{F}}{\partial\mathbf{y}_n}\right)^\top \boldsymbol{\lambda}, \qquad \bar{\boldsymbol{\theta}} = \left(\frac{\partial\mathbf{F}}{\partial\boldsymbol{\theta}}\right)^\top \boldsymbol{\lambda}.
      $$
-     No Newton solver iterations are differentiated (`jax.lax.stop_gradient` on step count, retries, and line-search factors), and the linear solve reuses the verified `flexmesa.mtx` IFT pattern.
+     No Newton solver iterations are differentiated (`jax.lax.stop_gradient` on step count, retries, and line-search factors), and the linear solve reuses the existing `flexmesa.mtx` IFT pattern.
    - **Forward mode (`@jax.custom_jvp`)**: Given input tangents $(\dot{\mathbf{y}}_n, \dot{\boldsymbol{\theta}})$, solve $\mathbf{J}\,\dot{\mathbf{y}}_{n+1} = -\left(\frac{\partial\mathbf{F}}{\partial\mathbf{y}_n}\dot{\mathbf{y}}_n + \frac{\partial\mathbf{F}}{\partial\boldsymbol{\theta}}\dot{\boldsymbol{\theta}}\right)$ with the same factorized or `bcyclic` linear solver to support `jax.jvp` / `jax.jacfwd`.
 3. **Requirements for a Differentiable Multi-Step Evolution Trajectory**:
    - **Explicit $\partial\mathbf{F}/\partial\mathbf{y}_n$ and $\partial\mathbf{F}/\partial\boldsymbol{\theta}$ Hooks over `PyO3`**: Beyond the already-exposed $\partial\mathbf{F}/\partial\mathbf{y}_{n+1}$ blocks `(lblk, dblk, ublk)`, Rust must expose lightweight VJP/JVP contractions of time-derivative and boundary terms wrt old-step arrays $(\rho_{\mathrm{start}}, T_{\mathrm{start}}, E_{\mathrm{start}}, X_{i,\mathrm{start}})$ (`_start` coupling in hydro and nuclear burning) and continuous namelist parameters $\boldsymbol{\theta}$ (e.g., $\alpha_{\mathrm{MLT}}$, overshoot $f_{\mathrm{ov}}$, wind efficiency $\eta$, $\Delta t$).

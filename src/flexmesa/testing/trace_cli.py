@@ -309,6 +309,14 @@ def _build_harness_parser() -> argparse.ArgumentParser:
     p_run.add_argument("--markdown-out", default=None)
     p_run.add_argument("--json-out", default=None)
     p_run.add_argument(
+        "--figures-dir",
+        default=None,
+        help=(
+            "Optional directory for rendered MESA comparison PNGs linked from "
+            "--markdown-out (#173)."
+        ),
+    )
+    p_run.add_argument(
         "--save-baseline",
         default=None,
         help="Write timing-normalized baseline JSON for 'harness table'.",
@@ -522,6 +530,73 @@ def _run_selected_entries(
     return [indexed_records[i] for i in range(len(selected))]
 
 
+def _render_harness_figures(
+    manifest: case_manifest.HarnessManifest,
+    records: list[harness_runner.CaseHarnessRecord],
+    work_root: pathlib.Path,
+    figures_dir: str,
+    *,
+    manifest_path: str | None,
+    markdown_out: str | None,
+    numerics_mode: str,
+    max_steps: int | None,
+) -> dict[tuple[str, str], str]:
+    import matplotlib.pyplot as plt
+
+    from flexmesa.plotting import compare as plot_compare
+
+    entry_by_key = manifest.by_key()
+    fig_root = pathlib.Path(figures_dir)
+    md_parent = (
+        pathlib.Path(markdown_out).resolve().parent if markdown_out else None
+    )
+    fig_links: dict[tuple[str, str], str] = {}
+    for rec in records:
+        entry = entry_by_key[rec.suite, rec.case]
+        if (
+            not rec.executed
+            or entry.reference_status == "no_reference_yet"
+            or not entry.reference_path
+        ):
+            continue
+        hist_p = harness_runner.locate_written_history(
+            rec.suite, work_root / rec.suite / rec.case, True
+        )
+        if hist_p is None:
+            continue
+        fig_out = fig_root / rec.suite / f"{rec.case}.png"
+        try:
+            fig, _ = plot_compare.plot_case_comparison(
+                rec.case,
+                suite=rec.suite,
+                flexmesa_history=hist_p,
+                manifest_path=manifest_path,
+                save_path=fig_out,
+                termination_code=rec.observed_termination,
+                numerics_mode=numerics_mode,
+                controls_ignored=rec.controls_ignored,
+                max_steps=max_steps,
+                case_entry=entry,
+                comparison=rec.comparison,
+            )
+        except (OSError, ValueError, KeyError) as exc:
+            print(
+                f"[harness] skipping figure for {rec.suite}/{rec.case}: {exc}",
+                file=sys.stderr,
+            )
+            continue
+        plt.close(fig)
+        if md_parent is not None:
+            fig_links[(rec.suite, rec.case)] = (
+                fig_out.resolve()
+                .relative_to(md_parent, walk_up=True)
+                .as_posix()
+            )
+        else:
+            fig_links[(rec.suite, rec.case)] = fig_out.as_posix()
+    return fig_links
+
+
 def harness_main(argv: list[str] | None = None) -> int:
     """Execute ``flexmesa harness table|run``.
 
@@ -555,6 +630,7 @@ def harness_main(argv: list[str] | None = None) -> int:
     selected = _select_entries(manifest, ns.preset, ns.cases)
     base_dir = pathlib.Path(ns.manifest).parent if ns.manifest else None
 
+    fig_links: dict[tuple[str, str], str] | None = None
     with contextlib.ExitStack() as stack:
         if ns.work_dir is None:
             tmp_dir = stack.enter_context(
@@ -565,6 +641,18 @@ def harness_main(argv: list[str] | None = None) -> int:
             work_root = pathlib.Path(ns.work_dir)
             work_root.mkdir(parents=True, exist_ok=True)
         records = _run_selected_entries(selected, gaps, work_root, ns, base_dir)
+
+        if ns.figures_dir is not None:
+            fig_links = _render_harness_figures(
+                manifest,
+                records,
+                work_root,
+                ns.figures_dir,
+                manifest_path=ns.manifest,
+                markdown_out=ns.markdown_out,
+                numerics_mode=ns.numerics_mode,
+                max_steps=ns.max_steps,
+            )
 
     payload = case_report.build_report_payload(
         manifest,
@@ -578,6 +666,7 @@ def harness_main(argv: list[str] | None = None) -> int:
             records,
             summary=payload["summary"],
             known_gaps=gaps,
+            figure_links=fig_links,
         )
         mpath = pathlib.Path(ns.markdown_out)
         mpath.parent.mkdir(parents=True, exist_ok=True)

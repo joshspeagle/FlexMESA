@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
-# Portable Makefile for the Wave 1 four-stage Fortran MESA benchmark suite.
+# Portable Makefile for the Wave 1 to Wave 5 Fortran MESA benchmark suite.
 #
 # Usage:
-#   make MESA_DIR=/path/to/mesa run
+#   make MESA_DIR=/path/to/mesa MESASDK_ROOT=/path/to/mesasdk run
 
 MESA_DIR ?= ../../../mesa
 ifeq ($(origin FC), default)
@@ -12,39 +12,60 @@ FC ?= gfortran
 BUILD_DIR ?= build
 FFLAGS ?= -O2 -fopenmp -cpp -ffree-form -ffree-line-length-none
 
-MESA_INC := -I$(MESA_DIR)/include -I$(MESA_DIR)/interp_2d/make
-MESA_LIBS := \
-	$(MESA_DIR)/lib/libatm.a \
-	$(MESA_DIR)/lib/libnet.a \
-	$(MESA_DIR)/lib/librates.a \
-	$(MESA_DIR)/lib/libkap.a \
-	$(MESA_DIR)/lib/libeos.a \
-	$(MESA_DIR)/lib/libcolors.a \
-	$(MESA_DIR)/lib/libionization.a \
-	$(MESA_DIR)/lib/libturb.a \
-	$(MESA_DIR)/lib/libneu.a \
-	$(MESA_DIR)/lib/libinterp_2d.a \
-	$(MESA_DIR)/lib/libnum.a \
-	$(MESA_DIR)/lib/libmtx.a \
-	$(MESA_DIR)/lib/libinterp_1d.a \
-	$(MESA_DIR)/lib/libauto_diff.a \
-	$(MESA_DIR)/lib/libchem.a \
-	$(MESA_DIR)/lib/libmath.a \
-	$(MESA_DIR)/lib/libutils.a \
-	$(MESA_DIR)/lib/libconst.a \
-	$(MESA_DIR)/lib/libforum.a
+MESA_BASE_MODULES := \
+	atm net rates kap eos colors ionization turb neu \
+	interp_2d num mtx interp_1d auto_diff chem math utils const forum
+
+MESA_STAR_MODS := star star_data gyre gyre_mesa $(MESA_BASE_MODULES)
+MESA_WAVE5_MODS := astero adipls binary $(MESA_STAR_MODS)
+
+ifeq ($(wildcard $(MESA_DIR)/build/const/.*),)
+# Classic ./install layout: $(MESA_DIR)/lib/lib*.a, $(MESA_DIR)/include/*.mod,
+# plus module private $(MESA_DIR)/<module>/make/*.mod directories.
+MESA_PRIVATE_MOD_DIRS := $(wildcard $(addsuffix /make,$(addprefix $(MESA_DIR)/,$(MESA_WAVE5_MODS))))
+MESA_INC := -I$(MESA_DIR)/include $(addprefix -I,$(MESA_PRIVATE_MOD_DIRS))
+MESA_LIB_PATH = $(MESA_DIR)/lib/lib$(1).a
+else
+# CMake build/<module>/{lib,include,modules} layout.
+MESA_INC := $(foreach m,$(MESA_WAVE5_MODS),$(if $(wildcard $(MESA_DIR)/build/$(m)),-I$(MESA_DIR)/build/$(m)/include -I$(MESA_DIR)/build/$(m)/modules))
+MESA_LIB_PATH = $(firstword $(wildcard $(MESA_DIR)/build/$(1)/lib/lib$(1).a $(MESA_DIR)/build/gyre/lib/lib$(1).a) $(MESA_DIR)/build/$(1)/lib/lib$(1).a)
+endif
+
+MESA_LIBS := $(foreach m,$(MESA_BASE_MODULES),$(call MESA_LIB_PATH,$(m)))
 
 MESA_STAR_LIBS := \
-	$(MESA_DIR)/lib/libstar.a \
-	$(MESA_DIR)/lib/libstar_data.a \
+	$(call MESA_LIB_PATH,star) \
+	$(call MESA_LIB_PATH,star_data) \
+	$(call MESA_LIB_PATH,gyre_mesa) \
+	$(call MESA_LIB_PATH,gyre) \
 	$(MESA_LIBS)
 
+# Replicate libastero after libstar because libadipls needs astero callbacks.
 MESA_WAVE5_LIBS := \
-	$(MESA_DIR)/lib/libastero.a \
-	$(MESA_DIR)/lib/libbinary.a \
-	$(MESA_STAR_LIBS)
+	$(call MESA_LIB_PATH,astero) \
+	$(call MESA_LIB_PATH,adipls) \
+	$(call MESA_LIB_PATH,binary) \
+	$(call MESA_LIB_PATH,star) \
+	$(call MESA_LIB_PATH,star_data) \
+	$(call MESA_LIB_PATH,astero) \
+	$(call MESA_LIB_PATH,gyre_mesa) \
+	$(call MESA_LIB_PATH,gyre) \
+	$(MESA_LIBS)
 
+ifdef MESASDK_ROOT
+SDK_LINK_ENV := PATH="$(MESASDK_ROOT)/bin:$(PATH)" MESASDK_ROOT="$(MESASDK_ROOT)"
+SDK_CRMATH_LIBS ?= $(shell $(SDK_LINK_ENV) $(MESASDK_ROOT)/bin/mesasdk_crmath_link 2>/dev/null || echo "-L$(MESASDK_ROOT)/lib -lcrmath -lcrlibm")
+SDK_LAPACK95_LIBS ?= $(shell $(SDK_LINK_ENV) $(MESASDK_ROOT)/bin/mesasdk_lapack95_link 2>/dev/null || echo "-L$(MESASDK_ROOT)/math-slots/default/lib -llapack95 -ltmg -llapack -lblas")
+SDK_LAPACK_LIBS ?= $(shell $(SDK_LINK_ENV) $(MESASDK_ROOT)/bin/mesasdk_lapack_link 2>/dev/null || echo "-L$(MESASDK_ROOT)/math-slots/default/lib -llapack -lblas")
+SDK_BLAS_LIBS ?= $(shell $(SDK_LINK_ENV) $(MESASDK_ROOT)/bin/mesasdk_blas_link 2>/dev/null || echo "-L$(MESASDK_ROOT)/math-slots/default/lib -lblas")
+SDK_HDF5_LIBS ?= $(shell $(SDK_LINK_ENV) $(MESASDK_ROOT)/bin/mesasdk_hdf5_link 2>/dev/null || echo "-L$(MESASDK_ROOT)/lib -lhdf5_fortran -lhdf5 -lz")
+SDK_PGPLOT_LIBS ?= $(shell $(SDK_LINK_ENV) $(MESASDK_ROOT)/bin/mesasdk_pgplot_link 2>/dev/null || echo "-L$(MESASDK_ROOT)/lib -lpgplot") -lz
+BLAS_LAPACK_LIBS ?= $(SDK_CRMATH_LIBS) $(SDK_LAPACK95_LIBS) $(SDK_LAPACK_LIBS) $(SDK_BLAS_LIBS) $(SDK_HDF5_LIBS)
+STAR_EXT_LIBS ?= $(SDK_PGPLOT_LIBS)
+else
 BLAS_LAPACK_LIBS ?= $(shell pkg-config --libs lapack blas 2>/dev/null || echo "-llapack -lblas")
+STAR_EXT_LIBS ?=
+endif
 
 OBJS := \
 	$(BUILD_DIR)/bench_harness.o \
@@ -151,10 +172,10 @@ $(TARGET_WAVE3B): $(WAVE3B_OBJS)
 	$(FC) $(FFLAGS) -o $@ $(WAVE3B_OBJS) $(MESA_LIBS) $(BLAS_LAPACK_LIBS)
 
 $(TARGET_WAVE4): $(WAVE4_OBJS)
-	$(FC) $(FFLAGS) -o $@ $(WAVE4_OBJS) $(MESA_STAR_LIBS) $(BLAS_LAPACK_LIBS) -lstdc++
+	$(FC) $(FFLAGS) -o $@ $(WAVE4_OBJS) $(MESA_STAR_LIBS) $(STAR_EXT_LIBS) $(BLAS_LAPACK_LIBS) -lstdc++
 
 $(TARGET_WAVE5): $(WAVE5_OBJS)
-	$(FC) $(FFLAGS) -o $@ $(WAVE5_OBJS) $(MESA_WAVE5_LIBS) $(BLAS_LAPACK_LIBS) -lstdc++
+	$(FC) $(FFLAGS) -o $@ $(WAVE5_OBJS) $(MESA_WAVE5_LIBS) $(STAR_EXT_LIBS) $(BLAS_LAPACK_LIBS) -lstdc++
 
 run: $(TARGET)
 	MESA_DIR=$(MESA_DIR) $(TARGET)

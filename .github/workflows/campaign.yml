@@ -164,9 +164,8 @@ jobs:
           cargo test -p flexmesa-eos --release --no-fail-fast \
             -- --ignored --nocapture \
             2>&1 | tee "$LOG_DIR/eos_ignored.log"
-          cargo test -p flexmesa-bench --release --no-fail-fast \
-            -- --ignored --nocapture \
-            2>&1 | tee "$LOG_DIR/bench_ignored.log"
+          cargo run -p flexmesa-bench --release --bin run_rust_benchmarks \
+            2>&1 | tee "$LOG_DIR/rust_benchmarks.md"
           # --no-fail-fast: without it cargo stops at the first test binary
           # with a failure and the remaining campaigns are never run.
           cargo test -p flexmesa-binary -p flexmesa-astero --release \
@@ -177,7 +176,6 @@ jobs:
             --live-github \
             --require-all-rust-ignores-executed \
             --cargo-ignored-log "$LOG_DIR/eos_ignored.log" \
-            --cargo-ignored-log "$LOG_DIR/bench_ignored.log" \
             --cargo-ignored-log "$LOG_DIR/campaign_ignored.log" \
             --markdown-out "$LOG_DIR/ignored_gate.md" \
             --json-out "$LOG_DIR/ignored_gate.json"

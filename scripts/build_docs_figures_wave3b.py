@@ -10,11 +10,12 @@ four sides, frameless legends, and journal-derived widths):
    nuclear energy generation $\\log_{10}\\epsilon_{\\mathrm{nuc}}$ and
    ${}^{12}\\mathrm{C}(\\alpha,\\gamma){}^{16}\\mathrm{O}$ screened rate across
    temperature comparing Safe Rust and JAX (right).
-2. `wave3b_benchmark_staircase.png`: Pre-audit Wave 3b.5 runtime comparison at
-   $N_{\\mathrm{zones}} = 4096$ across Pre-Audit Fortran, Safe Rust,
-   Python/PyO3 (`flexmesa._rust`), and Python/JAX (`@jax.jit(vmap)`) (left),
-   paired with `ATM_TABLE_PHOTOSPHERE` vs. Eddington grey $T(\\tau)$ surface
-   pressure boundary conditions across $T_{\\mathrm{eff}}$ (right).
+2. `wave3b_benchmark_staircase.png`: MESA `26.4.1` Wave 3b runtime comparison
+   at $N_{\\mathrm{zones}} = 4096$ loaded from `benchmarks/raw/26.4.1/` across
+   MESA `26.4.1` Fortran, Safe Rust, Python/PyO3 (`flexmesa._rust`), and
+   Python/JAX (`@jax.jit(vmap)`) (left), paired with `ATM_TABLE_PHOTOSPHERE`
+   vs. Eddington grey $T(\\tau)$ surface pressure boundary conditions across
+   $T_{\\mathrm{eff}}$ (right).
 """
 
 from __future__ import annotations
@@ -25,6 +26,7 @@ import jax.numpy as jnp
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
+from docs import raw_benchmarks as _raw_bench
 from matplotlib import figure
 
 from flexmesa import _rust, atm, chem, constants, kap, net, rates
@@ -224,21 +226,31 @@ def plot_wave3b_microphysics_diagnostics(out_dir: pathlib.Path) -> None:
 
 
 def plot_wave3b_benchmark_staircase(out_dir: pathlib.Path) -> None:
-    """Plot the 4-way Wave 3b.5 runtime comparison and atmosphere profiles."""
+    """Plot 4-way Wave 3b runtime comparison and atmosphere profiles."""
     _configure_plot_style()
-    workloads = ["eos_4d", "kap", "rates", "net", "atm"]
-    x_pos = np.arange(len(workloads), dtype=np.float64)
+    raw = _raw_bench.load_raw_benchmarks()
+    labels = ["eos_4d", "kap", "rates", "net", "atm"]
+    keys = ["eos_4d", "kap_fixed", "rates_screen", "net_eval", "atm_table"]
+    x_pos = np.arange(len(labels), dtype=np.float64)
     w_bar = 0.18
-    fortran_4t = np.array([1451.55, 452.32, 271.28, 10185.83, 650.79])
-    rust_4t = np.array([994.56, 266.31, 95.25, 3738.18, 62.66])
-    pyo3_4t = np.array([1070.91, 300.27, 167.71, 3792.84, 81.50])
-    jax_vmap = np.array([143.95, 401.20, 226.50, 3709.81, 167.47])
+    fortran_4t = np.array(
+        [raw.get("fortran", w, 4096).stage3.median_us for w in keys]
+    )
+    rust_4t = np.array(
+        [raw.get("rust", w, 4096).stage3.median_us for w in keys]
+    )
+    pyo3_4t = np.array(
+        [raw.get("python", w, 4096).stage1.median_us for w in keys]
+    )
+    jax_vmap = np.array(
+        [raw.get("python", w, 4096).stage3.median_us for w in keys]
+    )
 
     fig, ax = _two_panel_fig(wspace=0.40)
     bars = (
-        (-1.5, fortran_4t, "C2", 0.85, "Pre-Audit Fortran (4t)"),
-        (-0.5, rust_4t, "C0", 0.95, "Safe Rust (4t)"),
-        (0.5, pyo3_4t, "C1", 0.90, "PyO3 (4t)"),
+        (-1.5, fortran_4t, "C2", 0.85, "MESA 26.4.1 Fortran (4t)"),
+        (-0.5, rust_4t, "C0", 0.95, "Safe Rust (4t rayon)"),
+        (0.5, pyo3_4t, "C1", 0.90, "PyO3 (4t rayon)"),
         (1.5, jax_vmap, "C3", 0.85, "JAX (vmap)"),
     )
     for mult, arr, col, alp, lbl in bars:
@@ -251,8 +263,8 @@ def plot_wave3b_benchmark_staircase(out_dir: pathlib.Path) -> None:
             label=lbl,
         )
     ax[0].set_xticks(x_pos)
-    ax[0].set_xticklabels(workloads, fontsize=8.0)
-    ax[0].set_ylim(1.4, 4.4)
+    ax[0].set_xticklabels(labels, fontsize=8.0)
+    ax[0].set_ylim(1.4, 5.15)
     ax[0].set_xlabel(r"Wave 3b Workload ($N_{\mathrm{zones}} = 4096$)")
     ax[0].set_ylabel(r"Latency [$\log_{10}(t / \mu\mathrm{s})$]")
     ax[0].legend(frameon=False, loc="upper left")

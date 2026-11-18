@@ -2,8 +2,8 @@
 ! -----------------------------------------------------------------------------
 ! Program: run_wave1_bench
 !
-! Executes the Wave 1 four-stage Fortran MESA benchmark and cross-language
-! parity suite across all six Wave 1 workloads:
+! Executes the Wave 1 four-stage Fortran MESA benchmark and internal
+! stage-consistency suite across all six Wave 1 workloads:
 !   1. auto_diff     (auto_diff_real_2var_order2)
 !   2. interp_2d     (interp_mkbicub_db / interp_evbicub_db / fvbicub_db)
 !   3. neu           (Itoh et al. 1996 pair + plasmon neu_get)
@@ -11,9 +11,9 @@
 !   5. turb_mlt      (Cox 1968 set_MLT with auto_diff_real_star_order1)
 !   6. turb_tdc      (Kuhfuss 1986 set_TDC with auto_diff_real_star_order1)
 !
-! First verifies internal stage parity (Stages 1..3 vs. Stage 0 <= 1e-12)
+! First verifies internal cross-stage agreement (Stages 1..3 vs. Stage 0 <= 1e-12)
 ! across N_zones in {8, 32} and checks N_zones = 8 checksums against the
-! pinned cross-language reference values from flexmesa-bench (Rust) and
+! recorded regression snapshots matching flexmesa-bench (Rust) and
 ! flexmesa.bench (Python/NumPy/JAX). Then runs the full timing suite across
 ! N_zones in {128, 1024, 4096} and prints the Markdown summary table.
 ! -----------------------------------------------------------------------------
@@ -28,9 +28,9 @@ program run_wave1_bench
       bench_turb_tdc
    implicit none
 
-   ! Pinned N_zones = 8 cross-language checksums matching flexmesa-bench (Rust)
+   ! Recorded N_zones = 8 regression snapshots matching flexmesa-bench (Rust)
    ! and flexmesa.bench (Python/NumPy/JAX).
-   real(dp), parameter :: EXPECTED_CHECKSUMS_N8(6) = [ &
+   real(dp), parameter :: REGRESSION_SNAPSHOTS_N8(6) = [ &
       1.089274155553244e4_dp, &
       3.622775349153983e2_dp, &
       9.873195638253145e12_dp, &
@@ -57,21 +57,21 @@ program run_wave1_bench
    call math_init()
    call init_bicub_table(table)
 
-   ! Step 1: Verify internal stage parity and cross-language N_zones = 8
-   ! reference checksums before running the timing suite.
+   ! Step 1: Verify internal cross-stage agreement and recorded N_zones = 8
+   ! regression snapshots before running the timing suite.
    do idx = 1, size(PARITY_ZONES)
       call run_all_workloads( &
          PARITY_ZONES(idx), table, 1, 3, recs, d1, d2, d3, d4)
       do w = 1, 6
          if ((recs(w)%max_rel_err /= recs(w)%max_rel_err) .or. &
              (recs(w)%max_rel_err > 1.0e-12_dp)) then
-            write (*, '(a,a,a,es12.4)') 'Parity failure in ', &
+            write (*, '(a,a,a,es12.4)') 'Stage mismatch in ', &
                trim(recs(w)%workload), ': max_rel_err = ', recs(w)%max_rel_err
             stop 1
          end if
          if (PARITY_ZONES(idx) == 8) then
-            rel_chk = abs(recs(w)%checksum - EXPECTED_CHECKSUMS_N8(w)) &
-               / abs(EXPECTED_CHECKSUMS_N8(w))
+            rel_chk = abs(recs(w)%checksum - REGRESSION_SNAPSHOTS_N8(w)) &
+               / abs(REGRESSION_SNAPSHOTS_N8(w))
             ! Upstream MESA fvbicub_db (w == 2) uses implicit 32-bit REAL
             ! locals (xp, yp, cx, cy, hx2, hy2, z36th), giving ~7.2e-9 vs f64.
             tol_chk = merge(1.0e-8_dp, 1.0e-11_dp, w == 2)

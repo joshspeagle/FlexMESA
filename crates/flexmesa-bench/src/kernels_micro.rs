@@ -171,7 +171,7 @@ where
 /// * `n_repeats` - Number of timed iterations.
 ///
 /// # Returns
-/// [`BenchRecord`] with Stages 0..3 latencies, parity error, and checksum.
+/// [`BenchRecord`] with Stages 0..3 latencies, cross-stage relative error, and checksum.
 pub fn bench_autodiff(
     grid: &ThermoGrid,
     n_warmup: usize,
@@ -196,7 +196,7 @@ pub fn bench_autodiff(
 /// * `n_repeats` - Number of timed iterations.
 ///
 /// # Returns
-/// [`BenchRecord`] with Stages 0..3 latencies, parity error, and checksum.
+/// [`BenchRecord`] with Stages 0..3 latencies, cross-stage relative error, and checksum.
 pub fn bench_interp2d(
     grid: &ThermoGrid,
     table: &BicubTable,
@@ -249,7 +249,7 @@ pub fn bench_interp2d(
 /// * `n_repeats` - Number of timed iterations.
 ///
 /// # Returns
-/// [`BenchRecord`] with Stages 0..3 latencies, parity error, and checksum.
+/// [`BenchRecord`] with Stages 0..3 latencies, cross-stage relative error, and checksum.
 pub fn bench_neu(
     grid: &ThermoGrid,
     n_warmup: usize,

@@ -36,13 +36,13 @@ program run_wave4_bench
    call init_base_zams_star(mesa_dir_arg, id_base, s_base, ierr)
    if (ierr /= 0) stop 'init_base_zams_star failed'
 
-   ! Step 1: Verify internal stage parity at N_zones = 8 before timing.
+   ! Step 1: Verify cross-stage agreement at N_zones = 8 before timing.
    do idx = 1, size(PARITY_ZONES)
       call run_all_wave4_workloads(s_base, PARITY_ZONES(idx), 1, 3, recs)
       do w = 1, 5
          if ((recs(w)%max_rel_err /= recs(w)%max_rel_err) .or. &
              (recs(w)%max_rel_err > 1.0e-10_dp)) then
-            write (*, '(a,a,a,es12.4)') 'Parity failure in ', &
+            write (*, '(a,a,a,es12.4)') 'Stage mismatch in ', &
                trim(recs(w)%workload), ': max_rel_err = ', recs(w)%max_rel_err
             stop 1
          end if
@@ -83,8 +83,8 @@ contains
    subroutine print_record_row(rec)
       type(BenchRecord), intent(in) :: rec
 
-      write (*, '(a,a,a,i5,a,f9.2,a,f7.2,a,f9.2,a,f7.2,a,' // &
-                'f9.2,a,f7.2,a,f9.2,a,f7.2,a,es9.2,a,es15.8,a)') &
+      write (*, '(a,a,a,i5,a,f11.2,a,f9.2,a,f11.2,a,f9.2,a,' // &
+                'f11.2,a,f9.2,a,f11.2,a,f9.2,a,es9.2,a,es15.8,a)') &
          '| `', trim(rec%workload), '` | ', rec%n_zones, &
          ' | ', rec%stage0%median_us, ' +/- ', rec%stage0%iqr_us, &
          ' | ', rec%stage1%median_us, ' +/- ', rec%stage1%iqr_us, &

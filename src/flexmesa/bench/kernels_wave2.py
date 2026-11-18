@@ -138,7 +138,7 @@ def bench_chem_comp(
         n_repeats: Number of timed iterations.
 
     Returns:
-        `BenchRecord` with Stages 0..3 latencies and parity error.
+        `BenchRecord` with Stages 0..3 latencies and cross-stage error.
     """
     cids = list(_chem_cat._resolve_chem_ids(WAVE2_ISO_NAMES))
     xa_c = make_wave2_composition_profile(nz)
@@ -193,7 +193,7 @@ def bench_ion_fe56(
         n_repeats: Number of timed iterations.
 
     Returns:
-        `BenchRecord` with Stages 0..3 latencies and parity error.
+        `BenchRecord` with Stages 0..3 latencies and cross-stage error.
     """
     s = np.arange(nz, dtype=np.float64) / float(max(nz - 1, 1))
     lne_c = _dispatch.as_c_f64(24.5 + 5.5 * s)
@@ -235,7 +235,7 @@ def bench_ion_4d(
         n_repeats: Number of timed iterations.
 
     Returns:
-        `BenchRecord` with Stages 0..3 latencies and parity error.
+        `BenchRecord` with Stages 0..3 latencies and cross-stage error.
     """
     s = np.arange(nz, dtype=np.float64) / float(max(nz - 1, 1))
     z_c = _dispatch.as_c_f64(0.005 + 0.030 * s)
@@ -296,7 +296,7 @@ def bench_colors_sed(
         n_repeats: Number of timed iterations.
 
     Returns:
-        `BenchRecord` with Stages 0..3 latencies and parity error.
+        `BenchRecord` with Stages 0..3 latencies and cross-stage error.
     """
     s = np.arange(nz, dtype=np.float64) / float(max(nz - 1, 1))
     teff_c = _dispatch.as_c_f64(5760.0 + 230.0 * s)

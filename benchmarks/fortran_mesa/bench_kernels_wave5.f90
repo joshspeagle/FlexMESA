@@ -20,9 +20,11 @@ module bench_kernels_wave5
    use hydro_rotation, only: rot_a_poly => a, log_term_power
    use binary_utils, only: eval_rlobe
    use binary_tides, only: hut_f3 => f3, hut_f4 => f4
-   use astero_def, only: correction_factor
+   use astero_def, only: correction_factor, freq_sigma, sigmas_r01, sigmas_r10, &
+      trace_chi2_seismo_ratios_info
    use astero_lib, only: astero_get_cubic_all_freq_corr, &
       astero_get_combined_all_freq_corr
+   use astero_support, only: get_frequency_ratios
    use bench_harness, only: STAGE3_THREADS, BenchRecord, LatencyStats, &
       now_us, compute_latency_stats, max_rel_diff, max_err3
    implicit none
@@ -410,7 +412,7 @@ contains
       integer, parameter :: n_modes = 12
       real(dp) :: r(nz), r_mid(nz), csound(nz), brunt_n2(nz), dt_ac(nz)
       real(dp) :: tau_r(nz), tau_d(nz), l1_mod(n_modes), l1_sig(n_modes)
-      integer :: nl(0:3), k, m, n_ord
+      integer :: nl(0:3), k, m, n_ord, n_rat, l0_first, l1_first
       real(dp) :: obs(0:3, n_modes), sig(0:3, n_modes), freq(0:3, n_modes)
       real(dp) :: ine(0:3, n_modes), corr_cub(0:3, n_modes)
       real(dp) :: corr_comb(0:3, n_modes), r01(n_modes - 2), r10(n_modes - 2)
@@ -418,7 +420,6 @@ contains
       real(dp) :: s, r_center, r_phot, m_star, teff, l_phot, g_surf, gam1_s
       real(dp) :: rho_s, p_s, tau_0, dnu_asymp, dnu_scal, nu_max_v, nu_ac_v
       real(dp) :: int_pg, delta_pg, target_b1, target_b3, a3_c, b3_c, b1_c
-      real(dp) :: d01, d10, dnu1, dnu0, sd01_sq, sd10_sq
 
       r_center = rsun * 0.05_dp; r_phot = rsun * 0.995_dp
       m_star = 1.05_dp * msun; teff = 5820.0_dp; l_phot = 1.12_dp * lsun
@@ -476,26 +477,15 @@ contains
       call astero_get_combined_all_freq_corr( &
          b3_c, b1_c, .true., nl, obs, sig, freq, corr_comb, ine)
 
-      do m = 1, n_modes - 2
-         d01 = (freq(0, m) - 4.0_dp * l1_mod(m) + 6.0_dp * freq(0, m + 1) - &
-            4.0_dp * l1_mod(m + 1) + freq(0, m + 2)) / 8.0_dp
-         dnu1 = l1_mod(m + 1) - l1_mod(m); r01(m) = d01 / dnu1
-         sd01_sq = (sig(0, m)**2 + 16.0_dp * (l1_sig(m)**2 + &
-            l1_sig(m + 1)**2) + 36.0_dp * (sig(0, m + 1)**2) + &
-            sig(0, m + 2)**2) / 64.0_dp
-         sig_r01(m) = sqrt(sd01_sq / (dnu1 * dnu1) + &
-            (l1_sig(m + 1)**2 + l1_sig(m)**2) * (d01 * d01) / (dnu1**4))
-
-         d10 = -(l1_mod(m) - 4.0_dp * freq(0, m + 1) + &
-            6.0_dp * l1_mod(m + 1) - 4.0_dp * freq(0, m + 2) + &
-            l1_mod(m + 2)) / 8.0_dp
-         dnu0 = freq(0, m + 2) - freq(0, m + 1); r10(m) = d10 / dnu0
-         sd10_sq = (l1_sig(m)**2 + 16.0_dp * (sig(0, m + 1)**2 + &
-            sig(0, m + 2)**2) + 36.0_dp * (l1_sig(m + 1)**2) + &
-            l1_sig(m + 2)**2) / 64.0_dp
-         sig_r10(m) = sqrt(sd10_sq / (dnu0 * dnu0) + &
-            (sig(0, m + 2)**2 + sig(0, m + 1)**2) * (d10 * d10) / (dnu0**4))
-      end do
+      trace_chi2_seismo_ratios_info = .false.
+      freq_sigma = 1.0_dp
+      freq_sigma(0, 1:n_modes) = sig(0, 1:n_modes)
+      freq_sigma(1, 1:n_modes) = l1_sig(1:n_modes)
+      call get_frequency_ratios( &
+         .true., n_modes, freq(0, 1:n_modes), n_modes, l1_mod, &
+         n_rat, l0_first, l1_first, r01, r10)
+      sig_r01 = sigmas_r01(1:n_modes - 2)
+      sig_r10 = sigmas_r10(1:n_modes - 2)
 
       checksum = (sum(tau_r + tau_d) / real(nz, dp) + tau_0 + dnu_asymp + &
          dnu_scal + nu_max_v + nu_ac_v + delta_pg + &

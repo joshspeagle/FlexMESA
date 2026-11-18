@@ -9,11 +9,11 @@ four sides, frameless legends, and journal-derived widths):
    [170, 180]$ for a $\\mathrm{C}^{12}/\\mathrm{O}^{16}$ white dwarf mixture
    (left), paired with interior $\\Gamma_1$ and crystallization phase profiles
    comparing `HELM` and `Skye` across Safe Rust and JAX (right).
-2. `wave3a_benchmark_staircase.png`: Pre-audit Wave 3a.5 runtime comparison at
-   $N_{\\mathrm{zones}} = 1024$ across Pre-Audit Fortran, Safe Rust,
-   Python/PyO3 (`flexmesa._rust`), and Python/JAX (`@jax.jit(vmap)`) (left),
-   paired with `Skye` vs. `PC` vs. `HELM` non-ideal Coulomb pressure profiles
-   across density (right).
+2. `wave3a_benchmark_staircase.png`: MESA `26.4.1` Wave 3a runtime comparison
+   at $N_{\\mathrm{zones}} = 1024$ loaded from `benchmarks/raw/26.4.1/` across
+   MESA `26.4.1` Fortran, Safe Rust, Python/PyO3 (`flexmesa._rust`), and
+   Python/JAX (`@jax.jit(vmap)`) (left), paired with `Skye` vs. `PC` vs. `HELM`
+   non-ideal Coulomb pressure profiles across density (right).
 """
 
 from __future__ import annotations
@@ -22,6 +22,7 @@ import pathlib
 
 import matplotlib.pyplot as plt
 import numpy as np
+from docs import raw_benchmarks as _raw_bench
 from matplotlib import figure
 
 from flexmesa import eos as _eos
@@ -199,24 +200,33 @@ def plot_eos_helm_skye_phase_diagram(out_dir: pathlib.Path) -> None:
 
 
 def plot_wave3a_benchmark_staircase(out_dir: pathlib.Path) -> None:
-    """Plots the 4-way Wave 3a.5 runtime comparison and Coulomb corrections.
+    """Plot 4-way Wave 3a runtime comparison and Coulomb pressure curves.
 
     Args:
         out_dir: Target directory for `wave3a_benchmark_staircase.png`.
     """
+    raw = _raw_bench.load_raw_benchmarks()
     workloads = ["eos_ideal", "eos_helm", "eos_pc", "eos_skye"]
     x_pos = np.arange(len(workloads), dtype=np.float64)
     w_bar = 0.19
-    fortran_4t = np.array([349.01, 204.05, 1170.70, 2931.65])
-    rust_4t = np.array([198.83, 85.72, 633.67, 2329.83])
-    pyo3_4t = np.array([239.28, 160.92, 634.03, 1586.10])
-    jax_vmap = np.array([327.32, 328.61, 1163.75, 605.55])
+    fortran_4t = np.array(
+        [raw.get("fortran", w, 1024).stage3.median_us for w in workloads]
+    )
+    rust_4t = np.array(
+        [raw.get("rust", w, 1024).stage3.median_us for w in workloads]
+    )
+    pyo3_4t = np.array(
+        [raw.get("python", w, 1024).stage1.median_us for w in workloads]
+    )
+    jax_vmap = np.array(
+        [raw.get("python", w, 1024).stage3.median_us for w in workloads]
+    )
 
     fig, ax = _two_panel_fig(wspace=0.42)
     bars = (
-        (-1.5, fortran_4t, "C2", 0.85, "Pre-Audit Fortran (4t)"),
-        (-0.5, rust_4t, "C0", 0.95, "Safe Rust (4t)"),
-        (0.5, pyo3_4t, "C1", 0.90, "PyO3 (4t)"),
+        (-1.5, fortran_4t, "C2", 0.85, "MESA 26.4.1 Fortran (4t)"),
+        (-0.5, rust_4t, "C0", 0.95, "Safe Rust (4t rayon)"),
+        (0.5, pyo3_4t, "C1", 0.90, "PyO3 (4t rayon)"),
         (1.5, jax_vmap, "C3", 0.85, "JAX (vmap)"),
     )
     for mult, arr, col, alp, lbl in bars:
@@ -230,7 +240,7 @@ def plot_wave3a_benchmark_staircase(out_dir: pathlib.Path) -> None:
         )
     ax[0].set_xticks(x_pos)
     ax[0].set_xticklabels(workloads, fontsize=8.5)
-    ax[0].set_ylim(1.5, 3.85)
+    ax[0].set_ylim(1.5, 4.30)
     ax[0].set_xlabel(r"Wave 3a Workload ($N_{\mathrm{zones}} = 1024$)")
     ax[0].set_ylabel(r"Latency [$\log_{10}(t / \mu\mathrm{s})$]")
     ax[0].legend(frameon=False, loc="upper left", fontsize=8)

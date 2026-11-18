@@ -1,0 +1,103 @@
+{
+  "schema_version": 1,
+  "date_utc": "2026-11-17T22:46:37Z",
+  "fortran_wave3b_wave4_clean_rerun_utc": "2026-11-17T23:25:34Z",
+  "flexmesa_base_commit": "b5b6abd6245181511ca08ad3236eadb1ba08436b",
+  "ci_continuous_verification": false,
+  "hardware": {
+    "os": "Linux x86_64",
+    "cpu_model": "AMD Ryzen 7 9800X3D 8-Core Processor",
+    "logical_cores": 16,
+    "gpu_model": "NVIDIA GeForce RTX 5080"
+  },
+  "toolchains": {
+    "mesa_release": "r26.4.1",
+    "mesa_sdk": "x86_64-linux-26.6.1",
+    "gfortran": "GNU Fortran (GCC) 15.2.0",
+    "fortran_fflags": "-O2 -fopenmp -cpp -ffree-form -ffree-line-length-none",
+    "rustc": "rustc 1.100.0 (0ef1bc386 2026-11-09)",
+    "python": "Python 3.14.0",
+    "jax": "0.11.0",
+    "jax_backend": "gpu",
+    "omp_num_threads": 4,
+    "rayon_max_threads": 4
+  },
+  "stage_semantics": {
+    "fortran": {
+      "stage0": "1-thread baseline calling MESA or reference Fortran entry point",
+      "stage1": "1-thread contiguous SoA loop",
+      "stage2": "1-thread fused/hoisted loop (reference Fortran loop on auto_diff, mtx_tridiag, chem_comp)",
+      "stage3": "4-thread OpenMP parallel loop"
+    },
+    "rust": {
+      "stage0": "1-thread idiomatic scalar baseline (strict crlibm)",
+      "stage1": "1-thread contiguous SoA slice loop",
+      "stage2": "1-thread fused/hoisted slice loop",
+      "stage3": "4-thread rayon parallel pool"
+    },
+    "python": {
+      "stage0": "Python/PyO3 1-thread (flexmesa._rust)",
+      "stage1": "Python/PyO3 4-thread rayon (flexmesa._rust)",
+      "stage2": "Python/JAX @jax.jit float64 (GPU)",
+      "stage3": "Python/JAX @jax.jit(jax.vmap) batched float64 (GPU, amortized per profile)"
+    }
+  },
+  "comparators": {
+    "mesa_26_4_1_all_stages": [
+      "interp_2d",
+      "neu",
+      "turb_mlt",
+      "turb_tdc",
+      "ion_fe56",
+      "ion_4d",
+      "colors_sed",
+      "eos_ideal",
+      "eos_helm",
+      "eos_pc",
+      "eos_skye",
+      "eos_4d",
+      "kap_fixed",
+      "rates_screen",
+      "net_eval",
+      "atm_table",
+      "star_micro_vars",
+      "star_hydro_eqns",
+      "star_newton_step",
+      "star_remesh",
+      "star_evolve_step"
+    ],
+    "mesa_26_4_1_stages_0_1_reference_fortran_stages_2_3": [
+      "auto_diff",
+      "mtx_tridiag",
+      "chem_comp"
+    ],
+    "hybrid_mesa_helpers_and_reference_fortran": [
+      "w5_diff_rot",
+      "w5_binary_rlof",
+      "w5_astero_seism"
+    ],
+    "standalone_reference_fortran_non_mesa": [
+      "w5_riemann_rsp2"
+    ],
+    "wave_zone_counts": {
+      "wave1": [128, 1024, 4096],
+      "wave2": [128, 1024, 4096],
+      "wave3a": [128, 1024, 4096],
+      "wave3b": [128, 1024, 4096],
+      "wave4": [128, 512, 1024],
+      "wave5": [128, 512, 1024]
+    },
+    "total_workloads": 28,
+    "total_records_per_suite": 84
+  },
+  "artifacts": [
+    "fortran_wave1.txt",
+    "fortran_wave2.txt",
+    "fortran_wave3a.txt",
+    "fortran_wave3b.txt",
+    "fortran_wave4.txt",
+    "fortran_wave5.txt",
+    "rust_waves_1_to_5.txt",
+    "python_waves_1_to_5.json"
+  ]
+}

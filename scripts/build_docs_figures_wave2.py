@@ -8,12 +8,12 @@ four sides, frameless legends, and journal-derived widths):
    surface flux spectra overlaid with Johnson $UBVRI$ filter curves (left) and
    synthetic color indices across $T_{\\mathrm{eff}}$ and $[\\mathrm{M/H}]$
    (right).
-2. `wave2_benchmark_staircase.png`: Pre-audit Wave 2.5 runtime comparison at
-   $N_{\\mathrm{zones}} = 1024$ across Pre-Audit Fortran (`chem_comp` uses a
-   hand-written loop at Stage 3), Safe Rust, Python/PyO3 (`flexmesa._rust`),
-   and Python/JAX (`@jax.jit(vmap)`) (left), paired with $\\mathrm{Fe}^{56}$ in
-   $\\mathrm{He}^4$ effective charge
-   $Z_{\\mathrm{eff}}(\\log_{10} n_e, \\log_{10} T)$ profiles (right).
+2. `wave2_benchmark_staircase.png`: MESA `26.4.1` Wave 2 runtime comparison at
+   $N_{\\mathrm{zones}} = 1024$ loaded from `benchmarks/raw/26.4.1/` across
+   MESA `26.4.1` / Reference Fortran (`chem_comp` uses a local hoisted loop
+   at Stage 3), Safe Rust, Python/PyO3 (`flexmesa._rust`), and Python/JAX
+   (`@jax.jit(vmap)`) (left), paired with Fe56-in-He4
+   effective charge profiles (right).
 """
 
 from __future__ import annotations
@@ -22,6 +22,7 @@ import pathlib
 
 import matplotlib.pyplot as plt
 import numpy as np
+from docs import raw_benchmarks as _raw_bench
 from matplotlib import figure
 
 from flexmesa import colors as _colors
@@ -169,24 +170,33 @@ def plot_colors_kurucz_sed_johnson(out_dir: pathlib.Path) -> None:
 
 
 def plot_wave2_benchmark_staircase(out_dir: pathlib.Path) -> None:
-    """Plots the 4-way Wave 2.5 runtime comparison and Fe56 ionization curves.
+    """Plot 4-way Wave 2 runtime comparison and Fe56 ionization curves.
 
     Args:
         out_dir: Target directory for `wave2_benchmark_staircase.png`.
     """
+    raw = _raw_bench.load_raw_benchmarks()
     workloads = ["chem_comp", "ion_fe56", "ion_4d", "colors_sed"]
     x_pos = np.arange(len(workloads), dtype=np.float64)
     w_bar = 0.19
-    fortran_4t = np.array([3.78, 8.65, 290.53, 28570.68])
-    rust_4t = np.array([3.82, 17.80, 230.60, 1638.59])
-    pyo3_4t = np.array([10.51, 12.76, 293.93, 1570.04])
-    jax_vmap = np.array([45.96, 359.66, 318.62, 744.64])
+    fortran_4t = np.array(
+        [raw.get("fortran", w, 1024).stage3.median_us for w in workloads]
+    )
+    rust_4t = np.array(
+        [raw.get("rust", w, 1024).stage3.median_us for w in workloads]
+    )
+    pyo3_4t = np.array(
+        [raw.get("python", w, 1024).stage1.median_us for w in workloads]
+    )
+    jax_vmap = np.array(
+        [raw.get("python", w, 1024).stage3.median_us for w in workloads]
+    )
 
     fig, ax = _two_panel_fig()
     bars = (
-        (-1.5, fortran_4t, "C2", 0.85, "Pre-Audit Fortran (4t)"),
-        (-0.5, rust_4t, "C0", 0.95, "Safe Rust (4t)"),
-        (0.5, pyo3_4t, "C1", 0.90, "PyO3 (4t)"),
+        (-1.5, fortran_4t, "C2", 0.85, "MESA 26.4.1 / Ref. F90 (4t)"),
+        (-0.5, rust_4t, "C0", 0.95, "Safe Rust (4t rayon)"),
+        (0.5, pyo3_4t, "C1", 0.90, "PyO3 (4t rayon)"),
         (1.5, jax_vmap, "C3", 0.85, "JAX (vmap)"),
     )
     for mult, arr, col, alp, lbl in bars:
@@ -200,7 +210,7 @@ def plot_wave2_benchmark_staircase(out_dir: pathlib.Path) -> None:
         )
     ax[0].set_xticks(x_pos)
     ax[0].set_xticklabels(workloads, fontsize=8.5)
-    ax[0].set_ylim(0.0, 5.0)
+    ax[0].set_ylim(0.0, 5.25)
     ax[0].set_xlabel(r"Wave 2 Workload ($N_{\mathrm{zones}} = 1024$)")
     ax[0].set_ylabel(r"Latency [$\log_{10}(t / \mu\mathrm{s})$]")
     ax[0].legend(frameon=False, loc="upper left", fontsize=8)

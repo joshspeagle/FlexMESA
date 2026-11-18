@@ -107,7 +107,8 @@ contains
       call star_ptr(id, s, ierr)
       if (ierr /= 0) return
       call set_default_star_job_controls()
-      call store_star_job_controls(s)
+      call store_star_job_controls(s, ierr)
+      if (ierr /= 0) return
       s%job%mesa_dir = trim(mesa_dir_arg)
       s%inlist_fname = trim(mesa_dir_arg) // '/star/test/inlist'
       call starlib_init(s, ierr)
@@ -201,7 +202,6 @@ contains
       s%lnR_start(1:nz) = s%lnR(1:nz); s%r_start(1:nz) = s%r(1:nz)
       s%L_start(1:nz) = s%L(1:nz); s%lnPeos_start(1:nz) = s%lnPeos(1:nz)
       s%Peos_start(1:nz) = s%Peos(1:nz); s%Peos_face_start(1:nz) = s%Peos(1:nz)
-      s%reconstructed_P_face_start(1:nz) = s%Peos(1:nz)
       s%lnPgas_start(1:nz) = s%lnPgas(1:nz); s%energy_start(1:nz) = s%energy(1:nz)
       s%lnS_start(1:nz) = s%lnS(1:nz); s%grada_start(1:nz) = s%grada(1:nz)
       s%chiT_start(1:nz) = s%chiT(1:nz); s%chiRho_start(1:nz) = s%chiRho(1:nz)

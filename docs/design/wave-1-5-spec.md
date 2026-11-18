@@ -11,14 +11,14 @@ This specification defines the engineering contract for **Wave 1.5** ([Issue #28
 
 While per-pull-request CI checks verify unit correctness, static types, and local golden test baselines for individual modules during Wave `X`, systemic cross-module interactions and comparative performance against upstream Fortran MESA can only be evaluated once all modules in Wave `X` are assembled. Every primary migration wave (`Wave 1`, `Wave 2`, `Wave 3a`, `Wave 3b`, `Wave 4`, `Wave 5`) therefore concludes with an explicit **`Wave X.5`** milestone before any module in Wave `X+1` begins:
 
-1. **Upstream Fortran MESA Compilation, Parity & 4-Stage Timing (`benchmarks/fortran_mesa/`)**:
-   - Compile and link the upstream Fortran MESA static archives (`lib*.a`) corresponding to all modules in Wave `X` with `gfortran -O2 -fopenmp`.
-   - Verify 16-digit parity against `<pkg>/test/test_output` and cross-language stage checksums across $N_{\mathrm{zones}} \in \{128, 1024, 4096\}$, and measure 4-stage execution latencies across Upstream Fortran MESA, Safe Rust (`crates/`), Python (`backend="rust"`), and JAX (`backend="jax"`).
+1. **Upstream Fortran MESA Compilation & 4-Stage Timing (`benchmarks/fortran_mesa/`)**:
+   - Compile and link the upstream Fortran MESA static archives (`lib*.a` / `build/<mod>/lib/lib*.a`) corresponding to all modules in Wave `X` with `gfortran -O2 -fopenmp`.
+   - Record four-stage execution latencies and checksums across Fortran comparators (`benchmarks/raw/26.4.1/`), Safe Rust (`crates/`), Python (`backend="rust"`), and JAX (`backend="jax"`).
 2. **Holistic Multi-Lens Review & Algorithmic Optimization**:
    - Audit all code written in Wave `X` to remove redundant abstractions, eliminate host-device or FFI copy bottlenecks, replace suboptimal algorithms, and ensure uniform `backend="auto" | "rust" | "jax"` behavior.
-3. **Iterative Re-Verification Loop Against `FlexMESA` CI and Upstream Fortran MESA**:
-   - After each optimization batch, re-run the full `FlexMESA` test suite (`pytest`, `cargo test`, `check_grads`, `proptest`, `hypothesis`) and re-execute `benchmarks/fortran_mesa/`.
-   - **Advancement Gate**: Work does not advance to Wave `X+1` until all `FlexMESA` tests and all compare-to-original-Fortran-MESA parity and performance gates pass and are published to the `Wave X.5` GitHub tracking issue.
+3. **Iterative Re-Verification Loop Against `FlexMESA` CI**:
+   - After each optimization batch, re-run the `FlexMESA` correctness test suites (`pytest`, `cargo test`, `check_grads`, `proptest`, `hypothesis`) and re-record offline benchmarks when needed.
+   - **Advancement Note (`#146`, `DECISIONS #17`/`#23`)**: Performance is informational only and is **not** a wave or merge gate ahead of verified MESA `26.4.1` correctness. CI runs unit, history, and strict-determinism gates without building the offline Fortran benchmark harness.
 4. **Public Documentation Website Sync (`docs/` + `mkdocs build --strict`)**:
    - Author and verify the Wave `X` module explainers, governing equations, publication-styled diagnostic figures (`scripts/build_docs_figures.py`), updated post-`X.5` 4-way benchmark scorecards, and synced API reference pages on the public MkDocs Material website.
 
@@ -83,5 +83,5 @@ The public documentation website (`mkdocs.yml`, `docs/`) is organized into five 
 1. **Overview & Philosophy (`docs/index.md`, `docs/design-philosophy.md`)**: Project motivation, the 12-tier MESA architecture map, the Three-Tier Hybrid Architecture, and quickstart guides for Python (`backend="rust"` and `backend="jax"`) and Safe Rust.
 2. **Architecture & Specifications (`docs/design/`)**: Complete engineering specifications (`scoping-and-architecture.md`, `wave-0-spec.md`, `wave-1-spec.md`, `wave-1-5-spec.md`).
 3. **Module Physics & Numerics Guide (`docs/modules/`)**: Deep-dive explainers for Wave 0 (`schema`, `data`, `testing`) and Wave 1 (`const`, `utils`, `math`, `auto_diff`, `interp_1d`, `interp_2d`, `mtx`, `num`, `neu`, `turb`), featuring governing physical equations, numerical derivations, upstream MESA precision notes, and embedded diagnostic figures (`docs/assets/figures/`).
-4. **Benchmarks & Parity (`docs/design/wave-1-benchmark-report.md`)**: Four-way parity scorecards and runtime scaling comparisons (`Upstream Fortran MESA` vs. `Safe Rust` vs. `Python PyO3` vs. `Python JAX`).
+4. **Benchmarks (`docs/design/wave-1-benchmark-report.md`)**: Four-way runtime and checksum comparisons (`MESA 26.4.1 / Ref. Fortran` vs. `Safe Rust` vs. `Python PyO3` vs. `Python JAX`).
 5. **API Reference (`docs/api/`)**: Auto-generated Python/JAX API reference (`mkdocstrings`) and cross-linked Safe Rust crate documentation (`cargo doc`).

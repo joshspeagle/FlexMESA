@@ -2,16 +2,17 @@
 ! -----------------------------------------------------------------------------
 ! Program: run_wave3a_bench
 !
-! Executes the Wave 3a four-stage Fortran MESA benchmark and cross-language
-! parity suite across all four Wave 3a equation-of-state (eos) workloads:
+! Executes the Wave 3a four-stage Fortran MESA benchmark and internal
+! stage-consistency suite across all four Wave 3a equation-of-state (eos)
+! workloads:
 !   1. eos_ideal (Neutral ideal-gas + Planckian radiation EOS)
 !   2. eos_helm  (Timmes & Swesty 2000 biquintic/bicubic HELM EOS)
 !   3. eos_pc    (Potekhin & Chabrier 2010/2013 Coulomb liquid/solid PC EOS)
 !   4. eos_skye  (Jermyn et al. 2021 3rd-order free-energy minimization Skye EOS)
 !
-! First verifies internal stage parity (Stages 1..3 vs. Stage 0 <= 1e-12)
+! First verifies internal cross-stage agreement (Stages 1..3 vs. Stage 0 <= 1e-12)
 ! across N_zones in {8, 32} and checks N_zones = 8 checksums against the
-! pinned cross-language reference values from flexmesa-bench (Rust) and
+! recorded regression snapshots matching flexmesa-bench (Rust) and
 ! flexmesa.bench (Python/NumPy/JAX). Then runs the full timing suite across
 ! N_zones in {128, 1024, 4096} and prints the Markdown summary table.
 ! -----------------------------------------------------------------------------
@@ -26,9 +27,9 @@ program run_wave3a_bench
       bench_eos_pc, bench_eos_skye
    implicit none
 
-   ! Pinned N_zones = 8 cross-language checksums matching flexmesa-bench (Rust)
+   ! Recorded N_zones = 8 regression snapshots matching flexmesa-bench (Rust)
    ! and flexmesa.bench (Python/NumPy/JAX).
-   real(dp), parameter :: EXPECTED_WAVE3A_CHECKSUMS_N8(4) = [ &
+   real(dp), parameter :: WAVE3A_REGRESSION_SNAPSHOTS_N8(4) = [ &
       1.438224257481198e2_dp, &
       3.561688957866044e2_dp, &
       4.117886894420108e2_dp, &
@@ -58,27 +59,27 @@ program run_wave3a_bench
    eos_handle = alloc_eos_handle(ierr)
    if (ierr /= 0) stop 'alloc_eos_handle failed'
 
-   ! Step 1: Verify internal stage parity and cross-language N_zones = 8
-   ! reference checksums before running the timing suite.
+   ! Step 1: Verify internal cross-stage agreement and recorded N_zones = 8
+   ! regression snapshots before running the timing suite.
    do idx = 1, size(PARITY_ZONES)
       call run_all_wave3a_workloads( &
          eos_handle, PARITY_ZONES(idx), 1, 3, recs)
       do w = 1, 4
          if ((recs(w)%max_rel_err /= recs(w)%max_rel_err) .or. &
              (recs(w)%max_rel_err > 1.0e-11_dp)) then
-            write (*, '(a,a,a,es12.4)') 'Parity failure in ', &
+            write (*, '(a,a,a,es12.4)') 'Stage mismatch in ', &
                trim(recs(w)%workload), ': max_rel_err = ', recs(w)%max_rel_err
             stop 1
          end if
          if (PARITY_ZONES(idx) == 8) then
-            rel_chk = abs(recs(w)%checksum - EXPECTED_WAVE3A_CHECKSUMS_N8(w)) &
-               / abs(EXPECTED_WAVE3A_CHECKSUMS_N8(w))
+            rel_chk = abs(recs(w)%checksum - WAVE3A_REGRESSION_SNAPSHOTS_N8(w)) &
+               / abs(WAVE3A_REGRESSION_SNAPSHOTS_N8(w))
             if ((rel_chk /= rel_chk) .or. (rel_chk > 1.0e-11_dp)) then
                write (*, '(a,a,a,es12.4,a,es22.15,a,es22.15)') &
                   'Cross-language checksum mismatch ', &
                   trim(recs(w)%workload), ': rel_err = ', rel_chk, &
                   ' got ', recs(w)%checksum, &
-                  ' expected ', EXPECTED_WAVE3A_CHECKSUMS_N8(w)
+                  ' expected ', WAVE3A_REGRESSION_SNAPSHOTS_N8(w)
                stop 1
             end if
          end if

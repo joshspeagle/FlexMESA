@@ -4,11 +4,12 @@
 Produces three 300 dpi PNG figures in `docs/assets/figures/` following the
 AASTeX publication plot style (Computer Modern typography, inward ticks on all
 four sides, frameless legends, and journal-derived widths):
-1. `wave5_benchmark_speedup.png`: Four-way Wave 5.5 runtime comparison at
-   $N_{\\mathrm{zones}} = 1024$ across Standalone Ref. Fortran (non-MESA),
-   Safe Rust, Python/PyO3 (`flexmesa._rust`), and Python/JAX (left), paired
-   with scaling across $N_{\\mathrm{zones}} \\in \\{128, 512, 1024\\}$ for
-   `w5_diff_rot` and `w5_riemann_rsp2` (right).
+1. `wave5_benchmark_speedup.png`: Four-way Wave 5 runtime comparison at
+   $N_{\\mathrm{zones}} = 1024$ loaded from `benchmarks/raw/26.4.1/` across
+   Reference Fortran (`w5_riemann_rsp2` is non-MESA; the remaining three wrap
+   MESA helper calls in local loops), Safe Rust, Python/PyO3 (`flexmesa._rust`),
+   and Python/JAX (left), paired with scaling across $N_{\\mathrm{zones}} \\in
+   \\{128, 512, 1024\\}$ for `w5_diff_rot` and `w5_riemann_rsp2` (right).
 2. `wave5_astero_echelle_surface_corr.png`: Asteroseismic echelle diagram
    ($\\nu \\bmod \\Delta\\nu$ vs. $\\nu$) illustrating Ball & Gizon (2014)
    1-term cubic, 2-term combined, and Sonoi (2015) surface-effect frequency
@@ -31,6 +32,7 @@ import jax.numpy as jnp
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
+from docs import raw_benchmarks as _raw_bench
 from matplotlib import figure
 
 from flexmesa import _rust, astero, binary, constants
@@ -76,21 +78,36 @@ def _save_fig(fig: figure.Figure, path: pathlib.Path) -> None:
 
 
 def plot_wave5_benchmark_speedup(out_dir: pathlib.Path) -> None:
-    """Plot 4-way Wave 5.5 runtime comparison and zone-count scaling."""
+    """Plot 4-way Wave 5 runtime comparison and zone-count scaling."""
     _configure_plot_style()
-    workloads = ["diff_rot", "riemann_rsp2", "binary_rlof", "astero_seism"]
-    x_pos = np.arange(len(workloads), dtype=np.float64)
+    raw = _raw_bench.load_raw_benchmarks()
+    labels = ["diff_rot", "riemann_rsp2", "binary_rlof", "astero_seism"]
+    keys = [
+        "w5_diff_rot",
+        "w5_riemann_rsp2",
+        "w5_binary_rlof",
+        "w5_astero_seism",
+    ]
+    x_pos = np.arange(len(labels), dtype=np.float64)
     w_bar = 0.18
-    fortran_best = np.array([91.83, 46.46, 28.29, 5.83])
-    rust_best = np.array([70.41, 7.94, 57.79, 7.25])
-    pyo3_best = np.array([49.62, 33.29, 60.69, 7.46])
-    jax_best = np.array([120.91, 89.90, 101.77, 26.75])
+    fortran_best = np.array(
+        [raw.get("fortran", w, 1024).stage3.median_us for w in keys]
+    )
+    rust_best = np.array(
+        [raw.get("rust", w, 1024).stage3.median_us for w in keys]
+    )
+    pyo3_best = np.array(
+        [raw.get("python", w, 1024).stage1.median_us for w in keys]
+    )
+    jax_best = np.array(
+        [raw.get("python", w, 1024).stage3.median_us for w in keys]
+    )
 
     fig, ax = _two_panel_fig(wspace=0.40)
     bars = (
-        (-1.5, fortran_best, "C2", 0.85, "Ref. Fortran (non-MESA)"),
-        (-0.5, rust_best, "C0", 0.95, "Safe Rust"),
-        (0.5, pyo3_best, "C1", 0.90, "PyO3 (flexmesa._rust)"),
+        (-1.5, fortran_best, "C2", 0.85, "Ref. Fortran (4t)"),
+        (-0.5, rust_best, "C0", 0.95, "Safe Rust (4t rayon)"),
+        (0.5, pyo3_best, "C1", 0.90, "PyO3 (4t rayon)"),
         (1.5, jax_best, "C3", 0.85, "JAX (jit / vmap)"),
     )
     for mult, arr, col, alp, lbl in bars:
@@ -103,16 +120,20 @@ def plot_wave5_benchmark_speedup(out_dir: pathlib.Path) -> None:
             label=lbl,
         )
     ax[0].set_xticks(x_pos)
-    ax[0].set_xticklabels(workloads, fontsize=7.5, rotation=12)
-    ax[0].set_ylim(0.0, 3.20)
+    ax[0].set_xticklabels(labels, fontsize=7.5, rotation=12)
+    ax[0].set_ylim(0.0, 3.85)
     ax[0].set_xlabel(r"Wave 5 Workload ($N_{\mathrm{zones}} = 1024$)")
     ax[0].set_ylabel(r"Latency [$\log_{10}(t / \mu\mathrm{s})$]")
     ax[0].legend(frameon=False, loc="upper right", fontsize=7.5)
 
-    nz_arr = np.array([128.0, 512.0, 1024.0])
+    nz_vals = (128, 512, 1024)
+    nz_arr = np.asarray(nz_vals, dtype=np.float64)
     scaling_series = (
         (
-            [4.68, 22.54, 46.46],
+            [
+                raw.get("fortran", "w5_riemann_rsp2", nz).stage3.median_us
+                for nz in nz_vals
+            ],
             "C2",
             1.5,
             "--",
@@ -120,7 +141,10 @@ def plot_wave5_benchmark_speedup(out_dir: pathlib.Path) -> None:
             r"Ref. Fortran $\mathtt{riemann\_rsp2}$ (4t)",
         ),
         (
-            [3.53, 14.05, 28.15],
+            [
+                raw.get("rust", "w5_riemann_rsp2", nz).stage2.median_us
+                for nz in nz_vals
+            ],
             "C0",
             1.5,
             ":",
@@ -128,7 +152,10 @@ def plot_wave5_benchmark_speedup(out_dir: pathlib.Path) -> None:
             r"Rust $\mathtt{riemann\_rsp2}$ (1t)",
         ),
         (
-            [1.20, 4.04, 7.94],
+            [
+                raw.get("rust", "w5_riemann_rsp2", nz).stage3.median_us
+                for nz in nz_vals
+            ],
             "C0",
             2.0,
             "-",
@@ -136,7 +163,10 @@ def plot_wave5_benchmark_speedup(out_dir: pathlib.Path) -> None:
             r"Rust $\mathtt{riemann\_rsp2}$ (4t)",
         ),
         (
-            [6.07, 34.91, 91.83],
+            [
+                raw.get("fortran", "w5_diff_rot", nz).stage3.median_us
+                for nz in nz_vals
+            ],
             "C1",
             1.5,
             "--",
@@ -144,7 +174,10 @@ def plot_wave5_benchmark_speedup(out_dir: pathlib.Path) -> None:
             r"Ref. Fortran $\mathtt{diff\_rot}$ (4t)",
         ),
         (
-            [6.12, 24.09, 70.41],
+            [
+                raw.get("rust", "w5_diff_rot", nz).stage3.median_us
+                for nz in nz_vals
+            ],
             "C3",
             1.8,
             "-",
@@ -163,10 +196,10 @@ def plot_wave5_benchmark_speedup(out_dir: pathlib.Path) -> None:
             label=lbl,
         )
     ax[1].set_xticks([128, 512, 1024])
-    ax[1].set_ylim(-0.05, 2.55)
+    ax[1].set_ylim(-0.05, 3.85)
     ax[1].set_xlabel(r"Radial Zone Count [$N_{\mathrm{zones}}$]")
     ax[1].set_ylabel(r"Kernel Latency [$\log_{10}(t / \mu\mathrm{s})$]")
-    ax[1].legend(frameon=False, loc="lower right", fontsize=7.0)
+    ax[1].legend(frameon=False, loc="upper left", fontsize=7.0)
     _save_fig(fig, out_dir / "wave5_benchmark_speedup.png")
 
 

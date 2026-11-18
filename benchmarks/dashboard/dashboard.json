@@ -455,7 +455,7 @@
       "upstream_panel_modules": 46
     },
     "infrastructure_lines": {
-      "rust_bridge_testing_bench": 15544,
+      "rust_bridge_testing_bench": 15625,
       "python_testing_bench": 13333
     }
   },
@@ -1087,7 +1087,7 @@
     }
   },
   "skips": {
-    "rust_ignore_count": 19,
+    "rust_ignore_count": 13,
     "rust_ignores": [
       {
         "location": "crates/flexmesa-astero/tests/astero_suite.rs:334",
@@ -1113,36 +1113,6 @@
         "location": "crates/flexmesa-astero/tests/astero_suite.rs:358",
         "reason": "unverified uncapped astero campaign; tracked in #143 and #162",
         "issues": "#143, #162"
-      },
-      {
-        "location": "crates/flexmesa-bench/tests/bench_tests.rs:157",
-        "reason": "benchmark table generator for --release runs; tracked in #146",
-        "issues": "#146"
-      },
-      {
-        "location": "crates/flexmesa-bench/tests/bench_tests.rs:174",
-        "reason": "benchmark table generator for --release runs; tracked in #146",
-        "issues": "#146"
-      },
-      {
-        "location": "crates/flexmesa-bench/tests/bench_tests.rs:191",
-        "reason": "benchmark table generator for --release runs; tracked in #146",
-        "issues": "#146"
-      },
-      {
-        "location": "crates/flexmesa-bench/tests/bench_tests.rs:208",
-        "reason": "benchmark table generator for --release runs; tracked in #146",
-        "issues": "#146"
-      },
-      {
-        "location": "crates/flexmesa-bench/tests/bench_tests.rs:229",
-        "reason": "benchmark table generator for --release runs; tracked in #146",
-        "issues": "#146"
-      },
-      {
-        "location": "crates/flexmesa-bench/tests/bench_tests.rs:246",
-        "reason": "benchmark table generator for --release runs; tracked in #146",
-        "issues": "#146"
       },
       {
         "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:332",

@@ -360,8 +360,11 @@ $N_{\mathrm{zones}} \in \{128, 1024, 4096\}$, and four optimization stages:
 4. **Stage 3 (Batched / Multi-Core Parallelism)**: `jax.vmap` across $B = 4$
    stellar profiles and 4-thread scoped Safe Rust execution.
 
-All 18 `(workload, N_zones)` combinations agree to 9 significant digits in
-primal checksums across Safe Rust and Python/JAX, with stage-to-stage relative
-discrepancy $\le 7.01 \times 10^{-13}$. Full empirical tables, XLA compilation
-latencies, and the Wave 2/3 architectural trade-off evaluation are recorded in
-`docs/design/wave-1-benchmark-report.md`.
+Across the 18 `(workload, N_zones)` combinations in `benchmarks/raw/26.4.1/`,
+Stage 0 primal checksums agree between Fortran and Safe Rust `strict` within
+$\le 7.2 \times 10^{-9}$ ($\le 2 \times 10^{-12}$ on 15/18 rows;
+$7.2 \times 10^{-9}$ on `interp_2d` due to single-precision locals in
+upstream `fvbicub_db`). Empirical latencies, XLA compilation timings, and
+architecture trade-offs from `MESA r26.4.1` are recorded in
+`docs/design/wave-1-benchmark-report.md` (with `auto_diff` and `mtx_tridiag`
+Stages 2-3 using local Reference Fortran loops).

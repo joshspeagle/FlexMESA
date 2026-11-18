@@ -155,7 +155,7 @@ contains
       end do
       call compute_latency_stats(samples, reps, rec%stage3)
 
-      ! Verify solution parity across all stages and threads.
+      ! Verify cross-stage agreement across all stages and threads.
       d3 = 0.0_dp
       do t = 1, STAGE3_THREADS
          err_t = max_rel_diff(5 * nz, out0, out3(:, :, t))

@@ -77,7 +77,7 @@ def bench_autodiff(
         n_repeats: Number of timed iterations.
 
     Returns:
-        `BenchRecord` with Stages 0..3 latencies and parity error.
+        `BenchRecord` with Stages 0..3 latencies and cross-stage error.
     """
     nz = grid.n_zones
     x_c = _dispatch.as_c_f64(grid.log10_t)
@@ -146,7 +146,7 @@ def bench_interp2d(
         n_repeats: Number of timed iterations.
 
     Returns:
-        `BenchRecord` with Stages 0..3 latencies and parity error.
+        `BenchRecord` with Stages 0..3 latencies and cross-stage error.
     """
     nz = grid.n_zones
     xq_c = _dispatch.as_c_f64(grid.log10_rho)
@@ -277,7 +277,7 @@ def bench_neu(
         n_repeats: Number of timed iterations.
 
     Returns:
-        `BenchRecord` with Stages 0..3 latencies and parity error.
+        `BenchRecord` with Stages 0..3 latencies and cross-stage error.
     """
     nz = grid.n_zones
     flags_pp = (True, True, False, False, False)

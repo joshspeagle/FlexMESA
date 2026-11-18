@@ -303,7 +303,7 @@ pub fn bench_colors_sed(
             .expect("valid eval_colors")
         },
     );
-    // Sum column 9 (Johnson V magnitude) for cross-language parity.
+    // Sum column 9 (Johnson V magnitude) for regression snapshot verification.
     rec.checksum = (0..nz)
         .map(|k| {
             cube.eval_colors(

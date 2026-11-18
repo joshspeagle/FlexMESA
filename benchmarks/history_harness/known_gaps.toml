@@ -753,66 +753,6 @@ expect_fail_when_run = false
 reason = "Long-running uncapped astero NEWUOA campaign tracked under #162 and scheduled campaign CI."
 
 [[test_gaps]]
-kind = "rust_ignore"
-crate = "flexmesa-bench"
-file = "crates/flexmesa-bench/tests/bench_tests.rs"
-test_name = "print_full_wave1_rust_benchmarks"
-issue = "#146"
-role = "benchmark"
-expect_fail_when_run = false
-reason = "Release benchmark stdout printer retained pending benchmark separation under #146."
-
-[[test_gaps]]
-kind = "rust_ignore"
-crate = "flexmesa-bench"
-file = "crates/flexmesa-bench/tests/bench_tests.rs"
-test_name = "print_full_wave2_rust_benchmarks"
-issue = "#146"
-role = "benchmark"
-expect_fail_when_run = false
-reason = "Release benchmark stdout printer retained pending benchmark separation under #146."
-
-[[test_gaps]]
-kind = "rust_ignore"
-crate = "flexmesa-bench"
-file = "crates/flexmesa-bench/tests/bench_tests.rs"
-test_name = "print_full_wave3a_rust_benchmarks"
-issue = "#146"
-role = "benchmark"
-expect_fail_when_run = false
-reason = "Release benchmark stdout printer retained pending benchmark separation under #146."
-
-[[test_gaps]]
-kind = "rust_ignore"
-crate = "flexmesa-bench"
-file = "crates/flexmesa-bench/tests/bench_tests.rs"
-test_name = "print_full_wave3b_rust_benchmarks"
-issue = "#146"
-role = "benchmark"
-expect_fail_when_run = false
-reason = "Release benchmark stdout printer retained pending benchmark separation under #146."
-
-[[test_gaps]]
-kind = "rust_ignore"
-crate = "flexmesa-bench"
-file = "crates/flexmesa-bench/tests/bench_tests.rs"
-test_name = "print_full_wave4_rust_benchmarks"
-issue = "#146"
-role = "benchmark"
-expect_fail_when_run = false
-reason = "Release benchmark stdout printer retained pending benchmark separation under #146."
-
-[[test_gaps]]
-kind = "rust_ignore"
-crate = "flexmesa-bench"
-file = "crates/flexmesa-bench/tests/bench_tests.rs"
-test_name = "print_full_wave5_rust_benchmarks"
-issue = "#146"
-role = "benchmark"
-expect_fail_when_run = false
-reason = "Release benchmark stdout printer retained pending benchmark separation under #146."
-
-[[test_gaps]]
 kind = "python_xfail"
 file = "tests/test_wave4_bench.py"
 test_name = "test_four_msun_zams_evolve_log_cntr_rho_matches_mesa_26_4_1"

@@ -1,19 +1,30 @@
-# Upstream Fortran MESA Benchmark Suite (`Wave 1`, `Wave 2` & `Wave 3a`)
+# Upstream Fortran MESA Benchmark Suite (`Wave 1` through `Wave 5`)
 
 This directory contains the native Fortran 2008 benchmark harness comparing
-upstream Fortran MESA (`gfortran -O2 -fopenmp`) directly against the Safe Rust
-(`crates/flexmesa-bench`) and Python/NumPy/JAX (`src/flexmesa/bench`) Wave 1,
-Wave 2, and Wave 3a implementations across identical thermodynamic profiles,
-spline grids, block-tridiagonal Henyey matrices, convective transport states,
-nuclear abundance profiles, ionization grids, stellar atmosphere SED cubes, and
-analytical/single-table equations of state.
+upstream Fortran MESA (`gfortran -O2 -fopenmp`) and reference Fortran kernels
+directly against the Safe Rust (`crates/flexmesa-bench`) and Python/NumPy/JAX
+(`src/flexmesa/bench`) Wave 1 to Wave 5 implementations across identical
+thermodynamic inputs, spline grids, Henyey matrices, microphysics tables,
+stellar structure profiles, and asteroseismic grids.
+
+21 of the 28 workloads call compiled upstream MESA `r26.4.1` subroutines in
+every stage, 3 Wave 1-2 workloads (`auto_diff`, `mtx_tridiag`, `chem_comp`)
+call upstream MESA in Stages 0-1 and local Reference Fortran loops in Stages
+2-3 (with `fortran_wave1.txt` also reporting 1-thread and 4-thread MESA
+`bcyclic_dble_decsolblk` timings separately), 3 Wave 5 workloads
+(`w5_diff_rot`, `w5_binary_rlof`, `w5_astero_seism`) mix compiled MESA
+helper calls (`hydro_rotation`, `binary_utils`/`binary_tides`, `astero_lib`/
+`astero_support`) with standalone Reference Fortran workload loops, and 1
+workload (`w5_riemann_rsp2`) calls zero MESA subroutines and is labeled
+`Reference Fortran (non-MESA)`.
 
 ## Workloads and Four-Stage Ladder
 
-Every workload is evaluated across radial shell counts
-$N_{\mathrm{zones}} \in \{128, 1024, 4096\}$ and verified at
-$N_{\mathrm{zones}} \in \{8, 32\}$ against the pinned cross-language reference
-checksums:
+Every workload runs across production zone counts ($N_{\mathrm{zones}} \in
+\{128, 1024, 4096\}$ in Waves 1 to 3b; $\{128, 512, 1024\}$ in Waves 4 and 5)
+after checking internal Stage 1..3 agreement against Stage 0 (and comparing
+$N_{\mathrm{zones}} = 8$ checksums in Waves 1 to 3b against recorded FlexMESA
+regression snapshots):
 
 ### Wave 1 Workloads (`run_wave1_bench`)
 
@@ -68,16 +79,57 @@ checksums:
    liquid/solid mixing, quantum anharmonic vibrational free energy, and smoothed
    latent heat across crystallization.
 
+### Wave 3b Workloads (`run_wave3b_bench`)
+
+1. `eos_4d`: 4D OPAL/SCVH tabulated equation of state (`get_opal_for_eosdt`).
+2. `kap_fixed`: Type 1 fixed-metal radiative, conductive, and Compton opacity.
+3. `rates_screen`: REACLIB triple-alpha/alpha-capture rate (`r_c12_ag_o16`)
+   with extended `screen5` nuclear screening.
+4. `net_eval`: 8-isotope `basic.net` nuclear reaction network RHS and Jacobian.
+5. `atm_table`: `ATM_TABLE_PHOTOSPHERE` atmosphere surface boundary table.
+
+### Wave 4 Workloads (`run_wave4_bench`)
+
+1. `star_micro_vars`: Per-zone EOS, opacity, neutrino, network, and MLT/Brunt
+   microphysics sweep over a initialized MESA star structure (`set_vars`).
+2. `star_hydro_eqns`: Coupled 1D Henyey structure residual and $4 \times 4$ block
+   Jacobian assembly (`set_hydro_vars`).
+3. `star_newton_step`: Single linearize-and-solve block-tridiagonal Henyey
+   iteration using MESA's cyclic solver.
+4. `star_remesh`: Adaptive mesh spacing function evaluation.
+5. `star_evolve_step`: Coupled structure, burn, and mix step
+   (`do_struct_burn_mix`) on the initialized star handle.
+
+### Wave 5 Workloads (`run_wave5_bench`)
+
+1. `w5_diff_rot`: Roche distortion (`hydro_rotation::a`) and Spruit-Tayler
+   dynamo transport (`log_term_power`).
+2. `w5_riemann_rsp2`: Reference Fortran 2008 Lagrangian HLLC / RSP2 / Dziembowski
+   pulsation comparator (`eval_riemann_rsp2_workload`, non-MESA).
+3. `w5_binary_rlof`: Eggleton Roche lobe (`binary_utils::eval_rlobe`), RLOF
+   transfer, and tidal synchronization functions (`binary_tides::f3` / `f4`).
+4. `w5_astero_seism`: Acoustic scaling, cubic/combined surface corrections
+   (`astero_get_cubic_all_freq_corr` / `astero_get_combined_all_freq_corr`), and
+   frequency separation ratios (`astero_support::get_frequency_ratios`).
+
 ## Building and Running
 
-Prerequisite: a compiled MESA checkout with `libconst.a`, `libutils.a`,
-`libmath.a`, `libauto_diff.a`, `libinterp_1d.a`, `libinterp_2d.a`, `libmtx.a`,
-`libnum.a`, `libchem.a`, `libneu.a`, `libturb.a`, `libionization.a`,
-`libcolors.a`, and `libeos.a` installed under `$(MESA_DIR)/lib` and `.mod` files
-under `$(MESA_DIR)/include`.
+Prerequisite: a compiled MESA checkout and initialized MESA SDK. The Makefile
+auto-detects both classic `./install` layouts (`$(MESA_DIR)/lib/lib*.a`,
+`$(MESA_DIR)/include/*.mod`, and `$(MESA_DIR)/<module>/make/*.mod`) and CMake
+build layouts (`$(MESA_DIR)/build/<module>/{lib,include,modules}`), and links
+MESA SDK `crmath`, `lapack95`, `lapack`, `blas`, `hdf5`, and `pgplot` helpers
+when `MESASDK_ROOT` is set.
 
 ```bash
-make -C benchmarks/fortran_mesa MESA_DIR=/path/to/mesa run
-make -C benchmarks/fortran_mesa MESA_DIR=/path/to/mesa run_wave2
-make -C benchmarks/fortran_mesa MESA_DIR=/path/to/mesa run_wave3a
+make -C benchmarks/fortran_mesa MESA_DIR=/path/to/mesa MESASDK_ROOT=/path/to/mesasdk all
+make -C benchmarks/fortran_mesa MESA_DIR=/path/to/mesa MESASDK_ROOT=/path/to/mesasdk run
+make -C benchmarks/fortran_mesa MESA_DIR=/path/to/mesa MESASDK_ROOT=/path/to/mesasdk run_wave2
+make -C benchmarks/fortran_mesa MESA_DIR=/path/to/mesa MESASDK_ROOT=/path/to/mesasdk run_wave3a
+make -C benchmarks/fortran_mesa MESA_DIR=/path/to/mesa MESASDK_ROOT=/path/to/mesasdk run_wave3b
+make -C benchmarks/fortran_mesa MESA_DIR=/path/to/mesa MESASDK_ROOT=/path/to/mesasdk run_wave4
+make -C benchmarks/fortran_mesa MESA_DIR=/path/to/mesa MESASDK_ROOT=/path/to/mesasdk run_wave5
 ```
+
+Raw outputs from MESA `r26.4.1` and `mesasdk x86_64-linux-26.6.1` are archived
+under `benchmarks/raw/26.4.1/`.

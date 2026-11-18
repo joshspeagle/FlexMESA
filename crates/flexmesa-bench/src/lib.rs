@@ -202,7 +202,7 @@ pub struct BenchRecord {
     pub stage3: LatencyStats,
     /// Maximum relative discrepancy across Stages 0, 1, 2, and 3.
     pub max_rel_err: f64,
-    /// Checksum scalar (`f64`) used for cross-language parity verification.
+    /// Checksum scalar (`f64`) used for snapshot regression verification.
     pub checksum: f64,
 }
 

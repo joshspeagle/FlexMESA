@@ -42,7 +42,7 @@ def bench_mtx_block_tridiag(
         n_repeats: Number of timed iterations.
 
     Returns:
-        `BenchRecord` with Stages 0..3 latencies and parity error.
+        `BenchRecord` with Stages 0..3 latencies and cross-stage error.
     """
     lblk, dblk, ublk, rhs = _h.make_block_tridiag_fixture(nz)
     l_f = _dispatch.as_c_f64(lblk)

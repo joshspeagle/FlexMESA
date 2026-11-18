@@ -90,6 +90,7 @@ PYTHONPATH="$REPO_ROOT/src" "$PYTHON_BIN" -m flexmesa.testing.module_hex_gate \
   --repo-root "$REPO_ROOT" --check-summary
 "$PYTHON_BIN" "$REPO_ROOT/scripts/docs/render_known_gaps_page.py" --repo-root "$REPO_ROOT" --check
 "$PYTHON_BIN" "$REPO_ROOT/scripts/docs/render_coverage_map_page.py" --repo-root "$REPO_ROOT" --check
+"$PYTHON_BIN" "$REPO_ROOT/scripts/docs/render_benchmark_pages.py" --repo-root "$REPO_ROOT" --check
 "$PYTHON_BIN" "$REPO_ROOT/scripts/build_docs_figures.py"
 if git -C "$REPO_ROOT" rev-parse --verify origin/main >/dev/null 2>&1; then
   "$PYTHON_BIN" -m flexmesa.cli dashboard check --repo-root "$REPO_ROOT" --base-ref origin/main

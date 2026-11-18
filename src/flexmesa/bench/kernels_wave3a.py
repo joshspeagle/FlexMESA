@@ -85,7 +85,7 @@ def bench_eos_ideal(
         n_repeats: Number of timed iterations.
 
     Returns:
-        `BenchRecord` with Stages 0..3 latencies and parity error.
+        `BenchRecord` with Stages 0..3 latencies and cross-stage error.
     """
     cids = [chem.get_nuclide_index(nm) for nm in _w2.WAVE2_ISO_NAMES]
     xa_c = _w2.make_wave2_composition_profile(1)[0]
@@ -162,7 +162,7 @@ def bench_eos_helm(
         n_repeats: Number of timed iterations.
 
     Returns:
-        `BenchRecord` with Stages 0..3 latencies and parity error.
+        `BenchRecord` with Stages 0..3 latencies and cross-stage error.
     """
     abar, zbar, _, _, _, _, _ = _c12_o16_bench_props()
     s = np.arange(nz, dtype=np.float64) / float(max(nz - 1, 1))
@@ -222,7 +222,7 @@ def bench_eos_pc(
         n_repeats: Number of timed iterations.
 
     Returns:
-        `BenchRecord` with Stages 0..3 latencies and parity error.
+        `BenchRecord` with Stages 0..3 latencies and cross-stage error.
     """
     abar, zbar, xa_1d, _, azion_c, acmi_c, _ = _c12_o16_bench_props()
     s = np.arange(nz, dtype=np.float64) / float(max(nz - 1, 1))
@@ -356,7 +356,7 @@ def bench_eos_skye(
         n_repeats: Number of timed iterations.
 
     Returns:
-        `BenchRecord` with Stages 0..3 latencies and parity error.
+        `BenchRecord` with Stages 0..3 latencies and cross-stage error.
     """
     abar, zbar, xa_1d, z_int_c, azion_c, acmi_c, a_c = _c12_o16_bench_props()
     s = np.arange(nz, dtype=np.float64) / float(max(nz - 1, 1))

@@ -916,16 +916,16 @@
     "python": {
       "tool": "pytest --cov",
       "overall": {
-        "statements": 21573,
-        "covered": 19329,
-        "percent": 89.6
+        "statements": 21641,
+        "covered": 18960,
+        "percent": 87.6
       },
       "by_subpackage": [
         {
           "subpackage": "flexmesa",
-          "statements": 101,
-          "covered": 91,
-          "percent": 90.1
+          "statements": 138,
+          "covered": 124,
+          "percent": 89.9
         },
         {
           "subpackage": "flexmesa.astero",
@@ -953,15 +953,15 @@
         },
         {
           "subpackage": "flexmesa.binary",
-          "statements": 321,
-          "covered": 309,
+          "statements": 323,
+          "covered": 311,
           "percent": 96.3
         },
         {
           "subpackage": "flexmesa.chem",
-          "statements": 240,
-          "covered": 231,
-          "percent": 96.2
+          "statements": 246,
+          "covered": 234,
+          "percent": 95.1
         },
         {
           "subpackage": "flexmesa.colors",
@@ -995,20 +995,20 @@
         },
         {
           "subpackage": "flexmesa.interp_2d",
-          "statements": 1055,
-          "covered": 865,
+          "statements": 1053,
+          "covered": 863,
           "percent": 82.0
         },
         {
           "subpackage": "flexmesa.ionization",
-          "statements": 312,
-          "covered": 300,
-          "percent": 96.2
+          "statements": 334,
+          "covered": 312,
+          "percent": 93.4
         },
         {
           "subpackage": "flexmesa.kap",
-          "statements": 1308,
-          "covered": 1269,
+          "statements": 1313,
+          "covered": 1274,
           "percent": 97.0
         },
         {
@@ -1031,9 +1031,9 @@
         },
         {
           "subpackage": "flexmesa.neu",
-          "statements": 1066,
-          "covered": 947,
-          "percent": 88.8
+          "statements": 1062,
+          "covered": 525,
+          "percent": 49.4
         },
         {
           "subpackage": "flexmesa.num",
@@ -1061,8 +1061,8 @@
         },
         {
           "subpackage": "flexmesa.star",
-          "statements": 1438,
-          "covered": 1334,
+          "statements": 1440,
+          "covered": 1336,
           "percent": 92.8
         },
         {
@@ -1074,8 +1074,8 @@
         {
           "subpackage": "flexmesa.turb",
           "statements": 912,
-          "covered": 803,
-          "percent": 88.0
+          "covered": 801,
+          "percent": 87.8
         },
         {
           "subpackage": "flexmesa.utils",
@@ -1268,8 +1268,8 @@
       },
       {
         "phase": "Phase C",
-        "open": 13,
-        "closed": 0,
+        "open": 12,
+        "closed": 1,
         "issues": [
           {
             "number": 152,
@@ -1334,7 +1334,7 @@
           {
             "number": 166,
             "title": "[Audit C15] JAX contract: derived, differentiable and batched; validated against Rust strict mode",
-            "state": "open"
+            "state": "closed"
           }
         ]
       },
@@ -1386,8 +1386,8 @@
     ],
     "open_pull_requests": [
       {
-        "number": 215,
-        "title": "feat(jax): derived JAX contract, full-argument auto dispatch, and docs parity (#166)",
+        "number": 219,
+        "title": "fix(interp_1d): reproduce upstream do_integrate_values on decreasing grids (#218)",
         "draft": false
       }
     ],
@@ -1526,6 +1526,14 @@
         "state": "open",
         "kind": "upstream-bug",
         "parity_pending": false,
+        "needs_confirmation": false
+      },
+      {
+        "number": 218,
+        "title": "[Deferred bug] do_integrate_values drops the lower sub-interval on decreasing grids",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": true,
         "needs_confirmation": false
       }
     ]
@@ -1764,6 +1772,19 @@
       "closed_140": "9",
       "total_140": "32",
       "deferred_169": "17"
+    },
+    {
+      "date_utc": "2026-11-18",
+      "commit": "33dff54",
+      "event": "main merge",
+      "engine_ported_pct": "13.9",
+      "all_verified_pct": "0.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "71.1",
+      "python_cov_pct": "87.6",
+      "closed_140": "10",
+      "total_140": "32",
+      "deferred_169": "18"
     }
   ]
 }

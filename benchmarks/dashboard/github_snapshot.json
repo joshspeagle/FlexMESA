@@ -101,8 +101,8 @@
     },
     {
       "phase": "Phase C",
-      "open": 13,
-      "closed": 0,
+      "open": 12,
+      "closed": 1,
       "issues": [
         {
           "number": 152,
@@ -167,7 +167,7 @@
         {
           "number": 166,
           "title": "[Audit C15] JAX contract: derived, differentiable and batched; validated against Rust strict mode",
-          "state": "open"
+          "state": "closed"
         }
       ]
     },
@@ -219,8 +219,8 @@
   ],
   "open_pull_requests": [
     {
-      "number": 215,
-      "title": "feat(jax): derived JAX contract, full-argument auto dispatch, and docs parity (#166)",
+      "number": 219,
+      "title": "fix(interp_1d): reproduce upstream do_integrate_values on decreasing grids (#218)",
       "draft": false
     }
   ],
@@ -359,6 +359,14 @@
       "state": "open",
       "kind": "upstream-bug",
       "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 218,
+      "title": "[Deferred bug] do_integrate_values drops the lower sub-interval on decreasing grids",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": true,
       "needs_confirmation": false
     }
   ]

@@ -7,13 +7,14 @@
 //! Usage:
 //! `cargo run --release -p flexmesa-binary --example binary_case_trace -- \
 //!    <case_dir> <out_binary_history.data | out_dir/> [max_steps] \
-//!    [--respect-intervals] [--logs-dir]`
+//!    [--respect-intervals] [--logs-dir] [--allow-unsupported-controls]`
 
 use std::path::Path;
 
 use flexmesa_binary::{
-    run_binary_test_suite_case_with_logs, BinaryLogsOptions,
+    run_binary_test_suite_case_with_options, BinaryLogsOptions,
 };
+use flexmesa_star::InlistLoadOptions;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -21,7 +22,7 @@ fn main() {
         eprintln!(
             "usage: binary_case_trace <case_dir> \
              <out_binary_history.data | out_dir/> [max_steps] \
-             [--respect-intervals] [--logs-dir]"
+             [--respect-intervals] [--logs-dir] [--allow-unsupported-controls]"
         );
         std::process::exit(2);
     }
@@ -31,6 +32,8 @@ fn main() {
             .flatten()
     });
     let respect_intervals = args.iter().any(|a| a == "--respect-intervals");
+    let allow_unsupported_controls =
+        args.iter().any(|a| a == "--allow-unsupported-controls");
     let out_arg = &args[2];
     let out_path = Path::new(out_arg);
     let is_logs_dir = args.iter().any(|a| a == "--logs-dir")
@@ -54,10 +57,13 @@ fn main() {
         }
     };
 
-    let rep = match run_binary_test_suite_case_with_logs(
+    let rep = match run_binary_test_suite_case_with_options(
         Path::new(&args[1]),
         cap,
         logs_opts,
+        InlistLoadOptions {
+            allow_unsupported_controls,
+        },
     ) {
         Ok(rep) => rep,
         Err(e) => {

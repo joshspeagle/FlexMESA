@@ -31,7 +31,7 @@ reason = "Upstream astero/test emits zero floating-point values in exact_tested_
 [[gaps]]
 module = "math"
 status = "partial_0_ulp"
-issue = "#166"
+issue = "#220"
 max_declared_ulp = 0
 min_zero_ulp_count = 24
 expect_nonzero_ulp = false
@@ -130,7 +130,7 @@ reason = "5/9 Salpeter, extended, and Chugunov screening outputs match at 0 ULP;
 [[gaps]]
 module = "auto_diff"
 status = "unported_hex_harness"
-issue = "#166"
+issue = "#220"
 reason = "774 upstream auto_diff operator-overload printouts await direct TSV harness mapping."
 
 [[gaps]]

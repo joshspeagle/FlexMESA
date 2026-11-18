@@ -101,7 +101,7 @@
     },
     {
       "phase": "Phase C",
-      "open": 12,
+      "open": 13,
       "closed": 1,
       "issues": [
         {
@@ -168,6 +168,11 @@
           "number": 166,
           "title": "[Audit C15] JAX contract: derived, differentiable and batched; validated against Rust strict mode",
           "state": "closed"
+        },
+        {
+          "number": 220,
+          "title": "[Audit] Level-2 exact-hex probes for the remaining math and auto_diff values",
+          "state": "open"
         }
       ]
     },

@@ -64,6 +64,49 @@ def _rel_diff(lhs: float, rhs: float) -> float:
     return abs(lhs - rhs) / denom
 
 
+#: Largest relative rounding error of a checksum printed with 9 significant
+#: digits. Differences between a printed Fortran or Rust checksum and a
+#: full-precision one cannot be resolved below this.
+PRINT_ROUNDING_9_DIGITS = 5.0e-9
+
+
+def _max_full_vs_printed(
+    suite: raw_benchmarks.RawBenchmarkSuite, waves: tuple[str, ...]
+) -> float:
+    """Largest relative difference, over ``waves``, between the
+    full-precision Python checksum and the 9-digit printed Fortran one."""
+    worst = 0.0
+    for key, f_rec in suite.fortran.items():
+        p_rec = suite.python.get(key)
+        if f_rec.wave in waves and p_rec is not None:
+            worst = max(worst, _rel_diff(p_rec.checksum, f_rec.checksum))
+    return worst
+
+
+def _printed_checksum_range(
+    suite: raw_benchmarks.RawBenchmarkSuite, wave: str
+) -> tuple[float, float]:
+    """Smallest and largest relative difference, over every workload and
+    size of ``wave``, between the printed Rust and Fortran checksums."""
+    diffs = [
+        _rel_diff(suite.rust[key].checksum, f_rec.checksum)
+        for key, f_rec in suite.fortran.items()
+        if f_rec.wave == wave and key in suite.rust
+    ]
+    return min(diffs), max(diffs)
+
+
+_WAVES_1_TO_3B: tuple[str, ...] = ("wave1", "wave2", "wave3a", "wave3b")
+
+
+def _fmt_factor_or_pct(rel: float) -> str:
+    """Format a relative difference as a percentage, or as a factor when
+    it exceeds 100%."""
+    if rel > 1.0:
+        return f"a factor of `{1.0 + rel:.1f}`"
+    return f"`{100.0 * rel:.2f}%`"
+
+
 def _provenance_bullets(
     suite: raw_benchmarks.RawBenchmarkSuite,
 ) -> list[str]:
@@ -226,7 +269,7 @@ def _render_kernel_scorecards(
         "# Kernel Performance Scorecards (MESA `r26.4.1`)",
         "",
         (
-            "These four-stage scorecards report verified measurements from "
+            "These four-stage scorecards report the measurements in "
             "the committed MESA `r26.4.1` raw captures in "
             f"[`benchmarks/raw/26.4.1/`]({raw_url}). All Rust numbers were "
             "recorded in `NumericsMode::Strict` (`crlibm` elementary "
@@ -294,10 +337,13 @@ def _render_kernel_scorecards(
             f"`{r_tri.stage3.median_us:.2f} us`)."
         ),
         (
-            "- **32-bit `fvbicub_db` floor**: `interp_2d` agrees across all 9 "
-            "printed significant digits (`0.00e+00` table difference) and to "
-            "`7.20e-9` in full `float64` precision because MESA's `fvbicub_db` "
-            "leaves implicit local variables as 32-bit `REAL`."
+            "- **Checksum precision**: Fortran and Rust print 9 significant "
+            "digits, and every Wave 1 printed checksum is identical. The "
+            "full `float64` Python checksums differ from the printed Fortran "
+            "values by at most "
+            f"`{_max_full_vs_printed(suite, ('wave1',)):.2e}`, "
+            f"within the `{PRINT_ROUNDING_9_DIGITS:.0e}` rounding of a 9-digit "
+            "print, so these captures cannot show a difference below that."
         ),
         "",
         *_render_scorecard_table(
@@ -329,9 +375,7 @@ def _render_kernel_scorecards(
             "(`eval_comp_hoisted`). At 4 threads on `ion_fe56`, Fortran MESA "
             f"(`{f_fe56.stage3.median_us:.2f} us`) is faster than Safe Rust "
             f"Stage 3 (`{r_fe56.stage3.median_us:.2f} us`) and PyO3 Stage 1 "
-            f"(`{p_fe56.stage1.median_us:.2f} us`), and `ion_fe56` shows a "
-            "`4.83e-9` full-precision floor from MESA's `fvbicub_db` 32-bit "
-            "locals."
+            f"(`{p_fe56.stage1.median_us:.2f} us`)."
         ),
         "",
         *_render_scorecard_table(
@@ -357,8 +401,10 @@ def _render_kernel_scorecards(
             "All nine Wave 3a and Wave 3b workloads invoke compiled MESA "
             "`r26.4.1` subroutines in every Fortran stage and match printed "
             "checksums across Fortran, Safe Rust, and Python/JAX (`0.00e+00` "
-            "at 9 significant digits; `<= 2e-9` across full `f64` JSON vs. "
-            "9-digit Rust output). Full per-size tables live in the "
+            "at 9 significant digits; at most "
+            f"`{_max_full_vs_printed(suite, ('wave3a', 'wave3b')):.2e}` "
+            "between full `f64` JSON and the 9-digit printed values, within "
+            "print rounding). Full per-size tables live in the "
             "[Wave 3a Report](../design/wave-3a-benchmark-report.md) and "
             "[Wave 3b Report](../design/wave-3b-benchmark-report.md). Note "
             "that cold XLA compilation for `eos_skye` on GPU took `60.7 s` "
@@ -401,12 +447,15 @@ def _render_kernel_scorecards(
             "- **Workloads where Fortran is faster**: At 4 threads, MESA "
             "`r26.4.1` outperforms Safe Rust on `star_hydro_eqns` "
             f"(`{f_w4_hyd.stage3.median_us:.2f} us` vs. "
-            f"`{r_w4_hyd.stage3.median_us:.2f} us`), `star_newton_step` "
+            f"`{r_w4_hyd.stage3.median_us:.2f} us`) and `star_newton_step` "
             f"(`{f_w4_newt.stage3.median_us:.2f} us` vs. "
-            f"`{r_w4_newt.stage3.median_us:.2f} us`), and `star_remesh` "
-            f"(`{f_w4_rem.stage3.median_us:.2f} us` vs. "
-            f"`{r_w4_rem.stage3.median_us:.2f} us` 4t / "
-            f"`{r_w4_rem.stage2.median_us:.2f} us` 1t Stage 2)."
+            f"`{r_w4_newt.stage3.median_us:.2f} us`). The `star_remesh` "
+            f"timings (`{f_w4_rem.stage3.median_us:.2f} us` Fortran vs. "
+            f"`{r_w4_rem.stage3.median_us:.2f} us` Rust 4t / "
+            f"`{r_w4_rem.stage2.median_us:.2f} us` 1t Stage 2) are not a "
+            "like-for-like comparison: the Fortran stage times only "
+            "`set_mesh_function_data`, the Rust stage the whole "
+            "`do_adjust_mesh`."
         ),
         (
             "- **PyO3 `star_newton_step` Stage 0 mismatch**: Python Stage 0 "
@@ -575,8 +624,8 @@ def _render_overview(
             "interp_2d",
             4096,
             (
-                "MESA `interp_evbicub_db`; Fortran 4t faster; `7.20e-9` "
-                "`fvbicub_db` floor"
+                "MESA `interp_evbicub_db`; Fortran 4t faster; printed "
+                "checksums identical"
             ),
         ),
         (
@@ -677,19 +726,26 @@ def _render_overview(
         (
             "- **Checksum accounting**: Across all `57` `(workload, "
             "N_zones)` operating points in Waves 1-3b, Safe Rust and Fortran "
-            "match across all 9 printed significant digits (`7.20e-9` "
-            "full-precision floor on `interp_2d` and `4.83e-9` on `ion_fe56` "
-            "due to 32-bit locals in MESA `fvbicub_db`; `<= 2e-11` "
-            "elsewhere). Wave 4 diverges on all five workloads (`7.48e-6` to "
-            "`9.15%`, plus 3-way `star_remesh` mismatch), and Wave 5 "
+            "match across all 9 printed significant digits. The full "
+            "`float64` Python checksums differ from the printed Fortran "
+            "values by at most "
+            f"`{_max_full_vs_printed(suite, _WAVES_1_TO_3B):.2e}`, "
+            f"within the `{PRINT_ROUNDING_9_DIGITS:.0e}` rounding of a 9-digit "
+            "print. Wave 4 diverges on all five workloads: across all sizes "
+            "the Rust and Fortran checksums differ by between "
+            f"`{_printed_checksum_range(suite, 'wave4')[0]:.2e}` and "
+            f"{_fmt_factor_or_pct(_printed_checksum_range(suite, 'wave4')[1])} "
+            "(the `star_remesh` stages also time different work). Wave 5 "
             "`w5_diff_rot` diverges by `99.17%` (`#158`)."
         ),
         (
             "- **Cases where Fortran is faster**: At 4 threads, Fortran is "
             "faster than Safe Rust on `interp_2d`, `mtx_tridiag` (batch "
             "Thomas), `ion_fe56`, `star_hydro_eqns`, `star_newton_step`, "
-            "`star_remesh`, `w5_diff_rot`, `w5_binary_rlof`, and "
-            "`w5_astero_seism`."
+            "`w5_diff_rot`, `w5_binary_rlof`, and `w5_astero_seism`. "
+            "`star_remesh` is not listed either way: its Fortran stage times "
+            "only `set_mesh_function_data`, while the Rust stage times the "
+            "whole `do_adjust_mesh`."
         ),
         "",
         *rep_table,
@@ -963,11 +1019,11 @@ def _render_wave1_report(
         "",
         (
             "All 18 Wave 1 `(workload, N_zones)` pairs agree across all 9 "
-            "printed significant digits (`<= 5e-9` relative difference between "
-            "full `float64` Python JSON and 9-digit printed Fortran/Rust). "
-            "In full double precision, `interp_2d` shows a `7.20e-9` floor "
-            "against MESA's `fvbicub_db` due to implicit 32-bit local "
-            "variables."
+            "printed significant digits. The full `float64` Python checksums "
+            "differ from the 9-digit printed Fortran values by at most "
+            f"`{_max_full_vs_printed(suite, ('wave1',)):.2e}`, within the "
+            f"`{PRINT_ROUNDING_9_DIGITS:.0e}` rounding of a 9-digit print, so "
+            "these captures cannot show a difference below that."
         ),
         "",
         *_checksum_table_rows(suite, workloads, nzs),
@@ -1085,9 +1141,10 @@ def _render_wave2_report(
         "",
         (
             "All 12 `(workload, N_zones)` pairs agree across all 9 printed "
-            "significant digits. In full `f64`, `ion_fe56` exhibits a "
-            "`4.83e-9` difference against MESA's `fvbicub_db` due to 32-bit "
-            "implicit locals."
+            "significant digits. The full `f64` Python checksums differ from "
+            "the printed Fortran values by at most "
+            f"`{_max_full_vs_printed(suite, ('wave2',)):.2e}`, within the "
+            "rounding of a 9-digit print."
         ),
         "",
         *_checksum_table_rows(suite, workloads, nzs),
@@ -1190,8 +1247,9 @@ def _render_wave3a_report(
         "",
         (
             "All 12 `(workload, N_zones)` pairs agree across all 9 printed "
-            "significant digits (`<= 2e-9` relative difference between JSON "
-            "and 9-digit printed sums)."
+            "significant digits (at most "
+            f"`{_max_full_vs_printed(suite, ('wave3a',)):.2e}` between JSON "
+            "and 9-digit printed sums, within print rounding)."
         ),
         "",
         *_checksum_table_rows(suite, workloads, nzs),
@@ -1563,11 +1621,14 @@ def _render_wave4_report(
             "1. **Workloads where MESA Fortran is faster**: At 4 threads, "
             "MESA `r26.4.1` outperforms Safe Rust on `star_hydro_eqns` "
             f"(`{f_hyd.stage3.median_us:.2f} us` vs. "
-            f"`{r_hyd.stage3.median_us:.2f} us`), `star_newton_step` "
+            f"`{r_hyd.stage3.median_us:.2f} us`) and `star_newton_step` "
             f"(`{f_newt.stage3.median_us:.2f} us` vs. "
-            f"`{r_newt.stage3.median_us:.2f} us`), and `star_remesh` "
-            f"(`{f_rem.stage3.median_us:.2f} us` vs. "
-            f"`{r_rem.stage3.median_us:.2f} us`)."
+            f"`{r_newt.stage3.median_us:.2f} us`). The `star_remesh` "
+            f"timings (`{f_rem.stage3.median_us:.2f} us` Fortran vs. "
+            f"`{r_rem.stage3.median_us:.2f} us` Rust) are not a "
+            "like-for-like comparison: the Fortran stage times only "
+            "`set_mesh_function_data`, the Rust stage the whole "
+            "`do_adjust_mesh`."
         ),
         (
             "2. **`star_newton_step` Stage 0 PyO3 "

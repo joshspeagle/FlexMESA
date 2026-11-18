@@ -131,6 +131,6 @@ Provenance summary (`benchmarks/raw/26.4.1/`): every `1024`-zone checksum mismat
 
 ## 3. Key Wave 4 Disclosures ($N_{\mathrm{zones}} = 1024$)
 
-1. **Workloads where MESA Fortran is faster**: At 4 threads, MESA `r26.4.1` outperforms Safe Rust on `star_hydro_eqns` (`2962.80 us` vs. `13814.92 us`), `star_newton_step` (`3165.36 us` vs. `14296.08 us`), and `star_remesh` (`21.93 us` vs. `340.46 us`).
+1. **Workloads where MESA Fortran is faster**: At 4 threads, MESA `r26.4.1` outperforms Safe Rust on `star_hydro_eqns` (`2962.80 us` vs. `13814.92 us`) and `star_newton_step` (`3165.36 us` vs. `14296.08 us`). The `star_remesh` timings (`21.93 us` Fortran vs. `340.46 us` Rust) are not a like-for-like comparison: the Fortran stage times only `set_mesh_function_data`, the Rust stage the whole `do_adjust_mesh`.
 2. **`star_newton_step` Stage 0 PyO3 (`204.75 us`)**: Benchmarks only the Rust `bcyclic` linear solve without `eval_equations`, whereas Fortran and Rust full-step stages include equation residual and Jacobian setup.
 3. **`star_evolve_step` unequal timestep**: Fortran sets `s% dt = 100 s` (`N=8` pre-flight check logs `ierr -1`) while Rust steps with `base.dt`.

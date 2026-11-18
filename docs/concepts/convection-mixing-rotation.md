@@ -28,7 +28,7 @@ To guarantee convergence across 80 orders of magnitude in $Y$, `set_tdc` searche
 
    $$\frac{\partial Y^*}{\partial \theta} = -\left(\frac{\partial Q}{\partial Y}\bigg|_{Y^*}\right)^{-1} \frac{\partial Q}{\partial \theta}\bigg|_{Y^*}.$$
 
-Applying the Implicit Function Theorem at the converged scalar root rather than propagating a 70-component dual number through every intermediate Newton iteration avoids redundant derivative arithmetic inside the root loop; pre-audit 4096-zone local benchmarks recorded $54.1\times$ faster Safe Rust (4t) and $146.0\times$ faster batched GPU JAX runtimes relative to per-zone MESA `set_TDC` calls (no raw JSON committed; reproducible MESA `26.4.1` timing tracked in `#146`).
+Applying the Implicit Function Theorem at the converged scalar root rather than propagating a 70-component dual number through every intermediate Newton iteration avoids redundant derivative arithmetic inside the root loop; the measured `turb_tdc` timings against MESA `26.4.1` are in the [Wave 1 benchmark report](../design/wave-1-benchmark-report.md).
 
 ![Steady-state Cox MLT vs. transient Kuhfuss TDC temperature gradient and Implicit Function Theorem sensitivity](../assets/figures/turb_mlt_tdc_comparison.png)
 

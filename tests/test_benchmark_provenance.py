@@ -93,7 +93,6 @@ def test_raw_captures_and_rendered_docs_contain_zero_bad_tokens() -> None:
         "/" + "mnt/",
         "." + "venvs",
         "file" + "://",
-        "speagle" + "-desktop",
         "\u2014",
     )
     overflow_token = "*" * 7

@@ -2,7 +2,7 @@
 
 # Kernel Performance Scorecards (MESA `r26.4.1`)
 
-These four-stage scorecards report verified measurements from the committed MESA `r26.4.1` raw captures in [`benchmarks/raw/26.4.1/`](https://github.com/joshspeagle/FlexMESA/tree/main/benchmarks/raw/26.4.1). All Rust numbers were recorded in `NumericsMode::Strict` (`crlibm` elementary functions, no FMA contraction); see `notes/audit/fast_vs_strict.md` for `fast` vs. `strict` scaling (`#165`).
+These four-stage scorecards report the measurements in the committed MESA `r26.4.1` raw captures in [`benchmarks/raw/26.4.1/`](https://github.com/joshspeagle/FlexMESA/tree/main/benchmarks/raw/26.4.1). All Rust numbers were recorded in `NumericsMode::Strict` (`crlibm` elementary functions, no FMA contraction); see `notes/audit/fast_vs_strict.md` for `fast` vs. `strict` scaling (`#165`).
 
 ## Provenance & Stage Semantics
 
@@ -28,7 +28,7 @@ Full $N_{\mathrm{zones}} \in \{128, 1024, 4096\}$ tables live in the [Wave 1 Ben
 
 - **Mixed comparators**: `auto_diff` (`eval_autodiff_fused`) and `mtx_tridiag` (`fast_block_thomas_solve`) Stages 2-3 time Reference Fortran loops rather than MESA library routines; MESA's single-matrix `bcyclic_dble_decsolblk` 4096-zone timing is `2161.30 us` (1t) and `790.11 us` (4t OpenMP).
 - **Workloads where Fortran is faster**: At 4 threads, Fortran MESA outperforms Safe Rust on `interp_2d` (`41.69 us` vs. `70.69 us`), and Reference Fortran batch Thomas outperforms Safe Rust on `mtx_tridiag` (`196.10 us` vs. `323.73 us`).
-- **32-bit `fvbicub_db` floor**: `interp_2d` agrees across all 9 printed significant digits (`0.00e+00` table difference) and to `7.20e-9` in full `float64` precision because MESA's `fvbicub_db` leaves implicit local variables as 32-bit `REAL`.
+- **Checksum precision**: Fortran and Rust print 9 significant digits, and every Wave 1 printed checksum is identical. The full `float64` Python checksums differ from the printed Fortran values by at most `4.84e-09`, within the `5e-09` rounding of a 9-digit print, so these captures cannot show a difference below that.
 
 | Workload | Comparator | Fortran 1t Stage 2 ($\mu\mathrm{s}$) | Fortran 4t Stage 3 ($\mu\mathrm{s}$) | Safe Rust 1t Stage 2 ($\mu\mathrm{s}$) | Safe Rust 4t Stage 3 ($\mu\mathrm{s}$) | PyO3 Best ($\mu\mathrm{s}$) | JAX `@jit` Stage 2 ($\mu\mathrm{s}$) | JAX `vmap` Stage 3 ($\mu\mathrm{s}$) | Fortran Checksum | Safe Rust Checksum | Rel. Diff |
 | :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -43,7 +43,7 @@ Full $N_{\mathrm{zones}} \in \{128, 1024, 4096\}$ tables live in the [Wave 1 Ben
 
 ## 2. Atomic Composition, Ionization & Synthetic Photometry ($N_{\mathrm{zones}} = 4096$)
 
-Full $N_{\mathrm{zones}} \in \{128, 1024, 4096\}$ tables live in the [Wave 2 Benchmark Report](../design/wave-2-benchmark-report.md). Stage 2/3 `chem_comp` Fortran timings run the hoisted Reference Fortran loop (`eval_comp_hoisted`). At 4 threads on `ion_fe56`, Fortran MESA (`32.05 us`) is faster than Safe Rust Stage 3 (`71.69 us`) and PyO3 Stage 1 (`46.74 us`), and `ion_fe56` shows a `4.83e-9` full-precision floor from MESA's `fvbicub_db` 32-bit locals.
+Full $N_{\mathrm{zones}} \in \{128, 1024, 4096\}$ tables live in the [Wave 2 Benchmark Report](../design/wave-2-benchmark-report.md). Stage 2/3 `chem_comp` Fortran timings run the hoisted Reference Fortran loop (`eval_comp_hoisted`). At 4 threads on `ion_fe56`, Fortran MESA (`32.05 us`) is faster than Safe Rust Stage 3 (`71.69 us`) and PyO3 Stage 1 (`46.74 us`).
 
 | Workload | Comparator | Fortran 1t Stage 2 ($\mu\mathrm{s}$) | Fortran 4t Stage 3 ($\mu\mathrm{s}$) | Safe Rust 1t Stage 2 ($\mu\mathrm{s}$) | Safe Rust 4t Stage 3 ($\mu\mathrm{s}$) | PyO3 4t Stage 1 ($\mu\mathrm{s}$) | JAX `@jit` Stage 2 ($\mu\mathrm{s}$) | JAX `vmap` Stage 3 ($\mu\mathrm{s}$) | Fortran Checksum | Safe Rust Checksum | Rel. Diff |
 | :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -56,7 +56,7 @@ Full $N_{\mathrm{zones}} \in \{128, 1024, 4096\}$ tables live in the [Wave 2 Ben
 
 ## 3. Equations of State, Opacity, Networks & Atmospheres ($N_{\mathrm{zones}} = 4096$)
 
-All nine Wave 3a and Wave 3b workloads invoke compiled MESA `r26.4.1` subroutines in every Fortran stage and match printed checksums across Fortran, Safe Rust, and Python/JAX (`0.00e+00` at 9 significant digits; `<= 2e-9` across full `f64` JSON vs. 9-digit Rust output). Full per-size tables live in the [Wave 3a Report](../design/wave-3a-benchmark-report.md) and [Wave 3b Report](../design/wave-3b-benchmark-report.md). Note that cold XLA compilation for `eos_skye` on GPU took `60.7 s` (Stage 3 at `N_zones = 4096`) prior to warm execution.
+All nine Wave 3a and Wave 3b workloads invoke compiled MESA `r26.4.1` subroutines in every Fortran stage and match printed checksums across Fortran, Safe Rust, and Python/JAX (`0.00e+00` at 9 significant digits; at most `3.40e-09` between full `f64` JSON and the 9-digit printed values, within print rounding). Full per-size tables live in the [Wave 3a Report](../design/wave-3a-benchmark-report.md) and [Wave 3b Report](../design/wave-3b-benchmark-report.md). Note that cold XLA compilation for `eos_skye` on GPU took `60.7 s` (Stage 3 at `N_zones = 4096`) prior to warm execution.
 
 | Workload | Comparator | MESA 1t Stage 2 ($\mu\mathrm{s}$) | MESA 4t Stage 3 ($\mu\mathrm{s}$) | Safe Rust 1t Stage 2 ($\mu\mathrm{s}$) | Safe Rust 4t Stage 3 ($\mu\mathrm{s}$) | PyO3 4t Stage 1 ($\mu\mathrm{s}$) | JAX `@jit` Stage 2 ($\mu\mathrm{s}$) | JAX `vmap` Stage 3 ($\mu\mathrm{s}$) | MESA Checksum | Safe Rust Checksum | Rel. Diff |
 | :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -76,7 +76,7 @@ All nine Wave 3a and Wave 3b workloads invoke compiled MESA `r26.4.1` subroutine
 
 Full tables and `star/test` comparisons live in the [Wave 4 Benchmark Report](../design/wave-4-benchmark-report.md). All five Wave 4 workloads run post-`51e1adc` (`need_to_setvars = .true.`), but **do not yet achieve numerical parity or equal work scope**:
 
-- **Workloads where Fortran is faster**: At 4 threads, MESA `r26.4.1` outperforms Safe Rust on `star_hydro_eqns` (`2962.80 us` vs. `13814.92 us`), `star_newton_step` (`3165.36 us` vs. `14296.08 us`), and `star_remesh` (`21.93 us` vs. `340.46 us` 4t / `223.41 us` 1t Stage 2).
+- **Workloads where Fortran is faster**: At 4 threads, MESA `r26.4.1` outperforms Safe Rust on `star_hydro_eqns` (`2962.80 us` vs. `13814.92 us`) and `star_newton_step` (`3165.36 us` vs. `14296.08 us`). The `star_remesh` timings (`21.93 us` Fortran vs. `340.46 us` Rust 4t / `223.41 us` 1t Stage 2) are not a like-for-like comparison: the Fortran stage times only `set_mesh_function_data`, the Rust stage the whole `do_adjust_mesh`.
 - **PyO3 `star_newton_step` Stage 0 mismatch**: Python Stage 0 PyO3 (`204.75 us`) times only the `bcyclic` linear solve without calling `eval_equations`.
 - **Checksum discrepancies (`1024` zones)**: `star_micro_vars` differs by `6.04e-05`, `star_hydro_eqns` by `1.60e-05`, `star_newton_step` by `9.15%`, `star_evolve_step` by `7.48e-06` (comparing Fortran `dt = 100 s` in `do_struct_burn_mix` against Rust `base.dt`, and Fortran's `8`-zone pre-flight check logs `hydro_solver_step returned ierr -1`), and `star_remesh` shows a **three-way mismatch** across Fortran `set_mesh_function_data` (`5.73660892e+05`), Rust `do_adjust_mesh` (`4.25843355e+02`), and Python `eval_mesh_gval_jax` (`4.21132239e+02`).
 

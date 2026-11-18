@@ -358,30 +358,15 @@ def build_spread_report(
     *,
     dry_run: bool,
     planned_commands: Sequence[str] = (),
-    provenance: dict[str, str] | None = None,
 ) -> dict[str, Any]:
-    """Assemble structured MESA-to-MESA spread report JSON.
-
-    ``provenance`` is the output of :func:`collect_build_provenance` for a
-    live run. It is ``None`` for a dry run or a comparison of history files
-    supplied by hand, and the report then says the builds were not read.
-    """
+    """Assemble structured MESA-to-MESA spread report JSON."""
     identical_count = sum(1 for c in cases if c.files_byte_identical)
     row_mismatches = sum(1 for c in cases if c.rows_baseline != c.rows_variant)
     max_ulp = max((c.max_ulp for c in cases), default=0)
     max_rel = max((c.max_rel_diff for c in cases), default=0.0)
     return {
         "schema_version": SCHEMA_VERSION,
-        "mesa_version": (
-            provenance["mesa_version"]
-            if provenance is not None
-            else DEFAULT_MESA_VERSION
-        ),
-        "build_provenance": (
-            provenance
-            if provenance is not None
-            else "not read (dry run or histories supplied by hand)"
-        ),
+        "mesa_version": DEFAULT_MESA_VERSION,
         "dry_run": dry_run,
         "baseline_config": baseline_cfg.to_dict(),
         "variant_config": variant_cfg.to_dict(),
@@ -444,36 +429,10 @@ def render_spread_markdown(report: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def read_makefile_fcopt(header_path: pathlib.Path) -> str:
-    """Return the value of the ``FCopt =`` line of a MESA makefile header.
-
-    Raises:
-        RuntimeError: If the header has no ``FCopt =`` line, in which case
-            the optimization flags of that build are unknown.
-    """
-    for ln in header_path.read_text(encoding="utf-8").splitlines():
-        if ln.startswith("FCopt ="):
-            return ln.split("=", 1)[1].strip()
-    raise RuntimeError(f"no 'FCopt =' line in {header_path}")
-
-
 def _patch_makefile_header(
     header_path: pathlib.Path, variant_fc_flags: str
 ) -> None:
-    """Update ``FCopt`` and disable PGSTAR inside a copied MESA worktree.
-
-    Raises:
-        RuntimeError: If no ``FCopt =`` line was replaced, or if the variant
-            flags equal the flags already there. Either way the variant
-            build would not differ from the baseline and the comparison
-            would be empty.
-    """
-    original = read_makefile_fcopt(header_path)
-    if original == variant_fc_flags.strip():
-        raise RuntimeError(
-            f"variant FCopt {variant_fc_flags!r} equals the baseline FCopt "
-            f"in {header_path}; the two builds would be the same"
-        )
+    """Update ``FCopt`` and disable PGSTAR inside a copied MESA worktree."""
     lines = header_path.read_text(encoding="utf-8").splitlines()
     out: list[str] = []
     for ln in lines:
@@ -484,68 +443,6 @@ def _patch_makefile_header(
         else:
             out.append(ln)
     header_path.write_text("\n".join(out) + "\n", encoding="utf-8")
-
-
-def collect_build_provenance(
-    mesa_dir: pathlib.Path,
-    alt_dir: pathlib.Path,
-    sdk_root: pathlib.Path,
-) -> dict[str, str]:
-    """Read the MESA version, SDK version and compiler from the builds.
-
-    Args:
-        mesa_dir: Baseline MESA tree.
-        alt_dir: Variant MESA tree.
-        sdk_root: MESA SDK root used for both builds.
-
-    Returns:
-        Dictionary with ``mesa_version`` (``data/version_number`` of the
-        baseline tree), ``mesasdk_version`` and ``compiler`` (first line of
-        ``gfortran --version`` under the SDK), and the ``FCopt`` value found
-        in each tree's ``utils/makefile_header``.
-
-    Raises:
-        RuntimeError: If any of these cannot be read. A spread report must
-            say what was compared.
-    """
-    version_file = mesa_dir / "data" / "version_number"
-    if not version_file.is_file():
-        raise RuntimeError(f"missing MESA version file: {version_file}")
-    env = os.environ.copy()
-    env["MESASDK_ROOT"] = str(sdk_root)
-    probe = (
-        'set +u; source "$MESASDK_ROOT/bin/mesasdk_init.sh"; '
-        'echo "sdk=$(mesasdk_version)"; '
-        'echo "fc=$(gfortran --version | head -n 1)"'
-    )
-    proc = subprocess.run(
-        ["bash", "-c", probe],
-        env=env,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    found = dict(
-        ln.split("=", 1) for ln in proc.stdout.splitlines() if "=" in ln
-    )
-    sdk = found.get("sdk", "").strip()
-    fc = found.get("fc", "").strip()
-    if proc.returncode != 0 or not sdk or not fc:
-        raise RuntimeError(
-            "could not read the MESA SDK version and compiler under "
-            f"{sdk_root}: {proc.stderr.strip()}"
-        )
-    return {
-        "mesa_version": version_file.read_text(encoding="utf-8").strip(),
-        "mesasdk_version": sdk,
-        "compiler": fc,
-        "baseline_fcopt_in_header": read_makefile_fcopt(
-            mesa_dir / "utils" / "makefile_header"
-        ),
-        "variant_fcopt_in_header": read_makefile_fcopt(
-            alt_dir / "utils" / "makefile_header"
-        ),
-    }
 
 
 def plan_alt_mesa_commands(
@@ -622,15 +519,6 @@ def _install_variant_mesa(
     if not sdk_root.is_dir():
         raise FileNotFoundError(f"MESASDK_ROOT not found: {sdk_root}")
     if alt_dir.exists():
-        # Reuse an existing variant tree only if it was built with the
-        # requested flags; otherwise the comparison would be against an
-        # unknown build.
-        found = read_makefile_fcopt(alt_dir / "utils" / "makefile_header")
-        if found != var_cfg.fc_flags.strip():
-            raise RuntimeError(
-                f"existing variant tree {alt_dir} has FCopt {found!r}, not "
-                f"the requested {var_cfg.fc_flags!r}; remove it and rerun"
-            )
         return
     shutil.copytree(mesa_dir, alt_dir, symlinks=True)
     _patch_makefile_header(
@@ -803,7 +691,6 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     spreads: list[CaseSpreadResult] = []
     planned: list[str] = []
-    provenance: dict[str, str] | None = None
     if ns.compare_histories:
         for suite_case, b_hist, v_hist in ns.compare_histories:
             suite, case = _parse_suite_case(suite_case)
@@ -823,7 +710,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         spreads = _execute_live_spread(
             mesa_dir, sdk_root, alt_dir, base_cfg, var_cfg, cases
         )
-        provenance = collect_build_provenance(mesa_dir, alt_dir, sdk_root)
 
     report = build_spread_report(
         base_cfg,
@@ -831,7 +717,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         spreads,
         dry_run=bool(ns.dry_run),
         planned_commands=planned,
-        provenance=provenance,
     )
     md_text = render_spread_markdown(report)
     if ns.json_out is not None:

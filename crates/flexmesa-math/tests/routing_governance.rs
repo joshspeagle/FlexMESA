@@ -248,3 +248,50 @@ fn test_flexmesa_crlibm_sys_is_sole_unsafe_crate_in_workspace() {
     }
     assert!(seen_crlibm, "flexmesa-crlibm-sys crate must exist");
 }
+
+/// A test that switches the process-wide numerics mode must not share a test
+/// binary with tests that read it (issue #210): `with_numerics_mode`
+/// serializes switchers against each other, but ordinary code reads the mode
+/// without the lock, so a concurrent test can see the mode change halfway
+/// through a calculation.
+///
+/// Outside `flexmesa-math` and the `flexmesa-py` bindings, the mode may
+/// therefore be switched only in an integration-test file named
+/// `*numerics_mode_test.rs`, which Cargo builds as its own process. A call
+/// that names `NumericsMode::Strict` literally is allowed anywhere, since it
+/// selects the default.
+#[test]
+fn test_numerics_mode_is_switched_only_in_dedicated_test_binaries() {
+    let crates_root = workspace_root().join("crates");
+    let mut files = Vec::new();
+    collect_rs_files(&crates_root, &mut files);
+    let mut offenders: Vec<String> = Vec::new();
+    for path in files {
+        let rel = path
+            .strip_prefix(&crates_root)
+            .expect("under crates/")
+            .to_string_lossy()
+            .replace('\\', "/");
+        if rel.starts_with("flexmesa-math/") || rel.starts_with("flexmesa-py/")
+        {
+            continue;
+        }
+        if rel.contains("/tests/") && rel.ends_with("numerics_mode_test.rs") {
+            continue;
+        }
+        let text = fs::read_to_string(&path).expect("read source file");
+        for (idx, line) in text.lines().enumerate() {
+            let code = line.split("//").next().unwrap_or("");
+            let switches = code.contains("with_numerics_mode(")
+                || code.contains("set_numerics_mode(");
+            if switches && !code.contains("NumericsMode::Strict") {
+                offenders.push(format!("{rel}:{}", idx + 1));
+            }
+        }
+    }
+    assert!(
+        offenders.is_empty(),
+        "numerics mode switched outside a dedicated `*numerics_mode_test.rs` \
+         test binary (issue #210): {offenders:?}"
+    );
+}

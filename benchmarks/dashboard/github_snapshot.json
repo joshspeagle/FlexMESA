@@ -101,8 +101,8 @@
     },
     {
       "phase": "Phase C",
-      "open": 13,
-      "closed": 1,
+      "open": 12,
+      "closed": 2,
       "issues": [
         {
           "number": 152,
@@ -172,7 +172,7 @@
         {
           "number": 220,
           "title": "[Audit] Level-2 exact-hex probes for the remaining math and auto_diff values",
-          "state": "open"
+          "state": "closed"
         }
       ]
     },
@@ -222,13 +222,7 @@
       "issues": []
     }
   ],
-  "open_pull_requests": [
-    {
-      "number": 225,
-      "title": "feat(testing): wire Level-2 exact-hex probes for all math and auto_diff values (#220)",
-      "draft": false
-    }
-  ],
+  "open_pull_requests": [],
   "deferred_169": [
     {
       "number": 175,

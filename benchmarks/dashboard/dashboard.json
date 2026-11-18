@@ -915,8 +915,8 @@
     "python": {
       "tool": "pytest --cov",
       "overall": {
-        "statements": 21673,
-        "covered": 19000,
+        "statements": 21689,
+        "covered": 19016,
         "percent": 87.7
       },
       "by_subpackage": [
@@ -1066,9 +1066,9 @@
         },
         {
           "subpackage": "flexmesa.testing",
-          "statements": 3377,
-          "covered": 2661,
-          "percent": 78.8
+          "statements": 3393,
+          "covered": 2677,
+          "percent": 78.9
         },
         {
           "subpackage": "flexmesa.turb",
@@ -1267,8 +1267,8 @@
       },
       {
         "phase": "Phase C",
-        "open": 13,
-        "closed": 1,
+        "open": 12,
+        "closed": 2,
         "issues": [
           {
             "number": 152,
@@ -1338,7 +1338,7 @@
           {
             "number": 220,
             "title": "[Audit] Level-2 exact-hex probes for the remaining math and auto_diff values",
-            "state": "open"
+            "state": "closed"
           }
         ]
       },
@@ -1388,13 +1388,7 @@
         "issues": []
       }
     ],
-    "open_pull_requests": [
-      {
-        "number": 225,
-        "title": "feat(testing): wire Level-2 exact-hex probes for all math and auto_diff values (#220)",
-        "draft": false
-      }
-    ],
+    "open_pull_requests": [],
     "deferred_169": [
       {
         "number": 175,
@@ -1852,6 +1846,19 @@
       "rust_cov_pct": "70.8",
       "python_cov_pct": "87.7",
       "closed_140": "11",
+      "total_140": "33",
+      "deferred_169": "18"
+    },
+    {
+      "date_utc": "2026-11-18",
+      "commit": "9fb0df9",
+      "event": "main merge",
+      "engine_ported_pct": "13.9",
+      "all_verified_pct": "0.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "70.8",
+      "python_cov_pct": "87.7",
+      "closed_140": "12",
       "total_140": "33",
       "deferred_169": "18"
     }

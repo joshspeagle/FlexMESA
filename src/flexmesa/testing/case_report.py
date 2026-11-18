@@ -265,6 +265,7 @@ def render_case_table_markdown(
     *,
     summary: dict[str, Any] | None = None,
     known_gaps: dict[tuple[str, str], case_manifest.KnownGapSpec] | None = None,
+    figure_links: dict[tuple[str, str], str] | None = None,
     title: str = "Upstream MESA Trajectory Case Table",
 ) -> str:
     """Render a deterministic Markdown table from ``records``.
@@ -274,6 +275,8 @@ def render_case_table_markdown(
         records: Sequence of ``CaseHarnessRecord`` entries.
         summary: Optional precomputed summary dictionary.
         known_gaps: Optional ``known_gaps.toml`` mapping.
+        figure_links: Optional mapping from ``(suite, case)`` to comparison
+            figure link targets included as a trailing column when given.
         title: Top-level Markdown heading text.
 
     Returns:
@@ -284,6 +287,7 @@ def render_case_table_markdown(
         if summary is not None
         else summarize_records(manifest, records, known_gaps)
     )
+    include_figures = figure_links is not None
     suites = head["cases_by_suite"]
     lines: list[str] = [
         GENERATED_HEADER,
@@ -364,9 +368,10 @@ def render_case_table_markdown(
         "",
         "| Suite | Case | Reference Status | Required Termination | "
         "Run Mode | Observed Term | Steps | Final Coord Diff | "
-        "Max Track Diff | First Div Step | Declared Gap | Verdict |",
+        "Max Track Diff | First Div Step | Declared Gap | Verdict |"
+        + (" Figure |" if include_figures else ""),
         "| :--- | :--- | :--- | :--- | :--- | :--- | ---: | ---: | :--- | "
-        "---: | :--- | :--- |",
+        "---: | :--- | :--- |" + (" :--- |" if include_figures else ""),
     ]
 
     for rec in records:
@@ -381,12 +386,18 @@ def render_case_table_markdown(
             else "-"
         )
         gap_str = rec.known_gap_issue if rec.known_gap_issue else "-"
+        fig_cell = ""
+        if include_figures:
+            assert figure_links is not None
+            fig_target = figure_links.get((rec.suite, rec.case))
+            fig_cell = f" [compare]({fig_target}) |" if fig_target else " - |"
         lines.append(
             f"| `{rec.suite}` | `{rec.case}` | `{rec.reference_status}` | "
             f"`{rec.required_termination}` | {rec.run_mode} | {obs_term} | "
             f"{steps_str} | "
             f"{_fmt_final_age_diff(rec)} | {_fmt_max_dev(rec)} | "
             f"{first_div} | {gap_str} | {rec.verdict} |"
+            f"{fig_cell}"
         )
 
     lines.append("")

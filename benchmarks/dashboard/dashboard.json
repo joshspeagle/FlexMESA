@@ -447,16 +447,16 @@
         "pct_ported": 0.0,
         "pct_verified": 0.0,
         "rust_lines": 0,
-        "python_jax_lines": 759
+        "python_jax_lines": 2873
       }
     ],
     "plotting_panels": {
-      "flexmesa_plot_builders": 7,
+      "flexmesa_plot_builders": 10,
       "upstream_panel_modules": 46
     },
     "infrastructure_lines": {
       "rust_bridge_testing_bench": 15625,
-      "python_testing_bench": 13333
+      "python_testing_bench": 13437
     }
   },
   "numerics": {

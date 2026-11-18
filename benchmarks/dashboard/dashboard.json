@@ -750,8 +750,8 @@
     "rust": {
       "tool": "cargo llvm-cov",
       "overall": {
-        "lines": 93004,
-        "covered": 66228,
+        "lines": 92978,
+        "covered": 66194,
         "percent": 71.2
       },
       "by_crate": [
@@ -848,8 +848,8 @@
         {
           "crate": "flexmesa-math",
           "lines": 775,
-          "covered": 598,
-          "percent": 77.2
+          "covered": 589,
+          "percent": 76.0
         },
         {
           "crate": "flexmesa-mtx",
@@ -859,8 +859,8 @@
         },
         {
           "crate": "flexmesa-net",
-          "lines": 7627,
-          "covered": 6600,
+          "lines": 7601,
+          "covered": 6575,
           "percent": 86.5
         },
         {
@@ -1418,11 +1418,11 @@
       {
         "number": 208,
         "title": "fix(testing): record MESA, SDK, and compiler provenance in mesa_spread_26_4_1.json (#144)",
-        "draft": true
+        "draft": false
       },
       {
-        "number": 211,
-        "title": "fix(testing): isolate numerics-mode tests (#210); drop spread-script edits that overlap PR #208 (#144)",
+        "number": 212,
+        "title": "docs,bench: record MESA 26.4.1 raw benchmarks and honesty audit (#146)",
         "draft": false
       }
     ],
@@ -1699,6 +1699,19 @@
     {
       "date_utc": "2026-11-17",
       "commit": "0fec8d2",
+      "event": "main merge",
+      "engine_ported_pct": "13.9",
+      "all_verified_pct": "0.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "71.2",
+      "python_cov_pct": "87.7",
+      "closed_140": "7",
+      "total_140": "32",
+      "deferred_169": "17"
+    },
+    {
+      "date_utc": "2026-11-18",
+      "commit": "28a3e51",
       "event": "main merge",
       "engine_ported_pct": "13.9",
       "all_verified_pct": "0.0",

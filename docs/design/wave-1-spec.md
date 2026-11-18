@@ -130,11 +130,12 @@ $$p_i(\Delta x) = c_{0,i} + \Delta x\,(c_{1,i} + \Delta x\,(c_{2,i} + \Delta x\,
   spurious extrema on every sub-interval.
 - **Huynh (1993) MP5 / M3a Slope Limiter (`interp_m3a`, `interp_m3b`, `interp_m3q`)**:
   Higher-order median-limited slopes preserving accuracy at smooth extrema.
-- **Integrals**: Exact analytic integration of the piecewise cubic over
-  $[x_a, x_b]$. Fixes upstream `do_integrate_values` (`interp_1d_misc.f90`),
-  which checks `x1 > x0` instead of `x1 /= x0` when subtracting the lower
-  sub-interval antiderivative `a1`, so strictly decreasing grids preserve exact
-  definite-integral symmetry.
+- **Integrals**: Analytic integration of the piecewise cubic over
+  $[x_a, x_b]$, reproducing upstream `do_integrate_values`
+  (`interp_1d/private/interp_1d_misc.f90:29-109`). Upstream checks `x1 > x0`
+  when subtracting the lower sub-interval antiderivative `a1`, so on strictly
+  decreasing grids each value is the integral from the cell's left knot; this
+  is reproduced and recorded as deferred issue `#218`.
 
 #### 2D Tensor-Product Spline Interpolation (`interp_2d`)
 Constructs $4 \times 4$ bicubic patch coefficients on rectangular grids

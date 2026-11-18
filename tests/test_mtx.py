@@ -99,7 +99,7 @@ def test_square1_and_square2_match_upstream_golden_output() -> None:
     np.testing.assert_allclose(prod, a2 @ a3, rtol=1e-13, atol=1e-13)
 
 
-def test_sparse_and_band_conversions_match_upstream() -> None:
+def test_sparse_and_band_conversions_roundtrip_on_support_matrix() -> None:
     """Verifies CSR, CSC, and band conversions (`test_mtx_support.f90`).
 
     Exercises 1-based and 0-based CSR/CSC roundtrips on the $5 \\times 5$

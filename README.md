@@ -61,7 +61,7 @@ Progress is measured by **upstream MESA `26.4.1` source lines by status**, never
 | **Subtotal: star + star_data + binary + astero** | 144,952 | 24,502 | 18,172 | 82,171 | 20,107 | 0 | 0 | 73,918 | 7,171 | 13.9% | 0.0% |
 | **Total (all 26 modules)** | 497,703 | 249,527 | 18,172 | 206,337 | 23,667 | 0 | 0 | 139,935 | 45,493 | 4.8% | 0.0% |
 
-*Notes*: `star_data` state structs reside in `crates/flexmesa-star`. Bridge, testing, and benchmark infrastructure account for an additional `15,544` Rust lines (`flexmesa-py`, `flexmesa-testing`, `flexmesa-bench`) and `13,333` Python lines (`flexmesa.testing`, `flexmesa.bench`). For plotting ([#173](https://github.com/joshspeagle/FlexMESA/issues/173)), `flexmesa.plotting` currently provides `7` `plot_*` builders against `46` upstream `pgstar`/`pgbinary` panel modules.
+*Notes*: `star_data` state structs reside in `crates/flexmesa-star`. Bridge, testing, and benchmark infrastructure account for an additional `15,625` Rust lines (`flexmesa-py`, `flexmesa-testing`, `flexmesa-bench`) and `13,333` Python lines (`flexmesa.testing`, `flexmesa.bench`). For plotting ([#173](https://github.com/joshspeagle/FlexMESA/issues/173)), `flexmesa.plotting` currently provides `7` `plot_*` builders against `46` upstream `pgstar`/`pgbinary` panel modules.
 
 ### 2. Verification & Numerics Status
 
@@ -102,7 +102,7 @@ Full scalar diff: [`notes/audit/defaults_diff_26_4_1.md`](https://github.com/jos
 
 - **Rust workspace line coverage (`cargo llvm-cov`)**: **71.2%** (`66,194` / `92,978` lines across `26` crates).
 - **Python package statement coverage (`pytest --cov`)**: **87.7%** (`18,340` / `20,911` statements across `27` subpackages).
-- **Ignored / skipped tests**: `19` Rust `#[ignore]` ([#143](https://github.com/joshspeagle/FlexMESA/issues/143), [#146](https://github.com/joshspeagle/FlexMESA/issues/146), [#160](https://github.com/joshspeagle/FlexMESA/issues/160), [#161](https://github.com/joshspeagle/FlexMESA/issues/161), [#162](https://github.com/joshspeagle/FlexMESA/issues/162)) and `1` Python `xfail`/`skip` ([#153](https://github.com/joshspeagle/FlexMESA/issues/153); `0` unlinked).
+- **Ignored / skipped tests**: `13` Rust `#[ignore]` ([#143](https://github.com/joshspeagle/FlexMESA/issues/143), [#160](https://github.com/joshspeagle/FlexMESA/issues/160), [#161](https://github.com/joshspeagle/FlexMESA/issues/161), [#162](https://github.com/joshspeagle/FlexMESA/issues/162)) and `1` Python `xfail`/`skip` ([#153](https://github.com/joshspeagle/FlexMESA/issues/153); `0` unlinked).
 - **Static & documentation gates**: `cargo clippy --all-targets -- -D warnings`, `RUSTDOCFLAGS='-D warnings' cargo doc`, `ruff check`, `ruff format --check`, `mypy --strict`, `mkdocs build --strict`, and MESA `26.4.1` `file:line` citation resolution enforced in CI.
 
 ### 6. Work Tracking (`#140` & `#169`)

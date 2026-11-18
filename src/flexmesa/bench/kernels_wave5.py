@@ -373,7 +373,7 @@ def _run_w5_four_stages(
     fn_jax: collections.abc.Callable[[], jax.Array],
     fn_batch_jax: collections.abc.Callable[[], jax.Array],
 ) -> _h.BenchRecord:
-    """Measure Stages 0..3 for a 1D Wave 5 workload and compute parity."""
+    """Measure Stages 0..3 and cross-stage error for a 1D Wave 5 workload."""
     s0, v0 = _h.measure_and_capture(n_warmup, n_repeats, lambda: fn_rust(False))
     s1, v1 = _h.measure_and_capture(n_warmup, n_repeats, lambda: fn_rust(True))
     s2, v2_j = _h.measure_and_capture(

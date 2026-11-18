@@ -146,7 +146,7 @@ def bench_eos_4d(
         n_repeats: Number of timed iterations.
 
     Returns:
-        `BenchRecord` with Stages 0..3 latencies and parity error.
+        `BenchRecord` with Stages 0..3 latencies and cross-stage error.
     """
     cids = [chem.get_nuclide_index(nm) for nm in _SOLAR7_NAMES]
     xa_c = _dispatch.as_c_f64(_SOLAR7_XA)
@@ -217,7 +217,7 @@ def bench_kap_fixed(
         n_repeats: Number of timed iterations.
 
     Returns:
-        `BenchRecord` with Stages 0..3 latencies and parity error.
+        `BenchRecord` with Stages 0..3 latencies and cross-stage error.
     """
     cids = [chem.get_nuclide_index(nm) for nm in _SOLAR7_NAMES]
     comp = chem.get_composition_info(cids, _SOLAR7_XA, backend="rust")
@@ -307,7 +307,7 @@ def bench_rates_screen(
         n_repeats: Number of timed iterations.
 
     Returns:
-        `BenchRecord` with Stages 0..3 latencies and parity error.
+        `BenchRecord` with Stages 0..3 latencies and cross-stage error.
     """
     _, terms = _rust.rates_reaclib_terms("r_c12_ag_o16")
     coeffs_j = jnp.asarray([row[3] for row in terms], dtype=jnp.float64)
@@ -364,7 +364,7 @@ def bench_net_eval(
         n_repeats: Number of timed iterations.
 
     Returns:
-        `BenchRecord` with Stages 0..3 latencies and parity error.
+        `BenchRecord` with Stages 0..3 latencies and cross-stage error.
     """
     _, _, cids, _, _ = _rust.net_info("basic.net")
     x_c = _dispatch.as_c_f64(
@@ -509,7 +509,7 @@ def bench_atm_table(
         n_repeats: Number of timed iterations.
 
     Returns:
-        `BenchRecord` with Stages 0..3 latencies and parity error.
+        `BenchRecord` with Stages 0..3 latencies and cross-stage error.
     """
     logg_a, teff_a, _, _, pgas_c = _rust.atm_table_photosphere_zsol_spline()
     logg_j, teff_arr_j = jnp.asarray(logg_a), jnp.asarray(teff_a)

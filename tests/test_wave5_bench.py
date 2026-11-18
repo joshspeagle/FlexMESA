@@ -23,7 +23,7 @@ import numpy as np
 from flexmesa import bench
 
 
-def test_wave5_bench_kernels_return_positive_throughput_and_parity() -> None:
+def test_wave5_bench_kernels_match_snapshots() -> None:
     """All 4 Wave 5 benchmark kernels match FlexMESA regression snapshots."""
     records = bench.run_all_wave5_benchmarks(
         zone_counts=(8, 128), n_warmup=1, n_repeats=3

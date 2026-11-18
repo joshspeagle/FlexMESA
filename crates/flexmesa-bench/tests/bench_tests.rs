@@ -76,16 +76,16 @@ const WAVE5_REGRESSION_SNAPSHOTS_N8: [(&str, f64); 4] = [
     ("w5_astero_seism", 7.563_537_818_023_943e1),
 ];
 
-fn assert_records_parity_with_tol(
+fn assert_records_match_snapshots_with_tol(
     records: &[BenchRecord],
-    expected_n8: &[(&str, f64)],
+    snapshots_n8: &[(&str, f64)],
     max_stage_rel_err: f64,
 ) {
-    assert_eq!(records.len(), expected_n8.len() * 2);
+    assert_eq!(records.len(), snapshots_n8.len() * 2);
     for rec in records {
         assert!(
             rec.max_rel_err <= max_stage_rel_err,
-            "workload {} (N={}) stage parity error {:.3e} > {:.1e}",
+            "workload {} (N={}) cross-stage relative error {:.3e} > {:.1e}",
             rec.workload,
             rec.n_zones,
             rec.max_rel_err,
@@ -98,13 +98,13 @@ fn assert_records_parity_with_tol(
         assert!(rec.checksum.is_finite());
     }
     for (rec, &(exp_name, exp_sum)) in
-        records[..expected_n8.len()].iter().zip(expected_n8.iter())
+        records[..snapshots_n8.len()].iter().zip(snapshots_n8.iter())
     {
         assert_eq!(rec.workload, exp_name);
         let rel_err = (rec.checksum - exp_sum).abs() / exp_sum.abs();
         assert!(
             rel_err <= 1.0e-12,
-            "workload {} (N=8) checksum {:.15e} vs {:.15e} (rel {:.3e})",
+            "workload {} (N=8) snapshot {:.15e} != {:.15e} (rel {:.3e})",
             rec.workload,
             rec.checksum,
             exp_sum,
@@ -113,138 +113,61 @@ fn assert_records_parity_with_tol(
     }
 }
 
-fn assert_records_parity(records: &[BenchRecord], expected_n8: &[(&str, f64)]) {
-    assert_records_parity_with_tol(records, expected_n8, 1.0e-12);
-}
-
-fn print_bench_table(records: &[BenchRecord]) {
-    println!(
-        "| Workload | N_zones | Stage 0 (us) | Stage 1 (us) | \
-         Stage 2 (us) | Stage 3 (us) | Max Rel Err | Checksum |"
-    );
-    println!("|---|---:|---:|---:|---:|---:|---:|---:|");
-    for rec in records {
-        println!(
-            "| `{}` | {} | {:.2} +/- {:.2} | {:.2} +/- {:.2} | \
-             {:.2} +/- {:.2} | {:.2} +/- {:.2} | {:.3e} | {:.8e} |",
-            rec.workload,
-            rec.n_zones,
-            rec.stage0.median_us,
-            rec.stage0.iqr_us,
-            rec.stage1.median_us,
-            rec.stage1.iqr_us,
-            rec.stage2.median_us,
-            rec.stage2.iqr_us,
-            rec.stage3.median_us,
-            rec.stage3.iqr_us,
-            rec.max_rel_err,
-            rec.checksum
-        );
-    }
+fn assert_records_match_snapshots(
+    records: &[BenchRecord],
+    snapshots_n8: &[(&str, f64)],
+) {
+    assert_records_match_snapshots_with_tol(records, snapshots_n8, 1.0e-12);
 }
 
 /// Checks that all six Wave 1 benchmark workloads execute across Stages 0..3
 /// and match their `FlexMESA` regression snapshots ($\le 10^{-12}$).
 #[test]
-fn test_wave1_four_stage_benchmarks_parity() {
+fn test_wave1_four_stage_benchmarks_match_snapshots() {
     let records = run_all_wave1_benchmarks(&[8, 32], 1, 3);
-    assert_records_parity(&records, &WAVE1_REGRESSION_SNAPSHOTS_N8);
-}
-
-/// Prints the full Wave 1 four-stage benchmark table across
-/// $N_{\mathrm{zones}} \in \{128, 1024, 4096\}$.
-#[test]
-#[ignore = "benchmark table generator for --release runs; tracked in #146"]
-fn print_full_wave1_rust_benchmarks() {
-    let records = run_all_wave1_benchmarks(&[128, 1024, 4096], 3, 9);
-    print_bench_table(&records);
+    assert_records_match_snapshots(&records, &WAVE1_REGRESSION_SNAPSHOTS_N8);
 }
 
 /// Checks that all four Wave 2 benchmark workloads execute across Stages 0..3
 /// and match their `FlexMESA` regression snapshots ($\le 10^{-12}$).
 #[test]
-fn test_wave2_four_stage_benchmarks_parity() {
+fn test_wave2_four_stage_benchmarks_match_snapshots() {
     let records = run_all_wave2_benchmarks(&[8, 32], 1, 3);
-    assert_records_parity(&records, &WAVE2_REGRESSION_SNAPSHOTS_N8);
-}
-
-/// Prints the full Wave 2 four-stage benchmark table across
-/// $N_{\mathrm{zones}} \in \{128, 1024, 4096\}$.
-#[test]
-#[ignore = "benchmark table generator for --release runs; tracked in #146"]
-fn print_full_wave2_rust_benchmarks() {
-    let records = run_all_wave2_benchmarks(&[128, 1024, 4096], 3, 9);
-    print_bench_table(&records);
+    assert_records_match_snapshots(&records, &WAVE2_REGRESSION_SNAPSHOTS_N8);
 }
 
 /// Checks that all four Wave 3a EOS benchmark workloads execute across Stages
 /// 0..3 and match their `FlexMESA` regression snapshots ($\le 10^{-12}$).
 #[test]
-fn test_wave3a_four_stage_benchmarks_parity() {
+fn test_wave3a_four_stage_benchmarks_match_snapshots() {
     let records = run_all_wave3a_benchmarks(&[8, 32], 1, 3);
-    assert_records_parity(&records, &WAVE3A_REGRESSION_SNAPSHOTS_N8);
-}
-
-/// Prints the full Wave 3a four-stage benchmark table across
-/// $N_{\mathrm{zones}} \in \{128, 1024, 4096\}$.
-#[test]
-#[ignore = "benchmark table generator for --release runs; tracked in #146"]
-fn print_full_wave3a_rust_benchmarks() {
-    let records = run_all_wave3a_benchmarks(&[128, 1024, 4096], 3, 9);
-    print_bench_table(&records);
+    assert_records_match_snapshots(&records, &WAVE3A_REGRESSION_SNAPSHOTS_N8);
 }
 
 /// Checks that all five Wave 3b microphysics benchmark workloads execute
 /// across Stages 0..3 and match their `FlexMESA` regression snapshots ($\le 10^{-12}$).
 #[test]
-fn test_wave3b_four_stage_benchmarks_parity() {
+fn test_wave3b_four_stage_benchmarks_match_snapshots() {
     let records = run_all_wave3b_benchmarks(&[8, 32], 1, 3);
-    assert_records_parity(&records, &WAVE3B_REGRESSION_SNAPSHOTS_N8);
-}
-
-/// Prints the full Wave 3b four-stage benchmark table across
-/// $N_{\mathrm{zones}} \in \{128, 1024, 4096\}$.
-#[test]
-#[ignore = "benchmark table generator for --release runs; tracked in #146"]
-fn print_full_wave3b_rust_benchmarks() {
-    let records = run_all_wave3b_benchmarks(&[128, 1024, 4096], 3, 9);
-    print_bench_table(&records);
+    assert_records_match_snapshots(&records, &WAVE3B_REGRESSION_SNAPSHOTS_N8);
 }
 
 /// Checks that all five Wave 4 1D stellar engine benchmark workloads execute
 /// across Stages 0..3 and match their `FlexMESA` regression snapshots ($\le 10^{-10}$).
 #[test]
-fn test_wave4_four_stage_benchmarks_parity() {
+fn test_wave4_four_stage_benchmarks_match_snapshots() {
     let records = run_all_wave4_benchmarks(&[8, 32], 1, 3);
-    assert_records_parity_with_tol(
+    assert_records_match_snapshots_with_tol(
         &records,
         &WAVE4_REGRESSION_SNAPSHOTS_N8,
         1.0e-10,
     );
 }
 
-/// Prints the full Wave 4 four-stage benchmark table across
-/// $N_{\mathrm{zones}} \in \{128, 512, 1024\}$.
-#[test]
-#[ignore = "benchmark table generator for --release runs; tracked in #146"]
-fn print_full_wave4_rust_benchmarks() {
-    let records = run_all_wave4_benchmarks(&[128, 512, 1024], 2, 7);
-    print_bench_table(&records);
-}
-
 /// Checks that all four Wave 5 benchmark workloads execute across Stages 0..3
 /// and match their `FlexMESA` regression snapshots ($\le 10^{-12}$).
 #[test]
-fn test_wave5_four_stage_benchmarks_parity() {
+fn test_wave5_four_stage_benchmarks_match_snapshots() {
     let records = run_all_wave5_benchmarks(&[8, 32], 1, 3);
-    assert_records_parity(&records, &WAVE5_REGRESSION_SNAPSHOTS_N8);
-}
-
-/// Prints the full Wave 5 four-stage benchmark table across
-/// $N_{\mathrm{zones}} \in \{128, 512, 1024\}$.
-#[test]
-#[ignore = "benchmark table generator for --release runs; tracked in #146"]
-fn print_full_wave5_rust_benchmarks() {
-    let records = run_all_wave5_benchmarks(&[128, 512, 1024], 3, 11);
-    print_bench_table(&records);
+    assert_records_match_snapshots(&records, &WAVE5_REGRESSION_SNAPSHOTS_N8);
 }

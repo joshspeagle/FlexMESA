@@ -32,13 +32,13 @@ program run_wave5_bench
    if (ierr /= 0) stop 'do_const_init failed'
    call math_init()
 
-   ! Step 1: Verify internal stage parity at N_zones = 8 before timing.
+   ! Step 1: Verify cross-stage agreement at N_zones = 8 before timing.
    do idx = 1, size(PARITY_ZONES)
       call run_all_wave5_workloads(PARITY_ZONES(idx), 1, 3, recs)
       do w = 1, 4
          if ((recs(w)%max_rel_err /= recs(w)%max_rel_err) .or. &
              (recs(w)%max_rel_err > 1.0e-12_dp)) then
-            write (*, '(a,a,a,es12.4)') 'Parity failure in ', &
+            write (*, '(a,a,a,es12.4)') 'Stage mismatch in ', &
                trim(recs(w)%workload), ': max_rel_err = ', recs(w)%max_rel_err
             stop 1
          end if

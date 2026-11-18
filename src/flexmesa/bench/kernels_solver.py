@@ -109,7 +109,7 @@ def _bench_turb_4stage(
         batch_jit_fn: `@jax.jit(jax.vmap)` batched kernel for Stage 3.
 
     Returns:
-        `BenchRecord` with Stages 0..3 latencies and parity error.
+        `BenchRecord` with Stages 0..3 latencies and cross-stage error.
     """
     s_np = _dispatch.as_c_f64(
         np.arange(nz, dtype=np.float64) / float(max(nz - 1, 1))
@@ -173,7 +173,7 @@ def bench_turb_mlt(
         n_repeats: Number of timed iterations.
 
     Returns:
-        `BenchRecord` with Stages 0..3 latencies and parity error.
+        `BenchRecord` with Stages 0..3 latencies and cross-stage error.
     """
     return _bench_turb_4stage(
         "turb_mlt",
@@ -199,7 +199,7 @@ def bench_turb_tdc(
         n_repeats: Number of timed iterations.
 
     Returns:
-        `BenchRecord` with Stages 0..3 latencies and parity error.
+        `BenchRecord` with Stages 0..3 latencies and cross-stage error.
     """
     return _bench_turb_4stage(
         "turb_tdc",

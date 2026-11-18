@@ -157,7 +157,7 @@ Cases lacking a committed MESA `26.4.1` baseline report `no reference yet` and c
 | `astero` | `fast_simplex` | [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | `xtra1` | `timeout` (524 steps; diagnostic (48 controls ignored)) | Asteroseismic simplex optimizer and in-house pulsation scaffolding (#162, #171). |
 | `astero` | `surface_effects` | [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | `max_model_number` | `max_model_number` (0 steps; diagnostic (30 controls ignored)) | Asteroseismic surface-effects starting model and ADIPLS scaffolding (#162, #171). |
 
-## Declared Test-Suite Gaps (`[[test_gaps]]`, 20 Markers)
+## Declared Test-Suite Gaps (`[[test_gaps]]`, 14 Markers)
 
 Every Rust `#[ignore]` and Python `xfail`/`skip` marker in the repository is tracked bijectively in `benchmarks/history_harness/known_gaps.toml` (`#144`):
 
@@ -176,12 +176,6 @@ Every Rust `#[ignore]` and Python `xfail`/`skip` marker in the repository is tra
 | `rust_ignore` | `crates/flexmesa-astero/tests/astero_suite.rs` | `test_fast_scan_grid_uncapped` | `campaign` | [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | Long-running uncapped astero scan_grid campaign tracked under #162 and scheduled campaign CI. |
 | `rust_ignore` | `crates/flexmesa-astero/tests/astero_suite.rs` | `test_fast_simplex_uncapped` | `campaign` | [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | Long-running uncapped astero simplex campaign tracked under #162 and scheduled campaign CI. |
 | `rust_ignore` | `crates/flexmesa-astero/tests/astero_suite.rs` | `test_fast_newuoa_uncapped` | `campaign` | [#162](https://github.com/joshspeagle/FlexMESA/issues/162) | Long-running uncapped astero NEWUOA campaign tracked under #162 and scheduled campaign CI. |
-| `rust_ignore` | `crates/flexmesa-bench/tests/bench_tests.rs` | `print_full_wave1_rust_benchmarks` | `benchmark` | [#146](https://github.com/joshspeagle/FlexMESA/issues/146) | Release benchmark stdout printer retained pending benchmark separation under #146. |
-| `rust_ignore` | `crates/flexmesa-bench/tests/bench_tests.rs` | `print_full_wave2_rust_benchmarks` | `benchmark` | [#146](https://github.com/joshspeagle/FlexMESA/issues/146) | Release benchmark stdout printer retained pending benchmark separation under #146. |
-| `rust_ignore` | `crates/flexmesa-bench/tests/bench_tests.rs` | `print_full_wave3a_rust_benchmarks` | `benchmark` | [#146](https://github.com/joshspeagle/FlexMESA/issues/146) | Release benchmark stdout printer retained pending benchmark separation under #146. |
-| `rust_ignore` | `crates/flexmesa-bench/tests/bench_tests.rs` | `print_full_wave3b_rust_benchmarks` | `benchmark` | [#146](https://github.com/joshspeagle/FlexMESA/issues/146) | Release benchmark stdout printer retained pending benchmark separation under #146. |
-| `rust_ignore` | `crates/flexmesa-bench/tests/bench_tests.rs` | `print_full_wave4_rust_benchmarks` | `benchmark` | [#146](https://github.com/joshspeagle/FlexMESA/issues/146) | Release benchmark stdout printer retained pending benchmark separation under #146. |
-| `rust_ignore` | `crates/flexmesa-bench/tests/bench_tests.rs` | `print_full_wave5_rust_benchmarks` | `benchmark` | [#146](https://github.com/joshspeagle/FlexMESA/issues/146) | Release benchmark stdout printer retained pending benchmark separation under #146. |
 | `python_xfail` | `tests/test_wave4_bench.py` | `test_four_msun_zams_evolve_log_cntr_rho_matches_mesa_26_4_1` | `physics_gap` | [#153](https://github.com/joshspeagle/FlexMESA/issues/153) | MESA 26.4.1 star/test remeshes 2464 -> 992 zones at step 2; log_cntr_Rho differs by 1.11e-3 > 1.0e-3 at step 11. |
 
 ## Level-2 Module Hex Reference Gaps (`benchmarks/module_hex/`)

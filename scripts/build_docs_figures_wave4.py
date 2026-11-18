@@ -10,12 +10,12 @@ four sides, frameless legends, and journal-derived widths):
    $4.0\\,M_\\odot, Z = 0.02$ ZAMS model comparing Safe Rust and JAX (left),
    paired with the 8-mass $Z = 0.02$ ZAMS Hertzsprung-Russell diagram ($0.51$
    to $15.0\\,M_\\odot$) computed by `FlexMESA` (right).
-2. `wave4_benchmark_staircase.png`: Pre-audit Wave 4.5 runtime comparison at
-   $N_{\\mathrm{zones}} = 1024$ across Pre-Audit Fortran (predates `51e1adc`
-   `need_to_setvars` fix; `star_evolve_step` compares unlike `dt`), Safe
-   Rust, Python/PyO3 (`flexmesa._rust`), and Python/JAX (left), paired with
-   `star_evolve_step` scaling across $N_{\\mathrm{zones}} \\in \\{128, 512,
-   1024\\}$ (right).
+2. `wave4_benchmark_staircase.png`: MESA `26.4.1` Wave 4 runtime comparison at
+   $N_{\\mathrm{zones}} = 1024$ loaded from `benchmarks/raw/26.4.1/` across
+   MESA `26.4.1` Fortran (`need_to_setvars = .true.` post-`51e1adc`;
+   `star_evolve_step` uses `dt = 100 s`), Safe Rust, Python/PyO3 (`Stage 0`),
+   and Python/JAX (left), paired with `star_evolve_step` scaling across
+   $N_{\\mathrm{zones}} \\in \\{128, 512, 1024\\}$ (right).
 """
 
 from __future__ import annotations
@@ -26,6 +26,7 @@ import jax.numpy as jnp
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
+from docs import raw_benchmarks as _raw_bench
 from matplotlib import figure
 
 from flexmesa import star
@@ -190,8 +191,9 @@ def plot_wave4_star_structure_evolution(out_dir: pathlib.Path) -> None:
 
 
 def plot_wave4_benchmark_staircase(out_dir: pathlib.Path) -> None:
-    """Plot pre-audit Wave 4.5 runtime comparison and step scaling (`#146`)."""
+    """Plot MESA 26.4.1 Wave 4 runtime comparison and step scaling (`#146`)."""
     _configure_plot_style()
+    raw = _raw_bench.load_raw_benchmarks()
     workloads = [
         "micro_vars",
         "hydro_eqns",
@@ -199,18 +201,33 @@ def plot_wave4_benchmark_staircase(out_dir: pathlib.Path) -> None:
         "remesh",
         "evolve_step",
     ]
+    keys = [
+        "star_micro_vars",
+        "star_hydro_eqns",
+        "star_newton_step",
+        "star_remesh",
+        "star_evolve_step",
+    ]
     x_pos = np.arange(len(workloads), dtype=np.float64)
     w_bar = 0.18
-    fortran_4t = np.array([2553.10, 2955.19, 3174.67, 5.77, 163495.99])
-    rust_4t = np.array([3323.26, 3427.20, 4098.13, 3.22, 25951.86])
-    pyo3_best = np.array([7116.21, 6810.54, 254.39, 52.19, 43055.64])
-    jax_best = np.array([53.42, 60.07, 778.28, 13.16, 74358.93])
+    fortran_4t = np.array(
+        [raw.get("fortran", w, 1024).stage3.median_us for w in keys]
+    )
+    rust_4t = np.array(
+        [raw.get("rust", w, 1024).stage3.median_us for w in keys]
+    )
+    pyo3_best = np.array(
+        [raw.get("python", w, 1024).stage0.median_us for w in keys]
+    )
+    jax_best = np.array(
+        [raw.get("python", w, 1024).stage3.median_us for w in keys]
+    )
 
     fig, ax = _two_panel_fig(wspace=0.40)
     bars = (
-        (-1.5, fortran_4t, "C2", 0.85, "Pre-Audit Fortran (4t)"),
-        (-0.5, rust_4t, "C0", 0.95, "Safe Rust (4t)"),
-        (0.5, pyo3_best, "C1", 0.90, "PyO3 (flexmesa._rust)"),
+        (-1.5, fortran_4t, "C2", 0.85, "MESA 26.4.1 Fortran (4t)"),
+        (-0.5, rust_4t, "C0", 0.95, "Safe Rust (4t rayon)"),
+        (0.5, pyo3_best, "C1", 0.90, "PyO3 / Eager Python (Stage 0)"),
         (1.5, jax_best, "C3", 0.85, "JAX (jit / vmap)"),
     )
     for mult, arr, col, alp, lbl in bars:
@@ -229,11 +246,32 @@ def plot_wave4_benchmark_staircase(out_dir: pathlib.Path) -> None:
     ax[0].set_ylabel(r"Latency [$\log_{10}(t / \mu\mathrm{s})$]")
     ax[0].legend(frameon=False, loc="upper left")
 
-    nz_arr = np.array([128.0, 512.0, 1024.0])
-    f90_1t_ms = np.array([58.85, 210.88, 463.03])
-    f90_4t_ms = np.array([16.03, 55.48, 163.50])
-    rust_1t_ms = np.array([29.26, 39.07, 45.64])
-    rust_4t_ms = np.array([7.74, 15.09, 25.95])
+    nz_vals = (128, 512, 1024)
+    nz_arr = np.asarray(nz_vals, dtype=np.float64)
+    f90_1t_ms = np.array(
+        [
+            raw.get("fortran", "star_evolve_step", nz).stage2.median_us / 1.0e3
+            for nz in nz_vals
+        ]
+    )
+    f90_4t_ms = np.array(
+        [
+            raw.get("fortran", "star_evolve_step", nz).stage3.median_us / 1.0e3
+            for nz in nz_vals
+        ]
+    )
+    rust_1t_ms = np.array(
+        [
+            raw.get("rust", "star_evolve_step", nz).stage2.median_us / 1.0e3
+            for nz in nz_vals
+        ]
+    )
+    rust_4t_ms = np.array(
+        [
+            raw.get("rust", "star_evolve_step", nz).stage3.median_us / 1.0e3
+            for nz in nz_vals
+        ]
+    )
 
     ax[1].plot(
         nz_arr,
@@ -242,7 +280,7 @@ def plot_wave4_benchmark_staircase(out_dir: pathlib.Path) -> None:
         lw=1.5,
         ls="--",
         marker="s",
-        label="Pre-Audit Fortran (1t)",
+        label="MESA 26.4.1 Fortran (1t)",
     )
     ax[1].plot(
         nz_arr,
@@ -250,7 +288,7 @@ def plot_wave4_benchmark_staircase(out_dir: pathlib.Path) -> None:
         color="C2",
         lw=1.9,
         marker="o",
-        label="Pre-Audit Fortran (4t OpenMP)",
+        label="MESA 26.4.1 Fortran (4t OpenMP)",
     )
     ax[1].plot(
         nz_arr,
@@ -270,7 +308,7 @@ def plot_wave4_benchmark_staircase(out_dir: pathlib.Path) -> None:
         label="Safe Rust (4t rayon)",
     )
     ax[1].set_xticks([128, 512, 1024])
-    ax[1].set_ylim(0.7, 3.45)
+    ax[1].set_ylim(0.8, 3.65)
     ax[1].set_xlabel(r"Radial Zone Count [$N_{\mathrm{zones}}$]")
     ax[1].set_ylabel(r"Coupled Step Latency [$\log_{10}(t / \mathrm{ms})$]")
     ax[1].legend(frameon=False, loc="upper left")

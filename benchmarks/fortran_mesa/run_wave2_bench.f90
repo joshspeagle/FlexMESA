@@ -2,17 +2,17 @@
 ! -----------------------------------------------------------------------------
 ! Program: run_wave2_bench
 !
-! Executes the Wave 2 four-stage Fortran MESA benchmark and cross-language
-! parity suite across all four Wave 2 atomic and photometric microphysics
-! workloads:
+! Executes the Wave 2 four-stage Fortran MESA benchmark and internal
+! stage-consistency suite across all four Wave 2 atomic and photometric
+! microphysics workloads:
 !   1. chem_comp  (8-isotope basic_composition_info & hoisted moments)
 !   2. ion_fe56   (Potekhin 56Fe-in-4He eval_charge_of_Fe56_in_He4 & bicub)
 !   3. ion_4d     (28-channel 4D eval_ionization over Z, X, log10_rho, log10_T)
 !   4. colors_sed (Kurucz2003all 3D Hermite SED + 7 Johnson Vega bands)
 !
-! First verifies internal stage parity (Stages 1..3 vs. Stage 0 <= 1e-12)
+! First verifies internal cross-stage agreement (Stages 1..3 vs. Stage 0 <= 1e-12)
 ! across N_zones in {8, 32} and checks N_zones = 8 checksums against the
-! pinned cross-language reference values from flexmesa-bench (Rust) and
+! recorded regression snapshots matching flexmesa-bench (Rust) and
 ! flexmesa.bench (Python/NumPy/JAX). Then runs the full timing suite across
 ! N_zones in {128, 1024, 4096} and prints the Markdown summary table.
 ! -----------------------------------------------------------------------------
@@ -31,9 +31,9 @@ program run_wave2_bench
       bench_ion_4d, bench_colors_sed
    implicit none
 
-   ! Pinned N_zones = 8 cross-language checksums matching flexmesa-bench (Rust)
+   ! Recorded N_zones = 8 regression snapshots matching flexmesa-bench (Rust)
    ! and flexmesa.bench (Python/NumPy/JAX).
-   real(dp), parameter :: EXPECTED_WAVE2_CHECKSUMS_N8(4) = [ &
+   real(dp), parameter :: WAVE2_REGRESSION_SNAPSHOTS_N8(4) = [ &
       1.687001493521061e1_dp, &
       1.683709392958418e2_dp, &
       6.118846146172181e1_dp, &
@@ -75,21 +75,21 @@ program run_wave2_bench
    call colors_setup_hooks(colors_handle, ierr)
    if (ierr /= 0) stop 'colors_setup_hooks failed'
 
-   ! Step 1: Verify internal stage parity and cross-language N_zones = 8
-   ! reference checksums before running the timing suite.
+   ! Step 1: Verify internal cross-stage agreement and recorded N_zones = 8
+   ! regression snapshots before running the timing suite.
    do idx = 1, size(PARITY_ZONES)
       call run_all_wave2_workloads( &
          colors_handle, PARITY_ZONES(idx), 1, 3, recs)
       do w = 1, 4
          if ((recs(w)%max_rel_err /= recs(w)%max_rel_err) .or. &
              (recs(w)%max_rel_err > 1.0e-12_dp)) then
-            write (*, '(a,a,a,es12.4)') 'Parity failure in ', &
+            write (*, '(a,a,a,es12.4)') 'Stage mismatch in ', &
                trim(recs(w)%workload), ': max_rel_err = ', recs(w)%max_rel_err
             stop 1
          end if
          if (PARITY_ZONES(idx) == 8) then
-            rel_chk = abs(recs(w)%checksum - EXPECTED_WAVE2_CHECKSUMS_N8(w)) &
-               / abs(EXPECTED_WAVE2_CHECKSUMS_N8(w))
+            rel_chk = abs(recs(w)%checksum - WAVE2_REGRESSION_SNAPSHOTS_N8(w)) &
+               / abs(WAVE2_REGRESSION_SNAPSHOTS_N8(w))
             ! Upstream MESA fvbicub_db (used by ion_fe56, w == 2) has implicit
             ! 32-bit REAL locals (xp, yp, cx, cy, hx2, hy2, z36th), giving
             ! ~4.8e-9 relative difference vs true IEEE-754 float64.
@@ -99,7 +99,7 @@ program run_wave2_bench
                   'Cross-language checksum mismatch ', &
                   trim(recs(w)%workload), ': rel_err = ', rel_chk, &
                   ' got ', recs(w)%checksum, &
-                  ' expected ', EXPECTED_WAVE2_CHECKSUMS_N8(w)
+                  ' expected ', WAVE2_REGRESSION_SNAPSHOTS_N8(w)
                stop 1
             end if
          end if

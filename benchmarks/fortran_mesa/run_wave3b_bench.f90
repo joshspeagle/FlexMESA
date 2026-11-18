@@ -2,8 +2,8 @@
 ! -----------------------------------------------------------------------------
 ! Program: run_wave3b_bench
 !
-! Executes the Wave 3b four-stage Fortran MESA benchmark and cross-language
-! parity suite across all five Wave 3b stellar microphysics workloads:
+! Executes the Wave 3b four-stage Fortran MESA benchmark and internal
+! stage-consistency suite across all five Wave 3b stellar microphysics workloads:
 !   1. eos_4d       (4D OPAL/SCVH tabulated equation of state)
 !   2. kap_fixed    (Type 1 fixed-metal + conductive + Compton opacity)
 !   3. rates_screen (REACLIB r_c12_ag_o16 rate + extended screen5 screening)
@@ -27,9 +27,9 @@ program run_wave3b_bench
       bench_rates_screen, bench_net_eval, bench_atm_table
    implicit none
 
-   ! Pinned N_zones = 8 cross-language checksums matching flexmesa-bench (Rust)
+   ! Recorded N_zones = 8 regression snapshots matching flexmesa-bench (Rust)
    ! and flexmesa.bench (Python/NumPy/JAX).
-   real(dp), parameter :: EXPECTED_WAVE3B_CHECKSUMS_N8(5) = [ &
+   real(dp), parameter :: WAVE3B_REGRESSION_SNAPSHOTS_N8(5) = [ &
       2.037364564689326e2_dp, &
       2.909195757111935e0_dp, &
       -1.139188914724813e2_dp, &
@@ -83,27 +83,27 @@ program run_wave3b_bench
    call atm_init(.false., ierr)
    if (ierr /= 0) stop 'atm_init failed'
 
-   ! Step 1: Verify internal stage parity and cross-language N_zones = 8
-   ! reference checksums before running the timing suite.
+   ! Step 1: Verify internal cross-stage agreement and recorded N_zones = 8
+   ! regression snapshots before running the timing suite.
    do idx = 1, size(PARITY_ZONES)
       call run_all_wave3b_workloads( &
          eos_handle, kap_handle, net_handle, PARITY_ZONES(idx), 1, 3, recs)
       do w = 1, 5
          if ((recs(w)%max_rel_err /= recs(w)%max_rel_err) .or. &
              (recs(w)%max_rel_err > 1.0e-11_dp)) then
-            write (*, '(a,a,a,es12.4)') 'Parity failure in ', &
+            write (*, '(a,a,a,es12.4)') 'Stage mismatch in ', &
                trim(recs(w)%workload), ': max_rel_err = ', recs(w)%max_rel_err
             stop 1
          end if
          if (PARITY_ZONES(idx) == 8) then
-            rel_chk = abs(recs(w)%checksum - EXPECTED_WAVE3B_CHECKSUMS_N8(w)) &
-               / abs(EXPECTED_WAVE3B_CHECKSUMS_N8(w))
+            rel_chk = abs(recs(w)%checksum - WAVE3B_REGRESSION_SNAPSHOTS_N8(w)) &
+               / abs(WAVE3B_REGRESSION_SNAPSHOTS_N8(w))
             if ((rel_chk /= rel_chk) .or. (rel_chk > 1.0e-9_dp)) then
                write (*, '(a,a,a,es12.4,a,es22.15,a,es22.15)') &
                   'Cross-language checksum mismatch ', &
                   trim(recs(w)%workload), ': rel_err = ', rel_chk, &
                   ' got ', recs(w)%checksum, &
-                  ' expected ', EXPECTED_WAVE3B_CHECKSUMS_N8(w)
+                  ' expected ', WAVE3B_REGRESSION_SNAPSHOTS_N8(w)
                stop 1
             end if
          end if

@@ -119,6 +119,6 @@ print(
 )
 ```
 
-![Pre-audit Wave 5 runtime comparison against standalone hand-written Fortran loops](../assets/figures/wave5_benchmark_speedup.png)
+![Wave 5 four-way runtime comparison against Reference Fortran comparators](../assets/figures/wave5_benchmark_speedup.png)
 
-*Figure 1: Pre-audit Wave 5 kernel runtime comparison at $N_{\mathrm{zones}} = 1024$ (left) and zone scaling (right) across Safe Rust, PyO3, JAX, and the standalone hand-written `bench_kernels_wave5.f90` Fortran comparator (not upstream MESA routines; unrecorded local run with no raw output committed, and `w5_diff_rot` evaluates a different Spruit-Tayler branch than Fortran; `#146`).*
+*Figure 1: MESA `r26.4.1` raw capture Wave 5 kernel runtime comparison (`benchmarks/raw/26.4.1/`) at $N_{\mathrm{zones}} = 1024$ (left) and zone scaling (right) across Safe Rust (`strict`), PyO3, JAX (`float64`), and the `bench_kernels_wave5.f90` Reference Fortran comparator (`w5_diff_rot`, `w5_binary_rlof`, and `w5_astero_seism` hybrid MESA helpers; `w5_riemann_rsp2` non-MESA; `w5_diff_rot` diverges by `99.17%` from Reference Fortran, tracked in `#158`).*

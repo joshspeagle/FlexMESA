@@ -1,0 +1,120 @@
+ reading user weak rate file mesa-26.4.1/data/rates_data/rate_tables/S13_r_be7_wk_li7.h5
+ version_number r26.4.1
+ WARNING: Failed to find colors namelist in file: mesa-26.4.1/star/test/inlist
+ WARNING: Failed to find colors namelist in file: mesa-26.4.1/star/test/inlist
+ WARNING: Failed to find colors namelist in file: mesa-26.4.1/star/test/inlist
+ WARNING: Failed to find colors namelist in file: mesa-26.4.1/star/test/inlist
+ WARNING: Failed to find colors namelist in file: mesa-26.4.1/star/test/inlist
+ WARNING: Failed to find colors namelist in file: mesa-26.4.1/star/test/inlist
+ hydro_solver_step returned ierr          -1
+ s% model_number           1
+ nz           8
+ s% num_retries           0
+
+ hydro_solver_step returned ierr          -1
+ s% model_number           1
+ nz           8
+ s% num_retries           0
+
+ hydro_solver_step returned ierr          -1
+ s% model_number           1
+ nz           8
+ s% num_retries           0
+
+ hydro_solver_step returned ierr          -1
+ s% model_number           1
+ nz           8
+ s% num_retries           0
+
+ hydro_solver_step returned ierr          -1
+ s% model_number           1
+ nz           8
+ s% num_retries           0
+
+ hydro_solver_step returned ierr          -1
+ s% model_number           1
+ nz           8
+ s% num_retries           0
+
+ hydro_solver_step returned ierr          -1
+ s% model_number           1
+ nz           8
+ s% num_retries           0
+
+ hydro_solver_step returned ierr          -1
+ s% model_number           1
+ nz           8
+ s% num_retries           0
+
+ hydro_solver_step returned ierr          -1
+ s% model_number           1
+ nz           8
+ s% num_retries           0
+
+ hydro_solver_step returned ierr          -1
+ s% model_number           1
+ nz           8
+ s% num_retries           0
+
+ hydro_solver_step returned ierr          -1
+ s% model_number           1
+ nz           8
+ s% num_retries           0
+
+ hydro_solver_step returned ierr          -1
+ s% model_number           1
+ nz           8
+ s% num_retries           0
+
+ hydro_solver_step returned ierr          -1
+ s% model_number           1
+ nz           8
+ s% num_retries           0
+
+ hydro_solver_step returned ierr          -1
+ s% model_number           1
+ nz           8
+ s% num_retries           0
+
+ hydro_solver_step returned ierr          -1
+ s% model_number           1
+ nz           8
+ s% num_retries           0
+
+ hydro_solver_step returned ierr          -1
+ s% model_number           1
+ nz           8
+ s% num_retries           0
+
+| Workload | N_zones | Stage 0 (us) | Stage 1 (us) | Stage 2 (us) | Stage 3 (us) | Max Rel Err | Checksum |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+ WARNING: Failed to find colors namelist in file: mesa-26.4.1/star/test/inlist
+ WARNING: Failed to find colors namelist in file: mesa-26.4.1/star/test/inlist
+ WARNING: Failed to find colors namelist in file: mesa-26.4.1/star/test/inlist
+ WARNING: Failed to find colors namelist in file: mesa-26.4.1/star/test/inlist
+ WARNING: Failed to find colors namelist in file: mesa-26.4.1/star/test/inlist
+| `star_micro_vars` |   128 |    10040.95 +/-    172.91 |    10071.10 +/-    144.57 |     9774.77 +/-    290.49 |     2614.26 +/-    212.32 |  0.00E+00 |  4.18189385E+03 |
+| `star_hydro_eqns` |   128 |     1445.29 +/-     66.00 |     1468.19 +/-     31.62 |     1473.69 +/-     44.78 |      384.29 +/-      1.65 |  0.00E+00 |  7.64111853E+06 |
+| `star_newton_step` |   128 |     1555.40 +/-     55.54 |     1524.89 +/-     33.25 |     1534.08 +/-     45.34 |      427.53 +/-     30.89 |  0.00E+00 |  8.87742063E+04 |
+| `star_remesh` |   128 |        3.29 +/-      0.05 |        3.33 +/-      0.03 |        3.24 +/-      0.01 |        3.24 +/-      0.01 |  0.00E+00 |  7.13415890E+04 |
+| `star_evolve_step` |   128 |   116682.57 +/-   1626.70 |   115963.39 +/-   1048.69 |   116376.80 +/-   2995.41 |    31224.44 +/-   2701.74 |  0.00E+00 |  1.80069293E+03 |
+ WARNING: Failed to find colors namelist in file: mesa-26.4.1/star/test/inlist
+ WARNING: Failed to find colors namelist in file: mesa-26.4.1/star/test/inlist
+ WARNING: Failed to find colors namelist in file: mesa-26.4.1/star/test/inlist
+ WARNING: Failed to find colors namelist in file: mesa-26.4.1/star/test/inlist
+ WARNING: Failed to find colors namelist in file: mesa-26.4.1/star/test/inlist
+| `star_micro_vars` |   512 |    39415.76 +/-    514.27 |    40577.17 +/-   1427.94 |    39660.01 +/-   1141.95 |    10108.76 +/-    227.63 |  0.00E+00 |  1.67904925E+04 |
+| `star_hydro_eqns` |   512 |     5844.63 +/-    313.95 |     5868.39 +/-     94.77 |     5826.24 +/-     58.84 |     1489.77 +/-     13.89 |  0.00E+00 |  3.22840078E+07 |
+| `star_newton_step` |   512 |     6353.92 +/-    219.98 |     6379.89 +/-    591.03 |     6152.53 +/-    383.72 |     1628.93 +/-     88.18 |  0.00E+00 |  7.69959724E+04 |
+| `star_remesh` |   512 |       10.86 +/-      0.34 |       11.04 +/-      0.05 |       10.70 +/-      0.02 |       10.71 +/-      0.01 |  0.00E+00 |  2.86562751E+05 |
+| `star_evolve_step` |   512 |   419361.32 +/-   2947.64 |   419532.81 +/-   4194.12 |   421364.11 +/-   2945.52 |   109793.71 +/-   7285.24 |  0.00E+00 |  7.26765889E+03 |
+ WARNING: Failed to find colors namelist in file: mesa-26.4.1/star/test/inlist
+ WARNING: Failed to find colors namelist in file: mesa-26.4.1/star/test/inlist
+ WARNING: Failed to find colors namelist in file: mesa-26.4.1/star/test/inlist
+ WARNING: Failed to find colors namelist in file: mesa-26.4.1/star/test/inlist
+ WARNING: Failed to find colors namelist in file: mesa-26.4.1/star/test/inlist
+| `star_micro_vars` |  1024 |    79042.73 +/-   1155.17 |    78848.63 +/-    709.73 |    79607.37 +/-   3120.44 |    20756.76 +/-   1246.36 |  0.00E+00 |  3.36107957E+04 |
+| `star_hydro_eqns` |  1024 |    11725.37 +/-    468.27 |    11670.62 +/-    329.89 |    11972.73 +/-    738.11 |     2962.80 +/-     95.66 |  0.00E+00 |  6.71023666E+07 |
+| `star_newton_step` |  1024 |    12594.35 +/-   1976.23 |    12279.23 +/-    170.65 |    12198.39 +/-    211.83 |     3165.36 +/-     62.46 |  0.00E+00 |  1.18210818E+05 |
+| `star_remesh` |  1024 |       22.18 +/-      1.57 |       22.27 +/-      0.02 |       21.65 +/-      0.03 |       21.93 +/-      7.42 |  0.00E+00 |  5.73660892E+05 |
+| `star_evolve_step` |  1024 |   920548.21 +/-   6535.70 |   925584.70 +/-  11064.02 |   917795.98 +/-   9093.73 |   235422.09 +/-  13343.55 |  0.00E+00 |  1.45656372E+04 |

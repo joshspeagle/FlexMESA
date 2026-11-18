@@ -5,7 +5,7 @@ Provides fixed-step bisection + Newton-Raphson root-finding in $Z = \\ln Y$ via
 `jax.lax.fori_loop` coupled with Implicit Function Theorem differentiation
 (`jax.grad`) so Stages 2 (`@jax.jit`) and 3 (`jax.jit(jax.vmap)`) of
 `bench_turb_tdc` execute on the XLA device with compact HLO graphs and exact
-iterate parity with `set_tdc`.
+iterate agreement with `set_tdc`.
 """
 
 from __future__ import annotations

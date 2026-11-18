@@ -51,7 +51,7 @@ type TridiagWorkspace = (Vec<f64>, Vec<f64>, Vec<usize>, Vec<f64>);
 /// * `n_repeats` - Number of timed iterations.
 ///
 /// # Returns
-/// [`BenchRecord`] with Stages 0..3 latencies, parity error, and checksum.
+/// [`BenchRecord`] with Stages 0..3 latencies, cross-stage relative error, and checksum.
 pub fn bench_mtx_block_tridiag(
     nz: usize,
     n_warmup: usize,
@@ -267,7 +267,7 @@ fn eval_tdc_zone(s_frac: f64) -> [f64; 4] {
 /// * `n_repeats` - Number of timed iterations.
 ///
 /// # Returns
-/// [`BenchRecord`] with Stages 0..3 latencies, parity error, and checksum.
+/// [`BenchRecord`] with Stages 0..3 latencies, cross-stage relative error, and checksum.
 pub fn bench_turb_mlt(
     grid: &ThermoGrid,
     n_warmup: usize,
@@ -294,7 +294,7 @@ pub fn bench_turb_mlt(
 /// * `n_repeats` - Number of timed iterations.
 ///
 /// # Returns
-/// [`BenchRecord`] with Stages 0..3 latencies, parity error, and checksum.
+/// [`BenchRecord`] with Stages 0..3 latencies, cross-stage relative error, and checksum.
 pub fn bench_turb_tdc(
     grid: &ThermoGrid,
     n_warmup: usize,

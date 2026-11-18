@@ -21,6 +21,7 @@ import build_docs_figures_wave5 as _w5_figs
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
+from docs import raw_benchmarks as _raw_bench
 from matplotlib import figure, font_manager
 
 from flexmesa import auto_diff as _ad
@@ -357,15 +358,16 @@ def plot_turb_mlt_tdc(out_dir: pathlib.Path) -> None:
 
 
 def plot_wave1_benchmark_staircase(out_dir: pathlib.Path) -> None:
-    """Plots the pre-audit Wave 1.5 runtime comparison at $N_z = 4096$.
+    """Plot the MESA 26.4.1 Wave 1 four-stage comparison at $N_z = 4096$.
 
-    Matches `kernel-scorecards.md` (batched Stage 3 values; `auto_diff` and
-    `mtx_tridiag` Stage 3 Fortran loops are hand-written comparators rather
-    than MESA library calls, with raw provenance tracked in `#146`).
+    Loads all latencies from `benchmarks/raw/26.4.1/`. On `auto_diff` and
+    `mtx_tridiag`, Stage 3 Fortran loops are local Reference Fortran comparators
+    (MESA `bcyclic` 4t is recorded separately at `790.11 us`).
 
     Args:
         out_dir: Target directory for `wave1_benchmark_staircase.png`.
     """
+    raw = _raw_bench.load_raw_benchmarks()
     workloads = [
         "auto_diff",
         "interp_2d",
@@ -376,16 +378,24 @@ def plot_wave1_benchmark_staircase(out_dir: pathlib.Path) -> None:
     ]
     x_pos = np.arange(len(workloads), dtype=np.float64)
     w_bar = 0.20
-    fortran_4t = np.array([5.65, 41.15, 152.32, 221.38, 1784.93, 58176.83])
-    rust_4t = np.array([5.89, 36.95, 161.32, 405.79, 142.14, 1075.24])
-    pyo3_best = np.array([100.22, 142.37, 312.58, 1652.80, 290.02, 1205.71])
-    jax_batch = np.array([321.12, 322.45, 319.25, 5356.85, 317.73, 398.61])
+    fortran_4t = np.array(
+        [raw.get("fortran", w, 4096).stage3.median_us for w in workloads]
+    )
+    rust_4t = np.array(
+        [raw.get("rust", w, 4096).stage3.median_us for w in workloads]
+    )
+    pyo3_best = np.array(
+        [raw.get("python", w, 4096).stage1.median_us for w in workloads]
+    )
+    jax_batch = np.array(
+        [raw.get("python", w, 4096).stage3.median_us for w in workloads]
+    )
 
     fig, ax = plt.subplots(1, 1, figsize=(TEXT_WIDTH, 0.44 * TEXT_WIDTH))
     bars = (
-        (-1.5, fortran_4t, "C2", 0.85, "Pre-Audit Fortran (4t)"),
+        (-1.5, fortran_4t, "C2", 0.85, "MESA 26.4.1 / Ref. F90 (4t)"),
         (-0.5, rust_4t, "C0", 0.95, "Safe Rust (4t rayon)"),
-        (0.5, pyo3_best, "C1", 0.90, "Python PyO3 (flexmesa._rust)"),
+        (0.5, pyo3_best, "C1", 0.90, "Python PyO3 (4t rayon)"),
         (1.5, jax_batch, "C3", 0.85, "Python JAX (jit + vmap / 4)"),
     )
     for mult, arr, col, alp, lbl in bars:
@@ -399,7 +409,7 @@ def plot_wave1_benchmark_staircase(out_dir: pathlib.Path) -> None:
         )
     ax.set_xticks(x_pos)
     ax.set_xticklabels(workloads)
-    ax.set_ylim(0.0, 5.7)
+    ax.set_ylim(0.0, 5.75)
     ax.set_xlabel(r"Wave 1 Workload ($N_{\mathrm{zones}} = 4096$)")
     ax.set_ylabel(r"Latency per Star [$\log_{10}(t / \mu\mathrm{s})$]")
     ax.legend(frameon=False, loc="upper left", ncol=2)

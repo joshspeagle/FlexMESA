@@ -219,8 +219,8 @@
   ],
   "open_pull_requests": [
     {
-      "number": 214,
-      "title": "feat(plotting): MESA 26.4.1 comparison figures, CLI & PGSTAR map (#173)",
+      "number": 215,
+      "title": "feat(jax): derived JAX contract, full-argument auto dispatch, and docs parity (#166)",
       "draft": false
     }
   ],

@@ -33,6 +33,10 @@ def main(argv: list[str] | None = None) -> int:
         from flexmesa.testing import dashboard
 
         return dashboard.dashboard_main(args_list[1:])
+    if args_list and args_list[0] == "plot":
+        from flexmesa.plotting import cli as plot_cli
+
+        return plot_cli.main(args_list[1:])
 
     parser = argparse.ArgumentParser(
         prog="flexmesa",
@@ -59,6 +63,10 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser(
         "dashboard",
         help="Generate or validate the MESA 26.4.1 progress dashboard.",
+    )
+    sub.add_parser(
+        "plot",
+        help="Render MESA 26.4.1 comparison and radial profile figures.",
     )
     parsed = parser.parse_args(args_list)
     if parsed.version:

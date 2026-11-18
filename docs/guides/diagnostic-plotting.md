@@ -148,3 +148,42 @@ print(
 ![Synthetic Kurucz SED and Johnson filter curves](../assets/figures/colors_kurucz_sed_johnson.png)
 
 *Figure 1: Kurucz (2003) synthetic spectral energy distributions at $T_{\mathrm{eff}} = 5920\,\mathrm{K}$ ($[\mathrm{M/H}] = 0.0$) and $T_{\mathrm{eff}} = 5770\,\mathrm{K}$ ($[\mathrm{M/H}] = -0.4$) with Johnson $B$, $V$, $R$ filter passbands (left), paired with synthetic $(B - V)$ color indices across $T_{\mathrm{eff}} \in [5760, 5990]\,\mathrm{K}$ at $\log g = 4.25$ comparing Safe Rust and JAX (right).*
+
+---
+
+## 4. Comparing Runs Against Stored MESA `26.4.1` References (`flexmesa plot`)
+
+Every comparison figure in `flexmesa.plotting.compare` reads exclusively from saved ASCII outputs (`history.data`, `binary_history.data`, `profileN.data`, and stored MESA `26.4.1` references in `benchmarks/history_harness/reference_histories/`) without recomputing physics inside plotting code (`#173`).
+
+```bash
+flexmesa plot compare 1.3M_ms_high_Z --out compare_1.3M.png
+flexmesa plot compare evolve_both_stars --flexmesa-dir out_binary/ --out compare_bin.png
+flexmesa plot profile LOGS/profile1.data --out profile1.png
+```
+
+In Python, call `plotting.plot_case_comparison(...)` for synchronized multi-panel star, astero, or binary comparisons with `DECISIONS #20` normalized residual bands, or `plotting.plot_profile_panels(...)` for saved radial profiles:
+
+```python
+import matplotlib.pyplot as plt
+from flexmesa import plotting
+from flexmesa.testing import case_manifest
+
+ref_file = (
+    case_manifest.repo_root()
+    / "benchmarks"
+    / "history_harness"
+    / "reference_histories"
+    / "star"
+    / "1.3M_ms_high_Z.data"
+)
+fig_cmp, axes_cmp = plotting.plot_case_comparison(
+    "1.3M_ms_high_Z",
+    suite="star",
+    flexmesa_history=ref_file,
+    mesa_history=ref_file,
+)
+plt.close(fig_cmp)
+print("Rendered comparison grid:", axes_cmp.shape)
+```
+
+For the full mapping of upstream `pgstar.defaults`, `pgbinary.defaults`, and `astero_pgstar.defaults` windows onto `flexmesa.plotting` builders, see the [PGSTAR & PGBINARY Coverage Report](../benchmarks/pgstar-coverage.md).

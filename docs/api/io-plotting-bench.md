@@ -96,6 +96,12 @@ print(
 
 ::: flexmesa.plotting.astero_binary_plots
 
+::: flexmesa.plotting.compare
+
+::: flexmesa.plotting.pgstar_coverage
+
+::: flexmesa.plotting.cli
+
 ---
 
 ## Four-Stage Performance Benchmark Harness (`flexmesa.bench`)

@@ -111,6 +111,7 @@ nav:
       - Overview & Speedup Synthesis: benchmarks/overview.md
       - Declared Known Gaps (106 Cases): benchmarks/known-gaps.md
       - Port Coverage Map (26 Modules): benchmarks/coverage-map.md
+      - PGSTAR & PGBINARY Coverage: benchmarks/pgstar-coverage.md
       - MESA I-VI Comparison Roadmap: benchmarks/mesa_paper_figures.md
       - Kernel Performance Scorecards: benchmarks/kernel-scorecards.md
       - Tolerance & Discrepancy Ledger: benchmarks/tolerance-and-discrepancy-ledger.md

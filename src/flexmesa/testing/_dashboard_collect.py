@@ -92,7 +92,11 @@ def _collect_plotting_panel_counts(
     plot_dir = repo_root / "src" / "flexmesa" / "plotting"
     if plot_dir.is_dir():
         for py_fp in sorted(plot_dir.glob("*.py")):
-            if py_fp.name == "__init__.py":
+            if (
+                py_fp.name == "__init__.py"
+                or py_fp.name == "cli.py"
+                or py_fp.name.startswith("_")
+            ):
                 continue
             plot_fns.extend(
                 re.findall(

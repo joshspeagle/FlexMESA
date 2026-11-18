@@ -750,9 +750,9 @@
     "rust": {
       "tool": "cargo llvm-cov",
       "overall": {
-        "lines": 92978,
+        "lines": 93038,
         "covered": 66194,
-        "percent": 71.2
+        "percent": 71.1
       },
       "by_crate": [
         {
@@ -775,9 +775,9 @@
         },
         {
           "crate": "flexmesa-bench",
-          "lines": 2348,
+          "lines": 2408,
           "covered": 2334,
-          "percent": 99.4
+          "percent": 96.9
         },
         {
           "crate": "flexmesa-binary",
@@ -1209,8 +1209,8 @@
       },
       {
         "phase": "Phase A",
-        "open": 3,
-        "closed": 1,
+        "open": 2,
+        "closed": 2,
         "issues": [
           {
             "number": 142,
@@ -1225,7 +1225,7 @@
           {
             "number": 146,
             "title": "[Audit A5] Benchmark honesty and provenance",
-            "state": "open"
+            "state": "closed"
           },
           {
             "number": 168,
@@ -1236,13 +1236,13 @@
       },
       {
         "phase": "Phase B",
-        "open": 5,
-        "closed": 0,
+        "open": 4,
+        "closed": 1,
         "issues": [
           {
             "number": 147,
             "title": "[Audit B1] Fail loudly on unsupported controls, missing data and discarded errors",
-            "state": "open"
+            "state": "closed"
           },
           {
             "number": 148,
@@ -1386,8 +1386,8 @@
     ],
     "open_pull_requests": [
       {
-        "number": 212,
-        "title": "docs,bench: record MESA 26.4.1 raw benchmarks and honesty audit (#146)",
+        "number": 213,
+        "title": "fix(docs,bench): derive benchmark precision and divergence text from raw data (#146)",
         "draft": false
       }
     ],
@@ -1697,6 +1697,19 @@
       "rust_cov_pct": "71.2",
       "python_cov_pct": "87.7",
       "closed_140": "7",
+      "total_140": "32",
+      "deferred_169": "17"
+    },
+    {
+      "date_utc": "2026-11-18",
+      "commit": "5549331",
+      "event": "main merge",
+      "engine_ported_pct": "13.9",
+      "all_verified_pct": "0.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "71.1",
+      "python_cov_pct": "87.7",
+      "closed_140": "9",
       "total_140": "32",
       "deferred_169": "17"
     }

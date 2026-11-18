@@ -42,8 +42,8 @@
     },
     {
       "phase": "Phase A",
-      "open": 3,
-      "closed": 1,
+      "open": 2,
+      "closed": 2,
       "issues": [
         {
           "number": 142,
@@ -58,7 +58,7 @@
         {
           "number": 146,
           "title": "[Audit A5] Benchmark honesty and provenance",
-          "state": "open"
+          "state": "closed"
         },
         {
           "number": 168,
@@ -69,13 +69,13 @@
     },
     {
       "phase": "Phase B",
-      "open": 5,
-      "closed": 0,
+      "open": 4,
+      "closed": 1,
       "issues": [
         {
           "number": 147,
           "title": "[Audit B1] Fail loudly on unsupported controls, missing data and discarded errors",
-          "state": "open"
+          "state": "closed"
         },
         {
           "number": 148,
@@ -219,8 +219,8 @@
   ],
   "open_pull_requests": [
     {
-      "number": 212,
-      "title": "docs,bench: record MESA 26.4.1 raw benchmarks and honesty audit (#146)",
+      "number": 213,
+      "title": "fix(docs,bench): derive benchmark precision and divergence text from raw data (#146)",
       "draft": false
     }
   ],

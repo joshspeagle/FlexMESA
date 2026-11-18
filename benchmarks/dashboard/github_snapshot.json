@@ -69,8 +69,8 @@
     },
     {
       "phase": "Phase B",
-      "open": 4,
-      "closed": 1,
+      "open": 3,
+      "closed": 2,
       "issues": [
         {
           "number": 147,
@@ -90,7 +90,7 @@
         {
           "number": 150,
           "title": "[Audit B4] Error type, telemetry, retry-proof counters, checkpoints, and removal of whole-model clones",
-          "state": "open"
+          "state": "closed"
         },
         {
           "number": 151,
@@ -222,7 +222,13 @@
       "issues": []
     }
   ],
-  "open_pull_requests": [],
+  "open_pull_requests": [
+    {
+      "number": 224,
+      "title": "fix(star,binary): an oversized mass change is a retriable failure again (#150)",
+      "draft": false
+    }
+  ],
   "deferred_169": [
     {
       "number": 175,

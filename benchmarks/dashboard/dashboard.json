@@ -21,7 +21,7 @@
         "verified_total": 0,
         "pct_ported": 14.9,
         "pct_verified": 0.0,
-        "rust_lines": 59077,
+        "rust_lines": 59083,
         "python_jax_lines": 4765
       },
       {
@@ -55,7 +55,7 @@
         "verified_total": 0,
         "pct_ported": 18.2,
         "pct_verified": 0.0,
-        "rust_lines": 10377,
+        "rust_lines": 10369,
         "python_jax_lines": 1282
       },
       {

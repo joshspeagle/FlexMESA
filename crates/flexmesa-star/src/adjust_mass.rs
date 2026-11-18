@@ -226,7 +226,10 @@ fn do_adjust_mass_regions(
     let xm_old = model.xmstar;
     let xm_new = xm_old + delta_m;
     if xm_new <= 0.0 {
-        return Err(StarError::InvalidInput(format!(
+        // Upstream sets `ierr = -1` here (`adjust_mass.f90:260-263`), which
+        // the step driver turns into a retry with a smaller timestep
+        // (`evolve.f90:591`). The error is therefore a retriable one.
+        return Err(StarError::ConvergenceFailure(format!(
             "do_adjust_mass produced non-positive envelope mass xm_new={xm_new}"
         )));
     }
@@ -611,7 +614,10 @@ pub fn do_adjust_mass_step(
     let xm_old = model.xmstar;
     let xm_new = xm_old + delta_m;
     if xm_new <= 0.0 {
-        return Err(StarError::InvalidInput(format!(
+        // Upstream sets `ierr = -1` here (`adjust_mass.f90:260-263`), which
+        // the step driver turns into a retry with a smaller timestep
+        // (`evolve.f90:591`). The error is therefore a retriable one.
+        return Err(StarError::ConvergenceFailure(format!(
             "do_adjust_mass_step produced non-positive envelope mass xm_new={xm_new}"
         )));
     }

@@ -363,8 +363,9 @@ def test_plot_case_comparison_handles_single_row_nonmonotonic_and_missing(
     )
     try:
         assert axes_nm[2, 1].texts[0].get_text() == (
-            "No track tolerances configured"
+            "No comparison: histories could not be aligned"
         )
+        assert "not compared" in fig_nm.get_suptitle()
     finally:
         plt.close(fig_nm)
 
@@ -727,3 +728,38 @@ def test_plotting_modules_contain_no_large_hardcoded_data_arrays() -> None:
                     f"{py_file.name}: unexpected numeric array literal of "
                     f"length {num_elts}"
                 )
+
+
+def test_comparison_title_never_reports_a_diagnostic_or_smoke_run_as_pass(
+    tmp_path: pathlib.Path,
+) -> None:
+    # DECISIONS #26: a run that ignored unsupported controls, or ran under a
+    # step cap, is labelled as such even when its history is inside tolerance.
+    entry = compare.resolve_case_entry("star/1.3M_ms_high_Z")
+    ref_path = REF_DIR / "star" / "1.3M_ms_high_Z.data"
+
+    def _title(**kwargs: Any) -> str:
+        fig, _ = plotting.plot_case_comparison(
+            entry.case,
+            suite=entry.suite,
+            flexmesa_history=ref_path,
+            mesa_history=ref_path,
+            numerics_mode="strict",
+            **kwargs,
+        )
+        try:
+            return str(fig.get_suptitle())
+        finally:
+            plt.close(fig)
+
+    strict_title = _title()
+    assert "within tol" in strict_title
+    assert "not a pass" not in strict_title
+
+    diag_title = _title(controls_ignored=True, n_controls_ignored=7)
+    assert "diagnostic (7 controls ignored)" in diag_title
+    assert "within tol (diagnostic, not a pass)" in diag_title
+
+    smoke_title = _title(max_steps=5)
+    assert "smoke: cap=5 steps" in smoke_title
+    assert "within tol (smoke, not a pass)" in smoke_title

@@ -47,6 +47,76 @@ impl AtmTTauRelation {
     }
 }
 
+/// Structured diagnostic payload returned inside [`StarError::StepFailure`].
+#[derive(Debug, Clone, PartialEq)]
+pub struct StepFailureInfo {
+    /// Stellar `model_number` being attempted or evaluated.
+    pub model_number: usize,
+    /// Zero-based zone index holding the maximum residual or failing condition.
+    pub zone: Option<usize>,
+    /// Name of the equation holding the maximum residual.
+    pub equation: Option<String>,
+    /// Name of the paired solver variable at `zone`.
+    pub variable: Option<String>,
+    /// Signed offending residual or diagnostic value.
+    pub value: Option<f64>,
+    /// L2 residual norm across all solver equations.
+    pub residual_norm: f64,
+    /// L-infinity maximum absolute residual across solver equations.
+    pub max_residual: f64,
+    /// L2 scaled correction norm across solver variables.
+    pub correction_norm: f64,
+    /// L-infinity maximum scaled correction.
+    pub max_correction: f64,
+    /// Attempted timestep $\Delta t$ in seconds.
+    pub dt: f64,
+    /// Number of Newton iterations completed before failure.
+    pub iterations: usize,
+    /// Retry attempt count recorded when step retries are exhausted.
+    pub retries: usize,
+    /// Reason recorded for the retry or step rejection.
+    pub retry_reason: String,
+    /// Concise summary of the failure site and cause.
+    pub detail: String,
+}
+
+impl fmt::Display for StepFailureInfo {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "model={} dt={:.3e} s iters={} retries={}",
+            self.model_number, self.dt, self.iterations, self.retries
+        )?;
+        if let Some(zone) = self.zone {
+            write!(f, " zone={zone}")?;
+        }
+        if let Some(ref eq) = self.equation {
+            write!(f, " eq={eq}")?;
+        }
+        if let Some(ref var) = self.variable {
+            write!(f, " var={var}")?;
+        }
+        if let Some(val) = self.value {
+            write!(f, " val={val:.3e}")?;
+        }
+        write!(
+            f,
+            " rnorm={:.3e} rmax={:.3e} cnorm={:.3e} cmax={:.3e}",
+            self.residual_norm,
+            self.max_residual,
+            self.correction_norm,
+            self.max_correction
+        )?;
+        if !self.retry_reason.is_empty() {
+            write!(f, " retry_reason={}", self.retry_reason)?;
+        }
+        if !self.detail.is_empty() {
+            write!(f, ": {}", self.detail)?;
+        }
+        Ok(())
+    }
+}
+
 /// Error conditions returned by `flexmesa-star` routines.
 #[derive(Debug, Clone, PartialEq)]
 pub enum StarError {
@@ -58,6 +128,15 @@ pub enum StarError {
     MicrophysicsError(String),
     /// Non-convergence in root-finding or Henyey Newton-Raphson solver.
     ConvergenceFailure(String),
+    /// Structured Newton-step or retry-cascade failure with diagnostics.
+    StepFailure(Box<StepFailureInfo>),
+    /// Controlled runtime termination (e.g. timestep controller limit).
+    Terminated {
+        /// Active stellar model number when termination triggered.
+        model_number: usize,
+        /// Termination code or reason string.
+        reason: String,
+    },
 }
 
 impl fmt::Display for StarError {
@@ -71,6 +150,11 @@ impl fmt::Display for StarError {
             Self::ConvergenceFailure(msg) => {
                 write!(f, "star solver convergence failure: {msg}")
             }
+            Self::StepFailure(info) => write!(f, "star step failed: {info}"),
+            Self::Terminated {
+                model_number,
+                reason,
+            } => write!(f, "star terminated at model {model_number}: {reason}"),
         }
     }
 }
@@ -249,6 +333,91 @@ impl VarLayout {
         } else {
             self.nvar_hydro
         }
+    }
+
+    /// Returns the MESA equation slot name for 0-based equation `equ_idx`.
+    #[must_use]
+    pub fn equation_name(
+        &self,
+        equ_idx: usize,
+        iso_names: &[String],
+    ) -> String {
+        if equ_idx == self.i_equ_l {
+            return String::from("equ_L");
+        }
+        if equ_idx == self.i_dv_dt {
+            return String::from("dv_dt");
+        }
+        if equ_idx == self.i_dlnd_dt {
+            return String::from("dlnd_dt");
+        }
+        if equ_idx == self.i_dlne_dt {
+            return String::from("dlnE_dt");
+        }
+        if self.i_dlnr_dt == Some(equ_idx) {
+            return String::from("dlnR_dt");
+        }
+        if self.i_turbulent_energy == Some(equ_idx) {
+            return String::from("d_etrb_dt");
+        }
+        if self.i_equ_hp == Some(equ_idx) {
+            return String::from("equ_Hp");
+        }
+        if self.i_dalpha_rti_dt == Some(equ_idx) {
+            return String::from("dalpha_RTI_dt");
+        }
+        if equ_idx >= self.nvar_hydro {
+            let j = equ_idx - self.nvar_hydro;
+            return iso_names.get(j).map_or_else(
+                || format!("equ_chem_{j}"),
+                |name| format!("d_dt_{name}"),
+            );
+        }
+        format!("equ_{equ_idx}")
+    }
+
+    /// Returns the MESA solver variable name for 0-based slot `var_idx`.
+    #[must_use]
+    pub fn variable_name(
+        &self,
+        var_idx: usize,
+        iso_names: &[String],
+    ) -> String {
+        if var_idx == self.i_lnd {
+            return String::from("lnd");
+        }
+        if var_idx == self.i_lnt {
+            return String::from("lnT");
+        }
+        if var_idx == self.i_lnr {
+            return String::from("lnR");
+        }
+        if var_idx == self.i_lum {
+            return String::from("L");
+        }
+        if self.i_v == Some(var_idx) {
+            return String::from("v");
+        }
+        if self.i_u == Some(var_idx) {
+            return String::from("u");
+        }
+        if self.i_w == Some(var_idx) {
+            return String::from("w");
+        }
+        if self.i_hp == Some(var_idx) {
+            return String::from("Hp");
+        }
+        if self.i_alpha_rti == Some(var_idx) {
+            return String::from("alpha_RTI");
+        }
+        if var_idx >= self.nvar_hydro {
+            let j = var_idx - self.nvar_hydro;
+            return iso_names
+                .get(j)
+                .cloned()
+                .unwrap_or_else(|| format!("chem_{j}"));
+        }
+        format!("var_{var_idx}")
     }
 }
 

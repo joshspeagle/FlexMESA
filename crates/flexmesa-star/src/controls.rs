@@ -9,7 +9,7 @@ use flexmesa_turb::{MltOption, SemiconvectionOption, ThermohalineOption};
 
 pub use crate::job_controls::{
     AtmOption, AtmTTauRelation, EnergyEqnOption, StarError, StarJobControls,
-    VarLayout,
+    StepFailureInfo, VarLayout,
 };
 
 /// Evolutionary and physics controls (`&controls` namelist in

@@ -26,7 +26,7 @@
 use flexmesa_const::{LN10, R_SUN, SECYER};
 
 use crate::adjust_mass::do_adjust_mass_step;
-use crate::controls::StarError;
+use crate::controls::{StarError, StepFailureInfo};
 use crate::evolve_support::{
     apply_step_pre_physics, eval_total_energy_integrals,
     remesh_star_before_step, update_step_energy_conservation,
@@ -320,6 +320,7 @@ pub fn star_evolve_step(
                 }
             }
         };
+        let mut ts_retry_reason: Option<String> = None;
         if let Ok(ref rep) = attempt {
             if rep.converged && !force_outer_retry {
                 model.model_number += 1;
@@ -359,10 +360,12 @@ pub fn star_evolve_step(
                             num_merges,
                         ));
                     }
-                    TimestepAction::Retry(_) => {
+                    TimestepAction::Retry(reason) => {
                         model.model_number -= 1;
+                        ts_retry_reason = Some(reason);
                     }
                     TimestepAction::Terminate(reason) => {
+                        let terminated_model = model.model_number;
                         model.model_number -= 1;
                         restore_from_old(model)?;
                         model.dt_old = prev_dt_old;
@@ -371,7 +374,10 @@ pub fn star_evolve_step(
                             prev_rot_boost_old;
                         model.aux.step_hist.was_in_implicit_wind_limit =
                             prev_was_in_limit;
-                        return Err(StarError::InvalidInput(reason));
+                        return Err(StarError::Terminated {
+                            model_number: terminated_model,
+                            reason,
+                        });
                     }
                 }
             }
@@ -379,18 +385,102 @@ pub fn star_evolve_step(
         // Why this attempt is being retried. Kept so that the final failure
         // names the cause of the last attempt (for example a missing table
         // or a rejected option) instead of only counting retries.
-        let why = match &attempt {
+        let target_mod = model.model_number + 1;
+        let (why, attempt_info) = match &attempt {
             Ok(rep) if rep.converged && force_outer_retry => {
-                String::from("implicit wind redo requested outer retry")
+                let msg =
+                    String::from("implicit wind redo requested outer retry");
+                let info = StepFailureInfo {
+                    model_number: target_mod,
+                    zone: None,
+                    equation: None,
+                    variable: None,
+                    value: None,
+                    residual_norm: rep.residual_norm,
+                    max_residual: rep.max_residual,
+                    correction_norm: rep.correction_norm,
+                    max_correction: rep.max_correction,
+                    dt: dt_try,
+                    iterations: rep.iterations,
+                    retries,
+                    retry_reason: msg.clone(),
+                    detail: msg.clone(),
+                };
+                (msg, info)
             }
             Ok(rep) if rep.converged => {
-                String::from("timestep controller requested retry")
+                let msg = ts_retry_reason.unwrap_or_else(|| {
+                    String::from("timestep controller requested retry")
+                });
+                let info = StepFailureInfo {
+                    model_number: target_mod,
+                    zone: None,
+                    equation: None,
+                    variable: None,
+                    value: None,
+                    residual_norm: rep.residual_norm,
+                    max_residual: rep.max_residual,
+                    correction_norm: rep.correction_norm,
+                    max_correction: rep.max_correction,
+                    dt: dt_try,
+                    iterations: rep.iterations,
+                    retries,
+                    retry_reason: msg.clone(),
+                    detail: msg.clone(),
+                };
+                (msg, info)
             }
-            Ok(rep) => format!(
-                "solver did not converge (iters={}, rmax={:.3e}, cmax={:.3e})",
-                rep.iterations, rep.max_residual, rep.max_correction
-            ),
-            Err(e) => format!("error: {e}"),
+            Ok(rep) => {
+                let msg = format!(
+                    "solver did not converge (iters={}, rmax={:.3e}, cmax={:.3e})",
+                    rep.iterations, rep.max_residual, rep.max_correction
+                );
+                let info = StepFailureInfo {
+                    model_number: target_mod,
+                    zone: None,
+                    equation: None,
+                    variable: None,
+                    value: None,
+                    residual_norm: rep.residual_norm,
+                    max_residual: rep.max_residual,
+                    correction_norm: rep.correction_norm,
+                    max_correction: rep.max_correction,
+                    dt: dt_try,
+                    iterations: rep.iterations,
+                    retries,
+                    retry_reason: msg.clone(),
+                    detail: msg.clone(),
+                };
+                (msg, info)
+            }
+            Err(StarError::StepFailure(info)) => {
+                let mut preserved = (**info).clone();
+                preserved.model_number = target_mod;
+                preserved.retries = retries;
+                let msg = preserved.detail.clone();
+                preserved.retry_reason.clone_from(&msg);
+                (msg, preserved)
+            }
+            Err(e) => {
+                let msg = format!("error: {e}");
+                let info = StepFailureInfo {
+                    model_number: target_mod,
+                    zone: None,
+                    equation: None,
+                    variable: None,
+                    value: None,
+                    residual_norm: 0.0,
+                    max_residual: 0.0,
+                    correction_norm: 0.0,
+                    max_correction: 0.0,
+                    dt: dt_try,
+                    iterations: 0,
+                    retries,
+                    retry_reason: msg.clone(),
+                    detail: msg.clone(),
+                };
+                (msg, info)
+            }
         };
         if crate::step_trace::enabled(model.model_number + 1) {
             eprintln!(
@@ -413,16 +503,20 @@ pub fn star_evolve_step(
         {
             restore_from_old(model)?;
             model.dt_old = prev_dt_old;
-            return Err(StarError::ConvergenceFailure(format!(
-                "star_evolve_step failed after {retries}/{} retries \
-                 (dt={next_dt:.3e} s, dt_floor={dt_floor:.3e} s; \
-                 `star/private/evolve.f90:2213-2248`); last attempt: {why}",
-                if max_retries == 0 {
-                    String::from("unlimited")
-                } else {
-                    max_retries.to_string()
-                }
-            )));
+            let limit_str = if max_retries == 0 {
+                String::from("unlimited")
+            } else {
+                max_retries.to_string()
+            };
+            let mut final_info = attempt_info;
+            final_info.retries = retries;
+            final_info.dt = next_dt;
+            final_info.retry_reason = why;
+            final_info.detail = format!(
+                "star_evolve_step failed after {retries}/{limit_str} retries \
+                 (dt={next_dt:.3e} s, dt_floor={dt_floor:.3e} s)"
+            );
+            return Err(StarError::StepFailure(Box::new(final_info)));
         }
         model.num_retries += 1;
         dt_try = next_dt;

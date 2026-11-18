@@ -10,7 +10,7 @@
 
 use flexmesa_mtx::{solve_block_tridiag_bcyclic, solve_block_tridiagonal};
 
-use crate::controls::StarError;
+use crate::controls::{StarError, StepFailureInfo};
 use crate::hydro_eqns::{eval_henyey_equations_into, HenyeySystem};
 use crate::model::StarModel;
 use crate::solver_norms::{
@@ -217,8 +217,54 @@ fn solve_linear_henyey_system(
 ///   sequential block-Thomas elimination ([`solve_block_tridiagonal`]).
 ///
 /// # Errors
+fn build_step_failure_info(
+    model: &StarModel,
+    sys: &HenyeySystem,
+    iterations: usize,
+    residual_norm: f64,
+    max_residual: f64,
+    correction_norm: f64,
+    max_correction: f64,
+    detail: String,
+) -> StepFailureInfo {
+    let (zone, eq_idx, worst_val) = if sys.equ.is_empty() || sys.nvar == 0 {
+        (None, None, None)
+    } else {
+        let (k, eq, v) = crate::step_trace::argmax_abs(&sys.equ, sys.nvar);
+        (
+            Some(k),
+            Some((
+                model.layout.equation_name(eq, &model.iso_names),
+                model.layout.variable_name(eq, &model.iso_names),
+            )),
+            Some(v),
+        )
+    };
+    let (equation, variable) = match eq_idx {
+        Some((eq, var)) => (Some(eq), Some(var)),
+        None => (None, None),
+    };
+    StepFailureInfo {
+        model_number: model.model_number,
+        zone,
+        equation,
+        variable,
+        value: worst_val,
+        residual_norm,
+        max_residual,
+        correction_norm,
+        max_correction,
+        dt: model.dt,
+        iterations,
+        retries: 0,
+        retry_reason: String::new(),
+        detail,
+    }
+}
+
 /// Returns [`StarError`] if initial microphysics fails or the Jacobian is
-/// singular.
+/// singular, or [`StarError::StepFailure`] if line search fails or Newton
+/// iterations do not converge.
 pub fn solve_henyey_step(
     model: &mut StarModel,
     include_chem: bool,
@@ -370,8 +416,17 @@ pub fn solve_henyey_step(
                     model.dt,
                 );
             }
-            return Err(StarError::ConvergenceFailure(format!(
-                "line search failed at Newton iteration {iter}"
+            return Err(StarError::StepFailure(Box::new(
+                build_step_failure_info(
+                    model,
+                    &sys,
+                    iter,
+                    residual_norm,
+                    max_residual,
+                    correction_norm,
+                    max_correction,
+                    format!("line search failed at Newton iteration {iter}"),
+                ),
             )));
         }
 
@@ -440,6 +495,19 @@ pub fn solve_henyey_step(
         normalize_species_fractions(model);
     }
     model.xa_sub_xa_start.clear();
+
+    if !converged {
+        return Err(StarError::StepFailure(Box::new(build_step_failure_info(
+            model,
+            &sys,
+            iter_used,
+            residual_norm,
+            max_residual,
+            correction_norm,
+            max_correction,
+            format!("solver did not converge within {iter_used} iterations"),
+        ))));
+    }
 
     Ok(HenyeySolverReport {
         converged,

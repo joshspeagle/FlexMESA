@@ -469,7 +469,7 @@ fn test_e2e_4_tier4_pulsation_astero_and_dev_cases() {
             )
             .expect_err("gyre_in_mesa_wd fails convergence cleanly (#157)");
             assert!(
-                matches!(wd_err, StarError::ConvergenceFailure(_)),
+                matches!(wd_err, StarError::StepFailure(_)),
                 "unexpected cleaned gyre_in_mesa_wd error: {wd_err}"
             );
             assert!(

@@ -189,7 +189,7 @@ pub use adjust_mass::{
 };
 pub use controls::{
     AtmOption, AtmTTauRelation, EnergyEqnOption, StarControls, StarError,
-    StarJobControls, VarLayout,
+    StarJobControls, StepFailureInfo, VarLayout,
 };
 pub use controls_mix_wind::{
     MixWindControls, OvershootParamSet, PredictiveParamSet,

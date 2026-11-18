@@ -86,8 +86,16 @@ pub struct StarModel {
     pub v_center: f64,
     /// Cumulative Newton solver iterations across run (`total_num_solver_iterations`).
     pub total_num_solver_iterations: usize,
+    /// Cumulative `solve_henyey_step` calls across run (`num_solver_calls`).
+    pub total_num_solver_calls: usize,
     /// Cumulative step retries (`num_retries`).
     pub num_retries: usize,
+    /// Cumulative wind/implicit-step redos (`num_redos`).
+    pub num_redos: usize,
+    /// Cumulative microphysics cache hits in [`crate::hydro_vars::set_hydro_vars`].
+    pub micro_cache_hits: usize,
+    /// Cumulative microphysics cache misses in [`crate::hydro_vars::set_hydro_vars`].
+    pub micro_cache_misses: usize,
 
     // --- Primary State Vectors (len = nz, `xa` len = nz * species) ---
     /// Cell-centered $\ln(\rho/\mathrm{g\,cm^{-3}})$ (`lnd`).
@@ -427,7 +435,11 @@ impl StarModel {
             l_center: 0.0,
             v_center: 0.0,
             total_num_solver_iterations: 0,
+            total_num_solver_calls: 0,
             num_retries: 0,
+            num_redos: 0,
+            micro_cache_hits: 0,
+            micro_cache_misses: 0,
             lnd: vec![0.0; nz],
             ln_t: vec![0.0; nz],
             ln_r: vec![0.0; nz],
@@ -582,5 +594,98 @@ impl StarModel {
     #[inline]
     pub fn surface_r_rsun(&self) -> f64 {
         flexmesa_math::exp(self.ln_r.first().copied().unwrap_or(0.0)) / R_SUN
+    }
+
+    /// Returns the approximate live heap byte size of this [`StarModel`].
+    #[must_use]
+    pub fn heap_bytes(&self) -> usize {
+        use std::mem::size_of_val;
+        let prim_bytes =
+            crate::primary_state::PrimaryStateBuffer::from_model(self)
+                .heap_bytes();
+        let extra_f64: usize = [
+            &self.abar,
+            &self.zbar,
+            &self.z2bar,
+            &self.z53bar,
+            &self.ye,
+            &self.xh_mass,
+            &self.yhe_mass,
+            &self.z_mass,
+            &self.rho,
+            &self.t,
+            &self.pgas,
+            &self.ln_pgas,
+            &self.prad,
+            &self.peos,
+            &self.ln_peos,
+            &self.ln_e,
+            &self.entropy,
+            &self.ln_s,
+            &self.grada,
+            &self.cv,
+            &self.cp,
+            &self.chi_rho,
+            &self.chi_t,
+            &self.gamma1,
+            &self.gamma3,
+            &self.eta,
+            &self.gam,
+            &self.mu,
+            &self.lnfree_e,
+            &self.csound,
+            &self.opacity,
+            &self.d_opacity_dlnd,
+            &self.d_opacity_dlnt,
+            &self.tau,
+            &self.non_nuc_neu,
+            &self.d_non_nuc_neu_dlnd,
+            &self.d_non_nuc_neu_dlnt,
+            &self.d_epsnuc_dlnd,
+            &self.d_epsnuc_dlnt,
+            &self.d_epsnuc_dx,
+            &self.eps_nuc_neu_total,
+            &self.d_dxdt_nuc_dlnd,
+            &self.d_dxdt_nuc_dlnt,
+            &self.d_dxdt_nuc_dx,
+            &self.aux.eos_frac_pc,
+            &self.aux.latent_ddlnrho,
+            &self.aux.latent_ddlnt,
+            &self.aux.d_eps_grav_dx,
+            &self.aux.dln_e_dxa_for_partials,
+            &self.aux.dln_peos_dxa_for_partials,
+        ]
+        .into_iter()
+        .map(|v| size_of_val(v.as_slice()))
+        .sum();
+        let ad_bytes: usize = [
+            &self.ln_peos_ad,
+            &self.ln_e_ad,
+            &self.ln_s_ad,
+            &self.eps_grav_ad,
+            &self.gradt_ad,
+            &self.gradr_ad,
+            &self.gradl_ad,
+            &self.scale_height_ad,
+            &self.mlt_vc_ad,
+            &self.mlt_d_ad,
+            &self.mlt_cdc_ad,
+            &self.aux.eq_ad,
+            &self.aux.u_face_ad,
+            &self.aux.p_face_ad,
+            &self.aux.extra_grav,
+            &self.aux.uq_ad,
+        ]
+        .into_iter()
+        .map(|v| size_of_val(v.as_slice()))
+        .sum();
+        let eos_raw = size_of_val(self.eos_res.as_slice())
+            + size_of_val(self.eos_d_dlnd.as_slice())
+            + size_of_val(self.eos_d_dlnt.as_slice());
+        prim_bytes
+            + extra_f64
+            + ad_bytes
+            + eos_raw
+            + size_of_val(self.net_iso.as_slice())
     }
 }

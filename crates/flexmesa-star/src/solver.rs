@@ -270,6 +270,7 @@ pub fn solve_henyey_step(
     include_chem: bool,
     use_bcyclic: bool,
 ) -> Result<HenyeySolverReport, StarError> {
+    model.total_num_solver_calls += 1;
     model.pack_xh();
     if include_chem
         && model.species > 0

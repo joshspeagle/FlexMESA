@@ -19,9 +19,10 @@ use crate::hydro_work::{
     eval_cell_dpe_dt_ad, eval_v_flag_dke_dt_ad, eval_v_flag_dwork_dm_ad,
     eval_v_flag_simple_pdv_dm_ad,
 };
-use crate::mesh_adjust::{do_adjust_mesh, MeshFunctionConfig};
+use crate::mesh_adjust::{plan_mesh, remap_onto_dq, MeshFunctionConfig};
 use crate::model::StarModel;
 use crate::premix::{do_conv_premix, do_phase_separation};
+use crate::primary_state::PrimaryStateBuffer;
 use crate::riemann_ad::eval_u_flag_total_energy_rates_ad;
 use crate::rotation::{
     conserve_shell_j_rot_and_distortion, set_rotation_mixing_info,
@@ -296,7 +297,7 @@ pub fn update_step_energy_conservation(model: &mut StarModel, dt: f64) {
 pub fn remesh_star_before_step(
     model: &mut StarModel,
     dt_try: f64,
-) -> Result<(usize, usize, Option<StarModel>), StarError> {
+) -> Result<(usize, usize, Option<PrimaryStateBuffer>), StarError> {
     let recent_retry = model
         .aux
         .step_hist
@@ -319,9 +320,10 @@ pub fn remesh_star_before_step(
         let dt_curr = dt_try.max(1.0);
         refresh_mixing_state(model, dt_curr, &[]);
         let mesh_cfg = MeshFunctionConfig::from_controls(&model.controls);
-        let snap = model.clone();
-        let (ns, nm) = do_adjust_mesh(model, &mesh_cfg)?;
+        let (dq_new, ns, nm) = plan_mesh(model, &mesh_cfg);
         if ns + nm > 0 {
+            let snap = PrimaryStateBuffer::from_model(model);
+            remap_onto_dq(model, &dq_new)?;
             crate::hydro_state::smooth_post_remesh_hydro_and_rotation(
                 model, &snap,
             )?;
@@ -478,7 +480,12 @@ pub(crate) fn relax_pre_ms_to_radiative_core(
         model.star_age_old,
         model.model_number,
         model.num_retries,
-    ) = (0.0, 0.0, 1, 0);
+        model.num_redos,
+        model.total_num_solver_iterations,
+        model.total_num_solver_calls,
+        model.micro_cache_hits,
+        model.micro_cache_misses,
+    ) = (0.0, 0.0, 1, 0, 0, 0, 0, 0, 0);
     model.aux.cumulative_energy_error = 0.0;
     set_hydro_vars(model, false, false)?;
     model.save_start_values()?;

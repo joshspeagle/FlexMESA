@@ -282,6 +282,8 @@ pub struct HydroAuxState {
     pub mlt_flip_count: Vec<u8>,
     /// Per-step scalar history, solver/substep counters, and retry-hold state.
     pub step_hist: StepHistoryScalars,
+    /// Per-model 2-slot microphysics cache (never duplicated on clone).
+    pub micro_cache: crate::micro_cache::MicrophysicsCache,
 }
 
 impl HydroAuxState {
@@ -361,6 +363,7 @@ impl HydroAuxState {
             mlt_prev_conv: vec![0; nz],
             mlt_flip_count: vec![0; nz],
             step_hist: StepHistoryScalars::default(),
+            micro_cache: crate::micro_cache::MicrophysicsCache::default(),
         }
     }
 
@@ -545,7 +548,7 @@ fn interp_hermite_p1(
 
 pub(crate) fn smooth_post_remesh_hydro_and_rotation(
     model: &mut crate::model::StarModel,
-    pre: &crate::model::StarModel,
+    pre: &crate::primary_state::PrimaryStateBuffer,
 ) -> Result<(), crate::controls::StarError> {
     let (nz_new, nz_old) = (model.nz, pre.nz);
     if nz_new < 2 || nz_old < 2 {

@@ -121,6 +121,7 @@ impl BinarySystem {
         let tracing = flexmesa_star::step_trace::enabled(self.model_number + 1);
         for outer_retry in 0..16_usize {
             if outer_retry > 0 {
+                self.counters.num_retries += 1;
                 self.record_retry_holds(&mut retry_holds);
                 self.restore_snapshot(&pre_step_snap)?;
                 self.apply_retry_holds(&retry_holds);
@@ -156,6 +157,7 @@ impl BinarySystem {
                             && dt_used > 1.0
                             && self.exceeds_hard_limits(&ts_ctrl)
                         {
+                            self.counters.num_hard_limit_retries += 1;
                             dt_try = 0.5 * dt_used;
                             continue;
                         }
@@ -181,6 +183,7 @@ impl BinarySystem {
                             .finish_accepted_step(dt_used, &ts_ctrl, extras));
                     }
                     Ok(SingleTrialOutcome::CutDt(dt_cut)) => {
+                        self.counters.num_dt_cuts += 1;
                         dt_try = check_cut_dt(dt_cut, dt_try)?;
                         continue;
                     }
@@ -225,6 +228,7 @@ impl BinarySystem {
                 if try_idx > 1 {
                     self.restore_snapshot(&trial_snap)?;
                 }
+                self.counters.num_implicit_trials += 1;
                 let (dt_used, ts_ctrl) = match self
                     .run_single_trial(trial_mdot, dt_try, false, extras)
                 {
@@ -232,6 +236,7 @@ impl BinarySystem {
                         (dt_used, ts_ctrl)
                     }
                     Ok(SingleTrialOutcome::CutDt(dt_cut)) => {
+                        self.counters.num_dt_cuts += 1;
                         let next_dt = check_cut_dt(dt_cut, dt_try)?;
                         if tracing {
                             let mut jl =
@@ -344,6 +349,7 @@ impl BinarySystem {
                             accepted = Some((dt_used, ts_ctrl));
                         } else {
                             self.restore_snapshot(&trial_snap)?;
+                            self.counters.num_implicit_trials += 1;
                             if let Ok(SingleTrialOutcome::Completed {
                                 dt_used: dt0,
                                 ts_ctrl: ts0,
@@ -362,7 +368,7 @@ impl BinarySystem {
                         if next_m > 0.0 && self.point_mass_i == 0 {
                             self.restore_snapshot(&trial_snap)?;
                             let _ = self.swap_donor_and_accretor()?;
-                            trial_snap = self.capture_snapshot();
+                            self.capture_snapshot_into(&mut trial_snap);
                             solver.flip_for_contact_donor_switch();
                             trial_mdot = -next_m;
                         } else {
@@ -384,6 +390,7 @@ impl BinarySystem {
                     && dt_used > 1.0
                     && (self.exceeds_hard_limits(&ts_ctrl) || dmdot_hard)
                 {
+                    self.counters.num_hard_limit_retries += 1;
                     let next_dt = (0.5 * dt_used).max(dt_floor);
                     if tracing {
                         let mut jl = flexmesa_star::step_trace::JsonLine::new(

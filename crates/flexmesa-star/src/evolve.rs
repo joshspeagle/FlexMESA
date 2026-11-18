@@ -249,6 +249,7 @@ pub fn star_evolve_step(
         let mut force_outer_retry = false;
         let reset_for_redo =
             |m: &mut StarModel, next_mdot: f64| -> Result<(), StarError> {
+                m.num_redos += 1;
                 restore_from_old(m)?;
                 m.dt = dt_try;
                 m.dt_old = prev_dt_old;
@@ -523,9 +524,7 @@ pub fn star_evolve_step(
         model.num_retries += 1;
         dt_try = next_dt;
         if let Some(snap) = pre_remesh_model.take() {
-            let cur_num_retries = model.num_retries;
-            *model = snap;
-            model.num_retries = cur_num_retries;
+            snap.restore_into(model)?;
             num_splits = 0;
             num_merges = 0;
             if !model.controls.rsp2_flag && model.aux.total_energy == 0.0 {

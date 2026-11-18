@@ -40,6 +40,12 @@ pub(crate) fn binary_report_to_pydict<'py>(
     d.set_item("final_abs_mdot_msun_yr", rep.final_abs_mdot_msun_yr)?;
     d.set_item("max_relative_oracle_error", rep.max_relative_oracle_error)?;
     d.set_item("wall_time_ms", rep.wall_time_ms)?;
+    d.set_item("binary_retries", rep.binary_retries)?;
+    d.set_item("implicit_trials", rep.implicit_trials)?;
+    d.set_item("dt_cuts", rep.dt_cuts)?;
+    d.set_item("hard_limit_retries", rep.hard_limit_retries)?;
+    d.set_item("donor_retries", rep.donor_retries)?;
+    d.set_item("accretor_retries", rep.accretor_retries)?;
     Ok(d)
 }
 

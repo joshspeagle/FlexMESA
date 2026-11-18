@@ -98,6 +98,7 @@ pub mod mesh;
 pub mod mesh_adjust;
 pub(crate) mod mesh_remap;
 pub mod micro;
+pub mod micro_cache;
 pub mod micro_net;
 pub mod mix_info;
 pub mod model;
@@ -107,6 +108,7 @@ pub mod overshoot;
 pub mod photo_io;
 pub mod pre_ms;
 pub mod premix;
+pub mod primary_state;
 pub mod pulse;
 pub mod pulse_bvp;
 pub mod pulse_bvp_recon;
@@ -295,6 +297,7 @@ pub use micro::{
     change_model_network, do_eos, do_kap, do_net, do_neu, get_or_load_net,
     get_tau, global_basic_net, set_basic_vars,
 };
+pub use micro_cache::MicrophysicsCache;
 pub use mix_info::{
     cdc_factor, clean_mixing_glitches, compute_convection_sigmas,
     eval_dxdt_mix, face_density, locate_convection_boundaries, ConvBoundary,
@@ -314,6 +317,7 @@ pub use premix::{
     do_conv_premix, do_phase_separation, eval_castellani_penetration_vel,
     eval_phase_separation_shift,
 };
+pub use primary_state::PrimaryStateBuffer;
 pub use pulse::{
     build_pulse_points, build_pulse_points_with_options, eval_center_d2,
     eval_center_parabolic, eval_center_rho, eval_face, export_fgong,

@@ -76,7 +76,8 @@ fn settle_constant_xa_kh_loop(
         {
             break;
         }
-        let backup = star.clone();
+        let backup =
+            flexmesa_star::primary_state::PrimaryStateBuffer::from_model(star);
         star.save_old_values();
         star.save_start_values()?;
         match do_struct_burn_mix(star, dt_yr * SECYER, false, true, &[]) {
@@ -84,7 +85,7 @@ fn settle_constant_xa_kh_loop(
                 dt_yr = (dt_yr * 1.8).min(5.0e4);
             }
             _ => {
-                *star = backup;
+                backup.restore_into(star)?;
                 dt_yr = (dt_yr * 0.5).max(1.0);
             }
         }
@@ -122,7 +123,8 @@ fn settle_cno_gold_equilibrium(
                 saved_controls.use_gold2_tolerances;
         }
         let dt_s = dt_yr * SECYER;
-        let backup = star.clone();
+        let backup =
+            flexmesa_star::primary_state::PrimaryStateBuffer::from_model(star);
         star.dt = dt_s;
         if star.controls.rotation_flag && omega_0 > 0.0 {
             apply_uniform_rotation(star, omega_0);
@@ -137,7 +139,7 @@ fn settle_cno_gold_equilibrium(
                 star.save_old_values();
             }
             _ => {
-                *star = backup;
+                backup.restore_into(star)?;
             }
         }
     }
@@ -198,7 +200,11 @@ pub(crate) fn prep_and_settle_binary_star(
         star.star_age_old = 0.0;
         star.model_number = 0;
         star.num_retries = 0;
+        star.num_redos = 0;
         star.total_num_solver_iterations = 0;
+        star.total_num_solver_calls = 0;
+        star.micro_cache_hits = 0;
+        star.micro_cache_misses = 0;
         star.dt = 1.0 * SECYER;
         star.dt_next = 1.0 * SECYER;
         star.dt_old = 0.0;

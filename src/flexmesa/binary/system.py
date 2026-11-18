@@ -156,6 +156,26 @@ class BinarySystem:
         """Next maximum binary timestep (s)."""
         return self._inner.max_timestep_sec
 
+    @property
+    def num_retries(self) -> int:
+        """Cumulative outer binary retries preserved across rollbacks."""
+        return self._inner.num_retries
+
+    @property
+    def num_implicit_trials(self) -> int:
+        """Cumulative coupled implicit mass-transfer trials."""
+        return self._inner.num_implicit_trials
+
+    @property
+    def num_dt_cuts(self) -> int:
+        """Cumulative solver `CutDt` restarts preserved across rollbacks."""
+        return self._inner.num_dt_cuts
+
+    @property
+    def num_hard_limit_retries(self) -> int:
+        """Cumulative hard-limit retries preserved across rollbacks."""
+        return self._inner.num_hard_limit_retries
+
 
 def run_binary_test_suite_case(
     case_dir: str | pathlib.Path,

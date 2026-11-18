@@ -437,7 +437,10 @@ impl_py_star_model!(
     scalars: [
         nz: usize, species: usize, model_number: usize, star_age: f64,
         dt: f64, dt_next: f64, dt_old: f64, mstar: f64, teff: f64,
-        r_center: f64, l_center: f64, m_center: f64, v_center: f64
+        r_center: f64, l_center: f64, m_center: f64, v_center: f64,
+        total_num_solver_iterations: usize, total_num_solver_calls: usize,
+        num_retries: usize, num_redos: usize,
+        micro_cache_hits: usize, micro_cache_misses: usize
     ],
     arrays: [
         lnd, lnd_start, ln_t, ln_r, ln_r_start, lum, dq, q, xq, m, dm, dm_bar,

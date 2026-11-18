@@ -57,6 +57,20 @@ pub enum BinaryCompanion {
     Star(Box<StarModel>),
 }
 
+/// Cumulative binary retry, implicit trial, timestep cut, and hard-limit
+/// rollback counters preserved across snapshot rollbacks on [`BinarySystem`].
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct BinaryStepCounters {
+    /// Cumulative outer step retries (`outer_retry > 0`).
+    pub num_retries: usize,
+    /// Cumulative coupled binary trials executed in implicit mode.
+    pub num_implicit_trials: usize,
+    /// Cumulative solver `CutDt` restarts.
+    pub num_dt_cuts: usize,
+    /// Cumulative retries triggered by binary hard limits or `delta_mdot_hard_limit`.
+    pub num_hard_limit_retries: usize,
+}
+
 /// Coupled binary star evolution state and step driver (`binary_info`).
 #[derive(Debug, Clone)]
 pub struct BinarySystem {
@@ -128,6 +142,8 @@ pub struct BinarySystem {
     pub last_edot: EdotBreakdown,
     /// Binary or stellar termination reason triggered at the end of the latest step.
     pub last_termination_reason: Option<String>,
+    /// Retry, implicit trial, dt-cut, and hard-limit counters preserved across rollbacks.
+    pub counters: BinaryStepCounters,
 }
 
 impl BinarySystem {
@@ -344,6 +360,7 @@ impl BinarySystem {
             last_jdot: JdotBreakdown::default(),
             last_edot: EdotBreakdown::default(),
             last_termination_reason: None,
+            counters: BinaryStepCounters::default(),
         };
         sys.refresh_tidal_deformation_hooks(false)?;
         sys.update_stage_varcontrol();
@@ -650,6 +667,42 @@ impl BinarySystem {
             self.last_jdot,
             self.last_edot,
         )
+    }
+
+    pub(crate) fn capture_snapshot_into(&self, snap: &mut BinaryStepSnapshot) {
+        let (comp_star, pm_state) = match &self.companion {
+            BinaryCompanion::PointMass {
+                mass_g,
+                m_bh_zero_eq_g,
+                is_black_hole,
+            } => (None, Some((*mass_g, *m_bh_zero_eq_g, *is_black_hole))),
+            BinaryCompanion::Star(s2) => (Some(&**s2), None),
+        };
+        snap.capture_into(
+            &self.donor,
+            comp_star,
+            pm_state,
+            self.point_mass_i,
+            self.donor_i,
+            self.separation,
+            self.period,
+            self.eccentricity,
+            self.angular_momentum_j,
+            self.rl,
+            self.rl_relative_gap,
+            self.mtransfer_rate,
+            self.step_mtransfer_rate,
+            self.jdot,
+            self.binary_age_yr,
+            self.model_number,
+            self.max_timestep_sec,
+            self.change_factor,
+            self.using_jdot_mb,
+            self.cumulative_j_ext,
+            self.last_mdot,
+            self.last_jdot,
+            self.last_edot,
+        );
     }
 
     pub(crate) fn restore_snapshot(

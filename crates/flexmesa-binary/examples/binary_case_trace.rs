@@ -74,7 +74,8 @@ fn main() {
 
     println!(
         "case={} passed={} term={} steps={} m1={:.6} m2={:.6} sep={:.6} \
-         period_d={:.6} runtime={:.2}s",
+         period_d={:.6} bin_retries={} trials={} cuts={} hard_retries={} \
+         donor_retries={} accretor_retries={} runtime={:.2}s",
         rep.case_name,
         rep.passed,
         rep.termination_code,
@@ -83,6 +84,12 @@ fn main() {
         rep.final_m2_msun,
         rep.final_separation_rsun,
         rep.final_period_days,
+        rep.binary_retries,
+        rep.implicit_trials,
+        rep.dt_cuts,
+        rep.hard_limit_retries,
+        rep.donor_retries,
+        rep.accretor_retries,
         rep.wall_time_ms / 1000.0
     );
 }

@@ -171,6 +171,26 @@ impl PyBinarySystem {
     pub fn max_timestep_sec(&self) -> f64 {
         self.inner.max_timestep_sec
     }
+    /// Cumulative outer binary retries preserved across rollbacks.
+    #[getter]
+    pub fn num_retries(&self) -> usize {
+        self.inner.counters.num_retries
+    }
+    /// Cumulative implicit mass-transfer trials preserved across rollbacks.
+    #[getter]
+    pub fn num_implicit_trials(&self) -> usize {
+        self.inner.counters.num_implicit_trials
+    }
+    /// Cumulative solver `CutDt` restarts preserved across rollbacks.
+    #[getter]
+    pub fn num_dt_cuts(&self) -> usize {
+        self.inner.counters.num_dt_cuts
+    }
+    /// Cumulative hard-limit retries preserved across rollbacks.
+    #[getter]
+    pub fn num_hard_limit_retries(&self) -> usize {
+        self.inner.counters.num_hard_limit_retries
+    }
 }
 
 /// Evaluates Eggleton (1983) Roche-lobe radius $R_{L,1}(m_1, m_2, a)$ (cm).

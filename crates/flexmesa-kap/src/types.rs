@@ -168,7 +168,7 @@ impl KapLowTOption {
 }
 
 /// Control configuration for opacity evaluation (`Kap_General_Info` in `kap_def.f90`).
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct KapConfig {
     /// Base metallicity $Z_{\mathrm{base}}$ (`-1.0` if unset).
     pub zbase: f64,

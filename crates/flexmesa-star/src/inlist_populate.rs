@@ -220,9 +220,15 @@ impl InlistBundle {
         map_strs!("star_job", sj, j, [
             save_model_filename, save_photo_filename, save_pulse_data_filename,
             h_he_net, co_net, adv_net,
-            required_termination_code_string,
             history_columns_file, profile_columns_file, filename_for_profile_when_terminate,
         ]);
+        let codes = sj.try_get_indexed_strings(
+            "star_job",
+            "required_termination_code_string",
+        )?;
+        if !codes.is_empty() {
+            j.required_termination_code_string = codes;
+        }
         if let Some(s) = sj.try_get_str("star_job", "load_model_filename")? {
             j.saved_model_name = s.to_string();
         }

@@ -8,9 +8,8 @@ import pathlib
 
 import pytest
 
-from flexmesa import constants
+from flexmesa import _rust, constants
 from flexmesa.testing import (
-    _module_hex_probes,
     case_manifest,
     module_hex_gate,
 )
@@ -66,7 +65,7 @@ def _write_const_tsv(
     lines = [
         "record_idx\tval_idx\tsrc_loc\tlabel\tkind\tdecimal\thex_float\traw_bits_hex"
     ]
-    for idx, val in enumerate(_module_hex_probes.CONST_PROBE_VALUES, start=1):
+    for idx, val in enumerate(_rust.const_probe_values(), start=1):
         h = (
             const_hex_override
             if (idx == 1 and const_hex_override is not None)

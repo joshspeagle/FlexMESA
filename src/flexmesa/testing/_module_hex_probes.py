@@ -23,39 +23,11 @@ from flexmesa import (
     kap,
     neu,
     rates,
-    turb,
 )
 
 # Tuple: (expected_outputs, checked, zero_ulp_values, max_ulp, note).
 ProbeOutcome = tuple[int, int, int, int, str]
 ProbeFn = Callable[[pathlib.Path], ProbeOutcome]
-
-# Ordered 23 CGS constants captured in `const/exact_tested_values.tsv`.
-CONST_PROBE_VALUES: tuple[float, ...] = (
-    constants.PI,
-    constants.LN10,
-    constants.BOLTZ_SIGMA,
-    constants.BOLTZ_SIGMA * 4.0,
-    constants.BOLTZ_SIGMA * 4.0 / constants.CLIGHT,
-    constants.BOLTZ_SIGMA / constants.CLIGHT,
-    constants.CRAD,
-    constants.SECYER,
-    constants.MSUN,
-    constants.RSUN,
-    constants.LSUN,
-    constants.LY,
-    constants.M_EARTH,
-    constants.AU,
-    constants.AMU,
-    constants.MN,
-    constants.MP,
-    constants.ME,
-    constants.PLANCK_H,
-    constants.QE,
-    constants.AVO,
-    constants.CLIGHT,
-    constants.KERG,
-)
 
 # 100-point bell profile from `interp_1d/test/src/test_interp_1d.f90`.
 _INTERP_1D_TEST_U: tuple[float, ...] = (
@@ -215,7 +187,7 @@ def _probe_const(hex_root: pathlib.Path) -> ProbeOutcome:
     rows = load_tsv_rows(hex_root, "const")
     ulps = [
         ulp_distance(a, r["raw_bits_hex"])
-        for a, r in zip(CONST_PROBE_VALUES, rows, strict=True)
+        for a, r in zip(_rust.const_probe_values(), rows, strict=True)
     ]
     checked, zeros, max_u = _summarize_ulps(ulps)
     return (
@@ -223,7 +195,7 @@ def _probe_const(hex_root: pathlib.Path) -> ProbeOutcome:
         checked,
         zeros,
         max_u,
-        "All 23 CGS physical/astronomical constants.",
+        "All 23 CGS constants of the Rust `flexmesa-const` crate.",
     )
 
 
@@ -399,7 +371,13 @@ def _probe_ionization(hex_root: pathlib.Path) -> ProbeOutcome:
     z_i = raw_hex_to_float64(rows[11]["raw_bits_hex"])
     x_i = raw_hex_to_float64(rows[12]["raw_bits_hex"])
     res = ionization.eval_ionization(
-        z_i, x_i, rho=10.0**lrho_i, t=10.0**lt_i, backend="rust"
+        z_i,
+        x_i,
+        rho=float(_rust.exp10(lrho_i)),
+        log10_rho=lrho_i,
+        t=float(_rust.exp10(lt_i)),
+        log10_t=lt_i,
+        backend="rust",
     )
     ulps.extend(
         ulp_distance(float(v), rows[13 + j]["raw_bits_hex"])
@@ -571,7 +549,7 @@ def _probe_colors(hex_root: pathlib.Path) -> ProbeOutcome:
     )
 
 
-def _make_turb_tdc_inputs() -> tuple[turb.TdcInputs, float, float, float]:
+def _make_turb_tdc_inputs() -> tuple[list[float], float, float, float]:
     cgrav = 6.6743000000000004e-8
     m = 5.8707400456875664e34
     scale = 5.0386519362246294e45
@@ -580,67 +558,69 @@ def _make_turb_tdc_inputs() -> tuple[turb.TdcInputs, float, float, float]:
     t = 613193666.5178368
     opacity = 9.075017123146995e-2
     l_val = 1.09415288158835 * (-scale)
+    # Constants from the Rust crate, and `pow4(T)` as upstream's
+    # `(T*T)*(T*T)` (`turb/test/src/test_turb.f90:211`), so that no input
+    # of the 0-ULP comparison depends on the Python layer or platform math.
+    pi, _, boltz_sigma = _rust.const_probe_values()[:3]
     gradr = (
         3.0
         * p
         * opacity
         * l_val
-        / (64.0 * constants.PI * constants.BOLTZ_SIGMA * (t**4) * cgrav * m)
+        / (64.0 * pi * boltz_sigma * ((t * t) * (t * t)) * cgrav * m)
     )
-    tdc_inp = turb.TdcInputs(
-        chi_t=1.0,
-        chi_rho=1.0,
-        gradr=gradr,
-        r=r,
-        p=p,
-        t=t,
-        rho=5204.573257474575,
-        dv=3.8256494463482604e-7,
-        cp=6628075118.460659,
-        opacity=opacity,
-        scale_height=2638686602.006378,
-        gradl=0.252075872673435,
-        grada=0.2520469725687274,
-        eq_div_w=0.0,
-        grav=m * cgrav / (r * r),
-        energy=0.0,
-    )
+    # Order of `TdcInputs` in `crates/flexmesa-turb/src/tdc.rs`.
+    tdc_inp = [
+        1.0,  # chi_t
+        1.0,  # chi_rho
+        gradr,
+        r,
+        p,
+        t,
+        5204.573257474575,  # rho
+        3.8256494463482604e-7,  # dv
+        6628075118.460659,  # cp
+        opacity,
+        2638686602.006378,  # scale_height
+        0.252075872673435,  # gradl
+        0.2520469725687274,  # grada
+        0.0,  # eq_div_w
+        m * cgrav / (r * r),  # grav
+        0.0,  # energy
+    ]
     return tdc_inp, cgrav, m, scale
 
 
 def _probe_turb(hex_root: pathlib.Path) -> ProbeOutcome:
     rows = load_tsv_rows(hex_root, "turb")
-    tdc_inp, cgrav, m, scale = _make_turb_tdc_inputs()
-    dt = 500.0
+    inputs, cgrav, m, scale = _make_turb_tdc_inputs()
     ulps: list[int] = []
     for j in range(31):
-        tp = turb.TdcParams(
-            conv_vel_start=5.232058741515405e7,
-            mixing_length_alpha=2.0,
-            tdc_alpha_d=1.0,
-            tdc_alpha_r=0.0,
-            tdc_alpha_pt=0.0,
-            tdc_alpha_c=1.0,
-            tdc_alpha_s=1.0,
-            dt=dt,
-            cgrav=cgrav,
-            m=m,
-            scale=scale,
-            max_conv_vel=1e99,
-            include_mlt_corr_to_tdc=True,
-            use_tdc_enthalpy_flux_limiter=False,
-        )
-        res = turb.set_tdc(tp, tdc_inp)
-        assert isinstance(res.output.grad_t, float)
-        assert isinstance(res.output.conv_vel, float)
         base = 3 + 4 * j
-        ulps.append(
-            ulp_distance(res.output.grad_t, rows[base + 1]["raw_bits_hex"])
+        # `dt` and `conv_vel_start` are read from the values MESA printed
+        # (`turb/test/src/test_turb.f90:220-229`), not recomputed here.
+        dt = raw_hex_to_float64(rows[base]["raw_bits_hex"])
+        conv_vel_start = raw_hex_to_float64(rows[base + 2]["raw_bits_hex"])
+        params = [
+            conv_vel_start,
+            2.0,  # mixing_length_alpha
+            1.0,  # TDC_alpha_D
+            0.0,  # TDC_alpha_R
+            0.0,  # TDC_alpha_Pt
+            1.0,  # TDC_alpha_C
+            1.0,  # TDC_alpha_S
+            dt,
+            cgrav,
+            m,
+            scale,
+            1e99,  # max_conv_vel
+            0.0,  # y_face_guess (unset)
+        ]
+        _, grad_t, _, conv_vel, _, _ = _rust.turb_set_tdc_f64(
+            params, True, False, inputs
         )
-        ulps.append(
-            ulp_distance(res.output.conv_vel, rows[base + 3]["raw_bits_hex"])
-        )
-        dt *= 1.02
+        ulps.append(ulp_distance(grad_t, rows[base + 1]["raw_bits_hex"]))
+        ulps.append(ulp_distance(conv_vel, rows[base + 3]["raw_bits_hex"]))
     checked, zeros, max_u = _summarize_ulps(ulps)
     # 71 computed outputs across test_turb (excluding 65 input rows).
     return (

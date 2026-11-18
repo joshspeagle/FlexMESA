@@ -20,6 +20,7 @@ import pathlib
 import re
 import sys
 import tomllib
+import warnings
 from collections.abc import Sequence
 from typing import Any, Literal
 
@@ -229,7 +230,23 @@ def require_upstream_file(
             "'python -m flexmesa.data.fetch fetch --include-test-inputs' "
             "(or set FLEXMESA_REQUIRE_ZERO_SKIPS=0 to opt out locally)."
         )
+    _warn_not_run(f"{label} {path}")
     return False
+
+
+def _warn_not_run(what: str) -> None:
+    """Say on stderr that a test body is not being run for lack of inputs.
+
+    Only reachable with ``FLEXMESA_REQUIRE_ZERO_SKIPS`` opted out. The
+    calling test then returns without checking anything, so it is reported
+    as passed; this warning is what makes that visible.
+    """
+    warnings.warn(
+        f"NOT RUN (FLEXMESA_REQUIRE_ZERO_SKIPS opted out): missing {what}; "
+        "the calling test checks nothing and is not evidence of anything",
+        RuntimeWarning,
+        stacklevel=3,
+    )
 
 
 def require_mesa_test_inputs_dir() -> pathlib.Path | None:
@@ -261,6 +278,7 @@ def require_mesa_test_inputs_dir() -> pathlib.Path | None:
             "'python -m flexmesa.data.fetch fetch --include-test-inputs' "
             "(or set FLEXMESA_REQUIRE_ZERO_SKIPS=0 to opt out locally)."
         )
+    _warn_not_run(f"upstream MESA test inputs under {root}")
     return None
 
 
@@ -381,7 +399,7 @@ def _scan_python_file(
             func = node.func
             if (
                 isinstance(func, ast.Attribute)
-                and func.attr == "skip"
+                and func.attr in {"skip", "xfail", "importorskip"}
                 and isinstance(func.value, ast.Name)
                 and func.value.id == "pytest"
             ):
@@ -397,7 +415,7 @@ def extract_python_test_markers(
 
 
 def scan_imperative_python_skips(root: pathlib.Path) -> list[str]:
-    """Return ``file:line`` strings for runtime ``pytest.skip`` calls."""
+    """Return ``file:line`` for runtime skip, xfail and importorskip calls."""
     return _discover_repo_test_state(root)[1]
 
 
@@ -421,8 +439,6 @@ def _discover_repo_test_state(
         if not sub_dir.is_dir():
             continue
         for py_path in sorted(sub_dir.rglob("*.py")):
-            if py_path.name == "conftest.py":
-                continue
             rel = py_path.relative_to(root).as_posix()
             py_markers, py_skips = _scan_python_file(
                 py_path.read_text(encoding="utf-8"), rel

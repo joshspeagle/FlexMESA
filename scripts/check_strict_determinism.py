@@ -26,6 +26,7 @@ import json
 import os
 import pathlib
 import platform
+import re
 import subprocess
 import sys
 import tempfile
@@ -138,8 +139,13 @@ def _run_strict_evolution(
     case: str,
     max_steps: int | None,
     threads: int,
-) -> tuple[str, int, dict[str, dict[str, Any]]]:
-    """Run ``flexmesa trace`` in an isolated subprocess with ``threads``."""
+) -> tuple[str, int, dict[str, dict[str, Any]], str, int]:
+    """Run ``flexmesa trace`` in an isolated subprocess with ``threads``.
+
+    Returns:
+        ``(combined_sha256, total_bytes, per_file_digests, termination_code,
+        steps)``. The last two are parsed from the trace summary line.
+    """
     with tempfile.TemporaryDirectory(
         prefix=f"flexmesa_det_{suite}_{threads}t_"
     ) as tmp:
@@ -168,31 +174,60 @@ def _run_strict_evolution(
             )
         files = _collect_history_digests(out_dir, suite)
         combined_sha, total_bytes = _combined_files_digest(files)
-        return combined_sha, total_bytes, files
+        term, steps = _parse_trace_summary(proc.stdout)
+        if steps <= 0:
+            raise RuntimeError(
+                f"strict trace ({suite}/{case}, {threads}t) took no steps "
+                f"(term={term!r}); two empty runs would compare equal:\n"
+                f"{proc.stdout}\n{proc.stderr}"
+            )
+        return combined_sha, total_bytes, files, term, steps
+
+
+def _parse_trace_summary(stdout: str) -> tuple[str, int]:
+    """Read ``term=<code>`` and ``steps=<n>`` from the trace summary line.
+
+    Raises:
+        RuntimeError: If no summary line carrying both fields is present.
+    """
+    for line in reversed(stdout.splitlines()):
+        m_term = re.search(r"\bterm=(\S+)", line)
+        m_steps = re.search(r"\bsteps=(\d+)", line)
+        if m_term and m_steps:
+            return m_term.group(1), int(m_steps.group(1))
+    raise RuntimeError(f"no trace summary line in output:\n{stdout}")
 
 
 def _measure_case(
     suite: str, case: str, max_steps: int | None
 ) -> dict[str, Any]:
     """Run 1t vs 4t strict trace for one case and assert byte-identity."""
-    sha_1t, bytes_1t, files_1t = _run_strict_evolution(
+    sha_1t, bytes_1t, files_1t, term_1t, steps_1t = _run_strict_evolution(
         suite, case, max_steps, threads=1
     )
-    sha_4t, bytes_4t, files_4t = _run_strict_evolution(
+    sha_4t, bytes_4t, files_4t, term_4t, steps_4t = _run_strict_evolution(
         suite, case, max_steps, threads=4
     )
     identical = (
-        sha_1t == sha_4t and bytes_1t == bytes_4t and files_1t == files_4t
+        sha_1t == sha_4t
+        and bytes_1t == bytes_4t
+        and files_1t == files_4t
+        and term_1t == term_4t
+        and steps_1t == steps_4t
     )
     if not identical:
         raise RuntimeError(
             f"1-thread vs 4-thread history mismatch on {suite}/{case}: "
-            f"1t={sha_1t} ({bytes_1t} B) vs 4t={sha_4t} ({bytes_4t} B)"
+            f"1t={sha_1t} ({bytes_1t} B, {steps_1t} steps, {term_1t}) vs "
+            f"4t={sha_4t} ({bytes_4t} B, {steps_4t} steps, {term_4t})"
         )
     return {
         "suite": suite,
         "case": case,
         "max_steps": max_steps,
+        "steps": steps_1t,
+        "termination_code": term_1t,
+        "unsupported_controls_ignored": True,
         "history_bytes": bytes_1t,
         "history_1t_sha256": sha_1t,
         "history_4t_sha256": sha_4t,
@@ -223,6 +258,7 @@ def _measure(
         "os": platform.system(),
         "arch": platform.machine(),
         "numerics_mode": "strict",
+        "unsupported_controls_ignored": True,
         "math_vector_count": vec_count,
         "math_vectors_sha256": vec_sha,
         "evolution_suite": primary["suite"],
@@ -270,6 +306,10 @@ def _validate_digest_pair(rec: dict[str, Any], label: str) -> list[str]:
         )
     if rec.get("thread_1_vs_4_byte_identical") is not True:
         errors.append(f"{label}: thread_1_vs_4_byte_identical != True")
+    if "steps" in rec:
+        steps = rec.get("steps")
+        if not isinstance(steps, int) or isinstance(steps, bool) or steps <= 0:
+            errors.append(f"{label}: steps must be > 0, got {steps!r}")
     return errors
 
 
@@ -387,6 +427,8 @@ def _compare_jsons(
         f"{base['math_vectors_sha256']}\n"
         f"  {case_desc} ({base['evolution_max_steps'] or 'uncapped'}, 1t==4t): "
         f"{base['history_1t_sha256']}\n"
+        "  (runs ignore unsupported upstream controls; this checks "
+        "bit-identity, not agreement with MESA)\n"
     )
     return 0
 

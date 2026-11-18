@@ -231,10 +231,70 @@ fn set_tdc_batch<'py>(
     eval_batch_2d(py, sf.len(), parallel, 32, move |k| eval_tdc_zone(sf[k]))
 }
 
+/// Evaluates Time-Dependent Convection at one point with plain `f64`
+/// inputs (`set_TDC` in `turb/public/turb.f90`).
+///
+/// `params` holds, in order, `conv_vel_start`, `mixing_length_alpha`,
+/// `tdc_alpha_d`, `tdc_alpha_r`, `tdc_alpha_pt`, `tdc_alpha_c`,
+/// `tdc_alpha_s`, `dt`, `cgrav`, `m`, `scale`, `max_conv_vel` and
+/// `y_face_guess`. `inputs` holds, in order, `chi_t`, `chi_rho`, `gradr`,
+/// `r`, `p`, `t`, `rho`, `dv`, `cp`, `opacity`, `scale_height`, `gradl`,
+/// `grada`, `eq_div_w`, `grav` and `energy` (CGS units).
+///
+/// Returns `(gamma, grad_t, y_face, conv_vel, d, num_iters)`.
+#[pyfunction]
+fn turb_set_tdc_f64(
+    params: [f64; 13],
+    include_mlt_corr_to_tdc: bool,
+    use_tdc_enthalpy_flux_limiter: bool,
+    inputs: [f64; 16],
+) -> PyResult<(f64, f64, f64, f64, f64, usize)> {
+    let tp = TdcParams {
+        conv_vel_start: params[0],
+        mixing_length_alpha: params[1],
+        tdc_alpha_d: params[2],
+        tdc_alpha_r: params[3],
+        tdc_alpha_pt: params[4],
+        tdc_alpha_c: params[5],
+        tdc_alpha_s: params[6],
+        dt: params[7],
+        cgrav: params[8],
+        m: params[9],
+        scale: params[10],
+        max_conv_vel: params[11],
+        include_mlt_corr_to_tdc,
+        use_tdc_enthalpy_flux_limiter,
+        y_face_guess: params[12],
+    };
+    let inp = TdcInputs::<f64> {
+        chi_t: inputs[0],
+        chi_rho: inputs[1],
+        gradr: inputs[2],
+        r: inputs[3],
+        p: inputs[4],
+        t: inputs[5],
+        rho: inputs[6],
+        dv: inputs[7],
+        cp: inputs[8],
+        opacity: inputs[9],
+        scale_height: inputs[10],
+        gradl: inputs[11],
+        grada: inputs[12],
+        eq_div_w: inputs[13],
+        grav: inputs[14],
+        energy: inputs[15],
+    };
+    let res = set_tdc(&tp, &inp)
+        .map_err(|e| PyValueError::new_err(format!("set_tdc failed: {e}")))?;
+    let o = res.output;
+    Ok((o.gamma, o.grad_t, o.y_face, o.conv_vel, o.d, res.num_iters))
+}
+
 /// Registers Tier B `turb` functions on `m`.
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(set_mlt_f64, m)?)?;
     m.add_function(wrap_pyfunction!(set_mlt_batch, m)?)?;
     m.add_function(wrap_pyfunction!(set_tdc_batch, m)?)?;
+    m.add_function(wrap_pyfunction!(turb_set_tdc_f64, m)?)?;
     Ok(())
 }

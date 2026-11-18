@@ -333,11 +333,9 @@ impl MdotRedoState {
         let w_prev = self.w_div_w_crit;
         self.w_div_w_crit = eval_surf_avg_w_div_w_crit(model);
         let w = self.w_div_w_crit;
-        let tol = model
-            .controls
-            .mix_wind
-            .surf_omega_div_omega_crit_tol
-            .max(1.0e-6);
+        // Used as given, with no floor
+        // (`star/private/evolve.f90:943,1004`).
+        let tol = model.controls.mix_wind.surf_omega_div_omega_crit_tol;
 
         if wind_mdot >= self.max_wind_mdot {
             if (self.mdot_redo_cnt > 0 || w > self.surf_limit)

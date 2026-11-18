@@ -42,8 +42,8 @@
     },
     {
       "phase": "Phase A",
-      "open": 2,
-      "closed": 2,
+      "open": 3,
+      "closed": 1,
       "issues": [
         {
           "number": 142,
@@ -53,7 +53,7 @@
         {
           "number": 144,
           "title": "[Audit A3] CI that runs real campaigns, and a declared-known-gaps mechanism",
-          "state": "closed"
+          "state": "open"
         },
         {
           "number": 146,
@@ -217,7 +217,18 @@
       "issues": []
     }
   ],
-  "open_pull_requests": [],
+  "open_pull_requests": [
+    {
+      "number": 208,
+      "title": "fix(testing): record MESA, SDK, and compiler provenance in mesa_spread_26_4_1.json (#144)",
+      "draft": true
+    },
+    {
+      "number": 211,
+      "title": "fix(testing): isolate numerics-mode tests (#210); drop spread-script edits that overlap PR #208 (#144)",
+      "draft": false
+    }
+  ],
   "deferred_169": [
     {
       "number": 175,

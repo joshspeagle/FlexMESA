@@ -12,6 +12,7 @@
 use std::io::{BufReader, Read};
 use std::path::{Path, PathBuf};
 
+use flexmesa_math::{numerics_mode, NumericsMode};
 use flexmesa_utils::cache_envelope::{
     read_verified_cache, write_verified_cache_atomic,
 };
@@ -84,14 +85,24 @@ fn encode_dt_vertex(v: &EosDtVertex, out: &mut [u8; VERTEX_BYTES]) {
     }
 }
 
+/// Cache file for one slice, one source file and one numerics mode.
+///
+/// The fitted coefficients depend on the numerics mode: the `CMS` build takes
+/// `safe_log` of `Cp` and `Cv` (`cms/table.rs`), and `flexmesa_math::log` is
+/// correctly rounded in strict mode and the platform routine in fast mode.
+/// A slice built in one mode must therefore never be served to the other, so
+/// the mode is part of the file name.
 fn slice_cache_path(
     cache_root: &Path,
     stem: &str,
     source_sha256: &str,
+    mode: NumericsMode,
 ) -> PathBuf {
-    cache_root
-        .join("eos_4d_slices")
-        .join(format!("{stem}.{}.bin", &source_sha256[..16]))
+    cache_root.join("eos_4d_slices").join(format!(
+        "{stem}.{}.{}.bin",
+        &source_sha256[..16],
+        mode.as_str()
+    ))
 }
 
 fn load_or_populate_slice_cache<T>(
@@ -135,7 +146,8 @@ fn load_or_populate_slice_cache_in<T>(
     })?;
 
     if let Some(cache_root) = cache_root {
-        let cache_file = slice_cache_path(cache_root, stem, &source_sha);
+        let cache_file =
+            slice_cache_path(cache_root, stem, &source_sha, numerics_mode());
         if cache_file.is_file() {
             let label = cache_file.display().to_string();
             let payload = read_verified_cache(
@@ -757,6 +769,27 @@ mod tests {
         assert!(msg_cms.contains("(1, 2)"), "missing cell in err: {msg_cms}");
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_slice_cache_path_separates_numerics_modes() {
+        let root = Path::new("cache_root");
+        let sha = "0123456789abcdef0123456789abcdef";
+        let strict =
+            slice_cache_path(root, "mesa-CMS_000x", sha, NumericsMode::Strict);
+        let fast =
+            slice_cache_path(root, "mesa-CMS_000x", sha, NumericsMode::Fast);
+        assert_ne!(strict, fast);
+        assert_eq!(
+            strict,
+            root.join("eos_4d_slices")
+                .join("mesa-CMS_000x.0123456789abcdef.strict.bin")
+        );
+        assert_eq!(
+            fast,
+            root.join("eos_4d_slices")
+                .join("mesa-CMS_000x.0123456789abcdef.fast.bin")
+        );
     }
 
     #[test]

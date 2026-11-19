@@ -69,8 +69,8 @@
     },
     {
       "phase": "Phase B",
-      "open": 2,
-      "closed": 3,
+      "open": 3,
+      "closed": 2,
       "issues": [
         {
           "number": 147,
@@ -80,7 +80,7 @@
         {
           "number": 148,
           "title": "[Audit B2] Move test-case code out of the library and delete fabricated behaviour",
-          "state": "closed"
+          "state": "open"
         },
         {
           "number": 149,
@@ -231,6 +231,26 @@
     {
       "number": 228,
       "title": "Align module and star defaults with MESA 26.4.1 *.defaults (#149)",
+      "draft": true
+    },
+    {
+      "number": 230,
+      "title": "[Audit C13] Data pipeline provenance and verified runtime caches (#164)",
+      "draft": false
+    },
+    {
+      "number": 232,
+      "title": "chore(extras): re-point the unported-extras ledger to #231 (split out of #148)",
+      "draft": false
+    },
+    {
+      "number": 233,
+      "title": "[Audit A6] Profile real evolutions, MESA 26.4.1 comparison, fast math, waste removal, and batching (#168)",
+      "draft": true
+    },
+    {
+      "number": 234,
+      "title": "test(eos): replace inline EOS literals with MESA 26.4.1 Fortran oracles and expand Python upstream coverage (#161 Slice 1)",
       "draft": true
     }
   ],

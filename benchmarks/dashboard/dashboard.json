@@ -748,16 +748,16 @@
     "rust": {
       "tool": "cargo llvm-cov",
       "overall": {
-        "lines": 90534,
-        "covered": 66645,
-        "percent": 73.6
+        "lines": 90287,
+        "covered": 66808,
+        "percent": 74.0
       },
       "by_crate": [
         {
           "crate": "flexmesa-astero",
-          "lines": 4284,
-          "covered": 1437,
-          "percent": 33.5
+          "lines": 4040,
+          "covered": 1507,
+          "percent": 37.3
         },
         {
           "crate": "flexmesa-atm",
@@ -816,8 +816,8 @@
         {
           "crate": "flexmesa-eos",
           "lines": 8893,
-          "covered": 7127,
-          "percent": 80.1
+          "covered": 7131,
+          "percent": 80.2
         },
         {
           "crate": "flexmesa-interp1d",
@@ -887,9 +887,9 @@
         },
         {
           "crate": "flexmesa-star",
-          "lines": 35744,
-          "covered": 26101,
-          "percent": 73.0
+          "lines": 35741,
+          "covered": 26190,
+          "percent": 73.3
         },
         {
           "crate": "flexmesa-testing",
@@ -915,7 +915,7 @@
       "tool": "pytest --cov",
       "overall": {
         "statements": 21585,
-        "covered": 18974,
+        "covered": 18970,
         "percent": 87.9
       },
       "by_subpackage": [
@@ -1066,8 +1066,8 @@
         {
           "subpackage": "flexmesa.testing",
           "statements": 3453,
-          "covered": 2733,
-          "percent": 79.1
+          "covered": 2729,
+          "percent": 79.0
         },
         {
           "subpackage": "flexmesa.turb",
@@ -1234,8 +1234,8 @@
       },
       {
         "phase": "Phase B",
-        "open": 2,
-        "closed": 3,
+        "open": 3,
+        "closed": 2,
         "issues": [
           {
             "number": 147,
@@ -1245,7 +1245,7 @@
           {
             "number": 148,
             "title": "[Audit B2] Move test-case code out of the library and delete fabricated behaviour",
-            "state": "closed"
+            "state": "open"
           },
           {
             "number": 149,
@@ -1396,6 +1396,26 @@
       {
         "number": 228,
         "title": "Align module and star defaults with MESA 26.4.1 *.defaults (#149)",
+        "draft": true
+      },
+      {
+        "number": 230,
+        "title": "[Audit C13] Data pipeline provenance and verified runtime caches (#164)",
+        "draft": false
+      },
+      {
+        "number": 232,
+        "title": "chore(extras): re-point the unported-extras ledger to #231 (split out of #148)",
+        "draft": false
+      },
+      {
+        "number": 233,
+        "title": "[Audit A6] Profile real evolutions, MESA 26.4.1 comparison, fast math, waste removal, and batching (#168)",
+        "draft": true
+      },
+      {
+        "number": 234,
+        "title": "test(eos): replace inline EOS literals with MESA 26.4.1 Fortran oracles and expand Python upstream coverage (#161 Slice 1)",
         "draft": true
       }
     ],
@@ -1896,6 +1916,19 @@
       "python_cov_pct": "87.9",
       "closed_140": "12",
       "total_140": "33",
+      "deferred_169": "18"
+    },
+    {
+      "date_utc": "2026-11-19",
+      "commit": "1131259",
+      "event": "main merge",
+      "engine_ported_pct": "13.9",
+      "all_verified_pct": "0.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "74.0",
+      "python_cov_pct": "87.9",
+      "closed_140": "12",
+      "total_140": "34",
       "deferred_169": "18"
     }
   ]

@@ -10,29 +10,39 @@ mod common;
 
 use flexmesa_chem::{get_composition_info, NuclideCatalog};
 use flexmesa_eos::{
-    eos_dt_get, eval_helm_eos, eval_pc_eos, eval_skye_eos, EosConfig,
-    HelmTable, PcConfig, SkyeConfig, SkyeSolidMixingRule,
-    EOS_BASIC_RESULT_NAMES,
+    eos_dt_get, eval_pc_eos, eval_skye_eos, EosConfig, HelmTable, PcConfig,
+    SkyeConfig, SkyeSolidMixingRule,
 };
 use flexmesa_math::exp10;
 
-/// Declared residuals against compiled MESA `26.4.1` (`#161`): the only
-/// `(case, channel, col)` entries whose temperature derivative `d_dlnT` (`col 2`)
-/// misses the `5.0e-12`..`1.0e-7` tolerances after `#165` put the `HelmTable`
-/// grid on `CRMATH` `exp10`. Every other value and derivative in these suites
-/// is asserted at its original tolerance; the `#[ignore]` test below asserts
-/// all of them at the unwidened tolerances.
-const DECLARED_DLNT_RESIDUALS: [(&str, usize, usize, f64); 10] = [
-    ("skye_co_liq", 6, 2, 4.0e-8),            // grad_ad 2.510e-8  (5.0e-11)
-    ("skye_co_liq", 9, 2, 1.5e-6),            // Cp      1.101e-6  (5.0e-11)
-    ("skye_co_liq", 10, 2, 1.5e-6),           // Cv      1.082e-6  (5.0e-11)
-    ("skye_co_liq", 12, 2, 1.0e-7),           // dS_dT   6.949e-8  (5.0e-11)
-    ("skye_co_liq", 14, 2, 2.0e-10),          // gamma1  1.410e-10 (5.0e-11)
-    ("skye_co_liq", 15, 2, 6.0e-8),           // gamma3  3.954e-8  (5.0e-11)
-    ("eosdt_skye_helm_blend", 9, 2, 3.5e-7),  // Cp      2.262e-7  (1.0e-7)
-    ("eosdt_skye_helm_blend", 10, 2, 6.0e-7), // Cv      4.244e-7  (1.0e-7)
-    ("eosdt_skye_helm_blend", 12, 2, 4.0e-7), // dS_dT   2.554e-7  (1.0e-7)
-    ("eosdt_skye_helm_blend", 15, 2, 1.5e-7), // gamma3  1.036e-7  (1.0e-7)
+/// Declared unfloored relative residuals against compiled MESA `26.4.1` (`#161`):
+/// `(case, channel, col, rtol_bound)` entries whose `d_dlnT` (`col 2`) misses
+/// the `5.0e-12`..`1.0e-7` tolerances after `#165` put the `HelmTable` grid on
+/// `CRMATH` `exp10`. The `#[ignore]` test below enforces the unwidened bounds.
+const DECLARED_DLNT_RESIDUALS: [(&str, usize, usize, f64); 23] = [
+    ("skye_c12_liq", 6, 1, 1.3e-10),           // grad_ad d_dlnd 8.141e-11 (5.0e-12)
+    ("skye_c12_liq", 6, 2, 1.8e-10),           // grad_ad d_dlnT 1.182e-10 (5.0e-12)
+    ("skye_c12_liq", 14, 2, 5.1e-11),          // gamma1  d_dlnT 3.369e-11 (5.0e-12)
+    ("skye_c12_liq", 15, 1, 2.7e-11),          // gamma3  d_dlnd 1.778e-11 (5.0e-12)
+    ("skye_c12_liq", 15, 2, 1.7e-10),          // gamma3  d_dlnT 1.084e-10 (5.0e-12)
+    ("skye_c12_liq_ion", 6, 1, 1.3e-10),       // grad_ad d_dlnd 8.141e-11 (5.0e-12)
+    ("skye_c12_liq_ion", 6, 2, 1.8e-10),       // grad_ad d_dlnT 1.182e-10 (5.0e-12)
+    ("skye_c12_liq_ion", 14, 2, 5.1e-11),      // gamma1  d_dlnT 3.369e-11 (5.0e-12)
+    ("skye_c12_liq_ion", 15, 1, 2.7e-11),      // gamma3  d_dlnd 1.778e-11 (5.0e-12)
+    ("skye_c12_liq_ion", 15, 2, 1.7e-10),      // gamma3  d_dlnT 1.084e-10 (5.0e-12)
+    ("skye_co_liq", 6, 1, 4.8e-10),            // grad_ad d_dlnd 3.185e-10 (5.0e-11)
+    ("skye_co_liq", 6, 2, 2.0e-6),             // grad_ad d_dlnT 1.317e-6  (5.0e-11)
+    ("skye_co_liq", 9, 2, 1.7e-6),             // Cp      d_dlnT 1.101e-6  (5.0e-11)
+    ("skye_co_liq", 10, 2, 1.7e-6),            // Cv      d_dlnT 1.082e-6  (5.0e-11)
+    ("skye_co_liq", 12, 2, 2.0e-6),            // dS_dT   d_dlnT 1.023e-6  (5.0e-11)
+    ("skye_co_liq", 14, 2, 1.4e-6),            // gamma1  d_dlnT 9.177e-7  (5.0e-11)
+    ("skye_co_liq", 15, 2, 2.0e-6),            // gamma3  d_dlnT 1.321e-6  (5.0e-11)
+    ("eosdt_skye_helm_blend", 6, 2, 5.8e-6),   // grad_ad d_dlnT 3.814e-6  (1.0e-7)
+    ("eosdt_skye_helm_blend", 9, 2, 3.4e-7),   // Cp      d_dlnT 2.262e-7  (1.0e-7)
+    ("eosdt_skye_helm_blend", 10, 2, 6.4e-7),  // Cv      d_dlnT 4.244e-7  (1.0e-7)
+    ("eosdt_skye_helm_blend", 12, 2, 3.9e-7),  // dS_dT   d_dlnT 2.554e-7  (1.0e-7)
+    ("eosdt_skye_helm_blend", 14, 2, 3.0e-6),  // gamma1  d_dlnT 1.950e-6  (1.0e-7)
+    ("eosdt_skye_helm_blend", 15, 2, 1.3e-5),  // gamma3  d_dlnT 8.028e-6  (1.0e-7)
 ];
 
 fn make_comp(
@@ -52,96 +62,35 @@ fn make_comp(
 
 fn run_skye_and_blend_suite(allow_declared_residuals: bool) {
     let ht = HelmTable::builtin().expect("builtin HELM table");
-    let (cid_c, xa_c, abar_c, zbar_c) = make_comp(0.0, 1.0, 0.0);
-    let (cid_co, xa_co, abar_co, zbar_co) = make_comp(0.0, 0.5, 0.5);
+    let comps = [make_comp(0.0, 1.0, 0.0), make_comp(0.0, 0.5, 0.5)];
+    let skye_cases = [
+        ("skye_c12_liq", 0, 1.0e6, 1.0e8, false, SkyeSolidMixingRule::Ogata, 5.0e-12),
+        ("skye_c12_liq_ion", 0, 1.0e6, 1.0e8, true, SkyeSolidMixingRule::Ogata, 5.0e-12),
+        ("skye_co_liq", 1, 1.0e6, 1.0e7, false, SkyeSolidMixingRule::Ogata, 5.0e-11),
+        ("skye_co_sol_ogata", 1, 1.0e6, 2.0e6, false, SkyeSolidMixingRule::Ogata, 5.0e-8),
+        ("skye_co_sol_pc", 1, 1.0e6, 2.0e6, false, SkyeSolidMixingRule::Pc, 5.0e-8),
+        ("skye_c12_phase", 0, 1.0e6, 2.65e6, false, SkyeSolidMixingRule::Ogata, 5.0e-8),
+    ];
+    for (cid, c_idx, rho, temp, ion, rule, tol) in skye_cases {
+        let (chem_id, xa, abar, zbar) = &comps[c_idx];
+        let cfg = SkyeConfig {
+            skye_use_ion_offsets: ion,
+            skye_solid_mixing_rule: rule,
+            ..SkyeConfig::default()
+        };
+        let out = eval_skye_eos(&cfg, ht, rho, temp, *abar, *zbar, chem_id, xa)
+            .expect(cid);
+        common::assert_eos_against_mesa(
+            cid,
+            &out,
+            tol,
+            tol,
+            &DECLARED_DLNT_RESIDUALS,
+            allow_declared_residuals,
+        );
+    }
 
-    let mut skye_cfg = SkyeConfig {
-        skye_use_ion_offsets: false,
-        skye_solid_mixing_rule: SkyeSolidMixingRule::Ogata,
-        ..SkyeConfig::default()
-    };
-    let out = eval_skye_eos(
-        &skye_cfg, ht, 1.0e6, 1.0e8, abar_c, zbar_c, &cid_c, &xa_c,
-    )
-    .unwrap();
-    common::assert_eos_against_mesa(
-        "skye_c12_liq",
-        &out,
-        5.0e-12,
-        5.0e-12,
-        &DECLARED_DLNT_RESIDUALS,
-        allow_declared_residuals,
-    );
-
-    skye_cfg.skye_use_ion_offsets = true;
-    let out = eval_skye_eos(
-        &skye_cfg, ht, 1.0e6, 1.0e8, abar_c, zbar_c, &cid_c, &xa_c,
-    )
-    .unwrap();
-    common::assert_eos_against_mesa(
-        "skye_c12_liq_ion",
-        &out,
-        5.0e-12,
-        5.0e-12,
-        &DECLARED_DLNT_RESIDUALS,
-        allow_declared_residuals,
-    );
-
-    skye_cfg.skye_use_ion_offsets = false;
-    let out = eval_skye_eos(
-        &skye_cfg, ht, 1.0e6, 1.0e7, abar_co, zbar_co, &cid_co, &xa_co,
-    )
-    .unwrap();
-    common::assert_eos_against_mesa(
-        "skye_co_liq",
-        &out,
-        5.0e-11,
-        5.0e-11,
-        &DECLARED_DLNT_RESIDUALS,
-        allow_declared_residuals,
-    );
-
-    let out = eval_skye_eos(
-        &skye_cfg, ht, 1.0e6, 2.0e6, abar_co, zbar_co, &cid_co, &xa_co,
-    )
-    .unwrap();
-    common::assert_eos_against_mesa(
-        "skye_co_sol_ogata",
-        &out,
-        5.0e-8,
-        5.0e-8,
-        &DECLARED_DLNT_RESIDUALS,
-        allow_declared_residuals,
-    );
-
-    skye_cfg.skye_solid_mixing_rule = SkyeSolidMixingRule::Pc;
-    let out = eval_skye_eos(
-        &skye_cfg, ht, 1.0e6, 2.0e6, abar_co, zbar_co, &cid_co, &xa_co,
-    )
-    .unwrap();
-    common::assert_eos_against_mesa(
-        "skye_co_sol_pc",
-        &out,
-        5.0e-8,
-        5.0e-8,
-        &DECLARED_DLNT_RESIDUALS,
-        allow_declared_residuals,
-    );
-
-    skye_cfg.skye_solid_mixing_rule = SkyeSolidMixingRule::Ogata;
-    let out = eval_skye_eos(
-        &skye_cfg, ht, 1.0e6, 2.65e6, abar_c, zbar_c, &cid_c, &xa_c,
-    )
-    .unwrap();
-    common::assert_eos_against_mesa(
-        "skye_c12_phase",
-        &out,
-        5.0e-8,
-        5.0e-8,
-        &DECLARED_DLNT_RESIDUALS,
-        allow_declared_residuals,
-    );
-
+    let (cid_c, xa_c, _, _) = &comps[0];
     let mut cfg_sk_bl = EosConfig {
         use_skye: true,
         use_pc: false,
@@ -150,8 +99,7 @@ fn run_skye_and_blend_suite(allow_declared_residuals: bool) {
         ..EosConfig::default()
     };
     cfg_sk_bl.skye.skye_use_ion_offsets = false;
-    let out =
-        eos_dt_get(ht, exp10(3.45), 1.0e7, &cid_c, &xa_c, &cfg_sk_bl).unwrap();
+    let out = eos_dt_get(ht, exp10(3.45), 1.0e7, cid_c, xa_c, &cfg_sk_bl).unwrap();
     common::assert_eos_against_mesa(
         "eosdt_skye_helm_blend",
         &out,
@@ -197,27 +145,7 @@ fn test_all_five_helm_cases_against_compiled_mesa_26_4_1() {
         ("sample_eos_c12", 1.0e9, 1.0e4, 12.0, 6.0),
     ];
     for (case_id, temp, den, abar, zbar) in cases {
-        let expected = common::load_indexed_rows::<16, 5>("HELM", case_id);
-        let (out, deriv_abar, deriv_charge) =
-            eval_helm_eos(temp, den, abar, zbar).expect(case_id);
-        for (idx, exp) in expected.iter().enumerate() {
-            let name = EOS_BASIC_RESULT_NAMES[idx];
-            let got = [
-                out.res[idx],
-                out.d_dlnd[idx],
-                out.d_dln_t[idx],
-                deriv_abar[idx],
-                deriv_charge[idx],
-            ];
-            for (col, (&g, &e)) in got.iter().zip(exp.iter()).enumerate() {
-                let rel_err = (g - e).abs() / e.abs().max(1.0);
-                assert!(
-                    rel_err < 1.0e-14,
-                    "{case_id} [{idx}: {name}] col {col}: got {g:.16e}, \
-                     mesa_26_4_1 {e:.16e} (rel_err = {rel_err:.3e})"
-                );
-            }
-        }
+        common::assert_helm_against_mesa(case_id, temp, den, abar, zbar, 1.0e-13);
     }
 }
 
@@ -225,93 +153,28 @@ fn test_all_five_helm_cases_against_compiled_mesa_26_4_1() {
 fn test_all_fifteen_pc_skye_and_blend_cases_against_compiled_mesa_26_4_1() {
     let ht = HelmTable::builtin().expect("builtin HELM table");
     let pc_cfg = PcConfig::default();
-    let (cid_c, xa_c, abar_c, zbar_c) = make_comp(0.0, 1.0, 0.0);
-    let (cid_co, xa_co, abar_co, zbar_co) = make_comp(0.0, 0.5, 0.5);
-    let (cid_he, xa_he, abar_he, zbar_he) = make_comp(1.0, 0.0, 0.0);
+    let comps = [
+        make_comp(0.0, 1.0, 0.0),
+        make_comp(0.0, 0.5, 0.5),
+        make_comp(1.0, 0.0, 0.0),
+    ];
+    let pc_cases = [
+        ("pc_c12_liq", 0, 1.0e6, 1.0e8),
+        ("pc_co_liq", 1, 1.0e6, 1.0e7),
+        ("pc_c12_trans_eosfi", 0, 1.0e6, 3.1e6),
+        ("pc_c12_trans_phase", 0, 1.0e6, 2.05e6),
+        ("pc_c12_sol", 0, 1.0e6, 1.0e6),
+        ("pc_co_sol", 1, 1.0e6, 1.0e6),
+        ("pc_he4_qmelt", 2, 1.0e8, 1.0e5),
+    ];
+    for (cid, c_idx, rho, temp) in pc_cases {
+        let (chem_id, xa, abar, zbar) = &comps[c_idx];
+        let out = eval_pc_eos(&pc_cfg, rho, temp, *abar, *zbar, chem_id, xa)
+            .expect(cid);
+        common::assert_eos_against_mesa(cid, &out, 1.0e-6, 1.0e-5, &[], false);
+    }
 
-    // PC cases (`use_EXCOR7_table` spline residuals tightened individually in
-    // `wave3a3_pc_tests.rs` and `wave3a3_pc_solid_tests.rs`, #161)
-    let out = eval_pc_eos(&pc_cfg, 1.0e6, 1.0e8, abar_c, zbar_c, &cid_c, &xa_c)
-        .unwrap();
-    common::assert_eos_against_mesa(
-        "pc_c12_liq",
-        &out,
-        1.0e-6,
-        1.0e-5,
-        &[],
-        false,
-    );
-
-    let out =
-        eval_pc_eos(&pc_cfg, 1.0e6, 1.0e7, abar_co, zbar_co, &cid_co, &xa_co)
-            .unwrap();
-    common::assert_eos_against_mesa(
-        "pc_co_liq",
-        &out,
-        1.0e-6,
-        1.0e-5,
-        &[],
-        false,
-    );
-
-    let out = eval_pc_eos(&pc_cfg, 1.0e6, 3.1e6, abar_c, zbar_c, &cid_c, &xa_c)
-        .unwrap();
-    common::assert_eos_against_mesa(
-        "pc_c12_trans_eosfi",
-        &out,
-        1.0e-6,
-        1.0e-5,
-        &[],
-        false,
-    );
-
-    let out =
-        eval_pc_eos(&pc_cfg, 1.0e6, 2.05e6, abar_c, zbar_c, &cid_c, &xa_c)
-            .unwrap();
-    common::assert_eos_against_mesa(
-        "pc_c12_trans_phase",
-        &out,
-        1.0e-6,
-        1.0e-5,
-        &[],
-        false,
-    );
-
-    let out = eval_pc_eos(&pc_cfg, 1.0e6, 1.0e6, abar_c, zbar_c, &cid_c, &xa_c)
-        .unwrap();
-    common::assert_eos_against_mesa(
-        "pc_c12_sol",
-        &out,
-        1.0e-6,
-        1.0e-5,
-        &[],
-        false,
-    );
-
-    let out =
-        eval_pc_eos(&pc_cfg, 1.0e6, 1.0e6, abar_co, zbar_co, &cid_co, &xa_co)
-            .unwrap();
-    common::assert_eos_against_mesa(
-        "pc_co_sol",
-        &out,
-        1.0e-6,
-        1.0e-5,
-        &[],
-        false,
-    );
-
-    let out =
-        eval_pc_eos(&pc_cfg, 1.0e8, 1.0e5, abar_he, zbar_he, &cid_he, &xa_he)
-            .unwrap();
-    common::assert_eos_against_mesa(
-        "pc_he4_qmelt",
-        &out,
-        1.0e-6,
-        1.0e-5,
-        &[],
-        false,
-    );
-
+    let (cid_c, xa_c, _, _) = &comps[0];
     let mut cfg_pc_bl = EosConfig {
         use_skye: false,
         use_pc: true,
@@ -320,15 +183,8 @@ fn test_all_fifteen_pc_skye_and_blend_cases_against_compiled_mesa_26_4_1() {
         ..EosConfig::default()
     };
     cfg_pc_bl.pc.pc_use_gamma_limit_instead_of_t = true;
-    let out = eos_dt_get(
-        ht,
-        exp10(2.9),
-        exp10(6.5),
-        &cid_c,
-        &xa_c,
-        &cfg_pc_bl,
-    )
-    .unwrap();
+    let out =
+        eos_dt_get(ht, exp10(2.9), exp10(6.5), cid_c, xa_c, &cfg_pc_bl).unwrap();
     common::assert_eos_against_mesa(
         "eosdt_pc_helm_blend",
         &out,
@@ -342,7 +198,7 @@ fn test_all_fifteen_pc_skye_and_blend_cases_against_compiled_mesa_26_4_1() {
 }
 
 #[test]
-#[ignore = "declared gap (#161): Skye/HELM operation order; 10 d_dlnT channels on skye_co_liq and eosdt_skye_helm_blend miss the original tolerance, largest skye_co_liq Cp rel_err 1.101e-6 >= 5.0e-11 (see DECLARED_DLNT_RESIDUALS)"]
+#[ignore = "declared gap (#161): Skye/HELM operation order; 12 d_dlnT channels on skye_co_liq and eosdt_skye_helm_blend miss the original tolerance, largest eosdt_skye_helm_blend gamma3 rel_err 8.028e-6 >= 1.0e-7 (see DECLARED_DLNT_RESIDUALS)"]
 fn test_skye_and_blend_third_order_hermite_derivatives_match_mesa_26_4_1() {
     run_skye_and_blend_suite(false);
 }

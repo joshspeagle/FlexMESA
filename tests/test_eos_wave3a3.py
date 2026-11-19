@@ -23,10 +23,31 @@ _EOS_ORACLES_TSV = (
 )
 
 
-def _rel_diff(a: np.ndarray, b: np.ndarray) -> float:
-    """Return max scaled difference `|a - b| / max(|a|, |b|, 1.0)`."""
-    denom = np.maximum(np.maximum(np.abs(a), np.abs(b)), 1.0)
-    return float(np.max(np.abs(a - b) / denom))
+def _assert_unfloored(
+    got: np.ndarray,
+    ref: np.ndarray,
+    *,
+    rtol: float,
+    zero_atol: float = 1.0e-14,
+    near_zero_cutoff: float = 1.0e-13,
+) -> None:
+    """Assert unfloored `|got - ref| / |ref| <= rtol` (`zero_atol` near 0)."""
+    got_a = np.asarray(got, dtype=np.float64)
+    ref_a = np.asarray(ref, dtype=np.float64)
+    assert got_a.shape == ref_a.shape
+    near_zero = np.abs(ref_a) <= near_zero_cutoff
+    if np.any(near_zero):
+        max_abs = float(np.max(np.abs(got_a[near_zero] - ref_a[near_zero])))
+        assert max_abs <= zero_atol, (
+            f"Near-zero abs diff {max_abs:.3e} > {zero_atol:.1e}"
+        )
+    non_zero = ~near_zero
+    if np.any(non_zero):
+        rel = np.abs(got_a[non_zero] - ref_a[non_zero]) / np.abs(
+            ref_a[non_zero]
+        )
+        max_rel = float(np.max(rel))
+        assert max_rel <= rtol, f"Unfloored rel diff {max_rel:.3e} > {rtol:.1e}"
 
 
 def _load_eos_case(case_id: str) -> np.ndarray:
@@ -423,14 +444,14 @@ def test_eval_pc_eos_and_zones_match_across_rust_and_jax() -> None:
         assert abs(float(out_r.res[eos.I_PHASE]) - expected_phase) < 1.0e-12
         assert abs(float(out_r.res[eos.I_FRAC_PC]) - 1.0) < 1.0e-14
         tol_res = 1.0e-13 if rho < 1.0e6 else 5.0e-12
-        assert _rel_diff(np.asarray(out_r.res), np.asarray(out_j.res)) < tol_res
-        assert (
-            _rel_diff(np.asarray(out_r.d_dlnd), np.asarray(out_j.d_dlnd))
-            < 1.0e-10
+        _assert_unfloored(
+            np.asarray(out_j.res), np.asarray(out_r.res), rtol=tol_res
         )
-        assert (
-            _rel_diff(np.asarray(out_r.d_dln_t), np.asarray(out_j.d_dln_t))
-            < 1.0e-10
+        _assert_unfloored(
+            np.asarray(out_j.d_dlnd), np.asarray(out_r.d_dlnd), rtol=1.0e-9
+        )
+        _assert_unfloored(
+            np.asarray(out_j.d_dln_t), np.asarray(out_r.d_dln_t), rtol=1.0e-9
         )
 
     rhos = np.array([1.0e5, 1.0e6, 1.0e7], dtype=np.float64)
@@ -453,14 +474,14 @@ def test_eval_pc_eos_and_zones_match_across_rust_and_jax() -> None:
     )
     assert zones_r.res.shape == (3, eos.NUM_EOS_BASIC_RESULTS)
     assert zones_j.res.shape == (3, eos.NUM_EOS_BASIC_RESULTS)
-    assert _rel_diff(np.asarray(zones_r.res), np.asarray(zones_j.res)) < 5.0e-12
-    assert (
-        _rel_diff(np.asarray(zones_r.d_dlnd), np.asarray(zones_j.d_dlnd))
-        < 1.0e-10
+    _assert_unfloored(
+        np.asarray(zones_j.res), np.asarray(zones_r.res), rtol=5.0e-12
     )
-    assert (
-        _rel_diff(np.asarray(zones_r.d_dln_t), np.asarray(zones_j.d_dln_t))
-        < 1.0e-10
+    _assert_unfloored(
+        np.asarray(zones_j.d_dlnd), np.asarray(zones_r.d_dlnd), rtol=1.0e-9
+    )
+    _assert_unfloored(
+        np.asarray(zones_j.d_dln_t), np.asarray(zones_r.d_dln_t), rtol=1.0e-9
     )
 
 
@@ -483,12 +504,20 @@ def test_eval_skye_eos_and_eos_dt_get_rust_jax_and_autodiff() -> None:
         jnp.asarray(xa, dtype=jnp.float64),
         backend="jax",
     )
-    assert _rel_diff(np.asarray(sk_r.res), np.asarray(sk_j.res)) < 1.0e-11
-    assert _rel_diff(np.asarray(sk_r.d_dlnd), np.asarray(sk_j.d_dlnd)) < 1.0e-8
-    # JAX validated against Rust strict at tolerance 3.0e-6 (biquintic F_TTT
-    # cancels ~10^16 down to ~10^6 in Cv/Cp d_dln_t at T = 10^7 K).
-    assert (
-        _rel_diff(np.asarray(sk_r.d_dln_t), np.asarray(sk_j.d_dln_t)) < 3.0e-6
+    _assert_unfloored(np.asarray(sk_j.res), np.asarray(sk_r.res), rtol=1.0e-11)
+    _assert_unfloored(
+        np.asarray(sk_j.d_dlnd),
+        np.asarray(sk_r.d_dlnd),
+        rtol=3.0e-6,
+        near_zero_cutoff=1.0e-12,
+    )
+    # JAX validated against Rust strict at unfloored tolerance 1.0e-5
+    # (biquintic F_TTT cancels ~10^16 down to ~10^6 in Cv/Cp/grad_ad d_dln_t).
+    _assert_unfloored(
+        np.asarray(sk_j.d_dln_t),
+        np.asarray(sk_r.d_dln_t),
+        rtol=1.0e-5,
+        near_zero_cutoff=1.0e-12,
     )
     assert float(sk_r.res[eos.I_FRAC_SKYE]) == 1.0
 
@@ -523,7 +552,9 @@ def test_eval_skye_eos_and_eos_dt_get_rust_jax_and_autodiff() -> None:
         jnp.asarray(a_arr),
         backend="jax",
     )
-    assert _rel_diff(np.asarray(sk_zr.res), np.asarray(sk_zj.res)) < 1.0e-10
+    _assert_unfloored(
+        np.asarray(sk_zj.res), np.asarray(sk_zr.res), rtol=1.0e-10
+    )
 
     dt_r = eos.eos_dt_get(rho, temp, chem_id, xa, backend="rust")
     dt_j = eos.eos_dt_get(
@@ -533,7 +564,7 @@ def test_eval_skye_eos_and_eos_dt_get_rust_jax_and_autodiff() -> None:
         jnp.asarray(xa, dtype=jnp.float64),
         backend="jax",
     )
-    assert _rel_diff(np.asarray(dt_r.res), np.asarray(dt_j.res)) < 1.0e-11
+    _assert_unfloored(np.asarray(dt_j.res), np.asarray(dt_r.res), rtol=1.0e-11)
 
     def _ln_pgas_fn(r_in: jax.Array, t_in: jax.Array) -> jax.Array:
         out = eos.eos_dt_get(
@@ -742,12 +773,11 @@ def test_pc_and_skye_grid_rust_jax_consistency_and_jacfwd() -> None:
         ),
         argnums=(0, 1),
     )(rho0, t0)
-    assert (
-        _rel_diff(np.asarray(pc0.d_dlnd), np.asarray(jac_pc_r * rho0))
-        <= 1.0e-12
+    _assert_unfloored(
+        np.asarray(jac_pc_r * rho0), np.asarray(pc0.d_dlnd), rtol=1.0e-11
     )
-    assert (
-        _rel_diff(np.asarray(pc0.d_dln_t), np.asarray(jac_pc_t * t0)) <= 1.0e-12
+    _assert_unfloored(
+        np.asarray(jac_pc_t * t0), np.asarray(pc0.d_dln_t), rtol=1.0e-11
     )
 
     sk0 = eos.eval_skye_eos(
@@ -773,12 +803,11 @@ def test_pc_and_skye_grid_rust_jax_consistency_and_jacfwd() -> None:
         ),
         argnums=(0, 1),
     )(rho0, t0)
-    assert (
-        _rel_diff(np.asarray(sk0.d_dlnd), np.asarray(jac_sk_r * rho0))
-        <= 1.0e-12
+    _assert_unfloored(
+        np.asarray(jac_sk_r * rho0), np.asarray(sk0.d_dlnd), rtol=1.0e-11
     )
-    assert (
-        _rel_diff(np.asarray(sk0.d_dln_t), np.asarray(jac_sk_t * t0)) <= 1.0e-12
+    _assert_unfloored(
+        np.asarray(jac_sk_t * t0), np.asarray(sk0.d_dln_t), rtol=1.0e-11
     )
 
 
@@ -816,7 +845,7 @@ def test_neutron_bearing_multispecies_buckets_and_multizone_dispatch() -> None:
             mass_fraction_limit=0.0,
             backend="jax",
         )
-        assert _rel_diff(np.asarray(sk_r.res), np.asarray(sk_j.res)) < 1.0e-6
+        _assert_unfloored(np.asarray(sk_j.res), np.asarray(sk_r.res), rtol=1e-6)
 
         pc_r = eos.eval_pc_eos(
             rho,
@@ -838,21 +867,21 @@ def test_neutron_bearing_multispecies_buckets_and_multizone_dispatch() -> None:
             mass_fraction_limit=0.0,
             backend="jax",
         )
-        assert _rel_diff(np.asarray(pc_r.res), np.asarray(pc_j.res)) < 1.0e-11
-        assert (
-            _rel_diff(np.asarray(pc_r.d_dlnd), np.asarray(pc_j.d_dlnd))
-            < 1.0e-10
+        _assert_unfloored(
+            np.asarray(pc_j.res), np.asarray(pc_r.res), rtol=1.0e-11
         )
-        assert (
-            _rel_diff(np.asarray(pc_r.d_dln_t), np.asarray(pc_j.d_dln_t))
-            < 1.0e-10
+        _assert_unfloored(
+            np.asarray(pc_j.d_dlnd), np.asarray(pc_r.d_dlnd), rtol=1.0e-9
+        )
+        _assert_unfloored(
+            np.asarray(pc_j.d_dln_t), np.asarray(pc_r.d_dln_t), rtol=1.0e-9
         )
 
     dt_r = eos.eos_dt_get(1.0e6, 1.0e7, cids_9, xa_9, backend="rust")
     dt_j = eos.eos_dt_get(
         jnp.float64(1.0e6), jnp.float64(1.0e7), cids_9, xa_9j, backend="jax"
     )
-    assert _rel_diff(np.asarray(dt_r.res), np.asarray(dt_j.res)) < 1.0e-10
+    _assert_unfloored(np.asarray(dt_j.res), np.asarray(dt_r.res), rtol=1.0e-10)
 
     # 35-species mixture (64-bucket) + N_zones = 20 (> 16 vmap) + N_zones = 0
     cids_35 = list(range(1, 36))
@@ -885,7 +914,9 @@ def test_neutron_bearing_multispecies_buckets_and_multizone_dispatch() -> None:
         r_20, t_20, ab_20, zb_20, xa_20, z_35, w_35, backend="rust"
     )
     pc_z_j = eos.eval_pc_eos_zones(*z_args_j, z_35j, w_35j, backend="jax")
-    assert _rel_diff(np.asarray(pc_z_r.res), np.asarray(pc_z_j.res)) < 1.0e-11
+    _assert_unfloored(
+        np.asarray(pc_z_j.res), np.asarray(pc_z_r.res), rtol=1.0e-11
+    )
 
     sk_z_r = eos.eval_skye_eos_zones(
         r_20,
@@ -901,7 +932,7 @@ def test_neutron_bearing_multispecies_buckets_and_multizone_dispatch() -> None:
     sk_z_j = eos.eval_skye_eos_zones(
         *z_args_j, z_35j, w_35j, a_35j, backend="jax"
     )
-    assert _rel_diff(np.asarray(sk_z_r.res), np.asarray(sk_z_j.res)) < 1.0e-6
+    _assert_unfloored(np.asarray(sk_z_j.res), np.asarray(sk_z_r.res), rtol=1e-6)
 
     ef, ex = jnp.zeros((0,), jnp.float64), jnp.zeros((0, 35), jnp.float64)
     pc_0 = eos.eval_pc_eos_zones(

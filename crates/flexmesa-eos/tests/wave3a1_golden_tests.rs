@@ -346,16 +346,16 @@ fn test_ideal_eos_satisfies_exact_laws_and_maxwell_relations() {
 
     // Direct 26-channel x 3-column comparison of catalog-based eval_ideal_eos
     // against compiled MESA `26.4.1` `eosDT_get_component(i_eos_ideal)`
-    // (`dE_dRho = E * dlnE/dlnRho / rho` and `d(Cp)/dlnRho` cancel `E_gas` /
-    // `Cp_gas` out of `E_tot = 9.62e12` / `Cp = 1.60e8`, giving 1-2 ULP
-    // `3.30e-11` / `1.41e-11` differences; all other 25 primal slots < 1e-14).
+    // (`dE_dRho` and radiation-perturbed `grad_ad`/`Cp` derivatives cancel
+    // `E_gas`/`P_gas` out of `E_tot = 9.62e12`/`P_tot = 6.42e10`, giving 1-2 ULP
+    // `3.30e-11`..`2.75e-10` differences; all other 25 primal slots < 1e-14).
     let out_cat =
         eval_ideal_eos(temp, rho, abar, zbar, &xa, &chem_ids).unwrap();
     common::assert_eos_against_mesa(
         "ideal_solar_1e5_1em2",
         &out_cat,
         1.0e-14,
-        5.0e-11,
+        5.0e-10,
         &[("ideal_solar_1e5_1em2", I_DE_DRHO, 0, 5.0e-11)],
         true,
     );

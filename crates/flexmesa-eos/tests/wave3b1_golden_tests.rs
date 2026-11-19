@@ -76,12 +76,19 @@ fn init_composition(
 }
 
 fn assert_rel_close(label: &str, actual: f64, expected: f64, rtol: f64) {
-    let denom = expected.abs().max(actual.abs()).max(1.0);
-    let rel = (actual - expected).abs() / denom;
-    assert!(
-        rel <= rtol,
-        "{label}: actual={actual:.16e}, expected={expected:.16e}, rel_err={rel:.3e} > {rtol:.3e}"
-    );
+    let abs_err = (actual - expected).abs();
+    if expected.abs() <= 1.0e-13 {
+        assert!(
+            abs_err <= 1.0e-14,
+            "{label} (near-zero): actual={actual:.16e}, expected={expected:.16e}, abs_err={abs_err:.3e} > 1.0e-14"
+        );
+    } else {
+        let rel = abs_err / expected.abs();
+        assert!(
+            rel <= rtol,
+            "{label}: actual={actual:.16e}, expected={expected:.16e}, rel_err={rel:.3e} > {rtol:.3e}"
+        );
+    }
 }
 
 #[derive(Debug)]

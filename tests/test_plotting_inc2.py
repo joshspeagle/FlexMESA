@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import pathlib
+from typing import Any
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -683,4 +684,208 @@ def test_flexmesa_plot_cli_increment2_subcommands_write_figures_cleanly(
         == 0
     )
     assert out_grd.is_file()
+    assert not plt.get_fignums()
+
+
+def test_mode_prop_grid_rsun_fallback_and_bare_str_rejection(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Mode_Prop uses constants.RSUN fallback and rejects bare str."""
+    plt.close("all")
+    r_rsun = np.linspace(1.0, 0.05, 32, dtype=np.float64)
+    minimal_prof = _write_mesa_log(
+        tmp_path / "minimal_mode_prop.data",
+        {
+            "model_number": "10",
+            "num_zones": "32",
+            "version_number": '"r26.4.1"',
+        },
+        {
+            "radius": r_rsun,
+            "csound": np.linspace(8.0e5, 5.0e7, 32, dtype=np.float64),
+            "brunt_N2": np.linspace(1.0e-6, 4.0e-6, 32, dtype=np.float64),
+        },
+    )
+    fig_mp, axes_mp = plotting.plot_pgstar_grid(
+        ["Mode_Prop"], profile_path=minimal_prof
+    )
+    try:
+        lamb_lines = [
+            ln
+            for ln in axes_mp[0].get_lines()
+            if "S_{1}" in str(ln.get_label())
+        ]
+        assert len(lamb_lines) == 1
+        y_s1 = np.asarray(lamb_lines[0].get_ydata(), dtype=np.float64)
+        peak_log_uhz = float(np.nanmax(y_s1))
+        # Physical solar-like log10(S_1 / uHz) lies in ~2..4.5 (never ~14.3).
+        assert 2.0 < peak_log_uhz < 4.5
+    finally:
+        plt.close(fig_mp)
+
+    bad_str: Any = "Mode_Prop"
+    with pytest.raises(TypeError, match="not a bare str"):
+        plotting.plot_pgstar_grid(bad_str, profile_path=minimal_prof)
+    with pytest.raises(TypeError, match="not a bare str"):
+        plotting.plot_profile_custom_panels(minimal_prof, bad_str)
+    hist = _make_kipp_history(tmp_path / "h.data")
+    with pytest.raises(TypeError, match="not a bare str"):
+        plotting.plot_history_panels(hist, bad_str)
+    assert not plt.get_fignums()
+
+
+def test_kippenhahn_log_time_from_present_and_lineless_framing(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Kippenhahn frames log(t_final - t) and line-less runs cleanly."""
+    plt.close("all")
+    hist = _make_kipp_history(tmp_path / "kipp_h.data")
+
+    fig_lt, ax_lt = plotting.plot_history_kippenhahn(
+        hist,
+        xaxis="star_age",
+        age_units="Myr",
+        time_from_present=True,
+        log_xaxis=True,
+    )
+    try:
+        x0, x1 = ax_lt.get_xlim()
+        # Reversed so evolution advances left-to-right with compact span.
+        assert x0 > x1
+        assert abs(x0 - x1) < 6.0
+        assert min(x0, x1) > -5.0
+    finally:
+        plt.close(fig_lt)
+
+    fig_unrev, ax_unrev = plotting.plot_history_kippenhahn(
+        hist,
+        xaxis="star_age",
+        age_units="Myr",
+        time_from_present=True,
+        log_xaxis=True,
+        xaxis_reversed=False,
+    )
+    try:
+        assert ax_unrev.get_xlim()[0] < ax_unrev.get_xlim()[1]
+    finally:
+        plt.close(fig_unrev)
+
+    # Line-less history call (show_mass_boundaries=False -> no Line2D).
+    fig_nl, ax_nl = plotting.plot_history_kippenhahn(
+        hist, show_mass_boundaries=False, yaxis="mass"
+    )
+    try:
+        assert not ax_nl.get_lines()
+        assert ax_nl.get_xlim() == pytest.approx((0.5, 5.5))
+        assert ax_nl.get_ylim()[1] == pytest.approx(2.50 * 1.04)
+    finally:
+        plt.close(fig_nl)
+
+    # Line-less profile_paths call.
+    p1 = _make_rich_profile(
+        tmp_path / "kp1.data", model_number=1, star_age=1.0e6
+    )
+    p2 = _make_rich_profile(
+        tmp_path / "kp2.data", model_number=2, star_age=5.0e6
+    )
+    fig_np, ax_np = plotting.plot_history_kippenhahn(
+        profile_paths=[p1, p2], xaxis="model_number", show_mass_boundaries=False
+    )
+    try:
+        assert not ax_np.get_lines()
+        assert ax_np.get_xlim() == pytest.approx((1.0, 2.0))
+        assert ax_np.get_ylim()[1] > 1.5
+    finally:
+        plt.close(fig_np)
+    assert not plt.get_fignums()
+
+
+def test_reference_provenance_subtitles_and_summary_burn_neutrino_overlay(
+    tmp_path: pathlib.Path,
+) -> None:
+    """All comparison builders display Ref provenance and reference eps_neu."""
+    plt.close("all")
+    prof = _make_rich_profile(tmp_path / "cand_prof.data")
+    ref_prof = _make_rich_profile(tmp_path / "ref_prof.data")
+    ref_star = REF_DIR / "star" / "1.3M_ms_high_Z.data"
+    ref_bin = REF_DIR / "binary" / "evolve_both_stars.data"
+
+    for fn in (
+        plotting.plot_trho_profile,
+        plotting.plot_power_profile,
+        plotting.plot_abundance_profile,
+        plotting.plot_mixing_profile,
+        plotting.plot_summary_profile,
+        plotting.plot_summary_burn_profile,
+    ):
+        fig_p, ax_p = fn(prof, ref_profile_path=ref_prof)
+        try:
+            assert "Ref: MESA r26.4.1" in ax_p.get_title()
+            if fn is plotting.plot_summary_burn_profile:
+                labels = {str(ln.get_label()) for ln in ax_p.get_lines()}
+                assert r"$\log\epsilon_\nu$ MESA" in labels
+        finally:
+            plt.close(fig_p)
+
+    fig_orb, ax_orb = plotting.plot_pgbinary_orbit(
+        ref_bin, mesa_binary_history=ref_bin
+    )
+    try:
+        assert "Ref: MESA r26.4.1" in ax_orb.get_title()
+    finally:
+        plt.close(fig_orb)
+
+    fig_bs, ax_bs = plotting.plot_pgbinary_summary_history(
+        ref_bin, mesa_binary_history=ref_bin
+    )
+    try:
+        assert "Ref: MESA r26.4.1" in ax_bs.get_title()
+    finally:
+        plt.close(fig_bs)
+
+    fig_ht, ax_ht = plotting.plot_history_track(
+        ref_star, preset="HR", ref_history_path=ref_star
+    )
+    try:
+        assert "Ref: MESA r26.4.1" in ax_ht.get_title()
+        line_labels = {str(ln.get_label()) for ln in ax_ht.get_lines()}
+        assert "MESA r26.4.1" in line_labels
+    finally:
+        plt.close(fig_ht)
+
+    fig_sh, ax_sh = plotting.plot_summary_history(
+        ref_star, ref_history_path=ref_star
+    )
+    try:
+        assert "Ref: MESA r26.4.1" in ax_sh.get_title()
+    finally:
+        plt.close(fig_sh)
+
+    fig_hp, _ = plotting.plot_history_panels(
+        ref_star, ["log_L", "log_Teff"], ref_history_path=ref_star
+    )
+    try:
+        assert "Ref: MESA r26.4.1" in fig_hp.get_suptitle()
+    finally:
+        plt.close(fig_hp)
+
+    # Binary fallback in Grid TRACK_PRESETS forwards ref_binary_history_path.
+    bin_with_hr = _write_mesa_log(
+        tmp_path / "bin_hr.data",
+        {"version_number": '"r26.4.1"'},
+        {
+            "model_number": np.array([1.0, 2.0, 3.0]),
+            "log_Teff": np.array([3.8, 3.79, 3.78]),
+            "log_L": np.array([0.4, 0.45, 0.5]),
+        },
+    )
+    fig_bg, axes_bg = plotting.plot_pgstar_grid(
+        ["HR"],
+        binary_history_path=bin_with_hr,
+        ref_binary_history_path=bin_with_hr,
+    )
+    try:
+        assert "Ref: MESA r26.4.1" in axes_bg[0].get_title()
+    finally:
+        plt.close(fig_bg)
     assert not plt.get_fignums()

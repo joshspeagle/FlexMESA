@@ -65,6 +65,7 @@ def plot_history_kippenhahn(
     age_units: Literal["auto", "yr", "Myr"] = "auto",
     log_xaxis: bool = False,
     time_from_present: bool = False,
+    xaxis_reversed: bool | None = None,
     show_mixing: bool = True,
     show_burn: bool = True,
     show_mass_boundaries: bool = True,
@@ -96,6 +97,11 @@ def plot_history_kippenhahn(
         log_xaxis: Apply $\log_{10}|x|$ scaling (`pgstar_kipp.f90:193-197`).
         time_from_present: Shift ``star_age`` to $t - t_{\mathrm{final}}$
             (`pgstar_kipp.f90:186-191`).
+        xaxis_reversed: Optional override reversing horizontal axis direction
+            (`pgstar.defaults:1232`). Defaults to ``True`` when
+            ``xaxis == "star_age"``, ``time_from_present=True``, and
+            ``log_xaxis=True`` so evolution advances left-to-right toward the
+            final model, and ``False`` otherwise.
         show_mixing: Render convective, overshoot, semiconvective,
             thermohaline, and RTI regions (`pgstar_kipp.f90:724-796`).
         show_burn: Shade nuclear burning and cooling zones
@@ -134,6 +140,8 @@ def plot_history_kippenhahn(
         )
 
     handles: list[Any] = []
+    x_bounds: list[np.ndarray] = []
+    y_bounds: list[np.ndarray] = []
     x_label = ""
     y_label = ""
 
@@ -169,6 +177,8 @@ def plot_history_kippenhahn(
 
         max_y = max(float(np.nanmax(yv)) for yv in y_vecs)
         y_grid = np.linspace(0.0, max_y, mass_grid_points, dtype=np.float64)
+        x_bounds.append(px_vals)
+        y_bounds.append(y_grid)
         mix_grid = np.zeros((mass_grid_points, len(loaded)), dtype=np.float64)
         has_eps = show_burn and all("eps_nuc" in pt.columns for pt in loaded)
         eps_grid = (
@@ -273,8 +283,12 @@ def plot_history_kippenhahn(
         if not y_label:
             y_label = hist_ylabel
 
+        y_top_curve = y_center + y_span
+        y_bounds.append(y_top_curve)
+
         if not profile_paths:
             x_edges = _kipp_regions.step_edges(hx_vals)
+            x_bounds.append(x_edges)
             handles.extend(
                 _kipp_regions.draw_history_regions(
                     fig,
@@ -289,9 +303,10 @@ def plot_history_kippenhahn(
                     burn_type_cutoff=burn_type_cutoff,
                 )
             )
+        else:
+            x_bounds.append(hx_vals)
 
         if show_mass_boundaries:
-            y_top_curve = y_center + y_span
             if yaxis != "q":
                 (ln_top,) = ax.plot(
                     hx_vals,
@@ -360,23 +375,33 @@ def plot_history_kippenhahn(
             if lum_drawn:
                 ax_lum.set_ylabel(r"Luminosity [$\log_{10}(L / L_\odot)$]")
 
-    x_all = [
-        np.asarray(ln.get_xdata(), dtype=np.float64) for ln in ax.get_lines()
-    ]
-    y_all = [
-        np.asarray(ln.get_ydata(), dtype=np.float64) for ln in ax.get_lines()
-    ]
-    if x_all:
-        x_cat = np.concatenate(x_all)
-        ax.set_xlim(float(np.nanmin(x_cat)), float(np.nanmax(x_cat)))
-    else:
-        ax.autoscale_view()
+    for ln in ax.get_lines():
+        x_bounds.append(np.asarray(ln.get_xdata(), dtype=np.float64))
+        y_bounds.append(np.asarray(ln.get_ydata(), dtype=np.float64))
+
+    rev_x = (
+        xaxis_reversed
+        if xaxis_reversed is not None
+        else (xaxis in ("star_age", "age") and time_from_present and log_xaxis)
+    )
+    if x_bounds:
+        x_cat = np.concatenate(x_bounds)
+        x_fin = x_cat[np.isfinite(x_cat)]
+        if x_fin.size > 0:
+            x_lo, x_hi = float(np.min(x_fin)), float(np.max(x_fin))
+            if x_hi <= x_lo:
+                x_lo, x_hi = x_lo - 0.5, x_hi + 0.5
+            ax.set_xlim((x_hi, x_lo) if rev_x else (x_lo, x_hi))
+    elif rev_x and not ax.xaxis_inverted():
+        ax.invert_xaxis()
 
     if yaxis == "q":
         ax.set_ylim(0.0, 1.02)
-    elif y_all:
-        y_cat = np.concatenate(y_all)
-        ax.set_ylim(0.0, max(float(np.nanmax(y_cat)) * 1.04, 1.0e-3))
+    elif y_bounds:
+        y_cat = np.concatenate(y_bounds)
+        y_fin = y_cat[np.isfinite(y_cat)]
+        if y_fin.size > 0:
+            ax.set_ylim(0.0, max(float(np.max(y_fin)) * 1.04, 1.0e-3))
     else:
         ax.autoscale_view()
 

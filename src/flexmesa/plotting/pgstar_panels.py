@@ -150,6 +150,7 @@ def plot_trho_profile(
         )
 
     y_run = prof.columns["logT"]
+    standalone = ax is None
     fig, ax = style.init_ax(ax, "single", 0.86)
     valid_xy = _compare_panels.finite_mask(x_run) & _compare_panels.finite_mask(
         y_run
@@ -283,11 +284,14 @@ def plot_trho_profile(
         and x_ref is not None
         and "logT" in ref_prof.columns
     ):
+        ref_lbl = _plot_support.format_ref_label(
+            str(ref_prof.header.get("version_number", ""))
+        )
         _compare_panels._plot_series(
             ax,
             x_ref,
             ref_prof.columns["logT"],
-            label="MESA 26.4.1",
+            label=ref_lbl,
             color=style.OKABE_ITO["black"],
             ls="--",
             lw=1.2,
@@ -320,8 +324,14 @@ def plot_trho_profile(
     ax.set_ylim(y_lo, y_hi)
     ax.set_xlabel(x_label)
     ax.set_ylabel(r"$\log_{10}(T / \mathrm{K})$")
-    sub_txt = _plot_support.format_profile_subtitle(prof, ref_prof)
-    ax.set_title(f"TRho Profile ({sub_txt})", fontsize=8.6)
+    _plot_support.set_profile_panel_title(
+        ax,
+        "TRho Profile",
+        prof,
+        ref_prof,
+        standalone=standalone,
+        always_subtitle=True,
+    )
     ax.legend(loc="best", frameon=False, fontsize=6.6, ncol=2)
     _compare_panels.save_figure(fig, save_path)
     return fig, ax
@@ -402,6 +412,7 @@ def plot_power_profile(
     eff_ymax = auto_ymax if ymax is None else float(ymax)
     floor_lin = 10.0**eff_ymin
 
+    standalone = ax is None
     fig, ax = style.init_ax(ax, "single", 0.82)
     drawn = 0
     for peak_val, cat in ranked:
@@ -441,7 +452,9 @@ def plot_power_profile(
     ax.set_ylabel(
         r"Specific Power [$\log_{10}(\epsilon / \mathrm{erg\,g^{-1}\,s^{-1}})$]"
     )
-    ax.set_title("Nuclear Reaction Power")
+    _plot_support.set_profile_panel_title(
+        ax, "Nuclear Reaction Power", prof, ref_prof, standalone=standalone
+    )
     ax.legend(loc="best", frameon=False, fontsize=6.8, ncol=2)
     _compare_panels.save_figure(fig, save_path)
     return fig, ax
@@ -527,6 +540,7 @@ def plot_abundance_profile(
             "no isotope or H/He/Z mass-fraction columns in profile"
         )
 
+    standalone = ax is None
     fig, ax = style.init_ax(ax, "single", 0.82)
     short_names = {
         "x_mass_fraction_H": "H",
@@ -567,7 +581,9 @@ def plot_abundance_profile(
     _plot_support.draw_xaxis_mixing_bar(ax, x_run, prof)
     ax.set_xlabel(x_label)
     ax.set_ylabel(r"Log Mass Fraction [$\log_{10} X_i$]")
-    ax.set_title("Abundance Profile")
+    _plot_support.set_profile_panel_title(
+        ax, "Abundance Profile", prof, ref_prof, standalone=standalone
+    )
     ax.legend(loc="best", frameon=False, fontsize=6.6, ncol=3)
     _compare_panels.save_figure(fig, save_path)
     return fig, ax
@@ -614,6 +630,7 @@ def plot_mixing_profile(
         else None
     )
 
+    standalone = ax is None
     fig, ax = style.init_ax(ax, "single", 0.80)
     y_d = prof.columns["log_D_mix"]
     _plot_support.plot_profile_pair(
@@ -678,7 +695,9 @@ def plot_mixing_profile(
         ax.invert_xaxis()
     ax.set_xlabel(x_label)
     ax.set_ylabel(r"$\log_{10}(D_{\mathrm{mix}} / \mathrm{cm^2\,s^{-1}})$")
-    ax.set_title("Mixing Diffusivity")
+    _plot_support.set_profile_panel_title(
+        ax, "Mixing Diffusivity", prof, ref_prof, standalone=standalone
+    )
     ax.legend(loc="best", frameon=False, fontsize=6.6, ncol=2)
     _compare_panels.save_figure(fig, save_path)
     return fig, ax

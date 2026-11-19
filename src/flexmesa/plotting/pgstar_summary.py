@@ -94,6 +94,7 @@ def plot_summary_profile(
             if not (c == "logT" and has_temp)
         ]
 
+    standalone = ax is None
     fig, ax = style.init_ax(ax, "single", 0.82)
     colors = pgstar_panels.SERIES_COLORS
     cnt = 0
@@ -144,7 +145,9 @@ def plot_summary_profile(
     _plot_support.draw_xaxis_mixing_bar(ax, x_run, prof)
     ax.set_xlabel(x_label)
     ax.set_ylabel("Mass Fraction / Normalized Profile")
-    ax.set_title("Summary Profile")
+    _plot_support.set_profile_panel_title(
+        ax, "Summary Profile", prof, ref_prof, standalone=standalone
+    )
     ax.legend(loc="best", frameon=False, fontsize=6.4, ncol=2)
     _compare_panels.save_figure(fig, save_path)
     return fig, ax
@@ -187,6 +190,7 @@ def plot_summary_burn_profile(
         else None
     )
 
+    standalone = ax is None
     fig, ax = style.init_ax(ax, "single", 0.84)
     _plot_support.plot_profile_pair(
         ax,
@@ -210,6 +214,30 @@ def plot_summary_burn_profile(
         lw=1.6,
         transform=lambda a: pgstar_panels.safe_log10_pos(np.abs(a)),
     )
+    if (
+        ref_prof is not None
+        and x_ref is not None
+        and (
+            "non_nuc_neu" in ref_prof.columns
+            or "eps_nuc_neu_total" in ref_prof.columns
+        )
+    ):
+        ref_neu = ref_prof.columns.get(
+            "non_nuc_neu", np.zeros(ref_prof.num_zones, dtype=np.float64)
+        ) + ref_prof.columns.get(
+            "eps_nuc_neu_total", np.zeros(ref_prof.num_zones, dtype=np.float64)
+        )
+        _compare_panels._plot_series(
+            ax,
+            x_ref,
+            pgstar_panels.safe_log10_pos(ref_neu),
+            label=r"$\log\epsilon_\nu$ MESA",
+            color=style.OKABE_ITO["bluish_green"],
+            ls="--",
+            lw=1.05,
+            alpha=0.72,
+            zorder=2,
+        )
     if "non_nuc_neu" in prof.columns or "eps_nuc_neu_total" in prof.columns:
         neu_tot = prof.columns.get(
             "non_nuc_neu", np.zeros(prof.num_zones, dtype=np.float64)
@@ -223,6 +251,7 @@ def plot_summary_burn_profile(
             label=r"$\log\epsilon_\nu$",
             color=style.OKABE_ITO["bluish_green"],
             lw=1.45,
+            zorder=3,
         )
 
     ax_t = ax.twinx()
@@ -267,7 +296,9 @@ def plot_summary_burn_profile(
     _plot_support.draw_xaxis_mixing_bar(ax, x_run, prof)
     ax.set_xlabel(x_label)
     ax.set_ylabel(r"$\log_{10}\rho$ / $\log_{10}|\epsilon|$")
-    ax.set_title("Summary Burn")
+    _plot_support.set_profile_panel_title(
+        ax, "Summary Burn", prof, ref_prof, standalone=standalone
+    )
     _compare_panels.merge_twinx_legend(
         ax, ax_t, loc="best", fontsize=6.5, ncol=2
     )
@@ -300,6 +331,10 @@ def plot_profile_custom_panels(
         Tuple ``(fig, axes)`` where ``axes`` is a 1D array of length
         ``len(panels)``.
     """
+    if isinstance(panels, (str, bytes)):
+        raise TypeError(
+            "panels must be a sequence of column names or pairs, not a bare str"
+        )
     if not panels:
         raise ValueError("panels must contain at least one column spec")
     prof = compare.load_profile_file(profile_path)

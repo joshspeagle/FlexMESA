@@ -308,8 +308,107 @@ def format_profile_subtitle(
     ref_sdk = (
         str(ref_prof.header.get("MESA_SDK_version", "")).strip().strip('"')
     )
-    ref_parts = [p for p in (ref_ver or "MESA ref", ref_sdk) if p]
+    ref_parts = [p for p in (format_ref_label(ref_ver), ref_sdk) if p]
     return f"{base} | Ref: {', '.join(ref_parts)} ({ref_prof.num_zones} zones)"
+
+
+def format_ref_label(
+    version_number: str = "", default: str = "MESA ref"
+) -> str:
+    """Format a dynamic MESA reference label without hardcoding a version."""
+    ver = str(version_number).strip().strip('"')
+    if not ver:
+        return default
+    if ver.lower().startswith("mesa"):
+        return ver
+    return f"MESA {ver}"
+
+
+def set_profile_panel_title(
+    ax: mpl_axes.Axes,
+    base_title: str,
+    prof: _compare_mod.ProfileTable,
+    ref_prof: _compare_mod.ProfileTable | None,
+    *,
+    standalone: bool,
+    always_subtitle: bool = False,
+) -> None:
+    """Set panel title with reference provenance when ``ref_prof`` is set."""
+    if ref_prof is not None:
+        if standalone:
+            sub_txt = format_profile_subtitle(prof, ref_prof)
+            ax.set_title(f"{base_title}\n{sub_txt}", fontsize=8.3)
+        else:
+            ref_lbl = format_ref_label(
+                str(ref_prof.header.get("version_number", ""))
+            )
+            ax.set_title(f"{base_title} (Ref: {ref_lbl})", fontsize=8.6)
+        return
+    if always_subtitle and standalone:
+        ax.set_title(
+            f"{base_title} ({format_profile_subtitle(prof)})", fontsize=8.6
+        )
+    else:
+        ax.set_title(base_title)
+
+
+def format_history_provenance(
+    run_tbl: history_compare.HistoryTable,
+    ref_tbl: history_compare.HistoryTable,
+    *,
+    ref_path: pathlib.Path | str | None = None,
+    ref_hdr: dict[str, Any] | None = None,
+) -> str:
+    """Format a 1-line provenance summary for history/binary comparisons."""
+    raw_ver = ref_tbl.mesa_version_number or (
+        str(ref_hdr.get("version_number", "")) if ref_hdr is not None else ""
+    )
+    ref_lbl = format_ref_label(raw_ver)
+    if not raw_ver and ref_tbl.provenance_comment:
+        prov = ref_tbl.provenance_comment.lstrip("# ").strip()
+        if prov:
+            ref_lbl = prov[:48]
+    sdk_str = (
+        str(ref_hdr.get("MESA_SDK_version", "")).strip().strip('"')
+        if ref_hdr is not None
+        else ""
+    )
+    sdk_part = f", SDK {sdk_str}" if sdk_str else ""
+    name_part = (
+        f"{pathlib.Path(ref_path).name}, " if ref_path is not None else ""
+    )
+    return (
+        f"Ref: {ref_lbl}{sdk_part} ({name_part}{ref_tbl.num_rows} rows) | "
+        f"Candidate: {run_tbl.num_rows} rows"
+    )
+
+
+def set_history_panel_title(
+    ax: mpl_axes.Axes,
+    base_title: str,
+    run_tbl: history_compare.HistoryTable,
+    ref_tbl: history_compare.HistoryTable | None,
+    *,
+    ref_path: pathlib.Path | str | None = None,
+    ref_hdr: dict[str, Any] | None = None,
+    standalone: bool = True,
+) -> None:
+    """Set panel title with reference provenance when ``ref_tbl`` is given."""
+    if ref_tbl is None:
+        ax.set_title(base_title)
+        return
+    if standalone:
+        prov = format_history_provenance(
+            run_tbl, ref_tbl, ref_path=ref_path, ref_hdr=ref_hdr
+        )
+        ax.set_title(f"{base_title}\n{prov}", fontsize=8.3)
+        return
+    raw_ver = ref_tbl.mesa_version_number or (
+        str(ref_hdr.get("version_number", "")) if ref_hdr is not None else ""
+    )
+    ax.set_title(
+        f"{base_title} (Ref: {format_ref_label(raw_ver)})", fontsize=8.6
+    )
 
 
 def render_mixing_grid_layers(

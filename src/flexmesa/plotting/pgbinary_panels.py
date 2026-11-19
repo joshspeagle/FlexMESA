@@ -79,14 +79,19 @@ def plot_pgbinary_orbit(
     Returns:
         Tuple ``(fig, ax)`` of ``Figure`` and equal-aspect ``Axes``.
     """
+    standalone = ax is None
     fig, ax = style.init_ax(ax, "single", 0.95)
     run_tbl, _ = _plot_support.load_history_with_header(binary_history)
     r_idx = _roche_orbit.select_row_index(run_tbl, model_number, row_index)
     run_state = _roche_orbit.extract_orbit_state(run_tbl, r_idx)
 
+    ref_tbl: history_compare.HistoryTable | None = None
+    ref_hdr: dict[str, Any] | None = None
     xmax = 0.6
     if mesa_binary_history is not None:
-        ref_tbl, _ = _plot_support.load_history_with_header(mesa_binary_history)
+        ref_tbl, ref_hdr = _plot_support.load_history_with_header(
+            mesa_binary_history
+        )
         target_mod = (
             model_number
             if model_number is not None
@@ -132,8 +137,17 @@ def plot_pgbinary_orbit(
         r"$x / a$ ($a = " + f"{run_state['sep']:.2f}" + r"\,R_\odot$)"
     )
     ax.set_ylabel(r"$y / a$")
-    ax.set_title(
+    orbit_title = (
         f"Orbit & Roche Geometry (model {round(run_state['model_number'])})"
+    )
+    _plot_support.set_history_panel_title(
+        ax,
+        orbit_title,
+        run_tbl,
+        ref_tbl,
+        ref_path=mesa_binary_history,
+        ref_hdr=ref_hdr,
+        standalone=standalone,
     )
     ax.legend(loc="upper right", frameon=False, fontsize=6.8)
     _compare_panels.save_figure(fig, save_path)
@@ -167,13 +181,15 @@ def plot_pgbinary_summary_history(
     Returns:
         Tuple ``(fig, ax)`` with normalized trajectories in ``[0, 1]``.
     """
+    standalone = ax is None
     fig, ax = style.init_ax(ax, "single", 0.80)
     run_tbl, _ = _plot_support.load_history_with_header(binary_history)
-    ref_tbl = (
-        history_compare.load_history_file(mesa_binary_history)
-        if mesa_binary_history is not None
-        else None
-    )
+    ref_tbl: history_compare.HistoryTable | None = None
+    ref_hdr: dict[str, Any] | None = None
+    if mesa_binary_history is not None:
+        ref_tbl, ref_hdr = _plot_support.load_history_with_header(
+            mesa_binary_history
+        )
 
     x_run = run_tbl.columns.get(
         xaxis, np.arange(1, run_tbl.num_rows + 1, dtype=np.float64)
@@ -233,7 +249,15 @@ def plot_pgbinary_summary_history(
     ax.set_ylim(-0.04, 1.06)
     ax.set_xlabel("Model Number" if xaxis == "model_number" else x_lbl)
     ax.set_ylabel(r"Scaled $(y - y_{\min}) / (y_{\max} - y_{\min})$")
-    ax.set_title("Binary Summary History")
+    _plot_support.set_history_panel_title(
+        ax,
+        "Binary Summary History",
+        run_tbl,
+        ref_tbl,
+        ref_path=mesa_binary_history,
+        ref_hdr=ref_hdr,
+        standalone=standalone,
+    )
     ax.legend(loc="best", frameon=False, fontsize=6.8, ncol=2)
     _compare_panels.save_figure(fig, save_path)
     return fig, ax

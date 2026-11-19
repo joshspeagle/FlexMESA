@@ -19,6 +19,7 @@ import dataclasses
 import math
 import pathlib
 from collections.abc import Sequence
+from typing import Any
 
 import matplotlib.axes as mpl_axes
 import matplotlib.figure as mpl_figure
@@ -222,11 +223,12 @@ def plot_history_track(
         Tuple ``(fig, ax)``.
     """
     tbl = history_compare.load_history_file(history_path)
-    ref_tbl = (
-        history_compare.load_history_file(ref_history_path)
-        if ref_history_path is not None
-        else None
-    )
+    ref_tbl: history_compare.HistoryTable | None = None
+    ref_hdr: dict[str, Any] | None = None
+    if ref_history_path is not None:
+        ref_tbl, ref_hdr = _plot_support.load_history_with_header(
+            ref_history_path
+        )
 
     if preset is not None:
         key = preset.strip().lower()
@@ -264,6 +266,7 @@ def plot_history_track(
         do_psi = bool(show_degeneracy_line)
         title = f"{eff_y} vs. {eff_x}"
 
+    standalone = ax is None
     fig, ax = style.init_ax(ax, "single", 0.84)
     xv, yv = tbl.columns[eff_x], tbl.columns[eff_y]
     valid = _compare_panels.finite_mask(xv) & _compare_panels.finite_mask(yv)
@@ -288,11 +291,15 @@ def plot_history_track(
         and eff_x in ref_tbl.columns
         and eff_y in ref_tbl.columns
     ):
+        ref_lbl = _plot_support.format_ref_label(
+            ref_tbl.mesa_version_number
+            or (str(ref_hdr.get("version_number", "")) if ref_hdr else "")
+        )
         _compare_panels._plot_series(
             ax,
             ref_tbl.columns[eff_x],
             ref_tbl.columns[eff_y],
-            label="MESA 26.4.1",
+            label=ref_lbl,
             color=style.OKABE_ITO["black"],
             ls="--",
             lw=1.2,
@@ -334,7 +341,15 @@ def plot_history_track(
         ax.invert_yaxis()
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
-    ax.set_title(title)
+    _plot_support.set_history_panel_title(
+        ax,
+        title,
+        tbl,
+        ref_tbl,
+        ref_path=ref_history_path,
+        ref_hdr=ref_hdr,
+        standalone=standalone,
+    )
     ax.legend(loc="best", frameon=False, fontsize=7.0)
     _compare_panels.save_figure(fig, save_path)
     return fig, ax
@@ -353,13 +368,15 @@ def plot_summary_history(
     Implements ``do_summary_history_plot`` from
     ``star/private/pgstar_summary_history.f90:54-265``.
     """
+    standalone = ax is None
     fig, ax = style.init_ax(ax, "single", 0.80)
     tbl = history_compare.load_history_file(history_path)
-    ref_tbl = (
-        history_compare.load_history_file(ref_history_path)
-        if ref_history_path is not None
-        else None
-    )
+    ref_tbl: history_compare.HistoryTable | None = None
+    ref_hdr: dict[str, Any] | None = None
+    if ref_history_path is not None:
+        ref_tbl, ref_hdr = _plot_support.load_history_with_header(
+            ref_history_path
+        )
     x_run = tbl.columns.get(
         xaxis, np.arange(1, tbl.num_rows + 1, dtype=np.float64)
     )
@@ -417,7 +434,15 @@ def plot_summary_history(
     ax.set_ylim(-0.04, 1.05)
     ax.set_xlabel("Model Number" if xaxis == "model_number" else x_lbl)
     ax.set_ylabel("Mass Fraction / Scaled Value")
-    ax.set_title("Summary History")
+    _plot_support.set_history_panel_title(
+        ax,
+        "Summary History",
+        tbl,
+        ref_tbl,
+        ref_path=ref_history_path,
+        ref_hdr=ref_hdr,
+        standalone=standalone,
+    )
     ax.legend(loc="best", frameon=False, fontsize=6.6, ncol=2)
     _compare_panels.save_figure(fig, save_path)
     return fig, ax
@@ -437,14 +462,19 @@ def plot_history_panels(
     ``star/private/pgstar_history_panels.f90:31-240`` and
     ``binary/private/pgbinary_history_panels.f90:31-240``.
     """
+    if isinstance(panels, (str, bytes)):
+        raise TypeError(
+            "panels must be a sequence of column names or pairs, not a bare str"
+        )
     if not panels:
         raise ValueError("panels must contain at least one history column")
     tbl = history_compare.load_history_file(history_path)
-    ref_tbl = (
-        history_compare.load_history_file(ref_history_path)
-        if ref_history_path is not None
-        else None
-    )
+    ref_tbl: history_compare.HistoryTable | None = None
+    ref_hdr: dict[str, Any] | None = None
+    if ref_history_path is not None:
+        ref_tbl, ref_hdr = _plot_support.load_history_with_header(
+            ref_history_path
+        )
     if xaxis not in tbl.columns:
         raise KeyError(f"xaxis column {xaxis!r} not found in history")
     x_raw = tbl.columns[xaxis]
@@ -533,7 +563,13 @@ def plot_history_panels(
             ax_i.legend(loc="best", frameon=False, fontsize=6.8)
 
     axes[-1].set_xlabel("Model Number" if xaxis == "model_number" else x_lbl)
-    fig.suptitle("History Panels", fontsize=9.0)
+    if ref_tbl is not None:
+        prov = _plot_support.format_history_provenance(
+            tbl, ref_tbl, ref_path=ref_history_path, ref_hdr=ref_hdr
+        )
+        fig.suptitle(f"History Panels\n{prov}", fontsize=8.6)
+    else:
+        fig.suptitle("History Panels", fontsize=9.0)
     _compare_panels.save_figure(fig, save_path)
     return fig, axes
 
@@ -593,6 +629,11 @@ def plot_pgstar_grid(
         eff_cols = c_cnt if num_cols is None else num_cols
         resolved_specs = list(parsed_specs)
     else:
+        if isinstance(panels, (str, bytes)):
+            raise TypeError(
+                "panels must be a sequence of panel names or GridPanelSpec "
+                "objects, not a bare str or bytes"
+            )
         if not panels:
             raise ValueError("provide either panels=... or inlist_path=...")
         if all(isinstance(p, str) for p in panels):

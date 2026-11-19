@@ -66,7 +66,10 @@ def resolve_kipp_xaxis(
         label = xaxis
 
     if log_xaxis:
-        vals = np.log10(np.maximum(np.abs(vals), 1.0e-99))
+        abs_vals = np.abs(vals)
+        pos = abs_vals[np.isfinite(abs_vals) & (abs_vals > 0.0)]
+        floor = 0.5 * float(np.min(pos)) if pos.size > 0 else 1.0e-99
+        vals = np.log10(np.maximum(abs_vals, floor))
         label = rf"$\log_{{10}}$({label})"
     return vals, label
 

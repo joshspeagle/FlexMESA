@@ -10,6 +10,7 @@ from typing import Any
 import matplotlib.axes as mpl_axes
 import numpy as np
 
+from flexmesa import constants
 from flexmesa.plotting import (
     compare,
     kippenhahn,
@@ -153,10 +154,15 @@ def dispatch_grid_cell(
         h_src = history_path or binary_history_path
         if h_src is None:
             raise ValueError(f"panel {raw!r} requires history_path")
+        r_src = (
+            ref_history_path
+            if history_path is not None
+            else (ref_history_path or ref_binary_history_path)
+        )
         _pg_grid.plot_history_track(
             h_src,
             preset=raw,
-            ref_history_path=ref_history_path,
+            ref_history_path=r_src,
             mesa_dir=mesa_dir,
             ax=ax,
         )
@@ -171,11 +177,16 @@ def dispatch_grid_cell(
         h_src = history_path or binary_history_path
         if h_src is None:
             raise ValueError(f"panel {raw!r} requires history_path")
+        r_src = (
+            ref_history_path
+            if history_path is not None
+            else (ref_history_path or ref_binary_history_path)
+        )
         _pg_grid.plot_history_track(
             h_src,
             parts[1],
             parts[2],
-            ref_history_path=ref_history_path or ref_binary_history_path,
+            ref_history_path=r_src,
             mesa_dir=mesa_dir,
             ax=ax,
         )
@@ -220,7 +231,7 @@ def dispatch_grid_cell(
         r_max = max(float(np.nanmax(r_rsun)), 1.0e-30)
         r_cm = pt.columns.get("radius_cm")
         if r_cm is None:
-            r_cm = r_rsun * float(pt.header.get("rsun", 1.0))
+            r_cm = r_rsun * float(pt.header.get("rsun", constants.RSUN))
         stellar_plots.plot_propagation_diagram(
             r_rsun / r_max,
             pt.columns["brunt_N2"],

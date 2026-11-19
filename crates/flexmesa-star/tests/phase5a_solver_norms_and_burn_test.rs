@@ -7,17 +7,20 @@ use flexmesa_const::SECYER;
 use flexmesa_star::photo_io::{read_photo_bytes, write_photo_bytes};
 use flexmesa_star::solver_norms::compute_residual_norms;
 use flexmesa_star::{
+    StarControls, StarError, StarJobControls, StarModel,
     active_solver_tolerances, change_model_network,
     compute_model_correction_norms, do_struct_burn_mix, load_zams_model,
-    set_hydro_vars, solve_henyey_step, star_evolve_step, StarControls,
-    StarError, StarJobControls, StarModel,
+    set_hydro_vars, solve_henyey_step, star_evolve_step,
 };
 
 fn usize_to_f64(n: usize) -> f64 {
     f64::from(u32::try_from(n).expect("small test zone index fits in u32"))
 }
 
-fn build_compact_zams(nz_target: usize, mut controls: StarControls) -> StarModel {
+fn build_compact_zams(
+    nz_target: usize,
+    mut controls: StarControls,
+) -> StarModel {
     if controls.zbase < 0.0 {
         controls.zbase = 0.02;
     }
@@ -90,8 +93,8 @@ fn build_compact_zams(nz_target: usize, mut controls: StarControls) -> StarModel
 }
 
 #[test]
-fn test_coupled_u_flag_hllc_henyey_step_converges_to_strict_residual_tolerances(
-) {
+fn test_coupled_u_flag_hllc_henyey_step_converges_to_strict_residual_tolerances()
+ {
     let controls_full = StarControls {
         u_flag: true,
         v_flag: false,
@@ -153,8 +156,8 @@ fn test_coupled_u_flag_hllc_henyey_step_converges_to_strict_residual_tolerances(
 }
 
 #[test]
-fn test_multi_isotope_approx21_coupled_and_variable_t_const_density_op_split_burn_converge(
-) {
+fn test_multi_isotope_approx21_coupled_and_variable_t_const_density_op_split_burn_converge()
+ {
     let mut model = load_zams_model(
         StarControls {
             zbase: 0.02,
@@ -336,7 +339,9 @@ fn test_sizeb_filter_flags_nan_propagation_and_strict_unconverged_rejection() {
     );
 
     let mut perturbed = model;
-    perturbed.controls.max_newton_iters = 1;
+    perturbed.doing_first_model_of_run = false;
+    perturbed.controls.solver_max_tries_before_reject = 1;
+    perturbed.controls.solver_itermin = 1;
     perturbed.controls.use_gold_tolerances = true;
     perturbed.lnd[2] += 0.15;
     perturbed.pack_xh();
@@ -357,7 +362,10 @@ fn test_sizeb_filter_flags_nan_propagation_and_strict_unconverged_rejection() {
 #[test]
 fn test_star_evolve_step_retry_exhaustion_returns_step_failure() {
     let mut evolve_fail = build_compact_zams(12, StarControls::default());
-    evolve_fail.controls.max_newton_iters = 1;
+    evolve_fail.doing_first_model_of_run = false;
+    evolve_fail.controls.solver_max_tries_before_reject = 1;
+    evolve_fail.controls.max_tries_for_retry = 1;
+    evolve_fail.controls.solver_itermin = 1;
     evolve_fail.controls.ts_stop.retry_limit = 1;
     evolve_fail.lnd[2] += 0.25;
     evolve_fail.pack_xh();

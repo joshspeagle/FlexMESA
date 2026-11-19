@@ -8,9 +8,9 @@ use flexmesa_chem::NuclideCatalog;
 use flexmesa_const::{L_SUN, M_SUN, R_SUN, SECYER, STANDARD_CGRAV};
 
 use crate::core_boundaries::{
-    compute_core_masses, compute_power_categories, CoreMasses,
+    CoreMasses, compute_core_masses, compute_power_categories,
 };
-use crate::history::{extract_history_row, HistoryRow};
+use crate::history::{HistoryRow, extract_history_row};
 use crate::model::StarModel;
 
 /// Computes `(he_core_mass, co_core_mass, one_core_mass)` in solar masses
@@ -147,11 +147,21 @@ pub fn check_termination_limits_with_history(
             return Some(String::from("max_model_number"));
         }
     }
+    let time_sec = if model.time_sec != 0.0 || model.star_age == 0.0 {
+        model.time_sec
+    } else {
+        model.star_age * SECYER
+    };
     if c.max_age > 0.0 && model.star_age >= c.max_age {
         return Some(String::from("max_age"));
     }
+    if c.max_age_in_days > 0.0
+        && time_sec >= c.max_age_in_days * flexmesa_const::SECDAY
+    {
+        return Some(String::from("max_age_in_days"));
+    }
     if let Some(max_age_sec) = c.max_age_in_seconds {
-        if model.star_age * SECYER >= max_age_sec {
+        if max_age_sec > 0.0 && time_sec >= max_age_sec {
             return Some(String::from("max_age_in_seconds"));
         }
     }

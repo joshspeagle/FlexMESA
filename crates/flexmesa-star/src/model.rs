@@ -18,7 +18,7 @@
 //!   and `brunt_n2[k]`.
 
 use flexmesa_chem::NuclideCatalog;
-use flexmesa_const::{MixingType, L_SUN, M_SUN, R_SUN, SECYER, STANDARD_CGRAV};
+use flexmesa_const::{L_SUN, M_SUN, MixingType, R_SUN, SECYER, STANDARD_CGRAV};
 use flexmesa_eos::{EosConfig, NUM_EOS_BASIC_RESULTS};
 use flexmesa_kap::KapConfig;
 
@@ -54,10 +54,18 @@ pub struct StarModel {
     // --- Scalar Evolutionary State ---
     /// Current evolutionary step counter (`model_number`).
     pub model_number: usize,
-    /// Stellar age in years (`time` / `star_age`).
+    /// Starting model number at load or `set_initial_model_number` (`init_model_number`).
+    pub init_model_number: isize,
+    /// Whether the upcoming step is the first evolutionary step of a run (`doing_first_model_of_run`).
+    pub doing_first_model_of_run: bool,
+    /// Stellar age in years (`star_age = time / secyer`).
     pub star_age: f64,
-    /// Previous step stellar age in years (`time_old`).
+    /// Previous step stellar age in years (`star_age_old`).
     pub star_age_old: f64,
+    /// Exact stellar age in seconds (`time`).
+    pub time_sec: f64,
+    /// Exact previous-step stellar age in seconds (`time_old`).
+    pub time_old_sec: f64,
     /// Current timestep $\Delta t$ in seconds (`dt`).
     pub dt: f64,
     /// Next proposed timestep $\Delta t_{\mathrm{next}}$ in seconds (`dt_next`).
@@ -78,12 +86,42 @@ pub struct StarModel {
     pub mstar_dot: f64,
     /// Inner boundary core mass $M_{\mathrm{center}}$ in grams (`M_center`).
     pub m_center: f64,
+    /// Previous-step inner boundary core mass in grams (`M_center_old`).
+    pub m_center_old: f64,
     /// Inner boundary core radius $R_{\mathrm{center}}$ in cm (`R_center`).
     pub r_center: f64,
+    /// Previous-step inner boundary core radius in cm (`R_center_old`).
+    pub r_center_old: f64,
     /// Inner boundary core luminosity $L_{\mathrm{center}}$ in $\mathrm{erg\,s^{-1}}$ (`L_center`).
     pub l_center: f64,
+    /// Previous-step inner boundary core luminosity in $\mathrm{erg\,s^{-1}}$ (`L_center_old`).
+    pub l_center_old: f64,
     /// Inner boundary core velocity $v_{\mathrm{center}}$ in $\mathrm{cm\,s^{-1}}$ (`v_center`).
     pub v_center: f64,
+    /// Previous-step inner boundary core velocity in $\mathrm{cm\,s^{-1}}$ (`v_center_old`).
+    pub v_center_old: f64,
+    /// Consecutive steps accepted via `tol_bad_max_correction` (`bad_max_corr_cnt`).
+    pub bad_max_corr_cnt: usize,
+    /// 1-based zone index below newly accreted material (`k_below_just_added`, `1` when none).
+    pub k_below_just_added: usize,
+    /// Reference surface entropy $\ln s_0$ for accretion revision checks (`surf_lnS`).
+    pub surf_lns: f64,
+    /// Number of forced accretion surface entropy revisions in active solve (`num_surf_revisions`).
+    pub num_surf_revisions: usize,
+    /// Whether the active solve forced an extra iteration for accretion (`used_extra_iter_in_solver_for_accretion`).
+    pub used_extra_iter_in_solver_for_accretion: bool,
+    /// Whether the active solve used `gold` or `gold2` tolerances (`using_gold_tolerances`).
+    pub using_gold_tolerances: bool,
+    /// Whether the last trial failed on `xa < min_xa_hard_limit` (`why_Tlim == Tlim_neg_X`).
+    pub why_tlim_neg_x: bool,
+    /// Whether the active `star_solver` call skips `corr_coeff_limit` (`skip_global_corr_coeff_limit`).
+    pub solver_skip_global_corr_coeff_limit: bool,
+    /// Whether the active `star_solver` call is on `first_try` of the step (`first_try`).
+    pub solver_first_try_of_step: bool,
+    /// Retry counter within the active step (`retry_cnt` for `set_max_tries`).
+    pub step_retry_cnt: usize,
+    /// Mass fraction $q$ down to which `adjust_J_lost` modified `j_rot` (`adjust_J_q`, `1.0` default).
+    pub adjust_j_q: f64,
     /// Cumulative Newton solver iterations across run (`total_num_solver_iterations`).
     pub total_num_solver_iterations: usize,
     /// Cumulative `solve_henyey_step` calls across run (`num_solver_calls`).
@@ -148,6 +186,15 @@ pub struct StarModel {
     pub peos_start: Vec<f64>,
     /// Start-of-step thermal neutrino energy loss rate (`non_nuc_neu_start`).
     pub non_nuc_neu_start: Vec<f64>,
+    /// Start-of-step electron mole fraction $Y_e$ (`ye_start`, intra-step).
+    #[serde(skip)]
+    pub ye_start: Vec<f64>,
+    /// Start-of-step total nuclear energy rate $\epsilon_{\mathrm{nuc}}$ (`eps_nuc_start`, intra-step).
+    #[serde(skip)]
+    pub eps_nuc_start: Vec<f64>,
+    /// Start-of-step integrated nuclear luminosity by category in $L_\odot$ (`luminosity_by_category_start`, intra-step).
+    #[serde(skip)]
+    pub lum_by_category_start: Vec<[f64; flexmesa_chem::NUM_CATEGORIES]>,
     /// Start-of-step species mass fractions (`xa_start`).
     pub xa_start: Vec<f64>,
     /// Accumulated Newton step species increments `xa - xa_start` (`xa_sub_xa_start`).
@@ -421,8 +468,12 @@ impl StarModel {
             eos_config: EosConfig::default(),
             kap_config,
             model_number: 0,
+            init_model_number: 0,
+            doing_first_model_of_run: true,
             star_age: 0.0,
             star_age_old: 0.0,
+            time_sec: 0.0,
+            time_old_sec: 0.0,
             dt: 1.0e3 * SECYER,
             dt_next: 1.0e3 * SECYER,
             dt_old: 1.0e3 * SECYER,
@@ -433,9 +484,24 @@ impl StarModel {
             xmstar: mstar,
             mstar_dot: 0.0,
             m_center: 0.0,
+            m_center_old: 0.0,
             r_center: 0.0,
+            r_center_old: 0.0,
             l_center: 0.0,
+            l_center_old: 0.0,
             v_center: 0.0,
+            v_center_old: 0.0,
+            bad_max_corr_cnt: 0,
+            k_below_just_added: 1,
+            surf_lns: 0.0,
+            num_surf_revisions: 0,
+            used_extra_iter_in_solver_for_accretion: false,
+            using_gold_tolerances: false,
+            why_tlim_neg_x: false,
+            solver_skip_global_corr_coeff_limit: false,
+            solver_first_try_of_step: true,
+            step_retry_cnt: 0,
+            adjust_j_q: 1.0,
             total_num_solver_iterations: 0,
             total_num_solver_calls: 0,
             num_retries: 0,
@@ -465,6 +531,9 @@ impl StarModel {
             energy_start: vec![0.0; nz],
             peos_start: vec![0.0; nz],
             non_nuc_neu_start: vec![0.0; nz],
+            ye_start: Vec::new(),
+            eps_nuc_start: Vec::new(),
+            lum_by_category_start: Vec::new(),
             xa_start: vec![0.0; nz * species],
             xa_sub_xa_start: Vec::new(),
             xh_start: vec![0.0; nz * layout.nvar_hydro],

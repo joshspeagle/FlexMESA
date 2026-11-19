@@ -5,11 +5,11 @@
 
 use flexmesa_const::{LSUN, MSUN, SECYER};
 use flexmesa_star::{
+    EnergyEqnOption, MeshFunctionConfig, StarControls, StarError, StarModel,
     apply_step_pre_physics, apply_uniform_rotation, compute_power_categories,
     do_adjust_mesh, do_struct_burn_mix, eval_total_energy_integrals,
     remap_onto_dq, set_hydro_vars, snapshot_step_history_old,
-    update_rotation_distortion_factors, EnergyEqnOption, MeshFunctionConfig,
-    StarControls, StarError, StarModel,
+    update_rotation_distortion_factors,
 };
 
 use crate::system::{BinaryCompanion, BinarySystem};
@@ -102,7 +102,8 @@ fn settle_cno_gold_equilibrium(
     star.controls.use_other_wind = false;
     star.controls.ts_stop.delta_hr_limit = -1.0;
     star.controls.ts_stop.delta_hr_hard_limit = -1.0;
-    star.controls.max_newton_iters = saved_controls.max_newton_iters.max(80);
+    star.controls.solver_max_tries_before_reject =
+        saved_controls.solver_max_tries_before_reject.max(80);
     if star.controls.rotation_flag && omega_0 > 0.0 {
         apply_uniform_rotation(star, omega_0);
     }
@@ -175,8 +176,8 @@ pub(crate) fn prep_and_settle_binary_star(
         star.controls.energy_eqn_option = EnergyEqnOption::EpsGrav;
         star.controls.ts_stop.delta_hr_limit = -1.0;
         star.controls.ts_stop.delta_hr_hard_limit = -1.0;
-        star.controls.max_newton_iters =
-            saved_controls.max_newton_iters.max(80);
+        star.controls.solver_max_tries_before_reject =
+            saved_controls.solver_max_tries_before_reject.max(80);
 
         star.controls.do_mix = false;
         star.controls.mix_factor = 0.0;

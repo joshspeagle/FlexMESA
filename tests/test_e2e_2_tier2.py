@@ -222,17 +222,6 @@ def test_upstream_tier2_test_suite_case_and_restart_reproducibility(
                 verify_restart=True,
             )
         return
-    if case_name == "make_co_wd":
-        # Without fabricated Tier2CaseExtras shutting off burning/remeshing,
-        # cleaned make_co_wd hits a Newton line-search stop at model=3 (#152).
-        with pytest.raises(ValueError, match=r"star step failed"):
-            e2e.run_test_suite_case(
-                clean_dir,
-                skip_optional=True,
-                max_steps_per_stage=2,
-                verify_restart=True,
-            )
-        return
     rep = e2e.run_test_suite_case(
         clean_dir,
         skip_optional=True,
@@ -241,6 +230,12 @@ def test_upstream_tier2_test_suite_case_and_restart_reproducibility(
     )
     assert rep["case_name"] == case_name
     assert rep["tier"] == 0
+    if case_name == "make_co_wd":
+        # Cleaned make_co_wd without extras or entropy relaxation (#154, #157)
+        # terminates cleanly at min_timestep_limit under #152.
+        assert rep["termination_code"] == "min_timestep_limit"
+        assert rep["total_steps"] >= 2
+        return
     assert rep["termination_code"] == "max_steps_cap"
     assert rep["passed"] is False
     assert rep["assertions_passed"] is True

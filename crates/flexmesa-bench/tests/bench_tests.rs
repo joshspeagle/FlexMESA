@@ -7,9 +7,9 @@
 //! are internal regression values, not upstream MESA outputs (tracked in #146).
 
 use flexmesa_bench::{
-    run_all_wave1_benchmarks, run_all_wave2_benchmarks,
+    BenchRecord, run_all_wave1_benchmarks, run_all_wave2_benchmarks,
     run_all_wave3a_benchmarks, run_all_wave3b_benchmarks,
-    run_all_wave4_benchmarks, run_all_wave5_benchmarks, BenchRecord,
+    run_all_wave4_benchmarks, run_all_wave5_benchmarks,
 };
 
 /// `FlexMESA` regression snapshots for $N_{\mathrm{zones}} = 8$ across all six
@@ -55,16 +55,15 @@ const WAVE3B_REGRESSION_SNAPSHOTS_N8: [(&str, f64); 5] = [
 /// `FlexMESA` regression snapshots for $N_{\mathrm{zones}} = 8$ across all five
 /// Wave 4 1D stellar engine workloads (internal self-consistency check, not an
 /// upstream MESA output; `star_hydro_eqns`, `star_newton_step`, and
-/// `star_evolve_step` shifted under `#141` when `neu` `#193` and `num` `#194`
-/// were aligned to MESA `26.4.1`, and all five shifted under `#149` when
-/// `&controls` / microphysics / mesh-function defaults were aligned to MESA
-/// `26.4.1`; tracked in #146).
+/// `star_evolve_step` shifted under `#141`, `#149`, and `#152` when `x_scale`
+/// (`set_xscale_info`) and Newton step/equilibration semantics were aligned to
+/// MESA `26.4.1`; tracked in #146).
 const WAVE4_REGRESSION_SNAPSHOTS_N8: [(&str, f64); 5] = [
     ("star_micro_vars", 2.497_139_571_258_105e2),
-    ("star_hydro_eqns", 4.253_179_678_855_851e6),
-    ("star_newton_step", 1.451_475_459_976_951e2),
+    ("star_hydro_eqns", 4.253_173_239_706_706e6),
+    ("star_newton_step", 1.451_491_418_068_066e2),
     ("star_remesh", 5.513_777_703_025_969e2),
-    ("star_evolve_step", 1.005_971_756_200_643e2),
+    ("star_evolve_step", 9.894_550_507_232_628e1),
 ];
 
 /// `FlexMESA` regression snapshots for $N_{\mathrm{zones}} = 8$ across all four

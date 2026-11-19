@@ -152,6 +152,7 @@ pub mod rsp_turb_partials;
 pub mod rsp_zone_micro;
 pub mod solver;
 pub mod solver_norms;
+pub mod solver_support;
 pub mod star_ad;
 pub mod star_job_init;
 pub mod stella;
@@ -185,40 +186,41 @@ pub use controls::{
     StarJobControls, StepFailureInfo, VarLayout,
 };
 pub use controls_mix_wind::{
-    MixWindControls, OvershootParamSet, PredictiveParamSet,
-    NUM_OVERSHOOT_PARAM_SETS, NUM_PREDICTIVE_PARAM_SETS,
+    MixWindControls, NUM_OVERSHOOT_PARAM_SETS, NUM_PREDICTIVE_PARAM_SETS,
+    OvershootParamSet, PredictiveParamSet,
 };
 pub use controls_output::OutputControls;
-pub use controls_timestep_stop::{TimestepStopControls, MAX_DX_LIMIT_CTRLS};
+pub use controls_timestep_stop::{MAX_DX_LIMIT_CTRLS, TimestepStopControls};
 pub use core_boundaries::{
-    compute_core_masses, compute_power_categories, get_info_at_q,
-    k_for_q_1based, snapshot_step_history_old, CoreBoundaryInfo, CoreMasses,
-    PowerCategories,
+    CoreBoundaryInfo, CoreMasses, PowerCategories, compute_core_masses,
+    compute_power_categories, get_info_at_q, k_for_q_1based,
+    snapshot_step_history_old,
 };
 pub use diffusion::{
-    do_element_diffusion, eval_burgers_velocities, eval_caplan_ocp_dstar,
+    BurgersZoneResult, DiffusionScheme, do_element_diffusion,
+    eval_burgers_velocities, eval_caplan_ocp_dstar,
     eval_coulomb_collision_factors, eval_radiative_levitation_accel,
-    eval_wd_sedimentation_heating, BurgersZoneResult, DiffusionScheme,
+    eval_wd_sedimentation_heating,
 };
 pub use eps_grav::{
     eval_eps_grav, eval_eps_grav_lns_cell, eval_eps_grav_std_cell,
 };
 pub use eps_mdot::{
-    calculate_eps_mdot, calculate_eps_mdot_with_change,
+    PrevMassState, calculate_eps_mdot, calculate_eps_mdot_with_change,
     eval_cell_specific_total_energy, eval_specific_total_energy_profile,
-    find_mass_flux, PrevMassState,
+    find_mass_flux,
 };
 pub use evolve::{
-    restore_from_old, star_evolve, star_evolve_step,
-    star_evolve_step_with_extras, EvolveStepReport,
+    EvolveStepReport, restore_from_old, star_evolve, star_evolve_step,
+    star_evolve_step_with_extras,
 };
 pub use evolve_support::{
     apply_step_pre_physics, eval_total_energy_integrals,
     remesh_star_before_step, update_step_energy_conservation,
 };
 pub use history::{
-    extract_history_row, format_history_header, format_history_row,
-    format_profile_string, HistoryRow,
+    HistoryRow, extract_history_row, format_history_header, format_history_row,
+    format_profile_string,
 };
 pub use hydro_energy::{
     eval_cell_pressure_for_work_ad, eval_face_area_time_centered_ad,
@@ -226,9 +228,9 @@ pub use hydro_energy::{
     setup_sources_and_others,
 };
 pub use hydro_eqns::{
-    compute_x_scale, do1_chem_eqns, do1_density_eqn, do1_energy_eqn,
-    do1_momentum_eqn, do1_radius_eqn, do1_temperature_eqn, do_surf_bc_eqns,
-    eval_henyey_equations, HenyeySystem,
+    HenyeySystem, compute_x_scale, do_surf_bc_eqns, do1_chem_eqns,
+    do1_density_eqn, do1_energy_eqn, do1_momentum_eqn, do1_radius_eqn,
+    do1_temperature_eqn, eval_henyey_equations,
 };
 pub use hydro_momentum::{
     eval_cell_peos_time_centered_ad, eval_face_dm_bar, expected_hse_grav_term,
@@ -249,40 +251,40 @@ pub use hydro_vars::{
 };
 pub use inlist::{InlistBundle, InlistLoadOptions, SectionControls};
 pub use inlist_inventory::{
-    copy_cleaned_star_case, supported_star_control_inventory,
-    StarControlInventory,
+    StarControlInventory, copy_cleaned_star_case,
+    supported_star_control_inventory,
 };
 pub use inlist_runner::{
-    run_inlist_stage, run_inlist_stage_with_logs, run_test_suite_case,
+    CaseRunReport, DefaultStarExtras, ExtrasDirective, RspBuildOutcome,
+    StageRunReport, StarExtras, StarLogsOptions, run_inlist_stage,
+    run_inlist_stage_with_logs, run_test_suite_case,
     run_test_suite_case_with_extras, run_test_suite_case_with_logs,
     run_test_suite_case_with_options, verify_photo_restart_parity,
-    CaseRunReport, DefaultStarExtras, ExtrasDirective, RspBuildOutcome,
-    StageRunReport, StarExtras, StarLogsOptions,
 };
 pub use mdot_redo::{
-    eval_surf_avg_w_div_w_crit, MdotRedoState, SelectMdotAction,
+    MdotRedoState, SelectMdotAction, eval_surf_avg_w_div_w_crit,
 };
 pub use mesa_history::{
-    default_star_history_specs, evaluate_star_history_row,
-    format_star_history_data_line, format_star_history_data_line_with_extra,
-    format_star_history_file_header,
+    DEFAULT_STAR_HISTORY_COLUMNS_TEXT, HistoryColumnSpec, HistoryIsoQuery,
+    IncrementalHistoryWriter, MesaCellValue, default_star_history_specs,
+    evaluate_star_history_row, format_star_history_data_line,
+    format_star_history_data_line_with_extra, format_star_history_file_header,
     format_star_history_file_header_with_extra, parse_star_history_columns,
-    resolve_star_history_columns, HistoryColumnSpec, HistoryIsoQuery,
-    IncrementalHistoryWriter, MesaCellValue, DEFAULT_STAR_HISTORY_COLUMNS_TEXT,
+    resolve_star_history_columns,
 };
 pub use mesa_log_reader::{
-    read_mesa_log_file, read_mesa_log_str, read_profiles_index_file,
-    read_profiles_index_str, MesaHeaderValue, MesaLogTable,
+    MesaHeaderValue, MesaLogTable, read_mesa_log_file, read_mesa_log_str,
+    read_profiles_index_file, read_profiles_index_str,
 };
 pub use mesa_profile::{
-    default_star_profile_specs, format_star_profile_text,
-    parse_star_profile_columns, resolve_star_profile_columns,
-    ProfileColumnSpec, ProfilesIndex, ProfilesIndexEntry, StarLogsWriter,
-    DEFAULT_STAR_PROFILE_COLUMNS_TEXT,
+    DEFAULT_STAR_PROFILE_COLUMNS_TEXT, ProfileColumnSpec, ProfilesIndex,
+    ProfilesIndexEntry, StarLogsWriter, default_star_profile_specs,
+    format_star_profile_text, parse_star_profile_columns,
+    resolve_star_profile_columns,
 };
 pub use mesh_adjust::{
-    do_adjust_mesh, eval_mesh_gval, plan_mesh, remap_onto_dq,
-    MeshFunctionConfig,
+    MeshFunctionConfig, do_adjust_mesh, eval_mesh_gval, plan_mesh,
+    remap_onto_dq,
 };
 pub use micro::{
     change_model_network, do_eos, do_kap, do_net, do_neu, get_or_load_net,
@@ -290,19 +292,19 @@ pub use micro::{
 };
 pub use micro_cache::MicrophysicsCache;
 pub use mix_info::{
-    cdc_factor, clean_mixing_glitches, compute_convection_sigmas,
-    eval_dxdt_mix, face_density, locate_convection_boundaries, ConvBoundary,
+    ConvBoundary, cdc_factor, clean_mixing_glitches, compute_convection_sigmas,
+    eval_dxdt_mix, face_density, locate_convection_boundaries,
 };
 pub use model::StarModel;
 pub use model_io::{
-    compute_photo_checksum, load_photo_bytes, photo_numerics_mode,
-    read_mod_str, read_photo_bytes, try_write_photo_bytes, write_mod_string,
-    write_photo_bytes, PHOTO_FORMAT_VERSION, STAR_DEF_VERSION,
+    PHOTO_FORMAT_VERSION, STAR_DEF_VERSION, compute_photo_checksum,
+    load_photo_bytes, photo_numerics_mode, read_mod_str, read_photo_bytes,
+    try_write_photo_bytes, write_mod_string, write_photo_bytes,
 };
-pub use overshoot::{apply_overshooting, OvershootConfig, OvershootScheme};
+pub use overshoot::{OvershootConfig, OvershootScheme, apply_overshooting};
 pub use pre_ms::{
-    build1_pre_ms_model, build_pre_ms_model, default_basic_net_composition,
-    PreMsShell,
+    PreMsShell, build_pre_ms_model, build1_pre_ms_model,
+    default_basic_net_composition,
 };
 pub use premix::{
     add_predictive_mixing, apply_predictive_mixing_from_controls,
@@ -311,31 +313,31 @@ pub use premix::{
 };
 pub use primary_state::PrimaryStateBuffer;
 pub use pulse::{
-    build_pulse_points, build_pulse_points_with_options, eval_center_d2,
-    eval_center_parabolic, eval_center_rho, eval_face, export_fgong,
-    export_fgong_with_version, export_gyre, export_gyre_with_schema,
-    export_osc, set_segment_indices, PulseExportOptions, PulsePoint,
-    PULSE_ISO_NAMES,
+    PULSE_ISO_NAMES, PulseExportOptions, PulsePoint, build_pulse_points,
+    build_pulse_points_with_options, eval_center_d2, eval_center_parabolic,
+    eval_center_rho, eval_face, export_fgong, export_fgong_with_version,
+    export_gyre, export_gyre_with_schema, export_osc, set_segment_indices,
 };
 pub use pulse_bvp::{
-    shoot_determinant, steffen_slopes, BvpEigenmode, BvpModel, BvpPoint,
-    InertiaNormKind, OuterBoundKind,
+    BvpEigenmode, BvpModel, BvpPoint, InertiaNormKind, OuterBoundKind,
+    shoot_determinant, steffen_slopes,
 };
 pub use pulse_bvp_recon::{
     classify_mode_orders, parse_fgong_model, parse_fortran_float,
     parse_gyre_mesa_model, reconstruct_and_analyze_mode,
 };
 pub use pulse_exporters::{
-    export_cafein, export_gr1d, export_gsm, export_gsm_data,
-    export_pulse_by_format, export_saio, GsmData,
+    GsmData, export_cafein, export_gr1d, export_gsm, export_gsm_data,
+    export_pulse_by_format, export_saio,
 };
 pub use pulse_modes::{
+    LinearOscillationMode, PulseModeScanOptions,
     build_bvp_model_from_pulse_points, eval_acoustic_large_separation_hz,
     eval_astero_scaling_dnu_numax_uhz, eval_buoyancy_period_spacing_s,
     eval_kappa_mechanism_growth, eval_linear_oscillation_modes,
     eval_target_mode_frequency_and_growth, scan_bounds_from_targets,
     scan_star_bvp_eigenmodes, solve_adipls_fgong_modes, solve_bvp_eigenmodes,
-    solve_gyre_mesa_modes, LinearOscillationMode, PulseModeScanOptions,
+    solve_gyre_mesa_modes,
 };
 pub use relax::{
     apply_composition_relaxation, apply_planetary_core, apply_uniform_rotation,
@@ -344,6 +346,8 @@ pub use relax::{
 };
 pub use relax_comp::relax_composition_with_henyey;
 pub use report_utils::{
+    ConvAndMixSummary, MESA_REF_VERSION_NUMBER, PhotosphereInfo,
+    STAR_LOG_COL_WIDTH, StepReportContext, SurfAvgRotationInfo,
     center_avg_x_by_name, center_value, center_value_by,
     eval_conv_and_mx_summary, eval_conv_time_scale_zone, eval_conv_time_scales,
     eval_photosphere_info, eval_surf_avg_rotation_info,
@@ -352,81 +356,80 @@ pub use report_utils::{
     format_mesa_int_width, format_mesa_txt, format_mesa_txt_width,
     parse_quoted_include_arg, push_mesa_6line_header, safe_log10,
     surface_avg_x_by_name, write_mesa_dbl_width, write_mesa_int_width,
-    write_mesa_txt_width, ConvAndMixSummary, PhotosphereInfo,
-    StepReportContext, SurfAvgRotationInfo, MESA_REF_VERSION_NUMBER,
-    STAR_LOG_COL_WIDTH,
+    write_mesa_txt_width,
 };
 pub use riemann::{
-    eval_hllc_face, eval_hllc_surface_face, eval_riemann_momentum_residual,
-    eval_riemann_profile, HllcFaceState,
+    HllcFaceState, eval_hllc_face, eval_hllc_surface_face,
+    eval_riemann_momentum_residual, eval_riemann_profile,
 };
 pub use riemann_ad::{
-    calc_ptot_cell_ad, do1_riemann_momentum_eqn, do_uface_and_pface,
+    calc_ptot_cell_ad, do_uface_and_pface, do1_riemann_momentum_eqn,
 };
-pub use rn_parser::{parse_rn_stages, RnStage};
+pub use rn_parser::{RnStage, parse_rn_stages};
 pub use rotation::{
-    eval_magnetic_diffusivity, eval_omega_crit, eval_rotation_fp_ft,
-    eval_rotational_mixing_zone, eval_thermal_diffusivity,
+    RI_CRIT_DSI, RotationalMixZone, eval_magnetic_diffusivity, eval_omega_crit,
+    eval_rotation_fp_ft, eval_rotational_mixing_zone, eval_thermal_diffusivity,
     set_rotation_mixing_info, sync_post_henyey_rotation,
-    update_rotation_distortion_factors, RotationalMixZone, RI_CRIT_DSI,
+    update_rotation_distortion_factors,
 };
-pub use rsp2::{
-    compute_rsp2_uq_face, eval_rsp2_face, eval_rsp2_zone, rsp2_flux_limiter,
-    solve_stationary_rsp2_w, Rsp2Config, Rsp2FaceResult, Rsp2ZoneResult,
-    X_ALFAC, X_ALFAP, X_ALFAS, X_CEDE, X_GAMMAR,
-};
-pub use rsp2_ad::{
-    eval_and_save_rsp2_eqns, eval_rsp2_hp_face_ad, eval_rsp2_ptrb_cell_ad,
-    update_rsp2_vars_ad,
-};
-pub use rsp2_eqns::{
-    eval_rsp2_hp_face_zone, eval_rsp2_profile_equations,
-    rsp2_adjust_vars_before_call_solver, Rsp2ProfileResiduals,
-};
-pub use rsp2_remesh::{remesh_for_rsp2, seed_rsp2_w_from_mlt_vc_if_needed};
 pub use rsp_build::{
-    build_rsp_envelope_model, do_rsp_build_model, eval_rsp_lina_modes,
-    RspLinaMode,
+    RspLinaMode, build_rsp_envelope_model, do_rsp_build_model,
+    eval_rsp_lina_modes,
 };
 pub use rsp_config::{Rsp2Controls, RspConfig};
 pub use rsp_def::{
-    RspDerivedConsts, RspState, F_EDD_FREE_STREAM, F_EDD_ISOTROPIC, MAX_RSP_NZN,
+    F_EDD_FREE_STREAM, F_EDD_ISOTROPIC, MAX_RSP_NZN, RspDerivedConsts, RspState,
 };
 pub use rsp_driver::{
     rsp_one_step, rsp_one_step_with_extras, rsp_setup_model,
     rsp_total_energy_integrals,
 };
 pub use rsp_eos_kap::{
-    compute_standard_metals_xa, eval1_gamma_pt_get_rho, eval1_mesa_eos_and_kap,
+    RspChemCache, RspEosKapOut, compute_standard_metals_xa,
+    eval_mesa_eos_and_kap, eval1_gamma_pt_get_rho, eval1_mesa_eos_and_kap,
     eval1_mesa_eos_de_and_kap, eval1_mesa_eos_degas_and_kap,
-    eval1_mesa_rho_given_pt, eval1_mesa_t_given_dp, eval_mesa_eos_and_kap,
-    get_surf_p_t_kap, set_rho_for_new_pgas, set_t_for_new_egas,
-    set_t_for_new_energy, set_t_for_new_pgas, RspChemCache, RspEosKapOut,
+    eval1_mesa_rho_given_pt, eval1_mesa_t_given_dp, get_surf_p_t_kap,
+    set_rho_for_new_pgas, set_t_for_new_egas, set_t_for_new_energy,
+    set_t_for_new_pgas,
 };
 pub use rsp_grid::{
-    cleanup_for_lina, copy_results, eop, finish_build_rsp_model, mesa_eos_kap,
-    MesaRanmar, RspEnvGrid, RspTotalEosKap,
+    MesaRanmar, RspEnvGrid, RspTotalEosKap, cleanup_for_lina, copy_results,
+    eop, finish_build_rsp_model, mesa_eos_kap,
 };
-pub use rsp_lina::{do_lina, RspLinaOutput};
+pub use rsp_lina::{RspLinaOutput, do_lina};
 pub use rsp_relax_env::relax_env;
 pub use rsp_stah::stah;
+pub use rsp2::{
+    Rsp2Config, Rsp2FaceResult, Rsp2ZoneResult, X_ALFAC, X_ALFAP, X_ALFAS,
+    X_CEDE, X_GAMMAR, compute_rsp2_uq_face, eval_rsp2_face, eval_rsp2_zone,
+    rsp2_flux_limiter, solve_stationary_rsp2_w,
+};
+pub use rsp2_ad::{
+    eval_and_save_rsp2_eqns, eval_rsp2_hp_face_ad, eval_rsp2_ptrb_cell_ad,
+    update_rsp2_vars_ad,
+};
+pub use rsp2_eqns::{
+    Rsp2ProfileResiduals, eval_rsp2_hp_face_zone, eval_rsp2_profile_equations,
+    rsp2_adjust_vars_before_call_solver,
+};
+pub use rsp2_remesh::{remesh_for_rsp2, seed_rsp2_w_from_mlt_vc_if_needed};
 pub use solver::{
-    active_solver_tolerances, compute_corr_coeff, compute_correction_norms,
-    compute_model_correction_norms, compute_residual_norms,
-    compute_vector_norms, solve_henyey_step, HenyeySolverReport,
+    HenyeySolverReport, active_solver_tolerances, compute_corr_coeff,
+    compute_correction_norms, compute_model_correction_norms,
+    compute_residual_norms, compute_vector_norms, solve_henyey_step,
 };
 pub use star_ad::{
-    StarAdExt, StarAdOrder1, I_HP_00, I_HP_M1, I_HP_P1, I_LND_00, I_LND_M1,
+    I_HP_00, I_HP_M1, I_HP_P1, I_L_00, I_L_M1, I_L_P1, I_LND_00, I_LND_M1,
     I_LND_P1, I_LNR_00, I_LNR_M1, I_LNR_P1, I_LNT_00, I_LNT_M1, I_LNT_P1,
-    I_L_00, I_L_M1, I_L_P1, I_OMEGA_00, I_OMEGA_M1, I_OMEGA_P1, I_V_00, I_V_M1,
-    I_V_P1, I_W_00, I_W_M1, I_W_P1, NUM_STAR_AD_VARS,
+    I_OMEGA_00, I_OMEGA_M1, I_OMEGA_P1, I_V_00, I_V_M1, I_V_P1, I_W_00, I_W_M1,
+    I_W_P1, NUM_STAR_AD_VARS, StarAdExt, StarAdOrder1,
 };
 pub use star_job_init::init_or_update_model_from_bundle;
 pub use stella::{
-    eval_sobolev_feii_5169_snapshot, export_stella_pair, parse_stella_abn,
-    parse_stella_hyd, parse_stella_lbol, run_stella_from_hyd_abn,
     FeII5169EtaTable, StellaAbnZone, StellaExportOptions, StellaHydModel,
-    StellaHydZone, StellaVelFeIIRow,
+    StellaHydZone, StellaVelFeIIRow, eval_sobolev_feii_5169_snapshot,
+    export_stella_pair, parse_stella_abn, parse_stella_hyd, parse_stella_lbol,
+    run_stella_from_hyd_abn,
 };
 pub use struct_burn_mix::{
     do_struct_burn_mix, op_split_burn_zones, solve_composition_diffusion,
@@ -437,17 +440,18 @@ pub use termination::{
     compute_core_masses_msun,
 };
 pub use timestep::{
+    TimestepAction, TimestepLimitReason, TimestepReport,
     eval_dx_nuc_drop_ratio, eval_h211_factor, eval_varcontrol, filter_limit,
-    pick_next_timestep, TimestepAction, TimestepLimitReason, TimestepReport,
+    pick_next_timestep,
 };
 pub use timestep_limits::timestep_controller;
 pub use winds::{
-    do_set_mdot, eval_bjorklund_wind, eval_blocker_wind, eval_de_jager_wind,
-    eval_dutch_wind, eval_nieuwenhuijzen_wind, eval_nugis_lamers_wind,
-    eval_reimers_wind, eval_van_loon_wind, eval_vink_wind, set_mdot,
-    DutchLowTScheme, WindScheme,
+    DutchLowTScheme, WindScheme, do_set_mdot, eval_bjorklund_wind,
+    eval_blocker_wind, eval_de_jager_wind, eval_dutch_wind,
+    eval_nieuwenhuijzen_wind, eval_nugis_lamers_wind, eval_reimers_wind,
+    eval_van_loon_wind, eval_vink_wind, set_mdot,
 };
 pub use zams::{
-    interp_q, load_zams_model, load_zams_model_from_catalog,
-    yrs_for_init_timestep, ZamsCatalog, ZamsEntry,
+    ZamsCatalog, ZamsEntry, interp_q, load_zams_model,
+    load_zams_model_from_catalog, yrs_for_init_timestep,
 };

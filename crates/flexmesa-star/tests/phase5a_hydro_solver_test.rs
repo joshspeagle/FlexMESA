@@ -2,12 +2,12 @@
 //! Phase 5a analytical vs. finite-difference Jacobian verification (`Issue #112`).
 
 use flexmesa_const::SECYER;
-use flexmesa_star::hydro_eqns::{assemble_henyey_system, HenyeySystem};
+use flexmesa_star::hydro_eqns::{HenyeySystem, assemble_henyey_system};
 use flexmesa_star::riemann_ad::do_uface_and_pface;
 use flexmesa_star::star_ad::StarAdOrder1;
 use flexmesa_star::{
-    eval_henyey_equations, load_zams_model, set_hydro_vars, EnergyEqnOption,
-    StarControls, StarJobControls, StarModel,
+    EnergyEqnOption, StarControls, StarJobControls, StarModel,
+    eval_henyey_equations, load_zams_model, set_hydro_vars,
 };
 
 fn usize_to_f64(n: usize) -> f64 {
@@ -226,7 +226,9 @@ fn assert_tridiagonal_jacobian_matches_fd(
                     let eff_atol =
                         abs_tol.max(2.0 * f64::EPSILON * eq0 / eps_scaled);
                     assert_entry_matches(
-                        &format!("hydro k_equ={k_equ} i_equ={i_equ} k_var={k_var} j_var={j_var}"),
+                        &format!(
+                            "hydro k_equ={k_equ} i_equ={i_equ} k_var={k_var} j_var={j_var}"
+                        ),
                         an,
                         fd,
                         h_rtol,
@@ -343,7 +345,9 @@ fn assert_tridiagonal_jacobian_matches_fd(
                             rel_tol
                         };
                         assert_entry_matches(
-                            &format!("simplex k_equ={k_equ} i_equ={i_equ} k_var={k_var} j_sp={j_sp}"),
+                            &format!(
+                                "simplex k_equ={k_equ} i_equ={i_equ} k_var={k_var} j_sp={j_sp}"
+                            ),
                             an_dir,
                             fd_dir,
                             zone_rtol,
@@ -405,7 +409,14 @@ fn test_frozen_microphysics_star_ad_jacobian_matches_central_fd_to_1e_10() {
         let (nvar, nvar_h, eps) = (sys0.nvar, base.layout.nvar_hydro, 3.0e-6);
         for k_var in 0..base.nz {
             for j_var in 0..nvar_h {
-                let delta = eps * sys0.x_scale[k_var * nvar + j_var];
+                let eps_var = if j_var == base.layout.i_lum
+                    || Some(j_var) == base.layout.i_v
+                {
+                    1.0e-4
+                } else {
+                    eps
+                };
+                let delta = eps_var * sys0.x_scale[k_var * nvar + j_var];
                 let (mut mp, mut mm) = (base.clone(), base.clone());
                 mp.xh[k_var * nvar_h + j_var] += delta;
                 mp.unpack_xh();
@@ -420,7 +431,7 @@ fn test_frozen_microphysics_star_ad_jacobian_matches_central_fd_to_1e_10() {
                     for i_equ in 0..nvar {
                         let fd = (sys_p.equ[k_equ * nvar + i_equ]
                             - sys_m.equ[k_equ * nvar + i_equ])
-                            / (2.0 * eps);
+                            / (2.0 * eps_var);
                         let an = lookup_block_entry(
                             &sys0, k_equ, i_equ, k_var, j_var,
                         );
@@ -439,8 +450,8 @@ fn test_frozen_microphysics_star_ad_jacobian_matches_central_fd_to_1e_10() {
 }
 
 #[test]
-fn test_coupled_hydro_chem_jacobian_matches_central_fd_across_sinks_and_spherical_v_flag(
-) {
+fn test_coupled_hydro_chem_jacobian_matches_central_fd_across_sinks_and_spherical_v_flag()
+ {
     // 1. Analytical `HELM` radiative envelope (`alpha_MLT = 0`): strict `2e-5`
     //    relative gate across all zones and both `Dedt` / `EpsGrav` forms.
     for opt in [EnergyEqnOption::Dedt, EnergyEqnOption::EpsGrav] {
@@ -560,8 +571,8 @@ fn test_coupled_u_flag_hllc_jacobian_across_all_outer_bcs_and_chem_rti() {
 }
 
 #[test]
-fn test_coupled_v_flag_rti_jacobian_with_active_baroclinic_source_diffusion_and_supersaturation(
-) {
+fn test_coupled_v_flag_rti_jacobian_with_active_baroclinic_source_diffusion_and_supersaturation()
+ {
     let mut controls = StarControls {
         v_flag: true,
         rti_flag: true,

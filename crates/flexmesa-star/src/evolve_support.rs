@@ -10,7 +10,7 @@ use flexmesa_const::MixingType;
 use flexmesa_turb::MltOption;
 
 use crate::controls::{EnergyEqnOption, StarError};
-use crate::diffusion::{do_element_diffusion, DiffusionScheme};
+use crate::diffusion::{DiffusionScheme, do_element_diffusion};
 use crate::hydro_energy::{
     setup_d_turbulent_energy_dt, setup_dl_dm, setup_sources_and_others,
 };
@@ -19,7 +19,7 @@ use crate::hydro_work::{
     eval_cell_dpe_dt_ad, eval_v_flag_dke_dt_ad, eval_v_flag_dwork_dm_ad,
     eval_v_flag_simple_pdv_dm_ad,
 };
-use crate::mesh_adjust::{plan_mesh, remap_onto_dq, MeshFunctionConfig};
+use crate::mesh_adjust::{MeshFunctionConfig, plan_mesh, remap_onto_dq};
 use crate::model::StarModel;
 use crate::premix::{do_conv_premix, do_phase_separation};
 use crate::primary_state::PrimaryStateBuffer;
@@ -288,47 +288,164 @@ pub fn update_step_energy_conservation(model: &mut StarModel, dt: f64) {
         model.aux.step_hist.cumulative_energy_error_old + err_erg;
 }
 
-/// Executes pre-step adaptive remeshing (`do_adjust_mesh` + hydro/rotation
-/// smoothing) once before a step or coupled binary RLOF trial loop, returning
+/// Evaluates enclosed nuclear luminosity by reaction category (`erg/s`) from
+/// center outward (`set_luminosity_by_category` in `star/private/star_utils.f90:4112-4132`).
+#[must_use]
+pub fn eval_lum_by_category_erg_s(
+    model: &StarModel,
+) -> Vec<[f64; flexmesa_chem::NUM_CATEGORIES]> {
+    let nz = model.nz;
+    let mut out = vec![[0.0_f64; flexmesa_chem::NUM_CATEGORIES]; nz];
+    if nz == 0 {
+        return out;
+    }
+    let mut running = [0.0_f64; flexmesa_chem::NUM_CATEGORIES];
+    for k in (0..nz).rev() {
+        let dm_k = model.dm[k];
+        if let Some(cats) = model.aux.eps_nuc_categories.get(k) {
+            for (c, &val) in cats.iter().enumerate() {
+                running[c] += dm_k * val;
+            }
+        }
+        out[k] = running;
+    }
+    out
+}
+
+/// Snapshots start-of-step `ye_start`, `eps_nuc_start`, and
+/// `lum_by_category_start` (`set_start_of_step_info` in
+/// `star/private/evolve.f90:1748-1808` and `struct_burn_mix.f90:268-356`).
+pub fn snapshot_step_start_extras(model: &mut StarModel) {
+    model.ye_start.clone_from(&model.ye);
+    model.eps_nuc_start.clone_from(&model.eps_nuc);
+    model.lum_by_category_start = eval_lum_by_category_erg_s(model);
+}
+
+/// Snapshots inner-boundary and elapsed-time `*_old` scalars (`new_generation`
+/// in `star/private/evolve_support.f90:82-90`).
+pub fn snapshot_step_old_extras(model: &mut StarModel) {
+    if model.time_sec == 0.0 && model.star_age != 0.0 {
+        model.time_sec = model.star_age * flexmesa_const::SECYER;
+    }
+    model.time_old_sec = model.time_sec;
+    model.m_center_old = model.m_center;
+    model.r_center_old = model.r_center;
+    model.l_center_old = model.l_center;
+    model.v_center_old = model.v_center;
+}
+
+fn restore_exact_remapped_j_rot(
+    model: &mut StarModel,
+    snap: &PrimaryStateBuffer,
+) {
+    let nz_old = snap.dq.len();
+    let nz_new = model.nz;
+    if nz_old == 0 || nz_new == 0 || snap.j_rot.len() != nz_old {
+        return;
+    }
+    let dqbar_from_dq = |dq: &[f64]| -> Vec<f64> {
+        let n = dq.len();
+        let mut out = vec![0.0_f64; n];
+        out[0] = 0.5 * dq[0];
+        for i in 1..n.saturating_sub(1) {
+            out[i] = 0.5 * (dq[i - 1] + dq[i]);
+        }
+        if n > 1 {
+            out[n - 1] = 0.5 * dq[n - 2] + dq[n - 1];
+        } else {
+            out[0] = dq[0];
+        }
+        out
+    };
+    let dqbar_old = dqbar_from_dq(&snap.dq);
+    let dqbar_new = dqbar_from_dq(&model.dq);
+    let mut xbar_old = vec![0.0_f64; nz_old + 1];
+    for kk in 0..nz_old {
+        xbar_old[kk + 1] = xbar_old[kk] + dqbar_old[kk];
+    }
+    xbar_old[nz_old] = 1.0;
+
+    let mut xbar_cur = 0.0_f64;
+    let mut kk_b = 0_usize;
+    for k in 0..nz_new {
+        let a0 = xbar_cur;
+        let a1 = if k + 1 < nz_new {
+            a0 + dqbar_new[k]
+        } else {
+            1.0
+        };
+        xbar_cur = a1;
+        let dx = (a1 - a0).max(1.0e-99);
+        while kk_b + 1 < nz_old && xbar_old[kk_b + 1] <= a0 {
+            kk_b += 1;
+        }
+        let mut j_acc = 0.0_f64;
+        for kk in kk_b..nz_old {
+            let b0 = xbar_old[kk];
+            if b0 >= a1 {
+                break;
+            }
+            let b1 = xbar_old[kk + 1];
+            let ov = (a1.min(b1) - a0.max(b0)).max(0.0);
+            if ov > 0.0 {
+                j_acc += ov * snap.j_rot[kk];
+            }
+        }
+        model.j_rot[k] = j_acc / dx;
+    }
+    crate::rotation::conserve_shell_j_rot_and_distortion(model);
+}
+
+/// Executes pre-step adaptive remeshing (`do_mesh` in
+/// `star/private/evolve.f90:1882-1889, 1961-1989`), returning
 /// `(num_splits, num_merges, pre_remesh_snapshot)`.
 ///
 /// # Errors
 /// Returns [`StarError`] if microphysics or mesh adjustment fails.
 pub fn remesh_star_before_step(
     model: &mut StarModel,
-    dt_try: f64,
+    dt_prev: f64,
 ) -> Result<(usize, usize, Option<PrimaryStateBuffer>), StarError> {
-    let recent_retry = model
-        .aux
-        .step_hist
-        .model_number_for_last_retry
-        .is_some_and(|m_ret| model.model_number <= m_ret + 1);
-    let sharp_dt_drop = !model.controls.rsp_flag
-        && dt_try > 0.0
-        && model.dt_old > 0.0
-        && dt_try < 0.25 * model.dt_old;
+    let hold_after_retry = model.controls.restore_mesh_on_retry
+        && model.aux.step_hist.model_number_for_last_retry.is_some_and(
+            |m_ret| {
+                (m_ret as isize)
+                    > (model.model_number as isize)
+                        - model.controls.num_steps_to_hold_mesh_after_retry
+            },
+        );
     let min_remesh_dt = model.controls.mix_wind.remesh_dt_limit;
-    let dt_remesh_ok =
-        model.controls.rsp_flag || dt_try <= 0.0 || dt_try >= min_remesh_dt;
+    let dt_remesh_ok = dt_prev <= 0.0 || dt_prev >= min_remesh_dt;
     if model.controls.okay_to_remesh
-        && !model.controls.rsp2_flag
-        && !recent_retry
-        && !sharp_dt_drop
+        && !model.controls.rsp_flag
+        && !model.doing_first_model_of_run
+        && !hold_after_retry
         && dt_remesh_ok
     {
         set_hydro_vars(model, false, false)?;
-        let dt_curr = dt_try.max(1.0);
+        let dt_curr = dt_prev.max(1.0);
         refresh_mixing_state(model, dt_curr, &[]);
         let mesh_cfg = MeshFunctionConfig::from_controls(&model.controls);
         let (dq_new, ns, nm) = plan_mesh(model, &mesh_cfg);
         if ns + nm > 0 {
             let snap = PrimaryStateBuffer::from_model(model);
             remap_onto_dq(model, &dq_new)?;
+            // Pre-`#153` `remap_onto_dq` uses linear cell interpolation; keep
+            // `smooth_post_remesh_hydro_and_rotation` until `#153` replaces
+            // `remap_onto_dq` with `mesh_adjust.f90` reconstruction, and
+            // restore exact conservatively remapped `j_rot` when rotating.
             crate::hydro_state::smooth_post_remesh_hydro_and_rotation(
                 model, &snap,
             )?;
-            set_hydro_vars(model, false, false)?;
+            if model.controls.rotation_flag {
+                restore_exact_remapped_j_rot(model, &snap);
+                model.aux.solver_mlt_eval_count = 1;
+            }
+            let hydro_res = set_hydro_vars(model, false, false);
+            model.aux.solver_mlt_eval_count = 0;
+            hydro_res?;
             model.save_start_values()?;
+            snapshot_step_start_extras(model);
             return Ok((ns, nm, Some(snap)));
         }
         Ok((ns, nm, None))
@@ -337,8 +454,8 @@ pub fn remesh_star_before_step(
     }
 }
 
-/// Updates sticky-`gradr` solver MLT flip-tracking and zero-initialized `sig`
-/// immediately after face MLT evaluation (`mlt_info.f90` solver iteration hysteresis).
+/// Updates sticky-`gradr` solver MLT state and zero-initialized `sig`
+/// immediately after face MLT evaluation (`turb_info.f90:56-61, 213-223`).
 pub(crate) fn update_mlt_sticky_and_sig_after_hydro(model: &mut StarModel) {
     let nz = model.nz;
     if !model.aux.doing_struct_burn_mix {
@@ -361,32 +478,12 @@ pub(crate) fn update_mlt_sticky_and_sig_after_hydro(model: &mut StarModel) {
                     .fold(f64::NEG_INFINITY, f64::max)
                     / flexmesa_const::LN10
                     >= mw.min_logt_for_make_gradr_sticky_in_solver_iters);
-        let eval_cnt = model.aux.solver_mlt_eval_count;
-        for k in 0..nz {
-            if model.aux.fixed_gradr_sticky[k] {
-                continue;
-            }
-            let is_conv =
-                u8::from(model.mixing_type[k] == MixingType::ConvectiveMixing);
-            if is_conv != model.aux.mlt_prev_conv[k] {
-                model.aux.mlt_prev_conv[k] = is_conv;
-                model.aux.mlt_flip_count[k] =
-                    model.aux.mlt_flip_count[k].saturating_add(1);
-                if model.aux.mlt_flip_count[k] >= 2 {
-                    model.aux.solver_had_mlt_flip = true;
-                }
-            }
-        }
-        if sticky_ctrl && eval_cnt > 3 {
+        // `eval_cnt == 1` is the pre-iteration residual evaluation (`solver_iter == 0`),
+        // so `solver_iter > 3` (`turb_info.f90:56`) corresponds to `eval_cnt > 4`.
+        if sticky_ctrl && model.aux.solver_mlt_eval_count > 4 {
             for k in 0..nz {
-                if model.mixing_type[k] != MixingType::ConvectiveMixing {
-                    model.aux.fixed_gradr_sticky[k] = true;
-                }
-            }
-        } else if model.aux.solver_had_mlt_flip && eval_cnt >= 3 {
-            for k in 0..nz {
-                if model.t[k] > 1.0e6
-                    && model.mixing_type[k] != MixingType::ConvectiveMixing
+                if !model.aux.fixed_gradr_sticky[k]
+                    && model.mixing_type[k] == MixingType::NoMixing
                 {
                     model.aux.fixed_gradr_sticky[k] = true;
                 }

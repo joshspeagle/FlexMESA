@@ -49,6 +49,8 @@ Scope and the `v0.1.0` definition are in [`SCOPE.md`](SCOPE.md). Work is tracked
 | 32 | Unported Upstream Extras Are Declared and Never Pass (`#148`) | In force | below |
 | 33 | Data Pipeline Provenance, Verified Runtime Caches, and Corruption Errors (`#164`) | In force | below |
 | 34 | Upstream MESA 26.4.1 Control Defaults Parity, Scalar Sentinels, and Explicit Opacity Zbase (`#149`) | In force | below |
+| 35 | Mode-Independent `CRMATH` Recomputation of REACLIB Reverse Coefficients at Load Time (`#161`) | In force | below |
+| 36 | Unconditional MESA 26.4.1 Newton Solver, Retry/Redo Semantics, and Deferred Upstream Bugs (`#152`, `#139`, `#177`, `#251`-`#253`) | In force | below |
 
 ## Pre-audit decisions still in force
 
@@ -429,3 +431,18 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
 - **Alternatives Rejected**:
   - *Calling `with_numerics_mode(NumericsMode::Strict, ...)` during catalog loading*: Mutates the process-wide `ACTIVE_MODE` atomic while concurrent `Fast`-mode callers read `is_strict()` lock-free (`#210`, caught by `routing_governance`).
   - *Re-packing `rates_tables.bin` offline in Python*: Leaves reverse detailed-balance coefficients decoupled from `NuclideCatalog` and `flexmesa-math` `CRMATH` rounding.
+
+---
+
+## DECISIONS #36: Unconditional MESA 26.4.1 Newton Solver, Retry/Redo Semantics, and Deferred Upstream Bugs (`Issues #152, #139, #177, #251-#253`)
+
+- **Date**: 2026-11-19
+- **Decision**:
+  1. **Upstream Newton Iteration Control (`star_solver.f90`, `solver_support.f90`)**: Replace FlexMESA's 7-halving line search, `|dln| <= 0.5` / `|dX| <= 0.25` damping caps, `1.5x` residual-growth acceptance, fixed `25`-iteration limit, and silent `[0, 1]` mass-fraction clamping with MESA `26.4.1`'s `do_solver_work`, `adjust_correction` (quadratic and cubic backtracking using `block_multiply_xa` directional derivatives), `Bdomain`, `scale_correction_norm`, retry-dependent `max_tries` schedule (`max_tries1`, `solver_max_tries_before_reject`, `max_tries_for_retry`, `max_tries_after_5_retries`, `max_tries_after_10_retries`, `max_tries_after_20_retries`, `solver_itermin`, `tiny_corr_coeff_limit`), high-$T$ correction tolerance relaxation (`tol_correction_high_t_limit`, `tol_correction_extreme_t_limit`), `min_xa_hard_limit` / `sum_xa_hard_limit` retries, and `check_after_converge` (`surface_avg_abundance_dq`). Bump `FMPHOTO2` format version to `22` for solver/step state fields.
+  2. **Retry, Redo, and Implicit-Wind Failure Semantics (`evolve.f90`, `evolve_support.f90`, `#139`)**: Restore `M_center`, `R_center`, `L_center`, `v_center`, `time_sec`, and `mlt_vc` in `restore_from_old`; preserve remeshed grids across retries unless `restore_mesh_on_retry = true`; remove non-upstream remesh vetoes and the `0.2` retry factor on retry $\ge 4$; terminate cleanly on `min_timestep_limit`, `max_number_retries`, and `redo_limit`; and remove `force_accept_next` / `note_solver_failure` from `select_mdot_action` so any failed solve inside `implicit_mdot_loop` immediately triggers a step retry (`evolve.f90:678-680`, closing `#139`'s mechanism).
+  3. **Unconditional Reproduction of Upstream MESA `26.4.1` Bugs (`#145`, `#169`, `#177`, `#251`-`#253`)**: Reproduce MESA `26.4.1` unconditionally with zero option flags across all five solver and timestep defects: (a) `sizequ` double-counted chemistry residuals (`solver_support.f90:219-236, 273-286`, `#177`), (b) `check_dX` tautological `'X'`/`'Y'` species tests (`timestep.f90:564-567`, `#177`), (c) `sizeB` cumulative cross-zone `sum_xa_corr` and duplicate `species_loop` accumulation (`solver_support.f90:387, 389, 452-501`, `#251`), (d) `set_vars_for_solver` `ln10 * min(lnT, lnT_start)` factor (`solver_support.f90:1145-1146, 1157-1158, 1339-1340, 1351-1352`, `#252`), and (e) `check_dX` `dX_decreases_only(j)` species-slot indexing (`timestep.f90:578`, `#253`), returning an explicit `StarError::InvalidInput` if a matching species ever exceeds the 100-slot `dX_decreases_only` bound rather than reading out-of-bounds memory.
+  4. **Self-Generated Wave 4 `N=8` Regression Snapshot Refresh (`#146`)**: Aligning `set_xscale_info` (`max(1.0, |xh_start|)`) and equilibrating the resampled 8-zone `bench_star_evolve_step` initial profile via `star_evolve_step` shifts three internal `N=8` benchmark checksums: `star_hydro_eqns` (`4.253179678855851e6` -> `4.253173239706706e6` Rust / `4.253173239706682e6` Python), `star_newton_step` (`1.451475459976951e2` -> `1.451491418068066e2`), and `star_evolve_step` (`1.005971756200643e2` -> `9.894550507232628e1`).
+- **Why**: Invented solver damping, iteration caps, `xa` clamps, force-accepted wind redos, and well-intentioned fixes to `#177` caused systematic step-count, retry-count, and iteration-count divergence from MESA `26.4.1`, and `CLAUDE.md` forbids option flags that toggle between upstream `26.4.1` and post-`v0.1.0` bug fixes before `#143` parity is established.
+- **Alternatives Rejected**:
+  - *Adding runtime flags to toggle `#177` and `#251`-`#253` fixes*: Violates the unconditional single-target MESA `26.4.1` parity rule (`CLAUDE.md`, `#145`, `#169`).
+  - *Retaining `force_accept_next` fallback in `select_mdot_action`*: Force-accepts steps with $\Omega / \Omega_{\mathrm{crit}}$ above limit when boosted winds fail to converge (`#139`).

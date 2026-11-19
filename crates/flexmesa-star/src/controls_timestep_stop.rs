@@ -4,8 +4,8 @@
 //! (`star/defaults/controls.defaults:762-950` and `9425-11300`).
 
 /// Number of indexed abundance-change timestep limit slots (`max_dX_limit_ctrls`
-/// in `star_data/public/star_data_def.inc`).
-pub const MAX_DX_LIMIT_CTRLS: usize = 8;
+/// in `star_data/public/star_data_def.inc:388`).
+pub const MAX_DX_LIMIT_CTRLS: usize = 100;
 
 /// Core-boundary definitions, additional evolutionary stopping limits, and
 /// soft/hard timestep controller settings (`timestep.f90`, `report.f90`,
@@ -117,22 +117,28 @@ pub struct TimestepStopControls {
     // --- Abundance & Nuclear Depletion Timestep Limits (`controls.defaults:9758-9950`) ---
     /// Distance ($M_\odot$) from convective boundaries excluded from `dX` checks (`dX_mix_dist_limit`).
     pub dx_mix_dist_limit: f64,
-    /// Species names (`"h1"`, `"he4"`, `"X"`, `"Y"`, `"Z"`, ...) for `dX_limit(1..8)`.
-    pub dx_limit_species: [String; MAX_DX_LIMIT_CTRLS],
-    /// Minimum cell abundance for `dX_limit(1..8)` (`dX_limit_min_X`).
-    pub dx_limit_min_x: [f64; MAX_DX_LIMIT_CTRLS],
-    /// Soft limit on $|\Delta X|$ (`dX_limit(1..8)`).
-    pub dx_limit: [f64; MAX_DX_LIMIT_CTRLS],
-    /// Hard retry limit on $|\Delta X|$ (`dX_hard_limit(1..8)`).
-    pub dx_hard_limit: [f64; MAX_DX_LIMIT_CTRLS],
-    /// Only check decreases in abundance (`dX_decreases_only(1..8)`).
-    pub dx_decreases_only: [bool; MAX_DX_LIMIT_CTRLS],
-    /// Minimum cell abundance for `dX_div_X_limit(1..8)` (`dX_div_X_limit_min_X`).
-    pub dx_div_x_limit_min_x: [f64; MAX_DX_LIMIT_CTRLS],
-    /// Soft limit on $|\Delta X| / X$ (`dX_div_X_limit(1..8)`).
-    pub dx_div_x_limit: [f64; MAX_DX_LIMIT_CTRLS],
-    /// Hard retry limit on $|\Delta X| / X$ (`dX_div_X_hard_limit(1..8)`).
-    pub dx_div_x_hard_limit: [f64; MAX_DX_LIMIT_CTRLS],
+    /// Species names (`"h1"`, `"he4"`, `"X"`, `"Y"`, `"Z"`, ...) for `dX_limit(1..100)`.
+    pub dx_limit_species: Vec<String>,
+    /// Minimum cell abundance for `dX_limit(1..100)` (`dX_limit_min_X`).
+    pub dx_limit_min_x: Vec<f64>,
+    /// Soft limit on $|\Delta X|$ (`dX_limit(1..100)`).
+    pub dx_limit: Vec<f64>,
+    /// Hard retry limit on $|\Delta X|$ (`dX_hard_limit(1..100)`).
+    pub dx_hard_limit: Vec<f64>,
+    /// Only check decreases in abundance (`dX_decreases_only(1..100)`).
+    pub dx_decreases_only: Vec<bool>,
+    /// Minimum cell abundance for `dX_div_X_limit(1..100)` (`dX_div_X_limit_min_X`).
+    pub dx_div_x_limit_min_x: Vec<f64>,
+    /// Soft limit on $|\Delta X| / X$ (`dX_div_X_limit(1..100)`).
+    pub dx_div_x_limit: Vec<f64>,
+    /// Hard retry limit on $|\Delta X| / X$ (`dX_div_X_hard_limit(1..100)`).
+    pub dx_div_x_hard_limit: Vec<f64>,
+    /// High-$T$ soft limit on $|\Delta X| / X$ (`dX_div_X_at_high_T_limit(1..100)`).
+    pub dx_div_x_at_high_t_limit: Vec<f64>,
+    /// High-$T$ hard retry limit on $|\Delta X| / X$ (`dX_div_X_at_high_T_hard_limit(1..100)`).
+    pub dx_div_x_at_high_t_hard_limit: Vec<f64>,
+    /// Peak $\log_{10} T$ threshold switching `dX_div_X` to high-$T$ limits (`dX_div_X_at_high_T_limit_lgT_min(1..100)`).
+    pub dx_div_x_at_high_t_limit_lgt_min: Vec<f64>,
     /// Minimum abundance for `dX_nuc_drop` (`dX_nuc_drop_min_X_limit`, `1e-4` default).
     pub dx_nuc_drop_min_x_limit: f64,
     /// Maximum mass number $A$ for `dX_nuc_drop` (`dX_nuc_drop_max_A_limit`, `52.0` default).
@@ -305,18 +311,145 @@ pub struct TimestepStopControls {
     pub dt_div_dt_cell_collapse_limit: f64,
     /// Hard retry limit on $\Delta t / \Delta t_{\mathrm{collapse}}$.
     pub dt_div_dt_cell_collapse_hard_limit: f64,
+    /// Restrict `dt_div_min_dr_div_cs` to cells inside remnant mass (`check_remnant_only_for_dt_div_min_dr_div_cs_limit`).
+    pub check_remnant_only_for_dt_div_min_dr_div_cs_limit: bool,
+    /// Soft limit on $|\Delta Y_e|$ in high-$T$ zones (`delta_Ye_highT_limit`, `99.0` default).
+    pub delta_ye_hight_limit: f64,
+    /// Hard retry limit on $|\Delta Y_e|$ in high-$T$ zones (`delta_Ye_highT_hard_limit`, `-1.0` default).
+    pub delta_ye_hight_hard_limit: f64,
+    /// Minimum cell temperature (K) for `delta_Ye_highT` (`minT_for_highT_Ye_limit`, `7e9` default).
+    pub mint_for_hight_ye_limit: f64,
+    /// Soft limit on non-convective increase in $\log_{10}\epsilon_{\mathrm{nuc}}$ (`delta_log_eps_nuc_limit`, `-1.0` default).
+    pub delta_log_eps_nuc_limit: f64,
+    /// Hard retry limit on non-convective increase in $\log_{10}\epsilon_{\mathrm{nuc}}$ (`delta_log_eps_nuc_hard_limit`, `-1.0` default).
+    pub delta_log_eps_nuc_hard_limit: f64,
+    /// Soft limit on per-category $|\Delta\log_{10} L_{\mathrm{cat}}|$ (`delta_lgL_nuc_cat_limit`, `-1.0` default).
+    pub delta_lgl_nuc_cat_limit: f64,
+    /// Hard retry limit on per-category $|\Delta\log_{10} L_{\mathrm{cat}}|$ (`delta_lgL_nuc_cat_hard_limit`, `-1.0` default).
+    pub delta_lgl_nuc_cat_hard_limit: f64,
+    /// Minimum $\log_{10}(L_{\mathrm{cat}}/L_\odot)$ for `delta_lgL_nuc_cat` (`lgL_nuc_cat_burn_min`, `-1.0` default).
+    pub lgl_nuc_cat_burn_min: f64,
+    /// Mixing-boundary exclusion distance in $q$ for `delta_lgL_nuc_cat` (`lgL_nuc_mix_dist_limit`, `1e-6` default).
+    pub lgl_nuc_mix_dist_limit: f64,
+    /// Maximum dominance $\max(\log_{10} L_{\mathrm{He}}, \log_{10} L_Z) - \log_{10} L_{\mathrm{H}}$ for `delta_lgL_H` (`lgL_H_burn_relative_limit`, `3.0` default).
+    pub lgl_h_burn_relative_limit: f64,
+    /// Maximum dominance $\max(\log_{10} L_{\mathrm{H}}, \log_{10} L_Z) - \log_{10} L_{\mathrm{He}}$ for `delta_lgL_He` (`lgL_He_burn_relative_limit`, `3.0` default).
+    pub lgl_he_burn_relative_limit: f64,
+    /// Maximum dominance $\max(\log_{10} L_{\mathrm{H}}, \log_{10} L_{\mathrm{He}}) - \log_{10} L_Z$ for `delta_lgL_z` (`lgL_z_burn_relative_limit`, `3.0` default).
+    pub lgl_z_burn_relative_limit: f64,
+    /// High-$T$ soft limit on $|\Delta\log_{10} L_{\mathrm{nuc}}|$ (`delta_lgL_nuc_at_high_T_limit`, `-1.0` default).
+    pub delta_lgl_nuc_at_high_t_limit: f64,
+    /// High-$T$ hard limit on $|\Delta\log_{10} L_{\mathrm{nuc}}|$ (`delta_lgL_nuc_at_high_T_hard_limit`, `-1.0` default).
+    pub delta_lgl_nuc_at_high_t_hard_limit: f64,
+    /// Peak $\log_{10} T$ switching `delta_lgL_nuc` to high-$T$ limits (`delta_lgL_nuc_at_high_T_limit_lgT_min`, `1e99` default).
+    pub delta_lgl_nuc_at_high_t_limit_lgt_min: f64,
+    /// Peak $\log_{10} T$ above which `delta_lgL_nuc` is ignored (`max_lgT_for_lgL_nuc_limit`, `1e99` default).
+    pub max_lgt_for_lgl_nuc_limit: f64,
+    /// Minimum peak $\log_{10} T$ for `delta_lgT_max` (`delta_lgT_max_limit_lgT_min`, `9.0` default).
+    pub delta_lgt_max_limit_lgt_min: f64,
+    /// High-$T$ soft limit on $|\Delta\max_k\log_{10} T_k|$ (`delta_lgT_max_at_high_T_limit`, `-1.0` default).
+    pub delta_lgt_max_at_high_t_limit: f64,
+    /// High-$T$ hard limit on $|\Delta\max_k\log_{10} T_k|$ (`delta_lgT_max_at_high_T_hard_limit`, `-1.0` default).
+    pub delta_lgt_max_at_high_t_hard_limit: f64,
+    /// Peak $\log_{10} T$ threshold for `delta_lgT_max_at_high_T` (`delta_lgT_max_at_high_T_limit_lgT_min`, `-1.0` default).
+    pub delta_lgt_max_at_high_t_limit_lgt_min: f64,
+    /// Gate `delta_lgT_max` on post-ZAMS evolution (`delta_lgT_max_limit_only_after_near_zams`, `false` default).
+    pub delta_lgt_max_limit_only_after_near_zams: bool,
+    /// Gate `delta_lgT_cntr` on post-ZAMS evolution (`delta_lgT_cntr_limit_only_after_near_zams`, `true` default).
+    pub delta_lgt_cntr_limit_only_after_near_zams: bool,
+    /// Lower $\log_{10} X_c$ bound for `delta_dX_div_X_cntr` (`delta_dX_div_X_cntr_min`, `-5.0` default).
+    pub delta_dx_div_x_cntr_min: f64,
+    /// Upper $\log_{10} X_c$ bound for `delta_dX_div_X_cntr` (`delta_dX_div_X_cntr_max`, `0.0` default).
+    pub delta_dx_div_x_cntr_max: f64,
+    /// Soft limit on central $|\Delta X_c| / X_c$ (`delta_dX_div_X_cntr_limit`, `0.1` default).
+    pub delta_dx_div_x_cntr_limit: f64,
+    /// Hard retry limit on central $|\Delta X_c| / X_c$ (`delta_dX_div_X_cntr_hard_limit`, `-1.0` default).
+    pub delta_dx_div_x_cntr_hard_limit: f64,
+    /// Only limit decreases in central $X_c$ for `delta_dX_div_X_cntr` (`delta_dX_div_X_drop_only`, `false` default).
+    pub delta_dx_div_x_drop_only: bool,
+    /// Lower $\log_{10} X(^{20}\mathrm{Ne})_c$ bound (`delta_lg_XNe_cntr_min`, `-5.0` default).
+    pub delta_lg_xne_cntr_min: f64,
+    /// Upper $\log_{10} X(^{20}\mathrm{Ne})_c$ bound (`delta_lg_XNe_cntr_max`, `0.0` default).
+    pub delta_lg_xne_cntr_max: f64,
+    /// Soft limit on $|\Delta\log_{10} X(^{20}\mathrm{Ne})_c|$ (`delta_lg_XNe_cntr_limit`, `1e99` default).
+    pub delta_lg_xne_cntr_limit: f64,
+    /// Hard limit on $|\Delta\log_{10} X(^{20}\mathrm{Ne})_c|$ (`delta_lg_XNe_cntr_hard_limit`, `-1.0` default).
+    pub delta_lg_xne_cntr_hard_limit: f64,
+    /// Only limit drops in $\log_{10} X(^{20}\mathrm{Ne})_c$ (`delta_lg_XNe_drop_only`, `false` default).
+    pub delta_lg_xne_drop_only: bool,
+    /// Lower $\log_{10} X(^{16}\mathrm{O})_c$ bound (`delta_lg_XO_cntr_min`, `-5.0` default).
+    pub delta_lg_xo_cntr_min: f64,
+    /// Upper $\log_{10} X(^{16}\mathrm{O})_c$ bound (`delta_lg_XO_cntr_max`, `0.0` default).
+    pub delta_lg_xo_cntr_max: f64,
+    /// Soft limit on $|\Delta\log_{10} X(^{16}\mathrm{O})_c|$ (`delta_lg_XO_cntr_limit`, `1e99` default).
+    pub delta_lg_xo_cntr_limit: f64,
+    /// Hard limit on $|\Delta\log_{10} X(^{16}\mathrm{O})_c|$ (`delta_lg_XO_cntr_hard_limit`, `-1.0` default).
+    pub delta_lg_xo_cntr_hard_limit: f64,
+    /// Only limit drops in $\log_{10} X(^{16}\mathrm{O})_c$ (`delta_lg_XO_drop_only`, `false` default).
+    pub delta_lg_xo_drop_only: bool,
+    /// Lower $\log_{10} X(^{28}\mathrm{Si})_c$ bound (`delta_lg_XSi_cntr_min`, `-5.0` default).
+    pub delta_lg_xsi_cntr_min: f64,
+    /// Upper $\log_{10} X(^{28}\mathrm{Si})_c$ bound (`delta_lg_XSi_cntr_max`, `0.0` default).
+    pub delta_lg_xsi_cntr_max: f64,
+    /// Soft limit on $|\Delta\log_{10} X(^{28}\mathrm{Si})_c|$ (`delta_lg_XSi_cntr_limit`, `1e99` default).
+    pub delta_lg_xsi_cntr_limit: f64,
+    /// Hard limit on $|\Delta\log_{10} X(^{28}\mathrm{Si})_c|$ (`delta_lg_XSi_cntr_hard_limit`, `-1.0` default).
+    pub delta_lg_xsi_cntr_hard_limit: f64,
+    /// Only limit drops in $\log_{10} X(^{28}\mathrm{Si})_c$ (`delta_lg_XSi_drop_only`, `false` default).
+    pub delta_lg_xsi_drop_only: bool,
+    /// Soft limit on $|\Delta X(^1\mathrm{H})_c|$ (`delta_XH_cntr_limit`, `0.01` default).
+    pub delta_xh_cntr_limit: f64,
+    /// Hard limit on $|\Delta X(^1\mathrm{H})_c|$ (`delta_XH_cntr_hard_limit`, `-1.0` default).
+    pub delta_xh_cntr_hard_limit: f64,
+    /// Only limit drops in $X(^1\mathrm{H})_c$ (`delta_XH_drop_only`, `false` default).
+    pub delta_xh_drop_only: bool,
+    /// Soft limit on $|\Delta X(^4\mathrm{He})_c|$ (`delta_XHe_cntr_limit`, `0.01` default).
+    pub delta_xhe_cntr_limit: f64,
+    /// Hard limit on $|\Delta X(^4\mathrm{He})_c|$ (`delta_XHe_cntr_hard_limit`, `-1.0` default).
+    pub delta_xhe_cntr_hard_limit: f64,
+    /// Only limit drops in $X(^4\mathrm{He})_c$ (`delta_XHe_drop_only`, `false` default).
+    pub delta_xhe_drop_only: bool,
+    /// Soft limit on $|\Delta X(^{12}\mathrm{C})_c|$ (`delta_XC_cntr_limit`, `0.01` default).
+    pub delta_xc_cntr_limit: f64,
+    /// Hard limit on $|\Delta X(^{12}\mathrm{C})_c|$ (`delta_XC_cntr_hard_limit`, `-1.0` default).
+    pub delta_xc_cntr_hard_limit: f64,
+    /// Only limit drops in $X(^{12}\mathrm{C})_c$ (`delta_XC_drop_only`, `false` default).
+    pub delta_xc_drop_only: bool,
+    /// Soft limit on $|\Delta X(^{20}\mathrm{Ne})_c|$ (`delta_XNe_cntr_limit`, `0.01` default).
+    pub delta_xne_cntr_limit: f64,
+    /// Hard limit on $|\Delta X(^{20}\mathrm{Ne})_c|$ (`delta_XNe_cntr_hard_limit`, `-1.0` default).
+    pub delta_xne_cntr_hard_limit: f64,
+    /// Only limit drops in $X(^{20}\mathrm{Ne})_c$ (`delta_XNe_drop_only`, `false` default).
+    pub delta_xne_drop_only: bool,
+    /// Soft limit on $|\Delta X(^{16}\mathrm{O})_c|$ (`delta_XO_cntr_limit`, `0.01` default).
+    pub delta_xo_cntr_limit: f64,
+    /// Hard limit on $|\Delta X(^{16}\mathrm{O})_c|$ (`delta_XO_cntr_hard_limit`, `-1.0` default).
+    pub delta_xo_cntr_hard_limit: f64,
+    /// Only limit drops in $X(^{16}\mathrm{O})_c$ (`delta_XO_drop_only`, `false` default).
+    pub delta_xo_drop_only: bool,
+    /// Soft limit on $|\Delta X(^{28}\mathrm{Si})_c|$ (`delta_XSi_cntr_limit`, `0.01` default).
+    pub delta_xsi_cntr_limit: f64,
+    /// Hard limit on $|\Delta X(^{28}\mathrm{Si})_c|$ (`delta_XSi_cntr_hard_limit`, `-1.0` default).
+    pub delta_xsi_cntr_hard_limit: f64,
+    /// Only limit drops in $X(^{28}\mathrm{Si})_c$ (`delta_XSi_drop_only`, `false` default).
+    pub delta_xsi_drop_only: bool,
+    /// Soft limit on angular-momentum adjustment depth $q$ (`adjust_J_q_limit`, `0.99_f32` default).
+    pub adjust_j_q_limit: f64,
+    /// Hard retry limit on angular-momentum adjustment depth $q$ (`adjust_J_q_hard_limit`, `0.98_f32` default).
+    pub adjust_j_q_hard_limit: f64,
+    /// Enable custom `other_timestep_limit` hook (`use_other_timestep_limit`, `false` default).
+    pub use_other_timestep_limit: bool,
 }
 
 impl Default for TimestepStopControls {
     fn default() -> Self {
-        let mut dx_limit_species: [String; MAX_DX_LIMIT_CTRLS] =
-            std::array::from_fn(|_| String::new());
+        let mut dx_limit_species = vec![String::new(); MAX_DX_LIMIT_CTRLS];
         dx_limit_species[0] = String::from("h1");
         dx_limit_species[1] = String::from("he4");
-        let mut dx_div_x_limit_min_x = [1.0e99; MAX_DX_LIMIT_CTRLS];
+        let mut dx_div_x_limit_min_x = vec![1.0e99; MAX_DX_LIMIT_CTRLS];
         dx_div_x_limit_min_x[0] = 1.0e-3;
         dx_div_x_limit_min_x[1] = 1.0e-3;
-        let mut dx_div_x_limit = [1.0e99; MAX_DX_LIMIT_CTRLS];
+        let mut dx_div_x_limit = vec![1.0e99; MAX_DX_LIMIT_CTRLS];
         dx_div_x_limit[0] = 0.9;
         dx_div_x_limit[1] = 0.9;
 
@@ -371,13 +504,16 @@ impl Default for TimestepStopControls {
             diffusion_iters_hard_limit: 800,
             dx_mix_dist_limit: 1.0e-4,
             dx_limit_species,
-            dx_limit_min_x: [1.0e99; MAX_DX_LIMIT_CTRLS],
-            dx_limit: [1.0e99; MAX_DX_LIMIT_CTRLS],
-            dx_hard_limit: [1.0e99; MAX_DX_LIMIT_CTRLS],
-            dx_decreases_only: [true; MAX_DX_LIMIT_CTRLS],
+            dx_limit_min_x: vec![1.0e99; MAX_DX_LIMIT_CTRLS],
+            dx_limit: vec![1.0e99; MAX_DX_LIMIT_CTRLS],
+            dx_hard_limit: vec![1.0e99; MAX_DX_LIMIT_CTRLS],
+            dx_decreases_only: vec![true; MAX_DX_LIMIT_CTRLS],
             dx_div_x_limit_min_x,
             dx_div_x_limit,
-            dx_div_x_hard_limit: [1.0e99; MAX_DX_LIMIT_CTRLS],
+            dx_div_x_hard_limit: vec![1.0e99; MAX_DX_LIMIT_CTRLS],
+            dx_div_x_at_high_t_limit: vec![1.0e99; MAX_DX_LIMIT_CTRLS],
+            dx_div_x_at_high_t_hard_limit: vec![1.0e99; MAX_DX_LIMIT_CTRLS],
+            dx_div_x_at_high_t_limit_lgt_min: vec![1.0e99; MAX_DX_LIMIT_CTRLS],
             dx_nuc_drop_min_x_limit: 1.0e-4,
             dx_nuc_drop_max_a_limit: 52.0,
             dx_nuc_drop_limit_at_high_t: -1.0,
@@ -463,6 +599,70 @@ impl Default for TimestepStopControls {
             dt_div_min_dr_div_cs_hard_limit: -1.0,
             dt_div_dt_cell_collapse_limit: -1.0,
             dt_div_dt_cell_collapse_hard_limit: -1.0,
+            check_remnant_only_for_dt_div_min_dr_div_cs_limit: false,
+            delta_ye_hight_limit: 99.0,
+            delta_ye_hight_hard_limit: -1.0,
+            mint_for_hight_ye_limit: 7.0e9,
+            delta_log_eps_nuc_limit: -1.0,
+            delta_log_eps_nuc_hard_limit: -1.0,
+            delta_lgl_nuc_cat_limit: -1.0,
+            delta_lgl_nuc_cat_hard_limit: -1.0,
+            lgl_nuc_cat_burn_min: -1.0,
+            lgl_nuc_mix_dist_limit: 1.0e-6,
+            lgl_h_burn_relative_limit: 3.0,
+            lgl_he_burn_relative_limit: 3.0,
+            lgl_z_burn_relative_limit: 3.0,
+            delta_lgl_nuc_at_high_t_limit: -1.0,
+            delta_lgl_nuc_at_high_t_hard_limit: -1.0,
+            delta_lgl_nuc_at_high_t_limit_lgt_min: 1.0e99,
+            max_lgt_for_lgl_nuc_limit: 1.0e99,
+            delta_lgt_max_limit_lgt_min: 9.0,
+            delta_lgt_max_at_high_t_limit: -1.0,
+            delta_lgt_max_at_high_t_hard_limit: -1.0,
+            delta_lgt_max_at_high_t_limit_lgt_min: -1.0,
+            delta_lgt_max_limit_only_after_near_zams: false,
+            delta_lgt_cntr_limit_only_after_near_zams: true,
+            delta_dx_div_x_cntr_min: -5.0,
+            delta_dx_div_x_cntr_max: 0.0,
+            delta_dx_div_x_cntr_limit: 0.1,
+            delta_dx_div_x_cntr_hard_limit: -1.0,
+            delta_dx_div_x_drop_only: false,
+            delta_lg_xne_cntr_min: -5.0,
+            delta_lg_xne_cntr_max: 0.0,
+            delta_lg_xne_cntr_limit: 1.0e99,
+            delta_lg_xne_cntr_hard_limit: -1.0,
+            delta_lg_xne_drop_only: false,
+            delta_lg_xo_cntr_min: -5.0,
+            delta_lg_xo_cntr_max: 0.0,
+            delta_lg_xo_cntr_limit: 1.0e99,
+            delta_lg_xo_cntr_hard_limit: -1.0,
+            delta_lg_xo_drop_only: false,
+            delta_lg_xsi_cntr_min: -5.0,
+            delta_lg_xsi_cntr_max: 0.0,
+            delta_lg_xsi_cntr_limit: 1.0e99,
+            delta_lg_xsi_cntr_hard_limit: -1.0,
+            delta_lg_xsi_drop_only: false,
+            delta_xh_cntr_limit: 0.01,
+            delta_xh_cntr_hard_limit: -1.0,
+            delta_xh_drop_only: false,
+            delta_xhe_cntr_limit: 0.01,
+            delta_xhe_cntr_hard_limit: -1.0,
+            delta_xhe_drop_only: false,
+            delta_xc_cntr_limit: 0.01,
+            delta_xc_cntr_hard_limit: -1.0,
+            delta_xc_drop_only: false,
+            delta_xne_cntr_limit: 0.01,
+            delta_xne_cntr_hard_limit: -1.0,
+            delta_xne_drop_only: false,
+            delta_xo_cntr_limit: 0.01,
+            delta_xo_cntr_hard_limit: -1.0,
+            delta_xo_drop_only: false,
+            delta_xsi_cntr_limit: 0.01,
+            delta_xsi_cntr_hard_limit: -1.0,
+            delta_xsi_drop_only: false,
+            adjust_j_q_limit: f64::from(0.99_f32),
+            adjust_j_q_hard_limit: f64::from(0.98_f32),
+            use_other_timestep_limit: false,
         }
     }
 }

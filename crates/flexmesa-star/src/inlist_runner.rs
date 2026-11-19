@@ -9,8 +9,9 @@ use std::time::Instant;
 
 use crate::case_staging::TempCaseStaging;
 use crate::controls::StarError;
-use crate::evolve::{star_evolve_step, star_evolve_step_with_extras};
-use crate::history::{extract_history_row, HistoryRow};
+use crate::evolve::{star_evolve_step, star_evolve_step_outcome_with_extras};
+use crate::evolve_support::snapshot_step_start_extras;
+use crate::history::{HistoryRow, extract_history_row};
 use crate::hydro_vars::set_hydro_vars;
 use crate::inlist::{InlistBundle, InlistLoadOptions};
 use crate::mesa_profile::StarLogsWriter;
@@ -19,10 +20,10 @@ use crate::model_io::{
     compute_photo_checksum, load_photo_bytes, write_mod_string,
     write_photo_bytes,
 };
-use crate::rn_parser::{parse_rn_stages, RnStage};
+use crate::rn_parser::{RnStage, parse_rn_stages};
 use crate::rsp_eos_kap::RspChemCache;
 use crate::star_job_init::{
-    init_or_update_model_from_bundle_outcome, InitModelOutcome,
+    InitModelOutcome, init_or_update_model_from_bundle_outcome,
 };
 use crate::termination::check_termination_limits_with_history;
 
@@ -84,6 +85,16 @@ pub trait StarExtras {
     /// Invoked immediately after a step converges to check custom limits.
     fn extras_check_model(&mut self, _m: &mut StarModel) -> ExtrasDirective {
         ExtrasDirective::KeepGoing
+    }
+    /// Optional custom timestep limiter (`use_other_timestep_limit` in `timestep.f90:134-138`),
+    /// returning `(ExtrasDirective, dt_limit_ratio)`.
+    fn other_timestep_limit(
+        &mut self,
+        _m: &mut StarModel,
+        _skip_hard_limit: bool,
+        _dt: f64,
+    ) -> (ExtrasDirective, f64) {
+        (ExtrasDirective::KeepGoing, 0.0)
     }
     /// Invoked at the end of a step after history extraction.
     fn extras_finish_step(&mut self, _m: &mut StarModel) -> ExtrasDirective {
@@ -451,18 +462,25 @@ pub fn run_inlist_stage_with_logs(
                 }
             }
 
-            let step_rep = star_evolve_step_with_extras(
-                model,
-                do_remesh,
-                op_split_burn,
-                true,
-                extras,
-            )?;
+            let (step_rep, check_term_opt) =
+                match star_evolve_step_outcome_with_extras(
+                    model,
+                    do_remesh,
+                    op_split_burn,
+                    true,
+                    extras,
+                ) {
+                    Ok(pair) => pair,
+                    Err(StarError::Terminated { reason, .. }) => {
+                        termination_code = reason;
+                        break;
+                    }
+                    Err(e) => return Err(e),
+                };
             steps_taken += 1;
             total_newton_iterations += step_rep.iterations;
             total_retries += step_rep.retries;
 
-            let check_dir = extras.extras_check_model(model);
             let finish_dir = extras.extras_finish_step(model);
             model.mstar_start = model.mstar;
             if !model.controls.rsp_flag {
@@ -474,35 +492,32 @@ pub fn run_inlist_stage_with_logs(
                     &[],
                 );
                 model.save_start_values()?;
+                snapshot_step_start_extras(model);
             }
             let hr = extract_history_row(model);
             history_rows.push(hr);
 
-            for dir in [&check_dir, &finish_dir] {
-                if let ExtrasDirective::Error(msg) = dir {
-                    return Err(StarError::ConvergenceFailure(msg.clone()));
-                }
-            }
             let mut will_terminate = false;
-            for dir in [check_dir, finish_dir] {
-                match dir {
-                    ExtrasDirective::Error(msg) => {
-                        return Err(StarError::ConvergenceFailure(msg));
-                    }
-                    ExtrasDirective::Retry | ExtrasDirective::Redo => {
-                        return Err(StarError::ConvergenceFailure(
-                            String::from(
-                                "extras step retry/redo is not yet implemented (#152)",
-                            ),
-                        ));
-                    }
-                    ExtrasDirective::Terminate(reason) => {
+            if let Some(reason) = check_term_opt {
+                termination_code = reason;
+                will_terminate = true;
+            }
+            match finish_dir {
+                ExtrasDirective::Error(msg) => {
+                    return Err(StarError::ConvergenceFailure(msg));
+                }
+                ExtrasDirective::Retry | ExtrasDirective::Redo => {
+                    return Err(StarError::ConvergenceFailure(String::from(
+                        "extras_finish_step must return keep_going or terminate (run_star_support.f90:249)",
+                    )));
+                }
+                ExtrasDirective::Terminate(reason) => {
+                    if !will_terminate {
                         termination_code = reason;
                         will_terminate = true;
-                        break;
                     }
-                    ExtrasDirective::KeepGoing => {}
                 }
+                ExtrasDirective::KeepGoing => {}
             }
             if !will_terminate {
                 if let Some(code) =
@@ -539,7 +554,33 @@ pub fn run_inlist_stage_with_logs(
 
     extras.extras_after_evolve(model)?;
 
-    if model.job.save_model_when_terminate
+    let abnormal_termination = matches!(
+        termination_code.as_str(),
+        "min_timestep_limit"
+            | "max_number_retries"
+            | "redo_limit"
+            | "dt_is_zero"
+            | "varcontrol_target < min_allowed_varcontrol_target"
+            | "invalid dt_next in timestep_controller"
+    );
+    let req_codes: Vec<&str> = model
+        .job
+        .required_termination_code_string
+        .iter()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .collect();
+    let term_str_ok = req_codes.is_empty()
+        || req_codes.iter().any(|&req| {
+            termination_code == req
+                || termination_code
+                    .strip_prefix(req)
+                    .is_some_and(|rest| rest.starts_with('('))
+        });
+
+    if !abnormal_termination
+        && term_str_ok
+        && model.job.save_model_when_terminate
         && !model.job.save_model_filename.is_empty()
         && !model
             .job
@@ -582,7 +623,7 @@ pub fn verify_photo_restart_parity(
     let do_remesh = continued.controls.okay_to_remesh
         && continued.controls.mesh_delta_coeff > 0.0;
     let op_split = continued.controls.op_split_burn;
-    if continued.lnd_old.is_empty() {
+    if continued.lnd_old.is_empty() || continued.doing_first_model_of_run {
         star_evolve_step(&mut continued, do_remesh, op_split, true)?;
     }
 
@@ -787,15 +828,29 @@ pub fn run_test_suite_case_with_extras(
                     photo_restart_verified = c1 == c2;
                 }
 
-                if let Some(out_name) = output_mod {
-                    let out_path = case_dir.join(out_name);
-                    write_mod_if_missing(&model, &out_path)?;
+                let stage_abnormal = matches!(
+                    rep.termination_code.as_str(),
+                    "min_timestep_limit"
+                        | "max_number_retries"
+                        | "redo_limit"
+                        | "dt_is_zero"
+                        | "varcontrol_target < min_allowed_varcontrol_target"
+                        | "invalid dt_next in timestep_controller"
+                );
+                if !stage_abnormal {
+                    if let Some(out_name) = output_mod {
+                        let out_path = case_dir.join(out_name);
+                        write_mod_if_missing(&model, &out_path)?;
+                    }
                 }
                 total_steps += rep.steps_taken;
                 total_newton += rep.total_newton_iterations;
                 total_retries += rep.total_retries;
                 stage_reports.push(rep);
                 current_model = Some(model);
+                if stage_abnormal {
+                    break;
+                }
             }
         }
     }

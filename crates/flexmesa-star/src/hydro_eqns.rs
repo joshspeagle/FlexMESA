@@ -9,7 +9,7 @@
 //! `(nz, nvar, nvar)` using 3-cell stencil forward-mode automatic
 //! differentiation ([`StarAdOrder1`]).
 
-use flexmesa_const::{FOUR_PI, L_SUN};
+use flexmesa_const::FOUR_PI;
 
 use crate::controls::{StarError, VarLayout};
 use crate::eps_grav::eval_eps_grav;
@@ -22,9 +22,9 @@ pub use crate::hydro_temperature::do1_temperature_eqn;
 use crate::hydro_vars::set_hydro_vars;
 use crate::model::StarModel;
 use crate::star_ad::{
-    StarAdExt, StarAdOrder1, I_HP_00, I_HP_M1, I_HP_P1, I_LND_00, I_LND_M1,
+    I_HP_00, I_HP_M1, I_HP_P1, I_L_00, I_L_M1, I_L_P1, I_LND_00, I_LND_M1,
     I_LND_P1, I_LNR_00, I_LNR_M1, I_LNR_P1, I_LNT_00, I_LNT_M1, I_LNT_P1,
-    I_L_00, I_L_M1, I_L_P1, I_V_00, I_V_M1, I_V_P1, I_W_00, I_W_M1, I_W_P1,
+    I_V_00, I_V_M1, I_V_P1, I_W_00, I_W_M1, I_W_P1, StarAdExt, StarAdOrder1,
 };
 
 /// Assembled 1D Henyey residual vector and scaled block-tridiagonal Jacobian
@@ -173,33 +173,84 @@ pub fn compute_x_scale_into(
     x_scale.clear();
     x_scale.resize(nz * nvar, 1.0);
 
-    let max_abs_l = model
-        .lum_start
-        .iter()
-        .fold(0.0_f64, |acc, &x| acc.max(x.abs()));
-    let l_scale_max = L_SUN.max(1.0e-3 * max_abs_l);
-
     for k in 0..nz {
         let base = k * nvar;
-        x_scale[base + layout.i_lnd] = model.lnd_start[k].abs().max(1.0);
-        x_scale[base + layout.i_lnt] = model.ln_t_start[k].abs().max(1.0);
-        x_scale[base + layout.i_lnr] = model.ln_r_start[k].abs().max(1.0);
-        x_scale[base + layout.i_lum] = l_scale_max
-            .max(max_abs_l * model.q[k].min(1.0))
-            .max(model.lum_start[k].abs());
-        if let Some(iv) = layout.i_v.or(layout.i_u) {
-            let r_over_dt = flexmesa_math::exp(model.ln_r_start[k]).max(1.0)
-                / model.dt.max(1.0e-30);
-            x_scale[base + iv] =
-                r_over_dt.min(model.csound[k].max(1.0)).max(1.0e-30);
+        let lnd_s = model
+            .lnd_start
+            .get(k)
+            .copied()
+            .unwrap_or(model.lnd[k])
+            .abs();
+        let lnt_s = model
+            .ln_t_start
+            .get(k)
+            .copied()
+            .unwrap_or(model.ln_t[k])
+            .abs();
+        let lnr_s = model
+            .ln_r_start
+            .get(k)
+            .copied()
+            .unwrap_or(model.ln_r[k])
+            .abs();
+        let lum_s = model
+            .lum_start
+            .get(k)
+            .copied()
+            .unwrap_or(model.lum[k])
+            .abs();
+        x_scale[base + layout.i_lnd] = lnd_s.max(1.0);
+        x_scale[base + layout.i_lnt] = lnt_s.max(1.0);
+        x_scale[base + layout.i_lnr] = lnr_s.max(1.0);
+        x_scale[base + layout.i_lum] = lum_s.max(1.0);
+        if let Some(iv) = layout.i_v {
+            let v_s = model
+                .v_start
+                .get(k)
+                .copied()
+                .unwrap_or_else(|| model.v.get(k).copied().unwrap_or(0.0))
+                .abs();
+            x_scale[base + iv] = v_s.max(1.0);
+        }
+        if let Some(iu) = layout.i_u {
+            let u_s = model
+                .u_start
+                .get(k)
+                .copied()
+                .unwrap_or_else(|| model.u.get(k).copied().unwrap_or(0.0))
+                .abs();
+            x_scale[base + iu] = u_s.max(1.0);
         }
         if let Some(iw) = layout.i_w {
-            let w_s =
-                model.aux.rsp.w_start.get(k).copied().unwrap_or(0.0).abs();
-            x_scale[base + iw] = w_s.max(1.0e3);
+            let w_s = model
+                .aux
+                .rsp
+                .w_start
+                .get(k)
+                .copied()
+                .unwrap_or_else(|| {
+                    model
+                        .aux
+                        .rsp
+                        .et_rsp
+                        .get(k)
+                        .copied()
+                        .unwrap_or(0.0)
+                        .max(0.0)
+                        .sqrt()
+                })
+                .abs();
+            x_scale[base + iw] = w_s.max(1.0);
         }
         if let Some(ihp) = layout.i_hp {
-            let hp = model.aux.rsp.hp_face.get(k).copied().unwrap_or(1.0).abs();
+            let hp = model
+                .xh_start
+                .get(k * layout.nvar_hydro + ihp)
+                .copied()
+                .unwrap_or_else(|| {
+                    model.aux.rsp.hp_face.get(k).copied().unwrap_or(1.0)
+                })
+                .abs();
             x_scale[base + ihp] = hp.max(1.0);
         }
         if let Some(ia) = layout.i_alpha_rti {
@@ -208,16 +259,22 @@ pub fn compute_x_scale_into(
                 .alpha_rti_start
                 .get(k)
                 .copied()
-                .unwrap_or(model.aux.alpha_rti[k])
+                .unwrap_or_else(|| {
+                    model.aux.alpha_rti.get(k).copied().unwrap_or(0.0)
+                })
                 .abs();
             x_scale[base + ia] = a_s.max(1.0);
         }
         if include_chem {
-            let xa_min = model.controls.xa_scale.max(1.0e-30);
+            let xa_min = model.controls.xa_scale;
             for j in 0..model.species {
                 let ivar = layout.chem_var_index(j);
-                x_scale[base + ivar] =
-                    model.xa_start[k * model.species + j].max(xa_min);
+                let xa_s = model
+                    .xa_start
+                    .get(k * model.species + j)
+                    .copied()
+                    .unwrap_or_else(|| model.xa[k * model.species + j]);
+                x_scale[base + ivar] = xa_s.max(xa_min);
             }
         }
     }
@@ -254,12 +311,7 @@ pub fn do1_density_eqn(
         StarAdOrder1::constant(flexmesa_math::pow3(model.r_center))
     };
     let rho_00 = StarAdOrder1::variable(model.lnd[k], I_LND_00).exp();
-    let mc = if model.controls.use_mass_corrections {
-        model.aux.mass_correction.get(k).copied().unwrap_or(1.0)
-    } else {
-        1.0
-    };
-    let dr3 = (3.0 * model.dm[k] * mc / FOUR_PI) / rho_00;
+    let dr3 = (3.0 * model.dm[k] / FOUR_PI) / rho_00;
     let rp13_p_dr3 = r_p1_cubed + dr3;
     if rp13_p_dr3.val <= 0.0 || !rp13_p_dr3.val.is_finite() {
         return Err(StarError::ConvergenceFailure(format!(
@@ -404,13 +456,6 @@ pub fn do1_chem_eqns(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
 
     let has_dx = model.xa_sub_xa_start.len() == model.xa.len()
         && model.xa_start.len() == model.xa.len();
-    let valid_dx = |idx: usize| -> bool {
-        has_dx && {
-            let x = model.xa[idx];
-            (model.xa_start[idx] + model.xa_sub_xa_start[idx] - x).abs()
-                <= 4.0 * f64::EPSILON * (1.0 + x.abs())
-        }
-    };
 
     for j in 0..species {
         let kj = k * species + j;
@@ -437,7 +482,7 @@ pub fn do1_chem_eqns(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
         };
         let dxdt_mix = (f_00 - f_p1) / dm_k;
         let dxdt_nuc = if active_burn { model.dxdt_nuc[kj] } else { 0.0 };
-        let dxdt_actual = if valid_dx(kj) {
+        let dxdt_actual = if has_dx {
             model.xa_sub_xa_start[kj]
         } else {
             model.xa[kj] - model.xa_start[kj]

@@ -10,8 +10,8 @@ use flexmesa_num::neumaier_sum;
 use crate::controls::StarError;
 use crate::core_boundaries::dominant_species_index;
 use crate::eps_mdot::{
-    calculate_eps_mdot_with_change, eval_specific_kinetic_energy_profile,
-    eval_specific_total_energy_profile, PrevMassState,
+    PrevMassState, calculate_eps_mdot_with_change,
+    eval_specific_kinetic_energy_profile, eval_specific_total_energy_profile,
 };
 use crate::hydro_vars::set_hydro_vars;
 use crate::mesh_remap::normalize_and_assign_remapped_xa;
@@ -331,6 +331,14 @@ fn do_adjust_mass_regions(
     model.set_xqs();
     sync_enclosed_mass_from_dm(model, &dm_target);
     model.set_dm_bar();
+    model.k_below_just_added = if delta_m > 0.0 {
+        let q_just_added = sum_prev_dm / xm_new;
+        (0..nz)
+            .find(|&k| model.q[k] <= q_just_added)
+            .map_or(nz, |k| k + 1)
+    } else {
+        1
+    };
 
     let built_acc = build_accreted_xa(model);
     let x_acc = x_accreted.unwrap_or(&built_acc);
@@ -563,6 +571,7 @@ fn remap_j_rot_and_adjust_j_lost(
         )));
     }
     let qlast = model.q[last_k];
+    model.adjust_j_q = qlast;
     let denom: f64 = (0..last_k)
         .map(|k| {
             let dm_f = if k == 0 {

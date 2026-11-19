@@ -564,12 +564,19 @@ pub fn read_mod_str(
         model.aux.rsp.hp_face = hp;
     }
     (model.mstar_old, model.dt_old) = (parsed_mstar_old, parsed_dt_old);
+    model.init_model_number = model.model_number as isize;
+    model.time_sec = model.star_age * flexmesa_const::SECYER;
+    model.time_old_sec = model.star_age_old * flexmesa_const::SECYER;
+    model.m_center_old = model.m_center;
+    model.r_center_old = model.r_center;
+    model.l_center_old = model.l_center;
+    model.v_center_old = model.v_center;
 
     Ok(model)
 }
 
 pub use crate::photo_io::{
-    compute_photo_checksum, load_photo_bytes, photo_numerics_mode,
-    read_photo_bytes, try_write_photo_bytes, write_photo_bytes,
-    PHOTO_FORMAT_VERSION,
+    PHOTO_FORMAT_VERSION, compute_photo_checksum, load_photo_bytes,
+    photo_numerics_mode, read_photo_bytes, try_write_photo_bytes,
+    write_photo_bytes,
 };

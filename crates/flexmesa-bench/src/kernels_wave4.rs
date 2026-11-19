@@ -23,12 +23,12 @@
 
 use flexmesa_mtx::{solve_block_tridiag_bcyclic, solve_block_tridiagonal};
 use flexmesa_star::{
+    HenyeySystem, MeshFunctionConfig, StarControls, StarJobControls, StarModel,
     do_adjust_mesh, do_struct_burn_mix, eval_henyey_equations, eval_mesh_gval,
-    interp_q, load_zams_model, plan_mesh, set_hydro_vars, HenyeySystem,
-    MeshFunctionConfig, StarControls, StarJobControls, StarModel,
+    interp_q, load_zams_model, plan_mesh, set_hydro_vars, star_evolve_step,
 };
 
-use crate::{max_err3, max_rel_diff, measure_us, stage3_pool, BenchRecord};
+use crate::{BenchRecord, max_err3, max_rel_diff, measure_us, stage3_pool};
 
 /// Constructs a resampled $4.0\,M_\odot, Z = 0.02$ ZAMS [`StarModel`] with
 /// `nz` Lagrangian zones by interpolating along the cumulative ZAMS mass grid.
@@ -397,8 +397,17 @@ pub fn bench_star_evolve_step(
     n_warmup: usize,
     n_repeats: usize,
 ) -> BenchRecord {
-    let base = make_wave4_zams_model(nz);
+    let mut base = make_wave4_zams_model(nz);
     let dt = base.dt;
+    star_evolve_step(&mut base, false, false, true)
+        .expect("equilibrate resampled ZAMS step");
+    base.dt = dt;
+    base.dt_next = dt;
+    set_hydro_vars(&mut base, false, false)
+        .expect("set_hydro_vars on settled ZAMS");
+    base.save_start_values()
+        .expect("save_start_values on settled ZAMS");
+    base.save_old_values();
     let mut out0 = vec![0.0_f64; base.nz];
     let mut out1 = vec![0.0_f64; base.nz];
     let mut out2 = vec![0.0_f64; base.nz];

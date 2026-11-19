@@ -21,7 +21,7 @@
         "verified_total": 0,
         "pct_ported": 14.9,
         "pct_verified": 0.0,
-        "rust_lines": 55584,
+        "rust_lines": 58995,
         "python_jax_lines": 3869
       },
       {
@@ -55,7 +55,7 @@
         "verified_total": 0,
         "pct_ported": 18.2,
         "pct_verified": 0.0,
-        "rust_lines": 9681,
+        "rust_lines": 9689,
         "python_jax_lines": 1244
       },
       {
@@ -455,8 +455,8 @@
       "upstream_panel_modules": 46
     },
     "infrastructure_lines": {
-      "rust_bridge_testing_bench": 18727,
-      "python_testing_bench": 13992
+      "rust_bridge_testing_bench": 18739,
+      "python_testing_bench": 13997
     }
   },
   "numerics": {
@@ -679,11 +679,11 @@
     {
       "namelist": "star &controls",
       "upstream_scalars": 1444,
-      "matched_in_flexmesa": 611,
-      "defaults_agree": 611,
+      "matched_in_flexmesa": 751,
+      "defaults_agree": 751,
       "value_mismatch": 0,
       "disabled_limit_none": 0,
-      "unimplemented": 833
+      "unimplemented": 693
     },
     {
       "namelist": "star &star_job",

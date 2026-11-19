@@ -9,8 +9,8 @@
 
 use flexmesa_const::{CLIGHT, CRAD, MSUN, PI, SECYER};
 use flexmesa_star::{
-    do_set_mdot, star_evolve_step, EvolveStepReport, PrimaryStateBuffer,
-    StarError, StarModel,
+    EvolveStepReport, PrimaryStateBuffer, StarError, StarModel, do_set_mdot,
+    star_evolve_step,
 };
 
 use crate::edd_wind::{
@@ -366,11 +366,7 @@ pub fn eval_star_intrinsic_wind_cgs_with_extras(
                 wind_mdot = wind_mdot.min(mw.max_wind * (MSUN / SECYER));
             }
         }
-        if wind_mdot > 0.0 {
-            -wind_mdot
-        } else {
-            0.0
-        }
+        if wind_mdot > 0.0 { -wind_mdot } else { 0.0 }
     } else {
         let saved_mc = star.controls.mass_change;
         let saved_other = star.controls.use_other_adjust_mdot;
@@ -787,7 +783,18 @@ pub fn evolve_single_star_without_term_rewind(
         && star.controls.mesh_delta_coeff > 0.0
         && dt_try >= star.controls.mix_wind.remesh_dt_limit;
     let op_split = star.controls.op_split_burn;
-    let res = star_evolve_step(star, do_remesh, op_split, true);
+    let res = match star_evolve_step(star, do_remesh, op_split, true) {
+        Err(StarError::Terminated { ref reason, .. })
+            if reason == "min_timestep_limit"
+                && dt_try > star.controls.min_timestep_limit =>
+        {
+            Err(StarError::ConvergenceFailure(format!(
+                "component trial reached min_timestep_limit ({:.3e} s) at binary trial dt={dt_try:.3e} s",
+                star.controls.min_timestep_limit
+            )))
+        }
+        other => other,
+    };
 
     star.controls.use_other_wind = saved_other_wind;
 

@@ -5,8 +5,8 @@
 #![forbid(unsafe_code)]
 
 use flexmesa_star::{
-    load_zams_model, set_hydro_vars, star_evolve_step, PrimaryStateBuffer,
-    StarControls, StarError, StarJobControls,
+    PrimaryStateBuffer, StarControls, StarError, StarJobControls,
+    load_zams_model, set_hydro_vars, star_evolve_step,
 };
 
 fn assert_bits_eq(label: &str, actual: &[f64], expected_bits: &[u64]) {
@@ -177,8 +177,8 @@ fn test_non_retriable_star_error_fails_immediately_with_zero_retries() {
 }
 
 #[test]
-fn test_primary_state_buffer_preserves_omega_when_solver_mlt_eval_count_nonzero(
-) {
+fn test_primary_state_buffer_preserves_omega_when_solver_mlt_eval_count_nonzero()
+ {
     let ctrl = StarControls {
         initial_mass: 1.5,
         rotation_flag: true,
@@ -253,6 +253,7 @@ fn test_evolve_step_rolls_back_remesh_on_terminate_and_attempt0_exhaustion() {
         StarJobControls::default(),
     )
     .expect("1 Msun ZAMS");
+    term_model.doing_first_model_of_run = false;
     term_model.controls.ts_stop.min_allowed_varcontrol_target = 1.0;
     let term_nz = term_model.nz;
     let term_dq: Vec<u64> = term_model.dq.iter().map(|v| v.to_bits()).collect();
@@ -268,13 +269,15 @@ fn test_evolve_step_rolls_back_remesh_on_terminate_and_attempt0_exhaustion() {
     assert_bits_eq("Terminate dq", &term_model.dq, &term_dq);
     assert_eq!(term_model.dt.to_bits(), dt0.to_bits());
 
-    // 2. Remesh + attempt-0 retry exhaustion must also restore original mesh.
-    let mut exh_model = load_zams_model(
+    // 2. Remesh + `min_timestep_limit` termination must restore original mesh.
+    let mut min_dt_model = load_zams_model(
         StarControls {
             initial_mass: 1.0,
             mesh_delta_coeff: 0.25,
             okay_to_remesh: true,
-            max_newton_iters: 1,
+            max_tries1: 1,
+            solver_max_tries_before_reject: 1,
+            max_tries_for_retry: 1,
             tol_correction_norm: 1.0e-15,
             tol_max_correction: 1.0e-15,
             zbase: 0.02,
@@ -283,18 +286,58 @@ fn test_evolve_step_rolls_back_remesh_on_terminate_and_attempt0_exhaustion() {
         StarJobControls::default(),
     )
     .expect("1 Msun ZAMS");
-    exh_model.controls.min_timestep_limit = 0.6 * exh_model.dt;
+    min_dt_model.doing_first_model_of_run = false;
+    min_dt_model.controls.min_timestep_limit = 0.6 * min_dt_model.dt;
+    min_dt_model.controls.ts_stop.timestep_factor_for_retries = 0.5;
+    let min_dt_nz = min_dt_model.nz;
+    let min_dt_dq: Vec<u64> =
+        min_dt_model.dq.iter().map(|v| v.to_bits()).collect();
+
+    let min_dt_err = star_evolve_step(&mut min_dt_model, true, false, true)
+        .expect_err("min_timestep_limit must return Terminated");
+    assert!(
+        matches!(
+            min_dt_err,
+            StarError::Terminated { ref reason, .. } if reason == "min_timestep_limit"
+        ),
+        "expected StarError::Terminated(min_timestep_limit), got {min_dt_err:?}"
+    );
+    assert_eq!(min_dt_model.nz, min_dt_nz, "min_dt must undo remesh");
+    assert_bits_eq("min_dt dq", &min_dt_model.dq, &min_dt_dq);
+
+    // 3. Remesh + `retry_limit` exhaustion must return `StepFailure` and restore mesh.
+    let mut exh_model = load_zams_model(
+        StarControls {
+            initial_mass: 1.0,
+            mesh_delta_coeff: 0.25,
+            okay_to_remesh: true,
+            max_tries1: 1,
+            solver_max_tries_before_reject: 1,
+            max_tries_for_retry: 1,
+            tol_correction_norm: 1.0e-15,
+            tol_max_correction: 1.0e-15,
+            zbase: 0.02,
+            ..StarControls::default()
+        },
+        StarJobControls::default(),
+    )
+    .expect("1 Msun ZAMS");
+    exh_model.doing_first_model_of_run = false;
+    exh_model.controls.ts_stop.retry_limit = 1;
     exh_model.controls.ts_stop.timestep_factor_for_retries = 0.5;
     let exh_nz = exh_model.nz;
     let exh_dq: Vec<u64> = exh_model.dq.iter().map(|v| v.to_bits()).collect();
 
     let exh_err = star_evolve_step(&mut exh_model, true, false, true)
-        .expect_err("attempt-0 exhaustion must return StepFailure");
+        .expect_err("retry_limit exhaustion must return StepFailure");
     assert!(
         matches!(exh_err, StarError::StepFailure(_)),
         "expected StarError::StepFailure, got {exh_err:?}"
     );
-    assert_eq!(exh_model.nz, exh_nz, "exhaustion must undo attempt-0 remesh");
+    assert_eq!(
+        exh_model.nz, exh_nz,
+        "exhaustion must undo attempt-0 remesh"
+    );
     assert_bits_eq("exhaustion dq", &exh_model.dq, &exh_dq);
 }
 
@@ -362,7 +405,10 @@ fn test_microphysics_cache_invalidates_on_fe56ec_fake_factor_change() {
 
     set_hydro_vars(&mut model, false, false).expect("cached approx21 eval");
     assert_eq!((model.micro_cache_misses, model.micro_cache_hits), (1, 1));
-    assert_eq!(model.dxdt_nuc[c * sp + i_fe56].to_bits(), dxdt_fe56_base.to_bits());
+    assert_eq!(
+        model.dxdt_nuc[c * sp + i_fe56].to_bits(),
+        dxdt_fe56_base.to_bits()
+    );
 
     // Mutating fe56ec_fake_factor must miss cache and update nuclear rates.
     model.controls.fe56ec_fake_factor = 1.0e-2;

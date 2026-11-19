@@ -157,8 +157,8 @@ pub fn eval_surf_avg_w_div_w_crit(model: &mut StarModel) -> f64 {
     }
 }
 
-/// Per-attempt state machine for `max_mdot_redo_cnt` rotational mass-loss
-/// iteration (`evolve.f90:747-1057`).
+/// Per-attempt state machine for implicit wind and `max_mdot_redo_cnt`
+/// rotational mass-loss iteration (`evolve.f90:747-1057`).
 #[derive(Debug, Clone)]
 pub struct MdotRedoState {
     ignored_first_step: bool,
@@ -174,24 +174,38 @@ pub struct MdotRedoState {
     too_small_wind_mdot: f64,
     explicit_mdot: f64,
     abs_mstar_delta: f64,
-    force_accept: bool,
+    iwind_redo_cnt: usize,
+    iwind_max_redo_cnt: usize,
+    iwind_tolerance: f64,
+    iwind_lambda: f64,
 }
 
 impl MdotRedoState {
     /// Initializes the redo state before the first `do_adjust_mass_step` try of a
     /// timestep (`setup_for_implicit_mdot_loop` in `evolve.f90:747-785`).
     pub fn setup(model: &mut StarModel) -> Self {
+        let has_prev_generation = !model.lnd_old.is_empty();
+        Self::setup_with_generation(model, has_prev_generation)
+    }
+
+    /// Initializes the redo state with an explicit `has_prev_generation` flag
+    /// (`s% generations == 2` in `evolve.f90:768`).
+    pub fn setup_with_generation(
+        model: &mut StarModel,
+        has_prev_generation: bool,
+    ) -> Self {
         let surf_limit = model.controls.surf_omega_div_omega_crit_limit;
         let max_cnt = model.controls.mix_wind.max_mdot_redo_cnt;
         let explicit_mdot = model.mstar_dot;
         let mdot_old = model.aux.step_hist.mstar_dot_old;
         let was_in_limit = model.aux.step_hist.was_in_implicit_wind_limit;
-        let rev_fac = model.controls.mix_wind.mdot_revise_factor.max(1.001);
+        let rev_fac = model.controls.mix_wind.mdot_revise_factor;
 
         let mut ignored_first_step = false;
         let mut mdot_redo_cnt = 0_usize;
         if max_cnt > 0
             && was_in_limit
+            && has_prev_generation
             && mdot_old.abs() > 0.0
             && ((model.mstar_dot - mdot_old) / mdot_old).abs() + 1.0 > rev_fac
         {
@@ -214,7 +228,10 @@ impl MdotRedoState {
             too_small_wind_mdot: 0.0,
             explicit_mdot,
             abs_mstar_delta: 0.0,
-            force_accept: false,
+            iwind_redo_cnt: 0,
+            iwind_max_redo_cnt: model.controls.max_tries_for_implicit_wind,
+            iwind_tolerance: model.controls.iwind_tolerance,
+            iwind_lambda: model.controls.iwind_lambda,
         }
     }
 
@@ -224,69 +241,71 @@ impl MdotRedoState {
         self.w_div_w_crit
     }
 
-    /// Marks the next converged fallback trial for immediate acceptance.
-    pub fn force_accept_next(&mut self) {
-        self.force_accept = true;
-    }
-
-    /// Records a Henyey failure on a boosted wind trial (`failed_mdot < 0`) as an
-    /// upper wind bound and returns a bisected `mstar_dot` trial when possible.
-    pub fn note_solver_failure(
-        &mut self,
-        failed_mdot: f64,
-        tol: f64,
-    ) -> Option<f64> {
-        let w_fail = -failed_mdot;
-        if self.ignored_first_step
-            && !self.have_too_small_wind_mdot
-            && w_fail > -self.explicit_mdot
-        {
-            self.ignored_first_step = false;
-            self.mdot_redo_cnt = 0;
-            self.have_too_large_wind_mdot = true;
-            self.too_large_wind_mdot = w_fail;
-            return Some(self.explicit_mdot);
-        }
-        if !self.have_too_small_wind_mdot || w_fail <= self.too_small_wind_mdot
-        {
-            return None;
-        }
-        self.too_large_wind_mdot = if self.have_too_large_wind_mdot {
-            self.too_large_wind_mdot.min(w_fail)
-        } else {
-            w_fail
-        };
-        self.have_too_large_wind_mdot = true;
-        self.mdot_redo_cnt += 1;
-        if self.mdot_redo_cnt >= self.max_mdot_redo_cnt {
-            return None;
-        }
-        if (self.too_large_wind_mdot - self.too_small_wind_mdot)
-            > tol * self.too_large_wind_mdot.abs().max(1.0e-30)
-        {
-            Some(-0.5 * (self.too_large_wind_mdot + self.too_small_wind_mdot))
-        } else {
-            None
-        }
-    }
-
     /// Evaluates `select_mdot_action` (`evolve.f90:788-1057`) on a converged
-    /// post-Henyey trial at `dt` (s).
+    /// post-Henyey trial at `dt` (s) using [`crate::inlist_runner::DefaultStarExtras`].
     pub fn select_action(
         &mut self,
         model: &mut StarModel,
         dt: f64,
     ) -> SelectMdotAction {
-        if model.mstar_dot == 0.0
-            || self.max_mdot_redo_cnt == 0
-            || !model.controls.rotation_flag
-        {
-            return SelectMdotAction::Accept;
+        let mut extras = crate::inlist_runner::DefaultStarExtras;
+        self.select_action_with_extras(model, dt, &mut extras)
+            .unwrap_or(SelectMdotAction::ForceRetry)
+    }
+
+    /// Evaluates `select_mdot_action` (`evolve.f90:788-1057`) on a converged
+    /// post-Henyey trial at `dt` (s) with explicit [`crate::inlist_runner::StarExtras`].
+    ///
+    /// # Errors
+    /// Returns [`crate::controls::StarError`] if a custom `other_wind` hook fails
+    /// with a non-retriable configuration error during `iwind` evaluation.
+    pub fn select_action_with_extras(
+        &mut self,
+        model: &mut StarModel,
+        dt: f64,
+        extras: &mut dyn crate::inlist_runner::StarExtras,
+    ) -> Result<SelectMdotAction, crate::controls::StarError> {
+        if model.mstar_dot == 0.0 || self.max_mdot_redo_cnt == 0 {
+            return Ok(SelectMdotAction::Accept);
         }
-        if self.force_accept {
-            self.force_accept = false;
-            model.aux.step_hist.was_in_implicit_wind_limit = true;
-            return SelectMdotAction::Accept;
+
+        if self.iwind_redo_cnt < self.iwind_max_redo_cnt
+            && self.iwind_lambda > 0.0
+        {
+            let saved_mdot = model.mstar_dot;
+            let saved_boost_old = model.aux.step_hist.rotational_mdot_boost_old;
+            match crate::winds::do_set_mdot_with_extras(model, extras) {
+                Ok(_) => {}
+                Err(e) if !e.is_retriable() => {
+                    model.mstar_dot = saved_mdot;
+                    model.aux.step_hist.rotational_mdot_boost_old =
+                        saved_boost_old;
+                    return Err(e);
+                }
+                Err(_) => {
+                    model.mstar_dot = saved_mdot;
+                    model.aux.step_hist.rotational_mdot_boost_old =
+                        saved_boost_old;
+                    return Ok(SelectMdotAction::ForceRetry);
+                }
+            }
+            let implicit_mdot = model.mstar_dot;
+            model.mstar_dot = saved_mdot;
+            model.aux.step_hist.rotational_mdot_boost_old = saved_boost_old;
+            if (self.explicit_mdot - implicit_mdot).abs()
+                > implicit_mdot.abs() * self.iwind_tolerance
+            {
+                let next_mdot = self.explicit_mdot
+                    + self.iwind_lambda * (implicit_mdot - self.explicit_mdot);
+                self.explicit_mdot = next_mdot;
+                self.iwind_redo_cnt += 1;
+                return Ok(SelectMdotAction::RedoWithMdot(next_mdot));
+            }
+            self.iwind_max_redo_cnt = self.iwind_redo_cnt;
+        }
+
+        if !model.controls.rotation_flag {
+            return Ok(SelectMdotAction::Accept);
         }
 
         let mstar_dot_prev = self.mstar_dot_tracked;
@@ -294,9 +313,7 @@ impl MdotRedoState {
         let mstar_dot = model.mstar_dot;
         let wind_mdot = -mstar_dot;
 
-        if self.mdot_redo_cnt == 0
-            || (self.mdot_redo_cnt == 1 && self.ignored_first_step)
-        {
+        if self.mdot_redo_cnt == 1 || self.ignored_first_step {
             let l1 = model.lum[0].max(1.0);
             let teff = if model.teff > 0.0 {
                 model.teff
@@ -317,11 +334,9 @@ impl MdotRedoState {
             let kh_timescale = (0.75 * cgrav * model.mstar * model.mstar
                 / (r_phot * l1))
                 .max(1.0);
-            let dmskhf =
-                model.controls.mix_wind.rotational_mdot_kh_fac.max(0.0);
-            let dmsfac =
-                model.controls.mix_wind.rotational_mdot_boost_fac.max(1.0);
-            self.max_wind_mdot = dmskhf * model.mstar.max(1.0) / kh_timescale;
+            let dmskhf = model.controls.mix_wind.rotational_mdot_kh_fac;
+            let dmsfac = model.controls.mix_wind.rotational_mdot_boost_fac;
+            self.max_wind_mdot = dmskhf * model.mstar / kh_timescale;
             if wind_mdot > 0.0 {
                 self.max_wind_mdot = self.max_wind_mdot.min(wind_mdot * dmsfac);
             }
@@ -330,42 +345,30 @@ impl MdotRedoState {
         let w_prev = self.w_div_w_crit;
         self.w_div_w_crit = eval_surf_avg_w_div_w_crit(model);
         let w = self.w_div_w_crit;
-        // Used as given, with no floor
-        // (`star/private/evolve.f90:943,1004`).
         let tol = model.controls.mix_wind.surf_omega_div_omega_crit_tol;
 
         if wind_mdot >= self.max_wind_mdot {
-            if (self.mdot_redo_cnt > 0 || w > self.surf_limit)
-                && dt >= 0.1 * SECYER
-            {
-                return SelectMdotAction::ForceRetry;
+            if self.mdot_redo_cnt > 0 || w > self.surf_limit {
+                return Ok(SelectMdotAction::ForceRetry);
             }
-            model.aux.step_hist.was_in_implicit_wind_limit =
-                w > self.surf_limit;
-            return SelectMdotAction::Accept;
+            return Ok(SelectMdotAction::Accept);
         }
 
         if w <= self.surf_limit && self.mdot_redo_cnt == 0 {
             model.aux.step_hist.was_in_implicit_wind_limit = false;
-            return SelectMdotAction::Accept;
+            return Ok(SelectMdotAction::Accept);
         }
-        if w <= self.surf_limit
-            && (model.mstar_dot - self.explicit_mdot).abs() == 0.0
-        {
-            model.aux.step_hist.was_in_implicit_wind_limit = false;
-            return SelectMdotAction::Accept;
+        if w <= self.surf_limit && model.mstar_dot == self.explicit_mdot {
+            return Ok(SelectMdotAction::Accept);
         }
 
         model.aux.step_hist.was_in_implicit_wind_limit = true;
         if dt / SECYER < model.controls.mix_wind.min_years_dt_for_redo_mdot {
-            return SelectMdotAction::Accept;
-        }
-        if w <= self.surf_limit && (self.surf_limit - w) <= tol {
-            return SelectMdotAction::Accept;
+            return Ok(SelectMdotAction::Accept);
         }
 
         self.mdot_redo_cnt += 1;
-        let rev_fac = model.controls.mix_wind.mdot_revise_factor.max(1.001);
+        let rev_fac = model.controls.mix_wind.mdot_revise_factor;
 
         if self.mdot_redo_cnt == 1 {
             self.have_too_small_wind_mdot = true;
@@ -379,7 +382,7 @@ impl MdotRedoState {
                 next = -self.max_wind_mdot;
             }
             self.abs_mstar_delta = next.abs();
-            return SelectMdotAction::RedoWithMdot(next);
+            return Ok(SelectMdotAction::RedoWithMdot(next));
         } else if self.mdot_redo_cnt == 2 && self.ignored_first_step {
             self.abs_mstar_delta = model.aux.step_hist.mstar_dot_old.abs();
         }
@@ -389,18 +392,17 @@ impl MdotRedoState {
             && wind_mdot.abs() > 0.0
             && ((wind_mdot - self.too_small_wind_mdot) / wind_mdot).abs() < tol
         {
-            return SelectMdotAction::Accept;
+            return Ok(SelectMdotAction::Accept);
         }
 
-        if self.mdot_redo_cnt >= self.max_mdot_redo_cnt
-            || (w > self.surf_limit
-                && w_prev >= self.surf_limit
-                && -mstar_dot >= self.max_wind_mdot)
+        if self.mdot_redo_cnt >= self.max_mdot_redo_cnt {
+            return Ok(SelectMdotAction::ForceRetry);
+        }
+        if w > self.surf_limit
+            && w_prev >= self.surf_limit
+            && -mstar_dot >= self.max_wind_mdot
         {
-            if dt < 0.1 * SECYER {
-                return SelectMdotAction::Accept;
-            }
-            return SelectMdotAction::ForceRetry;
+            return Ok(SelectMdotAction::ForceRetry);
         }
 
         if w >= self.surf_limit {
@@ -454,6 +456,6 @@ impl MdotRedoState {
                 }
                 nxt
             };
-        SelectMdotAction::RedoWithMdot(next)
+        Ok(SelectMdotAction::RedoWithMdot(next))
     }
 }

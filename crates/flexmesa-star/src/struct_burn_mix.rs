@@ -25,8 +25,8 @@
 use flexmesa_chem::NUM_CATEGORIES;
 use flexmesa_const::LN10;
 use flexmesa_net::{
-    burn_1_zone, burn_1_zone_const_density, Burn1ZoneInput,
-    BurnConstDensityInput,
+    Burn1ZoneInput, BurnConstDensityInput, burn_1_zone,
+    burn_1_zone_const_density,
 };
 use flexmesa_turb::MixingType;
 use rayon::prelude::*;
@@ -40,8 +40,8 @@ use crate::mix_info::{
 };
 use crate::model::StarModel;
 pub use crate::omega_mix::solve_omega_mix;
-use crate::overshoot::{apply_overshooting, OvershootConfig};
-use crate::solver::{solve_henyey_step, HenyeySolverReport};
+use crate::overshoot::{OvershootConfig, apply_overshooting};
+use crate::solver::{HenyeySolverReport, solve_henyey_step};
 
 struct SplitZoneOutcome {
     k: usize,
@@ -483,6 +483,9 @@ fn run_struct_burn_mix_core(
         model.sig.fill(0.0);
     }
 
+    model.surf_lns = model.ln_s.first().copied().unwrap_or(0.0);
+    model.num_surf_revisions = 0;
+
     model.save_start_values()?;
     (
         model.lnd_start,
@@ -492,7 +495,8 @@ fn run_struct_burn_mix_core(
         model.aux.csound_start,
     ) = pre_burn_start;
 
-    let do_chem = (do_burn || do_mix) && model.species > 0;
+    let do_chem =
+        (model.controls.do_burn || model.controls.do_mix) && model.species > 0;
     solve_henyey_step(model, do_chem, use_bcyclic)
 }
 

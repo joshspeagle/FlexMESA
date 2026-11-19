@@ -45,8 +45,12 @@ fn model_scalar_copy_to_buf(dst: &mut PrimaryStateBuffer, src: &StarModel) {
             species,
             eos_config,
             model_number,
+            init_model_number,
+            doing_first_model_of_run,
             star_age,
             star_age_old,
+            time_sec,
+            time_old_sec,
             dt,
             dt_next,
             dt_old,
@@ -57,9 +61,14 @@ fn model_scalar_copy_to_buf(dst: &mut PrimaryStateBuffer, src: &StarModel) {
             xmstar,
             mstar_dot,
             m_center,
+            m_center_old,
             r_center,
+            r_center_old,
             l_center,
+            l_center_old,
             v_center,
+            v_center_old,
+            bad_max_corr_cnt,
             tau_base,
             teff
         ]
@@ -73,8 +82,12 @@ fn model_scalar_copy_from_buf(dst: &mut StarModel, src: &PrimaryStateBuffer) {
         [
             eos_config,
             model_number,
+            init_model_number,
+            doing_first_model_of_run,
             star_age,
             star_age_old,
+            time_sec,
+            time_old_sec,
             dt,
             dt_next,
             dt_old,
@@ -85,9 +98,14 @@ fn model_scalar_copy_from_buf(dst: &mut StarModel, src: &PrimaryStateBuffer) {
             xmstar,
             mstar_dot,
             m_center,
+            m_center_old,
             r_center,
+            r_center_old,
             l_center,
+            l_center_old,
             v_center,
+            v_center_old,
+            bad_max_corr_cnt,
             tau_base,
             teff
         ]
@@ -305,8 +323,12 @@ pub struct PrimaryStateBuffer {
     pub kap_config: KapConfig,
 
     pub(crate) model_number: usize,
+    pub(crate) init_model_number: isize,
+    pub(crate) doing_first_model_of_run: bool,
     pub(crate) star_age: f64,
     pub(crate) star_age_old: f64,
+    pub(crate) time_sec: f64,
+    pub(crate) time_old_sec: f64,
     pub(crate) dt: f64,
     pub(crate) dt_next: f64,
     pub(crate) dt_old: f64,
@@ -317,9 +339,14 @@ pub struct PrimaryStateBuffer {
     pub(crate) xmstar: f64,
     pub(crate) mstar_dot: f64,
     pub(crate) m_center: f64,
+    pub(crate) m_center_old: f64,
     pub(crate) r_center: f64,
+    pub(crate) r_center_old: f64,
     pub(crate) l_center: f64,
+    pub(crate) l_center_old: f64,
     pub(crate) v_center: f64,
+    pub(crate) v_center_old: f64,
+    pub(crate) bad_max_corr_cnt: usize,
     pub(crate) tau_base: f64,
     pub(crate) teff: f64,
 
@@ -467,6 +494,8 @@ macro_rules! make_empty_buf {
             tidal_deformation: None,
             extra_grav_if_nonzero: None,
             model_number: 0,
+            init_model_number: 0,
+            bad_max_corr_cnt: 0,
             smoothed_brunt_b_hash: 0,
             solver_mlt_eval_count: 0,
             k_const_mass: 0,
@@ -504,15 +533,17 @@ impl PrimaryStateBuffer {
                 fixed_gradr_sticky, mlt_prev_conv, mlt_flip_count
             ],
             zeros: [
-                star_age, star_age_old, dt, dt_next, dt_old, mstar, mstar_start,
-                mstar_old, xmstar, mstar_dot, m_center, r_center, l_center,
-                v_center, tau_base, teff, total_energy,
-                total_internal_energy_start, cumulative_energy_error,
+                star_age, star_age_old, time_sec, time_old_sec, dt, dt_next,
+                dt_old, mstar, mstar_start, mstar_old, xmstar, mstar_dot,
+                m_center, m_center_old, r_center, r_center_old, l_center,
+                l_center_old, v_center, v_center_old, tau_base, teff,
+                total_energy, total_internal_energy_start,
+                cumulative_energy_error,
                 non_epsnuc_energy_change_from_split_burn
             ],
             falses: [
-                doing_relax, doing_struct_burn_mix, have_mlt_vc,
-                okay_to_set_mlt_vc, solver_had_mlt_flip
+                doing_first_model_of_run, doing_relax, doing_struct_burn_mix,
+                have_mlt_vc, okay_to_set_mlt_vc, solver_had_mlt_flip
             ]
         )
     }

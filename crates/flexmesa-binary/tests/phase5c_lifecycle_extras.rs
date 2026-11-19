@@ -12,16 +12,16 @@ use flexmesa_binary::{
 };
 use flexmesa_const::{LSUN, MSUN, SECYER};
 use flexmesa_star::{
+    StarControls, StarError, StarJobControls, StarModel,
     apply_step_pre_physics, compute_power_categories, do_struct_burn_mix,
     load_zams_model, relax_composition_with_henyey, set_hydro_vars,
     solve_henyey_step, star_evolve_step, sync_post_henyey_rotation,
-    update_rotation_distortion_factors, StarControls, StarError,
-    StarJobControls, StarModel,
+    update_rotation_distortion_factors,
 };
 
 #[test]
-fn test_default_am_d_mix_zero_omega_transport_and_gold2_chem_increment_convergence(
-) {
+fn test_default_am_d_mix_zero_omega_transport_and_gold2_chem_increment_convergence()
+ {
     let mut ctrl = StarControls {
         initial_mass: 4.0,
         rotation_flag: true,
@@ -53,6 +53,13 @@ fn test_default_am_d_mix_zero_omega_transport_and_gold2_chem_increment_convergen
         shear_after < 0.1 * shear_before,
         "am_d_mix_factor=0 must still transport omega: {shear_before} -> {shear_after}"
     );
+
+    // Equilibrate the newly spun-up 4 Msun ZAMS star onto hydrostatic/thermal
+    // balance at its ZAMS timestep before injecting the stiff 50 s core test.
+    star.pack_xh();
+    star.save_start_values().expect("save_start_values");
+    solve_henyey_step(&mut star, false, true)
+        .expect("equilibrate spun-up ZAMS");
 
     // Stiff gold2 convective core (dt * sig / dm = 1e13 at dt = 50 s) with
     // 1-ULP start-of-step normalization jitter across core cells.
@@ -145,8 +152,8 @@ fn test_premix_omega_symmetric_strang_split_pre_and_post_henyey() {
 }
 
 #[test]
-fn test_op_split_burn_runs_before_save_start_values_preserving_pre_burn_t_start(
-) {
+fn test_op_split_burn_runs_before_save_start_values_preserving_pre_burn_t_start()
+ {
     let ctrl = StarControls {
         initial_mass: 15.0,
         op_split_burn: true,

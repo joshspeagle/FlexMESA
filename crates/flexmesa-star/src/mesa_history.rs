@@ -8,14 +8,15 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 
-use flexmesa_chem::{category_id, category_name, NuclideCatalog};
-use flexmesa_const::{LN10, L_SUN, M_SUN, R_SUN, SECDAY, SECYER};
+use flexmesa_chem::{NuclideCatalog, category_id, category_name};
+use flexmesa_const::{L_SUN, LN10, M_SUN, R_SUN, SECDAY, SECYER};
 use flexmesa_schema::strip_fortran_comment;
 
 use crate::controls::StarError;
 use crate::core_boundaries::CoreBoundaryInfo;
 use crate::model::StarModel;
 use crate::report_utils::{
+    MESA_REF_VERSION_NUMBER, STAR_LOG_COL_WIDTH, StepReportContext,
     center_avg_x_by_name, center_avg_x_slot, center_value, center_value_by,
     csound_face_at, equatorial_and_polar_r_cm, eval_astero_report_scalars,
     eval_conv_time_scales, eval_history_burning_regions,
@@ -24,7 +25,6 @@ use crate::report_utils::{
     iso_slot_for_chem_id, parse_quoted_include_arg, push_mesa_6line_header,
     resolve_iso_slot, safe_log10, star_avg_x_slot, surface_avg_x_by_name,
     surface_avg_x_slot, write_mesa_dbl_width, write_mesa_int_width,
-    StepReportContext, MESA_REF_VERSION_NUMBER, STAR_LOG_COL_WIDTH,
 };
 
 /// Active column declarations from upstream MESA `26.4.1`
@@ -1028,9 +1028,53 @@ fn eval_core_bdy_prop(bdy: &CoreBoundaryInfo, suffix: &str) -> MesaCellValue {
     }
 }
 
+fn eval_ejecta_mass_g(model: &StarModel) -> f64 {
+    if (!model.controls.u_flag && !model.controls.v_flag) || model.nz == 0 {
+        return 0.0;
+    }
+    let mut v_div_vesc_prev = 0.0_f64;
+    for k in 0..model.nz {
+        let v = if model.controls.u_flag {
+            if k == 0 {
+                model.u[0]
+            } else {
+                0.5 * (model.u[k - 1] + model.u[k])
+            }
+        } else {
+            model.v[k]
+        };
+        let vesc = (2.0 * model.cgrav[k].max(0.0) * model.m[k].max(0.0)
+            / model.r[k].max(1.0e-99))
+        .sqrt()
+        .max(1.0e-99);
+        let v_div_vesc = v / vesc;
+        if v_div_vesc < 1.0 {
+            if k == 0 {
+                return 0.0;
+            }
+            let dm = flexmesa_num::find0(
+                0.0,
+                v_div_vesc_prev - 1.0,
+                model.dm[k - 1],
+                v_div_vesc - 1.0,
+            )
+            .unwrap_or(0.0)
+            .max(0.0);
+            let outer_sum: f64 = if k >= 2 {
+                model.dm[..=(k - 2)].iter().sum()
+            } else {
+                0.0
+            };
+            return outer_sum + dm;
+        }
+        v_div_vesc_prev = v_div_vesc;
+    }
+    0.0
+}
+
 /// Evaluates `min_dr_div_cs` and 1-based `min_k` matching `set_abs_du_div_cs` and
 /// `min_dr_div_cs` (`star/private/star_utils.f90:1268-1325, 1488-1541`).
-fn eval_min_dr_div_cs(model: &StarModel) -> (f64, i64) {
+pub(crate) fn eval_min_dr_div_cs(model: &StarModel) -> (f64, i64) {
     let nz = model.nz;
     if nz == 0 {
         return (1.0e99, 0);
@@ -1039,6 +1083,16 @@ fn eval_min_dr_div_cs(model: &StarModel) -> (f64, i64) {
     if (!model.controls.v_flag && !model.controls.u_flag) || nz < 2 {
         return (1.0e99, min_k_1based);
     }
+
+    let remnant_mass = if model
+        .controls
+        .ts_stop
+        .check_remnant_only_for_dt_div_min_dr_div_cs_limit
+    {
+        model.m[0] - eval_ejecta_mass_g(model)
+    } else {
+        model.m[0]
+    };
 
     let o = &model.controls.output;
     let mut abs_du_plus_cs = vec![1.0e99_f64; nz];
@@ -1115,6 +1169,9 @@ fn eval_min_dr_div_cs(model: &StarModel) -> (f64, i64) {
             &model.v[..nz]
         };
         for k in k_min_0..(nz - 1) {
+            if model.m[k] > remnant_mass {
+                continue;
+            }
             if model.q[k] > o.max_q_for_dt_div_min_dr_div_cs_limit {
                 continue;
             }
@@ -1145,6 +1202,9 @@ fn eval_min_dr_div_cs(model: &StarModel) -> (f64, i64) {
             &model.u[..nz]
         };
         for k in k_min_0..(nz - 1) {
+            if model.m[k] > remnant_mass {
+                continue;
+            }
             if model.q[k] > o.max_q_for_dt_div_min_dr_div_cs_limit {
                 continue;
             }
@@ -1173,23 +1233,27 @@ fn eval_min_dr_div_cs(model: &StarModel) -> (f64, i64) {
     (best, min_k_1based)
 }
 
-fn eval_min_cell_collapse_time(model: &StarModel) -> f64 {
+pub(crate) fn eval_min_cell_collapse_time(model: &StarModel) -> f64 {
     if !model.controls.v_flag || model.nz < 2 {
         return 1.0e99;
     }
+    let mut rp1 = model.r_center;
+    let mut vp1 = model.v_center;
     let mut best = 1.0e99;
-    for k in 1..model.nz {
-        let (rp1, vp1) = if k + 1 == model.nz {
-            (model.r_center, model.v_center)
-        } else {
-            (model.r[k + 1], model.v[k + 1])
-        };
-        if vp1 > model.v[k] {
-            let t = (model.r[k] - rp1) / (vp1 - model.v[k]);
-            if t > 0.0 && t < best {
+    for k in (1..model.nz).rev() {
+        let r00 = model.r[k];
+        let v00 = model.v[k];
+        if r00 <= rp1 {
+            return -1.0;
+        }
+        if vp1 > v00 {
+            let t = (r00 - rp1) / (vp1 - v00);
+            if t < best {
                 best = t;
             }
         }
+        rp1 = r00;
+        vp1 = v00;
     }
     best
 }
@@ -2038,11 +2102,7 @@ fn eval_scalar_column(
             MesaCellValue::Float(if model.controls.rotation_flag && nz > 0 {
                 center_value_by(model, nz, |k| {
                     let wc = eval_upstream_omega_crit(model, k);
-                    if wc > 0.0 {
-                        model.omega[k] / wc
-                    } else {
-                        0.0
-                    }
+                    if wc > 0.0 { model.omega[k] / wc } else { 0.0 }
                 })
                 .min(1.0)
             } else {

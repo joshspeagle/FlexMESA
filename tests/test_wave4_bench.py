@@ -27,15 +27,15 @@ from flexmesa import bench, star
 
 # Self-generated FlexMESA regression snapshots at N=8 (not upstream MESA
 # outputs; `star_hydro_eqns`, `star_newton_step`, and `star_evolve_step`
-# shifted under #141 when `neu` #193 and `num` #194 were aligned to MESA
-# 26.4.1, and all five shifted under #149 when `&controls`, microphysics, and
-# mesh-function defaults were aligned to MESA 26.4.1; tracked in #146).
+# shifted under #141, #149, and #152 when `x_scale` (`set_xscale_info`) and
+# Newton step/equilibration semantics were aligned to MESA 26.4.1; tracked in
+# #146).
 _WAVE4_REGRESSION_SNAPSHOTS_N8: dict[str, float] = {
     "star_micro_vars": 2.497139571258105e2,
-    "star_hydro_eqns": 4.253179678855851e6,
-    "star_newton_step": 1.451475459976951e2,
+    "star_hydro_eqns": 4.253173239706682e6,
+    "star_newton_step": 1.451491418068066e2,
     "star_remesh": 5.513777703025969e2,
-    "star_evolve_step": 1.005971756200643e2,
+    "star_evolve_step": 9.894550507232628e1,
 }
 
 _STAR_TEST_HISTORY = (

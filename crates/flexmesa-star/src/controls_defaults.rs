@@ -340,8 +340,6 @@ impl Default for StarControls {
             rti_energy_floor: 0.0,
             max_num_surf_revisions: 1,
             max_abs_rel_change_surf_lns: 5.0e-4,
-            restore_mesh_on_retry: false,
-            num_steps_to_hold_mesh_after_retry: 0,
             max_tries_for_implicit_wind: 0,
             iwind_tolerance: 1.0e-3,
             iwind_lambda: 1.0,

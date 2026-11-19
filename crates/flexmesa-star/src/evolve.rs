@@ -723,7 +723,7 @@ pub(crate) fn star_evolve_step_outcome_with_extras(
             next_dt = model.controls.ts_stop.max_timestep;
         }
 
-        let restore_snap = if model.controls.restore_mesh_on_retry
+        let restore_snap = if model.controls.mix_wind.restore_mesh_on_retry
             && !model.controls.rsp_flag
         {
             pre_remesh_model.take()

@@ -608,10 +608,10 @@ pub fn rti_check_after_converge(
         return Ok(());
     }
     let nz = model.nz;
+    let species = model.species;
     let floor = model.controls.rti_energy_floor;
-    let mut e_target = model.energy.clone();
-    let mut unchanged = vec![true; nz];
-    let mut any_floored = false;
+    let nvar_hydro = model.layout.nvar_hydro;
+    let i_lnt = model.layout.i_lnt;
 
     for k in 0..nz {
         if k + 1 < nz
@@ -619,34 +619,30 @@ pub fn rti_check_after_converge(
         {
             continue;
         }
-        if model.energy[k] < floor {
-            e_target[k] = floor;
-            unchanged[k] = false;
-            any_floored = true;
-        }
-    }
-    if !any_floored {
-        return Ok(());
-    }
-
-    let old_energy = model.energy.clone();
-    crate::mesh_remap::set_lnt_for_energy(model, &e_target, &unchanged)?;
-
-    let nvar_hydro = model.layout.nvar_hydro;
-    let i_lnt = model.layout.i_lnt;
-    for k in 0..nz {
-        if unchanged[k] {
+        let old_energy = model.energy[k];
+        if old_energy >= floor {
             continue;
         }
         model.energy[k] = floor;
         if floor > 0.0 {
             model.ln_e[k] = flexmesa_math::log(floor);
         }
-        model.t[k] = flexmesa_math::exp(model.ln_t[k]);
+        let log_rho = model.lnd[k] / LN10;
+        let xa_k = model.xa[k * species..(k + 1) * species].to_vec();
+        let (new_lnt, _rev_e) = crate::mesh_remap::solve_cell_lnt_for_energy(
+            model,
+            &xa_k,
+            log_rho,
+            model.energy[k],
+            model.ln_t[k],
+            1.0e-11,
+        )?;
+        model.ln_t[k] = new_lnt;
+        model.t[k] = flexmesa_math::exp(new_lnt);
         if model.xh.len() == nz * nvar_hydro {
-            model.xh[k * nvar_hydro + i_lnt] = model.ln_t[k];
+            model.xh[k * nvar_hydro + i_lnt] = new_lnt;
         }
-        let old_ie = old_energy[k] * model.dm[k];
+        let old_ie = old_energy * model.dm[k];
         let new_ie = model.energy[k] * model.dm[k];
         if model.controls.u_flag {
             let old_ke = 0.5 * model.dm[k] * model.u[k] * model.u[k];

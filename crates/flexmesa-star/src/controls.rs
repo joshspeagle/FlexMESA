@@ -685,10 +685,6 @@ pub struct StarControls {
     pub max_num_surf_revisions: usize,
     /// Relative surface $\ln S$ change threshold triggering extra accretion iteration (`max_abs_rel_change_surf_lnS`, `5e-4` default).
     pub max_abs_rel_change_surf_lns: f64,
-    /// Restore pre-remesh grid when a step retries (`restore_mesh_on_retry`, `false` default).
-    pub restore_mesh_on_retry: bool,
-    /// Number of steps after a retry to suppress remeshing when `restore_mesh_on_retry` is true (`num_steps_to_hold_mesh_after_retry`, `0` default).
-    pub num_steps_to_hold_mesh_after_retry: isize,
     /// Maximum iterations for implicit stellar wind convergence (`max_tries_for_implicit_wind`, `0` default).
     pub max_tries_for_implicit_wind: usize,
     /// Relative convergence tolerance for implicit stellar wind (`iwind_tolerance`, `1e-3` default).

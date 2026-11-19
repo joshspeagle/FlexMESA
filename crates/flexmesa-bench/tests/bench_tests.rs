@@ -54,15 +54,16 @@ const WAVE3B_REGRESSION_SNAPSHOTS_N8: [(&str, f64); 5] = [
 
 /// `FlexMESA` regression snapshots for $N_{\mathrm{zones}} = 8$ across all five
 /// Wave 4 1D stellar engine workloads (internal self-consistency check, not an
-/// upstream MESA output; `star_hydro_eqns`, `star_newton_step`, and
-/// `star_evolve_step` shifted under `#141`, `#149`, and `#152` when `x_scale`
-/// (`set_xscale_info`) and Newton step/equilibration semantics were aligned to
-/// MESA `26.4.1`; tracked in #146).
+/// upstream MESA output; `star_hydro_eqns`, `star_newton_step`, `star_remesh`,
+/// and `star_evolve_step` shifted under `#141`, `#149`, `#153`, and `#152` when
+/// defaults, `set_mesh_function_data` + `get_gval_info`, `set_xscale_info`, and
+/// Newton step/equilibration semantics were aligned to MESA `26.4.1`; tracked in
+/// #146).
 const WAVE4_REGRESSION_SNAPSHOTS_N8: [(&str, f64); 5] = [
     ("star_micro_vars", 2.497_139_571_258_105e2),
     ("star_hydro_eqns", 4.253_173_239_706_706e6),
     ("star_newton_step", 1.451_491_418_068_066e2),
-    ("star_remesh", 5.513_777_703_025_969e2),
+    ("star_remesh", 5.108_453_216_631_093e2),
     ("star_evolve_step", 9.894_550_507_232_628e1),
 ];
 

@@ -287,22 +287,20 @@ fn test_min_xa_and_sum_xa_hard_limits_reject_without_silent_clamping() {
 #[test]
 fn test_restore_mesh_on_retry_false_keeps_remeshed_grid_and_true_restores() {
     let run_case = |restore_mesh: bool| -> (usize, usize, usize, usize) {
-        let mut m = load_zams_model(
-            StarControls {
-                initial_mass: 1.0,
-                zbase: 0.02,
-                mesh_delta_coeff: 0.25,
-                okay_to_remesh: true,
-                restore_mesh_on_retry: restore_mesh,
-                max_tries1: 1,
-                solver_max_tries_before_reject: 1,
-                max_tries_for_retry: 20,
-                solver_itermin: 2,
-                ..StarControls::default()
-            },
-            StarJobControls::default(),
-        )
-        .expect("zams");
+        let mut ctrl = StarControls {
+            initial_mass: 1.0,
+            zbase: 0.02,
+            mesh_delta_coeff: 0.25,
+            okay_to_remesh: true,
+            max_tries1: 1,
+            solver_max_tries_before_reject: 1,
+            max_tries_for_retry: 20,
+            solver_itermin: 2,
+            ..StarControls::default()
+        };
+        ctrl.mix_wind.restore_mesh_on_retry = restore_mesh;
+        let mut m =
+            load_zams_model(ctrl, StarJobControls::default()).expect("zams");
         m.doing_first_model_of_run = false;
         let nz_init = m.nz;
         let rep = star_evolve_step(&mut m, true, false, true)
@@ -585,5 +583,19 @@ fn test_timestep_checks_match_177_and_253() {
     assert!(
         matches!(act_oob, TimestepAction::Terminate(ref msg) if msg.contains("#253")),
         "expected #253 OOB guard, got {act_oob:?}"
+    );
+}
+
+#[test]
+fn test_sizeb_flailing_check_reproduces_upstream_260_never_fires() {
+    let mut tracker = flexmesa_star::solver_norms::FlailingTracker::default();
+    let r1 = tracker.observe(1, 1.0e-3, 1.0e-2, Some((4, 1)));
+    let r2 = tracker.observe(2, 1.0e-3, 1.0e-1, Some((4, 1)));
+    let r3 = tracker.observe(3, 1.0e-3, 1.0, Some((4, 1)));
+    assert_eq!(r1, 1.0e-2);
+    assert_eq!(r2, 1.0e-1);
+    assert_eq!(
+        r3, 1.0,
+        "upstream #260 overwrites abs_max_corr1 before comparison so flailing never fires"
     );
 }

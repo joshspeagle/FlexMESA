@@ -25,9 +25,12 @@ impl FlailingTracker {
         *self = Self::default();
     }
 
-    /// Applies the upstream 3-iteration diverging `max_correction = 1e99`
-    /// check (`solver_support.f90:540-566`) and updates stored `(var, zone)`
-    /// history.
+    /// Applies the upstream `sizeB` history shift and diverging-solve check
+    /// (`solver_support.f90:537-567`).
+    ///
+    /// Upstream overwrites `abs_max_corr1 = abs_corr` (`:539`) BEFORE testing
+    /// `abs_corr > abs_max_corr1` (`:560`), so the flailing branch is always
+    /// false in MESA `26.4.1` (reproduced unconditionally per `#260` / `#169`).
     pub fn observe(
         &mut self,
         solver_iter: usize,
@@ -38,10 +41,24 @@ impl FlailingTracker {
         if solver_iter <= 1 {
             self.reset();
         }
-        let mut reported = raw_max_corr;
+        let (zone_opt, var_opt) = match arg_max {
+            Some((z, v)) => (Some(z), Some(v)),
+            None => (None, None),
+        };
+        // `solver_support.f90:539-541` (`#260`): shift history BEFORE comparing.
+        self.abs_max_corr2 = self.abs_max_corr1;
+        self.abs_max_corr1 = raw_max_corr;
+        self.max_zone2 = self.max_zone1;
+        self.max_zone1 = zone_opt;
+        self.max_var2 = self.max_var1;
+        self.max_var1 = var_opt;
+        if solver_iter < 3 {
+            return raw_max_corr;
+        }
+        // `solver_support.f90:558-567` (`#260`): `raw_max_corr > self.abs_max_corr1`
+        // is always false because `self.abs_max_corr1 == raw_max_corr`.
         if let Some((zone, var)) = arg_max {
-            if solver_iter >= 3
-                && raw_max_corr > tol_max_correction
+            if raw_max_corr > tol_max_correction
                 && raw_max_corr > self.abs_max_corr1
                 && self.abs_max_corr1 > self.abs_max_corr2
                 && Some(zone) == self.max_zone1
@@ -49,23 +66,10 @@ impl FlailingTracker {
                 && Some(var) == self.max_var1
                 && self.max_var1 == self.max_var2
             {
-                reported = 1.0e99;
+                return 1.0e99;
             }
-            self.abs_max_corr2 = self.abs_max_corr1;
-            self.abs_max_corr1 = raw_max_corr;
-            self.max_zone2 = self.max_zone1;
-            self.max_zone1 = Some(zone);
-            self.max_var2 = self.max_var1;
-            self.max_var1 = Some(var);
-        } else {
-            self.abs_max_corr2 = self.abs_max_corr1;
-            self.abs_max_corr1 = raw_max_corr;
-            self.max_zone2 = self.max_zone1;
-            self.max_zone1 = None;
-            self.max_var2 = self.max_var1;
-            self.max_var1 = None;
         }
-        reported
+        raw_max_corr
     }
 }
 

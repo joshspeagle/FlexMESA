@@ -19,7 +19,7 @@ use crate::hydro_work::{
     eval_cell_dpe_dt_ad, eval_v_flag_dke_dt_ad, eval_v_flag_dwork_dm_ad,
     eval_v_flag_simple_pdv_dm_ad,
 };
-use crate::mesh_adjust::{MeshFunctionConfig, plan_mesh, remap_onto_dq};
+use crate::mesh_adjust::{MeshFunctionConfig, do_adjust_mesh};
 use crate::model::StarModel;
 use crate::premix::{do_conv_premix, do_phase_separation};
 use crate::primary_state::PrimaryStateBuffer;
@@ -334,68 +334,6 @@ pub fn snapshot_step_old_extras(model: &mut StarModel) {
     model.v_center_old = model.v_center;
 }
 
-fn restore_exact_remapped_j_rot(
-    model: &mut StarModel,
-    snap: &PrimaryStateBuffer,
-) {
-    let nz_old = snap.dq.len();
-    let nz_new = model.nz;
-    if nz_old == 0 || nz_new == 0 || snap.j_rot.len() != nz_old {
-        return;
-    }
-    let dqbar_from_dq = |dq: &[f64]| -> Vec<f64> {
-        let n = dq.len();
-        let mut out = vec![0.0_f64; n];
-        out[0] = 0.5 * dq[0];
-        for i in 1..n.saturating_sub(1) {
-            out[i] = 0.5 * (dq[i - 1] + dq[i]);
-        }
-        if n > 1 {
-            out[n - 1] = 0.5 * dq[n - 2] + dq[n - 1];
-        } else {
-            out[0] = dq[0];
-        }
-        out
-    };
-    let dqbar_old = dqbar_from_dq(&snap.dq);
-    let dqbar_new = dqbar_from_dq(&model.dq);
-    let mut xbar_old = vec![0.0_f64; nz_old + 1];
-    for kk in 0..nz_old {
-        xbar_old[kk + 1] = xbar_old[kk] + dqbar_old[kk];
-    }
-    xbar_old[nz_old] = 1.0;
-
-    let mut xbar_cur = 0.0_f64;
-    let mut kk_b = 0_usize;
-    for k in 0..nz_new {
-        let a0 = xbar_cur;
-        let a1 = if k + 1 < nz_new {
-            a0 + dqbar_new[k]
-        } else {
-            1.0
-        };
-        xbar_cur = a1;
-        let dx = (a1 - a0).max(1.0e-99);
-        while kk_b + 1 < nz_old && xbar_old[kk_b + 1] <= a0 {
-            kk_b += 1;
-        }
-        let mut j_acc = 0.0_f64;
-        for kk in kk_b..nz_old {
-            let b0 = xbar_old[kk];
-            if b0 >= a1 {
-                break;
-            }
-            let b1 = xbar_old[kk + 1];
-            let ov = (a1.min(b1) - a0.max(b0)).max(0.0);
-            if ov > 0.0 {
-                j_acc += ov * snap.j_rot[kk];
-            }
-        }
-        model.j_rot[k] = j_acc / dx;
-    }
-    crate::rotation::conserve_shell_j_rot_and_distortion(model);
-}
-
 /// Executes pre-step adaptive remeshing (`do_mesh` in
 /// `star/private/evolve.f90:1882-1889, 1961-1989`), returning
 /// `(num_splits, num_merges, pre_remesh_snapshot)`.
@@ -406,49 +344,36 @@ pub fn remesh_star_before_step(
     model: &mut StarModel,
     dt_prev: f64,
 ) -> Result<(usize, usize, Option<PrimaryStateBuffer>), StarError> {
-    let hold_after_retry = model.controls.restore_mesh_on_retry
+    let mw = &model.controls.mix_wind;
+    let hold_after_retry = mw.restore_mesh_on_retry
+        && mw.num_steps_to_hold_mesh_after_retry > 0
         && model.aux.step_hist.model_number_for_last_retry.is_some_and(
             |m_ret| {
-                (m_ret as isize)
+                (m_ret as isize) + mw.num_steps_to_hold_mesh_after_retry
                     > (model.model_number as isize)
-                        - model.controls.num_steps_to_hold_mesh_after_retry
             },
         );
-    let min_remesh_dt = model.controls.mix_wind.remesh_dt_limit;
+    let min_remesh_dt = mw.remesh_dt_limit;
     let dt_remesh_ok = dt_prev <= 0.0 || dt_prev >= min_remesh_dt;
+    let allow_first =
+        model.controls.rsp_flag || !model.doing_first_model_of_run;
     if model.controls.okay_to_remesh
-        && !model.controls.rsp_flag
-        && !model.doing_first_model_of_run
+        && (!model.controls.rsp_flag || mw.use_split_merge_amr)
+        && allow_first
         && !hold_after_retry
         && dt_remesh_ok
     {
         set_hydro_vars(model, false, false)?;
         let dt_curr = dt_prev.max(1.0);
         refresh_mixing_state(model, dt_curr, &[]);
+        let snap = PrimaryStateBuffer::from_model(model);
         let mesh_cfg = MeshFunctionConfig::from_controls(&model.controls);
-        let (dq_new, ns, nm) = plan_mesh(model, &mesh_cfg);
-        if ns + nm > 0 {
-            let snap = PrimaryStateBuffer::from_model(model);
-            remap_onto_dq(model, &dq_new)?;
-            // Pre-`#153` `remap_onto_dq` uses linear cell interpolation; keep
-            // `smooth_post_remesh_hydro_and_rotation` until `#153` replaces
-            // `remap_onto_dq` with `mesh_adjust.f90` reconstruction, and
-            // restore exact conservatively remapped `j_rot` when rotating.
-            crate::hydro_state::smooth_post_remesh_hydro_and_rotation(
-                model, &snap,
-            )?;
-            if model.controls.rotation_flag {
-                restore_exact_remapped_j_rot(model, &snap);
-                model.aux.solver_mlt_eval_count = 1;
-            }
-            let hydro_res = set_hydro_vars(model, false, false);
-            model.aux.solver_mlt_eval_count = 0;
-            hydro_res?;
-            model.save_start_values()?;
-            snapshot_step_start_extras(model);
-            return Ok((ns, nm, Some(snap)));
-        }
-        Ok((ns, nm, None))
+        let (ns, nm) = do_adjust_mesh(model, &mesh_cfg)?;
+        set_hydro_vars(model, false, false)?;
+        model.save_start_values()?;
+        snapshot_step_start_extras(model);
+        let pre_snap = (ns + nm > 0).then_some(snap);
+        Ok((ns, nm, pre_snap))
     } else {
         Ok((0, 0, None))
     }
@@ -554,9 +479,13 @@ pub(crate) fn relax_pre_ms_to_radiative_core(
     ) = (0.0, 0.0, 0.0, 0.0);
     let mut min_conv_mx1_bot = 1.0e99_f64;
     for step in 0..600usize {
+        // Upstream pre-MS relaxation (`star/private/init.f90:1095-1108` &
+        // `star/private/relax.f90:4068`) runs with remeshing enabled so the
+        // initial `dq[0]` grid refines to `max_surface_cell_dq` under
+        // `doing_relax = true` before evolution starts.
         crate::evolve::star_evolve_step(
             model,
-            false,
+            model.controls.okay_to_remesh,
             model.controls.op_split_burn,
             true,
         )?;
@@ -573,6 +502,7 @@ pub(crate) fn relax_pre_ms_to_radiative_core(
     }
     model.controls = saved_ctrl;
     model.aux.doing_relax = false;
+    model.doing_first_model_of_run = true;
     (
         model.star_age,
         model.star_age_old,
@@ -585,6 +515,136 @@ pub(crate) fn relax_pre_ms_to_radiative_core(
         model.micro_cache_misses,
     ) = (0.0, 0.0, 1, 0, 0, 0, 0, 0, 0);
     model.aux.cumulative_energy_error = 0.0;
+    set_hydro_vars(model, false, false)?;
+    model.save_start_values()?;
+    model.save_old_values();
+    Ok(())
+}
+
+/// Relaxes a rotating stellar model smoothly to a uniform angular velocity
+/// `target_omega` ($\mathrm{rad\,s^{-1}}$) over `num_steps` internal
+/// relaxation steps (`do_relax_uniform_omega` and `do_internal_evolve` in
+/// `star/private/relax.f90:1234-1391, 3878-4286`).
+///
+/// # Errors
+/// Returns [`StarError`] if `num_steps == 0` or an internal relaxation step
+/// fails to converge.
+pub fn relax_uniform_omega(
+    model: &mut StarModel,
+    target_omega: f64,
+    num_steps: usize,
+    max_yrs_dt: f64,
+) -> Result<(), StarError> {
+    if !model.controls.rotation_flag || model.nz == 0 {
+        return Ok(());
+    }
+    if model.omega.iter().all(|&w| w == target_omega) {
+        return Ok(());
+    }
+    if num_steps == 0 {
+        return Err(StarError::InvalidInput(String::from(
+            "invalid num_steps_to_relax_rotation (must be > 0)",
+        )));
+    }
+
+    let saved_ctrl = model.controls.clone();
+    let saved_age = model.star_age;
+    let saved_age_old = model.star_age_old;
+    let saved_time_sec = model.time_sec;
+    let saved_model_number = model.model_number;
+    let saved_num_retries = model.num_retries;
+    let saved_num_redos = model.num_redos;
+    let saved_iters = model.total_num_solver_iterations;
+    let saved_calls = model.total_num_solver_calls;
+    let saved_cache_hits = model.micro_cache_hits;
+    let saved_cache_misses = model.micro_cache_misses;
+    let saved_dt_next = model.dt_next;
+    let saved_first = model.doing_first_model_of_run;
+    let saved_cum_err = model.aux.cumulative_energy_error;
+
+    let starting_omega = model.omega.first().copied().unwrap_or(0.0);
+    model.aux.doing_relax = true;
+    {
+        let c = &mut model.controls;
+        c.dxdt_nuc_factor = 0.0;
+        c.mix_factor = 0.0;
+        c.mix_wind.am_d_mix_factor = 0.0;
+        c.max_age = 1.0e50;
+        c.max_age_in_days = 1.0e50;
+        c.max_age_in_seconds = None;
+        c.ts_stop.max_timestep_factor = 2.0;
+        c.max_model_number = None;
+        c.max_years_for_timestep = max_yrs_dt;
+        c.ts_stop.max_timestep = 0.0;
+        c.mass_change = 0.0;
+        c.use_other_wind = false;
+        c.reimers_scaling_factor = 0.0;
+        c.blocker_scaling_factor = 0.0;
+        c.vink_scaling_factor = 0.0;
+        c.dutch_scaling_factor = 0.0;
+        c.mix_wind.de_jager_scaling_factor = 0.0;
+        c.mix_wind.van_loon_scaling_factor = 0.0;
+        c.mix_wind.nieuwenhuijzen_scaling_factor = 0.0;
+        c.mix_wind.bjorklund_scaling_factor = 0.0;
+        c.use_gold2_tolerances = false;
+        c.steps_before_use_gold2_tolerances = -1;
+        c.use_gold_tolerances = c.relax_use_gold_tolerances;
+        c.steps_before_use_gold_tolerances = -1;
+        if c.mlt_option == MltOption::Tdc {
+            c.mlt_option = MltOption::Cox;
+        }
+    }
+    if model.dt_next <= 0.0 {
+        model.dt_next = flexmesa_const::SECYER;
+    }
+
+    let max_iters = num_steps + 51;
+    let mut step_err = Ok(());
+    for step_idx in 1..=max_iters {
+        if let Err(e) = crate::evolve::star_evolve_step(
+            model,
+            model.controls.okay_to_remesh,
+            model.controls.op_split_burn,
+            true,
+        ) {
+            step_err = Err(e);
+            break;
+        }
+        let frac = ((step_idx as f64) / (num_steps as f64)).clamp(0.0, 1.0);
+        let this_step_omega =
+            frac * target_omega + (1.0 - frac) * starting_omega;
+        let cur_omega = model.omega.first().copied().unwrap_or(0.0);
+        let done = step_idx > num_steps + 50
+            || (cur_omega - target_omega).abs()
+                < 1.0e-4 * target_omega.abs().max(1.0e-10);
+        crate::relax::apply_uniform_rotation(model, this_step_omega);
+        crate::rotation::update_rotation_distortion_factors(model);
+        if done {
+            break;
+        }
+    }
+
+    model.controls = saved_ctrl;
+    model.aux.doing_relax = false;
+    model.doing_first_model_of_run = saved_first;
+    model.star_age = saved_age;
+    model.star_age_old = saved_age_old;
+    model.time_sec = saved_time_sec;
+    model.model_number = saved_model_number;
+    model.num_retries = saved_num_retries;
+    model.num_redos = saved_num_redos;
+    model.total_num_solver_iterations = saved_iters;
+    model.total_num_solver_calls = saved_calls;
+    model.micro_cache_hits = saved_cache_hits;
+    model.micro_cache_misses = saved_cache_misses;
+    model.dt = 0.0;
+    model.dt_old = 0.0;
+    model.dt_next = saved_dt_next;
+    model.aux.cumulative_energy_error = saved_cum_err;
+    model.aux.step_hist.timestep_hold = 0;
+    model.aux.step_hist.model_number_for_last_retry = None;
+
+    step_err?;
     set_hydro_vars(model, false, false)?;
     model.save_start_values()?;
     model.save_old_values();

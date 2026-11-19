@@ -61,6 +61,8 @@
 )]
 
 pub mod adjust_mass;
+pub mod adjust_mesh_split_merge;
+pub mod adjust_mesh_support;
 pub mod case_staging;
 pub mod controls;
 mod controls_defaults;
@@ -96,7 +98,9 @@ pub mod mesa_log_reader;
 pub mod mesa_profile;
 pub mod mesh;
 pub mod mesh_adjust;
-pub(crate) mod mesh_remap;
+pub mod mesh_functions;
+pub mod mesh_plan;
+pub mod mesh_remap;
 pub mod micro;
 pub mod micro_cache;
 pub mod micro_net;
@@ -181,6 +185,13 @@ pub use adjust_mass::{
     build_accreted_xa, do_adjust_mass, do_adjust_mass_step,
     do_adjust_mass_with_dt,
 };
+pub use adjust_mesh_split_merge::{
+    get1_grad, minmod3, preview_split_merge_amr, remesh_split_merge,
+};
+pub use adjust_mesh_support::{
+    GvalInfo, OtherMeshDeltaCoeffFactorHandle, OtherMeshDeltaCoeffFactorHook,
+    check_validity, get_gval_info, get_gval_info_with_controls,
+};
 pub use controls::{
     AtmOption, AtmTTauRelation, EnergyEqnOption, StarControls, StarError,
     StarJobControls, StepFailureInfo, VarLayout,
@@ -215,7 +226,7 @@ pub use evolve::{
     star_evolve_step_with_extras,
 };
 pub use evolve_support::{
-    apply_step_pre_physics, eval_total_energy_integrals,
+    apply_step_pre_physics, eval_total_energy_integrals, relax_uniform_omega,
     remesh_star_before_step, update_step_energy_conservation,
 };
 pub use history::{
@@ -283,9 +294,17 @@ pub use mesa_profile::{
     resolve_star_profile_columns,
 };
 pub use mesh_adjust::{
-    MeshFunctionConfig, do_adjust_mesh, eval_mesh_gval, plan_mesh,
-    remap_onto_dq,
+    CellType, MeshFunctionConfig, StandardMeshPlan, classify_new_cells,
+    compute_monotone_xa_slopes, do_adjust_mesh, do_prune_mesh_surface,
+    eval_effective_mesh_delta_coeff, eval_mesh_gval, plan_mesh, remap_onto_dq,
+    solve_cell_lnt_for_energy, try_plan_standard_mesh,
 };
+pub use mesh_functions::{
+    MAX_ALLOWED_GVALS, MeshFunctionData, OtherMeshFunctionColumn,
+    OtherMeshFunctionsHandle, OtherMeshFunctionsHook, num_mesh_functions,
+    set_mesh_function_data,
+};
+pub use mesh_plan::{MeshPlanOutput, do_mesh_plan};
 pub use micro::{
     change_model_network, do_eos, do_kap, do_net, do_neu, get_or_load_net,
     get_tau, global_basic_net, set_basic_vars,

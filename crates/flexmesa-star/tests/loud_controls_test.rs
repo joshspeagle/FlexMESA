@@ -143,9 +143,9 @@ fn test_unknown_section_key_unused_and_removed_aliases_fail_loudly() {
             "x_logical_ctrl",
         ),
         (
-            "unused_mesh_ratio",
-            "&controls\n  mesh_max_allowed_ratio = 2.0d0\n/\n",
-            "mesh_max_allowed_ratio",
+            "unused_premix_time",
+            "&controls\n  conv_premix_time_factor = 1.0d0\n/\n",
+            "conv_premix_time_factor",
         ),
         (
             "unused_bad_max_corr",

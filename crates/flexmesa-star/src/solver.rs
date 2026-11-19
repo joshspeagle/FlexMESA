@@ -665,14 +665,13 @@ pub fn solve_henyey_step(
                     break;
                 }
 
-                std::mem::swap(&mut sys, &mut trial_sys);
-
                 if eff_min_coeff == 1.0 {
+                    std::mem::swap(&mut sys, &mut trial_sys);
                     accepted_coeff = Some(coeff_try);
                     break;
                 }
 
-                let f = eval_f(sys.nvar, sys.nz, &sys.equ);
+                let f = eval_f(trial_sys.nvar, trial_sys.nz, &trial_sys.equ);
                 if !f.is_finite() {
                     if alam > eff_min_coeff {
                         alam = (alam / 10.0).max(eff_min_coeff);
@@ -686,6 +685,7 @@ pub fn solve_henyey_step(
                 let f_target =
                     (0.5 * fold).max(fold + 1.0e-2 * coeff_try * slope);
                 if f <= f_target || alam <= eff_min_coeff {
+                    std::mem::swap(&mut sys, &mut trial_sys);
                     accepted_coeff = Some(coeff_try);
                     break;
                 }

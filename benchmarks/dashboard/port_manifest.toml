@@ -1707,8 +1707,11 @@ upstream_path = "binary/private/binary_irradiation.f90"
 module = "binary"
 upstream_lines = 62
 upstream_sha256 = "200cf59fae1a2f1b39f83bef6dd69f6f7b4d731cb57f8641ef8513961c559dd7"
-status = "absent"
-notes = "seeded from coverage-map.md (absent): quick. grep `irradiation` in flexmesa-binary: none"
+status = "ported_unverified"
+flexmesa_files = ["crates/flexmesa-binary/src/system_step.rs"]
+notes = "ported in #160: adjust_irradiation donor column-depth heating"
+[files.routine_map]
+"adjust_irradiation" = "crates/flexmesa-binary/src/system_step.rs::adjust_irradiation"
 
 [[files]]
 upstream_path = "binary/private/binary_jdot.f90"
@@ -6556,26 +6559,34 @@ upstream_path = "star/private/adjust_mesh.f90"
 module = "star"
 upstream_lines = 700
 upstream_sha256 = "32f17e8edbb32fb4c697e60e5d3a94a62b3833a3b90879010423959fe8c5c504"
-status = "partial"
-flexmesa_files = ["crates/flexmesa-star/src/evolve_support.rs", "crates/flexmesa-star/src/mesh_adjust.rs"]
-notes = "seeded from coverage-map.md (partial): quick. Driver only; `set_types_of_new_cells`, `okay_to_merge` logic, gval work arrays not present"
+status = "ported_unverified"
+flexmesa_files = ["crates/flexmesa-star/src/mesh_adjust.rs", "crates/flexmesa-star/src/mesh_remap.rs"]
+notes = "updated for #153: remesh driver, set_types_of_new_cells, okay_to_merge, and mesh_max_allowed_ratio clamp (#250)"
+[files.routine_map]
+"remesh" = "crates/flexmesa-star/src/mesh_adjust.rs::do_adjust_mesh+plan_mesh"
 
 [[files]]
 upstream_path = "star/private/adjust_mesh_split_merge.f90"
 module = "star"
 upstream_lines = 1461
 upstream_sha256 = "6417841843978a7ec9244eab70047b9e8406b00664cf6feff4cf5bf45de1f8bf"
-status = "absent"
-notes = "seeded from coverage-map.md (absent): quick. `use_split_merge_amr` path: 0/22 routine names in Rust"
+status = "ported_unverified"
+flexmesa_files = ["crates/flexmesa-star/src/adjust_mesh_split_merge.rs"]
+notes = "updated for #153: remesh_split_merge optical-depth/radius split-merge AMR (#242 loud guard on flipped_hybrid_zoning)"
+[files.routine_map]
+"remesh_split_merge" = "crates/flexmesa-star/src/adjust_mesh_split_merge.rs::remesh_split_merge"
 
 [[files]]
 upstream_path = "star/private/adjust_mesh_support.f90"
 module = "star"
 upstream_lines = 457
 upstream_sha256 = "ddbd5ed6b3a656483e718d6f6780889f5d0b8bcf2b33185eb8541ebff7fe5ec0"
-status = "stub"
-flexmesa_files = ["crates/flexmesa-star/src/mesh_adjust.rs"]
-notes = "seeded from coverage-map.md (stub): deep (C1-18). No `mesh_dlog_*_dlogP_extra`, `xtra_coef_*`, `mesh_delta_coeff_for_highT`, `E_function`, burn-zone multipliers"
+status = "ported_unverified"
+flexmesa_files = ["crates/flexmesa-star/src/adjust_mesh_support.rs"]
+notes = "updated for #153: get_gval_info, mesh_dlog_*_dlogP_extra, xtra_coef_*, mesh_delta_coeff_for_highT (#243), and check_validity"
+[files.routine_map]
+"check_validity" = "crates/flexmesa-star/src/adjust_mesh_support.rs::check_validity"
+"get_gval_info" = "crates/flexmesa-star/src/adjust_mesh_support.rs::get_gval_info"
 
 [[files]]
 upstream_path = "star/private/adjust_net.f90"
@@ -6739,7 +6750,7 @@ upstream_lines = 2403
 upstream_sha256 = "101795067cd3ba193a0289d55fc2412f49c5251d38bd5240b51e68c2e868e748"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-star/src/evolve.rs", "crates/flexmesa-star/src/evolve_support.rs", "crates/flexmesa-star/src/mdot_redo.rs"]
-notes = "seeded from coverage-map.md (partial): deep. Step/retry loop, implicit-mdot redo (`select_mdot_action`), energy-conservation accounting present. Missing: `do_step_part1` pieces (adjust_net, remove shells, `do_mesh` variants), redo (`prepare_to_redo`) as a driver action, `report_problems`, most `other_*` hooks, `set_age` details; non-upstream retry factors (C1-20)"
+notes = "updated for #152: retry/redo flow, restore_mesh_on_retry, select_mdot_action (#139), max_age* clipping, min_timestep_limit/max_number_retries/redo_limit terminations, and do_adjust_mesh wiring (#153). Still missing: adjust_net, remove_shells, and remaining other_* hooks (#154, #159)"
 
 [[files]]
 upstream_path = "star/private/evolve_support.f90"
@@ -6747,8 +6758,8 @@ module = "star"
 upstream_lines = 305
 upstream_sha256 = "075e367c470a7e2450e26ab861634e8e706fe40de2dce8b1469657d15a970253"
 status = "partial"
-flexmesa_files = ["crates/flexmesa-star/src/evolve.rs"]
-notes = "seeded from coverage-map.md (partial): quick. Generation bookkeeping re-implemented"
+flexmesa_files = ["crates/flexmesa-star/src/evolve.rs", "crates/flexmesa-star/src/evolve_support.rs"]
+notes = "updated for #152: new_generation, set_current_to_old / restore_from_old (M/R/L/v_center, time_sec, mlt_vc), and prepare_for_new_step / prepare_for_new_try; output_to_file photo/history hooks live in inlist_runner.rs"
 
 [[files]]
 upstream_path = "star/private/gravity_darkening.f90"
@@ -6950,27 +6961,37 @@ upstream_path = "star/private/mesh_adjust.f90"
 module = "star"
 upstream_lines = 2889
 upstream_sha256 = "21de1bff546d7533fffc57c205448543f3a4ac239aab4ac06c14e8991ecf24e5"
-status = "partial"
-flexmesa_files = ["crates/flexmesa-star/src/hydro_state.rs", "crates/flexmesa-star/src/mesh_remap.rs"]
-notes = "seeded from coverage-map.md (partial): quick. xh/xa conservative remap with monotone slopes and `set_lnT_for_energy` present; `do_prune_mesh_surface`, `adjust_omega`, `do_v`/`do_u` momentum-conserving remaps, RSP2 `Hp_face`/`etrb` remaps not found (5/35 names)"
+status = "ported_unverified"
+flexmesa_files = ["crates/flexmesa-star/src/mesh_remap.rs"]
+notes = "updated for #153: do_mesh_adjust, do_lnR_and_lnd, do_xa, set_lnT_for_energy, do_v/do_u/do_etrb (#244), adjust_omega, and do_prune_mesh_surface"
+[files.routine_map]
+"do_mesh_adjust" = "crates/flexmesa-star/src/mesh_remap.rs::execute_adjust_mesh_from_plan+remap_onto_dq"
+"do_prune_mesh_surface" = "crates/flexmesa-star/src/mesh_remap.rs::do_prune_mesh_surface"
+"set_lnT_for_energy" = "crates/flexmesa-star/src/mesh_remap.rs::solve_cell_lnt_for_energy"
+"set_lnT_for_energy_with_tol" = "crates/flexmesa-star/src/mesh_remap.rs::solve_cell_lnt_for_energy"
 
 [[files]]
 upstream_path = "star/private/mesh_functions.f90"
 module = "star"
 upstream_lines = 327
 upstream_sha256 = "1706bf4c9f83697c27636e236de2b5d03467657c6dc2d6866617e9d3549e3256"
-status = "stub"
-flexmesa_files = ["crates/flexmesa-star/src/mesh_adjust.rs"]
-notes = "seeded from coverage-map.md (stub): deep (C1-18). 7 functions; no `log_tau`, `log_kap`, per-species xa functions"
+status = "ported_unverified"
+flexmesa_files = ["crates/flexmesa-star/src/mesh_functions.rs"]
+notes = "updated for #153: all 21 MESA 26.4.1 mesh function families (default he4 weight 30, log_tau, log_kap, conv_bdy #241 loud guard)"
+[files.routine_map]
+"num_mesh_functions" = "crates/flexmesa-star/src/mesh_functions.rs::num_mesh_functions"
+"set_mesh_function_data" = "crates/flexmesa-star/src/mesh_functions.rs::set_mesh_function_data"
 
 [[files]]
 upstream_path = "star/private/mesh_plan.f90"
 module = "star"
 upstream_lines = 1301
 upstream_sha256 = "06aa29b63e7c193d7238ff47bb0a4a7c4cb6f4f3e0dc036a58fb317a31ebf75e"
-status = "stub"
-flexmesa_files = ["crates/flexmesa-star/src/mesh_adjust.rs"]
-notes = "seeded from coverage-map.md (stub): deep (C1-18). Different algorithm; 0/14 routine names"
+status = "ported_unverified"
+flexmesa_files = ["crates/flexmesa-star/src/mesh_plan.rs"]
+notes = "updated for #153: do_mesh_plan, pick_new_points, pick_next_dq, split1, smooth_new_points, and round_off_xq"
+[files.routine_map]
+"do_mesh_plan" = "crates/flexmesa-star/src/mesh_plan.rs::do_mesh_plan"
 
 [[files]]
 upstream_path = "star/private/micro.f90"
@@ -7739,9 +7760,17 @@ upstream_path = "star/private/solver_support.f90"
 module = "star"
 upstream_lines = 1547
 upstream_sha256 = "f0e4afc3f21cda8eef650aa9a33cf2c1e535bd8bf297929f3c486561f164ecc1"
-status = "partial"
-flexmesa_files = ["crates/flexmesa-star/src/hydro_eqns.rs", "crates/flexmesa-star/src/solver.rs", "crates/flexmesa-star/src/solver_norms.rs"]
-notes = "seeded from coverage-map.md (partial): deep-ish. x-scale and norms present; `Bdomain`, `force_another_iteration`, `edit_lnR` absent"
+status = "ported_unverified"
+flexmesa_files = ["crates/flexmesa-star/src/hydro_eqns.rs", "crates/flexmesa-star/src/solver.rs", "crates/flexmesa-star/src/solver_norms.rs", "crates/flexmesa-star/src/solver_support.rs"]
+notes = "updated for #152: set_xscale_info, sizequ (#177), sizeB (#251), Bdomain, set_vars_for_solver (edit_lnR, min_xa_hard_limit, sum_xa_hard_limit, #252), and check_after_converge"
+[files.routine_map]
+"Bdomain" = "crates/flexmesa-star/src/solver_support.rs::apply_bdomain"
+"eval_equations" = "crates/flexmesa-star/src/hydro_eqns.rs::eval_henyey_equations_into"
+"force_another_iteration" = "crates/flexmesa-star/src/solver_support.rs::force_another_iteration"
+"inspectB" = "crates/flexmesa-star/src/solver.rs::solve_henyey_step"
+"set_xscale_info" = "crates/flexmesa-star/src/hydro_eqns.rs::compute_x_scale_into"
+"sizeB" = "crates/flexmesa-star/src/solver_norms.rs::compute_model_correction_norms_in_solver"
+"sizequ" = "crates/flexmesa-star/src/solver_norms.rs::compute_residual_norms_with_argmax"
 
 [[files]]
 upstream_path = "star/private/star_bcyclic.f90"
@@ -7794,9 +7823,11 @@ upstream_path = "star/private/star_solver.f90"
 module = "star"
 upstream_lines = 1940
 upstream_sha256 = "517a4a50c6790c57c4035bcf7d7bd04ad08e610d5d65467e3b3a86fa54e7aa88"
-status = "partial"
-flexmesa_files = ["crates/flexmesa-star/src/solver.rs"]
-notes = "seeded from coverage-map.md (partial): deep (C1-17). Newton loop and gold tolerances present; line search and iteration control are not upstream's"
+status = "ported_unverified"
+flexmesa_files = ["crates/flexmesa-star/src/solver.rs", "crates/flexmesa-star/src/solver_support.rs"]
+notes = "updated for #152: do_solver_work, adjust_correction (quadratic/cubic backtracking via block_multiply_xa), apply_coeff, retry max_tries schedule, solver_itermin, tiny_corr_coeff_limit, and high-T correction tolerance relaxation"
+[files.routine_map]
+"solver" = "crates/flexmesa-star/src/solver.rs::solve_henyey_step"
 
 [[files]]
 upstream_path = "star/private/star_utils.f90"
@@ -7813,7 +7844,6 @@ module = "star"
 upstream_lines = 104
 upstream_sha256 = "81580b8ed3aa402e16c565d5a24079b577ad1b6eb881520ffa0390b11a6a8b5c"
 status = "absent"
-flexmesa_files = []
 notes = "unported (#148 removed Tier1CaseExtras stub; do_starspots tracked under #161)"
 
 [[files]]
@@ -7846,9 +7876,13 @@ upstream_path = "star/private/timestep.f90"
 module = "star"
 upstream_lines = 2432
 upstream_sha256 = "1a4419ba2e0122a462c824534aa17596902b3cc7ff62d2a3091acbadde1b8378"
-status = "partial"
+status = "ported_unverified"
 flexmesa_files = ["crates/flexmesa-star/src/timestep.rs", "crates/flexmesa-star/src/timestep_checks.rs", "crates/flexmesa-star/src/timestep_limits.rs"]
-notes = "seeded from coverage-map.md (partial): deep-ish. Controller/H211 filter and ~25 of 41 limiters present by control name; missing `check_dYe_highT_change`, `check_dlog_eps_nuc_change`, `check_adjust_J_q`, `check_dX_div_X_cntr`, `check_lgL_nuc_cat_change`, Ne/O/Si centre checks"
+notes = "updated for #152: H211 and first-order dt controller plus all timestep.f90 limiters including check_dYe_highT_change, check_dlog_eps_nuc_change, check_adjust_J_q, check_dX_div_X_cntr, check_lgL_nuc_cat_change, Ne/O/Si center checks, #177 X/Y check_dX, and #253 guard"
+[files.routine_map]
+"check_change" = "crates/flexmesa-star/src/timestep_checks.rs::check_change"
+"check_integer_limit" = "crates/flexmesa-star/src/timestep_checks.rs::check_integer_limit"
+"timestep_controller" = "crates/flexmesa-star/src/timestep_limits.rs::timestep_controller"
 
 [[files]]
 upstream_path = "star/private/turb_info.f90"

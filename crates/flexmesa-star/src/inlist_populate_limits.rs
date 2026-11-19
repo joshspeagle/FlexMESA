@@ -44,11 +44,6 @@ impl InlistBundle {
             &mut c.relax_solver_iters_timestep_limit,
             "relax_solver_iters_timestep_limit",
         )?;
-        ctrl.try_isize_into(
-            "controls",
-            &mut c.num_steps_to_hold_mesh_after_retry,
-            "num_steps_to_hold_mesh_after_retry",
-        )?;
         map_f64s!("controls", ctrl, c, [
             tol_correction_norm, tol_max_correction,
             tol_correction_high_t_limit, tol_correction_norm_high_t, tol_max_correction_high_t,
@@ -99,7 +94,6 @@ impl InlistBundle {
             relax_use_gold_tolerances,
             do_solver_damping_for_neg_xa,
             scale_max_correction_for_negative_surf_lum,
-            restore_mesh_on_retry,
             retry_for_v_above_clight,
             convergence_ignore_equl_residuals, convergence_ignore_alpha_rti_residuals,
             use_gold_tolerances, use_gold2_tolerances,

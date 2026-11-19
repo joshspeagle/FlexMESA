@@ -823,11 +823,6 @@ pub fn run_test_suite_case_with_extras(
                     stage_logs.as_mut(),
                 )?;
 
-                if verify_restart && !photo_restart_verified {
-                    let (c1, c2) = verify_photo_restart_parity(&model, 1)?;
-                    photo_restart_verified = c1 == c2;
-                }
-
                 let stage_abnormal = matches!(
                     rep.termination_code.as_str(),
                     "min_timestep_limit"
@@ -837,6 +832,11 @@ pub fn run_test_suite_case_with_extras(
                         | "varcontrol_target < min_allowed_varcontrol_target"
                         | "invalid dt_next in timestep_controller"
                 );
+                if verify_restart && !photo_restart_verified && !stage_abnormal
+                {
+                    let (c1, c2) = verify_photo_restart_parity(&model, 1)?;
+                    photo_restart_verified = c1 == c2;
+                }
                 if !stage_abnormal {
                     if let Some(out_name) = output_mod {
                         let out_path = case_dir.join(out_name);
@@ -868,9 +868,19 @@ pub fn run_test_suite_case_with_extras(
         || String::from("no_stages_executed"),
         |s| s.termination_code.clone(),
     );
+    let abnormal_termination = matches!(
+        termination_code.as_str(),
+        "min_timestep_limit"
+            | "max_number_retries"
+            | "redo_limit"
+            | "dt_is_zero"
+            | "varcontrol_target < min_allowed_varcontrol_target"
+            | "invalid dt_next in timestep_controller"
+    );
     let reached_terminal_stop = !termination_code.is_empty()
         && termination_code != "max_steps_cap"
-        && termination_code != "no_stages_executed";
+        && termination_code != "no_stages_executed"
+        && !abnormal_termination;
     let passed = assertions_passed
         && reached_terminal_stop
         && (terminated_in_init || !verify_restart || photo_restart_verified);

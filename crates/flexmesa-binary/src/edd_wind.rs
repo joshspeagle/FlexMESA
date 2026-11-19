@@ -9,7 +9,9 @@
 //! Corresponds to `binary/private/binary_mdot.f90:428-622` and `binary_wind.f90`.
 
 use flexmesa_const::{CLIGHT, MSUN, ONE_THIRD, PI, SECYER, STANDARD_CGRAV};
-use flexmesa_math::pow;
+use flexmesa_math::{cos, pow, pow2, pow6};
+
+use crate::orbit::build_anomaly_grid;
 
 /// Point-mass Eddington retention and system mass-loss accounting returned by
 /// [`eval_point_mass_edd_and_retention`] (`adjust_mdots` in
@@ -214,19 +216,46 @@ pub fn eval_point_mass_edd_and_retention(
     }
 }
 
-/// Computes the Tout & Eggleton (1988, MNRAS 231, 823 Eq. 2) tidal wind
+/// Computes the Tout & Eggleton (1988, MNRAS 231, 823 Eq. 2) circular tidal wind
 /// enhancement factor $1 + B_{\mathrm{wind}} \min((R/R_L)^6, 0.5^6)$.
-///
-/// Corresponds to `Tout_enhance_wind` in `binary/private/binary_wind.f90:131-170`.
 #[must_use]
 pub fn eval_tout_wind_enhancement(
     r_star: f64,
     rl_star: f64,
     b_wind: f64,
 ) -> f64 {
-    let ratio = (r_star / rl_star.max(1.0)).min(0.5);
-    let r2 = ratio * ratio;
-    1.0 + b_wind * (r2 * r2 * r2)
+    1.0 + b_wind * pow6(r_star / rl_star.max(1.0)).min(pow6(0.5))
+}
+
+/// Evaluates orbit-averaged Tout & Eggleton (1988, MNRAS 231, 823 Eq. 2) tidally
+/// enhanced wind mass-loss rate ($\mathrm{g\,s^{-1}}$) integrated over
+/// `anomaly_steps` true-anomaly points (`Tout_enhance_wind` in
+/// `binary/private/binary_wind.f90:131-170`).
+#[must_use]
+pub fn eval_tout_wind_enhancement_orbit_averaged(
+    mstar_dot: f64,
+    r_star: f64,
+    rl_star: f64,
+    b_wind: f64,
+    eccentricity: f64,
+    anomaly_steps: usize,
+) -> f64 {
+    let (theta_co, time_co) = build_anomaly_grid(anomaly_steps, eccentricity);
+    let n = theta_co.len();
+    let one_m_e2 = 1.0 - pow2(eccentricity);
+    let cap = pow6(0.5);
+    let mut mdot_prev = 0.0_f64;
+    let mut dm = 0.0_f64;
+    for i in 0..n {
+        let rl_d = one_m_e2 / (1.0 + eccentricity * cos(theta_co[i])) * rl_star;
+        let r_rl = pow6(r_star / rl_d.max(1.0)).min(cap);
+        let mdot_i = mstar_dot * (1.0 + b_wind * r_rl);
+        if i > 0 {
+            dm += 0.5 * (mdot_prev + mdot_i) * (time_co[i] - time_co[i - 1]);
+        }
+        mdot_prev = mdot_i;
+    }
+    dm
 }
 
 /// Computes the Bondi-Hoyle wind mass transfer fraction $f_{\mathrm{wind}} \in [0, f_{\max}]$

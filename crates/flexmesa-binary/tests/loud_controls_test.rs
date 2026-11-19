@@ -126,7 +126,7 @@ fn test_binary_missing_inlist2_and_missing_roche_tables_fail_loudly() {
     .expect("write inlist");
     fs::write(
         case_dir.join("inlist1"),
-        "&star_job\n/\n&controls\n  initial_mass = 10.0d0\n  max_model_number = 1\n/\n",
+        "&star_job\n/\n&kap\n  zbase = 0.02d0\n/\n&controls\n  initial_mass = 10.0d0\n  max_model_number = 1\n/\n",
     )
     .expect("write inlist1");
 

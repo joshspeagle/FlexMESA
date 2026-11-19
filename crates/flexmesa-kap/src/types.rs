@@ -93,13 +93,14 @@ impl KapCoOption {
         }
     }
 
-    /// Return the reference metal mass fractions `(fC, fN, fO, fNe)` for this mixture.
+    /// Return the reference metal mass fractions `(fC, fN, fO, fNe)` for this mixture
+    /// matching the MESA `26.4.1` `*_co_*.data` table headers.
     #[must_use]
     pub const fn ref_zfracs(self) -> (f64, f64, f64, f64) {
         match self {
             Self::Gn93Co => (0.173_285, 0.053_152, 0.482_273, 0.098_668),
-            Self::Gs98Co => (0.165_659, 0.048_844, 0.453_345, 0.114_576),
-            Self::A09Co => (0.176_246, 0.050_427, 0.428_279, 0.093_860),
+            Self::Gs98Co => (0.171_835, 0.050_335, 0.467_356, 0.104_831),
+            Self::A09Co => (0.176_930, 0.051_828, 0.428_871, 0.094_039),
         }
     }
 
@@ -196,9 +197,9 @@ pub struct KapConfig {
     pub include_electron_conduction: bool,
     /// Apply Blouin et al. (2020) moderate-coupling H/He conduction correction (`true`).
     pub use_blouin_conductive_opacities: bool,
-    /// Evaluate Type 1 tables at `zbase` rather than local `Z` (`false` by default).
+    /// Evaluate Type 1 tables at `zbase` rather than local `Z` (`true` by default).
     pub use_zbase_for_type1: bool,
-    /// Enable Type 2 C/O-enhanced opacity evaluation (`false` by default).
+    /// Enable Type 2 C/O-enhanced opacity evaluation (`true` by default).
     pub use_type2_opacities: bool,
     /// Hydrogen mass fraction $X$ below which Type 2 opacities are fully enabled (`1e-6`).
     pub kap_type2_full_on_x: f64,
@@ -227,8 +228,8 @@ impl Default for KapConfig {
             cubic_interpolation_in_z: false,
             include_electron_conduction: true,
             use_blouin_conductive_opacities: true,
-            use_zbase_for_type1: false,
-            use_type2_opacities: false,
+            use_zbase_for_type1: true,
+            use_type2_opacities: true,
             kap_type2_full_on_x: 1.0e-6,
             kap_type2_full_off_x: 1.0e-3,
             kap_type2_full_off_dz: 0.001,

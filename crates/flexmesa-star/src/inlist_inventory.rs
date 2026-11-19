@@ -253,6 +253,7 @@ pub const KAP_SUPPORTED: &[&str] = &[
     "kap_file_prefix",
     "kap_lowt_prefix",
     "use_type2_opacities",
+    "use_zbase_for_type1",
     "zbase",
 ];
 

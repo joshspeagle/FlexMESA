@@ -1103,7 +1103,7 @@
     }
   },
   "skips": {
-    "rust_ignore_count": 16,
+    "rust_ignore_count": 17,
     "rust_ignores": [
       {
         "location": "crates/flexmesa-astero/tests/astero_suite.rs:422",
@@ -1131,37 +1131,42 @@
         "issues": "#143, #162"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:987",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:928",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:995",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:988",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1004",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:996",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1012",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1005",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1020",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1013",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1027",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1021",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1035",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1028",
+        "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
+        "issues": "#143, #160"
+      },
+      {
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1036",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },

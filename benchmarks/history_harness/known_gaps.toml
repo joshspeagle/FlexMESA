@@ -666,6 +666,16 @@ reason = "Skye/HELM operation order on liquid and blend cases causes derivative 
 kind = "rust_ignore"
 crate = "flexmesa-binary"
 file = "crates/flexmesa-binary/tests/tier5_coupled_suite.rs"
+test_name = "test_uncapped_jdot_ls_check_campaign"
+issue = "#160"
+role = "campaign"
+expect_fail_when_run = true
+reason = "Uncapped jdot_ls_check campaign fails after removing the non-upstream F4-3 latch because apply_initial_orbit_sync omits upstream star_relax_uniform_omega (#160, #157); reproduced directly in MESA 26.4.1 without rotation relaxation (step 2 equL failure at core boundary)."
+
+[[test_gaps]]
+kind = "rust_ignore"
+crate = "flexmesa-binary"
+file = "crates/flexmesa-binary/tests/tier5_coupled_suite.rs"
 test_name = "test_uncapped_jdot_gr_check_campaign"
 issue = "#160"
 role = "campaign"

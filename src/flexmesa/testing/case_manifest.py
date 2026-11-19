@@ -28,6 +28,21 @@ VALID_REFERENCE_STATUSES: tuple[str, ...] = (
     "mesa_26_4_1",
 )
 _ISSUE_RE = re.compile(r"^#[1-9][0-9]*$")
+_DEFAULT_STAR_FINAL_TOLERANCES: dict[str, float] = {
+    "rel_star_age": 0.001,
+    "log_L": 0.001,
+    "log_Teff": 0.0005,
+    "log_R": 0.001,
+    "log_center_T": 0.001,
+    "log_center_Rho": 0.002,
+}
+_DEFAULT_STAR_TRACK_TOLERANCES: dict[str, float] = {
+    "log_L": 0.005,
+    "log_Teff": 0.002,
+    "log_R": 0.005,
+    "log_center_T": 0.002,
+    "log_center_Rho": 0.005,
+}
 
 
 def repo_root() -> pathlib.Path:
@@ -154,11 +169,35 @@ class CaseManifestEntry:
     extras_status: str = ""
     extras_issue: str = ""
     departures: tuple[DepartureSpec, ...] = ()
+    component_independent_var: str = "star_age"
+    component_final_tolerances: dict[str, float] = dataclasses.field(
+        default_factory=lambda: dict(_DEFAULT_STAR_FINAL_TOLERANCES)
+    )
+    component_track_tolerances: dict[str, float] = dataclasses.field(
+        default_factory=lambda: dict(_DEFAULT_STAR_TRACK_TOLERANCES)
+    )
 
     @property
     def key(self) -> tuple[str, str]:
         """Return the ``(suite, case)`` lookup key."""
         return (self.suite, self.case)
+
+    def component_spec(
+        self,
+        component_name: str,
+        reference_path: str = "",
+    ) -> CaseManifestEntry:
+        """Build the stellar tolerance spec for a binary ``LOGS{1,2}`` track."""
+        return CaseManifestEntry(
+            suite="star",
+            case=f"{self.case}/{component_name}",
+            reference_status=self.reference_status,
+            reference_path=reference_path,
+            required_termination=self.required_termination,
+            independent_var=self.component_independent_var,
+            final_tolerances=dict(self.component_final_tolerances),
+            track_tolerances=dict(self.component_track_tolerances),
+        )
 
 
 @dataclasses.dataclass(frozen=True)
@@ -401,6 +440,17 @@ def load_case_manifest(
             deps.append(DepartureSpec(issue=d_issue, rationale=d_rat))
 
         extras_factory = str(raw.get("extras_factory", def_ext_factory)).strip()
+        star_x, star_ftol, star_ttol, _, _, _ = suite_defaults["star"]
+        comp_ftol = _parse_tol_map(
+            raw.get("component_final_tolerances"),
+            star_ftol,
+            f"{ctx}.component_final_tolerances",
+        )
+        comp_ttol = _parse_tol_map(
+            raw.get("component_track_tolerances"),
+            star_ttol,
+            f"{ctx}.component_track_tolerances",
+        )
 
         entries.append(
             CaseManifestEntry(
@@ -421,6 +471,9 @@ def load_case_manifest(
                 extras_status=extras_ledger.get((suite, case), ("", ""))[0],
                 extras_issue=extras_ledger.get((suite, case), ("", ""))[1],
                 departures=tuple(deps),
+                component_independent_var=star_x,
+                component_final_tolerances=comp_ftol,
+                component_track_tolerances=comp_ttol,
             )
         )
 

@@ -1707,8 +1707,11 @@ upstream_path = "binary/private/binary_irradiation.f90"
 module = "binary"
 upstream_lines = 62
 upstream_sha256 = "200cf59fae1a2f1b39f83bef6dd69f6f7b4d731cb57f8641ef8513961c559dd7"
-status = "absent"
-notes = "seeded from coverage-map.md (absent): quick. grep `irradiation` in flexmesa-binary: none"
+status = "ported_unverified"
+flexmesa_files = ["crates/flexmesa-binary/src/system_step.rs"]
+notes = "ported in #160: adjust_irradiation donor column-depth heating"
+[files.routine_map]
+"adjust_irradiation" = "crates/flexmesa-binary/src/system_step.rs::adjust_irradiation"
 
 [[files]]
 upstream_path = "binary/private/binary_jdot.f90"

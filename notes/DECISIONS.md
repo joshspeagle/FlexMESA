@@ -49,6 +49,8 @@ Scope and the `v0.1.0` definition are in [`SCOPE.md`](SCOPE.md). Work is tracked
 | 32 | Unported Upstream Extras Are Declared and Never Pass (`#148`) | In force | below |
 | 33 | Data Pipeline Provenance, Verified Runtime Caches, and Corruption Errors (`#164`) | In force | below |
 | 34 | Upstream MESA 26.4.1 Control Defaults Parity, Scalar Sentinels, and Explicit Opacity Zbase (`#149`) | In force | below |
+| 35 | Mode-Independent `CRMATH` Recomputation of REACLIB Reverse Coefficients at Load Time (`#161`) | In force | below |
+| 36 | Unconditional Upstream Binary Orbital Euler Step, Removal of `edot_gr`, and `Ftid_1` Reproduction (`#160`, `#175`, `#186`) | In force | below |
 
 ## Pre-audit decisions still in force
 
@@ -429,3 +431,17 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
 - **Alternatives Rejected**:
   - *Calling `with_numerics_mode(NumericsMode::Strict, ...)` during catalog loading*: Mutates the process-wide `ACTIVE_MODE` atomic while concurrent `Fast`-mode callers read `is_strict()` lock-free (`#210`, caught by `routing_governance`).
   - *Re-packing `rates_tables.bin` offline in Python*: Leaves reverse detailed-balance coefficients decoupled from `NuclideCatalog` and `flexmesa-math` `CRMATH` rounding.
+
+---
+
+## DECISIONS #36: Unconditional Upstream Binary Orbital Euler Step, Removal of `edot_gr`, and `Ftid_1` Reproduction (`Issue #160`, `#175`, `#186`)
+
+- **Date**: 2026-11-19
+- **Decision**:
+  1. **Single Explicit Euler Orbital Step & Removal of `eval_edot_gr` (`#175`)**: Replace the non-upstream 8-substep midpoint orbital loop in `flexmesa-binary` with upstream MESA's single first-order explicit Euler update (`angular_momentum_j = angular_momentum_j + jdot * time_step * secyer` at `binary/private/binary_evolve.f90:320-321`, holding `eccentricity` fixed with zeroed `edot` terms during `doing_first_model_of_run` at `:331-340`), and remove Peters (1964) gravitational-wave eccentricity decay (`eval_edot_gr`) from `jdot_tides.rs` and `EdotBreakdown` so `get_edot` sums `edot_tidal + edot_enhance + extra_edot` (`binary/private/binary_edot.f90:33-99`). No option flag is introduced; bump `FMBINCP1` checkpoint version from `1` to `2`.
+  2. **Unconditional `Ftid_1` Reproduction in `edot_tidal_Hut` (`#186`)**: Pass `Ftid_1` on both component 1 and component 2 in `eval_coupled_edot_breakdown` (`binary/private/binary_edot.f90:171-172`) with photospheric radii `Rsun * photosphere_r` and `omega_avg_surf`, matching `binary_history.rs` and MESA `26.4.1` verbatim while `#186` remains tracked under `#169` for post-`v0.1.0` review.
+  3. **Measured 8-Case `binary/test_suite` Baseline Update (`DECISIONS #27`, `#143` Carried `LOGS1`/`LOGS2`)**: Updating `benchmarks/history_harness/baseline_run_26_4_1.json` across the `8` `binary` cases preserves `run_status` and `termination_matches` on all `106` cases (`0` regressions), eliminates all unsupported `&binary_job`/`&binary_controls` keys (`0` binary controls rejected across `8/8` cases; remaining diagnostic reruns reflect component `&star_job`/`&controls` keys such as `save_model_when_terminate`), brings `binary/jdot_gr_check` within all `binary_history.data` final and track tolerances (`rel_age = +4.85e-4`, `period_days = -1.14e-4`, `star_1_mass = +8.83e-9 Msun`, `failed_final_columns = []`, `failed_track_columns = []`) while newly comparing component `LOGS1`/`LOGS2` stellar tracks (`jdot_gr_check` `LOGS1` `log_center_T`/`log_center_Rho` awaits `#161`), and leaves coupled `part1`/`adjust_mdots`/`part2` (`F3-1`), `binary_ce.f90`, and `double_bh` (`history_columns.list` `#161` + `#152`/`#153`/`#154`) for `#160` Slice 2.
+- **Why**: Upstream `v0.1.0` requires reproducing MESA `26.4.1` behavior unconditionally (`CLAUDE.md`, `#145`). In `binary/jdot_gr_check`, the 8-substep midpoint integrator reduces separation error against Peters (1964) relative to MESA's own explicit Euler step, causing the trajectory to diverge from MESA `26.4.1`'s `binary_history.data`, while `edot_gr` and component-2 `Ftid_2` in `edot_tidal_Hut` are absent from upstream Fortran.
+- **Alternatives Rejected**:
+  - *Adding a non-default control flag for higher-order orbital integration or `edot_gr`*: Violates `v0.1.0` scope (`notes/SCOPE.md`, `#160` ruling) by maintaining unverified code paths outside MESA `26.4.1` before `#143` passes.
+  - *Keeping `Ftid_2` in the orbital integrator while reporting `Ftid_1` in `binary_history.data`*: Splits the evolved eccentricity trajectory from MESA `26.4.1` whenever `Ftid_2 != Ftid_1`.

@@ -31,6 +31,7 @@ from flexmesa.testing._case_verdict import (
     count_unsupported_controls,
     evaluate_case_record,
     is_unsupported_controls_rejection,
+    resolve_binary_component_reference_paths,
     resolve_reference_history_path,
 )
 
@@ -43,6 +44,7 @@ __all__ = [
     "is_unsupported_controls_rejection",
     "locate_written_history",
     "proc_rss_gb",
+    "resolve_binary_component_reference_paths",
     "resolve_case_dir",
     "resolve_effective_numerics_mode",
     "resolve_mesa_test_root",

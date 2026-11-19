@@ -10,16 +10,16 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use flexmesa_binary::{
+    BINARY_LOG_COL_WIDTH, BinaryLogsWriter, BinarySystem, DefaultBinaryExtras,
+    EdotBreakdown, IncrementalBinaryHistoryWriter,
     default_binary_history_specs, evaluate_binary_history_row,
-    parse_binary_history_columns, BinaryLogsWriter, BinarySystem,
-    DefaultBinaryExtras, EdotBreakdown, IncrementalBinaryHistoryWriter,
-    BINARY_LOG_COL_WIDTH,
+    parse_binary_history_columns,
 };
 use flexmesa_const::{MSUN, SECYER};
 use flexmesa_star::{
-    load_zams_model, read_mesa_log_file, read_mesa_log_str, safe_log10,
-    set_hydro_vars, MesaCellValue, MesaHeaderValue, OutputControls,
-    StarControls, StarError, StarJobControls,
+    MesaCellValue, MesaHeaderValue, OutputControls, StarControls, StarError,
+    StarJobControls, load_zams_model, read_mesa_log_file, read_mesa_log_str,
+    safe_log10, set_hydro_vars,
 };
 
 /// Verbatim 8-line prefix (6 header lines + first 2 data rows) from real Fortran
@@ -320,9 +320,9 @@ fn test_binary_history_edot_columns_report_applied_terms() {
     // be non-zero and would differ from the stored sentinels below.
     sys.controls.do_tidal_circ = true;
     sys.last_edot = EdotBreakdown {
-        edot_gr: -1.0e-21,
         edot_tidal: -3.0e-19,
         edot_enhance: 5.0e-20,
+        extra_edot: -1.0e-21,
         edot_total: -2.51e-19,
     };
 

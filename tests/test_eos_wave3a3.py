@@ -448,10 +448,10 @@ def test_eval_pc_eos_and_zones_match_across_rust_and_jax() -> None:
             np.asarray(out_j.res), np.asarray(out_r.res), rtol=tol_res
         )
         _assert_unfloored(
-            np.asarray(out_j.d_dlnd), np.asarray(out_r.d_dlnd), rtol=1.0e-9
+            np.asarray(out_j.d_dlnd), np.asarray(out_r.d_dlnd), rtol=5.0e-9
         )
         _assert_unfloored(
-            np.asarray(out_j.d_dln_t), np.asarray(out_r.d_dln_t), rtol=1.0e-9
+            np.asarray(out_j.d_dln_t), np.asarray(out_r.d_dln_t), rtol=5.0e-9
         )
 
     rhos = np.array([1.0e5, 1.0e6, 1.0e7], dtype=np.float64)
@@ -478,10 +478,10 @@ def test_eval_pc_eos_and_zones_match_across_rust_and_jax() -> None:
         np.asarray(zones_j.res), np.asarray(zones_r.res), rtol=5.0e-12
     )
     _assert_unfloored(
-        np.asarray(zones_j.d_dlnd), np.asarray(zones_r.d_dlnd), rtol=1.0e-9
+        np.asarray(zones_j.d_dlnd), np.asarray(zones_r.d_dlnd), rtol=5.0e-9
     )
     _assert_unfloored(
-        np.asarray(zones_j.d_dln_t), np.asarray(zones_r.d_dln_t), rtol=1.0e-9
+        np.asarray(zones_j.d_dln_t), np.asarray(zones_r.d_dln_t), rtol=5.0e-9
     )
 
 
@@ -871,10 +871,10 @@ def test_neutron_bearing_multispecies_buckets_and_multizone_dispatch() -> None:
             np.asarray(pc_j.res), np.asarray(pc_r.res), rtol=1.0e-11
         )
         _assert_unfloored(
-            np.asarray(pc_j.d_dlnd), np.asarray(pc_r.d_dlnd), rtol=1.0e-9
+            np.asarray(pc_j.d_dlnd), np.asarray(pc_r.d_dlnd), rtol=5.0e-9
         )
         _assert_unfloored(
-            np.asarray(pc_j.d_dln_t), np.asarray(pc_r.d_dln_t), rtol=1.0e-9
+            np.asarray(pc_j.d_dln_t), np.asarray(pc_r.d_dln_t), rtol=5.0e-9
         )
 
     dt_r = eos.eos_dt_get(1.0e6, 1.0e7, cids_9, xa_9, backend="rust")

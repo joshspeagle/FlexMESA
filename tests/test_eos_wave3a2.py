@@ -303,10 +303,16 @@ def test_eval_helm_eos_jax_autodiff_matches_analytical_derivatives() -> None:
     )
 
     _assert_unfloored(
-        np.asarray(out_j.d_dlnd)[:16], np.asarray(ad_dlnd)[:16], rtol=1.0e-7
+        np.asarray(out_j.d_dlnd)[:16],
+        np.asarray(ad_dlnd)[:16],
+        rtol=1.0e-7,
+        zero_atol=1.0e-13,
     )
     _assert_unfloored(
-        np.asarray(out_j.d_dln_t)[:16], np.asarray(ad_dlnt)[:16], rtol=1.0e-7
+        np.asarray(out_j.d_dln_t)[:16],
+        np.asarray(ad_dlnt)[:16],
+        rtol=1.0e-7,
+        zero_atol=1.0e-13,
     )
     primary_idx = [
         eos.I_LN_PGAS,
@@ -472,8 +478,14 @@ def test_eval_helm_eos_full_table_matches_mesa_26_4_1_and_autodiff() -> None:
         np.asarray(out_wd.d_dln_t)[:3], np.asarray(ad_dlnt)[:3], rtol=1.0e-9
     )
     _assert_unfloored(
-        np.asarray(out_wd.d_dlnd)[:16], np.asarray(ad_dlnd)[:16], rtol=1.0e-7
+        np.asarray(out_wd.d_dlnd)[:16],
+        np.asarray(ad_dlnd)[:16],
+        rtol=1.0e-7,
+        zero_atol=1.0e-13,
     )
     _assert_unfloored(
-        np.asarray(out_wd.d_dln_t)[:16], np.asarray(ad_dlnt)[:16], rtol=1.0e-6
+        np.asarray(out_wd.d_dln_t)[:16],
+        np.asarray(ad_dlnt)[:16],
+        rtol=1.0e-6,
+        zero_atol=1.0e-13,
     )

@@ -222,7 +222,13 @@
       "issues": []
     }
   ],
-  "open_pull_requests": [],
+  "open_pull_requests": [
+    {
+      "number": 228,
+      "title": "Align module and star defaults with MESA 26.4.1 *.defaults (#149)",
+      "draft": true
+    }
+  ],
   "deferred_169": [
     {
       "number": 175,

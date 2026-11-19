@@ -119,7 +119,7 @@ Full scalar diff: [`notes/audit/defaults_diff_26_4_1.md`](https://github.com/jos
 
 - **Rust workspace line coverage (`cargo llvm-cov`)**: **73.0%** (`67,944` / `93,082` lines across `26` crates).
 - **Python package statement coverage (`pytest --cov`)**: **88.2%** (`20,670` / `23,446` statements across `27` subpackages).
-- **Ignored / skipped tests**: `18` Rust `#[ignore]` ([#143](https://github.com/joshspeagle/FlexMESA/issues/143), [#160](https://github.com/joshspeagle/FlexMESA/issues/160), [#161](https://github.com/joshspeagle/FlexMESA/issues/161), [#162](https://github.com/joshspeagle/FlexMESA/issues/162)) and `4` Python `xfail`/`skip` ([#153](https://github.com/joshspeagle/FlexMESA/issues/153), [#161](https://github.com/joshspeagle/FlexMESA/issues/161); `0` unlinked).
+- **Ignored / skipped tests**: `18` Rust `#[ignore]` ([#143](https://github.com/joshspeagle/FlexMESA/issues/143), [#160](https://github.com/joshspeagle/FlexMESA/issues/160), [#161](https://github.com/joshspeagle/FlexMESA/issues/161), [#162](https://github.com/joshspeagle/FlexMESA/issues/162)) and `5` Python `xfail`/`skip` ([#153](https://github.com/joshspeagle/FlexMESA/issues/153), [#161](https://github.com/joshspeagle/FlexMESA/issues/161); `0` unlinked).
 - **Static & documentation gates**: `cargo clippy --all-targets -- -D warnings`, `RUSTDOCFLAGS='-D warnings' cargo doc`, `ruff check`, `ruff format --check`, `mypy --strict`, `mkdocs build --strict`, and MESA `26.4.1` `file:line` citation resolution enforced in CI.
 
 #### Rust Line Coverage by Crate (`cargo llvm-cov`)

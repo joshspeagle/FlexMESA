@@ -822,6 +822,15 @@ reason = "get_skye_alfa_simple uses f64 2.3/2.4/7.2/7.4 defaults whereas MESA eo
 
 [[test_gaps]]
 kind = "python_xfail"
+file = "tests/test_eos_wave3a3.py"
+test_name = "test_pc_and_skye_rust_strict_match_mesa_26_4_1_at_base_tolerance"
+issue = "#161"
+role = "physics_gap"
+expect_fail_when_run = true
+reason = "Rust strict PC and Skye derivatives differ from MESA 26.4.1 beyond the base tolerances (1.0e-11 values, 5.0e-9 PC and 1.0e-8 Skye derivatives); largest measured pc_co_liq d_dlnT 7.1e-6 and skye_co_liq d_dlnT 1.3e-6. The same gap is declared for the Rust tests."
+
+[[test_gaps]]
+kind = "python_xfail"
 file = "tests/test_eos_wave3b1.py"
 test_name = "test_get_t_logp_matches_early_stopped_upstream_iterate"
 issue = "#161"

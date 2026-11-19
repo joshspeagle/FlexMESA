@@ -1178,11 +1178,16 @@
         "issues": "#161"
       }
     ],
-    "python_xfail_or_skip_count": 4,
+    "python_xfail_or_skip_count": 5,
     "python_skips": [
       {
         "location": "tests/test_eos_wave3a3.py:183",
         "reason": "pytest.mark.xfail( strict=True, reason=( \"declared gap (#161): get_skye_alfa_simple uses f64 2.3/2.4/7.2/7.4 \" \"defaults vs MESA eos/defaults/eos.defaults:225-228 real(4) literals\" ), )",
+        "issues": "#161"
+      },
+      {
+        "location": "tests/test_eos_wave3a3.py:201",
+        "reason": "pytest.mark.xfail( strict=True, reason=( \"declared gap (#161): Rust strict PC and Skye derivatives differ \" \"from MESA 26.4.1 beyond the base tolerances (largest measured: \" \"pc_co_liq d_dlnT 7.1e-6, skye_co_liq d_dlnT 1.3e-6)\" ), )",
         "issues": "#161"
       },
       {

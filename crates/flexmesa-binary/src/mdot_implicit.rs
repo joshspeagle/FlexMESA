@@ -504,8 +504,11 @@ impl ImplicitMdotSolver {
         if !is_roche && !is_contact {
             if scheme_low != "ritter" && scheme_low != "kolb" {
                 return Err(StarError::InvalidInput(format!(
-                    "unsupported implicit mdot_scheme '{scheme}' \
-                     (expected 'roche_lobe', 'contact', 'Ritter', or 'Kolb')"
+                    concat!(
+                        "unsupported implicit mdot_scheme '{}' ",
+                        "(expected 'roche_lobe', 'contact', 'Ritter', or 'Kolb')"
+                    ),
+                    scheme
                 )));
             }
             // `binary_mdot.f90:171-176`
@@ -601,7 +604,9 @@ impl ImplicitMdotSolver {
         self.fixed_delta_mdot /= 2.0;
     }
 
-    pub(crate) fn record_and_propose(
+    /// Records trial `(mdot, f)` and proposes the next implicit RLOF action
+    /// (`check_implicit_rlo` / `pick_mdot_for_implicit_rlo` in `binary_mdot.f90:194-425`).
+    pub fn record_and_propose(
         &mut self,
         num_tries: usize,
         max_tries: usize,

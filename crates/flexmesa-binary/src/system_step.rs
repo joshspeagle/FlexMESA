@@ -538,7 +538,7 @@ impl BinarySystem {
                 0.0
             };
 
-            // `binary_rlof.f90:76, 205`: `num_tries` increments on each call to
+            // `binary_mdot.f90:76, 205`: `num_tries` increments on each call to
             // `check_implicit_rlo` and triggers `retry` only when
             // `num_tries > max_tries_to_achieve`, so convergence is evaluated
             // through try `max_tries + 1`.
@@ -916,7 +916,7 @@ impl BinarySystem {
     }
 
     /// Evaluates `adjust_irradiation` (`binary/private/binary_irradiation.f90:33-60`).
-    fn adjust_irradiation(&mut self) {
+    pub fn adjust_irradiation(&mut self) {
         let col_depth = self.controls.col_depth_for_eps_extra;
         if col_depth <= 0.0 || self.separation <= 0.0 {
             return;

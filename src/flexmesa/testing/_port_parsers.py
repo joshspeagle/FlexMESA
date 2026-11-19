@@ -64,7 +64,7 @@ _INCLUDE_STMT_RE = re.compile(
     flags=re.IGNORECASE,
 )
 _RUST_STRIP_RE = re.compile(
-    r"//[^\n]*|/\*[\s\S]*?\*/|b?r(#*)\"[\s\S]*?\"\1|b?\"(?:\\.|[^\"\\])*\""
+    r"//[^\n]*|/\*[\s\S]*?\*/|\bb?r(#*)\"[\s\S]*?\"\1|b?\"(?:\\[\s\S]|[^\"\\])*\""
 )
 _RUST_SYM_RE = re.compile(
     r"\b(?:pub(?:\([^)]*\))?\s+)?(?:(?:const|async)\s+)*"

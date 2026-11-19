@@ -73,8 +73,6 @@ pub struct StarControls {
     pub min_t_for_neu: f64,
     /// Thermal neutrino multiplicative factor (`1.0`).
     pub non_nuc_neu_factor: f64,
-    /// Minimum $\log_{10}(T/\mathrm{K})$ for nuclear network evaluation.
-    pub min_logt_for_net: f64,
     /// Maximum $\log_{10}(T/\mathrm{K})$ above which network $T$ is clipped (`max_logT_for_net`).
     pub max_logt_for_net: f64,
     /// Maximum mean atomic mass $\bar{A}$ for nuclear burning (`max_abar_for_burning`).

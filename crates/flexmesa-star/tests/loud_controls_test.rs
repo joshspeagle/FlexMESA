@@ -15,7 +15,6 @@ use flexmesa_star::inlist_inventory::{
 };
 use flexmesa_star::pulse_exporters::export_pulse_by_format;
 use flexmesa_star::rn_parser::parse_rn_stages;
-use flexmesa_star::tier2_extras::eval_wd_phase_separation;
 use flexmesa_star::{
     load_zams_model, StarControls, StarError, StarJobControls,
 };
@@ -317,15 +316,11 @@ fn test_unrecognized_option_strings_and_simple_photosphere_fail_loudly() {
         );
     }
 
-    let mut model =
+    let model =
         load_zams_model(StarControls::default(), StarJobControls::default())
             .expect("zams");
     assert!(matches!(
         export_pulse_by_format(&model, "bogus_format", true),
-        Err(StarError::InvalidInput(_))
-    ));
-    assert!(matches!(
-        eval_wd_phase_separation(&mut model, "bogus_phase"),
         Err(StarError::InvalidInput(_))
     ));
 }

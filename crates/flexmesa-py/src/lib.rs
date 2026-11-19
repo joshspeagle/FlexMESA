@@ -78,14 +78,12 @@ pub mod math_vec_audit;
 pub mod net_py;
 /// Tier B bindings for `neu` (Itoh et al. 1996 thermal neutrino losses).
 pub mod neu_py;
+/// PyO3 callback adapters and RSP/GYRE helpers for test-side extras.
+pub mod extras_py;
 /// Tier B bindings for `rates` (nuclear reaction rates, screening, and weak rates).
 pub mod rates_py;
 /// PyO3 bindings for `star` end-to-end `inlist` parsing and `test_suite` runner.
 pub mod star_e2e_py;
-/// PyO3 bindings for Stage `E2E-4` pulsation, `astero`, and `dev_cases_*` suites.
-pub mod star_e2e_tier4_py;
-/// PyO3 bindings for Stage `E2E-5` Tier 5 `star` and `binary/test_suite` suites.
-pub mod star_e2e_tier5_py;
 /// Internal helper routines for [`star_py::PyStarModel`].
 pub mod star_helpers_py;
 /// Tier A/B/C bindings for `star` (stellar structure, ZAMS/pre-MS, I/O, microphysics).
@@ -298,9 +296,8 @@ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     atm_py::register(m)?;
     net_py::register(m)?;
     star_py::register(m)?;
+    extras_py::register(m)?;
     star_e2e_py::register(m)?;
-    star_e2e_tier4_py::register(m)?;
-    star_e2e_tier5_py::register(m)?;
     star_wave5_py::register(m)?;
     star_wave5_2_py::register(m)?;
     binary_py::register(m)?;

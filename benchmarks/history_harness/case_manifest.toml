@@ -15,8 +15,8 @@ zenodo_record = "19722306"
 
 [defaults.star]
 independent_var = "star_age"
-uses_library_extras = true
-library_extras_issue = "#148"
+uses_library_extras = false
+extras_factory = "tests.case_extras:resolve_case_extras"
 
 [defaults.star.final_tolerances]
 rel_star_age = 0.001
@@ -35,8 +35,8 @@ log_center_Rho = 0.005
 
 [defaults.binary]
 independent_var = "age"
-uses_library_extras = true
-library_extras_issue = "#148"
+uses_library_extras = false
+extras_factory = "tests.case_extras:resolve_case_extras"
 
 [defaults.binary.final_tolerances]
 rel_age = 0.001
@@ -50,8 +50,8 @@ star_2_mass = 0.002
 
 [defaults.astero]
 independent_var = "star_age"
-uses_library_extras = true
-library_extras_issue = "#148"
+uses_library_extras = false
+extras_factory = "tests.case_extras:resolve_case_extras"
 
 [defaults.astero.final_tolerances]
 rel_star_age = 0.001

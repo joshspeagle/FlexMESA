@@ -100,7 +100,7 @@ fn test_multi_step_relaxation_routines_preserve_physical_invariants() {
         .expect("1 Msun ZAMS should load");
 
     // 1. Mass relaxation (`relax_mass_to_target`)
-    relax_mass_to_target(&mut model, 1.5, 8, false);
+    relax_mass_to_target(&mut model, 1.5, 8);
     assert!(!model.aux.doing_relax);
     assert!((model.mstar - 1.5 * M_SUN).abs() < 1.0e-9 * M_SUN);
     assert!((model.controls.initial_mass - 1.5).abs() < 1.0e-12);
@@ -113,12 +113,12 @@ fn test_multi_step_relaxation_routines_preserve_physical_invariants() {
         model.xa[k * species + 1] = 0.98;
     }
     let m_before_strip = model.mstar;
-    relax_to_remove_h_env(&mut model, 1.0e-4, 8, false);
+    relax_to_remove_h_env(&mut model, 1.0e-4, 8);
     assert!(model.mstar < m_before_strip);
     assert!(model.mstar > 0.1 * M_SUN);
 
     // 3. Core boundary relaxation (`relax_core_boundary`)
-    relax_core_boundary(&mut model, 0.02, 10.0, 1.0e-4, 8, true);
+    relax_core_boundary(&mut model, 0.02, 10.0, 1.0e-4, 8);
     assert!((model.m_center - 0.02 * M_SUN).abs() < 1.0e-8 * M_SUN);
     assert!(model.r_center > 0.0);
 
@@ -144,6 +144,56 @@ fn test_multi_step_relaxation_routines_preserve_physical_invariants() {
     assert!(!model.aux.doing_relax);
 }
 
+fn write_test_relax_profile_files(
+    model: &crate::model::StarModel,
+    case_dir: &std::path::Path,
+) -> Result<(), crate::controls::StarError> {
+    use std::fmt::Write as _;
+    let nz = model.nz;
+    let species = model.species;
+
+    let mut ent = format!("{nz}\n");
+    let mut ang = format!("{nz}\n");
+    let mut comp = format!("{nz} {species}\n");
+    for k in 0..nz {
+        let q_rel = 1.0 - model.q[k].clamp(0.0, 1.0);
+        let s_cgs = flexmesa_math::exp(model.entropy[k])
+            * (flexmesa_const::KERG * 6.022_140_76e23);
+        let _ = writeln!(ent, "{q_rel:.16e} {s_cgs:.16e}");
+        let j_k = model.j_rot.get(k).copied().unwrap_or(0.0);
+        let _ = writeln!(ang, "{q_rel:.16e} {j_k:.16e}");
+        let _ = write!(comp, "{q_rel:.16e}");
+        for &x_j in model.cell_xa(k) {
+            let _ = write!(comp, " {x_j:.16e}");
+        }
+        comp.push('\n');
+    }
+
+    let m_msun = model.mstar / M_SUN;
+    let l1_lsun = model.lum.first().copied().unwrap_or(flexmesa_const::L_SUN)
+        / flexmesa_const::L_SUN;
+    let teff = model.teff;
+
+    for (fname, content) in [
+        ("entropy.dat", ent),
+        ("angular_momentum.dat", ang),
+        ("composition.dat", comp),
+        ("initial_mass.dat", format!("{m_msun:.16e}\n")),
+        ("target_vals.dat", format!("{teff:.16e}\n{l1_lsun:.16e}\n")),
+    ] {
+        let p = case_dir.join(fname);
+        if !p.exists() {
+            std::fs::write(&p, content).map_err(|e| {
+                crate::controls::StarError::IoError(format!(
+                    "failed to write {}: {e}",
+                    p.display()
+                ))
+            })?;
+        }
+    }
+    Ok(())
+}
+
 #[test]
 fn test_relax_from_profile_files_interpolates_j_and_entropy() {
     let mut model =
@@ -152,8 +202,8 @@ fn test_relax_from_profile_files_interpolates_j_and_entropy() {
 
     let tmp_dir = std::env::temp_dir().join("flexmesa_fidelity4_relax_test");
     let _ = std::fs::create_dir_all(&tmp_dir);
-    crate::tier5_extras::write_relax_profile_files(&model, &tmp_dir)
-        .expect("write_relax_profile_files");
+    write_test_relax_profile_files(&model, &tmp_dir)
+        .expect("write_test_relax_profile_files");
 
     relax_from_profile_files(&mut model, &tmp_dir)
         .expect("relax_from_profile_files");

@@ -19,11 +19,6 @@ use crate::rsp_lina::{do_lina, RspLinaOutput};
 use crate::rsp_relax_env::relax_env;
 use crate::rsp_stah::stah;
 
-pub use crate::rsp_crossing::{
-    eval_rsp_2nd_crossing_edges, eval_rsp_2nd_crossing_with_controls,
-    Rsp2ndCrossingOffset, Rsp2ndCrossingPoint, Rsp2ndCrossingReport,
-};
-
 /// Linear non-adiabatic (`LINA`) radial pulsation eigenmode returned by
 /// [`eval_rsp_lina_modes`] (`star/private/rsp_lina.f90`).
 #[derive(Debug, Clone, Copy, PartialEq)]

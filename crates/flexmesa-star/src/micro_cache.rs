@@ -47,7 +47,6 @@ struct CachedMicroKey {
     opacity_factor_bits: u64,
     min_t_for_neu_bits: u64,
     non_nuc_neu_factor_bits: u64,
-    min_logt_for_net_bits: u64,
     max_logt_for_net_bits: u64,
     max_abar_for_burning_bits: u64,
     eps_nuc_factor_bits: u64,
@@ -86,7 +85,6 @@ impl Default for CachedMicroKey {
             opacity_factor_bits: 0,
             min_t_for_neu_bits: 0,
             non_nuc_neu_factor_bits: 0,
-            min_logt_for_net_bits: 0,
             max_logt_for_net_bits: 0,
             max_abar_for_burning_bits: 0,
             eps_nuc_factor_bits: 0,
@@ -124,7 +122,6 @@ impl CachedMicroKey {
             || self.opacity_factor_bits != c.opacity_factor.to_bits()
             || self.min_t_for_neu_bits != c.min_t_for_neu.to_bits()
             || self.non_nuc_neu_factor_bits != c.non_nuc_neu_factor.to_bits()
-            || self.min_logt_for_net_bits != c.min_logt_for_net.to_bits()
             || self.max_logt_for_net_bits != c.max_logt_for_net.to_bits()
             || self.max_abar_for_burning_bits
                 != c.max_abar_for_burning.to_bits()
@@ -179,7 +176,6 @@ impl CachedMicroKey {
         self.opacity_factor_bits = c.opacity_factor.to_bits();
         self.min_t_for_neu_bits = c.min_t_for_neu.to_bits();
         self.non_nuc_neu_factor_bits = c.non_nuc_neu_factor.to_bits();
-        self.min_logt_for_net_bits = c.min_logt_for_net.to_bits();
         self.max_logt_for_net_bits = c.max_logt_for_net.to_bits();
         self.max_abar_for_burning_bits = c.max_abar_for_burning.to_bits();
         self.eps_nuc_factor_bits = c.eps_nuc_factor.to_bits();

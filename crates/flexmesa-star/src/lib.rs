@@ -130,7 +130,6 @@ pub mod rsp2_eqns;
 pub mod rsp2_remesh;
 pub mod rsp_build;
 pub mod rsp_config;
-pub mod rsp_crossing;
 pub mod rsp_def;
 pub mod rsp_driver;
 pub mod rsp_eos_inv;
@@ -159,12 +158,6 @@ pub mod stella;
 pub mod step_trace;
 pub mod struct_burn_mix;
 pub mod termination;
-pub mod tier1_extras;
-pub mod tier2_extras;
-pub mod tier3_extras;
-pub mod tier3_physics;
-pub mod tier4_extras;
-pub mod tier5_extras;
 pub mod timestep;
 mod timestep_checks;
 pub mod timestep_limits;
@@ -182,8 +175,6 @@ mod tests_fidelity2;
 mod tests_fidelity4;
 #[cfg(test)]
 mod tests_phase3_pulse_stella;
-#[cfg(test)]
-mod tests_wave5;
 
 pub use adjust_mass::{
     build_accreted_xa, do_adjust_mass, do_adjust_mass_step,
@@ -218,7 +209,8 @@ pub use eps_mdot::{
     find_mass_flux, PrevMassState,
 };
 pub use evolve::{
-    restore_from_old, star_evolve, star_evolve_step, EvolveStepReport,
+    restore_from_old, star_evolve, star_evolve_step,
+    star_evolve_step_with_extras, EvolveStepReport,
 };
 pub use evolve_support::{
     apply_step_pre_physics, eval_total_energy_integrals,
@@ -261,12 +253,11 @@ pub use inlist_inventory::{
     StarControlInventory,
 };
 pub use inlist_runner::{
-    run_case_list, run_case_list_with_options, run_inlist_stage,
-    run_inlist_stage_with_logs, run_test_suite_case,
-    run_test_suite_case_with_logs, run_test_suite_case_with_options,
-    verify_photo_restart_parity, CaseRunReport, DefaultStarExtras,
-    ExtrasDirective, StageRunReport, StarExtras, StarLogsOptions,
-    TovGrStarExtras,
+    run_inlist_stage, run_inlist_stage_with_logs, run_test_suite_case,
+    run_test_suite_case_with_extras, run_test_suite_case_with_logs,
+    run_test_suite_case_with_options, verify_photo_restart_parity,
+    CaseRunReport, DefaultStarExtras, ExtrasDirective, RspBuildOutcome,
+    StageRunReport, StarExtras, StarLogsOptions,
 };
 pub use mdot_redo::{
     eval_surf_avg_w_div_w_crit, MdotRedoState, SelectMdotAction,
@@ -347,8 +338,8 @@ pub use pulse_modes::{
     solve_gyre_mesa_modes, LinearOscillationMode, PulseModeScanOptions,
 };
 pub use relax::{
-    apply_composition_relaxation, apply_uniform_rotation, relax_core_boundary,
-    relax_from_profile_files, relax_irradiation_to_target,
+    apply_composition_relaxation, apply_planetary_core, apply_uniform_rotation,
+    relax_core_boundary, relax_from_profile_files, relax_irradiation_to_target,
     relax_mass_to_target, relax_tau_factor_to_target, relax_to_remove_h_env,
 };
 pub use relax_comp::relax_composition_with_henyey;
@@ -394,9 +385,7 @@ pub use rsp2_eqns::{
 };
 pub use rsp2_remesh::{remesh_for_rsp2, seed_rsp2_w_from_mlt_vc_if_needed};
 pub use rsp_build::{
-    build_rsp_envelope_model, do_rsp_build_model, eval_rsp_2nd_crossing_edges,
-    eval_rsp_2nd_crossing_with_controls, eval_rsp_lina_modes,
-    Rsp2ndCrossingOffset, Rsp2ndCrossingPoint, Rsp2ndCrossingReport,
+    build_rsp_envelope_model, do_rsp_build_model, eval_rsp_lina_modes,
     RspLinaMode,
 };
 pub use rsp_config::{Rsp2Controls, RspConfig};
@@ -404,7 +393,8 @@ pub use rsp_def::{
     RspDerivedConsts, RspState, F_EDD_FREE_STREAM, F_EDD_ISOTROPIC, MAX_RSP_NZN,
 };
 pub use rsp_driver::{
-    rsp_one_step, rsp_setup_model, rsp_total_energy_integrals,
+    rsp_one_step, rsp_one_step_with_extras, rsp_setup_model,
+    rsp_total_energy_integrals,
 };
 pub use rsp_eos_kap::{
     compute_standard_metals_xa, eval1_gamma_pt_get_rho, eval1_mesa_eos_and_kap,
@@ -445,46 +435,6 @@ pub use struct_burn_mix::{
 pub use termination::{
     check_termination_limits, check_termination_limits_with_history,
     compute_core_masses_msun,
-};
-pub use tier1_extras::{
-    eval_model_colors, eval_solar_calibration_objective,
-    eval_starspot_effective_luminosity, eval_t_tau_gradr_factor, is_tier1_case,
-    nelder_mead_solar_calibration_step, run_tier1_suite,
-    run_tier1_suite_with_options, verify_tier1_case_assertions,
-    Tier1CaseExtras, TIER1_CASES,
-};
-pub use tier2_extras::{
-    apply_accretion_composition_and_nova_wind, apply_planetary_core,
-    eval_conductive_flame_state, eval_planetary_irradiation_heating,
-    eval_wd_phase_separation, is_tier2_case, run_tier2_suite,
-    run_tier2_suite_with_options, verify_tier2_case_assertions,
-    Tier2CaseExtras, TIER2_CASES,
-};
-pub use tier3_extras::{
-    compute_total_angular_momentum, is_tier3_case, run_tier3_suite,
-    run_tier3_suite_with_options, verify_tier3_case_assertions,
-    Tier3CaseExtras, TIER3_CASES,
-};
-pub use tier3_physics::{
-    eval_duffell_rti_shock_state, eval_fe_core_infall_state,
-    eval_hot_cool_blended_wind_mdot, eval_magnetic_braking_torque,
-    eval_pair_instability_gamma1_and_energy, eval_roche_gravity_darkening,
-    eval_spruit_tayler_dynamo_diagnostics, eval_tov_effective_cgrav,
-    eval_tzo_core_accretion_step, export_stella_ascii,
-};
-pub use tier4_extras::{
-    is_tier4_case, run_dev_cases_suite, run_dev_cases_suite_with_options,
-    run_tier4_star_suite, run_tier4_star_suite_with_options,
-    verify_tier4_case_assertions, Tier4CaseExtras, TIER4_ACTIVE_STAR_CASES,
-    TIER4_ASTERO_CASES, TIER4_DEV_CASES, TIER4_STAR_CASES,
-};
-pub use tier5_extras::{
-    all_active_star_case_names, eval_grafener_kudritzki_wind_msun_yr,
-    eval_overshoot_dbl_exp, eval_xtrans_mesh_factor, is_tier5_star_case,
-    run_all_active_star_suite, run_all_active_star_suite_with_options,
-    run_tier5_star_suite, run_tier5_star_suite_with_options,
-    verify_step_redo_bit_parity, verify_tier5_star_case_assertions,
-    write_relax_profile_files, Tier5StarCaseExtras, TIER5_STAR_CASES,
 };
 pub use timestep::{
     eval_dx_nuc_drop_ratio, eval_h211_factor, eval_varcontrol, filter_limit,

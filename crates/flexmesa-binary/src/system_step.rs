@@ -253,8 +253,8 @@ impl BinarySystem {
                                 self.controls.max_explicit_abs_mdot,
                             )
                         };
-                        return Ok(self
-                            .finish_accepted_step(dt_used, &ts_ctrl, extras));
+                        return self
+                            .finish_accepted_step(dt_used, &ts_ctrl, extras);
                     }
                     Ok(SingleTrialOutcome::CutDt(dt_cut)) => {
                         self.counters.num_dt_cuts += 1;
@@ -498,7 +498,7 @@ impl BinarySystem {
                     dt_try = next_dt;
                     continue;
                 }
-                return Ok(self.finish_accepted_step(dt_used, &ts_ctrl, extras));
+                return self.finish_accepted_step(dt_used, &ts_ctrl, extras);
             }
         }
         Err(StarError::ConvergenceFailure(String::from(
@@ -928,7 +928,7 @@ impl BinarySystem {
         dt_used: f64,
         ts_ctrl: &BinaryTimestepControls,
         extras: &mut dyn BinaryExtras,
-    ) -> (f64, i32) {
+    ) -> Result<(f64, i32), StarError> {
         self.binary_age_yr += dt_used / SECYER;
         self.model_number += 1;
         self.update_stage_varcontrol();
@@ -988,16 +988,20 @@ impl BinarySystem {
                     }
                 });
         }
-        if let BinaryExtrasAction::Terminate(reason_str) =
-            extras.check_model(self)
-        {
-            self.last_termination_reason = Some(reason_str);
-        } else if let BinaryExtrasAction::Terminate(reason_str) =
-            extras.finish_step(self)
-        {
-            self.last_termination_reason = Some(reason_str);
+        let check_act = extras.check_model(self);
+        let finish_act = extras.finish_step(self);
+        for act in [&check_act, &finish_act] {
+            if let BinaryExtrasAction::Error(msg) = act {
+                return Err(StarError::ConvergenceFailure(msg.clone()));
+            }
         }
-        (next_dt, reason)
+        for act in [check_act, finish_act] {
+            if let BinaryExtrasAction::Terminate(reason_str) = act {
+                self.last_termination_reason = Some(reason_str);
+                break;
+            }
+        }
+        Ok((next_dt, reason))
     }
 
     fn record_retry_holds(&self, holds: &mut [(Option<usize>, usize); 2]) {

@@ -6,15 +6,19 @@
 //! `l = 0` BVP velocity kick (`rsp_gyre`), lossless `.mod` save/load
 //! continuation, and bit-identical `.photo` restart parity (`#5`, `#141`).
 
+use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use flexmesa_eos::EosConfig;
 use flexmesa_kap::{KapCoOption, KapConfig, KapLowTOption, KapOption};
+use flexmesa_star::inlist_runner::StarExtras;
+use flexmesa_star::rsp_eos_kap::RspChemCache;
 use flexmesa_star::{
-    do_rsp_build_model, read_mod_str, rsp_setup_model, star_evolve_step,
-    verify_photo_restart_parity, write_mod_string, StarControls,
-    StarJobControls,
+    do_brunt_b, do_brunt_n2, do_rsp_build_model, export_gyre_with_schema,
+    read_mod_str, rsp_setup_model, solve_gyre_mesa_modes, star_evolve_step,
+    star_evolve_step_with_extras, verify_photo_restart_parity, write_mod_string,
+    StarControls, StarError, StarJobControls, StarModel,
 };
 
 fn golden_rsp_dir() -> PathBuf {
@@ -309,6 +313,117 @@ fn test_rsp_hyd_multicycle_period_save_load_and_photo_restart_parity() {
     assert!(rep_loaded.converged);
 }
 
+struct TestGyreRspExtras;
+
+impl StarExtras for TestGyreRspExtras {
+    fn other_rsp_linear_analysis(
+        &mut self,
+        model: &mut StarModel,
+        chem: &RspChemCache,
+        log_dir: Option<&Path>,
+    ) -> Result<bool, StarError> {
+        let nzn = model.nz;
+        for k0 in 0..nzn {
+            if k0 > 0 {
+                model.gradt[k0] = model.aux.rsp.y_face_rsp[k0]
+                    + f64::midpoint(model.grada[k0 - 1], model.grada[k0]);
+            }
+            model.abar[k0] = chem.abar;
+            model.zbar[k0] = chem.zbar;
+            for j in 0..model.species.min(chem.xa.len()) {
+                model.xa[k0 * model.species + j] = chem.xa[j];
+            }
+        }
+        if nzn >= 2 {
+            model.gradt[0] = model.gradt[1];
+        }
+        model.controls.calculate_brunt_n2 = true;
+        do_brunt_b(model)?;
+        do_brunt_n2(model);
+
+        let gyre_txt = export_gyre_with_schema(model, false, 120);
+        if let Some(dir) = log_dir {
+            fs::write(dir.join("gyre.data"), &gyre_txt).map_err(|e| {
+                StarError::IoError(format!(
+                    "failed writing {}: {e}",
+                    dir.join("gyre.data").display()
+                ))
+            })?;
+        }
+        let gyre_modes = solve_gyre_mesa_modes(&gyre_txt, 0, 0.5, 25.0, 400);
+        if gyre_modes.is_empty() {
+            return Err(StarError::ConvergenceFailure(String::from(
+                "rsp_gyre BVP scan returned zero radial eigenmodes",
+            )));
+        }
+        for (m_idx, mode) in gyre_modes.iter().take(3).enumerate() {
+            let p_sec = 1.0 / (mode.freq_uhz * 1.0e-6).max(1.0e-30);
+            model.aux.rsp.lina_periods[m_idx] = p_sec;
+            model.aux.rsp.lina_growth_rates[m_idx] = mode.stellingwerf_eta;
+            if let Some(dir) = log_dir {
+                let mut ef = String::new();
+                for (j, yj) in mode.y.iter().enumerate() {
+                    let _ = writeln!(ef, "{:6} {:24.16e}", j + 1, yj[0]);
+                }
+                let ef_path = dir.join(format!("eigfunc.{}.dat", m_idx + 1));
+                fs::write(&ef_path, ef).map_err(|e| {
+                    StarError::IoError(format!(
+                        "failed writing {}: {e}",
+                        ef_path.display()
+                    ))
+                })?;
+            }
+        }
+        let mode_idx = model
+            .controls
+            .rsp
+            .mode_for_setting_periodlin
+            .min(gyre_modes.len() - 1);
+        model.aux.rsp.period =
+            1.0 / (gyre_modes[mode_idx].freq_uhz * 1.0e-6).max(1.0e-30);
+
+        let amix1 = model.controls.x_ctrl.get(3).copied().unwrap_or(0.0);
+        let amix2 = model.controls.x_ctrl.get(4).copied().unwrap_or(0.0);
+        let velkm = model
+            .controls
+            .x_ctrl
+            .get(5)
+            .copied()
+            .filter(|&v| v != 0.0)
+            .unwrap_or(model.controls.rsp.kick_vsurf_km_per_sec);
+        let amix_f = 1.0 - (amix1 + amix2);
+
+        let n_pts = gyre_modes[0].y.len();
+        let xi_at = |m: usize, j: usize| -> f64 {
+            gyre_modes.get(m).map_or(0.0, |md| {
+                let k0 = nzn.saturating_sub(1 + j);
+                let x_j = model.r[k0] / model.r[0].max(1.0e-30);
+                md.y[j][0] / x_j.max(1.0e-30)
+            })
+        };
+        let j_surf = n_pts - 1;
+        let v_surf = amix_f * xi_at(0, j_surf)
+            + amix1 * xi_at(1, j_surf)
+            + amix2 * xi_at(2, j_surf);
+        if v_surf.abs() > 0.0 && velkm != 0.0 {
+            let scale = 1.0e5 * velkm / v_surf;
+            for j in 0..n_pts.min(nzn) {
+                let k0 = nzn - 1 - j;
+                model.v[k0] = scale
+                    * (amix_f * xi_at(0, j)
+                        + amix1 * xi_at(1, j)
+                        + amix2 * xi_at(2, j));
+            }
+            if n_pts < nzn && nzn >= 2 {
+                model.v[0] = model.v[1];
+            }
+        }
+        model.v_center = 0.0;
+        model.aux.rsp.have_set_velocities = true;
+        Ok(true)
+    }
+}
+
 #[test]
 fn test_rsp_gyre_bvp_linear_kick_and_nonlinear_hyd_steps() {
     let mut ctrl = StarControls {
@@ -335,9 +450,16 @@ fn test_rsp_gyre_bvp_linear_kick_and_nonlinear_hyd_steps() {
     assert!(lina_opt.is_none());
     assert!(!model.aux.rsp.have_set_velocities);
 
+    let mut extras = TestGyreRspExtras;
     for _ in 0..3 {
-        let rep = star_evolve_step(&mut model, false, true, true)
-            .expect("rsp_gyre step");
+        let rep = star_evolve_step_with_extras(
+            &mut model,
+            false,
+            true,
+            true,
+            &mut extras,
+        )
+        .expect("rsp_gyre step");
         assert!(rep.converged);
     }
     assert!(model.aux.rsp.have_set_velocities);

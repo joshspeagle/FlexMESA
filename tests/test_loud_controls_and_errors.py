@@ -10,7 +10,7 @@ import tempfile
 
 import pytest
 
-from flexmesa import binary, star
+from flexmesa import astero, binary, star
 from flexmesa.testing import harness_runner, known_gaps_gate, trace_cli
 
 
@@ -189,4 +189,92 @@ def test_python_inlist_and_runner_loud_failures_and_opt_out() -> None:
             encoding="utf-8",
         )
         with pytest.raises(ValueError, match="correction_scheme"):
-            star.run_astero_test_suite_case(ast_case, max_steps_per_stage=1)
+            astero.run_astero_test_suite_case(ast_case, max_steps_per_stage=1)
+        with pytest.raises(ValueError, match="astero"):
+            harness_runner.run_trace_inprocess(
+                "astero",
+                ast_case,
+                root / "ast_out",
+                max_steps=1,
+                extras=object(),
+            )
+
+
+def test_extras_missing_hooks_callback_errors_and_redo_fail_loudly(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Verify missing hooks, callback errors, and redo fail loudly (`#148`)."""
+    wind_case = tmp_path / "wind_case"
+    wind_case.mkdir()
+    (wind_case / "inlist").write_text(
+        "&controls\n"
+        "  initial_mass = 1.0\n"
+        "  use_other_wind = .true.\n"
+        "  max_model_number = 1\n"
+        "/\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="use_other_wind"):
+        star.run_test_suite_case(
+            wind_case,
+            skip_optional=True,
+            max_steps_per_stage=1,
+        )
+
+    class _BadStarExtras:
+        def extras_check_model(self, _state: dict[str, object]) -> str:
+            raise ValueError("boom from python star extras")
+
+    ok_star = tmp_path / "ok_star"
+    ok_star.mkdir()
+    (ok_star / "inlist").write_text(
+        "&controls\n  initial_mass = 1.0\n  max_model_number = 1\n/\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="boom from python star extras"):
+        star.run_test_suite_case(
+            ok_star,
+            skip_optional=True,
+            max_steps_per_stage=1,
+            extras=_BadStarExtras(),
+        )
+
+    class _RedoStarExtras:
+        def extras_check_model(self, _state: dict[str, object]) -> str:
+            return "redo"
+
+    with pytest.raises(ValueError, match=r"#152"):
+        star.run_test_suite_case(
+            ok_star,
+            skip_optional=True,
+            max_steps_per_stage=1,
+            extras=_RedoStarExtras(),
+        )
+
+    class _BadBinaryExtras:
+        def finish_step(self, _state: dict[str, object]) -> str:
+            raise ValueError("boom from python binary extras")
+
+    ok_bin = tmp_path / "ok_bin"
+    ok_bin.mkdir()
+    (ok_bin / "inlist").write_text(
+        "&binary_job\n"
+        "  evolve_both_stars = .false.\n"
+        "/\n"
+        "&binary_controls\n"
+        "  m1 = 10.0\n"
+        "  m2 = 8.0\n"
+        "  initial_period_in_days = 5.0\n"
+        "/\n",
+        encoding="utf-8",
+    )
+    (ok_bin / "inlist1").write_text(
+        "&controls\n  initial_mass = 10.0\n/\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="boom from python binary extras"):
+        binary.run_binary_test_suite_case(
+            ok_bin,
+            max_steps_cap=1,
+            extras=_BadBinaryExtras(),
+        )

@@ -10,6 +10,7 @@ verdicts against ``case_manifest.toml`` and ``known_gaps.toml``.
 from __future__ import annotations
 
 import dataclasses
+import importlib
 import json
 import os
 import pathlib
@@ -247,6 +248,32 @@ def _count_history_rows(hist: pathlib.Path | None) -> int:
         return 0
 
 
+def load_extras_factory(spec: str | None) -> Any:
+    """Resolve an ``'module.path:callable'`` test-side extras factory spec."""
+    raw = (spec or "").strip()
+    if not raw:
+        return None
+    if ":" not in raw:
+        raise ValueError(
+            f"extras_factory must use 'module:callable' syntax, got {spec!r}"
+        )
+    mod_name, attr_name = raw.split(":", 1)
+    try:
+        mod = importlib.import_module(mod_name)
+    except ModuleNotFoundError:
+        candidates = [
+            pathlib.Path.cwd(),
+            pathlib.Path(__file__).resolve().parents[3],
+        ]
+        for cand in candidates:
+            if (cand / "tests").is_dir():
+                s_cand = str(cand)
+                if s_cand not in sys.path:
+                    sys.path.insert(0, s_cand)
+        mod = importlib.import_module(mod_name)
+    return getattr(mod, attr_name)
+
+
 def run_trace_inprocess(
     suite: str,
     case_dir: pathlib.Path,
@@ -259,6 +286,8 @@ def run_trace_inprocess(
     is_logs_dir: bool = True,
     numerics_mode: str | None = None,
     allow_unsupported_controls: bool = False,
+    extras_factory: str | None = None,
+    extras: Any = None,
 ) -> dict[str, Any]:
     """Invoke the compiled Safe Rust tracer directly in the current process.
 
@@ -275,13 +304,17 @@ def run_trace_inprocess(
             to active ``FLEXMESA_NUMERICS_MODE`` / process mode).
         allow_unsupported_controls: Bypass strict namelist rejection of
             unread, unused, or unimplemented MESA controls when True.
+        extras_factory: Optional ``'module:callable'`` specification returning
+            test-side extras handlers from ``(suite, case_dir)``.
+        extras: Explicit pre-built test-side extras callback object; overrides
+            ``extras_factory`` when provided.
 
     Returns:
         Raw telemetry dictionary returned by ``flexmesa._rust``.
 
     Raises:
-        ValueError: If ``max_steps < 0``, ``numerics_mode`` is invalid, or
-            ``suite`` is unknown.
+        ValueError: If ``max_steps < 0``, ``numerics_mode`` is invalid,
+            ``suite`` is unknown, or custom extras are passed to ``"astero"``.
     """
     if max_steps is not None and max_steps < 0:
         raise ValueError(f"max_steps must be non-negative, got {max_steps}")
@@ -290,6 +323,12 @@ def run_trace_inprocess(
         out_target.mkdir(parents=True, exist_ok=True)
     else:
         out_target.parent.mkdir(parents=True, exist_ok=True)
+
+    resolved_extras = extras
+    if resolved_extras is None and extras_factory:
+        factory = load_extras_factory(extras_factory)
+        if factory is not None:
+            resolved_extras = factory(suite, case_dir)
 
     c_str = str(case_dir)
     o_str = str(out_target)
@@ -305,6 +344,7 @@ def run_trace_inprocess(
                 is_logs_dir=is_logs_dir,
                 numerics_mode=eff_mode,
                 allow_unsupported_controls=allow_unsupported_controls,
+                extras=resolved_extras,
             )
         )
     if suite == "binary":
@@ -317,9 +357,14 @@ def run_trace_inprocess(
                 is_logs_dir=is_logs_dir,
                 numerics_mode=eff_mode,
                 allow_unsupported_controls=allow_unsupported_controls,
+                extras=resolved_extras,
             )
         )
     if suite == "astero":
+        if resolved_extras is not None:
+            raise ValueError(
+                "astero suite does not accept custom star/binary extras"
+            )
         return dict(
             _rust.trace_astero_case(
                 c_str,
@@ -380,6 +425,7 @@ def _run_traced_worker(
     is_logs_dir: bool,
     numerics_mode: str,
     allow_unsupported_controls: bool,
+    extras_factory: str | None,
     timeout_sec: float | None,
     max_rss_gb: float | None,
     t0: float,
@@ -415,6 +461,8 @@ def _run_traced_worker(
             cmd.append("--write-profiles")
         if allow_unsupported_controls:
             cmd.append("--allow-unsupported-controls")
+        if extras_factory:
+            cmd.extend(["--extras-factory", extras_factory])
 
         cap_kb = int(max_rss_gb * 1.0e6) if max_rss_gb is not None else None
         peak_kb = 0
@@ -521,6 +569,7 @@ def run_traced_case(
     is_logs_dir: bool = True,
     numerics_mode: str | None = None,
     allow_unsupported_controls: bool = False,
+    extras_factory: str | None = None,
     timeout_sec: float | None = None,
     max_rss_gb: float | None = None,
 ) -> TraceRunOutcome:
@@ -539,6 +588,8 @@ def run_traced_case(
             to active ``FLEXMESA_NUMERICS_MODE`` / process mode).
         allow_unsupported_controls: Bypass strict namelist rejection of
             unread, unused, or unimplemented MESA controls when True.
+        extras_factory: Optional ``'module:callable'`` specification returning
+            test-side extras handlers from ``(suite, case_dir)``.
         timeout_sec: Optional wall-clock timeout in seconds (``s``).
         max_rss_gb: Optional resident-memory ceiling in gigabytes (``GB``).
 
@@ -568,6 +619,7 @@ def run_traced_case(
             is_logs_dir=is_logs_dir,
             numerics_mode=eff_mode,
             allow_unsupported_controls=allow_unsupported_controls,
+            extras_factory=extras_factory,
             timeout_sec=timeout_sec,
             max_rss_gb=max_rss_gb,
             t0=t0,
@@ -585,6 +637,7 @@ def run_traced_case(
             is_logs_dir=is_logs_dir,
             numerics_mode=eff_mode,
             allow_unsupported_controls=allow_unsupported_controls,
+            extras_factory=extras_factory,
         )
         wall = time.monotonic() - t0
         hist = locate_written_history(suite, out_target, is_logs_dir)
@@ -655,6 +708,7 @@ def run_case_with_diagnostic(
     max_steps: int | None = None,
     numerics_mode: str | None = None,
     allow_unsupported_controls: bool = False,
+    extras_factory: str | None = None,
     timeout_sec: float | None = None,
     max_rss_gb: float | None = None,
 ) -> TraceRunOutcome:
@@ -675,6 +729,8 @@ def run_case_with_diagnostic(
         numerics_mode: Arithmetic mode (``"strict"`` or ``"fast"``).
         allow_unsupported_controls: Skip the strict run and go straight to
             the diagnostic run when True.
+        extras_factory: Optional ``'module:callable'`` specification returning
+            test-side extras handlers from ``(suite, case_dir)``.
         timeout_sec: Optional wall-clock timeout in seconds (``s``), applied
             to each of the two runs separately.
         max_rss_gb: Optional resident-memory ceiling in gigabytes (``GB``).
@@ -694,6 +750,7 @@ def run_case_with_diagnostic(
             max_steps=max_steps,
             numerics_mode=numerics_mode,
             allow_unsupported_controls=False,
+            extras_factory=extras_factory,
             timeout_sec=timeout_sec,
             max_rss_gb=max_rss_gb,
         )
@@ -714,6 +771,7 @@ def run_case_with_diagnostic(
         max_steps=max_steps,
         numerics_mode=numerics_mode,
         allow_unsupported_controls=True,
+        extras_factory=extras_factory,
         timeout_sec=timeout_sec,
         max_rss_gb=max_rss_gb,
     )

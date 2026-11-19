@@ -6060,7 +6060,7 @@ upstream_lines = 3705
 upstream_sha256 = "f3c68364e228b6241dda500711694b3430b48346d1dc337d8f75e7e3d3465ce2"
 status = "partial"
 flexmesa_files = ["crates/flexmesa-star/src/inlist_runner.rs", "crates/flexmesa-star/src/star_job_init.rs"]
-notes = "seeded from coverage-map.md (partial): deep. Stage loop over `rn` scripts and `&star_job` actions (25% of names). No `LOGS/history.data`/profile/photo files written by the runner (only `.mod`, inlist_runner.rs:127-141), no pgstar, no `do_star_job_controls_after` parity; case-name behaviour (C1-5)"
+notes = "seeded from coverage-map.md (partial): deep. Stage loop over `rn` scripts and `&star_job` actions (25% of names). No `LOGS/history.data`/profile/photo files written by the runner (only `.mod`, inlist_runner.rs:127-141), no pgstar, no `do_star_job_controls_after` parity"
 
 [[files]]
 upstream_path = "star/job/standard_run_star_extras.dek"
@@ -6583,7 +6583,7 @@ module = "star"
 upstream_lines = 249
 upstream_sha256 = "cd3b6f38db03b0be4a62f0940cf36e1092ea97f7b40347db20aaf5915c75bf80"
 status = "absent"
-notes = "seeded from coverage-map.md (absent): quick. `auto_extend_net` is read (job_controls.rs:465) but unused; tier1 extras hard-code `cno_extras.net` for the `adjust_net` case (tier1_extras.rs:425)"
+notes = "unported (`auto_extend_net` read in `job_controls.rs` but unused; `#148` removed the `adjust_net` library case extras)"
 
 [[files]]
 upstream_path = "star/private/adjust_xyz.f90"
@@ -6643,9 +6643,8 @@ upstream_path = "star/private/create_initial_model.f90"
 module = "star"
 upstream_lines = 501
 upstream_sha256 = "cd9232f91780699479b1b4ae2f6f2ebd9a231c4dc28e97b41fd51e342a641fa7"
-status = "stub"
-flexmesa_files = ["crates/flexmesa-star/src/star_job_init.rs"]
-notes = "seeded from coverage-map.md (stub): deep (C1-1). Rescales the 1 Msun ZAMS model; no envelope integration from (M, R)"
+status = "absent"
+notes = "Pre-#148 ZAMS rescaling stub removed; create_initial_model fails loudly until envelope integration is ported (#154)."
 
 [[files]]
 upstream_path = "star/private/ctrls_io.f90"
@@ -6895,7 +6894,7 @@ upstream_lines = 1232
 upstream_sha256 = "02eefaece9c8c88115a7d2eb5c5cf3c8312b22eaaf2a8ce932478b095313a3f6"
 status = "stub"
 flexmesa_files = ["crates/flexmesa-star/src/star_job_init.rs"]
-notes = "seeded from coverage-map.md (stub): deep (C1-1, C1-5). Model selection branches on case name and mass range; `do_star_init`, `do_load1_star`, `do_relax_to_radiative_core` only loosely mirrored"
+notes = "seeded from coverage-map.md (stub): deep (C1-1). Case-name branching and sub-grid ZAMS rescaling removed (#148); remaining `do_star_init`, `do_load1_star`, `do_relax_to_radiative_core`, and envelope initialization parity tracked under #154"
 
 [[files]]
 upstream_path = "star/private/init_model.f90"
@@ -7813,9 +7812,9 @@ upstream_path = "star/private/starspots.f90"
 module = "star"
 upstream_lines = 104
 upstream_sha256 = "81580b8ed3aa402e16c565d5a24079b577ad1b6eb881520ffa0390b11a6a8b5c"
-status = "stub"
-flexmesa_files = ["crates/flexmesa-star/src/tier1_extras.rs"]
-notes = "seeded from coverage-map.md (stub): quick. Exists only in a case extras; not wired to `do_starspots` control"
+status = "absent"
+flexmesa_files = []
+notes = "unported (#148 removed Tier1CaseExtras stub; do_starspots tracked under #161)"
 
 [[files]]
 upstream_path = "star/private/struct_burn_mix.f90"

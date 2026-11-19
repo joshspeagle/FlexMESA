@@ -77,7 +77,7 @@ jobs:
   e2e:
     name: Upstream MESA End-to-End Suites
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 45
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4

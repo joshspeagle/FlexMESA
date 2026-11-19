@@ -10,12 +10,10 @@ use flexmesa_const::{CLIGHT, CRAD, PI, SECYER};
 
 use crate::controls::{StarError, StarJobControls};
 use crate::inlist::InlistBundle;
-use crate::inlist_runner::StarExtras;
+use crate::inlist_runner::{DefaultStarExtras, RspBuildOutcome, StarExtras};
 use crate::model::StarModel;
 use crate::model_io::read_mod_str;
-use crate::rsp_build::{
-    do_rsp_build_model, eval_rsp_2nd_crossing_with_controls,
-};
+use crate::rsp_build::do_rsp_build_model;
 use crate::rsp_def::RspDerivedConsts;
 use crate::rsp_eos_kap::{get_surf_p_t_kap, RspChemCache};
 use crate::rsp_eqns::RspHydBand;
@@ -28,7 +26,6 @@ use crate::rsp_hyd_work::RspHydWork;
 use crate::rsp_lina::do_lina;
 use crate::rsp_stats::{
     calculate_work_integrals, gather_pulse_statistics, get_grpdv,
-    rsp_set_gyre_linear_analysis,
 };
 use crate::star_job_init::resolve_model_path;
 
@@ -58,53 +55,37 @@ fn apply_rsp_job_overrides(model: &mut StarModel, job: &StarJobControls) {
     }
 }
 
+/// Outcome from `init_rsp_model_from_bundle` (`None` falls through to
+/// non-`RSP` ZAMS/pre-MS/saved-model initialization).
+pub(crate) enum InitRspOutcome {
+    NotHandled,
+    Model(Box<StarModel>),
+    Terminate(String),
+}
+
 /// Handles `create_RSP_model`, multi-stage `RSP` continuation, and `RSP_flag`
-/// `.mod` loading for [`crate::star_job_init::init_or_update_model_from_bundle`].
+/// `.mod` loading for [`crate::star_job_init::init_or_update_model_from_bundle_outcome`].
 pub(crate) fn init_rsp_model_from_bundle(
     bundle: &InlistBundle,
     existing_model: &mut Option<StarModel>,
     extras: &mut dyn StarExtras,
-) -> Result<Option<StarModel>, StarError> {
+) -> Result<InitRspOutcome, StarError> {
     let job = &bundle.job;
     let controls = &bundle.controls;
 
     if job.create_rsp_model {
         let mut model = if controls.rsp.use_other_rsp_build_model {
-            let hist_name = controls
-                .x_character_ctrl
-                .first()
-                .map_or("history_7M.data", String::as_str);
-            let rep = eval_rsp_2nd_crossing_with_controls(
-                &bundle.case_dir,
-                controls,
-                job,
-                &bundle.eos_config,
-                &bundle.kap_config,
-                hist_name,
-            )?;
-            let mut build_ctrl = controls.clone();
-            if let Some(pt) = rep
-                .points
-                .iter()
-                .find(|p| p.growth_rate > 0.0)
-                .or_else(|| rep.points.first())
-            {
-                build_ctrl.rsp_teff = pt.teff_k;
-                build_ctrl.rsp_l = pt.lum_lsun;
-            } else {
-                build_ctrl.rsp_teff = 6050.0;
-                build_ctrl.rsp_l = 1438.8;
+            match extras.other_rsp_build_model(bundle)? {
+                Some(RspBuildOutcome::Model(m)) => *m,
+                Some(RspBuildOutcome::Terminate(reason)) => {
+                    return Ok(InitRspOutcome::Terminate(reason));
+                }
+                None => {
+                    return Err(StarError::InvalidInput(String::from(
+                        "use_other_rsp_build_model = .true. requires an other_rsp_build_model hook",
+                    )));
+                }
             }
-            build_ctrl.rsp.nmodes = 1;
-            build_ctrl.rsp.use_other_rsp_build_model = false;
-            let (m, _) = do_rsp_build_model(
-                build_ctrl,
-                job.clone(),
-                bundle.eos_config,
-                bundle.kap_config.clone(),
-                Some(&bundle.case_dir),
-            )?;
-            m
         } else {
             let (m, _) = do_rsp_build_model(
                 controls.clone(),
@@ -117,9 +98,9 @@ pub(crate) fn init_rsp_model_from_bundle(
         };
         apply_rsp_job_overrides(&mut model, job);
         model.save_old_values();
-        extras.extras_controls(&mut model);
+        extras.extras_controls(&mut model)?;
         extras.extras_startup(&mut model, false)?;
-        return Ok(Some(model));
+        return Ok(InitRspOutcome::Model(Box::new(model)));
     }
 
     if !job.load_saved_model
@@ -143,9 +124,9 @@ pub(crate) fn init_rsp_model_from_bundle(
             prev.eos_config = bundle.eos_config;
             prev.kap_config = bundle.kap_config.clone();
             apply_rsp_job_overrides(&mut prev, job);
-            extras.extras_controls(&mut prev);
+            extras.extras_controls(&mut prev)?;
             extras.extras_startup(&mut prev, false)?;
-            return Ok(Some(prev));
+            return Ok(InitRspOutcome::Model(Box::new(prev)));
         }
     }
 
@@ -177,13 +158,13 @@ pub(crate) fn init_rsp_model_from_bundle(
             apply_rsp_job_overrides(&mut m, job);
             rsp_setup_model(&mut m, false, false)?;
             m.save_old_values();
-            extras.extras_controls(&mut m);
+            extras.extras_controls(&mut m)?;
             extras.extras_startup(&mut m, false)?;
-            return Ok(Some(m));
+            return Ok(InitRspOutcome::Model(Box::new(m)));
         }
     }
 
-    Ok(None)
+    Ok(InitRspOutcome::NotHandled)
 }
 
 /// Completes `rsp_setup_part1`, `begin_calculation`, and `rsp_setup_part2`
@@ -317,10 +298,30 @@ pub fn rsp_total_energy_integrals(model: &mut StarModel) -> (f64, f64) {
     (model.aux.rsp.etot, total_radiation)
 }
 
-/// Executes one complete `RSP` nonlinear timestep (`rsp_one_step` in `rsp.f90:405-496`).
+/// Executes one complete `RSP` nonlinear timestep with no custom hooks
+/// (`rsp_one_step` in `rsp.f90:405-496`).
+///
+/// # Errors
+/// Returns [`StarError`] if linear analysis, hydro iteration, or a required
+/// `other_*` hook fails.
 pub fn rsp_one_step(
     model: &mut StarModel,
     log_dir: Option<&Path>,
+) -> Result<(usize, usize), StarError> {
+    let mut extras = DefaultStarExtras;
+    rsp_one_step_with_extras(model, log_dir, &mut extras)
+}
+
+/// Executes one complete `RSP` nonlinear timestep with [`StarExtras`] hooks
+/// (`rsp_one_step` in `rsp.f90:405-496`).
+///
+/// # Errors
+/// Returns [`StarError`] if linear analysis, hydro iteration, or a required
+/// `other_rsp_linear_analysis` hook fails.
+pub fn rsp_one_step_with_extras(
+    model: &mut StarModel,
+    log_dir: Option<&Path>,
+    extras: &mut dyn StarExtras,
 ) -> Result<(usize, usize), StarError> {
     let nz = model.nz;
     let dc = RspDerivedConsts::from_config(&model.controls.rsp, nz);
@@ -334,7 +335,11 @@ pub fn rsp_one_step(
     if !model.aux.rsp.have_set_velocities {
         model.aux.rsp.just_set_velocities = true;
         if model.controls.rsp.use_other_rsp_linear_analysis {
-            rsp_set_gyre_linear_analysis(model, &chem, log_dir)?;
+            if !extras.other_rsp_linear_analysis(model, &chem, log_dir)? {
+                return Err(StarError::InvalidInput(String::from(
+                    "use_other_rsp_linear_analysis = .true. requires an other_rsp_linear_analysis hook",
+                )));
+            }
         } else {
             get_lina_info(model, &chem, &dc, log_dir)?;
         }

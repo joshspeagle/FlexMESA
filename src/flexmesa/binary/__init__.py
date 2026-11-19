@@ -19,19 +19,10 @@ from __future__ import annotations
 
 from flexmesa import _dispatch
 from flexmesa.binary import jax_kernels, orbit_mdot, system
-from flexmesa.star import e2e_tier45
 
 JAX_ENGINE_STATUS: str = _dispatch.FROZEN_JAX_ENGINE_STATUS
 
 BinarySystem = system.BinarySystem
-TIER5_BINARY_CASES = e2e_tier45.TIER5_BINARY_CASES
-
-eval_brott_wind_msun_yr = e2e_tier45.eval_brott_wind_msun_yr
-eval_gr_expected_separation_rsun = e2e_tier45.eval_gr_expected_separation_rsun
-eval_tauris_vdh_expected_separation_rsun = (
-    e2e_tier45.eval_tauris_vdh_expected_separation_rsun
-)
-run_binary_suite = system.run_binary_suite
 run_binary_test_suite_case = system.run_binary_test_suite_case
 
 eval_rlobe = orbit_mdot.eval_rlobe
@@ -60,12 +51,9 @@ eval_edot_tidal_hut_jax = jax_kernels.eval_edot_tidal_hut_jax
 
 __all__ = [
     "JAX_ENGINE_STATUS",
-    "TIER5_BINARY_CASES",
     "BinarySystem",
     "eval_bh_spin_and_edd_jax",
-    "eval_brott_wind_msun_yr",
     "eval_edot_tidal_hut_jax",
-    "eval_gr_expected_separation_rsun",
     "eval_j_orb",
     "eval_j_orb_jax",
     "eval_jdot_gr_jax",
@@ -78,11 +66,9 @@ __all__ = [
     "eval_rl_relative_gap_jax",
     "eval_rlobe",
     "eval_rlobe_jax",
-    "eval_tauris_vdh_expected_separation_rsun",
     "period_from_separation",
     "period_from_separation_jax",
     "pick_next_timestep_rl",
-    "run_binary_suite",
     "run_binary_test_suite_case",
     "separation_from_j_orb",
     "separation_from_j_orb_jax",

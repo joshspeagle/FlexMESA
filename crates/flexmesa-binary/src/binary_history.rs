@@ -778,6 +778,14 @@ pub fn format_binary_history_file_header(
     sys: &BinarySystem,
     specs: &[BinaryHistoryColumnSpec],
 ) -> String {
+    format_binary_history_file_header_with_extra(sys, specs, &[])
+}
+
+fn format_binary_history_file_header_with_extra(
+    sys: &BinarySystem,
+    specs: &[BinaryHistoryColumnSpec],
+    extra_names: &[&str],
+) -> String {
     let w = BINARY_LOG_COL_WIDTH;
     let hdr_items: [(&str, String); 9] = [
         (
@@ -811,8 +819,9 @@ pub fn format_binary_history_file_header(
         ),
         ("date", format_mesa_header_str_width("20260401", w)),
     ];
-    let col_names: Vec<&str> =
+    let mut col_names: Vec<&str> =
         specs.iter().map(|sp| sp.column_name()).collect();
+    col_names.extend_from_slice(extra_names);
     let mut out = String::with_capacity(512 + col_names.len() * 68);
     push_mesa_6line_header(&mut out, &hdr_items, &col_names, w);
     out
@@ -891,13 +900,14 @@ impl IncrementalBinaryHistoryWriter {
             return Ok(());
         }
         let row = evaluate_binary_history_row(sys, &self.specs);
-        self.write_evaluated_row(sys, &row)
+        self.write_evaluated_row_with_extra(sys, row, &[])
     }
 
-    fn write_evaluated_row(
+    fn write_evaluated_row_with_extra(
         &mut self,
         sys: &BinarySystem,
-        row: &[(String, MesaCellValue)],
+        mut row: Vec<(String, MesaCellValue)>,
+        extra_cols: &[(String, f64)],
     ) -> Result<(), StarError> {
         if self.last_model_number == Some(sys.model_number) {
             return Ok(());
@@ -925,7 +935,13 @@ impl IncrementalBinaryHistoryWriter {
                     ))
                 })?;
             let mut bw = BufWriter::new(f);
-            let hdr = format_binary_history_file_header(sys, &self.specs);
+            let extra_names: Vec<&str> =
+                extra_cols.iter().map(|(k, _)| k.as_str()).collect();
+            let hdr = format_binary_history_file_header_with_extra(
+                sys,
+                &self.specs,
+                &extra_names,
+            );
             bw.write_all(hdr.as_bytes()).map_err(|e| {
                 StarError::IoError(format!(
                     "failed to write header {}: {e}",
@@ -935,7 +951,10 @@ impl IncrementalBinaryHistoryWriter {
             self.writer = Some(bw);
         }
 
-        let line = format_binary_history_data_line(row);
+        for (name, val) in extra_cols {
+            row.push((name.clone(), MesaCellValue::Float(*val)));
+        }
+        let line = format_binary_history_data_line(&row);
         if let Some(ref mut bw) = self.writer {
             bw.write_all(line.as_bytes()).map_err(|e| {
                 StarError::IoError(format!(
@@ -1033,31 +1052,65 @@ impl BinaryLogsWriter {
         is_first_step: bool,
         is_terminating: bool,
     ) -> Result<(), StarError> {
+        self.record_step_with_extra(
+            sys,
+            is_first_step,
+            is_terminating,
+            &[],
+            &[Vec::new(), Vec::new()],
+        )
+    }
+
+    /// Returns whether `binary_history.data` or component `LOGS*` will consume
+    /// extra history columns on the current step (`is_binary_due`, `is_star_due`).
+    #[must_use]
+    pub fn extra_history_due_flags(
+        &self,
+        sys: &BinarySystem,
+        is_first_step: bool,
+        is_terminating: bool,
+    ) -> (bool, [bool; 2]) {
         let hist_int = self
             .history_interval_override
             .unwrap_or(sys.controls.history_interval);
         let bin_due = is_terminating
             || (hist_int > 0 && sys.model_number.is_multiple_of(hist_int));
-        let any_star_hist_due = (1..=2_usize).any(|idx| {
-            match (self.star_writers[idx - 1].as_ref(), sys.star_ref(idx)) {
+        let star_due = [
+            match (self.star_writers[0].as_ref(), sys.star_ref(1)) {
                 (Some(sw), Some(star)) => {
                     sw.is_history_due(star, is_first_step, is_terminating)
                 }
                 _ => false,
-            }
-        });
+            },
+            match (self.star_writers[1].as_ref(), sys.star_ref(2)) {
+                (Some(sw), Some(star)) => {
+                    sw.is_history_due(star, is_first_step, is_terminating)
+                }
+                _ => false,
+            },
+        ];
+        (bin_due, star_due)
+    }
+
+    /// Evaluates and writes binary and component logs for the current step with
+    /// caller-supplied extra binary and component history columns (`#148`).
+    pub fn record_step_with_extra(
+        &mut self,
+        sys: &BinarySystem,
+        is_first_step: bool,
+        is_terminating: bool,
+        extra_bin_cols: &[(String, f64)],
+        extra_star_cols: &[Vec<(String, f64)>; 2],
+    ) -> Result<(), StarError> {
+        let (bin_due, star_due) =
+            self.extra_history_due_flags(sys, is_first_step, is_terminating);
+        let any_star_hist_due = star_due[0] || star_due[1];
 
         let need_extra = self.append_to_star_history && any_star_hist_due;
         let evaluated = (bin_due || need_extra)
             .then(|| evaluate_binary_history_row(sys, &self.binary_specs));
 
-        if bin_due {
-            if let Some(ref row) = evaluated {
-                self.binary_writer.write_evaluated_row(sys, row)?;
-            }
-        }
-
-        let extra_star_cols = if need_extra {
+        let appended_bin_cols = if need_extra {
             evaluated
                 .as_deref()
                 .map_or_else(Vec::new, binary_history_row_as_f64_pairs)
@@ -1065,15 +1118,33 @@ impl BinaryLogsWriter {
             Vec::new()
         };
 
+        if bin_due {
+            if let Some(row) = evaluated {
+                self.binary_writer.write_evaluated_row_with_extra(
+                    sys,
+                    row,
+                    extra_bin_cols,
+                )?;
+            }
+        }
+
         for idx in 1..=2_usize {
+            if !star_due[idx - 1] {
+                continue;
+            }
             if let (Some(sw), Some(star)) =
                 (self.star_writers[idx - 1].as_mut(), sys.star_ref(idx))
             {
+                let mut combined_star_cols = Vec::with_capacity(
+                    appended_bin_cols.len() + extra_star_cols[idx - 1].len(),
+                );
+                combined_star_cols.extend_from_slice(&appended_bin_cols);
+                combined_star_cols.extend_from_slice(&extra_star_cols[idx - 1]);
                 sw.record_step_with_extra(
                     star,
                     is_first_step,
                     is_terminating,
-                    &extra_star_cols,
+                    &combined_star_cols,
                 )?;
             }
         }

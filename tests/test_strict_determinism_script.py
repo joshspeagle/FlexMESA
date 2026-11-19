@@ -40,10 +40,14 @@ def test_default_cases_and_uncapped_trace_commands() -> None:
     )
     assert "--max-steps" not in uncapped_cmd
     assert "--allow-unsupported-controls" in uncapped_cmd
+    assert "--extras-factory" in uncapped_cmd
+    assert "tests.case_extras:resolve_case_extras" in uncapped_cmd
 
     capped_cmd = mod._build_trace_command(
         "binary", "jdot_gr_check", pathlib.Path("out"), 5
     )
+    assert "--extras-factory" in capped_cmd
+    assert "tests.case_extras:resolve_case_extras" in capped_cmd
     assert capped_cmd[-5:] == [
         "--numerics-mode",
         "strict",

@@ -21,8 +21,8 @@ reason = "Atomic diffusion shortens main-sequence age relative to MESA 26.4.1."
 [[gaps]]
 suite = "star"
 case = "12M_pre_ms_to_core_collapse"
-issue = "#148"
-reason = "Case-keyed Tier3CaseExtras terminates after 1 step instead of evolving to core collapse (#152, #161)."
+issue = "#152"
+reason = "Core-collapse evolution exceeds wall-time guard with unported solver, mesh, and high-T rate controls (#152, #153, #161)."
 
 [[gaps]]
 suite = "star"
@@ -57,8 +57,8 @@ reason = "Exceeds wall-time guard under non-upstream Newton and retry control (a
 [[gaps]]
 suite = "star"
 case = "20M_pre_ms_to_core_collapse"
-issue = "#148"
-reason = "Case-keyed Tier3CaseExtras terminates after 1 step instead of evolving to core collapse (#152, #161)."
+issue = "#152"
+reason = "Core-collapse evolution hits memory guard with unported solver, mesh, and high-T rate controls (#152, #153, #161)."
 
 [[gaps]]
 suite = "star"
@@ -94,7 +94,7 @@ reason = "T(tau) atmosphere gradr reconstruction departs from MESA 26.4.1."
 suite = "star"
 case = "accreted_material_j"
 issue = "#158"
-reason = "Accreted angular-momentum transport times out (#158, #159)."
+reason = "Accreted angular-momentum evolution diverges from MESA 26.4.1 by step 1 with unported angular-momentum and wind-coupling controls (#158, #159)."
 
 [[gaps]]
 suite = "star"
@@ -135,14 +135,14 @@ reason = "Atmosphere boundary reconstruction departs from MESA 26.4.1 (#161, #16
 [[gaps]]
 suite = "star"
 case = "check_redo"
-issue = "#148"
-reason = "Tier5CaseExtras overrides controls and times out under non-upstream redo/retry semantics (#152)."
+issue = "#152"
+reason = "Fails loudly at step 10 when test-side CheckRedoStarExtras returns redo before step-redo semantics are implemented (#152), alongside unported eos/photo controls (#161)."
 
 [[gaps]]
 suite = "star"
 case = "conductive_flame"
-issue = "#148"
-reason = "Case-keyed Tier2CaseExtras terminates after 1 step with flame_reached_target (#161)."
+issue = "#161"
+reason = "Case uses unported use_other_build_initial_model and use_other_surface_pt custom-physics hooks (#154, #161)."
 
 [[gaps]]
 suite = "star"
@@ -184,31 +184,31 @@ reason = "Extended convective penetration departs from upstream core H burning l
 suite = "star"
 case = "gyre_in_mesa_bcep"
 issue = "#170"
-reason = "Depends on bundled GYRE (#170) and Tier4CaseExtras 2-step cutoff (#148)."
+reason = "Depends on bundled GYRE oscillation solver (#170) and solver/control parity (#152)."
 
 [[gaps]]
 suite = "star"
 case = "gyre_in_mesa_envelope"
 issue = "#170"
-reason = "Depends on bundled GYRE (#170) and Tier4CaseExtras 4-step cutoff (#148)."
+reason = "Depends on bundled GYRE oscillation solver (#170) and solver/control parity (#152)."
 
 [[gaps]]
 suite = "star"
 case = "gyre_in_mesa_ms"
 issue = "#170"
-reason = "Depends on bundled GYRE (#170) and Tier4CaseExtras 2-step cutoff (#148)."
+reason = "Depends on bundled GYRE oscillation solver (#170) and solver/control parity (#152)."
 
 [[gaps]]
 suite = "star"
 case = "gyre_in_mesa_rsg"
 issue = "#170"
-reason = "Depends on bundled GYRE (#170) and Tier4CaseExtras 2-step cutoff (#148)."
+reason = "Depends on bundled GYRE oscillation solver (#170) and solver/control parity (#152)."
 
 [[gaps]]
 suite = "star"
 case = "gyre_in_mesa_spb"
 issue = "#170"
-reason = "Depends on bundled GYRE (#170) and Tier4CaseExtras 2-step cutoff (#148)."
+reason = "Depends on bundled GYRE oscillation solver (#170) and solver/control parity (#152)."
 
 [[gaps]]
 suite = "star"
@@ -274,7 +274,7 @@ reason = "Case history_columns.list requests unported MLT++ gradT_excess_alpha c
 suite = "star"
 case = "make_brown_dwarf"
 issue = "#154"
-reason = "create_initial_model rescales ZAMS instead of relaxing a polytrope (audit M-6)."
+reason = "Fails loudly at sub-grid initial_mass without create_initial_model polytrope integration (#154)."
 
 [[gaps]]
 suite = "star"
@@ -310,7 +310,7 @@ reason = "Case history_columns.list requests unported MLT++ gradT_excess_alpha c
 suite = "star"
 case = "make_planets"
 issue = "#154"
-reason = "create_initial_model planetary relaxation not yet faithful to upstream."
+reason = "Fails loudly at sub-grid planetary initial_mass without create_initial_model relaxation (#154)."
 
 [[gaps]]
 suite = "star"
@@ -357,8 +357,8 @@ reason = "Neutron-star He envelope burning hits max_model_number instead of powe
 [[gaps]]
 suite = "star"
 case = "other_physics_hooks"
-issue = "#148"
-reason = "Tier5CaseExtras hits max_model_number with case-keyed hook overrides (#155, #159)."
+issue = "#155"
+reason = "Case requires custom overshoot_scheme = 'other', use_other_mesh_functions, and photo controls (#155, #159)."
 
 [[gaps]]
 suite = "star"
@@ -369,32 +369,32 @@ reason = "Case history_columns.list requests unported hydro shock_mass and pair-
 [[gaps]]
 suite = "star"
 case = "ppisn"
-issue = "#148"
-reason = "Case-keyed Tier3CaseExtras terminates after 1 step instead of evolving pair-instability pulses (#161)."
+issue = "#159"
+reason = "Case requires custom other_wind hook alongside unported massive-star retry and net controls (#159, #152, #161)."
 
 [[gaps]]
 suite = "star"
 case = "relax_composition_j_entropy"
 issue = "#154"
-reason = "3-stage composition, angular-momentum, and entropy relaxation times out (#154, #148)."
+reason = "Multi-stage composition, angular-momentum, and entropy relaxation exceeds wall-time guard (#154, #152)."
 
 [[gaps]]
 suite = "star"
 case = "rsp_BEP"
-issue = "#148"
-reason = "Meets all MESA 26.4.1 tolerances across 7255 steps (rel_star_age=+5.25e-10, d_log_L=+1.68e-10, d_log_Teff=-3.12e-10, d_log_R=+7.13e-10, max |d_log_L|=1.19e-3), but crates/flexmesa-star/src/inlist_runner.rs:599-601 dispatches library-side Tier4CaseExtras (tier4_extras.rs:145-326) slated for removal under #148 (and omits run_star_extras.f90:153-183 extra history columns)."
+issue = "#161"
+reason = "Diagnostic run reaches upstream termination within tolerances via test-side extras, but strict validation rejects unported &colors and photo_interval controls (#161, #152)."
 
 [[gaps]]
 suite = "star"
 case = "rsp_BLAP"
-issue = "#148"
-reason = "Meets all MESA 26.4.1 tolerances across 7318 steps (rel_star_age=-1.10e-10, d_log_L=+6.74e-12, d_log_Teff=-2.03e-12, d_log_R=+7.43e-12, max |d_log_L|=6.99e-5), but crates/flexmesa-star/src/inlist_runner.rs:599-601 dispatches library-side Tier4CaseExtras (tier4_extras.rs:145-326) slated for removal under #148 (and omits run_star_extras.f90:153-183 extra history columns)."
+issue = "#161"
+reason = "Diagnostic run reaches upstream termination within tolerances via test-side extras, but strict validation rejects unported &colors and photo_interval controls (#161, #152)."
 
 [[gaps]]
 suite = "star"
 case = "rsp_Cepheid"
-issue = "#148"
-reason = "Meets all MESA 26.4.1 tolerances across 7266 steps (rel_star_age=-4.62e-9, d_log_L=+1.92e-10, d_log_Teff=+4.21e-11, d_log_R=+1.13e-11, max |d_log_L|=1.17e-3), but crates/flexmesa-star/src/inlist_runner.rs:599-601 dispatches library-side Tier4CaseExtras (tier4_extras.rs:145-326) slated for removal under #148 (and omits run_star_extras.f90:153-183 extra history columns)."
+issue = "#161"
+reason = "Diagnostic run reaches upstream termination within tolerances via test-side extras, but strict validation rejects unported &colors and photo_interval controls (#161, #152)."
 
 [[gaps]]
 suite = "star"
@@ -405,14 +405,14 @@ reason = "RSP pulsation period and age drift over 100 cycles (#162)."
 [[gaps]]
 suite = "star"
 case = "rsp_RR_Lyrae"
-issue = "#148"
-reason = "Meets all MESA 26.4.1 tolerances across 7220 steps (rel_star_age=-2.14e-9, d_log_L=+6.86e-11, d_log_Teff=+1.14e-11, d_log_R=+1.07e-11, max |d_log_L|=8.56e-4), but crates/flexmesa-star/src/inlist_runner.rs:599-601 dispatches library-side Tier4CaseExtras (tier4_extras.rs:145-326) slated for removal under #148 (and omits run_star_extras.f90:153-183 extra history columns)."
+issue = "#161"
+reason = "Diagnostic run reaches upstream termination within tolerances via test-side extras, but strict validation rejects unported &colors and photo_interval controls (#161, #152)."
 
 [[gaps]]
 suite = "star"
 case = "rsp_Type_II_Cepheid"
 issue = "#162"
-reason = "Nonlinear RSP luminosity and Teff exceed strict tolerances over 20 cycles (#162) while running Tier4CaseExtras (#148)."
+reason = "Nonlinear RSP luminosity and Teff exceed strict tolerances over multiple pulsation cycles (#162)."
 
 [[gaps]]
 suite = "star"
@@ -423,8 +423,8 @@ reason = "Depends on bundled GYRE linear modes in run_star_extras (#170)."
 [[gaps]]
 suite = "star"
 case = "rsp_save_and_load_file"
-issue = "#148"
-reason = "Meets all MESA 26.4.1 tolerances across 7266 2-stage save/load steps (rel_star_age=-5.54e-9, d_log_L=+2.30e-10, d_log_Teff=+4.98e-11, d_log_R=+1.54e-11, max |d_log_L|=8.00e-7), but crates/flexmesa-star/src/inlist_runner.rs:599-601 dispatches library-side Tier4CaseExtras (tier4_extras.rs:145-326) slated for removal under #148."
+issue = "#161"
+reason = "Diagnostic run reaches upstream termination within tolerances via test-side extras, but strict validation rejects unported &colors, photo_interval, and rsp_map controls (#161, #162)."
 
 [[gaps]]
 suite = "star"
@@ -441,8 +441,8 @@ reason = "Simplex solar calibration optimizer times out under non-upstream simpl
 [[gaps]]
 suite = "star"
 case = "split_burn_big_net"
-issue = "#148"
-reason = "Case-keyed Tier3CaseExtras terminates after 1 step instead of evolving big-network Si burning (#161)."
+issue = "#161"
+reason = "Large-network silicon burning exceeds wall-time guard with unported rate, burning-limit, and solver controls (#161, #152)."
 
 [[gaps]]
 suite = "star"
@@ -453,14 +453,14 @@ reason = "Case history_columns.list requests unported starspot cz_bot_radius col
 [[gaps]]
 suite = "star"
 case = "timing"
-issue = "#148"
-reason = "Tier5CaseExtras hits max_model_number with case-keyed control overrides (#152)."
+issue = "#152"
+reason = "Main-sequence timing track misses strict tolerances under non-upstream Newton/timestep control (#152, #149) and unported first_model_for_timing/photo controls."
 
 [[gaps]]
 suite = "star"
 case = "twin_studies"
-issue = "#148"
-reason = "Case-keyed Tier3CaseExtras terminates after 4 steps with overridden controls (#154)."
+issue = "#154"
+reason = "Multi-star evolution exceeds wall-time guard under unported rotational mixing and burning-limit controls (#154, #158, #161)."
 
 [[gaps]]
 suite = "star"
@@ -489,14 +489,14 @@ reason = "Accreting CO WD carbon ignition times out (#152, #159)."
 [[gaps]]
 suite = "star"
 case = "wd_cool_0.6M"
-issue = "#148"
-reason = "Case-keyed Tier2CaseExtras disables remeshing and burning (audit M-5)."
+issue = "#156"
+reason = "White-dwarf cooling reaches target central temperature early and misses strict tolerances with unported sedimentation/diffusion heating and solver controls (#156, #152)."
 
 [[gaps]]
 suite = "star"
 case = "wd_diffusion"
-issue = "#148"
-reason = "Case-keyed Tier2CaseExtras terminates after 1 step instead of evolving WD diffusion (#156)."
+issue = "#156"
+reason = "White-dwarf element diffusion hits memory guard with unported cgs/full-net diffusion and opacity controls (#156, #161)."
 
 [[gaps]]
 suite = "star"
@@ -519,8 +519,8 @@ reason = "Stable H-burning accreting WD fails to converge on dt floor (#152, #15
 [[gaps]]
 suite = "star"
 case = "zams_to_cc_80"
-issue = "#148"
-reason = "Case-keyed Tier3CaseExtras terminates after 1 step instead of evolving to core collapse (#152, #161)."
+issue = "#152"
+reason = "80 Msun evolution terminates at fe_core_infall_limit off reference track with unported core-collapse solver and rate controls (#152, #161)."
 
 [[gaps]]
 suite = "binary"

@@ -16,7 +16,6 @@ use crate::micro::change_model_network;
 use crate::model::StarModel;
 use crate::model_io::read_mod_str;
 use crate::pre_ms::build_pre_ms_model;
-pub(crate) use crate::relax::equilibrate_tier2_scaled_model;
 use crate::relax::{
     apply_composition_relaxation, apply_uniform_rotation,
     excise_core_by_temperature, relax_core_boundary, relax_from_profile_files,
@@ -43,84 +42,6 @@ pub(crate) fn resolve_model_path(
     None
 }
 
-/// Peeks the `M/Msun` header entry from a saved `.mod` file.
-fn peek_mod_header_mass(mod_path: &Path) -> Result<Option<f64>, StarError> {
-    let text = fs::read_to_string(mod_path).map_err(|e| {
-        StarError::IoError(format!(
-            "failed to read saved model {}: {e}",
-            mod_path.display()
-        ))
-    })?;
-    for line in text.lines().take(35) {
-        let clean = line.split('!').next().unwrap_or(line).trim();
-        let tokens: Vec<&str> = clean.split_whitespace().collect();
-        if tokens.len() >= 2 && tokens[0] == "M/Msun" {
-            let num_s = tokens[1].replace(['D', 'd'], "e");
-            let m = num_s.parse::<f64>().map_err(|e| {
-                StarError::IoError(format!(
-                    "invalid M/Msun '{}' in {}: {e}",
-                    tokens[1],
-                    mod_path.display()
-                ))
-            })?;
-            if m > 0.0 && m.is_finite() {
-                return Ok(Some(m));
-            }
-            return Err(StarError::IoError(format!(
-                "non-positive/non-finite M/Msun {m} in {}",
-                mod_path.display()
-            )));
-        }
-    }
-    Ok(None)
-}
-
-/// Builds an initial planet, brown dwarf, or conductive-flame model when
-/// `job.create_initial_model` or `job.use_other_build_initial_model` is true
-/// (`star/private/create_initial_model.f90`).
-fn build_initial_planet_or_wd_model(
-    mut controls: StarControls,
-    job: StarJobControls,
-) -> Result<StarModel, StarError> {
-    let use_create_init_dims =
-        job.create_initial_model || job.use_other_build_initial_model;
-    let m_target = if use_create_init_dims
-        && job.mass_in_gm_for_create_initial_model > 0.0
-    {
-        job.mass_in_gm_for_create_initial_model / M_SUN
-    } else if job.relax_mass && job.new_mass > 0.0 {
-        job.new_mass
-    } else {
-        controls.initial_mass
-    };
-    let r_init_cm = if use_create_init_dims {
-        job.radius_in_cm_for_create_initial_model
-    } else {
-        0.0
-    };
-    controls.initial_mass = 1.0;
-    let mut model = load_zams_model(controls, job)?;
-    model.controls.initial_mass = m_target;
-    let old_mstar = model.mstar.max(1.0);
-    let new_mstar = m_target.max(1.0e-5) * M_SUN;
-    let dln_r = if r_init_cm > 0.0 {
-        flexmesa_math::log(
-            r_init_cm / flexmesa_math::exp(model.ln_r[0]).max(1.0),
-        )
-    } else {
-        flexmesa_math::log(new_mstar / old_mstar) / 3.0
-    };
-    for k in 0..model.nz {
-        model.ln_r[k] += dln_r;
-        model.lum[k] *= new_mstar / old_mstar;
-    }
-    model.mstar = new_mstar;
-    model.xmstar = (new_mstar - model.m_center).max(0.0);
-    model.mstar_start = model.mstar;
-    model.mstar_old = model.mstar;
-    Ok(model)
-}
-
 /// Loads `model_name` from `case_dir`, failing loudly if missing, unreadable,
 /// or malformed.
 fn load_saved_mod(
@@ -128,7 +49,6 @@ fn load_saved_mod(
     model_name: &str,
     controls: StarControls,
     job: StarJobControls,
-    loaded_from_mod: &mut bool,
 ) -> Result<StarModel, StarError> {
     let trimmed = model_name.trim();
     if trimmed.is_empty() {
@@ -148,9 +68,13 @@ fn load_saved_mod(
             mod_path.display()
         ))
     })?;
-    let model = read_mod_str(&text, controls, job)?;
-    *loaded_from_mod = true;
-    Ok(model)
+    read_mod_str(&text, controls, job)
+}
+
+/// Outcome of model initialization (`Terminate` stops cleanly at 0 steps).
+pub(crate) enum InitModelOutcome {
+    Model(Box<StarModel>),
+    Terminate(String),
 }
 
 /// Initializes a [`StarModel`] from `bundle` (or updates `existing_model` for
@@ -159,137 +83,84 @@ fn load_saved_mod(
 /// `star/private/init.f90`).
 ///
 /// # Errors
-/// Returns [`StarError`] if model loading, network switching, or microphysics
-/// evaluation fails.
+/// Returns [`StarError`] if model loading, network switching, microphysics
+/// evaluation, or an `other_rsp_build_model` termination occurs.
 pub fn init_or_update_model_from_bundle(
+    bundle: &InlistBundle,
+    existing_model: Option<StarModel>,
+    extras: &mut dyn StarExtras,
+) -> Result<StarModel, StarError> {
+    match init_or_update_model_from_bundle_outcome(
+        bundle,
+        existing_model,
+        extras,
+    )? {
+        InitModelOutcome::Model(m) => Ok(*m),
+        InitModelOutcome::Terminate(reason) => Err(StarError::InvalidInput(
+            format!("stage terminated during initialization: {reason}"),
+        )),
+    }
+}
+
+pub(crate) fn init_or_update_model_from_bundle_outcome(
     bundle: &InlistBundle,
     mut existing_model: Option<StarModel>,
     extras: &mut dyn StarExtras,
-) -> Result<StarModel, StarError> {
-    if let Some(rsp_m) = crate::rsp_driver::init_rsp_model_from_bundle(
+) -> Result<InitModelOutcome, StarError> {
+    match crate::rsp_driver::init_rsp_model_from_bundle(
         bundle,
         &mut existing_model,
         extras,
     )? {
-        return Ok(rsp_m);
+        crate::rsp_driver::InitRspOutcome::Model(m) => {
+            return Ok(InitModelOutcome::Model(m));
+        }
+        crate::rsp_driver::InitRspOutcome::Terminate(reason) => {
+            return Ok(InitModelOutcome::Terminate(reason));
+        }
+        crate::rsp_driver::InitRspOutcome::NotHandled => {}
     }
     let job = bundle.job.clone();
     let controls = bundle.controls.clone();
-    let case_name = bundle
-        .case_dir
-        .file_name()
-        .and_then(|s| s.to_str())
-        .unwrap_or("");
-    let out_of_zams_range =
-        controls.initial_mass > 15.8 || controls.initial_mass < 0.51;
-    let is_astero_case =
-        crate::tier4_extras::TIER4_ASTERO_CASES.contains(&case_name);
-    let is_pulse_mod_case = case_name.starts_with("gyre_in_mesa_");
-    let is_pulsation_env_mod = crate::tier4_extras::is_tier4_case(case_name)
-        && !is_astero_case
-        && job.load_saved_model
-        && !job.saved_model_name.is_empty()
-        && controls.use_dprad_dm_form_of_t_gradient_eqn
-        && controls.use_momentum_outer_bc
-        && controls.eps_nuc_factor == 0.0;
-    let is_rsp2_mod_case = controls.rsp2_flag
-        || (controls.rsp2.change_rsp2_flag && controls.rsp2.new_rsp2_flag)
-        || case_name.starts_with("dev_rsp2_")
-        || is_pulsation_env_mod;
-    let is_tier2_or_3 = crate::tier2_extras::is_tier2_case(case_name)
-        || crate::tier3_extras::is_tier3_case(case_name)
-        || (crate::tier4_extras::is_tier4_case(case_name) && !is_astero_case)
-        || crate::tier5_extras::is_tier5_star_case(case_name)
-        || job.relax_initial_mass_to_remove_h_env
-        || out_of_zams_range;
-    let had_existing_model = existing_model.is_some();
-    let mut loaded_from_mod = false;
     let mut did_create_pre_ms = false;
-    let mut model = if is_pulse_mod_case || is_rsp2_mod_case {
-        if let Some(prev) = existing_model {
-            loaded_from_mod = true;
-            prev
-        } else if job.load_saved_model {
-            load_saved_mod(
-                &bundle.case_dir,
-                &job.saved_model_name,
-                controls.clone(),
-                job.clone(),
-                &mut loaded_from_mod,
-            )?
-        } else {
-            load_zams_model(controls.clone(), job.clone())?
-        }
-    } else if case_name == "make_env" && existing_model.is_none() {
-        let mut env_controls = controls.clone();
-        if let Some(&m_env) = controls.x_ctrl.first().filter(|&&m| m > 0.0) {
-            env_controls.initial_mass = m_env.clamp(0.55, 15.0);
-        }
-        let mut m = load_zams_model(env_controls, job.clone())?;
-        excise_core_by_temperature(&mut m, 4.0e6)?;
-        m
-    } else if crate::tier3_extras::is_tier3_case(case_name)
-        || (crate::tier4_extras::is_tier4_case(case_name) && !is_astero_case)
-        || crate::tier5_extras::is_tier5_star_case(case_name)
-        || out_of_zams_range
-    {
-        if let Some(prev) = existing_model.filter(|p| !p.controls.rsp_flag) {
-            prev
-        } else {
-            let mut init_controls = controls.clone();
-            let candidate_name =
-                if job.load_saved_model && !job.saved_model_name.is_empty() {
-                    Some(job.saved_model_name.as_str())
-                } else if !controls.zams_filename.is_empty() {
-                    Some(controls.zams_filename.as_str())
-                } else {
-                    None
-                };
-            if let Some(mname) = candidate_name {
-                if let Some(mod_path) =
-                    resolve_model_path(&bundle.case_dir, mname)
-                {
-                    if let Some(m_hdr) = peek_mod_header_mass(&mod_path)? {
-                        init_controls.initial_mass = m_hdr;
-                    }
-                }
-            }
-            if (case_name.starts_with("rsp_") || job.create_rsp_model)
-                && init_controls.rsp_mass > 0.0
-            {
-                init_controls.initial_mass = init_controls.rsp_mass;
-            }
-            build_initial_planet_or_wd_model(init_controls, job.clone())?
-        }
-    } else if job.create_initial_model
-        || job.use_other_build_initial_model
-        || job.relax_initial_mass_to_remove_h_env
-        || (job.relax_mass && job.new_mass > 0.0 && job.new_mass <= 0.3)
-        || (job.relax_irradiation && controls.initial_mass <= 0.02)
-    {
-        build_initial_planet_or_wd_model(controls.clone(), job.clone())?
+    let mut model = if let Some(prev) = existing_model {
+        prev
     } else if job.load_saved_model {
-        if let Some(prev) = existing_model {
-            prev
-        } else {
-            load_saved_mod(
-                &bundle.case_dir,
-                &job.saved_model_name,
-                controls.clone(),
-                job.clone(),
-                &mut loaded_from_mod,
-            )?
-        }
-    } else if matches!(case_name, "make_he_wd" | "make_co_wd" | "make_o_ne_wd")
-        && existing_model.is_none()
-    {
-        build_initial_planet_or_wd_model(controls.clone(), job.clone())?
+        load_saved_mod(
+            &bundle.case_dir,
+            &job.saved_model_name,
+            controls.clone(),
+            job.clone(),
+        )?
     } else if job.create_pre_ms_model {
         did_create_pre_ms = true;
         build_pre_ms_model(controls.clone(), job.clone())?
-    } else if let Some(prev) = existing_model {
-        prev
+    } else if job.use_other_build_initial_model {
+        extras.other_build_initial_model(bundle)?.ok_or_else(|| {
+            StarError::InvalidInput(String::from(
+                "use_other_build_initial_model = .true. requires an other_build_initial_model hook",
+            ))
+        })?
+    } else if job.create_initial_model {
+        return Err(StarError::InvalidInput(String::from(
+            "create_initial_model = .true. is not yet implemented (#154)",
+        )));
     } else {
+        if !job.relax_z && (controls.initial_z - 0.02).abs() > 1.0e-4 {
+            return Err(StarError::InvalidInput(format!(
+                "built-in ZAMS catalog zams_z2m2_y28 has initial_z = 0.02, got {} without relax_z/change_initial_z",
+                controls.initial_z
+            )));
+        }
+        if !job.relax_y
+            && controls.initial_y >= 0.0
+            && (controls.initial_y - 0.28).abs() > 1.0e-4
+        {
+            return Err(StarError::InvalidInput(format!(
+                "built-in ZAMS catalog zams_z2m2_y28 has initial_y = 0.28, got {} without relax_y/change_initial_y",
+                controls.initial_y
+            )));
+        }
         load_zams_model(controls.clone(), job.clone())?
     };
 
@@ -301,12 +172,11 @@ pub fn init_or_update_model_from_bundle(
         model.controls.rotation_flag,
         model.controls.rti_flag,
     );
-    let (preserved_tau, preserved_m, preserved_z, preserved_y, preserved_opac) = (
+    let (preserved_tau, preserved_m, preserved_z, preserved_y) = (
         model.controls.tau_factor,
         model.controls.initial_mass,
         model.controls.initial_z,
         model.controls.initial_y,
-        model.controls.opacity_factor,
     );
 
     model.job = job.clone();
@@ -326,15 +196,10 @@ pub fn init_or_update_model_from_bundle(
         model.controls.initial_z,
         model.controls.initial_y,
     ) = (preserved_tau, preserved_m, preserved_z, preserved_y);
-    if had_existing_model
-        && !loaded_from_mod
-        && is_tier2_or_3
-        && (model.controls.opacity_factor - 1.0).abs() < 1.0e-12
-    {
-        model.controls.opacity_factor = preserved_opac;
-    }
     model.eos_config = bundle.eos_config;
     model.kap_config = bundle.kap_config.clone();
+
+    extras.extras_controls(&mut model)?;
 
     // 1. Reaction network switching (`change_net` / `change_initial_net`)
     if job.change_net && !job.new_net_name.is_empty() {
@@ -346,27 +211,24 @@ pub fn init_or_update_model_from_bundle(
     }
 
     // 2. Composition and external profile relaxation
-    if case_name != "tzo" {
-        apply_composition_relaxation(&mut model, &job);
-    }
+    apply_composition_relaxation(&mut model, &job);
     relax_from_profile_files(&mut model, &bundle.case_dir)?;
 
     // 3. Mass and H-envelope stripping relaxation
     if job.relax_mass && job.new_mass > 0.0 {
-        relax_mass_to_target(&mut model, job.new_mass, 8, is_tier2_or_3);
+        relax_mass_to_target(&mut model, job.new_mass, 8);
     } else if job.relax_initial_mass_to_remove_h_env {
-        relax_to_remove_h_env(&mut model, 1.0e-4, 8, is_tier2_or_3);
+        relax_to_remove_h_env(&mut model, 1.0e-4, 8);
     }
 
     // 4. Inner boundary, irradiation, and optical-depth relaxation
-    if job.relax_m_center && job.new_core_mass > 0.0 && case_name != "tzo" {
+    if job.relax_m_center && job.new_core_mass > 0.0 {
         relax_core_boundary(
             &mut model,
             job.new_core_mass,
             job.core_avg_rho,
             job.core_avg_eps,
             8,
-            is_tier2_or_3,
         );
     }
     if job.relax_r_center && job.new_r_center > 0.0 {
@@ -448,7 +310,6 @@ pub fn init_or_update_model_from_bundle(
         }
     }
 
-    extras.extras_controls(&mut model);
     if model.controls.v_flag && model.v.len() != model.nz {
         model.v.resize(model.nz, 0.0);
         model.v_start.resize(model.nz, 0.0);
@@ -475,16 +336,6 @@ pub fn init_or_update_model_from_bundle(
         model.controls.rsp2_flag,
         model.controls.rti_flag,
     );
-    let did_mass_or_core_relax = job.relax_mass
-        || job.relax_initial_mass_to_remove_h_env
-        || job.relax_m_center;
-    if !loaded_from_mod
-        && is_tier2_or_3
-        && (!had_existing_model || did_mass_or_core_relax)
-        && (model.m_center == 0.0 || job.relax_m_center)
-    {
-        equilibrate_tier2_scaled_model(&mut model);
-    }
     if let Some(t_cut) = job.remove_initial_center_by_temperature {
         excise_core_by_temperature(&mut model, t_cut)?;
     }
@@ -506,14 +357,12 @@ pub fn init_or_update_model_from_bundle(
         }
     }
     model.sync_mesh_and_pack()?;
-    if job.relax_mass && job.new_mass > 0.3 && !is_tier2_or_3 {
+    if job.relax_mass && job.new_mass > 0.3 {
         model.reconstruct_ln_r_from_lnd_and_dm();
         model.sync_mesh_and_pack()?;
     }
-    if model.controls.use_other_cgrav
-        && !crate::tier3_extras::is_tier3_case(case_name)
-    {
-        extras.other_cgrav(&mut model);
+    if model.controls.use_other_cgrav {
+        extras.other_cgrav(&mut model)?;
     }
 
     // Apply rotational spin-up AFTER equilibration and `sync_mesh_and_pack` so
@@ -548,9 +397,6 @@ pub fn init_or_update_model_from_bundle(
     }
     model.save_start_values()?;
     model.save_old_values();
-    if loaded_from_mod {
-        crate::relax::settle_relaxed_loaded_model(&mut model)?;
-    }
     let relax_rad_core = bundle
         .sections
         .get("star_job")
@@ -565,5 +411,5 @@ pub fn init_or_update_model_from_bundle(
     }
     extras.extras_startup(&mut model, false)?;
 
-    Ok(model)
+    Ok(InitModelOutcome::Model(Box::new(model)))
 }

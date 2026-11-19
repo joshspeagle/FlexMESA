@@ -7,10 +7,10 @@ use std::path::Path;
 
 use flexmesa_astero::run_astero_test_suite_case_with_options;
 use flexmesa_binary::{
-    run_binary_test_suite_case_with_options, BinaryLogsOptions,
+    run_binary_test_suite_case_with_extras, BinaryLogsOptions,
 };
 use flexmesa_star::inlist_runner::{
-    run_test_suite_case_with_options, StarLogsOptions,
+    run_test_suite_case_with_extras, StarLogsOptions,
 };
 use flexmesa_star::mesa_log_reader::{read_mesa_log_file, MesaHeaderValue};
 use flexmesa_star::InlistLoadOptions;
@@ -19,8 +19,8 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
 
-use crate::star_e2e_py::case_report_to_pydict;
-use crate::star_e2e_tier5_py::binary_report_to_pydict;
+use crate::extras_py::{run_with_binary_extras, run_with_star_extras};
+use crate::star_e2e_py::{binary_report_to_pydict, case_report_to_pydict};
 use crate::star_helpers_py::to_py_err;
 
 fn parse_opt_mode(
@@ -56,7 +56,8 @@ where
     write_profiles=false,
     is_logs_dir=true,
     numerics_mode=None,
-    allow_unsupported_controls=false
+    allow_unsupported_controls=false,
+    extras=None
 ))]
 #[allow(clippy::too_many_arguments)]
 pub fn trace_star_case<'py>(
@@ -70,31 +71,31 @@ pub fn trace_star_case<'py>(
     is_logs_dir: bool,
     numerics_mode: Option<&str>,
     allow_unsupported_controls: bool,
+    extras: Option<Py<PyAny>>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let mode = parse_opt_mode(numerics_mode)?;
     let load_opts = InlistLoadOptions {
         allow_unsupported_controls,
     };
-    let rep = py
-        .detach(|| {
-            run_in_opt_mode(mode, || {
-                let opts = StarLogsOptions::from_target(
-                    Path::new(out_target),
-                    is_logs_dir,
-                    respect_intervals,
-                    write_profiles,
-                );
-                run_test_suite_case_with_options(
-                    Path::new(case_dir),
-                    skip_optional,
-                    max_steps_per_stage,
-                    false,
-                    opts,
-                    load_opts,
-                )
-            })
+    let opts = StarLogsOptions::from_target(
+        Path::new(out_target),
+        is_logs_dir,
+        respect_intervals,
+        write_profiles,
+    );
+    let rep = run_with_star_extras(py, extras, |ex| {
+        run_in_opt_mode(mode, || {
+            run_test_suite_case_with_extras(
+                Path::new(case_dir),
+                skip_optional,
+                max_steps_per_stage,
+                false,
+                opts,
+                load_opts,
+                ex,
+            )
         })
-        .map_err(to_py_err)?;
+    })?;
     case_report_to_pydict(py, &rep)
 }
 
@@ -108,8 +109,10 @@ pub fn trace_star_case<'py>(
     respect_intervals=false,
     is_logs_dir=true,
     numerics_mode=None,
-    allow_unsupported_controls=false
+    allow_unsupported_controls=false,
+    extras=None
 ))]
+#[allow(clippy::too_many_arguments)]
 pub fn trace_binary_case<'py>(
     py: Python<'py>,
     case_dir: &str,
@@ -119,40 +122,40 @@ pub fn trace_binary_case<'py>(
     is_logs_dir: bool,
     numerics_mode: Option<&str>,
     allow_unsupported_controls: bool,
+    extras: Option<Py<PyAny>>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let mode = parse_opt_mode(numerics_mode)?;
     let load_opts = InlistLoadOptions {
         allow_unsupported_controls,
     };
-    let rep = py
-        .detach(|| {
-            run_in_opt_mode(mode, || {
-                let out_p = Path::new(out_target);
-                let hist_override = (!respect_intervals).then_some(1);
-                let opts = if is_logs_dir {
-                    BinaryLogsOptions {
-                        output_root: Some(out_p),
-                        explicit_binary_history_file: None,
-                        history_interval_override: hist_override,
-                        write_star_logs: true,
-                    }
-                } else {
-                    BinaryLogsOptions {
-                        output_root: None,
-                        explicit_binary_history_file: Some(out_p),
-                        history_interval_override: hist_override,
-                        write_star_logs: false,
-                    }
-                };
-                run_binary_test_suite_case_with_options(
-                    Path::new(case_dir),
-                    max_steps,
-                    opts,
-                    load_opts,
-                )
-            })
+    let out_p = Path::new(out_target);
+    let hist_override = (!respect_intervals).then_some(1);
+    let opts = if is_logs_dir {
+        BinaryLogsOptions {
+            output_root: Some(out_p),
+            explicit_binary_history_file: None,
+            history_interval_override: hist_override,
+            write_star_logs: true,
+        }
+    } else {
+        BinaryLogsOptions {
+            output_root: None,
+            explicit_binary_history_file: Some(out_p),
+            history_interval_override: hist_override,
+            write_star_logs: false,
+        }
+    };
+    let rep = run_with_binary_extras(py, extras, |ex| {
+        run_in_opt_mode(mode, || {
+            run_binary_test_suite_case_with_extras(
+                Path::new(case_dir),
+                max_steps,
+                opts,
+                load_opts,
+                ex,
+            )
         })
-        .map_err(to_py_err)?;
+    })?;
     binary_report_to_pydict(py, &rep)
 }
 

@@ -306,7 +306,13 @@ pub fn eval_star_intrinsic_wind_cgs_with_extras(
     extras: &mut dyn BinaryExtras,
 ) -> Result<f64, StarError> {
     let custom_raw = if star.controls.use_other_wind {
-        extras.other_wind_cgs(star, star_idx, ignore_rlof)?
+        Some(extras.other_wind_cgs(star, star_idx, ignore_rlof)?.ok_or_else(
+            || {
+                StarError::InvalidInput(String::from(
+                    "use_other_wind = .true. requires an other_wind hook",
+                ))
+            },
+        )?)
     } else {
         None
     };
@@ -770,6 +776,8 @@ pub fn evolve_single_star_without_term_rewind(
         ),
     );
 
+    let saved_other_wind =
+        std::mem::replace(&mut star.controls.use_other_wind, false);
     star.dt = dt_try;
     star.dt_next = dt_try;
     let do_remesh = allow_remesh
@@ -778,6 +786,8 @@ pub fn evolve_single_star_without_term_rewind(
         && dt_try >= star.controls.mix_wind.remesh_dt_limit;
     let op_split = star.controls.op_split_burn;
     let res = star_evolve_step(star, do_remesh, op_split, true);
+
+    star.controls.use_other_wind = saved_other_wind;
 
     (
         star.controls.max_model_number,

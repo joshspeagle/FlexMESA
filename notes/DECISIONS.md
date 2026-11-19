@@ -45,6 +45,7 @@ Scope and the `v0.1.0` definition are in [`SCOPE.md`](SCOPE.md). Work is tracked
 | 28 | Storage of Subscripted Namelist Controls (`#147`) | In force | below |
 | 29 | Derived JAX Contract, Full-Argument Auto-Dispatch, and Python Utility Disposition (`#166`) | In force | below |
 | 30 | Generated `serde` Checkpoints, Rollback State Buffers, and RAM-Local Microphysics Cache (`#150`) | In force | below |
+| 31 | Test-Side `extras_factory` Dispatch and Pure-Upstream Library Execution (`#148`) | In force | below |
 
 ## Pre-audit decisions still in force
 
@@ -354,3 +355,16 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
 - **Alternatives Rejected**:
   - *Serializing `micro_cache_hits` and `micro_cache_misses`*: Makes restarted processes disagree on cache-warmup counts even when physical states match to the last bit.
   - *Maintaining a manual field list in `photo_io`*: Reintroduces silent field omissions whenever fields are added (`N1-20`).
+
+---
+
+## DECISIONS #31: Test-Side `extras_factory` Dispatch and Pure-Upstream Library Execution (`Issue #148`)
+
+- **Date**: 2026-11-18
+- **Decision**:
+  1. **Pure-Upstream Engine Libraries**: Remove all per-case `Tier1`–`Tier5` extras, case-name branches, hardcoded case-list constants, and fabricated ZAMS luminosity scaling, synthetic `cgrav` overrides, and opacity scaling from `flexmesa-star`, `flexmesa-binary`, `flexmesa-astero`, `flexmesa-py`, and `src/flexmesa/`. Library runners default to `DefaultStarExtras` and `DefaultBinaryExtras`, and ZAMS loading fails loudly on unrelaxed non-solar `initial_z` or `initial_y`.
+  2. **Content-Keyed Test-Side Extras & Manifest `extras_factory`**: Implement upstream `test_suite/*/src/run_star_extras.f90` and `run_binary_extras.f90` logic strictly in `tests/case_extras/`, dispatched by normalized Fortran source text rather than directory name, and connected via the manifest `extras_factory` field (`tests.case_extras:resolve_case_extras`) and `PyStarExtrasAdapter`/`PyBinaryExtrasAdapter` (`crates/flexmesa-py/src/extras_py.rs`).
+- **Why**: Removes in-library case overrides and fabricated fallbacks that masked genuine solver, control, and microphysics gaps (`G1-1`, `T1-3`, `T2-1`), and guarantees that renaming or relocating a case directory never changes engine behaviour.
+- **Alternatives Rejected**:
+  - *Moving `tier1_extras`–`tier5_extras` verbatim into Rust integration tests while keeping control overrides*: Preserves non-upstream mutations and directory-name branching.
+  - *Passing whole `StarModel` / `BinarySystem` clones into Python callbacks on every step*: Violates `DECISIONS #30` clone-free hot-loop guarantees.

@@ -854,13 +854,13 @@ def test_library_extras_flag_prevents_pass_verdict_until_148_lands(
     gap = case_manifest.KnownGapSpec(
         suite="star",
         case="rsp_BLAP",
-        issue="#148",
-        reason="Tier4CaseExtras in library code (#148).",
+        issue="#152",
+        reason="Step retry divergence (#152).",
     )
     rec_decl = harness_runner.evaluate_case_record(
         spec, {("star", "rsp_BLAP"): gap}, outcome, precomputed_comparison=comp
     )
-    assert rec_decl.verdict == "declared gap (#148)"
+    assert rec_decl.verdict == "declared gap (#152)"
     assert rec_decl.is_undeclared_failure is False
     assert rec_decl.is_stale_known_gap is False
 

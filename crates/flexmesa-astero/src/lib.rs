@@ -47,10 +47,8 @@ mod search_methods;
 pub mod surface_corr;
 
 pub use e2e::{
-    run_astero_suite, run_astero_suite_with_options,
     run_astero_test_suite_case, run_astero_test_suite_case_with_logs,
     run_astero_test_suite_case_with_options, TempCaseStaging,
-    TIER4_ASTERO_CASES,
 };
 pub use inlist_astero::{
     parse_astero_search_controls, parse_astero_search_controls_with_options,

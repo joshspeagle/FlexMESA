@@ -227,60 +227,28 @@ print(
 
 ---
 
-## 4. Pointwise Physics Helpers & Legacy Multi-Stage Runners
+## 4. Binary Checkpoints, Restart Reproducibility & Test-Side Extras
 
-For the 8 upstream `binary/test_suite` cases (`double_bh`, `evolve_both_stars`, `jdot_gr_check`, `jdot_ls_check`, `jdot_ml_check`, `star_plus_point_mass`, `star_plus_point_mass_explicit_mdot`, `wind_fed_bhhmxb`) and hook-oriented `star/test_suite` cases (`check_redo`, `other_physics_hooks`, `relax_composition_j_entropy`, `timing`), `flexmesa.star` and `flexmesa.binary` expose standalone helpers alongside legacy pre-audit wrapper scaffolding (binary trajectory parity against MESA `26.4.1` currently stands at `0 / 8` under `#160`, and synthetic `Tier1CaseExtras` wrappers are slated for removal under `#148`; see [Declared Known Gaps](../benchmarks/known-gaps.md)):
-
-- **Peters (1964) GW Inspiral & Tauris & van den Heuvel (2003) Non-Conservative Formulas (`binary.eval_gr_expected_separation_rsun`, `binary.eval_tauris_vdh_expected_separation_rsun`)**: Closed-form orbital separation formulas $a(t)$ and $a(q; \alpha, \beta, \delta, \gamma)$ used as analytical checks alongside `jdot_gr_check` and `jdot_ml_check` (`0 / 8` binary test-suite trajectory parity under `#160`).
-- **Brott et al. (2011) Bi-Stability Massive-Star Winds (`binary.eval_brott_wind_msun_yr`)**: Standalone wind formula combining Vink et al. (2001), Nieuwenhuijzen & de Jager (1990), and Hamann et al. (1995) Wolf-Rayet winds across the bi-stability jump (`double_bh` binary trajectory parity remains open under `#160`).
-- **Custom Physics Hooks & Internal Step-Redo Check (`star.eval_overshoot_dbl_exp`, `star.eval_grafener_kudritzki_wind_msun_yr`, `star.verify_step_redo_bit_parity`)**: Evaluates double-exponential convective overshooting $D_{\mathrm{ov}}(r)$, Gräfener & Kudritzki (2008) Wolf-Rayet optically thick wind mass-loss rates, and an internal `.photo` step-redo rollback check (`check_redo` and full `other_*` MESA `26.4.1` trajectory parity remain open under `#150` and `#152`).
+In-library per-case hooks and standalone oracle stubs were removed under `#148`, so `BinarySystem` and `StarModel` execute pure upstream controls unless a test harness or user attaches an explicit callback object (`BinaryExtras` / `StarExtras`). Both `BinarySystem` (`FMBINCP1` v1) and `StarModel` (`FMPHOTO2` v20) support deterministic `serde` byte checkpoints and bit-identical continuation verification (`#150`, while binary trajectory parity against MESA `26.4.1` remains open under `#160`; see [Declared Known Gaps](../benchmarks/known-gaps.md)):
 
 ```python
-from flexmesa import binary, constants, star
+from flexmesa import binary, star
 
-# 1. Peters (1964) GW inspiral and Tauris & van den Heuvel (2003) non-conservative separation
-a_gr = binary.eval_gr_expected_separation_rsun(
-    a0_rsun=2.5, m1_msun=1.4, m2_msun=1.0, time_sec=1.0e8 * 3.15576e7
+donor = star.StarModel.from_zams(initial_mass=2.0, initial_z=0.02)
+sys_bin = binary.BinarySystem.from_point_mass(
+    donor,
+    companion_mass_msun=1.4,
+    initial_period_days=1.5,
+    eccentricity=0.0,
 )
-a_ml = binary.eval_tauris_vdh_expected_separation_rsun(
-    a0_rsun=10.0, q0=2.0, q=1.2, alpha=0.2, beta=0.3, delta=0.1, gamma=1.5
-)
-w_brott = binary.eval_brott_wind_msun_yr(
-    l_surf_lsun=6.0e5,
-    m_surf_msun=65.0,
-    r_surf_rsun=12.0,
-    t_surf_k=48000.0,
-    x_surf=0.35,
-    y_surf=0.63,
-    z_div_z_solar=0.1,
-)
-print(
-    f"Oracles: a_GR = {a_gr:.4f} Rsun, a_TVdH = {a_ml:.4f} Rsun, "
-    f"Mdot_Brott = {w_brott:.3e} Msun/yr"
-)
+ckpt_bytes = sys_bin.to_photo_bytes()
+restored = binary.BinarySystem.from_photo_bytes(ckpt_bytes)
 
-# 2. Double-exponential overshoot, Grafener-Kudritzki WR wind, and internal step-redo check
-d_ov = star.eval_overshoot_dbl_exp(
-    d0=1.0e14,
-    delta_r=1.0e9,
-    hp_bdy=5.0e9,
-    f_ov1=0.015,
-    f_ov2=0.005,
-    d_ov_trans=1.0e12,
-)
-mdot_gk = star.eval_grafener_kudritzki_wind_msun_yr(
-    m_surf_g=60.0 * constants.MSUN,
-    l_surf_erg_s=1.0e6 * constants.LSUN,
-    r_surf_cm=30.0 * constants.RSUN,
-    t_surf_k=40000.0,
-    x_surf=0.70,
-    z_surf=0.02,
-    w_scale=1.0,
-)
 zams_1m = star.StarModel.from_zams(initial_mass=1.0, initial_z=0.02)
-redo_ok = star.verify_step_redo_bit_parity(zams_1m)
+hash_a, hash_b = zams_1m.verify_photo_restart(n_steps=2)
+assert hash_a == hash_b
 print(
-    f"Other hooks: D_ov = {d_ov:.3e} cm^2/s, Mdot_GK = {mdot_gk:.3e} Msun/yr, "
-    f"internal redo check = {redo_ok}"
+    f"Binary checkpoint size={len(ckpt_bytes)} B, P={restored.period / 86400.0:.3f} d; "
+    f"star restart hash={hash_a:#x}"
 )
 ```

@@ -8,8 +8,7 @@
 //! 4. `"power_law"`: Ball & Gizon (2017) free power-law $a(\nu/\nu_{\max})^b / Q_{nl}$.
 //! 5. `"sonoi"`: Sonoi et al. (2015) modified Lorentzian.
 //!
-//! Corresponds to `astero/private/astero_support.f90:702-1341` and tested in
-//! `astero/test_suite/surface_effects/src/run_star_extras.f90`.
+//! Corresponds to `astero/private/astero_support.f90:702-1341`.
 
 use flexmesa_autodiff::DualOrder1;
 use flexmesa_math::pow;

@@ -10,7 +10,7 @@ pub use crate::adjust_mass::{
     build_accreted_xa, do_adjust_mass, do_adjust_mass_step,
     do_adjust_mass_with_dt,
 };
-pub use crate::winds_driver::{do_set_mdot, set_mdot};
+pub use crate::winds_driver::{do_set_mdot, do_set_mdot_with_extras, set_mdot};
 
 /// Stellar wind mass-loss prescription (`cool_wind_RGB_scheme`,
 /// `cool_wind_AGB_scheme`, and `hot_wind_scheme` in `winds.f90`).

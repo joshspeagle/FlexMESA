@@ -9,7 +9,7 @@ use std::time::Instant;
 
 use crate::case_staging::TempCaseStaging;
 use crate::controls::StarError;
-use crate::evolve::star_evolve_step;
+use crate::evolve::{star_evolve_step, star_evolve_step_with_extras};
 use crate::history::{extract_history_row, HistoryRow};
 use crate::hydro_vars::set_hydro_vars;
 use crate::inlist::{InlistBundle, InlistLoadOptions};
@@ -20,30 +20,20 @@ use crate::model_io::{
     write_photo_bytes,
 };
 use crate::rn_parser::{parse_rn_stages, RnStage};
-use crate::star_job_init::init_or_update_model_from_bundle;
+use crate::rsp_eos_kap::RspChemCache;
+use crate::star_job_init::{
+    init_or_update_model_from_bundle_outcome, InitModelOutcome,
+};
 use crate::termination::check_termination_limits_with_history;
-use crate::tier1_extras::{
-    is_tier1_case, verify_tier1_case_assertions, Tier1CaseExtras,
-};
-use crate::tier2_extras::{
-    is_tier2_case, verify_tier2_case_assertions, Tier2CaseExtras,
-};
-use crate::tier3_extras::{
-    is_tier3_case, verify_tier3_case_assertions, Tier3CaseExtras,
-};
-use crate::tier4_extras::{
-    is_tier4_case, verify_tier4_case_assertions, Tier4CaseExtras,
-};
-use crate::tier5_extras::{
-    is_tier5_star_case, verify_tier5_star_case_assertions, Tier5StarCaseExtras,
-};
 
 /// Control flow directive returned by [`StarExtras`] step hooks (`keep_going`,
-/// `retry`, `terminate` in `star/public/star_def.inc`).
+/// `redo`, `retry`, `terminate` in `star/public/star_def.inc`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExtrasDirective {
     /// Continue normal evolution (`keep_going`).
     KeepGoing,
+    /// Re-run the current step at identical timestep (`redo`).
+    Redo,
     /// Force a step retry with reduced timestep (`retry`).
     Retry,
     /// Terminate the evolutionary stage with the given reason string (`terminate`).
@@ -52,11 +42,26 @@ pub enum ExtrasDirective {
     Error(String),
 }
 
+/// Outcome returned by [`StarExtras::other_rsp_build_model`] (`RSP` envelope
+/// construction or clean pre-evolution termination as in `rsp_check_2nd_crossing`).
+#[derive(Debug, Clone)]
+pub enum RspBuildOutcome {
+    /// Constructed static `RSP` [`StarModel`].
+    Model(Box<StarModel>),
+    /// Terminated cleanly during model construction with termination code (`ierr = -1`).
+    Terminate(String),
+}
+
 /// Rust trait equivalent of upstream MESA's `run_star_extras.f90` hooks and
 /// `other_*` physics callbacks.
 pub trait StarExtras {
-    /// Invoked after `inlist` controls are loaded before model initialization.
-    fn extras_controls(&mut self, _model: &mut StarModel) {}
+    /// Invoked after `inlist` controls are loaded before `&star_job` relaxations.
+    ///
+    /// # Errors
+    /// Returns [`StarError`] if custom control setup fails.
+    fn extras_controls(&mut self, _model: &mut StarModel) -> Result<(), StarError> {
+        Ok(())
+    }
 
     /// Invoked once at the start of an evolutionary stage after model loading.
     ///
@@ -92,10 +97,18 @@ pub trait StarExtras {
         Ok(())
     }
     /// Custom effective gravitational constant profile $G_{\mathrm{eff}}(k)$.
-    fn other_cgrav(&self, _m: &mut StarModel) {}
+    ///
+    /// # Errors
+    /// Returns [`StarError`] if evaluating or validating `model.cgrav` fails.
+    fn other_cgrav(&self, _m: &mut StarModel) -> Result<(), StarError> {
+        Ok(())
+    }
     /// Custom mixing-length parameter profile $\alpha_{\mathrm{MLT}}(k)$.
     fn other_alpha_mlt(&self, _m: &mut StarModel) {}
     /// Custom wind mass-loss rate $\dot{M}$ ($M_\odot\,\mathrm{yr^{-1}}$).
+    ///
+    /// # Errors
+    /// Returns [`StarError`] if evaluating custom wind fails.
     fn other_wind(
         &self,
         _m: &StarModel,
@@ -103,12 +116,19 @@ pub trait StarExtras {
         _ms: f64,
         _r: f64,
         _t: f64,
-    ) -> Option<f64> {
-        None
+    ) -> Result<Option<f64>, StarError> {
+        Ok(None)
     }
-    /// Custom multiplier or adjustment on $\dot{M}$ ($\mathrm{g\,s^{-1}}$).
-    fn other_adjust_mdot(&self, _m: &StarModel, current_mdot: f64) -> f64 {
-        current_mdot
+    /// Custom adjusted $\dot{M}$ ($\mathrm{g\,s^{-1}}$) or `None` to keep `current_mdot`.
+    ///
+    /// # Errors
+    /// Returns [`StarError`] if evaluating custom $\dot{M}$ fails.
+    fn other_adjust_mdot(
+        &self,
+        _m: &StarModel,
+        _current_mdot: f64,
+    ) -> Result<Option<f64>, StarError> {
+        Ok(None)
     }
     /// Custom specific angular momentum torque $\dot{j}_{\mathrm{extra}}(k)$ ($\mathrm{cm^2\,s^{-2}}$).
     fn other_torque(&self, _m: &StarModel) -> Option<Vec<f64>> {
@@ -118,23 +138,55 @@ pub trait StarExtras {
     fn other_energy(&self, _m: &StarModel) -> Option<Vec<f64>> {
         None
     }
+    /// Optional custom initial model builder (`use_other_build_initial_model`).
+    ///
+    /// # Errors
+    /// Returns [`StarError`] if custom model construction fails.
+    fn other_build_initial_model(
+        &mut self,
+        _bundle: &InlistBundle,
+    ) -> Result<Option<StarModel>, StarError> {
+        Ok(None)
+    }
+    /// Optional custom `RSP` model builder (`use_other_rsp_build_model`).
+    ///
+    /// # Errors
+    /// Returns [`StarError`] if custom `RSP` envelope construction fails.
+    fn other_rsp_build_model(
+        &mut self,
+        _bundle: &InlistBundle,
+    ) -> Result<Option<RspBuildOutcome>, StarError> {
+        Ok(None)
+    }
+    /// Optional custom `RSP` linear analysis (`use_other_rsp_linear_analysis`).
+    ///
+    /// Returns `Ok(true)` when the hook populated `lina_*`, `period`, and
+    /// initial velocities, or `Ok(false)` when unimplemented.
+    ///
+    /// # Errors
+    /// Returns [`StarError`] if custom linear pulsation analysis fails.
+    fn other_rsp_linear_analysis(
+        &mut self,
+        _model: &mut StarModel,
+        _chem: &RspChemCache,
+        _log_dir: Option<&Path>,
+    ) -> Result<bool, StarError> {
+        Ok(false)
+    }
+    /// Extra per-step history columns appended to `history.data` rows
+    /// (`data_for_extra_history_columns`).
+    fn extra_history_columns(&self, _m: &StarModel) -> Vec<(String, f64)> {
+        Vec::new()
+    }
+    /// Receives the staged temporary case directory path before stage execution
+    /// so caller-supplied extras write auxiliary outputs inside the staged copy.
+    fn set_staged_case_dir(&mut self, _case_dir: &Path) {}
 }
 
 /// Default no-op [`StarExtras`] implementation (`standard_run_star_extras.inc`).
 #[derive(Debug, Clone, Copy, Default)]
 pub struct DefaultStarExtras;
 impl StarExtras for DefaultStarExtras {}
-
-/// Tolman-Oppenheimer-Volkoff (TOV) post-Newtonian general-relativistic
-/// effective gravitational constant hook (`other_cgrav` in `ns_h`, `ns_he`,
-/// `tzo`, and `neutron_star_envelope`).
-#[derive(Debug, Clone, Copy, Default)]
-pub struct TovGrStarExtras;
-impl StarExtras for TovGrStarExtras {
-    fn other_cgrav(&self, model: &mut StarModel) {
-        model.cgrav = crate::tier3_physics::eval_tov_effective_cgrav(model);
-    }
-}
 
 fn write_mod_if_missing(
     model: &StarModel,
@@ -349,7 +401,12 @@ pub fn run_inlist_stage_with_logs(
             }
         }
         if let Some(lw) = logs_writer.as_deref_mut() {
-            lw.record_step(model, true, true)?;
+            let extra_cols = if lw.is_history_due(model, true, true) {
+                extras.extra_history_columns(model)
+            } else {
+                Vec::new()
+            };
+            lw.record_step_with_extra(model, true, true, &extra_cols)?;
         }
     } else {
         for _ in 0..cap {
@@ -361,20 +418,28 @@ pub fn run_inlist_stage_with_logs(
                 ExtrasDirective::Error(msg) => {
                     return Err(StarError::ConvergenceFailure(msg));
                 }
-                ExtrasDirective::KeepGoing | ExtrasDirective::Retry => {}
+                ExtrasDirective::Retry | ExtrasDirective::Redo => {
+                    return Err(StarError::ConvergenceFailure(String::from(
+                        "extras step retry/redo is not yet implemented (#152)",
+                    )));
+                }
+                ExtrasDirective::KeepGoing => {}
             }
             if model.controls.use_other_cgrav {
-                extras.other_cgrav(model);
+                extras.other_cgrav(model)?;
             }
             if model.controls.use_other_alpha_mlt {
                 extras.other_alpha_mlt(model);
             }
-            if model.controls.use_other_adjust_mdot {
-                model.mstar_dot =
-                    extras.other_adjust_mdot(model, model.mstar_dot);
-            }
             if model.controls.use_other_torque {
                 if let Some(jdot) = extras.other_torque(model) {
+                    if jdot.len() != model.nz {
+                        return Err(StarError::InvalidInput(format!(
+                            "other_torque returned {} values for nz = {}",
+                            jdot.len(),
+                            model.nz
+                        )));
+                    }
                     for (j_k, &dj_k) in model.j_rot.iter_mut().zip(jdot.iter())
                     {
                         *j_k = (*j_k + dj_k * model.dt).max(1.0e10);
@@ -382,8 +447,13 @@ pub fn run_inlist_stage_with_logs(
                 }
             }
 
-            let step_rep =
-                star_evolve_step(model, do_remesh, op_split_burn, true)?;
+            let step_rep = star_evolve_step_with_extras(
+                model,
+                do_remesh,
+                op_split_burn,
+                true,
+                extras,
+            )?;
             steps_taken += 1;
             total_newton_iterations += step_rep.iterations;
             total_retries += step_rep.retries;
@@ -404,18 +474,30 @@ pub fn run_inlist_stage_with_logs(
             let hr = extract_history_row(model);
             history_rows.push(hr);
 
+            for dir in [&check_dir, &finish_dir] {
+                if let ExtrasDirective::Error(msg) = dir {
+                    return Err(StarError::ConvergenceFailure(msg.clone()));
+                }
+            }
             let mut will_terminate = false;
             for dir in [check_dir, finish_dir] {
                 match dir {
                     ExtrasDirective::Error(msg) => {
                         return Err(StarError::ConvergenceFailure(msg));
                     }
+                    ExtrasDirective::Retry | ExtrasDirective::Redo => {
+                        return Err(StarError::ConvergenceFailure(
+                            String::from(
+                                "extras step retry/redo is not yet implemented (#152)",
+                            ),
+                        ));
+                    }
                     ExtrasDirective::Terminate(reason) => {
                         termination_code = reason;
                         will_terminate = true;
                         break;
                     }
-                    ExtrasDirective::KeepGoing | ExtrasDirective::Retry => {}
+                    ExtrasDirective::KeepGoing => {}
                 }
             }
             if !will_terminate {
@@ -429,7 +511,21 @@ pub fn run_inlist_stage_with_logs(
             let is_last_cap_step = steps_taken == cap;
             let is_terminating = will_terminate || is_last_cap_step;
             if let Some(lw) = logs_writer.as_deref_mut() {
-                lw.record_step(model, steps_taken == 1, is_terminating)?;
+                let extra_cols = if lw.is_history_due(
+                    model,
+                    steps_taken == 1,
+                    is_terminating,
+                ) {
+                    extras.extra_history_columns(model)
+                } else {
+                    Vec::new()
+                };
+                lw.record_step_with_extra(
+                    model,
+                    steps_taken == 1,
+                    is_terminating,
+                    &extra_cols,
+                )?;
             }
             if will_terminate {
                 break;
@@ -568,36 +664,49 @@ pub fn run_test_suite_case_with_options(
     logs_opts: StarLogsOptions<'_>,
     load_opts: InlistLoadOptions,
 ) -> Result<CaseRunReport, StarError> {
+    let mut extras = DefaultStarExtras;
+    run_test_suite_case_with_extras(
+        orig_case_dir,
+        skip_optional,
+        max_steps_per_stage,
+        verify_restart,
+        logs_opts,
+        load_opts,
+        &mut extras,
+    )
+}
+
+/// Executes all stages of an upstream MESA `test_suite` case directory with
+/// explicit `logs_opts`, `load_opts`, and caller-supplied [`StarExtras`] hooks.
+///
+/// # Errors
+/// Returns [`StarError`] if `inlist` parsing, stage execution, or log output fails.
+pub fn run_test_suite_case_with_extras(
+    orig_case_dir: &Path,
+    skip_optional: bool,
+    max_steps_per_stage: Option<usize>,
+    verify_restart: bool,
+    logs_opts: StarLogsOptions<'_>,
+    load_opts: InlistLoadOptions,
+    extras: &mut dyn StarExtras,
+) -> Result<CaseRunReport, StarError> {
     let t0 = Instant::now();
     let staging = TempCaseStaging::new(orig_case_dir)?;
     let case_dir = staging.staged_dir.as_path();
+    extras.set_staged_case_dir(case_dir);
     let case_name = case_dir
         .file_name()
         .and_then(|s| s.to_str())
         .unwrap_or("unknown")
         .to_string();
 
-    let is_multi_star = case_dir.join("inlist_multi_stars_job").exists();
     let rn_stages = parse_rn_stages(case_dir, skip_optional)?;
-    let tier = if is_tier1_case(&case_name) {
-        1
-    } else if is_tier2_case(&case_name) {
-        2
-    } else if is_tier3_case(&case_name) {
-        3
-    } else if is_tier4_case(&case_name) {
-        4
-    } else if is_tier5_star_case(&case_name) {
-        5
-    } else {
-        0
-    };
 
     let mut current_model: Option<StarModel> = None;
-    let mut twin_star1_hr: Option<HistoryRow> = None;
     let mut stage_reports = Vec::with_capacity(rn_stages.len());
     let (mut total_steps, mut total_newton, mut total_retries) = (0, 0, 0);
     let mut photo_restart_verified = false;
+    let mut terminated_in_init = false;
 
     for stage in &rn_stages {
         match stage {
@@ -625,36 +734,31 @@ pub fn run_test_suite_case_with_options(
                 output_mod,
                 logs_dir,
             } => {
-                if is_multi_star {
-                    if let Some(m1) = current_model.take() {
-                        if case_name == "twin_studies" {
-                            twin_star1_hr = Some(extract_history_row(&m1));
-                        }
-                    }
-                }
                 let bundle = InlistBundle::from_file_in_case_dir_with_options(
                     case_dir, inlist, load_opts,
                 )?;
-                let use_tov = bundle.controls.use_other_cgrav;
-                let mut extras: Box<dyn StarExtras> = match tier {
-                    1 => Box::new(Tier1CaseExtras::new(&case_name)),
-                    2 => Box::new(Tier2CaseExtras::new(&case_name)),
-                    3 => Box::new(Tier3CaseExtras::new(&case_name)),
-                    4 => Box::new(Tier4CaseExtras::with_case_dir(
-                        &case_name, case_dir,
-                    )),
-                    5 => Box::new(Tier5StarCaseExtras::with_case_dir(
-                        &case_name, case_dir,
-                    )),
-                    _ if use_tov => Box::new(TovGrStarExtras),
-                    _ => Box::new(DefaultStarExtras),
-                };
 
-                let mut model = init_or_update_model_from_bundle(
+                let mut model = match init_or_update_model_from_bundle_outcome(
                     &bundle,
                     current_model.take(),
-                    extras.as_mut(),
-                )?;
+                    extras,
+                )? {
+                    InitModelOutcome::Model(m) => *m,
+                    InitModelOutcome::Terminate(reason) => {
+                        terminated_in_init = true;
+                        stage_reports.push(StageRunReport {
+                            inlist_name: bundle.entry_inlist.clone(),
+                            steps_taken: 0,
+                            total_newton_iterations: 0,
+                            total_retries: 0,
+                            termination_code: reason,
+                            runtime_sec: t0.elapsed().as_secs_f64(),
+                            final_history: HistoryRow::default(),
+                            history_rows: Vec::new(),
+                        });
+                        break;
+                    }
+                };
 
                 let mut stage_logs = logs_opts.build_writer(
                     &model,
@@ -665,7 +769,7 @@ pub fn run_test_suite_case_with_options(
                 let rep = run_inlist_stage_with_logs(
                     &mut model,
                     &bundle,
-                    extras.as_mut(),
+                    extras,
                     max_steps_per_stage,
                     stage_logs.as_mut(),
                 )?;
@@ -689,35 +793,28 @@ pub fn run_test_suite_case_with_options(
     }
 
     let runtime_sec = t0.elapsed().as_secs_f64();
-    let twin_match = twin_star1_hr
-        .zip(current_model.as_ref().map(extract_history_row))
-        .is_none_or(|(hr1, hr2)| {
-            (hr1.star_mass - hr2.star_mass).abs() < 0.5
-                && (hr1.log_teff - hr2.log_teff).abs() < 0.2
-        });
-    let assertions_passed = twin_match
-        && current_model.as_ref().is_some_and(|m| match tier {
-            1 => verify_tier1_case_assertions(m, &case_name),
-            2 => verify_tier2_case_assertions(m, &case_name),
-            3 => verify_tier3_case_assertions(m, &case_name),
-            4 => verify_tier4_case_assertions(m, &case_name),
-            5 => verify_tier5_star_case_assertions(m, &case_name, case_dir),
-            _ => m.nz >= 2 && m.teff.is_finite() && m.teff > 0.0,
-        });
+    let assertions_passed = terminated_in_init
+        || current_model
+            .as_ref()
+            .is_some_and(|m| m.nz >= 2 && m.teff.is_finite() && m.teff > 0.0);
     let final_hr = stage_reports
         .last()
         .map(|s| s.final_history)
         .or_else(|| current_model.as_ref().map(extract_history_row));
     let termination_code = stage_reports.last().map_or_else(
-        || String::from("completed"),
+        || String::from("no_stages_executed"),
         |s| s.termination_code.clone(),
     );
-    let passed =
-        assertions_passed && (!verify_restart || photo_restart_verified);
+    let reached_terminal_stop = !termination_code.is_empty()
+        && termination_code != "max_steps_cap"
+        && termination_code != "no_stages_executed";
+    let passed = assertions_passed
+        && reached_terminal_stop
+        && (terminated_in_init || !verify_restart || photo_restart_verified);
 
     Ok(CaseRunReport {
         case_name,
-        tier,
+        tier: 0,
         passed,
         termination_code,
         stages: stage_reports,
@@ -736,54 +833,4 @@ pub fn run_test_suite_case_with_options(
         photo_restart_verified,
         assertions_passed,
     })
-}
-
-/// Runs a slice of `star/test_suite/<case>` directories under `mesa_dir` in
-/// order and returns their [`CaseRunReport`] records.
-///
-/// Uses default strict inlist validation (`allow_unsupported_controls = false`).
-///
-/// # Errors
-/// Returns [`StarError`] if any case in `cases` fails to execute.
-pub fn run_case_list(
-    mesa_dir: &Path,
-    cases: &[&str],
-    max_steps_per_stage: Option<usize>,
-    verify_restart: bool,
-) -> Result<Vec<CaseRunReport>, StarError> {
-    run_case_list_with_options(
-        mesa_dir,
-        cases,
-        max_steps_per_stage,
-        verify_restart,
-        InlistLoadOptions::default(),
-    )
-}
-
-/// Runs a slice of `star/test_suite/<case>` directories under `mesa_dir` in
-/// order with explicit `load_opts` (`#147`).
-///
-/// # Errors
-/// Returns [`StarError`] if any case in `cases` fails to execute.
-pub fn run_case_list_with_options(
-    mesa_dir: &Path,
-    cases: &[&str],
-    max_steps_per_stage: Option<usize>,
-    verify_restart: bool,
-    load_opts: InlistLoadOptions,
-) -> Result<Vec<CaseRunReport>, StarError> {
-    let suite_dir = mesa_dir.join("star").join("test_suite");
-    let mut reports = Vec::with_capacity(cases.len());
-    for &case_name in cases {
-        let case_dir = suite_dir.join(case_name);
-        reports.push(run_test_suite_case_with_options(
-            &case_dir,
-            true,
-            max_steps_per_stage,
-            verify_restart,
-            StarLogsOptions::default(),
-            load_opts,
-        )?);
-    }
-    Ok(reports)
 }

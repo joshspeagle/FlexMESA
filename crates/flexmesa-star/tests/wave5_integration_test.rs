@@ -1,0 +1,205 @@
+// SPDX-License-Identifier: LGPL-3.0-or-later
+//! Integration tests for `flexmesa-star` Wave 5 modules (`diffusion`,
+//! `rotation`, `premix`, `riemann`, `rsp2`, `pulse`) and multi-stage `inlist`
+//! / `rn` execution.
+
+#![allow(clippy::similar_names)]
+
+use std::fs;
+
+use flexmesa_star::{
+    build_pulse_points, change_model_network, eval_burgers_velocities,
+    eval_hllc_face, eval_phase_separation_shift, eval_rotation_fp_ft,
+    eval_rotational_mixing_zone, eval_rsp2_zone, export_fgong, export_gyre,
+    export_osc, load_zams_model, run_test_suite_case, set_hydro_vars,
+    solve_stationary_rsp2_w, verify_photo_restart_parity, DiffusionScheme,
+    Rsp2Config, StarControls, StarJobControls,
+};
+
+#[test]
+fn test_wave5_1_diffusion_rotation_and_premix_preserve_physical_invariants() {
+    let a = [1.0, 4.0, 16.0];
+    let z = [1.0, 2.0, 8.0];
+    let x = [0.70, 0.28, 0.02];
+    let res = eval_burgers_velocities(
+        &a,
+        &z,
+        &x,
+        10.0,
+        1.0e7,
+        -1.0e-10,
+        2.74e4,
+        None,
+        DiffusionScheme::StantonMurillo,
+    )
+    .expect("Burgers diffusion solve");
+    assert_eq!(res.v_gt.len(), 3);
+    assert!(res.v_gt[0] > 0.0);
+    assert!(res.v_gt[1] < 0.0);
+    assert!(res.v_gt[2] < 0.0);
+    let mass_flux: f64 =
+        x.iter().zip(res.v_gt.iter()).map(|(xi, vi)| xi * vi).sum();
+    assert!(mass_flux.abs() <= 1.0e-12);
+
+    let (fp0, ft0, i0) = eval_rotation_fp_ft(0.0, 0.75, 0.95);
+    assert!((fp0 - 1.0).abs() <= 1.0e-15);
+    assert!((ft0 - 1.0).abs() <= 1.0e-15);
+    assert!((i0 - 2.0 / 3.0).abs() <= 1.0e-15);
+    let (fp_fast, ft_fast, i_fast) = eval_rotation_fp_ft(0.6, 0.5, 0.5);
+    assert!(fp_fast < 1.0 && fp_fast < ft_fast && ft_fast < 1.0);
+    assert!(i_fast > 2.0 / 3.0);
+
+    let rot_zone = eval_rotational_mixing_zone(
+        3.0e10, 5.0e9, 2.5e4, 5.0, 1.5e7, 3.5e8, 0.5, 1.0, 1.0, 0.4, 0.2,
+        1.0e-6, 1.0e-7, 1.0e-4, 0.5, 1.3, 1.1, 0.0,
+    );
+    assert!(rot_zone.d_es > 0.0);
+    assert!(
+        rot_zone.d_st > 0.0 && rot_zone.nu_st > 0.0 && rot_zone.b_phi > 0.0
+    );
+
+    let dx_co = eval_phase_separation_shift(0.5, false);
+    let dx_one = eval_phase_separation_shift(0.5, true);
+    assert!(dx_co > 0.05 && dx_co < 0.30);
+    assert!(dx_one > 0.02 && dx_one < 0.25);
+}
+
+#[test]
+fn test_wave5_2_riemann_rsp2_and_pulse_exporters_preserve_invariants() {
+    let r_face = 5.0e10_f64;
+    let m_grav = 1.0e33_f64;
+    let cgrav = 6.67430e-8_f64;
+    let dm = 1.0e30_f64;
+    let g_over_a = cgrav * m_grav
+        / (4.0 * flexmesa_const::PI * flexmesa_math::pow4(r_face));
+    let p_star = 1.0e15_f64;
+    let p_l = p_star + 0.5 * dm * g_over_a;
+    let p_r = p_star - 0.5 * dm * g_over_a;
+    let f = eval_hllc_face(
+        p_l, 10.0, 5.0e7, 0.0, dm, p_r, 8.0, 4.5e7, 0.0, dm, r_face, m_grav,
+        cgrav,
+    );
+    assert!(f.u_face.abs() <= 1.0e-14);
+    assert!((f.p_face - p_star).abs() / p_star <= 1.0e-14);
+
+    let cfg = Rsp2Config::default();
+    let w_eq = solve_stationary_rsp2_w(
+        1.0e5, 1.0e-5, 1.0e8, 3.0e8, 0.40, 1.2, 2.0, 1.0e9, 0.55, &cfg,
+    );
+    assert!(w_eq > 0.0);
+    let z = eval_rsp2_zone(
+        w_eq, 1.0e5, 1.0e-5, 1.0e8, 3.0e8, 0.40, 1.2, 2.0, 1.0e9, 0.55,
+        5.01e10, 5.0e10, 0.0, 0.0, 1.0e28, 0.0, &cfg,
+    );
+    let rel_res =
+        z.de_t_dt.abs() / z.source_s.abs().max(z.sink_d.abs()).max(1.0);
+    assert!(rel_res <= 1.0e-13);
+
+    let mut model =
+        load_zams_model(StarControls::default(), StarJobControls::default())
+            .expect("zams");
+    set_hydro_vars(&mut model, false, false).expect("hydro_vars");
+    let pts = build_pulse_points(&model, true, false, 1.0e99);
+    let n_pts = model.nz + 1;
+    assert_eq!(pts.len(), n_pts);
+    assert_eq!(pts[0].r, 0.0);
+    assert!((pts[0].u_dziem - 3.0).abs() <= 1.0e-14);
+    let gyre_str = export_gyre(&model, true);
+    assert_eq!(gyre_str.lines().count(), 1 + n_pts);
+    let fgong_str = export_fgong(&model, true);
+    assert_eq!(fgong_str.lines().count(), 5 + 3 + 8 * n_pts);
+    let osc_str = export_osc(&model, true);
+    assert_eq!(osc_str.lines().count(), 6 + 3 + 8 * n_pts);
+}
+
+#[test]
+fn test_e2e_0_inlist_bundle_net_change_termination_and_photo_restart_parity() {
+    let mut model =
+        load_zams_model(StarControls::default(), StarJobControls::default())
+            .expect("zams");
+    assert_eq!(model.species, 8);
+    change_model_network(&mut model, "co_burn.net", None)
+        .expect("switch to co_burn.net");
+    assert_eq!(model.species, 9);
+    for k in 0..model.nz {
+        let sum_x: f64 = model.cell_xa(k).iter().sum();
+        assert!((sum_x - 1.0).abs() <= 1.0e-14);
+    }
+
+    let (c_cont, c_rest) =
+        verify_photo_restart_parity(&model, 2).expect("photo restart parity");
+    assert_eq!(c_cont, c_rest);
+
+    let tmp_dir = std::env::temp_dir()
+        .join(format!("flexmesa_e2e0_test_{}", std::process::id()));
+    let _ = fs::remove_dir_all(&tmp_dir);
+    let _ = fs::create_dir_all(&tmp_dir);
+
+    fs::write(
+        tmp_dir.join("inlist_common"),
+        r"
+&controls
+   initial_mass = 1.0
+   initial_z = 0.02
+   mesh_delta_coeff = 0.0
+/ ! end of controls namelist
+",
+    )
+    .expect("write inlist_common");
+
+    fs::write(
+        tmp_dir.join("inlist_stage1"),
+        r"
+&star_job
+   save_model_when_terminate = .true.
+   save_model_filename = 'stage1_out.mod'
+/ ! end of star_job namelist
+
+&controls
+   read_extra_controls_inlist(1) = .true.
+   extra_controls_inlist_name(1) = 'inlist_common'
+   max_model_number = 3
+/ ! end of controls namelist
+",
+    )
+    .expect("write inlist_stage1");
+
+    fs::write(
+        tmp_dir.join("inlist_stage2"),
+        r"
+&star_job
+   load_saved_model = .true.
+   load_model_filename = 'stage1_out.mod'
+   change_net = .true.
+   new_net_name = 'co_burn.net'
+/ ! end of star_job namelist
+
+&controls
+   read_extra_controls_inlist(1) = .true.
+   extra_controls_inlist_name(1) = 'inlist_common'
+   max_model_number = 5
+/ ! end of controls namelist
+",
+    )
+    .expect("write inlist_stage2");
+
+    fs::write(
+        tmp_dir.join("rn"),
+        r"#!/usr/bin/env bash
+do_one inlist_stage1 stage1_out.mod
+do_one inlist_stage2 final.mod
+",
+    )
+    .expect("write rn");
+
+    let rep = run_test_suite_case(&tmp_dir, true, Some(10), true)
+        .expect("run 2-stage case");
+    assert_eq!(rep.stages.len(), 2);
+    assert_eq!(rep.stages[0].termination_code, "max_model_number");
+    assert_eq!(rep.stages[1].termination_code, "max_model_number");
+    assert!(rep.photo_restart_verified);
+    assert!(tmp_dir.join("stage1_out.mod").exists());
+    assert!(tmp_dir.join("final.mod").exists());
+
+    let _ = fs::remove_dir_all(&tmp_dir);
+}

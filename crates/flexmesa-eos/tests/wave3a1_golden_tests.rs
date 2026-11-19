@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-//! Golden parity and physical verification tests for Wave 3a.1
+//! Upstream MESA `26.4.1` oracle and physical verification tests for Wave 3a.1
 //! (`flexmesa-eos`: `blend`, `gauss_fermi`, `ion_offset`, `free_energy`, and
-//! `ideal`).
+//! `ideal`; `#161`, `T2-15`).
 
 #![allow(
     clippy::cast_precision_loss,
     clippy::similar_names,
     clippy::too_many_lines
 )]
+
+mod common;
 
 use flexmesa_autodiff::AutoDiffReal2VarOrder1;
 use flexmesa_const::{AMU, CLIGHT, CRAD, EV2ERG, KERG, LN10, ME};
@@ -20,8 +22,8 @@ use flexmesa_eos::{
     NIST_IONIZATION_TABLE_EV, NUM_EOS_BASIC_RESULTS,
 };
 
-/// Verifies `is_contained` and `min_distance_to_polygon` against all 5 golden
-/// outputs in `eos/test/test_output` (`do_test_eos_blend`, lines 465-474).
+/// Verifies `is_contained` and `min_distance_to_polygon` against all 5 outputs
+/// in `eos/test/test_output` (`do_test_eos_blend`, lines 465-474).
 #[test]
 fn test_eos_blend_matches_upstream_mesa_golden_output() {
     let coords = [[-1.0, -1.0], [-1.0, 1.0], [1.0, 1.0], [1.0, -1.0]];
@@ -75,8 +77,7 @@ fn test_eos_blend_matches_upstream_mesa_golden_output() {
     let d5 = min_distance_to_polygon(&coords, p5);
     assert!((d5.val - 2.0).abs() < 1.0e-15);
 
-    // Also verify seeded first-order partial derivatives at p = (-2.0, 0.25)
-    // (nearest edge is x = -1, so distance is -1 - x = 1.0, dd/dx = -1)
+    // Seeded first-order partial derivatives at p = (-2.0, 0.25)
     let p_seeded = [
         AutoDiffReal2VarOrder1::independent(-2.0, 0),
         AutoDiffReal2VarOrder1::independent(0.25, 1),
@@ -87,27 +88,52 @@ fn test_eos_blend_matches_upstream_mesa_golden_output() {
     assert!(d_seeded.d1[1].abs() < 1.0e-15);
 }
 
-/// Verifies `dfermi` against the `gfortran` oracle for `gauss_fermi.f90`
-/// (`eta = 1.46722890948893`, `T = 11327678.5183021`, `dk = -0.5` and `0.5`)
-/// and checks analytical derivatives against central finite differences.
+/// Verifies `dfermi` against compiled MESA `26.4.1` `eos_fermi_dirac_integral`
+/// (`eos/test/src/test_eos_support.f90:660-675` and 96-point `(dk, eta, theta)`
+/// grid in `mesa_26_4_1_eos_oracles.tsv`) plus central finite differences.
 #[test]
 fn test_dfermi_matches_upstream_mesa_dirac_integral_golden() {
     let eta = 1.467_228_909_488_93_f64;
     let t = 11_327_678.518_302_1_f64;
     let theta = (KERG * t) / (ME * CLIGHT * CLIGHT);
 
-    let (fdmh, fdeta_mh, fdtheta_mh) = dfermi(-0.5, eta, theta);
+    let m0p5 = common::load_scalar_row::<6>("DFERMI", "dirac_test_m0p5");
+    let p0p5 = common::load_scalar_row::<6>("DFERMI", "dirac_test_p0p5");
+    let p1p5 = common::load_scalar_row::<6>("DFERMI", "dirac_test_p1p5");
+    let p2p5 = common::load_scalar_row::<6>("DFERMI", "dirac_test_p2p5");
+
+    for row in [m0p5, p0p5, p1p5, p2p5] {
+        let (dk, eta_ref, theta_ref, exp_fd, exp_fdeta, exp_fdtheta) =
+            (row[0], row[1], row[2], row[3], row[4], row[5]);
+        assert!((eta - eta_ref).abs() < 1.0e-15);
+        assert!((theta - theta_ref).abs() < 1.0e-18);
+        let (fd, fdeta, fdtheta) = dfermi(dk, eta, theta);
+        assert!((fd - exp_fd).abs() < 1.0e-14);
+        assert!((fdeta - exp_fdeta).abs() < 1.0e-14);
+        assert!((fdtheta - exp_fdtheta).abs() < 1.0e-14);
+    }
+
+    let (fdmh, _, _) = dfermi(-0.5, eta, theta);
     let (fdph, fdeta_ph, fdtheta_ph) = dfermi(0.5, eta, theta);
     let calc_ratio = fdmh / fdph;
+    let exp_ratio = m0p5[3] / p0p5[3];
+    assert!((calc_ratio - exp_ratio).abs() < 1.0e-14);
 
-    // Exact gfortran oracle values from eos/private/gauss_fermi.f90
-    assert!((fdmh - 2.189_678_684_809_835_3).abs() < 1.0e-14);
-    assert!((fdeta_mh - 7.819_242_981_028_8e-1).abs() < 1.0e-14);
-    assert!((fdtheta_mh - 4.657_371_805_764_492_5e-1).abs() < 1.0e-14);
-    assert!((fdph - 1.866_572_507_339_512_3).abs() < 1.0e-14);
-    assert!((fdeta_ph - 1.095_729_024_204_351_1).abs() < 1.0e-14);
-    assert!((fdtheta_ph - 9.485_028_387_068_805e-1).abs() < 1.0e-14);
-    assert!((calc_ratio - 1.173_101_326_736_488_3).abs() < 1.0e-14);
+    // All 96 `(dk, eta, theta)` grid points against compiled MESA `26.4.1`
+    for idx in 0..96 {
+        let row =
+            common::load_scalar_row::<6>("DFERMI", &format!("grid_{idx}"));
+        let (fd, fdeta, fdtheta) = dfermi(row[0], row[1], row[2]);
+        for (got, exp) in
+            [(fd, row[3]), (fdeta, row[4]), (fdtheta, row[5])]
+        {
+            let scale = exp.abs().max(1.0);
+            assert!(
+                (got - exp).abs() / scale < 1.0e-14,
+                "grid_{idx}: got {got:.16e}, mesa_26_4_1 {exp:.16e}"
+            );
+        }
+    }
 
     // Verify analytical derivatives fdeta and fdtheta across k = -0.5..2.5
     let h_eta = 1.0e-6;
@@ -138,20 +164,16 @@ fn test_dfermi_matches_upstream_mesa_dirac_integral_golden() {
     assert!((fd_dual.val - fdph).abs() < 1.0e-15);
     assert!((fd_dual.d1[0] - fdeta_ph).abs() < 1.0e-15);
     assert!((fd_dual.d1[1] - fdtheta_ph).abs() < 1.0e-15);
-    let _ = (fdeta_mh, fdtheta_mh);
 }
 
 /// Verifies `compute_ion_offset` and `compute_ion_offset_from_za` against
 /// exact NIST atomic binding energies (`ion_offset.f90`).
 #[test]
 fn test_ion_offset_matches_nist_binding_table() {
-    // Pure hydrogen (Z=1, A=1): 13.598434599702 eV / amu
     let h_offset = compute_ion_offset_from_za(&[1.0], &[1], &[1.0]);
     let expected_h = NIST_IONIZATION_TABLE_EV[0] * EV2ERG / AMU;
     assert!((h_offset - expected_h).abs() / expected_h < 1.0e-15);
 
-    // Solar-like mixture (X=0.70 H1, Y=0.28 He4, Z=0.02 C12)
-    // Reproduces `eos/private/ion_offset.f90:58-81` at tag 26.4.1 (#192).
     let xa = [0.70, 0.28, 0.02];
     let z = [1_usize, 2, 6];
     let a = [1.0, 4.0, 12.0];
@@ -165,7 +187,6 @@ fn test_ion_offset_matches_nist_binding_table() {
         / AMU;
     assert!((mix_offset - expected_mix).abs() / expected_mix < 1.0e-15);
 
-    // Verify catalog-backed compute_ion_offset with H1, He4, C12
     let catalog = flexmesa_chem::NuclideCatalog::builtin();
     let ih1 = catalog.get_by_name("h1").unwrap().chem_id;
     let ihe4 = catalog.get_by_name("he4").unwrap().chem_id;
@@ -174,22 +195,28 @@ fn test_ion_offset_matches_nist_binding_table() {
     assert!((cat_offset - expected_mix).abs() / expected_mix < 1.0e-15);
 }
 
-/// Verifies `eval_ideal_eos` and `eval_ideal_eos_from_weights` against exact
-/// closed-form neutral ideal-gas + radiation laws and Maxwell thermodynamic
-/// identities.
+/// Verifies `eval_ideal_eos` and `eval_ideal_eos_from_weights` against compiled
+/// MESA `26.4.1` `eosDT_get_component(i_eos_ideal)`, closed-form neutral
+/// ideal-gas + radiation laws, and Maxwell thermodynamic identities.
 #[test]
 fn test_ideal_eos_satisfies_exact_laws_and_maxwell_relations() {
     let temp = 1.0e5_f64;
     let rho = 1.0e-2_f64;
     let xa = [0.70, 0.28, 0.02];
-    let weights = [1.007_825_032_2, 4.002_603_254_1, 12.0];
+    let catalog = flexmesa_chem::NuclideCatalog::builtin();
+    let chem_ids = [
+        catalog.get_by_name("h1").unwrap().chem_id,
+        catalog.get_by_name("he4").unwrap().chem_id,
+        catalog.get_by_name("c12").unwrap().chem_id,
+    ];
+    let weights = chem_ids.map(|id| catalog.get_by_id(id).unwrap().w);
     let a = [1.0, 4.0, 12.0];
-    let inv_abar = xa[0] / weights[0] + xa[1] / weights[1] + xa[2] / weights[2];
-    let abar = 1.0 / inv_abar;
-    let zbar = abar
-        * (xa[0] * 1.0 / weights[0]
-            + xa[1] * 2.0 / weights[1]
-            + xa[2] * 6.0 / weights[2]);
+    let comp = flexmesa_chem::get_composition_info(
+        &catalog, &chem_ids, &xa, false,
+    )
+    .unwrap();
+    let abar = comp.abar;
+    let zbar = comp.zbar;
 
     let out =
         eval_ideal_eos_from_weights(temp, rho, abar, zbar, &xa, &weights, &a)
@@ -219,10 +246,7 @@ fn test_ideal_eos_satisfies_exact_laws_and_maxwell_relations() {
     assert!((out.res[I_MU] - abar).abs() < 1.0e-15);
     assert!((out.res[I_FRAC_IDEAL] - 1.0).abs() < 1.0e-15);
 
-    // 4. Maxwell consistency relations (from sample_eos.f90 lines 327-329):
-    //    dse = T * (dS/dT)_rho / (dE/dT)_rho - 1 = 0
-    //    dpe = (rho^2 * (dE/drho)_T + T * (dP/dT)_rho) / P - 1 = 0
-    //    dsp = -(dS/drho)_T * rho^2 / (dP/dT)_rho - 1 = 0
+    // 4. Maxwell consistency relations (sample_eos.f90:327-329)
     let prad = CRAD * flexmesa_math::pow4(temp) / 3.0;
     let ptot = pgas_eval + prad;
     let dpgas_dt = pgas_eval * out.d_dln_t[I_LN_PGAS] / temp;
@@ -241,8 +265,7 @@ fn test_ideal_eos_satisfies_exact_laws_and_maxwell_relations() {
     assert!(dpe < 1.0e-14, "Maxwell dpe = {dpe:e}");
     assert!(dsp < 1.0e-14, "Maxwell dsp = {dsp:e}");
 
-    // 5. Verify log-derivatives d_dlnd and d_dln_t against symmetric central
-    //    differences in (ln T, ln rho)
+    // 5. Log-derivatives d_dlnd and d_dln_t against symmetric central FD
     let eps = 1.0e-5_f64;
     let out_tp = eval_ideal_eos_from_weights(
         temp * flexmesa_math::exp(eps),
@@ -312,29 +335,30 @@ fn test_ideal_eos_satisfies_exact_laws_and_maxwell_relations() {
         );
     }
 
-    // Exact 50-digit analytical oracles for dCp/dlnT and d(dE/drho)/dlnRho
-    let exact_dcp_dlnt = 15_131.562_343_485_932_f64;
+    // Closed-form analytical derivative for d(dE/drho)/dlnRho
     let exact_dde_drho_dlnd =
         2.0 * CRAD * flexmesa_math::pow4(temp) / (rho * rho);
-    assert!(
-        ((out.d_dln_t[I_CP] - exact_dcp_dlnt) / exact_dcp_dlnt).abs() < 1.0e-10
-    );
     assert!(
         ((out.d_dlnd[I_DE_DRHO] - exact_dde_drho_dlnd) / exact_dde_drho_dlnd)
             .abs()
             < 1.0e-10
     );
 
-    // Also check catalog-based eval_ideal_eos
-    let catalog = flexmesa_chem::NuclideCatalog::builtin();
-    let chem_ids = [
-        catalog.get_by_name("h1").unwrap().chem_id,
-        catalog.get_by_name("he4").unwrap().chem_id,
-        catalog.get_by_name("c12").unwrap().chem_id,
-    ];
+    // Direct 26-channel x 3-column comparison of catalog-based eval_ideal_eos
+    // against compiled MESA `26.4.1` `eosDT_get_component(i_eos_ideal)`
+    // (`dE_dRho = E * dlnE/dlnRho / rho` and `d(Cp)/dlnRho` cancel `E_gas` /
+    // `Cp_gas` out of `E_tot = 9.62e12` / `Cp = 1.60e8`, giving 1-2 ULP
+    // `3.30e-11` / `1.41e-11` differences; all other 25 primal slots < 1e-14).
     let out_cat =
         eval_ideal_eos(temp, rho, abar, zbar, &xa, &chem_ids).unwrap();
-    assert!((out_cat.res[I_LN_PGAS] - out.res[I_LN_PGAS]).abs() < 1.0e-12);
+    common::assert_eos_against_mesa(
+        "ideal_solar_1e5_1em2",
+        &out_cat,
+        1.0e-14,
+        5.0e-11,
+        &[("ideal_solar_1e5_1em2", I_DE_DRHO, 0, 5.0e-11)],
+        true,
+    );
 }
 
 /// Verifies `quintic_blend` and `blend_eos_results` against `Do_Blend` in

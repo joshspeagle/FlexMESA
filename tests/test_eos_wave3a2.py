@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import pathlib
+
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -10,19 +12,63 @@ import pytest
 
 import flexmesa
 from flexmesa import eos
+from flexmesa import math as fm_math
 
-SAMPLE_STATES: list[tuple[str, float, float, float, float]] = [
+_EOS_ORACLES_TSV = (
+    pathlib.Path(__file__).resolve().parents[1]
+    / "benchmarks"
+    / "fortran_mesa"
+    / "eos_oracles"
+    / "mesa_26_4_1_eos_oracles.tsv"
+)
+
+ORACLE_HELM_STATES: list[tuple[str, float, float, float, float]] = [
     ("pure_he_2e8_100", 2.0e8, 100.0, 4.0, 2.0),
     ("pure_h_2e8_100", 2.0e8, 100.0, 1.0, 1.0),
+    ("solar_2e8_100", 2.0e8, 100.0, 1.2966353410255222, 1.1021400398716938),
+    (
+        "test_components",
+        1.0e6,
+        float(fm_math.exp10(3.5)),
+        2.990964711670598,
+        1.6749402385355348,
+    ),
+    ("sample_eos_c12", 1.0e9, 1.0e4, 12.0, 6.0),
     ("mixed_z_2e8_100", 2.0e8, 100.0, 1.72, 1.15),
     ("solar_1e6_100", 1.0e6, 100.0, 1.29818593, 1.10539606),
-    ("test_components", 10.0**6.1, 10.0**0.1, 1.29666341, 1.10668478),
-    ("sample_eos_c12", 1.0e9, 1.0e6, 12.0, 6.0),
+    ("py_sample_eos_c12", 1.0e9, 1.0e6, 12.0, 6.0),
 ]
 
 
+def _load_helm_case(case_id: str) -> np.ndarray:
+    """Load a `16 x 5` `HELM` block from `mesa_26_4_1_eos_oracles.tsv`."""
+    arr = np.zeros((16, 5), dtype=np.float64)
+    seen = [False] * 16
+    for line in _EOS_ORACLES_TSV.read_text("utf-8").splitlines():
+        if not line or line.startswith("#"):
+            continue
+        cols = line.split("\t")
+        if cols[0] == "HELM" and cols[1] == case_id:
+            slot = int(cols[2])
+            arr[slot] = [float(x) for x in cols[3:8]]
+            seen[slot] = True
+    assert all(seen), f"Incomplete HELM oracle case: {case_id}"
+    return arr
+
+
+def _load_ierr_code(case_id: str) -> int:
+    """Load `ierr` from an `IERR` row in `mesa_26_4_1_eos_oracles.tsv`."""
+    for line in _EOS_ORACLES_TSV.read_text("utf-8").splitlines():
+        if not line or line.startswith("#"):
+            continue
+        cols = line.split("\t")
+        if cols[0] == "IERR" and cols[1] == case_id:
+            return int(cols[2])
+    raise AssertionError(f"Missing IERR row: {case_id}")
+
+
 def _rel_diff(a: np.ndarray, b: np.ndarray) -> float:
-    """Return max relative difference `|a - b| / max(|a|, |b|, 1.0)`."""
+    """Return max scaled difference `|a - b| / max(|a|, |b|, 1.0)`."""
     denom = np.maximum(np.maximum(np.abs(a), np.abs(b)), 1.0)
     return float(np.max(np.abs(a - b) / denom))
 
@@ -38,13 +84,13 @@ def _res_of_ln_td_az(
 
 
 @pytest.mark.parametrize(
-    ("label", "temp", "rho", "abar", "zbar"), SAMPLE_STATES
+    ("label", "temp", "rho", "abar", "zbar"), ORACLE_HELM_STATES
 )
-def test_eval_helm_eos_rust_jax_consistency_across_sample_states(
+def test_eval_helm_eos_matches_mesa_26_4_1_oracle_across_rust_and_jax(
     label: str, temp: float, rho: float, abar: float, zbar: float
 ) -> None:
-    """Verify `eval_helm_eos` JAX kernel vs Rust `strict` on sample states."""
-    del label
+    """Verify `eval_helm_eos` Rust `strict` and JAX against MESA `26.4.1`."""
+    exp = _load_helm_case(label)
     with flexmesa.numerics_mode_context("strict"):
         out_r, da_r, dz_r = eos.eval_helm_eos(
             temp, rho, abar, zbar, backend="rust"
@@ -56,25 +102,42 @@ def test_eval_helm_eos_rust_jax_consistency_across_sample_states(
         jnp.asarray(zbar, dtype=jnp.float64),
         backend="jax",
     )
-    assert _rel_diff(np.asarray(out_r.res), np.asarray(out_j.res)) < 1.0e-10
-    assert (
-        _rel_diff(np.asarray(out_r.d_dlnd), np.asarray(out_j.d_dlnd)) < 2.0e-6
+
+    got_r = np.column_stack(
+        [
+            np.asarray(out_r.res)[:16],
+            np.asarray(out_r.d_dlnd)[:16],
+            np.asarray(out_r.d_dln_t)[:16],
+            np.asarray(da_r)[:16],
+            np.asarray(dz_r)[:16],
+        ]
     )
-    assert (
-        _rel_diff(np.asarray(out_r.d_dln_t), np.asarray(out_j.d_dln_t)) < 2.0e-6
-    )
-    assert _rel_diff(np.asarray(da_r), np.asarray(da_j)) < 2.0e-6
-    assert _rel_diff(np.asarray(dz_r), np.asarray(dz_j)) < 2.0e-6
+    np.testing.assert_allclose(got_r, exp, rtol=1.0e-13, atol=1.0e-15)
+    assert np.all(np.asarray(out_r.res)[16 : eos.I_FRAC_HELM] == 0.0)
     assert float(out_r.res[eos.I_FRAC_HELM]) == 1.0
+    assert np.all(np.asarray(out_r.res)[eos.I_FRAC_HELM + 1 :] == 0.0)
+
+    got_j_res = np.asarray(out_j.res)[:16]
+    got_j_der = np.column_stack(
+        [
+            np.asarray(out_j.d_dlnd)[:16],
+            np.asarray(out_j.d_dln_t)[:16],
+            np.asarray(da_j)[:16],
+            np.asarray(dz_j)[:16],
+        ]
+    )
+    np.testing.assert_allclose(got_j_res, exp[:, 0], rtol=1.0e-10, atol=1.0e-15)
+    np.testing.assert_allclose(got_j_der, exp[:, 1:], rtol=3.0e-6, atol=1.0e-12)
     assert float(out_j.res[eos.I_FRAC_HELM]) == 1.0
 
 
-def test_eval_helm_eos_zones_matches_scalar_across_backends() -> None:
-    """Verify `eval_helm_eos_zones` JAX vs Rust `strict` consistency."""
-    temps = np.array([s[1] for s in SAMPLE_STATES], dtype=np.float64)
-    rhos = np.array([s[2] for s in SAMPLE_STATES], dtype=np.float64)
-    abars = np.array([s[3] for s in SAMPLE_STATES], dtype=np.float64)
-    zbars = np.array([s[4] for s in SAMPLE_STATES], dtype=np.float64)
+def test_eval_helm_eos_zones_and_off_table_error_match_mesa_26_4_1() -> None:
+    """Verify `eval_helm_eos_zones` and MESA `26.4.1` `IERR` rejection."""
+    temps = np.array([s[1] for s in ORACLE_HELM_STATES], dtype=np.float64)
+    rhos = np.array([s[2] for s in ORACLE_HELM_STATES], dtype=np.float64)
+    abars = np.array([s[3] for s in ORACLE_HELM_STATES], dtype=np.float64)
+    zbars = np.array([s[4] for s in ORACLE_HELM_STATES], dtype=np.float64)
+    exp_stack = np.stack([_load_helm_case(s[0]) for s in ORACLE_HELM_STATES])
 
     with flexmesa.numerics_mode_context("strict"):
         batch_r = eos.eval_helm_eos_zones(
@@ -87,24 +150,47 @@ def test_eval_helm_eos_zones_matches_scalar_across_backends() -> None:
         jnp.asarray(zbars),
         backend="jax",
     )
-    assert batch_r.res.shape == (len(SAMPLE_STATES), eos.NUM_EOS_BASIC_RESULTS)
-    assert _rel_diff(np.asarray(batch_r.res), np.asarray(batch_j.res)) < 1.0e-10
-    assert (
-        _rel_diff(np.asarray(batch_r.d_dlnd), np.asarray(batch_j.d_dlnd))
-        < 2.0e-6
+    assert batch_r.res.shape == (
+        len(ORACLE_HELM_STATES),
+        eos.NUM_EOS_BASIC_RESULTS,
     )
-    assert (
-        _rel_diff(np.asarray(batch_r.d_dln_t), np.asarray(batch_j.d_dln_t))
-        < 2.0e-6
+    np.testing.assert_allclose(
+        np.asarray(batch_r.res)[:, :16],
+        exp_stack[:, :, 0],
+        rtol=1.0e-13,
+        atol=1.0e-15,
+    )
+    np.testing.assert_allclose(
+        np.asarray(batch_j.res)[:, :16],
+        exp_stack[:, :, 0],
+        rtol=1.0e-10,
+        atol=1.0e-15,
+    )
+    np.testing.assert_allclose(
+        np.asarray(batch_j.d_dlnd)[:, :16],
+        exp_stack[:, :, 1],
+        rtol=3.0e-6,
+        atol=1.0e-12,
+    )
+    np.testing.assert_allclose(
+        np.asarray(batch_j.d_dln_t)[:, :16],
+        exp_stack[:, :, 2],
+        rtol=3.0e-6,
+        atol=1.0e-12,
     )
 
-    with pytest.raises(ValueError, match="eval_helm_eos failed"):
+    exp_ierr = _load_ierr_code("crystallized_wd_1e6_6p5")
+    assert exp_ierr != 0
+    with pytest.raises(ValueError, match=f"ierr = {exp_ierr}"):
         eos.eval_helm_eos(
-            1.0e6, 10.0**6.5, 13.714285714285715, 6.8571428571428577
+            1.0e6,
+            float(fm_math.exp10(6.5)),
+            13.714285714285715,
+            6.8571428571428577,
         )
     out_invalid, _, _ = eos.eval_helm_eos(
         jnp.asarray(1.0e6),
-        jnp.asarray(10.0**6.5),
+        jnp.asarray(float(fm_math.exp10(6.5))),
         jnp.asarray(13.714285714285715),
         jnp.asarray(6.8571428571428577),
         backend="jax",

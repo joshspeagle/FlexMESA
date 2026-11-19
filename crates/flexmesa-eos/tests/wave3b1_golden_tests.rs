@@ -17,6 +17,8 @@
     clippy::unreadable_literal
 )]
 
+mod common;
+
 use flexmesa_chem::NuclideCatalog;
 use flexmesa_const::{CRAD, LN10};
 use flexmesa_eos::{
@@ -435,6 +437,14 @@ fn test_wave3b1_components_cms_and_eospt_inversions() {
     )
     .expect("OPAL/SCVH standalone evaluation");
     assert_eq!(out_opal.res[I_FRAC_OPAL_SCVH], 1.0);
+    common::assert_eos_against_mesa(
+        "opal_scvh_solar_1em2_1e5",
+        &out_opal,
+        1.0e-14,
+        1.0e-14,
+        &[],
+        false,
+    );
 
     let out_free = eval_free_eos(
         dt_tables,
@@ -446,8 +456,19 @@ fn test_wave3b1_components_cms_and_eospt_inversions() {
     )
     .expect("FreeEOS standalone evaluation");
     assert_eq!(out_free.res[I_FRAC_FREE_EOS], 1.0);
+    common::assert_eos_against_mesa(
+        "free_eos_solar_1em2_1e6",
+        &out_free,
+        1.0e-14,
+        1.0e-14,
+        &[],
+        false,
+    );
 
-    let out_cms = eval_cms_eos(
+    // `CmsConfig::default()` currently sets `include_radiation: false` (declared
+    // `#161` gap below against MESA `eos.defaults:163`); verify both `norad` and
+    // radiation-enabled `CMS` against compiled MESA `26.4.1` across all 26x3 slots.
+    let out_cms_norad = eval_cms_eos(
         cms_tables,
         &CmsConfig::default(),
         1.0e-2,
@@ -455,14 +476,41 @@ fn test_wave3b1_components_cms_and_eospt_inversions() {
         &chem_id,
         &xa,
     )
-    .expect("CMS standalone evaluation");
-    assert_eq!(out_cms.res[I_FRAC_CMS], 1.0);
+    .expect("CMS standalone evaluation (include_radiation = false)");
+    assert_eq!(out_cms_norad.res[I_FRAC_CMS], 1.0);
+    common::assert_eos_against_mesa(
+        "cms_solar_1em2_1e5_norad",
+        &out_cms_norad,
+        1.0e-14,
+        2.0e-12,
+        &[],
+        false,
+    );
+
+    let cms_rad_cfg = CmsConfig {
+        include_radiation: true,
+        ..CmsConfig::default()
+    };
+    let out_cms_rad =
+        eval_cms_eos(cms_tables, &cms_rad_cfg, 1.0e-2, 1.0e5, &chem_id, &xa)
+            .expect("CMS standalone evaluation (include_radiation = true)");
+    assert_eq!(out_cms_rad.res[I_FRAC_CMS], 1.0);
+    common::assert_eos_against_mesa(
+        "cms_solar_1em2_1e5",
+        &out_cms_rad,
+        1.0e-14,
+        2.0e-12,
+        &[],
+        false,
+    );
 
     let cfg = EosConfig::default();
     let pt_ref = eos_pt_get(ht, &chem_id, &xa, 15.0, 7.2, &cfg)
         .expect("reference eosPT");
     let target_lne = pt_ref.eos.res[I_LN_E];
 
+    let exp_pt_t =
+        common::load_scalar_row::<6>("INV", "solar_pt_get_t_15_7p2");
     let inv_t = eos_pt_get_t(
         ht,
         &chem_id,
@@ -477,7 +525,31 @@ fn test_wave3b1_components_cms_and_eospt_inversions() {
         &cfg,
     )
     .expect("eos_pt_get_t must converge");
-    assert_rel_close("eosPT_get_T logT", inv_t.log10_result, 7.2, 1.0e-5);
+    assert_rel_close("eosPT_get_T logT", inv_t.log10_result, exp_pt_t[0], 1.0e-12);
+    assert_rel_close(
+        "eosPT_get_T log10_rho",
+        inv_t.pt.log10_rho,
+        exp_pt_t[1],
+        1.0e-12,
+    );
+    assert_rel_close(
+        "eosPT_get_T lnE",
+        inv_t.pt.eos.res[I_LN_E],
+        exp_pt_t[2],
+        1.0e-12,
+    );
+    assert_rel_close(
+        "eosPT_get_T dlnRho_dlnPgas",
+        inv_t.pt.dln_rho_dln_pgas_const_t,
+        exp_pt_t[4],
+        1.0e-12,
+    );
+    assert_rel_close(
+        "eosPT_get_T dlnRho_dlnT",
+        inv_t.pt.dln_rho_dln_t_const_pgas,
+        exp_pt_t[5],
+        1.0e-12,
+    );
 
     let inv_pgas = eos_pt_get_pgas(
         ht,
@@ -508,4 +580,28 @@ fn test_wave3b1_components_cms_and_eospt_inversions() {
         ht, &chem_id, &xa, 15.0, 99, 0.0, 7.0, 1.0e-6, 1.0e-6, 10, &cfg
     )
     .is_err());
+}
+
+#[test]
+#[ignore = "declared gap (#161): CmsConfig::default().include_radiation is false whereas MESA eos/defaults/eos.defaults:163 sets include_radiation = .true. (dS_dT -1984.67 vs +1525.74)"]
+fn test_cms_default_config_matches_mesa_26_4_1_default_radiation() {
+    let cms_tables = CmsTableSet::builtin();
+    let (chem_id, xa) = init_composition(0.70, 0.02, 0.0, 0.0);
+    let out_cms_def = eval_cms_eos(
+        cms_tables,
+        &CmsConfig::default(),
+        1.0e-2,
+        1.0e5,
+        &chem_id,
+        &xa,
+    )
+    .expect("CMS standalone evaluation");
+    common::assert_eos_against_mesa(
+        "cms_solar_1em2_1e5",
+        &out_cms_def,
+        1.0e-12,
+        1.0e-12,
+        &[],
+        false,
+    );
 }

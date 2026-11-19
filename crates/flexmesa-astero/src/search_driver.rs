@@ -66,7 +66,7 @@ struct AsteroTrackExtras<'a> {
 impl AsteroTrackExtras<'_> {
     fn set_max_years_dt(model: &mut StarModel, max_yrs: f64) {
         let yrs = max_yrs.max(1.0);
-        model.controls.max_years_for_timestep = Some(yrs);
+        model.controls.max_years_for_timestep = yrs;
         model.dt = model.dt.min(yrs * SECYER);
         model.dt_next = model.dt_next.min(yrs * SECYER);
     }
@@ -159,11 +159,12 @@ impl StarExtras for AsteroTrackExtras<'_> {
         }
         if checking_age && model.star_age < self.ctrl.age_target {
             let rem = (self.ctrl.age_target - model.star_age).max(1.0);
-            let cur_max = model
-                .controls
-                .max_years_for_timestep
-                .unwrap_or(self.ctrl.max_yrs_dt_when_cold)
-                .max(1.0);
+            let cur_max = if model.controls.max_years_for_timestep > 0.0 {
+                model.controls.max_years_for_timestep
+            } else {
+                self.ctrl.max_yrs_dt_when_cold
+            }
+            .max(1.0);
             if rem <= cur_max {
                 Self::set_max_years_dt(model, rem);
             } else if self.ctrl.num_smaller_steps_before_age_target > 0
@@ -387,7 +388,7 @@ fn apply_params_to_bundle(
     }
     if !ctrl.eval_chi2_at_target_age_only && !ctrl.include_age_in_chi2_spectro {
         bundle.controls.max_years_for_timestep =
-            Some(ctrl.max_yrs_dt_when_cold.max(1.0));
+            ctrl.max_yrs_dt_when_cold.max(1.0);
     }
     Ok(())
 }

@@ -200,6 +200,10 @@ pub struct HydroAuxState {
     pub csound_start: Vec<f64>,
     /// Start-of-step face convective velocity $v_{c,\mathrm{old},k}$ in $\mathrm{cm\,s^{-1}}$ (`mlt_vc_old`).
     pub mlt_vc_old: Vec<f64>,
+    /// Whether `mlt_vc` holds valid convective velocities from the prior step (`have_mlt_vc`).
+    pub have_mlt_vc: bool,
+    /// Constant-mass inner boundary zone index during mass adjustment (`k_const_mass`).
+    pub k_const_mass: usize,
     /// Rayleigh-Taylor instability face kinematic diffusivity $\eta_{\mathrm{RTI},k}$ (`eta_RTI`).
     pub eta_rti: Vec<f64>,
     /// Rayleigh-Taylor instability cell kinematic diffusivity $\eta_{\mathrm{mid,RTI},k}$ (`etamid_RTI`).
@@ -325,6 +329,8 @@ impl HydroAuxState {
             hp_face_old: vec![0.0; nz],
             csound_start: vec![0.0; nz],
             mlt_vc_old: vec![0.0; nz],
+            have_mlt_vc: false,
+            k_const_mass: 0,
             eta_rti: vec![0.0; nz],
             etamid_rti: vec![0.0; nz],
             sig_rti: vec![0.0; nz],
@@ -455,7 +461,7 @@ impl HydroAuxState {
         chi_t: &[f64],
         chi_rho: &[f64],
         csound: &[f64],
-        mlt_vc: &[f64],
+        _mlt_vc: &[f64],
     ) {
         self.cp_start.clone_from_slice(cp);
         self.grada_start.clone_from_slice(grada);
@@ -464,7 +470,6 @@ impl HydroAuxState {
         self.csound_start.clone_from_slice(csound);
         self.etrb_start.clone_from(&self.etrb);
         self.alpha_rti_start.clone_from(&self.alpha_rti);
-        self.mlt_vc_old.clone_from_slice(mlt_vc);
     }
 }
 

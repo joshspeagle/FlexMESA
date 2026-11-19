@@ -73,15 +73,22 @@ pub fn update_sig_from_d_mix(model: &mut StarModel) {
     if nz == 0 {
         return;
     }
+    if !model.controls.do_mix || model.controls.mix_factor <= 0.0 {
+        model.sig.fill(0.0);
+        return;
+    }
+    let mix_fac = model.controls.mix_factor;
+    let sig_term = model.controls.sig_term_limit;
     model.sig[0] = 0.0;
     for k in 1..nz {
         let rho_f = model.interp_val_to_pt(&model.rho, k);
         let area_rho = FOUR_PI * model.r[k] * model.r[k] * rho_f;
         let dm_bar_k = model.dm_bar[k].max(1.0e-30);
-        let mut sig_k = (area_rho * area_rho) * model.d_mix[k] / dm_bar_k;
-        if model.dt > 0.0 {
+        let mut sig_k =
+            mix_fac * (area_rho * area_rho) * model.d_mix[k] / dm_bar_k;
+        if model.dt > 0.0 && sig_term > 0.0 {
             let dm_min = model.dm[k - 1].min(model.dm[k]).max(1.0e-30);
-            sig_k = sig_k.min(1.0e6 * dm_min / model.dt);
+            sig_k = sig_k.min(sig_term * dm_min / model.dt);
         }
         model.sig[k] = sig_k;
     }
@@ -233,11 +240,24 @@ fn eval_face_mlt(
                 model.controls.mlt_option
             };
             let vc_old = model.aux.mlt_vc_old.get(k).copied().unwrap_or(0.0);
-            let tdc_res = if mlt_opt == MltOption::Tdc
-                && model.dt > 0.0
+            let using_tdc = mlt_opt == MltOption::Tdc
+                && model.aux.have_mlt_vc
                 && k > 0
-                && vc_old > 0.0
+                && model.dt > 0.0
+                && !(model.mstar_dot.abs() > 1.0e-99
+                    && k < model.aux.k_const_mass);
+            let max_conv_vel = if k > 0
+                && model.controls.max_conv_vel_div_csound >= 0.0
+                && model.q[k]
+                    <= model.controls.output.max_conv_vel_div_csound_maxq
             {
+                (model.interp_val_to_pt(&model.csound, k)
+                    * model.controls.max_conv_vel_div_csound)
+                    .max(0.0)
+            } else {
+                1.0e99
+            };
+            let tdc_res = if using_tdc {
                 let e_f =
                     model.interp_eos_ad_to_face(&model.ln_e, I_LN_E, k).exp();
                 let dv_f = if model.lnd_old.len() == model.nz {
@@ -250,27 +270,32 @@ fn eval_face_mlt(
                 } else {
                     StarAdOrder1::ZERO
                 };
+                let l_ref = if model.aux.doing_struct_burn_mix
+                    && model.lum_start.len() == model.nz
+                {
+                    &model.lum_start
+                } else {
+                    &model.lum
+                };
+                let l_max =
+                    l_ref.iter().copied().map(f64::abs).fold(0.0_f64, f64::max);
+                let scale = l_ref[k].abs().max(1.0e-3 * l_max).max(1.0e-30);
                 let tdc_params = TdcParams {
                     conv_vel_start: vc_old,
                     mixing_length_alpha: alpha_mlt,
-                    tdc_alpha_d: 1.0,
+                    tdc_alpha_d: model.controls.tdc_alpha_d,
                     tdc_alpha_r: model.controls.tdc_alpha_r,
-                    tdc_alpha_pt: 0.0,
-                    tdc_alpha_c: 1.0,
-                    tdc_alpha_s: 1.0,
+                    tdc_alpha_pt: model.controls.tdc_alpha_pt,
+                    tdc_alpha_c: model.controls.tdc_alpha_c,
+                    tdc_alpha_s: model.controls.tdc_alpha_s,
                     dt: model.dt,
                     cgrav: model.cgrav[k],
                     m: model.m_grav[k].max(1.0),
-                    scale: model
-                        .lum
-                        .first()
-                        .copied()
-                        .unwrap_or(1.0)
-                        .abs()
-                        .max(model.lum[k].abs())
-                        .max(1.0e20),
-                    max_conv_vel: 1.0e99,
-                    include_mlt_corr_to_tdc: true,
+                    scale,
+                    max_conv_vel,
+                    include_mlt_corr_to_tdc: model
+                        .controls
+                        .include_mlt_corr_to_tdc,
                     use_tdc_enthalpy_flux_limiter: model
                         .controls
                         .rsp2
@@ -310,9 +335,9 @@ fn eval_face_mlt(
                 let mlt_params = MltParams {
                     option: mlt_opt,
                     mixing_length_alpha: alpha_mlt,
-                    henyey_nu: 8.0,
-                    henyey_y: 1.0 / 3.0,
-                    max_conv_vel: 1.0e99,
+                    henyey_nu: model.controls.henyey_mlt_nu_param,
+                    henyey_y: model.controls.henyey_mlt_y_param,
+                    max_conv_vel,
                 };
                 let mlt_in = MltInputs {
                     chi_t: chi_t_f,

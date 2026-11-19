@@ -389,14 +389,13 @@ pub fn do1_chem_eqns(model: &StarModel, k: usize, sys: &mut HenyeySystem) {
         && model.controls.dxdt_nuc_factor != 0.0
         && !doing_op_split_burn;
 
-    let mix_fac = if model.controls.do_mix {
-        model.controls.mix_factor
+    let sig_00 = if model.controls.do_mix && k > 0 {
+        model.sig[k]
     } else {
         0.0
     };
-    let sig_00 = if k > 0 { model.sig[k] * mix_fac } else { 0.0 };
-    let sig_p1 = if k + 1 < nz {
-        model.sig[k + 1] * mix_fac
+    let sig_p1 = if model.controls.do_mix && k + 1 < nz {
+        model.sig[k + 1]
     } else {
         0.0
     };

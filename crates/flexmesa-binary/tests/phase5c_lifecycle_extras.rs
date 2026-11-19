@@ -200,7 +200,8 @@ fn test_relax_composition_with_henyey_low_metallicity_equilibration() {
         new_z: 0.00034,
         relax_y: true,
         new_y: 0.248_246,
-        new_surface_rotation_v: Some(50.0),
+        set_surface_rotation_v: true,
+        new_surface_rotation_v: 50.0,
         ..StarJobControls::default()
     };
 

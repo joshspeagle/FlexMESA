@@ -452,12 +452,12 @@ fn test_multistage_rn_logs_dir_routing() {
     .expect("write rn");
     fs::write(
         ms_case.path().join("inlist_s1"),
-        "&star_job\n  steps_to_take_before_terminate = 1\n/\n&controls\n  initial_mass = 1.0\n  initial_z = 0.02\n  history_interval = 1\n  write_profiles_flag = .false.\n/\n",
+        "&star_job\n  steps_to_take_before_terminate = 1\n/\n&controls\n  initial_mass = 1.0\n  initial_z = 0.02\n  history_interval = 1\n  write_profiles_flag = .false.\n/\n&kap\n  zbase = 0.02d0\n/\n",
     )
     .expect("write inlist_s1");
     fs::write(
         ms_case.path().join("inlist_s2"),
-        "&star_job\n  load_saved_model = .true.\n  load_model_filename = 's1.mod'\n  steps_to_take_before_terminate = 1\n/\n&controls\n  initial_mass = 1.0\n  initial_z = 0.02\n  history_interval = 1\n  write_profiles_flag = .false.\n/\n",
+        "&star_job\n  load_saved_model = .true.\n  load_model_filename = 's1.mod'\n  steps_to_take_before_terminate = 1\n/\n&controls\n  initial_mass = 1.0\n  initial_z = 0.02\n  history_interval = 1\n  write_profiles_flag = .false.\n/\n&kap\n  zbase = 0.02d0\n/\n",
     )
     .expect("write inlist_s2");
     let rep = flexmesa_star::run_test_suite_case_with_logs(

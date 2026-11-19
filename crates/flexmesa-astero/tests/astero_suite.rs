@@ -84,7 +84,7 @@ fn test_offline_synthetic_mock_case_runs_two_steps_with_restart_parity() {
         .expect("write rn");
     fs::write(
         tmp.join("inlist"),
-        "&star_job\n  save_model_when_terminate = .true.\n  save_model_filename = 'final.mod'\n/\n&controls\n  initial_mass = 1.1\n  initial_z = 0.02\n  max_model_number = 2\n/\n",
+        "&star_job\n  save_model_when_terminate = .true.\n  save_model_filename = 'final.mod'\n/\n&controls\n  initial_mass = 1.1\n  initial_z = 0.02\n  max_model_number = 2\n/\n&kap\n  zbase = 0.02d0\n/\n",
     )
     .expect("write inlist");
     fs::write(
@@ -242,8 +242,7 @@ fn test_surface_effects_case_recovers_synthetic_targets_and_bison_solar_fits() {
         ((a_div_r / target_a_div_r) - 1.0).abs() < solar_tol,
         "a_div_r={a_div_r} vs target={target_a_div_r}"
     );
-    let (_, a3_sol) =
-        eval_cubic_corr(&obs_f, &obs_sig, &mod_f, &mod_in, 1.0);
+    let (_, a3_sol) = eval_cubic_corr(&obs_f, &obs_sig, &mod_f, &mod_in, 1.0);
     assert!(a3_sol <= 0.0 && ((a3_sol / target_a3) - 1.0).abs() < solar_tol);
 
     let (_, b3_sol, b1_sol) =
@@ -305,22 +304,24 @@ fn assert_uncapped_case_passes(case_name: &str) {
         ..Default::default()
     };
     let rep = flexmesa_astero::e2e::run_astero_test_suite_case_with_logs(
-        &cleaned,
-        true,
-        None,
-        true,
-        logs_opts,
+        &cleaned, true, None, true, logs_opts,
     )
     .unwrap_or_else(|e| panic!("astero case {case_name} errored: {e}"));
     assert_eq!(rep.case_name, case_name);
     if case_name == "surface_effects" {
         let freqs_text = fs::read_to_string(cleaned.join("freqs.dat"))
             .expect("surface_effects freqs.dat");
-        assert_eq!(freqs_text.lines().filter(|l| !l.trim().is_empty()).count(), 81);
+        assert_eq!(
+            freqs_text.lines().filter(|l| !l.trim().is_empty()).count(),
+            81
+        );
     } else if case_name == "example_astero" {
         let (samples, best_chi2) = parse_search_chi2(&rep.termination_code)
             .unwrap_or_else(|| {
-                panic!("unexpected search termination string: {}", rep.termination_code)
+                panic!(
+                    "unexpected search termination string: {}",
+                    rep.termination_code
+                )
             });
         assert_eq!(samples, 1);
         assert!(
@@ -374,9 +375,13 @@ fn test_all_eight_astero_cases_bounded_eight_steps_pass() {
         "missing astero test_suite directory: {}",
         suite_dir.display()
     );
-    let raw_err =
-        run_astero_test_suite_case(&suite_dir.join("astero_adipls"), true, Some(2), true)
-            .expect_err("raw $MESA_DIR astero case must reject unsupported controls");
+    let raw_err = run_astero_test_suite_case(
+        &suite_dir.join("astero_adipls"),
+        true,
+        Some(2),
+        true,
+    )
+    .expect_err("raw $MESA_DIR astero case must reject unsupported controls");
     assert!(
         matches!(raw_err, StarError::InvalidInput(_))
             && raw_err.to_string().contains("unsupported control"),
@@ -398,12 +403,17 @@ fn test_all_eight_astero_cases_bounded_eight_steps_pass() {
             Some(8),
             true,
         )
-        .unwrap_or_else(|e| panic!("bounded astero case {case_name} errored: {e}"));
+        .unwrap_or_else(|e| {
+            panic!("bounded astero case {case_name} errored: {e}")
+        });
         assert_eq!(rep.case_name, case_name);
         assert!(rep.photo_restart_verified);
         assert!(rep.assertions_passed);
         if case_name == "surface_effects" {
-            assert!(rep.passed, "surface_effects must pass at 0 steps: {rep:?}");
+            assert!(
+                rep.passed,
+                "surface_effects must pass at 0 steps: {rep:?}"
+            );
         } else {
             assert!(
                 !rep.passed,

@@ -555,6 +555,7 @@ pub fn read_mod_str(
         model.conv_vel.clone_from(&vc);
         model.aux.mlt_vc_old.clone_from(&vc);
         model.mlt_vc = vc;
+        model.aux.have_mlt_vc = true;
     }
     if let Some(hp) = saved_hp {
         model.scale_height.clone_from(&hp);

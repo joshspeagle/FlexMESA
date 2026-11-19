@@ -35,8 +35,8 @@ use crate::controls::StarError;
 use crate::hydro_vars::set_hydro_vars;
 use crate::micro::{do_eos, do_kap, resolve_model_net, set_basic_vars};
 use crate::mix_info::{
-    clean_mixing_glitches, compute_convection_sigmas,
-    locate_convection_boundaries,
+    apply_min_d_mix_floor, clean_mixing_glitches_from_controls,
+    compute_convection_sigmas, locate_convection_boundaries,
 };
 use crate::model::StarModel;
 pub use crate::omega_mix::solve_omega_mix;
@@ -404,8 +404,11 @@ pub(crate) fn refresh_mixing_state(
             }
         }
     }
-    if model.controls.remove_mixing_glitches {
-        clean_mixing_glitches(model, 1.0, 0.1);
+    if model.controls.remove_mixing_glitches
+        && !model.controls.rsp_flag
+        && !model.controls.rsp2_flag
+    {
+        clean_mixing_glitches_from_controls(model);
     }
     if model.controls.do_mix && model.controls.mix_factor > 0.0 {
         crate::premix::apply_predictive_mixing_from_controls(model);
@@ -415,7 +418,18 @@ pub(crate) fn refresh_mixing_state(
     if has_rot_mix {
         crate::rotation::augment_d_mix_with_rotation(model);
     }
-    compute_convection_sigmas(model, dt, 1.0, 1.0e13);
+    apply_min_d_mix_floor(model);
+    let eff_mix_factor = if model.controls.do_mix {
+        model.controls.mix_factor
+    } else {
+        0.0
+    };
+    compute_convection_sigmas(
+        model,
+        dt,
+        eff_mix_factor,
+        model.controls.sig_term_limit,
+    );
     if model.controls.rti_flag
         && model.controls.do_mix
         && model.controls.mix_factor > 0.0

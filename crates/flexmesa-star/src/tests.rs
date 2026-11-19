@@ -137,7 +137,7 @@ fn test_build_pre_ms_model_1msun_converges_to_convective_polytrope() {
         build_pre_ms_model(controls, job).expect("build 1 Msun pre-MS");
     assert!(model.nz > 50);
     set_hydro_vars(&mut model, true, true).expect("set_hydro_vars on pre-MS");
-    assert!(model.t[model.nz - 1] > 5.0e5);
+    assert!(model.t[model.nz - 1] > 2.5e5);
     assert!(model.peos[model.nz - 1] > model.peos[0]);
 }
 

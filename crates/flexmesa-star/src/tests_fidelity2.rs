@@ -170,6 +170,7 @@ fn test_eval_face_mlt_semiconvection_thermohaline_and_tdc_dispatch() {
         .expect("convective face in 1 Msun ZAMS");
     model.controls.mlt_option = MltOption::Tdc;
     model.dt = 1.0e4;
+    model.aux.have_mlt_vc = true;
     model.aux.mlt_vc_old[k_conv] = model.mlt_vc[k_conv].max(1.0e3);
     set_mlt_vars(&mut model).expect("set_mlt_vars with TDC");
     assert_eq!(model.mixing_type[k_conv], MixingType::ConvectiveMixing);

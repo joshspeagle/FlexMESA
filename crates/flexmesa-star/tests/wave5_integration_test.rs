@@ -160,6 +160,10 @@ fn test_e2e_0_inlist_bundle_net_change_termination_and_photo_restart_parity() {
    extra_controls_inlist_name(1) = 'inlist_common'
    max_model_number = 3
 / ! end of controls namelist
+
+&kap
+   zbase = 0.02d0
+/ ! end of kap namelist
 ",
     )
     .expect("write inlist_stage1");
@@ -179,6 +183,10 @@ fn test_e2e_0_inlist_bundle_net_change_termination_and_photo_restart_parity() {
    extra_controls_inlist_name(1) = 'inlist_common'
    max_model_number = 5
 / ! end of controls namelist
+
+&kap
+   zbase = 0.02d0
+/ ! end of kap namelist
 ",
     )
     .expect("write inlist_stage2");

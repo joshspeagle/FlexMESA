@@ -93,6 +93,8 @@ pub fn restore_from_old(model: &mut StarModel) -> Result<(), StarError> {
     model.aux.rsp.et_rsp.clone_from(&model.aux.et_rsp_old);
     model.aux.rsp.hp_face.clone_from(&model.aux.hp_face_old);
     model.aux.alpha_rti.clone_from(&model.aux.alpha_rti_old);
+    model.mlt_vc.clone_from(&model.aux.mlt_vc_old);
+    model.conv_vel.clone_from(&model.aux.mlt_vc_old);
     if model.aux.omega_old.len() == model.nz {
         model.omega.clone_from(&model.aux.omega_old);
         model.j_rot.clone_from(&model.aux.j_rot_old);
@@ -243,8 +245,8 @@ pub fn star_evolve_step_with_extras(
             model.controls.min_timestep_limit
         )));
     }
-    if let Some(max_yr) = model.controls.max_years_for_timestep {
-        dt_try = dt_try.min(max_yr * SECYER);
+    if model.controls.max_years_for_timestep > 0.0 {
+        dt_try = dt_try.min(model.controls.max_years_for_timestep * SECYER);
     }
     if model.controls.rsp.max_timestep > 0.0 {
         dt_try = dt_try.min(model.controls.rsp.max_timestep);
@@ -271,8 +273,7 @@ pub fn star_evolve_step_with_extras(
     loop {
         model.dt = dt_try;
         if model.controls.use_other_adjust_mdot {
-            let prev_rot_boost =
-                model.aux.step_hist.rotational_mdot_boost_old;
+            let prev_rot_boost = model.aux.step_hist.rotational_mdot_boost_old;
             do_set_mdot_with_extras(model, extras)?;
             if let Some(adj_mdot) =
                 extras.other_adjust_mdot(model, model.mstar_dot)?
@@ -327,10 +328,7 @@ pub fn star_evolve_step_with_extras(
                             new_mdot,
                         ) => {
                             if mdot_redo.last_w_div_w_crit()
-                                > model
-                                    .controls
-                                    .surf_omega_div_omega_crit_limit
-                                    .unwrap_or(0.99)
+                                > model.controls.surf_omega_div_omega_crit_limit
                             {
                                 last_conv_mdot = Some(model.mstar_dot);
                             }
@@ -430,8 +428,9 @@ pub fn star_evolve_step_with_extras(
         // errors without burning retry budget or shrinking `dt`.
         if matches!(&attempt, Err(e) if !e.is_retriable()) {
             restore_attempt_state(model, pre_remesh_model.take(), saved)?;
-            return Err(attempt
-                .expect_err("matched non-retriable StarError above"));
+            return Err(
+                attempt.expect_err("matched non-retriable StarError above")
+            );
         }
 
         let target_mod = model.model_number + 1;
@@ -708,8 +707,8 @@ fn finalize_accepted_step(
     num_splits: usize,
     num_merges: usize,
 ) -> EvolveStepReport {
-    if let Some(max_yr) = model.controls.max_years_for_timestep {
-        dt_next = dt_next.min(max_yr * SECYER);
+    if model.controls.max_years_for_timestep > 0.0 {
+        dt_next = dt_next.min(model.controls.max_years_for_timestep * SECYER);
     }
     if model.controls.rsp.max_timestep > 0.0 {
         dt_next = dt_next.min(model.controls.rsp.max_timestep);
@@ -727,6 +726,7 @@ fn finalize_accepted_step(
     model.dt_next = dt_next;
     model.dt_old = dt_try;
     model.aux.step_hist.mstar_dot_old = model.mstar_dot;
+    model.aux.have_mlt_vc = true;
 
     EvolveStepReport {
         model_number: model.model_number,
@@ -807,7 +807,8 @@ pub fn star_evolve(
                 break;
             }
         }
-        if let Some(max_age) = model.controls.max_age {
+        let max_age = model.controls.max_age;
+        if max_age > 0.0 {
             if model.star_age >= max_age * (1.0 - 1.0e-12) {
                 break;
             }

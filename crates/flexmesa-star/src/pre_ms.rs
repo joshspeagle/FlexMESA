@@ -227,7 +227,11 @@ pub fn build1_pre_ms_model(
     // Inner-most shell (`pre_ms_model.f90:451-474`, using Kippenhahn & Weigert
     // Eq. 10.6 matched to `d_log10_p` so `dm[nz-2] / dm[nz-1] = O(1)` for any
     // step size `d_log10_p`).
-    let d_log10_p = job.pre_ms_d_log10_p.max(1.0e-4);
+    let d_log10_p = if job.pre_ms_d_log10_p <= 0.0 {
+        0.004
+    } else {
+        job.pre_ms_d_log10_p
+    };
     let dp_target_c = p_c * (1.0 - exp10(-0.5 * d_log10_p));
     let kw_factor = (3.0 * STANDARD_CGRAV / (8.0 * flexmesa_const::PI))
         * flexmesa_math::pow(FOUR_PI * rho_c / 3.0, 4.0 / 3.0);

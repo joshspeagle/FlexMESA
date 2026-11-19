@@ -7,17 +7,18 @@ pub use crate::cms::config::{
 
 use crate::helm::table_io::resolve_mesa_data_dir;
 use crate::tables_4d::slice_cache::load_or_build_cms_slice;
-use crate::tables_4d::spline::{EosDtVertex, NUM_EOS_TABLE_VALS};
+use crate::tables_4d::spline::{
+    build_4d_slice_vertices, validate_4d_grid_header, EosDtVertex,
+    NUM_EOS_TABLE_VALS,
+};
 use crate::types::{
     EosError, I_CHI_RHO, I_CHI_T, I_CP, I_CV, I_DE_DRHO, I_DS_DRHO, I_DS_DT,
     I_ETA, I_GAMMA1, I_GAMMA3, I_GRAD_AD, I_LN_E, I_LN_FREE_E, I_LN_PGAS,
     I_LN_S, I_MU,
 };
 use flexmesa_const::LN10;
-use flexmesa_interp2d::{interp_mkbicub_db, BicubicBc};
 use flexmesa_math::safe_log;
 use flexmesa_utils::is_bad;
-use rayon::prelude::*;
 use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock};
@@ -88,6 +89,7 @@ impl CmsXTable {
 
     #[allow(clippy::too_many_arguments)]
     fn build_from_raw_vars(
+        table_label: &str,
         version: i32,
         x: f64,
         num_log_ts: usize,
@@ -106,44 +108,13 @@ impl CmsXTable {
         let log_rhos: Vec<f64> = (0..num_log_rhos)
             .map(|j| log_rho_min + (j as f64) * delta_log_rho)
             .collect();
-        let ngrid = num_log_ts * num_log_rhos;
-
-        let fitted: Vec<Vec<[f64; 4]>> = (0..NUM_EOS_TABLE_VALS)
-            .into_par_iter()
-            .map(|v| {
-                let z_slice = &raw_vars[v * ngrid..(v + 1) * ngrid];
-                interp_mkbicub_db(
-                    &log_ts,
-                    &log_rhos,
-                    z_slice,
-                    BicubicBc::NotAKnot,
-                    &[],
-                    BicubicBc::NotAKnot,
-                    &[],
-                    BicubicBc::NotAKnot,
-                    &[],
-                    BicubicBc::NotAKnot,
-                    &[],
-                )
-                .map(|(coeffs, _, _)| coeffs)
-                .map_err(|e| EosError::InvalidState {
-                    context: "CmsXTable::build_from_raw_vars",
-                    detail: format!(
-                        "interp_mkbicub_db failed for var {v}: {e}"
-                    ),
-                })
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-
-        let mut dense = vec![EosDtVertex::default(); ngrid];
-        for (v, coeffs) in fitted.iter().enumerate() {
-            for (cell, c4) in coeffs.iter().enumerate() {
-                for (m, &val) in c4.iter().enumerate() {
-                    dense[cell].coeffs[v * 4 + m] =
-                        if is_bad(val) { 0.0 } else { val };
-                }
-            }
-        }
+        let dense = build_4d_slice_vertices(
+            "CmsXTable::build_from_raw_vars",
+            table_label,
+            &log_ts,
+            &log_rhos,
+            raw_vars,
+        )?;
 
         Ok(Self {
             version,
@@ -162,9 +133,10 @@ impl CmsXTable {
 
     /// Reads a compact `FMCMSR01` raw binary slice (`eos_4d_raw/mesa-CMS_*.raw`) and fits its 16 bicubic splines.
     pub fn from_raw_bin(path: &Path) -> Result<Self, EosError> {
+        let table_label = path.display().to_string();
         let err = |msg: String| EosError::TableIo {
             context: "CmsXTable::from_raw_bin",
-            detail: msg,
+            detail: format!("{table_label}: {msg}"),
         };
         let file = std::fs::File::open(path).map_err(|e| err(e.to_string()))?;
         let mut reader = BufReader::with_capacity(256 * 1024, file);
@@ -175,42 +147,83 @@ impl CmsXTable {
         if &hdr[0..8] != CMS_RAW_BIN_MAGIC {
             return Err(err("invalid FMCMSR01 magic".to_string()));
         }
-        let f64_at = |off: usize| -> f64 {
-            f64::from_le_bytes(hdr[off..off + 8].try_into().unwrap_or([0; 8]))
+        let f64_at = |off: usize| -> Result<f64, EosError> {
+            let bytes: [u8; 8] = hdr[off..off + 8]
+                .try_into()
+                .map_err(|_| err("short FMCMSR01 header slice".to_string()))?;
+            Ok(f64::from_le_bytes(bytes))
         };
-        let version =
-            i32::from_le_bytes(hdr[8..12].try_into().unwrap_or([0; 4]));
-        let x = f64_at(12);
-        let num_log_ts =
-            u32::from_le_bytes(hdr[20..24].try_into().unwrap_or([0; 4]))
-                as usize;
-        let log_t_min = f64_at(24);
-        let log_t_max = f64_at(32);
-        let delta_log_t = f64_at(40);
-        let num_log_rhos =
-            u32::from_le_bytes(hdr[48..52].try_into().unwrap_or([0; 4]))
-                as usize;
-        let log_rho_min = f64_at(52);
-        let log_rho_max = f64_at(60);
-        let delta_log_rho = f64_at(68);
+        let i32_at = |off: usize| -> Result<i32, EosError> {
+            let bytes: [u8; 4] = hdr[off..off + 4]
+                .try_into()
+                .map_err(|_| err("short FMCMSR01 header slice".to_string()))?;
+            Ok(i32::from_le_bytes(bytes))
+        };
+        let u32_at = |off: usize| -> Result<usize, EosError> {
+            let bytes: [u8; 4] = hdr[off..off + 4]
+                .try_into()
+                .map_err(|_| err("short FMCMSR01 header slice".to_string()))?;
+            Ok(u32::from_le_bytes(bytes) as usize)
+        };
+        let version = i32_at(8)?;
+        let x = f64_at(12)?;
+        let num_log_ts = u32_at(20)?;
+        let log_t_min = f64_at(24)?;
+        let log_t_max = f64_at(32)?;
+        let delta_log_t = f64_at(40)?;
+        let num_log_rhos = u32_at(48)?;
+        let log_rho_min = f64_at(52)?;
+        let log_rho_max = f64_at(60)?;
+        let delta_log_rho = f64_at(68)?;
 
-        let ngrid = num_log_ts * num_log_rhos;
+        let ngrid = validate_4d_grid_header(
+            "CmsXTable::from_raw_bin",
+            &table_label,
+            x,
+            0.0,
+            num_log_ts,
+            log_t_min,
+            log_t_max,
+            delta_log_t,
+            num_log_rhos,
+            log_rho_min,
+            log_rho_max,
+            delta_log_rho,
+        )?;
         let mut raw_vars = vec![0.0_f64; NUM_EOS_TABLE_VALS * ngrid];
         let mut row_bytes = [0u8; NUM_EOS_TABLE_VALS * 8];
         for cell in 0..ngrid {
             reader
                 .read_exact(&mut row_bytes)
                 .map_err(|e| err(e.to_string()))?;
-            let vals: [f64; 16] = std::array::from_fn(|k| {
+            let it = cell / num_log_rhos;
+            let jrho = cell % num_log_rhos;
+            let mut vals = [0.0_f64; 16];
+            for (k, slot) in vals.iter_mut().enumerate() {
                 let s = k * 8;
-                f64::from_le_bytes(
-                    row_bytes[s..s + 8].try_into().unwrap_or([0; 8]),
-                )
-            });
+                let bytes: [u8; 8] =
+                    row_bytes[s..s + 8].try_into().map_err(|_| {
+                        err("short FMCMSR01 cell slice".to_string())
+                    })?;
+                let val = f64::from_le_bytes(bytes);
+                if is_bad(val) {
+                    return Err(err(format!(
+                        "non-finite raw column {k} ({val}) at cell=({it}, {jrho})"
+                    )));
+                }
+                *slot = val;
+            }
             Self::store_mapped_cell(&mut raw_vars, ngrid, cell, &vals);
+        }
+        let mut trailing = [0_u8; 1];
+        if reader.read(&mut trailing).map_err(|e| err(e.to_string()))? != 0 {
+            return Err(err(
+                "unexpected trailing bytes after FMCMSR01 payload".to_string(),
+            ));
         }
 
         Self::build_from_raw_vars(
+            &table_label,
             version,
             x,
             num_log_ts,
@@ -283,7 +296,20 @@ impl CmsXTable {
 
         let _col_names = next_non_empty(&mut line_buf)?;
 
-        let ngrid = num_log_ts * num_log_rhos;
+        let ngrid = validate_4d_grid_header(
+            "CmsXTable::from_ascii_reader",
+            "CMS ascii",
+            x,
+            0.0,
+            num_log_ts,
+            log_t_min,
+            log_t_max,
+            delta_log_t,
+            num_log_rhos,
+            log_rho_min,
+            log_rho_max,
+            delta_log_rho,
+        )?;
         let mut raw_vars = vec![0.0_f64; NUM_EOS_TABLE_VALS * ngrid];
 
         for it in 0..num_log_ts {
@@ -293,7 +319,7 @@ impl CmsXTable {
                 let _lt = toks.next();
                 let _lr = toks.next();
                 let mut vals = [0.0_f64; 16];
-                for v in &mut vals {
+                for (k, v) in vals.iter_mut().enumerate() {
                     let s =
                         toks.next().ok_or_else(|| EosError::InvalidState {
                             context: "CmsXTable::from_ascii_reader",
@@ -301,19 +327,30 @@ impl CmsXTable {
                                 "fewer than 18 columns at ({it}, {jrho})"
                             ),
                         })?;
-                    *v = s.parse::<f64>().map_err(|e| {
+                    let val = s.parse::<f64>().map_err(|e| {
                         EosError::InvalidState {
                             context: "CmsXTable::from_ascii_reader",
                             detail: format!("bad float '{s}': {e}"),
                         }
                     })?;
+                    if is_bad(val) {
+                        return Err(EosError::InvalidState {
+                            context: "CmsXTable::from_ascii_reader",
+                            detail: format!(
+                                "non-finite ASCII column {k} ({val}) in CMS(X={x}) cell=({it}, {jrho})"
+                            ),
+                        });
+                    }
+                    *v = val;
                 }
                 let cell = it * num_log_rhos + jrho;
                 Self::store_mapped_cell(&mut raw_vars, ngrid, cell, &vals);
             }
         }
 
+        let label = format!("CMS(X={x})");
         Self::build_from_raw_vars(
+            &label,
             version,
             x,
             num_log_ts,

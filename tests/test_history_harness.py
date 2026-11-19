@@ -1061,7 +1061,7 @@ def test_unported_extras_never_count_as_pass() -> None:
             final_tolerances={"rel_star_age": 0.001, "log_L": 0.001},
             track_tolerances={},
             extras_status=status,
-            extras_issue="#148" if status == "unported" else "",
+            extras_issue="#231" if status == "unported" else "",
         )
         rec = harness_runner.evaluate_case_record(
             spec, {}, outcome, precomputed_comparison=comp

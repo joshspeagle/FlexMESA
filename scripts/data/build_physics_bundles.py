@@ -27,7 +27,6 @@ import pathlib
 import shutil
 import struct
 import subprocess
-import sys
 import tarfile
 import tempfile
 
@@ -35,7 +34,10 @@ import numpy as np
 
 DT_RAW_MAGIC = b"FMDTRW01"
 CMS_RAW_MAGIC = b"FMCMSR01"
+HELM_FULL_MAGIC = b"FMHELM01"
 NET_BUNDLE_MAGIC = b"FNET0001"
+HELM_IMAX = 2701
+HELM_JMAX = 1001
 
 
 def sha256_file(path: pathlib.Path) -> str:
@@ -114,6 +116,8 @@ def convert_dt_ascii_to_raw(src: pathlib.Path, dst: pathlib.Path) -> None:
         raise ValueError(
             f"{src.name}: expected ({n_lq * n_lt}, 16), got {arr.shape}"
         )
+    if not np.all(np.isfinite(arr)):
+        raise ValueError(f"{src.name}: contains non-finite values")
     header_bytes = struct.pack(
         "<8siddIdddIddd",
         DT_RAW_MAGIC,
@@ -167,6 +171,8 @@ def convert_cms_ascii_to_raw(src: pathlib.Path, dst: pathlib.Path) -> None:
         raise ValueError(
             f"{src.name}: expected ({n_lt * n_lr}, 16), got {arr.shape}"
         )
+    if not np.all(np.isfinite(arr)):
+        raise ValueError(f"{src.name}: contains non-finite values")
     header_bytes = struct.pack(
         "<8sidIdddIddd",
         CMS_RAW_MAGIC,
@@ -191,9 +197,7 @@ def compress_zst(src: pathlib.Path, dst: pathlib.Path, level: int = 19) -> str:
     """Compress `src` to `dst` with Zstandard and return SHA-256 of `dst`."""
     dst.parent.mkdir(parents=True, exist_ok=True)
     try:
-        from compression import (
-            zstd as std_zstd,  # type: ignore[import-not-found]
-        )
+        from compression import zstd as std_zstd
 
         with (
             src.open("rb") as fin,
@@ -204,7 +208,7 @@ def compress_zst(src: pathlib.Path, dst: pathlib.Path, level: int = 19) -> str:
     except ImportError:
         pass
     try:
-        import zstandard  # type: ignore[import-not-found]
+        import zstandard
 
         cctx = zstandard.ZstdCompressor(level=level, threads=-1)
         with src.open("rb") as fin, dst.open("wb") as fout:
@@ -223,16 +227,14 @@ def decompress_zst(src: pathlib.Path, dst: pathlib.Path) -> None:
     """Decompress `src` `.zst` archive to `dst`."""
     dst.parent.mkdir(parents=True, exist_ok=True)
     try:
-        from compression import (
-            zstd as std_zstd,  # type: ignore[import-not-found]
-        )
+        from compression import zstd as std_zstd
 
         with std_zstd.open(src, "rb") as fin, dst.open("wb") as fout:
             shutil.copyfileobj(fin, fout, length=8 * 1024 * 1024)
         return
     except ImportError:
         pass
-    import zstandard  # type: ignore[import-not-found]
+    import zstandard
 
     dctx = zstandard.ZstdDecompressor()
     with src.open("rb") as fin, dst.open("wb") as fout:
@@ -286,27 +288,163 @@ def pack_deterministic_tar_zst(
         tar_path.unlink(missing_ok=True)
 
 
+def convert_helm_ascii_to_full(
+    src: pathlib.Path,
+    dst: pathlib.Path,
+    *,
+    imax: int = HELM_IMAX,
+    jmax: int = HELM_JMAX,
+) -> None:
+    """Convert `helm_table.dat` into an `FMHELM01` `imax x jmax x 21` `.bin`."""
+    n_total = imax * jmax
+    sec_sizes = (9, 4, 4, 4)
+    chunks: list[np.ndarray] = []
+    with src.open("r", encoding="utf-8") as fh:
+        lines = (ln.strip() for ln in fh)
+        non_empty = (ln for ln in lines if ln)
+        for sec_idx, ncols in enumerate(sec_sizes):
+            vals = np.empty((n_total, ncols), dtype="<f8")
+            for idx in range(n_total):
+                row = next(non_empty, None)
+                if row is None:
+                    raise ValueError(
+                        f"{src.name}: unexpected EOF in section "
+                        f"{sec_idx} row {idx}"
+                    )
+                toks = row.replace("D", "E").split()
+                if len(toks) != ncols:
+                    raise ValueError(
+                        f"{src.name}: expected {ncols} cols at section "
+                        f"{sec_idx} row {idx}, got {len(toks)}"
+                    )
+                vals[idx] = [float(t) for t in toks]
+            if not np.all(np.isfinite(vals)):
+                raise ValueError(
+                    f"{src.name}: non-finite values in HELM section {sec_idx}"
+                )
+            chunks.append(vals)
+        if next(non_empty, None) is not None:
+            raise ValueError(
+                f"{src.name}: unexpected trailing data after section 3"
+            )
+    merged = np.concatenate(chunks, axis=1).astype("<f8", copy=False)
+    header = struct.pack("<8sII", HELM_FULL_MAGIC, imax, jmax)
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    with dst.open("wb") as fout:
+        fout.write(header)
+        fout.write(merged.tobytes(order="C"))
+
+
+def build_helm_full_bundle(
+    mesa_dir: pathlib.Path,
+    out_dir: pathlib.Path,
+    level: int = 19,
+) -> tuple[str, str, int]:
+    """Build `helm_table_full.bin.zst` and SHA manifest from `$MESA_DIR`."""
+    src_dat = mesa_dir / "data" / "eosDT_data" / "helm_table.dat"
+    if not src_dat.is_file():
+        raise FileNotFoundError(f"Missing MESA HELM table: {src_dat}")
+    with tempfile.TemporaryDirectory(prefix="flexmesa_helm_build_") as tmp:
+        raw_bin = pathlib.Path(tmp) / "helm_table_full.bin"
+        convert_helm_ascii_to_full(src_dat, raw_bin)
+        unpacked_sha = sha256_file(raw_bin)
+        size_bytes = raw_bin.stat().st_size
+        out_zst = out_dir / "helm_table_full.bin.zst"
+        archive_sha = compress_zst(raw_bin, out_zst, level=level)
+        manifest = out_dir / "helm_full.sha256.tsv"
+        manifest.write_text(
+            "# sha256\tsize_bytes\trelpath\n"
+            f"{unpacked_sha}\t{size_bytes}\thelm_table_full.bin\n",
+            encoding="utf-8",
+        )
+        return archive_sha, unpacked_sha, size_bytes
+
+
+def convert_aesopus_hdf5_to_section(
+    h5_path: pathlib.Path, out_path: pathlib.Path
+) -> None:
+    """Convert native float32 `AESOPUS_AGSS09.h5` into a binary section.
+
+    Asserts that upstream `kap` datasets are natively `float32` (`N1-13`) and
+    finite so zero implicit quantization occurs between MESA's HDF5 table and
+    FlexMESA's `FMKAP001` archive.
+    """
+    import h5py
+
+    if not h5_path.is_file():
+        raise FileNotFoundError(f"Missing AESOPUS HDF5 table: {h5_path}")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with h5py.File(h5_path, "r") as f, out_path.open("wb") as out:
+        for k in ["Zsun", "fCO_ref", "fC_ref", "fN_ref"]:
+            val = float(f[k][()])
+            if not np.isfinite(val):
+                raise ValueError(f"{h5_path.name}: non-finite scalar {k}")
+            out.write(struct.pack("<d", val))
+        log_rs = np.asarray(f["logRs"][:], dtype="<f8")
+        log_ts = np.asarray(f["logTs"][:], dtype="<f8")
+        zs = np.asarray(f["Zs"][:], dtype="<f8")
+        for arr_name, arr in (
+            ("logRs", log_rs),
+            ("logTs", log_ts),
+            ("Zs", zs),
+        ):
+            if not np.all(np.isfinite(arr)):
+                raise ValueError(f"{h5_path.name}: non-finite {arr_name}")
+        out.write(struct.pack("<III", len(log_rs), len(log_ts), len(zs)))
+        out.write(log_rs.tobytes())
+        out.write(log_ts.tobytes())
+        out.write(zs.tobytes())
+        for z in zs:
+            g = f[f"{z:.6f}"]
+            xs = np.asarray(g["Xs"][:], dtype="<f8")
+            fcos = np.asarray(g["fCOs"][:], dtype="<f8")
+            fcs = np.asarray(g["fCs"][:], dtype="<f8")
+            fns = np.asarray(g["fNs"][:], dtype="<f8")
+            out.write(
+                struct.pack("<IIII", len(xs), len(fcos), len(fcs), len(fns))
+            )
+            out.write(xs.tobytes())
+            out.write(fcos.tobytes())
+            out.write(fcs.tobytes())
+            out.write(fns.tobytes())
+            out.write(b"\x01")
+            kap_ds = g["kap"]
+            if kap_ds.dtype != np.dtype("float32"):
+                raise ValueError(
+                    f"{h5_path.name}: expected float32 kap dtype, "
+                    f"got {kap_ds.dtype}"
+                )
+            kap = np.asarray(kap_ds[:], dtype="<f4")
+            if not np.all(np.isfinite(kap)):
+                raise ValueError(
+                    f"{h5_path.name}: non-finite kap values at Z={z:.6f}"
+                )
+            slices = np.moveaxis(kap, (0, 1), (-2, -1)).reshape(
+                -1, len(log_ts) * len(log_rs)
+            )
+            for s in slices:
+                out.write(b"\x01")
+                out.write(s.tobytes())
+
+
 def build_kap_full_bundle(
     mesa_dir: pathlib.Path,
     out_dir: pathlib.Path,
     level: int = 19,
 ) -> tuple[str, str, int]:
-    """Build `kap_tables_full_v2.bin.zst` via `flexmesa._rust` loader."""
+    """Build `kap_tables_full_v2.bin.zst` offline into `out_dir`."""
+    from flexmesa import _rust
+
+    kap_dir = mesa_dir / "data" / "kap_data"
+    h5_path = kap_dir / "AESOPUS_AGSS09.h5"
     with tempfile.TemporaryDirectory(prefix="flexmesa_kap_build_") as tmp:
-        tmp_data = pathlib.Path(tmp)
-        env = dict(os.environ)
-        env["FLEXMESA_DATA_DIR"] = str(tmp_data)
-        env["MESA_DIR"] = str(mesa_dir)
-        env["JAX_PLATFORMS"] = "cpu"
-        cmd = [
-            sys.executable,
-            "-c",
-            "from flexmesa import kap; "
-            "kap.kap_get_fixed_metal(0.01, 0.7, -4.0, 3.2, "
-            "prefix='lowT_Freedman11', backend='rust')",
-        ]
-        subprocess.run(cmd, env=env, check=True)
-        raw_bin = tmp_data / "kap_full" / "kap_tables_full.bin"
+        tmp_dir = pathlib.Path(tmp)
+        aes_section = tmp_dir / "aesopus_section.bin"
+        raw_bin = tmp_dir / "kap_tables_full.bin"
+        convert_aesopus_hdf5_to_section(h5_path, aes_section)
+        _rust.kap_build_full_tables_bin(
+            str(kap_dir), str(aes_section), str(raw_bin)
+        )
         if not raw_bin.is_file():
             raise RuntimeError("Failed to build kap_tables_full.bin")
         unpacked_sha = sha256_file(raw_bin)
@@ -349,6 +487,11 @@ def main() -> int:
         help="Only rebuild crates/flexmesa-net/data/nets.bin.",
     )
     parser.add_argument(
+        "--helm-only",
+        action="store_true",
+        help="Rebuild nets.bin and helm_table_full.bin.zst.",
+    )
+    parser.add_argument(
         "--kap-only",
         action="store_true",
         help="Rebuild nets.bin and kap_tables_full_v2.bin.zst.",
@@ -375,6 +518,25 @@ def main() -> int:
     if args.out_dir is None:
         raise SystemExit("--out-dir is required when building release bundles.")
     args.out_dir.mkdir(parents=True, exist_ok=True)
+
+    if args.helm_only:
+        h_arch_sha, h_unp_sha, h_size = build_helm_full_bundle(
+            args.mesa_dir, args.out_dir
+        )
+        print(
+            f"helm_table_full.bin.zst: archive_sha256={h_arch_sha} "
+            f"unpacked_sha256={h_unp_sha} unpacked_bytes={h_size}"
+        )
+        return 0
+
+    if not args.kap_only:
+        h_arch_sha, h_unp_sha, h_size = build_helm_full_bundle(
+            args.mesa_dir, args.out_dir
+        )
+        print(
+            f"helm_table_full.bin.zst: archive_sha256={h_arch_sha} "
+            f"unpacked_sha256={h_unp_sha} unpacked_bytes={h_size}"
+        )
 
     kap_arch_sha, kap_unp_sha, kap_size = build_kap_full_bundle(
         args.mesa_dir, args.out_dir
@@ -403,10 +565,10 @@ def main() -> int:
         dt_sha = pack_deterministic_tar_zst(
             stage,
             dt_rels,
-            args.out_dir / "eos_opal_scvh_raw.tar.zst",
+            args.out_dir / "eos_opal_scvh_raw_v1.tar.zst",
             args.out_dir / "eos_opal_scvh.sha256.tsv",
         )
-        print(f"eos_opal_scvh_raw.tar.zst: sha256={dt_sha}")
+        print(f"eos_opal_scvh_raw_v1.tar.zst: sha256={dt_sha}")
 
         fe_rels: list[str] = []
         for p in sorted(
@@ -420,10 +582,10 @@ def main() -> int:
         fe_sha = pack_deterministic_tar_zst(
             stage,
             fe_rels,
-            args.out_dir / "eos_free_eos_raw.tar.zst",
+            args.out_dir / "eos_free_eos_raw_v1.tar.zst",
             args.out_dir / "eos_free_eos.sha256.tsv",
         )
-        print(f"eos_free_eos_raw.tar.zst: sha256={fe_sha}")
+        print(f"eos_free_eos_raw_v1.tar.zst: sha256={fe_sha}")
 
         cms_rels: list[str] = []
         for p in sorted(
@@ -435,10 +597,10 @@ def main() -> int:
         cms_sha = pack_deterministic_tar_zst(
             stage,
             cms_rels,
-            args.out_dir / "eos_cms_raw.tar.zst",
+            args.out_dir / "eos_cms_raw_v1.tar.zst",
             args.out_dir / "eos_cms.sha256.tsv",
         )
-        print(f"eos_cms_raw.tar.zst: sha256={cms_sha}")
+        print(f"eos_cms_raw_v1.tar.zst: sha256={cms_sha}")
         shutil.rmtree(stage, ignore_errors=True)
 
     return 0

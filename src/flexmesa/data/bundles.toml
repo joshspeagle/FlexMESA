@@ -50,7 +50,7 @@ archive_size_bytes = 63657396
 unpacked_sha256 = "b7671a08959d94e836b1e78f4b4e8462337fb9931394dcdde234ec716dd59917"
 unpacked_size_bytes = 120223383
 test_only = false
-description = "Full MESA 26.4.1 radiative and conductive opacity tables: fixed-metal (Freedman Z grid [0.01..1.00]), Type-2 CO, AESOPUS_AGSS09, and kapCN (FMKAP001)."
+description = "Full MESA 26.4.1 radiative and conductive opacity tables: fixed-metal (Freedman Z grid [0.01..1.00]), Type-2 CO, AESOPUS_AGSS09 (natively IEEE-754 float32 in upstream HDF5), and kapCN (FMKAP001)."
 
 [[bundles]]
 name = "eos_opal_scvh"

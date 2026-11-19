@@ -363,3 +363,21 @@ name = "pre_z"
 upstream_context = "Precomputed integer and fractional powers pre_z(1:1000) in math/public/math_def.f90:26-48 and math/public/precompute_zs.inc"
 crlibm_symbol = "log_rz + pow_r_ (populated by math_init)"
 flexmesa_math = "flexmesa_math::pre_z"
+
+[[ruling_extensions]]
+name = "log_strict"
+upstream_context = "Mode-independent CRMATH log_rz helper for lock-free catalog initialization without mutating process-wide NumericsMode (#161, #210, DECISIONS #34)"
+crlibm_symbol = "log_rz"
+flexmesa_math = "flexmesa_math::log_strict"
+
+[[ruling_extensions]]
+name = "pow_strict"
+upstream_context = "Mode-independent CRMATH pow_r_ helper (math/public/math_lib_crmath.f90:220-255) for pre_z and catalog initialization (#161, #210, DECISIONS #34)"
+crlibm_symbol = "exp_rd + log_rz (composite)"
+flexmesa_math = "flexmesa_math::pow_strict"
+
+[[ruling_extensions]]
+name = "powi_strict"
+upstream_context = "Mode-independent CRMATH pow_i_ helper (math/public/math_lib_crmath.f90:193-217) for catalog initialization (#161, #210, DECISIONS #34)"
+crlibm_symbol = "IEEE-754 sequential multiplication (composite)"
+flexmesa_math = "flexmesa_math::powi_strict"

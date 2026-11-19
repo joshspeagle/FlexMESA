@@ -1234,8 +1234,8 @@
       },
       {
         "phase": "Phase B",
-        "open": 3,
-        "closed": 2,
+        "open": 2,
+        "closed": 3,
         "issues": [
           {
             "number": 147,
@@ -1245,7 +1245,7 @@
           {
             "number": 148,
             "title": "[Audit B2] Move test-case code out of the library and delete fabricated behaviour",
-            "state": "open"
+            "state": "closed"
           },
           {
             "number": 149,
@@ -1266,7 +1266,7 @@
       },
       {
         "phase": "Phase C",
-        "open": 12,
+        "open": 13,
         "closed": 2,
         "issues": [
           {
@@ -1338,6 +1338,11 @@
             "number": 220,
             "title": "[Audit] Level-2 exact-hex probes for the remaining math and auto_diff values",
             "state": "closed"
+          },
+          {
+            "number": 231,
+            "title": "[Audit C17] Port the remaining upstream per-case extras to test-side hooks",
+            "state": "open"
           }
         ]
       },
@@ -1392,11 +1397,6 @@
         "number": 228,
         "title": "Align module and star defaults with MESA 26.4.1 *.defaults (#149)",
         "draft": true
-      },
-      {
-        "number": 229,
-        "title": "fix(extras): make test-side hooks follow upstream and remove case routes from the library (#148)",
-        "draft": false
       }
     ],
     "deferred_169": [

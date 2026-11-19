@@ -79,18 +79,30 @@ def test_batch1_stock_cases_classify_as_stock_under_relocation(
 def test_batch1_ported_cases_resolve_by_fortran_content_only(
     tmp_path: pathlib.Path, case_name: str, expected_cls: type[Any]
 ) -> None:
-    """Ported handlers attach from Fortran text and detach when deleted."""
+    """Handlers match from Fortran text only; unserved ones are not attached.
+
+    A handler outside `ADAPTER_SERVED_STAR_HANDLERS` reads state the adapter
+    does not provide, so it is matched but not attached and its case stays
+    `unported`.
+    """
+    served = expected_cls.__name__ in case_extras.ADAPTER_SERVED_STAR_HANDLERS
     orig = harness_runner.resolve_case_dir("star", case_name)
-    assert case_extras.classify_case_extras("star", orig) == "ported"
-    assert isinstance(
-        case_extras.resolve_case_extras("star", orig), expected_cls
+    assert case_extras.classify_case_extras("star", orig) == (
+        "ported" if served else "unported"
     )
+    assert isinstance(case_extras.match_case_extras("star", orig), expected_cls)
     moved = _copy_src_only(case_name, tmp_path / "arbitrary_case_dir")
     assert isinstance(
-        case_extras.resolve_case_extras("star", moved), expected_cls
+        case_extras.match_case_extras("star", moved), expected_cls
     )
+    for case_dir in (orig, moved):
+        attached = case_extras.resolve_case_extras("star", case_dir)
+        if served:
+            assert isinstance(attached, expected_cls)
+        else:
+            assert attached is None
     (moved / "src" / "run_star_extras.f90").unlink()
-    assert case_extras.resolve_case_extras("star", moved) is None
+    assert case_extras.match_case_extras("star", moved) is None
 
 
 def test_cepheid_blue_loop_crossings_and_restart_guard() -> None:

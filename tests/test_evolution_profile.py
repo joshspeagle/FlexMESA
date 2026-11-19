@@ -69,7 +69,7 @@ def test_profile_artifacts_and_reports_contain_zero_forbidden_tokens() -> None:
         "/" + "tmp/",
         "." + "venvs",
         "file" + "://",
-        "speagle" + "-desktop",
+        "-" + "desktop",
         "\u2014",
     )
     checked = [*sorted(_PROF_DIR.iterdir()), _AUDIT_MD, _DOCS_MD]

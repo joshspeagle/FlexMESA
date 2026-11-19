@@ -42,7 +42,7 @@ jobs:
       (github.event_name != 'push' ||
        !startsWith(github.event.head_commit.message, 'chore(dashboard): auto-refresh'))
     runs-on: ubuntu-latest
-    timeout-minutes: 75
+    timeout-minutes: 150
     steps:
       - name: Checkout triggering commit
         uses: actions/checkout@v4

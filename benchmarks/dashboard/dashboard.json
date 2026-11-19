@@ -748,16 +748,16 @@
     "rust": {
       "tool": "cargo llvm-cov",
       "overall": {
-        "lines": 90287,
-        "covered": 66808,
-        "percent": 74.0
+        "lines": 93082,
+        "covered": 67944,
+        "percent": 73.0
       },
       "by_crate": [
         {
           "crate": "flexmesa-astero",
           "lines": 4040,
-          "covered": 1507,
-          "percent": 37.3
+          "covered": 1456,
+          "percent": 36.0
         },
         {
           "crate": "flexmesa-atm",
@@ -773,9 +773,9 @@
         },
         {
           "crate": "flexmesa-bench",
-          "lines": 2408,
-          "covered": 2334,
-          "percent": 96.9
+          "lines": 3558,
+          "covered": 2409,
+          "percent": 67.7
         },
         {
           "crate": "flexmesa-binary",
@@ -815,9 +815,9 @@
         },
         {
           "crate": "flexmesa-eos",
-          "lines": 8893,
-          "covered": 7131,
-          "percent": 80.2
+          "lines": 9698,
+          "covered": 7677,
+          "percent": 79.2
         },
         {
           "crate": "flexmesa-interp1d",
@@ -833,15 +833,15 @@
         },
         {
           "crate": "flexmesa-ionization",
-          "lines": 1001,
-          "covered": 674,
-          "percent": 67.3
+          "lines": 1227,
+          "covered": 804,
+          "percent": 65.5
         },
         {
           "crate": "flexmesa-kap",
-          "lines": 3141,
-          "covered": 1987,
-          "percent": 63.3
+          "lines": 3394,
+          "covered": 2226,
+          "percent": 65.6
         },
         {
           "crate": "flexmesa-math",
@@ -888,8 +888,8 @@
         {
           "crate": "flexmesa-star",
           "lines": 35741,
-          "covered": 26190,
-          "percent": 73.3
+          "covered": 26100,
+          "percent": 73.0
         },
         {
           "crate": "flexmesa-testing",
@@ -905,18 +905,18 @@
         },
         {
           "crate": "flexmesa-utils",
-          "lines": 839,
-          "covered": 515,
-          "percent": 61.4
+          "lines": 1200,
+          "covered": 802,
+          "percent": 66.8
         }
       ]
     },
     "python": {
       "tool": "pytest --cov",
       "overall": {
-        "statements": 21585,
-        "covered": 18970,
-        "percent": 87.9
+        "statements": 23446,
+        "covered": 20670,
+        "percent": 88.2
       },
       "by_subpackage": [
         {
@@ -975,15 +975,15 @@
         },
         {
           "subpackage": "flexmesa.data",
-          "statements": 541,
-          "covered": 428,
-          "percent": 79.1
+          "statements": 661,
+          "covered": 536,
+          "percent": 81.1
         },
         {
           "subpackage": "flexmesa.eos",
-          "statements": 3478,
-          "covered": 3282,
-          "percent": 94.4
+          "statements": 3434,
+          "covered": 3271,
+          "percent": 95.3
         },
         {
           "subpackage": "flexmesa.interp_1d",
@@ -1005,9 +1005,9 @@
         },
         {
           "subpackage": "flexmesa.kap",
-          "statements": 1313,
-          "covered": 1274,
-          "percent": 97.0
+          "statements": 1400,
+          "covered": 1350,
+          "percent": 96.4
         },
         {
           "subpackage": "flexmesa.math",
@@ -1036,14 +1036,14 @@
         {
           "subpackage": "flexmesa.num",
           "statements": 1596,
-          "covered": 1394,
-          "percent": 87.3
+          "covered": 1401,
+          "percent": 87.8
         },
         {
           "subpackage": "flexmesa.plotting",
-          "statements": 805,
-          "covered": 759,
-          "percent": 94.3
+          "statements": 2503,
+          "covered": 2274,
+          "percent": 90.9
         },
         {
           "subpackage": "flexmesa.rates",
@@ -1066,8 +1066,8 @@
         {
           "subpackage": "flexmesa.testing",
           "statements": 3453,
-          "covered": 2729,
-          "percent": 79.0
+          "covered": 2734,
+          "percent": 79.2
         },
         {
           "subpackage": "flexmesa.turb",
@@ -1274,8 +1274,8 @@
       },
       {
         "phase": "Phase B",
-        "open": 3,
-        "closed": 2,
+        "open": 2,
+        "closed": 3,
         "issues": [
           {
             "number": 147,
@@ -1285,7 +1285,7 @@
           {
             "number": 148,
             "title": "[Audit B2] Move test-case code out of the library and delete fabricated behaviour",
-            "state": "open"
+            "state": "closed"
           },
           {
             "number": 149,
@@ -1436,27 +1436,17 @@
       {
         "number": 228,
         "title": "Align module and star defaults with MESA 26.4.1 *.defaults (#149)",
-        "draft": true
-      },
-      {
-        "number": 230,
-        "title": "[Audit C13] Data pipeline provenance and verified runtime caches (#164)",
         "draft": false
       },
       {
-        "number": 232,
-        "title": "chore(extras): re-point the unported-extras ledger to #231 (split out of #148)",
+        "number": 237,
+        "title": "fix(atm,neu,rates): F2-23 T(tau) dispatch, MESA 26.4.1 operation order, and module oracles (#161)",
         "draft": false
       },
       {
-        "number": 233,
-        "title": "[Audit A6] Profile real evolutions, MESA 26.4.1 comparison, fast math, waste removal, and batching (#168)",
-        "draft": true
-      },
-      {
-        "number": 234,
-        "title": "test(eos): replace inline EOS literals with MESA 26.4.1 Fortran oracles and expand Python upstream coverage (#161 Slice 1)",
-        "draft": true
+        "number": 240,
+        "title": "fix(extras): attach only handlers the adapter can serve (#231); label the #168 profiling runs as diagnostic; let the coverage job finish (#174)",
+        "draft": false
       }
     ],
     "deferred_169": [
@@ -1599,6 +1589,38 @@
       {
         "number": 218,
         "title": "[Deferred bug] do_integrate_values drops the lower sub-interval on decreasing grids",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": false,
+        "needs_confirmation": false
+      },
+      {
+        "number": 241,
+        "title": "[Deferred bug] do_conv_bdy indexes top_conv_bdy by mesh-function column i instead of convective boundary j",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": false,
+        "needs_confirmation": false
+      },
+      {
+        "number": 242,
+        "title": "[Deferred bug] split_merge_amr_flipped_hybrid_zoning reads uninitialized target_dr_core and subtracts cm R_center from log radius",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": false,
+        "needs_confirmation": false
+      },
+      {
+        "number": 243,
+        "title": "[Deferred bug] do_mesh_dlogX_dlogP_coef multiplies dlnPeos by ln10 instead of dividing by ln10",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": false,
+        "needs_confirmation": false
+      },
+      {
+        "number": 244,
+        "title": "[Deferred bug] adjust1_omega, adjust1_v, adjust1_u, and adjust1_etrb subtract negative roundoff overshoot instead of adding",
         "state": "open",
         "kind": "upstream-bug",
         "parity_pending": false,
@@ -1970,6 +1992,19 @@
       "closed_140": "12",
       "total_140": "34",
       "deferred_169": "18"
+    },
+    {
+      "date_utc": "2026-11-19",
+      "commit": "e9d1948",
+      "event": "main merge",
+      "engine_ported_pct": "13.9",
+      "all_verified_pct": "0.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "73.0",
+      "python_cov_pct": "88.2",
+      "closed_140": "13",
+      "total_140": "34",
+      "deferred_169": "22"
     }
   ]
 }

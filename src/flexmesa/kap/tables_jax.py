@@ -12,7 +12,6 @@ evaluation.
 from __future__ import annotations
 
 import mmap
-import os
 import pathlib
 import struct
 from typing import Any
@@ -21,7 +20,6 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from flexmesa import _rust
 from flexmesa.data import fetch
 
 KAP_CO_DXS: tuple[float, ...] = (
@@ -146,20 +144,15 @@ def fit_bicubic_batch(
         (1, 2, 0),
     )
     coeffs = np.stack([f, f_xx, f_yy, f_xxyy], axis=-1)
-    coeffs = np.where(np.isfinite(coeffs), coeffs, 0.0)
+    if not np.all(np.isfinite(coeffs)):
+        msg = "Non-finite bicubic spline coefficient in JAX kap table fit"
+        raise ValueError(msg)
     return coeffs, splinck(log_rs), splinck(log_ts)
 
 
 def _find_kap_bin_path() -> pathlib.Path:
-    """Resolve `kap_tables_full.bin`, building via Rust if needed."""
-    for env_key in ("FLEXMESA_DATA_DIR", "FLEXMESA_CACHE_DIR"):
-        if val := os.environ.get(env_key, "").strip():
-            cand = pathlib.Path(val) / "kap_full" / "kap_tables_full.bin"
-            if cand.is_file():
-                return cand
+    """Resolve immutable `kap_tables_full.bin` inside `$FLEXMESA_DATA_DIR`."""
     cand = fetch.resolve_data_dir() / "kap_full" / "kap_tables_full.bin"
-    if not cand.is_file():
-        _ = _rust.kap_get_fixed_metal_rust(0.02, 0.70, -6.0, 6.0)
     if cand.is_file():
         return cand
     msg = (

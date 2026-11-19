@@ -7,6 +7,7 @@
 use crate::loader_ascii::load_or_build_kap_tables;
 use crate::spline::fit_bicubic_not_a_knot;
 use crate::types::KapError;
+use flexmesa_utils::is_bad;
 use std::sync::OnceLock;
 
 /// Reference $\delta X_{\mathrm{C}}, \delta X_{\mathrm{O}}$ grid in Type 2 tables (`kap_def.f90`).
@@ -28,9 +29,32 @@ fn fit_kap_spline(
     log_ts: &[f64],
     vals: &[f64],
     context: &'static str,
+    table_label: &str,
 ) -> Result<(Vec<[f64; 4]>, bool, bool), KapError> {
-    fit_bicubic_not_a_knot(log_rs, log_ts, vals)
-        .map_err(|_| KapError::NumericalFailure(context))
+    let n_t = log_ts.len();
+    for (idx, &val) in vals.iter().enumerate() {
+        if is_bad(val) {
+            let i_r = idx.checked_div(n_t).unwrap_or(idx);
+            let j_t = idx.checked_rem(n_t).unwrap_or(0);
+            return Err(KapError::TableIo(format!(
+                "non-finite input log_kap ({val}) in {table_label} cell=({i_r}, {j_t})"
+            )));
+        }
+    }
+    let fitted = fit_bicubic_not_a_knot(log_rs, log_ts, vals)
+        .map_err(|_| KapError::NumericalFailure(context))?;
+    for (cell, c4) in fitted.0.iter().enumerate() {
+        let i_r = cell.checked_div(n_t).unwrap_or(cell);
+        let j_t = cell.checked_rem(n_t).unwrap_or(0);
+        for (m, &c) in c4.iter().enumerate() {
+            if is_bad(c) {
+                return Err(KapError::TableIo(format!(
+                    "non-finite spline coefficient ({c}) in {table_label} cell=({i_r}, {j_t}) coeff={m}"
+                )));
+            }
+        }
+    }
+    Ok(fitted)
 }
 
 /// Single 2D $(\log_{10} R, \log_{10} T)$ fixed-metal or low-$T$ opacity table.
@@ -73,11 +97,13 @@ impl KapXTable {
             .get_or_init(|| {
                 let vals: Vec<f64> =
                     raw.iter().map(|&v| f64::from(v) / 1000.0).collect();
+                let label = format!("fixed(X={}, Z={})", self.x, self.z);
                 fit_kap_spline(
                     &self.log_rs,
                     &self.log_ts,
                     &vals,
                     "bicubic spline fit failed on fixed kap table",
+                    &label,
                 )
             })
             .as_ref()
@@ -136,11 +162,13 @@ impl KapCoSubTable {
             .get_or_init(|| {
                 let vals: Vec<f64> =
                     raw.iter().map(|&v| f64::from(v) / 1000.0).collect();
+                let label = format!("CO(dXC={}, dXO={})", self.dxc, self.dxo);
                 fit_kap_spline(
                     log_rs,
                     log_ts,
                     &vals,
                     "bicubic spline fit failed on CO kap table",
+                    &label,
                 )
             })
             .as_ref()
@@ -238,6 +266,7 @@ impl AesopusSlice {
                     log_ts,
                     &vals,
                     "bicubic spline fit failed on AESOPUS slice",
+                    "AESOPUS",
                 )
             })
             .as_ref()
@@ -317,11 +346,13 @@ impl KapCnZSet {
         cell.get_or_init(|| {
             let vals: Vec<f64> =
                 raw.iter().map(|&v| f64::from(v) / 1000.0).collect();
+            let label = format!("kapCN(Z={}, subtable={tbl_idx})", self.z);
             fit_kap_spline(
                 log_rs,
                 log_ts,
                 &vals,
                 "bicubic spline fit failed on kapCN table",
+                &label,
             )
         })
         .as_ref()

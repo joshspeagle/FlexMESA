@@ -47,6 +47,7 @@ Scope and the `v0.1.0` definition are in [`SCOPE.md`](SCOPE.md). Work is tracked
 | 30 | Generated `serde` Checkpoints, Rollback State Buffers, and RAM-Local Microphysics Cache (`#150`) | In force | below |
 | 31 | Test-Side `extras_factory` Dispatch and Pure-Upstream Library Execution (`#148`) | In force | below |
 | 32 | Unported Upstream Extras Are Declared and Never Pass (`#148`) | In force | below |
+| 33 | Data Pipeline Provenance, Verified Runtime Caches, and Corruption Errors (`#164`) | In force | below |
 
 ## Pre-audit decisions still in force
 
@@ -383,3 +384,18 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
 - **Alternatives Rejected**:
   - *Failing the run when the extras are unported*: stops about 70 cases from taking steps and removes their measured numbers from the case table.
   - *Counting unported extras as ignored controls under `DECISIONS #26`*: the strict rejection happens in the inlist parser before the extras are resolved, so the count would have two sources.
+
+---
+
+## DECISIONS #33: Data Pipeline Provenance, Verified Runtime Caches, and Corruption Errors (`Issue #164`)
+
+- **Date**: 2026-11-19
+- **Decision**:
+  1. **Immutable Data Directory vs. Versioned Runtime Cache (`FMCENV01`)**: `resolve_flexmesa_data_dir` and `$FLEXMESA_DATA_DIR` are strictly read-only. Runtime spline and binary caches (`eos_4d_slices`, `helm`, `kap`, `ionization`) live under `resolve_flexmesa_cache_dir` (`$FLEXMESA_CACHE_DIR/v1` or `~/.cache/flexmesa/derived/v1`), carry an `FMCENV01` envelope with schema version, builder version, payload tag, source `SHA-256`, and payload `SHA-256`, can be disabled via `FLEXMESA_DISABLE_RUNTIME_CACHE=1`, and fail loudly on corruption instead of falling back.
+  2. **Loud Rejection of Non-Finite Table Inputs and Splines (`N1-12`)**: Fail with errors naming the table, variable, and cell on non-finite raw inputs or fitted spline coefficients rather than substituting `0.0`. Upstream MESA `Check_XEoS_Interpolation_Data` (`eos/private/eosdt_load_tables.f90:409-424`) replaces non-finite spline entries with `0`, whereas all `116` MESA `26.4.1` 4D EOS slices (`eos_opal_scvh`, `eos_free_eos`, `eos_cms`) contain `0` non-finite entries, so loud rejection detects corruption with zero change to MESA `26.4.1` physics.
+  3. **Offline HDF5 Conversion & Documented `float32` Precision (`N1-13`)**: Remove `std::process::Command` and the embedded Python subprocess from `flexmesa-kap`. Convert `AESOPUS_AGSS09.h5` offline in `scripts/data/build_physics_bundles.py` and keep `float32` storage in `FMKAP001`, because upstream `AESOPUS_AGSS09.h5` natively stores `kap` datasets as IEEE-754 `float32`.
+  4. **Strict Verification, Reproducible `Makefile`, and Release Scope (`N1-10`)**: `flexmesa data verify` verifies per-file `SHA-256` digests and rejects unexpected files or legacy caches under data directories. Root `Makefile` drives offline conversion from pinned MESA `26.4.1` sources alongside `docker/mesa-26.4.1/`, while `data-v1` release assets include physics bundles, `mesa_test_inputs`, `mesa_histories`, and `mesa_module_hex`.
+- **Why**: Prior runtime caches mutated the verified data directory from `2.6 GB` to `4.7 GB`, skipped source/payload hashes, masked non-finite table entries with `0.0`, invoked `$PYTHON` dynamically from Rust, and passed `verify` when legacy cache files existed (`N1-10`–`N1-14`).
+- **Alternatives Rejected**:
+  - *Widening `AESOPUS` to `float64` in `FMKAP001`*: Adds ~45 MB with zero upstream precision gain because `AESOPUS_AGSS09.h5` is natively `float32`.
+  - *Silently rebuilding on `FMCENV01` cache mismatch*: Masks filesystem corruption instead of surfacing it (`#164` acceptance criterion).

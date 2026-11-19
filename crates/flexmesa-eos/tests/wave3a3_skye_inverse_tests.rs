@@ -255,7 +255,6 @@ fn test_skye_solid_and_phase_transition_regimes_match_mesa_26_4_1_oracle() {
 #[test]
 fn test_skye_alfa_blend_and_inverse_solvers_match_mesa_26_4_1_oracle() {
     let ht = HelmTable::builtin().expect("builtin HELM table");
-    let skye_cfg = SkyeConfig::default();
 
     let exp_in =
         common::load_scalar_row::<3>("ALFA", "skye_alfa_c12_4p0_7p5");
@@ -269,11 +268,17 @@ fn test_skye_alfa_blend_and_inverse_solvers_match_mesa_26_4_1_oracle() {
     assert!((dt_ed - exp_ed[1]).abs() < 1.0e-13);
     assert!((dr_ed - exp_ed[2]).abs() < 1.0e-13);
 
-    // Explicit f64 bounds (`2.3d0, 2.4d0, 7.2d0, 7.4d0` in MESA; see declared
-    // `#161` gap below for MESA's `eos.defaults:225-228` `real(4)` bounds).
+    // Explicit f64 bounds (`2.3d0, 2.4d0, 7.2d0, 7.4d0` in MESA).
+    let skye_cfg_f64 = SkyeConfig {
+        log_rho_min_for_any_skye: 2.3,
+        log_rho_min_for_all_skye: 2.4,
+        log_t_min_for_any_skye: 7.2,
+        log_t_min_for_all_skye: 7.4,
+        ..SkyeConfig::default()
+    };
     let exp_sm_f64 =
         common::load_scalar_row::<3>("ALFA", "skye_alfa_simple_f64_2p35_7p3");
-    let (a_sm, dt_sm, dr_sm) = get_skye_alfa_simple(&skye_cfg, 2.35, 7.3);
+    let (a_sm, dt_sm, dr_sm) = get_skye_alfa_simple(&skye_cfg_f64, 2.35, 7.3);
     assert!((a_sm - exp_sm_f64[0]).abs() < 1.0e-13);
     assert!((dt_sm - exp_sm_f64[1]).abs() < 1.0e-13);
     assert!((dr_sm - exp_sm_f64[2]).abs() < 1.0e-13);
@@ -367,7 +372,6 @@ fn test_skye_liquid_and_blend_match_mesa_26_4_1_unwidened() {
 }
 
 #[test]
-#[ignore = "declared gap (#161): SkyeConfig::default() uses f64 2.3/2.4/7.2/7.4 whereas MESA eos/defaults/eos.defaults:225-228 uses real(4) literals (d_alfa_dlogRho -5.0 vs -4.999990463273898, diff 9.537e-6 >= 1.0e-13)"]
 fn test_skye_alfa_simple_default_bounds_match_mesa_26_4_1_unwidened() {
     let skye_cfg = SkyeConfig::default();
     let exp_def =

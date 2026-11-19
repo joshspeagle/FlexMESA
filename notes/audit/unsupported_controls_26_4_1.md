@@ -8,7 +8,7 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 - **Total manifest cases scanned**: `106`
 - **Cases passing strict `#147` validation**: `0`
 - **Cases rejected by strict `#147` validation**: `106`
-- **Distinct unsupported physics/solver controls encountered**: `436`
+- **Distinct unsupported physics/solver controls encountered**: `417`
 - **Distinct unknown/misspelled controls encountered**: `0`
 - **Cases using headless plotting controls (`#173` / `DECISIONS #25`)**: `78` (`895` distinct keys)
 
@@ -16,10 +16,10 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 
 | Section | Upstream `26.4.1` | Supported | Unused (`#147`) | Headless GUI (`#173`) | Terminal output (`DECISIONS #26`) | Unimplemented |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `&star_job` | 455 | 100 | 16 | 3 | 5 | 331 |
+| `&star_job` | 455 | 106 | 16 | 3 | 5 | 325 |
 | `&eos` | 102 | 5 | 0 | 0 | 0 | 97 |
-| `&kap` | 51 | 5 | 0 | 0 | 0 | 46 |
-| `&controls` | 1448 | 631 | 29 | 0 | 8 | 780 |
+| `&kap` | 51 | 6 | 0 | 0 | 0 | 45 |
+| `&controls` | 1448 | 657 | 27 | 0 | 8 | 756 |
 | `&binary_job` | 37 | 6 | 0 | 1 | 0 | 30 |
 | `&binary_controls` | 176 | 115 | 0 | 0 | 0 | 61 |
 | `&astero_search_controls` | 153 | 88 | 3 | 0 | 0 | 62 |
@@ -175,33 +175,33 @@ Per `DECISIONS #25` (matching upstream `USE_PGSTAR = NO`), keys in `&pgstar`, `&
 | `star` | `1.3M_ms_high_Z` | `fail_unsupported` | 3 | 0 | 77 |
 | `star` | `1.4M_ms_op_mono` | `fail_unsupported` | 9 | 0 | 27 |
 | `star` | `1.5M_with_diffusion` | `fail_unsupported` | 22 | 0 | 19 |
-| `star` | `12M_pre_ms_to_core_collapse` | `fail_unsupported` | 51 | 0 | 263 |
-| `star` | `15M_dynamo` | `fail_unsupported` | 11 | 0 | 17 |
+| `star` | `12M_pre_ms_to_core_collapse` | `fail_unsupported` | 49 | 0 | 263 |
+| `star` | `15M_dynamo` | `fail_unsupported` | 9 | 0 | 17 |
 | `star` | `16M_conv_premix` | `fail_unsupported` | 8 | 0 | 1 |
 | `star` | `16M_predictive_mix` | `fail_unsupported` | 10 | 0 | 1 |
 | `star` | `1M_pre_ms_to_wd` | `fail_unsupported` | 15 | 0 | 18 |
-| `star` | `1M_thermohaline` | `fail_unsupported` | 12 | 0 | 66 |
-| `star` | `20M_pre_ms_to_core_collapse` | `fail_unsupported` | 51 | 0 | 263 |
+| `star` | `1M_thermohaline` | `fail_unsupported` | 11 | 0 | 66 |
+| `star` | `20M_pre_ms_to_core_collapse` | `fail_unsupported` | 49 | 0 | 263 |
 | `star` | `20M_z2m2_high_rotation` | `fail_unsupported` | 28 | 0 | 295 |
 | `star` | `5M_cepheid_blue_loop` | `fail_unsupported` | 6 | 0 | 20 |
 | `star` | `7M_prems_to_AGB` | `fail_unsupported` | 4 | 0 | 20 |
 | `star` | `R_CrB_star` | `fail_unsupported` | 9 | 0 | 122 |
 | `star` | `T_tau_gradr` | `fail_unsupported` | 3 | 0 | 0 |
-| `star` | `accreted_material_j` | `fail_unsupported` | 4 | 0 | 24 |
+| `star` | `accreted_material_j` | `fail_unsupported` | 3 | 0 | 24 |
 | `star` | `adjust_net` | `fail_unsupported` | 30 | 0 | 68 |
-| `star` | `c13_pocket` | `fail_unsupported` | 7 | 0 | 100 |
+| `star` | `c13_pocket` | `fail_unsupported` | 6 | 0 | 100 |
 | `star` | `carbon_kh` | `fail_unsupported` | 9 | 0 | 81 |
 | `star` | `cburn_inward` | `fail_unsupported` | 3 | 0 | 66 |
 | `star` | `ccsn_IIp` | `fail_unsupported` | 76 | 0 | 100 |
-| `star` | `check_pulse_atm` | `fail_unsupported` | 7 | 0 | 0 |
-| `star` | `check_redo` | `fail_unsupported` | 4 | 0 | 3 |
+| `star` | `check_pulse_atm` | `fail_unsupported` | 6 | 0 | 0 |
+| `star` | `check_redo` | `fail_unsupported` | 3 | 0 | 3 |
 | `star` | `conductive_flame` | `fail_unsupported` | 8 | 0 | 109 |
-| `star` | `conserve_angular_momentum` | `fail_unsupported` | 10 | 0 | 0 |
+| `star` | `conserve_angular_momentum` | `fail_unsupported` | 8 | 0 | 0 |
 | `star` | `conv_core_cpm` | `fail_unsupported` | 5 | 0 | 87 |
 | `star` | `custom_colors` | `fail_unsupported` | 10 | 0 | 22 |
 | `star` | `custom_rates` | `fail_unsupported` | 15 | 0 | 48 |
-| `star` | `diffusion_smoothness` | `fail_unsupported` | 13 | 0 | 24 |
-| `star` | `extended_convective_penetration` | `fail_unsupported` | 5 | 0 | 14 |
+| `star` | `diffusion_smoothness` | `fail_unsupported` | 12 | 0 | 24 |
+| `star` | `extended_convective_penetration` | `fail_unsupported` | 4 | 0 | 14 |
 | `star` | `gyre_in_mesa_bcep` | `fail_unsupported` | 3 | 0 | 0 |
 | `star` | `gyre_in_mesa_envelope` | `fail_unsupported` | 3 | 0 | 5 |
 | `star` | `gyre_in_mesa_ms` | `fail_unsupported` | 3 | 0 | 0 |
@@ -234,7 +234,7 @@ Per `DECISIONS #25` (matching upstream `USE_PGSTAR = NO`), keys in `&pgstar`, `&
 | `star` | `ns_he` | `fail_unsupported` | 17 | 0 | 64 |
 | `star` | `other_physics_hooks` | `fail_unsupported` | 2 | 0 | 0 |
 | `star` | `pisn` | `fail_unsupported` | 62 | 0 | 288 |
-| `star` | `ppisn` | `fail_unsupported` | 65 | 0 | 76 |
+| `star` | `ppisn` | `fail_unsupported` | 62 | 0 | 76 |
 | `star` | `radiative_levitation` | `fail_unsupported` | 43 | 0 | 14 |
 | `star` | `relax_composition_j_entropy` | `fail_unsupported` | 2 | 0 | 0 |
 | `star` | `rsp_BEP` | `fail_unsupported` | 8 | 0 | 75 |
@@ -251,21 +251,21 @@ Per `DECISIONS #25` (matching upstream `USE_PGSTAR = NO`), keys in `&pgstar`, `&
 | `star` | `split_burn_big_net` | `fail_unsupported` | 41 | 0 | 258 |
 | `star` | `starspots` | `fail_unsupported` | 14 | 0 | 17 |
 | `star` | `timing` | `fail_unsupported` | 2 | 0 | 0 |
-| `star` | `twin_studies` | `fail_unsupported` | 46 | 0 | 255 |
-| `star` | `tzo` | `fail_unsupported` | 46 | 0 | 334 |
+| `star` | `twin_studies` | `fail_unsupported` | 45 | 0 | 255 |
+| `star` | `tzo` | `fail_unsupported` | 41 | 0 | 334 |
 | `star` | `wd_acc_small_dm` | `fail_unsupported` | 6 | 0 | 55 |
 | `star` | `wd_aic` | `fail_unsupported` | 9 | 0 | 41 |
 | `star` | `wd_c_core_ignition` | `fail_unsupported` | 6 | 0 | 15 |
-| `star` | `wd_cool_0.6M` | `fail_unsupported` | 17 | 0 | 17 |
+| `star` | `wd_cool_0.6M` | `fail_unsupported` | 9 | 0 | 17 |
 | `star` | `wd_diffusion` | `fail_unsupported` | 6 | 0 | 11 |
-| `star` | `wd_he_shell_ignition` | `fail_unsupported` | 9 | 0 | 17 |
-| `star` | `wd_nova_burst` | `fail_unsupported` | 12 | 0 | 11 |
-| `star` | `wd_stable_h_burn` | `fail_unsupported` | 12 | 0 | 0 |
-| `star` | `zams_to_cc_80` | `fail_unsupported` | 50 | 0 | 263 |
-| `binary` | `double_bh` | `fail_unsupported` | 5 | 0 | 92 |
+| `star` | `wd_he_shell_ignition` | `fail_unsupported` | 8 | 0 | 17 |
+| `star` | `wd_nova_burst` | `fail_unsupported` | 11 | 0 | 11 |
+| `star` | `wd_stable_h_burn` | `fail_unsupported` | 10 | 0 | 0 |
+| `star` | `zams_to_cc_80` | `fail_unsupported` | 48 | 0 | 263 |
+| `binary` | `double_bh` | `fail_unsupported` | 4 | 0 | 92 |
 | `binary` | `evolve_both_stars` | `fail_unsupported` | 2 | 0 | 84 |
 | `binary` | `jdot_gr_check` | `fail_unsupported` | 1 | 0 | 1 |
-| `binary` | `jdot_ls_check` | `fail_unsupported` | 3 | 0 | 0 |
+| `binary` | `jdot_ls_check` | `fail_unsupported` | 2 | 0 | 0 |
 | `binary` | `jdot_ml_check` | `fail_unsupported` | 1 | 0 | 0 |
 | `binary` | `star_plus_point_mass` | `fail_unsupported` | 2 | 0 | 85 |
 | `binary` | `star_plus_point_mass_explicit_mdot` | `fail_unsupported` | 2 | 0 | 0 |

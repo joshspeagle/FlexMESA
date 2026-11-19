@@ -65,10 +65,10 @@ impl Default for SkyeConfig {
             skye_max_gamma_for_liquid: 200.0,
             skye_solid_mixing_rule: SkyeSolidMixingRule::Pc,
             use_simple_skye_blends: false,
-            log_rho_min_for_any_skye: 2.3,
-            log_rho_min_for_all_skye: 2.4,
-            log_t_min_for_any_skye: 7.2,
-            log_t_min_for_all_skye: 7.4,
+            log_rho_min_for_any_skye: f64::from(2.3_f32),
+            log_rho_min_for_all_skye: f64::from(2.4_f32),
+            log_t_min_for_any_skye: f64::from(7.2_f32),
+            log_t_min_for_all_skye: f64::from(7.4_f32),
         }
     }
 }

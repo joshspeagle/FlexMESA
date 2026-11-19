@@ -37,63 +37,246 @@ macro_rules! sum_vec_bytes {
 }
 
 fn model_scalar_copy_to_buf(dst: &mut PrimaryStateBuffer, src: &StarModel) {
-    copy_scalars!(dst, src, [
-        nz, species, eos_config, model_number, star_age, star_age_old, dt,
-        dt_next, dt_old, dt_limit_ratio_old, mstar, mstar_start, mstar_old,
-        xmstar, mstar_dot, m_center, r_center, l_center, v_center, tau_base,
-        teff
-    ]);
+    copy_scalars!(
+        dst,
+        src,
+        [
+            nz,
+            species,
+            eos_config,
+            model_number,
+            star_age,
+            star_age_old,
+            dt,
+            dt_next,
+            dt_old,
+            dt_limit_ratio_old,
+            mstar,
+            mstar_start,
+            mstar_old,
+            xmstar,
+            mstar_dot,
+            m_center,
+            r_center,
+            l_center,
+            v_center,
+            tau_base,
+            teff
+        ]
+    );
 }
 
 fn model_scalar_copy_from_buf(dst: &mut StarModel, src: &PrimaryStateBuffer) {
-    copy_scalars!(dst, src, [
-        eos_config, model_number, star_age, star_age_old, dt, dt_next, dt_old,
-        dt_limit_ratio_old, mstar, mstar_start, mstar_old, xmstar, mstar_dot,
-        m_center, r_center, l_center, v_center, tau_base, teff
-    ]);
+    copy_scalars!(
+        dst,
+        src,
+        [
+            eos_config,
+            model_number,
+            star_age,
+            star_age_old,
+            dt,
+            dt_next,
+            dt_old,
+            dt_limit_ratio_old,
+            mstar,
+            mstar_start,
+            mstar_old,
+            xmstar,
+            mstar_dot,
+            m_center,
+            r_center,
+            l_center,
+            v_center,
+            tau_base,
+            teff
+        ]
+    );
 }
 
 fn rsp_heap_bytes(rsp: &RspState) -> usize {
-    sum_vec_bytes!(rsp, [
-        et_rsp, erad_rsp, fr_rsp, lc_rsp, lt_rsp, ptrb_rsp, pvsc_rsp,
-        egas_rsp, hp_face, vol_rsp, f_edd_rsp, y_face_rsp, pii_rsp, chi_rsp,
-        coupl_rsp, eq_rsp, qq_rsp, source_rsp, damp_rsp, dampr_rsp, vol_start,
-        w_start, fr_start, erad_start, egas_start, pgas_start, prad_start,
-        opacity_start, qq_start, lc_start, lt_start, t_start_rsp, r_start_rsp,
-        v_start_rsp, csound_start_rsp, pvsc_start, ptrb_start, chi_start,
-        coupl_start, ppp0, ppq0, ppt0, ppc0, vv0, work, workq, workt, workc
-    ])
+    sum_vec_bytes!(
+        rsp,
+        [
+            et_rsp,
+            erad_rsp,
+            fr_rsp,
+            lc_rsp,
+            lt_rsp,
+            ptrb_rsp,
+            pvsc_rsp,
+            egas_rsp,
+            hp_face,
+            vol_rsp,
+            f_edd_rsp,
+            y_face_rsp,
+            pii_rsp,
+            chi_rsp,
+            coupl_rsp,
+            eq_rsp,
+            qq_rsp,
+            source_rsp,
+            damp_rsp,
+            dampr_rsp,
+            vol_start,
+            w_start,
+            fr_start,
+            erad_start,
+            egas_start,
+            pgas_start,
+            prad_start,
+            opacity_start,
+            qq_start,
+            lc_start,
+            lt_start,
+            t_start_rsp,
+            r_start_rsp,
+            v_start_rsp,
+            csound_start_rsp,
+            pvsc_start,
+            ptrb_start,
+            chi_start,
+            coupl_start,
+            ppp0,
+            ppq0,
+            ppt0,
+            ppc0,
+            vv0,
+            work,
+            workq,
+            workt,
+            workc
+        ]
+    )
 }
 
 /// Computes live heap bytes of a [`StarModel`]'s primary, grid, mixing, aux,
 /// and `RSP` fields (excluding `aux.extra_grav`, counted separately in
 /// [`StarModel::heap_bytes`]) with zero heap allocations.
 pub(crate) fn primary_heap_bytes(model: &StarModel) -> usize {
-    let model_vecs = sum_vec_bytes!(model, [
-        lnd, ln_t, ln_r, lum, v, u, omega, j_rot, xa, xh, lnd_start,
-        ln_t_start, ln_r_start, lum_start, v_start, u_start, ln_pgas_start,
-        ln_peos_start, ln_e_start, ln_s_start, energy_start, peos_start,
-        non_nuc_neu_start, xa_start, xa_sub_xa_start, xh_start, lnd_old,
-        ln_t_old, ln_r_old, lum_old, v_old, u_old, xa_old, dq_old, dq, q, xq,
-        dm, dm_bar, m, m_grav, cgrav, grav, r, rmid, energy, eps_nuc,
-        dxdt_nuc, eps_mdot, gradt, gradr, gradl, scale_height, mlt_vc, mlt_d,
-        mlt_cdc, mlt_gamma, d_mix, conv_vel, sig, brunt_b, brunt_n2, chem_id,
-        mixing_type
-    ]);
+    let model_vecs = sum_vec_bytes!(
+        model,
+        [
+            lnd,
+            ln_t,
+            ln_r,
+            lum,
+            v,
+            u,
+            omega,
+            j_rot,
+            xa,
+            xh,
+            lnd_start,
+            ln_t_start,
+            ln_r_start,
+            lum_start,
+            v_start,
+            u_start,
+            ln_pgas_start,
+            ln_peos_start,
+            ln_e_start,
+            ln_s_start,
+            energy_start,
+            peos_start,
+            non_nuc_neu_start,
+            xa_start,
+            xa_sub_xa_start,
+            xh_start,
+            lnd_old,
+            ln_t_old,
+            ln_r_old,
+            lum_old,
+            v_old,
+            u_old,
+            xa_old,
+            dq_old,
+            dq,
+            q,
+            xq,
+            dm,
+            dm_bar,
+            m,
+            m_grav,
+            cgrav,
+            grav,
+            r,
+            rmid,
+            energy,
+            eps_nuc,
+            dxdt_nuc,
+            eps_mdot,
+            gradt,
+            gradr,
+            gradl,
+            scale_height,
+            mlt_vc,
+            mlt_d,
+            mlt_cdc,
+            mlt_gamma,
+            d_mix,
+            conv_vel,
+            sig,
+            brunt_b,
+            brunt_n2,
+            chem_id,
+            mixing_type
+        ]
+    );
     let aux = &model.aux;
-    let aux_vecs = sum_vec_bytes!(aux, [
-        cp_start, grada_start, chi_t_start, chi_rho_start, burn_avg_epsnuc,
-        extra_heat, d_extra_heat_dlnd, d_extra_heat_dlnt,
-        eps_wd_sedimentation, eps_diffusion, eps_pre_mix, eps_phase_separation,
-        irradiation_heat, etrb, etrb_start, et_rsp_old, hp_face_old,
-        csound_start, mlt_vc_old, eta_rti, etamid_rti, sig_rti, sigmid_rti,
-        dpdr_drhodr_info, source_plus_alpha_rti, source_minus_alpha_rti,
-        alpha_rti, alpha_rti_start, alpha_rti_old, u_face_start, p_face_start,
-        w_div_wc, fp_rot, d_fp_rot_dlnr, ft_rot, d_ft_rot_dlnr, i_rot,
-        d_i_rot_dlnr, brunt_n2_composition_term, smoothed_brunt_b,
-        mass_correction, omega_old, j_rot_old, eps_mdot_old,
-        eps_nuc_categories, fixed_gradr_sticky, mlt_prev_conv, mlt_flip_count
-    ]);
+    let aux_vecs = sum_vec_bytes!(
+        aux,
+        [
+            cp_start,
+            grada_start,
+            chi_t_start,
+            chi_rho_start,
+            burn_avg_epsnuc,
+            extra_heat,
+            d_extra_heat_dlnd,
+            d_extra_heat_dlnt,
+            eps_wd_sedimentation,
+            eps_diffusion,
+            eps_pre_mix,
+            eps_phase_separation,
+            irradiation_heat,
+            etrb,
+            etrb_start,
+            et_rsp_old,
+            hp_face_old,
+            csound_start,
+            mlt_vc_old,
+            eta_rti,
+            etamid_rti,
+            sig_rti,
+            sigmid_rti,
+            dpdr_drhodr_info,
+            source_plus_alpha_rti,
+            source_minus_alpha_rti,
+            alpha_rti,
+            alpha_rti_start,
+            alpha_rti_old,
+            u_face_start,
+            p_face_start,
+            w_div_wc,
+            fp_rot,
+            d_fp_rot_dlnr,
+            ft_rot,
+            d_ft_rot_dlnr,
+            i_rot,
+            d_i_rot_dlnr,
+            brunt_n2_composition_term,
+            smoothed_brunt_b,
+            mass_correction,
+            omega_old,
+            j_rot_old,
+            eps_mdot_old,
+            eps_nuc_categories,
+            fixed_gradr_sticky,
+            mlt_prev_conv,
+            mlt_flip_count
+        ]
+    );
     let name_bytes: usize = model.iso_names.iter().map(String::len).sum();
     model_vecs + aux_vecs + name_bytes + rsp_heap_bytes(&aux.rsp)
 }
@@ -206,6 +389,9 @@ pub struct PrimaryStateBuffer {
 
     pub(crate) doing_relax: bool,
     pub(crate) doing_struct_burn_mix: bool,
+    pub(crate) have_mlt_vc: bool,
+    pub(crate) okay_to_set_mlt_vc: bool,
+    pub(crate) k_const_mass: usize,
     pub(crate) total_energy: f64,
     pub(crate) total_internal_energy_start: f64,
     pub(crate) cumulative_energy_error: f64,
@@ -283,6 +469,7 @@ macro_rules! make_empty_buf {
             model_number: 0,
             smoothed_brunt_b_hash: 0,
             solver_mlt_eval_count: 0,
+            k_const_mass: 0,
             $( $v: Vec::new(), )+
             $( $z: 0.0, )+
             $( $b: false, )+
@@ -323,7 +510,10 @@ impl PrimaryStateBuffer {
                 total_internal_energy_start, cumulative_energy_error,
                 non_epsnuc_energy_change_from_split_burn
             ],
-            falses: [doing_relax, doing_struct_burn_mix, solver_had_mlt_flip]
+            falses: [
+                doing_relax, doing_struct_burn_mix, have_mlt_vc,
+                okay_to_set_mlt_vc, solver_had_mlt_flip
+            ]
         )
     }
 
@@ -339,39 +529,155 @@ impl PrimaryStateBuffer {
     /// capacities across retries and implicit trials.
     pub fn capture_from(&mut self, model: &StarModel) {
         model_scalar_copy_to_buf(self, model);
-        clone_vecs!(self, model, [
-            chem_id, iso_names, layout, kap_config, lnd, ln_t, ln_r, lum, v, u,
-            omega, j_rot, xa, xh, lnd_start, ln_t_start, ln_r_start, lum_start,
-            v_start, u_start, ln_pgas_start, ln_peos_start, ln_e_start,
-            ln_s_start, energy_start, peos_start, non_nuc_neu_start, xa_start,
-            xa_sub_xa_start, xh_start, lnd_old, ln_t_old, ln_r_old, lum_old,
-            v_old, u_old, xa_old, dq_old, dq, q, xq, dm, dm_bar, m, m_grav,
-            cgrav, grav, r, rmid, energy, eps_nuc, dxdt_nuc, eps_mdot, gradt,
-            gradr, gradl, scale_height, mlt_vc, mlt_d, mlt_cdc, mlt_gamma,
-            d_mix, conv_vel, sig, mixing_type, brunt_b, brunt_n2
-        ]);
+        clone_vecs!(
+            self,
+            model,
+            [
+                chem_id,
+                iso_names,
+                layout,
+                kap_config,
+                lnd,
+                ln_t,
+                ln_r,
+                lum,
+                v,
+                u,
+                omega,
+                j_rot,
+                xa,
+                xh,
+                lnd_start,
+                ln_t_start,
+                ln_r_start,
+                lum_start,
+                v_start,
+                u_start,
+                ln_pgas_start,
+                ln_peos_start,
+                ln_e_start,
+                ln_s_start,
+                energy_start,
+                peos_start,
+                non_nuc_neu_start,
+                xa_start,
+                xa_sub_xa_start,
+                xh_start,
+                lnd_old,
+                ln_t_old,
+                ln_r_old,
+                lum_old,
+                v_old,
+                u_old,
+                xa_old,
+                dq_old,
+                dq,
+                q,
+                xq,
+                dm,
+                dm_bar,
+                m,
+                m_grav,
+                cgrav,
+                grav,
+                r,
+                rmid,
+                energy,
+                eps_nuc,
+                dxdt_nuc,
+                eps_mdot,
+                gradt,
+                gradr,
+                gradl,
+                scale_height,
+                mlt_vc,
+                mlt_d,
+                mlt_cdc,
+                mlt_gamma,
+                d_mix,
+                conv_vel,
+                sig,
+                mixing_type,
+                brunt_b,
+                brunt_n2
+            ]
+        );
         let a = &model.aux;
-        copy_scalars!(self, a, [
-            doing_relax, doing_struct_burn_mix, total_energy,
-            total_internal_energy_start, cumulative_energy_error,
-            non_epsnuc_energy_change_from_split_burn, smoothed_brunt_b_hash,
-            solver_mlt_eval_count, solver_had_mlt_flip
-        ]);
-        clone_vecs!(self, a, [
-            cp_start, grada_start, chi_t_start, chi_rho_start, burn_avg_epsnuc,
-            eps_nuc_categories, extra_heat, d_extra_heat_dlnd,
-            d_extra_heat_dlnt, eps_wd_sedimentation, eps_diffusion, eps_pre_mix,
-            eps_phase_separation, irradiation_heat, etrb, etrb_start,
-            et_rsp_old, hp_face_old, csound_start, mlt_vc_old, eta_rti,
-            etamid_rti, sig_rti, sigmid_rti, dpdr_drhodr_info,
-            source_plus_alpha_rti, source_minus_alpha_rti, alpha_rti,
-            alpha_rti_start, alpha_rti_old, u_face_start, p_face_start,
-            w_div_wc, fp_rot, d_fp_rot_dlnr, ft_rot, d_ft_rot_dlnr, i_rot,
-            d_i_rot_dlnr, brunt_n2_composition_term, smoothed_brunt_b,
-            mass_correction, omega_old, j_rot_old, eps_mdot_old,
-            fixed_gradr_sticky, mlt_prev_conv, mlt_flip_count, step_hist, rsp,
-            tidal_deformation
-        ]);
+        copy_scalars!(
+            self,
+            a,
+            [
+                doing_relax,
+                doing_struct_burn_mix,
+                have_mlt_vc,
+                okay_to_set_mlt_vc,
+                k_const_mass,
+                total_energy,
+                total_internal_energy_start,
+                cumulative_energy_error,
+                non_epsnuc_energy_change_from_split_burn,
+                smoothed_brunt_b_hash,
+                solver_mlt_eval_count,
+                solver_had_mlt_flip
+            ]
+        );
+        clone_vecs!(
+            self,
+            a,
+            [
+                cp_start,
+                grada_start,
+                chi_t_start,
+                chi_rho_start,
+                burn_avg_epsnuc,
+                eps_nuc_categories,
+                extra_heat,
+                d_extra_heat_dlnd,
+                d_extra_heat_dlnt,
+                eps_wd_sedimentation,
+                eps_diffusion,
+                eps_pre_mix,
+                eps_phase_separation,
+                irradiation_heat,
+                etrb,
+                etrb_start,
+                et_rsp_old,
+                hp_face_old,
+                csound_start,
+                mlt_vc_old,
+                eta_rti,
+                etamid_rti,
+                sig_rti,
+                sigmid_rti,
+                dpdr_drhodr_info,
+                source_plus_alpha_rti,
+                source_minus_alpha_rti,
+                alpha_rti,
+                alpha_rti_start,
+                alpha_rti_old,
+                u_face_start,
+                p_face_start,
+                w_div_wc,
+                fp_rot,
+                d_fp_rot_dlnr,
+                ft_rot,
+                d_ft_rot_dlnr,
+                i_rot,
+                d_i_rot_dlnr,
+                brunt_n2_composition_term,
+                smoothed_brunt_b,
+                mass_correction,
+                omega_old,
+                j_rot_old,
+                eps_mdot_old,
+                fixed_gradr_sticky,
+                mlt_prev_conv,
+                mlt_flip_count,
+                step_hist,
+                rsp,
+                tidal_deformation
+            ]
+        );
         let has_nonzero = a
             .extra_grav
             .iter()
@@ -415,35 +721,126 @@ impl PrimaryStateBuffer {
             model.nz = self.nz;
         }
         model_scalar_copy_from_buf(model, self);
-        clone_vecs!(model, self, [
-            kap_config, lnd, ln_t, ln_r, lum, v, u, omega, j_rot, xa, xh,
-            lnd_start, ln_t_start, ln_r_start, lum_start, v_start, u_start,
-            ln_pgas_start, ln_peos_start, ln_e_start, ln_s_start, energy_start,
-            peos_start, non_nuc_neu_start, xa_start, xa_sub_xa_start, xh_start,
-            lnd_old, ln_t_old, ln_r_old, lum_old, v_old, u_old, xa_old, dq_old,
-            dq, q, xq, dm, dm_bar, m, m_grav, cgrav, grav, r, rmid, energy, sig
-        ]);
+        clone_vecs!(
+            model,
+            self,
+            [
+                kap_config,
+                lnd,
+                ln_t,
+                ln_r,
+                lum,
+                v,
+                u,
+                omega,
+                j_rot,
+                xa,
+                xh,
+                lnd_start,
+                ln_t_start,
+                ln_r_start,
+                lum_start,
+                v_start,
+                u_start,
+                ln_pgas_start,
+                ln_peos_start,
+                ln_e_start,
+                ln_s_start,
+                energy_start,
+                peos_start,
+                non_nuc_neu_start,
+                xa_start,
+                xa_sub_xa_start,
+                xh_start,
+                lnd_old,
+                ln_t_old,
+                ln_r_old,
+                lum_old,
+                v_old,
+                u_old,
+                xa_old,
+                dq_old,
+                dq,
+                q,
+                xq,
+                dm,
+                dm_bar,
+                m,
+                m_grav,
+                cgrav,
+                grav,
+                r,
+                rmid,
+                energy,
+                sig
+            ]
+        );
 
         {
             let a = &mut model.aux;
-            copy_scalars!(a, self, [
-                doing_relax, total_energy, total_internal_energy_start,
-                cumulative_energy_error, non_epsnuc_energy_change_from_split_burn
-            ]);
+            copy_scalars!(
+                a,
+                self,
+                [
+                    doing_relax,
+                    have_mlt_vc,
+                    okay_to_set_mlt_vc,
+                    k_const_mass,
+                    total_energy,
+                    total_internal_energy_start,
+                    cumulative_energy_error,
+                    non_epsnuc_energy_change_from_split_burn
+                ]
+            );
             a.doing_struct_burn_mix = false;
-            clone_vecs!(a, self, [
-                cp_start, grada_start, chi_t_start, chi_rho_start,
-                burn_avg_epsnuc, extra_heat, d_extra_heat_dlnd,
-                d_extra_heat_dlnt, eps_wd_sedimentation, eps_diffusion,
-                eps_pre_mix, eps_phase_separation, irradiation_heat, etrb,
-                etrb_start, et_rsp_old, hp_face_old, csound_start, mlt_vc_old,
-                eta_rti, etamid_rti, sig_rti, sigmid_rti, dpdr_drhodr_info,
-                source_plus_alpha_rti, source_minus_alpha_rti, alpha_rti,
-                alpha_rti_start, alpha_rti_old, u_face_start, p_face_start,
-                fp_rot, ft_rot, i_rot, brunt_n2_composition_term,
-                mass_correction, omega_old, j_rot_old, eps_mdot_old, step_hist,
-                rsp, tidal_deformation
-            ]);
+            clone_vecs!(
+                a,
+                self,
+                [
+                    cp_start,
+                    grada_start,
+                    chi_t_start,
+                    chi_rho_start,
+                    burn_avg_epsnuc,
+                    extra_heat,
+                    d_extra_heat_dlnd,
+                    d_extra_heat_dlnt,
+                    eps_wd_sedimentation,
+                    eps_diffusion,
+                    eps_pre_mix,
+                    eps_phase_separation,
+                    irradiation_heat,
+                    etrb,
+                    etrb_start,
+                    et_rsp_old,
+                    hp_face_old,
+                    csound_start,
+                    mlt_vc_old,
+                    eta_rti,
+                    etamid_rti,
+                    sig_rti,
+                    sigmid_rti,
+                    dpdr_drhodr_info,
+                    source_plus_alpha_rti,
+                    source_minus_alpha_rti,
+                    alpha_rti,
+                    alpha_rti_start,
+                    alpha_rti_old,
+                    u_face_start,
+                    p_face_start,
+                    fp_rot,
+                    ft_rot,
+                    i_rot,
+                    brunt_n2_composition_term,
+                    mass_correction,
+                    omega_old,
+                    j_rot_old,
+                    eps_mdot_old,
+                    step_hist,
+                    rsp,
+                    tidal_deformation
+                ]
+            );
             a.solver_mlt_eval_count = 0;
             a.solver_had_mlt_flip = false;
             a.fixed_gradr_sticky.fill(false);
@@ -463,49 +860,184 @@ impl PrimaryStateBuffer {
         // Restore exact post-step values (e.g., overshoot/predictive mixing,
         // operator-split burn averages, rotation distortion + `grav`, and
         // solver latches) overwritten by `set_hydro_vars` without pre-physics.
-        clone_vecs!(model, self, [
-            omega, j_rot, grav, eps_nuc, dxdt_nuc, eps_mdot, gradt, gradr,
-            gradl, scale_height, mlt_vc, mlt_d, mlt_cdc, mlt_gamma, d_mix,
-            conv_vel, sig, mixing_type, brunt_b, brunt_n2
-        ]);
+        clone_vecs!(
+            model,
+            self,
+            [
+                omega,
+                j_rot,
+                grav,
+                eps_nuc,
+                dxdt_nuc,
+                eps_mdot,
+                gradt,
+                gradr,
+                gradl,
+                scale_height,
+                mlt_vc,
+                mlt_d,
+                mlt_cdc,
+                mlt_gamma,
+                d_mix,
+                conv_vel,
+                sig,
+                mixing_type,
+                brunt_b,
+                brunt_n2
+            ]
+        );
         let a = &mut model.aux;
-        copy_scalars!(a, self, [
-            doing_struct_burn_mix, smoothed_brunt_b_hash,
-            solver_mlt_eval_count, solver_had_mlt_flip
-        ]);
-        clone_vecs!(a, self, [
-            eps_nuc_categories, w_div_wc, fp_rot, d_fp_rot_dlnr, ft_rot,
-            d_ft_rot_dlnr, i_rot, d_i_rot_dlnr, smoothed_brunt_b,
-            fixed_gradr_sticky, mlt_prev_conv, mlt_flip_count
-        ]);
+        copy_scalars!(
+            a,
+            self,
+            [
+                doing_struct_burn_mix,
+                smoothed_brunt_b_hash,
+                solver_mlt_eval_count,
+                solver_had_mlt_flip
+            ]
+        );
+        clone_vecs!(
+            a,
+            self,
+            [
+                eps_nuc_categories,
+                w_div_wc,
+                fp_rot,
+                d_fp_rot_dlnr,
+                ft_rot,
+                d_ft_rot_dlnr,
+                i_rot,
+                d_i_rot_dlnr,
+                smoothed_brunt_b,
+                fixed_gradr_sticky,
+                mlt_prev_conv,
+                mlt_flip_count
+            ]
+        );
         Ok(())
     }
 
     /// Returns the approximate live heap byte size of this rollback buffer.
     #[must_use]
     pub fn heap_bytes(&self) -> usize {
-        let own_vecs = sum_vec_bytes!(self, [
-            chem_id, lnd, ln_t, ln_r, lum, v, u, omega, j_rot, xa, xh,
-            lnd_start, ln_t_start, ln_r_start, lum_start, v_start, u_start,
-            ln_pgas_start, ln_peos_start, ln_e_start, ln_s_start, energy_start,
-            peos_start, non_nuc_neu_start, xa_start, xa_sub_xa_start, xh_start,
-            lnd_old, ln_t_old, ln_r_old, lum_old, v_old, u_old, xa_old, dq_old,
-            dq, q, xq, dm, dm_bar, m, m_grav, cgrav, grav, r, rmid, energy,
-            eps_nuc, dxdt_nuc, eps_mdot, gradt, gradr, gradl, scale_height,
-            mlt_vc, mlt_d, mlt_cdc, mlt_gamma, d_mix, conv_vel, sig,
-            mixing_type, brunt_b, brunt_n2, cp_start, grada_start, chi_t_start,
-            chi_rho_start, burn_avg_epsnuc, eps_nuc_categories, extra_heat,
-            d_extra_heat_dlnd, d_extra_heat_dlnt, eps_wd_sedimentation,
-            eps_diffusion, eps_pre_mix, eps_phase_separation, irradiation_heat,
-            etrb, etrb_start, et_rsp_old, hp_face_old, csound_start,
-            mlt_vc_old, eta_rti, etamid_rti, sig_rti, sigmid_rti,
-            dpdr_drhodr_info, source_plus_alpha_rti, source_minus_alpha_rti,
-            alpha_rti, alpha_rti_start, alpha_rti_old, u_face_start,
-            p_face_start, w_div_wc, fp_rot, d_fp_rot_dlnr, ft_rot,
-            d_ft_rot_dlnr, i_rot, d_i_rot_dlnr, brunt_n2_composition_term,
-            smoothed_brunt_b, mass_correction, omega_old, j_rot_old,
-            eps_mdot_old, fixed_gradr_sticky, mlt_prev_conv, mlt_flip_count
-        ]);
+        let own_vecs = sum_vec_bytes!(
+            self,
+            [
+                chem_id,
+                lnd,
+                ln_t,
+                ln_r,
+                lum,
+                v,
+                u,
+                omega,
+                j_rot,
+                xa,
+                xh,
+                lnd_start,
+                ln_t_start,
+                ln_r_start,
+                lum_start,
+                v_start,
+                u_start,
+                ln_pgas_start,
+                ln_peos_start,
+                ln_e_start,
+                ln_s_start,
+                energy_start,
+                peos_start,
+                non_nuc_neu_start,
+                xa_start,
+                xa_sub_xa_start,
+                xh_start,
+                lnd_old,
+                ln_t_old,
+                ln_r_old,
+                lum_old,
+                v_old,
+                u_old,
+                xa_old,
+                dq_old,
+                dq,
+                q,
+                xq,
+                dm,
+                dm_bar,
+                m,
+                m_grav,
+                cgrav,
+                grav,
+                r,
+                rmid,
+                energy,
+                eps_nuc,
+                dxdt_nuc,
+                eps_mdot,
+                gradt,
+                gradr,
+                gradl,
+                scale_height,
+                mlt_vc,
+                mlt_d,
+                mlt_cdc,
+                mlt_gamma,
+                d_mix,
+                conv_vel,
+                sig,
+                mixing_type,
+                brunt_b,
+                brunt_n2,
+                cp_start,
+                grada_start,
+                chi_t_start,
+                chi_rho_start,
+                burn_avg_epsnuc,
+                eps_nuc_categories,
+                extra_heat,
+                d_extra_heat_dlnd,
+                d_extra_heat_dlnt,
+                eps_wd_sedimentation,
+                eps_diffusion,
+                eps_pre_mix,
+                eps_phase_separation,
+                irradiation_heat,
+                etrb,
+                etrb_start,
+                et_rsp_old,
+                hp_face_old,
+                csound_start,
+                mlt_vc_old,
+                eta_rti,
+                etamid_rti,
+                sig_rti,
+                sigmid_rti,
+                dpdr_drhodr_info,
+                source_plus_alpha_rti,
+                source_minus_alpha_rti,
+                alpha_rti,
+                alpha_rti_start,
+                alpha_rti_old,
+                u_face_start,
+                p_face_start,
+                w_div_wc,
+                fp_rot,
+                d_fp_rot_dlnr,
+                ft_rot,
+                d_ft_rot_dlnr,
+                i_rot,
+                d_i_rot_dlnr,
+                brunt_n2_composition_term,
+                smoothed_brunt_b,
+                mass_correction,
+                omega_old,
+                j_rot_old,
+                eps_mdot_old,
+                fixed_gradr_sticky,
+                mlt_prev_conv,
+                mlt_flip_count
+            ]
+        );
         let name_bytes: usize = self.iso_names.iter().map(String::len).sum();
         let extra_grav = self
             .extra_grav_if_nonzero

@@ -263,6 +263,8 @@ pub fn remap_onto_dq(
     let et_rsp_old = model.aux.rsp.et_rsp.clone();
     let hp_face_old = model.aux.rsp.hp_face.clone();
     let alpha_rti_old = model.aux.alpha_rti.clone();
+    let mlt_vc_prev = model.mlt_vc.clone();
+    let prev_okay_mlt_vc = model.aux.okay_to_set_mlt_vc;
 
     let (xa_c0, xa_c1) =
         compute_monotone_xa_slopes(&dq_old, &xa_old, nz_old, species);
@@ -274,6 +276,12 @@ pub fn remap_onto_dq(
     model.set_qs();
     model.set_xqs();
     model.set_m_and_dm();
+    interp_face_mlt_vc_onto_xq(
+        &xq_old,
+        &mlt_vc_prev,
+        &model.xq,
+        &mut model.mlt_vc,
+    );
 
     let mut e_target = vec![0.0; nz_new];
     let mut unchanged = vec![false; nz_new];
@@ -447,11 +455,67 @@ pub fn remap_onto_dq(
     let (age_old, dt_old, mstar_old) =
         (model.star_age_old, model.dt_old, model.mstar_old);
     model.pack_xh();
-    set_hydro_vars(model, false, false)?;
+    model.aux.okay_to_set_mlt_vc = false;
+    let hydro_res = set_hydro_vars(model, false, false);
+    model.aux.okay_to_set_mlt_vc = prev_okay_mlt_vc;
+    hydro_res?;
     model.save_start_values()?;
     model.save_old_values();
     model.star_age_old = age_old;
     model.dt_old = dt_old;
     model.mstar_old = mstar_old;
     Ok(())
+}
+
+/// Interpolates face `mlt_vc` from `xq_old[0..nz_old]` (with center `xq = 1`,
+/// `val = 0`) onto `xq_new[0..nz_new]` (`do_interp_pt_val` in
+/// `star/private/mesh_adjust.f90:245-248, 834-871`).
+fn interp_face_mlt_vc_onto_xq(
+    xq_old: &[f64],
+    mlt_vc_old: &[f64],
+    xq_new: &[f64],
+    mlt_vc_out: &mut [f64],
+) {
+    let nz_old = xq_old.len().min(mlt_vc_old.len());
+    let nz_new = xq_new.len().min(mlt_vc_out.len());
+    if nz_old == 0 || nz_new == 0 {
+        mlt_vc_out.fill(0.0);
+        return;
+    }
+    let mut x_pts = Vec::with_capacity(nz_old + 1);
+    let mut y_pts = Vec::with_capacity(nz_old + 1);
+    x_pts.extend_from_slice(&xq_old[..nz_old]);
+    y_pts.extend_from_slice(&mlt_vc_old[..nz_old]);
+    x_pts.push(1.0);
+    y_pts.push(0.0);
+
+    let strictly_inc = x_pts.windows(2).all(|w| w[1] > w[0]);
+    if strictly_inc && x_pts.len() >= 4 {
+        if let Ok(vals) = flexmesa_interp1d::interpolate_vector_pm(
+            &x_pts,
+            &y_pts,
+            &xq_new[..nz_new],
+        ) {
+            for (dst, v) in mlt_vc_out[..nz_new].iter_mut().zip(vals) {
+                *dst = if v.is_finite() { v.max(0.0) } else { 0.0 };
+            }
+            return;
+        }
+    }
+
+    let mut j = 0_usize;
+    for (k, &xq) in xq_new[..nz_new].iter().enumerate() {
+        while j + 2 < x_pts.len() && x_pts[j + 1] < xq {
+            j += 1;
+        }
+        let (x0, x1) = (x_pts[j], x_pts[j + 1]);
+        let (y0, y1) = (y_pts[j], y_pts[j + 1]);
+        let v = if x1 > x0 {
+            let t = ((xq - x0) / (x1 - x0)).clamp(0.0, 1.0);
+            (1.0 - t) * y0 + t * y1
+        } else {
+            y0
+        };
+        mlt_vc_out[k] = if v.is_finite() { v.max(0.0) } else { 0.0 };
+    }
 }

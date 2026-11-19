@@ -8,7 +8,6 @@ import pathlib
 import jax
 import jax.numpy as jnp
 import numpy as np
-import pytest
 
 import flexmesa
 from flexmesa import chem, constants, eos
@@ -164,7 +163,7 @@ def test_get_pc_and_skye_alfa_match_mesa_26_4_1_oracle() -> None:
         for cid, lr, lt in (
             ("skye_alfa_simple_2p0_6p0", 2.0, 6.0),
             ("skye_alfa_simple_4p0_8p0", 4.0, 8.0),
-            ("skye_alfa_simple_f64_2p35_7p3", 2.35, 7.3),
+            ("skye_alfa_simple_2p35_7p3", 2.35, 7.3),
         ):
             exp = _load_scalar_row("ALFA", cid)
             sm_r = eos.get_skye_alfa_simple(lr, lt, backend="rust")
@@ -180,21 +179,20 @@ def test_get_pc_and_skye_alfa_match_mesa_26_4_1_oracle() -> None:
                 )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "declared gap (#161): get_skye_alfa_simple uses f64 2.3/2.4/7.2/7.4 "
-        "defaults vs MESA eos/defaults/eos.defaults:225-228 real(4) literals"
-    ),
-)
 def test_skye_alfa_simple_default_bounds_match_mesa_26_4_1_real4() -> None:
     """Check `get_skye_alfa_simple` default bounds against MESA `26.4.1`."""
     exp_def = _load_scalar_row("ALFA", "skye_alfa_simple_2p35_7p3")
     with flexmesa.numerics_mode_context("strict"):
         sm_r = eos.get_skye_alfa_simple(2.35, 7.3, backend="rust")
+    sm_j = eos.get_skye_alfa_simple(
+        jnp.float64(2.35), jnp.float64(7.3), backend="jax"
+    )
     for col in range(3):
         np.testing.assert_allclose(
             float(sm_r[col]), exp_def[col], rtol=1e-13, atol=1e-15
+        )
+        np.testing.assert_allclose(
+            float(sm_j[col]), exp_def[col], rtol=1e-13, atol=1e-15
         )
 
 

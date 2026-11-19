@@ -26,6 +26,7 @@ fn test_default_am_d_mix_zero_omega_transport_and_gold2_chem_increment_convergen
         initial_mass: 4.0,
         rotation_flag: true,
         use_gold2_tolerances: true,
+        zbase: 0.02,
         ..StarControls::default()
     };
     ctrl.mix_wind.premix_omega = false;
@@ -92,6 +93,7 @@ fn test_premix_omega_symmetric_strang_split_pre_and_post_henyey() {
     let mut base_ctrl = StarControls {
         initial_mass: 3.0,
         rotation_flag: true,
+        zbase: 0.02,
         ..StarControls::default()
     };
     base_ctrl.mix_wind.am_nu_factor = 1.0;
@@ -149,6 +151,7 @@ fn test_op_split_burn_runs_before_save_start_values_preserving_pre_burn_t_start(
         initial_mass: 15.0,
         op_split_burn: true,
         op_split_burn_min_t: 1.0e7,
+        zbase: 0.02,
         ..StarControls::default()
     };
     let mut star = load_zams_model(ctrl, StarJobControls::default())
@@ -193,6 +196,7 @@ fn test_relax_composition_with_henyey_low_metallicity_equilibration() {
     let ctrl = StarControls {
         initial_mass: 12.0,
         rotation_flag: true,
+        zbase: 0.02,
         ..StarControls::default()
     };
     let job = StarJobControls {
@@ -200,7 +204,8 @@ fn test_relax_composition_with_henyey_low_metallicity_equilibration() {
         new_z: 0.00034,
         relax_y: true,
         new_y: 0.248_246,
-        new_surface_rotation_v: Some(50.0),
+        set_surface_rotation_v: true,
+        new_surface_rotation_v: 50.0,
         ..StarJobControls::default()
     };
 
@@ -284,6 +289,7 @@ fn test_binary_extras_custom_other_wind_and_finish_step_termination() {
     let c1 = StarControls {
         initial_mass: 2.0,
         use_other_wind: true,
+        zbase: 0.02,
         ..StarControls::default()
     };
     let s1 =

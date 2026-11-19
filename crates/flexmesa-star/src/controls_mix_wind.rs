@@ -136,6 +136,30 @@ pub struct MixWindControls {
     pub make_gradr_sticky_in_solver_iters: bool,
     /// Peak $\log_{10}(T/\mathrm{K})$ threshold enabling `make_gradr_sticky_in_solver_iters` (`min_logT_for_make_gradr_sticky_in_solver_iters`).
     pub min_logt_for_make_gradr_sticky_in_solver_iters: f64,
+    /// Enable diffusive mixing floor `min_D_mix` (`set_min_D_mix`, `false` default).
+    pub set_min_d_mix: bool,
+    /// Minimum mass coordinate ($M_\odot$) for applying `min_D_mix` (`mass_lower_limit_for_min_D_mix`, `0.0` default).
+    pub mass_lower_limit_for_min_d_mix: f64,
+    /// Maximum mass coordinate ($M_\odot$) for applying `min_D_mix` (`mass_upper_limit_for_min_D_mix`, `1e99` default).
+    pub mass_upper_limit_for_min_d_mix: f64,
+    /// Minimum central electron fraction $Y_{e,c}$ required to apply `min_D_mix` (`min_center_Ye_for_min_D_mix`, `0.47` default).
+    pub min_center_ye_for_min_d_mix: f64,
+    /// Remove isolated 1-zone mixing spikes when `remove_mixing_glitches` is active (`okay_to_remove_mixing_singleton`, `true` default).
+    pub okay_to_remove_mixing_singleton: bool,
+    /// Minimum diffusivity threshold ($\mathrm{cm^2\,s^{-1}}$) below which mixing is zeroed (`clip_D_limit`, `0.0` default).
+    pub clip_d_limit: f64,
+    /// Maximum radiative gap ($H_P$) closed between convective zones (`min_convective_gap`, `-1.0` default = off).
+    pub min_convective_gap: f64,
+    /// Maximum gap ($H_P$) closed between thermohaline zones (`min_thermohaline_gap`, `-1.0` default = off).
+    pub min_thermohaline_gap: f64,
+    /// Maximum radiative dropout ($H_P$) bridged inside thermohaline regions (`min_thermohaline_dropout`, `-1.0` default = off).
+    pub min_thermohaline_dropout: f64,
+    /// Maximum $\nabla_L - \nabla_{\mathrm{ad}}$ permitted inside a bridged thermohaline dropout (`max_dropout_gradL_sub_grada`, `1e-3` default).
+    pub max_dropout_gradl_sub_grada: f64,
+    /// Maximum gap ($H_P$) closed between semiconvective zones (`min_semiconvection_gap`, `-1.0` default = off).
+    pub min_semiconvection_gap: f64,
+    /// Convert semiconvective islands bounded by convection into convective zones (`remove_embedded_semiconvection`, `false` default).
+    pub remove_embedded_semiconvection: bool,
 
     // --- Winds, Rotational Enhancement, Accretion & `eps_mdot` ---
     /// Hot-star wind prescription name (`hot_wind_scheme`, `""` default).
@@ -256,6 +280,8 @@ pub struct MixWindControls {
     pub r_function_weight: f64,
     /// Mass gradient weight in mesh spacing function (`M_function_weight`, `0.0` default).
     pub m_function_weight: f64,
+    /// Mass transition scale parameter in mesh spacing function (`M_function_param`, `1e-6` default).
+    pub m_function_param: f64,
     /// Temperature-gradient weight in mesh spacing function (`gradT_function_weight`, `0.0` default).
     pub gradt_function_weight: f64,
     /// Angular-velocity gradient weight in mesh spacing function (`omega_function_weight`, `0.0` default).
@@ -355,11 +381,23 @@ impl Default for MixWindControls {
             predictive_sets: std::array::from_fn(|_| {
                 PredictiveParamSet::default()
             }),
-            conv_premix_avoid_increase: true,
+            conv_premix_avoid_increase: false,
             conv_premix_time_factor: 0.0,
             conv_premix_fix_pgas: true,
             make_gradr_sticky_in_solver_iters: false,
             min_logt_for_make_gradr_sticky_in_solver_iters: 1.0e99,
+            set_min_d_mix: false,
+            mass_lower_limit_for_min_d_mix: 0.0,
+            mass_upper_limit_for_min_d_mix: 1.0e99,
+            min_center_ye_for_min_d_mix: 0.47,
+            okay_to_remove_mixing_singleton: true,
+            clip_d_limit: 0.0,
+            min_convective_gap: -1.0,
+            min_thermohaline_gap: -1.0,
+            min_thermohaline_dropout: -1.0,
+            max_dropout_gradl_sub_grada: 1.0e-3,
+            min_semiconvection_gap: -1.0,
+            remove_embedded_semiconvection: false,
             hot_wind_scheme: String::new(),
             rgb_to_agb_wind_switch: 1.0e-4,
             dutch_wind_lowt_scheme: String::from("de Jager"),
@@ -412,18 +450,19 @@ impl Default for MixWindControls {
             mesh_min_dlnr: 1.0e-9,
             mesh_max_allowed_ratio: 2.5,
             max_delta_x_for_merge: 0.1,
-            max_surface_cell_dq: 1.0e-8,
-            max_center_cell_dq: 1.0e-6,
-            p_function_weight: 30.0,
+            max_surface_cell_dq: 1.0e-12,
+            max_center_cell_dq: 1.0e-7,
+            p_function_weight: 40.0,
             t_function1_weight: 110.0,
             r_function_weight: 0.0,
             m_function_weight: 0.0,
+            m_function_param: 1.0e-6,
             gradt_function_weight: 0.0,
             omega_function_weight: 0.0,
             gam_function_weight: 0.0,
-            xa_function_species: Vec::new(),
-            xa_function_weight: Vec::new(),
-            xa_function_param: Vec::new(),
+            xa_function_species: vec![String::from("he4")],
+            xa_function_weight: vec![30.0],
+            xa_function_param: vec![1.0e-2],
             remesh_dt_limit: -1.0,
             delta_mdot_atol: 1.0e-3,
             delta_mdot_rtol: 0.5,

@@ -175,7 +175,12 @@ def test_kapcn_knot_and_multi_zone_batch_consistency() -> None:
     z6 = (zeros, zeros, zeros, zeros, zeros, zeros)
     with pytest.raises(ValueError, match="mismatched zone"):
         kap.kap_get_zones(
-            chem_id, xa_zones[: nz - 1], log_rho_zones, log_t_zones, *z6
+            chem_id,
+            xa_zones[: nz - 1],
+            log_rho_zones,
+            log_t_zones,
+            *z6,
+            zbase=0.02,
         )
     with pytest.raises(ValueError, match="kap_get failed"):
         kap.kap_get_zones(
@@ -184,6 +189,7 @@ def test_kapcn_knot_and_multi_zone_batch_consistency() -> None:
             log_rho_zones,
             log_t_zones,
             *z6,
+            zbase=0.02,
         )
 
     # Verify make_differentiable_kap with AESOPUS low-T tables under @jax.jit

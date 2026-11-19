@@ -114,14 +114,15 @@ jobs:
 
       - name: Run Ruff formatter, linter, and Mypy strict type checker
         run: |
-          ruff format --check --line-length 80 src tests scripts/docs scripts/check_strict_determinism.py scripts/mesa_reference/measure_mesa_spread.py
-          ruff check src tests scripts/docs scripts/check_strict_determinism.py scripts/mesa_reference/measure_mesa_spread.py
-          mypy --strict src tests scripts/docs scripts/check_strict_determinism.py scripts/mesa_reference/measure_mesa_spread.py
+          ruff format --check --line-length 80 src tests scripts/docs scripts/audit/diff_mesa_defaults.py scripts/check_strict_determinism.py scripts/mesa_reference/measure_mesa_spread.py
+          ruff check src tests scripts/docs scripts/audit/diff_mesa_defaults.py scripts/check_strict_determinism.py scripts/mesa_reference/measure_mesa_spread.py
+          mypy --strict src tests scripts/docs scripts/audit/diff_mesa_defaults.py scripts/check_strict_determinism.py scripts/mesa_reference/measure_mesa_spread.py
 
       - name: Verify bijective known-gaps and Level-2 module hex gates
         run: |
           python -m flexmesa.testing.known_gaps_gate --fail-on-imperative-skips
           python -m flexmesa.testing.module_hex_gate --check-summary
+          python scripts/audit/diff_mesa_defaults.py --check --enforce
 
       - name: Verify generated documentation pages and port manifest dashboard
         run: |
@@ -145,7 +146,7 @@ jobs:
   history-harness:
     name: Upstream History Harness (PR Subset)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 45
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4

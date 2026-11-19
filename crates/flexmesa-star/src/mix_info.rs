@@ -28,7 +28,7 @@
 //! $\sum_{k=0}^{\mathrm{nz}-1} \Delta m_k (dX_{j,k}/dt)_{\mathrm{mix}} = 0$
 //! to machine precision.
 
-use flexmesa_const::{MixingType, FOUR_PI};
+use flexmesa_const::{MixingType, FOUR_PI, M_SUN};
 
 use crate::model::StarModel;
 
@@ -92,22 +92,109 @@ pub fn clean_mixing_glitches(
     clip_d_limit: f64,
     min_convective_gap_hp: f64,
 ) {
-    let nz = model.nz;
-    if nz < 3 {
+    if model.nz < 3 {
         return;
     }
+    remove_tiny_mixing(model, clip_d_limit);
+    remove_mixing_singletons(model, true);
+    if min_convective_gap_hp > 0.0 {
+        bridge_zone_gaps(
+            model,
+            MixingType::ConvectiveMixing,
+            MixingType::ConvectiveMixing,
+            min_convective_gap_hp,
+        );
+        bridge_zone_gaps(
+            model,
+            MixingType::ThermohalineMixing,
+            MixingType::ThermohalineMixing,
+            min_convective_gap_hp,
+        );
+    }
+    remove_embedded_semiconvection_zones(model);
+}
 
-    // 1. Remove tiny mixing below clip_d_limit (`remove_tiny_mixing`).
-    let d_floor = clip_d_limit.max(model.controls.min_d_mix);
+/// Applies mixing glitch cleanup parameterized by `model.controls.mix_wind`
+/// (`remove_mixing_glitches` in `mix_info.f90:157-180, 969-1341`).
+pub fn clean_mixing_glitches_from_controls(model: &mut StarModel) {
+    if model.nz < 3 {
+        return;
+    }
+    let mw = model.controls.mix_wind.clone();
+    remove_tiny_mixing(model, mw.clip_d_limit);
+    remove_mixing_singletons(model, mw.okay_to_remove_mixing_singleton);
+    if mw.min_convective_gap > 0.0 {
+        bridge_zone_gaps(
+            model,
+            MixingType::ConvectiveMixing,
+            MixingType::ConvectiveMixing,
+            mw.min_convective_gap,
+        );
+    }
+    if mw.min_thermohaline_gap > 0.0 {
+        bridge_zone_gaps(
+            model,
+            MixingType::ThermohalineMixing,
+            MixingType::ThermohalineMixing,
+            mw.min_thermohaline_gap,
+        );
+    }
+    if mw.min_thermohaline_dropout > 0.0 {
+        remove_thermohaline_dropouts(
+            model,
+            mw.min_thermohaline_dropout,
+            mw.max_dropout_gradl_sub_grada,
+        );
+    }
+    if mw.min_semiconvection_gap > 0.0 {
+        bridge_zone_gaps(
+            model,
+            MixingType::SemiconvectiveMixing,
+            MixingType::SemiconvectiveMixing,
+            mw.min_semiconvection_gap,
+        );
+    }
+    if mw.remove_embedded_semiconvection {
+        remove_embedded_semiconvection_zones(model);
+    }
+}
+
+/// Enforces `min_d_mix` across qualifying mass zones when `set_min_d_mix` is
+/// enabled and central $Y_e \ge \mathrm{min\_center\_ye\_for\_min\_d\_mix}$
+/// (`set_min_D_mix` in `mix_info.f90:241-249`).
+pub fn apply_min_d_mix_floor(model: &mut StarModel) {
+    let mw = &model.controls.mix_wind;
+    let d_min = model.controls.min_d_mix;
+    if !mw.set_min_d_mix || d_min <= 0.0 || model.nz == 0 {
+        return;
+    }
+    let center_ye = model.ye.last().copied().unwrap_or(0.0);
+    if center_ye < mw.min_center_ye_for_min_d_mix {
+        return;
+    }
+    let m_lo = mw.mass_lower_limit_for_min_d_mix * M_SUN;
+    let m_hi = mw.mass_upper_limit_for_min_d_mix * M_SUN;
+    for k in 0..model.nz {
+        if model.d_mix[k] >= d_min || model.m[k] > m_hi || model.m[k] < m_lo {
+            continue;
+        }
+        model.d_mix[k] = d_min;
+        model.mixing_type[k] = MixingType::MinimumMixing;
+    }
+}
+
+fn remove_tiny_mixing(model: &mut StarModel, d_floor: f64) {
     if d_floor > 0.0 {
-        for k in 1..nz {
+        for k in 1..model.nz {
             if model.d_mix[k] > 0.0 && model.d_mix[k] < d_floor {
                 set_face_radiative(model, k);
             }
         }
     }
+}
 
-    // 2. Remove mixing singletons (`remove_mixing_singletons`).
+fn remove_mixing_singletons(model: &mut StarModel, remove_conv: bool) {
+    let nz = model.nz;
     for k in 1..(nz - 1) {
         let prev_mix = model.d_mix[k - 1] > 0.0;
         let curr_mix = model.d_mix[k] > 0.0;
@@ -126,31 +213,66 @@ pub fn clean_mixing_glitches(
                 .max(model.mixing_type[k + 1].code());
             model.mixing_type[k] = MixingType::from_code(code)
                 .unwrap_or(MixingType::ConvectiveMixing);
-        } else if curr_mix && !prev_mix && !next_mix {
+        } else if remove_conv && curr_mix && !prev_mix && !next_mix {
             set_face_radiative(model, k);
         }
     }
+}
 
-    // 3. Close narrow radiative gaps between convective zones (`close_gaps`).
-    if min_convective_gap_hp > 0.0 {
-        bridge_zone_gaps(
-            model,
-            MixingType::ConvectiveMixing,
-            MixingType::ConvectiveMixing,
-            min_convective_gap_hp,
-        );
-        // 4. Bridge narrow radiative dropouts inside thermohaline regions
-        // (`remove_thermohaline_dropouts`).
-        bridge_zone_gaps(
-            model,
-            MixingType::ThermohalineMixing,
-            MixingType::ThermohalineMixing,
-            min_convective_gap_hp,
-        );
+fn remove_thermohaline_dropouts(
+    model: &mut StarModel,
+    max_dropout_hp: f64,
+    max_gradl_sub_grada: f64,
+) {
+    let nz = model.nz;
+    let mut k = 1_usize;
+    while k + 2 < nz {
+        if model.mixing_type[k] == MixingType::ThermohalineMixing
+            && model.mixing_type[k + 1] == MixingType::NoMixing
+        {
+            let k_top = k;
+            let mut k_bot = k + 1;
+            let mut all_small = true;
+            while k_bot < nz && model.mixing_type[k_bot] == MixingType::NoMixing
+            {
+                let grada_f = model.interp_val_to_pt(&model.grada, k_bot);
+                if model.gradl[k_bot] - grada_f > max_gradl_sub_grada {
+                    all_small = false;
+                }
+                k_bot += 1;
+            }
+            if k_bot < nz
+                && model.mixing_type[k_bot] == MixingType::ThermohalineMixing
+                && all_small
+            {
+                let q_upper = model.q[k_top];
+                let q_lower = model.q[k_bot];
+                let dq_span = q_upper - q_lower;
+                let dr = (model.r[k_top + 1] - model.r[k_bot - 1]).abs();
+                let hp = model.scale_height[k_top + 1];
+                if dq_span > 1.0e-20 && dr < max_dropout_hp * hp {
+                    for j in (k_top + 1)..k_bot {
+                        let alfa = (model.q[j] - q_lower) / dq_span;
+                        let beta = 1.0 - alfa;
+                        model.d_mix[j] = alfa * model.d_mix[k_top]
+                            + beta * model.d_mix[k_bot];
+                        model.conv_vel[j] = alfa * model.conv_vel[k_top]
+                            + beta * model.conv_vel[k_bot];
+                        model.mlt_cdc[j] =
+                            cdc_factor(model, j) * model.d_mix[j];
+                        model.mixing_type[j] = MixingType::ThermohalineMixing;
+                    }
+                }
+            }
+            k = k_bot;
+        } else {
+            k += 1;
+        }
     }
+}
 
-    // 5. Convert embedded semiconvection bounded by convection into convection
-    // (`remove_embedded_semiconvection`).
+fn remove_embedded_semiconvection_zones(model: &mut StarModel) {
+    let nz = model.nz;
     let mut k = 1;
     while k + 2 < nz {
         if model.mixing_type[k] == MixingType::ConvectiveMixing
@@ -223,7 +345,9 @@ fn set_face_radiative(model: &mut StarModel, k: usize) {
     model.mlt_d[k] = 0.0;
     model.mlt_cdc[k] = 0.0;
     model.conv_vel[k] = 0.0;
-    model.mlt_vc[k] = 0.0;
+    if model.aux.okay_to_set_mlt_vc {
+        model.mlt_vc[k] = 0.0;
+    }
     model.gradt[k] = model.gradr[k];
     model.mixing_type[k] = MixingType::NoMixing;
 }

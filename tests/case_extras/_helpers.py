@@ -38,6 +38,7 @@ def zbar_div_abar_profile_column(
     - `star/test_suite/wd_acc_small_dm/src/run_star_extras.f90:198-214`
     - `star/test_suite/magnetic_braking/src/run_star_extras.f90:251-267`
     - `star/test_suite/wd_aic/src/run_star_extras.f90:214-230`
+    - `star/test_suite/hb_2M/src/run_star_extras.f90:202-218`
 
     Args:
         state: Star snapshot mapping containing `nz`, `zbar` `(nz,)`, and

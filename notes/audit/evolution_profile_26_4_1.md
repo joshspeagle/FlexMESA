@@ -1,6 +1,8 @@
 # Audit A6 (`#168`): Real Evolution Profile, Waste Removal, `strict` vs `fast`, and Batching
 
-This report is rendered deterministically by `scripts/audit/render_evolution_profile_report.py` from raw JSON and CSV captures in `benchmarks/evolution_profile/26.4.1/`. Every timing and trajectory comparison below was recorded on a single quiet host against compiled Fortran MESA `r26.4.1` (`commit c8c2026`, Zenodo `19722306`) at matched thread count.
+This report is rendered deterministically by `scripts/audit/render_evolution_profile_report.py` from raw JSON and CSV captures in `benchmarks/evolution_profile/26.4.1/`. Section 3 compares with compiled Fortran MESA `r26.4.1` (`commit c8c2026`, Zenodo `19722306`) at matched thread count; Sections 2, 4, 5 and 6 compare FlexMESA with itself.
+
+**Every FlexMESA run in this report is a diagnostic run.** `4` of the `4` `strict` records carry `allow_unsupported_controls = true`: the runs continued past upstream controls FlexMESA does not implement, so they did not do everything the inlists ask (`DECISIONS #26`). All four cases are declared known gaps in `benchmarks/history_harness/known_gaps.toml` and none counts as passing. The step counts and track differences in Section 1 show that the FlexMESA and MESA runs are not the same calculation; the timings are a profile of FlexMESA as it is, not a like-for-like speed comparison with MESA.
 
 ## 1. Measurement Provenance & Selected Cases
 
@@ -10,7 +12,7 @@ This report is rendered deterministically by `scripts/audit/render_evolution_pro
 - **FlexMESA Toolchain**: `rustc 1.100.0 (0ef1bc386 2026-11-09)`, `Python 3.14.0`, `JAX 0.11.0`, `origin/main` base `1131259` (driver commit `d63af21`)
 - **Matched Thread Caps**: `OMP_NUM_THREADS=2`, `RAYON_NUM_THREADS=2`, `OPENBLAS_NUM_THREADS=2`
 
-Four `star/test_suite` cases that run to upstream's physical stopping condition on `origin/main` with stock `run_star_extras.f90` hooks were selected to span fixed and Type-2 CO opacities, 8-species and 10-species nuclear networks, Cox and Henyey MLT, stellar winds, convective overshooting, and zero-metallicity pre-MS-through-core-He evolution (`star/test_suite/semiconvection` currently stops at step 197 on `origin/main` awaiting the `#149` Type-2 `a09_co` defaults alignment):
+Four `star/test_suite` cases whose diagnostic runs end at upstream's termination code on `origin/main`, with stock `run_star_extras.f90` hooks, were selected to span fixed and Type-2 CO opacities, 8-species and 10-species nuclear networks, Cox and Henyey MLT, stellar winds, convective overshooting, and zero-metallicity pre-MS-through-core-He evolution (`star/test_suite/semiconvection` currently stops at step 197 on `origin/main` awaiting the `#149` Type-2 `a09_co` defaults alignment):
 
 - **`1.3M_ms_high_Z`**: `basic.net` (8 species), Cox MLT, fixed `gs98` opacity, CNO main sequence (`Z = 0.04`) to `log_L_upper_limit`.
 - **`low_z`**: `basic.net` (8 species), Henyey MLT, Type-2 CO opacity, Eddington `T(tau)` atmosphere (`Z = 1e-4`) to central H depletion.
@@ -28,7 +30,18 @@ Four `star/test_suite` cases that run to upstream's physical stopping condition 
 
 Unperturbed wall times (`repeats = 3` median) are measured without instrumentation hooks inside `flexmesa-star`. A second pass (`profile_evolution case --with-phase-profile`) times read-only step probes cloned before each step while verifying a `0-ULP` match on the serialized `.photo` state checksum so phase attribution never perturbs the canonical evolution trajectory.
 
-### 2.1 Share of Step Wall Time by Subsystem (`%`)
+The shares below are a model, not a direct measurement. Each kernel is timed once per step on a copy of the pre-step model and the time is multiplied by the number of calls counted in the real step. The sum of those products exceeds the measured wall time in every case, and the shares are then scaled to add up to `100%`:
+
+| Case | Measured Evolve Wall (`s`) | Sum of Kernel Estimates (`s`) | Overshoot |
+| :--- | ---: | ---: | ---: |
+| `1.3M_ms_high_Z` | `54.14` | `71.84` | `+32.7%` |
+| `low_z` | `21.14` | `26.26` | `+24.2%` |
+| `high_z` | `136.70` | `205.15` | `+50.1%` |
+| `make_metals` | `131.98` | `170.29` | `+29.0%` |
+
+The turbulence bucket also includes the Brunt, surface boundary and `eps_grav` probes, which the real step does not call on every sweep. Figures derived from these shares later in the report (the stateless microphysics share and the Amdahl ceiling in Section 6) inherit this uncertainty.
+
+### 2.1 Modelled Share of Step Wall Time by Subsystem (`%`, rescaled to `100%`)
 
 | Case | EOS | Opacity | Net + Jacobian | Turbulence | Eqn Assembly | Block Solve | Remesh | Bookkeeping & Copies |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -64,7 +77,7 @@ Each upstream case was compiled cleanly against `$MESA_DIR` (`r26.4.1`) and run 
 | `make_metals` | FlexMESA `strict` | `1112` | `4` | `1488` | `131.981` | `118.69` | `79.76` | `5.79x` |
 | `make_metals` | MESA `26.4.1` (evolve / `./rn`) | `511` | `4` | `1274` | `300.60` (`348.25`) | `588.26` | `461.67` | `1.00x` |
 
-Per zone-step (`wall_us_per_zone_step`), FlexMESA `strict` runs at `1.93x` to `5.79x` the speed of compiled Fortran MESA `26.4.1` (`2.28x` to `5.45x` on end-to-end evolution wall clock). Differences between per-zone-step speedup and total-run speedup stem directly from timestep (`dt`) controller trajectories (`#149`), because `1.3M_ms_high_Z` and `make_metals` currently take more timesteps than upstream MESA while `low_z` and `high_z` take fewer.
+Wall time per zone-step for the FlexMESA `strict` diagnostic runs is `1.93x` to `5.79x` smaller than for the MESA `26.4.1` runs (`2.28x` to `5.45x` on evolution wall clock). These ratios are not a speed comparison of equal work. The two codes take different numbers of steps on every case and their tracks differ (Section 1), the FlexMESA runs ignore unsupported controls, a zone step is not normalised for Newton iterations, and the timing protocols differ: MESA was run once with its normal output, while FlexMESA is the median of three runs with history output on one of them. Why the step counts differ has not been established.
 
 ## 4. What `#150` Waste Removal Bought
 
@@ -77,7 +90,11 @@ Issue `#150` removed two recurring sources of per-step waste in `flexmesa-star`:
 | `1.3M_ms_high_Z` | Pre-`#150` (`af9747e1`) | `346` | `53.8424` | `4.9466` | `155.61` | `0.00%` | `1.00x` |
 | `1.3M_ms_high_Z` | Post-`#150` (`3f7fa734`) | `346` | `48.6631` | `0.4205` | `140.64` | `9.62%` | `1.11x` |
 
+This is one case with `3` repeats per build. The spread of the pre-`#150` samples (`4.95 s`) is about as large as the measured saving (`5.18 s`), so the saving is not well resolved. The two commits also differ by more than the two items described above.
+
 ### 4.2 `HEAD` Component Breakdown Across All Four Cases
+
+The columns below are estimates, not A/B measurements. "Est. Micro Wall Saved" is cache hits multiplied by the difference between a cold and a warm kernel probe, using the un-rescaled probe costs of Section 2. The clone cost is `StarModel::clone()` timed at `HEAD`, not the pre-`#150` code.
 
 | Case | `MicrophysicsCache` Hits / Step | Est. Micro Wall Saved (`s`) | `StarModel` Heap (`KiB`) | `PrimaryStateBuffer` (`KiB`) | Snapshot Footprint Ratio | Pre-`#150` Clone Cost (`s`) vs Lazy Buffer (`s`) |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -156,6 +173,10 @@ Combining the measured `69.4%` stateless microphysics share with Amdahl's law fi
 
 ## 7. What Was Not Verified
 
+- **Agreement with MESA**: None of the four cases passes the upstream-history harness. Every FlexMESA run here ignored unsupported controls, and the runs diverge from MESA in step count and track (Section 1). No statement in this report is a statement about FlexMESA's speed at equal work.
+- **Timing protocol**: MESA was timed from a single run; FlexMESA from the median of three. Build flags are not recorded for either code. MESA zone-steps are estimated from `history.data`.
+- **Subsystem shares**: The per-subsystem shares are a rescaled model (Section 2), not instrumented timings.
+- **Engine version**: The FlexMESA measurements were taken at `origin/main` `1131259` and have not been repeated on later commits.
 - **Case breadth**: Measurements cover four `star/test_suite` cases (`1.3M_ms_high_Z`, `low_z`, `high_z`, `make_metals`) on a single `x86_64` workstation; `semiconvection` (blocked at step 197 on `origin/main` pending `#149`), late burning with `approx21.net`, hydrodynamic `rsp2` pulsations, `binary` evolutions, and `astero` simplex runs were not profiled in this campaign.
 - **`aarch64` & multi-socket scaling**: `strict` vs `fast` ratios and `rayon` worker-pool curves were measured on one `8`-core / `16`-thread `x86_64` CPU under WSL2; Apple Silicon (`aarch64`) and high-core-count server NUMA scaling were not measured.
 - **`#150` git A/B scope**: Direct pre-`#150` (`af9747e`) vs post-`#150` (`3f7fa734`) binary timing was run on `1.3M_ms_high_Z`; the remaining three cases report `HEAD` component measurements (`MicrophysicsCache` hit rates and `PrimaryStateBuffer` vs `StarModel::clone` timings).

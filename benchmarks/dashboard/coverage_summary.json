@@ -2,16 +2,16 @@
   "rust": {
     "tool": "cargo llvm-cov",
     "overall": {
-      "lines": 90287,
-      "covered": 66808,
-      "percent": 74.0
+      "lines": 93082,
+      "covered": 67944,
+      "percent": 73.0
     },
     "by_crate": [
       {
         "crate": "flexmesa-astero",
         "lines": 4040,
-        "covered": 1507,
-        "percent": 37.3
+        "covered": 1456,
+        "percent": 36.0
       },
       {
         "crate": "flexmesa-atm",
@@ -27,9 +27,9 @@
       },
       {
         "crate": "flexmesa-bench",
-        "lines": 2408,
-        "covered": 2334,
-        "percent": 96.9
+        "lines": 3558,
+        "covered": 2409,
+        "percent": 67.7
       },
       {
         "crate": "flexmesa-binary",
@@ -69,9 +69,9 @@
       },
       {
         "crate": "flexmesa-eos",
-        "lines": 8893,
-        "covered": 7131,
-        "percent": 80.2
+        "lines": 9698,
+        "covered": 7677,
+        "percent": 79.2
       },
       {
         "crate": "flexmesa-interp1d",
@@ -87,15 +87,15 @@
       },
       {
         "crate": "flexmesa-ionization",
-        "lines": 1001,
-        "covered": 674,
-        "percent": 67.3
+        "lines": 1227,
+        "covered": 804,
+        "percent": 65.5
       },
       {
         "crate": "flexmesa-kap",
-        "lines": 3141,
-        "covered": 1987,
-        "percent": 63.3
+        "lines": 3394,
+        "covered": 2226,
+        "percent": 65.6
       },
       {
         "crate": "flexmesa-math",
@@ -142,8 +142,8 @@
       {
         "crate": "flexmesa-star",
         "lines": 35741,
-        "covered": 26190,
-        "percent": 73.3
+        "covered": 26100,
+        "percent": 73.0
       },
       {
         "crate": "flexmesa-testing",
@@ -159,18 +159,18 @@
       },
       {
         "crate": "flexmesa-utils",
-        "lines": 839,
-        "covered": 515,
-        "percent": 61.4
+        "lines": 1200,
+        "covered": 802,
+        "percent": 66.8
       }
     ]
   },
   "python": {
     "tool": "pytest --cov",
     "overall": {
-      "statements": 21585,
-      "covered": 18970,
-      "percent": 87.9
+      "statements": 23446,
+      "covered": 20670,
+      "percent": 88.2
     },
     "by_subpackage": [
       {
@@ -229,15 +229,15 @@
       },
       {
         "subpackage": "flexmesa.data",
-        "statements": 541,
-        "covered": 428,
-        "percent": 79.1
+        "statements": 661,
+        "covered": 536,
+        "percent": 81.1
       },
       {
         "subpackage": "flexmesa.eos",
-        "statements": 3478,
-        "covered": 3282,
-        "percent": 94.4
+        "statements": 3434,
+        "covered": 3271,
+        "percent": 95.3
       },
       {
         "subpackage": "flexmesa.interp_1d",
@@ -259,9 +259,9 @@
       },
       {
         "subpackage": "flexmesa.kap",
-        "statements": 1313,
-        "covered": 1274,
-        "percent": 97.0
+        "statements": 1400,
+        "covered": 1350,
+        "percent": 96.4
       },
       {
         "subpackage": "flexmesa.math",
@@ -290,14 +290,14 @@
       {
         "subpackage": "flexmesa.num",
         "statements": 1596,
-        "covered": 1394,
-        "percent": 87.3
+        "covered": 1401,
+        "percent": 87.8
       },
       {
         "subpackage": "flexmesa.plotting",
-        "statements": 805,
-        "covered": 759,
-        "percent": 94.3
+        "statements": 2503,
+        "covered": 2274,
+        "percent": 90.9
       },
       {
         "subpackage": "flexmesa.rates",
@@ -320,8 +320,8 @@
       {
         "subpackage": "flexmesa.testing",
         "statements": 3453,
-        "covered": 2729,
-        "percent": 79.0
+        "covered": 2734,
+        "percent": 79.2
       },
       {
         "subpackage": "flexmesa.turb",

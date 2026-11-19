@@ -37,6 +37,7 @@ fn run_two_star_coupled_in_pool(n_threads: usize) -> Vec<u8> {
             let donor = load_zams_model(
                 StarControls {
                     initial_mass: 1.4,
+                    zbase: 0.02,
                     ..StarControls::default()
                 },
                 StarJobControls::default(),
@@ -45,6 +46,7 @@ fn run_two_star_coupled_in_pool(n_threads: usize) -> Vec<u8> {
             let accretor = load_zams_model(
                 StarControls {
                     initial_mass: 1.1,
+                    zbase: 0.02,
                     ..StarControls::default()
                 },
                 StarJobControls::default(),

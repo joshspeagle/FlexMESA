@@ -26,6 +26,7 @@ use crate::zams::load_zams_model;
 fn build_solar_test_model(v_flag: bool) -> StarModel {
     let mut ctrl = StarControls {
         v_flag,
+        zbase: 0.02,
         ..StarControls::default()
     };
     ctrl.initial_mass = 1.0;

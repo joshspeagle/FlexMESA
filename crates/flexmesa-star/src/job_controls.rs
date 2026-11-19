@@ -544,8 +544,8 @@ pub struct StarJobControls {
     pub astero_just_call_my_extras_check_model: bool,
     /// Output `.mod` filename on termination (`save_model_filename`).
     pub save_model_filename: String,
-    /// Optional model number at which to save a `.mod` file (`save_model_number`).
-    pub save_model_number: Option<usize>,
+    /// Model number at which to save a `.mod` file (`save_model_number`, `< 0` disables).
+    pub save_model_number: isize,
     /// Whether to save a `.photo` restart file on termination (`save_photo_when_terminate`).
     pub save_photo_when_terminate: bool,
     /// Output `.photo` filename on termination (`save_photo_filename`).
@@ -586,12 +586,24 @@ pub struct StarJobControls {
     pub change_rotation_flag: bool,
     /// Target `rotation_flag` when `change_rotation_flag` is true (`new_rotation_flag`).
     pub new_rotation_flag: bool,
-    /// Optional uniform angular velocity $\Omega$ ($\mathrm{rad\,s^{-1}}$) on startup (`new_omega`).
-    pub new_omega: Option<f64>,
-    /// Optional uniform $\Omega / \Omega_{\mathrm{crit}}$ on startup (`new_omega_div_omega_crit`).
-    pub new_omega_div_omega_crit: Option<f64>,
-    /// Optional surface equatorial velocity ($\mathrm{km\,s^{-1}}$) on startup (`new_surface_rotation_v`).
-    pub new_surface_rotation_v: Option<f64>,
+    /// Apply `new_omega` at startup (`set_omega`, `false` default).
+    pub set_omega: bool,
+    /// Apply `new_omega` only on initial non-restart run (`set_initial_omega`, `false` default).
+    pub set_initial_omega: bool,
+    /// Uniform angular velocity $\Omega$ ($\mathrm{rad\,s^{-1}}$) on startup (`new_omega`, `0.0` default).
+    pub new_omega: f64,
+    /// Apply `new_omega_div_omega_crit` at startup (`set_omega_div_omega_crit`, `false` default).
+    pub set_omega_div_omega_crit: bool,
+    /// Apply `new_omega_div_omega_crit` only on initial non-restart run (`set_initial_omega_div_omega_crit`, `false` default).
+    pub set_initial_omega_div_omega_crit: bool,
+    /// Uniform $\Omega / \Omega_{\mathrm{crit}}$ on startup (`new_omega_div_omega_crit`, `0.0` default).
+    pub new_omega_div_omega_crit: f64,
+    /// Apply `new_surface_rotation_v` at startup (`set_surface_rotation_v`, `false` default).
+    pub set_surface_rotation_v: bool,
+    /// Apply `new_surface_rotation_v` only on initial non-restart run (`set_initial_surface_rotation_v`, `false` default).
+    pub set_initial_surface_rotation_v: bool,
+    /// Surface equatorial velocity ($\mathrm{km\,s^{-1}}$) on startup (`new_surface_rotation_v`, `0.0` default).
+    pub new_surface_rotation_v: f64,
     /// Whether to set initial stellar age (`set_initial_age`).
     pub set_initial_age: bool,
     /// Initial stellar age in years (`initial_age`).
@@ -679,10 +691,10 @@ pub struct StarJobControls {
     /// `star_data/public/star_data_def.inc:369`). An unsubscripted
     /// assignment sets element 1, as a Fortran namelist does.
     pub required_termination_code_string: Vec<String>,
-    /// Optional exact number of evolutionary steps to take before terminating (`steps_to_take_before_terminate`).
-    pub steps_to_take_before_terminate: Option<usize>,
-    /// Optional inner temperature cut in K (`remove_initial_center_by_temperature`).
-    pub remove_initial_center_by_temperature: Option<f64>,
+    /// Number of evolutionary steps to take before terminating (`steps_to_take_before_terminate`, `< 0` disables).
+    pub steps_to_take_before_terminate: isize,
+    /// Inner temperature cut in K (`remove_initial_center_by_temperature`, `<= 0` disables).
+    pub remove_initial_center_by_temperature: f64,
     /// Whether `pgstar` live plotting was requested in the inlist (accepted as no-op).
     pub pgstar_flag: bool,
     /// Custom `history_columns.list` path (`history_columns_file` in `star/defaults/star_job.defaults:214`).
@@ -701,13 +713,13 @@ impl Default for StarJobControls {
     fn default() -> Self {
         Self {
             create_pre_ms_model: false,
-            pre_ms_t_c: 9.0e5,
+            pre_ms_t_c: 3.0e5,
             pre_ms_guess_rho_c: 0.0,
-            pre_ms_d_log10_p: 0.004,
+            pre_ms_d_log10_p: 0.0,
             pre_ms_log_p_surf_limit: 3.5,
             pre_ms_log_t_surf_limit: 3.7,
             pre_ms_log_lum_factor: 0.0,
-            pre_ms_relax_num_steps: 20,
+            pre_ms_relax_num_steps: 300,
             create_initial_model: false,
             radius_in_cm_for_create_initial_model: 0.0,
             mass_in_gm_for_create_initial_model: 0.0,
@@ -717,19 +729,19 @@ impl Default for StarJobControls {
             saved_model_name: String::new(),
             save_model_when_terminate: false,
             astero_just_call_my_extras_check_model: false,
-            save_model_filename: String::new(),
-            save_model_number: None,
-            save_photo_when_terminate: false,
+            save_model_filename: String::from("undefined"),
+            save_model_number: -111,
+            save_photo_when_terminate: true,
             save_photo_filename: String::new(),
             save_pulse_data_when_terminate: false,
-            save_pulse_data_filename: String::new(),
-            pulse_data_format: String::from("GYRE"),
+            save_pulse_data_filename: String::from("undefined"),
+            pulse_data_format: String::from("FGONG"),
             save_stella_data_when_terminate: false,
             save_stella_data_filename: String::new(),
             net_name: String::from("basic.net"),
             change_net: false,
             new_net_name: String::new(),
-            auto_extend_net: false,
+            auto_extend_net: true,
             h_he_net: String::from("basic.net"),
             co_net: String::from("co_burn.net"),
             adv_net: String::from("approx21.net"),
@@ -739,16 +751,22 @@ impl Default for StarJobControls {
             new_u_flag: false,
             change_rotation_flag: false,
             new_rotation_flag: false,
-            new_omega: None,
-            new_omega_div_omega_crit: None,
-            new_surface_rotation_v: None,
+            set_omega: false,
+            set_initial_omega: false,
+            new_omega: 0.0,
+            set_omega_div_omega_crit: false,
+            set_initial_omega_div_omega_crit: false,
+            new_omega_div_omega_crit: 0.0,
+            set_surface_rotation_v: false,
+            set_initial_surface_rotation_v: false,
+            new_surface_rotation_v: 0.0,
             set_initial_age: false,
             initial_age: 0.0,
             set_initial_model_number: false,
             initial_model_number: 0,
             set_initial_dt: false,
-            years_for_initial_dt: 0.0,
-            seconds_for_initial_dt: 0.0,
+            years_for_initial_dt: -1.0,
+            seconds_for_initial_dt: -1.0,
             set_initial_cumulative_energy_error: false,
             new_cumulative_energy_error: 0.0,
             set_uniform_initial_composition: false,
@@ -765,18 +783,18 @@ impl Default for StarJobControls {
             new_y: -1.0,
             set_tau_factor: false,
             relax_tau_factor: false,
-            set_to_this_tau_factor: 1.0,
+            set_to_this_tau_factor: -1.0,
             relax_m_center: false,
             new_core_mass: 0.0,
             core_avg_rho: 10.0,
-            core_avg_eps: 0.0,
+            core_avg_eps: 1.0e-6,
             relax_r_center: false,
             new_r_center: 0.0,
             relax_l_center: false,
             new_l_center: 0.0,
             relax_irradiation: false,
             new_irradiation_flux: 0.0,
-            column_depth_for_irradiation: 0.0,
+            column_depth_for_irradiation: -1.0,
             relax_initial_to_xaccrete: false,
             relax_initial_mass_to_remove_h_env: false,
             set_initial_v_center: false,
@@ -784,8 +802,8 @@ impl Default for StarJobControls {
             change_initial_rti_flag: false,
             new_rti_flag: false,
             required_termination_code_string: Vec::new(),
-            steps_to_take_before_terminate: None,
-            remove_initial_center_by_temperature: None,
+            steps_to_take_before_terminate: -1,
+            remove_initial_center_by_temperature: 0.0,
             pgstar_flag: false,
             history_columns_file: String::new(),
             profile_columns_file: String::new(),

@@ -306,13 +306,15 @@ pub fn eval_star_intrinsic_wind_cgs_with_extras(
     extras: &mut dyn BinaryExtras,
 ) -> Result<f64, StarError> {
     let custom_raw = if star.controls.use_other_wind {
-        Some(extras.other_wind_cgs(star, star_idx, ignore_rlof)?.ok_or_else(
-            || {
-                StarError::InvalidInput(String::from(
-                    "use_other_wind = .true. requires an other_wind hook",
-                ))
-            },
-        )?)
+        Some(
+            extras
+                .other_wind_cgs(star, star_idx, ignore_rlof)?
+                .ok_or_else(|| {
+                    StarError::InvalidInput(String::from(
+                        "use_other_wind = .true. requires an other_wind hook",
+                    ))
+                })?,
+        )
     } else {
         None
     };
@@ -765,7 +767,7 @@ pub fn evolve_single_star_without_term_rewind(
 ) -> Result<EvolveStepReport, StarError> {
     let saved_limits = (
         star.controls.max_model_number.take(),
-        star.controls.max_age.take(),
+        std::mem::replace(&mut star.controls.max_age, 1.0e36),
         star.controls.max_age_in_seconds.take(),
         std::mem::take(&mut star.controls.xa_central_lower_limit),
         std::mem::take(&mut star.controls.xa_central_upper_limit),

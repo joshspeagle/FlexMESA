@@ -295,6 +295,7 @@ fn test_rsp_inverse_eos_root_finders_converge() {
     let mut model =
         read_mod_str(&raw, StarControls::default(), StarJobControls::default())
             .expect("parse cepheid");
+    model.kap_config.zbase = 0.007;
     let chem = RspChemCache::from_model_zone0(&model).expect("chem cache");
 
     for &k in &[5_usize, 45, 110] {

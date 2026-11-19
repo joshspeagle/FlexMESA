@@ -19,7 +19,9 @@ use flexmesa_binary::{
     BinaryLogsOptions, BinarySystem, ImplicitMdotSolver, ImplicitStepAction,
     RocheDeformationTables,
 };
-use flexmesa_const::{CLIGHT, CRAD, LSUN, MSUN, PI, RSUN, SECDAY, SECYER, STANDARD_CGRAV};
+use flexmesa_const::{
+    CLIGHT, CRAD, LSUN, MSUN, PI, RSUN, SECDAY, SECYER, STANDARD_CGRAV,
+};
 use flexmesa_math::{exp10, log10, pow};
 use flexmesa_star::{
     check_termination_limits, init_or_update_model_from_bundle,
@@ -191,7 +193,12 @@ fn eval_brott_vink_wind(
     alfa * w1 + (1.0 - alfa) * w2
 }
 
-fn species_frac(star: &StarModel, zone: usize, iso: &str, fallback: f64) -> f64 {
+fn species_frac(
+    star: &StarModel,
+    zone: usize,
+    iso: &str,
+    fallback: f64,
+) -> f64 {
     if star.nz == 0 || star.species == 0 {
         return fallback;
     }
@@ -239,7 +246,9 @@ impl BinaryExtras for JdotGrCheckExtras {
         self.max_rel_err = self.max_rel_err.max(rel);
         if rel > 1.0e-2 {
             self.failed_mid_run = true;
-            return BinaryExtrasAction::Terminate(String::from("GrErrorExceeded"));
+            return BinaryExtrasAction::Terminate(String::from(
+                "GrErrorExceeded",
+            ));
         }
         BinaryExtrasAction::KeepGoing
     }
@@ -278,7 +287,9 @@ impl BinaryExtras for JdotMlCheckExtras {
         self.max_rel_err = self.max_rel_err.max(rel);
         if rel > 1.0e-4 {
             self.failed_mid_run = true;
-            return BinaryExtrasAction::Terminate(String::from("MlErrorExceeded"));
+            return BinaryExtrasAction::Terminate(String::from(
+                "MlErrorExceeded",
+            ));
         }
         BinaryExtrasAction::KeepGoing
     }
@@ -338,7 +349,9 @@ impl BinaryExtras for WindFedBhHmxbExtras {
             acct.mdot_edd * (1.0 - acct.mdot_edd_eta) * (1.0 + 1.0e-10);
         if acct.component_mdot[1] > max_allowed {
             self.failed_mid_run = true;
-            return BinaryExtrasAction::Terminate(String::from("ExceededEddington"));
+            return BinaryExtrasAction::Terminate(String::from(
+                "ExceededEddington",
+            ));
         }
         let expected_sys = if -acct.actual_mtransfer_rate > acct.mdot_edd {
             acct.actual_mtransfer_rate + acct.mdot_edd
@@ -427,8 +440,8 @@ impl BinaryExtras for DoubleBhExtras {
         }
         let x_surf = species_frac(star, 0, "h1", 0.7);
         let y_surf = species_frac(star, 0, "he4", 0.28);
-        let z_base = if star.controls.zbase > 0.0 {
-            star.controls.zbase
+        let z_base = if star.kap_config.zbase >= 0.0 {
+            star.kap_config.zbase
         } else {
             (1.0 - x_surf - y_surf).clamp(1.0e-6, 0.1)
         };
@@ -690,12 +703,14 @@ fn test_decoupled_edd_retention_limit_vs_radiation_correction() {
 fn test_initial_separation_and_dynamic_point_mass_conversion() {
     let c1 = StarControls {
         initial_mass: 1.0,
+        zbase: 0.02,
         ..StarControls::default()
     };
     let s1 =
         load_zams_model(c1, StarJobControls::default()).expect("1 Msun ZAMS");
     let c2 = StarControls {
         initial_mass: 0.8,
+        zbase: 0.02,
         ..StarControls::default()
     };
     let s2 =
@@ -730,8 +745,7 @@ fn test_brott_2011_wind_regimes_are_positive_and_continuous() {
         eval_brott_wind_msun_yr(5.0e5, 60.0, 12.0, 42_000.0, 0.70, 0.02);
     let w_bistab =
         eval_brott_wind_msun_yr(5.0e5, 60.0, 35.0, 23_000.0, 0.70, 0.02);
-    let w_wr =
-        eval_brott_wind_msun_yr(6.0e5, 35.0, 3.0, 80_000.0, 0.05, 0.02);
+    let w_wr = eval_brott_wind_msun_yr(6.0e5, 35.0, 3.0, 80_000.0, 0.05, 0.02);
     let w_blend =
         eval_brott_wind_msun_yr(5.5e5, 45.0, 8.0, 50_000.0, 0.55, 0.02);
     for w in [w_hot, w_bistab, w_wr, w_blend] {
@@ -756,11 +770,11 @@ fn test_recursive_binary_inlists_and_all_8_cases_capped_4_steps() {
             && raw_err.to_string().contains("unsupported control"),
         "unexpected raw double_bh error: {raw_err}"
     );
-    let suite_err = run_binary_test_suite_case(
-        &suite_dir.join("jdot_gr_check"),
-        Some(4),
-    )
-    .expect_err("raw $MESA_DIR binary case must reject unsupported controls");
+    let suite_err =
+        run_binary_test_suite_case(&suite_dir.join("jdot_gr_check"), Some(4))
+            .expect_err(
+                "raw $MESA_DIR binary case must reject unsupported controls",
+            );
     assert!(
         matches!(suite_err, StarError::InvalidInput(_))
             && suite_err.to_string().contains("unsupported control"),
@@ -863,9 +877,12 @@ fn test_coupled_double_bh_35_steps_preserves_star_controls() {
     let seed = load_zams_model(b_probe.controls.clone(), b_probe.job.clone())
         .expect("probe ZAMS");
     let mut star_extras = DefaultStarExtras;
-    let s_probe =
-        init_or_update_model_from_bundle(&b_probe, Some(seed), &mut star_extras)
-            .expect("init probe");
+    let s_probe = init_or_update_model_from_bundle(
+        &b_probe,
+        Some(seed),
+        &mut star_extras,
+    )
+    .expect("init probe");
     let bctrl = BinaryInlistControls::from_case_dir(&cdir).expect("bctrl");
     let mut extras = DoubleBhExtras {
         initial_period_in_days: bctrl.initial_period_in_days,
@@ -931,15 +948,17 @@ fn test_uncapped_jdot_ls_check_campaign() {
 
 fn assert_slow_uncapped_case(
     case_name: &str,
-) -> (flexmesa_binary::BinaryCaseRunReport, Box<dyn TestOracleExtras>) {
+) -> (
+    flexmesa_binary::BinaryCaseRunReport,
+    Box<dyn TestOracleExtras>,
+) {
     let suite_dir =
         resolve_suite_dir().expect("MESA_DIR binary/test_suite must exist");
     let tmp = TempDirGuard::new(case_name);
     let cleaned = tmp.root.join(case_name);
     copy_cleaned_binary_case(&suite_dir.join(case_name), &cleaned)
         .expect("clean uncapped binary case");
-    let bctrl =
-        BinaryInlistControls::from_case_dir(&cleaned).expect("bctrl");
+    let bctrl = BinaryInlistControls::from_case_dir(&cleaned).expect("bctrl");
     let mut extras = build_test_oracle_extras(case_name, &bctrl);
     let rep = run_binary_test_suite_case_with_extras(
         &cleaned,
@@ -1111,8 +1130,9 @@ fn test_edot_isotropic_eccentricity_enhancement_and_mdot_redo_boost() {
 
     let mut c1 = StarControls {
         initial_mass: 20.0,
+        zbase: 0.02,
         rotation_flag: true,
-        surf_omega_div_omega_crit_limit: Some(0.98),
+        surf_omega_div_omega_crit_limit: 0.98,
         ..StarControls::default()
     };
     c1.mix_wind.surf_omega_div_omega_crit_tol = 0.02;

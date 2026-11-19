@@ -359,8 +359,8 @@ pub fn timestep_controller(
         } else {
             f64::INFINITY
         };
-        if let Some(yrs) = c.max_years_for_timestep.filter(|&y| y > 0.0) {
-            max_dt = max_dt.min(yrs * SECYER);
+        if c.max_years_for_timestep > 0.0 {
+            max_dt = max_dt.min(c.max_years_for_timestep * SECYER);
         }
         if ts.max_timestep_hi_t_limit > 0.0
             && ts.hi_t_max_years_for_timestep > 0.0

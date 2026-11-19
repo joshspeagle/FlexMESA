@@ -22,6 +22,7 @@ def _make_pre_ms_model() -> star.StarModel:
     model = star.StarModel.from_pre_ms(
         initial_mass=1.0,
         initial_z=0.02,
+        t_c=9.0e5,
         d_log10_p=0.15,
     )
     model.dt = 10.0 * float(constants.SECYER)

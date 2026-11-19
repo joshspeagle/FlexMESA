@@ -226,19 +226,25 @@ pub fn eos_eval_free_eos<'py>(
 
 /// Evaluates Chabrier, Mazevet & Soubiran (`CMS`) H/He EOS standalone.
 #[pyfunction]
+#[pyo3(signature = (rho, temp, chem_id, xa, include_radiation=true))]
 pub fn eos_eval_cms<'py>(
     py: Python<'py>,
     rho: f64,
     temp: f64,
     chem_id: Vec<usize>,
     xa: PyReadonlyArray1<'py, f64>,
+    include_radiation: bool,
 ) -> PyResult<PyEosTuple<'py>> {
     let xa_s = xa
         .as_slice()
         .map_err(|_| PyValueError::new_err("xa must be contiguous"))?;
+    let cfg = CmsConfig {
+        include_radiation,
+        ..CmsConfig::default()
+    };
     let out = eval_cms_eos(
         CmsTableSet::builtin(),
-        &CmsConfig::default(),
+        &cfg,
         rho,
         temp,
         &chem_id,

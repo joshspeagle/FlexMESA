@@ -11,17 +11,39 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+import importlib.util
 import math
 import os
 import pathlib
 import re
+import struct
 import sys
+from typing import Any
 
 os.environ.setdefault("JAX_PLATFORMS", "cpu")
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from flexmesa.data import fetch  # noqa: E402
+
+def _load_fetch_module() -> Any:
+    try:
+        from flexmesa.data import fetch
+
+        return fetch
+    except ImportError:
+        fetch_path = REPO_ROOT / "src" / "flexmesa" / "data" / "fetch.py"
+        spec = importlib.util.spec_from_file_location(
+            "flexmesa_data_fetch_standalone", fetch_path
+        )
+        if spec is None or spec.loader is None:
+            raise
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = mod
+        spec.loader.exec_module(mod)
+        return mod
+
+
+fetch = _load_fetch_module()
 
 ENUM_VALUE_MAP: dict[str, str] = {
     "MltOption::Cox": "Cox",
@@ -90,12 +112,18 @@ FIELD_ALIASES: dict[str, str] = {
     "blend_logt_upper": "kap_blend_logt_upper_bdy",
     "blend_logt_lower": "kap_blend_logt_lower_bdy",
     "include_electron_conduction": "use_simple_es_for_kap",
+    "column_depth_for_irradiation": "irrad_col_depth",
 }
+
+ALLOW_LIST: frozenset[tuple[str, str]] = frozenset()
 
 NAMELIST_SPECS: tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...] = (
     (
         "star &controls",
-        ("star/defaults/controls.defaults",),
+        (
+            "star/defaults/controls.defaults",
+            "star/defaults/controls_dev.defaults",
+        ),
         (
             "crates/flexmesa-star/src/controls_defaults.rs",
             "crates/flexmesa-star/src/controls_output.rs",
@@ -108,7 +136,10 @@ NAMELIST_SPECS: tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...] = (
     ),
     (
         "star &star_job",
-        ("star/defaults/star_job.defaults",),
+        (
+            "star/defaults/star_job.defaults",
+            "star/defaults/star_job_dev.defaults",
+        ),
         ("crates/flexmesa-star/src/job_controls.rs",),
     ),
     (
@@ -187,6 +218,10 @@ def _strip_fortran_comment(line: str) -> str:
     return line
 
 
+def _f32_to_f64(val: float) -> float:
+    return float(struct.unpack("f", struct.pack("f", val))[0])
+
+
 def _parse_fortran_scalar(raw: str) -> bool | float | str:
     tok = raw.strip()
     low = tok.lower()
@@ -198,11 +233,18 @@ def _parse_fortran_scalar(raw: str) -> bool | float | str:
         tok.startswith('"') and tok.endswith('"')
     ):
         return tok[1:-1]
-    num_tok = re.sub(r"[dD]", "e", tok)
+    is_dp = bool(re.search(r"[dD]", tok)) or tok.endswith("_dp")
+    num_tok = re.sub(r"[dD]", "e", re.sub(r"_dp$", "", tok))
     try:
-        return float(num_tok)
+        parsed = float(num_tok)
     except ValueError:
         return tok
+    if not is_dp and ("." in num_tok or "e" in num_tok.lower()):
+        try:
+            return _f32_to_f64(parsed)
+        except OverflowError:
+            return parsed
+    return parsed
 
 
 def parse_mesa_defaults_file(
@@ -215,6 +257,7 @@ def parse_mesa_defaults_file(
         r"^\s*([A-Za-z_][A-Za-z0-9_]*)(?:\(([^)]*)\))?\s*=\s*(.+?)\s*$"
     )
     entries: dict[str, UpstreamDefault] = {}
+    is_slice: dict[str, bool] = {}
     for lno, raw_line in enumerate(
         fpath.read_text(encoding="utf-8", errors="replace").splitlines(), 1
     ):
@@ -226,9 +269,16 @@ def parse_mesa_defaults_file(
             continue
         name, sub, rhs = match.group(1), match.group(2), match.group(3)
         key = name.lower()
-        if sub is not None and sub.strip() not in ("1", ":", "1:"):
+        sub_clean = sub.strip() if sub is not None else None
+        if sub_clean is not None and sub_clean not in ("1", ":", "1:"):
             continue
-        if key not in entries or sub is None:
+        cur_is_slice = sub_clean in (":", "1:")
+        should_set = (
+            key not in entries
+            or sub_clean is None
+            or (is_slice.get(key, False) and not cur_is_slice)
+        )
+        if should_set:
             entries[key] = UpstreamDefault(
                 name=name,
                 rel_file=rel_file,
@@ -236,6 +286,7 @@ def parse_mesa_defaults_file(
                 raw_value=rhs,
                 parsed=_parse_fortran_scalar(rhs),
             )
+            is_slice[key] = cur_is_slice
     return entries
 
 
@@ -246,6 +297,11 @@ def _parse_rust_expr(expr: str) -> tuple[bool | float | str | None, bool]:
     if tok.startswith("Some(") and tok.endswith(")"):
         inner, _ = _parse_rust_expr(tok[5:-1])
         return inner, False
+    vec_m = re.match(r"^vec!\[([^\[\]]+)\]$", tok)
+    if vec_m is not None:
+        inner_tok = vec_m.group(1).strip()
+        if inner_tok and "," not in inner_tok:
+            return _parse_rust_expr(inner_tok)
     if tok in ("true", "false"):
         return (tok == "true"), False
     if tok == "String::new()":
@@ -259,6 +315,13 @@ def _parse_rust_expr(expr: str) -> tuple[bool | float | str | None, bool]:
     fixed_m = re.match(r"^AsteroSearchParam::fixed\(([^)]+)\)$", tok)
     if fixed_m is not None:
         return _parse_rust_expr(fixed_m.group(1))
+    f32_m = re.match(r"^f64::from\(([^)]+)_f32\)$", tok)
+    if f32_m is not None:
+        raw_f32 = f32_m.group(1).strip().replace("_", "")
+        try:
+            return _f32_to_f64(float(raw_f32)), False
+        except ValueError:
+            return None, False
     num_clean = tok.replace("_", "")
     try:
         return float(num_clean), False
@@ -269,6 +332,12 @@ def _parse_rust_expr(expr: str) -> tuple[bool | float | str | None, bool]:
 STRUCT_PREFIX_MAP: dict[str, str] = {
     "RspConfig": "rsp_",
 }
+UNPREFIXED_STRUCT_FIELDS: frozenset[tuple[str, str]] = frozenset(
+    {
+        ("RspConfig", "atm_t_tau_errtol"),
+        ("RspConfig", "atm_t_tau_max_iters"),
+    }
+)
 SKIP_DEFAULT_STRUCTS: frozenset[str] = frozenset({"Rsp2Config"})
 
 
@@ -294,7 +363,6 @@ def parse_rust_defaults(rel_files: tuple[str, ...]) -> dict[str, RustDefault]:
                 continue
             brace_depth += code.count("{") - code.count("}")
             if cur_struct not in SKIP_DEFAULT_STRUCTS:
-                prefix = STRUCT_PREFIX_MAP.get(cur_struct, "")
                 for match in field_re.finditer(code):
                     fname, expr = match.group(1), match.group(2).strip()
                     if fname == "Self":
@@ -302,6 +370,12 @@ def parse_rust_defaults(rel_files: tuple[str, ...]) -> dict[str, RustDefault]:
                     val, is_none = _parse_rust_expr(expr)
                     if val is None and not is_none:
                         continue
+                    prefix = (
+                        ""
+                        if (cur_struct, fname.lower())
+                        in UNPREFIXED_STRUCT_FIELDS
+                        else STRUCT_PREFIX_MAP.get(cur_struct, "")
+                    )
                     rec = RustDefault(
                         field=fname,
                         rel_file=rel,
@@ -360,8 +434,10 @@ def _values_equal(
     return False, "type mismatch"
 
 
-def generate_markdown(mesa_root: pathlib.Path) -> str:
-    """Build the complete ``defaults_diff_26_4_1.md`` report."""
+def check_defaults_parity(
+    mesa_root: pathlib.Path,
+) -> tuple[str, int, int, list[tuple[str, str, str]]]:
+    """Build report and return ``(md, val_diffs, none_diffs, unallowed)``."""
     ref = fetch.load_upstream_reference()
     lines: list[str] = [
         (
@@ -388,6 +464,9 @@ def generate_markdown(mesa_root: pathlib.Path) -> str:
     ]
 
     sections_md: list[str] = []
+    total_val_diff = 0
+    total_none_diff = 0
+    unallowed: list[tuple[str, str, str]] = []
     for label, up_files, rust_files in NAMELIST_SPECS:
         up_map: dict[str, UpstreamDefault] = {}
         for uf in up_files:
@@ -421,7 +500,11 @@ def generate_markdown(mesa_root: pathlib.Path) -> str:
                 else:
                     n_val_diff += 1
                 mismatches.append((u_ent, r_ent, reason))
+                if (label, key) not in ALLOW_LIST:
+                    unallowed.append((label, u_ent.name, reason))
 
+        total_val_diff += n_val_diff
+        total_none_diff += n_none_diff
         n_unimpl = n_up - n_matched
         lines.append(
             f"| {label} | {n_up} | {n_matched} | {n_agree} | "
@@ -444,9 +527,9 @@ def generate_markdown(mesa_root: pathlib.Path) -> str:
         sections_md.extend(
             [
                 (
-                    "| Control | Upstream `26.4.1` Source | Upstream Default "
-                    "| `FlexMESA` Source | `FlexMESA` Default "
-                    "| Classification |"
+                    "| Control | Upstream `26.4.1` Source "
+                    "| Upstream Default | `FlexMESA` Source "
+                    "| `FlexMESA` Default | Classification |"
                 ),
                 "| :--- | :--- | :--- | :--- | :--- | :--- |",
             ]
@@ -463,7 +546,13 @@ def generate_markdown(mesa_root: pathlib.Path) -> str:
 
     lines.extend(sections_md)
     lines.append("")
-    return "\n".join(lines)
+    return "\n".join(lines), total_val_diff, total_none_diff, unallowed
+
+
+def generate_markdown(mesa_root: pathlib.Path) -> str:
+    """Build the complete ``defaults_diff_26_4_1.md`` report."""
+    md_text, _, _, _ = check_defaults_parity(mesa_root)
+    return md_text
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -484,22 +573,44 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Verify that --out matches generated content.",
     )
+    parser.add_argument(
+        "--enforce",
+        action="store_true",
+        help="Exit non-zero if any non-allowlisted default mismatch remains.",
+    )
     ns = parser.parse_args(argv)
     mesa_root = fetch.resolve_mesa_test_inputs_dir(ns.mesa_dir)
-    md_text = generate_markdown(mesa_root)
+    md_text, total_val_diff, total_none_diff, unallowed = check_defaults_parity(
+        mesa_root
+    )
     out_path = pathlib.Path(ns.out)
+    rc = 0
     if ns.check:
         if (
             not out_path.is_file()
             or out_path.read_text(encoding="utf-8") != md_text
         ):
             print(f"{out_path} is out of date", file=sys.stderr)
-            return 1
-        return 0
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(md_text, encoding="utf-8")
-    print(f"Wrote {out_path.relative_to(REPO_ROOT)}")
-    return 0
+            rc = 1
+    else:
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(md_text, encoding="utf-8")
+        try:
+            disp = out_path.relative_to(REPO_ROOT)
+        except ValueError:
+            disp = out_path
+        print(f"Wrote {disp}")
+    if ns.enforce and (total_val_diff > 0 or total_none_diff > 0 or unallowed):
+        print(
+            f"Defaults parity enforcement failed: {total_val_diff} value "
+            f"mismatches, {total_none_diff} None-disabled active limits, "
+            f"{len(unallowed)} unallowed items",
+            file=sys.stderr,
+        )
+        for label, ctrl, reason in unallowed:
+            print(f"  - [{label}] {ctrl}: {reason}", file=sys.stderr)
+        return 1
+    return rc
 
 
 if __name__ == "__main__":

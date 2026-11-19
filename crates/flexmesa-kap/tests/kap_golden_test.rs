@@ -297,7 +297,10 @@ fn test_kapcn_and_multi_zone_batch_evaluation() {
     );
     assert!(dln_dr.is_finite() && dln_dt.is_finite());
 
-    let cfg = KapConfig::default();
+    let cfg = KapConfig {
+        zbase: 0.02,
+        ..KapConfig::default()
+    };
     let zbar = [1.101_885_743_409_164_7, 1.2, 1.5];
     let x = [0.7, 0.7, 0.7];
     let z = [0.018, 0.02, 0.02];
@@ -430,4 +433,23 @@ fn test_kap_full_tables_all_slices_loaded_and_distinct() {
     let (aes2, _, _) =
         aesopus_get(0.0300, 0.75, 8.0e-3, 2.0e-3, 1.2e-2, -9.0, 3.45).unwrap();
     assert!((aes1 - aes2).abs() / aes1 > 1.0e-2, "distinct AESOPUS Z/X");
+}
+
+#[test]
+fn test_kap_co_table_header_zfracs_match_upstream_26_4_1() {
+    let tables = kap_tables().expect("kap_tables failed");
+    for opt in [KapCoOption::Gn93Co, KapCoOption::Gs98Co, KapCoOption::A09Co] {
+        let prefix = opt.prefix();
+        let set = tables
+            .co_sets
+            .iter()
+            .find(|s| s.prefix == prefix)
+            .unwrap_or_else(|| panic!("missing CO set {prefix}"));
+        let z0 = set.z_tables.first().expect("non-empty z_tables");
+        let (fc, fn_, fo, fne) = opt.ref_zfracs();
+        assert_rel_close(z0.zfrac_c, fc, 1.0e-12, "zfrac_c");
+        assert_rel_close(z0.zfrac_n, fn_, 1.0e-12, "zfrac_n");
+        assert_rel_close(z0.zfrac_o, fo, 1.0e-12, "zfrac_o");
+        assert_rel_close(z0.zfrac_ne, fne, 1.0e-12, "zfrac_ne");
+    }
 }

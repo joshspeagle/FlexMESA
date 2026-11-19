@@ -126,14 +126,20 @@ def _ramp_01(x: jax.Array, x_lo: float, x_hi: float) -> jax.Array:
     )
 
 
+_SKYE_RHO_ANY_DEFAULT: float = float(np.float32(2.3))
+_SKYE_RHO_ALL_DEFAULT: float = float(np.float32(2.4))
+_SKYE_T_ANY_DEFAULT: float = float(np.float32(7.2))
+_SKYE_T_ALL_DEFAULT: float = float(np.float32(7.4))
+
+
 @jax.jit
 def get_skye_alfa_simple_jax(
     log_rho: jax.Array,
     log_t: jax.Array,
-    log_rho_min_for_any_skye: float = 2.3,
-    log_rho_min_for_all_skye: float = 2.4,
-    log_t_min_for_any_skye: float = 7.2,
-    log_t_min_for_all_skye: float = 7.4,
+    log_rho_min_for_any_skye: float = _SKYE_RHO_ANY_DEFAULT,
+    log_rho_min_for_all_skye: float = _SKYE_RHO_ALL_DEFAULT,
+    log_t_min_for_any_skye: float = _SKYE_T_ANY_DEFAULT,
+    log_t_min_for_all_skye: float = _SKYE_T_ALL_DEFAULT,
 ) -> tuple[jax.Array, jax.Array, jax.Array]:
     """Evaluate `Get_Skye_alfa_simple` (`skye.f90` lines 120-173) in JAX.
 

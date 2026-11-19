@@ -2,12 +2,16 @@
 //! Chugunov, DeWitt & Yakovlev (2007, PhRvD 76, 025028) one-component plasma
 //! electrostatic screening ported from `rates/private/screen_chugunov.f90`.
 
-use flexmesa_const::{AMU, BOLTZM, HBAR, ONE_THIRD, PI, QE};
+use flexmesa_const::{
+    AMU, FOUR_THIRDS, HBAR, KERG, ONE_THIRD, PI, PI2, PI4, QE, TWO_THIRDS,
+};
+use flexmesa_math::{cospi, exp, pow, sinpi};
 
 use crate::types::ScreenEval;
 
-/// Evaluates Chugunov, DeWitt & Yakovlev (2007) plasma screening (`chugunov_screening`)
-/// with analytical $(T, \rho)$ partial derivatives (`screen_chugunov.f90`).
+/// Evaluates Chugunov, DeWitt & Yakovlev (2007) plasma screening (`eval_screen_chugunov`
+/// in `rates/private/screen_chugunov.f90` and `rates/private/screen.f90:101-102`)
+/// with analytical $(T, \rho)$ partial derivatives.
 #[must_use]
 #[allow(clippy::too_many_arguments, clippy::cast_possible_truncation)]
 pub fn screen_chugunov(
@@ -15,11 +19,24 @@ pub fn screen_chugunov(
     den: f64,
     zbar: f64,
     abar: f64,
-    _a1: f64,
+    a1: f64,
     z1: f64,
-    _a2: f64,
+    a2: f64,
     z2: f64,
 ) -> ScreenEval {
+    const C_A1: f64 = 2.7822_f64;
+    const C_A2: f64 = 98.34_f64;
+    const C_B1: f64 = -1.7476_f64;
+    const C_B2: f64 = 66.07_f64;
+    const C_B3: f64 = 1.12_f64;
+    const C_B4: f64 = 65.0_f64;
+    const GAMMA_1: f64 = 590.0_f64;
+    const GAMMA_2: f64 = 600.0_f64;
+    const DELTAGAMMA: f64 = GAMMA_2 - GAMMA_1;
+    const TP1: f64 = 0.1_f64;
+    const TP2: f64 = 0.2_f64;
+    const DELTATP: f64 = TP2 - TP1;
+
     // Upstream `eval_screen_chugunov` (`rates/private/screen_chugunov.f90:115-120`)
     // returns unscreened unity (`scor = 1, dscor_dt = 0, dscor_dd = 0`) for
     // neutral species (`z1 <= 0` or `z2 <= 0`) or hydrogen-dominated plasmas
@@ -27,152 +44,177 @@ pub fn screen_chugunov(
     if z1 <= 0.0 || z2 <= 0.0 || zbar <= 1.0 || temp <= 0.0 || den <= 0.0 {
         return ScreenEval::UNSCREENED;
     }
-    let mav = abar * AMU;
-    let ntot = den / mav;
-    let ae = flexmesa_math::pow(3.0 / (4.0 * PI * ntot * zbar), ONE_THIRD);
-    let r1 = ae * flexmesa_math::pow(f64::from(z1 as i32), ONE_THIRD);
-    let r2 = ae * flexmesa_math::pow(f64::from(z2 as i32), ONE_THIRD);
-    let rav = 0.5 * (r1 + r2);
-    let dravdd = -rav / (3.0 * den);
 
-    let w = (4.0 * PI * z1 * z2 * QE * QE * ntot / mav).sqrt();
-    let dwdd = 0.5 * w / den;
-    let tp = HBAR * w / BOLTZM;
-    let dtpdd = (HBAR / BOLTZM) * dwdd;
+    // `screen.f90:101-102`
+    let ntot = den / (AMU * abar);
+    let a_e = pow(3.0 / (PI4 * zbar * ntot), ONE_THIRD);
+
+    // `screen_chugunov.f90:136-171`
+    let z1z2 = f64::from((z1 as i32) * (z2 as i32));
+    let m1 = f64::from(a1.round() as i32) * AMU;
+    let m2 = f64::from(a2.round() as i32) * AMU;
+    let _ = (m1, m2);
+    let mav = abar * AMU;
+
+    let a_1 = a_e * pow(f64::from(z1 as i32), ONE_THIRD);
+    let a_2 = a_e * pow(f64::from(z2 as i32), ONE_THIRD);
+    let da_1dd = -ONE_THIRD * a_1 / den;
+    let da_2dd = -ONE_THIRD * a_2 / den;
+    let a_av = 0.5 * (a_1 + a_2);
+    let da_avdd = 0.5 * (da_1dd + da_2dd);
+
+    let wp = (PI4 * z1z2 * QE * QE * ntot / mav).sqrt();
+    let dwpdd = 0.5 * wp / den;
+    let tp = HBAR * wp / KERG;
+    let dtpdd = (HBAR / KERG) * dwpdd;
     let tn = temp / tp;
     let dtndt = 1.0 / tp;
-    let dtndd = -tn * dtpdd / tp;
+    let dtndd = -tn / tp * dtpdd;
 
-    let (tk, dtkdt, dtkdd, denom) = if tn > 0.2 {
-        (
-            temp,
-            1.0,
-            0.0,
-            tp * temp * dtpdd / flexmesa_math::pow3(temp),
-        )
-    } else if tn <= 0.1 {
-        (0.1 * tp, 0.0, 0.1 * dtpdd, 0.0)
+    // `screen_chugunov.f90:173-195`
+    let (tk, dtkdt, dtkdd, denom_zeta) = if tn > TP2 {
+        let tk_v = temp;
+        let dtk_dt = 1.0;
+        let dtk_dd = 0.0;
+        let den_v = tp * (tk_v * dtpdd - tp * dtk_dd) / (tk_v * tk_v * tk_v);
+        (tk_v, dtk_dt, dtk_dd, den_v)
+    } else if tn <= TP1 {
+        let tk_v = TP1 * tp;
+        let dtk_dt = 0.0;
+        let dtk_dd = TP1 * dtpdd;
+        (tk_v, dtk_dt, dtk_dd, 0.0)
     } else {
-        let alfa = 0.5 * (1.0 - flexmesa_math::cos(PI * (tn - 0.1) / 0.1));
-        let dalfadtn =
-            0.5 * PI * flexmesa_math::sin(PI * (tn - 0.1) / 0.1) / 0.1;
-        let dalfadt = dalfadtn * dtndt;
-        let dalfadd = dalfadtn * dtndd;
-        let beta = 1.0 - alfa;
-        let dbetadt = -dalfadt;
-        let dbetadd = -dalfadd;
-        let tk_v = (beta * 0.1 + alfa * 0.2) * tp;
-        let dtk_dt = (dbetadt * 0.1 + dalfadt * 0.2) * tp;
-        let dtk_dd = (dbetadd * 0.1 + dalfadd * 0.2) * tp
-            + (beta * 0.1 + alfa * 0.2) * dtpdd;
-        let den_v =
-            tp * (tk_v * dtpdd - tp * dtk_dd) / flexmesa_math::pow3(tk_v);
+        let alpha = 0.5 * (1.0 - cospi((tn - TP1) / DELTATP));
+        let dalphadtn = 0.5 * (PI / DELTATP) * sinpi((tn - TP1) / DELTATP);
+        let beta = 1.0 - alpha;
+        let dbetadtn = -dalphadtn;
+        let dtk_dt =
+            (dbetadtn * dtndt * TP1 * tp) + (dalphadtn * dtndt * TP2 * tp);
+        let dtk_dd = (beta * TP1 * dtpdd)
+            + (dbetadtn * dtndd * TP1 * tp)
+            + (alpha * TP2 * dtpdd)
+            + (dalphadtn * dtndd * TP2 * tp);
+        let tk_v = beta * (TP1 * tp) + alpha * (TP2 * tp);
+        let den_v = tp * (tk_v * dtpdd - tp * dtk_dd) / (tk_v * tk_v * tk_v);
         (tk_v, dtk_dt, dtk_dd, den_v)
     };
 
-    let u_zeta = 4.0 * tp * tp / (3.0 * PI * PI * tk * tk);
-    let zeta = flexmesa_math::pow(u_zeta, ONE_THIRD);
-    let dzetadt = -2.0 * zeta * dtkdt / (3.0 * tk);
-    let dzetadd = (zeta / (3.0 * u_zeta)) * (8.0 / (3.0 * PI * PI)) * denom;
+    // `screen_chugunov.f90:197-226`
+    let u_zeta = FOUR_THIRDS * (tp * tp) / (PI2 * tk * tk);
+    let zeta = pow(u_zeta, ONE_THIRD);
+    let dzetadt = -TWO_THIRDS * (zeta / tk) * dtkdt;
+    let dzetadd =
+        ONE_THIRD * (zeta / u_zeta) * (FOUR_THIRDS / PI2) * 2.0 * denom_zeta;
 
-    let mut gam = z1 * z2 * QE * QE / (rav * BOLTZM * tk);
-    let mut dgamdt = -gam * dtkdt / tk;
-    let mut dgamdd = -gam * (tk * dravdd + rav * dtkdd) / (rav * tk);
+    let mut gam = z1z2 * QE * QE / (a_av * tk * KERG);
+    let mut dgamdt = -(gam / tk) * dtkdt;
+    let mut dgamdd = -(gam / (a_av * tk)) * (tk * da_avdd + a_av * dtkdd);
 
-    if gam >= 600.0 {
-        gam = 600.0;
+    if gam >= GAMMA_2 {
+        gam = GAMMA_2;
         dgamdt = 0.0;
         dgamdd = 0.0;
-    } else if gam >= 590.0 {
-        let alfa = 0.5 * (1.0 - flexmesa_math::cos(PI * (gam - 590.0) / 10.0));
-        let dalfadgam =
-            0.5 * PI * flexmesa_math::sin(PI * (gam - 590.0) / 10.0) / 10.0;
-        let dalfadt = dalfadgam * dgamdt;
-        let dalfadd = dalfadgam * dgamdd;
-        let beta = 1.0 - alfa;
-        let dbetadt = -dalfadt;
-        let dbetadd = -dalfadd;
-        let gam_orig = gam;
-        let dgamdt_orig = dgamdt;
-        let dgamdd_orig = dgamdd;
-        gam = beta * gam_orig + alfa * 600.0;
-        dgamdt = dbetadt * gam_orig + beta * dgamdt_orig + dalfadt * 600.0;
-        dgamdd = dbetadd * gam_orig + beta * dgamdd_orig + dalfadd * 600.0;
+    } else if gam >= GAMMA_1 {
+        let alpha = 0.5 * (1.0 - cospi((gam - GAMMA_1) / DELTAGAMMA));
+        let dalphadgam =
+            0.5 * PI * sinpi((gam - GAMMA_1) / DELTAGAMMA) * (1.0 / DELTAGAMMA);
+        let beta = 1.0 - alpha;
+        let dbetadgam = -dalphadgam;
+        let dgamdt_new = beta * dgamdt
+            + (dbetadgam * dgamdt) * gam
+            + (dalphadgam * dgamdt) * GAMMA_2;
+        let dgamdd_new = beta * dgamdd
+            + (dbetadgam * dgamdd) * gam
+            + (dalphadgam * dgamdd) * GAMMA_2;
+        gam = beta * gam + alpha * GAMMA_2;
+        dgamdt = dgamdt_new;
+        dgamdd = dgamdd_new;
     }
 
-    let a_z = 0.022;
-    let b_z = 0.41 - 0.6 / gam;
-    let db_z_dt = 0.6 * dgamdt / (gam * gam);
-    let db_z_dd = 0.6 * dgamdd / (gam * gam);
-    let g_z = 0.06 + 2.2 / gam;
-    let dg_z_dt = -2.2 * dgamdt / (gam * gam);
-    let dg_z_dd = -2.2 * dgamdd / (gam * gam);
+    // `screen_chugunov.f90:228-252`
+    let alfa = 0.022;
+    let beta = 0.41 - 0.6 / gam;
+    let dbetadt = 0.6 / (gam * gam) * dgamdt;
+    let dbetadd = 0.6 / (gam * gam) * dgamdd;
+    let gama = 0.06 + 2.2 / gam;
+    let dgamadt = -2.2 / (gam * gam) * dgamdt;
+    let dgamadd = -2.2 / (gam * gam) * dgamdd;
 
-    let u =
-        1.0 + a_z * zeta + b_z * zeta * zeta + g_z * flexmesa_math::pow3(zeta);
-    let dudt = a_z * dzetadt
-        + db_z_dt * zeta * zeta
-        + 2.0 * b_z * zeta * dzetadt
-        + dg_z_dt * flexmesa_math::pow3(zeta)
-        + 3.0 * g_z * zeta * zeta * dzetadt;
-    let dudd = a_z * dzetadd
-        + db_z_dd * zeta * zeta
-        + 2.0 * b_z * zeta * dzetadd
-        + dg_z_dd * flexmesa_math::pow3(zeta)
-        + 3.0 * g_z * zeta * zeta * dzetadd;
+    let zeta2 = zeta * zeta;
+    let zeta3 = zeta2 * zeta;
+    let u = 1.0 + alfa * zeta + beta * zeta2 + gama * zeta3;
+    let denom = pow(u, -ONE_THIRD);
+    let denom2 = denom / u;
+    let ddenomdt = -ONE_THIRD
+        * denom2
+        * ((alfa * dzetadt)
+            + (zeta2 * dbetadt + 2.0 * dzetadt * beta * zeta)
+            + (zeta3 * dgamadt + 3.0 * dzetadt * gama * zeta2));
+    let ddenomdd = -ONE_THIRD
+        * denom2
+        * ((alfa * dzetadd)
+            + (zeta2 * dbetadd + 2.0 * dzetadd * beta * zeta)
+            + (zeta3 * dgamadd + 3.0 * dzetadd * gama * zeta2));
 
-    let u13 = flexmesa_math::pow(u, ONE_THIRD);
-    let tgam = gam / u13;
-    let dtgamdt = (dgamdt - ONE_THIRD * gam * dudt / u) / u13;
-    let dtgamdd = (dgamdd - ONE_THIRD * gam * dudd / u) / u13;
+    let gamtild = gam * denom;
+    let dgamtilddt = ddenomdt * gam + dgamdt * denom;
+    let dgamtilddd = ddenomdd * gam + dgamdd * denom;
 
-    let ca1 = 2.7822_f64;
-    let ca2 = 98.34_f64;
-    let ca3 = 3.0_f64.sqrt() - ca1 / ca2.sqrt();
-    let cb1 = -1.7476_f64;
-    let cb2 = 66.07_f64;
-    let cb3 = 1.12_f64;
-    let cb4 = 65.0_f64;
+    // `screen_chugunov.f90:254-305`
+    let c_a3 = 3.0_f64.sqrt() - C_A1 / C_A2.sqrt();
+    let gamtild2 = gamtild * gamtild;
 
-    let t1_g = ca1 / (ca2 + tgam).sqrt();
-    let dt1g_dt = -0.5 * ca1 * dtgamdt / flexmesa_math::pow(ca2 + tgam, 1.5);
-    let dt1g_dd = -0.5 * ca1 * dtgamdd / flexmesa_math::pow(ca2 + tgam, 1.5);
-    let t2_g = ca3 / (1.0 + tgam);
-    let dt2g_dt = -ca3 * dtgamdt / ((1.0 + tgam) * (1.0 + tgam));
-    let dt2g_dd = -ca3 * dtgamdd / ((1.0 + tgam) * (1.0 + tgam));
+    let a_big = gamtild * gamtild.sqrt();
+    let da_dt = 1.5 * (a_big / gamtild) * dgamtilddt;
+    let da_dd = 1.5 * (a_big / gamtild) * dgamtilddd;
 
-    let tg32 = flexmesa_math::pow(tgam, 1.5);
-    let dtg32_dt = 1.5 * tgam.sqrt() * dtgamdt;
-    let dtg32_dd = 1.5 * tgam.sqrt() * dtgamdd;
-    let t3_g = tg32 * (t1_g + t2_g);
-    let dt3g_dt = dtg32_dt * (t1_g + t2_g) + tg32 * (dt1g_dt + dt2g_dt);
-    let dt3g_dd = dtg32_dd * (t1_g + t2_g) + tg32 * (dt1g_dd + dt2g_dd);
+    let b_big = C_A1 / (C_A2 + gamtild).sqrt();
+    let db_dt = -0.5 * b_big / (C_A2 + gamtild) * dgamtilddt;
+    let db_dd = -0.5 * b_big / (C_A2 + gamtild) * dgamtilddd;
 
-    let tg2 = tgam * tgam;
-    let dtg2_dt = 2.0 * tgam * dtgamdt;
-    let dtg2_dd = 2.0 * tgam * dtgamdd;
+    let c_big = c_a3 / (1.0 + gamtild);
+    let dc_dt = -c_big / (1.0 + gamtild) * dgamtilddt;
+    let dc_dd = -c_big / (1.0 + gamtild) * dgamtilddd;
 
-    let t4_g = cb1 * tg2 / (cb2 + tgam);
-    let dt4g_dt = cb1 * (dtg2_dt - tg2 * dtgamdt / (cb2 + tgam)) / (cb2 + tgam);
-    let dt4g_dd = cb1 * (dtg2_dd - tg2 * dtgamdd / (cb2 + tgam)) / (cb2 + tgam);
+    let t1 = a_big * (b_big + c_big);
+    let dt1dt = a_big * (db_dt + dc_dt) + da_dt * (b_big + c_big);
+    let dt1dd = a_big * (db_dd + dc_dd) + da_dd * (b_big + c_big);
 
-    let t5_g = cb3 * tg2 / (cb4 + tg2);
-    let dt5g_dt = cb3 * (dtg2_dt - tg2 * dtg2_dt / (cb4 + tg2)) / (cb4 + tg2);
-    let dt5g_dd = cb3 * (dtg2_dd - tg2 * dtg2_dd / (cb4 + tg2)) / (cb4 + tg2);
+    let denom_t2 = C_B2 + gamtild;
+    let ddenom_t2_dt = dgamtilddt;
+    let ddenom_t2_dd = dgamtilddd;
+    let t2 = C_B1 * gamtild2 / denom_t2;
+    let dt2dt = ((denom_t2 * C_B1 * 2.0 * gamtild * dgamtilddt)
+        - (C_B1 * gamtild2 * ddenom_t2_dt))
+        / (denom_t2 * denom_t2);
+    let dt2dd = ((denom_t2 * C_B1 * 2.0 * gamtild * dgamtilddd)
+        - (C_B1 * gamtild2 * ddenom_t2_dd))
+        / (denom_t2 * denom_t2);
 
-    let mut h0 = t3_g + t4_g + t5_g;
-    let mut dh0dt = dt3g_dt + dt4g_dt + dt5g_dt;
-    let mut dh0dd = dt3g_dd + dt4g_dd + dt5g_dd;
+    let denom_t3 = C_B4 + gamtild2;
+    let ddenom_t3_dt = 2.0 * gamtild * dgamtilddt;
+    let ddenom_t3_dd = 2.0 * gamtild * dgamtilddd;
+    let t3 = C_B3 * gamtild2 / denom_t3;
+    let dt3dt = ((denom_t3 * C_B3 * 2.0 * gamtild * dgamtilddt)
+        - (C_B3 * gamtild2 * ddenom_t3_dt))
+        / (denom_t3 * denom_t3);
+    let dt3dd = ((denom_t3 * C_B3 * 2.0 * gamtild * dgamtilddd)
+        - (C_B3 * gamtild2 * ddenom_t3_dd))
+        / (denom_t3 * denom_t3);
+
+    let mut h0 = t1 + t2 + t3;
+    let mut dh0dt = dt1dt + dt2dt + dt3dt;
+    let mut dh0dd = dt1dd + dt2dd + dt3dd;
 
     if h0 > 300.0 {
         h0 = 300.0;
         dh0dt = 0.0;
         dh0dd = 0.0;
     }
-    let scor = flexmesa_math::exp(h0);
+    let scor = exp(h0);
     ScreenEval {
         scor,
-        dscor_dt: scor * dh0dt,
-        dscor_dd: scor * dh0dd,
+        dscor_dt: dh0dt * scor,
+        dscor_dd: dh0dd * scor,
     }
 }

@@ -3,12 +3,16 @@
 
 from __future__ import annotations
 
+import pathlib
+import struct
+
 import jax
 import jax.numpy as jnp
 import numpy as np
+import pytest
 
 import flexmesa
-from flexmesa import atm, chem, constants, net
+from flexmesa import _rust, atm, chem, constants, net
 
 
 def _solar_species_and_xa(
@@ -560,3 +564,460 @@ def test_net_one_zone_burn_and_const_p_burn_match_mesa_golden() -> None:
         np.testing.assert_allclose(
             out_var.ending_x[idx21["o16"]], 6.9559810130e-1, rtol=1e-3
         )
+
+
+def _hex_to_f64(tok: str) -> float:
+    """Decode an IEEE-754 big-endian hex string (`0x...`) to `float`."""
+    val: float = struct.unpack(">d", int(tok.strip(), 16).to_bytes(8, "big"))[0]
+    return val
+
+
+def _ulp_diff(a: float, b: float) -> int:
+    """Compute IEEE-754 ULP distance between two `float` values."""
+    if a == 0.0 and b == 0.0:
+        return 0
+    ua = int(struct.unpack(">Q", struct.pack(">d", a))[0])
+    ub = int(struct.unpack(">Q", struct.pack(">d", b))[0])
+    if (ua >> 63) != (ub >> 63):
+        return 1 << 62
+    return abs(ua - ub)
+
+
+def _assert_unfloored_rel(
+    actual: float, expected: float, rtol: float, ctx: str
+) -> None:
+    """Assert unfloored relative error `|actual - expected| / |expected|`."""
+    if expected == 0.0:
+        assert actual == 0.0, f"{ctx}: expected 0.0, got {actual}"
+        return
+    rel = abs(actual - expected) / abs(expected)
+    assert rel <= rtol, f"{ctx}: rel={rel:.3e} > {rtol:.3e}"
+
+
+def _atm_teff(l_val: float, r_val: float) -> float:
+    """Evaluate blackbody `Teff` via `_rust.pow` matching `atm_Teff`."""
+    denom = 4.0 * constants.PI * r_val * r_val * constants.BOLTZ_SIGMA
+    return float(_rust.pow(l_val / denom, 0.25))
+
+
+def test_f2_23_eval_t_tau_atm_and_eval_table_atm_modes_and_errors() -> None:
+    """Verify `F2-23` `eval_t_tau_atm`, `eval_table_atm`, FD, and errors."""
+    assert atm.get_t_tau_id("Eddington") == atm.ATM_T_TAU_EDDINGTON
+    assert atm.get_table_id("photosphere") == atm.ATM_TABLE_PHOTOSPHERE
+
+    with pytest.raises(ValueError, match="simple_photosphere"):
+        atm.get_t_tau_id("simple_photosphere")
+    with pytest.raises(ValueError):
+        atm.get_t_tau_id("unknown_relation")
+    with pytest.raises(ValueError):
+        atm.get_table_id("unknown_table")
+
+    cid, xa = _solar_species_and_xa(0.70, 0.02)
+    cgrav = constants.STANDARD_CGRAV
+    teff_sun = _atm_teff(constants.LSUN, constants.RSUN)
+
+    with flexmesa.numerics_mode_context("strict"):
+        # Verify `pextra_factor` monotonic radiation-pressure shift in `fixed`.
+        f_p0 = atm.eval_t_tau_atm(
+            2.0 / 3.0,
+            constants.LSUN,
+            constants.RSUN,
+            constants.MSUN,
+            cgrav,
+            0.40,
+            0.0,
+            "Eddington",
+            "fixed",
+            1.0e-6,
+            0,
+            500,
+            False,
+            teff_sun,
+            chem_id=cid,
+            xa=xa,
+        )
+        f_p15 = atm.eval_t_tau_atm(
+            2.0 / 3.0,
+            constants.LSUN,
+            constants.RSUN,
+            constants.MSUN,
+            cgrav,
+            0.40,
+            1.5,
+            "Eddington",
+            "fixed",
+            1.0e-6,
+            0,
+            500,
+            False,
+            teff_sun,
+            chem_id=cid,
+            xa=xa,
+        )
+        assert f_p15.ln_p > f_p0.ln_p
+        assert f_p0.kap == 0.40
+
+        # Verify `'iterated'` implicit opacity partial fixup against FD.
+        def _eval_iter(l_in: float, r_in: float, m_in: float) -> float:
+            return atm.eval_t_tau_atm(
+                2.0 / 3.0,
+                l_in,
+                r_in,
+                m_in,
+                cgrav,
+                0.50,
+                1.5,
+                "solar_Hopf",
+                "iterated",
+                1.0e-11,
+                50,
+                500,
+                False,
+                _atm_teff(l_in, r_in),
+                chem_id=cid,
+                xa=xa,
+            ).ln_p
+
+        base_it = atm.eval_t_tau_atm(
+            2.0 / 3.0,
+            constants.LSUN,
+            constants.RSUN,
+            constants.MSUN,
+            cgrav,
+            0.50,
+            1.5,
+            "solar_Hopf",
+            "iterated",
+            1.0e-11,
+            50,
+            500,
+            False,
+            teff_sun,
+            chem_id=cid,
+            xa=xa,
+        )
+        assert base_it.dln_p_dln_kap == 0.0
+        h = 1.0e-6
+        dl = constants.LSUN * h
+        fd_l = (
+            _eval_iter(constants.LSUN + dl, constants.RSUN, constants.MSUN)
+            - _eval_iter(constants.LSUN - dl, constants.RSUN, constants.MSUN)
+        ) / (2.0 * dl)
+        _assert_unfloored_rel(base_it.dln_p_dl, fd_l, 5.0e-6, "dlnP_dL")
+
+        # Verify loud errors on invalid options, `tau_factor != 1.0`, off-table.
+        with pytest.raises(ValueError, match="max_iters > 0"):
+            atm.eval_t_tau_atm(
+                2.0 / 3.0,
+                constants.LSUN,
+                constants.RSUN,
+                constants.MSUN,
+                cgrav,
+                0.40,
+                1.0,
+                "Eddington",
+                "iterated",
+                1.0e-6,
+                0,
+                500,
+                False,
+                teff_sun,
+                chem_id=cid,
+                xa=xa,
+            )
+        with pytest.raises(ValueError, match="tau_factor"):
+            atm.eval_table_atm(
+                constants.LSUN,
+                constants.RSUN,
+                constants.MSUN,
+                cgrav,
+                "photosphere",
+                0.02,
+                tau_factor=2.0,
+            )
+        l_hot = constants.LSUN * 1.0e5
+        with pytest.raises(ValueError, match="atm_off_table_option"):
+            atm.eval_table_atm(
+                l_hot,
+                constants.RSUN,
+                constants.MSUN,
+                cgrav,
+                "tau_100",
+                0.02,
+                atm_off_table_option="",
+                teff=_atm_teff(l_hot, constants.RSUN),
+                chem_id=cid,
+                xa=xa,
+            )
+
+
+def test_mesa_26_4_1_atm_oracles_match_in_strict_mode() -> None:
+    """Verify all `234` rows of MESA 26.4.1 `atm_oracles` in `strict` mode."""
+    repo_root = pathlib.Path(__file__).resolve().parents[2]
+    oracles_dir = repo_root / "benchmarks" / "fortran_mesa" / "atm_oracles"
+    forbidden = (
+        "/" + "home/",
+        "/" + "tmp/",
+        "/" + "mnt/",
+        "." + "venvs",
+        "file" + "://",
+        "\u2014",
+    )
+    for rel_name in (
+        "Makefile",
+        "README.md",
+        "gen_atm_oracles.f90",
+        "mesa_26_4_1_atm_oracles.tsv",
+    ):
+        text = (oracles_dir / rel_name).read_text(encoding="utf-8")
+        for tok in forbidden:
+            assert tok not in text, f"Forbidden token {tok!r} in {rel_name}"
+
+    tsv_text = (oracles_dir / "mesa_26_4_1_atm_oracles.tsv").read_text(
+        encoding="utf-8"
+    )
+    for header in (
+        "# mesa_version: r26.4.1",
+        "# mesa_git_commit: c8c202662922a22b3efefa824473ad615c623afd",
+        "# mesasdk_version: x86_64-linux-26.6.1",
+        "# math_backend: CRMATH",
+    ):
+        assert header in tsv_text
+
+    groups: dict[
+        tuple[str, str, str, str, str, str, str], dict[str, float]
+    ] = {}
+    row_count = 0
+    for line in tsv_text.splitlines():
+        s = line.strip()
+        if not s or s.startswith("#") or s.startswith("row_id\t"):
+            continue
+        cols = line.split("\t")
+        key = (cols[1], cols[2], cols[3], cols[4], cols[5], cols[6], cols[7])
+        groups.setdefault(key, {})[cols[8]] = _hex_to_f64(cols[9])
+        row_count += 1
+
+    assert row_count == 234
+
+    with flexmesa.numerics_mode_context("strict"):
+        for (sec, lbl, x1, x2, x3, x4, x5), outs in groups.items():
+            v1, v2, v3, v4, v5 = (
+                _hex_to_f64(x1),
+                _hex_to_f64(x2),
+                _hex_to_f64(x3),
+                _hex_to_f64(x4),
+                _hex_to_f64(x5),
+            )
+            if sec == "t_tau_rel":
+                rel_id = round(v1)
+                if "tau_base" in outs:
+                    assert (
+                        _ulp_diff(atm.get_t_tau_base(rel_id), outs["tau_base"])
+                        == 0
+                    )
+                else:
+                    assert (
+                        _ulp_diff(atm.eval_t_tau(rel_id, v2, v3), outs["lnT"])
+                        == 0
+                    )
+                    assert (
+                        _ulp_diff(
+                            atm.eval_t_tau_dq_dtau(rel_id, v2), outs["dq_dtau"]
+                        )
+                        == 0
+                    )
+            elif sec == "e2":
+                e2, de2 = _rust.atm_eval_e2(v1)
+                assert _ulp_diff(float(e2), outs["e2"]) == 0
+                assert _ulp_diff(float(de2), outs["de2_dx"]) == 0
+            elif sec == "paczynski":
+                gradr = atm.eval_paczynski_gradr(
+                    v1,
+                    v2,
+                    v3,
+                    v4,
+                    v5,
+                    constants.LSUN,
+                    constants.MSUN,
+                    constants.RSUN,
+                    constants.STANDARD_CGRAV,
+                )
+                assert _ulp_diff(gradr, outs["gradr"]) == 0
+            elif sec == "t_tau_atm":
+                p0, rel_name, op_mode = lbl.split(":")
+                cid, xa = _solar_species_and_xa(0.70, 0.02)
+                kap_g = {
+                    "fixed": 0.35 if "solar" in p0 else 0.34,
+                    "iterated": 0.50,
+                    "varying": 0.40,
+                }[op_mode]
+                errtol = 1.0e-9 if op_mode == "varying" else 1.0e-6
+                res = atm.eval_t_tau_atm(
+                    v1,
+                    v3,
+                    v4,
+                    v5,
+                    constants.STANDARD_CGRAV,
+                    kap_g,
+                    v2,
+                    rel_name,
+                    op_mode,
+                    errtol,
+                    30,
+                    500,
+                    False,
+                    _atm_teff(v3, v4),
+                    chem_id=cid,
+                    xa=xa,
+                    zbase=0.02,
+                )
+                got_map = {
+                    "lnT": res.ln_t,
+                    "dlnT_dL": res.dln_t_dl,
+                    "dlnT_dlnR": res.dln_t_dln_r,
+                    "dlnT_dlnM": res.dln_t_dln_m,
+                    "dlnT_dlnkap": res.dln_t_dln_kap,
+                    "lnP": res.ln_p,
+                    "dlnP_dL": res.dln_p_dl,
+                    "dlnP_dlnR": res.dln_p_dln_r,
+                    "dlnP_dlnM": res.dln_p_dln_m,
+                    "dlnP_dlnkap": res.dln_p_dln_kap,
+                    "kap": res.kap,
+                }
+                for k, exp_v in outs.items():
+                    if op_mode in ("fixed", "iterated") or k in (
+                        "lnT",
+                        "dlnT_dL",
+                        "dlnT_dlnR",
+                        "dlnT_dlnM",
+                        "dlnT_dlnkap",
+                        "dlnP_dlnkap",
+                        "kap",
+                    ):
+                        assert _ulp_diff(got_map[k], exp_v) == 0, f"{lbl}.{k}"
+                    elif k == "lnP":
+                        _assert_unfloored_rel(
+                            got_map[k], exp_v, 5.0e-12, f"{lbl}.{k}"
+                        )
+                    else:
+                        _assert_unfloored_rel(
+                            got_map[k], exp_v, 1.0e-7, f"{lbl}.{k}"
+                        )
+            elif sec == "table":
+                tid = atm.get_table_id(lbl)
+                res = atm.eval_table(
+                    v1, v2, v3, constants.STANDARD_CGRAV, tid, v4, False, v5
+                )
+                got_map = {
+                    "lnT": res.ln_t,
+                    "dlnT_dL": res.dln_t_dl,
+                    "dlnT_dlnR": res.dln_t_dln_r,
+                    "dlnT_dlnM": res.dln_t_dln_m,
+                    "dlnT_dlnkap": res.dln_t_dln_kap,
+                    "lnP": res.ln_p,
+                    "dlnP_dL": res.dln_p_dl,
+                    "dlnP_dlnR": res.dln_p_dln_r,
+                    "dlnP_dlnM": res.dln_p_dln_m,
+                    "dlnP_dlnkap": res.dln_p_dln_kap,
+                    "kap": res.kap,
+                }
+                for k, exp_v in outs.items():
+                    _assert_unfloored_rel(
+                        got_map[k], exp_v, 5.0e-14, f"{lbl}.{k}"
+                    )
+            elif sec == "table_ab":
+                tid = (
+                    atm.ATM_TABLE_PHOTOSPHERE
+                    if "photosphere" in lbl
+                    else atm.ATM_TABLE_TAU_100
+                )
+                teff = v4 if v4 > 0.0 else _atm_teff(v1, v2)
+                a, b = atm.get_table_alfa_beta(
+                    v1, teff, v2, v3, constants.STANDARD_CGRAV, tid
+                )
+                assert _ulp_diff(a, outs["alfa"]) == 0
+                assert _ulp_diff(b, outs["beta"]) == 0
+                if "tau_base" in outs:
+                    assert (
+                        _ulp_diff(atm.get_table_base(tid), outs["tau_base"])
+                        == 0
+                    )
+            elif sec == "table_blend":
+                off_rel = "Eddington" if "edge" in lbl else "solar_Hopf"
+                cid, xa = _solar_species_and_xa(0.70, v4)
+                res, tbase = atm.eval_table_atm(
+                    v1,
+                    v2,
+                    v3,
+                    constants.STANDARD_CGRAV,
+                    "WD_tau_25",
+                    v4,
+                    atm_off_table_option="T_tau",
+                    t_tau_relation=off_rel,
+                    t_tau_opacity="fixed",
+                    kap_guess=v5,
+                    pextra_factor=1.0,
+                    errtol=1.0e-6,
+                    max_iters=0,
+                    max_steps=500,
+                    skip_partials=False,
+                    teff=_atm_teff(v1, v2),
+                    chem_id=cid,
+                    xa=xa,
+                    zbase=v4,
+                )
+                assert _ulp_diff(tbase, outs["kap"]) == 0
+                got_map = {
+                    "lnT": res.ln_t,
+                    "dlnT_dL": res.dln_t_dl,
+                    "dlnT_dlnR": res.dln_t_dln_r,
+                    "dlnT_dlnM": res.dln_t_dln_m,
+                    "dlnT_dlnkap": res.dln_t_dln_kap,
+                    "lnP": res.ln_p,
+                    "dlnP_dL": res.dln_p_dl,
+                    "dlnP_dlnR": res.dln_p_dln_r,
+                    "dlnP_dlnM": res.dln_p_dln_m,
+                    "dlnP_dlnkap": res.dln_p_dln_kap,
+                }
+                for k, exp_v in outs.items():
+                    if k == "kap":
+                        continue
+                    if "pure_off_table" in lbl:
+                        assert _ulp_diff(got_map[k], exp_v) == 0, f"{lbl}.{k}"
+                    else:
+                        _assert_unfloored_rel(
+                            got_map[k], exp_v, 5.0e-14, f"{lbl}.{k}"
+                        )
+            elif sec == "irradiated":
+                cid, xa = _solar_species_and_xa(0.70, 0.01)
+                irr = atm.eval_irradiated(
+                    v1,
+                    v2,
+                    v3,
+                    constants.STANDARD_CGRAV,
+                    v4,
+                    1.0e6,
+                    1.5e-2,
+                    4.0e-3,
+                    v5,
+                    1.0e-6,
+                    30,
+                    False,
+                    chem_id=cid,
+                    xa=xa,
+                    zbase=0.01,
+                    low_t_option="lowT_Freedman11",
+                )
+                got_map = {
+                    "kap": irr.kap,
+                    "tau": irr.tau,
+                    "lnT": irr.ln_t,
+                    "dlnT_dL": irr.dln_t_dl,
+                    "dlnT_dlnR": irr.dln_t_dln_r,
+                    "dlnT_dlnM": irr.dln_t_dln_m,
+                    "dlnT_dlnkap": irr.dln_t_dln_kap,
+                }
+                for k, exp_v in outs.items():
+                    _assert_unfloored_rel(
+                        got_map[k], exp_v, 1.0e-14, f"{lbl}.{k}"
+                    )

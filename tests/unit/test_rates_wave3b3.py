@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import pathlib
+import struct
 
 import jax
 import jax.numpy as jnp
@@ -11,7 +12,7 @@ import numpy as np
 import numpy.testing as npt
 
 import flexmesa
-from flexmesa import chem, eos, rates
+from flexmesa import _rust, chem, eos, rates
 from flexmesa.testing import golden
 
 _GOLDEN_PATH = (
@@ -329,3 +330,181 @@ def test_sections5_6_7_pycno_rate_table_and_reaclib_jax_match_golden() -> None:
         "r_c12_ag_o16", jnp.asarray(0.005), backend="jax"
     )
     assert (float(f_lo), float(df_lo)) == (0.0, 0.0)
+
+
+def _hex_to_f64(tok: str) -> float:
+    """Decode an IEEE-754 big-endian hex string (`0x...`) to `float`."""
+    val: float = struct.unpack(">d", int(tok.strip(), 16).to_bytes(8, "big"))[0]
+    return val
+
+
+def _ulp_diff(a: float, b: float) -> int:
+    """Compute IEEE-754 ULP distance between two `float` values."""
+    if a == 0.0 and b == 0.0:
+        return 0
+    ua = int(struct.unpack(">Q", struct.pack(">d", a))[0])
+    ub = int(struct.unpack(">Q", struct.pack(">d", b))[0])
+    if (ua >> 63) != (ub >> 63):
+        return 1 << 62
+    return abs(ua - ub)
+
+
+def test_mesa_26_4_1_rates_oracles_and_rev_coeff1_match_strict() -> None:
+    """Verify MESA 26.4.1 `rates_oracles` (`185` rows) and `rev_coeff1`."""
+    repo_root = pathlib.Path(__file__).resolve().parents[2]
+    oracles_dir = repo_root / "benchmarks" / "fortran_mesa" / "rates_oracles"
+    forbidden = (
+        "/" + "home/",
+        "/" + "tmp/",
+        "/" + "mnt/",
+        "." + "venvs",
+        "file" + "://",
+        "\u2014",
+    )
+    for rel_name in (
+        "Makefile",
+        "README.md",
+        "gen_rates_oracles.f90",
+        "mesa_26_4_1_rates_oracles.tsv",
+    ):
+        text = (oracles_dir / rel_name).read_text(encoding="utf-8")
+        for tok in forbidden:
+            assert tok not in text, f"Forbidden token {tok!r} in {rel_name}"
+
+    tsv_text = (oracles_dir / "mesa_26_4_1_rates_oracles.tsv").read_text(
+        encoding="utf-8"
+    )
+    for header in (
+        "# mesa_version: r26.4.1",
+        "# mesa_git_commit: c8c202662922a22b3efefa824473ad615c623afd",
+        "# mesasdk_version: x86_64-linux-26.6.1",
+        "# math_backend: CRMATH",
+    ):
+        assert header in tsv_text
+
+    rows = [
+        line.split("\t")
+        for line in tsv_text.splitlines()
+        if line.strip()
+        and not line.startswith("#")
+        and not line.startswith("row_id\t")
+    ]
+    assert len(rows) == 185
+
+    pair_map = {
+        "h1_h1": ("h1", "h1"),
+        "he4_c12": ("he4", "c12"),
+        "h1_n14": ("h1", "n14"),
+        "c12_c12": ("c12", "c12"),
+        "o16_o16": ("o16", "o16"),
+        "neut_fe": ("neut", "si28"),
+        "mg24_mg24": ("mg24", "mg24"),
+        "c12_o16": ("c12", "o16"),
+    }
+
+    with flexmesa.numerics_mode_context("strict"):
+        coulomb_groups: dict[str, list[list[str]]] = {}
+        for cols in rows:
+            sec, lbl, out_name = cols[1], cols[2], cols[8]
+            if sec == "coulomb":
+                coulomb_groups.setdefault(lbl, []).append(cols)
+                continue
+            x1, x2, x3, x4, x5 = (_hex_to_f64(cols[k]) for k in range(3, 8))
+            expected = _hex_to_f64(cols[9])
+
+            if sec == "screen":
+                parts = lbl.split(":")
+                n1, n2 = pair_map[parts[-1]]
+                i1 = chem.get_nuclide_info(n1)
+                i2 = chem.get_nuclide_info(n2)
+                sc = rates.screen_pair(
+                    parts[0],
+                    x1,
+                    x2,
+                    x3,
+                    x4,
+                    x5,
+                    i1.w,
+                    float(i1.z),
+                    i2.w,
+                    float(i2.z),
+                    backend="rust",
+                )
+                assert isinstance(sc, rates.ScreenEval)
+                got = {
+                    "scor": sc.scor,
+                    "dscor_dt": sc.dscor_dt,
+                    "dscor_dd": sc.dscor_dd,
+                }[out_name]
+            elif sec == "reaclib":
+                lam, dlam, rlam, drlam = rates.eval_reaclib_handle(
+                    lbl, x1, backend="rust"
+                )
+                got = float(
+                    {
+                        "lambda": lam,
+                        "dlambda_dlnT": dlam,
+                        "rlambda": rlam,
+                        "drlambda_dlnT": drlam,
+                    }[out_name]
+                )
+            elif sec == "raw_rate":
+                ir = rates.reaction_id_by_name(lbl)
+                got_arr = rates.set_raw_rates_zones([ir], [x2], log_ts=[x1])
+                got = float(got_arr[0, 0])
+            elif sec == "pycno":
+                got = float(
+                    rates.eval_fl_epsnuc_3alf(x1, x2, x3, x4, backend="rust")
+                )
+            elif sec == "weak":
+                lhs, rhs = lbl.split(":")[1].split("_")
+                w = rates.eval_weak_pair(
+                    lhs, rhs, x1, x2, use_suzuki=(x3 != 0.0)
+                )
+                got = {
+                    "lambda": w.lambda_rate,
+                    "dlambda_dlnT": w.dlambda_dln_t,
+                    "dlambda_dlnRho": w.dlambda_dln_rho,
+                    "Q": w.q,
+                    "dQ_dlnT": w.dq_dln_t,
+                    "dQ_dlnRho": w.dq_dln_rho,
+                    "Qneu": w.qneu,
+                    "dQneu_dlnT": w.dqneu_dln_t,
+                    "dQneu_dlnRho": w.dqneu_dln_rho,
+                }[out_name]
+            else:
+                raise AssertionError(f"Unknown section {sec}")
+
+            assert _ulp_diff(got, expected) == 0, f"{sec}:{lbl}:{out_name}"
+
+        for lbl, crows in coulomb_groups.items():
+            mui_opt, vs_opt = lbl.split(":")
+            t = _hex_to_f64(crows[0][3])
+            rho = _hex_to_f64(crows[0][4])
+            zb = _hex_to_f64(crows[0][5])
+            ab = _hex_to_f64(crows[0][6])
+            z1 = _hex_to_f64(crows[0][7])
+            z2 = _hex_to_f64(crows[1][7])
+            mu1, mu2, dmu_ev, vs = rates.eval_coulomb(
+                t, rho, zb, ab, z1, z2, which_mui=mui_opt, which_vs=vs_opt
+            )
+            got_map = {"mu1": mu1, "mu2": mu2, "dmu_ev": dmu_ev, "vs": vs}
+            for crow in crows:
+                assert _ulp_diff(got_map[crow[8]], _hex_to_f64(crow[9])) <= 6
+
+        he4 = chem.get_nuclide_info("he4")
+        c12 = chem.get_nuclide_info("c12")
+        o16 = chem.get_nuclide_info("o16")
+        c1_fwd = float(
+            _rust.rates_compute_rev_ratio_coeff1(
+                [c12.w, he4.w], [c12.spin, he4.spin], [o16.w], [o16.spin]
+            )
+        )
+        c1_inv = float(
+            _rust.rates_compute_rev_ratio_coeff1(
+                [o16.w], [o16.spin], [c12.w, he4.w], [c12.spin, he4.spin]
+            )
+        )
+        _, terms = _rust.rates_reaclib_terms("r_c12_ag_o16")
+        assert _ulp_diff(c1_fwd, float(terms[0][4])) == 0
+        npt.assert_allclose(c1_fwd + c1_inv, 0.0, rtol=0.0, atol=1e-14)

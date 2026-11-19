@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import math
 import pathlib
+import struct
 
 import jax
 import jax.numpy as jnp
@@ -696,3 +697,124 @@ def test_invalid_inputs_raise_value_error() -> None:
             neu.neu_get(t=1.0e8, rho=bad, abar=12.0, zbar=6.0)
         with pytest.raises(ValueError):
             neu.neu_get(t=1.0e8, rho=1.0e5, abar=bad, zbar=6.0)
+
+
+def _hex_to_f64(tok: str) -> float:
+    """Decode an IEEE-754 big-endian hex string (`0x...`) to `float`."""
+    val: float = struct.unpack(">d", int(tok.strip(), 16).to_bytes(8, "big"))[0]
+    return val
+
+
+def _ulp_diff(a: float, b: float) -> int:
+    """Compute IEEE-754 ULP distance between two `float` values."""
+    if a == 0.0 and b == 0.0:
+        return 0
+    ua = int(struct.unpack(">Q", struct.pack(">d", a))[0])
+    ub = int(struct.unpack(">Q", struct.pack(">d", b))[0])
+    if (ua >> 63) != (ub >> 63):
+        return 1 << 62
+    return abs(ua - ub)
+
+
+def test_mesa_26_4_1_neu_oracles_and_batch_zones_match_zero_ulp() -> None:
+    """Verify MESA 26.4.1 `neu_oracles` and `neu_get_full_zones` at `0 ULP`."""
+    repo_root = pathlib.Path(__file__).resolve().parents[1]
+    oracles_dir = repo_root / "benchmarks" / "fortran_mesa" / "neu_oracles"
+    forbidden = (
+        "/" + "home/",
+        "/" + "tmp/",
+        "/" + "mnt/",
+        "." + "venvs",
+        "file" + "://",
+        "\u2014",
+    )
+    for rel_name in (
+        "Makefile",
+        "README.md",
+        "gen_neu_oracles.f90",
+        "mesa_26_4_1_neu_oracles.tsv",
+    ):
+        text = (oracles_dir / rel_name).read_text(encoding="utf-8")
+        for tok in forbidden:
+            assert tok not in text, f"Forbidden token {tok!r} in {rel_name}"
+
+    tsv_text = (oracles_dir / "mesa_26_4_1_neu_oracles.tsv").read_text(
+        encoding="utf-8"
+    )
+    for header in (
+        "# mesa_version: r26.4.1",
+        "# mesa_git_commit: c8c202662922a22b3efefa824473ad615c623afd",
+        "# mesasdk_version: x86_64-linux-26.6.1",
+        "# math_backend: CRMATH",
+    ):
+        assert header in tsv_text
+
+    cases: dict[int, tuple[str, str, list[float], dict[int, float]]] = {}
+    row_count = 0
+    for line in tsv_text.splitlines():
+        s = line.strip()
+        if not s or s.startswith("#") or s.startswith("case_id\t"):
+            continue
+        cols = line.split("\t")
+        cid = int(cols[0])
+        out_idx = int(cols[8])
+        val = _hex_to_f64(cols[10])
+        if cid not in cases:
+            inputs = [_hex_to_f64(cols[k]) for k in range(3, 8)]
+            cases[cid] = (cols[1], cols[2], inputs, {})
+        cases[cid][3][out_idx] = val
+        row_count += 1
+
+    assert len(cases) == 36
+    assert row_count == 1080
+
+    with flexmesa.numerics_mode_context("strict"):
+        batch_inputs: list[list[float]] = []
+        batch_expected: list[list[float]] = []
+
+        for cid, (lbl, mask, ins, outs) in sorted(cases.items()):
+            flags = neu.NeuFlags(
+                pair=mask[0] == "1",
+                plas=mask[1] == "1",
+                phot=mask[2] == "1",
+                brem=mask[3] == "1",
+                reco=mask[4] == "1",
+            )
+            log10_t, log10_rho, abar, zbar, log10_tlim = ins
+            t = _exp10(log10_t)
+            rho = _exp10(log10_rho)
+            res = neu.neu_get(
+                t=t,
+                log10_t=log10_t,
+                rho=rho,
+                log10_rho=log10_rho,
+                abar=abar,
+                zbar=zbar,
+                log10_tlim=log10_tlim,
+                flags=flags,
+            )
+            flat = list(res.loss) + list(res.sources.reshape(25))
+            for idx in range(30):
+                assert _ulp_diff(float(flat[idx]), outs[idx]) == 0, (
+                    f"case {cid} ({lbl}) idx {idx}"
+                )
+
+            if mask == "11111" and log10_tlim == 7.5:
+                # `neu_get_full_zones` packs `sources` in Fortran column-major
+                # `(deriv, channel)` order matching `neu/test/test_output`.
+                col_major = list(res.loss) + list(res.sources.T.reshape(25))
+                batch_inputs.append([log10_t, log10_rho, abar, zbar])
+                batch_expected.append([float(v) for v in col_major])
+
+        arr_in = np.asarray(batch_inputs, dtype=np.float64)
+        got_batch = _rust.neu_get_full_zones(
+            np.ascontiguousarray(arr_in[:, 0]),
+            np.ascontiguousarray(arr_in[:, 1]),
+            np.ascontiguousarray(arr_in[:, 2]),
+            np.ascontiguousarray(arr_in[:, 3]),
+            7.5,
+            [True, True, True, True, True],
+        )
+        exp_batch = np.asarray(batch_expected, dtype=np.float64)
+        assert got_batch.shape == exp_batch.shape
+        np.testing.assert_array_equal(got_batch, exp_batch)

@@ -100,6 +100,12 @@ def neu_get_batch(
     flags: Sequence[bool] = (True, True, True, True, True),
     parallel: bool = False,
 ) -> _ArrF64: ...
+def neu_get_full_zones(
+    log10_t: _ArrF64, log10_rho: _ArrF64, abar: _ArrF64, zbar: _ArrF64,
+    log10_tlim: float = 7.5,
+    flags: Sequence[bool] = (True, True, True, True, True),
+    parallel: bool = False,
+) -> _ArrF64: ...
 def set_mlt_f64(
     option: str, mixing_length_alpha: float, henyey_y_param: float,
     henyey_nu_param: float, chi_t: float, chi_rho: float, cp: float,
@@ -315,14 +321,19 @@ def rates_eval_weak_pair(lhs_name: str, rhs_name: str, t9: float, ye_rho: float,
 def rates_eval_ecapture_pair(lhs_name: str, rhs_name: str, t9: float, ye_rho: float, eta_k: float, which_mui: str = "pcr2009", which_vs: str = "itoh2002", zbar: float = 10.909090909090908, abar: float = 21.818181818181817) -> list[float]: ...  # noqa: E501
 def rates_weak_info_by_names(lhs_name: str, rhs_name: str) -> tuple[float, float]: ...  # noqa: E501
 def rates_eval_weak_table_index(idx: int, t9: float, l_ye_rho: float) -> tuple[str, str, list[float]]: ...  # noqa: E501
+def rates_compute_rev_ratio_coeff1(w_in: Sequence[float], spin_in: Sequence[float], w_out: Sequence[float], spin_out: Sequence[float]) -> float: ...  # noqa: E501
 def atm_eval_t_tau(t_tau_id: int, tau: float, teff: float) -> float: ...
 def atm_eval_t_tau_dq_dtau(t_tau_id: int, tau: float) -> float: ...
 def atm_get_t_tau_base(t_tau_id: int) -> float: ...
+def atm_get_t_tau_id(name: str) -> int: ...
+def atm_get_table_id(name: str) -> int: ...
 def atm_eval_e2(x: float) -> tuple[float, float]: ...
 def atm_eval_paczynski_gradr(t: float, p: float, rho: float, tau: float, kap: float, l: float, m: float, r: float, cgrav: float) -> float: ...  # noqa: E501
 def atm_eval_table(l: float, r: float, m: float, cgrav: float, id: int, z: float, skip_partials: bool, teff: float) -> tuple[float, ...]: ...  # noqa: E501
+def atm_eval_table_atm(l: float, r: float, m: float, cgrav: float, atm_table: str, z: float, tau_factor: float, atm_off_table_option: str, t_tau_relation: str, t_tau_opacity: str, kap_guess: float, pextra_factor: float, errtol: float, max_iters: int, max_steps: int, skip_partials: bool, teff: float, chem_id: Sequence[int] | None = None, xa: _ArrF64 | None = None, zbase: float = 0.02, low_t_option: str = "low_t_fa05_gs98") -> tuple[tuple[float, ...], float]: ...  # noqa: E501
 def atm_get_table_alfa_beta(l: float, teff: float, r: float, m: float, cgrav: float, id: int) -> tuple[float, float]: ...  # noqa: E501
 def atm_get_table_base(id: int) -> float: ...
+def atm_eval_t_tau_atm(tau_surf: float, l: float, r: float, m: float, cgrav: float, kap_guess: float, pextra_factor: float, t_tau_relation: str, t_tau_opacity: str, errtol: float, max_iters: int, max_steps: int, skip_partials: bool, teff: float, chem_id: Sequence[int] | None = None, xa: _ArrF64 | None = None, zbase: float = 0.02, low_t_option: str = "low_t_fa05_gs98") -> tuple[float, ...]: ...  # noqa: E501
 def atm_eval_t_tau_uniform(tau_surf: float, l: float, r: float, m: float, cgrav: float, kap_guess: float, pextra_factor: float, t_tau_id: int, errtol: float, max_iters: int, skip_partials: bool, teff: float, chem_id: Sequence[int] | None = None, xa: _ArrF64 | None = None, zbase: float = 0.02, low_t_option: str = "low_t_fa05_gs98") -> tuple[float, ...]: ...  # noqa: E501
 def atm_eval_t_tau_varying(tau_surf: float, l: float, r: float, m: float, cgrav: float, t_tau_id: int, errtol: float, max_steps: int, skip_partials: bool, teff: float, chem_id: Sequence[int], xa: _ArrF64, zbase: float = 0.02, low_t_option: str = "low_t_fa05_gs98") -> tuple[float, ...]: ...  # noqa: E501
 def atm_eval_irradiated(l: float, r: float, m: float, cgrav: float, t_eq: float, p_surf: float, kap_guess: float, kap_v: float, gamma: float, errtol: float, max_iters: int, skip_partials: bool, chem_id: Sequence[int] | None = None, xa: _ArrF64 | None = None, zbase: float = 0.02, low_t_option: str = "low_t_fa05_gs98") -> tuple[float, ...]: ...  # noqa: E501

@@ -146,3 +146,16 @@ Standalone Fortran 2008 reference generators compiled against upstream MESA
   `flexmesa-eos` and `flexmesa.eos` (`DFERMI`, `ALFA`, `HELM`, `ideal`, `PC`,
   `Skye`, `OPAL/SCVH`, `FreeEOS`, `CMS`, and `(P, T)` / `(rho, T)` inversions;
   `make -C benchmarks/fortran_mesa/eos_oracles MESA_DIR=/path/to/mesa MESASDK_ROOT=/path/to/mesasdk run`).
+- `atm_oracles/`: Surface atmosphere and `F2-23` outer boundary condition
+  reference tables (`t_tau_rel`, `e2`, `paczynski`, `'fixed'`/`'iterated'`/`'varying'`
+  `t_tau_atm`, `table`, `table_ab`, `table_blend`, and `irradiated` with
+  `skip_partials = .false.`;
+  `make -C benchmarks/fortran_mesa/atm_oracles MESA_DIR=/path/to/mesa MESASDK_ROOT=/path/to/mesasdk generate clean`).
+- `neu_oracles/`: Itoh et al. (1996) 5-channel thermal neutrino loss and
+  analytical partial-derivative reference tables (`1,080` IEEE-754 hex + decimal
+  rows across `36` thermodynamic/flag states;
+  `make -C benchmarks/fortran_mesa/neu_oracles MESA_DIR=/path/to/mesa MESASDK_ROOT=/path/to/mesasdk generate clean`).
+- `rates_oracles/`: Nuclear reaction rate, `screen5` / `Chugunov` screening,
+  Coulomb chemical-potential shift, REACLIB detailed-balance, pycnonuclear
+  $3\alpha$, and `weaklib` / `Suzuki2016` reference tables (`185` rows;
+  `make -C benchmarks/fortran_mesa/rates_oracles MESA_DIR=/path/to/mesa MESASDK_ROOT=/path/to/mesasdk generate clean`).

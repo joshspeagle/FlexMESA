@@ -85,8 +85,8 @@ impl CoulombMuiOption {
     pub fn from_name(name: &str) -> Result<Self, RatesError> {
         match name.trim().to_ascii_lowercase().as_str() {
             "0" | "none" | "no_coulomb" => Ok(Self::None),
-            "1" | "dcw1973" => Ok(Self::Dcw1973),
-            "2" | "slr1982" => Ok(Self::Slr1982),
+            "1" | "dcw1973" | "dgc1973" => Ok(Self::Dcw1973),
+            "2" | "slr1982" | "i1993" => Ok(Self::Slr1982),
             "3" | "pcr2009" => Ok(Self::Pcr2009),
             other => Err(RatesError::InvalidOption(format!(
                 "unknown CoulombMuiOption '{other}'"
@@ -116,7 +116,9 @@ impl CoulombVsOption {
     pub fn from_name(name: &str) -> Result<Self, RatesError> {
         match name.trim().to_ascii_lowercase().as_str() {
             "0" | "none" | "no_screening" => Ok(Self::None),
-            "1" | "throwe1983" => Ok(Self::Throwe1983),
+            "1" | "throwe1983" | "thomasfermi" | "thomas_fermi" => {
+                Ok(Self::Throwe1983)
+            }
             "2" | "itoh2002" => Ok(Self::Itoh2002),
             other => Err(RatesError::InvalidOption(format!(
                 "unknown CoulombVsOption '{other}'"

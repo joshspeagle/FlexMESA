@@ -140,8 +140,8 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 3181,
-        "python_jax_lines": 1476
+        "rust_lines": 3466,
+        "python_jax_lines": 1478
       },
       {
         "module": "neu",
@@ -157,8 +157,8 @@
         "verified_total": 0,
         "pct_ported": 83.9,
         "pct_verified": 0.0,
-        "rust_lines": 1916,
-        "python_jax_lines": 2648
+        "rust_lines": 1948,
+        "python_jax_lines": 2673
       },
       {
         "module": "atm",
@@ -174,8 +174,8 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 2096,
-        "python_jax_lines": 791
+        "rust_lines": 2476,
+        "python_jax_lines": 984
       },
       {
         "module": "turb",
@@ -344,7 +344,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 1992,
+        "rust_lines": 2011,
         "python_jax_lines": 577
       },
       {
@@ -455,14 +455,14 @@
       "upstream_panel_modules": 46
     },
     "infrastructure_lines": {
-      "rust_bridge_testing_bench": 18498,
-      "python_testing_bench": 13609
+      "rust_bridge_testing_bench": 18727,
+      "python_testing_bench": 13992
     }
   },
   "numerics": {
     "has_165_ci": true,
     "strict_cross_machine_identical": "gated in CI by scripts/check_strict_determinism.py (x86_64 vs aarch64, 1 vs 4 threads; 474,062 math vectors + uncapped star/1.3M_ms_high_Z + binary/jdot_gr_check run with unsupported controls ignored; a bit-identity check, not a comparison with MESA)",
-    "strict_kernels_bit_identical": "math: 403,258/403,258 CRMATH 0 ULP (70,804 libm <= 1 ULP); 3,856/3,966 probed module hex 0 ULP (4 complete, 13 non-math probed)",
+    "strict_kernels_bit_identical": "math: 403,258/403,258 CRMATH 0 ULP (70,804 libm <= 1 ULP); 304,567/304,635 probed module hex 0 ULP (5 complete, 14 non-math probed)",
     "total_upstream_hex_values": 348321,
     "modules": [
       {
@@ -528,12 +528,12 @@
       {
         "module": "rates",
         "upstream_exact_values": 3685,
-        "exact_strict_compared": "5/9 0 ULP (max 6 ULP, 3,685 total)"
+        "exact_strict_compared": "3,636/3,639 0 ULP (max 29 ULP, 3,639 total)"
       },
       {
         "module": "neu",
         "upstream_exact_values": 340000,
-        "exact_strict_compared": "2,935/3,000 0 ULP (max 68 ULP, 300,000 total)"
+        "exact_strict_compared": "300,000/300,000 (0 ULP)"
       },
       {
         "module": "net",
@@ -548,7 +548,7 @@
       {
         "module": "atm",
         "upstream_exact_values": 90,
-        "exact_strict_compared": "0"
+        "exact_strict_compared": "15/39 0 ULP (max 7,863,114 ULP, 39 total)"
       },
       {
         "module": "turb",

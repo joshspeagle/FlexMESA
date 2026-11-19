@@ -29,7 +29,7 @@
 use crate::inputs::{PLAS_WEINBERG_PREF, TFAC3, TFAC4};
 use crate::{NeuInputs, NeuRate};
 use flexmesa_const::{ILN10, ONE_SIXTH, TWO_THIRDS};
-use flexmesa_math::{cos, exp, log10, pow, sin};
+use flexmesa_math::{cos, exp, log10, pow, powi, sin};
 
 /// Evaluates volumetric pair-neutrino energy loss rate and partial derivatives
 /// (`pair_neu` in `mod_neu.f90`, in $\mathrm{erg\,cm^{-3}\,s^{-1}}$ before
@@ -238,8 +238,10 @@ pub fn plas_neu(input: &NeuInputs) -> NeuRate {
     } else {
         let p_a1 = 0.39 - 1.25 * xnum - 0.35 * sin(4.5 * xnum);
         let p_a2 = -1.25 - 4.5 * 0.35 * cos(4.5 * xnum);
+        // Match integer-exponent `pow(..., 2)` and unfactored partial products
+        // in neu/private/mod_neu.f90:1519-1549.
         let arg = 4.5 * xnum + 0.9;
-        let p_b1 = 0.3 * exp(-pow(arg, 2.0));
+        let p_b1 = 0.3 * exp(-powi(arg, 2));
         let p_b2 = -p_b1 * 2.0 * arg * 4.5;
         let c_val = (xden - 1.6 + 1.25 * xnum).min(0.0);
         let (dumdt, dumdd, dumda, dumdz) = if c_val == 0.0 {
@@ -261,13 +263,12 @@ pub fn plas_neu(input: &NeuInputs) -> NeuRate {
         let c03 = f1 * (dumda + a3_val * 0.25 * xnumda);
         let c04 = f1 * (dumdz + a3_val * 0.25 * xnumdz);
         let diff_ab = p_a1 - p_b1;
-        let ddiff_ab = p_a2 - p_b2;
         (
             1.05 + diff_ab * g_exp,
-            ddiff_ab * xnumdt * g_exp + diff_ab * c01,
-            ddiff_ab * xnumdd * g_exp + diff_ab * c02,
-            ddiff_ab * xnumda * g_exp + diff_ab * c03,
-            ddiff_ab * xnumdz * g_exp + diff_ab * c04,
+            (p_a2 * xnumdt - p_b2 * xnumdt) * g_exp + diff_ab * c01,
+            (p_a2 * xnumdd - p_b2 * xnumdd) * g_exp + diff_ab * c02,
+            (p_a2 * xnumda - p_b2 * xnumda) * g_exp + diff_ab * c03,
+            (p_a2 * xnumdz - p_b2 * xnumdz) * g_exp + diff_ab * c04,
         )
     };
 

@@ -133,3 +133,16 @@ make -C benchmarks/fortran_mesa MESA_DIR=/path/to/mesa MESASDK_ROOT=/path/to/mes
 
 Raw outputs from MESA `r26.4.1` and `mesasdk x86_64-linux-26.6.1` are archived
 under `benchmarks/raw/26.4.1/`.
+
+## Module-Level Oracle Generators
+
+Standalone Fortran 2008 reference generators compiled against upstream MESA
+`r26.4.1` and the MESA SDK (`CRMATH` math backend) live in subdirectories under
+`benchmarks/fortran_mesa/`:
+
+- `math_hex_vectors/`: IEEE-754 bit-exact hex reference vectors for
+  `flexmesa-math` (`make -C benchmarks/fortran_mesa/math_hex_vectors MESA_DIR=/path/to/mesa MESASDK_ROOT=/path/to/mesasdk run`).
+- `eos_oracles/`: Component and inverse-solver reference tables for
+  `flexmesa-eos` and `flexmesa.eos` (`DFERMI`, `ALFA`, `HELM`, `ideal`, `PC`,
+  `Skye`, `OPAL/SCVH`, `FreeEOS`, `CMS`, and `(P, T)` / `(rho, T)` inversions;
+  `make -C benchmarks/fortran_mesa/eos_oracles MESA_DIR=/path/to/mesa MESASDK_ROOT=/path/to/mesasdk run`).

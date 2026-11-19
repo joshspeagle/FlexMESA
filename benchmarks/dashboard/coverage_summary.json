@@ -2,9 +2,9 @@
   "rust": {
     "tool": "cargo llvm-cov",
     "overall": {
-      "lines": 93976,
-      "covered": 68981,
-      "percent": 73.4
+      "lines": 95354,
+      "covered": 69937,
+      "percent": 73.3
     },
     "by_crate": [
       {
@@ -33,9 +33,9 @@
       },
       {
         "crate": "flexmesa-binary",
-        "lines": 6547,
-        "covered": 4169,
-        "percent": 63.7
+        "lines": 7925,
+        "covered": 5225,
+        "percent": 65.9
       },
       {
         "crate": "flexmesa-chem",
@@ -70,8 +70,8 @@
       {
         "crate": "flexmesa-eos",
         "lines": 9724,
-        "covered": 7728,
-        "percent": 79.5
+        "covered": 7717,
+        "percent": 79.4
       },
       {
         "crate": "flexmesa-interp1d",
@@ -94,8 +94,8 @@
       {
         "crate": "flexmesa-kap",
         "lines": 3402,
-        "covered": 2245,
-        "percent": 66.0
+        "covered": 2239,
+        "percent": 65.8
       },
       {
         "crate": "flexmesa-math",
@@ -142,8 +142,8 @@
       {
         "crate": "flexmesa-star",
         "lines": 36104,
-        "covered": 26426,
-        "percent": 73.2
+        "covered": 26346,
+        "percent": 73.0
       },
       {
         "crate": "flexmesa-testing",
@@ -154,8 +154,8 @@
       {
         "crate": "flexmesa-turb",
         "lines": 1093,
-        "covered": 906,
-        "percent": 82.9
+        "covered": 903,
+        "percent": 82.6
       },
       {
         "crate": "flexmesa-utils",
@@ -168,9 +168,9 @@
   "python": {
     "tool": "pytest --cov",
     "overall": {
-      "statements": 23681,
-      "covered": 20896,
-      "percent": 88.2
+      "statements": 23744,
+      "covered": 20925,
+      "percent": 88.1
     },
     "by_subpackage": [
       {
@@ -319,9 +319,9 @@
       },
       {
         "subpackage": "flexmesa.testing",
-        "statements": 3575,
-        "covered": 2849,
-        "percent": 79.7
+        "statements": 3638,
+        "covered": 2878,
+        "percent": 79.1
       },
       {
         "subpackage": "flexmesa.turb",

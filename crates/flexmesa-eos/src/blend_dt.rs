@@ -65,6 +65,14 @@ pub struct EosConfig {
     pub helm_blend_width: f64,
     /// Use linear instead of quintic blending between EOS components (default `false`).
     pub linear_blend: bool,
+    /// Namelist flag `eosDT_use_linear_interp_to_HELM` (`eos.defaults:298`, default `false`).
+    pub eosdt_use_linear_interp_to_helm: bool,
+    /// User floating-point control array `eos_ctrl(1..=10)` (`eos.defaults:336`).
+    pub eos_ctrl: [f64; 10],
+    /// User integer control array `eos_integer_ctrl(1..=10)` (`eos.defaults:337`).
+    pub eos_integer_ctrl: [i64; 10],
+    /// User boolean control array `eos_logical_ctrl(1..=10)` (`eos.defaults:338`).
+    pub eos_logical_ctrl: [bool; 10],
 }
 
 impl Default for EosConfig {
@@ -84,6 +92,10 @@ impl Default for EosConfig {
             okay_to_convert_ierr_to_skip: true,
             helm_blend_width: 0.1,
             linear_blend: false,
+            eosdt_use_linear_interp_to_helm: false,
+            eos_ctrl: [0.0; 10],
+            eos_integer_ctrl: [0; 10],
+            eos_logical_ctrl: [false; 10],
         }
     }
 }
@@ -333,7 +345,11 @@ pub fn eos_dt_get_from_weights_with_tables(
     cfg: &EosConfig,
 ) -> Result<EosEvalOutput, EosError> {
     let eval_lvl6 = || {
-        let (a, dt, dr) =
+        // Upstream MESA 26.4.1 `eos/private/eosdt_eval.f90:728,749-750` passes
+        // `(d_alfa_dlogRho, d_alfa_dlogT)` into `get_HELM_alfa(..., alfa,
+        // d_alfa_dlogT, d_alfa_dlogRho, ierr)` and forwards `(alfa,
+        // d_alfa_dlogT, d_alfa_dlogRho)` to `combine_for_eosdt` (#176).
+        let (a, dr, dt) =
             get_helm_alfa(ht, log_rho, log_t, cfg.helm_blend_width);
         combine_level_skippable(
             a,
@@ -559,20 +575,28 @@ pub fn eos_dt_get(
     )
 }
 
-/// Evaluates `eosDT_get` in parallel across `N` stellar zones using `rayon`.
-pub fn eos_dt_get_zones(
+/// Evaluates `eosDT_get` in parallel across `N` stellar zones using `rayon`
+/// with explicit `log10(rho)` and `log10(T)` slices (`lnd / ln(10)` and
+/// `lnT / ln(10)` in `star/private/micro.f90:326,349`).
+pub fn eos_dt_get_zones_with_logs(
     ht: &HelmTable,
     rho_zones: &[f64],
+    log_rho_zones: &[f64],
     t_zones: &[f64],
+    log_t_zones: &[f64],
     chem_id: &[usize],
     xa_zones: &[f64],
     cfg: &EosConfig,
 ) -> Result<Vec<EosEvalOutput>, EosError> {
     let n_zones = rho_zones.len();
     let n_spec = chem_id.len();
-    if t_zones.len() != n_zones || xa_zones.len() != n_zones * n_spec {
+    if log_rho_zones.len() != n_zones
+        || t_zones.len() != n_zones
+        || log_t_zones.len() != n_zones
+        || xa_zones.len() != n_zones * n_spec
+    {
         return Err(EosError::InvalidState {
-            context: "eos_dt_get_zones",
+            context: "eos_dt_get_zones_with_logs",
             detail: "zone slice length mismatch".to_string(),
         });
     }
@@ -592,14 +616,50 @@ pub fn eos_dt_get_zones(
                     context: "eos_dt_get_zones",
                     detail: e.to_string(),
                 })?;
-            let rho = rho_zones[iz];
-            let t = t_zones[iz];
-            let (lr, lt) = (flexmesa_math::log10(rho), flexmesa_math::log10(t));
             eos_dt_get_from_weights_with_tables(
-                ht, dt_tables, cms_tables, comp.xh, comp.xz, rho, lr, t, lt,
-                comp.abar, comp.zbar, xa, &z_int, &azion, &acmi, &a_baryon,
+                ht,
+                dt_tables,
+                cms_tables,
+                comp.xh,
+                comp.xz,
+                rho_zones[iz],
+                log_rho_zones[iz],
+                t_zones[iz],
+                log_t_zones[iz],
+                comp.abar,
+                comp.zbar,
+                xa,
+                &z_int,
+                &azion,
+                &acmi,
+                &a_baryon,
                 cfg,
             )
         })
         .collect()
+}
+
+/// Evaluates `eosDT_get` in parallel across `N` stellar zones using `rayon`.
+pub fn eos_dt_get_zones(
+    ht: &HelmTable,
+    rho_zones: &[f64],
+    t_zones: &[f64],
+    chem_id: &[usize],
+    xa_zones: &[f64],
+    cfg: &EosConfig,
+) -> Result<Vec<EosEvalOutput>, EosError> {
+    let log_rho_zones: Vec<f64> =
+        rho_zones.iter().map(|&r| flexmesa_math::log10(r)).collect();
+    let log_t_zones: Vec<f64> =
+        t_zones.iter().map(|&t| flexmesa_math::log10(t)).collect();
+    eos_dt_get_zones_with_logs(
+        ht,
+        rho_zones,
+        &log_rho_zones,
+        t_zones,
+        &log_t_zones,
+        chem_id,
+        xa_zones,
+        cfg,
+    )
 }

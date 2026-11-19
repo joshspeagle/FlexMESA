@@ -160,9 +160,12 @@ impl InlistBundle {
     /// # Errors
     /// Returns [`StarError::InvalidInput`] on any type mismatch, out-of-range
     /// integer/float, or unrecognized option string.
-    pub(crate) fn populate_typed_structs(&mut self) -> Result<(), StarError> {
+    pub(crate) fn populate_typed_structs_with_options(
+        &mut self,
+        allow_unsupported_controls: bool,
+    ) -> Result<(), StarError> {
         self.populate_star_job()?;
-        self.populate_eos_kap()?;
+        self.populate_eos_kap_with_options(allow_unsupported_controls)?;
         self.populate_controls_physics()?;
         self.populate_controls_output()?;
         self.populate_controls_solver()?;
@@ -341,63 +344,11 @@ impl InlistBundle {
         Ok(())
     }
 
-    fn populate_eos_kap(&mut self) -> Result<(), StarError> {
-        if let Some(eos) = self.sections.get("eos") {
-            eos.try_bool_into(
-                "eos",
-                &mut self.eos_config.use_free_eos,
-                "use_freeeos",
-            )?;
-            map_bools!(
-                "eos",
-                eos,
-                self.eos_config,
-                [use_opal_scvh, use_pc, use_skye, use_cms]
-            );
-        }
-        if let Some(kap) = self.sections.get("kap") {
-            if let Some(v) = kap.try_get_f64("kap", "zbase")? {
-                self.kap_config.zbase = v;
-                self.controls.zbase = v;
-            }
-            if let Some(s) = kap.try_get_str("kap", "kap_file_prefix")? {
-                self.kap_config.kap_option =
-                    flexmesa_kap::KapOption::from_prefix(s).map_err(|e| {
-                        StarError::InvalidInput(format!(
-                            "invalid '&kap::kap_file_prefix' = '{s}': {e}"
-                        ))
-                    })?;
-            }
-            if let Some(s) = kap.try_get_str("kap", "kap_co_prefix")? {
-                self.kap_config.kap_co_option =
-                    flexmesa_kap::KapCoOption::from_prefix(s).map_err(|e| {
-                        StarError::InvalidInput(format!(
-                            "invalid '&kap::kap_co_prefix' = '{s}': {e}"
-                        ))
-                    })?;
-            }
-            if let Some(s) = kap.try_get_str("kap", "kap_lowt_prefix")? {
-                self.kap_config.kap_low_t_option =
-                    flexmesa_kap::KapLowTOption::from_prefix(s).map_err(
-                        |e| {
-                            StarError::InvalidInput(format!(
-                                "invalid '&kap::kap_lowt_prefix' = '{s}': {e}"
-                            ))
-                        },
-                    )?;
-            }
-            kap.try_bool_into(
-                "kap",
-                &mut self.kap_config.use_type2_opacities,
-                "use_type2_opacities",
-            )?;
-            kap.try_bool_into(
-                "kap",
-                &mut self.kap_config.use_zbase_for_type1,
-                "use_zbase_for_type1",
-            )?;
-        }
-        Ok(())
+    fn populate_eos_kap_with_options(
+        &mut self,
+        allow_unsupported_controls: bool,
+    ) -> Result<(), StarError> {
+        self.populate_eos_and_kap_configs(allow_unsupported_controls)
     }
 
     #[rustfmt::skip]

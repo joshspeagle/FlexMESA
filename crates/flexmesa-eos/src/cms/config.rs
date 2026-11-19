@@ -57,6 +57,10 @@ pub struct CmsConfig {
     pub logt_max_for_all_cms: f64,
     /// Upper $\log_{10} T$ cutoff for any `CMS` weight (default `-1.0`, disabled).
     pub logt_max_for_any_cms: f64,
+    /// Upper $\log_{10} T$ threshold for full `CMS` weight on pure He (default `-1.0`, disabled).
+    pub logt_max_for_all_cms_pure_he: f64,
+    /// Upper $\log_{10} T$ cutoff for any `CMS` weight on pure He (default `-1.0`, disabled).
+    pub logt_max_for_any_cms_pure_he: f64,
     /// Upper $\log_{10} T$ threshold for full `CMS` in the lower-right corner (default `5.5`).
     pub logt_low_max_for_all_cms: f64,
     /// Upper $\log_{10} T$ cutoff for any `CMS` in the lower-right corner (default `5.6`).
@@ -88,6 +92,8 @@ impl Default for CmsConfig {
             logt_min_for_all_cms: -1.0,
             logt_max_for_all_cms: -1.0,
             logt_max_for_any_cms: -1.0,
+            logt_max_for_all_cms_pure_he: -1.0,
+            logt_max_for_any_cms_pure_he: -1.0,
             logt_low_max_for_all_cms: 5.5,
             logt_low_max_for_any_cms: 5.6,
             logrho_high_min_for_all_cms: 2.2,
@@ -121,6 +127,8 @@ impl CmsConfig {
             logt_min_for_all_cms: 2.1,
             logt_max_for_all_cms: 7.9,
             logt_max_for_any_cms: 8.0,
+            logt_max_for_all_cms_pure_he: -1.0,
+            logt_max_for_any_cms_pure_he: -1.0,
             logt_low_max_for_all_cms: 5.5,
             logt_low_max_for_any_cms: 5.6,
             logrho_high_min_for_all_cms: 2.2,

@@ -57,44 +57,45 @@ pub mod system_step;
 pub mod timestep;
 
 pub use binary_history::{
+    BINARY_LOG_COL_WIDTH, BinaryHistoryColumnSpec, BinaryLogsWriter,
+    DEFAULT_BINARY_HISTORY_COLUMNS_TEXT, IncrementalBinaryHistoryWriter,
     binary_history_row_as_f64_pairs, default_binary_history_specs,
     evaluate_binary_history_row, format_binary_history_data_line,
     format_binary_history_file_header, parse_binary_history_columns,
-    resolve_binary_history_columns, BinaryHistoryColumnSpec, BinaryLogsWriter,
-    IncrementalBinaryHistoryWriter, BINARY_LOG_COL_WIDTH,
-    DEFAULT_BINARY_HISTORY_COLUMNS_TEXT,
+    resolve_binary_history_columns,
 };
 pub use disk::eval_l2_mass_loss_fraction;
 pub use e2e::{
+    BinaryCaseRunReport, BinaryInlistControls, BinaryLogsOptions,
     run_binary_test_suite_case, run_binary_test_suite_case_with_extras,
     run_binary_test_suite_case_with_logs,
-    run_binary_test_suite_case_with_options, BinaryCaseRunReport,
-    BinaryInlistControls, BinaryLogsOptions,
+    run_binary_test_suite_case_with_options,
 };
 pub use edd_wind::{
-    bh_initial_equatorial_mass, eval_accreted_material_j, eval_bh_spin,
-    eval_bondi_hoyle_wind_fraction, eval_mdot_edd,
-    eval_mdot_edd_with_overrides, eval_point_mass_edd_and_retention,
-    eval_tout_wind_enhancement, PointMassEddRetention,
+    PointMassEddRetention, bh_initial_equatorial_mass,
+    eval_accreted_material_j, eval_bh_spin, eval_bondi_hoyle_wind_fraction,
+    eval_mdot_edd, eval_mdot_edd_with_overrides,
+    eval_point_mass_edd_and_retention, eval_tout_wind_enhancement,
+    eval_tout_wind_enhancement_orbit_averaged,
 };
 pub use extras::{BinaryExtras, BinaryExtrasAction, DefaultBinaryExtras};
 pub use inlist_inventory::{
-    copy_cleaned_binary_case, supported_binary_control_inventory,
-    validate_binary_sections, BinaryControlInventory,
     BINARY_CONTROLS_SUPPORTED, BINARY_JOB_HEADLESS_GUI, BINARY_JOB_SUPPORTED,
+    BinaryControlInventory, copy_cleaned_binary_case,
+    supported_binary_control_inventory, validate_binary_sections,
 };
 pub use jdot_tides::{
-    check_jdot_mb_conditions, eval_edot_gr, eval_edot_tidal_hut, eval_jdot_gr,
-    eval_jdot_ls, eval_jdot_ls_with_winds, eval_jdot_mb,
+    check_jdot_mb_conditions, eval_edot_tidal_hut, eval_jdot_gr, eval_jdot_ls,
+    eval_jdot_ls_with_am_removed, eval_jdot_ls_with_winds, eval_jdot_mb,
     eval_jdot_mb_with_scale_mass, eval_jdot_missing_wind, eval_jdot_ml,
     eval_k_div_t_convective, eval_k_div_t_radiative, eval_tsync, hut_f2,
     hut_f3, hut_f4, hut_f5,
 };
 pub use mdot::{
+    ImplicitMdotSolver, ImplicitRlofSolver, ImplicitStepAction,
     eval_arras_mdot_thin, eval_edot_enhancement_isotropic,
     eval_kolb_mdot_eccentric, eval_kolb_mdot_thick, eval_ritter_mdot_eccentric,
     eval_ritter_mdot_thin, kolb_f3, update_change_factor_after_step,
-    ImplicitMdotSolver, ImplicitRlofSolver, ImplicitStepAction,
 };
 pub use orbit::{
     build_anomaly_grid, eval_j_orb, eval_l2_overflow_limit,
@@ -102,24 +103,25 @@ pub use orbit::{
     separation_from_j_orb, separation_from_period,
 };
 pub use roche_deformation::{
-    eval_synchronicity_switch, BinaryTidalDeformationHook,
-    RocheDeformationTables, RocheTable2D, ROCHE_NUDGE,
+    BinaryTidalDeformationHook, ROCHE_NUDGE, RocheDeformationTables,
+    RocheTable2D, eval_synchronicity_switch,
 };
 pub use system::{BinaryCompanion, BinaryStepCounters, BinarySystem};
 pub use system_jdot::{
-    eval_coupled_edot, eval_coupled_edot_breakdown, eval_gated_jdot,
-    EdotBreakdown, JdotBreakdown,
+    EdotBreakdown, JdotBreakdown, eval_coupled_edot,
+    eval_coupled_edot_breakdown, eval_gated_jdot,
 };
 pub use system_rlof::{
-    blend_explicit_mdot, eval_scheme_explicit_mdot,
+    BinaryStepSnapshot, CoupledMdotAccounting, blend_explicit_mdot,
+    eval_scheme_explicit_mdot, eval_scheme_explicit_mdot_with_steps,
+    eval_star_intrinsic_wind_cgs_eccentric,
     eval_star_intrinsic_wind_cgs_with_extras, prepare_coupled_mdots,
-    prepare_coupled_mdots_with_extras, BinaryStepSnapshot,
-    CoupledMdotAccounting,
+    prepare_coupled_mdots_with_extras,
 };
 pub use timestep::{
-    binary_pick_next_timestep, violates_binary_hard_limits,
-    BinaryTimestepControls, B_TLIM_COMP, B_TLIM_DM, B_TLIM_ECC, B_TLIM_ENV,
-    B_TLIM_JORB, B_TLIM_ROCHE, B_TLIM_SEP,
+    B_TLIM_COMP, B_TLIM_DM, B_TLIM_ECC, B_TLIM_ENV, B_TLIM_JORB, B_TLIM_ROCHE,
+    B_TLIM_SEP, BinaryTimestepControls, binary_pick_next_timestep,
+    violates_binary_hard_limits,
 };
 
 #[cfg(test)]
@@ -241,7 +243,7 @@ mod tests {
     }
 
     #[test]
-    fn test_fidelity3_anomaly_grid_edot_gr_jdot_ls_and_contact_solver() {
+    fn test_anomaly_grid_edot_175_186_jdot_mb_and_contact_solver() {
         for n in [8_usize, 9_usize, 16_usize] {
             let (theta, time_co) = build_anomaly_grid(n, 0.4);
             assert_eq!(theta.len(), n);
@@ -255,8 +257,109 @@ mod tests {
             }
         }
 
-        let edot = eval_edot_gr(1.4 * MSUN, 1.4 * MSUN, 2.0 * RSUN, 0.3);
-        assert!(edot < 0.0 && edot.is_finite());
+        // `#175` & `#186`: `do_jdot_gr` contributes zero `edot`, and `edot_tidal`
+        // uses `Ftid_1` on both stars (`binary_edot.f90:93, 171-172`).
+        let s1 = flexmesa_star::load_zams_model(
+            flexmesa_star::StarControls {
+                initial_mass: 1.4,
+                zbase: 0.02,
+                ..flexmesa_star::StarControls::default()
+            },
+            flexmesa_star::StarJobControls::default(),
+        )
+        .expect("s1");
+        let s2 = flexmesa_star::load_zams_model(
+            flexmesa_star::StarControls {
+                initial_mass: 1.1,
+                zbase: 0.02,
+                ..flexmesa_star::StarControls::default()
+            },
+            flexmesa_star::StarJobControls::default(),
+        )
+        .expect("s2");
+        let mut ctrl = BinaryInlistControls {
+            do_jdot_gr: true,
+            do_tidal_circ: false,
+            circ_type_1: String::from("Hut_rad"),
+            circ_type_2: String::from("Hut_rad"),
+            ftid_1: 1.0,
+            ftid_2: 7.0,
+            ..BinaryInlistControls::default()
+        };
+        let eb_gr_only = eval_coupled_edot_breakdown(
+            &ctrl,
+            &s1,
+            Some(&s2),
+            1,
+            s1.mstar,
+            s2.mstar,
+            6.0 * RSUN,
+            period_from_separation(s1.mstar, s2.mstar, 6.0 * RSUN),
+            0.3,
+        )
+        .expect("edot gr only");
+        assert_eq!(eb_gr_only.edot_total, 0.0);
+
+        ctrl.do_tidal_circ = true;
+        let eb_ftid_7 = eval_coupled_edot_breakdown(
+            &ctrl,
+            &s1,
+            Some(&s2),
+            1,
+            s1.mstar,
+            s2.mstar,
+            6.0 * RSUN,
+            period_from_separation(s1.mstar, s2.mstar, 6.0 * RSUN),
+            0.3,
+        )
+        .expect("edot ftid_2=7");
+        ctrl.ftid_2 = 1.0;
+        let eb_ftid_1 = eval_coupled_edot_breakdown(
+            &ctrl,
+            &s1,
+            Some(&s2),
+            1,
+            s1.mstar,
+            s2.mstar,
+            6.0 * RSUN,
+            period_from_separation(s1.mstar, s2.mstar, 6.0 * RSUN),
+            0.3,
+        )
+        .expect("edot ftid_2=1");
+        assert_eq!(
+            eb_ftid_7.edot_tidal.to_bits(),
+            eb_ftid_1.edot_tidal.to_bits()
+        );
+        assert!(eb_ftid_1.edot_tidal < 0.0);
+
+        // `F3-14`: `keep_mb_on` activates MB even when `was_using_mb == false`,
+        // `jdot_ls` is zero on `doing_first_model_of_run`, and orbit-averaged
+        // `Tout_enhance_wind` integrates over `anomaly_steps`.
+        let mut mb_ctrl = BinaryInlistControls {
+            keep_mb_on: true,
+            jdot_mb_min_qconv_env: 0.99,
+            ..BinaryInlistControls::default()
+        };
+        assert!(check_jdot_mb_conditions(&s1, &mb_ctrl, false).0);
+        mb_ctrl.keep_mb_on = false;
+        assert!(!check_jdot_mb_conditions(&s1, &mb_ctrl, true).0);
+
+        assert_eq!(
+            eval_jdot_ls_with_am_removed(
+                true, 2, false, 1.0e50, 0.9e50, -1.0e18, 1.0e32, -1.0e18, 0.0,
+                0.0, 0.0, 0.0, 1.0e14
+            ),
+            0.0
+        );
+        let w_enh = eval_tout_wind_enhancement_orbit_averaged(
+            -1.0e18,
+            RSUN,
+            3.0 * RSUN,
+            1.0e4,
+            0.4,
+            500,
+        );
+        assert!(w_enh < -1.0e18 && w_enh.is_finite());
 
         let jdot_ls_wind = eval_jdot_ls_with_winds(
             1.0e50, 0.9e50, -1.0e18, 1.0e17, 0.5e50, 0.5e50, 0.0, 0.0, 1.0e14,

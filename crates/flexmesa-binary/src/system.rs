@@ -5,7 +5,7 @@
 
 use flexmesa_const::{MSUN, RSUN, SECDAY, SECYER};
 use flexmesa_star::{
-    set_hydro_vars, sync_post_henyey_rotation, StarError, StarModel,
+    StarError, StarModel, set_hydro_vars, sync_post_henyey_rotation,
 };
 
 use crate::edd_wind::bh_initial_equatorial_mass;
@@ -17,7 +17,8 @@ use crate::orbit::{
 use crate::roche_deformation::BinaryTidalDeformationHook;
 use crate::system_init::prep_and_settle_binary_star;
 use crate::system_jdot::{
-    apply_initial_orbit_sync, eval_star_spin_j, EdotBreakdown, JdotBreakdown,
+    EdotBreakdown, JdotBreakdown, apply_initial_orbit_sync, eval_star_spin_j,
+    star_photosphere_radius_cm,
 };
 use crate::system_rlof::{
     BinaryStepScalars, BinaryStepSnapshot, CoupledMdotAccounting,
@@ -315,12 +316,12 @@ impl BinarySystem {
         let j_orb = eval_j_orb(m_d, m_a, separation, eccentricity);
         let r_a = match &companion {
             BinaryCompanion::PointMass { .. } => 0.0,
-            BinaryCompanion::Star(s2) => s2.r[0],
+            BinaryCompanion::Star(s2) => star_photosphere_radius_cm(s2),
         };
         let (rl, rl_relative_gap) = compute_rl_and_gaps(
             m_d,
             m_a,
-            donor.r[0],
+            star_photosphere_radius_cm(&donor),
             r_a,
             separation,
             eccentricity,
@@ -446,7 +447,7 @@ impl BinarySystem {
     pub fn accretor_radius_cm(&self) -> f64 {
         match &self.companion {
             BinaryCompanion::PointMass { .. } => 0.0,
-            BinaryCompanion::Star(s2) => s2.r[0],
+            BinaryCompanion::Star(s2) => star_photosphere_radius_cm(s2),
         }
     }
 
@@ -522,7 +523,7 @@ impl BinarySystem {
         let (rl, gaps) = compute_rl_and_gaps(
             m_d,
             m_a,
-            self.donor.r[0],
+            star_photosphere_radius_cm(&self.donor),
             self.accretor_radius_cm(),
             self.separation,
             self.eccentricity,
@@ -574,7 +575,7 @@ impl BinarySystem {
         let (rl, gaps) = compute_rl_and_gaps(
             self.donor.mstar,
             self.accretor_mass_g(),
-            self.donor.r[0],
+            star_photosphere_radius_cm(&self.donor),
             0.0,
             self.separation,
             self.eccentricity,
@@ -829,19 +830,18 @@ impl BinarySystem {
 }
 
 const BINARY_CHECKPOINT_MAGIC: &[u8; 8] = b"FMBINCP1";
-const BINARY_CHECKPOINT_VERSION: u32 = 1;
+const BINARY_CHECKPOINT_VERSION: u32 = 2;
 
 fn decode_binary_checkpoint_frame(
     bytes: &[u8],
 ) -> Result<(flexmesa_math::NumericsMode, &[u8]), StarError> {
-    let (mode_tag, payload) =
-        flexmesa_utils::bin_codec::decode_framed_header(
-            bytes,
-            BINARY_CHECKPOINT_MAGIC,
-            BINARY_CHECKPOINT_VERSION,
-            "binary checkpoint",
-        )
-        .map_err(StarError::IoError)?;
+    let (mode_tag, payload) = flexmesa_utils::bin_codec::decode_framed_header(
+        bytes,
+        BINARY_CHECKPOINT_MAGIC,
+        BINARY_CHECKPOINT_VERSION,
+        "binary checkpoint",
+    )
+    .map_err(StarError::IoError)?;
     let mode = flexmesa_math::NumericsMode::from_wire_tag(mode_tag)
         .ok_or_else(|| {
             StarError::IoError(format!(

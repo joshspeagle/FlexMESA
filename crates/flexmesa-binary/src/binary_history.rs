@@ -11,15 +11,15 @@ use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 
 use flexmesa_const::{
-    MixingType, LSUN, MSUN, PI, RSUN, SECDAY, SECYER, STANDARD_CGRAV,
+    LSUN, MSUN, MixingType, PI, RSUN, SECDAY, SECYER, STANDARD_CGRAV,
 };
 use flexmesa_schema::strip_fortran_comment;
 use flexmesa_star::{
-    eval_photosphere_info, eval_surf_avg_rotation_info, format_mesa_dbl_width,
-    format_mesa_header_str_width, parse_quoted_include_arg,
-    push_mesa_6line_header, safe_log10, write_mesa_dbl_width,
-    write_mesa_int_width, MesaCellValue, StarError, StarLogsWriter, StarModel,
-    MESA_REF_VERSION_NUMBER,
+    MESA_REF_VERSION_NUMBER, MesaCellValue, StarError, StarLogsWriter,
+    StarModel, eval_photosphere_info, eval_surf_avg_rotation_info,
+    format_mesa_dbl_width, format_mesa_header_str_width,
+    parse_quoted_include_arg, push_mesa_6line_header, safe_log10,
+    write_mesa_dbl_width, write_mesa_int_width,
 };
 
 use crate::edd_wind::eval_accreted_material_j;
@@ -340,11 +340,7 @@ fn parse_binary_history_columns_rec(
 
 #[inline]
 fn map_donor_acc_to_stars<T: Copy>(donor_i: usize, arr: [T; 2]) -> [T; 2] {
-    if donor_i == 1 {
-        arr
-    } else {
-        [arr[1], arr[0]]
-    }
+    if donor_i == 1 { arr } else { [arr[1], arr[0]] }
 }
 
 fn eval_upstream_k_div_t(
@@ -475,11 +471,7 @@ fn eval_star_tsync_sec(
         sys.separation,
         f_tid,
     );
-    if ts.is_finite() && ts > 0.0 {
-        ts
-    } else {
-        0.0
-    }
+    if ts.is_finite() && ts > 0.0 { ts } else { 0.0 }
 }
 
 /// Evaluates all requested [`BinaryHistoryColumnSpec`] columns on `sys`
@@ -520,11 +512,9 @@ pub fn evaluate_binary_history_row(
         - sys.mass_transfer_alpha
         - sys.mass_transfer_beta
         - sys.mass_transfer_delta;
-    // `binary_history.f90` writes the stored `b% edot`, `b% edot_tidal` and
-    // `b% edot_enhance`, so report the terms the orbital update applied.
-    // While the engine still carries the gravitational-wave term (`#175`)
-    // and per-star `Ftid` (`#186`), both owed under `#160`, these columns
-    // show that departure instead of hiding it.
+    // `binary_history.f90` writes the stored `b% edot`, `b% edot_tidal`, and
+    // `b% edot_enhance`, reporting the exact terms the orbital update applied
+    // (`#175`, `#186`, `DECISIONS #36`).
     let (edot_tot, edot_tidal, edot_enhance) = (
         sys.last_edot.edot_total,
         sys.last_edot.edot_tidal,

@@ -1,37 +1,36 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 //! Coupled `BinarySystem::step` / `BinarySystem::try_step` explicit and implicit
-//! RLOF redo loop, single-trial Henyey + RK2 orbital integrator, and binary
-//! termination checks (`binary/private/binary_evolve.f90:257-620`).
+//! RLOF redo loop, single-trial Henyey + first-order Euler orbital update, and
+//! binary termination checks (`binary/private/binary_evolve.f90:257-620`).
 
 use flexmesa_const::{MSUN, SECYER};
 use flexmesa_star::{
-    check_termination_limits, compute_core_masses_msun,
+    StarError, StarModel, check_termination_limits, compute_core_masses_msun,
     eval_total_energy_integrals, remesh_star_before_step, set_hydro_vars,
-    sync_post_henyey_rotation, StarError, StarModel,
+    sync_post_henyey_rotation,
 };
 
 use crate::extras::{BinaryExtras, BinaryExtrasAction, DefaultBinaryExtras};
 use crate::mdot_implicit::{
-    update_change_factor_after_step, ImplicitMdotSolver, ImplicitStepAction,
+    ImplicitMdotSolver, ImplicitStepAction, update_change_factor_after_step,
 };
 use crate::orbit::{
-    eval_l2_overflow_limit, eval_rlobe, period_from_separation,
-    separation_from_j_orb,
+    eval_l2_overflow_limit, period_from_separation, separation_from_j_orb,
 };
-use crate::system::{compute_rl_and_gaps, BinaryCompanion, BinarySystem};
+use crate::system::{BinaryCompanion, BinarySystem, compute_rl_and_gaps};
 use crate::system_jdot::{
-    apply_tidal_spin_sync, conserve_spin_after_henyey, eval_coupled_edot,
-    eval_coupled_edot_breakdown, eval_gated_jdot, eval_star_spin_j,
-    EdotBreakdown, JdotBreakdown,
+    EdotBreakdown, apply_tidal_spin_sync, conserve_spin_after_henyey,
+    eval_coupled_edot_breakdown, eval_gated_jdot_step, eval_star_spin_j,
+    star_photosphere_radius_cm,
 };
 use crate::system_rlof::{
-    blend_explicit_mdot, eval_scheme_explicit_mdot,
+    blend_explicit_mdot, eval_scheme_explicit_mdot_with_steps,
     evolve_single_star_without_term_rewind, prepare_coupled_mdots_with_extras,
     star_exceeds_delta_mdot_hard_limit,
 };
 use crate::timestep::{
-    binary_pick_next_timestep, violates_binary_hard_limits,
-    BinaryTimestepControls, B_TLIM_COMP,
+    B_TLIM_COMP, BinaryTimestepControls, binary_pick_next_timestep,
+    violates_binary_hard_limits,
 };
 
 #[allow(clippy::large_enum_variant)]
@@ -174,26 +173,27 @@ impl BinarySystem {
             BinaryCompanion::Star(s2) => s2.controls.min_timestep_limit,
         };
         let dt_floor = self.donor.controls.min_timestep_limit.max(s2_min);
-        let check_cut_dt =
-            |dt_cut: f64, cur_dt: f64| -> Result<f64, StarError> {
-                if !dt_cut.is_finite() || dt_cut <= 0.0 {
-                    return Err(StarError::ConvergenceFailure(format!(
-                        "CutDt produced non-positive dt ({dt_cut:.3e} s)"
-                    )));
-                }
-                if dt_floor > 0.0 && dt_cut < dt_floor {
-                    return Err(StarError::ConvergenceFailure(format!(
+        let check_cut_dt = |dt_cut: f64,
+                            cur_dt: f64|
+         -> Result<f64, StarError> {
+            if !dt_cut.is_finite() || dt_cut <= 0.0 {
+                return Err(StarError::ConvergenceFailure(format!(
+                    "CutDt produced non-positive dt ({dt_cut:.3e} s)"
+                )));
+            }
+            if dt_floor > 0.0 && dt_cut < dt_floor {
+                return Err(StarError::ConvergenceFailure(format!(
                     "CutDt hit dt_floor ({dt_cut:.3e} s < {dt_floor:.3e} s)"
                 )));
-                }
-                let next_dt = dt_cut.max(dt_floor);
-                if next_dt >= 0.999_999 * cur_dt {
-                    return Err(StarError::ConvergenceFailure(format!(
+            }
+            let next_dt = dt_cut.max(dt_floor);
+            if next_dt >= 0.999_999 * cur_dt {
+                return Err(StarError::ConvergenceFailure(format!(
                     "CutDt stalled at dt ({next_dt:.3e} s >= {cur_dt:.3e} s)"
                 )));
-                }
-                Ok(next_dt)
-            };
+            }
+            Ok(next_dt)
+        };
         let mut dt_try = if dt_floor > 0.0 {
             dt.min(self.max_timestep_sec).max(dt_floor)
         } else {
@@ -212,7 +212,12 @@ impl BinarySystem {
                 self.apply_retry_holds(&retry_holds);
             }
             if tracing {
-                emit_outer_retry_trace(self, outer_retry, dt_try, implicit_mode);
+                emit_outer_retry_trace(
+                    self,
+                    outer_retry,
+                    dt_try,
+                    implicit_mode,
+                );
             }
             if !implicit_mode {
                 let pre_mdot = if self.ignore_rlof_flag {
@@ -238,13 +243,14 @@ impl BinarySystem {
                         self.mtransfer_rate = if self.ignore_rlof_flag {
                             0.0
                         } else {
-                            let m_exp = eval_scheme_explicit_mdot(
+                            let m_exp = eval_scheme_explicit_mdot_with_steps(
                                 &self.controls.mdot_scheme,
                                 &self.donor,
                                 self.accretor_mass_g(),
                                 self.rl[0],
                                 self.separation,
                                 self.eccentricity,
+                                self.controls.anomaly_steps,
                             )?;
                             blend_explicit_mdot(
                                 pre_mdot,
@@ -370,13 +376,14 @@ impl BinarySystem {
                 {
                     0.0
                 } else {
-                    eval_scheme_explicit_mdot(
+                    eval_scheme_explicit_mdot_with_steps(
                         &self.controls.mdot_scheme,
                         &self.donor,
                         m_a,
                         self.rl[0],
                         self.separation,
                         self.eccentricity,
+                        self.controls.anomaly_steps,
                     )?
                 };
                 let act = solver.evaluate_trial(
@@ -430,9 +437,9 @@ impl BinarySystem {
                         } else {
                             self.restore_snapshot(&trial_snap)?;
                             self.counters.num_implicit_trials += 1;
-                            match self.run_single_trial(
-                                0.0, dt_try, false, extras,
-                            ) {
+                            match self
+                                .run_single_trial(0.0, dt_try, false, extras)
+                            {
                                 Ok(SingleTrialOutcome::Completed {
                                     dt_used: dt0,
                                     ts_ctrl: ts0,
@@ -695,12 +702,7 @@ impl BinarySystem {
             BinaryCompanion::Star(s2) => eval_star_spin_j(s2),
         };
 
-        let n_sub = 8_usize;
-        let h = dt_used / (n_sub as f64);
-        let (mut j_cur, mut e_cur, mut dj_non_ls_accum) =
-            (j_old, e_old, 0.0_f64);
-        let mut last_jb = JdotBreakdown::default();
-        let mut last_eb = EdotBreakdown::default();
+        let doing_first_model_of_run = self.model_number == 0;
         let acc_ref = match &self.companion {
             BinaryCompanion::PointMass { .. } => None,
             BinaryCompanion::Star(s2) => Some(&**s2),
@@ -710,145 +712,96 @@ impl BinarySystem {
         } else {
             trial_mdot.min(0.0)
         };
+        let am_rem_d =
+            (-self.donor.mstar_dot.min(0.0)) * j_surf_pre_d * dt_used;
+        let am_rem_a = match &self.companion {
+            BinaryCompanion::Star(s2) if s2.mstar_dot < 0.0 => {
+                (-acct.mdot_system_wind[1].min(0.0)) * j_surf_pre_a * dt_used
+            }
+            _ => 0.0,
+        };
+        let old_mb = self.using_jdot_mb;
+        let last_jb = eval_gated_jdot_step(
+            &self.controls,
+            doing_first_model_of_run,
+            &self.donor,
+            acc_ref,
+            self.donor_i,
+            m_d_new,
+            m_a_new,
+            self.rl[0],
+            self.rl[1],
+            a_old,
+            self.period,
+            e_old,
+            j_old,
+            mtr_eff,
+            acct.mdot_system_transfer[0],
+            acct.mdot_system_wind[0],
+            acct.mdot_system_transfer[1],
+            acct.mdot_system_wind[1],
+            acct.mdot_system_cct,
+            s_pre_d,
+            s_post_d,
+            am_rem_d,
+            s_pre_a,
+            s_post_a,
+            am_rem_a,
+            dt_used,
+            0.0,
+            old_mb,
+            &mut self.using_jdot_mb,
+            &mut self.change_factor,
+        );
 
-        for sub in 0..n_sub {
-            let f0 = (sub as f64) / (n_sub as f64);
-            let f_mid = ((sub as f64) + 0.5) / (n_sub as f64);
-            let (md0, ma0) = (
-                m_d_old + (m_d_new - m_d_old) * f0,
-                m_a_old + (m_a_new - m_a_old) * f0,
-            );
-            let a0_s = separation_from_j_orb(md0, ma0, j_cur, e_cur);
-            let p0_s = period_from_separation(md0, ma0, a0_s);
-            let mut mb_tmp = self.using_jdot_mb;
-            let jb0 = eval_gated_jdot(
-                &self.controls,
-                &self.donor,
-                acc_ref,
-                self.donor_i,
-                md0,
-                ma0,
-                eval_rlobe(md0, ma0, a0_s),
-                eval_rlobe(ma0, md0, a0_s),
-                a0_s,
-                p0_s,
-                e_cur,
-                j_cur,
-                mtr_eff,
-                acct.mdot_system_transfer[0],
-                acct.mdot_system_wind[0],
-                acct.mdot_system_transfer[1],
-                acct.mdot_system_wind[1],
-                acct.mdot_system_cct,
-                s_pre_d,
-                s_post_d,
-                j_surf_pre_d,
-                s_pre_a,
-                s_post_a,
-                j_surf_pre_a,
-                dt_used,
-                0.0,
-                &mut mb_tmp,
-            );
-            let ed0 = eval_coupled_edot(
-                &self.controls,
-                &self.donor,
-                acc_ref,
-                self.donor_i,
-                md0,
-                ma0,
-                a0_s,
-                p0_s,
-                e_cur,
-            )?;
-
-            let (md_m, ma_m) = (
-                m_d_old + (m_d_new - m_d_old) * f_mid,
-                m_a_old + (m_a_new - m_a_old) * f_mid,
-            );
-            let j_m = j_cur + 0.5 * jb0.jdot_total * h;
-            if j_m <= 0.0 {
-                let f_j = self.controls.dt_reduction_factor_for_j;
-                return Ok(SingleTrialOutcome::CutDt(dt_used * f_j));
-            }
-            let e_m = (e_cur + 0.5 * ed0 * h).clamp(
-                self.controls.min_eccentricity,
-                self.controls.max_eccentricity,
-            );
-            let a_m = separation_from_j_orb(md_m, ma_m, j_m, e_m);
-            let p_m = period_from_separation(md_m, ma_m, a_m);
-            let mut mb_mid = self.using_jdot_mb;
-            let jb_m = eval_gated_jdot(
-                &self.controls,
-                &self.donor,
-                acc_ref,
-                self.donor_i,
-                md_m,
-                ma_m,
-                eval_rlobe(md_m, ma_m, a_m),
-                eval_rlobe(ma_m, md_m, a_m),
-                a_m,
-                p_m,
-                e_m,
-                j_m,
-                mtr_eff,
-                acct.mdot_system_transfer[0],
-                acct.mdot_system_wind[0],
-                acct.mdot_system_transfer[1],
-                acct.mdot_system_wind[1],
-                acct.mdot_system_cct,
-                s_pre_d,
-                s_post_d,
-                j_surf_pre_d,
-                s_pre_a,
-                s_post_a,
-                j_surf_pre_a,
-                dt_used,
-                0.0,
-                &mut mb_mid,
-            );
-            let eb_m = eval_coupled_edot_breakdown(
-                &self.controls,
-                &self.donor,
-                acc_ref,
-                self.donor_i,
-                md_m,
-                ma_m,
-                a_m,
-                p_m,
-                e_m,
-            )?;
-            let ed_m = eb_m.edot_total;
-            if sub + 1 == n_sub {
-                self.using_jdot_mb = mb_mid;
-            }
-            j_cur += jb_m.jdot_total * h;
-            if j_cur <= 0.0 {
-                let f_j = self.controls.dt_reduction_factor_for_j;
-                return Ok(SingleTrialOutcome::CutDt(dt_used * f_j));
-            }
-            e_cur = (e_cur + ed_m * h).clamp(
-                self.controls.min_eccentricity,
-                self.controls.max_eccentricity,
-            );
-            dj_non_ls_accum += (jb_m.jdot_total - jb_m.jdot_ls) * h;
-            last_jb = jb_m;
-            last_eb = eb_m;
+        // `#175` (`binary/private/binary_evolve.f90:320-321`): upstream uses a
+        // single explicit first-order Euler orbital update (`DECISIONS #36`).
+        let j_cur = j_old + last_jb.jdot_total * dt_used;
+        if j_cur <= 0.0 || !j_cur.is_finite() {
+            let f_j = self.controls.dt_reduction_factor_for_j;
+            return Ok(SingleTrialOutcome::CutDt(dt_used * f_j));
         }
+
+        // `binary/private/binary_evolve.f90:330-340`: eccentricity is held
+        // fixed during `doing_first_model_of_run` with zeroed `edot` terms.
+        let (e_cur, last_eb) = if doing_first_model_of_run {
+            (e_old, EdotBreakdown::default())
+        } else {
+            let eb = eval_coupled_edot_breakdown(
+                &self.controls,
+                &self.donor,
+                acc_ref,
+                self.donor_i,
+                m_d_new,
+                m_a_new,
+                a_old,
+                self.period,
+                e_old,
+            )?;
+            let e_next = (e_old + eb.edot_total * dt_used).clamp(
+                self.controls.min_eccentricity,
+                self.controls.max_eccentricity,
+            );
+            (e_next, eb)
+        };
+        let dj_non_ls_accum = (last_jb.jdot_total - last_jb.jdot_ls) * dt_used;
 
         self.angular_momentum_j = j_cur;
         self.eccentricity = e_cur;
-        self.jdot = (j_cur - j_old) / dt_used.max(1.0e-99);
+        self.jdot = last_jb.jdot_total;
         self.separation = separation_from_j_orb(m_d_new, m_a_new, j_cur, e_cur);
         self.period = period_from_separation(m_d_new, m_a_new, self.separation);
         let (rl_new, gap_new) = compute_rl_and_gaps(
             m_d_new,
             m_a_new,
-            self.donor.r[0],
+            star_photosphere_radius_cm(&self.donor),
             self.accretor_radius_cm(),
             self.separation,
             self.eccentricity,
         );
+        if !gap_new[0].is_finite() || !gap_new[1].is_finite() {
+            return Ok(SingleTrialOutcome::CutDt(0.5 * dt_used));
+        }
         self.rl = rl_new;
         self.rl_relative_gap = gap_new;
         self.step_mtransfer_rate = mtr_eff;
@@ -860,14 +813,17 @@ impl BinarySystem {
         if let BinaryCompanion::Star(ref mut s2) = self.companion {
             finalize_star_post_binary_torques(s2)?;
         }
-        if self.controls.do_jdot_ls && !self.controls.use_tidal_deformation {
-            let s_fin_a = match &self.companion {
-                BinaryCompanion::PointMass { .. } => 0.0,
-                BinaryCompanion::Star(s2) => eval_star_spin_j(s2),
-            };
-            self.angular_momentum_j -= (eval_star_spin_j(&self.donor)
-                - s_post_d)
-                + (s_fin_a - s_post_a);
+        let s_fin_d = eval_star_spin_j(&self.donor);
+        let s_fin_a = match &self.companion {
+            BinaryCompanion::PointMass { .. } => 0.0,
+            BinaryCompanion::Star(s2) => eval_star_spin_j(s2),
+        };
+        if self.controls.do_jdot_ls
+            && !doing_first_model_of_run
+            && !self.controls.use_tidal_deformation
+        {
+            self.angular_momentum_j -=
+                (s_fin_d - s_post_d) + (s_fin_a - s_post_a);
         }
 
         let wind_spin_d = if self.donor.mstar_dot < 0.0 {
@@ -881,11 +837,12 @@ impl BinarySystem {
             }
             BinaryCompanion::PointMass { .. } => 0.0,
         };
-        let ext_spin_delta = if self.controls.do_jdot_ls {
-            wind_spin_d + wind_spin_a
-        } else {
-            (s_post_d - s_pre_d) + (s_post_a - s_pre_a)
-        };
+        let ext_spin_delta =
+            if self.controls.do_jdot_ls && !doing_first_model_of_run {
+                wind_spin_d + wind_spin_a
+            } else {
+                (s_fin_d - s_pre_d) + (s_fin_a - s_pre_a)
+            };
         self.cumulative_j_ext += dj_non_ls_accum + ext_spin_delta;
 
         let env_d_new =

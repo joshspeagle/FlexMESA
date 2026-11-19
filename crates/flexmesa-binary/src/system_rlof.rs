@@ -7,15 +7,16 @@
 //! `binary/private/binary_wind.f90:33-170`, and
 //! `binary/private/binary_evolve.f90:257-620`.
 
-use flexmesa_const::{CLIGHT, CRAD, MSUN, PI, SECYER};
+use flexmesa_const::{CLIGHT, CRAD, MSUN, PI, RSUN, SECYER};
 use flexmesa_star::{
-    do_set_mdot, star_evolve_step, EvolveStepReport, PrimaryStateBuffer,
-    StarError, StarModel,
+    EvolveStepReport, PrimaryStateBuffer, StarError, StarModel, do_set_mdot,
+    eval_photosphere_info, star_evolve_step,
 };
 
 use crate::edd_wind::{
     eval_accreted_material_j, eval_bondi_hoyle_wind_fraction,
-    eval_point_mass_edd_and_retention, eval_tout_wind_enhancement,
+    eval_point_mass_edd_and_retention,
+    eval_tout_wind_enhancement_orbit_averaged,
 };
 use crate::extras::{BinaryExtras, DefaultBinaryExtras};
 use crate::inlist::BinaryInlistControls;
@@ -23,7 +24,9 @@ use crate::mdot::{
     eval_arras_mdot_thin, eval_kolb_mdot_eccentric, eval_kolb_mdot_thick,
     eval_ritter_mdot_eccentric,
 };
-use crate::system_jdot::{EdotBreakdown, JdotBreakdown};
+use crate::system_jdot::{
+    EdotBreakdown, JdotBreakdown, star_photosphere_radius_cm,
+};
 
 /// Per-step wind, RLOF, Eddington, and system mass-loss accounting (`adjust_mdots`
 /// in `binary/private/binary_mdot.f90:506-660`, indexed `[donor_slot, accretor_slot]`).
@@ -366,11 +369,7 @@ pub fn eval_star_intrinsic_wind_cgs_with_extras(
                 wind_mdot = wind_mdot.min(mw.max_wind * (MSUN / SECYER));
             }
         }
-        if wind_mdot > 0.0 {
-            -wind_mdot
-        } else {
-            0.0
-        }
+        if wind_mdot > 0.0 { -wind_mdot } else { 0.0 }
     } else {
         let saved_mc = star.controls.mass_change;
         let saved_other = star.controls.use_other_adjust_mdot;
@@ -389,7 +388,51 @@ pub fn eval_star_intrinsic_wind_cgs_with_extras(
         w
     };
     if do_enhance && wind_cgs < 0.0 {
-        wind_cgs *= eval_tout_wind_enhancement(star.r[0], rl_cm, b_wind);
+        wind_cgs = eval_tout_wind_enhancement_orbit_averaged(
+            wind_cgs,
+            star_photosphere_radius_cm(star),
+            rl_cm,
+            b_wind,
+            0.0,
+            500,
+        );
+    }
+    Ok(wind_cgs)
+}
+
+/// Evaluates intrinsic stellar wind $\dot{M}_{\mathrm{wind}} \le 0$ ($\mathrm{g\,s^{-1}}$)
+/// with orbit-averaged Tout & Eggleton (1988) tidal wind enhancement over
+/// `(eccentricity, anomaly_steps)` (`binary_wind.f90:131-170`).
+#[allow(clippy::too_many_arguments)]
+pub fn eval_star_intrinsic_wind_cgs_eccentric(
+    star: &mut StarModel,
+    star_idx: usize,
+    rl_cm: f64,
+    do_enhance: bool,
+    b_wind: f64,
+    eccentricity: f64,
+    anomaly_steps: usize,
+    ignore_rlof: bool,
+    extras: &mut dyn BinaryExtras,
+) -> Result<f64, StarError> {
+    let mut wind_cgs = eval_star_intrinsic_wind_cgs_with_extras(
+        star,
+        star_idx,
+        rl_cm,
+        false,
+        b_wind,
+        ignore_rlof,
+        extras,
+    )?;
+    if do_enhance && wind_cgs < 0.0 {
+        wind_cgs = eval_tout_wind_enhancement_orbit_averaged(
+            wind_cgs,
+            star_photosphere_radius_cm(star),
+            rl_cm,
+            b_wind,
+            eccentricity,
+            anomaly_steps,
+        );
     }
     Ok(wind_cgs)
 }
@@ -499,22 +542,27 @@ pub fn prepare_coupled_mdots_with_extras(
         .unwrap_or(0.0);
 
     let acc_i = 3 - donor_i;
-    let w_d = eval_star_intrinsic_wind_cgs_with_extras(
+    let r_d_phot = star_photosphere_radius_cm(donor);
+    let w_d = eval_star_intrinsic_wind_cgs_eccentric(
         donor,
         donor_i,
         rl[0],
         enh_d,
         b_d,
+        eccentricity,
+        ctrl.anomaly_steps,
         ignore_rlof,
         extras,
     )?;
     let w_a = match accretor_star.as_deref_mut() {
-        Some(acc) => eval_star_intrinsic_wind_cgs_with_extras(
+        Some(acc) => eval_star_intrinsic_wind_cgs_eccentric(
             acc,
             acc_i,
             rl[1],
             enh_a,
             b_a,
+            eccentricity,
+            ctrl.anomaly_steps,
             ignore_rlof,
             extras,
         )?,
@@ -525,7 +573,7 @@ pub fn prepare_coupled_mdots_with_extras(
         eval_bondi_hoyle_wind_fraction(
             m_d,
             m_a,
-            donor.r[0],
+            r_d_phot,
             separation,
             eccentricity,
             abh_d,
@@ -539,7 +587,7 @@ pub fn prepare_coupled_mdots_with_extras(
         Some(acc) if do_wt_a => eval_bondi_hoyle_wind_fraction(
             m_a,
             m_d,
-            acc.r[0],
+            star_photosphere_radius_cm(acc),
             separation,
             eccentricity,
             abh_a,
@@ -623,7 +671,13 @@ pub fn prepare_coupled_mdots_with_extras(
         out.actual_mtransfer_rate = actual_tr;
         out.retained_accretion_rate = retained;
         out.accreted_material_j = if ctrl.do_j_accretion && retained > 0.0 {
-            eval_accreted_material_j(m_d, m_a, acc.r[0], separation).0
+            eval_accreted_material_j(
+                m_d,
+                m_a,
+                star_photosphere_radius_cm(acc),
+                separation,
+            )
+            .0
         } else {
             0.0
         };
@@ -638,7 +692,8 @@ pub fn prepare_coupled_mdots_with_extras(
 }
 
 /// Evaluates the explicit mass-transfer prescription (`"Ritter"`, `"Kolb"`, or `"Arras"`)
-/// on the post-step donor profile (`get_info_for_explicit_mdot` in `binary_mdot.f90:662-683`).
+/// on the post-step donor profile (`get_info_for_explicit_mdot` in `binary_mdot.f90:662-683`)
+/// using upstream's default `anomaly_steps = 500`.
 pub fn eval_scheme_explicit_mdot(
     scheme: &str,
     donor: &StarModel,
@@ -647,10 +702,34 @@ pub fn eval_scheme_explicit_mdot(
     separation: f64,
     eccentricity: f64,
 ) -> Result<f64, StarError> {
+    eval_scheme_explicit_mdot_with_steps(
+        scheme,
+        donor,
+        m_accretor,
+        rl_donor,
+        separation,
+        eccentricity,
+        500,
+    )
+}
+
+/// Evaluates the explicit mass-transfer prescription (`"Ritter"`, `"Kolb"`, or `"Arras"`)
+/// on the post-step donor profile (`get_info_for_explicit_mdot` in `binary_mdot.f90:662-683`),
+/// integrating eccentric orbits over `anomaly_steps` (`binary_mdot.f90:850,918`)
+/// and using photospheric radius `b% r(d_i)` (`binary_mdot.f90:845,870,913`).
+pub fn eval_scheme_explicit_mdot_with_steps(
+    scheme: &str,
+    donor: &StarModel,
+    m_accretor: f64,
+    rl_donor: f64,
+    separation: f64,
+    eccentricity: f64,
+    anomaly_steps: usize,
+) -> Result<f64, StarError> {
     if donor.nz == 0 {
         return Ok(0.0);
     }
-    let (m_d, r_d) = (donor.mstar, donor.r[0]);
+    let (m_d, r_d) = (donor.mstar, RSUN * eval_photosphere_info(donor).r_rsun);
     let (rho0, p0, t0, mu0) = (
         donor.rho[0].max(1.0e-30),
         donor.peos[0].max(1.0),
@@ -671,7 +750,7 @@ pub fn eval_scheme_explicit_mdot(
             t0,
             mu0,
             true,
-            32,
+            anomaly_steps,
         );
         let thick = if eccentricity > 0.0 {
             eval_kolb_mdot_eccentric(
@@ -684,7 +763,7 @@ pub fn eval_scheme_explicit_mdot(
                 &donor.t,
                 &donor.mu,
                 &donor.gamma1,
-                32,
+                anomaly_steps,
             )
         } else {
             eval_kolb_mdot_thick(
@@ -711,7 +790,7 @@ pub fn eval_scheme_explicit_mdot(
             t0,
             mu0,
             false,
-            32,
+            anomaly_steps,
         )
     } else {
         return Err(StarError::InvalidInput(format!(

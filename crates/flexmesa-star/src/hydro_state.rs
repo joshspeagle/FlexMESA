@@ -196,6 +196,12 @@ pub struct HydroAuxState {
     pub chi_rho_start: Vec<f64>,
     /// Fraction of Potekhin-Chabrier (`PC`) EOS in cell `k` (`eos_frac_PC`).
     pub eos_frac_pc: Vec<f64>,
+    /// Opacity regime blend fractions `[lowT, highT, Type2, Compton]` per cell (`kap_frac_*`).
+    #[serde(default)]
+    pub kap_frac: Vec<[f64; 4]>,
+    /// Unscaled thermal neutrino channel losses `[plas, brem, phot, pair, reco]` per cell (`nonnucneu_*`).
+    #[serde(default)]
+    pub nonnucneu_channels: Vec<[f64; 5]>,
     /// Phase-transition latent heat density derivative (`latent_ddlnRho`).
     pub latent_ddlnrho: Vec<f64>,
     /// Phase-transition latent heat temperature derivative (`latent_ddlnT`).
@@ -378,6 +384,8 @@ impl HydroAuxState {
             chi_t_start: vec![0.0; nz],
             chi_rho_start: vec![0.0; nz],
             eos_frac_pc: vec![0.0; nz],
+            kap_frac: vec![[0.0; 4]; nz],
+            nonnucneu_channels: vec![[0.0; 5]; nz],
             latent_ddlnrho: vec![0.0; nz],
             latent_ddlnt: vec![0.0; nz],
             d_eps_grav_dx: vec![0.0; nz * species],
@@ -523,6 +531,8 @@ impl HydroAuxState {
             ad.resize(nz, StarAdOrder1::ZERO);
         }
         let n_sp = nz * species;
+        self.kap_frac.resize(nz, [0.0; 4]);
+        self.nonnucneu_channels.resize(nz, [0.0; 5]);
         self.eps_nuc_categories
             .resize(nz, [0.0; flexmesa_chem::NUM_CATEGORIES]);
         self.d_eps_grav_dx.resize(n_sp, 0.0);

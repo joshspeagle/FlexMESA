@@ -215,3 +215,92 @@ def test_kapcn_knot_and_multi_zone_batch_consistency() -> None:
         rtol=1.0e-12,
         atol=1.0e-12,
     )
+
+
+def test_op_a09_compton_and_gn93_low_t_bounds_match_mesa_26_4_1_jax() -> None:
+    """Verify `F2-11` `OP_a09` Compton and `lowT_fa05_gn93` bounds in JAX."""
+    for lt, exp_kap, exp_dr, exp_dt, exp_f_ht, exp_f_c in (
+        (
+            7.75,
+            3.0242892010067907e-1,
+            -9.871252150096227e-4,
+            -1.742298293406443e-1,
+            4.625399808000008e-1,
+            5.374600191999992e-1,
+        ),
+        (
+            8.20,
+            2.484889761354873e-1,
+            -1.3576011121718156e-9,
+            -2.3434817686748277e-1,
+            0.0,
+            1.0,
+        ),
+    ):
+        with flexmesa.numerics_mode_context("strict"):
+            out_r = kap.kap_get_results(
+                0.014,
+                0.70,
+                0.014,
+                log_rho=-2.0,
+                log_t=lt,
+                lnfree_e=-0.17,
+                eta=-10.0,
+                zbar=1.1,
+                kap_option="OP_a09",
+                use_type2_opacities=False,
+                backend="rust",
+            )
+        out_j = kap.kap_get_results(
+            jnp.float64(0.014),
+            jnp.float64(0.70),
+            jnp.float64(0.014),
+            log_rho=jnp.float64(-2.0),
+            log_t=jnp.float64(lt),
+            lnfree_e=jnp.float64(-0.17),
+            eta=jnp.float64(-10.0),
+            zbar=jnp.float64(1.1),
+            kap_option="OP_a09",
+            use_type2_opacities=False,
+            backend="jax",
+        )
+        for out in (out_r, out_j):
+            np.testing.assert_allclose(float(out.kap), exp_kap, rtol=1.0e-12)
+            np.testing.assert_allclose(
+                float(out.dlnkap_dln_rho), exp_dr, rtol=1.0e-10
+            )
+            np.testing.assert_allclose(
+                float(out.dlnkap_dln_t), exp_dt, rtol=1.0e-11
+            )
+            np.testing.assert_allclose(
+                np.asarray(out.kap_fracs),
+                [0.0, exp_f_ht, 0.0, exp_f_c],
+                rtol=1.0e-12,
+                atol=1.0e-15,
+            )
+
+    out_gn_j = kap.kap_get_results(
+        jnp.float64(0.02),
+        jnp.float64(0.70),
+        jnp.float64(0.02),
+        log_rho=jnp.float64(-6.0),
+        log_t=jnp.float64(3.95),
+        lnfree_e=jnp.float64(-0.17),
+        eta=jnp.float64(-10.0),
+        zbar=jnp.float64(1.1),
+        kap_option="gn93",
+        kap_low_t_option="lowT_fa05_gn93",
+        kap_blend_log_t_lower_bdy=3.80,
+        kap_blend_log_t_upper_bdy=4.20,
+        use_type2_opacities=False,
+        backend="jax",
+    )
+    np.testing.assert_allclose(
+        float(out_gn_j.kap), 3.840006733209830e1, rtol=1.0e-12
+    )
+    np.testing.assert_allclose(
+        np.asarray(out_gn_j.kap_fracs),
+        [0.5, 0.5, 0.0, 0.0],
+        rtol=1.0e-13,
+        atol=1.0e-15,
+    )

@@ -39,7 +39,7 @@ def test_mesa_defaults_parity_zero_mismatches_and_empty_allow_list() -> None:
     assert none_diff == 0, f"unexpected None active limits:\n{md_text}"
     assert unallowed == []
     assert summary.upstream_scalars == 2396
-    assert summary.matched >= 1204
+    assert summary.matched >= 1229
     assert summary.agree == summary.matched
     # Baseline 12 non-scalar/computed initializers plus 8 empty-Vec
     # xa_{surface,average}_{lower,upper}_limit{,_species} fields (#159),

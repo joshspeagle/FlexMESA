@@ -357,7 +357,7 @@ pub fn do_in_out(
     just_dydt: bool,
 ) {
     let q = g.reactions[i].std_q;
-    let qneu = g.reactions[i].std_qneu;
+    let qneu = g.reactions[i].std_qneu * g.reaction_neuqs_factor;
     do_in_out_neu(
         g,
         w,

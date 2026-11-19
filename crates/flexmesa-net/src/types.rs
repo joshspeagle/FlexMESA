@@ -156,6 +156,7 @@ pub struct ScreenPairParams {
 }
 
 /// Complete compiled nuclear reaction network definition (`Net_General_Info`).
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub struct NetGeneralInfo {
     /// Network filename (e.g., `"basic.net"`, `"approx21.net"`).
@@ -226,6 +227,11 @@ pub struct NetGeneralInfo {
     /// Multiplicative factor applied to `std_reaction_neuQs` (`1.0` default;
     /// `star/private/net.f90:202-210`).
     pub reaction_neuqs_factor: f64,
+    /// Use Fushiki & Lamb (1987) triple-alpha screening (`false` default;
+    /// `net/public/net_def.f90:161`, `star/private/net.f90:685`).
+    pub use_3a_fl87: bool,
+    /// Use Suzuki et al. (2016) `sd`-shell weak rates (`false` default).
+    pub use_suzuki_weak_rates: bool,
 }
 
 impl NetGeneralInfo {

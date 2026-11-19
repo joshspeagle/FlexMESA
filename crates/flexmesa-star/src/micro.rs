@@ -30,7 +30,7 @@ use crate::model::StarModel;
 use crate::star_ad::{StarAdExt, StarAdOrder1};
 
 static BASIC_NET_INFO: OnceLock<NetGeneralInfo> = OnceLock::new();
-type NetCacheKey = (String, u64, u64, u64, u64, u64);
+type NetCacheKey = (String, u64, u64, u64, u64, u64, bool, bool);
 static NET_CACHE: OnceLock<Mutex<HashMap<NetCacheKey, Arc<NetGeneralInfo>>>> =
     OnceLock::new();
 
@@ -74,9 +74,12 @@ pub fn get_or_load_net_with_fe56ec(
         -1.0,
         -1.0,
         1.0,
+        false,
+        false,
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn get_or_load_net_with_star_params(
     net_name: &str,
     search_dir: Option<&Path>,
@@ -85,6 +88,8 @@ fn get_or_load_net_with_star_params(
     net_logtcut_lo: f64,
     net_logtcut_lim: f64,
     reaction_neuqs_factor: f64,
+    use_3a_fl87: bool,
+    use_suzuki_weak_rates: bool,
 ) -> Result<Arc<NetGeneralInfo>, StarError> {
     let key = net_name.trim();
     let cache_key = (
@@ -94,6 +99,8 @@ fn get_or_load_net_with_star_params(
         net_logtcut_lo.to_bits(),
         net_logtcut_lim.to_bits(),
         reaction_neuqs_factor.to_bits(),
+        use_3a_fl87,
+        use_suzuki_weak_rates,
     );
     let cache = NET_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
     if let Ok(guard) = cache.lock() {
@@ -107,16 +114,18 @@ fn get_or_load_net_with_star_params(
                 "failed to load network '{key}': {e}"
             ))
         })?;
-    // `star/private/net.f90:741-748` and `net/public/net_def.f90:588-606`:
+    // `star/private/net.f90:685,741-748` and `net/public/net_def.f90:588-606`:
     // unconditionally assign `s% net_logTcut_{lo,lim}` and `s% fe56ec_*`
     // (overriding standalone `net_def` defaults despite the stale `<= 0`
     // comment in `controls.defaults:6786`), plus `s% reaction_neuQs_factor`
-    // (`star/private/net.f90:202-210`).
+    // (`star/private/net.f90:202-210`) and `use_3a_fl87` / `use_suzuki_weak_rates`.
     loaded.fe56ec_fake_factor = fe56ec_fake_factor;
     loaded.min_t_for_fe56ec_fake_factor = min_t_for_fe56ec_fake_factor;
     loaded.log_tcut_lo = net_logtcut_lo;
     loaded.log_tcut_lim = net_logtcut_lim;
     loaded.reaction_neuqs_factor = reaction_neuqs_factor;
+    loaded.use_3a_fl87 = use_3a_fl87;
+    loaded.use_suzuki_weak_rates = use_suzuki_weak_rates;
     let info = Arc::new(loaded);
     if let Ok(mut guard) = cache.lock() {
         guard.insert(cache_key, Arc::clone(&info));
@@ -125,8 +134,7 @@ fn get_or_load_net_with_star_params(
 }
 
 /// Returns a cached [`Arc<NetGeneralInfo>`] matching `model.job.net_name`,
-/// `model.species`, and `model.controls`'s `fe56ec`, `net_logTcut`, and
-/// `reaction_neuQs_factor` settings.
+/// `model.species`, and `model.controls` / `model.job` rate settings.
 ///
 /// # Errors
 /// Returns [`StarError::MicrophysicsError`] if `model.job.net_name` cannot be
@@ -135,14 +143,17 @@ pub fn resolve_model_net(
     model: &StarModel,
 ) -> Result<Arc<NetGeneralInfo>, StarError> {
     let c = &model.controls;
+    let j = &model.job;
     let net_info = get_or_load_net_with_star_params(
-        &model.job.net_name,
+        &j.net_name,
         None,
         c.fe56ec_fake_factor,
         c.min_t_for_fe56ec_fake_factor,
         c.net_logtcut_lo,
         c.net_logtcut_lim,
         c.reaction_neuqs_factor,
+        j.use_3a_fl87,
+        j.use_suzuki_weak_rates,
     )?;
     if net_info.num_isos != model.species {
         return Err(StarError::MicrophysicsError(format!(
@@ -267,12 +278,12 @@ pub fn set_basic_vars(model: &mut StarModel) -> Result<(), StarError> {
         model.t[k] = flexmesa_math::exp(lnt_k);
 
         let xa_k = &model.xa[k * species..(k + 1) * species];
-        let comp = get_composition_info(catalog, &model.chem_id, xa_k, false)
+        let comp = get_composition_info(catalog, &model.chem_id, xa_k, true)
             .map_err(|e| {
-            StarError::MicrophysicsError(format!(
-                "composition error at zone {k}: {e}"
-            ))
-        })?;
+                StarError::MicrophysicsError(format!(
+                    "composition error at zone {k}: {e}"
+                ))
+            })?;
         model.abar[k] = comp.abar;
         model.zbar[k] = comp.zbar;
         model.z2bar[k] = comp.z2bar;

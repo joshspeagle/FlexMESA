@@ -275,8 +275,15 @@ pub fn do_net(
                     } else {
                         eps_val / eps_cat_sum
                     };
+                    // `star/private/net.f90:327,366-372`: renormalize by `alfa`
+                    // first, then scale by `eps_nuc_factor` when `!= 1`.
                     for c_val in cats_k.iter_mut() {
-                        *c_val *= alfa * eps_fac;
+                        *c_val *= alfa;
+                    }
+                    if eps_fac != 1.0 {
+                        for c_val in cats_k.iter_mut() {
+                            *c_val *= eps_fac;
+                        }
                     }
 
                     *eps_k = eps_val * eps_fac;

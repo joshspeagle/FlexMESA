@@ -18,7 +18,8 @@ use flexmesa_star::micro::{
     set_basic_vars,
 };
 use flexmesa_star::{
-    load_zams_model, StarControls, StarError, StarJobControls,
+    load_zams_model, op_split_burn_zones, StarControls, StarError,
+    StarJobControls,
 };
 
 fn zams_controls() -> StarControls {
@@ -286,6 +287,96 @@ fn test_do_net_special_rates_neuqs_logtcut_clamp_and_category_renorm() {
         (model.eps_nuc_neu_total[kc] - 0.25 * a21_neu_1).abs()
             <= 1.0e-12 * a21_neu_1
     );
+}
+
+#[test]
+fn test_op_split_burn_zones_threads_rate_factors_weak_fl87_and_unscaled_neu() {
+    let base_model =
+        load_zams_model(zams_controls(), StarJobControls::default())
+            .expect("load ZAMS");
+    let kc = base_model.nz - 1;
+    let sp = base_model.species;
+    let setup = |eps_fac: f64,
+                 weak_fac: f64,
+                 fl87: bool,
+                 r3a_fac: Option<f64>|
+     -> (f64, f64, f64) {
+        let mut m = base_model.clone();
+        // Hot, dense H+He core zone (`T = 1.2e8 K`, `rho = 1e5 g/cm^3`)
+        // activating both pp weak reactions and strongly screened 3-alpha.
+        m.ln_t[kc] = flexmesa_math::log(1.2e8);
+        m.ln_t_start = m.ln_t.clone();
+        m.lnd[kc] = flexmesa_math::log(1.0e5);
+        m.xa[kc * sp..kc * sp + sp]
+            .copy_from_slice(&[0.20, 0.0, 0.80, 0.0, 0.0, 0.0, 0.0, 0.0]);
+        set_basic_vars(&mut m).expect("set_basic_vars");
+        do_eos(&mut m).expect("do_eos");
+        m.controls.op_split_burn = true;
+        m.controls.op_split_burn_min_t = 1.0e8;
+        m.controls.eps_nuc_factor = eps_fac;
+        m.controls.weak_rate_factor = weak_fac;
+        m.job.use_3a_fl87 = fl87;
+        if let Some(fac) = r3a_fac {
+            m.job.num_special_rate_factors = 1;
+            m.job.reaction_for_special_factor =
+                vec![String::from("r_he4_he4_he4_to_c12")];
+            m.job.special_rate_factor = vec![fac];
+        }
+        op_split_burn_zones(&mut m, 1.0).expect("op_split_burn_zones");
+        (m.eps_nuc[kc], m.eps_nuc_neu_total[kc], m.xa[kc * sp + 3])
+    };
+
+    let (eps_base, neu_base, xc12_base) = setup(1.0, 1.0, false, None);
+    assert!(eps_base > 0.0 && neu_base > 0.0 && xc12_base > 0.0);
+
+    // 1. `eps_nuc_factor` scales `eps_nuc` while `eps_nuc_neu_total` stays unscaled.
+    let (eps_3x, neu_3x, _) = setup(3.0, 1.0, false, None);
+    assert!((eps_3x - 3.0 * eps_base).abs() <= 1.0e-12 * eps_3x);
+    assert!((neu_3x - neu_base).abs() <= 1.0e-13 * neu_base);
+
+    // 2. `special_rate_factor` suppresses 3-alpha `c12` synthesis when set to `0`.
+    let (_, _, xc12_no_3a) = setup(1.0, 1.0, false, Some(0.0));
+    assert!(xc12_no_3a < 1.0e-12 * xc12_base);
+
+    // 3. `weak_rate_factor = 0` suppresses weak electron-capture burning (`irn56ec`)
+    //    and neutrino emission on `approx21.net`.
+    let eval_a21_weak = |weak_fac: f64| -> (f64, f64) {
+        let mut m = base_model.clone();
+        change_model_network(&mut m, "approx21.net", None)
+            .expect("switch to approx21.net");
+        let sp_a21 = m.species;
+        let i_ni56 = m
+            .iso_names
+            .iter()
+            .position(|s| s == "ni56")
+            .expect("ni56 in approx21");
+        let i_fe56 = m
+            .iso_names
+            .iter()
+            .position(|s| s == "fe56")
+            .expect("fe56 in approx21");
+        m.ln_t[kc] = flexmesa_math::log(5.0e8);
+        m.ln_t_start = m.ln_t.clone();
+        m.lnd[kc] = flexmesa_math::log(1.0e8);
+        m.xa[kc * sp_a21..(kc + 1) * sp_a21].fill(0.0);
+        m.xa[kc * sp_a21 + i_ni56] = 1.0;
+        set_basic_vars(&mut m).expect("set_basic_vars a21");
+        do_eos(&mut m).expect("do_eos a21");
+        m.controls.op_split_burn = true;
+        m.controls.op_split_burn_min_t = 1.0e8;
+        m.controls.weak_rate_factor = weak_fac;
+        op_split_burn_zones(&mut m, 10.0).expect("op_split_burn_zones a21");
+        (m.eps_nuc_neu_total[kc], m.xa[kc * sp_a21 + i_fe56])
+    };
+    let (neu_wk_1, xfe_wk_1) = eval_a21_weak(1.0);
+    let (neu_wk_0, xfe_wk_0) = eval_a21_weak(0.0);
+    assert!(neu_wk_1 > 0.0 && xfe_wk_1 > 0.0);
+    assert!(neu_wk_0 < 1.0e-12 * neu_wk_1);
+    assert!(xfe_wk_0 < 1.0e-12 * xfe_wk_1);
+
+    // 4. `use_3a_fl87 = true` modifies screened 3-alpha `c12` yield.
+    let (_, _, xc12_fl87) = setup(1.0, 1.0, true, None);
+    assert!((xc12_fl87 - xc12_base).abs() > 1.0e-3 * xc12_base);
 }
 
 #[test]

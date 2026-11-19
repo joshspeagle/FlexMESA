@@ -512,6 +512,8 @@ impl NetGeneralInfo {
             fe56ec_fake_factor: 1.0e-4,
             min_t_for_fe56ec_fake_factor: 3.0e9,
             reaction_neuqs_factor: 1.0,
+            use_3a_fl87: false,
+            use_suzuki_weak_rates: false,
         };
         init_screening_tables(&mut info);
         Ok(info)

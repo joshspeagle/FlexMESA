@@ -66,6 +66,27 @@ pub struct Approx21ReactionQs {
 
 static APPROX21_QS: OnceLock<Approx21ReactionQs> = OnceLock::new();
 
+impl Approx21ReactionQs {
+    /// Returns a copy with all standard reaction neutrino $Q_\nu$ entries
+    /// scaled by `factor` (`star/private/net.f90:202-210`).
+    #[must_use]
+    pub fn with_neuqs_factor(mut self, factor: f64) -> Self {
+        if factor != 1.0 {
+            self.qneu_rpp *= factor;
+            self.qneu_rpp2 *= factor;
+            self.qneu_rpp3 *= factor;
+            self.qneu_rcpg *= factor;
+            self.qneu_rnpg *= factor;
+            self.qneu_ropg *= factor;
+            self.qneu_rpen *= factor;
+            self.qneu_rnep *= factor;
+            self.qneu_rni56ec *= factor;
+            self.qneu_rco56ec *= factor;
+        }
+        self
+    }
+}
+
 fn q_pair(name: &str) -> (f64, f64) {
     synthesize_reaction_info(name, 0)
         .map_or((0.0, 0.0), |r| (r.std_q, r.std_qneu))
@@ -187,12 +208,13 @@ pub(crate) fn get_qs_rfe56ec(g: &NetGeneralInfo) -> (f64, f64) {
         "cr66" => "rfe56ec_fake_to_cr66",
         _ => "rco56ec_to_fe56",
     };
-    if let Some(idx1) = g.reaction_index_by_name(rxn_name) {
+    let (q, qneu) = if let Some(idx1) = g.reaction_index_by_name(rxn_name) {
         let r = &g.reactions[idx1 - 1];
         (r.std_q, r.std_qneu)
     } else {
         q_pair(rxn_name)
-    }
+    };
+    (q, qneu * g.reaction_neuqs_factor)
 }
 
 /// Evaluates `approx21_special_reactions` (`net/private/net_approx21.f90` lines 352–923).

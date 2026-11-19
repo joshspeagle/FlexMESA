@@ -575,20 +575,28 @@ pub fn eos_dt_get(
     )
 }
 
-/// Evaluates `eosDT_get` in parallel across `N` stellar zones using `rayon`.
-pub fn eos_dt_get_zones(
+/// Evaluates `eosDT_get` in parallel across `N` stellar zones using `rayon`
+/// with explicit `log10(rho)` and `log10(T)` slices (`lnd / ln(10)` and
+/// `lnT / ln(10)` in `star/private/micro.f90:326,349`).
+pub fn eos_dt_get_zones_with_logs(
     ht: &HelmTable,
     rho_zones: &[f64],
+    log_rho_zones: &[f64],
     t_zones: &[f64],
+    log_t_zones: &[f64],
     chem_id: &[usize],
     xa_zones: &[f64],
     cfg: &EosConfig,
 ) -> Result<Vec<EosEvalOutput>, EosError> {
     let n_zones = rho_zones.len();
     let n_spec = chem_id.len();
-    if t_zones.len() != n_zones || xa_zones.len() != n_zones * n_spec {
+    if log_rho_zones.len() != n_zones
+        || t_zones.len() != n_zones
+        || log_t_zones.len() != n_zones
+        || xa_zones.len() != n_zones * n_spec
+    {
         return Err(EosError::InvalidState {
-            context: "eos_dt_get_zones",
+            context: "eos_dt_get_zones_with_logs",
             detail: "zone slice length mismatch".to_string(),
         });
     }
@@ -608,14 +616,50 @@ pub fn eos_dt_get_zones(
                     context: "eos_dt_get_zones",
                     detail: e.to_string(),
                 })?;
-            let rho = rho_zones[iz];
-            let t = t_zones[iz];
-            let (lr, lt) = (flexmesa_math::log10(rho), flexmesa_math::log10(t));
             eos_dt_get_from_weights_with_tables(
-                ht, dt_tables, cms_tables, comp.xh, comp.xz, rho, lr, t, lt,
-                comp.abar, comp.zbar, xa, &z_int, &azion, &acmi, &a_baryon,
+                ht,
+                dt_tables,
+                cms_tables,
+                comp.xh,
+                comp.xz,
+                rho_zones[iz],
+                log_rho_zones[iz],
+                t_zones[iz],
+                log_t_zones[iz],
+                comp.abar,
+                comp.zbar,
+                xa,
+                &z_int,
+                &azion,
+                &acmi,
+                &a_baryon,
                 cfg,
             )
         })
         .collect()
+}
+
+/// Evaluates `eosDT_get` in parallel across `N` stellar zones using `rayon`.
+pub fn eos_dt_get_zones(
+    ht: &HelmTable,
+    rho_zones: &[f64],
+    t_zones: &[f64],
+    chem_id: &[usize],
+    xa_zones: &[f64],
+    cfg: &EosConfig,
+) -> Result<Vec<EosEvalOutput>, EosError> {
+    let log_rho_zones: Vec<f64> =
+        rho_zones.iter().map(|&r| flexmesa_math::log10(r)).collect();
+    let log_t_zones: Vec<f64> =
+        t_zones.iter().map(|&t| flexmesa_math::log10(t)).collect();
+    eos_dt_get_zones_with_logs(
+        ht,
+        rho_zones,
+        &log_rho_zones,
+        t_zones,
+        &log_t_zones,
+        chem_id,
+        xa_zones,
+        cfg,
+    )
 }

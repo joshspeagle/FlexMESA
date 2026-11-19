@@ -511,6 +511,7 @@ impl NetGeneralInfo {
             fe56ec_n_neut: parsed.fe56ec_n_neut,
             fe56ec_fake_factor: 1.0e-4,
             min_t_for_fe56ec_fake_factor: 3.0e9,
+            reaction_neuqs_factor: 1.0,
         };
         init_screening_tables(&mut info);
         Ok(info)

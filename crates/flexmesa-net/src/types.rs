@@ -223,6 +223,9 @@ pub struct NetGeneralInfo {
     pub fe56ec_fake_factor: f64,
     /// Minimum $T$ for `fe56ec_fake_factor` (`3e9`).
     pub min_t_for_fe56ec_fake_factor: f64,
+    /// Multiplicative factor applied to `std_reaction_neuQs` (`1.0` default;
+    /// `star/private/net.f90:202-210`).
+    pub reaction_neuqs_factor: f64,
 }
 
 impl NetGeneralInfo {

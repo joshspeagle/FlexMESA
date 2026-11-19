@@ -67,7 +67,7 @@ pub fn approx21_eps_info(
     do_eps_nuc_categories: bool,
     eps_nuc_categories: &mut [f64; NUM_CATEGORIES],
 ) -> (f64, f64) {
-    let qs = global_approx21_qs();
+    let qs = global_approx21_qs().with_neuqs_factor(g.reaction_neuqs_factor);
     let (qtotal_rfe56ec, qneu_rfe56ec) = get_qs_rfe56ec(g);
 
     let mut xx = F64x2::ZERO;

@@ -13,6 +13,7 @@ use crate::controls::StarError;
 use crate::inlist::{InlistBundle, SectionControls};
 
 const KAP_MAX_DIM: usize = 50;
+const MAX_NUM_SPECIAL_RATE_FACTORS: usize = 500;
 
 fn extract_f64(val: &ControlValue) -> Result<f64, String> {
     match val {
@@ -136,7 +137,8 @@ impl InlistBundle {
         &mut self,
     ) -> Result<(), StarError> {
         self.populate_eos_section()?;
-        self.populate_kap_section()
+        self.populate_kap_section()?;
+        self.populate_star_micro_controls()
     }
 
     #[allow(clippy::too_many_lines)]
@@ -683,6 +685,105 @@ impl InlistBundle {
             &mut kcfg.kap_character_ctrl,
             extract_string,
         )?;
+        Ok(())
+    }
+
+    fn populate_star_micro_controls(&mut self) -> Result<(), StarError> {
+        if let Some(sj) = self.sections.get("star_job") {
+            let job = &mut self.job;
+            sj.try_bool_into("star_job", &mut job.use_3a_fl87, "use_3a_fl87")?;
+            sj.try_bool_into(
+                "star_job",
+                &mut job.use_suzuki_weak_rates,
+                "use_suzuki_weak_rates",
+            )?;
+            if let Some(n) =
+                sj.try_get_i64("star_job", "num_special_rate_factors")?
+            {
+                if n < 0 || (n as usize) > MAX_NUM_SPECIAL_RATE_FACTORS {
+                    return Err(StarError::InvalidInput(format!(
+                        "invalid '&star_job::num_special_rate_factors' = {n}: expected 0..={MAX_NUM_SPECIAL_RATE_FACTORS}"
+                    )));
+                }
+                job.num_special_rate_factors = n as usize;
+            }
+            let has_rxn =
+                sj.scalars.contains_key("reaction_for_special_factor")
+                    || sj.indexed.contains_key("reaction_for_special_factor");
+            let has_fac = sj.scalars.contains_key("special_rate_factor")
+                || sj.indexed.contains_key("special_rate_factor");
+            if job.num_special_rate_factors > 0 || has_rxn || has_fac {
+                let mut rxns: Vec<String> =
+                    vec![String::new(); MAX_NUM_SPECIAL_RATE_FACTORS];
+                let mut facs: Vec<f64> =
+                    vec![1.0_f64; MAX_NUM_SPECIAL_RATE_FACTORS];
+                if !job.reaction_for_special_factor.is_empty() {
+                    for (dst, src) in
+                        rxns.iter_mut().zip(&job.reaction_for_special_factor)
+                    {
+                        dst.clone_from(src);
+                    }
+                }
+                if !job.special_rate_factor.is_empty() {
+                    for (dst, &src) in
+                        facs.iter_mut().zip(&job.special_rate_factor)
+                    {
+                        *dst = src;
+                    }
+                }
+                apply_micro_indexed_slice(
+                    "star_job",
+                    sj,
+                    "reaction_for_special_factor",
+                    true,
+                    &mut rxns,
+                    extract_string,
+                )?;
+                apply_micro_indexed_slice(
+                    "star_job",
+                    sj,
+                    "special_rate_factor",
+                    true,
+                    &mut facs,
+                    extract_f64,
+                )?;
+                let mut keep = job.num_special_rate_factors;
+                for i in 0..MAX_NUM_SPECIAL_RATE_FACTORS {
+                    if !rxns[i].is_empty() || facs[i] != 1.0 {
+                        keep = keep.max(i + 1);
+                    }
+                }
+                rxns.truncate(keep);
+                facs.truncate(keep);
+                job.reaction_for_special_factor = rxns;
+                job.special_rate_factor = facs;
+            }
+        }
+
+        if let Some(ctrl) = self.sections.get("controls") {
+            let c = &mut self.controls;
+            ctrl.try_bool_into(
+                "controls",
+                &mut c.use_simple_es_for_kap,
+                "use_simple_es_for_kap",
+            )?;
+            ctrl.try_bool_into(
+                "controls",
+                &mut c.use_starting_composition_for_kap,
+                "use_starting_composition_for_kap",
+            )?;
+            for (dst, key) in [
+                (&mut c.opacity_max, "opacity_max"),
+                (&mut c.opacity_min, "opacity_min"),
+                (&mut c.net_logtcut_lo, "net_logtcut_lo"),
+                (&mut c.net_logtcut_lim, "net_logtcut_lim"),
+                (&mut c.weak_rate_factor, "weak_rate_factor"),
+                (&mut c.reaction_neuqs_factor, "reaction_neuqs_factor"),
+                (&mut c.max_abs_eps_nuc, "max_abs_eps_nuc"),
+            ] {
+                ctrl.try_f64_into("controls", dst, key)?;
+            }
+        }
         Ok(())
     }
 }

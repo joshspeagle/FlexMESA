@@ -37,6 +37,14 @@ struct CachedMicroKey {
     eos_config: EosConfig,
     kap_config: KapConfig,
     include_composition_in_eps_grav: bool,
+    use_mass_corrections: bool,
+    use_simple_es_for_kap: bool,
+    use_starting_composition_for_kap: bool,
+    use_3a_fl87: bool,
+    use_suzuki_weak_rates: bool,
+    num_special_rate_factors: usize,
+    reaction_for_special_factor: Vec<String>,
+    special_rate_factor_bits: Vec<u64>,
     op_split_burn: bool,
     doing_split: bool,
     mstar_bits: u64,
@@ -45,12 +53,20 @@ struct CachedMicroKey {
     tau_base_bits: u64,
     tau_factor_bits: u64,
     opacity_factor_bits: u64,
+    opacity_max_bits: u64,
+    opacity_min_bits: u64,
+    kap_factor_logt_bounds_bits: [u64; 4],
     min_t_for_neu_bits: u64,
     non_nuc_neu_factor_bits: u64,
     max_logt_for_net_bits: u64,
+    net_logtcut_lo_bits: u64,
+    net_logtcut_lim_bits: u64,
     max_abar_for_burning_bits: u64,
     eps_nuc_factor_bits: u64,
     dxdt_nuc_factor_bits: u64,
+    weak_rate_factor_bits: u64,
+    reaction_neuqs_factor_bits: u64,
+    max_abs_eps_nuc_bits: u64,
     op_split_burn_min_t_bits: u64,
     fe56ec_fake_factor_bits: u64,
     min_t_for_fe56ec_fake_factor_bits: u64,
@@ -61,6 +77,7 @@ struct CachedMicroKey {
     q: Vec<f64>,
     cgrav: Vec<f64>,
     xa: Vec<f64>,
+    xa_start_kap: Vec<f64>,
     ln_t_start_split: Vec<f64>,
 }
 
@@ -77,6 +94,14 @@ impl Default for CachedMicroKey {
             eos_config: EosConfig::default(),
             kap_config: KapConfig::default(),
             include_composition_in_eps_grav: false,
+            use_mass_corrections: false,
+            use_simple_es_for_kap: false,
+            use_starting_composition_for_kap: false,
+            use_3a_fl87: false,
+            use_suzuki_weak_rates: false,
+            num_special_rate_factors: 0,
+            reaction_for_special_factor: Vec::new(),
+            special_rate_factor_bits: Vec::new(),
             op_split_burn: false,
             doing_split: false,
             mstar_bits: 0,
@@ -85,12 +110,20 @@ impl Default for CachedMicroKey {
             tau_base_bits: 0,
             tau_factor_bits: 0,
             opacity_factor_bits: 0,
+            opacity_max_bits: 0,
+            opacity_min_bits: 0,
+            kap_factor_logt_bounds_bits: [0; 4],
             min_t_for_neu_bits: 0,
             non_nuc_neu_factor_bits: 0,
             max_logt_for_net_bits: 0,
+            net_logtcut_lo_bits: 0,
+            net_logtcut_lim_bits: 0,
             max_abar_for_burning_bits: 0,
             eps_nuc_factor_bits: 0,
             dxdt_nuc_factor_bits: 0,
+            weak_rate_factor_bits: 0,
+            reaction_neuqs_factor_bits: 0,
+            max_abs_eps_nuc_bits: 0,
             op_split_burn_min_t_bits: 0,
             fe56ec_fake_factor_bits: 0,
             min_t_for_fe56ec_fake_factor_bits: 0,
@@ -101,6 +134,7 @@ impl Default for CachedMicroKey {
             q: Vec::new(),
             cgrav: Vec::new(),
             xa: Vec::new(),
+            xa_start_kap: Vec::new(),
             ln_t_start_split: Vec::new(),
         }
     }
@@ -109,6 +143,14 @@ impl Default for CachedMicroKey {
 impl CachedMicroKey {
     fn matches(&self, model: &StarModel, doing_split: bool) -> bool {
         let c = &model.controls;
+        let j = &model.job;
+        let r = &c.rsp;
+        let kap_bounds = [
+            r.min_logt_for_opacity_factor_off.to_bits(),
+            r.min_logt_for_opacity_factor_on.to_bits(),
+            r.max_logt_for_opacity_factor_on.to_bits(),
+            r.max_logt_for_opacity_factor_off.to_bits(),
+        ];
         if self.nz != model.nz
             || self.species != model.species
             || self.rsp_flag != c.rsp_flag
@@ -116,6 +158,13 @@ impl CachedMicroKey {
             || self.screening_mode != c.screening_mode
             || self.include_composition_in_eps_grav
                 != c.include_composition_in_eps_grav
+            || self.use_mass_corrections != c.use_mass_corrections
+            || self.use_simple_es_for_kap != c.use_simple_es_for_kap
+            || self.use_starting_composition_for_kap
+                != c.use_starting_composition_for_kap
+            || self.use_3a_fl87 != j.use_3a_fl87
+            || self.use_suzuki_weak_rates != j.use_suzuki_weak_rates
+            || self.num_special_rate_factors != j.num_special_rate_factors
             || self.op_split_burn != c.op_split_burn
             || self.doing_split != doing_split
             || self.mstar_bits != model.mstar.to_bits()
@@ -124,19 +173,36 @@ impl CachedMicroKey {
             || self.tau_base_bits != model.tau_base.to_bits()
             || self.tau_factor_bits != c.tau_factor.to_bits()
             || self.opacity_factor_bits != c.opacity_factor.to_bits()
+            || self.opacity_max_bits != c.opacity_max.to_bits()
+            || self.opacity_min_bits != c.opacity_min.to_bits()
+            || self.kap_factor_logt_bounds_bits != kap_bounds
             || self.min_t_for_neu_bits != c.min_t_for_neu.to_bits()
             || self.non_nuc_neu_factor_bits != c.non_nuc_neu_factor.to_bits()
             || self.max_logt_for_net_bits != c.max_logt_for_net.to_bits()
+            || self.net_logtcut_lo_bits != c.net_logtcut_lo.to_bits()
+            || self.net_logtcut_lim_bits != c.net_logtcut_lim.to_bits()
             || self.max_abar_for_burning_bits
                 != c.max_abar_for_burning.to_bits()
             || self.eps_nuc_factor_bits != c.eps_nuc_factor.to_bits()
             || self.dxdt_nuc_factor_bits != c.dxdt_nuc_factor.to_bits()
+            || self.weak_rate_factor_bits != c.weak_rate_factor.to_bits()
+            || self.reaction_neuqs_factor_bits
+                != c.reaction_neuqs_factor.to_bits()
+            || self.max_abs_eps_nuc_bits != c.max_abs_eps_nuc.to_bits()
             || self.op_split_burn_min_t_bits != c.op_split_burn_min_t.to_bits()
             || self.fe56ec_fake_factor_bits != c.fe56ec_fake_factor.to_bits()
             || self.min_t_for_fe56ec_fake_factor_bits
                 != c.min_t_for_fe56ec_fake_factor.to_bits()
             || self.chem_id != model.chem_id
-            || self.net_name != model.job.net_name
+            || self.net_name != j.net_name
+            || self.reaction_for_special_factor != j.reaction_for_special_factor
+            || self.special_rate_factor_bits.len()
+                != j.special_rate_factor.len()
+            || !self
+                .special_rate_factor_bits
+                .iter()
+                .zip(&j.special_rate_factor)
+                .all(|(&b, &v)| b == v.to_bits())
             || self.eos_config != model.eos_config
             || self.kap_config != model.kap_config
         {
@@ -152,6 +218,11 @@ impl CachedMicroKey {
         {
             return false;
         }
+        if c.use_starting_composition_for_kap
+            && !f64_slices_bit_eq(&self.xa_start_kap, &model.xa_start)
+        {
+            return false;
+        }
         if doing_split
             && !f64_slices_bit_eq(&self.ln_t_start_split, &model.ln_t_start)
         {
@@ -162,10 +233,12 @@ impl CachedMicroKey {
 
     fn capture_from(&mut self, model: &StarModel, doing_split: bool) {
         let c = &model.controls;
+        let j = &model.job;
+        let r = &c.rsp;
         self.nz = model.nz;
         self.species = model.species;
         self.chem_id.clone_from(&model.chem_id);
-        self.net_name.clone_from(&model.job.net_name);
+        self.net_name.clone_from(&j.net_name);
         self.rsp_flag = c.rsp_flag;
         self.rsp2_flag = c.rsp2_flag;
         self.screening_mode = c.screening_mode;
@@ -173,6 +246,18 @@ impl CachedMicroKey {
         self.kap_config = model.kap_config.clone();
         self.include_composition_in_eps_grav =
             c.include_composition_in_eps_grav;
+        self.use_mass_corrections = c.use_mass_corrections;
+        self.use_simple_es_for_kap = c.use_simple_es_for_kap;
+        self.use_starting_composition_for_kap =
+            c.use_starting_composition_for_kap;
+        self.use_3a_fl87 = j.use_3a_fl87;
+        self.use_suzuki_weak_rates = j.use_suzuki_weak_rates;
+        self.num_special_rate_factors = j.num_special_rate_factors;
+        self.reaction_for_special_factor
+            .clone_from(&j.reaction_for_special_factor);
+        self.special_rate_factor_bits.clear();
+        self.special_rate_factor_bits
+            .extend(j.special_rate_factor.iter().map(|v| v.to_bits()));
         self.op_split_burn = c.op_split_burn;
         self.doing_split = doing_split;
         self.mstar_bits = model.mstar.to_bits();
@@ -181,12 +266,25 @@ impl CachedMicroKey {
         self.tau_base_bits = model.tau_base.to_bits();
         self.tau_factor_bits = c.tau_factor.to_bits();
         self.opacity_factor_bits = c.opacity_factor.to_bits();
+        self.opacity_max_bits = c.opacity_max.to_bits();
+        self.opacity_min_bits = c.opacity_min.to_bits();
+        self.kap_factor_logt_bounds_bits = [
+            r.min_logt_for_opacity_factor_off.to_bits(),
+            r.min_logt_for_opacity_factor_on.to_bits(),
+            r.max_logt_for_opacity_factor_on.to_bits(),
+            r.max_logt_for_opacity_factor_off.to_bits(),
+        ];
         self.min_t_for_neu_bits = c.min_t_for_neu.to_bits();
         self.non_nuc_neu_factor_bits = c.non_nuc_neu_factor.to_bits();
         self.max_logt_for_net_bits = c.max_logt_for_net.to_bits();
+        self.net_logtcut_lo_bits = c.net_logtcut_lo.to_bits();
+        self.net_logtcut_lim_bits = c.net_logtcut_lim.to_bits();
         self.max_abar_for_burning_bits = c.max_abar_for_burning.to_bits();
         self.eps_nuc_factor_bits = c.eps_nuc_factor.to_bits();
         self.dxdt_nuc_factor_bits = c.dxdt_nuc_factor.to_bits();
+        self.weak_rate_factor_bits = c.weak_rate_factor.to_bits();
+        self.reaction_neuqs_factor_bits = c.reaction_neuqs_factor.to_bits();
+        self.max_abs_eps_nuc_bits = c.max_abs_eps_nuc.to_bits();
         self.op_split_burn_min_t_bits = c.op_split_burn_min_t.to_bits();
         self.fe56ec_fake_factor_bits = c.fe56ec_fake_factor.to_bits();
         self.min_t_for_fe56ec_fake_factor_bits =
@@ -198,6 +296,11 @@ impl CachedMicroKey {
         self.q.clone_from(&model.q);
         self.cgrav.clone_from(&model.cgrav);
         self.xa.clone_from(&model.xa);
+        if c.use_starting_composition_for_kap {
+            self.xa_start_kap.clone_from(&model.xa_start);
+        } else {
+            self.xa_start_kap.clear();
+        }
         if doing_split {
             self.ln_t_start_split.clone_from(&model.ln_t_start);
         } else {
@@ -241,6 +344,9 @@ struct CachedMicroOutputs {
     lnfree_e: Vec<f64>,
     csound: Vec<f64>,
     eos_frac_pc: Vec<f64>,
+    kap_frac: Vec<[f64; 4]>,
+    nonnucneu_channels: Vec<[f64; 5]>,
+    mass_correction: Vec<f64>,
     latent_ddlnt: Vec<f64>,
     latent_ddlnrho: Vec<f64>,
     dln_e_dxa_for_partials: Vec<f64>,
@@ -288,18 +394,70 @@ macro_rules! copy_pre_net_fields {
 
 impl CachedMicroOutputs {
     fn capture_pre_net(&mut self, model: &StarModel) {
-        copy_pre_net_fields!(self, model, [
-            rho, t, abar, zbar, z2bar, z53bar, ye, xh_mass, yhe_mass, z_mass,
-            pgas, ln_pgas, prad, peos, ln_peos, energy, ln_e, entropy, ln_s,
-            grada, cv, cp, chi_rho, chi_t, gamma1, gamma3, eta, gam, mu,
-            lnfree_e, csound, ln_peos_ad, ln_e_ad, ln_s_ad, eos_res, eos_d_dlnd,
-            eos_d_dlnt, opacity, d_opacity_dlnd, d_opacity_dlnt, tau,
-            non_nuc_neu, d_non_nuc_neu_dlnd, d_non_nuc_neu_dlnt
-        ]);
-        copy_pre_net_fields!(self, model.aux, [
-            eos_frac_pc, latent_ddlnt, latent_ddlnrho, dln_e_dxa_for_partials,
-            dln_peos_dxa_for_partials
-        ]);
+        copy_pre_net_fields!(
+            self,
+            model,
+            [
+                rho,
+                t,
+                abar,
+                zbar,
+                z2bar,
+                z53bar,
+                ye,
+                xh_mass,
+                yhe_mass,
+                z_mass,
+                pgas,
+                ln_pgas,
+                prad,
+                peos,
+                ln_peos,
+                energy,
+                ln_e,
+                entropy,
+                ln_s,
+                grada,
+                cv,
+                cp,
+                chi_rho,
+                chi_t,
+                gamma1,
+                gamma3,
+                eta,
+                gam,
+                mu,
+                lnfree_e,
+                csound,
+                ln_peos_ad,
+                ln_e_ad,
+                ln_s_ad,
+                eos_res,
+                eos_d_dlnd,
+                eos_d_dlnt,
+                opacity,
+                d_opacity_dlnd,
+                d_opacity_dlnt,
+                tau,
+                non_nuc_neu,
+                d_non_nuc_neu_dlnd,
+                d_non_nuc_neu_dlnt
+            ]
+        );
+        copy_pre_net_fields!(
+            self,
+            model.aux,
+            [
+                eos_frac_pc,
+                kap_frac,
+                nonnucneu_channels,
+                mass_correction,
+                latent_ddlnt,
+                latent_ddlnrho,
+                dln_e_dxa_for_partials,
+                dln_peos_dxa_for_partials
+            ]
+        );
     }
 
     fn capture_net(&mut self, model: &StarModel, has_net_jac: bool) {
@@ -307,15 +465,25 @@ impl CachedMicroOutputs {
             && model.d_dxdt_nuc_dx.len() <= MAX_CACHED_NET_JAC_ELEMS;
         self.has_net = true;
         self.has_net_jac = store_jac;
-        copy_pre_net_fields!(self, model, [
-            eps_nuc, d_epsnuc_dlnd, d_epsnuc_dlnt, eps_nuc_neu_total, dxdt_nuc
-        ]);
+        copy_pre_net_fields!(
+            self,
+            model,
+            [
+                eps_nuc,
+                d_epsnuc_dlnd,
+                d_epsnuc_dlnt,
+                eps_nuc_neu_total,
+                dxdt_nuc
+            ]
+        );
         self.eps_nuc_categories
             .clone_from(&model.aux.eps_nuc_categories);
         if store_jac {
-            copy_pre_net_fields!(self, model, [
-                d_epsnuc_dx, d_dxdt_nuc_dlnd, d_dxdt_nuc_dlnt, d_dxdt_nuc_dx
-            ]);
+            copy_pre_net_fields!(
+                self,
+                model,
+                [d_epsnuc_dx, d_dxdt_nuc_dlnd, d_dxdt_nuc_dlnt, d_dxdt_nuc_dx]
+            );
         } else {
             self.d_epsnuc_dx.clear();
             self.d_epsnuc_dx.shrink_to_fit();
@@ -330,19 +498,71 @@ impl CachedMicroOutputs {
 
     fn restore_pre_net(&self, model: &mut StarModel) {
         model.set_m_and_dm();
+        copy_pre_net_fields!(
+            model,
+            self,
+            [
+                rho,
+                t,
+                abar,
+                zbar,
+                z2bar,
+                z53bar,
+                ye,
+                xh_mass,
+                yhe_mass,
+                z_mass,
+                pgas,
+                ln_pgas,
+                prad,
+                peos,
+                ln_peos,
+                energy,
+                ln_e,
+                entropy,
+                ln_s,
+                grada,
+                cv,
+                cp,
+                chi_rho,
+                chi_t,
+                gamma1,
+                gamma3,
+                eta,
+                gam,
+                mu,
+                lnfree_e,
+                csound,
+                ln_peos_ad,
+                ln_e_ad,
+                ln_s_ad,
+                eos_res,
+                eos_d_dlnd,
+                eos_d_dlnt,
+                opacity,
+                d_opacity_dlnd,
+                d_opacity_dlnt,
+                tau,
+                non_nuc_neu,
+                d_non_nuc_neu_dlnd,
+                d_non_nuc_neu_dlnt
+            ]
+        );
+        copy_pre_net_fields!(
+            model.aux,
+            self,
+            [
+                eos_frac_pc,
+                kap_frac,
+                nonnucneu_channels,
+                mass_correction,
+                latent_ddlnt,
+                latent_ddlnrho,
+                dln_e_dxa_for_partials,
+                dln_peos_dxa_for_partials
+            ]
+        );
         model.set_m_grav_and_grav();
-        copy_pre_net_fields!(model, self, [
-            rho, t, abar, zbar, z2bar, z53bar, ye, xh_mass, yhe_mass, z_mass,
-            pgas, ln_pgas, prad, peos, ln_peos, energy, ln_e, entropy, ln_s,
-            grada, cv, cp, chi_rho, chi_t, gamma1, gamma3, eta, gam, mu,
-            lnfree_e, csound, ln_peos_ad, ln_e_ad, ln_s_ad, eos_res, eos_d_dlnd,
-            eos_d_dlnt, opacity, d_opacity_dlnd, d_opacity_dlnt, tau,
-            non_nuc_neu, d_non_nuc_neu_dlnd, d_non_nuc_neu_dlnt
-        ]);
-        copy_pre_net_fields!(model.aux, self, [
-            eos_frac_pc, latent_ddlnt, latent_ddlnrho, dln_e_dxa_for_partials,
-            dln_peos_dxa_for_partials
-        ]);
     }
 
     fn restore_net(

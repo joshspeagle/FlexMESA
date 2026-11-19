@@ -14,6 +14,10 @@ use flexmesa_chem::{
 use flexmesa_const::{
     MixingType, BOLTZ_SIGMA, FOUR_PI, LN10, L_SUN, M_SUN, R_SUN, SECYER,
 };
+use flexmesa_eos::{
+    I_FRAC_CMS, I_FRAC_FREE_EOS, I_FRAC_HELM, I_FRAC_IDEAL, I_FRAC_OPAL_SCVH,
+    I_FRAC_PC, I_FRAC_SKYE,
+};
 use flexmesa_schema::strip_fortran_comment;
 
 use crate::controls::StarError;
@@ -162,6 +166,11 @@ const SUPPORTED_PROFILE_SCALARS: &[&str] = &[
     "log_abs_eps_nuc",
     "eps_nuc_neu_total",
     "non_nuc_neu",
+    "nonnucneu_plas",
+    "nonnucneu_brem",
+    "nonnucneu_phot",
+    "nonnucneu_pair",
+    "nonnucneu_reco",
     "eps_grav",
     "signed_log_eps_grav",
     "eps_mdot",
@@ -173,6 +182,17 @@ const SUPPORTED_PROFILE_SCALARS: &[&str] = &[
     "opacity",
     "log_opacity",
     "log_kap",
+    "kap_frac_lowT",
+    "kap_frac_highT",
+    "kap_frac_Type2",
+    "kap_frac_Compton",
+    "eos_frac_OPAL_SCVH",
+    "eos_frac_HELM",
+    "eos_frac_Skye",
+    "eos_frac_PC",
+    "eos_frac_FreeEOS",
+    "eos_frac_CMS",
+    "eos_frac_ideal",
     "tau",
     "logtau",
     "xtau",
@@ -726,6 +746,21 @@ fn eval_profile_scalar(
         }
         "eps_nuc_neu_total" => MesaCellValue::Float(model.eps_nuc_neu_total[k]),
         "non_nuc_neu" => MesaCellValue::Float(model.non_nuc_neu[k]),
+        "nonnucneu_plas" => MesaCellValue::Float(
+            model.aux.nonnucneu_channels.get(k).map_or(0.0, |c| c[0]),
+        ),
+        "nonnucneu_brem" => MesaCellValue::Float(
+            model.aux.nonnucneu_channels.get(k).map_or(0.0, |c| c[1]),
+        ),
+        "nonnucneu_phot" => MesaCellValue::Float(
+            model.aux.nonnucneu_channels.get(k).map_or(0.0, |c| c[2]),
+        ),
+        "nonnucneu_pair" => MesaCellValue::Float(
+            model.aux.nonnucneu_channels.get(k).map_or(0.0, |c| c[3]),
+        ),
+        "nonnucneu_reco" => MesaCellValue::Float(
+            model.aux.nonnucneu_channels.get(k).map_or(0.0, |c| c[4]),
+        ),
         "eps_grav" => MesaCellValue::Float(model.eps_grav_ad[k].val),
         "signed_log_eps_grav" => {
             MesaCellValue::Float(signed_log(model.eps_grav_ad[k].val))
@@ -751,6 +786,31 @@ fn eval_profile_scalar(
         "opacity" => MesaCellValue::Float(model.opacity[k]),
         "log_opacity" | "log_kap" => {
             MesaCellValue::Float(safe_log10(model.opacity[k]))
+        }
+        "kap_frac_lowT" => MesaCellValue::Float(
+            model.aux.kap_frac.get(k).map_or(0.0, |f| f[0]),
+        ),
+        "kap_frac_highT" => MesaCellValue::Float(
+            model.aux.kap_frac.get(k).map_or(0.0, |f| f[1]),
+        ),
+        "kap_frac_Type2" => MesaCellValue::Float(
+            model.aux.kap_frac.get(k).map_or(0.0, |f| f[2]),
+        ),
+        "kap_frac_Compton" => MesaCellValue::Float(
+            model.aux.kap_frac.get(k).map_or(0.0, |f| f[3]),
+        ),
+        "eos_frac_OPAL_SCVH" => {
+            MesaCellValue::Float(model.eos_res[k][I_FRAC_OPAL_SCVH])
+        }
+        "eos_frac_HELM" => MesaCellValue::Float(model.eos_res[k][I_FRAC_HELM]),
+        "eos_frac_Skye" => MesaCellValue::Float(model.eos_res[k][I_FRAC_SKYE]),
+        "eos_frac_PC" => MesaCellValue::Float(model.eos_res[k][I_FRAC_PC]),
+        "eos_frac_FreeEOS" => {
+            MesaCellValue::Float(model.eos_res[k][I_FRAC_FREE_EOS])
+        }
+        "eos_frac_CMS" => MesaCellValue::Float(model.eos_res[k][I_FRAC_CMS]),
+        "eos_frac_ideal" => {
+            MesaCellValue::Float(model.eos_res[k][I_FRAC_IDEAL])
         }
         "tau" => MesaCellValue::Float(model.tau[k]),
         "logtau" => MesaCellValue::Float(safe_log10(model.tau[k])),

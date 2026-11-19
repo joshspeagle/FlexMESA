@@ -11,17 +11,17 @@
         "module": "star",
         "upstream_files": 173,
         "upstream_lines": 120509,
-        "absent": 19941,
-        "stub": 15041,
-        "partial": 62515,
-        "ported_unverified": 23012,
+        "absent": 18480,
+        "stub": 12956,
+        "partial": 58926,
+        "ported_unverified": 30147,
         "kernel_reference_vectors": 0,
         "case_level_evidence": 0,
-        "ported_total": 23012,
+        "ported_total": 30147,
         "verified_total": 0,
-        "pct_ported": 19.1,
+        "pct_ported": 25.0,
         "pct_verified": 0.0,
-        "rust_lines": 60637,
+        "rust_lines": 66136,
         "python_jax_lines": 3869
       },
       {
@@ -595,7 +595,7 @@
         "no_reference_yet": 4,
         "strict_validated": 0,
         "diagnostic_runs": 90,
-        "reached_termination": 39,
+        "reached_termination": 37,
         "within_numeric_tol": 5,
         "passing": 0,
         "declared_gaps": 86,
@@ -607,8 +607,8 @@
         "no_reference_yet": 0,
         "strict_validated": 0,
         "diagnostic_runs": 8,
-        "reached_termination": 4,
-        "within_numeric_tol": 0,
+        "reached_termination": 6,
+        "within_numeric_tol": 1,
         "passing": 0,
         "declared_gaps": 8,
         "undeclared_failures": 0
@@ -653,6 +653,11 @@
         "issue": "#161"
       },
       {
+        "suite": "binary",
+        "case": "jdot_ml_check",
+        "issue": "#160"
+      },
+      {
         "suite": "astero",
         "case": "surface_effects",
         "issue": "#162"
@@ -668,10 +673,9 @@
       "#170": 7,
       "#156": 4,
       "#158": 4,
-      "#159": 3,
+      "#159": 4,
       "#231": 2,
       "#151": 1,
-      "#153": 1,
       "#171": 1
     },
     "comparison_figures_count": 0
@@ -680,11 +684,11 @@
     {
       "namelist": "star &controls",
       "upstream_scalars": 1444,
-      "matched_in_flexmesa": 670,
-      "defaults_agree": 670,
+      "matched_in_flexmesa": 770,
+      "defaults_agree": 770,
       "value_mismatch": 0,
       "disabled_limit_none": 0,
-      "unimplemented": 774
+      "unimplemented": 674
     },
     {
       "namelist": "star &star_job",

@@ -22,7 +22,7 @@ reason = "Atomic diffusion shortens main-sequence age relative to MESA 26.4.1."
 suite = "star"
 case = "12M_pre_ms_to_core_collapse"
 issue = "#152"
-reason = "Core-collapse evolution exceeds wall-time guard with unported solver, mesh, and high-T rate controls (#152, #153, #161)."
+reason = "Core-collapse evolution exceeds wall-time guard with unported solver and high-T rate controls (#152, #161)."
 
 [[gaps]]
 suite = "star"
@@ -34,7 +34,7 @@ reason = "Spruit-Tayler dynamo and rotational mixing time out."
 suite = "star"
 case = "16M_conv_premix"
 issue = "#152"
-reason = "Diagnostic run reaches xa_central_lower_limit(h1) (+0.58% rel_star_age) with 6 unsupported non-mixing controls (convective_bdy_weight, max_abs_rel_run_e_err, photo/termination controls; #152, #153, #159)."
+reason = "Diagnostic run reaches xa_central_lower_limit(h1) (+0.58% rel_star_age) with unsupported non-mixing controls (max_abs_rel_run_e_err, photo/termination controls; #152, #159)."
 
 [[gaps]]
 suite = "star"
@@ -46,7 +46,7 @@ reason = "Diagnostic run reaches xa_central_lower_limit(h1) (+0.33% rel_star_age
 suite = "star"
 case = "1M_pre_ms_to_wd"
 issue = "#152"
-reason = "Multi-stage pre-MS-to-WD campaign times out under non-upstream solver and mesh control (#152, #153)."
+reason = "Multi-stage pre-MS-to-WD campaign times out under non-upstream solver and retry control (#152)."
 
 [[gaps]]
 suite = "star"
@@ -58,7 +58,7 @@ reason = "Exceeds wall-time guard under non-upstream Newton and retry control (a
 suite = "star"
 case = "20M_pre_ms_to_core_collapse"
 issue = "#152"
-reason = "Core-collapse evolution hits memory guard with unported solver, mesh, and high-T rate controls (#152, #153, #161)."
+reason = "Core-collapse evolution exceeds wall-time guard with unported solver and high-T rate controls (#152, #161)."
 
 [[gaps]]
 suite = "star"
@@ -76,7 +76,7 @@ reason = "Newton retry loop and remaining unsupported photo/termination controls
 suite = "star"
 case = "7M_prems_to_AGB"
 issue = "#152"
-reason = "Pre-MS-to-AGB campaign times out under non-upstream solver and retry control (#152, #153)."
+reason = "Pre-MS-to-AGB campaign departs from reference track under non-upstream solver and retry control (#152)."
 
 [[gaps]]
 suite = "star"
@@ -153,8 +153,8 @@ reason = "Exceeds wall-time guard under non-upstream solver and rotational retry
 [[gaps]]
 suite = "star"
 case = "conv_core_cpm"
-issue = "#153"
-reason = "Diagnostic run reaches xa_central_lower_limit(h1) (+0.84% rel_star_age, 93 vs 92 steps) with 3 unsupported non-mixing controls (convective_bdy_weight, photo_interval, required_termination_code_string; #153, #159)."
+issue = "#159"
+reason = "Diagnostic run reaches xa_central_lower_limit(h1) (+0.84% rel_star_age, 93 vs 92 steps) with unsupported non-mixing controls (photo_interval, required_termination_code_string; #159, #152)."
 
 [[gaps]]
 suite = "star"
@@ -220,7 +220,7 @@ reason = "Case history_columns.list requests unported MLT++ gradT_excess_alpha c
 suite = "star"
 case = "hb_2M"
 issue = "#152"
-reason = "Diagnostic run reaches xa_central_lower_limit(he4) (+1.00% rel_star_age, peak mass_conv_core 0.2673 vs 0.2668 Msun, co_core_mass +0.0004 Msun) with 2 unsupported non-mixing controls (photo_interval, required_termination_code_string) and solver/mesh differences (#152, #153, #159)."
+reason = "Diagnostic run reaches xa_central_lower_limit(he4) (+1.00% rel_star_age, peak mass_conv_core 0.2673 vs 0.2668 Msun, co_core_mass +0.0004 Msun) with 2 unsupported non-mixing controls (photo_interval, required_termination_code_string) and solver differences (#152, #159)."
 
 [[gaps]]
 suite = "star"
@@ -328,7 +328,7 @@ reason = "Pre-MS relaxation and initial model construction differences (#154)."
 suite = "star"
 case = "make_zams_low_mass"
 issue = "#154"
-reason = "Pre-MS initial model construction and low-mass ZAMS relaxation (#154)."
+reason = "Pre-MS initial model construction (#154) and retry-mesh restoration (#152) during low-mass ZAMS relaxation."
 
 [[gaps]]
 suite = "star"
@@ -346,7 +346,7 @@ reason = "Case history_columns.list requests unported MLT++ gradT_excess_alpha c
 suite = "star"
 case = "ns_h"
 issue = "#161"
-reason = "Neutron-star H envelope burning stops on max_age_in_seconds (#161, #159)."
+reason = "Neutron-star H envelope burning fails to converge in surface equ_L with unported microphysics and accretion controls (#161, #159, #152)."
 
 [[gaps]]
 suite = "star"
@@ -358,7 +358,7 @@ reason = "Neutron-star He envelope burning hits max_model_number instead of powe
 suite = "star"
 case = "other_physics_hooks"
 issue = "#231"
-reason = "Case requires custom overshoot_scheme = 'other', use_other_mesh_functions, and photo controls (#231, #153, #159)."
+reason = "Case requires custom overshoot_scheme = 'other', use_other_mesh_functions, and photo controls (#231, #159)."
 
 [[gaps]]
 suite = "star"
@@ -490,7 +490,7 @@ reason = "Accreting CO WD carbon ignition times out (#152, #159)."
 suite = "star"
 case = "wd_cool_0.6M"
 issue = "#156"
-reason = "White-dwarf cooling reaches target central temperature early and misses strict tolerances with unported sedimentation/diffusion heating and solver controls (#156, #152)."
+reason = "White-dwarf cooling exceeds wall-time guard at step 283 with unported sedimentation/diffusion heating and solver controls (#156, #152)."
 
 [[gaps]]
 suite = "star"
@@ -532,7 +532,7 @@ reason = "Component history_columns.list requests unported gradT_excess_alpha/hy
 suite = "binary"
 case = "evolve_both_stars"
 issue = "#160"
-reason = "Coupled two-star binary RLOF evolution times out."
+reason = "Coupled two-star binary RLOF evolution reaches accretor_overflow_terminate in diagnostic mode with component mass and age drift (#160)."
 
 [[gaps]]
 suite = "binary"
@@ -568,7 +568,7 @@ reason = "Explicit RLOF star+point-mass age and component masses differ from MES
 suite = "binary"
 case = "wind_fed_bhhmxb"
 issue = "#160"
-reason = "All binary controls and BH Eddington/wind-budget extras checks pass; component inlist1 sets 2 unsupported star controls (#150, #159) and implicit RLOF exceeds 300 s budget (#152, #153, #160)."
+reason = "All binary controls and BH Eddington/wind-budget extras checks pass; component inlist1 sets 2 unsupported star controls (#150, #159) and implicit RLOF exceeds 300 s budget (#152, #160)."
 
 [[gaps]]
 suite = "astero"

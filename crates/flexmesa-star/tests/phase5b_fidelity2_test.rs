@@ -6,9 +6,11 @@
 //! conservation, and `timestep_controller` retry / `star_evolve` termination.
 
 use flexmesa_const::{
-    MixingType, CLIGHT, FOUR_PI, L_SUN, M_SUN, SECYER, STANDARD_CGRAV,
+    CLIGHT, FOUR_PI, L_SUN, M_SUN, MixingType, SECYER, STANDARD_CGRAV,
 };
 use flexmesa_star::{
+    DiffusionScheme, DutchLowTScheme, EnergyEqnOption, MeshFunctionConfig,
+    StarControls, StarError, StarJobControls, StarModel, TimestepAction,
     apply_overshooting, apply_predictive_mixing_from_controls,
     apply_step_pre_physics, check_termination_limits, compute_core_masses,
     do_adjust_mass_step, do_adjust_mesh, do_conv_premix, do_element_diffusion,
@@ -17,8 +19,6 @@ use flexmesa_star::{
     eval_omega_crit, eval_van_loon_wind, eval_vink_wind, find_mass_flux,
     load_zams_model, locate_convection_boundaries, set_basic_vars,
     set_hydro_vars, star_evolve, star_evolve_step, timestep_controller,
-    DiffusionScheme, DutchLowTScheme, EnergyEqnOption, MeshFunctionConfig,
-    StarControls, StarError, StarJobControls, StarModel, TimestepAction,
 };
 
 fn rel_err(a: f64, b: f64) -> f64 {
@@ -38,15 +38,14 @@ fn species_total_masses(model: &StarModel) -> Vec<f64> {
 
 #[test]
 fn test_do_adjust_mesh_splits_and_merges_conserving_mass_and_isotopes() {
-    let mut model =
-        load_zams_model(
-            StarControls {
-                zbase: 0.02,
-                ..StarControls::default()
-            },
-            StarJobControls::default(),
-        )
-            .expect("load 1 Msun ZAMS");
+    let mut model = load_zams_model(
+        StarControls {
+            zbase: 0.02,
+            ..StarControls::default()
+        },
+        StarJobControls::default(),
+    )
+    .expect("load 1 Msun ZAMS");
     set_hydro_vars(&mut model, false, false).expect("set_hydro_vars");
 
     let cfg_default = MeshFunctionConfig::from_controls(&model.controls);
@@ -73,8 +72,9 @@ fn test_do_adjust_mesh_splits_and_merges_conserving_mass_and_isotopes() {
     cfg_fine.p_function_weight = 600.0;
     cfg_fine.t_function1_weight = 1200.0;
     cfg_fine.max_dq = 0.0008;
-    cfg_fine.max_surface_cell_dq = 1.0;
-    cfg_fine.max_center_cell_dq = 1.0;
+    // Note: in MESA `26.4.1` (`star/private/mesh_plan.f90:891`), `max_center_cell_dq`
+    // terminates interior zoning once `1 - xq_new < max_dq_cntr`, so keeping the
+    // upstream default `max_center_cell_dq = 1e-7` resolves the full interior.
     let (splits, _) =
         do_adjust_mesh(&mut model, &cfg_fine).expect("fine remesh");
     assert!(splits > 0, "expected splits on finer mesh weights");
@@ -103,8 +103,8 @@ fn test_do_adjust_mesh_splits_and_merges_conserving_mass_and_isotopes() {
     cfg_coarse.grad_function_weight = 0.0;
     cfg_coarse.xa_function_weight = 0.0;
     cfg_coarse.max_dq = 0.25;
-    cfg_coarse.max_surface_cell_dq = 1.0;
-    cfg_coarse.max_center_cell_dq = 1.0;
+    cfg_coarse.max_surface_cell_dq = 1.0e-2;
+    cfg_coarse.max_center_cell_dq = 1.0e-2;
     let (_, merges) =
         do_adjust_mesh(&mut model, &cfg_coarse).expect("coarse remesh");
     assert!(merges > 0, "expected merges on coarser mesh weights");
@@ -218,8 +218,8 @@ fn test_do_set_mdot_bjorklund_dutch_and_rotational_boost_match_analytic_laws() {
 }
 
 #[test]
-fn test_do_adjust_mass_step_and_eps_mdot_conserve_accreted_species_and_angular_momentum(
-) {
+fn test_do_adjust_mass_step_and_eps_mdot_conserve_accreted_species_and_angular_momentum()
+ {
     let mut ctrl = StarControls {
         mass_change: 1.0e-6,
         accrete_same_as_surface: false,
@@ -459,15 +459,14 @@ fn test_conv_premix_predictive_mixing_and_extra_heat_in_evolve_step() {
     assert!(m_pred.d_mix.iter().all(|v| v.is_finite()));
     assert!(m_pred.conv_vel.iter().all(|v| v.is_finite()));
 
-    let mut m_heat =
-        load_zams_model(
-            StarControls {
-                zbase: 0.02,
-                ..StarControls::default()
-            },
-            StarJobControls::default(),
-        )
-            .expect("load 1 Msun ZAMS");
+    let mut m_heat = load_zams_model(
+        StarControls {
+            zbase: 0.02,
+            ..StarControls::default()
+        },
+        StarJobControls::default(),
+    )
+    .expect("load 1 Msun ZAMS");
     set_hydro_vars(&mut m_heat, false, false).expect("set_hydro_vars");
     m_heat.controls.mix_wind.inject_uniform_extra_heat = 1.0e2;
     m_heat.controls.mix_wind.min_q_for_uniform_extra_heat = 0.2;
@@ -492,11 +491,13 @@ fn test_conv_premix_predictive_mixing_and_extra_heat_in_evolve_step() {
         .expect("evolve_step Dedt");
     assert!(rep_dedt.converged);
     assert!(m_heat.aux.total_energy.is_finite());
-    assert!(m_heat
-        .aux
-        .step_hist
-        .error_in_energy_conservation
-        .is_finite());
+    assert!(
+        m_heat
+            .aux
+            .step_hist
+            .error_in_energy_conservation
+            .is_finite()
+    );
 
     m_heat.controls.energy_eqn_option = EnergyEqnOption::EpsGrav;
     let rep_eps = star_evolve_step(&mut m_heat, false, false, true)
@@ -506,17 +507,16 @@ fn test_conv_premix_predictive_mixing_and_extra_heat_in_evolve_step() {
 }
 
 #[test]
-fn test_timestep_controller_hard_limit_triggers_retry_and_termination_stops_evolve(
-) {
-    let mut model =
-        load_zams_model(
-            StarControls {
-                zbase: 0.02,
-                ..StarControls::default()
-            },
-            StarJobControls::default(),
-        )
-            .expect("load 1 Msun ZAMS");
+fn test_timestep_controller_hard_limit_triggers_retry_and_termination_stops_evolve()
+ {
+    let mut model = load_zams_model(
+        StarControls {
+            zbase: 0.02,
+            ..StarControls::default()
+        },
+        StarJobControls::default(),
+    )
+    .expect("load 1 Msun ZAMS");
     set_hydro_vars(&mut model, false, false).expect("set_hydro_vars");
     star_evolve_step(&mut model, false, false, true).expect("initial step");
 
@@ -550,17 +550,16 @@ fn test_timestep_controller_hard_limit_triggers_retry_and_termination_stops_evol
 }
 
 #[test]
-fn test_element_diffusion_pure_h_envelope_preserves_unit_composition_and_do_kap(
-) {
-    let mut m =
-        load_zams_model(
-            StarControls {
-                zbase: 0.02,
-                ..StarControls::default()
-            },
-            StarJobControls::default(),
-        )
-            .expect("load 1 Msun ZAMS");
+fn test_element_diffusion_pure_h_envelope_preserves_unit_composition_and_do_kap()
+ {
+    let mut m = load_zams_model(
+        StarControls {
+            zbase: 0.02,
+            ..StarControls::default()
+        },
+        StarJobControls::default(),
+    )
+    .expect("load 1 Msun ZAMS");
     set_hydro_vars(&mut m, false, false).expect("set_hydro_vars");
     let nc = m.species;
     for k in 0..5.min(m.nz) {
@@ -582,15 +581,14 @@ fn test_element_diffusion_pure_h_envelope_preserves_unit_composition_and_do_kap(
 
 #[test]
 fn test_compute_core_masses_matches_subcell_find0_oracles() {
-    let mut m =
-        load_zams_model(
-            StarControls {
-                zbase: 0.02,
-                ..StarControls::default()
-            },
-            StarJobControls::default(),
-        )
-            .expect("load 1 Msun ZAMS");
+    let mut m = load_zams_model(
+        StarControls {
+            zbase: 0.02,
+            ..StarControls::default()
+        },
+        StarJobControls::default(),
+    )
+    .expect("load 1 Msun ZAMS");
     set_hydro_vars(&mut m, false, false).expect("set_hydro_vars");
     let nc = m.species;
     let j_he4 = m.iso_names.iter().position(|n| n == "he4").unwrap();
@@ -693,15 +691,14 @@ fn test_star_evolve_step_terminate_rolls_back_state_and_eps_mdot() {
 /// retry with a smaller timestep (`evolve.f90:591`), not a fatal input error.
 #[test]
 fn test_oversized_mass_loss_is_a_retriable_failure() {
-    let mut model =
-        load_zams_model(
-            StarControls {
-                zbase: 0.02,
-                ..StarControls::default()
-            },
-            StarJobControls::default(),
-        )
-            .expect("load 1 Msun ZAMS");
+    let mut model = load_zams_model(
+        StarControls {
+            zbase: 0.02,
+            ..StarControls::default()
+        },
+        StarJobControls::default(),
+    )
+    .expect("load 1 Msun ZAMS");
     set_hydro_vars(&mut model, false, false).expect("set_hydro_vars");
     let dt = 1.0e3 * SECYER;
     model.mstar_dot = -2.0 * model.xmstar / dt;

@@ -283,6 +283,34 @@ pub struct HydroAuxState {
     pub mixing: crate::mixing_state::MixingAuxState,
     /// Per-step scalar history, solver/substep counters, and retry-hold state.
     pub step_hist: StepHistoryScalars,
+    /// White-dwarf solid-core boundary mass in grams (`crystal_core_boundary_mass`
+    /// in `star/private/phase_separation.f90:70, 121` and `mesh_plan.f90:965`).
+    pub crystal_core_boundary_mass: f64,
+    /// Cumulative mesh adjustment invocations (`mesh_call_number`).
+    pub mesh_call_number: usize,
+    /// Cumulative `remesh_split_merge` split count (`num_hydro_splits`).
+    pub num_hydro_splits: usize,
+    /// Cumulative `remesh_split_merge` merge count (`num_hydro_merges`).
+    pub num_hydro_merges: usize,
+    /// Last `do_mesh_adjust` relative internal-energy conservation residual (`mesh_adjust_IE_conservation`).
+    pub mesh_adjust_ie_conservation: f64,
+    /// Last `do_mesh_adjust` relative potential-energy conservation residual (`mesh_adjust_PE_conservation`).
+    pub mesh_adjust_pe_conservation: f64,
+    /// Last `do_mesh_adjust` relative kinetic-energy conservation residual (`mesh_adjust_KE_conservation`).
+    pub mesh_adjust_ke_conservation: f64,
+    /// Last `do_mesh_adjust` relative turbulent-energy conservation residual (`mesh_adjust_Eturb_conservation`).
+    pub mesh_adjust_eturb_conservation: f64,
+    /// Optional custom mesh spacing functions callback (`use_other_mesh_functions`).
+    #[serde(skip)]
+    pub other_mesh_functions:
+        Option<crate::mesh_functions::OtherMeshFunctionsHandle>,
+    /// Optional custom local mesh multiplier callback (`use_other_mesh_delta_coeff_factor`).
+    #[serde(skip)]
+    pub other_mesh_delta_coeff_factor:
+        Option<crate::adjust_mesh_support::OtherMeshDeltaCoeffFactorHandle>,
+    /// Ephemeral planned mesh cache bridging `plan_mesh` and `remap_onto_dq`.
+    #[serde(skip)]
+    pub(crate) planned_mesh: crate::mesh_adjust::PlannedMeshSlot,
     /// Per-model 2-slot microphysics cache (never duplicated on clone).
     #[serde(skip)]
     pub micro_cache: crate::micro_cache::MicrophysicsCache,
@@ -365,6 +393,17 @@ impl HydroAuxState {
             fixed_gradr_sticky: vec![false; nz],
             mixing: crate::mixing_state::MixingAuxState::new(nz),
             step_hist: StepHistoryScalars::default(),
+            crystal_core_boundary_mass: 0.0,
+            mesh_call_number: 0,
+            num_hydro_splits: 0,
+            num_hydro_merges: 0,
+            mesh_adjust_ie_conservation: 0.0,
+            mesh_adjust_pe_conservation: 0.0,
+            mesh_adjust_ke_conservation: 0.0,
+            mesh_adjust_eturb_conservation: 0.0,
+            other_mesh_functions: None,
+            other_mesh_delta_coeff_factor: None,
+            planned_mesh: crate::mesh_adjust::PlannedMeshSlot::default(),
             micro_cache: crate::micro_cache::MicrophysicsCache::default(),
         }
     }
@@ -466,160 +505,11 @@ impl HydroAuxState {
     }
 }
 
-fn interp_hermite_p1(
-    x_p1: &[f64],
-    y_p1: &[f64],
-    dy_p1: &[f64],
-    kk: usize,
-    x: f64,
-) -> f64 {
-    let (x0, x1) = (x_p1[kk], x_p1[kk + 1]);
-    if (x - x0).abs() <= 1.0e-15 {
-        return y_p1[kk];
-    }
-    if (x - x1).abs() <= 1.0e-15 {
-        return y_p1[kk + 1];
-    }
-    let h = (x1 - x0).max(1.0e-30);
-    let t = ((x - x0) / h).clamp(0.0, 1.0);
-    let (t2, t3) = (t * t, t * t * t);
-    (2.0 * t3 - 3.0 * t2 + 1.0) * y_p1[kk]
-        + (t3 - 2.0 * t2 + t) * h * dy_p1[kk]
-        + (-2.0 * t3 + 3.0 * t2) * y_p1[kk + 1]
-        + (t3 - t2) * h * dy_p1[kk + 1]
-}
-
+// Retains `Result` signature for `evolve_support.rs` caller compatibility until `#152` lands.
+#[allow(clippy::unnecessary_wraps)]
 pub(crate) fn smooth_post_remesh_hydro_and_rotation(
-    model: &mut crate::model::StarModel,
-    pre: &crate::primary_state::PrimaryStateBuffer,
+    _model: &mut crate::model::StarModel,
+    _pre: &crate::primary_state::PrimaryStateBuffer,
 ) -> Result<(), crate::controls::StarError> {
-    let (nz_new, nz_old) = (model.nz, pre.nz);
-    if nz_new < 2 || nz_old < 2 {
-        return Ok(());
-    }
-    let mut xq_p1 = Vec::with_capacity(nz_old + 1);
-    xq_p1.extend_from_slice(&pre.xq[..nz_old]);
-    xq_p1.push(1.0);
-    let mut v_p1 = vec![0.0; nz_old + 1];
-    for kk in (0..nz_old).rev() {
-        v_p1[kk] = v_p1[kk + 1] + pre.dq[kk] * flexmesa_math::exp(-pre.lnd[kk]);
-    }
-    let mut dv_p1 = crate::pulse_bvp::steffen_slopes(&xq_p1, &v_p1);
-    dv_p1[0] = (v_p1[1] - v_p1[0]) / (xq_p1[1] - xq_p1[0]).max(1.0e-30);
-
-    let (mut e_c1, mut lnt_c1) = (vec![0.0; nz_old], vec![0.0; nz_old]);
-    for kk in 1..(nz_old - 1) {
-        let dm_lo = 0.5 * (pre.dq[kk - 1] + pre.dq[kk]).max(1.0e-99);
-        let dm_hi = 0.5 * (pre.dq[kk] + pre.dq[kk + 1]).max(1.0e-99);
-        let (se_lo, se_hi) = (
-            (pre.energy[kk] - pre.energy[kk - 1]) / dm_lo,
-            (pre.energy[kk + 1] - pre.energy[kk]) / dm_hi,
-        );
-        if se_lo * se_hi > 0.0 {
-            let cap = 1.6 * pre.energy[kk].abs() / pre.dq[kk].max(1.0e-99);
-            e_c1[kk] = (2.0 * se_lo * se_hi / (se_lo + se_hi)).clamp(-cap, cap);
-        }
-        let (st_lo, st_hi) = (
-            (pre.ln_t[kk] - pre.ln_t[kk - 1]) / dm_lo,
-            (pre.ln_t[kk + 1] - pre.ln_t[kk]) / dm_hi,
-        );
-        if st_lo * st_hi > 0.0 {
-            lnt_c1[kk] = 2.0 * st_lo * st_hi / (st_lo + st_hi);
-        }
-    }
-
-    let (mut exact_flags, mut e_target, mut kk_hint) =
-        (vec![false; nz_new], vec![0.0; nz_new], 0_usize);
-    for k in 0..nz_new {
-        let (a0, dx) = (model.xq[k], model.dq[k]);
-        let a1 = if k + 1 < nz_new { model.xq[k + 1] } else { 1.0 };
-        while kk_hint + 1 < nz_old && xq_p1[kk_hint + 1] <= a0 {
-            kk_hint += 1;
-        }
-        let exact_kk = (kk_hint.saturating_sub(1)..(kk_hint + 3).min(nz_old))
-            .find(|&kk| {
-                (dx - pre.dq[kk]).abs() <= 1.0e-11 * dx
-                    && (a0 - pre.xq[kk]).abs()
-                        <= 1.0e-11 * a0.max(dx).max(1.0e-15)
-            });
-        if let Some(kk) = exact_kk {
-            exact_flags[k] = true;
-            model.lnd[k] = pre.lnd[kk];
-            model.ln_t[k] = pre.ln_t[kk];
-            model.energy[k] = pre.energy[kk];
-            model.lum[k] = pre.lum[kk];
-            if model.controls.rotation_flag {
-                model.omega[k] = pre.omega[kk];
-            }
-            e_target[k] = pre.energy[kk];
-            continue;
-        }
-        let (xq_lo, xq_hi) = (xq_p1[kk_hint], xq_p1[kk_hint + 1]);
-        let tf = if (a0 - xq_lo).abs() <= 1.0e-14 * dx {
-            0.0
-        } else {
-            ((a0 - xq_lo) / (xq_hi - xq_lo).max(1.0e-30)).clamp(0.0, 1.0)
-        };
-        let l_hi = if kk_hint + 1 < nz_old {
-            pre.lum[kk_hint + 1]
-        } else {
-            pre.l_center
-        };
-        model.lum[k] = pre.lum[kk_hint] + tf * (l_hi - pre.lum[kk_hint]);
-        if model.controls.rotation_flag {
-            model.omega[k] = pre.omega[kk_hint]
-                + tf * (pre.omega[(kk_hint + 1).min(nz_old - 1)]
-                    - pre.omega[kk_hint]);
-        }
-        let mut kk1 = kk_hint;
-        while kk1 + 1 < nz_old && xq_p1[kk1 + 1] < a1 {
-            kk1 += 1;
-        }
-        let v0 = interp_hermite_p1(&xq_p1, &v_p1, &dv_p1, kk_hint, a0);
-        let v1 = interp_hermite_p1(&xq_p1, &v_p1, &dv_p1, kk1, a1);
-        model.lnd[k] =
-            flexmesa_math::log((dx / (v0 - v1).max(1.0e-99)).max(1.0e-30));
-        let (mut e_acc, mut lnt_acc, mut w_sum) = (0.0, 0.0, 0.0);
-        for kk in kk_hint..=kk1 {
-            let (lo, hi) = (a0.max(xq_p1[kk]), a1.min(xq_p1[kk + 1]));
-            if hi > lo {
-                let (ov, d_xc) =
-                    (hi - lo, 0.5 * (lo + hi) - (xq_p1[kk] + 0.5 * pre.dq[kk]));
-                e_acc += ov * (pre.energy[kk] + e_c1[kk] * d_xc);
-                lnt_acc += ov * (pre.ln_t[kk] + lnt_c1[kk] * d_xc);
-                w_sum += ov;
-            }
-        }
-        e_target[k] = if w_sum > 0.0 {
-            model.ln_t[k] = (lnt_acc / w_sum).clamp(3.0, 26.0);
-            (e_acc / w_sum).max(1.0)
-        } else {
-            model.energy[k]
-        };
-    }
-    model.reconstruct_ln_r_from_lnd_and_dm();
-    model.set_m_grav_and_grav();
-    model.pack_xh();
-    crate::mesh_remap::set_lnt_for_energy(model, &e_target, &exact_flags)?;
-    model.pack_xh();
-    crate::rotation::update_rotation_distortion_factors(model);
-    if model.controls.rotation_flag && pre.j_rot.len() == nz_old {
-        let j_old: f64 =
-            pre.dm_bar.iter().zip(&pre.j_rot).map(|(m, j)| m * j).sum();
-        for _ in 0..2 {
-            let j_new: f64 = model
-                .dm_bar
-                .iter()
-                .zip(&model.j_rot)
-                .map(|(m, j)| m * j)
-                .sum();
-            if j_old.abs() > 0.0 && j_new.abs() > 1.0e-30 && j_old * j_new > 0.0
-            {
-                let sc = j_old / j_new;
-                model.omega[..nz_new].iter_mut().for_each(|w| *w *= sc);
-                crate::rotation::update_rotation_distortion_factors(model);
-            }
-        }
-    }
     Ok(())
 }

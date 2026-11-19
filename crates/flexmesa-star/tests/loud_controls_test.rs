@@ -16,7 +16,7 @@ use flexmesa_star::inlist_inventory::{
 use flexmesa_star::pulse_exporters::export_pulse_by_format;
 use flexmesa_star::rn_parser::parse_rn_stages;
 use flexmesa_star::{
-    load_zams_model, StarControls, StarError, StarJobControls,
+    StarControls, StarError, StarJobControls, load_zams_model,
 };
 
 struct TempCaseGuard {
@@ -121,13 +121,15 @@ fn test_unknown_section_key_unused_and_removed_aliases_fail_loudly() {
         .expect_err("unimplemented upstream key must fail by default");
     assert!(unimpl_err.to_string().contains("photo_interval"));
 
-    assert!(InlistBundle::from_file_with_options(
-        &unimpl,
-        InlistLoadOptions {
-            allow_unsupported_controls: true,
-        },
-    )
-    .is_ok());
+    assert!(
+        InlistBundle::from_file_with_options(
+            &unimpl,
+            InlistLoadOptions {
+                allow_unsupported_controls: true,
+            },
+        )
+        .is_ok()
+    );
 
     for (tag, body, expected) in [
         (
@@ -141,9 +143,9 @@ fn test_unknown_section_key_unused_and_removed_aliases_fail_loudly() {
             "x_logical_ctrl",
         ),
         (
-            "unused_mesh_ratio",
-            "&controls\n  mesh_max_allowed_ratio = 2.0d0\n/\n",
-            "mesh_max_allowed_ratio",
+            "unused_premix_time",
+            "&controls\n  conv_premix_time_factor = 1.0d0\n/\n",
+            "conv_premix_time_factor",
         ),
         (
             "unused_redo",
@@ -200,10 +202,12 @@ fn test_headless_pgstar_valid_keys_noop_and_typos_fail_loudly() {
     .expect("write valid pgstar");
     let bundle = InlistBundle::from_file(&valid)
         .expect("valid headless &pgstar must succeed in strict mode");
-    assert!(bundle
-        .validation_report
-        .pgstar_plotting_keys
-        .contains(&(String::from("pgstar"), String::from("pgstar_interval"))));
+    assert!(
+        bundle.validation_report.pgstar_plotting_keys.contains(&(
+            String::from("pgstar"),
+            String::from("pgstar_interval")
+        ))
+    );
 
     let bad = tmp.root.join("inlist_pgstar_bad");
     fs::write(
@@ -227,10 +231,15 @@ fn test_headless_pgstar_valid_keys_noop_and_typos_fail_loudly() {
     .expect("write inactive pgstar");
     let ok_inactive = InlistBundle::from_file(&inactive_stale)
         .expect("inactive pgstar must ignore stale keys");
-    assert!(ok_inactive
-        .validation_report
-        .pgstar_plotting_keys
-        .contains(&(String::from("pgstar"), String::from("pgstar_interval"))));
+    assert!(
+        ok_inactive
+            .validation_report
+            .pgstar_plotting_keys
+            .contains(&(
+                String::from("pgstar"),
+                String::from("pgstar_interval")
+            ))
+    );
 }
 
 #[test]
@@ -275,13 +284,15 @@ fn test_star_inventory_subset_of_mesa_26_4_1_and_x_ctrl_indexing() {
 
     let ctrl_rti = tmp.root.join("inlist_ctrl_rti");
     fs::write(&ctrl_rti, "&controls\n  rti_flag = .true.\n/\n").expect("write");
-    assert!(InlistBundle::from_file_with_options(
-        &ctrl_rti,
-        InlistLoadOptions {
-            allow_unsupported_controls: true,
-        },
-    )
-    .is_err());
+    assert!(
+        InlistBundle::from_file_with_options(
+            &ctrl_rti,
+            InlistLoadOptions {
+                allow_unsupported_controls: true,
+            },
+        )
+        .is_err()
+    );
 }
 
 #[test]
@@ -353,12 +364,14 @@ fn test_missing_files_stages_and_removed_clamps_behave_strictly() {
     .expect("write missing mod");
     let bundle = InlistBundle::from_file(&missing_mod).expect("parse ok");
     let mut extras = flexmesa_star::inlist_runner::DefaultStarExtras;
-    assert!(flexmesa_star::init_or_update_model_from_bundle(
-        &bundle,
-        None,
-        &mut extras,
-    )
-    .is_err());
+    assert!(
+        flexmesa_star::init_or_update_model_from_bundle(
+            &bundle,
+            None,
+            &mut extras,
+        )
+        .is_err()
+    );
 
     let empty_rn_dir = tmp.root.join("empty_rn_case");
     fs::create_dir_all(&empty_rn_dir).expect("mkdir");

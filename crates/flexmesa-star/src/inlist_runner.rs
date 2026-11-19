@@ -59,7 +59,10 @@ pub trait StarExtras {
     ///
     /// # Errors
     /// Returns [`StarError`] if custom control setup fails.
-    fn extras_controls(&mut self, _model: &mut StarModel) -> Result<(), StarError> {
+    fn extras_controls(
+        &mut self,
+        _model: &mut StarModel,
+    ) -> Result<(), StarError> {
         Ok(())
     }
 
@@ -378,7 +381,8 @@ pub fn run_inlist_stage_with_logs(
     let mut history_rows = Vec::new();
     let mut termination_code = String::from("max_steps_cap");
 
-    let job_step_cap = model.job.steps_to_take_before_terminate;
+    let job_step_cap = (model.job.steps_to_take_before_terminate >= 0)
+        .then_some(model.job.steps_to_take_before_terminate as usize);
     let cap = max_steps_cap
         .into_iter()
         .chain(job_step_cap)
@@ -537,6 +541,10 @@ pub fn run_inlist_stage_with_logs(
 
     if model.job.save_model_when_terminate
         && !model.job.save_model_filename.is_empty()
+        && !model
+            .job
+            .save_model_filename
+            .eq_ignore_ascii_case("undefined")
     {
         let out_path = bundle.case_dir.join(&model.job.save_model_filename);
         write_mod_if_missing(model, &out_path)?;

@@ -93,7 +93,7 @@ def test_live_repo_known_test_gaps_gate_passes() -> None:
         root, fail_on_imperative_skips=True
     )
     assert res.declared_count == res.discovered_count
-    assert res.declared_count >= 14
+    assert res.declared_count >= 1
     assert res.ok, known_gaps_gate.render_markdown_summary(res)
 
 

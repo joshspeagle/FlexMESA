@@ -79,15 +79,11 @@ impl InlistBundle {
         if let Some(v) = ctrl.try_get_i64("controls", "max_model_number")? {
             c.max_model_number = if v < 0 { None } else { Some(v as usize) };
         }
-        if let Some(v) = ctrl.try_get_f64("controls", "max_age")? {
-            c.max_age = (v > 0.0).then_some(v);
-        }
+        ctrl.try_f64_into("controls", &mut c.max_age, "max_age")?;
         if let Some(v) = ctrl.try_get_f64("controls", "max_age_in_seconds")? {
             c.max_age_in_seconds = (v > 0.0).then_some(v);
         }
-        if let Some(v) = ctrl.try_get_f64("controls", "max_years_for_timestep")? {
-            c.max_years_for_timestep = (v > 0.0).then_some(v);
-        }
+        ctrl.try_f64_into("controls", &mut c.max_years_for_timestep, "max_years_for_timestep")?;
         ctrl.try_bool_into("controls", &mut c.stop_near_zams, "stop_near_zams")?;
         if let Some(v) = ctrl.try_get_f64("controls", "lnuc_div_l_zams_limit")? {
             c.lnuc_div_l_zams_limit = v;
@@ -100,20 +96,24 @@ impl InlistBundle {
         c.xa_central_upper_limit_species = ctrl.try_get_indexed_strings("controls", "xa_central_upper_limit_species")?;
         c.xa_central_upper_limit = ctrl.try_get_indexed_f64s("controls", "xa_central_upper_limit")?;
 
+        map_f64s!("controls", ctrl, c, [
+            log_center_temp_upper_limit, log_center_density_upper_limit,
+            log_max_temp_upper_limit, envelope_mass_limit, he_layer_mass_lower_limit,
+            star_mass_max_limit, star_mass_min_limit, remnant_mass_min_limit,
+            star_species_mass_min_limit, star_species_mass_max_limit,
+            fe_core_infall_limit, surf_omega_div_omega_crit_limit,
+            conv_core_gap_dq_limit,
+        ]);
         map_opt_f64s!("controls", ctrl, c, [
             log_l_upper_limit, log_l_lower_limit, teff_upper_limit, teff_lower_limit,
-            log_teff_upper_limit, log_teff_lower_limit, log_center_temp_upper_limit,
-            log_center_temp_lower_limit, log_center_density_upper_limit,
-            log_center_density_lower_limit, log_max_temp_upper_limit, log_g_upper_limit,
-            log_g_lower_limit, log_psurf_upper_limit, log_rsurf_upper_limit,
-            center_r_lower_limit, he_core_mass_limit, co_core_mass_limit,
-            one_core_mass_limit, envelope_mass_limit, he_layer_mass_lower_limit,
+            log_teff_upper_limit, log_teff_lower_limit,
+            log_center_temp_lower_limit, log_center_density_lower_limit,
+            log_g_upper_limit, log_g_lower_limit,
+            log_psurf_upper_limit, log_rsurf_upper_limit, center_r_lower_limit,
+            he_core_mass_limit, co_core_mass_limit, one_core_mass_limit,
             power_nuc_burn_upper_limit, power_nuc_burn_lower_limit,
-            power_he_burn_upper_limit, star_mass_max_limit, star_mass_min_limit,
-            remnant_mass_min_limit, star_species_mass_min_limit,
-            star_species_mass_max_limit, fe_core_infall_limit,
+            power_he_burn_upper_limit,
             v_surf_div_v_kh_upper_limit, gamma_center_limit, v_surf_div_v_esc_limit,
-            surf_omega_div_omega_crit_limit, conv_core_gap_dq_limit,
         ]);
         map_strs!("controls", ctrl, c, [star_species_mass_min_limit_iso, star_species_mass_max_limit_iso]);
         map_bools!("controls", ctrl, c, [

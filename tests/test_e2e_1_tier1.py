@@ -68,6 +68,9 @@ def test_convective_premix_predictive_mix_and_diffusion_hooks() -> None:
     [
         (
             "starspots",
+            "&kap\n"
+            "  zbase = 0.02\n"
+            "/\n"
             "&controls\n"
             "  initial_mass = 1.0\n"
             "  initial_z = 0.02\n"
@@ -78,6 +81,9 @@ def test_convective_premix_predictive_mix_and_diffusion_hooks() -> None:
         ),
         (
             "T_tau_gradr",
+            "&kap\n"
+            "  zbase = 0.02\n"
+            "/\n"
             "&controls\n"
             "  initial_mass = 1.0\n"
             "  initial_z = 0.02\n"
@@ -88,6 +94,9 @@ def test_convective_premix_predictive_mix_and_diffusion_hooks() -> None:
         ),
         (
             "check_pulse_atm",
+            "&kap\n"
+            "  zbase = 0.02\n"
+            "/\n"
             "&controls\n"
             "  initial_mass = 1.0\n"
             "  initial_z = 0.02\n"
@@ -96,6 +105,9 @@ def test_convective_premix_predictive_mix_and_diffusion_hooks() -> None:
         ),
         (
             "custom_colors",
+            "&kap\n"
+            "  zbase = 0.02\n"
+            "/\n"
             "&controls\n"
             "  initial_mass = 1.0\n"
             "  initial_z = 0.02\n"
@@ -108,6 +120,9 @@ def test_convective_premix_predictive_mix_and_diffusion_hooks() -> None:
             "  change_net = .true.\n"
             "  new_net_name = 'co_burn.net'\n"
             "/\n"
+            "&kap\n"
+            "  zbase = 0.02\n"
+            "/\n"
             "&controls\n"
             "  initial_mass = 2.0\n"
             "  initial_z = 0.02\n"
@@ -116,6 +131,9 @@ def test_convective_premix_predictive_mix_and_diffusion_hooks() -> None:
         ),
         (
             "semiconvection",
+            "&kap\n"
+            "  zbase = 0.02\n"
+            "/\n"
             "&controls\n"
             "  initial_mass = 4.0\n"
             "  initial_z = 0.02\n"
@@ -127,6 +145,9 @@ def test_convective_premix_predictive_mix_and_diffusion_hooks() -> None:
         ),
         (
             "simplex_solar_calibration",
+            "&kap\n"
+            "  zbase = 0.02\n"
+            "/\n"
             "&controls\n"
             "  initial_mass = 1.0\n"
             "  initial_z = 0.02\n"
@@ -197,6 +218,9 @@ def test_full_stages_skip_optional_false_multi_stage_tier1_execution() -> None:
             "  save_model_when_terminate = .true.\n"
             "  save_model_filename = 'zams.mod'\n"
             "/\n"
+            "&kap\n"
+            "  zbase = 0.02\n"
+            "/\n"
             "&controls\n"
             "  initial_mass = 1.0\n"
             "  initial_z = 0.02\n"
@@ -208,6 +232,9 @@ def test_full_stages_skip_optional_false_multi_stage_tier1_execution() -> None:
             "&star_job\n"
             "  load_saved_model = .true.\n"
             "  load_model_filename = 'zams.mod'\n"
+            "/\n"
+            "&kap\n"
+            "  zbase = 0.02\n"
             "/\n"
             "&controls\n"
             "  initial_mass = 1.0\n"

@@ -81,7 +81,7 @@ fn build_kap_config(
     kap_blend_log_t_upper_bdy=3.88, kap_blend_log_t_lower_bdy=3.80,
     cubic_interpolation_in_x=false, cubic_interpolation_in_z=false,
     include_electron_conduction=true, use_blouin_conductive_opacities=true,
-    use_zbase_for_type1=false, use_type2_opacities=false,
+    use_zbase_for_type1=true, use_type2_opacities=true,
     kap_type2_full_off_x=1.0e-3, kap_type2_full_on_x=1.0e-6,
     kap_type2_full_off_dz=0.001, kap_type2_full_on_dz=0.01
 ))]
@@ -164,12 +164,12 @@ pub fn kap_get_results_rust(
 #[pyo3(signature = (
     chem_id, xa, log_rho, log_t,
     lnfree_e, d_lnfree_e_dln_rho, d_lnfree_e_dln_t,
-    eta, d_eta_dln_rho, d_eta_dln_t, zbase=0.02,
+    eta, d_eta_dln_rho, d_eta_dln_t, zbase=-1.0,
     kap_option="gs98", kap_co_option="gs98_co", kap_low_t_option="lowT_fa05_gs98",
     kap_blend_log_t_upper_bdy=3.88, kap_blend_log_t_lower_bdy=3.80,
     cubic_interpolation_in_x=false, cubic_interpolation_in_z=false,
     include_electron_conduction=true, use_blouin_conductive_opacities=true,
-    use_zbase_for_type1=false, use_type2_opacities=false,
+    use_zbase_for_type1=true, use_type2_opacities=true,
     kap_type2_full_off_x=1.0e-3, kap_type2_full_on_x=1.0e-6,
     kap_type2_full_off_dz=0.001, kap_type2_full_on_dz=0.01
 ))]
@@ -361,11 +361,11 @@ pub fn kap_get_kapcn_rust(
     chem_id, xa_zones, log_rho_zones, log_t_zones,
     lnfree_e_zones, d_lnfree_e_dln_rho_zones, d_lnfree_e_dln_t_zones,
     eta_zones, d_eta_dln_rho_zones, d_eta_dln_t_zones,
-    zbase=0.02, kap_option="gs98", kap_co_option="gs98_co", kap_low_t_option="lowT_fa05_gs98",
+    zbase=-1.0, kap_option="gs98", kap_co_option="gs98_co", kap_low_t_option="lowT_fa05_gs98",
     kap_blend_log_t_upper_bdy=3.88, kap_blend_log_t_lower_bdy=3.80,
     cubic_interpolation_in_x=false, cubic_interpolation_in_z=false,
     include_electron_conduction=true, use_blouin_conductive_opacities=true,
-    use_zbase_for_type1=false, use_type2_opacities=false,
+    use_zbase_for_type1=true, use_type2_opacities=true,
     kap_type2_full_off_x=1.0e-3, kap_type2_full_on_x=1.0e-6,
     kap_type2_full_off_dz=0.001, kap_type2_full_on_dz=0.01,
     parallel=true
@@ -485,7 +485,7 @@ pub fn kap_get_zones_rust<'py>(
     kap_blend_log_t_upper_bdy=3.88, kap_blend_log_t_lower_bdy=3.80,
     cubic_interpolation_in_x=false, cubic_interpolation_in_z=false,
     include_electron_conduction=true, use_blouin_conductive_opacities=true,
-    use_zbase_for_type1=false, use_type2_opacities=false,
+    use_zbase_for_type1=true, use_type2_opacities=true,
     kap_type2_full_off_x=1.0e-3, kap_type2_full_on_x=1.0e-6,
     kap_type2_full_off_dz=0.001, kap_type2_full_on_dz=0.01,
     parallel=true

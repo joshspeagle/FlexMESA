@@ -112,6 +112,7 @@ fn test_binary_history_donor_switch_mapping_and_width_32() {
             write_profiles_flag: false,
             ..OutputControls::default()
         },
+        zbase: 0.02,
         ..StarControls::default()
     };
     let mut c2 = c1.clone();
@@ -221,6 +222,7 @@ fn test_binary_logs_writer_coupled_stepping_intervals() {
             write_profiles_flag: false,
             ..OutputControls::default()
         },
+        zbase: 0.02,
         ..StarControls::default()
     };
 
@@ -305,6 +307,7 @@ fn test_binary_history_edot_columns_report_applied_terms() {
     let c1 = StarControls {
         initial_mass: 2.0,
         initial_z: 0.02,
+        zbase: 0.02,
         ..StarControls::default()
     };
     let mut c2 = c1.clone();

@@ -11,7 +11,7 @@ use crate::model::StarModel;
 const PHOTO_MAGIC: &[u8; 8] = b"FMPHOTO2";
 
 /// Binary `.photo` format version written by the generated `serde` encoder.
-pub const PHOTO_FORMAT_VERSION: u32 = 20;
+pub const PHOTO_FORMAT_VERSION: u32 = 21;
 
 /// Computes a deterministic 64-bit FNV-1a checksum of `.photo` restart bytes
 /// (`./ck` in upstream MESA `test_suite_helpers`).
@@ -37,7 +37,9 @@ fn decode_photo_frame(
     .map_err(StarError::IoError)?;
     let mode = flexmesa_math::NumericsMode::from_wire_tag(mode_tag)
         .ok_or_else(|| {
-            StarError::IoError(format!("invalid photo numerics_mode tag {mode_tag}"))
+            StarError::IoError(format!(
+                "invalid photo numerics_mode tag {mode_tag}"
+            ))
         })?;
     Ok((mode, payload))
 }

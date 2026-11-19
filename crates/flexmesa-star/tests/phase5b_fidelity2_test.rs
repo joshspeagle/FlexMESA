@@ -39,7 +39,13 @@ fn species_total_masses(model: &StarModel) -> Vec<f64> {
 #[test]
 fn test_do_adjust_mesh_splits_and_merges_conserving_mass_and_isotopes() {
     let mut model =
-        load_zams_model(StarControls::default(), StarJobControls::default())
+        load_zams_model(
+            StarControls {
+                zbase: 0.02,
+                ..StarControls::default()
+            },
+            StarJobControls::default(),
+        )
             .expect("load 1 Msun ZAMS");
     set_hydro_vars(&mut model, false, false).expect("set_hydro_vars");
 
@@ -171,6 +177,7 @@ fn test_do_set_mdot_bjorklund_dutch_and_rotational_boost_match_analytic_laws() {
         initial_mass: 4.0,
         hot_wind_full_on_t: 1.0e4,
         cool_wind_full_on_t: 0.5e4,
+        zbase: 0.02,
         ..Default::default()
     };
     ctrl.mix_wind.hot_wind_scheme = String::from("Bjorklund");
@@ -220,6 +227,7 @@ fn test_do_adjust_mass_step_and_eps_mdot_conserve_accreted_species_and_angular_m
         accretion_h1: 0.40,
         accretion_he4: 0.58,
         rotation_flag: true,
+        zbase: 0.02,
         ..Default::default()
     };
     ctrl.mix_wind.use_accreted_material_j = true;
@@ -288,6 +296,7 @@ fn test_do_adjust_mass_step_and_eps_mdot_conserve_accreted_species_and_angular_m
 fn test_overshoot_16_param_sets_and_peclet_damping_follow_mesa_rules() {
     let ctrl = StarControls {
         initial_mass: 4.0,
+        zbase: 0.02,
         ..Default::default()
     };
     let mut base = load_zams_model(ctrl, StarJobControls::default())
@@ -403,6 +412,7 @@ fn test_conv_premix_predictive_mixing_and_extra_heat_in_evolve_step() {
         initial_mass: 4.0,
         do_conv_premix: true,
         do_premix_heating: true,
+        zbase: 0.02,
         ..Default::default()
     };
     let mut m_pm = load_zams_model(ctrl, StarJobControls::default())
@@ -432,7 +442,13 @@ fn test_conv_premix_predictive_mixing_and_extra_heat_in_evolve_step() {
     assert!(m_pred.conv_vel.iter().all(|v| v.is_finite()));
 
     let mut m_heat =
-        load_zams_model(StarControls::default(), StarJobControls::default())
+        load_zams_model(
+            StarControls {
+                zbase: 0.02,
+                ..StarControls::default()
+            },
+            StarJobControls::default(),
+        )
             .expect("load 1 Msun ZAMS");
     set_hydro_vars(&mut m_heat, false, false).expect("set_hydro_vars");
     m_heat.controls.mix_wind.inject_uniform_extra_heat = 1.0e2;
@@ -475,7 +491,13 @@ fn test_conv_premix_predictive_mixing_and_extra_heat_in_evolve_step() {
 fn test_timestep_controller_hard_limit_triggers_retry_and_termination_stops_evolve(
 ) {
     let mut model =
-        load_zams_model(StarControls::default(), StarJobControls::default())
+        load_zams_model(
+            StarControls {
+                zbase: 0.02,
+                ..StarControls::default()
+            },
+            StarJobControls::default(),
+        )
             .expect("load 1 Msun ZAMS");
     set_hydro_vars(&mut model, false, false).expect("set_hydro_vars");
     star_evolve_step(&mut model, false, false, true).expect("initial step");
@@ -513,7 +535,13 @@ fn test_timestep_controller_hard_limit_triggers_retry_and_termination_stops_evol
 fn test_element_diffusion_pure_h_envelope_preserves_unit_composition_and_do_kap(
 ) {
     let mut m =
-        load_zams_model(StarControls::default(), StarJobControls::default())
+        load_zams_model(
+            StarControls {
+                zbase: 0.02,
+                ..StarControls::default()
+            },
+            StarJobControls::default(),
+        )
             .expect("load 1 Msun ZAMS");
     set_hydro_vars(&mut m, false, false).expect("set_hydro_vars");
     let nc = m.species;
@@ -537,7 +565,13 @@ fn test_element_diffusion_pure_h_envelope_preserves_unit_composition_and_do_kap(
 #[test]
 fn test_compute_core_masses_matches_subcell_find0_oracles() {
     let mut m =
-        load_zams_model(StarControls::default(), StarJobControls::default())
+        load_zams_model(
+            StarControls {
+                zbase: 0.02,
+                ..StarControls::default()
+            },
+            StarJobControls::default(),
+        )
             .expect("load 1 Msun ZAMS");
     set_hydro_vars(&mut m, false, false).expect("set_hydro_vars");
     let nc = m.species;
@@ -608,6 +642,7 @@ fn test_compute_core_masses_matches_subcell_find0_oracles() {
 fn test_star_evolve_step_terminate_rolls_back_state_and_eps_mdot() {
     let mut ctrl = StarControls {
         mass_change: -1.0e-7,
+        zbase: 0.02,
         ..Default::default()
     };
     ctrl.mix_wind.eps_mdot_factor = 1.0;
@@ -641,7 +676,13 @@ fn test_star_evolve_step_terminate_rolls_back_state_and_eps_mdot() {
 #[test]
 fn test_oversized_mass_loss_is_a_retriable_failure() {
     let mut model =
-        load_zams_model(StarControls::default(), StarJobControls::default())
+        load_zams_model(
+            StarControls {
+                zbase: 0.02,
+                ..StarControls::default()
+            },
+            StarJobControls::default(),
+        )
             .expect("load 1 Msun ZAMS");
     set_hydro_vars(&mut model, false, false).expect("set_hydro_vars");
     let dt = 1.0e3 * SECYER;

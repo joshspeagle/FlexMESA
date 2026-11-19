@@ -157,7 +157,7 @@ def test_step_struct_burn_mix_coupled_and_op_split() -> None:
     np.testing.assert_allclose(np.sum(zams.xa, axis=1), 1.0, atol=1.0e-12)
 
     pre = star.StarModel.from_pre_ms(
-        initial_mass=4.0, initial_z=0.02, d_log10_p=0.15
+        initial_mass=4.0, initial_z=0.02, t_c=9.0e5, d_log10_p=0.15
     )
     dt = 10.0 * float(const.SECYER)
 

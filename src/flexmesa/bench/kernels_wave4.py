@@ -529,7 +529,7 @@ def bench_star_evolve_step(
             lnd_j, lnt_j, lnr_j, lum_j, lnd0_j, lnt0_j, lnr0_j, lum0_j
         )
         return jnp.asarray(
-            star.eval_h211_timestep_jax(dt, dt, vc / 1.0e-4, 1.0)
+            star.eval_h211_timestep_jax(dt, dt, vc / 1.0e-3, 1.0)
         )
 
     def _run_hybrid() -> _ArrF64:

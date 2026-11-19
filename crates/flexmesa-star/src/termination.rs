@@ -55,7 +55,8 @@ fn eval_core_infall_termination(
         return None;
     };
 
-    if let Some(lim) = c.fe_core_infall_limit {
+    if c.fe_core_infall_limit > 0.0 && (c.v_flag || c.u_flag) {
+        let lim = c.fe_core_infall_limit;
         if cores.fe_core_mass > 0.0 {
             let m_fe_g = cores.fe_core_mass * M_SUN;
             let mut mass_sum = 0.0_f64;
@@ -146,20 +147,18 @@ pub fn check_termination_limits_with_history(
             return Some(String::from("max_model_number"));
         }
     }
-    if let Some(max_age) = c.max_age {
-        if model.star_age >= max_age {
-            return Some(String::from("max_age"));
-        }
+    if c.max_age > 0.0 && model.star_age >= c.max_age {
+        return Some(String::from("max_age"));
     }
     if let Some(max_age_sec) = c.max_age_in_seconds {
         if model.star_age * SECYER >= max_age_sec {
             return Some(String::from("max_age_in_seconds"));
         }
     }
-    if let Some(lim) = c.rsp_max_num_periods {
-        if lim >= 0 && (model.aux.rsp.num_periods as isize) >= lim {
-            return Some(String::from("RSP_max_num_periods"));
-        }
+    if c.rsp_max_num_periods >= 0
+        && (model.aux.rsp.num_periods as isize) >= c.rsp_max_num_periods
+    {
+        return Some(String::from("RSP_max_num_periods"));
     }
     if c.rsp_flag
         && c.rsp.grekm_avg_abs_limit > 0.0
@@ -240,9 +239,7 @@ pub fn check_termination_limits_with_history(
         return Some(String::from("log_g_lower_limit"));
     }
 
-    if c.log_center_temp_upper_limit
-        .is_some_and(|lim| hr.log_center_t >= lim)
-    {
+    if hr.log_center_t >= c.log_center_temp_upper_limit {
         return Some(String::from("log_center_temp_upper_limit"));
     }
     if c.log_center_temp_lower_limit
@@ -250,9 +247,7 @@ pub fn check_termination_limits_with_history(
     {
         return Some(String::from("log_center_temp_lower_limit"));
     }
-    if c.log_center_density_upper_limit
-        .is_some_and(|lim| hr.log_center_rho >= lim)
-    {
+    if hr.log_center_rho >= c.log_center_density_upper_limit {
         return Some(String::from("log_center_density_upper_limit"));
     }
     if c.log_center_density_lower_limit
@@ -261,20 +256,17 @@ pub fn check_termination_limits_with_history(
         return Some(String::from("log_center_density_lower_limit"));
     }
 
-    if let Some(lim) = c.log_max_temp_upper_limit {
-        let max_ln_t =
-            model.ln_t.iter().copied().fold(f64::NEG_INFINITY, f64::max);
-        if max_ln_t / flexmesa_const::LN10 >= lim {
-            return Some(String::from("log_max_temp_upper_limit"));
-        }
+    let max_ln_t = model.ln_t.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    if max_ln_t / flexmesa_const::LN10 >= c.log_max_temp_upper_limit {
+        return Some(String::from("log_max_temp_upper_limit"));
     }
 
     let need_cores = c.he_core_mass_limit.is_some()
         || c.co_core_mass_limit.is_some()
         || c.one_core_mass_limit.is_some()
-        || c.envelope_mass_limit.is_some()
-        || c.he_layer_mass_lower_limit.is_some()
-        || c.fe_core_infall_limit.is_some()
+        || c.envelope_mass_limit > 0.0
+        || c.he_layer_mass_lower_limit > 0.0
+        || (c.fe_core_infall_limit > 0.0 && (c.v_flag || c.u_flag))
         || ts.non_fe_core_infall_limit.is_some()
         || c.stop_at_phase_tp_agb;
     let cores = if need_cores {
@@ -346,51 +338,54 @@ pub fn check_termination_limits_with_history(
         return Some(String::from("power_z_burn_lower_limit"));
     }
 
-    if c.star_mass_max_limit.is_some_and(|lim| hr.star_mass >= lim) {
+    if c.star_mass_max_limit > 0.0 && hr.star_mass >= c.star_mass_max_limit {
         return Some(String::from("star_mass_max_limit"));
     }
-    if c.star_mass_min_limit.is_some_and(|lim| hr.star_mass <= lim) {
+    if c.star_mass_min_limit > 0.0 && hr.star_mass <= c.star_mass_min_limit {
         return Some(String::from("star_mass_min_limit"));
     }
-    if c.remnant_mass_min_limit
-        .is_some_and(|lim| hr.star_mass <= lim)
+    if c.remnant_mass_min_limit > 0.0
+        && hr.star_mass <= c.remnant_mass_min_limit
     {
         return Some(String::from("remnant_mass_min_limit"));
     }
 
     let env_mass = (hr.star_mass - cores.he_core_mass).max(0.0);
-    if c.envelope_mass_limit.is_some_and(|lim| env_mass < lim) {
+    if c.envelope_mass_limit > 0.0 && env_mass < c.envelope_mass_limit {
         return Some(String::from("envelope_mass_limit"));
     }
-    if let Some(lim) = c.he_layer_mass_lower_limit {
-        if cores.he_core_mass >= cores.co_core_mass
-            && cores.co_core_mass > 0.0
-            && hr.center_he4 < 1.0e-4
-            && cores.he_core_mass - cores.co_core_mass < lim
-        {
-            return Some(String::from("he_layer_mass_lower_limit"));
-        }
+    if c.he_layer_mass_lower_limit > 0.0
+        && cores.he_core_mass >= cores.co_core_mass
+        && cores.co_core_mass > 0.0
+        && hr.center_he4 < 1.0e-4
+        && cores.he_core_mass - cores.co_core_mass < c.he_layer_mass_lower_limit
+    {
+        return Some(String::from("he_layer_mass_lower_limit"));
     }
 
-    if let Some(lim) = c.star_species_mass_min_limit {
+    if c.star_species_mass_min_limit > 0.0 {
         if let Some(j) = species_col_index(
             model,
             catalog,
             &c.star_species_mass_min_limit_iso,
         ) {
-            if species_total_mass_msun(model, j) <= lim {
+            if species_total_mass_msun(model, j)
+                <= c.star_species_mass_min_limit
+            {
                 return Some(String::from("star_species_mass_min_limit"));
             }
         }
     }
 
-    if let Some(lim) = c.star_species_mass_max_limit {
+    if c.star_species_mass_max_limit > 0.0 {
         if let Some(j) = species_col_index(
             model,
             catalog,
             &c.star_species_mass_max_limit_iso,
         ) {
-            if species_total_mass_msun(model, j) >= lim {
+            if species_total_mass_msun(model, j)
+                >= c.star_species_mass_max_limit
+            {
                 return Some(String::from("star_species_mass_max_limit"));
             }
         }
@@ -463,28 +458,6 @@ pub fn check_termination_limits_with_history(
             .max(1.0e-30);
         if v_surf / v_esc >= lim {
             return Some(String::from("v_surf_div_v_esc_limit"));
-        }
-    }
-    if let Some(lim) = c.conv_core_gap_dq_limit {
-        let mut last_conv_q: Option<f64> = None;
-        let mut in_conv = false;
-        for k in (0..nz).rev() {
-            let is_conv = model.d_mix[k] > 0.0;
-            if is_conv {
-                if !in_conv {
-                    if let Some(q_prev) = last_conv_q {
-                        if (model.q[k] - q_prev).abs() <= lim {
-                            return Some(String::from(
-                                "conv_core_gap_dq_limit",
-                            ));
-                        }
-                    }
-                }
-                last_conv_q = Some(model.q[k]);
-                in_conv = true;
-            } else {
-                in_conv = false;
-            }
         }
     }
 

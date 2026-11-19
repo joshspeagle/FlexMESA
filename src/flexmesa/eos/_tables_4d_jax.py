@@ -552,8 +552,138 @@ def _eval_cms_slice_16(
     return f, dlnt, dlnd
 
 
+def _include_cms_radiation_jax(
+    rho: jax.Array,
+    temp: jax.Array,
+    f16: jax.Array,
+    dlnd16: jax.Array,
+    dlnt16: jax.Array,
+) -> tuple[jax.Array, jax.Array, jax.Array]:
+    """Add blackbody radiation to `CMS` (`eoscms_eval.f90:302-456`)."""
+    crad_3 = float(constants.CRAD) / 3.0
+
+    def _add(
+        a: tuple[jax.Array, jax.Array, jax.Array],
+        b: tuple[jax.Array, jax.Array, jax.Array],
+    ) -> tuple[jax.Array, jax.Array, jax.Array]:
+        return (a[0] + b[0], a[1] + b[1], a[2] + b[2])
+
+    def _sub(
+        a: tuple[jax.Array, jax.Array, jax.Array],
+        b: tuple[jax.Array, jax.Array, jax.Array],
+    ) -> tuple[jax.Array, jax.Array, jax.Array]:
+        return (a[0] - b[0], a[1] - b[1], a[2] - b[2])
+
+    def _mul(
+        a: tuple[jax.Array, jax.Array, jax.Array],
+        b: tuple[jax.Array, jax.Array, jax.Array],
+    ) -> tuple[jax.Array, jax.Array, jax.Array]:
+        return (
+            a[0] * b[0],
+            a[1] * b[0] + a[0] * b[1],
+            a[2] * b[0] + a[0] * b[2],
+        )
+
+    def _div(
+        a: tuple[jax.Array, jax.Array, jax.Array],
+        b: tuple[jax.Array, jax.Array, jax.Array],
+    ) -> tuple[jax.Array, jax.Array, jax.Array]:
+        inv = 1.0 / b[0]
+        q = a[0] * inv
+        return (q, (a[1] - q * b[1]) * inv, (a[2] - q * b[2]) * inv)
+
+    def _exp(
+        a: tuple[jax.Array, jax.Array, jax.Array],
+    ) -> tuple[jax.Array, jax.Array, jax.Array]:
+        ev = jnp.exp(a[0])
+        return (ev, ev * a[1], ev * a[2])
+
+    def _log(
+        a: tuple[jax.Array, jax.Array, jax.Array],
+    ) -> tuple[jax.Array, jax.Array, jax.Array]:
+        inv = 1.0 / a[0]
+        return (jnp.log(a[0]), a[1] * inv, a[2] * inv)
+
+    def _sc(c: float) -> tuple[jax.Array, jax.Array, jax.Array]:
+        z = jnp.zeros((), dtype=jnp.float64)
+        return (jnp.asarray(c, dtype=jnp.float64), z, z)
+
+    def _unp(idx: int) -> tuple[jax.Array, jax.Array, jax.Array]:
+        return (f16[idx], dlnt16[idx] / temp, dlnd16[idx] / rho)
+
+    z0 = jnp.zeros((), dtype=jnp.float64)
+    one = _sc(1.0)
+    t_ad = (temp, jnp.ones((), dtype=jnp.float64), z0)
+    r_ad = (rho, z0, jnp.ones((), dtype=jnp.float64))
+
+    ln_pgas = _unp(core.I_LN_PGAS)
+    ln_e = _unp(core.I_LN_E)
+    ln_s = _unp(core.I_LN_S)
+    chi_rho = _unp(core.I_CHI_RHO)
+    chi_t = _unp(core.I_CHI_T)
+    cv = _unp(core.I_CV)
+    mu = _unp(core.I_MU)
+    ln_free_e = _unp(core.I_LN_FREE_E)
+    eta = _unp(core.I_ETA)
+
+    pgas = _exp(ln_pgas)
+    t2 = _mul(t_ad, t_ad)
+    prad = _mul(_sc(crad_3), _mul(t2, t2))
+    p_tot = _add(pgas, prad)
+    rt = _mul(r_ad, t_ad)
+    r2 = _mul(r_ad, r_ad)
+    ln_e = _log(_add(_exp(ln_e), _div(_mul(_sc(3.0), prad), r_ad)))
+    ln_s = _log(_add(_exp(ln_s), _div(_mul(_sc(4.0), prad), rt)))
+    cv = _add(cv, _div(_mul(_sc(12.0), prad), rt))
+    chi_t = _add(
+        _div(_mul(chi_t, pgas), p_tot),
+        _div(_mul(_sc(4.0), prad), p_tot),
+    )
+    chi_rho = _div(_mul(chi_rho, pgas), p_tot)
+    gamma3 = _add(one, _mul(_div(p_tot, r_ad), _div(chi_t, _mul(t_ad, cv))))
+    gm1 = _sub(gamma3, one)
+    gamma1 = _add(_mul(chi_t, gm1), chi_rho)
+    grad_ad = _div(gm1, gamma1)
+    cp = _div(_mul(cv, gamma1), chi_rho)
+    de_drho = _div(_mul(_sub(one, chi_t), p_tot), r2)
+    ds_dt = _div(cv, t_ad)
+    ds_drho = _div(
+        _mul(_sc(-1.0), _mul(p_tot, chi_t)),
+        _mul(r2, t_ad),
+    )
+
+    chans = (
+        (core.I_LN_PGAS, ln_pgas),
+        (core.I_LN_E, ln_e),
+        (core.I_LN_S, ln_s),
+        (core.I_GRAD_AD, grad_ad),
+        (core.I_CHI_RHO, chi_rho),
+        (core.I_CHI_T, chi_t),
+        (core.I_CP, cp),
+        (core.I_CV, cv),
+        (core.I_DE_DRHO, de_drho),
+        (core.I_DS_DT, ds_dt),
+        (core.I_DS_DRHO, ds_drho),
+        (core.I_MU, mu),
+        (core.I_LN_FREE_E, ln_free_e),
+        (core.I_GAMMA1, gamma1),
+        (core.I_GAMMA3, gamma3),
+        (core.I_ETA, eta),
+    )
+    vals, dlnds, dlnts = f16, dlnd16, dlnt16
+    for idx, ch in chans:
+        vals = vals.at[idx].set(ch[0])
+        dlnts = dlnts.at[idx].set(ch[1] * temp)
+        dlnds = dlnds.at[idx].set(ch[2] * rho)
+    return vals, dlnds, dlnts
+
+
 def eval_cms_eos_jax(
-    rho: jax.Array, temp: jax.Array, x: float
+    rho: jax.Array,
+    temp: jax.Array,
+    x: float,
+    *,
+    include_radiation: bool = True,
 ) -> tuple[jax.Array, jax.Array, jax.Array]:
     """Evaluate 26-channel `CMS` EOS in pure JAX."""
     log_rho = jnp.log10(rho)
@@ -579,6 +709,10 @@ def eval_cms_eos_jax(
     f16 = alfa * r1 + beta * r2
     dlnt16 = alfa * dt1 + beta * dt2
     dlnd16 = alfa * dr1 + beta * dr2
+    if include_radiation:
+        f16, dlnd16, dlnt16 = _include_cms_radiation_jax(
+            rho, temp, f16, dlnd16, dlnt16
+        )
     pad10 = jnp.zeros(10, dtype=jnp.float64)
     res = jnp.concatenate([f16, pad10]).at[core.I_FRAC_CMS].set(1.0)
     return (

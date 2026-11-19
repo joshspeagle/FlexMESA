@@ -324,8 +324,8 @@ impl PyStarModel {
         max_age: Option<f64>,
     ) -> PyResult<Vec<EvolveStepTuple>> {
         let inner = &mut self.inner;
-        if max_age.is_some() {
-            inner.controls.max_age = max_age;
+        if let Some(lim) = max_age {
+            inner.controls.max_age = lim;
         }
         let reps = py
             .detach(|| {

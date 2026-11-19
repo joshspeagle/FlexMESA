@@ -15,7 +15,6 @@ use crate::inlist_runner::StarExtras;
 use crate::micro::change_model_network;
 use crate::model::StarModel;
 use crate::model_io::read_mod_str;
-use crate::pre_ms::build_pre_ms_model;
 use crate::relax::{
     apply_composition_relaxation, apply_uniform_rotation,
     excise_core_by_temperature, relax_core_boundary, relax_from_profile_files,
@@ -123,6 +122,7 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
     let job = bundle.job.clone();
     let controls = bundle.controls.clone();
     let mut did_create_pre_ms = false;
+    let is_restart = existing_model.is_some();
     let mut model = if let Some(prev) = existing_model {
         prev
     } else if job.load_saved_model {
@@ -134,7 +134,12 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
         )?
     } else if job.create_pre_ms_model {
         did_create_pre_ms = true;
-        build_pre_ms_model(controls.clone(), job.clone())?
+        crate::pre_ms::build_pre_ms_model_with_configs(
+            controls.clone(),
+            job.clone(),
+            bundle.eos_config,
+            bundle.kap_config.clone(),
+        )?
     } else if job.use_other_build_initial_model {
         extras.other_build_initial_model(bundle)?.ok_or_else(|| {
             StarError::InvalidInput(String::from(
@@ -336,8 +341,11 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
         model.controls.rsp2_flag,
         model.controls.rti_flag,
     );
-    if let Some(t_cut) = job.remove_initial_center_by_temperature {
-        excise_core_by_temperature(&mut model, t_cut)?;
+    if job.remove_initial_center_by_temperature > 0.0 {
+        excise_core_by_temperature(
+            &mut model,
+            job.remove_initial_center_by_temperature,
+        )?;
     }
     if model.controls.rsp2_flag {
         crate::rsp2_remesh::seed_rsp2_w_from_mlt_vc_if_needed(&mut model)?;
@@ -363,11 +371,16 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
 
     // Apply rotational spin-up AFTER equilibration and `sync_mesh_and_pack` so
     // `model.r[0]` and `model.cgrav[0]` match the active stellar structure.
-    if let Some(v_surf) = job.new_surface_rotation_v.filter(|&v| v > 0.0) {
+    if job.set_surface_rotation_v
+        || (!is_restart && job.set_initial_surface_rotation_v)
+    {
         let r_surf = model.r.first().copied().unwrap_or(R_SUN).max(1.0);
-        apply_uniform_rotation(&mut model, (v_surf * 1.0e5) / r_surf);
-    } else if let Some(w_div_wc) =
-        job.new_omega_div_omega_crit.filter(|&w| w > 0.0)
+        apply_uniform_rotation(
+            &mut model,
+            (job.new_surface_rotation_v * 1.0e5) / r_surf,
+        );
+    } else if job.set_omega_div_omega_crit
+        || (!is_restart && job.set_initial_omega_div_omega_crit)
     {
         let r_surf = model.r.first().copied().unwrap_or(R_SUN).max(1.0);
         let g_surf = model
@@ -378,9 +391,12 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
             .unwrap_or(STANDARD_CGRAV);
         let omega_crit =
             (g_surf * model.mstar / flexmesa_math::pow3(r_surf)).sqrt();
-        apply_uniform_rotation(&mut model, w_div_wc * omega_crit);
-    } else if let Some(omega_0) = job.new_omega.filter(|&w| w > 0.0) {
-        apply_uniform_rotation(&mut model, omega_0);
+        apply_uniform_rotation(
+            &mut model,
+            job.new_omega_div_omega_crit * omega_crit,
+        );
+    } else if job.set_omega || (!is_restart && job.set_initial_omega) {
+        apply_uniform_rotation(&mut model, job.new_omega);
     }
 
     set_hydro_vars(&mut model, false, false)?;

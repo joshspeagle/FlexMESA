@@ -56,13 +56,15 @@ const WAVE3B_REGRESSION_SNAPSHOTS_N8: [(&str, f64); 5] = [
 /// Wave 4 1D stellar engine workloads (internal self-consistency check, not an
 /// upstream MESA output; `star_hydro_eqns`, `star_newton_step`, and
 /// `star_evolve_step` shifted under `#141` when `neu` `#193` and `num` `#194`
-/// were aligned to MESA `26.4.1`; tracked in #146).
+/// were aligned to MESA `26.4.1`, and all five shifted under `#149` when
+/// `&controls` / microphysics / mesh-function defaults were aligned to MESA
+/// `26.4.1`; tracked in #146).
 const WAVE4_REGRESSION_SNAPSHOTS_N8: [(&str, f64); 5] = [
-    ("star_micro_vars", 2.497_297_961_588_147e2),
-    ("star_hydro_eqns", 4.253_179_678_462_525e6),
-    ("star_newton_step", 1.451_336_644_709_231e2),
-    ("star_remesh", 4.203_476_959_958_853e2),
-    ("star_evolve_step", 1.005_942_875_453_512e2),
+    ("star_micro_vars", 2.497_139_571_258_105e2),
+    ("star_hydro_eqns", 4.253_179_678_855_851e6),
+    ("star_newton_step", 1.451_475_459_976_951e2),
+    ("star_remesh", 5.513_777_703_025_969e2),
+    ("star_evolve_step", 1.005_971_756_200_643e2),
 ];
 
 /// `FlexMESA` regression snapshots for $N_{\mathrm{zones}} = 8$ across all four
@@ -97,8 +99,9 @@ fn assert_records_match_snapshots_with_tol(
         assert!(rec.stage3.median_us > 0.0);
         assert!(rec.checksum.is_finite());
     }
-    for (rec, &(exp_name, exp_sum)) in
-        records[..snapshots_n8.len()].iter().zip(snapshots_n8.iter())
+    for (rec, &(exp_name, exp_sum)) in records[..snapshots_n8.len()]
+        .iter()
+        .zip(snapshots_n8.iter())
     {
         assert_eq!(rec.workload, exp_name);
         let rel_err = (rec.checksum - exp_sum).abs() / exp_sum.abs();

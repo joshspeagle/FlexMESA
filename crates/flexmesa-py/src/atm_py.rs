@@ -3,11 +3,12 @@
 //! $T(\tau)$ relations, irradiated atmospheres, and atmosphere table interpolation).
 
 use flexmesa_atm::{
-    eval_e2, eval_irradiated, eval_paczynski_gradr, eval_t_tau,
+    eval_e2, eval_irradiated, eval_paczynski_gradr, eval_t_tau, eval_t_tau_atm,
     eval_t_tau_dq_dtau, eval_t_tau_uniform, eval_t_tau_varying, eval_table,
-    get_t_tau_base, get_table_alfa_beta, get_table_base, radiation_pressure,
-    AtmEosCallbackResult, AtmError, AtmEvalOutput, AtmKapCallbackResult,
-    AtmTables, ATM_TABLE_PHOTOSPHERE,
+    eval_table_atm, get_t_tau_base, get_t_tau_id, get_table_alfa_beta,
+    get_table_base, get_table_id, radiation_pressure, AtmEosCallbackResult,
+    AtmError, AtmEvalOutput, AtmKapCallbackResult, AtmTables,
+    ATM_TABLE_PHOTOSPHERE,
 };
 use flexmesa_const::LN10;
 use flexmesa_eos::{eos_pt_get, EosConfig, HelmTable, I_ETA, I_LN_FREE_E};
@@ -477,18 +478,162 @@ pub fn atm_table_photosphere_zsol_spline<'py>(
     ))
 }
 
+/// Maps an `atm_T_tau_relation` name (`'Eddington'`, `'solar_Hopf'`,
+/// `'Krishna_Swamy'`, `'Trampedach_solar'`) to its integer ID.
+#[pyfunction]
+pub fn atm_get_t_tau_id(name: &str) -> PyResult<i32> {
+    get_t_tau_id(name).map_err(to_py_err)
+}
+
+/// Maps an `atm_table` name (`'tau_100'`, `'tau_10'`, `'tau_1'`, `'tau_1m1'`,
+/// `'photosphere'`, `'WD_tau_25'`, `'DB_WD_tau_25'`) to its integer ID.
+#[pyfunction]
+pub fn atm_get_table_id(name: &str) -> PyResult<i32> {
+    get_table_id(name).map_err(to_py_err)
+}
+
+/// Dispatches $T(\tau)$ atmosphere evaluation across `'fixed'`, `'iterated'`,
+/// and `'varying'` opacity modes with `Pextra_factor` (`eval_t_tau_atm`).
+#[pyfunction]
+#[pyo3(signature = (
+    tau_surf, l, r, m, cgrav, kap_guess, pextra_factor,
+    t_tau_relation, t_tau_opacity,
+    errtol, max_iters, max_steps, skip_partials, teff,
+    chem_id=None, xa=None, zbase=0.02, low_t_option="low_t_fa05_gs98"
+))]
+pub fn atm_eval_t_tau_atm(
+    tau_surf: f64,
+    l: f64,
+    r: f64,
+    m: f64,
+    cgrav: f64,
+    kap_guess: f64,
+    pextra_factor: f64,
+    t_tau_relation: &str,
+    t_tau_opacity: &str,
+    errtol: f64,
+    max_iters: usize,
+    max_steps: usize,
+    skip_partials: bool,
+    teff: f64,
+    chem_id: Option<Vec<usize>>,
+    xa: Option<PyReadonlyArray1<'_, f64>>,
+    zbase: f64,
+    low_t_option: &str,
+) -> PyResult<AtmEvalTuple> {
+    let (cid_vec, xa_vec) = unpack_opt_comp(chem_id, xa)?;
+    let ht = HelmTable::builtin()
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    let eos_cfg = EosConfig::default();
+    let kap_cfg = make_kap_cfg(zbase, low_t_option)?;
+    let out = eval_t_tau_atm(
+        tau_surf,
+        l,
+        r,
+        m,
+        cgrav,
+        kap_guess,
+        pextra_factor,
+        t_tau_relation,
+        t_tau_opacity,
+        |ln_p, ln_t| {
+            eval_eos_callback(ht, &eos_cfg, &cid_vec, &xa_vec, ln_p, ln_t)
+        },
+        |ln_rho, ln_t, eos| {
+            eval_kap_callback(&kap_cfg, &cid_vec, &xa_vec, ln_rho, ln_t, eos)
+        },
+        errtol,
+        max_iters,
+        max_steps,
+        skip_partials,
+        teff,
+    )
+    .map_err(to_py_err)?;
+    Ok(unpack_atm_eval(out))
+}
+
+/// Evaluates a tabulated model atmosphere with upstream `atm_off_table_option`
+/// blending (`eval_table_atm`), returning `(eval_tuple, tau_base)`.
+#[pyfunction]
+#[pyo3(signature = (
+    l, r, m, cgrav, atm_table, z, tau_factor, atm_off_table_option,
+    t_tau_relation, t_tau_opacity, kap_guess, pextra_factor,
+    errtol, max_iters, max_steps, skip_partials, teff,
+    chem_id=None, xa=None, zbase=0.02, low_t_option="low_t_fa05_gs98"
+))]
+pub fn atm_eval_table_atm(
+    l: f64,
+    r: f64,
+    m: f64,
+    cgrav: f64,
+    atm_table: &str,
+    z: f64,
+    tau_factor: f64,
+    atm_off_table_option: &str,
+    t_tau_relation: &str,
+    t_tau_opacity: &str,
+    kap_guess: f64,
+    pextra_factor: f64,
+    errtol: f64,
+    max_iters: usize,
+    max_steps: usize,
+    skip_partials: bool,
+    teff: f64,
+    chem_id: Option<Vec<usize>>,
+    xa: Option<PyReadonlyArray1<'_, f64>>,
+    zbase: f64,
+    low_t_option: &str,
+) -> PyResult<(AtmEvalTuple, f64)> {
+    let (cid_vec, xa_vec) = unpack_opt_comp(chem_id, xa)?;
+    let ht = HelmTable::builtin()
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    let eos_cfg = EosConfig::default();
+    let kap_cfg = make_kap_cfg(zbase, low_t_option)?;
+    let (out, tau_base) = eval_table_atm(
+        l,
+        r,
+        m,
+        cgrav,
+        atm_table,
+        z,
+        tau_factor,
+        atm_off_table_option,
+        t_tau_relation,
+        t_tau_opacity,
+        kap_guess,
+        pextra_factor,
+        |ln_p, ln_t| {
+            eval_eos_callback(ht, &eos_cfg, &cid_vec, &xa_vec, ln_p, ln_t)
+        },
+        |ln_rho, ln_t, eos| {
+            eval_kap_callback(&kap_cfg, &cid_vec, &xa_vec, ln_rho, ln_t, eos)
+        },
+        errtol,
+        max_iters,
+        max_steps,
+        skip_partials,
+        teff,
+    )
+    .map_err(to_py_err)?;
+    Ok((unpack_atm_eval(out), tau_base))
+}
+
 /// Registers `flexmesa-atm` functions on the `flexmesa._rust` module.
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(atm_eval_t_tau, m)?)?;
     m.add_function(wrap_pyfunction!(atm_eval_t_tau_dq_dtau, m)?)?;
     m.add_function(wrap_pyfunction!(atm_get_t_tau_base, m)?)?;
+    m.add_function(wrap_pyfunction!(atm_get_t_tau_id, m)?)?;
+    m.add_function(wrap_pyfunction!(atm_get_table_id, m)?)?;
     m.add_function(wrap_pyfunction!(atm_eval_e2, m)?)?;
     m.add_function(wrap_pyfunction!(atm_eval_paczynski_gradr, m)?)?;
     m.add_function(wrap_pyfunction!(atm_eval_table, m)?)?;
+    m.add_function(wrap_pyfunction!(atm_eval_table_atm, m)?)?;
     m.add_function(wrap_pyfunction!(atm_eval_table_zones, m)?)?;
     m.add_function(wrap_pyfunction!(atm_table_photosphere_zsol_spline, m)?)?;
     m.add_function(wrap_pyfunction!(atm_get_table_alfa_beta, m)?)?;
     m.add_function(wrap_pyfunction!(atm_get_table_base, m)?)?;
+    m.add_function(wrap_pyfunction!(atm_eval_t_tau_atm, m)?)?;
     m.add_function(wrap_pyfunction!(atm_eval_t_tau_uniform, m)?)?;
     m.add_function(wrap_pyfunction!(atm_eval_t_tau_varying, m)?)?;
     m.add_function(wrap_pyfunction!(atm_eval_irradiated, m)?)?;

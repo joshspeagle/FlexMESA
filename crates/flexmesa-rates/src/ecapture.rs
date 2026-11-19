@@ -34,23 +34,25 @@ pub fn eval_mui_coulomb(
     match which_mui {
         CoulombMuiOption::None => 0.0,
         CoulombMuiOption::Dcw1973 => {
-            let gam = flexmesa_math::pow(z, 2.0 / 3.0) * zbar * game;
+            // `eval_coulomb.f90:102-107`
+            let gam = game * zbar * flexmesa_math::pow(z, 2.0 / 3.0);
             let zr = z / zbar;
-            -zr * (gam
-                * (0.9 + 0.2843 * flexmesa_math::pow(zr, -ONE_THIRD)
-                    - 0.054 * flexmesa_math::pow(zr, -2.0 / 3.0))
-                - (9.0 / 16.0)
-                + 0.460 * flexmesa_math::pow(zr, -ONE_THIRD))
+            let zr_m13 = flexmesa_math::pow(zr, -ONE_THIRD);
+            -zr * (gam * (0.9 + (0.2843 - 0.054 * zr_m13) * zr_m13)
+                + (-9.0 / 16.0 + 0.460 * zr_m13))
         }
         CoulombMuiOption::Slr1982 => {
-            let gam = flexmesa_math::pow(z, 5.0 / 3.0) * game;
-            -0.898004 * gam + 4.0 * 0.96786 * flexmesa_math::pow(gam, 0.25)
-                - 4.0 * 0.220703 * flexmesa_math::pow(gam, -0.25)
+            // `eval_coulomb.f90:140-145`
+            let gam = game * flexmesa_math::pow(z, 5.0 / 3.0);
+            let gam14 = flexmesa_math::pow(gam, 0.25);
+            -0.898004 * gam + 4.0 * 0.96786 * gam14
+                - 4.0 * 0.220703 / gam14
                 - 0.86097 * flexmesa_math::log(gam)
                 - 2.52692
         }
         CoulombMuiOption::Pcr2009 => {
-            let gam = flexmesa_math::pow(z, 5.0 / 3.0) * game;
+            // `eval_coulomb.f90:173-250`
+            let gam = game * flexmesa_math::pow(z, 5.0 / 3.0);
             let a1 = -0.907347_f64;
             let a2 = 0.62849_f64;
             let a3 = -3.0_f64.sqrt() / 2.0 - a1 / a2.sqrt();
@@ -60,9 +62,10 @@ pub fn eval_mui_coulomb(
                         (gam / a2).sqrt() + (1.0 + gam / a2).sqrt(),
                     ))
                 + 2.0 * a3 * (gam.sqrt() - flexmesa_math::atan(gam.sqrt()));
+            let log_z = flexmesa_math::log(z);
             let a = 1.11 * flexmesa_math::pow(z, 0.475);
-            let b = 0.2 + 0.078 * flexmesa_math::pow2(flexmesa_math::log(z));
-            let nu = 1.16 + 0.08 * flexmesa_math::log(z);
+            let b = 0.2 + 0.078 * log_z * log_z;
+            let nu = 1.16 + 0.08 * log_z;
             let cdh = (z / 3.0_f64.sqrt())
                 * (flexmesa_math::pow(1.0 + z, 1.5)
                     - 1.0
@@ -72,17 +75,17 @@ pub fn eval_mui_coulomb(
                 * (1.0 - flexmesa_math::pow(z, -ONE_THIRD)
                     + 0.2 * flexmesa_math::pow(z, -0.5));
             let g1 = 1.0
-                + (0.78 / (21.0 + game * flexmesa_math::pow3(z / rs)))
+                + (0.78 / (21.0 + game * flexmesa_math::pow(z / rs, 3.0)))
                     * (game / z).sqrt();
             let g2 = 1.0
                 + ((z - 1.0) / 9.0)
                     * (1.0 + 1.0 / (0.001 * z * z + 2.0 * game))
-                    * flexmesa_math::pow3(rs)
+                    * flexmesa_math::pow(rs, 3.0)
                     / (1.0 + 6.0 * rs * rs);
             let x = 0.014005 / rs;
             let h1 = 1.0
                 / (1.0
-                    + flexmesa_math::pow6(x / (1.0 + x * x).sqrt())
+                    + flexmesa_math::pow(x / (1.0 + x * x).sqrt(), 6.0)
                         * flexmesa_math::pow(z, -ONE_THIRD));
             let h2 = 1.0 / (1.0 + x * x).sqrt();
             let fie = -game
@@ -231,9 +234,9 @@ pub fn eval_ecapture_pair(
                     fd_complete(5, y),
                 );
                 let ie_v = (f4 - 2.0 * zeta * f3 + zeta * zeta * f2)
-                    / flexmesa_math::pow5(beta);
+                    / flexmesa_math::powi(beta, 5);
                 let je_v = (f5 - 2.0 * zeta * f4 + zeta * zeta * f3)
-                    / flexmesa_math::pow6(beta);
+                    / flexmesa_math::powi(beta, 6);
                 (ie_v, je_v)
             }
         } else if zeta < beta {
@@ -260,21 +263,23 @@ pub fn eval_ecapture_pair(
             let c1 = -2.0
                 * beta
                 * (2.0 * beta * beta - 3.0 * beta * zeta + zeta * zeta);
-            let c0 = beta * beta * flexmesa_math::pow2(beta - zeta);
+            let c0 = beta * beta * (beta - zeta) * (beta - zeta);
             let ie_v = ((f4_1 - 2.0 * zeta * f3_1 + zeta * zeta * f2_1)
                 - (f4_2 + c3 * f3_2 + c2 * f2_2 + c1 * f1_2 + c0 * f0_2))
-                / flexmesa_math::pow5(beta);
+                / flexmesa_math::powi(beta, 5);
 
             let d4 = 3.0 * zeta - 5.0 * beta;
             let d3 =
                 10.0 * beta * beta - 12.0 * beta * zeta + 3.0 * zeta * zeta;
-            let d2 = flexmesa_math::pow3(zeta) - 9.0 * beta * zeta * zeta
+            let d2 = zeta * zeta * zeta - 9.0 * beta * zeta * zeta
                 + 18.0 * beta * beta * zeta
-                - 10.0 * flexmesa_math::pow3(beta);
+                - 10.0 * beta * beta * beta;
             let d1 = beta
                 * (5.0 * beta - 2.0 * zeta)
-                * flexmesa_math::pow2(beta - zeta);
-            let d0 = -beta * beta * flexmesa_math::pow3(beta - zeta);
+                * (beta - zeta)
+                * (beta - zeta);
+            let d0 =
+                -beta * beta * (beta - zeta) * (beta - zeta) * (beta - zeta);
             let je_v = ((f5_1 - 2.0 * zeta * f4_1 + zeta * zeta * f3_1)
                 - (f5_2
                     + d4 * f4_2
@@ -282,20 +287,22 @@ pub fn eval_ecapture_pair(
                     + d2 * f2_2
                     + d1 * f1_2
                     + d0 * f0_2))
-                / flexmesa_math::pow6(beta);
+                / flexmesa_math::powi(beta, 6);
             (ie_v, je_v)
         };
 
-        if ie > 0.0 && je > 0.0 {
+        let ie_gm = ggm * ie;
+        let je_gm = ggm * je;
+        if ie_gm > 0.0 && je_gm > 0.0 {
             let prob_i =
                 (2.0 * ji + 1.0) * flexmesa_math::exp(-ei / kbt) / zpart;
-            let w = ggm * LN2 * flexmesa_math::exp10(-logft) * prob_i;
-            lam += ie * w;
-            eps_nu += mec2 * je * w;
+            let ln2ft = LN2 * flexmesa_math::exp10(-logft);
+            lam += ie_gm * ln2ft * prob_i;
+            eps_nu += mec2 * je_gm * ln2ft * prob_i;
         }
     }
 
-    let qneu = if lam > 0.0 { eps_nu / lam } else { 0.0 };
+    let qneu = if lam > 1.0e-30 { eps_nu / lam } else { 0.0 };
     Ok(WeakRateEval {
         lambda: lam,
         dlambda_dln_t: 0.0,

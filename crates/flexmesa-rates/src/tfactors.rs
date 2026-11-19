@@ -1,9 +1,13 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 //! Precomputed temperature power factors (`T_Factors`), REACLIB 7-parameter
 //! polynomial evaluator, and detailed-balance reverse rate coefficients
-//! (`rates/private/ratelib.f90` and `reaclib_input.f90`).
+//! (`rates/private/ratelib.f90`, `rates/private/reaclib_eval.f90`, and
+//! `rates/private/reaclib_support.f90:217-257`).
 
-use flexmesa_const::{AVO, BOLTZM, HBAR, LN10, PI};
+use flexmesa_const::{
+    AVO, BOLTZM, FIVE_THIRDS, FOUR_THIRDS, HBAR, LN10, ONE_THIRD, PI,
+    TWO_THIRDS,
+};
 
 use crate::types::{ReaclibTerm, MAX_LN_LAMBDA};
 
@@ -144,11 +148,12 @@ impl TFactors {
     /// operation order (`ratelib.f90:tfactors`).
     #[must_use]
     pub fn from_log_t(log_t_in: f64, temp_in: f64) -> Self {
+        // `rates/private/ratelib.f90:3521-3606` (`tfactors`)
         let log_t = log_t_in.max(0.0);
         let temp = temp_in.max(1.0);
         let ln_t = log_t * LN10;
+        let ln_t9 = (log_t - 9.0) * LN10;
         let t9 = temp * 1.0e-9;
-        let ln_t9 = ln_t - 9.0 * LN10;
 
         let t92 = t9 * t9;
         let t93 = t92 * t9;
@@ -156,64 +161,74 @@ impl TFactors {
         let t95 = t94 * t9;
         let t96 = t95 * t9;
         let t97 = t96 * t9;
-        let t9i = 1.0 / t9;
-        let t9i2 = t9i * t9i;
-        let t9i3 = t9i2 * t9i;
 
         let t912 = t9.sqrt();
         let t932 = t9 * t912;
-        let t952 = t92 * t912;
-        let t972 = t93 * t912;
-        let t9i12 = 1.0 / t912;
-        let t9i32 = 1.0 / t932;
-        let t9i52 = 1.0 / t952;
-        let t9i72 = 1.0 / t972;
+        let t952 = t9 * t932;
+        let t972 = t9 * t952;
 
-        let t913 = flexmesa_math::pow(t9, 1.0 / 3.0);
+        let t913 = flexmesa_math::pow(t9, ONE_THIRD);
         let t923 = t913 * t913;
         let t943 = t9 * t913;
         let t953 = t9 * t923;
-        let t973 = t92 * t913;
-        let t9113 = t93 * t923;
-        let t9i13 = 1.0 / t913;
-        let t9i23 = t9i13 * t9i13;
-        let t9i43 = t9i * t9i13;
-        let t9i53 = t9i * t9i23;
+        let t973 = t953 * t923;
+        let t9113 = t973 * t943;
 
         let t914 = flexmesa_math::pow(t9, 0.25);
         let t934 = t914 * t914 * t914;
         let t954 = t9 * t914;
         let t974 = t9 * t934;
+
+        let t915 = flexmesa_math::pow(t9, 0.2);
+        let t935 = t915 * t915 * t915;
+        let t945 = t915 * t935;
+        let t965 = t9 * t915;
+
+        let t916 = flexmesa_math::pow(t9, 1.0 / 6.0);
+        let t976 = t9 * t916;
+
+        let t917 = flexmesa_math::pow(t9, 1.0 / 7.0);
+        let t927 = t917 * t917;
+        let t947 = t927 * t927;
+
+        let t918 = t914.sqrt();
+        let t938 = t918 * t918 * t918;
+        let t958 = t938 * t918 * t918;
+
+        let t9i = 1.0 / t9;
+        let t9i2 = t9i * t9i;
+        let t9i3 = t9i2 * t9i;
+
+        let t9i12 = 1.0 / t912;
+        let t9i32 = t9i * t9i12;
+        let t9i52 = t9i * t9i32;
+        let t9i72 = t9i * t9i52;
+
+        let t9i13 = 1.0 / t913;
+        let t9i23 = t9i13 * t9i13;
+        let t9i43 = t9i * t9i13;
+        let t9i53 = t9i * t9i23;
+
         let t9i14 = 1.0 / t914;
-        let t9i34 = 1.0 / t934;
+        let t9i34 = t9i14 * t9i14 * t9i14;
         let t9i54 = t9i * t9i14;
         let t9i74 = t9i * t9i34;
 
-        let t915 = flexmesa_math::pow(t9, 0.2);
         let t9i15 = 1.0 / t915;
-        let t935 = t915 * t915 * t915;
-        let t945 = t935 * t915;
-        let t9i45 = 1.0 / t945;
-        let t965 = t9 * t915;
-        let t9i65 = 1.0 / t965;
+        let t9i35 = t9i15 * t9i15 * t9i15;
+        let t9i45 = t9i15 * t9i35;
+        let t9i65 = t9i * t9i15;
 
-        let t916 = flexmesa_math::pow(t9, 1.0 / 6.0);
         let t9i16 = 1.0 / t916;
-        let t976 = t9 * t916;
         let t9i76 = 1.0 / t976;
 
-        let t917 = flexmesa_math::pow(t9, 1.0 / 7.0);
         let t9i17 = 1.0 / t917;
-        let t927 = t917 * t917;
-        let t947 = t927 * t927;
-        let t9i47 = 1.0 / t947;
+        let t9i27 = t9i17 * t9i17;
+        let t9i47 = t9i27 * t9i27;
 
-        let t918 = t914.sqrt();
         let t9i18 = 1.0 / t918;
-        let t938 = t918 * t918 * t918;
-        let t9i38 = 1.0 / t938;
-        let t958 = t938 * t914;
-        let t9i58 = 1.0 / t958;
+        let t9i38 = t9i18 * t9i18 * t9i18;
+        let t9i58 = t9i38 * t9i18 * t9i18;
 
         Self {
             log_t,
@@ -299,6 +314,9 @@ pub fn eval_reaclib_terms(
     reaclib_min_t9: f64,
     check_e_flag: bool,
 ) -> (f64, f64, f64, f64) {
+    // `rates/private/reaclib_eval.f90:86-222`
+    const LAM_MAX: f64 = 1.0e99;
+
     if terms.is_empty() {
         return (0.0, 0.0, 0.0, 0.0);
     }
@@ -310,70 +328,104 @@ pub fn eval_reaclib_terms(
         return (0.0, 0.0, 0.0, 0.0);
     }
 
+    let t9inv = 1.0 / t9;
     let ln_t9 = flexmesa_math::log(t9);
     let f = [
         1.0,
-        flexmesa_math::powm1(t9),
-        flexmesa_math::pow(t9, -1.0 / 3.0),
-        flexmesa_math::pow(t9, 1.0 / 3.0),
+        t9inv,
+        flexmesa_math::pow(t9inv, ONE_THIRD),
+        flexmesa_math::pow(t9, ONE_THIRD),
         t9,
-        flexmesa_math::pow(t9, 5.0 / 3.0),
+        flexmesa_math::pow(t9, FIVE_THIRDS),
         ln_t9,
     ];
-    let df_dln_t = [
+    let dt9fac_dt9 = [
         0.0,
-        -f[1],
-        -(1.0 / 3.0) * f[2],
-        (1.0 / 3.0) * f[3],
-        f[4],
-        (5.0 / 3.0) * f[5],
+        -t9inv * t9inv,
+        -ONE_THIRD * flexmesa_math::pow(t9inv, FOUR_THIRDS),
+        ONE_THIRD * flexmesa_math::pow(t9inv, TWO_THIRDS),
         1.0,
+        FIVE_THIRDS * flexmesa_math::pow(t9, TWO_THIRDS),
+        t9inv,
+    ];
+    let df_dln_t = [
+        t9 * dt9fac_dt9[0],
+        t9 * dt9fac_dt9[1],
+        t9 * dt9fac_dt9[2],
+        t9 * dt9fac_dt9[3],
+        t9 * dt9fac_dt9[4],
+        t9 * dt9fac_dt9[5],
+        t9 * dt9fac_dt9[6],
     ];
 
-    let indx = get_partition_fcn_indx(t9);
+    let mut indx = get_partition_fcn_indx(t9);
+    if indx >= 24 {
+        indx = 23;
+    }
+
     let mut lam_sum = 0.0;
     let mut dlam_sum = 0.0;
     let mut rlam_sum = 0.0;
     let mut drlam_sum = 0.0;
 
     for term in terms {
-        let mut ln_l = 0.0;
-        let mut dln_l = 0.0;
+        let mut ln1 = 0.0;
         for k in 0..7 {
-            ln_l += term.coeffs[k] * f[k];
-            dln_l += term.coeffs[k] * df_dln_t[k];
+            ln1 += f[k] * term.coeffs[k];
         }
-        ln_l = ln_l.min(MAX_LN_LAMBDA);
-        let lam = flexmesa_math::exp(ln_l);
+        let (ln_l, lam, dlam) = if ln1 > MAX_LN_LAMBDA {
+            (MAX_LN_LAMBDA, LAM_MAX, 0.0)
+        } else {
+            let lam_v = flexmesa_math::exp(ln1);
+            let mut dln_l = 0.0;
+            for k in 0..7 {
+                dln_l += df_dln_t[k] * term.coeffs[k];
+            }
+            (ln1, lam_v, dln_l * lam_v)
+        };
         lam_sum += lam;
-        dlam_sum += lam * dln_l;
+        dlam_sum += dlam;
 
-        if term.rflag == b'w' || term.rflag == b'e' {
+        if term.rflag == b'w' || term.rflag == b'e' || term.inv_part[0] == 0.0 {
             continue;
         }
-        let inv_exp = f64::from(term.inv_exp);
-        let inv_ln =
-            (ln_l + term.inv_c1 + term.inv_c2 / t9 + 1.5 * inv_exp * ln_t9)
-                .min(MAX_LN_LAMBDA);
-        let dinv_ln = dln_l - term.inv_c2 / t9 + 1.5 * inv_exp;
-        let inv_l0 = flexmesa_math::exp(inv_ln);
 
         let (qratio, dqratio_dln_t) = if indx < 1 {
-            (term.inv_part[0], 0.0)
-        } else if indx >= 24 {
-            (term.inv_part[23], 0.0)
+            (1.0, 0.0)
         } else {
             let m = indx - 1;
             let dt = TPART[m + 1] - TPART[m];
             let tfac = (t9 - TPART[m]) / dt;
-            let ratio = term.inv_part[m + 1] / term.inv_part[m];
-            let qr = term.inv_part[m] * flexmesa_math::pow(ratio, tfac);
-            let dqr = qr * flexmesa_math::log(ratio) * (t9 / dt);
+            let dtfac_dln_t = t9 / dt;
+            let a = term.inv_part[m + 1] / term.inv_part[m];
+            let blurp = flexmesa_math::pow(a, tfac);
+            let qr = term.inv_part[m] * blurp;
+            let dqr = qr * flexmesa_math::log(a) * dtfac_dln_t;
             (qr, dqr)
         };
-        let rl = qratio * inv_l0;
-        rlam_sum += rl;
-        drlam_sum += rl * dinv_ln + dqratio_dln_t * inv_l0;
+
+        let inv_exp = f64::from(term.inv_exp);
+        let dt9i_dln_t = -t9inv;
+        let ln1_inv =
+            ln_l + term.inv_c1 + term.inv_c2 * t9inv + 1.5 * inv_exp * ln_t9;
+        let (fac1, dfac1_dln_t) = if ln1_inv < MAX_LN_LAMBDA {
+            let f1 = flexmesa_math::exp(ln1_inv);
+            let dln1 = dlam / lam.max(1.0e-99)
+                + term.inv_c2 * dt9i_dln_t
+                + 1.5 * inv_exp;
+            (f1, dln1 * f1)
+        } else {
+            (LAM_MAX, 0.0)
+        };
+
+        let inv_lam = fac1 * qratio;
+        let dinv_lam = if lam < 1.0e-99 {
+            0.0
+        } else {
+            dfac1_dln_t * qratio + fac1 * dqratio_dln_t
+        };
+        rlam_sum += inv_lam;
+        drlam_sum += dinv_lam;
     }
 
     (lam_sum, dlam_sum, rlam_sum, drlam_sum)
@@ -381,7 +433,8 @@ pub fn eval_reaclib_terms(
 
 /// Computes the detailed-balance first reverse coefficient
 /// `inverse_coefficients(1)` from nuclear masses `w` (`AMU`) and ground-state
-/// spins `spin` (`reaclib_input.f90:512`).
+/// spins `spin` (`rates/private/reaclib_support.f90:217-257` and
+/// `rates/test/src/test_rates.f90:305-378`).
 #[must_use]
 pub fn compute_rev_ratio_coeff1(
     w_in: &[f64],
@@ -389,19 +442,20 @@ pub fn compute_rev_ratio_coeff1(
     w_out: &[f64],
     spin_out: &[f64],
 ) -> f64 {
-    let fac = (flexmesa_math::pow(
+    let fac = flexmesa_math::pow(
         1.0e9 * BOLTZM / (2.0 * PI * HBAR * HBAR * AVO),
         1.5,
-    )) / AVO;
+    ) / AVO;
     let g_in: f64 = spin_in.iter().map(|&s| 2.0 * s + 1.0).product();
     let g_out: f64 = spin_out.iter().map(|&s| 2.0 * s + 1.0).product();
     let m_in: f64 = w_in.iter().copied().product();
     let m_out: f64 = w_out.iter().copied().product();
     let tmp = m_in / m_out;
-    let mut c1 = flexmesa_math::pow(tmp, 1.5) * (g_in / g_out);
+    let mut log_c1 =
+        flexmesa_math::log(flexmesa_math::pow(tmp, 1.5) * (g_in / g_out));
     let inv_exp = (w_in.len() as i32) - (w_out.len() as i32);
     if inv_exp != 0 {
-        c1 *= flexmesa_math::powi(fac, inv_exp);
+        log_c1 += f64::from(inv_exp) * flexmesa_math::log(fac);
     }
-    flexmesa_math::log(c1)
+    log_c1
 }

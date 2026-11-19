@@ -347,10 +347,12 @@ pub fn neu_get(
     };
 
     if input.logtemp <= log10_tlim && log10_tlim > LOG10_TMIN_NEU {
+        // Match left-to-right Fortran division in neu/private/mod_neu.f90:366-372:
+        // `0.5d0 * pi * sinpi(...) * 1.d0 / (dtlim * temp * ln10)`.
         let dtlim = log10_tlim - LOG10_TMIN_NEU;
         let phase = (input.logtemp - LOG10_TMIN_NEU) / dtlim;
         let f_cut = 0.5 * (1.0 - cospi(phase));
-        let df_dt = 0.5 * PI * sinpi(phase) * (1.0 / (dtlim * temp * LN10));
+        let df_dt = (0.5 * PI * sinpi(phase) * 1.0) / (dtlim * temp * LN10);
         plas = plas.with_cutoff(f_cut, df_dt);
         pair = pair.with_cutoff(f_cut, df_dt);
         phot = phot.with_cutoff(f_cut, df_dt);

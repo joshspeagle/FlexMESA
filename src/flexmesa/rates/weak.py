@@ -84,9 +84,9 @@ def eval_coulomb(
         z1: Parent ion atomic number $Z_1$.
         z2: Daughter ion atomic number $Z_2$.
         which_mui: Ion chemical potential option (`"none"`, `"dcw1973"`,
-            `"slr1982"`, `"pcr2009"`).
+            `"dgc1973"`, `"slr1982"`, `"i1993"`, `"pcr2009"`).
         which_vs: Electron screening shift option (`"none"`, `"throwe1983"`,
-            `"itoh2002"`).
+            `"thomasfermi"`, `"thomas_fermi"`, `"itoh2002"`).
 
     Returns:
         Tuple `(mu1, mu2, dmu_eV, vs)` where `mu1` and `mu2` are dimensionless
@@ -153,8 +153,10 @@ def eval_ecapture_pair(
         ye_rho: Electron-weighted density $\\rho Y_e$ ($\\mathrm{g\\,cm^{-3}}$).
         eta_k: Electron degeneracy parameter
             $\\eta_e = \\mu_e / (k_{\\mathrm{B}} T)$ excluding rest mass.
-        which_mui: Ion Coulomb chemical potential option (`"pcr2009"`).
-        which_vs: Electron screening shift option (`"itoh2002"`).
+        which_mui: Ion Coulomb chemical potential option (`"none"`, `"dcw1973"`,
+            `"dgc1973"`, `"slr1982"`, `"i1993"`, `"pcr2009"`).
+        which_vs: Electron screening shift option (`"none"`, `"throwe1983"`,
+            `"thomasfermi"`, `"thomas_fermi"`, `"itoh2002"`).
         zbar: Mean ionic charge $\\bar{Z}$.
         abar: Mean atomic weight $\\bar{A}$.
 

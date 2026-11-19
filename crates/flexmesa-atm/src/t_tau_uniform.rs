@@ -151,6 +151,12 @@ where
             detail: "require L, R, M > 0".to_string(),
         });
     }
+    if kap_guess <= 0.0 || is_bad(kap_guess) {
+        return Err(AtmError::InvalidArgument {
+            context: "eval_t_tau_uniform",
+            detail: format!("require kap_guess > 0, got {kap_guess}"),
+        });
+    }
     let g = cgrav * m / (r * r);
     let mut kap = kap_guess;
     let mut out = eval_uniform_data(

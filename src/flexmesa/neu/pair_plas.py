@@ -219,7 +219,7 @@ def plas_neu(inp: _inputs.NeuInputs) -> _inputs.NeuRate:
         p_a1 = 0.39 - 1.25 * xnum - 0.35 * math.sin(4.5 * xnum)
         p_a2 = -1.25 - 4.5 * 0.35 * math.cos(4.5 * xnum)
         arg = 4.5 * xnum + 0.9
-        p_b1 = 0.3 * math.exp(-math.pow(arg, 2.0))
+        p_b1 = 0.3 * math.exp(-(arg * arg))
         p_b2 = -p_b1 * 2.0 * arg * 4.5
         c_val = min(0.0, xden - 1.6 + 1.25 * xnum)
         if c_val == 0.0:
@@ -231,19 +231,18 @@ def plas_neu(inp: _inputs.NeuInputs) -> _inputs.NeuRate:
             dumdz = xnumdz + 1.25 * xnumdz
         d_val = 0.57 - 0.25 * xnum
         a3_val = c_val / d_val
-        g_exp = math.exp(-a3_val * a3_val)
+        g_exp = math.exp(-1.0 * a3_val * a3_val)
         f1 = -g_exp * 2.0 * a3_val / d_val
         c01 = f1 * (dumdt + a3_val * 0.25 * xnumdt)
         c02 = f1 * (dumdd + a3_val * 0.25 * xnumdd)
         c03 = f1 * (dumda + a3_val * 0.25 * xnumda)
         c04 = f1 * (dumdz + a3_val * 0.25 * xnumdz)
         diff_ab = p_a1 - p_b1
-        ddiff_ab = p_a2 - p_b2
         fxy = 1.05 + diff_ab * g_exp
-        fxydt = ddiff_ab * xnumdt * g_exp + diff_ab * c01
-        fxydd = ddiff_ab * xnumdd * g_exp + diff_ab * c02
-        fxyda = ddiff_ab * xnumda * g_exp + diff_ab * c03
-        fxydz = ddiff_ab * xnumdz * g_exp + diff_ab * c04
+        fxydt = (p_a2 * xnumdt - p_b2 * xnumdt) * g_exp + diff_ab * c01
+        fxydd = (p_a2 * xnumdd - p_b2 * xnumdd) * g_exp + diff_ab * c02
+        fxyda = (p_a2 * xnumda - p_b2 * xnumda) * g_exp + diff_ab * c03
+        fxydz = (p_a2 * xnumdz - p_b2 * xnumdz) * g_exp + diff_ab * c04
 
     # Combine (f_T + f_L) * f_xy with exp(-gamma), gamma^6, and lambda^9
     # to form the volumetric plasmon-decay loss rate (eq. 4.1).

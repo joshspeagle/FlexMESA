@@ -5,11 +5,106 @@
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
-use flexmesa_chem::NuclideCatalog;
+use flexmesa_chem::{NuclideCatalog, NuclideEntry};
+use flexmesa_const::{AVO, BOLTZM, HBAR, MEV_TO_ERGS, PI};
 use flexmesa_interp1d::CubicCoeffs;
 
 use crate::raw_rates::eval_interp_rate_table;
 use crate::types::{RatesError, ReaclibTerm, ReactionInfo};
+
+fn parse_reaclib_handle<'a>(
+    nuclides: &'a NuclideCatalog,
+    handle: &str,
+) -> Option<(Vec<&'a NuclideEntry>, Vec<&'a NuclideEntry>)> {
+    let rest = handle.trim().strip_prefix("r_")?;
+    let mut in_isos: Vec<&'a NuclideEntry> = Vec::with_capacity(4);
+    let mut out_isos: Vec<&'a NuclideEntry> = Vec::with_capacity(4);
+    let mut doing_in = true;
+
+    let light_carrier = |b: u8| -> Option<Option<&'static str>> {
+        match b {
+            b'p' => Some(Some("h1")),
+            b'a' => Some(Some("he4")),
+            b'n' => Some(Some("neut")),
+            b'g' => Some(None),
+            _ => None,
+        }
+    };
+
+    for tok in rest.split('_') {
+        let iso_name = if tok == "prot" { "h1" } else { tok };
+        if let Some(entry) = nuclides.get_by_name(iso_name) {
+            if doing_in {
+                in_isos.push(entry);
+            } else {
+                out_isos.push(entry);
+            }
+        } else if doing_in {
+            let bytes = tok.as_bytes();
+            if bytes.len() == 2 {
+                if let (Some(ex_in), Some(ex_out)) =
+                    (light_carrier(bytes[0]), light_carrier(bytes[1]))
+                {
+                    if let Some(in_name) = ex_in {
+                        if in_isos.len() != 1 {
+                            return None;
+                        }
+                        let ex = nuclides.get_by_name(in_name)?;
+                        if in_isos[0].z >= ex.z {
+                            in_isos.insert(0, ex);
+                        } else {
+                            in_isos.push(ex);
+                        }
+                    }
+                    doing_in = false;
+                    if let Some(out_name) = ex_out {
+                        out_isos.push(nuclides.get_by_name(out_name)?);
+                    }
+                    continue;
+                }
+            }
+            doing_in = false;
+        } else {
+            return None;
+        }
+    }
+    if in_isos.is_empty() || out_isos.is_empty() {
+        return None;
+    }
+    Some((in_isos, out_isos))
+}
+
+fn compute_reaclib_rev_coeffs(
+    in_isos: &[&NuclideEntry],
+    out_isos: &[&NuclideEntry],
+    fac: f64,
+) -> (f64, f64, [f64; 24]) {
+    // `rates/private/reaclib_support.f90:204-262` (`compute_rev_ratio`)
+    let m_in: f64 = in_isos.iter().map(|e| e.w).product();
+    let m_out: f64 = out_isos.iter().map(|e| e.w).product();
+    let g_in: f64 = in_isos.iter().map(|e| 2.0 * e.spin + 1.0).product();
+    let g_out: f64 = out_isos.iter().map(|e| 2.0 * e.spin + 1.0).product();
+    let tmp = m_in / m_out;
+    let mut c1 = flexmesa_math::pow_strict(tmp, 1.5) * (g_in / g_out);
+    #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
+    let inv_exp = (in_isos.len() as i32) - (out_isos.len() as i32);
+    if inv_exp != 0 {
+        c1 *= flexmesa_math::powi_strict(fac, inv_exp);
+    }
+    let inv_c1 = flexmesa_math::log_strict(c1);
+
+    let sum1: f64 = in_isos.iter().map(|e| e.binding_energy).sum();
+    let sum2: f64 = out_isos.iter().map(|e| e.binding_energy).sum();
+    let inv_c2 = (sum1 - sum2) * MEV_TO_ERGS / BOLTZM / 1.0e9;
+
+    let mut inv_part = [1.0_f64; 24];
+    for (k, slot) in inv_part.iter_mut().enumerate() {
+        let p_in: f64 = in_isos.iter().map(|e| e.pfcn[k]).product();
+        let p_out: f64 = out_isos.iter().map(|e| e.pfcn[k]).product();
+        *slot = p_in / p_out;
+    }
+    (inv_c1, inv_c2, inv_part)
+}
 
 const RAW_BUNDLE: &[u8] = include_bytes!("../data/rates_tables.bin");
 
@@ -348,6 +443,11 @@ impl RatesCatalog {
             rate_tables.insert(rxn_id, (t8s, f1));
         }
 
+        let nuclides = NuclideCatalog::builtin_ref();
+        let fac = flexmesa_math::pow_strict(
+            1.0e9 * BOLTZM / (2.0 * PI * HBAR * HBAR * AVO),
+            1.5,
+        ) / AVO;
         let num_handles = read_u32(&mut pos) as usize;
         let mut reaclib_handles = HashMap::with_capacity(num_handles);
         for _ in 0..num_handles {
@@ -355,15 +455,34 @@ impl RatesCatalog {
             let is_rev = read_u8(&mut pos) != 0;
             let nterms = read_u8(&mut pos) as usize;
             let h = read_str(&mut pos, hlen);
+            let rev_override = if nterms > 0 {
+                parse_reaclib_handle(nuclides, &h).map(|(ins, outs)| {
+                    let (fwd_in, fwd_out) =
+                        if is_rev { (outs, ins) } else { (ins, outs) };
+                    compute_reaclib_rev_coeffs(&fwd_in, &fwd_out, fac)
+                })
+            } else {
+                None
+            };
             let mut terms = Vec::with_capacity(nterms);
             for _ in 0..nterms {
                 let chapter = read_u8(&mut pos);
                 let rflag = read_u8(&mut pos);
                 let inv_exp = read_i8(&mut pos);
                 let coeffs = std::array::from_fn(|_| read_f64(&mut pos));
-                let inv_c1 = read_f64(&mut pos);
-                let inv_c2 = read_f64(&mut pos);
-                let inv_part = std::array::from_fn(|_| read_f64(&mut pos));
+                let mut inv_c1 = read_f64(&mut pos);
+                let mut inv_c2 = read_f64(&mut pos);
+                let mut inv_part = std::array::from_fn(|_| read_f64(&mut pos));
+                if rflag != b'w' && rflag != b'e' && inv_part[0] != 0.0 {
+                    let (c1, c2, ip) = rev_override.unwrap_or_else(|| {
+                        panic!(
+                            "failed to parse non-weak REACLIB handle '{h}' in rates_tables.bin"
+                        )
+                    });
+                    inv_c1 = c1;
+                    inv_c2 = c2;
+                    inv_part = ip;
+                }
                 terms.push(ReaclibTerm {
                     chapter,
                     rflag,
@@ -387,7 +506,6 @@ impl RatesCatalog {
             weak_info.insert((wl_id, wr_id), (hl, qneu));
         }
 
-        let nuclides = NuclideCatalog::builtin_ref();
         let num_wt = read_u32(&mut pos) as usize;
         let mut weak_tables = Vec::with_capacity(num_wt);
         let mut weak_pair_map = HashMap::with_capacity(num_wt);

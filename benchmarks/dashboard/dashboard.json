@@ -13,15 +13,15 @@
         "upstream_lines": 120509,
         "absent": 18480,
         "stub": 15482,
-        "partial": 61424,
-        "ported_unverified": 25123,
+        "partial": 59800,
+        "ported_unverified": 26747,
         "kernel_reference_vectors": 0,
         "case_level_evidence": 0,
-        "ported_total": 25123,
+        "ported_total": 26747,
         "verified_total": 0,
-        "pct_ported": 20.8,
+        "pct_ported": 22.2,
         "pct_verified": 0.0,
-        "rust_lines": 61083,
+        "rust_lines": 64432,
         "python_jax_lines": 3869
       },
       {
@@ -55,7 +55,7 @@
         "verified_total": 0,
         "pct_ported": 18.7,
         "pct_verified": 0.0,
-        "rust_lines": 11721,
+        "rust_lines": 11734,
         "python_jax_lines": 1244
       },
       {
@@ -684,11 +684,11 @@
     {
       "namelist": "star &controls",
       "upstream_scalars": 1444,
-      "matched_in_flexmesa": 711,
-      "defaults_agree": 711,
+      "matched_in_flexmesa": 821,
+      "defaults_agree": 821,
       "value_mismatch": 0,
       "disabled_limit_none": 0,
-      "unimplemented": 733
+      "unimplemented": 623
     },
     {
       "namelist": "star &star_job",

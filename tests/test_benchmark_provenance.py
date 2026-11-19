@@ -146,3 +146,51 @@ def test_figure_builders_import_raw_benchmarks_without_legacy_sha() -> None:
         text = (_REPO_ROOT / "scripts" / name).read_text("utf-8")
         assert "raw_benchmarks" in text, f"{name} must import raw_benchmarks"
         assert legacy_sha not in text, f"{name} still references legacy sha"
+
+
+def test_eos_oracles_driver_and_table_record_mesa_26_4_1_provenance() -> None:
+    """`eos_oracles` driver and TSV record MESA `26.4.1` provenance cleanly."""
+    oracles_dir = _REPO_ROOT / "benchmarks" / "fortran_mesa" / "eos_oracles"
+    required_files = (
+        "Makefile",
+        "README.md",
+        "gen_eos_oracles.f90",
+        "mesa_26_4_1_eos_oracles.tsv",
+    )
+    forbidden_tokens: tuple[str, ...] = (
+        "/" + "home/",
+        "/" + "tmp/",
+        "/" + "mnt/",
+        "." + "venvs",
+        "file" + "://",
+        "\u2014",
+        "*" * 7,
+    )
+    for rel_name in required_files:
+        path = oracles_dir / rel_name
+        assert path.is_file(), f"Missing EOS oracle file: {path}"
+        content = path.read_text("utf-8")
+        for token in forbidden_tokens:
+            assert token not in content, (
+                f"Forbidden token {token!r} in {path.relative_to(_REPO_ROOT)}"
+            )
+
+    tsv_text = (oracles_dir / "mesa_26_4_1_eos_oracles.tsv").read_text("utf-8")
+    for expected_header in (
+        "# FlexMESA upstream Fortran MESA 26.4.1 EOS module oracle table",
+        "# mesa_version_number=r26.4.1",
+        "# mesa_git_tag=26.4.1",
+        "# mesa_git_commit=c8c202662922a22b3efefa824473ad615c623afd",
+        "# mesasdk_version=x86_64-linux-26.6.1",
+        "# math_backend=CRMATH",
+        "# compiler=GCC version 15.2.0",
+        "# fflags=-march=x86-64",
+    ):
+        assert expected_header in tsv_text, f"Missing header: {expected_header}"
+
+    prefixes = {
+        line.split("\t", 1)[0]
+        for line in tsv_text.splitlines()
+        if line and not line.startswith("#")
+    }
+    assert prefixes == {"DFERMI", "ALFA", "HELM", "EOS", "INV", "IERR"}

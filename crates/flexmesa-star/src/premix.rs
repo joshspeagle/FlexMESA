@@ -1,14 +1,11 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-//! Convective premixing (`conv_premix.f90`), predictive mixing
-//! (`predictive_mix.f90`), and white-dwarf crystallization phase separation
+//! Thin public entry points delegating convective premixing (`conv_premix.rs`)
+//! and predictive mixing (`predictive_mix.rs`) to verbatim MESA `26.4.1`
+//! implementations, plus white-dwarf crystallization phase separation
 //! (`phase_separation.f90`).
 
-use flexmesa_const::MixingType;
-
 use crate::controls::StarError;
-use crate::hydro_vars::{do_brunt_b, set_mlt_vars};
-use crate::micro::{do_eos, do_kap, set_basic_vars};
-use crate::mix_info::locate_convection_boundaries;
+use crate::micro::{do_eos, set_basic_vars};
 use crate::model::StarModel;
 
 /// Evaluates the Blouin et al. (2020, 2021) 5th-order polynomial distillation
@@ -42,7 +39,7 @@ pub fn eval_phase_separation_shift(x_heavy: f64, is_one_mixture: bool) -> f64 {
 
 /// Evaluates the Castellani, Giannone & Renzini (1971) convective boundary
 /// penetration velocity $v_p$ in $\mathrm{cm\,s^{-1}}$
-/// (`conv_premix.f90:574-614`).
+/// (`conv_premix.f90:948-1016`).
 #[must_use]
 pub fn eval_castellani_penetration_vel(
     conv_vel: f64,
@@ -59,245 +56,100 @@ pub fn eval_castellani_penetration_vel(
     (conv_vel.max(0.0) * geom * super_ad * abar_in.max(1.0) / d_abar).max(0.0)
 }
 
-fn refresh_convective_state_const_p(
-    model: &mut StarModel,
-    p_fixed: &[f64],
-) -> Result<(), StarError> {
-    set_basic_vars(model)?;
-    do_eos(model)?;
-    if model.controls.mix_wind.conv_premix_fix_pgas {
-        // One damped Newton step on `lnd` at fixed `(T, p_fixed)` so mixing
-        // happens at constant total pressure (`conv_premix.f90:1010-1085`).
-        for (k, &p_tar) in p_fixed.iter().enumerate() {
-            if p_tar > 0.0 && model.peos[k] > 0.0 {
-                let d_lnp_dlnd = model.chi_rho[k].max(0.1);
-                let step = (flexmesa_math::log(p_tar / model.peos[k])
-                    / d_lnp_dlnd)
-                    .clamp(-0.1, 0.1);
-                model.lnd[k] += step;
-            }
-        }
-        set_basic_vars(model)?;
-        do_eos(model)?;
-    }
-    do_kap(model)?;
-    do_brunt_b(model)?;
-    set_mlt_vars(model)
-}
-
-/// Performs iterative convective premixing (`conv_premix.f90:do_conv_premix`),
-/// testing whether homogenizing each cell immediately adjacent to a convective
-/// boundary makes the newly mixed boundary cell convectively unstable
-/// ($\nabla_{\mathrm{rad}}(\bar{X}) > \nabla_L(\bar{X})$) at constant pressure,
-/// and populates `model.aux.eps_pre_mix` when `do_premix_heating` is enabled.
+/// Runs verbatim MESA `26.4.1` convective premixing
+/// (`crate::conv_premix::do_conv_premix`) and updates `model.aux.eps_pre_mix`
+/// from the resulting internal energy change when `do_premix_heating` is set.
 ///
-/// Returns the total number of cells absorbed across all convective boundaries.
+/// The `_max_iters` parameter is retained for PyO3 API compatibility; verbatim
+/// MESA `26.4.1` advances each eligible boundary until stopped by stability,
+/// clock budget (`conv_premix_time_factor`), or `avoid_fuel_increase`.
 ///
 /// # Errors
-/// Returns [`StarError`] if refreshing hydrodynamic/EOS state fails during
-/// rollback of a trial mixed state.
+/// Returns [`StarError`] if EOS, opacity, MLT, or zone validation fails.
 pub fn do_conv_premix(
     model: &mut StarModel,
-    max_iters: usize,
+    _max_iters: usize,
     avoid_fuel_increase: bool,
 ) -> Result<usize, StarError> {
     let nz = model.nz;
-    let nc = model.species;
     if model.aux.eps_pre_mix.len() != nz {
         model.aux.eps_pre_mix.resize(nz, 0.0);
     }
     model.aux.eps_pre_mix.fill(0.0);
-    if nz < 4 || nc == 0 {
+    if nz < 2 || model.species == 0 {
         return Ok(0);
     }
 
     let e_before = model.energy.clone();
-    let p_fixed = model.peos.clone();
-    let mut total_advanced = 0usize;
-    let (_cz_bdy_dq, boundaries) = locate_convection_boundaries(model);
-
-    for bdy in &boundaries {
-        let mut k_bdy = bdy.conv_bdy_loc.min(nz - 1);
-        for _ in 0..max_iters.max(1) {
-            let (k_rad, k_lo, k_hi) = if bdy.top_conv_bdy {
-                if k_bdy == 0 {
-                    break;
-                }
-                let k_r = k_bdy - 1;
-                let k_end = (k_bdy + 8).min(nz - 1);
-                (k_r, k_r.saturating_sub(1), k_end)
-            } else {
-                if k_bdy + 1 >= nz {
-                    break;
-                }
-                let k_r = k_bdy + 1;
-                let k_start = k_bdy.saturating_sub(8);
-                (k_r, k_start, k_r)
-            };
-
-            let mut m_tot = 0.0;
-            let mut x_bar = vec![0.0; nc];
-            for k in k_lo..=k_hi {
-                let dm_k = model.dm[k];
-                m_tot += dm_k;
-                for j in 0..nc {
-                    x_bar[j] += dm_k * model.xa[k * nc + j];
-                }
-            }
-            if m_tot <= 0.0 {
-                break;
-            }
-            for xj in &mut x_bar {
-                *xj /= m_tot;
-            }
-
-            if avoid_fuel_increase {
-                let x_old_h1 = model.xa[k_bdy * nc];
-                if x_bar[0] > x_old_h1 + 0.05 {
-                    break;
-                }
-            }
-
-            let saved_xa = model.xa[k_lo * nc..(k_hi + 1) * nc].to_vec();
-            let saved_lnd = model.lnd[k_lo..=k_hi].to_vec();
-            for k in k_lo..=k_hi {
-                model.xa[k * nc..(k + 1) * nc].copy_from_slice(&x_bar);
-            }
-            let ok = refresh_convective_state_const_p(model, &p_fixed).is_ok();
-
-            if ok && model.gradr[k_rad] > model.gradl[k_rad] {
-                model.mixing_type[k_rad] = MixingType::ConvectiveMixing;
-                model.d_mix[k_rad] = model.d_mix[k_bdy].max(1.0e12);
-                k_bdy = k_rad;
-                total_advanced += 1;
-            } else {
-                model.xa[k_lo * nc..(k_hi + 1) * nc].copy_from_slice(&saved_xa);
-                model.lnd[k_lo..=k_hi].copy_from_slice(&saved_lnd);
-                refresh_convective_state_const_p(model, &p_fixed)?;
-                break;
-            }
-        }
-    }
+    let prev_avoid = model.controls.mix_wind.conv_premix_avoid_increase;
+    model.controls.mix_wind.conv_premix_avoid_increase = avoid_fuel_increase;
+    let res = crate::conv_premix::do_conv_premix(model);
+    model.controls.mix_wind.conv_premix_avoid_increase = prev_avoid;
+    let total_advanced = res?;
 
     if total_advanced > 0 && model.controls.do_premix_heating && model.dt > 0.0
     {
         for k in 0..nz {
             model.aux.eps_pre_mix[k] =
-                -(model.energy[k] - e_before[k]) / model.dt;
+                (e_before[k] - model.energy[k]) / model.dt;
         }
     }
     Ok(total_advanced)
 }
 
-fn add_predictive_mixing_in_q_range(
-    model: &mut StarModel,
-    ingested_mass_limit_coeff: f64,
-    superad_thresh: f64,
-    bdy_q_min: f64,
-    bdy_q_max: f64,
-) -> usize {
-    let nz = model.nz;
-    if nz < 4 {
-        return 0;
-    }
-    let (_cz_bdy_dq, boundaries) = locate_convection_boundaries(model);
-    let mut n_extended = 0usize;
-    let use_ledoux = model.controls.use_ledoux_criterion;
-
-    for bdy in &boundaries {
-        if bdy.conv_bdy_q < bdy_q_min || bdy.conv_bdy_q > bdy_q_max {
-            continue;
-        }
-        let k_bdy = bdy.conv_bdy_loc.min(nz - 1);
-        let grad_crit_bdy = if use_ledoux {
-            model.gradl[k_bdy]
-        } else {
-            model.grada[k_bdy]
-        };
-        let superad = (model.gradr[k_bdy] - grad_crit_bdy).max(0.0);
-        if superad < superad_thresh.max(0.0) {
-            continue;
-        }
-        let k_adj = if bdy.top_conv_bdy {
-            if k_bdy == 0 {
-                continue;
-            }
-            k_bdy - 1
-        } else {
-            if k_bdy + 1 >= nz {
-                continue;
-            }
-            k_bdy + 1
-        };
-
-        let kap_ratio =
-            (model.opacity[k_bdy] / model.opacity[k_adj].max(1.0e-10)).max(1.0);
-        let gradr_pred = model.gradr[k_adj] * kap_ratio
-            + 0.5 * (model.gradr[k_bdy] - model.gradr[k_adj]).max(0.0);
-        let grad_crit_adj = if use_ledoux {
-            model.gradl[k_adj]
-        } else {
-            model.grada[k_adj]
-        };
-        if gradr_pred > grad_crit_adj {
-            let d_ing =
-                ingested_mass_limit_coeff.max(0.01) * model.mlt_d[k_bdy];
-            if d_ing > model.d_mix[k_adj] {
-                model.d_mix[k_adj] = d_ing;
-                model.conv_vel[k_adj] = model.mlt_vc[k_bdy];
-                model.mixing_type[k_adj] = MixingType::ConvectiveMixing;
-                n_extended += 1;
-            }
-        }
-    }
-    n_extended
-}
-
-/// Applies predictive mixing (`predictive_mix.f90:add_predictive_mixing`) at
-/// convective boundaries, extending `model.d_mix` and `model.conv_vel` into
-/// adjacent zones where the homogenized radiative gradient exceeds the
-/// convective stability threshold (`gradL` when `use_ledoux_criterion`, else
-/// `grada`) while respecting the Constantino et al. (2015) ingestion cap.
+/// Runs verbatim MESA `26.4.1` predictive mixing
+/// (`crate::predictive_mix::add_predictive_mixing`) using an explicit
+/// `(ingested_mass_limit_coeff, superad_thresh)` parameter pair matching the
+/// standalone Python helper signature.
 pub fn add_predictive_mixing(
     model: &mut StarModel,
     ingested_mass_limit_coeff: f64,
     superad_thresh: f64,
 ) -> usize {
-    add_predictive_mixing_in_q_range(
-        model,
-        ingested_mass_limit_coeff,
-        superad_thresh,
-        0.0,
-        1.0,
-    )
-}
-
-/// Evaluates all enabled `predictive_mix` rules in `model.controls.mix_wind`.
-pub fn apply_predictive_mixing_from_controls(model: &mut StarModel) -> usize {
-    let sets = model.controls.mix_wind.predictive_sets.clone();
-    if !sets.iter().any(|ps| ps.predictive_mix) {
+    if model.nz < 2 {
         return 0;
     }
-    let mut total = 0_usize;
-    for ps in &sets {
-        if !ps.predictive_mix {
-            continue;
-        }
-        let ing_coeff = if ps.ingestion_factor > 0.0 {
-            ps.ingestion_factor.clamp(0.01, 1.0)
-        } else {
-            1.0
-        };
-        let thresh = ps.superad_thresh.max(0.0);
-        total += add_predictive_mixing_in_q_range(
-            model,
-            ing_coeff,
-            thresh,
-            ps.bdy_q_min,
-            ps.bdy_q_max,
+    let saved_sets = model.controls.mix_wind.predictive_sets.clone();
+    let saved_premix = model.controls.do_conv_premix;
+    model.controls.do_conv_premix = false;
+    for ps in &mut model.controls.mix_wind.predictive_sets {
+        ps.predictive_mix = false;
+    }
+    if let Some(ps0) = model.controls.mix_wind.predictive_sets.first_mut() {
+        ps0.predictive_mix = true;
+        ps0.zone_type = String::from("any");
+        ps0.zone_loc = String::from("any");
+        ps0.bdy_loc = String::from("any");
+        ps0.bdy_q_min = 0.0;
+        ps0.bdy_q_max = 1.0;
+        ps0.superad_thresh = superad_thresh;
+        ps0.avoid_reversal = String::new();
+        ps0.limit_ingestion = String::new();
+        ps0.ingestion_factor = ingested_mass_limit_coeff;
+    }
+    if model.aux.mixing.conv_bdy_loc.is_empty() {
+        let zeros = vec![0.0; model.nz];
+        crate::mix_info::locate_convection_boundaries_in_place(
+            model, &zeros, &zeros, &zeros,
         );
     }
-    total
+    let n_extended = crate::predictive_mix::add_predictive_mixing(model)
+        .unwrap_or(0);
+    model.controls.mix_wind.predictive_sets = saved_sets;
+    model.controls.do_conv_premix = saved_premix;
+    n_extended
+}
+
+/// Evaluates all enabled `predictive_mix` rules in `model.controls.mix_wind`
+/// via [`crate::predictive_mix::add_predictive_mixing`].
+///
+/// # Errors
+/// Returns [`StarError`] if a predictive parameter set has invalid selectors,
+/// conflicts with `do_conv_premix`, or fails trial EOS/opacity/MLT evaluation.
+pub fn apply_predictive_mixing_from_controls(
+    model: &mut StarModel,
+) -> Result<usize, StarError> {
+    crate::predictive_mix::add_predictive_mixing(model)
 }
 
 /// Executes white-dwarf crystallization phase separation

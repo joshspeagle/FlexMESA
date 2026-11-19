@@ -147,7 +147,7 @@ pub fn set_mixing_info(model: &mut StarModel) -> Result<(), StarError> {
         locate_convection_boundaries_in_place(model, &eps_h, &eps_he, &eps_z);
 
         // Predictive mixing (`star/private/predictive_mix.f90`).
-        crate::premix::apply_predictive_mixing_from_controls(model);
+        let _ = crate::predictive_mix::add_predictive_mixing(model)?;
     }
 
     check_d_mix_finite(model, "after add_predictive_mixing")?;
@@ -1521,7 +1521,7 @@ fn taper_sig_region(
                 (xm1, xm1 - x00, model.dm[k - 1])
             } else {
                 // Verbatim `star/private/mix_info.f90:1540-1544` (`dX = -dX`
-                // after `dX = x00 - xm1`; tracked under #169).
+                // after `dX = x00 - xm1`; tracked under #169 / #268).
                 (x00, -(x00 - xm1), model.dm[k])
             };
             if x_val < 1.0e-5 {

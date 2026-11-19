@@ -379,6 +379,7 @@ fn test_overshoot_16_param_sets_and_brunt_b_cutoff_follow_mesa_rules() {
 }
 
 #[test]
+#[allow(clippy::too_many_lines)]
 fn test_conv_premix_predictive_mixing_and_extra_heat_in_evolve_step() {
     let ctrl = StarControls {
         initial_mass: 4.0,
@@ -399,16 +400,61 @@ fn test_conv_premix_predictive_mixing_and_extra_heat_in_evolve_step() {
         assert!((sum_x - 1.0).abs() < 1.0e-12);
     }
 
-    assert_eq!(apply_predictive_mixing_from_controls(&mut m_pm), 0);
+    assert_eq!(
+        apply_predictive_mixing_from_controls(&mut m_pm)
+            .expect("disabled predictive mixing returns 0"),
+        0
+    );
+    // Construct a realistic multi-cell H/He composition gradient inside the
+    // Schwarzschild core under the Ledoux criterion so `gradL` stabilizes a
+    // thick gradient zone above the convective core, and verbatim predictive
+    // mixing (`predictive_mix.f90`) expands the core outward under the
+    // trial-mixed Schwarzschild criterion.
+    m_pred.controls.do_conv_premix = false;
+    m_pred.controls.use_ledoux_criterion = true;
+    m_pred.controls.mix_wind.num_cells_for_smooth_gradl_composition_term = 0;
+    m_pred.controls.mix_wind.num_cells_for_smooth_brunt_b = 0;
     let (_, b_pred) = locate_convection_boundaries(&m_pred);
     let k_bdy = b_pred[0].conv_bdy_loc;
-    m_pred.gradr[k_bdy] = m_pred.grada[k_bdy] + 0.5;
-    m_pred.controls.mix_wind.predictive_sets[0].predictive_mix = true;
-    m_pred.controls.mix_wind.predictive_sets[0].superad_thresh = 0.0;
-    let extended = apply_predictive_mixing_from_controls(&mut m_pred);
+    let idx_h1 = m_pred
+        .iso_names
+        .iter()
+        .position(|s| s == "h1")
+        .expect("h1 present");
+    let idx_he4 = m_pred
+        .iso_names
+        .iter()
+        .position(|s| s == "he4")
+        .expect("he4 present");
+    let sp = m_pred.species;
+    let k_grad_top = (k_bdy + 30).min(m_pred.nz - 25);
+    let k_grad_bot = (k_grad_top + 12).min(m_pred.nz - 10);
+    let span = f64::from(
+        u32::try_from((k_grad_bot - k_grad_top).max(1)).expect("small span"),
+    );
+    for k in k_grad_top..m_pred.nz {
+        let frac = if k < k_grad_bot {
+            f64::from(u32::try_from(k - k_grad_top).expect("small offset"))
+                / span
+        } else {
+            1.0
+        };
+        let delta = (0.015 * frac).min(m_pred.xa[k * sp + idx_h1]);
+        m_pred.xa[k * sp + idx_h1] -= delta;
+        m_pred.xa[k * sp + idx_he4] += delta;
+    }
+    set_hydro_vars(&mut m_pred, false, false).expect("refresh before pred");
+    let ps0 = &mut m_pred.controls.mix_wind.predictive_sets[0];
+    ps0.predictive_mix = true;
+    ps0.zone_type = String::from("any");
+    ps0.zone_loc = String::from("core");
+    ps0.bdy_loc = String::from("top");
+    ps0.superad_thresh = 0.0;
+    let extended = apply_predictive_mixing_from_controls(&mut m_pred)
+        .expect("predictive mixing succeeds");
     assert!(
         extended > 0,
-        "predictive mixing must extend superadiabatic core"
+        "predictive mixing must extend Ledoux-stabilized convective core"
     );
     assert!(m_pred.d_mix.iter().all(|v| v.is_finite()));
     assert!(m_pred.conv_vel.iter().all(|v| v.is_finite()));

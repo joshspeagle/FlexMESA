@@ -21,7 +21,8 @@ use crate::hydro_work::{
 };
 use crate::mesh_adjust::{plan_mesh, remap_onto_dq, MeshFunctionConfig};
 use crate::model::StarModel;
-use crate::premix::{do_conv_premix, do_phase_separation};
+use crate::conv_premix::do_conv_premix;
+use crate::premix::do_phase_separation;
 use crate::primary_state::PrimaryStateBuffer;
 use crate::riemann_ad::eval_u_flag_total_energy_rates_ad;
 use crate::rotation::{
@@ -135,11 +136,13 @@ pub fn apply_step_pre_physics(
             model.aux.eps_pre_mix.resize(nz, 0.0);
         }
         model.aux.eps_pre_mix.copy_from_slice(&model.energy[..nz]);
-        do_conv_premix(
-            model,
-            5,
-            model.controls.mix_wind.conv_premix_avoid_increase,
-        )?;
+        let saved_dt = model.dt;
+        if dt > 0.0 {
+            model.dt = dt;
+        }
+        let pm_res = do_conv_premix(model);
+        model.dt = saved_dt;
+        let _ = pm_res?;
         set_hydro_vars(model, false, false)?;
         if dt > 0.0 {
             for k in 0..nz {

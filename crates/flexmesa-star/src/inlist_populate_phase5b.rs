@@ -292,6 +292,32 @@ impl InlistBundle {
         apply_fortran_1based(ctrl, "predictive_avoid_reversal", n_pr, |i, v| mw.predictive_sets[i].avoid_reversal = v, val_str)?;
         apply_fortran_1based(ctrl, "predictive_limit_ingestion", n_pr, |i, v| mw.predictive_sets[i].limit_ingestion = v, val_str)?;
         apply_fortran_1based(ctrl, "predictive_ingestion_factor", n_pr, |i, v| mw.predictive_sets[i].ingestion_factor = v, val_f64)?;
+        for (idx, set) in mw.predictive_sets.iter().enumerate() {
+            let zt = set.zone_type.trim();
+            if !matches!(zt, "" | "any" | "burn_H" | "burn_He" | "burn_Z" | "nonburn") {
+                return Err(StarError::InvalidInput(format!(
+                    "unrecognized '&controls::predictive_zone_type({})' = '{}'",
+                    idx + 1,
+                    set.zone_type
+                )));
+            }
+            let zl = set.zone_loc.trim();
+            if !matches!(zl, "" | "any" | "core" | "shell" | "surf") {
+                return Err(StarError::InvalidInput(format!(
+                    "unrecognized '&controls::predictive_zone_loc({})' = '{}'",
+                    idx + 1,
+                    set.zone_loc
+                )));
+            }
+            let bl = set.bdy_loc.trim();
+            if !matches!(bl, "" | "any" | "top" | "bottom") {
+                return Err(StarError::InvalidInput(format!(
+                    "unrecognized '&controls::predictive_bdy_loc({})' = '{}'",
+                    idx + 1,
+                    set.bdy_loc
+                )));
+            }
+        }
 
         const NUM_XA_FUNCTION: usize = 9;
         if mw.xa_function_species.len() < NUM_XA_FUNCTION {

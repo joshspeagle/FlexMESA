@@ -884,7 +884,8 @@ fn eval_superad_reduction(
     let gamma_limit = mw.superad_reduction_gamma_limit;
     let scale_value1 = mw.superad_reduction_gamma_limit_scale;
     // Upstream `turb_support.f90:486` reads `superad_reduction_gamma_inv_scale`
-    // into `scale_value2` but uses `scale_value1` in the `beta_inv` formula.
+    // into `scale_value2` but uses `scale_value1` in the `beta_inv` formula
+    // (tracked under #169 / #267).
     let diff_grads_limit = mw.superad_reduction_diff_grads_limit;
     let reduction_limit = mw.superad_reduction_limit;
 
@@ -918,7 +919,7 @@ fn eval_superad_reduction(
         }
         // Verbatim upstream `star/private/turb_support.f90:483-490`: uses
         // `scale_value1` (`superad_reduction_Gamma_limit_scale`) in the
-        // `Gamma_inv_threshold` branch as well (tracked under #169).
+        // `Gamma_inv_threshold` branch as well (tracked under #169 / #267).
         if lrad_div_ledd.val > gamma_inv_threshold.val {
             let a = lrad_div_ledd / gamma_inv_threshold - 1.0;
             if a.val < 1.0 {

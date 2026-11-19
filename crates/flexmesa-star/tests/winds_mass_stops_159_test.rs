@@ -16,6 +16,7 @@
 
 #![allow(
     clippy::cast_precision_loss,
+    clippy::manual_midpoint,
     clippy::similar_names,
     clippy::too_many_lines
 )]
@@ -128,31 +129,42 @@ fn test_super_eddington_wind_and_boost_use_prev_ledd_and_half_vesc2() {
         -dm_capped / dt
     );
 
-    // Super-Eddington boost scales existing wind via prev_Ledd (`winds.f90:381-394`).
+    // Super-Eddington boost scales existing wind via prev_Ledd (`winds.f90:216-236`):
+    // linear ramp from `1.0` at `full_off` to `max_boost` at `full_on`, saturating at `max_boost`.
     model.controls.super_eddington_scaling_factor = 0.0;
     model.controls.mix_wind.super_eddington_wind_max_boost = 5.0;
-    model.controls.mix_wind.super_eddington_wind_ledd_factor = 1.0;
+    model.controls.mix_wind.wind_boost_full_off_l_div_ledd = 1.0;
+    model.controls.mix_wind.wind_boost_full_on_l_div_ledd = 2.0;
     model.controls.mix_wind.max_wind = 0.0;
     model.controls.mix_wind.hot_wind_scheme = String::from("other");
     model.controls.cool_wind_rgb_scheme = String::from("other");
     model.controls.cool_wind_agb_scheme = String::from("other");
     model.controls.use_other_wind = true;
+    let base_cgs = -1.0e-6 * M_SUN / SECYER;
     let extras = FixedOtherWindExtras {
         wind_msun_yr: 1.0e-6,
     };
-    // At L/prev_Ledd = 1.5 -> boost = 1 + (5 - 1)*(1.5 - 1.0) = 3.0? Wait:
-    // upstream formula `winds.f90:388`: `factor = 1 + min(max_boost - 1, ...)` or
-    // `super_eddington_wind_boost` ramp: verify boosted > base when L > prev_Ledd
-    // and unboosted when L <= prev_Ledd.
+    // Sub-Eddington (`L / prev_Ledd = 0.5 <= full_off = 1.0`) -> boost = 1.0.
     model.aux.step_hist.prev_ledd = Some(2.0 * l1);
     let mdot_sub = do_set_mdot_with_extras(&mut model, &extras).expect("sub");
-    assert!(rel_err(mdot_sub, -1.0e-6 * M_SUN / SECYER) < 1.0e-13);
+    assert!(rel_err(mdot_sub, base_cgs) < 1.0e-13);
 
-    model.aux.step_hist.prev_ledd = Some(0.5 * l1);
-    let mdot_sup = do_set_mdot_with_extras(&mut model, &extras).expect("sup");
+    // Mid-ramp (`L / prev_Ledd = 1.5`) -> boost = 1 + (5 - 1) * (1.5 - 1) / (2 - 1) = 3.0.
+    model.aux.step_hist.prev_ledd = Some(l1 / 1.5);
+    let mdot_mid = do_set_mdot_with_extras(&mut model, &extras).expect("mid");
     assert!(
-        mdot_sup.abs() > mdot_sub.abs(),
-        "super-Eddington boost should increase wind when L > prev_Ledd"
+        rel_err(mdot_mid, 3.0 * base_cgs) < 1.0e-13,
+        "mid-ramp boost mismatch: got {mdot_mid:.12e}, expected {:.12e}",
+        3.0 * base_cgs
+    );
+
+    // Saturated (`L / prev_Ledd = 3.0 >= full_on = 2.0`) -> boost = max_boost = 5.0.
+    model.aux.step_hist.prev_ledd = Some(l1 / 3.0);
+    let mdot_sat = do_set_mdot_with_extras(&mut model, &extras).expect("sat");
+    assert!(
+        rel_err(mdot_sat, 5.0 * base_cgs) < 1.0e-13,
+        "saturated boost mismatch: got {mdot_sat:.12e}, expected {:.12e}",
+        5.0 * base_cgs
     );
 }
 
@@ -407,7 +419,49 @@ fn test_adjust_mass_limits_crossing_clamp_263_omega_and_smooth_outer_xa() {
         "default accretion must not copy stale old surface j_rot"
     );
 
-    // 4. `smooth_outer_xa_big` / `smooth_outer_xa_small` conserve total species mass.
+    // 4. `do_adjust_j_lost = true` uses entry `model.j_rot` (NOT stale `j_rot_old`)
+    //    and conserves `J_after == J_before - actual_j_lost` (`adjust_mass.f90:1476-1571`).
+    let mut m_jloss = zams_model(2.0);
+    m_jloss.controls.rotation_flag = true;
+    m_jloss.controls.mix_wind.do_adjust_j_lost = true;
+    m_jloss.controls.mix_wind.adjust_j_fraction = 1.0;
+    m_jloss.controls.mix_wind.min_q_for_adjust_j_lost = 0.99;
+    m_jloss.controls.mix_wind.min_j_div_delta_j = 10.0;
+    // Set an inward-varying omega so starting_j_rot_surf differs from deeper j_rot,
+    // and deliberately zero `j_rot_old` (step-1 state) to verify entry `model.j_rot` is used.
+    for k in 0..m_jloss.nz {
+        m_jloss.omega[k] = 1.0e-5 * (1.0 + 0.5 * (k as f64 / m_jloss.nz as f64));
+    }
+    flexmesa_star::update_rotation_distortion_factors(&mut m_jloss);
+    m_jloss.aux.j_rot_old.fill(0.0);
+    let starting_j_surf = m_jloss.j_rot[0];
+    let dmbar_before = |m: &StarModel| -> f64 {
+        let mut tot = 0.0_f64;
+        let mut dm00 = 0.0_f64;
+        for k in 0..m.nz {
+            let dmm1 = dm00;
+            dm00 = m.dm[k];
+            let mut dmb = 0.5 * (dmm1 + dm00);
+            if k + 1 == m.nz {
+                dmb += 0.5 * dm00;
+            }
+            tot += dmb * m.j_rot[k];
+        }
+        tot
+    };
+    let j_tot_before = dmbar_before(&m_jloss);
+    let dm_loss = 5.0e-4 * M_SUN;
+    m_jloss.mstar_dot = -dm_loss / SECYER;
+    do_adjust_mass_step(&mut m_jloss, SECYER).expect("adjust_j_lost");
+    let j_tot_after = dmbar_before(&m_jloss);
+    let expected_j_lost = dm_loss * starting_j_surf;
+    assert!(
+        rel_err(j_tot_before - j_tot_after, expected_j_lost) < 1.0e-3,
+        "adjust_j_lost should remove ~{expected_j_lost:.6e}, removed {:.6e}",
+        j_tot_before - j_tot_after
+    );
+
+    // 5. `smooth_outer_xa_big` / `smooth_outer_xa_small` conserve total species mass.
     let mut sm = zams_model(2.0);
     sm.controls.mix_wind.smooth_outer_xa_big = 0.05;
     sm.controls.mix_wind.smooth_outer_xa_small = 0.01;
@@ -488,7 +542,6 @@ fn test_get_xa_for_accretion_modes_power_categories_and_eps_mdot() {
     //    and separates `power_h_burn = PP + CNO` from total nuclear power.
     let mut p_model = zams_model(5.0);
     let nz = p_model.nz;
-    let ncat = flexmesa_chem::NUM_CATEGORIES;
     p_model.aux.eps_nuc_categories = vec![[0.0; flexmesa_chem::NUM_CATEGORIES]; nz];
     p_model.eps_nuc.fill(0.0);
     for k in 0..nz {
@@ -497,7 +550,6 @@ fn test_get_xa_for_accretion_modes_power_categories_and_eps_mdot() {
         p_model.aux.eps_nuc_categories[k][2] = 70.0; // tri_alpha
         p_model.eps_nuc[k] = 100.0;
     }
-    let _ = ncat;
     p_model.controls.eps_nuc_factor = 0.0;
     let p_zero = compute_power_categories(&p_model);
     let m_tot_g: f64 = p_model.dm.iter().sum();
@@ -520,19 +572,26 @@ fn test_get_xa_for_accretion_modes_power_categories_and_eps_mdot() {
     assert!(rel_err(p_one.power_nuc_burn, 100.0 * m_tot_g / L_SUN) < 1.0e-13);
 
     // 5. `eval_cell_specific_total_energy` includes face-averaged `0.25*(v_0^2 + v_1^2)`
-    //    when `v_flag = true`.
+    //    when `v_flag = true` and accounts for `mass_correction`.
     let mut v_model = zams_model(2.0);
     v_model.controls.v_flag = false;
     let e_no_v = eval_cell_specific_total_energy(&v_model, 0);
     v_model.controls.v_flag = true;
-    v_model.v[0] = 1.0e7; // 100 km/s on outer face
-    v_model.v[1] = 1.0e7; // 100 km/s on inner face
+    v_model.v[0] = 1.0e7; // outer face != inner face to distinguish 0.25*(v0^2+v1^2) from 0.5*v0^2
+    v_model.v[1] = 3.0e7;
     let e_with_v = eval_cell_specific_total_energy(&v_model, 0);
-    let expected_ke = 0.5 * 1.0e14;
+    let expected_ke = 0.25 * (1.0e14 + 9.0e14);
     assert!(
         rel_err(e_with_v - e_no_v, expected_ke) < 1.0e-12,
-        "v_flag KE mismatch: got {:.6e}, expected {expected_ke:.6e}",
+        "v_flag face-averaged KE mismatch: got {:.6e}, expected {expected_ke:.6e}",
         e_with_v - e_no_v
+    );
+    v_model.controls.use_mass_corrections = true;
+    v_model.aux.mass_correction[0] = 1.02;
+    let e_with_mc = eval_cell_specific_total_energy(&v_model, 0);
+    assert!(
+        (e_with_mc - e_with_v).abs() > 0.0,
+        "use_mass_corrections = true must scale gravitational potential term"
     );
 }
 
@@ -541,7 +600,6 @@ fn test_set_phase_of_evolution_all_13_stop_phases_and_history_column() {
     let base = zams_model(5.0);
     let h1_idx = base.iso_names.iter().position(|n| n == "h1").expect("h1");
     let he4_idx = base.iso_names.iter().position(|n| n == "he4").expect("he4");
-    let ncat = flexmesa_chem::NUM_CATEGORIES;
 
     // 1. doing_first_model_of_run -> PHASE_STARTING.
     let mut m = base.clone();
@@ -553,7 +611,6 @@ fn test_set_phase_of_evolution_all_13_stop_phases_and_history_column() {
     assert_eq!(set_phase_of_evolution(&mut m, false), PHASE_RELAX);
 
     // Helper to build a clean baseline with zero burning and controllable center X/Y.
-    let _ = ncat;
     let make_clean = |h1_c: f64, he4_c: f64| -> StarModel {
         let mut s = base.clone();
         s.aux.doing_relax = false;
@@ -750,10 +807,16 @@ fn test_do_check_limits_all_categories_and_deferred_bugs_264_265() {
         LimitCheckOutcome::Terminate { ref code, .. } if code == "max_age"
     ));
 
-    // 4. `retry_for_v_above_clight` returns `LimitCheckOutcome::Retry`.
+    // 4. `retry_for_v_above_clight` returns `LimitCheckOutcome::Retry` on signed `max_abs_vel > CLIGHT`
+    //    (`do_one_utils.f90:726-736`), and does NOT retry on negative infall `v < -CLIGHT`.
     let mut m_v = base.clone();
     m_v.controls.v_flag = true;
     m_v.controls.ts_stop.retry_for_v_above_clight = true;
+    m_v.v[0] = -1.1 * CLIGHT;
+    assert_eq!(
+        do_check_limits(&mut m_v, None, false).expect("v < -c"),
+        LimitCheckOutcome::KeepGoing
+    );
     m_v.v[0] = 1.1 * CLIGHT;
     assert!(matches!(
         do_check_limits(&mut m_v, None, false).expect("v > c"),
@@ -884,11 +947,45 @@ fn test_do_check_limits_all_categories_and_deferred_bugs_264_265() {
         m_sh.v[k] = 2.0 * m_sh.csound[k];
     }
     let m_shock = get_shock_mass_msun(&m_sh);
-    assert!(m_shock > 0.0 && m_shock < m_sh.mstar / M_SUN);
+    // Exact linear-interpolation oracle: Mach crosses 1.0 between k=4 (Mach=0) and k=5 (Mach=2)
+    // at r_shock = 0.5*(r[4] + r[5]), so m_shock = 0.5*(m[4] + m[5]) / M_SUN.
+    let expected_m_shock = 0.5 * (m_sh.m[4] + m_sh.m[5]) / M_SUN;
+    assert!(
+        rel_err(m_shock, expected_m_shock) < 1.0e-13,
+        "shock mass mismatch: got {m_shock:.12e}, expected {expected_m_shock:.12e}"
+    );
 
-    let ctx_ej = StepReportContext::compute(&m_ej);
-    let (_fe_inf, _non_fe_inf, _non_fe_reb) =
-        eval_core_infall_and_rebound_cms(&m_ej, &ctx_ej.cores);
+    // Core infall & rebound oracle (`report.f90:398-438`): construct a He core with
+    // negative infall velocities inside the He core and verify `non_fe_infall == 2.5e8`.
+    let mut m_inf = base.clone();
+    m_inf.controls.v_flag = true;
+    let h1_slot = m_inf.iso_names.iter().position(|n| n == "h1").expect("h1");
+    let he4_slot = m_inf.iso_names.iter().position(|n| n == "he4").expect("he4");
+    let k_core = m_inf.nz / 2;
+    for k in k_core..m_inf.nz {
+        let mut x = vec![0.0; m_inf.species];
+        x[he4_slot] = 1.0;
+        x[h1_slot] = 0.0;
+        m_inf.cell_xa_mut(k).copy_from_slice(&x);
+    }
+    m_inf.v.fill(0.0);
+    for k in (k_core + 1)..m_inf.nz {
+        m_inf.v[k] = -2.5e8;
+    }
+    let ctx_inf = StepReportContext::compute(&m_inf);
+    assert!(ctx_inf.cores.he_core_mass > 0.0);
+    let (fe_inf, non_fe_inf, non_fe_reb) =
+        eval_core_infall_and_rebound_cms(&m_inf, &ctx_inf.cores);
+    assert_eq!(fe_inf, 0.0, "no Fe core -> fe_core_infall == 0");
+    assert!(
+        rel_err(non_fe_inf, 2.5e8) < 1.0e-13,
+        "expected non_fe_core_infall = 2.5e8, got {non_fe_inf:.6e}"
+    );
+    assert_eq!(
+        non_fe_reb,
+        -f64::MAX,
+        "absent Fe core yields empty slice maxval == -huge(1d0)"
+    );
 
     // 9. Surface & average abundance limits (`xa_surface_*`, `xa_average_*`).
     let mut m_xa = base.clone();
@@ -920,7 +1017,6 @@ fn test_when_to_stop_rtol_atol_redo_convergence_and_max_age_graded_approach() {
     let mut probe = zams_model(2.0);
     probe.dt = 1.0e5 * SECYER;
     probe.dt_next = probe.dt;
-    let h1_idx = probe.iso_names.iter().position(|n| n == "h1").expect("h1");
     let h1_init = flexmesa_star::center_avg_x_by_name(&probe, "h1");
     star_evolve_step(&mut probe, false, false, true).expect("probe step");
     let h1_after_full = flexmesa_star::center_avg_x_by_name(&probe, "h1");
@@ -929,7 +1025,6 @@ fn test_when_to_stop_rtol_atol_redo_convergence_and_max_age_graded_approach() {
         drop > 0.0,
         "expected central H1 drop over 1e5 yr on 2 Msun ZAMS, got {drop:.3e}"
     );
-    let _ = h1_idx;
 
     // Place `xa_central_lower_limit` halfway through the single-step H1 drop
     // with tolerance smaller than `0.25 * drop` so the first full step overshoots
@@ -1009,5 +1104,25 @@ fn test_when_to_stop_rtol_atol_redo_convergence_and_max_age_graded_approach() {
     assert!(
         rel_err(m_age.aux.step_hist.time_sec, 1.0e5 * SECYER) < 1.0e-14,
         "time_sec must match exact max_age * SECYER"
+    );
+
+    // 4. `max_age_in_days` still clips `dt` in `prepare_for_new_step` even when
+    //    `max_age_in_seconds = Some(-1.0)` (`evolve.f90:1908-1913`).
+    let mut m_days = zams_model(2.0);
+    m_days.star_age = 0.0;
+    m_days.aux.step_hist.time_sec = 0.0;
+    m_days.aux.step_hist.time_old_sec = 0.0;
+    m_days.dt = 100.0 * SECDAY;
+    m_days.dt_next = m_days.dt;
+    m_days.controls.max_age = -1.0;
+    m_days.controls.max_age_in_seconds = Some(-1.0);
+    m_days.controls.ts_stop.max_age_in_days = 10.0;
+    let rep_days = star_evolve_step(&mut m_days, false, false, true)
+        .expect("max_age_in_days clip");
+    assert!(
+        rel_err(rep_days.dt, 10.0 * SECDAY) < 1.0e-14,
+        "expected dt clipped to 10 days ({:.6e} s), got {:.6e} s",
+        10.0 * SECDAY,
+        rep_days.dt
     );
 }

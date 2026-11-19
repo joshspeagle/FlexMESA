@@ -299,10 +299,12 @@ pub fn star_evolve_step_with_extras(
         {
             dt_next_clipped =
                 (model.controls.max_age * SECYER - pre_step_time_sec).max(0.0);
-        } else if let Some(lim_s) = model.controls.max_age_in_seconds {
-            if lim_s > 0.0 && pre_step_time_sec + dt_next_clipped > lim_s {
-                dt_next_clipped = (lim_s - pre_step_time_sec).max(0.0);
-            }
+        } else if let Some(lim_s) = model
+            .controls
+            .max_age_in_seconds
+            .filter(|&lim_s| lim_s > 0.0 && pre_step_time_sec + dt_next_clipped > lim_s)
+        {
+            dt_next_clipped = (lim_s - pre_step_time_sec).max(0.0);
         } else if ts.max_age_in_days > 0.0
             && pre_step_time_sec + dt_next_clipped > ts.max_age_in_days * SECDAY
         {

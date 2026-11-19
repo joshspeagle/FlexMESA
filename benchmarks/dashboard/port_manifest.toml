@@ -6550,9 +6550,9 @@ upstream_path = "star/private/adjust_mass.f90"
 module = "star"
 upstream_lines = 1624
 upstream_sha256 = "aa005fd513ef41b49b39594d08d495ab9286857c4633773195afe810df546159"
-status = "ported_unverified"
+status = "partial"
 flexmesa_files = ["crates/flexmesa-star/src/adjust_mass.rs", "crates/flexmesa-star/src/accretion_xa.rs"]
-notes = "updated for #159: compute_delta_m, revise_q_and_dq, set_xa, get_xa_for_accretion, set_omega_adjust_mass, adjust_j_lost, smooth_outer_xa, verbatim #263 crossing-step clamp"
+notes = "updated for #159: compute_delta_m, revise_q_and_dq, set_xa, get_xa_for_accretion, set_omega_adjust_mass, adjust_j_lost, smooth_outer_xa, verbatim #263 crossing-step clamp; set_D_omega, xa_removed/angular_momentum_removed fields, and use_other_j_for_adjust_J_lost not ported"
 [files.routine_map]
 "do_adjust_mass" = "crates/flexmesa-star/src/adjust_mass.rs::do_adjust_mass_step"
 "compute_prev_mesh_dm" = "crates/flexmesa-star/src/adjust_mass.rs::do_adjust_mass_step"

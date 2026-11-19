@@ -15,9 +15,9 @@ use crate::core_boundaries::{compute_core_masses, CoreMasses};
 use crate::history::HistoryRow;
 use crate::model::StarModel;
 use crate::report_utils::{
-    center_avg_x_slot, center_value, eval_astero_report_scalars,
-    eval_upstream_omega_crit, safe_log10, surface_avg_x_slot,
-    StepReportContext,
+    center_avg_x_slot, center_value, csound_face_at,
+    eval_astero_report_scalars, eval_upstream_omega_crit, iso_slot_for_chem_id,
+    safe_log10, surface_avg_x_slot, StepReportContext,
 };
 
 /// Evolutionary phase integer codes (`star_data/public/star_data_def.inc:26-40`).
@@ -108,22 +108,6 @@ fn find0(x1: f64, y1: f64, x2: f64, y2: f64) -> f64 {
             0.5 * (x1 + x2)
         } else {
             x
-        }
-    }
-}
-
-#[inline]
-fn csound_face_at(model: &StarModel, k: usize) -> f64 {
-    if k == 0 {
-        model.csound[0]
-    } else {
-        let denom = model.dm[k - 1] + model.dm[k];
-        if denom > 0.0 {
-            (model.dm[k - 1] * model.csound[k]
-                + model.dm[k] * model.csound[k - 1])
-                / denom
-        } else {
-            0.5 * (model.csound[k - 1] + model.csound[k])
         }
     }
 }
@@ -530,7 +514,7 @@ fn species_col_index(
         return None;
     }
     let cid = catalog.get_nuclide_index(trimmed)?;
-    model.chem_id.iter().position(|&id| id == cid)
+    iso_slot_for_chem_id(model, cid)
 }
 
 fn get_species_mass_msun(
@@ -731,12 +715,17 @@ fn eval_check_limits_core(
     let log_center_temperature = center_value(model, &model.ln_t) / LN10;
     let log_center_density = center_value(model, &model.lnd) / LN10;
     let center_entropy = ctx.center_entropy(model);
-    let max_entropy = model
+    let max_lns = model
         .ln_s
         .iter()
         .take(nz)
-        .map(|&lns| flexmesa_math::exp(lns) * AMU / KERG)
+        .copied()
         .fold(f64::NEG_INFINITY, f64::max);
+    let max_entropy = if max_lns.is_finite() {
+        flexmesa_math::exp(max_lns) * AMU / KERG
+    } else {
+        0.0
+    };
     let log_max_temperature = model
         .ln_t
         .iter()
@@ -852,7 +841,8 @@ fn eval_check_limits_core(
         }
     }
 
-    if max_abs_vel.abs() > CLIGHT && ts.retry_for_v_above_clight {
+    // Upstream checks signed `max_abs_vel > clight` (`star/private/do_one_utils.f90:622-631, 726-736`).
+    if max_abs_vel > CLIGHT && ts.retry_for_v_above_clight {
         return Ok(LimitCheckOutcome::Retry {
             reason: format!(
                 "maximum velocity ({max_abs_vel:.3e} cm/s) exceeds speed of light"

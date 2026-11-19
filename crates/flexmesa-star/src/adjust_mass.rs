@@ -522,8 +522,15 @@ fn do_adjust_mass_core(
         mmax,
     );
 
-    // Rotation remap (`set_omega_adjust_mass` + `adjust_J_lost`, `adjust_mass.f90:430-452`).
+    // Rotation remap (`set_omega_adjust_mass` + `adjust_J_lost`, `adjust_mass.f90:295-300, 430-452`).
     if model.controls.rotation_flag && model.j_rot.len() == nz {
+        // Compute `angular_momentum_removed` from entry `model.j_rot` before
+        // `set_omega_adjust_mass` overwrites `model.j_rot` (`adjust_mass.f90:295, 527-552`).
+        let j_removed = if delta_m < 0.0 {
+            compute_angular_momentum_removed(model, &prev_dm_raw, -delta_m)
+        } else {
+            0.0
+        };
         set_omega_adjust_mass(
             model,
             k_b,
@@ -539,9 +546,9 @@ fn do_adjust_mass_core(
             adjust_j_lost(
                 model,
                 old_mstar,
-                &prev_dm_raw,
                 &new_cell_mass,
                 starting_j_rot_surf,
+                j_removed,
             )?;
         }
     }
@@ -936,41 +943,49 @@ fn set1_omega(
     Ok(())
 }
 
+/// Integrates angular momentum removed by mass loss using entry `model.j_rot`
+/// (`angular_momentum_removed` in `star/private/adjust_mass.f90:527-552`).
+fn compute_angular_momentum_removed(
+    model: &StarModel,
+    old_cell_mass: &[f64],
+    dm_lost: f64,
+) -> f64 {
+    if !model.controls.rotation_flag || dm_lost <= 0.0 {
+        return 0.0;
+    }
+    let nz = model.nz;
+    let mut dm00 = 0.0_f64;
+    let mut dm_sum = 0.0_f64;
+    let mut j_tot = 0.0_f64;
+    for k in 0..nz {
+        let dmm1 = dm00;
+        dm00 = old_cell_mass[k];
+        let mut dm_k = 0.5 * (dmm1 + dm00);
+        if dm_sum + dm_k > dm_lost {
+            dm_k = dm_lost - dm_sum;
+            dm_sum = dm_lost;
+        } else {
+            dm_sum += dm_k;
+        }
+        j_tot += dm_k * model.j_rot[k];
+        if dm_sum == dm_lost {
+            break;
+        }
+    }
+    j_tot
+}
+
 fn adjust_j_lost(
     model: &mut StarModel,
     old_mstar: f64,
-    old_dm: &[f64],
     new_dm: &[f64],
     starting_j_rot_surf: f64,
+    j_removed: f64,
 ) -> Result<(), StarError> {
     let nz = model.nz;
     let mass_lost = old_mstar - model.mstar;
     if mass_lost <= 0.0 {
         return Ok(());
-    }
-
-    let (mut j_removed, mut dm_sum) = (0.0_f64, 0.0_f64);
-    let mut dm00 = 0.0_f64;
-    for k in 0..nz {
-        let dmm1 = dm00;
-        dm00 = old_dm[k];
-        let mut dm_k = 0.5 * (dmm1 + dm00);
-        if k + 1 == nz {
-            dm_k += 0.5 * dm00;
-        }
-        let j_k = model
-            .aux
-            .j_rot_old
-            .get(k)
-            .copied()
-            .unwrap_or(model.j_rot[k]);
-        if dm_sum + dm_k >= mass_lost {
-            dm_k = (mass_lost - dm_sum).max(0.0);
-            j_removed += dm_k * j_k;
-            break;
-        }
-        dm_sum += dm_k;
-        j_removed += dm_k * j_k;
     }
 
     let mw = &model.controls.mix_wind;

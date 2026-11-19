@@ -612,7 +612,7 @@ pub struct MixWindControls {
     pub accretion_h2: f64,
     /// Accreted $^3\mathrm{He}$ mass fraction when `accretion_he4 > 0` (`accretion_he3`, `0` default).
     pub accretion_he3: f64,
-    /// Standard metal-distribution selector for accretion (`accretion_zfracs`, `-1` uses `initial_zfracs`, `0` uses `z_fraction_*`, `1..=10` uses solar scale).
+    /// Standard metal-distribution selector for accretion (`accretion_zfracs`, `-1` errors loudly on nonzero metals per `adjust_xyz.f90:1069-1079`, `0` uses `z_fraction_*`, `1..=10` uses solar scale).
     pub accretion_zfracs: i32,
     /// Dump unrepresented metal mass fractions into the heaviest net species (`accretion_dump_missing_metals_into_heaviest`, `true` default).
     pub accretion_dump_missing_metals_into_heaviest: bool,

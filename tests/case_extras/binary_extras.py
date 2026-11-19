@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import math
 import re
+import struct
 from typing import Any
 
 from flexmesa import _rust, constants
@@ -19,7 +20,19 @@ _JDOT_GR_CHECK_RE = re.compile(
 _JDOT_ML_CHECK_RE = re.compile(
     r'names\(1\)\s*=\s*"expected_separation".*?initial_separation_in_rsuns'
 )
+_JDOT_LS_STAR_RE = re.compile(
+    r"names\(i\)\s*=\s*['\"]spin_orital_period_ratio['\"]"
+)
 _WIND_FED_RE = re.compile(r"lx_tested_super_edd")
+
+# Exact IEEE-754 single-precision literals (`1 + 1e-10`, `1e-10`, `1e-15`)
+# promoted to `real(dp)` at lines `183`, `201`, `214`, `221` of
+# `binary/test_suite/wind_fed_bhhmxb/src/run_binary_extras.f90`.
+_REAL4_1E_MINUS_10: float = struct.unpack("f", struct.pack("f", 1.0e-10))[0]
+_REAL4_1E_MINUS_15: float = struct.unpack("f", struct.pack("f", 1.0e-15))[0]
+_REAL4_1_PLUS_1E_MINUS_10: float = struct.unpack(
+    "f", struct.pack("f", 1.0 + _REAL4_1E_MINUS_10)
+)[0]
 
 
 def _fdiv(num: float, den: float) -> float:
@@ -383,6 +396,127 @@ class JdotMlCheckBinaryExtras:
         return "keep_going"
 
 
+class JdotLsCheckBinaryExtras:
+    """Tidal spin-orbit synchronization star history columns from
+    `binary/test_suite/jdot_ls_check/src/run_star_extras.f90:82-117` and
+    `binary/test_suite/jdot_ls_check/src/run_binary_extras.f90:36-184`.
+    """
+
+    def extra_star_history_columns(
+        self, state: dict[str, Any], star_idx: int
+    ) -> list[tuple[str, float]]:
+        """Evaluate spin period and orbital-period ratio columns (`:88-117`)."""
+        omega_surf = float(state[f"s{star_idx}_omega_avg_surf"])
+        spin_period = _fdiv(2.0 * constants.PI, omega_surf)
+        return [
+            ("spin_period_days", spin_period / constants.SECDAY),
+            ("spin_period_hr", spin_period / (60.0 * 60.0)),
+            ("spin_period_minutes", spin_period / 60.0),
+            (
+                "spin_orital_period_ratio",
+                _fdiv(spin_period, float(state["period"])),
+            ),
+        ]
+
+
+class WindFedBhHmxbBinaryExtras:
+    """Eddington wind-accretion and system mass-budget checks from
+    `binary/test_suite/wind_fed_bhhmxb/src/run_binary_extras.f90:30-248`.
+    """
+
+    def __init__(self) -> None:
+        self.lx_tested_super_edd = False
+        self.lx_tested_sub_edd = False
+        self.both_phases_tested: bool | None = None
+
+    def extras_binary_startup(
+        self, _state: dict[str, Any], restart: bool
+    ) -> str:
+        """Reset `lx_tested_super_edd` and `lx_tested_sub_edd` when not
+        restarting (`:119-136`).
+        """
+        if not restart:
+            self.lx_tested_super_edd = False
+            self.lx_tested_sub_edd = False
+        return "keep_going"
+
+    def finish_step(self, state: dict[str, Any]) -> str:
+        """Verify BH Eddington cap, radiation mass loss, and donor wind budget
+        (`:167-227`).
+        """
+        comp_mdot_2 = float(state["component_mdot"][1])
+        mdot_edd = float(state["mdot_edd"])
+        mdot_edd_eta = float(state["mdot_edd_eta"])
+        if (
+            comp_mdot_2
+            > mdot_edd * (1.0 - mdot_edd_eta) * _REAL4_1_PLUS_1E_MINUS_10
+        ):
+            raise RuntimeError("ERROR: BH is accreting above Eddington")
+
+        d_i = int(state["donor_i"])
+        d_idx = d_i - 1
+        mdot_wind_xfer_d = float(state["mdot_wind_transfer"][d_idx])
+        actual_mtransfer = mdot_wind_xfer_d + float(
+            state["step_mtransfer_rate"]
+        )
+        c2 = constants.CLIGHT * constants.CLIGHT
+        acc_lum = float(state["accretion_luminosity"])
+        if -actual_mtransfer > mdot_edd:
+            expected_mdot_system = actual_mtransfer + mdot_edd - acc_lum / c2
+            self.lx_tested_super_edd = True
+        else:
+            expected_mdot_system = -acc_lum / c2
+            self.lx_tested_sub_edd = True
+
+        frac_error = abs(
+            _fdiv(
+                float(state["mdot_system_transfer"][1]) - expected_mdot_system,
+                expected_mdot_system,
+            )
+        )
+        if frac_error > _REAL4_1E_MINUS_15 and int(state["model_number"]) > 1:
+            raise RuntimeError(
+                "ERROR: mass lost from the vicinity of the BH is incorrect"
+            )
+
+        donor_wind_mdot = float(state[f"s{d_i}_mstar_dot"]) - float(
+            state["mtransfer_rate"]
+        )
+        wind_xfer_frac = float(state["wind_xfer_fraction"][d_idx])
+        frac_error = abs(
+            _fdiv(
+                mdot_wind_xfer_d - donor_wind_mdot * wind_xfer_frac,
+                mdot_wind_xfer_d,
+            )
+        )
+        if frac_error > _REAL4_1E_MINUS_10:
+            raise RuntimeError(
+                "ERROR: unexpected difference in expected wind mdot"
+            )
+
+        expected_mdot_wind = donor_wind_mdot * (1.0 - wind_xfer_frac)
+        frac_error = abs(
+            _fdiv(
+                float(state["mdot_system_wind"][0]) - expected_mdot_wind,
+                expected_mdot_wind,
+            )
+        )
+        if frac_error > _REAL4_1E_MINUS_10:
+            raise RuntimeError(
+                "ERROR: calculation of mass leaving system from vicinity of "
+                "donor failed"
+            )
+        return "keep_going"
+
+    def extras_binary_after_evolve(self, _state: dict[str, Any]) -> None:
+        """Record whether both sub- and super-Eddington phases occurred
+        (`:229-248`).
+        """
+        self.both_phases_tested = bool(
+            self.lx_tested_super_edd and self.lx_tested_sub_edd
+        )
+
+
 def match_binary_extras(norm_bin_text: str, norm_star_text: str) -> Any:
     """Match binary extras strictly from normalized Fortran source content."""
     if _DOUBLE_BH_FINISH_RE.search(norm_bin_text) or _BROTT_WIND_RE.search(
@@ -393,4 +527,8 @@ def match_binary_extras(norm_bin_text: str, norm_star_text: str) -> Any:
         return JdotGrCheckBinaryExtras()
     if _JDOT_ML_CHECK_RE.search(norm_bin_text):
         return JdotMlCheckBinaryExtras()
+    if _WIND_FED_RE.search(norm_bin_text):
+        return WindFedBhHmxbBinaryExtras()
+    if _JDOT_LS_STAR_RE.search(norm_star_text):
+        return JdotLsCheckBinaryExtras()
     return None

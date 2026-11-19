@@ -13,9 +13,14 @@ from tests.case_extras import (
     star_agb_hb,
     star_atm_pulse,
     star_burn_flame,
+    star_ccsn_iip,
+    star_core_collapse,
     star_mixing_init,
+    star_ns_wd_simplex,
     star_post_checks,
+    star_ppisn,
     star_relax_hydro,
+    star_rot_mix_checks,
     star_wd_hooks,
     star_winds_hooks,
 )
@@ -25,6 +30,7 @@ AdjustNetStarExtras = star_burn_flame.AdjustNetStarExtras
 C13PocketStarExtras = star_agb_hb.C13PocketStarExtras
 CarbonKhStarExtras = star_burn_flame.CarbonKhStarExtras
 CburnInwardStarExtras = star_burn_flame.CburnInwardStarExtras
+CcsnIIpStarExtras = star_ccsn_iip.CcsnIIpStarExtras
 CepheidBlueLoopStarExtras = star_burn_flame.CepheidBlueLoopStarExtras
 CheckPulseAtmStarExtras = star_atm_pulse.CheckPulseAtmStarExtras
 ConductiveFlameStarExtras = star_burn_flame.ConductiveFlameStarExtras
@@ -32,11 +38,18 @@ ConserveAngularMomentumStarExtras = (
     star_relax_hydro.ConserveAngularMomentumStarExtras
 )
 ConvCoreCpmStarExtras = star_post_checks.ConvCoreCpmStarExtras
+DiffusionSmoothnessStarExtras = (
+    star_rot_mix_checks.DiffusionSmoothnessStarExtras
+)
+Dynamo15MStarExtras = star_rot_mix_checks.Dynamo15MStarExtras
 ExtendedConvectivePenetrationStarExtras = (
     star_mixing_init.ExtendedConvectivePenetrationStarExtras
 )
 GyreInMesaStarExtras = star_atm_pulse.GyreInMesaStarExtras
 Hb2MStarExtras = star_agb_hb.Hb2MStarExtras
+HighRotation20MZ2m2StarExtras = (
+    star_rot_mix_checks.HighRotation20MZ2m2StarExtras
+)
 HighRotDarkeningStarExtras = star_post_checks.HighRotDarkeningStarExtras
 HotCoolWindStarExtras = star_post_checks.HotCoolWindStarExtras
 HseRiemannStarExtras = star_relax_hydro.HseRiemannStarExtras
@@ -45,20 +58,40 @@ MagneticBrakingStarExtras = star_winds_hooks.MagneticBrakingStarExtras
 MakeCoWdStarExtras = star_wd_hooks.MakeCoWdStarExtras
 MakeEnvStarExtras = star_mixing_init.MakeEnvStarExtras
 MakeONeWdStarExtras = star_wd_hooks.MakeONeWdStarExtras
+MakePreCcsn13bvnStarExtras = star_core_collapse.MakePreCcsn13bvnStarExtras
 MakeSdbStarExtras = star_relax_hydro.MakeSdbStarExtras
 MsOpMonoStarExtras = star_atm_pulse.MsOpMonoStarExtras
+NeutronStarEnvStarExtras = star_ns_wd_simplex.NeutronStarEnvStarExtras
 OtherPhysicsHooksStarExtras = star_winds_hooks.OtherPhysicsHooksStarExtras
 PisnStarExtras = star_burn_flame.PisnStarExtras
+PpisnStarExtras = star_ppisn.PpisnStarExtras
+PreMs1MToWdStarExtras = star_ns_wd_simplex.PreMs1MToWdStarExtras
+PreMs12MCoreCollapseStarExtras = (
+    star_core_collapse.PreMs12MCoreCollapseStarExtras
+)
+PreMs20MCoreCollapseStarExtras = (
+    star_core_collapse.PreMs20MCoreCollapseStarExtras
+)
+RadiativeLevitationStarExtras = (
+    star_rot_mix_checks.RadiativeLevitationStarExtras
+)
 RCrBStarExtras = star_agb_hb.RCrBStarExtras
 RelaxCompositionJEntropyStarExtras = (
     star_relax_hydro.RelaxCompositionJEntropyStarExtras
 )
 SemiconvectionStarExtras = star_post_checks.SemiconvectionStarExtras
+SimplexSolarCalibrationStarExtras = (
+    star_ns_wd_simplex.SimplexSolarCalibrationStarExtras
+)
+SplitBurnBigNetStarExtras = star_core_collapse.SplitBurnBigNetStarExtras
+Thermohaline1MStarExtras = star_rot_mix_checks.Thermohaline1MStarExtras
 TTauGradrStarExtras = star_atm_pulse.TTauGradrStarExtras
 TzoStarExtras = star_mixing_init.TzoStarExtras
 WdAccSmallDmStarExtras = star_wd_hooks.WdAccSmallDmStarExtras
 WdAicStarExtras = star_wd_hooks.WdAicStarExtras
+WdCool06MStarExtras = star_ns_wd_simplex.WdCool06MStarExtras
 WdDiffusionStarExtras = star_post_checks.WdDiffusionStarExtras
+WdNovaBurstStarExtras = star_ns_wd_simplex.WdNovaBurstStarExtras
 
 
 class CheckRedoStarExtras:
@@ -222,6 +255,87 @@ _STAR_DISPATCH_RULES: tuple[tuple[re.Pattern[str], Callable[[], Any]], ...] = (
             r"location"
         ),
         HseRiemannStarExtras,
+    ),
+    (
+        re.compile(r"subroutine\s+low_density_wind_routine\b"),
+        CcsnIIpStarExtras,
+    ),
+    (
+        re.compile(r"z_div_z_solar\s*=\s*s%\s*kap_rq%\s*zbase\s*/\s*0\.0142d0"),
+        PpisnStarExtras,
+    ),
+    (
+        re.compile(r"include\s+['\"]xtra_coeff_os/xtra_coeff_os\.inc['\"]"),
+        PreMs1MToWdStarExtras,
+    ),
+    (
+        re.compile(
+            r"s%\s*other_mesh_fcn_data\s*=>\s*gradr_grada_mesh_fcn_data\b"
+        ),
+        SimplexSolarCalibrationStarExtras,
+    ),
+    (
+        re.compile(r"names\(1\)\s*=\s*['\"]log_total_drag_energy['\"]"),
+        MakePreCcsn13bvnStarExtras,
+    ),
+    (
+        re.compile(
+            r"testhub_extras_names\(1\)\s*=\s*['\"]total_burn_solver_steps['\"]"
+        ),
+        SplitBurnBigNetStarExtras,
+    ),
+    (
+        re.compile(
+            r"select\s+case\s*\(\s*s%\s*x_integer_ctrl\(5\)\s*\)\s*"
+            r"case\s*\(\s*6\s*\)\s*testhub_extras_names\(1\)\s*=\s*"
+            r"['\"]fe_core_mass['\"]"
+        ),
+        PreMs12MCoreCollapseStarExtras,
+    ),
+    (
+        re.compile(
+            r"select\s+case\s*\(\s*s%\s*x_integer_ctrl\(5\)\s*\)\s*"
+            r"case\s*\(\s*7\s*\)\s*testhub_extras_names\(1\)\s*=\s*"
+            r"['\"]fe_core_mass['\"]"
+        ),
+        PreMs20MCoreCollapseStarExtras,
+    ),
+    (
+        re.compile(r"avg\s+from\s+3\.0\s+to\s+3\.4\s+msun"),
+        Dynamo15MStarExtras,
+    ),
+    (
+        re.compile(r"avg\s+near\s+0\.245\s+msun"),
+        Thermohaline1MStarExtras,
+    ),
+    (
+        re.compile(r"brunt_n2_composition_term\s+is\s+smooth\s+enough"),
+        DiffusionSmoothnessStarExtras,
+    ),
+    (
+        re.compile(r"found\s+expected\s+effects\s+of\s+radiative\s+levitation"),
+        RadiativeLevitationStarExtras,
+    ),
+    (
+        re.compile(r"include\s+['\"]other_cgrav\.inc['\"]"),
+        NeutronStarEnvStarExtras,
+    ),
+    (
+        re.compile(r"names\(2\)\s*=\s*['\"]eospc_fraction['\"]"),
+        WdCool06MStarExtras,
+    ),
+    (
+        re.compile(r"have\s+finished\s+burst"),
+        WdNovaBurstStarExtras,
+    ),
+    (
+        re.compile(
+            r"^module\s+run_star_extras\b"
+            r"(?:(?!other_alpha_mlt|other_photo_read|other_cgrav|other_torque|"
+            r"xtra_coeff_os|eospc_fraction|h1_mass_added|electron\s+captures).)*"
+            r"names\(1\)\s*=\s*['\"]zbar_div_abar['\"]"
+        ),
+        HighRotation20MZ2m2StarExtras,
     ),
 )
 

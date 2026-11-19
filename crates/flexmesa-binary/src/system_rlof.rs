@@ -7,9 +7,13 @@
 //! `binary/private/binary_wind.f90:33-170`, and
 //! `binary/private/binary_evolve.f90:257-620`.
 
-use flexmesa_const::{CLIGHT, CRAD, MSUN, PI, RSUN, SECYER};
+use std::cell::RefCell;
+
+use flexmesa_const::{MSUN, RSUN, SECYER};
+use flexmesa_star::inlist_runner::StarExtras;
+use flexmesa_star::winds::do_set_mdot_with_extras;
 use flexmesa_star::{
-    EvolveStepReport, PrimaryStateBuffer, StarError, StarModel, do_set_mdot,
+    EvolveStepReport, PrimaryStateBuffer, StarError, StarModel,
     eval_photosphere_info, star_evolve_step,
 };
 
@@ -74,6 +78,18 @@ pub struct BinaryStepSnapshot {
     pub point_mass_i: usize,
     /// Active donor index `donor_i` in `{1, 2}`.
     pub donor_i: usize,
+    /// Suppress RLOF mass transfer flag (`ignore_rlof_flag`).
+    pub ignore_rlof_flag: bool,
+    /// Equivalent non-rotating BH mass (`eq_initial_bh_mass`, g).
+    pub eq_initial_bh_mass: f64,
+    /// Suppress hard limits on the active step (`ignore_hard_limits_this_step`).
+    pub ignore_hard_limits_this_step: bool,
+    /// Saved donor irradiation flux (`irradiation_flux`, $\mathrm{erg\,cm^{-2}\,s^{-1}}$).
+    pub donor_irradiation_flux: f64,
+    /// Saved donor irradiation column depth (`column_depth_for_irradiation`, $\mathrm{g\,cm^{-2}}$).
+    pub donor_column_depth_for_irradiation: f64,
+    /// Tidal synchronization timescales `[t_sync_1, t_sync_2]` (s).
+    pub t_sync: [f64; 2],
     /// Orbital separation $a$ (cm).
     pub separation: f64,
     /// Orbital period $P$ (s).
@@ -121,6 +137,18 @@ pub struct BinaryStepScalars {
     pub point_mass_i: usize,
     /// Active donor index `donor_i` in `{1, 2}`.
     pub donor_i: usize,
+    /// Suppress RLOF mass transfer flag (`ignore_rlof_flag`).
+    pub ignore_rlof_flag: bool,
+    /// Equivalent non-rotating BH mass (`eq_initial_bh_mass`, g).
+    pub eq_initial_bh_mass: f64,
+    /// Suppress hard limits on the active step (`ignore_hard_limits_this_step`).
+    pub ignore_hard_limits_this_step: bool,
+    /// Saved donor irradiation flux (`irradiation_flux`, $\mathrm{erg\,cm^{-2}\,s^{-1}}$).
+    pub donor_irradiation_flux: f64,
+    /// Saved donor irradiation column depth (`column_depth_for_irradiation`, $\mathrm{g\,cm^{-2}}$).
+    pub donor_column_depth_for_irradiation: f64,
+    /// Tidal synchronization timescales `[t_sync_1, t_sync_2]` (s).
+    pub t_sync: [f64; 2],
     /// Orbital separation $a$ (cm).
     pub separation: f64,
     /// Orbital period $P$ (s).
@@ -173,6 +201,13 @@ impl BinaryStepSnapshot {
             point_mass_state: s.point_mass_state,
             point_mass_i: s.point_mass_i,
             donor_i: s.donor_i,
+            ignore_rlof_flag: s.ignore_rlof_flag,
+            eq_initial_bh_mass: s.eq_initial_bh_mass,
+            ignore_hard_limits_this_step: s.ignore_hard_limits_this_step,
+            donor_irradiation_flux: s.donor_irradiation_flux,
+            donor_column_depth_for_irradiation: s
+                .donor_column_depth_for_irradiation,
+            t_sync: s.t_sync,
             separation: s.separation,
             period: s.period,
             eccentricity: s.eccentricity,
@@ -214,6 +249,13 @@ impl BinaryStepSnapshot {
         self.point_mass_state = s.point_mass_state;
         self.point_mass_i = s.point_mass_i;
         self.donor_i = s.donor_i;
+        self.ignore_rlof_flag = s.ignore_rlof_flag;
+        self.eq_initial_bh_mass = s.eq_initial_bh_mass;
+        self.ignore_hard_limits_this_step = s.ignore_hard_limits_this_step;
+        self.donor_irradiation_flux = s.donor_irradiation_flux;
+        self.donor_column_depth_for_irradiation =
+            s.donor_column_depth_for_irradiation;
+        self.t_sync = s.t_sync;
         self.separation = s.separation;
         self.period = s.period;
         self.eccentricity = s.eccentricity;
@@ -275,6 +317,30 @@ pub(crate) fn surface_h1_and_he4(star: &StarModel) -> (f64, f64) {
     (x.clamp(0.0, 1.0), y.clamp(0.0, 1.0))
 }
 
+struct StarWindExtrasAdapter<'a> {
+    extras: RefCell<&'a mut dyn BinaryExtras>,
+    star_idx: usize,
+    ignore_rlof: bool,
+}
+
+impl StarExtras for StarWindExtrasAdapter<'_> {
+    fn other_wind(
+        &self,
+        model: &StarModel,
+        _l: f64,
+        _ms: f64,
+        _r: f64,
+        _t: f64,
+    ) -> Result<Option<f64>, StarError> {
+        let opt_cgs = self.extras.borrow_mut().other_wind_cgs(
+            model,
+            self.star_idx,
+            self.ignore_rlof,
+        )?;
+        Ok(opt_cgs.map(|w_cgs| (-w_cgs).max(0.0) * (SECYER / MSUN)))
+    }
+}
+
 /// Evaluates intrinsic stellar wind $\dot{M}_{\mathrm{wind}} \le 0$ ($\mathrm{g\,s^{-1}}$)
 /// without RLOF `mass_change` using [`DefaultBinaryExtras`].
 pub fn eval_star_intrinsic_wind_cgs(
@@ -296,9 +362,11 @@ pub fn eval_star_intrinsic_wind_cgs(
 }
 
 /// Evaluates intrinsic stellar wind $\dot{M}_{\mathrm{wind}} \le 0$ ($\mathrm{g\,s^{-1}}$)
-/// without RLOF `mass_change`, routing `use_other_wind` through [`BinaryExtras::other_wind_cgs`]
-/// before applying rotational boost/caps (`star/private/winds.f90:431-475`) and
-/// Tout & Eggleton (1988) tidal wind enhancement (`binary_wind.f90:131-170`).
+/// without RLOF `mass_change`, routing `use_other_wind` and rotational
+/// $\Omega/\Omega_{\mathrm{crit}}$ wind enhancement through the canonical
+/// [`flexmesa_star::winds::do_set_mdot_with_extras`] (`F3-13`,
+/// `star/private/winds.f90:54-476`) before applying Tout & Eggleton (1988)
+/// tidal wind enhancement (`binary_wind.f90:131-170`).
 pub fn eval_star_intrinsic_wind_cgs_with_extras(
     star: &mut StarModel,
     star_idx: usize,
@@ -308,85 +376,26 @@ pub fn eval_star_intrinsic_wind_cgs_with_extras(
     ignore_rlof: bool,
     extras: &mut dyn BinaryExtras,
 ) -> Result<f64, StarError> {
-    let custom_raw = if star.controls.use_other_wind {
-        Some(
-            extras
-                .other_wind_cgs(star, star_idx, ignore_rlof)?
-                .ok_or_else(|| {
-                    StarError::InvalidInput(String::from(
-                        "use_other_wind = .true. requires an other_wind hook",
-                    ))
-                })?,
-        )
-    } else {
-        None
+    let saved_mc = std::mem::replace(&mut star.controls.mass_change, 0.0);
+    let saved_other_adj =
+        std::mem::replace(&mut star.controls.use_other_adjust_mdot, false);
+    let saved_mdot = star.mstar_dot;
+    let saved_rot_boost = star.aux.step_hist.rotational_mdot_boost_old;
+
+    let adapter = StarWindExtrasAdapter {
+        extras: RefCell::new(extras),
+        star_idx,
+        ignore_rlof,
     };
-    let mut wind_cgs = if let Some(raw_wind_cgs) = custom_raw {
-        let mut wind_mdot = (-raw_wind_cgs).max(0.0);
-        let l1 = star.lum.first().copied().unwrap_or(1.0).max(1.0);
-        let t1 = if star.teff > 0.0 {
-            star.teff
-        } else {
-            let r0 = star.r.first().copied().unwrap_or(1.0).max(1.0);
-            flexmesa_math::pow(l1 / (PI * r0 * r0 * CRAD * CLIGHT), 0.25)
-        }
-        .max(100.0);
-        let r1 = (l1 / (PI * CRAD * CLIGHT * flexmesa_math::pow4(t1)))
-            .sqrt()
-            .max(1.0);
-        let mw = star.controls.mix_wind.clone();
-        if mw.max_wind > 0.0 {
-            wind_mdot = wind_mdot.min(mw.max_wind * (MSUN / SECYER));
-        }
-        if star.controls.rotation_flag
-            && mw.mdot_omega_power > 0.0
-            && wind_mdot > 0.0
-        {
-            let m1 = star.mstar;
-            let cgrav = star
-                .cgrav
-                .first()
-                .copied()
-                .unwrap_or(flexmesa_const::STANDARD_CGRAV);
-            let t_kh = (0.75 * cgrav * m1 * m1 / (r1 * l1)).max(1.0);
-            let w_lim = (mw.rotational_mdot_kh_fac.max(0.0) * m1 / t_kh)
-                .min(wind_mdot * mw.rotational_mdot_boost_fac.max(1.0));
-            let w_div_wc = flexmesa_star::eval_surf_avg_w_div_w_crit(star);
-            let mut enh = flexmesa_math::pow(
-                (1.0 - w_div_wc).max(1.0e-22),
-                -mw.mdot_omega_power,
-            );
-            if mw.max_rotational_mdot_boost > 0.0 {
-                enh = enh.min(mw.max_rotational_mdot_boost);
-            }
-            wind_mdot = (wind_mdot * enh).min(w_lim);
-            let prev_w = -star.aux.step_hist.mstar_dot_old;
-            if prev_w > 0.0 && mw.max_mdot_jump_for_rotation > 0.0 {
-                wind_mdot =
-                    wind_mdot.min(mw.max_mdot_jump_for_rotation * prev_w);
-            }
-            if mw.max_wind > 0.0 {
-                wind_mdot = wind_mdot.min(mw.max_wind * (MSUN / SECYER));
-            }
-        }
-        if wind_mdot > 0.0 { -wind_mdot } else { 0.0 }
-    } else {
-        let saved_mc = star.controls.mass_change;
-        let saved_other = star.controls.use_other_adjust_mdot;
-        let saved_other_w = star.controls.use_other_wind;
-        let saved_mdot = star.mstar_dot;
-        star.controls.mass_change = 0.0;
-        star.controls.use_other_adjust_mdot = false;
-        star.controls.use_other_wind = false;
-        let res = do_set_mdot(star);
-        let w = star.mstar_dot.min(0.0);
-        star.controls.mass_change = saved_mc;
-        star.controls.use_other_adjust_mdot = saved_other;
-        star.controls.use_other_wind = saved_other_w;
-        star.mstar_dot = saved_mdot;
-        res?;
-        w
-    };
+    let res = do_set_mdot_with_extras(star, &adapter);
+    let mut wind_cgs = star.mstar_dot.min(0.0);
+
+    star.controls.mass_change = saved_mc;
+    star.controls.use_other_adjust_mdot = saved_other_adj;
+    star.mstar_dot = saved_mdot;
+    star.aux.step_hist.rotational_mdot_boost_old = saved_rot_boost;
+    res?;
+
     if do_enhance && wind_cgs < 0.0 {
         wind_cgs = eval_tout_wind_enhancement_orbit_averaged(
             wind_cgs,
@@ -469,8 +478,8 @@ pub fn prepare_coupled_mdots(
 
 /// Evaluates coupled winds, Bondi-Hoyle wind transfer, decoupled Eddington
 /// retention vs. radiation-corrected accretion (`binary_mdot.f90:428-622`), and
-/// configures `donor` and optional `accretor` `mass_change` and `mstar_dot`
-/// before calling `star_evolve_step`.
+/// configures `donor` and optional `accretor` `mass_change`, `mstar_dot`, and
+/// `accreted_material_j` before calling `star_evolve_step`.
 #[allow(clippy::too_many_arguments)]
 pub fn prepare_coupled_mdots_with_extras(
     ctrl: &BinaryInlistControls,
@@ -602,6 +611,7 @@ pub fn prepare_coupled_mdots_with_extras(
     let donor_net_mdot = mtransfer_rate + w_d - w_tr_a;
     donor.controls.mass_change = mtransfer_rate / MSUN * SECYER;
     donor.controls.use_other_adjust_mdot = true;
+    donor.controls.mix_wind.use_accreted_material_j = false;
     if donor.aux.step_hist.mstar_dot_old == 0.0 && donor.model_number > 0 {
         donor.aux.step_hist.mstar_dot_old = donor.mstar_dot;
     }
@@ -670,7 +680,7 @@ pub fn prepare_coupled_mdots_with_extras(
         }
         out.actual_mtransfer_rate = actual_tr;
         out.retained_accretion_rate = retained;
-        out.accreted_material_j = if ctrl.do_j_accretion && retained > 0.0 {
+        out.accreted_material_j = if ctrl.do_j_accretion && acc_net_mdot > 0.0 {
             eval_accreted_material_j(
                 m_d,
                 m_a,
@@ -681,6 +691,11 @@ pub fn prepare_coupled_mdots_with_extras(
         } else {
             0.0
         };
+        // `run_binary_support.f90:261-263` & `binary_mdot.f90:562-572`:
+        // wire `use_accreted_material_j` and `accreted_material_j` into `adjust_mass`.
+        acc.controls.mix_wind.use_accreted_material_j =
+            ctrl.do_j_accretion && acc_net_mdot > 0.0;
+        acc.controls.mix_wind.accreted_material_j = out.accreted_material_j;
         out.component_mdot = [donor_net_mdot, acc_net_mdot];
         out.mdot_system_transfer = [
             mtransfer_rate * ctrl.mass_transfer_alpha,
@@ -802,7 +817,7 @@ pub fn eval_scheme_explicit_mdot_with_steps(
 
 /// Blends explicit mass-transfer rate with the previous step's rate (`cur_mdot_frac`)
 /// and caps at `max_explicit_abs_mdot` ($M_\odot\,\mathrm{yr}^{-1}$)
-/// (`binary_evolve.f90:485-503`).
+/// (`binary_evolve.f90:445-447`).
 #[must_use]
 pub fn blend_explicit_mdot(
     prev_mdot: f64,
@@ -816,10 +831,29 @@ pub fn blend_explicit_mdot(
     blended.min(0.0).max(-cap_cgs)
 }
 
+/// Returns whether stellar hard timestep limits are suppressed on `star`
+/// (`star/private/timestep.f90` `skip_hard_limit`: `timestep_hold >= model_number`
+/// or `relax_hard_limits_after_retry` on a retried model, unless
+/// `never_skip_hard_limits` is `true`).
+#[must_use]
+pub fn star_skips_hard_limits(star: &StarModel) -> bool {
+    let ts = &star.controls.ts_stop;
+    if ts.never_skip_hard_limits {
+        return false;
+    }
+    let sh = &star.aux.step_hist;
+    sh.timestep_hold >= star.model_number
+        || (ts.relax_hard_limits_after_retry
+            && sh.model_number_for_last_retry == Some(star.model_number))
+}
+
 /// Checks `check_delta_mdot` (`star/private/timestep.f90:1889-1917`) at the
 /// accepted coupled binary step (`run_binary_support.f90:546-558`).
 #[must_use]
 pub fn star_exceeds_delta_mdot_hard_limit(star: &StarModel) -> bool {
+    if star_skips_hard_limits(star) {
+        return false;
+    }
     let mw = &star.controls.mix_wind;
     let hard_lim = mw.delta_mdot_hard_limit
         * star.controls.ts_stop.time_delta_coeff.max(1.0e-6);

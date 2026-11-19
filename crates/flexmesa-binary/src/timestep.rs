@@ -2,7 +2,7 @@
 //! Binary timestep controller (`binary_pick_next_timestep`) and hard-limit retry
 //! checks.
 //!
-//! Corresponds to `binary/private/binary_timestep.f90:99-322`.
+//! Corresponds to `binary/private/binary_timestep.f90:33-322`.
 
 use flexmesa_const::{MSUN, RSUN, SECYER};
 use flexmesa_math::{exp10, log10};
@@ -22,6 +22,37 @@ pub const B_TLIM_ECC: i32 = 6;
 /// Component mass change limit (`fdm`).
 pub const B_TLIM_DM: i32 = 7;
 
+/// Specific binary hard-limit violation triggered inside
+/// `binary_pick_next_timestep` (`binary/private/binary_timestep.f90:168-262`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BinaryHardLimitViolation {
+    /// Orbital angular-momentum relative change exceeded `fj_hard * time_delta_coeff`.
+    FjHard,
+    /// Donor envelope-mass relative change exceeded `fm_hard * time_delta_coeff`.
+    FmHard,
+    /// Donor Roche-lobe gap relative change exceeded `fr_hard * time_delta_coeff`.
+    FrHardDonor,
+    /// Accretor Roche-lobe gap relative change exceeded `fr_hard * time_delta_coeff`.
+    FrHardAccretor,
+    /// Orbital separation relative change exceeded `fa_hard * time_delta_coeff`.
+    FaHard,
+    /// Eccentricity relative change exceeded `fe_hard * time_delta_coeff`.
+    FeHard,
+    /// Donor mass relative change exceeded `fdm_hard * time_delta_coeff`.
+    FdmHardDonor,
+    /// Accretor mass relative change exceeded `fdm_hard * time_delta_coeff`.
+    FdmHardAccretor,
+}
+
+impl BinaryHardLimitViolation {
+    /// Whether this violation sets `have_to_reduce_timestep_due_to_j = .true.`
+    /// (`binary/private/binary_timestep.f90:173`).
+    #[must_use]
+    pub const fn reduces_timestep_due_to_j(self) -> bool {
+        matches!(self, Self::FjHard)
+    }
+}
+
 /// State and control parameters for `binary_pick_next_timestep`
 /// (`binary/private/binary_timestep.f90:99-322`).
 #[derive(Debug, Clone)]
@@ -34,7 +65,7 @@ pub struct BinaryTimestepControls {
     pub time_delta_coeff: f64,
     /// Log-space timestep softening weight (`b%dt_softening_factor`, default `0.5`).
     pub dt_softening_factor: f64,
-    /// Relative Roche-lobe gap `(r - rl)/rl` for `[donor, accretor]`.
+    /// Relative Roche-lobe gap `(r - rl*(1-e))/(rl*(1-e))` for `[donor, accretor]`.
     pub rl_relative_gap: [f64; 2],
     /// Previous step relative Roche-lobe gap for `[donor, accretor]`.
     pub rl_relative_gap_old: [f64; 2],
@@ -60,6 +91,11 @@ pub struct BinaryTimestepControls {
     pub m_old: [f64; 2],
     /// Whether the companion is a point mass (`point_mass_i != 0`).
     pub is_point_mass_companion: bool,
+    /// Whether this is the first evolutionary step of the run (`b% doing_first_model_of_run`).
+    pub doing_first_model_of_run: bool,
+    /// Whether hard limits are suppressed on this step (`b% ignore_hard_limits_this_step`,
+    /// set by `set_angular_momentum_j` in `binary_utils.f90:200`).
+    pub ignore_hard_limits_this_step: bool,
     /// Relative change limits (`fm, fr, fj, fa, fe, fdm`; negative disables).
     pub fm: f64,
     /// Floor on donor envelope mass in `fm` (`fm_limit`, default `1e-3`).
@@ -102,6 +138,8 @@ impl Default for BinaryTimestepControls {
             m: [MSUN, MSUN],
             m_old: [MSUN, MSUN],
             is_point_mass_companion: true,
+            doing_first_model_of_run: false,
+            ignore_hard_limits_this_step: false,
             fm: 0.01,
             fm_limit: 1.0e-3,
             fr: 0.10,
@@ -116,6 +154,39 @@ impl Default for BinaryTimestepControls {
     }
 }
 
+fn step_changes(ctrl: &BinaryTimestepControls) -> (f64, f64, f64, f64, f64) {
+    if ctrl.doing_first_model_of_run {
+        (0.0, 0.0, 0.0, 0.0, 0.0)
+    } else {
+        let env_change = if ctrl.env_donor_old == 0.0 {
+            0.0
+        } else {
+            ctrl.env_donor - ctrl.env_donor_old
+        };
+        let rel_gap_change_d = if ctrl.rl_relative_gap_old[0] == 0.0 {
+            0.0
+        } else {
+            ctrl.rl_relative_gap_old[0] - ctrl.rl_relative_gap[0]
+        };
+        let j_change = if ctrl.angular_momentum_j_old == 0.0 {
+            0.0
+        } else {
+            ctrl.angular_momentum_j - ctrl.angular_momentum_j_old
+        };
+        let sep_change = if ctrl.separation_old == 0.0 {
+            0.0
+        } else {
+            ctrl.separation - ctrl.separation_old
+        };
+        let e_change = if ctrl.eccentricity_old == 0.0 {
+            0.0
+        } else {
+            ctrl.eccentricity - ctrl.eccentricity_old
+        };
+        (env_change, rel_gap_change_d, j_change, sep_change, e_change)
+    }
+}
+
 /// Evaluates the next maximum binary timestep `max_timestep` (s) and limiting
 /// reason code (`B_TLIM_*`), matching `binary_pick_next_timestep` in
 /// `binary/private/binary_timestep.f90:99-322` and tested in
@@ -127,6 +198,16 @@ pub fn binary_pick_next_timestep(ctrl: &BinaryTimestepControls) -> (f64, i32) {
     let limit_dt =
         |rel: f64, f_lim: f64| dt_yr / (rel / (f_lim * c_dt) + 1.0e-99);
 
+    // `binary_timestep.f90:121`: only negative `max_timestep` is replaced by `s_donor% dt`.
+    let prev_max = if ctrl.max_timestep_sec < 0.0 {
+        dt_yr * SECYER
+    } else {
+        ctrl.max_timestep_sec
+    };
+
+    let (env_change, rel_gap_change_d, j_change, sep_change, e_change) =
+        step_changes(ctrl);
+
     let mut dtm = 1.0e99_f64;
     let mut dtr = 1.0e99_f64;
     let mut dtj = 1.0e99_f64;
@@ -134,106 +215,165 @@ pub fn binary_pick_next_timestep(ctrl: &BinaryTimestepControls) -> (f64, i32) {
     let mut dte = 1.0e99_f64;
     let mut dtdm = 1.0e99_f64;
 
-    if ctrl.fj > 0.0
-        && ctrl.angular_momentum_j > 0.0
-        && ctrl.angular_momentum_j_old != 0.0
-    {
-        let rj = (ctrl.angular_momentum_j - ctrl.angular_momentum_j_old).abs()
-            / ctrl.angular_momentum_j;
+    if ctrl.fj > 0.0 && ctrl.angular_momentum_j != 0.0 {
+        let rj = (j_change / ctrl.angular_momentum_j).abs();
         dtj = limit_dt(rj, ctrl.fj);
     }
 
-    if ctrl.fm > 0.0 && ctrl.env_donor_old != 0.0 {
-        let rm = (ctrl.env_donor - ctrl.env_donor_old).abs()
-            / ctrl.env_donor.max(ctrl.fm_limit);
+    if ctrl.fm > 0.0 {
+        let rm = (env_change / ctrl.env_donor.max(ctrl.fm_limit)).abs();
         dtm = limit_dt(rm, ctrl.fm);
     }
 
     if ctrl.fr > 0.0 {
-        let rr_d = if ctrl.rl_relative_gap_old[0] == 0.0 {
+        let rr_d = (rel_gap_change_d
+            / ctrl.rl_relative_gap[0].abs().max(ctrl.fr_limit))
+        .abs();
+        let dtr_d = limit_dt(rr_d, ctrl.fr);
+        let rel_gap_change_a = if ctrl.rl_relative_gap_old[1] == 0.0 {
             0.0
         } else {
-            (ctrl.rl_relative_gap_old[0] - ctrl.rl_relative_gap[0]).abs()
-                / ctrl.rl_relative_gap[0].abs().max(ctrl.fr_limit)
+            ctrl.rl_relative_gap_old[1] - ctrl.rl_relative_gap[1]
         };
-        let dtr_d = limit_dt(rr_d, ctrl.fr);
-        dtr = if ctrl.is_point_mass_companion {
-            dtr_d
-        } else {
-            let rr_a = if ctrl.rl_relative_gap_old[1] == 0.0 {
-                0.0
-            } else {
-                (ctrl.rl_relative_gap_old[1] - ctrl.rl_relative_gap[1]).abs()
-                    / ctrl.rl_relative_gap[1].abs().max(ctrl.fr_limit)
-            };
-            dtr_d.min(limit_dt(rr_a, ctrl.fr))
-        };
-        if dtr < ctrl.fr_dt_limit {
-            dtr = ctrl.fr_dt_limit;
-        }
+        let rr_a = (rel_gap_change_a
+            / ctrl.rl_relative_gap[1].abs().max(ctrl.fr_limit))
+        .abs();
+        dtr = dtr_d.min(limit_dt(rr_a, ctrl.fr));
+    }
+    if dtr < ctrl.fr_dt_limit {
+        dtr = ctrl.fr_dt_limit;
     }
 
-    if ctrl.fa > 0.0 && ctrl.separation > 0.0 && ctrl.separation_old != 0.0 {
-        let ra =
-            (ctrl.separation_old - ctrl.separation).abs() / ctrl.separation;
+    if ctrl.fa > 0.0 && ctrl.separation != 0.0 {
+        let ra = (sep_change / ctrl.separation).abs();
         dta = limit_dt(ra, ctrl.fa);
     }
 
-    if ctrl.fe > 0.0 && ctrl.eccentricity_old != 0.0 {
-        let re = (ctrl.eccentricity_old - ctrl.eccentricity).abs()
-            / ctrl.eccentricity.max(ctrl.fe_limit);
+    if ctrl.fe > 0.0 {
+        let re = (e_change / ctrl.eccentricity.max(ctrl.fe_limit)).abs();
         dte = limit_dt(re, ctrl.fe);
     }
 
+    // `binary_timestep.f90:244-264` (`F3-8`): evaluates `fdm` on both donor
+    // and accretor, including point-mass companions.
     if ctrl.fdm > 0.0 && ctrl.m_old[0] > 0.0 {
         let rdm_d = (ctrl.m[0] - ctrl.m_old[0]).abs() / ctrl.m_old[0];
-        let dtdm_d = limit_dt(rdm_d, ctrl.fdm);
-        dtdm = if ctrl.is_point_mass_companion || ctrl.m_old[1] <= 0.0 {
-            dtdm_d
-        } else {
+        let mut dtdm_cur = limit_dt(rdm_d, ctrl.fdm);
+        if ctrl.m_old[1] > 0.0 {
             let rdm_a = (ctrl.m[1] - ctrl.m_old[1]).abs() / ctrl.m_old[1];
-            dtdm_d.min(limit_dt(rdm_a, ctrl.fdm))
-        };
-    }
-
-    let candidates = [
-        (dtm, B_TLIM_ENV),
-        (dtr, B_TLIM_ROCHE),
-        (dtj, B_TLIM_JORB),
-        (dta, B_TLIM_SEP),
-        (dte, B_TLIM_ECC),
-        (dtdm, B_TLIM_DM),
-    ];
-    let mut dt_set_yr = 1.0e99_f64;
-    let mut reason = B_TLIM_COMP;
-    for (val, code) in candidates {
-        if val < dt_set_yr {
-            dt_set_yr = val;
-            reason = code;
+            dtdm_cur = dtdm_cur.min(limit_dt(rdm_a, ctrl.fdm));
         }
-    }
-    if dt_set_yr < 1.0e-7 {
-        dt_set_yr = 1.0e-7;
-    }
-    if reason == B_TLIM_COMP {
-        return (1.0e99, B_TLIM_COMP);
+        dtdm = dtdm_cur;
     }
 
-    let prev_max =
-        if ctrl.max_timestep_sec <= 0.0 || ctrl.max_timestep_sec >= 1.0e90 {
-            (dt_yr * SECYER).max(1.0e-7 * SECYER)
-        } else {
-            ctrl.max_timestep_sec
-        };
+    let dt_set_raw = dtm.min(dtr).min(dtj).min(dta).min(dte).min(dtdm);
+    let reason = if dt_set_raw == dtm {
+        B_TLIM_ENV
+    } else if dt_set_raw == dtr {
+        B_TLIM_ROCHE
+    } else if dt_set_raw == dtj {
+        B_TLIM_JORB
+    } else if dt_set_raw == dta {
+        B_TLIM_SEP
+    } else if dt_set_raw == dte {
+        B_TLIM_ECC
+    } else {
+        B_TLIM_DM
+    };
+    let dt_set_yr = dt_set_raw.max(1.0e-7);
+
     let f_soft = ctrl.dt_softening_factor;
     let max_timestep_new = exp10(
-        f_soft * log10(prev_max) + (1.0 - f_soft) * log10(dt_set_yr * SECYER),
+        f_soft * log10(prev_max.max(1.0e-99))
+            + (1.0 - f_soft) * log10(dt_set_yr * SECYER),
     );
     (max_timestep_new, reason)
 }
 
+/// Checks binary hard relative-change limits (`fj_hard`, `fm_hard`, `fr_hard`,
+/// `fa_hard`, `fe_hard`, `fdm_hard` in `binary_timestep.f90:166-264`), returning
+/// the first violated limit when `ctrl.ignore_hard_limits_this_step` is `false`.
+///
+/// Notice upstream checks each `*_hard` inside its corresponding `if (b% f* > 0)`
+/// block (`binary_timestep.f90:166, 179, 191, 220, 232, 244`).
+#[allow(clippy::too_many_arguments)]
+#[must_use]
+pub fn check_binary_hard_limits(
+    ctrl: &BinaryTimestepControls,
+    fm_hard: f64,
+    fr_hard: f64,
+    fj_hard: f64,
+    fa_hard: f64,
+    fe_hard: f64,
+    fdm_hard: f64,
+) -> Option<BinaryHardLimitViolation> {
+    if ctrl.ignore_hard_limits_this_step {
+        return None;
+    }
+    let c_dt = ctrl.time_delta_coeff;
+    let (env_change, rel_gap_change_d, j_change, sep_change, e_change) =
+        step_changes(ctrl);
+
+    if ctrl.fj > 0.0 && fj_hard > 0.0 && ctrl.angular_momentum_j != 0.0 {
+        let rj = (j_change / ctrl.angular_momentum_j).abs();
+        if rj > fj_hard * c_dt {
+            return Some(BinaryHardLimitViolation::FjHard);
+        }
+    }
+    if ctrl.fm > 0.0 && fm_hard > 0.0 {
+        let rm = (env_change / ctrl.env_donor.max(ctrl.fm_limit)).abs();
+        if rm > fm_hard * c_dt {
+            return Some(BinaryHardLimitViolation::FmHard);
+        }
+    }
+    if ctrl.fr > 0.0 && fr_hard > 0.0 {
+        let rr_d = (rel_gap_change_d
+            / ctrl.rl_relative_gap[0].abs().max(ctrl.fr_limit))
+        .abs();
+        if rr_d > fr_hard * c_dt {
+            return Some(BinaryHardLimitViolation::FrHardDonor);
+        }
+        let rel_gap_change_a = if ctrl.rl_relative_gap_old[1] == 0.0 {
+            0.0
+        } else {
+            ctrl.rl_relative_gap_old[1] - ctrl.rl_relative_gap[1]
+        };
+        let rr_a = (rel_gap_change_a
+            / ctrl.rl_relative_gap[1].abs().max(ctrl.fr_limit))
+        .abs();
+        if rr_a > fr_hard * c_dt {
+            return Some(BinaryHardLimitViolation::FrHardAccretor);
+        }
+    }
+    if ctrl.fa > 0.0 && fa_hard > 0.0 && ctrl.separation != 0.0 {
+        let ra = (sep_change / ctrl.separation).abs();
+        if ra > fa_hard * c_dt {
+            return Some(BinaryHardLimitViolation::FaHard);
+        }
+    }
+    if ctrl.fe > 0.0 && fe_hard > 0.0 {
+        let re = (e_change / ctrl.eccentricity.max(ctrl.fe_limit)).abs();
+        if re > fe_hard * c_dt {
+            return Some(BinaryHardLimitViolation::FeHard);
+        }
+    }
+    if ctrl.fdm > 0.0 && fdm_hard > 0.0 && ctrl.m_old[0] > 0.0 {
+        let rdm_d = (ctrl.m[0] - ctrl.m_old[0]).abs() / ctrl.m_old[0];
+        if rdm_d > fdm_hard * c_dt {
+            return Some(BinaryHardLimitViolation::FdmHardDonor);
+        }
+        if ctrl.m_old[1] > 0.0 {
+            let rdm_a = (ctrl.m[1] - ctrl.m_old[1]).abs() / ctrl.m_old[1];
+            if rdm_a > fdm_hard * c_dt {
+                return Some(BinaryHardLimitViolation::FdmHardAccretor);
+            }
+        }
+    }
+    None
+}
+
 /// Checks binary hard relative-change limits (`fm_hard`, `fr_hard`, `fj_hard`,
-/// `fa_hard`, `fe_hard`, `fdm_hard` in `binary_timestep.f90:155-265`), returning
+/// `fa_hard`, `fe_hard`, `fdm_hard` in `binary_timestep.f90:166-264`), returning
 /// `true` if the trial step exceeded a configured hard limit and must retry.
 #[allow(clippy::too_many_arguments)]
 #[must_use]
@@ -246,65 +386,74 @@ pub fn violates_binary_hard_limits(
     fe_hard: f64,
     fdm_hard: f64,
 ) -> bool {
-    let c_dt = ctrl.time_delta_coeff.max(1.0e-12);
-    if fj_hard > 0.0
-        && ctrl.angular_momentum_j > 0.0
-        && ctrl.angular_momentum_j_old != 0.0
-    {
-        let rj = (ctrl.angular_momentum_j - ctrl.angular_momentum_j_old).abs()
-            / ctrl.angular_momentum_j;
-        if rj > fj_hard * c_dt {
-            return true;
-        }
+    check_binary_hard_limits(
+        ctrl, fm_hard, fr_hard, fj_hard, fa_hard, fe_hard, fdm_hard,
+    )
+    .is_some()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_f3_8_point_mass_accretor_fdm_and_hard_limits() {
+        let ctrl = BinaryTimestepControls {
+            donor_time_step_yr: 100.0,
+            max_timestep_sec: -1.0,
+            dt_softening_factor: 0.0,
+            is_point_mass_companion: true,
+            m: [19.99 * MSUN, 1.42 * MSUN],
+            m_old: [20.0 * MSUN, 1.40 * MSUN],
+            fm: -1.0,
+            fr: -1.0,
+            fj: -1.0,
+            fa: -1.0,
+            fe: -1.0,
+            fdm: 0.005,
+            ..BinaryTimestepControls::default()
+        };
+        let (max_dt_sec, reason) = binary_pick_next_timestep(&ctrl);
+        assert_eq!(reason, B_TLIM_DM);
+        // Donor relative mass change is 0.0005, point-mass accretor is 0.02/1.40 = 1/70 > 0.005,
+        // so accretor sets `dtdm = 100 / ((1/70) / 0.005) = 35 yr`.
+        assert!((max_dt_sec / SECYER - 35.0).abs() < 1.0e-12);
+
+        let viol =
+            check_binary_hard_limits(&ctrl, -1.0, -1.0, -1.0, -1.0, -1.0, 0.01);
+        assert_eq!(viol, Some(BinaryHardLimitViolation::FdmHardAccretor));
+
+        let mut ignored = ctrl;
+        ignored.ignore_hard_limits_this_step = true;
+        assert_eq!(
+            check_binary_hard_limits(
+                &ignored, -1.0, -1.0, -1.0, -1.0, -1.0, 0.01
+            ),
+            None
+        );
     }
-    if fm_hard > 0.0 && ctrl.env_donor_old != 0.0 {
-        let rm = (ctrl.env_donor - ctrl.env_donor_old).abs()
-            / ctrl.env_donor.max(ctrl.fm_limit);
-        if rm > fm_hard * c_dt {
-            return true;
-        }
+
+    #[test]
+    fn test_f3_8_first_model_zeros_orbital_deltas_and_fj_hard_sets_j_flag() {
+        let mut ctrl = BinaryTimestepControls {
+            doing_first_model_of_run: true,
+            angular_momentum_j: 0.9 * 1.0e52,
+            angular_momentum_j_old: 1.0e52,
+            fj: 0.001,
+            ..BinaryTimestepControls::default()
+        };
+        assert_eq!(
+            check_binary_hard_limits(&ctrl, -1.0, -1.0, 0.01, -1.0, -1.0, -1.0),
+            None
+        );
+        ctrl.doing_first_model_of_run = false;
+        let viol =
+            check_binary_hard_limits(&ctrl, -1.0, -1.0, 0.01, -1.0, -1.0, -1.0);
+        assert_eq!(viol, Some(BinaryHardLimitViolation::FjHard));
+        assert!(
+            viol.is_some_and(
+                BinaryHardLimitViolation::reduces_timestep_due_to_j
+            )
+        );
     }
-    if fr_hard > 0.0 && ctrl.rl_relative_gap_old[0] != 0.0 {
-        let rr_d = (ctrl.rl_relative_gap_old[0] - ctrl.rl_relative_gap[0])
-            .abs()
-            / ctrl.rl_relative_gap[0].abs().max(ctrl.fr_limit);
-        if rr_d > fr_hard * c_dt {
-            return true;
-        }
-        if !ctrl.is_point_mass_companion && ctrl.rl_relative_gap_old[1] != 0.0 {
-            let rr_a = (ctrl.rl_relative_gap_old[1] - ctrl.rl_relative_gap[1])
-                .abs()
-                / ctrl.rl_relative_gap[1].abs().max(ctrl.fr_limit);
-            if rr_a > fr_hard * c_dt {
-                return true;
-            }
-        }
-    }
-    if fa_hard > 0.0 && ctrl.separation > 0.0 && ctrl.separation_old != 0.0 {
-        let ra =
-            (ctrl.separation_old - ctrl.separation).abs() / ctrl.separation;
-        if ra > fa_hard * c_dt {
-            return true;
-        }
-    }
-    if fe_hard > 0.0 && ctrl.eccentricity_old != 0.0 {
-        let re = (ctrl.eccentricity_old - ctrl.eccentricity).abs()
-            / ctrl.eccentricity.max(ctrl.fe_limit);
-        if re > fe_hard * c_dt {
-            return true;
-        }
-    }
-    if fdm_hard > 0.0 && ctrl.m_old[0] > 0.0 {
-        let rdm_d = (ctrl.m[0] - ctrl.m_old[0]).abs() / ctrl.m_old[0];
-        if rdm_d > fdm_hard * c_dt {
-            return true;
-        }
-        if !ctrl.is_point_mass_companion && ctrl.m_old[1] > 0.0 {
-            let rdm_a = (ctrl.m[1] - ctrl.m_old[1]).abs() / ctrl.m_old[1];
-            if rdm_a > fdm_hard * c_dt {
-                return true;
-            }
-        }
-    }
-    false
 }

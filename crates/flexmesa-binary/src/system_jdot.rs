@@ -248,8 +248,53 @@ pub(crate) fn validate_circ_type(s: &str) -> Result<(), StarError> {
     }
 }
 
+/// Evaluates exact stellar spin angular momentum removed during mass loss
+/// (`s% angular_momentum_removed` in `star/private/adjust_mass.f90:527-552, 1508-1569`),
+/// matching [`flexmesa_star::adjust_mass::do_adjust_mass_step`].
+#[must_use]
+pub(crate) fn eval_star_am_removed_post_step(star: &StarModel) -> f64 {
+    if !star.controls.rotation_flag || star.mstar_dot >= 0.0 || star.nz == 0 {
+        return 0.0;
+    }
+    let mass_lost = (star.mstar_old - star.mstar).max(0.0);
+    if mass_lost <= 0.0
+        || star.dq_old.len() != star.nz
+        || star.aux.j_rot_old.len() != star.nz
+    {
+        return 0.0;
+    }
+    let xm_old = (star.mstar_old - star.m_center).max(0.0);
+    let nz = star.nz;
+    let mut dm00 = 0.0_f64;
+    let mut dm_sum = 0.0_f64;
+    let mut j_removed = 0.0_f64;
+    for k in 0..nz {
+        let dmm1 = dm00;
+        dm00 = xm_old * star.dq_old[k];
+        let mut dm_k = if k + 1 == nz {
+            0.5 * dmm1 + dm00
+        } else {
+            0.5 * (dmm1 + dm00)
+        };
+        if dm_sum + dm_k >= mass_lost {
+            dm_k = (mass_lost - dm_sum).max(0.0);
+            j_removed += dm_k * star.aux.j_rot_old[k];
+            break;
+        }
+        dm_sum += dm_k;
+        j_removed += dm_k * star.aux.j_rot_old[k];
+    }
+    let mw = &star.controls.mix_wind;
+    if mw.do_adjust_j_lost {
+        let f_adj = mw.adjust_j_fraction.clamp(0.0, 1.0);
+        f_adj * mass_lost * star.aux.j_rot_old[0] + (1.0 - f_adj) * j_removed
+    } else {
+        j_removed
+    }
+}
+
 /// Relaxes shellular spin $\Omega_k$ toward orbital synchronization over `dt` (s)
-/// following `sync_spin_orbit_torque` (`binary/private/binary_tides.f90:120-210`).
+/// following `sync_spin_orbit_torque` (`binary/private/binary_tides.f90:93-271`).
 #[allow(clippy::too_many_arguments)]
 pub fn apply_tidal_spin_sync(
     star: &mut StarModel,
@@ -263,6 +308,39 @@ pub fn apply_tidal_spin_sync(
     eccentricity: f64,
     dt: f64,
 ) -> Result<(), StarError> {
+    let _ = apply_tidal_spin_sync_step(
+        star,
+        false,
+        sync_type,
+        sync_mode,
+        f_tid,
+        tidal_reduction,
+        m_companion,
+        separation,
+        period,
+        eccentricity,
+        dt,
+    )?;
+    Ok(())
+}
+
+/// Evaluates `sync_spin_to_orbit` (`binary/private/binary_tides.f90:93-271`),
+/// returning `t_sync` (s) (`0.0` when inactive or `"Instantaneous"`) and
+/// skipping the `extra_jdot` spin update on `doing_first_model_of_run` (`:265`).
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn apply_tidal_spin_sync_step(
+    star: &mut StarModel,
+    doing_first_model_of_run: bool,
+    sync_type: &str,
+    sync_mode: &str,
+    f_tid: f64,
+    tidal_reduction: f64,
+    m_companion: f64,
+    separation: f64,
+    period: f64,
+    eccentricity: f64,
+    dt: f64,
+) -> Result<f64, StarError> {
     validate_sync_type(sync_type)?;
     validate_sync_mode(sync_mode)?;
     if !star.controls.rotation_flag
@@ -273,16 +351,18 @@ pub fn apply_tidal_spin_sync(
         || f_tid <= 0.0
         || sync_type.eq_ignore_ascii_case("None")
     {
-        return Ok(());
+        return Ok(0.0);
     }
     update_rotation_distortion_factors(star);
     let omega_orb = 2.0 * PI / period;
     if sync_type.eq_ignore_ascii_case("Instantaneous") {
-        for k in 0..star.nz {
-            star.omega[k] = omega_orb;
-            star.j_rot[k] = star.aux.i_rot[k] * omega_orb;
+        if !doing_first_model_of_run {
+            for k in 0..star.nz {
+                star.omega[k] = omega_orb;
+                star.j_rot[k] = star.aux.i_rot[k] * omega_orb;
+            }
         }
-        return Ok(());
+        return Ok(0.0);
     }
     let t_sync = if sync_type.eq_ignore_ascii_case("Orb_period") {
         period / f_tid
@@ -307,11 +387,16 @@ pub fn apply_tidal_spin_sync(
         )
     };
     if !t_sync.is_finite() || t_sync <= 0.0 {
-        return Ok(());
+        return Ok(0.0);
+    }
+    // `binary_tides.f90:256-269`: `b% t_sync_{1,2}` is recorded on all steps,
+    // while `s% extra_jdot` is applied only when `.not. b% doing_first_model_of_run`.
+    if doing_first_model_of_run {
+        return Ok(t_sync);
     }
     if sync_mode.eq_ignore_ascii_case("tdyn_div_tkh") {
         apply_tdyn_div_tkh_sync(star, omega_orb, t_sync, dt);
-        return Ok(());
+        return Ok(t_sync);
     }
     let a1 = hut_f2(eccentricity);
     let a2 = pow((1.0 - eccentricity * eccentricity).max(1.0e-12), 1.5)
@@ -323,7 +408,7 @@ pub fn apply_tidal_spin_sync(
         star.j_rot[k] -= relax_frac * (star.j_rot[k] - sync_ratio * j_sync);
         star.omega[k] = star.j_rot[k] / star.aux.i_rot[k].max(1.0e-30);
     }
-    Ok(())
+    Ok(t_sync)
 }
 
 fn interp_val_to_face(vals: &[f64], dq: &[f64], k: usize) -> f64 {

@@ -139,6 +139,16 @@ pub struct BinarySystem {
     pub donor_i: usize,
     /// Suppress RLOF mass transfer when `true` (`ignore_rlof_flag`).
     pub ignore_rlof_flag: bool,
+    /// Equivalent non-rotating BH mass $M_{\mathrm{BH},0}^{\mathrm{eq}}$ in grams (`b% eq_initial_bh_mass`).
+    pub eq_initial_bh_mass: f64,
+    /// Suppress binary hard limits on the active step (`b% ignore_hard_limits_this_step`).
+    pub ignore_hard_limits_this_step: bool,
+    /// Pending extra retry reduction factor `dt_reduction_factor_for_j` (`b% have_to_reduce_timestep_due_to_j`).
+    pub have_to_reduce_timestep_due_to_j: bool,
+    /// Whether the donor hit the rotational implicit wind limit during an implicit RLOF trial (`b% donor_started_implicit_wind`).
+    pub donor_started_implicit_wind: bool,
+    /// Tidal synchronization timescales `[t_sync_1, t_sync_2]` in seconds (`b% t_sync_1`, `b% t_sync_2`).
+    pub t_sync: [f64; 2],
     /// Adaptive implicit RLOF step multiplier (`change_factor`).
     pub change_factor: f64,
     /// Latched magnetic-braking flags `[star_1, star_2]`.
@@ -156,6 +166,9 @@ pub struct BinarySystem {
     pub last_termination_reason: Option<String>,
     /// Retry, implicit trial, dt-cut, and hard-limit counters preserved across rollbacks.
     pub counters: BinaryStepCounters,
+    /// Frozen stellar structure retained after `set_point_mass_i` converts an
+    /// evolved star into a compact point mass (`b% s1` / `b% s2` in `binary_utils.f90:67-82`).
+    collapsed_star: Option<Box<StarModel>>,
 }
 
 impl BinarySystem {
@@ -334,6 +347,12 @@ impl BinarySystem {
             false
         };
 
+        let eq_bh_init = match &companion {
+            BinaryCompanion::PointMass { m_bh_zero_eq_g, .. } => {
+                *m_bh_zero_eq_g
+            }
+            BinaryCompanion::Star(_) => 0.0,
+        };
         let init_masses_msun = if donor_i == 1 {
             [donor.mstar / MSUN, m_a / MSUN]
         } else {
@@ -367,6 +386,14 @@ impl BinarySystem {
             point_mass_i,
             donor_i,
             ignore_rlof_flag: ignore_rlof,
+            eq_initial_bh_mass: eq_bh_init,
+            // `binarydata_init` calls `set_{period,separation}_eccentricity` ->
+            // `set_angular_momentum_j` (`binary_utils.f90:200`), which sets
+            // `ignore_hard_limits_this_step = .true.` for the first step.
+            ignore_hard_limits_this_step: true,
+            have_to_reduce_timestep_due_to_j: false,
+            donor_started_implicit_wind: false,
+            t_sync: [0.0; 2],
             using_jdot_mb: [false; 2],
             cumulative_j_ext: 0.0,
             last_mdot: CoupledMdotAccounting::default(),
@@ -374,7 +401,9 @@ impl BinarySystem {
             last_edot: EdotBreakdown::default(),
             last_termination_reason: None,
             counters: BinaryStepCounters::default(),
+            collapsed_star: None,
         };
+        sys.apply_binary_job_controls_after(false)?;
         sys.refresh_tidal_deformation_hooks(false)?;
         sys.update_stage_varcontrol();
         Ok(sys)
@@ -462,6 +491,16 @@ impl BinarySystem {
         }
     }
 
+    /// Returns `[rl(1), rl(2)]` in cm ordered by star index (`1` and `2`).
+    #[must_use]
+    pub fn rl_by_star(&self) -> [f64; 2] {
+        if self.donor_i == 1 {
+            self.rl
+        } else {
+            [self.rl[1], self.rl[0]]
+        }
+    }
+
     /// Returns `[rl_relative_gap(1), rl_relative_gap(2)]` ordered by star index.
     #[must_use]
     pub fn rl_relative_gap_by_star(&self) -> [f64; 2] {
@@ -487,6 +526,18 @@ impl BinarySystem {
         }
     }
 
+    /// Returns a reference to star slot `idx` (`1` or `2`), including a star
+    /// converted into a compact point mass via [`Self::set_point_mass_i`]
+    /// (`b% s1` / `b% s2` in `binary_utils.f90:67-82`).
+    #[must_use]
+    pub fn star_slot_ref(&self, idx: usize) -> Option<&StarModel> {
+        if self.point_mass_i == idx {
+            self.collapsed_star.as_deref()
+        } else {
+            self.star_ref(idx)
+        }
+    }
+
     /// Returns conserved spin-orbit quantity $J_{\mathrm{orb}} + S_1 + S_2 - J_{\mathrm{ext}}$.
     #[must_use]
     pub fn total_angular_momentum_conserved(&self) -> f64 {
@@ -506,7 +557,22 @@ impl BinarySystem {
         }
     }
 
-    /// Updates orbital period `period_sec` (s) and `eccentricity`, recomputing $a$, $J_{\mathrm{orb}}$, and $R_L$.
+    /// Updates `eq_initial_bh_mass` in grams (`b% eq_initial_bh_mass`), keeping
+    /// any active `PointMass` companion's `m_bh_zero_eq_g` synchronized.
+    pub fn set_eq_initial_bh_mass(&mut self, eq_mass_g: f64) {
+        self.eq_initial_bh_mass = eq_mass_g;
+        if let BinaryCompanion::PointMass {
+            ref mut m_bh_zero_eq_g,
+            ..
+        } = self.companion
+        {
+            *m_bh_zero_eq_g = eq_mass_g;
+        }
+    }
+
+    /// Updates orbital period `period_sec` (s) and `eccentricity`, recomputing
+    /// $a$, $J_{\mathrm{orb}}$, and $R_L$, and setting `ignore_hard_limits_this_step`
+    /// (`set_period_eccentricity` -> `set_angular_momentum_j` in `binary_utils.f90:146-202`).
     pub fn set_period_eccentricity(
         &mut self,
         period_sec: f64,
@@ -531,20 +597,150 @@ impl BinarySystem {
         );
         self.rl = rl;
         self.rl_relative_gap = gaps;
+        self.ignore_hard_limits_this_step = true;
         self.refresh_tidal_deformation_hooks(false)
     }
 
+    /// Updates orbital separation `separation_cm` (cm) and `eccentricity`,
+    /// recomputing $P$, $J_{\mathrm{orb}}$, and $R_L$, and setting
+    /// `ignore_hard_limits_this_step` (`set_separation_eccentricity` in `binary_utils.f90:163-202`).
+    pub fn set_separation_eccentricity(
+        &mut self,
+        separation_cm: f64,
+        eccentricity: f64,
+    ) -> Result<(), StarError> {
+        let (m_d, m_a) = (self.donor.mstar, self.accretor_mass_g());
+        self.separation = separation_cm;
+        self.eccentricity = eccentricity.clamp(
+            self.controls.min_eccentricity,
+            self.controls.max_eccentricity,
+        );
+        self.period = period_from_separation(m_d, m_a, self.separation);
+        self.angular_momentum_j =
+            eval_j_orb(m_d, m_a, self.separation, self.eccentricity);
+        let (rl, gaps) = compute_rl_and_gaps(
+            m_d,
+            m_a,
+            star_photosphere_radius_cm(&self.donor),
+            self.accretor_radius_cm(),
+            self.separation,
+            self.eccentricity,
+        );
+        self.rl = rl;
+        self.rl_relative_gap = gaps;
+        self.ignore_hard_limits_this_step = true;
+        self.refresh_tidal_deformation_hooks(false)
+    }
+
+    /// Updates point-mass primary mass `m1_msun` ($M_\odot$) when `point_mass_i == 1`
+    /// (`set_m1` in `binary_utils.f90:105-124`).
+    pub fn set_m1(&mut self, m1_msun: f64) -> Result<(), StarError> {
+        if self.point_mass_i != 1 {
+            return Err(StarError::InvalidInput(String::from(
+                "set_m1 requires point_mass_i == 1",
+            )));
+        }
+        if let BinaryCompanion::PointMass { ref mut mass_g, .. } =
+            self.companion
+        {
+            *mass_g = m1_msun * MSUN;
+        }
+        self.set_separation_eccentricity(self.separation, self.eccentricity)
+    }
+
+    /// Updates point-mass secondary mass `m2_msun` ($M_\odot$) when `point_mass_i == 2`
+    /// (`set_m2` in `binary_utils.f90:126-144`).
+    pub fn set_m2(&mut self, m2_msun: f64) -> Result<(), StarError> {
+        if self.point_mass_i != 2 {
+            return Err(StarError::InvalidInput(String::from(
+                "set_m2 requires point_mass_i == 2",
+            )));
+        }
+        if let BinaryCompanion::PointMass { ref mut mass_g, .. } =
+            self.companion
+        {
+            *mass_g = m2_msun * MSUN;
+        }
+        self.set_separation_eccentricity(self.separation, self.eccentricity)
+    }
+
+    /// Applies `&binary_job` `change_*` / `change_initial_*` overrides
+    /// (`do_binary_job_controls_after` in `run_binary_support.f90:894-1014`).
+    pub fn apply_binary_job_controls_after(
+        &mut self,
+        restart: bool,
+    ) -> Result<(), StarError> {
+        let c = self.controls.clone();
+        if c.change_ignore_rlof_flag
+            || (c.change_initial_ignore_rlof_flag && !restart)
+        {
+            self.set_ignore_rlof_flag(c.new_ignore_rlof_flag);
+        }
+        if (c.change_point_mass_i
+            || (c.change_initial_point_mass_i && !restart))
+            && usize::try_from(c.new_point_mass_i).unwrap_or(self.point_mass_i)
+                != self.point_mass_i
+        {
+            let new_pm = usize::try_from(c.new_point_mass_i).map_err(|_| {
+                StarError::InvalidInput(format!(
+                    "invalid new_point_mass_i {}",
+                    c.new_point_mass_i
+                ))
+            })?;
+            self.set_point_mass_i(new_pm)?;
+        }
+        if (c.change_m1 || (c.change_initial_m1 && !restart))
+            && self.star_masses_g()[0] != c.new_m1
+        {
+            self.set_m1(c.new_m1)?;
+        }
+        if (c.change_m2 || (c.change_initial_m2 && !restart))
+            && self.star_masses_g()[1] != c.new_m2
+        {
+            self.set_m2(c.new_m2)?;
+        }
+        if (c.change_period_eccentricity
+            || (c.change_initial_period_eccentricity && !restart))
+            && (self.period != c.new_period * SECDAY
+                || self.eccentricity != c.new_eccentricity)
+        {
+            self.set_period_eccentricity(
+                c.new_period * SECDAY,
+                c.new_eccentricity,
+            )?;
+        }
+        if (c.change_separation_eccentricity
+            || (c.change_initial_separation_eccentricity && !restart))
+            && (self.separation != c.new_separation * RSUN
+                || self.eccentricity != c.new_eccentricity)
+        {
+            self.set_separation_eccentricity(
+                c.new_separation * RSUN,
+                c.new_eccentricity,
+            )?;
+        }
+        Ok(())
+    }
+
     /// Dynamically converts star `new_point_mass_i` (`1` or `2`) into a compact
-    /// point mass (`binary_set_point_mass_i` in `binary_evolve.f90:140-200`).
+    /// point mass (`set_point_mass_i` in `binary_utils.f90:47-82`).
     pub fn set_point_mass_i(
         &mut self,
         new_point_mass_i: usize,
     ) -> Result<(), StarError> {
-        if new_point_mass_i == self.point_mass_i
-            || new_point_mass_i == 0
-            || new_point_mass_i > 2
-        {
+        if new_point_mass_i == self.point_mass_i {
             return Ok(());
+        }
+        if new_point_mass_i == 0 || new_point_mass_i > 2 {
+            return Err(StarError::InvalidInput(format!(
+                "set_point_mass_i requires 1 or 2, got {new_point_mass_i}"
+            )));
+        }
+        if self.point_mass_i != 0 {
+            return Err(StarError::InvalidInput(format!(
+                "cannot set point_mass_i={new_point_mass_i} when star {} is already a point mass",
+                self.point_mass_i
+            )));
         }
         let pm_mass = self.star_masses_g()[new_point_mass_i - 1];
         let m_bh_eq =
@@ -559,20 +755,20 @@ impl BinarySystem {
             if let BinaryCompanion::Star(other_star) =
                 std::mem::replace(&mut self.companion, pm)
             {
-                self.donor = *other_star;
+                let old_donor = std::mem::replace(&mut self.donor, *other_star);
+                self.collapsed_star = Some(Box::new(old_donor));
             }
-        } else {
-            self.companion = pm;
+            self.donor_i = 3 - new_point_mass_i;
+            self.mtransfer_rate = 0.0;
+            self.step_mtransfer_rate = 0.0;
+            self.change_factor = self.controls.max_change_factor;
+        } else if let BinaryCompanion::Star(old_comp) =
+            std::mem::replace(&mut self.companion, pm)
+        {
+            self.collapsed_star = Some(old_comp);
         }
         self.point_mass_i = new_point_mass_i;
-        self.donor_i = 3 - new_point_mass_i;
-        self.mtransfer_rate = 0.0;
-        self.step_mtransfer_rate = 0.0;
-        self.change_factor = self.controls.max_change_factor;
-        self.last_mdot = CoupledMdotAccounting::default();
-        self.last_jdot = JdotBreakdown::default();
-        self.last_edot = EdotBreakdown::default();
-        self.last_termination_reason = None;
+        self.eq_initial_bh_mass = m_bh_eq;
         let (rl, gaps) = compute_rl_and_gaps(
             self.donor.mstar,
             self.accretor_mass_g(),
@@ -662,6 +858,15 @@ impl BinarySystem {
             point_mass_state,
             point_mass_i: self.point_mass_i,
             donor_i: self.donor_i,
+            ignore_rlof_flag: self.ignore_rlof_flag,
+            eq_initial_bh_mass: self.eq_initial_bh_mass,
+            ignore_hard_limits_this_step: self.ignore_hard_limits_this_step,
+            donor_irradiation_flux: self.donor.controls.irradiation_flux,
+            donor_column_depth_for_irradiation: self
+                .donor
+                .controls
+                .column_depth_for_irradiation,
+            t_sync: self.t_sync,
             separation: self.separation,
             period: self.period,
             eccentricity: self.eccentricity,
@@ -698,6 +903,16 @@ impl BinarySystem {
         &mut self,
         snap: &BinaryStepSnapshot,
     ) -> Result<(), StarError> {
+        if snap.point_mass_i == 0
+            && matches!(self.companion, BinaryCompanion::PointMass { .. })
+            && snap.companion_state.is_some()
+        {
+            let restored_box = self
+                .collapsed_star
+                .take()
+                .unwrap_or_else(|| Box::new(self.donor.clone()));
+            self.companion = BinaryCompanion::Star(restored_box);
+        }
         if self.donor_i != snap.donor_i {
             if let BinaryCompanion::Star(ref mut s2) = self.companion {
                 std::mem::swap(&mut self.donor, s2);
@@ -705,6 +920,13 @@ impl BinarySystem {
         }
         self.point_mass_i = snap.point_mass_i;
         self.donor_i = snap.donor_i;
+        self.ignore_rlof_flag = snap.ignore_rlof_flag;
+        self.eq_initial_bh_mass = snap.eq_initial_bh_mass;
+        self.ignore_hard_limits_this_step = snap.ignore_hard_limits_this_step;
+        self.donor.controls.irradiation_flux = snap.donor_irradiation_flux;
+        self.donor.controls.column_depth_for_irradiation =
+            snap.donor_column_depth_for_irradiation;
+        self.t_sync = snap.t_sync;
         self.separation = snap.separation;
         self.period = snap.period;
         self.eccentricity = snap.eccentricity;

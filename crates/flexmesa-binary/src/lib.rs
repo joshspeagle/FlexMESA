@@ -117,11 +117,12 @@ pub use system_rlof::{
     eval_scheme_explicit_mdot, eval_scheme_explicit_mdot_with_steps,
     eval_star_intrinsic_wind_cgs_eccentric,
     eval_star_intrinsic_wind_cgs_with_extras, prepare_coupled_mdots,
-    prepare_coupled_mdots_with_extras,
+    prepare_coupled_mdots_with_extras, star_skips_hard_limits,
 };
 pub use timestep::{
     B_TLIM_COMP, B_TLIM_DM, B_TLIM_ECC, B_TLIM_ENV, B_TLIM_JORB, B_TLIM_ROCHE,
-    B_TLIM_SEP, BinaryTimestepControls, binary_pick_next_timestep,
+    B_TLIM_SEP, BinaryHardLimitViolation, BinaryTimestepControls,
+    binary_pick_next_timestep, check_binary_hard_limits,
     violates_binary_hard_limits,
 };
 

@@ -595,12 +595,22 @@ pub fn evaluate_binary_history_row(
                     });
                     MesaCellValue::Float(v)
                 }
-                "lg_t_sync_1" => MesaCellValue::Float(safe_log10(
-                    eval_star_tsync_sec(sys, 1, m_by_star).abs() / SECYER,
-                )),
-                "lg_t_sync_2" => MesaCellValue::Float(safe_log10(
-                    eval_star_tsync_sec(sys, 2, m_by_star).abs() / SECYER,
-                )),
+                "lg_t_sync_1" => {
+                    let ts = if sys.model_number > 0 {
+                        sys.t_sync[0]
+                    } else {
+                        eval_star_tsync_sec(sys, 1, m_by_star)
+                    };
+                    MesaCellValue::Float(safe_log10(ts.abs() / SECYER))
+                }
+                "lg_t_sync_2" => {
+                    let ts = if sys.model_number > 0 {
+                        sys.t_sync[1]
+                    } else {
+                        eval_star_tsync_sec(sys, 2, m_by_star)
+                    };
+                    MesaCellValue::Float(safe_log10(ts.abs() / SECYER))
+                }
                 "star_1_mass" => MesaCellValue::Float(m_by_star[0] / MSUN),
                 "lg_star_1_mass" => {
                     MesaCellValue::Float(safe_log10(m_by_star[0] / MSUN))
@@ -685,13 +695,25 @@ pub fn evaluate_binary_history_row(
                             mass_g,
                             m_bh_zero_eq_g,
                             ..
-                        } if sys.point_mass_i != 0 && *m_bh_zero_eq_g > 0.0 => {
-                            let denom =
-                                (*mass_g).min(6.0_f64.sqrt() * *m_bh_zero_eq_g);
-                            let ratio = *m_bh_zero_eq_g / denom.max(1.0e-99);
-                            (2.0_f64 / 3.0).sqrt()
-                                * ratio
-                                * (4.0 - (18.0 * ratio * ratio - 2.0).max(0.0).sqrt())
+                        } if sys.point_mass_i != 0 => {
+                            let eq_m = if sys.eq_initial_bh_mass > 0.0 {
+                                sys.eq_initial_bh_mass
+                            } else {
+                                *m_bh_zero_eq_g
+                            };
+                            if eq_m > 0.0 {
+                                let denom =
+                                    (*mass_g).min(6.0_f64.sqrt() * eq_m);
+                                let ratio = eq_m / denom.max(1.0e-99);
+                                (2.0_f64 / 3.0).sqrt()
+                                    * ratio
+                                    * (4.0
+                                        - (18.0 * ratio * ratio - 2.0)
+                                            .max(0.0)
+                                            .sqrt())
+                            } else {
+                                0.0
+                            }
                         }
                         _ => 0.0,
                     };

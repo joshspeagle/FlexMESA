@@ -27,7 +27,7 @@ pub struct CmsConfig {
     pub fixed_composition_index: isize,
     /// Use 4-point piecewise monotonic cubic interpolation in $X$ (default `false`).
     pub cubic_in_x: bool,
-    /// Include blackbody radiation pressure/energy/entropy in `CMS` (default `false`).
+    /// Include blackbody radiation pressure/energy/entropy in `CMS` (default `true`).
     pub include_radiation: bool,
     /// Metallicity $Z$ above which `CMS` has zero weight (default `-1.0`, disabled).
     pub max_z_for_any_cms: f64,
@@ -73,7 +73,7 @@ impl Default for CmsConfig {
             use_fixed_composition: false,
             fixed_composition_index: -1,
             cubic_in_x: false,
-            include_radiation: false,
+            include_radiation: true,
             max_z_for_any_cms: -1.0,
             max_z_for_all_cms: -1.0,
             logq_min_for_any_cms: -1.0,
@@ -106,7 +106,7 @@ impl CmsConfig {
             use_fixed_composition: false,
             fixed_composition_index: -1,
             cubic_in_x: false,
-            include_radiation: false,
+            include_radiation: true,
             max_z_for_any_cms: -1.0,
             max_z_for_all_cms: -1.0,
             logq_min_for_any_cms: -100.0,

@@ -90,7 +90,7 @@
         "pct_ported": 0.0,
         "pct_verified": 0.0,
         "rust_lines": 14202,
-        "python_jax_lines": 9673
+        "python_jax_lines": 9848
       },
       {
         "module": "kap",
@@ -455,7 +455,7 @@
       "upstream_panel_modules": 46
     },
     "infrastructure_lines": {
-      "rust_bridge_testing_bench": 16922,
+      "rust_bridge_testing_bench": 18498,
       "python_testing_bench": 13609
     }
   },
@@ -1090,7 +1090,7 @@
     }
   },
   "skips": {
-    "rust_ignore_count": 13,
+    "rust_ignore_count": 16,
     "rust_ignores": [
       {
         "location": "crates/flexmesa-astero/tests/astero_suite.rs:422",
@@ -1153,13 +1153,34 @@
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-eos/tests/mesa_26_4_1_component_oracles_test.rs:343",
-        "reason": "declared gap (#161): Skye/HELM operation order; 10 d_dlnT channels on skye_co_liq and eosdt_skye_helm_blend miss the original tolerance, largest skye_co_liq Cp rel_err 1.101e-6 >= 5.0e-11 (see DECLARED_DLNT_RESIDUALS)",
+        "location": "crates/flexmesa-eos/tests/mesa_26_4_1_component_oracles_test.rs:201",
+        "reason": "declared gap (#161): Skye/HELM operation order; 12 d_dlnT channels on skye_co_liq and eosdt_skye_helm_blend miss the original tolerance, largest eosdt_skye_helm_blend gamma3 rel_err 8.028e-6 >= 1.0e-7 (see DECLARED_DLNT_RESIDUALS)",
+        "issues": "#161"
+      },
+      {
+        "location": "crates/flexmesa-eos/tests/wave3a3_pc_solid_tests.rs:256",
+        "reason": "declared gap (#161): PC analytical EXCOR7 vs MESA pc_eos.f90:1895 use_EXCOR7_table spline on solid/blend cases; largest pc_co_sol dE_dRho d_dlnT rel_err 2.513e-6 >= 5.0e-9",
+        "issues": "#161"
+      },
+      {
+        "location": "crates/flexmesa-eos/tests/wave3a3_pc_tests.rs:132",
+        "reason": "declared gap (#161): PC analytical EXCOR7 vs MESA pc_eos.f90:1895 use_EXCOR7_table spline; 9 entries exceed 1.0e-11/5.0e-9, largest pc_co_liq dE_dRho d_dlnT rel_err 7.123e-6",
+        "issues": "#161"
+      },
+      {
+        "location": "crates/flexmesa-eos/tests/wave3a3_skye_inverse_tests.rs:369",
+        "reason": "declared gap (#161): Skye/HELM operation order on skye_c12_liq, skye_c12_liq_ion, skye_co_liq, and eosdt_skye_helm_blend (max rel_err 1.101e-6 >= 1.0e-11; see DECLARED_SKYE_RESIDUALS)",
         "issues": "#161"
       }
     ],
-    "python_xfail_or_skip_count": 0,
-    "python_skips": [],
+    "python_xfail_or_skip_count": 1,
+    "python_skips": [
+      {
+        "location": "tests/test_eos_wave3b1.py:395",
+        "reason": "pytest.mark.xfail( strict=True, reason=( \"declared gap (#161): Python eos.eos_dt_get_t does not yet expose \" \"logT_tol/other_tol (eos/test/test_output:395 tol=1e-5 stops one \" \"Newton step earlier at 4.8009613155595554)\" ), )",
+        "issues": "#161"
+      }
+    ],
     "unlinked_locations": []
   },
   "github": {

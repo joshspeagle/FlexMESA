@@ -16,6 +16,7 @@ import math
 import os
 import pathlib
 import re
+import struct
 import sys
 from typing import Any
 
@@ -217,6 +218,10 @@ def _strip_fortran_comment(line: str) -> str:
     return line
 
 
+def _f32_to_f64(val: float) -> float:
+    return float(struct.unpack("f", struct.pack("f", val))[0])
+
+
 def _parse_fortran_scalar(raw: str) -> bool | float | str:
     tok = raw.strip()
     low = tok.lower()
@@ -228,11 +233,18 @@ def _parse_fortran_scalar(raw: str) -> bool | float | str:
         tok.startswith('"') and tok.endswith('"')
     ):
         return tok[1:-1]
-    num_tok = re.sub(r"[dD]", "e", tok)
+    is_dp = bool(re.search(r"[dD]", tok)) or tok.endswith("_dp")
+    num_tok = re.sub(r"[dD]", "e", re.sub(r"_dp$", "", tok))
     try:
-        return float(num_tok)
+        parsed = float(num_tok)
     except ValueError:
         return tok
+    if not is_dp and ("." in num_tok or "e" in num_tok.lower()):
+        try:
+            return _f32_to_f64(parsed)
+        except OverflowError:
+            return parsed
+    return parsed
 
 
 def parse_mesa_defaults_file(
@@ -303,6 +315,13 @@ def _parse_rust_expr(expr: str) -> tuple[bool | float | str | None, bool]:
     fixed_m = re.match(r"^AsteroSearchParam::fixed\(([^)]+)\)$", tok)
     if fixed_m is not None:
         return _parse_rust_expr(fixed_m.group(1))
+    f32_m = re.match(r"^f64::from\(([^)]+)_f32\)$", tok)
+    if f32_m is not None:
+        raw_f32 = f32_m.group(1).strip().replace("_", "")
+        try:
+            return _f32_to_f64(float(raw_f32)), False
+        except ValueError:
+            return None, False
     num_clean = tok.replace("_", "")
     try:
         return float(num_clean), False

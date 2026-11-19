@@ -257,7 +257,7 @@ def eos_eval_pt_get(
 ) -> tuple[float, float, float, float, _ArrF64, _ArrF64, _ArrF64]: ...
 def eos_eval_opal_scvh(rho: float, temp: float, chem_id: list[int], xa: _ArrF64) -> tuple[_ArrF64, _ArrF64, _ArrF64]: ...  # noqa: E501
 def eos_eval_free_eos(rho: float, temp: float, chem_id: list[int], xa: _ArrF64) -> tuple[_ArrF64, _ArrF64, _ArrF64]: ...  # noqa: E501
-def eos_eval_cms(rho: float, temp: float, chem_id: list[int], xa: _ArrF64) -> tuple[_ArrF64, _ArrF64, _ArrF64]: ...  # noqa: E501
+def eos_eval_cms(rho: float, temp: float, chem_id: list[int], xa: _ArrF64, include_radiation: bool = True) -> tuple[_ArrF64, _ArrF64, _ArrF64]: ...  # noqa: E501
 def eos_eval_dt_get_t(
     rho: float, which_other: int, other_value: float, chem_id: list[int],
     xa: _ArrF64, log_t_guess: float = 6.0, use_skye: bool = True,

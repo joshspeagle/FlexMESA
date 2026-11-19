@@ -168,11 +168,11 @@ def test_python_inlist_and_runner_loud_failures_and_opt_out() -> None:
             "&binary_controls\n"
             "  m1 = 10.0\n"
             "  m2 = 8.0\n"
-            "  terminal_interval = 10\n"
+            "  photo_interval = 10\n"
             "/\n",
             encoding="utf-8",
         )
-        with pytest.raises(ValueError, match="terminal_interval"):
+        with pytest.raises(ValueError, match="photo_interval"):
             binary.run_binary_test_suite_case(bin_case, max_steps_cap=1)
         ast_case = root / "ast_case"
         ast_case.mkdir()

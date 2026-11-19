@@ -1091,3 +1091,188 @@ def test_extras_status_ledger_covers_every_case_and_is_current() -> None:
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     assert mod.main(["--check"]) == 0
+
+
+def test_binary_harness_compares_component_logs1_and_logs2_tracks(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Binary harness enforces LOGS1/LOGS2 stellar tolerances with binary."""
+    # Verify real cached MESA 26.4.1 component logs resolve for all 8 cases.
+    manifest = case_manifest.load_case_manifest()
+    bin_cases = [c for c in manifest.cases if c.suite == "binary"]
+    assert len(bin_cases) == 8
+    for entry in bin_cases:
+        comp_paths = harness_runner.resolve_binary_component_reference_paths(
+            entry.case
+        )
+        assert "LOGS1" in comp_paths
+        if entry.case in ("double_bh", "evolve_both_stars"):
+            assert "LOGS2" in comp_paths
+
+    # Hermetic synthetic two-star binary run under tmp_path.
+    bin_ref = tmp_path / "ref_bin.tsv"
+    bin_ref.write_text(
+        "# test binary reference\n"
+        "model_number\tage\tstar_1_mass\tstar_2_mass\tperiod_days\n"
+        "1\t0.0\t2.000\t1.500\t1.200\n"
+        "2\t1.0e6\t1.950\t1.550\t1.250\n",
+        encoding="utf-8",
+    )
+    star_ref_txt = (
+        "# test component reference\n"
+        "model_number\tstar_age\tlog_L\tlog_Teff\tlog_R\tlog_center_T\tlog_center_Rho\n"
+        "1\t0.0\t0.800\t3.900\t0.200\t7.300\t1.800\n"
+        "2\t1.0e6\t0.850\t3.890\t0.240\t7.310\t1.790\n"
+    )
+    for sub in ("LOGS1", "LOGS2"):
+        rpath = tmp_path / "runs" / "binary" / "demo_bin" / sub / "history.data"
+        rpath.parent.mkdir(parents=True, exist_ok=True)
+        rpath.write_text(star_ref_txt, encoding="utf-8")
+
+    spec = case_manifest.CaseManifestEntry(
+        suite="binary",
+        case="demo_bin",
+        reference_status="mesa_26_4_1",
+        reference_path="ref_bin.tsv",
+        required_termination="max_age",
+        independent_var="age",
+        final_tolerances={
+            "rel_age": 0.001,
+            "star_1_mass": 0.001,
+            "star_2_mass": 0.001,
+            "period_days": 0.001,
+        },
+        track_tolerances={"star_1_mass": 0.002, "star_2_mass": 0.002},
+        extras_status="stock",
+    )
+
+    out_ok = tmp_path / "run_ok"
+    out_ok.mkdir()
+    (out_ok / "binary_history.data").write_text(
+        bin_ref.read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    for sub in ("LOGS1", "LOGS2"):
+        p = out_ok / sub / "history.data"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(star_ref_txt, encoding="utf-8")
+
+    rec_ok = harness_runner.evaluate_case_record(
+        spec,
+        {},
+        harness_runner.TraceRunOutcome(
+            suite="binary",
+            case="demo_bin",
+            status="ok",
+            termination_code="max_age",
+            steps=2,
+            retries=0,
+            wall_time_sec=0.1,
+            peak_rss_gb=0.1,
+            history_path=out_ok / "binary_history.data",
+        ),
+        root_dir=tmp_path,
+    )
+    assert rec_ok.verdict == "pass"
+    assert rec_ok.is_within_tolerances
+    assert set(rec_ok.component_comparisons) == {"LOGS1", "LOGS2"}
+
+    # Diverging LOGS2 must block a pass even when binary_history.data matches.
+    out_bad_comp = tmp_path / "run_bad_comp"
+    out_bad_comp.mkdir()
+    (out_bad_comp / "binary_history.data").write_text(
+        bin_ref.read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    (out_bad_comp / "LOGS1").mkdir()
+    (out_bad_comp / "LOGS1" / "history.data").write_text(
+        star_ref_txt, encoding="utf-8"
+    )
+    (out_bad_comp / "LOGS2").mkdir()
+    (out_bad_comp / "LOGS2" / "history.data").write_text(
+        star_ref_txt.replace("0.850", "1.250"), encoding="utf-8"
+    )
+    rec_bad_comp = harness_runner.evaluate_case_record(
+        spec,
+        {},
+        harness_runner.TraceRunOutcome(
+            suite="binary",
+            case="demo_bin",
+            status="ok",
+            termination_code="max_age",
+            steps=2,
+            retries=0,
+            wall_time_sec=0.1,
+            peak_rss_gb=0.1,
+            history_path=out_bad_comp / "binary_history.data",
+        ),
+        root_dir=tmp_path,
+    )
+    assert rec_bad_comp.verdict == "fail (undeclared)"
+    assert not rec_bad_comp.is_within_tolerances
+    assert rec_bad_comp.comparison is not None
+    assert rec_bad_comp.comparison.within_final_tolerances
+    assert not rec_bad_comp.component_comparisons[
+        "LOGS2"
+    ].within_final_tolerances
+
+    # Round-trip serialization preserves component failure on baseline reload.
+    manifest_toml = tmp_path / "manifest.toml"
+    manifest_toml.write_text(
+        '[metadata]\nmesa_release = "26.4.1"\nzenodo_record = "19722306"\n'
+        '[defaults.star]\nindependent_var = "star_age"\n'
+        "[defaults.star.final_tolerances]\nlog_L = 0.001\n"
+        "[defaults.star.track_tolerances]\nlog_L = 0.005\n"
+        '[defaults.binary]\nindependent_var = "age"\n'
+        "[defaults.binary.final_tolerances]\nstar_1_mass = 0.001\n"
+        "[[cases]]\n"
+        'suite = "binary"\ncase = "demo_bin"\n'
+        'reference_status = "mesa_26_4_1"\nreference_path = "ref_bin.tsv"\n'
+        'required_termination = "max_age"\n',
+        encoding="utf-8",
+    )
+    gaps_toml = tmp_path / "gaps.toml"
+    gaps_toml.write_text("gaps = []\n", encoding="utf-8")
+    bjson = tmp_path / "baseline.json"
+    mini_manifest = case_manifest.load_case_manifest(manifest_toml)
+    bjson.write_text(
+        json.dumps(
+            case_report.build_deterministic_baseline_payload(
+                mini_manifest, [rec_bad_comp], {}
+            )
+        ),
+        encoding="utf-8",
+    )
+    _, _, reloaded = case_report.build_manifest_inventory_records(
+        manifest_toml, gaps_toml, bjson
+    )
+    assert reloaded[0].verdict == "fail (undeclared)"
+    assert not reloaded[0].is_within_tolerances
+
+    # Missing LOGS2/history.data when reference has LOGS2 must fail.
+    out_missing = tmp_path / "run_missing"
+    out_missing.mkdir()
+    (out_missing / "binary_history.data").write_text(
+        bin_ref.read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    (out_missing / "LOGS1").mkdir()
+    (out_missing / "LOGS1" / "history.data").write_text(
+        star_ref_txt, encoding="utf-8"
+    )
+    rec_missing = harness_runner.evaluate_case_record(
+        spec,
+        {},
+        harness_runner.TraceRunOutcome(
+            suite="binary",
+            case="demo_bin",
+            status="ok",
+            termination_code="max_age",
+            steps=2,
+            retries=0,
+            wall_time_sec=0.1,
+            peak_rss_gb=0.1,
+            history_path=out_missing / "binary_history.data",
+        ),
+        root_dir=tmp_path,
+    )
+    assert rec_missing.verdict == "fail (undeclared)"
+    assert rec_missing.has_component_error
+    assert "missing LOGS2/history.data" in rec_missing.error_message

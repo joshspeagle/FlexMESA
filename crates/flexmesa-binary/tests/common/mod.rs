@@ -2,9 +2,11 @@
 //! Shared test fixtures for `flexmesa-binary` counter, determinism, and
 //! child-process checkpoint integration tests.
 
-use flexmesa_binary::{BinaryInlistControls, BinarySystem, DefaultBinaryExtras};
+use flexmesa_binary::{
+    BinaryInlistControls, BinarySystem, DefaultBinaryExtras,
+};
 use flexmesa_const::SECYER;
-use flexmesa_star::{load_zams_model, StarControls, StarJobControls};
+use flexmesa_star::{StarControls, StarJobControls, load_zams_model};
 
 #[allow(dead_code)]
 pub fn build_rlof_binary() -> BinarySystem {
@@ -24,6 +26,7 @@ pub fn build_rlof_binary() -> BinarySystem {
         initial_period_in_days: 0.45,
         mdot_scheme: String::from("Ritter"),
         max_tries_to_achieve: 20,
+        terminate_if_initial_overflow: false,
         ..BinaryInlistControls::default()
     };
     bctrl.use_radiation_corrected_transfer_rate = false;

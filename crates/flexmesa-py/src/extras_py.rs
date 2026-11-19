@@ -7,19 +7,19 @@ use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use flexmesa_binary::{
-    separation_from_period, BinaryCompanion, BinaryExtras, BinaryExtrasAction,
-    BinarySystem, DefaultBinaryExtras,
+    BinaryCompanion, BinaryExtras, BinaryExtrasAction, BinarySystem,
+    DefaultBinaryExtras, separation_from_period,
 };
 use flexmesa_const::{CLIGHT, CRAD, LSUN, M_SUN, PI, RSUN, SECDAY};
 use flexmesa_star::inlist_runner::{
     DefaultStarExtras, ExtrasDirective, RspBuildOutcome, StarExtras,
 };
 use flexmesa_star::{
-    center_avg_x_by_name, compute_core_masses, compute_power_categories,
-    do_rsp_build_model, eval_photosphere_info, export_gyre,
-    parse_gyre_mesa_model, safe_log10, solve_bvp_eigenmodes, InertiaNormKind,
-    InlistBundle, OuterBoundKind, RspChemCache, StarControls, StarError,
-    StarModel,
+    InertiaNormKind, InlistBundle, OuterBoundKind, RspChemCache, StarControls,
+    StarError, StarModel, center_avg_x_by_name, compute_core_masses,
+    compute_power_categories, do_rsp_build_model, eval_photosphere_info,
+    eval_surf_avg_rotation_info, export_gyre, parse_gyre_mesa_model,
+    safe_log10, solve_bvp_eigenmodes,
 };
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
@@ -1205,6 +1205,10 @@ fn set_binary_star_scalars(
         d.set_item(format!("{prefix}_surface_he4"), y)?;
     }
     d.set_item(format!("{prefix}_he_core_mass"), cores.he_core_mass)?;
+    d.set_item(
+        format!("{prefix}_omega_avg_surf"),
+        eval_surf_avg_rotation_info(star).omega,
+    )?;
     Ok(())
 }
 
@@ -1258,28 +1262,54 @@ fn build_binary_snapshot<'py>(
     d.set_item("mass_transfer_delta", bin.mass_transfer_delta)?;
     d.set_item("mass_transfer_gamma", bin.mass_transfer_gamma)?;
     d.set_item("jdot", bin.jdot)?;
-    d.set_item("rl", PyList::new(py, bin.rl)?)?;
-    d.set_item("rl_relative_gap", PyList::new(py, bin.rl_relative_gap)?)?;
+    d.set_item("rl", PyList::new(py, bin.rl_by_star())?)?;
+    d.set_item(
+        "rl_relative_gap",
+        PyList::new(py, bin.rl_relative_gap_by_star())?,
+    )?;
     d.set_item("point_mass_i", bin.point_mass_i)?;
     d.set_item("donor_i", bin.donor_i)?;
     d.set_item("ignore_rlof_flag", bin.ignore_rlof_flag)?;
+    d.set_item("eq_initial_bh_mass", bin.eq_initial_bh_mass)?;
+    let map_by_star = |pair: [f64; 2]| -> [f64; 2] {
+        if bin.donor_i == 1 {
+            pair
+        } else {
+            [pair[1], pair[0]]
+        }
+    };
+    let mdot = &bin.last_mdot;
+    d.set_item(
+        "component_mdot",
+        PyList::new(py, map_by_star(mdot.component_mdot))?,
+    )?;
+    d.set_item(
+        "mdot_wind_transfer",
+        PyList::new(py, map_by_star(mdot.mdot_wind_transfer))?,
+    )?;
+    d.set_item(
+        "mdot_system_transfer",
+        PyList::new(py, map_by_star(mdot.mdot_system_transfer))?,
+    )?;
+    d.set_item(
+        "mdot_system_wind",
+        PyList::new(py, map_by_star(mdot.mdot_system_wind))?,
+    )?;
+    d.set_item(
+        "wind_xfer_fraction",
+        PyList::new(py, map_by_star(mdot.wind_xfer_fraction))?,
+    )?;
+    d.set_item("mdot_edd", mdot.mdot_edd)?;
+    d.set_item("mdot_edd_eta", mdot.mdot_edd_eta)?;
+    d.set_item("accretion_luminosity", mdot.accretion_luminosity)?;
     d.set_item("donor_mass_msun", bin.donor.mstar / M_SUN)?;
     d.set_item("accretor_mass_msun", bin.accretor_mass_g() / M_SUN)?;
     d.set_item("case_dir", case_dir)?;
     set_user_controls(&d, &bin.donor.controls)?;
-    let companion_star = match &bin.companion {
-        BinaryCompanion::Star(s2) => Some(s2.as_ref()),
-        BinaryCompanion::PointMass { .. } => None,
-    };
-    let (s1, s2) = if bin.donor_i == 2 {
-        (companion_star, Some(&bin.donor))
-    } else {
-        (Some(&bin.donor), companion_star)
-    };
-    if let Some(star1) = s1 {
+    if let Some(star1) = bin.star_slot_ref(1) {
         set_binary_star_scalars(&d, "s1", star1)?;
     }
-    if let Some(star2) = s2 {
+    if let Some(star2) = bin.star_slot_ref(2) {
         set_binary_star_scalars(&d, "s2", star2)?;
     }
     Ok(d)
@@ -1296,9 +1326,23 @@ fn apply_binary_updates(
         bin.set_point_mass_i(val.extract::<usize>()?)
             .map_err(to_py_err)?;
     }
+    if let Some(val) = updates.get_item("eq_initial_bh_mass")? {
+        bin.set_eq_initial_bh_mass(val.extract::<f64>()?);
+    }
+    if let Some(val) = updates.get_item("m1")? {
+        bin.set_m1(val.extract::<f64>()?).map_err(to_py_err)?;
+    }
+    if let Some(val) = updates.get_item("m2")? {
+        bin.set_m2(val.extract::<f64>()?).map_err(to_py_err)?;
+    }
     if let Some(val) = updates.get_item("period_eccentricity")? {
         let (p_sec, ecc) = val.extract::<(f64, f64)>()?;
         bin.set_period_eccentricity(p_sec, ecc).map_err(to_py_err)?;
+    }
+    if let Some(val) = updates.get_item("separation_eccentricity")? {
+        let (sep_cm, ecc) = val.extract::<(f64, f64)>()?;
+        bin.set_separation_eccentricity(sep_cm, ecc)
+            .map_err(to_py_err)?;
     }
     if let Some(val) = updates.get_item("max_implicit_abs_mdot")? {
         bin.controls.max_implicit_abs_mdot = val.extract::<f64>()?;
@@ -1378,6 +1422,8 @@ fn parse_binary_action(
 
     match action_str.as_str() {
         "keep_going" => Ok(BinaryExtrasAction::KeepGoing),
+        "redo" => Ok(BinaryExtrasAction::Redo),
+        "retry" => Ok(BinaryExtrasAction::Retry),
         "error" => {
             Ok(BinaryExtrasAction::Error(dict_msg.unwrap_or_else(|| {
                 String::from("error returned by binary extras hook")
@@ -1403,6 +1449,8 @@ fn parse_binary_action(
 #[allow(clippy::struct_excessive_bools)]
 pub struct PyBinaryExtrasAdapter {
     py_obj: Py<PyAny>,
+    startup_method: Option<&'static str>,
+    after_evolve_method: Option<&'static str>,
     has_other_wind_cgs: bool,
     has_check_model: bool,
     has_finish_step: bool,
@@ -1418,7 +1466,23 @@ impl PyBinaryExtrasAdapter {
     /// Returns [`PyErr`] if attribute inspection fails.
     pub fn new(py: Python<'_>, obj: Py<PyAny>) -> PyResult<Self> {
         let b = obj.bind(py);
+        let startup_method = if b.hasattr("extras_binary_startup")? {
+            Some("extras_binary_startup")
+        } else if b.hasattr("startup")? {
+            Some("startup")
+        } else {
+            None
+        };
+        let after_evolve_method = if b.hasattr("extras_binary_after_evolve")? {
+            Some("extras_binary_after_evolve")
+        } else if b.hasattr("after_evolve")? {
+            Some("after_evolve")
+        } else {
+            None
+        };
         Ok(Self {
+            startup_method,
+            after_evolve_method,
             has_other_wind_cgs: b.hasattr("other_wind_cgs")?,
             has_check_model: b.hasattr("check_model")?,
             has_finish_step: b.hasattr("finish_step")?,
@@ -1483,6 +1547,71 @@ impl PyBinaryExtrasAdapter {
 impl BinaryExtras for PyBinaryExtrasAdapter {
     fn set_staged_case_dir(&mut self, case_dir: &Path) {
         self.state.set_staged_case_dir(case_dir);
+    }
+
+    fn startup(
+        &mut self,
+        bin: &mut BinarySystem,
+        restart: bool,
+    ) -> BinaryExtrasAction {
+        if let Some(msg) = self.state.take_pending_msg() {
+            return BinaryExtrasAction::Error(msg);
+        }
+        let Some(method) = self.startup_method else {
+            return BinaryExtrasAction::KeepGoing;
+        };
+        let case_dir = self.state.staged_dir_string();
+        Python::attach(|py| {
+            let snap = match build_binary_snapshot(py, bin, &case_dir) {
+                Ok(s) => s,
+                Err(e) => {
+                    return BinaryExtrasAction::Error(format!(
+                        "{method}: {}",
+                        format_py_err(py, &e)
+                    ));
+                }
+            };
+            match self.py_obj.bind(py).call_method1(method, (snap, restart)) {
+                Ok(res) => {
+                    parse_binary_action(&res, "extras_binary_startup", bin)
+                        .unwrap_or_else(|e| {
+                            BinaryExtrasAction::Error(format!(
+                                "{method}: {}",
+                                format_py_err(py, &e)
+                            ))
+                        })
+                }
+                Err(e) => BinaryExtrasAction::Error(format!(
+                    "{method}: {}",
+                    format_py_err(py, &e)
+                )),
+            }
+        })
+    }
+
+    fn after_evolve(
+        &mut self,
+        bin: &mut BinarySystem,
+    ) -> Result<(), StarError> {
+        self.state.take_pending_star_err()?;
+        let Some(method) = self.after_evolve_method else {
+            return Ok(());
+        };
+        let case_dir = self.state.staged_dir_string();
+        Python::attach(|py| {
+            let snap = build_binary_snapshot(py, bin, &case_dir)
+                .map_err(|e| StarError::InvalidInput(format_py_err(py, &e)))?;
+            self.py_obj
+                .bind(py)
+                .call_method1(method, (snap,))
+                .map(|_| ())
+                .map_err(|e| {
+                    StarError::InvalidInput(format!(
+                        "{method}: {}",
+                        format_py_err(py, &e)
+                    ))
+                })
+        })
     }
 
     fn other_wind_cgs(

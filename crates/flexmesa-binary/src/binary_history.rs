@@ -11,15 +11,15 @@ use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 
 use flexmesa_const::{
-    MixingType, LSUN, MSUN, PI, RSUN, SECDAY, SECYER, STANDARD_CGRAV,
+    LSUN, MSUN, MixingType, PI, RSUN, SECDAY, SECYER, STANDARD_CGRAV,
 };
 use flexmesa_schema::strip_fortran_comment;
 use flexmesa_star::{
-    eval_photosphere_info, eval_surf_avg_rotation_info, format_mesa_dbl_width,
-    format_mesa_header_str_width, parse_quoted_include_arg,
-    push_mesa_6line_header, safe_log10, write_mesa_dbl_width,
-    write_mesa_int_width, MesaCellValue, StarError, StarLogsWriter, StarModel,
-    MESA_REF_VERSION_NUMBER,
+    MESA_REF_VERSION_NUMBER, MesaCellValue, StarError, StarLogsWriter,
+    StarModel, eval_photosphere_info, eval_surf_avg_rotation_info,
+    format_mesa_dbl_width, format_mesa_header_str_width,
+    parse_quoted_include_arg, push_mesa_6line_header, safe_log10,
+    write_mesa_dbl_width, write_mesa_int_width,
 };
 
 use crate::edd_wind::eval_accreted_material_j;
@@ -340,11 +340,7 @@ fn parse_binary_history_columns_rec(
 
 #[inline]
 fn map_donor_acc_to_stars<T: Copy>(donor_i: usize, arr: [T; 2]) -> [T; 2] {
-    if donor_i == 1 {
-        arr
-    } else {
-        [arr[1], arr[0]]
-    }
+    if donor_i == 1 { arr } else { [arr[1], arr[0]] }
 }
 
 fn eval_upstream_k_div_t(
@@ -475,11 +471,7 @@ fn eval_star_tsync_sec(
         sys.separation,
         f_tid,
     );
-    if ts.is_finite() && ts > 0.0 {
-        ts
-    } else {
-        0.0
-    }
+    if ts.is_finite() && ts > 0.0 { ts } else { 0.0 }
 }
 
 /// Evaluates all requested [`BinaryHistoryColumnSpec`] columns on `sys`
@@ -520,11 +512,9 @@ pub fn evaluate_binary_history_row(
         - sys.mass_transfer_alpha
         - sys.mass_transfer_beta
         - sys.mass_transfer_delta;
-    // `binary_history.f90` writes the stored `b% edot`, `b% edot_tidal` and
-    // `b% edot_enhance`, so report the terms the orbital update applied.
-    // While the engine still carries the gravitational-wave term (`#175`)
-    // and per-star `Ftid` (`#186`), both owed under `#160`, these columns
-    // show that departure instead of hiding it.
+    // `binary_history.f90` writes the stored `b% edot`, `b% edot_tidal`, and
+    // `b% edot_enhance`, reporting the exact terms the orbital update applied
+    // (`#175`, `#186`, `DECISIONS #36`).
     let (edot_tot, edot_tidal, edot_enhance) = (
         sys.last_edot.edot_total,
         sys.last_edot.edot_tidal,
@@ -605,12 +595,22 @@ pub fn evaluate_binary_history_row(
                     });
                     MesaCellValue::Float(v)
                 }
-                "lg_t_sync_1" => MesaCellValue::Float(safe_log10(
-                    eval_star_tsync_sec(sys, 1, m_by_star).abs() / SECYER,
-                )),
-                "lg_t_sync_2" => MesaCellValue::Float(safe_log10(
-                    eval_star_tsync_sec(sys, 2, m_by_star).abs() / SECYER,
-                )),
+                "lg_t_sync_1" => {
+                    let ts = if sys.model_number > 0 {
+                        sys.t_sync[0]
+                    } else {
+                        eval_star_tsync_sec(sys, 1, m_by_star)
+                    };
+                    MesaCellValue::Float(safe_log10(ts.abs() / SECYER))
+                }
+                "lg_t_sync_2" => {
+                    let ts = if sys.model_number > 0 {
+                        sys.t_sync[1]
+                    } else {
+                        eval_star_tsync_sec(sys, 2, m_by_star)
+                    };
+                    MesaCellValue::Float(safe_log10(ts.abs() / SECYER))
+                }
                 "star_1_mass" => MesaCellValue::Float(m_by_star[0] / MSUN),
                 "lg_star_1_mass" => {
                     MesaCellValue::Float(safe_log10(m_by_star[0] / MSUN))
@@ -695,13 +695,25 @@ pub fn evaluate_binary_history_row(
                             mass_g,
                             m_bh_zero_eq_g,
                             ..
-                        } if sys.point_mass_i != 0 && *m_bh_zero_eq_g > 0.0 => {
-                            let denom =
-                                (*mass_g).min(6.0_f64.sqrt() * *m_bh_zero_eq_g);
-                            let ratio = *m_bh_zero_eq_g / denom.max(1.0e-99);
-                            (2.0_f64 / 3.0).sqrt()
-                                * ratio
-                                * (4.0 - (18.0 * ratio * ratio - 2.0).max(0.0).sqrt())
+                        } if sys.point_mass_i != 0 => {
+                            let eq_m = if sys.eq_initial_bh_mass > 0.0 {
+                                sys.eq_initial_bh_mass
+                            } else {
+                                *m_bh_zero_eq_g
+                            };
+                            if eq_m > 0.0 {
+                                let denom =
+                                    (*mass_g).min(6.0_f64.sqrt() * eq_m);
+                                let ratio = eq_m / denom.max(1.0e-99);
+                                (2.0_f64 / 3.0).sqrt()
+                                    * ratio
+                                    * (4.0
+                                        - (18.0 * ratio * ratio - 2.0)
+                                            .max(0.0)
+                                            .sqrt())
+                            } else {
+                                0.0
+                            }
                         }
                         _ => 0.0,
                     };

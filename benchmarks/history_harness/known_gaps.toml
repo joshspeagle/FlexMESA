@@ -538,7 +538,7 @@ reason = "Coupled two-star binary RLOF evolution times out."
 suite = "binary"
 case = "jdot_gr_check"
 issue = "#160"
-reason = "Coupled binary gravitational-wave inspiral age differs from MESA 26.4.1."
+reason = "Binary orbit and masses match MESA 26.4.1 within tolerance; component inlist1 sets save_model_when_terminate (#150) and LOGS1 log_center_T/log_center_Rho exceed star tolerances (#161)."
 
 [[gaps]]
 suite = "binary"
@@ -568,7 +568,7 @@ reason = "Explicit RLOF star+point-mass age and component masses differ from MES
 suite = "binary"
 case = "wind_fed_bhhmxb"
 issue = "#160"
-reason = "Wind-fed BH-HMXB donor mass and age differ from MESA 26.4.1."
+reason = "All binary controls and BH Eddington/wind-budget extras checks pass; component inlist1 sets 2 unsupported star controls (#150, #159) and implicit RLOF exceeds 300 s budget (#152, #153, #160)."
 
 [[gaps]]
 suite = "astero"

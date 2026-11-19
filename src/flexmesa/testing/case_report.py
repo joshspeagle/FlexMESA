@@ -126,7 +126,7 @@ def record_to_dict(rec: harness_runner.CaseHarnessRecord) -> dict[str, Any]:
     Returns:
         JSON-serializable dictionary.
     """
-    return {
+    out: dict[str, Any] = {
         "suite": rec.suite,
         "case": rec.case,
         "reference_status": rec.reference_status,
@@ -155,6 +155,14 @@ def record_to_dict(rec: harness_runner.CaseHarnessRecord) -> dict[str, Any]:
         ),
         "error_message": rec.error_message,
     }
+    if rec.component_comparisons:
+        out["component_comparisons"] = {
+            k: history_compare.comparison_to_dict(v)
+            for k, v in rec.component_comparisons.items()
+        }
+    if rec.has_component_error:
+        out["has_component_error"] = True
+    return out
 
 
 def build_report_payload(
@@ -482,12 +490,26 @@ def build_manifest_inventory_records(
             if isinstance(raw_comp, dict)
             else None
         )
+        raw_ccomps = stored.get("component_comparisons")
+        ccomps = (
+            {
+                str(cname): history_compare.comparison_from_dict(cval)
+                for cname, cval in raw_ccomps.items()
+                if isinstance(cval, dict)
+            }
+            if isinstance(raw_ccomps, dict)
+            else None
+        )
         records.append(
             harness_runner.evaluate_case_record(
                 entry,
                 gaps,
                 outcome,
                 precomputed_comparison=comp,
+                precomputed_component_comparisons=ccomps,
+                precomputed_has_component_error=bool(
+                    stored.get("has_component_error", False)
+                ),
             )
         )
     return manifest, gaps, records

@@ -1299,14 +1299,12 @@ mod tests {
             assert_eq!(*key, key.to_ascii_lowercase());
         }
         assert!(inv.star_job_supported.is_disjoint(&inv.star_job_unused));
-        assert!(
-            inv.star_job_supported
-                .is_disjoint(&inv.star_job_headless_gui_flags)
-        );
-        assert!(
-            inv.star_job_unused
-                .is_disjoint(&inv.star_job_headless_gui_flags)
-        );
+        assert!(inv
+            .star_job_supported
+            .is_disjoint(&inv.star_job_headless_gui_flags));
+        assert!(inv
+            .star_job_unused
+            .is_disjoint(&inv.star_job_headless_gui_flags));
         assert!(inv.controls_supported.is_disjoint(&inv.controls_unused));
         assert!(inv.eos_supported.is_disjoint(&inv.eos_terminal_output));
         assert!(inv.kap_supported.is_disjoint(&inv.kap_terminal_output));

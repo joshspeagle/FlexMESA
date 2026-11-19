@@ -323,7 +323,8 @@ impl Default for AsteroSearchControls {
             oscillation_code: String::from("adipls"),
             nu_lower_factor: f64::from(0.8_f32),
             nu_upper_factor: f64::from(1.2_f32),
-            iscan_factor: [1.0; 4],
+            // `astero/defaults/astero_search.defaults:1372-1375`: iscan_factor(0:3) = 15.
+            iscan_factor: [15.0; 4],
             gyre_input_file: String::from("gyre.in"),
             gyre_non_ad: false,
             add_atmosphere: false,

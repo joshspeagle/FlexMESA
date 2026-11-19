@@ -78,15 +78,14 @@ macro_rules! impl_py_star_model {
             pub fn from_mod_str(text: &str) -> PyResult<Self> {
                 let (c, j) =
                     (StarControls::default(), StarJobControls::default());
-                let mut inner = read_mod_str(text, c, j).map_err(to_py_err)?;
-                if inner.kap_config.zbase < 0.0
-                    && inner.controls.initial_z >= 0.0
-                {
-                    let zb = inner.controls.initial_z;
-                    inner.controls.zbase = zb;
-                    inner.kap_config.zbase = zb;
-                }
+                let inner = read_mod_str(text, c, j).map_err(to_py_err)?;
                 Ok(Self { inner })
+            }
+
+            /// Base metallicity $Z_{\mathrm{base}}$ from `&kap` (`-1.0` default).
+            #[getter]
+            pub const fn zbase(&self) -> f64 {
+                self.inner.kap_config.zbase
             }
 
             /// Restores a [`PyStarModel`] from binary `.photo` bytes

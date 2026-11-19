@@ -234,11 +234,6 @@
       "draft": false
     },
     {
-      "number": 254,
-      "title": "[Audit C2] Port MESA 26.4.1 mesh planner, functions, multipliers, and remap (#153)",
-      "draft": false
-    },
-    {
       "number": 256,
       "title": "Wire &eos/&kap controls, dynamic opacity bounds, #176 HELM-edge blend, and star microphysics (#161)",
       "draft": false
@@ -256,6 +251,11 @@
     {
       "number": 262,
       "title": "Port MESA 26.4.1 convective boundaries, mixing, overshoot, predictive mixing, and convective premixing",
+      "draft": true
+    },
+    {
+      "number": 269,
+      "title": "feat(star,binary): align winds, mass adjustment, and stop conditions with MESA 26.4.1 (#159)",
       "draft": true
     }
   ],
@@ -433,7 +433,7 @@
       "title": "[Deferred bug] adjust1_omega, adjust1_v, adjust1_u, and adjust1_etrb subtract negative roundoff overshoot instead of adding",
       "state": "open",
       "kind": "upstream-bug",
-      "parity_pending": true,
+      "parity_pending": false,
       "needs_confirmation": false
     },
     {
@@ -497,7 +497,7 @@
       "title": "[Deferred bug] do_adjust_mass omits new_xmstar update when clamping min_star_mass_for_loss or max_star_mass_for_gain",
       "state": "open",
       "kind": "upstream-bug",
-      "parity_pending": false,
+      "parity_pending": true,
       "needs_confirmation": false
     },
     {
@@ -511,6 +511,30 @@
     {
       "number": 265,
       "title": "[Deferred bug] do_check_limits and history compute v_surf_div_v_kh with mixed units (cm/s * yr / Rsun)",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": true,
+      "needs_confirmation": false
+    },
+    {
+      "number": 266,
+      "title": "[Deferred bug] predictive_mix sets mix_mask to .false. instead of .true. after checking for overlap",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 267,
+      "title": "[Deferred bug] set_superad_reduction uses scale_value1 instead of scale_value2 for the Gamma_inv_threshold term",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 268,
+      "title": "[Deferred bug] get_convection_sigmas negates dX when xm1 <= x00, disabling high-Tc sigma limiting for downward gradients",
       "state": "open",
       "kind": "upstream-bug",
       "parity_pending": false,

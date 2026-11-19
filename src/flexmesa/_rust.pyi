@@ -373,6 +373,7 @@ class RustStarModel:
     num_redos: int
     micro_cache_hits: int
     micro_cache_misses: int
+    zbase: float
     ln_peos_surf: float
     ln_t_surf: float
     iso_names: list[str]

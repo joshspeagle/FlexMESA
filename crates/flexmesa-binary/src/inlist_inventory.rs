@@ -8,11 +8,11 @@ use std::path::Path;
 use std::sync::OnceLock;
 
 use flexmesa_schema::{
-    copy_cleaned_case_dir, is_include_key, upstream_section_keys,
-    ControlValidationReport,
+    ControlValidationReport, copy_cleaned_case_dir, is_include_key,
+    upstream_section_keys,
 };
 use flexmesa_star::{
-    supported_star_control_inventory, SectionControls, StarError,
+    SectionControls, StarError, supported_star_control_inventory,
 };
 
 /// Supported `&binary_job` keys.
@@ -20,22 +20,58 @@ pub const BINARY_JOB_SUPPORTED: &[&str] = &[
     "binary_history_columns_file",
     "change_ignore_rlof_flag",
     "change_initial_ignore_rlof_flag",
+    "change_initial_m1",
+    "change_initial_m2",
+    "change_initial_period_eccentricity",
+    "change_initial_point_mass_i",
+    "change_initial_separation_eccentricity",
+    "change_m1",
+    "change_m2",
+    "change_period_eccentricity",
+    "change_point_mass_i",
+    "change_separation_eccentricity",
     "evolve_both_stars",
     "inlist_names",
+    "new_eccentricity",
     "new_ignore_rlof_flag",
+    "new_m1",
+    "new_m2",
+    "new_period",
+    "new_point_mass_i",
+    "new_separation",
 ];
 
 /// Headless `&binary_job` GUI flags (`DECISIONS #25`).
 pub const BINARY_JOB_HEADLESS_GUI: &[&str] = &["pgbinary_flag"];
 
+/// `&binary_job` keys whose only upstream use is to gate text written to the
+/// terminal (`DECISIONS #26`).
+///
+/// Upstream use at MESA `26.4.1`:
+/// - `show_binary_log_description_at_start`: `binary/private/run_binary_support.f90:313`.
+pub const BINARY_JOB_TERMINAL_OUTPUT: &[&str] =
+    &["show_binary_log_description_at_start"];
+
+/// `&binary_controls` keys whose only upstream use is to gate text written to
+/// the terminal (`DECISIONS #26`).
+///
+/// Upstream uses at MESA `26.4.1`:
+/// - `terminal_interval`: `binary/private/run_binary_support.f90:671,678-679`.
+/// - `write_header_frequency`: `binary/private/run_binary_support.f90:678-679`.
+pub const BINARY_CONTROLS_TERMINAL_OUTPUT: &[&str] =
+    &["terminal_interval", "write_header_frequency"];
+
 /// Supported `&binary_controls` keys.
 pub const BINARY_CONTROLS_SUPPORTED: &[&str] = &[
+    "accretion_powered_irradiation",
     "accretor_overflow_terminate",
     "anomaly_steps",
     "append_to_star_history",
     "change_factor_fraction",
+    "change_factor_increase",
     "circ_type_1",
     "circ_type_2",
+    "col_depth_for_eps_extra",
     "cur_mdot_frac",
     "do_enhance_wind_1",
     "do_enhance_wind_2",
@@ -85,6 +121,7 @@ pub const BINARY_CONTROLS_SUPPORTED: &[&str] = &[
     "initial_eccentricity",
     "initial_period_in_days",
     "initial_separation_in_rsuns",
+    "irrad_flux_at_std_distance",
     "jdot_mb_mass_frac_for_scale",
     "jdot_mb_max_qconv_core",
     "jdot_mb_max_qconv_env",
@@ -109,6 +146,7 @@ pub const BINARY_CONTROLS_SUPPORTED: &[&str] = &[
     "max_change_factor",
     "max_eccentricity",
     "max_explicit_abs_mdot",
+    "max_f_irr",
     "max_implicit_abs_mdot",
     "max_tries_to_achieve",
     "max_wind_transfer_fraction_1",
@@ -118,9 +156,12 @@ pub const BINARY_CONTROLS_SUPPORTED: &[&str] = &[
     "min_change_factor",
     "min_eccentricity",
     "min_mdot_for_implicit",
+    "num_tries_for_increase_change_factor",
+    "report_rlo_solver_progress",
     "roche_min_mdot",
     "solver_type",
     "starting_mdot",
+    "std_distance_for_irradiation",
     "sync_mode_1",
     "sync_mode_2",
     "sync_type_1",
@@ -131,6 +172,7 @@ pub const BINARY_CONTROLS_SUPPORTED: &[&str] = &[
     "time_delta_coeff",
     "tout_b_wind_1",
     "tout_b_wind_2",
+    "use_accretor_luminosity_for_irrad",
     "use_eccentricity_enhancement",
     "use_es_opacity_for_mdot_edd",
     "use_radiation_corrected_transfer_rate",
@@ -154,8 +196,12 @@ pub struct BinaryControlInventory {
     pub binary_job_supported: HashSet<&'static str>,
     /// Headless GUI `&binary_job` flags (`pgbinary_flag`).
     pub binary_job_headless_gui_flags: HashSet<&'static str>,
+    /// `&binary_job` keys that only write to the terminal (`DECISIONS #26`).
+    pub binary_job_terminal_output: HashSet<&'static str>,
     /// Supported `&binary_controls` keys.
     pub binary_controls_supported: HashSet<&'static str>,
+    /// `&binary_controls` keys that only write to the terminal (`DECISIONS #26`).
+    pub binary_controls_terminal_output: HashSet<&'static str>,
 }
 
 static BINARY_INVENTORY: OnceLock<BinaryControlInventory> = OnceLock::new();
@@ -169,7 +215,15 @@ pub fn supported_binary_control_inventory() -> &'static BinaryControlInventory {
             .iter()
             .copied()
             .collect(),
+        binary_job_terminal_output: BINARY_JOB_TERMINAL_OUTPUT
+            .iter()
+            .copied()
+            .collect(),
         binary_controls_supported: BINARY_CONTROLS_SUPPORTED
+            .iter()
+            .copied()
+            .collect(),
+        binary_controls_terminal_output: BINARY_CONTROLS_TERMINAL_OUTPUT
             .iter()
             .copied()
             .collect(),
@@ -215,21 +269,23 @@ pub fn validate_binary_sections<S: ::std::hash::BuildHasher>(
                 );
             }
             "binary_job" => {
-                report.validate_implemented_section(
+                report.validate_implemented_section_with_terminal_output(
                     sec,
                     &keys,
                     &inv.binary_job_supported,
                     &empty,
                     &inv.binary_job_headless_gui_flags,
+                    &inv.binary_job_terminal_output,
                 );
             }
             "binary_controls" => {
-                report.validate_implemented_section(
+                report.validate_implemented_section_with_terminal_output(
                     sec,
                     &keys,
                     &inv.binary_controls_supported,
                     &empty,
                     &empty,
+                    &inv.binary_controls_terminal_output,
                 );
             }
             other => {
@@ -272,6 +328,7 @@ pub fn copy_cleaned_binary_case(
                 is_include_key(sec, key)
                     || star_inv.star_job_supported.contains(key)
                     || star_inv.star_job_headless_gui_flags.contains(key)
+                    || star_inv.star_job_terminal_output.contains(key)
             }
             "eos" => {
                 is_include_key(sec, key) || star_inv.eos_supported.contains(key)
@@ -282,15 +339,18 @@ pub fn copy_cleaned_binary_case(
             "controls" => {
                 is_include_key(sec, key)
                     || star_inv.controls_supported.contains(key)
+                    || star_inv.controls_terminal_output.contains(key)
             }
             "binary_job" => {
                 is_include_key(sec, key)
                     || bin_inv.binary_job_supported.contains(key)
                     || bin_inv.binary_job_headless_gui_flags.contains(key)
+                    || bin_inv.binary_job_terminal_output.contains(key)
             }
             "binary_controls" => {
                 is_include_key(sec, key)
                     || bin_inv.binary_controls_supported.contains(key)
+                    || bin_inv.binary_controls_terminal_output.contains(key)
             }
             "pgstar" | "pgbinary" => {
                 is_include_key(sec, key)

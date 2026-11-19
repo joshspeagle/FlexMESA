@@ -8,7 +8,7 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 - **Total manifest cases scanned**: `106`
 - **Cases passing strict `#147` validation**: `0`
 - **Cases rejected by strict `#147` validation**: `106`
-- **Distinct unsupported physics/solver controls encountered**: `382`
+- **Distinct unsupported physics/solver controls encountered**: `380`
 - **Distinct unknown/misspelled controls encountered**: `0`
 - **Cases using headless plotting controls (`#173` / `DECISIONS #25`)**: `78` (`895` distinct keys)
 
@@ -20,8 +20,8 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 | `&eos` | 102 | 5 | 0 | 0 | 0 | 97 |
 | `&kap` | 51 | 6 | 0 | 0 | 0 | 45 |
 | `&controls` | 1448 | 759 | 26 | 0 | 10 | 653 |
-| `&binary_job` | 37 | 6 | 0 | 1 | 0 | 30 |
-| `&binary_controls` | 176 | 115 | 0 | 0 | 0 | 61 |
+| `&binary_job` | 37 | 22 | 0 | 1 | 1 | 13 |
+| `&binary_controls` | 176 | 124 | 0 | 0 | 2 | 50 |
 | `&astero_search_controls` | 153 | 88 | 3 | 0 | 0 | 62 |
 
 ## Top Unsupported Physics & Solver Controls (`#147`)
@@ -106,6 +106,7 @@ These keys only gate or format text that MESA writes to the terminal. Strict val
 | `&controls::terminal_show_timestep_units` | 12 |
 | `&star_job::show_retry_counts_when_terminate` | 6 |
 | `&star_job::show_timestep_limit_counts_when_terminate` | 6 |
+| `&binary_controls::terminal_interval` | 1 |
 | `&star_job::show_net_reactions_info` | 1 |
 | `&star_job::show_net_species_info` | 1 |
 
@@ -262,14 +263,14 @@ Per `DECISIONS #25` (matching upstream `USE_PGSTAR = NO`), keys in `&pgstar`, `&
 | `star` | `wd_nova_burst` | `fail_unsupported` | 10 | 0 | 11 |
 | `star` | `wd_stable_h_burn` | `fail_unsupported` | 10 | 0 | 0 |
 | `star` | `zams_to_cc_80` | `fail_unsupported` | 45 | 0 | 263 |
-| `binary` | `double_bh` | `fail_unsupported` | 4 | 0 | 92 |
+| `binary` | `double_bh` | `fail_unsupported` | 2 | 0 | 92 |
 | `binary` | `evolve_both_stars` | `fail_unsupported` | 2 | 0 | 84 |
 | `binary` | `jdot_gr_check` | `fail_unsupported` | 1 | 0 | 1 |
 | `binary` | `jdot_ls_check` | `fail_unsupported` | 2 | 0 | 0 |
 | `binary` | `jdot_ml_check` | `fail_unsupported` | 1 | 0 | 0 |
 | `binary` | `star_plus_point_mass` | `fail_unsupported` | 2 | 0 | 85 |
 | `binary` | `star_plus_point_mass_explicit_mdot` | `fail_unsupported` | 2 | 0 | 0 |
-| `binary` | `wind_fed_bhhmxb` | `fail_unsupported` | 3 | 0 | 0 |
+| `binary` | `wind_fed_bhhmxb` | `fail_unsupported` | 2 | 0 | 0 |
 | `astero` | `astero_adipls` | `fail_unsupported` | 5 | 0 | 0 |
 | `astero` | `astero_gyre` | `fail_unsupported` | 4 | 0 | 0 |
 | `astero` | `example_astero` | `fail_unsupported` | 59 | 0 | 173 |

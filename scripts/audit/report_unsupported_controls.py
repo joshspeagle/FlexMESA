@@ -325,6 +325,8 @@ def load_inventories() -> InventorySets:
         terminal_output={
             "star_job": star_inv["STAR_JOB_TERMINAL_OUTPUT"],
             "controls": star_inv["CONTROLS_TERMINAL_OUTPUT"],
+            "binary_job": bin_inv["BINARY_JOB_TERMINAL_OUTPUT"],
+            "binary_controls": bin_inv["BINARY_CONTROLS_TERMINAL_OUTPUT"],
         },
     )
 

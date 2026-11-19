@@ -11,23 +11,23 @@ use std::fs;
 use std::path::PathBuf;
 
 use flexmesa_binary::{
-    bh_initial_equatorial_mass, copy_cleaned_binary_case,
-    eval_edot_enhancement_isotropic, eval_point_mass_edd_and_retention,
-    eval_synchronicity_switch, run_binary_test_suite_case,
-    run_binary_test_suite_case_with_extras, separation_from_period,
     BinaryCompanion, BinaryExtras, BinaryExtrasAction, BinaryInlistControls,
     BinaryLogsOptions, BinarySystem, ImplicitMdotSolver, ImplicitStepAction,
-    RocheDeformationTables,
+    RocheDeformationTables, bh_initial_equatorial_mass,
+    copy_cleaned_binary_case, eval_edot_enhancement_isotropic,
+    eval_point_mass_edd_and_retention, eval_synchronicity_switch,
+    run_binary_test_suite_case, run_binary_test_suite_case_with_extras,
+    separation_from_period,
 };
 use flexmesa_const::{
     CLIGHT, CRAD, LSUN, MSUN, PI, RSUN, SECDAY, SECYER, STANDARD_CGRAV,
 };
 use flexmesa_math::{exp10, log10, pow};
 use flexmesa_star::{
+    DefaultStarExtras, InlistBundle, InlistLoadOptions, MdotRedoState,
+    SelectMdotAction, StarControls, StarError, StarJobControls, StarModel,
     check_termination_limits, init_or_update_model_from_bundle,
-    load_zams_model, DefaultStarExtras, InlistBundle, InlistLoadOptions,
-    MdotRedoState, SelectMdotAction, StarControls, StarError, StarJobControls,
-    StarModel,
+    load_zams_model,
 };
 
 const BINARY_CASES: [&str; 8] = [
@@ -760,15 +760,25 @@ fn test_recursive_binary_inlists_and_all_8_cases_capped_4_steps() {
         return;
     };
 
-    let raw_err =
-        BinaryInlistControls::from_case_dir(&suite_dir.join("double_bh"))
-            .expect_err(
-                "raw $MESA_DIR double_bh must fail on unsupported controls",
-            );
+    for &case_name in &BINARY_CASES {
+        BinaryInlistControls::from_case_dir(&suite_dir.join(case_name))
+            .unwrap_or_else(|e| {
+                panic!(
+                    "raw $MESA_DIR {case_name} binary inlist must parse without unsupported binary controls: {e}"
+                )
+            });
+    }
+    let raw_dbh_err = run_binary_test_suite_case(
+        &suite_dir.join("double_bh"),
+        Some(4),
+    )
+    .expect_err(
+        "raw $MESA_DIR double_bh must fail on unsupported star controls",
+    );
     assert!(
-        matches!(raw_err, StarError::InvalidInput(_))
-            && raw_err.to_string().contains("unsupported control"),
-        "unexpected raw double_bh error: {raw_err}"
+        matches!(raw_dbh_err, StarError::InvalidInput(_))
+            && raw_dbh_err.to_string().contains("unsupported control"),
+        "unexpected raw double_bh error: {raw_dbh_err}"
     );
     let suite_err =
         run_binary_test_suite_case(&suite_dir.join("jdot_gr_check"), Some(4))

@@ -384,12 +384,13 @@ def _render_controls_health_and_work(
         "",
         "| Namelist | Upstream `26.4.1` Scalars | Matched in `FlexMESA` | "
         "Defaults Agree | Value Mismatch | Active Limit `None` | "
-        "Unimplemented |",
-        "| :--- | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "Non-Scalar Rust | Unimplemented |",
+        "| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
         *(
             f"| `{c['namelist']}` | {c['upstream_scalars']:,} | "
             f"{c['matched_in_flexmesa']:,} | {c['defaults_agree']:,} | "
             f"{c['value_mismatch']:,} | {c['disabled_limit_none']:,} | "
+            f"{c.get('skipped_unparseable_rust', 0):,} | "
             f"{c['unimplemented']:,} |"
             for c in data["controls"]
         ),

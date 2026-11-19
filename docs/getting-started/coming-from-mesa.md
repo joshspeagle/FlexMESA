@@ -87,7 +87,7 @@ from flexmesa import star
 # Export a ZAMS model to an upstream-compatible ASCII .mod string and roundtrip it
 model = star.StarModel.from_zams(initial_mass=2.0, initial_z=0.02)
 mod_text = model.to_mod_str()
-reloaded = star.StarModel.from_mod_str(mod_text, eval_hydro=True)
+reloaded = star.StarModel.from_mod_str(mod_text)
 assert reloaded.nz == model.nz
 
 # Save and restore an internal FlexMESA binary snapshot (.photo; not Fortran MESA binary compatible)

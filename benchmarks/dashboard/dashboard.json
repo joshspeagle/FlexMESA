@@ -55,7 +55,7 @@
         "verified_total": 0,
         "pct_ported": 18.7,
         "pct_verified": 0.0,
-        "rust_lines": 11721,
+        "rust_lines": 11737,
         "python_jax_lines": 1244
       },
       {
@@ -608,7 +608,7 @@
         "strict_validated": 0,
         "diagnostic_runs": 8,
         "reached_termination": 6,
-        "within_numeric_tol": 1,
+        "within_numeric_tol": 2,
         "passing": 0,
         "declared_gaps": 8,
         "undeclared_failures": 0
@@ -651,6 +651,11 @@
         "suite": "star",
         "case": "rsp_save_and_load_file",
         "issue": "#161"
+      },
+      {
+        "suite": "binary",
+        "case": "jdot_gr_check",
+        "issue": "#160"
       },
       {
         "suite": "binary",

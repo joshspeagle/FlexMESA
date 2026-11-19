@@ -271,19 +271,16 @@ pub fn get_table_values(
         idx
     };
 
-    let (zlo, zhi) = if (new_log_z - ai.log_z[z_index - 1]).abs() == 0.0 {
-        (z_index, z_index)
-    } else {
-        let mut lo = z_index.saturating_sub(1).max(1);
-        let mut hi = (z_index + 2).min(nz);
-        if hi - lo != 3 {
-            lo = lo.saturating_sub(1).max(1);
-        }
-        if hi - lo != 3 {
-            hi = (hi + 1).min(nz);
-        }
-        (lo, hi)
-    };
+    // `atm/private/table_atm.f90:320-326`: unconditionally form the up-to-4-slice
+    // Z window (`num_zs == 1` only when `nz == 1`, e.g. `WD_tau_25` / `DB_WD_tau_25`).
+    let mut zlo = z_index.saturating_sub(1).max(1);
+    let mut zhi = (z_index + 2).min(nz);
+    if zhi - zlo != 3 {
+        zlo = zlo.saturating_sub(1).max(1);
+    }
+    if zhi - zlo != 3 {
+        zhi = (zhi + 1).min(nz);
+    }
     let num_zs = zhi - zlo + 1;
 
     let do_interp =

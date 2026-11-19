@@ -49,7 +49,8 @@ Scope and the `v0.1.0` definition are in [`SCOPE.md`](SCOPE.md). Work is tracked
 | 32 | Unported Upstream Extras Are Declared and Never Pass (`#148`) | In force | below |
 | 33 | Data Pipeline Provenance, Verified Runtime Caches, and Corruption Errors (`#164`) | In force | below |
 | 34 | Upstream MESA 26.4.1 Control Defaults Parity, Scalar Sentinels, and Explicit Opacity Zbase (`#149`) | In force | below |
-| 35 | Upstream MESA 26.4.1 Mesh Planner, Split-Merge AMR, and Uninitialized-Memory Guards (`#153`) | In force | below |
+| 35 | Mode-Independent `CRMATH` Recomputation of REACLIB Reverse Coefficients at Load Time (`#161`) | In force | below |
+| 36 | Upstream MESA 26.4.1 Mesh Planner, Split-Merge AMR, and Uninitialized-Memory Guards (`#153`) | In force | below |
 
 ## Pre-audit decisions still in force
 
@@ -420,7 +421,20 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
 
 ---
 
-## DECISIONS #35: Upstream MESA 26.4.1 Mesh Planner, Split-Merge AMR, and Uninitialized-Memory Guards (`Issue #153`)
+## DECISIONS #35: Mode-Independent `CRMATH` Recomputation of REACLIB Reverse Coefficients at Load Time (`Issue #161`)
+
+- **Date**: 2026-11-19
+- **Decision**:
+  1. **Load-Time Detailed-Balance Recomputation (`crates/flexmesa-rates/src/loader.rs`)**: Recompute REACLIB reverse detailed-balance parameters `(inv_c1, inv_c2, inv_part)` once inside `RatesCatalog::parse_builtin` from `NuclideCatalog::builtin_ref()` (`flexmesa-chem`) in exact upstream order (`compute_rev_ratio` in `rates/private/reaclib_support.f90:204-263`), panicking loudly if any non-weak REACLIB handle in `rates_tables.bin` fails stoichiometry parsing.
+  2. **Mode-Independent `CRMATH` Helpers (`crates/flexmesa-math/src/lib.rs`)**: Expose `log_strict`, `pow_strict`, and `powi_strict` so catalog initialization evaluates `crlibm` (`CRMATH`) intrinsics directly without reading or mutating the process-wide `NumericsMode` atomic (`#210`).
+- **Why**: Offline Python float serialization in `rates_tables.bin` introduced up to `1.8e-13` (`1,742 ULP`) drift in `inv_c1` and `inv_c2` relative to MESA `26.4.1`, whereas computing `(inv_c1, inv_c2, inv_part)` from `NuclideCatalog` via `log_strict` / `pow_strict` / `powi_strict` achieves `0 ULP` across all `2,763 / 2,763` raw reaction rates in `rates/test/test_output` and keeps `RatesCatalog` initialization thread-safe regardless of ambient `NumericsMode`.
+- **Alternatives Rejected**:
+  - *Calling `with_numerics_mode(NumericsMode::Strict, ...)` during catalog loading*: Mutates the process-wide `ACTIVE_MODE` atomic while concurrent `Fast`-mode callers read `is_strict()` lock-free (`#210`, caught by `routing_governance`).
+  - *Re-packing `rates_tables.bin` offline in Python*: Leaves reverse detailed-balance coefficients decoupled from `NuclideCatalog` and `flexmesa-math` `CRMATH` rounding.
+
+---
+
+## DECISIONS #36: Upstream MESA 26.4.1 Mesh Planner, Split-Merge AMR, and Uninitialized-Memory Guards (`Issue #153`)
 
 - **Date**: 2026-11-19
 - **Decision**:

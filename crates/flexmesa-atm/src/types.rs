@@ -85,6 +85,13 @@ pub enum AtmError {
         /// Explanation of the invalid value.
         detail: String,
     },
+    /// Unknown or deprecated atmosphere option, $T(\tau)$ relation name, opacity mode, or table name.
+    InvalidOption {
+        /// Routine where the option string was parsed.
+        context: &'static str,
+        /// Rejected option string.
+        option: String,
+    },
     /// Unknown $T(\tau)$ relation ID or atmosphere table ID.
     UnknownId {
         /// Routine where the ID was queried.
@@ -114,6 +121,9 @@ impl fmt::Display for AtmError {
             Self::InvalidArgument { context, detail } => {
                 write!(f, "invalid atm argument in {context}: {detail}")
             }
+            Self::InvalidOption { context, option } => {
+                write!(f, "unknown atm option '{option}' in {context}")
+            }
             Self::UnknownId { context, id } => {
                 write!(f, "unknown atm id {id} in {context}")
             }
@@ -131,6 +141,89 @@ impl fmt::Display for AtmError {
 }
 
 impl std::error::Error for AtmError {}
+
+/// Opacity treatment for $T(\tau)$ model atmospheres (`atm_T_tau_opacity` in
+/// `star/private/atm_support.f90:278-341`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AtmTTauOpacity {
+    /// Fixed outer-cell opacity (`'fixed'`, `max_iters = 0` in `eval_T_tau_uniform`).
+    Fixed,
+    /// Self-consistent 0.5-underrelaxed uniform opacity iteration (`'iterated'`).
+    Iterated,
+    /// Depth-varying opacity integrated via `dopri5` (`'varying'`, `eval_T_tau_varying`).
+    Varying,
+}
+
+impl AtmTTauOpacity {
+    /// Parses `atm_T_tau_opacity` (`'fixed'`, `'iterated'`, `'varying'`) matching
+    /// `star/private/atm_support.f90:278-341`, failing loudly on unknown values.
+    ///
+    /// # Errors
+    /// Returns [`AtmError::InvalidOption`] if `name` is not `'fixed'`, `'iterated'`, or `'varying'`.
+    pub fn from_name(name: &str) -> Result<Self, AtmError> {
+        match name.trim() {
+            "fixed" => Ok(Self::Fixed),
+            "iterated" => Ok(Self::Iterated),
+            "varying" => Ok(Self::Varying),
+            other => Err(AtmError::InvalidOption {
+                context: "AtmTTauOpacity::from_name",
+                option: other.to_string(),
+            }),
+        }
+    }
+
+    /// Canonical upstream option string.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Fixed => "fixed",
+            Self::Iterated => "iterated",
+            Self::Varying => "varying",
+        }
+    }
+}
+
+/// Maps `atm_T_tau_relation` string (`'Eddington'`, `'solar_Hopf'`,
+/// `'Krishna_Swamy'`, `'Trampedach_solar'`) to its numeric ID, matching
+/// `star/private/atm_support.f90:395-427` and failing loudly on unknown or
+/// deprecated options (such as `'simple_photosphere'`).
+///
+/// # Errors
+/// Returns [`AtmError::InvalidOption`] if `name` is not one of the four upstream $T(\tau)$ relations.
+pub fn get_t_tau_id(name: &str) -> Result<i32, AtmError> {
+    match name.trim() {
+        "Eddington" => Ok(ATM_T_TAU_EDDINGTON),
+        "solar_Hopf" => Ok(ATM_T_TAU_SOLAR_HOPF),
+        "Krishna_Swamy" => Ok(ATM_T_TAU_KRISHNA_SWAMY),
+        "Trampedach_solar" => Ok(ATM_T_TAU_TRAMPEDACH_SOLAR),
+        other => Err(AtmError::InvalidOption {
+            context: "get_t_tau_id",
+            option: other.to_string(),
+        }),
+    }
+}
+
+/// Maps `atm_table` string (`'tau_100'`, `'tau_10'`, `'tau_1'`, `'tau_1m1'`,
+/// `'photosphere'`, `'WD_tau_25'`, `'DB_WD_tau_25'`) to its numeric ID, matching
+/// `star/private/atm_support.f90:692-730` and failing loudly on unknown values.
+///
+/// # Errors
+/// Returns [`AtmError::InvalidOption`] if `name` is not one of the seven upstream table names.
+pub fn get_table_id(name: &str) -> Result<i32, AtmError> {
+    match name.trim() {
+        "tau_100" => Ok(ATM_TABLE_TAU_100),
+        "tau_10" => Ok(ATM_TABLE_TAU_10),
+        "tau_1" => Ok(ATM_TABLE_TAU_1),
+        "tau_1m1" => Ok(ATM_TABLE_TAU_1M1),
+        "photosphere" => Ok(ATM_TABLE_PHOTOSPHERE),
+        "WD_tau_25" => Ok(ATM_TABLE_WD_TAU_25),
+        "DB_WD_tau_25" => Ok(ATM_TABLE_DB_WD_TAU_25),
+        other => Err(AtmError::InvalidOption {
+            context: "get_table_id",
+            option: other.to_string(),
+        }),
+    }
+}
 
 /// Output of `atm_eos_iface` callback at $(\ln P, \ln T)$.
 #[derive(Debug, Clone)]

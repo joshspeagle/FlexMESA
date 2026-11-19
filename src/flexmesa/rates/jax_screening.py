@@ -114,7 +114,7 @@ def screen_extended_jax(
     qlam0z = 1.88e8 * tempi * pp
     qlam0zdt = 1.88e8 * (dtempidt * pp + tempi * dppdt)
     qlam0zdd = 1.88e8 * tempi * dppdd
-    taufac = 4.248719e3 / 3.0 * (tempi**constants.ONE_THIRD)
+    taufac = (constants.ONE_THIRD * 4.248719e3) * (tempi**constants.ONE_THIRD)
     taufacdt = -constants.ONE_THIRD * taufac * tempi
     xni = (rr * zb) ** constants.ONE_THIRD
     dxnidd = constants.ONE_THIRD * xni * deni
@@ -135,7 +135,7 @@ def screen_extended_jax(
     )
 
     bb = z1_s * z2_s
-    qq = (2.0**constants.ONE_THIRD) * bb * zs13inv
+    qq = constants.TWO_13 * bb * zs13inv
     gamef_raw = qq * aa
     gamefdt_raw = qq * daadt
     gamefdd_raw = qq * daadd
@@ -152,7 +152,7 @@ def screen_extended_jax(
     gamef = jnp.where(cap, 1.6 * tau12, gamef_raw)
     gamefdt = jnp.where(cap, 1.6 * tau12dt, gamefdt_raw)
     gamefdd = jnp.where(cap, 0.0, gamefdd_raw)
-    qq_inv = zs13 / ((2.0**constants.ONE_THIRD) * bb)
+    qq_inv = zs13 / (constants.TWO_13 * bb)
     gamp = jnp.where(cap, gamef * qq_inv, aa)
     gampdt = jnp.where(cap, gamefdt * qq_inv, daadt)
     gampdd = jnp.where(cap, 0.0, daadd)

@@ -165,9 +165,80 @@ fn neu_get_batch<'py>(
     })
 }
 
+/// Evaluates `neu_get` across 1D arrays `(log10_t, log10_rho, abar, zbar)` of
+/// shape `(nz,)`, returning a 2D `(nz, 30)` array packing `loss[0..5]` followed
+/// by Fortran column-major `sources` (`d_idx` outer `0..5`, `channel` inner `0..5`).
+#[pyfunction]
+#[pyo3(signature = (
+    log10_t,
+    log10_rho,
+    abar,
+    zbar,
+    log10_tlim=7.5,
+    flags=[true, true, true, true, true],
+    parallel=false
+))]
+fn neu_get_full_zones<'py>(
+    py: Python<'py>,
+    log10_t: PyReadonlyArray1<'py, f64>,
+    log10_rho: PyReadonlyArray1<'py, f64>,
+    abar: PyReadonlyArray1<'py, f64>,
+    zbar: PyReadonlyArray1<'py, f64>,
+    log10_tlim: f64,
+    flags: [bool; 5],
+    parallel: bool,
+) -> PyResult<Bound<'py, PyArray2<f64>>> {
+    let lts = log10_t
+        .as_slice()
+        .map_err(|_| PyValueError::new_err("log10_t must be C-contiguous"))?;
+    let lrhos = log10_rho
+        .as_slice()
+        .map_err(|_| PyValueError::new_err("log10_rho must be C-contiguous"))?;
+    let as_ = abar
+        .as_slice()
+        .map_err(|_| PyValueError::new_err("abar must be C-contiguous"))?;
+    let zs = zbar
+        .as_slice()
+        .map_err(|_| PyValueError::new_err("zbar must be C-contiguous"))?;
+    let nz = lts.len();
+    if lrhos.len() != nz || as_.len() != nz || zs.len() != nz {
+        return Err(PyValueError::new_err(
+            "neu_get_full_zones input length mismatch",
+        ));
+    }
+    let flg = flags_from_arr(flags);
+    let (ltv, lrv, av, zv) =
+        (lts.to_vec(), lrhos.to_vec(), as_.to_vec(), zs.to_vec());
+    eval_batch_2d::<30, _>(py, nz, parallel, 64, move |k| {
+        match rust_neu_get(
+            None,
+            Some(ltv[k]),
+            None,
+            Some(lrv[k]),
+            av[k],
+            zv[k],
+            log10_tlim,
+            flg,
+        ) {
+            Ok(r) => {
+                let mut row = [0.0_f64; 30];
+                row[..5].copy_from_slice(&r.loss);
+                for d_idx in 0..5 {
+                    for ch in 0..5 {
+                        row[5 + d_idx * 5 + ch] = r.sources[ch][d_idx];
+                    }
+                }
+                row
+            }
+            Err(_) => [f64::NAN; 30],
+        }
+    })
+}
+
 /// Registers Tier B `neu` functions on `m`.
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(neu_get, m)?)?;
     m.add_function(wrap_pyfunction!(neu_get_batch, m)?)?;
+    m.add_function(wrap_pyfunction!(neu_get_full_zones, m)?)?;
     Ok(())
 }

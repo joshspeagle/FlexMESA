@@ -125,6 +125,33 @@ def get_t_tau_base(t_tau_id: int) -> float:
     return float(_rust.atm_get_t_tau_base(int(t_tau_id)))
 
 
+def get_t_tau_id(name: str) -> int:
+    """Map an `atm_T_tau_relation` string to its integer relation identifier.
+
+    Args:
+        name: Upstream $T(\\tau)$ relation name (`'Eddington'`, `'solar_Hopf'`,
+            `'Krishna_Swamy'`, or `'Trampedach_solar'`).
+
+    Returns:
+        Integer $T(\\tau)$ relation identifier (`1`..`4`).
+    """
+    return int(_rust.atm_get_t_tau_id(str(name)))
+
+
+def get_table_id(name: str) -> int:
+    """Map an `atm_table` string to its integer table identifier.
+
+    Args:
+        name: Upstream atmosphere table name (`'tau_100'`, `'tau_10'`,
+            `'tau_1'`, `'tau_1m1'`, `'photosphere'`, `'WD_tau_25'`, or
+            `'DB_WD_tau_25'`).
+
+    Returns:
+        Integer atmosphere table identifier (`100`..`106`).
+    """
+    return int(_rust.atm_get_table_id(str(name)))
+
+
 def eval_e2(x: float) -> tuple[float, float]:
     """Evaluate the second exponential integral $(E_2(x), dE_2/dx)$.
 
@@ -385,6 +412,164 @@ def eval_t_tau_varying(
         str(low_t_option),
     )
     return AtmEvalOutput(*[float(v) for v in vals])
+
+
+def eval_t_tau_atm(
+    tau_surf: float,
+    luminosity: float,
+    r: float,
+    m: float,
+    cgrav: float,
+    kap_guess: float,
+    pextra_factor: float,
+    t_tau_relation: str,
+    t_tau_opacity: str,
+    errtol: float,
+    max_iters: int,
+    max_steps: int,
+    skip_partials: bool,
+    teff: float,
+    chem_id: Sequence[int] | None = None,
+    xa: npt.ArrayLike | None = None,
+    zbase: float = 0.02,
+    low_t_option: str = "low_t_fa05_gs98",
+) -> AtmEvalOutput:
+    """Dispatch $T(\\tau)$ outer boundary evaluation across opacity modes.
+
+    Evaluates `'fixed'`, `'iterated'`, or `'varying'` opacity treatments with
+    `pextra_factor` in upstream order (`star/private/atm_support.f90`).
+
+    Args:
+        tau_surf: Surface optical depth $\\tau_{\\mathrm{surf}}$.
+        luminosity: Luminosity $L$ ($\\mathrm{erg\\,s^{-1}}$).
+        r: Radius $R$ ($\\mathrm{cm}$).
+        m: Mass $M$ ($\\mathrm{g}$).
+        cgrav: Gravitational constant $G$ ($\\mathrm{cm^3\\,g^{-1}\\,s^{-2}}$).
+        kap_guess: Initial opacity guess $\\kappa$ ($\\mathrm{cm^2\\,g^{-1}}$).
+        pextra_factor: Radiation pressure enhancement factor (`Pextra_factor`).
+        t_tau_relation: Upstream $T(\\tau)$ relation name (`'Eddington'`,
+            `'solar_Hopf'`, `'Krishna_Swamy'`, or `'Trampedach_solar'`).
+        t_tau_opacity: Upstream opacity mode (`'fixed'`, `'iterated'`, or
+            `'varying'`).
+        errtol: Relative convergence or `dopri5` tolerance.
+        max_iters: Maximum opacity iterations for `'iterated'`.
+        max_steps: Maximum `dopri5` integration steps for `'varying'`.
+        skip_partials: If `True`, skip partial derivatives.
+        teff: Effective temperature $T_{\\mathrm{eff}}$ ($\\mathrm{K}$).
+        chem_id: Optional species catalog IDs (`[S]`).
+        xa: Optional species mass fractions (`(S,)`).
+        zbase: Base metallicity $Z_{\\mathrm{base}}$ for `kap`.
+        low_t_option: Low-temperature opacity table selection.
+
+    Returns:
+        Populated `AtmEvalOutput` dataclass.
+    """
+    cid_list = [int(c) for c in chem_id] if chem_id is not None else None
+    xa_arr = (
+        np.ascontiguousarray(xa, dtype=np.float64) if xa is not None else None
+    )
+    vals = _rust.atm_eval_t_tau_atm(
+        float(tau_surf),
+        float(luminosity),
+        float(r),
+        float(m),
+        float(cgrav),
+        float(kap_guess),
+        float(pextra_factor),
+        str(t_tau_relation),
+        str(t_tau_opacity),
+        float(errtol),
+        int(max_iters),
+        int(max_steps),
+        bool(skip_partials),
+        float(teff),
+        cid_list,
+        xa_arr,
+        float(zbase),
+        str(low_t_option),
+    )
+    return AtmEvalOutput(*[float(v) for v in vals])
+
+
+def eval_table_atm(
+    luminosity: float,
+    r: float,
+    m: float,
+    cgrav: float,
+    atm_table: str,
+    z: float,
+    tau_factor: float = 1.0,
+    atm_off_table_option: str = "T_tau",
+    t_tau_relation: str = "Eddington",
+    t_tau_opacity: str = "fixed",
+    kap_guess: float = 0.5,
+    pextra_factor: float = 1.0,
+    errtol: float = 1.0e-6,
+    max_iters: int = 30,
+    max_steps: int = 500,
+    skip_partials: bool = False,
+    teff: float = 5777.0,
+    chem_id: Sequence[int] | None = None,
+    xa: npt.ArrayLike | None = None,
+    zbase: float = 0.02,
+    low_t_option: str = "low_t_fa05_gs98",
+) -> tuple[AtmEvalOutput, float]:
+    """Evaluate a tabulated atmosphere with upstream off-table blending.
+
+    Args:
+        luminosity: Luminosity $L$ ($\\mathrm{erg\\,s^{-1}}$).
+        r: Radius $R$ ($\\mathrm{cm}$).
+        m: Mass $M$ ($\\mathrm{g}$).
+        cgrav: Gravitational constant $G$ ($\\mathrm{cm^3\\,g^{-1}\\,s^{-2}}$).
+        atm_table: Upstream table name (`'tau_100'`, `'photosphere'`, etc.).
+        z: Metallicity mass fraction $Z$.
+        tau_factor: Optical-depth scale factor (must equal `1.0`).
+        atm_off_table_option: Off-table backup mode (`'T_tau'` or `''`).
+        t_tau_relation: Backup $T(\\tau)$ relation name.
+        t_tau_opacity: Backup $T(\\tau)$ opacity mode.
+        kap_guess: Initial opacity guess ($\\mathrm{cm^2\\,g^{-1}}$).
+        pextra_factor: Radiation pressure enhancement factor.
+        errtol: Relative convergence or `dopri5` tolerance.
+        max_iters: Maximum opacity iterations for `'iterated'`.
+        max_steps: Maximum `dopri5` steps for `'varying'`.
+        skip_partials: If `True`, skip partial derivatives.
+        teff: Effective temperature $T_{\\mathrm{eff}}$ ($\\mathrm{K}$).
+        chem_id: Optional species catalog IDs (`[S]`).
+        xa: Optional species mass fractions (`(S,)`).
+        zbase: Base metallicity $Z_{\\mathrm{base}}$ for `kap`.
+        low_t_option: Low-temperature opacity table selection.
+
+    Returns:
+        Tuple `(output, tau_base)`.
+    """
+    cid_list = [int(c) for c in chem_id] if chem_id is not None else None
+    xa_arr = (
+        np.ascontiguousarray(xa, dtype=np.float64) if xa is not None else None
+    )
+    vals, tau_base = _rust.atm_eval_table_atm(
+        float(luminosity),
+        float(r),
+        float(m),
+        float(cgrav),
+        str(atm_table),
+        float(z),
+        float(tau_factor),
+        str(atm_off_table_option),
+        str(t_tau_relation),
+        str(t_tau_opacity),
+        float(kap_guess),
+        float(pextra_factor),
+        float(errtol),
+        int(max_iters),
+        int(max_steps),
+        bool(skip_partials),
+        float(teff),
+        cid_list,
+        xa_arr,
+        float(zbase),
+        str(low_t_option),
+    )
+    return AtmEvalOutput(*[float(v) for v in vals]), float(tau_base)
 
 
 def eval_irradiated(

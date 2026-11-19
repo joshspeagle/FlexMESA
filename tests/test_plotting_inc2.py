@@ -401,9 +401,9 @@ def test_pgstar_profile_panels_match_bundled_plot_info_and_rank_series(
     fig_pw, ax_pw = plotting.plot_power_profile(prof, ref_profile_path=prof)
     try:
         pw_labels = [
-            ln.get_label()
+            str(ln.get_label())
             for ln in ax_pw.get_lines()
-            if not ln.get_label().endswith("MESA")
+            if not str(ln.get_label()).endswith("MESA")
         ]
         # cno peak (7600) > pp peak (900) -> cno appears first
         assert pw_labels[:2] == ["cno", "pp"]
@@ -413,9 +413,9 @@ def test_pgstar_profile_panels_match_bundled_plot_info_and_rank_series(
     fig_ab, ax_ab = plotting.plot_abundance_profile(prof, ref_profile_path=prof)
     try:
         ab_labels = [
-            ln.get_label()
+            str(ln.get_label())
             for ln in ax_ab.get_lines()
-            if not ln.get_label().endswith("MESA")
+            if not str(ln.get_label()).endswith("MESA")
         ]
         assert ab_labels[:2] == ["h1", "he4"]
         assert "n14" in ab_labels and "o16" in ab_labels

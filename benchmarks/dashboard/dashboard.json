@@ -758,9 +758,9 @@
     "rust": {
       "tool": "cargo llvm-cov",
       "overall": {
-        "lines": 93976,
-        "covered": 68981,
-        "percent": 73.4
+        "lines": 95354,
+        "covered": 69937,
+        "percent": 73.3
       },
       "by_crate": [
         {
@@ -789,9 +789,9 @@
         },
         {
           "crate": "flexmesa-binary",
-          "lines": 6547,
-          "covered": 4169,
-          "percent": 63.7
+          "lines": 7925,
+          "covered": 5225,
+          "percent": 65.9
         },
         {
           "crate": "flexmesa-chem",
@@ -826,8 +826,8 @@
         {
           "crate": "flexmesa-eos",
           "lines": 9724,
-          "covered": 7728,
-          "percent": 79.5
+          "covered": 7717,
+          "percent": 79.4
         },
         {
           "crate": "flexmesa-interp1d",
@@ -850,8 +850,8 @@
         {
           "crate": "flexmesa-kap",
           "lines": 3402,
-          "covered": 2245,
-          "percent": 66.0
+          "covered": 2239,
+          "percent": 65.8
         },
         {
           "crate": "flexmesa-math",
@@ -898,8 +898,8 @@
         {
           "crate": "flexmesa-star",
           "lines": 36104,
-          "covered": 26426,
-          "percent": 73.2
+          "covered": 26346,
+          "percent": 73.0
         },
         {
           "crate": "flexmesa-testing",
@@ -910,8 +910,8 @@
         {
           "crate": "flexmesa-turb",
           "lines": 1093,
-          "covered": 906,
-          "percent": 82.9
+          "covered": 903,
+          "percent": 82.6
         },
         {
           "crate": "flexmesa-utils",
@@ -924,9 +924,9 @@
     "python": {
       "tool": "pytest --cov",
       "overall": {
-        "statements": 23681,
-        "covered": 20896,
-        "percent": 88.2
+        "statements": 23744,
+        "covered": 20925,
+        "percent": 88.1
       },
       "by_subpackage": [
         {
@@ -1075,9 +1075,9 @@
         },
         {
           "subpackage": "flexmesa.testing",
-          "statements": 3575,
-          "covered": 2849,
-          "percent": 79.7
+          "statements": 3638,
+          "covered": 2878,
+          "percent": 79.1
         },
         {
           "subpackage": "flexmesa.turb",
@@ -1429,11 +1429,6 @@
         "draft": false
       },
       {
-        "number": 254,
-        "title": "[Audit C2] Port MESA 26.4.1 mesh planner, functions, multipliers, and remap (#153)",
-        "draft": false
-      },
-      {
         "number": 256,
         "title": "Wire &eos/&kap controls, dynamic opacity bounds, #176 HELM-edge blend, and star microphysics (#161)",
         "draft": false
@@ -1451,6 +1446,11 @@
       {
         "number": 262,
         "title": "Port MESA 26.4.1 convective boundaries, mixing, overshoot, predictive mixing, and convective premixing",
+        "draft": true
+      },
+      {
+        "number": 269,
+        "title": "feat(star,binary): align winds, mass adjustment, and stop conditions with MESA 26.4.1 (#159)",
         "draft": true
       }
     ],
@@ -1628,7 +1628,7 @@
         "title": "[Deferred bug] adjust1_omega, adjust1_v, adjust1_u, and adjust1_etrb subtract negative roundoff overshoot instead of adding",
         "state": "open",
         "kind": "upstream-bug",
-        "parity_pending": true,
+        "parity_pending": false,
         "needs_confirmation": false
       },
       {
@@ -1692,7 +1692,7 @@
         "title": "[Deferred bug] do_adjust_mass omits new_xmstar update when clamping min_star_mass_for_loss or max_star_mass_for_gain",
         "state": "open",
         "kind": "upstream-bug",
-        "parity_pending": false,
+        "parity_pending": true,
         "needs_confirmation": false
       },
       {
@@ -1706,6 +1706,30 @@
       {
         "number": 265,
         "title": "[Deferred bug] do_check_limits and history compute v_surf_div_v_kh with mixed units (cm/s * yr / Rsun)",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": true,
+        "needs_confirmation": false
+      },
+      {
+        "number": 266,
+        "title": "[Deferred bug] predictive_mix sets mix_mask to .false. instead of .true. after checking for overlap",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": false,
+        "needs_confirmation": false
+      },
+      {
+        "number": 267,
+        "title": "[Deferred bug] set_superad_reduction uses scale_value1 instead of scale_value2 for the Gamma_inv_threshold term",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": false,
+        "needs_confirmation": false
+      },
+      {
+        "number": 268,
+        "title": "[Deferred bug] get_convection_sigmas negates dX when xm1 <= x00, disabling high-Tc sigma limiting for downward gradients",
         "state": "open",
         "kind": "upstream-bug",
         "parity_pending": false,
@@ -2116,6 +2140,19 @@
       "closed_140": "13",
       "total_140": "34",
       "deferred_169": "32"
+    },
+    {
+      "date_utc": "2026-11-19",
+      "commit": "226cc16",
+      "event": "main merge",
+      "engine_ported_pct": "18.8",
+      "all_verified_pct": "0.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "73.3",
+      "python_cov_pct": "88.1",
+      "closed_140": "13",
+      "total_140": "34",
+      "deferred_169": "35"
     }
   ]
 }

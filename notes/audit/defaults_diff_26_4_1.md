@@ -7,7 +7,7 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 
 | Namelist | Upstream `26.4.1` Scalars | Matched in `FlexMESA` | Agree | Value Mismatch | Active Limit Disabled (`None`) | Unimplemented in `FlexMESA` |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| star &controls | 1444 | 721 | 721 | 0 | 0 | 723 |
+| star &controls | 1444 | 821 | 821 | 0 | 0 | 623 |
 | star &star_job | 455 | 88 | 88 | 0 | 0 | 367 |
 | binary &binary_controls + &binary_job | 209 | 145 | 145 | 0 | 0 | 64 |
 | astero &astero_search_controls | 150 | 73 | 73 | 0 | 0 | 77 |

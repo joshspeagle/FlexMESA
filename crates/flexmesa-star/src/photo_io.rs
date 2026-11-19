@@ -11,7 +11,7 @@ use crate::model::StarModel;
 const PHOTO_MAGIC: &[u8; 8] = b"FMPHOTO2";
 
 /// Binary `.photo` format version written by the generated `serde` encoder.
-pub const PHOTO_FORMAT_VERSION: u32 = 22;
+pub const PHOTO_FORMAT_VERSION: u32 = 23;
 
 /// Computes a deterministic 64-bit FNV-1a checksum of `.photo` restart bytes
 /// (`./ck` in upstream MESA `test_suite_helpers`).

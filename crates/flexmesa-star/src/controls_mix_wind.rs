@@ -12,6 +12,14 @@ pub const NUM_OVERSHOOT_PARAM_SETS: usize = 16;
 /// (`NUM_PREDICTIVE_PARAM_SETS` in `star_data/public/star_data_def.inc`).
 pub const NUM_PREDICTIVE_PARAM_SETS: usize = 16;
 
+/// Number of indexed species abundance mesh spacing functions
+/// (`num_xa_function` in `star_data/public/star_data_def.inc`).
+pub const NUM_XA_FUNCTION: usize = 9;
+
+/// Number of indexed $\mathrm{d}\log X / \mathrm{d}\log P$ mesh refinement rules
+/// (`num_mesh_logX` in `star_data/public/star_data_def.inc`).
+pub const NUM_MESH_LOGX: usize = 9;
+
 /// One indexed convective overshooting parameter set (`1..=16` in
 /// `controls.defaults:2580-2660`).
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
@@ -251,7 +259,19 @@ pub struct MixWindControls {
     /// Outer mass-fraction boundary for `inject_uniform_extra_heat` (`max_q_for_uniform_extra_heat`).
     pub max_q_for_uniform_extra_heat: f64,
 
-    // --- Adaptive Mesh Spacing Weights (`mesh_function.f90`) ---
+    // --- Adaptive Mesh Spacing & Split-Merge AMR (`controls.defaults:5756-6744`) ---
+    /// Maximum allowed number of grid zones (`max_allowed_nz`, `8000` default; `<= 0` unlimited).
+    pub max_allowed_nz: isize,
+    /// Disable remeshing if any cell has $\log_{10} T$ above this ceiling (`remesh_max_allowed_logT`, `1e99` default).
+    pub remesh_max_allowed_logt: f64,
+    /// Exponent on $P_{\mathrm{gas}} / P_{\mathrm{eos}}$ applied to `delta_gval_max` (`mesh_Pgas_div_P_exponent`, `0.0` default).
+    pub mesh_pgas_div_p_exponent: f64,
+    /// High-temperature `mesh_delta_coeff` value (`mesh_delta_coeff_for_highT`, `3.0` default).
+    pub mesh_delta_coeff_for_hight: f64,
+    /// Central $\log_{10} T$ ceiling for standard `mesh_delta_coeff` (`logT_max_for_standard_mesh_delta_coeff`, `9.0` default).
+    pub logt_max_for_standard_mesh_delta_coeff: f64,
+    /// Central $\log_{10} T$ floor for `mesh_delta_coeff_for_highT` (`logT_min_for_highT_mesh_delta_coeff`, `9.5` default).
+    pub logt_min_for_hight_mesh_delta_coeff: f64,
     /// Maximum relative cell mass fraction $\Delta q_{\max}$ (`max_dq`, `1e-2` default).
     pub max_dq: f64,
     /// Minimum relative cell mass fraction $\Delta q_{\min}$ (`min_dq`, `1e-14` default).
@@ -262,40 +282,234 @@ pub struct MixWindControls {
     pub min_dq_for_xa: f64,
     /// Minimum cell $\Delta q$ for composition-driven splitting in convective zones (`min_dq_for_xa_convective`, `1e-6` default).
     pub min_dq_for_xa_convective: f64,
+    /// Minimum cell $\Delta q$ for $\log_{10} T$-driven splitting (`min_dq_for_logT`, `1e-14` default).
+    pub min_dq_for_logt: f64,
     /// Minimum $\Delta\ln R$ across a cell during mesh refinement (`mesh_min_dlnR`, `1e-9` default).
     pub mesh_min_dlnr: f64,
+    /// Force cell merge when $\Delta\ln R < \text{mesh\_min\_dlnR}$ (`merge_if_dlnR_too_small`, `false` default).
+    pub merge_if_dlnr_too_small: bool,
+    /// Minimum $\Delta r / (R_* - R_{\mathrm{center}})$ for splitting (`mesh_min_dr_div_dRstar`, `-1.0` default).
+    pub mesh_min_dr_div_drstar: f64,
+    /// Force cell merge when $\Delta r / \Delta R_* < \text{mesh\_min\_dr\_div\_dRstar}$ (`merge_if_dr_div_dRstar_too_small`, `true` default).
+    pub merge_if_dr_div_drstar_too_small: bool,
+    /// Minimum sound-crossing time $\Delta r / c_s$ in seconds for splitting (`mesh_min_dr_div_cs`, `-1.0` default).
+    pub mesh_min_dr_div_cs: f64,
+    /// Force cell merge when $\Delta r / c_s < \text{mesh\_min\_dr\_div\_cs}$ (`merge_if_dr_div_cs_too_small`, `true` default).
+    pub merge_if_dr_div_cs_too_small: bool,
     /// Maximum allowed adjacent cell $\Delta q$ ratio (`mesh_max_allowed_ratio`, `2.5` default).
     pub mesh_max_allowed_ratio: f64,
     /// Maximum composition jump allowed when merging adjacent cells (`max_delta_x_for_merge`, `0.1` default).
     pub max_delta_x_for_merge: f64,
-    /// Maximum surface cell mass fraction (`max_surface_cell_dq`, `1e-8` default).
+    /// Maximum surface cell mass fraction (`max_surface_cell_dq`, `1e-12` default).
     pub max_surface_cell_dq: f64,
-    /// Maximum center cell mass fraction (`max_center_cell_dq`, `1e-6` default).
+    /// Minimum surface cell mass fraction (`min_surface_cell_dq`, `1e-99` default).
+    pub min_surface_cell_dq: f64,
+    /// Maximum center cell mass fraction (`max_center_cell_dq`, `1e-7` default).
     pub max_center_cell_dq: f64,
-    /// Pressure gradient weight in mesh spacing function (`P_function_weight`, `30.0` default).
+    /// Candidate subcells per old zone in `round_off_xq` (`max_num_subcells`, `2` default).
+    pub max_num_subcells: usize,
+    /// Maximum number of old cells merged into one interior zone (`max_num_merge_cells`, `2` default).
+    pub max_num_merge_cells: usize,
+    /// Maximum number of old cells merged into the surface zone (`max_num_merge_surface_cells`, `2` default).
+    pub max_num_merge_surface_cells: usize,
+    /// Invert EOS $\ln T(\rho, e)$ during remapping (`mesh_adjust_get_T_from_E`, `true` default).
+    pub mesh_adjust_get_t_from_e: bool,
+    /// Permit cell merges during `do_mesh_plan` (`mesh_ok_to_merge`, `true` default).
+    pub mesh_ok_to_merge: bool,
+    /// Maximum 1-based old cell index eligible for split/merge (`mesh_max_k_old_for_split`, `999_999_999` default).
+    pub mesh_max_k_old_for_split: isize,
+    /// Minimum 1-based old cell index eligible for split/merge (`mesh_min_k_old_for_split`, `0` default).
+    pub mesh_min_k_old_for_split: isize,
+    /// Internal energy mesh function weight (`E_function_weight`, `0.0` default).
+    pub e_function_weight: f64,
+    /// Floor on $\log_{10} e$ in `E_function` (`E_function_param`, `16.0` default).
+    pub e_function_param: f64,
+    /// Pressure gradient weight in mesh spacing function (`P_function_weight`, `40.0` default).
     pub p_function_weight: f64,
     /// Primary temperature gradient weight in mesh spacing function (`T_function1_weight`, `110.0` default).
     pub t_function1_weight: f64,
+    /// Envelope ionization temperature mesh function weight (`T_function2_weight`, `0.0` default).
+    pub t_function2_weight: f64,
+    /// Transition temperature in K for `T_function2` (`T_function2_param`, `2e4` default).
+    pub t_function2_param: f64,
     /// Radius gradient weight in mesh spacing function (`R_function_weight`, `0.0` default).
     pub r_function_weight: f64,
+    /// Scale parameter in $R_\odot$ for `R_function` (`R_function_param`, `1e-4` default).
+    pub r_function_param: f64,
+    /// Clamped fractional radius mesh function weight (`R_function2_weight`, `0.0` default).
+    pub r_function2_weight: f64,
+    /// Upper $r / R_*$ clamp for `R_function2` (`R_function2_param1`, `0.4` default).
+    pub r_function2_param1: f64,
+    /// Lower $r / R_*$ clamp for `R_function2` (`R_function2_param2`, `0.0` default).
+    pub r_function2_param2: f64,
+    /// Linear $r / R_*$ mesh function weight (`R_function3_weight`, `0.0` default).
+    pub r_function3_weight: f64,
     /// Mass gradient weight in mesh spacing function (`M_function_weight`, `0.0` default).
     pub m_function_weight: f64,
     /// Mass transition scale parameter in mesh spacing function (`M_function_param`, `1e-6` default).
     pub m_function_param: f64,
     /// Temperature-gradient weight in mesh spacing function (`gradT_function_weight`, `0.0` default).
     pub gradt_function_weight: f64,
+    /// Optical-depth $\log_{10}\tau$ mesh function weight (`log_tau_function_weight`, `0.0` default).
+    pub log_tau_function_weight: f64,
+    /// Opacity $\log_{10}\kappa$ mesh function weight (`log_kap_function_weight`, `0.0` default).
+    pub log_kap_function_weight: f64,
     /// Angular-velocity gradient weight in mesh spacing function (`omega_function_weight`, `0.0` default).
     pub omega_function_weight: f64,
     /// Coulomb $\Gamma$ gradient weight in mesh spacing function (`gam_function_weight`, `0.0` default).
     pub gam_function_weight: f64,
+    /// Center Coulomb $\Gamma_1$ for `gam_function` (`gam_function_param1`, `170.0` default).
+    pub gam_function_param1: f64,
+    /// Width Coulomb $\Gamma_2$ for `gam_function` (`gam_function_param2`, `20.0` default).
+    pub gam_function_param2: f64,
     /// Species names for abundance mesh spacing functions (`xa_function_species(1..)`).
     pub xa_function_species: Vec<String>,
     /// Weights for abundance mesh spacing functions (`xa_function_weight(1..)`).
     pub xa_function_weight: Vec<f64>,
     /// Transition scales for abundance mesh spacing functions (`xa_function_param(1..)`).
     pub xa_function_param: Vec<f64>,
+    /// Multiplier on `delta_coeff` when `xa_function_species(j)` is the heaviest net isotope (`xa_mesh_delta_coeff(1..)`).
+    pub xa_mesh_delta_coeff: Vec<f64>,
+    /// Smoothing iterations applied to `delta_gval_max` (`mesh_delta_coeff_factor_smooth_iters`, `3` default).
+    pub mesh_delta_coeff_factor_smooth_iters: isize,
+    /// Species names for $|\mathrm{d}\log X / \mathrm{d}\log P|$ refinement (`mesh_logX_species(1..)`).
+    pub mesh_logx_species: Vec<String>,
+    /// Minimum $\log_{10} X$ threshold for `dlogX/dlogP` refinement (`mesh_logX_min_for_extra(1..)`).
+    pub mesh_logx_min_for_extra: Vec<f64>,
+    /// Local `delta_gval_max` factor for steep `dlogX/dlogP` (`mesh_dlogX_dlogP_extra(1..)`).
+    pub mesh_dlogx_dlogp_extra: Vec<f64>,
+    /// $|\mathrm{d}\log X / \mathrm{d}\log P|$ above which full `extra` applies (`mesh_dlogX_dlogP_full_on(1..)`).
+    pub mesh_dlogx_dlogp_full_on: Vec<f64>,
+    /// $|\mathrm{d}\log X / \mathrm{d}\log P|$ below which no `extra` applies (`mesh_dlogX_dlogP_full_off(1..)`).
+    pub mesh_dlogx_dlogp_full_off: Vec<f64>,
+    /// Minimum $\log_{10}\epsilon_{\mathrm{cat}}$ for burning-gradient refinement (`mesh_dlog_eps_min_for_extra`, `-2.0` default).
+    pub mesh_dlog_eps_min_for_extra: f64,
+    /// $|\mathrm{d}\log\epsilon / \mathrm{d}\log P|$ above which full burning `extra` applies (`mesh_dlog_eps_dlogP_full_on`, `4.0` default).
+    pub mesh_dlog_eps_dlogp_full_on: f64,
+    /// $|\mathrm{d}\log\epsilon / \mathrm{d}\log P|$ below which no burning `extra` applies (`mesh_dlog_eps_dlogP_full_off`, `1.0` default).
+    pub mesh_dlog_eps_dlogp_full_off: f64,
+    /// Burning-gradient `delta_gval_max` factor for `pp` (`mesh_dlog_pp_dlogP_extra`, `0.25` default).
+    pub mesh_dlog_pp_dlogp_extra: f64,
+    /// Burning-gradient `delta_gval_max` factor for `cno` (`mesh_dlog_cno_dlogP_extra`, `0.25` default).
+    pub mesh_dlog_cno_dlogp_extra: f64,
+    /// Burning-gradient `delta_gval_max` factor for `tri_alpha` (`mesh_dlog_3alf_dlogP_extra`, `0.25` default).
+    pub mesh_dlog_3alf_dlogp_extra: f64,
+    /// Burning-gradient `delta_gval_max` factor for `c_alpha` (`mesh_dlog_burn_c_dlogP_extra`, `0.25` default).
+    pub mesh_dlog_burn_c_dlogp_extra: f64,
+    /// Burning-gradient `delta_gval_max` factor for `n_alpha` (`mesh_dlog_burn_n_dlogP_extra`, `0.25` default).
+    pub mesh_dlog_burn_n_dlogp_extra: f64,
+    /// Burning-gradient `delta_gval_max` factor for `o_alpha` (`mesh_dlog_burn_o_dlogP_extra`, `0.25` default).
+    pub mesh_dlog_burn_o_dlogp_extra: f64,
+    /// Burning-gradient `delta_gval_max` factor for `ne_alpha` (`mesh_dlog_burn_ne_dlogP_extra`, `0.25` default).
+    pub mesh_dlog_burn_ne_dlogp_extra: f64,
+    /// Burning-gradient `delta_gval_max` factor for `na_alpha` (`mesh_dlog_burn_na_dlogP_extra`, `0.25` default).
+    pub mesh_dlog_burn_na_dlogp_extra: f64,
+    /// Burning-gradient `delta_gval_max` factor for `mg_alpha` (`mesh_dlog_burn_mg_dlogP_extra`, `0.25` default).
+    pub mesh_dlog_burn_mg_dlogp_extra: f64,
+    /// Burning-gradient `delta_gval_max` factor for `c12_c12` (`mesh_dlog_cc_dlogP_extra`, `0.25` default).
+    pub mesh_dlog_cc_dlogp_extra: f64,
+    /// Burning-gradient `delta_gval_max` factor for `c12_o16` (`mesh_dlog_co_dlogP_extra`, `0.25` default).
+    pub mesh_dlog_co_dlogp_extra: f64,
+    /// Burning-gradient `delta_gval_max` factor for `o16_o16` (`mesh_dlog_oo_dlogP_extra`, `0.25` default).
+    pub mesh_dlog_oo_dlogp_extra: f64,
+    /// Burning-gradient `delta_gval_max` factor for `si_alpha` (`mesh_dlog_burn_si_dlogP_extra`, `0.25` default).
+    pub mesh_dlog_burn_si_dlogp_extra: f64,
+    /// Burning-gradient `delta_gval_max` factor for `s_alpha` (`mesh_dlog_burn_s_dlogP_extra`, `0.25` default).
+    pub mesh_dlog_burn_s_dlogp_extra: f64,
+    /// Burning-gradient `delta_gval_max` factor for `ar_alpha` (`mesh_dlog_burn_ar_dlogP_extra`, `0.25` default).
+    pub mesh_dlog_burn_ar_dlogp_extra: f64,
+    /// Burning-gradient `delta_gval_max` factor for `ca_alpha` (`mesh_dlog_burn_ca_dlogP_extra`, `0.25` default).
+    pub mesh_dlog_burn_ca_dlogp_extra: f64,
+    /// Burning-gradient `delta_gval_max` factor for `ti_alpha` (`mesh_dlog_burn_ti_dlogP_extra`, `0.25` default).
+    pub mesh_dlog_burn_ti_dlogp_extra: f64,
+    /// Burning-gradient `delta_gval_max` factor for `cr_alpha` (`mesh_dlog_burn_cr_dlogP_extra`, `0.25` default).
+    pub mesh_dlog_burn_cr_dlogp_extra: f64,
+    /// Burning-gradient `delta_gval_max` factor for `fe_co_ni` (`mesh_dlog_burn_fe_dlogP_extra`, `0.25` default).
+    pub mesh_dlog_burn_fe_dlogp_extra: f64,
+    /// Burning-gradient `delta_gval_max` factor for `pnhe4` (`mesh_dlog_pnhe4_dlogP_extra`, `0.25` default).
+    pub mesh_dlog_pnhe4_dlogp_extra: f64,
+    /// Burning-gradient `delta_gval_max` factor for `other` (`mesh_dlog_other_dlogP_extra`, `0.25` default).
+    pub mesh_dlog_other_dlogp_extra: f64,
+    /// Burning-gradient `delta_gval_max` factor for `photo` (`mesh_dlog_photo_dlogP_extra`, `1.0` default).
+    pub mesh_dlog_photo_dlogp_extra: f64,
+    /// Convective-boundary step mesh function weight (`convective_bdy_weight`, `0.0` default).
+    pub convective_bdy_weight: f64,
+    /// Minimum cell $\Delta q$ at convective boundary for `convective_bdy` (`convective_bdy_dq_limit`, `3e-5` default).
+    pub convective_bdy_dq_limit: f64,
+    /// Minimum timestep in years enabling `convective_bdy` (`convective_bdy_min_dt_yrs`, `1e-3` default).
+    pub convective_bdy_min_dt_yrs: f64,
+    /// Maximum relative cell internal-energy adjustment balancing $\Delta(\mathrm{PE} + \mathrm{KE})$ (`max_rel_delta_IE_for_mesh_total_energy_balance`, `0.05` default).
+    pub max_rel_delta_ie_for_mesh_total_energy_balance: f64,
+    /// Enforce strict IE/KE/Eturb conservation bounds during `do_mesh_adjust` (`trace_mesh_adjust_error_in_conservation`, `false` default).
+    pub trace_mesh_adjust_error_in_conservation: bool,
+    /// Undo remeshing on step retry (`restore_mesh_on_retry`, `false` default).
+    pub restore_mesh_on_retry: bool,
+    /// Steps to suppress remeshing after a retry when `restore_mesh_on_retry` is active (`num_steps_to_hold_mesh_after_retry`, `0` default).
+    pub num_steps_to_hold_mesh_after_retry: isize,
     /// Minimum timestep in seconds required to execute adaptive remeshing (`remesh_dt_limit`, `-1.0` default).
     pub remesh_dt_limit: f64,
+    /// Enable custom `other_mesh_functions` hook (`use_other_mesh_functions`, `false` default).
+    pub use_other_mesh_functions: bool,
+    /// Enable custom `other_mesh_delta_coeff_factor` hook (`use_other_mesh_delta_coeff_factor`, `false` default).
+    pub use_other_mesh_delta_coeff_factor: bool,
+    /// Enforce hydro velocity-jump merge limits inside `do_mesh_plan` (`use_hydro_merge_limits_in_mesh_plan`, `false` default).
+    pub use_hydro_merge_limits_in_mesh_plan: bool,
+    /// Use hydrodynamic `remesh_split_merge` instead of `remesh` (`use_split_merge_amr`, `false` default).
+    pub use_split_merge_amr: bool,
+    /// Target uniform $\ln\tau$ spacing in `remesh_split_merge` (`split_merge_amr_logtau_zoning`, `false` default).
+    pub split_merge_amr_logtau_zoning: bool,
+    /// Target uniform $\ln r$ spacing in `remesh_split_merge` (`split_merge_amr_log_zoning`, `true` default).
+    pub split_merge_amr_log_zoning: bool,
+    /// Target linear-$r$ core + $\ln r$ envelope spacing in `remesh_split_merge` (`split_merge_amr_hybrid_zoning`, `false` default).
+    pub split_merge_amr_hybrid_zoning: bool,
+    /// Target $\ln r$ core + linear-$r$ envelope spacing in `remesh_split_merge` (`split_merge_amr_flipped_hybrid_zoning`, `false` default; `#242`).
+    pub split_merge_amr_flipped_hybrid_zoning: bool,
+    /// Baseline target zone count for `remesh_split_merge` (`split_merge_amr_nz_baseline`, `1000` default).
+    pub split_merge_amr_nz_baseline: isize,
+    /// Target core zone count inside `r_core_cm` for hybrid AMR (`split_merge_amr_nz_r_core`, `0` default).
+    pub split_merge_amr_nz_r_core: isize,
+    /// Core radius fraction of $r_1 - R_{\mathrm{center}}$ when `split_merge_amr_r_core_cm <= 0` (`split_merge_amr_nz_r_core_fraction`, `0.0` default).
+    pub split_merge_amr_nz_r_core_fraction: f64,
+    /// Resolution divisor on `nz_baseline` and `nz_r_core` (`split_merge_amr_mesh_delta_coeff`, `1.0` default).
+    pub split_merge_amr_mesh_delta_coeff: f64,
+    /// Maximum actual/baseline cell-width ratio before splitting (`split_merge_amr_MaxLong`, `1.5` default).
+    pub split_merge_amr_maxlong: f64,
+    /// Maximum baseline/actual cell-width ratio before merging (`split_merge_amr_MaxShort`, `1.5` default).
+    pub split_merge_amr_maxshort: f64,
+    /// Maximum $|\Delta u| / c_s$ permitted for AMR merging (`merge_amr_max_abs_du_div_cs`, `0.1` default).
+    pub merge_amr_max_abs_du_div_cs: f64,
+    /// Apply `merge_amr_max_abs_du_div_cs` only on compressive interfaces (`merge_amr_du_div_cs_limit_only_for_compression`, `false` default).
+    pub merge_amr_du_div_cs_limit_only_for_compression: bool,
+    /// Soften rather than block merges across velocity jumps (`merge_amr_inhibit_at_jumps`, `false` default).
+    pub merge_amr_inhibit_at_jumps: bool,
+    /// Skip outermost `merge_amr_k_for_ignore_surface_cells` zones for AMR merging (`merge_amr_ignore_surface_cells`, `true` default).
+    pub merge_amr_ignore_surface_cells: bool,
+    /// Count of outermost zones skipped when `merge_amr_ignore_surface_cells` is active (`merge_amr_k_for_ignore_surface_cells`, `2` default).
+    pub merge_amr_k_for_ignore_surface_cells: isize,
+    /// Skip high-temperature core zones for AMR merging (`merge_amr_ignore_core_cells`, `false` default).
+    pub merge_amr_ignore_core_cells: bool,
+    /// $\log_{10} T$ threshold for `merge_amr_ignore_core_cells` (`merge_amr_logT_for_ignore_core_cells`, `1e99` default).
+    pub merge_amr_logt_for_ignore_core_cells: f64,
+    /// Skip high-temperature core zones for AMR splitting (`split_amr_ignore_core_cells`, `false` default).
+    pub split_amr_ignore_core_cells: bool,
+    /// $\log_{10} T$ threshold for `split_amr_ignore_core_cells` (`split_amr_logT_for_ignore_core_cells`, `1e99` default).
+    pub split_amr_logt_for_ignore_core_cells: f64,
+    /// Prevent touching a zone more than once per `remesh_split_merge` pass (`split_merge_amr_avoid_repeated_remesh`, `false` default).
+    pub split_merge_amr_avoid_repeated_remesh: bool,
+    /// Minimum cell $\Delta q$ in `remesh_split_merge` (`split_merge_amr_dq_min`, `1e-14` default).
+    pub split_merge_amr_dq_min: f64,
+    /// Maximum cell $\Delta q$ in `remesh_split_merge` (`split_merge_amr_dq_max`, `1.0` default).
+    pub split_merge_amr_dq_max: f64,
+    /// Hybrid AMR core transition radius in cm (`split_merge_amr_r_core_cm`, `1e8` default).
+    pub split_merge_amr_r_core_cm: f64,
+    /// Maximum split/merge iterations per `remesh_split_merge` call (`split_merge_amr_max_iters`, `100` default).
+    pub split_merge_amr_max_iters: usize,
+    /// Permit splitting surface zone `k = 1` in `remesh_split_merge` (`split_merge_amr_okay_to_split_1`, `true` default).
+    pub split_merge_amr_okay_to_split_1: bool,
+    /// Permit splitting center zone `k = nz` in `remesh_split_merge` (`split_merge_amr_okay_to_split_nz`, `true` default).
+    pub split_merge_amr_okay_to_split_nz: bool,
+    /// Use uniform density across subcells when splitting in `remesh_split_merge` (`equal_split_density_amr`, `false` default).
+    pub equal_split_density_amr: bool,
     /// Absolute mass-loss tolerance in $M_\odot\,\mathrm{yr}^{-1}$ for `check_delta_mdot` (`delta_mdot_atol`, `1e-3` default).
     pub delta_mdot_atol: f64,
     /// Relative mass-loss tolerance for `check_delta_mdot` (`delta_mdot_rtol`, `0.5` default).
@@ -546,28 +760,131 @@ impl Default for MixWindControls {
             inject_uniform_extra_heat: 0.0,
             min_q_for_uniform_extra_heat: 0.0,
             max_q_for_uniform_extra_heat: 1.0,
+            max_allowed_nz: 8000,
+            remesh_max_allowed_logt: 1.0e99,
+            mesh_pgas_div_p_exponent: 0.0,
+            mesh_delta_coeff_for_hight: 3.0,
+            logt_max_for_standard_mesh_delta_coeff: 9.0,
+            logt_min_for_hight_mesh_delta_coeff: 9.5,
             max_dq: 1.0e-2,
             min_dq: 1.0e-14,
             min_dq_for_split: 1.0e-14,
             min_dq_for_xa: 1.0e-14,
             min_dq_for_xa_convective: 1.0e-6,
+            min_dq_for_logt: 1.0e-14,
             mesh_min_dlnr: 1.0e-9,
+            merge_if_dlnr_too_small: false,
+            mesh_min_dr_div_drstar: -1.0,
+            merge_if_dr_div_drstar_too_small: true,
+            mesh_min_dr_div_cs: -1.0,
+            merge_if_dr_div_cs_too_small: true,
             mesh_max_allowed_ratio: 2.5,
             max_delta_x_for_merge: 0.1,
             max_surface_cell_dq: 1.0e-12,
+            min_surface_cell_dq: 1.0e-99,
             max_center_cell_dq: 1.0e-7,
+            max_num_subcells: 2,
+            max_num_merge_cells: 2,
+            max_num_merge_surface_cells: 2,
+            mesh_adjust_get_t_from_e: true,
+            mesh_ok_to_merge: true,
+            mesh_max_k_old_for_split: 999_999_999,
+            mesh_min_k_old_for_split: 0,
+            e_function_weight: 0.0,
+            e_function_param: 16.0,
             p_function_weight: 40.0,
             t_function1_weight: 110.0,
+            t_function2_weight: 0.0,
+            t_function2_param: 2.0e4,
             r_function_weight: 0.0,
+            r_function_param: 1.0e-4,
+            r_function2_weight: 0.0,
+            r_function2_param1: 0.4,
+            r_function2_param2: 0.0,
+            r_function3_weight: 0.0,
             m_function_weight: 0.0,
             m_function_param: 1.0e-6,
             gradt_function_weight: 0.0,
+            log_tau_function_weight: 0.0,
+            log_kap_function_weight: 0.0,
             omega_function_weight: 0.0,
             gam_function_weight: 0.0,
+            gam_function_param1: 170.0,
+            gam_function_param2: 20.0,
             xa_function_species: vec![String::from("he4")],
             xa_function_weight: vec![30.0],
             xa_function_param: vec![1.0e-2],
+            xa_mesh_delta_coeff: vec![1.0],
+            mesh_delta_coeff_factor_smooth_iters: 3,
+            mesh_logx_species: vec![String::new()],
+            mesh_logx_min_for_extra: vec![-6.0],
+            mesh_dlogx_dlogp_extra: vec![1.0],
+            mesh_dlogx_dlogp_full_on: vec![2.0],
+            mesh_dlogx_dlogp_full_off: vec![1.0],
+            mesh_dlog_eps_min_for_extra: -2.0,
+            mesh_dlog_eps_dlogp_full_on: 4.0,
+            mesh_dlog_eps_dlogp_full_off: 1.0,
+            mesh_dlog_pp_dlogp_extra: 0.25,
+            mesh_dlog_cno_dlogp_extra: 0.25,
+            mesh_dlog_3alf_dlogp_extra: 0.25,
+            mesh_dlog_burn_c_dlogp_extra: 0.25,
+            mesh_dlog_burn_n_dlogp_extra: 0.25,
+            mesh_dlog_burn_o_dlogp_extra: 0.25,
+            mesh_dlog_burn_ne_dlogp_extra: 0.25,
+            mesh_dlog_burn_na_dlogp_extra: 0.25,
+            mesh_dlog_burn_mg_dlogp_extra: 0.25,
+            mesh_dlog_cc_dlogp_extra: 0.25,
+            mesh_dlog_co_dlogp_extra: 0.25,
+            mesh_dlog_oo_dlogp_extra: 0.25,
+            mesh_dlog_burn_si_dlogp_extra: 0.25,
+            mesh_dlog_burn_s_dlogp_extra: 0.25,
+            mesh_dlog_burn_ar_dlogp_extra: 0.25,
+            mesh_dlog_burn_ca_dlogp_extra: 0.25,
+            mesh_dlog_burn_ti_dlogp_extra: 0.25,
+            mesh_dlog_burn_cr_dlogp_extra: 0.25,
+            mesh_dlog_burn_fe_dlogp_extra: 0.25,
+            mesh_dlog_pnhe4_dlogp_extra: 0.25,
+            mesh_dlog_other_dlogp_extra: 0.25,
+            mesh_dlog_photo_dlogp_extra: 1.0,
+            convective_bdy_weight: 0.0,
+            convective_bdy_dq_limit: 3.0e-5,
+            convective_bdy_min_dt_yrs: 1.0e-3,
+            max_rel_delta_ie_for_mesh_total_energy_balance: 0.05,
+            trace_mesh_adjust_error_in_conservation: false,
+            restore_mesh_on_retry: false,
+            num_steps_to_hold_mesh_after_retry: 0,
             remesh_dt_limit: -1.0,
+            use_other_mesh_functions: false,
+            use_other_mesh_delta_coeff_factor: false,
+            use_hydro_merge_limits_in_mesh_plan: false,
+            use_split_merge_amr: false,
+            split_merge_amr_logtau_zoning: false,
+            split_merge_amr_log_zoning: true,
+            split_merge_amr_hybrid_zoning: false,
+            split_merge_amr_flipped_hybrid_zoning: false,
+            split_merge_amr_nz_baseline: 1000,
+            split_merge_amr_nz_r_core: 0,
+            split_merge_amr_nz_r_core_fraction: 0.0,
+            split_merge_amr_mesh_delta_coeff: 1.0,
+            split_merge_amr_maxlong: 1.5,
+            split_merge_amr_maxshort: 1.5,
+            merge_amr_max_abs_du_div_cs: 0.1,
+            merge_amr_du_div_cs_limit_only_for_compression: false,
+            merge_amr_inhibit_at_jumps: false,
+            merge_amr_ignore_surface_cells: true,
+            merge_amr_k_for_ignore_surface_cells: 2,
+            merge_amr_ignore_core_cells: false,
+            merge_amr_logt_for_ignore_core_cells: 1.0e99,
+            split_amr_ignore_core_cells: false,
+            split_amr_logt_for_ignore_core_cells: 1.0e99,
+            split_merge_amr_avoid_repeated_remesh: false,
+            split_merge_amr_dq_min: 1.0e-14,
+            split_merge_amr_dq_max: 1.0,
+            split_merge_amr_r_core_cm: 1.0e8,
+            split_merge_amr_max_iters: 100,
+            split_merge_amr_okay_to_split_1: true,
+            split_merge_amr_okay_to_split_nz: true,
+            equal_split_density_amr: false,
             delta_mdot_atol: 1.0e-3,
             delta_mdot_rtol: 0.5,
             delta_mdot_limit: -1.0,

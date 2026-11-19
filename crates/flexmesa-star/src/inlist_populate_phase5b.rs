@@ -96,6 +96,33 @@ fn val_str(val: &ControlValue) -> Result<String, String> {
     }
 }
 
+fn try_isize_into(
+    ctrl: &SectionControls,
+    sec: &str,
+    dst: &mut isize,
+    key: &str,
+) -> Result<(), StarError> {
+    let Some(raw) = ctrl.scalars.get(&key.to_ascii_lowercase()) else {
+        return Ok(());
+    };
+    *dst = match raw {
+        ControlValue::Integer(i) => isize::try_from(*i).map_err(|_| {
+            StarError::InvalidInput(format!(
+                "integer overflow for '&{sec}::{key}' = {i}"
+            ))
+        })?,
+        ControlValue::Float(f) if f.is_finite() && f.fract() == 0.0 => {
+            *f as isize
+        }
+        other => {
+            return Err(StarError::InvalidInput(format!(
+                "invalid value for '&{sec}::{key}': expected integer, found {other:?}"
+            )));
+        }
+    };
+    Ok(())
+}
+
 impl InlistBundle {
     #[rustfmt::skip]
     pub(crate) fn populate_controls_phase5b(&mut self) -> Result<(), StarError> {
@@ -133,13 +160,52 @@ impl InlistBundle {
             eps_wd_sedimentation_factor, extra_power_source,
             inject_uniform_extra_heat, min_q_for_uniform_extra_heat,
             max_q_for_uniform_extra_heat,
+            remesh_max_allowed_logt, mesh_pgas_div_p_exponent,
+            mesh_delta_coeff_for_hight,
+            logt_max_for_standard_mesh_delta_coeff,
+            logt_min_for_hight_mesh_delta_coeff,
             max_dq, min_dq, min_dq_for_split, min_dq_for_xa,
-            min_dq_for_xa_convective, mesh_min_dlnr, mesh_max_allowed_ratio,
-            max_delta_x_for_merge, max_surface_cell_dq,
-            max_center_cell_dq, p_function_weight, t_function1_weight,
-            r_function_weight, m_function_weight, m_function_param,
-            gradt_function_weight, omega_function_weight,
-            gam_function_weight, remesh_dt_limit,
+            min_dq_for_xa_convective, min_dq_for_logt,
+            mesh_min_dlnr, mesh_min_dr_div_drstar, mesh_min_dr_div_cs,
+            mesh_max_allowed_ratio, max_delta_x_for_merge,
+            max_surface_cell_dq, min_surface_cell_dq, max_center_cell_dq,
+            e_function_weight, e_function_param,
+            p_function_weight, t_function1_weight,
+            t_function2_weight, t_function2_param,
+            r_function_weight, r_function_param,
+            r_function2_weight, r_function2_param1, r_function2_param2,
+            r_function3_weight,
+            m_function_weight, m_function_param,
+            gradt_function_weight, log_tau_function_weight,
+            log_kap_function_weight, omega_function_weight,
+            gam_function_weight, gam_function_param1, gam_function_param2,
+            mesh_dlog_eps_min_for_extra,
+            mesh_dlog_eps_dlogp_full_on, mesh_dlog_eps_dlogp_full_off,
+            mesh_dlog_pp_dlogp_extra, mesh_dlog_cno_dlogp_extra,
+            mesh_dlog_3alf_dlogp_extra,
+            mesh_dlog_burn_c_dlogp_extra, mesh_dlog_burn_n_dlogp_extra,
+            mesh_dlog_burn_o_dlogp_extra, mesh_dlog_burn_ne_dlogp_extra,
+            mesh_dlog_burn_na_dlogp_extra, mesh_dlog_burn_mg_dlogp_extra,
+            mesh_dlog_cc_dlogp_extra, mesh_dlog_co_dlogp_extra,
+            mesh_dlog_oo_dlogp_extra,
+            mesh_dlog_burn_si_dlogp_extra, mesh_dlog_burn_s_dlogp_extra,
+            mesh_dlog_burn_ar_dlogp_extra, mesh_dlog_burn_ca_dlogp_extra,
+            mesh_dlog_burn_ti_dlogp_extra, mesh_dlog_burn_cr_dlogp_extra,
+            mesh_dlog_burn_fe_dlogp_extra,
+            mesh_dlog_pnhe4_dlogp_extra, mesh_dlog_other_dlogp_extra,
+            mesh_dlog_photo_dlogp_extra,
+            convective_bdy_weight, convective_bdy_dq_limit,
+            convective_bdy_min_dt_yrs,
+            max_rel_delta_ie_for_mesh_total_energy_balance,
+            remesh_dt_limit,
+            split_merge_amr_nz_r_core_fraction,
+            split_merge_amr_mesh_delta_coeff,
+            split_merge_amr_maxlong, split_merge_amr_maxshort,
+            merge_amr_max_abs_du_div_cs,
+            merge_amr_logt_for_ignore_core_cells,
+            split_amr_logt_for_ignore_core_cells,
+            split_merge_amr_dq_min, split_merge_amr_dq_max,
+            split_merge_amr_r_core_cm,
             delta_mdot_atol, delta_mdot_rtol,
             delta_mdot_limit, delta_mdot_hard_limit, w_div_wcrit_max,
             am_gradmu_factor, d_dsi_factor, d_sh_factor,
@@ -174,6 +240,27 @@ impl InlistBundle {
             no_wind_if_no_rotation, use_accreted_material_j,
             premix_omega, do_adjust_j_lost, skip_rotation_in_convection_zones,
             accretion_dump_missing_metals_into_heaviest,
+            merge_if_dlnr_too_small,
+            merge_if_dr_div_drstar_too_small,
+            merge_if_dr_div_cs_too_small,
+            mesh_adjust_get_t_from_e, mesh_ok_to_merge,
+            trace_mesh_adjust_error_in_conservation,
+            restore_mesh_on_retry,
+            use_hydro_merge_limits_in_mesh_plan,
+            use_split_merge_amr,
+            split_merge_amr_logtau_zoning,
+            split_merge_amr_log_zoning,
+            split_merge_amr_hybrid_zoning,
+            split_merge_amr_flipped_hybrid_zoning,
+            merge_amr_du_div_cs_limit_only_for_compression,
+            merge_amr_inhibit_at_jumps,
+            merge_amr_ignore_surface_cells,
+            merge_amr_ignore_core_cells,
+            split_amr_ignore_core_cells,
+            split_merge_amr_avoid_repeated_remesh,
+            split_merge_amr_okay_to_split_1,
+            split_merge_amr_okay_to_split_nz,
+            equal_split_density_amr,
         ]);
         map_strs!("controls", ctrl, mw, [hot_wind_scheme, dutch_wind_lowt_scheme]);
         if ctrl.try_get_str("controls", "hot_wind_scheme")?.is_some()
@@ -269,7 +356,7 @@ impl InlistBundle {
         apply_fortran_1based(ctrl, "predictive_limit_ingestion", n_pr, |i, v| mw.predictive_sets[i].limit_ingestion = v, val_str)?;
         apply_fortran_1based(ctrl, "predictive_ingestion_factor", n_pr, |i, v| mw.predictive_sets[i].ingestion_factor = v, val_f64)?;
 
-        const NUM_XA_FUNCTION: usize = 9;
+        const NUM_XA_FUNCTION: usize = crate::controls_mix_wind::NUM_XA_FUNCTION;
         if mw.xa_function_species.len() < NUM_XA_FUNCTION {
             mw.xa_function_species.resize(NUM_XA_FUNCTION, String::new());
         }
@@ -279,9 +366,48 @@ impl InlistBundle {
         if mw.xa_function_param.len() < NUM_XA_FUNCTION {
             mw.xa_function_param.resize(NUM_XA_FUNCTION, 0.0);
         }
+        if mw.xa_mesh_delta_coeff.len() < NUM_XA_FUNCTION {
+            mw.xa_mesh_delta_coeff.resize(NUM_XA_FUNCTION, 1.0);
+        }
         apply_fortran_1based(ctrl, "xa_function_species", NUM_XA_FUNCTION, |i, v| mw.xa_function_species[i] = v, val_str)?;
         apply_fortran_1based(ctrl, "xa_function_weight", NUM_XA_FUNCTION, |i, v| mw.xa_function_weight[i] = v, val_f64)?;
         apply_fortran_1based(ctrl, "xa_function_param", NUM_XA_FUNCTION, |i, v| mw.xa_function_param[i] = v, val_f64)?;
+        apply_fortran_1based(ctrl, "xa_mesh_delta_coeff", NUM_XA_FUNCTION, |i, v| mw.xa_mesh_delta_coeff[i] = v, val_f64)?;
+
+        const NUM_MESH_LOGX: usize = crate::controls_mix_wind::NUM_MESH_LOGX;
+        if mw.mesh_logx_species.len() < NUM_MESH_LOGX {
+            mw.mesh_logx_species.resize(NUM_MESH_LOGX, String::new());
+        }
+        if mw.mesh_logx_min_for_extra.len() < NUM_MESH_LOGX {
+            mw.mesh_logx_min_for_extra.resize(NUM_MESH_LOGX, 0.0);
+        }
+        if mw.mesh_dlogx_dlogp_extra.len() < NUM_MESH_LOGX {
+            mw.mesh_dlogx_dlogp_extra.resize(NUM_MESH_LOGX, 0.0);
+        }
+        if mw.mesh_dlogx_dlogp_full_on.len() < NUM_MESH_LOGX {
+            mw.mesh_dlogx_dlogp_full_on.resize(NUM_MESH_LOGX, 0.0);
+        }
+        if mw.mesh_dlogx_dlogp_full_off.len() < NUM_MESH_LOGX {
+            mw.mesh_dlogx_dlogp_full_off.resize(NUM_MESH_LOGX, 0.0);
+        }
+        apply_fortran_1based(ctrl, "mesh_logx_species", NUM_MESH_LOGX, |i, v| mw.mesh_logx_species[i] = v, val_str)?;
+        apply_fortran_1based(ctrl, "mesh_logx_min_for_extra", NUM_MESH_LOGX, |i, v| mw.mesh_logx_min_for_extra[i] = v, val_f64)?;
+        apply_fortran_1based(ctrl, "mesh_dlogx_dlogp_extra", NUM_MESH_LOGX, |i, v| mw.mesh_dlogx_dlogp_extra[i] = v, val_f64)?;
+        apply_fortran_1based(ctrl, "mesh_dlogx_dlogp_full_on", NUM_MESH_LOGX, |i, v| mw.mesh_dlogx_dlogp_full_on[i] = v, val_f64)?;
+        apply_fortran_1based(ctrl, "mesh_dlogx_dlogp_full_off", NUM_MESH_LOGX, |i, v| mw.mesh_dlogx_dlogp_full_off[i] = v, val_f64)?;
+
+        try_isize_into(ctrl, "controls", &mut mw.max_allowed_nz, "max_allowed_nz")?;
+        try_isize_into(ctrl, "controls", &mut mw.mesh_max_k_old_for_split, "mesh_max_k_old_for_split")?;
+        try_isize_into(ctrl, "controls", &mut mw.mesh_min_k_old_for_split, "mesh_min_k_old_for_split")?;
+        try_isize_into(ctrl, "controls", &mut mw.mesh_delta_coeff_factor_smooth_iters, "mesh_delta_coeff_factor_smooth_iters")?;
+        try_isize_into(ctrl, "controls", &mut mw.num_steps_to_hold_mesh_after_retry, "num_steps_to_hold_mesh_after_retry")?;
+        try_isize_into(ctrl, "controls", &mut mw.split_merge_amr_nz_baseline, "split_merge_amr_nz_baseline")?;
+        try_isize_into(ctrl, "controls", &mut mw.split_merge_amr_nz_r_core, "split_merge_amr_nz_r_core")?;
+        try_isize_into(ctrl, "controls", &mut mw.merge_amr_k_for_ignore_surface_cells, "merge_amr_k_for_ignore_surface_cells")?;
+        ctrl.try_usize_into("controls", &mut mw.max_num_subcells, "max_num_subcells", 1)?;
+        ctrl.try_usize_into("controls", &mut mw.max_num_merge_cells, "max_num_merge_cells", 0)?;
+        ctrl.try_usize_into("controls", &mut mw.max_num_merge_surface_cells, "max_num_merge_surface_cells", 0)?;
+        ctrl.try_usize_into("controls", &mut mw.split_merge_amr_max_iters, "split_merge_amr_max_iters", 0)?;
 
         let ts = &mut self.controls.ts_stop;
         map_f64s!("controls", ctrl, ts, [

@@ -360,7 +360,8 @@ impl BinarySystem {
             mass_transfer_beta: controls.mass_transfer_beta,
             mass_transfer_delta: controls.mass_transfer_delta,
             mass_transfer_gamma: controls.mass_transfer_gamma,
-            use_implicit_rlof: controls.max_tries_to_achieve > 0,
+            use_implicit_rlof: controls.max_tries_to_achieve > 0
+                && controls.implicit_scheme_tolerance > 0.0,
             change_factor: controls.initial_change_factor,
             controls,
             point_mass_i,
@@ -606,6 +607,9 @@ impl BinarySystem {
         &mut self,
     ) -> Result<bool, StarError> {
         if let BinaryCompanion::Star(ref mut s2) = self.companion {
+            if self.controls.report_rlo_solver_progress {
+                println!(" switching donor");
+            }
             std::mem::swap(&mut self.donor, s2);
             self.donor_i = 3 - self.donor_i;
             self.rl.swap(0, 1);

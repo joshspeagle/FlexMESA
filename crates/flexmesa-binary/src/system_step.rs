@@ -12,7 +12,8 @@ use flexmesa_star::{
 
 use crate::extras::{BinaryExtras, BinaryExtrasAction, DefaultBinaryExtras};
 use crate::mdot_implicit::{
-    ImplicitMdotSolver, ImplicitStepAction, update_change_factor_after_step,
+    ImplicitMdotSolver, ImplicitStepAction, RloIterReportContext,
+    update_change_factor_after_step,
 };
 use crate::orbit::{
     eval_l2_overflow_limit, period_from_separation, separation_from_j_orb,
@@ -199,9 +200,11 @@ impl BinarySystem {
         } else {
             dt.min(self.max_timestep_sec)
         };
-        let implicit_mode =
-            !self.ignore_rlof_flag && self.controls.max_tries_to_achieve > 0;
-        let max_tries = self.controls.max_tries_to_achieve.max(1) as usize;
+        let implicit_mode = !self.ignore_rlof_flag
+            && self.controls.max_tries_to_achieve > 0
+            && self.controls.implicit_scheme_tolerance > 0.0;
+        let max_tries =
+            usize::try_from(self.controls.max_tries_to_achieve).unwrap_or(0);
 
         let tracing = flexmesa_star::step_trace::enabled(self.model_number + 1);
         for outer_retry in 0..16_usize {
@@ -259,8 +262,12 @@ impl BinarySystem {
                                 self.controls.max_explicit_abs_mdot,
                             )
                         };
-                        return self
-                            .finish_accepted_step(dt_used, &ts_ctrl, extras);
+                        return self.finish_accepted_step(
+                            dt_used,
+                            &ts_ctrl,
+                            pre_step_snap.mtransfer_rate,
+                            extras,
+                        );
                     }
                     Ok(SingleTrialOutcome::CutDt(dt_cut)) => {
                         self.counters.num_dt_cuts += 1;
@@ -311,7 +318,11 @@ impl BinarySystem {
             };
             let mut accepted: Option<(f64, BinaryTimestepControls)> = None;
 
-            for try_idx in 1..=max_tries {
+            // `binary_mdot.f90:76, 205`: `num_tries` increments on each call to
+            // `check_implicit_rlo` and triggers `retry` only when
+            // `num_tries > max_tries_to_achieve`, so convergence is evaluated
+            // through try `max_tries + 1`.
+            for try_idx in 1..=(max_tries + 1) {
                 if try_idx > 1 {
                     self.restore_snapshot(&trial_snap)?;
                 }
@@ -386,7 +397,8 @@ impl BinarySystem {
                         self.controls.anomaly_steps,
                     )?
                 };
-                let act = solver.evaluate_trial(
+                solver.change_factor = self.change_factor;
+                let act = solver.evaluate_trial_with_context(
                     &self.controls.mdot_scheme,
                     try_idx,
                     max_tries,
@@ -395,7 +407,14 @@ impl BinarySystem {
                     self.rl_relative_gap[0],
                     self.rl_relative_gap[1],
                     m_a / m_d.max(1.0),
+                    RloIterReportContext {
+                        model_number: self.model_number + 1,
+                        donor_i: self.donor_i,
+                        rl_gaps_by_star: self.rl_relative_gap_by_star(),
+                        point_mass_i: self.point_mass_i,
+                    },
                 )?;
+                self.change_factor = solver.change_factor;
                 let outcome_name = match &act {
                     ImplicitStepAction::Converged(_) => "converged",
                     ImplicitStepAction::Detached => "detached",
@@ -418,51 +437,15 @@ impl BinarySystem {
                 }
                 match act {
                     ImplicitStepAction::Converged(m_conv) => {
-                        let m_acc = m_conv.min(0.0);
-                        self.mtransfer_rate = m_acc;
-                        self.change_factor = update_change_factor_after_step(
-                            self.change_factor,
-                            pre_step_snap.mtransfer_rate,
-                            m_acc,
-                            try_idx,
-                            &self.controls,
-                        );
+                        self.mtransfer_rate = m_conv.min(0.0);
                         accepted = Some((dt_used, ts_ctrl));
                         break;
                     }
                     ImplicitStepAction::Detached => {
-                        if trial_mdot == 0.0 {
-                            self.mtransfer_rate = 0.0;
-                            accepted = Some((dt_used, ts_ctrl));
-                        } else {
-                            self.restore_snapshot(&trial_snap)?;
-                            self.counters.num_implicit_trials += 1;
-                            match self
-                                .run_single_trial(0.0, dt_try, false, extras)
-                            {
-                                Ok(SingleTrialOutcome::Completed {
-                                    dt_used: dt0,
-                                    ts_ctrl: ts0,
-                                }) => {
-                                    self.mtransfer_rate = 0.0;
-                                    accepted = Some((dt0, ts0));
-                                }
-                                Ok(SingleTrialOutcome::CutDt(dt_cut)) => {
-                                    self.counters.num_dt_cuts += 1;
-                                    dt_try = check_cut_dt(dt_cut, dt_try)?;
-                                }
-                                Err(e) => {
-                                    if !is_binary_trial_retriable(&e)
-                                        || outer_retry >= 10
-                                        || dt_try <= dt_floor
-                                    {
-                                        self.restore_snapshot(&pre_step_snap)?;
-                                        return Err(e);
-                                    }
-                                    dt_try = (0.5 * dt_try).max(dt_floor);
-                                }
-                            }
-                        }
+                        // `binary_mdot.f90:106-112, 252-262`: accept the completed
+                        // step immediately (`keep_going`) with `mtransfer_rate = 0`.
+                        self.mtransfer_rate = 0.0;
+                        accepted = Some((dt_used, ts_ctrl));
                         break;
                     }
                     ImplicitStepAction::TryNextMdot(next_m) => {
@@ -505,7 +488,12 @@ impl BinarySystem {
                     dt_try = next_dt;
                     continue;
                 }
-                return self.finish_accepted_step(dt_used, &ts_ctrl, extras);
+                return self.finish_accepted_step(
+                    dt_used,
+                    &ts_ctrl,
+                    pre_step_snap.mtransfer_rate,
+                    extras,
+                );
             }
         }
         Err(StarError::ConvergenceFailure(String::from(
@@ -884,6 +872,7 @@ impl BinarySystem {
         &mut self,
         dt_used: f64,
         ts_ctrl: &BinaryTimestepControls,
+        mtransfer_rate_old: f64,
         extras: &mut dyn BinaryExtras,
     ) -> Result<(f64, i32), StarError> {
         self.binary_age_yr += dt_used / SECYER;
@@ -958,6 +947,15 @@ impl BinarySystem {
                 break;
             }
         }
+        // `run_binary_support.f90:654-657` & `binary_evolve.f90:506-519`:
+        // `binary_finish_step` updates `change_factor` after `extras_binary_finish_step`.
+        self.change_factor = update_change_factor_after_step(
+            self.model_number == 1,
+            self.change_factor,
+            mtransfer_rate_old,
+            self.mtransfer_rate,
+            &self.controls,
+        );
         Ok((next_dt, reason))
     }
 

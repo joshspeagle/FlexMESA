@@ -80,7 +80,8 @@ pub use edd_wind::{
 };
 pub use extras::{BinaryExtras, BinaryExtrasAction, DefaultBinaryExtras};
 pub use inlist_inventory::{
-    BINARY_CONTROLS_SUPPORTED, BINARY_JOB_HEADLESS_GUI, BINARY_JOB_SUPPORTED,
+    BINARY_CONTROLS_SUPPORTED, BINARY_CONTROLS_TERMINAL_OUTPUT,
+    BINARY_JOB_HEADLESS_GUI, BINARY_JOB_SUPPORTED, BINARY_JOB_TERMINAL_OUTPUT,
     BinaryControlInventory, copy_cleaned_binary_case,
     supported_binary_control_inventory, validate_binary_sections,
 };

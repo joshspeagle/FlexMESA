@@ -758,9 +758,9 @@
     "rust": {
       "tool": "cargo llvm-cov",
       "overall": {
-        "lines": 93488,
-        "covered": 68366,
-        "percent": 73.1
+        "lines": 93976,
+        "covered": 68981,
+        "percent": 73.4
       },
       "by_crate": [
         {
@@ -771,9 +771,9 @@
         },
         {
           "crate": "flexmesa-atm",
-          "lines": 1332,
-          "covered": 993,
-          "percent": 74.5
+          "lines": 1603,
+          "covered": 1332,
+          "percent": 83.1
         },
         {
           "crate": "flexmesa-autodiff",
@@ -855,9 +855,9 @@
         },
         {
           "crate": "flexmesa-math",
-          "lines": 775,
-          "covered": 617,
-          "percent": 79.6
+          "lines": 781,
+          "covered": 623,
+          "percent": 79.8
         },
         {
           "crate": "flexmesa-mtx",
@@ -873,9 +873,9 @@
         },
         {
           "crate": "flexmesa-neu",
-          "lines": 994,
-          "covered": 953,
-          "percent": 95.9
+          "lines": 1022,
+          "covered": 983,
+          "percent": 96.2
         },
         {
           "crate": "flexmesa-num",
@@ -885,9 +885,9 @@
         },
         {
           "crate": "flexmesa-rates",
-          "lines": 2109,
-          "covered": 1844,
-          "percent": 87.4
+          "lines": 2292,
+          "covered": 2084,
+          "percent": 90.9
         },
         {
           "crate": "flexmesa-schema",
@@ -924,8 +924,8 @@
     "python": {
       "tool": "pytest --cov",
       "overall": {
-        "statements": 23531,
-        "covered": 20750,
+        "statements": 23681,
+        "covered": 20896,
         "percent": 88.2
       },
       "by_subpackage": [
@@ -943,9 +943,9 @@
         },
         {
           "subpackage": "flexmesa.atm",
-          "statements": 180,
-          "covered": 173,
-          "percent": 96.1
+          "statements": 198,
+          "covered": 194,
+          "percent": 98.0
         },
         {
           "subpackage": "flexmesa.auto_diff",
@@ -1039,9 +1039,9 @@
         },
         {
           "subpackage": "flexmesa.neu",
-          "statements": 1062,
-          "covered": 525,
-          "percent": 49.4
+          "statements": 1059,
+          "covered": 524,
+          "percent": 49.5
         },
         {
           "subpackage": "flexmesa.num",
@@ -1051,9 +1051,9 @@
         },
         {
           "subpackage": "flexmesa.plotting",
-          "statements": 2503,
-          "covered": 2274,
-          "percent": 90.9
+          "statements": 2516,
+          "covered": 2282,
+          "percent": 90.7
         },
         {
           "subpackage": "flexmesa.rates",
@@ -1075,9 +1075,9 @@
         },
         {
           "subpackage": "flexmesa.testing",
-          "statements": 3453,
-          "covered": 2731,
-          "percent": 79.1
+          "statements": 3575,
+          "covered": 2849,
+          "percent": 79.7
         },
         {
           "subpackage": "flexmesa.turb",
@@ -1430,17 +1430,27 @@
       },
       {
         "number": 254,
-        "title": "Port MESA 26.4.1 mesh planner, multipliers, remap, and split-merge AMR (#153)",
-        "draft": true
-      },
-      {
-        "number": 255,
-        "title": "[Audit C9] Align binary orbital Euler step, implicit RLOF solver, and step structure (#160)",
-        "draft": true
+        "title": "[Audit C2] Port MESA 26.4.1 mesh planner, functions, multipliers, and remap (#153)",
+        "draft": false
       },
       {
         "number": 256,
-        "title": "Align &eos/&kap controls, opacity blend bounds, #176 HELM blend, and star microphysics (#161, #176)",
+        "title": "Wire &eos/&kap controls, dynamic opacity bounds, #176 HELM-edge blend, and star microphysics (#161)",
+        "draft": false
+      },
+      {
+        "number": 259,
+        "title": "feat(star): port MESA 26.4.1 Newton solver, retry/redo semantics, and timestep checks (#152)",
+        "draft": true
+      },
+      {
+        "number": 261,
+        "title": "Resolve #149 reopen audit findings: denominator reporting, from_mod_str zbase, and baseline movement causes",
+        "draft": false
+      },
+      {
+        "number": 262,
+        "title": "Port MESA 26.4.1 convective boundaries, mixing, overshoot, predictive mixing, and convective premixing",
         "draft": true
       }
     ],
@@ -1450,7 +1460,7 @@
         "title": "[Deferred enhancement] Higher-order binary orbit integrator and gravitational-wave eccentricity term",
         "state": "open",
         "kind": "enhancement",
-        "parity_pending": true,
+        "parity_pending": false,
         "needs_confirmation": false
       },
       {
@@ -1522,7 +1532,7 @@
         "title": "[Deferred bug] edot_tidal_Hut multiplies both binary components by Ftid_1 instead of Ftid_2 on star 2",
         "state": "open",
         "kind": "upstream-bug",
-        "parity_pending": true,
+        "parity_pending": false,
         "needs_confirmation": false
       },
       {
@@ -1667,6 +1677,38 @@
         "state": "open",
         "kind": "upstream-bug",
         "parity_pending": true,
+        "needs_confirmation": false
+      },
+      {
+        "number": 260,
+        "title": "[Deferred bug] sizeB \"flailing\" divergence test can never fire because abs_max_corr1 is overwritten before it is compared",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": false,
+        "needs_confirmation": false
+      },
+      {
+        "number": 263,
+        "title": "[Deferred bug] do_adjust_mass omits new_xmstar update when clamping min_star_mass_for_loss or max_star_mass_for_gain",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": false,
+        "needs_confirmation": false
+      },
+      {
+        "number": 264,
+        "title": "[Deferred bug] do_check_limits aborts at 0.75 * peak_burn_vconv_div_cs_limit before reaching the limit stop",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": false,
+        "needs_confirmation": false
+      },
+      {
+        "number": 265,
+        "title": "[Deferred bug] do_check_limits and history compute v_surf_div_v_kh with mixed units (cm/s * yr / Rsun)",
+        "state": "open",
+        "kind": "upstream-bug",
+        "parity_pending": false,
         "needs_confirmation": false
       }
     ]
@@ -2061,6 +2103,19 @@
       "closed_140": "13",
       "total_140": "34",
       "deferred_169": "28"
+    },
+    {
+      "date_utc": "2026-11-19",
+      "commit": "86313c2",
+      "event": "main merge",
+      "engine_ported_pct": "13.9",
+      "all_verified_pct": "0.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "73.4",
+      "python_cov_pct": "88.2",
+      "closed_140": "13",
+      "total_140": "34",
+      "deferred_169": "32"
     }
   ]
 }

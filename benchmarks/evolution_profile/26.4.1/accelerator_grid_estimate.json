@@ -81,7 +81,7 @@
     "xla_dispatch_latency_us_per_iter": 80.0,
     "hypothetical_device_micro_speedup_vs_2t_rust": 6.0,
     "heterogeneous_grid_lockstep_efficiency": 0.72,
-    "mtx_pcr_vs_cpu_bcyclic_note": "Measured GPU PCR at N=4096 is 2795.65 us vs 323.73 us on 4t Safe Rust CPU (0.12x), so block-tridiagonal Henyey solves favor CPU bcyclic/Thomas or IFT custom_vjp."
+    "mtx_pcr_vs_cpu_solver_note": "Measured batch-of-4 GPU vmap PCR at N=4096 is 2795.65 us vs 323.73 us for 4-system amortized Safe Rust fast_block_thomas_solve (0.12x), and single-profile GPU PCR is 7451.55 us vs 1380.73 us 1t PyO3 bcyclic / 1294.80 us 1t Rust block-Thomas, so block-tridiagonal Henyey solves favor CPU bcyclic/block-Thomas or IFT custom_vjp."
   },
   "grid_projections": [
     {

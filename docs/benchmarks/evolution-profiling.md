@@ -127,16 +127,16 @@ Single-kernel timings from `benchmarks/raw/26.4.1/` anchor what an accelerator (
 
 | Kernel (`benchmarks/raw/26.4.1/`) | Ref Zones | Safe Rust `4t` (`us / zone`) | JAX `vmap` (`us / zone`) | JAX / Rust `4t` Speedup | Execution Notes |
 | :--- | ---: | ---: | ---: | ---: | :--- |
-| `eos_helm` | `4096` | `0.1348` | `0.0828` | `1.63x` | Host cell-lookup callback (`N1-24`); CPU-bound |
-| `eos_skye` | `4096` | `2.3256` | `1.0260` | `2.27x` | Host spline callback (`N1-24`); CPU-bound |
-| `eos_4d` | `4096` | `0.2050` | `0.0815` | `2.52x` | Host 4D bicubic callback (`N1-24`); CPU-bound |
-| `kap_fixed` | `4096` | `0.1894` | `0.2717` | `0.70x` | Device-cached table interpolation after load |
+| `eos_helm` | `4096` | `0.1348` | `0.0828` | `1.63x` | GPU `@jax.jit` poly eval on pre-fetched cells (public API does `N1-25` host lookup) |
+| `eos_skye` | `4096` | `2.3256` | `1.0260` | `2.27x` | GPU `@jax.jit` 3rd-order AD on pre-fetched cells (public API does `N1-25` host lookup) |
+| `eos_4d` | `4096` | `0.2050` | `0.0815` | `2.52x` | GPU `@jax.jit` bicubic eval on pre-fetched cells (public API does `N1-25` host lookup) |
+| `kap_fixed` | `4096` | `0.1894` | `0.2717` | `0.70x` | `pure_callback` into `_rust.kap_get_results_zones_rust` (`N1-25`) |
 | `rates_screen` | `4096` | `0.1494` | `0.0780` | `1.92x` | Pure `@jax.jit` analytical screening kernel |
-| `net_eval_host_cb` | `4096` | `1.3212` | `1.2720` | `1.04x` | `pure_callback` into `_rust.net_eval` (`N1-25`) |
+| `net_eval_host_cb` | `4096` | `1.3212` | `1.2720` | `1.04x` | `pure_callback` into `_rust.net_eval` (`N1-24`) |
 | `turb_mlt` | `4096` | `0.0735` | `0.0167` | `4.40x` | Pure `@jax.jit` local cubic/quartic MLT solver |
-| `turb_tdc` | `4096` | `0.6266` | `0.0956` | `6.55x` | Iterative root + dual overhead vs Rust IFT |
+| `turb_tdc` | `4096` | `0.6266` | `0.0956` | `6.55x` | Pure `@jax.jit` unrolled Newton/dual TDC vs Rust IFT |
 | `colors_sed` | `1024` | `1.5820` | `0.6733` | `2.35x` | Pure `@jax.jit` 3D SED + filter integration |
-| `mtx_tridiag` | `4096` | `0.0790` | `0.6825` | `0.12x` | `O(N log N)` GPU PCR vs `O(N)` CPU `bcyclic` |
+| `mtx_tridiag` | `4096` | `0.0790` | `0.6825` | `0.12x` | `O(N log N)` GPU `vmap` PCR vs 4-system amortized `O(N)` CPU block-Thomas |
 
 Combining the measured `69.4%` stateless microphysics share with Amdahl's law fixes an upper bound of `3.27x` for any hybrid CPU-Henyey + GPU-microphysics step, even before PCIe transfers (`24 GB/s`), XLA launch latency (`80 us` per Newton iteration), and heterogeneous adaptive-timestep lockstep padding (`0.72` utilization). By contrast, standalone stateless grid evaluations (`SED` photometry, screening, analytical EOS, MLT surrogates) avoid the Henyey solver loop entirely:
 
@@ -151,7 +151,7 @@ Combining the measured `69.4%` stateless microphysics share with Amdahl's law fi
 ### 6.3 Concrete Recommendations for `#166`
 
 1. **Population & Grid Stellar Evolution (`N >= 8` tracks)**: Run independent `StarModel` trajectories across a Safe Rust `rayon` worker pool rather than padding heterogeneous meshes (`nz`) and adaptive timesteps (`dt`) into lockstep GPU batches. Shared `OnceLock` physics tables keep memory overhead small across dozens of concurrent stars, and each worker runs asynchronously with zero host-device synchronization.
-2. **Differentiable Stellar Structure & Evolution (Post-`#143`)**: Keep forward evolution in Safe Rust and expose Implicit Function Theorem (`@jax.custom_vjp` / `@jax.custom_jvp`) step wrappers solved with CPU `bcyclic` (`mtx` `solver_mode="rust_ffi"`) plus `#150` `.photo` binomial checkpointing. Measured GPU `PCR` at `N = 4096` is slower than `4`-thread CPU `bcyclic` because `PCR` performs `O(N log2 N)` dense block multiplications in `float64`.
+2. **Differentiable Stellar Structure & Evolution (Post-`#143`)**: Keep forward evolution in Safe Rust and expose Implicit Function Theorem (`@jax.custom_vjp` / `@jax.custom_jvp`) step wrappers solved on CPU (`bcyclic` via `mtx` `solver_mode="rust_ffi"` or `fast_block_thomas_solve`) plus `#150` `.photo` binomial checkpointing. At `N = 4096`, GPU `PCR` (`7.45 ms` single-profile, `2.80 ms` `vmap` amortized) is slower than CPU solvers (`1.38 ms` 1-thread `PyO3` `bcyclic`, `1.29 ms` 1-thread Rust block-Thomas, `0.32 ms` 4-system amortized Rust block-Thomas) because `PCR` performs `O(N log2 N)` dense block multiplications in `float64`.
 3. **Where Native Pure-XLA JAX Kernels Pay (`#166`)**: Prioritize pure `@jax.jit` / `jax.vmap` kernels on stateless, fixed-shape batch workloads that run outside the Henyey iteration loop, specifically bolometric and filter photometry (`flexmesa.colors`), analytical screening and neutrino emission (`flexmesa.rates`, `flexmesa.neu`), local `set_mlt_jax` / `T(tau)` boundary evaluations (`flexmesa.turb`, `flexmesa.atm`), and batch inference likelihoods over `>= 10^4` evaluation points. Porting stateful 4D `eos` / `kap` bicubic tables or stiff `net` Rosenbrock solvers to pure GPU solely to accelerate 1D Henyey steps is bounded by the `<= 3.27x` Amdahl ceiling.
 
 ## 7. What Was Not Verified

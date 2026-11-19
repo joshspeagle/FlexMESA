@@ -552,16 +552,30 @@ def _build_shared_sections(
     )
     lines.append("| :--- | ---: | ---: | ---: | ---: | :--- |")
     kernel_notes = {
-        "eos_helm": "Host cell-lookup callback (`N1-24`); CPU-bound",
-        "eos_skye": "Host spline callback (`N1-24`); CPU-bound",
-        "eos_4d": "Host 4D bicubic callback (`N1-24`); CPU-bound",
-        "kap_fixed": "Device-cached table interpolation after load",
+        "eos_helm": (
+            "GPU `@jax.jit` poly eval on pre-fetched cells "
+            "(public API does `N1-25` host lookup)"
+        ),
+        "eos_skye": (
+            "GPU `@jax.jit` 3rd-order AD on pre-fetched cells "
+            "(public API does `N1-25` host lookup)"
+        ),
+        "eos_4d": (
+            "GPU `@jax.jit` bicubic eval on pre-fetched cells "
+            "(public API does `N1-25` host lookup)"
+        ),
+        "kap_fixed": (
+            "`pure_callback` into `_rust.kap_get_results_zones_rust` (`N1-25`)"
+        ),
         "rates_screen": "Pure `@jax.jit` analytical screening kernel",
-        "net_eval_host_cb": "`pure_callback` into `_rust.net_eval` (`N1-25`)",
+        "net_eval_host_cb": "`pure_callback` into `_rust.net_eval` (`N1-24`)",
         "turb_mlt": "Pure `@jax.jit` local cubic/quartic MLT solver",
-        "turb_tdc": "Iterative root + dual overhead vs Rust IFT",
+        "turb_tdc": "Pure `@jax.jit` unrolled Newton/dual TDC vs Rust IFT",
         "colors_sed": "Pure `@jax.jit` 3D SED + filter integration",
-        "mtx_tridiag": "`O(N log N)` GPU PCR vs `O(N)` CPU `bcyclic`",
+        "mtx_tridiag": (
+            "`O(N log N)` GPU `vmap` PCR vs 4-system amortized "
+            "`O(N)` CPU block-Thomas"
+        ),
     }
     anchors = cast(
         dict[str, dict[str, float]], accel["measured_kernel_anchors"]
@@ -620,10 +634,13 @@ def _build_shared_sections(
         "2. **Differentiable Stellar Structure & Evolution (Post-`#143`)**: "
         "Keep forward evolution in Safe Rust and expose Implicit Function "
         "Theorem (`@jax.custom_vjp` / `@jax.custom_jvp`) step wrappers solved "
-        'with CPU `bcyclic` (`mtx` `solver_mode="rust_ffi"`) plus `#150` '
-        "`.photo` binomial checkpointing. Measured GPU `PCR` at `N = 4096` is "
-        "slower than `4`-thread CPU `bcyclic` because `PCR` performs "
-        "`O(N log2 N)` dense block multiplications in `float64`."
+        'on CPU (`bcyclic` via `mtx` `solver_mode="rust_ffi"` or '
+        "`fast_block_thomas_solve`) plus `#150` `.photo` binomial "
+        "checkpointing. At `N = 4096`, GPU `PCR` (`7.45 ms` single-profile, "
+        "`2.80 ms` `vmap` amortized) is slower than CPU solvers (`1.38 ms` "
+        "1-thread `PyO3` `bcyclic`, `1.29 ms` 1-thread Rust block-Thomas, "
+        "`0.32 ms` 4-system amortized Rust block-Thomas) because `PCR` "
+        "performs `O(N log2 N)` dense block multiplications in `float64`."
     )
     lines.append(
         "3. **Where Native Pure-XLA JAX Kernels Pay (`#166`)**: Prioritize "

@@ -242,10 +242,10 @@ def _build_accelerator_estimate(
     # Model per-step wall time on N stars comparing:
     # (a) 8-thread Safe Rust CPU worker pool (measured from batch_8t)
     # (b) Hybrid CPU-solver + hypothetical pure-GPU stateless microphysics
-    #     (removing current N1-24/N1-25 host callbacks, assuming 6.0x kernel
-    #     speedup on device-resident EOS/kap/net/MLT + 80 us XLA dispatch per
-    #     Newton iter + PCIe 24 GB/s round-trip of 48 float64 arrays/zone, and
-    #     0.72 lockstep adaptive-dt/remesh utilization across tracks).
+    #     (removing current N1-24 net and N1-25 EOS/kap host callbacks, assuming
+    #     6.0x kernel speedup on device-resident EOS/kap/net/MLT + 80 us XLA
+    #     dispatch per Newton iter + PCIe 24 GB/s round-trip of 48 float64
+    #     arrays/zone, and 0.72 lockstep adaptive-dt/remesh utilization).
     ref_case = strict_cases[0]
     step_2t_sec = float(ref_case["evolve_wall_sec"]) / max(
         1.0, float(ref_case["steps_taken"])
@@ -328,10 +328,13 @@ def _build_accelerator_estimate(
                 device_kernel_speedup_vs_2t
             ),
             "heterogeneous_grid_lockstep_efficiency": lockstep_efficiency,
-            "mtx_pcr_vs_cpu_bcyclic_note": (
-                "Measured GPU PCR at N=4096 is 2795.65 us vs 323.73 us on 4t "
-                "Safe Rust CPU (0.12x), so block-tridiagonal Henyey solves "
-                "favor CPU bcyclic/Thomas or IFT custom_vjp."
+            "mtx_pcr_vs_cpu_solver_note": (
+                "Measured batch-of-4 GPU vmap PCR at N=4096 is 2795.65 us vs "
+                "323.73 us for 4-system amortized Safe Rust "
+                "fast_block_thomas_solve (0.12x), and single-profile GPU PCR "
+                "is 7451.55 us vs 1380.73 us 1t PyO3 bcyclic / 1294.80 us 1t "
+                "Rust block-Thomas, so block-tridiagonal Henyey solves favor "
+                "CPU bcyclic/block-Thomas or IFT custom_vjp."
             ),
         },
         "grid_projections": grid_projections,

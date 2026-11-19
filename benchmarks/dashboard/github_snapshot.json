@@ -229,19 +229,24 @@
   ],
   "open_pull_requests": [
     {
-      "number": 228,
-      "title": "Align module and star defaults with MESA 26.4.1 *.defaults (#149)",
+      "number": 248,
+      "title": "fix(data,ionization): complete #164 provenance, cache numerics-mode isolation, and clean-room CI verification",
       "draft": false
     },
     {
-      "number": 237,
-      "title": "fix(atm,neu,rates): F2-23 T(tau) dispatch, MESA 26.4.1 operation order, and module oracles (#161)",
-      "draft": false
+      "number": 254,
+      "title": "Port MESA 26.4.1 mesh planner, multipliers, remap, and split-merge AMR (#153)",
+      "draft": true
     },
     {
-      "number": 240,
-      "title": "fix(extras): attach only handlers the adapter can serve (#231); label the #168 profiling runs as diagnostic; let the coverage job finish (#174)",
-      "draft": false
+      "number": 255,
+      "title": "[Audit C9] Align binary orbital Euler step, implicit RLOF solver, and step structure (#160)",
+      "draft": true
+    },
+    {
+      "number": 256,
+      "title": "Align &eos/&kap controls, opacity blend bounds, #176 HELM blend, and star microphysics (#161, #176)",
+      "draft": true
     }
   ],
   "deferred_169": [
@@ -418,7 +423,55 @@
       "title": "[Deferred bug] adjust1_omega, adjust1_v, adjust1_u, and adjust1_etrb subtract negative roundoff overshoot instead of adding",
       "state": "open",
       "kind": "upstream-bug",
+      "parity_pending": true,
+      "needs_confirmation": false
+    },
+    {
+      "number": 245,
+      "title": "[Deferred bug] ccsn_IIp enable_magnetar branches on uninitialized local age_days when x_ctrl(55) > 0",
+      "state": "open",
+      "kind": "upstream-bug",
       "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 246,
+      "title": "[Deferred bug] ccsn_IIp check_rti double-indexes s% net_iso(s% net_iso(ih1))",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 250,
+      "title": "[Deferred bug] star/private/adjust_mesh.f90:155-158 passes unclamped mesh_max_allowed_ratio < 2.5 on first remesh",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 251,
+      "title": "[Deferred bug] sizeB accumulates sum_xa_corr across zones and adds qualifying species a second time",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": true,
+      "needs_confirmation": false
+    },
+    {
+      "number": 252,
+      "title": "[Deferred bug] set_vars_for_solver multiplies lnT by ln10 instead of dividing by ln10 in min_logT_for_hydro_mtx_max_allowed guard",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 253,
+      "title": "[Deferred bug] check_dX indexes dX_decreases_only by species slot j instead of dX_limit_species slot i",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": true,
       "needs_confirmation": false
     }
   ]

@@ -16,19 +16,19 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
-use flexmesa_interp2d::{interp_mkbicub_db, BicubicBc};
+use flexmesa_interp2d::{BicubicBc, interp_mkbicub_db};
 use flexmesa_math::{exp10, log10};
 use flexmesa_utils::cache_envelope::{
     read_verified_cache, write_verified_cache_atomic,
 };
-use flexmesa_utils::sha256::{compute_sha256_bytes, Sha256Hasher};
+use flexmesa_utils::sha256::{Sha256Hasher, compute_sha256_bytes};
 use flexmesa_utils::{
     is_bad, resolve_flexmesa_cache_dir, resolve_flexmesa_data_dir,
 };
 use rayon::prelude::*;
 
 use crate::{
-    IonError, IonScalar, ION_XS, ION_ZS, NUM_ION_VALS, NUM_ION_XS,
+    ION_XS, ION_ZS, IonError, IonScalar, NUM_ION_VALS, NUM_ION_XS,
     NUM_ION_XS_FOR_Z, NUM_ION_ZS,
 };
 
@@ -90,7 +90,7 @@ impl IonTableGrid {
     }
 
     fn build_builtin_checked() -> Result<Self, IonError> {
-        let dir_opt = resolve_ion_data_dir();
+        let dir_opt = resolve_ion_data_dir()?;
         Self::load_or_verify_cache(dir_opt.as_deref())
     }
 
@@ -107,7 +107,8 @@ impl IonTableGrid {
         Self::load_or_verify_cache_in(ascii_dir, cache_root.as_deref())
     }
 
-    pub(crate) fn load_or_verify_cache_in(
+    #[doc(hidden)]
+    pub fn load_or_verify_cache_in(
         ascii_dir: Option<&Path>,
         cache_root: Option<&Path>,
     ) -> Result<Self, IonError> {
@@ -228,6 +229,7 @@ impl IonTableGrid {
         file_prefix: &str,
         z1_suffix: &str,
     ) -> Result<Self, IonError> {
+        validate_ion_data_dir(data_dir, file_prefix, z1_suffix)?;
         let mut pairs = Vec::with_capacity(22);
         for iz in 0..NUM_ION_ZS {
             for ix in 0..NUM_ION_XS_FOR_Z[iz] {
@@ -350,7 +352,8 @@ impl IonTableGrid {
         })
     }
 
-    fn encode_cache_payload(&self) -> Result<Vec<u8>, IonError> {
+    #[doc(hidden)]
+    pub fn encode_cache_payload(&self) -> Result<Vec<u8>, IonError> {
         let cell_len = self.num_log_qs * self.num_log_ts * 4;
         let mut out = Vec::with_capacity(
             56 + NUM_ION_ZS * NUM_ION_XS * NUM_ION_VALS * cell_len * 8,
@@ -425,22 +428,86 @@ fn read_ion_cache_header(
     Ok((lq_min, dq, nq, lt_min, dt, nt))
 }
 
-fn resolve_ion_data_dir() -> Option<PathBuf> {
-    let d = resolve_flexmesa_data_dir();
-    let sub = d.join("ionization_data");
-    if sub.is_dir() && sub.join("ion_00z00x.data").is_file() {
-        return Some(sub);
+fn validate_ion_data_dir(
+    data_dir: &Path,
+    file_prefix: &str,
+    z1_suffix: &str,
+) -> Result<(), IonError> {
+    if !data_dir.is_dir() {
+        return Err(IonError::Io(format!(
+            "ionization data path {} is not a directory",
+            data_dir.display()
+        )));
     }
-    if d.join("ion_00z00x.data").is_file() {
-        return Some(d);
-    }
-    if let Ok(m) = std::env::var("MESA_DIR") {
-        let p = PathBuf::from(m).join("data").join("ionization_data");
-        if p.is_dir() && p.join("ion_00z00x.data").is_file() {
-            return Some(p);
+    for (&z, &n_xs) in ION_ZS.iter().zip(NUM_ION_XS_FOR_Z.iter()) {
+        for &x in ION_XS.iter().take(n_xs) {
+            let expected =
+                ion_table_filename(data_dir, file_prefix, z1_suffix, z, x);
+            if !expected.is_file() {
+                return Err(IonError::Io(format!(
+                    "incomplete ionization data directory {}: missing expected table file {}",
+                    data_dir.display(),
+                    expected.display()
+                )));
+            }
         }
     }
-    None
+    Ok(())
+}
+
+fn has_any_ion_table_entry(
+    data_dir: &Path,
+    file_prefix: &str,
+    z1_suffix: &str,
+) -> bool {
+    for (&z, &n_xs) in ION_ZS.iter().zip(NUM_ION_XS_FOR_Z.iter()) {
+        for &x in ION_XS.iter().take(n_xs) {
+            let p = ion_table_filename(data_dir, file_prefix, z1_suffix, z, x);
+            if fs::symlink_metadata(&p).is_ok() {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Resolve an external `ionization_data` directory from `flex_data_dir` or
+/// `mesa_dir`, returning a loud error (`IonError::Io`) naming the directory
+/// and missing table file whenever an `ionization_data` directory exists on
+/// disk in an incomplete state (`ionization/private/ion_tables_load.f90:54-65`,
+/// `89-104`, `146-175`).
+pub(crate) fn resolve_ion_data_dir_from(
+    flex_data_dir: &Path,
+    mesa_dir: Option<&Path>,
+) -> Result<Option<PathBuf>, IonError> {
+    let sub = flex_data_dir.join("ionization_data");
+    if fs::symlink_metadata(&sub).is_ok() {
+        validate_ion_data_dir(&sub, "ion", "")?;
+        return Ok(Some(sub));
+    }
+    let named_ion_dir = flex_data_dir.file_name().and_then(|s| s.to_str())
+        == Some("ionization_data")
+        && fs::symlink_metadata(flex_data_dir).is_ok();
+    if named_ion_dir || has_any_ion_table_entry(flex_data_dir, "ion", "") {
+        validate_ion_data_dir(flex_data_dir, "ion", "")?;
+        return Ok(Some(flex_data_dir.to_path_buf()));
+    }
+    if let Some(m) = mesa_dir.filter(|p| !p.as_os_str().is_empty()) {
+        let p = m.join("data").join("ionization_data");
+        if fs::symlink_metadata(&p).is_ok() {
+            validate_ion_data_dir(&p, "ion", "")?;
+            return Ok(Some(p));
+        }
+    }
+    Ok(None)
+}
+
+fn resolve_ion_data_dir() -> Result<Option<PathBuf>, IonError> {
+    let d = resolve_flexmesa_data_dir();
+    let mesa = std::env::var_os("MESA_DIR")
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from);
+    resolve_ion_data_dir_from(&d, mesa.as_deref())
 }
 
 fn ion_cache_path(cache_root: &Path, source_sha: &str) -> PathBuf {
@@ -541,6 +608,7 @@ fn compute_ion_dir_sha256(
     file_prefix: &str,
     z1_suffix: &str,
 ) -> Result<String, IonError> {
+    validate_ion_data_dir(data_dir, file_prefix, z1_suffix)?;
     let mut hasher = Sha256Hasher::new();
     for (&z, &n_xs) in ION_ZS.iter().zip(NUM_ION_XS_FOR_Z.iter()) {
         for &x in ION_XS.iter().take(n_xs) {
@@ -587,9 +655,8 @@ fn ion_table_filename(
 ///
 /// Reads the header row `(nt, lt_min, dt, nq, lq_min, dq)`, parses all
 /// `nq * nt` rows across the 28 output channels, fits a 2D not-a-knot bicubic
-/// spline to each channel via [`interp_mkbicub_db`], and replaces any
-/// non-finite spline derivative entries with `0.0`
-/// (`Check_ion_Interpolation_Data`).
+/// spline to each channel via [`interp_mkbicub_db`], and rejects any
+/// non-finite raw input or spline derivative entry loudly (`DECISIONS #33`).
 ///
 /// # Errors
 /// Returns [`IonError`] if the file cannot be read, has an incomplete header,
@@ -703,7 +770,7 @@ fn build_table_splines(
     raw: &[Vec<f64>],
 ) -> Result<Vec<Vec<f64>>, IonError> {
     let mut coeffs = Vec::with_capacity(NUM_ION_VALS);
-    for raw_v in raw.iter().take(NUM_ION_VALS) {
+    for (v, raw_v) in raw.iter().enumerate().take(NUM_ION_VALS) {
         let (c, _, _) = interp_mkbicub_db(
             log_qs,
             log_ts,
@@ -718,11 +785,15 @@ fn build_table_splines(
             &[],
         )
         .map_err(|e| IonError::Interp(e.to_string()))?;
-        let flat: Vec<f64> = c
-            .into_iter()
-            .flatten()
-            .map(|val| if is_bad(val) { 0.0 } else { val })
-            .collect();
+        let mut flat = Vec::with_capacity(c.len() * 4);
+        for (idx, val) in c.into_iter().flatten().enumerate() {
+            if is_bad(val) {
+                return Err(IonError::Interp(format!(
+                    "non-finite spline coefficient ({val}) at var={v}, idx={idx}"
+                )));
+            }
+            flat.push(val);
+        }
         coeffs.push(flat);
     }
     Ok(coeffs)
@@ -843,5 +914,119 @@ mod tests {
             IonTableGrid::decode_cache_payload(b"BADMAGIC_PADDING"),
             Err(IonError::Io(_))
         ));
+    }
+
+    fn populate_all_22_ion_tables(dir: &Path) {
+        fs::create_dir_all(dir).expect("mkdir ion dir");
+        for (&z, &n_xs) in ION_ZS.iter().zip(NUM_ION_XS_FOR_Z.iter()) {
+            for &x in ION_XS.iter().take(n_xs) {
+                let p = ion_table_filename(dir, "ion", "", z, x);
+                fs::write(p, b"placeholder\n").expect("write ion stub");
+            }
+        }
+    }
+
+    #[test]
+    fn test_build_table_splines_rejects_non_finite_coefficients_loudly() {
+        let log_qs = [-6.0_f64, -5.9, -5.8, -5.7];
+        let log_ts = [3.0_f64, 3.1, 3.2, 3.3];
+        let mut raw = vec![vec![0.0_f64; 16]; NUM_ION_VALS];
+        raw[0][0] = f64::MAX;
+        raw[0][1] = -f64::MAX;
+        let err = build_table_splines(&log_qs, &log_ts, &raw)
+            .expect_err("overflowed spline derivative must error loudly");
+        assert!(
+            matches!(err, IonError::Interp(_)),
+            "expected IonError::Interp, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn test_resolve_ion_data_dir_errors_on_incomplete_dirs_without_fallback() {
+        let root = std::env::temp_dir()
+            .join(format!("flexmesa_ion_resolve_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let flex_data = root.join("data");
+        let mesa_test_only = root.join("mesa_test_inputs");
+        fs::create_dir_all(&flex_data).expect("mkdir flex_data");
+        fs::create_dir_all(mesa_test_only.join("data").join("star_data"))
+            .expect("mkdir star_data");
+
+        // 1. Standard data-v1 + mesa_test_inputs layout (no ionization_data) -> Ok(None)
+        assert_eq!(
+            resolve_ion_data_dir_from(&flex_data, Some(&mesa_test_only))
+                .expect("absent ionization_data resolves to None"),
+            None
+        );
+
+        // 2. Empty $FLEXMESA_DATA_DIR/ionization_data/ -> loud error naming dir + file
+        let sub = flex_data.join("ionization_data");
+        fs::create_dir_all(&sub).expect("mkdir empty ionization_data");
+        let err_empty =
+            resolve_ion_data_dir_from(&flex_data, Some(&mesa_test_only))
+                .expect_err("empty ionization_data must error");
+        let msg_empty = err_empty.to_string();
+        assert!(msg_empty.contains("ionization_data"), "got: {msg_empty}");
+        assert!(msg_empty.contains("ion_00z00x.data"), "got: {msg_empty}");
+
+        // 3. Partial $FLEXMESA_DATA_DIR/ionization_data/ (missing non-sentinel ion_20z80x.data)
+        populate_all_22_ion_tables(&sub);
+        let missing = sub.join("ion_20z80x.data");
+        fs::remove_file(&missing).expect("remove one non-sentinel ion file");
+        let err_partial =
+            resolve_ion_data_dir_from(&flex_data, Some(&mesa_test_only))
+                .expect_err("partial ionization_data must error");
+        let msg_partial = err_partial.to_string();
+        assert!(
+            msg_partial.contains("ionization_data"),
+            "got: {msg_partial}"
+        );
+        assert!(
+            msg_partial.contains("ion_20z80x.data"),
+            "got: {msg_partial}"
+        );
+
+        // Restore missing file -> complete 22-file directory resolves cleanly
+        fs::write(&missing, b"placeholder\n").expect("restore missing");
+        assert_eq!(
+            resolve_ion_data_dir_from(&flex_data, Some(&mesa_test_only))
+                .expect("complete ionization_data resolves"),
+            Some(sub.clone())
+        );
+        fs::remove_dir_all(&sub).expect("remove sub");
+
+        // 4. Incomplete $MESA_DIR/data/ionization_data/ -> loud error naming dir + file
+        let mesa_full = root.join("mesa_full");
+        let mesa_ion = mesa_full.join("data").join("ionization_data");
+        populate_all_22_ion_tables(&mesa_ion);
+        fs::remove_file(mesa_ion.join("ion_04z40x.data"))
+            .expect("remove mesa ion_04z40x.data");
+        let err_mesa = resolve_ion_data_dir_from(&flex_data, Some(&mesa_full))
+            .expect_err("incomplete MESA_DIR ionization_data must error");
+        let msg_mesa = err_mesa.to_string();
+        assert!(msg_mesa.contains("ionization_data"), "got: {msg_mesa}");
+        assert!(msg_mesa.contains("ion_04z40x.data"), "got: {msg_mesa}");
+
+        // 5. Partial ion_*.data placed directly in $FLEXMESA_DATA_DIR (missing ion_00z00x.data)
+        fs::write(flex_data.join("ion_02z60x.data"), b"placeholder\n")
+            .expect("write direct stub");
+        let err_direct = resolve_ion_data_dir_from(&flex_data, None)
+            .expect_err("partial direct ion_*.data must error");
+        assert!(
+            err_direct.to_string().contains("ion_00z00x.data"),
+            "got: {err_direct}"
+        );
+        fs::remove_file(flex_data.join("ion_02z60x.data")).expect("rm direct");
+
+        // 6. Non-directory file at $FLEXMESA_DATA_DIR/ionization_data -> loud error
+        fs::write(&sub, b"not a directory").expect("write file at sub");
+        let err_file = resolve_ion_data_dir_from(&flex_data, None)
+            .expect_err("file at ionization_data must error");
+        assert!(
+            err_file.to_string().contains("not a directory"),
+            "got: {err_file}"
+        );
+
+        let _ = fs::remove_dir_all(&root);
     }
 }

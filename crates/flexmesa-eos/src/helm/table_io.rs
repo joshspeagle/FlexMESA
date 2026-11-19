@@ -5,7 +5,7 @@
 use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
 
-use crate::helm::table::{HelmVertex, HELM_IMAX, HELM_JMAX};
+use crate::helm::table::{HELM_IMAX, HELM_JMAX, HelmVertex};
 use flexmesa_utils::cache_envelope::{
     read_verified_cache, write_verified_cache_atomic,
 };
@@ -59,15 +59,30 @@ pub(crate) fn resolve_mesa_data_dir() -> Option<PathBuf> {
 /// Returns an actionable error when neither `helm_table_full.bin` in the
 /// FlexMESA data directory nor upstream `MESA_DIR/data/eosDT_data` is present,
 /// or if any table/cache file is corrupt or contains non-finite entries.
-pub(crate) fn load_or_build_full_helm_vertices(
-) -> Result<Vec<HelmVertex>, String> {
+pub(crate) fn load_or_build_full_helm_vertices()
+-> Result<Vec<HelmVertex>, String> {
     let data_root = resolve_flexmesa_data_dir();
+    let mesa_data = resolve_mesa_data_dir();
+    let cache_root = resolve_flexmesa_cache_dir();
+    load_or_build_helm_vertices_in(
+        &data_root,
+        mesa_data.as_deref(),
+        cache_root.as_deref(),
+    )
+}
+
+#[doc(hidden)]
+pub fn load_or_build_helm_vertices_in(
+    data_root: &Path,
+    mesa_data: Option<&Path>,
+    cache_root: Option<&Path>,
+) -> Result<Vec<HelmVertex>, String> {
     let full_bin = data_root.join("helm_table_full.bin");
     if full_bin.is_file() {
         return read_helm_full_bin(&full_bin);
     }
 
-    if let Some(mesa_data) = resolve_mesa_data_dir() {
+    if let Some(mesa_data) = mesa_data {
         let eosdt_dir = mesa_data.join("eosDT_data");
         let mesa_cache = eosdt_dir.join("cache").join("helm_table.bin");
         let ascii_dat = eosdt_dir.join("helm_table.dat");
@@ -81,7 +96,7 @@ pub(crate) fn load_or_build_full_helm_vertices(
         let src_sha = compute_sha256_file(&src_path).map_err(|e| {
             format!("failed to hash HELM source {}: {e}", src_path.display())
         })?;
-        if let Some(cache_root) = resolve_flexmesa_cache_dir() {
+        if let Some(cache_root) = cache_root {
             let helm_cache = cache_root
                 .join("helm")
                 .join(format!("helm_table_full.{}.bin", &src_sha[..16]));

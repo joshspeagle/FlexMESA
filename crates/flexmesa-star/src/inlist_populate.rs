@@ -168,6 +168,12 @@ impl InlistBundle {
         self.populate_controls_solver()?;
         self.populate_controls_limits()?;
         self.populate_controls_phase5b()?;
+        if let Some(ctrl) = self.sections.get("controls") {
+            crate::controls_diffusion::populate_diffusion_controls(
+                ctrl,
+                &mut self.controls.diffusion,
+            )?;
+        }
         self.populate_user_x_controls()?;
         crate::rsp_config::populate_rsp_inlist(
             self.sections.get("star_job"),

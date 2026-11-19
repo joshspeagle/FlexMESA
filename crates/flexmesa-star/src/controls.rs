@@ -557,6 +557,8 @@ pub struct StarControls {
     pub ts_stop: crate::controls_timestep_stop::TimestepStopControls,
     /// History, radial profile, and report-averaging output controls (`controls.defaults:216-857`).
     pub output: crate::controls_output::OutputControls,
+    /// Element diffusion and white-dwarf phase separation controls (`controls.defaults:6880-7650`).
+    pub diffusion: crate::controls_diffusion::DiffusionControls,
 }
 
 impl StarControls {

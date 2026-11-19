@@ -8,7 +8,7 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 - **Total manifest cases scanned**: `106`
 - **Cases passing strict `#147` validation**: `0`
 - **Cases rejected by strict `#147` validation**: `106`
-- **Distinct unsupported physics/solver controls encountered**: `380`
+- **Distinct unsupported physics/solver controls encountered**: `337`
 - **Distinct unknown/misspelled controls encountered**: `0`
 - **Cases using headless plotting controls (`#173` / `DECISIONS #25`)**: `78` (`895` distinct keys)
 
@@ -19,7 +19,7 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 | `&star_job` | 455 | 106 | 16 | 3 | 5 | 325 |
 | `&eos` | 102 | 5 | 0 | 0 | 0 | 97 |
 | `&kap` | 51 | 6 | 0 | 0 | 0 | 45 |
-| `&controls` | 1448 | 759 | 26 | 0 | 10 | 653 |
+| `&controls` | 1448 | 816 | 30 | 0 | 13 | 589 |
 | `&binary_job` | 37 | 22 | 0 | 1 | 1 | 13 |
 | `&binary_controls` | 176 | 124 | 0 | 0 | 2 | 50 |
 | `&astero_search_controls` | 153 | 88 | 3 | 0 | 0 | 62 |
@@ -106,6 +106,7 @@ These keys only gate or format text that MESA writes to the terminal. Strict val
 | `&controls::terminal_show_timestep_units` | 12 |
 | `&star_job::show_retry_counts_when_terminate` | 6 |
 | `&star_job::show_timestep_limit_counts_when_terminate` | 6 |
+| `&controls::show_diffusion_info` | 3 |
 | `&binary_controls::terminal_interval` | 1 |
 | `&star_job::show_net_reactions_info` | 1 |
 | `&star_job::show_net_species_info` | 1 |
@@ -175,7 +176,7 @@ Per `DECISIONS #25` (matching upstream `USE_PGSTAR = NO`), keys in `&pgstar`, `&
 | :--- | :--- | :--- | ---: | ---: | ---: |
 | `star` | `1.3M_ms_high_Z` | `fail_unsupported` | 3 | 0 | 77 |
 | `star` | `1.4M_ms_op_mono` | `fail_unsupported` | 9 | 0 | 27 |
-| `star` | `1.5M_with_diffusion` | `fail_unsupported` | 22 | 0 | 19 |
+| `star` | `1.5M_with_diffusion` | `fail_unsupported` | 9 | 0 | 19 |
 | `star` | `12M_pre_ms_to_core_collapse` | `fail_unsupported` | 46 | 0 | 263 |
 | `star` | `15M_dynamo` | `fail_unsupported` | 9 | 0 | 17 |
 | `star` | `16M_conv_premix` | `fail_unsupported` | 7 | 0 | 1 |
@@ -201,14 +202,14 @@ Per `DECISIONS #25` (matching upstream `USE_PGSTAR = NO`), keys in `&pgstar`, `&
 | `star` | `conv_core_cpm` | `fail_unsupported` | 4 | 0 | 87 |
 | `star` | `custom_colors` | `fail_unsupported` | 10 | 0 | 22 |
 | `star` | `custom_rates` | `fail_unsupported` | 14 | 0 | 48 |
-| `star` | `diffusion_smoothness` | `fail_unsupported` | 11 | 0 | 24 |
+| `star` | `diffusion_smoothness` | `fail_unsupported` | 2 | 0 | 24 |
 | `star` | `extended_convective_penetration` | `fail_unsupported` | 4 | 0 | 14 |
 | `star` | `gyre_in_mesa_bcep` | `fail_unsupported` | 3 | 0 | 0 |
 | `star` | `gyre_in_mesa_envelope` | `fail_unsupported` | 3 | 0 | 5 |
 | `star` | `gyre_in_mesa_ms` | `fail_unsupported` | 3 | 0 | 0 |
 | `star` | `gyre_in_mesa_rsg` | `fail_unsupported` | 2 | 0 | 59 |
 | `star` | `gyre_in_mesa_spb` | `fail_unsupported` | 3 | 0 | 0 |
-| `star` | `gyre_in_mesa_wd` | `fail_unsupported` | 14 | 0 | 28 |
+| `star` | `gyre_in_mesa_wd` | `fail_unsupported` | 5 | 0 | 28 |
 | `star` | `hb_2M` | `fail_unsupported` | 8 | 0 | 29 |
 | `star` | `high_mass` | `fail_unsupported` | 2 | 0 | 41 |
 | `star` | `high_rot_darkening` | `fail_unsupported` | 7 | 0 | 65 |
@@ -219,11 +220,11 @@ Per `DECISIONS #25` (matching upstream `USE_PGSTAR = NO`), keys in `&pgstar`, `&
 | `star` | `low_z` | `fail_unsupported` | 8 | 0 | 0 |
 | `star` | `magnetic_braking` | `fail_unsupported` | 9 | 0 | 56 |
 | `star` | `make_brown_dwarf` | `fail_unsupported` | 6 | 0 | 19 |
-| `star` | `make_co_wd` | `fail_unsupported` | 34 | 0 | 29 |
+| `star` | `make_co_wd` | `fail_unsupported` | 24 | 0 | 29 |
 | `star` | `make_env` | `fail_unsupported` | 9 | 0 | 0 |
 | `star` | `make_he_wd` | `fail_unsupported` | 5 | 0 | 0 |
 | `star` | `make_metals` | `fail_unsupported` | 2 | 0 | 0 |
-| `star` | `make_o_ne_wd` | `fail_unsupported` | 20 | 0 | 255 |
+| `star` | `make_o_ne_wd` | `fail_unsupported` | 15 | 0 | 255 |
 | `star` | `make_planets` | `fail_unsupported` | 10 | 0 | 0 |
 | `star` | `make_pre_ccsn_13bvn` | `fail_unsupported` | 21 | 0 | 324 |
 | `star` | `make_sdb` | `fail_unsupported` | 8 | 0 | 5 |
@@ -236,7 +237,7 @@ Per `DECISIONS #25` (matching upstream `USE_PGSTAR = NO`), keys in `&pgstar`, `&
 | `star` | `other_physics_hooks` | `fail_unsupported` | 2 | 0 | 0 |
 | `star` | `pisn` | `fail_unsupported` | 48 | 0 | 288 |
 | `star` | `ppisn` | `fail_unsupported` | 48 | 0 | 76 |
-| `star` | `radiative_levitation` | `fail_unsupported` | 43 | 0 | 14 |
+| `star` | `radiative_levitation` | `fail_unsupported` | 7 | 0 | 14 |
 | `star` | `relax_composition_j_entropy` | `fail_unsupported` | 2 | 0 | 0 |
 | `star` | `rsp_BEP` | `fail_unsupported` | 8 | 0 | 75 |
 | `star` | `rsp_BLAP` | `fail_unsupported` | 8 | 0 | 76 |
@@ -248,7 +249,7 @@ Per `DECISIONS #25` (matching upstream `USE_PGSTAR = NO`), keys in `&pgstar`, `&
 | `star` | `rsp_gyre` | `fail_unsupported` | 8 | 0 | 20 |
 | `star` | `rsp_save_and_load_file` | `fail_unsupported` | 22 | 0 | 69 |
 | `star` | `semiconvection` | `fail_unsupported` | 7 | 0 | 1 |
-| `star` | `simplex_solar_calibration` | `fail_unsupported` | 16 | 0 | 0 |
+| `star` | `simplex_solar_calibration` | `fail_unsupported` | 3 | 0 | 0 |
 | `star` | `split_burn_big_net` | `fail_unsupported` | 38 | 0 | 258 |
 | `star` | `starspots` | `fail_unsupported` | 14 | 0 | 17 |
 | `star` | `timing` | `fail_unsupported` | 2 | 0 | 0 |
@@ -257,8 +258,8 @@ Per `DECISIONS #25` (matching upstream `USE_PGSTAR = NO`), keys in `&pgstar`, `&
 | `star` | `wd_acc_small_dm` | `fail_unsupported` | 6 | 0 | 55 |
 | `star` | `wd_aic` | `fail_unsupported` | 9 | 0 | 41 |
 | `star` | `wd_c_core_ignition` | `fail_unsupported` | 6 | 0 | 15 |
-| `star` | `wd_cool_0.6M` | `fail_unsupported` | 9 | 0 | 17 |
-| `star` | `wd_diffusion` | `fail_unsupported` | 6 | 0 | 11 |
+| `star` | `wd_cool_0.6M` | `fail_unsupported` | 6 | 0 | 17 |
+| `star` | `wd_diffusion` | `fail_unsupported` | 3 | 0 | 11 |
 | `star` | `wd_he_shell_ignition` | `fail_unsupported` | 8 | 0 | 17 |
 | `star` | `wd_nova_burst` | `fail_unsupported` | 10 | 0 | 11 |
 | `star` | `wd_stable_h_burn` | `fail_unsupported` | 10 | 0 | 0 |

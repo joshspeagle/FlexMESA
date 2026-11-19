@@ -126,6 +126,7 @@ NAMELIST_SPECS: tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...] = (
         ),
         (
             "crates/flexmesa-star/src/controls_defaults.rs",
+            "crates/flexmesa-star/src/controls_diffusion.rs",
             "crates/flexmesa-star/src/controls_output.rs",
             "crates/flexmesa-star/src/controls_timestep_stop.rs",
             "crates/flexmesa-star/src/controls_mix_wind.rs",
@@ -350,11 +351,15 @@ def _parse_rust_expr(expr: str) -> tuple[bool | float | str | None, bool]:
     if tok.startswith("Some(") and tok.endswith(")"):
         inner, _ = _parse_rust_expr(tok[5:-1])
         return inner, False
+    vec_rep_m = re.match(r"^vec!\[([^;\[\]]+);\s*[^;\[\]]+\]$", tok)
+    if vec_rep_m is not None:
+        return _parse_rust_expr(vec_rep_m.group(1))
     vec_m = re.match(r"^vec!\[([^\[\]]+)\]$", tok)
     if vec_m is not None:
         inner_tok = vec_m.group(1).strip()
-        if inner_tok and "," not in inner_tok:
-            return _parse_rust_expr(inner_tok)
+        if inner_tok:
+            first_elem = inner_tok.split(",", 1)[0].strip()
+            return _parse_rust_expr(first_elem)
     arr_rep_m = re.match(r"^\[([^;\[\]]+);\s*[^;\[\]]+\]$", tok)
     if arr_rep_m is not None:
         return _parse_rust_expr(arr_rep_m.group(1))

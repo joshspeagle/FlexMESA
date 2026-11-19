@@ -8,7 +8,7 @@
 //!   partition extrapolation and `d/dlnT`), `raw_rate` (`18`), `pycno` (`2`),
 //!   and `weak` (`36`, including `Suzuki2016` interior and out-of-bounds fallback)
 //!   outputs (`169 / 169` at `0 ULP`).
-//! - `<= 6 ULP` across all `coulomb` (`16`) outputs across `None`, `DGC1973`,
+//! - `0 ULP` across all `coulomb` (`16`) outputs across `None`, `DGC1973`,
 //!   `I1993`, `PCR2009`, `ThomasFermi`, and `Itoh2002`.
 
 #![forbid(unsafe_code)]
@@ -293,8 +293,8 @@ fn test_all_185_mesa_26_4_1_rates_oracles_match_in_strict_mode() {
                 };
                 let ulp = ulp_distance(got, crow.expected);
                 assert!(
-                    ulp <= 6,
-                    "coulomb row {} ({lbl} {}) ULP={ulp} > 6: got={got:.17e} expected={:.17e}",
+                    ulp == 0,
+                    "coulomb row {} ({lbl} {}) ULP={ulp} != 0: got={got:.17e} expected={:.17e}",
                     crow.row_id,
                     crow.out_name,
                     crow.expected

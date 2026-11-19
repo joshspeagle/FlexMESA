@@ -8,7 +8,7 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 - **Total manifest cases scanned**: `106`
 - **Cases passing strict `#147` validation**: `0`
 - **Cases rejected by strict `#147` validation**: `106`
-- **Distinct unsupported physics/solver controls encountered**: `415`
+- **Distinct unsupported physics/solver controls encountered**: `383`
 - **Distinct unknown/misspelled controls encountered**: `0`
 - **Cases using headless plotting controls (`#173` / `DECISIONS #25`)**: `78` (`895` distinct keys)
 
@@ -19,7 +19,7 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 | `&star_job` | 455 | 106 | 16 | 3 | 5 | 325 |
 | `&eos` | 102 | 5 | 0 | 0 | 0 | 97 |
 | `&kap` | 51 | 6 | 0 | 0 | 0 | 45 |
-| `&controls` | 1448 | 657 | 27 | 0 | 8 | 756 |
+| `&controls` | 1448 | 722 | 21 | 0 | 8 | 697 |
 | `&binary_job` | 37 | 22 | 0 | 1 | 1 | 13 |
 | `&binary_controls` | 176 | 124 | 0 | 0 | 2 | 50 |
 | `&astero_search_controls` | 153 | 88 | 3 | 0 | 0 | 62 |
@@ -33,7 +33,6 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 | `&controls::atm_t_tau_opacity` | `unimplemented` | 31 | `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, `astero/fast_simplex`, ... (+27) |
 | `&controls::max_abs_rel_run_e_err` | `unimplemented` | 19 | `star/1.3M_ms_high_Z`, `star/1.5M_with_diffusion`, `star/12M_pre_ms_to_core_collapse`, `star/16M_conv_premix`, ... (+15) |
 | `&controls::x_logical_ctrl` | `unused` | 16 | `star/12M_pre_ms_to_core_collapse`, `star/15M_dynamo`, `star/20M_pre_ms_to_core_collapse`, `star/gyre_in_mesa_bcep`, ... (+12) |
-| `&controls::okay_to_reduce_gradt_excess` | `unimplemented` | 13 | `star/12M_pre_ms_to_core_collapse`, `star/20M_pre_ms_to_core_collapse`, `star/adjust_net`, `star/ccsn_IIp`, ... (+9) |
 | `&controls::when_to_stop_atol` | `unimplemented` | 13 | `astero/astero_adipls`, `astero/astero_gyre`, `star/12M_pre_ms_to_core_collapse`, `star/20M_pre_ms_to_core_collapse`, ... (+9) |
 | `&controls::when_to_stop_rtol` | `unimplemented` | 13 | `astero/astero_adipls`, `astero/astero_gyre`, `star/12M_pre_ms_to_core_collapse`, `star/20M_pre_ms_to_core_collapse`, ... (+9) |
 | `&controls::max_number_retries` | `unimplemented` | 12 | `binary/evolve_both_stars`, `binary/jdot_ls_check`, `binary/star_plus_point_mass`, `binary/star_plus_point_mass_explicit_mdot`, ... (+8) |
@@ -50,23 +49,15 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 | `&controls::logt_max_for_standard_mesh_delta_coeff` | `unimplemented` | 10 | `star/12M_pre_ms_to_core_collapse`, `star/20M_pre_ms_to_core_collapse`, `star/adjust_net`, `star/ccsn_IIp`, ... (+6) |
 | `&controls::logt_min_for_hight_mesh_delta_coeff` | `unimplemented` | 10 | `star/12M_pre_ms_to_core_collapse`, `star/20M_pre_ms_to_core_collapse`, `star/adjust_net`, `star/ccsn_IIp`, ... (+6) |
 | `&controls::mesh_delta_coeff_for_hight` | `unimplemented` | 10 | `star/12M_pre_ms_to_core_collapse`, `star/20M_pre_ms_to_core_collapse`, `star/adjust_net`, `star/ccsn_IIp`, ... (+6) |
-| `&controls::sig_min_factor_for_high_tcenter` | `unimplemented` | 10 | `star/12M_pre_ms_to_core_collapse`, `star/20M_pre_ms_to_core_collapse`, `star/adjust_net`, `star/ccsn_IIp`, ... (+6) |
 | `&controls::warn_rates_for_high_temp` | `unimplemented` | 10 | `star/12M_pre_ms_to_core_collapse`, `star/20M_pre_ms_to_core_collapse`, `star/20M_z2m2_high_rotation`, `star/ccsn_IIp`, ... (+6) |
 | `&controls::delta_xhe_cntr_hard_limit` | `unimplemented` | 9 | `star/15M_dynamo`, `star/adjust_net`, `star/ccsn_IIp`, `star/make_o_ne_wd`, ... (+5) |
 | `&controls::delta_xhe_cntr_limit` | `unimplemented` | 9 | `star/15M_dynamo`, `star/adjust_net`, `star/ccsn_IIp`, `star/make_pre_ccsn_13bvn`, ... (+5) |
 | `&controls::delta_xsi_cntr_hard_limit` | `unimplemented` | 9 | `star/12M_pre_ms_to_core_collapse`, `star/20M_pre_ms_to_core_collapse`, `star/ccsn_IIp`, `star/make_o_ne_wd`, ... (+5) |
-| `&controls::gradt_excess_f1` | `unimplemented` | 9 | `star/12M_pre_ms_to_core_collapse`, `star/20M_pre_ms_to_core_collapse`, `star/adjust_net`, `star/ccsn_IIp`, ... (+5) |
-| `&controls::gradt_excess_f2` | `unimplemented` | 9 | `star/12M_pre_ms_to_core_collapse`, `star/20M_pre_ms_to_core_collapse`, `star/adjust_net`, `star/ccsn_IIp`, ... (+5) |
-| `&controls::t_mix_limit` | `unimplemented` | 9 | `star/1M_pre_ms_to_wd`, `star/1M_thermohaline`, `star/adjust_net`, `star/ccsn_IIp`, ... (+5) |
-| `&controls::tcenter_max_for_sig_min_factor_full_off` | `unimplemented` | 9 | `star/12M_pre_ms_to_core_collapse`, `star/20M_pre_ms_to_core_collapse`, `star/adjust_net`, `star/ccsn_IIp`, ... (+5) |
-| `&controls::tcenter_min_for_sig_min_factor_full_on` | `unimplemented` | 9 | `star/12M_pre_ms_to_core_collapse`, `star/20M_pre_ms_to_core_collapse`, `star/adjust_net`, `star/ccsn_IIp`, ... (+5) |
 | `&star_job::filename_of_special_rate` | `unimplemented` | 9 | `astero/example_astero`, `star/12M_pre_ms_to_core_collapse`, `star/20M_pre_ms_to_core_collapse`, `star/R_CrB_star`, ... (+5) |
 | `&star_job::num_special_rate_factors` | `unimplemented` | 9 | `astero/example_astero`, `star/12M_pre_ms_to_core_collapse`, `star/20M_pre_ms_to_core_collapse`, `star/R_CrB_star`, ... (+5) |
 | `&star_job::reaction_for_special_factor` | `unimplemented` | 9 | `astero/example_astero`, `star/12M_pre_ms_to_core_collapse`, `star/20M_pre_ms_to_core_collapse`, `star/R_CrB_star`, ... (+5) |
 | `&star_job::special_rate_factor` | `unimplemented` | 9 | `astero/example_astero`, `star/12M_pre_ms_to_core_collapse`, `star/20M_pre_ms_to_core_collapse`, `star/R_CrB_star`, ... (+5) |
 | `&controls::delta_xsi_cntr_limit` | `unimplemented` | 8 | `star/12M_pre_ms_to_core_collapse`, `star/20M_pre_ms_to_core_collapse`, `star/ccsn_IIp`, `star/pisn`, ... (+4) |
-| `&controls::gradt_excess_lambda1` | `unimplemented` | 8 | `star/12M_pre_ms_to_core_collapse`, `star/20M_pre_ms_to_core_collapse`, `star/adjust_net`, `star/ccsn_IIp`, ... (+4) |
-| `&controls::mlt_make_surface_no_mixing` | `unimplemented` | 8 | `star/12M_pre_ms_to_core_collapse`, `star/20M_pre_ms_to_core_collapse`, `star/make_brown_dwarf`, `star/make_pre_ccsn_13bvn`, ... (+4) |
 | `&controls::photo_digits` | `unimplemented` | 8 | `star/12M_pre_ms_to_core_collapse`, `star/16M_conv_premix`, `star/16M_predictive_mix`, `star/1M_thermohaline`, ... (+4) |
 | `&controls::scale_max_correction` | `unimplemented` | 8 | `star/12M_pre_ms_to_core_collapse`, `star/20M_pre_ms_to_core_collapse`, `star/20M_z2m2_high_rotation`, `star/accreted_material_j`, ... (+4) |
 | `&controls::warning_limit_for_max_residual` | `unimplemented` | 8 | `star/ccsn_IIp`, `star/make_brown_dwarf`, `star/make_planets`, `star/ns_c`, ... (+4) |
@@ -88,6 +79,15 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 | `&astero_search_controls::best_model_fgong_filename` | `unimplemented` | 6 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+2) |
 | `&astero_search_controls::best_model_profile_filename` | `unimplemented` | 6 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+2) |
 | `&astero_search_controls::best_model_save_model_filename` | `unimplemented` | 6 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+2) |
+| `&astero_search_controls::chi2_limit_for_smaller_timesteps` | `unimplemented` | 6 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+2) |
+| `&astero_search_controls::chi2_limit_for_smallest_timesteps` | `unimplemented` | 6 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+2) |
+| `&astero_search_controls::fgong_postfix` | `unimplemented` | 6 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+2) |
+| `&astero_search_controls::fgong_prefix` | `unimplemented` | 6 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+2) |
+| `&astero_search_controls::last_model_save_info_filename` | `unimplemented` | 6 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+2) |
+| `&astero_search_controls::max_yrs_dt_chi2_smaller_limit` | `unimplemented` | 6 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+2) |
+| `&astero_search_controls::max_yrs_dt_chi2_smallest_limit` | `unimplemented` | 6 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+2) |
+| `&astero_search_controls::model_num_digits` | `unimplemented` | 6 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+2) |
+| `&astero_search_controls::num_digits` | `unimplemented` | 6 | `astero/example_astero`, `astero/fast_from_file`, `astero/fast_newuoa`, `astero/fast_scan_grid`, ... (+2) |
 
 ## Terminal-Output Controls (`DECISIONS #26`)
 
@@ -175,30 +175,30 @@ Per `DECISIONS #25` (matching upstream `USE_PGSTAR = NO`), keys in `&pgstar`, `&
 | :--- | :--- | :--- | ---: | ---: | ---: |
 | `star` | `1.3M_ms_high_Z` | `fail_unsupported` | 3 | 0 | 77 |
 | `star` | `1.4M_ms_op_mono` | `fail_unsupported` | 9 | 0 | 27 |
-| `star` | `1.5M_with_diffusion` | `fail_unsupported` | 22 | 0 | 19 |
-| `star` | `12M_pre_ms_to_core_collapse` | `fail_unsupported` | 49 | 0 | 263 |
+| `star` | `1.5M_with_diffusion` | `fail_unsupported` | 17 | 0 | 19 |
+| `star` | `12M_pre_ms_to_core_collapse` | `fail_unsupported` | 35 | 0 | 263 |
 | `star` | `15M_dynamo` | `fail_unsupported` | 9 | 0 | 17 |
-| `star` | `16M_conv_premix` | `fail_unsupported` | 8 | 0 | 1 |
-| `star` | `16M_predictive_mix` | `fail_unsupported` | 10 | 0 | 1 |
-| `star` | `1M_pre_ms_to_wd` | `fail_unsupported` | 15 | 0 | 18 |
-| `star` | `1M_thermohaline` | `fail_unsupported` | 11 | 0 | 66 |
-| `star` | `20M_pre_ms_to_core_collapse` | `fail_unsupported` | 49 | 0 | 263 |
+| `star` | `16M_conv_premix` | `fail_unsupported` | 6 | 0 | 1 |
+| `star` | `16M_predictive_mix` | `fail_unsupported` | 5 | 0 | 1 |
+| `star` | `1M_pre_ms_to_wd` | `fail_unsupported` | 14 | 0 | 18 |
+| `star` | `1M_thermohaline` | `fail_unsupported` | 10 | 0 | 66 |
+| `star` | `20M_pre_ms_to_core_collapse` | `fail_unsupported` | 35 | 0 | 263 |
 | `star` | `20M_z2m2_high_rotation` | `fail_unsupported` | 28 | 0 | 295 |
-| `star` | `5M_cepheid_blue_loop` | `fail_unsupported` | 6 | 0 | 20 |
+| `star` | `5M_cepheid_blue_loop` | `fail_unsupported` | 2 | 0 | 20 |
 | `star` | `7M_prems_to_AGB` | `fail_unsupported` | 4 | 0 | 20 |
 | `star` | `R_CrB_star` | `fail_unsupported` | 9 | 0 | 122 |
-| `star` | `T_tau_gradr` | `fail_unsupported` | 3 | 0 | 0 |
+| `star` | `T_tau_gradr` | `fail_unsupported` | 2 | 0 | 0 |
 | `star` | `accreted_material_j` | `fail_unsupported` | 3 | 0 | 24 |
-| `star` | `adjust_net` | `fail_unsupported` | 30 | 0 | 68 |
+| `star` | `adjust_net` | `fail_unsupported` | 16 | 0 | 68 |
 | `star` | `c13_pocket` | `fail_unsupported` | 6 | 0 | 100 |
 | `star` | `carbon_kh` | `fail_unsupported` | 9 | 0 | 81 |
 | `star` | `cburn_inward` | `fail_unsupported` | 3 | 0 | 66 |
-| `star` | `ccsn_IIp` | `fail_unsupported` | 76 | 0 | 100 |
-| `star` | `check_pulse_atm` | `fail_unsupported` | 6 | 0 | 0 |
+| `star` | `ccsn_IIp` | `fail_unsupported` | 62 | 0 | 100 |
+| `star` | `check_pulse_atm` | `fail_unsupported` | 5 | 0 | 0 |
 | `star` | `check_redo` | `fail_unsupported` | 3 | 0 | 3 |
 | `star` | `conductive_flame` | `fail_unsupported` | 8 | 0 | 109 |
-| `star` | `conserve_angular_momentum` | `fail_unsupported` | 8 | 0 | 0 |
-| `star` | `conv_core_cpm` | `fail_unsupported` | 5 | 0 | 87 |
+| `star` | `conserve_angular_momentum` | `fail_unsupported` | 7 | 0 | 0 |
+| `star` | `conv_core_cpm` | `fail_unsupported` | 3 | 0 | 87 |
 | `star` | `custom_colors` | `fail_unsupported` | 10 | 0 | 22 |
 | `star` | `custom_rates` | `fail_unsupported` | 15 | 0 | 48 |
 | `star` | `diffusion_smoothness` | `fail_unsupported` | 12 | 0 | 24 |
@@ -209,23 +209,23 @@ Per `DECISIONS #25` (matching upstream `USE_PGSTAR = NO`), keys in `&pgstar`, `&
 | `star` | `gyre_in_mesa_rsg` | `fail_unsupported` | 2 | 0 | 59 |
 | `star` | `gyre_in_mesa_spb` | `fail_unsupported` | 3 | 0 | 0 |
 | `star` | `gyre_in_mesa_wd` | `fail_unsupported` | 14 | 0 | 28 |
-| `star` | `hb_2M` | `fail_unsupported` | 8 | 0 | 29 |
+| `star` | `hb_2M` | `fail_unsupported` | 2 | 0 | 29 |
 | `star` | `high_mass` | `fail_unsupported` | 2 | 0 | 41 |
 | `star` | `high_rot_darkening` | `fail_unsupported` | 7 | 0 | 65 |
 | `star` | `high_z` | `fail_unsupported` | 3 | 0 | 0 |
 | `star` | `hot_cool_wind` | `fail_unsupported` | 3 | 0 | 0 |
-| `star` | `hse_riemann` | `fail_unsupported` | 10 | 0 | 67 |
-| `star` | `irradiated_planet` | `fail_unsupported` | 10 | 0 | 0 |
+| `star` | `hse_riemann` | `fail_unsupported` | 9 | 0 | 67 |
+| `star` | `irradiated_planet` | `fail_unsupported` | 9 | 0 | 0 |
 | `star` | `low_z` | `fail_unsupported` | 8 | 0 | 0 |
 | `star` | `magnetic_braking` | `fail_unsupported` | 9 | 0 | 56 |
-| `star` | `make_brown_dwarf` | `fail_unsupported` | 6 | 0 | 19 |
-| `star` | `make_co_wd` | `fail_unsupported` | 34 | 0 | 29 |
+| `star` | `make_brown_dwarf` | `fail_unsupported` | 5 | 0 | 19 |
+| `star` | `make_co_wd` | `fail_unsupported` | 32 | 0 | 29 |
 | `star` | `make_env` | `fail_unsupported` | 10 | 0 | 0 |
 | `star` | `make_he_wd` | `fail_unsupported` | 5 | 0 | 0 |
 | `star` | `make_metals` | `fail_unsupported` | 2 | 0 | 0 |
-| `star` | `make_o_ne_wd` | `fail_unsupported` | 20 | 0 | 255 |
-| `star` | `make_planets` | `fail_unsupported` | 10 | 0 | 0 |
-| `star` | `make_pre_ccsn_13bvn` | `fail_unsupported` | 24 | 0 | 324 |
+| `star` | `make_o_ne_wd` | `fail_unsupported` | 18 | 0 | 255 |
+| `star` | `make_planets` | `fail_unsupported` | 9 | 0 | 0 |
+| `star` | `make_pre_ccsn_13bvn` | `fail_unsupported` | 12 | 0 | 324 |
 | `star` | `make_sdb` | `fail_unsupported` | 8 | 0 | 5 |
 | `star` | `make_zams` | `fail_unsupported` | 2 | 0 | 72 |
 | `star` | `make_zams_low_mass` | `fail_unsupported` | 2 | 0 | 0 |
@@ -234,9 +234,9 @@ Per `DECISIONS #25` (matching upstream `USE_PGSTAR = NO`), keys in `&pgstar`, `&
 | `star` | `ns_h` | `fail_unsupported` | 17 | 0 | 58 |
 | `star` | `ns_he` | `fail_unsupported` | 17 | 0 | 64 |
 | `star` | `other_physics_hooks` | `fail_unsupported` | 2 | 0 | 0 |
-| `star` | `pisn` | `fail_unsupported` | 62 | 0 | 288 |
-| `star` | `ppisn` | `fail_unsupported` | 62 | 0 | 76 |
-| `star` | `radiative_levitation` | `fail_unsupported` | 43 | 0 | 14 |
+| `star` | `pisn` | `fail_unsupported` | 54 | 0 | 288 |
+| `star` | `ppisn` | `fail_unsupported` | 59 | 0 | 76 |
+| `star` | `radiative_levitation` | `fail_unsupported` | 42 | 0 | 14 |
 | `star` | `relax_composition_j_entropy` | `fail_unsupported` | 2 | 0 | 0 |
 | `star` | `rsp_BEP` | `fail_unsupported` | 8 | 0 | 75 |
 | `star` | `rsp_BLAP` | `fail_unsupported` | 8 | 0 | 76 |
@@ -247,22 +247,22 @@ Per `DECISIONS #25` (matching upstream `USE_PGSTAR = NO`), keys in `&pgstar`, `&
 | `star` | `rsp_check_2nd_crossing` | `fail_unsupported` | 8 | 0 | 0 |
 | `star` | `rsp_gyre` | `fail_unsupported` | 8 | 0 | 20 |
 | `star` | `rsp_save_and_load_file` | `fail_unsupported` | 22 | 0 | 69 |
-| `star` | `semiconvection` | `fail_unsupported` | 7 | 0 | 1 |
+| `star` | `semiconvection` | `fail_unsupported` | 2 | 0 | 1 |
 | `star` | `simplex_solar_calibration` | `fail_unsupported` | 16 | 0 | 0 |
-| `star` | `split_burn_big_net` | `fail_unsupported` | 41 | 0 | 258 |
-| `star` | `starspots` | `fail_unsupported` | 14 | 0 | 17 |
+| `star` | `split_burn_big_net` | `fail_unsupported` | 34 | 0 | 258 |
+| `star` | `starspots` | `fail_unsupported` | 13 | 0 | 17 |
 | `star` | `timing` | `fail_unsupported` | 2 | 0 | 0 |
-| `star` | `twin_studies` | `fail_unsupported` | 45 | 0 | 255 |
-| `star` | `tzo` | `fail_unsupported` | 41 | 0 | 334 |
-| `star` | `wd_acc_small_dm` | `fail_unsupported` | 6 | 0 | 55 |
+| `star` | `twin_studies` | `fail_unsupported` | 38 | 0 | 255 |
+| `star` | `tzo` | `fail_unsupported` | 38 | 0 | 334 |
+| `star` | `wd_acc_small_dm` | `fail_unsupported` | 5 | 0 | 55 |
 | `star` | `wd_aic` | `fail_unsupported` | 9 | 0 | 41 |
-| `star` | `wd_c_core_ignition` | `fail_unsupported` | 6 | 0 | 15 |
-| `star` | `wd_cool_0.6M` | `fail_unsupported` | 9 | 0 | 17 |
+| `star` | `wd_c_core_ignition` | `fail_unsupported` | 5 | 0 | 15 |
+| `star` | `wd_cool_0.6M` | `fail_unsupported` | 8 | 0 | 17 |
 | `star` | `wd_diffusion` | `fail_unsupported` | 6 | 0 | 11 |
 | `star` | `wd_he_shell_ignition` | `fail_unsupported` | 8 | 0 | 17 |
 | `star` | `wd_nova_burst` | `fail_unsupported` | 11 | 0 | 11 |
 | `star` | `wd_stable_h_burn` | `fail_unsupported` | 10 | 0 | 0 |
-| `star` | `zams_to_cc_80` | `fail_unsupported` | 48 | 0 | 263 |
+| `star` | `zams_to_cc_80` | `fail_unsupported` | 35 | 0 | 263 |
 | `binary` | `double_bh` | `fail_unsupported` | 2 | 0 | 92 |
 | `binary` | `evolve_both_stars` | `fail_unsupported` | 2 | 0 | 84 |
 | `binary` | `jdot_gr_check` | `fail_unsupported` | 1 | 0 | 1 |

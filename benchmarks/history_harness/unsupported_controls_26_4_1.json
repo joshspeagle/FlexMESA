@@ -10,7 +10,7 @@
     "total_cases": 106,
     "strict_pass_cases": 0,
     "strict_fail_cases": 106,
-    "distinct_unsupported_controls": 415,
+    "distinct_unsupported_controls": 383,
     "distinct_unknown_controls": 0,
     "cases_with_headless_plotting": 78,
     "distinct_headless_plotting_keys": 895
@@ -46,11 +46,11 @@
     {
       "section": "controls",
       "upstream_keys": 1448,
-      "supported_keys": 657,
-      "unused_keys": 27,
+      "supported_keys": 722,
+      "unused_keys": 21,
       "headless_gui_keys": 0,
       "terminal_output_keys": 8,
-      "unimplemented_upstream_keys": 756
+      "unimplemented_upstream_keys": 697
     },
     {
       "section": "binary_job",
@@ -361,27 +361,6 @@
     },
     {
       "section": "controls",
-      "key": "okay_to_reduce_gradt_excess",
-      "category": "unimplemented",
-      "case_count": 13,
-      "cases": [
-        "star/12M_pre_ms_to_core_collapse",
-        "star/20M_pre_ms_to_core_collapse",
-        "star/adjust_net",
-        "star/ccsn_IIp",
-        "star/hse_riemann",
-        "star/make_co_wd",
-        "star/make_o_ne_wd",
-        "star/make_pre_ccsn_13bvn",
-        "star/pisn",
-        "star/split_burn_big_net",
-        "star/starspots",
-        "star/twin_studies",
-        "star/zams_to_cc_80"
-      ]
-    },
-    {
-      "section": "controls",
       "key": "when_to_stop_atol",
       "category": "unimplemented",
       "case_count": 13,
@@ -681,24 +660,6 @@
     },
     {
       "section": "controls",
-      "key": "sig_min_factor_for_high_tcenter",
-      "category": "unimplemented",
-      "case_count": 10,
-      "cases": [
-        "star/12M_pre_ms_to_core_collapse",
-        "star/20M_pre_ms_to_core_collapse",
-        "star/adjust_net",
-        "star/ccsn_IIp",
-        "star/make_pre_ccsn_13bvn",
-        "star/pisn",
-        "star/split_burn_big_net",
-        "star/twin_studies",
-        "star/tzo",
-        "star/zams_to_cc_80"
-      ]
-    },
-    {
-      "section": "controls",
       "key": "warn_rates_for_high_temp",
       "category": "unimplemented",
       "case_count": 10,
@@ -759,91 +720,6 @@
         "star/20M_pre_ms_to_core_collapse",
         "star/ccsn_IIp",
         "star/make_o_ne_wd",
-        "star/pisn",
-        "star/split_burn_big_net",
-        "star/twin_studies",
-        "star/tzo",
-        "star/zams_to_cc_80"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "gradt_excess_f1",
-      "category": "unimplemented",
-      "case_count": 9,
-      "cases": [
-        "star/12M_pre_ms_to_core_collapse",
-        "star/20M_pre_ms_to_core_collapse",
-        "star/adjust_net",
-        "star/ccsn_IIp",
-        "star/make_pre_ccsn_13bvn",
-        "star/pisn",
-        "star/split_burn_big_net",
-        "star/twin_studies",
-        "star/zams_to_cc_80"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "gradt_excess_f2",
-      "category": "unimplemented",
-      "case_count": 9,
-      "cases": [
-        "star/12M_pre_ms_to_core_collapse",
-        "star/20M_pre_ms_to_core_collapse",
-        "star/adjust_net",
-        "star/ccsn_IIp",
-        "star/make_pre_ccsn_13bvn",
-        "star/pisn",
-        "star/split_burn_big_net",
-        "star/twin_studies",
-        "star/zams_to_cc_80"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "t_mix_limit",
-      "category": "unimplemented",
-      "case_count": 9,
-      "cases": [
-        "star/1M_pre_ms_to_wd",
-        "star/1M_thermohaline",
-        "star/adjust_net",
-        "star/ccsn_IIp",
-        "star/conserve_angular_momentum",
-        "star/irradiated_planet",
-        "star/make_planets",
-        "star/wd_acc_small_dm",
-        "star/wd_c_core_ignition"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "tcenter_max_for_sig_min_factor_full_off",
-      "category": "unimplemented",
-      "case_count": 9,
-      "cases": [
-        "star/12M_pre_ms_to_core_collapse",
-        "star/20M_pre_ms_to_core_collapse",
-        "star/adjust_net",
-        "star/ccsn_IIp",
-        "star/pisn",
-        "star/split_burn_big_net",
-        "star/twin_studies",
-        "star/tzo",
-        "star/zams_to_cc_80"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "tcenter_min_for_sig_min_factor_full_on",
-      "category": "unimplemented",
-      "case_count": 9,
-      "cases": [
-        "star/12M_pre_ms_to_core_collapse",
-        "star/20M_pre_ms_to_core_collapse",
-        "star/adjust_net",
-        "star/ccsn_IIp",
         "star/pisn",
         "star/split_burn_big_net",
         "star/twin_studies",
@@ -932,38 +808,6 @@
         "star/split_burn_big_net",
         "star/twin_studies",
         "star/tzo",
-        "star/zams_to_cc_80"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "gradt_excess_lambda1",
-      "category": "unimplemented",
-      "case_count": 8,
-      "cases": [
-        "star/12M_pre_ms_to_core_collapse",
-        "star/20M_pre_ms_to_core_collapse",
-        "star/adjust_net",
-        "star/ccsn_IIp",
-        "star/make_co_wd",
-        "star/make_o_ne_wd",
-        "star/make_pre_ccsn_13bvn",
-        "star/pisn"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "mlt_make_surface_no_mixing",
-      "category": "unimplemented",
-      "case_count": 8,
-      "cases": [
-        "star/12M_pre_ms_to_core_collapse",
-        "star/20M_pre_ms_to_core_collapse",
-        "star/make_brown_dwarf",
-        "star/make_pre_ccsn_13bvn",
-        "star/pisn",
-        "star/split_burn_big_net",
-        "star/twin_studies",
         "star/zams_to_cc_80"
       ]
     },
@@ -1760,34 +1604,6 @@
       ]
     },
     {
-      "section": "controls",
-      "key": "threshold_for_smooth_brunt_b",
-      "category": "unimplemented",
-      "case_count": 6,
-      "cases": [
-        "star/1.5M_with_diffusion",
-        "star/16M_conv_premix",
-        "star/16M_predictive_mix",
-        "star/conv_core_cpm",
-        "star/hb_2M",
-        "star/semiconvection"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "threshold_for_smooth_gradl_composition_term",
-      "category": "unimplemented",
-      "case_count": 6,
-      "cases": [
-        "star/1.5M_with_diffusion",
-        "star/16M_conv_premix",
-        "star/16M_predictive_mix",
-        "star/conv_core_cpm",
-        "star/hb_2M",
-        "star/semiconvection"
-      ]
-    },
-    {
       "section": "astero_search_controls",
       "key": "avg_age_sigma_limit",
       "category": "unimplemented",
@@ -2113,45 +1929,6 @@
       ]
     },
     {
-      "section": "controls",
-      "key": "predictive_bdy_loc",
-      "category": "unused",
-      "case_count": 5,
-      "cases": [
-        "star/1.5M_with_diffusion",
-        "star/16M_predictive_mix",
-        "star/5M_cepheid_blue_loop",
-        "star/hb_2M",
-        "star/semiconvection"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "predictive_zone_loc",
-      "category": "unused",
-      "case_count": 5,
-      "cases": [
-        "star/1.5M_with_diffusion",
-        "star/16M_predictive_mix",
-        "star/5M_cepheid_blue_loop",
-        "star/hb_2M",
-        "star/semiconvection"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "predictive_zone_type",
-      "category": "unused",
-      "case_count": 5,
-      "cases": [
-        "star/1.5M_with_diffusion",
-        "star/16M_predictive_mix",
-        "star/5M_cepheid_blue_loop",
-        "star/hb_2M",
-        "star/semiconvection"
-      ]
-    },
-    {
       "section": "star_job",
       "key": "num_steps_to_relax_rotation",
       "category": "unimplemented",
@@ -2469,72 +2246,6 @@
     },
     {
       "section": "controls",
-      "key": "gradt_excess_age_fraction",
-      "category": "unimplemented",
-      "case_count": 3,
-      "cases": [
-        "star/adjust_net",
-        "star/ccsn_IIp",
-        "star/make_pre_ccsn_13bvn"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "gradt_excess_beta1",
-      "category": "unimplemented",
-      "case_count": 3,
-      "cases": [
-        "star/adjust_net",
-        "star/ccsn_IIp",
-        "star/make_pre_ccsn_13bvn"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "gradt_excess_beta2",
-      "category": "unimplemented",
-      "case_count": 3,
-      "cases": [
-        "star/adjust_net",
-        "star/ccsn_IIp",
-        "star/make_pre_ccsn_13bvn"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "gradt_excess_dbeta",
-      "category": "unimplemented",
-      "case_count": 3,
-      "cases": [
-        "star/adjust_net",
-        "star/ccsn_IIp",
-        "star/make_pre_ccsn_13bvn"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "gradt_excess_dlambda",
-      "category": "unimplemented",
-      "case_count": 3,
-      "cases": [
-        "star/adjust_net",
-        "star/ccsn_IIp",
-        "star/make_pre_ccsn_13bvn"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "gradt_excess_lambda2",
-      "category": "unimplemented",
-      "case_count": 3,
-      "cases": [
-        "star/adjust_net",
-        "star/ccsn_IIp",
-        "star/make_pre_ccsn_13bvn"
-      ]
-    },
-    {
-      "section": "controls",
       "key": "mass_change_full_off_dt",
       "category": "unimplemented",
       "case_count": 3,
@@ -2601,61 +2312,6 @@
     },
     {
       "section": "controls",
-      "key": "superad_reduction_diff_grads_limit",
-      "category": "unimplemented",
-      "case_count": 3,
-      "cases": [
-        "star/12M_pre_ms_to_core_collapse",
-        "star/20M_pre_ms_to_core_collapse",
-        "star/zams_to_cc_80"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "superad_reduction_gamma_inv_scale",
-      "category": "unimplemented",
-      "case_count": 3,
-      "cases": [
-        "star/12M_pre_ms_to_core_collapse",
-        "star/20M_pre_ms_to_core_collapse",
-        "star/zams_to_cc_80"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "superad_reduction_gamma_limit",
-      "category": "unimplemented",
-      "case_count": 3,
-      "cases": [
-        "star/12M_pre_ms_to_core_collapse",
-        "star/20M_pre_ms_to_core_collapse",
-        "star/zams_to_cc_80"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "superad_reduction_gamma_limit_scale",
-      "category": "unimplemented",
-      "case_count": 3,
-      "cases": [
-        "star/12M_pre_ms_to_core_collapse",
-        "star/20M_pre_ms_to_core_collapse",
-        "star/zams_to_cc_80"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "superad_reduction_limit",
-      "category": "unimplemented",
-      "case_count": 3,
-      "cases": [
-        "star/12M_pre_ms_to_core_collapse",
-        "star/20M_pre_ms_to_core_collapse",
-        "star/zams_to_cc_80"
-      ]
-    },
-    {
-      "section": "controls",
       "key": "tol_correction_high_t_limit",
       "category": "unimplemented",
       "case_count": 3,
@@ -2674,17 +2330,6 @@
         "star/ccsn_IIp",
         "star/hse_riemann",
         "star/pisn"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "use_superad_reduction",
-      "category": "unimplemented",
-      "case_count": 3,
-      "cases": [
-        "star/12M_pre_ms_to_core_collapse",
-        "star/20M_pre_ms_to_core_collapse",
-        "star/zams_to_cc_80"
       ]
     },
     {
@@ -2946,26 +2591,6 @@
     },
     {
       "section": "controls",
-      "key": "predictive_avoid_reversal",
-      "category": "unused",
-      "case_count": 2,
-      "cases": [
-        "star/5M_cepheid_blue_loop",
-        "star/hb_2M"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "prune_bad_cz_min_hp_height",
-      "category": "unimplemented",
-      "case_count": 2,
-      "cases": [
-        "star/radiative_levitation",
-        "star/wd_cool_0.6M"
-      ]
-    },
-    {
-      "section": "controls",
       "key": "relax_use_gold_tolerances",
       "category": "unimplemented",
       "case_count": 2,
@@ -3092,16 +2717,6 @@
       "cases": [
         "star/other_physics_hooks",
         "star/simplex_solar_calibration"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "use_t_tau_gradr_factor",
-      "category": "unimplemented",
-      "case_count": 2,
-      "cases": [
-        "star/T_tau_gradr",
-        "star/check_pulse_atm"
       ]
     },
     {
@@ -3756,15 +3371,6 @@
     },
     {
       "section": "controls",
-      "key": "max_abs_du_div_cs_for_convection",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/ppisn"
-      ]
-    },
-    {
-      "section": "controls",
       "key": "max_dt_yrs_for_velocity_logt_lower_bound",
       "category": "unimplemented",
       "case_count": 1,
@@ -3820,24 +3426,6 @@
     {
       "section": "controls",
       "key": "max_tries_for_retry",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/ppisn"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "max_v_div_cs_for_convection",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "star/ppisn"
-      ]
-    },
-    {
-      "section": "controls",
-      "key": "max_v_for_convection",
       "category": "unimplemented",
       "case_count": 1,
       "cases": [
@@ -9582,11 +9170,6 @@
         "controls::diffusion_use_isolve::unimplemented",
         "controls::max_abs_rel_run_e_err::unimplemented",
         "controls::photo_interval::unimplemented",
-        "controls::predictive_bdy_loc::unused",
-        "controls::predictive_zone_loc::unused",
-        "controls::predictive_zone_type::unused",
-        "controls::threshold_for_smooth_brunt_b::unimplemented",
-        "controls::threshold_for_smooth_gradl_composition_term::unimplemented",
         "controls::warn_when_large_rel_run_e_err::unimplemented",
         "star_job::required_termination_code_string::unused"
       ],
@@ -9617,9 +9200,6 @@
         "controls::delta_xsi_cntr_hard_limit::unimplemented",
         "controls::delta_xsi_cntr_limit::unimplemented",
         "controls::delta_ye_hight_limit::unimplemented",
-        "controls::gradt_excess_f1::unimplemented",
-        "controls::gradt_excess_f2::unimplemented",
-        "controls::gradt_excess_lambda1::unimplemented",
         "controls::ignore_too_large_correction::unimplemented",
         "controls::logt_max_for_standard_mesh_delta_coeff::unimplemented",
         "controls::logt_min_for_hight_mesh_delta_coeff::unimplemented",
@@ -9630,21 +9210,10 @@
         "controls::mesh_delta_coeff_for_hight::unimplemented",
         "controls::min_xa_hard_limit::unimplemented",
         "controls::min_xa_hard_limit_for_hight::unimplemented",
-        "controls::mlt_make_surface_no_mixing::unimplemented",
-        "controls::okay_to_reduce_gradt_excess::unimplemented",
         "controls::photo_digits::unimplemented",
         "controls::photo_interval::unimplemented",
         "controls::scale_max_correction::unimplemented",
-        "controls::sig_min_factor_for_high_tcenter::unimplemented",
-        "controls::superad_reduction_diff_grads_limit::unimplemented",
-        "controls::superad_reduction_gamma_inv_scale::unimplemented",
-        "controls::superad_reduction_gamma_limit::unimplemented",
-        "controls::superad_reduction_gamma_limit_scale::unimplemented",
-        "controls::superad_reduction_limit::unimplemented",
-        "controls::tcenter_max_for_sig_min_factor_full_off::unimplemented",
-        "controls::tcenter_min_for_sig_min_factor_full_on::unimplemented",
         "controls::tol_correction_high_t_limit::unimplemented",
-        "controls::use_superad_reduction::unimplemented",
         "controls::warn_rates_for_high_temp::unimplemented",
         "controls::when_to_stop_atol::unimplemented",
         "controls::when_to_stop_rtol::unimplemented",
@@ -9715,8 +9284,6 @@
         "controls::max_abs_rel_run_e_err::unimplemented",
         "controls::photo_digits::unimplemented",
         "controls::photo_interval::unimplemented",
-        "controls::threshold_for_smooth_brunt_b::unimplemented",
-        "controls::threshold_for_smooth_gradl_composition_term::unimplemented",
         "star_job::pause_before_terminate::unimplemented",
         "star_job::required_termination_code_string::unused"
       ],
@@ -9741,11 +9308,6 @@
         "controls::max_abs_rel_run_e_err::unimplemented",
         "controls::photo_digits::unimplemented",
         "controls::photo_interval::unimplemented",
-        "controls::predictive_bdy_loc::unused",
-        "controls::predictive_zone_loc::unused",
-        "controls::predictive_zone_type::unused",
-        "controls::threshold_for_smooth_brunt_b::unimplemented",
-        "controls::threshold_for_smooth_gradl_composition_term::unimplemented",
         "star_job::pause_before_terminate::unimplemented",
         "star_job::required_termination_code_string::unused"
       ],
@@ -9781,7 +9343,6 @@
         "controls::mesh_logx_min_for_extra::unimplemented",
         "controls::mesh_logx_species::unimplemented",
         "controls::photo_interval::unimplemented",
-        "controls::t_mix_limit::unimplemented",
         "controls::use_other_mesh_delta_coeff_factor::unimplemented",
         "star_job::change_d_omega_flag::unimplemented",
         "star_job::new_d_omega_flag::unimplemented",
@@ -9810,7 +9371,6 @@
         "controls::max_abs_rel_run_e_err::unimplemented",
         "controls::photo_digits::unimplemented",
         "controls::photo_interval::unimplemented",
-        "controls::t_mix_limit::unimplemented",
         "star_job::change_d_omega_flag::unimplemented",
         "star_job::near_zams_relax_initial_surface_rotation_v::unimplemented",
         "star_job::new_d_omega_flag::unimplemented",
@@ -9844,9 +9404,6 @@
         "controls::delta_xsi_cntr_hard_limit::unimplemented",
         "controls::delta_xsi_cntr_limit::unimplemented",
         "controls::delta_ye_hight_limit::unimplemented",
-        "controls::gradt_excess_f1::unimplemented",
-        "controls::gradt_excess_f2::unimplemented",
-        "controls::gradt_excess_lambda1::unimplemented",
         "controls::ignore_too_large_correction::unimplemented",
         "controls::logt_max_for_standard_mesh_delta_coeff::unimplemented",
         "controls::logt_min_for_hight_mesh_delta_coeff::unimplemented",
@@ -9857,21 +9414,10 @@
         "controls::mesh_delta_coeff_for_hight::unimplemented",
         "controls::min_xa_hard_limit::unimplemented",
         "controls::min_xa_hard_limit_for_hight::unimplemented",
-        "controls::mlt_make_surface_no_mixing::unimplemented",
-        "controls::okay_to_reduce_gradt_excess::unimplemented",
         "controls::photo_digits::unimplemented",
         "controls::photo_interval::unimplemented",
         "controls::scale_max_correction::unimplemented",
-        "controls::sig_min_factor_for_high_tcenter::unimplemented",
-        "controls::superad_reduction_diff_grads_limit::unimplemented",
-        "controls::superad_reduction_gamma_inv_scale::unimplemented",
-        "controls::superad_reduction_gamma_limit::unimplemented",
-        "controls::superad_reduction_gamma_limit_scale::unimplemented",
-        "controls::superad_reduction_limit::unimplemented",
-        "controls::tcenter_max_for_sig_min_factor_full_off::unimplemented",
-        "controls::tcenter_min_for_sig_min_factor_full_on::unimplemented",
         "controls::tol_correction_high_t_limit::unimplemented",
-        "controls::use_superad_reduction::unimplemented",
         "controls::warn_rates_for_high_temp::unimplemented",
         "controls::when_to_stop_atol::unimplemented",
         "controls::when_to_stop_rtol::unimplemented",
@@ -9958,10 +9504,6 @@
       ],
       "unsupported_controls": [
         "controls::photo_interval::unimplemented",
-        "controls::predictive_avoid_reversal::unused",
-        "controls::predictive_bdy_loc::unused",
-        "controls::predictive_zone_loc::unused",
-        "controls::predictive_zone_type::unused",
         "star_job::required_termination_code_string::unused"
       ],
       "unknown_controls": [],
@@ -10030,7 +9572,6 @@
       ],
       "unsupported_controls": [
         "controls::photo_interval::unimplemented",
-        "controls::use_t_tau_gradr_factor::unimplemented",
         "star_job::required_termination_code_string::unused"
       ],
       "unknown_controls": [],
@@ -10076,26 +9617,12 @@
         "controls::delta_xhe_cntr_hard_limit::unimplemented",
         "controls::delta_xhe_cntr_limit::unimplemented",
         "controls::delta_ye_hight_limit::unimplemented",
-        "controls::gradt_excess_age_fraction::unimplemented",
-        "controls::gradt_excess_beta1::unimplemented",
-        "controls::gradt_excess_beta2::unimplemented",
-        "controls::gradt_excess_dbeta::unimplemented",
-        "controls::gradt_excess_dlambda::unimplemented",
-        "controls::gradt_excess_f1::unimplemented",
-        "controls::gradt_excess_f2::unimplemented",
-        "controls::gradt_excess_lambda1::unimplemented",
-        "controls::gradt_excess_lambda2::unimplemented",
         "controls::logt_max_for_standard_mesh_delta_coeff::unimplemented",
         "controls::logt_min_for_hight_mesh_delta_coeff::unimplemented",
         "controls::max_dt_yrs_for_velocity_logt_lower_bound::unimplemented",
         "controls::mesh_delta_coeff_for_hight::unimplemented",
-        "controls::okay_to_reduce_gradt_excess::unimplemented",
         "controls::photo_interval::unimplemented",
-        "controls::sig_min_factor_for_high_tcenter::unimplemented",
         "controls::solver_itermin::unimplemented",
-        "controls::t_mix_limit::unimplemented",
-        "controls::tcenter_max_for_sig_min_factor_full_off::unimplemented",
-        "controls::tcenter_min_for_sig_min_factor_full_on::unimplemented",
         "star_job::enable_adaptive_network::unimplemented",
         "star_job::min_x_for_add::unimplemented",
         "star_job::min_x_for_keep::unimplemented",
@@ -10211,15 +9738,6 @@
         "controls::delta_xsi_cntr_hard_limit::unimplemented",
         "controls::delta_xsi_cntr_limit::unimplemented",
         "controls::delta_ye_hight_limit::unimplemented",
-        "controls::gradt_excess_age_fraction::unimplemented",
-        "controls::gradt_excess_beta1::unimplemented",
-        "controls::gradt_excess_beta2::unimplemented",
-        "controls::gradt_excess_dbeta::unimplemented",
-        "controls::gradt_excess_dlambda::unimplemented",
-        "controls::gradt_excess_f1::unimplemented",
-        "controls::gradt_excess_f2::unimplemented",
-        "controls::gradt_excess_lambda1::unimplemented",
-        "controls::gradt_excess_lambda2::unimplemented",
         "controls::inject_until_reach_model_with_total_energy::unimplemented",
         "controls::logt_max_for_standard_mesh_delta_coeff::unimplemented",
         "controls::logt_min_for_hight_mesh_delta_coeff::unimplemented",
@@ -10227,7 +9745,6 @@
         "controls::max_number_retries::unimplemented",
         "controls::max_resid_jump_limit::unimplemented",
         "controls::mesh_delta_coeff_for_hight::unimplemented",
-        "controls::okay_to_reduce_gradt_excess::unimplemented",
         "controls::photo_interval::unimplemented",
         "controls::report_solver_progress::unimplemented",
         "controls::rti_c_x0_frac::unimplemented",
@@ -10242,7 +9759,6 @@
         "controls::rti_smooth_fraction::unimplemented",
         "controls::rti_smooth_iterations::unimplemented",
         "controls::rti_smooth_mass::unimplemented",
-        "controls::sig_min_factor_for_high_tcenter::unimplemented",
         "controls::solver_itermin::unimplemented",
         "controls::solver_itermin_until_reduce_min_corr_coeff::unimplemented",
         "controls::split_merge_amr_log_zoning::unimplemented",
@@ -10252,9 +9768,6 @@
         "controls::split_merge_amr_nz_baseline::unimplemented",
         "controls::split_merge_amr_okay_to_split_nz::unimplemented",
         "controls::start_time_for_inject_extra_ergs_sec::unimplemented",
-        "controls::t_mix_limit::unimplemented",
-        "controls::tcenter_max_for_sig_min_factor_full_off::unimplemented",
-        "controls::tcenter_min_for_sig_min_factor_full_on::unimplemented",
         "controls::tiny_corr_coeff_limit::unimplemented",
         "controls::total_mass_for_inject_extra_ergs_sec::unimplemented",
         "controls::use_split_merge_amr::unimplemented",
@@ -10297,7 +9810,6 @@
         "controls::atm_t_tau_opacity::unimplemented",
         "controls::fgong_ivers::unimplemented",
         "controls::photo_interval::unimplemented",
-        "controls::use_t_tau_gradr_factor::unimplemented",
         "star_job::required_termination_code_string::unused"
       ],
       "unknown_controls": [],
@@ -10369,7 +9881,6 @@
         "controls::mass_change_full_on_dt::unimplemented",
         "controls::max_abs_rel_run_e_err::unimplemented",
         "controls::photo_interval::unimplemented",
-        "controls::t_mix_limit::unimplemented",
         "star_job::change_d_omega_flag::unimplemented",
         "star_job::new_d_omega_flag::unimplemented",
         "star_job::required_termination_code_string::unused"
@@ -10394,8 +9905,6 @@
       "unsupported_controls": [
         "controls::convective_bdy_weight::unimplemented",
         "controls::photo_interval::unimplemented",
-        "controls::threshold_for_smooth_brunt_b::unimplemented",
-        "controls::threshold_for_smooth_gradl_composition_term::unimplemented",
         "star_job::required_termination_code_string::unused"
       ],
       "unknown_controls": [],
@@ -10670,12 +10179,6 @@
       ],
       "unsupported_controls": [
         "controls::photo_interval::unimplemented",
-        "controls::predictive_avoid_reversal::unused",
-        "controls::predictive_bdy_loc::unused",
-        "controls::predictive_zone_loc::unused",
-        "controls::predictive_zone_type::unused",
-        "controls::threshold_for_smooth_brunt_b::unimplemented",
-        "controls::threshold_for_smooth_gradl_composition_term::unimplemented",
         "star_job::required_termination_code_string::unused"
       ],
       "unknown_controls": [],
@@ -10786,7 +10289,6 @@
         "inlist_finish_header"
       ],
       "unsupported_controls": [
-        "controls::okay_to_reduce_gradt_excess::unimplemented",
         "controls::photo_interval::unimplemented",
         "controls::split_merge_amr_log_zoning::unimplemented",
         "controls::split_merge_amr_max_iters::unimplemented",
@@ -10821,7 +10323,6 @@
         "controls::atm_irradiated_p_surf::unimplemented",
         "controls::atm_irradiated_t_eq::unimplemented",
         "controls::photo_interval::unimplemented",
-        "controls::t_mix_limit::unimplemented",
         "star_job::dlogtau_factor::unimplemented",
         "star_job::relax_irradiation_max_yrs_dt::unimplemented",
         "star_job::relax_irradiation_min_steps::unimplemented",
@@ -10903,7 +10404,6 @@
       "unsupported_controls": [
         "controls::max_corr_jump_limit::unimplemented",
         "controls::max_resid_jump_limit::unimplemented",
-        "controls::mlt_make_surface_no_mixing::unimplemented",
         "controls::photo_interval::unimplemented",
         "controls::warning_limit_for_max_residual::unimplemented",
         "star_job::required_termination_code_string::unused"
@@ -10944,10 +10444,8 @@
         "controls::diffusion_use_full_net::unimplemented",
         "controls::diffusion_use_isolve::unimplemented",
         "controls::diffusion_v_max::unimplemented",
-        "controls::gradt_excess_lambda1::unimplemented",
         "controls::ignore_too_large_correction::unimplemented",
         "controls::neg_mass_fraction_hold::unused",
-        "controls::okay_to_reduce_gradt_excess::unimplemented",
         "controls::photo_interval::unimplemented",
         "controls::relax_max_number_retries::unimplemented",
         "controls::show_diffusion_info::unimplemented",
@@ -11068,8 +10566,6 @@
         "controls::diffusion_class_representative::unimplemented",
         "controls::diffusion_min_dq_at_surface::unimplemented",
         "controls::diffusion_num_classes::unimplemented",
-        "controls::gradt_excess_lambda1::unimplemented",
-        "controls::okay_to_reduce_gradt_excess::unimplemented",
         "controls::photo_interval::unimplemented",
         "controls::show_diffusion_info::unimplemented",
         "star_job::filename_of_special_rate::unimplemented",
@@ -11101,7 +10597,6 @@
         "controls::max_corr_jump_limit::unimplemented",
         "controls::max_resid_jump_limit::unimplemented",
         "controls::photo_interval::unimplemented",
-        "controls::t_mix_limit::unimplemented",
         "controls::warn_when_large_virial_thm_rel_err::unimplemented",
         "controls::warning_limit_for_max_residual::unimplemented",
         "star_job::dlg_core_mass_per_step::unimplemented",
@@ -11132,23 +10627,11 @@
         "controls::delta_xhe_cntr_hard_limit::unimplemented",
         "controls::delta_xhe_cntr_limit::unimplemented",
         "controls::delta_ye_hight_limit::unimplemented",
-        "controls::gradt_excess_age_fraction::unimplemented",
-        "controls::gradt_excess_beta1::unimplemented",
-        "controls::gradt_excess_beta2::unimplemented",
-        "controls::gradt_excess_dbeta::unimplemented",
-        "controls::gradt_excess_dlambda::unimplemented",
-        "controls::gradt_excess_f1::unimplemented",
-        "controls::gradt_excess_f2::unimplemented",
-        "controls::gradt_excess_lambda1::unimplemented",
-        "controls::gradt_excess_lambda2::unimplemented",
         "controls::logt_max_for_standard_mesh_delta_coeff::unimplemented",
         "controls::logt_min_for_hight_mesh_delta_coeff::unimplemented",
         "controls::mesh_delta_coeff_for_hight::unimplemented",
-        "controls::mlt_make_surface_no_mixing::unimplemented",
-        "controls::okay_to_reduce_gradt_excess::unimplemented",
         "controls::photo_digits::unimplemented",
         "controls::photo_interval::unimplemented",
-        "controls::sig_min_factor_for_high_tcenter::unimplemented",
         "controls::when_to_stop_atol::unimplemented",
         "controls::when_to_stop_rtol::unimplemented"
       ],
@@ -11401,9 +10884,6 @@
         "controls::delta_xsi_cntr_hard_limit::unimplemented",
         "controls::delta_xsi_cntr_limit::unimplemented",
         "controls::delta_ye_hight_limit::unimplemented",
-        "controls::gradt_excess_f1::unimplemented",
-        "controls::gradt_excess_f2::unimplemented",
-        "controls::gradt_excess_lambda1::unimplemented",
         "controls::logt_max_for_standard_mesh_delta_coeff::unimplemented",
         "controls::logt_min_for_hight_mesh_delta_coeff::unimplemented",
         "controls::max_safe_logt_for_rates::unimplemented",
@@ -11413,10 +10893,7 @@
         "controls::mesh_delta_coeff_for_hight::unimplemented",
         "controls::min_xa_hard_limit::unimplemented",
         "controls::min_xa_hard_limit_for_hight::unimplemented",
-        "controls::mlt_make_surface_no_mixing::unimplemented",
-        "controls::okay_to_reduce_gradt_excess::unimplemented",
         "controls::photo_interval::unimplemented",
-        "controls::sig_min_factor_for_high_tcenter::unimplemented",
         "controls::split_merge_amr_avoid_repeated_remesh::unimplemented",
         "controls::split_merge_amr_hybrid_zoning::unimplemented",
         "controls::split_merge_amr_max_iters::unimplemented",
@@ -11426,8 +10903,6 @@
         "controls::split_merge_amr_nz_r_core::unimplemented",
         "controls::split_merge_amr_okay_to_split_nz::unimplemented",
         "controls::split_merge_amr_r_core_cm::unimplemented",
-        "controls::tcenter_max_for_sig_min_factor_full_off::unimplemented",
-        "controls::tcenter_min_for_sig_min_factor_full_on::unimplemented",
         "controls::use_split_merge_amr::unimplemented",
         "controls::warn_rates_for_high_temp::unimplemented",
         "controls::when_to_stop_atol::unimplemented",
@@ -11479,7 +10954,6 @@
         "controls::ignore_min_corr_coeff_for_scale_max_correction::unimplemented",
         "controls::ignore_too_large_correction::unimplemented",
         "controls::initial_he3::unimplemented",
-        "controls::max_abs_du_div_cs_for_convection::unimplemented",
         "controls::max_num_merge_surface_cells::unimplemented",
         "controls::max_number_retries::unimplemented",
         "controls::max_resid_jump_limit::unimplemented",
@@ -11487,8 +10961,6 @@
         "controls::max_tries_after_20_retries::unimplemented",
         "controls::max_tries_after_5_retries::unimplemented",
         "controls::max_tries_for_retry::unimplemented",
-        "controls::max_v_div_cs_for_convection::unimplemented",
-        "controls::max_v_for_convection::unimplemented",
         "controls::merge_amr_du_div_cs_limit_only_for_compression::unimplemented",
         "controls::merge_amr_ignore_surface_cells::unimplemented",
         "controls::merge_amr_k_for_ignore_surface_cells::unimplemented",
@@ -11586,7 +11058,6 @@
         "controls::high_logt_op_mono_full_on::unimplemented",
         "controls::op_mono_min_x_to_include::unimplemented",
         "controls::photo_interval::unimplemented",
-        "controls::prune_bad_cz_min_hp_height::unimplemented",
         "controls::use_op_mono_alt_get_kap::unimplemented",
         "star_job::required_termination_code_string::unused"
       ],
@@ -11908,11 +11379,6 @@
       ],
       "unsupported_controls": [
         "controls::photo_interval::unimplemented",
-        "controls::predictive_bdy_loc::unused",
-        "controls::predictive_zone_loc::unused",
-        "controls::predictive_zone_type::unused",
-        "controls::threshold_for_smooth_brunt_b::unimplemented",
-        "controls::threshold_for_smooth_gradl_composition_term::unimplemented",
         "star_job::required_termination_code_string::unused"
       ],
       "unknown_controls": [],
@@ -11986,8 +11452,6 @@
         "controls::delta_xsi_cntr_hard_limit::unimplemented",
         "controls::delta_xsi_cntr_limit::unimplemented",
         "controls::delta_ye_hight_limit::unimplemented",
-        "controls::gradt_excess_f1::unimplemented",
-        "controls::gradt_excess_f2::unimplemented",
         "controls::logt_max_for_standard_mesh_delta_coeff::unimplemented",
         "controls::logt_min_for_hight_mesh_delta_coeff::unimplemented",
         "controls::max_safe_logt_for_rates::unimplemented",
@@ -11995,12 +11459,7 @@
         "controls::mesh_delta_coeff_for_hight::unimplemented",
         "controls::min_xa_hard_limit::unimplemented",
         "controls::min_xa_hard_limit_for_hight::unimplemented",
-        "controls::mlt_make_surface_no_mixing::unimplemented",
-        "controls::okay_to_reduce_gradt_excess::unimplemented",
         "controls::photo_interval::unimplemented",
-        "controls::sig_min_factor_for_high_tcenter::unimplemented",
-        "controls::tcenter_max_for_sig_min_factor_full_off::unimplemented",
-        "controls::tcenter_min_for_sig_min_factor_full_on::unimplemented",
         "controls::warn_rates_for_high_temp::unimplemented",
         "controls::when_to_stop_atol::unimplemented",
         "controls::when_to_stop_rtol::unimplemented",
@@ -12032,7 +11491,6 @@
         "controls::do_starspots::unimplemented",
         "controls::fspot::unimplemented",
         "controls::max_number_retries::unimplemented",
-        "controls::okay_to_reduce_gradt_excess::unimplemented",
         "controls::photo_digits::unimplemented",
         "controls::photo_interval::unimplemented",
         "controls::report_solver_progress::unimplemented",
@@ -12100,8 +11558,6 @@
         "controls::delta_xsi_cntr_hard_limit::unimplemented",
         "controls::delta_xsi_cntr_limit::unimplemented",
         "controls::delta_ye_hight_limit::unimplemented",
-        "controls::gradt_excess_f1::unimplemented",
-        "controls::gradt_excess_f2::unimplemented",
         "controls::logt_max_for_standard_mesh_delta_coeff::unimplemented",
         "controls::logt_min_for_hight_mesh_delta_coeff::unimplemented",
         "controls::max_safe_logt_for_rates::unimplemented",
@@ -12109,13 +11565,8 @@
         "controls::mesh_delta_coeff_for_hight::unimplemented",
         "controls::min_xa_hard_limit::unimplemented",
         "controls::min_xa_hard_limit_for_hight::unimplemented",
-        "controls::mlt_make_surface_no_mixing::unimplemented",
-        "controls::okay_to_reduce_gradt_excess::unimplemented",
         "controls::photo_directory::unimplemented",
         "controls::photo_interval::unimplemented",
-        "controls::sig_min_factor_for_high_tcenter::unimplemented",
-        "controls::tcenter_max_for_sig_min_factor_full_off::unimplemented",
-        "controls::tcenter_min_for_sig_min_factor_full_on::unimplemented",
         "controls::warn_rates_for_high_temp::unimplemented",
         "controls::when_to_stop_atol::unimplemented",
         "controls::when_to_stop_rtol::unimplemented",
@@ -12176,9 +11627,6 @@
         "controls::report_solver_progress::unimplemented",
         "controls::restore_mesh_on_retry::unimplemented",
         "controls::scale_max_correction::unimplemented",
-        "controls::sig_min_factor_for_high_tcenter::unimplemented",
-        "controls::tcenter_max_for_sig_min_factor_full_off::unimplemented",
-        "controls::tcenter_min_for_sig_min_factor_full_on::unimplemented",
         "controls::warn_when_large_rel_run_e_err::unimplemented",
         "controls::write_pulse_data_with_profile::unimplemented",
         "controls::x_logical_ctrl::unused",
@@ -12210,8 +11658,7 @@
         "controls::accretion_he3::unimplemented",
         "controls::accretion_zfracs::unimplemented",
         "controls::atm_t_tau_opacity::unimplemented",
-        "controls::photo_interval::unimplemented",
-        "controls::t_mix_limit::unimplemented"
+        "controls::photo_interval::unimplemented"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 55,
@@ -12262,7 +11709,6 @@
         "controls::atm_t_tau_opacity::unimplemented",
         "controls::max_abs_rel_run_e_err::unimplemented",
         "controls::photo_interval::unimplemented",
-        "controls::t_mix_limit::unimplemented",
         "star_job::required_termination_code_string::unused",
         "star_job::use_3a_fl87::unimplemented"
       ],
@@ -12288,7 +11734,6 @@
         "controls::do_diffusion_heating::unimplemented",
         "controls::do_wd_sedimentation_heating::unimplemented",
         "controls::photo_interval::unimplemented",
-        "controls::prune_bad_cz_min_hp_height::unimplemented",
         "controls::when_to_stop_atol::unimplemented",
         "controls::when_to_stop_rtol::unimplemented",
         "eos::skye_solid_mixing_rule::unimplemented",
@@ -12432,8 +11877,6 @@
         "controls::delta_xsi_cntr_hard_limit::unimplemented",
         "controls::delta_xsi_cntr_limit::unimplemented",
         "controls::delta_ye_hight_limit::unimplemented",
-        "controls::gradt_excess_f1::unimplemented",
-        "controls::gradt_excess_f2::unimplemented",
         "controls::ignore_too_large_correction::unimplemented",
         "controls::logt_max_for_standard_mesh_delta_coeff::unimplemented",
         "controls::logt_min_for_hight_mesh_delta_coeff::unimplemented",
@@ -12444,21 +11887,10 @@
         "controls::mesh_delta_coeff_for_hight::unimplemented",
         "controls::min_xa_hard_limit::unimplemented",
         "controls::min_xa_hard_limit_for_hight::unimplemented",
-        "controls::mlt_make_surface_no_mixing::unimplemented",
-        "controls::okay_to_reduce_gradt_excess::unimplemented",
         "controls::photo_digits::unimplemented",
         "controls::photo_interval::unimplemented",
         "controls::scale_max_correction::unimplemented",
-        "controls::sig_min_factor_for_high_tcenter::unimplemented",
-        "controls::superad_reduction_diff_grads_limit::unimplemented",
-        "controls::superad_reduction_gamma_inv_scale::unimplemented",
-        "controls::superad_reduction_gamma_limit::unimplemented",
-        "controls::superad_reduction_gamma_limit_scale::unimplemented",
-        "controls::superad_reduction_limit::unimplemented",
-        "controls::tcenter_max_for_sig_min_factor_full_off::unimplemented",
-        "controls::tcenter_min_for_sig_min_factor_full_on::unimplemented",
         "controls::tol_correction_high_t_limit::unimplemented",
-        "controls::use_superad_reduction::unimplemented",
         "controls::warn_rates_for_high_temp::unimplemented",
         "controls::when_to_stop_atol::unimplemented",
         "controls::when_to_stop_rtol::unimplemented",

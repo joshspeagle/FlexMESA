@@ -33,14 +33,14 @@ reason = "Spruit-Tayler dynamo and rotational mixing time out."
 [[gaps]]
 suite = "star"
 case = "16M_conv_premix"
-issue = "#155"
-reason = "Convective premixing hits max_model_number before core H exhaustion."
+issue = "#152"
+reason = "Diagnostic run reaches xa_central_lower_limit(h1) (+0.58% rel_star_age) with 6 unsupported non-mixing controls (convective_bdy_weight, max_abs_rel_run_e_err, photo/termination controls; #152, #153, #159)."
 
 [[gaps]]
 suite = "star"
 case = "16M_predictive_mix"
-issue = "#155"
-reason = "Predictive mixing hits max_model_number before core H exhaustion."
+issue = "#152"
+reason = "Diagnostic run reaches xa_central_lower_limit(h1) (+0.33% rel_star_age) with 5 unsupported non-mixing controls (max_abs_rel_run_e_err, photo/termination controls; #152, #159)."
 
 [[gaps]]
 suite = "star"
@@ -69,8 +69,8 @@ reason = "Case history_columns.list requests unported MLT++ gradT_excess_alpha c
 [[gaps]]
 suite = "star"
 case = "5M_cepheid_blue_loop"
-issue = "#155"
-reason = "Core/shell convective boundary and Newton retry loop time out (#155, #152)."
+issue = "#152"
+reason = "Newton retry loop and remaining unsupported photo/termination controls exceed wall-time guard (#152, #159)."
 
 [[gaps]]
 suite = "star"
@@ -106,7 +106,7 @@ reason = "Case inlist enables okay_to_reduce_gradT_excess and requests unported 
 suite = "star"
 case = "c13_pocket"
 issue = "#152"
-reason = "AGB third-dredge-up C13-pocket evolution times out (#152, #155)."
+reason = "AGB third-dredge-up C13-pocket evolution times out with unported solver and atmosphere/opacity controls (#152, #161)."
 
 [[gaps]]
 suite = "star"
@@ -153,8 +153,8 @@ reason = "Exceeds wall-time guard under non-upstream solver and rotational retry
 [[gaps]]
 suite = "star"
 case = "conv_core_cpm"
-issue = "#155"
-reason = "Convective premixing shortens main-sequence lifetime."
+issue = "#153"
+reason = "Diagnostic run reaches xa_central_lower_limit(h1) (+0.84% rel_star_age, 93 vs 92 steps) with 3 unsupported non-mixing controls (convective_bdy_weight, photo_interval, required_termination_code_string; #153, #159)."
 
 [[gaps]]
 suite = "star"
@@ -177,8 +177,8 @@ reason = "Atomic diffusion profile and age depart from MESA 26.4.1."
 [[gaps]]
 suite = "star"
 case = "extended_convective_penetration"
-issue = "#155"
-reason = "Extended convective penetration departs from upstream core H burning lifetime."
+issue = "#231"
+reason = "Case uses custom overshoot_scheme(1) = 'other' hook (null_other_overshooting_scheme errors until #231 wires other_overshooting_scheme) plus unsupported photo/termination controls (#231, #159)."
 
 [[gaps]]
 suite = "star"
@@ -219,8 +219,8 @@ reason = "Case history_columns.list requests unported MLT++ gradT_excess_alpha c
 [[gaps]]
 suite = "star"
 case = "hb_2M"
-issue = "#155"
-reason = "Predictive mixing does not grow convective He-burning core to upstream lifetime (audit M-2)."
+issue = "#152"
+reason = "Diagnostic run reaches xa_central_lower_limit(he4) (+1.00% rel_star_age, peak mass_conv_core 0.2673 vs 0.2668 Msun, co_core_mass +0.0004 Msun) with 2 unsupported non-mixing controls (photo_interval, required_termination_code_string) and solver/mesh differences (#152, #153, #159)."
 
 [[gaps]]
 suite = "star"
@@ -238,7 +238,7 @@ reason = "Case history_columns.list requests unported gravity-darkening grav_dar
 suite = "star"
 case = "high_z"
 issue = "#152"
-reason = "High-metallicity core He burning exceeds track tolerances (#152, #155)."
+reason = "High-metallicity core He burning exceeds track tolerances with unported solver and atmosphere controls (#152, #161)."
 
 [[gaps]]
 suite = "star"
@@ -357,8 +357,8 @@ reason = "Neutron-star He envelope burning hits max_model_number instead of powe
 [[gaps]]
 suite = "star"
 case = "other_physics_hooks"
-issue = "#155"
-reason = "Case requires custom overshoot_scheme = 'other', use_other_mesh_functions, and photo controls (#155, #159)."
+issue = "#231"
+reason = "Case requires custom overshoot_scheme = 'other', use_other_mesh_functions, and photo controls (#231, #153, #159)."
 
 [[gaps]]
 suite = "star"

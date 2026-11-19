@@ -59,10 +59,10 @@ When the companion is an accreting black hole (`is_black_hole=True` in `BinarySy
 
 `flexmesa.binary` evolves orbital angular momentum $J_{\mathrm{orb}}$, eccentricity $e$, and component spin rates $\Omega_{1,2}$ under four secular torque mechanisms:
 
-1. **Peters (1964) Gravitational-Wave Radiation & Eccentricity Decay (`eval_jdot_gr_jax`, `eval_edot_gr`)**:
-   Quadrupole gravitational-wave emission extracts orbital angular momentum (`eval_jdot_gr`) and evaluates Peters (1964) eccentricity decay (`eval_edot_gr`; upstream `get_edot` at `binary/private/binary_edot.f90:93` omits `edot_gr`, so alignment back to MESA `26.4.1` is tracked in [#160](https://github.com/joshspeagle/FlexMESA/issues/160) and [#175](https://github.com/joshspeagle/FlexMESA/issues/175)):
+1. **Peters (1964) Gravitational-Wave Radiation (`eval_jdot_gr`, `eval_jdot_gr_jax`)**:
+   Quadrupole gravitational-wave emission extracts orbital angular momentum (`default_jdot_gr`, `binary/private/binary_jdot.f90:95-111`), integrated via upstream's single explicit Euler step (`binary/private/binary_evolve.f90:321`) while omitting gravitational-wave eccentricity decay in `get_edot` (`binary/private/binary_edot.f90:93`; [#175](https://github.com/joshspeagle/FlexMESA/issues/175), `DECISIONS #36`):
 
-   $$\frac{\dot{J}_{\mathrm{gr}}}{J_{\mathrm{orb}}} = -\frac{32}{5}\,\frac{G^3}{c^5}\,\frac{M_1 M_2 (M_1 + M_2)}{a^4\,(1 - e^2)^{5/2}}\left(1 + \frac{7}{8}e^2\right), \qquad \dot{e}_{\mathrm{gr}} = -\frac{304}{15}\,\frac{G^3 M_1 M_2 (M_1 + M_2)}{c^5\,a^4\,(1 - e^2)^{5/2}}\,e\left(1 + \frac{121}{304}e^2\right).$$
+   $$\frac{\dot{J}_{\mathrm{gr}}}{J_{\mathrm{orb}}} = -\frac{32}{5}\,\frac{G^3}{c^5}\,\frac{M_1 M_2 (M_1 + M_2)}{a^4}.$$
 
 2. **Rappaport, Verbunt & Joss (1983) Magnetic Braking (`eval_jdot_mb_jax`)**:
    Magnetized stellar winds coupled to a donor with a convective envelope and radiative core extract spin and orbital angular momentum at rate $\dot{J}_{\mathrm{mb}} = -3.8 \times 10^{-30}\,M_1 R_\odot^4\,(R_1 / R_\odot)^{\gamma_{\mathrm{mb}}}\,\Omega_{\mathrm{orb}}^3\,\mathrm{dyn\,cm}$ (default $\gamma_{\mathrm{mb}} = 3.0$).

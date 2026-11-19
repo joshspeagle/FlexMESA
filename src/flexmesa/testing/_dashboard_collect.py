@@ -414,11 +414,7 @@ def collect_harness_summary(repo_root: pathlib.Path) -> dict[str, Any]:
                 sr["strict_validated"] += 1
         if rec.executed and rec.termination_matches:
             sr["reached_termination"] += 1
-            if (
-                rec.comparison is not None
-                and rec.comparison.within_final_tolerances
-                and rec.comparison.within_track_tolerances
-            ):
+            if rec.is_within_tolerances:
                 sr["within_numeric_tol"] += 1
                 within_tol = True
         if rec.verdict == "pass":

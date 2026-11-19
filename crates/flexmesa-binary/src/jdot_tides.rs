@@ -8,9 +8,9 @@
 //! `binary_edot.f90`.
 
 use flexmesa_const::{
-    MixingType, CLIGHT, MSUN, ONE_THIRD, PI, RSUN, SECYER, STANDARD_CGRAV,
+    CLIGHT, MSUN, MixingType, ONE_THIRD, PI, RSUN, SECYER, STANDARD_CGRAV,
 };
-use flexmesa_math::{exp, pow};
+use flexmesa_math::{exp, pow, pow2, pow3, pow4, pow5, pow6, pow8};
 use flexmesa_star::StarModel;
 
 use crate::inlist::BinaryInlistControls;
@@ -26,12 +26,11 @@ pub fn eval_jdot_gr(
     separation: f64,
     j_orb: f64,
 ) -> f64 {
-    let g3 = STANDARD_CGRAV * STANDARD_CGRAV * STANDARD_CGRAV;
-    let c5 = CLIGHT * CLIGHT * CLIGHT * CLIGHT * CLIGHT;
-    let a2 = separation * separation;
-    let a4 = a2 * a2;
-    -(32.0 * g3 * m_accretor * m_donor * (m_accretor + m_donor)
-        / (5.0 * c5 * a4))
+    let bs4 = pow4(separation);
+    let clight5 = pow5(CLIGHT);
+    let cgrav3 = STANDARD_CGRAV * STANDARD_CGRAV * STANDARD_CGRAV;
+    -32.0 * cgrav3 * m_accretor * m_donor * (m_accretor + m_donor)
+        / (5.0 * clight5 * bs4)
         * j_orb
 }
 
@@ -55,46 +54,38 @@ pub fn eval_jdot_ml(
     mdot_sys_cct: f64,
     gamma_mt: f64,
 ) -> f64 {
-    let m_tot = m_donor + m_accretor;
-    let r_d = (m_accretor / m_tot) * separation;
-    let r_a = (m_donor / m_tot) * separation;
-    let omega_orb = 2.0 * PI / period;
-    let jdot_iso = ((mdot_sys_tr_donor + mdot_sys_wind_donor) * (r_d * r_d)
-        + (mdot_sys_tr_accretor + mdot_sys_wind_accretor) * (r_a * r_a))
-        * omega_orb
-        * (1.0 - eccentricity * eccentricity).sqrt();
-    let jdot_cct =
-        mdot_sys_cct * gamma_mt * (STANDARD_CGRAV * m_tot * separation).sqrt();
-    jdot_iso + jdot_cct
+    let m_ad = m_accretor + m_donor;
+    let sqrt_1me2 = (1.0 - pow2(eccentricity)).sqrt();
+    let jdot_d = (mdot_sys_tr_donor + mdot_sys_wind_donor)
+        * pow2(m_accretor / m_ad * separation)
+        * 2.0
+        * PI
+        / period
+        * sqrt_1me2;
+    let jdot_a = (mdot_sys_tr_accretor + mdot_sys_wind_accretor)
+        * pow2(m_donor / m_ad * separation)
+        * 2.0
+        * PI
+        / period
+        * sqrt_1me2;
+    let jdot_cct = mdot_sys_cct
+        * gamma_mt
+        * (STANDARD_CGRAV * (m_donor + m_accretor) * separation).sqrt();
+    jdot_d + jdot_a + jdot_cct
 }
 
-/// Evaluates `check_jdot_mb_conditions` (`binary/private/binary_jdot.f90:201-246`),
+/// Evaluates `check_jdot_mb_conditions` (`binary/private/binary_jdot.f90:201-246, 266, 296`),
 /// returning `(use_mb, qconv_env)` for `star` given convective core/envelope
-/// mass-fraction bounds in `ctrl` and latching `was_using_mb` when `keep_mb_on`.
+/// mass-fraction bounds in `ctrl` and `keep_mb_on`.
 #[must_use]
 pub fn check_jdot_mb_conditions(
     star: &StarModel,
     ctrl: &BinaryInlistControls,
-    was_using_mb: bool,
+    _was_using_mb: bool,
 ) -> (bool, f64) {
     let nz = star.nz;
-    if nz < 2 {
-        return (false, 0.0);
-    }
-    let mut qconv_env = 0.0_f64;
-    for k in 0..nz {
-        let is_conv = star
-            .mixing_type
-            .get(k)
-            .copied()
-            .map_or(star.gradr[k] > star.grada[k], |mt| {
-                mt == MixingType::ConvectiveMixing
-            });
-        if is_conv {
-            qconv_env += star.dq[k];
-        } else if star.q[k] < ctrl.jdot_mb_qlim_for_check_conv_env {
-            break;
-        }
+    if nz == 0 {
+        return (ctrl.keep_mb_on, 0.0);
     }
 
     let mut qconv_core = 0.0_f64;
@@ -106,20 +97,39 @@ pub fn check_jdot_mb_conditions(
             .map_or(star.gradr[k] > star.grada[k], |mt| {
                 mt == MixingType::ConvectiveMixing
             });
+        if star.q[k] > ctrl.jdot_mb_qlim_for_check_rad_core
+            && (qconv_core == 0.0 || !is_conv)
+        {
+            break;
+        }
         if is_conv {
             qconv_core += star.dq[k];
-        } else if star.q[k] > ctrl.jdot_mb_qlim_for_check_rad_core {
-            break;
         }
     }
 
-    if ctrl.keep_mb_on && was_using_mb {
-        return (true, qconv_env);
+    let mut qconv_env = 0.0_f64;
+    for k in 0..nz {
+        let is_conv = star
+            .mixing_type
+            .get(k)
+            .copied()
+            .map_or(star.gradr[k] > star.grada[k], |mt| {
+                mt == MixingType::ConvectiveMixing
+            });
+        if star.q[k] < ctrl.jdot_mb_qlim_for_check_conv_env
+            && (qconv_env == 0.0 || !is_conv)
+        {
+            break;
+        }
+        if is_conv {
+            qconv_env += star.dq[k];
+        }
     }
-    let active = qconv_env >= ctrl.jdot_mb_min_qconv_env
+
+    let apply_jdot_mb = qconv_env >= ctrl.jdot_mb_min_qconv_env
         && qconv_env <= ctrl.jdot_mb_max_qconv_env
         && qconv_core <= ctrl.jdot_mb_max_qconv_core;
-    (active, qconv_env)
+    (apply_jdot_mb || ctrl.keep_mb_on, qconv_env)
 }
 
 /// Evaluates magnetic braking orbital angular momentum loss $\dot{J}_{\mathrm{mb}}$
@@ -162,23 +172,24 @@ pub fn eval_jdot_mb_with_scale_mass(
     scale_for_low_qconv_env: bool,
     mass_frac_for_scale: f64,
 ) -> f64 {
-    let r_eff = r_star.min(rl_star);
-    let rsun2 = RSUN * RSUN;
-    let rsun4 = rsun2 * rsun2;
+    let rsun4 = pow4(RSUN);
     let omega = 2.0 * PI / period;
-    let base = -3.8e-30
+    let two_pi_div_p3 = omega * omega * omega;
+    let jdot_scale = if scale_for_low_qconv_env {
+        if q_conv_env > mass_frac_for_scale {
+            1.0
+        } else {
+            exp(-mass_frac_for_scale / q_conv_env.max(1.0e-99) + 1.0)
+        }
+    } else {
+        1.0
+    };
+    -3.8e-30
         * m_star
         * rsun4
-        * pow(r_eff / RSUN, gamma_mb)
-        * (omega * omega * omega);
-    if scale_for_low_qconv_env
-        && mass_frac_for_scale > 0.0
-        && q_conv_env < mass_frac_for_scale
-    {
-        base * exp(-mass_frac_for_scale / q_conv_env.max(1.0e-99) + 1.0)
-    } else {
-        base
-    }
+        * pow(r_star.min(rl_star) / RSUN, gamma_mb)
+        * two_pi_div_p3
+        * jdot_scale
 }
 
 /// Evaluates spin-orbit coupling torque $\dot{J}_{\mathrm{ls}}$ ($\mathrm{g\,cm^2\,s^{-2}}$)
@@ -229,6 +240,47 @@ pub fn eval_jdot_ls_with_winds(
     (dj_donor + dj_accretor) / dt_safe
 }
 
+/// Evaluates `default_jdot_ls` (`binary/private/binary_jdot.f90:136-174`) using
+/// exact `angular_momentum_removed` ($\ge 0$, $\mathrm{g\,cm^2\,s^{-1}}$) and
+/// returning `0.0` on `doing_first_model_of_run`.
+#[allow(clippy::too_many_arguments)]
+#[must_use]
+pub fn eval_jdot_ls_with_am_removed(
+    doing_first_model_of_run: bool,
+    point_mass_i: usize,
+    model_twins_flag: bool,
+    s_donor_old: f64,
+    s_donor: f64,
+    mstar_dot_donor: f64,
+    am_removed_donor: f64,
+    mdot_system_wind_donor: f64,
+    s_accretor_old: f64,
+    s_accretor: f64,
+    mstar_dot_accretor: f64,
+    am_removed_accretor: f64,
+    dt: f64,
+) -> f64 {
+    if doing_first_model_of_run {
+        return 0.0;
+    }
+    let mut delta_j = s_donor_old - s_donor;
+    if mstar_dot_donor < 0.0 {
+        delta_j -=
+            am_removed_donor * (mdot_system_wind_donor / mstar_dot_donor).abs();
+    }
+    let mut jdot_ls = delta_j;
+    if point_mass_i == 0 {
+        let mut dj_a = s_accretor_old - s_accretor;
+        if mstar_dot_accretor < 0.0 {
+            dj_a -= am_removed_accretor;
+        }
+        jdot_ls += dj_a;
+    } else if model_twins_flag {
+        jdot_ls += jdot_ls;
+    }
+    jdot_ls / dt.max(1.0e-99)
+}
+
 /// Evaluates the missing wind spin angular momentum torque on the accretor
 /// $\dot{J}_{\mathrm{missing\_wind}}$ ($\mathrm{g\,cm^2\,s^{-2}}$)
 /// (`default_jdot_missing_wind` in `binary/private/binary_jdot.f90:176-199`).
@@ -252,62 +304,37 @@ pub fn eval_jdot_missing_wind(
     mdot_missing * j_surf_accretor
 }
 
-/// Evaluates the Peters (1964, PhRv 136, B1224) gravitational-wave orbital
-/// circularization rate $\dot{e}_{\mathrm{gr}}$ ($\mathrm{s}^{-1}$)
-/// (`get_edot` in `binary/private/binary_edot.f90:33-99`).
-#[must_use]
-pub fn eval_edot_gr(
-    m_donor: f64,
-    m_accretor: f64,
-    separation: f64,
-    eccentricity: f64,
-) -> f64 {
-    if eccentricity <= 0.0 || separation <= 0.0 {
-        return 0.0;
-    }
-    let g3 = STANDARD_CGRAV * STANDARD_CGRAV * STANDARD_CGRAV;
-    let c5 = CLIGHT * CLIGHT * CLIGHT * CLIGHT * CLIGHT;
-    let a2 = separation * separation;
-    let a4 = a2 * a2;
-    let e2 = eccentricity * eccentricity;
-    let one_m_e2 = (1.0 - e2).max(1.0e-12);
-    -(304.0 * g3 * m_donor * m_accretor * (m_donor + m_accretor) * eccentricity
-        / (15.0 * c5 * a4 * pow(one_m_e2, 2.5)))
-        * (1.0 + (121.0 / 304.0) * e2)
-}
+// Note (`#175`): Upstream `get_edot` (`binary/private/binary_edot.f90:33-99`)
+// sums `edot_tidal + edot_enhance + extra_edot` and omits a Peters (1964)
+// gravitational-wave `edot_gr` term; `eval_edot_gr` was removed under `#160`
+// (`DECISIONS #36`) to reproduce MESA `26.4.1` unconditionally.
 
 /// Hut (1981, Eq. 11) polynomial $f_2(e) = 1 + \frac{15}{2}e^2 + \frac{45}{8}e^4 + \frac{5}{16}e^6$.
 #[inline]
 #[must_use]
 pub fn hut_f2(e: f64) -> f64 {
-    let e2 = e * e;
-    let e4 = e2 * e2;
-    1.0 + 7.5 * e2 + 5.625 * e4 + 0.3125 * e4 * e2
+    1.0 + 15.0 / 2.0 * pow2(e) + 45.0 / 8.0 * pow4(e) + 5.0 / 16.0 * pow6(e)
 }
 
 /// Hut (1981, Eq. 11) polynomial $f_3(e) = 1 + \frac{15}{4}e^2 + \frac{15}{8}e^4 + \frac{5}{64}e^6$.
 #[inline]
 #[must_use]
 pub fn hut_f3(e: f64) -> f64 {
-    let e2 = e * e;
-    let e4 = e2 * e2;
-    1.0 + 3.75 * e2 + 1.875 * e4 + (5.0 / 64.0) * e4 * e2
+    1.0 + 15.0 / 4.0 * pow2(e) + 15.0 / 8.0 * pow4(e) + 5.0 / 64.0 * pow6(e)
 }
 
 /// Hut (1981, Eq. 11) polynomial $f_4(e) = 1 + \frac{3}{2}e^2 + \frac{1}{8}e^4$.
 #[inline]
 #[must_use]
 pub fn hut_f4(e: f64) -> f64 {
-    let e2 = e * e;
-    1.0 + 1.5 * e2 + 0.125 * e2 * e2
+    1.0 + 3.0 / 2.0 * pow2(e) + 1.0 / 8.0 * pow4(e)
 }
 
 /// Hut (1981, Eq. 11) polynomial $f_5(e) = 1 + 3e^2 + \frac{3}{8}e^4$.
 #[inline]
 #[must_use]
 pub fn hut_f5(e: f64) -> f64 {
-    let e2 = e * e;
-    1.0 + 3.0 * e2 + 0.375 * e2 * e2
+    1.0 + 3.0 * pow2(e) + 3.0 / 8.0 * pow4(e)
 }
 
 /// Evaluates the convective-envelope tidal dissipation ratio $(k/T)_{\mathrm{conv}}$
@@ -325,21 +352,20 @@ pub fn eval_k_div_t_convective(
     omega_surf: f64,
     tidal_reduction: f64,
 ) -> f64 {
-    let inner = (m_env_msun * r_env_rsun * (r_phot_rsun - 0.5 * r_env_rsun)
-        / (3.0 * l_phot_lsun.max(1.0e-30)))
-    .max(0.0);
+    let inner = m_env_msun * r_env_rsun * (r_phot_rsun - r_env_rsun / 2.0)
+        / 3.0
+        / l_phot_lsun.max(1.0e-30);
     if inner <= 0.0 {
         return 0.0;
     }
     let tau_conv = 0.431 * pow(inner, ONE_THIRD) * SECYER;
-    let freq_diff = (1.0 / period_sec - omega_surf / (2.0 * PI)).abs();
-    let f_conv = if freq_diff <= 1.0e-99 {
+    let f_conv = if 1.0 / period_sec == omega_surf / (2.0 * PI) {
         1.0
     } else {
-        let p_tid = 1.0 / freq_diff;
-        pow(p_tid / (2.0 * tau_conv), tidal_reduction).min(1.0)
+        let p_tid = 1.0 / (1.0 / period_sec - omega_surf / (2.0 * PI)).abs();
+        1.0_f64.min(pow(p_tid / (2.0 * tau_conv), tidal_reduction))
     };
-    (2.0 / 21.0) * (f_conv / tau_conv) * (m_env_msun / m_star_msun.max(1.0e-30))
+    2.0 / 21.0 * f_conv / tau_conv * m_env_msun / m_star_msun.max(1.0e-30)
 }
 
 /// Evaluates the radiative-envelope dynamical tide coupling ratio $(k/T)_{\mathrm{rad}}$
@@ -352,16 +378,13 @@ pub fn eval_k_div_t_radiative(
     r_phot: f64,
     separation: f64,
 ) -> f64 {
-    let m_msun = m_star / MSUN;
     let q = m_companion / m_star.max(1.0e-30);
-    let e2 = 1.592e-9 * pow(m_msun, 2.84);
-    let r2 = r_phot * r_phot;
-    let a5 = separation * separation * separation * separation * separation;
-    let rsun3 = RSUN * RSUN * RSUN;
-    (1.9782e4 / SECYER)
-        * ((m_star * r2 / a5.max(1.0)) / (MSUN / rsun3)).sqrt()
-        * pow(1.0 + q, 5.0 / 6.0)
-        * e2
+    let mut k_div_t = 1.9782e4
+        * (m_star * r_phot * r_phot / pow5(separation) / (MSUN / pow3(RSUN)))
+            .sqrt();
+    k_div_t *= pow(1.0 + q, 5.0 / 6.0);
+    let e2 = 1.592e-9 * pow(m_star / MSUN, 2.84);
+    k_div_t * e2 / SECYER
 }
 
 /// Evaluates the Hut (1981, Eq. 11) spin synchronization timescale $t_{\mathrm{sync}}$ (s)
@@ -375,16 +398,12 @@ pub fn eval_tsync(
     separation: f64,
     f_tid: f64,
 ) -> f64 {
-    let r_over_a = r_phot / separation.max(1.0);
-    let r2 = r_over_a * r_over_a;
-    let r6 = r2 * r2 * r2;
     let inv_tsync = 3.0
-        * f_tid
         * k_div_t
         * (q_companion_over_star * q_companion_over_star
-            / r_gyr_sq.max(1.0e-12))
-        * r6;
-    1.0 / inv_tsync.max(1.0e-99)
+            / r_gyr_sq.max(1.0e-99))
+        * pow6(r_phot / separation.max(1.0));
+    (1.0 / inv_tsync.max(1.0e-99)) / f_tid
 }
 
 /// Evaluates the Hut (1981, Eq. 10) / Hurley et al. (2002, Eq. 29) tidal
@@ -406,25 +425,20 @@ pub fn eval_edot_tidal_hut(
     if eccentricity <= 0.0 {
         return 0.0;
     }
-    let q = m_companion / m_star.max(1.0e-30);
-    let r_over_a = r_phot / separation.max(1.0);
-    let r2 = r_over_a * r_over_a;
-    let r4 = r2 * r2;
-    let r8 = r4 * r4;
-    let one_m_e2 = (1.0 - eccentricity * eccentricity).max(1.0e-12);
-    let omega_orb = 2.0 * PI / period;
-    let bracket = hut_f3(eccentricity)
-        - (11.0 / 18.0)
-            * (omega_star / omega_orb)
-            * hut_f4(eccentricity)
-            * pow(one_m_e2, 1.5);
-    -27.0
-        * f_tid
-        * k_div_t
-        * q
-        * (1.0 + q)
-        * r8
+    let qratio = m_companion / m_star.max(1.0e-30);
+    let omega_sync = 2.0 * PI / period;
+    let one_m_e2 = 1.0 - pow2(eccentricity);
+    let mut edot_tidal = -27.0
+        * qratio
+        * (1.0 + qratio)
+        * pow8(r_phot / separation)
         * eccentricity
         * pow(one_m_e2, -6.5)
-        * bracket
+        * f_tid;
+    edot_tidal *= k_div_t;
+    edot_tidal
+        * (hut_f3(eccentricity)
+            - 11.0 / 18.0 * omega_star / omega_sync
+                * hut_f4(eccentricity)
+                * pow(one_m_e2, 1.5))
 }

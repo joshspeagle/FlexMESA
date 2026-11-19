@@ -340,8 +340,8 @@ macro_rules! impl_py_star_model {
 
             /// Executes adaptive remeshing (`do_adjust_mesh`).
             pub fn adjust_mesh(&mut self) -> PyResult<(usize, usize)> {
-                do_adjust_mesh(&mut self.inner, &MeshFunctionConfig::default())
-                    .map_err(to_py_err)
+                let cfg = MeshFunctionConfig::from_controls(&self.inner.controls);
+                do_adjust_mesh(&mut self.inner, &cfg).map_err(to_py_err)
             }
 
             /// Computes `(dt_next, varcontrol, dt_limit_ratio)` via H211 filter.

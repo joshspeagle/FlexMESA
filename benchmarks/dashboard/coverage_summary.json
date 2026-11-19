@@ -2,9 +2,9 @@
   "rust": {
     "tool": "cargo llvm-cov",
     "overall": {
-      "lines": 93488,
-      "covered": 68366,
-      "percent": 73.1
+      "lines": 93976,
+      "covered": 68981,
+      "percent": 73.4
     },
     "by_crate": [
       {
@@ -15,9 +15,9 @@
       },
       {
         "crate": "flexmesa-atm",
-        "lines": 1332,
-        "covered": 993,
-        "percent": 74.5
+        "lines": 1603,
+        "covered": 1332,
+        "percent": 83.1
       },
       {
         "crate": "flexmesa-autodiff",
@@ -99,9 +99,9 @@
       },
       {
         "crate": "flexmesa-math",
-        "lines": 775,
-        "covered": 617,
-        "percent": 79.6
+        "lines": 781,
+        "covered": 623,
+        "percent": 79.8
       },
       {
         "crate": "flexmesa-mtx",
@@ -117,9 +117,9 @@
       },
       {
         "crate": "flexmesa-neu",
-        "lines": 994,
-        "covered": 953,
-        "percent": 95.9
+        "lines": 1022,
+        "covered": 983,
+        "percent": 96.2
       },
       {
         "crate": "flexmesa-num",
@@ -129,9 +129,9 @@
       },
       {
         "crate": "flexmesa-rates",
-        "lines": 2109,
-        "covered": 1844,
-        "percent": 87.4
+        "lines": 2292,
+        "covered": 2084,
+        "percent": 90.9
       },
       {
         "crate": "flexmesa-schema",
@@ -168,8 +168,8 @@
   "python": {
     "tool": "pytest --cov",
     "overall": {
-      "statements": 23531,
-      "covered": 20750,
+      "statements": 23681,
+      "covered": 20896,
       "percent": 88.2
     },
     "by_subpackage": [
@@ -187,9 +187,9 @@
       },
       {
         "subpackage": "flexmesa.atm",
-        "statements": 180,
-        "covered": 173,
-        "percent": 96.1
+        "statements": 198,
+        "covered": 194,
+        "percent": 98.0
       },
       {
         "subpackage": "flexmesa.auto_diff",
@@ -283,9 +283,9 @@
       },
       {
         "subpackage": "flexmesa.neu",
-        "statements": 1062,
-        "covered": 525,
-        "percent": 49.4
+        "statements": 1059,
+        "covered": 524,
+        "percent": 49.5
       },
       {
         "subpackage": "flexmesa.num",
@@ -295,9 +295,9 @@
       },
       {
         "subpackage": "flexmesa.plotting",
-        "statements": 2503,
-        "covered": 2274,
-        "percent": 90.9
+        "statements": 2516,
+        "covered": 2282,
+        "percent": 90.7
       },
       {
         "subpackage": "flexmesa.rates",
@@ -319,9 +319,9 @@
       },
       {
         "subpackage": "flexmesa.testing",
-        "statements": 3453,
-        "covered": 2731,
-        "percent": 79.1
+        "statements": 3575,
+        "covered": 2849,
+        "percent": 79.7
       },
       {
         "subpackage": "flexmesa.turb",

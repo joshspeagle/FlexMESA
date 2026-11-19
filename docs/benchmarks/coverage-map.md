@@ -9,8 +9,8 @@ Progress is tracked by **upstream MESA `26.4.1` lines promoted to verified statu
 
 | Denominator Scope | Upstream Lines | Ported (Unverified) | Verified Against MESA `26.4.1` | Notes |
 | :--- | ---: | ---: | ---: | :--- |
-| Core engines (`star` + `star_data` + `binary` + `astero`) | 144,952 | 20,107 (13.9%) | 0 (0.0%) | Excludes stub (`17,567`) and partial (`82,171`) lines |
-| All `26` MESA `26.4.1` modules (incl. `gyre`, `adipls`, `stella`, `plotting`) | 497,703 | 23,667 (4.8%) | 0 (0.0%) | Full `v0.1.0` target denominator (`notes/SCOPE.md`) |
+| Core engines (`star` + `star_data` + `binary` + `astero`) | 144,952 | 27,304 (18.8%) | 0 (0.0%) | Excludes stub (`15,482`) and partial (`78,582`) lines |
+| All `26` MESA `26.4.1` modules (incl. `gyre`, `adipls`, `stella`, `plotting`) | 497,703 | 30,864 (6.2%) | 0 (0.0%) | Full `v0.1.0` target denominator (`notes/SCOPE.md`) |
 | Pre-rebaseline non-plotting `star`+`binary`+`astero` audit (`0b2e6bb`) | 134,940 | 21,493 `PORTED` (16%) / 66,685 `PARTIAL` (49%) | unverified pre-audit | `17%` `STUB` (23,259 LOC), `17%` `ABSENT` (23,503 LOC) |
 | `math` strict-mode scalar vectors (`#165`) | 474,062 vectors | math: 403,258/403,258 CRMATH 0 ULP (70,804 libm <= 1 ULP); 304,567/304,635 probed module hex 0 ULP (5 complete, 14 non-math probed) | gated in CI by scripts/check_strict_determinism.py (x86_64 vs aarch64, 1 vs 4 threads; 474,062 math vectors + uncapped star/1.3M_ms_high_Z + binary/jdot_gr_check run with unsupported controls ignored; a bit-identity check, not a comparison with MESA) | 14 / 23 remaining module suites marked verified in manifest |
 | End-to-end `test_suite` cases | 106 cases | 106 in manifest | **0 / 106** passing | 102 declared gaps, 4 `no_reference_yet` |
@@ -19,9 +19,9 @@ Progress is tracked by **upstream MESA `26.4.1` lines promoted to verified statu
 
 | Module | Upstream LOC | Absent | Stub | Partial | Ported (Unverified) | Verified LOC | % Ported | % Verified |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `star` | 120,509 | 19,941 | 17,567 | 65,013 | 17,988 | 0 | 14.9% | 0.0% |
+| `star` | 120,509 | 18,480 | 15,482 | 61,424 | 25,123 | 0 | 20.8% | 0.0% |
 | `star_data` | 4,870 | 34 | 0 | 4,836 | 0 | 0 | 0.0% | 0.0% |
-| `binary` | 11,638 | 2,947 | 0 | 6,572 | 2,119 | 0 | 18.2% | 0.0% |
+| `binary` | 11,638 | 2,885 | 0 | 6,572 | 2,181 | 0 | 18.7% | 0.0% |
 | `astero` | 7,935 | 2,185 | 0 | 5,750 | 0 | 0 | 0.0% | 0.0% |
 | `eos` | 28,666 | 7,656 | 0 | 21,010 | 0 | 0 | 0.0% | 0.0% |
 | `kap` | 22,430 | 13,652 | 0 | 8,778 | 0 | 0 | 0.0% | 0.0% |
@@ -45,18 +45,18 @@ Progress is tracked by **upstream MESA `26.4.1` lines promoted to verified statu
 | `adipls` | 30,923 | 30,923 | 0 | 0 | 0 | 0 | 0.0% | 0.0% |
 | `stella` | 62,117 | 62,117 | 0 | 0 | 0 | 0 | 0.0% | 0.0% |
 | `plotting` | 35,732 | 35,732 | 0 | 0 | 0 | 0 | 0.0% | 0.0% |
-| **Core Engine Subtotal** | **144,952** | **25,107** | **17,567** | **82,171** | **20,107** | **0** | **13.9%** | **0.0%** |
-| **All 26 Modules Total** | **497,703** | **250,132** | **17,567** | **206,337** | **23,667** | **0** | **4.8%** | **0.0%** |
+| **Core Engine Subtotal** | **144,952** | **23,584** | **15,482** | **78,582** | **27,304** | **0** | **18.8%** | **0.0%** |
+| **All 26 Modules Total** | **497,703** | **248,609** | **15,482** | **202,748** | **30,864** | **0** | **6.2%** | **0.0%** |
 
 ## Namelist Controls & Defaults Alignment
 
-Compared against MESA `26.4.1` `.defaults` schemas, **819 / 1,444** `&controls` keys (`56.7%`) and **366 / 455** `&star_job` keys (`80.4%`) are currently unimplemented (details in [`notes/audit/defaults_diff_26_4_1.md`](https://github.com/joshspeagle/FlexMESA/blob/main/notes/audit/defaults_diff_26_4_1.md); loud rejection of unsupported keys is tracked in `#147` and default alignment in `#149`):
+Compared against MESA `26.4.1` `.defaults` schemas, **719 / 1,444** `&controls` keys (`49.8%`) and **366 / 455** `&star_job` keys (`80.4%`) are currently unimplemented (details in [`notes/audit/defaults_diff_26_4_1.md`](https://github.com/joshspeagle/FlexMESA/blob/main/notes/audit/defaults_diff_26_4_1.md); loud rejection of unsupported keys is tracked in `#147` and default alignment in `#149`):
 
 | Namelist | Upstream Scalars | Matched in FlexMESA | Defaults Agree | Value Mismatch | Disabled (`none`/limit) | Non-Scalar Rust | Unimplemented |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `star &controls` | 1,444 | 616 | 616 | 0 | 0 | 9 | 819 |
+| `star &controls` | 1,444 | 716 | 716 | 0 | 0 | 9 | 719 |
 | `star &star_job` | 455 | 88 | 88 | 0 | 0 | 1 | 366 |
-| `binary &binary_controls + &binary_job` | 209 | 120 | 120 | 0 | 0 | 1 | 88 |
+| `binary &binary_controls + &binary_job` | 209 | 145 | 145 | 0 | 0 | 1 | 63 |
 | `astero &astero_search_controls` | 150 | 75 | 75 | 0 | 0 | 1 | 74 |
 | `eos &eos` | 102 | 54 | 54 | 0 | 0 | 0 | 48 |
 | `kap &kap` | 36 | 16 | 16 | 0 | 0 | 0 | 20 |

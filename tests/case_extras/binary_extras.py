@@ -244,25 +244,32 @@ class DoubleBhBinaryExtras:
         # :225-240
         pm_i = int(state["point_mass_i"])
         if pm_i == 0:
-            if (
-                float(state["s1_center_he4"]) < 1.0e-5
-                or float(state["s2_center_he4"]) < 1.0e-5
-            ):
-                # Upstream calls `binary_set_point_mass_i` and then sets
-                # `b% eq_initial_bh_mass = b% m(i)` (:229, :235). FlexMESA's
-                # binary system has no `eq_initial_bh_mass`, so the second
-                # assignment cannot be made.
-                raise NotImplementedError(
-                    "double_bh: extras_binary_finish_step sets "
-                    "b% eq_initial_bh_mass (upstream lines 229 and 235), "
-                    "which the binary system does not carry"
-                )
+            if float(state["s1_center_he4"]) < 1.0e-5:
+                pm_i = 1
+                updates["point_mass_i"] = 1
+                updates["eq_initial_bh_mass"] = float(state["m"][0])
+            elif float(state["s2_center_he4"]) < 1.0e-5:
+                pm_i = 2
+                updates["point_mass_i"] = 2
+                updates["eq_initial_bh_mass"] = float(state["m"][1])
         # :242-255
         if pm_i == 1:
             if float(state["s2_center_he4"]) < 1.0e-5:
+                if updates:
+                    return {
+                        "action": "terminate",
+                        "message": "Terminate due to helium depletion",
+                        "updates": updates,
+                    }
                 return ("terminate", "Terminate due to helium depletion")
         elif pm_i == 2:
             if float(state["s1_center_he4"]) < 1.0e-5:
+                if updates:
+                    return {
+                        "action": "terminate",
+                        "message": "Terminate due to helium depletion",
+                        "updates": updates,
+                    }
                 return ("terminate", "Terminate due to helium depletion")
 
         if updates:

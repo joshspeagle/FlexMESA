@@ -133,6 +133,24 @@ class CaseHarnessRecord:
     controls_ignored: bool = False
     n_controls_ignored: int = 0
     strict_rejection: str = ""
+    component_comparisons: dict[str, history_compare.HistoryComparison] = (
+        dataclasses.field(default_factory=dict)
+    )
+    has_component_error: bool = False
+
+    @property
+    def is_within_tolerances(self) -> bool:
+        """Return whether primary and component comparisons meet tolerances."""
+        return (
+            self.comparison is not None
+            and self.comparison.within_final_tolerances
+            and self.comparison.within_track_tolerances
+            and not self.has_component_error
+            and all(
+                comp.within_final_tolerances and comp.within_track_tolerances
+                for comp in self.component_comparisons.values()
+            )
+        )
 
     @property
     def run_mode(self) -> str:
@@ -173,6 +191,37 @@ def resolve_reference_history_path(
     )
 
 
+def resolve_binary_component_reference_paths(
+    case: str,
+    root_dir: pathlib.Path | None = None,
+) -> dict[str, pathlib.Path]:
+    """Locate stored ``LOGS1``/``LOGS2`` component reference tracks."""
+    repo = case_manifest.repo_root()
+    if root_dir is not None and root_dir.resolve() != repo.resolve():
+        search_roots = [root_dir]
+    else:
+        search_roots = [repo, fetch.resolve_mesa_histories_dir()]
+
+    found: dict[str, pathlib.Path] = {}
+    for comp_name in ("LOGS1", "LOGS2"):
+        for sroot in search_roots:
+            for prefix in ("runs", "thinned"):
+                cand = (
+                    sroot
+                    / prefix
+                    / "binary"
+                    / case
+                    / comp_name
+                    / "history.data"
+                )
+                if cand.is_file():
+                    found[comp_name] = cand
+                    break
+            if comp_name in found:
+                break
+    return found
+
+
 def _sanitize_error_message(msg: str) -> str:
     if not msg:
         return ""
@@ -199,6 +248,10 @@ def evaluate_case_record(
     max_steps: int | None = None,
     root_dir: pathlib.Path | None = None,
     precomputed_comparison: history_compare.HistoryComparison | None = None,
+    precomputed_component_comparisons: (
+        dict[str, history_compare.HistoryComparison] | None
+    ) = None,
+    precomputed_has_component_error: bool = False,
 ) -> CaseHarnessRecord:
     """Combine manifest metadata, run outcome, and comparison into a verdict."""
     gap = known_gaps.get(spec.key)
@@ -277,6 +330,63 @@ def evaluate_case_record(
                 err_s = _sanitize_error_message(str(err))
                 comp_err = f"{comp_err}; compare error: {err_s}".strip("; ")
 
+    comp_map: dict[str, history_compare.HistoryComparison] = {}
+    has_comp_err = precomputed_has_component_error
+    if precomputed_component_comparisons is not None:
+        comp_map = {
+            cname: history_compare.re_evaluate_comparison(
+                ccomp, spec.component_spec(cname)
+            )
+            for cname, ccomp in precomputed_component_comparisons.items()
+        }
+    elif (
+        spec.suite == "binary"
+        and spec.reference_status != "no_reference_yet"
+        and spec.reference_path
+        and outcome.history_path is not None
+    ):
+        expected_ver_c = fetch.load_upstream_reference().version_number
+        comp_refs = resolve_binary_component_reference_paths(
+            spec.case, root_dir=base
+        )
+        for cname, ref_cpath in comp_refs.items():
+            cspec = spec.component_spec(cname, str(ref_cpath))
+            ref_ctbl = history_compare.load_history_file(ref_cpath)
+            if (
+                spec.reference_status == "mesa_26_4_1"
+                and not ref_ctbl.provenance_comment
+                and ref_ctbl.mesa_version_number != expected_ver_c
+            ):
+                raise ValueError(
+                    f"{spec.case}/{cname}: expected MESA version_number "
+                    f"{expected_ver_c!r}, got {ref_ctbl.mesa_version_number!r}"
+                )
+            if cspec.independent_var not in ref_ctbl.columns:
+                raise KeyError(
+                    f"{spec.case}/{cname}: missing independent_var "
+                    f"{cspec.independent_var!r}"
+                )
+            run_cpath = outcome.history_path.parent / cname / "history.data"
+            if run_cpath.is_file():
+                try:
+                    run_ctbl = history_compare.load_history_file(run_cpath)
+                    comp_map[cname] = history_compare.compare_histories(
+                        ref_ctbl, run_ctbl, cspec
+                    )
+                except (OSError, ValueError, KeyError) as err:
+                    err_s = _sanitize_error_message(str(err))
+                    comp_err = (
+                        f"{comp_err}; {cname} compare error: {err_s}".strip(
+                            "; "
+                        )
+                    )
+                    has_comp_err = True
+            elif outcome.history_path.name == "binary_history.data":
+                comp_err = f"{comp_err}; missing {cname}/history.data".strip(
+                    "; "
+                )
+                has_comp_err = True
+
     # A run that continued past unsupported controls (#147 opt-out) did not
     # do what the inlist asks. Its numbers are diagnostic and it can never
     # satisfy the tolerance condition of any verdict.
@@ -284,6 +394,11 @@ def evaluate_case_record(
         comp is not None
         and comp.within_final_tolerances
         and comp.within_track_tolerances
+        and not has_comp_err
+        and all(
+            c.within_final_tolerances and c.within_track_tolerances
+            for c in comp_map.values()
+        )
         and not outcome.controls_ignored
     )
     smoke_note = " (controls ignored)" if outcome.controls_ignored else ""
@@ -359,4 +474,6 @@ def evaluate_case_record(
         controls_ignored=outcome.controls_ignored,
         n_controls_ignored=outcome.n_controls_ignored,
         strict_rejection=_sanitize_error_message(outcome.strict_rejection),
+        component_comparisons=comp_map,
+        has_component_error=has_comp_err,
     )

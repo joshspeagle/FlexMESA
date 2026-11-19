@@ -8,21 +8,28 @@
 ! `libauto_diff.a`) for audit finding T2-15 and Issue #141.
 !
 ! Build & run (with MESA SDK 26.6.1 active and $MESA_DIR pointing to MESA 26.4.1):
-!   gfortran -O2 -fopenmp -ffree-form -ffree-line-length-none \
-!     -I"$MESA_DIR/include" scripts/mesa_reference/gen_eos_component_oracles.f90 \
+!   gfortran -march=x86-64 -mtune=generic -mfpmath=sse -O2 -ffp-contract=off \
+!     -fprotect-parens -fno-sign-zero -fno-range-check -fopenmp -ffree-form \
+!     -ffree-line-length-none -I"$MESA_DIR/include" \
+!     scripts/mesa_reference/gen_eos_component_oracles.f90 \
 !     "$MESA_DIR/lib/libeos.a" "$MESA_DIR/lib/libinterp_2d.a" \
 !     "$MESA_DIR/lib/libnum.a" "$MESA_DIR/lib/libmtx.a" \
 !     "$MESA_DIR/lib/libinterp_1d.a" "$MESA_DIR/lib/libauto_diff.a" \
 !     "$MESA_DIR/lib/libchem.a" "$MESA_DIR/lib/libmath.a" \
 !     "$MESA_DIR/lib/libutils.a" "$MESA_DIR/lib/libconst.a" \
-!     `mesasdk_lapack_link` `mesasdk_blas_link` `mesasdk_crmath_link` \
-!     `mesasdk_hdf5_link` -o gen_eos_component_oracles
-!   ./gen_eos_component_oracles tests/fixtures/golden/eos/component_oracles_26_4_1.tsv
+!     `mesasdk_lapack95_link` `mesasdk_lapack_link` `mesasdk_blas_link` \
+!     `mesasdk_crmath_link` `mesasdk_crlibm_link` `mesasdk_hdf5_link` \
+!     -o gen_eos_component_oracles
+!   MESASDK_VERSION_STR="$(mesasdk_version)" ./gen_eos_component_oracles \
+!     tests/fixtures/golden/eos/component_oracles_26_4_1.tsv
+!
+! Extended EOS module oracles (`DFERMI`, `ALFA`, `HELM`, `EOS`, `INV`, `IERR`)
+! for `#161` (`T2-15` & `T1-11`) live in `benchmarks/fortran_mesa/eos_oracles/`.
 ! -----------------------------------------------------------------------------
 program gen_eos_component_oracles
    use const_def, only: dp, arg_not_provided
    use const_lib, only: const_init
-   use math_lib, only: math_init, exp10, log10
+   use math_lib, only: MATH_BACKEND, math_init, exp10, log10
    use chem_def, only: num_chem_isos
    use chem_lib, only: chem_init, chem_shutdown, chem_get_iso_id
    use eos_def, only: EoS_General_Info, num_eos_basic_results, &
@@ -32,7 +39,7 @@ program gen_eos_component_oracles
       eos_convert_helm_results, eosDT_get_component, eosDT_get
    implicit none
 
-   character(len=512) :: mesa_dir_arg, out_path
+   character(len=512) :: mesa_dir_arg, out_path, sdk_ver
    character(len=64) :: ver_str
    integer :: ierr, eos_handle, iunit, out_unit
    type(EoS_General_Info), pointer :: rq
@@ -41,6 +48,8 @@ program gen_eos_component_oracles
 
    call get_environment_variable('MESA_DIR', mesa_dir_arg)
    if (len_trim(mesa_dir_arg) == 0) stop 'MESA_DIR must be set'
+   call get_environment_variable('MESASDK_VERSION_STR', sdk_ver)
+   if (len_trim(sdk_ver) == 0) sdk_ver = 'unknown'
    call get_command_argument(1, out_path)
    if (len_trim(out_path) == 0) stop 'Usage: gen_eos_component_oracles <out.tsv>'
 
@@ -71,6 +80,8 @@ program gen_eos_component_oracles
    write (out_unit, '(a,a)') '# mesa_version_number=', trim(adjustl(ver_str))
    write (out_unit, '(a)') '# mesa_git_tag=26.4.1'
    write (out_unit, '(a)') '# mesa_git_commit=c8c202662922a22b3efefa824473ad615c623afd'
+   write (out_unit, '(a,a)') '# mesasdk_version=', trim(adjustl(sdk_ver))
+   write (out_unit, '(a,a)') '# math_backend=', trim(MATH_BACKEND)
    write (out_unit, '(a)') '# compiler=' // compiler_version()
    write (out_unit, '(a)') '# columns_helm: case_id idx val d_dlnd d_dlnT d_dabar d_dzbar'
    write (out_unit, '(a)') '# columns_eos:  case_id idx val d_dlnd d_dlnT'

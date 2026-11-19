@@ -10,7 +10,7 @@
     "total_cases": 106,
     "strict_pass_cases": 0,
     "strict_fail_cases": 106,
-    "distinct_unsupported_controls": 388,
+    "distinct_unsupported_controls": 386,
     "distinct_unknown_controls": 0,
     "cases_with_headless_plotting": 78,
     "distinct_headless_plotting_keys": 895
@@ -55,20 +55,20 @@
     {
       "section": "binary_job",
       "upstream_keys": 37,
-      "supported_keys": 6,
+      "supported_keys": 22,
       "unused_keys": 0,
       "headless_gui_keys": 1,
-      "terminal_output_keys": 0,
-      "unimplemented_upstream_keys": 30
+      "terminal_output_keys": 1,
+      "unimplemented_upstream_keys": 13
     },
     {
       "section": "binary_controls",
       "upstream_keys": 176,
-      "supported_keys": 115,
+      "supported_keys": 124,
       "unused_keys": 0,
       "headless_gui_keys": 0,
-      "terminal_output_keys": 0,
-      "unimplemented_upstream_keys": 61
+      "terminal_output_keys": 2,
+      "unimplemented_upstream_keys": 50
     },
     {
       "section": "astero_search_controls",
@@ -2729,16 +2729,6 @@
       ]
     },
     {
-      "section": "binary_controls",
-      "key": "report_rlo_solver_progress",
-      "category": "unimplemented",
-      "case_count": 2,
-      "cases": [
-        "binary/double_bh",
-        "binary/wind_fed_bhhmxb"
-      ]
-    },
-    {
       "section": "controls",
       "key": "add_atmosphere_to_pulse_data",
       "category": "unimplemented",
@@ -3166,15 +3156,6 @@
       "cases": [
         "star/make_co_wd",
         "star/ppisn"
-      ]
-    },
-    {
-      "section": "binary_controls",
-      "key": "terminal_interval",
-      "category": "unimplemented",
-      "case_count": 1,
-      "cases": [
-        "binary/double_bh"
       ]
     },
     {
@@ -4730,6 +4711,11 @@
         "section": "eos",
         "key": "logt_lo",
         "case_count": 2
+      },
+      {
+        "section": "binary_controls",
+        "key": "terminal_interval",
+        "case_count": 1
       },
       {
         "section": "star_job",
@@ -12155,14 +12141,13 @@
         "inlist2"
       ],
       "unsupported_controls": [
-        "binary_controls::report_rlo_solver_progress::unimplemented",
-        "binary_controls::terminal_interval::unimplemented",
         "controls::redo_limit::unused",
         "star_job::set_cumulative_energy_error_at_step::unimplemented"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 92,
       "terminal_output_keys": [
+        "binary_controls::terminal_interval",
         "controls::terminal_interval",
         "controls::write_header_frequency",
         "star_job::show_log_description_at_start"
@@ -12296,7 +12281,6 @@
         "inlist1"
       ],
       "unsupported_controls": [
-        "binary_controls::report_rlo_solver_progress::unimplemented",
         "controls::extra_terminal_output_file::unimplemented",
         "controls::max_number_retries::unimplemented"
       ],

@@ -1,58 +1,85 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 //! Coupled binary evolution case runner for `FlexMESA` (`#148`).
 
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
-use std::sync::OnceLock;
+use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 use std::time::Instant;
 
 use flexmesa_const::{MSUN, RSUN, SECDAY, SECYER};
 use flexmesa_star::{
-    init_or_update_model_from_bundle, load_zams_model_from_catalog,
-    relax_composition_with_henyey, DefaultStarExtras, InlistBundle,
-    InlistLoadOptions, StarError, StarModel, ZamsCatalog,
+    DefaultStarExtras, InlistBundle, InlistLoadOptions, StarError, StarModel,
+    ZamsCatalog, init_or_update_model_from_bundle,
+    load_zams_model_from_catalog, relax_composition_with_henyey,
 };
 
 use crate::binary_history::BinaryLogsWriter;
-use crate::extras::{BinaryExtras, DefaultBinaryExtras};
+use crate::extras::{BinaryExtras, BinaryExtrasAction, DefaultBinaryExtras};
 pub use crate::inlist::BinaryInlistControls;
 use crate::system::{BinaryCompanion, BinarySystem};
 
-static FULL_ZAMS_CATALOG: OnceLock<Result<Option<ZamsCatalog>, String>> =
+static ZAMS_CATALOG_CACHE: OnceLock<Mutex<BTreeMap<String, Arc<ZamsCatalog>>>> =
     OnceLock::new();
 
-fn resolve_full_zams_catalog(
+fn resolve_zams_catalog(
     case_dir: &Path,
-) -> Result<Option<&'static ZamsCatalog>, StarError> {
-    let res = FULL_ZAMS_CATALOG.get_or_init(|| {
-        let Some(zams_path) = case_dir.ancestors().find_map(|anc| {
-            let p = anc
-                .join("data")
-                .join("star_data")
-                .join("zams_models")
-                .join("zams_z2m2_y28.data");
-            p.is_file().then_some(p)
-        }) else {
-            return Ok(None);
-        };
-        let text = fs::read_to_string(&zams_path).map_err(|e| {
-            format!(
-                "failed reading ZAMS catalog '{}': {e}",
-                zams_path.display()
-            )
-        })?;
-        let cat = ZamsCatalog::parse_ascii(&text).map_err(|e| {
-            format!(
-                "failed parsing ZAMS catalog '{}': {e}",
-                zams_path.display()
-            )
-        })?;
-        Ok(Some(cat))
-    });
-    match res {
-        Ok(opt) => Ok(opt.as_ref()),
-        Err(msg) => Err(StarError::IoError(msg.clone())),
+    zams_filename: &str,
+) -> Result<Option<Arc<ZamsCatalog>>, StarError> {
+    let fname = if zams_filename.trim().is_empty() {
+        "zams_z2m2_y28.data"
+    } else {
+        zams_filename.trim()
+    };
+    let candidate = Path::new(fname);
+    let resolved_path = if candidate.is_absolute() {
+        candidate.is_file().then(|| candidate.to_path_buf())
+    } else {
+        let local = case_dir.join(candidate);
+        if local.is_file() {
+            Some(local)
+        } else {
+            case_dir.ancestors().find_map(|anc| {
+                let p = anc
+                    .join("data")
+                    .join("star_data")
+                    .join("zams_models")
+                    .join(fname);
+                p.is_file().then_some(p)
+            })
+        }
+    };
+    let Some(zams_path) = resolved_path else {
+        return Ok(None);
+    };
+    let cache_key = zams_path.to_string_lossy().into_owned();
+    let cache = ZAMS_CATALOG_CACHE.get_or_init(|| Mutex::new(BTreeMap::new()));
+    if let Some(existing) = cache
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .get(&cache_key)
+        .cloned()
+    {
+        return Ok(Some(existing));
     }
+    let text = fs::read_to_string(&zams_path).map_err(|e| {
+        StarError::IoError(format!(
+            "failed reading ZAMS catalog '{}': {e}",
+            zams_path.display()
+        ))
+    })?;
+    let cat = ZamsCatalog::parse_ascii(&text).map_err(|e| {
+        StarError::IoError(format!(
+            "failed parsing ZAMS catalog '{}': {e}",
+            zams_path.display()
+        ))
+    })?;
+    let arc_cat = Arc::new(cat);
+    cache
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .insert(cache_key, Arc::clone(&arc_cat));
+    Ok(Some(arc_cat))
 }
 
 fn init_binary_star_component(
@@ -73,22 +100,31 @@ fn init_binary_star_component(
         init_bundle.job.relax_z = false;
         init_bundle.job.relax_y = false;
     }
-    let uses_default_zams = !bundle.job.load_saved_model
+    let zams_fname = bundle.controls.zams_filename.trim();
+    let custom_zams = !zams_fname.is_empty()
+        && !zams_fname.eq_ignore_ascii_case("zams_z2m2_y28.data");
+    let uses_zams_catalog = !bundle.job.load_saved_model
         && !bundle.job.create_pre_ms_model
         && !bundle.job.create_initial_model
         && !bundle.job.use_other_build_initial_model
-        && (bundle.job.relax_z
-            || (bundle.controls.initial_z - 0.02).abs() <= 1.0e-4)
-        && (bundle.job.relax_y
-            || bundle.controls.initial_y < 0.0
-            || (bundle.controls.initial_y - 0.28).abs() <= 1.0e-4);
-    let seed_zams = if uses_default_zams {
-        if let Some(cat) = resolve_full_zams_catalog(case_dir)? {
+        && (custom_zams
+            || ((bundle.job.relax_z
+                || (bundle.controls.initial_z - 0.02).abs() <= 1.0e-4)
+                && (bundle.job.relax_y
+                    || bundle.controls.initial_y < 0.0
+                    || (bundle.controls.initial_y - 0.28).abs() <= 1.0e-4)));
+    let seed_zams = if uses_zams_catalog {
+        if let Some(cat) = resolve_zams_catalog(case_dir, zams_fname)? {
             Some(load_zams_model_from_catalog(
-                cat,
+                &cat,
                 init_bundle.controls.clone(),
                 init_bundle.job.clone(),
             )?)
+        } else if custom_zams {
+            return Err(StarError::IoError(format!(
+                "configured zams_filename '{zams_fname}' not found relative to '{}' or data/star_data/zams_models",
+                case_dir.display()
+            )));
         } else {
             None
         }
@@ -286,6 +322,23 @@ pub fn run_binary_test_suite_case_with_extras(
         BinarySystem::from_controls_point_mass(donor, bctrl)?
     };
 
+    // `run_binary_support.f90:345-350`: `extras_binary_startup` followed by
+    // `do_binary_job_controls_after`.
+    match extras.startup(&mut bin, false) {
+        BinaryExtrasAction::KeepGoing
+        | BinaryExtrasAction::Redo
+        | BinaryExtrasAction::Retry => {}
+        BinaryExtrasAction::Terminate(reason) => {
+            bin.last_termination_reason = Some(reason);
+        }
+        BinaryExtrasAction::Error(msg) => {
+            return Err(StarError::InvalidInput(format!(
+                "[{case_name} startup] {msg}"
+            )));
+        }
+    }
+    bin.apply_binary_job_controls_after(false)?;
+
     let mut logs_writer = if logs_opts.output_root.is_some()
         || logs_opts.explicit_binary_history_file.is_some()
     {
@@ -324,7 +377,11 @@ pub fn run_binary_test_suite_case_with_extras(
     }
 
     let mut term_code = String::from("MaxStepsCap");
-    while bin.model_number < step_limit {
+    if let Some(ref startup_reason) = bin.last_termination_reason {
+        term_code.clone_from(startup_reason);
+    }
+    while bin.last_termination_reason.is_none() && bin.model_number < step_limit
+    {
         let step_num = bin.model_number + 1;
         let (suggested_dt, _) =
             bin.try_step_with_extras(dt_next, extras).map_err(|e| {
@@ -367,6 +424,7 @@ pub fn run_binary_test_suite_case_with_extras(
             break;
         }
     }
+    extras.after_evolve(&mut bin)?;
 
     let [m1_final_g, m2_final_g] = bin.star_masses_g();
     let m1_msun = m1_final_g / MSUN;
@@ -376,7 +434,9 @@ pub fn run_binary_test_suite_case_with_extras(
     if std::env::var("FLEXMESA_BENCH_LOG").is_ok() {
         eprintln!(
             "[binary_e2e] case={case_name} uncapped={uncapped} passed={passed} steps={} term={term_code} m1={m1_msun:.4} m2={m2_msun:.4} sep={:.4} wall_s={:.2}",
-            bin.model_number, bin.separation / RSUN, wall_ms / 1000.0
+            bin.model_number,
+            bin.separation / RSUN,
+            wall_ms / 1000.0
         );
     }
 

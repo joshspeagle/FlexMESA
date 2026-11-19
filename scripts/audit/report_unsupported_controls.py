@@ -327,6 +327,8 @@ def load_inventories() -> InventorySets:
             "eos": star_inv.get("EOS_TERMINAL_OUTPUT", frozenset()),
             "kap": star_inv.get("KAP_TERMINAL_OUTPUT", frozenset()),
             "controls": star_inv["CONTROLS_TERMINAL_OUTPUT"],
+            "binary_job": bin_inv["BINARY_JOB_TERMINAL_OUTPUT"],
+            "binary_controls": bin_inv["BINARY_CONTROLS_TERMINAL_OUTPUT"],
         },
     )
 

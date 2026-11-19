@@ -45,7 +45,8 @@ pub fn eval_mui_coulomb(
             // `eval_coulomb.f90:140-145`
             let gam = game * flexmesa_math::pow(z, 5.0 / 3.0);
             let gam14 = flexmesa_math::pow(gam, 0.25);
-            -0.898004 * gam + 4.0 * 0.96786 * gam14 - 4.0 * 0.220703 / gam14
+            -0.898004 * gam + 4.0 * 0.96786 * gam14
+                - 4.0 * 0.220703 / gam14
                 - 0.86097 * flexmesa_math::log(gam)
                 - 2.52692
         }
@@ -277,7 +278,8 @@ pub fn eval_ecapture_pair(
                 * (5.0 * beta - 2.0 * zeta)
                 * (beta - zeta)
                 * (beta - zeta);
-            let d0 = -beta * beta * (beta - zeta) * (beta - zeta) * (beta - zeta);
+            let d0 =
+                -beta * beta * (beta - zeta) * (beta - zeta) * (beta - zeta);
             let je_v = ((f5_1 - 2.0 * zeta * f4_1 + zeta * zeta * f3_1)
                 - (f5_2
                     + d4 * f4_2

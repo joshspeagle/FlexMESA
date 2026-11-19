@@ -199,12 +199,10 @@ pub fn screen_extended(
         let duudd = alf12dd * tt + alf12 * dttdd;
 
         let vv = gamef * alf12 * uu;
-        let dvvdt = gamefdt * alf12 * uu
-            + gamef * alf12dt * uu
-            + gamef * alf12 * duudt;
-        let dvvdd = gamefdd * alf12 * uu
-            + gamef * alf12dd * uu
-            + gamef * alf12 * duudd;
+        let dvvdt =
+            gamefdt * alf12 * uu + gamef * alf12dt * uu + gamef * alf12 * duudt;
+        let dvvdd =
+            gamefdd * alf12 * uu + gamef * alf12dd * uu + gamef * alf12 * duudd;
 
         h12 = cc - a3 * (ss + vv);
         let rr_h = da3 * (ss + vv);

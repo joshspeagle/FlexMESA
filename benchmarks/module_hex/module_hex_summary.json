@@ -3,10 +3,10 @@
   "total_packages_in_install": 26,
   "packages_with_test_dir": 25,
   "total_exact_values_captured": 348321,
-  "modules_with_executable_probes": 14,
-  "modules_passing_0_ulp": 4,
-  "total_values_checked": 3966,
-  "total_values_0_ulp": 3856,
+  "modules_with_executable_probes": 15,
+  "modules_passing_0_ulp": 5,
+  "total_values_checked": 304635,
+  "total_values_0_ulp": 304567,
   "modules": [
     {
       "module": "const",
@@ -155,23 +155,23 @@
       "module": "rates",
       "status": "nonzero_ulp",
       "upstream_exact_values": 3685,
-      "expected_outputs": 3685,
-      "checked_values": 9,
-      "zero_ulp_values": 5,
-      "max_ulp": 6,
+      "expected_outputs": 3639,
+      "checked_values": 3639,
+      "zero_ulp_values": 3636,
+      "max_ulp": 29,
       "issue": "#161",
-      "notes": "Salpeter, extended, and Chugunov plasma screening."
+      "notes": "3,636/3,639 rates outputs at 0 ULP (all 2,763 raw rates, 12 screening, 845/846 weak, 4 Coulomb, 4 Suzuki/weaklib, pycno, r3, 4 rev_c1); 3 Fermi-Dirac ecapture within 29 ULP."
     },
     {
       "module": "neu",
-      "status": "nonzero_ulp",
+      "status": "pass_0_ulp",
       "upstream_exact_values": 340000,
       "expected_outputs": 300000,
-      "checked_values": 3000,
-      "zero_ulp_values": 2935,
-      "max_ulp": 68,
-      "issue": "#161",
-      "notes": "100 strided records (3,000 outputs) of neu."
+      "checked_values": 300000,
+      "zero_ulp_values": 300000,
+      "max_ulp": 0,
+      "issue": null,
+      "notes": "All 10,000 records (300,000 outputs) of neu at 0 ULP."
     },
     {
       "module": "net",
@@ -197,14 +197,14 @@
     },
     {
       "module": "atm",
-      "status": "unported_hex_harness",
+      "status": "nonzero_ulp",
       "upstream_exact_values": 90,
-      "expected_outputs": 90,
-      "checked_values": 0,
-      "zero_ulp_values": 0,
-      "max_ulp": 0,
+      "expected_outputs": 39,
+      "checked_values": 39,
+      "zero_ulp_values": 15,
+      "max_ulp": 7863114,
       "issue": "#161",
-      "notes": "90 upstream model atmosphere table printouts await direct TSV harness mapping."
+      "notes": "All 39 computed atm outputs across 7 tables, 5 T(tau) varying, 2 T(tau) uniform, and irradiated atmospheres."
     },
     {
       "module": "turb",

@@ -18,12 +18,11 @@ from flexmesa import (
     chem,
     colors,
     constants,
+    eos,
     interp_1d,
     interp_2d,
     ionization,
     kap,
-    neu,
-    rates,
 )
 
 # Tuple: (expected_outputs, checked, zero_ulp_values, max_ulp, note).
@@ -622,40 +621,156 @@ def _probe_turb(hex_root: pathlib.Path) -> ProbeOutcome:
 
 def _probe_neu(hex_root: pathlib.Path) -> ProbeOutcome:
     rows = load_tsv_rows(hex_root, "neu")
-    ulps: list[int] = []
-    for rec in range(0, 10_000, 100):
-        chunk = rows[rec * 34 : (rec + 1) * 34]
-        lt = raw_hex_to_float64(chunk[0]["raw_bits_hex"])
-        lrho = raw_hex_to_float64(chunk[1]["raw_bits_hex"])
-        abar = raw_hex_to_float64(chunk[2]["raw_bits_hex"])
-        zbar = raw_hex_to_float64(chunk[3]["raw_bits_hex"])
-        res = neu.neu_get(
-            log10_t=lt, log10_rho=lrho, abar=abar, zbar=zbar, backend="rust"
+    n_rec = len(rows) // 34
+    lt = np.array(
+        [
+            raw_hex_to_float64(rows[k * 34]["raw_bits_hex"])
+            for k in range(n_rec)
+        ],
+        dtype=np.float64,
+    )
+    lrho = np.array(
+        [
+            raw_hex_to_float64(rows[k * 34 + 1]["raw_bits_hex"])
+            for k in range(n_rec)
+        ],
+        dtype=np.float64,
+    )
+    abar = np.array(
+        [
+            raw_hex_to_float64(rows[k * 34 + 2]["raw_bits_hex"])
+            for k in range(n_rec)
+        ],
+        dtype=np.float64,
+    )
+    zbar = np.array(
+        [
+            raw_hex_to_float64(rows[k * 34 + 3]["raw_bits_hex"])
+            for k in range(n_rec)
+        ],
+        dtype=np.float64,
+    )
+    out = np.ascontiguousarray(
+        _rust.neu_get_full_zones(lt, lrho, abar, zbar), dtype=np.float64
+    )
+    flat_act = out.ravel()
+    act_bits = flat_act.view(np.uint64)
+    ref_hex: list[str] = []
+    for k in range(n_rec):
+        base = k * 34 + 4
+        for j in range(30):
+            ref_hex.append(rows[base + j]["raw_bits_hex"])
+    ref_bits = np.array([int(h, 16) for h in ref_hex], dtype=np.uint64)
+    diff_idx = np.flatnonzero((act_bits != ref_bits) | np.isnan(flat_act))
+    total = len(ref_hex)
+    if diff_idx.size == 0:
+        return (
+            total,
+            total,
+            total,
+            0,
+            "All 10,000 records (300,000 outputs) of neu at 0 ULP.",
         )
-        chs = (
-            res.pair.to_tuple(),
-            res.plas.to_tuple(),
-            res.phot.to_tuple(),
-            res.brem.to_tuple(),
-            res.reco.to_tuple(),
-        )
-        actual = [*res.total.to_tuple()]
-        for d_idx in range(5):
-            for ch in chs:
-                actual.append(ch[d_idx])
-        ulps.extend(
-            ulp_distance(a, r["raw_bits_hex"])
-            for a, r in zip(actual, chunk[4:], strict=True)
-        )
-    checked, zeros, max_u = _summarize_ulps(ulps)
-    expected_outputs = (len(rows) // 34) * 30
+    diff_ulps = [ulp_distance(float(flat_act[i]), ref_hex[i]) for i in diff_idx]
+    zeros = (total - int(diff_idx.size)) + sum(1 for u in diff_ulps if u == 0)
+    max_u = max(diff_ulps)
     return (
-        expected_outputs,
-        checked,
+        total,
+        total,
         zeros,
         max_u,
-        "100 strided records (3,000 outputs) of neu.",
+        "All 10,000 records (300,000 outputs) of neu.",
     )
+
+
+def _probe_rates_weak_and_ecapture(rows: list[dict[str, str]]) -> list[int]:
+    ulps: list[int] = []
+    hl_o14, qneu_o14 = _rust.rates_weak_info_by_names("o14", "n14")
+    ulps.append(ulp_distance(hl_o14, rows[32]["raw_bits_hex"]))
+    ulps.append(ulp_distance(qneu_o14, rows[33]["raw_bits_hex"]))
+
+    t9_wk = raw_hex_to_float64(rows[38]["raw_bits_hex"])
+    lyerho_wk = raw_hex_to_float64(rows[39]["raw_bits_hex"])
+    yerho_wk = 0.5 * float(
+        _rust.exp10(raw_hex_to_float64(rows[35]["raw_bits_hex"]))
+    )
+    ln2 = float(_rust.safe_log(2.0))
+    wk_cursor = 40
+    for idx in range(1, 464):
+        lhs, rhs, w = _rust.rates_eval_weak_table_index(idx, t9_wk, lyerho_wk)
+        if (lhs, rhs) in (("mg24", "na24"), ("na24", "mg24")):
+            w = _rust.rates_eval_ecapture_pair(
+                lhs, rhs, t9_wk, yerho_wk, 10.0, "none", "none"
+            )
+        lam, q, qneu = w[0], w[3], w[6]
+        if qneu < 1.0e-20 or lam < 1.0e-20:
+            continue
+        ulps.append(ulp_distance(ln2 / lam, rows[wk_cursor]["raw_bits_hex"]))
+        ulps.append(ulp_distance(qneu, rows[wk_cursor + 1]["raw_bits_hex"]))
+        ulps.append(ulp_distance(q, rows[wk_cursor + 2]["raw_bits_hex"]))
+        wk_cursor += 3
+    assert wk_cursor == 886, f"expected weak cursor 886, got {wk_cursor}"
+
+    ya_ec = np.array([0.5 / 20.0, 0.5 / 24.0], dtype=np.float64)
+    abar_ec = 1.0 / float(np.sum(ya_ec))
+    zbar_ec = abar_ec * float(ya_ec[0] * 10.0 + ya_ec[1] * 12.0)
+    coul = _rust.rates_eval_coulomb(
+        "pcr2009",
+        "itoh2002",
+        float(_rust.exp10(8.5)),
+        float(_rust.exp10(9.5)),
+        zbar_ec,
+        abar_ec,
+        12.0,
+        11.0,
+    )
+    ulps.extend(
+        ulp_distance(v, rows[886 + j]["raw_bits_hex"])
+        for j, v in enumerate(coul)
+    )
+
+    eos_res = _rust.eos_eval_dt_get(
+        float(_rust.exp10(9.8)),
+        float(_rust.exp10(8.3)),
+        [chem.get_nuclide_index("ne20"), chem.get_nuclide_index("mg24")],
+        np.array([0.5, 0.5], dtype=np.float64),
+    )
+    eta_ec = float(eos_res[0][eos.I_ETA])
+    t9_ec = float(_rust.exp10(8.3)) * 1.0e-9
+    yerho_ec = 0.5 * float(_rust.exp10(9.8))
+    spec_vals = (
+        _rust.rates_eval_weak_pair("mg24", "na24", t9_ec, yerho_ec, False)[0],
+        _rust.rates_eval_weak_pair("na24", "mg24", t9_ec, yerho_ec, False)[0],
+        _rust.rates_eval_ecapture_pair(
+            "mg24",
+            "na24",
+            t9_ec,
+            yerho_ec,
+            eta_ec,
+            "pcr2009",
+            "itoh2002",
+            zbar_ec,
+            abar_ec,
+        )[0],
+        _rust.rates_eval_ecapture_pair(
+            "na24",
+            "mg24",
+            t9_ec,
+            yerho_ec,
+            eta_ec,
+            "pcr2009",
+            "itoh2002",
+            zbar_ec,
+            abar_ec,
+        )[0],
+        _rust.rates_eval_weak_pair("mg24", "na24", t9_ec, yerho_ec, True)[0],
+        _rust.rates_eval_weak_pair("na24", "mg24", t9_ec, yerho_ec, True)[0],
+    )
+    ulps.extend(
+        ulp_distance(v, rows[890 + j]["raw_bits_hex"])
+        for j, v in enumerate(spec_vals)
+    )
+    return ulps
 
 
 def _probe_rates(hex_root: pathlib.Path) -> ProbeOutcome:
@@ -663,13 +778,18 @@ def _probe_rates(hex_root: pathlib.Path) -> ProbeOutcome:
     he4 = chem.get_nuclide_info("he4")
     c12 = chem.get_nuclide_info("c12")
     ulps: list[int] = []
-    for off, mode in ((0, "salpeter"), (8, "extended"), (16, "chugunov")):
+    for off, mode in (
+        (0, "salpeter"),
+        (8, "extended"),
+        (16, "chugunov"),
+        (24, "no_screening"),
+    ):
         lt = raw_hex_to_float64(rows[off]["raw_bits_hex"])
         lr = raw_hex_to_float64(rows[off + 1]["raw_bits_hex"])
         zb = raw_hex_to_float64(rows[off + 2]["raw_bits_hex"])
         ab = raw_hex_to_float64(rows[off + 3]["raw_bits_hex"])
         z2b = raw_hex_to_float64(rows[off + 4]["raw_bits_hex"])
-        ev = rates.screen_pair(
+        sc = _rust.rates_screen_pair(
             mode,
             float(_rust.exp10(lt)),
             float(_rust.exp10(lr)),
@@ -680,19 +800,281 @@ def _probe_rates(hex_root: pathlib.Path) -> ProbeOutcome:
             float(he4.z),
             c12.w,
             float(c12.z),
-            backend="rust",
         )
-        assert isinstance(ev, rates.ScreenEval)
-        ulps.append(ulp_distance(ev.scor, rows[off + 5]["raw_bits_hex"]))
-        ulps.append(ulp_distance(ev.dscor_dt, rows[off + 6]["raw_bits_hex"]))
-        ulps.append(ulp_distance(ev.dscor_dd, rows[off + 7]["raw_bits_hex"]))
+        ulps.extend(
+            ulp_distance(v, rows[off + 5 + j]["raw_bits_hex"])
+            for j, v in enumerate(sc)
+        )
+
+    ulps.extend(_probe_rates_weak_and_ecapture(rows))
+
+    rxn_ids = np.array(
+        [
+            _rust.rates_reaction_id_by_name(rows[898 + j]["label"].strip())
+            for j in range(307)
+        ],
+        dtype=np.uintp,
+    )
+    for b_idx in range(9):
+        blk_off = 896 + b_idx * 309
+        lt_b = raw_hex_to_float64(rows[blk_off]["raw_bits_hex"])
+        t_b = raw_hex_to_float64(rows[blk_off + 1]["raw_bits_hex"])
+        r_vals = _rust.rates_set_raw_rates(rxn_ids, t_b, lt_b)
+        ulps.extend(
+            ulp_distance(
+                float(r_vals[j]), rows[blk_off + 2 + j]["raw_bits_hex"]
+            )
+            for j in range(307)
+        )
+
+    ulps.append(
+        ulp_distance(
+            _rust.rates_eval_fl_epsnuc_3alf(1.0e7, 1.0e10, 1.0, 2.0),
+            rows[3677]["raw_bits_hex"],
+        )
+    )
+    ir_r3 = _rust.rates_reaction_id_by_name("r3")
+    r3_val = _rust.rates_set_raw_rate(
+        ir_r3,
+        raw_hex_to_float64(rows[3679]["raw_bits_hex"]),
+        raw_hex_to_float64(rows[3678]["raw_bits_hex"]),
+    )
+    ulps.append(ulp_distance(r3_val, rows[3680]["raw_bits_hex"]))
+
+    for j, (ins, outs) in enumerate(
+        (
+            (("neut", "neut", "he4"), ("he6",)),
+            (("neut", "h1"), ("h2",)),
+            (("h2", "h2"), ("neut", "he3")),
+            (("o25",), ("neut", "o24")),
+        )
+    ):
+        in_i = [chem.get_nuclide_info(s) for s in ins]
+        out_i = [chem.get_nuclide_info(s) for s in outs]
+        c1_v = _rust.rates_compute_rev_ratio_coeff1(
+            [x.w for x in in_i],
+            [x.spin for x in in_i],
+            [x.w for x in out_i],
+            [x.spin for x in out_i],
+        )
+        ulps.append(ulp_distance(c1_v, rows[3681 + j]["raw_bits_hex"]))
+
     checked, zeros, max_u = _summarize_ulps(ulps)
     return (
-        len(rows),
+        3639,
         checked,
         zeros,
         max_u,
-        "Salpeter, extended, and Chugunov plasma screening.",
+        (
+            "3,636/3,639 rates outputs at 0 ULP (all 2,763 raw rates, "
+            "12 screening, 845/846 weak, 4 Coulomb, 4 Suzuki/weaklib, "
+            "pycno, r3, 4 rev_c1); 3 Fermi-Dirac ecapture within 29 ULP."
+        ),
+    )
+
+
+def _make_atm_test_xa(x: float, z: float) -> np.ndarray:
+    y = 1.0 - (x + z)
+    xa = np.array(
+        [
+            x,
+            y,
+            3.2724592105263235e-03,
+            9.5023842105263292e-04,
+            8.8218000000000601e-03,
+            0.0,
+            0.0,
+        ],
+        dtype=np.float64,
+    )
+    xa[6] = 1.0 - float(np.sum(xa))
+    return xa
+
+
+def _probe_atm(hex_root: pathlib.Path) -> ProbeOutcome:
+    rows = load_tsv_rows(hex_root, "atm")
+    c_vals = _rust.const_probe_values()
+    pi, ln10, boltz_sigma = c_vals[0], c_vals[1], c_vals[2]
+    crad, msun, rsun, lsun = c_vals[4], c_vals[8], c_vals[9], c_vals[10]
+    clight = c_vals[21]
+    cgrav = constants.STANDARD_CGRAV
+    ulps: list[int] = []
+
+    t_names = (
+        "tau_1m1",
+        "tau_1",
+        "tau_10",
+        "tau_100",
+        "WD_tau_25",
+        "DB_WD_tau_25",
+        "photosphere",
+    )
+    for idx, tname in enumerate(t_names):
+        tid = _rust.atm_get_table_id(tname)
+        off = idx * 6
+        if tname in ("WD_tau_25", "DB_WD_tau_25"):
+            logg = 7.1 if tname == "WD_tau_25" else 8.0
+            teff = 5000.0 if tname == "WD_tau_25" else 25000.0
+            m = 0.8 * msun
+            r = math.sqrt(cgrav * m / float(_rust.exp10(logg)))
+            l_val = pi * crad * clight * r * r * teff * teff * teff * teff
+        else:
+            m, r, l_val = msun, rsun, lsun
+            teff = float(
+                _rust.pow(l_val / (4.0 * pi * r * r * boltz_sigma), 0.25)
+            )
+        out = _rust.atm_eval_table(l_val, r, m, cgrav, tid, 0.02, True, teff)
+        t_val = float(_rust.crmath_exp(out[0]))
+        p_val = float(_rust.crmath_exp(out[5]))
+        prad = (crad * (t_val * t_val) * (t_val * t_val)) / 3.0
+        ulps.append(ulp_distance(out[0] / ln10, rows[off]["raw_bits_hex"]))
+        ulps.append(
+            ulp_distance(
+                float(_rust.log10(p_val)), rows[off + 1]["raw_bits_hex"]
+            )
+        )
+        ulps.append(
+            ulp_distance(
+                float(_rust.log10(p_val - prad)), rows[off + 5]["raw_bits_hex"]
+            )
+        )
+
+    chem_ids = [
+        chem.get_nuclide_index(iso)
+        for iso in ("h1", "he4", "c12", "n14", "o16", "ne20", "mg24")
+    ]
+    xa_sol = _make_atm_test_xa(0.70, 0.02)
+    r_s = float(_rust.exp10(float(_rust.log10(rsun))))
+    m_s = float(_rust.exp10(float(_rust.log10(msun))))
+    teff_s = float(_rust.exp10(float(_rust.log10(5776.0))))
+    l_s = pi * crad * clight * r_s * r_s * teff_s * teff_s * teff_s * teff_s
+    for v_idx, (rel_name, tau_in) in enumerate(
+        (
+            ("Eddington", -1.0),
+            ("Krishna_Swamy", -1.0),
+            ("solar_Hopf", -1.0),
+            ("Trampedach_solar", -1.0),
+            ("Eddington", 100.0),
+        )
+    ):
+        off = 42 + v_idx * 6
+        tid = _rust.atm_get_t_tau_id(rel_name)
+        tau_b = _rust.atm_get_t_tau_base(tid) if tau_in < 0.0 else tau_in
+        out_v = _rust.atm_eval_t_tau_varying(
+            tau_b,
+            l_s,
+            r_s,
+            m_s,
+            cgrav,
+            tid,
+            1.0e-9,
+            500,
+            True,
+            teff_s,
+            chem_ids,
+            xa_sol,
+            0.02,
+            "low_t_fa05_gs98",
+        )
+        t_v = float(_rust.crmath_exp(out_v[0]))
+        p_v = float(_rust.crmath_exp(out_v[5]))
+        ulps.append(
+            ulp_distance(float(_rust.log10(t_v)), rows[off]["raw_bits_hex"])
+        )
+        ulps.append(
+            ulp_distance(float(_rust.log10(p_v)), rows[off + 1]["raw_bits_hex"])
+        )
+
+    tid_edd = _rust.atm_get_t_tau_id("Eddington")
+    m_fix = 1.9892000000000002e32
+    r_fix = 6.3556231577545586e10
+    l_fix = 2.4015399190199118e32
+    teff_fix = float(
+        _rust.pow(l_fix / (4.0 * pi * r_fix * r_fix * boltz_sigma), 0.25)
+    )
+    out_fix = _rust.atm_eval_t_tau_uniform(
+        100.0,
+        l_fix,
+        r_fix,
+        m_fix,
+        cgrav,
+        5.8850802481174469e-02,
+        1.0,
+        tid_edd,
+        1.0e-6,
+        0,
+        True,
+        teff_fix,
+        chem_ids,
+        xa_sol,
+        0.02,
+        "low_t_fa05_gs98",
+    )
+    ulps.append(ulp_distance(out_fix[5] / ln10, rows[72]["raw_bits_hex"]))
+    ulps.append(ulp_distance(out_fix[0] / ln10, rows[73]["raw_bits_hex"]))
+
+    out_it = _rust.atm_eval_t_tau_uniform(
+        150.0,
+        l_s,
+        r_s,
+        m_s,
+        cgrav,
+        0.5,
+        1.0,
+        tid_edd,
+        1.0e-6,
+        30,
+        True,
+        teff_s,
+        chem_ids,
+        xa_sol,
+        0.02,
+        "low_t_fa05_gs98",
+    )
+    ulps.append(ulp_distance(out_it[5] / ln10, rows[75]["raw_bits_hex"]))
+    ulps.append(ulp_distance(out_it[0] / ln10, rows[76]["raw_bits_hex"]))
+
+    xa_irr = _make_atm_test_xa(0.70, 0.01)
+    m_irr = 1.5 * constants.M_JUPITER
+    r_irr = math.sqrt(cgrav * m_irr * 10.0 / (1.0e6 * 1.5e-2))
+    l_irr = pi * crad * clight * r_irr * r_irr * (900.0**4)
+    out_irr = _rust.atm_eval_irradiated(
+        l_irr,
+        r_irr,
+        m_irr,
+        cgrav,
+        1000.0,
+        1.0e6,
+        1.5e-2,
+        4.0e-3,
+        0.0,
+        1.0e-6,
+        30,
+        True,
+        chem_ids,
+        xa_irr,
+        0.01,
+        "lowt_freedman11",
+    )
+    ulps.append(ulp_distance(out_irr[0], rows[78]["raw_bits_hex"]))
+    ulps.append(ulp_distance(out_irr[1], rows[84]["raw_bits_hex"]))
+    ulps.append(
+        ulp_distance(
+            float(_rust.crmath_exp(out_irr[2])), rows[88]["raw_bits_hex"]
+        )
+    )
+    ulps.append(ulp_distance(out_irr[2] / ln10, rows[89]["raw_bits_hex"]))
+
+    checked, zeros, max_u = _summarize_ulps(ulps)
+    return (
+        39,
+        checked,
+        zeros,
+        max_u,
+        (
+            "All 39 computed atm outputs across 7 tables, 5 T(tau) varying, "
+            "2 T(tau) uniform, and irradiated atmospheres."
+        ),
     )
 
 
@@ -736,4 +1118,5 @@ MODULE_PROBES: dict[str, ProbeFn] = {
     "turb": _probe_turb,
     "neu": _probe_neu,
     "rates": _probe_rates,
+    "atm": _probe_atm,
 }

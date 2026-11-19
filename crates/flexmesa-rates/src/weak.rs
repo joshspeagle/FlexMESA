@@ -108,8 +108,7 @@ pub fn eval_weaklib_one(
         (0.0, 0.0, 0.0)
     } else {
         let qn = flexmesa_math::exp10(lneu) / lambda;
-        let dqn_dt =
-            LN10 * t9 * qn * dlneu_dt9 - dlambda_dln_t * qn / lambda;
+        let dqn_dt = LN10 * t9 * qn * dlneu_dt9 - dlambda_dln_t * qn / lambda;
         let dqn_dr = qn * dlneu_dly - dlambda_dln_rho * qn / lambda;
         (qn, dqn_dt, dqn_dr)
     };

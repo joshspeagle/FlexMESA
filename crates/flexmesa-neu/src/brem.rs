@@ -396,7 +396,10 @@ pub fn brem_neu(input: &NeuInputs) -> NeuRate {
     let dbetadz = -dalfadz;
     NeuRate {
         val: alfa * weak.val + beta * liq.val,
-        d_t: alfa * weak.d_t + beta * liq.d_t + dalfadt * weak.val + dbetadt * liq.val,
+        d_t: alfa * weak.d_t
+            + beta * liq.d_t
+            + dalfadt * weak.val
+            + dbetadt * liq.val,
         d_rho: alfa * weak.d_rho
             + beta * liq.d_rho
             + dalfadd * weak.val

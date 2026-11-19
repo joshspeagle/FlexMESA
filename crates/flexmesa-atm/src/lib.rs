@@ -144,8 +144,9 @@ where
             if max_iters == 0 {
                 return Err(AtmError::InvalidArgument {
                     context: "eval_t_tau_atm",
-                    detail: "atm_T_tau_opacity = 'iterated' requires max_iters > 0"
-                        .to_string(),
+                    detail:
+                        "atm_T_tau_opacity = 'iterated' requires max_iters > 0"
+                            .to_string(),
                 });
             }
             eval_t_tau_uniform(

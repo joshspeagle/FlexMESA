@@ -304,15 +304,24 @@ def _cell_eos_energy_diff(state: dict[str, Any], k: int) -> tuple[float, float]:
     """Compute `(dedt_minus_rse, rse_term)` in $\\mathrm{erg\\,g^{-1}}$
     (`carbon_kh/src/run_star_extras.f90:215-220, 246-249`).
     """
-    rse_term = -0.5 * (
-        float(state["t_start"][k]) * float(state["cv_start"][k])
-        + float(state["t"][k]) * float(state["cv"][k])
-    ) * float(state["dxh_lnt"][k]) - 0.5 * (
-        float(state["rho_start"][k]) * float(state["de_drho_start"][k])
-        + float(state["rho"][k]) * float(state["de_drho"][k])
-    ) * float(state["dxh_lnd"][k])
     de = float(state["energy"][k]) - float(state["energy_start"][k])
-    return de + rse_term, rse_term
+    term_t = (
+        0.5
+        * (
+            float(state["t_start"][k]) * float(state["cv_start"][k])
+            + float(state["t"][k]) * float(state["cv"][k])
+        )
+        * float(state["dxh_lnt"][k])
+    )
+    term_rho = (
+        0.5
+        * (
+            float(state["rho_start"][k]) * float(state["de_drho_start"][k])
+            + float(state["rho"][k]) * float(state["de_drho"][k])
+        )
+        * float(state["dxh_lnd"][k])
+    )
+    return (de - term_t) - term_rho, -term_t - term_rho
 
 
 def in_eos_blend(state: dict[str, Any], k: int) -> bool:
@@ -454,6 +463,23 @@ class PisnStarExtras:
     def __init__(self) -> None:
         self._gamma1_cntr_pulse_start = _DBL_HUGE
         self.testhub_extras: dict[str, float] = {}
+
+    def extras_controls(self, state: dict[str, Any]) -> None:
+        """Require `other_remove_surface` when enabled (`:40-62`)."""
+        if bool(state["use_other_remove_surface"]):
+            raise NotImplementedError(
+                "pisn: extras_controls registers other_remove_surface (:56), "
+                "which flexmesa-star StarExtras does not expose (#153)"
+            )
+
+    def other_remove_surface(self, state: dict[str, Any]) -> None:
+        """Guard `remove_ejecta_one_cell_per_step` surface cut (`:65-77`)."""
+        if float(state["star_ejecta_mass"]) > 0.1 * constants.MSUN:
+            raise NotImplementedError(
+                "pisn: remove_ejecta_one_cell_per_step (:65-77) calls "
+                "star_remove_surface_at_cell_k, which flexmesa-star does not "
+                "implement (#153)"
+            )
 
     def extras_startup(self, state: dict[str, Any], restart: bool) -> None:
         """Initialize `gamma1_cntr_pulse_start` or require `#150` in part 7

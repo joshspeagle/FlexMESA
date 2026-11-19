@@ -243,9 +243,43 @@ def test_carbon_kh_energy_accumulators_and_columns() -> None:
     ]
 
 
-def test_pisn_and_adjust_net_hooks() -> None:
-    """`PisnStarExtras` and `AdjustNetStarExtras` match upstream formulas."""
+def test_carbon_kh_preserves_left_to_right_floating_point_association() -> None:
+    """`_cell_eos_energy_diff` evaluates `(de - term_t) - term_rho` cleanly."""
+    # In IEEE-754 float64: (1.0 - 1.0) - 1e-16 == -1e-16, whereas the
+    # reassociated 1.0 + (-1.0 - 1e-16) underflows to 0.0.
+    snap = {
+        "nz": 1,
+        "dt": 1.0,
+        "energy": [2.0],
+        "energy_start": [1.0],
+        "t_start": [1.0],
+        "t": [1.0],
+        "cv_start": [1.0],
+        "cv": [1.0],
+        "dxh_lnt": [1.0],
+        "rho_start": [1.0],
+        "rho": [1.0],
+        "de_drho_start": [1.0],
+        "de_drho": [1.0],
+        "dxh_lnd": [1.0e-16],
+        "eos_frac_helm": [1.0],
+        "eos_frac_free_eos": [0.0],
+    }
+    h = star_extras.CarbonKhStarExtras()
+    pcols = dict(h.extra_profile_columns(snap))
+    assert pcols["eps_eos"] == [-1.0e-16]
+    assert pcols["rse_eps_grav"] == [-1.0]
+
+
+def test_pisn_remove_surface_guards_and_gamma1_pulse() -> None:
+    """`PisnStarExtras` guards `#153` and tracks `gamma1_cntr_pulse_start`."""
     pisn = star_extras.PisnStarExtras()
+    pisn.extras_controls({"use_other_remove_surface": False})
+    with pytest.raises(NotImplementedError, match="#153"):
+        pisn.extras_controls({"use_other_remove_surface": True})
+    pisn.other_remove_surface({"star_ejecta_mass": 0.05 * constants.MSUN})
+    with pytest.raises(NotImplementedError, match="#153"):
+        pisn.other_remove_surface({"star_ejecta_mass": 0.2 * constants.MSUN})
     pisn.extras_startup({"x_integer_ctrl": [1]}, restart=True)
     with pytest.raises(NotImplementedError, match="#150"):
         pisn.extras_startup({"x_integer_ctrl": [7]}, restart=True)
@@ -273,6 +307,9 @@ def test_pisn_and_adjust_net_hooks() -> None:
         abs_tol=1.0e-15,
     )
 
+
+def test_adjust_net_records_num_isos_in_part2() -> None:
+    """`AdjustNetStarExtras` records `num_isos` only in part 2."""
     adj = star_extras.AdjustNetStarExtras()
     adj.extras_after_evolve({"x_integer_ctrl": [1]})
     assert not adj.testhub_extras

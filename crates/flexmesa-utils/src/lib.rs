@@ -10,28 +10,29 @@
 //!   used to parse nuclear reaction network (`.net`) definition files.
 
 pub mod bin_codec;
+pub mod cache_envelope;
 pub mod sha256;
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-/// Resolve the canonical `FlexMESA` physics table directory (`DECISIONS #3` & `#13`).
+/// On-disk envelope schema version for runtime derived caches (`FMCENV01`).
+pub const RUNTIME_CACHE_SCHEMA_VERSION: u32 = 1;
+
+/// Resolve the canonical immutable `FlexMESA` physics data directory (`DECISIONS #3` & `#13`).
 ///
 /// Precedence:
-/// 1. `FLEXMESA_DATA_DIR` (or legacy `FLEXMESA_BIN_CACHE_DIR` / `FLEXMESA_CACHE_DIR`) when set and non-empty.
+/// 1. `FLEXMESA_DATA_DIR` when set and non-empty.
 /// 2. `XDG_CACHE_HOME/flexmesa/data` when `XDG_CACHE_HOME` is set and non-empty.
 /// 3. `HOME/.cache/flexmesa/data` (or `LOCALAPPDATA/flexmesa/data` on Windows).
+///
+/// Runtime derived caches are stored separately via [`resolve_flexmesa_cache_dir`]
+/// and never written inside this directory.
 #[must_use]
 pub fn resolve_flexmesa_data_dir() -> PathBuf {
-    for var in [
-        "FLEXMESA_DATA_DIR",
-        "FLEXMESA_BIN_CACHE_DIR",
-        "FLEXMESA_CACHE_DIR",
-    ] {
-        if let Some(val) = std::env::var_os(var) {
-            if !val.is_empty() {
-                return PathBuf::from(val);
-            }
+    if let Some(val) = std::env::var_os("FLEXMESA_DATA_DIR") {
+        if !val.is_empty() {
+            return PathBuf::from(val);
         }
     }
     if let Some(xdg) = std::env::var_os("XDG_CACHE_HOME") {
@@ -53,6 +54,99 @@ pub fn resolve_flexmesa_data_dir() -> PathBuf {
         }
     }
     PathBuf::from(".flexmesa_data")
+}
+
+/// Return `true` when `FLEXMESA_DISABLE_RUNTIME_CACHE` disables derived runtime caches.
+#[must_use]
+pub fn is_runtime_cache_disabled() -> bool {
+    std::env::var("FLEXMESA_DISABLE_RUNTIME_CACHE").is_ok_and(|val| {
+        matches!(
+            val.trim().to_ascii_lowercase().as_str(),
+            "1" | "true" | "yes" | "on"
+        )
+    })
+}
+
+fn normalize_lexical_path(path: &std::path::Path) -> PathBuf {
+    use std::path::Component;
+    let abs = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir()
+            .unwrap_or_else(|_| PathBuf::from("."))
+            .join(path)
+    };
+    let mut out = PathBuf::new();
+    for comp in abs.components() {
+        match comp {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                let _ = out.pop();
+            }
+            other => out.push(other.as_os_str()),
+        }
+    }
+    out
+}
+
+fn paths_overlap(a: &std::path::Path, b: &std::path::Path) -> bool {
+    let na = normalize_lexical_path(a);
+    let nb = normalize_lexical_path(b);
+    na.starts_with(&nb) || nb.starts_with(&na)
+}
+
+/// Resolve the versioned runtime derived-cache directory, or `None` when disabled.
+///
+/// Returns `None` when [`is_runtime_cache_disabled`] is `true` or when the
+/// configured `FLEXMESA_CACHE_DIR` overlaps [`resolve_flexmesa_data_dir`].
+/// Otherwise resolves `FLEXMESA_CACHE_DIR/v1`,
+/// `XDG_CACHE_HOME/flexmesa/derived/v1`, `HOME/.cache/flexmesa/derived/v1`,
+/// `LOCALAPPDATA/flexmesa/derived/v1`, or `.flexmesa_cache/v1`.
+#[must_use]
+pub fn resolve_flexmesa_cache_dir() -> Option<PathBuf> {
+    if is_runtime_cache_disabled() {
+        return None;
+    }
+    let ver_dir = format!("v{RUNTIME_CACHE_SCHEMA_VERSION}");
+    let candidate = if let Some(val) =
+        std::env::var_os("FLEXMESA_CACHE_DIR").filter(|v| !v.is_empty())
+    {
+        let base = PathBuf::from(val);
+        if base.file_name().and_then(|s| s.to_str()) == Some(ver_dir.as_str()) {
+            base
+        } else {
+            base.join(&ver_dir)
+        }
+    } else if let Some(xdg) =
+        std::env::var_os("XDG_CACHE_HOME").filter(|v| !v.is_empty())
+    {
+        PathBuf::from(xdg)
+            .join("flexmesa")
+            .join("derived")
+            .join(&ver_dir)
+    } else if let Some(home) =
+        std::env::var_os("HOME").filter(|v| !v.is_empty())
+    {
+        PathBuf::from(home)
+            .join(".cache")
+            .join("flexmesa")
+            .join("derived")
+            .join(&ver_dir)
+    } else if let Some(local) =
+        std::env::var_os("LOCALAPPDATA").filter(|v| !v.is_empty())
+    {
+        PathBuf::from(local)
+            .join("flexmesa")
+            .join("derived")
+            .join(&ver_dir)
+    } else {
+        PathBuf::from(".flexmesa_cache").join(&ver_dir)
+    };
+    let data_dir = resolve_flexmesa_data_dir();
+    if paths_overlap(&candidate, &data_dir) {
+        return None;
+    }
+    Some(candidate)
 }
 
 /// Resolve the upstream MESA release `26.4.1` verification directory (`MESA_DIR` or `mesa_test_inputs`).

@@ -9,7 +9,7 @@ use flexmesa_eos::{
     eos_pt_get_pgas, eos_pt_get_t, eval_cms_eos, eval_free_eos,
     eval_opal_scvh_eos, get1_eosdt_results, CmsConfig, CmsTableSet, EosConfig,
     EosDtTableKind, EosDtTableSet, FreeEosConfig, HelmTable, OpalScvhConfig,
-    I_FRAC_OPAL_SCVH, NUM_EOS_BASIC_RESULTS,
+    I_FRAC_OPAL_SCVH, NUM_EOS_BASIC_RESULTS, NUM_EOS_TABLE_VALS,
 };
 use numpy::{PyArray1, PyArray2, PyArrayMethods, PyReadonlyArray1};
 use pyo3::exceptions::PyValueError;
@@ -585,6 +585,76 @@ pub fn eos_eval_opal_scvh_zones<'py>(
     Ok(out_arr)
 }
 
+type PySliceCoeffsTuple<'py> =
+    (f64, f64, usize, f64, f64, usize, Bound<'py, PyArray1<f64>>);
+
+/// Returns `(log_q_min, del_log_q, num_log_qs, log_t_min, del_log_t, num_log_ts, coeffs_flat)`
+/// for a verified 4D `OPAL/SCVH` (`kind=0`) or `FreeEOS` (`kind=1`) slice (`ix_1b`, `iz_1b`).
+#[pyfunction]
+pub fn eos_dt_slice_coeffs<'py>(
+    py: Python<'py>,
+    kind: u8,
+    ix_1b: usize,
+    iz_1b: usize,
+) -> PyResult<PySliceCoeffsTuple<'py>> {
+    let dt_kind = match kind {
+        0 => EosDtTableKind::OpalScvh,
+        1 => EosDtTableKind::FreeEos,
+        _ => {
+            return Err(PyValueError::new_err(format!(
+                "unsupported 4D EOS table kind {kind}; expected 0 (OPAL/SCVH) or 1 (FreeEOS)"
+            )));
+        }
+    };
+    let tbl = EosDtTableSet::builtin()
+        .get_table(dt_kind, ix_1b, iz_1b)
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    let dense = tbl.dense.as_ref().ok_or_else(|| {
+        PyValueError::new_err("loaded 4D EOS slice missing dense coefficients")
+    })?;
+    let mut flat = Vec::with_capacity(dense.len() * NUM_EOS_TABLE_VALS * 4);
+    for v in dense {
+        flat.extend_from_slice(&v.coeffs);
+    }
+    Ok((
+        tbl.log_q_min,
+        tbl.del_log_q,
+        tbl.num_log_qs,
+        tbl.log_t_min,
+        tbl.del_log_t,
+        tbl.num_log_ts,
+        PyArray1::from_vec(py, flat),
+    ))
+}
+
+/// Returns `(log_t_min, delta_log_t, num_log_ts, log_rho_min, delta_log_rho, num_log_rhos, coeffs_flat)`
+/// for a verified 4D `CMS` slice (`ix_1b` in `1..=11`).
+#[pyfunction]
+pub fn eos_cms_slice_coeffs<'py>(
+    py: Python<'py>,
+    ix_1b: usize,
+) -> PyResult<PySliceCoeffsTuple<'py>> {
+    let tbl = CmsTableSet::builtin()
+        .get_table(ix_1b)
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    let dense = tbl.dense.as_ref().ok_or_else(|| {
+        PyValueError::new_err("loaded CMS slice missing dense coefficients")
+    })?;
+    let mut flat = Vec::with_capacity(dense.len() * NUM_EOS_TABLE_VALS * 4);
+    for v in dense {
+        flat.extend_from_slice(&v.coeffs);
+    }
+    Ok((
+        tbl.log_t_min,
+        tbl.delta_log_t,
+        tbl.num_log_ts,
+        tbl.log_rho_min,
+        tbl.delta_log_rho,
+        tbl.num_log_rhos,
+        PyArray1::from_vec(py, flat),
+    ))
+}
+
 /// Registers Wave 3a.3 and Wave 3b.1 `eosDT_get` cascade, 4D table evaluators,
 /// and inverse solver bindings on the `flexmesa._rust` module.
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -594,6 +664,8 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(eos_eval_opal_scvh_zones, m)?)?;
     m.add_function(wrap_pyfunction!(eos_eval_free_eos, m)?)?;
     m.add_function(wrap_pyfunction!(eos_eval_cms, m)?)?;
+    m.add_function(wrap_pyfunction!(eos_dt_slice_coeffs, m)?)?;
+    m.add_function(wrap_pyfunction!(eos_cms_slice_coeffs, m)?)?;
     m.add_function(wrap_pyfunction!(eos_eval_dt_get_t, m)?)?;
     m.add_function(wrap_pyfunction!(eos_eval_dt_get_rho, m)?)?;
     m.add_function(wrap_pyfunction!(eos_eval_pt_get_t, m)?)?;

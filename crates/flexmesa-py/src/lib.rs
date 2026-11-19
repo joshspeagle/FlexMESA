@@ -59,6 +59,8 @@ pub mod eos_pc_skye_py;
 pub mod eos_py;
 /// Tier B bindings for `eos` Wave 3a.3 (`eosDT_get` blend and inverse solvers).
 pub mod eos_solver_py;
+/// PyO3 callback adapters and RSP/GYRE helpers for test-side extras.
+pub mod extras_py;
 /// Tier B bindings for 1D piecewise-monotonic and MP cubic interpolation.
 pub mod interp_1d;
 /// Tier B bindings for 2D bicubic and piecewise-monotonic interpolation.
@@ -78,8 +80,6 @@ pub mod math_vec_audit;
 pub mod net_py;
 /// Tier B bindings for `neu` (Itoh et al. 1996 thermal neutrino losses).
 pub mod neu_py;
-/// PyO3 callback adapters and RSP/GYRE helpers for test-side extras.
-pub mod extras_py;
 /// Tier B bindings for `rates` (nuclear reaction rates, screening, and weak rates).
 pub mod rates_py;
 /// PyO3 bindings for `star` end-to-end `inlist` parsing and `test_suite` runner.

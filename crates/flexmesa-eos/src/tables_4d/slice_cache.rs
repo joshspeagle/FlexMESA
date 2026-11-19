@@ -1,16 +1,29 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-//! Binary slice cache reader/writer (`eos_4d_slices/*.bin`) and upstream MESA
-//! Fortran `.bin` cache reader for `OPAL/SCVH`, `FreeEOS`, and `CMS` tables.
+//! Verified runtime spline cache reader/writer (`FMCENV01` wrapping
+//! `FMDT4D01` / `FMCMS001`) and upstream MESA Fortran `.bin` cache reader for
+//! `OPAL/SCVH`, `FreeEOS`, and `CMS` tables (`N1-11`, `N1-12`).
+//!
+//! Runtime caches live strictly under [`flexmesa_utils::resolve_flexmesa_cache_dir`]
+//! (`~/.cache/flexmesa/derived/v1/` or `$FLEXMESA_CACHE_DIR/v1/`), never inside
+//! the verified `FLEXMESA_DATA_DIR`, and carry both the source file `SHA-256`
+//! and payload `SHA-256`. Corrupted cache files fail loudly rather than falling
+//! back silently.
 
-use std::io::{BufReader, BufWriter, Read, Write};
-use std::path::Path;
+use std::io::{BufReader, Read};
+use std::path::{Path, PathBuf};
 
+use flexmesa_utils::cache_envelope::{
+    read_verified_cache, write_verified_cache_atomic,
+};
 use flexmesa_utils::is_bad;
+use flexmesa_utils::resolve_flexmesa_cache_dir;
+use flexmesa_utils::sha256::compute_sha256_file;
 
 use crate::cms::table::CmsXTable;
 use crate::helm::table_io::resolve_flexmesa_data_dir;
 use crate::tables_4d::spline::{
-    EosDtTableKind, EosDtVertex, EosDtXzTable, NUM_EOS_TABLE_VALS,
+    validate_4d_grid_header, validate_dense_vertices, EosDtTableKind,
+    EosDtVertex, EosDtXzTable, NUM_EOS_TABLE_VALS,
 };
 use crate::types::EosError;
 
@@ -20,13 +33,46 @@ pub const DT_SLICE_BIN_MAGIC: &[u8; 8] = b"FMDT4D01";
 /// Magic header for cached `(logT, logRho)` `CMS` slices.
 pub const CMS_SLICE_BIN_MAGIC: &[u8; 8] = b"FMCMS001";
 
+/// Builder version stamped into `FMCENV01` headers for 4D EOS slice caches.
+pub const SLICE_CACHE_BUILDER_VERSION: u32 = 1;
+
 const VERTEX_BYTES: usize = NUM_EOS_TABLE_VALS * 4 * 8;
+
+fn map_cache_err(context: &'static str, detail: String) -> EosError {
+    EosError::TableIo { context, detail }
+}
+
+fn header_f64(bytes: &[u8], off: usize, label: &str) -> Result<f64, String> {
+    let slice: [u8; 8] = bytes
+        .get(off..off + 8)
+        .and_then(|s| s.try_into().ok())
+        .ok_or_else(|| format!("{label}: truncated f64 at byte {off}"))?;
+    Ok(f64::from_le_bytes(slice))
+}
+
+fn header_i32(bytes: &[u8], off: usize, label: &str) -> Result<i32, String> {
+    let slice: [u8; 4] = bytes
+        .get(off..off + 4)
+        .and_then(|s| s.try_into().ok())
+        .ok_or_else(|| format!("{label}: truncated i32 at byte {off}"))?;
+    Ok(i32::from_le_bytes(slice))
+}
+
+fn header_u32(bytes: &[u8], off: usize, label: &str) -> Result<usize, String> {
+    let slice: [u8; 4] = bytes
+        .get(off..off + 4)
+        .and_then(|s| s.try_into().ok())
+        .ok_or_else(|| format!("{label}: truncated u32 at byte {off}"))?;
+    Ok(u32::from_le_bytes(slice) as usize)
+}
 
 #[inline]
 fn decode_dt_vertex(bytes: &[u8; VERTEX_BYTES]) -> EosDtVertex {
     let coeffs = std::array::from_fn(|k| {
         let s = k * 8;
-        f64::from_le_bytes(bytes[s..s + 8].try_into().unwrap_or([0; 8]))
+        let mut buf = [0_u8; 8];
+        buf.copy_from_slice(&bytes[s..s + 8]);
+        f64::from_le_bytes(buf)
     });
     EosDtVertex { coeffs }
 }
@@ -38,25 +84,107 @@ fn encode_dt_vertex(v: &EosDtVertex, out: &mut [u8; VERTEX_BYTES]) {
     }
 }
 
-/// Loads or builds a full `(Z, X)` `EosDtXzTable` slice, caching it in `eos_4d_slices/`.
+fn slice_cache_path(
+    cache_root: &Path,
+    stem: &str,
+    source_sha256: &str,
+) -> PathBuf {
+    cache_root
+        .join("eos_4d_slices")
+        .join(format!("{stem}.{}.bin", &source_sha256[..16]))
+}
+
+fn load_or_populate_slice_cache<T>(
+    context: &'static str,
+    stem: &str,
+    source_path: &Path,
+    payload_tag: [u8; 8],
+    build_from_source: impl FnOnce() -> Result<T, EosError>,
+    encode_payload: impl FnOnce(&T) -> Result<Vec<u8>, String>,
+    decode_payload: impl FnOnce(&[u8], &str) -> Result<T, EosError>,
+) -> Result<T, EosError> {
+    let cache_root = resolve_flexmesa_cache_dir();
+    load_or_populate_slice_cache_in(
+        context,
+        stem,
+        source_path,
+        payload_tag,
+        cache_root.as_deref(),
+        build_from_source,
+        encode_payload,
+        decode_payload,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn load_or_populate_slice_cache_in<T>(
+    context: &'static str,
+    stem: &str,
+    source_path: &Path,
+    payload_tag: [u8; 8],
+    cache_root: Option<&Path>,
+    build_from_source: impl FnOnce() -> Result<T, EosError>,
+    encode_payload: impl FnOnce(&T) -> Result<Vec<u8>, String>,
+    decode_payload: impl FnOnce(&[u8], &str) -> Result<T, EosError>,
+) -> Result<T, EosError> {
+    let source_sha = compute_sha256_file(source_path).map_err(|e| {
+        map_cache_err(
+            context,
+            format!("failed to hash source {}: {e}", source_path.display()),
+        )
+    })?;
+
+    if let Some(cache_root) = cache_root {
+        let cache_file = slice_cache_path(cache_root, stem, &source_sha);
+        if cache_file.is_file() {
+            let label = cache_file.display().to_string();
+            let payload = read_verified_cache(
+                &cache_file,
+                SLICE_CACHE_BUILDER_VERSION,
+                &payload_tag,
+                &source_sha,
+            )
+            .map_err(|detail| map_cache_err(context, detail))?;
+            return decode_payload(&payload, &label);
+        }
+
+        let built = build_from_source()?;
+        let payload = encode_payload(&built).map_err(|detail| {
+            map_cache_err(context, format!("{stem}: {detail}"))
+        })?;
+        write_verified_cache_atomic(
+            &cache_file,
+            SLICE_CACHE_BUILDER_VERSION,
+            &payload_tag,
+            &source_sha,
+            &payload,
+        )
+        .map_err(|detail| map_cache_err(context, detail))?;
+        return Ok(built);
+    }
+
+    build_from_source()
+}
+
+/// Loads or builds a full `(Z, X)` `EosDtXzTable` slice, caching in
+/// [`resolve_flexmesa_cache_dir`] keyed by source `SHA-256`.
 pub fn load_or_build_dt_slice(
     mesa_data_dir: Option<&Path>,
     kind: EosDtTableKind,
     stem: &str,
 ) -> Result<EosDtXzTable, EosError> {
     let flex_dir = resolve_flexmesa_data_dir();
-    let slice_bin = flex_dir.join("eos_4d_slices").join(format!("{stem}.bin"));
-    if slice_bin.is_file() {
-        if let Ok(tbl) = read_dt_slice_bin(&slice_bin) {
-            return Ok(tbl);
-        }
-    }
-
     let raw_bin = flex_dir.join("eos_4d_raw").join(format!("{stem}.raw"));
     if raw_bin.is_file() {
-        let tbl = EosDtXzTable::from_raw_bin(&raw_bin)?;
-        let _ = write_dt_slice_bin_atomic(&slice_bin, &tbl);
-        return Ok(tbl);
+        return load_or_populate_slice_cache(
+            "load_or_build_dt_slice",
+            stem,
+            &raw_bin,
+            *DT_SLICE_BIN_MAGIC,
+            || EosDtXzTable::from_raw_bin(&raw_bin),
+            encode_dt_slice_bytes,
+            decode_dt_slice_bytes,
+        );
     }
 
     if let Some(data_dir) = mesa_data_dir {
@@ -74,17 +202,41 @@ pub fn load_or_build_dt_slice(
             .join(format!("{stem}.bin"));
         let ascii_path = data_dir.join(subdir).join(format!("{stem}.data"));
 
-        let tbl = if mesa_cache_1.is_file() {
-            read_mesa_eosdt_cache_bin(&mesa_cache_1)
-                .or_else(|_| EosDtXzTable::from_data_file(&ascii_path))?
+        let source_path = if mesa_cache_1.is_file() {
+            mesa_cache_1
         } else if mesa_cache_2.is_file() {
-            read_mesa_eosdt_cache_bin(&mesa_cache_2)
-                .or_else(|_| EosDtXzTable::from_data_file(&ascii_path))?
+            mesa_cache_2
+        } else if ascii_path.is_file() {
+            ascii_path
         } else {
-            EosDtXzTable::from_data_file(&ascii_path)?
+            return Err(map_cache_err(
+                "load_or_build_dt_slice",
+                format!(
+                    "FlexMESA 4D EOS slice '{stem}' not found in {} or {}. \
+                     Run 'flexmesa data fetch' (or set FLEXMESA_DATA_DIR).",
+                    flex_dir.display(),
+                    data_dir.display()
+                ),
+            ));
         };
-        let _ = write_dt_slice_bin_atomic(&slice_bin, &tbl);
-        return Ok(tbl);
+
+        return load_or_populate_slice_cache(
+            "load_or_build_dt_slice",
+            stem,
+            &source_path,
+            *DT_SLICE_BIN_MAGIC,
+            || {
+                if source_path.extension().and_then(|s| s.to_str())
+                    == Some("bin")
+                {
+                    read_mesa_eosdt_cache_bin(&source_path)
+                } else {
+                    EosDtXzTable::from_data_file(&source_path)
+                }
+            },
+            encode_dt_slice_bytes,
+            decode_dt_slice_bytes,
+        );
     }
 
     Err(EosError::TableIo {
@@ -98,32 +250,38 @@ pub fn load_or_build_dt_slice(
     })
 }
 
-/// Loads or builds a full `CMS` `CmsXTable` slice, caching it in `eos_4d_slices/`.
+/// Loads or builds a full `CMS` `CmsXTable` slice, caching in
+/// [`resolve_flexmesa_cache_dir`] keyed by source `SHA-256`.
 pub fn load_or_build_cms_slice(
     mesa_data_dir: Option<&Path>,
     stem: &str,
 ) -> Result<CmsXTable, EosError> {
     let flex_dir = resolve_flexmesa_data_dir();
-    let slice_bin = flex_dir.join("eos_4d_slices").join(format!("{stem}.bin"));
-    if slice_bin.is_file() {
-        if let Ok(tbl) = read_cms_slice_bin(&slice_bin) {
-            return Ok(tbl);
-        }
-    }
-
     let raw_bin = flex_dir.join("eos_4d_raw").join(format!("{stem}.raw"));
     if raw_bin.is_file() {
-        let tbl = CmsXTable::from_raw_bin(&raw_bin)?;
-        let _ = write_cms_slice_bin_atomic(&slice_bin, &tbl);
-        return Ok(tbl);
+        return load_or_populate_slice_cache(
+            "load_or_build_cms_slice",
+            stem,
+            &raw_bin,
+            *CMS_SLICE_BIN_MAGIC,
+            || CmsXTable::from_raw_bin(&raw_bin),
+            encode_cms_slice_bytes,
+            decode_cms_slice_bytes,
+        );
     }
 
     if let Some(data_dir) = mesa_data_dir {
         let ascii_path =
             data_dir.join("eosCMS_data").join(format!("{stem}.data"));
-        let tbl = CmsXTable::from_data_file(&ascii_path)?;
-        let _ = write_cms_slice_bin_atomic(&slice_bin, &tbl);
-        return Ok(tbl);
+        return load_or_populate_slice_cache(
+            "load_or_build_cms_slice",
+            stem,
+            &ascii_path,
+            *CMS_SLICE_BIN_MAGIC,
+            || CmsXTable::from_data_file(&ascii_path),
+            encode_cms_slice_bytes,
+            decode_cms_slice_bytes,
+        );
     }
 
     Err(EosError::TableIo {
@@ -137,46 +295,69 @@ pub fn load_or_build_cms_slice(
     })
 }
 
-/// Reads a cached `FMDT4D01` binary slice into an [`EosDtXzTable`].
-pub fn read_dt_slice_bin(path: &Path) -> Result<EosDtXzTable, EosError> {
+/// Decodes a validated `FMDT4D01` payload buffer into an [`EosDtXzTable`].
+pub fn decode_dt_slice_bytes(
+    bytes: &[u8],
+    table_label: &str,
+) -> Result<EosDtXzTable, EosError> {
     let err = |msg: String| EosError::TableIo {
-        context: "read_dt_slice_bin",
-        detail: msg,
+        context: "decode_dt_slice_bytes",
+        detail: format!("{table_label}: {msg}"),
     };
-    let bytes = std::fs::read(path).map_err(|e| err(e.to_string()))?;
     if bytes.len() < 84 || &bytes[0..8] != DT_SLICE_BIN_MAGIC {
         return Err(err(
             "invalid FMDT4D01 magic or truncated header".to_string()
         ));
     }
-    let f64_at = |off: usize| -> f64 {
-        f64::from_le_bytes(bytes[off..off + 8].try_into().unwrap_or([0; 8]))
-    };
-    let version = i32::from_le_bytes(bytes[8..12].try_into().unwrap_or([0; 4]));
-    let x = f64_at(12);
-    let z = f64_at(20);
-    let num_log_ts =
-        u32::from_le_bytes(bytes[28..32].try_into().unwrap_or([0; 4])) as usize;
-    let log_t_min = f64_at(32);
-    let log_t_max = f64_at(40);
-    let del_log_t = f64_at(48);
-    let num_log_qs =
-        u32::from_le_bytes(bytes[56..60].try_into().unwrap_or([0; 4])) as usize;
-    let log_q_min = f64_at(60);
-    let log_q_max = f64_at(68);
-    let del_log_q = f64_at(76);
+    let version = header_i32(bytes, 8, table_label).map_err(&err)?;
+    let x = header_f64(bytes, 12, table_label).map_err(&err)?;
+    let z = header_f64(bytes, 20, table_label).map_err(&err)?;
+    let num_log_ts = header_u32(bytes, 28, table_label).map_err(&err)?;
+    let log_t_min = header_f64(bytes, 32, table_label).map_err(&err)?;
+    let log_t_max = header_f64(bytes, 40, table_label).map_err(&err)?;
+    let del_log_t = header_f64(bytes, 48, table_label).map_err(&err)?;
+    let num_log_qs = header_u32(bytes, 56, table_label).map_err(&err)?;
+    let log_q_min = header_f64(bytes, 60, table_label).map_err(&err)?;
+    let log_q_max = header_f64(bytes, 68, table_label).map_err(&err)?;
+    let del_log_q = header_f64(bytes, 76, table_label).map_err(&err)?;
 
-    let ngrid = num_log_qs * num_log_ts;
+    let ngrid = validate_4d_grid_header(
+        "decode_dt_slice_bytes",
+        table_label,
+        x,
+        z,
+        num_log_qs,
+        log_q_min,
+        log_q_max,
+        del_log_q,
+        num_log_ts,
+        log_t_min,
+        log_t_max,
+        del_log_t,
+    )?;
+    let expected_body = ngrid
+        .checked_mul(VERTEX_BYTES)
+        .ok_or_else(|| err("FMDT4D01 body byte size overflow".to_string()))?;
     let body = &bytes[84..];
-    if body.len() < ngrid * VERTEX_BYTES {
-        return Err(err("truncated FMDT4D01 body".to_string()));
+    if body.len() != expected_body {
+        return Err(err(format!(
+            "FMDT4D01 body size mismatch: expected {expected_body} bytes, got {}",
+            body.len()
+        )));
     }
-    let dense: Vec<EosDtVertex> = body[..ngrid * VERTEX_BYTES]
+    let dense: Vec<EosDtVertex> = body
         .as_chunks::<VERTEX_BYTES>()
         .0
         .iter()
         .map(decode_dt_vertex)
         .collect();
+    validate_dense_vertices(
+        "decode_dt_slice_bytes",
+        table_label,
+        num_log_qs,
+        num_log_ts,
+        &dense,
+    )?;
     Ok(EosDtXzTable {
         version,
         x,
@@ -193,50 +374,57 @@ pub fn read_dt_slice_bin(path: &Path) -> Result<EosDtXzTable, EosError> {
     })
 }
 
+/// Reads a `FMDT4D01` binary slice file into an [`EosDtXzTable`].
+pub fn read_dt_slice_bin(path: &Path) -> Result<EosDtXzTable, EosError> {
+    let label = path.display().to_string();
+    let bytes = std::fs::read(path).map_err(|e| EosError::TableIo {
+        context: "read_dt_slice_bin",
+        detail: format!("{label}: {e}"),
+    })?;
+    decode_dt_slice_bytes(&bytes, &label)
+}
+
+/// Encodes an [`EosDtXzTable`] as a `FMDT4D01` payload buffer.
+pub fn encode_dt_slice_bytes(tbl: &EosDtXzTable) -> Result<Vec<u8>, String> {
+    let dense = tbl.dense.as_ref().ok_or("missing dense vertices")?;
+    let mut out = Vec::with_capacity(84 + dense.len() * VERTEX_BYTES);
+    out.extend_from_slice(DT_SLICE_BIN_MAGIC);
+    out.extend_from_slice(&tbl.version.to_le_bytes());
+    out.extend_from_slice(&tbl.x.to_le_bytes());
+    out.extend_from_slice(&tbl.z.to_le_bytes());
+    out.extend_from_slice(&(tbl.num_log_ts as u32).to_le_bytes());
+    out.extend_from_slice(&tbl.log_t_min.to_le_bytes());
+    out.extend_from_slice(&tbl.log_t_max.to_le_bytes());
+    out.extend_from_slice(&tbl.del_log_t.to_le_bytes());
+    out.extend_from_slice(&(tbl.num_log_qs as u32).to_le_bytes());
+    out.extend_from_slice(&tbl.log_q_min.to_le_bytes());
+    out.extend_from_slice(&tbl.log_q_max.to_le_bytes());
+    out.extend_from_slice(&tbl.del_log_q.to_le_bytes());
+    let mut vbuf = [0u8; VERTEX_BYTES];
+    for v in dense {
+        encode_dt_vertex(v, &mut vbuf);
+        out.extend_from_slice(&vbuf);
+    }
+    Ok(out)
+}
+
 /// Writes an [`EosDtXzTable`] to a `FMDT4D01` binary slice file atomically.
 pub fn write_dt_slice_bin_atomic(
     path: &Path,
     tbl: &EosDtXzTable,
 ) -> Result<(), String> {
-    let dense = tbl.dense.as_ref().ok_or("missing dense vertices")?;
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
-    let tmp = path.with_extension(format!("bin.tmp.{}", std::process::id()));
-    {
-        let file = std::fs::File::create(&tmp).map_err(|e| e.to_string())?;
-        let mut w = BufWriter::with_capacity(512 * 1024, file);
-        let mut hdr = Vec::with_capacity(84);
-        hdr.extend_from_slice(DT_SLICE_BIN_MAGIC);
-        hdr.extend_from_slice(&tbl.version.to_le_bytes());
-        hdr.extend_from_slice(&tbl.x.to_le_bytes());
-        hdr.extend_from_slice(&tbl.z.to_le_bytes());
-        hdr.extend_from_slice(&(tbl.num_log_ts as u32).to_le_bytes());
-        hdr.extend_from_slice(&tbl.log_t_min.to_le_bytes());
-        hdr.extend_from_slice(&tbl.log_t_max.to_le_bytes());
-        hdr.extend_from_slice(&tbl.del_log_t.to_le_bytes());
-        hdr.extend_from_slice(&(tbl.num_log_qs as u32).to_le_bytes());
-        hdr.extend_from_slice(&tbl.log_q_min.to_le_bytes());
-        hdr.extend_from_slice(&tbl.log_q_max.to_le_bytes());
-        hdr.extend_from_slice(&tbl.del_log_q.to_le_bytes());
-        w.write_all(&hdr).map_err(|e| e.to_string())?;
-        let mut vbuf = [0u8; VERTEX_BYTES];
-        for v in dense {
-            encode_dt_vertex(v, &mut vbuf);
-            w.write_all(&vbuf).map_err(|e| e.to_string())?;
-        }
-        w.flush().map_err(|e| e.to_string())?;
-    }
-    std::fs::rename(&tmp, path).map_err(|e| e.to_string())
+    let payload = encode_dt_slice_bytes(tbl)?;
+    write_atomic_raw(path, &payload)
 }
 
 /// Reads upstream MESA's unformatted Fortran cache (`Read_EoS_Cache` in `eosdt_load_tables.f90`).
 pub fn read_mesa_eosdt_cache_bin(
     path: &Path,
 ) -> Result<EosDtXzTable, EosError> {
+    let table_label = path.display().to_string();
     let err = |msg: String| EosError::TableIo {
         context: "read_mesa_eosdt_cache_bin",
-        detail: msg,
+        detail: format!("{table_label}: {msg}"),
     };
     let file = std::fs::File::open(path).map_err(|e| err(e.to_string()))?;
     let mut reader = BufReader::with_capacity(512 * 1024, file);
@@ -244,40 +432,54 @@ pub fn read_mesa_eosdt_cache_bin(
     reader
         .read_exact(&mut r1_hdr)
         .map_err(|e| err(e.to_string()))?;
-    let r1_len = u32::from_le_bytes(r1_hdr[0..4].try_into().unwrap_or([0; 4]));
-    let r1_tail =
-        u32::from_le_bytes(r1_hdr[80..84].try_into().unwrap_or([0; 4]));
+    let r1_len = header_i32(&r1_hdr, 0, &table_label).map_err(&err)? as u32;
+    let r1_tail = header_i32(&r1_hdr, 80, &table_label).map_err(&err)? as u32;
     if r1_len != 76 || r1_tail != 76 {
         return Err(err(format!("unexpected MESA header record len {r1_len}")));
     }
-    let f64_at = |off: usize| -> f64 {
-        f64::from_le_bytes(r1_hdr[off..off + 8].try_into().unwrap_or([0; 8]))
-    };
-    let x = f64_at(4);
-    let z = f64_at(12);
-    let num_log_ts =
-        i32::from_le_bytes(r1_hdr[20..24].try_into().unwrap_or([0; 4]))
-            as usize;
-    let log_t_min = f64_at(24);
-    let log_t_max = f64_at(32);
-    let del_log_t = f64_at(40);
-    let num_log_qs =
-        i32::from_le_bytes(r1_hdr[48..52].try_into().unwrap_or([0; 4]))
-            as usize;
-    let log_q_min = f64_at(52);
-    let log_q_max = f64_at(60);
-    let del_log_q = f64_at(68);
-    let version =
-        i32::from_le_bytes(r1_hdr[76..80].try_into().unwrap_or([0; 4]));
+    let x = header_f64(&r1_hdr, 4, &table_label).map_err(&err)?;
+    let z = header_f64(&r1_hdr, 12, &table_label).map_err(&err)?;
+    let num_log_ts_i = header_i32(&r1_hdr, 20, &table_label).map_err(&err)?;
+    let log_t_min = header_f64(&r1_hdr, 24, &table_label).map_err(&err)?;
+    let log_t_max = header_f64(&r1_hdr, 32, &table_label).map_err(&err)?;
+    let del_log_t = header_f64(&r1_hdr, 40, &table_label).map_err(&err)?;
+    let num_log_qs_i = header_i32(&r1_hdr, 48, &table_label).map_err(&err)?;
+    let log_q_min = header_f64(&r1_hdr, 52, &table_label).map_err(&err)?;
+    let log_q_max = header_f64(&r1_hdr, 60, &table_label).map_err(&err)?;
+    let del_log_q = header_f64(&r1_hdr, 68, &table_label).map_err(&err)?;
+    let version = header_i32(&r1_hdr, 76, &table_label).map_err(&err)?;
+
+    let num_log_ts = usize::try_from(num_log_ts_i)
+        .map_err(|_| err(format!("negative num_log_ts={num_log_ts_i}")))?;
+    let num_log_qs = usize::try_from(num_log_qs_i)
+        .map_err(|_| err(format!("negative num_log_qs={num_log_qs_i}")))?;
+    let ngrid = validate_4d_grid_header(
+        "read_mesa_eosdt_cache_bin",
+        &table_label,
+        x,
+        z,
+        num_log_qs,
+        log_q_min,
+        log_q_max,
+        del_log_q,
+        num_log_ts,
+        log_t_min,
+        log_t_max,
+        del_log_t,
+    )?;
 
     let mut r2_marker = [0u8; 4];
     reader
         .read_exact(&mut r2_marker)
         .map_err(|e| err(e.to_string()))?;
     let r2_len = u32::from_le_bytes(r2_marker) as usize;
-    let ngrid = num_log_qs * num_log_ts;
     let nv_mesa = 26usize;
-    if r2_len != 4 * nv_mesa * ngrid * 8 {
+    let expected_r2 = 4usize
+        .checked_mul(nv_mesa)
+        .and_then(|v| v.checked_mul(ngrid))
+        .and_then(|v| v.checked_mul(8))
+        .ok_or_else(|| err("MESA cache record size overflow".to_string()))?;
+    if r2_len != expected_r2 {
         return Err(err(format!("unexpected MESA tbl1 record len {r2_len}")));
     }
 
@@ -291,10 +493,15 @@ pub fn read_mesa_eosdt_cache_bin(
             let dst = &mut dense[iq * num_log_ts + jt].coeffs;
             for (k, slot) in dst.iter_mut().enumerate() {
                 let s = k * 8;
-                let val = f64::from_le_bytes(
-                    cell_buf[s..s + 8].try_into().unwrap_or([0; 8]),
-                );
-                *slot = if is_bad(val) { 0.0 } else { val };
+                let mut fb = [0_u8; 8];
+                fb.copy_from_slice(&cell_buf[s..s + 8]);
+                let val = f64::from_le_bytes(fb);
+                if is_bad(val) {
+                    return Err(err(format!(
+                        "non-finite spline entry ({val}) at cell=({iq}, {jt}) slot={k}"
+                    )));
+                }
+                *slot = val;
             }
         }
     }
@@ -314,45 +521,68 @@ pub fn read_mesa_eosdt_cache_bin(
     })
 }
 
-/// Reads a cached `FMCMS001` binary slice into a [`CmsXTable`].
-pub fn read_cms_slice_bin(path: &Path) -> Result<CmsXTable, EosError> {
+/// Decodes a validated `FMCMS001` payload buffer into a [`CmsXTable`].
+pub fn decode_cms_slice_bytes(
+    bytes: &[u8],
+    table_label: &str,
+) -> Result<CmsXTable, EosError> {
     let err = |msg: String| EosError::TableIo {
-        context: "read_cms_slice_bin",
-        detail: msg,
+        context: "decode_cms_slice_bytes",
+        detail: format!("{table_label}: {msg}"),
     };
-    let bytes = std::fs::read(path).map_err(|e| err(e.to_string()))?;
     if bytes.len() < 76 || &bytes[0..8] != CMS_SLICE_BIN_MAGIC {
         return Err(err(
             "invalid FMCMS001 magic or truncated header".to_string()
         ));
     }
-    let f64_at = |off: usize| -> f64 {
-        f64::from_le_bytes(bytes[off..off + 8].try_into().unwrap_or([0; 8]))
-    };
-    let version = i32::from_le_bytes(bytes[8..12].try_into().unwrap_or([0; 4]));
-    let x = f64_at(12);
-    let num_log_ts =
-        u32::from_le_bytes(bytes[20..24].try_into().unwrap_or([0; 4])) as usize;
-    let log_t_min = f64_at(24);
-    let log_t_max = f64_at(32);
-    let delta_log_t = f64_at(40);
-    let num_log_rhos =
-        u32::from_le_bytes(bytes[48..52].try_into().unwrap_or([0; 4])) as usize;
-    let log_rho_min = f64_at(52);
-    let log_rho_max = f64_at(60);
-    let delta_log_rho = f64_at(68);
+    let version = header_i32(bytes, 8, table_label).map_err(&err)?;
+    let x = header_f64(bytes, 12, table_label).map_err(&err)?;
+    let num_log_ts = header_u32(bytes, 20, table_label).map_err(&err)?;
+    let log_t_min = header_f64(bytes, 24, table_label).map_err(&err)?;
+    let log_t_max = header_f64(bytes, 32, table_label).map_err(&err)?;
+    let delta_log_t = header_f64(bytes, 40, table_label).map_err(&err)?;
+    let num_log_rhos = header_u32(bytes, 48, table_label).map_err(&err)?;
+    let log_rho_min = header_f64(bytes, 52, table_label).map_err(&err)?;
+    let log_rho_max = header_f64(bytes, 60, table_label).map_err(&err)?;
+    let delta_log_rho = header_f64(bytes, 68, table_label).map_err(&err)?;
 
-    let ngrid = num_log_ts * num_log_rhos;
+    let ngrid = validate_4d_grid_header(
+        "decode_cms_slice_bytes",
+        table_label,
+        x,
+        0.0,
+        num_log_ts,
+        log_t_min,
+        log_t_max,
+        delta_log_t,
+        num_log_rhos,
+        log_rho_min,
+        log_rho_max,
+        delta_log_rho,
+    )?;
+    let expected_body = ngrid
+        .checked_mul(VERTEX_BYTES)
+        .ok_or_else(|| err("FMCMS001 body byte size overflow".to_string()))?;
     let body = &bytes[76..];
-    if body.len() < ngrid * VERTEX_BYTES {
-        return Err(err("truncated FMCMS001 body".to_string()));
+    if body.len() != expected_body {
+        return Err(err(format!(
+            "FMCMS001 body size mismatch: expected {expected_body} bytes, got {}",
+            body.len()
+        )));
     }
-    let dense: Vec<EosDtVertex> = body[..ngrid * VERTEX_BYTES]
+    let dense: Vec<EosDtVertex> = body
         .as_chunks::<VERTEX_BYTES>()
         .0
         .iter()
         .map(decode_dt_vertex)
         .collect();
+    validate_dense_vertices(
+        "decode_cms_slice_bytes",
+        table_label,
+        num_log_ts,
+        num_log_rhos,
+        &dense,
+    )?;
     Ok(CmsXTable {
         version,
         x,
@@ -368,38 +598,285 @@ pub fn read_cms_slice_bin(path: &Path) -> Result<CmsXTable, EosError> {
     })
 }
 
+/// Reads a `FMCMS001` binary slice file into a [`CmsXTable`].
+pub fn read_cms_slice_bin(path: &Path) -> Result<CmsXTable, EosError> {
+    let label = path.display().to_string();
+    let bytes = std::fs::read(path).map_err(|e| EosError::TableIo {
+        context: "read_cms_slice_bin",
+        detail: format!("{label}: {e}"),
+    })?;
+    decode_cms_slice_bytes(&bytes, &label)
+}
+
+/// Encodes a [`CmsXTable`] as a `FMCMS001` payload buffer.
+pub fn encode_cms_slice_bytes(tbl: &CmsXTable) -> Result<Vec<u8>, String> {
+    let dense = tbl.dense.as_ref().ok_or("missing dense CMS vertices")?;
+    let mut out = Vec::with_capacity(76 + dense.len() * VERTEX_BYTES);
+    out.extend_from_slice(CMS_SLICE_BIN_MAGIC);
+    out.extend_from_slice(&tbl.version.to_le_bytes());
+    out.extend_from_slice(&tbl.x.to_le_bytes());
+    out.extend_from_slice(&(tbl.num_log_ts as u32).to_le_bytes());
+    out.extend_from_slice(&tbl.log_t_min.to_le_bytes());
+    out.extend_from_slice(&tbl.log_t_max.to_le_bytes());
+    out.extend_from_slice(&tbl.delta_log_t.to_le_bytes());
+    out.extend_from_slice(&(tbl.num_log_rhos as u32).to_le_bytes());
+    out.extend_from_slice(&tbl.log_rho_min.to_le_bytes());
+    out.extend_from_slice(&tbl.log_rho_max.to_le_bytes());
+    out.extend_from_slice(&tbl.delta_log_rho.to_le_bytes());
+    let mut vbuf = [0u8; VERTEX_BYTES];
+    for v in dense {
+        encode_dt_vertex(v, &mut vbuf);
+        out.extend_from_slice(&vbuf);
+    }
+    Ok(out)
+}
+
 /// Writes a [`CmsXTable`] to a `FMCMS001` binary slice file atomically.
 pub fn write_cms_slice_bin_atomic(
     path: &Path,
     tbl: &CmsXTable,
 ) -> Result<(), String> {
-    let dense = tbl.dense.as_ref().ok_or("missing dense CMS vertices")?;
+    let payload = encode_cms_slice_bytes(tbl)?;
+    write_atomic_raw(path, &payload)
+}
+
+fn write_atomic_raw(path: &Path, payload: &[u8]) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
     let tmp = path.with_extension(format!("bin.tmp.{}", std::process::id()));
-    {
-        let file = std::fs::File::create(&tmp).map_err(|e| e.to_string())?;
-        let mut w = BufWriter::with_capacity(256 * 1024, file);
-        let mut hdr = Vec::with_capacity(76);
-        hdr.extend_from_slice(CMS_SLICE_BIN_MAGIC);
-        hdr.extend_from_slice(&tbl.version.to_le_bytes());
-        hdr.extend_from_slice(&tbl.x.to_le_bytes());
-        hdr.extend_from_slice(&(tbl.num_log_ts as u32).to_le_bytes());
-        hdr.extend_from_slice(&tbl.log_t_min.to_le_bytes());
-        hdr.extend_from_slice(&tbl.log_t_max.to_le_bytes());
-        hdr.extend_from_slice(&tbl.delta_log_t.to_le_bytes());
-        hdr.extend_from_slice(&(tbl.num_log_rhos as u32).to_le_bytes());
-        hdr.extend_from_slice(&tbl.log_rho_min.to_le_bytes());
-        hdr.extend_from_slice(&tbl.log_rho_max.to_le_bytes());
-        hdr.extend_from_slice(&tbl.delta_log_rho.to_le_bytes());
-        w.write_all(&hdr).map_err(|e| e.to_string())?;
-        let mut vbuf = [0u8; VERTEX_BYTES];
-        for v in dense {
-            encode_dt_vertex(v, &mut vbuf);
-            w.write_all(&vbuf).map_err(|e| e.to_string())?;
-        }
-        w.flush().map_err(|e| e.to_string())?;
+    let write_res = std::fs::write(&tmp, payload).map_err(|e| e.to_string());
+    if let Err(err) = write_res {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(err);
     }
-    std::fs::rename(&tmp, path).map_err(|e| e.to_string())
+    std::fs::rename(&tmp, path).map_err(|e| {
+        let _ = std::fs::remove_file(&tmp);
+        e.to_string()
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::cms::table::CMS_RAW_BIN_MAGIC;
+    use crate::tables_4d::table_io::DT_RAW_BIN_MAGIC;
+
+    fn make_temp_dir(tag: &str) -> PathBuf {
+        let dir = std::env::temp_dir()
+            .join(format!("flexmesa_eos_{tag}_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("create temp dir");
+        dir
+    }
+
+    fn build_synthetic_dt_raw_bytes(inject_nan: bool) -> Vec<u8> {
+        let n_q = 4_usize;
+        let n_t = 4_usize;
+        let mut out = Vec::with_capacity(84 + n_q * n_t * 16 * 8);
+        out.extend_from_slice(DT_RAW_BIN_MAGIC);
+        out.extend_from_slice(&51_i32.to_le_bytes());
+        out.extend_from_slice(&0.70_f64.to_le_bytes());
+        out.extend_from_slice(&0.02_f64.to_le_bytes());
+        out.extend_from_slice(&(n_t as u32).to_le_bytes());
+        out.extend_from_slice(&4.0_f64.to_le_bytes());
+        out.extend_from_slice(&4.3_f64.to_le_bytes());
+        out.extend_from_slice(&0.1_f64.to_le_bytes());
+        out.extend_from_slice(&(n_q as u32).to_le_bytes());
+        out.extend_from_slice(&(-5.0_f64).to_le_bytes());
+        out.extend_from_slice(&(-4.4_f64).to_le_bytes());
+        out.extend_from_slice(&0.2_f64.to_le_bytes());
+        for iq in 0..n_q {
+            for jt in 0..n_t {
+                for k in 0..16 {
+                    let val = if inject_nan && iq == 2 && jt == 1 && k == 3 {
+                        f64::NAN
+                    } else {
+                        10.0 + 0.05 * (iq as f64)
+                            + 0.1 * (jt as f64)
+                            + 0.01 * (k as f64)
+                    };
+                    out.extend_from_slice(&val.to_le_bytes());
+                }
+            }
+        }
+        out
+    }
+
+    fn build_synthetic_cms_raw_bytes(inject_inf: bool) -> Vec<u8> {
+        let n_t = 4_usize;
+        let n_rho = 4_usize;
+        let mut out = Vec::with_capacity(76 + n_t * n_rho * 16 * 8);
+        out.extend_from_slice(CMS_RAW_BIN_MAGIC);
+        out.extend_from_slice(&1_i32.to_le_bytes());
+        out.extend_from_slice(&0.70_f64.to_le_bytes());
+        out.extend_from_slice(&(n_t as u32).to_le_bytes());
+        out.extend_from_slice(&3.0_f64.to_le_bytes());
+        out.extend_from_slice(&3.3_f64.to_le_bytes());
+        out.extend_from_slice(&0.1_f64.to_le_bytes());
+        out.extend_from_slice(&(n_rho as u32).to_le_bytes());
+        out.extend_from_slice(&(-4.0_f64).to_le_bytes());
+        out.extend_from_slice(&(-3.7_f64).to_le_bytes());
+        out.extend_from_slice(&0.1_f64.to_le_bytes());
+        for it in 0..n_t {
+            for jrho in 0..n_rho {
+                for k in 0..16 {
+                    let val = if inject_inf && it == 1 && jrho == 2 && k == 4 {
+                        f64::INFINITY
+                    } else {
+                        5.0 + 0.03 * (it as f64)
+                            + 0.07 * (jrho as f64)
+                            + 0.01 * (k as f64)
+                    };
+                    out.extend_from_slice(&val.to_le_bytes());
+                }
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn test_raw_table_non_finite_entries_return_named_error() {
+        let dir = make_temp_dir("nonfinite");
+        let dt_bad = dir.join("bad_dt.raw");
+        std::fs::write(&dt_bad, build_synthetic_dt_raw_bytes(true))
+            .expect("write bad dt raw");
+        let err = EosDtXzTable::from_raw_bin(&dt_bad)
+            .expect_err("NaN raw input must fail");
+        let msg = err.to_string();
+        assert!(msg.contains("bad_dt.raw"), "unexpected err: {msg}");
+        assert!(msg.contains("(2, 1)"), "missing cell in err: {msg}");
+
+        let cms_bad = dir.join("bad_cms.raw");
+        std::fs::write(&cms_bad, build_synthetic_cms_raw_bytes(true))
+            .expect("write bad cms raw");
+        let err_cms = CmsXTable::from_raw_bin(&cms_bad)
+            .expect_err("Inf CMS raw input must fail");
+        let msg_cms = err_cms.to_string();
+        assert!(msg_cms.contains("bad_cms.raw"), "unexpected err: {msg_cms}");
+        assert!(msg_cms.contains("(1, 2)"), "missing cell in err: {msg_cms}");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_slice_cache_isolates_from_data_dir_and_detects_corruption() {
+        let dir = make_temp_dir("cache_iso");
+        let data_dir = dir.join("data");
+        let cache_dir = dir.join("cache");
+        let cache_v1 = cache_dir.join("v1");
+        let raw_dir = data_dir.join("eos_4d_raw");
+        std::fs::create_dir_all(&raw_dir).expect("mkdir raw");
+
+        let stem = "mesa-eosDT_synthetic";
+        let raw_path = raw_dir.join(format!("{stem}.raw"));
+        std::fs::write(&raw_path, build_synthetic_dt_raw_bytes(false))
+            .expect("write raw");
+        let cms_stem = "mesa-CMS_synthetic";
+        let cms_raw_path = raw_dir.join(format!("{cms_stem}.raw"));
+        std::fs::write(&cms_raw_path, build_synthetic_cms_raw_bytes(false))
+            .expect("write cms raw");
+
+        // 1. Disabled mode (cache_root = None) builds cleanly with zero cache files written
+        let _ = load_or_populate_slice_cache_in(
+            "test_slice_cache",
+            stem,
+            &raw_path,
+            *DT_SLICE_BIN_MAGIC,
+            None,
+            || EosDtXzTable::from_raw_bin(&raw_path),
+            encode_dt_slice_bytes,
+            decode_dt_slice_bytes,
+        )
+        .expect("load dt with cache disabled");
+        assert!(!cache_dir.exists());
+        assert!(!data_dir.join("eos_4d_slices").exists());
+
+        // 2. Enabled mode populates v1/eos_4d_slices/*.bin without touching data_dir
+        let dt1 = load_or_populate_slice_cache_in(
+            "test_slice_cache",
+            stem,
+            &raw_path,
+            *DT_SLICE_BIN_MAGIC,
+            Some(&cache_v1),
+            || EosDtXzTable::from_raw_bin(&raw_path),
+            encode_dt_slice_bytes,
+            decode_dt_slice_bytes,
+        )
+        .expect("populate dt cache");
+        let cms1 = load_or_populate_slice_cache_in(
+            "test_slice_cache",
+            cms_stem,
+            &cms_raw_path,
+            *CMS_SLICE_BIN_MAGIC,
+            Some(&cache_v1),
+            || CmsXTable::from_raw_bin(&cms_raw_path),
+            encode_cms_slice_bytes,
+            decode_cms_slice_bytes,
+        )
+        .expect("populate cms cache");
+        assert!(!data_dir.join("eos_4d_slices").exists());
+        let cached_slices_dir = cache_v1.join("eos_4d_slices");
+        let cached_files: Vec<PathBuf> = std::fs::read_dir(&cached_slices_dir)
+            .expect("read cache dir")
+            .filter_map(|e| e.ok().map(|x| x.path()))
+            .collect();
+        assert_eq!(cached_files.len(), 2);
+
+        // Reload from verified cache
+        let dt2 = load_or_populate_slice_cache_in(
+            "test_slice_cache",
+            stem,
+            &raw_path,
+            *DT_SLICE_BIN_MAGIC,
+            Some(&cache_v1),
+            || EosDtXzTable::from_raw_bin(&raw_path),
+            encode_dt_slice_bytes,
+            decode_dt_slice_bytes,
+        )
+        .expect("reload dt cache");
+        assert_eq!(dt1.dense, dt2.dense);
+        let cms2 = load_or_populate_slice_cache_in(
+            "test_slice_cache",
+            cms_stem,
+            &cms_raw_path,
+            *CMS_SLICE_BIN_MAGIC,
+            Some(&cache_v1),
+            || CmsXTable::from_raw_bin(&cms_raw_path),
+            encode_cms_slice_bytes,
+            decode_cms_slice_bytes,
+        )
+        .expect("reload cms cache");
+        assert_eq!(cms1.dense, cms2.dense);
+
+        // 3. Corrupting 1 byte in cached file must fail loudly (not fall back)
+        let dt_cache = cached_files
+            .iter()
+            .find(|p| {
+                p.file_name()
+                    .is_some_and(|n| n.to_string_lossy().contains("eosDT"))
+            })
+            .expect("find dt cache file");
+        let mut bytes = std::fs::read(dt_cache).expect("read cached dt");
+        let tail = bytes.len() - 1;
+        bytes[tail] ^= 0x01;
+        std::fs::write(dt_cache, &bytes).expect("write corrupt cache");
+        let err = load_or_populate_slice_cache_in(
+            "test_slice_cache",
+            stem,
+            &raw_path,
+            *DT_SLICE_BIN_MAGIC,
+            Some(&cache_v1),
+            || EosDtXzTable::from_raw_bin(&raw_path),
+            encode_dt_slice_bytes,
+            decode_dt_slice_bytes,
+        )
+        .expect_err("corrupt cache must fail loudly");
+        assert!(
+            err.to_string().contains("SHA-256 mismatch"),
+            "unexpected err: {err}"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

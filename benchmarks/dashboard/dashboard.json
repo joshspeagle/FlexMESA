@@ -1148,32 +1148,32 @@
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-eos/tests/mesa_26_4_1_component_oracles_test.rs:345",
-        "reason": "declared gap (#161): Skye/HELM operation order; 10 d_dlnT channels on skye_co_liq and eosdt_skye_helm_blend miss the original tolerance, largest skye_co_liq Cp rel_err 1.101e-6 >= 5.0e-11 (see DECLARED_DLNT_RESIDUALS)",
+        "location": "crates/flexmesa-eos/tests/mesa_26_4_1_component_oracles_test.rs:201",
+        "reason": "declared gap (#161): Skye/HELM operation order; 12 d_dlnT channels on skye_co_liq and eosdt_skye_helm_blend miss the original tolerance, largest eosdt_skye_helm_blend gamma3 rel_err 8.028e-6 >= 1.0e-7 (see DECLARED_DLNT_RESIDUALS)",
         "issues": "#161"
       },
       {
-        "location": "crates/flexmesa-eos/tests/wave3a3_pc_solid_tests.rs:227",
+        "location": "crates/flexmesa-eos/tests/wave3a3_pc_solid_tests.rs:256",
         "reason": "declared gap (#161): PC analytical EXCOR7 vs MESA pc_eos.f90:1895 use_EXCOR7_table spline on solid/blend cases; largest pc_co_sol dE_dRho d_dlnT rel_err 2.513e-6 >= 5.0e-9",
         "issues": "#161"
       },
       {
-        "location": "crates/flexmesa-eos/tests/wave3a3_pc_tests.rs:110",
+        "location": "crates/flexmesa-eos/tests/wave3a3_pc_tests.rs:132",
         "reason": "declared gap (#161): PC analytical EXCOR7 vs MESA pc_eos.f90:1895 use_EXCOR7_table spline; 9 entries exceed 1.0e-11/5.0e-9, largest pc_co_liq dE_dRho d_dlnT rel_err 7.123e-6",
         "issues": "#161"
       },
       {
-        "location": "crates/flexmesa-eos/tests/wave3a3_skye_inverse_tests.rs:350",
+        "location": "crates/flexmesa-eos/tests/wave3a3_skye_inverse_tests.rs:364",
         "reason": "declared gap (#161): Skye/HELM operation order on skye_c12_liq, skye_c12_liq_ion, skye_co_liq, and eosdt_skye_helm_blend (max rel_err 1.101e-6 >= 1.0e-11; see DECLARED_SKYE_RESIDUALS)",
         "issues": "#161"
       },
       {
-        "location": "crates/flexmesa-eos/tests/wave3a3_skye_inverse_tests.rs:356",
+        "location": "crates/flexmesa-eos/tests/wave3a3_skye_inverse_tests.rs:370",
         "reason": "declared gap (#161): SkyeConfig::default() uses f64 2.3/2.4/7.2/7.4 whereas MESA eos/defaults/eos.defaults:225-228 uses real(4) literals (d_alfa_dlogRho -5.0 vs -4.999990463273898, diff 9.537e-6 >= 1.0e-13)",
         "issues": "#161"
       },
       {
-        "location": "crates/flexmesa-eos/tests/wave3b1_golden_tests.rs:586",
+        "location": "crates/flexmesa-eos/tests/wave3b1_golden_tests.rs:593",
         "reason": "declared gap (#161): CmsConfig::default().include_radiation is false whereas MESA eos/defaults/eos.defaults:163 sets include_radiation = .true. (dS_dT -1984.67 vs +1525.74)",
         "issues": "#161"
       }
@@ -1181,7 +1181,7 @@
     "python_xfail_or_skip_count": 4,
     "python_skips": [
       {
-        "location": "tests/test_eos_wave3a3.py:162",
+        "location": "tests/test_eos_wave3a3.py:183",
         "reason": "pytest.mark.xfail( strict=True, reason=( \"declared gap (#161): get_skye_alfa_simple uses f64 2.3/2.4/7.2/7.4 \" \"defaults vs MESA eos/defaults/eos.defaults:225-228 real(4) literals\" ), )",
         "issues": "#161"
       },

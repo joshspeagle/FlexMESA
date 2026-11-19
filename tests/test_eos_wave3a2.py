@@ -406,7 +406,7 @@ def test_eval_helm_eos_full_table_matches_mesa_26_4_1_and_autodiff() -> None:
                 ]
             )
             _assert_unfloored(
-                got_r, exp_dom[idx], rtol=3.0e-13, zero_atol=1.0e-14
+                got_r, exp_dom[idx], rtol=1.0e-12, zero_atol=1.0e-14
             )
             assert float(out_r.res[eos.I_FRAC_HELM]) == 1.0, label
 

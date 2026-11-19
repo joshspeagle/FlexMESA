@@ -421,7 +421,8 @@ pub struct AsteroChi2Weights {
 impl Default for AsteroChi2Weights {
     fn default() -> Self {
         Self {
-            chi2_seismo_fraction: 2.0 / 3.0,
+            // `astero/defaults/astero_search.defaults:24`: 0.667d0.
+            chi2_seismo_fraction: 0.667,
             chi2_seismo_freq_fraction: None,
             chi2_seismo_delta_nu_fraction: 0.0,
             chi2_seismo_nu_max_fraction: 0.0,

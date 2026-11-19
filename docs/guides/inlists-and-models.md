@@ -153,15 +153,15 @@ from flexmesa import star
 model = star.StarModel.from_zams(initial_mass=1.0, initial_z=0.02)
 model.evolve(max_steps=2, use_bcyclic=True)
 
-# 1. Round-trip through an ASCII .mod file
+# 1. Round-trip through an ASCII .mod file (header does not store &kap::zbase)
 mod_text = model.to_mod_str()
-reloaded_mod = star.StarModel.from_mod_str(mod_text, eval_hydro=True)
+reloaded_mod = star.StarModel.from_mod_str(mod_text)
 max_dlnt = float(np.max(np.abs(np.asarray(model.ln_t) - np.asarray(reloaded_mod.ln_t))))
 
 with tempfile.TemporaryDirectory() as tmpdir:
     mod_path = pathlib.Path(tmpdir) / "1m_evolved.mod"
     model.write_mod_file(mod_path)
-    from_disk = star.StarModel.from_mod_file(mod_path, eval_hydro=True)
+    from_disk = star.StarModel.from_mod_file(mod_path)
 
 # 2. Round-trip through a binary photo and check n_steps continuation state hashes
 photo_bytes = model.to_photo_bytes()

@@ -1,292 +1,51 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-//! Strict-mode regression snapshot tests for Wave 3a.2 (`HELM` degenerate,
-//! relativistic pair-production, crystallized WD, and Hermite basis regimes;
-//! `#146`). Real compiled MESA `26.4.1` component oracle comparisons are in
-//! `mesa_26_4_1_component_oracles_test.rs` (`T2-15`).
+//! Upstream Fortran MESA `26.4.1` oracle tests for Wave 3a.2 (`HELM`
+//! degenerate, relativistic pair-production, crystallized WD, and Hermite basis
+//! regimes; `#161`, `T2-15`).
+//!
+//! Expected `16 x 5` reference rows and `IERR` codes are loaded from
+//! `benchmarks/fortran_mesa/eos_oracles/mesa_26_4_1_eos_oracles.tsv`.
 
-#![allow(
-    clippy::excessive_precision,
-    clippy::similar_names,
-    clippy::too_many_lines,
-    clippy::unreadable_literal
-)]
+#![allow(clippy::similar_names)]
+
+mod common;
 
 use flexmesa_eos::{
     eval_helm_eos, eval_helm_eos_zones, helmeos2, CubicBasis1D, HelmConfig,
-    HelmTable, QuinticBasis1D, EOS_BASIC_RESULT_NAMES,
+    HelmTable, QuinticBasis1D, I_ETA, I_LN_PGAS,
 };
 
-fn assert_helm_case(
-    label: &str,
-    temp: f64,
-    den: f64,
-    abar: f64,
-    zbar: f64,
-    expected: &[[f64; 5]; 16],
-) {
-    let (out, d_dabar, d_dzbar) =
-        eval_helm_eos(temp, den, abar, zbar).expect(label);
-    for (idx, exp) in expected.iter().enumerate() {
-        let name = EOS_BASIC_RESULT_NAMES[idx];
-        let got = [
-            out.res[idx],
-            out.d_dlnd[idx],
-            out.d_dln_t[idx],
-            d_dabar[idx],
-            d_dzbar[idx],
-        ];
-        for (col, (&g, &e)) in got.iter().zip(exp.iter()).enumerate() {
-            let scale = e.abs().max(1.0);
-            let rel_err = (g - e).abs() / scale;
-            assert!(
-                rel_err < 1.0e-14,
-                "{label} {name} col {col}: got {g:.16e}, exp {e:.16e} \
-                 (rel_err = {rel_err:.3e})"
-            );
-        }
-    }
-}
-
 #[test]
-fn test_helm_eos_degenerate_and_pair_regimes_match_strict_regression_snapshot()
-{
+fn test_helm_eos_degenerate_and_pair_regimes_match_mesa_26_4_1_oracle() {
     // 1. test_components (degenerate, plasg > 1): logT = 6.0, logRho = 3.5
-    let expected_comp: [[f64; 5]; 16] = [
-        [
-            4.2376368450237116e1,
-            1.6545966715062166e0,
-            4.4455938648336621e-2,
-            -5.5319832596154062e-1,
-            9.3864232304380701e-1,
-        ],
-        [
-            3.4665921737792338e1,
-            6.7430313153439447e-1,
-            5.2854721481232013e-2,
-            -5.5978698946241190e-1,
-            9.1735982879346900e-1,
-        ],
-        [
-            1.9376051338525823e1,
-            -1.3703787859873251e-1,
-            2.3088202990491580e-1,
-            -2.3489511595291321e-1,
-            -5.6050248622233581e-2,
-        ],
-        [1.1181426293501342e0, 0.0, 0.0, 0.0, 0.0],
-        [
-            -5.7981832371927189e-1,
-            5.1070259132757201e-15,
-            -1.8390285085749507e-35,
-            -3.3434028696428753e-1,
-            5.9703622672194190e-1,
-        ],
-        [
-            4.3987202128853411e1,
-            2.9241885148987532e1,
-            -4.4025327594252524e1,
-            -9.7767402720891781e0,
-            1.7458464771587817e1,
-        ],
-        [
-            3.5309141041505099e-1,
-            -6.8762662390452227e-3,
-            2.1910947313464952e-2,
-            -7.6572057046630213e-2,
-            1.1906145632275494e-1,
-        ],
-        [
-            1.6545966698595755e0,
-            1.1816064421939988e-2,
-            -3.1022053518773931e-2,
-            3.7153556280603706e-1,
-            -6.4060483312742245e-1,
-        ],
-        [
-            4.4455942584861637e-2,
-            -3.1022053518773938e-2,
-            4.3936185777897263e-2,
-            1.0371922275688306e-2,
-            -3.7458248047248906e-2,
-        ],
-        [
-            6.0978046304818206e7,
-            -1.8833615512380835e6,
-            -6.4277882491859340e5,
-            -1.9974950081130102e7,
-            8.9039671776362378e6,
-        ],
-        [
-            6.0020873212637417e7,
-            -1.1672275836517692e6,
-            -1.6380684142697090e6,
-            -1.9677144768489584e7,
-            9.2479523182256185e6,
-        ],
-        [
-            2.4214399170139157e11,
-            -7.5776056416494537e10,
-            -3.6910977121143132e8,
-            -1.3658199489692917e11,
-            2.3677887651952515e11,
-        ],
-        [
-            6.0020873212637468e1,
-            -1.1672275836517541e0,
-            -6.1658941626907236e1,
-            -1.4979814358238666e1,
-            9.2479523182256322e0,
-        ],
-        [
-            -1.1265560503266406e4,
-            1.1752446804388090e4,
-            -3.6910977121142656e2,
-            3.1086029252140743e3,
-            -1.0820540066287017e3,
-        ],
-        [
-            1.6809830805535817e0,
-            -7.2240436514170656e-3,
-            -3.3594751148310520e-3,
-            3.7790143800311427e-1,
-            -6.6436900996612036e-1,
-        ],
-        [
-            1.5935406867964952e0,
-            -1.4109634966995577e-2,
-            3.5645729906285575e-2,
-            4.7174194038265282e-3,
-            -3.4442697140368184e-2,
-        ],
-    ];
-    assert_helm_case(
+    common::assert_helm_against_mesa(
         "test_components",
         1.0e6,
         flexmesa_math::exp10(3.5),
-        2.9909647116705980,
-        1.6749402385355348,
-        &expected_comp,
+        2.990_964_711_670_598,
+        1.674_940_238_535_534_8,
+        1.0e-13,
     );
 
     // 2. sample_eos (relativistic e-e+ pairs): T = 1e9, Rho = 1e4, C12
-    let expected_pair: [[f64; 5]; 16] = [
-        [
-            4.7684373846155040e1,
-            9.0205265267070256e-1,
-            1.7622812342523098e0,
-            -7.5171054389225195e-2,
-            1.2759924941156120e-1,
-        ],
-        [
-            4.1296488004630746e1,
-            -9.2437628591452747e-1,
-            3.9800687687227221e0,
-            -6.3019761737906181e-3,
-            1.0559687135048084e-2,
-        ],
-        [
-            2.1113067379262809e1,
-            -7.4419913457121301e-1,
-            2.3197371599664316e0,
-            -2.0730230309193281e-2,
-            2.5803251141224157e-2,
-        ],
-        [1.7142857142857142e0, 0.0, 0.0, 0.0, 0.0],
-        [
-            -6.3224263069835929e-1,
-            -1.0292019365308669e-1,
-            4.4190674432234134e-1,
-            -7.4756650528906746e-2,
-            1.4951330105781349e-1,
-        ],
-        [
-            -4.1820555706823441e0,
-            9.4513100001334194e-1,
-            -1.3197644168536053e0,
-            -7.8760916667786104e-2,
-            1.5752183333555697e-1,
-        ],
-        [
-            2.4409060446328085e-1,
-            5.5904521018376712e-3,
-            -6.1684582055786669e-2,
-            -7.0534369499855132e-4,
-            1.4000129804983695e-3,
-        ],
-        [
-            1.5216852336929665e-1,
-            1.4439759177254782e-1,
-            -5.1433013595765886e-1,
-            -1.0743683433903015e-2,
-            1.8220529129873705e-2,
-        ],
-        [
-            3.6225160922797093e0,
-            -5.1433013595765886e-1,
-            2.3812622146450679e0,
-            4.2860844663138220e-2,
-            -7.5618007549006327e-2,
-        ],
-        [
-            2.9587068033790409e10,
-            -5.8039418565256393e10,
-            2.0452302588408734e11,
-            2.1493409318714585e9,
-            -3.6931857257575169e9,
-        ],
-        [
-            3.4255273424423532e9,
-            -3.6044082799376435e9,
-            1.3093270520161219e10,
-            1.4906744791274281e7,
-            -3.1534400086215705e7,
-        ],
-        [
-            -7.9558329921060766e13,
-            1.6261343508613953e14,
-            -3.6044082799376438e14,
-            -2.9139793700149823e11,
-            5.8151160614872717e11,
-        ],
-        [
-            3.4255273424423529e0,
-            -3.6044082799376440e0,
-            9.6677431777188669e0,
-            1.4906744791269862e-2,
-            -3.1534400086206865e-2,
-        ],
-        [
-            -1.0989497119287927e5,
-            2.1867043572345981e5,
-            -3.6044082799376437e5,
-            9.3292221858225162e1,
-            -7.1481436523703593e1,
-        ],
-        [
-            1.3143145575708020e0,
-            5.1920480373755240e-2,
-            -3.8073843851923272e-1,
-            -3.0372574840036295e-3,
-            5.4156735016734833e-3,
-        ],
-        [
-            1.3208118348123339e0,
-            2.0020914019301367e-2,
-            -1.7400761977415630e-1,
-            -1.6684095016084451e-3,
-            3.1619724596563476e-3,
-        ],
-    ];
-    assert_helm_case("sample_eos_c12", 1.0e9, 1.0e4, 12.0, 6.0, &expected_pair);
+    common::assert_helm_against_mesa(
+        "sample_eos_c12",
+        1.0e9,
+        1.0e4,
+        12.0,
+        6.0,
+        1.0e-13,
+    );
 
     // 3. Cold crystallized WD core where sgas < 1e-20 returns Err(1) in MESA
+    let (exp_ierr, _) = common::load_ierr_row("crystallized_wd_1e6_6p5");
     let res_err = eval_helm_eos(
         1.0e6,
         flexmesa_math::exp10(6.5),
-        13.714285714285715,
-        6.8571428571428577,
+        13.714_285_714_285_715,
+        6.857_142_857_142_858,
     );
-    assert_eq!(res_err, Err(1));
+    assert_eq!(res_err, Err(exp_ierr));
 }
 
 #[test]
@@ -303,6 +62,13 @@ fn test_helm_basis_hermite_endpoint_conditions_and_zones() {
     assert!((c0.w0[0] - 1.0).abs() < 1.0e-15);
     assert!((c1.w0[2] - 1.0).abs() < 1.0e-15);
 
+    let pure_he_oracle =
+        common::load_indexed_rows::<16, 5>("HELM", "pure_he_2e8_100");
+    let pure_h_oracle =
+        common::load_indexed_rows::<16, 5>("HELM", "pure_h_2e8_100");
+    let pair_oracle =
+        common::load_indexed_rows::<16, 5>("HELM", "sample_eos_c12");
+
     let table = HelmTable::builtin().expect("builtin HELM table");
     let (f_ele, eta_ele, xne_fer) = table.eval_electron_positron_order3(
         2.0e8,
@@ -312,7 +78,7 @@ fn test_helm_basis_hermite_endpoint_conditions_and_zones() {
         2.0,
     );
     assert!(f_ele.val.is_finite() && f_ele.d3val1.is_finite());
-    assert!((eta_ele.val - (-6.1787884956455370)).abs() < 1.0e-14);
+    assert!((eta_ele.val - pure_he_oracle[I_ETA][0]).abs() < 1.0e-14);
     assert!(xne_fer.val > 0.0);
 
     let batch = eval_helm_eos_zones(
@@ -322,10 +88,20 @@ fn test_helm_basis_hermite_endpoint_conditions_and_zones() {
         &[2.0, 1.0, 6.0],
     );
     assert_eq!(batch.len(), 3);
-    assert!((batch[0].res[0] - 4.1667504138634364e1).abs() < 1.0e-14);
+    assert!(
+        (batch[0].res[I_LN_PGAS] - pure_he_oracle[I_LN_PGAS][0]).abs()
+            < 1.0e-14
+    );
+    assert!(
+        (batch[1].res[I_LN_PGAS] - pure_h_oracle[I_LN_PGAS][0]).abs() < 1.0e-14
+    );
+    assert!(
+        (batch[2].res[I_LN_PGAS] - pair_oracle[I_LN_PGAS][0]).abs() < 1.0e-14
+    );
 
-    // Verify off-table temperature returns Err(1) matching helm.f90 line 194
+    // Off-table temperature returns Err(1) matching `eos/private/helm.f90:194`
+    let (exp_low_t_ierr, _) = common::load_ierr_row("helmeos2_low_t_100_100");
     let cfg = HelmConfig::default();
     let res_low_t = helmeos2(table, 100.0, 2.0, 100.0, 2.0, 4.0, 2.0, &cfg);
-    assert_eq!(res_low_t, Err(1));
+    assert_eq!(res_low_t, Err(exp_low_t_ierr));
 }

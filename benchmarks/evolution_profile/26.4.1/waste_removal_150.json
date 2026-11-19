@@ -1,0 +1,90 @@
+{
+  "git_ab_1_3M_ms_high_Z": {
+    "case": "1.3M_ms_high_Z",
+    "pre_150": {
+      "commit": "af9747e16966cf3a99def75a88db778a40971020",
+      "short_commit": "af9747e1",
+      "repeats": 3,
+      "rayon_threads": 2,
+      "median_wall_sec": 53.84240352,
+      "range_wall_sec": 4.94659516,
+      "steps_taken": 346,
+      "wall_ms_per_step": 155.61388300578034
+    },
+    "post_150": {
+      "commit": "3f7fa73480035372551c411529bf7c18be5c365c",
+      "short_commit": "3f7fa734",
+      "repeats": 3,
+      "rayon_threads": 2,
+      "median_wall_sec": 48.66312518,
+      "range_wall_sec": 0.420458605,
+      "steps_taken": 346,
+      "wall_ms_per_step": 140.64487046242775
+    },
+    "wall_speedup_pre_over_post": 1.1064312725671104,
+    "wall_time_saved_sec": 5.179278339999996,
+    "wall_time_saved_pct": 9.619329750158963
+  },
+  "head_component_breakdown": [
+    {
+      "case": "1.3M_ms_high_Z",
+      "steps_taken": 346,
+      "evolve_wall_sec": 54.1364357,
+      "micro_cache_hits": 1577,
+      "micro_cache_misses": 3060,
+      "micro_cache_hits_per_step": 4.557803468,
+      "micro_cache_misses_per_step": 8.843930636,
+      "saved_micro_eval_sec": 9.766347922,
+      "pre150_full_clone_every_step_sec": 0.219495506,
+      "post150_lazy_primary_buf_sec": 0.092385065,
+      "star_model_heap_bytes": 8067626,
+      "primary_state_buffer_heap_bytes": 1991714,
+      "snapshot_byte_reduction_factor": 4.050594613483663
+    },
+    {
+      "case": "low_z",
+      "steps_taken": 201,
+      "evolve_wall_sec": 21.14333816,
+      "micro_cache_hits": 1006,
+      "micro_cache_misses": 2021,
+      "micro_cache_hits_per_step": 5.004975124,
+      "micro_cache_misses_per_step": 10.05472637,
+      "saved_micro_eval_sec": 4.563453252,
+      "pre150_full_clone_every_step_sec": 0.114295377,
+      "post150_lazy_primary_buf_sec": 0.023249996,
+      "star_model_heap_bytes": 5830397,
+      "primary_state_buffer_heap_bytes": 1430669,
+      "snapshot_byte_reduction_factor": 4.075294145606007
+    },
+    {
+      "case": "high_z",
+      "steps_taken": 328,
+      "evolve_wall_sec": 136.6984188,
+      "micro_cache_hits": 1085,
+      "micro_cache_misses": 4363,
+      "micro_cache_hits_per_step": 3.307926829,
+      "micro_cache_misses_per_step": 13.30182927,
+      "saved_micro_eval_sec": 10.8924197,
+      "pre150_full_clone_every_step_sec": 0.449661098,
+      "post150_lazy_primary_buf_sec": 0.163483898,
+      "star_model_heap_bytes": 11491263,
+      "primary_state_buffer_heap_bytes": 2774055,
+      "snapshot_byte_reduction_factor": 4.142406332967443
+    },
+    {
+      "case": "make_metals",
+      "steps_taken": 1112,
+      "evolve_wall_sec": 131.9812553,
+      "micro_cache_hits": 4954,
+      "micro_cache_misses": 7245,
+      "micro_cache_hits_per_step": 4.455035971,
+      "micro_cache_misses_per_step": 6.51528777,
+      "saved_micro_eval_sec": 35.65508769,
+      "pre150_full_clone_every_step_sec": 1.644580068,
+      "post150_lazy_primary_buf_sec": 0.356445696,
+      "star_model_heap_bytes": 13474826,
+      "primary_state_buffer_heap_bytes": 3347714,
+      "snapshot_byte_reduction_factor": 4.025082787836715
+    }
+  ]
+}

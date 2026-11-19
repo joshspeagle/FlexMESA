@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "issue": "#168",
+  "date_utc": "2026-11-19T07:30:22Z",
+  "flexmesa_origin_main_commit": "11312594646d2df455a539b2077c3f851d2baf0e",
+  "flexmesa_branch_commit": "d63af212d9c3a7c88ce94ac3c544e9b11eeaf161",
+  "pre_150_commit": "af9747e16966cf3a99def75a88db778a40971020",
+  "post_150_commit": "3f7fa73480035372551c411529bf7c18be5c365c",
+  "ci_continuous_verification": false,
+  "quiet_host": {
+    "load_avg_1m_start": 1.88,
+    "load_avg_1m_end": 5.2,
+    "serialized_single_campaign": true
+  },
+  "hardware": {
+    "os": "Linux x86_64",
+    "cpu_model": "AMD Ryzen 7 9800X3D 8-Core Processor",
+    "logical_cores": 16,
+    "physical_cores": 8,
+    "total_ram_gib": 30.15,
+    "gpu_model": "NVIDIA GeForce RTX 5080"
+  },
+  "toolchains": {
+    "mesa_release": "r26.4.1",
+    "mesa_commit": "c8c2026",
+    "mesa_zenodo_record": "19722306",
+    "mesa_sdk": "x86_64-linux-26.6.1",
+    "gfortran": "GNU Fortran (GCC) 15.2.0",
+    "rustc": "rustc 1.100.0 (0ef1bc386 2026-11-09)",
+    "python": "Python 3.14.0",
+    "jax": "0.11.0",
+    "omp_num_threads": 2,
+    "rayon_num_threads": 2
+  },
+  "selected_cases": [
+    "1.3M_ms_high_Z",
+    "low_z",
+    "high_z",
+    "make_metals"
+  ]
+}

@@ -1,0 +1,171 @@
+{
+  "pool_2_threads": {
+    "case": "low_z",
+    "numerics_mode": "strict",
+    "pool_threads": 2,
+    "max_steps_cap": 60,
+    "heterogeneous_alpha": true,
+    "warmup_wall_sec": 0.700861327,
+    "template_zones": 773,
+    "template_species": 8,
+    "star_model_heap_bytes": 5350508,
+    "points": [
+      {
+        "n_stars": 1,
+        "pool_threads": 2,
+        "wall_sec": 3.92915863,
+        "total_steps": 60,
+        "total_zone_steps": 44641,
+        "stars_per_min": 15.27044481,
+        "steps_per_sec": 15.27044481,
+        "zone_steps_per_sec": 11361.46544,
+        "speedup_vs_n1": 1.0,
+        "current_rss_kib": 2107444,
+        "peak_rss_kib": 2223248
+      },
+      {
+        "n_stars": 2,
+        "pool_threads": 2,
+        "wall_sec": 5.400473298,
+        "total_steps": 120,
+        "total_zone_steps": 89277,
+        "stars_per_min": 22.22027466,
+        "steps_per_sec": 22.22027466,
+        "zone_steps_per_sec": 16531.32884,
+        "speedup_vs_n1": 1.455116399,
+        "current_rss_kib": 2112692,
+        "peak_rss_kib": 2223248
+      },
+      {
+        "n_stars": 4,
+        "pool_threads": 2,
+        "wall_sec": 10.81742778,
+        "total_steps": 240,
+        "total_zone_steps": 178557,
+        "stars_per_min": 22.18642036,
+        "steps_per_sec": 22.18642036,
+        "zone_steps_per_sec": 16506.41942,
+        "speedup_vs_n1": 1.452899417,
+        "current_rss_kib": 2127540,
+        "peak_rss_kib": 2223248
+      },
+      {
+        "n_stars": 8,
+        "pool_threads": 2,
+        "wall_sec": 21.66938538,
+        "total_steps": 480,
+        "total_zone_steps": 357117,
+        "stars_per_min": 22.15106666,
+        "steps_per_sec": 22.15106666,
+        "zone_steps_per_sec": 16480.25515,
+        "speedup_vs_n1": 1.450584245,
+        "current_rss_kib": 2164916,
+        "peak_rss_kib": 2223248
+      },
+      {
+        "n_stars": 16,
+        "pool_threads": 2,
+        "wall_sec": 42.7633085,
+        "total_steps": 960,
+        "total_zone_steps": 714235,
+        "stars_per_min": 22.4491517,
+        "steps_per_sec": 22.4491517,
+        "zone_steps_per_sec": 16702.05195,
+        "speedup_vs_n1": 1.470104636,
+        "current_rss_kib": 2240820,
+        "peak_rss_kib": 2240820
+      }
+    ]
+  },
+  "pool_8_threads": {
+    "case": "low_z",
+    "numerics_mode": "strict",
+    "pool_threads": 8,
+    "max_steps_cap": 60,
+    "heterogeneous_alpha": true,
+    "warmup_wall_sec": 1.24820763,
+    "template_zones": 773,
+    "template_species": 8,
+    "star_model_heap_bytes": 5350508,
+    "points": [
+      {
+        "n_stars": 1,
+        "pool_threads": 8,
+        "wall_sec": 5.046311592,
+        "total_steps": 60,
+        "total_zone_steps": 44641,
+        "stars_per_min": 11.88987222,
+        "steps_per_sec": 11.88987222,
+        "zone_steps_per_sec": 8846.263095,
+        "speedup_vs_n1": 1.0,
+        "current_rss_kib": 2089040,
+        "peak_rss_kib": 2805928
+      },
+      {
+        "n_stars": 2,
+        "pool_threads": 8,
+        "wall_sec": 3.653342726,
+        "total_steps": 120,
+        "total_zone_steps": 89277,
+        "stars_per_min": 32.84663088,
+        "steps_per_sec": 32.84663088,
+        "zone_steps_per_sec": 24437.07221,
+        "speedup_vs_n1": 2.762572236,
+        "current_rss_kib": 2102636,
+        "peak_rss_kib": 2805928
+      },
+      {
+        "n_stars": 4,
+        "pool_threads": 8,
+        "wall_sec": 3.902760715,
+        "total_steps": 240,
+        "total_zone_steps": 178557,
+        "stars_per_min": 61.49493077,
+        "steps_per_sec": 61.49493077,
+        "zone_steps_per_sec": 45751.45981,
+        "speedup_vs_n1": 5.172043034,
+        "current_rss_kib": 2144436,
+        "peak_rss_kib": 2805928
+      },
+      {
+        "n_stars": 8,
+        "pool_threads": 8,
+        "wall_sec": 6.484712909,
+        "total_steps": 480,
+        "total_zone_steps": 357117,
+        "stars_per_min": 74.0202391,
+        "steps_per_sec": 74.0202391,
+        "zone_steps_per_sec": 55070.59526,
+        "speedup_vs_n1": 6.22548651,
+        "current_rss_kib": 2195196,
+        "peak_rss_kib": 2805928
+      },
+      {
+        "n_stars": 16,
+        "pool_threads": 8,
+        "wall_sec": 15.15549784,
+        "total_steps": 960,
+        "total_zone_steps": 714235,
+        "stars_per_min": 63.34334971,
+        "steps_per_sec": 63.34334971,
+        "zone_steps_per_sec": 47127.12227,
+        "speedup_vs_n1": 5.327504665,
+        "current_rss_kib": 2264544,
+        "peak_rss_kib": 2805928
+      },
+      {
+        "n_stars": 32,
+        "pool_threads": 8,
+        "wall_sec": 33.59804263,
+        "total_steps": 1920,
+        "total_zone_steps": 1428468,
+        "stars_per_min": 57.1461862,
+        "steps_per_sec": 57.1461862,
+        "zone_steps_per_sec": 42516.40537,
+        "speedup_vs_n1": 4.806291031,
+        "current_rss_kib": 2433736,
+        "peak_rss_kib": 2805928
+      }
+    ]
+  }
+}

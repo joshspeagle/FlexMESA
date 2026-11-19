@@ -6,7 +6,9 @@
 //! integrity checks.
 
 use std::fmt::Write as _;
-use std::io::Read;
+use std::fs::File;
+use std::io::{BufReader, Read};
+use std::path::Path;
 
 const INITIAL_STATE: [u32; 8] = [
     0x6a09_e667,
@@ -246,4 +248,48 @@ pub fn compute_sha256_reader<R: Read>(
         hasher.update(&buf[..n]);
     }
     Ok(hasher.finalize_hex())
+}
+
+/// Compute the raw 32-byte FIPS 180-4 `SHA-256` digest of `data`.
+#[must_use]
+pub fn compute_sha256_raw(data: &[u8]) -> [u8; 32] {
+    let hex = compute_sha256_bytes(data);
+    decode_sha256_hex(&hex).unwrap_or([0_u8; 32])
+}
+
+/// Decode a 64-character ASCII hex `SHA-256` digest into raw `[u8; 32]` bytes.
+#[must_use]
+pub fn decode_sha256_hex(hex: &str) -> Option<[u8; 32]> {
+    let trimmed = hex.trim();
+    if !is_valid_sha256_hex(trimmed) {
+        return None;
+    }
+    let mut out = [0_u8; 32];
+    for (slot, pair) in
+        out.iter_mut().zip(trimmed.as_bytes().as_chunks::<2>().0)
+    {
+        let s = std::str::from_utf8(pair).ok()?;
+        *slot = u8::from_str_radix(s, 16).ok()?;
+    }
+    Some(out)
+}
+
+/// Format a raw 32-byte `SHA-256` digest as a 64-character lowercase hex string.
+#[must_use]
+pub fn encode_sha256_hex(bytes: &[u8; 32]) -> String {
+    let mut hex = String::with_capacity(64);
+    for b in bytes {
+        let _ = write!(hex, "{b:02x}");
+    }
+    hex
+}
+
+/// Compute the lowercase 64-character `SHA-256` hex digest of `path`.
+///
+/// # Errors
+/// Propagates any [`std::io::Error`] encountered opening or reading `path`.
+pub fn compute_sha256_file(path: &Path) -> std::io::Result<String> {
+    let file = File::open(path)?;
+    let mut reader = BufReader::with_capacity(256 * 1024, file);
+    compute_sha256_reader(&mut reader)
 }

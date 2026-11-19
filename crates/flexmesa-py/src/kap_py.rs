@@ -5,7 +5,8 @@
 use flexmesa_kap::{
     aesopus_get, compton_opacity, do_electron_conduction, get1_kap_co_results,
     get1_kap_fixed_metal_results, get_kap_results, kap_get, kapcn_get,
-    KapCoOption, KapConfig, KapLowTOption, KapOption, NUM_KAP_FRACS,
+    loader_ascii::build_full_kap_tables_file, KapCoOption, KapConfig,
+    KapLowTOption, KapOption, NUM_KAP_FRACS,
 };
 use numpy::{
     PyArray2, PyArrayMethods, PyReadonlyArray1, PyReadonlyArray2,
@@ -13,6 +14,7 @@ use numpy::{
 };
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
+use std::path::Path;
 
 fn parse_kap_option(opt: &str) -> PyResult<KapOption> {
     KapOption::from_prefix(opt)
@@ -541,6 +543,22 @@ pub fn kap_get_results_zones_rust<'py>(
     Ok(out_arr)
 }
 
+/// Assemble and validate an `FMKAP001` `kap_tables_full.bin` file from an
+/// upstream `MESA_DIR/data/kap_data` tree and a pre-converted `aesopus_section.bin`.
+#[pyfunction]
+pub fn kap_build_full_tables_bin(
+    kap_dir: &str,
+    aesopus_section_path: &str,
+    out_path: &str,
+) -> PyResult<()> {
+    build_full_kap_tables_file(
+        Path::new(kap_dir),
+        Path::new(aesopus_section_path),
+        Path::new(out_path),
+    )
+    .map_err(|e| PyValueError::new_err(e.to_string()))
+}
+
 /// Register `kap` bindings on `flexmesa._rust`.
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(kap_get_results_rust, m)?)?;
@@ -553,5 +571,6 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(kap_get_aesopus_rust, m)?)?;
     m.add_function(wrap_pyfunction!(kap_get_kapcn_rust, m)?)?;
     m.add_function(wrap_pyfunction!(kap_get_zones_rust, m)?)?;
+    m.add_function(wrap_pyfunction!(kap_build_full_tables_bin, m)?)?;
     Ok(())
 }

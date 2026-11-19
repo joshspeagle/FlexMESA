@@ -74,7 +74,8 @@ fn py_ion_fe56_he4_grid<'py>(
 fn py_ion_builtin_cell_grid<'py>(
     py: Python<'py>,
 ) -> PyResult<(f64, f64, usize, f64, f64, usize, Bound<'py, PyArray2<f64>>)> {
-    let grid = IonTableGrid::builtin();
+    let grid = IonTableGrid::builtin_checked()
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
     let n_rows = NUM_ION_ZS * NUM_ION_XS * NUM_ION_VALS;
     let row_len = grid.num_log_qs * grid.num_log_ts * 4;
     let mut flat = Vec::with_capacity(n_rows * row_len);
@@ -215,7 +216,9 @@ fn py_ion_eval_ionization_dual<'py>(
     let xd = DualOrder1::<4>::independent(x, 1);
     let lrhod = DualOrder1::<4>::independent(log10_rho, 2);
     let ltd = DualOrder1::<4>::independent(log10_t, 3);
-    let out = IonTableGrid::builtin().eval_generic(zd, xd, lrhod, ltd);
+    let grid = IonTableGrid::builtin_checked()
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    let out = grid.eval_generic(zd, xd, lrhod, ltd);
     let vals: Vec<f64> = out.iter().map(|d| d.val).collect();
     let mut jac_flat = Vec::with_capacity(NUM_ION_VALS * 4);
     for d in &out {
@@ -260,7 +263,8 @@ fn py_ion_eval_ionization_zones<'py>(
             "z, x, log10_rho, and log10_t must have equal length",
         ));
     }
-    let grid = IonTableGrid::builtin();
+    let grid = IonTableGrid::builtin_checked()
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
     let (zv, xv, lrhov, ltv) =
         (z_s.to_vec(), x_s.to_vec(), lrho_s.to_vec(), lt_s.to_vec());
     eval_batch_2d::<28, _>(py, n, parallel, PARALLEL_ZONE_THRESHOLD, move |k| {

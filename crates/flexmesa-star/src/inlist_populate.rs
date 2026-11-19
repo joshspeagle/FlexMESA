@@ -198,6 +198,7 @@ impl InlistBundle {
             set_omega, set_initial_omega,
             set_omega_div_omega_crit, set_initial_omega_div_omega_crit,
             set_surface_rotation_v, set_initial_surface_rotation_v,
+            astero_just_call_my_extras_check_model,
         ]);
         map_f64s!("star_job", sj, j, [
             pre_ms_t_c, pre_ms_guess_rho_c, pre_ms_d_log10_p,

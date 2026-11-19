@@ -100,7 +100,7 @@ Generated mechanically by `flexmesa harness` from `benchmarks/history_harness/ca
 | `star` | `rsp_RR_Lyrae` | `mesa_26_4_1` | `extras_finish_step` | diagnostic (2 controls ignored) | `extras_finish_step` | 7220 | -0.00% | `log_L`: 8.555e-04 | - | #161 | declared gap (#161) |
 | `star` | `rsp_Type_II_Cepheid` | `mesa_26_4_1` | `extras_finish_step` | diagnostic (2 controls ignored) | `extras_finish_step` | 14680 | +0.04% | `log_L`: 9.518e-03 | 4387 | #162 | declared gap (#162) |
 | `star` | `rsp_check_2nd_crossing` | `no_reference_yet` | `other_rsp_build_model` | diagnostic (2 controls ignored) | `other_rsp_build_model` | 0 | - | - | - | - | no reference yet |
-| `star` | `rsp_gyre` | `mesa_26_4_1` | `extras_finish_step` | diagnostic (2 controls ignored) | `extras_finish_step` | 5992 | +34.25% | `log_L`: 3.112e-03 | - | #170 | declared gap (#170) |
+| `star` | `rsp_gyre` | `mesa_26_4_1` | `extras_finish_step` | diagnostic (2 controls ignored) | - | 0 | - | - | - | #170 | declared gap (#170) |
 | `star` | `rsp_save_and_load_file` | `mesa_26_4_1` | `extras_finish_step` | diagnostic (16 controls ignored) | `extras_finish_step` | 7266 | -0.00% | `log_L`: 7.996e-07 | - | #161 | declared gap (#161) |
 | `star` | `semiconvection` | `mesa_26_4_1` | `xa_central_lower_limit` | diagnostic (7 controls ignored) | - | 197 | -83.80% | `log_center_Rho`: 3.461e-01 | 3 | #152 | declared gap (#152) |
 | `star` | `simplex_solar_calibration` | `mesa_26_4_1` | `max_model_number|extras_finish_step` | diagnostic (16 controls ignored) | `timeout` | 782 | +60.56% | `log_center_Rho`: 2.165e-01 | 1 | #162 | declared gap (#162) |
@@ -120,17 +120,17 @@ Generated mechanically by `flexmesa harness` from `benchmarks/history_harness/ca
 | `star` | `zams_to_cc_80` | `mesa_26_4_1` | `fe_core_infall_limit` | diagnostic (50 controls ignored) | `fe_core_infall_limit` | 18 | -0.00% | `log_R`: 2.512e-01 | 2296 | #152 | declared gap (#152) |
 | `binary` | `double_bh` | `mesa_26_4_1` | `extras_binary_finish_step` | diagnostic (2 controls ignored) | - | 0 | - | - | - | #161 | declared gap (#161) |
 | `binary` | `evolve_both_stars` | `mesa_26_4_1` | `accretor_overflow_terminate` | diagnostic (2 controls ignored) | `timeout` | 971 | +6.46% | `star_1_mass`: 3.454e-02 | 183 | #160 | declared gap (#160) |
-| `binary` | `jdot_gr_check` | `mesa_26_4_1` | `max_age|extras_binary_finish_step` | diagnostic (1 controls ignored) | `beginning_of_rlof` | 224 | -0.59% | `star_1_mass`: 0.000e+00 | - | #160 | declared gap (#160) |
+| `binary` | `jdot_gr_check` | `mesa_26_4_1` | `extras_binary_check_model` | diagnostic (1 controls ignored) | `extras_binary_check_model` | 224 | -0.59% | `star_1_mass`: 0.000e+00 | - | #160 | declared gap (#160) |
 | `binary` | `jdot_ls_check` | `mesa_26_4_1` | `max_age|max_model_number` | diagnostic (3 controls ignored) | `max_age` | 224 | +0.23% | `star_1_mass`: 0.000e+00 | - | #160 | declared gap (#160) |
-| `binary` | `jdot_ml_check` | `mesa_26_4_1` | `max_age|extras_binary_finish_step` | diagnostic (1 controls ignored) | `max_age` | 885 | +0.05% | `star_1_mass`: 2.182e-03 | 462 | #160 | declared gap (#160) |
+| `binary` | `jdot_ml_check` | `mesa_26_4_1` | `max_age` | diagnostic (1 controls ignored) | `max_age` | 885 | +0.05% | `star_1_mass`: 2.182e-03 | 462 | #160 | declared gap (#160) |
 | `binary` | `star_plus_point_mass` | `mesa_26_4_1` | `xa_central_lower_limit` | diagnostic (2 controls ignored) | `xa_central_lower_limit(h1)` | 307 | +3.08% | `star_1_mass`: 3.087e-02 | 108 | #160 | declared gap (#160) |
 | `binary` | `star_plus_point_mass_explicit_mdot` | `mesa_26_4_1` | `xa_central_lower_limit` | diagnostic (2 controls ignored) | `xa_central_lower_limit(h1)` | 659 | +4.23% | `star_2_mass`: 3.270e-02 | 109 | #160 | declared gap (#160) |
 | `binary` | `wind_fed_bhhmxb` | `mesa_26_4_1` | `xa_central_lower_limit` | diagnostic (1 controls ignored) | `timeout` | 371 | -0.32% | `star_1_mass`: 2.398e+00 | 128 | #160 | declared gap (#160) |
-| `astero` | `astero_adipls` | `mesa_26_4_1` | `xa_central_lower_limit` | diagnostic (1 controls ignored) | `xa_central_lower_limit(h1)` | 480 | +2.05% | `log_L`: 7.016e-02 | 2 | #171 | declared gap (#171) |
-| `astero` | `astero_gyre` | `mesa_26_4_1` | `xa_central_lower_limit` | diagnostic (5 controls ignored) | `xa_central_lower_limit(h1)` | 480 | +2.05% | `log_L`: 7.016e-02 | 2 | #170 | declared gap (#170) |
+| `astero` | `astero_adipls` | `mesa_26_4_1` | `xa_central_lower_limit` | diagnostic (4 controls ignored) | `xa_central_lower_limit(h1)` | 480 | +2.05% | `log_L`: 7.016e-02 | 2 | #171 | declared gap (#171) |
+| `astero` | `astero_gyre` | `mesa_26_4_1` | `xa_central_lower_limit` | diagnostic (4 controls ignored) | `xa_central_lower_limit(h1)` | 480 | +2.05% | `log_L`: 7.016e-02 | 2 | #170 | declared gap (#170) |
 | `astero` | `example_astero` | `mesa_26_4_1` | `xtra1` | diagnostic (51 controls ignored) | `astero_use_first_values_samples=1_best_chi2=1.819977e1_term=limit_num_chi2_too_big` | 910 | +0.53% | `log_L`: 1.611e-01 | 2 | #162 | declared gap (#162) |
 | `astero` | `fast_from_file` | `mesa_26_4_1` | `xtra1` | diagnostic (43 controls ignored) | `astero_from_file_samples=2_best_chi2=6.300590e0_term=limit_num_chi2_too_big` | 934 | +3.82% | `log_L`: 1.057e-01 | 2 | #162 | declared gap (#162) |
 | `astero` | `fast_newuoa` | `mesa_26_4_1` | `xtra1` | diagnostic (43 controls ignored) | `timeout` | 533 | +0.00% | `log_L`: 1.228e-01 | 2 | #162 | declared gap (#162) |
 | `astero` | `fast_scan_grid` | `mesa_26_4_1` | `xtra1` | diagnostic (44 controls ignored) | `astero_scan_grid_samples=4_best_chi2=9.929687e0_term=limit_num_chi2_too_big` | 1733 | +107.34% | `log_g`: 7.131e-02 | 2 | #162 | declared gap (#162) |
 | `astero` | `fast_simplex` | `mesa_26_4_1` | `xtra1` | diagnostic (48 controls ignored) | `astero_simplex_samples=5_best_chi2=1.127609e4_term=max_age` | 2619 | +112.09% | `log_L`: 7.878e-01 | 2 | #162 | declared gap (#162) |
-| `astero` | `surface_effects` | `mesa_26_4_1` | `max_model_number` | diagnostic (30 controls ignored) | `max_model_number` | 0 | -0.00% | - | - | #162 | declared gap (#162) |
+| `astero` | `surface_effects` | `mesa_26_4_1` | `max_model_number` | diagnostic (1 controls ignored) | `max_model_number` | 1 | +0.00% | - | - | #162 | declared gap (#162) |

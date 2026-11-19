@@ -65,6 +65,7 @@ pub fn supported_star_control_inventory() -> &'static StarControlInventory {
 
 /// Supported `&star_job` keys.
 pub const STAR_JOB_SUPPORTED: &[&str] = &[
+    "astero_just_call_my_extras_check_model",
     "change_initial_net",
     "change_initial_rotation_flag",
     "change_initial_rsp2_flag",

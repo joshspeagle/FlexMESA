@@ -537,6 +537,11 @@ pub struct StarJobControls {
     pub saved_model_name: String,
     /// Whether to save a `.mod` file when evolution terminates (`save_model_when_terminate`).
     pub save_model_when_terminate: bool,
+    /// Whether `astero` runs the star once and leaves every decision to the
+    /// user's `extras_check_model`, skipping its own search and chi^2 logic
+    /// (`astero_just_call_my_extras_check_model`;
+    /// `astero/private/astero_run_support.f90:171-174,239`).
+    pub astero_just_call_my_extras_check_model: bool,
     /// Output `.mod` filename on termination (`save_model_filename`).
     pub save_model_filename: String,
     /// Model number at which to save a `.mod` file (`save_model_number`, `< 0` disables).
@@ -723,6 +728,7 @@ impl Default for StarJobControls {
             load_saved_model: false,
             saved_model_name: String::new(),
             save_model_when_terminate: false,
+            astero_just_call_my_extras_check_model: false,
             save_model_filename: String::from("undefined"),
             save_model_number: -111,
             save_photo_when_terminate: true,

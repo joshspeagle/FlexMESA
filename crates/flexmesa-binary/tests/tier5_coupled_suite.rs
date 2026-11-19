@@ -227,9 +227,14 @@ struct JdotGrCheckExtras {
 }
 
 impl BinaryExtras for JdotGrCheckExtras {
-    fn finish_step(&mut self, bin: &mut BinarySystem) -> BinaryExtrasAction {
+    // Upstream makes this test in `extras_binary_check_model`
+    // (`binary/test_suite/jdot_gr_check/src/run_binary_extras.f90:151-169`); the code is the
+    // hook's upstream name, as the Python adapter reports it.
+    fn check_model(&mut self, bin: &mut BinarySystem) -> BinaryExtrasAction {
         if bin.donor.mstar_dot != 0.0 {
-            return BinaryExtrasAction::Terminate(String::from("GrCheckPass"));
+            return BinaryExtrasAction::Terminate(String::from(
+                "extras_binary_check_model",
+            ));
         }
         let a_exp = eval_gr_expected_separation_rsun(
             self.a0_rsun,
@@ -972,7 +977,7 @@ fn assert_slow_uncapped_case(
 #[ignore = "unverified uncapped binary campaign; tracked in #143 and #160"]
 fn test_uncapped_jdot_gr_check_campaign() {
     let (rep, extras) = assert_slow_uncapped_case("jdot_gr_check");
-    assert_eq!(rep.termination_code, "GrCheckPass");
+    assert_eq!(rep.termination_code, "extras_binary_check_model");
     assert!(extras.max_rel_err() < 1.0e-2);
 }
 

@@ -8,7 +8,7 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 - **Total manifest cases scanned**: `106`
 - **Cases passing strict `#147` validation**: `0`
 - **Cases rejected by strict `#147` validation**: `106`
-- **Distinct unsupported physics/solver controls encountered**: `437`
+- **Distinct unsupported physics/solver controls encountered**: `436`
 - **Distinct unknown/misspelled controls encountered**: `0`
 - **Cases using headless plotting controls (`#173` / `DECISIONS #25`)**: `78` (`895` distinct keys)
 
@@ -16,7 +16,7 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 
 | Section | Upstream `26.4.1` | Supported | Unused (`#147`) | Headless GUI (`#173`) | Terminal output (`DECISIONS #26`) | Unimplemented |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `&star_job` | 455 | 99 | 16 | 3 | 5 | 332 |
+| `&star_job` | 455 | 100 | 16 | 3 | 5 | 331 |
 | `&eos` | 102 | 5 | 0 | 0 | 0 | 97 |
 | `&kap` | 51 | 5 | 0 | 0 | 0 | 46 |
 | `&controls` | 1448 | 631 | 29 | 0 | 8 | 780 |
@@ -270,11 +270,11 @@ Per `DECISIONS #25` (matching upstream `USE_PGSTAR = NO`), keys in `&pgstar`, `&
 | `binary` | `star_plus_point_mass` | `fail_unsupported` | 2 | 0 | 85 |
 | `binary` | `star_plus_point_mass_explicit_mdot` | `fail_unsupported` | 2 | 0 | 0 |
 | `binary` | `wind_fed_bhhmxb` | `fail_unsupported` | 3 | 0 | 0 |
-| `astero` | `astero_adipls` | `fail_unsupported` | 6 | 0 | 0 |
-| `astero` | `astero_gyre` | `fail_unsupported` | 5 | 0 | 0 |
+| `astero` | `astero_adipls` | `fail_unsupported` | 5 | 0 | 0 |
+| `astero` | `astero_gyre` | `fail_unsupported` | 4 | 0 | 0 |
 | `astero` | `example_astero` | `fail_unsupported` | 59 | 0 | 173 |
 | `astero` | `fast_from_file` | `fail_unsupported` | 49 | 0 | 173 |
 | `astero` | `fast_newuoa` | `fail_unsupported` | 49 | 0 | 173 |
 | `astero` | `fast_scan_grid` | `fail_unsupported` | 50 | 0 | 173 |
 | `astero` | `fast_simplex` | `fail_unsupported` | 54 | 0 | 173 |
-| `astero` | `surface_effects` | `fail_unsupported` | 32 | 0 | 36 |
+| `astero` | `surface_effects` | `fail_unsupported` | 31 | 0 | 36 |

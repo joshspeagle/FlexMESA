@@ -365,10 +365,6 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
         }
     }
     model.sync_mesh_and_pack()?;
-    if job.relax_mass && job.new_mass > 0.3 {
-        model.reconstruct_ln_r_from_lnd_and_dm();
-        model.sync_mesh_and_pack()?;
-    }
     if model.controls.use_other_cgrav {
         extras.other_cgrav(&mut model)?;
     }

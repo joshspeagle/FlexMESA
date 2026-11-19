@@ -21,7 +21,7 @@
         "verified_total": 0,
         "pct_ported": 14.9,
         "pct_verified": 0.0,
-        "rust_lines": 54417,
+        "rust_lines": 54421,
         "python_jax_lines": 3869
       },
       {
@@ -72,7 +72,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 6024,
+        "rust_lines": 5754,
         "python_jax_lines": 1288
       },
       {
@@ -455,7 +455,7 @@
       "upstream_panel_modules": 46
     },
     "infrastructure_lines": {
-      "rust_bridge_testing_bench": 16719,
+      "rust_bridge_testing_bench": 16820,
       "python_testing_bench": 13609
     }
   },
@@ -595,7 +595,7 @@
         "no_reference_yet": 4,
         "strict_validated": 0,
         "diagnostic_runs": 90,
-        "reached_termination": 35,
+        "reached_termination": 34,
         "within_numeric_tol": 5,
         "passing": 0,
         "declared_gaps": 86,
@@ -607,7 +607,7 @@
         "no_reference_yet": 0,
         "strict_validated": 0,
         "diagnostic_runs": 8,
-        "reached_termination": 4,
+        "reached_termination": 5,
         "within_numeric_tol": 0,
         "passing": 0,
         "declared_gaps": 8,
@@ -683,11 +683,11 @@
     {
       "namelist": "star &star_job",
       "upstream_scalars": 431,
-      "matched_in_flexmesa": 79,
-      "defaults_agree": 62,
+      "matched_in_flexmesa": 80,
+      "defaults_agree": 63,
       "value_mismatch": 11,
       "disabled_limit_none": 6,
-      "unimplemented": 352
+      "unimplemented": 351
     },
     {
       "namelist": "binary &binary_controls + &binary_job",
@@ -748,16 +748,16 @@
     "rust": {
       "tool": "cargo llvm-cov",
       "overall": {
-        "lines": 90534,
-        "covered": 66645,
-        "percent": 73.6
+        "lines": 90287,
+        "covered": 66808,
+        "percent": 74.0
       },
       "by_crate": [
         {
           "crate": "flexmesa-astero",
-          "lines": 4284,
-          "covered": 1437,
-          "percent": 33.5
+          "lines": 4040,
+          "covered": 1507,
+          "percent": 37.3
         },
         {
           "crate": "flexmesa-atm",
@@ -816,8 +816,8 @@
         {
           "crate": "flexmesa-eos",
           "lines": 8893,
-          "covered": 7127,
-          "percent": 80.1
+          "covered": 7131,
+          "percent": 80.2
         },
         {
           "crate": "flexmesa-interp1d",
@@ -887,9 +887,9 @@
         },
         {
           "crate": "flexmesa-star",
-          "lines": 35744,
-          "covered": 26101,
-          "percent": 73.0
+          "lines": 35741,
+          "covered": 26190,
+          "percent": 73.3
         },
         {
           "crate": "flexmesa-testing",
@@ -914,8 +914,8 @@
     "python": {
       "tool": "pytest --cov",
       "overall": {
-        "statements": 21562,
-        "covered": 18954,
+        "statements": 21585,
+        "covered": 18970,
         "percent": 87.9
       },
       "by_subpackage": [
@@ -1065,9 +1065,9 @@
         },
         {
           "subpackage": "flexmesa.testing",
-          "statements": 3430,
-          "covered": 2713,
-          "percent": 79.1
+          "statements": 3453,
+          "covered": 2729,
+          "percent": 79.0
         },
         {
           "subpackage": "flexmesa.turb",
@@ -1088,62 +1088,62 @@
     "rust_ignore_count": 13,
     "rust_ignores": [
       {
-        "location": "crates/flexmesa-astero/tests/astero_suite.rs:419",
+        "location": "crates/flexmesa-astero/tests/astero_suite.rs:415",
         "reason": "unverified uncapped astero campaign; tracked in #143 and #162",
         "issues": "#143, #162"
       },
       {
-        "location": "crates/flexmesa-astero/tests/astero_suite.rs:425",
+        "location": "crates/flexmesa-astero/tests/astero_suite.rs:421",
         "reason": "unverified uncapped astero campaign; tracked in #143 and #162",
         "issues": "#143, #162"
       },
       {
-        "location": "crates/flexmesa-astero/tests/astero_suite.rs:431",
+        "location": "crates/flexmesa-astero/tests/astero_suite.rs:427",
         "reason": "unverified uncapped astero campaign; tracked in #143 and #162",
         "issues": "#143, #162"
       },
       {
-        "location": "crates/flexmesa-astero/tests/astero_suite.rs:437",
+        "location": "crates/flexmesa-astero/tests/astero_suite.rs:433",
         "reason": "unverified uncapped astero campaign; tracked in #143 and #162",
         "issues": "#143, #162"
       },
       {
-        "location": "crates/flexmesa-astero/tests/astero_suite.rs:443",
+        "location": "crates/flexmesa-astero/tests/astero_suite.rs:439",
         "reason": "unverified uncapped astero campaign; tracked in #143 and #162",
         "issues": "#143, #162"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:953",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:958",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:961",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:966",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:970",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:975",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:978",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:983",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:986",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:991",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:993",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:998",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1001",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1006",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },
@@ -1266,7 +1266,7 @@
       },
       {
         "phase": "Phase C",
-        "open": 12,
+        "open": 13,
         "closed": 2,
         "issues": [
           {
@@ -1338,6 +1338,11 @@
             "number": 220,
             "title": "[Audit] Level-2 exact-hex probes for the remaining math and auto_diff values",
             "state": "closed"
+          },
+          {
+            "number": 231,
+            "title": "[Audit C17] Port the remaining upstream per-case extras to test-side hooks",
+            "state": "open"
           }
         ]
       },
@@ -1391,6 +1396,26 @@
       {
         "number": 228,
         "title": "Align module and star defaults with MESA 26.4.1 *.defaults (#149)",
+        "draft": true
+      },
+      {
+        "number": 230,
+        "title": "[Audit C13] Data pipeline provenance and verified runtime caches (#164)",
+        "draft": false
+      },
+      {
+        "number": 232,
+        "title": "chore(extras): re-point the unported-extras ledger to #231 (split out of #148)",
+        "draft": false
+      },
+      {
+        "number": 233,
+        "title": "[Audit A6] Profile real evolutions, MESA 26.4.1 comparison, fast math, waste removal, and batching (#168)",
+        "draft": true
+      },
+      {
+        "number": 234,
+        "title": "test(eos): replace inline EOS literals with MESA 26.4.1 Fortran oracles and expand Python upstream coverage (#161 Slice 1)",
         "draft": true
       }
     ],
@@ -1878,6 +1903,32 @@
       "python_cov_pct": "87.9",
       "closed_140": "12",
       "total_140": "33",
+      "deferred_169": "18"
+    },
+    {
+      "date_utc": "2026-11-19",
+      "commit": "b1e4aa2",
+      "event": "main merge",
+      "engine_ported_pct": "13.9",
+      "all_verified_pct": "0.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "73.6",
+      "python_cov_pct": "87.9",
+      "closed_140": "12",
+      "total_140": "33",
+      "deferred_169": "18"
+    },
+    {
+      "date_utc": "2026-11-19",
+      "commit": "1131259",
+      "event": "main merge",
+      "engine_ported_pct": "13.9",
+      "all_verified_pct": "0.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "74.0",
+      "python_cov_pct": "87.9",
+      "closed_140": "12",
+      "total_140": "34",
       "deferred_169": "18"
     }
   ]

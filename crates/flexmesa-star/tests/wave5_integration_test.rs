@@ -96,7 +96,13 @@ fn test_wave5_2_riemann_rsp2_and_pulse_exporters_preserve_invariants() {
     assert!(rel_res <= 1.0e-13);
 
     let mut model =
-        load_zams_model(StarControls::default(), StarJobControls::default())
+        load_zams_model(
+            StarControls {
+                zbase: 0.02,
+                ..StarControls::default()
+            },
+            StarJobControls::default(),
+        )
             .expect("zams");
     set_hydro_vars(&mut model, false, false).expect("hydro_vars");
     let pts = build_pulse_points(&model, true, false, 1.0e99);
@@ -115,7 +121,13 @@ fn test_wave5_2_riemann_rsp2_and_pulse_exporters_preserve_invariants() {
 #[test]
 fn test_e2e_0_inlist_bundle_net_change_termination_and_photo_restart_parity() {
     let mut model =
-        load_zams_model(StarControls::default(), StarJobControls::default())
+        load_zams_model(
+            StarControls {
+                zbase: 0.02,
+                ..StarControls::default()
+            },
+            StarJobControls::default(),
+        )
             .expect("zams");
     assert_eq!(model.species, 8);
     change_model_network(&mut model, "co_burn.net", None)

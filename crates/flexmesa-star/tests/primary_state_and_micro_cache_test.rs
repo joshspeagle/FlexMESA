@@ -21,6 +21,7 @@ fn test_primary_state_buffer_zero_ulp_round_trip_memory_and_counter_survival() {
     let ctrl = StarControls {
         initial_mass: 1.0,
         rotation_flag: true,
+        zbase: 0.02,
         ..StarControls::default()
     };
     let mut model =
@@ -86,6 +87,7 @@ fn test_primary_state_buffer_zero_ulp_round_trip_memory_and_counter_survival() {
 fn test_microphysics_cache_hit_exactness_and_one_ulp_invalidation() {
     let ctrl = StarControls {
         initial_mass: 1.0,
+        zbase: 0.02,
         ..StarControls::default()
     };
     let mut model =
@@ -136,6 +138,7 @@ fn test_microphysics_cache_hit_exactness_and_one_ulp_invalidation() {
 fn test_star_evolve_step_populates_solver_calls_and_cache_hits() {
     let ctrl = StarControls {
         initial_mass: 1.0,
+        zbase: 0.02,
         ..StarControls::default()
     };
     let mut model =
@@ -155,6 +158,7 @@ fn test_non_retriable_star_error_fails_immediately_with_zero_retries() {
         initial_mass: 1.0,
         do_phase_separation: true,
         phase_separation_option: String::from("bogus_phase_sep"),
+        zbase: 0.02,
         ..StarControls::default()
     };
     let mut model =
@@ -178,6 +182,7 @@ fn test_primary_state_buffer_preserves_omega_when_solver_mlt_eval_count_nonzero(
     let ctrl = StarControls {
         initial_mass: 1.5,
         rotation_flag: true,
+        zbase: 0.02,
         ..StarControls::default()
     };
     let mut model = load_zams_model(ctrl, StarJobControls::default())
@@ -242,6 +247,7 @@ fn test_evolve_step_rolls_back_remesh_on_terminate_and_attempt0_exhaustion() {
             initial_mass: 1.0,
             mesh_delta_coeff: 0.25,
             okay_to_remesh: true,
+            zbase: 0.02,
             ..StarControls::default()
         },
         StarJobControls::default(),
@@ -271,6 +277,7 @@ fn test_evolve_step_rolls_back_remesh_on_terminate_and_attempt0_exhaustion() {
             max_newton_iters: 1,
             tol_correction_norm: 1.0e-15,
             tol_max_correction: 1.0e-15,
+            zbase: 0.02,
             ..StarControls::default()
         },
         StarJobControls::default(),

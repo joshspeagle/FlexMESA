@@ -399,4 +399,3 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
 - **Alternatives Rejected**:
   - *Retaining `Option<T>` wrappers with `None` active defaults*: Keeps MESA's active upper limits and `0.99` rotation wind limit silently disabled when omitted from an inlist.
   - *Maintaining a non-empty `ALLOW_LIST` for `diff_mesa_defaults.py --enforce`*: Hides parity drift behind permanent exceptions.
->>>>>>> 5b60b66 (test(audit): enforce zero MESA 26.4.1 default mismatches in CI and record DECISIONS #32 (#149))

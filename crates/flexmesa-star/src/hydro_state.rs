@@ -202,6 +202,8 @@ pub struct HydroAuxState {
     pub mlt_vc_old: Vec<f64>,
     /// Whether `mlt_vc` holds valid convective velocities from the prior step (`have_mlt_vc`).
     pub have_mlt_vc: bool,
+    /// Whether MLT/TDC evaluations may overwrite `mlt_vc` (`okay_to_set_mlt_vc` in `evolve.f90:321`).
+    pub okay_to_set_mlt_vc: bool,
     /// Constant-mass inner boundary zone index during mass adjustment (`k_const_mass`).
     pub k_const_mass: usize,
     /// Rayleigh-Taylor instability face kinematic diffusivity $\eta_{\mathrm{RTI},k}$ (`eta_RTI`).
@@ -330,6 +332,7 @@ impl HydroAuxState {
             csound_start: vec![0.0; nz],
             mlt_vc_old: vec![0.0; nz],
             have_mlt_vc: false,
+            okay_to_set_mlt_vc: true,
             k_const_mass: 0,
             eta_rti: vec![0.0; nz],
             etamid_rti: vec![0.0; nz],

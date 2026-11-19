@@ -144,6 +144,7 @@ fn test_f4_28_log_lh_separates_hydrogen_helium_and_metal_burning_powers() {
     let controls = StarControls {
         initial_mass: 2.0,
         initial_z: 0.02,
+        zbase: 0.02,
         ..StarControls::default()
     };
     let mut model =
@@ -252,6 +253,7 @@ fn test_incremental_flush_survives_mid_run_drop_and_profiles_evict_by_priority()
     let controls = StarControls {
         initial_mass: 1.0,
         initial_z: 0.02,
+        zbase: 0.02,
         output: OutputControls {
             history_interval: 3,
             profile_interval: 2,
@@ -353,6 +355,7 @@ fn test_two_step_evolve_writes_mesa_logs_and_split_headers() {
     let controls = StarControls {
         initial_mass: 1.0,
         initial_z: 0.02,
+        zbase: 0.02,
         output: OutputControls {
             history_interval: 1,
             profile_interval: 2,

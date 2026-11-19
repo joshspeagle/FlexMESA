@@ -345,7 +345,9 @@ fn set_face_radiative(model: &mut StarModel, k: usize) {
     model.mlt_d[k] = 0.0;
     model.mlt_cdc[k] = 0.0;
     model.conv_vel[k] = 0.0;
-    model.mlt_vc[k] = 0.0;
+    if model.aux.okay_to_set_mlt_vc {
+        model.mlt_vc[k] = 0.0;
+    }
     model.gradt[k] = model.gradr[k];
     model.mixing_type[k] = MixingType::NoMixing;
 }

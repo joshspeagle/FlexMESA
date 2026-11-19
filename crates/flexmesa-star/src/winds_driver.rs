@@ -124,8 +124,8 @@ pub fn do_set_mdot_with_extras(
     let surf_he4 = model.yhe_mass.first().copied().unwrap_or(0.0);
     let cen_h1 = model.xh_mass.last().copied().unwrap_or(0.0);
     let cen_he4 = model.yhe_mass.last().copied().unwrap_or(0.0);
-    let z_surf = if c.zbase >= 0.0 {
-        c.zbase
+    let z_surf = if model.kap_config.zbase >= 0.0 {
+        model.kap_config.zbase
     } else {
         (1.0 - surf_h1 - surf_he4).max(0.0)
     };

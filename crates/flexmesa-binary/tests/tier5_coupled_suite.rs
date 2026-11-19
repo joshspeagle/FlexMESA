@@ -435,8 +435,8 @@ impl BinaryExtras for DoubleBhExtras {
         }
         let x_surf = species_frac(star, 0, "h1", 0.7);
         let y_surf = species_frac(star, 0, "he4", 0.28);
-        let z_base = if star.controls.zbase > 0.0 {
-            star.controls.zbase
+        let z_base = if star.kap_config.zbase >= 0.0 {
+            star.kap_config.zbase
         } else {
             (1.0 - x_surf - y_surf).clamp(1.0e-6, 0.1)
         };
@@ -698,12 +698,14 @@ fn test_decoupled_edd_retention_limit_vs_radiation_correction() {
 fn test_initial_separation_and_dynamic_point_mass_conversion() {
     let c1 = StarControls {
         initial_mass: 1.0,
+        zbase: 0.02,
         ..StarControls::default()
     };
     let s1 =
         load_zams_model(c1, StarJobControls::default()).expect("1 Msun ZAMS");
     let c2 = StarControls {
         initial_mass: 0.8,
+        zbase: 0.02,
         ..StarControls::default()
     };
     let s2 =
@@ -1123,6 +1125,7 @@ fn test_edot_isotropic_eccentricity_enhancement_and_mdot_redo_boost() {
 
     let mut c1 = StarControls {
         initial_mass: 20.0,
+        zbase: 0.02,
         rotation_flag: true,
         surf_omega_div_omega_crit_limit: 0.98,
         ..StarControls::default()

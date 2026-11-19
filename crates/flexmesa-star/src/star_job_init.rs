@@ -15,7 +15,6 @@ use crate::inlist_runner::StarExtras;
 use crate::micro::change_model_network;
 use crate::model::StarModel;
 use crate::model_io::read_mod_str;
-use crate::pre_ms::build_pre_ms_model;
 use crate::relax::{
     apply_composition_relaxation, apply_uniform_rotation,
     excise_core_by_temperature, relax_core_boundary, relax_from_profile_files,
@@ -135,7 +134,12 @@ pub(crate) fn init_or_update_model_from_bundle_outcome(
         )?
     } else if job.create_pre_ms_model {
         did_create_pre_ms = true;
-        build_pre_ms_model(controls.clone(), job.clone())?
+        crate::pre_ms::build_pre_ms_model_with_configs(
+            controls.clone(),
+            job.clone(),
+            bundle.eos_config,
+            bundle.kap_config.clone(),
+        )?
     } else if job.use_other_build_initial_model {
         extras.other_build_initial_model(bundle)?.ok_or_else(|| {
             StarError::InvalidInput(String::from(

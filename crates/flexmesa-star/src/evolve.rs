@@ -95,6 +95,7 @@ pub fn restore_from_old(model: &mut StarModel) -> Result<(), StarError> {
     model.aux.alpha_rti.clone_from(&model.aux.alpha_rti_old);
     model.mlt_vc.clone_from(&model.aux.mlt_vc_old);
     model.conv_vel.clone_from(&model.aux.mlt_vc_old);
+    model.aux.okay_to_set_mlt_vc = true;
     if model.aux.omega_old.len() == model.nz {
         model.omega.clone_from(&model.aux.omega_old);
         model.j_rot.clone_from(&model.aux.j_rot_old);
@@ -212,8 +213,18 @@ pub fn star_evolve_step_with_extras(
     };
     let explicit_step_mdot = model.mstar_dot;
 
+    // Keep `okay_to_set_mlt_vc = false` across `remesh_star_before_step` until
+    // `save_old_values()` copies `mlt_vc` into `mlt_vc_old` (`evolve.f90:321`,
+    // `evolve_support.f90:58, 193-195`).
+    model.aux.okay_to_set_mlt_vc = false;
     let (mut num_splits, mut num_merges, mut pre_remesh_model) = if do_remesh {
-        remesh_star_before_step(model, model.dt)?
+        match remesh_star_before_step(model, model.dt) {
+            Ok(res) => res,
+            Err(e) => {
+                model.aux.okay_to_set_mlt_vc = true;
+                return Err(e);
+            }
+        }
     } else {
         (0, 0, None)
     };
@@ -225,6 +236,7 @@ pub fn star_evolve_step_with_extras(
         model.aux.total_energy = eval_total_energy_integrals(model).5;
     }
     model.save_old_values();
+    model.aux.okay_to_set_mlt_vc = true;
     model.aux.step_hist.mstar_dot_old = prev_mstar_dot_old;
     model.dt_old = prev_dt_old;
     let rsp2_e_old = if model.controls.rsp2_flag {

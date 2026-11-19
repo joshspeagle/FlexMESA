@@ -15,7 +15,7 @@ impl Default for StarControls {
             initial_mass: 1.0,
             initial_z: 0.02,
             initial_y: -1.0,
-            zbase: 0.02,
+            zbase: -1.0,
             zams_filename: String::from("zams_z2m2_y28.data"),
             max_model_number: None,
             max_age: 1.0e36,

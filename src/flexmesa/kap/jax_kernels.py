@@ -15,6 +15,7 @@ from typing import Any
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 from flexmesa import constants
 from flexmesa.kap import jax_co_lowt, jax_interp, tables_jax
@@ -416,14 +417,35 @@ def kap_get_results_jax(
     lo_bdy = max(float(kap_blend_log_t_lower_bdy), 3.75)
     hi_bdy = min(float(kap_blend_log_t_upper_bdy), low_t_max)
 
+    needs_zbase_low_t = kap_low_t_option in ("kapCN", "AESOPUS")
+    if not isinstance(zbase, jax.core.Tracer) and not isinstance(
+        log_t, jax.core.Tracer
+    ):
+        zb_min = float(np.min(np.asarray(zbase, dtype=np.float64)))
+        lt_arr = np.asarray(log_t, dtype=np.float64)
+        active_t2 = bool(use_type2_opacities) and bool(np.any(lt_arr > lo_bdy))
+        active_lt = needs_zbase_low_t and bool(np.any(lt_arr < hi_bdy))
+        if zb_min < 0.0 and (active_t2 or active_lt):
+            raise ValueError(
+                "must supply zbase >= 0 for Type 2, kapCN, or AESOPUS opacities"
+            )
+
+    invalid_zbase = (zb_a < 0.0) & (
+        (bool(use_type2_opacities) & (lt > lo_bdy))
+        | (bool(needs_zbase_low_t) & (lt < hi_bdy))
+    )
+    zb_eval = jnp.where(zb_a < 0.0, 0.0, zb_a)
+
     def _eval_low_t() -> tuple[jax.Array, jax.Array, jax.Array]:
         if kap_low_t_option == "kapCN":
-            fc_cn = jnp.where(zb_a <= 0.0, 1.0, xc_a / (0.1644 * zb_a))
-            fn_cn = jnp.where(zb_a <= 0.0, 1.0, xn_a / (0.0532 * zb_a))
-            return jax_co_lowt.eval_kapcn_jax(zb_a, x_a, fc_cn, fn_cn, lr, lt)
+            fc_cn = jnp.where(zb_eval <= 0.0, 1.0, xc_a / (0.1644 * zb_eval))
+            fn_cn = jnp.where(zb_eval <= 0.0, 1.0, xn_a / (0.0532 * zb_eval))
+            return jax_co_lowt.eval_kapcn_jax(
+                zb_eval, x_a, fc_cn, fn_cn, lr, lt
+            )
         if kap_low_t_option == "AESOPUS":
             return jax_co_lowt.eval_aesopus_jax(
-                zb_a, x_a, xc_a, xn_a, xo_a, lr, lt
+                zb_eval, x_a, xc_a, xn_a, xo_a, lr, lt
             )
         lk_l, dr_l, dt_l = jax_interp.eval_fixed_metal_jax(
             z_a,
@@ -440,7 +462,7 @@ def kap_get_results_jax(
         return _eval_high_t_jax(
             z_a,
             x_a,
-            zb_a,
+            zb_eval,
             xc_a,
             xo_a,
             lr,
@@ -542,15 +564,27 @@ def kap_get_results_jax(
             blend,
         ]
     )
+    nan_s = jnp.asarray(jnp.nan, dtype=jnp.float64)
+    fracs = jnp.where(invalid_zbase, nan_s, fracs)
     if not include_electron_conduction:
-        return kap_rad, dlk_rad_dr, dlk_rad_dt, fracs
+        return (
+            jnp.where(invalid_zbase, nan_s, kap_rad),
+            jnp.where(invalid_zbase, nan_s, dlk_rad_dr),
+            jnp.where(invalid_zbase, nan_s, dlk_rad_dt),
+            fracs,
+        )
     k_ec, dec_dr, dec_dt = electron_conduction_jax(
         zb_ion, lr_in, lt, use_blouin=use_blouin_conductive_opacities
     )
     kap_tot, dtot_dr, dtot_dt = combine_rad_with_conduction_jax(
         kap_rad, dlk_rad_dr, dlk_rad_dt, k_ec, dec_dr, dec_dt
     )
-    return kap_tot, dtot_dr, dtot_dt, fracs
+    return (
+        jnp.where(invalid_zbase, nan_s, kap_tot),
+        jnp.where(invalid_zbase, nan_s, dtot_dr),
+        jnp.where(invalid_zbase, nan_s, dtot_dt),
+        fracs,
+    )
 
 
 def make_differentiable_kap(

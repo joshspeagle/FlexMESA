@@ -397,12 +397,30 @@ pub fn build_pre_ms_model(
     controls: StarControls,
     job: StarJobControls,
 ) -> Result<StarModel, StarError> {
-    let ht = crate::micro::builtin_helm_table()?;
-    let eos_cfg = EosConfig::default();
     let kap_cfg = KapConfig {
         zbase: controls.zbase,
         ..KapConfig::default()
     };
+    build_pre_ms_model_with_configs(
+        controls,
+        job,
+        EosConfig::default(),
+        kap_cfg,
+    )
+}
+
+/// Constructs an initial $n = 1.5$ pre-main-sequence [`StarModel`] using
+/// explicit [`EosConfig`] and [`KapConfig`] settings (`star/private/pre_ms_model.f90`).
+///
+/// # Errors
+/// Returns [`StarError`] if root-finding or model construction fails.
+pub fn build_pre_ms_model_with_configs(
+    controls: StarControls,
+    job: StarJobControls,
+    eos_cfg: EosConfig,
+    kap_cfg: KapConfig,
+) -> Result<StarModel, StarError> {
+    let ht = crate::micro::builtin_helm_table()?;
 
     let (chem_id, xa_single) =
         default_basic_net_composition(controls.initial_y, controls.initial_z);
@@ -490,6 +508,7 @@ pub fn build_pre_ms_model(
     let m_total = best_shells[0].m;
     let mut model = StarModel::new(nz, chem_id, job, controls);
     model.eos_config = eos_cfg;
+    model.kap_config = kap_cfg;
     model.mstar = mstar;
     model.mstar_start = mstar;
     model.mstar_old = mstar;

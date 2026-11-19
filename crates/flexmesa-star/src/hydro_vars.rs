@@ -239,7 +239,11 @@ fn eval_face_mlt(
             } else {
                 model.controls.mlt_option
             };
-            let vc_old = model.aux.mlt_vc_old.get(k).copied().unwrap_or(0.0);
+            let vc_old = if model.aux.okay_to_set_mlt_vc {
+                model.aux.mlt_vc_old.get(k).copied().unwrap_or(0.0)
+            } else {
+                model.mlt_vc.get(k).copied().unwrap_or(0.0)
+            };
             let using_tdc = mlt_opt == MltOption::Tdc
                 && model.aux.have_mlt_vc
                 && k > 0
@@ -459,7 +463,9 @@ fn eval_face_mlt(
     model.gradl_ad[k] = gradl_f;
     model.gradt[k] = grad_t_f.val;
     model.gradt_ad[k] = grad_t_f;
-    model.mlt_vc[k] = mlt_vc_ad.val;
+    if model.aux.okay_to_set_mlt_vc {
+        model.mlt_vc[k] = mlt_vc_ad.val;
+    }
     model.mlt_vc_ad[k] = mlt_vc_ad;
     model.mlt_d[k] = d_f.val;
     model.mlt_d_ad[k] = d_f;

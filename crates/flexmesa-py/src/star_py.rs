@@ -78,9 +78,15 @@ macro_rules! impl_py_star_model {
             pub fn from_mod_str(text: &str) -> PyResult<Self> {
                 let (c, j) =
                     (StarControls::default(), StarJobControls::default());
-                Ok(Self {
-                    inner: read_mod_str(text, c, j).map_err(to_py_err)?,
-                })
+                let mut inner = read_mod_str(text, c, j).map_err(to_py_err)?;
+                if inner.kap_config.zbase < 0.0
+                    && inner.controls.initial_z >= 0.0
+                {
+                    let zb = inner.controls.initial_z;
+                    inner.controls.zbase = zb;
+                    inner.kap_config.zbase = zb;
+                }
+                Ok(Self { inner })
             }
 
             /// Restores a [`PyStarModel`] from binary `.photo` bytes

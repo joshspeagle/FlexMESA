@@ -133,3 +133,48 @@ def test_diff_mesa_defaults_enforce_rejects_mismatch_and_none(
     out_md.write_text(dmd.generate_markdown(mesa_root), encoding="utf-8")
     rc = dmd.main(["--out", str(out_md), "--check", "--enforce"])
     assert rc == 1
+
+
+def test_kap_get_results_jax_rejects_negative_zbase_for_type2_and_jit() -> None:
+    """Derived JAX kap kernel rejects zbase < 0 when Type 2 is active (#149)."""
+    import jax
+    import jax.numpy as jnp
+    import numpy as np
+
+    from flexmesa.kap import jax_kernels
+
+    with pytest.raises(ValueError, match="zbase >= 0"):
+        jax_kernels.kap_get_results_jax(
+            0.02, 0.70, -1.0, log_rho=-3.0, log_t=6.0, use_type2_opacities=True
+        )
+    with pytest.raises(ValueError, match="zbase >= 0"):
+        jax_kernels.kap_get_results_jax(
+            0.02,
+            0.70,
+            -1.0,
+            log_rho=-6.0,
+            log_t=3.6,
+            kap_low_t_option="AESOPUS",
+        )
+
+    # Type 1 only (use_type2_opacities=False, non-kapCN/AESOPUS low-T) succeeds.
+    kap_t1, dr_t1, dt_t1, _ = jax_kernels.kap_get_results_jax(
+        0.02, 0.70, -1.0, log_rho=-3.0, log_t=6.0, use_type2_opacities=False
+    )
+    assert np.isfinite(float(kap_t1))
+    assert np.isfinite(float(dr_t1))
+    assert np.isfinite(float(dt_t1))
+
+    # Under @jax.jit Tracer, negative zbase returns NaN rather than clamping Z=0.
+    jit_fn = jax.jit(
+        lambda zb: jax_kernels.kap_get_results_jax(
+            0.02, 0.70, zb, log_rho=-3.0, log_t=6.0, use_type2_opacities=True
+        )
+    )
+    kap_bad, dr_bad, dt_bad, fr_bad = jit_fn(jnp.asarray(-1.0))
+    assert np.isnan(float(kap_bad))
+    assert np.isnan(float(dr_bad))
+    assert np.isnan(float(dt_bad))
+    assert np.all(np.isnan(np.asarray(fr_bad)))
+    kap_ok, _, _, _ = jit_fn(jnp.asarray(0.02))
+    assert np.isfinite(float(kap_ok)) and float(kap_ok) > 0.0

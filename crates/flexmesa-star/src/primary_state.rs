@@ -390,6 +390,7 @@ pub struct PrimaryStateBuffer {
     pub(crate) doing_relax: bool,
     pub(crate) doing_struct_burn_mix: bool,
     pub(crate) have_mlt_vc: bool,
+    pub(crate) okay_to_set_mlt_vc: bool,
     pub(crate) k_const_mass: usize,
     pub(crate) total_energy: f64,
     pub(crate) total_internal_energy_start: f64,
@@ -511,7 +512,7 @@ impl PrimaryStateBuffer {
             ],
             falses: [
                 doing_relax, doing_struct_burn_mix, have_mlt_vc,
-                solver_had_mlt_flip
+                okay_to_set_mlt_vc, solver_had_mlt_flip
             ]
         )
     }
@@ -609,6 +610,7 @@ impl PrimaryStateBuffer {
                 doing_relax,
                 doing_struct_burn_mix,
                 have_mlt_vc,
+                okay_to_set_mlt_vc,
                 k_const_mass,
                 total_energy,
                 total_internal_energy_start,
@@ -782,6 +784,7 @@ impl PrimaryStateBuffer {
                 [
                     doing_relax,
                     have_mlt_vc,
+                    okay_to_set_mlt_vc,
                     k_const_mass,
                     total_energy,
                     total_internal_energy_start,

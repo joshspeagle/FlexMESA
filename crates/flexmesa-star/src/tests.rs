@@ -99,6 +99,7 @@ fn test_set_hydro_vars_on_4msun_zams_model_populates_convective_core() {
     let controls = StarControls {
         initial_mass: 4.0,
         initial_z: 0.02,
+        zbase: 0.02,
         ..StarControls::default()
     };
     let job = StarJobControls::default();
@@ -125,6 +126,7 @@ fn test_build_pre_ms_model_1msun_converges_to_convective_polytrope() {
     let controls = StarControls {
         initial_mass: 1.0,
         initial_z: 0.02,
+        zbase: 0.02,
         ..StarControls::default()
     };
     let job = StarJobControls {
@@ -146,6 +148,7 @@ fn test_henyey_jacobian_blocks_match_central_finite_differences() {
     let controls = StarControls {
         initial_mass: 4.0,
         initial_z: 0.02,
+        zbase: 0.02,
         ..StarControls::default()
     };
     let job = StarJobControls::default();
@@ -243,6 +246,7 @@ fn test_solve_henyey_step_converges_on_perturbed_model() {
     let controls = StarControls {
         initial_mass: 1.0,
         initial_z: 0.02,
+        zbase: 0.02,
         max_newton_iters: 25,
         ..StarControls::default()
     };
@@ -298,6 +302,7 @@ fn test_convective_boundaries_overshoot_diffusion_and_winds_conserve_mass() {
     let controls = StarControls {
         initial_mass: 4.0,
         initial_z: 0.02,
+        zbase: 0.02,
         ..StarControls::default()
     };
     let job = StarJobControls::default();
@@ -346,6 +351,7 @@ fn test_remesh_timestep_evolve_and_history_preserve_invariants() {
     let controls = StarControls {
         initial_mass: 4.0,
         initial_z: 0.02,
+        zbase: 0.02,
         mesh_delta_coeff: 0.5,
         varcontrol_target: 1.0e-3,
         max_model_number: Some(3),
@@ -392,6 +398,7 @@ fn test_do1_energy_eqn_time_centers_non_nuc_neu() {
     let controls = StarControls {
         initial_mass: 4.0,
         initial_z: 0.02,
+        zbase: 0.02,
         ..StarControls::default()
     };
     let mut model =
@@ -422,4 +429,123 @@ fn test_do1_energy_eqn_time_centers_non_nuc_neu() {
         (actual_diff - expected_diff).abs() <= 1.0e-12 * expected_diff.abs(),
         "expected time-centered 0.5*delta_neu shift {expected_diff}, got {actual_diff}"
     );
+}
+
+#[test]
+fn test_default_star_controls_zbase_sentinel_and_wind_surface_z_fallback() {
+    assert_eq!(StarControls::default().zbase, -1.0);
+
+    let mut m_uninit =
+        load_zams_model(StarControls::default(), StarJobControls::default())
+            .expect("load ZAMS with default controls");
+    assert_eq!(m_uninit.kap_config.zbase, -1.0);
+    let err = set_hydro_vars(&mut m_uninit, true, true)
+        .expect_err("Type 2 opacities must reject default zbase = -1.0");
+    assert!(format!("{err}").contains("zbase"));
+
+    // With Type 2 off and kap_config.zbase = -1.0, hot winds use surface 1-X-Y
+    // rather than solar Z = 0.02 (`star/private/winds.f90:336-341`).
+    let mut m_lowz = load_zams_model(
+        StarControls {
+            initial_mass: 20.0,
+            hot_wind_full_on_t: 1.0e4,
+            cool_wind_full_on_t: 9.0e3,
+            vink_scaling_factor: 1.0,
+            ..StarControls::default()
+        },
+        StarJobControls::default(),
+    )
+    .expect("20 Msun ZAMS");
+    m_lowz.controls.mix_wind.hot_wind_scheme = String::from("Vink");
+    m_lowz.kap_config.use_type2_opacities = false;
+    m_lowz.kap_config.use_zbase_for_type1 = false;
+    for k in 0..m_lowz.nz {
+        let row = m_lowz.cell_xa_mut(k);
+        row.fill(0.0);
+        row[0] = 0.758; // h1
+        row[2] = 0.240; // he4 -> surface Z = 0.002 (0.1 Z_solar)
+        row[3] = 0.002; // c12
+    }
+    m_lowz.finish_init_model().expect("finish_init_model");
+    set_hydro_vars(&mut m_lowz, true, true).expect("Type 1 hydro_vars");
+    let mut m_solarz = m_lowz.clone();
+    m_solarz.kap_config.zbase = 0.02;
+
+    let mdot_lowz =
+        crate::winds_driver::do_set_mdot(&mut m_lowz).expect("mdot lowz");
+    let mdot_solarz =
+        crate::winds_driver::do_set_mdot(&mut m_solarz).expect("mdot solarz");
+    assert!(mdot_lowz < 0.0 && mdot_solarz < 0.0);
+    assert!(
+        mdot_lowz.abs() < 0.5 * mdot_solarz.abs(),
+        "surface Z=0.002 Vink wind ({mdot_lowz:e}) must be weaker than Zbase=0.02 ({mdot_solarz:e})"
+    );
+}
+
+#[test]
+fn test_tdc_mlt_vc_old_preserved_across_pre_step_remesh_and_mod_roundtrip() {
+    let controls = StarControls {
+        initial_mass: 4.0,
+        initial_z: 0.02,
+        zbase: 0.02,
+        mesh_delta_coeff: 2.5,
+        okay_to_remesh: true,
+        ..StarControls::default()
+    };
+    let mut model =
+        load_zams_model(controls, StarJobControls::default()).expect("4 Msun ZAMS");
+    set_hydro_vars(&mut model, false, false).expect("init hydro");
+    star_evolve_step(&mut model, false, false, true).expect("step 1");
+    assert!(model.aux.have_mlt_vc);
+
+    let vc_after_step1 = model.mlt_vc.clone();
+    let xq_after_step1 = model.xq.clone();
+    assert!(vc_after_step1.iter().any(|&v| v > 0.0));
+
+    // 1. Active remesh (`ns1 + nm1 > 0`) interpolates face `mlt_vc` onto new `xq`
+    // without prematurely stepping TDC before `save_old_values()`.
+    model.aux.okay_to_set_mlt_vc = false;
+    model.controls.okay_to_remesh = true;
+    model.controls.mesh_delta_coeff = 2.5;
+    let dt1 = model.dt;
+    let (ns1, nm1, _) =
+        crate::evolve_support::remesh_star_before_step(&mut model, dt1)
+            .expect("active remesh");
+    assert!(ns1 + nm1 > 0);
+    assert_ne!(model.nz, xq_after_step1.len());
+    // 2. Converge mesh adaptation, then verify a 0-split/0-merge pre-step call
+    // runs `set_hydro_vars` while `okay_to_set_mlt_vc == false` and leaves
+    // `model.mlt_vc` byte-identical.
+    for _ in 0..8 {
+        let (s, m, _) =
+            crate::evolve_support::remesh_star_before_step(&mut model, dt1)
+                .expect("converge remesh");
+        if s + m == 0 {
+            break;
+        }
+    }
+    let vc_settled = model.mlt_vc.clone();
+    let (ns0, nm0, _) =
+        crate::evolve_support::remesh_star_before_step(&mut model, dt1)
+            .expect("no-op remesh on already-adapted mesh");
+    assert_eq!((ns0, nm0), (0, 0));
+    assert_eq!(
+        model.mlt_vc, vc_settled,
+        "set_hydro_vars inside remesh_star_before_step must not overwrite mlt_vc"
+    );
+    model.save_old_values();
+    assert_eq!(model.aux.mlt_vc_old, model.mlt_vc);
+    assert!(model.aux.mlt_vc_old.iter().any(|&v| v > 0.0));
+
+    // Radiative .mod roundtrip with mlt_vc == 0 still preserves have_mlt_vc = true.
+    model.mlt_vc.fill(0.0);
+    model.aux.have_mlt_vc = true;
+    let mod_txt = write_mod_string(&model).expect("write radiative .mod");
+    let reloaded = read_mod_str(
+        &mod_txt,
+        model.controls.clone(),
+        model.job.clone(),
+    )
+    .expect("read radiative .mod");
+    assert!(reloaded.aux.have_mlt_vc);
 }

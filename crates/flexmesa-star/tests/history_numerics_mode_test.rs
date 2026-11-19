@@ -20,6 +20,7 @@ fn test_numerics_mode_recorded_in_history_profile_mod_and_photo() {
         StarControls {
             initial_mass: 1.0,
             initial_z: 0.02,
+            zbase: 0.02,
             ..StarControls::default()
         },
         StarJobControls::default(),

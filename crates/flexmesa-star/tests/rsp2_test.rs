@@ -147,6 +147,7 @@ fn test_remesh_for_rsp2_and_profile_equations_preserve_mass_and_monotonic_radius
 ) {
     let mut controls = StarControls {
         rsp2_flag: true,
+        zbase: 0.02,
         ..Default::default()
     };
     controls.rsp2.nz = 120;
@@ -210,6 +211,7 @@ fn build_rsp2_jacobian_test_model() -> StarModel {
         p_theta_for_velocity_time_centering: 0.6,
         l_theta_for_velocity_time_centering: 0.7,
         max_logt_for_include_p_and_l_in_velocity_time_centering: 99.0,
+        zbase: 0.02,
         ..Default::default()
     };
     controls.rsp2.nz = 60;
@@ -346,6 +348,7 @@ fn test_rsp2_coupled_henyey_evolution_on_blap_conserves_energy() {
         include_p_in_velocity_time_centering: true,
         include_l_in_velocity_time_centering: true,
         use_p_d_1_div_rho_form_of_work_when_time_centering_velocity: true,
+        zbase: 0.02,
         ..Default::default()
     };
     controls.rsp2.change_rsp_flag = true;

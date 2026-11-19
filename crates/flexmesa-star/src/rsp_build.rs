@@ -328,7 +328,7 @@ pub fn build_rsp_envelope_model(
     mut controls: StarControls,
     job: StarJobControls,
 ) -> Result<StarModel, StarError> {
-    if controls.zbase <= 0.0 || controls.zbase == 0.02 {
+    if controls.zbase < 0.0 {
         controls.zbase = controls.rsp_z;
     }
     let kap = KapConfig {

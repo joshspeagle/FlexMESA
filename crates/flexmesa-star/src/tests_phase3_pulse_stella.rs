@@ -26,7 +26,13 @@ fn golden_dir() -> PathBuf {
 #[test]
 fn test_all_seven_pulsation_exporters_and_double_point_atmosphere_options() {
     let mut model =
-        load_zams_model(StarControls::default(), StarJobControls::default())
+        load_zams_model(
+            StarControls {
+                zbase: 0.02,
+                ..StarControls::default()
+            },
+            StarJobControls::default(),
+        )
             .expect("zams");
     set_hydro_vars(&mut model, false, false).expect("hydro_vars");
 
@@ -278,7 +284,13 @@ fn test_stella_export_and_feii_5169_sobolev_golden_fixture_parity() {
 
     // Also verify export_stella_pair on a StarModel produces 400 zones in .hyd and .abn
     let mut model =
-        load_zams_model(StarControls::default(), StarJobControls::default())
+        load_zams_model(
+            StarControls {
+                zbase: 0.02,
+                ..StarControls::default()
+            },
+            StarJobControls::default(),
+        )
             .expect("zams");
     set_hydro_vars(&mut model, false, false).expect("hydro_vars");
     let (hyd_out, abn_out) =

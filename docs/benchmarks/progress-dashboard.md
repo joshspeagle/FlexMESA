@@ -47,9 +47,9 @@ Progress is measured by **upstream MESA `26.4.1` source lines by status**, never
 | `gyre` | 55,708 | 55,708 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0.0% | 0.0% |
 | `adipls` | 30,923 | 30,923 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0.0% | 0.0% |
 | `stella` | 62,117 | 62,117 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0.0% | 0.0% |
-| `plotting` | 35,732 | 35,732 | 0 | 0 | 0 | 0 | 0 | 0 | 7,716 | 0.0% | 0.0% |
+| `plotting` | 35,732 | 35,732 | 0 | 0 | 0 | 0 | 0 | 0 | 7,761 | 0.0% | 0.0% |
 | **Subtotal: star + star_data + binary + astero** | 144,952 | 25,107 | 17,567 | 82,171 | 20,107 | 0 | 0 | 69,854 | 6,401 | 13.9% | 0.0% |
-| **Total (all 26 modules)** | 497,703 | 250,132 | 17,567 | 206,337 | 23,667 | 0 | 0 | 138,979 | 52,156 | 4.8% | 0.0% |
+| **Total (all 26 modules)** | 497,703 | 250,132 | 17,567 | 206,337 | 23,667 | 0 | 0 | 138,979 | 52,201 | 4.8% | 0.0% |
 
 *Notes*: `star_data` state structs reside in `crates/flexmesa-star`. Bridge, testing, and benchmark infrastructure account for an additional `18,483` Rust lines (`flexmesa-py`, `flexmesa-testing`, `flexmesa-bench`) and `13,609` Python lines (`flexmesa.testing`, `flexmesa.bench`). For plotting ([#173](https://github.com/joshspeagle/FlexMESA/issues/173)), `flexmesa.plotting` currently provides `25` `plot_*` builders against `46` upstream `pgstar`/`pgbinary` panel modules.
 

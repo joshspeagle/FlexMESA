@@ -62,6 +62,14 @@ def render_pgstar_coverage_markdown(repo_root: pathlib.Path) -> str:
         "and MESA `26.4.1` `plot_info` files (`flexmesa plot compare` / "
         "`profile` / `kipp` / `binary` / `track` / `grid`).",
         "",
+        "The status of each family is assigned by hand in "
+        "`flexmesa.plotting.pgstar_coverage` from a reading of the upstream "
+        "window source. The generator checks only that every upstream window "
+        "family has a row and that each named builder exists. No figure has "
+        "been compared with a PGSTAR or PGBINARY rendering, so `equivalent` "
+        "means the builder is intended to draw the same quantities, and "
+        "`partial` rows say what is known to be missing.",
+        "",
         "## Headline Summary",
         "",
         "| Metric | Value |",
@@ -75,7 +83,7 @@ def render_pgstar_coverage_markdown(repo_root: pathlib.Path) -> str:
             f"`{report.total_windows}` |"
         ),
         (
-            "| Families with equivalent static Matplotlib builder | "
+            "| Families whose builder is classed `equivalent` | "
             f"`{eq_fams}` (`{eq_wins}` windows) |"
         ),
         (

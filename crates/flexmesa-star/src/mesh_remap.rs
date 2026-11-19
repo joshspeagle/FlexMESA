@@ -1,13 +1,26 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-//! Conservative species, volume, kinetic-energy, angular-momentum, and internal
-//! energy remapping (`do_mesh_adjust`, `get1_lpp`, `adjust_omega`, and
-//! `set_lnT_for_energy` in `star/private/mesh_adjust.f90`).
+//! Upstream MESA `26.4.1` conservative Lagrangian profile remapping
+//! (`do_mesh_adjust`, `get1_lpp`, `get_xq_integral`, `do_lnR_and_lnd`, `do_xa`,
+//! `do1_lnT`, `set_lnT_for_energy`, `adjust_omega`, `do_v`, `do_u`, `do_etrb`,
+//! and `do_prune_mesh_surface` in `star/private/mesh_adjust.f90:1-2889` and
+//! `star/private/adjust_mesh.f90:36-580`).
 
-use flexmesa_eos::{eos_dt_get_zones, I_LN_E};
+use flexmesa_chem::{NuclideCatalog, get_composition_info};
+use flexmesa_const::{FOUR_THIRDS_PI, LN10, ONE_THIRD};
+use flexmesa_eos::{I_LN_E, eos_dt_get_t, eos_dt_get_zones};
+use flexmesa_interp1d::interpolate_vector_pm;
 
+use crate::adjust_mesh_support::{
+    fortran_maxloc_0based, fortran_minloc_0based,
+};
 use crate::controls::StarError;
 use crate::hydro_vars::set_hydro_vars;
+use crate::mesh_adjust::PlannedMeshOutcome;
 use crate::model::StarModel;
+
+/// Electron degeneracy threshold above which `do1_lnT` skips EOS temperature
+/// inversion (`eta_limit = -1d-6` in `star/private/mesh_adjust.f90:38, 1403`).
+pub const ETA_LIMIT_FOR_MESH_ADJUST: f64 = -1.0e-6;
 
 pub(crate) fn normalize_and_assign_remapped_xa(
     dst: &mut [f64],
@@ -27,8 +40,368 @@ pub(crate) fn normalize_and_assign_remapped_xa(
     }
 }
 
-/// Computes monotone, sum-preserving linear slopes `xa_c1` (`(nz_old, species)`)
-/// in exterior mass coordinate `xq` (`get1_lpp` in `mesh_adjust.f90:266-299`).
+/// Classification of each remeshed cell relative to the parent grid
+/// (`unchanged_type`, `split_type`, `merged_type`, `revised_type` in
+/// `star/private/adjust_mesh.f90:519-579`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CellType {
+    /// Cell boundaries `[xq_new(k), xq_new(k+1)]` match parent cell `comes_from[k]`.
+    Unchanged,
+    /// Cell lies strictly within or subdivides a parent cell.
+    Split,
+    /// Cell spans two or more merged parent cells.
+    Merged,
+    /// Cell retained boundaries while thermodynamic state was revised.
+    Revised,
+}
+
+/// Cached plan produced by `adjust_mesh` (`do_mesh_plan` + `set_types_of_new_cells`
+/// in `star/private/adjust_mesh.f90:244-579`).
+#[derive(Debug, Clone)]
+pub struct StandardMeshPlan {
+    /// Parent grid zone count (`nz_old`).
+    pub nz_old: usize,
+    /// Parent grid `dq` after `dq(nz) = 1 - sum(dq(1:nz-1))` (`adjust_mesh.f90:245-261`).
+    pub dq_old: Vec<f64>,
+    /// Original `model.dq` bits at `plan_mesh` entry for cache matching.
+    pub raw_dq_old: Vec<f64>,
+    /// Parent grid exterior mass fractions `xq_old`.
+    pub xq_old: Vec<f64>,
+    /// Planned new cell mass fractions `dq_new`.
+    pub dq_new: Vec<f64>,
+    /// Planned new exterior mass fractions `xq_new`.
+    pub xq_new: Vec<f64>,
+    /// 0-based parent zone index `comes_from[k]` in `0..nz_old`.
+    pub comes_from: Vec<usize>,
+    /// 1-based index of governing mesh function (`which_gval`).
+    pub which_gval: Vec<usize>,
+    /// Per-zone [`CellType`] classification (`len = nz_new`).
+    pub cell_type: Vec<CellType>,
+    /// Count of `Split` cells in `cell_type`.
+    pub num_splits: usize,
+    /// Count of `Merged` cells in `cell_type`.
+    pub num_merges: usize,
+}
+
+#[inline]
+pub(crate) fn f64_slices_bit_eq(a: &[f64], b: &[f64]) -> bool {
+    a.len() == b.len()
+        && a.iter().zip(b).all(|(x, y)| x.to_bits() == y.to_bits())
+}
+
+/// Computes `dq(nz) = 1 - sum(dq(1:nz-1))` with fallback normalization matching
+/// `star/private/adjust_mesh.f90:244-261, 354-369`.
+pub(crate) fn fix_tail_dq(dq: &mut [f64]) -> Result<(), StarError> {
+    let nz = dq.len();
+    if nz == 0 {
+        return Ok(());
+    }
+    if nz == 1 {
+        dq[0] = 1.0;
+        return Ok(());
+    }
+    let tmp = dq[nz - 1];
+    let sum_m1: f64 = dq[..nz - 1].iter().sum();
+    dq[nz - 1] = 1.0 - sum_m1;
+    if dq[nz - 1] <= 0.0 {
+        dq[nz - 1] = tmp;
+        let sum_all: f64 = dq.iter().sum();
+        if sum_all <= 0.0 || !sum_all.is_finite() {
+            return Err(StarError::InvalidInput(format!(
+                "non-positive sum(dq) = {sum_all} in adjust_mesh"
+            )));
+        }
+        for val in dq.iter_mut() {
+            *val /= sum_all;
+        }
+        let sum_m1_retry: f64 = dq[..nz - 1].iter().sum();
+        dq[nz - 1] = 1.0 - sum_m1_retry;
+        if dq[nz - 1] <= 0.0 {
+            return Err(StarError::InvalidInput(format!(
+                "dq(nz) = {} <= 0 in adjust_mesh",
+                dq[nz - 1]
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// Computes exterior mass coordinates `xq` from `dq` (`set_xqs` in
+/// `star/private/star_utils.f90:1557`).
+#[must_use]
+pub(crate) fn compute_xqs(dq: &[f64]) -> Vec<f64> {
+    let nz = dq.len();
+    let mut xq = vec![0.0_f64; nz];
+    for k in 1..nz {
+        xq[k] = xq[k - 1] + dq[k - 1];
+    }
+    xq
+}
+
+/// Classifies new zones against parent zones (`set_types_of_new_cells` in
+/// `star/private/adjust_mesh.f90:519-579`).
+///
+/// # Errors
+/// Returns [`StarError::InvalidInput`] if `xq_new[k] < xq_old[comes_from[k]]`.
+pub fn classify_new_cells(
+    xq_old: &[f64],
+    xq_new: &[f64],
+    comes_from: &[usize],
+) -> Result<(Vec<CellType>, usize, usize, usize), StarError> {
+    let nz_old = xq_old.len();
+    let nz_new = xq_new.len();
+    if comes_from.len() != nz_new {
+        return Err(StarError::InvalidInput(String::from(
+            "classify_new_cells: comes_from length mismatch",
+        )));
+    }
+    let mut cell_type = Vec::with_capacity(nz_new);
+    let mut unchanged = 0_usize;
+    let mut split = 0_usize;
+    let mut merged = 0_usize;
+
+    for k in 0..nz_new {
+        let k_old = comes_from[k];
+        if k_old >= nz_old {
+            return Err(StarError::InvalidInput(format!(
+                "classify_new_cells: comes_from[{k}]={k_old} >= nz_old={nz_old}"
+            )));
+        }
+        let ct = if xq_new[k] < xq_old[k_old] {
+            return Err(StarError::InvalidInput(format!(
+                "set_types_of_new_cells: xq_new({})={} < xq_old({})={}",
+                k + 1,
+                xq_new[k],
+                k_old + 1,
+                xq_old[k_old]
+            )));
+        } else if xq_new[k] > xq_old[k_old] {
+            CellType::Split
+        } else if k_old + 1 == nz_old {
+            if k + 1 == nz_new {
+                CellType::Unchanged
+            } else {
+                CellType::Split
+            }
+        } else if k + 1 == nz_new {
+            CellType::Split
+        } else if xq_new[k + 1] == xq_old[k_old + 1] {
+            CellType::Unchanged
+        } else if xq_new[k + 1] > xq_old[k_old + 1] {
+            CellType::Merged
+        } else {
+            CellType::Split
+        };
+        match ct {
+            CellType::Unchanged | CellType::Revised => unchanged += 1,
+            CellType::Split => split += 1,
+            CellType::Merged => merged += 1,
+        }
+        cell_type.push(ct);
+    }
+
+    if unchanged + split + merged != nz_new {
+        return Err(StarError::InvalidInput(String::from(
+            "set_types_of_new_cells count mismatch",
+        )));
+    }
+    Ok((cell_type, unchanged, split, merged))
+}
+
+fn build_plan_for_given_dq(
+    model: &StarModel,
+    dq_new_in: &[f64],
+) -> Result<StandardMeshPlan, StarError> {
+    let nz_old = model.nz;
+    let nz_new = dq_new_in.len();
+    if nz_old < 2 || nz_new < 2 {
+        return Err(StarError::InvalidInput(String::from(
+            "dq_new and model must each have at least 2 zones",
+        )));
+    }
+    let raw_dq_old = model.dq.clone();
+    let mut dq_old = raw_dq_old.clone();
+    fix_tail_dq(&mut dq_old)?;
+    let xq_old = compute_xqs(&dq_old);
+
+    let mut dq_new = dq_new_in.to_vec();
+    fix_tail_dq(&mut dq_new)?;
+    let xq_new = compute_xqs(&dq_new);
+
+    let mut comes_from = vec![0_usize; nz_new];
+    let mut ko = 0_usize;
+    for k in 0..nz_new {
+        let mut xk = xq_new[k];
+        while ko + 1 < nz_old && xq_old[ko + 1] <= xk {
+            ko += 1;
+        }
+        if ko + 1 < nz_old
+            && (xk - xq_old[ko + 1]).abs() <= 1.0e-15 * dq_old[ko]
+        {
+            ko += 1;
+            xk = xq_old[ko];
+        }
+        if (xk - xq_old[ko]).abs() <= 1.0e-15 * dq_old[ko] {
+            let _ = xk;
+        }
+        comes_from[k] = ko;
+    }
+
+    let mut xq_aligned = xq_new;
+    for k in 0..nz_new {
+        let ko = comes_from[k];
+        if (xq_aligned[k] - xq_old[ko]).abs()
+            <= 1.0e-15 * dq_old[ko].max(1.0e-30)
+        {
+            xq_aligned[k] = xq_old[ko];
+        }
+    }
+    let (cell_type, _unch, num_splits, num_merges) =
+        classify_new_cells(&xq_old, &xq_aligned, &comes_from)?;
+
+    Ok(StandardMeshPlan {
+        nz_old,
+        dq_old,
+        raw_dq_old,
+        xq_old,
+        dq_new,
+        xq_new: xq_aligned,
+        comes_from,
+        which_gval: vec![0; nz_new],
+        cell_type,
+        num_splits,
+        num_merges,
+    })
+}
+
+/// Evaluates `cell_specific_PE` (`star/private/star_utils.f90:2224-2277`).
+#[must_use]
+pub fn cell_specific_pe(model: &StarModel, k: usize) -> f64 {
+    let nz = model.nz;
+    if k >= nz {
+        return 0.0;
+    }
+    let mbar = if model.controls.use_mass_corrections {
+        model.aux.mass_correction.get(k).copied().unwrap_or(1.0)
+    } else {
+        1.0
+    };
+    let (rp1, mp1, gp1) = if k + 1 == nz {
+        (model.r_center, model.m_center, model.cgrav[nz - 1])
+    } else {
+        (model.r[k + 1], model.m_grav[k + 1], model.cgrav[k + 1])
+    };
+    let gravp1 = if rp1 <= 0.0 { 0.0 } else { -gp1 * mp1 / rp1 };
+    let r00 = model.r[k];
+    let grav00 = if r00 <= 0.0 {
+        0.0
+    } else {
+        -model.cgrav[k] * model.m_grav[k] / r00
+    };
+    0.5 * mbar * (gravp1 + grav00)
+}
+
+/// Evaluates `cell_specific_KE` (`star/private/star_utils.f90:2176-2221`).
+#[must_use]
+pub fn cell_specific_ke(model: &StarModel, k: usize) -> f64 {
+    let nz = model.nz;
+    if k >= nz {
+        return 0.0;
+    }
+    let mbar = if model.controls.use_mass_corrections {
+        model.aux.mass_correction.get(k).copied().unwrap_or(1.0)
+    } else {
+        1.0
+    };
+    if model.controls.u_flag {
+        let v0 = model.u[k];
+        0.5 * mbar * (v0 * v0)
+    } else if model.controls.v_flag {
+        let v0 = model.v[k];
+        let v1 = if k + 1 < nz {
+            model.v[k + 1]
+        } else {
+            model.v_center
+        };
+        let v2 = 0.5 * (v0 * v0 + v1 * v1);
+        0.5 * mbar * v2
+    } else {
+        0.0
+    }
+}
+
+/// Evaluates `total_angular_momentum` (`star/private/star_utils.f90:1835-1855`).
+#[must_use]
+pub fn total_angular_momentum(model: &StarModel) -> f64 {
+    if !model.controls.rotation_flag {
+        return 0.0;
+    }
+    model
+        .dm_bar
+        .iter()
+        .zip(&model.j_rot)
+        .map(|(dm_b, jr)| dm_b * jr)
+        .sum()
+}
+
+/// Single-zone LPP-HARMOD reconstruction (`get1_lpp` in
+/// `star/private/mesh_adjust.f90:1720-1807`, Stiriba 2003).
+///
+/// Reconstructs $f(\delta q) = c_0 + c_1\,\delta q + \tfrac{1}{2} c_2\,\delta q^2$
+/// with $\delta q = q - q_{\mathrm{mid}} = x_{q,\mathrm{mid}} - x_q$.
+#[must_use]
+pub fn get1_lpp_zone(
+    k: usize,
+    nz: usize,
+    species: usize,
+    j: usize,
+    dq: &[f64],
+    v_zone_major: &[f64],
+    quad: bool,
+) -> (f64, f64, f64) {
+    let v_at = |z: usize| v_zone_major[z * species + j];
+    if k == 0 || k + 1 >= nz {
+        return (v_at(k), 0.0, 0.0);
+    }
+    let sm1 = (v_at(k - 1) - v_at(k)) / ((dq[k - 1] + dq[k]) * 0.5);
+    let s00 = (v_at(k) - v_at(k + 1)) / ((dq[k] + dq[k + 1]) * 0.5);
+    let sprod = sm1 * s00;
+    if sprod <= 0.0 {
+        return (v_at(k), 0.0, 0.0);
+    }
+
+    let (c0, mut c1, mut c2) = if quad {
+        let c1_h = (sprod * 2.0) / (s00 + sm1);
+        let c2_h = if sm1.abs() <= s00.abs() {
+            (sm1 - c1_h) / (2.0 * dq[k])
+        } else {
+            (c1_h - s00) / (2.0 * dq[k])
+        };
+        let c0_h = v_at(k) - (c2_h * dq[k] * dq[k]) / 24.0;
+        (c0_h, c1_h, c2_h)
+    } else {
+        (v_at(k), (sm1 + s00) * 0.5, 0.0)
+    };
+
+    let dqhalf = dq[k] * 0.5;
+    let vbdy1 = c0 + c1 * dqhalf + 0.5 * c2 * dqhalf * dqhalf;
+    let vbdy2 = c0 - c1 * dqhalf + 0.5 * c2 * dqhalf * dqhalf;
+    if (v_at(k - 1) - vbdy1) * (vbdy1 - v_at(k)) < 0.0
+        || (v_at(k) - vbdy2) * (vbdy2 - v_at(k + 1)) < 0.0
+    {
+        c2 = 0.0;
+        c1 = if sm1.abs() <= s00.abs() { sm1 } else { s00 };
+    }
+    (c0, c1, c2)
+}
+
+/// Computes monotone, sum-preserving linear slopes `(xa_c0, xa_c1)` (`(nz_old, species)`)
+/// in `q - q_mid = xq_mid - xq` (`get1_lpp` + sum-zero normalization in
+/// `star/private/mesh_adjust.f90:255-288, 1720-1807`).
+///
+/// Note: `compute_monotone_xa_slopes` returns `xa_c1_xq = -xa_c1_q` in exterior
+/// mass coordinate `xq - xq_mid` for backwards compatibility with callers using
+/// `xa_c0 + xa_c1_xq * (xq - xq_mid)`.
 #[must_use]
 pub fn compute_monotone_xa_slopes(
     dq_old: &[f64],
@@ -36,86 +409,251 @@ pub fn compute_monotone_xa_slopes(
     nz_old: usize,
     species: usize,
 ) -> (Vec<f64>, Vec<f64>) {
+    let (c0, c1_q) =
+        compute_upstream_xa_lpp(dq_old, xa_old, nz_old, species, 0, nz_old);
+    let c1_xq = c1_q.into_iter().map(|s| -s).collect();
+    (c0, c1_xq)
+}
+
+fn compute_upstream_xa_lpp(
+    dq_old: &[f64],
+    xa_old: &[f64],
+    nz_old: usize,
+    species: usize,
+    k_start: usize,
+    k_end_excl: usize,
+) -> (Vec<f64>, Vec<f64>) {
     let mut xa_c0 = vec![0.0; nz_old * species];
     let mut xa_c1 = vec![0.0; nz_old * species];
     if nz_old == 0 || species == 0 {
         return (xa_c0, xa_c1);
     }
 
-    for k in 0..nz_old {
+    for k in k_start..k_end_excl.min(nz_old) {
         let base = k * species;
-        let sum_x: f64 = xa_old[base..base + species].iter().sum();
-        if sum_x > 0.0 {
+        for j in 0..species {
+            let (c0, c1, _c2) =
+                get1_lpp_zone(k, nz_old, species, j, dq_old, xa_old, false);
+            xa_c0[base + j] = c0;
+            xa_c1[base + j] = c1;
+        }
+        let sumx: f64 = xa_old[base..base + species].iter().sum();
+        if sumx > 0.0 {
             for j in 0..species {
-                xa_c0[base + j] = (xa_old[base + j] / sum_x).clamp(0.0, 1.0);
+                xa_c0[base + j] = xa_old[base + j] / sumx;
             }
         }
-    }
-    if nz_old < 3 {
-        return (xa_c0, xa_c1);
-    }
 
-    for k in 1..(nz_old - 1) {
-        let base = k * species;
-        let dm_lo = 0.5 * (dq_old[k - 1] + dq_old[k]).max(1.0e-99);
-        let dm_hi = 0.5 * (dq_old[k] + dq_old[k + 1]).max(1.0e-99);
+        let slope_row = &mut xa_c1[base..base + species];
+        let slope_sum: f64 = slope_row.iter().sum();
+        let j_piv = if slope_sum > 0.0 {
+            fortran_maxloc_0based(slope_row)
+        } else {
+            fortran_minloc_0based(slope_row)
+        };
+        slope_row[j_piv] = 0.0;
+        let rem_sum: f64 = slope_row.iter().sum();
+        slope_row[j_piv] = -rem_sum;
+
+        let half_dq = dq_old[k] * 0.5;
+        let mut bad = false;
         for j in 0..species {
-            let x_m1 = xa_c0[(k - 1) * species + j];
-            let x_00 = xa_c0[base + j];
-            let x_p1 = xa_c0[(k + 1) * species + j];
-            let s_lo = (x_00 - x_m1) / dm_lo;
-            let s_hi = (x_p1 - x_00) / dm_hi;
-            if s_lo * s_hi > 0.0 {
-                let s_min = s_lo.abs().min(s_hi.abs());
-                xa_c1[base + j] = s_lo.signum() * s_min;
-            }
-        }
-
-        // Enforce `sum_j xa_c1[k, j] == 0` by adjusting the dominant-slope
-        // species (`mesh_adjust.f90:283-290`).
-        let slope_sum: f64 = xa_c1[base..base + species].iter().sum();
-        if slope_sum.abs() > 0.0 {
-            let mut j_piv = 0_usize;
-            if slope_sum > 0.0 {
-                for j in 1..species {
-                    if xa_c1[base + j] > xa_c1[base + j_piv] {
-                        j_piv = j;
-                    }
-                }
-            } else {
-                for j in 1..species {
-                    if xa_c1[base + j] < xa_c1[base + j_piv] {
-                        j_piv = j;
-                    }
-                }
-            }
-            xa_c1[base + j_piv] -= slope_sum;
-        }
-
-        // Zero all slopes in cell `k` if any species would leave `[0, 1]` at
-        // either cell edge (`mesh_adjust.f90:291-297`).
-        let half_dq = 0.5 * dq_old[k];
-        let mut invalid = false;
-        for j in 0..species {
-            let dxa = xa_c1[base + j].abs() * half_dq;
+            let dxa = slope_row[j].abs() * half_dq;
             if xa_c0[base + j] + dxa > 1.0 || xa_c0[base + j] - dxa < 0.0 {
-                invalid = true;
+                bad = true;
                 break;
             }
         }
-        if invalid {
-            xa_c1[base..base + species].fill(0.0);
+        if bad {
+            slope_row.fill(0.0);
         }
     }
     (xa_c0, xa_c1)
 }
 
-/// Inverts EOS $\ln e(\rho_k, \ln T_k, \mathbf{X}_k) = \ln e_{\mathrm{target},k}$
-/// across all modified zones via damped Newton-Raphson (`set_lnT_for_energy` in
-/// `mesh_adjust.f90:345-385, 2550-2680`).
+/// Integrates reconstructed polynomial `(c0, c1, c2)` over `[xq_outer, xq_outer + dq]`
+/// (`get_xq_integral` in `star/private/mesh_adjust.f90:1810-1924`).
+#[must_use]
+pub fn get_xq_integral_col(
+    k_old_in: usize,
+    nz_old: usize,
+    xq_old: &[f64],
+    xq_outer: f64,
+    dq: f64,
+    order: usize,
+    species: usize,
+    j: usize,
+    c0: &[f64],
+    c1: &[f64],
+    c2: Option<&[f64]>,
+) -> f64 {
+    let mut k_old = k_old_in.min(nz_old.saturating_sub(1));
+    while k_old > 0 && xq_old[k_old] > xq_outer {
+        k_old -= 1;
+    }
+    let mut xq_inner = xq_outer + dq;
+    let mut old_xq_inner = xq_old[k_old];
+    let mut sum_dqs = 0.0_f64;
+    let mut integral = 0.0_f64;
+
+    for k in k_old..nz_old {
+        if dq <= sum_dqs {
+            break;
+        }
+        let old_xq_outer = old_xq_inner;
+        old_xq_inner = if k + 1 == nz_old { 1.0 } else { xq_old[k + 1] };
+        let xq_overlap_outer = xq_outer.max(old_xq_outer);
+        let mut xq_overlap_inner = xq_inner.min(old_xq_inner);
+
+        let dq1 = if sum_dqs == 0.0
+            && xq_overlap_outer == xq_outer
+            && xq_overlap_inner == xq_inner
+        {
+            xq_inner = xq_outer + dq;
+            xq_overlap_inner = xq_inner;
+            dq
+        } else if old_xq_inner >= xq_inner {
+            dq - sum_dqs
+        } else {
+            (xq_overlap_inner - xq_overlap_outer).max(0.0)
+        };
+        sum_dqs += dq1;
+
+        let idx = k * species + j;
+        let a = c0[idx];
+        let b = c1[idx];
+        let c = if order == 2 {
+            c2.map_or(0.0, |arr| arr[idx])
+        } else {
+            0.0
+        };
+
+        let avg_value = if dq1 == 0.0 || (b == 0.0 && c == 0.0) || order == 0 {
+            a
+        } else {
+            let old_xq_mid = (old_xq_outer + old_xq_inner) * 0.5;
+            let dq_outer = old_xq_mid - xq_overlap_outer;
+            let dq_inner = old_xq_mid - xq_overlap_inner;
+            if order == 1 || c == 0.0 {
+                let v_outer = a + dq_outer * b;
+                let v_inner = a + dq_inner * b;
+                (v_outer + v_inner) * 0.5
+            } else {
+                a + b * (dq_inner + dq_outer) * 0.5
+                    + c * (dq_inner * dq_inner
+                        + dq_inner * dq_outer
+                        + dq_outer * dq_outer)
+                        / 6.0
+            }
+        };
+        integral += dq1 * avg_value;
+        if old_xq_inner >= xq_inner {
+            break;
+        }
+    }
+    integral
+}
+
+/// Integrates piecewise-constant cell profile `value_old` over
+/// `[xq_outer, xq_outer + dq_range]` (`get_old_integral` in
+/// `star/private/mesh_adjust.f90:1530-1624`).
+#[must_use]
+pub fn get_old_value_integral(
+    k_old_in: usize,
+    nz_old: usize,
+    xq_old: &[f64],
+    dq_old: &[f64],
+    xq_outer: f64,
+    dq_range: f64,
+    value_old: &[f64],
+) -> f64 {
+    let mut k_old = k_old_in.min(nz_old.saturating_sub(1));
+    while k_old > 0 && xq_old[k_old] > xq_outer {
+        k_old -= 1;
+    }
+    let xq_inner = xq_outer + dq_range;
+    let mut old_xq_inner = xq_old[k_old];
+    let mut sum_dqs = 0.0_f64;
+    let mut integral = 0.0_f64;
+
+    for k in k_old..nz_old {
+        if dq_range <= sum_dqs {
+            break;
+        }
+        let old_xq_outer = old_xq_inner;
+        old_xq_inner = if k + 1 == nz_old { 1.0 } else { xq_old[k + 1] };
+        let val = value_old[k];
+
+        if old_xq_inner <= xq_inner && old_xq_outer >= xq_outer {
+            sum_dqs += dq_old[k];
+            integral += val * dq_old[k];
+        } else if old_xq_inner >= xq_inner && old_xq_outer <= xq_outer {
+            sum_dqs = dq_range;
+            integral = val * dq_range;
+        } else if xq_inner <= old_xq_inner {
+            integral += val * (dq_range - sum_dqs);
+            sum_dqs = dq_range;
+        } else {
+            let dq_overlap = (old_xq_inner - xq_outer).max(0.0);
+            sum_dqs += dq_overlap;
+            integral += val * dq_overlap;
+        }
+    }
+    integral
+}
+
+/// Solves EOS $\ln T(\rho, e, \mathbf{X})$ at a single zone (`set_lnT_for_energy_with_tol`
+/// in `star/private/mesh_adjust.f90:1627-1702` and `solve_eos_given_DE` in
+/// `star/private/eos_support.f90:106-143`).
 ///
 /// # Errors
-/// Returns [`StarError`] if EOS evaluation fails during temperature inversion.
+/// Returns [`StarError`] if EOS inversion fails or produces non-finite $\ln T$.
+pub fn solve_cell_lnt_for_energy(
+    model: &StarModel,
+    xa_k: &[f64],
+    log_rho: f64,
+    energy: f64,
+    lnt_guess: f64,
+    tol: f64,
+) -> Result<(f64, f64), StarError> {
+    if energy <= 0.0 || !energy.is_finite() || !log_rho.is_finite() {
+        return Err(StarError::MicrophysicsError(format!(
+            "solve_cell_lnt_for_energy invalid inputs: logRho={log_rho}, energy={energy}"
+        )));
+    }
+    let ht = crate::micro::builtin_helm_table()?;
+    let log_e = flexmesa_math::log10(energy);
+    let inv = eos_dt_get_t(
+        ht,
+        &model.chem_id,
+        xa_k,
+        log_rho,
+        I_LN_E as isize,
+        log_e * LN10,
+        lnt_guess / LN10,
+        tol,
+        tol * LN10,
+        100,
+        &model.eos_config,
+    )
+    .map_err(|e| {
+        StarError::MicrophysicsError(format!("solve_eos_given_DE failed: {e}"))
+    })?;
+    let lnt = inv.log10_result * LN10;
+    let res_energy = flexmesa_math::exp(inv.eos.res[I_LN_E]);
+    if !lnt.is_finite() || !res_energy.is_finite() {
+        return Err(StarError::MicrophysicsError(format!(
+            "solve_cell_lnt_for_energy non-finite output: lnT={lnt}"
+        )));
+    }
+    Ok((lnt, res_energy))
+}
+
+/// Inverts EOS $\ln e(\rho_k, \ln T_k, \mathbf{X}_k) = \ln e_{\mathrm{target},k}$
+/// across modified zones (`set_lnT_for_energy` in `star/private/mesh_adjust.f90:1627-1702`).
+///
+/// # Errors
+/// Returns [`StarError`] if EOS evaluation fails.
 pub fn set_lnt_for_energy(
     model: &mut StarModel,
     e_target: &[f64],
@@ -125,54 +663,30 @@ pub fn set_lnt_for_energy(
     if nz == 0 || e_target.len() != nz {
         return Ok(0.0);
     }
-    let ht = crate::micro::builtin_helm_table()?;
-
-    for _iter in 0..20 {
-        for k in 0..nz {
-            model.rho[k] = flexmesa_math::exp(model.lnd[k]);
-            model.t[k] = flexmesa_math::exp(model.ln_t[k]);
-        }
-        let outs = eos_dt_get_zones(
-            ht,
-            &model.rho,
-            &model.t,
-            &model.chem_id,
-            &model.xa,
-            &model.eos_config,
-        )
-        .map_err(|e| {
-            StarError::MicrophysicsError(format!(
-                "set_lnt_for_energy EOS failed: {e}"
-            ))
-        })?;
-
-        let mut max_rel = 0.0_f64;
-        for (k, out) in outs.iter().enumerate() {
-            let e_cur = flexmesa_math::exp(out.res[I_LN_E]);
-            model.energy[k] = e_cur;
-            if unchanged.get(k).copied().unwrap_or(false) || e_target[k] <= 0.0
-            {
-                continue;
-            }
-            let ln_e_tar = flexmesa_math::log(e_target[k]);
-            let resid = out.res[I_LN_E] - ln_e_tar;
-            let rel = ((e_cur - e_target[k]) / e_target[k]).abs();
-            max_rel = max_rel.max(rel);
-            if rel > 1.0e-13 {
-                let d_lne_dlnt = out.d_dln_t[I_LN_E].max(1.0e-4);
-                let step = (-resid / d_lne_dlnt).clamp(-0.15, 0.15);
-                model.ln_t[k] = (model.ln_t[k] + step).clamp(3.0, 26.0);
-            }
-        }
-        if max_rel <= 1.0e-12 {
-            break;
-        }
-    }
-
+    let species = model.species;
     for k in 0..nz {
         model.rho[k] = flexmesa_math::exp(model.lnd[k]);
+        if unchanged.get(k).copied().unwrap_or(false) || e_target[k] <= 0.0 {
+            model.t[k] = flexmesa_math::exp(model.ln_t[k]);
+            continue;
+        }
+        let log_rho = model.lnd[k] / LN10;
+        let xa_k = &model.xa[k * species..(k + 1) * species];
+        if let Ok((new_lnt, rev_e)) = solve_cell_lnt_for_energy(
+            model,
+            xa_k,
+            log_rho,
+            e_target[k],
+            model.ln_t[k],
+            1.0e-11,
+        ) {
+            model.ln_t[k] = new_lnt;
+            model.energy[k] = rev_e;
+        }
         model.t[k] = flexmesa_math::exp(model.ln_t[k]);
     }
+
+    let ht = crate::micro::builtin_helm_table()?;
     let outs = eos_dt_get_zones(
         ht,
         &model.rho,
@@ -207,258 +721,1149 @@ pub fn set_lnt_for_energy(
     Ok(rel_err)
 }
 
-fn dqbar_profile(dq: &[f64]) -> Vec<f64> {
+pub(crate) fn dqbar_profile(dq: &[f64]) -> Vec<f64> {
     let n = dq.len();
     let mut dqbar = vec![0.0; n];
     if n == 0 {
+        return dqbar;
+    }
+    if n == 1 {
+        dqbar[0] = dq[0];
         return dqbar;
     }
     dqbar[0] = 0.5 * dq[0];
     for k in 1..(n - 1) {
         dqbar[k] = 0.5 * (dq[k - 1] + dq[k]);
     }
-    if n > 1 {
-        dqbar[n - 1] = 0.5 * dq[n - 2] + dq[n - 1];
-    } else {
-        dqbar[0] = dq[0];
-    }
+    dqbar[n - 1] = 0.5 * dq[n - 2] + dq[n - 1];
     dqbar
 }
 
-/// Conservatively projects `model` onto a new mass grid `dq_new` (`mesh_adjust`
-/// in `star/private/mesh_adjust.f90`).
-///
-/// Conserves species mass $\sum_k \Delta m_k X_{j,k}$ via monotone linear
-/// overlap integration, cell volume $\sum_k \Delta m_k / \rho_k$, total
-/// internal energy $\sum_k \Delta m_k e_k$ via EOS $\ln T$ inversion, specific
-/// kinetic/turbulent energy, and total rotational angular momentum
-/// $J_{\mathrm{tot}} = \sum_k \overline{\Delta m}_k j_{\mathrm{rot},k}$.
-///
-/// # Errors
-/// Returns [`StarError`] if `dq_new` has fewer than 2 zones or EOS fails.
-pub fn remap_onto_dq(
-    model: &mut StarModel,
-    dq_new: &[f64],
+fn do_interp_pt_val(
+    nz: usize,
+    nz_old: usize,
+    nzlo1: usize,
+    nzhi1: usize,
+    val_out: &mut [f64],
+    val_old: &[f64],
+    center_val: f64,
+    xq_old_plus1: &[f64],
+    xq_new_slice: &[f64],
+    force_non_negative: bool,
 ) -> Result<(), StarError> {
-    let nz_old = model.nz;
-    let nz_new = dq_new.len();
-    let species = model.species;
-    if nz_new < 2 {
-        return Err(StarError::InvalidInput(String::from(
-            "dq_new must have at least 2 zones",
-        )));
+    let mut val_old_plus1 = Vec::with_capacity(nz_old + 1);
+    val_old_plus1.extend_from_slice(&val_old[..nz_old]);
+    val_old_plus1.push(center_val);
+
+    let val_new =
+        interpolate_vector_pm(xq_old_plus1, &val_old_plus1, xq_new_slice)
+            .map_err(|e| {
+                StarError::InvalidInput(format!(
+                    "mesh_adjust do_interp_pt_val failed: {e}"
+                ))
+            })?;
+
+    for (idx, k1) in (nzlo1..=nzhi1).enumerate() {
+        let mut v = val_new[idx];
+        if force_non_negative && v < 0.0 {
+            v = 0.0;
+        }
+        val_out[k1 - 1] = v;
     }
 
-    let dq_old = model.dq.clone();
-    let xq_old = model.xq.clone();
+    if nzlo1 > 1 {
+        val_out[..(nzlo1 - 1)].copy_from_slice(&val_old[..(nzlo1 - 1)]);
+    }
+    if nzhi1 < nz {
+        let n = nz - nzhi1 - 1;
+        for k in 0..=n {
+            val_out[nz - 1 - k] = val_old[nz_old - 1 - k];
+        }
+    }
+    Ok(())
+}
+
+/// Cell-midpoint `interp_pm` interpolation (`do_interp_cell_val` in
+/// `star/private/mesh_adjust.f90:874-961`).
+///
+/// # Errors
+/// Returns [`StarError::InvalidInput`] if spline construction fails.
+pub fn do_interp_cell_val(
+    nz: usize,
+    nz_old: usize,
+    nzlo1: usize,
+    nzhi1: usize,
+    val_out: &mut [f64],
+    val_old: &[f64],
+    xq: &[f64],
+    xq_old_plus1: &[f64],
+    dq: &[f64],
+    dq_old: &[f64],
+) -> Result<(), StarError> {
+    let n = nzhi1 - nzlo1 + 1;
+    let mut val_old_plus1 = vec![0.0; nz_old + 1];
+    let mut mid_xq_old_plus1 = vec![0.0; nz_old + 1];
+    for k in 0..nz_old {
+        val_old_plus1[k] = val_old[k];
+        mid_xq_old_plus1[k] = xq_old_plus1[k] + 0.5 * dq_old[k];
+    }
+    val_old_plus1[nz_old] = val_old_plus1[nz_old - 1];
+    mid_xq_old_plus1[nz_old] = 1.0;
+
+    let mut mid_xq_new = vec![0.0; n];
+    for i in 0..n {
+        let idx = nzlo1 - 1 + i;
+        mid_xq_new[i] = xq[idx] + 0.5 * dq[idx];
+    }
+
+    let val_new =
+        interpolate_vector_pm(&mid_xq_old_plus1, &val_old_plus1, &mid_xq_new)
+            .map_err(|e| {
+            StarError::InvalidInput(format!(
+                "mesh_adjust do_interp_cell_val failed: {e}"
+            ))
+        })?;
+
+    for i in 0..n {
+        val_out[nzlo1 - 1 + i] = val_new[i];
+    }
+    if nzlo1 > 1 {
+        val_out[..(nzlo1 - 1)].copy_from_slice(&val_old[..(nzlo1 - 1)]);
+    }
+    if nzhi1 < nz {
+        let tail = nz - nzhi1 - 1;
+        for i in 0..=tail {
+            val_out[nz - 1 - i] = val_old[nz_old - 1 - i];
+        }
+    }
+    Ok(())
+}
+
+fn do_lnr_and_lnd(
+    nz: usize,
+    nz_old: usize,
+    nzlo1: usize,
+    nzhi1: usize,
+    cell_type: &[CellType],
+    comes_from: &[usize],
+    xmstar: f64,
+    r_center: f64,
+    lnr_old: &[f64],
+    lnd_old: &[f64],
+    old_r: &[f64],
+    old_rho: &[f64],
+    dq: &[f64],
+    xq: &[f64],
+    xq_old_plus1: &[f64],
+    lnr_out: &mut [f64],
+    lnd_out: &mut [f64],
+    density_new_out: &mut [f64],
+) -> Result<(), StarError> {
+    let interp_lo1 = 1_usize.max(nzlo1.saturating_sub(1));
+    let interp_hi1 = nz.min(nzhi1 + 1);
+
+    let mut vol_old_plus1 = vec![0.0; nz_old + 1];
+    for k in 0..nz_old {
+        let rk = old_r[k];
+        vol_old_plus1[k] = FOUR_THIRDS_PI * rk * rk * rk;
+    }
+    let vol_center = FOUR_THIRDS_PI * r_center * r_center * r_center;
+    vol_old_plus1[nz_old] = vol_center;
+
+    for k in 1..=nz_old {
+        if vol_old_plus1[k] >= vol_old_plus1[k - 1] {
+            return Err(StarError::InvalidInput(format!(
+                "do_lnR_and_lnd: non-decreasing old volume at k={}",
+                k + 1
+            )));
+        }
+    }
+    for k in 1..nz {
+        if xq[k] <= xq[k - 1] {
+            return Err(StarError::InvalidInput(format!(
+                "do_lnR_and_lnd: non-increasing xq at k={}",
+                k + 1
+            )));
+        }
+    }
+
+    let interp_xq = &xq[(interp_lo1 - 1)..interp_hi1];
+    let interp_vol_new =
+        interpolate_vector_pm(xq_old_plus1, &vol_old_plus1, interp_xq)
+            .map_err(|e| {
+                StarError::InvalidInput(format!(
+                    "mesh_adjust do_lnR_and_lnd interp failed: {e}"
+                ))
+            })?;
+
+    let sz = nz.max(nz_old) + 2;
+    let mut vol_new = vec![0.0; sz];
+    vol_new[nz + 1] = vol_center;
+    for (idx, k1) in (interp_lo1..=interp_hi1).enumerate() {
+        vol_new[k1] = interp_vol_new[idx];
+    }
+
+    if interp_lo1 < interp_hi1 && vol_new[interp_lo1 + 1] >= vol_new[interp_lo1]
+    {
+        let v_hi2 = if interp_lo1 + 2 <= interp_hi1 {
+            vol_new[interp_lo1 + 2]
+        } else {
+            vol_center
+        };
+        vol_new[interp_lo1 + 1] = (vol_new[interp_lo1] + v_hi2) * 0.5;
+        if vol_new[interp_lo1 + 1] >= vol_new[interp_lo1] {
+            return Err(StarError::InvalidInput(String::from(
+                "do_lnR_and_lnd: Vol_new(interp_lo+1) >= Vol_new(interp_lo)",
+            )));
+        }
+    }
+
+    if interp_hi1 >= interp_lo1 + 2 {
+        for k1 in (interp_lo1 + 1)..interp_hi1 {
+            if vol_new[k1 + 1] >= vol_new[k1] || vol_new[k1] >= vol_new[k1 - 1]
+            {
+                let vol_min =
+                    vol_new[k1 - 1].min(vol_new[k1]).min(vol_new[k1 + 1]);
+                let vol_max =
+                    vol_new[k1 - 1].max(vol_new[k1]).max(vol_new[k1 + 1]);
+                if vol_min == vol_max
+                    || !vol_min.is_finite()
+                    || !vol_max.is_finite()
+                {
+                    return Err(StarError::InvalidInput(String::from(
+                        "do_lnR_and_lnd: degenerate non-monotonic Vol_new",
+                    )));
+                }
+                vol_new[k1 - 1] = vol_max;
+                vol_new[k1] = (vol_max + vol_min) * 0.5;
+                vol_new[k1 + 1] = vol_min;
+                if vol_new[k1 + 1] >= vol_new[k1]
+                    || vol_new[k1] >= vol_new[k1 - 1]
+                {
+                    return Err(StarError::InvalidInput(String::from(
+                        "do_lnR_and_lnd: interpolation gave non-positive volume",
+                    )));
+                }
+            }
+        }
+    }
+
+    let mut new_r = vec![0.0; nz + 1];
+    let mut density_new = vec![0.0; nz + 1];
+    let set1_new_r = |k1: usize, vol_arr: &[f64]| -> f64 {
+        if cell_type[k1 - 1] == CellType::Unchanged {
+            old_r[comes_from[k1 - 1]]
+        } else {
+            flexmesa_math::pow(vol_arr[k1] / FOUR_THIRDS_PI, ONE_THIRD)
+        }
+    };
+
+    new_r[nzlo1] = set1_new_r(nzlo1, &vol_new);
+    let k_loop_end = nzhi1.min(nz.saturating_sub(1));
+    for k1 in nzlo1..=k_loop_end {
+        new_r[k1 + 1] = set1_new_r(k1 + 1, &vol_new);
+        if cell_type[k1 - 1] == CellType::Unchanged {
+            density_new[k1] = old_rho[comes_from[k1 - 1]];
+            continue;
+        }
+        if new_r[k1] <= new_r[k1 + 1] {
+            return Err(StarError::InvalidInput(format!(
+                "do_lnR_and_lnd: new_r({k1}) <= new_r({})",
+                k1 + 1
+            )));
+        }
+        let cell_vol = vol_new[k1] - vol_new[k1 + 1];
+        if cell_vol <= 0.0 || dq[k1 - 1] <= 0.0 {
+            return Err(StarError::InvalidInput(format!(
+                "do_lnR_and_lnd: non-positive cell_Vol={cell_vol} or dq={} at k={k1}",
+                dq[k1 - 1]
+            )));
+        }
+        density_new[k1] = (xmstar * dq[k1 - 1]) / cell_vol;
+    }
+
+    if nzlo1 > 1 {
+        for k1 in 1..nzlo1 {
+            new_r[k1] = old_r[k1 - 1];
+            density_new[k1] = old_rho[k1 - 1];
+            vol_new[k1] = FOUR_THIRDS_PI * new_r[k1] * new_r[k1] * new_r[k1];
+        }
+    }
+
+    if nzhi1 < nz {
+        let n = nz - nzhi1 - 1;
+        for k in 0..=n {
+            new_r[nz - k] = old_r[nz_old - 1 - k];
+            density_new[nz - k] = old_rho[nz_old - 1 - k];
+            let rk = new_r[nz - k];
+            vol_new[nz - k] = FOUR_THIRDS_PI * rk * rk * rk;
+        }
+    } else {
+        let denom = vol_new[nz] - vol_center;
+        if denom <= 0.0 {
+            return Err(StarError::InvalidInput(String::from(
+                "do_lnR_and_lnd: Vol_new(nz) <= Vol_center",
+            )));
+        }
+        density_new[nz] = (xmstar * dq[nz - 1]) / denom;
+        new_r[nz] = flexmesa_math::pow(vol_new[nz] / FOUR_THIRDS_PI, ONE_THIRD);
+    }
+
+    for k1 in 1..=nz {
+        let from_k = comes_from[k1 - 1];
+        lnr_out[k1 - 1] = if new_r[k1] == old_r[from_k] {
+            lnr_old[from_k]
+        } else {
+            flexmesa_math::log(new_r[k1])
+        };
+        lnd_out[k1 - 1] = if density_new[k1] == old_rho[from_k] {
+            lnd_old[from_k]
+        } else {
+            flexmesa_math::log(density_new[k1])
+        };
+        density_new_out[k1 - 1] = density_new[k1];
+    }
+    Ok(())
+}
+
+/// Conservative overlap integration on `xout_old` / `xout_new` matching
+/// `adjust1_omega` (`include_upstream_gap_fill = true`) and `adjust1_v`,
+/// `adjust1_u`, `adjust1_etrb` (`include_upstream_gap_fill = false`) in
+/// `star/private/mesh_adjust.f90:1955-2887`.
+fn adjust1_control_volume(
+    k1: usize,
+    nz: usize,
+    nz_old: usize,
+    comes_from: &[usize],
+    xout_old: &[f64],
+    xout_new: &[f64],
+    old_mass_wt: &[f64],
+    new_point_wt: f64,
+    old_specific_val: &[f64],
+    include_upstream_gap_fill: bool,
+) -> Result<(f64, f64), StarError> {
+    let xq_outer = xout_new[k1 - 1];
+    let xq_inner = if k1 < nz {
+        xq_outer + new_point_wt
+    } else {
+        1.0
+    };
+
+    let mut dq_sum = 0.0_f64;
+    let mut accum = 0.0_f64;
+    let k_outer1 = if xq_outer >= xout_old[nz_old - 1] {
+        nz_old
+    } else if k1 == 1 {
+        1
+    } else {
+        comes_from[k1 - 2] + 1
+    };
+
+    for kk1 in k_outer1..=nz_old {
+        let xq1 = if kk1 == nz_old { 1.0 } else { xout_old[kk1] };
+        if xq1 <= xq_outer {
+            continue;
+        }
+        let xq0 = xout_old[kk1 - 1];
+        if include_upstream_gap_fill && xq0 >= xq_inner {
+            if dq_sum < new_point_wt && kk1 > 1 {
+                let dq = new_point_wt - dq_sum;
+                dq_sum = new_point_wt;
+                accum += old_specific_val[kk1 - 2] * dq;
+            }
+            break;
+        }
+        if xq1 < xq_outer {
+            return Err(StarError::InvalidInput(String::from(
+                "mesh_adjust control-volume overlap xq1 < xq_outer",
+            )));
+        }
+
+        if xq0 >= xq_outer && xq1 <= xq_inner {
+            let mut dq = old_mass_wt[kk1 - 1];
+            dq_sum += dq;
+            if dq_sum > new_point_wt {
+                // Upstream `star/private/mesh_adjust.f90:2035, 2284, 2518, 2811`
+                // computes `dq = dq - (target - dq_sum)` when `dq_sum > target`
+                // (deferred bug #244); reproduced verbatim for MESA 26.4.1 parity.
+                dq -= new_point_wt - dq_sum;
+                dq_sum = new_point_wt;
+            }
+            accum += old_specific_val[kk1 - 1] * dq;
+        } else if xq0 <= xq_outer && xq1 >= xq_inner {
+            let dq = new_point_wt;
+            dq_sum += dq;
+            accum += old_specific_val[kk1 - 1] * dq;
+        } else {
+            let dq = if xq_inner <= xq1 {
+                let rem = new_point_wt - dq_sum;
+                dq_sum = new_point_wt;
+                rem
+            } else {
+                let mut ov = (xq1 - xq_outer).max(0.0);
+                if dq_sum + ov > new_point_wt {
+                    ov = new_point_wt - dq_sum;
+                }
+                dq_sum += ov;
+                ov
+            };
+            accum += old_specific_val[kk1 - 1] * dq;
+            if dq <= 0.0 {
+                return Err(StarError::InvalidInput(format!(
+                    "mesh_adjust control-volume non-positive partial overlap dq={dq} at k={k1}"
+                )));
+            }
+        }
+
+        if dq_sum >= new_point_wt {
+            break;
+        }
+    }
+    Ok((accum, dq_sum))
+}
+
+#[inline]
+fn unchanged_face_for_vel(k: usize, cell_type: &[CellType]) -> bool {
+    matches!(cell_type[k], CellType::Unchanged | CellType::Revised)
+        && (k == 0 || cell_type[k - 1] == CellType::Unchanged)
+}
+
+pub(crate) fn execute_adjust_mesh_from_plan(
+    model: &mut StarModel,
+    plan: StandardMeshPlan,
+) -> Result<(), StarError> {
+    let nz_old = plan.nz_old;
+    let nz = plan.dq_new.len();
+    let species = model.species;
+    let mw = model.controls.mix_wind.clone();
+
+    model.aux.mesh_adjust_ke_conservation = 0.0;
+    model.aux.mesh_adjust_ie_conservation = 0.0;
+    model.aux.mesh_adjust_pe_conservation = 0.0;
+    model.aux.mesh_adjust_eturb_conservation = 0.0;
+
+    if model.controls.rotation_flag
+        && model.j_rot.iter().all(|&j| j == 0.0)
+        && model.omega.iter().any(|&w| w != 0.0)
+    {
+        crate::rotation::update_rotation_distortion_factors(model);
+    }
+    let j_tot1 = total_angular_momentum(model);
+
+    // `clean_up_fractions(1, nz, species, nz, s% xa, 10d0, 1d-2, ierr)`
+    // (`adjust_mesh.f90:109`).
+    for k in 0..nz_old {
+        let row = &mut model.xa[k * species..(k + 1) * species];
+        let sum_abs: f64 = row.iter().map(|x| x.abs()).sum();
+        if !sum_abs.is_finite() || sum_abs > 10.0 {
+            return Err(StarError::InvalidInput(format!(
+                "clean_up_fractions failed during adjust_mesh at zone {}: sum_abs={sum_abs}",
+                k + 1
+            )));
+        }
+        for x in row.iter_mut() {
+            *x = x.clamp(0.0, 1.0);
+        }
+        let sum_x: f64 = row.iter().sum();
+        if (sum_x - 1.0).abs() > 1.0e-2 || sum_x <= 0.0 {
+            return Err(StarError::InvalidInput(format!(
+                "clean_up_fractions failed during adjust_mesh at zone {}: sum={sum_x}",
+                k + 1
+            )));
+        }
+        for x in row.iter_mut() {
+            *x /= sum_x;
+        }
+    }
+
+    let specific_pe_old: Vec<f64> =
+        (0..nz_old).map(|k| cell_specific_pe(model, k)).collect();
+    let specific_ke_old: Vec<f64> =
+        (0..nz_old).map(|k| cell_specific_ke(model, k)).collect();
+    model.aux.mesh_call_number += 1;
+
+    let dq_old = plan.dq_old;
+    let xq_old = plan.xq_old;
+    let comes_from = plan.comes_from;
+    let cell_type = plan.cell_type;
+
     let xa_old = model.xa.clone();
-    let e_old = model.energy.clone();
+    let energy_old = model.energy.clone();
+    let eta_old = model.eta.clone();
     let lnd_old = model.lnd.clone();
     let lnt_old = model.ln_t.clone();
+    let lnr_old = model.ln_r.clone();
     let lum_old = model.lum.clone();
     let v_old = model.v.clone();
     let u_old = model.u.clone();
-    let omega_old = model.omega.clone();
-    let j_rot_old = model.j_rot.clone();
-    let et_rsp_old = model.aux.rsp.et_rsp.clone();
+    let w_old: Vec<f64> = (0..nz_old)
+        .map(|k| {
+            model
+                .aux
+                .rsp
+                .et_rsp
+                .get(k)
+                .copied()
+                .unwrap_or(0.0)
+                .max(0.0)
+                .sqrt()
+        })
+        .collect();
     let hp_face_old = model.aux.rsp.hp_face.clone();
     let alpha_rti_old = model.aux.alpha_rti.clone();
-    let mlt_vc_prev = model.mlt_vc.clone();
-    let prev_okay_mlt_vc = model.aux.okay_to_set_mlt_vc;
-
-    let (xa_c0, xa_c1) =
-        compute_monotone_xa_slopes(&dq_old, &xa_old, nz_old, species);
-    let dqbar_old = dqbar_profile(&dq_old);
-
-    model.resize_zones(nz_new);
-    model.dq.copy_from_slice(dq_new);
-    model.normalize_dqs()?;
-    model.set_qs();
-    model.set_xqs();
-    model.set_m_and_dm();
-    interp_face_mlt_vc_onto_xq(
-        &xq_old,
-        &mlt_vc_prev,
-        &model.xq,
-        &mut model.mlt_vc,
-    );
-
-    let mut e_target = vec![0.0; nz_new];
-    let mut unchanged = vec![false; nz_new];
-    let mut accum = vec![0.0; species];
-    let mut kk_start = 0_usize;
-
-    for k in 0..nz_new {
-        let a0 = model.xq[k];
-        let a1 = if k + 1 < nz_new { model.xq[k + 1] } else { 1.0 };
-        let dx = (a1 - a0).max(1.0e-99);
-        accum.fill(0.0);
-        let mut e_acc = 0.0;
-        let mut inv_rho_acc = 0.0;
-        let mut lnt_acc = 0.0;
-        let mut lum_acc = 0.0;
-        let mut v_acc = 0.0;
-        let mut v2_acc = 0.0;
-        let mut u_acc = 0.0;
-        let mut u2_acc = 0.0;
-        let mut et_acc = 0.0;
-        let mut hp_acc = 0.0;
-        let mut omega_acc = 0.0;
-        let mut alpha_rti_acc = 0.0;
-
-        while kk_start + 1 < nz_old && xq_old[kk_start + 1] <= a0 {
-            kk_start += 1;
-        }
-        let exact_match = (kk_start..(kk_start + 2).min(nz_old)).find(|&kk| {
-            let b0 = xq_old[kk];
-            let b1 = if kk + 1 < nz_old { xq_old[kk + 1] } else { 1.0 };
-            (a0 - b0).abs() <= 1.0e-15 * dx && (a1 - b1).abs() <= 1.0e-15 * dx
-        });
-        if let Some(kk) = exact_match {
-            unchanged[k] = true;
-            model.xa[k * species..(k + 1) * species]
-                .copy_from_slice(&xa_old[kk * species..(kk + 1) * species]);
-            e_target[k] = e_old[kk];
-            model.energy[k] = e_old[kk];
-            model.lnd[k] = lnd_old[kk];
-            model.ln_t[k] = lnt_old[kk];
-            model.lum[k] = lum_old[kk];
-            model.v[k] = v_old[kk];
-            model.u[k] = u_old[kk];
-            model.aux.rsp.et_rsp[k] =
-                et_rsp_old.get(kk).copied().unwrap_or(0.0);
-            model.aux.rsp.hp_face[k] =
-                hp_face_old.get(kk).copied().unwrap_or(0.0);
-            model.omega[k] = omega_old[kk];
-            model.aux.alpha_rti[k] =
-                alpha_rti_old.get(kk).copied().unwrap_or(0.0);
-            continue;
-        }
-        for kk in kk_start..nz_old {
-            let b0 = xq_old[kk];
-            if b0 >= a1 {
-                break;
-            }
-            let b1 = if kk + 1 < nz_old { xq_old[kk + 1] } else { 1.0 };
-            let lo = a0.max(b0);
-            let hi = a1.min(b1);
-            let ov = (hi - lo).max(0.0);
-            if ov > 0.0 {
-                let x_mid = 0.5 * (lo + hi);
-                let x_cen = b0 + 0.5 * dq_old[kk];
-                let dx_cen = x_mid - x_cen;
-                let base = kk * species;
-                for j in 0..species {
-                    accum[j] +=
-                        ov * (xa_c0[base + j] + xa_c1[base + j] * dx_cen);
-                }
-                e_acc += ov * e_old[kk];
-                inv_rho_acc += ov * flexmesa_math::exp(-lnd_old[kk]);
-                lnt_acc += ov * lnt_old[kk];
-                lum_acc += ov * lum_old[kk];
-                v_acc += ov * v_old[kk];
-                v2_acc += ov * v_old[kk] * v_old[kk];
-                u_acc += ov * u_old[kk];
-                u2_acc += ov * u_old[kk] * u_old[kk];
-                et_acc += ov * et_rsp_old.get(kk).copied().unwrap_or(0.0);
-                hp_acc += ov * hp_face_old.get(kk).copied().unwrap_or(0.0);
-                omega_acc += ov * omega_old[kk];
-                alpha_rti_acc +=
-                    ov * alpha_rti_old.get(kk).copied().unwrap_or(0.0);
-            }
-        }
-
-        normalize_and_assign_remapped_xa(
-            &mut model.xa[k * species..(k + 1) * species],
-            &accum,
-            dx,
-        );
-        e_target[k] = e_acc / dx;
-        model.energy[k] = e_target[k];
-        let inv_rho = (inv_rho_acc / dx).max(1.0e-99);
-        model.lnd[k] = -(flexmesa_math::log(inv_rho));
-        model.ln_t[k] = lnt_acc / dx;
-        model.lum[k] = lum_acc / dx;
-        let v_mean = v_acc / dx;
-        model.v[k] = if model.controls.v_flag && v_mean != 0.0 {
-            v_mean.signum() * (v2_acc / dx).max(0.0).sqrt()
-        } else {
-            v_mean
-        };
-        let u_mean = u_acc / dx;
-        model.u[k] = if model.controls.u_flag && u_mean != 0.0 {
-            u_mean.signum() * (u2_acc / dx).max(0.0).sqrt()
-        } else {
-            u_mean
-        };
-        model.aux.rsp.et_rsp[k] = (et_acc / dx).max(0.0);
-        model.aux.rsp.hp_face[k] = (hp_acc / dx).max(0.0);
-        model.omega[k] = omega_acc / dx;
-        model.aux.alpha_rti[k] = (alpha_rti_acc / dx).max(0.0);
-    }
-
-    model.reconstruct_ln_r_from_lnd_and_dm();
-
-    // Conserve total rotational angular momentum `sum_k dm_bar[k] * j_rot[k]`
-    // across face-centered control volumes (`adjust_omega`,
-    // `mesh_adjust.f90:232-248, 1280-1360`).
-    if model.controls.rotation_flag {
-        let dqbar_new = dqbar_profile(&model.dq);
-        let mut xbar_old = vec![0.0; nz_old + 1];
-        for kk in 0..nz_old {
-            xbar_old[kk + 1] = xbar_old[kk] + dqbar_old[kk];
-        }
-        xbar_old[nz_old] = 1.0;
-
-        let mut xbar_cur = 0.0;
-        let mut kk_b = 0_usize;
-        for k in 0..nz_new {
-            let a0 = xbar_cur;
-            let a1 = if k + 1 < nz_new {
-                a0 + dqbar_new[k]
-            } else {
-                1.0
-            };
-            xbar_cur = a1;
-            let dx = (a1 - a0).max(1.0e-99);
-            while kk_b + 1 < nz_old && xbar_old[kk_b + 1] <= a0 {
-                kk_b += 1;
-            }
-            let mut j_acc = 0.0;
-            for kk in kk_b..nz_old {
-                let b0 = xbar_old[kk];
-                if b0 >= a1 {
-                    break;
-                }
-                let b1 = xbar_old[kk + 1];
-                let ov = (a1.min(b1) - a0.max(b0)).max(0.0);
-                if ov > 0.0 {
-                    let jr = j_rot_old.get(kk).copied().unwrap_or_else(|| {
-                        (2.0 / 3.0)
-                            * flexmesa_math::pow2(model.r[k.min(nz_new - 1)])
-                            * omega_old[kk]
-                    });
-                    j_acc += ov * jr;
-                }
-            }
-            let jr_new = j_acc / dx;
-            let i_rot_k = ((2.0 / 3.0) * model.r[k] * model.r[k]).max(1.0e-99);
-            model.j_rot[k] = jr_new;
-            model.aux.i_rot[k] = i_rot_k;
-            model.omega[k] = jr_new / i_rot_k;
-        }
-    }
-
-    model.set_m_grav_and_grav();
-    let _ie_err = set_lnt_for_energy(model, &e_target, &unchanged)?;
-
+    let dpdr_drhodr_old = model.aux.dpdr_drhodr_info.clone();
+    let j_rot_old = model.j_rot.clone();
+    let omega_old = model.omega.clone();
+    let i_rot_old = model.aux.i_rot.clone();
+    let fp_rot_old = model.aux.fp_rot.clone();
+    let ft_rot_old = model.aux.ft_rot.clone();
+    let mlt_vc_old = model.mlt_vc.clone();
+    let d_mix_old = model.d_mix.clone();
+    let old_r = model.r.clone();
+    let old_rho = model.rho.clone();
     let (age_old, dt_old, mstar_old) =
         (model.star_age_old, model.dt_old, model.mstar_old);
+    let prev_okay_mlt_vc = model.aux.okay_to_set_mlt_vc;
+
+    model.resize_zones(nz);
+    model.dq.copy_from_slice(&plan.dq_new);
+    fix_tail_dq(&mut model.dq)?;
+    model.set_qs();
+    model.set_xqs();
+    for k in 1..nz {
+        if model.xq[k] <= model.xq[k - 1] {
+            return Err(StarError::InvalidInput(format!(
+                "bad xq_new before do_mesh_adjust at k={}: {} <= {}",
+                k + 1,
+                model.xq[k],
+                model.xq[k - 1]
+            )));
+        }
+    }
+    model.set_m_and_dm();
+
+    for (k, &xk) in model.xq.iter().enumerate() {
+        if !(0.0..=1.0).contains(&xk) {
+            return Err(StarError::InvalidInput(format!(
+                "do_mesh_adjust out-of-range xq[{}]={xk}",
+                k + 1
+            )));
+        }
+    }
+
+    let mut nzlo1 = 0_usize;
+    for (k, &ct) in cell_type.iter().enumerate() {
+        if ct != CellType::Unchanged {
+            nzlo1 = k + 1;
+            break;
+        }
+    }
+    if nzlo1 == 0 {
+        nzlo1 = nz;
+    }
+    let mut nzhi1 = nzlo1;
+    for k1 in (nzlo1..=nz).rev() {
+        if cell_type[k1 - 1] != CellType::Unchanged {
+            nzhi1 = k1;
+            break;
+        }
+    }
+    if nzhi1 < nz {
+        nzhi1 += 1;
+    }
+    if nzlo1 > 1 {
+        nzlo1 -= 1;
+    }
+
+    let nzlo_old0 = comes_from[nzlo1 - 1];
+    let nzhi_old0 = if nzhi1 == nz {
+        nz_old - 1
+    } else {
+        comes_from[nzhi1]
+    };
+
+    let dqbar = dqbar_profile(&model.dq);
+    let dqbar_old = dqbar_profile(&dq_old);
+
+    let mut xq_old_plus1 = Vec::with_capacity(nz_old + 1);
+    xq_old_plus1.extend_from_slice(&xq_old);
+    xq_old_plus1.push(1.0);
+
+    let xq_new_slice = model.xq[(nzlo1 - 1)..nzhi1].to_vec();
+
+    let mut xout_old = vec![0.0; nz_old];
+    xout_old[0] = xq_old[0];
+    for k in 1..nz_old {
+        xout_old[k] = xout_old[k - 1] + dqbar_old[k - 1];
+    }
+    let mut xout_new = vec![0.0; nz];
+    xout_new[0] = model.xq[0];
+    for k in 1..nz {
+        xout_new[k] = xout_new[k - 1] + dqbar[k - 1];
+    }
+
+    do_interp_pt_val(
+        nz,
+        nz_old,
+        nzlo1,
+        nzhi1,
+        &mut model.lum,
+        &lum_old,
+        model.l_center,
+        &xq_old_plus1,
+        &xq_new_slice,
+        false,
+    )?;
+
+    if model.controls.rti_flag {
+        do_interp_pt_val(
+            nz,
+            nz_old,
+            nzlo1,
+            nzhi1,
+            &mut model.aux.alpha_rti,
+            &alpha_rti_old,
+            0.0,
+            &xq_old_plus1,
+            &xq_new_slice,
+            true,
+        )?;
+        do_interp_pt_val(
+            nz,
+            nz_old,
+            nzlo1,
+            nzhi1,
+            &mut model.aux.dpdr_drhodr_info,
+            &dpdr_drhodr_old,
+            0.0,
+            &xq_old_plus1,
+            &xq_new_slice,
+            true,
+        )?;
+    }
+
+    let mut density_new = vec![0.0; nz];
+    let dq_snap = model.dq.clone();
+    let xq_snap = model.xq.clone();
+    do_lnr_and_lnd(
+        nz,
+        nz_old,
+        nzlo1,
+        nzhi1,
+        &cell_type,
+        &comes_from,
+        model.xmstar,
+        model.r_center,
+        &lnr_old,
+        &lnd_old,
+        &old_r,
+        &old_rho,
+        &dq_snap,
+        &xq_snap,
+        &xq_old_plus1,
+        &mut model.ln_r,
+        &mut model.lnd,
+        &mut density_new,
+    )?;
+
+    if model.controls.v_flag {
+        let old_v2: Vec<f64> = v_old.iter().map(|&v| v * v).collect();
+        let old_ke_tot: f64 = dqbar_old
+            .iter()
+            .zip(&old_v2)
+            .map(|(dqb, v2)| dqb * v2)
+            .sum();
+        for k in 0..nz {
+            if unchanged_face_for_vel(k, &cell_type) {
+                model.v[k] = v_old[comes_from[k]];
+                continue;
+            }
+            let (ke_sum, _dq_s) = adjust1_control_volume(
+                k + 1,
+                nz,
+                nz_old,
+                &comes_from,
+                &xout_old,
+                &xout_new,
+                &dqbar_old,
+                dqbar[k],
+                &old_v2,
+                false,
+            )?;
+            let mut v_new = (ke_sum / dqbar[k]).max(0.0).sqrt();
+            if v_old[comes_from[k]] < 0.0 {
+                v_new = -v_new;
+            }
+            model.v[k] = v_new;
+        }
+        let new_ke_tot: f64 = dqbar
+            .iter()
+            .zip(&model.v)
+            .map(|(dqb, &v)| dqb * v * v)
+            .sum();
+        if (old_ke_tot - new_ke_tot).abs() > 1.0e-7 * new_ke_tot {
+            return Err(StarError::InvalidInput(String::from(
+                "failed kinetic-energy conservation check in mesh_adjust do_v",
+            )));
+        }
+        let err = (old_ke_tot - new_ke_tot).abs()
+            / new_ke_tot.max(old_ke_tot).max(1.0);
+        model.aux.mesh_adjust_ke_conservation = err;
+        if mw.trace_mesh_adjust_error_in_conservation && err > 1.0e-10 {
+            return Err(StarError::InvalidInput(format!(
+                "mesh_adjust KE conservation error {err} > 1e-10"
+            )));
+        }
+    }
+
+    if model.controls.u_flag {
+        let old_u2: Vec<f64> = u_old.iter().map(|&u| u * u).collect();
+        let old_ke_tot: f64 =
+            dq_old.iter().zip(&old_u2).map(|(d, u2)| d * u2).sum();
+        for k in 0..nz {
+            if unchanged_face_for_vel(k, &cell_type) {
+                model.u[k] = u_old[comes_from[k]];
+                continue;
+            }
+            let (ke_sum, _dq_s) = adjust1_control_volume(
+                k + 1,
+                nz,
+                nz_old,
+                &comes_from,
+                &xout_old,
+                &xout_new,
+                &dq_old,
+                model.dq[k],
+                &old_u2,
+                false,
+            )?;
+            let mut u_new = (ke_sum / model.dq[k]).max(0.0).sqrt();
+            if u_old[comes_from[k]] < 0.0 {
+                u_new = -u_new;
+            }
+            model.u[k] = u_new;
+        }
+        let new_ke_tot: f64 =
+            model.dq.iter().zip(&model.u).map(|(d, &u)| d * u * u).sum();
+        let err = (old_ke_tot - new_ke_tot).abs()
+            / new_ke_tot.max(old_ke_tot).max(1.0);
+        model.aux.mesh_adjust_ke_conservation = err;
+        if mw.trace_mesh_adjust_error_in_conservation && err > 1.0e-10 {
+            return Err(StarError::InvalidInput(format!(
+                "mesh_adjust KE (u_flag) conservation error {err} > 1e-10"
+            )));
+        }
+    }
+
+    if model.controls.rsp2_flag {
+        let old_et: Vec<f64> = w_old.iter().map(|&w| w * w).collect();
+        let old_et_tot: f64 =
+            dq_old.iter().zip(&old_et).map(|(d, e)| d * e).sum();
+        for k in 0..nz {
+            if unchanged_face_for_vel(k, &cell_type) {
+                let wk = w_old[comes_from[k]];
+                let et = wk * wk;
+                model.aux.rsp.et_rsp[k] = et;
+                model.aux.etrb[k] = et;
+                continue;
+            }
+            let (et_sum, _dq_s) = adjust1_control_volume(
+                k + 1,
+                nz,
+                nz_old,
+                &comes_from,
+                &xout_old,
+                &xout_new,
+                &dq_old,
+                model.dq[k],
+                &old_et,
+                false,
+            )?;
+            let wk = (et_sum / model.dq[k]).max(0.0).sqrt();
+            let et = wk * wk;
+            model.aux.rsp.et_rsp[k] = et;
+            model.aux.etrb[k] = et;
+        }
+        let new_et_tot: f64 = model
+            .dq
+            .iter()
+            .zip(&model.aux.rsp.et_rsp)
+            .map(|(d, &et)| d * et)
+            .sum();
+        let err = (old_et_tot - new_et_tot).abs()
+            / new_et_tot.max(old_et_tot).max(1.0);
+        model.aux.mesh_adjust_eturb_conservation = err;
+        if mw.trace_mesh_adjust_error_in_conservation && err > 1.0e-10 {
+            return Err(StarError::InvalidInput(format!(
+                "mesh_adjust turbulent-energy conservation error {err} > 1e-10"
+            )));
+        }
+
+        let hp_center = hp_face_old.get(nz_old - 1).copied().unwrap_or(1.0);
+        do_interp_pt_val(
+            nz,
+            nz_old,
+            nzlo1,
+            nzhi1,
+            &mut model.aux.rsp.hp_face,
+            &hp_face_old,
+            hp_center,
+            &xq_old_plus1,
+            &xq_new_slice,
+            false,
+        )?;
+    }
+
+    do_interp_pt_val(
+        nz,
+        nz_old,
+        nzlo1,
+        nzhi1,
+        &mut model.mlt_vc,
+        &mlt_vc_old,
+        0.0,
+        &xq_old_plus1,
+        &xq_new_slice,
+        true,
+    )?;
+    do_interp_pt_val(
+        nz,
+        nz_old,
+        nzlo1,
+        nzhi1,
+        &mut model.d_mix,
+        &d_mix_old,
+        0.0,
+        &xq_old_plus1,
+        &xq_new_slice,
+        true,
+    )?;
+
+    let (xa_c0, xa_c1) = compute_upstream_xa_lpp(
+        &dq_old,
+        &xa_old,
+        nz_old,
+        species,
+        nzlo_old0,
+        nzhi_old0 + 1,
+    );
+
+    let total_internal_energy1: f64 =
+        dq_old.iter().zip(&energy_old).map(|(d, e)| d * e).sum();
+
+    for k in 0..nz {
+        if matches!(cell_type[k], CellType::Unchanged | CellType::Revised) {
+            let ko = comes_from[k];
+            model.xa[k * species..(k + 1) * species]
+                .copy_from_slice(&xa_old[ko * species..(ko + 1) * species]);
+            continue;
+        }
+        let xq_outer = model.xq[k];
+        let cell_dq = if k + 1 == nz {
+            1.0 - xq_outer
+        } else {
+            model.dq[k]
+        };
+        let k_old_start = comes_from[k].saturating_sub(1);
+        let row = &mut model.xa[k * species..(k + 1) * species];
+        for (j, slot) in row.iter_mut().enumerate() {
+            let tot_j = get_xq_integral_col(
+                k_old_start,
+                nz_old,
+                &xq_old,
+                xq_outer,
+                cell_dq,
+                2,
+                species,
+                j,
+                &xa_c0,
+                &xa_c1,
+                None,
+            );
+            *slot = tot_j / cell_dq;
+            if *slot > 1.0 + 1.0e-8 || *slot < -1.0e-8 || !slot.is_finite() {
+                return Err(StarError::InvalidInput(format!(
+                    "do_xa out-of-range abundance {} at zone {}",
+                    *slot,
+                    k + 1
+                )));
+            }
+        }
+        let xa_sum: f64 = row.iter().sum();
+        if !xa_sum.is_finite() || (1.0 - xa_sum).abs() > 1.0e-3 {
+            return Err(StarError::InvalidInput(format!(
+                "do_xa sum deviation xa_sum={xa_sum} at zone {}",
+                k + 1
+            )));
+        }
+        for slot in row.iter_mut() {
+            *slot = (*slot / xa_sum).clamp(0.0, 1.0);
+        }
+        let norm_sum: f64 = row.iter().sum();
+        if norm_sum > 0.0 {
+            for slot in row.iter_mut() {
+                *slot /= norm_sum;
+            }
+        }
+    }
+
+    let catalog = NuclideCatalog::builtin_ref();
+    for k in 0..nz {
+        let xa_k = &model.xa[k * species..(k + 1) * species];
+        let comp = get_composition_info(
+            catalog,
+            &model.chem_id,
+            xa_k,
+            model.controls.use_mass_corrections,
+        )
+        .map_err(|e| {
+            StarError::MicrophysicsError(format!(
+                "do_mesh_adjust composition error at zone {}: {e}",
+                k + 1
+            ))
+        })?;
+        model.xh_mass[k] = comp.xh.clamp(0.0, 1.0);
+        model.yhe_mass[k] = comp.xhe.clamp(0.0, 1.0);
+        model.z_mass[k] = comp.xz.clamp(0.0, 1.0);
+        model.abar[k] = comp.abar;
+        model.zbar[k] = comp.zbar;
+        model.z2bar[k] = comp.z2bar;
+        model.z53bar[k] = comp.z53bar;
+        model.ye[k] = comp.ye;
+        model.aux.mass_correction[k] = comp.mass_correction;
+        let ko = comes_from[k];
+        model.r[k] = if model.ln_r[k] == lnr_old[ko] {
+            old_r[ko]
+        } else {
+            flexmesa_math::exp(model.ln_r[k])
+        };
+    }
+    model.set_m_grav_and_grav();
+
+    let mut untouched_rot = vec![false; nz];
+    let mut j_target = vec![0.0; nz];
+    if model.controls.rotation_flag {
+        for k in 0..nz {
+            let ko = comes_from[k];
+            let face_unchanged = unchanged_face_for_vel(k, &cell_type)
+                && model.r[k] == old_r[ko];
+            let jr = if face_unchanged {
+                j_rot_old[ko]
+            } else {
+                let (j_tot, dq_s) = adjust1_control_volume(
+                    k + 1,
+                    nz,
+                    nz_old,
+                    &comes_from,
+                    &xout_old,
+                    &xout_new,
+                    &dqbar_old,
+                    dqbar[k],
+                    &j_rot_old,
+                    true,
+                )?;
+                if dq_s > 0.0 { j_tot / dq_s } else { 0.0 }
+            };
+            model.j_rot[k] = jr;
+            j_target[k] = jr;
+            untouched_rot[k] = face_unchanged;
+            model.omega[k] = omega_old[ko];
+            if face_unchanged {
+                if let Some(&ir) = i_rot_old.get(ko) {
+                    model.aux.i_rot[k] = ir;
+                }
+                if let Some(&fp) = fp_rot_old.get(ko) {
+                    model.aux.fp_rot[k] = fp;
+                }
+                if let Some(&ft) = ft_rot_old.get(ko) {
+                    model.aux.ft_rot[k] = ft;
+                }
+            }
+        }
+        crate::rotation::conserve_shell_j_rot_and_distortion(model);
+        for k in 0..nz {
+            let ko = comes_from[k];
+            if untouched_rot[k] {
+                model.omega[k] = omega_old[ko];
+                model.j_rot[k] = j_rot_old[ko];
+                if let Some(&ir) = i_rot_old.get(ko) {
+                    model.aux.i_rot[k] = ir;
+                }
+            } else {
+                model.j_rot[k] = j_target[k];
+            }
+        }
+    }
+
+    let mut energy_new = vec![0.0; nz];
+    for k in 0..nz {
+        let k_old = comes_from[k];
+        if cell_type[k] == CellType::Unchanged {
+            model.ln_t[k] = lnt_old[k_old];
+            energy_new[k] = energy_old[k_old];
+            model.energy[k] = energy_new[k];
+            continue;
+        }
+        let xq_outer = model.xq[k];
+        let cell_dq = model.dq[k];
+        let avg_lnt = if cell_type[k] == CellType::Revised {
+            lnt_old[k]
+        } else {
+            get_old_value_integral(
+                k_old, nz_old, &xq_old, &dq_old, xq_outer, cell_dq, &lnt_old,
+            ) / cell_dq
+        };
+        if !avg_lnt.is_finite() || !(0.0..=100.0).contains(&avg_lnt) {
+            return Err(StarError::InvalidInput(format!(
+                "do1_lnT out-of-range avg_lnT={avg_lnt} at zone {}",
+                k + 1
+            )));
+        }
+
+        if !mw.mesh_adjust_get_t_from_e
+            || eta_old[k_old] >= ETA_LIMIT_FOR_MESH_ADJUST
+        {
+            model.ln_t[k] = avg_lnt;
+            energy_new[k] = energy_old[k_old];
+            model.energy[k] = energy_new[k];
+            continue;
+        }
+
+        let avg_energy = if cell_type[k] == CellType::Revised {
+            energy_old[k_old]
+        } else {
+            get_old_value_integral(
+                k_old,
+                nz_old,
+                &xq_old,
+                &dq_old,
+                xq_outer,
+                cell_dq,
+                &energy_old,
+            ) / cell_dq
+        };
+
+        let target_e =
+            if mw.max_rel_delta_ie_for_mesh_total_energy_balance == 0.0 {
+                avg_energy
+            } else {
+                let avg_pe = if cell_type[k] == CellType::Revised {
+                    specific_pe_old[k_old]
+                } else {
+                    get_old_value_integral(
+                        k_old,
+                        nz_old,
+                        &xq_old,
+                        &dq_old,
+                        xq_outer,
+                        cell_dq,
+                        &specific_pe_old,
+                    ) / cell_dq
+                };
+                let avg_ke = if cell_type[k] == CellType::Revised {
+                    specific_ke_old[k_old]
+                } else {
+                    get_old_value_integral(
+                        k_old,
+                        nz_old,
+                        &xq_old,
+                        &dq_old,
+                        xq_outer,
+                        cell_dq,
+                        &specific_ke_old,
+                    ) / cell_dq
+                };
+                let new_pe = cell_specific_pe(model, k);
+                let new_ke = cell_specific_ke(model, k);
+                let max_delta = avg_energy
+                    * mw.max_rel_delta_ie_for_mesh_total_energy_balance;
+                let mut delta_e = avg_pe + avg_ke - (new_pe + new_ke);
+                if delta_e.abs() > max_delta {
+                    delta_e = if delta_e < 0.0 {
+                        -max_delta.abs()
+                    } else {
+                        max_delta.abs()
+                    };
+                }
+                let cand = avg_energy + delta_e;
+                if cand <= 0.0 { avg_energy } else { cand }
+            };
+        energy_new[k] = target_e;
+
+        let rho_k = density_new[k];
+        let log_rho = flexmesa_math::log10(rho_k);
+        let xa_k = model.xa[k * species..(k + 1) * species].to_vec();
+        let new_lnt = if let Ok((lnt_sol, _rev_e)) = solve_cell_lnt_for_energy(
+            model, &xa_k, log_rho, target_e, avg_lnt, 1.0e-11,
+        ) {
+            lnt_sol
+        } else {
+            energy_new[k] = energy_old[k_old];
+            avg_lnt
+        };
+        model.ln_t[k] = new_lnt;
+        model.energy[k] = energy_new[k];
+    }
+
+    let total_internal_energy2: f64 =
+        model.dq.iter().zip(&energy_new).map(|(d, e)| d * e).sum();
+    let ie_err = (total_internal_energy1 - total_internal_energy2).abs()
+        / total_internal_energy1
+            .abs()
+            .max(total_internal_energy2.abs())
+            .max(1.0);
+    model.aux.mesh_adjust_ie_conservation = ie_err;
+    if mw.trace_mesh_adjust_error_in_conservation && ie_err > 1.0e-8 {
+        return Err(StarError::InvalidInput(format!(
+            "mesh_adjust IE conservation error {ie_err} > 1e-8"
+        )));
+    }
+
+    // `check_species_conservation` (`mesh_adjust.f90:469-498`).
+    for j in 0..species {
+        let old_total: f64 = (0..nz_old)
+            .map(|k| xa_old[k * species + j] * dq_old[k])
+            .sum();
+        if old_total < 1.0e-9 {
+            continue;
+        }
+        let new_total: f64 = (0..nz)
+            .map(|k| model.xa[k * species + j] * model.dq[k])
+            .sum();
+        if (new_total - old_total).abs() > 1.0e-4 {
+            return Err(StarError::InvalidInput(format!(
+                "check_species_conservation failed for species index {j}: old={old_total}, new={new_total}"
+            )));
+        }
+    }
+
+    if model.controls.rotation_flag {
+        let j_tot2 = total_angular_momentum(model);
+        if (j_tot2 - j_tot1).abs() > 1.0e-2 * j_tot1.abs().max(j_tot2.abs()) {
+            return Err(StarError::InvalidInput(format!(
+                "adjust_mesh failed angular momentum conservation: J_tot1={j_tot1}, J_tot2={j_tot2}"
+            )));
+        }
+    }
+
     model.pack_xh();
     model.aux.okay_to_set_mlt_vc = false;
     let hydro_res = set_hydro_vars(model, false, false);
     model.aux.okay_to_set_mlt_vc = prev_okay_mlt_vc;
     hydro_res?;
+
+    if model.controls.rotation_flag {
+        for k in 0..nz {
+            let ko = comes_from[k];
+            if untouched_rot[k] {
+                model.omega[k] = omega_old[ko];
+                model.j_rot[k] = j_rot_old[ko];
+            } else {
+                model.j_rot[k] = j_target[k];
+            }
+        }
+    }
+
     model.save_start_values()?;
     model.save_old_values();
     model.star_age_old = age_old;
@@ -467,55 +1872,131 @@ pub fn remap_onto_dq(
     Ok(())
 }
 
-/// Interpolates face `mlt_vc` from `xq_old[0..nz_old]` (with center `xq = 1`,
-/// `val = 0`) onto `xq_new[0..nz_new]` (`do_interp_pt_val` in
-/// `star/private/mesh_adjust.f90:245-248, 834-871`).
-fn interp_face_mlt_vc_onto_xq(
-    xq_old: &[f64],
-    mlt_vc_old: &[f64],
-    xq_new: &[f64],
-    mlt_vc_out: &mut [f64],
-) {
-    let nz_old = xq_old.len().min(mlt_vc_old.len());
-    let nz_new = xq_new.len().min(mlt_vc_out.len());
-    if nz_old == 0 || nz_new == 0 {
-        mlt_vc_out.fill(0.0);
-        return;
-    }
-    let mut x_pts = Vec::with_capacity(nz_old + 1);
-    let mut y_pts = Vec::with_capacity(nz_old + 1);
-    x_pts.extend_from_slice(&xq_old[..nz_old]);
-    y_pts.extend_from_slice(&mlt_vc_old[..nz_old]);
-    x_pts.push(1.0);
-    y_pts.push(0.0);
-
-    let strictly_inc = x_pts.windows(2).all(|w| w[1] > w[0]);
-    if strictly_inc && x_pts.len() >= 4 {
-        if let Ok(vals) = flexmesa_interp1d::interpolate_vector_pm(
-            &x_pts,
-            &y_pts,
-            &xq_new[..nz_new],
-        ) {
-            for (dst, v) in mlt_vc_out[..nz_new].iter_mut().zip(vals) {
-                *dst = if v.is_finite() { v.max(0.0) } else { 0.0 };
+/// Conservatively projects `model` onto `dq_new` (`remesh` / `do_mesh_adjust`
+/// in `star/private/adjust_mesh.f90` and `star/private/mesh_adjust.f90`, or
+/// `remesh_split_merge` when `use_split_merge_amr` is active).
+///
+/// # Errors
+/// Returns [`StarError`] if `dq_new` has fewer than 2 zones, conservation checks
+/// fail, or EOS inversion encounters an invalid state.
+pub fn remap_onto_dq(
+    model: &mut StarModel,
+    dq_new: &[f64],
+) -> Result<(), StarError> {
+    if let Some(outcome) = model.aux.planned_mesh.take() {
+        match outcome {
+            PlannedMeshOutcome::DeferredError(err) => return Err(err),
+            PlannedMeshOutcome::SplitMergeAmr { raw_dq_old }
+                if f64_slices_bit_eq(&raw_dq_old, &model.dq) =>
+            {
+                let _ =
+                    crate::adjust_mesh_split_merge::remesh_split_merge(model)?;
+                return Ok(());
             }
-            return;
+            PlannedMeshOutcome::Standard(plan)
+                if plan.nz_old == model.nz
+                    && f64_slices_bit_eq(&plan.raw_dq_old, &model.dq)
+                    && f64_slices_bit_eq(&plan.dq_new, dq_new) =>
+            {
+                if model.controls.mix_wind.mesh_max_allowed_ratio < 2.5 {
+                    model.controls.mix_wind.mesh_max_allowed_ratio = 2.5;
+                }
+                return execute_adjust_mesh_from_plan(model, *plan);
+            }
+            _ => {}
         }
     }
 
-    let mut j = 0_usize;
-    for (k, &xq) in xq_new[..nz_new].iter().enumerate() {
-        while j + 2 < x_pts.len() && x_pts[j + 1] < xq {
-            j += 1;
-        }
-        let (x0, x1) = (x_pts[j], x_pts[j + 1]);
-        let (y0, y1) = (y_pts[j], y_pts[j + 1]);
-        let v = if x1 > x0 {
-            let t = ((xq - x0) / (x1 - x0)).clamp(0.0, 1.0);
-            (1.0 - t) * y0 + t * y1
-        } else {
-            y0
-        };
-        mlt_vc_out[k] = if v.is_finite() { v.max(0.0) } else { 0.0 };
+    let plan = build_plan_for_given_dq(model, dq_new)?;
+    execute_adjust_mesh_from_plan(model, plan)
+}
+
+/// Strips the outermost `nz_old - nz_new` zones from `model` without altering
+/// interior zone values (`do_prune_mesh_surface` in
+/// `star/private/mesh_adjust.f90:553-640`).
+///
+/// # Errors
+/// Returns [`StarError::InvalidInput`] if `nz_new == 0` or `nz_new > model.nz`.
+pub fn do_prune_mesh_surface(
+    model: &mut StarModel,
+    nz_new: usize,
+) -> Result<(), StarError> {
+    let nz_old = model.nz;
+    if nz_new == 0 || nz_new > nz_old {
+        return Err(StarError::InvalidInput(format!(
+            "do_prune_mesh_surface invalid nz_new={nz_new} for nz_old={nz_old}"
+        )));
     }
+    let skip = nz_old - nz_new;
+    if skip == 0 {
+        return Ok(());
+    }
+    let species = model.species;
+    let nvar = model.layout.nvar_hydro;
+    let new_mstar = model.m[skip];
+    let new_xmstar = new_mstar - model.m_center;
+    if new_xmstar <= 0.0 || !new_xmstar.is_finite() {
+        return Err(StarError::InvalidInput(format!(
+            "do_prune_mesh_surface non-positive xmstar={new_xmstar} at skip={skip}"
+        )));
+    }
+    let dm_kept: Vec<f64> = model.dm[skip..nz_old].to_vec();
+
+    model
+        .xa
+        .copy_within((skip * species)..(nz_old * species), 0);
+    if model.xh.len() >= nz_old * nvar {
+        model.xh.copy_within((skip * nvar)..(nz_old * nvar), 0);
+    }
+    for vec in [
+        &mut model.lnd,
+        &mut model.ln_t,
+        &mut model.ln_r,
+        &mut model.lum,
+        &mut model.v,
+        &mut model.u,
+        &mut model.m_grav,
+        &mut model.r,
+        &mut model.rmid,
+        &mut model.rho,
+        &mut model.t,
+        &mut model.energy,
+        &mut model.ln_e,
+        &mut model.d_mix,
+        &mut model.mlt_vc,
+        &mut model.j_rot,
+        &mut model.omega,
+        &mut model.aux.i_rot,
+        &mut model.aux.fp_rot,
+        &mut model.aux.ft_rot,
+        &mut model.aux.alpha_rti,
+        &mut model.aux.dpdr_drhodr_info,
+    ] {
+        if vec.len() >= nz_old {
+            vec.copy_within(skip..nz_old, 0);
+        }
+    }
+    model.resize_zones(nz_new);
+    model.mstar = new_mstar;
+    model.xmstar = new_xmstar;
+    model.q[0] = 1.0;
+    for k in 0..nz_new {
+        model.dq[k] = dm_kept[k] / new_xmstar;
+        if k > 0 {
+            model.q[k] = model.q[k - 1] - model.dq[k - 1];
+        }
+    }
+    model.dq[nz_new - 1] = model.q[nz_new - 1];
+    model.xq[0] = 0.0;
+    for k in 0..nz_new {
+        model.dm[k] = model.dq[k] * new_xmstar;
+        model.m[k] = model.q[k] * new_xmstar + model.m_center;
+        if k + 1 < nz_new {
+            model.xq[k + 1] = model.xq[k] + model.dq[k];
+        }
+    }
+    model.set_dm_bar();
+    model.set_m_grav_and_grav();
+    model.unpack_xh();
+    Ok(())
 }

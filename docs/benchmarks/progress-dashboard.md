@@ -51,7 +51,7 @@ Progress is measured by **upstream MESA `26.4.1` source lines by status**, never
 | **Subtotal: star + star_data + binary + astero** | 144,952 | 23,584 | 12,956 | 76,084 | 32,328 | 0 | 0 | 83,619 | 6,401 | 22.3% | 0.0% |
 | **Total (all 26 modules)** | 497,703 | 248,609 | 12,956 | 200,250 | 35,888 | 0 | 0 | 153,503 | 52,630 | 7.2% | 0.0% |
 
-*Notes*: `star_data` state structs reside in `crates/flexmesa-star`. Bridge, testing, and benchmark infrastructure account for an additional `18,856` Rust lines (`flexmesa-py`, `flexmesa-testing`, `flexmesa-bench`) and `14,177` Python lines (`flexmesa.testing`, `flexmesa.bench`). For plotting ([#173](https://github.com/joshspeagle/FlexMESA/issues/173)), `flexmesa.plotting` currently provides `25` `plot_*` builders against `46` upstream `pgstar`/`pgbinary` panel modules.
+*Notes*: `star_data` state structs reside in `crates/flexmesa-star`. Bridge, testing, and benchmark infrastructure account for an additional `18,856` Rust lines (`flexmesa-py`, `flexmesa-testing`, `flexmesa-bench`) and `14,186` Python lines (`flexmesa.testing`, `flexmesa.bench`). For plotting ([#173](https://github.com/joshspeagle/FlexMESA/issues/173)), `flexmesa.plotting` currently provides `25` `plot_*` builders against `46` upstream `pgstar`/`pgbinary` panel modules.
 
 ### 2. Verification & Numerics Status
 

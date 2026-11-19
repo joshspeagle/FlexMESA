@@ -117,12 +117,13 @@ Setting `RAYON_NUM_THREADS` to match the physical core count (typically 4 to 8 t
 
 Upstream Fortran MESA distributes over 2 GiB of ASCII text tables paired with platform-dependent Fortran unformatted binary cache files. `FlexMESA` replaces these with content-addressed, zero-copy `.safetensors` and IEEE-754 little-endian binary table bundles verified by `SHA-256` checksums:
 
-- **Full-Resolution `data-v1` Physics Bundles (`flexmesa data fetch`)**: After installing `FlexMESA`, fetch and verify the canonical full-resolution physics tables (`helm_table_full.bin`, full radiative and conductive opacity tables `kap_tables_full.bin`, and the 116 `OPAL`/`SCVH`, `FreeEOS`, and `CMS` 4D EOS composition slices) into `$FLEXMESA_DATA_DIR` (defaulting to `$XDG_CACHE_HOME/flexmesa/data` or `~/.cache/flexmesa/data`):
+- **Full-Resolution `data-v1` Physics Bundles (`flexmesa data fetch`)**: After installing `FlexMESA`, fetch and checksum-validate the canonical full-resolution physics tables (`helm_table_full.bin`, full radiative and conductive opacity tables `kap_tables_full.bin`, and the 116 `OPAL`/`SCVH`, `FreeEOS`, and `CMS` 4D EOS composition slices) into the read-only `$FLEXMESA_DATA_DIR` directory (defaulting to `$XDG_CACHE_HOME/flexmesa/data` or `~/.cache/flexmesa/data`):
 
 ```bash
 flexmesa data fetch
 flexmesa data verify
 flexmesa data status
+flexmesa data clean-cache
 ```
 
   To also download the `SHA-256`-verified MESA release `26.4.1` `test_output` fixtures, Fortran source, `test_suite` inputs (`mesa-test-inputs-v2`), exact IEEE-754 hexadecimal module test outputs (`mesa-module-hex-v1`), and stored reference trajectories (`mesa-histories-v1`) into `~/.cache/flexmesa/`, pass `--include-test-inputs`:
@@ -145,4 +146,4 @@ repo, tag, bundles = fetch.load_bundles_manifest()
 print(f"Release {repo}@{tag}: {len(bundles)} verified archives")
 ```
 
-- **Custom External Table Directory (`FLEXMESA_DATA_DIR`)**: When hosting physics table bundles on shared cluster storage, set the `FLEXMESA_DATA_DIR` environment variable (or pass `--dest` / `--data-dir` to `flexmesa data fetch`, `flexmesa data verify`, and `flexmesa data path`), and optionally set `MESA_DIR` to point to the extracted `mesa_test_inputs` directory. `flexmesa data fetch` and `flexmesa data verify` validate archive and unpacked `SHA-256` digests, byte sizes, and sentinel paths, while table loaders memory-map (`mmap`) binary physics tables directly into Safe Rust and JAX/NumPy without intermediate heap copies.
+- **Read-Only Table Directory (`FLEXMESA_DATA_DIR`) & Isolated Runtime Caches (`FLEXMESA_CACHE_DIR`)**: When hosting physics table bundles on shared cluster storage, set `FLEXMESA_DATA_DIR` (or pass `--dest` / `--data-dir` to `flexmesa data fetch`, `flexmesa data verify`, `flexmesa data path`, and `flexmesa data clean-cache`), and optionally set `MESA_DIR` to point to the extracted `mesa_test_inputs` directory. `$FLEXMESA_DATA_DIR` is strictly read-only at runtime: `flexmesa data verify` checks archive and per-file `SHA-256` manifests (`bundle_hashes/*.sha256.tsv`) and rejects any unexpected files or legacy caches inside data directories. Runtime-derived spline and binary caches (`eos_4d_slices`, `helm`, `kap`, `ionization`) are written to a separate versioned cache directory `$FLEXMESA_CACHE_DIR/v1` (defaulting to `$XDG_CACHE_HOME/flexmesa/derived/v1` or `~/.cache/flexmesa/derived/v1`) wrapped in an `FMCENV01` envelope recording schema version, builder version, payload tag, source `SHA-256`, and payload `SHA-256`. Set `FLEXMESA_DISABLE_RUNTIME_CACHE=1` to disable runtime cache I/O, or run `flexmesa data clean-cache` (`--purge-legacy-in-data`) to remove derived caches.

@@ -73,6 +73,71 @@ class ReleaseBundle:
     manifest_dir: str = ""
 
 
+RUNTIME_CACHE_SCHEMA_VERSION: int = 1
+_LEGACY_DATA_CACHE_ENTRIES: tuple[str, ...] = (
+    "eos_4d_slices",
+    "ionization_full.bin",
+    "aesopus_section.bin",
+)
+
+
+def is_runtime_cache_disabled() -> bool:
+    """Return ``True`` when ``FLEXMESA_DISABLE_RUNTIME_CACHE`` is enabled."""
+    raw = os.environ.get("FLEXMESA_DISABLE_RUNTIME_CACHE", "")
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _paths_overlap(a: pathlib.Path, b: pathlib.Path) -> bool:
+    """Return ``True`` when resolved paths ``a`` and ``b`` equal or nest."""
+    return a == b or a.is_relative_to(b) or b.is_relative_to(a)
+
+
+def _resolve_cache_path_unconditional(
+    explicit: str | pathlib.Path | None = None,
+    *,
+    data_dir: str | pathlib.Path | None = None,
+) -> pathlib.Path:
+    """Resolve the versioned ``v1`` runtime cache path even when disabled.
+
+    Appends ``v{RUNTIME_CACHE_SCHEMA_VERSION}`` unless the target directory
+    already ends with that version segment, and raises ``ValueError`` if the
+    resolved cache path overlaps ``resolve_data_dir(data_dir)`` (`N1-11`).
+    """
+    ver = f"v{RUNTIME_CACHE_SCHEMA_VERSION}"
+    if explicit is not None:
+        base = pathlib.Path(explicit).expanduser()
+    elif env_dir := os.environ.get("FLEXMESA_CACHE_DIR", "").strip():
+        base = pathlib.Path(env_dir).expanduser()
+    elif xdg := os.environ.get("XDG_CACHE_HOME", "").strip():
+        base = pathlib.Path(xdg).expanduser() / "flexmesa" / "derived"
+    else:
+        base = pathlib.Path.home() / ".cache" / "flexmesa" / "derived"
+    target = base if base.name == ver else base / ver
+    c_root = target.resolve()
+    d_root = resolve_data_dir(data_dir)
+    if _paths_overlap(c_root, d_root):
+        msg = (
+            f"Runtime cache directory {c_root} overlaps physics data directory "
+            f"{d_root}; set FLEXMESA_CACHE_DIR to a separate path."
+        )
+        raise ValueError(msg)
+    return c_root
+
+
+def resolve_cache_dir(
+    explicit: str | pathlib.Path | None = None,
+) -> pathlib.Path | None:
+    """Resolve the separate, versioned runtime derived-cache directory.
+
+    Returns ``None`` when ``FLEXMESA_DISABLE_RUNTIME_CACHE`` is enabled, and
+    raises ``ValueError`` if ``FLEXMESA_CACHE_DIR`` (or ``explicit``) overlaps
+    ``resolve_data_dir()`` (`N1-11`).
+    """
+    if is_runtime_cache_disabled():
+        return None
+    return _resolve_cache_path_unconditional(explicit)
+
+
 def resolve_data_dir(
     explicit: str | pathlib.Path | None = None,
 ) -> pathlib.Path:
@@ -235,12 +300,11 @@ def _sha256_file(path: pathlib.Path) -> str:
         return hashlib.file_digest(fh, "sha256").hexdigest()
 
 
-def _verify_per_file_manifest(
-    root: pathlib.Path,
+def _collect_manifest_relpaths(
     manifest_relpath: str,
     manifest_dir: pathlib.Path | None = None,
-) -> bool:
-    """Verify every unpacked file listed in ``manifest_relpath`` (`N1-10`)."""
+) -> tuple[bool, list[tuple[str, int, str]]]:
+    """Parse ``(sha256, size_bytes, relpath)`` entries from a bundle TSV."""
     base_dir = (
         manifest_dir
         if manifest_dir is not None
@@ -248,23 +312,124 @@ def _verify_per_file_manifest(
     )
     mpath = base_dir / manifest_relpath
     if not mpath.is_file():
-        return False
+        return False, []
+    entries: list[tuple[str, int, str]] = []
     for raw in mpath.read_text(encoding="utf-8").splitlines():
         line = raw.strip()
         if not line or line.startswith("#"):
             continue
         parts = line.split("\t")
         if len(parts) != 3:
-            return False
-        exp_sha, exp_sz_str, rel = parts
+            return False, []
+        entries.append((parts[0].lower(), int(parts[1]), parts[2]))
+    return True, entries
+
+
+def _verify_per_file_manifest(
+    root: pathlib.Path,
+    manifest_relpath: str,
+    manifest_dir: pathlib.Path | None = None,
+) -> bool:
+    """Verify every unpacked file listed in ``manifest_relpath`` (`N1-10`)."""
+    parsed_ok, entries = _collect_manifest_relpaths(
+        manifest_relpath, manifest_dir
+    )
+    if not parsed_ok:
+        return False
+    for exp_sha, exp_sz, rel in entries:
         fpath = root / rel
         if not fpath.is_file():
             return False
-        if fpath.stat().st_size != int(exp_sz_str):
+        if fpath.stat().st_size != exp_sz:
             return False
-        if _sha256_file(fpath) != exp_sha.lower():
+        if _sha256_file(fpath) != exp_sha:
             return False
     return True
+
+
+def _load_valid_safetensors_relpaths(
+    root: pathlib.Path, manifest_dir: pathlib.Path
+) -> set[str]:
+    """Return relative paths of valid Wave 0 ``.safetensors`` under ``root``."""
+    allowed: set[str] = set()
+    st_toml = manifest_dir / "manifest.toml"
+    if not st_toml.is_file():
+        return allowed
+    raw = tomllib.loads(st_toml.read_text(encoding="utf-8"))
+    for entry in raw.get("tables", ()):
+        fname = str(entry.get("filename", ""))
+        exp_sha = str(entry.get("sha256", "")).lower()
+        exp_sz = int(entry.get("size_bytes", -1))
+        fp = root / fname
+        if (
+            fname
+            and fp.is_file()
+            and fp.stat().st_size == exp_sz
+            and _sha256_file(fp) == exp_sha
+        ):
+            allowed.add(pathlib.PurePosixPath(fname).as_posix())
+    return allowed
+
+
+def _find_unexpected_entries(
+    root: pathlib.Path,
+    expected_relpaths: set[str],
+) -> list[str]:
+    """Scan ``root`` for any files or legacy cache folders outside manifests."""
+    unexpected: list[str] = []
+    if not root.exists():
+        return unexpected
+    for legacy in _LEGACY_DATA_CACHE_ENTRIES:
+        if (root / legacy).exists():
+            unexpected.append(legacy)
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames.sort()
+        filenames.sort()
+        p_dir = pathlib.Path(dirpath)
+        rel_dir = p_dir.relative_to(root)
+        # Do not double-report inside already flagged legacy folders
+        if rel_dir.parts and rel_dir.parts[0] in _LEGACY_DATA_CACHE_ENTRIES:
+            dirnames[:] = []
+            continue
+        for fname in filenames:
+            rel_posix = (rel_dir / fname).as_posix()
+            if rel_posix not in expected_relpaths:
+                unexpected.append(rel_posix)
+    return unexpected
+
+
+def clean_runtime_cache(
+    *,
+    cache_dir: str | pathlib.Path | None = None,
+    data_dir: str | pathlib.Path | None = None,
+    purge_legacy_in_data: bool = False,
+    quiet: bool = False,
+) -> list[pathlib.Path]:
+    """Remove versioned runtime caches and optional legacy data-dir caches."""
+    removed: list[pathlib.Path] = []
+    c_root = _resolve_cache_path_unconditional(cache_dir, data_dir=data_dir)
+    if c_root.exists():
+        if c_root.is_dir():
+            shutil.rmtree(c_root)
+        else:
+            c_root.unlink()
+        removed.append(c_root)
+        if not quiet:
+            print(f"[flexmesa-data] removed runtime cache: {c_root}")
+
+    if purge_legacy_in_data:
+        d_root = resolve_data_dir(data_dir)
+        for name in _LEGACY_DATA_CACHE_ENTRIES:
+            target = d_root / name
+            if target.exists():
+                if target.is_dir():
+                    shutil.rmtree(target)
+                else:
+                    target.unlink()
+                removed.append(target)
+                if not quiet:
+                    print(f"[flexmesa-data] removed legacy cache: {target}")
+    return removed
 
 
 @contextlib.contextmanager
@@ -364,22 +529,51 @@ def verify_bundles(
         except (KeyError, OSError):
             pass
     all_ok = True
+    expected_by_root: dict[pathlib.Path, set[str]] = {}
     for b in bundles:
         if b.test_only and not include_test_inputs:
             continue
         root = _resolve_bundle_target_root(b, data_root, test_root)
+        allowed = expected_by_root.setdefault(root, set())
+        stamp_rel = _stamp_path(root, b).relative_to(root).as_posix()
+        allowed.add(stamp_rel)
         ok = is_bundle_ready(root, b)
         if ok and b.kind == "single_zst" and b.unpacked_sha256:
             ok = _sha256_file(root / b.target_relpath) == b.unpacked_sha256
-        if ok and b.manifest_file:
+        if b.manifest_file:
             mdir = (
                 pathlib.Path(b.manifest_dir) if b.manifest_dir else manifest_dir
             )
-            ok = _verify_per_file_manifest(root, b.manifest_file, mdir)
+            parsed_ok, entries = _collect_manifest_relpaths(
+                b.manifest_file, mdir
+            )
+            if parsed_ok:
+                allowed.update(rel for _, _, rel in entries)
+            if ok:
+                ok = _verify_per_file_manifest(root, b.manifest_file, mdir)
+        elif b.kind == "single_zst":
+            allowed.add(pathlib.PurePosixPath(b.target_relpath).as_posix())
         if not quiet:
             status = "VERIFIED" if ok else "FAILED"
             print(f"[flexmesa-data] {b.name:18s} {status} ({root})", flush=True)
         all_ok = all_ok and ok
+
+    if data_root in expected_by_root:
+        expected_by_root[data_root].update(
+            _load_valid_safetensors_relpaths(data_root, manifest_dir)
+        )
+    for root, allowed in sorted(expected_by_root.items()):
+        extra = _find_unexpected_entries(root, allowed)
+        if extra:
+            all_ok = False
+            if not quiet:
+                sample = ", ".join(extra[:5])
+                more = f" (+{len(extra) - 5} more)" if len(extra) > 5 else ""
+                print(
+                    f"[flexmesa-data] UNEXPECTED files in {root}: "
+                    f"{sample}{more}",
+                    flush=True,
+                )
     return all_ok
 
 
@@ -673,6 +867,31 @@ def build_parser(
         action="store_true",
         help="Print the resolved MESA test inputs directory instead.",
     )
+
+    p_clean = sub.add_parser(
+        "clean-cache",
+        help="Remove runtime derived caches and optional legacy data caches.",
+    )
+    _add_dir_args(p_clean)
+    p_clean.add_argument(
+        "--cache-dir",
+        type=pathlib.Path,
+        default=None,
+        help="Runtime derived-cache root to remove ($FLEXMESA_CACHE_DIR/v1).",
+    )
+    p_clean.add_argument(
+        "--purge-legacy-in-data",
+        action="store_true",
+        help=(
+            "Also remove legacy eos_4d_slices/, ionization_full.bin, and "
+            "aesopus_section.bin inside FLEXMESA_DATA_DIR."
+        ),
+    )
+    p_clean.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Suppress removal lines.",
+    )
     return parser
 
 
@@ -702,6 +921,10 @@ def main(argv: list[str] | None = None) -> int:
             pass
         print(f"Release tag:     {tag}")
         print(f"Data directory:  {data_root}")
+        c_root = resolve_cache_dir()
+        print(
+            f"Cache directory: {c_root if c_root is not None else '(disabled)'}"
+        )
         print(f"Test inputs dir: {test_root}")
         print(
             f"Histories dir:   {resolve_mesa_histories_dir(data_dir=data_root)}"
@@ -734,6 +957,14 @@ def main(argv: list[str] | None = None) -> int:
             )
         else:
             print(data_root)
+        return 0
+    if args.subcommand == "clean-cache":
+        clean_runtime_cache(
+            cache_dir=args.cache_dir,
+            data_dir=args.dest,
+            purge_legacy_in_data=bool(args.purge_legacy_in_data),
+            quiet=bool(args.quiet),
+        )
         return 0
     parser.print_help(sys.stderr)
     return 2

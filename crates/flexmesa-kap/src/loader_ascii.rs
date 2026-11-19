@@ -1,18 +1,32 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-//! Full opacity table builder and binary cache manager (`FMKAP001` format).
+//! Full opacity table builder and verified runtime cache manager (`FMKAP001`).
 //!
-//! Loads `$FLEXMESA_DATA_DIR/kap_full/kap_tables_full.bin` populated by
-//! `flexmesa data fetch`, or builds and caches the `FMKAP001` payload from
-//! upstream `MESA_DIR/data/kap_data` tables.
+//! Loads the verified immutable `$FLEXMESA_DATA_DIR/kap_full/kap_tables_full.bin`
+//! installed by `flexmesa data fetch`, or builds the `FMKAP001` payload from
+//! upstream `MESA_DIR/data/kap_data` ASCII files plus a pre-converted
+//! `aesopus_section.bin` (caching the `FMCENV01` output strictly under
+//! [`flexmesa_utils::resolve_flexmesa_cache_dir`]). Never invokes Python at runtime.
 
 use crate::loader::KapTables;
 use crate::loader_parse::parse_kap_tables;
 use crate::spline::get_output_string;
 use crate::types::KapError;
+use flexmesa_utils::cache_envelope::{
+    read_verified_cache, write_verified_cache_atomic,
+};
+use flexmesa_utils::sha256::{compute_sha256_file, Sha256Hasher};
+use flexmesa_utils::{
+    is_bad, resolve_flexmesa_cache_dir, resolve_flexmesa_data_dir,
+};
 use rayon::prelude::*;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+
+/// Magic header for `FMKAP001` opacity binary payload.
+pub const KAP_FULL_BIN_MAGIC: &[u8; 8] = b"FMKAP001";
+
+/// Builder version stamped into `FMCENV01` runtime caches for `kap`.
+const KAP_CACHE_BUILDER_VERSION: u32 = 1;
 
 const FIXED_PREFIXES: &[&str] = &[
     "gs98",
@@ -42,8 +56,6 @@ const CO_ZS: [f64; 8] =
     [0.000, 0.001, 0.004, 0.010, 0.020, 0.030, 0.050, 0.100];
 const CO_XS: [f64; 5] = [0.00, 0.03, 0.10, 0.35, 0.70];
 
-use flexmesa_utils::resolve_flexmesa_data_dir;
-
 /// Resolve an optional upstream MESA `kap_data` directory when raw ASCII tables are present.
 #[must_use]
 pub fn find_kap_data_dir() -> Option<PathBuf> {
@@ -65,21 +77,142 @@ pub fn find_kap_data_dir() -> Option<PathBuf> {
     None
 }
 
-/// Resolve the canonical `kap_full` binary cache directory (`$FLEXMESA_DATA_DIR/kap_full`).
+/// Resolve the immutable `kap_full` bundle path under `$FLEXMESA_DATA_DIR`.
 #[must_use]
-pub fn find_kap_cache_dir() -> PathBuf {
+pub fn find_kap_bundle_dir() -> PathBuf {
     resolve_flexmesa_data_dir().join("kap_full")
 }
 
+/// Enumerate every relative `.data` file under `kap_dir` consumed by
+/// [`build_full_kap_tables_bytes`] in deterministic order (`1,150` files in
+/// MESA `26.4.1`: `1,008` fixed/low-T, `7` `Freedman11`, `120` Type-2 CO,
+/// `kR_Z_fCN.data`, and `14` `kapCN` `kR_Z*.data` files).
+pub(crate) fn kap_source_relpaths(
+    kap_dir: &Path,
+) -> Result<Vec<String>, KapError> {
+    let mut rels = Vec::with_capacity(1152);
+    for &prefix in FIXED_PREFIXES {
+        for (iz, &z) in FIXED_ZS.iter().enumerate() {
+            for &x_raw in &FIXED_XS[..FIXED_NUM_XS[iz]] {
+                let x = if x_raw + z > 1.0 { 1.0 - z } else { x_raw };
+                rels.push(format!(
+                    "{prefix}_z{}_x{}.data",
+                    get_output_string(z)?,
+                    get_output_string(x)?
+                ));
+            }
+        }
+    }
+    for &z in &FREEDMAN_ZS {
+        rels.push(format!("lowT_Freedman11_z{}.data", get_output_string(z)?));
+    }
+    for &prefix in CO_PREFIXES {
+        for &z in &CO_ZS {
+            for &x in &CO_XS {
+                rels.push(format!(
+                    "{prefix}_z{}_x{}.data",
+                    get_output_string(z)?,
+                    get_output_string(x)?
+                ));
+            }
+        }
+    }
+    rels.push("kR_Z_fCN.data".to_string());
+    let fcn_path = kap_dir.join("kR_Z_fCN.data");
+    let fcn_text = fs::read_to_string(&fcn_path).map_err(|e| {
+        KapError::TableIo(format!("failed to read {}: {e}", fcn_path.display()))
+    })?;
+    let mut cn_fnames = Vec::new();
+    for line in fcn_text.lines().skip(1) {
+        let toks: Vec<&str> = line.split_whitespace().collect();
+        if toks.len() < 11 {
+            continue;
+        }
+        let z = parse_f64_str(toks[0], &fcn_path, "kapCN Z")?;
+        let fname = kapcn_filename(z);
+        if fname.is_empty() {
+            return Err(KapError::TableIo(format!(
+                "unsupported kapCN metallicity Z={z}"
+            )));
+        }
+        if !cn_fnames.contains(&fname) {
+            cn_fnames.push(fname);
+        }
+    }
+    cn_fnames.reverse();
+    for fname in cn_fnames {
+        rels.push(fname.to_string());
+    }
+    Ok(rels)
+}
+
+/// Compute a combined `SHA-256` fingerprint over every raw `kap_data` `.data`
+/// input consumed by [`build_full_kap_tables_bytes`] plus `aesopus_section.bin`.
+fn compute_kap_source_sha256(
+    kap_dir: &Path,
+    aesopus_section_path: &Path,
+) -> Result<String, KapError> {
+    let aes_len = fs::metadata(aesopus_section_path)
+        .map_err(|e| {
+            KapError::TableIo(format!(
+                "failed to stat {}: {e}",
+                aesopus_section_path.display()
+            ))
+        })?
+        .len();
+    let aes_sha = compute_sha256_file(aesopus_section_path).map_err(|e| {
+        KapError::TableIo(format!(
+            "failed to read {}: {e}",
+            aesopus_section_path.display()
+        ))
+    })?;
+
+    let relpaths = kap_source_relpaths(kap_dir)?;
+    let file_digests: Vec<(String, u64, String)> = relpaths
+        .into_par_iter()
+        .map(|rel| {
+            let p = kap_dir.join(&rel);
+            let len = fs::metadata(&p)
+                .map_err(|e| {
+                    KapError::TableIo(format!(
+                        "failed to stat {}: {e}",
+                        p.display()
+                    ))
+                })?
+                .len();
+            let digest = compute_sha256_file(&p).map_err(|e| {
+                KapError::TableIo(format!(
+                    "failed to read {}: {e}",
+                    p.display()
+                ))
+            })?;
+            Ok((rel, len, digest))
+        })
+        .collect::<Result<Vec<_>, KapError>>()?;
+
+    let mut hasher = Sha256Hasher::new();
+    hasher.update(b"aesopus_section.bin\0");
+    hasher.update(&aes_len.to_le_bytes());
+    hasher.update(aes_sha.as_bytes());
+    for (rel, len, digest) in file_digests {
+        hasher.update(rel.as_bytes());
+        hasher.update(&[0_u8]);
+        hasher.update(&len.to_le_bytes());
+        hasher.update(digest.as_bytes());
+    }
+    Ok(hasher.finalize_hex())
+}
+
 /// Load [`KapTables`] from `$FLEXMESA_DATA_DIR/kap_full/kap_tables_full.bin`, or
-/// build and cache it from upstream `MESA_DIR/data/kap_data`.
+/// build from upstream `MESA_DIR/data/kap_data` + `aesopus_section.bin` with
+/// verified runtime caching under [`resolve_flexmesa_cache_dir`].
 ///
 /// # Errors
-/// Returns [`KapError::TableIo`] if neither the cached bundle nor upstream
-/// `kap_data` tables can be found, read, or parsed.
+/// Returns [`KapError::TableIo`] if neither the verified bundle nor upstream
+/// tables + `aesopus_section.bin` can be found, read, or parsed, or if a
+/// runtime cache file fails verification.
 pub(crate) fn load_or_build_kap_tables() -> Result<KapTables, KapError> {
-    let cache_dir = find_kap_cache_dir();
-    let full_bin_path = cache_dir.join("kap_tables_full.bin");
+    let full_bin_path = find_kap_bundle_dir().join("kap_tables_full.bin");
     if full_bin_path.is_file() {
         let bytes = fs::read(&full_bin_path).map_err(|e| {
             KapError::TableIo(format!(
@@ -89,25 +222,54 @@ pub(crate) fn load_or_build_kap_tables() -> Result<KapTables, KapError> {
         })?;
         return parse_kap_tables(&bytes);
     }
+
     if let Some(kap_dir) = find_kap_data_dir() {
-        let bytes = build_full_kap_tables_bytes(&kap_dir, Some(&cache_dir))?;
-        let _ = fs::create_dir_all(&cache_dir);
-        let tmp_path = cache_dir
-            .join(format!("kap_tables_full.{}.tmp", std::process::id()));
-        let dst_path = cache_dir.join("kap_tables_full.bin");
-        if fs::write(&tmp_path, &bytes).is_ok() {
-            let _ = fs::rename(&tmp_path, &dst_path);
+        let aes_path = kap_dir.join("aesopus_section.bin");
+        if !aes_path.is_file() {
+            return Err(KapError::TableIo(format!(
+                "FlexMESA opacity bundle not found at {}, and raw source directory {} \
+                 lacks pre-converted aesopus_section.bin. Run 'flexmesa data fetch' or \
+                 'make data-physics' to build the verified FMKAP001 bundle offline.",
+                full_bin_path.display(),
+                kap_dir.display()
+            )));
         }
+        let source_sha = compute_kap_source_sha256(&kap_dir, &aes_path)?;
+        if let Some(cache_root) = resolve_flexmesa_cache_dir() {
+            let cache_path = cache_root
+                .join("kap")
+                .join(format!("kap_tables_full.{}.bin", &source_sha[..16]));
+            if cache_path.is_file() {
+                let payload = read_verified_cache(
+                    &cache_path,
+                    KAP_CACHE_BUILDER_VERSION,
+                    KAP_FULL_BIN_MAGIC,
+                    &source_sha,
+                )
+                .map_err(KapError::TableIo)?;
+                return parse_kap_tables(&payload);
+            }
+            let bytes = build_full_kap_tables_bytes(&kap_dir, &aes_path)?;
+            let tables = parse_kap_tables(&bytes)?;
+            write_verified_cache_atomic(
+                &cache_path,
+                KAP_CACHE_BUILDER_VERSION,
+                KAP_FULL_BIN_MAGIC,
+                &source_sha,
+                &bytes,
+            )
+            .map_err(KapError::TableIo)?;
+            return Ok(tables);
+        }
+        let bytes = build_full_kap_tables_bytes(&kap_dir, &aes_path)?;
         return parse_kap_tables(&bytes);
     }
-    let expected = resolve_flexmesa_data_dir()
-        .join("kap_full")
-        .join("kap_tables_full.bin");
+
     Err(KapError::TableIo(format!(
         "FlexMESA opacity tables not found at {}. \
          Run 'flexmesa data fetch' (or set FLEXMESA_DATA_DIR) to download \
          the verified data-v1 physics table bundle.",
-        expected.display()
+        full_bin_path.display()
     )))
 }
 
@@ -136,12 +298,19 @@ fn parse_f64_tok<'a>(
             path.display()
         ))
     })?;
-    raw.parse::<f64>().map_err(|e| {
+    let val = raw.parse::<f64>().map_err(|e| {
         KapError::TableIo(format!(
             "invalid float '{raw}' for {label} in {}: {e}",
             path.display()
         ))
-    })
+    })?;
+    if is_bad(val) {
+        return Err(KapError::TableIo(format!(
+            "non-finite float '{raw}' for {label} in {}",
+            path.display()
+        )));
+    }
+    Ok(val)
 }
 
 fn parse_usize_str(
@@ -158,12 +327,19 @@ fn parse_usize_str(
 }
 
 fn parse_f64_str(raw: &str, path: &Path, label: &str) -> Result<f64, KapError> {
-    raw.parse::<f64>().map_err(|e| {
+    let val = raw.parse::<f64>().map_err(|e| {
         KapError::TableIo(format!(
             "invalid float '{raw}' for {label} in {}: {e}",
             path.display()
         ))
-    })
+    })?;
+    if is_bad(val) {
+        return Err(KapError::TableIo(format!(
+            "non-finite float '{raw}' for {label} in {}",
+            path.display()
+        )));
+    }
+    Ok(val)
 }
 
 fn parse_fixed_file_bytes(
@@ -360,96 +536,23 @@ fn parse_co_file_bytes(
     Ok((zfracs, out))
 }
 
-fn build_aesopus_section_bytes(
-    kap_dir: &Path,
-    cache_dir: Option<&Path>,
+fn read_aesopus_section_bytes(
+    aesopus_section_path: &Path,
 ) -> Result<Vec<u8>, KapError> {
-    if let Some(cdir) = cache_dir {
-        let p = cdir.join("aesopus_section.bin");
-        if let Ok(b) = fs::read(&p) {
-            if b.len() > 46_000_000 {
-                return Ok(b);
-            }
-        }
-    }
-    let h5_path = kap_dir.join("AESOPUS_AGSS09.h5");
-    if !h5_path.is_file() {
-        return Err(KapError::TableIo(format!(
-            "missing {}",
-            h5_path.display()
-        )));
-    }
-    let py_script = r#"
-import sys, struct, h5py, numpy as np
-h5_path, out_path = sys.argv[1], sys.argv[2]
-with h5py.File(h5_path, "r") as f, open(out_path, "wb") as out:
-    for k in ["Zsun", "fCO_ref", "fC_ref", "fN_ref"]:
-        out.write(struct.pack("<d", float(f[k][()])))
-    log_rs = np.asarray(f["logRs"][:], dtype=np.float64)
-    log_ts = np.asarray(f["logTs"][:], dtype=np.float64)
-    zs = np.asarray(f["Zs"][:], dtype=np.float64)
-    out.write(struct.pack("<III", len(log_rs), len(log_ts), len(zs)))
-    out.write(log_rs.tobytes())
-    out.write(log_ts.tobytes())
-    out.write(zs.tobytes())
-    for z in zs:
-        g = f[f"{z:.6f}"]
-        xs = np.asarray(g["Xs"][:], dtype=np.float64)
-        fcos = np.asarray(g["fCOs"][:], dtype=np.float64)
-        fcs = np.asarray(g["fCs"][:], dtype=np.float64)
-        fns = np.asarray(g["fNs"][:], dtype=np.float64)
-        out.write(struct.pack("<IIII", len(xs), len(fcos), len(fcs), len(fns)))
-        out.write(xs.tobytes()); out.write(fcos.tobytes())
-        out.write(fcs.tobytes()); out.write(fns.tobytes())
-        out.write(b"\x01")
-        kap = np.asarray(g["kap"][:], dtype=np.float32)
-        slices = np.moveaxis(kap, (0, 1), (-2, -1)).reshape(-1, len(log_ts) * len(log_rs))
-        for s in slices:
-            out.write(b"\x01")
-            out.write(s.tobytes())
-"#;
-    let out_dir = cache_dir.map_or_else(std::env::temp_dir, Path::to_path_buf);
-    let _ = fs::create_dir_all(&out_dir);
-    let tmp_file =
-        out_dir.join(format!("aesopus_section.{}.tmp", std::process::id()));
-    let dst_file = out_dir.join("aesopus_section.bin");
-    let mut py_bins: Vec<PathBuf> = Vec::new();
-    if let Ok(py) = std::env::var("PYTHON") {
-        py_bins.push(PathBuf::from(py));
-    }
-    if let Ok(venv) = std::env::var("VIRTUAL_ENV") {
-        py_bins.push(PathBuf::from(venv).join("bin").join("python"));
-    }
-    py_bins.push(PathBuf::from("python3"));
-    let ok = py_bins.iter().any(|bin| {
-        Command::new(bin)
-            .args([
-                "-c",
-                py_script,
-                h5_path.to_str().unwrap_or(""),
-                tmp_file.to_str().unwrap_or(""),
-            ])
-            .status()
-            .is_ok_and(|s| s.success())
-    });
-    if !ok {
-        return Err(KapError::TableIo(format!(
-            "python HDF5 converter failed for {}",
-            h5_path.display()
-        )));
-    }
-    fs::rename(&tmp_file, &dst_file).map_err(|e| {
+    let bytes = fs::read(aesopus_section_path).map_err(|e| {
         KapError::TableIo(format!(
-            "failed to move converted {} into place: {e}",
-            dst_file.display()
+            "failed to read AESOPUS section {}: {e}",
+            aesopus_section_path.display()
         ))
     })?;
-    fs::read(&dst_file).map_err(|e| {
-        KapError::TableIo(format!(
-            "failed to read converted {}: {e}",
-            dst_file.display()
-        ))
-    })
+    if bytes.len() < 44 {
+        return Err(KapError::TableIo(format!(
+            "truncated AESOPUS section {} ({} bytes)",
+            aesopus_section_path.display(),
+            bytes.len()
+        )));
+    }
+    Ok(bytes)
 }
 
 fn kapcn_filename(z: f64) -> &'static str {
@@ -595,12 +698,18 @@ fn build_kapcn_section_bytes(kap_dir: &Path) -> Result<Vec<u8>, KapError> {
     Ok(out)
 }
 
-fn build_full_kap_tables_bytes(
+/// Assemble an `FMKAP001` payload buffer from upstream `kap_data` ASCII files
+/// and a pre-converted `aesopus_section.bin`.
+///
+/// # Errors
+/// Returns [`KapError::TableIo`] if any upstream table or `aesopus_section.bin`
+/// is missing, malformed, or fails validation.
+pub fn build_full_kap_tables_bytes(
     kap_dir: &Path,
-    cache_dir: Option<&Path>,
+    aesopus_section_path: &Path,
 ) -> Result<Vec<u8>, KapError> {
     let mut out = Vec::with_capacity(120_000_000);
-    out.extend_from_slice(b"FMKAP001");
+    out.extend_from_slice(KAP_FULL_BIN_MAGIC);
 
     // 1. Fixed-metal & low-T sets (8 standard + Freedman11 = 9 sets)
     push_u32(&mut out, FIXED_PREFIXES.len() + 1);
@@ -683,13 +792,131 @@ fn build_full_kap_tables_bytes(
         }
     }
 
-    // 3. AESOPUS_AGSS09
-    let aes_bytes = build_aesopus_section_bytes(kap_dir, cache_dir)?;
+    // 3. AESOPUS_AGSS09 (pre-converted offline from native float32 HDF5)
+    let aes_bytes = read_aesopus_section_bytes(aesopus_section_path)?;
     out.extend_from_slice(&aes_bytes);
 
     // 4. kapCN
     let cn_bytes = build_kapcn_section_bytes(kap_dir)?;
     out.extend_from_slice(&cn_bytes);
 
+    let _validated = parse_kap_tables(&out)?;
     Ok(out)
+}
+
+/// Build and atomically write a validated `FMKAP001` file at `out_path`.
+///
+/// # Errors
+/// Returns [`KapError::TableIo`] if building, validating, or writing fails.
+pub fn build_full_kap_tables_file(
+    kap_dir: &Path,
+    aesopus_section_path: &Path,
+    out_path: &Path,
+) -> Result<(), KapError> {
+    let bytes = build_full_kap_tables_bytes(kap_dir, aesopus_section_path)?;
+    if let Some(parent) = out_path.parent() {
+        fs::create_dir_all(parent).map_err(|e| {
+            KapError::TableIo(format!(
+                "failed to create output dir {}: {e}",
+                parent.display()
+            ))
+        })?;
+    }
+    let tmp =
+        out_path.with_extension(format!("bin.tmp.{}", std::process::id()));
+    fs::write(&tmp, &bytes).map_err(|e| {
+        let _ = fs::remove_file(&tmp);
+        KapError::TableIo(format!("failed to write {}: {e}", tmp.display()))
+    })?;
+    fs::rename(&tmp, out_path).map_err(|e| {
+        let _ = fs::remove_file(&tmp);
+        KapError::TableIo(format!(
+            "failed to move {} into place: {e}",
+            out_path.display()
+        ))
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{compute_kap_source_sha256, kap_source_relpaths};
+    use crate::types::KapError;
+    use std::fs;
+
+    const SAMPLE_FCN: &str = "\
+Z fC1 fC2 fC3 fC4 fC5 fC6 fC7 fN1 fN2 fN3
+0.04000 1 1 1 1 1 1 1 1 1 1
+0.02000 1 1 1 1 1 1 1 1 1 1
+0.01000 1 1 1 1 1 1 1 1 1 1
+0.00800 1 1 1 1 1 1 1 1 1 1
+0.00600 1 1 1 1 1 1 1 1 1 1
+0.00500 1 1 1 1 1 1 1 1 1 1
+0.00400 1 1 1 1 1 1 1 1 1 1
+0.00300 1 1 1 1 1 1 1 1 1 1
+0.00200 1 1 1 1 1 1 1 1 1 1
+0.00100 1 1 1 1 1 1 1 1 1 1
+0.00030 1 1 1 1 1 1 1 1 1 1
+0.00010 1 1 1 1 1 1 1 1 1 1
+0.00003 1 1 1 1 1 1 1 1 1 1
+0.00001 1 1 1 1 1 1 1 1 1 1
+";
+
+    #[test]
+    fn test_kap_source_sha256_covers_every_table_file() {
+        let dir = std::env::temp_dir()
+            .join(format!("flexmesa_kap_src_sha_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).expect("mkdir");
+        fs::write(dir.join("kR_Z_fCN.data"), SAMPLE_FCN).expect("write fcn");
+
+        let rels = kap_source_relpaths(&dir).expect("relpaths");
+        assert_eq!(rels.len(), 1150);
+
+        for (i, rel) in rels.iter().enumerate() {
+            if rel != "kR_Z_fCN.data" {
+                fs::write(dir.join(rel), format!("payload_{i}\n"))
+                    .expect("write data");
+            }
+        }
+        let aes = dir.join("aesopus_section.bin");
+        fs::write(&aes, [0_u8; 48]).expect("write aesopus");
+
+        let base_sha =
+            compute_kap_source_sha256(&dir, &aes).expect("base sha256");
+        assert_eq!(
+            compute_kap_source_sha256(&dir, &aes).expect("repeat sha256"),
+            base_sha
+        );
+
+        // Mutating any non-sentinel fixed, Freedman11, CO, kapCN, or AESOPUS file
+        // must change the composite source digest.
+        for target in [
+            "a09_z0.02_x0.7.data",
+            "lowT_Freedman11_z0.02.data",
+            "a09_co_z0.02_x0.7.data",
+            "kR_Z2E-2.data",
+        ] {
+            let p = dir.join(target);
+            let orig = fs::read(&p).expect("read orig");
+            fs::write(&p, b"mutated_table_payload\n").expect("mutate");
+            let mutated_sha =
+                compute_kap_source_sha256(&dir, &aes).expect("mutated sha256");
+            assert_ne!(mutated_sha, base_sha, "{target} mutation missed");
+            fs::write(&p, orig).expect("restore");
+        }
+        fs::write(&aes, [1_u8; 48]).expect("mutate aes");
+        assert_ne!(
+            compute_kap_source_sha256(&dir, &aes).expect("aes sha"),
+            base_sha
+        );
+
+        // Deleting a non-sentinel file must fail loudly
+        fs::remove_file(dir.join("OP_gs98_z0.01_x0.5.data")).expect("rm");
+        assert!(matches!(
+            compute_kap_source_sha256(&dir, &aes),
+            Err(KapError::TableIo(_))
+        ));
+
+        let _ = fs::remove_dir_all(&dir);
+    }
 }

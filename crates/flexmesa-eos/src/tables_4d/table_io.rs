@@ -6,11 +6,12 @@ use std::io::{BufRead, BufReader, Read};
 use std::path::Path;
 
 use flexmesa_const::LN10;
-use flexmesa_interp2d::{interp_mkbicub_db, BicubicBc};
 use flexmesa_utils::is_bad;
-use rayon::prelude::*;
 
-use crate::tables_4d::spline::{EosDtVertex, EosDtXzTable, NUM_EOS_TABLE_VALS};
+use crate::tables_4d::spline::{
+    build_4d_slice_vertices, validate_4d_grid_header, EosDtXzTable,
+    NUM_EOS_TABLE_VALS,
+};
 use crate::types::{
     EosError, I_CHI_RHO, I_CHI_T, I_CP, I_CV, I_DE_DRHO, I_DS_DRHO, I_DS_DT,
     I_ETA, I_GAMMA1, I_GAMMA3, I_GRAD_AD, I_LN_E, I_LN_FREE_E, I_LN_PGAS,
@@ -48,6 +49,7 @@ impl EosDtXzTable {
 
     #[allow(clippy::too_many_arguments)]
     fn build_from_raw_vars(
+        table_label: &str,
         version: i32,
         x: f64,
         z: f64,
@@ -67,44 +69,13 @@ impl EosDtXzTable {
         let log_ts: Vec<f64> = (0..num_log_ts)
             .map(|jt| log_t_min + (jt as f64) * del_log_t)
             .collect();
-        let ngrid = num_log_qs * num_log_ts;
-
-        let fitted: Vec<Vec<[f64; 4]>> = (0..NUM_EOS_TABLE_VALS)
-            .into_par_iter()
-            .map(|v| {
-                let z_slice = &raw_vars[v * ngrid..(v + 1) * ngrid];
-                interp_mkbicub_db(
-                    &log_qs,
-                    &log_ts,
-                    z_slice,
-                    BicubicBc::NotAKnot,
-                    &[],
-                    BicubicBc::NotAKnot,
-                    &[],
-                    BicubicBc::NotAKnot,
-                    &[],
-                    BicubicBc::NotAKnot,
-                    &[],
-                )
-                .map(|(coeffs, _, _)| coeffs)
-                .map_err(|e| EosError::InvalidState {
-                    context: "EosDtXzTable::build_from_raw_vars",
-                    detail: format!(
-                        "interp_mkbicub_db failed for var {v}: {e}"
-                    ),
-                })
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-
-        let mut dense = vec![EosDtVertex::default(); ngrid];
-        for (v, coeffs) in fitted.iter().enumerate() {
-            for (cell, c4) in coeffs.iter().enumerate() {
-                for (m, &val) in c4.iter().enumerate() {
-                    dense[cell].coeffs[v * 4 + m] =
-                        if is_bad(val) { 0.0 } else { val };
-                }
-            }
-        }
+        let dense = build_4d_slice_vertices(
+            "EosDtXzTable::build_from_raw_vars",
+            table_label,
+            &log_qs,
+            &log_ts,
+            raw_vars,
+        )?;
 
         Ok(Self {
             version,
@@ -124,9 +95,10 @@ impl EosDtXzTable {
 
     /// Reads a compact `FMDTRW01` raw binary slice (`eos_4d_raw/*.raw`) and fits its 16 bicubic splines.
     pub fn from_raw_bin(path: &Path) -> Result<Self, EosError> {
+        let table_label = path.display().to_string();
         let err = |msg: String| EosError::TableIo {
             context: "EosDtXzTable::from_raw_bin",
-            detail: msg,
+            detail: format!("{table_label}: {msg}"),
         };
         let file = std::fs::File::open(path).map_err(|e| err(e.to_string()))?;
         let mut reader = BufReader::with_capacity(512 * 1024, file);
@@ -137,46 +109,96 @@ impl EosDtXzTable {
         if &hdr[0..8] != DT_RAW_BIN_MAGIC {
             return Err(err("invalid FMDTRW01 magic".to_string()));
         }
-        let f64_at = |off: usize| -> f64 {
-            f64::from_le_bytes(hdr[off..off + 8].try_into().unwrap_or([0; 8]))
+        let f64_at = |off: usize| -> Result<f64, EosError> {
+            let bytes: [u8; 8] = hdr[off..off + 8]
+                .try_into()
+                .map_err(|_| err("short FMDTRW01 header slice".to_string()))?;
+            Ok(f64::from_le_bytes(bytes))
         };
-        let version =
-            i32::from_le_bytes(hdr[8..12].try_into().unwrap_or([0; 4]));
-        let x = f64_at(12);
-        let z = f64_at(20);
-        let num_log_ts =
-            u32::from_le_bytes(hdr[28..32].try_into().unwrap_or([0; 4]))
-                as usize;
-        let log_t_min = f64_at(32);
-        let log_t_max = f64_at(40);
-        let del_log_t = f64_at(48);
-        let num_log_qs =
-            u32::from_le_bytes(hdr[56..60].try_into().unwrap_or([0; 4]))
-                as usize;
-        let log_q_min = f64_at(60);
-        let log_q_max = f64_at(68);
-        let del_log_q = f64_at(76);
+        let i32_at = |off: usize| -> Result<i32, EosError> {
+            let bytes: [u8; 4] = hdr[off..off + 4]
+                .try_into()
+                .map_err(|_| err("short FMDTRW01 header slice".to_string()))?;
+            Ok(i32::from_le_bytes(bytes))
+        };
+        let u32_at = |off: usize| -> Result<usize, EosError> {
+            let bytes: [u8; 4] = hdr[off..off + 4]
+                .try_into()
+                .map_err(|_| err("short FMDTRW01 header slice".to_string()))?;
+            Ok(u32::from_le_bytes(bytes) as usize)
+        };
+        let version = i32_at(8)?;
+        let x = f64_at(12)?;
+        let z = f64_at(20)?;
+        let num_log_ts = u32_at(28)?;
+        let log_t_min = f64_at(32)?;
+        let log_t_max = f64_at(40)?;
+        let del_log_t = f64_at(48)?;
+        let num_log_qs = u32_at(56)?;
+        let log_q_min = f64_at(60)?;
+        let log_q_max = f64_at(68)?;
+        let del_log_q = f64_at(76)?;
 
-        let ngrid = num_log_qs * num_log_ts;
+        let ngrid = validate_4d_grid_header(
+            "EosDtXzTable::from_raw_bin",
+            &table_label,
+            x,
+            z,
+            num_log_qs,
+            log_q_min,
+            log_q_max,
+            del_log_q,
+            num_log_ts,
+            log_t_min,
+            log_t_max,
+            del_log_t,
+        )?;
         let mut raw_vars = vec![0.0_f64; NUM_EOS_TABLE_VALS * ngrid];
         let mut row_bytes = [0u8; NUM_EOS_TABLE_VALS * 8];
         for cell in 0..ngrid {
             reader
                 .read_exact(&mut row_bytes)
                 .map_err(|e| err(e.to_string()))?;
-            let file_vals: [f64; NUM_EOS_TABLE_VALS] =
-                std::array::from_fn(|k| {
-                    let s = k * 8;
-                    f64::from_le_bytes(
-                        row_bytes[s..s + 8].try_into().unwrap_or([0; 8]),
-                    )
-                });
+            let iq = cell / num_log_ts;
+            let jt = cell % num_log_ts;
+            let mut file_vals = [0.0_f64; NUM_EOS_TABLE_VALS];
+            for (k, slot) in file_vals.iter_mut().enumerate() {
+                let s = k * 8;
+                let bytes: [u8; 8] =
+                    row_bytes[s..s + 8].try_into().map_err(|_| {
+                        err("short FMDTRW01 cell slice".to_string())
+                    })?;
+                let val = f64::from_le_bytes(bytes);
+                if is_bad(val) {
+                    return Err(err(format!(
+                        "non-finite raw column {k} ({val}) at cell=({iq}, {jt})"
+                    )));
+                }
+                *slot = val;
+            }
             Self::store_mapped_cell(&mut raw_vars, ngrid, cell, &file_vals);
+        }
+        let mut trailing = [0_u8; 1];
+        if reader.read(&mut trailing).map_err(|e| err(e.to_string()))? != 0 {
+            return Err(err(
+                "unexpected trailing bytes after FMDTRW01 payload".to_string(),
+            ));
         }
 
         Self::build_from_raw_vars(
-            version, x, z, num_log_ts, log_t_min, log_t_max, del_log_t,
-            num_log_qs, log_q_min, log_q_max, del_log_q, &raw_vars,
+            &table_label,
+            version,
+            x,
+            z,
+            num_log_ts,
+            log_t_min,
+            log_t_max,
+            del_log_t,
+            num_log_qs,
+            log_q_min,
+            log_q_max,
+            del_log_q,
+            &raw_vars,
         )
     }
 
@@ -234,8 +256,21 @@ impl EosDtXzTable {
         let log_q_max = hdr[9];
         let del_log_q = hdr[10];
 
-        let mut raw_vars =
-            vec![0.0_f64; NUM_EOS_TABLE_VALS * num_log_qs * num_log_ts];
+        let ngrid = validate_4d_grid_header(
+            "EosDtXzTable::from_ascii_reader",
+            "ascii",
+            x,
+            z,
+            num_log_qs,
+            log_q_min,
+            log_q_max,
+            del_log_q,
+            num_log_ts,
+            log_t_min,
+            log_t_max,
+            del_log_t,
+        )?;
+        let mut raw_vars = vec![0.0_f64; NUM_EOS_TABLE_VALS * ngrid];
 
         for iq in 0..num_log_qs {
             for label in ["logQ label", "logQ value", "column names"] {
@@ -259,29 +294,38 @@ impl EosDtXzTable {
                         detail: "empty data row".to_string(),
                     })?;
                 let mut file_vals = [0.0_f64; NUM_EOS_TABLE_VALS];
-                for fv in &mut file_vals {
+                for (k, fv) in file_vals.iter_mut().enumerate() {
                     let s =
                         toks.next().ok_or_else(|| EosError::InvalidState {
                             context: "EosDtXzTable::from_ascii_reader",
                             detail: "fewer than 16 EOS columns in row"
                                 .to_string(),
                         })?;
-                    *fv = s.parse::<f64>().map_err(|e| {
+                    let val = s.parse::<f64>().map_err(|e| {
                         EosError::InvalidState {
                             context: "EosDtXzTable::from_ascii_reader",
                             detail: format!("bad float '{s}': {e}"),
                         }
                     })?;
+                    if is_bad(val) {
+                        return Err(EosError::InvalidState {
+                            context: "EosDtXzTable::from_ascii_reader",
+                            detail: format!(
+                                "non-finite ASCII column {k} ({val}) in eosDT(X={x}, Z={z}) cell=({iq}, {jt})"
+                            ),
+                        });
+                    }
+                    *fv = val;
                 }
 
                 let cell = iq * num_log_ts + jt;
-                let ngrid = num_log_qs * num_log_ts;
                 Self::store_mapped_cell(&mut raw_vars, ngrid, cell, &file_vals);
             }
         }
 
+        let label = format!("eosDT(X={x}, Z={z})");
         Self::build_from_raw_vars(
-            version, x, z, num_log_ts, log_t_min, log_t_max, del_log_t,
+            &label, version, x, z, num_log_ts, log_t_min, log_t_max, del_log_t,
             num_log_qs, log_q_min, log_q_max, del_log_q, &raw_vars,
         )
     }

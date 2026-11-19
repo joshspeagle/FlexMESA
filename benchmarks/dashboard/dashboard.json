@@ -89,8 +89,8 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 13285,
-        "python_jax_lines": 9743
+        "rust_lines": 14169,
+        "python_jax_lines": 9673
       },
       {
         "module": "kap",
@@ -106,8 +106,8 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 4474,
-        "python_jax_lines": 3093
+        "rust_lines": 4852,
+        "python_jax_lines": 3214
       },
       {
         "module": "net",
@@ -225,7 +225,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 2846,
+        "rust_lines": 3123,
         "python_jax_lines": 1033
       },
       {
@@ -378,8 +378,8 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 4364,
-        "python_jax_lines": 2353
+        "rust_lines": 4846,
+        "python_jax_lines": 2584
       },
       {
         "module": "gyre",
@@ -455,7 +455,7 @@
       "upstream_panel_modules": 46
     },
     "infrastructure_lines": {
-      "rust_bridge_testing_bench": 16820,
+      "rust_bridge_testing_bench": 16915,
       "python_testing_bench": 13609
     }
   },

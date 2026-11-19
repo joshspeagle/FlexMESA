@@ -319,10 +319,10 @@ impl IonTableGrid {
     }
 }
 
-/// Evaluate `eval_ionization` using [`IonTableGrid::builtin`].
+/// Evaluate `eval_ionization` using [`IonTableGrid::builtin_checked`].
 ///
 /// # Errors
-/// Returns [`IonError::InvalidInput`] if inputs are invalid.
+/// Returns [`IonError`] if table/cache loading fails or inputs are invalid.
 pub fn eval_ionization(
     z: f64,
     x: f64,
@@ -331,7 +331,7 @@ pub fn eval_ionization(
     t: Option<f64>,
     log10_t: Option<f64>,
 ) -> Result<[f64; NUM_ION_VALS], IonError> {
-    IonTableGrid::builtin().eval(z, x, rho, log10_rho, t, log10_t)
+    IonTableGrid::builtin_checked()?.eval(z, x, rho, log10_rho, t, log10_t)
 }
 
 /// Evaluate a 3-point uniform-grid quadratic Lagrange polynomial across 28

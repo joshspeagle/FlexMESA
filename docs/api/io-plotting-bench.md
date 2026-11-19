@@ -46,7 +46,7 @@ print(
 
 ## `.safetensors` Data Loader, Manifest, Release Bundles & Converters (`flexmesa.data`)
 
-`flexmesa.data` verifies `SHA-256` checksums against `manifest.toml` and `bundles.toml`, downloads and unpacks full-resolution `data-v1` release archives into `$FLEXMESA_DATA_DIR` (`flexmesa data fetch`), memory-maps 64-byte-aligned `.safetensors` physics tables directly from the OS page cache, and converts upstream ASCII/binary MESA data tables (`isotopes.data`, `lodders03.data`, `helm_table.dat`, `eosDT`, `kap`, `rates`, `atm`) into `.safetensors`.
+`flexmesa.data` validates archive and per-file `SHA-256` checksums against `manifest.toml`, `bundles.toml`, and `bundle_hashes/*.sha256.tsv` (`flexmesa data fetch`, `flexmesa data verify`, rejecting unexpected files inside read-only `$FLEXMESA_DATA_DIR`), isolates versioned runtime-derived caches under `$FLEXMESA_CACHE_DIR/v1` (`resolve_cache_dir`, `FLEXMESA_DISABLE_RUNTIME_CACHE`, `flexmesa data clean-cache`), memory-maps 64-byte-aligned `.safetensors` physics tables directly from the OS page cache, and converts built-in ASCII MESA tables (`lodders03.data`, `isotopes.data`, and `helm_table.dat`) into `.safetensors` (while full-grid `data-v1` binary bundles are built offline via `make data-bundles`).
 
 ::: flexmesa.data.manifest
 

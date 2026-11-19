@@ -21,7 +21,7 @@
         "verified_total": 0,
         "pct_ported": 14.9,
         "pct_verified": 0.0,
-        "rust_lines": 55581,
+        "rust_lines": 55584,
         "python_jax_lines": 3869
       },
       {
@@ -1176,7 +1176,7 @@
     "python_xfail_or_skip_count": 2,
     "python_skips": [
       {
-        "location": "tests/test_eos_wave3a3.py:199",
+        "location": "tests/test_eos_wave3a3.py:200",
         "reason": "pytest.mark.xfail( strict=True, reason=( \"declared gap (#161): Rust strict PC and Skye derivatives differ \" \"from MESA 26.4.1 beyond the base tolerances (largest measured: \" \"pc_co_liq d_dlnT 7.1e-6, skye_co_liq d_dlnT 1.3e-6)\" ), )",
         "issues": "#161"
       },

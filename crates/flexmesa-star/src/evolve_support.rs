@@ -27,7 +27,6 @@ use crate::riemann_ad::eval_u_flag_total_energy_rates_ad;
 use crate::rotation::{
     conserve_shell_j_rot_and_distortion, set_rotation_mixing_info,
 };
-use crate::struct_burn_mix::refresh_mixing_state;
 
 /// Evaluates domain-integrated `(e_int, e_grav, e_kin, e_rot, e_turb, e_tot)`
 /// in $\mathrm{erg}$ (`eval_total_energy_integrals` in
@@ -116,15 +115,40 @@ pub fn apply_step_pre_physics(
     dt: f64,
 ) -> Result<(), StarError> {
     let nz = model.nz;
-    let mut need_hydro_refresh = false;
+    model.aux.mixing.okay_to_set_mixing_info = true;
+    model.aux.mixing.have_new_cz_bdy_info = false;
+    model.aux.mixing.phase_sep_mixing_mass = -1.0;
+    model.aux.mixing.gradt_excess_alpha_old =
+        model.aux.mixing.gradt_excess_alpha;
+    model.aux.mixing.crystal_core_boundary_mass_old =
+        model.aux.mixing.crystal_core_boundary_mass;
+    if !model.controls.rsp_flag {
+        crate::hydro_vars::set_gradt_excess_alpha(model);
+    }
+
+    // Refresh hydro and mixing info before operator-split pre-physics
+    // (`evolve.f90:569,606`).
+    set_hydro_vars(model, false, false)?;
 
     if model.controls.do_conv_premix {
+        if model.aux.eps_pre_mix.len() != nz {
+            model.aux.eps_pre_mix.resize(nz, 0.0);
+        }
+        model.aux.eps_pre_mix.copy_from_slice(&model.energy[..nz]);
         do_conv_premix(
             model,
             5,
             model.controls.mix_wind.conv_premix_avoid_increase,
         )?;
-        need_hydro_refresh = true;
+        set_hydro_vars(model, false, false)?;
+        if dt > 0.0 {
+            for k in 0..nz {
+                model.aux.eps_pre_mix[k] =
+                    (model.aux.eps_pre_mix[k] - model.energy[k]) / dt;
+            }
+        } else {
+            model.aux.eps_pre_mix.fill(0.0);
+        }
     } else {
         model.aux.eps_pre_mix.fill(0.0);
     }
@@ -147,10 +171,16 @@ pub fn apply_step_pre_physics(
         };
         model.aux.eps_phase_separation =
             do_phase_separation(model, dt, 175.0, is_one)?;
-        need_hydro_refresh = true;
+        set_hydro_vars(model, false, false)?;
     } else {
+        model.aux.mixing.crystal_core_boundary_mass = -1.0;
         model.aux.eps_phase_separation.fill(0.0);
     }
+
+    // Lock mixing info before element diffusion and `do_struct_burn_mix`
+    // (`star/private/evolve.f90:632`).
+    model.aux.mixing.okay_to_set_mixing_info = false;
+    let mut need_hydro_refresh = false;
 
     if model.controls.do_element_diffusion {
         let (_, eps_wd) =
@@ -316,9 +346,8 @@ pub fn remesh_star_before_step(
         && !sharp_dt_drop
         && dt_remesh_ok
     {
+        model.aux.mixing.okay_to_set_mixing_info = true;
         set_hydro_vars(model, false, false)?;
-        let dt_curr = dt_try.max(1.0);
-        refresh_mixing_state(model, dt_curr, &[]);
         let mesh_cfg = MeshFunctionConfig::from_controls(&model.controls);
         let (dq_new, ns, nm) = plan_mesh(model, &mesh_cfg);
         if ns + nm > 0 {
@@ -327,6 +356,7 @@ pub fn remesh_star_before_step(
             crate::hydro_state::smooth_post_remesh_hydro_and_rotation(
                 model, &snap,
             )?;
+            model.aux.mixing.okay_to_set_mixing_info = true;
             set_hydro_vars(model, false, false)?;
             model.save_start_values()?;
             return Ok((ns, nm, Some(snap)));
@@ -334,64 +364,6 @@ pub fn remesh_star_before_step(
         Ok((ns, nm, None))
     } else {
         Ok((0, 0, None))
-    }
-}
-
-/// Updates sticky-`gradr` solver MLT flip-tracking and zero-initialized `sig`
-/// immediately after face MLT evaluation (`mlt_info.f90` solver iteration hysteresis).
-pub(crate) fn update_mlt_sticky_and_sig_after_hydro(model: &mut StarModel) {
-    let nz = model.nz;
-    if !model.aux.doing_struct_burn_mix {
-        for k in 0..nz {
-            model.aux.mlt_prev_conv[k] =
-                u8::from(model.mixing_type[k] == MixingType::ConvectiveMixing);
-        }
-        if model.sig.iter().all(|&s| s == 0.0) {
-            crate::hydro_vars::update_sig_from_d_mix(model);
-        }
-    } else if !model.controls.rsp2_flag {
-        model.aux.solver_mlt_eval_count += 1;
-        let mw = &model.controls.mix_wind;
-        let sticky_ctrl = mw.make_gradr_sticky_in_solver_iters
-            || (mw.min_logt_for_make_gradr_sticky_in_solver_iters < 1.0e20
-                && model
-                    .ln_t_start
-                    .iter()
-                    .copied()
-                    .fold(f64::NEG_INFINITY, f64::max)
-                    / flexmesa_const::LN10
-                    >= mw.min_logt_for_make_gradr_sticky_in_solver_iters);
-        let eval_cnt = model.aux.solver_mlt_eval_count;
-        for k in 0..nz {
-            if model.aux.fixed_gradr_sticky[k] {
-                continue;
-            }
-            let is_conv =
-                u8::from(model.mixing_type[k] == MixingType::ConvectiveMixing);
-            if is_conv != model.aux.mlt_prev_conv[k] {
-                model.aux.mlt_prev_conv[k] = is_conv;
-                model.aux.mlt_flip_count[k] =
-                    model.aux.mlt_flip_count[k].saturating_add(1);
-                if model.aux.mlt_flip_count[k] >= 2 {
-                    model.aux.solver_had_mlt_flip = true;
-                }
-            }
-        }
-        if sticky_ctrl && eval_cnt > 3 {
-            for k in 0..nz {
-                if model.mixing_type[k] != MixingType::ConvectiveMixing {
-                    model.aux.fixed_gradr_sticky[k] = true;
-                }
-            }
-        } else if model.aux.solver_had_mlt_flip && eval_cnt >= 3 {
-            for k in 0..nz {
-                if model.t[k] > 1.0e6
-                    && model.mixing_type[k] != MixingType::ConvectiveMixing
-                {
-                    model.aux.fixed_gradr_sticky[k] = true;
-                }
-            }
-        }
     }
 }
 

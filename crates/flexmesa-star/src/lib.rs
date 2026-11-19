@@ -101,6 +101,7 @@ pub mod micro;
 pub mod micro_cache;
 pub mod micro_net;
 pub mod mix_info;
+pub mod mixing_state;
 pub mod model;
 pub mod model_io;
 pub mod omega_mix;
@@ -244,8 +245,12 @@ pub use hydro_state::{
 };
 pub use hydro_temperature::{interp_p_point_ad, set_rsp_lsurf_bc};
 pub use hydro_vars::{
-    check_for_redo_mlt, do_brunt_b, do_brunt_n2, eval_surf_bc, set_hydro_vars,
-    set_mlt_vars, update_sig_from_d_mix,
+    check_for_redo_mlt, do_brunt_b, do_brunt_n2, eval_surf_bc,
+    set_gradt_excess_alpha, set_hydro_vars, set_mlt_vars,
+    update_sig_from_d_mix,
+};
+pub use mixing_state::{
+    set_grads, threshold_smoothing, weighted_smoothing, MixingAuxState,
 };
 pub use inlist::{InlistBundle, InlistLoadOptions, SectionControls};
 pub use inlist_inventory::{
@@ -291,7 +296,8 @@ pub use micro::{
 pub use micro_cache::MicrophysicsCache;
 pub use mix_info::{
     cdc_factor, clean_mixing_glitches, compute_convection_sigmas,
-    eval_dxdt_mix, face_density, locate_convection_boundaries, ConvBoundary,
+    do_mix_envelope, eval_dxdt_mix, face_density, locate_convection_boundaries,
+    set_cz_bdy_mass, set_cz_boundary_info, set_mixing_info, ConvBoundary,
 };
 pub use model::StarModel;
 pub use model_io::{
@@ -299,7 +305,10 @@ pub use model_io::{
     read_mod_str, read_photo_bytes, try_write_photo_bytes, write_mod_string,
     write_photo_bytes, PHOTO_FORMAT_VERSION, STAR_DEF_VERSION,
 };
-pub use overshoot::{apply_overshooting, OvershootConfig, OvershootScheme};
+pub use overshoot::{
+    add_overshooting, apply_overshooting, eval_conv_bdy_hp, eval_conv_bdy_k,
+    eval_conv_bdy_r, eval_over_bdy_params, OvershootConfig, OvershootScheme,
+};
 pub use pre_ms::{
     build1_pre_ms_model, build_pre_ms_model, default_basic_net_composition,
     PreMsShell,

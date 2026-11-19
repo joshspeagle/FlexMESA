@@ -7,7 +7,6 @@ use flexmesa_const::{
     MixingType, CLIGHT, CRAD, FOUR_PI, L_SUN, M_SUN, PI, R_SUN,
 };
 
-use crate::hydro_state::{smooth_triangular_signed, use_smoothed_brunt_b};
 use crate::model::StarModel;
 use crate::rotation::{
     conserve_shell_j_rot_and_distortion, eval_spruit_tayler_dynamo, RI_CRIT_DSI,
@@ -82,14 +81,8 @@ fn eval_heger_rot_diffusivities(model: &StarModel) -> RotDiffArrays {
     }
     let mw = &model.controls.mix_wind;
     let f_mu = mw.am_gradmu_factor.max(0.0);
-    let b_cow: std::borrow::Cow<'_, [f64]> = if use_smoothed_brunt_b(model) {
-        std::borrow::Cow::Borrowed(&model.brunt_b)
-    } else {
-        std::borrow::Cow::Owned(smooth_triangular_signed(
-            &model.brunt_b,
-            mw.num_cells_for_smooth_brunt_b,
-        ))
-    };
+    let b_cow: std::borrow::Cow<'_, [f64]> =
+        std::borrow::Cow::Borrowed(&model.brunt_b);
 
     let (
         mut rho,
@@ -428,6 +421,11 @@ fn eval_heger_rot_diffusivities(model: &StarModel) -> RotDiffArrays {
 
 pub(crate) fn eval_d_mix_non_rotation_vec(model: &StarModel) -> Vec<f64> {
     let nz = model.nz;
+    if model.aux.mixing.have_mixing_info
+        && model.aux.mixing.d_mix_non_rotation.len() == nz
+    {
+        return model.aux.mixing.d_mix_non_rotation.clone();
+    }
     let mw = &model.controls.mix_wind;
     if !model.controls.rotation_flag
         || (mw.am_d_mix_factor <= 0.0 && mw.d_visc_factor <= 0.0)

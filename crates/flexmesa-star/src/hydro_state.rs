@@ -253,10 +253,8 @@ pub struct HydroAuxState {
     pub tidal_deformation: Option<TidalDeformationHandle>,
     /// Brunt-Väisälä composition buoyancy term $N_{\mu,k}^2$ in $\mathrm{s^{-2}}$ (`brunt_N2_composition_term`).
     pub brunt_n2_composition_term: Vec<f64>,
-    /// Triangular-smoothed Ledoux composition buoyancy term $B_{\mathrm{smooth},k}$ (`smoothed_brunt_B`).
+    /// Binomial-smoothed Ledoux composition buoyancy term $B_{\mathrm{smooth},k}$ (`smoothed_brunt_B`).
     pub smoothed_brunt_b: Vec<f64>,
-    /// Bit-level hash of `model.brunt_b` when `smoothed_brunt_b` was last refreshed.
-    pub smoothed_brunt_b_hash: u64,
     /// Baryonic mass correction factor per cell (`mass_correction`).
     pub mass_correction: Vec<f64>,
     /// Extra face gravitational acceleration $g_{\mathrm{extra},k}$ (`extra_grav`).
@@ -279,14 +277,10 @@ pub struct HydroAuxState {
     pub eps_mdot_old: Vec<f64>,
     /// Solver `set_mlt_vars` evaluation counter within the active `do_struct_burn_mix` solve.
     pub solver_mlt_eval_count: usize,
-    /// Whether any face has completed a convective/radiative round-trip flip during the active Henyey solve.
-    pub solver_had_mlt_flip: bool,
-    /// Per-face sticky radiative/sub-Ledoux latch (`fixed_gradr_for_rest_of_solver_iters` in `turb_info.f90:57-62`).
+    /// Per-face sticky radiative latch (`fixed_gradr_for_rest_of_solver_iters` in `turb_info.f90:56-61`).
     pub fixed_gradr_sticky: Vec<bool>,
-    /// Per-face previous convective indicator (`1` if `ConvectiveMixing`, `0` otherwise) during a Henyey solve.
-    pub mlt_prev_conv: Vec<u8>,
-    /// Per-face convective/non-convective transition count within the active Henyey solve.
-    pub mlt_flip_count: Vec<u8>,
+    /// Auxiliary mixing, MLT, convective-boundary, and Brunt-smoothing state.
+    pub mixing: crate::mixing_state::MixingAuxState,
     /// Per-step scalar history, solver/substep counters, and retry-hold state.
     pub step_hist: StepHistoryScalars,
     /// Per-model 2-slot microphysics cache (never duplicated on clone).
@@ -358,7 +352,6 @@ impl HydroAuxState {
             tidal_deformation: None,
             brunt_n2_composition_term: vec![0.0; nz],
             smoothed_brunt_b: vec![0.0; nz],
-            smoothed_brunt_b_hash: 0,
             mass_correction: vec![1.0; nz],
             extra_grav: vec![StarAdOrder1::ZERO; nz],
             uq_ad: vec![StarAdOrder1::ZERO; nz],
@@ -369,10 +362,8 @@ impl HydroAuxState {
             j_rot_old: vec![0.0; nz],
             eps_mdot_old: vec![0.0; nz],
             solver_mlt_eval_count: 0,
-            solver_had_mlt_flip: false,
             fixed_gradr_sticky: vec![false; nz],
-            mlt_prev_conv: vec![0; nz],
-            mlt_flip_count: vec![0; nz],
+            mixing: crate::mixing_state::MixingAuxState::new(nz),
             step_hist: StepHistoryScalars::default(),
             micro_cache: crate::micro_cache::MicrophysicsCache::default(),
         }
@@ -451,8 +442,7 @@ impl HydroAuxState {
         self.dln_e_dxa_for_partials.resize(n_sp, 0.0);
         self.dln_peos_dxa_for_partials.resize(n_sp, 0.0);
         self.fixed_gradr_sticky.resize(nz, false);
-        self.mlt_prev_conv.resize(nz, 0);
-        self.mlt_flip_count.resize(nz, 0);
+        self.mixing.resize(nz);
         self.rsp.resize(nz);
     }
 
@@ -474,63 +464,6 @@ impl HydroAuxState {
         self.etrb_start.clone_from(&self.etrb);
         self.alpha_rti_start.clone_from(&self.alpha_rti);
     }
-}
-
-#[inline]
-pub(crate) fn hash_brunt_b(b: &[f64]) -> u64 {
-    let mut h = 0xcbf29ce484222325_u64;
-    for &x in b {
-        h ^= x.to_bits();
-        h = h.wrapping_mul(0x100000001b3);
-    }
-    h
-}
-
-pub(crate) fn smooth_triangular_signed(
-    src: &[f64],
-    half_width: usize,
-) -> Vec<f64> {
-    let nz = src.len();
-    if half_width == 0 || nz < 3 {
-        return src.to_vec();
-    }
-    let mut out = vec![0.0; nz];
-    out[0] = src[0];
-    let w_i = half_width as isize;
-    for k in 1..nz {
-        let (mut sum, mut wsum) = (0.0, 0.0);
-        for dj in -w_i..=w_i {
-            let j = k as isize + dj;
-            if j >= 1 && (j as usize) < nz {
-                let wt = (half_width + 1 - dj.unsigned_abs()) as f64;
-                sum += wt * src[j as usize];
-                wsum += wt;
-            }
-        }
-        out[k] = if wsum > 0.0 { sum / wsum } else { src[k] };
-    }
-    out
-}
-
-pub(crate) fn refresh_smoothed_brunt_b(model: &mut crate::model::StarModel) {
-    let mw = &model.controls.mix_wind;
-    let raw_b = model.brunt_b.clone();
-    model.aux.smoothed_brunt_b = smooth_triangular_signed(
-        &raw_b,
-        mw.num_cells_for_smooth_gradl_composition_term,
-    );
-    if mw.num_cells_for_smooth_brunt_b > 0 {
-        model.brunt_b =
-            smooth_triangular_signed(&raw_b, mw.num_cells_for_smooth_brunt_b);
-    }
-    model.aux.smoothed_brunt_b_hash = hash_brunt_b(&model.brunt_b);
-}
-
-#[inline]
-pub(crate) fn use_smoothed_brunt_b(model: &crate::model::StarModel) -> bool {
-    model.aux.smoothed_brunt_b.len() == model.nz
-        && model.aux.smoothed_brunt_b_hash != 0
-        && hash_brunt_b(&model.brunt_b) == model.aux.smoothed_brunt_b_hash
 }
 
 fn interp_hermite_p1(

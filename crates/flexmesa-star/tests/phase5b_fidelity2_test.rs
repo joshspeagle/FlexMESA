@@ -293,7 +293,7 @@ fn test_do_adjust_mass_step_and_eps_mdot_conserve_accreted_species_and_angular_m
 
 #[test]
 #[allow(clippy::too_many_lines)]
-fn test_overshoot_16_param_sets_and_peclet_damping_follow_mesa_rules() {
+fn test_overshoot_16_param_sets_and_brunt_b_cutoff_follow_mesa_rules() {
     let ctrl = StarControls {
         initial_mass: 4.0,
         zbase: 0.02,
@@ -332,13 +332,13 @@ fn test_overshoot_16_param_sets_and_peclet_damping_follow_mesa_rules() {
     m_short_circuit.controls.mix_wind.overshoot_sets[0].scheme =
         String::from("none");
 
-    let mut m_peclet = m_exp.clone();
-    m_peclet.controls.mix_wind.peclet_function_full_off = 1.0e30;
-    m_peclet.controls.mix_wind.peclet_function_full_on = 1.0e31;
+    let mut m_bmax = m_exp.clone();
+    m_bmax.controls.mix_wind.overshoot_brunt_b_max = 1.0e-6;
+    m_bmax.aux.mixing.unsmoothed_brunt_b.fill(1.0);
 
     apply_overshooting(&mut m_exp, &boundaries, &[]);
     apply_overshooting(&mut m_short_circuit, &boundaries, &[]);
-    apply_overshooting(&mut m_peclet, &boundaries, &[]);
+    apply_overshooting(&mut m_bmax, &boundaries, &[]);
 
     let n_ov_exp = m_exp
         .mixing_type
@@ -350,59 +350,31 @@ fn test_overshoot_16_param_sets_and_peclet_damping_follow_mesa_rules() {
         .iter()
         .filter(|&&mt| mt == MixingType::OvershootMixing)
         .count();
-    let n_ov_peclet = m_peclet
+    let n_ov_bmax = m_bmax
         .mixing_type
         .iter()
         .filter(|&&mt| mt == MixingType::OvershootMixing)
         .count();
 
     assert!(n_ov_exp > 0, "expected OvershootMixing zones from set 0");
-    let bdy = &boundaries[0];
-    let dr_cz = (base.r[bdy.cell_index] - base.r_center).max(0.0);
-    let alpha = base.controls.mixing_length_alpha.max(1.0e-6);
-    let hp_cb = if base
-        .controls
-        .mix_wind
-        .limit_overshoot_hp_using_size_of_convection_zone
-        && dr_cz > 0.0
-        && alpha * bdy.hp_cb > dr_cz
-    {
-        dr_cz / alpha
-    } else {
-        bdy.hp_cb
-    };
-    let r_ob = (bdy.r_cb - 0.005 * hp_cb).max(base.r[base.nz - 1]);
-    let mut k_ob = bdy.cell_index;
-    while k_ob + 1 < base.nz && base.r[k_ob] > r_ob && base.r[k_ob + 1] > r_ob {
-        k_ob += 1;
-    }
-    let k_next = (k_ob + 1).min(base.nz - 1);
-    let w_ob =
-        ((flexmesa_math::pow3(base.r[k_ob]) - flexmesa_math::pow3(r_ob)).abs()
-            / (flexmesa_math::pow3(base.r[k_ob])
-                - flexmesa_math::pow3(base.r[k_next]))
-            .abs()
-            .max(1.0e-99))
-        .clamp(0.0, 1.0);
-    let vc_ob = ((1.0 - w_ob) * base.mlt_vc[k_ob] + w_ob * base.mlt_vc[k_next])
-        .max(0.0);
-    let hp_anchor = (1.0 - w_ob) * base.scale_height[k_ob]
-        + w_ob * base.scale_height[k_next];
-    let d_ob =
-        (vc_ob * alpha * hp_anchor / 3.0).max(base.mlt_d[bdy.conv_bdy_loc]);
+    let hp_cb = flexmesa_star::eval_conv_bdy_hp(&base, 0)
+        .expect("eval_conv_bdy_hp");
+    let (_k_ob, r_ob, d_ob, _vc_ob) =
+        flexmesa_star::eval_over_bdy_params(&base, 0, 0.005)
+            .expect("eval_over_bdy_params");
     let ov_face_idx = m_exp
         .mixing_type
         .iter()
         .position(|&mt| mt == MixingType::OvershootMixing)
         .expect("first overshoot face");
-    let dr_ov = (m_exp.r[ov_face_idx] - r_ob).max(0.0);
+    let dr_ov = m_exp.r[ov_face_idx] - r_ob;
     let expected_d_ov =
         d_ob * flexmesa_math::exp(-2.0 * dr_ov / (0.02 * hp_cb));
     assert!(rel_err(m_exp.d_mix[ov_face_idx], expected_d_ov) < 1.0e-11);
     assert_eq!(n_ov_short, 0, "'none' in set 0 must short-circuit set 1");
     assert_eq!(
-        n_ov_peclet, 0,
-        "Pe <= peclet_function_full_off must damp overshoot diffusivity to zero"
+        n_ov_bmax, 0,
+        "unsmoothed_brunt_B > overshoot_brunt_B_max must stop overshooting"
     );
 }
 

@@ -8,7 +8,7 @@ use flexmesa_atm::{
     get_table_base, AtmEosCallbackResult, AtmError, AtmEvalOutput,
     AtmKapCallbackResult,
 };
-use flexmesa_const::{CLIGHT, CRAD, L_SUN, M_SUN, PI};
+use flexmesa_const::{CLIGHT, CRAD, FOUR_PI, L_SUN, M_SUN, PI};
 use flexmesa_eos::{eos_dt_get, I_LN_PGAS};
 
 use crate::controls::{AtmOption, StarError};
@@ -19,57 +19,68 @@ use crate::star_ad::{
 };
 
 /// Evaluates the face-centered composition gradient term $B_k$ (`do_brunt_B`
-/// in `star/private/brunt.f90:57-330`).
+/// in `star/private/brunt.f90:37-106,184-333`), stores `unsmoothed_brunt_B`,
+/// and applies `threshold_smoothing` to `model.brunt_b`.
 ///
 /// Supports both the default Brassard et al. (1991) finite-difference EOS
-/// formulation (`!model.controls.use_brunt_gradmux_form`, `brunt.f90:282-316`)
+/// formulation (`!model.controls.use_brunt_gradmux_form`, `brunt.f90:231-333`)
 /// and the explicit mean-molecular-weight logarithmic derivative form
-/// (`model.controls.use_brunt_gradmux_form`, `brunt.f90:202-238`).
+/// (`model.controls.use_brunt_gradmux_form`).
 ///
 /// # Errors
 /// Returns [`StarError::MicrophysicsError`] if face EOS evaluation fails or
-/// produces non-finite $B_k$ (`star/private/brunt.f90:282-296,314-316`).
+/// produces non-finite $B_k$ (`star/private/brunt.f90:258-331`).
 pub fn do_brunt_b(model: &mut StarModel) -> Result<(), StarError> {
     let nz = model.nz;
     if nz == 0 {
         return Ok(());
     }
+    if model.aux.mixing.unsmoothed_brunt_b.len() != nz {
+        model.aux.mixing.resize(nz);
+    }
     model.brunt_b.fill(0.0);
+    model.aux.mixing.unsmoothed_brunt_b.fill(0.0);
     model.aux.brunt_n2_composition_term.fill(0.0);
-    if !model.controls.calculate_brunt_n2
-        && !model.controls.use_ledoux_criterion
-    {
+    if !model.controls.calculate_brunt_b {
         return Ok(());
     }
 
     let species = model.species;
     let use_gradmux = model.controls.use_brunt_gradmux_form || species == 0;
+    let use_mc = model.controls.use_mass_corrections;
     let ht = crate::micro::builtin_helm_table()?;
 
     for k in 1..nz {
-        let dlnp_peos = model.ln_peos[k - 1] - model.ln_peos[k];
-        if dlnp_peos.abs() < 1.0e-14 {
-            model.brunt_b[k] = 0.0;
-            continue;
-        }
-        let chi_t_f = model.interp_val_to_pt(&model.chi_t, k).max(1.0e-10);
+        let rho_f = model.interp_val_to_pt(&model.rho, k);
+        let t_f = model.interp_val_to_pt(&model.t, k);
+        let chi_t_f = model.interp_val_to_pt(&model.chi_t, k);
+        let chi_rho_f = model.interp_val_to_pt(&model.chi_rho, k);
 
-        let b_k = if use_gradmux {
-            eval_gradmux_brunt_b(model, k, dlnp_peos, chi_t_f)
+        let mut delta_lnp = model.ln_peos[k - 1] - model.ln_peos[k];
+        if delta_lnp > -1.0e-50 {
+            // Hydrostatic equilibrium fallback (`star/private/brunt.f90:299-304`).
+            let alfa = model.dq[k - 1] / (model.dq[k - 1] + model.dq[k]);
+            let p_point =
+                alfa * model.peos[k] + (1.0 - alfa) * model.peos[k - 1];
+            let dlnp_dm = -model.cgrav[k] * model.m[k]
+                / (FOUR_PI * flexmesa_math::pow4(model.r[k]) * p_point);
+            delta_lnp = dlnp_dm * model.dm_bar[k];
+        }
+
+        let mut b_k = if use_gradmux {
+            eval_gradmux_brunt_b(model, k, delta_lnp, chi_t_f, chi_rho_f)
         } else {
             let xa_00 = &model.xa[k * species..(k + 1) * species];
             let xa_m1 = &model.xa[(k - 1) * species..k * species];
-            let max_dx = xa_00
-                .iter()
-                .zip(xa_m1.iter())
-                .map(|(a, b)| (a - b).abs())
-                .fold(0.0_f64, f64::max);
-            if max_dx < 1.0e-14 {
+            if !(rho_f > 0.0 && t_f > 0.0) {
+                return Err(StarError::MicrophysicsError(format!(
+                    "do_brunt_b invalid face rho/T at face {k}: rho={rho_f}, T={t_f}"
+                )));
+            }
+            if xa_00 == xa_m1 {
                 0.0
             } else {
-                let rho_f = model.interp_val_to_pt(&model.rho, k).max(1.0e-99);
-                let t_f = model.interp_val_to_pt(&model.t, k).max(1.0);
-                let prad_f = CRAD * flexmesa_math::pow4(t_f) / 3.0;
+                let prad_f = CRAD * t_f * t_f * t_f * t_f / 3.0;
                 let out_00 = eos_dt_get(
                     ht,
                     rho_f,
@@ -103,9 +114,16 @@ pub fn do_brunt_b(model: &mut StarModel) -> Result<(), StarError> {
                 let ln_p2 = flexmesa_math::log(
                     prad_f + flexmesa_math::exp(out_m1.res[I_LN_PGAS]),
                 );
-                (ln_p1 - ln_p2) / (dlnp_peos * chi_t_f)
+                (ln_p1 - ln_p2) / delta_lnp / chi_t_f
             }
         };
+
+        if use_mc {
+            let delta_ln_mbar =
+                flexmesa_math::log(model.aux.mass_correction[k - 1])
+                    - flexmesa_math::log(model.aux.mass_correction[k]);
+            b_k -= chi_rho_f * delta_ln_mbar / delta_lnp / chi_t_f;
+        }
 
         if !b_k.is_finite() {
             return Err(StarError::MicrophysicsError(format!(
@@ -113,6 +131,25 @@ pub fn do_brunt_b(model: &mut StarModel) -> Result<(), StarError> {
             )));
         }
         model.brunt_b[k] = b_k;
+    }
+
+    model
+        .aux
+        .mixing
+        .unsmoothed_brunt_b
+        .copy_from_slice(&model.brunt_b[..nz]);
+
+    let ns = model.controls.mix_wind.num_cells_for_smooth_brunt_b;
+    if ns > 0 {
+        let thresh = model.controls.mix_wind.threshold_for_smooth_brunt_b;
+        let mut work = vec![0.0_f64; nz];
+        crate::mixing_state::threshold_smoothing(
+            &mut model.brunt_b[..nz],
+            thresh,
+            ns,
+            false,
+            &mut work,
+        );
     }
     Ok(())
 }
@@ -123,49 +160,83 @@ fn eval_gradmux_brunt_b(
     k: usize,
     dlnp: f64,
     chi_t_f: f64,
+    chi_rho_f: f64,
 ) -> f64 {
     let mu_m1 = model.mu[k - 1].max(1.0e-10);
     let mu_00 = model.mu[k].max(1.0e-10);
     let dln_mu = flexmesa_math::log1p((mu_m1 - mu_00) / mu_00);
-    let chi_rho_f = model.interp_val_to_pt(&model.chi_rho, k);
     (chi_rho_f / chi_t_f) * (dln_mu / dlnp)
 }
 
 /// Evaluates the Brunt-Väisälä buoyancy frequency squared $N_k^2$ and its
 /// compositional contribution $N_{\mu,k}^2$ at all faces (`do_brunt_N2` in
-/// `star/private/brunt.f90:297-334`).
+/// `star/private/brunt.f90:110-181`).
 pub fn do_brunt_n2(model: &mut StarModel) {
     let nz = model.nz;
     model.brunt_n2.fill(0.0);
     model.aux.brunt_n2_composition_term.fill(0.0);
-    if !model.controls.calculate_brunt_n2 {
+    if nz == 0
+        || !(model.controls.calculate_brunt_b
+            && model.controls.calculate_brunt_n2)
+    {
         return;
     }
-    let use_rot = model.controls.rotation_flag
-        && model.controls.use_gravity_rotation_correction;
+
+    let use_mc = model.controls.use_mass_corrections;
+    let mut cell_fac = vec![0.0_f64; nz];
+    for k in 0..nz {
+        let mut v =
+            (model.rho[k] / model.peos[k]) * (model.chi_t[k] / model.chi_rho[k]);
+        if use_mc {
+            v *= model.aux.mass_correction[k];
+        }
+        cell_fac[k] = v;
+    }
+    let mut face_fac = vec![0.0_f64; nz];
+    face_fac[0] = cell_fac[0];
     for k in 1..nz {
-        let rho_f = model.interp_val_to_pt(&model.rho, k);
-        let p_f = model.interp_val_to_pt(&model.peos, k).max(1.0e-30);
-        let chi_t_f = model.interp_val_to_pt(&model.chi_t, k);
-        let chi_rho_f = model.interp_val_to_pt(&model.chi_rho, k).max(1.0e-10);
-        let grada_f = model.interp_val_to_pt(&model.grada, k);
-        let fp_k = if use_rot {
-            let fp = model.aux.fp_rot.get(k).copied().unwrap_or(1.0);
-            if fp > 0.0 {
-                fp
-            } else {
-                1.0
-            }
+        face_fac[k] = model.interp_val_to_pt(&cell_fac, k);
+    }
+
+    let min_mag = model.controls.mix_wind.min_magnitude_brunt_b;
+    let has_gradt_sub_grada = model.aux.mixing.gradt_sub_grada.len() == nz;
+    for k in 0..nz {
+        let gradt_sub_grada = if has_gradt_sub_grada {
+            model.aux.mixing.gradt_sub_grada[k]
         } else {
-            1.0
+            let grada_f = if k == 0 {
+                model.grada[0]
+            } else {
+                model.interp_val_to_pt(&model.grada, k)
+            };
+            model.gradt[k] - grada_f
         };
-        let r_k = model.r[k].max(1.0);
-        let g_sph = model.cgrav[k] * model.m_grav[k] / (r_k * r_k);
-        let g = g_sph * fp_k;
-        let prefactor = (g * g * rho_f / p_f) * (chi_t_f / chi_rho_f);
-        let n2_comp = prefactor * model.brunt_b[k];
-        model.aux.brunt_n2_composition_term[k] = n2_comp;
-        model.brunt_n2[k] = prefactor * (grada_f - model.gradt[k]) + n2_comp;
+        if model.brunt_b[k].abs() < min_mag
+            || model.gradt[k] == 0.0
+            || !gradt_sub_grada.is_finite()
+        {
+            model.brunt_b[k] = 0.0;
+            model.brunt_n2[k] = 0.0;
+            model.aux.brunt_n2_composition_term[k] = 0.0;
+            continue;
+        }
+        let g = if model.grav[k] > 0.0 {
+            model.grav[k]
+        } else {
+            let r_k = model.r[k].max(1.0);
+            model.cgrav[k] * model.m_grav[k] / (r_k * r_k)
+        };
+        let f = flexmesa_math::pow2(g) * face_fac[k];
+        model.brunt_n2[k] = f * (model.brunt_b[k] - gradt_sub_grada);
+        model.aux.brunt_n2_composition_term[k] = f * model.brunt_b[k];
+    }
+
+    let coeff = model.controls.mix_wind.brunt_n2_coefficient;
+    if coeff != 1.0 {
+        for k in 0..nz {
+            model.brunt_n2[k] *= coeff;
+            model.aux.brunt_n2_composition_term[k] *= coeff;
+        }
     }
 }
 

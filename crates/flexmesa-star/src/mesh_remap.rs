@@ -208,6 +208,53 @@ pub fn classify_new_cells(
     Ok((cell_type, unchanged, split, merged))
 }
 
+/// Counts net split and merge operations across minimal aligned mass intervals
+/// so `splits + merges == 0` iff every cell is [`CellType::Unchanged`] and
+/// `nz_old + splits - merges == nz_new` holds identically.
+#[must_use]
+pub(crate) fn count_plan_splits_and_merges(
+    xq_old: &[f64],
+    xq_new: &[f64],
+    comes_from: &[usize],
+    cell_type: &[CellType],
+) -> (usize, usize) {
+    let nz_old = xq_old.len();
+    let nz_new = xq_new.len();
+    if nz_old == 0 || nz_new == 0 {
+        return (0, 0);
+    }
+    let mut splits = 0_usize;
+    let mut merges = 0_usize;
+    let mut k0 = 0_usize;
+    let mut ko0 = 0_usize;
+    for k in 1..=nz_new {
+        let aligned_ko = if k == nz_new {
+            Some(nz_old)
+        } else {
+            let ko = comes_from[k];
+            (xq_new[k] == xq_old[ko]).then_some(ko)
+        };
+        let Some(ko1) = aligned_ko else {
+            continue;
+        };
+        let new_cnt = k - k0;
+        let old_cnt = ko1.saturating_sub(ko0);
+        if new_cnt > old_cnt {
+            splits += new_cnt - old_cnt;
+        } else if old_cnt > new_cnt {
+            merges += old_cnt - new_cnt;
+        } else if new_cnt > 1
+            || (new_cnt == 1 && cell_type[k0] != CellType::Unchanged)
+        {
+            splits += 1;
+            merges += 1;
+        }
+        k0 = k;
+        ko0 = ko1;
+    }
+    (splits, merges)
+}
+
 fn build_plan_for_given_dq(
     model: &StarModel,
     dq_new_in: &[f64],
@@ -256,8 +303,14 @@ fn build_plan_for_given_dq(
             xq_aligned[k] = xq_old[ko];
         }
     }
-    let (cell_type, _unch, num_splits, num_merges) =
+    let (cell_type, _unch, _split_cells, _merged_cells) =
         classify_new_cells(&xq_old, &xq_aligned, &comes_from)?;
+    let (num_splits, num_merges) = count_plan_splits_and_merges(
+        &xq_old,
+        &xq_aligned,
+        &comes_from,
+        &cell_type,
+    );
 
     Ok(StandardMeshPlan {
         nz_old,

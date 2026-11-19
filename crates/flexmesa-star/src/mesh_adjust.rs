@@ -25,7 +25,8 @@ pub use crate::mesh_remap::{
     solve_cell_lnt_for_energy,
 };
 use crate::mesh_remap::{
-    compute_xqs, execute_adjust_mesh_from_plan, fix_tail_dq,
+    compute_xqs, count_plan_splits_and_merges, execute_adjust_mesh_from_plan,
+    fix_tail_dq,
 };
 use crate::model::StarModel;
 
@@ -451,8 +452,14 @@ pub fn try_plan_standard_mesh(
     fix_tail_dq(&mut dq_new_fixed)?;
     let xq_new_fixed = compute_xqs(&dq_new_fixed);
 
-    let (cell_type, _unchanged, num_splits, num_merges) =
+    let (cell_type, _unchanged, _split_cells, _merged_cells) =
         classify_new_cells(&xq_old, &plan_out.xq_new, &plan_out.comes_from)?;
+    let (num_splits, num_merges) = count_plan_splits_and_merges(
+        &xq_old,
+        &plan_out.xq_new,
+        &plan_out.comes_from,
+        &cell_type,
+    );
 
     Ok(Some(StandardMeshPlan {
         nz_old: nz,

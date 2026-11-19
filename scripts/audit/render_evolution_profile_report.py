@@ -108,10 +108,26 @@ def _build_shared_sections(
     lines.append(
         "This report is rendered deterministically by "
         "`scripts/audit/render_evolution_profile_report.py` from raw JSON and "
-        "CSV captures in `benchmarks/evolution_profile/26.4.1/`. Every timing "
-        "and trajectory comparison below was recorded on a single quiet host "
-        "against compiled Fortran MESA `r26.4.1` (`commit c8c2026`, Zenodo "
-        "`19722306`) at matched thread count."
+        "CSV captures in `benchmarks/evolution_profile/26.4.1/`. Section 3 "
+        "compares with compiled Fortran MESA `r26.4.1` (`commit c8c2026`, "
+        "Zenodo `19722306`) at matched thread count; Sections 2, 4, 5 and 6 "
+        "compare FlexMESA with itself."
+    )
+    lines.append("")
+    n_diag = sum(
+        1 for c in strict_cases if bool(c["allow_unsupported_controls"])
+    )
+    lines.append(
+        f"**Every FlexMESA run in this report is a diagnostic run.** "
+        f"`{n_diag}` of the `{len(strict_cases)}` `strict` records carry "
+        f"`allow_unsupported_controls = true`: the runs continued past "
+        f"upstream controls FlexMESA does not implement, so they did not do "
+        f"everything the inlists ask (`DECISIONS #26`). All four cases are "
+        f"declared known gaps in `benchmarks/history_harness/known_gaps.toml` "
+        f"and none counts as passing. The step counts and track differences "
+        f"in Section 1 show that the FlexMESA and MESA runs are not the same "
+        f"calculation; the timings are a profile of FlexMESA as it is, not a "
+        f"like-for-like speed comparison with MESA."
     )
     lines.append("")
 
@@ -148,10 +164,11 @@ def _build_shared_sections(
     )
     lines.append("")
     lines.append(
-        "Four `star/test_suite` cases that run to upstream's physical stopping "
-        "condition on `origin/main` with stock `run_star_extras.f90` hooks "
-        "were selected to span fixed and Type-2 CO opacities, 8-species and "
-        "10-species nuclear networks, Cox and Henyey MLT, stellar winds, "
+        "Four `star/test_suite` cases whose diagnostic runs end at upstream's "
+        "termination code on `origin/main`, with stock `run_star_extras.f90` "
+        "hooks, were selected to span fixed and Type-2 CO opacities, "
+        "8-species and 10-species nuclear networks, Cox and Henyey MLT, "
+        "stellar winds, "
         "convective overshooting, and zero-metallicity pre-MS-through-core-He "
         "evolution (`star/test_suite/semiconvection` currently stops at step "
         "197 on `origin/main` awaiting the `#149` Type-2 `a09_co` defaults "
@@ -202,7 +219,41 @@ def _build_shared_sections(
         "perturbs the canonical evolution trajectory."
     )
     lines.append("")
-    lines.append("### 2.1 Share of Step Wall Time by Subsystem (`%`)")
+    lines.append(
+        "The shares below are a model, not a direct measurement. Each kernel "
+        "is timed once per step on a copy of the pre-step model and the time "
+        "is multiplied by the number of calls counted in the real step. The "
+        "sum of those products exceeds the measured wall time in every case, "
+        "and the shares are then scaled to add up to `100%`:"
+    )
+    lines.append("")
+    lines.append(
+        "| Case | Measured Evolve Wall (`s`) | Sum of Kernel Estimates (`s`) | "
+        "Overshoot |"
+    )
+    lines.append("| :--- | ---: | ---: | ---: |")
+    for cname in prov["selected_cases"]:
+        ph = cast(dict[str, Any], strict_by_case[cname]["phases"])
+        ref_sec = float(ph["reference_evolve_wall_sec"])
+        bottom_up = float(ph["bottom_up_total_sec"])
+        over_pct = 100.0 * (bottom_up / ref_sec - 1.0)
+        lines.append(
+            f"| `{cname}` | `{ref_sec:.2f}` | `{bottom_up:.2f}` | "
+            f"`{_fmt_pct(over_pct, 1, signed=True)}` |"
+        )
+    lines.append("")
+    lines.append(
+        "The turbulence bucket also includes the Brunt, surface boundary and "
+        "`eps_grav` probes, which the real step does not call on every sweep. "
+        "Figures derived from these shares later in the report (the stateless "
+        "microphysics share and the Amdahl ceiling in Section 6) inherit this "
+        "uncertainty."
+    )
+    lines.append("")
+    lines.append(
+        "### 2.1 Modelled Share of Step Wall Time by Subsystem (`%`, "
+        "rescaled to `100%`)"
+    )
     lines.append("")
     lines.append(
         "| Case | EOS | Opacity | Net + Jacobian | Turbulence | "
@@ -340,14 +391,17 @@ def _build_shared_sections(
         )
     lines.append("")
     lines.append(
-        f"Per zone-step (`wall_us_per_zone_step`), FlexMESA `strict` runs at "
-        f"`{min(zs_speedups):.2f}x` to `{max(zs_speedups):.2f}x` the speed of "
-        f"compiled Fortran MESA `26.4.1` (`{min(wall_speedups):.2f}x` to "
-        f"`{max(wall_speedups):.2f}x` on end-to-end evolution wall clock). "
-        f"Differences between per-zone-step speedup and total-run speedup stem "
-        f"directly from timestep (`dt`) controller trajectories (`#149`), "
-        f"because `1.3M_ms_high_Z` and `make_metals` currently take more "
-        f"timesteps than upstream MESA while `low_z` and `high_z` take fewer."
+        f"Wall time per zone-step for the FlexMESA `strict` diagnostic runs "
+        f"is `{min(zs_speedups):.2f}x` to `{max(zs_speedups):.2f}x` smaller "
+        f"than for the MESA `26.4.1` runs (`{min(wall_speedups):.2f}x` to "
+        f"`{max(wall_speedups):.2f}x` on evolution wall clock). These ratios "
+        f"are not a speed comparison of equal work. The two codes take "
+        f"different numbers of steps on every case and their tracks differ "
+        f"(Section 1), the FlexMESA runs ignore unsupported controls, a zone "
+        f"step is not normalised for Newton iterations, and the timing "
+        f"protocols differ: MESA was run once with its normal output, while "
+        f"FlexMESA is the median of three runs with history output on one of "
+        f"them. Why the step counts differ has not been established."
     )
     lines.append("")
 
@@ -390,7 +444,24 @@ def _build_shared_sections(
     )
     lines.append("")
 
+    lines.append(
+        f"This is one case with `{pre150['repeats']}` repeats per build. The "
+        f"spread of the pre-`#150` samples "
+        f"(`{pre150['range_wall_sec']:.2f} s`) is about as large as the "
+        f"measured saving (`{ab['wall_time_saved_sec']:.2f} s`), so the "
+        f"saving is not well resolved. The two commits also differ by more "
+        f"than the two items described above."
+    )
+    lines.append("")
     lines.append("### 4.2 `HEAD` Component Breakdown Across All Four Cases")
+    lines.append("")
+    lines.append(
+        "The columns below are estimates, not A/B measurements. "
+        '"Est. Micro Wall Saved" is cache hits multiplied by the difference '
+        "between a cold and a warm kernel probe, using the un-rescaled probe "
+        "costs of Section 2. The clone cost is `StarModel::clone()` timed at "
+        "`HEAD`, not the pre-`#150` code."
+    )
     lines.append("")
     lines.append(
         "| Case | `MicrophysicsCache` Hits / Step | "
@@ -660,6 +731,27 @@ def _build_shared_sections(
     # Section 7: Plain Disclosure (What Was Not Verified)
     lines.append("## 7. What Was Not Verified")
     lines.append("")
+    lines.append(
+        "- **Agreement with MESA**: None of the four cases passes the "
+        "upstream-history harness. Every FlexMESA run here ignored "
+        "unsupported controls, and the runs diverge from MESA in step count "
+        "and track (Section 1). No statement in this report is a statement "
+        "about FlexMESA's speed at equal work."
+    )
+    lines.append(
+        "- **Timing protocol**: MESA was timed from a single run; FlexMESA "
+        "from the median of three. Build flags are not recorded for either "
+        "code. MESA zone-steps are estimated from `history.data`."
+    )
+    lines.append(
+        "- **Subsystem shares**: The per-subsystem shares are a rescaled "
+        "model (Section 2), not instrumented timings."
+    )
+    lines.append(
+        f"- **Engine version**: The FlexMESA measurements were taken at "
+        f"`origin/main` `{main_short}` and have not been repeated on later "
+        f"commits."
+    )
     lines.append(
         "- **Case breadth**: Measurements cover four `star/test_suite` cases "
         "(`1.3M_ms_high_Z`, `low_z`, `high_z`, `make_metals`) on a single "

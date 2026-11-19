@@ -87,29 +87,55 @@ def is_runtime_cache_disabled() -> bool:
     return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _paths_overlap(a: pathlib.Path, b: pathlib.Path) -> bool:
+    """Return ``True`` when resolved paths ``a`` and ``b`` equal or nest."""
+    return a == b or a.is_relative_to(b) or b.is_relative_to(a)
+
+
+def _resolve_cache_path_unconditional(
+    explicit: str | pathlib.Path | None = None,
+    *,
+    data_dir: str | pathlib.Path | None = None,
+) -> pathlib.Path:
+    """Resolve the versioned ``v1`` runtime cache path even when disabled.
+
+    Appends ``v{RUNTIME_CACHE_SCHEMA_VERSION}`` unless the target directory
+    already ends with that version segment, and raises ``ValueError`` if the
+    resolved cache path overlaps ``resolve_data_dir(data_dir)`` (`N1-11`).
+    """
+    ver = f"v{RUNTIME_CACHE_SCHEMA_VERSION}"
+    if explicit is not None:
+        base = pathlib.Path(explicit).expanduser()
+    elif env_dir := os.environ.get("FLEXMESA_CACHE_DIR", "").strip():
+        base = pathlib.Path(env_dir).expanduser()
+    elif xdg := os.environ.get("XDG_CACHE_HOME", "").strip():
+        base = pathlib.Path(xdg).expanduser() / "flexmesa" / "derived"
+    else:
+        base = pathlib.Path.home() / ".cache" / "flexmesa" / "derived"
+    target = base if base.name == ver else base / ver
+    c_root = target.resolve()
+    d_root = resolve_data_dir(data_dir)
+    if _paths_overlap(c_root, d_root):
+        msg = (
+            f"Runtime cache directory {c_root} overlaps physics data directory "
+            f"{d_root}; set FLEXMESA_CACHE_DIR to a separate path."
+        )
+        raise ValueError(msg)
+    return c_root
+
+
 def resolve_cache_dir(
     explicit: str | pathlib.Path | None = None,
 ) -> pathlib.Path | None:
     """Resolve the separate, versioned runtime derived-cache directory.
 
-    Returns ``None`` when ``FLEXMESA_DISABLE_RUNTIME_CACHE`` is enabled.
-    Never resolves inside ``resolve_data_dir()`` (`N1-11`).
+    Returns ``None`` when ``FLEXMESA_DISABLE_RUNTIME_CACHE`` is enabled, and
+    raises ``ValueError`` if ``FLEXMESA_CACHE_DIR`` (or ``explicit``) overlaps
+    ``resolve_data_dir()`` (`N1-11`).
     """
     if is_runtime_cache_disabled():
         return None
-    ver = f"v{RUNTIME_CACHE_SCHEMA_VERSION}"
-    if explicit is not None:
-        return (pathlib.Path(explicit).expanduser() / ver).resolve()
-    for env_var in ("FLEXMESA_CACHE_DIR", "FLEXMESA_BIN_CACHE_DIR"):
-        if env_dir := os.environ.get(env_var, "").strip():
-            return (pathlib.Path(env_dir).expanduser() / ver).resolve()
-    if xdg := os.environ.get("XDG_CACHE_HOME", "").strip():
-        return (
-            pathlib.Path(xdg).expanduser() / "flexmesa" / "derived" / ver
-        ).resolve()
-    return (
-        pathlib.Path.home() / ".cache" / "flexmesa" / "derived" / ver
-    ).resolve()
+    return _resolve_cache_path_unconditional(explicit)
 
 
 def resolve_data_dir(
@@ -379,14 +405,10 @@ def clean_runtime_cache(
     purge_legacy_in_data: bool = False,
     quiet: bool = False,
 ) -> list[pathlib.Path]:
-    """Remove runtime caches and optional legacy caches inside data dirs."""
+    """Remove versioned runtime caches and optional legacy data-dir caches."""
     removed: list[pathlib.Path] = []
-    c_root: pathlib.Path | None
-    if cache_dir is not None:
-        c_root = pathlib.Path(cache_dir).expanduser().resolve()
-    else:
-        c_root = resolve_cache_dir()
-    if c_root is not None and c_root.exists():
+    c_root = _resolve_cache_path_unconditional(cache_dir, data_dir=data_dir)
+    if c_root.exists():
         if c_root.is_dir():
             shutil.rmtree(c_root)
         else:

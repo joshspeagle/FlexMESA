@@ -244,6 +244,51 @@ def test_build_physics_converters_and_nonfinite_rejection(
     bp.convert_aesopus_hdf5_to_section(h5_path, sec_out)
     assert sec_out.stat().st_size > 44
 
+    # 5. HELM ASCII -> FMHELM01 mini-grid roundtrip + NaN/EOF/trailing checks
+    helm_lines: list[str] = []
+    for sec, ncols in ((0, 9), (1, 4), (2, 4), (3, 4)):
+        for row_i in range(6):
+            base = float(100 * sec + 10 * row_i)
+            helm_lines.append(
+                " ".join(f"{base + c + 1:.8E}" for c in range(ncols))
+            )
+    helm_txt = "\n".join(helm_lines) + "\n"
+    helm_src = tmp_path / "helm_mini.dat"
+    helm_dst = tmp_path / "helm_mini.bin"
+    helm_src.write_text(helm_txt, encoding="utf-8")
+    bp.convert_helm_ascii_to_full(helm_src, helm_dst, imax=3, jmax=2)
+    helm_raw = helm_dst.read_bytes()
+    assert len(helm_raw) == 16 + 6 * 21 * 8
+    magic, h_imax, h_jmax = struct.unpack("<8sII", helm_raw[:16])
+    assert (magic, h_imax, h_jmax) == (b"FMHELM01", 3, 2)
+    helm_arr = np.frombuffer(helm_raw, dtype="<f8", offset=16).reshape(6, 21)
+    assert helm_arr[0, 0] == pytest.approx(1.0)
+    assert helm_arr[5, 20] == pytest.approx(354.0)
+
+    helm_nan = tmp_path / "helm_nan.dat"
+    helm_nan.write_text(
+        "\n".join(["NaN " + " ".join(["1.0"] * 8), *helm_lines[1:]]) + "\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="non-finite"):
+        bp.convert_helm_ascii_to_full(
+            helm_nan, tmp_path / "bad_helm.bin", imax=3, jmax=2
+        )
+
+    helm_eof = tmp_path / "helm_eof.dat"
+    helm_eof.write_text("\n".join(helm_lines[:-1]) + "\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="unexpected EOF"):
+        bp.convert_helm_ascii_to_full(
+            helm_eof, tmp_path / "eof_helm.bin", imax=3, jmax=2
+        )
+
+    helm_trail = tmp_path / "helm_trail.dat"
+    helm_trail.write_text(helm_txt + "1.0 2.0 3.0 4.0\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="trailing"):
+        bp.convert_helm_ascii_to_full(
+            helm_trail, tmp_path / "trail_helm.bin", imax=3, jmax=2
+        )
+
     # Live upstream AESOPUS dtype check when $MESA_DIR is available
     if mesa_env := os.environ.get("MESA_DIR", "").strip():
         live_h5 = (
@@ -303,11 +348,12 @@ def test_verify_bundles_rejects_unexpected_files_and_clean_cache_removes_them(
         is False
     )
 
-    # Also test runtime cache directory cleanup + legacy purge
+    # Runtime cache cleanup removes only cache_root/v1 and preserves siblings
     cache_root = tmp_path / "runtime_cache"
     v1_cache = cache_root / "v1" / "eos_4d_slices"
     v1_cache.mkdir(parents=True)
     (v1_cache / "cached.bin").write_bytes(b"ok")
+    (cache_root / "keep.txt").write_text("do not delete\n", encoding="utf-8")
 
     assert (
         cli.main(
@@ -325,7 +371,38 @@ def test_verify_bundles_rejects_unexpected_files_and_clean_cache_removes_them(
         == 0
     )
     assert not (cache_root / "v1").exists()
+    assert (cache_root / "keep.txt").is_file()
     assert not legacy_dir.exists()
+
+    # Cleanup still removes v1 when FLEXMESA_DISABLE_RUNTIME_CACHE=1 is active
+    v1_cache.mkdir(parents=True)
+    (v1_cache / "cached2.bin").write_bytes(b"ok")
+    monkeypatch.setenv("FLEXMESA_CACHE_DIR", str(cache_root))
+    monkeypatch.setenv("FLEXMESA_DATA_DIR", str(data_dest))
+    monkeypatch.setenv("FLEXMESA_DISABLE_RUNTIME_CACHE", "1")
+    assert fetch.resolve_cache_dir() is None
+    assert cli.main(["data", "clean-cache", "--quiet"]) == 0
+    assert not (cache_root / "v1").exists()
+    assert (cache_root / "keep.txt").is_file()
+    monkeypatch.delenv("FLEXMESA_DISABLE_RUNTIME_CACHE")
+
+    # Overlapping cache_dir and data_dir raises ValueError in resolve & clean
+    for bad_cache, bad_data in (
+        (data_dest, data_dest),
+        (data_dest / "sub", data_dest),
+        (cache_root, cache_root / "v1" / "data"),
+    ):
+        monkeypatch.setenv("FLEXMESA_DATA_DIR", str(bad_data))
+        monkeypatch.setenv("FLEXMESA_CACHE_DIR", str(bad_cache))
+        with pytest.raises(ValueError, match="overlaps physics data directory"):
+            fetch.resolve_cache_dir()
+        with pytest.raises(ValueError, match="overlaps physics data directory"):
+            fetch.clean_runtime_cache(
+                cache_dir=bad_cache, data_dir=bad_data, quiet=True
+            )
+    monkeypatch.setenv("FLEXMESA_DATA_DIR", str(data_dest))
+    monkeypatch.setenv("FLEXMESA_CACHE_DIR", str(cache_root))
+
     assert (
         fetch.verify_bundles(
             dest=data_dest,
@@ -427,3 +504,87 @@ def test_runtime_cache_isolation_disable_and_pyo3_error_handling(
     assert proc_bad.returncode != 0
     assert "PanicException" not in proc_bad.stderr
     assert "ValueError" in proc_bad.stderr
+
+
+def _build_minimal_fmkap001(aes_f32: np.ndarray) -> bytes:
+    """Build a valid 258-byte `FMKAP001` payload with one 4x4 AESOPUS slice."""
+    buf = bytearray(b"FMKAP001")
+    buf.extend(struct.pack("<2I", 0, 0))
+    buf.extend(struct.pack("<4d", 0.0134, -0.35, -0.5, -1.1))
+    buf.extend(struct.pack("<3I", 4, 4, 1))
+    buf.extend(np.array([-8.0, -7.0, -6.0, -5.0], dtype="<f8").tobytes())
+    buf.extend(np.array([3.2, 3.3, 3.4, 3.5], dtype="<f8").tobytes())
+    buf.extend(np.array([0.02], dtype="<f8").tobytes())
+    buf.extend(struct.pack("<4I", 1, 1, 1, 1))
+    buf.extend(np.array([0.7, 0.0, 0.0, 0.0], dtype="<f8").tobytes())
+    buf.extend(bytes([1, 1]))
+    buf.extend(aes_f32.astype("<f4").tobytes())
+    buf.extend(struct.pack("<3I", 0, 0, 0))
+    return bytes(buf)
+
+
+def test_jax_kap_loader_rejects_nan_opacities_and_corrupt_fmkap001(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: pathlib.Path,
+) -> None:
+    """JAX kap loader rejects NaN opacities and corrupt/truncated FMKAP001."""
+    from flexmesa.kap import tables_co_lowt_jax, tables_jax
+
+    lrs = np.array([-8.0, -7.0, -6.0, -5.0], dtype=np.float64)
+    lts = np.array([3.2, 3.3, 3.4, 3.5], dtype=np.float64)
+    raw_nan = np.full((1, 4, 4), -2.0, dtype=np.float64)
+    raw_nan[0, 2, 1] = np.nan
+    with pytest.raises(ValueError, match="Non-finite raw log10\\(kappa\\)"):
+        tables_jax.fit_bicubic_batch(lrs, lts, raw_nan)
+
+    lrs_nan = lrs.copy()
+    lrs_nan[0] = np.inf
+    with pytest.raises(ValueError, match="Non-finite grid coordinate"):
+        tables_jax.fit_bicubic_batch(
+            lrs_nan, lts, np.full((1, 4, 4), -2.0, dtype=np.float64)
+        )
+
+    data_dir = tmp_path / "kap_jax_data"
+    kap_path = data_dir / "kap_full" / "kap_tables_full.bin"
+    kap_path.parent.mkdir(parents=True)
+    monkeypatch.setenv("FLEXMESA_DATA_DIR", str(data_dir))
+    tables_jax.reset_index_cache()
+    tables_co_lowt_jax._AESOPUS_SPLINE_CACHE.clear()
+
+    valid = _build_minimal_fmkap001(np.full(16, -2.0, dtype=np.float32))
+    bad_scalar = bytearray(valid)
+    bad_scalar[16:24] = struct.pack("<d", float("nan"))
+
+    try:
+        for bad_bytes, pat in (
+            (b"", "Truncated"),
+            (valid[:-5], "Unexpected EOF"),
+            (valid + b"\x00", "trailing"),
+            (bytes(bad_scalar), "Non-finite f64"),
+        ):
+            kap_path.write_bytes(bad_bytes)
+            with pytest.raises(ValueError, match=pat):
+                tables_jax.ensure_indexed()
+            assert tables_jax._RAW_FILE is None
+            assert tables_jax._RAW_MMAP is None
+            assert tables_jax._RAW_BYTES is None
+            assert tables_jax.FIXED_INDEX == {}
+
+        # Float32 NaN inside AESOPUS slice must fail fit_bicubic_batch loudly
+        aes_nan = np.full(16, -2.0, dtype=np.float32)
+        aes_nan[5] = np.float32("nan")
+        kap_path.write_bytes(_build_minimal_fmkap001(aes_nan))
+        _ = tables_jax.ensure_indexed()
+        with pytest.raises(ValueError, match="Non-finite raw log10\\(kappa\\)"):
+            tables_co_lowt_jax.get_aesopus_z_coeffs_jax(0)
+        tables_jax.reset_index_cache()
+        tables_co_lowt_jax._AESOPUS_SPLINE_CACHE.clear()
+
+        # Valid minimal FMKAP001 indexes and spline-fits cleanly
+        kap_path.write_bytes(valid)
+        coeffs = tables_co_lowt_jax.get_aesopus_z_coeffs_jax(0)
+        assert coeffs.shape == (1, 4, 4, 4)
+        assert bool(np.all(np.isfinite(np.asarray(coeffs))))
+    finally:
+        tables_jax.reset_index_cache()
+        tables_co_lowt_jax._AESOPUS_SPLINE_CACHE.clear()

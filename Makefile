@@ -7,7 +7,7 @@ MESA_ZIP ?= $(HOME)/mesa-26.04.1.zip
 OUT_DIR ?= dist/data-v1
 GROUND_TRUTH_DIR ?= $(CURDIR)/build/mesa_ground_truth
 
-.PHONY: help data-nets data-physics data-test-inputs data-histories data-bundles data-verify data-clean-cache
+.PHONY: help data-nets data-physics data-test-inputs data-histories data-bundles data-verify verify-data data-clean-cache
 
 help:
 	@echo "Reproducible MESA 26.4.1 data pipeline targets:"
@@ -16,7 +16,7 @@ help:
 	@echo "  make data-test-inputs  MESA_DIR=... MESA_ZIP=... OUT_DIR=..."
 	@echo "  make data-histories    GROUND_TRUTH_DIR=... OUT_DIR=..."
 	@echo "  make data-bundles      Run data-physics + data-test-inputs"
-	@echo "  make data-verify       Run flexmesa data verify"
+	@echo "  make data-verify       Run flexmesa data verify --include-test-inputs (alias: verify-data)"
 	@echo "  make data-clean-cache  Remove runtime derived caches"
 
 data-nets:
@@ -45,7 +45,9 @@ data-histories:
 data-bundles: data-physics data-test-inputs
 
 data-verify:
-	$(PYTHON) -m flexmesa.cli data verify
+	$(PYTHON) -m flexmesa.cli data verify --include-test-inputs
+
+verify-data: data-verify
 
 data-clean-cache:
 	$(PYTHON) -m flexmesa.cli data clean-cache --purge-legacy-in-data

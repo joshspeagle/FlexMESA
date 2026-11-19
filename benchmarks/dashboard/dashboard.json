@@ -106,8 +106,8 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 4682,
-        "python_jax_lines": 3086
+        "rust_lines": 4852,
+        "python_jax_lines": 3214
       },
       {
         "module": "net",
@@ -378,8 +378,8 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 4808,
-        "python_jax_lines": 2562
+        "rust_lines": 4846,
+        "python_jax_lines": 2584
       },
       {
         "module": "gyre",

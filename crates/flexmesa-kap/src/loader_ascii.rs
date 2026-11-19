@@ -14,7 +14,7 @@ use crate::types::KapError;
 use flexmesa_utils::cache_envelope::{
     read_verified_cache, write_verified_cache_atomic,
 };
-use flexmesa_utils::sha256::{compute_sha256_bytes, Sha256Hasher};
+use flexmesa_utils::sha256::{compute_sha256_file, Sha256Hasher};
 use flexmesa_utils::{
     is_bad, resolve_flexmesa_cache_dir, resolve_flexmesa_data_dir,
 };
@@ -83,35 +83,122 @@ pub fn find_kap_bundle_dir() -> PathBuf {
     resolve_flexmesa_data_dir().join("kap_full")
 }
 
-/// Compute a combined `SHA-256` fingerprint over the raw `kap_data` inputs and
-/// `aesopus_section.bin`.
+/// Enumerate every relative `.data` file under `kap_dir` consumed by
+/// [`build_full_kap_tables_bytes`] in deterministic order (`1,150` files in
+/// MESA `26.4.1`: `1,008` fixed/low-T, `7` `Freedman11`, `120` Type-2 CO,
+/// `kR_Z_fCN.data`, and `14` `kapCN` `kR_Z*.data` files).
+pub(crate) fn kap_source_relpaths(
+    kap_dir: &Path,
+) -> Result<Vec<String>, KapError> {
+    let mut rels = Vec::with_capacity(1152);
+    for &prefix in FIXED_PREFIXES {
+        for (iz, &z) in FIXED_ZS.iter().enumerate() {
+            for &x_raw in &FIXED_XS[..FIXED_NUM_XS[iz]] {
+                let x = if x_raw + z > 1.0 { 1.0 - z } else { x_raw };
+                rels.push(format!(
+                    "{prefix}_z{}_x{}.data",
+                    get_output_string(z)?,
+                    get_output_string(x)?
+                ));
+            }
+        }
+    }
+    for &z in &FREEDMAN_ZS {
+        rels.push(format!("lowT_Freedman11_z{}.data", get_output_string(z)?));
+    }
+    for &prefix in CO_PREFIXES {
+        for &z in &CO_ZS {
+            for &x in &CO_XS {
+                rels.push(format!(
+                    "{prefix}_z{}_x{}.data",
+                    get_output_string(z)?,
+                    get_output_string(x)?
+                ));
+            }
+        }
+    }
+    rels.push("kR_Z_fCN.data".to_string());
+    let fcn_path = kap_dir.join("kR_Z_fCN.data");
+    let fcn_text = fs::read_to_string(&fcn_path).map_err(|e| {
+        KapError::TableIo(format!("failed to read {}: {e}", fcn_path.display()))
+    })?;
+    let mut cn_fnames = Vec::new();
+    for line in fcn_text.lines().skip(1) {
+        let toks: Vec<&str> = line.split_whitespace().collect();
+        if toks.len() < 11 {
+            continue;
+        }
+        let z = parse_f64_str(toks[0], &fcn_path, "kapCN Z")?;
+        let fname = kapcn_filename(z);
+        if fname.is_empty() {
+            return Err(KapError::TableIo(format!(
+                "unsupported kapCN metallicity Z={z}"
+            )));
+        }
+        if !cn_fnames.contains(&fname) {
+            cn_fnames.push(fname);
+        }
+    }
+    cn_fnames.reverse();
+    for fname in cn_fnames {
+        rels.push(fname.to_string());
+    }
+    Ok(rels)
+}
+
+/// Compute a combined `SHA-256` fingerprint over every raw `kap_data` `.data`
+/// input consumed by [`build_full_kap_tables_bytes`] plus `aesopus_section.bin`.
 fn compute_kap_source_sha256(
     kap_dir: &Path,
     aesopus_section_path: &Path,
 ) -> Result<String, KapError> {
-    let mut hasher = Sha256Hasher::new();
-    let aes_bytes = fs::read(aesopus_section_path).map_err(|e| {
+    let aes_len = fs::metadata(aesopus_section_path)
+        .map_err(|e| {
+            KapError::TableIo(format!(
+                "failed to stat {}: {e}",
+                aesopus_section_path.display()
+            ))
+        })?
+        .len();
+    let aes_sha = compute_sha256_file(aesopus_section_path).map_err(|e| {
         KapError::TableIo(format!(
             "failed to read {}: {e}",
             aesopus_section_path.display()
         ))
     })?;
-    hasher.update(&(aes_bytes.len() as u64).to_le_bytes());
-    hasher.update(&aes_bytes);
 
-    // Include key sentinel & metadata tables so cache invalidates if sources change.
-    for rel in [
-        "gs98_z0.0_x0.0.data",
-        "gn93_co_z0.0_x0.0.data",
-        "kR_Z_fCN.data",
-    ] {
-        let p = kap_dir.join(rel);
-        let bytes = fs::read(&p).map_err(|e| {
-            KapError::TableIo(format!("failed to read {}: {e}", p.display()))
-        })?;
+    let relpaths = kap_source_relpaths(kap_dir)?;
+    let file_digests: Vec<(String, u64, String)> = relpaths
+        .into_par_iter()
+        .map(|rel| {
+            let p = kap_dir.join(&rel);
+            let len = fs::metadata(&p)
+                .map_err(|e| {
+                    KapError::TableIo(format!(
+                        "failed to stat {}: {e}",
+                        p.display()
+                    ))
+                })?
+                .len();
+            let digest = compute_sha256_file(&p).map_err(|e| {
+                KapError::TableIo(format!(
+                    "failed to read {}: {e}",
+                    p.display()
+                ))
+            })?;
+            Ok((rel, len, digest))
+        })
+        .collect::<Result<Vec<_>, KapError>>()?;
+
+    let mut hasher = Sha256Hasher::new();
+    hasher.update(b"aesopus_section.bin\0");
+    hasher.update(&aes_len.to_le_bytes());
+    hasher.update(aes_sha.as_bytes());
+    for (rel, len, digest) in file_digests {
         hasher.update(rel.as_bytes());
-        hasher.update(&(bytes.len() as u64).to_le_bytes());
-        hasher.update(&bytes);
+        hasher.update(&[0_u8]);
+        hasher.update(&len.to_le_bytes());
+        hasher.update(digest.as_bytes());
     }
     Ok(hasher.finalize_hex())
 }
@@ -465,7 +552,6 @@ fn read_aesopus_section_bytes(
             bytes.len()
         )));
     }
-    let _digest = compute_sha256_bytes(&bytes);
     Ok(bytes)
 }
 
@@ -749,4 +835,88 @@ pub fn build_full_kap_tables_file(
             out_path.display()
         ))
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{compute_kap_source_sha256, kap_source_relpaths};
+    use crate::types::KapError;
+    use std::fs;
+
+    const SAMPLE_FCN: &str = "\
+Z fC1 fC2 fC3 fC4 fC5 fC6 fC7 fN1 fN2 fN3
+0.04000 1 1 1 1 1 1 1 1 1 1
+0.02000 1 1 1 1 1 1 1 1 1 1
+0.01000 1 1 1 1 1 1 1 1 1 1
+0.00800 1 1 1 1 1 1 1 1 1 1
+0.00600 1 1 1 1 1 1 1 1 1 1
+0.00500 1 1 1 1 1 1 1 1 1 1
+0.00400 1 1 1 1 1 1 1 1 1 1
+0.00300 1 1 1 1 1 1 1 1 1 1
+0.00200 1 1 1 1 1 1 1 1 1 1
+0.00100 1 1 1 1 1 1 1 1 1 1
+0.00030 1 1 1 1 1 1 1 1 1 1
+0.00010 1 1 1 1 1 1 1 1 1 1
+0.00003 1 1 1 1 1 1 1 1 1 1
+0.00001 1 1 1 1 1 1 1 1 1 1
+";
+
+    #[test]
+    fn test_kap_source_sha256_covers_every_table_file() {
+        let dir = std::env::temp_dir()
+            .join(format!("flexmesa_kap_src_sha_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).expect("mkdir");
+        fs::write(dir.join("kR_Z_fCN.data"), SAMPLE_FCN).expect("write fcn");
+
+        let rels = kap_source_relpaths(&dir).expect("relpaths");
+        assert_eq!(rels.len(), 1150);
+
+        for (i, rel) in rels.iter().enumerate() {
+            if rel != "kR_Z_fCN.data" {
+                fs::write(dir.join(rel), format!("payload_{i}\n"))
+                    .expect("write data");
+            }
+        }
+        let aes = dir.join("aesopus_section.bin");
+        fs::write(&aes, [0_u8; 48]).expect("write aesopus");
+
+        let base_sha =
+            compute_kap_source_sha256(&dir, &aes).expect("base sha256");
+        assert_eq!(
+            compute_kap_source_sha256(&dir, &aes).expect("repeat sha256"),
+            base_sha
+        );
+
+        // Mutating any non-sentinel fixed, Freedman11, CO, kapCN, or AESOPUS file
+        // must change the composite source digest.
+        for target in [
+            "a09_z0.02_x0.7.data",
+            "lowT_Freedman11_z0.02.data",
+            "a09_co_z0.02_x0.7.data",
+            "kR_Z2E-2.data",
+        ] {
+            let p = dir.join(target);
+            let orig = fs::read(&p).expect("read orig");
+            fs::write(&p, b"mutated_table_payload\n").expect("mutate");
+            let mutated_sha =
+                compute_kap_source_sha256(&dir, &aes).expect("mutated sha256");
+            assert_ne!(mutated_sha, base_sha, "{target} mutation missed");
+            fs::write(&p, orig).expect("restore");
+        }
+        fs::write(&aes, [1_u8; 48]).expect("mutate aes");
+        assert_ne!(
+            compute_kap_source_sha256(&dir, &aes).expect("aes sha"),
+            base_sha
+        );
+
+        // Deleting a non-sentinel file must fail loudly
+        fs::remove_file(dir.join("OP_gs98_z0.01_x0.5.data")).expect("rm");
+        assert!(matches!(
+            compute_kap_source_sha256(&dir, &aes),
+            Err(KapError::TableIo(_))
+        ));
+
+        let _ = fs::remove_dir_all(&dir);
+    }
 }

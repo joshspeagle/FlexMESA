@@ -288,9 +288,15 @@ def pack_deterministic_tar_zst(
         tar_path.unlink(missing_ok=True)
 
 
-def convert_helm_ascii_to_full(src: pathlib.Path, dst: pathlib.Path) -> None:
-    """Convert `helm_table.dat` into an `FMHELM01` `2701 x 1001 x 21` `.bin`."""
-    n_total = HELM_IMAX * HELM_JMAX
+def convert_helm_ascii_to_full(
+    src: pathlib.Path,
+    dst: pathlib.Path,
+    *,
+    imax: int = HELM_IMAX,
+    jmax: int = HELM_JMAX,
+) -> None:
+    """Convert `helm_table.dat` into an `FMHELM01` `imax x jmax x 21` `.bin`."""
+    n_total = imax * jmax
     sec_sizes = (9, 4, 4, 4)
     chunks: list[np.ndarray] = []
     with src.open("r", encoding="utf-8") as fh:
@@ -317,8 +323,12 @@ def convert_helm_ascii_to_full(src: pathlib.Path, dst: pathlib.Path) -> None:
                     f"{src.name}: non-finite values in HELM section {sec_idx}"
                 )
             chunks.append(vals)
+        if next(non_empty, None) is not None:
+            raise ValueError(
+                f"{src.name}: unexpected trailing data after section 3"
+            )
     merged = np.concatenate(chunks, axis=1).astype("<f8", copy=False)
-    header = struct.pack("<8sII", HELM_FULL_MAGIC, HELM_IMAX, HELM_JMAX)
+    header = struct.pack("<8sII", HELM_FULL_MAGIC, imax, jmax)
     dst.parent.mkdir(parents=True, exist_ok=True)
     with dst.open("wb") as fout:
         fout.write(header)

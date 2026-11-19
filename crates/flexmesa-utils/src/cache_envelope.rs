@@ -289,14 +289,12 @@ mod tests {
         let _guard = ENV_LOCK.lock().expect("env lock");
         let prev_data = std::env::var_os("FLEXMESA_DATA_DIR");
         let prev_cache = std::env::var_os("FLEXMESA_CACHE_DIR");
-        let prev_bin = std::env::var_os("FLEXMESA_BIN_CACHE_DIR");
         let prev_dis = std::env::var_os("FLEXMESA_DISABLE_RUNTIME_CACHE");
 
         let fake_data = std::env::temp_dir().join("fm_data_only");
         let fake_cache = std::env::temp_dir().join("fm_cache_root");
         std::env::set_var("FLEXMESA_DATA_DIR", &fake_data);
         std::env::remove_var("FLEXMESA_CACHE_DIR");
-        std::env::remove_var("FLEXMESA_BIN_CACHE_DIR");
         std::env::remove_var("FLEXMESA_DISABLE_RUNTIME_CACHE");
 
         assert_eq!(resolve_flexmesa_data_dir(), fake_data);
@@ -307,6 +305,21 @@ mod tests {
 
         std::env::set_var("FLEXMESA_CACHE_DIR", &fake_cache);
         assert_eq!(resolve_flexmesa_cache_dir(), Some(fake_cache.join("v1")));
+        std::env::set_var("FLEXMESA_CACHE_DIR", fake_cache.join("v1"));
+        assert_eq!(resolve_flexmesa_cache_dir(), Some(fake_cache.join("v1")));
+
+        // Overlapping cache_dir and data_dir must never resolve inside data_dir
+        std::env::set_var("FLEXMESA_CACHE_DIR", &fake_data);
+        assert_eq!(resolve_flexmesa_cache_dir(), None);
+        std::env::set_var("FLEXMESA_CACHE_DIR", fake_data.join("sub"));
+        assert_eq!(resolve_flexmesa_cache_dir(), None);
+        std::env::set_var("FLEXMESA_CACHE_DIR", &fake_cache);
+        std::env::set_var(
+            "FLEXMESA_DATA_DIR",
+            fake_cache.join("v1").join("data"),
+        );
+        assert_eq!(resolve_flexmesa_cache_dir(), None);
+        std::env::set_var("FLEXMESA_DATA_DIR", &fake_data);
 
         std::env::set_var("FLEXMESA_DISABLE_RUNTIME_CACHE", "1");
         assert!(is_runtime_cache_disabled());
@@ -320,10 +333,6 @@ mod tests {
         match prev_cache {
             Some(v) => std::env::set_var("FLEXMESA_CACHE_DIR", v),
             None => std::env::remove_var("FLEXMESA_CACHE_DIR"),
-        }
-        match prev_bin {
-            Some(v) => std::env::set_var("FLEXMESA_BIN_CACHE_DIR", v),
-            None => std::env::remove_var("FLEXMESA_BIN_CACHE_DIR"),
         }
         match prev_dis {
             Some(v) => std::env::set_var("FLEXMESA_DISABLE_RUNTIME_CACHE", v),

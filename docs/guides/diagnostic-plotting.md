@@ -151,39 +151,61 @@ print(
 
 ---
 
-## 4. Comparing Runs Against Stored MESA `26.4.1` References (`flexmesa plot`)
+## 4. Saved-Output `PGSTAR`, Kippenhahn, `PGBINARY` & `Grid` Panels (`flexmesa plot`)
 
-Every comparison figure in `flexmesa.plotting.compare` reads exclusively from saved ASCII outputs (`history.data`, `binary_history.data`, `profileN.data`, and stored MESA `26.4.1` references in `benchmarks/history_harness/reference_histories/`) without recomputing physics inside plotting code (`#173`).
+Every file-based diagnostic and comparison builder in `flexmesa.plotting` reads strictly from saved ASCII outputs (`history.data`, `binary_history.data`, `profileN.data`, bundled MESA `26.4.1` `data/star_data/plot_info/*.data` guide curves, and stored MESA `26.4.1` references in `benchmarks/history_harness/reference_histories/`) without recomputing physics inside plotting code (`#173`). Whenever a reference file is supplied, the figure title or subtitle records the reference provenance alongside the candidate run.
+
+- **Kippenhahn Evolution Diagrams (`plotting.plot_history_kippenhahn`, `plotting.plot_profile_kippenhahn`)**: Renders convective, overshoot, semiconvective, thermohaline, rotational, Rayleigh-Taylor, and leftover-convective mixing zones, signed nuclear burning and neutrino cooling regions, core mass boundaries (`he_core_mass` through `fe_core_mass`), and optional right-axis luminosities across `mass`, `q`, or `radius` versus `model_number` or `star_age` (including `log_xaxis` and `time_from_present`).
+- **Radial `pgstar` Profile Panels (`plotting.pgstar_panels`, `plotting.pgstar_summary`)**: Ports `TRho_Profile` (`plotting.plot_trho_profile`), 22-category nuclear reaction `Power` (`plotting.plot_power_profile`), ranked multi-isotope `Abundance` (`plotting.plot_abundance_profile`), log-diffusivity `Mixing` (`plotting.plot_mixing_profile`), normalized `Summary_Profile` (`plotting.plot_summary_profile`), `Summary_Burn` (`plotting.plot_summary_burn_profile`), and dual-axis `Profile_Panels<N>` (`plotting.plot_profile_custom_panels`).
+- **Evolutionary Tracks, History Summaries & `Grid<N>` Composer (`plotting.pgstar_grid`)**: Ports `History_Track<N>` plus all 13 named two-column presets (`plotting.plot_history_track` and `plotting.TRACK_PRESETS`, including `HR`, `TRho`, `TmaxRho`, `logg_Teff`, `logg_logT`, and `logL_Teff`), `Summary_History` (`plotting.plot_summary_history`), `History_Panels<N>` (`plotting.plot_history_panels`), and multi-panel `Grid<N>` layouts (`plotting.plot_pgstar_grid` and `plotting.parse_inlist_grid_spec`).
+- **Interacting Binary `pgbinary` Panels (`plotting.pgbinary_panels`)**: Ports 2D Keplerian orbit and dimensionless Roche-lobe equipotential snapshots (`plotting.plot_pgbinary_orbit`), normalized `Summary_History` (`plotting.plot_pgbinary_summary_history`), and synchronized 6-panel binary diagnostics with donor/accretor HR tracks (`plotting.plot_pgbinary_panels`).
+
+From the command line, `flexmesa plot` exposes subcommands for every saved-output workflow:
 
 ```bash
 flexmesa plot compare 1.3M_ms_high_Z --out compare_1.3M.png
 flexmesa plot compare evolve_both_stars --flexmesa-dir out_binary/ --out compare_bin.png
-flexmesa plot profile LOGS/profile1.data --out profile1.png
+flexmesa plot profile LOGS/profile1.data --panel trho --out trho_profile1.png
+flexmesa plot kipp --history LOGS/history.data --yaxis mass --show-luminosities --out kipp.png
+flexmesa plot binary binary_history.data --mode panels --out pgbinary_panels.png
+flexmesa plot track LOGS/history.data --preset HR --mesa-history ref_history.data --out hr_track.png
+flexmesa plot grid --inlist inlist_pgstar --history LOGS/history.data --profile LOGS/profile1.data --out grid1.png
 ```
 
-In Python, call `plotting.plot_case_comparison(...)` for synchronized multi-panel star, astero, or binary comparisons with `DECISIONS #20` normalized residual bands, or `plotting.plot_profile_panels(...)` for saved radial profiles:
+In Python, call the corresponding builders directly to inspect or customize `(fig, ax)` / `(fig, axes)` objects:
 
 ```python
 import matplotlib.pyplot as plt
 from flexmesa import plotting
 from flexmesa.testing import case_manifest
 
-ref_file = (
-    case_manifest.repo_root()
-    / "benchmarks"
-    / "history_harness"
-    / "reference_histories"
-    / "star"
-    / "1.3M_ms_high_Z.data"
-)
+ref_root = case_manifest.repo_root() / "benchmarks" / "history_harness" / "reference_histories"
+ref_star = ref_root / "star" / "1.3M_ms_high_Z.data"
+ref_bin = ref_root / "binary" / "evolve_both_stars.data"
+
 fig_cmp, axes_cmp = plotting.plot_case_comparison(
     "1.3M_ms_high_Z",
     suite="star",
-    flexmesa_history=ref_file,
-    mesa_history=ref_file,
+    flexmesa_history=ref_star,
+    mesa_history=ref_star,
 )
 plt.close(fig_cmp)
-print("Rendered comparison grid:", axes_cmp.shape)
+
+fig_kipp, _ = plotting.plot_history_kippenhahn(
+    ref_star, xaxis="star_age", yaxis="q", log_xaxis=True
+)
+plt.close(fig_kipp)
+
+fig_trk, _ = plotting.plot_history_track(
+    ref_star, preset="HR", ref_history_path=ref_star
+)
+plt.close(fig_trk)
+
+fig_orb, _ = plotting.plot_pgbinary_orbit(
+    ref_bin, mesa_binary_history=ref_bin
+)
+plt.close(fig_orb)
+print("Rendered comparison, Kippenhahn, track, and binary orbit figures:", axes_cmp.shape)
 ```
 
-For the full mapping of upstream `pgstar.defaults`, `pgbinary.defaults`, and `astero_pgstar.defaults` windows onto `flexmesa.plotting` builders, see the [PGSTAR & PGBINARY Coverage Report](../benchmarks/pgstar-coverage.md).
+For the full mapping of upstream `pgstar.defaults`, `pgbinary.defaults`, and `astero_pgstar.defaults` windows (`pgstar_coverage.PGSTAR_COVERAGE`) onto `flexmesa.plotting` builders, see the [PGSTAR & PGBINARY Coverage Report](../benchmarks/pgstar-coverage.md) and the [I/O, Plotting & Benchmark API Reference](../api/io-plotting-bench.md).

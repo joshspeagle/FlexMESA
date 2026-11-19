@@ -58,8 +58,9 @@ def render_pgstar_coverage_markdown(repo_root: pathlib.Path) -> str:
         "`star/defaults/pgstar.defaults`, `binary/defaults/pgbinary.defaults`, "
         "and `astero/defaults/astero_pgstar.defaults` paired with "
         "`flexmesa.plotting.pgstar_coverage` (`#173`). All plots read strictly "
-        "from saved `history.data`, `binary_history.data`, and `profileN.data` "
-        "files (`flexmesa plot compare` / `flexmesa plot profile`).",
+        "from saved `history.data`, `binary_history.data`, `profileN.data`, "
+        "and MESA `26.4.1` `plot_info` files (`flexmesa plot compare` / "
+        "`profile` / `kipp` / `binary` / `track` / `grid`).",
         "",
         "## Headline Summary",
         "",

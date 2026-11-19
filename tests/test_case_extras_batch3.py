@@ -178,8 +178,9 @@ def test_alpha_mlt_and_core_collapse_split_burn_handlers() -> None:
 
     cc12 = star_core_collapse.PreMs12MCoreCollapseStarExtras()
     with pytest.raises(NotImplementedError, match="#155"):
-        cc12.other_alpha_mlt({"x_ctrl": x_ctrl})
-    assert cc12.other_alpha_mlt({"x_ctrl": [0.0] * 30}) is None
+        cc12.other_alpha_mlt({"x_ctrl": x_ctrl, "net_iso_h1": 2})
+    assert cc12.other_alpha_mlt({"x_ctrl": [0.0] * 30, "net_iso_h1": 2}) is None
+    assert cc12.other_alpha_mlt({"x_ctrl": x_ctrl, "net_iso_h1": 0}) is None
     x_log = [False] * 40
     cc12.extras_startup({"x_logical_ctrl": x_log}, False)
     assert cc12.extras_finish_step({"x_logical_ctrl": x_log}) == "keep_going"
@@ -219,8 +220,8 @@ def test_alpha_mlt_and_core_collapse_split_burn_handlers() -> None:
 def test_make_pre_ccsn_13bvn_drag_and_mass_change_hooks() -> None:
     """Verify `MakePreCcsn13bvnStarExtras` drag columns and `mass_change`."""
     bvn = star_core_collapse.MakePreCcsn13bvnStarExtras()
-    with pytest.raises(NotImplementedError, match="#150"):
-        bvn.extras_startup({}, True)
+    bvn.extras_startup({}, False)
+    bvn.extras_startup({}, True)
     hcols = bvn.extra_history_columns(
         {
             "v_flag": True,
@@ -550,7 +551,9 @@ def test_ppisn_wind_roche_kap_and_columns() -> None:
         },
         1,
     )
-    assert kap_ov == (pytest.approx(0.24), 0.0, 0.0)
+    assert kap_ov is not None
+    assert kap_ov[0] == pytest.approx(0.24)
+    assert kap_ov[1:] == (0.0, 0.0)
 
     msun = constants.MSUN
     hstate = {
@@ -628,23 +631,36 @@ def test_ccsn_iip_wind_nico_magnetar_and_rti() -> None:
         star_ccsn_iip.enable_magnetar({"x_ctrl": x_ctrl_mag})
 
     ccsn.max_mass_h = 5.0 * msun
+    # approx21-like layout: neut (chem_id=1) -> slot 1, h1 (ih1=2) -> slot 2.
     h1_val = ccsn.check_rti(
         {
             "nz": 3,
             "species": 2,
-            "net_iso": [1, 0, 2],
+            "net_iso": [1, 2, 0],
             "m": [6.0 * msun, 4.0 * msun, 2.0 * msun],
-            "xa": [[0.35, 0.05, 0.0], [0.65, 0.95, 1.0]],
+            "xa": [[0.65, 0.95, 1.0], [0.35, 0.05, 0.0]],
         }
     )
     assert h1_val == pytest.approx(0.35)
+
+    # basic-like layout without neut: net_iso(ih1=2) = 1 -> net_iso(1) = 0 OOB.
+    with pytest.raises(IndexError, match="#246"):
+        ccsn.check_rti(
+            {
+                "nz": 3,
+                "species": 2,
+                "net_iso": [0, 1, 2],
+                "m": [6.0 * msun, 4.0 * msun, 2.0 * msun],
+                "xa": [[0.35, 0.05, 0.0], [0.65, 0.95, 1.0]],
+            }
+        )
 
     with pytest.raises(IndexError, match="#246"):
         ccsn.check_rti(
             {
                 "nz": 3,
                 "species": 2,
-                "net_iso": [2, 0, 1],
+                "net_iso": [1, 0, 2],
                 "m": [6.0 * msun, 4.0 * msun, 2.0 * msun],
                 "xa": [[0.65, 0.95, 1.0], [0.35, 0.05, 0.0]],
             }
@@ -662,12 +678,16 @@ def test_batch3_binary_jdot_ls_and_wind_fed_bhhmxb(
     cols = jls.extra_star_history_columns(
         {"s1_omega_avg_surf": omega, "period": 2.0 * constants.SECDAY}, 1
     )
-    assert cols == [
-        ("spin_period_days", pytest.approx(1.0)),
-        ("spin_period_hr", pytest.approx(24.0)),
-        ("spin_period_minutes", pytest.approx(1440.0)),
-        ("spin_orital_period_ratio", pytest.approx(0.5)),
+    assert [name for name, _ in cols] == [
+        "spin_period_days",
+        "spin_period_hr",
+        "spin_period_minutes",
+        "spin_orital_period_ratio",
     ]
+    assert cols[0][1] == pytest.approx(1.0)
+    assert cols[1][1] == pytest.approx(24.0)
+    assert cols[2][1] == pytest.approx(1440.0)
+    assert cols[3][1] == pytest.approx(0.5)
 
     wf = binary_extras.WindFedBhHmxbBinaryExtras()
     assert wf.extras_binary_startup({}, False) == "keep_going"
@@ -734,6 +754,9 @@ def test_batch3_handlers_raise_key_error_on_missing_snapshot_fields() -> None:
     """Every Batch 3 hook indexes snapshots directly and raises `KeyError`."""
     calls: list[Any] = [
         lambda: star_core_collapse.compute_alpha_mlt_vector({}),
+        lambda: star_core_collapse.require_per_cell_alpha_mlt(
+            {"x_ctrl": [2.0] * 30}, "12M_pre_ms_to_core_collapse", ":63-93"
+        ),
         lambda: (
             star_core_collapse.PreMs12MCoreCollapseStarExtras().extras_after_evolve(
                 {}

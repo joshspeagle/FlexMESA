@@ -52,7 +52,7 @@ def require_per_cell_alpha_mlt(
     (`#155`, `#231`).
 
     Args:
-        state: Star snapshot mapping with `x_ctrl` `(>=23,)`.
+        state: Star snapshot mapping with `x_ctrl` `(>=23,)` and `net_iso_h1`.
         case_label: Upstream test-suite case label for diagnostics.
         line_span: Upstream Fortran line span string (`:<lo>-<hi>`).
 
@@ -68,9 +68,8 @@ def require_per_cell_alpha_mlt(
     alpha_h = float(x_ctrl[20])
     alpha_other = float(x_ctrl[21])
     _ = float(x_ctrl[22])
-    if alpha_h <= 0.0 or alpha_other <= 0.0:
-        return None
-    if "net_iso_h1" in state and int(state["net_iso_h1"]) <= 0:
+    h1 = int(state["net_iso_h1"])
+    if alpha_h <= 0.0 or alpha_other <= 0.0 or h1 <= 0:
         return None
     raise NotImplementedError(
         f"{case_label}: alpha_mlt_routine ({line_span}) assigns per-cell "
@@ -201,14 +200,11 @@ class MakePreCcsn13bvnStarExtras:
             state, "make_pre_ccsn_13bvn", ":58-88"
         )
 
-    def extras_startup(self, _state: dict[str, Any], restart: bool) -> None:
-        """Guard `extras_photo_read` on restart (`:92-101, 249-267`)."""
-        if restart:
-            raise NotImplementedError(
-                "make_pre_ccsn_13bvn: restart checks inlist_part via "
-                "extras_photo_read (:249-267), which flexmesa-star does not "
-                "expose (#150)"
-            )
+    def extras_startup(self, _state: dict[str, Any], _restart: bool) -> None:
+        """No-op (`:92-101`; `:45-54` leaves `s% other_photo_read` unassigned,
+        so `:249-267` is unreachable on both fresh starts and restarts).
+        """
+        return None
 
     def extras_start_step(self, _state: dict[str, Any]) -> str:
         """Return `keep_going` (`:212-223`)."""

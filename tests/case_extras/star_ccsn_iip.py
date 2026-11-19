@@ -15,10 +15,10 @@ import pathlib
 from typing import Any
 
 from flexmesa import constants
+from flexmesa.chem import catalog as chem_catalog
 from tests.case_extras import _helpers, star_core_collapse
 
 _H1_LIMIT: float = 0.1
-_IH1_CHEM_ID: int = 1
 
 
 def _parse_nml_scalar(raw: str) -> Any:
@@ -410,7 +410,8 @@ class CcsnIIpStarExtras:
         m_arr = state["m"]
         xa_matrix = state["xa"]
 
-        first_slot = int(net_iso[_IH1_CHEM_ID - 1])
+        ih1 = chem_catalog.get_nuclide_index("h1")
+        first_slot = int(net_iso[ih1 - 1])
         if first_slot <= 0 or first_slot > len(net_iso):
             raise IndexError(
                 f"ccsn_IIp: check_rti (:775) net_iso(ih1)={first_slot} out of "

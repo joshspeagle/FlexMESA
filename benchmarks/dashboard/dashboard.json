@@ -21,7 +21,7 @@
         "verified_total": 0,
         "pct_ported": 14.9,
         "pct_verified": 0.0,
-        "rust_lines": 55581,
+        "rust_lines": 55584,
         "python_jax_lines": 3869
       },
       {
@@ -447,7 +447,7 @@
         "pct_ported": 0.0,
         "pct_verified": 0.0,
         "rust_lines": 0,
-        "python_jax_lines": 7716
+        "python_jax_lines": 7761
       }
     ],
     "plotting_panels": {
@@ -1173,8 +1173,13 @@
         "issues": "#161"
       }
     ],
-    "python_xfail_or_skip_count": 1,
+    "python_xfail_or_skip_count": 2,
     "python_skips": [
+      {
+        "location": "tests/test_eos_wave3a3.py:200",
+        "reason": "pytest.mark.xfail( strict=True, reason=( \"declared gap (#161): Rust strict PC and Skye derivatives differ \" \"from MESA 26.4.1 beyond the base tolerances (largest measured: \" \"pc_co_liq d_dlnT 7.1e-6, skye_co_liq d_dlnT 1.3e-6)\" ), )",
+        "issues": "#161"
+      },
       {
         "location": "tests/test_eos_wave3b1.py:395",
         "reason": "pytest.mark.xfail( strict=True, reason=( \"declared gap (#161): Python eos.eos_dt_get_t does not yet expose \" \"logT_tol/other_tol (eos/test/test_output:395 tol=1e-5 stops one \" \"Newton step earlier at 4.8009613155595554)\" ), )",

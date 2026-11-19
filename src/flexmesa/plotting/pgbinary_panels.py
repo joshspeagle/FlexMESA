@@ -12,6 +12,7 @@ subtitles.
 from __future__ import annotations
 
 import pathlib
+import textwrap
 from collections.abc import Sequence
 from typing import Any, Literal
 
@@ -546,12 +547,27 @@ def plot_pgbinary_panels(
         figsize=style.figsize("double", 1.16),
         constrained_layout=True,
     )
-    plot_pgbinary_orbit(
-        run_path,
-        model_number=orbit_model_number,
-        mesa_binary_history=ref_path,
-        ax=axes[0, 0],
-    )
+    try:
+        plot_pgbinary_orbit(
+            run_path,
+            model_number=orbit_model_number,
+            mesa_binary_history=ref_path,
+            ax=axes[0, 0],
+        )
+    except _roche_orbit.MissingOrbitColumnsError as exc:
+        # The other five panels still carry information, so the orbit cell
+        # states why it is empty instead of drawing an assumed orbit.
+        axes[0, 0].clear()
+        axes[0, 0].set_axis_off()
+        axes[0, 0].text(
+            0.5,
+            0.5,
+            "Orbit not drawn:\n" + textwrap.fill(str(exc), 44),
+            ha="center",
+            va="center",
+            fontsize=6.5,
+            transform=axes[0, 0].transAxes,
+        )
     ref_base = ref_path.parent if ref_path is not None else None
     _plot_donor_accretor_hr(
         axes[0, 1],

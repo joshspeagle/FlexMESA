@@ -914,8 +914,8 @@
     "python": {
       "tool": "pytest --cov",
       "overall": {
-        "statements": 21562,
-        "covered": 18954,
+        "statements": 21585,
+        "covered": 18974,
         "percent": 87.9
       },
       "by_subpackage": [
@@ -1065,8 +1065,8 @@
         },
         {
           "subpackage": "flexmesa.testing",
-          "statements": 3430,
-          "covered": 2713,
+          "statements": 3453,
+          "covered": 2733,
           "percent": 79.1
         },
         {
@@ -1392,6 +1392,11 @@
         "number": 228,
         "title": "Align module and star defaults with MESA 26.4.1 *.defaults (#149)",
         "draft": true
+      },
+      {
+        "number": 229,
+        "title": "fix(extras): make test-side hooks follow upstream and remove case routes from the library (#148)",
+        "draft": false
       }
     ],
     "deferred_169": [
@@ -1870,6 +1875,19 @@
     {
       "date_utc": "2026-11-19",
       "commit": "93de419",
+      "event": "main merge",
+      "engine_ported_pct": "13.9",
+      "all_verified_pct": "0.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "73.6",
+      "python_cov_pct": "87.9",
+      "closed_140": "12",
+      "total_140": "33",
+      "deferred_169": "18"
+    },
+    {
+      "date_utc": "2026-11-19",
+      "commit": "b1e4aa2",
       "event": "main merge",
       "engine_ported_pct": "13.9",
       "all_verified_pct": "0.0",

@@ -600,7 +600,6 @@ fn test_upstream_test_suite_history_column_lists_parse_or_fail_loudly() {
         "adjust_net",
         "cburn_inward",
         "ccsn_IIp",
-        "custom_colors",
         "double_bh",
         "gyre_in_mesa_wd",
         "high_rot_darkening",

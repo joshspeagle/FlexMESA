@@ -24,7 +24,7 @@ use crate::rsp_eos_kap::RspChemCache;
 use crate::star_job_init::{
     init_or_update_model_from_bundle_outcome, InitModelOutcome,
 };
-use crate::termination::check_termination_limits_with_history;
+use crate::termination::{do_check_limits, LimitCheckOutcome};
 
 /// Control flow directive returned by [`StarExtras`] step hooks (`keep_going`,
 /// `redo`, `retry`, `terminate` in `star/public/star_def.inc`).
@@ -398,8 +398,8 @@ pub fn run_inlist_stage_with_logs(
     let init_hr = extract_history_row(model);
     if cap == 0 {
         if job_step_cap != Some(0) {
-            if let Some(code) =
-                check_termination_limits_with_history(model, Some(&init_hr))
+            if let LimitCheckOutcome::Terminate { code, .. } =
+                do_check_limits(model, None, true)?
             {
                 termination_code = code;
             }
@@ -451,13 +451,22 @@ pub fn run_inlist_stage_with_logs(
                 }
             }
 
-            let step_rep = star_evolve_step_with_extras(
+            let step_rep = match star_evolve_step_with_extras(
                 model,
                 do_remesh,
                 op_split_burn,
                 true,
                 extras,
-            )?;
+            ) {
+                Ok(rep) => rep,
+                Err(StarError::Terminated { reason, .. })
+                    if reason == "max_age" =>
+                {
+                    termination_code = reason;
+                    break;
+                }
+                Err(e) => return Err(e),
+            };
             steps_taken += 1;
             total_newton_iterations += step_rep.iterations;
             total_retries += step_rep.retries;
@@ -505,8 +514,8 @@ pub fn run_inlist_stage_with_logs(
                 }
             }
             if !will_terminate {
-                if let Some(code) =
-                    check_termination_limits_with_history(model, Some(&hr))
+                if let LimitCheckOutcome::Terminate { code, .. } =
+                    do_check_limits(model, None, false)?
                 {
                     termination_code = code;
                     will_terminate = true;

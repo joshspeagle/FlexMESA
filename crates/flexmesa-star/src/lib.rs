@@ -435,7 +435,13 @@ pub use struct_burn_mix::{
 };
 pub use termination::{
     check_termination_limits, check_termination_limits_with_history,
-    compute_core_masses_msun,
+    compute_core_masses_msun, do_check_limits, eval_core_infall_and_rebound_cms,
+    eval_min_gamma1, eval_phase_of_evolution, get_ejecta_mass,
+    get_remnant_mass, get_shock_mass_msun, set_phase_of_evolution,
+    LimitCheckOutcome, PHASE_C_BURN, PHASE_HE_BURN, PHASE_IAMS, PHASE_NE_BURN,
+    PHASE_O_BURN, PHASE_PREMS, PHASE_RELAX, PHASE_SI_BURN, PHASE_STARTING,
+    PHASE_TACHEB, PHASE_TAMS, PHASE_TP_AGB, PHASE_WDCS, PHASE_ZACHEB,
+    PHASE_ZAMS,
 };
 pub use timestep::{
     eval_dx_nuc_drop_ratio, eval_h211_factor, eval_varcontrol, filter_limit,
@@ -443,10 +449,11 @@ pub use timestep::{
 };
 pub use timestep_limits::timestep_controller;
 pub use winds::{
-    do_set_mdot, eval_bjorklund_wind, eval_blocker_wind, eval_de_jager_wind,
-    eval_dutch_wind, eval_nieuwenhuijzen_wind, eval_nugis_lamers_wind,
-    eval_reimers_wind, eval_rlo_wind, eval_super_eddington_wind,
-    eval_van_loon_wind, eval_vink_wind, set_mdot, DutchLowTScheme, WindScheme,
+    do_set_mdot, do_set_mdot_with_extras, eval_bjorklund_wind,
+    eval_blocker_wind, eval_de_jager_wind, eval_dutch_wind,
+    eval_nieuwenhuijzen_wind, eval_nugis_lamers_wind, eval_reimers_wind,
+    eval_rlo_wind, eval_super_eddington_wind, eval_van_loon_wind,
+    eval_vink_wind, set_mdot, DutchLowTScheme, WindScheme,
 };
 pub use zams::{
     interp_q, load_zams_model, load_zams_model_from_catalog,

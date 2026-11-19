@@ -7,9 +7,14 @@
 //! `Locate_logQ`, `Locate_logT`, and `Get1_eosdt_XTable_Results` from
 //! `eos/private/eosdt_eval.f90`.
 
-use crate::types::{EosError, EosEvalOutput, I_LN_S, NUM_EOS_BASIC_RESULTS};
+use crate::types::{
+    EosError, EosEvalOutput, EOS_BASIC_RESULT_NAMES, I_LN_S,
+    NUM_EOS_BASIC_RESULTS,
+};
 use flexmesa_const::{LN10, ONE_SIXTH};
+use flexmesa_interp2d::{interp_mkbicub_db, BicubicBc};
 use flexmesa_utils::is_bad;
+use rayon::prelude::*;
 
 pub use crate::tables_4d::table_io::DT_RAW_BIN_MAGIC;
 
@@ -343,4 +348,216 @@ pub fn eval_xtable(
         d_dln_t,
         d_dxa: Vec::new(),
     })
+}
+
+/// Validates and rejects non-finite coordinates, grid sizes, or raw/fitted
+/// 4D EOS spline arrays (`N1-12`).
+///
+/// Upstream MESA's `Check_XEoS_Interpolation_Data` (`eos/private/eosdt_load_tables.f90:409-424`)
+/// replaces `is_bad` spline coefficients with `0.0`. All 116 pinned MESA `26.4.1`
+/// raw slices (`eos_opal_scvh`, `eos_free_eos`, `eos_cms`) have zero non-finite
+/// values or spline coefficients, so rejecting any non-finite entry with an error
+/// naming table, variable, and cell detects corruption without changing MESA
+/// `26.4.1` physics.
+pub(crate) fn build_4d_slice_vertices(
+    context: &'static str,
+    table_label: &str,
+    axis1: &[f64],
+    axis2: &[f64],
+    raw_vars: &[f64],
+) -> Result<Vec<EosDtVertex>, EosError> {
+    let n1 = axis1.len();
+    let n2 = axis2.len();
+    if n1 < 2 || n2 < 2 {
+        return Err(EosError::InvalidState {
+            context,
+            detail: format!(
+                "{table_label}: grid too small ({n1} x {n2}); need at least 2 x 2"
+            ),
+        });
+    }
+    let ngrid = n1.checked_mul(n2).ok_or_else(|| EosError::InvalidState {
+        context,
+        detail: format!("{table_label}: grid size overflow ({n1} * {n2})"),
+    })?;
+    let expected_raw =
+        NUM_EOS_TABLE_VALS.checked_mul(ngrid).ok_or_else(|| {
+            EosError::InvalidState {
+                context,
+                detail: format!("{table_label}: raw buffer size overflow"),
+            }
+        })?;
+    if raw_vars.len() != expected_raw {
+        return Err(EosError::InvalidState {
+            context,
+            detail: format!(
+                "{table_label}: expected {expected_raw} raw values, got {}",
+                raw_vars.len()
+            ),
+        });
+    }
+
+    for (v, &val) in raw_vars.iter().enumerate() {
+        if is_bad(val) {
+            let var_idx = v / ngrid;
+            let cell = v % ngrid;
+            let i1 = cell / n2;
+            let i2 = cell % n2;
+            let var_name = EOS_BASIC_RESULT_NAMES
+                .get(var_idx)
+                .copied()
+                .unwrap_or("var");
+            return Err(EosError::InvalidState {
+                context,
+                detail: format!(
+                    "non-finite input value ({val}) in {table_label} var={var_idx} ({var_name}) at cell=({i1}, {i2})"
+                ),
+            });
+        }
+    }
+
+    let fitted: Vec<Vec<[f64; 4]>> = (0..NUM_EOS_TABLE_VALS)
+        .into_par_iter()
+        .map(|v| {
+            let z_slice = &raw_vars[v * ngrid..(v + 1) * ngrid];
+            interp_mkbicub_db(
+                axis1,
+                axis2,
+                z_slice,
+                BicubicBc::NotAKnot,
+                &[],
+                BicubicBc::NotAKnot,
+                &[],
+                BicubicBc::NotAKnot,
+                &[],
+                BicubicBc::NotAKnot,
+                &[],
+            )
+            .map(|(coeffs, _, _)| coeffs)
+            .map_err(|e| {
+                let var_name =
+                    EOS_BASIC_RESULT_NAMES.get(v).copied().unwrap_or("var");
+                EosError::InvalidState {
+                    context,
+                    detail: format!(
+                        "{table_label}: interp_mkbicub_db failed for var={v} ({var_name}): {e}"
+                    ),
+                }
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+    let mut dense = vec![EosDtVertex::default(); ngrid];
+    for (v, coeffs) in fitted.iter().enumerate() {
+        let var_name = EOS_BASIC_RESULT_NAMES.get(v).copied().unwrap_or("var");
+        for (cell, c4) in coeffs.iter().enumerate() {
+            let i1 = cell / n2;
+            let i2 = cell % n2;
+            for (m, &val) in c4.iter().enumerate() {
+                if is_bad(val) {
+                    return Err(EosError::InvalidState {
+                        context,
+                        detail: format!(
+                            "non-finite bicubic spline coefficient ({val}) in {table_label} var={v} ({var_name}) cell=({i1}, {i2}) coeff={m}"
+                        ),
+                    });
+                }
+                dense[cell].coeffs[v * 4 + m] = val;
+            }
+        }
+    }
+    Ok(dense)
+}
+
+/// Validates that every fitted spline coefficient in `dense` is finite (`N1-12`).
+pub(crate) fn validate_dense_vertices(
+    context: &'static str,
+    table_label: &str,
+    n1: usize,
+    n2: usize,
+    dense: &[EosDtVertex],
+) -> Result<(), EosError> {
+    let expected = n1.checked_mul(n2).ok_or_else(|| EosError::TableIo {
+        context,
+        detail: format!("{table_label}: grid size overflow ({n1} * {n2})"),
+    })?;
+    if dense.len() != expected {
+        return Err(EosError::TableIo {
+            context,
+            detail: format!(
+                "{table_label}: expected {expected} vertices, got {}",
+                dense.len()
+            ),
+        });
+    }
+    for (cell, vert) in dense.iter().enumerate() {
+        let i1 = cell / n2;
+        let i2 = cell % n2;
+        for (idx, &val) in vert.coeffs.iter().enumerate() {
+            if is_bad(val) {
+                let var_idx = idx / 4;
+                let coeff_idx = idx % 4;
+                let var_name = EOS_BASIC_RESULT_NAMES
+                    .get(var_idx)
+                    .copied()
+                    .unwrap_or("var");
+                return Err(EosError::TableIo {
+                    context,
+                    detail: format!(
+                        "non-finite spline coefficient ({val}) in {table_label} var={var_idx} ({var_name}) cell=({i1}, {i2}) coeff={coeff_idx}"
+                    ),
+                });
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Validates uniform 4D table header parameters before memory allocation.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn validate_4d_grid_header(
+    context: &'static str,
+    table_label: &str,
+    x: f64,
+    z: f64,
+    n1: usize,
+    a1_min: f64,
+    a1_max: f64,
+    d_a1: f64,
+    n2: usize,
+    a2_min: f64,
+    a2_max: f64,
+    d_a2: f64,
+) -> Result<usize, EosError> {
+    if is_bad(x)
+        || is_bad(z)
+        || is_bad(a1_min)
+        || is_bad(a1_max)
+        || is_bad(d_a1)
+        || is_bad(a2_min)
+        || is_bad(a2_max)
+        || is_bad(d_a2)
+        || n1 < 2
+        || n2 < 2
+        || d_a1 <= 0.0
+        || d_a2 <= 0.0
+    {
+        return Err(EosError::TableIo {
+            context,
+            detail: format!(
+                "{table_label}: invalid header grid ({n1} x {n2}, X={x}, Z={z}, d1={d_a1}, d2={d_a2})"
+            ),
+        });
+    }
+    let ngrid = n1.checked_mul(n2).ok_or_else(|| EosError::TableIo {
+        context,
+        detail: format!("{table_label}: grid size overflow ({n1} * {n2})"),
+    })?;
+    let _ = NUM_EOS_TABLE_VALS.checked_mul(ngrid * 8).ok_or_else(|| {
+        EosError::TableIo {
+            context,
+            detail: format!("{table_label}: table allocation size overflow"),
+        }
+    })?;
+    Ok(ngrid)
 }

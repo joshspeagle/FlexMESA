@@ -101,7 +101,7 @@
     },
     {
       "phase": "Phase C",
-      "open": 12,
+      "open": 13,
       "closed": 2,
       "issues": [
         {
@@ -173,6 +173,11 @@
           "number": 220,
           "title": "[Audit] Level-2 exact-hex probes for the remaining math and auto_diff values",
           "state": "closed"
+        },
+        {
+          "number": 231,
+          "title": "[Audit C17] Port the remaining upstream per-case extras to test-side hooks",
+          "state": "open"
         }
       ]
     },
@@ -229,9 +234,24 @@
       "draft": true
     },
     {
-      "number": 229,
-      "title": "fix(extras): make test-side hooks follow upstream and remove case routes from the library (#148)",
+      "number": 230,
+      "title": "[Audit C13] Data pipeline provenance and verified runtime caches (#164)",
       "draft": false
+    },
+    {
+      "number": 232,
+      "title": "chore(extras): re-point the unported-extras ledger to #231 (split out of #148)",
+      "draft": false
+    },
+    {
+      "number": 233,
+      "title": "[Audit A6] Profile real evolutions, MESA 26.4.1 comparison, fast math, waste removal, and batching (#168)",
+      "draft": true
+    },
+    {
+      "number": 234,
+      "title": "test(eos): replace inline EOS literals with MESA 26.4.1 Fortran oracles and expand Python upstream coverage (#161 Slice 1)",
+      "draft": true
     }
   ],
   "deferred_169": [

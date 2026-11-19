@@ -11,6 +11,7 @@ bottom-spine mixing-region bars (`star/private/pgstar_power.f90:220-224`).
 from __future__ import annotations
 
 import pathlib
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 import matplotlib.axes as mpl_axes
@@ -354,3 +355,51 @@ def render_mixing_grid_layers(
             )
         )
     return handles
+
+
+def plot_profile_pair(
+    ax: mpl_axes.Axes,
+    prof: _compare_mod.ProfileTable,
+    x_run: np.ndarray,
+    ref_prof: _compare_mod.ProfileTable | None,
+    x_ref: np.ndarray | None,
+    col: str,
+    *,
+    label: str,
+    color: str,
+    ls: str = "-",
+    lw: float = 1.5,
+    transform: Callable[[np.ndarray], np.ndarray] | None = None,
+) -> bool:
+    """Overplot optional MESA reference and candidate profile ``col``."""
+    drawn = False
+    if ref_prof is not None and x_ref is not None and col in ref_prof.columns:
+        yr = ref_prof.columns[col]
+        if transform is not None:
+            yr = transform(yr)
+        drawn |= _compare_panels._plot_series(
+            ax,
+            x_ref,
+            yr,
+            label=f"{label} MESA",
+            color=color,
+            ls="--",
+            lw=1.05,
+            alpha=0.72,
+            zorder=2,
+        )
+    if col in prof.columns:
+        yf = prof.columns[col]
+        if transform is not None:
+            yf = transform(yf)
+        drawn |= _compare_panels._plot_series(
+            ax,
+            x_run,
+            yf,
+            label=label,
+            color=color,
+            ls=ls,
+            lw=lw,
+            zorder=3,
+        )
+    return drawn

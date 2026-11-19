@@ -98,6 +98,16 @@ print(
 
 ::: flexmesa.plotting.compare
 
+::: flexmesa.plotting.kippenhahn
+
+::: flexmesa.plotting.pgstar_panels
+
+::: flexmesa.plotting.pgstar_summary
+
+::: flexmesa.plotting.pgbinary_panels
+
+::: flexmesa.plotting.pgstar_grid
+
 ::: flexmesa.plotting.pgstar_coverage
 
 ::: flexmesa.plotting.cli

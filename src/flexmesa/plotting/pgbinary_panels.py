@@ -11,19 +11,23 @@ subtitles.
 
 from __future__ import annotations
 
-import math
 import pathlib
 from collections.abc import Sequence
 from typing import Any, Literal
 
 import matplotlib.axes as mpl_axes
-import matplotlib.colors as mpl_colors
 import matplotlib.figure as mpl_figure
 import matplotlib.pyplot as plt
 import numpy as np
 
-from flexmesa.plotting import _compare_panels, _plot_support, compare, style
-from flexmesa.testing import case_manifest, harness_runner, history_compare
+from flexmesa.plotting import (
+    _compare_panels,
+    _plot_support,
+    _roche_orbit,
+    compare,
+    style,
+)
+from flexmesa.testing import harness_runner, history_compare
 
 _DEFAULT_SUMMARY_COLS: tuple[tuple[str, str], ...] = (
     ("period_days", r"$P_{\mathrm{orb}}$"),
@@ -41,311 +45,6 @@ _PALETTE: tuple[str, ...] = (
     style.OKABE_ITO["reddish_purple"],
     style.OKABE_ITO["sky_blue"],
 )
-
-
-def _xl1_fit(q_ratio: float) -> float:
-    """L1 distance from Star 1 (`binary/private/pgbinary_orbit.f90:250-261`)."""
-    logq = math.log10(q_ratio)
-    if q_ratio > 1.0:
-        logq = -logq
-    xl1 = (
-        -1.72452947 / math.pi * math.atan(logq * 0.21625699)
-        + 0.5
-        + 0.01559149 * logq
-        - 1.3924e-5 * logq * (logq + 1.5) * (logq + 4.0)
-    )
-    return 1.0 - xl1 if q_ratio > 1.0 else xl1
-
-
-def _psi_fit(req: float, q_ratio: float) -> float:
-    """Roche potential fit (`binary/private/pgbinary_orbit.f90:263-271`)."""
-    return (
-        -1.0 / req
-        - q_ratio
-        - 0.5533 * (1.0 + q_ratio) * req**2
-        - 0.3642 * req**2 * (req**2 - 1.0)
-        - 1.8693
-        * req
-        * (req - 0.1)
-        * (req - 0.3)
-        * (req - 0.7)
-        * (req - 1.0414)
-    )
-
-
-def _roche_potential(radius: float, cos_phi: float, q_ratio: float) -> float:
-    """Roche potential (`binary/private/pgbinary_orbit.f90:273-279`)."""
-    dist2 = max(1.0 - 2.0 * radius * cos_phi + radius * radius, 1.0e-16)
-    return (
-        -1.0 / radius
-        - q_ratio * (1.0 / math.sqrt(dist2) - radius * cos_phi)
-        - 0.5 * (1.0 + q_ratio) * radius * radius
-    )
-
-
-def _solve_roche_ray(
-    cos_phi: float,
-    q_ratio: float,
-    target_psi: float,
-    r_max: float,
-) -> float:
-    """Solve ``roche(r, cos_phi) == target_psi`` on ``(1e-4, r_max]``."""
-    r_lo = 1.0e-4
-    r_hi = max(min(r_max, 1.0 - 1.0e-3), r_lo * 2.0)
-    f_hi = _roche_potential(r_hi, cos_phi, q_ratio) - target_psi
-    if f_hi <= 0.0:
-        # Locate local potential maximum along the ray inside [r_lo, r_hi].
-        probe = np.linspace(r_lo, r_hi, 32, dtype=np.float64)
-        vals = np.array(
-            [
-                _roche_potential(float(rv), cos_phi, q_ratio) - target_psi
-                for rv in probe
-            ],
-            dtype=np.float64,
-        )
-        pos_idx = np.flatnonzero(vals >= 0.0)
-        if pos_idx.size == 0:
-            return float(probe[int(np.argmax(vals))])
-        r_hi = float(probe[int(pos_idx[0])])
-        if int(pos_idx[0]) > 0:
-            r_lo = float(probe[int(pos_idx[0]) - 1])
-
-    for _ in range(48):
-        r_mid = 0.5 * (r_lo + r_hi)
-        if _roche_potential(r_mid, cos_phi, q_ratio) - target_psi < 0.0:
-            r_lo = r_mid
-        else:
-            r_hi = r_mid
-    return 0.5 * (r_lo + r_hi)
-
-
-def _equipotential_xy(
-    req: float,
-    q_ratio: float,
-    *,
-    a_star: float,
-    ecc: float,
-    second_star: bool,
-    num_points: int = 50,
-) -> tuple[np.ndarray, np.ndarray]:
-    """Closed 2D contour (`binary/private/pgbinary_orbit.f90:130-206`)."""
-    req_clamped = min(max(req, 2.0e-3), 0.95)
-    xl1 = _xl1_fit(q_ratio)
-    this_psi = _psi_fit(req_clamped, q_ratio)
-    n_tot = 2 * num_points + 1
-    xs = np.zeros(n_tot, dtype=np.float64)
-    ys = np.zeros(n_tot, dtype=np.float64)
-
-    for idx in range(num_points):
-        phi = (idx + 0.5) * math.pi / num_points
-        cos_p = math.cos(phi)
-        r_ray = _solve_roche_ray(cos_p, q_ratio, this_psi, xl1)
-        xs[idx] = r_ray * cos_p
-        ys[idx] = r_ray * math.sin(phi)
-        ys[2 * num_points - 1 - idx] = -ys[idx]
-
-    icut = 0
-    while icut < num_points - 1 and xs[icut] > xl1:
-        icut += 1
-    if icut > 0:
-        xs[:icut] = xs[icut]
-        ys[:icut] = ys[icut]
-
-    shift = a_star * (1.0 - ecc)
-    for idx in range(num_points):
-        x_disp = -(xs[idx] - shift) if second_star else (xs[idx] - shift)
-        xs[idx] = x_disp
-        xs[2 * num_points - 1 - idx] = x_disp
-    xs[-1] = xs[0]
-    ys[-1] = ys[0]
-    return xs, ys
-
-
-def _select_row_index(
-    tbl: history_compare.HistoryTable,
-    model_number: int | None,
-    row_index: int,
-) -> int:
-    """Resolve 0-based row index from ``model_number`` or ``row_index``."""
-    if model_number is not None and "model_number" in tbl.columns:
-        diffs = np.abs(tbl.columns["model_number"] - float(model_number))
-        return int(np.argmin(diffs))
-    idx = row_index if row_index >= 0 else tbl.num_rows + row_index
-    return max(0, min(idx, tbl.num_rows - 1))
-
-
-def _extract_orbit_state(
-    tbl: history_compare.HistoryTable,
-    idx: int,
-) -> dict[str, float]:
-    """Extract orbital and Roche state at ``idx`` from ``binary_history``."""
-    if "star_1_mass" not in tbl.columns or "star_2_mass" not in tbl.columns:
-        raise ValueError(
-            "binary_history requires 'star_1_mass' and 'star_2_mass' columns"
-        )
-    m1 = float(tbl.columns["star_1_mass"][idx])
-    m2 = float(tbl.columns["star_2_mass"][idx])
-    ecc = (
-        float(tbl.columns["eccentricity"][idx])
-        if "eccentricity" in tbl.columns
-        else 0.0
-    )
-    ecc = min(max(ecc if math.isfinite(ecc) else 0.0, 0.0), 0.99)
-    sep = (
-        float(tbl.columns["binary_separation"][idx])
-        if "binary_separation" in tbl.columns
-        else 1.0
-    )
-    sep = sep if math.isfinite(sep) and sep > 0.0 else 1.0
-    rl1 = float(tbl.columns["rl_1"][idx]) if "rl_1" in tbl.columns else 0.0
-    rl2 = float(tbl.columns["rl_2"][idx]) if "rl_2" in tbl.columns else 0.0
-
-    def _star_r(star_i: int, rl_val: float) -> float:
-        r_col = f"star_{star_i}_radius"
-        ov_col = f"rl_relative_overflow_{star_i}"
-        if r_col in tbl.columns and math.isfinite(
-            float(tbl.columns[r_col][idx])
-        ):
-            return max(float(tbl.columns[r_col][idx]), 0.0)
-        if ov_col in tbl.columns and rl_val > 0.0:
-            ov = float(tbl.columns[ov_col][idx])
-            if math.isfinite(ov) and abs(ov) < 1.0e50:
-                return max(rl_val * (1.0 + ov), 0.0)
-        return 0.0
-
-    pm_idx = (
-        round(float(tbl.columns["point_mass_index"][idx]))
-        if "point_mass_index" in tbl.columns
-        and math.isfinite(float(tbl.columns["point_mass_index"][idx]))
-        else 0
-    )
-    mod_no = (
-        float(tbl.columns["model_number"][idx])
-        if "model_number" in tbl.columns
-        else float(idx + 1)
-    )
-    return {
-        "m1": m1,
-        "m2": m2,
-        "ecc": ecc,
-        "sep": sep,
-        "rl1": rl1,
-        "rl2": rl2,
-        "r1": _star_r(1, rl1),
-        "r2": _star_r(2, rl2),
-        "pm_idx": float(pm_idx),
-        "model_number": mod_no,
-    }
-
-
-def _draw_orbit_geometry(
-    ax: mpl_axes.Axes,
-    state: dict[str, float],
-    *,
-    is_ref: bool,
-    show_roche_lobes: bool,
-    show_stars: bool,
-) -> float:
-    """Draw Keplerian orbits and Roche/stellar contours; return ``xmax``."""
-    m1, m2, ecc, sep = state["m1"], state["m2"], state["ecc"], state["sep"]
-    a1 = 1.0 / (1.0 + m1 / m2)
-    a2 = 1.0 / (1.0 + m2 / m1)
-    num_pts = 50
-    idx_arr = np.arange(1, num_pts + 1, dtype=np.float64)
-    thetas = (idx_arr - 0.5) * math.pi / num_pts
-    r1_half = a1 * (1.0 - ecc * ecc) / (1.0 + ecc * np.cos(thetas))
-    r2_half = (a2 / a1) * r1_half
-
-    x1 = np.concatenate(
-        [-r1_half * np.cos(thetas), (-r1_half * np.cos(thetas))[::-1]]
-    )
-    y1 = np.concatenate(
-        [-r1_half * np.sin(thetas), (r1_half * np.sin(thetas))[::-1]]
-    )
-    x2 = np.concatenate(
-        [r2_half * np.cos(thetas), (r2_half * np.cos(thetas))[::-1]]
-    )
-    y2 = np.concatenate(
-        [r2_half * np.sin(thetas), (-r2_half * np.sin(thetas))[::-1]]
-    )
-    x1 = np.append(x1, x1[0])
-    y1 = np.append(y1, y1[0])
-    x2 = np.append(x2, x2[0])
-    y2 = np.append(y2, y2[0])
-
-    c1 = style.OKABE_ITO["black"] if is_ref else style.OKABE_ITO["orange"]
-    c2 = style.OKABE_ITO["grey"] if is_ref else style.OKABE_ITO["blue"]
-    ls_orb = "--" if is_ref else ":"
-    lw_orb = 1.0 if is_ref else 1.25
-    sfx = " (MESA)" if is_ref else ""
-
-    ax.plot(x1, y1, color=c1, ls=ls_orb, lw=lw_orb, label=f"Star 1 orbit{sfx}")
-    ax.plot(x2, y2, color=c2, ls=ls_orb, lw=lw_orb, label=f"Star 2 orbit{sfx}")
-    xmax = max(float(np.max(np.abs(x1))), float(np.max(np.abs(x2))), 0.6)
-
-    q12 = m2 / m1
-    pm_idx = round(state["pm_idx"])
-    if abs(math.log10(max(q12, 1.0e-12))) <= 2.0:
-        for star_i, q_loc, a_loc, rl_v, r_v, c_hex in (
-            (1, q12, a1, state["rl1"], state["r1"], c1),
-            (2, 1.0 / q12, a2, state["rl2"], state["r2"], c2),
-        ):
-            second = star_i == 2
-            x_focus = a_loc * (1.0 - ecc) if second else -a_loc * (1.0 - ecc)
-            if show_roche_lobes and rl_v > 0.0:
-                x_rl, y_rl = _equipotential_xy(
-                    rl_v / sep,
-                    q_loc,
-                    a_star=a_loc,
-                    ecc=ecc,
-                    second_star=second,
-                )
-                ax.plot(
-                    x_rl,
-                    y_rl,
-                    color=c_hex,
-                    ls="--" if is_ref else "-",
-                    lw=0.9 if is_ref else 1.1,
-                    alpha=0.65 if is_ref else 0.85,
-                )
-                xmax = max(xmax, float(np.max(np.abs(x_rl))))
-            if pm_idx == star_i or not show_stars or r_v <= 0.0:
-                if not is_ref:
-                    ax.scatter(
-                        [x_focus],
-                        [0.0],
-                        color=c_hex,
-                        marker="o" if pm_idx != star_i else "D",
-                        s=28,
-                        zorder=4,
-                    )
-            else:
-                x_st, y_st = _equipotential_xy(
-                    r_v / sep,
-                    q_loc,
-                    a_star=a_loc,
-                    ecc=ecc,
-                    second_star=second,
-                )
-                ax.plot(
-                    x_st,
-                    y_st,
-                    color=c_hex,
-                    ls="--" if is_ref else "-",
-                    lw=1.1 if is_ref else 1.4,
-                )
-                if not is_ref:
-                    ax.fill(
-                        x_st,
-                        y_st,
-                        facecolor=mpl_colors.to_rgba(c_hex, 0.24),
-                        edgecolor=c_hex,
-                        hatch="///" if star_i == 1 else "\\\\\\",
-                        lw=0.8,
-                        zorder=3,
-                    )
-                xmax = max(xmax, float(np.max(np.abs(x_st))))
-    return xmax
 
 
 def plot_pgbinary_orbit(
@@ -382,8 +81,8 @@ def plot_pgbinary_orbit(
     """
     fig, ax = style.init_ax(ax, "single", 0.95)
     run_tbl, _ = _plot_support.load_history_with_header(binary_history)
-    r_idx = _select_row_index(run_tbl, model_number, row_index)
-    run_state = _extract_orbit_state(run_tbl, r_idx)
+    r_idx = _roche_orbit.select_row_index(run_tbl, model_number, row_index)
+    run_state = _roche_orbit.extract_orbit_state(run_tbl, r_idx)
 
     xmax = 0.6
     if mesa_binary_history is not None:
@@ -393,11 +92,11 @@ def plot_pgbinary_orbit(
             if model_number is not None
             else round(run_state["model_number"])
         )
-        m_idx = _select_row_index(ref_tbl, target_mod, row_index)
-        ref_state = _extract_orbit_state(ref_tbl, m_idx)
+        m_idx = _roche_orbit.select_row_index(ref_tbl, target_mod, row_index)
+        ref_state = _roche_orbit.extract_orbit_state(ref_tbl, m_idx)
         xmax = max(
             xmax,
-            _draw_orbit_geometry(
+            _roche_orbit.draw_orbit_geometry(
                 ax,
                 ref_state,
                 is_ref=True,
@@ -408,7 +107,7 @@ def plot_pgbinary_orbit(
 
     xmax = max(
         xmax,
-        _draw_orbit_geometry(
+        _roche_orbit.draw_orbit_geometry(
             ax,
             run_state,
             is_ref=False,
@@ -545,7 +244,6 @@ def _discover_component_history(
     base_dir: pathlib.Path | None,
     star_idx: int,
 ) -> pathlib.Path | None:
-    """Locate component ``LOGS<star_idx>/history.data`` when present."""
     if explicit is not None:
         p = pathlib.Path(explicit)
         if not p.is_file():
@@ -689,6 +387,40 @@ def _plot_donor_accretor_hr(
     ax.set_title("Donor & Accretor HR Tracks")
 
 
+def _plot_paired_hist(
+    ax: mpl_axes.Axes,
+    run_x: np.ndarray,
+    run_tbl: history_compare.HistoryTable,
+    ref_x: np.ndarray | None,
+    ref_tbl: history_compare.HistoryTable | None,
+    col: str,
+    *,
+    label: str,
+    color: str,
+    offset: float = 0.0,
+) -> None:
+    if ref_tbl is not None and ref_x is not None and col in ref_tbl.columns:
+        _compare_panels._plot_series(
+            ax,
+            ref_x,
+            ref_tbl.columns[col] + offset,
+            label=f"{label} MESA",
+            color=color,
+            ls="--",
+            lw=1.1,
+            alpha=0.74,
+        )
+    if col in run_tbl.columns:
+        _compare_panels._plot_series(
+            ax,
+            run_x,
+            run_tbl.columns[col] + offset,
+            label=label,
+            color=color,
+            lw=1.55,
+        )
+
+
 def plot_pgbinary_panels(
     binary_history: pathlib.Path | str | None = None,
     *,
@@ -739,17 +471,17 @@ def plot_pgbinary_panels(
     Returns:
         Tuple ``(fig, axes)`` with ``axes`` of shape ``(3, 2)``.
     """
-    spec: case_manifest.CaseManifestEntry | None = None
-    if case is not None:
-        spec = compare.resolve_case_entry(
+    spec = (
+        compare.resolve_case_entry(
             case, suite="binary", manifest_path=manifest_path
         )
-
+        if case is not None
+        else None
+    )
     base_dir = pathlib.Path(flexmesa_dir) if flexmesa_dir is not None else None
     if binary_history is not None:
         run_path = pathlib.Path(binary_history)
-        if base_dir is None:
-            base_dir = run_path.parent
+        base_dir = base_dir or run_path.parent
     elif base_dir is not None:
         located = harness_runner.locate_written_history(
             "binary", base_dir, True
@@ -790,29 +522,25 @@ def plot_pgbinary_panels(
         figsize=style.figsize("double", 1.16),
         constrained_layout=True,
     )
-
-    # (0, 0) 2D Orbit & Roche Geometry
     plot_pgbinary_orbit(
         run_path,
         model_number=orbit_model_number,
         mesa_binary_history=ref_path,
         ax=axes[0, 0],
     )
-
-    # (0, 1) Donor + Accretor HR Tracks
-    s1_p = _discover_component_history(star1_history, base_dir, 1)
-    s2_p = _discover_component_history(star2_history, base_dir, 2)
     ref_base = ref_path.parent if ref_path is not None else None
-    ms1_p = _discover_component_history(mesa_star1_history, ref_base, 1)
-    ms2_p = _discover_component_history(mesa_star2_history, ref_base, 2)
     _plot_donor_accretor_hr(
         axes[0, 1],
         run_tbl,
         ref_tbl,
-        star1_hist=s1_p,
-        star2_hist=s2_p,
-        mesa_s1_hist=ms1_p,
-        mesa_s2_hist=ms2_p,
+        star1_hist=_discover_component_history(star1_history, base_dir, 1),
+        star2_hist=_discover_component_history(star2_history, base_dir, 2),
+        mesa_s1_hist=_discover_component_history(
+            mesa_star1_history, ref_base, 1
+        ),
+        mesa_s2_hist=_discover_component_history(
+            mesa_star2_history, ref_base, 2
+        ),
     )
 
     x_col = (
@@ -846,31 +574,17 @@ def plot_pgbinary_panels(
         (1, style.OKABE_ITO["blue"]),
         (2, style.OKABE_ITO["orange"]),
     ):
-        ov_col = f"rl_relative_overflow_{s_idx}"
-        if (
-            ref_tbl is not None
-            and ref_x is not None
-            and ov_col in ref_tbl.columns
-        ):
-            _compare_panels._plot_series(
-                ax,
-                ref_x,
-                1.0 + ref_tbl.columns[ov_col],
-                label=f"$R_{s_idx}/R_{{\\mathrm{{RL}},{s_idx}}}$ MESA",
-                color=c_hex,
-                ls="--",
-                lw=1.1,
-                alpha=0.75,
-            )
-        if ov_col in run_tbl.columns:
-            _compare_panels._plot_series(
-                ax,
-                run_x,
-                1.0 + run_tbl.columns[ov_col],
-                label=f"$R_{s_idx}/R_{{\\mathrm{{RL}},{s_idx}}}$",
-                color=c_hex,
-                lw=1.55,
-            )
+        _plot_paired_hist(
+            ax,
+            run_x,
+            run_tbl,
+            ref_x,
+            ref_tbl,
+            f"rl_relative_overflow_{s_idx}",
+            label=f"$R_{s_idx}/R_{{\\mathrm{{RL}},{s_idx}}}$",
+            color=c_hex,
+            offset=1.0,
+        )
     ax.set_xlabel(x_label)
     ax.set_ylabel(r"Filling Factor [$R_i / R_{\mathrm{RL},i}$]")
     ax.set_title("Roche-Lobe Filling Factor")
@@ -878,7 +592,8 @@ def plot_pgbinary_panels(
 
     # (1, 1) Mass-Transfer Rate lg_mtransfer_rate
     ax = axes[1, 1]
-    mdot_specs = (
+    active_vals: list[np.ndarray] = []
+    for col, tag, c_hex in (
         (
             "lg_mtransfer_rate",
             r"$\dot{M}_{\mathrm{RLOF}}$",
@@ -887,36 +602,19 @@ def plot_pgbinary_panels(
         ("lg_mstar_dot_1", r"$\dot{M}_1$", style.OKABE_ITO["blue"]),
         ("lg_mstar_dot_2", r"$\dot{M}_2$", style.OKABE_ITO["bluish_green"]),
         ("lg_mdot_edd", r"$\dot{M}_{\mathrm{Edd}}$", style.OKABE_ITO["grey"]),
-    )
-    active_vals: list[np.ndarray] = []
-    for col, tag, c_hex in mdot_specs:
-        if ref_tbl is not None and ref_x is not None and col in ref_tbl.columns:
-            yr = ref_tbl.columns[col]
-            _compare_panels._plot_series(
-                ax,
-                ref_x,
-                yr,
-                label=f"{tag} MESA",
-                color=c_hex,
-                ls="--",
-                lw=1.1,
-                alpha=0.72,
-            )
-            act_r = yr[_compare_panels.finite_mask(yr) & (yr > -90.0)]
-            if act_r.size > 0:
-                active_vals.append(act_r)
-        if col in run_tbl.columns:
-            yf = run_tbl.columns[col]
-            _compare_panels._plot_series(
-                ax, run_x, yf, label=tag, color=c_hex, lw=1.55
-            )
-            act_f = yf[_compare_panels.finite_mask(yf) & (yf > -90.0)]
-            if act_f.size > 0:
-                active_vals.append(act_f)
+    ):
+        _plot_paired_hist(
+            ax, run_x, run_tbl, ref_x, ref_tbl, col, label=tag, color=c_hex
+        )
+        for tbl_i in (ref_tbl, run_tbl):
+            if tbl_i is not None and col in tbl_i.columns:
+                yv = tbl_i.columns[col]
+                act = yv[_compare_panels.finite_mask(yv) & (yv > -90.0)]
+                if act.size > 0:
+                    active_vals.append(act)
     if active_vals:
         cat_act = np.concatenate(active_vals)
-        y_lo = float(np.min(cat_act)) - 0.8
-        y_hi = float(np.max(cat_act)) + 0.8
+        y_lo, y_hi = float(np.min(cat_act)) - 0.8, float(np.max(cat_act)) + 0.8
         ax.set_ylim(min(y_lo, y_hi - 1.5), max(y_hi, y_lo + 1.5))
     ax.set_xlabel(x_label)
     ax.set_ylabel(r"$\log_{10}(|\dot{M}| / M_\odot\,\mathrm{yr}^{-1})$")
@@ -926,65 +624,40 @@ def plot_pgbinary_panels(
     # (2, 0) Orbital Period & Binary Separation
     ax = axes[2, 0]
     p_col = "period_days" if "period_days" in run_tbl.columns else "period_hr"
-    p_lbl = (
+    _plot_paired_hist(
+        ax,
+        run_x,
+        run_tbl,
+        ref_x,
+        ref_tbl,
+        p_col,
+        label="$P$",
+        color=style.OKABE_ITO["blue"],
+    )
+    ax.set_xlabel(x_label)
+    ax.set_ylabel(
         r"Period [$\mathrm{d}$]"
         if p_col == "period_days"
         else r"Period [$\mathrm{hr}$]"
     )
-    if ref_tbl is not None and ref_x is not None and p_col in ref_tbl.columns:
-        _compare_panels._plot_series(
-            ax,
-            ref_x,
-            ref_tbl.columns[p_col],
-            label="$P$ MESA",
-            color=style.OKABE_ITO["blue"],
-            ls="--",
-            lw=1.1,
-            alpha=0.75,
-        )
-    if p_col in run_tbl.columns:
-        _compare_panels._plot_series(
-            ax,
-            run_x,
-            run_tbl.columns[p_col],
-            label="$P$",
-            color=style.OKABE_ITO["blue"],
-            lw=1.55,
-        )
-    ax.set_xlabel(x_label)
-    ax.set_ylabel(p_lbl)
     ax.set_title("Orbital Period & Separation")
     ax_sep = ax.twinx()
-    if (
-        ref_tbl is not None
-        and ref_x is not None
-        and "binary_separation" in ref_tbl.columns
-    ):
-        _compare_panels._plot_series(
-            ax_sep,
-            ref_x,
-            ref_tbl.columns["binary_separation"],
-            label="$a$ MESA",
-            color=style.OKABE_ITO["bluish_green"],
-            ls="--",
-            lw=1.1,
-            alpha=0.75,
-        )
-    if "binary_separation" in run_tbl.columns:
-        _compare_panels._plot_series(
-            ax_sep,
-            run_x,
-            run_tbl.columns["binary_separation"],
-            label="$a$",
-            color=style.OKABE_ITO["bluish_green"],
-            lw=1.45,
-        )
+    _plot_paired_hist(
+        ax_sep,
+        run_x,
+        run_tbl,
+        ref_x,
+        ref_tbl,
+        "binary_separation",
+        label="$a$",
+        color=style.OKABE_ITO["bluish_green"],
+    )
     ax_sep.set_ylabel(r"Separation [$R_\odot$]")
     _compare_panels.merge_twinx_legend(
         ax, ax_sep, loc="best", fontsize=6.6, ncol=2
     )
 
-    # (2, 1) Residual panel when comparing a manifest case, else Masses + J_orb
+    # (2, 1) Residuals when comparing a manifest case, else Component Masses
     comp: history_compare.HistoryComparison | None = None
     if spec is not None and ref_tbl is not None:
         if (
@@ -1004,30 +677,16 @@ def plot_pgbinary_panels(
             ("star_1_mass", "$M_1$", style.OKABE_ITO["blue"]),
             ("star_2_mass", "$M_2$", style.OKABE_ITO["bluish_green"]),
         ):
-            if (
-                ref_tbl is not None
-                and ref_x is not None
-                and col in ref_tbl.columns
-            ):
-                _compare_panels._plot_series(
-                    ax_m,
-                    ref_x,
-                    ref_tbl.columns[col],
-                    label=f"{tag} MESA",
-                    color=c_hex,
-                    ls="--",
-                    lw=1.1,
-                    alpha=0.75,
-                )
-            if col in run_tbl.columns:
-                _compare_panels._plot_series(
-                    ax_m,
-                    run_x,
-                    run_tbl.columns[col],
-                    label=tag,
-                    color=c_hex,
-                    lw=1.55,
-                )
+            _plot_paired_hist(
+                ax_m,
+                run_x,
+                run_tbl,
+                ref_x,
+                ref_tbl,
+                col,
+                label=tag,
+                color=c_hex,
+            )
         ax_m.set_xlabel(x_label)
         ax_m.set_ylabel(r"Component Mass [$M_\odot$]")
         ax_m.set_title("Component Masses")

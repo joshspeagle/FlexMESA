@@ -17,6 +17,17 @@ from flexmesa import constants as const
 from flexmesa import star
 
 
+def _specific_pe(model: star.StarModel) -> np.ndarray:
+    """Compute MESA cell-specific gravitational potential energy (erg/g)."""
+    r_cm = np.asarray(model.r, dtype=np.float64)
+    m_g = np.asarray(model.m, dtype=np.float64)
+    g0 = -float(const.STANDARD_CGRAV) * m_g / r_cm
+    g1 = np.empty_like(g0)
+    g1[:-1] = g0[1:]
+    g1[-1] = 0.0
+    return 0.5 * (g0 + g1)
+
+
 def test_adaptive_remeshing_and_mesh_gval_jax_consistency() -> None:
     """Verify `eval_mesh_gval_jax`, autodiff, and conservative `adjust_mesh`."""
     pre = star.StarModel.from_pre_ms(
@@ -46,19 +57,36 @@ def test_adaptive_remeshing_and_mesh_gval_jax_consistency() -> None:
 
     nz_before = pre.nz
     species_mass_before = np.sum(pre.dm[:, None] * pre.xa, axis=0) / pre.mstar
-    energy_before = float(np.sum(pre.dm * pre.energy))
+    ie_before = float(np.sum(pre.dm * pre.energy))
+    pe_before = float(np.sum(pre.dm * _specific_pe(pre)))
     n_splits, n_merges = pre.adjust_mesh()
     assert n_splits > 0
     assert pre.nz == nz_before + n_splits - n_merges
 
     species_mass_after = np.sum(pre.dm[:, None] * pre.xa, axis=0) / pre.mstar
-    energy_after = float(np.sum(pre.dm * pre.energy))
+    ie_after = float(np.sum(pre.dm * pre.energy))
+    pe_after = float(np.sum(pre.dm * _specific_pe(pre)))
     np.testing.assert_allclose(
         species_mass_after, species_mass_before, rtol=1.0e-12, atol=1.0e-14
     )
-    assert energy_after == pytest.approx(energy_before, rel=2.0e-3)
+    d_ie = ie_after - ie_before
+    d_pe = pe_after - pe_before
+    assert abs(d_ie) <= 0.05 * ie_before
+    assert abs(d_ie + d_pe) < abs(d_pe)
     np.testing.assert_allclose(float(np.sum(pre.dq)), 1.0, atol=1.0e-14)
     np.testing.assert_allclose(np.sum(pre.xa, axis=1), 1.0, atol=1.0e-14)
+
+    zams = star.StarModel.from_zams(initial_mass=4.0, initial_z=0.02)
+    zams.set_evolve_controls(mesh_delta_coeff=0.5, varcontrol_target=1.0e-3)
+    etot_zams_before = float(
+        np.sum(zams.dm * (zams.energy + _specific_pe(zams)))
+    )
+    z_splits, z_merges = zams.adjust_mesh()
+    assert z_splits + z_merges > 0
+    etot_zams_after = float(
+        np.sum(zams.dm * (zams.energy + _specific_pe(zams)))
+    )
+    assert etot_zams_after == pytest.approx(etot_zams_before, rel=1.0e-11)
 
 
 def test_varcontrol_and_h211_timestep_filter_rust_vs_jax() -> None:

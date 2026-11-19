@@ -11,17 +11,17 @@
         "module": "star",
         "upstream_files": 173,
         "upstream_lines": 120509,
-        "absent": 19941,
-        "stub": 17567,
-        "partial": 65013,
-        "ported_unverified": 17988,
+        "absent": 18480,
+        "stub": 15482,
+        "partial": 61424,
+        "ported_unverified": 25123,
         "kernel_reference_vectors": 0,
         "case_level_evidence": 0,
-        "ported_total": 17988,
+        "ported_total": 25123,
         "verified_total": 0,
-        "pct_ported": 14.9,
+        "pct_ported": 20.8,
         "pct_verified": 0.0,
-        "rust_lines": 57222,
+        "rust_lines": 62721,
         "python_jax_lines": 3869
       },
       {
@@ -595,7 +595,7 @@
         "no_reference_yet": 4,
         "strict_validated": 0,
         "diagnostic_runs": 90,
-        "reached_termination": 38,
+        "reached_termination": 35,
         "within_numeric_tol": 5,
         "passing": 0,
         "declared_gaps": 86,
@@ -607,8 +607,8 @@
         "no_reference_yet": 0,
         "strict_validated": 0,
         "diagnostic_runs": 8,
-        "reached_termination": 4,
-        "within_numeric_tol": 0,
+        "reached_termination": 6,
+        "within_numeric_tol": 2,
         "passing": 0,
         "declared_gaps": 8,
         "undeclared_failures": 0
@@ -653,6 +653,16 @@
         "issue": "#161"
       },
       {
+        "suite": "binary",
+        "case": "jdot_gr_check",
+        "issue": "#160"
+      },
+      {
+        "suite": "binary",
+        "case": "jdot_ml_check",
+        "issue": "#160"
+      },
+      {
         "suite": "astero",
         "case": "surface_effects",
         "issue": "#162"
@@ -679,11 +689,11 @@
     {
       "namelist": "star &controls",
       "upstream_scalars": 1444,
-      "matched_in_flexmesa": 620,
-      "defaults_agree": 620,
+      "matched_in_flexmesa": 720,
+      "defaults_agree": 720,
       "value_mismatch": 0,
       "disabled_limit_none": 0,
-      "unimplemented": 824
+      "unimplemented": 724
     },
     {
       "namelist": "star &star_job",
@@ -693,33 +703,6 @@
       "value_mismatch": 0,
       "disabled_limit_none": 0,
       "unimplemented": 364
-    },
-    {
-      "namelist": "binary &binary_controls + &binary_job",
-      "upstream_scalars": 209,
-      "matched_in_flexmesa": 120,
-      "defaults_agree": 120,
-      "value_mismatch": 0,
-      "disabled_limit_none": 0,
-      "unimplemented": 89
-    },
-    {
-      "namelist": "star &controls",
-      "upstream_scalars": 1444,
-      "matched_in_flexmesa": 611,
-      "defaults_agree": 611,
-      "value_mismatch": 0,
-      "disabled_limit_none": 0,
-      "unimplemented": 833
-    },
-    {
-      "namelist": "star &star_job",
-      "upstream_scalars": 455,
-      "matched_in_flexmesa": 88,
-      "defaults_agree": 88,
-      "value_mismatch": 0,
-      "disabled_limit_none": 0,
-      "unimplemented": 367
     },
     {
       "namelist": "binary &binary_controls + &binary_job",

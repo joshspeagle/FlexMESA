@@ -44,16 +44,14 @@ issue = "#231"
 [[cases]]
 suite = "star"
 case = "16M_conv_premix"
-status = "unported"
+status = "stock"
 digest = "dc0c5abaf8ce92977981d709bc64664c21ec2f5fe5ba74ab443bd14b681c61fe"
-issue = "#231"
 
 [[cases]]
 suite = "star"
 case = "16M_predictive_mix"
-status = "unported"
+status = "stock"
 digest = "dc0c5abaf8ce92977981d709bc64664c21ec2f5fe5ba74ab443bd14b681c61fe"
-issue = "#231"
 
 [[cases]]
 suite = "star"
@@ -86,16 +84,14 @@ issue = "#231"
 [[cases]]
 suite = "star"
 case = "5M_cepheid_blue_loop"
-status = "unported"
+status = "ported"
 digest = "c2880e51fd3c51156000ef863041001534afed33ce4da17f5e76a485192bdff3"
-issue = "#231"
 
 [[cases]]
 suite = "star"
 case = "7M_prems_to_AGB"
-status = "unported"
+status = "stock"
 digest = "809c0bcd009192cf71888bd476fb2dc94f77e1a190c914ba2b37dba790032faf"
-issue = "#231"
 
 [[cases]]
 suite = "star"
@@ -121,9 +117,8 @@ issue = "#231"
 [[cases]]
 suite = "star"
 case = "adjust_net"
-status = "unported"
+status = "ported"
 digest = "49b02086a5c4448d24632d5c48cb32c155ec854021cd2a130b791c18113f76ee"
-issue = "#231"
 
 [[cases]]
 suite = "star"
@@ -135,16 +130,14 @@ issue = "#231"
 [[cases]]
 suite = "star"
 case = "carbon_kh"
-status = "unported"
+status = "ported"
 digest = "97fc0a9e2d2d709330df035da2d3ebb6141739c63b0b42873019a2f033b1aacc"
-issue = "#231"
 
 [[cases]]
 suite = "star"
 case = "cburn_inward"
-status = "unported"
+status = "ported"
 digest = "d2f88bf4e0736355e0674a6b081cef2aac5d145226719e1f7b77b0454b71c450"
-issue = "#231"
 
 [[cases]]
 suite = "star"
@@ -169,9 +162,8 @@ digest = "8778fff27a08a6eb221bcf345a4fff2e5a8a0e932096812f4a082331da9db0b8"
 [[cases]]
 suite = "star"
 case = "conductive_flame"
-status = "unported"
+status = "ported"
 digest = "5fe17cfd4b40458f0d4080eb51f0e896317c23c7673b2d5b35113de44fbf2bc9"
-issue = "#231"
 
 [[cases]]
 suite = "star"
@@ -190,9 +182,8 @@ issue = "#231"
 [[cases]]
 suite = "star"
 case = "custom_colors"
-status = "unported"
+status = "stock"
 digest = "5b83f1aa177d576018f1e32c7c068439fd4ff4066a1a70c5f83b1dc4865bb175"
-issue = "#231"
 
 [[cases]]
 suite = "star"
@@ -210,9 +201,8 @@ issue = "#231"
 [[cases]]
 suite = "star"
 case = "extended_convective_penetration"
-status = "unported"
+status = "ported"
 digest = "b569c11174ef867731774b51792bad3d6314ef9e0404f4084ecb71833984e2e8"
-issue = "#231"
 
 [[cases]]
 suite = "star"
@@ -279,9 +269,8 @@ issue = "#231"
 [[cases]]
 suite = "star"
 case = "high_z"
-status = "unported"
+status = "stock"
 digest = "cee123d06d0473df8468de41c0b53c508ca76ecbb347e8ae08e00caa640ec426"
-issue = "#231"
 
 [[cases]]
 suite = "star"
@@ -313,9 +302,8 @@ issue = "#231"
 [[cases]]
 suite = "star"
 case = "magnetic_braking"
-status = "unported"
+status = "ported"
 digest = "f1ebb2e3a5f52b0564658682dc70a7e22e055e8455db385e847cc1a075b4bcb0"
-issue = "#231"
 
 [[cases]]
 suite = "star"
@@ -326,16 +314,14 @@ digest = "4b7b570f3a144678fa67d368b2c5b485ad89e03f9b43abe8575c1635939c1a5a"
 [[cases]]
 suite = "star"
 case = "make_co_wd"
-status = "unported"
+status = "ported"
 digest = "6d70de25e9a38ff2358a08c7a4f94a4dc3d4b49240c66d3416148d1a064b0753"
-issue = "#231"
 
 [[cases]]
 suite = "star"
 case = "make_env"
-status = "unported"
+status = "ported"
 digest = "674a09404e9cc19f0fbaf3f9f713d4891954c179e62e778c3edb428cf8298ff5"
-issue = "#231"
 
 [[cases]]
 suite = "star"
@@ -352,9 +338,8 @@ digest = "4b7b570f3a144678fa67d368b2c5b485ad89e03f9b43abe8575c1635939c1a5a"
 [[cases]]
 suite = "star"
 case = "make_o_ne_wd"
-status = "unported"
+status = "ported"
 digest = "66d8fe751688234d5fd13d79968b4df0b42473861d85d4b8ca37bed61dd2967e"
-issue = "#231"
 
 [[cases]]
 suite = "star"
@@ -379,23 +364,20 @@ issue = "#231"
 [[cases]]
 suite = "star"
 case = "make_zams"
-status = "unported"
+status = "stock"
 digest = "506d0aac408f309287ac27f7bc3ca449cb309f7ce73379c95e348ac4228c7902"
-issue = "#231"
 
 [[cases]]
 suite = "star"
 case = "make_zams_low_mass"
-status = "unported"
+status = "stock"
 digest = "506d0aac408f309287ac27f7bc3ca449cb309f7ce73379c95e348ac4228c7902"
-issue = "#231"
 
 [[cases]]
 suite = "star"
 case = "make_zams_ultra_high_mass"
-status = "unported"
+status = "stock"
 digest = "506d0aac408f309287ac27f7bc3ca449cb309f7ce73379c95e348ac4228c7902"
-issue = "#231"
 
 [[cases]]
 suite = "star"
@@ -421,16 +403,14 @@ issue = "#231"
 [[cases]]
 suite = "star"
 case = "other_physics_hooks"
-status = "unported"
+status = "ported"
 digest = "954882f16bd7e4ecaabde44de7d1defd8890664dfc658b2b431f0e9b6d7763c6"
-issue = "#231"
 
 [[cases]]
 suite = "star"
 case = "pisn"
-status = "unported"
+status = "ported"
 digest = "671bb9ec338e2a07a8d7ef3d7fc81913ea8841cc5ac657132a8d463adf97b4d7"
-issue = "#231"
 
 [[cases]]
 suite = "star"
@@ -549,30 +529,26 @@ digest = "cdef7b57daff6676e9925c5fe0007af08344d8ee2b39a1a7d77920ac222183b4"
 [[cases]]
 suite = "star"
 case = "tzo"
-status = "unported"
+status = "ported"
 digest = "7c5c9d25dd8d864bc00ba46c11ceb95f1f4f696084a6ec65f5be49219a80b19f"
-issue = "#231"
 
 [[cases]]
 suite = "star"
 case = "wd_acc_small_dm"
-status = "unported"
+status = "ported"
 digest = "7d75b8170807ce58e0c065b076b13ca1102d04ba6bb4e8dbbb21822e5c9935fd"
-issue = "#231"
 
 [[cases]]
 suite = "star"
 case = "wd_aic"
-status = "unported"
+status = "ported"
 digest = "83af033802e03ca12c5f9c0ad4b71d051596d63c5b349280364c6e6169f87949"
-issue = "#231"
 
 [[cases]]
 suite = "star"
 case = "wd_c_core_ignition"
-status = "unported"
+status = "stock"
 digest = "ac62d4397d7617eb25e31531a0e81b981c27965a32c5a09430e9084db5639ddc"
-issue = "#231"
 
 [[cases]]
 suite = "star"

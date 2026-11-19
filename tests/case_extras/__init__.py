@@ -87,9 +87,31 @@ def extras_source_digest(case_dir: pathlib.Path | str) -> str:
 # shared `test_suite_startup` / `test_suite_after_evolve` timing helpers.
 STOCK_EXTRAS_DIGESTS: frozenset[str] = frozenset(
     {
-        # star/test_suite/1.3M_ms_high_Z and 12 cases with identical text.
+        # star/test_suite/1.3M_ms_high_Z/src/run_star_extras.f90:1-155 and 12
+        # cases with identical normalized text.
         "4b7b570f3a144678fa67d368b2c5b485ad89e03f9b43abe8575c1635939c1a5a",
-        # binary/test_suite/evolve_both_stars and 2 cases with identical text.
+        # star/test_suite/make_zams/src/run_star_extras.f90:1-166,
+        # make_zams_low_mass, and make_zams_ultra_high_mass (adds no-op
+        # extras_start_step = 0).
+        "506d0aac408f309287ac27f7bc3ca449cb309f7ce73379c95e348ac4228c7902",
+        # star/test_suite/high_z/src/run_star_extras.f90:1-157 (unused local
+        # real(dp) :: Mass in extras_after_evolve).
+        "cee123d06d0473df8468de41c0b53c508ca76ecbb347e8ae08e00caa640ec426",
+        # star/test_suite/7M_prems_to_AGB/src/run_star_extras.f90:1-158 (unused
+        # local character(len=strlen) :: test in extras_after_evolve).
+        "809c0bcd009192cf71888bd476fb2dc94f77e1a190c914ba2b37dba790032faf",
+        # star/test_suite/wd_c_core_ignition/src/run_star_extras.f90:1-154
+        # (duplicate ierr = 0 before test_suite_after_evolve).
+        "ac62d4397d7617eb25e31531a0e81b981c27965a32c5a09430e9084db5639ddc",
+        # star/test_suite/16M_conv_premix/src/run_star_extras.f90:1-157 and
+        # 16M_predictive_mix (unused use chem_def in extras_finish_step).
+        "dc0c5abaf8ce92977981d709bc64664c21ec2f5fe5ba74ab443bd14b681c61fe",
+        # star/test_suite/custom_colors/src/run_star_extras.f90:1-256 (standard
+        # template with dead `if (.false. .and. ...)` example block and zero
+        # extra columns or header items).
+        "5b83f1aa177d576018f1e32c7c068439fd4ff4066a1a70c5f83b1dc4865bb175",
+        # binary/test_suite/evolve_both_stars/src/run_binary_extras.f90 and 2
+        # cases with identical normalized text.
         "f4e8cb4d5f84304947b6a817879063dc65c04cacca90bba857f07fd50020e440",
     }
 )

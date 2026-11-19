@@ -12,7 +12,7 @@ from typing import Any
 
 import numpy as np
 
-from flexmesa.plotting import style
+from flexmesa.plotting import _plot_support, style
 
 
 def plot_hr_diagram(
@@ -223,17 +223,11 @@ def plot_kippenhahn(
             "\\mathrm{erg\\,g^{-1}\\,s^{-1}})$]"
         )
 
-    ax.contourf(
-        t_arr,
-        m_arr,
-        (mix_arr == 1.0).astype(np.float64),
-        levels=[0.5, 1.5],
-        colors=["none"],
-        hatches=["///"],
-        zorder=2,
+    handles: list[Any] = list(
+        _plot_support.render_mixing_grid_layers(ax, t_arr, m_arr, mix_arr)
     )
     if total_mass_msun is not None:
-        ax.plot(
+        (ln_m,) = ax.plot(
             t_arr,
             np.asarray(total_mass_msun, dtype=np.float64),
             color=style.OKABE_ITO["black"],
@@ -241,7 +235,9 @@ def plot_kippenhahn(
             label="Surface Mass [$M(t)$]",
             zorder=3,
         )
-        ax.legend(loc="upper right", frameon=False)
+        handles.append(ln_m)
+    if handles:
+        ax.legend(handles=handles, loc="upper right", frameon=False)
 
     ax.set_xlabel("Stellar Age [$\\mathrm{Myr}$]")
     ax.set_ylabel("Enclosed Mass [$M_r / M_\\odot$]")

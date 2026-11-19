@@ -634,6 +634,56 @@ reason = "Skye/HELM operation order causes 10 d_dlnT channels to exceed 5.0e-11 
 
 [[test_gaps]]
 kind = "rust_ignore"
+crate = "flexmesa-eos"
+file = "crates/flexmesa-eos/tests/wave3a3_pc_tests.rs"
+test_name = "test_pc_liquid_and_transition_regimes_match_mesa_26_4_1_unwidened"
+issue = "#161"
+role = "physics_gap"
+expect_fail_when_run = true
+reason = "PC evaluates analytical EXCOR7 whereas MESA pc_eos.f90:1895 interpolates EXCOR7.data via bicubic splines (use_EXCOR7_table = .true.); 9 entries exceed 1.0e-11/5.0e-9 (max rel_err 7.123e-6)."
+
+[[test_gaps]]
+kind = "rust_ignore"
+crate = "flexmesa-eos"
+file = "crates/flexmesa-eos/tests/wave3a3_pc_solid_tests.rs"
+test_name = "test_pc_solid_and_blend_regimes_match_mesa_26_4_1_unwidened"
+issue = "#161"
+role = "physics_gap"
+expect_fail_when_run = true
+reason = "PC evaluates analytical EXCOR7 whereas MESA pc_eos.f90:1895 interpolates EXCOR7.data via bicubic splines; solid/blend derivatives differ up to 2.513e-6 >= 5.0e-9."
+
+[[test_gaps]]
+kind = "rust_ignore"
+crate = "flexmesa-eos"
+file = "crates/flexmesa-eos/tests/wave3a3_skye_inverse_tests.rs"
+test_name = "test_skye_liquid_and_blend_match_mesa_26_4_1_unwidened"
+issue = "#161"
+role = "physics_gap"
+expect_fail_when_run = true
+reason = "Skye/HELM operation order on liquid and blend cases causes derivative channels to exceed 1.0e-12/1.0e-11/1.0e-8 (max rel_err 1.101e-6)."
+
+[[test_gaps]]
+kind = "rust_ignore"
+crate = "flexmesa-eos"
+file = "crates/flexmesa-eos/tests/wave3a3_skye_inverse_tests.rs"
+test_name = "test_skye_alfa_simple_default_bounds_match_mesa_26_4_1_unwidened"
+issue = "#161"
+role = "physics_gap"
+expect_fail_when_run = true
+reason = "SkyeConfig::default() uses f64 2.3/2.4/7.2/7.4 bounds whereas MESA eos/defaults/eos.defaults:225-228 writes real(4) literals (d_alfa_dlogRho -5.0 vs -4.999990463273898, diff 9.537e-6)."
+
+[[test_gaps]]
+kind = "rust_ignore"
+crate = "flexmesa-eos"
+file = "crates/flexmesa-eos/tests/wave3b1_golden_tests.rs"
+test_name = "test_cms_default_config_matches_mesa_26_4_1_default_radiation"
+issue = "#161"
+role = "physics_gap"
+expect_fail_when_run = true
+reason = "CmsConfig::default().include_radiation is false whereas MESA eos/defaults/eos.defaults:163 sets include_radiation = .true. (dS_dT -1984.67 vs +1525.74)."
+
+[[test_gaps]]
+kind = "rust_ignore"
 crate = "flexmesa-binary"
 file = "crates/flexmesa-binary/tests/tier5_coupled_suite.rs"
 test_name = "test_uncapped_jdot_gr_check_campaign"
@@ -760,3 +810,30 @@ issue = "#153"
 role = "physics_gap"
 expect_fail_when_run = true
 reason = "MESA 26.4.1 star/test remeshes 2464 -> 992 zones at step 2; log_cntr_Rho differs by 1.11e-3 > 1.0e-3 at step 11."
+
+[[test_gaps]]
+kind = "python_xfail"
+file = "tests/test_eos_wave3a3.py"
+test_name = "test_skye_alfa_simple_default_bounds_match_mesa_26_4_1_real4"
+issue = "#161"
+role = "physics_gap"
+expect_fail_when_run = true
+reason = "get_skye_alfa_simple uses f64 2.3/2.4/7.2/7.4 defaults whereas MESA eos/defaults/eos.defaults:225-228 writes real(4) literals (diff 9.537e-6)."
+
+[[test_gaps]]
+kind = "python_xfail"
+file = "tests/test_eos_wave3b1.py"
+test_name = "test_get_t_logp_matches_early_stopped_upstream_iterate"
+issue = "#161"
+role = "physics_gap"
+expect_fail_when_run = true
+reason = "Python eos.eos_dt_get_t does not yet expose logT_tol/other_tol; MESA eos/test/test_output:395 passes tol=1.0e-5 and stops one Newton step earlier at 4.8009613155595554."
+
+[[test_gaps]]
+kind = "python_xfail"
+file = "tests/test_eos_wave3b1.py"
+test_name = "test_eval_cms_eos_default_matches_mesa_26_4_1_default_radiation"
+issue = "#161"
+role = "physics_gap"
+expect_fail_when_run = true
+reason = "eval_cms_eos defaults include_radiation=False whereas MESA eos/defaults/eos.defaults:163 sets include_radiation = .true."

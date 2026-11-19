@@ -62,18 +62,30 @@ def _copy_src_only(case_name: str, dst_dir: pathlib.Path) -> pathlib.Path:
 def test_batch2_ported_cases_resolve_by_fortran_content_only(
     tmp_path: pathlib.Path, case_name: str, expected_cls: type[Any]
 ) -> None:
-    """Batch 2 handlers attach from Fortran source content under any folder."""
+    """Handlers match from Fortran text only; unserved ones are not attached.
+
+    A handler outside `ADAPTER_SERVED_STAR_HANDLERS` reads state the adapter
+    does not provide, so it is matched but not attached and its case stays
+    `unported`.
+    """
+    served = expected_cls.__name__ in case_extras.ADAPTER_SERVED_STAR_HANDLERS
     orig = harness_runner.resolve_case_dir("star", case_name)
-    assert case_extras.classify_case_extras("star", orig) == "ported"
-    assert isinstance(
-        case_extras.resolve_case_extras("star", orig), expected_cls
+    assert case_extras.classify_case_extras("star", orig) == (
+        "ported" if served else "unported"
     )
+    assert isinstance(case_extras.match_case_extras("star", orig), expected_cls)
     moved = _copy_src_only(case_name, tmp_path / "renamed_batch2_case")
     assert isinstance(
-        case_extras.resolve_case_extras("star", moved), expected_cls
+        case_extras.match_case_extras("star", moved), expected_cls
     )
+    for case_dir in (orig, moved):
+        attached = case_extras.resolve_case_extras("star", case_dir)
+        if served:
+            assert isinstance(attached, expected_cls)
+        else:
+            assert attached is None
     (moved / "src" / "run_star_extras.f90").unlink()
-    assert case_extras.resolve_case_extras("star", moved) is None
+    assert case_extras.match_case_extras("star", moved) is None
 
 
 def test_extras_status_ledger_matches_generated_output() -> None:
@@ -688,7 +700,7 @@ def test_high_rot_darkening_and_semiconvection_checks() -> None:
 def test_batch2_live_py_star_extras_adapter_execution_and_loud_key_error(
     tmp_path: pathlib.Path,
 ) -> None:
-    """`R_CrB_star` steps live and `hb_2M` propagates missing-key error."""
+    """`R_CrB_star` steps live; the unserved `hb_2M` hook is not attached."""
     rcrb_dir = harness_runner.resolve_case_dir("star", "R_CrB_star")
     rep = harness_runner.run_trace_inprocess(
         "star",
@@ -700,16 +712,20 @@ def test_batch2_live_py_star_extras_adapter_execution_and_loud_key_error(
     )
     assert rep["total_steps"] == 4
 
+    # The `hb_2M` handler reads `center_he4` in `extras_finish_step`, which
+    # the adapter snapshot does not carry there, so it is not attached and
+    # the case runs with default hooks.
     hb_dir = harness_runner.resolve_case_dir("star", "hb_2M")
-    with pytest.raises(ValueError, match="center_he4"):
-        harness_runner.run_trace_inprocess(
-            "star",
-            hb_dir,
-            tmp_path / "out_hb_2m",
-            max_steps=2,
-            allow_unsupported_controls=True,
-            extras_factory="tests.case_extras:resolve_case_extras",
-        )
+    assert case_extras.resolve_case_extras("star", hb_dir) is None
+    rep_hb = harness_runner.run_trace_inprocess(
+        "star",
+        hb_dir,
+        tmp_path / "out_hb_2m",
+        max_steps=2,
+        allow_unsupported_controls=True,
+        extras_factory="tests.case_extras:resolve_case_extras",
+    )
+    assert rep_hb["total_steps"] == 2
 
 
 def test_batch2_handlers_raise_key_error_on_missing_snapshot_fields() -> None:

@@ -227,6 +227,11 @@
       "number": 228,
       "title": "Align module and star defaults with MESA 26.4.1 *.defaults (#149)",
       "draft": true
+    },
+    {
+      "number": 229,
+      "title": "fix(extras): make test-side hooks follow upstream and remove case routes from the library (#148)",
+      "draft": false
     }
   ],
   "deferred_169": [

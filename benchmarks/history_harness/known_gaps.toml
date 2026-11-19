@@ -418,7 +418,7 @@ reason = "Nonlinear RSP luminosity and Teff exceed strict tolerances over multip
 suite = "star"
 case = "rsp_gyre"
 issue = "#170"
-reason = "Depends on bundled GYRE linear modes in run_star_extras (#170)."
+reason = "Upstream run_star_extras calls GYRE for the initial velocities; GYRE is not ported, so the test-side hook raises and the run does not start (#170)."
 
 [[gaps]]
 suite = "star"

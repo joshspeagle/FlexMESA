@@ -745,7 +745,7 @@ suite = "binary"
 case = "jdot_gr_check"
 reference_status = "mesa_26_4_1"
 reference_path = "benchmarks/history_harness/reference_histories/binary/jdot_gr_check.data"
-required_termination = "max_age|extras_binary_finish_step"
+required_termination = "extras_binary_check_model"
 
 [[cases]]
 suite = "binary"
@@ -759,7 +759,7 @@ suite = "binary"
 case = "jdot_ml_check"
 reference_status = "mesa_26_4_1"
 reference_path = "benchmarks/history_harness/reference_histories/binary/jdot_ml_check.data"
-required_termination = "max_age|extras_binary_finish_step"
+required_termination = "max_age"
 
 [[cases]]
 suite = "binary"

@@ -671,7 +671,7 @@ def test_batch3_binary_jdot_ls_and_wind_fed_bhhmxb(
     tmp_path: pathlib.Path,
 ) -> None:
     """Verify `JdotLsCheckBinaryExtras`, `WindFedBhHmxbBinaryExtras`, and
-    unserved live detachment on `binary/jdot_ls_check`.
+    live adapter attachment on `binary/jdot_ls_check`.
     """
     jls = binary_extras.JdotLsCheckBinaryExtras()
     omega = 2.0 * constants.PI / constants.SECDAY
@@ -738,7 +738,10 @@ def test_batch3_binary_jdot_ls_and_wind_fed_bhhmxb(
         )
 
     jls_dir = harness_runner.resolve_case_dir("binary", "jdot_ls_check")
-    assert case_extras.resolve_case_extras("binary", jls_dir) is None
+    assert isinstance(
+        case_extras.resolve_case_extras("binary", jls_dir),
+        binary_extras.JdotLsCheckBinaryExtras,
+    )
     rep = harness_runner.run_trace_inprocess(
         "binary",
         jls_dir,

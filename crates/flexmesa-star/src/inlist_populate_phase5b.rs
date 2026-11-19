@@ -230,8 +230,6 @@ impl InlistBundle {
             mesh_adjust_get_t_from_e, mesh_ok_to_merge,
             trace_mesh_adjust_error_in_conservation,
             restore_mesh_on_retry,
-            use_other_mesh_functions,
-            use_other_mesh_delta_coeff_factor,
             use_hydro_merge_limits_in_mesh_plan,
             use_split_merge_amr,
             split_merge_amr_logtau_zoning,

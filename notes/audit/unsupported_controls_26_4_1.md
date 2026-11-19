@@ -19,7 +19,7 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 | `&star_job` | 455 | 106 | 16 | 3 | 5 | 325 |
 | `&eos` | 102 | 5 | 0 | 0 | 0 | 97 |
 | `&kap` | 51 | 6 | 0 | 0 | 0 | 45 |
-| `&controls` | 1448 | 759 | 28 | 0 | 10 | 651 |
+| `&controls` | 1448 | 759 | 26 | 0 | 10 | 653 |
 | `&binary_job` | 37 | 6 | 0 | 1 | 0 | 30 |
 | `&binary_controls` | 176 | 115 | 0 | 0 | 0 | 61 |
 | `&astero_search_controls` | 153 | 88 | 3 | 0 | 0 | 62 |

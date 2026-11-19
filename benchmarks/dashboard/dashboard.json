@@ -21,7 +21,7 @@
         "verified_total": 0,
         "pct_ported": 20.8,
         "pct_verified": 0.0,
-        "rust_lines": 61017,
+        "rust_lines": 61013,
         "python_jax_lines": 3869
       },
       {
@@ -595,7 +595,7 @@
         "no_reference_yet": 4,
         "strict_validated": 0,
         "diagnostic_runs": 90,
-        "reached_termination": 39,
+        "reached_termination": 37,
         "within_numeric_tol": 5,
         "passing": 0,
         "declared_gaps": 86,
@@ -607,8 +607,8 @@
         "no_reference_yet": 0,
         "strict_validated": 0,
         "diagnostic_runs": 8,
-        "reached_termination": 4,
-        "within_numeric_tol": 0,
+        "reached_termination": 6,
+        "within_numeric_tol": 2,
         "passing": 0,
         "declared_gaps": 8,
         "undeclared_failures": 0
@@ -651,6 +651,16 @@
         "suite": "star",
         "case": "rsp_save_and_load_file",
         "issue": "#161"
+      },
+      {
+        "suite": "binary",
+        "case": "jdot_ls_check",
+        "issue": "#160"
+      },
+      {
+        "suite": "binary",
+        "case": "jdot_ml_check",
+        "issue": "#160"
       },
       {
         "suite": "astero",

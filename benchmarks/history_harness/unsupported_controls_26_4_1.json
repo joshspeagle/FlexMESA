@@ -47,10 +47,10 @@
       "section": "controls",
       "upstream_keys": 1448,
       "supported_keys": 759,
-      "unused_keys": 28,
+      "unused_keys": 26,
       "headless_gui_keys": 0,
       "terminal_output_keys": 10,
-      "unimplemented_upstream_keys": 651
+      "unimplemented_upstream_keys": 653
     },
     {
       "section": "binary_job",
@@ -2907,7 +2907,7 @@
     {
       "section": "controls",
       "key": "use_other_mesh_functions",
-      "category": "unused",
+      "category": "unimplemented",
       "case_count": 2,
       "cases": [
         "star/other_physics_hooks",
@@ -4054,7 +4054,7 @@
     {
       "section": "controls",
       "key": "use_other_mesh_delta_coeff_factor",
-      "category": "unused",
+      "category": "unimplemented",
       "case_count": 1,
       "cases": [
         "star/1M_pre_ms_to_wd"
@@ -9413,7 +9413,7 @@
       "unsupported_controls": [
         "controls::photo_interval::unimplemented",
         "controls::t_mix_limit::unimplemented",
-        "controls::use_other_mesh_delta_coeff_factor::unused",
+        "controls::use_other_mesh_delta_coeff_factor::unimplemented",
         "star_job::change_d_omega_flag::unimplemented",
         "star_job::new_d_omega_flag::unimplemented",
         "star_job::required_termination_code_string::unused"
@@ -10957,7 +10957,7 @@
       ],
       "unsupported_controls": [
         "controls::photo_interval::unimplemented",
-        "controls::use_other_mesh_functions::unused"
+        "controls::use_other_mesh_functions::unimplemented"
       ],
       "unknown_controls": [],
       "headless_plotting_keys_count": 0,
@@ -11515,7 +11515,7 @@
         "controls::diffusion_use_isolve::unimplemented",
         "controls::do_diffusion_heating::unimplemented",
         "controls::photo_interval::unimplemented",
-        "controls::use_other_mesh_functions::unused",
+        "controls::use_other_mesh_functions::unimplemented",
         "star_job::set_cumulative_energy_error_each_step_if_age_less_than::unimplemented"
       ],
       "unknown_controls": [],

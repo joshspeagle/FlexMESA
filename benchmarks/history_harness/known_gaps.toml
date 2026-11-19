@@ -749,8 +749,8 @@ file = "crates/flexmesa-astero/tests/astero_suite.rs"
 test_name = "test_fast_from_file_uncapped"
 issue = "#162"
 role = "campaign"
-expect_fail_when_run = false
-reason = "Long-running uncapped astero from_file campaign tracked under #162 and scheduled campaign CI."
+expect_fail_when_run = true
+reason = "Since the defaults change in PR #228 every track of the uncapped astero from_file search stops on limit_num_chi2_too_big (samples=2, best chi2 6.81), which the report's internal pass flag rejects; measured by the campaign run on 986a6aa (issue #257). No MESA 26.4.1 reference exists for this case, so whether upstream stops the same way is not known (#162)."
 
 [[test_gaps]]
 kind = "rust_ignore"
@@ -759,8 +759,8 @@ file = "crates/flexmesa-astero/tests/astero_suite.rs"
 test_name = "test_fast_scan_grid_uncapped"
 issue = "#162"
 role = "campaign"
-expect_fail_when_run = false
-reason = "Long-running uncapped astero scan_grid campaign tracked under #162 and scheduled campaign CI."
+expect_fail_when_run = true
+reason = "Since the defaults change in PR #228 every track of the uncapped astero scan_grid search stops on limit_num_chi2_too_big (samples=4, best chi2 2.80), which the report's internal pass flag rejects; measured by the campaign run on 986a6aa (issue #257). No MESA 26.4.1 reference exists for this case, so whether upstream stops the same way is not known (#162)."
 
 [[test_gaps]]
 kind = "rust_ignore"

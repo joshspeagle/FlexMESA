@@ -16,6 +16,7 @@ fn test_binary_history_header_records_numerics_mode() {
     let c1 = StarControls {
         initial_mass: 2.0,
         initial_z: 0.02,
+        zbase: 0.02,
         ..StarControls::default()
     };
     let mut c2 = c1.clone();

@@ -81,19 +81,19 @@ pub struct MeshFunctionConfig {
 impl Default for MeshFunctionConfig {
     fn default() -> Self {
         Self {
-            p_function_weight: 30.0,
+            p_function_weight: 40.0,
             t_function1_weight: 110.0,
             r_function_weight: 0.0,
             r_function_param: 1.0e-4,
             m_function_weight: 0.0,
-            m_function_param: 1.0e-2,
+            m_function_param: 1.0e-6,
             grad_function_weight: 0.0,
             omega_function_weight: 0.0,
             gam_function_weight: 0.0,
             gam_function_param1: 170.0,
             gam_function_param2: 20.0,
-            xa_function_weight: 20.0,
-            xa_function_param: 1.0e-3,
+            xa_function_weight: 30.0,
+            xa_function_param: 1.0e-2,
             min_dq: 1.0e-12,
             max_dq: 1.0e-1,
             min_dq_for_split: 1.0e-14,
@@ -102,8 +102,8 @@ impl Default for MeshFunctionConfig {
             mesh_min_dlnr: 1.0e-9,
             mesh_max_allowed_ratio: 2.5,
             max_delta_x_for_merge: 0.1,
-            max_surface_cell_dq: 1.0,
-            max_center_cell_dq: 1.0,
+            max_surface_cell_dq: 1.0e-12,
+            max_center_cell_dq: 1.0e-7,
         }
     }
 }
@@ -124,20 +124,20 @@ impl MeshFunctionConfig {
             .iter()
             .copied()
             .find(|&p| p > 0.0)
-            .unwrap_or(1.0e-3);
+            .unwrap_or(1.0e-2);
         Self {
             p_function_weight: mw.p_function_weight,
             t_function1_weight: mw.t_function1_weight,
             r_function_weight: mw.r_function_weight,
             r_function_param: def.r_function_param,
             m_function_weight: mw.m_function_weight,
-            m_function_param: def.m_function_param,
+            m_function_param: mw.m_function_param,
             grad_function_weight: mw.gradt_function_weight,
             omega_function_weight: mw.omega_function_weight,
             gam_function_weight: mw.gam_function_weight,
             gam_function_param1: def.gam_function_param1,
             gam_function_param2: def.gam_function_param2,
-            xa_function_weight: if max_xa_w > 0.0 { max_xa_w } else { 20.0 },
+            xa_function_weight: max_xa_w,
             xa_function_param: xa_p,
             min_dq: mw.min_dq,
             max_dq: mw.max_dq,
@@ -171,6 +171,42 @@ fn eval_mesh_gval_parts(
     let a_m = cfg.m_function_param.max(1.0e-30);
     let x0 = cfg.xa_function_param.max(1.0e-30);
     let gam_w = cfg.gam_function_param2.max(1.0);
+    let per_species_xa: Option<Vec<(usize, f64, f64)>> = if *cfg
+        == MeshFunctionConfig::from_controls(&model.controls)
+        && !model.controls.mix_wind.xa_function_species.is_empty()
+    {
+        let mw = &model.controls.mix_wind;
+        let items = mw
+            .xa_function_species
+            .iter()
+            .enumerate()
+            .filter_map(|(i, sp)| {
+                let name = sp.trim();
+                if name.is_empty() {
+                    return None;
+                }
+                let w = mw.xa_function_weight.get(i).copied().unwrap_or(0.0);
+                if w <= 0.0 {
+                    return None;
+                }
+                let j = model
+                    .iso_names
+                    .iter()
+                    .position(|n| n.eq_ignore_ascii_case(name))?;
+                let p = mw
+                    .xa_function_param
+                    .get(i)
+                    .copied()
+                    .filter(|&v| v > 0.0)
+                    .unwrap_or(1.0e-2)
+                    .max(1.0e-30);
+                Some((j, w, p))
+            })
+            .collect();
+        Some(items)
+    } else {
+        None
+    };
     let mut g_struct = vec![0.0; nz];
     let mut g_xa = vec![0.0; nz];
 
@@ -225,7 +261,17 @@ fn eval_mesh_gval_parts(
             max_struct =
                 max_struct.max(cfg.gam_function_weight * (f0 - f1).abs());
         }
-        if cfg.xa_function_weight > 0.0 {
+        if let Some(specs) = per_species_xa.as_deref() {
+            for &(j, w, x0_sp) in specs {
+                let x_k = model.xa[k * model.species + j];
+                let x_k1 = model.xa[k1 * model.species + j];
+                let df = w
+                    * (flexmesa_math::log10(x_k + x0_sp)
+                        - flexmesa_math::log10(x_k1 + x0_sp))
+                    .abs();
+                max_xa = max_xa.max(df);
+            }
+        } else if cfg.xa_function_weight > 0.0 {
             for j in 0..model.species {
                 let x_k = model.xa[k * model.species + j];
                 let x_k1 = model.xa[k1 * model.species + j];

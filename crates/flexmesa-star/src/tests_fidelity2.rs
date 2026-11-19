@@ -31,10 +31,17 @@ use crate::struct_burn_mix::solve_omega_mix;
 use crate::winds::{eval_dutch_wind, eval_nugis_lamers_wind, DutchLowTScheme};
 use crate::zams::load_zams_model;
 
+fn solar_zams_controls() -> StarControls {
+    StarControls {
+        zbase: 0.02,
+        ..StarControls::default()
+    }
+}
+
 #[test]
 fn test_brunt_b_brassard_eos_finite_difference_and_gradmux_forms() {
     let mut model =
-        load_zams_model(StarControls::default(), StarJobControls::default())
+        load_zams_model(solar_zams_controls(), StarJobControls::default())
             .expect("load 1 Msun ZAMS");
     set_hydro_vars(&mut model, true, true).expect("set_hydro_vars");
 
@@ -112,7 +119,7 @@ fn test_brunt_b_brassard_eos_finite_difference_and_gradmux_forms() {
 #[test]
 fn test_eval_face_mlt_semiconvection_thermohaline_and_tdc_dispatch() {
     let mut model =
-        load_zams_model(StarControls::default(), StarJobControls::default())
+        load_zams_model(solar_zams_controls(), StarJobControls::default())
             .expect("load 1 Msun ZAMS");
     set_hydro_vars(&mut model, true, true).expect("set_hydro_vars");
 
@@ -170,6 +177,7 @@ fn test_eval_face_mlt_semiconvection_thermohaline_and_tdc_dispatch() {
         .expect("convective face in 1 Msun ZAMS");
     model.controls.mlt_option = MltOption::Tdc;
     model.dt = 1.0e4;
+    model.aux.have_mlt_vc = true;
     model.aux.mlt_vc_old[k_conv] = model.mlt_vc[k_conv].max(1.0e3);
     set_mlt_vars(&mut model).expect("set_mlt_vars with TDC");
     assert_eq!(model.mixing_type[k_conv], MixingType::ConvectiveMixing);
@@ -179,7 +187,7 @@ fn test_eval_face_mlt_semiconvection_thermohaline_and_tdc_dispatch() {
 #[test]
 fn test_eval_face_mlt_and_brunt_n2_rotational_fp_ft_coupling() {
     let mut model =
-        load_zams_model(StarControls::default(), StarJobControls::default())
+        load_zams_model(solar_zams_controls(), StarJobControls::default())
             .expect("load 1 Msun ZAMS");
     model.controls.calculate_brunt_n2 = true;
     set_hydro_vars(&mut model, true, true)
@@ -229,7 +237,7 @@ fn test_eval_face_mlt_and_brunt_n2_rotational_fp_ft_coupling() {
 #[test]
 fn test_eval_surf_bc_simple_photosphere_pextra_and_ad_partials() {
     let mut model =
-        load_zams_model(StarControls::default(), StarJobControls::default())
+        load_zams_model(solar_zams_controls(), StarJobControls::default())
             .expect("load 1 Msun ZAMS");
     set_hydro_vars(&mut model, true, true).expect("set_hydro_vars");
 
@@ -330,7 +338,7 @@ fn test_eval_surf_bc_simple_photosphere_pextra_and_ad_partials() {
 #[test]
 fn test_do_kap_multi_isotope_cno_and_nugis_lamers_and_omega_mix() {
     let mut model =
-        load_zams_model(StarControls::default(), StarJobControls::default())
+        load_zams_model(solar_zams_controls(), StarJobControls::default())
             .expect("load 1 Msun ZAMS");
     change_model_network(&mut model, "cno_extras_o18_and_ne22.net", None)
         .expect("change network to cno_extras_o18_and_ne22.net");

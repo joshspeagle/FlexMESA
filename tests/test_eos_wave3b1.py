@@ -439,7 +439,7 @@ def test_standalone_4d_tables_and_pt_get_t_match_mesa_26_4_1_oracle() -> None:
                 1.0e-13,
             ),
             (
-                "cms_solar_1em2_1e5_norad",
+                "cms_solar_1em2_1e5",
                 eos.eval_cms_eos,
                 1.0e-2,
                 1.0e5,
@@ -522,22 +522,31 @@ def test_standalone_4d_tables_and_pt_get_t_match_mesa_26_4_1_oracle() -> None:
         )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "declared gap (#161): eval_cms_eos defaults include_radiation=False "
-        "vs MESA eos/defaults/eos.defaults:163 include_radiation=.true."
-    ),
-)
 def test_eval_cms_eos_default_matches_mesa_26_4_1_default_radiation() -> None:
-    """Check `eval_cms_eos` default radiation behavior against MESA `26.4.1`."""
+    """Check `eval_cms_eos` default and `norad` against MESA `26.4.1`."""
     cids, xa = _solar_composition()
     exp_cms = _load_eos_case("cms_solar_1em2_1e5")
+    exp_norad = _load_eos_case("cms_solar_1em2_1e5_norad")
     with flexmesa.numerics_mode_context("strict"):
         out_r = eos.eval_cms_eos(1.0e-2, 1.0e5, cids, xa, backend="rust")
+        out_nr = eos.eval_cms_eos(
+            1.0e-2, 1.0e5, cids, xa, include_radiation=False, backend="rust"
+        )
+    out_nj = eos.eval_cms_eos(
+        jnp.float64(1.0e-2),
+        jnp.float64(1.0e5),
+        cids,
+        jnp.asarray(xa),
+        include_radiation=False,
+        backend="jax",
+    )
     np.testing.assert_allclose(
         np.asarray(out_r.res), exp_cms[:, 0], rtol=1.0e-12, atol=1.0e-14
     )
+    for out_n in (out_nr, out_nj):
+        np.testing.assert_allclose(
+            np.asarray(out_n.res), exp_norad[:, 0], rtol=1.0e-12, atol=1.0e-14
+        )
 
 
 def test_eos_pt_get_jax_ift_jvp_matches_finite_differences() -> None:

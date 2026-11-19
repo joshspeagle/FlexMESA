@@ -19,9 +19,14 @@ fn test_flexmesa_step_trace_emits_valid_jsonl_records() {
     std::env::set_var("FLEXMESA_STEP_TRACE", "1");
     std::env::set_var("FLEXMESA_STEP_TRACE_FILE", &trace_path);
 
-    let mut model =
-        load_zams_model(StarControls::default(), StarJobControls::default())
-            .expect("load 1 Msun ZAMS");
+    let mut model = load_zams_model(
+        StarControls {
+            zbase: 0.02,
+            ..StarControls::default()
+        },
+        StarJobControls::default(),
+    )
+    .expect("load 1 Msun ZAMS");
     set_hydro_vars(&mut model, false, false).expect("set_hydro_vars");
     star_evolve_step(&mut model, false, false, true).expect("evolve step");
 

@@ -212,8 +212,13 @@ fn test_freeeos_opal_cms_and_blended_d_dxa_match_central_fd() {
         2.0e-5,
     );
 
-    // 3. CMS H/He table (linear X interpolation -> exact to machine precision)
-    let ccfg = CmsConfig::default();
+    // 3. CMS H/He table (linear X interpolation -> exact to machine precision;
+    //    gas-only d_dxa matches finite-diff with include_radiation = false, per
+    //    upstream eoscms_eval.f90:280-284,302-456)
+    let ccfg = CmsConfig {
+        include_radiation: false,
+        ..CmsConfig::default()
+    };
     let chem_hhe = vec![chem_id[0], chem_id[1]];
     let xa_hhe = vec![0.72, 0.28];
     let rho_c = exp10(0.0);

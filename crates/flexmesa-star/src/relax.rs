@@ -421,7 +421,12 @@ pub fn relax_irradiation_to_target(
     if col_depth > 0.0 {
         model.controls.column_depth_for_irradiation = col_depth;
     }
-    let sigma_max = model.controls.column_depth_for_irradiation.max(1.0);
+    let sigma_max = model.controls.column_depth_for_irradiation;
+    if sigma_max <= 0.0 {
+        model.aux.irradiation_heat.fill(0.0);
+        model.aux.doing_relax = false;
+        return;
+    }
     let mut col_acc = 0.0_f64;
     for k in 0..model.nz {
         let r_k = model.r[k].max(1.0);

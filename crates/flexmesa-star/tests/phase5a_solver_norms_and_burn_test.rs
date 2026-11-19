@@ -17,7 +17,10 @@ fn usize_to_f64(n: usize) -> f64 {
     f64::from(u32::try_from(n).expect("small test zone index fits in u32"))
 }
 
-fn build_compact_zams(nz_target: usize, controls: StarControls) -> StarModel {
+fn build_compact_zams(nz_target: usize, mut controls: StarControls) -> StarModel {
+    if controls.zbase < 0.0 {
+        controls.zbase = 0.02;
+    }
     let full = load_zams_model(controls, StarJobControls::default())
         .expect("1 Msun ZAMS model should load");
     let nz = nz_target.max(4).min(full.nz);
@@ -97,6 +100,7 @@ fn test_coupled_u_flag_hllc_henyey_step_converges_to_strict_residual_tolerances(
         velocity_q_upper_bound: 2.0,
         velocity_tau_lower_bound: -1.0,
         velocity_logt_lower_bound: -1.0,
+        zbase: 0.02,
         ..StarControls::default()
     };
     let mut full_model =
@@ -151,9 +155,14 @@ fn test_coupled_u_flag_hllc_henyey_step_converges_to_strict_residual_tolerances(
 #[test]
 fn test_multi_isotope_approx21_coupled_and_variable_t_const_density_op_split_burn_converge(
 ) {
-    let mut model =
-        load_zams_model(StarControls::default(), StarJobControls::default())
-            .expect("1 Msun ZAMS model should load");
+    let mut model = load_zams_model(
+        StarControls {
+            zbase: 0.02,
+            ..StarControls::default()
+        },
+        StarJobControls::default(),
+    )
+    .expect("1 Msun ZAMS model should load");
     change_model_network(&mut model, "approx21.net", None)
         .expect("switching to 21-isotope approx21.net should succeed");
     assert_eq!(model.species, 21);

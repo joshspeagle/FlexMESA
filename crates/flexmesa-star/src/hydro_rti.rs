@@ -180,8 +180,8 @@ pub fn set_rti_mixing_info(model: &mut StarModel) {
         let area_rho = FOUR_PI * model.r[k] * model.r[k] * rho_f;
         let dm_bar_k = model.dm_bar[k].max(1.0e-30);
         let mut sig_k = mix_fac * eta_k * (area_rho * area_rho) / dm_bar_k;
-        if model.dt > 0.0 {
-            sig_k = sig_k.min(1.0e6 * dm_bar_k / dt);
+        if model.dt > 0.0 && model.controls.sig_term_limit > 0.0 {
+            sig_k = sig_k.min(model.controls.sig_term_limit * dm_bar_k / dt);
         }
         model.aux.sig_rti[k] = sig_k;
     }

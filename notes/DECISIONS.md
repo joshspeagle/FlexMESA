@@ -48,6 +48,7 @@ Scope and the `v0.1.0` definition are in [`SCOPE.md`](SCOPE.md). Work is tracked
 | 31 | Test-Side `extras_factory` Dispatch and Pure-Upstream Library Execution (`#148`) | In force | below |
 | 32 | Unported Upstream Extras Are Declared and Never Pass (`#148`) | In force | below |
 | 33 | Data Pipeline Provenance, Verified Runtime Caches, and Corruption Errors (`#164`) | In force | below |
+| 34 | Upstream MESA 26.4.1 Control Defaults Parity, Scalar Sentinels, and Explicit Opacity Zbase (`#149`) | In force | below |
 
 ## Pre-audit decisions still in force
 
@@ -400,3 +401,18 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
 - **Alternatives Rejected**:
   - *Widening `AESOPUS` to `float64` in `FMKAP001`*: Adds ~45 MB with zero upstream precision gain because `AESOPUS_AGSS09.h5` is natively `float32`.
   - *Silently rebuilding on `FMCENV01` cache mismatch*: Masks filesystem corruption instead of surfacing it (`#164` acceptance criterion).
+
+---
+
+## DECISIONS #34: Upstream MESA 26.4.1 Control Defaults Parity, Scalar Sentinels, and Explicit Opacity Zbase (`Issue #149`)
+
+- **Date**: 2026-11-19
+- **Decision**:
+  1. **Zero-Mismatch Defaults Alignment Enforced in CI**: Align all matched `impl Default` blocks across `star` (`&controls`, `&star_job`, `controls_dev`, `star_job_dev`), `binary`, `astero`, `eos`, and `kap` with MESA `26.4.1`, gated by `scripts/audit/diff_mesa_defaults.py --check --enforce` with an empty `ALLOW_LIST`.
+  2. **Scalar Sentinels & Explicit Rotation Triggers**: Replace `Option<T>` wrappers on the 16 `&controls` and 6 `&star_job` sentinel controls with upstream MESA scalar sentinels (`1e36`, `11.0`, `12.0`, `99.0`, `3e7`, `0.99`, `0.0`, `-1`, `-111`) plus the 6 explicit `set_*` / `set_initial_*` rotation booleans, and bump `FMPHOTO2` checkpoint format version from `20` to `21` (`photo_io.rs`).
+  3. **Explicit `&kap::zbase` Without Silent Cross-Namelist Copy**: Remove non-upstream `initial_z` / `rsp_z` -> `kap_config.zbase` copying and set `StarControls::default().zbase = -1.0`; `&kap::zbase` defaults to `-1`, wind surface-`Z` fallback inspects `kap_config.zbase >= 0` (`winds.f90:336-341`), and both Rust and derived JAX `kap` fail loudly when Type 2, `kapCN`, or `AESOPUS` opacities receive negative `zbase`.
+  4. **Parameterization & TDC State Lifecycle**: Wire hardcoded literals (`sig_term_limit`, `fe56ec_fake_factor`, `min_t_for_fe56ec_fake_factor`, `max_conv_vel_div_csound`, `henyey_mlt_*`, `tdc_alpha_*`, `include_mlt_corr_to_tdc`, `set_min_d_mix`, `clip_d_limit`, `okay_to_remove_mixing_singleton`, `min_*_gap`, `min_thermohaline_dropout`, `remove_embedded_semiconvection`, `m_function_param`, `xa_function_*`), gate `okay_to_set_mlt_vc` across pre-step remeshing, and remap face `mlt_vc` onto `xq` via `interpolate_vector_pm` (`evolve.f90:321,697-700`, `turb_support.f90:314-318`, `mesh_adjust.f90:245-248`).
+- **Why**: Prior FlexMESA defaults (`MLT_option = 'Cox'`, `varcontrol_target = 1e-4`, `screening_mode = 'extended'`, disabled Type 2 opacities, `Option::None` on active MESA limits, and silent `zbase` copying) silently changed evolution trajectories away from upstream MESA `26.4.1` and masked missing `&kap` inputs (`#149`).
+- **Alternatives Rejected**:
+  - *Retaining `Option<T>` wrappers with `None` active defaults*: Keeps MESA's active upper limits and `0.99` rotation wind limit silently disabled when omitted from an inlist.
+  - *Maintaining a non-empty `ALLOW_LIST` for `diff_mesa_defaults.py --enforce`*: Hides parity drift behind permanent exceptions.

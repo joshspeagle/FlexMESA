@@ -960,7 +960,7 @@ pub fn eval_conv_and_mx_summary(model: &StarModel) -> ConvAndMixSummary {
     }
 
     // 2. `set_mass_conv_core` (`report.f90:456-475`).
-    let gap_dq = model.controls.conv_core_gap_dq_limit.unwrap_or(0.0);
+    let gap_dq = model.controls.conv_core_gap_dq_limit.max(0.0);
     let dm_limit = gap_dq * model.xmstar;
     let mut mass_conv_core = 0.0;
     for (j, &(bot_m, top_m)) in cz_regions.iter().enumerate() {

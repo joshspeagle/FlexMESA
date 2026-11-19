@@ -446,8 +446,9 @@ pub(crate) fn relax_pre_ms_to_radiative_core(
         c.mass_change,
         c.use_other_wind,
     ) = (0.0, 2.0, 0.0, false);
-    (c.max_years_for_timestep, c.max_age, c.max_model_number) =
-        (None, None, None);
+    c.max_years_for_timestep = 0.0;
+    c.max_age = 1.0e36;
+    c.max_model_number = None;
     (
         c.reimers_scaling_factor,
         c.blocker_scaling_factor,

@@ -73,21 +73,25 @@ echo "[verify_ci] 3/5 Running Ruff, Mypy (--strict), figures, gates, MkDocs (--s
 test -f "$REPO_ROOT/rust-toolchain.toml"
 "$RUFF_BIN" format --check --line-length 80 "$REPO_ROOT/src" "$REPO_ROOT/tests" \
   "$REPO_ROOT/scripts/docs" \
+  "$REPO_ROOT/scripts/audit/diff_mesa_defaults.py" \
   "$REPO_ROOT/scripts/check_strict_determinism.py" \
   "$REPO_ROOT/scripts/mesa_reference/measure_mesa_spread.py"
 "$RUFF_BIN" check "$REPO_ROOT/src" "$REPO_ROOT/tests" \
   "$REPO_ROOT/scripts/docs" \
+  "$REPO_ROOT/scripts/audit/diff_mesa_defaults.py" \
   "$REPO_ROOT/scripts/check_strict_determinism.py" \
   "$REPO_ROOT/scripts/mesa_reference/measure_mesa_spread.py"
 "$MYPY_BIN" --python-executable "$PYTHON_BIN" --config-file "$REPO_ROOT/pyproject.toml" --strict \
   "$REPO_ROOT/src" "$REPO_ROOT/tests" \
   "$REPO_ROOT/scripts/docs" \
+  "$REPO_ROOT/scripts/audit/diff_mesa_defaults.py" \
   "$REPO_ROOT/scripts/check_strict_determinism.py" \
   "$REPO_ROOT/scripts/mesa_reference/measure_mesa_spread.py"
 PYTHONPATH="$REPO_ROOT/src" "$PYTHON_BIN" -m flexmesa.testing.known_gaps_gate \
   --repo-root "$REPO_ROOT" --fail-on-imperative-skips
 PYTHONPATH="$REPO_ROOT/src" "$PYTHON_BIN" -m flexmesa.testing.module_hex_gate \
   --repo-root "$REPO_ROOT" --check-summary
+"$PYTHON_BIN" "$REPO_ROOT/scripts/audit/diff_mesa_defaults.py" --check --enforce
 "$PYTHON_BIN" "$REPO_ROOT/scripts/docs/render_known_gaps_page.py" --repo-root "$REPO_ROOT" --check
 "$PYTHON_BIN" "$REPO_ROOT/scripts/docs/render_coverage_map_page.py" --repo-root "$REPO_ROOT" --check
 "$PYTHON_BIN" "$REPO_ROOT/scripts/docs/render_pgstar_coverage.py" --repo-root "$REPO_ROOT" --check

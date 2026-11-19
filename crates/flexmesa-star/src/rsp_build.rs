@@ -46,6 +46,16 @@ pub fn do_rsp_build_model(
     kap_config: KapConfig,
     log_dir: Option<&Path>,
 ) -> Result<(StarModel, Option<RspLinaOutput>), StarError> {
+    if controls.rsp_mass <= 0.0
+        || controls.rsp_l <= 0.0
+        || controls.rsp_teff <= 0.0
+        || controls.rsp_x < 0.0
+        || controls.rsp_z < 0.0
+    {
+        return Err(StarError::InvalidInput(String::from(
+            "RSP build requires positive RSP_mass, RSP_L, RSP_Teff and non-negative RSP_X, RSP_Z",
+        )));
+    }
     controls.rsp_flag = true;
     controls.v_flag = true;
     let net_name = if job.change_net && !job.new_net_name.trim().is_empty() {
@@ -318,7 +328,7 @@ pub fn build_rsp_envelope_model(
     mut controls: StarControls,
     job: StarJobControls,
 ) -> Result<StarModel, StarError> {
-    if controls.zbase <= 0.0 || controls.zbase == 0.02 {
+    if controls.zbase < 0.0 {
         controls.zbase = controls.rsp_z;
     }
     let kap = KapConfig {

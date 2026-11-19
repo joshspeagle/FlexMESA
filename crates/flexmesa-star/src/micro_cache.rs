@@ -52,6 +52,8 @@ struct CachedMicroKey {
     eps_nuc_factor_bits: u64,
     dxdt_nuc_factor_bits: u64,
     op_split_burn_min_t_bits: u64,
+    fe56ec_fake_factor_bits: u64,
+    min_t_for_fe56ec_fake_factor_bits: u64,
     lnd: Vec<f64>,
     ln_t: Vec<f64>,
     ln_r: Vec<f64>,
@@ -71,7 +73,7 @@ impl Default for CachedMicroKey {
             net_name: String::new(),
             rsp_flag: false,
             rsp2_flag: false,
-            screening_mode: ScreeningMode::Extended,
+            screening_mode: ScreeningMode::Chugunov,
             eos_config: EosConfig::default(),
             kap_config: KapConfig::default(),
             include_composition_in_eps_grav: false,
@@ -90,6 +92,8 @@ impl Default for CachedMicroKey {
             eps_nuc_factor_bits: 0,
             dxdt_nuc_factor_bits: 0,
             op_split_burn_min_t_bits: 0,
+            fe56ec_fake_factor_bits: 0,
+            min_t_for_fe56ec_fake_factor_bits: 0,
             lnd: Vec::new(),
             ln_t: Vec::new(),
             ln_r: Vec::new(),
@@ -128,6 +132,9 @@ impl CachedMicroKey {
             || self.eps_nuc_factor_bits != c.eps_nuc_factor.to_bits()
             || self.dxdt_nuc_factor_bits != c.dxdt_nuc_factor.to_bits()
             || self.op_split_burn_min_t_bits != c.op_split_burn_min_t.to_bits()
+            || self.fe56ec_fake_factor_bits != c.fe56ec_fake_factor.to_bits()
+            || self.min_t_for_fe56ec_fake_factor_bits
+                != c.min_t_for_fe56ec_fake_factor.to_bits()
             || self.chem_id != model.chem_id
             || self.net_name != model.job.net_name
             || self.eos_config != model.eos_config
@@ -181,6 +188,9 @@ impl CachedMicroKey {
         self.eps_nuc_factor_bits = c.eps_nuc_factor.to_bits();
         self.dxdt_nuc_factor_bits = c.dxdt_nuc_factor.to_bits();
         self.op_split_burn_min_t_bits = c.op_split_burn_min_t.to_bits();
+        self.fe56ec_fake_factor_bits = c.fe56ec_fake_factor.to_bits();
+        self.min_t_for_fe56ec_fake_factor_bits =
+            c.min_t_for_fe56ec_fake_factor.to_bits();
         self.lnd.clone_from(&model.lnd);
         self.ln_t.clone_from(&model.ln_t);
         self.ln_r.clone_from(&model.ln_r);

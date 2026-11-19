@@ -288,7 +288,7 @@ impl Default for RspConfig {
             min_logt_for_opacity_factor_on: -1.0,
             max_logt_for_opacity_factor_on: -1.0,
             max_logt_for_opacity_factor_off: -1.0,
-            atm_t_tau_errtol: 1.0e-4,
+            atm_t_tau_errtol: 1.0e-7,
             atm_t_tau_max_iters: 50,
             max_timestep_factor: 1.2,
             max_timestep: 0.0,

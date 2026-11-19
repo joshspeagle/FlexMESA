@@ -408,9 +408,14 @@ fn test_missing_files_stages_and_removed_clamps_behave_strictly() {
     .expect("write bad retry fac");
     assert!(InlistBundle::from_file(&bad_retry_fac).is_err());
 
-    let mut model =
-        load_zams_model(StarControls::default(), StarJobControls::default())
-            .expect("zams");
+    let mut model = load_zams_model(
+        StarControls {
+            zbase: 0.02,
+            ..StarControls::default()
+        },
+        StarJobControls::default(),
+    )
+    .expect("zams");
     model.controls.ts_stop.timestep_factor_for_retries = 1.2;
     assert!(matches!(
         star_evolve_step(&mut model, false, false, false),

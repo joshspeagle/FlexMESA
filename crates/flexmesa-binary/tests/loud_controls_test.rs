@@ -126,7 +126,7 @@ fn test_binary_missing_inlist2_and_missing_roche_tables_fail_loudly() {
     .expect("write inlist");
     fs::write(
         case_dir.join("inlist1"),
-        "&star_job\n/\n&controls\n  initial_mass = 10.0d0\n  max_model_number = 1\n/\n",
+        "&star_job\n/\n&kap\n  zbase = 0.02d0\n/\n&controls\n  initial_mass = 10.0d0\n  max_model_number = 1\n/\n",
     )
     .expect("write inlist1");
 
@@ -202,9 +202,14 @@ fn test_binary_option_strings_and_removed_clamps_fail_loudly() {
         .evaluate_trial("Arras", 0, 10, 0.0, 0.0, -1.0, -1.0, 0.8)
         .is_err());
 
-    let donor =
-        load_zams_model(StarControls::default(), StarJobControls::default())
-            .expect("zams");
+    let donor = load_zams_model(
+        StarControls {
+            zbase: 0.02,
+            ..StarControls::default()
+        },
+        StarJobControls::default(),
+    )
+    .expect("zams");
     assert!(eval_scheme_explicit_mdot(
         "roche_lobe",
         &donor,

@@ -64,7 +64,7 @@ def test_synthetic_tier3_case_execution_and_photo_restart(
         )
         for sname in ("inlist_star1", "inlist_star2"):
             (case_dir / sname).write_text(
-                "&star_job\n/\n&eos\n/\n&kap\n/\n&controls\n"
+                "&star_job\n/\n&eos\n/\n&kap\n  zbase = 0.02\n/\n&controls\n"
                 "  initial_mass = 20.0\n  initial_z = 0.02\n"
                 "  max_model_number = 2\n/\n",
                 encoding="utf-8",
@@ -79,7 +79,7 @@ def test_synthetic_tier3_case_execution_and_photo_restart(
             "&star_job\n"
             "  save_model_when_terminate = .true.\n"
             "  save_model_filename = 'final.mod'\n"
-            "/\n&eos\n/\n&kap\n/\n&controls\n"
+            "/\n&eos\n/\n&kap\n  zbase = 0.02\n/\n&controls\n"
             "  initial_mass = 15.0\n"
             "  initial_z = 0.02\n"
             "  max_model_number = 2\n"

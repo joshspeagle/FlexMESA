@@ -89,21 +89,7 @@ pub fn build_accreted_xa(model: &StarModel) -> Vec<f64> {
                 }
             }
         }
-        for (iso, val) in [
-            ("h1", model.controls.accretion_h1),
-            ("he4", model.controls.accretion_he4),
-        ] {
-            if val >= 0.0 {
-                if let Some(j) = model.iso_names.iter().position(|n| n == iso) {
-                    xa[j] = val;
-                }
-            }
-        }
         return normalize_or_surface(xa, model);
-    }
-
-    if model.controls.accretion_h1 < 0.0 && model.controls.accretion_he4 < 0.0 {
-        return model.cell_xa(0).to_vec();
     }
 
     let (h1, he4) = (
@@ -210,6 +196,7 @@ fn do_adjust_mass_regions(
     k_a: usize,
     k_b: usize,
 ) -> Result<(), StarError> {
+    model.aux.k_const_mass = k_b;
     let (nz, species) = (model.nz, model.species);
     if let Some(x_acc) = x_accreted {
         if x_acc.len() < species {
@@ -608,6 +595,7 @@ pub fn do_adjust_mass_step(
     let nz = model.nz;
     let delta_m = mdot * dt;
     if delta_m == 0.0 || dt <= 0.0 || nz < 3 {
+        model.aux.k_const_mass = 0;
         model.eps_mdot.fill(0.0);
         return Ok(());
     }

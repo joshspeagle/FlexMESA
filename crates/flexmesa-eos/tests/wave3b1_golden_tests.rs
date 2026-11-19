@@ -472,12 +472,16 @@ fn test_wave3b1_components_cms_and_eospt_inversions() {
         false,
     );
 
-    // `CmsConfig::default()` currently sets `include_radiation: false` (declared
-    // `#161` gap below against MESA `eos.defaults:163`); verify both `norad` and
-    // radiation-enabled `CMS` against compiled MESA `26.4.1` across all 26x3 slots.
+    // Verify both gas-only (`norad`, `include_radiation = false`) and default
+    // radiation-enabled (`include_radiation = true`, `eos.defaults:163`) `CMS`
+    // against compiled MESA `26.4.1` across all 26x3 slots.
+    let cms_norad_cfg = CmsConfig {
+        include_radiation: false,
+        ..CmsConfig::default()
+    };
     let out_cms_norad = eval_cms_eos(
         cms_tables,
-        &CmsConfig::default(),
+        &cms_norad_cfg,
         1.0e-2,
         1.0e5,
         &chem_id,
@@ -494,13 +498,15 @@ fn test_wave3b1_components_cms_and_eospt_inversions() {
         false,
     );
 
-    let cms_rad_cfg = CmsConfig {
-        include_radiation: true,
-        ..CmsConfig::default()
-    };
-    let out_cms_rad =
-        eval_cms_eos(cms_tables, &cms_rad_cfg, 1.0e-2, 1.0e5, &chem_id, &xa)
-            .expect("CMS standalone evaluation (include_radiation = true)");
+    let out_cms_rad = eval_cms_eos(
+        cms_tables,
+        &CmsConfig::default(),
+        1.0e-2,
+        1.0e5,
+        &chem_id,
+        &xa,
+    )
+    .expect("CMS standalone evaluation (include_radiation = true)");
     assert_eq!(out_cms_rad.res[I_FRAC_CMS], 1.0);
     common::assert_eos_against_mesa(
         "cms_solar_1em2_1e5",
@@ -590,7 +596,6 @@ fn test_wave3b1_components_cms_and_eospt_inversions() {
 }
 
 #[test]
-#[ignore = "declared gap (#161): CmsConfig::default().include_radiation is false whereas MESA eos/defaults/eos.defaults:163 sets include_radiation = .true. (dS_dT -1984.67 vs +1525.74)"]
 fn test_cms_default_config_matches_mesa_26_4_1_default_radiation() {
     let cms_tables = CmsTableSet::builtin();
     let (chem_id, xa) = init_composition(0.70, 0.02, 0.0, 0.0);

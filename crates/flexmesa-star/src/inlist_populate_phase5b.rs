@@ -109,6 +109,10 @@ impl InlistBundle {
             max_y_for_burn_z_mix_region, max_x_for_burn_he_mix_region,
             conv_premix_time_factor,
             min_logt_for_make_gradr_sticky_in_solver_iters,
+            mass_lower_limit_for_min_d_mix, mass_upper_limit_for_min_d_mix,
+            min_center_ye_for_min_d_mix, clip_d_limit, min_convective_gap,
+            min_thermohaline_gap, min_thermohaline_dropout,
+            max_dropout_gradl_sub_grada, min_semiconvection_gap,
             rgb_to_agb_wind_switch, bjorklund_scaling_factor,
             de_jager_scaling_factor, van_loon_scaling_factor,
             nieuwenhuijzen_scaling_factor, min_wind, max_wind,
@@ -133,8 +137,8 @@ impl InlistBundle {
             min_dq_for_xa_convective, mesh_min_dlnr, mesh_max_allowed_ratio,
             max_delta_x_for_merge, max_surface_cell_dq,
             max_center_cell_dq, p_function_weight, t_function1_weight,
-            r_function_weight, m_function_weight, gradt_function_weight,
-            omega_function_weight,
+            r_function_weight, m_function_weight, m_function_param,
+            gradt_function_weight, omega_function_weight,
             gam_function_weight, remesh_dt_limit,
             delta_mdot_atol, delta_mdot_rtol,
             delta_mdot_limit, delta_mdot_hard_limit, w_div_wcrit_max,
@@ -150,6 +154,8 @@ impl InlistBundle {
             limit_overshoot_hp_using_size_of_convection_zone,
             conv_premix_avoid_increase, conv_premix_fix_pgas,
             make_gradr_sticky_in_solver_iters,
+            set_min_d_mix, okay_to_remove_mixing_singleton,
+            remove_embedded_semiconvection,
             no_wind_if_no_rotation, use_accreted_material_j,
             premix_omega, do_adjust_j_lost, skip_rotation_in_convection_zones,
         ]);
@@ -243,9 +249,19 @@ impl InlistBundle {
         apply_fortran_1based(ctrl, "predictive_limit_ingestion", n_pr, |i, v| mw.predictive_sets[i].limit_ingestion = v, val_str)?;
         apply_fortran_1based(ctrl, "predictive_ingestion_factor", n_pr, |i, v| mw.predictive_sets[i].ingestion_factor = v, val_f64)?;
 
-        mw.xa_function_species = ctrl.try_get_indexed_strings("controls", "xa_function_species")?;
-        mw.xa_function_weight = ctrl.try_get_indexed_f64s("controls", "xa_function_weight")?;
-        mw.xa_function_param = ctrl.try_get_indexed_f64s("controls", "xa_function_param")?;
+        const NUM_XA_FUNCTION: usize = 9;
+        if mw.xa_function_species.len() < NUM_XA_FUNCTION {
+            mw.xa_function_species.resize(NUM_XA_FUNCTION, String::new());
+        }
+        if mw.xa_function_weight.len() < NUM_XA_FUNCTION {
+            mw.xa_function_weight.resize(NUM_XA_FUNCTION, 0.0);
+        }
+        if mw.xa_function_param.len() < NUM_XA_FUNCTION {
+            mw.xa_function_param.resize(NUM_XA_FUNCTION, 0.0);
+        }
+        apply_fortran_1based(ctrl, "xa_function_species", NUM_XA_FUNCTION, |i, v| mw.xa_function_species[i] = v, val_str)?;
+        apply_fortran_1based(ctrl, "xa_function_weight", NUM_XA_FUNCTION, |i, v| mw.xa_function_weight[i] = v, val_f64)?;
+        apply_fortran_1based(ctrl, "xa_function_param", NUM_XA_FUNCTION, |i, v| mw.xa_function_param[i] = v, val_f64)?;
 
         let ts = &mut self.controls.ts_stop;
         map_f64s!("controls", ctrl, ts, [

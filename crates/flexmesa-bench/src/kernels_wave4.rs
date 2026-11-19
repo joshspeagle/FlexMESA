@@ -37,6 +37,7 @@ pub fn make_wave4_zams_model(nz: usize) -> StarModel {
     let controls = StarControls {
         initial_mass: 4.0,
         initial_z: 0.02,
+        zbase: 0.02,
         ..StarControls::default()
     };
     let job = StarJobControls::default();

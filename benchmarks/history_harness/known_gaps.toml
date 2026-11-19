@@ -70,7 +70,7 @@ reason = "Case history_columns.list requests unported MLT++ gradT_excess_alpha c
 suite = "star"
 case = "5M_cepheid_blue_loop"
 issue = "#155"
-reason = "Reaches test-side extras_check_model rather than star_species_mass_min_limit and exceeds strict tolerances without unported predictive-mixing and convective-boundary controls (#155, #152)."
+reason = "Core/shell convective boundary and Newton retry loop time out (#155, #152)."
 
 [[gaps]]
 suite = "star"
@@ -148,7 +148,7 @@ reason = "Case uses unported use_other_build_initial_model and use_other_surface
 suite = "star"
 case = "conserve_angular_momentum"
 issue = "#152"
-reason = "Rotational angular-momentum evolution reaches he_core_mass_limit slow and exceeds strict tolerances under unported solver and rotational mixing/retry controls (audit M-9, #152, #158)."
+reason = "Rotational angular-momentum evolution reaches he_core_mass_limit slowly and exceeds strict tolerances under unported solver and rotational mixing/retry controls (audit M-9, #152, #158)."
 
 [[gaps]]
 suite = "star"

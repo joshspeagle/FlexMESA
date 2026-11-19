@@ -471,7 +471,7 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
      - `star/make_pre_ccsn_13bvn` (`no reference yet`): `error` (`101` steps) -> `timeout` (`144` steps).
      - `star/wd_cool_0.6M` (`#156`): `oom_killed` (`311` steps) -> `timeout` (`283` steps within the `5.5 GB` RSS cap).
      - `star/hb_2M` (`#155`): `ok` (`xa_central_lower_limit(he4)`, `198` steps on the pre-`#153` `~800`-zone grid) -> `timeout` (`131` steps within `300 s` on MESA `26.4.1`'s `~2,641`-zone grid vs. upstream `2,629`).
-     - `star/make_zams_low_mass` (`#154`): `ok` (`Lnuc_div_L_zams_limit`, `110` steps) -> `error` (`29` steps; `#153` refines the pre-`#154` `1,773`-zone starting model toward MESA `26.4.1`'s `590`-zone grid before hitting pre-`#152` retry-mesh restoration).
+     - `star/make_zams_low_mass` (`#154`): `ok` (`Lnuc_div_L_zams_limit`, `110` steps) -> `error` (`29` steps; `#153` refines the pre-`#154` `1,773`-zone starting model toward MESA's `590`-zone grid before hitting pre-`#152` retry-mesh restoration).
      - `star/ns_h` (`#161`): `timeout` (`1493` steps) -> `error` (`27` steps; surface `equ_L` Newton non-convergence on the refined H-burning envelope with unported microphysics/accretion controls `#161`, `#159`, `#152`).
 - **Why**: Prior FlexMESA remeshing weighted all species at `20`, omitted `log_tau`/`log_kap` and burning/convective multipliers, smoothed profiles globally after remesh, and rescaled total angular momentum across untouched shells (`C1-18`, `F4-26`, `#153`).
 - **Alternatives Rejected**:

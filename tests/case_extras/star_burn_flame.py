@@ -84,7 +84,7 @@ class CepheidBlueLoopStarExtras:
 
 def has_ignited(state: dict[str, Any], k: int) -> bool:
     """Test carbon-flame ignition at 0-based cell `k`
-    (`cburn_inward/src/run_star_extras.f90:229-255`).
+    (`star/test_suite/cburn_inward/src/run_star_extras.f90:229-255`).
     """
     co_core_mass = float(state["co_core_mass"])
     if co_core_mass <= 0.0:
@@ -176,7 +176,7 @@ def flame_properties(
     eps_nuc: Sequence[float], r_arr: Sequence[float]
 ) -> tuple[float, float]:
     """Compute `(position, width)` in $\\mathrm{cm}$
-    (`conductive_flame/src/run_star_extras.f90:260-287`).
+    (`star/test_suite/conductive_flame/src/run_star_extras.f90:260-287`).
     """
     nz = len(eps_nuc)
     kmax = max(range(nz), key=lambda idx: float(eps_nuc[idx]))
@@ -302,7 +302,7 @@ class ConductiveFlameStarExtras:
 
 def _cell_eos_energy_diff(state: dict[str, Any], k: int) -> tuple[float, float]:
     """Compute `(dedt_minus_rse, rse_term)` in $\\mathrm{erg\\,g^{-1}}$
-    (`carbon_kh/src/run_star_extras.f90:215-220, 246-249`).
+    (`star/test_suite/carbon_kh/src/run_star_extras.f90:215-220, 246-249`).
     """
     de = float(state["energy"][k]) - float(state["energy_start"][k])
     term_t = (
@@ -326,7 +326,7 @@ def _cell_eos_energy_diff(state: dict[str, Any], k: int) -> tuple[float, float]:
 
 def in_eos_blend(state: dict[str, Any], k: int) -> bool:
     """Test whether 0-based cell `k` lies in an EOS blend
-    (`carbon_kh/src/run_star_extras.f90:262-274`).
+    (`star/test_suite/carbon_kh/src/run_star_extras.f90:262-274`).
     """
     fracs = (
         float(state["eos_frac_opal_scvh"][k]),
@@ -437,7 +437,7 @@ class CarbonKhStarExtras:
 
 def gamma1_integral(state: dict[str, Any]) -> float:
     """Compute pressure-weighted $\\Gamma_1 - 4/3$ integral
-    (`pisn/src/run_star_extras.f90:161-177`).
+    (`star/test_suite/pisn/src/run_star_extras.f90:161-177`).
     """
     nz = int(state["nz"])
     peos = state["peos"]

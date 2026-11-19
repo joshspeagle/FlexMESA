@@ -3,9 +3,9 @@
 (`#231`).
 
 Covers:
-- `star/test_suite/other_physics_hooks/src/run_star_extras.f90` and
-  `src/other_winds/other_winds.inc`
-- `star/test_suite/magnetic_braking/src/run_star_extras.f90`
+- `star/test_suite/other_physics_hooks/src/run_star_extras.f90:45-435`
+- `star/test_suite/other_physics_hooks/src/other_winds/other_winds.inc:2-556`
+- `star/test_suite/magnetic_braking/src/run_star_extras.f90:38-305`
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ def _parse_fortran_float(raw: str) -> float:
 
 
 def _cf(u: float, alpha: float, beta: float) -> float:
-    """Finite cone-angle correction factor (`other_winds.inc:276-293`)."""
+    """Finite cone-angle correction factor (`:276-293` of `other_winds`)."""
     xl = (beta + 1.0) * u - 1.0
     xl = xl * u / beta
     if abs(xl) <= 1.0e-3:
@@ -39,7 +39,7 @@ def _cf(u: float, alpha: float, beta: float) -> float:
 
 
 def _phicr(vsquar: float) -> float:
-    """Pauldrach `phi` function at `ucrit` (`other_winds.inc:329-341`)."""
+    """Pauldrach `phi` function at `ucrit` (`:329-341` of `other_winds`)."""
     vsq = math.sqrt(vsquar)
     xl = _rust.log10(vsq)
     xl = 0.36 + xl
@@ -49,7 +49,7 @@ def _phicr(vsquar: float) -> float:
 
 
 def _betcr(alpha: float, delta: float) -> float:
-    """Critical-point `beta` selector (`other_winds.inc:358-387`)."""
+    """Critical-point `beta` selector (`:358-387` of `other_winds`)."""
     if alpha <= 0.7:
         if delta < 0.03:
             return 2.0
@@ -70,7 +70,7 @@ def _betcr(alpha: float, delta: float) -> float:
 
 
 def _qq(beta: float, delta: float) -> float:
-    """Piecewise `q(beta, delta)` helper (`other_winds.inc:390-410`)."""
+    """Piecewise `q(beta, delta)` helper (`:390-410` of `other_winds`)."""
     b = min(2.5, max(0.2, beta))
     if b >= 1.0:
         a = 15.0 * (b - 1.0) + 7.5
@@ -84,7 +84,7 @@ def _qq(beta: float, delta: float) -> float:
 
 
 def _uc(alpha: float, _beta: float, delta: float, vsquar: float) -> float:
-    """Reciprocal critical point `uc` (`other_winds.inc:307-326`)."""
+    """Reciprocal critical point `uc` (`:307-326` of `other_winds`)."""
     sigma = alpha * alpha * (1.0 - alpha) / vsquar
     xphi = _phicr(vsquar)
     sigma = sigma / (xphi * xphi)
@@ -99,7 +99,7 @@ def _uc(alpha: float, _beta: float, delta: float, vsquar: float) -> float:
 
 
 def _vaucr(vsound: float, vesc: float, alpha: float) -> float:
-    """Critical-point velocity (`other_winds.inc:344-355`)."""
+    """Critical-point velocity (`:344-355` of `other_winds`)."""
     vsq = vsound * vsound / (vesc * vesc)
     phi = _phicr(vsq)
     hilf = math.sqrt(phi / (1.0 - alpha))
@@ -108,7 +108,7 @@ def _vaucr(vsound: float, vesc: float, alpha: float) -> float:
 
 
 def _xintap(alpha: float, beta: float, delta: float, ucrit: float) -> float:
-    """Approximate wind velocity integral (`other_winds.inc:413-460`)."""
+    """Approximate wind velocity integral (`:413-460` of `other_winds`)."""
     q = _qq(beta, delta)
     hilfex = 1.0 / (1.0 - alpha)
     alaaf = _rust.pow(1.0 / (1.0 + alpha), hilfex)
@@ -137,12 +137,12 @@ def _xintap(alpha: float, beta: float, delta: float, ucrit: float) -> float:
 
 
 def _sigmae(yps: float, xihe: float) -> float:
-    """Thomson scattering opacity per unit mass (`other_winds.inc:486-493`)."""
+    """Thomson scattering opacity per mass (`:486-493` of `other_winds`)."""
     return ((1.0 + xihe * yps) / (1.0 + 4.0 * yps)) * 0.3978
 
 
 def _gammma(stlum: float, stmass: float, sig: float) -> float:
-    """Eddington factor `Gamma` (`other_winds.inc:496-500`)."""
+    """Eddington factor `Gamma` (`:496-500` of `other_winds`)."""
     return 7.655e-5 * sig * stlum / stmass
 
 
@@ -155,7 +155,7 @@ def _xmdcak(
     ga: float,
     teff: float,
 ) -> float:
-    """Evaluate CAK mass-loss factor (`other_winds.inc:463-483`)."""
+    """Evaluate CAK mass-loss factor (`:463-483` of `other_winds`)."""
     hilfex = 1.0 / alpha
     hilf = _rust.pow(1.2762e23 * xk * stlum * 1.0e-10, hilfex)
     hiover = _rust.pow(1.0e10, hilfex)
@@ -178,7 +178,7 @@ def _xmdfc(
     yps: float,
     xmdcak_val: float,
 ) -> float:
-    """Evaluate finite-cone-angle mass loss (`other_winds.inc:510-535`)."""
+    """Evaluate finite-cone-angle mass loss (`:510-535` of `other_winds`)."""
     d_val = (
         (3.92859e1 * (1.0 + 2.0 * yps) / (1.0 + 4.0 * yps))
         / (rst * rst)
@@ -199,7 +199,8 @@ def _xmdfc(
 def eval_kuma_wind(
     xlogl: float, xlteff: float, stmass: float, xsurf: float
 ) -> tuple[float, float]:
-    """Evaluate Kudritzki radiation-driven wind (`other_winds.inc:220-556`).
+    """Evaluate Kudritzki radiation-driven wind
+    (`star/test_suite/other_physics_hooks/src/other_winds/other_winds.inc:220-556`).
 
     Args:
         xlogl: $\\log_{10}(L / L_\\odot)$ (dimensionless).
@@ -244,7 +245,8 @@ def eval_grafener_wind(
     z_surf: float,
     scaling_factor: float = 1.0,
 ) -> float:
-    """Evaluate Grafener & Hamann (2008) WR wind (`other_winds.inc:70-95`).
+    """Evaluate Grafener & Hamann (2008) WR wind
+    (`star/test_suite/other_physics_hooks/src/other_winds/other_winds.inc:70-95`).
 
     Args:
         l_cgs: Surface luminosity $L$ in $\\mathrm{erg\\,s^{-1}}$.
@@ -279,7 +281,7 @@ def eval_grafener_wind(
 
 
 def wr_hamann(xsl: float, xhs: float, znow: float) -> float:
-    """Evaluate Hamann et al. (1982, 1995) WR wind (`other_winds.inc:192-217`).
+    """Evaluate Hamann et al. (1982, 1995) wind (`:192-217` of `other_winds`).
 
     Args:
         xsl: Surface luminosity $L$ in $\\mathrm{erg\\,s^{-1}}$.
@@ -310,7 +312,7 @@ def _stern51_h_rich(
     z_fe: float,
     z_cno: float,
 ) -> float:
-    """Compute `Stern51` wind for `X_surf > 0.3` (`other_winds.inc:146-175`)."""
+    """Compute `Stern51` wind for `X_surf > 0.3` (`:146-175`)."""
     znow = max(
         0.0,
         min(1.0, 0.02 * (0.5 * (z_fe / 1.32e-3) + 0.5 * (z_cno / 0.01868))),
@@ -350,7 +352,7 @@ def eval_stern51_wind(
     x_surf: float,
     z_surf: float,
 ) -> float:
-    """Evaluate Stern51 composite wind (`other_winds.inc:114-189`)."""
+    """Evaluate Stern51 composite wind (`:114-189` of `other_winds`)."""
     zbase = float(state["zbase"])
     if zbase < 0.0:
         raise ValueError("must set Zbase to use stern51 wind")
@@ -376,7 +378,7 @@ def eval_stern51_wind(
 class OtherPhysicsHooksStarExtras:
     """Physics-hook test harness from
     `star/test_suite/other_physics_hooks/src/run_star_extras.f90:45-435` and
-    `src/other_winds/other_winds.inc:2-556`.
+    `star/test_suite/other_physics_hooks/src/other_winds/other_winds.inc:2-556`.
     """
 
     def __init__(self) -> None:
@@ -387,7 +389,7 @@ class OtherPhysicsHooksStarExtras:
         self._loaded_inlist = False
 
     def read_inlist_other_winds(self, case_dir: pathlib.Path | str) -> None:
-        """Read `inlist_other_winds` (`other_winds.inc:2-33`)."""
+        """Read `inlist_other_winds` (`:2-33` of `other_winds`)."""
         self.wind_scheme = ""
         self.kudritzki_scaling_factor = 0.0
         self.grafener_scaling_factor = 0.0
@@ -448,7 +450,7 @@ class OtherPhysicsHooksStarExtras:
         t_surf: float,
     ) -> float:
         """Evaluate `other_wind` in $M_\\odot\\,\\mathrm{yr^{-1}}$
-        (`other_winds.inc:36-67`).
+        (`star/test_suite/other_physics_hooks/src/other_winds/other_winds.inc:36-67`).
         """
         if not self._loaded_inlist:
             self.read_inlist_other_winds(str(state["case_dir"]))

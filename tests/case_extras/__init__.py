@@ -87,7 +87,7 @@ def extras_source_digest(case_dir: pathlib.Path | str) -> str:
 # shared `test_suite_startup` / `test_suite_after_evolve` timing helpers.
 STOCK_EXTRAS_DIGESTS: frozenset[str] = frozenset(
     {
-        # star/test_suite/1.3M_ms_high_Z/src/run_star_extras.f90:1-156 and 12
+        # star/test_suite/1.3M_ms_high_Z/src/run_star_extras.f90:1-155 and 12
         # cases with identical normalized text.
         "4b7b570f3a144678fa67d368b2c5b485ad89e03f9b43abe8575c1635939c1a5a",
         # star/test_suite/make_zams/src/run_star_extras.f90:1-166,

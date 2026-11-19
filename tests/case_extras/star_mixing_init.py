@@ -3,9 +3,9 @@
 (`#231`).
 
 Covers:
-- `star/test_suite/extended_convective_penetration/src/run_star_extras.f90`
-- `star/test_suite/make_env/src/run_star_extras.f90`
-- `star/test_suite/tzo/src/run_star_extras.f90`
+- star/test_suite/extended_convective_penetration/src/run_star_extras.f90:37-452
+- star/test_suite/make_env/src/run_star_extras.f90:36-605
+- star/test_suite/tzo/src/run_star_extras.f90:40-260
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ def evaluate_hp(
     r: float,
 ) -> float:
     """Evaluate local pressure scale height $H_P$ in $\\mathrm{cm}$
-    (`extended_convective_penetration/src/run_star_extras.f90:437-450`).
+    (`:437-450` of `extended_convective_penetration`).
     """
     p_val = _rust.crmath_exp(ln_peos)
     rho_val = _rust.crmath_exp(lnd)
@@ -36,7 +36,7 @@ def evaluate_hp(
 
 def calc_peclet_number(state: dict[str, Any], k: int) -> float:
     """Evaluate cell Peclet number (dimensionless) at 0-based index `k`
-    (`extended_convective_penetration/src/run_star_extras.f90:420-435`).
+    (`:420-435` of `extended_convective_penetration`).
     """
     t_k = float(state["t"][k])
     rho_k = float(state["rho"][k])
@@ -97,7 +97,7 @@ def _taper_overshoot_params(
 
 def dq_f(r: float, n: int, a1: float) -> tuple[float, float]:
     """Evaluate geometric series residual and derivative
-    (`make_env/src/run_star_extras.f90:547-568`).
+    (`star/test_suite/make_env/src/run_star_extras.f90:547-568`).
     """
     sn = 1.0
     r_to_n = _rust.pow(r, float(n))
@@ -108,7 +108,7 @@ def dq_f(r: float, n: int, a1: float) -> tuple[float, float]:
 
 def calc_dq_factor(n: int, dq1: float) -> float:
     """Solve for geometric cell-mass ratio `dq_factor`
-    (`make_env/src/run_star_extras.f90:570-603`).
+    (`star/test_suite/make_env/src/run_star_extras.f90:570-603`).
     """
     root_r, _ = num.safe_root_with_guess(
         lambda rv: dq_f(rv, n, dq1),
@@ -150,9 +150,8 @@ def _locate_mass_cells(m_arr: Any, nz: int) -> tuple[int, int, int, int]:
 
 
 class ExtendedConvectivePenetrationStarExtras:
-    """Michielsen et al. (2019) convective penetration and Peclet `gradT` blend.
-
-    Source: `extended_convective_penetration/src/run_star_extras.f90:37-452`.
+    """Michielsen et al. (2019) convective penetration and Peclet `gradT` blend
+    (`:37-452` of `extended_convective_penetration` cited in module docstring).
     """
 
     def __init__(self) -> None:

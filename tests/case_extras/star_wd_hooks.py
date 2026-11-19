@@ -133,7 +133,7 @@ def center_avg_x(
     center_avg_value_dq: float,
 ) -> float:
     """Compute central `dq`-weighted isotope average
-    (`wd_aic/src/run_star_extras.f90:38-57`).
+    (`star/test_suite/wd_aic/src/run_star_extras.f90:38-57`).
     """
     sum_x = 0.0
     sum_dq = 0.0

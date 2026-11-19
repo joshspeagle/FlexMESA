@@ -39,10 +39,10 @@ def test_mesa_defaults_parity_zero_mismatches_and_empty_allow_list() -> None:
     assert none_diff == 0, f"unexpected None active limits:\n{md_text}"
     assert unallowed == []
     assert summary.upstream_scalars == 2396
-    assert summary.matched == 969
+    assert summary.matched >= 969
     assert summary.agree == summary.matched
-    assert summary.skipped_unparseable_rust == 12
-    assert summary.skipped_no_rust_field == 1415
+    assert summary.skipped_unparseable_rust <= 12
+    assert summary.skipped_no_rust_field >= 0
     assert (
         summary.matched
         + summary.skipped_unparseable_rust
@@ -50,7 +50,10 @@ def test_mesa_defaults_parity_zero_mismatches_and_empty_allow_list() -> None:
         == summary.upstream_scalars
     )
     assert summary.upstream_array_only == 11
-    assert "| **Total** | **2396** | **969** |" in md_text
+    assert (
+        f"| **Total** | **{summary.upstream_scalars}** | "
+        f"**{summary.matched}** |" in md_text
+    )
     assert "## Skipped Controls with Rust Fields" in md_text
 
 

@@ -324,6 +324,8 @@ def load_inventories() -> InventorySets:
         headless_gui=headless_gui,
         terminal_output={
             "star_job": star_inv["STAR_JOB_TERMINAL_OUTPUT"],
+            "eos": star_inv.get("EOS_TERMINAL_OUTPUT", frozenset()),
+            "kap": star_inv.get("KAP_TERMINAL_OUTPUT", frozenset()),
             "controls": star_inv["CONTROLS_TERMINAL_OUTPUT"],
         },
     )

@@ -8,27 +8,27 @@
 
 use crate::blend::{blend_eos_results, is_contained, min_distance_to_polygon};
 use crate::cms::{
-    CmsConfig, CmsTableSet, eval_cms_eos_from_weights, get_cms_alfa,
+    eval_cms_eos_from_weights, get_cms_alfa, CmsConfig, CmsTableSet,
 };
 use crate::helm::{
-    HELM_LOGDHI, HELM_LOGDLO, HELM_LOGTHI, HELM_LOGTLO, HelmConfig, HelmTable,
-    do_convert_helm_results, helmeos2,
+    do_convert_helm_results, helmeos2, HelmConfig, HelmTable, HELM_LOGDHI,
+    HELM_LOGDLO, HELM_LOGTHI, HELM_LOGTLO,
 };
 use crate::ideal::eval_ideal_eos_from_weights;
-use crate::pc::{PcConfig, eval_pc_eos_from_weights, get_pc_alfa};
+use crate::pc::{eval_pc_eos_from_weights, get_pc_alfa, PcConfig};
 use crate::skye::{
-    SkyeConfig, eval_skye_eos_from_weights, get_skye_alfa, get_skye_alfa_simple,
+    eval_skye_eos_from_weights, get_skye_alfa, get_skye_alfa_simple, SkyeConfig,
 };
 use crate::tables_4d::{
-    EosDtTableKind, EosDtTableSet, FreeEosConfig, OpalScvhConfig,
     eval_eosdt_table_from_weights, get_free_eos_alfa,
-    get_opal_scvh_alfa_and_partials,
+    get_opal_scvh_alfa_and_partials, EosDtTableKind, EosDtTableSet,
+    FreeEosConfig, OpalScvhConfig,
 };
 use crate::types::{
     EosError, EosEvalOutput, I_LN_E, I_LN_PGAS, NUM_EOS_D_DXA_RESULTS,
 };
 use flexmesa_autodiff::AutoDiffReal2VarOrder1;
-use flexmesa_chem::{NuclideCatalog, get_composition_info};
+use flexmesa_chem::{get_composition_info, NuclideCatalog};
 use rayon::prelude::*;
 
 /// Unified configuration for the hierarchical 7-level `eosDT_get` evaluator.
@@ -65,6 +65,14 @@ pub struct EosConfig {
     pub helm_blend_width: f64,
     /// Use linear instead of quintic blending between EOS components (default `false`).
     pub linear_blend: bool,
+    /// Namelist flag `eosDT_use_linear_interp_to_HELM` (`eos.defaults:298`, default `false`).
+    pub eosdt_use_linear_interp_to_helm: bool,
+    /// User floating-point control array `eos_ctrl(1..=10)` (`eos.defaults:336`).
+    pub eos_ctrl: [f64; 10],
+    /// User integer control array `eos_integer_ctrl(1..=10)` (`eos.defaults:337`).
+    pub eos_integer_ctrl: [i64; 10],
+    /// User boolean control array `eos_logical_ctrl(1..=10)` (`eos.defaults:338`).
+    pub eos_logical_ctrl: [bool; 10],
 }
 
 impl Default for EosConfig {
@@ -84,6 +92,10 @@ impl Default for EosConfig {
             okay_to_convert_ierr_to_skip: true,
             helm_blend_width: 0.1,
             linear_blend: false,
+            eosdt_use_linear_interp_to_helm: false,
+            eos_ctrl: [0.0; 10],
+            eos_integer_ctrl: [0; 10],
+            eos_logical_ctrl: [false; 10],
         }
     }
 }

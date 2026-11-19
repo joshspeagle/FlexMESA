@@ -11,8 +11,8 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 | star &star_job | 455 | 88 | 88 | 0 | 0 | 367 |
 | binary &binary_controls + &binary_job | 209 | 120 | 120 | 0 | 0 | 89 |
 | astero &astero_search_controls | 150 | 73 | 73 | 0 | 0 | 77 |
-| eos &eos | 102 | 54 | 54 | 0 | 0 | 48 |
-| kap &kap | 36 | 16 | 16 | 0 | 0 | 20 |
+| eos &eos | 102 | 57 | 57 | 0 | 0 | 45 |
+| kap &kap | 36 | 17 | 17 | 0 | 0 | 19 |
 
 ## star &controls
 

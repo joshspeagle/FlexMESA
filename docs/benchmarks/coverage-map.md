@@ -55,11 +55,11 @@ Compared against MESA `26.4.1` `.defaults` schemas, **710 / 1,444** `&controls` 
 | Namelist | Upstream Scalars | Matched in FlexMESA | Defaults Agree | Value Mismatch | Disabled (`none`/limit) | Non-Scalar Rust | Unimplemented |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | `star &controls` | 1,444 | 725 | 725 | 0 | 0 | 9 | 710 |
-| `star &star_job` | 455 | 91 | 91 | 0 | 0 | 3 | 361 |
+| `star &star_job` | 455 | 93 | 93 | 0 | 0 | 1 | 361 |
 | `binary &binary_controls + &binary_job` | 209 | 145 | 145 | 0 | 0 | 1 | 63 |
 | `astero &astero_search_controls` | 150 | 75 | 75 | 0 | 0 | 1 | 74 |
 | `eos &eos` | 102 | 60 | 60 | 0 | 0 | 0 | 42 |
-| `kap &kap` | 36 | 20 | 20 | 0 | 0 | 1 | 15 |
+| `kap &kap` | 36 | 21 | 21 | 0 | 0 | 0 | 15 |
 
 ## Key Structural & Physics Gaps Driving `0 / 106` Parity
 

@@ -699,11 +699,11 @@
     {
       "namelist": "star &star_job",
       "upstream_scalars": 455,
-      "matched_in_flexmesa": 91,
-      "defaults_agree": 91,
+      "matched_in_flexmesa": 93,
+      "defaults_agree": 93,
       "value_mismatch": 0,
       "disabled_limit_none": 0,
-      "skipped_unparseable_rust": 3,
+      "skipped_unparseable_rust": 1,
       "unimplemented": 361
     },
     {
@@ -739,11 +739,11 @@
     {
       "namelist": "kap &kap",
       "upstream_scalars": 36,
-      "matched_in_flexmesa": 20,
-      "defaults_agree": 20,
+      "matched_in_flexmesa": 21,
+      "defaults_agree": 21,
       "value_mismatch": 0,
       "disabled_limit_none": 0,
-      "skipped_unparseable_rust": 1,
+      "skipped_unparseable_rust": 0,
       "unimplemented": 15
     },
     {

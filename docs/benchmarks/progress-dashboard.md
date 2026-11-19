@@ -105,11 +105,11 @@ Progress is measured by **upstream MESA `26.4.1` source lines by status**, never
 | Namelist | Upstream `26.4.1` Scalars | Matched in `FlexMESA` | Defaults Agree | Value Mismatch | Active Limit `None` | Non-Scalar Rust | Unimplemented |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | `star &controls` | 1,444 | 725 | 725 | 0 | 0 | 9 | 710 |
-| `star &star_job` | 455 | 91 | 91 | 0 | 0 | 3 | 361 |
+| `star &star_job` | 455 | 93 | 93 | 0 | 0 | 1 | 361 |
 | `binary &binary_controls + &binary_job` | 209 | 145 | 145 | 0 | 0 | 1 | 63 |
 | `astero &astero_search_controls` | 150 | 75 | 75 | 0 | 0 | 1 | 74 |
 | `eos &eos` | 102 | 60 | 60 | 0 | 0 | 0 | 42 |
-| `kap &kap` | 36 | 20 | 20 | 0 | 0 | 1 | 15 |
+| `kap &kap` | 36 | 21 | 21 | 0 | 0 | 0 | 15 |
 | `star &pgstar` | 2,900 | 0 | 0 | 0 | 0 | 0 | 2,900 |
 | `binary &pgbinary` | 1,329 | 0 | 0 | 0 | 0 | 0 | 1,329 |
 

@@ -66,39 +66,50 @@ fn brem_neu_weak_degen(t8: f64, input: &NeuInputs) -> NeuRate {
     let etam2 = etam1 * etam1;
     let etam3 = etam2 * etam1;
 
-    // Equation 5.2: fbrem
+    // Equation 5.2: fbrem (`neu/private/mod_neu.f90:880-909`)
     let a0 = 23.5 + 6.83e4 * t8m2 + 7.81e8 * t8m5;
     let f0 = (-2.0 * 6.83e4 * t8m3 - 5.0 * 7.81e8 * t8m6) * 1.0e-8;
     let xnum = 1.0 / a0;
     let edum = 1.0 + 1.47 * etam1 + 3.29e-2 * etam2;
     let dz = -1.47 * etam2 - 2.0 * 3.29e-2 * etam3;
+    let edumdt = dz * etadt;
+    let edumdd = dz * etadd;
+    let edumda = dz * etada;
+    let edumdz = dz * etadz;
     let c00 = 1.26 * (1.0 + etam1);
     let cz = -1.26 * etam2;
+    let c01 = cz * etadt;
+    let c02 = cz * etadd;
+    let c03 = cz * etada;
+    let c04 = cz * etadz;
     let inv_edum = 1.0 / edum;
     let xden = c00 * inv_edum;
-    let xdendt = (cz * etadt - xden * dz * etadt) * inv_edum;
-    let xdendd = (cz * etadd - xden * dz * etadd) * inv_edum;
-    let xdenda = (cz * etada - xden * dz * etada) * inv_edum;
-    let xdendz = (cz * etadz - xden * dz * etadz) * inv_edum;
+    let xdendt = (c01 - xden * edumdt) * inv_edum;
+    let xdendd = (c02 - xden * edumdd) * inv_edum;
+    let xdenda = (c03 - xden * edumda) * inv_edum;
+    let xdendz = (c04 - xden * edumdz) * inv_edum;
     let fbrem = xnum + xden;
     let fbremdt = -xnum * xnum * f0 + xdendt;
     let fbremdd = xdendd;
     let fbremda = xdenda;
     let fbremdz = xdendz;
 
-    // Equation 5.9: gbrem
+    // Equation 5.9: gbrem (`neu/private/mod_neu.f90:913-963`)
     let ga0 = 230.0 + 6.7e5 * t8m2 + 7.66e9 * t8m5;
     let gf0 = (-2.0 * 6.7e5 * t8m3 - 5.0 * 7.66e9 * t8m6) * 1.0e-8;
     let gz = 1.0 + input.rm * 1.0e-9;
     let gdum = ga0 * gz;
     let gdumdt = gf0 * gz;
     let g_scale = ga0 * 1.0e-9;
+    let gdumdd = g_scale * input.rmdd;
+    let gdumda = g_scale * input.rmda;
+    let gdumdz = g_scale * input.rmdz;
     let gxnum = 1.0 / gdum;
     let neg_gx2 = -gxnum * gxnum;
     let gxnumdt = neg_gx2 * gdumdt;
-    let gxnumdd = neg_gx2 * g_scale * input.rmdd;
-    let gxnumda = neg_gx2 * g_scale * input.rmda;
-    let gxnumdz = neg_gx2 * g_scale * input.rmdz;
+    let gxnumdd = neg_gx2 * gdumdd;
+    let gxnumda = neg_gx2 * gdumda;
+    let gxnumdz = neg_gx2 * gdumdz;
 
     let p1 = pow(t8, 3.85);
     let gc00 = 7.75e5 * t832 + 247.0 * p1;
@@ -372,17 +383,31 @@ pub fn brem_neu(input: &NeuInputs) -> NeuRate {
     let dtfracda = dtfermidu * duda * dtfrac_dtf;
     let dtfracdz = dtfermidu * dudz * dtfrac_dtf;
 
-    let d_cos = 0.5 * PI * sinpi(tfrac);
-    let dalfadt = dtfracdt * d_cos;
-    let dalfadd = dtfracdd * d_cos;
-    let dalfada = dtfracda * d_cos;
-    let dalfadz = dtfracdz * d_cos;
-    let diff_val = weak.val - liq.val;
+    // Match left-to-right `dtfracd* * 0.5d0 * pi * sinpi(tfrac)` and unfactored
+    // `dalfad* * sb + dbetad* * sb2` in neu/private/mod_neu.f90:1262-1276.
+    let s_pi = sinpi(tfrac);
+    let dalfadt = dtfracdt * 0.5 * PI * s_pi;
+    let dalfadd = dtfracdd * 0.5 * PI * s_pi;
+    let dalfada = dtfracda * 0.5 * PI * s_pi;
+    let dalfadz = dtfracdz * 0.5 * PI * s_pi;
+    let dbetadt = -dalfadt;
+    let dbetadd = -dalfadd;
+    let dbetada = -dalfada;
+    let dbetadz = -dalfadz;
     NeuRate {
         val: alfa * weak.val + beta * liq.val,
-        d_t: alfa * weak.d_t + beta * liq.d_t + dalfadt * diff_val,
-        d_rho: alfa * weak.d_rho + beta * liq.d_rho + dalfadd * diff_val,
-        d_abar: alfa * weak.d_abar + beta * liq.d_abar + dalfada * diff_val,
-        d_zbar: alfa * weak.d_zbar + beta * liq.d_zbar + dalfadz * diff_val,
+        d_t: alfa * weak.d_t + beta * liq.d_t + dalfadt * weak.val + dbetadt * liq.val,
+        d_rho: alfa * weak.d_rho
+            + beta * liq.d_rho
+            + dalfadd * weak.val
+            + dbetadd * liq.val,
+        d_abar: alfa * weak.d_abar
+            + beta * liq.d_abar
+            + dalfada * weak.val
+            + dbetada * liq.val,
+        d_zbar: alfa * weak.d_zbar
+            + beta * liq.d_zbar
+            + dalfadz * weak.val
+            + dbetadz * liq.val,
     }
 }

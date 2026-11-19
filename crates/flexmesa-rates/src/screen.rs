@@ -3,7 +3,7 @@
 //! `extended_screening`, and `chugunov_screening`) ported from
 //! `rates/private/screen.f90` and `rates/private/screen5.f90`.
 
-use flexmesa_const::ONE_THIRD;
+use flexmesa_const::{ONE_THIRD, TWO_13};
 
 use crate::screen_chugunov::screen_chugunov;
 use crate::types::{ScreenEval, ScreeningMode};
@@ -46,8 +46,8 @@ pub fn screen_pair(
     }
 }
 
-/// Evaluates Salpeter (1954) weak plasma screening (`salpeter_screening` in
-/// `rates/private/screen.f90`).
+/// Evaluates Salpeter (1954) weak plasma screening (`rates_salpeter_screening`
+/// in `rates/public/rates_lib.f90:705-727`).
 #[must_use]
 pub fn screen_salpeter(
     temp: f64,
@@ -60,9 +60,11 @@ pub fn screen_salpeter(
 ) -> ScreenEval {
     let zeta = (z2bar + zbar) / abar;
     let lnf = 1.88e8 * z1 * z2 * (den * zeta / (temp * temp * temp)).sqrt();
+    let dlnf_dd = lnf / (2.0 * den);
+    let dlnf_dt = (-lnf * 3.0) / (2.0 * temp);
     let scor = flexmesa_math::exp(lnf);
-    let dscor_dt = -1.5 * lnf / temp * scor;
-    let dscor_dd = 0.5 * lnf / den * scor;
+    let dscor_dd = scor * dlnf_dd;
+    let dscor_dt = scor * dlnf_dt;
     ScreenEval {
         scor,
         dscor_dt,
@@ -72,7 +74,7 @@ pub fn screen_salpeter(
 
 /// Evaluates Graboske et al. (1973), Alastuey & Jancovici (1978), and Itoh et
 /// al. (1979) weak-intermediate-strong plasma screening (`fxt_screen5` in
-/// `rates/private/screen5.f90`).
+/// `rates/private/screen.f90:46-99` and `rates/private/screen5.f90:61-386`).
 #[must_use]
 #[allow(clippy::too_many_arguments, clippy::float_cmp)]
 pub fn screen_extended(
@@ -86,18 +88,22 @@ pub fn screen_extended(
     a2: f64,
     z2: f64,
 ) -> ScreenEval {
+    const CO2: f64 = ONE_THIRD * 4.248_719e3;
+    const FACT: f64 = TWO_13;
+
     let ytot = 1.0 / abar;
     let rr = den * ytot;
     let tempi = 1.0 / temp;
     let dtempidt = -tempi * tempi;
     let deni = 1.0 / den;
     let pp = (rr * tempi * (z2bar + zbar)).sqrt();
-    let dppdt = 0.5 * rr * dtempidt * (z2bar + zbar) / pp;
-    let dppdd = 0.5 * ytot * tempi * (z2bar + zbar) / pp;
+    let qq_p = (0.5 / pp) * (z2bar + zbar);
+    let dppdt = qq_p * rr * dtempidt;
+    let dppdd = qq_p * ytot * tempi;
     let qlam0z = 1.88e8 * tempi * pp;
     let qlam0zdt = 1.88e8 * (dtempidt * pp + tempi * dppdt);
     let qlam0zdd = 1.88e8 * tempi * dppdd;
-    let taufac = 4.248719e3 / 3.0 * flexmesa_math::pow(tempi, ONE_THIRD);
+    let taufac = CO2 * flexmesa_math::pow(tempi, ONE_THIRD);
     let taufacdt = -ONE_THIRD * taufac * tempi;
     let xni = flexmesa_math::pow(rr * zbar, ONE_THIRD);
     let dxnidd = ONE_THIRD * xni * deni;
@@ -122,15 +128,16 @@ pub fn screen_extended(
     let mut gamp = aa;
     let mut gampdt = daadt;
     let mut gampdd = daadd;
-    let qq = flexmesa_math::pow(2.0_f64, ONE_THIRD) * bb * zs13inv;
+    let qq = FACT * bb * zs13inv;
     let mut gamef = qq * gamp;
     let mut gamefdt = qq * gampdt;
     let mut gamefdd = qq * gampdd;
     let tau12 = taufac * aznut;
     let tau12dt = taufacdt * aznut;
-    let mut alf12 = gamef / tau12;
-    let mut alf12dt = (gamefdt - alf12 * tau12dt) / tau12;
-    let mut alf12dd = gamefdd / tau12;
+    let qq_tau = 1.0 / tau12;
+    let mut alf12 = gamef * qq_tau;
+    let mut alf12dt = (gamefdt - alf12 * tau12dt) * qq_tau;
+    let mut alf12dd = gamefdd * qq_tau;
 
     if alf12 > 1.6 {
         alf12 = 1.6;
@@ -139,7 +146,7 @@ pub fn screen_extended(
         gamef = 1.6 * tau12;
         gamefdt = 1.6 * tau12dt;
         gamefdd = 0.0;
-        let qq_inv = zs13 / (flexmesa_math::pow(2.0_f64, ONE_THIRD) * bb);
+        let qq_inv = zs13 / (FACT * bb);
         gamp = gamef * qq_inv;
         gampdt = gamefdt * qq_inv;
         gampdd = 0.0;
@@ -152,69 +159,91 @@ pub fn screen_extended(
 
     if gamef > 0.3 {
         let gamp14 = flexmesa_math::pow(gamp, 0.25);
+        let rr_g = 1.0 / gamp;
+        let qq_g = 0.25 * gamp14 * rr_g;
+        let gamp14dt = qq_g * gampdt;
+        let gamp14dd = qq_g * gampdd;
+
         let cc = 0.896434 * gamp * zhat
             - 3.44740 * gamp14 * zhat2
             - 0.5551 * (flexmesa_math::log(gamp) + lzav)
             - 2.996;
-        let dccdgamp = 0.896434 * zhat
-            - 0.25 * 3.44740 * gamp14 * zhat2 / gamp
-            - 0.5551 / gamp;
-        let dccdt = dccdgamp * gampdt;
-        let dccdd = dccdgamp * gampdd;
+        let dccdt = 0.896434 * gampdt * zhat
+            - 3.44740 * gamp14dt * zhat2
+            - 0.5551 * rr_g * gampdt;
+        let dccdd = 0.896434 * gampdd * zhat
+            - 3.44740 * gamp14dd * zhat2
+            - 0.5551 * rr_g * gampdd;
 
         let a3 = alf12 * alf12 * alf12;
         let da3 = 3.0 * alf12 * alf12;
+
         let qq_s = 0.014 + 0.0128 * alf12;
-        let dqqdalf = 0.0128;
+        let dqqdt = 0.0128 * alf12dt;
+        let dqqdd = 0.0128 * alf12dd;
+
         let rr_s = (5.0 / 32.0) - alf12 * qq_s;
-        let drrdalf = -(qq_s + alf12 * dqqdalf);
+        let drrdt = -(alf12dt * qq_s + alf12 * dqqdt);
+        let drrdd = -(alf12dd * qq_s + alf12 * dqqdd);
+
         let ss = tau12 * rr_s;
-        let dssdt = tau12dt * rr_s + tau12 * drrdalf * alf12dt;
-        let dssdd = tau12 * drrdalf * alf12dd;
+        let dssdt = tau12dt * rr_s + tau12 * drrdt;
+        let dssdd = tau12 * drrdd;
 
         let tt = -0.0098 + 0.0048 * alf12;
-        let dttdalf = 0.0048;
+        let dttdt = 0.0048 * alf12dt;
+        let dttdd = 0.0048 * alf12dd;
+
         let uu = 0.0055 + alf12 * tt;
-        let duudalf = tt + alf12 * dttdalf;
+        let duudt = alf12dt * tt + alf12 * dttdt;
+        let duudd = alf12dd * tt + alf12 * dttdd;
+
         let vv = gamef * alf12 * uu;
-        let dvvdt = (gamefdt * alf12 + gamef * alf12dt) * uu
-            + gamef * alf12 * duudalf * alf12dt;
-        let dvvdd = (gamefdd * alf12 + gamef * alf12dd) * uu
-            + gamef * alf12 * duudalf * alf12dd;
+        let dvvdt = gamefdt * alf12 * uu
+            + gamef * alf12dt * uu
+            + gamef * alf12 * duudt;
+        let dvvdd = gamefdd * alf12 * uu
+            + gamef * alf12dd * uu
+            + gamef * alf12 * duudd;
 
-        let ww = ss + vv;
-        let dwwdt = dssdt + dvvdt;
-        let dwwdd = dssdd + dvvdd;
-        let xx = a3 * ww;
-        let dxxdt = da3 * alf12dt * ww + a3 * dwwdt;
-        let dxxdd = da3 * alf12dd * ww + a3 * dwwdd;
+        h12 = cc - a3 * (ss + vv);
+        let rr_h = da3 * (ss + vv);
+        dh12dt = dccdt - rr_h * alf12dt - a3 * (dssdt + dvvdt);
+        dh12dd = dccdd - rr_h * alf12dd - a3 * (dssdd + dvvdd);
 
-        let xlgfac = (1.0 - 0.0562 * a3).max(0.77);
-        let (dxlgfacdt, dxlgfacdd) = if xlgfac > 0.77 {
-            let f = -0.0562 * da3 / xlgfac;
-            (f * alf12dt, f * alf12dd)
+        let rr_lg = 1.0 - 0.0562 * a3;
+        let ss_lg = -0.0562 * da3;
+        let drr_lg_dt = ss_lg * alf12dt;
+        let drr_lg_dd = ss_lg * alf12dd;
+        let (xlgfac, dxlgfacdt, dxlgfacdd) = if rr_lg >= 0.77 {
+            (rr_lg, drr_lg_dt, drr_lg_dd)
         } else {
-            (0.0, 0.0)
+            (0.77, 0.0, 0.0)
         };
 
-        h12 = cc - xx + flexmesa_math::log(xlgfac);
-        dh12dt = dccdt - dxxdt + dxlgfacdt;
-        dh12dd = dccdd - dxxdd + dxlgfacdd;
+        h12 += flexmesa_math::log(xlgfac);
+        let rr_xl = 1.0 / xlgfac;
+        dh12dt += rr_xl * dxlgfacdt;
+        dh12dd += rr_xl * dxlgfacdd;
 
         if gamef <= 0.8 {
-            let dgamef = 2.0;
-            let rr_wt = dgamef * (0.8 - gamef);
-            let drrdt = -dgamef * gamefdt;
-            let drrdd = -dgamef * gamefdd;
-            let ss_wt = dgamef * (gamef - 0.3);
-            let dss_dt = dgamef * gamefdt;
-            let dss_dd = dgamef * gamefdd;
+            let dgamma = 1.0 / (0.8 - 0.3);
+            let rr_wt = dgamma * (0.8 - gamef);
+            let drr_wt_dt = -dgamma * gamefdt;
+            let drr_wt_dd = -dgamma * gamefdd;
+            let ss_wt = dgamma * (gamef - 0.3);
+            let dss_wt_dt = dgamma * gamefdt;
+            let dss_wt_dd = dgamma * gamefdd;
             let vv_s = h12;
             h12 = h12w * rr_wt + vv_s * ss_wt;
-            dh12dt =
-                dh12wdt * rr_wt + h12w * drrdt + dh12dt * ss_wt + vv_s * dss_dt;
-            dh12dd =
-                dh12wdd * rr_wt + h12w * drrdd + dh12dd * ss_wt + vv_s * dss_dd;
+            dh12dt = dh12wdt * rr_wt
+                + h12w * drr_wt_dt
+                + dh12dt * ss_wt
+                + vv_s * dss_wt_dt;
+            dh12dd = dh12wdd * rr_wt
+                + h12w * drr_wt_dd
+                + dh12dd * ss_wt
+                + vv_s * dss_wt_dd;
         }
     }
 

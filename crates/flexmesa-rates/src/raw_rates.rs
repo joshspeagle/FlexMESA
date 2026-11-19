@@ -169,36 +169,39 @@ pub fn eval_interp_rate_table(
 /// - `ue`: Mean nucleon-to-electron ratio $\mu_e \approx 1 / Y_e$ (typically `2.0`).
 #[must_use]
 pub fn eval_fl_epsnuc_3alf(t: f64, rho: f64, y: f64, ue: f64) -> f64 {
+    // `rates/private/pycno.f90:74-240`
     let r6 = 1.0e-6 * rho;
     let r6t = 2.0 * r6 / ue;
+    let r6t16 = flexmesa_math::pow(r6t, 1.0 / 6.0);
+    let r6t13 = r6t16 * r6t16;
     let t6 = 1.0e-6 * t;
-    let r6t13 = flexmesa_math::pow(r6t, ONE_THIRD);
-    let t623 = flexmesa_math::pow(t6, 2.0 / 3.0);
-    let u = 1.35 * r6t13 / t623;
+    let t613 = flexmesa_math::pow(t6, ONE_THIRD);
+    let t623 = t613 * t613;
+    let t653 = t623 * t6;
     let t612 = t6.sqrt();
-    let t632 = flexmesa_math::pow(t6, 1.5);
+    let t632 = t6 * t612;
+    let u = 1.35 * r6t13 / t623;
 
     let (g1, g2) = if u < 1.0 {
-        let t613 = flexmesa_math::pow(t6, ONE_THIRD);
-        let t653 = flexmesa_math::pow(t6, 5.0 / 3.0);
         let a1 = flexmesa_math::pow2(1.0 - 4.222e-2 * t623) + 2.643e-5 * t653;
-        let mut b1 = 16.16 / (a1 * t623) * flexmesa_math::exp(-134.92 / t613);
+        let mut b1 = (16.16 * flexmesa_math::exp(-134.92 / t613)) / (a1 * t623);
         if r6t < 5.458e3 {
             b1 += flexmesa_math::exp(-1065.1 / t6) / t632;
         }
         let g1 = b1 * flexmesa_math::exp(60.492 * r6t13 / t6);
         let a2 = flexmesa_math::pow2(1.0 - 2.807e-2 * t623) + 2.704e-6 * t653;
-        let mut b2 = 244.6 / (a2 * t623)
+        let mut b2 = (244.6
             * flexmesa_math::pow5(1.0 + 3.528e-3 * t623)
-            * flexmesa_math::exp(-235.72 / t613);
+            * flexmesa_math::exp(-235.72 / t613))
+            / (a2 * t623);
         if r6t < 1.836e4 {
             b2 += flexmesa_math::exp(-3336.4 / t6) / t632;
         }
         let g2 = b2 * flexmesa_math::exp(106.35 * r6t13 / t6);
         (g1, g2)
     } else {
-        let r6t16 = flexmesa_math::pow(r6t, 1.0 / 6.0);
-        let af = flexmesa_math::pow(u, -1.5) + 1.0;
+        let u32 = u * u.sqrt();
+        let af = 1.0 / u32 + 1.0;
         let b1_num = 1.178 * af * flexmesa_math::exp(-77.554 / r6t16);
         let b1_den = t612
             * (flexmesa_math::pow2(1.0 - 5.680e-2 * r6t13)
@@ -225,5 +228,5 @@ pub fn eval_fl_epsnuc_3alf(t: f64, rho: f64, y: f64, ue: f64) -> f64 {
         (g1, g2)
     };
 
-    5.120e29 * g1 * g2 * flexmesa_math::pow3(y) * r6 * r6
+    5.120e29 * g1 * g2 * y * y * y * r6 * r6
 }

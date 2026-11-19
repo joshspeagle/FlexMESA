@@ -100,13 +100,12 @@ def brem_neu_weak_degen(t8: float, inp: _inputs.NeuInputs) -> _inputs.NeuRate:
     cz = -1.26 * etam2
     inv_edum = 1.0 / edum
     xden = c00 * inv_edum
-    d_scale = (cz - xden * dz) * inv_edum
     f_tup = (
         xnum + xden,
-        -xnum * xnum * f0 + d_scale * etadt,
-        d_scale * etadd,
-        d_scale * etada,
-        d_scale * etadz,
+        -xnum * xnum * f0 + (cz * etadt - xden * (dz * etadt)) * inv_edum,
+        (cz * etadd - xden * (dz * etadd)) * inv_edum,
+        (cz * etada - xden * (dz * etada)) * inv_edum,
+        (cz * etadz - xden * (dz * etadz)) * inv_edum,
     )
 
     ga0 = 230.0 + 6.7e5 * t8m2 + 7.66e9 * t8m5
@@ -114,7 +113,7 @@ def brem_neu_weak_degen(t8: float, inp: _inputs.NeuInputs) -> _inputs.NeuRate:
     gz = 1.0 + inp.rm * 1.0e-9
     gxnum = 1.0 / (ga0 * gz)
     neg_gx2 = -gxnum * gxnum
-    g_scale = neg_gx2 * ga0 * 1.0e-9
+    g_scale = ga0 * 1.0e-9
 
     p1 = math.pow(t8, 3.85)
     gc00 = 7.75e5 * t832 + 247.0 * p1
@@ -135,10 +134,10 @@ def brem_neu_weak_degen(t8: float, inp: _inputs.NeuInputs) -> _inputs.NeuRate:
     neg_gxd2 = -gxden * gxden
     g_tup = (
         gxnum + gxden,
-        neg_gx2 * gf0 * gz + neg_gxd2 * gd2dt,
-        g_scale * inp.rmdd + neg_gxd2 * gd2dd,
-        (g_scale + neg_gxd2 * neg_c00_rmi2) * inp.rmda,
-        (g_scale + neg_gxd2 * neg_c00_rmi2) * inp.rmdz,
+        neg_gx2 * (gf0 * gz) + neg_gxd2 * gd2dt,
+        neg_gx2 * (g_scale * inp.rmdd) + neg_gxd2 * gd2dd,
+        neg_gx2 * (g_scale * inp.rmda) + neg_gxd2 * (neg_c00_rmi2 * inp.rmda),
+        neg_gx2 * (g_scale * inp.rmdz) + neg_gxd2 * (neg_c00_rmi2 * inp.rmdz),
     )
     return _combine_brem_rate(t85, t86, inp, f_tup, g_tup)
 
@@ -382,16 +381,27 @@ def brem_neu(inp: _inputs.NeuInputs) -> _inputs.NeuRate:
     dtfracda = dtfermidu * duda * dtfrac_dtf
     dtfracdz = dtfermidu * dudz * dtfrac_dtf
 
-    d_cos = 0.5 * _const.PI * math.sin(_const.PI * tfrac)
-    dalfadt = dtfracdt * d_cos
-    dalfadd = dtfracdd * d_cos
-    dalfada = dtfracda * d_cos
-    dalfadz = dtfracdz * d_cos
-    diff_val = weak.val - liq.val
+    s_pi = math.sin(_const.PI * tfrac)
+    dalfadt = dtfracdt * 0.5 * _const.PI * s_pi
+    dalfadd = dtfracdd * 0.5 * _const.PI * s_pi
+    dalfada = dtfracda * 0.5 * _const.PI * s_pi
+    dalfadz = dtfracdz * 0.5 * _const.PI * s_pi
     return _inputs.NeuRate(
         val=alfa * weak.val + beta * liq.val,
-        d_t=alfa * weak.d_t + beta * liq.d_t + dalfadt * diff_val,
-        d_rho=alfa * weak.d_rho + beta * liq.d_rho + dalfadd * diff_val,
-        d_abar=alfa * weak.d_abar + beta * liq.d_abar + dalfada * diff_val,
-        d_zbar=alfa * weak.d_zbar + beta * liq.d_zbar + dalfadz * diff_val,
+        d_t=alfa * weak.d_t
+        + beta * liq.d_t
+        + dalfadt * weak.val
+        + (-dalfadt) * liq.val,
+        d_rho=alfa * weak.d_rho
+        + beta * liq.d_rho
+        + dalfadd * weak.val
+        + (-dalfadd) * liq.val,
+        d_abar=alfa * weak.d_abar
+        + beta * liq.d_abar
+        + dalfada * weak.val
+        + (-dalfada) * liq.val,
+        d_zbar=alfa * weak.d_zbar
+        + beta * liq.d_zbar
+        + dalfadz * weak.val
+        + (-dalfadz) * liq.val,
     )

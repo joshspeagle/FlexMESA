@@ -498,14 +498,14 @@ fn rate_o16o16g_fxt(tf: &TFactors) -> (f64, f64) {
     if tf.t9 < LOW_T9_CUTOFF {
         return (0.0, 0.0);
     }
-    let term = 0.10
-        * 7.10e36
+    // `rates/private/ratelib.f90:1761-1775`: `term = ...; fr = term * 0.10d0`
+    let term = 7.10e36
         * tf.t9i23
         * flexmesa_math::exp(
             -135.93 * tf.t9i13 - 0.629 * tf.t923 - 0.445 * tf.t943
                 + 0.0103 * tf.t9 * tf.t9,
         );
-    (term, 0.0)
+    (term * 0.10, 0.0)
 }
 
 #[inline]

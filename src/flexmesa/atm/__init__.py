@@ -23,15 +23,19 @@ eval_irradiated = _core.eval_irradiated
 eval_paczynski_gradr = _core.eval_paczynski_gradr
 eval_paczynski_gradr_jax = _jax.eval_paczynski_gradr_jax
 eval_t_tau = _core.eval_t_tau
+eval_t_tau_atm = _core.eval_t_tau_atm
 eval_t_tau_dq_dtau = _core.eval_t_tau_dq_dtau
 eval_t_tau_jax = _jax.eval_t_tau_jax
 eval_t_tau_uniform = _core.eval_t_tau_uniform
 eval_t_tau_varying = _core.eval_t_tau_varying
 eval_table = _core.eval_table
+eval_table_atm = _core.eval_table_atm
 eval_table_jax = _jax.eval_table_jax
 get_t_tau_base = _core.get_t_tau_base
+get_t_tau_id = _core.get_t_tau_id
 get_table_alfa_beta = _core.get_table_alfa_beta
 get_table_base = _core.get_table_base
+get_table_id = _core.get_table_id
 
 __all__: list[str] = [
     "ATM_TABLE_DB_WD_TAU_25",
@@ -52,13 +56,17 @@ __all__: list[str] = [
     "eval_paczynski_gradr",
     "eval_paczynski_gradr_jax",
     "eval_t_tau",
+    "eval_t_tau_atm",
     "eval_t_tau_dq_dtau",
     "eval_t_tau_jax",
     "eval_t_tau_uniform",
     "eval_t_tau_varying",
     "eval_table",
+    "eval_table_atm",
     "eval_table_jax",
     "get_t_tau_base",
+    "get_t_tau_id",
     "get_table_alfa_beta",
     "get_table_base",
+    "get_table_id",
 ]

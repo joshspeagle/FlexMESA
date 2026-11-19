@@ -8,6 +8,20 @@ use flexmesa_const::LN10;
 use crate::loader::{RatesCatalog, SuzukiTable, WeakTable};
 use crate::types::{RatesError, WeakRateEval};
 
+#[inline]
+fn find_location(xs: &[f64], x: f64) -> usize {
+    // Matches `find_location` in `rates/private/weaklib_tables.f90:272-286`
+    // and `rates/private/suzuki_tables.f90:256-270`: exact interior grid points
+    // `x == xs[i]` select cell `[xs[i - 1], xs[i]]` (`ix = i - 1`).
+    let nx = xs.len();
+    for (i, &xi) in xs.iter().enumerate().take(nx - 1).skip(1) {
+        if x <= xi {
+            return i - 1;
+        }
+    }
+    nx - 2
+}
+
 /// Performs 2D bilinear interpolation on a row-major `(nx, ny)` matrix `z_flat`
 /// with axis clamping and exact partial derivatives `(f, df_dx, df_dy)` matching
 /// `weaklib_tables.f90` and `suzuki_tables.f90`.
@@ -27,14 +41,8 @@ pub fn bilinear_interp_2d(
     let x = x_in.clamp(xs[0], xs[nx - 1]);
     let y = y_in.clamp(ys[0], ys[ny - 1]);
 
-    let ix = xs
-        .partition_point(|&v| v <= x)
-        .saturating_sub(1)
-        .min(nx - 2);
-    let iy = ys
-        .partition_point(|&v| v <= y)
-        .saturating_sub(1)
-        .min(ny - 2);
+    let ix = find_location(xs, x);
+    let iy = find_location(ys, y);
 
     let (x0, x1) = (xs[ix], xs[ix + 1]);
     let (y0, y1) = (ys[iy], ys[iy + 1]);
@@ -63,9 +71,21 @@ pub fn bilinear_interp_2d(
 #[must_use]
 pub fn eval_weaklib_one(
     tab: &WeakTable,
-    t9: f64,
-    l_ye_rho: f64,
+    t9_in: f64,
+    l_ye_rho_in: f64,
 ) -> WeakRateEval {
+    // `eval_weak.f90:226-235` + `weaklib_tables.f90:249-265`
+    let t9 = if tab.t9s.is_empty() {
+        t9_in
+    } else {
+        t9_in.clamp(tab.t9s[0], tab.t9s[tab.t9s.len() - 1])
+    };
+    let l_ye_rho = if tab.lyerhos.is_empty() {
+        l_ye_rho_in
+    } else {
+        l_ye_rho_in.clamp(tab.lyerhos[0], tab.lyerhos[tab.lyerhos.len() - 1])
+    };
+
     let (ldec, dldec_dt9, dldec_dly) =
         bilinear_interp_2d(&tab.t9s, &tab.lyerhos, &tab.ldecay, t9, l_ye_rho);
     let (lcap, dlcap_dt9, dlcap_dly) =
@@ -78,19 +98,19 @@ pub fn eval_weaklib_one(
         l_ye_rho,
     );
 
-    let decay = flexmesa_math::exp(ldec * LN10);
-    let capture = flexmesa_math::exp(lcap * LN10);
+    let decay = flexmesa_math::exp10(ldec);
+    let capture = flexmesa_math::exp10(lcap);
     let lambda = decay + capture;
-    let dlambda_dln_t = t9 * LN10 * (decay * dldec_dt9 + capture * dlcap_dt9);
+    let dlambda_dln_t = LN10 * t9 * (decay * dldec_dt9 + capture * dlcap_dt9);
     let dlambda_dln_rho = decay * dldec_dly + capture * dlcap_dly;
 
     let (qneu, dqneu_dln_t, dqneu_dln_rho) = if lambda < 1.0e-30 {
         (0.0, 0.0, 0.0)
     } else {
-        let nu = flexmesa_math::exp(lneu * LN10);
-        let qn = nu / lambda;
-        let dqn_dt = qn * (t9 * LN10 * dlneu_dt9 - dlambda_dln_t / lambda);
-        let dqn_dr = qn * (dlneu_dly - dlambda_dln_rho / lambda);
+        let qn = flexmesa_math::exp10(lneu) / lambda;
+        let dqn_dt =
+            LN10 * t9 * qn * dlneu_dt9 - dlambda_dln_t * qn / lambda;
+        let dqn_dr = qn * dlneu_dly - dlambda_dln_rho * qn / lambda;
         (qn, dqn_dt, dqn_dr)
     };
 
@@ -124,17 +144,17 @@ fn eval_suzuki_channel(
     let (ln, dln_dt, dln_dr) =
         bilinear_interp_2d(logts, lyerhos, nu_grid, log_t, l_ye_rho);
     (
-        flexmesa_math::exp(lr * LN10),
+        flexmesa_math::exp10(lr),
         dlr_dt,
         dlr_dr,
-        flexmesa_math::exp(ln * LN10),
+        flexmesa_math::exp10(ln),
         dln_dt,
         dln_dr,
     )
 }
 
 /// Evaluates a single [`SuzukiTable`] at `(t9, l_ye_rho)` matching
-/// `rates/private/suzuki_tables.f90`.
+/// `rates/private/suzuki_tables.f90:136-254`.
 #[must_use]
 pub fn eval_suzuki_one(
     tab: &SuzukiTable,
@@ -169,24 +189,16 @@ pub fn eval_suzuki_one(
         l_ye_rho,
     );
 
-    let lambda = decay + capture;
-    let dlambda_dln_t = decay * dldec_dlogt + capture * dlcap_dlogt;
-    let dlambda_dln_rho = decay * dldec_dly + capture * dlcap_dly;
+    let lambda = capture + decay;
+    let dlambda_dln_t = capture * dlcap_dlogt + decay * dldec_dlogt;
+    let dlambda_dln_rho = capture * dlcap_dly + decay * dldec_dly;
 
     let (qneu, dqneu_dln_t, dqneu_dln_rho) = if lambda > 1.0e-30 {
-        let nu = decay_nu + capture_nu;
+        let nu = capture_nu + decay_nu;
         let qn = nu / lambda;
         let mut dqn_dt = 0.0;
         let mut dqn_dr = 0.0;
         if nu > 1.0e-30 {
-            if tab.has_decay {
-                dqn_dt += qn
-                    * ((decay_nu / nu) * dldec_nu_dlogt
-                        - (decay / lambda) * dldec_dlogt);
-                dqn_dr += qn
-                    * ((decay_nu / nu) * dldec_nu_dly
-                        - (decay / lambda) * dldec_dly);
-            }
             if tab.has_capture {
                 dqn_dt += qn
                     * ((capture_nu / nu) * dlcap_nu_dlogt
@@ -194,6 +206,14 @@ pub fn eval_suzuki_one(
                 dqn_dr += qn
                     * ((capture_nu / nu) * dlcap_nu_dly
                         - (capture / lambda) * dlcap_dly);
+            }
+            if tab.has_decay {
+                dqn_dt += qn
+                    * ((decay_nu / nu) * dldec_nu_dlogt
+                        - (decay / lambda) * dldec_dlogt);
+                dqn_dr += qn
+                    * ((decay_nu / nu) * dldec_nu_dly
+                        - (decay / lambda) * dldec_dly);
             }
         }
         (qn, dqn_dt, dqn_dr)
@@ -215,24 +235,37 @@ pub fn eval_suzuki_one(
 }
 
 /// Evaluates weak reaction rates for `(lhs_name, rhs_name)` at `(t9, ye_rho)`
-/// using either `weaklib` (`use_suzuki = false`) or `Suzuki2016` (`use_suzuki = true`).
+/// using either `weaklib` (`use_suzuki = false`) or `Suzuki2016` (`use_suzuki = true`),
+/// falling back to `weaklib` when `(log_t, l_ye_rho)` lies outside the `Suzuki2016`
+/// grid bounds (`eval_weak.f90:225-268`, `suzuki_tables.f90:144-155`).
 ///
 /// # Errors
 /// Returns [`RatesError::UnknownWeakPair`] if `(lhs_name, rhs_name)` is not found.
 pub fn eval_weak_reaction_pair(
     lhs_name: &str,
     rhs_name: &str,
-    t9: f64,
+    t9_in: f64,
     ye_rho: f64,
     use_suzuki: bool,
 ) -> Result<WeakRateEval, RatesError> {
     let cat = RatesCatalog::builtin();
-    let l_ye_rho = flexmesa_math::log10(ye_rho.max(1.0e-99));
+    let wtab = cat.weak_by_pair(lhs_name, rhs_name)?;
+    let t9 = t9_in.clamp(wtab.t9s[0], wtab.t9s[wtab.t9s.len() - 1]);
+    let l_ye_rho = flexmesa_math::log10(ye_rho.max(1.0e-99))
+        .clamp(wtab.lyerhos[0], wtab.lyerhos[wtab.lyerhos.len() - 1]);
     if use_suzuki {
         if let Some(stab) = cat.suzuki_by_pair(lhs_name, rhs_name) {
-            return Ok(eval_suzuki_one(stab, t9, l_ye_rho));
+            let log_t = flexmesa_math::log10(t9) + 9.0;
+            let in_bounds = !stab.logts.is_empty()
+                && !stab.lyerhos.is_empty()
+                && log_t >= stab.logts[0]
+                && log_t <= stab.logts[stab.logts.len() - 1]
+                && l_ye_rho >= stab.lyerhos[0]
+                && l_ye_rho <= stab.lyerhos[stab.lyerhos.len() - 1];
+            if in_bounds {
+                return Ok(eval_suzuki_one(stab, t9, l_ye_rho));
+            }
         }
     }
-    let wtab = cat.weak_by_pair(lhs_name, rhs_name)?;
     Ok(eval_weaklib_one(wtab, t9, l_ye_rho))
 }

@@ -21,7 +21,7 @@
         "verified_total": 0,
         "pct_ported": 14.9,
         "pct_verified": 0.0,
-        "rust_lines": 54421,
+        "rust_lines": 55571,
         "python_jax_lines": 3869
       },
       {
@@ -55,7 +55,7 @@
         "verified_total": 0,
         "pct_ported": 18.2,
         "pct_verified": 0.0,
-        "rust_lines": 9679,
+        "rust_lines": 9681,
         "python_jax_lines": 1244
       },
       {
@@ -72,7 +72,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 5754,
+        "rust_lines": 5762,
         "python_jax_lines": 1288
       },
       {
@@ -89,7 +89,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 14169,
+        "rust_lines": 14202,
         "python_jax_lines": 9673
       },
       {
@@ -106,8 +106,8 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 4852,
-        "python_jax_lines": 3214
+        "rust_lines": 4862,
+        "python_jax_lines": 3248
       },
       {
         "module": "net",
@@ -455,7 +455,7 @@
       "upstream_panel_modules": 46
     },
     "infrastructure_lines": {
-      "rust_bridge_testing_bench": 16915,
+      "rust_bridge_testing_bench": 16922,
       "python_testing_bench": 13609
     }
   },
@@ -595,7 +595,7 @@
         "no_reference_yet": 4,
         "strict_validated": 0,
         "diagnostic_runs": 90,
-        "reached_termination": 34,
+        "reached_termination": 39,
         "within_numeric_tol": 5,
         "passing": 0,
         "declared_gaps": 86,
@@ -607,7 +607,7 @@
         "no_reference_yet": 0,
         "strict_validated": 0,
         "diagnostic_runs": 8,
-        "reached_termination": 5,
+        "reached_termination": 4,
         "within_numeric_tol": 0,
         "passing": 0,
         "declared_gaps": 8,
@@ -620,7 +620,7 @@
         "strict_validated": 0,
         "diagnostic_runs": 8,
         "reached_termination": 3,
-        "within_numeric_tol": 0,
+        "within_numeric_tol": 1,
         "passing": 0,
         "declared_gaps": 8,
         "undeclared_failures": 0
@@ -651,6 +651,11 @@
         "suite": "star",
         "case": "rsp_save_and_load_file",
         "issue": "#161"
+      },
+      {
+        "suite": "astero",
+        "case": "surface_effects",
+        "issue": "#162"
       }
     ],
     "gaps_by_issue": {
@@ -673,28 +678,28 @@
   "controls": [
     {
       "namelist": "star &controls",
-      "upstream_scalars": 1396,
-      "matched_in_flexmesa": 582,
-      "defaults_agree": 535,
-      "value_mismatch": 31,
-      "disabled_limit_none": 16,
-      "unimplemented": 814
+      "upstream_scalars": 1444,
+      "matched_in_flexmesa": 611,
+      "defaults_agree": 611,
+      "value_mismatch": 0,
+      "disabled_limit_none": 0,
+      "unimplemented": 833
     },
     {
       "namelist": "star &star_job",
-      "upstream_scalars": 431,
-      "matched_in_flexmesa": 80,
-      "defaults_agree": 63,
-      "value_mismatch": 11,
-      "disabled_limit_none": 6,
-      "unimplemented": 351
+      "upstream_scalars": 455,
+      "matched_in_flexmesa": 88,
+      "defaults_agree": 88,
+      "value_mismatch": 0,
+      "disabled_limit_none": 0,
+      "unimplemented": 367
     },
     {
       "namelist": "binary &binary_controls + &binary_job",
       "upstream_scalars": 209,
       "matched_in_flexmesa": 120,
-      "defaults_agree": 117,
-      "value_mismatch": 3,
+      "defaults_agree": 120,
+      "value_mismatch": 0,
       "disabled_limit_none": 0,
       "unimplemented": 89
     },
@@ -702,8 +707,8 @@
       "namelist": "astero &astero_search_controls",
       "upstream_scalars": 150,
       "matched_in_flexmesa": 73,
-      "defaults_agree": 70,
-      "value_mismatch": 3,
+      "defaults_agree": 73,
+      "value_mismatch": 0,
       "disabled_limit_none": 0,
       "unimplemented": 77
     },
@@ -711,8 +716,8 @@
       "namelist": "eos &eos",
       "upstream_scalars": 102,
       "matched_in_flexmesa": 54,
-      "defaults_agree": 42,
-      "value_mismatch": 12,
+      "defaults_agree": 54,
+      "value_mismatch": 0,
       "disabled_limit_none": 0,
       "unimplemented": 48
     },
@@ -720,8 +725,8 @@
       "namelist": "kap &kap",
       "upstream_scalars": 36,
       "matched_in_flexmesa": 16,
-      "defaults_agree": 14,
-      "value_mismatch": 2,
+      "defaults_agree": 16,
+      "value_mismatch": 0,
       "disabled_limit_none": 0,
       "unimplemented": 20
     },
@@ -1088,62 +1093,62 @@
     "rust_ignore_count": 13,
     "rust_ignores": [
       {
-        "location": "crates/flexmesa-astero/tests/astero_suite.rs:415",
+        "location": "crates/flexmesa-astero/tests/astero_suite.rs:422",
         "reason": "unverified uncapped astero campaign; tracked in #143 and #162",
         "issues": "#143, #162"
       },
       {
-        "location": "crates/flexmesa-astero/tests/astero_suite.rs:421",
+        "location": "crates/flexmesa-astero/tests/astero_suite.rs:428",
         "reason": "unverified uncapped astero campaign; tracked in #143 and #162",
         "issues": "#143, #162"
       },
       {
-        "location": "crates/flexmesa-astero/tests/astero_suite.rs:427",
+        "location": "crates/flexmesa-astero/tests/astero_suite.rs:434",
         "reason": "unverified uncapped astero campaign; tracked in #143 and #162",
         "issues": "#143, #162"
       },
       {
-        "location": "crates/flexmesa-astero/tests/astero_suite.rs:433",
+        "location": "crates/flexmesa-astero/tests/astero_suite.rs:440",
         "reason": "unverified uncapped astero campaign; tracked in #143 and #162",
         "issues": "#143, #162"
       },
       {
-        "location": "crates/flexmesa-astero/tests/astero_suite.rs:439",
+        "location": "crates/flexmesa-astero/tests/astero_suite.rs:446",
         "reason": "unverified uncapped astero campaign; tracked in #143 and #162",
         "issues": "#143, #162"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:958",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:977",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:966",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:985",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:975",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:994",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:983",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1002",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:991",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1010",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:998",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1017",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },
       {
-        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1006",
+        "location": "crates/flexmesa-binary/tests/tier5_coupled_suite.rs:1025",
         "reason": "unverified uncapped binary campaign; tracked in #143 and #160",
         "issues": "#143, #160"
       },
@@ -1153,14 +1158,8 @@
         "issues": "#161"
       }
     ],
-    "python_xfail_or_skip_count": 1,
-    "python_skips": [
-      {
-        "location": "tests/test_wave4_bench.py:150",
-        "reason": "pytest.mark.xfail( strict=True, reason=( \"MESA 26.4.1 star/test remeshes 2464 -> 992 zones at step 2; \" \"log_cntr_Rho differs by 1.11e-3 > 1.0e-3 at step 11 (#153)\" ), )",
-        "issues": "#153"
-      }
-    ],
+    "python_xfail_or_skip_count": 0,
+    "python_skips": [],
     "unlinked_locations": []
   },
   "github": {

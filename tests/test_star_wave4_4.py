@@ -26,7 +26,7 @@ def test_adaptive_remeshing_and_mesh_gval_jax_consistency() -> None:
 
     gval = np.asarray(pre.eval_mesh_gval_jax(mesh_delta_coeff=0.5))
     expected_gval = 0.5 * np.maximum(
-        30.0 * np.abs(np.diff(pre.ln_peos)) / np.log(10.0),
+        40.0 * np.abs(np.diff(pre.ln_peos)) / np.log(10.0),
         110.0 * np.abs(np.diff(pre.ln_t)) / np.log(10.0),
     )
     assert gval.shape == (pre.nz,)

@@ -254,7 +254,7 @@ def kap_get(
     eta: float = 0.0,
     d_eta_dln_rho: float = 0.0,
     d_eta_dln_t: float = 0.0,
-    zbase: float = 0.02,
+    zbase: float = -1.0,
     **kwargs: Any,
 ) -> KapEvalOutput:
     """Evaluate `kap_get` from 1-based `chem_id` and mass-fraction vector `xa`.
@@ -307,7 +307,7 @@ def kap_get_zones(
     eta_zones: np.ndarray,
     d_eta_dln_rho_zones: np.ndarray,
     d_eta_dln_t_zones: np.ndarray,
-    zbase: float = 0.02,
+    zbase: float = -1.0,
     *,
     parallel: bool = True,
     **kwargs: Any,

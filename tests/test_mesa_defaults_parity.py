@@ -165,7 +165,7 @@ def test_kap_get_results_jax_rejects_negative_zbase_for_type2_and_jit() -> None:
     assert np.isfinite(float(dr_t1))
     assert np.isfinite(float(dt_t1))
 
-    # Under @jax.jit Tracer, negative zbase returns NaN rather than clamping Z=0.
+    # Under @jax.jit Tracer, negative zbase returns NaN (no silent Z=0 clamp).
     jit_fn = jax.jit(
         lambda zb: jax_kernels.kap_get_results_jax(
             0.02, 0.70, zb, log_rho=-3.0, log_t=6.0, use_type2_opacities=True
@@ -178,3 +178,15 @@ def test_kap_get_results_jax_rejects_negative_zbase_for_type2_and_jit() -> None:
     assert np.all(np.isnan(np.asarray(fr_bad)))
     kap_ok, _, _, _ = jit_fn(jnp.asarray(0.02))
     assert np.isfinite(float(kap_ok)) and float(kap_ok) > 0.0
+
+    # Standalone Python kap.kap_get also defaults zbase=-1.0 and rejects Type 2
+    # when zbase is omitted (MESA kap/defaults/kap.defaults Zbase = -1).
+    from flexmesa import kap as fm_kap
+
+    with pytest.raises(ValueError, match="zbase"):
+        fm_kap.kap_get(
+            np.array([2, 7, 40], dtype=np.uintp),
+            np.array([0.70, 0.28, 0.02], dtype=np.float64),
+            log_rho=-3.0,
+            log_t=6.0,
+        )

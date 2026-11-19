@@ -148,7 +148,7 @@ macro_rules! impl_py_star_model {
 
             /// Sets `mesh_delta_coeff` and `varcontrol_target` on `controls`.
             #[pyo3(signature = (
-                mesh_delta_coeff=1.0, varcontrol_target=1.0e-4
+                mesh_delta_coeff=1.0, varcontrol_target=1.0e-3
             ))]
             pub fn set_evolve_controls(
                 &mut self,

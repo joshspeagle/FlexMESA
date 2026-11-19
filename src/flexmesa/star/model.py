@@ -157,7 +157,7 @@ class StarModel(_arrays.StarModelArrays):
     def set_evolve_controls(
         self,
         mesh_delta_coeff: float = 1.0,
-        varcontrol_target: float = 1.0e-4,
+        varcontrol_target: float = 1.0e-3,
     ) -> None:
         """Set `mesh_delta_coeff` and `varcontrol_target` on `controls`."""
         self._rust_model.set_evolve_controls(

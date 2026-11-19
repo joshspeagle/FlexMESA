@@ -296,7 +296,7 @@ pub use mesh_adjust::{
     CellType, MeshFunctionConfig, StandardMeshPlan, classify_new_cells,
     compute_monotone_xa_slopes, do_adjust_mesh, do_prune_mesh_surface,
     eval_effective_mesh_delta_coeff, eval_mesh_gval, plan_mesh, remap_onto_dq,
-    set_lnt_for_energy, solve_cell_lnt_for_energy, try_plan_standard_mesh,
+    solve_cell_lnt_for_energy, try_plan_standard_mesh,
 };
 pub use mesh_functions::{
     MAX_ALLOWED_GVALS, MeshFunctionData, OtherMeshFunctionColumn,

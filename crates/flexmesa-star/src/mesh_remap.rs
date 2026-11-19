@@ -7,7 +7,7 @@
 
 use flexmesa_chem::{NuclideCatalog, get_composition_info};
 use flexmesa_const::{FOUR_THIRDS_PI, LN10, ONE_THIRD};
-use flexmesa_eos::{I_LN_E, eos_dt_get_t, eos_dt_get_zones};
+use flexmesa_eos::{I_LN_E, eos_dt_get_t};
 use flexmesa_interp1d::interpolate_vector_pm;
 
 use crate::adjust_mesh_support::{
@@ -81,12 +81,52 @@ pub struct StandardMeshPlan {
     pub num_splits: usize,
     /// Count of `Merged` cells in `cell_type`.
     pub num_merges: usize,
+    /// Whether `model.xa` was already cleaned in place prior to planning.
+    pub(crate) xa_already_cleaned: bool,
 }
 
 #[inline]
 pub(crate) fn f64_slices_bit_eq(a: &[f64], b: &[f64]) -> bool {
     a.len() == b.len()
         && a.iter().zip(b).all(|(x, y)| x.to_bits() == y.to_bits())
+}
+
+/// Floors and renormalizes zone mass fractions matching `clean_up_fractions` /
+/// `do_clean1` (`net/private/net_eval.f90:822-850`, `tiny_x = 1d-99`).
+pub(crate) fn clean_up_fractions_slice(
+    xa: &mut [f64],
+    nz: usize,
+    species: usize,
+    max_sum_abs: f64,
+    xsum_tol: f64,
+) -> Result<(), StarError> {
+    const TINY_X: f64 = 1.0e-99;
+    for k in 0..nz {
+        let row = &mut xa[k * species..(k + 1) * species];
+        if max_sum_abs > 1.0 {
+            let sum_abs: f64 = row.iter().map(|x| x.abs()).sum();
+            if !sum_abs.is_finite() || sum_abs > max_sum_abs {
+                return Err(StarError::InvalidInput(format!(
+                    "clean_up_fractions failed during adjust_mesh at zone {}: sum_abs={sum_abs}",
+                    k + 1
+                )));
+            }
+        }
+        for x in row.iter_mut() {
+            *x = (*x).clamp(TINY_X, 1.0);
+        }
+        let xsum: f64 = row.iter().sum();
+        if !xsum.is_finite() || (xsum - 1.0).abs() > xsum_tol {
+            return Err(StarError::InvalidInput(format!(
+                "clean_up_fractions failed during adjust_mesh at zone {}: sum={xsum}",
+                k + 1
+            )));
+        }
+        for x in row.iter_mut() {
+            *x /= xsum;
+        }
+    }
+    Ok(())
 }
 
 /// Computes `dq(nz) = 1 - sum(dq(1:nz-1))` with fallback normalization matching
@@ -324,6 +364,7 @@ fn build_plan_for_given_dq(
         cell_type,
         num_splits,
         num_merges,
+        xa_already_cleaned: false,
     })
 }
 
@@ -702,78 +743,6 @@ pub fn solve_cell_lnt_for_energy(
     Ok((lnt, res_energy))
 }
 
-/// Inverts EOS $\ln e(\rho_k, \ln T_k, \mathbf{X}_k) = \ln e_{\mathrm{target},k}$
-/// across modified zones (`set_lnT_for_energy` in `star/private/mesh_adjust.f90:1627-1702`).
-///
-/// # Errors
-/// Returns [`StarError`] if EOS evaluation fails.
-pub fn set_lnt_for_energy(
-    model: &mut StarModel,
-    e_target: &[f64],
-    unchanged: &[bool],
-) -> Result<f64, StarError> {
-    let nz = model.nz;
-    if nz == 0 || e_target.len() != nz {
-        return Ok(0.0);
-    }
-    let species = model.species;
-    for k in 0..nz {
-        model.rho[k] = flexmesa_math::exp(model.lnd[k]);
-        if unchanged.get(k).copied().unwrap_or(false) || e_target[k] <= 0.0 {
-            model.t[k] = flexmesa_math::exp(model.ln_t[k]);
-            continue;
-        }
-        let log_rho = model.lnd[k] / LN10;
-        let xa_k = &model.xa[k * species..(k + 1) * species];
-        if let Ok((new_lnt, rev_e)) = solve_cell_lnt_for_energy(
-            model,
-            xa_k,
-            log_rho,
-            e_target[k],
-            model.ln_t[k],
-            1.0e-11,
-        ) {
-            model.ln_t[k] = new_lnt;
-            model.energy[k] = rev_e;
-        }
-        model.t[k] = flexmesa_math::exp(model.ln_t[k]);
-    }
-
-    let ht = crate::micro::builtin_helm_table()?;
-    let outs = eos_dt_get_zones(
-        ht,
-        &model.rho,
-        &model.t,
-        &model.chem_id,
-        &model.xa,
-        &model.eos_config,
-    )
-    .map_err(|e| {
-        StarError::MicrophysicsError(format!(
-            "set_lnt_for_energy final EOS failed: {e}"
-        ))
-    })?;
-    for (k, out) in outs.iter().enumerate() {
-        model.energy[k] = flexmesa_math::exp(out.res[I_LN_E]);
-    }
-
-    let e_before: f64 = model
-        .dq
-        .iter()
-        .zip(e_target.iter())
-        .map(|(dq, e)| dq * e)
-        .sum();
-    let e_after: f64 = model
-        .dq
-        .iter()
-        .zip(model.energy.iter())
-        .map(|(dq, e)| dq * e)
-        .sum();
-    let rel_err =
-        (e_before - e_after).abs() / e_before.abs().max(e_after.abs()).max(1.0);
-    Ok(rel_err)
-}
-
 pub(crate) fn dqbar_profile(dq: &[f64]) -> Vec<f64> {
     let n = dq.len();
     let mut dqbar = vec![0.0; n];
@@ -1080,8 +1049,8 @@ fn do_lnr_and_lnd(
 }
 
 /// Conservative overlap integration on `xout_old` / `xout_new` matching
-/// `adjust1_omega` (`include_upstream_gap_fill = true`) and `adjust1_v`,
-/// `adjust1_u`, `adjust1_etrb` (`include_upstream_gap_fill = false`) in
+/// `adjust1_omega` and `adjust1_v` (`include_upstream_gap_fill = true`) and
+/// `adjust1_u` and `adjust1_etrb` (`include_upstream_gap_fill = false`) in
 /// `star/private/mesh_adjust.f90:1955-2887`.
 fn adjust1_control_volume(
     k1: usize,
@@ -1092,14 +1061,22 @@ fn adjust1_control_volume(
     xout_new: &[f64],
     old_mass_wt: &[f64],
     new_point_wt: f64,
-    old_specific_val: &[f64],
+    old_val: &[f64],
     include_upstream_gap_fill: bool,
+    divide_by_old_wt: bool,
 ) -> Result<(f64, f64), StarError> {
     let xq_outer = xout_new[k1 - 1];
     let xq_inner = if k1 < nz {
         xq_outer + new_point_wt
     } else {
         1.0
+    };
+    let contrib = |idx: usize, dq: f64| -> f64 {
+        if divide_by_old_wt {
+            (old_val[idx] * dq) / old_mass_wt[idx]
+        } else {
+            old_val[idx] * dq
+        }
     };
 
     let mut dq_sum = 0.0_f64;
@@ -1122,7 +1099,7 @@ fn adjust1_control_volume(
             if dq_sum < new_point_wt && kk1 > 1 {
                 let dq = new_point_wt - dq_sum;
                 dq_sum = new_point_wt;
-                accum += old_specific_val[kk1 - 2] * dq;
+                accum += contrib(kk1 - 2, dq);
             }
             break;
         }
@@ -1142,11 +1119,11 @@ fn adjust1_control_volume(
                 dq -= new_point_wt - dq_sum;
                 dq_sum = new_point_wt;
             }
-            accum += old_specific_val[kk1 - 1] * dq;
+            accum += contrib(kk1 - 1, dq);
         } else if xq0 <= xq_outer && xq1 >= xq_inner {
             let dq = new_point_wt;
             dq_sum += dq;
-            accum += old_specific_val[kk1 - 1] * dq;
+            accum += contrib(kk1 - 1, dq);
         } else {
             let dq = if xq_inner <= xq1 {
                 let rem = new_point_wt - dq_sum;
@@ -1160,7 +1137,7 @@ fn adjust1_control_volume(
                 dq_sum += ov;
                 ov
             };
-            accum += old_specific_val[kk1 - 1] * dq;
+            accum += contrib(kk1 - 1, dq);
             if dq <= 0.0 {
                 return Err(StarError::InvalidInput(format!(
                     "mesh_adjust control-volume non-positive partial overlap dq={dq} at k={k1}"
@@ -1204,29 +1181,9 @@ pub(crate) fn execute_adjust_mesh_from_plan(
     let j_tot1 = total_angular_momentum(model);
 
     // `clean_up_fractions(1, nz, species, nz, s% xa, 10d0, 1d-2, ierr)`
-    // (`adjust_mesh.f90:109`).
-    for k in 0..nz_old {
-        let row = &mut model.xa[k * species..(k + 1) * species];
-        let sum_abs: f64 = row.iter().map(|x| x.abs()).sum();
-        if !sum_abs.is_finite() || sum_abs > 10.0 {
-            return Err(StarError::InvalidInput(format!(
-                "clean_up_fractions failed during adjust_mesh at zone {}: sum_abs={sum_abs}",
-                k + 1
-            )));
-        }
-        for x in row.iter_mut() {
-            *x = x.clamp(0.0, 1.0);
-        }
-        let sum_x: f64 = row.iter().sum();
-        if (sum_x - 1.0).abs() > 1.0e-2 || sum_x <= 0.0 {
-            return Err(StarError::InvalidInput(format!(
-                "clean_up_fractions failed during adjust_mesh at zone {}: sum={sum_x}",
-                k + 1
-            )));
-        }
-        for x in row.iter_mut() {
-            *x /= sum_x;
-        }
+    // (`adjust_mesh.f90:109`, `net/private/net_eval.f90:822-850`).
+    if !plan.xa_already_cleaned {
+        clean_up_fractions_slice(&mut model.xa, nz_old, species, 10.0, 1.0e-2)?;
     }
 
     let specific_pe_old: Vec<f64> =
@@ -1420,12 +1377,12 @@ pub(crate) fn execute_adjust_mesh_from_plan(
     )?;
 
     if model.controls.v_flag {
-        let old_v2: Vec<f64> = v_old.iter().map(|&v| v * v).collect();
-        let old_ke_tot: f64 = dqbar_old
-            .iter()
-            .zip(&old_v2)
-            .map(|(dqb, v2)| dqb * v2)
-            .sum();
+        let mut old_ke = vec![0.0_f64; nz_old];
+        let mut old_ke_tot = 0.0_f64;
+        for k in 0..nz_old {
+            old_ke[k] = dqbar_old[k] * v_old[k] * v_old[k];
+            old_ke_tot += old_ke[k];
+        }
         for k in 0..nz {
             if unchanged_face_for_vel(k, &cell_type) {
                 model.v[k] = v_old[comes_from[k]];
@@ -1440,8 +1397,9 @@ pub(crate) fn execute_adjust_mesh_from_plan(
                 &xout_new,
                 &dqbar_old,
                 dqbar[k],
-                &old_v2,
-                false,
+                &old_ke,
+                true,
+                true,
             )?;
             let mut v_new = (ke_sum / dqbar[k]).max(0.0).sqrt();
             if v_old[comes_from[k]] < 0.0 {
@@ -1470,9 +1428,12 @@ pub(crate) fn execute_adjust_mesh_from_plan(
     }
 
     if model.controls.u_flag {
-        let old_u2: Vec<f64> = u_old.iter().map(|&u| u * u).collect();
-        let old_ke_tot: f64 =
-            dq_old.iter().zip(&old_u2).map(|(d, u2)| d * u2).sum();
+        let mut old_ke = vec![0.0_f64; nz_old];
+        let mut old_ke_tot = 0.0_f64;
+        for k in 0..nz_old {
+            old_ke[k] = dq_old[k] * u_old[k] * u_old[k];
+            old_ke_tot += old_ke[k];
+        }
         for k in 0..nz {
             if unchanged_face_for_vel(k, &cell_type) {
                 model.u[k] = u_old[comes_from[k]];
@@ -1487,8 +1448,9 @@ pub(crate) fn execute_adjust_mesh_from_plan(
                 &xout_new,
                 &dq_old,
                 model.dq[k],
-                &old_u2,
+                &old_ke,
                 false,
+                true,
             )?;
             let mut u_new = (ke_sum / model.dq[k]).max(0.0).sqrt();
             if u_old[comes_from[k]] < 0.0 {
@@ -1509,13 +1471,16 @@ pub(crate) fn execute_adjust_mesh_from_plan(
     }
 
     if model.controls.rsp2_flag {
-        let old_et: Vec<f64> = w_old.iter().map(|&w| w * w).collect();
-        let old_et_tot: f64 =
-            dq_old.iter().zip(&old_et).map(|(d, e)| d * e).sum();
+        let mut old_et = vec![0.0_f64; nz_old];
+        let mut old_et_tot = 0.0_f64;
+        for k in 0..nz_old {
+            old_et[k] = dq_old[k] * flexmesa_math::pow2(w_old[k]);
+            old_et_tot += old_et[k];
+        }
         for k in 0..nz {
             if unchanged_face_for_vel(k, &cell_type) {
                 let wk = w_old[comes_from[k]];
-                let et = wk * wk;
+                let et = flexmesa_math::pow2(wk);
                 model.aux.rsp.et_rsp[k] = et;
                 model.aux.etrb[k] = et;
                 continue;
@@ -1531,9 +1496,10 @@ pub(crate) fn execute_adjust_mesh_from_plan(
                 model.dq[k],
                 &old_et,
                 false,
+                true,
             )?;
             let wk = (et_sum / model.dq[k]).max(0.0).sqrt();
-            let et = wk * wk;
+            let et = flexmesa_math::pow2(wk);
             model.aux.rsp.et_rsp[k] = et;
             model.aux.etrb[k] = et;
         }
@@ -1650,13 +1616,7 @@ pub(crate) fn execute_adjust_mesh_from_plan(
             )));
         }
         for slot in row.iter_mut() {
-            *slot = (*slot / xa_sum).clamp(0.0, 1.0);
-        }
-        let norm_sum: f64 = row.iter().sum();
-        if norm_sum > 0.0 {
-            for slot in row.iter_mut() {
-                *slot /= norm_sum;
-            }
+            *slot /= xa_sum;
         }
     }
 
@@ -1684,12 +1644,7 @@ pub(crate) fn execute_adjust_mesh_from_plan(
         model.z53bar[k] = comp.z53bar;
         model.ye[k] = comp.ye;
         model.aux.mass_correction[k] = comp.mass_correction;
-        let ko = comes_from[k];
-        model.r[k] = if model.ln_r[k] == lnr_old[ko] {
-            old_r[ko]
-        } else {
-            flexmesa_math::exp(model.ln_r[k])
-        };
+        model.r[k] = flexmesa_math::exp(model.ln_r[k]);
     }
     model.set_m_grav_and_grav();
 
@@ -1699,7 +1654,7 @@ pub(crate) fn execute_adjust_mesh_from_plan(
         for k in 0..nz {
             let ko = comes_from[k];
             let face_unchanged = unchanged_face_for_vel(k, &cell_type)
-                && model.r[k] == old_r[ko];
+                && model.ln_r[k] == lnr_old[ko];
             let jr = if face_unchanged {
                 j_rot_old[ko]
             } else {
@@ -1714,6 +1669,7 @@ pub(crate) fn execute_adjust_mesh_from_plan(
                     dqbar[k],
                     &j_rot_old,
                     true,
+                    false,
                 )?;
                 if dq_s > 0.0 { j_tot / dq_s } else { 0.0 }
             };
@@ -1949,8 +1905,19 @@ pub fn remap_onto_dq(
             PlannedMeshOutcome::Standard(plan)
                 if plan.nz_old == model.nz
                     && f64_slices_bit_eq(&plan.raw_dq_old, &model.dq)
-                    && f64_slices_bit_eq(&plan.dq_new, dq_new) =>
+                    && (f64_slices_bit_eq(&plan.dq_new, dq_new)
+                        || (plan.num_splits == 0
+                            && plan.num_merges == 0
+                            && f64_slices_bit_eq(
+                                &plan.raw_dq_old,
+                                dq_new,
+                            ))) =>
             {
+                // Upstream `star/private/adjust_mesh.f90:155-159, 280` copies
+                // `mesh_max_allowed_ratio = s% mesh_max_allowed_ratio` before
+                // clamping `s% mesh_max_allowed_ratio = 2.5d0`, so the first
+                // remesh uses the unclamped value and subsequent calls see `2.5`
+                // (`#250` under `#169`).
                 if model.controls.mix_wind.mesh_max_allowed_ratio < 2.5 {
                     model.controls.mix_wind.mesh_max_allowed_ratio = 2.5;
                 }

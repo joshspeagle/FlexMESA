@@ -266,6 +266,15 @@ pub fn set_mesh_function_data_with_controls(
     mw: &MixWindControls,
     nfcns: usize,
 ) -> Result<MeshFunctionData, StarError> {
+    set_mesh_function_data_with_controls_and_xa(model, mw, nfcns, &model.xa)
+}
+
+pub(crate) fn set_mesh_function_data_with_controls_and_xa(
+    model: &StarModel,
+    mw: &MixWindControls,
+    nfcns: usize,
+    xa_slice: &[f64],
+) -> Result<MeshFunctionData, StarError> {
     if nfcns > MAX_ALLOWED_GVALS {
         return Err(StarError::InvalidInput(format!(
             "num_mesh_functions={nfcns} exceeds max_allowed_gvals={MAX_ALLOWED_GVALS}"
@@ -494,7 +503,7 @@ pub fn set_mesh_function_data_with_controls(
                     let param =
                         mw.xa_function_param.get(slot).copied().unwrap_or(0.0);
                     for m in 0..nz {
-                        let x = model.xa[m * model.species + j0];
+                        let x = xa_slice[m * model.species + j0];
                         col[m] = weight * flexmesa_math::log10(x + param);
                     }
                 }

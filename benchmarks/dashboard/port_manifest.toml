@@ -6964,7 +6964,7 @@ notes = "updated for #153: do_mesh_adjust, do_lnR_and_lnd, do_xa, set_lnT_for_en
 [files.routine_map]
 "do_mesh_adjust" = "crates/flexmesa-star/src/mesh_remap.rs::execute_adjust_mesh_from_plan+remap_onto_dq"
 "do_prune_mesh_surface" = "crates/flexmesa-star/src/mesh_remap.rs::do_prune_mesh_surface"
-"set_lnT_for_energy" = "crates/flexmesa-star/src/mesh_remap.rs::set_lnt_for_energy"
+"set_lnT_for_energy" = "crates/flexmesa-star/src/mesh_remap.rs::solve_cell_lnt_for_energy"
 "set_lnT_for_energy_with_tol" = "crates/flexmesa-star/src/mesh_remap.rs::solve_cell_lnt_for_energy"
 
 [[files]]

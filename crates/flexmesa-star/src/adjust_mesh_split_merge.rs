@@ -259,9 +259,9 @@ pub(crate) fn biggest_smallest(
     let mut inner_dx_baseline = 0.0;
 
     if hybrid_zoning {
-        if nz_r_core <= 0 || nz_baseline <= nz_r_core {
+        if nz_r_core == 0 || nz_baseline == nz_r_core {
             return Err(StarError::InvalidInput(format!(
-                "split_merge_amr_hybrid_zoning requires 0 < nz_r_core ({nz_r_core}) < nz_baseline ({nz_baseline})"
+                "split_merge_amr_hybrid_zoning zero denominator: nz_r_core={nz_r_core}, nz_baseline={nz_baseline}"
             )));
         }
         target_dr_core = (r_core_cm - model.r_center) / (nz_r_core as f64);
@@ -269,27 +269,27 @@ pub(crate) fn biggest_smallest(
             - flexmesa_math::log((1.0_f64).max(r_core_cm)))
             / ((nz_baseline - nz_r_core) as f64);
     } else if logtau_zoning {
-        if nz_baseline <= 0 {
+        if nz_baseline == 0 {
             return Err(StarError::InvalidInput(String::from(
-                "split_merge_amr_nz_baseline must be > 0",
+                "split_merge_amr_nz_baseline must be nonzero",
             )));
         }
         xmin = flexmesa_math::log(tau_center);
         let xmax = flexmesa_math::log(model.tau[0]);
         inner_dx_baseline = (xmin - xmax) / (nz_baseline as f64);
     } else if log_zoning {
-        if nz_baseline <= 0 {
+        if nz_baseline == 0 {
             return Err(StarError::InvalidInput(String::from(
-                "split_merge_amr_nz_baseline must be > 0",
+                "split_merge_amr_nz_baseline must be nonzero",
             )));
         }
         xmin = flexmesa_math::log((1.0_f64).max(model.r_center));
         let xmax = model.ln_r[0];
         inner_dx_baseline = (xmax - xmin) / (nz_baseline as f64);
     } else {
-        if nz_baseline <= 0 {
+        if nz_baseline == 0 {
             return Err(StarError::InvalidInput(String::from(
-                "split_merge_amr_nz_baseline must be > 0",
+                "split_merge_amr_nz_baseline must be nonzero",
             )));
         }
         xmin = model.r_center;
@@ -678,12 +678,6 @@ fn do_split(
             "remesh_split_merge::do_split requires at least 3 zones",
         )));
     }
-    let mw_max_nz = model.controls.mix_wind.max_allowed_nz;
-    if mw_max_nz > 0 && ((nz_old + 1) as isize) > mw_max_nz {
-        return Err(StarError::InvalidInput(format!(
-            "remesh_split_merge::do_split exceeded max_allowed_nz={mw_max_nz}"
-        )));
-    }
 
     let species = model.species;
     let star_pe0 = get_star_pe(model);
@@ -903,7 +897,7 @@ fn do_split(
     }
 
     let mut energy_r = energy + (grad_energy * dr) / 4.0;
-    let mut energy_l = (dm * energy - dm_r * energy_r) / dm_l;
+    let mut energy_l = (dm_parent * energy - dm_r * energy_r) / dm_l;
     if energy_r < 0.0 || energy_l < 0.0 {
         energy_r = energy;
         energy_l = energy;
@@ -913,7 +907,7 @@ fn do_split(
 
     if model.controls.u_flag {
         let mut v2_r = v2 + (grad_v2 * dr) / 4.0;
-        let mut v2_l = (dm * v2 - dm_r * v2_r) / dm_l;
+        let mut v2_l = (dm_parent * v2 - dm_r * v2_r) / dm_l;
         if v2_r < 0.0 || v2_l < 0.0 {
             v2_r = v2;
             v2_l = v2;

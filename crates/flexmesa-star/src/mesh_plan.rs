@@ -85,6 +85,7 @@ impl PlanState {
 struct PlanCtx<'a> {
     model: &'a StarModel,
     mw: &'a MixWindControls,
+    xa: &'a [f64],
     nz_old: usize,
     max_allowed_nz: isize,
     okay_to_merge: bool,
@@ -648,9 +649,9 @@ impl PlanCtx<'_> {
                                 }
                             }
 
-                            let xa_kk = &self.model.xa
-                                [(kk - 1) * species..kk * species];
-                            let xa_kkm1 = &self.model.xa
+                            let xa_kk =
+                                &self.xa[(kk - 1) * species..kk * species];
+                            let xa_kkm1 = &self.xa
                                 [(kk - 2) * species..(kk - 1) * species];
                             let maxval_delta_xa = xa_kk
                                 .iter()
@@ -886,6 +887,42 @@ pub fn do_mesh_plan(
     max_surface_cell_dq: f64,
     min_surface_cell_dq: f64,
 ) -> Result<MeshPlanOutput, StarError> {
+    do_mesh_plan_with_xa(
+        model,
+        mw,
+        &model.xa,
+        xq_old_0,
+        dq_old_0,
+        min_dq,
+        max_dq,
+        min_dq_for_split,
+        mesh_max_allowed_ratio,
+        do_not_split_0,
+        fcns,
+        delta_gval_max_0,
+        max_center_cell_dq,
+        max_surface_cell_dq,
+        min_surface_cell_dq,
+    )
+}
+
+pub(crate) fn do_mesh_plan_with_xa<'a>(
+    model: &'a StarModel,
+    mw: &'a MixWindControls,
+    xa_slice: &'a [f64],
+    xq_old_0: &[f64],
+    dq_old_0: &[f64],
+    min_dq: f64,
+    max_dq: f64,
+    min_dq_for_split: f64,
+    mesh_max_allowed_ratio: f64,
+    do_not_split_0: &[bool],
+    fcns: &'a MeshFunctionData,
+    delta_gval_max_0: &[f64],
+    max_center_cell_dq: f64,
+    max_surface_cell_dq: f64,
+    min_surface_cell_dq: f64,
+) -> Result<MeshPlanOutput, StarError> {
     let nz_old = dq_old_0.len();
     if nz_old < 2
         || xq_old_0.len() != nz_old
@@ -956,6 +993,7 @@ pub fn do_mesh_plan(
     let ctx = PlanCtx {
         model,
         mw,
+        xa: xa_slice,
         nz_old,
         max_allowed_nz: mw.max_allowed_nz,
         okay_to_merge: mw.mesh_ok_to_merge,

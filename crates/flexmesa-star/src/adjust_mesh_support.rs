@@ -7,7 +7,8 @@ use flexmesa_const::LN10;
 use crate::controls::StarError;
 use crate::controls_mix_wind::{MixWindControls, NUM_MESH_LOGX};
 use crate::mesh_functions::{
-    MeshFunctionData, get_net_iso_0based, set_mesh_function_data_with_controls,
+    MeshFunctionData, get_net_iso_0based,
+    set_mesh_function_data_with_controls_and_xa,
 };
 use crate::model::StarModel;
 
@@ -104,6 +105,7 @@ fn do_mesh_dlogx_dlogp_coef(
     model: &StarModel,
     mw: &MixWindControls,
     which: usize,
+    xa_slice: &[f64],
     delta_gval_max: &mut [f64],
 ) {
     let sp = mw.mesh_logx_species.get(which).map_or("", |s| s.trim());
@@ -133,8 +135,8 @@ fn do_mesh_dlogx_dlogp_coef(
     let species = model.species;
 
     for k in 1..nz {
-        let x_k = model.xa[k * species + j0];
-        let x_km1 = model.xa[(k - 1) * species + j0];
+        let x_k = xa_slice[k * species + j0];
+        let x_km1 = xa_slice[(k - 1) * species + j0];
         if x_k < x_min_for_extra || x_km1 < x_min_for_extra {
             continue;
         }
@@ -249,6 +251,7 @@ fn do1_dlog_eps_dlogp_coef(
 pub fn set_delta_gval_max_with_controls(
     model: &StarModel,
     mw: &MixWindControls,
+    xa_slice: &[f64],
 ) -> Result<Vec<f64>, StarError> {
     let nz = model.nz;
     let mut delta_gval_max = vec![1.0_f64; nz];
@@ -277,7 +280,13 @@ pub fn set_delta_gval_max_with_controls(
     for j in 0..NUM_MESH_LOGX {
         let extra = mw.mesh_dlogx_dlogp_extra.get(j).copied().unwrap_or(0.0);
         if extra > 0.0 && extra < 1.0 {
-            do_mesh_dlogx_dlogp_coef(model, mw, j, &mut delta_gval_max);
+            do_mesh_dlogx_dlogp_coef(
+                model,
+                mw,
+                j,
+                xa_slice,
+                &mut delta_gval_max,
+            );
         }
     }
 
@@ -355,9 +364,20 @@ pub fn get_gval_info_with_controls(
     mw: &MixWindControls,
     num_gvals: usize,
 ) -> Result<GvalInfo, StarError> {
+    get_gval_info_with_controls_and_xa(model, mw, num_gvals, &model.xa)
+}
+
+pub(crate) fn get_gval_info_with_controls_and_xa(
+    model: &StarModel,
+    mw: &MixWindControls,
+    num_gvals: usize,
+    xa_slice: &[f64],
+) -> Result<GvalInfo, StarError> {
     let nz = model.nz;
-    let mut fcns = set_mesh_function_data_with_controls(model, mw, num_gvals)?;
-    let delta_gval_max = set_delta_gval_max_with_controls(model, mw)?;
+    let mut fcns = set_mesh_function_data_with_controls_and_xa(
+        model, mw, num_gvals, xa_slice,
+    )?;
+    let delta_gval_max = set_delta_gval_max_with_controls(model, mw, xa_slice)?;
     smooth_gvals(nz, num_gvals, &mut fcns.vals);
     Ok(GvalInfo {
         delta_gval_max,

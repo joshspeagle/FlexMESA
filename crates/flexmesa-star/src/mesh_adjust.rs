@@ -12,21 +12,22 @@ use flexmesa_const::LN10;
 use crate::adjust_mesh_split_merge::{
     preview_split_merge_amr, remesh_split_merge,
 };
-use crate::adjust_mesh_support::{check_validity, get_gval_info_with_controls};
+use crate::adjust_mesh_support::{
+    check_validity, get_gval_info_with_controls_and_xa,
+};
 use crate::controls::{StarControls, StarError};
 use crate::controls_mix_wind::{MixWindControls, NUM_XA_FUNCTION};
 use crate::mesh_functions::{
     get_net_iso_0based, num_mesh_functions_with_controls,
 };
-use crate::mesh_plan::do_mesh_plan;
+use crate::mesh_plan::do_mesh_plan_with_xa;
 pub use crate::mesh_remap::{
     CellType, StandardMeshPlan, classify_new_cells, compute_monotone_xa_slopes,
-    do_prune_mesh_surface, remap_onto_dq, set_lnt_for_energy,
-    solve_cell_lnt_for_energy,
+    do_prune_mesh_surface, remap_onto_dq, solve_cell_lnt_for_energy,
 };
 use crate::mesh_remap::{
-    compute_xqs, count_plan_splits_and_merges, execute_adjust_mesh_from_plan,
-    fix_tail_dq,
+    clean_up_fractions_slice, compute_xqs, count_plan_splits_and_merges,
+    execute_adjust_mesh_from_plan, fix_tail_dq,
 };
 use crate::model::StarModel;
 
@@ -229,7 +230,16 @@ fn effective_mix_wind_controls(
     mw.mesh_max_allowed_ratio = cfg.mesh_max_allowed_ratio;
     mw.max_delta_x_for_merge = cfg.max_delta_x_for_merge;
     mw.max_surface_cell_dq = cfg.max_surface_cell_dq;
-    mw.max_center_cell_dq = cfg.max_center_cell_dq;
+    // Legacy Rust `MeshFunctionConfig` callers (`system_init.rs`) pass `1.0` as
+    // a pre-#153 "no forced center split" sentinel; in MESA 26.4.1
+    // `mesh_plan.f90:151, 954`, `max_center_cell_dq >= 1.0` terminates
+    // `pick_new_points` at `k_new = 1` (`nz = 1`), whereas `StarControls`
+    // callers hit the `*cfg == base` early return above untouched.
+    mw.max_center_cell_dq = if cfg.max_center_cell_dq >= 1.0 {
+        mw.max_center_cell_dq.max(1.0e-2)
+    } else {
+        cfg.max_center_cell_dq
+    };
 
     if (cfg.xa_function_weight - base.xa_function_weight).abs() > 0.0
         || (cfg.xa_function_param - base.xa_function_param).abs() > 0.0
@@ -269,11 +279,7 @@ pub fn eval_effective_mesh_delta_coeff(
     mw: &MixWindControls,
 ) -> f64 {
     let nz = model.nz;
-    let base_coeff = if model.controls.mesh_delta_coeff > 0.0 {
-        model.controls.mesh_delta_coeff
-    } else {
-        1.0
-    };
+    let base_coeff = model.controls.mesh_delta_coeff;
     if nz == 0 {
         return base_coeff;
     }
@@ -336,7 +342,8 @@ pub fn eval_mesh_gval(model: &StarModel, cfg: &MeshFunctionConfig) -> Vec<f64> {
     if num_gvals == 0 {
         return vec![0.0; nz];
     }
-    let Ok(mut ginfo) = get_gval_info_with_controls(model, &mw, num_gvals)
+    let Ok(mut ginfo) =
+        get_gval_info_with_controls_and_xa(model, &mw, num_gvals, &model.xa)
     else {
         return vec![0.0; nz];
     };
@@ -388,7 +395,19 @@ pub fn try_plan_standard_mesh(
         }
     }
 
-    let delta_coeff = eval_effective_mesh_delta_coeff(model, &mw);
+    let mut xa_clean = model.xa.clone();
+    clean_up_fractions_slice(&mut xa_clean, nz, model.species, 10.0, 1.0e-2)?;
+    try_plan_standard_mesh_with_cleaned_xa(model, &mw, &xa_clean, false)
+}
+
+fn try_plan_standard_mesh_with_cleaned_xa(
+    model: &StarModel,
+    mw: &MixWindControls,
+    xa_clean: &[f64],
+    xa_already_cleaned: bool,
+) -> Result<Option<StandardMeshPlan>, StarError> {
+    let nz = model.nz;
+    let delta_coeff = eval_effective_mesh_delta_coeff(model, mw);
     // Upstream `star/private/adjust_mesh.f90:155-158, 280` copies
     // `mesh_max_allowed_ratio = s% mesh_max_allowed_ratio` before clamping
     // `s% mesh_max_allowed_ratio = 2.5d0`, passing the unclamped scalar to
@@ -397,14 +416,15 @@ pub fn try_plan_standard_mesh(
 
     check_validity(model)?;
 
-    let num_gvals = num_mesh_functions_with_controls(model, &mw)?;
+    let num_gvals = num_mesh_functions_with_controls(model, mw)?;
     if num_gvals == 0 {
         return Err(StarError::InvalidInput(String::from(
             "must have at least 1 mesh gradient function with nonzero weight",
         )));
     }
 
-    let mut ginfo = get_gval_info_with_controls(model, &mw, num_gvals)?;
+    let mut ginfo =
+        get_gval_info_with_controls_and_xa(model, mw, num_gvals, xa_clean)?;
 
     let mut do_not_split = vec![false; nz];
     for k in 0..(nz - 1) {
@@ -425,15 +445,12 @@ pub fn try_plan_standard_mesh(
         *d *= delta_coeff;
     }
 
-    let raw_mesh_coeff = if model.controls.mesh_delta_coeff > 0.0 {
-        model.controls.mesh_delta_coeff
-    } else {
-        1.0
-    };
+    let raw_mesh_coeff = model.controls.mesh_delta_coeff;
 
-    let plan_out = do_mesh_plan(
+    let plan_out = do_mesh_plan_with_xa(
         model,
-        &mw,
+        mw,
+        xa_clean,
         &xq_old,
         &dq_old,
         mw.min_dq,
@@ -473,6 +490,7 @@ pub fn try_plan_standard_mesh(
         cell_type,
         num_splits,
         num_merges,
+        xa_already_cleaned,
     }))
 }
 
@@ -539,10 +557,11 @@ pub fn plan_mesh(
         Ok(None) => (model.dq.clone(), 0, 0),
         Ok(Some(plan)) => {
             let (ns, nm) = (plan.num_splits, plan.num_merges);
-            if ns == 0 && nm == 0 {
-                return (model.dq.clone(), 0, 0);
-            }
-            let dq_ret = plan.dq_new.clone();
+            let dq_ret = if ns == 0 && nm == 0 {
+                model.dq.clone()
+            } else {
+                plan.dq_new.clone()
+            };
             model
                 .aux
                 .planned_mesh
@@ -581,16 +600,36 @@ pub fn do_adjust_mesh(
         return remesh_split_merge(model);
     }
 
-    let Some(plan) = try_plan_standard_mesh(model, cfg)? else {
+    let nz = model.nz;
+    if nz < 4 {
+        return Ok((0, 0));
+    }
+    let mw = effective_mix_wind_controls(model, cfg);
+    if mw.remesh_max_allowed_logt < 100.0 {
+        let max_logt =
+            model.ln_t.iter().copied().fold(f64::NEG_INFINITY, f64::max) / LN10;
+        if max_logt > mw.remesh_max_allowed_logt {
+            return Ok((0, 0));
+        }
+    }
+
+    // Upstream `adjust_mesh.f90:109` runs `clean_up_fractions` on `s% xa`
+    // before `check_validity`, `get_gval_info`, and `do_mesh_plan`.
+    clean_up_fractions_slice(&mut model.xa, nz, model.species, 10.0, 1.0e-2)?;
+
+    let Some(plan) =
+        try_plan_standard_mesh_with_cleaned_xa(model, &mw, &model.xa, true)?
+    else {
         return Ok((0, 0));
     };
+    // Upstream `star/private/adjust_mesh.f90:155-159, 280` copies
+    // `mesh_max_allowed_ratio = s% mesh_max_allowed_ratio` before clamping
+    // `s% mesh_max_allowed_ratio = 2.5d0`, so the first remesh uses the
+    // unclamped value and subsequent calls see `2.5` (`#250` under `#169`).
     if from_ctrls && model.controls.mix_wind.mesh_max_allowed_ratio < 2.5 {
         model.controls.mix_wind.mesh_max_allowed_ratio = 2.5;
     }
     let (ns, nm) = (plan.num_splits, plan.num_merges);
-    if ns == 0 && nm == 0 {
-        return Ok((0, 0));
-    }
     execute_adjust_mesh_from_plan(model, plan)?;
     Ok((ns, nm))
 }

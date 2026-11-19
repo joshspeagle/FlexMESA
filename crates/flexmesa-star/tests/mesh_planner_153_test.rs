@@ -255,6 +255,11 @@ fn test_hydro_velocity_and_rsp2_turbulent_remaps_conserve_control_volumes() {
     let (sv, mgv) = do_adjust_mesh(&mut mv, &cfg_v).expect("remesh v_flag");
     assert!(sv + mgv > 0);
     assert!(mv.v.iter().all(|v| v.is_finite()));
+    assert!(
+        mv.aux.mesh_adjust_ke_conservation < 1.0e-12,
+        "do_v KE conservation error={}",
+        mv.aux.mesh_adjust_ke_conservation
+    );
 
     let mut ctrl_u = StarControls {
         initial_mass: 3.0,
@@ -764,4 +769,74 @@ fn test_num_zones_tracks_mesa_26_4_1_across_star_test_hb_2m_and_1p3m_high_z() {
     println!(
         "1.3M_ms_high_Z steps 1..5 num_zones: {highz_seq:?} (MESA 26.4.1: [807, 811, 809, 810, 805])"
     );
+}
+
+#[test]
+fn test_zero_change_remesh_250_clamp_and_tiny_x_preplan_clean() {
+    let mut model = load_zams_model(
+        StarControls {
+            initial_mass: 1.0,
+            initial_z: 0.02,
+            zbase: 0.02,
+            ..StarControls::default()
+        },
+        StarJobControls::default(),
+    )
+    .expect("load 1 Msun ZAMS");
+    set_hydro_vars(&mut model, false, false).expect("set_hydro_vars");
+
+    // Relax at `mesh_max_allowed_ratio = 2.0` with merging disabled until 0
+    // splits remain, guaranteeing 0 splits and 0 merges at `ratio = 2.2 < 2.5`.
+    model.controls.mesh_delta_coeff = 5.0;
+    model.controls.mix_wind.mesh_ok_to_merge = false;
+    model.controls.mix_wind.merge_if_dlnr_too_small = false;
+    model.controls.mix_wind.merge_if_dr_div_cs_too_small = false;
+    model.controls.mix_wind.merge_if_dr_div_drstar_too_small = false;
+    model.controls.mix_wind.min_dq = 1.0e-30;
+    model.controls.mix_wind.max_dq = 1.0;
+    model.controls.mix_wind.max_surface_cell_dq = 1.0;
+    model.controls.mix_wind.max_center_cell_dq = 1.0e-20;
+    model.controls.mix_wind.p_function_weight = 1.0e-6;
+    model.controls.mix_wind.t_function1_weight = 0.0;
+    model.controls.mix_wind.xa_function_weight.fill(0.0);
+    for _ in 0..32 {
+        model.controls.mix_wind.mesh_max_allowed_ratio = 2.0;
+        let init_cfg = MeshFunctionConfig::from_controls(&model.controls);
+        let (s, m) =
+            do_adjust_mesh(&mut model, &init_cfg).expect("initial ratio relax");
+        if s == 0 && m == 0 {
+            break;
+        }
+    }
+
+    // Zero an unused abundance slot to verify `clean_up_fractions` `tiny_x = 1e-99` floor.
+    let species = model.species;
+    let last_sp = species - 1;
+    let orig = model.xa[last_sp];
+    model.xa[0] += orig;
+    model.xa[last_sp] = 0.0;
+
+    model.controls.mix_wind.mesh_max_allowed_ratio = 2.2;
+    let calls_before = model.aux.mesh_call_number;
+    let cfg = MeshFunctionConfig::from_controls(&model.controls);
+    let (ns, nm) =
+        do_adjust_mesh(&mut model, &cfg).expect("0-change do_adjust_mesh");
+    assert_eq!((ns, nm), (0, 0));
+    assert_eq!(model.aux.mesh_call_number, calls_before + 1);
+    assert_eq!(model.controls.mix_wind.mesh_max_allowed_ratio, 2.5);
+    assert!(
+        model.xa[last_sp] >= 0.99e-99,
+        "expected tiny_x=1e-99 floor on zero abundance, got {}",
+        model.xa[last_sp]
+    );
+
+    // Verify `plan_mesh` -> `remap_onto_dq` on a 0-change step also applies #250 clamp.
+    model.controls.mix_wind.mesh_max_allowed_ratio = 2.2;
+    let cfg2 = MeshFunctionConfig::from_controls(&model.controls);
+    let (dq_new, ns2, nm2) = flexmesa_star::plan_mesh(&model, &cfg2);
+    assert_eq!((ns2, nm2), (0, 0));
+    flexmesa_star::remap_onto_dq(&mut model, &dq_new)
+        .expect("0-change remap_onto_dq");
+    assert_eq!(model.controls.mix_wind.mesh_max_allowed_ratio, 2.5);
+    assert_eq!(model.aux.mesh_call_number, calls_before + 2);
 }

@@ -769,6 +769,7 @@ impl BinarySystem {
         }
         self.point_mass_i = new_point_mass_i;
         self.eq_initial_bh_mass = m_bh_eq;
+        self.last_termination_reason = None;
         let (rl, gaps) = compute_rl_and_gaps(
             self.donor.mstar,
             self.accretor_mass_g(),

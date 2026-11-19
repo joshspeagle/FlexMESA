@@ -343,15 +343,25 @@ fn revise_q_and_dq_upstream(
     }
 
     // Set `q` from `dq` and close `dq[nz-1] = q[nz-1]` (`adjust_mass.f90:813-826`).
+    // Accumulate with Neumaier compensation so `dq[nz - 1]` closes to machine
+    // precision (`sum(dq) == 1.0`) without dumping naive-sum drift into cell `nz - 1`.
     model.dq = dq;
     model.q.resize(nz, 0.0);
     model.q[0] = 1.0;
-    let mut cum_dq = model.dq[0];
+    let mut sum_hi = model.dq[0];
+    let mut sum_lo = 0.0_f64;
     for k in 1..(nz - 1) {
-        model.q[k] = 1.0 - cum_dq;
-        cum_dq += model.dq[k];
+        model.q[k] = 1.0 - (sum_hi + sum_lo);
+        let d = model.dq[k];
+        let t = sum_hi + d;
+        if sum_hi.abs() >= d.abs() {
+            sum_lo += (sum_hi - t) + d;
+        } else {
+            sum_lo += (d - t) + sum_hi;
+        }
+        sum_hi = t;
     }
-    model.q[nz - 1] = 1.0 - cum_dq;
+    model.q[nz - 1] = 1.0 - (sum_hi + sum_lo);
     model.dq[nz - 1] = model.q[nz - 1];
     model.set_xqs();
 

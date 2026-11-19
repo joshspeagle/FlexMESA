@@ -32,10 +32,11 @@ use flexmesa_star::{
     eval_super_eddington_wind, eval_surf_avg_rotation_info,
     eval_surf_avg_w_div_w_crit, evaluate_star_history_row, get_ejecta_mass,
     get_remnant_mass, get_shock_mass_msun, get_xa_for_accretion,
-    load_zams_model, parse_star_history_columns, set_hydro_vars,
-    set_phase_of_evolution, star_evolve, star_evolve_step, InlistBundle,
-    LimitCheckOutcome, MesaCellValue, StarControls, StarError, StarExtras,
-    StarJobControls, StarModel, StepReportContext, WindScheme, PHASE_C_BURN,
+    load_zams_model, parse_star_history_columns, run_inlist_stage,
+    set_hydro_vars, set_phase_of_evolution, star_evolve, star_evolve_step,
+    ExtrasDirective, InlistBundle, LimitCheckOutcome, MesaCellValue,
+    StarControls, StarError, StarExtras, StarJobControls, StarModel,
+    StepReportContext, WindScheme, PHASE_C_BURN,
     PHASE_HE_BURN, PHASE_IAMS, PHASE_NE_BURN, PHASE_O_BURN, PHASE_PREMS,
     PHASE_RELAX, PHASE_SI_BURN, PHASE_STARTING, PHASE_TACHEB, PHASE_TAMS,
     PHASE_TP_AGB, PHASE_WDCS, PHASE_ZACHEB, PHASE_ZAMS,
@@ -1124,5 +1125,136 @@ fn test_when_to_stop_rtol_atol_redo_convergence_and_max_age_graded_approach() {
         "expected dt clipped to 10 days ({:.6e} s), got {:.6e} s",
         10.0 * SECDAY,
         rep_days.dt
+    );
+}
+
+#[test]
+fn test_log_l_limits_use_surface_l_while_lnuc_div_l_uses_photosphere_l() {
+    // Upstream `star/private/star_utils.f90:1110-1119` separates
+    // `L_phot = photosphere_L` (used for `Lnuc_div_L`) from
+    // `log_surface_luminosity = log10(max(1d-99, L(1)/Lsun))` (used for
+    // `log_L_{lower,upper}_limit` and `abs_diff_lg_LH_lg_Ls_limit`).
+    let mut m = zams_model(1.0);
+    m.controls.ts_stop.when_to_stop_rtol = 1.0e99;
+    m.controls.ts_stop.when_to_stop_atol = 1.0e99;
+
+    // 1. Explicit `StepReportContext` where `photosphere_L != L(1)/Lsun`.
+    let mut ctx = StepReportContext::compute(&m);
+    m.lum[0] = 4.0 * L_SUN;
+    ctx.phot.l_lsun = 1.0;
+
+    // `log10(photosphere_L) = 0.0 < 0.3 < log10(L(1)/Lsun) = 0.60206`.
+    m.controls.log_l_upper_limit = Some(0.3);
+    let out_log_l =
+        do_check_limits(&mut m, Some(&ctx), false).expect("log_L_upper_limit");
+    assert!(
+        matches!(out_log_l, LimitCheckOutcome::Terminate { ref code, .. } if code == "log_L_upper_limit"),
+        "log_L_upper_limit must track L(1)/Lsun, not photosphere_L; got {out_log_l:?}"
+    );
+    m.controls.log_l_upper_limit = None;
+
+    // `power_nuc / L(1) = power_nuc / 4 < mid < power_nuc / photosphere_L`.
+    let power_nuc = ctx.powers.power_nuc_burn;
+    assert!(power_nuc > 0.0, "ZAMS model must have positive nuclear power");
+    let mid_ratio = 0.5 * (power_nuc / 4.0 + power_nuc / 1.0);
+    m.controls.ts_stop.lnuc_div_l_upper_limit = mid_ratio;
+    let out_lnuc = do_check_limits(&mut m, Some(&ctx), false)
+        .expect("Lnuc_div_L_upper_limit");
+    assert!(
+        matches!(out_lnuc, LimitCheckOutcome::Terminate { ref code, .. } if code == "Lnuc_div_L_upper_limit"),
+        "Lnuc_div_L_upper_limit must track photosphere_L, not L(1)/Lsun; got {out_lnuc:?}"
+    );
+    m.controls.ts_stop.lnuc_div_l_upper_limit = 1.0e99;
+
+    // 2. Default `ctx = None` where `L(1) = 0` gives `log_surface_luminosity = -99`
+    //    while `eval_photosphere_info` clamps `l_erg >= 1 erg/s` (`log10 ~ -33.58`).
+    m.lum[0] = 0.0;
+    m.controls.log_l_lower_limit = Some(-50.0);
+    let out_zero_l =
+        do_check_limits(&mut m, None, false).expect("log_L_lower_limit");
+    assert!(
+        matches!(out_zero_l, LimitCheckOutcome::Terminate { ref code, .. } if code == "log_L_lower_limit"),
+        "zero surface luminosity must trigger log_L_lower_limit at -50; got {out_zero_l:?}"
+    );
+}
+
+struct ClearLimitOnFinishExtras {
+    check_calls: usize,
+    finish_calls: usize,
+}
+
+impl StarExtras for ClearLimitOnFinishExtras {
+    fn extras_check_model(&mut self, _model: &mut StarModel) -> ExtrasDirective {
+        self.check_calls += 1;
+        ExtrasDirective::KeepGoing
+    }
+
+    fn extras_finish_step(&mut self, model: &mut StarModel) -> ExtrasDirective {
+        self.finish_calls += 1;
+        // Clear the active limit before `inlist_runner` refreshes hydro/mixing
+        // state, verifying that the in-step `do_check_limits` termination code
+        // is propagated directly rather than dropped.
+        model.controls.star_mass_max_limit = 0.0;
+        ExtrasDirective::KeepGoing
+    }
+}
+
+#[test]
+fn test_in_step_termination_propagates_across_post_step_refresh() {
+    // 1. Direct `star_evolve_step` records `termination_code` on acceptance
+    //    and clears it at the start of any subsequent step.
+    let mut m = zams_model(2.0);
+    m.dt = 1.0e5 * SECYER;
+    m.dt_next = m.dt;
+    m.controls.star_mass_max_limit = 1.0;
+    m.controls.ts_stop.when_to_stop_rtol = 1.0e99;
+    m.controls.ts_stop.when_to_stop_atol = 1.0e99;
+
+    star_evolve_step(&mut m, false, false, true).expect("terminating step");
+    assert_eq!(
+        m.aux.step_hist.termination_code.as_deref(),
+        Some("star_mass_max_limit"),
+        "star_evolve_step must record in-step termination_code"
+    );
+
+    m.controls.star_mass_max_limit = 0.0;
+    star_evolve_step(&mut m, false, false, true).expect("normal follow-up step");
+    assert_eq!(
+        m.aux.step_hist.termination_code, None,
+        "subsequent non-terminating step must clear termination_code"
+    );
+
+    // 2. `run_inlist_stage` honors in-step `termination_code` even when
+    //    `extras_finish_step` / post-step refresh clears the limit, skips
+    //    `extras_check_model` (`run_star_support.f90:211-212`), and still
+    //    invokes `extras_finish_step` once (`run_star_support.f90:734-738`).
+    let mut m_stage = zams_model(2.0);
+    m_stage.dt = 1.0e5 * SECYER;
+    m_stage.dt_next = m_stage.dt;
+    m_stage.controls.star_mass_max_limit = 1.0;
+    m_stage.controls.ts_stop.when_to_stop_rtol = 1.0e99;
+    m_stage.controls.ts_stop.when_to_stop_atol = 1.0e99;
+    let tmp = std::env::temp_dir().join("flexmesa_159_stage_term.inlist");
+    std::fs::write(&tmp, "&star_job\n/\n&controls\n/\n").expect("write inlist");
+    let bundle = InlistBundle::from_file(&tmp).expect("parse empty inlist");
+    let _ = std::fs::remove_file(&tmp);
+    let mut extras = ClearLimitOnFinishExtras {
+        check_calls: 0,
+        finish_calls: 0,
+    };
+    let rep = run_inlist_stage(&mut m_stage, &bundle, &mut extras, Some(3))
+        .expect("run_inlist_stage");
+    assert_eq!(
+        rep.steps_taken, 1,
+        "inlist_runner must stop on the step terminated by in-step do_check_limits"
+    );
+    assert_eq!(rep.termination_code, "star_mass_max_limit");
+    assert_eq!(
+        extras.check_calls, 0,
+        "extras_check_model must be skipped once do_check_limits terminates"
+    );
+    assert_eq!(
+        extras.finish_calls, 1,
+        "extras_finish_step must still run once on the terminating step"
     );
 }

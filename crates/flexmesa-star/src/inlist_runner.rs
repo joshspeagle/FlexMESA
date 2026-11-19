@@ -471,7 +471,18 @@ pub fn run_inlist_stage_with_logs(
             total_newton_iterations += step_rep.iterations;
             total_retries += step_rep.retries;
 
-            let check_dir = extras.extras_check_model(model);
+            let in_step_termination =
+                model.aux.step_hist.termination_code.clone();
+            // Upstream `run_star_support.f90:211-212, 732-738`: if
+            // `star_check_model` (`do_check_limits`) already terminated the
+            // step, skip `extras_check_model`, run `extras_finish_step` one
+            // last time, and keep `terminate` authoritative across post-step
+            // hydro/mixing refreshes.
+            let check_dir = if in_step_termination.is_some() {
+                ExtrasDirective::KeepGoing
+            } else {
+                extras.extras_check_model(model)
+            };
             let finish_dir = extras.extras_finish_step(model);
             model.mstar_start = model.mstar;
             if !model.controls.rsp_flag {
@@ -493,24 +504,29 @@ pub fn run_inlist_stage_with_logs(
                 }
             }
             let mut will_terminate = false;
-            for dir in [check_dir, finish_dir] {
-                match dir {
-                    ExtrasDirective::Error(msg) => {
-                        return Err(StarError::ConvergenceFailure(msg));
+            if let Some(code) = in_step_termination {
+                termination_code = code;
+                will_terminate = true;
+            } else {
+                for dir in [check_dir, finish_dir] {
+                    match dir {
+                        ExtrasDirective::Error(msg) => {
+                            return Err(StarError::ConvergenceFailure(msg));
+                        }
+                        ExtrasDirective::Retry | ExtrasDirective::Redo => {
+                            return Err(StarError::ConvergenceFailure(
+                                String::from(
+                                    "extras step retry/redo is not yet implemented (#152)",
+                                ),
+                            ));
+                        }
+                        ExtrasDirective::Terminate(reason) => {
+                            termination_code = reason;
+                            will_terminate = true;
+                            break;
+                        }
+                        ExtrasDirective::KeepGoing => {}
                     }
-                    ExtrasDirective::Retry | ExtrasDirective::Redo => {
-                        return Err(StarError::ConvergenceFailure(
-                            String::from(
-                                "extras step retry/redo is not yet implemented (#152)",
-                            ),
-                        ));
-                    }
-                    ExtrasDirective::Terminate(reason) => {
-                        termination_code = reason;
-                        will_terminate = true;
-                        break;
-                    }
-                    ExtrasDirective::KeepGoing => {}
                 }
             }
             if !will_terminate {

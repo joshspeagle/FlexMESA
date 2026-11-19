@@ -52,6 +52,7 @@ Scope and the `v0.1.0` definition are in [`SCOPE.md`](SCOPE.md). Work is tracked
 | 35 | Mode-Independent `CRMATH` Recomputation of REACLIB Reverse Coefficients at Load Time (`#161`) | In force | below |
 | 36 | Unconditional Upstream Binary Orbital Euler Step, Removal of `edot_gr`, and `Ftid_1` Reproduction (`#160`, `#175`, `#186`) | In force | below |
 | 37 | Upstream MESA 26.4.1 Mesh Planner, Split-Merge AMR, and Uninitialized-Memory Guards (`#153`) | In force | below |
+| 38 | Upstream MESA 26.4.1 Winds, Mass Adjustment, Stop Conditions, and Deferred Bugs `#263`–`#265` (`#159`) | In force | below |
 
 ## Pre-audit decisions still in force
 

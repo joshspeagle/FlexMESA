@@ -73,6 +73,11 @@ pub struct StepHistoryScalars {
     pub revised_max_yr_dt: f64,
     /// Cumulative integrated extra heating in $\mathrm{erg}$ (`cumulative_extra_heating`).
     pub cumulative_extra_heating: f64,
+    /// Canonical MESA `termination_code_str` set when `do_check_limits`
+    /// terminates an accepted step inside `star_evolve_step_with_extras`
+    /// (`star/job/run_star_support.f90:211-233`).
+    #[serde(skip)]
+    pub termination_code: Option<String>,
 }
 
 impl Default for StepHistoryScalars {
@@ -109,6 +114,7 @@ impl Default for StepHistoryScalars {
             using_revised_max_yr_dt: false,
             revised_max_yr_dt: 0.0,
             cumulative_extra_heating: 0.0,
+            termination_code: None,
         }
     }
 }

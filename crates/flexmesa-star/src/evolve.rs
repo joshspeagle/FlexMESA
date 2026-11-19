@@ -158,6 +158,7 @@ pub fn star_evolve_step_with_extras(
     use_bcyclic: bool,
     extras: &mut dyn StarExtras,
 ) -> Result<EvolveStepReport, StarError> {
+    model.aux.step_hist.termination_code = None;
     if model.controls.rsp_flag {
         if model.dt_next > 0.0 {
             model.dt = model.dt_next;
@@ -528,11 +529,12 @@ pub fn star_evolve_step_with_extras(
                         model.model_number -= 1;
                         ts_retry_reason = Some(reason);
                     }
-                    LimitCheckOutcome::Terminate { .. } => {
+                    LimitCheckOutcome::Terminate { code, .. } => {
                         // Upstream keeps the terminating step and computes
                         // `dt_next` for saved models without allowing
                         // `timestep_controller` to force a retry
                         // (`run_star_support.f90:211-214, 780-781`).
+                        model.aux.step_hist.termination_code = Some(code);
                         let (_, ts_rep) = timestep_controller(model);
                         return Ok(finalize_accepted_step(
                             model,
@@ -1119,10 +1121,12 @@ pub fn star_evolve(
             Err(e) => return Err(e),
         };
         reports.push(rep);
-        if matches!(
-            do_check_limits(model, None, false)?,
-            LimitCheckOutcome::Terminate { .. }
-        ) {
+        if model.aux.step_hist.termination_code.is_some()
+            || matches!(
+                do_check_limits(model, None, false)?,
+                LimitCheckOutcome::Terminate { .. }
+            )
+        {
             break;
         }
     }

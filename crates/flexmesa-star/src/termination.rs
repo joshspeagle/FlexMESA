@@ -605,7 +605,7 @@ fn check_xa_limits_block(
                 reason: format!("invalid species '{name}' for {code}"),
             });
         };
-        let Some(i) = model.chem_id.iter().position(|&id| id == cid) else {
+        let Some(i) = iso_slot_for_chem_id(model, cid) else {
             continue;
         };
         let avg_x = eval_avg(model, i);
@@ -707,7 +707,9 @@ fn eval_check_limits_core(
     let log_surface_density = model.lnd[0] / LN10;
     let log_surface_pressure = model.ln_peos[0] / LN10;
     let log_surface_radius = safe_log10(model.r[0] / R_SUN);
-    let log_surface_luminosity = safe_log10(ctx.phot.l_lsun);
+    // Upstream `star/private/star_utils.f90:1110-1119` defines `L_phot = photosphere_L`
+    // separately from `log_surface_luminosity = log10(max(1d-99, L(1)/Lsun))`.
+    let log_surface_luminosity = safe_log10(model.surface_l_lsun());
 
     let center_gamma = center_value(model, &model.gam);
     let center_degeneracy = center_value(model, &model.eta);

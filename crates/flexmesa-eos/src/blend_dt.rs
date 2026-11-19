@@ -8,27 +8,27 @@
 
 use crate::blend::{blend_eos_results, is_contained, min_distance_to_polygon};
 use crate::cms::{
-    eval_cms_eos_from_weights, get_cms_alfa, CmsConfig, CmsTableSet,
+    CmsConfig, CmsTableSet, eval_cms_eos_from_weights, get_cms_alfa,
 };
 use crate::helm::{
-    do_convert_helm_results, helmeos2, HelmConfig, HelmTable, HELM_LOGDHI,
-    HELM_LOGDLO, HELM_LOGTHI, HELM_LOGTLO,
+    HELM_LOGDHI, HELM_LOGDLO, HELM_LOGTHI, HELM_LOGTLO, HelmConfig, HelmTable,
+    do_convert_helm_results, helmeos2,
 };
 use crate::ideal::eval_ideal_eos_from_weights;
-use crate::pc::{eval_pc_eos_from_weights, get_pc_alfa, PcConfig};
+use crate::pc::{PcConfig, eval_pc_eos_from_weights, get_pc_alfa};
 use crate::skye::{
-    eval_skye_eos_from_weights, get_skye_alfa, get_skye_alfa_simple, SkyeConfig,
+    SkyeConfig, eval_skye_eos_from_weights, get_skye_alfa, get_skye_alfa_simple,
 };
 use crate::tables_4d::{
+    EosDtTableKind, EosDtTableSet, FreeEosConfig, OpalScvhConfig,
     eval_eosdt_table_from_weights, get_free_eos_alfa,
-    get_opal_scvh_alfa_and_partials, EosDtTableKind, EosDtTableSet,
-    FreeEosConfig, OpalScvhConfig,
+    get_opal_scvh_alfa_and_partials,
 };
 use crate::types::{
     EosError, EosEvalOutput, I_LN_E, I_LN_PGAS, NUM_EOS_D_DXA_RESULTS,
 };
 use flexmesa_autodiff::AutoDiffReal2VarOrder1;
-use flexmesa_chem::{get_composition_info, NuclideCatalog};
+use flexmesa_chem::{NuclideCatalog, get_composition_info};
 use rayon::prelude::*;
 
 /// Unified configuration for the hierarchical 7-level `eosDT_get` evaluator.
@@ -333,7 +333,11 @@ pub fn eos_dt_get_from_weights_with_tables(
     cfg: &EosConfig,
 ) -> Result<EosEvalOutput, EosError> {
     let eval_lvl6 = || {
-        let (a, dt, dr) =
+        // Upstream MESA 26.4.1 `eos/private/eosdt_eval.f90:728,749-750` passes
+        // `(d_alfa_dlogRho, d_alfa_dlogT)` into `get_HELM_alfa(..., alfa,
+        // d_alfa_dlogT, d_alfa_dlogRho, ierr)` and forwards `(alfa,
+        // d_alfa_dlogT, d_alfa_dlogRho)` to `combine_for_eosdt` (#176).
+        let (a, dr, dt) =
             get_helm_alfa(ht, log_rho, log_t, cfg.helm_blend_width);
         combine_level_skippable(
             a,

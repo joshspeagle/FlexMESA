@@ -745,3 +745,99 @@ def test_4d_tables_and_eos_dt_get_across_stellar_profiles_and_autodiff() -> (
         rtol=1.0e-13,
         atol=1.0e-13,
     )
+
+
+def test_helm_ideal_edge_blend_matches_mesa_26_4_1_across_rust_and_jax() -> (
+    None
+):
+    """Verify `#176` `HELM`/`ideal` edge blend and `F2-6` off-table skip."""
+    names = ("h1", "he4", "c12", "n14", "o16", "ne20", "mg24")
+    cids = [int(chem.get_nuclide_index(n) or 0) for n in names]
+    xa_c12 = np.array([0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0], dtype=np.float64)
+    exp = _load_eos_case("eosdt_helm_ideal_hi_rho_blend")
+
+    with flexmesa.numerics_mode_context("strict"):
+        rho = float(fm_math.exp10(15.05))
+        temp = float(fm_math.exp10(12.5))
+        out_r = eos.eos_dt_get(
+            rho,
+            temp,
+            cids,
+            xa_c12,
+            use_skye=False,
+            use_pc=False,
+            use_cms=False,
+            use_free_eos=False,
+            use_opal_scvh=False,
+            backend="rust",
+        )
+    out_j = eos.eos_dt_get(
+        jnp.float64(rho),
+        jnp.float64(temp),
+        cids,
+        jnp.asarray(xa_c12),
+        use_skye=False,
+        use_pc=False,
+        use_cms=False,
+        use_free_eos=False,
+        use_opal_scvh=False,
+        backend="jax",
+    )
+    for b_name, out, der_rtol in (
+        ("rust", out_r, 1.0e-12),
+        ("jax", out_j, 5.0e-6),
+    ):
+        np.testing.assert_allclose(
+            np.asarray(out.res),
+            exp[:, 0],
+            rtol=1.0e-10 if b_name == "jax" else 1.0e-12,
+            atol=1.0e-14,
+        )
+        np.testing.assert_allclose(
+            np.asarray(out.d_dlnd), exp[:, 1], rtol=der_rtol, atol=1.0e-13
+        )
+        np.testing.assert_allclose(
+            np.asarray(out.d_dln_t), exp[:, 2], rtol=der_rtol, atol=1.0e-13
+        )
+
+    out_off, _, _ = eos.eval_helm_eos(
+        jnp.float64(100.0),
+        jnp.float64(100.0),
+        jnp.float64(4.0),
+        jnp.float64(2.0),
+        backend="jax",
+    )
+    assert bool(jnp.all(jnp.isnan(out_off.res)))
+
+    cids_sol, xa_sol = _solar_composition()
+    with flexmesa.numerics_mode_context("strict"):
+        t_lo = float(fm_math.exp10(2.95))
+        out_skip_r = eos.eos_dt_get(
+            1.0,
+            t_lo,
+            cids_sol,
+            xa_sol,
+            use_skye=False,
+            use_pc=False,
+            use_cms=False,
+            use_free_eos=False,
+            use_opal_scvh=False,
+            backend="rust",
+        )
+    out_skip_j = eos.eos_dt_get(
+        jnp.float64(1.0),
+        jnp.float64(t_lo),
+        cids_sol,
+        jnp.asarray(xa_sol),
+        use_skye=False,
+        use_pc=False,
+        use_cms=False,
+        use_free_eos=False,
+        use_opal_scvh=False,
+        backend="jax",
+    )
+    assert float(out_skip_r.res[eos.I_FRAC_IDEAL]) == 1.0
+    assert float(out_skip_j.res[eos.I_FRAC_IDEAL]) == 1.0
+    np.testing.assert_allclose(
+        np.asarray(out_skip_r.res), np.asarray(out_skip_j.res), rtol=1.0e-12
+    )

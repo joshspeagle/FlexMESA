@@ -55,7 +55,7 @@ macro_rules! impl_py_star_model {
             #[staticmethod]
             #[pyo3(signature = (
                 initial_mass=1.0, initial_z=0.02, initial_y=-1.0,
-                t_c=9.0e5, d_log10_p=0.02
+                t_c=3.0e5, d_log10_p=0.0
             ))]
             pub fn from_pre_ms(
                 initial_mass: f64,

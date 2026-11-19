@@ -429,7 +429,7 @@ class RustStarModel:
     @staticmethod
     def from_zams(initial_mass: float = 1.0, initial_z: float = 0.02, initial_y: float = -1.0) -> RustStarModel: ...  # noqa: E501
     @staticmethod
-    def from_pre_ms(initial_mass: float = 1.0, initial_z: float = 0.02, initial_y: float = -1.0, t_c: float = 9.0e5, d_log10_p: float = 0.02) -> RustStarModel: ...  # noqa: E501
+    def from_pre_ms(initial_mass: float = 1.0, initial_z: float = 0.02, initial_y: float = -1.0, t_c: float = 3.0e5, d_log10_p: float = 0.0) -> RustStarModel: ...  # noqa: E501
     @staticmethod
     def from_mod_str(text: str) -> RustStarModel: ...
     @staticmethod

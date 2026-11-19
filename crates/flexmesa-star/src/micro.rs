@@ -48,7 +48,7 @@ pub fn get_or_load_net(
     net_name: &str,
     search_dir: Option<&Path>,
 ) -> Result<Arc<NetGeneralInfo>, StarError> {
-    get_or_load_net_with_fe56ec(net_name, search_dir, 1.0e-4, 3.0e9)
+    get_or_load_net_with_fe56ec(net_name, search_dir, 1.0e-7, 3.0e9)
 }
 
 /// Returns a cached [`Arc<NetGeneralInfo>`] for `net_name` with explicit

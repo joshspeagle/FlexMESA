@@ -318,3 +318,72 @@ fn test_var_layout_paired_variable_names_hydrostatic_and_hydro() {
         "lnR"
     );
 }
+
+#[test]
+fn test_microphysics_cache_invalidates_on_fe56ec_fake_factor_change() {
+    let ctrl = StarControls {
+        initial_mass: 1.0,
+        zbase: 0.02,
+        ..StarControls::default()
+    };
+    let mut model =
+        load_zams_model(ctrl, StarJobControls::default()).expect("1 Msun ZAMS");
+    flexmesa_star::change_model_network(&mut model, "approx21.net", None)
+        .expect("switch to approx21.net");
+
+    let nz = model.nz;
+    let sp = model.species;
+    let i_fe56 = model
+        .iso_names
+        .iter()
+        .position(|s| s == "fe56")
+        .expect("fe56 in approx21");
+    let i_ni56 = model
+        .iso_names
+        .iter()
+        .position(|s| s == "ni56")
+        .expect("ni56 in approx21");
+    let c = nz - 1;
+    model.lnd[c] = flexmesa_math::log(1.0e8);
+    model.ln_t[c] = flexmesa_math::log(4.0e9);
+    for j in 0..sp {
+        model.xa[c * sp + j] = 0.0;
+    }
+    model.xa[c * sp + i_fe56] = 0.5;
+    model.xa[c * sp + i_ni56] = 0.5;
+
+    model.aux.micro_cache.clear();
+    model.micro_cache_hits = 0;
+    model.micro_cache_misses = 0;
+
+    set_hydro_vars(&mut model, false, false).expect("cold approx21 eval");
+    assert_eq!((model.micro_cache_misses, model.micro_cache_hits), (1, 0));
+    let dxdt_fe56_base = model.dxdt_nuc[c * sp + i_fe56];
+
+    set_hydro_vars(&mut model, false, false).expect("cached approx21 eval");
+    assert_eq!((model.micro_cache_misses, model.micro_cache_hits), (1, 1));
+    assert_eq!(model.dxdt_nuc[c * sp + i_fe56].to_bits(), dxdt_fe56_base.to_bits());
+
+    // Mutating fe56ec_fake_factor must miss cache and update nuclear rates.
+    model.controls.fe56ec_fake_factor = 1.0e-2;
+    set_hydro_vars(&mut model, false, false)
+        .expect("fe56ec_fake_factor changed");
+    assert_eq!(model.micro_cache_misses, 2);
+    let dxdt_fe56_boosted = model.dxdt_nuc[c * sp + i_fe56];
+    assert_ne!(
+        dxdt_fe56_boosted.to_bits(),
+        dxdt_fe56_base.to_bits(),
+        "fe56ec_fake_factor change must recompute approx21 dxdt_nuc"
+    );
+
+    // Mutating min_t_for_fe56ec_fake_factor above 4e9 K must also miss cache.
+    model.controls.min_t_for_fe56ec_fake_factor = 5.0e9;
+    set_hydro_vars(&mut model, false, false)
+        .expect("min_t_for_fe56ec_fake_factor changed");
+    assert_eq!(model.micro_cache_misses, 3);
+    assert_ne!(
+        model.dxdt_nuc[c * sp + i_fe56].to_bits(),
+        dxdt_fe56_boosted.to_bits(),
+        "min_t_for_fe56ec_fake_factor change must recompute approx21 dxdt_nuc"
+    );
+}

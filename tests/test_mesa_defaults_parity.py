@@ -190,3 +190,15 @@ def test_kap_get_results_jax_rejects_negative_zbase_for_type2_and_jit() -> None:
             log_rho=-3.0,
             log_t=6.0,
         )
+
+    # StarModel.from_pre_ms defaults match MESA 26.4.1 &star_job
+    # (pre_ms_T_c = 3e5, pre_ms_d_log10_P = 0.0).
+    import inspect
+
+    from flexmesa import star as fm_star
+
+    sig = inspect.signature(fm_star.StarModel.from_pre_ms)
+    assert sig.parameters["t_c"].default == pytest.approx(3.0e5)
+    assert sig.parameters["d_log10_p"].default == pytest.approx(0.0)
+    pre_def = fm_star.StarModel.from_pre_ms(eval_hydro=False)
+    assert pre_def.nz > 50

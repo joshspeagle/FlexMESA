@@ -20,7 +20,7 @@ from flexmesa import star
 def test_adaptive_remeshing_and_mesh_gval_jax_consistency() -> None:
     """Verify `eval_mesh_gval_jax`, autodiff, and conservative `adjust_mesh`."""
     pre = star.StarModel.from_pre_ms(
-        initial_mass=4.0, initial_z=0.02, d_log10_p=0.15
+        initial_mass=4.0, initial_z=0.02, t_c=9.0e5, d_log10_p=0.15
     )
     pre.set_evolve_controls(mesh_delta_coeff=0.5, varcontrol_target=1.0e-3)
 
@@ -65,7 +65,7 @@ def test_varcontrol_and_h211_timestep_filter_rust_vs_jax() -> None:
     """Verify `varcontrol` and Söderlind & Wang (2006) H211 consistency."""
     with flexmesa.numerics_mode_context("strict"):
         pre = star.StarModel.from_pre_ms(
-            initial_mass=4.0, initial_z=0.02, d_log10_p=0.15
+            initial_mass=4.0, initial_z=0.02, t_c=9.0e5, d_log10_p=0.15
         )
         pre.set_evolve_controls(mesh_delta_coeff=1.0, varcontrol_target=1.0e-3)
         pre.dt = 10.0 * float(const.SECYER)

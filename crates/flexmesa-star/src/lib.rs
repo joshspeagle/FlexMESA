@@ -89,6 +89,7 @@ pub mod inlist;
 pub mod inlist_inventory;
 pub mod inlist_populate;
 mod inlist_populate_limits;
+mod inlist_populate_micro;
 mod inlist_populate_phase5b;
 pub mod inlist_runner;
 pub mod job_controls;

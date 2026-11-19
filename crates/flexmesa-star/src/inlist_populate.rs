@@ -160,9 +160,12 @@ impl InlistBundle {
     /// # Errors
     /// Returns [`StarError::InvalidInput`] on any type mismatch, out-of-range
     /// integer/float, or unrecognized option string.
-    pub(crate) fn populate_typed_structs(&mut self) -> Result<(), StarError> {
+    pub(crate) fn populate_typed_structs_with_options(
+        &mut self,
+        allow_unsupported_controls: bool,
+    ) -> Result<(), StarError> {
         self.populate_star_job()?;
-        self.populate_eos_kap()?;
+        self.populate_eos_kap_with_options(allow_unsupported_controls)?;
         self.populate_controls_physics()?;
         self.populate_controls_output()?;
         self.populate_controls_solver()?;
@@ -341,8 +344,11 @@ impl InlistBundle {
         Ok(())
     }
 
-    fn populate_eos_kap(&mut self) -> Result<(), StarError> {
-        self.populate_eos_and_kap_configs()
+    fn populate_eos_kap_with_options(
+        &mut self,
+        allow_unsupported_controls: bool,
+    ) -> Result<(), StarError> {
+        self.populate_eos_and_kap_configs(allow_unsupported_controls)
     }
 
     #[rustfmt::skip]

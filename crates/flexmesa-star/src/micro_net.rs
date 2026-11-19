@@ -65,7 +65,7 @@ pub fn build_rate_factors(
 ///
 /// Zones handled by operator-split 1-zone burning during `do_struct_burn_mix`
 /// (`doing_struct_burn_mix && op_split_burn && T_start[k] >= op_split_burn_min_T`,
-/// `net.f90:160-164`) are left untouched so `burn_avg_epsnuc` and post-burn
+/// `star/private/net.f90:160-164`) are left untouched so `burn_avg_epsnuc` and post-burn
 /// categories remain intact across Newton iterations.
 ///
 /// # Errors

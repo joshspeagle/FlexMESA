@@ -460,7 +460,9 @@ impl InlistBundle {
             .into_result(options.allow_unsupported_controls)
             .map_err(|e| StarError::InvalidInput(e.to_string()))?;
         bundle.validation_report = report;
-        bundle.populate_typed_structs()?;
+        bundle.populate_typed_structs_with_options(
+            options.allow_unsupported_controls,
+        )?;
         Ok(bundle)
     }
 

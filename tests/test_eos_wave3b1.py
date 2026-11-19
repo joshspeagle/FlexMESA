@@ -757,8 +757,8 @@ def test_helm_ideal_edge_blend_matches_mesa_26_4_1_across_rust_and_jax() -> (
     exp = _load_eos_case("eosdt_helm_ideal_hi_rho_blend")
 
     with flexmesa.numerics_mode_context("strict"):
-        rho = float(fm_math.exp10(15.05))
-        temp = float(fm_math.exp10(12.5))
+        rho = float(flexmesa._rust.exp10(15.05))
+        temp = float(flexmesa._rust.exp10(12.5))
         out_r = eos.eos_dt_get(
             rho,
             temp,
@@ -811,7 +811,7 @@ def test_helm_ideal_edge_blend_matches_mesa_26_4_1_across_rust_and_jax() -> (
 
     cids_sol, xa_sol = _solar_composition()
     with flexmesa.numerics_mode_context("strict"):
-        t_lo = float(fm_math.exp10(2.95))
+        t_lo = float(flexmesa._rust.exp10(2.95))
         out_skip_r = eos.eos_dt_get(
             1.0,
             t_lo,
@@ -838,6 +838,11 @@ def test_helm_ideal_edge_blend_matches_mesa_26_4_1_across_rust_and_jax() -> (
     )
     assert float(out_skip_r.res[eos.I_FRAC_IDEAL]) == 1.0
     assert float(out_skip_j.res[eos.I_FRAC_IDEAL]) == 1.0
+    # `de_dd` (`res[11]`) subtracts `df_dd - T * d2f_dtdd` (`~5.7e10`), leaving
+    # `~8.4e-6` (`~1.5 ULP * 5.7e10`) roundoff between `crlibm` and XLA.
     np.testing.assert_allclose(
-        np.asarray(out_skip_r.res), np.asarray(out_skip_j.res), rtol=1.0e-12
+        np.asarray(out_skip_r.res),
+        np.asarray(out_skip_j.res),
+        rtol=1.0e-12,
+        atol=2.0e-5,
     )

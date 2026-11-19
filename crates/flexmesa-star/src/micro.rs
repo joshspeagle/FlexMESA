@@ -238,9 +238,8 @@ pub fn change_model_network(
 }
 
 /// Evaluates `rho`, `t`, `r`, `rmid`, `grav`, and composition moments (`abar`,
-/// `zbar`, `z2bar`, `z53bar`, `ye`, `xh_mass`, `yhe_mass`, `z_mass`,
-/// `mass_correction`) across all `nz` zones (`set_basic_vars` in
-/// `star/private/hydro_vars.f90:696-760` and `micro.f90:321-324`).
+/// `zbar`, `z2bar`, `z53bar`, `ye`, `xh_mass`, `yhe_mass`, `z_mass`) across all
+/// `nz` zones (`set_basic_vars` in `star/private/hydro_vars.f90:696-760`).
 ///
 /// # Errors
 /// Returns [`StarError`] if any zone contains non-finite state or invalid
@@ -251,9 +250,7 @@ pub fn set_basic_vars(model: &mut StarModel) -> Result<(), StarError> {
     let catalog = NuclideCatalog::builtin_ref();
 
     model.set_m_and_dm();
-    if model.aux.mass_correction.len() != nz {
-        model.aux.mass_correction.resize(nz, 1.0);
-    }
+    model.set_m_grav_and_grav();
 
     for k in 0..nz {
         let lnd_k = model.lnd[k];
@@ -270,23 +267,24 @@ pub fn set_basic_vars(model: &mut StarModel) -> Result<(), StarError> {
         model.t[k] = flexmesa_math::exp(lnt_k);
 
         let xa_k = &model.xa[k * species..(k + 1) * species];
-        let comp = get_composition_info(catalog, &model.chem_id, xa_k, true)
+        let comp = get_composition_info(catalog, &model.chem_id, xa_k, false)
             .map_err(|e| {
-                StarError::MicrophysicsError(format!(
-                    "composition error at zone {k}: {e}"
-                ))
-            })?;
+            StarError::MicrophysicsError(format!(
+                "composition error at zone {k}: {e}"
+            ))
+        })?;
         model.abar[k] = comp.abar;
         model.zbar[k] = comp.zbar;
         model.z2bar[k] = comp.z2bar;
         model.z53bar[k] = comp.z53bar;
         model.ye[k] = comp.ye;
-        model.xh_mass[k] = comp.xh;
-        model.yhe_mass[k] = comp.xhe;
-        model.z_mass[k] = comp.xz;
-        model.aux.mass_correction[k] = comp.mass_correction;
+        // `star/private/star_utils.f90:2029-2043` (`get_XYZ`).
+        let xh = comp.xh.clamp(0.0, 1.0);
+        let xhe = comp.xhe.clamp(0.0, 1.0);
+        model.xh_mass[k] = xh;
+        model.yhe_mass[k] = xhe;
+        model.z_mass[k] = (1.0 - (xh + xhe)).clamp(0.0, 1.0);
     }
-    model.set_m_grav_and_grav();
     Ok(())
 }
 
@@ -301,7 +299,7 @@ pub(crate) fn builtin_helm_table() -> Result<&'static HelmTable, StarError> {
 /// cell-centered thermodynamic quantities, composition partial derivatives
 /// (`dln_e_dxa_for_partials`, `dln_peos_dxa_for_partials`), and `StarAdOrder1`
 /// variables (`do_eos_for_cell` and `store_eos_for_cell` in
-/// `star/private/micro.f90:292-545` and `eos_support.f90:44-101`).
+/// `star/private/micro.f90:292-545` and `star/private/eos_support.f90:44-101`).
 ///
 /// # Errors
 /// Returns [`StarError::MicrophysicsError`] if EOS evaluation fails or yields
@@ -410,9 +408,11 @@ pub fn do_eos(model: &mut StarModel) -> Result<(), StarError> {
             || cp <= 0.0
         {
             return Err(StarError::MicrophysicsError(format!(
-                "store_eos_for_cell: non-positive thermodynamic state at zone {k} \
-                 (gamma1={gamma1}, grada={grada}, csound={csound}, chiT={chi_t}, \
-                  chiRho={chi_rho}, Cv={cv}, Cp={cp})"
+                concat!(
+                    "store_eos_for_cell: non-positive thermodynamic state at zone {} ",
+                    "(gamma1={}, grada={}, csound={}, chiT={}, chiRho={}, Cv={}, Cp={})"
+                ),
+                k, gamma1, grada, csound, chi_t, chi_rho, cv, cp
             )));
         }
 
@@ -573,7 +573,7 @@ pub fn do_neu(model: &mut StarModel) -> Result<(), StarError> {
 /// Evaluates Rosseland mean opacity `opacity` (radiative + Compton + electron
 /// conduction, or simple electron scattering) in parallel across all `nz` zones
 /// and integrates optical depth `tau` inward from the surface (`do_kap_for_cell`
-/// in `star/private/micro.f90:548-664` and `kap_support.f90:245-307`).
+/// in `star/private/micro.f90:548-664` and `star/private/kap_support.f90:245-307`).
 ///
 /// # Errors
 /// Returns [`StarError::InvalidInput`] if `use_other_kap` is active without a
@@ -618,7 +618,10 @@ pub fn do_kap(model: &mut StarModel) -> Result<(), StarError> {
                             "get_kap starting composition error at zone {k}: {e}"
                         ))
                     })?;
-                (xs, comp.zbar, comp.xh, comp.xhe, comp.xz)
+                let xh_s = comp.xh.clamp(0.0, 1.0);
+                let xhe_s = comp.xhe.clamp(0.0, 1.0);
+                let z_s = (1.0 - (xh_s + xhe_s)).clamp(0.0, 1.0);
+                (xs, comp.zbar, xh_s, xhe_s, z_s)
             } else {
                 (
                     &model.xa[k * species..(k + 1) * species],
@@ -639,17 +642,22 @@ pub fn do_kap(model: &mut StarModel) -> Result<(), StarError> {
                     _ => {}
                 }
             }
-            if !(0.0..=1.0).contains(&xc)
-                || !(0.0..=1.0).contains(&xn)
-                || !(0.0..=1.0).contains(&xo)
-                || !(0.0..=1.0).contains(&xne)
+            // `star/private/kap_support.f90:251,276-288`: `eps = 1d-6`.
+            const EPS: f64 = 1.0e-6;
+            if !(-EPS..=1.0 + EPS).contains(&xc)
+                || !(-EPS..=1.0 + EPS).contains(&xn)
+                || !(-EPS..=1.0 + EPS).contains(&xo)
+                || !(-EPS..=1.0 + EPS).contains(&xne)
                 || xh_k < 0.0
                 || xhe_k < 0.0
                 || z_k < 0.0
             {
                 return Err(StarError::MicrophysicsError(format!(
-                    "get_kap: invalid mass fractions at zone {k} \
-                     (xh={xh_k}, xhe={xhe_k}, z={z_k}, xc={xc}, xn={xn}, xo={xo}, xne={xne})"
+                    concat!(
+                        "get_kap: invalid mass fractions at zone {} ",
+                        "(xh={}, xhe={}, z={}, xc={}, xn={}, xo={}, xne={})"
+                    ),
+                    k, xh_k, xhe_k, z_k, xc, xn, xo, xne
                 )));
             }
 

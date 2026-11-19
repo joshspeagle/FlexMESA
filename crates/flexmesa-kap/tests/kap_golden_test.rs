@@ -455,7 +455,7 @@ fn test_kap_co_table_header_zfracs_match_upstream_26_4_1() {
 }
 
 #[test]
-fn test_op_a09_compton_and_gn93_low_t_blend_bounds_match_mesa_26_4_1() {
+fn test_op_a09_compton_blend_bounds_match_mesa_26_4_1() {
     // Reference values emitted by compiled MESA 26.4.1 (`r26.4.1`, MESA SDK
     // `x86_64-linux-26.6.1`, `GCC 15.2.0`, `CRMATH`) via `Get_kap_Results`
     // (`kap/private/load_kap.f90:65-70`, `kap/private/kap_eval.f90:287-318`,
@@ -561,7 +561,11 @@ fn test_op_a09_compton_and_gn93_low_t_blend_bounds_match_mesa_26_4_1() {
     );
     assert_eq!(out_820.kap_fracs[I_FRAC_COMPTON], 1.0);
     assert_eq!(out_820.kap_fracs[I_FRAC_HIGH_T], 0.0);
+}
 
+#[test]
+fn test_gn93_low_t_blend_bounds_and_aesopus_validation_match_mesa_26_4_1() {
+    let tables = kap_tables().expect("kap_tables");
     let cfg_gn93 = KapConfig {
         zbase: 0.02,
         kap_option: KapOption::Gn93,

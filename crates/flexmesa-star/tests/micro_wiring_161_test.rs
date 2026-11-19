@@ -51,7 +51,7 @@ fn test_do_eos_matches_upstream_prad_gam_and_rejects_extreme_states() {
     assert!((model.prad[k] - exp_prad).abs() <= 1.0e-15 * exp_prad);
     assert!((model.gam[k] - exp_gam).abs() <= 1.0e-15 * exp_gam);
 
-    // `eos_support.f90:70`: reject `logRho < -25`.
+    // `star/private/eos_support.f90:70`: reject `logRho < -25`.
     let mut low_rho = model.clone();
     low_rho.lnd[0] = -25.1 * LN10;
     low_rho.rho[0] = flexmesa_math::exp(low_rho.lnd[0]);
@@ -75,7 +75,7 @@ fn test_do_neu_includes_reco_channel_stores_unscaled_sources_and_rejects_hook()
     model.controls.non_nuc_neu_factor = 2.5;
     do_neu(&mut model).expect("do_neu");
     let ch = model.aux.nonnucneu_channels[k];
-    // Channels `[plas, brem, phot, pair, reco]` are stored unscaled (`neu.f90:106-115`),
+    // Channels `[plas, brem, phot, pair, reco]` are stored unscaled (`star/private/neu.f90:106-115`),
     // while `non_nuc_neu` equals `2.5 * sum(channels)`.
     assert!(
         ch[4] > 0.0,
@@ -107,7 +107,7 @@ fn test_do_kap_simple_es_starting_comp_logt_ramp_and_clamps() {
     do_kap(&mut model).expect("baseline do_kap");
     let base_kap: Vec<f64> = model.opacity.clone();
 
-    // 1. `use_simple_es_for_kap` (`kap_support.f90:302-307`)
+    // 1. `use_simple_es_for_kap` (`star/private/kap_support.f90:302-307`)
     model.controls.use_simple_es_for_kap = true;
     do_kap(&mut model).expect("simple es do_kap");
     for k in 0..model.nz {
@@ -189,8 +189,8 @@ fn test_do_net_special_rates_neuqs_logtcut_clamp_and_category_renorm() {
     let cat_sum_base: f64 = model.aux.eps_nuc_categories[kc].iter().sum();
     assert!((cat_sum_base - base_eps).abs() <= 1.0e-11 * base_eps);
 
-    // 1. `reaction_neuQs_factor` scales nuclear neutrino losses (`net.f90:202-210`)
-    // and `eps_nuc_factor` does NOT scale `eps_nuc_neu_total` (`net.f90:365-372`).
+    // 1. `reaction_neuQs_factor` scales nuclear neutrino losses (`star/private/net.f90:202-210`)
+    // and `eps_nuc_factor` does NOT scale `eps_nuc_neu_total` (`star/private/net.f90:365-372`).
     model.controls.reaction_neuqs_factor = 0.5;
     model.controls.eps_nuc_factor = 3.0;
     let net_half_neu = resolve_model_net(&model).expect("resolve half neu");
@@ -215,7 +215,7 @@ fn test_do_net_special_rates_neuqs_logtcut_clamp_and_category_renorm() {
     model.controls.reaction_neuqs_factor = 1.0;
     model.controls.eps_nuc_factor = 1.0;
 
-    // 2. `max_abs_eps_nuc` clamps `eps_nuc`, zeroes partials, and renormalizes categories (`net.f90:311-331`).
+    // 2. `max_abs_eps_nuc` clamps `eps_nuc`, zeroes partials, and renormalizes categories (`star/private/net.f90:311-331`).
     model.controls.max_abs_eps_nuc = 0.25 * base_eps;
     let net_std = resolve_model_net(&model).expect("resolve std");
     do_net(&mut model, &net_std, false).expect("do_net clamped");

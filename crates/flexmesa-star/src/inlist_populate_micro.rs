@@ -135,9 +135,10 @@ fn validate_terminal_debug_bounds(
 impl InlistBundle {
     pub(crate) fn populate_eos_and_kap_configs(
         &mut self,
+        allow_unsupported_controls: bool,
     ) -> Result<(), StarError> {
         self.populate_eos_section()?;
-        self.populate_kap_section()?;
+        self.populate_kap_section(allow_unsupported_controls)?;
         self.populate_star_micro_controls()
     }
 
@@ -477,7 +478,10 @@ impl InlistBundle {
     }
 
     #[allow(clippy::too_many_lines)]
-    fn populate_kap_section(&mut self) -> Result<(), StarError> {
+    fn populate_kap_section(
+        &mut self,
+        allow_unsupported_controls: bool,
+    ) -> Result<(), StarError> {
         let Some(kap) = self.sections.get("kap") else {
             return Ok(());
         };
@@ -580,9 +584,18 @@ impl InlistBundle {
             if Path::new(fname).file_name().and_then(|s| s.to_str())
                 != Some("AESOPUS_AGSS09.h5")
             {
-                return Err(StarError::InvalidInput(format!(
-                    "unsupported '&kap::aesopus_filename' = '{fname}': only bundled 'AESOPUS_AGSS09.h5' is supported"
-                )));
+                if allow_unsupported_controls {
+                    self.validation_report.unsupported_controls.push((
+                        String::from("kap"),
+                        format!("aesopus_filename={fname}"),
+                    ));
+                    kcfg.aesopus_filename.clear();
+                    kcfg.kap_low_t_option = KapLowTOption::LowTFa05Gs98;
+                } else {
+                    return Err(StarError::InvalidInput(format!(
+                        "unsupported '&kap::aesopus_filename' = '{fname}': only bundled 'AESOPUS_AGSS09.h5' is supported"
+                    )));
+                }
             }
         }
 

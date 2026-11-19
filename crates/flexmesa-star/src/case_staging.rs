@@ -14,7 +14,7 @@ static STAGING_SEQ: AtomicU64 = AtomicU64::new(0);
 
 /// RAII temporary workspace staging a single `test_suite` case directory under
 /// `std::env::temp_dir()` while preserving relative `../` and `../../` sibling
-/// lookups (`../shared`, `../../rsp2_utils`, `../../test_suite`).
+/// lookups (`../shared`, `../../test_suite`).
 #[derive(Debug)]
 pub(crate) struct TempCaseStaging {
     tmp_root: Option<PathBuf>,

@@ -40,8 +40,6 @@
 pub mod binary_history;
 pub mod disk;
 pub mod e2e;
-pub mod e2e_extras;
-pub mod e2e_oracles;
 pub mod edd_wind;
 pub mod extras;
 pub mod inlist;
@@ -68,12 +66,10 @@ pub use binary_history::{
 };
 pub use disk::eval_l2_mass_loss_fraction;
 pub use e2e::{
-    eval_brott_wind_msun_yr, eval_gr_expected_separation_rsun,
-    eval_tauris_vdh_expected_separation_rsun, is_tier5_binary_case,
-    run_binary_suite, run_binary_suite_with_options,
-    run_binary_test_suite_case, run_binary_test_suite_case_with_logs,
+    run_binary_test_suite_case, run_binary_test_suite_case_with_extras,
+    run_binary_test_suite_case_with_logs,
     run_binary_test_suite_case_with_options, BinaryCaseRunReport,
-    BinaryInlistControls, BinaryLogsOptions, TIER5_BINARY_CASES,
+    BinaryInlistControls, BinaryLogsOptions,
 };
 pub use edd_wind::{
     bh_initial_equatorial_mass, eval_accreted_material_j, eval_bh_spin,
@@ -224,44 +220,23 @@ mod tests {
     }
 
     #[test]
-    fn test_e2e_5_binary_test_suite_and_oracles() {
-        assert_eq!(TIER5_BINARY_CASES.len(), 8);
-        assert!(is_tier5_binary_case("jdot_gr_check"));
-        assert!(is_tier5_binary_case("wind_fed_bhhmxb"));
-        assert!(is_tier5_binary_case("double_bh"));
-
-        let a_gr =
-            eval_gr_expected_separation_rsun(1.0, 1.4, 1.4, 1.0e7 * SECYER);
-        assert!(a_gr > 0.0 && a_gr < 1.0);
-
-        let a_ml = eval_tauris_vdh_expected_separation_rsun(
-            10.0, 2.0, 1.5, 0.4, 0.4, 0.19, 2.0,
-        );
-        assert!(a_ml > 0.0 && a_ml.is_finite());
-
-        let w_brott = eval_brott_wind_msun_yr(
-            5.0e5, 60.0, 15.0, 45_000.0, 0.7, 0.28, 0.02,
-        );
-        assert!(w_brott > 0.0 && w_brott.is_finite());
-
+    fn test_e2e_5_binary_case_runner_rejects_raw_unsupported_controls() {
         if let Some(bin_suite) =
             flexmesa_utils::require_mesa_test_input_path("binary/test_suite")
         {
-            let base = bin_suite
-                .parent()
-                .and_then(|p| p.parent())
-                .expect("upstream MESA root");
-            {
-                let err = run_binary_suite(base, Some(4)).expect_err(
-                    "raw $MESA_DIR binary suite must reject unsupported controls",
-                );
-                let msg = err.to_string();
-                assert!(
-                    matches!(err, flexmesa_star::StarError::InvalidInput(_))
-                        && msg.contains("unsupported control"),
-                    "unexpected binary suite error: {msg}"
-                );
-            }
+            let err = run_binary_test_suite_case(
+                &bin_suite.join("jdot_gr_check"),
+                Some(4),
+            )
+            .expect_err(
+                "raw $MESA_DIR binary case must reject unsupported controls",
+            );
+            let msg = err.to_string();
+            assert!(
+                matches!(err, flexmesa_star::StarError::InvalidInput(_))
+                    && msg.contains("unsupported control"),
+                "unexpected binary case error: {msg}"
+            );
         }
     }
 

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
 """Stage E2E-1 (#92) Tier 1 hydrostatic, solar, mixing, and diffusion
-`test_suite` reproduction and physics-hook verification suite.
+`test_suite` execution and ZAMS/restart verification suite (`#148`).
 """
 
 from __future__ import annotations
@@ -17,101 +17,32 @@ from flexmesa.testing import known_gaps_gate
 
 from . import cleaned_case_gaps
 
-
-def test_tier1_cases_inventory_has_33_canonical_entries() -> None:
-    """Verify `TIER1_CASES` contains all 33 canonical Tier 1 case names."""
-    assert isinstance(star.TIER1_CASES, tuple)
-    assert len(star.TIER1_CASES) == 33
-    assert len(set(star.TIER1_CASES)) == 33
-    assert star.TIER1_CASES[0] == "make_zams"
-    assert star.TIER1_CASES[-1] == "simplex_solar_calibration"
-
-
-def test_starspot_flux_blocking_scales_effective_luminosity() -> None:
-    """Verify YREC starspot flux blocking (`starspots`) satisfies analytical
-    scaling $L_{\\mathrm{eff}} = L / (f_{\\mathrm{spot}} x_{\\mathrm{spot}}^4
-    + 1 - f_{\\mathrm{spot}})$.
-    """
-    f_spot = 0.34
-    x_spot = 0.85
-    expected_alpha = f_spot * (x_spot**4) + (1.0 - f_spot)
-    l_eff, alpha = e2e.eval_starspot_luminosity(2.5, f_spot, x_spot)
-    assert np.isclose(alpha, expected_alpha, rtol=1e-14, atol=1e-15)
-    assert np.isclose(l_eff, 2.5 / expected_alpha, rtol=1e-14, atol=1e-15)
-    assert l_eff > 2.5
-
-    l_unspotted, alpha_unspotted = e2e.eval_starspot_luminosity(1.0, 0.0, 0.85)
-    assert np.isclose(alpha_unspotted, 1.0, rtol=1e-15, atol=1e-15)
-    assert np.isclose(l_unspotted, 1.0, rtol=1e-15, atol=1e-15)
+_REPRESENTATIVE_TIER1_CASES = (
+    "1.3M_ms_high_Z",
+    "semiconvection",
+    "check_pulse_atm",
+    "custom_colors",
+    "extended_convective_penetration",
+    "make_env",
+    "custom_rates",
+    "carbon_kh",
+)
 
 
-def test_t_tau_gradr_factor_matches_eddington_krishna_swamy_and_hopf() -> None:
-    """Verify $T(\\tau)$ Hopf function $q(\\tau)$ and $\\nabla_{\\mathrm{rad}}$
-    correction factor $1 + \\tau\\,dq/d\\tau$ (`T_tau_gradr`).
-    """
-    tau = 2.0 / 3.0
-    q_edd, fac_edd = e2e.eval_t_tau_gradr_factor(tau, "Eddington")
-    assert np.isclose(q_edd, 2.0 / 3.0, rtol=1e-14, atol=1e-15)
-    assert np.isclose(fac_edd, 1.0, rtol=1e-14, atol=1e-15)
-
-    q_ks, fac_ks = e2e.eval_t_tau_gradr_factor(tau, "Krishna_Swamy")
-    e1 = np.exp(-2.54 * tau)
-    e2 = np.exp(-30.0 * tau)
-    expected_q_ks = 1.39 - 0.815 * e1 - 0.025 * e2
-    expected_fac_ks = 1.0 + tau * (2.54 * 0.815 * e1 + 30.0 * 0.025 * e2)
-    assert np.isclose(q_ks, expected_q_ks, rtol=1e-14, atol=1e-15)
-    assert np.isclose(fac_ks, expected_fac_ks, rtol=1e-14, atol=1e-15)
-
-    q_hopf, fac_hopf = e2e.eval_t_tau_gradr_factor(tau, "solar_Hopf_grey")
-    assert q_hopf > 0.5
-    assert fac_hopf > 1.0
-
-
-def test_custom_colors_and_pulse_atm_export_preserve_invariants() -> None:
-    """Verify synthetic photometry (`custom_colors`) and pulsation atmosphere
-    exports (`check_pulse_atm`) on a 1 Msun ZAMS model.
+def test_pulse_atm_export_preserves_invariants() -> None:
+    """Verify pulsation atmosphere exports (`GYRE`, `FGONG`) on a 1 Msun ZAMS
+    model preserve radial zone dimensions (`check_pulse_atm`).
     """
     model = star.StarModel.from_zams(initial_mass=1.0, initial_z=0.02)
-    cols = e2e.eval_model_colors(model)
-    assert len(cols) == 10
-    assert all(np.isfinite(c) for c in cols)
-    mag_bol, flux_bol = cols[0], cols[1]
-    assert 0.0 < mag_bol < 25.0
-    assert flux_bol > 0.0
-
     gyre_txt = model.to_gyre_str(add_center_point=True)
     fgong_txt = model.to_fgong_str(add_center_point=True)
     assert len(gyre_txt.splitlines()) == model.nz + 2
     assert len(fgong_txt.splitlines()) > model.nz
 
 
-def test_solar_calibration_objective_and_nelder_mead_simplex_step() -> None:
-    """Verify solar calibration $\\chi^2$ and Nelder-Mead reflection step
-    (`simplex_solar_calibration`).
-    """
-    chi2_zero = e2e.eval_solar_calibration_objective(0.0, 0.0, 0.0229, 0.0229)
-    assert np.isclose(chi2_zero, 0.0, atol=1e-15)
-
-    chi2_perturbed = e2e.eval_solar_calibration_objective(
-        1.0e-4, -1.0e-4, 0.0239, 0.0229
-    )
-    assert np.isclose(chi2_perturbed, 3.0, rtol=1e-12, atol=1e-12)
-
-    simplex = [
-        ((0.270, 0.018, 1.80), 12.0),
-        ((0.275, 0.019, 1.90), 4.0),
-        ((0.280, 0.020, 2.00), 8.0),
-        ((0.260, 0.015, 1.60), 25.0),
-    ]
-    y_r, z_r, alpha_r = e2e.nelder_mead_solar_step(simplex)
-    assert 0.270 < y_r <= 0.35
-    assert 0.018 < z_r <= 0.04
-    assert 1.80 < alpha_r <= 2.8
-
-
 def test_convective_premix_predictive_mix_and_diffusion_hooks() -> None:
-    """Verify convective premixing, predictive mixing, Castellani penetration,
-    and Burgers atomic diffusion preserve species mass conservation.
+    """Verify convective premixing, predictive mixing, and Burgers atomic
+    diffusion preserve species mass conservation.
     """
     model = star.StarModel.from_zams(initial_mass=4.0, initial_z=0.02)
     n_cpm = model.do_conv_premix(max_iters=3, avoid_fuel_increase=False)
@@ -209,8 +140,8 @@ def test_synthetic_tier1_case_runners_pass_assertions_and_restart(
     case_name: str,
     inlist_body: str,
 ) -> None:
-    """Verify synthetic Tier 1 case directories execute `Tier1CaseExtras`,
-    pass physical assertions, and reproduce `.photo` restarts bit-identically.
+    """Verify synthetic Tier 1 directories reach `max_model_number = 2`
+    without in-library case overrides and verify `.photo` restart parity.
     """
     with tempfile.TemporaryDirectory() as tmp:
         case_dir = pathlib.Path(tmp) / case_name
@@ -227,7 +158,7 @@ def test_synthetic_tier1_case_runners_pass_assertions_and_restart(
             verify_restart=True,
         )
         assert rep["case_name"] == case_name
-        assert rep["tier"] == 1
+        assert rep["tier"] == 0
         assert rep["passed"] is True
         assert rep["assertions_passed"] is True
         assert rep["photo_restart_passed"] is True
@@ -246,7 +177,7 @@ def test_synthetic_tier1_case_runners_pass_assertions_and_restart(
 
 def test_full_stages_skip_optional_false_multi_stage_tier1_execution() -> None:
     """Verify `skip_optional=False` (`--full-stages`) executes all `do_one`
-    stages sequentially from start to finish on a multi-stage Tier 1 case.
+    stages sequentially to physical `max_model_number` termination.
     """
     with tempfile.TemporaryDirectory() as tmp:
         case_dir = pathlib.Path(tmp) / "make_zams"
@@ -288,26 +219,59 @@ def test_full_stages_skip_optional_false_multi_stage_tier1_execution() -> None:
         rep = e2e.run_test_suite_case(
             case_dir,
             skip_optional=False,
-            max_steps_per_stage=2,
+            max_steps_per_stage=4,
             verify_restart=True,
         )
         assert rep["case_name"] == "make_zams"
-        assert rep["tier"] == 1
+        assert rep["tier"] == 0
         assert rep["passed"] is True
         assert rep["assertions_passed"] is True
         assert rep["photo_restart_passed"] is True
+        assert rep["photo_restart_verified"] is True
         assert len(rep["stages"]) == 2
         assert rep["total_steps"] >= 2
 
 
-@pytest.mark.parametrize("case_name", star.TIER1_CASES)
+def test_unrelaxed_non_solar_zams_z_and_y_fail_loudly(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Verify requesting non-solar Z or Y from built-in ZAMS without relax
+    directives raises `ValueError` instead of substituting Z=0.02 (#148).
+    """
+    z_dir = tmp_path / "bad_z"
+    z_dir.mkdir(parents=True, exist_ok=True)
+    (z_dir / "rn").write_text(
+        "#!/usr/bin/env bash\ndo_one inlist final.mod\n", encoding="utf-8"
+    )
+    (z_dir / "inlist").write_text(
+        "&controls\n  initial_mass = 1.0\n  initial_z = 0.001\n/\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match=r"initial_z = 0\.02"):
+        e2e.run_test_suite_case(z_dir, max_steps_per_stage=1)
+
+    y_dir = tmp_path / "bad_y"
+    y_dir.mkdir(parents=True, exist_ok=True)
+    (y_dir / "rn").write_text(
+        "#!/usr/bin/env bash\ndo_one inlist final.mod\n", encoding="utf-8"
+    )
+    (y_dir / "inlist").write_text(
+        "&controls\n  initial_mass = 1.0\n  initial_z = 0.02\n"
+        "  initial_y = 0.24\n/\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match=r"initial_y = 0\.28"):
+        e2e.run_test_suite_case(y_dir, max_steps_per_stage=1)
+
+
+@pytest.mark.parametrize("case_name", _REPRESENTATIVE_TIER1_CASES)
 def test_upstream_tier1_test_suite_case_and_restart_reproducibility(
     case_name: str,
     tmp_path: pathlib.Path,
 ) -> None:
-    """When `MESA_DIR` is present, verify unmodified upstream Tier 1
-    `star/test_suite/<case>` directories fail loudly under strict `#147`, and
-    cleaned copies execute cleanly with internal `.photo` round-trip checks.
+    """Verify unmodified Tier 1 cases fail strictly under `#147` and cleaned
+    copies respect declared stops or capped 2-step execution without in-library
+    case overrides.
     """
     base = known_gaps_gate.require_mesa_test_inputs_dir()
     if base is None:
@@ -345,10 +309,11 @@ def test_upstream_tier1_test_suite_case_and_restart_reproducibility(
         verify_restart=True,
     )
     assert rep["case_name"] == case_name
-    assert rep["tier"] == 1
-    assert rep["passed"] is True
+    assert rep["tier"] == 0
+    assert rep["termination_code"] == "max_steps_cap"
+    assert rep["passed"] is False
     assert rep["assertions_passed"] is True
-    assert rep["photo_restart_passed"] is True
+    assert rep["photo_restart_verified"] is True
     assert rep["total_steps"] >= 1
     assert rep["total_newton_iters"] >= 1
     assert np.isfinite(rep["final_teff"]) and rep["final_teff"] > 0.0

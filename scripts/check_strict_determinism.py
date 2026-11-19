@@ -121,14 +121,22 @@ def _build_trace_command(
         case,
         "--out",
         str(out_dir),
-        "--numerics-mode",
-        "strict",
-        # This gate compares bit-identity across thread counts and
-        # architectures, not agreement with MESA. The upstream case sets
-        # controls that are not ported yet (declared gap), so the
-        # documented exploratory opt-out is used here.
-        "--allow-unsupported-controls",
     ]
+    if (_REPO_ROOT / "tests" / "case_extras").is_dir():
+        cmd.extend(
+            ["--extras-factory", "tests.case_extras:resolve_case_extras"]
+        )
+    cmd.extend(
+        [
+            "--numerics-mode",
+            "strict",
+            # This gate compares bit-identity across thread counts and
+            # architectures, not agreement with MESA. The upstream case sets
+            # controls that are not ported yet (declared gap), so the
+            # documented exploratory opt-out is used here.
+            "--allow-unsupported-controls",
+        ]
+    )
     if max_steps is not None:
         cmd.extend(["--max-steps", str(max_steps)])
     return cmd

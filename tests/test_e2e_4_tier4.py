@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
-"""Stage E2E-4 (#95, closing #4 and #5) verification test suite for all 16
-Tier 4 `star/test_suite` pulsation cases (`15` active + `rsp_Cepheid_6M`), all
-8 `astero/test_suite` cases, and all 32 `star/dev_cases_*` pulsation cases.
+"""Stage E2E-4 (#95) verification test suite for pulsation, `RSP`, and `astero`
+interfaces without in-library test-case overrides (`#148`).
 """
 
 from __future__ import annotations
@@ -10,39 +9,27 @@ import pathlib
 
 import pytest
 
-from flexmesa import star
-from flexmesa.testing import known_gaps_gate
+from flexmesa import astero, star
+from flexmesa.testing import case_manifest, known_gaps_gate
+from tests.case_extras import resolve_case_extras
 
 
-def test_tier4_cases_inventory_and_cumulative_counts() -> None:
-    """Verify Tier 4 inventories and MESA 26.4.1 case counts (`#141`)."""
-    assert len(star.TIER4_STAR_CASES) == 16
-    assert len(set(star.TIER4_STAR_CASES)) == 16
-    assert len(star.TIER4_ACTIVE_STAR_CASES) == 15
-    assert len(set(star.TIER4_ACTIVE_STAR_CASES)) == 15
-    assert set(star.TIER4_STAR_CASES) - set(star.TIER4_ACTIVE_STAR_CASES) == {
-        "rsp_Cepheid_6M"
-    }
-    assert len(star.TIER4_ASTERO_CASES) == 8
-    assert len(set(star.TIER4_ASTERO_CASES)) == 8
-    assert len(star.TIER4_DEV_CASES) == 1
-    assert len(set(star.TIER4_DEV_CASES)) == 1
-
-    prior_star = (
-        set(star.TIER1_CASES) | set(star.TIER2_CASES) | set(star.TIER3_CASES)
-    )
-    assert len(prior_star) == 71
-    assert set(star.TIER4_STAR_CASES).isdisjoint(prior_star)
-    cumulative_active = (
-        len(prior_star)
-        + len(star.TIER4_ACTIVE_STAR_CASES)
-        + len(star.TIER4_ASTERO_CASES)
-    )
-    assert cumulative_active == 94
+def test_manifest_counts_match_106_release_test_suite_cases() -> None:
+    """Verify MESA 26.4.1 release manifest covers 90 star, 8 binary, and
+    8 astero cases (`106` total, `#141`, `#143`, `#148`).
+    """
+    entries = case_manifest.load_case_manifest().cases
+    star_cases = [e.case for e in entries if e.suite == "star"]
+    bin_cases = [e.case for e in entries if e.suite == "binary"]
+    ast_cases = [e.case for e in entries if e.suite == "astero"]
+    assert len(star_cases) == 90
+    assert len(bin_cases) == 8
+    assert len(ast_cases) == 8
+    assert len(entries) == 106
 
 
 def test_linear_oscillation_modes_and_astero_scaling_invariants() -> None:
-    """Verify GYRE/ADIPLS linear oscillation modes and scaling (#4)."""
+    """Verify linear oscillation mode scaffolding and astero scaling (#4)."""
     model = star.StarModel.from_zams(initial_mass=1.0, initial_z=0.02)
     p_modes = star.eval_linear_oscillation_modes(model, 0, [1, 2, 3, 4])
     assert len(p_modes) == 4
@@ -66,10 +53,8 @@ def test_linear_oscillation_modes_and_astero_scaling_invariants() -> None:
     assert numax > 500.0
 
 
-def test_rsp_lina_modes_and_create_rsp_envelope_model(
-    tmp_path: pathlib.Path,
-) -> None:
-    """Verify RSP LINA modes, envelope builder (#5), and 2nd-crossing edges."""
+def test_rsp_lina_modes_and_create_rsp_envelope_model() -> None:
+    """Verify RSP LINA modes and envelope builder (#5) without case stubs."""
     modes = star.eval_rsp_lina_modes(4.165, 1438.8, 6050.0, 0.73, 0.007, 3)
     assert len(modes) == 3
     # MESA 26.4.1 reference (`tests/fixtures/golden/rsp/lina_26_4_1.tsv`):
@@ -93,25 +78,6 @@ def test_rsp_lina_modes_and_create_rsp_envelope_model(
     step_rep = rsp_model.evolve_step()
     assert step_rep.converged is True
 
-    hist_file = tmp_path / "history_7M.data"
-    hist_file.write_text(
-        "h1\nh2\nh3\nh4\nh5\n"
-        "model_number star_age star_mass log_Teff log_L\n"
-        "2150 4.8877e7 7.0 3.6658195232350188 3.7109722141331023\n"
-        "2175 4.8891e7 7.0 3.6845865933860029 3.7242776441743706\n"
-        "2188 4.8897e7 7.0 3.6960000000000000 3.7285000000000000\n"
-        "2200 4.8902e7 7.0 3.7077397297731092 3.7319034980184869\n"
-        "2225 4.8915e7 7.0 3.7321408474917157 3.7374357317600007\n"
-        "2250 4.8932e7 7.0 3.7563642523076117 3.7421071850518519\n"
-        "2275 4.8961e7 7.0 3.7807324737693802 3.7469795150933503\n"
-        "2300 4.9019e7 7.0 3.8044285509655174 3.7541222977603699\n",
-        encoding="utf-8",
-    )
-    tb, tr, dt = star.eval_rsp_2nd_crossing_edges(tmp_path, 150.0)
-    assert 4800.0 < tr < 5600.0
-    assert tb > tr + 300.0
-    assert abs(dt - (tb - tr)) < 1.0e-9
-
 
 @pytest.mark.parametrize(
     "case_name",
@@ -129,7 +95,9 @@ def test_synthetic_tier4_star_case_execution_and_photo_restart(
     tmp_path: pathlib.Path,
     case_name: str,
 ) -> None:
-    """Verify synthetic offline Tier 4 star case execution and 0-ULP restart."""
+    """Verify synthetic offline pulsation/RSP directories reach
+    `max_model_number = 2` and verify 0-ULP `.photo` restarts.
+    """
     case_dir = tmp_path / case_name
     case_dir.mkdir(parents=True, exist_ok=True)
     (case_dir / "rn").write_text(
@@ -171,11 +139,11 @@ def test_synthetic_tier4_star_case_execution_and_photo_restart(
     rep = star.run_test_suite_case(
         case_dir,
         skip_optional=True,
-        max_steps_per_stage=2,
+        max_steps_per_stage=3,
         verify_restart=True,
     )
     assert rep["case_name"] == case_name
-    assert rep["tier"] == 4
+    assert rep["tier"] == 0
     assert rep["passed"] is True
     assert rep["assertions_passed"] is True
     assert rep["photo_restart_verified"] is True
@@ -184,7 +152,7 @@ def test_synthetic_tier4_star_case_execution_and_photo_restart(
 def test_synthetic_astero_case_execution_and_photo_restart(
     tmp_path: pathlib.Path,
 ) -> None:
-    """Verify synthetic offline astero/test_suite case execution and restart."""
+    """Verify synthetic offline `astero/test_suite` execution and restart."""
     case_dir = tmp_path / "example_astero"
     case_dir.mkdir(parents=True, exist_ok=True)
     (case_dir / "rn").write_text(
@@ -206,128 +174,77 @@ def test_synthetic_astero_case_execution_and_photo_restart(
         "&astero_search_controls\n  chi2_seismo_fraction = 0.666\n/\n",
         encoding="utf-8",
     )
-    rep = star.run_astero_test_suite_case(
+    rep = astero.run_astero_test_suite_case(
         case_dir,
         skip_optional=True,
-        max_steps_per_stage=2,
+        max_steps_per_stage=None,
         verify_restart=True,
     )
     assert rep["case_name"] == "example_astero"
-    assert rep["tier"] == 4
+    assert rep["tier"] == 0
     assert rep["passed"] is True
     assert rep["assertions_passed"] is True
     assert rep["photo_restart_verified"] is True
 
 
-def test_tier4_and_dev_raw_cases_rejected_and_cleaned_copies_smoke(
+def test_rsp_and_astero_raw_cases_rejected_and_cleaned_copies_smoke(
     tmp_path: pathlib.Path,
 ) -> None:
-    """Reject raw Tier 4 / dev suites under `#147` and run cleaned copies."""
+    """Reject raw `rsp_BLAP` and `astero` cases under `#147`; run cleaned
+    2-step smoke checks with test-side extras.
+    """
     root = known_gaps_gate.require_mesa_test_inputs_dir()
     if root is None:
         return
-    assert (root / "star" / "test_suite").is_dir(), (
-        f"Upstream star/test_suite not found under {root}"
-    )
 
-    clean_root = tmp_path / "mesa"
-    for case_name in star.TIER4_STAR_CASES:
-        raw_case = root / "star" / "test_suite" / case_name
-        with pytest.raises(
-            ValueError,
-            match=r"(unsupported|unknown|unrecognized).*control",
-        ):
-            star.run_test_suite_case(
-                raw_case,
-                skip_optional=True,
-                max_steps_per_stage=2,
-                verify_restart=True,
-            )
-        star.copy_cleaned_case(
-            raw_case,
-            clean_root / "star" / "test_suite" / case_name,
-            suite="star",
-        )
-    for case_name in star.TIER4_ASTERO_CASES:
-        raw_case = root / "astero" / "test_suite" / case_name
-        with pytest.raises(
-            ValueError,
-            match=r"(unsupported|unknown|unrecognized).*control",
-        ):
-            star.run_astero_test_suite_case(
-                raw_case,
-                max_steps_per_stage=2,
-                verify_restart=True,
-            )
-        star.copy_cleaned_case(
-            raw_case,
-            clean_root / "astero" / "test_suite" / case_name,
-            suite="astero",
-        )
-
-    star_root = clean_root / "star" / "test_suite"
-    # gyre_in_mesa_wd stops on a step failure (#157) and gyre_in_mesa_rsg
-    # completes but misses its target-mode check with the in-house pulsation
-    # scaffold (#170). Both are declared gaps, so they are asserted separately.
-    declared_gap_cases = {"gyre_in_mesa_wd", "gyre_in_mesa_rsg"}
-    for case_name in star.TIER4_STAR_CASES:
-        if case_name in declared_gap_cases:
-            continue
-        rep = star.run_test_suite_case(
-            star_root / case_name,
-            skip_optional=True,
-            max_steps_per_stage=2,
-            verify_restart=True,
-        )
-        assert rep["passed"] and rep["assertions_passed"], case_name
-        assert rep["photo_restart_verified"], case_name
-    with pytest.raises(ValueError, match="star step failed"):
-        star.run_test_suite_case(
-            star_root / "gyre_in_mesa_wd",
-            skip_optional=True,
-            max_steps_per_stage=2,
-            verify_restart=True,
-        )
-    rsg_rep = star.run_test_suite_case(
-        star_root / "gyre_in_mesa_rsg",
-        skip_optional=True,
-        max_steps_per_stage=2,
-        verify_restart=True,
-    )
-    assert not rsg_rep["passed"] and rsg_rep["photo_restart_verified"]
-    for case_name in star.TIER4_ASTERO_CASES:
-        rep = star.run_astero_test_suite_case(
-            clean_root / "astero" / "test_suite" / case_name,
-            max_steps_per_stage=2,
-            verify_restart=True,
-        )
-        assert rep["passed"] and rep["assertions_passed"], case_name
-
-    with pytest.raises((FileNotFoundError, OSError, ValueError)):
-        star.run_dev_cases_suite(
-            root, max_steps_per_stage=2, verify_restart=True, skip_optional=True
-        )
+    raw_rsp = root / "star" / "test_suite" / "rsp_BLAP"
+    assert raw_rsp.is_dir(), f"Missing upstream case: {raw_rsp}"
     with pytest.raises(
         ValueError,
         match=r"(unsupported|unknown|unrecognized).*control",
     ):
-        star.run_dev_cases_suite(
-            root,
+        star.run_test_suite_case(
+            raw_rsp,
+            skip_optional=True,
             max_steps_per_stage=2,
             verify_restart=True,
-            skip_optional=False,
+            extras=resolve_case_extras("star", raw_rsp),
         )
-    for sub_dir, case_name in star.TIER4_DEV_CASES:
-        star.copy_cleaned_case(
-            root / "star" / sub_dir / case_name,
-            clean_root / "star" / sub_dir / case_name,
-            suite="star",
-        )
-    dev_reports = star.run_dev_cases_suite(
-        clean_root,
+    clean_rsp = tmp_path / "rsp_BLAP"
+    star.copy_cleaned_case(raw_rsp, clean_rsp, suite="star")
+    rsp_rep = star.run_test_suite_case(
+        clean_rsp,
+        skip_optional=True,
         max_steps_per_stage=2,
         verify_restart=True,
-        skip_optional=False,
+        extras=resolve_case_extras("star", raw_rsp),
     )
-    assert len(dev_reports) == 1
-    assert all(r["passed"] and r["assertions_passed"] for r in dev_reports)
+    assert rsp_rep["tier"] == 0
+    assert rsp_rep["passed"] is False
+    assert rsp_rep["assertions_passed"] is True
+    assert rsp_rep["photo_restart_verified"] is True
+
+    for case_name in ("example_astero", "surface_effects"):
+        raw_ast = root / "astero" / "test_suite" / case_name
+        assert raw_ast.is_dir(), f"Missing upstream case: {raw_ast}"
+        with pytest.raises(
+            ValueError,
+            match=r"(unsupported|unknown|unrecognized).*control",
+        ):
+            astero.run_astero_test_suite_case(
+                raw_ast,
+                max_steps_per_stage=2,
+                verify_restart=True,
+            )
+        clean_ast = tmp_path / case_name
+        star.copy_cleaned_case(raw_ast, clean_ast, suite="astero")
+        ast_rep = astero.run_astero_test_suite_case(
+            clean_ast,
+            max_steps_per_stage=2,
+            verify_restart=True,
+        )
+        assert ast_rep["tier"] == 0
+        expected_passed = case_name == "surface_effects"
+        assert ast_rep["passed"] is expected_passed
+        assert ast_rep["assertions_passed"] is True
+        assert ast_rep["photo_restart_verified"] is True

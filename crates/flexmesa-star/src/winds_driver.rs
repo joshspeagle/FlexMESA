@@ -7,6 +7,7 @@ use flexmesa_const::{
 };
 
 use crate::controls::StarError;
+use crate::inlist_runner::{DefaultStarExtras, StarExtras};
 use crate::model::StarModel;
 use crate::winds::{eval_scheme_rate, DutchLowTScheme, WindScheme};
 
@@ -84,6 +85,19 @@ fn scheme_eta(model: &StarModel, scheme: WindScheme) -> f64 {
 /// Returns [`StarError`] if `hot_wind_full_on_t < cool_wind_full_on_t` or an
 /// unknown wind scheme name is configured.
 pub fn do_set_mdot(model: &mut StarModel) -> Result<f64, StarError> {
+    do_set_mdot_with_extras(model, &DefaultStarExtras)
+}
+
+/// Evaluates the full control-driven mass-change rate `model.mstar_dot`
+/// (`g s^-1`) using `extras` for `use_other_wind` (`winds.f90:54-476`).
+///
+/// # Errors
+/// Returns [`StarError`] if wind controls are invalid or a required
+/// `other_wind` hook fails or is missing.
+pub fn do_set_mdot_with_extras(
+    model: &mut StarModel,
+    extras: &dyn StarExtras,
+) -> Result<f64, StarError> {
     let nz = model.nz;
     if nz == 0 {
         model.mstar_dot = 0.0;
@@ -137,84 +151,101 @@ pub fn do_set_mdot(model: &mut StarModel) -> Result<f64, StarError> {
         wind_mdot = -c.mass_change * M_SUN / SECYER;
     }
 
-    // 3. Hot + cool RGB/AGB wind schemes (`winds.f90:320-321,402-406`).
-    let dutch_low = DutchLowTScheme::parse_name(&mw.dutch_wind_lowt_scheme)
-        .ok_or_else(|| {
+    // 3. Hot + cool RGB/AGB wind schemes (`winds.f90:319-406`).
+    if c.use_other_wind {
+        let w_msun_yr = extras
+            .other_wind(model, l1, m1, r1, t1)?
+            .ok_or_else(|| {
+                StarError::InvalidInput(String::from(
+                    "use_other_wind = .true. requires an other_wind hook",
+                ))
+            })?;
+        let wind_cgs = w_msun_yr * M_SUN / SECYER;
+        if wind_cgs > wind_mdot.abs() {
+            using_wind_scheme = true;
+            wind_mdot = wind_cgs;
+        }
+    } else {
+        let dutch_low = DutchLowTScheme::parse_name(&mw.dutch_wind_lowt_scheme)
+            .ok_or_else(|| {
+                StarError::InvalidInput(format!(
+                    "unknown Dutch_wind_lowT_scheme '{}'",
+                    mw.dutch_wind_lowt_scheme
+                ))
+            })?;
+        let hot_s =
+            WindScheme::parse_name(&mw.hot_wind_scheme).ok_or_else(|| {
+                StarError::InvalidInput(format!(
+                    "unknown hot_wind_scheme '{}'",
+                    mw.hot_wind_scheme
+                ))
+            })?;
+        let cool_name = if cen_h1 < 0.01 && cen_he4 < mw.rgb_to_agb_wind_switch
+        {
+            &c.cool_wind_agb_scheme
+        } else {
+            &c.cool_wind_rgb_scheme
+        };
+        let cool_s = WindScheme::parse_name(cool_name).ok_or_else(|| {
             StarError::InvalidInput(format!(
-                "unknown Dutch_wind_lowT_scheme '{}'",
-                mw.dutch_wind_lowt_scheme
+                "unknown cool_wind_scheme '{cool_name}'"
             ))
         })?;
-    let hot_s =
-        WindScheme::parse_name(&mw.hot_wind_scheme).ok_or_else(|| {
-            StarError::InvalidInput(format!(
-                "unknown hot_wind_scheme '{}'",
-                mw.hot_wind_scheme
-            ))
-        })?;
-    let cool_name = if cen_h1 < 0.01 && cen_he4 < mw.rgb_to_agb_wind_switch {
-        &c.cool_wind_agb_scheme
-    } else {
-        &c.cool_wind_rgb_scheme
-    };
-    let cool_s = WindScheme::parse_name(cool_name).ok_or_else(|| {
-        StarError::InvalidInput(format!(
-            "unknown cool_wind_scheme '{cool_name}'"
-        ))
-    })?;
 
-    let hot_w = if t1 >= c.cool_wind_full_on_t {
-        eval_scheme_rate(
-            hot_s,
-            dutch_low,
-            l1,
-            m1,
-            r1,
-            t1,
-            surf_h1,
-            surf_he4,
-            z_surf,
-            cgrav,
-            scheme_eta(model, hot_s),
-        )
-    } else {
-        0.0
-    };
-    let cool_w = if t1 <= c.hot_wind_full_on_t {
-        eval_scheme_rate(
-            cool_s,
-            dutch_low,
-            l1,
-            m1,
-            r1,
-            t1,
-            surf_h1,
-            surf_he4,
-            z_surf,
-            cgrav,
-            scheme_eta(model, cool_s),
-        )
-    } else {
-        0.0
-    };
+        let hot_w = if t1 >= c.cool_wind_full_on_t {
+            eval_scheme_rate(
+                hot_s,
+                dutch_low,
+                l1,
+                m1,
+                r1,
+                t1,
+                surf_h1,
+                surf_he4,
+                z_surf,
+                cgrav,
+                scheme_eta(model, hot_s),
+            )
+        } else {
+            0.0
+        };
+        let cool_w = if t1 <= c.hot_wind_full_on_t {
+            eval_scheme_rate(
+                cool_s,
+                dutch_low,
+                l1,
+                m1,
+                r1,
+                t1,
+                surf_h1,
+                surf_he4,
+                z_surf,
+                cgrav,
+                scheme_eta(model, cool_s),
+            )
+        } else {
+            0.0
+        };
 
-    let wind_msun_yr = if t1 >= c.hot_wind_full_on_t {
-        hot_w
-    } else if t1 <= c.cool_wind_full_on_t {
-        cool_w
-    } else if (c.hot_wind_full_on_t - c.cool_wind_full_on_t).abs() <= 1.0e-12 {
-        0.5 * (hot_w + cool_w)
-    } else {
-        let beta = ((c.hot_wind_full_on_t - t1)
-            / (c.hot_wind_full_on_t - c.cool_wind_full_on_t))
-            .clamp(0.0, 1.0);
-        (1.0 - beta) * hot_w + beta * cool_w
-    };
+        let wind_msun_yr = if t1 >= c.hot_wind_full_on_t {
+            hot_w
+        } else if t1 <= c.cool_wind_full_on_t {
+            cool_w
+        } else if (c.hot_wind_full_on_t - c.cool_wind_full_on_t).abs() <= 1.0e-12
+        {
+            0.5 * (hot_w + cool_w)
+        } else {
+            let beta = ((c.hot_wind_full_on_t - t1)
+                / (c.hot_wind_full_on_t - c.cool_wind_full_on_t))
+                .clamp(0.0, 1.0);
+            (1.0 - beta) * hot_w + beta * cool_w
+        };
 
-    let wind_cgs = wind_msun_yr * M_SUN / SECYER;
-    if wind_cgs > wind_mdot.abs() {
-        using_wind_scheme = true;
-        wind_mdot = wind_cgs;
+        let wind_cgs = wind_msun_yr * M_SUN / SECYER;
+        if wind_cgs > wind_mdot.abs() {
+            using_wind_scheme = true;
+            wind_mdot = wind_cgs;
+        }
     }
 
     if using_wind_scheme && mw.no_wind_if_no_rotation && !c.rotation_flag {

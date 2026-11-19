@@ -72,7 +72,7 @@ print("Validated controls:", validated)
 
 Many upstream MESA `test_suite` cases chain multiple evolutionary stages inside a `./rn` bash script using `do_one <inlist> <final_mod>` helper calls, where Stage 1 relaxes a pre-MS or ZAMS model and saves `stage1.mod`, and Stage 2 loads `stage1.mod` (`load_saved_model = .true.`) to evolve through helium burning or mass transfer.
 
-`star.parse_rn_stages` extracts the ordered list of `(stage_kind, inlist_name, output_mod)` stages from a case directory (respecting `MESA_SKIP_OPTIONAL` conditional blocks when `skip_optional=True`), and `star.run_test_suite_case` executes multi-stage inlists with optional internal `.photo` round-trip checks. Legacy `star.TIER1_CASES`, `star.run_tier1_suite`, and `Tier1CaseExtras` dispatch pre-audit in-library smoke stubs (step-capped checks slated for removal under `#148`, not upstream `run_star_extras.f90` equivalence; real MESA `26.4.1` trajectory evaluation runs through `flexmesa harness`):
+`star.parse_rn_stages` extracts the ordered list of `(stage_kind, inlist_name, output_mod)` stages from a case directory (respecting `MESA_SKIP_OPTIONAL` conditional blocks when `skip_optional=True`), and `star.run_test_suite_case` executes multi-stage inlists with optional internal `.photo` round-trip checks and caller-supplied Python `extras` hooks (while canonical MESA `26.4.1` trajectory evaluation runs through `flexmesa harness`):
 
 ```python
 import pathlib

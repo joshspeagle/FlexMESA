@@ -325,7 +325,7 @@ impl InlistBundle {
         // Upstream applies these limits only when positive and accepts any
         // integer (`star/private/evolve.f90:2161,2214`), so a non-positive
         // value is stored as 0, meaning no limit. Upstream's own
-        // `binary/test_suite/double_bh/inlist1:47` sets `redo_limit = -1`.
+        // Upstream binary/star inlists can set `redo_limit = -1` for unlimited redos.
         if let Some(v) = ctrl.try_get_i64("controls", "retry_limit")? {
             ts.retry_limit = if v <= 0 { 0 } else { v as usize };
         }

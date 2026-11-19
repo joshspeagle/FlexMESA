@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
-"""Stage E2E-2 (#93) Tier 2 substellar, planetary, white dwarf,
-phase-separation, accretion, nova, and conductive flame `test_suite`
-reproduction and physics-hook verification suite.
+"""Stage E2E-2 (#93) Tier 2 substellar, planetary, white dwarf, and accretion
+`test_suite` execution and loud-error checks (`#148`).
 """
 
 from __future__ import annotations
@@ -12,86 +11,21 @@ import tempfile
 import numpy as np
 import pytest
 
-from flexmesa import star
 from flexmesa.star import e2e
 from flexmesa.testing import known_gaps_gate
 
 from . import cleaned_case_gaps
 
-
-def test_tier2_cases_inventory_has_16_canonical_entries() -> None:
-    """Verify `TIER2_CASES` contains all 16 MESA 26.4.1 Tier 2 case names."""
-    assert isinstance(star.TIER2_CASES, tuple)
-    assert len(star.TIER2_CASES) == 16
-    assert len(set(star.TIER2_CASES)) == 16
-    assert star.TIER2_CASES[0] == "make_brown_dwarf"
-    assert star.TIER2_CASES[-1] == "conductive_flame"
-    assert set(star.TIER1_CASES).isdisjoint(set(star.TIER2_CASES))
-
-
-def test_planetary_irradiation_heating_and_core_boundary() -> None:
-    """Verify planetary surface irradiation heating profile and inflated radius
-    (`irradiated_planet`, `make_planets`).
-    """
-    model = star.StarModel.from_zams(initial_mass=1.0, initial_z=0.02)
-    f_irr = 4.9e8
-    sigma_star = 300.0
-    eps_irr, r_rjup = e2e.eval_planetary_irradiation_heating(
-        model, f_irr=f_irr, col_depth_irr=sigma_star
-    )
-    assert len(eps_irr) == model.nz
-    assert eps_irr[0] > 0.0
-    assert eps_irr[0] <= f_irr / (4.0 * sigma_star) * (1.0 + 1.0e-12)
-    assert eps_irr[0] >= eps_irr[-1]
-    assert np.all(np.diff(eps_irr) <= 1.0e-12)
-    assert r_rjup > 1.0
-
-    eps_zero, _ = e2e.eval_planetary_irradiation_heating(
-        model, f_irr=0.0, col_depth_irr=sigma_star
-    )
-    assert np.allclose(eps_zero, 0.0, atol=1e-15)
-
-
-def test_wd_crystallization_and_three_phase_separation() -> None:
-    """Verify white dwarf Coulomb crystallization and 2/3-component phase
-    separation (`wd_cool_0.6M` and `wd_o_ne_3_phase`).
-    """
-    model = star.StarModel.from_zams(initial_mass=1.0, initial_z=0.02)
-    cryst_co, l_lat_co = e2e.eval_wd_phase_separation(model, option="CO")
-    assert 0.0 <= cryst_co <= 1.0
-    assert l_lat_co >= 0.0
-    assert np.isfinite(cryst_co) and np.isfinite(l_lat_co)
-
-    cryst_one, l_lat_one = e2e.eval_wd_phase_separation(model, option="ONe")
-    assert 0.0 <= cryst_one <= 1.0
-    assert l_lat_one >= 0.0
-    row_sums = np.sum(model.xa, axis=1)
-    assert np.allclose(row_sums, 1.0, rtol=1e-12, atol=1e-12)
-
-    # Cool high-density crystallized white dwarf regime (Gamma_k > 185)
-    lnd_cool = np.full(model.nz, np.log(2.0e6), dtype=np.float64)
-    lnt_cool = np.full(model.nz, np.log(2.0e6), dtype=np.float64)
-    model.set_primary_state(
-        lnd_cool, lnt_cool, model.ln_r, model.lum, model.dq, model.xa
-    )
-    cryst_co_cool, l_lat_co_cool = e2e.eval_wd_phase_separation(
-        model, option="CO"
-    )
-    assert cryst_co_cool > 0.0
-    assert l_lat_co_cool > 0.0
-
-    cryst_one_cool, l_lat_one_cool = e2e.eval_wd_phase_separation(
-        model, option="ONe"
-    )
-    assert cryst_one_cool > 0.0
-    assert l_lat_one_cool > 0.0
-    assert np.allclose(np.sum(model.xa, axis=1), 1.0, rtol=1e-12, atol=1e-12)
+_REPRESENTATIVE_TIER2_CASES = (
+    "irradiated_planet",
+    "wd_aic",
+    "make_co_wd",
+)
 
 
 def test_accretion_composition_and_super_eddington_nova_wind() -> None:
     """Verify accretion composition and super-Eddington nova wind execution on
-    synthetic white dwarf accretion configurations (`wd_acc_small_dm`,
-    `wd_nova_burst`).
+    a synthetic white dwarf accretion configuration (`wd_nova_burst`).
     """
     with tempfile.TemporaryDirectory() as tmp:
         case_dir = pathlib.Path(tmp) / "wd_nova_burst"
@@ -120,84 +54,21 @@ def test_accretion_composition_and_super_eddington_nova_wind() -> None:
         rep = e2e.run_test_suite_case(
             case_dir,
             skip_optional=True,
-            max_steps_per_stage=2,
+            max_steps_per_stage=3,
             verify_restart=True,
         )
         assert rep["case_name"] == "wd_nova_burst"
-        assert rep["tier"] == 2
+        assert rep["tier"] == 0
         assert rep["passed"] is True
         assert rep["assertions_passed"] is True
         assert rep["photo_restart_passed"] is True
+        assert rep["photo_restart_verified"] is True
         assert rep["final_log_tc"] > 6.0
-
-
-def test_conductive_flame_speed_and_front_propagation() -> None:
-    """Verify conductive flame speed scaling and flame front mass coordinate
-    (`conductive_flame` and `cburn_inward`).
-    """
-    model = star.StarModel.from_zams(initial_mass=1.0, initial_z=0.02)
-    v_flame, q_flame = e2e.eval_conductive_flame_state(model)
-    assert np.isfinite(v_flame) and v_flame > 0.0
-    assert 0.0 < q_flame <= 1.0
 
 
 @pytest.mark.parametrize(
     "case_name,inlist_body",
     [
-        (
-            "make_brown_dwarf",
-            "&star_job\n"
-            "  create_initial_model = .true.\n"
-            "  mass_in_gm_for_create_initial_model = 1.9892d31\n"
-            "  radius_in_cm_for_create_initial_model = 3.5d10\n"
-            "/\n"
-            "&controls\n"
-            "  initial_z = 0.0001\n"
-            "  max_model_number = 2\n"
-            "/\n",
-        ),
-        (
-            "make_planets",
-            "&star_job\n"
-            "  create_initial_model = .true.\n"
-            "  mass_in_gm_for_create_initial_model = 1.8389d30\n"
-            "  radius_in_cm_for_create_initial_model = 1.39822d10\n"
-            "  relax_core = .true.\n"
-            "  new_core_mass = 3.0012d-5\n"
-            "  core_avg_rho = 10.0\n"
-            "/\n"
-            "&controls\n"
-            "  initial_z = 0.02\n"
-            "  max_model_number = 2\n"
-            "/\n",
-        ),
-        (
-            "irradiated_planet",
-            "&star_job\n"
-            "  relax_initial_irradiation = .true.\n"
-            "  relax_to_this_irrad_flux = 1.0d8\n"
-            "  irrad_col_depth = 300.0\n"
-            "/\n"
-            "&controls\n"
-            "  initial_mass = 0.001\n"
-            "  initial_z = 0.02\n"
-            "  irradiation_flux = 4.9d8\n"
-            "  column_depth_for_irradiation = 300.0\n"
-            "  max_model_number = 2\n"
-            "/\n",
-        ),
-        (
-            "make_he_wd",
-            "&star_job\n"
-            "  relax_initial_mass = .true.\n"
-            "  new_mass = 0.15\n"
-            "/\n"
-            "&controls\n"
-            "  initial_mass = 1.5\n"
-            "  initial_z = 0.01\n"
-            "  max_model_number = 2\n"
-            "/\n",
-        ),
         (
             "wd_cool_0.6M",
             "&star_job\n"
@@ -206,6 +77,7 @@ def test_conductive_flame_speed_and_front_propagation() -> None:
             "/\n"
             "&controls\n"
             "  initial_mass = 0.60\n"
+            "  initial_z = 0.02\n"
             "  do_phase_separation = .true.\n"
             "  phase_separation_option = 'CO'\n"
             "  max_model_number = 2\n"
@@ -219,19 +91,9 @@ def test_conductive_flame_speed_and_front_propagation() -> None:
             "/\n"
             "&controls\n"
             "  initial_mass = 1.10\n"
+            "  initial_z = 0.02\n"
             "  do_phase_separation = .true.\n"
             "  phase_separation_option = 'ONe'\n"
-            "  max_model_number = 2\n"
-            "/\n",
-        ),
-        (
-            "conductive_flame",
-            "&star_job\n"
-            "  create_initial_model = .true.\n"
-            "/\n"
-            "&controls\n"
-            "  use_other_build_initial_model = .true.\n"
-            "  mlt_option = 'none'\n"
             "  max_model_number = 2\n"
             "/\n",
         ),
@@ -241,8 +103,8 @@ def test_synthetic_tier2_case_runners_pass_assertions_and_restart(
     case_name: str,
     inlist_body: str,
 ) -> None:
-    """Verify synthetic Tier 2 case directories execute `Tier2CaseExtras`,
-    pass physical assertions, and reproduce `.photo` restarts bit-identically.
+    """Verify synthetic Tier 2 directories run to `max_model_number = 2` and
+    reproduce `.photo` restarts bit-identically without library-side extras.
     """
     with tempfile.TemporaryDirectory() as tmp:
         case_dir = pathlib.Path(tmp) / case_name
@@ -255,11 +117,11 @@ def test_synthetic_tier2_case_runners_pass_assertions_and_restart(
         rep = e2e.run_test_suite_case(
             case_dir,
             skip_optional=True,
-            max_steps_per_stage=2,
+            max_steps_per_stage=3,
             verify_restart=True,
         )
         assert rep["case_name"] == case_name
-        assert rep["tier"] == 2
+        assert rep["tier"] == 0
         assert rep["passed"] is True
         assert rep["assertions_passed"] is True
         assert rep["photo_restart_passed"] is True
@@ -274,14 +136,53 @@ def test_synthetic_tier2_case_runners_pass_assertions_and_restart(
         assert np.isfinite(rep["final_log_rhoc"])
 
 
-@pytest.mark.parametrize("case_name", star.TIER2_CASES)
+def test_unimplemented_create_initial_model_and_missing_hook_fail_loudly(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Verify unimplemented `create_initial_model` and missing
+    `other_build_initial_model` hooks fail loudly without ZAMS fallback
+    (`#148`).
+    """
+    init_dir = tmp_path / "create_init"
+    init_dir.mkdir(parents=True, exist_ok=True)
+    (init_dir / "rn").write_text(
+        "#!/usr/bin/env bash\ndo_one inlist final.mod\n", encoding="utf-8"
+    )
+    (init_dir / "inlist").write_text(
+        "&star_job\n  create_initial_model = .true.\n/\n"
+        "&controls\n  initial_z = 0.02\n  max_model_number = 2\n/\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(
+        ValueError,
+        match=(
+            r"create_initial_model = \.true\. is not yet implemented \(#154\)"
+        ),
+    ):
+        e2e.run_test_suite_case(init_dir, max_steps_per_stage=2)
+
+    hook_dir = tmp_path / "missing_build_hook"
+    hook_dir.mkdir(parents=True, exist_ok=True)
+    (hook_dir / "rn").write_text(
+        "#!/usr/bin/env bash\ndo_one inlist final.mod\n", encoding="utf-8"
+    )
+    (hook_dir / "inlist").write_text(
+        "&star_job\n  use_other_build_initial_model = .true.\n/\n"
+        "&controls\n  initial_z = 0.02\n  max_model_number = 2\n/\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match=r"other_build_initial_model"):
+        e2e.run_test_suite_case(hook_dir, max_steps_per_stage=2)
+
+
+@pytest.mark.parametrize("case_name", _REPRESENTATIVE_TIER2_CASES)
 def test_upstream_tier2_test_suite_case_and_restart_reproducibility(
     case_name: str,
     tmp_path: pathlib.Path,
 ) -> None:
-    """When `MESA_DIR` is present, verify unmodified upstream Tier 2
-    `star/test_suite/<case>` directories fail loudly under strict `#147`, and
-    cleaned copies execute cleanly with internal `.photo` round-trip checks.
+    """Verify unmodified Tier 2 cases fail strictly under `#147` and cleaned
+    copies follow declared stops or capped 2-step execution without in-library
+    case overrides.
     """
     base = known_gaps_gate.require_mesa_test_inputs_dir()
     if base is None:
@@ -312,6 +213,17 @@ def test_upstream_tier2_test_suite_case_and_restart_reproducibility(
                 verify_restart=True,
             )
         return
+    if case_name == "make_co_wd":
+        # Without fabricated Tier2CaseExtras shutting off burning/remeshing,
+        # cleaned make_co_wd hits a Newton line-search stop at model=3 (#152).
+        with pytest.raises(ValueError, match=r"star step failed"):
+            e2e.run_test_suite_case(
+                clean_dir,
+                skip_optional=True,
+                max_steps_per_stage=2,
+                verify_restart=True,
+            )
+        return
     rep = e2e.run_test_suite_case(
         clean_dir,
         skip_optional=True,
@@ -319,10 +231,11 @@ def test_upstream_tier2_test_suite_case_and_restart_reproducibility(
         verify_restart=True,
     )
     assert rep["case_name"] == case_name
-    assert rep["tier"] == 2
-    assert rep["passed"] is True
+    assert rep["tier"] == 0
+    assert rep["termination_code"] == "max_steps_cap"
+    assert rep["passed"] is False
     assert rep["assertions_passed"] is True
-    assert rep["photo_restart_passed"] is True
+    assert rep["photo_restart_verified"] is True
     assert rep["total_steps"] >= 1
     assert rep["total_newton_iters"] >= 1
     assert np.isfinite(rep["final_teff"]) and rep["final_teff"] > 0.0

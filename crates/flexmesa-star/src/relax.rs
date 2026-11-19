@@ -15,26 +15,28 @@ use flexmesa_const::{M_SUN, PI4, STANDARD_CGRAV};
 
 use crate::controls::{StarError, StarJobControls};
 use crate::model::StarModel;
-use crate::tier2_extras::apply_planetary_core;
 use crate::zams::parse_fortran_f64;
 
-/// Equilibrates a scaled Tier 2/3 model so that hydrostatic, density, and
-/// radiative/convective temperature equations remain balanced for arbitrary
-/// substellar, white-dwarf, super-AGB, or massive stellar masses and core boundaries.
-pub(crate) fn equilibrate_tier2_scaled_model(model: &mut StarModel) {
-    let alpha_m = (model.xmstar / M_SUN).max(1.0e-6);
-    model.r_center = 0.0;
-    model.l_center = 0.0;
+/// Sets an inert planetary or white-dwarf core boundary condition inside
+/// `model` (`do_relax_core` in `star/private/relax.f90`).
+pub fn apply_planetary_core(
+    model: &mut StarModel,
+    new_core_mass_msun: f64,
+    core_avg_rho: f64,
+    core_avg_eps: f64,
+) {
+    if new_core_mass_msun <= 0.0 || model.nz == 0 {
+        return;
+    }
+    let m_core = (new_core_mass_msun * M_SUN).min(0.95 * model.mstar);
+    let rho_core = core_avg_rho.max(1.0e-10);
+    model.m_center = m_core;
+    model.xmstar = (model.mstar - m_core).max(1.0);
+    model.r_center =
+        flexmesa_math::pow((3.0 * m_core) / (PI4 * rho_core), 1.0 / 3.0);
+    model.l_center = (m_core * core_avg_eps.max(0.0)).max(1.0);
     model.set_m_and_dm();
     model.reconstruct_ln_r_from_lnd_and_dm();
-    model.set_m_grav_and_grav();
-    for k in 0..model.nz {
-        let m_zams_k = model.q[k] * M_SUN;
-        let m_ratio = (alpha_m * m_zams_k) / model.m_grav[k].max(1.0);
-        model.cgrav[k] =
-            STANDARD_CGRAV * flexmesa_math::pow(alpha_m, -2.0 / 3.0) * m_ratio;
-    }
-    model.controls.opacity_factor = flexmesa_math::pow(alpha_m, -2.0 / 3.0);
     model.set_m_grav_and_grav();
 }
 
@@ -289,7 +291,6 @@ pub fn relax_mass_to_target(
     model: &mut StarModel,
     new_mass_msun: f64,
     n_steps: usize,
-    scale_lum: bool,
 ) {
     let old_mstar = model.mstar.max(1.0);
     let target_mstar = new_mass_msun.max(1.0e-6) * M_SUN;
@@ -302,7 +303,6 @@ pub fn relax_mass_to_target(
     let dln_m_step =
         flexmesa_math::log(target_mstar / old_mstar) / (steps as f64);
     for step in 1..=steps {
-        let prev_xmstar = model.xmstar.max(1.0);
         let cur_mstar = if step == steps {
             target_mstar
         } else {
@@ -313,12 +313,8 @@ pub fn relax_mass_to_target(
         model.xmstar = (cur_mstar - model.m_center).max(0.0);
         model.mstar_start = model.mstar;
         model.mstar_old = model.mstar;
-        let xm_ratio = model.xmstar / prev_xmstar;
         for k in 0..model.nz {
             model.ln_r[k] += dln_r;
-            if scale_lum {
-                model.lum[k] *= xm_ratio;
-            }
         }
         model.set_m_and_dm();
         model.set_m_grav_and_grav();
@@ -333,7 +329,6 @@ pub fn relax_to_remove_h_env(
     model: &mut StarModel,
     h1_threshold: f64,
     n_steps: usize,
-    scale_lum: bool,
 ) {
     let catalog = NuclideCatalog::builtin_ref();
     let h1_id = catalog.get_nuclide_index("h1").unwrap_or(1);
@@ -360,7 +355,7 @@ pub fn relax_to_remove_h_env(
     } else {
         0.85 * (model.mstar / M_SUN)
     };
-    relax_mass_to_target(model, target_msun, n_steps, scale_lum);
+    relax_mass_to_target(model, target_msun, n_steps);
 }
 
 /// Multi-step inner boundary relaxation (`do_relax_core` / `relax_M_center` in `relax.f90`).
@@ -370,22 +365,14 @@ pub fn relax_core_boundary(
     core_avg_rho: f64,
     core_avg_eps: f64,
     n_steps: usize,
-    scale_lum: bool,
 ) {
     model.aux.doing_relax = true;
     let steps = n_steps.max(1);
     let init_mc_msun = model.m_center / M_SUN;
     for step in 1..=steps {
-        let prev_xmstar = model.xmstar.max(1.0);
         let frac = (step as f64) / (steps as f64);
         let mc_step = init_mc_msun + frac * (new_core_mass_msun - init_mc_msun);
         apply_planetary_core(model, mc_step, core_avg_rho, core_avg_eps);
-        if scale_lum {
-            let ratio = model.xmstar / prev_xmstar;
-            for k in 0..model.nz {
-                model.lum[k] *= ratio;
-            }
-        }
     }
     model.aux.doing_relax = false;
 }
@@ -563,94 +550,5 @@ pub fn relax_from_profile_files(
             }
         }
     }
-    Ok(())
-}
-
-/// Settles a loaded `.mod` file after initial mass or `tau_factor` relaxation
-/// with logarithmic `doing_relax` pseudo-evolution steps (`do_internal_evolve`
-/// in `relax.f90:1431`).
-///
-/// # Errors
-/// Returns [`StarError`] if refreshing hydrodynamic state fails after settling.
-pub(crate) fn settle_relaxed_loaded_model(
-    model: &mut StarModel,
-) -> Result<(), crate::controls::StarError> {
-    if !(model.job.relax_tau_factor || model.job.relax_mass)
-        || model.dt >= 10.0 * flexmesa_const::SECYER
-    {
-        return Ok(());
-    }
-
-    let saved = (
-        model.dt,
-        model.dt_next,
-        model.dt_old,
-        model.star_age,
-        model.star_age_old,
-        model.model_number,
-        model.num_retries,
-        model.num_redos,
-        model.total_num_solver_iterations,
-        model.total_num_solver_calls,
-        model.micro_cache_hits,
-        model.micro_cache_misses,
-        model.mstar_dot,
-        model.aux.cumulative_energy_error,
-        model.controls.mass_change,
-        model.controls.super_eddington_scaling_factor,
-        model.controls.eps_nuc_factor,
-        model.controls.mesh_delta_coeff,
-    );
-
-    model.aux.doing_relax = true;
-    model.controls.mass_change = 0.0;
-    model.controls.super_eddington_scaling_factor = 0.0;
-    model.controls.eps_nuc_factor = 0.0;
-    model.controls.mesh_delta_coeff = 0.0;
-    model.mstar_dot = 0.0;
-
-    for dt_yr in [100.0, 10.0, 1.0, 0.1, 1.0e-2, 1.0e-3, 1.0e-4] {
-        model.dt = dt_yr * flexmesa_const::SECYER;
-        model.dt_next = model.dt;
-        crate::evolve::star_evolve_step(
-            model,
-            false,
-            model.controls.op_split_burn,
-            true,
-        )?;
-    }
-
-    (
-        model.dt,
-        model.dt_next,
-        model.dt_old,
-        model.star_age,
-        model.star_age_old,
-        model.model_number,
-        model.num_retries,
-        model.num_redos,
-        model.total_num_solver_iterations,
-        model.total_num_solver_calls,
-        model.micro_cache_hits,
-        model.micro_cache_misses,
-        model.mstar_dot,
-        model.aux.cumulative_energy_error,
-        model.controls.mass_change,
-        model.controls.super_eddington_scaling_factor,
-        model.controls.eps_nuc_factor,
-        model.controls.mesh_delta_coeff,
-    ) = saved;
-    model.aux.doing_relax = false;
-    model.aux.step_hist.model_number_for_last_retry = None;
-    model.aux.step_hist.timestep_hold = 0;
-    model.dt_limit_ratio_old = 0.0;
-
-    crate::hydro_vars::set_hydro_vars(model, false, false)?;
-    let etot = crate::evolve_support::eval_total_energy_integrals(model).5;
-    model.aux.total_energy = etot;
-    crate::core_boundaries::snapshot_step_history_old(model);
-    model.aux.step_hist.total_energy_old = etot;
-    model.save_start_values()?;
-    model.save_old_values();
     Ok(())
 }

@@ -49,6 +49,7 @@ def _run_worker(argv: list[str]) -> int:
         default="strict",
     )
     parser.add_argument("--allow-unsupported-controls", action="store_true")
+    parser.add_argument("--extras-factory", default=None)
     ns = parser.parse_args(argv)
 
     rep = harness_runner.run_trace_inprocess(
@@ -62,6 +63,7 @@ def _run_worker(argv: list[str]) -> int:
         is_logs_dir=bool(ns.is_logs_dir),
         numerics_mode=ns.numerics_mode,
         allow_unsupported_controls=bool(ns.allow_unsupported_controls),
+        extras_factory=ns.extras_factory,
     )
     payload = {
         "termination_code": rep.get("termination_code", ""),
@@ -147,6 +149,11 @@ def _build_trace_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--extras-factory",
+        default=None,
+        help="Optional 'module:callable' returning case extras handlers.",
+    )
+    parser.add_argument(
         "--timeout-sec",
         type=float,
         default=None,
@@ -190,6 +197,7 @@ def trace_main(argv: list[str] | None = None) -> int:
         is_logs_dir=not ns.explicit_file,
         numerics_mode=eff_mode,
         allow_unsupported_controls=bool(ns.allow_unsupported_controls),
+        extras_factory=ns.extras_factory,
         timeout_sec=ns.timeout_sec,
         max_rss_gb=ns.max_rss_gb,
     )
@@ -302,6 +310,13 @@ def _build_harness_parser() -> argparse.ArgumentParser:
             "default each case is run strictly first and rerun this way "
             "only if strict validation rejects it. A diagnostic run never "
             "counts as a pass."
+        ),
+    )
+    p_run.add_argument(
+        "--extras-factory",
+        default=None,
+        help=(
+            "Override the manifest 'module:callable' test-side extras factory."
         ),
     )
     p_run.add_argument("--timeout-sec", type=float, default=600.0)
@@ -421,6 +436,7 @@ def _execute_one_entry(
     max_steps: int | None,
     numerics_mode: str,
     allow_unsupported_controls: bool,
+    extras_factory: str | None,
     timeout_sec: float | None,
     max_rss_gb: float | None,
     base_dir: pathlib.Path | None,
@@ -429,6 +445,7 @@ def _execute_one_entry(
         entry.suite, entry.case, mesa_dir=mesa_dir
     )
     out_dir = work_root / entry.suite / entry.case
+    eff_extras_factory = extras_factory or entry.extras_factory or None
     outcome = harness_runner.run_case_with_diagnostic(
         entry.suite,
         case_dir,
@@ -436,6 +453,7 @@ def _execute_one_entry(
         max_steps=max_steps,
         numerics_mode=numerics_mode,
         allow_unsupported_controls=allow_unsupported_controls,
+        extras_factory=eff_extras_factory,
         timeout_sec=timeout_sec,
         max_rss_gb=max_rss_gb,
     )
@@ -481,6 +499,7 @@ def _run_selected_entries(
                 ns.max_steps,
                 ns.numerics_mode,
                 bool(ns.allow_unsupported_controls),
+                ns.extras_factory,
                 ns.timeout_sec,
                 ns.max_rss_gb,
                 base_dir,
@@ -508,6 +527,7 @@ def _run_selected_entries(
                 ns.max_steps,
                 ns.numerics_mode,
                 bool(ns.allow_unsupported_controls),
+                ns.extras_factory,
                 ns.timeout_sec,
                 ns.max_rss_gb,
                 base_dir,

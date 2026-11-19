@@ -32,6 +32,7 @@ use crate::evolve_support::{
     remesh_star_before_step, update_step_energy_conservation,
 };
 use crate::hydro_vars::set_hydro_vars;
+use crate::inlist_runner::{DefaultStarExtras, StarExtras};
 use crate::model::StarModel;
 use crate::solver::HenyeySolverReport;
 use crate::struct_burn_mix::{do_struct_burn_mix, refresh_mixing_state};
@@ -41,7 +42,7 @@ use crate::timestep::{
     TimestepReport,
 };
 use crate::timestep_limits::timestep_controller;
-use crate::winds::do_set_mdot;
+use crate::winds::do_set_mdot_with_extras;
 
 /// Diagnostic report returned by a single evolutionary step.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -130,6 +131,29 @@ pub fn star_evolve_step(
     op_split_burn: bool,
     use_bcyclic: bool,
 ) -> Result<EvolveStepReport, StarError> {
+    let mut extras = DefaultStarExtras;
+    star_evolve_step_with_extras(
+        model,
+        do_remesh,
+        op_split_burn,
+        use_bcyclic,
+        &mut extras,
+    )
+}
+
+/// Executes a single evolutionary step with explicit [`StarExtras`] hooks
+/// (`star_evolve_step` in `evolve.f90`).
+///
+/// # Errors
+/// Returns [`StarError`] if a required `other_*` hook is missing or all retry
+/// attempts fail.
+pub fn star_evolve_step_with_extras(
+    model: &mut StarModel,
+    do_remesh: bool,
+    op_split_burn: bool,
+    use_bcyclic: bool,
+    extras: &mut dyn StarExtras,
+) -> Result<EvolveStepReport, StarError> {
     if model.controls.rsp_flag {
         if model.dt_next > 0.0 {
             model.dt = model.dt_next;
@@ -143,7 +167,7 @@ pub fn star_evolve_step(
         model.model_number += 1;
 
         let (iterations, retries) =
-            crate::rsp_driver::rsp_one_step(model, None)?;
+            crate::rsp_driver::rsp_one_step_with_extras(model, None, extras)?;
         model.total_num_solver_iterations += iterations;
         model.num_retries += retries;
         model.star_age = model.aux.rsp.time_sec / SECYER;
@@ -247,9 +271,19 @@ pub fn star_evolve_step(
     loop {
         model.dt = dt_try;
         if model.controls.use_other_adjust_mdot {
-            model.mstar_dot = explicit_step_mdot;
+            let prev_rot_boost =
+                model.aux.step_hist.rotational_mdot_boost_old;
+            do_set_mdot_with_extras(model, extras)?;
+            if let Some(adj_mdot) =
+                extras.other_adjust_mdot(model, model.mstar_dot)?
+            {
+                model.mstar_dot = adj_mdot;
+            } else {
+                model.mstar_dot = explicit_step_mdot;
+                model.aux.step_hist.rotational_mdot_boost_old = prev_rot_boost;
+            }
         } else {
-            do_set_mdot(model)?;
+            do_set_mdot_with_extras(model, extras)?;
         }
         let mut mdot_redo = crate::mdot_redo::MdotRedoState::setup(model);
         let mut last_conv_mdot: Option<f64> = None;

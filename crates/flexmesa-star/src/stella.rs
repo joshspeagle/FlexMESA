@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-//! MESA-to-STELLA `.hyd` and `.abn` exporters (`star/test_suite/ccsn_IIp/src/stella/stella.inc`),
+//! MESA-to-STELLA `.hyd` and `.abn` exporters (`#172`),
 //! 40-group radiation-hydrodynamics + $^{56}\mathrm{Ni}\to{}^{56}\mathrm{Co}\to{}^{56}\mathrm{Fe}$
 //! homologous expansion light-curve solver, and Sobolev $\mathrm{Fe\,II}\ \lambda 5169.02\,\text{\AA}$
 //! line-velocity post-processor (`stella/res/stella_extras.f90`, resolving Issue #4).

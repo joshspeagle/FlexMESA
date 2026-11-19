@@ -447,11 +447,9 @@ pub fn load_zams_model_from_catalog(
     }
     let m_min = catalog.models.first().unwrap().m_msun;
     let m_max = catalog.models.last().unwrap().m_msun;
-    let m_floor = m_min.min(0.075);
-    if m_target < m_floor * (1.0 - 1.0e-7) || m_target > m_max * (1.0 + 1.0e-7)
-    {
+    if m_target < m_min * (1.0 - 1.0e-7) || m_target > m_max * (1.0 + 1.0e-7) {
         return Err(StarError::InvalidInput(format!(
-            "initial_mass={m_target} outside ZAMS catalog range [{m_floor}, {m_max}]"
+            "initial_mass={m_target} outside ZAMS catalog range [{m_min}, {m_max}] without create_initial_model (#154)"
         )));
     }
 
@@ -527,16 +525,9 @@ pub fn load_zams_model_from_catalog(
         }
     }
 
-    model.mstar = if m_target < e1.m_msun * (1.0 - 1.0e-7) {
-        e1.m_msun * M_SUN
-    } else {
-        m_target * M_SUN
-    };
+    model.mstar = m_target * M_SUN;
     (model.xmstar, model.mstar_start, model.mstar_old) =
         (model.mstar, model.mstar, model.mstar);
-    if m_target < e1.m_msun * (1.0 - 1.0e-7) {
-        crate::relax::relax_mass_to_target(&mut model, m_target, 8, true);
-    }
     (model.model_number, model.star_age) = (1, 0.0);
     let dt_sec = yrs_for_init_timestep(m_target) * SECYER;
     (model.dt, model.dt_next, model.dt_old) = (dt_sec, dt_sec, 0.0);
@@ -589,14 +580,25 @@ mod zams_catalog_tests {
         }
 
         let (mut prev_l, mut prev_r) = (0.0_f64, 0.0_f64);
-        for &m_msun in &[0.08, 0.10, 0.5, 1.0, 2.0, 4.0, 10.0, 50.0, 100.0] {
+        for &m_msun in &[0.08, 0.10] {
+            let controls = StarControls {
+                initial_mass: m_msun,
+                initial_z: 0.02,
+                ..StarControls::default()
+            };
+            let err = load_zams_model(controls, StarJobControls::default())
+                .expect_err("sub-grid ZAMS mass must fail loudly (#154)");
+            assert!(matches!(err, StarError::InvalidInput(_)));
+        }
+        for &m_msun in &[0.13, 0.2, 0.5, 1.0, 2.0, 4.0, 10.0, 50.0, 100.0, 300.0]
+        {
             let controls = StarControls {
                 initial_mass: m_msun,
                 initial_z: 0.02,
                 ..StarControls::default()
             };
             let model = load_zams_model(controls, StarJobControls::default())
-                .expect("load_zams_model across 0.08..=100 Msun");
+                .expect("load_zams_model across 0.13..=300 Msun");
             assert!(model.nz >= 1980);
             assert!(
                 (model.mstar - m_msun * M_SUN).abs() <= 1.0e-12 * model.mstar

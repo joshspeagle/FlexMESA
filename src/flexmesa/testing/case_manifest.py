@@ -119,13 +119,14 @@ class CaseManifestEntry:
             cases cannot count as passing under ``notes/SCOPE.md``.
         scaffolding_issue: Linked ``#<number>`` issue when
             ``uses_pulsation_scaffolding`` is True.
-        uses_library_extras: True when running the case dispatches per-case
-            hooks inside library crates (``Tier1CaseExtras`` through
-            ``Tier5StarCaseExtras`` or ``tier5_extras``) slated for removal
-            under ``#148``; such cases emit ``declared gap (#148)`` rather than
-            ``pass``.
-        library_extras_issue: Linked ``#<number>`` issue when
+        uses_library_extras: True if a case dispatches per-case test hooks
+            inside library crates rather than test-side ``extras_factory``
+            callbacks (deprecated gate retained for manifest schema stability;
+            ``False`` for all cases after ``#148``).
+        library_extras_issue: Optional ``#<number>`` issue when
             ``uses_library_extras`` is True.
+        extras_factory: Optional ``"module:callable"`` path returning test-side
+            extras handlers for the case.
         departures: Tuple of documented ``DepartureSpec`` items.
     """
 
@@ -142,6 +143,7 @@ class CaseManifestEntry:
     scaffolding_issue: str = ""
     uses_library_extras: bool = False
     library_extras_issue: str = ""
+    extras_factory: str = ""
     departures: tuple[DepartureSpec, ...] = ()
 
     @property
@@ -158,11 +160,14 @@ class HarnessManifest:
         mesa_release: Pinned upstream MESA release tag (``"26.4.1"``).
         zenodo_record: Zenodo archive identifier for the pinned release.
         cases: Tuple of ``CaseManifestEntry`` records in canonical order.
+        extras_factory: Optional default ``"module:callable"`` spec resolving
+            test-side extras handlers.
     """
 
     mesa_release: str
     zenodo_record: str
     cases: tuple[CaseManifestEntry, ...]
+    extras_factory: str = ""
 
     def by_key(self) -> dict[tuple[str, str], CaseManifestEntry]:
         """Return a dictionary mapping ``(suite, case)`` to its entry.
@@ -228,9 +233,10 @@ def load_case_manifest(
         raise ValueError(f"{manifest_path}: missing metadata.mesa_release")
 
     defaults_raw = data.get("defaults", {})
+    global_extras_factory = str(defaults_raw.get("extras_factory", "")).strip()
     suite_defaults: dict[
         str,
-        tuple[str, dict[str, float], dict[str, float], bool, str],
+        tuple[str, dict[str, float], dict[str, float], bool, str, str],
     ] = {}
     for s_name in VALID_SUITES:
         s_block = defaults_raw.get(s_name, {})
@@ -251,7 +257,17 @@ def load_case_manifest(
             def_lib_iss = _validate_issue_ref(
                 def_lib_iss, f"defaults.{s_name}.library_extras_issue"
             )
-        suite_defaults[s_name] = (xcol, ftol, ttol, def_lib_ext, def_lib_iss)
+        def_ext_factory = str(
+            s_block.get("extras_factory", global_extras_factory)
+        ).strip()
+        suite_defaults[s_name] = (
+            xcol,
+            ftol,
+            ttol,
+            def_lib_ext,
+            def_lib_iss,
+            def_ext_factory,
+        )
 
     raw_cases = data.get("cases", [])
     if not raw_cases:
@@ -289,9 +305,14 @@ def load_case_manifest(
         if not req_term:
             raise ValueError(f"{ctx}: required_termination cannot be empty")
 
-        def_x, def_ftol, def_ttol, def_lib_ext, def_lib_iss = suite_defaults[
-            suite
-        ]
+        (
+            def_x,
+            def_ftol,
+            def_ttol,
+            def_lib_ext,
+            def_lib_iss,
+            def_ext_factory,
+        ) = suite_defaults[suite]
         inherit_defaults = bool(raw.get("inherit_default_tolerances", True))
         base_ftol = def_ftol if inherit_defaults else {}
         base_ttol = def_ttol if inherit_defaults else {}
@@ -329,6 +350,8 @@ def load_case_manifest(
                 raise ValueError(f"{ctx}: departure {d_issue} lacks rationale")
             deps.append(DepartureSpec(issue=d_issue, rationale=d_rat))
 
+        extras_factory = str(raw.get("extras_factory", def_ext_factory)).strip()
+
         entries.append(
             CaseManifestEntry(
                 suite=suite,  # type: ignore[arg-type]
@@ -344,6 +367,7 @@ def load_case_manifest(
                 scaffolding_issue=scaff_issue,
                 uses_library_extras=uses_lib_ext,
                 library_extras_issue=lib_ext_issue,
+                extras_factory=extras_factory,
                 departures=tuple(deps),
             )
         )
@@ -352,6 +376,7 @@ def load_case_manifest(
         mesa_release=mesa_release,
         zenodo_record=zenodo_record,
         cases=tuple(entries),
+        extras_factory=global_extras_factory,
     )
 
 

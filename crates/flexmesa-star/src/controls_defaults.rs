@@ -40,7 +40,6 @@ impl Default for StarControls {
             opacity_factor: 1.0,
             min_t_for_neu: 1.0e7,
             non_nuc_neu_factor: 1.0,
-            min_logt_for_net: 6.3,
             max_logt_for_net: 10.2,
             max_abar_for_burning: 199.0,
             op_split_burn: false,

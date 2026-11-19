@@ -470,7 +470,8 @@ pub fn parse_gyre_mesa_model(content: &str) -> BvpModel {
     let mut raw_pts = Vec::new();
     for line in lines {
         let toks: Vec<&str> = line.split_whitespace().collect();
-        if toks.len() < 18 {
+        let min_cols = if version == 1 { 19 } else { 18 };
+        if toks.len() < min_cols {
             continue;
         }
         let c = |idx: usize| parse_fortran_float(toks[idx]);

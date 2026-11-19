@@ -12,7 +12,7 @@ use crate::report_utils::{
 
 /// Scalar evolutionary summary row corresponding to a single line of MESA's
 /// `LOGS/history.data` (`star/private/history.f90`).
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct HistoryRow {
     /// Evolutionary step counter (`model_number`, `history.f90:1391-1393`).
     pub model_number: usize,

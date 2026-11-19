@@ -86,7 +86,6 @@ pub fn op_split_burn_zones(
 
     let min_t_split = model.controls.op_split_burn_min_t;
     let min_t_var = model.controls.op_split_burn_min_t_for_variable_t_solver;
-    let min_logt_net = model.controls.min_logt_for_net;
     let max_abar = model.controls.max_abar_for_burning;
     let eps_nuc_factor = model.controls.eps_nuc_factor;
     let dxdt_nuc_factor = model.controls.dxdt_nuc_factor;
@@ -127,7 +126,6 @@ pub fn op_split_burn_zones(
             if skip_burn
                 || (eps_nuc_factor == 0.0 && dxdt_nuc_factor == 0.0)
                 || model.abar[k] > max_abar
-                || log_t < min_logt_net
             {
                 return Ok(SplitZoneOutcome {
                     k,

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import pathlib
 from typing import Any
 
 import jax.numpy as jnp
@@ -357,4 +358,36 @@ def scan_cartesian_grid(
         [float(v) for v in x_lower],
         [float(v) for v in x_upper],
         [float(v) for v in x_delta],
+    )
+
+
+def run_astero_test_suite_case(
+    case_dir: str | pathlib.Path,
+    skip_optional: bool = True,
+    max_steps_per_stage: int | None = 15,
+    verify_restart: bool = True,
+    allow_unsupported_controls: bool = False,
+) -> dict[str, Any]:
+    """Execute a single ``astero/test_suite`` case directory.
+
+    Args:
+        case_dir: Path to the ``astero/test_suite/<case>`` directory.
+        skip_optional: Whether ``MESA_SKIP_OPTIONAL`` branches are active.
+        max_steps_per_stage: Optional cap on evolutionary steps per stage.
+        verify_restart: Whether to verify internal ``.photo`` round-trip
+            consistency.
+        allow_unsupported_controls: When ``True``, bypass strict failure on
+            unread, unused, or unimplemented upstream MESA controls.
+
+    Returns:
+        ``CaseRunReport`` dictionary.
+    """
+    return dict(
+        _rust.star_run_astero_test_suite_case(
+            str(case_dir),
+            bool(skip_optional),
+            None if max_steps_per_stage is None else int(max_steps_per_stage),
+            bool(verify_restart),
+            bool(allow_unsupported_controls),
+        )
     )

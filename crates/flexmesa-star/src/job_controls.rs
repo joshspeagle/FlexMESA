@@ -527,7 +527,7 @@ pub struct StarJobControls {
     pub radius_in_cm_for_create_initial_model: f64,
     /// Mass in grams for `create_initial_model`.
     pub mass_in_gm_for_create_initial_model: f64,
-    /// Whether `use_other_build_initial_model` hook is enabled (`conductive_flame`).
+    /// Whether `use_other_build_initial_model` hook is enabled.
     pub use_other_build_initial_model: bool,
     /// Whether to construct a static radial stellar pulsation envelope (`create_RSP_model`).
     pub create_rsp_model: bool,

@@ -301,19 +301,20 @@ def render_coverage_map_markdown(repo_root: pathlib.Path) -> str:
             "## Key Structural & Physics Gaps Driving "
             f"`{hh_tot['passing']} / {hh_tot['total']}` Parity",
             "",
-            "- **Model Construction & Relaxation (`#150`, `#151`)**: "
-            "Multi-step `relax.f90` operations (`4,215` upstream LOC vs. "
-            "placeholder/algebraic relaxation in Rust) and upstream binary "
-            "`.photo` compatibility remain unported; current `.photo` byte "
-            "round-trips validate internal continuation consistency only.",
+            "- **Model Construction & Relaxation (`#154`, `#150`)**: "
+            "Multi-step `relax.f90` and `create_initial_model.f90` operations "
+            "(`#154`) and upstream binary `.photo` compatibility (`#150`) "
+            "remain unported; current `.photo` byte round-trips validate "
+            "internal continuation consistency only.",
             "- **Silent Inlist Drops & Default Mismatches (`#147`, `#149`)**: "
             "Existing parsers silently ignore unimplemented namelist keys or "
             "map unknown option strings (`mlt_option`, `atm_option`, "
             "`screening_mode`) onto defaults instead of failing loudly.",
-            "- **In-Library Per-Case Extras (`#148`)**: `Tier1CaseExtras` "
-            "through `Tier5StarCaseExtras` inject test-case overrides inside "
-            "library crates; those branches are scheduled for deletion so "
-            "per-case hooks live outside the engine.",
+            "- **In-Library Per-Case Extras Removed (`#148`)**: In-library "
+            "`Tier1..Tier5` test-case extras and fabricated ZAMS/gravity/"
+            "opacity overrides have been deleted from library crates; upstream "
+            "`run_star_extras.f90` and `run_binary_extras.f90` callbacks now "
+            "live strictly in `tests/case_extras/`.",
             "- **Solver Control, Remeshing, Mixing & Transport "
             "(`#152`-`#162`)**: Upstream Newton retry scheduling, "
             "`mesh_adjust.f90` zoning, convective premixing, predictive "

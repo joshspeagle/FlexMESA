@@ -43,7 +43,6 @@ pub fn do_net(
             .resize(nz, [0.0; NUM_CATEGORIES]);
     }
 
-    let min_logt = model.controls.min_logt_for_net;
     let max_logt = model.controls.max_logt_for_net;
     let max_abar = model.controls.max_abar_for_burning;
     let eps_fac = model.controls.eps_nuc_factor;
@@ -128,7 +127,6 @@ pub fn do_net(
                 let mut log_t = flexmesa_math::log10(t_k);
                 if (eps_fac == 0.0 && dxdt_fac == 0.0)
                     || abar_slice[k] > max_abar
-                    || log_t < min_logt
                 {
                     *eps_k = 0.0;
                     *deps_d_k = 0.0;

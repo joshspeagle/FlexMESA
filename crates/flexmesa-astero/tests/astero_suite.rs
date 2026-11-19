@@ -14,13 +14,24 @@ use flexmesa_astero::{
     copy_cleaned_astero_case, eval_combined_corr, eval_cubic_corr,
     eval_kjeldsen_corr, eval_model_astero_sample, eval_power_law_corr,
     eval_sonoi_corr, interpolate_l0_inertia, parse_astero_search_controls,
-    run_astero_suite, run_astero_test_suite_case, TIER4_ASTERO_CASES,
+    run_astero_test_suite_case,
 };
+
+const ASTERO_CASES: [&str; 8] = [
+    "astero_adipls",
+    "astero_gyre",
+    "example_astero",
+    "fast_from_file",
+    "fast_newuoa",
+    "fast_scan_grid",
+    "fast_simplex",
+    "surface_effects",
+];
 use flexmesa_math::pow;
 use flexmesa_star::inlist::InlistBundle;
 use flexmesa_star::inlist_runner::DefaultStarExtras;
 use flexmesa_star::star_job_init::init_or_update_model_from_bundle;
-use flexmesa_star::StarError;
+use flexmesa_star::{StarError, StarLogsOptions};
 
 struct TempAsteroDirGuard {
     root: PathBuf,
@@ -86,7 +97,7 @@ fn test_offline_synthetic_mock_case_runs_two_steps_with_restart_parity() {
         .expect("synthetic mock case should succeed");
     let _ = fs::remove_dir_all(&tmp_root);
     assert_eq!(rep.case_name, "example_astero");
-    assert_eq!(rep.tier, 4);
+    assert_eq!(rep.tier, 0);
     assert!(rep.passed);
     assert!(rep.photo_restart_verified);
     assert!(rep.assertions_passed);
@@ -210,6 +221,7 @@ fn test_surface_effects_case_recovers_synthetic_targets_and_bison_solar_fits() {
     assert!(((s1_syn / target_s1) - 1.0).abs() < 1.0e-12);
 
     // 2. BiSON solar fits (`solar_tol = 10.0`)
+    let solar_tol = 10.0_f64;
     let (_, a_div_r, r_k) = eval_kjeldsen_corr(
         &ctrl.freq_target[0],
         l0_f,
@@ -227,9 +239,46 @@ fn test_surface_effects_case_recovers_synthetic_targets_and_bison_solar_fits() {
         "unexpected homology factor r={r_k}"
     );
     assert!(
-        ((a_div_r / target_a_div_r) - 1.0).abs() < 10.0,
+        ((a_div_r / target_a_div_r) - 1.0).abs() < solar_tol,
         "a_div_r={a_div_r} vs target={target_a_div_r}"
     );
+    let (_, a3_sol) =
+        eval_cubic_corr(&obs_f, &obs_sig, &mod_f, &mod_in, 1.0);
+    assert!(a3_sol <= 0.0 && ((a3_sol / target_a3) - 1.0).abs() < solar_tol);
+
+    let (_, b3_sol, b1_sol) =
+        eval_combined_corr(&obs_f, &obs_sig, &mod_f, &mod_in, 1.0);
+    assert!(
+        b3_sol <= 0.0
+            && ((b1_sol / target_b1) - 1.0).abs() < solar_tol
+            && ((b3_sol / target_b3) - 1.0).abs() < solar_tol
+    );
+
+    let (_, p0_sol, p1_sol) = eval_power_law_corr(
+        &obs_f, &obs_sig, &mod_f, &mod_in, l0_f, l0_in, nu_max, 1.0,
+    );
+    assert!(
+        p0_sol <= 0.0
+            && ((p0_sol / target_p0) - 1.0).abs() < solar_tol
+            && ((p1_sol / target_p1) - 1.0).abs() < solar_tol
+    );
+
+    let (_, s0_sol, s1_sol) = eval_sonoi_corr(
+        &obs_f, &obs_sig, &mod_f, &mod_in, l0_f, l0_in, nu_max, 1.0,
+    );
+    assert!(
+        s0_sol <= 0.0
+            && s1_sol >= 0.0
+            && ((s0_sol / target_s0) - 1.0).abs() < solar_tol
+            && ((s1_sol / target_s1) - 1.0).abs() < solar_tol
+    );
+}
+
+fn parse_search_chi2(term_code: &str) -> Option<(usize, f64)> {
+    let (_, after_samples) = term_code.split_once("samples=")?;
+    let (samples_str, after_chi2) = after_samples.split_once("_best_chi2=")?;
+    let (chi2_str, _) = after_chi2.split_once("_term=")?;
+    Some((samples_str.parse().ok()?, chi2_str.parse().ok()?))
 }
 
 fn assert_uncapped_case_passes(case_name: &str) {
@@ -250,9 +299,39 @@ fn assert_uncapped_case_passes(case_name: &str) {
     let tmp = TempAsteroDirGuard::new(case_name);
     let cleaned = tmp.root.join(case_name);
     copy_cleaned_astero_case(&raw_case, &cleaned).expect("clean astero case");
-    let rep = run_astero_test_suite_case(&cleaned, true, None, true)
-        .unwrap_or_else(|e| panic!("astero case {case_name} errored: {e}"));
+    let logs_opts = StarLogsOptions {
+        output_root: (case_name == "surface_effects")
+            .then_some(cleaned.as_path()),
+        ..Default::default()
+    };
+    let rep = flexmesa_astero::e2e::run_astero_test_suite_case_with_logs(
+        &cleaned,
+        true,
+        None,
+        true,
+        logs_opts,
+    )
+    .unwrap_or_else(|e| panic!("astero case {case_name} errored: {e}"));
     assert_eq!(rep.case_name, case_name);
+    if case_name == "surface_effects" {
+        let freqs_text = fs::read_to_string(cleaned.join("freqs.dat"))
+            .expect("surface_effects freqs.dat");
+        assert_eq!(freqs_text.lines().filter(|l| !l.trim().is_empty()).count(), 81);
+    } else if case_name == "example_astero" {
+        let (samples, best_chi2) = parse_search_chi2(&rep.termination_code)
+            .unwrap_or_else(|| {
+                panic!("unexpected search termination string: {}", rep.termination_code)
+            });
+        assert_eq!(samples, 1);
+        assert!(
+            best_chi2 > 1.0 && best_chi2 < 15.0,
+            "example_astero best_chi2={best_chi2} outside expected (1, 15) oracle"
+        );
+    } else if case_name == "fast_newuoa" {
+        let (samples, _) = parse_search_chi2(&rep.termination_code)
+            .expect("fast_newuoa sample count");
+        assert!(samples >= 4);
+    }
     assert!(
         rep.passed,
         "astero case {} failed: assertions_passed={}, restart_verified={}, steps={}, teff={:.1}, logL={:.4}, logR={:.4}, h1c={:.5}, term={}",
@@ -295,38 +374,44 @@ fn test_all_eight_astero_cases_bounded_eight_steps_pass() {
         "missing astero test_suite directory: {}",
         suite_dir.display()
     );
-    let raw_err = run_astero_suite(&suite_dir, true, Some(2), true).expect_err(
-        "raw $MESA_DIR astero suite must reject unsupported controls",
-    );
+    let raw_err =
+        run_astero_test_suite_case(&suite_dir.join("astero_adipls"), true, Some(2), true)
+            .expect_err("raw $MESA_DIR astero case must reject unsupported controls");
     assert!(
         matches!(raw_err, StarError::InvalidInput(_))
             && raw_err.to_string().contains("unsupported control"),
-        "unexpected raw astero suite error: {raw_err}"
+        "unexpected raw astero error: {raw_err}"
     );
     let tmp = TempAsteroDirGuard::new("all8");
     let cleaned_suite = tmp.root.join("astero").join("test_suite");
-    for &case_name in &TIER4_ASTERO_CASES {
+    for &case_name in &ASTERO_CASES {
         copy_cleaned_astero_case(
             &suite_dir.join(case_name),
             &cleaned_suite.join(case_name),
         )
         .expect("clean astero suite case");
     }
-    let reports = run_astero_suite(&cleaned_suite, true, Some(8), true)
-        .expect("run all 8 cleaned astero cases bounded to 8 steps");
-    assert_eq!(reports.len(), TIER4_ASTERO_CASES.len());
-    for (rep, &expected_name) in reports.iter().zip(&TIER4_ASTERO_CASES) {
-        assert_eq!(rep.case_name, expected_name);
-        assert!(
-            rep.passed,
-            "bounded astero case {} failed: assertions_passed={}, restart_verified={}, term={}",
-            rep.case_name,
-            rep.assertions_passed,
-            rep.photo_restart_verified,
-            rep.termination_code
-        );
+    for &case_name in &ASTERO_CASES {
+        let rep = run_astero_test_suite_case(
+            &cleaned_suite.join(case_name),
+            true,
+            Some(8),
+            true,
+        )
+        .unwrap_or_else(|e| panic!("bounded astero case {case_name} errored: {e}"));
+        assert_eq!(rep.case_name, case_name);
         assert!(rep.photo_restart_verified);
         assert!(rep.assertions_passed);
+        if case_name == "surface_effects" {
+            assert!(rep.passed, "surface_effects must pass at 0 steps: {rep:?}");
+        } else {
+            assert!(
+                !rep.passed,
+                "capped 8-step astero case {} must not mark passed=true: {rep:?}",
+                rep.case_name
+            );
+            assert!(rep.total_steps >= 1);
+        }
     }
 }
 

@@ -138,13 +138,22 @@ pub fn safe_log10(x: f64) -> f64 {
     })
 }
 
+/// Evaluate `log_rz` unconditionally on the `Strict` (`CRMATH`) backend
+/// (`math/public/math_lib_crmath.f90:65`, `crmath_r_dp.f90:127`) without
+/// reading or mutating the process-wide [`NumericsMode`].
+#[must_use]
+#[inline]
+pub fn log_strict(x: f64) -> f64 {
+    flexmesa_crlibm_sys::log_rz(x)
+}
+
 /// Compute the natural logarithm $\ln(x)$ (`math/public/math_lib_crmath.f90:65`,
 /// `crmath_r_dp.f90:127`).
 #[must_use]
 #[inline]
 pub fn log(x: f64) -> f64 {
     if is_strict() {
-        flexmesa_crlibm_sys::log_rz(x)
+        log_strict(x)
     } else {
         fast_ops::ln(x)
     }
@@ -264,12 +273,13 @@ pub fn hypot(x: f64, y: f64) -> f64 {
     }
 }
 
-/// Evaluate `pow_r_` unconditionally on the `Strict` backend
-/// (`math/public/math_lib_crmath.f90:220-255`).
+/// Evaluate `pow_r_` unconditionally on the `Strict` (`CRMATH`) backend
+/// (`math/public/math_lib_crmath.f90:220-255`) without reading or mutating the
+/// process-wide [`NumericsMode`].
 #[must_use]
 #[inline]
 #[allow(clippy::float_cmp)]
-pub(crate) fn pow_strict(x: f64, y: f64) -> f64 {
+pub fn pow_strict(x: f64, y: f64) -> f64 {
     if x == 0.0_f64 {
         0.0_f64
     } else if y.is_finite() && y == y.floor() && y.abs() < 100.0_f64 {
@@ -301,38 +311,47 @@ pub fn pow(x: f64, y: f64) -> f64 {
     }
 }
 
+/// Evaluate `pow_i_` unconditionally on the `Strict` (`CRMATH`) backend
+/// (`math/public/math_lib_crmath.f90:193-217`; `powi_strict(0.0, 0) == 0.0`)
+/// without reading or mutating the process-wide [`NumericsMode`].
+#[must_use]
+#[inline]
+#[allow(clippy::float_cmp)]
+pub fn powi_strict(x: f64, iy: i32) -> f64 {
+    if x == 0.0_f64 {
+        return 0.0_f64;
+    }
+    let n = iy.unsigned_abs();
+    let mut pow_x = 1.0_f64;
+    if n <= 2200 {
+        for _ in 0..n {
+            pow_x *= x;
+        }
+    } else if x == 1.0_f64 {
+        pow_x = 1.0_f64;
+    } else if x == -1.0_f64 {
+        pow_x = if (n & 1) == 0 { 1.0_f64 } else { -1.0_f64 };
+    } else {
+        let steps = 2200 + (n & 1);
+        for _ in 0..steps {
+            pow_x *= x;
+        }
+    }
+    if iy < 0 {
+        1.0_f64 / pow_x
+    } else {
+        pow_x
+    }
+}
+
 /// Raise `x` to an integer power $x^{n}$ matching MESA's `pow_i_`
 /// (`math/public/math_lib_crmath.f90:193-217`; note `powi(0.0, 0) == 0.0`) in
 /// [`NumericsMode::Strict`].
 #[must_use]
 #[inline]
-#[allow(clippy::float_cmp)]
 pub fn powi(x: f64, iy: i32) -> f64 {
     if is_strict() {
-        if x == 0.0_f64 {
-            return 0.0_f64;
-        }
-        let n = iy.unsigned_abs();
-        let mut pow_x = 1.0_f64;
-        if n <= 2200 {
-            for _ in 0..n {
-                pow_x *= x;
-            }
-        } else if x == 1.0_f64 {
-            pow_x = 1.0_f64;
-        } else if x == -1.0_f64 {
-            pow_x = if (n & 1) == 0 { 1.0_f64 } else { -1.0_f64 };
-        } else {
-            let steps = 2200 + (n & 1);
-            for _ in 0..steps {
-                pow_x *= x;
-            }
-        }
-        if iy < 0 {
-            1.0_f64 / pow_x
-        } else {
-            pow_x
-        }
+        powi_strict(x, iy)
     } else {
         fast_ops::powi(x, iy)
     }

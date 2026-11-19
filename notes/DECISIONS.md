@@ -399,3 +399,16 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
 - **Alternatives Rejected**:
   - *Widening `AESOPUS` to `float64` in `FMKAP001`*: Adds ~45 MB with zero upstream precision gain because `AESOPUS_AGSS09.h5` is natively `float32`.
   - *Silently rebuilding on `FMCENV01` cache mismatch*: Masks filesystem corruption instead of surfacing it (`#164` acceptance criterion).
+
+---
+
+## DECISIONS #34: Mode-Independent `CRMATH` Recomputation of REACLIB Reverse Coefficients at Load Time (`Issue #161`)
+
+- **Date**: 2026-11-19
+- **Decision**:
+  1. **Load-Time Detailed-Balance Recomputation (`crates/flexmesa-rates/src/loader.rs`)**: Recompute REACLIB reverse detailed-balance parameters `(inv_c1, inv_c2, inv_part)` once inside `RatesCatalog::parse_builtin` from `NuclideCatalog::builtin_ref()` (`flexmesa-chem`) in exact upstream order (`compute_rev_ratio` in `rates/private/reaclib_support.f90:204-263`), panicking loudly if any non-weak REACLIB handle in `rates_tables.bin` fails stoichiometry parsing.
+  2. **Mode-Independent `CRMATH` Helpers (`crates/flexmesa-math/src/lib.rs`)**: Expose `log_strict`, `pow_strict`, and `powi_strict` so catalog initialization evaluates `crlibm` (`CRMATH`) intrinsics directly without reading or mutating the process-wide `NumericsMode` atomic (`#210`).
+- **Why**: Offline Python float serialization in `rates_tables.bin` introduced up to `1.8e-13` (`1,742 ULP`) drift in `inv_c1` and `inv_c2` relative to MESA `26.4.1`, whereas computing `(inv_c1, inv_c2, inv_part)` from `NuclideCatalog` via `log_strict` / `pow_strict` / `powi_strict` achieves `0 ULP` across all `2,763 / 2,763` raw reaction rates in `rates/test/test_output` and keeps `RatesCatalog` initialization thread-safe regardless of ambient `NumericsMode`.
+- **Alternatives Rejected**:
+  - *Calling `with_numerics_mode(NumericsMode::Strict, ...)` during catalog loading*: Mutates the process-wide `ACTIVE_MODE` atomic while concurrent `Fast`-mode callers read `is_strict()` lock-free (`#210`, caught by `routing_governance`).
+  - *Re-packing `rates_tables.bin` offline in Python*: Leaves reverse detailed-balance coefficients decoupled from `NuclideCatalog` and `flexmesa-math` `CRMATH` rounding.

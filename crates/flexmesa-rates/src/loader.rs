@@ -85,13 +85,13 @@ fn compute_reaclib_rev_coeffs(
     let g_in: f64 = in_isos.iter().map(|e| 2.0 * e.spin + 1.0).product();
     let g_out: f64 = out_isos.iter().map(|e| 2.0 * e.spin + 1.0).product();
     let tmp = m_in / m_out;
-    let mut c1 = flexmesa_math::pow(tmp, 1.5) * (g_in / g_out);
+    let mut c1 = flexmesa_math::pow_strict(tmp, 1.5) * (g_in / g_out);
     #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
     let inv_exp = (in_isos.len() as i32) - (out_isos.len() as i32);
     if inv_exp != 0 {
-        c1 *= flexmesa_math::powi(fac, inv_exp);
+        c1 *= flexmesa_math::powi_strict(fac, inv_exp);
     }
-    let inv_c1 = flexmesa_math::log(c1);
+    let inv_c1 = flexmesa_math::log_strict(c1);
 
     let sum1: f64 = in_isos.iter().map(|e| e.binding_energy).sum();
     let sum2: f64 = out_isos.iter().map(|e| e.binding_energy).sum();
@@ -444,15 +444,10 @@ impl RatesCatalog {
         }
 
         let nuclides = NuclideCatalog::builtin_ref();
-        let fac = flexmesa_math::with_numerics_mode(
-            flexmesa_math::NumericsMode::Strict,
-            || {
-                flexmesa_math::pow(
-                    1.0e9 * BOLTZM / (2.0 * PI * HBAR * HBAR * AVO),
-                    1.5,
-                ) / AVO
-            },
-        );
+        let fac = flexmesa_math::pow_strict(
+            1.0e9 * BOLTZM / (2.0 * PI * HBAR * HBAR * AVO),
+            1.5,
+        ) / AVO;
         let num_handles = read_u32(&mut pos) as usize;
         let mut reaclib_handles = HashMap::with_capacity(num_handles);
         for _ in 0..num_handles {
@@ -464,10 +459,7 @@ impl RatesCatalog {
                 parse_reaclib_handle(nuclides, &h).map(|(ins, outs)| {
                     let (fwd_in, fwd_out) =
                         if is_rev { (outs, ins) } else { (ins, outs) };
-                    flexmesa_math::with_numerics_mode(
-                        flexmesa_math::NumericsMode::Strict,
-                        || compute_reaclib_rev_coeffs(&fwd_in, &fwd_out, fac),
-                    )
+                    compute_reaclib_rev_coeffs(&fwd_in, &fwd_out, fac)
                 })
             } else {
                 None
@@ -482,11 +474,14 @@ impl RatesCatalog {
                 let mut inv_c2 = read_f64(&mut pos);
                 let mut inv_part = std::array::from_fn(|_| read_f64(&mut pos));
                 if rflag != b'w' && rflag != b'e' && inv_part[0] != 0.0 {
-                    if let Some((c1, c2, ip)) = rev_override {
-                        inv_c1 = c1;
-                        inv_c2 = c2;
-                        inv_part = ip;
-                    }
+                    let (c1, c2, ip) = rev_override.unwrap_or_else(|| {
+                        panic!(
+                            "failed to parse non-weak REACLIB handle '{h}' in rates_tables.bin"
+                        )
+                    });
+                    inv_c1 = c1;
+                    inv_c2 = c2;
+                    inv_part = ip;
                 }
                 terms.push(ReaclibTerm {
                     chapter,

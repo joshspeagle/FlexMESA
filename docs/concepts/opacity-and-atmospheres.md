@@ -35,16 +35,16 @@ $$\nabla_{\mathrm{rad}} = \frac{3}{16\pi a c G}\,\frac{\kappa\,L\,P}{m\,T^4}, \q
 
 Integrating the 1D stellar structure equations requires outer boundary values for the photospheric gas pressure $\ln P_{\mathrm{surf}}$ and temperature $\ln T_{\mathrm{surf}}$ at the surface optical depth $\tau_{\mathrm{surf}}$, together with their partial derivatives with respect to $(L, \ln R, \ln M, \ln \kappa)$. `flexmesa.atm` (`crates/flexmesa-atm`) provides three atmosphere boundary families:
 
-1. **Analytic & Integrated Grey $T(\tau)$ Relations (`eval_t_tau_uniform`, `eval_t_tau_varying`)**:
+1. **Analytic & Integrated Grey $T(\tau)$ Relations (`eval_t_tau_atm`, `eval_t_tau_uniform`, `eval_t_tau_varying`, `get_t_tau_id`)**:
    In a plane-parallel grey atmosphere in radiative equilibrium, temperature varies with optical depth $\tau$ according to a dimensionless Hopf function $q(\tau)$:
 
    $$T^4(\tau) = \frac{3}{4}\,T_{\mathrm{eff}}^4\,\left[\tau + q(\tau)\right], \qquad \frac{dP}{d\tau} = \frac{g}{\kappa(\rho, T)}.$$
 
-   `flexmesa.atm` supports the classic Eddington ($q(\tau) = 2/3$), solar Hopf, Krishna-Swamy (1966), and Trampedach et al. (2014) / Ball (2021) radiation-hydrodynamics $T(\tau)$ relations, solving for $P_{\mathrm{surf}}$ via either uniform-opacity fixed-point iteration or adaptive Cash-Karp RK45 integration of $dP/d\tau = g/\kappa$.
+   `flexmesa.atm` supports the classic Eddington ($q(\tau) = 2/3$), solar Hopf, Krishna-Swamy (1966), and Trampedach et al. (2014) / Ball (2021) radiation-hydrodynamics $T(\tau)$ relations (`get_t_tau_id`), solving for $P_{\mathrm{surf}}$ via `eval_t_tau_atm` (`star/private/atm_support.f90:218-343`) across `'fixed'` uniform opacity (`max_iters = 0`), `'iterated'` 0.5-underrelaxed fixed-point opacity iteration with radiation-pressure enhancement `pextra_factor` and implicit $(\chi_\rho, \chi_T, \kappa_\rho, \kappa_T)$ partial-derivative corrections, or `'varying'` adaptive Dormand-Prince 5(4) (`dopri5`, `num/private/mod_dopri5.f` and `atm/private/atm_t_tau_varying.f90:182-279`) integration of $dP/d\tau = g/\kappa$.
 2. **Irradiated Planetary & Binary Atmospheres (`eval_irradiated`)**:
    Implements the Guillot (2010) semi-grey two-stream irradiated atmosphere model for close-in giant planets and strongly irradiated binary companions, using a precomputed Steffen (1990) monotonic spline (`eval_e2`) for the second exponential integral $E_2(x)$.
-3. **Tabulated Model Atmospheres (`eval_table`)**:
-   Performs 2D bicubic Hermite interpolation in $(\log g, T_{\mathrm{eff}})$ and 1D Steffen interpolation in metallicity $[\mathrm{M/H}]$ across all 7 MESA atmosphere table sets (`ATM_TABLE_PHOTOSPHERE`, `TAU_100`, `TAU_10`, `TAU_1`, `TAU_1M1`, `WD_TAU_25`, and `DB_WD_TAU_25`).
+3. **Tabulated Model Atmospheres & Off-Table Blending (`eval_table_atm`, `eval_table`, `get_table_alfa_beta`, `get_table_id`)**:
+   Performs 2D bicubic Hermite interpolation in $(\log g, T_{\mathrm{eff}})$ and 4-point 1D Steffen interpolation in metallicity $[\mathrm{M/H}]$ across all 7 MESA atmosphere table sets (`ATM_TABLE_PHOTOSPHERE`, `TAU_100`, `TAU_10`, `TAU_1`, `TAU_1M1`, `WD_TAU_25`, and `DB_WD_TAU_25`; resolved by name via `get_table_id`), while `eval_table_atm` (`star/private/atm_support.f90:430-689`) blends boundary-margin and off-table states smoothly into `'T_tau'` via `get_table_alfa_beta` weights $(\alpha, \beta)$ and switches $\tau_{\mathrm{base}}$ when $\beta = 0$.
 
 ---
 

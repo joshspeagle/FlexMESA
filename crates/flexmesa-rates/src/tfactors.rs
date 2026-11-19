@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 //! Precomputed temperature power factors (`T_Factors`), REACLIB 7-parameter
 //! polynomial evaluator, and detailed-balance reverse rate coefficients
-//! (`rates/private/ratelib.f90` and `reaclib_input.f90`).
+//! (`rates/private/ratelib.f90`, `rates/private/reaclib_eval.f90`, and
+//! `rates/private/reaclib_support.f90:217-257`).
 
 use flexmesa_const::{
     AVO, BOLTZM, FIVE_THIRDS, FOUR_THIRDS, HBAR, LN10, ONE_THIRD, PI,
@@ -432,7 +433,8 @@ pub fn eval_reaclib_terms(
 
 /// Computes the detailed-balance first reverse coefficient
 /// `inverse_coefficients(1)` from nuclear masses `w` (`AMU`) and ground-state
-/// spins `spin` (`reaclib_input.f90` / `test_rates.f90:366-368`).
+/// spins `spin` (`rates/private/reaclib_support.f90:217-257` and
+/// `rates/test/src/test_rates.f90:305-378`).
 #[must_use]
 pub fn compute_rev_ratio_coeff1(
     w_in: &[f64],

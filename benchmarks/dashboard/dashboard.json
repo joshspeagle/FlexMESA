@@ -140,8 +140,8 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 3469,
-        "python_jax_lines": 1476
+        "rust_lines": 3466,
+        "python_jax_lines": 1478
       },
       {
         "module": "neu",
@@ -344,7 +344,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 1992,
+        "rust_lines": 2011,
         "python_jax_lines": 577
       },
       {

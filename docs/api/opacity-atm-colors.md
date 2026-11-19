@@ -72,7 +72,7 @@ print(
 
 ## Model Atmospheres & Outer Boundary Conditions (`flexmesa.atm`)
 
-`flexmesa.atm` evaluates outer photospheric boundary conditions $(P_{\mathrm{surf}}, T_{\mathrm{surf}})$ and their exact $(L, R, M)$ partial derivatives using grey $T(\tau)$ relations (Eddington, Krishna-Swamy, solar Hopf, Guillot irradiated planetary atmospheres), RK4 optical-depth integration, and pre-validated 2D bicubic spline atmosphere tables (`photosphere`, `tau_100`, `tau_10`, `tau_1`, `tau_1m1`, `wd_tau_25`, `db_wd_tau_25`).
+`flexmesa.atm` evaluates outer photospheric boundary conditions $(\ln P_{\mathrm{surf}}, \ln T_{\mathrm{surf}})$ and their exact $(L, \ln R, \ln M, \ln \kappa)$ partial derivatives using grey $T(\tau)$ relations (`Eddington`, `solar_Hopf`, `Krishna_Swamy`, `Trampedach_solar` via `get_t_tau_id` and `eval_t_tau_atm` across `'fixed'`, `'iterated'`, and `'varying'` opacity modes with `pextra_factor`), Guillot (2010) irradiated planetary atmospheres (`eval_irradiated`), adaptive Dormand-Prince 5(4) (`dopri5`) optical-depth integration (`eval_t_tau_varying`), and pre-validated 2D bicubic spline atmosphere tables (`photosphere`, `tau_100`, `tau_10`, `tau_1`, `tau_1m1`, `WD_tau_25`, `DB_WD_tau_25` via `get_table_id`, `eval_table`, and off-table `'T_tau'` boundary blending in `eval_table_atm` using `get_table_alfa_beta`).
 
 ::: flexmesa.atm._core
 

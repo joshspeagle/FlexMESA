@@ -32,6 +32,10 @@ pub struct StarControlInventory {
     pub controls_unused: HashSet<&'static str>,
     /// `&star_job` keys that only write to the terminal (`DECISIONS #26`).
     pub star_job_terminal_output: HashSet<&'static str>,
+    /// `&eos` keys that only write to the terminal (`DECISIONS #26`).
+    pub eos_terminal_output: HashSet<&'static str>,
+    /// `&kap` keys that only write to the terminal (`DECISIONS #26`).
+    pub kap_terminal_output: HashSet<&'static str>,
     /// `&controls` keys that only write to the terminal (`DECISIONS #26`).
     pub controls_terminal_output: HashSet<&'static str>,
 }
@@ -56,6 +60,8 @@ pub fn supported_star_control_inventory() -> &'static StarControlInventory {
             .iter()
             .copied()
             .collect(),
+        eos_terminal_output: EOS_TERMINAL_OUTPUT.iter().copied().collect(),
+        kap_terminal_output: KAP_TERMINAL_OUTPUT.iter().copied().collect(),
         controls_terminal_output: CONTROLS_TERMINAL_OUTPUT
             .iter()
             .copied()
@@ -119,6 +125,7 @@ pub const STAR_JOB_SUPPORTED: &[&str] = &[
     "new_v_flag",
     "new_y",
     "new_z",
+    "num_special_rate_factors",
     "pre_ms_d_log10_p",
     "pre_ms_guess_rho_c",
     "pre_ms_relax_to_start_radiative_core",
@@ -126,6 +133,7 @@ pub const STAR_JOB_SUPPORTED: &[&str] = &[
     "profile_columns_file",
     "profile_starting_model",
     "radius_in_cm_for_create_initial_model",
+    "reaction_for_special_factor",
     "relax_core",
     "relax_initial_core",
     "relax_initial_irradiation",
@@ -168,7 +176,10 @@ pub const STAR_JOB_SUPPORTED: &[&str] = &[
     "set_tau_factor",
     "set_to_this_tau_factor",
     "set_uniform_initial_composition",
+    "special_rate_factor",
     "steps_to_take_before_terminate",
+    "use_3a_fl87",
+    "use_suzuki_weak_rates",
     "write_profile_when_terminate",
     "years_for_initial_dt",
 ];
@@ -254,22 +265,171 @@ pub const CONTROLS_TERMINAL_OUTPUT: &[&str] = &[
     "write_header_frequency",
 ];
 
+/// `&eos` keys whose only upstream use is to gate diagnostic `write(*,*)`
+/// output (`eos/private/eosdt_eval.f90:239-244,730,1514`, `DECISIONS #26`).
+pub const EOS_TERMINAL_OUTPUT: &[&str] = &[
+    "dbg",
+    "logrho_hi",
+    "logrho_lo",
+    "logt_hi",
+    "logt_lo",
+    "x_hi",
+    "x_lo",
+    "z_hi",
+    "z_lo",
+];
+
 /// Supported `&eos` keys.
 pub const EOS_SUPPORTED: &[&str] = &[
+    "cms_fixed_composition_index",
+    "cms_use_fixed_composition",
+    "coulomb_den_cut_helm",
+    "coulomb_temp_cut_helm",
+    "eos_character_ctrl",
+    "eos_ctrl",
+    "eos_integer_ctrl",
+    "eos_logical_ctrl",
+    "eosdt_file_prefix",
+    "eosdt_use_linear_interp_for_x",
+    "eosdt_use_linear_interp_to_helm",
+    "include_elec_pos",
+    "include_radiation",
+    "log_gamma_e_all_helm",
+    "log_gamma_e_all_pc",
+    "logq_cut_freeeos_lo_z_max",
+    "logq_cut_hi_z_freeeos_hi",
+    "logq_cut_hi_z_freeeos_lo",
+    "logq_cut_lo_z_freeeos_hi",
+    "logq_cut_lo_z_freeeos_lo",
+    "logq_max_for_all_cms",
+    "logq_max_for_any_cms",
+    "logq_max_freeeos_hi",
+    "logq_max_freeeos_lo",
+    "logq_max_opal_scvh",
+    "logq_min_for_all_cms",
+    "logq_min_for_any_cms",
+    "logq_min_freeeos_hi",
+    "logq_min_freeeos_lo",
+    "logq_min_opal_scvh",
+    "logrho1_opal_scvh_limit",
+    "logrho1_pc_limit",
+    "logrho2_opal_scvh_limit",
+    "logrho2_pc_limit",
+    "logrho_cut_freeeos_hi",
+    "logrho_cut_freeeos_lo",
+    "logrho_max_for_all_cms",
+    "logrho_max_for_any_cms",
+    "logrho_max_freeeos_hi",
+    "logrho_max_freeeos_lo",
+    "logrho_min_for_all_cms",
+    "logrho_min_for_all_skye",
+    "logrho_min_for_any_cms",
+    "logrho_min_for_any_skye",
+    "logrho_min_freeeos_hi",
+    "logrho_min_freeeos_lo",
+    "logrho_min_opal_scvh_limit",
+    "logt1_pc_limit",
+    "logt2_pc_limit",
+    "logt_all_helm",
+    "logt_all_opal",
+    "logt_cut_freeeos_hi",
+    "logt_cut_freeeos_lo",
+    "logt_low_all_helm",
+    "logt_low_all_scvh",
+    "logt_max_for_all_cms",
+    "logt_max_for_all_cms_pure_he",
+    "logt_max_for_any_cms",
+    "logt_max_for_any_cms_pure_he",
+    "logt_max_freeeos_hi",
+    "logt_max_freeeos_lo",
+    "logt_min_for_all_cms",
+    "logt_min_for_all_skye",
+    "logt_min_for_any_cms",
+    "logt_min_for_any_skye",
+    "logt_min_freeeos_hi",
+    "logt_min_freeeos_lo",
+    "mass_fraction_limit_for_pc",
+    "mass_fraction_limit_for_skye",
+    "max_z_for_all_cms",
+    "max_z_for_any_cms",
+    "okay_to_convert_ierr_to_skip",
+    "pc_gamma_full_crystal",
+    "pc_gamma_start_crystal",
+    "pc_use_gamma_limit_instead_of_t",
+    "skye_max_gamma_for_liquid",
+    "skye_min_gamma_for_solid",
+    "skye_solid_mixing_rule",
+    "skye_use_ion_offsets",
+    "suffix_for_freeeos_z",
+    "tiny_fuzz",
     "use_cms",
     "use_freeeos",
     "use_opal_scvh",
+    "use_other_eos_component",
+    "use_other_eos_results",
     "use_pc",
+    "use_simple_skye_blends",
     "use_skye",
+    "z_all_helm",
+    "z_all_opal",
+];
+
+/// `&kap` keys whose only upstream use is to gate diagnostic `write(*,*)`
+/// output (`kap/private/kap_eval.f90:73-78`, `kap/private/kap_aesopus.f90:111-318`,
+/// `DECISIONS #26`).
+pub const KAP_TERMINAL_OUTPUT: &[&str] = &[
+    "dbg",
+    "logrho_hi",
+    "logrho_lo",
+    "logt_hi",
+    "logt_lo",
+    "show_info",
+    "x_hi",
+    "x_lo",
+    "z_hi",
+    "z_lo",
 ];
 
 /// Supported `&kap` keys.
 pub const KAP_SUPPORTED: &[&str] = &[
+    "aesopus_filename",
+    "cubic_interpolation_in_x",
+    "cubic_interpolation_in_z",
+    "include_electron_conduction",
+    "kap_blend_logt_lower_bdy",
+    "kap_blend_logt_upper_bdy",
+    "kap_character_ctrl",
     "kap_co_prefix",
+    "kap_ctrl",
     "kap_file_prefix",
+    "kap_integer_ctrl",
+    "kap_logical_ctrl",
     "kap_lowt_prefix",
+    "kap_type2_full_off_dz",
+    "kap_type2_full_off_x",
+    "kap_type2_full_on_dz",
+    "kap_type2_full_on_x",
+    "use_blouin_conductive_opacities",
+    "use_other_compton_opacity",
+    "use_other_elect_cond_opacity",
+    "use_other_radiative_opacity",
     "use_type2_opacities",
     "use_zbase_for_type1",
+    "user_kap_co_xs",
+    "user_kap_co_zs",
+    "user_kap_lowt_xs",
+    "user_kap_lowt_zs",
+    "user_kap_xs",
+    "user_kap_zs",
+    "user_num_kap_co_xs",
+    "user_num_kap_co_xs_for_this_z",
+    "user_num_kap_co_zs",
+    "user_num_kap_lowt_xs",
+    "user_num_kap_lowt_xs_for_this_z",
+    "user_num_kap_lowt_zs",
+    "user_num_kap_xs",
+    "user_num_kap_xs_for_this_z",
+    "user_num_kap_zs",
     "zbase",
 ];
 
@@ -620,6 +780,7 @@ pub const CONTROLS_SUPPORTED: &[&str] = &[
     "mass_lower_limit_for_min_d_mix",
     "mass_upper_limit_for_min_d_mix",
     "max_abar_for_burning",
+    "max_abs_eps_nuc",
     "max_age",
     "max_age_in_seconds",
     "max_allowed_nz",
@@ -763,6 +924,8 @@ pub const CONTROLS_SUPPORTED: &[&str] = &[
     "mixing_length_alpha",
     "mlt_option",
     "mlt_pturb_factor",
+    "net_logtcut_lim",
+    "net_logtcut_lo",
     "neutron_rich_core_boundary_ye_max",
     "never_skip_hard_limits",
     "nieuwenhuijzen_scaling_factor",
@@ -787,6 +950,8 @@ pub const CONTROLS_SUPPORTED: &[&str] = &[
     "op_split_burn_min_t_for_variable_t_solver",
     "op_split_burn_odescal",
     "opacity_factor",
+    "opacity_max",
+    "opacity_min",
     "overshoot_alpha",
     "overshoot_bdy_loc",
     "overshoot_brunt_b_max",
@@ -837,6 +1002,7 @@ pub const CONTROLS_SUPPORTED: &[&str] = &[
     "r_function3_weight",
     "r_function_param",
     "r_function_weight",
+    "reaction_neuqs_factor",
     "redo_conv_for_dr_lt_mixing_length",
     "reimers_scaling_factor",
     "relax_hard_limits_after_retry",
@@ -1061,7 +1227,9 @@ pub const CONTROLS_SUPPORTED: &[&str] = &[
     "use_pvsc_art_visc",
     "use_rsp_l_eqn_outer_bc",
     "use_rsp_new_start_scheme",
+    "use_simple_es_for_kap",
     "use_split_merge_amr",
+    "use_starting_composition_for_kap",
     "use_tdc_enthalpy_flux_limiter",
     "use_time_centered_eps_grav",
     "use_zero_pgas_outer_bc",
@@ -1075,6 +1243,7 @@ pub const CONTROLS_SUPPORTED: &[&str] = &[
     "velocity_tau_lower_bound",
     "vink_scaling_factor",
     "w_div_wcrit_max",
+    "weak_rate_factor",
     "wind_boost_full_off_l_div_ledd",
     "wind_boost_full_on_l_div_ledd",
     "write_profiles_flag",
@@ -1151,10 +1320,14 @@ pub fn copy_cleaned_star_case(
                     || inv.star_job_headless_gui_flags.contains(key)
             }
             "eos" => {
-                is_include_key(sec, key) || inv.eos_supported.contains(key)
+                is_include_key(sec, key)
+                    || inv.eos_supported.contains(key)
+                    || inv.eos_terminal_output.contains(key)
             }
             "kap" => {
-                is_include_key(sec, key) || inv.kap_supported.contains(key)
+                is_include_key(sec, key)
+                    || inv.kap_supported.contains(key)
+                    || inv.kap_terminal_output.contains(key)
             }
             "controls" => {
                 is_include_key(sec, key) || inv.controls_supported.contains(key)
@@ -1190,15 +1363,31 @@ mod tests {
             assert_eq!(*key, key.to_ascii_lowercase());
         }
         assert!(inv.star_job_supported.is_disjoint(&inv.star_job_unused));
-        assert!(
-            inv.star_job_supported
-                .is_disjoint(&inv.star_job_headless_gui_flags)
-        );
-        assert!(
-            inv.star_job_unused
-                .is_disjoint(&inv.star_job_headless_gui_flags)
-        );
+        assert!(inv
+            .star_job_supported
+            .is_disjoint(&inv.star_job_headless_gui_flags));
+        assert!(inv
+            .star_job_unused
+            .is_disjoint(&inv.star_job_headless_gui_flags));
         assert!(inv.controls_supported.is_disjoint(&inv.controls_unused));
+        assert!(inv.eos_supported.is_disjoint(&inv.eos_terminal_output));
+        assert!(inv.kap_supported.is_disjoint(&inv.kap_terminal_output));
+        for key in &inv.eos_terminal_output {
+            assert_eq!(*key, key.to_ascii_lowercase());
+            assert!(
+                upstream_section_keys("eos")
+                    .is_some_and(|set| set.contains(key)),
+                "{key} is not an upstream &eos key"
+            );
+        }
+        for key in &inv.kap_terminal_output {
+            assert_eq!(*key, key.to_ascii_lowercase());
+            assert!(
+                upstream_section_keys("kap")
+                    .is_some_and(|set| set.contains(key)),
+                "{key} is not an upstream &kap key"
+            );
+        }
         for (terminal, others) in [
             (
                 &inv.star_job_terminal_output,

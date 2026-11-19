@@ -527,24 +527,11 @@ fn update_model_range(
         })?;
 
         let lnd_k = inv.log10_result * LN10;
-        let rho_k = flexmesa_math::exp(lnd_k);
+        let rho_k = inv.linear_result;
+        let t_k = model.t[k];
         model.lnd[k] = lnd_k;
         model.rho[k] = rho_k;
-
-        let t_k = model.t[k];
-        let out = eos_dt_get(
-            ht,
-            rho_k,
-            t_k,
-            &model.chem_id,
-            xa_k,
-            &model.eos_config,
-        )
-        .map_err(|e| {
-            StarError::MicrophysicsError(format!(
-                "phase_separation EOS refresh failed at zone {k}: {e}"
-            ))
-        })?;
+        let out = inv.eos;
 
         let ln_pgas = out.res[I_LN_PGAS];
         let pgas = flexmesa_math::exp(ln_pgas);

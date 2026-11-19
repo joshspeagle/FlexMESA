@@ -405,7 +405,11 @@ def _eval_dt_native_core(
     log_t = jnp.log10(t_in)
 
     def _lvl6() -> core.EosEvalOutput:
-        a, dt, dr = get_helm_alfa_jax(log_rho, log_t, 0.1)
+        # Upstream MESA 26.4.1 `eos/private/eosdt_eval.f90:728,749-750` passes
+        # `(d_alfa_dlogRho, d_alfa_dlogT)` into `get_HELM_alfa(..., alfa,
+        # d_alfa_dlogT, d_alfa_dlogRho, ierr)` and forwards `(alfa,
+        # d_alfa_dlogT, d_alfa_dlogRho)` to `combine_for_eosdt` (#176).
+        a, dr, dt = get_helm_alfa_jax(log_rho, log_t, 0.1)
         return _combine_jax(
             a,
             dt,

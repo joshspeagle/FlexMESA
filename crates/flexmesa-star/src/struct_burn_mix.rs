@@ -114,7 +114,8 @@ pub fn op_split_burn_zones(
     }
 
     let ht = crate::micro::builtin_helm_table()?;
-    let rate_factors = vec![1.0_f64; net_info.num_reactions];
+    let rate_factors = crate::micro::build_rate_factors(&model.job, &net_info)?;
+    let weak_rate_factor = model.controls.weak_rate_factor;
     let eos_cfg = &model.eos_config;
 
     let outcomes: Result<Vec<SplitZoneOutcome>, StarError> = split_indices
@@ -147,7 +148,7 @@ pub fn op_split_burn_zones(
                         starting_log10_t: log_t,
                         log10_rho: log_rho,
                         rate_factors: &rate_factors,
-                        weak_rate_factor: 1.0,
+                        weak_rate_factor,
                         screening_mode,
                         stptry_in: 0.0,
                         max_steps,
@@ -184,7 +185,7 @@ pub fn op_split_burn_zones(
                         etas: &etas,
                         dxdt_source_term: None,
                         rate_factors: &rate_factors,
-                        weak_rate_factor: 1.0,
+                        weak_rate_factor,
                         reaction_qs: &[],
                         reaction_neu_qs: &[],
                         screening_mode,
@@ -232,7 +233,7 @@ pub fn op_split_burn_zones(
                 xa_after,
                 dxdt_split,
                 avg_epsnuc: avg_raw * eps_nuc_factor,
-                eps_neu_total: eps_neu * eps_nuc_factor,
+                eps_neu_total: eps_neu,
                 eps_cats: cats,
                 nstep: nstep_zone,
             })

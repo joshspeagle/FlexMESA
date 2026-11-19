@@ -69,12 +69,30 @@ pub struct StarControls {
     pub tau_factor: f64,
     /// Opacity multiplicative factor (`1.0`).
     pub opacity_factor: f64,
+    /// Use analytic electron-scattering opacity $\kappa = 0.2(1 + X)$ (`use_simple_es_for_kap`).
+    #[serde(default)]
+    pub use_simple_es_for_kap: bool,
+    /// Evaluate opacity using start-of-step `xa_start` composition (`use_starting_composition_for_kap`).
+    #[serde(default)]
+    pub use_starting_composition_for_kap: bool,
+    /// Upper clamp on Rosseland opacity (`opacity_max`, `<= 0` disables; `-1.0` default).
+    #[serde(default = "default_neg_one")]
+    pub opacity_max: f64,
+    /// Lower clamp on Rosseland opacity (`opacity_min`, `<= 0` disables; `-1.0` default).
+    #[serde(default = "default_neg_one")]
+    pub opacity_min: f64,
     /// Minimum temperature for thermal neutrino evaluation ($\mathrm{K}$).
     pub min_t_for_neu: f64,
     /// Thermal neutrino multiplicative factor (`1.0`).
     pub non_nuc_neu_factor: f64,
     /// Maximum $\log_{10}(T/\mathrm{K})$ above which network $T$ is clipped (`max_logT_for_net`).
     pub max_logt_for_net: f64,
+    /// Lower $\log_{10}(T/\mathrm{K})$ strong-rate zero threshold (`net_logTcut_lo`, `-1.0` default).
+    #[serde(default = "default_neg_one")]
+    pub net_logtcut_lo: f64,
+    /// Upper $\log_{10}(T/\mathrm{K})$ strong-rate smooth cutoff threshold (`net_logTcut_lim`, `-1.0` default).
+    #[serde(default = "default_neg_one")]
+    pub net_logtcut_lim: f64,
     /// Maximum mean atomic mass $\bar{A}$ for nuclear burning (`max_abar_for_burning`).
     pub max_abar_for_burning: f64,
     /// Whether operator-split 1-zone burning is active (`op_split_burn`).
@@ -83,7 +101,16 @@ pub struct StarControls {
     pub eps_nuc_factor: f64,
     /// Nuclear abundance rate multiplicative factor (`1.0`).
     pub dxdt_nuc_factor: f64,
-    /// Plasma screening prescription (`ScreeningMode::Extended` default).
+    /// Global weak-reaction rate multiplier (`weak_rate_factor`, `1.0` default).
+    #[serde(default = "default_one")]
+    pub weak_rate_factor: f64,
+    /// Global reaction neutrino $Q_\nu$ multiplier (`reaction_neuQs_factor`, `1.0` default).
+    #[serde(default = "default_one")]
+    pub reaction_neuqs_factor: f64,
+    /// Magnitude cap on $|\epsilon_{\mathrm{nuc}}|$ before `eps_nuc_factor` (`max_abs_eps_nuc`, `1e99` default).
+    #[serde(default = "default_max_abs_eps_nuc")]
+    pub max_abs_eps_nuc: f64,
+    /// Plasma screening prescription (`ScreeningMode::Chugunov` default).
     pub screening_mode: ScreeningMode,
     /// Whether to compute the Brunt-Väisälä composition term $B$ (`calculate_Brunt_B`, `true` default, `controls.defaults:7915`).
     pub calculate_brunt_b: bool,
@@ -571,4 +598,16 @@ impl StarControls {
                 && (model_number as isize)
                     >= self.steps_before_use_velocity_time_centering)
     }
+}
+
+const fn default_neg_one() -> f64 {
+    -1.0
+}
+
+const fn default_one() -> f64 {
+    1.0
+}
+
+const fn default_max_abs_eps_nuc() -> f64 {
+    1.0e99
 }

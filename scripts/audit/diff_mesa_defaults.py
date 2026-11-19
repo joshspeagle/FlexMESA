@@ -363,6 +363,9 @@ def _parse_rust_expr(expr: str) -> tuple[bool | float | str | None, bool]:
     arr_rep_m = re.match(r"^\[([^;\[\]]+);\s*[^;\[\]]+\]$", tok)
     if arr_rep_m is not None:
         return _parse_rust_expr(arr_rep_m.group(1))
+    from_fn_m = re.match(r"^std::array::from_fn\(\|_\|(.+)\)$", tok)
+    if from_fn_m is not None:
+        return _parse_rust_expr(from_fn_m.group(1))
     if tok in ("true", "false"):
         return (tok == "true"), False
     if tok == "String::new()":

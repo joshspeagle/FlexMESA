@@ -413,37 +413,66 @@ def kap_get_results_jax(
 
     clipped_rho = lr_in < -40.0
     lr = jnp.maximum(lr_in, -40.0)
-    low_t_max = 4.05 if kap_low_t_option == "kapCN" else 4.50
-    lo_bdy = max(float(kap_blend_log_t_lower_bdy), 3.75)
+    high_t_min, low_t_max, lt_c_hi, lr_c_lo = (
+        tables_jax.get_kap_blend_bounds_jax(
+            kap_option,
+            kap_co_option,
+            kap_low_t_option,
+            use_type2_opacities=bool(use_type2_opacities),
+        )
+    )
+    lo_bdy = max(float(kap_blend_log_t_lower_bdy), high_t_min)
     hi_bdy = min(float(kap_blend_log_t_upper_bdy), low_t_max)
+    lt_c_lo = lt_c_hi - 0.5
+    lr_c_hi = lr_c_lo + 0.5
 
-    needs_zbase_low_t = kap_low_t_option in ("kapCN", "AESOPUS")
-    if not isinstance(zbase, jax.core.Tracer) and not isinstance(
-        log_t, jax.core.Tracer
+    lt_opt = kap_low_t_option.strip()
+    if lt_opt == "kapcn":
+        lt_opt = "kapCN"
+    elif lt_opt == "aesopus":
+        lt_opt = "AESOPUS"
+    needs_zbase_low_t = lt_opt in ("kapCN", "AESOPUS")
+    if (
+        not isinstance(zbase, jax.core.Tracer)
+        and not isinstance(log_t, jax.core.Tracer)
+        and not isinstance(log_rho, jax.core.Tracer)
     ):
         zb_min = float(np.min(np.asarray(zbase, dtype=np.float64)))
         lt_arr = np.asarray(log_t, dtype=np.float64)
-        active_t2 = bool(use_type2_opacities) and bool(np.any(lt_arr > lo_bdy))
-        active_lt = needs_zbase_low_t and bool(np.any(lt_arr < hi_bdy))
+        lr_arr = np.asarray(log_rho, dtype=np.float64)
+        not_pure_compton = (lt_arr < lt_c_hi) & (
+            (lr_arr - 3.0 * lt_arr + 18.0) > lr_c_lo
+        )
+        active_t2 = bool(use_type2_opacities) and bool(
+            np.any(not_pure_compton & (lt_arr > lo_bdy))
+        )
+        active_lt = needs_zbase_low_t and bool(
+            np.any(not_pure_compton & (lt_arr < hi_bdy))
+        )
         if zb_min < 0.0 and (active_t2 or active_lt):
             raise ValueError(
                 "must supply zbase >= 0 for Type 2, kapCN, or AESOPUS opacities"
             )
 
-    invalid_zbase = (zb_a < 0.0) & (
-        (bool(use_type2_opacities) & (lt > lo_bdy))
-        | (bool(needs_zbase_low_t) & (lt < hi_bdy))
+    not_pure_compton_j = (lt < lt_c_hi) & ((lr_in - 3.0 * lt + 18.0) > lr_c_lo)
+    invalid_zbase = (
+        (zb_a < 0.0)
+        & not_pure_compton_j
+        & (
+            (bool(use_type2_opacities) & (lt > lo_bdy))
+            | (bool(needs_zbase_low_t) & (lt < hi_bdy))
+        )
     )
     zb_eval = jnp.where(zb_a < 0.0, 0.0, zb_a)
 
     def _eval_low_t() -> tuple[jax.Array, jax.Array, jax.Array]:
-        if kap_low_t_option == "kapCN":
+        if lt_opt == "kapCN":
             fc_cn = jnp.where(zb_eval <= 0.0, 1.0, xc_a / (0.1644 * zb_eval))
             fn_cn = jnp.where(zb_eval <= 0.0, 1.0, xn_a / (0.0532 * zb_eval))
             return jax_co_lowt.eval_kapcn_jax(
                 zb_eval, x_a, fc_cn, fn_cn, lr, lt
             )
-        if kap_low_t_option == "AESOPUS":
+        if lt_opt == "AESOPUS":
             return jax_co_lowt.eval_aesopus_jax(
                 zb_eval, x_a, xc_a, xn_a, xo_a, lr, lt
             )
@@ -452,7 +481,7 @@ def kap_get_results_jax(
             x_a,
             lr,
             lt,
-            prefix=kap_low_t_option,
+            prefix=lt_opt,
             cubic_x=cubic_interpolation_in_x,
             cubic_z=cubic_interpolation_in_z,
         )
@@ -467,8 +496,8 @@ def kap_get_results_jax(
             xo_a,
             lr,
             lt,
-            kap_option=kap_option,
-            kap_co_option=kap_co_option,
+            kap_option=kap_option.strip(),
+            kap_co_option=kap_co_option.strip(),
             cubic_x=cubic_interpolation_in_x,
             cubic_z=cubic_interpolation_in_z,
             use_zbase_for_type1=use_zbase_for_type1,
@@ -481,16 +510,32 @@ def kap_get_results_jax(
 
     z0 = jnp.asarray(0.0, dtype=jnp.float64)
     z1 = jnp.asarray(1.0, dtype=jnp.float64)
-    lt_f = float(lt) if not isinstance(lt, jax.core.Tracer) else None
-    if lt_f is not None and lt_f <= lo_bdy:
+    lt_f = (
+        float(lt)
+        if (lt.ndim == 0 and not isinstance(lt, jax.core.Tracer))
+        else None
+    )
+    lr_f = (
+        float(lr_in)
+        if (lr_in.ndim == 0 and not isinstance(lr_in, jax.core.Tracer))
+        else None
+    )
+    if (lt_f is not None and lt_f >= lt_c_hi) or (
+        lt_f is not None
+        and lr_f is not None
+        and (lr_f - 3.0 * lt_f + 18.0) <= lr_c_lo
+    ):
+        kr, dkr_dr, dkr_dt = z1, z0, z0
+        f_low, f_high, f_t2 = z0, z0, z0
+    elif lt_f is not None and lt_f <= lo_bdy:
         kr, dkr_dr, dkr_dt = _eval_low_t()
         f_low, f_high, f_t2 = z1, z0, z0
     elif lt_f is not None and lt_f >= hi_bdy:
         f_t2, kr, dkr_dr, dkr_dt = _eval_high_t()
         f_low, f_high = z0, z1
     else:
-        f_t2_h, k1, dr1, dt1 = _eval_high_t()
         k2, dr2, dt2 = _eval_low_t()
+        f_t2_h, k1, dr1, dt1 = _eval_high_t()
         u_t = jnp.clip((lt - lo_bdy) / (hi_bdy - lo_bdy), 0.0, 1.0)
         alfa_v, ds_du = _quintic_val_and_deriv(u_t)
         dalfa_dt = jnp.where(
@@ -516,7 +561,6 @@ def kap_get_results_jax(
 
     dkr_dr = jnp.where(clipped_rho, 0.0, dkr_dr)
     log_r = lr_in - 3.0 * lt + 18.0
-    lt_c_lo, lt_c_hi, lr_c_lo, lr_c_hi = 8.19, 8.69, -7.99, -7.49
     bt_v, dbt_du = _quintic_val_and_deriv(
         jnp.clip((lt - lt_c_lo) / 0.5, 0.0, 1.0)
     )

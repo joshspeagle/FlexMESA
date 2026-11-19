@@ -44,6 +44,7 @@ enum SingleTrialOutcome {
         ts_ctrl: BinaryTimestepControls,
     },
     CutDt(f64),
+    RetryWithJReduction(f64),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -158,6 +159,9 @@ fn emit_hard_limit_retry_trace(
     jl.emit();
 }
 
+/// Evaluates `eval_irradiation_heat` (`star/private/star_utils.f90:1849-1866`)
+/// on `star`'s current mesh (`irradiation_dq = 4 * pi * r(1)^2 * sigma / xmstar`
+/// with partial-cell weighting on the straddling cell).
 fn refresh_star_irradiation_heat(star: &mut StarModel) {
     let nz = star.nz;
     if star.aux.irradiation_heat.len() != nz {
@@ -165,21 +169,26 @@ fn refresh_star_irradiation_heat(star: &mut StarModel) {
     }
     let f_irr = star.controls.irradiation_flux;
     let sigma_max = star.controls.column_depth_for_irradiation;
-    if f_irr <= 0.0 || sigma_max <= 0.0 || nz == 0 {
+    if f_irr == 0.0 || sigma_max <= 0.0 || nz == 0 || star.mstar <= 0.0 {
         star.aux.irradiation_heat.fill(0.0);
         return;
     }
-    let mut col_acc = 0.0_f64;
+    let r0 = star.r[0];
+    let xmstar = (star.mstar - star.m_center).max(1.0e-99);
+    let irradiation_dq = (4.0 * PI) * r0 * r0 * sigma_max / xmstar;
+    let eps = 0.25 * f_irr / sigma_max;
     for k in 0..nz {
-        let r_k = star.r[k].max(1.0);
-        let dsigma = star.dm[k] / (4.0 * PI * r_k * r_k);
-        col_acc += 0.5 * dsigma;
-        star.aux.irradiation_heat[k] = if col_acc <= sigma_max {
-            f_irr / (4.0 * sigma_max)
+        let xq = 1.0 - star.q[k];
+        let dq_k = star.dq[k];
+        star.aux.irradiation_heat[k] = if irradiation_dq > xq {
+            if irradiation_dq < xq + dq_k && dq_k > 0.0 {
+                eps * (irradiation_dq - xq) / dq_k
+            } else {
+                eps
+            }
         } else {
             0.0
         };
-        col_acc += 0.5 * dsigma;
     }
 }
 
@@ -308,9 +317,11 @@ impl BinarySystem {
                 loop {
                     if redo_idx > 0 {
                         let saved_mtr = self.mtransfer_rate;
+                        let live_cf = self.change_factor;
                         self.restore_snapshot(&pre_step_snap)?;
                         self.apply_retry_holds(&retry_holds);
                         self.mtransfer_rate = saved_mtr;
+                        self.change_factor = live_cf;
                         explicit_trial_mdot = if self.ignore_rlof_flag {
                             0.0
                         } else {
@@ -464,15 +475,8 @@ impl BinarySystem {
                         }
                         Ok(SingleTrialOutcome::CutDt(dt_cut)) => {
                             self.counters.num_dt_cuts += 1;
-                            let base_cut = if self
-                                .have_to_reduce_timestep_due_to_j
-                            {
-                                self.have_to_reduce_timestep_due_to_j = false;
-                                dt_cut
-                            } else {
-                                dt_cut
-                            };
-                            dt_try = match check_cut_dt(base_cut, dt_try) {
+                            self.have_to_reduce_timestep_due_to_j = false;
+                            dt_try = match check_cut_dt(dt_cut, dt_try) {
                                 Ok(d) => d,
                                 Err(e) => {
                                     self.restore_snapshot(&pre_step_snap)?;
@@ -490,6 +494,21 @@ impl BinarySystem {
                                     ),
                                 ));
                             }
+                            break;
+                        }
+                        Ok(SingleTrialOutcome::RetryWithJReduction(
+                            dt_used,
+                        )) => {
+                            self.counters.num_dt_cuts += 1;
+                            dt_try = self.compute_retry_dt(
+                                dt_used,
+                                retry_factor_base,
+                                dt_floor,
+                                outer_retry,
+                                max_outer_retries,
+                                &pre_step_snap,
+                            )?;
+                            outer_retry += 1;
                             break;
                         }
                         Err(e) if is_binary_trial_retriable(&e) => {
@@ -544,7 +563,12 @@ impl BinarySystem {
             // through try `max_tries + 1`.
             for try_idx in 1..=(max_tries + 1) {
                 if try_idx > 1 {
+                    // `binary_evolve.f90:615-617`: `binary_set_current_to_old`
+                    // restores `change_factor_old` only on outer retry
+                    // (`num_tries == 0`), not on implicit RLOF redo trials.
+                    let live_cf = self.change_factor;
                     self.restore_snapshot(&trial_snap)?;
+                    self.change_factor = live_cf;
                 }
                 // `run_binary_support.f90:421-424`: preserve rotational implicit
                 // wind state and double `change_factor` across subsequent trials.
@@ -568,9 +592,42 @@ impl BinarySystem {
                             };
                             dt_try = next_dt;
                             outer_retry += 1;
+                            if max_outer_retries > 0
+                                && outer_retry > max_outer_retries
+                            {
+                                self.restore_snapshot(&pre_step_snap)?;
+                                return Err(StarError::ConvergenceFailure(
+                                    format!(
+                                        "BinarySystem::try_step exceeded retry_limit ({max_outer_retries})"
+                                    ),
+                                ));
+                            }
                             break;
                         }
                         (dt_used, ts_ctrl)
+                    }
+                    Ok(SingleTrialOutcome::RetryWithJReduction(dt_used)) => {
+                        self.counters.num_dt_cuts += 1;
+                        let next_dt = self.compute_retry_dt(
+                            dt_used,
+                            retry_factor_base,
+                            dt_floor,
+                            outer_retry,
+                            max_outer_retries,
+                            &pre_step_snap,
+                        )?;
+                        if tracing {
+                            emit_dt_cut_trace(
+                                target_model,
+                                outer_retry,
+                                try_idx,
+                                dt_try,
+                                next_dt,
+                            );
+                        }
+                        dt_try = next_dt;
+                        outer_retry += 1;
+                        break;
                     }
                     Ok(SingleTrialOutcome::CutDt(dt_cut)) => {
                         self.counters.num_dt_cuts += 1;
@@ -797,8 +854,23 @@ impl BinarySystem {
                         );
                     }
                     TrialDecision::Redo => {
+                        if try_idx > max_tries {
+                            let next_dt = self.compute_retry_dt(
+                                dt_used,
+                                retry_factor_base,
+                                dt_floor,
+                                outer_retry,
+                                max_outer_retries,
+                                &pre_step_snap,
+                            )?;
+                            dt_try = next_dt;
+                            outer_retry += 1;
+                            break;
+                        }
                         if next_mdot_candidate > 0.0 && self.point_mass_i == 0 {
+                            let live_cf = self.change_factor;
                             self.restore_snapshot(&trial_snap)?;
+                            self.change_factor = live_cf;
                             let _ = self.swap_donor_and_accretor()?;
                             self.capture_snapshot_into(&mut trial_snap);
                             solver.flip_for_contact_donor_switch();
@@ -1052,6 +1124,7 @@ impl BinarySystem {
             extras,
         )?;
 
+        refresh_star_irradiation_heat(&mut self.donor);
         let dt_used = evolve_single_star_without_term_rewind(
             &mut self.donor,
             dt_try,
@@ -1214,12 +1287,13 @@ impl BinarySystem {
 
         // `#175` (`binary/private/binary_evolve.f90:320-328`): upstream uses a
         // single explicit first-order Euler orbital update (`DECISIONS #36`) and
-        // sets `have_to_reduce_timestep_due_to_j = .true.` if `J_orb <= 0`.
+        // sets `have_to_reduce_timestep_due_to_j = .true.` + returns `retry`
+        // (multiplying `timestep_factor_for_retries * dt_reduction_factor_for_j`)
+        // when `J_orb <= 0`.
         let j_cur = j_old + last_jb.jdot_total * dt_used;
         if j_cur <= 0.0 || !j_cur.is_finite() {
             self.have_to_reduce_timestep_due_to_j = true;
-            let f_j = self.controls.dt_reduction_factor_for_j;
-            return Ok(SingleTrialOutcome::CutDt(dt_used * f_j));
+            return Ok(SingleTrialOutcome::RetryWithJReduction(dt_used));
         }
 
         // `binary/private/binary_evolve.f90:330-340`: eccentricity is held
@@ -1423,4 +1497,132 @@ fn finalize_star_post_binary_torques(
         star.aux.total_energy = eval_total_energy_integrals(star).5;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::inlist::BinaryInlistControls;
+    use flexmesa_star::{StarControls, StarJobControls, load_zams_model};
+
+    #[test]
+    fn test_eval_irradiation_heat_matches_upstream_partial_cell_straddling() {
+        let mut star = load_zams_model(
+            StarControls {
+                initial_mass: 1.0,
+                zbase: 0.02,
+                ..StarControls::default()
+            },
+            StarJobControls::default(),
+        )
+        .expect("1 Msun ZAMS");
+        let xmstar = star.mstar - star.m_center;
+        let r0 = star.r[0];
+        let f_irr = 1.0e12;
+        // Case A: sigma_max smaller than half of cell 0 column depth still heats cell 0 proportionally.
+        let dq_small = 0.25 * star.dq[0];
+        let sigma_small = dq_small * xmstar / (4.0 * PI * r0 * r0);
+        star.controls.irradiation_flux = f_irr;
+        star.controls.column_depth_for_irradiation = sigma_small;
+        refresh_star_irradiation_heat(&mut star);
+        let eps_small = 0.25 * f_irr / sigma_small;
+        let expected_0 = eps_small * (dq_small / star.dq[0]);
+        assert!(
+            (star.aux.irradiation_heat[0] - expected_0).abs()
+                <= 1.0e-12 * expected_0.abs()
+        );
+        assert_eq!(star.aux.irradiation_heat[1], 0.0);
+
+        // Case B: straddling cell 1 heats cell 0 fully and cell 1 by (irradiation_dq - xq1)/dq1.
+        let dq_straddle = star.dq[0] + 0.4 * star.dq[1];
+        let sigma_straddle = dq_straddle * xmstar / (4.0 * PI * r0 * r0);
+        star.controls.column_depth_for_irradiation = sigma_straddle;
+        refresh_star_irradiation_heat(&mut star);
+        let eps_straddle = 0.25 * f_irr / sigma_straddle;
+        let xq1 = 1.0 - star.q[1];
+        let expected_1 = eps_straddle * (dq_straddle - xq1) / star.dq[1];
+        assert!(
+            (star.aux.irradiation_heat[0] - eps_straddle).abs()
+                <= 1.0e-12 * eps_straddle.abs()
+        );
+        assert!(
+            (star.aux.irradiation_heat[1] - expected_1).abs()
+                <= 1.0e-12 * expected_1.abs()
+        );
+        assert_eq!(star.aux.irradiation_heat[2], 0.0);
+    }
+
+    #[test]
+    fn test_implicit_redo_preserves_change_factor_and_final_try_redo_triggers_retry()
+     {
+        struct RedoProbeExtras {
+            calls: usize,
+            seen_cf: Vec<f64>,
+            seen_models: Vec<usize>,
+        }
+
+        impl BinaryExtras for RedoProbeExtras {
+            fn check_model(
+                &mut self,
+                bin: &mut BinarySystem,
+            ) -> BinaryExtrasAction {
+                self.calls += 1;
+                self.seen_cf.push(bin.change_factor);
+                self.seen_models.push(bin.model_number);
+                match self.calls {
+                    1 => {
+                        // Simulate a mid-trial change_factor update (e.g. boost or MB reset)
+                        // that must survive into try 2 rather than being wiped by trial_snap.
+                        bin.change_factor = 1.75;
+                        BinaryExtrasAction::Redo
+                    }
+                    2 => {
+                        // Final allowed try (try_idx == max_tries + 1 = 2): returning Redo
+                        // must convert to outer Retry rather than falling through the loop.
+                        BinaryExtrasAction::Redo
+                    }
+                    _ => BinaryExtrasAction::KeepGoing,
+                }
+            }
+        }
+
+        let donor = load_zams_model(
+            StarControls {
+                initial_mass: 1.5,
+                zbase: 0.02,
+                ..StarControls::default()
+            },
+            StarJobControls::default(),
+        )
+        .expect("1.5 Msun ZAMS");
+        let bctrl = BinaryInlistControls {
+            m1_msun: 1.5,
+            m2_msun: 1.0,
+            initial_period_in_days: 5.0,
+            mdot_scheme: String::from("roche_lobe"),
+            max_tries_to_achieve: 1,
+            initial_change_factor: 1.25,
+            max_change_factor: 2.0,
+            terminate_if_initial_overflow: false,
+            ..BinaryInlistControls::default()
+        };
+        let mut sys = BinarySystem::from_controls_point_mass(donor, bctrl)
+            .expect("detached point-mass binary");
+        let mut extras = RedoProbeExtras {
+            calls: 0,
+            seen_cf: Vec::new(),
+            seen_models: Vec::new(),
+        };
+        let _ = sys
+            .try_step_with_extras(100.0 * SECYER, &mut extras)
+            .expect("step succeeds after outer retry on final-try redo");
+        assert_eq!(extras.calls, 3);
+        assert_eq!(extras.seen_models, vec![1, 1, 1]);
+        // Try 1 starts at 1.25, Try 2 sees preserved 1.75 across redo, Outer retry restores 1.25.
+        assert!((extras.seen_cf[0] - 1.25).abs() < 1.0e-12);
+        assert!((extras.seen_cf[1] - 1.75).abs() < 1.0e-12);
+        assert!((extras.seen_cf[2] - 1.25).abs() < 1.0e-12);
+        assert_eq!(sys.model_number, 1);
+        assert_eq!(sys.counters.num_retries, 1);
+    }
 }

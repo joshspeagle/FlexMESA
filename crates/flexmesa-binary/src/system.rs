@@ -908,10 +908,11 @@ impl BinarySystem {
             && matches!(self.companion, BinaryCompanion::PointMass { .. })
             && snap.companion_state.is_some()
         {
-            let restored_box = self
-                .collapsed_star
-                .take()
-                .unwrap_or_else(|| Box::new(self.donor.clone()));
+            let Some(restored_box) = self.collapsed_star.take() else {
+                return Err(StarError::InvalidInput(String::from(
+                    "cannot restore two-star snapshot after point-mass conversion without retained collapsed_star",
+                )));
+            };
             self.companion = BinaryCompanion::Star(restored_box);
         }
         if self.donor_i != snap.donor_i {

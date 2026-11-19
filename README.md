@@ -34,7 +34,7 @@ Progress is measured by **upstream MESA `26.4.1` source lines by status**, never
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | `star` | 120,509 | 19,941 | 17,567 | 65,013 | 17,988 | 0 | 0 | 55,584 | 3,869 | 14.9% | 0.0% |
 | `star_data` | 4,870 | 34 | 0 | 4,836 | 0 | 0 | 0 | 0 | 0 | 0.0% | 0.0% |
-| `binary` | 11,638 | 2,885 | 0 | 6,572 | 2,181 | 0 | 0 | 11,518 | 1,244 | 18.7% | 0.0% |
+| `binary` | 11,638 | 2,885 | 0 | 6,572 | 2,181 | 0 | 0 | 11,721 | 1,244 | 18.7% | 0.0% |
 | `astero` | 7,935 | 2,185 | 0 | 5,750 | 0 | 0 | 0 | 5,762 | 1,288 | 0.0% | 0.0% |
 | `eos` | 28,666 | 7,656 | 0 | 21,010 | 0 | 0 | 0 | 14,235 | 9,848 | 0.0% | 0.0% |
 | `kap` | 22,430 | 13,652 | 0 | 8,778 | 0 | 0 | 0 | 4,862 | 3,248 | 0.0% | 0.0% |
@@ -58,8 +58,8 @@ Progress is measured by **upstream MESA `26.4.1` source lines by status**, never
 | `adipls` | 30,923 | 30,923 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0.0% | 0.0% |
 | `stella` | 62,117 | 62,117 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0.0% | 0.0% |
 | `plotting` | 35,732 | 35,732 | 0 | 0 | 0 | 0 | 0 | 0 | 7,761 | 0.0% | 0.0% |
-| **Subtotal: star + star_data + binary + astero** | 144,952 | 25,045 | 17,567 | 82,171 | 20,169 | 0 | 0 | 72,864 | 6,401 | 13.9% | 0.0% |
-| **Total (all 26 modules)** | 497,703 | 250,070 | 17,567 | 206,337 | 23,729 | 0 | 0 | 142,748 | 52,630 | 4.8% | 0.0% |
+| **Subtotal: star + star_data + binary + astero** | 144,952 | 25,045 | 17,567 | 82,171 | 20,169 | 0 | 0 | 73,067 | 6,401 | 13.9% | 0.0% |
+| **Total (all 26 modules)** | 497,703 | 250,070 | 17,567 | 206,337 | 23,729 | 0 | 0 | 142,951 | 52,630 | 4.8% | 0.0% |
 
 *Notes*: `star_data` state structs reside in `crates/flexmesa-star`. Bridge, testing, and benchmark infrastructure account for an additional `18,856` Rust lines (`flexmesa-py`, `flexmesa-testing`, `flexmesa-bench`) and `14,177` Python lines (`flexmesa.testing`, `flexmesa.bench`). For plotting ([#173](https://github.com/joshspeagle/FlexMESA/issues/173)), `flexmesa.plotting` currently provides `25` `plot_*` builders against `46` upstream `pgstar`/`pgbinary` panel modules.
 

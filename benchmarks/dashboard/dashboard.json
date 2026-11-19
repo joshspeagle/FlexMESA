@@ -72,7 +72,7 @@
         "verified_total": 0,
         "pct_ported": 0.0,
         "pct_verified": 0.0,
-        "rust_lines": 5762,
+        "rust_lines": 5764,
         "python_jax_lines": 1288
       },
       {
@@ -455,8 +455,8 @@
       "upstream_panel_modules": 46
     },
     "infrastructure_lines": {
-      "rust_bridge_testing_bench": 18727,
-      "python_testing_bench": 13992
+      "rust_bridge_testing_bench": 18726,
+      "python_testing_bench": 14008
     }
   },
   "numerics": {
@@ -679,11 +679,12 @@
     {
       "namelist": "star &controls",
       "upstream_scalars": 1444,
-      "matched_in_flexmesa": 611,
-      "defaults_agree": 611,
+      "matched_in_flexmesa": 616,
+      "defaults_agree": 616,
       "value_mismatch": 0,
       "disabled_limit_none": 0,
-      "unimplemented": 833
+      "skipped_unparseable_rust": 9,
+      "unimplemented": 819
     },
     {
       "namelist": "star &star_job",
@@ -692,7 +693,8 @@
       "defaults_agree": 88,
       "value_mismatch": 0,
       "disabled_limit_none": 0,
-      "unimplemented": 367
+      "skipped_unparseable_rust": 1,
+      "unimplemented": 366
     },
     {
       "namelist": "binary &binary_controls + &binary_job",
@@ -701,16 +703,18 @@
       "defaults_agree": 120,
       "value_mismatch": 0,
       "disabled_limit_none": 0,
-      "unimplemented": 89
+      "skipped_unparseable_rust": 1,
+      "unimplemented": 88
     },
     {
       "namelist": "astero &astero_search_controls",
       "upstream_scalars": 150,
-      "matched_in_flexmesa": 73,
-      "defaults_agree": 73,
+      "matched_in_flexmesa": 75,
+      "defaults_agree": 75,
       "value_mismatch": 0,
       "disabled_limit_none": 0,
-      "unimplemented": 77
+      "skipped_unparseable_rust": 1,
+      "unimplemented": 74
     },
     {
       "namelist": "eos &eos",
@@ -719,6 +723,7 @@
       "defaults_agree": 54,
       "value_mismatch": 0,
       "disabled_limit_none": 0,
+      "skipped_unparseable_rust": 0,
       "unimplemented": 48
     },
     {
@@ -728,6 +733,7 @@
       "defaults_agree": 16,
       "value_mismatch": 0,
       "disabled_limit_none": 0,
+      "skipped_unparseable_rust": 0,
       "unimplemented": 20
     },
     {
@@ -737,6 +743,7 @@
       "defaults_agree": 0,
       "value_mismatch": 0,
       "disabled_limit_none": 0,
+      "skipped_unparseable_rust": 0,
       "unimplemented": 2900
     },
     {
@@ -746,6 +753,7 @@
       "defaults_agree": 0,
       "value_mismatch": 0,
       "disabled_limit_none": 0,
+      "skipped_unparseable_rust": 0,
       "unimplemented": 1329
     }
   ],

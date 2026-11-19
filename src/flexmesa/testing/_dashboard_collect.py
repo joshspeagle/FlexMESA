@@ -472,7 +472,7 @@ def collect_controls_summary(
         if not in_summary or not line.startswith("|"):
             continue
         cols = [c.strip() for c in line.strip("|").split("|")]
-        if len(cols) == 7 and cols[1].isdigit():
+        if len(cols) == 8 and cols[1].isdigit():
             rows.append(
                 {
                     "namelist": cols[0],
@@ -481,6 +481,20 @@ def collect_controls_summary(
                     "defaults_agree": int(cols[3]),
                     "value_mismatch": int(cols[4]),
                     "disabled_limit_none": int(cols[5]),
+                    "skipped_unparseable_rust": int(cols[6]),
+                    "unimplemented": int(cols[7]),
+                }
+            )
+        elif len(cols) == 7 and cols[1].isdigit():
+            rows.append(
+                {
+                    "namelist": cols[0],
+                    "upstream_scalars": int(cols[1]),
+                    "matched_in_flexmesa": int(cols[2]),
+                    "defaults_agree": int(cols[3]),
+                    "value_mismatch": int(cols[4]),
+                    "disabled_limit_none": int(cols[5]),
+                    "skipped_unparseable_rust": 0,
                     "unimplemented": int(cols[6]),
                 }
             )
@@ -509,6 +523,7 @@ def collect_controls_summary(
                         "defaults_agree": 0,
                         "value_mismatch": 0,
                         "disabled_limit_none": 0,
+                        "skipped_unparseable_rust": 0,
                         "unimplemented": len(names),
                     }
                 )

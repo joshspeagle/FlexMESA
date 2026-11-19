@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import collections
 import dataclasses
+import importlib
 import pathlib
 import re
 
@@ -85,10 +86,14 @@ _FAMILY_SPECS: dict[tuple[str, str], tuple[str, str, str, str]] = {
         "22-category nuclear specific power breakdown from profileN.data.",
     ),
     ("pgstar", "Mixing"): (
-        "equivalent",
+        "partial",
         "plot_mixing_profile, plot_profile_panels",
         "#173",
-        "log_D_mix segmented by mixing_type and component diffusivities.",
+        (
+            "log_D_mix by mixing_type plus conv/ovr/semi/thrm. The rotational "
+            "curves of star/private/pgstar_mixing_ds.f90:344-411 (D_ST, "
+            "D_visc, D_DSI, D_SH, D_SSI, D_ES, D_GSF) are not drawn."
+        ),
     ),
     ("pgstar", "Dynamo"): (
         "absent",
@@ -262,10 +267,14 @@ _FAMILY_SPECS: dict[tuple[str, str], tuple[str, str, str, str]] = {
         "Provenance and tolerance summary banner in figure title.",
     ),
     ("pgstar", "Grid<N>"): (
-        "equivalent",
+        "partial",
         "plot_pgstar_grid, plot_case_comparison",
         "#173",
-        "GridSpec multi-window composer supporting &pgstar Grid<N>_* inlists.",
+        (
+            "GridSpec composer for &pgstar Grid<N>_* inlists. Text_Summary "
+            "cells are rejected, so upstream's default Grid1, Grid2 and Grid4 "
+            "(star/defaults/pgstar.defaults:6842, 6952, 7194) do not render."
+        ),
     ),
     ("pgbinary", "Summary_History"): (
         "equivalent",
@@ -298,22 +307,34 @@ _FAMILY_SPECS: dict[tuple[str, str], tuple[str, str, str, str]] = {
         "Binary provenance and residual tolerance banner in title.",
     ),
     ("pgbinary", "Grid<N>"): (
-        "equivalent",
+        "partial",
         "plot_pgstar_grid, plot_pgbinary_panels, plot_case_comparison",
         "#173",
-        "GridSpec composer supporting &pgbinary Grid<N>_* inlists.",
+        (
+            "GridSpec composer for &pgbinary Grid<N>_* inlists. Text_Summary "
+            "cells are rejected, so upstream's default Grid1 "
+            "(binary/defaults/pgbinary.defaults:2273) does not render."
+        ),
     ),
     ("pgbinary", "Star<N>"): (
-        "equivalent",
+        "partial",
         "plot_pgbinary_panels, plot_pgstar_grid",
         "#173",
-        "Donor/accretor HR tracks, point-mass status, and Star1/Star2 cells.",
+        (
+            "Star1/Star2 cells limited to the panels the grid dispatcher "
+            "accepts; upstream embeds any pgstar window of either star."
+        ),
     ),
     ("pgbinary", "Orbit"): (
-        "equivalent",
+        "partial",
         "plot_pgbinary_orbit, plot_pgbinary_panels",
         "#173",
-        "2D Keplerian orbits, CoM, and Roche/stellar equipotential contours.",
+        (
+            "2D orbits, CoM, and Roche/stellar equipotentials. Needs the "
+            "eccentricity column, which upstream's default "
+            "binary_history_columns.list leaves commented out, so default "
+            "saved histories raise an error."
+        ),
     ),
     ("astero_pgstar", "echelle"): (
         "equivalent",
@@ -344,7 +365,8 @@ def build_pgstar_coverage_report(
     Raises:
         FileNotFoundError: If any plotting ``.defaults`` file is missing.
         ValueError: If upstream ``.defaults`` contains an uncatalogued
-            ``*_win_flag`` panel family.
+            ``*_win_flag`` panel family, or a catalogued row names a builder
+            that ``flexmesa.plotting`` does not export.
     """
     specs = (
         ("pgstar", mesa_dir / "star" / "defaults" / "pgstar.defaults"),
@@ -382,6 +404,16 @@ def build_pgstar_coverage_report(
                     f"uncatalogued upstream plotting panel family {key!r}"
                 )
             status, builders, issue, notes = _FAMILY_SPECS[key]
+            if status not in ("equivalent", "partial", "absent"):
+                raise ValueError(f"unknown coverage status {status!r}")
+            if builders != "-":
+                plotting_pkg = importlib.import_module("flexmesa.plotting")
+                for b_name in (b.strip() for b in builders.split(",")):
+                    if not callable(getattr(plotting_pkg, b_name, None)):
+                        raise ValueError(
+                            f"coverage row {key!r} names builder {b_name!r}, "
+                            "which flexmesa.plotting does not export"
+                        )
             panels.append(
                 PgstarPanelStatus(
                     namelist=namelist,

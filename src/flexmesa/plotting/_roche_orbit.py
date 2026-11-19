@@ -147,6 +147,19 @@ def select_row_index(
     return max(0, min(idx, tbl.num_rows - 1))
 
 
+#: ``binary_history`` columns the Orbit panel cannot be drawn without.
+ORBIT_REQUIRED_COLUMNS: tuple[str, ...] = (
+    "eccentricity",
+    "binary_separation",
+    "rl_1",
+    "rl_2",
+)
+
+
+class MissingOrbitColumnsError(ValueError):
+    """Raised when ``binary_history`` lacks a column the Orbit panel needs."""
+
+
 def extract_orbit_state(
     tbl: history_compare.HistoryTable,
     idx: int,
@@ -158,20 +171,27 @@ def extract_orbit_state(
         )
     m1 = float(tbl.columns["star_1_mass"][idx])
     m2 = float(tbl.columns["star_2_mass"][idx])
-    ecc = (
-        float(tbl.columns["eccentricity"][idx])
-        if "eccentricity" in tbl.columns
-        else 0.0
-    )
-    ecc = min(max(ecc if math.isfinite(ecc) else 0.0, 0.0), 0.99)
-    sep = (
-        float(tbl.columns["binary_separation"][idx])
-        if "binary_separation" in tbl.columns
-        else 1.0
-    )
-    sep = sep if math.isfinite(sep) and sep > 0.0 else 1.0
-    rl1 = float(tbl.columns["rl_1"][idx]) if "rl_1" in tbl.columns else 0.0
-    rl2 = float(tbl.columns["rl_2"][idx]) if "rl_2" in tbl.columns else 0.0
+    # Upstream's Orbit window reads ``b% eccentricity``, ``b% separation``
+    # and ``b% rl`` from memory (``binary/private/pgbinary_orbit.f90:102``).
+    # A saved history either carries those columns or the panel cannot be
+    # drawn; no value is substituted for a missing or non-finite one.
+    absent = [c for c in ORBIT_REQUIRED_COLUMNS if c not in tbl.columns]
+    if absent:
+        raise MissingOrbitColumnsError(
+            "Orbit panel requires binary_history columns "
+            + ", ".join(repr(c) for c in absent)
+            + "; enable them in binary_history_columns.list"
+        )
+    ecc = float(tbl.columns["eccentricity"][idx])
+    sep = float(tbl.columns["binary_separation"][idx])
+    rl1 = float(tbl.columns["rl_1"][idx])
+    rl2 = float(tbl.columns["rl_2"][idx])
+    if not (math.isfinite(ecc) and 0.0 <= ecc < 1.0):
+        raise ValueError(f"Orbit panel: eccentricity {ecc!r} outside [0, 1)")
+    if not (math.isfinite(sep) and sep > 0.0):
+        raise ValueError(f"Orbit panel: binary_separation {sep!r} not > 0")
+    if not (math.isfinite(rl1) and math.isfinite(rl2)):
+        raise ValueError("Orbit panel: non-finite rl_1 or rl_2")
 
     def _star_r(star_i: int, rl_val: float) -> float:
         r_col = f"star_{star_i}_radius"

@@ -790,3 +790,12 @@ issue = "#161"
 role = "physics_gap"
 expect_fail_when_run = true
 reason = "Python eos.eos_dt_get_t does not yet expose logT_tol/other_tol; MESA eos/test/test_output:395 passes tol=1.0e-5 and stops one Newton step earlier at 4.8009613155595554."
+
+[[test_gaps]]
+kind = "python_xfail"
+file = "tests/test_eos_wave3a3.py"
+test_name = "test_pc_and_skye_rust_strict_match_mesa_26_4_1_at_base_tolerance"
+issue = "#161"
+role = "physics_gap"
+expect_fail_when_run = true
+reason = "Rust strict PC and Skye derivatives differ from MESA 26.4.1 beyond the base tolerances (1.0e-11 values, 5.0e-9 PC and 1.0e-8 Skye derivatives); largest measured pc_co_liq d_dlnT 7.1e-6 and skye_co_liq d_dlnT 1.3e-6. The same gap is declared for the Rust tests."

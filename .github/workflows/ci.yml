@@ -96,7 +96,7 @@ jobs:
   docs:
     name: Ruff, Figures, MkDocs (Strict) & Snippets
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -112,11 +112,40 @@ jobs:
           release: "false"
           cache-jax: "true"
 
+      - name: Clean-room fetch and per-file SHA-256 verification of all data-v1 bundles
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          flexmesa data clean-cache --purge-legacy-in-data
+          flexmesa data verify --include-test-inputs
+          CLEAN_ROOT="${{ runner.temp }}/flexmesa-clean-provenance"
+          python -c 'import pathlib, shutil, sys; shutil.rmtree(pathlib.Path(sys.argv[1]), ignore_errors=True)' "$CLEAN_ROOT"
+          test ! -e "$CLEAN_ROOT"
+          FLEXMESA_DATA_DIR="$CLEAN_ROOT/data" \
+          FLEXMESA_CACHE_DIR="$CLEAN_ROOT/derived" \
+          MESA_DIR="$CLEAN_ROOT/mesa_test_inputs" \
+          FLEXMESA_HISTORIES_DIR="$CLEAN_ROOT/mesa_histories" \
+          FLEXMESA_MODULE_HEX_DIR="$CLEAN_ROOT/mesa_module_hex" \
+            flexmesa data clean-cache --purge-legacy-in-data
+          FLEXMESA_DATA_DIR="$CLEAN_ROOT/data" \
+          FLEXMESA_CACHE_DIR="$CLEAN_ROOT/derived" \
+          MESA_DIR="$CLEAN_ROOT/mesa_test_inputs" \
+          FLEXMESA_HISTORIES_DIR="$CLEAN_ROOT/mesa_histories" \
+          FLEXMESA_MODULE_HEX_DIR="$CLEAN_ROOT/mesa_module_hex" \
+            flexmesa data fetch --include-test-inputs
+          FLEXMESA_DATA_DIR="$CLEAN_ROOT/data" \
+          FLEXMESA_CACHE_DIR="$CLEAN_ROOT/derived" \
+          MESA_DIR="$CLEAN_ROOT/mesa_test_inputs" \
+          FLEXMESA_HISTORIES_DIR="$CLEAN_ROOT/mesa_histories" \
+          FLEXMESA_MODULE_HEX_DIR="$CLEAN_ROOT/mesa_module_hex" \
+            flexmesa data verify --include-test-inputs
+          python -c 'import pathlib, shutil, sys; shutil.rmtree(pathlib.Path(sys.argv[1]))' "$CLEAN_ROOT"
+
       - name: Run Ruff formatter, linter, and Mypy strict type checker
         run: |
-          ruff format --check --line-length 80 src tests scripts/docs scripts/check_strict_determinism.py scripts/mesa_reference/measure_mesa_spread.py
-          ruff check src tests scripts/docs scripts/check_strict_determinism.py scripts/mesa_reference/measure_mesa_spread.py
-          mypy --strict src tests scripts/docs scripts/check_strict_determinism.py scripts/mesa_reference/measure_mesa_spread.py
+          ruff format --check --line-length 80 src tests scripts/docs scripts/data/build_physics_bundles.py scripts/check_strict_determinism.py scripts/mesa_reference/measure_mesa_spread.py
+          ruff check src tests scripts/docs scripts/data/build_physics_bundles.py scripts/check_strict_determinism.py scripts/mesa_reference/measure_mesa_spread.py
+          mypy --strict src tests scripts/docs scripts/data/build_physics_bundles.py scripts/check_strict_determinism.py scripts/mesa_reference/measure_mesa_spread.py
 
       - name: Verify bijective known-gaps and Level-2 module hex gates
         run: |

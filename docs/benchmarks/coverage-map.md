@@ -50,16 +50,16 @@ Progress is tracked by **upstream MESA `26.4.1` lines promoted to verified statu
 
 ## Namelist Controls & Defaults Alignment
 
-Compared against MESA `26.4.1` `.defaults` schemas, **595 / 1,444** `&controls` keys (`41.2%`) and **367 / 455** `&star_job` keys (`80.7%`) are currently unimplemented (details in [`notes/audit/defaults_diff_26_4_1.md`](https://github.com/joshspeagle/FlexMESA/blob/main/notes/audit/defaults_diff_26_4_1.md); loud rejection of unsupported keys is tracked in `#147` and default alignment in `#149`):
+Compared against MESA `26.4.1` `.defaults` schemas, **578 / 1,444** `&controls` keys (`40.0%`) and **366 / 455** `&star_job` keys (`80.4%`) are currently unimplemented (details in [`notes/audit/defaults_diff_26_4_1.md`](https://github.com/joshspeagle/FlexMESA/blob/main/notes/audit/defaults_diff_26_4_1.md); loud rejection of unsupported keys is tracked in `#147` and default alignment in `#149`):
 
-| Namelist | Upstream Scalars | Matched in FlexMESA | Defaults Agree | Value Mismatch | Disabled (`none`/limit) | Unimplemented |
-| :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `star &controls` | 1,444 | 849 | 849 | 0 | 0 | 595 |
-| `star &star_job` | 455 | 88 | 88 | 0 | 0 | 367 |
-| `binary &binary_controls + &binary_job` | 209 | 145 | 145 | 0 | 0 | 64 |
-| `astero &astero_search_controls` | 150 | 73 | 73 | 0 | 0 | 77 |
-| `eos &eos` | 102 | 54 | 54 | 0 | 0 | 48 |
-| `kap &kap` | 36 | 16 | 16 | 0 | 0 | 20 |
+| Namelist | Upstream Scalars | Matched in FlexMESA | Defaults Agree | Value Mismatch | Disabled (`none`/limit) | Non-Scalar Rust | Unimplemented |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `star &controls` | 1,444 | 849 | 849 | 0 | 0 | 17 | 578 |
+| `star &star_job` | 455 | 88 | 88 | 0 | 0 | 1 | 366 |
+| `binary &binary_controls + &binary_job` | 209 | 145 | 145 | 0 | 0 | 1 | 63 |
+| `astero &astero_search_controls` | 150 | 75 | 75 | 0 | 0 | 1 | 74 |
+| `eos &eos` | 102 | 54 | 54 | 0 | 0 | 0 | 48 |
+| `kap &kap` | 36 | 16 | 16 | 0 | 0 | 0 | 20 |
 
 ## Key Structural & Physics Gaps Driving `0 / 106` Parity
 

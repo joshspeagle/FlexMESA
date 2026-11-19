@@ -748,16 +748,16 @@
     "rust": {
       "tool": "cargo llvm-cov",
       "overall": {
-        "lines": 94451,
-        "covered": 66915,
-        "percent": 70.8
+        "lines": 90534,
+        "covered": 66645,
+        "percent": 73.6
       },
       "by_crate": [
         {
           "crate": "flexmesa-astero",
-          "lines": 4432,
+          "lines": 4284,
           "covered": 1437,
-          "percent": 32.4
+          "percent": 33.5
         },
         {
           "crate": "flexmesa-atm",
@@ -779,9 +779,9 @@
         },
         {
           "crate": "flexmesa-binary",
-          "lines": 7009,
-          "covered": 4145,
-          "percent": 59.1
+          "lines": 6546,
+          "covered": 4155,
+          "percent": 63.5
         },
         {
           "crate": "flexmesa-chem",
@@ -858,8 +858,8 @@
         {
           "crate": "flexmesa-net",
           "lines": 7667,
-          "covered": 6642,
-          "percent": 86.6
+          "covered": 6654,
+          "percent": 86.8
         },
         {
           "crate": "flexmesa-neu",
@@ -882,14 +882,14 @@
         {
           "crate": "flexmesa-schema",
           "lines": 808,
-          "covered": 666,
-          "percent": 82.4
+          "covered": 669,
+          "percent": 82.8
         },
         {
           "crate": "flexmesa-star",
-          "lines": 39050,
-          "covered": 26396,
-          "percent": 67.6
+          "lines": 35744,
+          "covered": 26101,
+          "percent": 73.0
         },
         {
           "crate": "flexmesa-testing",
@@ -914,9 +914,9 @@
     "python": {
       "tool": "pytest --cov",
       "overall": {
-        "statements": 21689,
-        "covered": 19016,
-        "percent": 87.7
+        "statements": 21562,
+        "covered": 18954,
+        "percent": 87.9
       },
       "by_subpackage": [
         {
@@ -951,9 +951,9 @@
         },
         {
           "subpackage": "flexmesa.binary",
-          "statements": 340,
-          "covered": 329,
-          "percent": 96.8
+          "statements": 331,
+          "covered": 322,
+          "percent": 97.3
         },
         {
           "subpackage": "flexmesa.chem",
@@ -1059,15 +1059,15 @@
         },
         {
           "subpackage": "flexmesa.star",
-          "statements": 1458,
-          "covered": 1353,
-          "percent": 92.8
+          "statements": 1303,
+          "covered": 1262,
+          "percent": 96.9
         },
         {
           "subpackage": "flexmesa.testing",
-          "statements": 3393,
-          "covered": 2677,
-          "percent": 78.9
+          "statements": 3430,
+          "covered": 2713,
+          "percent": 79.1
         },
         {
           "subpackage": "flexmesa.turb",
@@ -1387,7 +1387,13 @@
         "issues": []
       }
     ],
-    "open_pull_requests": [],
+    "open_pull_requests": [
+      {
+        "number": 228,
+        "title": "Align module and star defaults with MESA 26.4.1 *.defaults (#149)",
+        "draft": true
+      }
+    ],
     "deferred_169": [
       {
         "number": 175,
@@ -1857,6 +1863,19 @@
       "cases_passing": "0",
       "rust_cov_pct": "70.8",
       "python_cov_pct": "87.7",
+      "closed_140": "12",
+      "total_140": "33",
+      "deferred_169": "18"
+    },
+    {
+      "date_utc": "2026-11-19",
+      "commit": "93de419",
+      "event": "main merge",
+      "engine_ported_pct": "13.9",
+      "all_verified_pct": "0.0",
+      "cases_passing": "0",
+      "rust_cov_pct": "73.6",
+      "python_cov_pct": "87.9",
       "closed_140": "12",
       "total_140": "33",
       "deferred_169": "18"

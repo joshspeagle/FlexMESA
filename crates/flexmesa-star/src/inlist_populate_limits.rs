@@ -85,12 +85,7 @@ impl InlistBundle {
         }
         ctrl.try_f64_into("controls", &mut c.max_years_for_timestep, "max_years_for_timestep")?;
         ctrl.try_bool_into("controls", &mut c.stop_near_zams, "stop_near_zams")?;
-        if let Some(v) = ctrl.try_get_f64("controls", "lnuc_div_l_zams_limit")? {
-            c.lnuc_div_l_zams_limit = v;
-            if ctrl.try_get_bool("controls", "stop_near_zams")?.is_none() {
-                c.stop_near_zams = true;
-            }
-        }
+        ctrl.try_f64_into("controls", &mut c.lnuc_div_l_zams_limit, "lnuc_div_l_zams_limit")?;
         c.xa_central_lower_limit_species = ctrl.try_get_indexed_strings("controls", "xa_central_lower_limit_species")?;
         c.xa_central_lower_limit = ctrl.try_get_indexed_f64s("controls", "xa_central_lower_limit")?;
         c.xa_central_upper_limit_species = ctrl.try_get_indexed_strings("controls", "xa_central_upper_limit_species")?;

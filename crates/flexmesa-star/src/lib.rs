@@ -60,6 +60,7 @@
     clippy::unreadable_literal
 )]
 
+pub mod accretion_xa;
 pub mod adjust_mass;
 pub mod case_staging;
 pub mod controls;
@@ -177,8 +178,8 @@ mod tests_fidelity4;
 mod tests_phase3_pulse_stella;
 
 pub use adjust_mass::{
-    build_accreted_xa, do_adjust_mass, do_adjust_mass_step,
-    do_adjust_mass_with_dt,
+    build_accreted_xa, compute_delta_m, do_adjust_mass, do_adjust_mass_step,
+    do_adjust_mass_with_dt, get_xa_for_accretion,
 };
 pub use controls::{
     AtmOption, AtmTTauRelation, EnergyEqnOption, StarControls, StarError,
@@ -444,8 +445,8 @@ pub use timestep_limits::timestep_controller;
 pub use winds::{
     do_set_mdot, eval_bjorklund_wind, eval_blocker_wind, eval_de_jager_wind,
     eval_dutch_wind, eval_nieuwenhuijzen_wind, eval_nugis_lamers_wind,
-    eval_reimers_wind, eval_van_loon_wind, eval_vink_wind, set_mdot,
-    DutchLowTScheme, WindScheme,
+    eval_reimers_wind, eval_rlo_wind, eval_super_eddington_wind,
+    eval_van_loon_wind, eval_vink_wind, set_mdot, DutchLowTScheme, WindScheme,
 };
 pub use zams::{
     interp_q, load_zams_model, load_zams_model_from_catalog,

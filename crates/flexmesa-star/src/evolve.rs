@@ -284,6 +284,14 @@ pub fn star_evolve_step_with_extras(
 
     loop {
         model.dt = dt_try;
+        // `set_start_of_step_info` (`star/private/evolve.f90:1784-1787`):
+        // snapshot start-of-step `starting_T_center` and optical-depth-averaged
+        // `prev_Ledd` before evaluating `set_mdot`.
+        if model.nz > 0 {
+            model.aux.step_hist.starting_t_center = Some(model.t[model.nz - 1]);
+            model.aux.step_hist.prev_ledd =
+                Some(crate::report_utils::eval_ledd_erg_s(model));
+        }
         if model.controls.use_other_adjust_mdot {
             let prev_rot_boost = model.aux.step_hist.rotational_mdot_boost_old;
             do_set_mdot_with_extras(model, extras)?;

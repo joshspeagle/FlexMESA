@@ -25,7 +25,7 @@ FORBIDDEN_PUBLIC_TOKENS: tuple[str, ...] = (
     "/" + "tmp/",
     "." + "venvs",
     "file" + "://",
-    "speagle" + "-desktop",
+    "-" + "desktop",
     "\u2014",
 )
 

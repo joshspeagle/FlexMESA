@@ -69,8 +69,8 @@
     },
     {
       "phase": "Phase B",
-      "open": 3,
-      "closed": 2,
+      "open": 2,
+      "closed": 3,
       "issues": [
         {
           "number": 147,
@@ -80,7 +80,7 @@
         {
           "number": 148,
           "title": "[Audit B2] Move test-case code out of the library and delete fabricated behaviour",
-          "state": "open"
+          "state": "closed"
         },
         {
           "number": 149,
@@ -231,27 +231,17 @@
     {
       "number": 228,
       "title": "Align module and star defaults with MESA 26.4.1 *.defaults (#149)",
-      "draft": true
-    },
-    {
-      "number": 230,
-      "title": "[Audit C13] Data pipeline provenance and verified runtime caches (#164)",
       "draft": false
     },
     {
-      "number": 232,
-      "title": "chore(extras): re-point the unported-extras ledger to #231 (split out of #148)",
+      "number": 237,
+      "title": "fix(atm,neu,rates): F2-23 T(tau) dispatch, MESA 26.4.1 operation order, and module oracles (#161)",
       "draft": false
     },
     {
-      "number": 233,
-      "title": "[Audit A6] Profile real evolutions, MESA 26.4.1 comparison, fast math, waste removal, and batching (#168)",
-      "draft": true
-    },
-    {
-      "number": 234,
-      "title": "test(eos): replace inline EOS literals with MESA 26.4.1 Fortran oracles and expand Python upstream coverage (#161 Slice 1)",
-      "draft": true
+      "number": 240,
+      "title": "fix(extras): attach only handlers the adapter can serve (#231); label the #168 profiling runs as diagnostic; let the coverage job finish (#174)",
+      "draft": false
     }
   ],
   "deferred_169": [
@@ -394,6 +384,38 @@
     {
       "number": 218,
       "title": "[Deferred bug] do_integrate_values drops the lower sub-interval on decreasing grids",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 241,
+      "title": "[Deferred bug] do_conv_bdy indexes top_conv_bdy by mesh-function column i instead of convective boundary j",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 242,
+      "title": "[Deferred bug] split_merge_amr_flipped_hybrid_zoning reads uninitialized target_dr_core and subtracts cm R_center from log radius",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 243,
+      "title": "[Deferred bug] do_mesh_dlogX_dlogP_coef multiplies dlnPeos by ln10 instead of dividing by ln10",
+      "state": "open",
+      "kind": "upstream-bug",
+      "parity_pending": false,
+      "needs_confirmation": false
+    },
+    {
+      "number": 244,
+      "title": "[Deferred bug] adjust1_omega, adjust1_v, adjust1_u, and adjust1_etrb subtract negative roundoff overshoot instead of adding",
       "state": "open",
       "kind": "upstream-bug",
       "parity_pending": false,

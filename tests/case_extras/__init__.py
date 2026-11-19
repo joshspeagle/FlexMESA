@@ -117,6 +117,25 @@ STOCK_EXTRAS_DIGESTS: frozenset[str] = frozenset(
 )
 
 
+# Star handlers that have been run through `PyStarExtrasAdapter` on their own
+# case without failing on state the adapter does not provide. A handler not
+# listed here is written but cannot run yet: its hooks read snapshot keys that
+# `build_star_snapshot` (`crates/flexmesa-py/src/extras_py.rs`) does not
+# supply, or need an engine capability that does not exist. Attaching such a
+# handler stops a run that otherwise takes steps, so `resolve_case_extras`
+# does not attach it and the case stays `unported` (it runs with default
+# no-op hooks and can never count as a pass, `DECISIONS #32`). Add a handler
+# here in the pull request that makes it runnable, with the harness rows of
+# its cases regenerated.
+ADAPTER_SERVED_STAR_HANDLERS: frozenset[str] = frozenset(
+    {
+        "CheckRedoStarExtras",
+        "CepheidBlueLoopStarExtras",
+        "RCrBStarExtras",
+    }
+)
+
+
 def classify_case_extras(suite: str, case_dir: pathlib.Path | str) -> str:
     """Classify a case's upstream extras sources.
 
@@ -128,7 +147,9 @@ def classify_case_extras(suite: str, case_dir: pathlib.Path | str) -> str:
         `"ported"` when `resolve_case_extras` attaches a handler, `"stock"`
         when the normalized sources equal a reviewed no-logic template, and
         `"unported"` otherwise. An unported case runs with default no-op
-        hooks, so its upstream extras logic is not executed.
+        hooks, so its upstream extras logic is not executed. A case whose
+        handler is written but not in `ADAPTER_SERVED_STAR_HANDLERS` is
+        `"unported"`.
     """
     if resolve_case_extras(suite, case_dir) is not None:
         return "ported"
@@ -138,7 +159,7 @@ def classify_case_extras(suite: str, case_dir: pathlib.Path | str) -> str:
 
 
 def resolve_case_extras(suite: str, case_dir: pathlib.Path | str) -> Any:
-    """Resolve test-side extras handler from upstream Fortran source files.
+    """Resolve the test-side extras handler to attach to a run.
 
     Args:
         suite: Suite identifier (`"star"`, `"binary"`, or `"astero"`).
@@ -146,7 +167,33 @@ def resolve_case_extras(suite: str, case_dir: pathlib.Path | str) -> Any:
 
     Returns:
         Python extras object implementing `StarExtras` or `BinaryExtras`
-        callbacks, or `None` when the upstream source uses default no-op hooks.
+        callbacks, or `None` when the upstream source uses default no-op
+        hooks or its handler cannot run through the adapter yet (see
+        `ADAPTER_SERVED_STAR_HANDLERS`).
+    """
+    handler = match_case_extras(suite, case_dir)
+    if handler is None:
+        return None
+    if (
+        suite == "star"
+        and not isinstance(handler, rsp_extras.RspPeriodLimitExtras)
+        and type(handler).__name__ not in ADAPTER_SERVED_STAR_HANDLERS
+    ):
+        return None
+    return handler
+
+
+def match_case_extras(suite: str, case_dir: pathlib.Path | str) -> Any:
+    """Match the handler written for a case, whether or not it can run.
+
+    Args:
+        suite: Suite identifier (`"star"`, `"binary"`, or `"astero"`).
+        case_dir: Path to the case directory on disk.
+
+    Returns:
+        The handler object matched from the upstream Fortran source, or
+        `None` when no handler is written for it. Use `resolve_case_extras`
+        for the handler to attach to a run.
     """
     root = pathlib.Path(case_dir)
     if suite == "star":

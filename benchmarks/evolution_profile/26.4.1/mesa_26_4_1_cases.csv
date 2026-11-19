@@ -1,0 +1,7 @@
+# MESA version: r26.4.1 (commit c8c2026, Zenodo 19722306) | SDK: x86_64-linux-26.6.1 | Compiler: GNU Fortran (GCC) 15.2.0
+# Captured UTC: 2026-11-19T07:30:22Z | OMP_NUM_THREADS=2
+case,mesa_version_number,omp_threads,termination_code,steps_taken,total_retries,total_zone_steps,rn_wall_sec,mesa_internal_evolve_sec,rn_wall_ms_per_step,rn_wall_us_per_zone_step,evolve_wall_ms_per_step,evolve_wall_us_per_zone_step
+1.3M_ms_high_Z,r26.4.1,2,log_L_upper_limit,219,0,209387,169.458766,167.400000,773.784320,809.308916,764.383562,799.476567
+low_z,r26.4.1,2,xa_central_lower_limit,574,0,446489,116.394916,115.200000,202.778600,260.689326,200.696864,258.013075
+high_z,r26.4.1,2,xa_central_lower_limit,445,0,569607,488.927025,487.800000,1098.712416,858.358527,1096.179775,856.379925
+make_metals,r26.4.1,2,xa_central_lower_limit,511,4,651119,348.254748,300.600000,681.516141,534.855761,588.258317,461.666761

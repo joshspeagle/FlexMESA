@@ -49,6 +49,7 @@ Scope and the `v0.1.0` definition are in [`SCOPE.md`](SCOPE.md). Work is tracked
 | 32 | Unported Upstream Extras Are Declared and Never Pass (`#148`) | In force | below |
 | 33 | Data Pipeline Provenance, Verified Runtime Caches, and Corruption Errors (`#164`) | In force | below |
 | 34 | Upstream MESA 26.4.1 Control Defaults Parity, Scalar Sentinels, and Explicit Opacity Zbase (`#149`) | In force | below |
+| 35 | Upstream MESA 26.4.1 Mesh Planner, Split-Merge AMR, and Uninitialized-Memory Guards (`#153`) | In force | below |
 
 ## Pre-audit decisions still in force
 
@@ -416,3 +417,17 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
 - **Alternatives Rejected**:
   - *Retaining `Option<T>` wrappers with `None` active defaults*: Keeps MESA's active upper limits and `0.99` rotation wind limit silently disabled when omitted from an inlist.
   - *Maintaining a non-empty `ALLOW_LIST` for `diff_mesa_defaults.py --enforce`*: Hides parity drift behind permanent exceptions.
+
+---
+
+## DECISIONS #35: Upstream MESA 26.4.1 Mesh Planner, Split-Merge AMR, and Uninitialized-Memory Guards (`Issue #153`)
+
+- **Date**: 2026-11-19
+- **Decision**:
+  1. **Upstream `mesh_plan`, `mesh_functions`, `adjust_mesh_support`, `adjust_mesh`, `mesh_adjust`, and `adjust_mesh_split_merge` Semantics**: Replace the pre-audit mesh planner and global post-remesh smoothing (`smooth_post_remesh_hydro_and_rotation`) with upstream MESA `26.4.1` `do_mesh_plan`, `set_mesh_function_data` (default `he4`-only abundance mesh function at weight `30`, `log_tau`, `log_kap`, convective/crystal boundary markers, and `other_mesh` hooks failing loudly under `#155`), `get_gval_info` gradient/burning multipliers, `do_mesh_adjust` conservative parabolic/monotone-linear remap (`do_lnR_and_lnd`, `do_xa`, `do1_lnT` total-energy balance with `eta >= -1e-6` degenerate skip, dual-cell `do_v`/`do_u`/`do_etrb`, and local dual-cell Roche `adjust_omega` preserving untouched zones bit-for-bit), and `remesh_split_merge` (`use_split_merge_amr`).
+  2. **Reproduction of Upstream Quirks vs. Loud Uninitialized-Memory Guards (`#169`)**: Reproduce MESA `26.4.1` defined-behavior quirks verbatim (`#243` `adjust_mesh_support.f90:199` `* ln10` instead of `/ ln10` in `do_mesh_dlogX_dlogP_coef`, `#244` `mesh_adjust.f90:2035,2284,2518,2811` `dq = dq - (target - dq_sum)` overshoot sign in dual-cell control-volume remaps, and `#250` `adjust_mesh.f90:155-158,280` pre-clamp `mesh_max_allowed_ratio < 2.5` copy on the first `remesh` call), while failing loudly with `StarError::InvalidInput` where upstream reads uninitialized Fortran heap arrays (`#241` `mesh_functions.f90:294,296` when `conv_bdy` index `i > max(10, num_conv_boundaries)`, and `#242` `adjust_mesh_split_merge.f90:298,362` when `split_merge_amr_flipped_hybrid_zoning = .true.`).
+  3. **Checkpoint Version & Benchmark Snapshot Update**: Bump `FMPHOTO2` checkpoint format version from `21` to `22` for the 103 mesh and `split_merge_amr` `&controls` fields (`0` mismatches in `diff_mesa_defaults.py --enforce`), and update the self-generated `star_remesh` `N = 8` Rust regression snapshot from `5.513777703025969e2` to `5.108453216631093e2` reflecting upstream `set_mesh_function_data` + `get_gval_info` (`he4`-only weight `30` vs. pre-audit all-species weight `20`; benchmark provenance tracked under `#146`).
+- **Why**: Prior FlexMESA remeshing weighted all species at `20`, omitted `log_tau`/`log_kap` and burning/convective multipliers, smoothed profiles globally after remesh, and rescaled total angular momentum across untouched shells (`C1-18`, `F4-26`, `#153`).
+- **Alternatives Rejected**:
+  - *Silently reading zero-filled values for `#241` and `#242`*: Masks undefined upstream memory reads behind Rust allocation defaults instead of surfacing them (`CLAUDE.md` rule on uninitialized upstream reads).
+  - *Applying changed-region solid-body `delta_omega` rescaling in `adjust_omega`*: Diverges from MESA `26.4.1` `mesh_adjust.f90:1927-2112`, which integrates dual-cell `j_rot * dq` locally per face (`#153`).

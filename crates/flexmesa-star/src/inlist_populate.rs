@@ -209,6 +209,7 @@ impl InlistBundle {
             relax_initial_to_xaccrete, set_initial_v_center, set_initial_l_center,
             new_rti_flag, pgstar_flag,
             write_profile_when_terminate, profile_starting_model,
+            astero_just_call_my_extras_check_model,
         ]);
         map_f64s!("star_job", sj, j, [
             pre_ms_t_c, pre_ms_guess_rho_c, pre_ms_d_log10_p,

@@ -89,7 +89,7 @@ def test_resolve_case_extras_ignores_directory_name(
             "surface_effects",
             "delta_ast",
             "kappa_ast",
-            0,
+            1,
             pathlib.Path("LOGS") / "history.data",
             (),
         ),

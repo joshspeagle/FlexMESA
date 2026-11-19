@@ -5,6 +5,7 @@ and `run_binary_extras` dispatch and coupled binary execution (`#148`).
 
 from __future__ import annotations
 
+import math
 import pathlib
 
 import pytest
@@ -62,57 +63,143 @@ def test_e2e_5_test_side_star_extras_and_photo_restart() -> None:
 
 def test_e2e_5_test_side_binary_extras_oracles() -> None:
     """Verify test-side `JdotGrCheckBinaryExtras`, `JdotMlCheckBinaryExtras`,
-    and `DoubleBhBinaryExtras.other_wind_cgs` match analytical formulas.
+    and `DoubleBhBinaryExtras.other_wind_cgs` follow the upstream routines.
     """
     gr = JdotGrCheckBinaryExtras()
-    sep_cols = gr.extra_binary_history_columns(
-        {
-            "initial_separation_cm": 1.0 * constants.RSUN,
-            "initial_mass_msun": [1.4, 1.4],
-            "separation": 0.9 * constants.RSUN,
-            "donor_mass_msun": 1.4,
-            "accretor_mass_msun": 1.4,
-            "s1_star_age": 1.0e7,
-            "binary_age_yr": 1.0e7,
-        }
-    )
+    # `b% xtra` starts at zero, so nothing is tested before a history write.
+    assert gr.check_model({"s1_mstar_dot": 0.0}) == "keep_going"
+    gr_state = {
+        "initial_separation_in_rsuns": 1.0,
+        "m1": 1.4,
+        "m2": 1.4,
+        "separation": 0.95 * constants.RSUN,
+        "s1_star_age": 1.0e7,
+    }
+    sep_cols = gr.extra_binary_history_columns(gr_state)
     assert sep_cols[0][0] == "expected_separation"
     assert 0.0 < sep_cols[0][1] < 1.0
+    # The stored error from the history write drives the next check
+    # (binary/test_suite/jdot_gr_check/src/run_binary_extras.f90:119,164).
+    assert abs((sep_cols[0][1] - 0.95) / sep_cols[0][1]) > 1.0e-2
+    assert gr.check_model({"s1_mstar_dot": 0.0}) == (
+        "terminate",
+        "Terminate because of large error in orbital separation",
+    )
+    assert gr.check_model({"s1_mstar_dot": -1.0e18}) == (
+        "terminate",
+        "terminate due to beginning of RLO",
+    )
+    with pytest.raises(KeyError):
+        gr.check_model({})
+    with pytest.raises(KeyError):
+        gr.extra_binary_history_columns({"m1": 1.4, "m2": 1.4})
 
     ml = JdotMlCheckBinaryExtras()
-    ml_cols = ml.extra_binary_history_columns(
-        {
-            "initial_separation_cm": 10.0 * constants.RSUN,
-            "initial_mass_msun": [2.0, 1.0],
-            "separation": 10.0 * constants.RSUN,
-            "donor_i": 1,
-            "donor_mass_msun": 1.8,
-            "accretor_mass_msun": 1.13,
-            "mass_transfer_alpha": 0.1,
-            "mass_transfer_beta": 0.2,
-            "mass_transfer_delta": 0.05,
-            "mass_transfer_gamma": 1.5,
-        }
-    )
+    assert ml.check_model({}) == "keep_going"
+    ml_state = {
+        "initial_separation_in_rsuns": 10.0,
+        "m1": 2.0,
+        "m2": 1.0,
+        "m": [1.8 * constants.MSUN, 1.13 * constants.MSUN],
+        "separation": 10.0 * constants.RSUN,
+        "mass_transfer_alpha": 0.1,
+        "mass_transfer_beta": 0.2,
+        "mass_transfer_delta": 0.05,
+        "mass_transfer_gamma": 1.5,
+    }
+    ml_cols = ml.extra_binary_history_columns(ml_state)
     assert ml_cols[0][0] == "expected_separation"
     assert ml_cols[0][1] > 0.0
+    assert abs((ml_cols[0][1] - 10.0) / ml_cols[0][1]) > 1.0e-4
+    assert ml.check_model({}) == (
+        "terminate",
+        "Terminate because of large error in orbital separation",
+    )
+    ml_state["separation"] = ml_cols[0][1] * constants.RSUN
+    ml.extra_binary_history_columns(ml_state)
+    assert ml.check_model({}) == "keep_going"
 
     dbh = DoubleBhBinaryExtras()
-    assert dbh.other_wind_cgs({}, 1, ignore_rlof_flag=True) == 0.0
-    w_cgs = dbh.other_wind_cgs(
-        {
-            "surface_l_lsun": 5.0e5,
-            "star_mass": 60.0,
-            "surface_r_rsun": 15.0,
-            "teff": 45_000.0,
-            "surface_h1": 0.70,
-            "surface_he4": 0.28,
-            "zbase": 0.02,
-        },
-        1,
-        ignore_rlof_flag=False,
+    l_surf = 5.0e5 * constants.LSUN
+    m_surf = 60.0 * constants.MSUN
+    r_surf = 15.0 * constants.RSUN
+    wind_state = {"surface_h1": 0.70, "zbase": 0.02}
+    assert (
+        dbh.other_wind_cgs(wind_state, 1, True, l_surf, m_surf, r_surf, 4.5e4)
+        == 0.0
     )
-    assert w_cgs is not None and w_cgs < 0.0
+    # Upstream reads `s% xa(h1,1)` and `Zbase` before anything else; a
+    # snapshot without them raises instead of using a default.
+    with pytest.raises(KeyError):
+        dbh.other_wind_cgs({}, 1, True, l_surf, m_surf, r_surf, 4.5e4)
+    w_cgs = dbh.other_wind_cgs(
+        wind_state, 1, False, l_surf, m_surf, r_surf, 4.5e4
+    )
+    # T1 is above the jump temperature and Xs == 0.7 leaves alfa = 0
+    # (binary/test_suite/double_bh/src/run_star_extras.f90:113-119), so the
+    # wind is one tenth of the Hamann rate (:106, :199-203).
+    hamann_msun_yr = 10.0 ** (
+        -11.95
+        + 1.5 * math.log10(5.0e5)
+        - 2.85 * 0.70
+        + 0.85 * math.log10(0.02 / 0.017)
+    )
+    expected_cgs = -(hamann_msun_yr / 10.0) * constants.MSUN / constants.SECYER
+    assert w_cgs == pytest.approx(expected_cgs, rel=1.0e-12)
+    # The radius argument is used as given (Nieuwenhuijzen term, :186-190):
+    # below the jump the wind is max(Vink, Nieuwenhuijzen), and a larger
+    # `Rsurf` raises the latter.
+    w_small_r = dbh.other_wind_cgs(
+        wind_state, 1, False, l_surf, m_surf, r_surf, 1.0e4
+    )
+    w_large_r = dbh.other_wind_cgs(
+        wind_state, 1, False, l_surf, m_surf, 1.0e3 * r_surf, 1.0e4
+    )
+    assert w_large_r < w_small_r < 0.0
+
+
+class _BogusActionExtras:
+    """Binary hook returning a directive string the adapter does not know."""
+
+    def check_model(self, _state: dict[str, object]) -> str:
+        return "large_separation_error"
+
+
+class _TerminateWithMessageExtras:
+    """Binary hook terminating with a diagnostic message."""
+
+    def finish_step(self, _state: dict[str, object]) -> tuple[str, str]:
+        return ("terminate", "anything")
+
+
+def test_e2e_5_hook_cannot_choose_termination_code(
+    tmp_path: pathlib.Path,
+) -> None:
+    """A hook's message never becomes the termination code, and an
+    unrecognised directive string is an error.
+    """
+    base = known_gaps_gate.require_mesa_test_inputs_dir()
+    if base is None:
+        return
+    clean_case = tmp_path / "jdot_gr_check"
+    star.copy_cleaned_case(
+        base / "binary" / "test_suite" / "jdot_gr_check",
+        clean_case,
+        suite="binary",
+    )
+    with pytest.raises(
+        ValueError,
+        match=r"unrecognised action 'large_separation_error' returned by "
+        r"extras_binary_check_model",
+    ):
+        binary.run_binary_test_suite_case(
+            clean_case, max_steps_cap=4, extras=_BogusActionExtras()
+        )
+    rep = binary.run_binary_test_suite_case(
+        clean_case, max_steps_cap=4, extras=_TerminateWithMessageExtras()
+    )
+    assert rep["total_steps"] == 1
+    assert rep["termination_code"] == "extras_binary_finish_step"
 
 
 def test_e2e_5_tier5_star_and_binary_suites_execution(

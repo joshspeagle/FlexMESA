@@ -1,0 +1,138 @@
+{
+  "anchor_raw_suite": "benchmarks/raw/26.4.1/",
+  "measured_kernel_anchors": {
+    "eos_helm": {
+      "n_zones_ref": 4096.0,
+      "rust_4t_us_per_zone": 0.134775390625,
+      "jax_gpu_vmap_us_per_zone": 0.08281689453125,
+      "gpu_vs_rust_4t_speedup": 1.6273900559522194
+    },
+    "eos_skye": {
+      "n_zones_ref": 4096.0,
+      "rust_4t_us_per_zone": 2.32558837890625,
+      "jax_gpu_vmap_us_per_zone": 1.0260240478515625,
+      "gpu_vs_rust_4t_speedup": 2.266602214417784
+    },
+    "eos_4d": {
+      "n_zones_ref": 4096.0,
+      "rust_4t_us_per_zone": 0.20501953125,
+      "jax_gpu_vmap_us_per_zone": 0.081469970703125,
+      "gpu_vs_rust_4t_speedup": 2.5165042957617745
+    },
+    "kap_fixed": {
+      "n_zones_ref": 4096.0,
+      "rust_4t_us_per_zone": 0.18939697265625,
+      "jax_gpu_vmap_us_per_zone": 0.27172174072265626,
+      "gpu_vs_rust_4t_speedup": 0.6970254649206213
+    },
+    "rates_screen": {
+      "n_zones_ref": 4096.0,
+      "rust_4t_us_per_zone": 0.14943115234375,
+      "jax_gpu_vmap_us_per_zone": 0.0779534912109375,
+      "gpu_vs_rust_4t_speedup": 1.9169270038130584
+    },
+    "net_eval_host_cb": {
+      "n_zones_ref": 4096.0,
+      "rust_4t_us_per_zone": 1.3212451171875,
+      "jax_gpu_vmap_us_per_zone": 1.2719752807617188,
+      "gpu_vs_rust_4t_speedup": 1.038734900882882
+    },
+    "turb_mlt": {
+      "n_zones_ref": 4096.0,
+      "rust_4t_us_per_zone": 0.07347900390625,
+      "jax_gpu_vmap_us_per_zone": 0.016694946289062502,
+      "gpu_vs_rust_4t_speedup": 4.401272255328483
+    },
+    "turb_tdc": {
+      "n_zones_ref": 4096.0,
+      "rust_4t_us_per_zone": 0.6266015625,
+      "jax_gpu_vmap_us_per_zone": 0.09562017822265625,
+      "gpu_vs_rust_4t_speedup": 6.553026507030008
+    },
+    "colors_sed": {
+      "n_zones_ref": 1024.0,
+      "rust_4t_us_per_zone": 1.582001953125,
+      "jax_gpu_vmap_us_per_zone": 0.67331201171875,
+      "gpu_vs_rust_4t_speedup": 2.3495822524933954
+    },
+    "mtx_tridiag": {
+      "n_zones_ref": 4096.0,
+      "rust_4t_us_per_zone": 0.07903564453125,
+      "jax_gpu_vmap_us_per_zone": 0.6825305786132813,
+      "gpu_vs_rust_4t_speedup": 0.11579795397860297
+    }
+  },
+  "mean_evolution_phase_shares_pct": {
+    "eos_share_pct": 12.59193747,
+    "kap_share_pct": 2.68187512225,
+    "net_and_jacobian_share_pct": 15.2278748805,
+    "turbulence_share_pct": 38.908877340000004,
+    "equation_assembly_share_pct": 7.143767539000001,
+    "block_solve_share_pct": 14.33699684025,
+    "remesh_share_pct": 8.3279719545,
+    "bookkeeping_and_copies_share_pct": 0.7806988545
+  },
+  "stateless_microphysics_fraction": 0.6941056481275001,
+  "stateful_solver_remesh_fraction": 0.3058943518724999,
+  "amdahl_infinite_gpu_micro_speedup_ceiling": 3.2691025312452022,
+  "rust_8t_worker_pool_throughput_gain_vs_single_star_2t": 4.847138386401675,
+  "model_assumptions": {
+    "pcie_effective_bandwidth_gb_s": 24.0,
+    "xla_dispatch_latency_us_per_iter": 80.0,
+    "hypothetical_device_micro_speedup_vs_2t_rust": 6.0,
+    "heterogeneous_grid_lockstep_efficiency": 0.72,
+    "mtx_pcr_vs_cpu_bcyclic_note": "Measured GPU PCR at N=4096 is 2795.65 us vs 323.73 us on 4t Safe Rust CPU (0.12x), so block-tridiagonal Henyey solves favor CPU bcyclic/Thomas or IFT custom_vjp."
+  },
+  "grid_projections": [
+    {
+      "n_stars": 1,
+      "total_grid_zones": 888,
+      "rust_8t_worker_pool_step_sec": 0.032279599739336536,
+      "hybrid_gpu_micro_step_sec": 0.028804046760634104,
+      "hybrid_gpu_vs_rust_8t_ratio": 1.1206619683541272,
+      "stateless_batch_only_rust_8t_sec": 0.022405452498368467,
+      "stateless_batch_only_gpu_sec": 0.01818512627209099,
+      "stateless_batch_only_gpu_speedup_vs_rust_8t": 1.2320757174369736
+    },
+    {
+      "n_stars": 8,
+      "total_grid_zones": 7107,
+      "rust_8t_worker_pool_step_sec": 0.2582367979146923,
+      "hybrid_gpu_micro_step_sec": 0.28337517002192275,
+      "hybrid_gpu_vs_rust_8t_ratio": 0.9112894326440609,
+      "stateless_batch_only_rust_8t_sec": 0.17924361998694774,
+      "stateless_batch_only_gpu_sec": 0.14492101017672793,
+      "stateless_batch_only_gpu_speedup_vs_rust_8t": 1.2368366723939073
+    },
+    {
+      "n_stars": 64,
+      "total_grid_zones": 56858,
+      "rust_8t_worker_pool_step_sec": 2.0658943833175383,
+      "hybrid_gpu_micro_step_sec": 2.261051135384382,
+      "hybrid_gpu_vs_rust_8t_ratio": 0.9136875990937432,
+      "stateless_batch_only_rust_8t_sec": 1.433948959895582,
+      "stateless_batch_only_gpu_sec": 1.1588080814138235,
+      "stateless_batch_only_gpu_speedup_vs_rust_8t": 1.2374343801141499
+    },
+    {
+      "n_stars": 256,
+      "total_grid_zones": 227430,
+      "rust_8t_worker_pool_step_sec": 8.263577533270153,
+      "hybrid_gpu_micro_step_sec": 9.04165444519853,
+      "hybrid_gpu_vs_rust_8t_ratio": 0.913945294343607,
+      "stateless_batch_only_rust_8t_sec": 5.735795839582328,
+      "stateless_batch_only_gpu_sec": 4.634992325655293,
+      "stateless_batch_only_gpu_speedup_vs_rust_8t": 1.2374984544923497
+    },
+    {
+      "n_stars": 1024,
+      "total_grid_zones": 909720,
+      "rust_8t_worker_pool_step_sec": 33.05431013308061,
+      "hybrid_gpu_micro_step_sec": 36.16406768445511,
+      "hybrid_gpu_vs_rust_8t_ratio": 0.914009740870184,
+      "stateless_batch_only_rust_8t_sec": 22.94318335832931,
+      "stateless_batch_only_gpu_sec": 18.539729302621176,
+      "stateless_batch_only_gpu_speedup_vs_rust_8t": 1.237514474123717
+    }
+  ]
+}

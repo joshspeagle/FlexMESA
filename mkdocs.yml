@@ -114,6 +114,7 @@ nav:
       - PGSTAR & PGBINARY Coverage: benchmarks/pgstar-coverage.md
       - MESA I-VI Comparison Roadmap: benchmarks/mesa_paper_figures.md
       - Kernel Performance Scorecards: benchmarks/kernel-scorecards.md
+      - Stellar Evolution Profiling (#168): benchmarks/evolution-profiling.md
       - Tolerance & Discrepancy Ledger: benchmarks/tolerance-and-discrepancy-ledger.md
   - Reference:
       - API Reference:

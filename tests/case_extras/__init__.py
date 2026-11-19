@@ -135,6 +135,18 @@ ADAPTER_SERVED_STAR_HANDLERS: frozenset[str] = frozenset(
     }
 )
 
+# Binary handlers whose snapshot keys are supplied by `build_binary_snapshot`
+# (`crates/flexmesa-py/src/extras_py.rs`). Handlers outside this set are
+# matched by `match_case_extras` and left detached by `resolve_case_extras`
+# until their snapshot fields land (`DECISIONS #32`).
+ADAPTER_SERVED_BINARY_HANDLERS: frozenset[str] = frozenset(
+    {
+        "DoubleBhBinaryExtras",
+        "JdotGrCheckBinaryExtras",
+        "JdotMlCheckBinaryExtras",
+    }
+)
+
 
 def classify_case_extras(suite: str, case_dir: pathlib.Path | str) -> str:
     """Classify a case's upstream extras sources.
@@ -148,8 +160,8 @@ def classify_case_extras(suite: str, case_dir: pathlib.Path | str) -> str:
         when the normalized sources equal a reviewed no-logic template, and
         `"unported"` otherwise. An unported case runs with default no-op
         hooks, so its upstream extras logic is not executed. A case whose
-        handler is written but not in `ADAPTER_SERVED_STAR_HANDLERS` is
-        `"unported"`.
+        handler is written but not in `ADAPTER_SERVED_STAR_HANDLERS` or
+        `ADAPTER_SERVED_BINARY_HANDLERS` is `"unported"`.
     """
     if resolve_case_extras(suite, case_dir) is not None:
         return "ported"
@@ -169,7 +181,7 @@ def resolve_case_extras(suite: str, case_dir: pathlib.Path | str) -> Any:
         Python extras object implementing `StarExtras` or `BinaryExtras`
         callbacks, or `None` when the upstream source uses default no-op
         hooks or its handler cannot run through the adapter yet (see
-        `ADAPTER_SERVED_STAR_HANDLERS`).
+        `ADAPTER_SERVED_STAR_HANDLERS` and `ADAPTER_SERVED_BINARY_HANDLERS`).
     """
     handler = match_case_extras(suite, case_dir)
     if handler is None:
@@ -178,6 +190,11 @@ def resolve_case_extras(suite: str, case_dir: pathlib.Path | str) -> Any:
         suite == "star"
         and not isinstance(handler, rsp_extras.RspPeriodLimitExtras)
         and type(handler).__name__ not in ADAPTER_SERVED_STAR_HANDLERS
+    ):
+        return None
+    if (
+        suite == "binary"
+        and type(handler).__name__ not in ADAPTER_SERVED_BINARY_HANDLERS
     ):
         return None
     return handler

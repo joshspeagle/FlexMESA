@@ -180,8 +180,8 @@ pub fn burn_1_zone_const_density(
                     input.rate_factors,
                     input.weak_rate_factor,
                     input.screening_mode,
-                    false,
-                    false,
+                    g.use_3a_fl87,
+                    g.use_suzuki_weak_rates,
                     false,
                 )?;
             if let Some(f) = f_out {

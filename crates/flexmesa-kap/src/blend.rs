@@ -9,6 +9,7 @@ use crate::low_t::{aesopus_get, kapcn_get};
 use crate::types::{KapConfig, KapError, KapLowTOption};
 use flexmesa_autodiff::AutoDiffReal2VarOrder1;
 use flexmesa_math::{exp10, safe_log10};
+use std::path::Path;
 
 const KAP_MIN_LOG_RHO: f64 = -40.0;
 const KAP_CN_ZC: f64 = 0.1644;
@@ -47,11 +48,7 @@ pub fn get_kap_results_blend_t(
         (log_rho_in, false)
     };
 
-    let high_t_min = 3.75_f64;
-    let low_t_max = match cfg.kap_low_t_option {
-        KapLowTOption::KapCn => 4.05,
-        _ => 4.50,
-    };
+    let (high_t_min, low_t_max) = kap_tables()?.temp_blend_bounds(cfg)?;
     let lower_bdy = cfg.kap_blend_log_t_lower_bdy.max(high_t_min);
     let upper_bdy = cfg.kap_blend_log_t_upper_bdy.min(low_t_max);
 
@@ -71,10 +68,10 @@ pub fn get_kap_results_blend_t(
             get_kap_high_t_results(cfg, x, z, xc, xn, xo, xne, log_rho, log_t)?;
         (0.0, 1.0, f_t2, k_ht, dk_ht_dr, dk_ht_dt)
     } else {
-        let (f_t2, kap1, dlnkap1_dr, dlnkap1_dt) =
-            get_kap_high_t_results(cfg, x, z, xc, xn, xo, xne, log_rho, log_t)?;
         let (kap2, dlnkap2_dr, dlnkap2_dt) =
             get_kap_low_t_results(cfg, x, z, xc, xn, xo, log_rho, log_t)?;
+        let (f_t2, kap1, dlnkap1_dr, dlnkap1_dt) =
+            get_kap_high_t_results(cfg, x, z, xc, xn, xo, xne, log_rho, log_t)?;
 
         let log_t_ad = AutoDiffReal2VarOrder1 {
             val: log_t,
@@ -259,6 +256,15 @@ pub fn get_kap_low_t_results(
             kapcn_get(zbase, x, fc, fn_val, log_rho, log_t)
         }
         KapLowTOption::Aesopus => {
+            let fname = cfg.aesopus_filename.trim();
+            if !fname.is_empty()
+                && Path::new(fname).file_name().and_then(|s| s.to_str())
+                    != Some("AESOPUS_AGSS09.h5")
+            {
+                return Err(KapError::InvalidOption(format!(
+                    "unsupported AESOPUS_filename '{fname}': only bundled 'AESOPUS_AGSS09.h5' is supported"
+                )));
+            }
             if cfg.zbase < 0.0 {
                 return Err(KapError::InvalidComposition(
                     "must supply zbase >= 0 for AESOPUS lowT opacities",

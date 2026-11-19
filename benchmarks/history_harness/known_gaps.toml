@@ -148,7 +148,7 @@ reason = "Case uses unported use_other_build_initial_model and use_other_surface
 suite = "star"
 case = "conserve_angular_momentum"
 issue = "#152"
-reason = "Exceeds wall-time guard under non-upstream solver and rotational retry control (audit M-9, #158)."
+reason = "Rotational angular-momentum evolution reaches he_core_mass_limit slowly and exceeds strict tolerances under unported solver and rotational mixing/retry controls (audit M-9, #152, #158)."
 
 [[gaps]]
 suite = "star"
@@ -739,8 +739,8 @@ file = "crates/flexmesa-astero/tests/astero_suite.rs"
 test_name = "test_example_astero_uncapped"
 issue = "#162"
 role = "campaign"
-expect_fail_when_run = true
-reason = "Uncapped astero campaign on a cleaned inlist; its own assertions fail (termination limit_num_chi2_too_big after 910 steps), measured in the scheduled campaign and locally, the same before and after the #205 engine fixes. Tracked under #162."
+expect_fail_when_run = false
+reason = "Long-running uncapped astero campaign (~241 s; terminates at chi2_search_limit2 with best_chi2 = 2.92 after #161 &eos/&kap control wiring), tracked under #162 and scheduled campaign CI."
 
 [[test_gaps]]
 kind = "rust_ignore"

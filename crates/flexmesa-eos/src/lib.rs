@@ -59,8 +59,8 @@ pub use blend::{
 };
 pub use blend_dt::{
     combine_two_eos_components, eos_dt_get, eos_dt_get_from_weights,
-    eos_dt_get_from_weights_with_tables, eos_dt_get_zones, get_helm_alfa,
-    EosConfig,
+    eos_dt_get_from_weights_with_tables, eos_dt_get_zones,
+    eos_dt_get_zones_with_logs, get_helm_alfa, EosConfig,
 };
 pub use cms::{
     eval_cms_eos, eval_cms_eos_from_weights, eval_cms_fixed_x, get_cms_alfa,

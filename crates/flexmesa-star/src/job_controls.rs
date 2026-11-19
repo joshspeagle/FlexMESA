@@ -574,6 +574,21 @@ pub struct StarJobControls {
     pub co_net: String,
     /// Advanced burning network for `auto_extend_net` (`"approx21.net"` default).
     pub adv_net: String,
+    /// Number of per-reaction special rate multipliers (`num_special_rate_factors`, `0` default).
+    #[serde(default)]
+    pub num_special_rate_factors: usize,
+    /// Reaction names for special rate factors (`reaction_for_special_factor(1..)`).
+    #[serde(default)]
+    pub reaction_for_special_factor: Vec<String>,
+    /// Multipliers for special rate factors (`special_rate_factor(1..)`, `1.0` default).
+    #[serde(default)]
+    pub special_rate_factor: Vec<f64>,
+    /// Use Fushiki & Lamb (1987) pycnonuclear triple-alpha rate (`use_3a_fl87`, `false` default).
+    #[serde(default)]
+    pub use_3a_fl87: bool,
+    /// Use Suzuki et al. (2016) $A=17\text{--}28$ weak rates (`use_suzuki_weak_rates`, `false` default).
+    #[serde(default)]
+    pub use_suzuki_weak_rates: bool,
     /// Whether to change `v_flag` on startup (`change_v_flag` / `change_initial_v_flag`).
     pub change_v_flag: bool,
     /// Target `v_flag` when `change_v_flag` is true (`new_v_flag`).
@@ -745,6 +760,11 @@ impl Default for StarJobControls {
             h_he_net: String::from("basic.net"),
             co_net: String::from("co_burn.net"),
             adv_net: String::from("approx21.net"),
+            num_special_rate_factors: 0,
+            reaction_for_special_factor: vec![String::new(); 50],
+            special_rate_factor: vec![1.0; 50],
+            use_3a_fl87: false,
+            use_suzuki_weak_rates: false,
             change_v_flag: false,
             new_v_flag: false,
             change_u_flag: false,

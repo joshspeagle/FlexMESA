@@ -7,123 +7,33 @@ Generated mechanically against **MESA 26.4.1** (git tag `26.4.1`, commit `c8c202
 
 | Namelist | Upstream `26.4.1` Scalars | Matched in `FlexMESA` | Agree | Value Mismatch | Active Limit Disabled (`None`) | Unimplemented in `FlexMESA` |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| star &controls | 1396 | 582 | 535 | 31 | 16 | 814 |
-| star &star_job | 431 | 79 | 62 | 11 | 6 | 352 |
-| binary &binary_controls + &binary_job | 209 | 120 | 117 | 3 | 0 | 89 |
-| astero &astero_search_controls | 150 | 73 | 70 | 3 | 0 | 77 |
-| eos &eos | 102 | 54 | 42 | 12 | 0 | 48 |
-| kap &kap | 36 | 16 | 14 | 2 | 0 | 20 |
+| star &controls | 1444 | 611 | 611 | 0 | 0 | 833 |
+| star &star_job | 455 | 87 | 87 | 0 | 0 | 368 |
+| binary &binary_controls + &binary_job | 209 | 120 | 120 | 0 | 0 | 89 |
+| astero &astero_search_controls | 150 | 73 | 73 | 0 | 0 | 77 |
+| eos &eos | 102 | 54 | 54 | 0 | 0 | 48 |
+| kap &kap | 36 | 16 | 16 | 0 | 0 | 20 |
 
 ## star &controls
 
-| Control | Upstream `26.4.1` Source | Upstream Default | `FlexMESA` Source | `FlexMESA` Default | Classification |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| `accretion_h1` | `star/defaults/controls.defaults:5669` | `0` | `crates/flexmesa-star/src/controls_defaults.rs:83` | `-1.0` | numeric mismatch |
-| `accretion_he4` | `star/defaults/controls.defaults:5672` | `0` | `crates/flexmesa-star/src/controls_defaults.rs:84` | `-1.0` | numeric mismatch |
-| `column_depth_for_irradiation` | `star/defaults/controls.defaults:4713` | `-1` | `crates/flexmesa-star/src/controls_defaults.rs:72` | `0.0` | numeric mismatch |
-| `conv_core_gap_dq_limit` | `star/defaults/controls.defaults:857` | `0d0` | `crates/flexmesa-star/src/controls_defaults.rs:138` | `None` | active upstream limit disabled as None |
-| `conv_premix_avoid_increase` | `star/defaults/controls.defaults:3042` | `.false.` | `crates/flexmesa-star/src/controls_mix_wind.rs:358` | `true` | boolean mismatch |
-| `delta_lg_XC_drop_only` | `star/defaults/controls.defaults:11333` | `.false.` | `crates/flexmesa-star/src/controls_timestep_stop.rs:453` | `true` | boolean mismatch |
-| `delta_lg_XH_drop_only` | `star/defaults/controls.defaults:11331` | `.false.` | `crates/flexmesa-star/src/controls_timestep_stop.rs:443` | `true` | boolean mismatch |
-| `delta_lg_XHe_drop_only` | `star/defaults/controls.defaults:11332` | `.false.` | `crates/flexmesa-star/src/controls_timestep_stop.rs:448` | `true` | boolean mismatch |
-| `delta_lgP_cntr_limit` | `star/defaults/controls.defaults:10841` | `-1` | `crates/flexmesa-star/src/controls_timestep_stop.rs:435` | `0.05` | numeric mismatch |
-| `do_phase_separation_heating` | `star/defaults/controls.defaults:7553` | `.true.` | `crates/flexmesa-star/src/controls_defaults.rs:69` | `false` | boolean mismatch |
-| `do_premix_heating` | `star/defaults/controls.defaults:3025` | `.true.` | `crates/flexmesa-star/src/controls_defaults.rs:183` | `false` | boolean mismatch |
-| `envelope_mass_limit` | `star/defaults/controls.defaults:1326` | `0` | `crates/flexmesa-star/src/controls_defaults.rs:121` | `None` | active upstream limit disabled as None |
-| `fe_core_infall_limit` | `star/defaults/controls.defaults:1803` | `3d7` | `crates/flexmesa-star/src/controls_defaults.rs:133` | `None` | active upstream limit disabled as None |
-| `he_layer_mass_lower_limit` | `star/defaults/controls.defaults:1423` | `0` | `crates/flexmesa-star/src/controls_defaults.rs:122` | `None` | active upstream limit disabled as None |
-| `Lnuc_div_L_zams_limit` | `star/defaults/controls.defaults:1911` | `0.9d0` | `crates/flexmesa-star/src/controls_defaults.rs:97` | `0.99` | numeric mismatch |
-| `log_center_density_upper_limit` | `star/defaults/controls.defaults:1058` | `12d0` | `crates/flexmesa-star/src/controls_defaults.rs:110` | `None` | active upstream limit disabled as None |
-| `log_center_temp_upper_limit` | `star/defaults/controls.defaults:1071` | `11d0` | `crates/flexmesa-star/src/controls_defaults.rs:108` | `None` | active upstream limit disabled as None |
-| `log_max_temp_upper_limit` | `star/defaults/controls.defaults:1098` | `99` | `crates/flexmesa-star/src/controls_defaults.rs:112` | `None` | active upstream limit disabled as None |
-| `M_function_param` | `star/defaults/controls.defaults:6177` | `1d-6` | `crates/flexmesa-star/src/mesh_adjust.rs:89` | `1.0e-2` | numeric mismatch |
-| `max_age` | `star/defaults/controls.defaults:987` | `1d36` | `crates/flexmesa-star/src/controls_defaults.rs:21` | `None` | active upstream limit disabled as None |
-| `max_center_cell_dq` | `star/defaults/controls.defaults:5993` | `1d-7` | `crates/flexmesa-star/src/controls_mix_wind.rs:416` | `1.0e-6` | numeric mismatch |
-| `max_logT_for_include_P_and_L_in_velocity_time_centering` | `star/defaults/controls.defaults:8423` | `1d99` | `crates/flexmesa-star/src/controls_defaults.rs:174` | `99.0` | numeric mismatch |
-| `max_surface_cell_dq` | `star/defaults/controls.defaults:6006` | `1d-12` | `crates/flexmesa-star/src/controls_mix_wind.rs:415` | `1.0e-8` | numeric mismatch |
-| `max_years_for_timestep` | `star/defaults/controls.defaults:9588` | `0` | `crates/flexmesa-star/src/controls_defaults.rs:23` | `None` | active upstream limit disabled as None |
-| `min_D_mix` | `star/defaults/controls.defaults:3701` | `1d3` | `crates/flexmesa-star/src/controls_defaults.rs:33` | `0.0` | numeric mismatch |
-| `MLT_option` | `star/defaults/controls.defaults:2328` | `'TDC'` | `crates/flexmesa-star/src/controls_defaults.rs:26` | `MltOption::Cox` | string/option mismatch |
-| `P_function_weight` | `star/defaults/controls.defaults:6078` | `40` | `crates/flexmesa-star/src/controls_mix_wind.rs:417` | `30.0` | numeric mismatch |
-| `remnant_mass_min_limit` | `star/defaults/controls.defaults:1278` | `0` | `crates/flexmesa-star/src/controls_defaults.rs:128` | `None` | active upstream limit disabled as None |
-| `RSP_L` | `star/defaults/controls.defaults:3167` | `-1` | `crates/flexmesa-star/src/controls_defaults.rs:147` | `45.0` | numeric mismatch |
-| `RSP_mass` | `star/defaults/controls.defaults:3165` | `-1` | `crates/flexmesa-star/src/controls_defaults.rs:145` | `0.65` | numeric mismatch |
-| `RSP_max_num_periods` | `star/defaults/controls.defaults:3286` | `-1` | `crates/flexmesa-star/src/controls_defaults.rs:143` | `None` | active upstream limit disabled as None |
-| `RSP_Teff` | `star/defaults/controls.defaults:3166` | `-1` | `crates/flexmesa-star/src/controls_defaults.rs:146` | `6500.0` | numeric mismatch |
-| `RSP_X` | `star/defaults/controls.defaults:3168` | `-1` | `crates/flexmesa-star/src/controls_defaults.rs:148` | `0.75` | numeric mismatch |
-| `RSP_Z` | `star/defaults/controls.defaults:3169` | `-1` | `crates/flexmesa-star/src/controls_defaults.rs:149` | `0.0004` | numeric mismatch |
-| `screening_mode` | `star/defaults/controls.defaults:6779` | `'chugunov'` | `crates/flexmesa-star/src/controls_defaults.rs:48` | `ScreeningMode::Extended` | string/option mismatch |
-| `star_mass_max_limit` | `star/defaults/controls.defaults:1265` | `0` | `crates/flexmesa-star/src/controls_defaults.rs:126` | `None` | active upstream limit disabled as None |
-| `star_mass_min_limit` | `star/defaults/controls.defaults:1255` | `0` | `crates/flexmesa-star/src/controls_defaults.rs:127` | `None` | active upstream limit disabled as None |
-| `star_species_mass_max_limit` | `star/defaults/controls.defaults:1300` | `0` | `crates/flexmesa-star/src/controls_defaults.rs:131` | `None` | active upstream limit disabled as None |
-| `star_species_mass_min_limit` | `star/defaults/controls.defaults:1295` | `0` | `crates/flexmesa-star/src/controls_defaults.rs:129` | `None` | active upstream limit disabled as None |
-| `surf_omega_div_omega_crit_limit` | `star/defaults/controls.defaults:5237` | `0.99d0` | `crates/flexmesa-star/src/controls_defaults.rs:137` | `None` | active upstream limit disabled as None |
-| `varcontrol_target` | `star/defaults/controls.defaults:9758` | `1d-3` | `crates/flexmesa-star/src/controls_defaults.rs:55` | `1.0e-4` | numeric mismatch |
-| `velocity_logT_lower_bound` | `star/defaults/controls.defaults:8156` | `-1d99` | `crates/flexmesa-star/src/controls_defaults.rs:223` | `0.0` | numeric mismatch |
-| `velocity_q_upper_bound` | `star/defaults/controls.defaults:8132` | `1d99` | `crates/flexmesa-star/src/controls_defaults.rs:221` | `1.0` | numeric mismatch |
-| `velocity_tau_lower_bound` | `star/defaults/controls.defaults:8144` | `-1d99` | `crates/flexmesa-star/src/controls_defaults.rs:222` | `0.0` | numeric mismatch |
-| `xa_function_param` | `star/defaults/controls.defaults:6277` | `1d-2` | `crates/flexmesa-star/src/mesh_adjust.rs:96` | `1.0e-3` | numeric mismatch |
-| `xa_function_weight` | `star/defaults/controls.defaults:6271` | `0` | `crates/flexmesa-star/src/mesh_adjust.rs:95` | `20.0` | numeric mismatch |
-| `zams_filename` | `star/defaults/controls.defaults:11699` | `'zams_z2m2_y28.data'` | `crates/flexmesa-star/src/controls_defaults.rs:19` | `String::new()` | string/option mismatch |
+All matched scalar defaults agree with MESA `26.4.1`.
 
 ## star &star_job
 
-| Control | Upstream `26.4.1` Source | Upstream Default | `FlexMESA` Source | `FlexMESA` Default | Classification |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| `auto_extend_net` | `star/defaults/star_job.defaults:2491` | `.true.` | `crates/flexmesa-star/src/job_controls.rs:726` | `false` | boolean mismatch |
-| `core_avg_eps` | `star/defaults/star_job.defaults:1871` | `1d-6` | `crates/flexmesa-star/src/job_controls.rs:766` | `0.0` | numeric mismatch |
-| `new_omega` | `star/defaults/star_job.defaults:1602` | `0` | `crates/flexmesa-star/src/job_controls.rs:736` | `None` | active upstream limit disabled as None |
-| `new_omega_div_omega_crit` | `star/defaults/star_job.defaults:1624` | `0` | `crates/flexmesa-star/src/job_controls.rs:737` | `None` | active upstream limit disabled as None |
-| `new_surface_rotation_v` | `star/defaults/star_job.defaults:1640` | `0` | `crates/flexmesa-star/src/job_controls.rs:738` | `None` | active upstream limit disabled as None |
-| `pre_ms_d_log10_P` | `star/defaults/star_job.defaults:416` | `0` | `crates/flexmesa-star/src/job_controls.rs:701` | `0.004` | numeric mismatch |
-| `pre_ms_relax_num_steps` | `star/defaults/star_job.defaults:441` | `300` | `crates/flexmesa-star/src/job_controls.rs:705` | `20` | numeric mismatch |
-| `pre_ms_T_c` | `star/defaults/star_job.defaults:396` | `3d5` | `crates/flexmesa-star/src/job_controls.rs:699` | `9.0e5` | numeric mismatch |
-| `remove_initial_center_by_temperature` | `star/defaults/star_job.defaults:2046` | `0` | `crates/flexmesa-star/src/job_controls.rs:782` | `None` | active upstream limit disabled as None |
-| `save_model_filename` | `star/defaults/star_job.defaults:260` | `'undefined'` | `crates/flexmesa-star/src/job_controls.rs:714` | `String::new()` | string/option mismatch |
-| `save_model_number` | `star/defaults/star_job.defaults:234` | `-111` | `crates/flexmesa-star/src/job_controls.rs:715` | `None` | active upstream limit disabled as None |
-| `save_photo_when_terminate` | `star/defaults/star_job.defaults:270` | `.true.` | `crates/flexmesa-star/src/job_controls.rs:716` | `false` | boolean mismatch |
-| `save_pulse_data_filename` | `star/defaults/star_job.defaults:323` | `'undefined'` | `crates/flexmesa-star/src/job_controls.rs:719` | `String::new()` | string/option mismatch |
-| `seconds_for_initial_dt` | `star/defaults/star_job.defaults:650` | `-1` | `crates/flexmesa-star/src/job_controls.rs:745` | `0.0` | numeric mismatch |
-| `set_to_this_tau_factor` | `star/defaults/star_job.defaults:1314` | `-1` | `crates/flexmesa-star/src/job_controls.rs:762` | `1.0` | numeric mismatch |
-| `steps_to_take_before_terminate` | `star/defaults/star_job.defaults:574` | `-1` | `crates/flexmesa-star/src/job_controls.rs:781` | `None` | active upstream limit disabled as None |
-| `years_for_initial_dt` | `star/defaults/star_job.defaults:649` | `-1` | `crates/flexmesa-star/src/job_controls.rs:744` | `0.0` | numeric mismatch |
+All matched scalar defaults agree with MESA `26.4.1`.
 
 ## binary &binary_controls + &binary_job
 
-| Control | Upstream `26.4.1` Source | Upstream Default | `FlexMESA` Source | `FlexMESA` Default | Classification |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| `implicit_scheme_tolerance` | `binary/defaults/binary_controls.defaults:627` | `1d-2` | `crates/flexmesa-binary/src/inlist.rs:311` | `1.0e-3` | numeric mismatch |
-| `initial_change_factor` | `binary/defaults/binary_controls.defaults:677` | `1.5d0` | `crates/flexmesa-binary/src/inlist.rs:313` | `1.2` | numeric mismatch |
-| `roche_min_mdot` | `binary/defaults/binary_controls.defaults:734` | `1d-16` | `crates/flexmesa-binary/src/inlist.rs:318` | `1.0e-12` | numeric mismatch |
+All matched scalar defaults agree with MESA `26.4.1`.
 
 ## astero &astero_search_controls
 
-| Control | Upstream `26.4.1` Source | Upstream Default | `FlexMESA` Source | `FlexMESA` Default | Classification |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| `f0_ov_div_f_ov` | `astero/defaults/astero_search.defaults:743` | `-1` | `crates/flexmesa-astero/src/inlist_astero.rs:365` | `1.0` | numeric mismatch |
-| `filename_for_parameters` | `astero/defaults/astero_search.defaults:591` | `'undefined'` | `crates/flexmesa-astero/src/inlist_astero.rs:387` | `String::from("parameters.txt")` | string/option mismatch |
-| `simplex_fcn_calls_max` | `astero/defaults/astero_search.defaults:417` | `10000` | `crates/flexmesa-astero/src/inlist_astero.rs:368` | `1000` | numeric mismatch |
+All matched scalar defaults agree with MESA `26.4.1`.
 
 ## eos &eos
 
-| Control | Upstream `26.4.1` Source | Upstream Default | `FlexMESA` Source | `FlexMESA` Default | Classification |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| `logQ_max_for_all_CMS` | `eos/defaults/eos.defaults:277` | `-1` | `crates/flexmesa-eos/src/cms/config.rs:81` | `100.0` | numeric mismatch |
-| `logQ_max_for_any_CMS` | `eos/defaults/eos.defaults:276` | `-1` | `crates/flexmesa-eos/src/cms/config.rs:82` | `100.0` | numeric mismatch |
-| `logQ_min_for_all_CMS` | `eos/defaults/eos.defaults:279` | `-1` | `crates/flexmesa-eos/src/cms/config.rs:80` | `-100.0` | numeric mismatch |
-| `logQ_min_for_any_CMS` | `eos/defaults/eos.defaults:278` | `-1` | `crates/flexmesa-eos/src/cms/config.rs:79` | `-100.0` | numeric mismatch |
-| `logRho_max_for_all_CMS` | `eos/defaults/eos.defaults:280` | `-1` | `crates/flexmesa-eos/src/cms/config.rs:85` | `5.9` | numeric mismatch |
-| `logRho_max_for_any_CMS` | `eos/defaults/eos.defaults:281` | `-1` | `crates/flexmesa-eos/src/cms/config.rs:86` | `6.0` | numeric mismatch |
-| `logRho_min_for_all_CMS` | `eos/defaults/eos.defaults:282` | `-1` | `crates/flexmesa-eos/src/cms/config.rs:84` | `-7.9` | numeric mismatch |
-| `logRho_min_for_any_CMS` | `eos/defaults/eos.defaults:283` | `-1` | `crates/flexmesa-eos/src/cms/config.rs:83` | `-8.0` | numeric mismatch |
-| `logT_max_for_all_CMS` | `eos/defaults/eos.defaults:284` | `-1` | `crates/flexmesa-eos/src/cms/config.rs:89` | `7.9` | numeric mismatch |
-| `logT_max_for_any_CMS` | `eos/defaults/eos.defaults:285` | `-1` | `crates/flexmesa-eos/src/cms/config.rs:90` | `8.0` | numeric mismatch |
-| `logT_min_for_all_CMS` | `eos/defaults/eos.defaults:286` | `-1` | `crates/flexmesa-eos/src/cms/config.rs:88` | `2.1` | numeric mismatch |
-| `logT_min_for_any_CMS` | `eos/defaults/eos.defaults:287` | `-1` | `crates/flexmesa-eos/src/cms/config.rs:87` | `2.0` | numeric mismatch |
+All matched scalar defaults agree with MESA `26.4.1`.
 
 ## kap &kap
 
-| Control | Upstream `26.4.1` Source | Upstream Default | `FlexMESA` Source | `FlexMESA` Default | Classification |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| `use_Type2_opacities` | `kap/defaults/kap.defaults:189` | `.true.` | `crates/flexmesa-kap/src/types.rs:231` | `false` | boolean mismatch |
-| `use_Zbase_for_Type1` | `kap/defaults/kap.defaults:176` | `.true.` | `crates/flexmesa-kap/src/types.rs:230` | `false` | boolean mismatch |
+All matched scalar defaults agree with MESA `26.4.1`.

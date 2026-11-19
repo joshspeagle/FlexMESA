@@ -64,6 +64,57 @@ def source_sha256(normalized_text: str) -> str:
     return hashlib.sha256(normalized_text.encode("utf-8")).hexdigest()
 
 
+def extras_source_digest(case_dir: pathlib.Path | str) -> str:
+    """Return the SHA-256 of a case's normalized upstream extras sources.
+
+    Args:
+        case_dir: Path to the case directory on disk.
+
+    Returns:
+        Hex digest over normalized `run_star_extras.f90` and
+        `run_binary_extras.f90` (an absent file contributes an empty string).
+    """
+    root = pathlib.Path(case_dir)
+    texts = []
+    for rel_name in ("run_star_extras.f90", "run_binary_extras.f90"):
+        raw = load_fortran_source(root, rel_name)
+        texts.append(normalize_fortran(raw) if raw else "")
+    return source_sha256("\x00".join(texts))
+
+
+# Digests of extras sources that were read and contain no case logic: every
+# routine returns `keep_going`, reports zero extra columns, or calls only the
+# shared `test_suite_startup` / `test_suite_after_evolve` timing helpers.
+STOCK_EXTRAS_DIGESTS: frozenset[str] = frozenset(
+    {
+        # star/test_suite/1.3M_ms_high_Z and 12 cases with identical text.
+        "4b7b570f3a144678fa67d368b2c5b485ad89e03f9b43abe8575c1635939c1a5a",
+        # binary/test_suite/evolve_both_stars and 2 cases with identical text.
+        "f4e8cb4d5f84304947b6a817879063dc65c04cacca90bba857f07fd50020e440",
+    }
+)
+
+
+def classify_case_extras(suite: str, case_dir: pathlib.Path | str) -> str:
+    """Classify a case's upstream extras sources.
+
+    Args:
+        suite: Suite identifier (`"star"`, `"binary"`, or `"astero"`).
+        case_dir: Path to the case directory on disk.
+
+    Returns:
+        `"ported"` when `resolve_case_extras` attaches a handler, `"stock"`
+        when the normalized sources equal a reviewed no-logic template, and
+        `"unported"` otherwise. An unported case runs with default no-op
+        hooks, so its upstream extras logic is not executed.
+    """
+    if resolve_case_extras(suite, case_dir) is not None:
+        return "ported"
+    if extras_source_digest(case_dir) in STOCK_EXTRAS_DIGESTS:
+        return "stock"
+    return "unported"
+
+
 def resolve_case_extras(suite: str, case_dir: pathlib.Path | str) -> Any:
     """Resolve test-side extras handler from upstream Fortran source files.
 

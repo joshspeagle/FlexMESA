@@ -128,6 +128,7 @@ jobs:
           python scripts/docs/render_known_gaps_page.py --check
           python scripts/docs/render_coverage_map_page.py --check
           python scripts/docs/render_pgstar_coverage.py --check
+          python scripts/audit/render_extras_status.py --check
           python scripts/docs/render_benchmark_pages.py --check
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             flexmesa dashboard check --base-ref "origin/${{ github.base_ref }}"

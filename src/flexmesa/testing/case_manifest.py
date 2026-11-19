@@ -125,6 +125,13 @@ class CaseManifestEntry:
             ``False`` for all cases after ``#148``).
         library_extras_issue: Optional ``#<number>`` issue when
             ``uses_library_extras`` is True.
+        extras_status: Status of the case's upstream extras logic from
+            ``extras_status.toml`` (``"ported"``, ``"stock"``, ``"unported"``,
+            or ``""`` when no ledger sits next to the manifest). An
+            ``"unported"`` case runs without its upstream extras logic and
+            never counts as passing.
+        extras_issue: ``#<number>`` issue owning the port when
+            ``extras_status`` is ``"unported"``.
         extras_factory: Optional ``"module:callable"`` path returning test-side
             extras handlers for the case.
         departures: Tuple of documented ``DepartureSpec`` items.
@@ -144,6 +151,8 @@ class CaseManifestEntry:
     uses_library_extras: bool = False
     library_extras_issue: str = ""
     extras_factory: str = ""
+    extras_status: str = ""
+    extras_issue: str = ""
     departures: tuple[DepartureSpec, ...] = ()
 
     @property
@@ -203,6 +212,45 @@ def _parse_tol_map(
     return merged
 
 
+EXTRAS_STATUS_FILENAME = "extras_status.toml"
+_EXTRAS_STATUSES = ("ported", "stock", "unported")
+
+
+def _load_extras_status(
+    manifest_dir: pathlib.Path,
+) -> dict[tuple[str, str], tuple[str, str]]:
+    """Load ``extras_status.toml`` from the manifest directory when present.
+
+    Args:
+        manifest_dir: Directory holding ``case_manifest.toml``.
+
+    Returns:
+        Mapping from ``(suite, case)`` to ``(status, issue)``; empty when the
+        ledger file does not exist.
+
+    Raises:
+        ValueError: If a row has an unknown status or an ``"unported"`` row
+            lacks a ``#<number>`` issue.
+    """
+    ledger_path = manifest_dir / EXTRAS_STATUS_FILENAME
+    if not ledger_path.is_file():
+        return {}
+    with ledger_path.open("rb") as fh:
+        rows = tomllib.load(fh).get("cases", [])
+    out: dict[tuple[str, str], tuple[str, str]] = {}
+    for row in rows:
+        key = (str(row["suite"]), str(row["case"]))
+        status = str(row.get("status", ""))
+        issue = str(row.get("issue", "")).strip()
+        ctx = f"{EXTRAS_STATUS_FILENAME}: {key[0]}/{key[1]}"
+        if status not in _EXTRAS_STATUSES:
+            raise ValueError(f"{ctx}: unknown status {status!r}")
+        if status == "unported" and not re.fullmatch(r"#\d+", issue):
+            raise ValueError(f"{ctx}: unported extras need a '#<number>' issue")
+        out[key] = (status, issue)
+    return out
+
+
 def load_case_manifest(
     path: pathlib.Path | str | None = None,
 ) -> HarnessManifest:
@@ -225,6 +273,8 @@ def load_case_manifest(
     )
     with manifest_path.open("rb") as fh:
         data = tomllib.load(fh)
+
+    extras_ledger = _load_extras_status(manifest_path.parent)
 
     meta = data.get("metadata", {})
     mesa_release = str(meta.get("mesa_release", ""))
@@ -368,6 +418,8 @@ def load_case_manifest(
                 uses_library_extras=uses_lib_ext,
                 library_extras_issue=lib_ext_issue,
                 extras_factory=extras_factory,
+                extras_status=extras_ledger.get((suite, case), ("", ""))[0],
+                extras_issue=extras_ledger.get((suite, case), ("", ""))[1],
                 departures=tuple(deps),
             )
         )

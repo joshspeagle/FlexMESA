@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import dataclasses
 import pathlib
-from typing import Any
+from typing import Any, Literal
 
 import matplotlib.axes as mpl_axes
 import matplotlib.figure as mpl_figure
@@ -325,6 +325,9 @@ def plot_profile_kippenhahn(
     profile_paths: list[pathlib.Path | str],
     *,
     mass_grid_points: int = 120,
+    xaxis: Literal["model_number", "star_age"] = "star_age",
+    yaxis: Literal["mass", "q", "radius"] = "mass",
+    history_path: pathlib.Path | str | None = None,
     save_path: pathlib.Path | str | None = None,
 ) -> tuple[mpl_figure.Figure, mpl_axes.Axes]:
     """Assemble a Kippenhahn diagram strictly from stored ``profileN.data``s.
@@ -332,21 +335,36 @@ def plot_profile_kippenhahn(
     Args:
         profile_paths: Ordered sequence of at least two stored
             ``profileN.data`` files spanning time.
-        mass_grid_points: Uniform vertical grid size across ``mass``
+        mass_grid_points: Uniform vertical grid size across ``yaxis``
             (default ``120``).
+        xaxis: Horizontal coordinate (``"star_age"`` or ``"model_number"``).
+        yaxis: Vertical coordinate (``"mass"``, ``"q"``, or ``"radius"``).
+        history_path: Optional ``history.data`` providing core mass boundaries.
         save_path: Optional output image path (``300 dpi``).
 
     Returns:
         Tuple ``(fig, ax)`` produced by
-        :func:`flexmesa.plotting.stellar_plots.plot_kippenhahn`.
+        :func:`flexmesa.plotting.stellar_plots.plot_kippenhahn` or
+        :func:`flexmesa.plotting.kippenhahn.plot_history_kippenhahn`.
 
     Raises:
         ValueError: If fewer than two profiles are given or required columns
-            (``mass``, ``mixing_type``) are absent.
+            are absent.
     """
     if len(profile_paths) < 2:
         raise ValueError(
             "plot_profile_kippenhahn requires at least 2 profile files"
+        )
+    if xaxis != "star_age" or yaxis != "mass" or history_path is not None:
+        from flexmesa.plotting import kippenhahn
+
+        return kippenhahn.plot_history_kippenhahn(
+            history_path=history_path,
+            profile_paths=profile_paths,
+            xaxis=xaxis,
+            yaxis=yaxis,
+            mass_grid_points=mass_grid_points,
+            save_path=save_path,
         )
     loaded = [load_profile_file(p) for p in profile_paths]
     for pt in loaded:

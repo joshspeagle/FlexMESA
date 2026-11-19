@@ -412,6 +412,11 @@ impl InlistBundle {
                 &mut self.kap_config.use_type2_opacities,
                 "use_type2_opacities",
             )?;
+            kap.try_bool_into(
+                "kap",
+                &mut self.kap_config.use_zbase_for_type1,
+                "use_zbase_for_type1",
+            )?;
         }
         Ok(())
     }

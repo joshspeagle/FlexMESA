@@ -79,7 +79,7 @@ fn build_kap_config(
     kap_blend_log_t_upper_bdy=3.88, kap_blend_log_t_lower_bdy=3.80,
     cubic_interpolation_in_x=false, cubic_interpolation_in_z=false,
     include_electron_conduction=true, use_blouin_conductive_opacities=true,
-    use_zbase_for_type1=false, use_type2_opacities=false,
+    use_zbase_for_type1=true, use_type2_opacities=true,
     kap_type2_full_off_x=1.0e-3, kap_type2_full_on_x=1.0e-6,
     kap_type2_full_off_dz=0.001, kap_type2_full_on_dz=0.01
 ))]
@@ -167,7 +167,7 @@ pub fn kap_get_results_rust(
     kap_blend_log_t_upper_bdy=3.88, kap_blend_log_t_lower_bdy=3.80,
     cubic_interpolation_in_x=false, cubic_interpolation_in_z=false,
     include_electron_conduction=true, use_blouin_conductive_opacities=true,
-    use_zbase_for_type1=false, use_type2_opacities=false,
+    use_zbase_for_type1=true, use_type2_opacities=true,
     kap_type2_full_off_x=1.0e-3, kap_type2_full_on_x=1.0e-6,
     kap_type2_full_off_dz=0.001, kap_type2_full_on_dz=0.01
 ))]
@@ -363,7 +363,7 @@ pub fn kap_get_kapcn_rust(
     kap_blend_log_t_upper_bdy=3.88, kap_blend_log_t_lower_bdy=3.80,
     cubic_interpolation_in_x=false, cubic_interpolation_in_z=false,
     include_electron_conduction=true, use_blouin_conductive_opacities=true,
-    use_zbase_for_type1=false, use_type2_opacities=false,
+    use_zbase_for_type1=true, use_type2_opacities=true,
     kap_type2_full_off_x=1.0e-3, kap_type2_full_on_x=1.0e-6,
     kap_type2_full_off_dz=0.001, kap_type2_full_on_dz=0.01,
     parallel=true
@@ -483,7 +483,7 @@ pub fn kap_get_zones_rust<'py>(
     kap_blend_log_t_upper_bdy=3.88, kap_blend_log_t_lower_bdy=3.80,
     cubic_interpolation_in_x=false, cubic_interpolation_in_z=false,
     include_electron_conduction=true, use_blouin_conductive_opacities=true,
-    use_zbase_for_type1=false, use_type2_opacities=false,
+    use_zbase_for_type1=true, use_type2_opacities=true,
     kap_type2_full_off_x=1.0e-3, kap_type2_full_on_x=1.0e-6,
     kap_type2_full_off_dz=0.001, kap_type2_full_on_dz=0.01,
     parallel=true

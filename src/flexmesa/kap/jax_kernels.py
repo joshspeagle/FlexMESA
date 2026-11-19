@@ -26,8 +26,8 @@ _LOG10_COND_COEF: float = float(jnp.log10(16.0 * constants.BOLTZ_SIGMA / 3.0))
 
 _REF_ZFRACS: dict[str, tuple[float, float, float, float]] = {
     "gn93_co": (0.173285, 0.053152, 0.482273, 0.098668),
-    "gs98_co": (0.165659, 0.048844, 0.453345, 0.114576),
-    "a09_co": (0.176246, 0.050427, 0.428279, 0.093860),
+    "gs98_co": (0.171835, 0.050335, 0.467356, 0.104831),
+    "a09_co": (0.176930, 0.051828, 0.428871, 0.094039),
 }
 
 
@@ -391,8 +391,8 @@ def kap_get_results_jax(
     cubic_interpolation_in_z: bool = False,
     include_electron_conduction: bool = True,
     use_blouin_conductive_opacities: bool = True,
-    use_zbase_for_type1: bool = False,
-    use_type2_opacities: bool = False,
+    use_zbase_for_type1: bool = True,
+    use_type2_opacities: bool = True,
     kap_type2_full_off_x: float = 1.0e-3,
     kap_type2_full_on_x: float = 1.0e-6,
     kap_type2_full_off_dz: float = 0.001,

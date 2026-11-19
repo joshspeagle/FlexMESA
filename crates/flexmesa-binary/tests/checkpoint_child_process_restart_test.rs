@@ -28,6 +28,7 @@ fn build_mutated_star() -> StarModel {
         initial_mass: 1.0,
         mixing_length_alpha: 1.93,
         mesh_delta_coeff: 0.85,
+        zbase: 0.02,
         ..StarControls::default()
     };
     let job = StarJobControls {

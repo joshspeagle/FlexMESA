@@ -181,10 +181,7 @@ impl MdotRedoState {
     /// Initializes the redo state before the first `do_adjust_mass_step` try of a
     /// timestep (`setup_for_implicit_mdot_loop` in `evolve.f90:747-785`).
     pub fn setup(model: &mut StarModel) -> Self {
-        let surf_limit = model
-            .controls
-            .surf_omega_div_omega_crit_limit
-            .unwrap_or(0.99);
+        let surf_limit = model.controls.surf_omega_div_omega_crit_limit;
         let max_cnt = model.controls.mix_wind.max_mdot_redo_cnt;
         let explicit_mdot = model.mstar_dot;
         let mdot_old = model.aux.step_hist.mstar_dot_old;

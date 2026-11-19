@@ -448,9 +448,10 @@ fn do1_step(
     calculate_work_integrals(model, dc, log_dir)?;
     let _rad = calculate_energies(model, dc, &wk);
     gather_pulse_statistics(model, dc);
-    if model.controls.rsp_max_num_periods.is_some_and(|lim| {
-        lim >= 0 && (model.aux.rsp.num_periods as isize) >= lim
-    }) {
+    if model.controls.rsp_max_num_periods >= 0
+        && (model.aux.rsp.num_periods as isize)
+            >= model.controls.rsp_max_num_periods
+    {
         get_grpdv(model, dc);
     }
     Ok(counts)

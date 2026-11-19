@@ -247,12 +247,12 @@ pub fn relax_composition_with_henyey(
     }
     if model.controls.rotation_flag {
         let r_s = model.r.first().copied().unwrap_or(R_SUN).max(1.0);
-        let om_t = if let Some(v_s) =
-            job.new_surface_rotation_v.filter(|&v| v > 0.0)
+        let om_t = if job.set_surface_rotation_v
+            || job.set_initial_surface_rotation_v
         {
-            (v_s * 1.0e5) / r_s
-        } else if let Some(w_wc) =
-            job.new_omega_div_omega_crit.filter(|&w| w > 0.0)
+            (job.new_surface_rotation_v * 1.0e5) / r_s
+        } else if job.set_omega_div_omega_crit
+            || job.set_initial_omega_div_omega_crit
         {
             let g_s = model
                 .cgrav
@@ -260,11 +260,21 @@ pub fn relax_composition_with_henyey(
                 .copied()
                 .filter(|&g| g > 0.0)
                 .unwrap_or(STANDARD_CGRAV);
-            w_wc * (g_s * model.mstar / flexmesa_math::pow3(r_s)).sqrt()
+            job.new_omega_div_omega_crit
+                * (g_s * model.mstar / flexmesa_math::pow3(r_s)).sqrt()
+        } else if job.set_omega || job.set_initial_omega {
+            job.new_omega
         } else {
             omega_0
         };
-        if om_t > 0.0 {
+        if om_t > 0.0
+            || job.set_omega
+            || job.set_initial_omega
+            || job.set_omega_div_omega_crit
+            || job.set_initial_omega_div_omega_crit
+            || job.set_surface_rotation_v
+            || job.set_initial_surface_rotation_v
+        {
             apply_uniform_rotation(model, om_t);
         }
     }

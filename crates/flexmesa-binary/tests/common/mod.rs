@@ -10,6 +10,7 @@ use flexmesa_star::{load_zams_model, StarControls, StarJobControls};
 pub fn build_rlof_binary() -> BinarySystem {
     let donor_ctrl = StarControls {
         initial_mass: 1.5,
+        zbase: 0.02,
         ..StarControls::default()
     };
     let mut donor = load_zams_model(donor_ctrl, StarJobControls::default())

@@ -29,9 +29,12 @@ fn enable_all_zone_velocity(c: &mut StarControls) {
 
 fn build_compact_zams(
     nz_target: usize,
-    controls: StarControls,
+    mut controls: StarControls,
     job: StarJobControls,
 ) -> StarModel {
+    if controls.zbase < 0.0 {
+        controls.zbase = 0.02;
+    }
     let full =
         load_zams_model(controls, job).expect("1 Msun ZAMS model should load");
     let nz = nz_target.max(4).min(full.nz);

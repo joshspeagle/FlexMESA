@@ -111,8 +111,8 @@ def kap_get_results(
     cubic_interpolation_in_z: bool = False,
     include_electron_conduction: bool = True,
     use_blouin_conductive_opacities: bool = True,
-    use_zbase_for_type1: bool = False,
-    use_type2_opacities: bool = False,
+    use_zbase_for_type1: bool = True,
+    use_type2_opacities: bool = True,
     kap_type2_full_off_x: float = 1.0e-3,
     kap_type2_full_on_x: float = 1.0e-6,
     kap_type2_full_off_dz: float = 0.001,
@@ -254,7 +254,7 @@ def kap_get(
     eta: float = 0.0,
     d_eta_dln_rho: float = 0.0,
     d_eta_dln_t: float = 0.0,
-    zbase: float = 0.02,
+    zbase: float = -1.0,
     **kwargs: Any,
 ) -> KapEvalOutput:
     """Evaluate `kap_get` from 1-based `chem_id` and mass-fraction vector `xa`.
@@ -307,7 +307,7 @@ def kap_get_zones(
     eta_zones: np.ndarray,
     d_eta_dln_rho_zones: np.ndarray,
     d_eta_dln_t_zones: np.ndarray,
-    zbase: float = 0.02,
+    zbase: float = -1.0,
     *,
     parallel: bool = True,
     **kwargs: Any,

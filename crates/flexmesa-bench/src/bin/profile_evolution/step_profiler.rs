@@ -566,7 +566,9 @@ pub fn profile_star_case(
                     None
                 };
 
-                let job_step_cap = model.job.steps_to_take_before_terminate;
+                let job_step_cap =
+                    usize::try_from(model.job.steps_to_take_before_terminate)
+                        .ok();
                 let cap = max_steps_per_stage
                     .into_iter()
                     .chain(job_step_cap)

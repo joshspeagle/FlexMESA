@@ -21,6 +21,7 @@ fn test_primary_state_buffer_zero_ulp_round_trip_memory_and_counter_survival() {
     let ctrl = StarControls {
         initial_mass: 1.0,
         rotation_flag: true,
+        zbase: 0.02,
         ..StarControls::default()
     };
     let mut model =
@@ -86,6 +87,7 @@ fn test_primary_state_buffer_zero_ulp_round_trip_memory_and_counter_survival() {
 fn test_microphysics_cache_hit_exactness_and_one_ulp_invalidation() {
     let ctrl = StarControls {
         initial_mass: 1.0,
+        zbase: 0.02,
         ..StarControls::default()
     };
     let mut model =
@@ -136,6 +138,7 @@ fn test_microphysics_cache_hit_exactness_and_one_ulp_invalidation() {
 fn test_star_evolve_step_populates_solver_calls_and_cache_hits() {
     let ctrl = StarControls {
         initial_mass: 1.0,
+        zbase: 0.02,
         ..StarControls::default()
     };
     let mut model =
@@ -155,6 +158,7 @@ fn test_non_retriable_star_error_fails_immediately_with_zero_retries() {
         initial_mass: 1.0,
         do_phase_separation: true,
         phase_separation_option: String::from("bogus_phase_sep"),
+        zbase: 0.02,
         ..StarControls::default()
     };
     let mut model =
@@ -178,6 +182,7 @@ fn test_primary_state_buffer_preserves_omega_when_solver_mlt_eval_count_nonzero(
     let ctrl = StarControls {
         initial_mass: 1.5,
         rotation_flag: true,
+        zbase: 0.02,
         ..StarControls::default()
     };
     let mut model = load_zams_model(ctrl, StarJobControls::default())
@@ -242,6 +247,7 @@ fn test_evolve_step_rolls_back_remesh_on_terminate_and_attempt0_exhaustion() {
             initial_mass: 1.0,
             mesh_delta_coeff: 0.25,
             okay_to_remesh: true,
+            zbase: 0.02,
             ..StarControls::default()
         },
         StarJobControls::default(),
@@ -271,6 +277,7 @@ fn test_evolve_step_rolls_back_remesh_on_terminate_and_attempt0_exhaustion() {
             max_newton_iters: 1,
             tol_correction_norm: 1.0e-15,
             tol_max_correction: 1.0e-15,
+            zbase: 0.02,
             ..StarControls::default()
         },
         StarJobControls::default(),
@@ -309,5 +316,74 @@ fn test_var_layout_paired_variable_names_hydrostatic_and_hydro() {
     assert_eq!(
         vel.paired_variable_name(vel.i_dlnr_dt.expect("i_dlnr_dt"), &iso),
         "lnR"
+    );
+}
+
+#[test]
+fn test_microphysics_cache_invalidates_on_fe56ec_fake_factor_change() {
+    let ctrl = StarControls {
+        initial_mass: 1.0,
+        zbase: 0.02,
+        ..StarControls::default()
+    };
+    let mut model =
+        load_zams_model(ctrl, StarJobControls::default()).expect("1 Msun ZAMS");
+    flexmesa_star::change_model_network(&mut model, "approx21.net", None)
+        .expect("switch to approx21.net");
+
+    let nz = model.nz;
+    let sp = model.species;
+    let i_fe56 = model
+        .iso_names
+        .iter()
+        .position(|s| s == "fe56")
+        .expect("fe56 in approx21");
+    let i_ni56 = model
+        .iso_names
+        .iter()
+        .position(|s| s == "ni56")
+        .expect("ni56 in approx21");
+    let c = nz - 1;
+    model.lnd[c] = flexmesa_math::log(1.0e8);
+    model.ln_t[c] = flexmesa_math::log(4.0e9);
+    for j in 0..sp {
+        model.xa[c * sp + j] = 0.0;
+    }
+    model.xa[c * sp + i_fe56] = 0.5;
+    model.xa[c * sp + i_ni56] = 0.5;
+
+    model.aux.micro_cache.clear();
+    model.micro_cache_hits = 0;
+    model.micro_cache_misses = 0;
+
+    set_hydro_vars(&mut model, false, false).expect("cold approx21 eval");
+    assert_eq!((model.micro_cache_misses, model.micro_cache_hits), (1, 0));
+    let dxdt_fe56_base = model.dxdt_nuc[c * sp + i_fe56];
+
+    set_hydro_vars(&mut model, false, false).expect("cached approx21 eval");
+    assert_eq!((model.micro_cache_misses, model.micro_cache_hits), (1, 1));
+    assert_eq!(model.dxdt_nuc[c * sp + i_fe56].to_bits(), dxdt_fe56_base.to_bits());
+
+    // Mutating fe56ec_fake_factor must miss cache and update nuclear rates.
+    model.controls.fe56ec_fake_factor = 1.0e-2;
+    set_hydro_vars(&mut model, false, false)
+        .expect("fe56ec_fake_factor changed");
+    assert_eq!(model.micro_cache_misses, 2);
+    let dxdt_fe56_boosted = model.dxdt_nuc[c * sp + i_fe56];
+    assert_ne!(
+        dxdt_fe56_boosted.to_bits(),
+        dxdt_fe56_base.to_bits(),
+        "fe56ec_fake_factor change must recompute approx21 dxdt_nuc"
+    );
+
+    // Mutating min_t_for_fe56ec_fake_factor above 4e9 K must also miss cache.
+    model.controls.min_t_for_fe56ec_fake_factor = 5.0e9;
+    set_hydro_vars(&mut model, false, false)
+        .expect("min_t_for_fe56ec_fake_factor changed");
+    assert_eq!(model.micro_cache_misses, 3);
+    assert_ne!(
+        model.dxdt_nuc[c * sp + i_fe56].to_bits(),
+        dxdt_fe56_boosted.to_bits(),
+        "min_t_for_fe56ec_fake_factor change must recompute approx21 dxdt_nuc"
     );
 }

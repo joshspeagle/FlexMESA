@@ -38,7 +38,9 @@ pub fn write_mod_string(model: &StarModel) -> Result<String, StarError> {
         && model.controls.rsp2_flag
         && model.aux.rsp.hp_face.len() == nz;
     let write_mlt_vc = model.mlt_vc.len() == nz
-        && (write_rsp || model.mlt_vc.iter().any(|&x| x != 0.0));
+        && (write_rsp
+            || model.aux.have_mlt_vc
+            || model.mlt_vc.iter().any(|&x| x != 0.0));
 
     let mut file_type = 4_u32;
     if write_v {
@@ -555,6 +557,7 @@ pub fn read_mod_str(
         model.conv_vel.clone_from(&vc);
         model.aux.mlt_vc_old.clone_from(&vc);
         model.mlt_vc = vc;
+        model.aux.have_mlt_vc = true;
     }
     if let Some(hp) = saved_hp {
         model.scale_height.clone_from(&hp);

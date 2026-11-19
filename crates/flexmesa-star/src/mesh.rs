@@ -428,6 +428,7 @@ impl StarModel {
         self.aux.et_rsp_old.clone_from(&self.aux.rsp.et_rsp);
         self.aux.hp_face_old.clone_from(&self.aux.rsp.hp_face);
         self.aux.alpha_rti_old.clone_from(&self.aux.alpha_rti);
+        self.aux.mlt_vc_old.clone_from(&self.mlt_vc);
         crate::core_boundaries::snapshot_step_history_old(self);
     }
 

@@ -4,6 +4,7 @@
 
 use crate::co::get1_kap_co_results;
 use crate::fixed::get1_kap_fixed_metal_results;
+use crate::loader::kap_tables;
 use crate::low_t::{aesopus_get, kapcn_get};
 use crate::types::{KapConfig, KapError, KapLowTOption};
 use flexmesa_autodiff::AutoDiffReal2VarOrder1;
@@ -154,7 +155,15 @@ pub fn get_kap_high_t_results(
         z
     };
 
-    let (fc, _fn, fo, _fne) = cfg.kap_co_option.ref_zfracs();
+    let tables = kap_tables()?;
+    let co_prefix = cfg.kap_co_option.prefix();
+    let co_table0 = tables
+        .co_sets
+        .iter()
+        .find(|s| s.prefix == co_prefix)
+        .and_then(|s| s.z_tables.first())
+        .ok_or(KapError::MissingTable("missing CO z_table for ref zfracs"))?;
+    let (fc, fo) = (co_table0.zfrac_c, co_table0.zfrac_o);
     let dxc = (xc - fc * zbase).max(0.0);
     let dxo = (xo - fo * zbase).max(0.0);
 

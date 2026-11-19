@@ -26,8 +26,9 @@ use crate::model::StarModel;
 use crate::star_ad::{StarAdExt, StarAdOrder1};
 
 static BASIC_NET_INFO: OnceLock<NetGeneralInfo> = OnceLock::new();
-static NET_CACHE: OnceLock<Mutex<HashMap<String, Arc<NetGeneralInfo>>>> =
-    OnceLock::new();
+static NET_CACHE: OnceLock<
+    Mutex<HashMap<(String, u64, u64), Arc<NetGeneralInfo>>>,
+> = OnceLock::new();
 
 /// Returns the cached [`NetGeneralInfo`] for `"basic.net"`.
 #[must_use]
@@ -47,28 +48,49 @@ pub fn get_or_load_net(
     net_name: &str,
     search_dir: Option<&Path>,
 ) -> Result<Arc<NetGeneralInfo>, StarError> {
+    get_or_load_net_with_fe56ec(net_name, search_dir, 1.0e-7, 3.0e9)
+}
+
+/// Returns a cached [`Arc<NetGeneralInfo>`] for `net_name` with explicit
+/// `fe56ec_fake_factor` and `min_t_for_fe56ec_fake_factor` applied.
+///
+/// # Errors
+/// Returns [`StarError::MicrophysicsError`] if the `.net` file cannot be parsed.
+pub fn get_or_load_net_with_fe56ec(
+    net_name: &str,
+    search_dir: Option<&Path>,
+    fe56ec_fake_factor: f64,
+    min_t_for_fe56ec_fake_factor: f64,
+) -> Result<Arc<NetGeneralInfo>, StarError> {
     let key = net_name.trim();
+    let cache_key = (
+        key.to_string(),
+        fe56ec_fake_factor.to_bits(),
+        min_t_for_fe56ec_fake_factor.to_bits(),
+    );
     let cache = NET_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
     if let Ok(guard) = cache.lock() {
-        if let Some(info) = guard.get(key) {
+        if let Some(info) = guard.get(&cache_key) {
             return Ok(Arc::clone(info));
         }
     }
-    let info = Arc::new(
-        NetGeneralInfo::from_name_or_dir(key, search_dir).map_err(|e| {
+    let mut loaded = NetGeneralInfo::from_name_or_dir(key, search_dir)
+        .map_err(|e| {
             StarError::MicrophysicsError(format!(
                 "failed to load network '{key}': {e}"
             ))
-        })?,
-    );
+        })?;
+    loaded.fe56ec_fake_factor = fe56ec_fake_factor;
+    loaded.min_t_for_fe56ec_fake_factor = min_t_for_fe56ec_fake_factor;
+    let info = Arc::new(loaded);
     if let Ok(mut guard) = cache.lock() {
-        guard.insert(key.to_string(), Arc::clone(&info));
+        guard.insert(cache_key, Arc::clone(&info));
     }
     Ok(info)
 }
 
-/// Returns a cached [`Arc<NetGeneralInfo>`] matching `model.job.net_name` and
-/// `model.species`.
+/// Returns a cached [`Arc<NetGeneralInfo>`] matching `model.job.net_name`,
+/// `model.species`, and `model.controls`'s `fe56ec` overrides.
 ///
 /// # Errors
 /// Returns [`StarError::MicrophysicsError`] if `model.job.net_name` cannot be
@@ -76,7 +98,12 @@ pub fn get_or_load_net(
 pub fn resolve_model_net(
     model: &StarModel,
 ) -> Result<Arc<NetGeneralInfo>, StarError> {
-    let net_info = get_or_load_net(&model.job.net_name, None)?;
+    let net_info = get_or_load_net_with_fe56ec(
+        &model.job.net_name,
+        None,
+        model.controls.fe56ec_fake_factor,
+        model.controls.min_t_for_fe56ec_fake_factor,
+    )?;
     if net_info.num_isos != model.species {
         return Err(StarError::MicrophysicsError(format!(
             "network '{}' has {} species, expected model.species={}",
@@ -375,7 +402,7 @@ pub fn do_neu(model: &mut StarModel) -> Result<(), StarError> {
         return Ok(());
     }
 
-    let flags = NeuFlags::default_stellar();
+    let flags = NeuFlags::all();
     let results: Result<Vec<(f64, f64, f64)>, StarError> = (0..nz)
         .into_par_iter()
         .map(|k| {

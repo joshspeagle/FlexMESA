@@ -22,10 +22,23 @@ _JDOT_ML_CHECK_RE = re.compile(
 _WIND_FED_RE = re.compile(r"lx_tested_super_edd")
 
 
+def _fdiv(num: float, den: float) -> float:
+    """Divide as Fortran does: IEEE-754, no exception on a zero divisor."""
+    try:
+        return num / den
+    except ZeroDivisionError:
+        if num == 0.0 or math.isnan(num):
+            return math.nan
+        return math.copysign(math.inf, num) * math.copysign(1.0, den)
+
+
 class DoubleBhBinaryExtras:
     """Brott et al. (2011) massive-star wind and evolutionary phase-transition
-    logic from `binary/test_suite/double_bh/src/run_binary_extras.f90:161-265`
-    and `binary/test_suite/double_bh/src/run_star_extras.f90:55-280`.
+    logic from `binary/test_suite/double_bh/src/run_binary_extras.f90:161-259`
+    and `binary/test_suite/double_bh/src/run_star_extras.f90:55-206`.
+
+    Every quantity upstream reads is indexed directly from the snapshot, so a
+    missing one raises `KeyError` instead of being substituted.
     """
 
     def other_wind_cgs(
@@ -33,166 +46,211 @@ class DoubleBhBinaryExtras:
         star_state: dict[str, Any],
         _star_idx: int,
         ignore_rlof_flag: bool,
-    ) -> float | None:
-        """Evaluate Brott et al. (2011) massive-star wind in CGS."""
+        l_surf: float,
+        m_surf: float,
+        r_surf: float,
+        t_surf: float,
+    ) -> float:
+        """Evaluate `brott_wind`.
+
+        Port of
+        `binary/test_suite/double_bh/src/run_star_extras.f90:55-206`.
+
+        Args:
+            star_state: Star snapshot; `surface_h1` is `s% xa(h1,1)` and
+                `zbase` is `s% kap_rq% Zbase`.
+            _star_idx: Component index (unused, as upstream).
+            ignore_rlof_flag: `b% ignore_rlof_flag`.
+            l_surf: `Lsurf` argument of `other_wind` (erg s^-1).
+            m_surf: `Msurf` argument (g).
+            r_surf: `Rsurf` argument (cm).
+            t_surf: `Tsurf` argument (K).
+
+        Returns:
+            Signed wind rate in g s^-1 (`-w*Msun/secyer`, where `w >= 0` is
+            upstream's result in Msun yr^-1).
+        """
+        lsun = constants.LSUN
+        msun = constants.MSUN
+        # :78-81
+        l1 = float(l_surf)
+        m1 = float(m_surf)
+        r1 = float(r_surf)
+        t1 = float(t_surf)
+        # :85 (`Ys`, :86, is read upstream but never used)
+        xs = float(star_state["surface_h1"])
+        # :88, :90
+        z_div_z_solar = float(star_state["zbase"]) / 0.017
+        log_z = _rust.log10(z_div_z_solar)
+        teff_jump = 1.0e3 * (61.2 + 2.59 * (-13.636 + 0.889 * log_z))
+
+        # :95-99
         if ignore_rlof_flag:
             return 0.0
-        l_lsun = max(float(star_state["surface_l_lsun"]), 1.0e-10)
-        m_msun = max(float(star_state["star_mass"]), 1.0e-5)
-        l1 = max(l_lsun * constants.LSUN, 1.0)
-        t_k = float(star_state["teff"])
-        if t_k <= 0.0:
-            r0 = max(float(star_state["surface_r_rsun"]) * constants.RSUN, 1.0)
-            t_k = _rust.pow(
-                l1
-                / (constants.PI * r0 * r0 * constants.CRAD * constants.CLIGHT),
-                0.25,
-            )
-        t_k = max(t_k, 100.0)
-        t2 = t_k * t_k
-        t4 = t2 * t2
-        r1 = max(
-            _rust.safe_sqrt(
-                l1 / (constants.PI * constants.CRAD * constants.CLIGHT * t4)
-            ),
-            1.0,
-        )
-        r_rsun = max(r1 / constants.RSUN, 1.0e-5)
-        x_surf = float(star_state.get("surface_h1", 0.0))
-        y_surf = float(star_state.get("surface_he4", 0.0))
-        z_base = float(star_state.get("zbase", 0.0))
-        if z_base <= 0.0:
-            z_base = min(max(1.0 - x_surf - y_surf, 1.0e-6), 0.1)
-        z_div_z_solar = z_base / 0.017
 
-        log_z_ratio = _rust.safe_log10(z_div_z_solar)
-        teff_jump = 1.0e3 * (61.2 + 2.59 * (-13.636 + 0.889 * log_z_ratio))
-        if t_k > 27_500.0:
-            alfa_vink = 1.0
-        elif t_k < 22_500.0:
-            alfa_vink = 0.0
+        # eval_Vink_wind, :126-179
+        if t1 > 27500.0:
+            alfa = 1.0
+        elif t1 < 22500.0:
+            alfa = 0.0
         else:
             dt = 100.0
-            if t_k > teff_jump + dt:
-                alfa_vink = 1.0
-            elif t_k < teff_jump - dt:
-                alfa_vink = 0.0
+            if t1 > teff_jump + dt:
+                alfa = 1.0
+            elif t1 < teff_jump - dt:
+                alfa = 0.0
             else:
-                alfa_vink = (t_k - (teff_jump - dt)) / (2.0 * dt)
-
-        z_scale_013 = _rust.pow(z_div_z_solar, 0.13)
-        w1 = 0.0
-        if alfa_vink > 0.0:
-            vinf_div_vesc = 2.6 * z_scale_013
-            log_t_40k = _rust.safe_log10(t_k / 4.0e4)
+                alfa = (t1 - (teff_jump - dt)) / (2 * dt)
+        if alfa > 0:
+            vinf_div_vesc = 2.6
+            vinf_div_vesc = vinf_div_vesc * _rust.pow(z_div_z_solar, 0.13)
+            log_t = _rust.log10(t1 / 4.0e4)
             log_mdot = (
                 -6.697
-                + 2.194 * _rust.safe_log10(l_lsun / 1.0e5)
-                - 1.313 * _rust.safe_log10(m_msun / 30.0)
-                - 1.226 * _rust.safe_log10(vinf_div_vesc / 2.0)
-                + 0.933 * log_t_40k
-                - 10.92 * log_t_40k * log_t_40k
-                + 0.85 * log_z_ratio
+                + 2.194 * _rust.log10(l1 / lsun / 1.0e5)
+                - 1.313 * _rust.log10(m1 / msun / 30)
+                - 1.226 * _rust.log10(vinf_div_vesc / 2.0)
+                + 0.933 * log_t
+                - 10.92 * (log_t * log_t)
+                + 0.85 * log_z
             )
             w1 = _rust.exp10(log_mdot)
-
-        w2 = 0.0
-        if alfa_vink < 1.0:
-            vinf_div_vesc = 1.3 * z_scale_013
+        else:
+            w1 = 0.0
+        if alfa < 1:
+            vinf_div_vesc = 1.3
+            vinf_div_vesc = vinf_div_vesc * _rust.pow(z_div_z_solar, 0.13)
             log_mdot = (
                 -6.688
-                + 2.210 * _rust.safe_log10(l_lsun / 1.0e5)
-                - 1.339 * _rust.safe_log10(m_msun / 30.0)
-                - 1.601 * _rust.safe_log10(vinf_div_vesc / 2.0)
-                + 1.07 * _rust.safe_log10(t_k / 2.0e4)
-                + 0.85 * log_z_ratio
+                + 2.210 * _rust.log10(l1 / lsun / 1.0e5)
+                - 1.339 * _rust.log10(m1 / msun / 30)
+                - 1.601 * _rust.log10(vinf_div_vesc / 2.0)
+                + 1.07 * _rust.log10(t1 / 2.0e4)
+                + 0.85 * log_z
             )
             w2 = _rust.exp10(log_mdot)
+        else:
+            w2 = 0.0
+        vink_wind = alfa * w1 + (1 - alfa) * w2
 
-        vink_wind = alfa_vink * w1 + (1.0 - alfa_vink) * w2
-        log_l_lsun = _rust.safe_log10(l_lsun)
+        # eval_Nieuwenhuijzen_wind, :181-192
         nieu_wind = _rust.exp10(
             -14.02
-            + 1.24 * log_l_lsun
-            + 0.16 * _rust.safe_log10(m_msun)
-            + 0.81 * _rust.safe_log10(r_rsun)
-            + 0.85 * log_z_ratio
+            + 1.24 * _rust.log10(l1 / lsun)
+            + 0.16 * _rust.log10(m1 / msun)
+            + 0.81 * _rust.log10(r1 / constants.RSUN)
+            + 0.85 * log_z
         )
-        hamann_wind = (
-            _rust.exp10(
-                -11.95 + 1.5 * log_l_lsun - 2.85 * x_surf + 0.85 * log_z_ratio
-            )
-        ) / 10.0
+        # eval_Hamann_wind, :194-204, then "use 1/10 hamann", :106
+        hamann_wind = _rust.exp10(
+            -11.95 + 1.5 * _rust.log10(l1 / lsun) - 2.85 * xs + 0.85 * log_z
+        )
+        hamann_wind = hamann_wind / 10.0
 
-        if t_k < teff_jump:
-            w_msun_yr = max(vink_wind, nieu_wind)
+        # :108-120
+        if t1 < teff_jump:
+            w = max(vink_wind, nieu_wind)
         else:
-            if x_surf > 0.7:
-                alfa_wr = 1.0
-            elif x_surf > 0.4:
-                alfa_wr = (x_surf - 0.4) / 0.3
-            else:
-                alfa_wr = 0.0
-            w_msun_yr = alfa_wr * vink_wind + (1.0 - alfa_wr) * hamann_wind
+            alfa = 0.0
+            if xs > 0.7:
+                alfa = 1.0
+            elif xs > 0.4 and xs < 0.7:
+                alfa = (xs - 0.4) / 0.3
+            w = alfa * vink_wind + (1.0 - alfa) * hamann_wind
 
-        return float(
-            -(max(w_msun_yr, 0.0) * (constants.MSUN / constants.SECYER))
-        )
+        # Msun/yr to g/s as `star/private/winds.f90:189` (`wind*Msun/secyer`);
+        # the adapter contract is a signed rate (mass loss negative).
+        return -(w * msun / constants.SECYER)
 
     def finish_step(
         self, state: dict[str, Any]
     ) -> str | tuple[str, str] | dict[str, Any]:
-        """Engage RLOF at thermal equilibrium and stop on He exhaustion."""
+        """Port of `extras_binary_finish_step`
+        (`binary/test_suite/double_bh/src/run_binary_extras.f90:161-259`).
+        """
         updates: dict[str, Any] = {}
-        ignore_rlof = bool(state.get("ignore_rlof_flag", False))
-        s1_log_lnuc = float(state.get("s1_log_lnuc", -99.0))
-        s1_log_l = float(state.get("s1_log_l", 0.0))
-        s1_age = float(state.get("s1_star_age", 0.0))
-        thermal_diff = abs(s1_log_lnuc - s1_log_l)
+        ignore_rlof = bool(state["ignore_rlof_flag"])
+        if ignore_rlof:
+            # :171-173 and :196-198:
+            # abs(log10(abs(b% s1% L_nuc_burn_total * Lsun / b% s1% L(1))))
+            thermal = abs(
+                _rust.log10(
+                    abs(
+                        _fdiv(
+                            float(state["s1_l_nuc_burn_total"])
+                            * constants.LSUN,
+                            float(state["s1_l_surf"]),
+                        )
+                    )
+                )
+            )
+            s1_age = float(state["s1_star_age"])
+            if thermal < 0.005 and s1_age > 1.0e2:
+                gap1 = float(state["rl_relative_gap"][0])
+                if gap1 > 0.320819224:
+                    # :177-180
+                    return (
+                        "terminate",
+                        "Terminate due to overflow of L2 at ZAMS",
+                    )
+                if gap1 > 0.0:
+                    # :181-187
+                    updates["max_implicit_abs_mdot"] = 1.0e-3
+                    updates["delta_mdot_hard_limit"] = -1.0
+                # :191-195
+                updates["ignore_rlof_flag"] = False
+                updates["terminate_if_l2_overflow"] = True
+            elif thermal > 0.005 or s1_age < 1.0e2:
+                # :199-204
+                updates["period_eccentricity"] = (
+                    float(state["initial_period_in_days"]) * constants.SECDAY,
+                    0.0,
+                )
 
-        if ignore_rlof and thermal_diff < 0.005 and s1_age > 100.0:
-            rl_gaps = state.get("rl_relative_gap", [0.0, 0.0])
-            gap1 = float(rl_gaps[0])
-            if gap1 > 0.320819224:
-                return ("terminate", "overflow_l2_at_zams")
-            if gap1 > 0.0:
-                updates["max_implicit_abs_mdot"] = 1.0e-3
-                updates["delta_mdot_hard_limit"] = -1.0
-            updates["ignore_rlof_flag"] = False
-            updates["terminate_if_l2_overflow"] = True
-        elif ignore_rlof and (thermal_diff > 0.005 or s1_age < 100.0):
-            init_p = float(state.get("initial_period_sec", state["period"]))
-            updates["period_eccentricity"] = (init_p, 0.0)
+        # :207-221. Upstream reads `b% s1` and `b% s2` unconditionally; a
+        # star the snapshot does not carry raises `KeyError`.
+        if float(state["s1_center_h1"]) > 1.0e-3:
+            if (
+                float(state["s1_center_he4"]) - float(state["s1_surface_he4"])
+                > 0.2
+            ):
+                return (
+                    "terminate",
+                    "Terminate due to primary not evolving homogeneously",
+                )
+        if float(state["s2_center_h1"]) > 1.0e-3:
+            if (
+                float(state["s2_center_he4"]) - float(state["s2_surface_he4"])
+                > 0.2
+            ):
+                return (
+                    "terminate",
+                    "Terminate due to secondary not evolving homogeneously",
+                )
 
-        if "s1_center_h1" in state:
-            s1_h1 = float(state["s1_center_h1"])
-            s1_he4 = float(state["s1_center_he4"])
-            s1_she4 = float(state["s1_surface_he4"])
-            if s1_h1 > 1.0e-3 and (s1_he4 - s1_she4) > 0.2:
-                return ("terminate", "primary_not_homogeneous")
-        else:
-            s1_he4 = 1.0
-
-        if "s2_center_h1" in state:
-            s2_h1 = float(state["s2_center_h1"])
-            s2_he4 = float(state["s2_center_he4"])
-            s2_she4 = float(state["s2_surface_he4"])
-            if s2_h1 > 1.0e-3 and (s2_he4 - s2_she4) > 0.2:
-                return ("terminate", "secondary_not_homogeneous")
-
-        pm_i = int(state.get("point_mass_i", 0))
+        # :225-240
+        pm_i = int(state["point_mass_i"])
         if pm_i == 0:
-            if s1_he4 < 1.0e-5:
-                updates["point_mass_i"] = 1
-                pm_i = 1
-            elif float(state.get("s2_center_he4", 1.0)) < 1.0e-5:
-                updates["point_mass_i"] = 2
-                pm_i = 2
-
-        if pm_i == 1 and float(state.get("s2_center_he4", 1.0)) < 1.0e-5:
-            return ("terminate", "helium_depletion")
-        if pm_i == 2 and s1_he4 < 1.0e-5:
-            return ("terminate", "helium_depletion")
+            if (
+                float(state["s1_center_he4"]) < 1.0e-5
+                or float(state["s2_center_he4"]) < 1.0e-5
+            ):
+                # Upstream calls `binary_set_point_mass_i` and then sets
+                # `b% eq_initial_bh_mass = b% m(i)` (:229, :235). FlexMESA's
+                # binary system has no `eq_initial_bh_mass`, so the second
+                # assignment cannot be made.
+                raise NotImplementedError(
+                    "double_bh: extras_binary_finish_step sets "
+                    "b% eq_initial_bh_mass (upstream lines 229 and 235), "
+                    "which the binary system does not carry"
+                )
+        # :242-255
+        if pm_i == 1:
+            if float(state["s2_center_he4"]) < 1.0e-5:
+                return ("terminate", "Terminate due to helium depletion")
+        elif pm_i == 2:
+            if float(state["s1_center_he4"]) < 1.0e-5:
+                return ("terminate", "Terminate due to helium depletion")
 
         if updates:
             return {"action": "keep_going", "updates": updates}
@@ -200,111 +258,129 @@ class DoubleBhBinaryExtras:
 
 
 class JdotGrCheckBinaryExtras:
-    """Peters (1964) gravitational-wave inspiral analytical check
-    (`binary/test_suite/jdot_gr_check/src/run_binary_extras.f90:89-168`).
+    """Peters (1964) gravitational-wave inspiral check
+    (`binary/test_suite/jdot_gr_check/src/run_binary_extras.f90:99-169`).
+
+    Upstream computes the separation error while writing the history columns,
+    stores it in `b% xtra(ix_separation_error)` and tests the stored value in
+    `extras_binary_check_model`, so the test sees the value from the most
+    recent history write. `_separation_error` is that stored value; it starts
+    at zero as `b% xtra` does (`binary/private/binary_evolve.f90:176`).
     """
 
-    def _expected_sep_rsun(self, state: dict[str, Any]) -> float:
-        a0 = float(state["initial_separation_cm"])
-        init_masses = state["initial_mass_msun"]
-        m1 = float(init_masses[0])
-        m2 = float(init_masses[1])
-        age_sec = (
-            float(state.get("s1_star_age", state.get("binary_age_yr", 0.0)))
-            * constants.SECYER
-        )
+    def __init__(self) -> None:
+        self._separation_error = 0.0
+
+    def extra_binary_history_columns(
+        self, state: dict[str, Any]
+    ) -> list[tuple[str, float]]:
+        """Port of `data_for_extra_binary_history_columns` (:99-120)."""
         g = constants.STANDARD_CGRAV
-        ms = constants.MSUN
+        msun = constants.MSUN
         c = constants.CLIGHT
-        c2 = c * c
+        rsun = constants.RSUN
+        m1 = float(state["m1"])
+        m2 = float(state["m2"])
+        # :116; pow3 and pow5 are repeated products
+        # (`math/private/math_pown.f90:89,109`).
         beta = (
-            (64.0 / 5.0)
+            64.0
+            / 5.0
             * (g * g * g)
             * m1
             * m2
             * (m1 + m2)
-            * (ms * ms * ms)
-            / (c2 * c2 * c)
+            * (msun * msun * msun)
+            / (c * c * c * c * c)
         )
-        a02 = a0 * a0
-        a_exp_4 = a02 * a02 - 4.0 * beta * age_sec
-        return (
-            _rust.pow(a_exp_4, 0.25) if a_exp_4 > 0.0 else 0.0
-        ) / constants.RSUN
+        # :117-118
+        a0 = float(state["initial_separation_in_rsuns"]) * rsun
+        expected = (
+            _rust.pow(
+                a0 * a0 * a0 * a0
+                - 4 * beta * float(state["s1_star_age"]) * constants.SECYER,
+                0.25,
+            )
+            / rsun
+        )
+        # :119
+        self._separation_error = _fdiv(
+            expected - float(state["separation"]) / rsun, expected
+        )
+        return [("expected_separation", expected)]
 
     def check_model(self, state: dict[str, Any]) -> str | tuple[str, str]:
-        """Stop cleanly if RLO begins or analytical GW separation drifts."""
-        if int(state.get("model_number", 0)) == 0:
-            return "keep_going"
-        if float(state.get("mtransfer_rate", 0.0)) != 0.0:
-            return ("terminate", "beginning_of_rlof")
-        exp_rsun = self._expected_sep_rsun(state)
-        if exp_rsun > 0.0:
-            cur_rsun = float(state["separation"]) / constants.RSUN
-            rel_err = abs((exp_rsun - cur_rsun) / exp_rsun)
-            if rel_err > 1.0e-2:
-                return ("terminate", "large_separation_error")
+        """Port of `extras_binary_check_model` (:151-169)."""
+        if float(state["s1_mstar_dot"]) != 0:
+            return ("terminate", "terminate due to beginning of RLO")
+        if abs(self._separation_error) > 1.0e-2:
+            return (
+                "terminate",
+                "Terminate because of large error in orbital separation",
+            )
         return "keep_going"
+
+
+class JdotMlCheckBinaryExtras:
+    """Tauris & van den Heuvel orbital separation check
+    (`binary/test_suite/jdot_ml_check/src/run_binary_extras.f90:99-178`).
+
+    The separation error is stored by the history-columns routine and tested
+    in `extras_binary_check_model`, as in `JdotGrCheckBinaryExtras`.
+    """
+
+    def __init__(self) -> None:
+        self._separation_error = 0.0
 
     def extra_binary_history_columns(
         self, state: dict[str, Any]
     ) -> list[tuple[str, float]]:
-        """Emit analytical `expected_separation` ($R_\\odot$) column."""
-        return [("expected_separation", self._expected_sep_rsun(state))]
-
-
-class JdotMlCheckBinaryExtras:
-    """Tauris & van den Heuvel (2006) orbital separation check
-    (`binary/test_suite/jdot_ml_check/src/run_binary_extras.f90:91-166`).
-    """
-
-    def _expected_sep_rsun(self, state: dict[str, Any]) -> float:
-        a0_rsun = float(state["initial_separation_cm"]) / constants.RSUN
-        init_masses = state["initial_mass_msun"]
-        m1_0 = float(init_masses[0])
-        m2_0 = float(init_masses[1])
-        q0 = m1_0 / m2_0
-        donor_m = float(state["donor_mass_msun"])
-        accretor_m = float(state["accretor_mass_msun"])
-        if int(state.get("donor_i", 1)) == 2:
-            m1, m2 = accretor_m, donor_m
-        else:
-            m1, m2 = donor_m, accretor_m
-        q = m1 / m2
+        """Port of `data_for_extra_binary_history_columns` (:99-132)."""
+        # :117-124
+        a0 = float(state["initial_separation_in_rsuns"])
+        q = _fdiv(float(state["m"][0]), float(state["m"][1]))
+        q0 = _fdiv(float(state["m1"]), float(state["m2"]))
         alpha = float(state["mass_transfer_alpha"])
         beta = float(state["mass_transfer_beta"])
         delta = float(state["mass_transfer_delta"])
         gamma = float(state["mass_transfer_gamma"])
-
-        eps = 1.0 - alpha - beta - delta
-        one_m_eps = max(1.0 - eps, 1.0e-15)
-        term1 = _rust.pow(q / q0, 2.0 * (alpha + gamma * delta - 1.0))
-        term2 = _rust.pow(
-            (q + 1.0) / (q0 + 1.0), (-alpha - beta + delta) / one_m_eps
+        epsilon = 1 - alpha - beta - delta
+        # :125-129 (`**2` is a product in compiled Fortran)
+        expected = (
+            a0
+            * _rust.pow(_fdiv(q, q0), 2 * (alpha + gamma * delta - 1))
+            * _rust.pow(
+                _fdiv(q + 1, q0 + 1),
+                _fdiv(-alpha - beta + delta, 1 - epsilon),
+            )
+            * _rust.pow(
+                _fdiv(epsilon * q + 1, epsilon * q0 + 1),
+                3
+                + _fdiv(
+                    2
+                    * (
+                        alpha * (epsilon * epsilon)
+                        + beta
+                        + gamma * delta * ((1 - epsilon) * (1 - epsilon))
+                    ),
+                    epsilon * (1 - epsilon),
+                ),
+            )
         )
-        if abs(eps) > 1.0e-12:
-            exp3 = 3.0 + 2.0 * (
-                alpha * eps * eps + beta + gamma * delta * one_m_eps * one_m_eps
-            ) / (eps * one_m_eps)
-            term3 = _rust.pow((eps * q + 1.0) / (eps * q0 + 1.0), exp3)
-        else:
-            term3 = _rust.crmath_exp(2.0 * (beta + gamma * delta) * (q - q0))
-        return float(a0_rsun * term1 * term2 * term3)
+        # :130
+        self._separation_error = _fdiv(
+            expected - float(state["separation"]) / constants.RSUN, expected
+        )
+        return [("expected_separation", expected)]
 
-    def check_model(self, state: dict[str, Any]) -> str | tuple[str, str]:
-        """Stop if numerical separation departs from analytical curve."""
-        exp_rsun = self._expected_sep_rsun(state)
-        if exp_rsun > 0.0 and not math.isnan(exp_rsun):
-            cur_rsun = float(state["separation"]) / constants.RSUN
-            if abs((exp_rsun - cur_rsun) / exp_rsun) > 1.0e-4:
-                return ("terminate", "large_separation_error")
+    def check_model(self, _state: dict[str, Any]) -> str | tuple[str, str]:
+        """Port of `extras_binary_check_model` (:163-178)."""
+        if abs(self._separation_error) > 1.0e-4:
+            return (
+                "terminate",
+                "Terminate because of large error in orbital separation",
+            )
         return "keep_going"
-
-    def extra_binary_history_columns(
-        self, state: dict[str, Any]
-    ) -> list[tuple[str, float]]:
-        """Emit analytical `expected_separation` ($R_\\odot$) column."""
-        return [("expected_separation", self._expected_sep_rsun(state))]
 
 
 def match_binary_extras(norm_bin_text: str, norm_star_text: str) -> Any:

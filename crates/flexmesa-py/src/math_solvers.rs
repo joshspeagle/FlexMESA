@@ -94,6 +94,16 @@ fn safe_log10(x: f64) -> f64 {
     flexmesa_math::safe_log10(x)
 }
 
+/// Evaluates $\log_{10}(x)$ on a scalar `f64` with no domain clamp.
+///
+/// Matches upstream MESA `math_lib::log10`
+/// (`math/public/math_lib_crmath.f90:67`); use [`safe_log10`] only where
+/// upstream calls `safe_log10`.
+#[pyfunction]
+fn log10(x: f64) -> f64 {
+    flexmesa_math::log10(x)
+}
+
 /// Evaluates base-10 exponential $10^x$ on a scalar `f64`.
 ///
 /// Matches upstream MESA `math_lib::exp10`.
@@ -371,6 +381,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(safe_sqrt, m)?)?;
     m.add_function(wrap_pyfunction!(safe_log, m)?)?;
     m.add_function(wrap_pyfunction!(safe_log10, m)?)?;
+    m.add_function(wrap_pyfunction!(log10, m)?)?;
     m.add_function(wrap_pyfunction!(exp10, m)?)?;
     m.add_function(wrap_pyfunction!(pow, m)?)?;
     m.add_function(wrap_pyfunction!(sinpi, m)?)?;

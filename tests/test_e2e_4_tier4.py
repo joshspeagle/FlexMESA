@@ -161,6 +161,9 @@ def test_synthetic_astero_case_execution_and_photo_restart(
     )
     (case_dir / "inlist").write_text(
         "&star_job\n"
+        # A plain star run, as upstream does with this control
+        # (`astero/private/astero_run_support.f90:171-174`).
+        "  astero_just_call_my_extras_check_model = .true.\n"
         "  save_model_when_terminate = .true.\n"
         "  save_model_filename = 'final.mod'\n"
         "/\n&eos\n/\n&kap\n/\n&controls\n"

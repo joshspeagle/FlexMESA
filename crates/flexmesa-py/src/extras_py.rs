@@ -10,15 +10,16 @@ use flexmesa_binary::{
     separation_from_period, BinaryCompanion, BinaryExtras, BinaryExtrasAction,
     BinarySystem, DefaultBinaryExtras,
 };
-use flexmesa_const::{M_SUN, RSUN, SECDAY};
+use flexmesa_const::{CLIGHT, CRAD, LSUN, M_SUN, PI, RSUN, SECDAY};
 use flexmesa_star::inlist_runner::{
     DefaultStarExtras, ExtrasDirective, RspBuildOutcome, StarExtras,
 };
 use flexmesa_star::{
     center_avg_x_by_name, compute_core_masses, compute_power_categories,
-    do_rsp_build_model, export_gyre, parse_gyre_mesa_model, safe_log10,
-    solve_bvp_eigenmodes, InertiaNormKind, InlistBundle, OuterBoundKind,
-    RspChemCache, StarControls, StarError, StarModel,
+    do_rsp_build_model, eval_photosphere_info, export_gyre,
+    parse_gyre_mesa_model, safe_log10, solve_bvp_eigenmodes, InertiaNormKind,
+    InlistBundle, OuterBoundKind, RspChemCache, StarControls, StarError,
+    StarModel,
 };
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
@@ -291,16 +292,19 @@ fn set_user_controls(
     Ok(())
 }
 
-fn surface_iso_frac(model: &StarModel, iso_name: &str) -> f64 {
+/// Surface-cell mass fraction `s% xa(net_iso(i<iso>), 1)`, or `None` when the
+/// isotope is not in the net or the model has no cells. Callers leave the
+/// snapshot key out in that case so a hook that reads it raises instead of
+/// seeing a substituted value.
+fn surface_iso_frac(model: &StarModel, iso_name: &str) -> Option<f64> {
     if model.nz == 0 {
-        return 0.0;
+        return None;
     }
     model
         .iso_names
         .iter()
         .position(|name| name.eq_ignore_ascii_case(iso_name))
         .and_then(|j| model.cell_xa(0).get(j).copied())
-        .unwrap_or(0.0)
 }
 
 fn build_star_snapshot<'py>(
@@ -348,8 +352,12 @@ fn build_star_snapshot<'py>(
         d.set_item("rsp_nmodes", model.controls.rsp.nmodes)?;
     }
     if model.controls.use_other_wind && model.nz > 0 {
-        d.set_item("surface_h1", surface_iso_frac(model, "h1"))?;
-        d.set_item("surface_he4", surface_iso_frac(model, "he4"))?;
+        if let Some(x) = surface_iso_frac(model, "h1") {
+            d.set_item("surface_h1", x)?;
+        }
+        if let Some(y) = surface_iso_frac(model, "he4") {
+            d.set_item("surface_he4", y)?;
+        }
         d.set_item("zbase", model.controls.zbase)?;
     }
     if include_history {
@@ -460,6 +468,15 @@ fn apply_rsp_linear_analysis_result(
     Ok(true)
 }
 
+/// Converts a star hook's return value into an [`ExtrasDirective`].
+///
+/// A hook cannot choose its termination code: upstream sets it from the hook
+/// that returned `terminate` (`star/job/standard_run_star_extras.inc:83`
+/// `t_extras_check_model`, `:228` `t_extras_finish_step`; strings at
+/// `star/private/star_private_def.f90:212-213`). `default_terminate_code` is
+/// that hook's upstream name and is always the code. A message supplied with
+/// `terminate` is diagnostic only (upstream hooks `write(*,*)` theirs) and
+/// goes to stderr. An unrecognised directive string is an error.
 fn parse_star_directive(
     res: &Bound<'_, PyAny>,
     default_terminate_code: &str,
@@ -482,13 +499,17 @@ fn parse_star_directive(
         } else {
             let first: String = tup.get_item(0)?.extract()?;
             let msg: String = second.extract()?;
-            return match first.as_str() {
-                "terminate" => Ok(ExtrasDirective::Terminate(msg)),
-                "error" => Ok(ExtrasDirective::Error(msg)),
-                _ => Err(PyValueError::new_err(format!(
-                    "unsupported star directive tuple tag '{first}'"
-                ))),
-            };
+            match first.as_str() {
+                "terminate" => dict_msg = Some(msg),
+                "error" => return Ok(ExtrasDirective::Error(msg)),
+                _ => {
+                    return Err(PyValueError::new_err(format!(
+                        "unsupported star directive tuple tag '{first}' \
+                         from {default_terminate_code}"
+                    )));
+                }
+            }
+            first
         }
     } else if let Ok(d) = res.cast::<PyDict>() {
         if let Some(updates) = d.get_item("updates")? {
@@ -517,10 +538,18 @@ fn parse_star_directive(
         "error" => Ok(ExtrasDirective::Error(dict_msg.unwrap_or_else(|| {
             String::from("error returned by star extras hook")
         }))),
-        "terminate" => Ok(ExtrasDirective::Terminate(
-            dict_msg.unwrap_or_else(|| default_terminate_code.to_string()),
-        )),
-        other => Ok(ExtrasDirective::Terminate(other.to_string())),
+        "terminate" => {
+            if let Some(msg) = dict_msg {
+                eprintln!("{default_terminate_code}: {msg}");
+            }
+            Ok(ExtrasDirective::Terminate(
+                default_terminate_code.to_string(),
+            ))
+        }
+        other => Err(PyValueError::new_err(format!(
+            "unrecognised directive '{other}' returned by \
+             {default_terminate_code}"
+        ))),
     }
 }
 
@@ -1015,8 +1044,15 @@ impl StarExtras for PyStarExtrasAdapter {
                     tup.get_item(1).and_then(|v| v.extract()).map_err(|e| {
                         StarError::InvalidInput(format_py_err(py, &e))
                     })?;
+                // The hook's message is diagnostic only; the code is the
+                // hook's name, as for `parse_star_directive`.
                 return match tag.as_str() {
-                    "terminate" => Ok(Some(RspBuildOutcome::Terminate(msg))),
+                    "terminate" => {
+                        eprintln!("other_rsp_build_model: {msg}");
+                        Ok(Some(RspBuildOutcome::Terminate(String::from(
+                            "other_rsp_build_model",
+                        ))))
+                    }
                     "error" => Err(StarError::InvalidInput(msg)),
                     _ => Err(StarError::InvalidInput(format!(
                         "unsupported other_rsp_build_model tuple tag '{tag}'"
@@ -1024,13 +1060,15 @@ impl StarExtras for PyStarExtrasAdapter {
                 };
             }
             if let Ok(code) = res.extract::<String>() {
-                return Ok(Some(RspBuildOutcome::Terminate(
-                    if code == "terminate" {
-                        String::from("other_rsp_build_model")
-                    } else {
-                        code
-                    },
-                )));
+                if code != "terminate" {
+                    return Err(StarError::InvalidInput(format!(
+                        "unrecognised directive '{code}' returned by \
+                         other_rsp_build_model"
+                    )));
+                }
+                return Ok(Some(RspBuildOutcome::Terminate(String::from(
+                    "other_rsp_build_model",
+                ))));
             }
             let pm = res.extract::<PyRef<'_, PyStarModel>>().map_err(|e| {
                 StarError::InvalidInput(format_py_err(py, &PyErr::from(e)))
@@ -1142,6 +1180,15 @@ fn set_binary_star_scalars(
         safe_log10(powers.power_nuc_burn - powers.power_photo),
     )?;
     d.set_item(format!("{prefix}_log_l"), safe_log10(star.surface_l_lsun()))?;
+    // `s% L_nuc_burn_total` (`star/private/report.f90:112`, in `Lsun`),
+    // `s% L(1)` (`erg s^-1`) and `s% mstar_dot` (`g s^-1`) as read by
+    // `binary/test_suite/double_bh/src/run_binary_extras.f90:172,197` and
+    // `binary/test_suite/jdot_gr_check/src/run_binary_extras.f90:160`.
+    d.set_item(format!("{prefix}_l_nuc_burn_total"), powers.power_nuc_burn)?;
+    if let Some(&l_surf) = star.lum.first() {
+        d.set_item(format!("{prefix}_l_surf"), l_surf)?;
+    }
+    d.set_item(format!("{prefix}_mstar_dot"), star.mstar_dot)?;
     d.set_item(
         format!("{prefix}_center_h1"),
         center_avg_x_by_name(star, "h1"),
@@ -1154,10 +1201,9 @@ fn set_binary_star_scalars(
         format!("{prefix}_center_c12"),
         center_avg_x_by_name(star, "c12"),
     )?;
-    d.set_item(
-        format!("{prefix}_surface_he4"),
-        surface_iso_frac(star, "he4"),
-    )?;
+    if let Some(y) = surface_iso_frac(star, "he4") {
+        d.set_item(format!("{prefix}_surface_he4"), y)?;
+    }
     d.set_item(format!("{prefix}_he_core_mass"), cores.he_core_mass)?;
     Ok(())
 }
@@ -1184,6 +1230,24 @@ fn build_binary_snapshot<'py>(
     d.set_item("eccentricity", bin.eccentricity)?;
     d.set_item("initial_period_sec", bin.initial_binary_period_sec)?;
     d.set_item("initial_separation_cm", initial_sep_cm)?;
+    // The controls `b% initial_period_in_days` and
+    // `b% initial_separation_in_Rsuns` exactly as set by the inlist; upstream
+    // never rewrites them (`binary/private/binary_evolve.f90:106-108`).
+    d.set_item(
+        "initial_period_in_days",
+        bin.controls.initial_period_in_days,
+    )?;
+    d.set_item(
+        "initial_separation_in_rsuns",
+        bin.controls.initial_separation_in_rsuns,
+    )?;
+    // The controls `b% m1` and `b% m2` (`Msun`) as set by the inlist, which
+    // `jdot_gr_check` and `jdot_ml_check` read, as opposed to
+    // `initial_mass_msun` (`binary_evolve.f90:73-85`).
+    d.set_item("m1", bin.controls.m1_msun)?;
+    d.set_item("m2", bin.controls.m2_msun)?;
+    // `b% m(1:2)` in grams, ordered by star index.
+    d.set_item("m", PyList::new(py, bin.star_masses_g())?)?;
     d.set_item("initial_mass_msun", PyList::new(py, bin.initial_mass_msun)?)?;
     d.set_item("initial_eccentricity", bin.controls.initial_eccentricity)?;
     d.set_item("angular_momentum_j", bin.angular_momentum_j)?;
@@ -1252,6 +1316,12 @@ fn apply_binary_updates(
     Ok(())
 }
 
+/// Converts a binary hook's return value into a [`BinaryExtrasAction`].
+///
+/// Same contract as [`parse_star_directive`]: the termination code is always
+/// `default_terminate_code` (the hook's upstream name), a message supplied
+/// with `terminate` is printed to stderr, and an unrecognised action string
+/// is an error.
 fn parse_binary_action(
     res: &Bound<'_, PyAny>,
     default_terminate_code: &str,
@@ -1274,13 +1344,17 @@ fn parse_binary_action(
         } else {
             let first: String = tup.get_item(0)?.extract()?;
             let msg: String = second.extract()?;
-            return match first.as_str() {
-                "terminate" => Ok(BinaryExtrasAction::Terminate(msg)),
-                "error" => Ok(BinaryExtrasAction::Error(msg)),
-                _ => Err(PyValueError::new_err(format!(
-                    "unsupported binary action tuple tag '{first}'"
-                ))),
-            };
+            match first.as_str() {
+                "terminate" => dict_msg = Some(msg),
+                "error" => return Ok(BinaryExtrasAction::Error(msg)),
+                _ => {
+                    return Err(PyValueError::new_err(format!(
+                        "unsupported binary action tuple tag '{first}' \
+                         from {default_terminate_code}"
+                    )));
+                }
+            }
+            first
         }
     } else if let Ok(d) = res.cast::<PyDict>() {
         if let Some(updates) = d.get_item("updates")? {
@@ -1309,10 +1383,18 @@ fn parse_binary_action(
                 String::from("error returned by binary extras hook")
             })))
         }
-        "terminate" => Ok(BinaryExtrasAction::Terminate(
-            dict_msg.unwrap_or_else(|| default_terminate_code.to_string()),
-        )),
-        other => Ok(BinaryExtrasAction::Terminate(other.to_string())),
+        "terminate" => {
+            if let Some(msg) = dict_msg {
+                eprintln!("{default_terminate_code}: {msg}");
+            }
+            Ok(BinaryExtrasAction::Terminate(
+                default_terminate_code.to_string(),
+            ))
+        }
+        other => Err(PyValueError::new_err(format!(
+            "unrecognised action '{other}' returned by \
+             {default_terminate_code}"
+        ))),
     }
 }
 
@@ -1414,6 +1496,14 @@ impl BinaryExtras for PyBinaryExtrasAdapter {
             return Ok(None);
         }
         let case_dir = self.state.staged_dir_string();
+        // The four surface arguments of upstream's `other_wind`
+        // (`star/private/winds.f90:81-84,345`), from the values `set_mdot`
+        // is called with (`star/private/evolve.f90:427`:
+        // `s% L_phot*Lsun, s% mstar, s% Teff`). No floors or fallbacks.
+        let l1 = eval_photosphere_info(star).l_lsun * LSUN;
+        let m1 = star.mstar;
+        let t1 = star.teff;
+        let r1 = (l1 / (PI * CRAD * CLIGHT * t1 * t1 * t1 * t1)).sqrt();
         Python::attach(|py| {
             let snap = build_star_snapshot(py, star, &case_dir, false)
                 .map_err(|e| StarError::InvalidInput(format_py_err(py, &e)))?;
@@ -1422,7 +1512,7 @@ impl BinaryExtras for PyBinaryExtrasAdapter {
                 .bind(py)
                 .call_method1(
                     "other_wind_cgs",
-                    (snap, star_idx, ignore_rlof_flag),
+                    (snap, star_idx, ignore_rlof_flag, l1, m1, r1, t1),
                 )
                 .map_err(|e| {
                     StarError::InvalidInput(format!(
@@ -1444,7 +1534,7 @@ impl BinaryExtras for PyBinaryExtrasAdapter {
         self.call_action_hook(
             self.has_check_model,
             "check_model",
-            "extras_check_model",
+            "extras_binary_check_model",
             bin,
         )
     }
@@ -1453,7 +1543,7 @@ impl BinaryExtras for PyBinaryExtrasAdapter {
         self.call_action_hook(
             self.has_finish_step,
             "finish_step",
-            "extras_finish_step",
+            "extras_binary_finish_step",
             bin,
         )
     }

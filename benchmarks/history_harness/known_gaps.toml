@@ -94,7 +94,7 @@ reason = "T(tau) atmosphere gradr reconstruction departs from MESA 26.4.1."
 suite = "star"
 case = "accreted_material_j"
 issue = "#158"
-reason = "Accreted angular-momentum evolution diverges from MESA 26.4.1 by step 1 with unported angular-momentum and wind-coupling controls (#158, #159)."
+reason = "Without the unported use_other_adjust_mdot extras hook the 20 Msun model never accretes and diverges from MESA 26.4.1 by step 1; under upstream varcontrol_target and TDC/mesh defaults it evolves into post-He burning and exceeds the wall-time guard (#158, #159, #152)."
 
 [[gaps]]
 suite = "star"
@@ -226,7 +226,7 @@ reason = "Core He-burning predictive mixing (#155, audit M-2) and wall-time guar
 suite = "star"
 case = "high_mass"
 issue = "#152"
-reason = "High-mass evolution times out under non-upstream solver and MLT++/TDC defaults (#152, #157)."
+reason = "High-mass evolution reaches upstream xa_central_lower_limit(h1) in diagnostic mode but misses strict tolerances under non-upstream solver and MLT++/TDC controls (#152, #157)."
 
 [[gaps]]
 suite = "star"
@@ -292,7 +292,7 @@ reason = "Envelope initial-model construction and boundary relaxation (#154)."
 suite = "star"
 case = "make_he_wd"
 issue = "#154"
-reason = "Mass-removal / He-WD relaxation times out (#154, #159)."
+reason = "Mass-removal / He-WD relaxation reaches upstream max_age in diagnostic mode but misses strict tolerances with unported relaxation and wind controls (#154, #159)."
 
 [[gaps]]
 suite = "star"
@@ -376,7 +376,7 @@ reason = "Case requires custom other_wind hook alongside unported massive-star r
 suite = "star"
 case = "relax_composition_j_entropy"
 issue = "#154"
-reason = "Multi-stage composition, angular-momentum, and entropy relaxation exceeds wall-time guard (#154, #152)."
+reason = "Multi-stage composition, angular-momentum, and entropy relaxation reaches upstream xa_central_lower_limit(he4) in diagnostic mode but misses strict tolerances (#154, #152)."
 
 [[gaps]]
 suite = "star"
@@ -496,7 +496,7 @@ reason = "White-dwarf cooling exceeds wall-time guard at step 283 with unported 
 suite = "star"
 case = "wd_diffusion"
 issue = "#156"
-reason = "White-dwarf element diffusion hits memory guard with unported cgs/full-net diffusion and opacity controls (#156, #161)."
+reason = "White-dwarf element diffusion reaches upstream Teff_lower_limit in diagnostic mode but misses strict tolerances with unported cgs/full-net diffusion and opacity controls (#156, #161)."
 
 [[gaps]]
 suite = "star"
@@ -520,7 +520,7 @@ reason = "Stable H-burning accreting WD fails to converge on dt floor (#152, #15
 suite = "star"
 case = "zams_to_cc_80"
 issue = "#152"
-reason = "80 Msun evolution terminates at fe_core_infall_limit off reference track with unported core-collapse solver and rate controls (#152, #161)."
+reason = "80 Msun core-collapse evolution evolves past the pre-#149 premature fe_core_infall_limit trigger and hits the harness wall-time guard with unported core-collapse solver and rate controls (#152, #161)."
 
 [[gaps]]
 suite = "binary"

@@ -282,8 +282,8 @@ def render_coverage_map_markdown(repo_root: pathlib.Path) -> str:
             "",
             "| Namelist | Upstream Scalars | Matched in FlexMESA | "
             "Defaults Agree | Value Mismatch | Disabled (`none`/limit) | "
-            "Unimplemented |",
-            "| :--- | ---: | ---: | ---: | ---: | ---: | ---: |",
+            "Non-Scalar Rust | Unimplemented |",
+            "| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
         ]
     )
 
@@ -292,6 +292,7 @@ def render_coverage_map_markdown(repo_root: pathlib.Path) -> str:
             f"| `{ctrl['namelist']}` | {ctrl['upstream_scalars']:,} | "
             f"{ctrl['matched_in_flexmesa']:,} | {ctrl['defaults_agree']:,} | "
             f"{ctrl['value_mismatch']:,} | {ctrl['disabled_limit_none']:,} | "
+            f"{ctrl.get('skipped_unparseable_rust', 0):,} | "
             f"{ctrl['unimplemented']:,} |"
         )
 

@@ -46,6 +46,7 @@ Scope and the `v0.1.0` definition are in [`SCOPE.md`](SCOPE.md). Work is tracked
 | 29 | Derived JAX Contract, Full-Argument Auto-Dispatch, and Python Utility Disposition (`#166`) | In force | below |
 | 30 | Generated `serde` Checkpoints, Rollback State Buffers, and RAM-Local Microphysics Cache (`#150`) | In force | below |
 | 31 | Test-Side `extras_factory` Dispatch and Pure-Upstream Library Execution (`#148`) | In force | below |
+| 32 | Unported Upstream Extras Are Declared and Never Pass (`#148`) | In force | below |
 
 ## Pre-audit decisions still in force
 
@@ -368,3 +369,17 @@ The text of these four entries predates the audit of 2026-11-16. The decisions s
 - **Alternatives Rejected**:
   - *Moving `tier1_extras`–`tier5_extras` verbatim into Rust integration tests while keeping control overrides*: Preserves non-upstream mutations and directory-name branching.
   - *Passing whole `StarModel` / `BinarySystem` clones into Python callbacks on every step*: Violates `DECISIONS #30` clone-free hot-loop guarantees.
+
+---
+
+## DECISIONS #32: Unported Upstream Extras Are Declared and Never Pass (`Issue #148`)
+
+- **Date**: 2026-11-19
+- **Decision**:
+  1. Every manifest case has a generated extras status in `benchmarks/history_harness/extras_status.toml` (`scripts/audit/render_extras_status.py`): `ported` when `tests.case_extras` attaches a handler, `stock` when the normalized `run_star_extras.f90` and `run_binary_extras.f90` equal a reviewed template without case logic (digests in `tests/case_extras/__init__.py`), and `unported` otherwise, with the open issue that owns the port.
+  2. The harness never reports an `unported` case as passing: with termination and tolerances met it is a declared gap, or an undeclared failure when no gap is declared. CI checks that the ledger matches the upstream sources and the dispatcher.
+  3. Run behaviour is unchanged; an unported case still runs with default no-op hooks so the case table keeps measured numbers.
+- **Why**: After `DECISIONS #31` an extras file with no handler ran as a silent no-op, so a case could reach upstream's termination string without upstream's extras logic (for example the per-cell `alpha_mlt` hook of `star/zams_to_cc_80`). The definition of passing requires upstream's per-case extras logic.
+- **Alternatives Rejected**:
+  - *Failing the run when the extras are unported*: stops about 70 cases from taking steps and removes their measured numbers from the case table.
+  - *Counting unported extras as ignored controls under `DECISIONS #26`*: the strict rejection happens in the inlist parser before the extras are resolved, so the count would have two sources.

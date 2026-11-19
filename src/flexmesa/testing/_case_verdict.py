@@ -318,7 +318,9 @@ def evaluate_case_record(
         if outcome.status == "ok" and term_ok and tol_ok:
             if spec.uses_pulsation_scaffolding:
                 verdict = f"scaffolding ({spec.scaffolding_issue})"
-            elif spec.uses_library_extras:
+            elif spec.uses_library_extras or spec.extras_status == "unported":
+                # A case whose upstream extras logic is not executed did not
+                # run what upstream runs, so it cannot count as passing.
                 if gap is not None:
                     verdict = f"declared gap ({gap.issue})"
                 else:

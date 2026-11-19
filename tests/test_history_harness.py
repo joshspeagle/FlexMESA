@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import dataclasses
+import importlib.util
 import json
 import pathlib
 import subprocess
@@ -20,6 +21,8 @@ from flexmesa.testing import (
     harness_runner,
     history_compare,
 )
+
+REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 
 def test_case_manifest_covers_all_106_mesa_26_4_1_cases_and_known_gaps() -> (
@@ -1012,3 +1015,76 @@ def test_baseline_regressions_flag_cases_that_get_worse() -> None:
     assert len(merged) == len(base)
     assert merged[base.index(ok)] is lost
     assert sum(1 for m, b in zip(merged, base, strict=True) if m is not b) == 1
+
+
+def test_unported_extras_never_count_as_pass() -> None:
+    """A case whose upstream extras logic is not executed cannot pass."""
+    comp = history_compare.HistoryComparison(
+        independent_var="star_age",
+        ref_rows=10,
+        run_rows=10,
+        overlap_min=0.0,
+        overlap_max=10.0,
+        final_diffs={"star_age": 0.0, "rel_star_age": 0.0, "log_L": 0.0},
+        within_final_tolerances=True,
+        failed_final_columns=(),
+        track_deviations=(),
+        within_track_tolerances=True,
+        failed_track_columns=(),
+        first_diverging_step=None,
+        first_diverging_x=None,
+        ref_span=10.0,
+    )
+    outcome = harness_runner.TraceRunOutcome(
+        suite="star",
+        case="demo",
+        status="ok",
+        termination_code="max_age",
+        steps=10,
+        retries=0,
+        wall_time_sec=1.0,
+        peak_rss_gb=0.2,
+        history_path=None,
+    )
+
+    def _verdict(status: str) -> str:
+        spec = case_manifest.CaseManifestEntry(
+            suite="star",
+            case="demo",
+            reference_status="mesa_26_4_1",
+            reference_path="dummy.data",
+            required_termination="max_age",
+            independent_var="star_age",
+            final_tolerances={"rel_star_age": 0.001, "log_L": 0.001},
+            track_tolerances={},
+            extras_status=status,
+            extras_issue="#148" if status == "unported" else "",
+        )
+        rec = harness_runner.evaluate_case_record(
+            spec, {}, outcome, precomputed_comparison=comp
+        )
+        return str(rec.verdict)
+
+    assert _verdict("stock") == "pass"
+    assert _verdict("ported") == "pass"
+    assert _verdict("unported") == "fail (undeclared)"
+
+
+def test_extras_status_ledger_covers_every_case_and_is_current() -> None:
+    """Every manifest case has a classified, up-to-date extras status."""
+    manifest = case_manifest.load_case_manifest()
+    statuses = {e.extras_status for e in manifest.cases}
+    assert statuses <= {"ported", "stock", "unported"}
+    assert all(
+        e.extras_issue.startswith("#")
+        for e in manifest.cases
+        if e.extras_status == "unported"
+    )
+    spec = importlib.util.spec_from_file_location(
+        "render_extras_status",
+        REPO_ROOT / "scripts" / "audit" / "render_extras_status.py",
+    )
+    assert spec is not None and spec.loader is not None
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    assert mod.main(["--check"]) == 0

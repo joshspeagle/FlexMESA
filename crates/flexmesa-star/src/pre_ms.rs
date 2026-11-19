@@ -227,10 +227,13 @@ pub fn build1_pre_ms_model(
     // Inner-most shell (`pre_ms_model.f90:451-474`, using Kippenhahn & Weigert
     // Eq. 10.6 matched to `d_log10_p` so `dm[nz-2] / dm[nz-1] = O(1)` for any
     // step size `d_log10_p`).
-    let d_log10_p = if job.pre_ms_d_log10_p <= 0.0 {
+    // `star/private/pre_ms_model.f90:431-435`: exactly zero selects
+    // `delta_logPgas = 0.004d0` (`pre_ms_model.f90:397`); any other value,
+    // negative included, is used as its absolute value.
+    let d_log10_p = if job.pre_ms_d_log10_p == 0.0 {
         0.004
     } else {
-        job.pre_ms_d_log10_p
+        job.pre_ms_d_log10_p.abs()
     };
     let dp_target_c = p_c * (1.0 - exp10(-0.5 * d_log10_p));
     let kw_factor = (3.0 * STANDARD_CGRAV / (8.0 * flexmesa_const::PI))

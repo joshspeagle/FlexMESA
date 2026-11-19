@@ -201,11 +201,13 @@ fig_trk, _ = plotting.plot_history_track(
 )
 plt.close(fig_trk)
 
-fig_orb, _ = plotting.plot_pgbinary_orbit(
+fig_sum, _ = plotting.plot_pgbinary_summary_history(
     ref_bin, mesa_binary_history=ref_bin
 )
-plt.close(fig_orb)
-print("Rendered comparison, Kippenhahn, track, and binary orbit figures:", axes_cmp.shape)
+plt.close(fig_sum)
+print("Rendered comparison, Kippenhahn, track, and binary summary figures:", axes_cmp.shape)
 ```
+
+`plotting.plot_pgbinary_orbit` needs the `eccentricity`, `binary_separation`, `rl_1` and `rl_2` columns in `binary_history.data` and raises an error when one is absent. MESA's default `binary_history_columns.list` leaves `eccentricity` commented out, so enable it before a run whose orbit you want to draw. The 6-panel `plotting.plot_pgbinary_panels` figure states in its orbit cell that the orbit was not drawn in that situation. Kippenhahn mixing zones are shaded only from the `mix_type_*` history columns; a history without them shows none.
 
 For the full mapping of upstream `pgstar.defaults`, `pgbinary.defaults`, and `astero_pgstar.defaults` windows (`pgstar_coverage.PGSTAR_COVERAGE`) onto `flexmesa.plotting` builders, see the [PGSTAR & PGBINARY Coverage Report](../benchmarks/pgstar-coverage.md) and the [I/O, Plotting & Benchmark API Reference](../api/io-plotting-bench.md).

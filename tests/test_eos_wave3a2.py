@@ -278,7 +278,14 @@ def test_eval_helm_eos_zones_and_off_table_error_match_mesa_26_4_1() -> None:
 
 
 def test_eval_helm_eos_jax_autodiff_matches_analytical_derivatives() -> None:
-    """Verify unfloored `jax.jacfwd` of `eval_helm_eos` matches partials."""
+    """Verify unfloored `jax.jacfwd` of `eval_helm_eos` matches partials.
+
+    This checks the derived JAX layer against itself, not against MESA. The
+    near-zero bound is `1.0e-13`. It was `1.0e-14` until commit `850f223`,
+    which widened it after the check measured `1.940e-14` on the CI runner
+    while passing on the author's machine. The cause of the machine
+    dependence has not been established.
+    """
     temp0 = 2.0e8
     rho0 = 100.0
     abar0 = 1.72

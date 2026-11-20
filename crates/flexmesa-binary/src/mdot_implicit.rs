@@ -591,12 +591,13 @@ impl ImplicitMdotSolver {
         if self.report_progress {
             println!(" switching donor");
         }
+        // `binary/private/binary_evolve.f90:224-227` swaps and negates only
+        // `mdot_lo`/`mdot_hi`. `implicit_function_lo`/`implicit_function_hi`
+        // are left as they were, so after a switch each stored function
+        // value belongs to the other bound (deferred upstream bug `#274`).
         let mdot_hi_temp = self.mdot_hi;
-        let f_hi_temp = self.f_hi;
         self.mdot_hi = -self.mdot_lo;
-        self.f_hi = -self.f_lo;
         self.mdot_lo = -mdot_hi_temp;
-        self.f_lo = -f_hi_temp;
         if !self.have_lo {
             self.have_hi = false;
         }

@@ -885,6 +885,11 @@ fn parse_star_directive(
         if let Some(updates) = d.get_item("updates")? {
             if let Ok(udict) = updates.cast::<PyDict>() {
                 apply_star_updates(model, udict)?;
+            } else if !updates.is_none() {
+                return Err(PyValueError::new_err(format!(
+                    "hook returned 'updates' of type {}; expected a dict",
+                    updates.get_type().name()?
+                )));
             }
         }
         if let Some(msg_obj) = d.get_item("message")? {
@@ -1093,6 +1098,10 @@ impl StarExtras for PyStarExtrasAdapter {
                 apply_star_updates(model, d).map_err(|e| {
                     StarError::InvalidInput(format_py_err(py, &e))
                 })?;
+            } else if !res.is_none() {
+                return Err(StarError::InvalidInput(String::from(
+                    "extras_controls: hook must return None or a dict of updates",
+                )));
             }
             Ok(())
         })
@@ -1125,6 +1134,10 @@ impl StarExtras for PyStarExtrasAdapter {
                 apply_star_updates(model, d).map_err(|e| {
                     StarError::InvalidInput(format_py_err(py, &e))
                 })?;
+            } else if !res.is_none() {
+                return Err(StarError::InvalidInput(String::from(
+                    "extras_startup: hook must return None or a dict of updates",
+                )));
             }
             Ok(())
         })
@@ -1774,6 +1787,11 @@ fn parse_binary_action(
         if let Some(updates) = d.get_item("updates")? {
             if let Ok(udict) = updates.cast::<PyDict>() {
                 apply_binary_updates(bin, udict)?;
+            } else if !updates.is_none() {
+                return Err(PyValueError::new_err(format!(
+                    "hook returned 'updates' of type {}; expected a dict",
+                    updates.get_type().name()?
+                )));
             }
         }
         if let Some(msg_obj) = d.get_item("message")? {
